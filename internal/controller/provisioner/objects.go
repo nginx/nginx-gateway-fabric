@@ -176,17 +176,11 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 	}
 
 	// build metrics service
-	metricsService := buildNginxMetricsService(
-		cloneObjectMeta(objectMeta),
-		nProxyCfg,
-		selectorLabels,
+	metricsObjs, metricsErr := p.buildMetricsServiceObjects(
+		cloneObjectMeta(objectMeta), nProxyCfg, selectorLabels, gateway,
 	)
-	if metricsService != nil {
-		if err := p.setOwnerReference(metricsService, gateway); err != nil {
-			errs = append(errs, fmt.Errorf(
-				"failed to set owner reference on Service %s: %w", metricsService.GetName(), err,
-			))
-		}
+	if metricsErr != nil {
+		errs = append(errs, metricsErr)
 	}
 
 	// order to install resources:
@@ -199,12 +193,7 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 	// hpa
 	// metrics service
 
-	extraCap := 3 // serviceAccount, service, deployment
-	if metricsService != nil {
-		extraCap++
-	}
-
-	objects := make([]client.Object, 0, len(configmapsList)+len(secretsList)+len(openshiftObjs)+extraCap)
+	objects := make([]client.Object, 0, len(configmapsList)+len(secretsList)+len(openshiftObjs)+3)
 	objects = append(objects, secretsList...)
 	objects = append(objects, configmapsList...)
 	objects = append(objects, serviceAccount)
@@ -221,9 +210,7 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 		objects = append(objects, hpa)
 	}
 
-	if metricsService != nil {
-		objects = append(objects, metricsService)
-	}
+	objects = append(objects, metricsObjs...)
 
 	return objects, errors.Join(errs...)
 }
@@ -786,6 +773,26 @@ func buildNginxMetricsService(
 	setIPFamily(nProxyCfg, svc)
 
 	return svc
+}
+
+func (p *NginxProvisioner) buildMetricsServiceObjects(
+	objectMeta metav1.ObjectMeta,
+	nProxyCfg *graph.EffectiveNginxProxy,
+	selectorLabels map[string]string,
+	gateway *gatewayv1.Gateway,
+) ([]client.Object, error) {
+	svc := buildNginxMetricsService(objectMeta, nProxyCfg, selectorLabels)
+	if svc == nil {
+		return nil, nil
+	}
+
+	if err := p.setOwnerReference(svc, gateway); err != nil {
+		return []client.Object{svc}, fmt.Errorf(
+			"failed to set owner reference on Service %s: %w", svc.GetName(), err,
+		)
+	}
+
+	return []client.Object{svc}, nil
 }
 
 func setSvcLoadBalancerSettings(svcCfg ngfAPIv1alpha2.ServiceSpec, svcSpec *corev1.ServiceSpec) {
