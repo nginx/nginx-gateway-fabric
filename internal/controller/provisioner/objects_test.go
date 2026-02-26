@@ -124,7 +124,8 @@ func TestBuildNginxResourceObjects(t *testing.T) {
 		})
 	g.Expect(err).ToNot(HaveOccurred())
 
-	g.Expect(objects).To(HaveLen(6))
+	// agentTLSSecret, includesConfigMap, agentConfigMap, serviceAccount, service, deployment, metricsService
+	g.Expect(objects).To(HaveLen(7))
 
 	validateLabelsAndAnnotations := func(obj client.Object) {
 		g.Expect(obj.GetLabels()).To(Equal(expLabels))
@@ -239,6 +240,24 @@ func TestBuildNginxResourceObjects(t *testing.T) {
 
 	g.Expect(initContainer.Image).To(Equal("ngf-image"))
 	g.Expect(initContainer.ImagePullPolicy).To(Equal(defaultImagePullPolicy))
+
+	metricsSvcObj := objects[6]
+	metricsSvc, ok := metricsSvcObj.(*corev1.Service)
+	g.Expect(ok).To(BeTrue())
+	g.Expect(metricsSvc.GetName()).To(Equal(
+		controller.CreateNginxResourceName(resourceName, metricsServiceNameSuffix),
+	))
+	validateLabelsAndAnnotations(metricsSvc)
+	g.Expect(metricsSvc.Spec.Type).To(Equal(corev1.ServiceTypeClusterIP))
+	g.Expect(*metricsSvc.Spec.IPFamilyPolicy).To(Equal(corev1.IPFamilyPolicyPreferDualStack))
+	g.Expect(metricsSvc.Spec.Ports).To(Equal([]corev1.ServicePort{
+		{
+			Name:       metricsPortName,
+			Port:       config.DefaultNginxMetricsPort,
+			Protocol:   corev1.ProtocolTCP,
+			TargetPort: intstr.FromInt32(config.DefaultNginxMetricsPort),
+		},
+	}))
 }
 
 func TestBuildNginxResourceObjects_NginxProxyConfig(t *testing.T) {
@@ -336,7 +355,8 @@ func TestBuildNginxResourceObjects_NginxProxyConfig(t *testing.T) {
 	objects, err := provisioner.buildNginxResourceObjects(resourceName, gateway, nProxyCfg)
 	g.Expect(err).ToNot(HaveOccurred())
 
-	g.Expect(objects).To(HaveLen(7))
+	// agentTLSSecret, includesConfigMap, agentConfigMap, serviceAccount, service, deployment, hpa, metricsService
+	g.Expect(objects).To(HaveLen(8))
 
 	cmObj := objects[1]
 	cm, ok := cmObj.(*corev1.ConfigMap)
@@ -398,6 +418,24 @@ func TestBuildNginxResourceObjects_NginxProxyConfig(t *testing.T) {
 	g.Expect(hpa.Spec.MinReplicas).ToNot(BeNil())
 	g.Expect(*hpa.Spec.MinReplicas).To(Equal(int32(1)))
 	g.Expect(hpa.Spec.MaxReplicas).To(Equal(int32(5)))
+
+	metricsSvcObj := objects[7]
+	metricsSvc, ok := metricsSvcObj.(*corev1.Service)
+	g.Expect(ok).To(BeTrue())
+	g.Expect(metricsSvc.GetName()).To(Equal(
+		controller.CreateNginxResourceName(resourceName, metricsServiceNameSuffix),
+	))
+	g.Expect(metricsSvc.Spec.Type).To(Equal(corev1.ServiceTypeClusterIP))
+	g.Expect(*metricsSvc.Spec.IPFamilyPolicy).To(Equal(corev1.IPFamilyPolicySingleStack))
+	g.Expect(metricsSvc.Spec.IPFamilies).To(Equal([]corev1.IPFamily{corev1.IPv4Protocol}))
+	g.Expect(metricsSvc.Spec.Ports).To(Equal([]corev1.ServicePort{
+		{
+			Name:       metricsPortName,
+			Port:       8080,
+			Protocol:   corev1.ProtocolTCP,
+			TargetPort: intstr.FromInt32(8080),
+		},
+	}))
 }
 
 func TestBuildNginxResourceObjects_ExposeHealthcheck(t *testing.T) {
@@ -774,7 +812,9 @@ func TestBuildNginxResourceObjects_Plus(t *testing.T) {
 	objects, err := provisioner.buildNginxResourceObjects(resourceName, gateway, &graph.EffectiveNginxProxy{})
 	g.Expect(err).ToNot(HaveOccurred())
 
-	g.Expect(objects).To(HaveLen(9))
+	// agentTLSSecret, jwtSecret, caSecret, clientSSLSecret, includesConfigMap, agentConfigMap,
+	// serviceAccount, service, deployment, metricsService
+	g.Expect(objects).To(HaveLen(10))
 
 	expLabels := map[string]string{
 		"label":                                  "value",
@@ -918,7 +958,9 @@ func TestBuildNginxResourceObjects_DockerSecrets(t *testing.T) {
 	objects, err := provisioner.buildNginxResourceObjects(resourceName, gateway, &graph.EffectiveNginxProxy{})
 	g.Expect(err).ToNot(HaveOccurred())
 
-	g.Expect(objects).To(HaveLen(9))
+	// agentTLSSecret, dockerSecret, dockerSecretR1, dockerSecretR2, includesConfigMap, agentConfigMap,
+	// serviceAccount, service, deployment, metricsService
+	g.Expect(objects).To(HaveLen(10))
 
 	expLabels := map[string]string{
 		"app":                                    "nginx",
@@ -1032,7 +1074,8 @@ func TestBuildNginxResourceObjects_DaemonSet(t *testing.T) {
 	objects, err := provisioner.buildNginxResourceObjects(resourceName, gateway, nProxyCfg)
 	g.Expect(err).ToNot(HaveOccurred())
 
-	g.Expect(objects).To(HaveLen(6))
+	// agentTLSSecret, includesConfigMap, agentConfigMap, serviceAccount, service, daemonSet, metricsService
+	g.Expect(objects).To(HaveLen(7))
 
 	expLabels := map[string]string{
 		"app":                                    "nginx",
@@ -1097,7 +1140,9 @@ func TestBuildNginxResourceObjects_OpenShift(t *testing.T) {
 	objects, err := provisioner.buildNginxResourceObjects(resourceName, gateway, &graph.EffectiveNginxProxy{})
 	g.Expect(err).ToNot(HaveOccurred())
 
-	g.Expect(objects).To(HaveLen(8))
+	// agentTLSSecret, includesConfigMap, agentConfigMap, serviceAccount, role, roleBinding, service, deployment,
+	// metricsService
+	g.Expect(objects).To(HaveLen(9))
 
 	expLabels := map[string]string{
 		"app":                                    "nginx",
@@ -1170,7 +1215,9 @@ func TestBuildNginxResourceObjects_DataplaneKeySecret(t *testing.T) {
 	resourceName := "gw-nginx"
 	objects, err := provisioner.buildNginxResourceObjects(resourceName, gateway, &graph.EffectiveNginxProxy{})
 	g.Expect(err).ToNot(HaveOccurred())
-	g.Expect(objects).To(HaveLen(7)) // 2 secrets, 2 configmaps, serviceaccount, service, deployment
+	// agentTLSSecret, dataplaneKeySecret, includesConfigMap, agentConfigMap, serviceAccount, service, deployment,
+	// metricsService
+	g.Expect(objects).To(HaveLen(8))
 
 	// Find the dataplane key secret
 	var found bool
@@ -1238,7 +1285,9 @@ func TestBuildResourcesForInvalidGatewayCleanup(t *testing.T) {
 
 	objects := provisioner.buildResourcesForInvalidGatewayCleanup(deploymentNSName)
 
-	g.Expect(objects).To(HaveLen(8))
+	// deployment, daemonSet, service, hpa, serviceAccount, includesConfigMap, agentConfigMap, agentTLSSecret,
+	// metricsService
+	g.Expect(objects).To(HaveLen(9))
 
 	validateMeta := func(obj client.Object, name string) {
 		g.Expect(obj.GetName()).To(Equal(name))
@@ -1305,7 +1354,9 @@ func TestBuildResourcesForInvalidGatewayCleanup_Plus(t *testing.T) {
 
 	objects := provisioner.buildResourcesForInvalidGatewayCleanup(deploymentNSName)
 
-	g.Expect(objects).To(HaveLen(12))
+	// deployment, daemonSet, service, hpa, serviceAccount, includesConfigMap, agentConfigMap, agentTLSSecret,
+	// dockerSecret, caSecret, clientSSLSecret, jwtSecret, metricsService
+	g.Expect(objects).To(HaveLen(13))
 
 	validateMeta := func(obj client.Object, name string) {
 		g.Expect(obj.GetName()).To(Equal(name))
@@ -1393,7 +1444,9 @@ func TestBuildResourcesForInvalidGatewayCleanup_OpenShift(t *testing.T) {
 
 	objects := provisioner.buildResourcesForInvalidGatewayCleanup(deploymentNSName)
 
-	g.Expect(objects).To(HaveLen(10))
+	// deployment, daemonSet, service, hpa, role, roleBinding, serviceAccount, includesConfigMap, agentConfigMap,
+	// agentTLSSecret, metricsService
+	g.Expect(objects).To(HaveLen(11))
 
 	validateMeta := func(obj client.Object, name string) {
 		g.Expect(obj.GetName()).To(Equal(name))
@@ -1438,9 +1491,9 @@ func TestBuildResourcesForInvalidGatewayCleanup_DataplaneKeySecret(t *testing.T)
 
 	objects := provisioner.buildResourcesForInvalidGatewayCleanup(deploymentNSName)
 
-	// Should include the dataplane key secret in the objects list
-	// Default: deployment, daemonset, service, hpa, serviceaccount, 2 configmaps, agentTLSSecret, dataplaneKeySecret
-	g.Expect(objects).To(HaveLen(9))
+	// deployment, daemonSet, service, hpa, serviceAccount, includesConfigMap, agentConfigMap, agentTLSSecret,
+	// dataplaneKeySecret, metricsService
+	g.Expect(objects).To(HaveLen(10))
 
 	validateMeta := func(obj client.Object, name string) {
 		g.Expect(obj.GetName()).To(Equal(name))
@@ -1495,6 +1548,193 @@ func TestSetIPFamily(t *testing.T) {
 	setIPFamily(&graph.EffectiveNginxProxy{IPFamily: &ipFamily}, svc)
 	g.Expect(svc.Spec.IPFamilyPolicy).To(Equal(helpers.GetPointer(corev1.IPFamilyPolicySingleStack)))
 	g.Expect(svc.Spec.IPFamilies).To(Equal([]corev1.IPFamily{corev1.IPv6Protocol}))
+}
+
+func TestBuildNginxMetricsService(t *testing.T) {
+	t.Parallel()
+
+	selectorLabels := map[string]string{
+		"app":                                    "nginx",
+		"gateway.networking.k8s.io/gateway-name": "gw",
+		"app.kubernetes.io/name":                 "gw-nginx",
+	}
+
+	baseMeta := metav1.ObjectMeta{
+		Name:      "gw-nginx",
+		Namespace: "default",
+		Labels: map[string]string{
+			"app":                                    "nginx",
+			"gateway.networking.k8s.io/gateway-name": "gw",
+			"app.kubernetes.io/name":                 "gw-nginx",
+			"label":                                  "value",
+		},
+		Annotations: map[string]string{
+			"annotation": "value",
+		},
+	}
+
+	expName := controller.CreateNginxResourceName("gw-nginx", metricsServiceNameSuffix)
+
+	tests := []struct {
+		nProxyCfg *graph.EffectiveNginxProxy
+		expected  *corev1.Service
+		name      string
+	}{
+		{
+			name:      "nil NginxProxy config",
+			nProxyCfg: nil,
+			expected: &corev1.Service{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:        expName,
+					Namespace:   "default",
+					Labels:      baseMeta.Labels,
+					Annotations: baseMeta.Annotations,
+				},
+				Spec: corev1.ServiceSpec{
+					Type:           corev1.ServiceTypeClusterIP,
+					Selector:       selectorLabels,
+					IPFamilyPolicy: helpers.GetPointer(corev1.IPFamilyPolicyPreferDualStack),
+					Ports: []corev1.ServicePort{
+						{
+							Name:       metricsPortName,
+							Port:       config.DefaultNginxMetricsPort,
+							Protocol:   corev1.ProtocolTCP,
+							TargetPort: intstr.FromInt32(config.DefaultNginxMetricsPort),
+						},
+					},
+				},
+			},
+		},
+		{
+			name:      "empty NginxProxy config",
+			nProxyCfg: &graph.EffectiveNginxProxy{},
+			expected: &corev1.Service{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:        expName,
+					Namespace:   "default",
+					Labels:      baseMeta.Labels,
+					Annotations: baseMeta.Annotations,
+				},
+				Spec: corev1.ServiceSpec{
+					Type:           corev1.ServiceTypeClusterIP,
+					Selector:       selectorLabels,
+					IPFamilyPolicy: helpers.GetPointer(corev1.IPFamilyPolicyPreferDualStack),
+					Ports: []corev1.ServicePort{
+						{
+							Name:       metricsPortName,
+							Port:       config.DefaultNginxMetricsPort,
+							Protocol:   corev1.ProtocolTCP,
+							TargetPort: intstr.FromInt32(config.DefaultNginxMetricsPort),
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "custom metrics port",
+			nProxyCfg: &graph.EffectiveNginxProxy{
+				Metrics: &ngfAPIv1alpha2.Metrics{
+					Port: helpers.GetPointer[int32](8080),
+				},
+			},
+			expected: &corev1.Service{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:        expName,
+					Namespace:   "default",
+					Labels:      baseMeta.Labels,
+					Annotations: baseMeta.Annotations,
+				},
+				Spec: corev1.ServiceSpec{
+					Type:           corev1.ServiceTypeClusterIP,
+					Selector:       selectorLabels,
+					IPFamilyPolicy: helpers.GetPointer(corev1.IPFamilyPolicyPreferDualStack),
+					Ports: []corev1.ServicePort{
+						{
+							Name:       metricsPortName,
+							Port:       8080,
+							Protocol:   corev1.ProtocolTCP,
+							TargetPort: intstr.FromInt32(8080),
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "metrics disabled",
+			nProxyCfg: &graph.EffectiveNginxProxy{
+				Metrics: &ngfAPIv1alpha2.Metrics{
+					Disable: helpers.GetPointer(true),
+				},
+			},
+			expected: nil,
+		},
+		{
+			name: "IPv4 single stack",
+			nProxyCfg: &graph.EffectiveNginxProxy{
+				IPFamily: helpers.GetPointer(ngfAPIv1alpha2.IPv4),
+			},
+			expected: &corev1.Service{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:        expName,
+					Namespace:   "default",
+					Labels:      baseMeta.Labels,
+					Annotations: baseMeta.Annotations,
+				},
+				Spec: corev1.ServiceSpec{
+					Type:           corev1.ServiceTypeClusterIP,
+					Selector:       selectorLabels,
+					IPFamilyPolicy: helpers.GetPointer(corev1.IPFamilyPolicySingleStack),
+					IPFamilies:     []corev1.IPFamily{corev1.IPv4Protocol},
+					Ports: []corev1.ServicePort{
+						{
+							Name:       metricsPortName,
+							Port:       config.DefaultNginxMetricsPort,
+							Protocol:   corev1.ProtocolTCP,
+							TargetPort: intstr.FromInt32(config.DefaultNginxMetricsPort),
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "IPv6 single stack",
+			nProxyCfg: &graph.EffectiveNginxProxy{
+				IPFamily: helpers.GetPointer(ngfAPIv1alpha2.IPv6),
+			},
+			expected: &corev1.Service{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:        expName,
+					Namespace:   "default",
+					Labels:      baseMeta.Labels,
+					Annotations: baseMeta.Annotations,
+				},
+				Spec: corev1.ServiceSpec{
+					Type:           corev1.ServiceTypeClusterIP,
+					Selector:       selectorLabels,
+					IPFamilyPolicy: helpers.GetPointer(corev1.IPFamilyPolicySingleStack),
+					IPFamilies:     []corev1.IPFamily{corev1.IPv6Protocol},
+					Ports: []corev1.ServicePort{
+						{
+							Name:       metricsPortName,
+							Port:       config.DefaultNginxMetricsPort,
+							Protocol:   corev1.ProtocolTCP,
+							TargetPort: intstr.FromInt32(config.DefaultNginxMetricsPort),
+						},
+					},
+				},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			result := buildNginxMetricsService(baseMeta, test.nProxyCfg, selectorLabels)
+			g.Expect(result).To(Equal(test.expected))
+		})
+	}
 }
 
 func TestBuildNginxConfigMaps_WorkerConnections(t *testing.T) {
@@ -1855,7 +2095,8 @@ func TestBuildNginxResourceObjects_Patches(t *testing.T) {
 
 	objects, err := provisioner.buildNginxResourceObjects("gw-nginx", gateway, nProxyCfg)
 	g.Expect(err).ToNot(HaveOccurred())
-	g.Expect(objects).To(HaveLen(6))
+	// agentTLSSecret, includesConfigMap, agentConfigMap, serviceAccount, service, deployment, metricsService
+	g.Expect(objects).To(HaveLen(7))
 
 	// Find and validate service
 	var svc *corev1.Service
@@ -1906,7 +2147,8 @@ func TestBuildNginxResourceObjects_Patches(t *testing.T) {
 
 	objects, err = provisioner.buildNginxResourceObjects("gw-nginx", gateway, nProxyCfg)
 	g.Expect(err).ToNot(HaveOccurred())
-	g.Expect(objects).To(HaveLen(6))
+	// agentTLSSecret, includesConfigMap, agentConfigMap, serviceAccount, service, deployment, metricsService
+	g.Expect(objects).To(HaveLen(7))
 
 	// Find and validate service label override
 	svc = nil
@@ -1937,7 +2179,8 @@ func TestBuildNginxResourceObjects_Patches(t *testing.T) {
 
 	objects, err = provisioner.buildNginxResourceObjects("gw-nginx", gateway, nProxyCfg)
 	g.Expect(err).ToNot(HaveOccurred())
-	g.Expect(objects).To(HaveLen(6))
+	// agentTLSSecret, includesConfigMap, agentConfigMap, serviceAccount, service, daemonSet, metricsService
+	g.Expect(objects).To(HaveLen(7))
 
 	// Find and validate daemonset
 	var ds *appsv1.DaemonSet
@@ -1980,7 +2223,8 @@ func TestBuildNginxResourceObjects_Patches(t *testing.T) {
 	g.Expect(err).To(HaveOccurred())
 	g.Expect(err.Error()).To(ContainSubstring("failed to apply service patches"))
 	g.Expect(err.Error()).To(ContainSubstring("failed to apply deployment patches"))
-	g.Expect(objects).To(HaveLen(6)) // Objects should still be returned
+	// agentTLSSecret, includesConfigMap, agentConfigMap, serviceAccount, service, deployment, metricsService
+	g.Expect(objects).To(HaveLen(7)) // Objects should still be returned
 
 	// Test unsupported patch type
 	nProxyCfg = &graph.EffectiveNginxProxy{
@@ -2001,7 +2245,8 @@ func TestBuildNginxResourceObjects_Patches(t *testing.T) {
 	objects, err = provisioner.buildNginxResourceObjects("gw-nginx", gateway, nProxyCfg)
 	g.Expect(err).To(HaveOccurred())
 	g.Expect(err.Error()).To(ContainSubstring("unsupported patch type"))
-	g.Expect(objects).To(HaveLen(6))
+	// agentTLSSecret, includesConfigMap, agentConfigMap, serviceAccount, service, deployment, metricsService
+	g.Expect(objects).To(HaveLen(7))
 
 	// Test edge cases - nil values and empty patches should be ignored
 	nProxyCfg = &graph.EffectiveNginxProxy{
@@ -2025,7 +2270,8 @@ func TestBuildNginxResourceObjects_Patches(t *testing.T) {
 
 	objects, err = provisioner.buildNginxResourceObjects("gw-nginx", gateway, nProxyCfg)
 	g.Expect(err).ToNot(HaveOccurred())
-	g.Expect(objects).To(HaveLen(6))
+	// agentTLSSecret, includesConfigMap, agentConfigMap, serviceAccount, service, deployment, metricsService
+	g.Expect(objects).To(HaveLen(7))
 
 	// Find service and verify no patches were applied
 	for _, obj := range objects {
@@ -2065,7 +2311,8 @@ func TestBuildNginxResourceObjects_Patches(t *testing.T) {
 
 	objects, err = provisioner.buildNginxResourceObjects("gw-nginx", gateway, nProxyCfg)
 	g.Expect(err).ToNot(HaveOccurred())
-	g.Expect(objects).To(HaveLen(6))
+	// agentTLSSecret, includesConfigMap, agentConfigMap, serviceAccount, service, deployment, metricsService
+	g.Expect(objects).To(HaveLen(7))
 
 	// Find and validate service - should only have service-specific labels
 	svc = nil

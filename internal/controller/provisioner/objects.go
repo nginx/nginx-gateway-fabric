@@ -38,6 +38,8 @@ const (
 	defaultNginxErrorLogLevel        = "info"
 	nginxIncludesConfigMapNameSuffix = "includes-bootstrap"
 	nginxAgentConfigMapNameSuffix    = "agent-config"
+	metricsPortName                  = "metrics"
+	metricsServiceNameSuffix         = "metrics"
 
 	defaultServiceType   = corev1.ServiceTypeLoadBalancer
 	defaultServicePolicy = corev1.ServiceExternalTrafficPolicyLocal
@@ -722,6 +724,15 @@ func setIPFamily(nProxyCfg *graph.EffectiveNginxProxy, svc *corev1.Service) {
 	}
 }
 
+// buildNginxMetricsService builds a ClusterIP Service dedicated to metrics scraping.
+func buildNginxMetricsService(
+	objectMeta metav1.ObjectMeta,
+	nProxyCfg *graph.EffectiveNginxProxy,
+	selectorLabels map[string]string,
+) *corev1.Service {
+	return nil
+}
+
 func setSvcLoadBalancerSettings(svcCfg ngfAPIv1alpha2.ServiceSpec, svcSpec *corev1.ServiceSpec) {
 	if svcCfg.LoadBalancerIP != nil {
 		svcSpec.LoadBalancerIP = *svcCfg.LoadBalancerIP
@@ -936,7 +947,7 @@ func (p *NginxProvisioner) buildNginxPodTemplateSpec(
 		}
 
 		containerPorts = append(containerPorts, corev1.ContainerPort{
-			Name:          "metrics",
+			Name:          metricsPortName,
 			ContainerPort: metricsPort,
 		})
 
