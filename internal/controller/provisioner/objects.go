@@ -175,6 +175,20 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 		))
 	}
 
+	// build metrics service
+	metricsService := buildNginxMetricsService(
+		cloneObjectMeta(objectMeta),
+		nProxyCfg,
+		selectorLabels,
+	)
+	if metricsService != nil {
+		if err := p.setOwnerReference(metricsService, gateway); err != nil {
+			errs = append(errs, fmt.Errorf(
+				"failed to set owner reference on Service %s: %w", metricsService.GetName(), err,
+			))
+		}
+	}
+
 	// order to install resources:
 	// secrets
 	// configmaps
@@ -183,8 +197,14 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 	// service
 	// deployment/daemonset
 	// hpa
+	// metrics service
 
-	objects := make([]client.Object, 0, len(configmapsList)+len(secretsList)+len(openshiftObjs)+3)
+	extraCap := 3 // serviceAccount, service, deployment
+	if metricsService != nil {
+		extraCap++
+	}
+
+	objects := make([]client.Object, 0, len(configmapsList)+len(secretsList)+len(openshiftObjs)+extraCap)
 	objects = append(objects, secretsList...)
 	objects = append(objects, configmapsList...)
 	objects = append(objects, serviceAccount)
@@ -199,6 +219,10 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 			errs = append(errs, fmt.Errorf("failed to set owner reference on HPA %s: %w", hpa.GetName(), err))
 		}
 		objects = append(objects, hpa)
+	}
+
+	if metricsService != nil {
+		objects = append(objects, metricsService)
 	}
 
 	return objects, errors.Join(errs...)
@@ -730,7 +754,38 @@ func buildNginxMetricsService(
 	nProxyCfg *graph.EffectiveNginxProxy,
 	selectorLabels map[string]string,
 ) *corev1.Service {
-	return nil
+	port, enabled := graph.MetricsEnabledForNginxProxy(nProxyCfg)
+	if !enabled {
+		return nil
+	}
+
+	metricsPort := config.DefaultNginxMetricsPort
+	if port != nil {
+		metricsPort = *port
+	}
+
+	objectMeta.Name = controller.CreateNginxResourceName(objectMeta.Name, metricsServiceNameSuffix)
+
+	svc := &corev1.Service{
+		ObjectMeta: objectMeta,
+		Spec: corev1.ServiceSpec{
+			Type:           corev1.ServiceTypeClusterIP,
+			Selector:       selectorLabels,
+			IPFamilyPolicy: helpers.GetPointer(corev1.IPFamilyPolicyPreferDualStack),
+			Ports: []corev1.ServicePort{
+				{
+					Name:       metricsPortName,
+					Port:       metricsPort,
+					Protocol:   corev1.ProtocolTCP,
+					TargetPort: intstr.FromInt32(metricsPort),
+				},
+			},
+		},
+	}
+
+	setIPFamily(nProxyCfg, svc)
+
+	return svc
 }
 
 func setSvcLoadBalancerSettings(svcCfg ngfAPIv1alpha2.ServiceSpec, svcSpec *corev1.ServiceSpec) {
@@ -1461,6 +1516,9 @@ func (p *NginxProvisioner) buildResourcesForInvalidGatewayCleanup(
 			&corev1.Secret{ObjectMeta: meta(resourceName(p.cfg.NginxOneConsoleTelemetryConfig.DataplaneKeySecretName))},
 		)
 	}
+
+	// 8. Metrics Service
+	objects = append(objects, &corev1.Service{ObjectMeta: meta(resourceName(metricsServiceNameSuffix))})
 
 	return objects
 }
