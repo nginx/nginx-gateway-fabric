@@ -1,0 +1,61 @@
+{{- if and .Values.nginxGateway.metrics.enable .Values.nginxGateway.metrics.serviceMonitor.enable }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "nginx-gateway.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "nginx-gateway.labels" . | nindent 4 }}
+    {{- with .Values.nginxGateway.metrics.serviceMonitor.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- with .Values.nginxGateway.metrics.serviceMonitor.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  namespaceSelector:
+    matchNames:
+    - {{ .Release.Namespace }}
+  selector:
+    matchLabels:
+      {{- include "nginx-gateway.selectorLabels" . | nindent 6 }}
+  endpoints:
+  - port: metrics
+    {{- if .Values.nginxGateway.metrics.serviceMonitor.interval }}
+    interval: {{ .Values.nginxGateway.metrics.serviceMonitor.interval }}
+    {{- end }}
+    {{- if .Values.nginxGateway.metrics.secure }}
+    scheme: https
+    tlsConfig:
+      insecureSkipVerify: true
+    {{- end }}
+{{- end }}
+---
+{{- if .Values.nginx.serviceMonitor.enable }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "nginx-gateway.fullname" . }}-nginx
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "nginx-gateway.labels" . | nindent 4 }}
+    {{- with .Values.nginx.serviceMonitor.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- with .Values.nginx.serviceMonitor.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  namespaceSelector:
+    any: true
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  endpoints:
+  - port: metrics
+    {{- if .Values.nginx.serviceMonitor.interval }}
+    interval: {{ .Values.nginx.serviceMonitor.interval }}
+    {{- end }}
+{{- end }}

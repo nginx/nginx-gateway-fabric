@@ -212,6 +212,19 @@ nginxGateway:
     # Please note that this endpoint will be secured with a self-signed certificate.
     secure: false
 
+    serviceMonitor:
+      # -- Create a ServiceMonitor resource for the control plane.
+      enable: false
+
+      # -- Additional labels for the control plane ServiceMonitor.
+      labels: {}
+
+      # -- Annotations for the control plane ServiceMonitor.
+      annotations: {}
+
+      # -- Scrape interval for the control plane ServiceMonitor (e.g. "30s"). Empty uses Prometheus default.
+      interval: ""
+
   gwAPIExperimentalFeatures:
     # -- Enable the experimental features of Gateway API which are supported by NGINX Gateway Fabric. Requires the Gateway
     # APIs installed from the experimental channel.
@@ -298,6 +311,20 @@ nginx:
     #     target:
     #       type: AverageValue
     #       averageValue: 400
+
+  serviceMonitor:
+    # -- Create a ServiceMonitor resource for the data plane.
+    enable: false
+
+    # -- Additional labels for the data plane ServiceMonitor.
+    labels: {}
+
+    # -- Annotations for the data plane ServiceMonitor.
+    annotations: {}
+
+    # -- Scrape interval for the data plane ServiceMonitor (e.g. "30s"). Empty uses Prometheus default.
+    interval: ""
+
   image:
     # -- The NGINX image to use.
     repository: ghcr.io/nginx/nginx-gateway-fabric/nginx
