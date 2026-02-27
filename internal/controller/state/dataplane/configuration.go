@@ -8,7 +8,6 @@ import (
 	"sort"
 
 	"github.com/go-logr/logr"
-	coreV1 "k8s.io/api/core/v1"
 	discoveryV1 "k8s.io/api/discovery/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -108,7 +107,7 @@ func BuildConfiguration(
 			buildRefCertificateBundles(g.ReferencedSecrets, g.ReferencedCaCertConfigMaps),
 			backendGroups,
 		),
-		AuthSecrets:       buildAuthSecrets(g.ReferencedSecrets),
+		AuthSecrets:       buildAuthSecrets(g.AuthenticationFilters, g.ReferencedSecrets),
 		Telemetry:         buildTelemetry(g, gateway),
 		BaseHTTPConfig:    baseHTTPConfig,
 		BaseStreamConfig:  baseStreamConfig,
@@ -445,19 +444,67 @@ func buildCertBundles(
 	return bundles
 }
 
-func buildAuthSecrets(secretsMap map[types.NamespacedName]*secrets.Secret) map[AuthFileID]AuthFileData {
-	authBasics := make(map[AuthFileID]AuthFileData, len(secretsMap))
+func buildAuthSecrets(
+	authenticationFilters map[types.NamespacedName]*graph.AuthenticationFilter,
+	secretsMap map[types.NamespacedName]*secrets.Secret,
+) map[AuthFileID]AuthFileData {
+	authFileData := make(map[AuthFileID]AuthFileData, len(authenticationFilters))
 
-	for nsname, secret := range secretsMap {
-		if secret != nil && secret.Source != nil &&
-			secret.Source.Type == coreV1.SecretType(secrets.SecretTypeHtpasswd) {
-			if data, exists := secret.Source.Data[secrets.AuthKey]; exists {
-				id := AuthFileID(fmt.Sprintf("%s_%s", nsname.Namespace, nsname.Name))
-				authBasics[id] = data
-			}
+	for _, filter := range authenticationFilters {
+		if filter == nil || filter.Source == nil {
+			continue
+		}
+		switch filter.Source.Spec.Type {
+		case ngfAPIv1alpha1.AuthTypeBasic:
+			id, data := getBasicAuthFileData(filter, secretsMap)
+			authFileData[id] = data
+		case ngfAPIv1alpha1.AuthTypeJWT:
+			id, data := getJWTAuthFileData(filter, secretsMap)
+			authFileData[id] = data
 		}
 	}
-	return authBasics
+
+	return authFileData
+}
+
+func getBasicAuthFileData(
+	filter *graph.AuthenticationFilter,
+	secretsMap map[types.NamespacedName]*secrets.Secret,
+) (AuthFileID, []byte) {
+	secretNsName := types.NamespacedName{
+		Namespace: filter.Source.Namespace,
+		Name:      filter.Source.Spec.Basic.SecretRef.Name,
+	}
+	secret := secretsMap[secretNsName]
+	if secret == nil || secret.Source == nil {
+		return "", nil
+	}
+	data, exists := secret.Source.Data[secrets.AuthKey]
+	if !exists {
+		return "", nil
+	}
+
+	return GenerateAuthBasicFileID(secretNsName.Namespace, secretNsName.Name), data
+}
+
+func getJWTAuthFileData(
+	filter *graph.AuthenticationFilter,
+	secretsMap map[types.NamespacedName]*secrets.Secret,
+) (AuthFileID, []byte) {
+	secretNsName := types.NamespacedName{
+		Namespace: filter.Source.Namespace,
+		Name:      filter.Source.Spec.JWT.File.SecretRef.Name,
+	}
+	secret := secretsMap[secretNsName]
+	if secret == nil || secret.Source == nil {
+		return "", nil
+	}
+	data, exists := secret.Source.Data[secrets.AuthKey]
+	if !exists {
+		return "", nil
+	}
+
+	return GenerateAuthJWTFileID(secretNsName.Namespace, secretNsName.Name), data
 }
 
 func buildBackendGroups(servers []VirtualServer) []BackendGroup {
@@ -487,12 +534,11 @@ func buildBackendGroups(servers []VirtualServer) []BackendGroup {
 		}
 	}
 
-	numGroups := len(uniqueGroups)
 	if len(uniqueGroups) == 0 {
 		return nil
 	}
 
-	groups := make([]BackendGroup, 0, numGroups)
+	groups := make([]BackendGroup, 0, len(uniqueGroups))
 	for _, group := range uniqueGroups {
 		groups = append(groups, group)
 	}
@@ -1129,9 +1175,14 @@ func generateCertBundleID(caCertRef types.NamespacedName) CertBundleID {
 	return CertBundleID(fmt.Sprintf("cert_bundle_%s_%s", caCertRef.Namespace, caCertRef.Name))
 }
 
-// GenerateAuthFileID is used to generate IDs for both basic auth and jwt auth user files.
-func GenerateAuthFileID(namespace, name string) AuthFileID {
-	return AuthFileID(fmt.Sprintf("%s_%s", namespace, name))
+// GenerateAuthBasicFileID is used to generate IDs for basic auth files.
+func GenerateAuthBasicFileID(namespace, name string) AuthFileID {
+	return AuthFileID(fmt.Sprintf("basic_auth_%s_%s", namespace, name))
+}
+
+// GenerateAuthJWTFileID is used to generate IDs for jwt auth files.
+func GenerateAuthJWTFileID(namespace, name string) AuthFileID {
+	return AuthFileID(fmt.Sprintf("jwt_auth_%s_%s", namespace, name))
 }
 
 func telemetryEnabled(gw *graph.Gateway) bool {

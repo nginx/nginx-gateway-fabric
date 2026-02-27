@@ -53,13 +53,16 @@ func (s *secretEntry) validate(obj client.Object) {
 		}
 
 		certBundle = secrets.NewCertificateBundle(client.ObjectKeyFromObject(secret), "Secret", cert)
+		// TODO: Remove this case 3 releases after 2.5.0.
 	case secret.Type == v1.SecretType(secrets.SecretTypeHtpasswd):
-		// Validate Htpasswd secret
+		fallthrough
+	case secret.Type == v1.SecretTypeOpaque:
+		// Process opaque secrets with the expected key for authentication.
 		if _, exists := secret.Data[secrets.AuthKey]; !exists {
-			validationErr = fmt.Errorf("missing required key %q in secret type %q", secrets.AuthKey, secret.Type)
+			validationErr = fmt.Errorf("missing required key %q", secrets.AuthKey)
 		}
 	default:
-		validationErr = fmt.Errorf("unsupported secret type %q", secret.Type)
+		validationErr = fmt.Errorf("unsupported secret type %q. Please use type: Opaque", secret.Type)
 	}
 
 	s.Secret = secrets.Secret{

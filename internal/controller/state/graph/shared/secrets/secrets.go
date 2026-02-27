@@ -28,6 +28,12 @@ const (
 	SecretTypeHtpasswd SecretType = "nginx.org/htpasswd" // #nosec G101
 )
 
+type SecretDataKey string
+
+const (
+	SecretDataKeyAuth SecretDataKey = "auth"
+)
+
 const (
 	// AuthKey is the Secret key for Basic Auth credentials.
 	AuthKey = "auth"

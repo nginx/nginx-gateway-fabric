@@ -19,6 +19,7 @@ import (
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 	"sigs.k8s.io/gateway-api/apis/v1alpha2"
 
+	"github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
@@ -294,6 +295,15 @@ func addFilters(hr *graph.L7Route, filters []graph.Filter) {
 	}
 }
 
+func addFilterPerRule(hr *graph.L7Route, filters []graph.Filter) {
+	for i := range hr.Spec.Rules {
+		hr.Spec.Rules[i].Filters = graph.RouteRuleFilters{
+			Filters: []graph.Filter{filters[i]},
+			Valid:   *hr.Spec.Rules[i].Matches[0].Path.Value != invalidFiltersPath,
+		}
+	}
+}
+
 func createBackendRefs(validRule bool) []graph.BackendRef {
 	if !validRule {
 		return nil
@@ -489,7 +499,8 @@ func TestBuildConfiguration(t *testing.T) {
 		"hr-5",
 		"foo.example.com",
 		"listener-80-1",
-		pathAndType{path: "/", pathType: prefix}, pathAndType{path: invalidFiltersPath, pathType: prefix},
+		pathAndType{path: "/", pathType: prefix},
+		pathAndType{path: invalidFiltersPath, pathType: prefix},
 	)
 
 	sf1 := &graph.SnippetsFilter{
@@ -524,6 +535,7 @@ func TestBuildConfiguration(t *testing.T) {
 		},
 	}
 
+	// Basic Auth resources
 	authBasicSecretNsName := types.NamespacedName{Namespace: "test", Name: "auth-basic-secret"}
 	authBasicSecret := &secrets.Secret{
 		Source: &apiv1.Secret{
@@ -538,18 +550,58 @@ func TestBuildConfiguration(t *testing.T) {
 		},
 	}
 
-	af1 := &graph.AuthenticationFilter{
+	afBasicAuth := &graph.AuthenticationFilter{
 		Source: &ngfAPIv1alpha1.AuthenticationFilter{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "af",
 				Namespace: "test",
 			},
 			Spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+				Type: ngfAPIv1alpha1.AuthTypeBasic,
 				Basic: &ngfAPIv1alpha1.BasicAuth{
 					SecretRef: ngfAPIv1alpha1.LocalObjectReference{
 						Name: authBasicSecretNsName.Name,
 					},
 					Realm: "",
+				},
+			},
+		},
+		Valid:      true,
+		Referenced: true,
+	}
+
+	// JWT Auth resources
+	authJWTSecretNsName := types.NamespacedName{Namespace: "test", Name: "auth-jwt-secret"}
+	authJWTSecret := &secrets.Secret{
+		Source: &apiv1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      authJWTSecretNsName.Name,
+				Namespace: authJWTSecretNsName.Namespace,
+			},
+			Type: apiv1.SecretType("nginx.org/jwt"),
+			Data: map[string][]byte{
+				"auth": []byte("token"),
+			},
+		},
+	}
+
+	afJWTAuth := &graph.AuthenticationFilter{
+		Source: &ngfAPIv1alpha1.AuthenticationFilter{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "af-jwt",
+				Namespace: "test",
+			},
+			Spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+				Type: ngfAPIv1alpha1.AuthTypeJWT,
+				JWT: &ngfAPIv1alpha1.JWTAuth{
+					Source: ngfAPIv1alpha1.JWTKeySourceFile,
+					File: &ngfAPIv1alpha1.JWTFileKeySource{
+						SecretRef: ngfAPIv1alpha1.LocalObjectReference{
+							Name: authJWTSecretNsName.Name,
+						},
+					},
+					KeyCache: helpers.GetPointer(ngfAPIv1alpha1.Duration("10s")),
+					Realm:    "",
 				},
 			},
 		},
@@ -576,7 +628,7 @@ func TestBuildConfiguration(t *testing.T) {
 		},
 	}
 
-	extRefFilterAuthenticationFilter := graph.Filter{
+	extRefFilterAuthenticationFilterBasic := graph.Filter{
 		FilterType: graph.FilterExtensionRef,
 		ExtensionRef: &v1.LocalObjectReference{
 			Group: ngfAPIv1alpha1.GroupName,
@@ -585,15 +637,29 @@ func TestBuildConfiguration(t *testing.T) {
 		},
 		ResolvedExtensionRef: &graph.ExtensionRefFilter{
 			Valid:                true,
-			AuthenticationFilter: af1,
+			AuthenticationFilter: afBasicAuth,
+		},
+	}
+
+	extRefFilterAuthenticationFilterJWT := graph.Filter{
+		FilterType: graph.FilterExtensionRef,
+		ExtensionRef: &v1.LocalObjectReference{
+			Group: ngfAPIv1alpha1.GroupName,
+			Kind:  kinds.AuthenticationFilter,
+			Name:  "af-jwt",
+		},
+		ResolvedExtensionRef: &graph.ExtensionRefFilter{
+			Valid:                true,
+			AuthenticationFilter: afJWTAuth,
 		},
 	}
 
 	addFilters(routeHR5, []graph.Filter{
 		redirect,
 		extRefFilterSnippetsFilter,
-		extRefFilterAuthenticationFilter,
+		extRefFilterAuthenticationFilterBasic,
 	})
+
 	expRedirect := HTTPRequestRedirectFilter{
 		Hostname: helpers.GetPointer("foo.example.com"),
 	}
@@ -615,12 +681,22 @@ func TestBuildConfiguration(t *testing.T) {
 		},
 	}
 
-	expExtRefFiltersAf := &AuthenticationFilter{
+	expExtRefFiltersAfBasic := &AuthenticationFilter{
 		Basic: &AuthBasic{
 			SecretName:      authBasicSecretNsName.Name,
 			SecretNamespace: authBasicSecretNsName.Namespace,
 			Realm:           "",
 			Data:            authBasicSecret.Source.Data["auth"],
+		},
+	}
+
+	expExtRefFiltersAfJWT := &AuthenticationFilter{
+		JWT: &AuthJWT{
+			SecretName:      authJWTSecretNsName.Name,
+			SecretNamespace: authJWTSecretNsName.Namespace,
+			Realm:           "",
+			Data:            authJWTSecret.Source.Data["auth"],
+			KeyCache:        helpers.GetPointer(ngfAPIv1alpha1.Duration("10s")),
 		},
 	}
 
@@ -645,6 +721,19 @@ func TestBuildConfiguration(t *testing.T) {
 		pathAndType{path: "/", pathType: prefix},
 		pathAndType{path: "/third", pathType: prefix},
 	)
+
+	hr9, expHR9Groups, routeHR9 := createTestResources(
+		"hr-9",
+		"foo.example.com",
+		"listener-80-1",
+		pathAndType{path: "/auth-basic", pathType: prefix},
+		pathAndType{path: "/auth-jwt", pathType: prefix},
+	)
+
+	addFilterPerRule(routeHR9, []graph.Filter{
+		extRefFilterAuthenticationFilterBasic,
+		extRefFilterAuthenticationFilterJWT,
+	})
 
 	_, _, httpsRouteHR1Invalid := createTestResources(
 		"https-hr-1",
@@ -1693,7 +1782,7 @@ func TestBuildConfiguration(t *testing.T) {
 										Filters: HTTPFilters{
 											RequestRedirect:      &expRedirect,
 											SnippetsFilters:      []SnippetsFilter{expExtRefFiltersSf},
-											AuthenticationFilter: expExtRefFiltersAf,
+											AuthenticationFilter: expExtRefFiltersAfBasic,
 										},
 									},
 								},
@@ -1709,6 +1798,73 @@ func TestBuildConfiguration(t *testing.T) {
 				return conf
 			}),
 			msg: "one http listener with one route with filters",
+		},
+		{
+			graph: getModifiedGraph(func(g *graph.Graph) *graph.Graph {
+				gw := g.Gateways[gatewayNsName]
+				gw.Listeners = append(gw.Listeners, &graph.Listener{
+					Name:        "listener-80-1",
+					GatewayName: gatewayNsName,
+					Source:      listener80,
+					Valid:       true,
+					Routes: map[graph.RouteKey]*graph.L7Route{
+						graph.CreateRouteKey(hr9): routeHR9,
+					},
+				})
+				g.Routes = map[graph.RouteKey]*graph.L7Route{
+					graph.CreateRouteKey(hr9): routeHR9,
+				}
+				g.ReferencedSecrets = map[types.NamespacedName]*secrets.Secret{
+					authBasicSecretNsName: authBasicSecret,
+					authJWTSecretNsName:   authJWTSecret,
+				}
+				return g
+			}),
+			expConf: getModifiedExpectedConfiguration(func(conf Configuration) Configuration {
+				conf.HTTPServers = append(conf.HTTPServers, []VirtualServer{
+					{
+						Hostname: "foo.example.com",
+						PathRules: []PathRule{
+							{
+								Path:     "/auth-basic",
+								PathType: PathTypePrefix,
+								MatchRules: []MatchRule{
+									{
+										Source:       &hr9.ObjectMeta,
+										BackendGroup: setPathRuleIdx(expHR9Groups[0], 0),
+										Filters: HTTPFilters{
+											AuthenticationFilter: expExtRefFiltersAfBasic,
+										},
+									},
+								},
+							},
+							{
+								Path:     "/auth-jwt",
+								PathType: PathTypePrefix,
+								MatchRules: []MatchRule{
+									{
+										Source:       &hr9.ObjectMeta,
+										BackendGroup: setPathRuleIdx(expHR9Groups[1], 1),
+										Filters: HTTPFilters{
+											AuthenticationFilter: expExtRefFiltersAfJWT,
+										},
+									},
+								},
+							},
+						},
+						Port: 80,
+					},
+				}...)
+				conf.SSLServers = []VirtualServer{}
+				conf.Upstreams = []Upstream{fooUpstream}
+				conf.BackendGroups = []BackendGroup{
+					setPathRuleIdx(expHR9Groups[0], 0),
+					setPathRuleIdx(expHR9Groups[1], 1),
+				}
+				conf.SSLKeyPairs = map[SSLKeyPairID]SSLKeyPair{}
+				return conf
+			}),
+			msg: "one http listener with multiple routes each with their own auth filter",
 		},
 		{
 			graph: getModifiedGraph(func(g *graph.Graph) *graph.Graph {
@@ -7057,7 +7213,12 @@ func TestBuildAuthSecrets(t *testing.T) {
 	htpasswdSecretNsName := types.NamespacedName{Namespace: "test", Name: "htpasswd-secret"}
 	tlsSecretNsName := types.NamespacedName{Namespace: "test", Name: "tls-secret"}
 	nilSourceSecretNsName := types.NamespacedName{Namespace: "test", Name: "nil-source"}
+	opaqueBasicAuthSecretNsName := types.NamespacedName{Namespace: "test", Name: "opaque-auth-basic-secret"}
+	opaqueJWTAuthSecretNsName := types.NamespacedName{Namespace: "test", Name: "opaque-auth-jwt-secret"}
+	invalidKeySecretNsName := types.NamespacedName{Namespace: "test", Name: "invalid-key-secret"}
 
+	// TODO: This secret type will be removed in a future release.
+	// Right now, this validates the `fallthrough` scenario.
 	htpasswdSecret := &secrets.Secret{
 		Source: &apiv1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
@@ -7066,7 +7227,33 @@ func TestBuildAuthSecrets(t *testing.T) {
 			},
 			Type: apiv1.SecretType(secrets.SecretTypeHtpasswd),
 			Data: map[string][]byte{
-				secrets.AuthKey: []byte("user:password"),
+				secrets.AuthKey: []byte("user:$apr1$cred"),
+			},
+		},
+	}
+
+	opaqueAuthSecretBasicData := &secrets.Secret{
+		Source: &apiv1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      opaqueBasicAuthSecretNsName.Name,
+				Namespace: opaqueBasicAuthSecretNsName.Namespace,
+			},
+			Type: apiv1.SecretTypeOpaque,
+			Data: map[string][]byte{
+				secrets.AuthKey: []byte("user:$apr1$cred"),
+			},
+		},
+	}
+
+	opaqueAuthSecretJwksData := &secrets.Secret{
+		Source: &apiv1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      opaqueJWTAuthSecretNsName.Name,
+				Namespace: opaqueJWTAuthSecretNsName.Namespace,
+			},
+			Type: apiv1.SecretTypeOpaque,
+			Data: map[string][]byte{
+				secrets.AuthKey: []byte("jwks-token"),
 			},
 		},
 	}
@@ -7103,7 +7290,7 @@ func TestBuildAuthSecrets(t *testing.T) {
 				Name:      "invalid-key-secret",
 				Namespace: "test",
 			},
-			Type: apiv1.SecretType(secrets.SecretTypeHtpasswd),
+			Type: apiv1.SecretTypeOpaque,
 			Data: map[string][]byte{
 				"wrong-key": []byte("data"),
 			},
@@ -7112,6 +7299,7 @@ func TestBuildAuthSecrets(t *testing.T) {
 
 	tests := []struct {
 		secrets  map[types.NamespacedName]*secrets.Secret
+		filters  map[types.NamespacedName]*graph.AuthenticationFilter
 		expected map[AuthFileID]AuthFileData
 		name     string
 	}{
@@ -7120,8 +7308,44 @@ func TestBuildAuthSecrets(t *testing.T) {
 			secrets: map[types.NamespacedName]*secrets.Secret{
 				htpasswdSecretNsName: htpasswdSecret,
 			},
+			filters: map[types.NamespacedName]*graph.AuthenticationFilter{
+				htpasswdSecretNsName: buildBasicAuthFilter(
+					htpasswdSecretNsName,
+					htpasswdSecretNsName.Namespace,
+				),
+			},
 			expected: map[AuthFileID]AuthFileData{
-				"test_htpasswd-secret": []byte("user:password"),
+				"basic_auth_test_htpasswd-secret": []byte("user:$apr1$cred"),
+			},
+		},
+		{
+			name: "opaque secret with auth key for basic auth",
+			secrets: map[types.NamespacedName]*secrets.Secret{
+				opaqueBasicAuthSecretNsName: opaqueAuthSecretBasicData,
+			},
+			filters: map[types.NamespacedName]*graph.AuthenticationFilter{
+				opaqueBasicAuthSecretNsName: buildBasicAuthFilter(
+					opaqueBasicAuthSecretNsName,
+					opaqueBasicAuthSecretNsName.Namespace,
+				),
+			},
+			expected: map[AuthFileID]AuthFileData{
+				"basic_auth_test_opaque-auth-basic-secret": []byte("user:$apr1$cred"),
+			},
+		},
+		{
+			name: "opaque secret with auth key for jwt auth",
+			secrets: map[types.NamespacedName]*secrets.Secret{
+				opaqueJWTAuthSecretNsName: opaqueAuthSecretJwksData,
+			},
+			filters: map[types.NamespacedName]*graph.AuthenticationFilter{
+				opaqueJWTAuthSecretNsName: buildJWTAuthFilter(
+					opaqueJWTAuthSecretNsName,
+					opaqueJWTAuthSecretNsName.Namespace,
+				),
+			},
+			expected: map[AuthFileID]AuthFileData{
+				"jwt_auth_test_opaque-auth-jwt-secret": []byte("jwks-token"),
 			},
 		},
 		{
@@ -7139,21 +7363,41 @@ func TestBuildAuthSecrets(t *testing.T) {
 			expected: map[AuthFileID]AuthFileData{},
 		},
 		{
-			name: "invalid key in htpasswd secret",
+			name: "invalid key in secret",
 			secrets: map[types.NamespacedName]*secrets.Secret{
-				{Namespace: "test", Name: "invalid-key-secret"}: invalidKeySecret,
+				invalidKeySecretNsName: invalidKeySecret,
 			},
-			expected: map[AuthFileID]AuthFileData{},
+			filters: map[types.NamespacedName]*graph.AuthenticationFilter{
+				invalidKeySecretNsName: buildBasicAuthFilter(
+					invalidKeySecretNsName,
+					invalidKeySecretNsName.Namespace,
+				),
+			},
+			expected: map[AuthFileID]AuthFileData{
+				"": nil,
+			},
 		},
 		{
 			name: "mixed secrets",
 			secrets: map[types.NamespacedName]*secrets.Secret{
-				htpasswdSecretNsName:  htpasswdSecret,
-				tlsSecretNsName:       tlsSecret,
-				nilSourceSecretNsName: nilSourceSecret,
+				opaqueBasicAuthSecretNsName: opaqueAuthSecretBasicData,
+				opaqueJWTAuthSecretNsName:   opaqueAuthSecretJwksData,
+				tlsSecretNsName:             tlsSecret,
+				nilSourceSecretNsName:       nilSourceSecret,
+			},
+			filters: map[types.NamespacedName]*graph.AuthenticationFilter{
+				opaqueBasicAuthSecretNsName: buildBasicAuthFilter(
+					opaqueBasicAuthSecretNsName,
+					opaqueBasicAuthSecretNsName.Namespace,
+				),
+				opaqueJWTAuthSecretNsName: buildJWTAuthFilter(
+					opaqueJWTAuthSecretNsName,
+					opaqueJWTAuthSecretNsName.Namespace,
+				),
 			},
 			expected: map[AuthFileID]AuthFileData{
-				"test_htpasswd-secret": []byte("user:password"),
+				"basic_auth_test_opaque-auth-basic-secret": []byte("user:$apr1$cred"),
+				"jwt_auth_test_opaque-auth-jwt-secret":     []byte("jwks-token"),
 			},
 		},
 	}
@@ -7163,9 +7407,48 @@ func TestBuildAuthSecrets(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			result := buildAuthSecrets(test.secrets)
+			result := buildAuthSecrets(test.filters, test.secrets)
 
 			g.Expect(result).To(Equal(test.expected))
 		})
+	}
+}
+
+func buildBasicAuthFilter(secretRef types.NamespacedName, namespace string) *graph.AuthenticationFilter {
+	return &graph.AuthenticationFilter{
+		Source: &ngfAPIv1alpha1.AuthenticationFilter{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: namespace,
+			},
+			Spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+				Type: ngfAPIv1alpha1.AuthTypeBasic,
+				Basic: &ngfAPIv1alpha1.BasicAuth{
+					SecretRef: v1alpha1.LocalObjectReference{
+						Name: secretRef.Name,
+					},
+				},
+			},
+		},
+	}
+}
+
+func buildJWTAuthFilter(secretRef types.NamespacedName, namespace string) *graph.AuthenticationFilter {
+	return &graph.AuthenticationFilter{
+		Source: &ngfAPIv1alpha1.AuthenticationFilter{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: namespace,
+			},
+			Spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+				Type: ngfAPIv1alpha1.AuthTypeJWT,
+				JWT: &ngfAPIv1alpha1.JWTAuth{
+					Source: ngfAPIv1alpha1.JWTKeySourceFile,
+					File: &ngfAPIv1alpha1.JWTFileKeySource{
+						SecretRef: ngfAPIv1alpha1.LocalObjectReference{
+							Name: secretRef.Name,
+						},
+					},
+				},
+			},
+		},
 	}
 }

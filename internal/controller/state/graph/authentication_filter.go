@@ -1,6 +1,8 @@
 package graph
 
 import (
+	"fmt"
+
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -58,6 +60,7 @@ func processAuthenticationFilters(
 	processed := make(map[types.NamespacedName]*AuthenticationFilter, len(authenticationFilters))
 
 	for nsname, af := range authenticationFilters {
+		// TODO: Add Plus feature flag here for JWT auth validation.
 		if cond := validateAuthenticationFilter(af, nsname, resourceResolver); cond != nil {
 			processed[nsname] = &AuthenticationFilter{
 				Source:     af,
@@ -81,27 +84,48 @@ func validateAuthenticationFilter(
 	nsname types.NamespacedName,
 	resourceResolver resolver.Resolver,
 ) *conditions.Condition {
-	var allErrs field.ErrorList
-
+	var cond *conditions.Condition
 	//revive:disable-next-line:unnecessary-stmt future-proof switch form; additional auth types will be added
 	switch af.Spec.Type {
 	case ngfAPI.AuthTypeBasic:
 		authBasicSecretNsName := types.NamespacedName{Namespace: nsname.Namespace, Name: af.Spec.Basic.SecretRef.Name}
-		if err := resourceResolver.Resolve(resolver.ResourceTypeSecret, authBasicSecretNsName); err != nil {
-			allErrs = append(allErrs, field.Invalid(
-				field.NewPath("spec.basic.secretRef"),
-				af.Spec.Basic.SecretRef.Name,
-				err.Error(),
-			))
+		cond = resolveAuthenticationFilterSecret(
+			authBasicSecretNsName,
+			resourceResolver,
+			field.NewPath("spec.basic.secretRef"),
+		)
+	case ngfAPI.AuthTypeJWT:
+		if af.Spec.JWT.Source == ngfAPI.JWTKeySourceFile {
+			authJWTSecretNsName := types.NamespacedName{Namespace: nsname.Namespace, Name: af.Spec.JWT.File.SecretRef.Name}
+			cond = resolveAuthenticationFilterSecret(
+				authJWTSecretNsName,
+				resourceResolver,
+				field.NewPath("spec.jwt.file.secretRef"),
+			)
 		}
-	default:
-		// Currently, only Basic auth is supported.
+	}
+
+	return cond
+}
+
+func resolveAuthenticationFilterSecret(
+	authSecretNsName types.NamespacedName,
+	resourceResolver resolver.Resolver,
+	path *field.Path,
+) *conditions.Condition {
+	var allErrs field.ErrorList
+
+	if err := resourceResolver.Resolve(resolver.ResourceTypeSecret, authSecretNsName); err != nil {
+		allErrs = append(allErrs, field.Invalid(
+			path,
+			fmt.Sprintf("secret %s/%s is invalid", authSecretNsName.Namespace, authSecretNsName.Name),
+			err.Error(),
+		))
 	}
 
 	if allErrs != nil {
 		cond := conditions.NewAuthenticationFilterInvalid(allErrs.ToAggregate().Error())
 		return &cond
 	}
-
 	return nil
 }
