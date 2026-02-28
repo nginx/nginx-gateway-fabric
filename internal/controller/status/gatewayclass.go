@@ -46,6 +46,7 @@ func supportedFeatures(experimental bool) []gatewayv1.SupportedFeature {
 		features.SupportHTTPRouteRequestPercentageMirror,
 		features.SupportHTTPRouteResponseHeaderModification,
 		features.SupportHTTPRouteSchemeRedirect,
+		features.SupportHTTPRouteCORS,
 	}
 
 	// Add experimental features if enabled
@@ -53,7 +54,6 @@ func supportedFeatures(experimental bool) []gatewayv1.SupportedFeature {
 		featureNames = append(
 			featureNames,
 			features.SupportUDPRoute,
-			features.SupportHTTPRouteCORS,
 		)
 	}
 
