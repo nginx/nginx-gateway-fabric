@@ -19,7 +19,6 @@ import (
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 	"sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	"github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
@@ -7423,7 +7422,7 @@ func buildBasicAuthFilter(secretRef types.NamespacedName, namespace string) *gra
 			Spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
 				Type: ngfAPIv1alpha1.AuthTypeBasic,
 				Basic: &ngfAPIv1alpha1.BasicAuth{
-					SecretRef: v1alpha1.LocalObjectReference{
+					SecretRef: ngfAPIv1alpha1.LocalObjectReference{
 						Name: secretRef.Name,
 					},
 				},
