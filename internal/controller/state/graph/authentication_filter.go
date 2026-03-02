@@ -3,12 +3,14 @@ package graph
 import (
 	"fmt"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/secrets"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/resolver"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
@@ -61,18 +63,11 @@ func processAuthenticationFilters(
 
 	for nsname, af := range authenticationFilters {
 		// TODO: Add Plus feature flag here for JWT auth validation.
-		if cond := validateAuthenticationFilter(af, nsname, resourceResolver); cond != nil {
-			processed[nsname] = &AuthenticationFilter{
-				Source:     af,
-				Conditions: []conditions.Condition{*cond},
-				Valid:      false,
-			}
-
-			continue
-		}
+		conds, valid := validateAuthenticationFilter(af, nsname, resourceResolver)
 		processed[nsname] = &AuthenticationFilter{
-			Source: af,
-			Valid:  true,
+			Source:     af,
+			Conditions: conds,
+			Valid:      valid,
 		}
 	}
 
@@ -83,13 +78,14 @@ func validateAuthenticationFilter(
 	af *ngfAPI.AuthenticationFilter,
 	nsname types.NamespacedName,
 	resourceResolver resolver.Resolver,
-) *conditions.Condition {
-	var cond *conditions.Condition
+) ([]conditions.Condition, bool) {
+	var conds []conditions.Condition
+	valid := true
 	//revive:disable-next-line:unnecessary-stmt future-proof switch form; additional auth types will be added
 	switch af.Spec.Type {
 	case ngfAPI.AuthTypeBasic:
 		authBasicSecretNsName := types.NamespacedName{Namespace: nsname.Namespace, Name: af.Spec.Basic.SecretRef.Name}
-		cond = resolveAuthenticationFilterSecret(
+		conds, valid = resolveAuthenticationFilterSecret(
 			authBasicSecretNsName,
 			resourceResolver,
 			field.NewPath("spec.basic.secretRef"),
@@ -97,7 +93,7 @@ func validateAuthenticationFilter(
 	case ngfAPI.AuthTypeJWT:
 		if af.Spec.JWT.Source == ngfAPI.JWTKeySourceFile {
 			authJWTSecretNsName := types.NamespacedName{Namespace: nsname.Namespace, Name: af.Spec.JWT.File.SecretRef.Name}
-			cond = resolveAuthenticationFilterSecret(
+			conds, valid = resolveAuthenticationFilterSecret(
 				authJWTSecretNsName,
 				resourceResolver,
 				field.NewPath("spec.jwt.file.secretRef"),
@@ -105,14 +101,14 @@ func validateAuthenticationFilter(
 		}
 	}
 
-	return cond
+	return conds, valid
 }
 
 func resolveAuthenticationFilterSecret(
 	authSecretNsName types.NamespacedName,
 	resourceResolver resolver.Resolver,
 	path *field.Path,
-) *conditions.Condition {
+) ([]conditions.Condition, bool) {
 	var allErrs field.ErrorList
 
 	if err := resourceResolver.Resolve(resolver.ResourceTypeSecret, authSecretNsName); err != nil {
@@ -125,7 +121,40 @@ func resolveAuthenticationFilterSecret(
 
 	if allErrs != nil {
 		cond := conditions.NewAuthenticationFilterInvalid(allErrs.ToAggregate().Error())
-		return &cond
+		return []conditions.Condition{cond}, false
 	}
-	return nil
+
+	// TODO: Remove this function 3 releases after 2.5.0.
+	return resolveHtPasswdSecret(authSecretNsName, resourceResolver)
+}
+
+func resolveHtPasswdSecret(
+	authSecretNsName types.NamespacedName,
+	resourceResolver resolver.Resolver,
+) ([]conditions.Condition, bool) {
+	secretResolver := resourceResolver.GetSecrets()[authSecretNsName]
+	if secretResolver == nil || secretResolver.Source == nil {
+		cond := conditions.NewAuthenticationFilterInvalid(
+			fmt.Sprintf("failed to resolve resource. Secret %s/%s is invalid or missing:",
+				authSecretNsName.Namespace,
+				authSecretNsName.Name),
+		)
+		return []conditions.Condition{cond}, false
+	}
+
+	if secretResolver.Source.Type == corev1.SecretType(secrets.SecretTypeHtpasswd) {
+		msg := fmt.Sprintf(
+			"The AuthenticationFilter is accepted,"+
+				" but the referenced Secret %s/%s of type %q."+
+				" This secret type will be removed in a future release."+
+				" Please use type %q instead.",
+			authSecretNsName.Namespace,
+			authSecretNsName.Name,
+			secretResolver.Source.Type,
+			corev1.SecretTypeOpaque,
+		)
+		cond := conditions.NewAuthenticationFilterAcceptedWithMessage(msg)
+		return []conditions.Condition{cond}, true
+	}
+	return nil, true
 }

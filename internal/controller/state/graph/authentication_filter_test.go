@@ -109,8 +109,8 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 		expCond conditions.Condition
 	}{
 		{
-			// TODO: Remove this test case when nginx.org/htpasswd type is removed.
-			name: "valid Basic auth filter with legacy htpasswd secret",
+			// TODO: Remove this case 3 releases after 2.5.0.
+			name: "valid Basic auth filter with htpasswd secret",
 			args: args{
 				secretNsName: types.NamespacedName{Namespace: "test", Name: "af"},
 				filter: createAuthenticationFilterBasicAuth(
@@ -124,7 +124,10 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 					}: createAuthSecret(corev1.SecretType(secrets.SecretTypeHtpasswd), "test", "hp", true),
 				},
 			},
-			expCond: conditions.Condition{},
+			expCond: conditions.NewAuthenticationFilterAcceptedWithMessage(
+				"The AuthenticationFilter is accepted, but the referenced Secret test/hp of type \"nginx.org/htpasswd\"." +
+					" This secret type will be removed in a future release. Please use type \"Opaque\" instead.",
+			),
 		},
 		{
 			name: "valid Basic auth filter with Opaque secret",
@@ -284,13 +287,18 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 			g := NewWithT(t)
 
 			resourceResolver := resolver.NewResourceResolver(tt.args.resources)
-			cond := validateAuthenticationFilter(tt.args.filter, tt.args.secretNsName, resourceResolver)
+			conds, valid := validateAuthenticationFilter(tt.args.filter, tt.args.secretNsName, resourceResolver)
 
 			if tt.expCond != (conditions.Condition{}) {
-				g.Expect(cond).ToNot(BeNil())
-				g.Expect(cond.Message).To(ContainSubstring(tt.expCond.Message))
+				g.Expect(conds).ToNot(BeNil())
+				g.Expect(conds).To(HaveLen(1))
+				g.Expect(conds[0].Message).To(ContainSubstring(tt.expCond.Message))
+				if tt.expCond.Status == metav1.ConditionTrue {
+					g.Expect(valid).To(BeTrue())
+				}
 			} else {
-				g.Expect(cond).To(BeNil())
+				g.Expect(conds).To(BeNil())
+				g.Expect(valid).To(BeTrue())
 			}
 		})
 	}
