@@ -66,7 +66,7 @@ jobs:
           echo "GOPROXY=${GOPROXY_VALUE}" >> $GITHUB_ENV
 
       - name: Setup Golang Environment
-        uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
+        uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
         with:
           go-version: stable
 
@@ -107,7 +107,7 @@ jobs:
       - name: Build binary
         uses: goreleaser/goreleaser-action@ec59f474b9834571250b370d4735c50f8e2d1e29 # v7.0.0
         with:
-          version: v2.14.0 # renovate: datasource=github-tags depName=goreleaser/goreleaser
+          version: v2.14.1 # renovate: datasource=github-tags depName=goreleaser/goreleaser
           args: build --single-target --snapshot --clean
         env:
           TELEMETRY_ENDPOINT: "" # disables sending telemetry
@@ -187,7 +187,7 @@ jobs:
 
       - name: Upload profile to GitHub
         if: ${{ inputs.enable-experimental }}
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: conformance-profile-${{ inputs.image }}-${{ inputs.k8s-version }}-${{ steps.ngf-meta.outputs.version }}
           path: ./tests/conformance-profile.yaml
@@ -208,7 +208,7 @@ jobs:
 
       - name: Upload profile to GitHub
         if: ${{ inputs.enable-experimental }} # add experimental flag to filter result upload
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: conformance-profile-inference-${{ inputs.image }}-${{ inputs.k8s-version }}-${{ steps.ngf-meta.outputs.version }}-${{ github.run_id }}
           path: ./tests/conformance-profile-inference.yaml
