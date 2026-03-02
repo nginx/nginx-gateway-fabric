@@ -135,7 +135,7 @@ Every Tuesday, alternating time zones at 9:30AM Pacific / 5:30PM GMT or 12:00PM 
 
 For the meeting link, updates, agenda, and meeting notes, check the link below:
 
-[NGINX Gateway Fabric Meeting Community Meeting](https://github.com/nginx/nginx-gateway-fabric/discussions/1472)
+[NGINX Gateway Fabric Community Meeting](https://github.com/nginx/nginx-gateway-fabric/discussions/1472)
 
 If you have a use case for NGINX Gateway Fabric that the project can't quite meet yet, bugs, problems, success stories, or just want to be more involved with the project, come by and say hi!
 
