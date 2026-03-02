@@ -464,16 +464,16 @@ func checkTargetRoutesForOverlap(
 
 	for _, targetedRoute := range targetedRoutes {
 		// We need to check if this route referenced in the policy has an overlapping
-		// hostname:port/path with any other route that isn't referenced by this policy.
+		// namespace/gateway-name:hostname:port/path with any other route that isn't referenced by this policy.
 		// If so, deny the policy.
-		hostPortPaths := buildHostPortPaths(targetedRoute)
+		gatewayHostPortPaths := buildGatewayHostPortPaths(targetedRoute)
 
 		for _, route := range graphRoutes {
 			if _, ok := targetedRoutes[client.ObjectKeyFromObject(route.Source)]; ok {
 				continue
 			}
 
-			if cond := checkForRouteOverlap(route, hostPortPaths); cond != nil {
+			if cond := checkForRouteOverlap(route, gatewayHostPortPaths); cond != nil {
 				conds = append(conds, *cond)
 			}
 		}
@@ -482,11 +482,11 @@ func checkTargetRoutesForOverlap(
 	return conds
 }
 
-// checkForRouteOverlap checks if any route references the same hostname:port/path combination
+// checkForRouteOverlap checks if any route references the same namespace/gateway-name:hostname:port/path combination
 // as a route referenced in a policy.
-func checkForRouteOverlap(route *L7Route, hostPortPaths map[string]string) *conditions.Condition {
+func checkForRouteOverlap(route *L7Route, gatewayHostPortPaths map[string]string) *conditions.Condition {
 	for _, parentRef := range route.ParentRefs {
-		if parentRef.Attachment != nil {
+		if parentRef.Attachment != nil && parentRef.Gateway != nil {
 			port := parentRef.Attachment.ListenerPort
 			// FIXME(sarthyparty): https://github.com/nginx/nginx-gateway-fabric/issues/3811
 			// Need to merge listener hostnames with route hostnames so wildcards are handled correctly
@@ -495,13 +495,16 @@ func checkForRouteOverlap(route *L7Route, hostPortPaths map[string]string) *cond
 				for _, rule := range route.Spec.Rules {
 					for _, match := range rule.Matches {
 						if match.Path != nil && match.Path.Value != nil {
-							key := fmt.Sprintf("%s:%d%s", hostname, port, *match.Path.Value)
-							if val, ok := hostPortPaths[key]; !ok {
-								hostPortPaths[key] = fmt.Sprintf("%s/%s", route.Source.GetNamespace(), route.Source.GetName())
+							key := fmt.Sprintf("%s:%s:%d%s", parentRef.Gateway.NamespacedName.String(), hostname, port, *match.Path.Value)
+							if val, ok := gatewayHostPortPaths[key]; !ok {
+								gatewayHostPortPaths[key] = fmt.Sprintf("%s/%s", route.Source.GetNamespace(), route.Source.GetName())
 							} else {
 								conflictingRouteName := fmt.Sprintf("%s/%s", route.Source.GetNamespace(), route.Source.GetName())
-								msg := fmt.Sprintf("Policy cannot be applied to target %q since another "+
-									"Route %q shares a hostname:port/path combination with this target", val, conflictingRouteName)
+								msg := fmt.Sprintf(
+									"Policy cannot be applied to target %q since another "+
+										"Route %q shares a namespace/gateway-name:hostname:port/path combination with this target",
+									val, conflictingRouteName,
+								)
 								cond := conditions.NewPolicyNotAcceptedTargetConflict(msg)
 
 								return &cond
@@ -516,15 +519,15 @@ func checkForRouteOverlap(route *L7Route, hostPortPaths map[string]string) *cond
 	return nil
 }
 
-// buildHostPortPaths uses the same logic as checkForRouteOverlap, except it's
-// simply initializing the hostPortPaths map with the route that's referenced in the Policy,
+// buildGatewayHostPortPaths uses the same logic as checkForRouteOverlap, except it's
+// simply initializing the gatewayHostPortPaths map with the route that's referenced in the Policy,
 // so it doesn't care about the return value.
-func buildHostPortPaths(route *L7Route) map[string]string {
-	hostPortPaths := make(map[string]string)
+func buildGatewayHostPortPaths(route *L7Route) map[string]string {
+	gatewayHostPortPaths := make(map[string]string)
 
-	checkForRouteOverlap(route, hostPortPaths)
+	checkForRouteOverlap(route, gatewayHostPortPaths)
 
-	return hostPortPaths
+	return gatewayHostPortPaths
 }
 
 // markConflictedPolicies marks policies that conflict with a policy of greater precedence as invalid.
