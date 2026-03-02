@@ -54,6 +54,7 @@ func getAuthenticationFilterResolverForNamespace(
 func processAuthenticationFilters(
 	authenticationFilters map[types.NamespacedName]*ngfAPI.AuthenticationFilter,
 	resourceResolver resolver.Resolver,
+	isPlus bool,
 ) map[types.NamespacedName]*AuthenticationFilter {
 	if len(authenticationFilters) == 0 {
 		return nil
@@ -62,8 +63,7 @@ func processAuthenticationFilters(
 	processed := make(map[types.NamespacedName]*AuthenticationFilter, len(authenticationFilters))
 
 	for nsname, af := range authenticationFilters {
-		// TODO: Add Plus feature flag here for JWT auth validation.
-		conds, valid := validateAuthenticationFilter(af, nsname, resourceResolver)
+		conds, valid := validateAuthenticationFilter(af, nsname, resourceResolver, isPlus)
 		processed[nsname] = &AuthenticationFilter{
 			Source:     af,
 			Conditions: conds,
@@ -78,6 +78,7 @@ func validateAuthenticationFilter(
 	af *ngfAPI.AuthenticationFilter,
 	nsname types.NamespacedName,
 	resourceResolver resolver.Resolver,
+	isPlus bool,
 ) ([]conditions.Condition, bool) {
 	var conds []conditions.Condition
 	valid := true
@@ -91,6 +92,10 @@ func validateAuthenticationFilter(
 			field.NewPath("spec.basic.secretRef"),
 		)
 	case ngfAPI.AuthTypeJWT:
+		if !isPlus {
+			cond := conditions.NewAuthenticationFilterInvalid("JWT Authentication requires NGINX Plus.")
+			return []conditions.Condition{cond}, false
+		}
 		if af.Spec.JWT.Source == ngfAPI.JWTKeySourceFile {
 			authJWTSecretNsName := types.NamespacedName{Namespace: nsname.Namespace, Name: af.Spec.JWT.File.SecretRef.Name}
 			conds, valid = resolveAuthenticationFilterSecret(

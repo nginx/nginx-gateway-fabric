@@ -88,7 +88,7 @@ func TestProcessAuthenticationFilters(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
-			processed := processAuthenticationFilters(tt.authenticationFiltersInput, resourceResolver)
+			processed := processAuthenticationFilters(tt.authenticationFiltersInput, resourceResolver, true)
 			g.Expect(processed).To(BeEquivalentTo(tt.expProcessed))
 		})
 	}
@@ -101,12 +101,13 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 		filter       *ngfAPI.AuthenticationFilter
 		resources    map[resolver.ResourceKey]client.Object
 		secretNsName types.NamespacedName
+		isPlus       bool
 	}
 
 	tests := []struct {
+		expCond conditions.Condition
 		name    string
 		args    args
-		expCond conditions.Condition
 	}{
 		{
 			// TODO: Remove this case 3 releases after 2.5.0.
@@ -117,6 +118,7 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 					types.NamespacedName{Namespace: "test", Name: "af"},
 					"hp",
 					true).Source,
+				isPlus: false,
 				resources: map[resolver.ResourceKey]client.Object{
 					{
 						ResourceType:   resolver.ResourceTypeSecret,
@@ -137,6 +139,7 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 					types.NamespacedName{Namespace: "test", Name: "af"},
 					"hp",
 					true).Source,
+				isPlus: true,
 				resources: map[resolver.ResourceKey]client.Object{
 					{
 						ResourceType:   resolver.ResourceTypeSecret,
@@ -154,6 +157,7 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 					types.NamespacedName{Namespace: "test", Name: "af"},
 					"hp",
 					true).Source,
+				isPlus: true,
 				resources: map[resolver.ResourceKey]client.Object{
 					{
 						ResourceType:   resolver.ResourceTypeSecret,
@@ -164,6 +168,19 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 			expCond: conditions.Condition{},
 		},
 		{
+			name: "invalid: JWT auth requires NGINX Plus",
+			args: args{
+				secretNsName: types.NamespacedName{Namespace: "test", Name: "af"},
+				filter: createAuthenticationFilterJWTAuth(
+					types.NamespacedName{Namespace: "test", Name: "af"},
+					"hp",
+					false).Source,
+				isPlus:    false,
+				resources: map[resolver.ResourceKey]client.Object{},
+			},
+			expCond: conditions.NewAuthenticationFilterInvalid("JWT Authentication requires NGINX Plus."),
+		},
+		{
 			name: "invalid: secret does not exist for Basic auth filter",
 			args: args{
 				filter: createAuthenticationFilterBasicAuth(
@@ -171,6 +188,7 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 					"not-found",
 					false).Source,
 				secretNsName: types.NamespacedName{Namespace: "test", Name: "af"},
+				isPlus:       true,
 				resources:    map[resolver.ResourceKey]client.Object{},
 			},
 			expCond: conditions.NewAuthenticationFilterInvalid(
@@ -185,6 +203,7 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 					"not-found",
 					false).Source,
 				secretNsName: types.NamespacedName{Namespace: "test", Name: "af"},
+				isPlus:       true,
 				resources:    map[resolver.ResourceKey]client.Object{},
 			},
 			expCond: conditions.NewAuthenticationFilterInvalid(
@@ -199,6 +218,7 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 					"secret-type",
 					false).Source,
 				secretNsName: types.NamespacedName{Namespace: "test", Name: "secret-type"},
+				isPlus:       true,
 				resources: map[resolver.ResourceKey]client.Object{
 					{
 						ResourceType:   resolver.ResourceTypeSecret,
@@ -223,6 +243,7 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 					"secret-type",
 					false).Source,
 				secretNsName: types.NamespacedName{Namespace: "test", Name: "secret-type"},
+				isPlus:       true,
 				resources: map[resolver.ResourceKey]client.Object{
 					{
 						ResourceType:   resolver.ResourceTypeSecret,
@@ -247,6 +268,7 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 					"hp-missing",
 					false).Source,
 				secretNsName: types.NamespacedName{Namespace: "test", Name: "af"},
+				isPlus:       true,
 				resources: map[resolver.ResourceKey]client.Object{
 					{
 						ResourceType:   resolver.ResourceTypeSecret,
@@ -267,6 +289,7 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 					"hp-missing",
 					false).Source,
 				secretNsName: types.NamespacedName{Namespace: "test", Name: "af"},
+				isPlus:       true,
 				resources: map[resolver.ResourceKey]client.Object{
 					{
 						ResourceType:   resolver.ResourceTypeSecret,
@@ -287,7 +310,7 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 			g := NewWithT(t)
 
 			resourceResolver := resolver.NewResourceResolver(tt.args.resources)
-			conds, valid := validateAuthenticationFilter(tt.args.filter, tt.args.secretNsName, resourceResolver)
+			conds, valid := validateAuthenticationFilter(tt.args.filter, tt.args.secretNsName, resourceResolver, tt.args.isPlus)
 
 			if tt.expCond != (conditions.Condition{}) {
 				g.Expect(conds).ToNot(BeNil())
