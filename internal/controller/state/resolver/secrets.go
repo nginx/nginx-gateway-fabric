@@ -54,6 +54,7 @@ func (s *secretEntry) validate(obj client.Object) {
 
 		certBundle = secrets.NewCertificateBundle(client.ObjectKeyFromObject(secret), "Secret", cert)
 		// TODO: Remove this case 3 releases after 2.5.0.
+		// https://github.com/nginx/nginx-gateway-fabric/issues/4870
 	case secret.Type == v1.SecretType(secrets.SecretTypeHtpasswd):
 		fallthrough
 	case secret.Type == v1.SecretTypeOpaque:

@@ -7218,6 +7218,7 @@ func TestBuildAuthSecrets(t *testing.T) {
 
 	// TODO: This secret type will be removed in a future release.
 	// Right now, this validates the `fallthrough` scenario.
+	// https://github.com/nginx/nginx-gateway-fabric/issues/4870
 	htpasswdSecret := &secrets.Secret{
 		Source: &apiv1.Secret{
 			ObjectMeta: metav1.ObjectMeta{

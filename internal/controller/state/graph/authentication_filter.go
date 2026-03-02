@@ -130,6 +130,7 @@ func resolveAuthenticationFilterSecret(
 	}
 
 	// TODO: Remove this function 3 releases after 2.5.0.
+	// https://github.com/nginx/nginx-gateway-fabric/issues/4870
 	return resolveHtPasswdSecret(authSecretNsName, resourceResolver)
 }
 

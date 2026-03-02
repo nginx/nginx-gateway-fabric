@@ -111,6 +111,7 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 	}{
 		{
 			// TODO: Remove this case 3 releases after 2.5.0.
+			// https://github.com/nginx/nginx-gateway-fabric/issues/4870
 			name: "valid Basic auth filter with htpasswd secret",
 			args: args{
 				secretNsName: types.NamespacedName{Namespace: "test", Name: "af"},
