@@ -13,7 +13,12 @@ server {
         {{- if and ($.IPFamily.IPv6) (not $s.IsSocket) }}
     listen [::]:{{ $s.Listen }} ssl default_server{{ $.RewriteClientIP.ProxyProtocol }};
         {{- end }}
+    {{- if $s.SSL }}
+    ssl_certificate {{ $s.SSL.Certificate }};
+    ssl_certificate_key {{ $s.SSL.CertificateKey }};
+    {{- else }}
     ssl_reject_handshake on;
+    {{- end }}
         {{- range $address := $.RewriteClientIP.RealIPFrom }}
     set_real_ip_from {{ $address }};
         {{- end}}
@@ -66,8 +71,8 @@ server {
     ssl_prefer_server_ciphers on;
           {{- end }}
 
-          {{- if not $.DisableSNIHostValidation }}
-    if ($ssl_server_name != $host) {
+          {{- if $s.MisdirectedRequestVars }}
+    if ({{ $s.MisdirectedRequestVars.SNIVar }} != {{ $s.MisdirectedRequestVars.HostVar }}) {
         return 421;
     }
           {{- end }}

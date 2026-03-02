@@ -1967,6 +1967,10 @@ func TestCreateServers(t *testing.T) {
 				Certificate:    expectedPEMPath,
 				CertificateKey: expectedPEMPath,
 			},
+			MisdirectedRequestVars: &http.MisdirectedRequestVars{
+				SNIVar:  "$sni_listener_id_8443",
+				HostVar: "$host_listener_id_8443",
+			},
 			Locations: getExpectedLocations(true),
 			Includes:  []shared.Include{},
 			Listen:    getSocketNameHTTPS(8443),
@@ -5034,7 +5038,7 @@ func TestExecuteServers_DisableSNIHostValidation(t *testing.T) {
 	}
 	results := gen.executeServers(confWithValidation, &policiesfakes.FakeGenerator{}, alwaysFalseKeepAliveChecker)
 	serverConf := string(results[0].data)
-	g.Expect(serverConf).To(ContainSubstring("if ($ssl_server_name != $host)"),
+	g.Expect(serverConf).To(ContainSubstring("if ($sni_listener_id_8443 != $host_listener_id_8443)"),
 		"Expected SNI host validation block to be present when DisableSNIHostValidation is false")
 
 	// Case 2: DisableSNIHostValidation = true
@@ -5046,7 +5050,7 @@ func TestExecuteServers_DisableSNIHostValidation(t *testing.T) {
 	}
 	results = gen.executeServers(confWithoutValidation, &policiesfakes.FakeGenerator{}, alwaysFalseKeepAliveChecker)
 	serverConf = string(results[0].data)
-	g.Expect(serverConf).NotTo(ContainSubstring("if ($ssl_server_name != $host)"),
+	g.Expect(serverConf).NotTo(ContainSubstring("if ($sni_listener_id_8443 != $host_listener_id_8443)"),
 		"Expected SNI host validation block to be absent when DisableSNIHostValidation is true")
 }
 

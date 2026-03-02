@@ -14,15 +14,25 @@ const (
 
 // Server holds all configuration for an HTTP server.
 type Server struct {
-	SSL           *SSL
-	ServerName    string
-	Listen        string
-	Locations     []Location
-	Includes      []shared.Include
-	IsDefaultHTTP bool
-	IsDefaultSSL  bool
-	GRPC          bool
-	IsSocket      bool
+	SSL                    *SSL
+	MisdirectedRequestVars *MisdirectedRequestVars
+	ServerName             string
+	Listen                 string
+	Locations              []Location
+	Includes               []shared.Include
+	IsDefaultHTTP          bool
+	IsDefaultSSL           bool
+	GRPC                   bool
+	IsSocket               bool
+}
+
+// MisdirectedRequestVars holds the per-port NGINX variable names used
+// for misdirected request (421) detection via SNI-to-Host comparison maps.
+type MisdirectedRequestVars struct {
+	// SNIVar is the NGINX variable for the SNI-derived listener ID (e.g., "$sni_listener_id_443").
+	SNIVar string
+	// HostVar is the NGINX variable for the Host-derived listener ID (e.g., "$host_listener_id_443").
+	HostVar string
 }
 
 type LocationType string

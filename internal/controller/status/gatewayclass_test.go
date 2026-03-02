@@ -43,6 +43,7 @@ func TestSupportedFeatures(t *testing.T) {
 		gatewayv1.FeatureName(features.SupportReferenceGrant),
 		gatewayv1.FeatureName(features.SupportTLSRoute),
 		gatewayv1.FeatureName(features.SupportHTTPRouteCORS),
+		gatewayv1.FeatureName(features.SupportGatewayHTTPSListenerDetectMisdirectedRequests),
 	}
 
 	experimentalFeatures := []gatewayv1.FeatureName{
