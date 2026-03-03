@@ -25,15 +25,9 @@ type SecretType string
 
 const (
 	// SecretTypeHtpasswd represents a Secret containing an htpasswd file for Basic Auth.
-	// TODO: Remove this secret type 3 releases after 2.5.0.
-	// https://github.com/nginx/nginx-gateway-fabric/issues/4870
+	// FIXME(s.odonovan): Remove this secret type 3 releases after 2.5.0.
+	// Issue https://github.com/nginx/nginx-gateway-fabric/issues/4870 will remove this secret type.
 	SecretTypeHtpasswd SecretType = "nginx.org/htpasswd" // #nosec G101
-)
-
-type SecretDataKey string
-
-const (
-	SecretDataKeyAuth SecretDataKey = "auth"
 )
 
 const (

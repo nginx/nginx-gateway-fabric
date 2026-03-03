@@ -129,8 +129,8 @@ func resolveAuthenticationFilterSecret(
 		return []conditions.Condition{cond}, false
 	}
 
-	// TODO: Remove this function 3 releases after 2.5.0.
-	// https://github.com/nginx/nginx-gateway-fabric/issues/4870
+	// FIXME(s.odonovan): Remove this secret type 3 releases after 2.5.0.
+	// Issue https://github.com/nginx/nginx-gateway-fabric/issues/4870 will remove this secret type.
 	return resolveHtPasswdSecret(authSecretNsName, resourceResolver)
 }
 
@@ -138,25 +138,25 @@ func resolveHtPasswdSecret(
 	authSecretNsName types.NamespacedName,
 	resourceResolver resolver.Resolver,
 ) ([]conditions.Condition, bool) {
-	secretResolver := resourceResolver.GetSecrets()[authSecretNsName]
-	if secretResolver == nil || secretResolver.Source == nil {
+	secretsMap := resourceResolver.GetSecrets()[authSecretNsName]
+	if secretsMap == nil || secretsMap.Source == nil {
 		cond := conditions.NewAuthenticationFilterInvalid(
-			fmt.Sprintf("failed to resolve resource. Secret %s/%s is invalid or missing:",
+			fmt.Sprintf("failed to resolve resource. Secret %s/%s is invalid or missing.",
 				authSecretNsName.Namespace,
 				authSecretNsName.Name),
 		)
 		return []conditions.Condition{cond}, false
 	}
 
-	if secretResolver.Source.Type == corev1.SecretType(secrets.SecretTypeHtpasswd) {
+	if secretsMap.Source.Type == corev1.SecretType(secrets.SecretTypeHtpasswd) {
 		msg := fmt.Sprintf(
 			"The AuthenticationFilter is accepted,"+
-				" but the referenced Secret %s/%s of type %q."+
+				" but the referenced Secret %s/%s of type %q is now deprecated."+
 				" This secret type will be removed in a future release."+
 				" Please use type %q instead.",
 			authSecretNsName.Namespace,
 			authSecretNsName.Name,
-			secretResolver.Source.Type,
+			secretsMap.Source.Type,
 			corev1.SecretTypeOpaque,
 		)
 		cond := conditions.NewAuthenticationFilterAcceptedWithMessage(msg)

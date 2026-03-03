@@ -454,27 +454,31 @@ func buildAuthSecrets(
 		if filter == nil || filter.Source == nil {
 			continue
 		}
-		switch filter.Source.Spec.Type {
-		case ngfAPIv1alpha1.AuthTypeBasic:
-			id, data := getBasicAuthFileData(filter, secretsMap)
-			authFileData[id] = data
-		case ngfAPIv1alpha1.AuthTypeJWT:
-			id, data := getJWTAuthFileData(filter, secretsMap)
-			authFileData[id] = data
-		}
+
+		id, data := getAuthFileIDAndData(filter, secretsMap)
+		authFileData[id] = data
 	}
 
 	return authFileData
 }
 
-func getBasicAuthFileData(
+func getAuthFileIDAndData(
 	filter *graph.AuthenticationFilter,
 	secretsMap map[types.NamespacedName]*secrets.Secret,
-) (AuthFileID, []byte) {
+) (authFileID AuthFileID, data []byte) {
 	secretNsName := types.NamespacedName{
 		Namespace: filter.Source.Namespace,
-		Name:      filter.Source.Spec.Basic.SecretRef.Name,
 	}
+
+	switch filter.Source.Spec.Type {
+	case ngfAPIv1alpha1.AuthTypeBasic:
+		secretNsName.Name = filter.Source.Spec.Basic.SecretRef.Name
+		authFileID = GenerateAuthBasicFileID(secretNsName.Namespace, secretNsName.Name)
+	case ngfAPIv1alpha1.AuthTypeJWT:
+		secretNsName.Name = filter.Source.Spec.JWT.File.SecretRef.Name
+		authFileID = GenerateAuthJWTFileID(secretNsName.Namespace, secretNsName.Name)
+	}
+
 	secret := secretsMap[secretNsName]
 	if secret == nil || secret.Source == nil {
 		return "", nil
@@ -484,27 +488,7 @@ func getBasicAuthFileData(
 		return "", nil
 	}
 
-	return GenerateAuthBasicFileID(secretNsName.Namespace, secretNsName.Name), data
-}
-
-func getJWTAuthFileData(
-	filter *graph.AuthenticationFilter,
-	secretsMap map[types.NamespacedName]*secrets.Secret,
-) (AuthFileID, []byte) {
-	secretNsName := types.NamespacedName{
-		Namespace: filter.Source.Namespace,
-		Name:      filter.Source.Spec.JWT.File.SecretRef.Name,
-	}
-	secret := secretsMap[secretNsName]
-	if secret == nil || secret.Source == nil {
-		return "", nil
-	}
-	data, exists := secret.Source.Data[secrets.AuthKey]
-	if !exists {
-		return "", nil
-	}
-
-	return GenerateAuthJWTFileID(secretNsName.Namespace, secretNsName.Name), data
+	return authFileID, data
 }
 
 func buildBackendGroups(servers []VirtualServer) []BackendGroup {

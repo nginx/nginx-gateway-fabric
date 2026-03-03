@@ -338,12 +338,12 @@ func TestSecretResolver(t *testing.T) {
 		{
 			name:           "invalid secret type",
 			nsname:         client.ObjectKeyFromObject(invalidSecretType),
-			expectedErrMsg: `unsupported secret type "kubernetes.io/dockercfg". Please use type: Opaque`,
+			expectedErrMsg: `unsupported secret type "kubernetes.io/dockercfg"`,
 		},
 		{
 			name:           "invalid secret type, again",
 			nsname:         client.ObjectKeyFromObject(invalidSecretType),
-			expectedErrMsg: `unsupported secret type "kubernetes.io/dockercfg". Please use type: Opaque`,
+			expectedErrMsg: `unsupported secret type "kubernetes.io/dockercfg"`,
 		},
 		{
 			name:           "invalid secret cert",

@@ -110,8 +110,8 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 		args    args
 	}{
 		{
-			// TODO: Remove this case 3 releases after 2.5.0.
-			// https://github.com/nginx/nginx-gateway-fabric/issues/4870
+			// FIXME(s.odonovan): Remove this secret type 3 releases after 2.5.0.
+			// Issue https://github.com/nginx/nginx-gateway-fabric/issues/4870 will remove this secret type.
 			name: "valid Basic auth filter with htpasswd secret",
 			args: args{
 				secretNsName: types.NamespacedName{Namespace: "test", Name: "af"},
@@ -128,8 +128,9 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 				},
 			},
 			expCond: conditions.NewAuthenticationFilterAcceptedWithMessage(
-				"The AuthenticationFilter is accepted, but the referenced Secret test/hp of type \"nginx.org/htpasswd\"." +
-					" This secret type will be removed in a future release. Please use type \"Opaque\" instead.",
+				"The AuthenticationFilter is accepted, but the referenced Secret test/hp of type \"nginx.org/htpasswd\"" +
+					" is now deprecated. This secret type will be removed in a future release." +
+					" Please use type \"Opaque\" instead.",
 			),
 		},
 		{
@@ -233,7 +234,7 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 			},
 			expCond: conditions.NewAuthenticationFilterInvalid(
 				"spec.basic.secretRef: Invalid value: \"secret test/secret-type is invalid\": " +
-					"unsupported secret type \"UnsupportedType\". Please use type: Opaque",
+					"unsupported secret type \"UnsupportedType\"",
 			),
 		},
 		{
@@ -258,7 +259,7 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 			},
 			expCond: conditions.NewAuthenticationFilterInvalid(
 				"spec.jwt.file.secretRef: Invalid value: \"secret test/secret-type is invalid\": " +
-					"unsupported secret type \"UnsupportedType\". Please use type: Opaque",
+					"unsupported secret type \"UnsupportedType\"",
 			),
 		},
 		{
