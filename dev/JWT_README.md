@@ -1,21 +1,28 @@
 ### Local
 
-1. Run `make jwks` 
+1. Generate a local public and private key using OpenSSL
+
+```
+openssl genpkey -algorithm RSA -out dev/private_key.pem -pkeyopt rsa_keygen_bits:2048
+openssl rsa -in dev/pivate_key.pem -pubout -out public_key.pem
+```
+
+2. Run `make jwks` 
 
 	This will:
 	- Create a secret called `jwt-keys-secure`
 	- If that secret already exists, it will delete it and re-create it with a new JWKS
 
-2. Run `make jwt`
+3. Run `make jwt`
 
 	This will:
 	- Create a JSON Web Token and save it to `$TOKEN`
 
-3. Deploy NGF with NGINX Plus
+4. Deploy NGF with NGINX Plus
 
-4. Deploy JWT AuthenticationFilter: `kubectl apply -f example/jwt-file-auth/`
+5. Deploy JWT AuthenticationFilter: `kubectl apply -f example/jwt-file-auth/`
 
-5. `curl --resolve cafe.example.com:8080:127.0.0.1 http://cafe.example.com:8080/tea -H "Authorization: Bearer $TOKEN"`
+6. `curl --resolve cafe.example.com:8080:127.0.0.1 http://cafe.example.com:8080/tea -H "Authorization: Bearer $TOKEN"`
 
 ### Remote
 
