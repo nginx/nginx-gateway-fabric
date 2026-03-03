@@ -22,9 +22,8 @@ import (
 )
 
 const (
-	controllerName          = "nginx"
-	gcName                  = "my-gateway-class"
-	experimentalFeaturesOff = false
+	controllerName = "nginx"
+	gcName         = "my-gateway-class"
 )
 
 var (
@@ -443,7 +442,7 @@ func Test_MultipleGateways_WithNginxProxy(t *testing.T) {
 							},
 						},
 						[]*Listener{},
-						gcConditions,
+						[]conditions.Condition{conditions.NewGatewayResolvedRefs()},
 					),
 				},
 				ReferencedNginxProxies: map[types.NamespacedName]*NginxProxy{

@@ -139,8 +139,7 @@ func buildGateways(
 func validateGatewayRefs(
 	gw *v1.Gateway,
 	npCfg *NginxProxy,
-	experimentalFeatures bool,
-	secretResolver *secretResolver,
+	resourceResolver resolver.Resolver,
 	refGrantResolver *referenceGrantResolver,
 ) ([]conditions.Condition, *types.NamespacedName) {
 	if (gw.Spec.Infrastructure == nil || gw.Spec.Infrastructure.ParametersRef == nil) &&
@@ -162,7 +161,7 @@ func validateGatewayRefs(
 			tlsCond, secretNsName = validateGatewayTLSBackend(
 				gw,
 				backendPath,
-				secretResolver,
+				resourceResolver,
 				refGrantResolver,
 			)
 		}
@@ -209,7 +208,7 @@ func validateParametersRef(gw *v1.Gateway, npCfg *NginxProxy) ([]conditions.Cond
 func validateGatewayTLSBackend(
 	gw *v1.Gateway,
 	path *field.Path,
-	secretResolver *secretResolver,
+	resourceResolver resolver.Resolver,
 	refGrantResolver *referenceGrantResolver,
 ) (conditions.Condition, *types.NamespacedName) {
 	backend := gw.Spec.TLS.Backend
@@ -240,7 +239,7 @@ func validateGatewayTLSBackend(
 	}
 
 	secretNsName, secretNs := getGatewayCertSecretNsName(gw)
-	if err := secretResolver.resolve(*secretNsName); err != nil {
+	if err := resourceResolver.Resolve(resolver.ResourceTypeSecret, *secretNsName); err != nil {
 		valErr := field.Invalid(path.Child("clientCertificateRef"), secretNsName, err.Error())
 		msg := helpers.CapitalizeString(valErr.Error())
 
@@ -288,7 +287,7 @@ func validateGateway(
 	conds = append(conds, validateUnsupportedGatewayFields(gw)...)
 
 	// Validate referenced resources
-	refsConds, secretRefNsName := validateGatewayRefs(gw, npCfg, experimentalFeatures, secretResolver, refGrantResolver)
+	refsConds, secretRefNsName := validateGatewayRefs(gw, npCfg, resourceResolver, refGrantResolver)
 	conds = append(conds, refsConds...)
 
 	return conds, valid, secretRefNsName

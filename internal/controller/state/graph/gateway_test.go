@@ -1791,8 +1791,7 @@ func TestValidateGatewayParametersRef(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			var experimentalFeatures bool
-			conds, _ := validateGatewayRefs(test.gw, test.np, experimentalFeatures, nil, nil)
+			conds, _ := validateGatewayRefs(test.gw, test.np, nil, nil)
 			g.Expect(conds).To(BeEquivalentTo(test.expConds))
 		})
 	}
@@ -2411,7 +2410,6 @@ func TestGateway_BackendTLSConfig(t *testing.T) {
 		kind *v1.Kind,
 		group *v1.Group,
 		cond []conditions.Condition,
-		valid bool,
 		setSecretRef bool,
 	) map[types.NamespacedName]*Gateway {
 		gwNsName := types.NamespacedName{Namespace: "test", Name: "test-gateway"}
@@ -2456,11 +2454,10 @@ func TestGateway_BackendTLSConfig(t *testing.T) {
 	nilGroup := (*v1.Group)(nil)
 
 	tests := []struct {
-		gw           map[types.NamespacedName]*v1.Gateway
-		refGrants    map[types.NamespacedName]*v1.ReferenceGrant
-		expected     map[types.NamespacedName]*Gateway
-		name         string
-		experimental bool
+		gw        map[types.NamespacedName]*v1.Gateway
+		refGrants map[types.NamespacedName]*v1.ReferenceGrant
+		expected  map[types.NamespacedName]*Gateway
+		name      string
 	}{
 		{
 			name: "tls.backend is not specified",
@@ -2491,7 +2488,6 @@ func TestGateway_BackendTLSConfig(t *testing.T) {
 					Valid:          true,
 				},
 			},
-			experimental: false,
 		},
 		{
 			name: "ClientCertificateRef has wrong kind",
@@ -2505,7 +2501,6 @@ func TestGateway_BackendTLSConfig(t *testing.T) {
 				)},
 				false,
 			),
-			experimental: true,
 		},
 		{
 			name: "ClientCertificateRef has wrong group",
@@ -2519,8 +2514,6 @@ func TestGateway_BackendTLSConfig(t *testing.T) {
 				)},
 				false,
 			),
-			experimental:   true,
-			secretResolver: newSecretResolver(secrets),
 		},
 		{
 			name: "secret reference is invalid",
@@ -2531,12 +2524,10 @@ func TestGateway_BackendTLSConfig(t *testing.T) {
 				nilGroup,
 				[]conditions.Condition{conditions.NewGatewaySecretRefInvalid(
 					"Spec.tls.backend.clientCertificateRef: " +
-						"Invalid value: {\"Namespace\":\"test\",\"Name\":\"invalid-secret\"}: secret does not exist",
+						"Invalid value: {\"Namespace\":\"test\",\"Name\":\"invalid-secret\"}: Secret test/invalid-secret does not exist",
 				)},
 				false,
 			),
-			experimental:   true,
-			secretResolver: newSecretResolver(secrets),
 		},
 		{
 			name: "secret is not permitted by reference grant",
@@ -2552,7 +2543,6 @@ func TestGateway_BackendTLSConfig(t *testing.T) {
 				},
 				false,
 			),
-			experimental: true,
 		},
 		{
 			name: "secret in different namespace is permitted by reference grant",
@@ -2588,7 +2578,6 @@ func TestGateway_BackendTLSConfig(t *testing.T) {
 					},
 				},
 			},
-			experimental: true,
 		},
 	}
 
