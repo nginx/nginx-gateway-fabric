@@ -1,4 +1,4 @@
-### Local
+## Local
 
 1. Generate a local public and private key using OpenSSL
 
@@ -24,7 +24,7 @@ openssl rsa -in dev/pivate_key.pem -pubout -out public_key.pem
 
 6. `curl --resolve cafe.example.com:8080:127.0.0.1 http://cafe.example.com:8080/tea -H "Authorization: Bearer $TOKEN"`
 
-### Remote
+## Remote
 
 Log in to the NGINX private registry, pull the image and load it into KIND
 
