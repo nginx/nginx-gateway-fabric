@@ -1,0 +1,38 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: cafe-routes
+spec:
+  parentRefs:
+  - name: gateway
+    sectionName: http
+  hostnames:
+  - "cafe.example.com"
+  rules:
+  - matches:
+      - path:
+          type: PathPrefix
+          value: /coffee
+    backendRefs:
+      - name: coffee
+        port: 80
+    filters:
+      - type: ExtensionRef
+        extensionRef:
+          group: gateway.nginx.org
+          kind: AuthenticationFilter
+          name: jwt-auth
+  - matches:
+      - path:
+          type: PathPrefix
+          value: /tea
+    backendRefs:
+      - name: tea
+        port: 80
+    ## Use to test Basic and JWT together.
+    # filters:
+    #   - type: ExtensionRef
+    #     extensionRef:
+    #       group: gateway.nginx.org
+    #       kind: AuthenticationFilter
+    #       name: basic-auth

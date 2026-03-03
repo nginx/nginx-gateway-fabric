@@ -1,0 +1,14 @@
+apiVersion: gateway.nginx.org/v1alpha1
+kind: AuthenticationFilter
+metadata:
+  name: jwt-auth
+spec:
+  type: JWT
+  jwt:
+    realm: "Restricted"
+    # JWK source. Local file or Remote JWKS
+    source: File
+    file:
+      secretRef:
+        name: jwt-keys-secure
+    keyCache: 10m
