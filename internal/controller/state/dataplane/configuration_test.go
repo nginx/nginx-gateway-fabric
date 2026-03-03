@@ -542,7 +542,7 @@ func TestBuildConfiguration(t *testing.T) {
 				Name:      authBasicSecretNsName.Name,
 				Namespace: authBasicSecretNsName.Namespace,
 			},
-			Type: apiv1.SecretType("nginx.org/htpasswd"),
+			Type: apiv1.SecretTypeOpaque,
 			Data: map[string][]byte{
 				"auth": []byte("user:$apr1$cred"),
 			},
@@ -577,7 +577,7 @@ func TestBuildConfiguration(t *testing.T) {
 				Name:      authJWTSecretNsName.Name,
 				Namespace: authJWTSecretNsName.Namespace,
 			},
-			Type: apiv1.SecretType("nginx.org/jwt"),
+			Type: apiv1.SecretTypeOpaque,
 			Data: map[string][]byte{
 				"auth": []byte("token"),
 			},
@@ -7380,7 +7380,7 @@ func TestBuildAuthSecrets(t *testing.T) {
 			expected: map[AuthFileID]AuthFileData{},
 		},
 		{
-			name: "invalid key in secret",
+			name: "invalid secret name",
 			secrets: map[types.NamespacedName]*secrets.Secret{
 				invalidKeySecretNsName: invalidKeySecret,
 			},

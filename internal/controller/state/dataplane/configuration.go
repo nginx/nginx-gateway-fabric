@@ -456,6 +456,11 @@ func buildAuthSecrets(
 		}
 
 		id, data := getAuthFileIDAndData(filter, secretsMap)
+
+		if id == "" || data == nil {
+			continue
+		}
+
 		authFileData[id] = data
 	}
 
@@ -475,10 +480,11 @@ func getAuthFileIDAndData(
 		secretNsName.Name = filter.Source.Spec.Basic.SecretRef.Name
 		authFileID = GenerateAuthBasicFileID(secretNsName.Namespace, secretNsName.Name)
 	case ngfAPIv1alpha1.AuthTypeJWT:
-		if filter.Source.Spec.JWT.File != nil {
-			secretNsName.Name = filter.Source.Spec.JWT.File.SecretRef.Name
-			authFileID = GenerateAuthJWTFileID(secretNsName.Namespace, secretNsName.Name)
+		if filter.Source.Spec.JWT == nil || filter.Source.Spec.JWT.File == nil {
+			return "", nil
 		}
+		secretNsName.Name = filter.Source.Spec.JWT.File.SecretRef.Name
+		authFileID = GenerateAuthJWTFileID(secretNsName.Namespace, secretNsName.Name)
 	}
 
 	secret := secretsMap[secretNsName]

@@ -701,6 +701,19 @@ func TestConvertAuthenticationFilter(t *testing.T) {
 			},
 		},
 		{
+			name: "jwt auth spec nil",
+			filter: &graph.AuthenticationFilter{
+				Source: &ngfAPIv1alpha1.AuthenticationFilter{
+					Spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+						Type: ngfAPIv1alpha1.AuthTypeJWT,
+						JWT:  nil,
+					},
+				},
+			},
+			referencedSecrets: nil,
+			expected:          &AuthenticationFilter{},
+		},
+		{
 			name: "jwt auth source nil",
 			filter: &graph.AuthenticationFilter{
 				Source: &ngfAPIv1alpha1.AuthenticationFilter{

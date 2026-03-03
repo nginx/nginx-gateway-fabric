@@ -242,7 +242,7 @@ func convertAuthenticationFilterJwtAuth(
 	referencedSecrets map[types.NamespacedName]*secrets.Secret,
 ) *AuthJWT {
 	var result *AuthJWT
-	if specJWT := filter.Source.Spec.JWT; specJWT.File != nil {
+	if specJWT := filter.Source.Spec.JWT; specJWT != nil && specJWT.File != nil {
 		referencedSecret, isReferenced := referencedSecrets[types.NamespacedName{
 			Namespace: filter.Source.Namespace,
 			Name:      specJWT.File.SecretRef.Name,
