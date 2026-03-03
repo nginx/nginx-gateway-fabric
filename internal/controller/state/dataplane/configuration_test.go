@@ -7342,10 +7342,27 @@ func TestBuildAuthSecrets(t *testing.T) {
 				opaqueJWTAuthSecretNsName: buildJWTAuthFilter(
 					opaqueJWTAuthSecretNsName,
 					opaqueJWTAuthSecretNsName.Namespace,
+					ngfAPIv1alpha1.JWTKeySourceFile,
 				),
 			},
 			expected: map[AuthFileID]AuthFileData{
 				"jwt_auth_test_opaque-auth-jwt-secret": []byte("jwks-token"),
+			},
+		},
+		{
+			name: "jwt auth with remote key source",
+			secrets: map[types.NamespacedName]*secrets.Secret{
+				opaqueJWTAuthSecretNsName: opaqueAuthSecretJwksData,
+			},
+			filters: map[types.NamespacedName]*graph.AuthenticationFilter{
+				opaqueJWTAuthSecretNsName: buildJWTAuthFilter(
+					opaqueJWTAuthSecretNsName,
+					opaqueJWTAuthSecretNsName.Namespace,
+					ngfAPIv1alpha1.JWTKeySourceRemote,
+				),
+			},
+			expected: map[AuthFileID]AuthFileData{
+				"": nil,
 			},
 		},
 		{
@@ -7393,6 +7410,7 @@ func TestBuildAuthSecrets(t *testing.T) {
 				opaqueJWTAuthSecretNsName: buildJWTAuthFilter(
 					opaqueJWTAuthSecretNsName,
 					opaqueJWTAuthSecretNsName.Namespace,
+					ngfAPIv1alpha1.JWTKeySourceFile,
 				),
 			},
 			expected: map[AuthFileID]AuthFileData{
@@ -7432,7 +7450,31 @@ func buildBasicAuthFilter(secretRef types.NamespacedName, namespace string) *gra
 	}
 }
 
-func buildJWTAuthFilter(secretRef types.NamespacedName, namespace string) *graph.AuthenticationFilter {
+func buildJWTAuthFilter(
+	secretRef types.NamespacedName,
+	namespace string,
+	source ngfAPIv1alpha1.JWTKeySource,
+) *graph.AuthenticationFilter {
+	var jwtAuth *ngfAPIv1alpha1.JWTAuth
+	switch source {
+	case ngfAPIv1alpha1.JWTKeySourceFile:
+		jwtAuth = &ngfAPIv1alpha1.JWTAuth{
+			Source: ngfAPIv1alpha1.JWTKeySourceFile,
+			File: &ngfAPIv1alpha1.JWTFileKeySource{
+				SecretRef: ngfAPIv1alpha1.LocalObjectReference{
+					Name: secretRef.Name,
+				},
+			},
+		}
+	case ngfAPIv1alpha1.JWTKeySourceRemote:
+		jwtAuth = &ngfAPIv1alpha1.JWTAuth{
+			Source: ngfAPIv1alpha1.JWTKeySourceRemote,
+			Remote: &ngfAPIv1alpha1.JWTRemoteKeySource{
+				URI: "",
+			},
+		}
+	}
+
 	return &graph.AuthenticationFilter{
 		Source: &ngfAPIv1alpha1.AuthenticationFilter{
 			ObjectMeta: metav1.ObjectMeta{
@@ -7440,14 +7482,7 @@ func buildJWTAuthFilter(secretRef types.NamespacedName, namespace string) *graph
 			},
 			Spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
 				Type: ngfAPIv1alpha1.AuthTypeJWT,
-				JWT: &ngfAPIv1alpha1.JWTAuth{
-					Source: ngfAPIv1alpha1.JWTKeySourceFile,
-					File: &ngfAPIv1alpha1.JWTFileKeySource{
-						SecretRef: ngfAPIv1alpha1.LocalObjectReference{
-							Name: secretRef.Name,
-						},
-					},
-				},
+				JWT:  jwtAuth,
 			},
 		},
 	}
