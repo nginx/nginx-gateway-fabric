@@ -295,3 +295,14 @@ debug-install-local-build-with-plus: debug-build-images-with-plus debug-load-ima
 
 .PHONY: dev-all
 dev-all: deps fmt njs-fmt vet lint unit-test njs-unit-test ## Run all the development checks
+
+# JWT dev helpers
+JWT_NAMESPACE ?= default## Kubernetes namespace to create/update the jwt secret in
+JWT_SECRET_NAME ?= jwt-keys-secure## Kubernetes secret name for JWKS (used by jwt-file-auth examples)
+
+.PHONY: jwt
+jwt: ## Generate JWKS, create/update the jwt secret, and print a signed JWT
+	./dev/convert_pem_to_jwks.sh
+	# Use server-side apply semantics so this target is re-runnable.
+	kubectl -n $(JWT_NAMESPACE) create secret generic $(JWT_SECRET_NAME) --from-file=dev/auth --dry-run=client -o yaml | kubectl -n $(JWT_NAMESPACE) apply -f -
+	./dev/generate_jwt.sh
