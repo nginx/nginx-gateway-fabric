@@ -13,7 +13,7 @@
 
 3. Deploy NGF with NGINX Plus
 
-4. Deploy JWT AuthenticationFilter: `kubectl apply -f exampled/jwt-file-auth/
+4. Deploy JWT AuthenticationFilter: `kubectl apply -f example/jwt-file-auth/`
 
 5. `curl --resolve cafe.example.com:8080:127.0.0.1 http://cafe.example.com:8080/tea -H "Authorization: Bearer $TOKEN"`
 
