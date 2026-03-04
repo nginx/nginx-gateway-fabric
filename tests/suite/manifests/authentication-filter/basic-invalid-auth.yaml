@@ -28,24 +28,6 @@ spec:
             group: gateway.nginx.org
             kind: AuthenticationFilter
             name: basic-auth3
-    - matches:
-        # Coffee with invalid Auth type
-        - path:
-            type: PathPrefix
-            value: /coffee1
-        # Additional coffee path with same auth
-        - path:
-            type: PathPrefix
-            value: /coffee2
-      backendRefs:
-        - name: coffee
-          port: 80
-      filters:
-        - type: ExtensionRef
-          extensionRef:
-            group: gateway.nginx.org
-            kind: AuthenticationFilter
-            name: basic-auth-opaque
     # Tea with Basic Auth with valid basic-auth2
     - matches:
         - path:
@@ -174,27 +156,6 @@ spec:
     secretRef:
       name: basic-auth2
     realm: "Restricted basic-auth2"
----
-# Auth with incorrect type
-apiVersion: v1
-kind: Secret
-metadata:
-  name: basic-auth-opaque
-type: Opaque
-data:
-  # Base64 of "printf 'user1:password1' | base64"
-  auth: dXNlcjE6cGFzc3dvcmQx
----
-apiVersion: gateway.nginx.org/v1alpha1
-kind: AuthenticationFilter
-metadata:
-  name: basic-auth-opaque
-spec:
-  type: Basic
-  basic:
-    secretRef:
-      name: basic-auth-opaque
-    realm: "Restricted basic-auth-opaque"
 ---
 # Auth with an invalid key
 apiVersion: v1

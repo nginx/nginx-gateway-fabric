@@ -477,6 +477,9 @@ func getAuthFileIDAndData(
 
 	switch filter.Source.Spec.Type {
 	case ngfAPIv1alpha1.AuthTypeBasic:
+		if filter.Source.Spec.Basic == nil {
+			return "", nil
+		}
 		secretNsName.Name = filter.Source.Spec.Basic.SecretRef.Name
 		authFileID = GenerateAuthBasicFileID(secretNsName.Namespace, secretNsName.Name)
 	case ngfAPIv1alpha1.AuthTypeJWT:

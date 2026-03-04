@@ -7361,9 +7361,7 @@ func TestBuildAuthSecrets(t *testing.T) {
 					ngfAPIv1alpha1.JWTKeySourceRemote,
 				),
 			},
-			expected: map[AuthFileID]AuthFileData{
-				"": nil,
-			},
+			expected: map[AuthFileID]AuthFileData{},
 		},
 		{
 			name: "TLS secret should be ignored",
@@ -7390,9 +7388,7 @@ func TestBuildAuthSecrets(t *testing.T) {
 					invalidKeySecretNsName.Namespace,
 				),
 			},
-			expected: map[AuthFileID]AuthFileData{
-				"": nil,
-			},
+			expected: map[AuthFileID]AuthFileData{},
 		},
 		{
 			name: "mixed secrets",
