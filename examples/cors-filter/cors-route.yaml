@@ -16,8 +16,8 @@ spec:
     - type: CORS
       cors:
         allowOrigins:
-        - "https://foobar*.com"
-        - "https://example.com"
+        - "https://www.foo.com"
+        - "https://*.bar.com"
         allowMethods:
         - GET
         - POST

@@ -105,9 +105,9 @@ func newHTTPRouteStatusSetter(status gatewayv1.HTTPRouteStatus, gatewayCtlrName 
 	}
 }
 
-func newTLSRouteStatusSetter(status v1alpha2.TLSRouteStatus, gatewayCtlrName string) Setter {
+func newTLSRouteStatusSetter(status gatewayv1.TLSRouteStatus, gatewayCtlrName string) Setter {
 	return func(object client.Object) (wasSet bool) {
-		tr := helpers.MustCastObject[*v1alpha2.TLSRoute](object)
+		tr := helpers.MustCastObject[*gatewayv1.TLSRoute](object)
 
 		// keep all the parent statuses that belong to other controllers
 		newParents := make([]gatewayv1.RouteParentStatus, 0, len(status.Parents))

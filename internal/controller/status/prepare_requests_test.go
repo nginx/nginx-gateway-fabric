@@ -527,23 +527,23 @@ func TestBuildGRPCRouteStatuses(t *testing.T) {
 
 func TestBuildTLSRouteStatuses(t *testing.T) {
 	t.Parallel()
-	trValid := &v1alpha2.TLSRoute{
+	trValid := &v1.TLSRoute{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace:  "test",
 			Name:       "tr-valid",
 			Generation: 3,
 		},
-		Spec: v1alpha2.TLSRouteSpec{
+		Spec: v1.TLSRouteSpec{
 			CommonRouteSpec: commonRouteSpecValid,
 		},
 	}
-	trInvalid := &v1alpha2.TLSRoute{
+	trInvalid := &v1.TLSRoute{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace:  "test",
 			Name:       "tr-invalid",
 			Generation: 3,
 		},
-		Spec: v1alpha2.TLSRouteSpec{
+		Spec: v1.TLSRouteSpec{
 			CommonRouteSpec: commonRouteSpecInvalid,
 		},
 	}
@@ -561,7 +561,7 @@ func TestBuildTLSRouteStatuses(t *testing.T) {
 		},
 	}
 
-	expectedStatuses := map[types.NamespacedName]v1alpha2.TLSRouteStatus{
+	expectedStatuses := map[types.NamespacedName]v1.TLSRouteStatus{
 		{Namespace: "test", Name: "tr-valid"}: {
 			RouteStatus: routeStatusValid,
 		},
@@ -572,7 +572,7 @@ func TestBuildTLSRouteStatuses(t *testing.T) {
 
 	g := NewWithT(t)
 
-	k8sClient := createK8sClientFor(&v1alpha2.TLSRoute{})
+	k8sClient := createK8sClientFor(&v1.TLSRoute{})
 
 	for _, r := range routes {
 		err := k8sClient.Create(t.Context(), r.Source)
@@ -593,7 +593,7 @@ func TestBuildTLSRouteStatuses(t *testing.T) {
 	g.Expect(reqs).To(HaveLen(len(expectedStatuses)))
 
 	for nsname, expected := range expectedStatuses {
-		var hr v1alpha2.TLSRoute
+		var hr v1.TLSRoute
 
 		err := k8sClient.Get(t.Context(), nsname, &hr)
 		g.Expect(err).ToNot(HaveOccurred())

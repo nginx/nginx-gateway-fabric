@@ -21,6 +21,9 @@ func supportedFeatures(experimental bool) []gatewayv1.SupportedFeature {
 		// BackendTLSPolicy
 		features.SupportBackendTLSPolicy,
 
+		// TLSRoute
+		features.SupportTLSRoute,
+
 		// Gateway extended
 		features.SupportGatewayAddressEmpty,
 		features.SupportGatewayHTTPListenerIsolation,
@@ -43,15 +46,14 @@ func supportedFeatures(experimental bool) []gatewayv1.SupportedFeature {
 		features.SupportHTTPRouteRequestPercentageMirror,
 		features.SupportHTTPRouteResponseHeaderModification,
 		features.SupportHTTPRouteSchemeRedirect,
+		features.SupportHTTPRouteCORS,
 	}
 
 	// Add experimental features if enabled
 	if experimental {
 		featureNames = append(
 			featureNames,
-			features.SupportTLSRoute,
 			features.SupportUDPRoute,
-			features.SupportHTTPRouteCORS,
 		)
 	}
 

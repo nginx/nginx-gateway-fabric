@@ -38,7 +38,6 @@ import (
 	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
-	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 	"sigs.k8s.io/gateway-api/pkg/consts"
 
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
@@ -88,7 +87,6 @@ const (
 var scheme = runtime.NewScheme()
 
 func init() {
-	utilruntime.Must(gatewayv1beta1.Install(scheme))
 	utilruntime.Must(gatewayv1.Install(scheme))
 	utilruntime.Must(gatewayv1alpha2.Install(scheme))
 	utilruntime.Must(apiv1.AddToScheme(scheme))
@@ -614,7 +612,7 @@ func registerControllers(
 			},
 		},
 		{
-			objectType: &gatewayv1beta1.ReferenceGrant{},
+			objectType: &gatewayv1.ReferenceGrant{},
 			options: []controller.Option{
 				controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
 			},
@@ -678,34 +676,36 @@ func registerControllers(
 		},
 	}
 
-	// BackendTLSPolicy v1 - conditionally register if CRD exists
-	controllerRegCfgs = append(controllerRegCfgs, ctlrCfg{
-		objectType: &gatewayv1.BackendTLSPolicy{},
-		options: []controller.Option{
-			controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
+	// BackendTLSPolicy/TLSRoute v1 - conditionally register if CRD exists
+	controllerRegCfgs = append(controllerRegCfgs,
+		ctlrCfg{
+			objectType: &gatewayv1.BackendTLSPolicy{},
+			options: []controller.Option{
+				controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
+			},
+			requireCRDCheck: true,
+			crdGVK: &schema.GroupVersionKind{
+				Group:   "gateway.networking.k8s.io",
+				Version: "v1",
+				Kind:    "BackendTLSPolicy",
+			},
 		},
-		requireCRDCheck: true,
-		crdGVK: &schema.GroupVersionKind{
-			Group:   "gateway.networking.k8s.io",
-			Version: "v1",
-			Kind:    "BackendTLSPolicy",
+		ctlrCfg{
+			objectType: &gatewayv1.TLSRoute{},
+			options: []controller.Option{
+				controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
+			},
+			requireCRDCheck: true,
+			crdGVK: &schema.GroupVersionKind{
+				Group:   "gateway.networking.k8s.io",
+				Version: "v1",
+				Kind:    "TLSRoute",
+			},
 		},
-	})
+	)
 
 	if cfg.ExperimentalFeatures {
 		gwExpFeatures := []ctlrCfg{
-			{
-				objectType: &gatewayv1alpha2.TLSRoute{},
-				options: []controller.Option{
-					controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
-				},
-				requireCRDCheck: true,
-				crdGVK: &schema.GroupVersionKind{
-					Group:   "gateway.networking.k8s.io",
-					Version: "v1alpha2",
-					Kind:    "TLSRoute",
-				},
-			},
 			{
 				objectType: &gatewayv1alpha2.TCPRoute{},
 				options: []controller.Option{
@@ -997,7 +997,7 @@ func prepareFirstEventBatchPreparerArgs(
 		&discoveryV1.EndpointSliceList{},
 		&gatewayv1.HTTPRouteList{},
 		&apiv1.ConfigMapList{},
-		&gatewayv1beta1.ReferenceGrantList{},
+		&gatewayv1.ReferenceGrantList{},
 		&ngfAPIv1alpha2.NginxProxyList{},
 		&gatewayv1.GRPCRouteList{},
 		&ngfAPIv1alpha1.ClientSettingsPolicyList{},
@@ -1016,7 +1016,7 @@ func prepareFirstEventBatchPreparerArgs(
 
 	if cfg.ExperimentalFeatures {
 		if discoveredCRDs["TLSRoute"] {
-			objectLists = append(objectLists, &gatewayv1alpha2.TLSRouteList{})
+			objectLists = append(objectLists, &gatewayv1.TLSRouteList{})
 		}
 		if discoveredCRDs["TCPRoute"] {
 			objectLists = append(objectLists, &gatewayv1alpha2.TCPRouteList{})

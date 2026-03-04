@@ -4,14 +4,14 @@ import (
 	apiv1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation/field"
-	"sigs.k8s.io/gateway-api/apis/v1alpha2"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
 
 func buildTLSRoute(
-	gtr *v1alpha2.TLSRoute,
+	gtr *gatewayv1.TLSRoute,
 	gws map[types.NamespacedName]*Gateway,
 	services map[types.NamespacedName]*apiv1.Service,
 	refGrantResolver func(resource toResource) bool,
@@ -68,7 +68,7 @@ func buildTLSRoute(
 }
 
 func validateBackendRefTLSRoute(
-	gtr *v1alpha2.TLSRoute,
+	gtr *gatewayv1.TLSRoute,
 	services map[types.NamespacedName]*apiv1.Service,
 	parentRefs []ParentRef,
 	refGrantResolver func(resource toResource) bool,
