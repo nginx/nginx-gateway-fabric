@@ -5509,7 +5509,7 @@ func TestUpdateLocationCORSFilter(t *testing.T) {
 		},
 		{
 			name: "corsFilter preserves existing location properties",
-			location: http.Location{
+			location: http.Location{ //nolint:gosec //not sure why gosec cares
 				Path:        "/api/v1",
 				Type:        http.InternalLocationType,
 				ProxyPass:   "http://backend",
@@ -5524,7 +5524,7 @@ func TestUpdateLocationCORSFilter(t *testing.T) {
 				Path:     "/api/v1",
 				PathType: dataplane.PathTypePrefix,
 			},
-			expected: http.Location{
+			expected: http.Location{ //nolint:gosec //not sure why gosec cares
 				Path:        "/api/v1",
 				Type:        http.InternalLocationType,
 				ProxyPass:   "http://backend",
