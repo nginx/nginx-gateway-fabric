@@ -1,6 +1,7 @@
 package provisioner
 
 import (
+	"fmt"
 	"reflect"
 	"strings"
 	"sync"
@@ -99,6 +100,7 @@ func (s *store) deleteGateway(nsName types.NamespacedName) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
+	fmt.Println("We are deleting Gateway with NamespacedName", nsName)
 	delete(s.gateways, nsName)
 }
 
@@ -313,6 +315,7 @@ func (s *store) deleteResourcesForGateway(nsName types.NamespacedName) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
+	fmt.Println("We are deleting resources for Gateway with NamespacedName", nsName)
 	delete(s.nginxResources, nsName)
 }
 
@@ -484,6 +487,7 @@ func getResourceVersionForSecret(resources *NginxResources, secret *corev1.Secre
 
 // markGatewayDeleting marks a Gateway as being deleted.
 func (s *store) markGatewayDeleting(nsName types.NamespacedName) {
+	fmt.Println("We are deleting Gateway with NamespacedName", nsName)
 	s.deletingGateways.Store(nsName, struct{}{})
 }
 

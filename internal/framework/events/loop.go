@@ -112,7 +112,17 @@ func (el *EventLoop) Start(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			// Wait for the completion if a batch is being handled.
+			el.logger.V(1).Info(
+				"stopping the event loop, waiting for the completion of handling the batch",
+				// "batchID", el.currentBatchID,
+				// "total for next batch ", len(el.nextBatch),
+			)
 			if handling {
+				el.logger.V(1).Info(
+					"waiting for the completion of handling the batch",
+					// "batchID", el.currentBatchID,
+					// "total for next batch ", len(el.nextBatch),
+				)
 				<-handlingDone
 			}
 			return nil
@@ -128,13 +138,29 @@ func (el *EventLoop) Start(ctx context.Context) error {
 
 			// If no batch is currently being handled, swap batches and begin handling the batch.
 			if !handling {
+				el.logger.V(1).Info(
+					"no batch is currently being handled, swapping batches",
+					"batchID", el.currentBatchID,
+					"total for next batch ", len(el.nextBatch),
+				)
 				swapAndHandleBatch()
 			}
 		case <-handlingDone:
 			handling = false
 
+			el.logger.V(1).Info(
+				"finished handling the batch",
+				"batchID", el.currentBatchID,
+				"total for next batch ", len(el.nextBatch),
+			)
+
 			// If there's at least one event in the next batch, swap batches and begin handling the batch.
 			if len(el.nextBatch) > 0 {
+				el.logger.V(1).Info(
+					"there are events in the next batch",
+					"batchID", el.currentBatchID,
+					"total for next batch ", len(el.nextBatch),
+				)
 				swapAndHandleBatch()
 			}
 		}

@@ -148,11 +148,11 @@ func newEventHandlerImpl(cfg eventHandlerConfig) *eventHandlerImpl {
 
 func (h *eventHandlerImpl) HandleEventBatch(ctx context.Context, logger logr.Logger, batch events.EventBatch) {
 	start := time.Now()
-	logger.V(1).Info("Started processing event batch")
+	fmt.Println("Started processing event batch")
 
 	defer func() {
 		duration := time.Since(start)
-		logger.V(1).Info(
+		fmt.Println(
 			"Finished processing event batch",
 			"duration", duration.String(),
 		)
@@ -160,15 +160,21 @@ func (h *eventHandlerImpl) HandleEventBatch(ctx context.Context, logger logr.Log
 	}()
 
 	for _, event := range batch {
+		fmt.Println("Processing event from batch", "event", fmt.Sprintf("%T", event))
 		h.parseAndCaptureEvent(ctx, logger, event)
 	}
+	fmt.Println("Finished capturing events for batch, processing changes in graph")
 
 	gr := h.cfg.processor.Process()
+	fmt.Println("Finished processing changes in graph")
 
 	// Once we've processed resources on startup and built our first graph, mark the Pod as ready.
 	if !h.cfg.graphBuiltHealthChecker.ready {
 		h.cfg.graphBuiltHealthChecker.setAsReady()
+		fmt.Println("Marked the Pod as ready after building the first graph")
 	}
+
+	fmt.Println("sending nginx config with gr ", "graph", fmt.Sprintf("%T", gr))
 
 	h.sendNginxConfig(ctx, logger, gr)
 }
@@ -185,6 +191,7 @@ func (h *eventHandlerImpl) enable(ctx context.Context) {
 
 func (h *eventHandlerImpl) sendNginxConfig(ctx context.Context, logger logr.Logger, gr *graph.Graph) {
 	if gr == nil {
+		fmt.Println("Graph is nil, skipping sending nginx config")
 		return
 	}
 
@@ -194,6 +201,7 @@ func (h *eventHandlerImpl) sendNginxConfig(ctx context.Context, logger logr.Logg
 			UpdateType: status.UpdateAll,
 		}
 		h.cfg.statusQueue.Enqueue(obj)
+		fmt.Println("No Gateways found in graph, skipping sending nginx config but enqueued status update")
 		return
 	}
 
@@ -202,6 +210,7 @@ func (h *eventHandlerImpl) sendNginxConfig(ctx context.Context, logger logr.Logg
 
 	for _, gw := range gr.Gateways {
 		go func() {
+			fmt.Println("Registering gateway with provisioner", "gateway", fmt.Sprintf("%T", gw))
 			if err := h.cfg.nginxProvisioner.RegisterGateway(ctx, gw, gw.DeploymentName.Name); err != nil {
 				logger.Error(err, "error from provisioner")
 			}
@@ -216,6 +225,8 @@ func (h *eventHandlerImpl) sendNginxConfig(ctx context.Context, logger logr.Logg
 				UpdateType: status.UpdateAll,
 			}
 			h.cfg.statusQueue.Enqueue(obj)
+			fmt.Println("Gateway is invalid, skipping sending nginx config but enqueued status update",
+				"gateway", fmt.Sprintf("%T", gw))
 			return
 		}
 
@@ -240,6 +251,8 @@ func (h *eventHandlerImpl) sendNginxConfig(ctx context.Context, logger logr.Logg
 		cfg.DeploymentContext = depCtx
 
 		h.setLatestConfiguration(gw, &cfg)
+		fmt.Println("Built configuration for gateway", "gateway", fmt.Sprintf("%T", gw),
+			"configuration", fmt.Sprintf("%+v", cfg))
 
 		vm := []v1.VolumeMount{}
 		if gw.EffectiveNginxProxy != nil &&
@@ -254,8 +267,10 @@ func (h *eventHandlerImpl) sendNginxConfig(ctx context.Context, logger logr.Logg
 		}
 
 		deployment.FileLock.Lock()
+		fmt.Println("Updating NGINX configuration for gateway", "gateway", fmt.Sprintf("%T", gw))
 		h.updateNginxConf(deployment, cfg, vm)
 		deployment.FileLock.Unlock()
+		fmt.Println("Finished updating NGINX configuration for gateway", "gateway", fmt.Sprintf("%T", gw))
 
 		configErr := deployment.GetLatestConfigError()
 		upstreamErr := deployment.GetLatestUpstreamError()
@@ -270,7 +285,10 @@ func (h *eventHandlerImpl) sendNginxConfig(ctx context.Context, logger logr.Logg
 			},
 		}
 		h.cfg.statusQueue.Enqueue(obj)
+		fmt.Println("Enqueued status update after sending nginx config", "gateway",
+			fmt.Sprintf("%T", gw), "error", fmt.Sprintf("%v", err))
 	}
+	fmt.Println("Finished sending nginx config for all gateways in graph")
 }
 
 func (h *eventHandlerImpl) waitForStatusUpdates(ctx context.Context) {
@@ -279,8 +297,13 @@ func (h *eventHandlerImpl) waitForStatusUpdates(ctx context.Context) {
 		if item == nil {
 			return
 		}
-
+		if item.Deployment.GatewayName != "" {
+			fmt.Println("We are processing a status update for " +
+				"deployment " + item.Deployment.GatewayName + " at time " + time.Now().String())
+		}
 		gr := h.cfg.processor.GetLatestGraph()
+
+		fmt.Println("We finished getting the graph at time " + time.Now().String())
 		if gr == nil {
 			continue
 		}
@@ -301,10 +324,13 @@ func (h *eventHandlerImpl) waitForStatusUpdates(ctx context.Context) {
 			h.cfg.logger.Error(item.Error, "Failed to update NGINX configuration")
 			nginxReloadRes.Error = item.Error
 		case gw != nil:
-			h.cfg.logger.Info("NGINX configuration was successfully updated")
+			fmt.Println("NGINX configuration was successfully updated")
 		}
 		if gw != nil {
 			gw.LatestReloadResult = nginxReloadRes
+			fmt.Println("This is our gw! " + time.Now().String() + " " + gw.Source.GetName())
+		} else {
+			fmt.Println("We have a nil gateway! " + time.Now().String())
 		}
 
 		switch item.UpdateType {
@@ -334,6 +360,9 @@ func (h *eventHandlerImpl) waitForStatusUpdates(ctx context.Context) {
 					msg+": %s",
 					err.Error(),
 				)
+				if gwAddresses == nil {
+					fmt.Println("We have a nil gwAddresses in wait for status updates for" + time.Now().String())
+				}
 				continue
 			}
 
@@ -361,6 +390,8 @@ func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph, 
 		return
 	}
 
+	fmt.Println("I am updating the statuses now! " + time.Now().String())
+
 	gwAddresses, err := getGatewayAddresses(ctx, h.cfg.k8sClient, nil, gw, h.cfg.gatewayClassName)
 	if err != nil {
 		msg := "error getting Gateway Service IP address"
@@ -374,6 +405,10 @@ func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph, 
 			msg+": %s",
 			err.Error(),
 		)
+	}
+
+	if gwAddresses == nil {
+		fmt.Println("We have a nil gwAddresses in update Statuses" + time.Now().String())
 	}
 
 	routeReqs := status.PrepareRouteRequests(
@@ -463,6 +498,8 @@ func (h *eventHandlerImpl) parseAndCaptureEvent(ctx context.Context, logger logr
 		h.cfg.processor.CaptureUpsertChange(e.Resource)
 	case *events.DeleteEvent:
 		delFilterKey := objectFilterKey(e.Type, e.NamespacedName)
+		fmt.Println("We are deleting an object at time " + time.Now().String() + " " +
+			fmt.Sprintf("%T / %s", e.Type, e.NamespacedName.Name))
 
 		if filter, ok := h.objectFilters[delFilterKey]; ok {
 			filter.delete(ctx, logger, e.NamespacedName)
@@ -483,12 +520,17 @@ func (h *eventHandlerImpl) updateNginxConf(
 	conf dataplane.Configuration,
 	volumeMounts []v1.VolumeMount,
 ) {
+	fmt.Println("Generating nginx configuration files for deployment")
 	files := h.cfg.generator.Generate(conf)
+	fmt.Println("Updating nginx configuration for deployment")
 	h.cfg.nginxUpdater.UpdateConfig(deployment, files, volumeMounts)
+	fmt.Println("Finished updating nginx configuration for deployment")
 
 	// If using NGINX Plus, update upstream servers using the API.
 	if h.cfg.plus {
+		fmt.Println("Updating upstream servers for deployment using NGINX Plus API")
 		h.cfg.nginxUpdater.UpdateUpstreamServers(deployment, conf)
+		fmt.Println("Finished updating upstream servers for deployment using NGINX Plus API")
 	}
 }
 
@@ -531,7 +573,7 @@ func (h *eventHandlerImpl) updateControlPlaneAndSetStatus(
 
 	h.cfg.statusUpdater.UpdateGroup(ctx, groupControlPlane, reqs...)
 
-	logger.Info("Reconfigured control plane.")
+	fmt.Println("Reconfigured control plane.")
 }
 
 // getGatewayAddresses gets the addresses for the Gateway.
@@ -560,6 +602,7 @@ func getGatewayAddresses(
 			true, /* poll immediately */
 			func(ctx context.Context) (bool, error) {
 				if err := k8sClient.Get(ctx, key, &gwSvc); err != nil {
+					fmt.Println("Waiting for Service", svcName, "to be created... "+time.Now().String())
 					return false, nil //nolint:nilerr // need to retry without returning error
 				}
 
@@ -736,7 +779,7 @@ func (h *eventHandlerImpl) ensureInferencePoolServices(
 		cancel()
 
 		if res == controllerutil.OperationResultCreated || res == controllerutil.OperationResultUpdated {
-			h.cfg.logger.Info(
+			fmt.Println(
 				fmt.Sprintf("Successfully %s headless Service for InferencePool", res),
 				"Service", svc.Name, "InferencePool", pool.Source.Name,
 			)
