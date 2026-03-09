@@ -106,8 +106,6 @@ The initial design will support the following directives from [`ngx_http_oidc_mo
 // AuthenticationFilterSpec defines the desired configuration.
 // +kubebuilder:validation:XValidation:message="for type=Basic, spec.basic must be set",rule="!(!has(self.basic) && self.type == 'Basic')"
 // +kubebuilder:validation:XValidation:message="for type=OIDC, spec.oidc must be set",rule="!(!has(self.oidc) && self.type == 'OIDC')"
-//
-//nolint:lll
 type AuthenticationFilterSpec struct {
 	// OIDC configures OpenID Connect Authentication.
 	//
@@ -129,8 +127,6 @@ const (
 )
 
 // OIDCAuth configures OpenID Connect Authentication.
-//
-//nolint:lll
 type OIDCAuth struct {
 	// CRLSecretRef references a Secret containing a certificate
 	// revocation list in PEM format. The referenced Secret must contain an entry with the key "ca.crl".
@@ -236,27 +232,26 @@ type OIDCSessionConfig struct {
 }
 
 // OIDCLogoutConfig defines the logout behavior for OIDC authentication.
-//
-//nolint:lll
 type OIDCLogoutConfig struct {
-	// URI defines the path for initiating session logout.
+	// URI defines the URI for initiating session logout. Accepts either a full URI
+	// (e.g. https://example.com/logout) or a path-only URI (e.g. /logout).
 	// Directive: https://nginx.org/en/docs/http/ngx_http_oidc_module.html#logout_uri
-	// Example: /logout
 	//
 	// +optional
 	// +kubebuilder:validation:Pattern=`^(https?://[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*(:[0-9]{1,5})?)?(/[a-zA-Z0-9._~:/?@!$&'()*+,;=-]*)?$`
 	URI *string `json:"uri,omitempty"`
 
-	// PostLogoutURI defines the path to redirect to after logout.
-	// Must match the configuration on the Provider's side.
+	// PostLogoutURI defines the URI to redirect to after logout. Accepts either a full URI
+	// (e.g. https://example.com/logged_out.html) or a path-only URI (e.g. /logged_out.html).
+	// Must match the configuration on the provider's side.
 	// Directive: https://nginx.org/en/docs/http/ngx_http_oidc_module.html#post_logout_uri
-	// Example: /logged_out.html
 	//
 	// +optional
 	// +kubebuilder:validation:Pattern=`^(https?://[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*(:[0-9]{1,5})?)?(/[a-zA-Z0-9._~:/?@!$&'()*+,;=-]*)?$`
 	PostLogoutURI *string `json:"postLogoutURI,omitempty"`
 
-	// FrontChannelLogoutURI defines the path for front-channel logout.
+	// FrontChannelLogoutURI defines the URI for front-channel logout. Accepts either a full URI
+	// (e.g. https://example.com/frontchannel_logout) or a path-only URI (e.g. /frontchannel_logout).
 	// The OpenID Provider should be configured to set "iss" and "sid" arguments.
 	// Directive: https://nginx.org/en/docs/http/ngx_http_oidc_module.html#frontchannel_logout_uri
 	//

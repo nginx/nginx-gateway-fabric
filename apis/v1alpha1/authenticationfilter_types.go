@@ -141,7 +141,7 @@ type OIDCAuth struct {
 	ClientID string `json:"clientID"`
 
 	// ClientSecretRef references a Kubernetes secret which contains the OIDC client secret to be used in the
-	// [Authentication Request](https://openid.net/specs/openid-connect-core-1_0.html#AuthRequest).
+	// Authentication Request: https://openid.net/specs/openid-connect-core-1_0.html#AuthRequest.
 	// The referenced Secret must contain an entry with the key "client-secret".
 	// Directive: https://nginx.org/en/docs/http/ngx_http_oidc_module.html#client_secret
 	ClientSecretRef LocalObjectReference `json:"clientSecretRef"`
@@ -190,24 +190,25 @@ type OIDCSessionConfig struct {
 //
 //nolint:lll
 type OIDCLogoutConfig struct {
-	// URI defines the path for initiating session logout.
+	// URI defines the URI for initiating session logout. Accepts either a full URI
+	// (e.g. https://example.com/logout) or a path-only URI (e.g. /logout).
 	// Directive: https://nginx.org/en/docs/http/ngx_http_oidc_module.html#logout_uri
-	// Example: /logout
 	//
 	// +optional
 	// +kubebuilder:validation:Pattern=`^(https?://[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*(:[0-9]{1,5})?)?(/[a-zA-Z0-9._~:/?@!$&'()*+,;=-]*)?$`
 	URI *string `json:"uri,omitempty"`
 
-	// PostLogoutURI defines the path to redirect to after logout.
+	// PostLogoutURI defines the URI to redirect to after logout. Accepts either a full URI
+	// (e.g. https://example.com/logged_out.html) or a path-only URI (e.g. /logged_out.html).
 	// Must match the configuration on the provider's side.
 	// Directive: https://nginx.org/en/docs/http/ngx_http_oidc_module.html#post_logout_uri
-	// Example: /logged_out.html
 	//
 	// +optional
 	// +kubebuilder:validation:Pattern=`^(https?://[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*(:[0-9]{1,5})?)?(/[a-zA-Z0-9._~:/?@!$&'()*+,;=-]*)?$`
 	PostLogoutURI *string `json:"postLogoutURI,omitempty"`
 
-	// FrontChannelLogoutURI defines the path for front-channel logout.
+	// FrontChannelLogoutURI defines the URI for front-channel logout. Accepts either a full URI
+	// (e.g. https://example.com/frontchannel_logout) or a path-only URI (e.g. /frontchannel_logout).
 	// The OpenID Provider should be configured to set "iss" and "sid" arguments.
 	// Directive: https://nginx.org/en/docs/http/ngx_http_oidc_module.html#frontchannel_logout_uri
 	//
