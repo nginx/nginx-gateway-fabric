@@ -3,7 +3,6 @@ package graph
 import (
 	"k8s.io/apimachinery/pkg/types"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
-	v1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
@@ -115,7 +114,7 @@ func fromUDPRoute(namespace string) fromResource {
 }
 
 // newReferenceGrantResolver creates a new referenceGrantResolver.
-func newReferenceGrantResolver(refGrants map[types.NamespacedName]*v1beta1.ReferenceGrant) *referenceGrantResolver {
+func newReferenceGrantResolver(refGrants map[types.NamespacedName]*v1.ReferenceGrant) *referenceGrantResolver {
 	allowed := make(map[allowedReference]struct{})
 
 	for nsname, grant := range refGrants {

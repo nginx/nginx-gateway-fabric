@@ -6296,6 +6296,7 @@ func TestBuildDNSResolverConfig(t *testing.T) {
 	}
 }
 
+//nolint:gosec // Tests with mock SSL/TLS configuration data, not real credentials.
 func TestBuildConfiguration_GatewaysAndListeners(t *testing.T) {
 	t.Parallel()
 

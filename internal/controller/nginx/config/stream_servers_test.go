@@ -227,13 +227,13 @@ func TestCreateStreamServers(t *testing.T) {
 		},
 		{
 			Listen:     fmt.Sprint(8081),
-			Pass:       getTLSPassthroughVarName(8081),
+			Target:     getTLSPassthroughVarName(8081),
 			StatusZone: "example.com",
 			SSLPreread: true,
 		},
 		{
 			Listen:     fmt.Sprint(8080),
-			Pass:       getTLSPassthroughVarName(8080),
+			Target:     getTLSPassthroughVarName(8080),
 			StatusZone: "example.com",
 			SSLPreread: true,
 		},

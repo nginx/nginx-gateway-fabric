@@ -17,7 +17,6 @@ import (
 	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 	"sigs.k8s.io/gateway-api/apis/v1alpha2"
-	"sigs.k8s.io/gateway-api/apis/v1beta1"
 	"sigs.k8s.io/gateway-api/pkg/consts"
 
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
@@ -137,14 +136,14 @@ func createGRPCRoute(
 	}
 }
 
-func createTLSRoute(name, gateway, hostname string, backendRefs ...v1.BackendRef) *v1alpha2.TLSRoute {
-	return &v1alpha2.TLSRoute{
+func createTLSRoute(name, gateway, hostname string, backendRefs ...v1.BackendRef) *v1.TLSRoute {
+	return &v1.TLSRoute{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace:  "test",
 			Name:       name,
 			Generation: 1,
 		},
-		Spec: v1alpha2.TLSRouteSpec{
+		Spec: v1.TLSRouteSpec{
 			CommonRouteSpec: v1.CommonRouteSpec{
 				ParentRefs: []v1.ParentReference{
 					{
@@ -157,7 +156,7 @@ func createTLSRoute(name, gateway, hostname string, backendRefs ...v1.BackendRef
 			Hostnames: []v1.Hostname{
 				v1.Hostname(hostname),
 			},
-			Rules: []v1alpha2.TLSRouteRule{
+			Rules: []v1.TLSRouteRule{
 				{
 					BackendRefs: backendRefs,
 				},
@@ -311,7 +310,6 @@ func createScheme() *runtime.Scheme {
 	scheme := runtime.NewScheme()
 
 	utilruntime.Must(v1.Install(scheme))
-	utilruntime.Must(v1beta1.Install(scheme))
 	utilruntime.Must(v1alpha2.Install(scheme))
 	utilruntime.Must(apiv1.AddToScheme(scheme))
 	utilruntime.Must(discoveryV1.AddToScheme(scheme))
@@ -438,10 +436,10 @@ var _ = Describe("ChangeProcessor", func() {
 				diffNsTLSCert, sameNsTLSCert                               *secrets.CertificateBundle
 				hr1, hr1Updated, hr2                                       *v1.HTTPRoute
 				gr1, gr1Updated, gr2                                       *v1.GRPCRoute
-				tr1, tr1Updated, tr2                                       *v1alpha2.TLSRoute
+				tr1, tr1Updated, tr2                                       *v1.TLSRoute
 				gw1, gw1Updated, gw2, gw2Updated                           *v1.Gateway
-				secretRefGrant, hrServiceRefGrant                          *v1beta1.ReferenceGrant
-				grServiceRefGrant, trServiceRefGrant                       *v1beta1.ReferenceGrant
+				secretRefGrant, hrServiceRefGrant                          *v1.ReferenceGrant
+				grServiceRefGrant, trServiceRefGrant                       *v1.ReferenceGrant
 				expGraph, expGraph2                                        *graph.Graph
 				expRouteHR1, expRouteHR2                                   *graph.L7Route
 				expRouteGR1, expRouteGR2                                   *graph.L7Route
@@ -513,20 +511,20 @@ var _ = Describe("ChangeProcessor", func() {
 				tr2 = createTLSRoute("tr-2", "gateway-2", "bar.tls.com", tlsBackendRef)
 				trKey2 = graph.CreateRouteKeyL4(tr2)
 
-				secretRefGrant = &v1beta1.ReferenceGrant{
+				secretRefGrant = &v1.ReferenceGrant{
 					ObjectMeta: metav1.ObjectMeta{
 						Namespace: "cert-ns",
 						Name:      "ref-grant",
 					},
-					Spec: v1beta1.ReferenceGrantSpec{
-						From: []v1beta1.ReferenceGrantFrom{
+					Spec: v1.ReferenceGrantSpec{
+						From: []v1.ReferenceGrantFrom{
 							{
 								Group:     v1.GroupName,
 								Kind:      kinds.Gateway,
 								Namespace: "test",
 							},
 						},
-						To: []v1beta1.ReferenceGrantTo{
+						To: []v1.ReferenceGrantTo{
 							{
 								Kind: "Secret",
 							},
@@ -534,20 +532,20 @@ var _ = Describe("ChangeProcessor", func() {
 					},
 				}
 
-				hrServiceRefGrant = &v1beta1.ReferenceGrant{
+				hrServiceRefGrant = &v1.ReferenceGrant{
 					ObjectMeta: metav1.ObjectMeta{
 						Namespace: "service-ns",
 						Name:      "ref-grant",
 					},
-					Spec: v1beta1.ReferenceGrantSpec{
-						From: []v1beta1.ReferenceGrantFrom{
+					Spec: v1.ReferenceGrantSpec{
+						From: []v1.ReferenceGrantFrom{
 							{
 								Group:     v1.GroupName,
 								Kind:      kinds.HTTPRoute,
 								Namespace: "test",
 							},
 						},
-						To: []v1beta1.ReferenceGrantTo{
+						To: []v1.ReferenceGrantTo{
 							{
 								Kind: "Service",
 							},
@@ -555,20 +553,20 @@ var _ = Describe("ChangeProcessor", func() {
 					},
 				}
 
-				grServiceRefGrant = &v1beta1.ReferenceGrant{
+				grServiceRefGrant = &v1.ReferenceGrant{
 					ObjectMeta: metav1.ObjectMeta{
 						Namespace: "grpc-service-ns",
 						Name:      "ref-grant",
 					},
-					Spec: v1beta1.ReferenceGrantSpec{
-						From: []v1beta1.ReferenceGrantFrom{
+					Spec: v1.ReferenceGrantSpec{
+						From: []v1.ReferenceGrantFrom{
 							{
 								Group:     v1.GroupName,
 								Kind:      kinds.GRPCRoute,
 								Namespace: "test",
 							},
 						},
-						To: []v1beta1.ReferenceGrantTo{
+						To: []v1.ReferenceGrantTo{
 							{
 								Kind: "Service",
 							},
@@ -576,20 +574,20 @@ var _ = Describe("ChangeProcessor", func() {
 					},
 				}
 
-				trServiceRefGrant = &v1beta1.ReferenceGrant{
+				trServiceRefGrant = &v1.ReferenceGrant{
 					ObjectMeta: metav1.ObjectMeta{
 						Namespace: "tls-service-ns",
 						Name:      "ref-grant",
 					},
-					Spec: v1beta1.ReferenceGrantSpec{
-						From: []v1beta1.ReferenceGrantFrom{
+					Spec: v1.ReferenceGrantSpec{
+						From: []v1.ReferenceGrantFrom{
 							{
 								Group:     v1.GroupName,
 								Kind:      kinds.TLSRoute,
 								Namespace: "test",
 							},
 						},
-						To: []v1beta1.ReferenceGrantTo{
+						To: []v1.ReferenceGrantTo{
 							{
 								Kind: "Service",
 							},
@@ -2158,7 +2156,7 @@ var _ = Describe("ChangeProcessor", func() {
 			When("the second TLSRoute is deleted", func() {
 				It("returns updated graph", func() {
 					processor.CaptureDeleteChange(
-						&v1alpha2.TLSRoute{},
+						&v1.TLSRoute{},
 						types.NamespacedName{Namespace: "test", Name: "tr-2"},
 					)
 
@@ -2325,7 +2323,7 @@ var _ = Describe("ChangeProcessor", func() {
 			When("the first TLSRoute is deleted", func() {
 				It("returns empty graph", func() {
 					processor.CaptureDeleteChange(
-						&v1alpha2.TLSRoute{},
+						&v1.TLSRoute{},
 						types.NamespacedName{Namespace: "test", Name: "tr-1"},
 					)
 
@@ -2816,7 +2814,7 @@ var _ = Describe("ChangeProcessor", func() {
 		Describe("NginxProxy resource changes", Ordered, func() {
 			Context("referenced by a GatewayClass", func() {
 				paramGC := gc.DeepCopy()
-				paramGC.Spec.ParametersRef = &v1beta1.ParametersReference{
+				paramGC.Spec.ParametersRef = &v1.ParametersReference{
 					Group:     ngfAPIv1alpha1.GroupName,
 					Kind:      kinds.NginxProxy,
 					Name:      "np",
@@ -3368,7 +3366,7 @@ var _ = Describe("ChangeProcessor", func() {
 			gw1, gw1Updated, gw2                                                              *v1.Gateway
 			hr1, hr1Updated, hr2                                                              *v1.HTTPRoute
 			gr1, gr1Updated, gr2                                                              *v1.GRPCRoute
-			rg1, rg1Updated, rg2                                                              *v1beta1.ReferenceGrant
+			rg1, rg1Updated, rg2                                                              *v1.ReferenceGrant
 			svc, barSvc, unrelatedSvc                                                         *apiv1.Service
 			slice, barSlice, unrelatedSlice                                                   *discoveryV1.EndpointSlice
 			ns, unrelatedNS, testNs, barNs                                                    *apiv1.Namespace
@@ -3610,7 +3608,7 @@ var _ = Describe("ChangeProcessor", func() {
 
 			rgNsName = types.NamespacedName{Namespace: "test", Name: "rg-1"}
 
-			rg1 = &v1beta1.ReferenceGrant{
+			rg1 = &v1.ReferenceGrant{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      rgNsName.Name,
 					Namespace: rgNsName.Namespace,
@@ -3747,7 +3745,7 @@ var _ = Describe("ChangeProcessor", func() {
 					processor.CaptureDeleteChange(&v1.Gateway{}, gwNsName)
 					processor.CaptureDeleteChange(&v1.HTTPRoute{}, hrNsName)
 					processor.CaptureDeleteChange(&v1.GRPCRoute{}, grNsName)
-					processor.CaptureDeleteChange(&v1beta1.ReferenceGrant{}, rgNsName)
+					processor.CaptureDeleteChange(&v1.ReferenceGrant{}, rgNsName)
 					processor.CaptureDeleteChange(&v1.BackendTLSPolicy{}, btlsNsName)
 					processor.CaptureDeleteChange(&apiv1.ConfigMap{}, cmNsName)
 					processor.CaptureDeleteChange(&ngfAPIv1alpha2.NginxProxy{}, npNsName)
@@ -3776,7 +3774,7 @@ var _ = Describe("ChangeProcessor", func() {
 				processor.CaptureDeleteChange(&v1.HTTPRoute{}, hr2NsName)
 				processor.CaptureDeleteChange(&v1.HTTPRoute{}, grNsName)
 				processor.CaptureDeleteChange(&v1.HTTPRoute{}, gr2NsName)
-				processor.CaptureDeleteChange(&v1beta1.ReferenceGrant{}, rgNsName)
+				processor.CaptureDeleteChange(&v1.ReferenceGrant{}, rgNsName)
 
 				Expect(processor.Process()).To(BeNil())
 			})

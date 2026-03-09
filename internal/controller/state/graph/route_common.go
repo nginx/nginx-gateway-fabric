@@ -247,7 +247,7 @@ func CreateRouteKeyL4(obj client.Object) L4RouteKey {
 	nsName := client.ObjectKeyFromObject(obj)
 	var routeType RouteType
 	switch obj.(type) {
-	case *v1alpha.TLSRoute:
+	case *v1.TLSRoute:
 		routeType = RouteTypeTLS
 	case *v1alpha.TCPRoute:
 		routeType = RouteTypeTCP
@@ -282,7 +282,7 @@ func (e routeRuleErrors) append(newErrors routeRuleErrors) routeRuleErrors {
 }
 
 func buildL4RoutesForGateways(
-	tlsRoutes map[types.NamespacedName]*v1alpha.TLSRoute,
+	tlsRoutes map[types.NamespacedName]*v1.TLSRoute,
 	tcpRoutes map[types.NamespacedName]*v1alpha.TCPRoute,
 	udpRoutes map[types.NamespacedName]*v1alpha.UDPRoute,
 	services map[types.NamespacedName]*apiv1.Service,
@@ -808,14 +808,14 @@ func sortListenersByHostname(attachableListeners []*Listener) {
 
 func getL4RouteKind(route *L4Route) v1.Kind {
 	switch route.Source.(type) {
-	case *v1alpha.TLSRoute:
+	case *v1.TLSRoute:
 		return v1.Kind(kinds.TLSRoute)
 	case *v1alpha.TCPRoute:
 		return v1.Kind(kinds.TCPRoute)
 	case *v1alpha.UDPRoute:
 		return v1.Kind(kinds.UDPRoute)
 	default:
-		return v1.Kind(kinds.TLSRoute)
+		panic(fmt.Sprintf("Unknown type: %T", route.Source))
 	}
 }
 

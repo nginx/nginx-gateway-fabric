@@ -92,6 +92,7 @@ func Post(request Request) (*http.Response, error) {
 	return response, err
 }
 
+//nolint:gosec // Test framework intentionally uses dynamic URLs
 func makeRequest(method string, request Request, opts ...Option) (*http.Response, error) {
 	dialer := &net.Dialer{}
 

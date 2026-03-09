@@ -34,8 +34,7 @@ import (
 	ctlr "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	inference_conformance "sigs.k8s.io/gateway-api-inference-extension/conformance"
-	v1 "sigs.k8s.io/gateway-api/apis/v1"
-	"sigs.k8s.io/gateway-api/apis/v1beta1"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	"sigs.k8s.io/gateway-api/conformance"
 	conf_v1 "sigs.k8s.io/gateway-api/conformance/apis/v1"
 	"sigs.k8s.io/gateway-api/conformance/tests"
@@ -51,9 +50,8 @@ const (
 	// This is needed to give the conformance tests an example valid ip unusable address.
 	unusableGatewayIPAddress = "198.51.100.0"
 
-	// Default NGF namespace and release name for log collection
+	// Default namespaces for log collection
 	ngfNamespace   = "nginx-gateway"
-	ngfReleaseName = "nginx-gateway-fabric"
 	infraNamespace = "gateway-conformance-infra"
 )
 
@@ -73,9 +71,9 @@ func TestConformance(t *testing.T) {
 
 	opts := conformance.DefaultOptions(t)
 
-	ipaddressType := v1.IPAddressType
-	opts.UnusableNetworkAddresses = []v1beta1.GatewaySpecAddress{{Type: &ipaddressType, Value: unusableGatewayIPAddress}}
-	opts.UsableNetworkAddresses = []v1beta1.GatewaySpecAddress{{Type: &ipaddressType, Value: "192.0.2.1"}}
+	ipaddressType := gatewayv1.IPAddressType
+	opts.UnusableNetworkAddresses = []gatewayv1.GatewaySpecAddress{{Type: &ipaddressType, Value: unusableGatewayIPAddress}}
+	opts.UsableNetworkAddresses = []gatewayv1.GatewaySpecAddress{{Type: &ipaddressType, Value: "192.0.2.1"}}
 
 	opts.Implementation = conf_v1.Implementation{
 		Organization: "nginx",
@@ -152,7 +150,7 @@ func collectNGFLogsOnFailure(t *testing.T, g Gomega) {
 		g.Expect(apps.AddToScheme(scheme)).To(Not(HaveOccurred()))
 		g.Expect(apiext.AddToScheme(scheme)).To(Not(HaveOccurred()))
 		g.Expect(coordination.AddToScheme(scheme)).To(Not(HaveOccurred()))
-		g.Expect(v1.Install(scheme)).To(Not(HaveOccurred()))
+		g.Expect(gatewayv1.Install(scheme)).To(Not(HaveOccurred()))
 		g.Expect(batchv1.AddToScheme(scheme)).To(Not(HaveOccurred()))
 		g.Expect(ngfAPIv1alpha1.AddToScheme(scheme)).To(Not(HaveOccurred()))
 		g.Expect(ngfAPIv1alpha2.AddToScheme(scheme)).To(Not(HaveOccurred()))
@@ -182,7 +180,7 @@ func collectNGFLogsOnFailure(t *testing.T, g Gomega) {
 	}
 }
 
-func collectLogs(t*testing.T,  g Gomega, rm framework.ResourceManager, namespace, containerName string) {
+func collectLogs(t *testing.T, g Gomega, rm framework.ResourceManager, namespace, containerName string) {
 	t.Helper()
 
 	pods, err := rm.GetPods(namespace, nil)

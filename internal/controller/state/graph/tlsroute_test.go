@@ -9,7 +9,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
-	"sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
@@ -18,15 +17,15 @@ import (
 
 func createTLSRoute(
 	hostname gatewayv1.Hostname,
-	rules []v1alpha2.TLSRouteRule,
+	rules []gatewayv1.TLSRouteRule,
 	parentRefs []gatewayv1.ParentReference,
-) *v1alpha2.TLSRoute {
-	return &v1alpha2.TLSRoute{
+) *gatewayv1.TLSRoute {
+	return &gatewayv1.TLSRoute{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: "test",
 			Name:      "tr",
 		},
-		Spec: v1alpha2.TLSRouteSpec{
+		Spec: gatewayv1.TLSRouteSpec{
 			CommonRouteSpec: gatewayv1.CommonRouteSpec{
 				ParentRefs: parentRefs,
 			},
@@ -99,7 +98,7 @@ func TestBuildTLSRoute(t *testing.T) {
 	)
 	backedRefDNEGtr := createTLSRoute(
 		"app.example.com",
-		[]v1alpha2.TLSRouteRule{
+		[]gatewayv1.TLSRouteRule{
 			{
 				BackendRefs: []gatewayv1.BackendRef{
 					{
@@ -118,7 +117,7 @@ func TestBuildTLSRoute(t *testing.T) {
 
 	wrongBackendRefGroupGtr := createTLSRoute(
 		"app.example.com",
-		[]v1alpha2.TLSRouteRule{
+		[]gatewayv1.TLSRouteRule{
 			{
 				BackendRefs: []gatewayv1.BackendRef{
 					{
@@ -138,7 +137,7 @@ func TestBuildTLSRoute(t *testing.T) {
 
 	wrongBackendRefKindGtr := createTLSRoute(
 		"app.example.com",
-		[]v1alpha2.TLSRouteRule{
+		[]gatewayv1.TLSRouteRule{
 			{
 				BackendRefs: []gatewayv1.BackendRef{
 					{
@@ -157,7 +156,7 @@ func TestBuildTLSRoute(t *testing.T) {
 	)
 
 	diffNsBackendRef := createTLSRoute("app.example.com",
-		[]v1alpha2.TLSRouteRule{
+		[]gatewayv1.TLSRouteRule{
 			{
 				BackendRefs: []gatewayv1.BackendRef{
 					{
@@ -176,7 +175,7 @@ func TestBuildTLSRoute(t *testing.T) {
 	)
 
 	portNilBackendRefGtr := createTLSRoute("app.example.com",
-		[]v1alpha2.TLSRouteRule{
+		[]gatewayv1.TLSRouteRule{
 			{
 				BackendRefs: []gatewayv1.BackendRef{
 					{
@@ -194,7 +193,7 @@ func TestBuildTLSRoute(t *testing.T) {
 
 	ipFamilyMismatchGtr := createTLSRoute(
 		"app.example.com",
-		[]v1alpha2.TLSRouteRule{
+		[]gatewayv1.TLSRouteRule{
 			{
 				BackendRefs: []gatewayv1.BackendRef{
 					{
@@ -212,7 +211,7 @@ func TestBuildTLSRoute(t *testing.T) {
 	)
 
 	validRefSameNs := createTLSRoute("app.example.com",
-		[]v1alpha2.TLSRouteRule{
+		[]gatewayv1.TLSRouteRule{
 			{
 				BackendRefs: []gatewayv1.BackendRef{
 					{
@@ -300,7 +299,7 @@ func TestBuildTLSRoute(t *testing.T) {
 
 	tests := []struct {
 		expected *L4Route
-		gtr      *v1alpha2.TLSRoute
+		gtr      *gatewayv1.TLSRoute
 		services map[types.NamespacedName]*apiv1.Service
 		resolver func(resource toResource) bool
 		gateway  *Gateway
