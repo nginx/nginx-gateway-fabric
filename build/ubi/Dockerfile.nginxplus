@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.21
+# syntax=docker/dockerfile:1.22
 FROM scratch AS nginx-files
 
 # NGINX Plus repo and key files (must be provided at build time)
@@ -15,7 +15,7 @@ RUN microdnf -y update glib2 && microdnf clean all
 ARG NGINX_PLUS_VERSION=R36
 
 # renovate: datasource=github-tags depName=nginx/agent
-ARG NGINX_AGENT_VERSION=v3.7.1
+ARG NGINX_AGENT_VERSION=v3.7.2
 ARG NJS_DIR
 ARG NGINX_CONF_DIR
 ARG BUILD_AGENT
