@@ -334,8 +334,7 @@ func TestGetAuthenticationFilterResolverForNamespace(t *testing.T) {
 	}
 }
 
-// Helpers
-
+// Helpers.
 func createHtpasswdSecret(ns, name string, withAuth bool) *corev1.Secret {
 	sec := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
