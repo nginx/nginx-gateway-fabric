@@ -20,11 +20,6 @@ In this example, we will:
 
 1. Follow the [installation instructions](https://docs.nginx.com/nginx-gateway-fabric/install/) to deploy NGINX Gateway Fabric.
 
-    **Note**: To use BackendTLSPolicy or TLSRoute for HTTPS connections to external services, you must:
-
-    - Install NGINX Gateway Fabric with `enableExperimental=true`
-    - Install the experimental Gateway APIs on the cluster
-
 ## 2. Deploy the Gateway with DNS Resolver
 
 Create the Gateway and NginxProxy configuration that enables DNS resolution for ExternalName services:

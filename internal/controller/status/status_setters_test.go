@@ -76,9 +76,9 @@ func TestNewGatewayStatusSetter(t *testing.T) {
 	}
 
 	tests := []struct {
-		name         string
 		status       gatewayv1.GatewayStatus
 		newStatus    gatewayv1.GatewayStatus
+		name         string
 		expStatusSet bool
 	}{
 		{
@@ -495,14 +495,14 @@ func TestNewTLSRouteStatusSetter(t *testing.T) {
 
 	tests := []struct {
 		name                         string
-		status, newStatus, expStatus v1alpha2.TLSRouteStatus
+		status, newStatus, expStatus gatewayv1.TLSRouteStatus
 		expStatusSet                 bool
 	}{
 		{
 			name: "TLSRoute has no status",
-			newStatus: v1alpha2.TLSRouteStatus{
+			newStatus: gatewayv1.TLSRouteStatus{
 				RouteStatus: v1alpha2.RouteStatus{
-					Parents: []v1alpha2.RouteParentStatus{
+					Parents: []gatewayv1.RouteParentStatus{
 						{
 							ParentRef:      gatewayv1.ParentReference{},
 							ControllerName: gatewayv1.GatewayController(controllerName),
@@ -511,7 +511,7 @@ func TestNewTLSRouteStatusSetter(t *testing.T) {
 					},
 				},
 			},
-			expStatus: v1alpha2.TLSRouteStatus{
+			expStatus: gatewayv1.TLSRouteStatus{
 				RouteStatus: gatewayv1.RouteStatus{
 					Parents: []gatewayv1.RouteParentStatus{
 						{
@@ -526,7 +526,7 @@ func TestNewTLSRouteStatusSetter(t *testing.T) {
 		},
 		{
 			name: "TLSRoute has old status",
-			newStatus: v1alpha2.TLSRouteStatus{
+			newStatus: gatewayv1.TLSRouteStatus{
 				RouteStatus: gatewayv1.RouteStatus{
 					Parents: []gatewayv1.RouteParentStatus{
 						{
@@ -537,7 +537,7 @@ func TestNewTLSRouteStatusSetter(t *testing.T) {
 					},
 				},
 			},
-			status: v1alpha2.TLSRouteStatus{
+			status: gatewayv1.TLSRouteStatus{
 				RouteStatus: gatewayv1.RouteStatus{
 					Parents: []gatewayv1.RouteParentStatus{
 						{
@@ -548,7 +548,7 @@ func TestNewTLSRouteStatusSetter(t *testing.T) {
 					},
 				},
 			},
-			expStatus: v1alpha2.TLSRouteStatus{
+			expStatus: gatewayv1.TLSRouteStatus{
 				RouteStatus: gatewayv1.RouteStatus{
 					Parents: []gatewayv1.RouteParentStatus{
 						{
@@ -563,7 +563,7 @@ func TestNewTLSRouteStatusSetter(t *testing.T) {
 		},
 		{
 			name: "TLSRoute has old status, keep other controller statuses",
-			newStatus: v1alpha2.TLSRouteStatus{
+			newStatus: gatewayv1.TLSRouteStatus{
 				RouteStatus: gatewayv1.RouteStatus{
 					Parents: []gatewayv1.RouteParentStatus{
 						{
@@ -574,7 +574,7 @@ func TestNewTLSRouteStatusSetter(t *testing.T) {
 					},
 				},
 			},
-			status: v1alpha2.TLSRouteStatus{
+			status: gatewayv1.TLSRouteStatus{
 				RouteStatus: gatewayv1.RouteStatus{
 					Parents: []gatewayv1.RouteParentStatus{
 						{
@@ -590,7 +590,7 @@ func TestNewTLSRouteStatusSetter(t *testing.T) {
 					},
 				},
 			},
-			expStatus: v1alpha2.TLSRouteStatus{
+			expStatus: gatewayv1.TLSRouteStatus{
 				RouteStatus: gatewayv1.RouteStatus{
 					Parents: []gatewayv1.RouteParentStatus{
 						{
@@ -610,7 +610,7 @@ func TestNewTLSRouteStatusSetter(t *testing.T) {
 		},
 		{
 			name: "TLSRoute has same status",
-			newStatus: v1alpha2.TLSRouteStatus{
+			newStatus: gatewayv1.TLSRouteStatus{
 				RouteStatus: gatewayv1.RouteStatus{
 					Parents: []gatewayv1.RouteParentStatus{
 						{
@@ -621,7 +621,7 @@ func TestNewTLSRouteStatusSetter(t *testing.T) {
 					},
 				},
 			},
-			status: v1alpha2.TLSRouteStatus{
+			status: gatewayv1.TLSRouteStatus{
 				RouteStatus: gatewayv1.RouteStatus{
 					Parents: []gatewayv1.RouteParentStatus{
 						{
@@ -632,7 +632,7 @@ func TestNewTLSRouteStatusSetter(t *testing.T) {
 					},
 				},
 			},
-			expStatus: v1alpha2.TLSRouteStatus{
+			expStatus: gatewayv1.TLSRouteStatus{
 				RouteStatus: gatewayv1.RouteStatus{
 					Parents: []gatewayv1.RouteParentStatus{
 						{
@@ -653,7 +653,7 @@ func TestNewTLSRouteStatusSetter(t *testing.T) {
 			g := NewWithT(t)
 
 			setter := newTLSRouteStatusSetter(test.newStatus, controllerName)
-			obj := &v1alpha2.TLSRoute{Status: test.status}
+			obj := &gatewayv1.TLSRoute{Status: test.status}
 
 			statusSet := setter(obj)
 
@@ -1108,9 +1108,9 @@ func TestGWStatusEqual(t *testing.T) {
 	}
 
 	tests := []struct {
-		name       string
 		prevStatus gatewayv1.GatewayStatus
 		curStatus  gatewayv1.GatewayStatus
+		name       string
 		expEqual   bool
 	}{
 		{

@@ -70,7 +70,6 @@ func buildGateways(
 	gc *GatewayClass,
 	refGrantResolver *referenceGrantResolver,
 	nps map[types.NamespacedName]*NginxProxy,
-	experimentalFeatures bool,
 ) map[types.NamespacedName]*Gateway {
 	if len(gws) == 0 {
 		return nil
@@ -93,7 +92,7 @@ func buildGateways(
 
 		effectiveNginxProxy := buildEffectiveNginxProxy(gcNp, np)
 
-		conds, valid, secretRefNsName := validateGateway(gw, gc, np, experimentalFeatures, resourceResolver, refGrantResolver)
+		conds, valid, secretRefNsName := validateGateway(gw, gc, np, resourceResolver, refGrantResolver)
 
 		protectedPorts := make(ProtectedPorts)
 		if port, enabled := MetricsEnabledForNginxProxy(effectiveNginxProxy); enabled {
@@ -184,7 +183,6 @@ func validateGateway(
 	gw *v1.Gateway,
 	gc *GatewayClass,
 	npCfg *NginxProxy,
-	experimentalFeatures bool,
 	resourceResolver resolver.Resolver,
 	refGrantResolver *referenceGrantResolver,
 ) ([]conditions.Condition, bool, *types.NamespacedName) {
@@ -208,27 +206,21 @@ func validateGateway(
 
 	var secretRefNsName *types.NamespacedName
 	if gw.Spec.TLS != nil && gw.Spec.TLS.Backend != nil {
-		if !experimentalFeatures {
-			path := field.NewPath("spec", "tls")
-			valErr := field.Forbidden(path, "tls.backend is not supported when experimental features are disabled")
-			conds = append(conds, conditions.NewGatewayUnsupportedValue(valErr.Error())...)
-		} else {
-			secretNsName, secretNs := getGatewayCertSecretNsName(gw)
-			if err := resourceResolver.Resolve(resolver.ResourceTypeSecret, *secretNsName); err != nil {
-				path := field.NewPath("backend.clientCertificateRef")
-				valErr := field.Invalid(path, secretNsName, err.Error())
-				conds = append(conds, conditions.NewGatewaySecretRefInvalid(valErr.Error()))
-			}
-
-			if secretNs != gw.Namespace {
-				if !refGrantResolver.refAllowed(toSecret(*secretNsName), fromGateway(gw.Namespace)) {
-					msg := fmt.Sprintf("secret ref %s not permitted by any ReferenceGrant", secretNsName)
-					conds = append(conds, conditions.NewGatewaySecretRefNotPermitted(msg))
-				}
-			}
-
-			secretRefNsName = secretNsName
+		secretNsName, secretNs := getGatewayCertSecretNsName(gw)
+		if err := resourceResolver.Resolve(resolver.ResourceTypeSecret, *secretNsName); err != nil {
+			path := field.NewPath("backend.clientCertificateRef")
+			valErr := field.Invalid(path, secretNsName, err.Error())
+			conds = append(conds, conditions.NewGatewaySecretRefInvalid(valErr.Error()))
 		}
+
+		if secretNs != gw.Namespace {
+			if !refGrantResolver.refAllowed(toSecret(*secretNsName), fromGateway(gw.Namespace)) {
+				msg := fmt.Sprintf("secret ref %s not permitted by any ReferenceGrant", secretNsName)
+				conds = append(conds, conditions.NewGatewaySecretRefNotPermitted(msg))
+			}
+		}
+
+		secretRefNsName = secretNsName
 	}
 
 	// Evaluate validity before validating parametersRef

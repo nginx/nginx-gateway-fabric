@@ -622,7 +622,7 @@ func TestBuildCORSOriginMapParameters(t *testing.T) {
 			origins: []string{"https://example.com"},
 			expected: []shared.MapParameter{
 				{
-					Value:  "\"~^https://example.com$\"",
+					Value:  "\"~^https://example\\.com$\"",
 					Result: "$http_origin",
 				},
 			},
@@ -632,7 +632,7 @@ func TestBuildCORSOriginMapParameters(t *testing.T) {
 			origins: []string{"https://api.example.com"},
 			expected: []shared.MapParameter{
 				{
-					Value:  "\"~^https://api.example.com$\"",
+					Value:  "\"~^https://api\\.example\\.com$\"",
 					Result: "$http_origin",
 				},
 			},
@@ -642,7 +642,7 @@ func TestBuildCORSOriginMapParameters(t *testing.T) {
 			origins: []string{"https://*.example.com"},
 			expected: []shared.MapParameter{
 				{
-					Value: "\"~^https://.*.example.com$\"",
+					Value: "\"~^https://.*\\.example\\.com$\"",
 
 					Result: "$http_origin",
 				},
@@ -653,7 +653,7 @@ func TestBuildCORSOriginMapParameters(t *testing.T) {
 			origins: []string{"https://*.*.example.com"},
 			expected: []shared.MapParameter{
 				{
-					Value:  "\"~^https://.*..*.example.com$\"",
+					Value:  "\"~^https://.*\\..*\\.example\\.com$\"",
 					Result: "$http_origin",
 				},
 			},
@@ -663,11 +663,11 @@ func TestBuildCORSOriginMapParameters(t *testing.T) {
 			origins: []string{"https://example.com", "https://*.foo.com"},
 			expected: []shared.MapParameter{
 				{
-					Value:  "\"~^https://example.com$\"",
+					Value:  "\"~^https://example\\.com$\"",
 					Result: "$http_origin",
 				},
 				{
-					Value:  "\"~^https://.*.foo.com$\"",
+					Value:  "\"~^https://.*\\.foo\\.com$\"",
 					Result: "$http_origin",
 				},
 			},
@@ -677,11 +677,11 @@ func TestBuildCORSOriginMapParameters(t *testing.T) {
 			origins: []string{"http://example.com", "https://example.com"},
 			expected: []shared.MapParameter{
 				{
-					Value:  "\"~^http://example.com$\"",
+					Value:  "\"~^http://example\\.com$\"",
 					Result: "$http_origin",
 				},
 				{
-					Value:  "\"~^https://example.com$\"",
+					Value:  "\"~^https://example\\.com$\"",
 					Result: "$http_origin",
 				},
 			},
@@ -691,7 +691,7 @@ func TestBuildCORSOriginMapParameters(t *testing.T) {
 			origins: []string{"https://example.com:8080"},
 			expected: []shared.MapParameter{
 				{
-					Value:  "\"~^https://example.com:8080$\"",
+					Value:  "\"~^https://example\\.com:8080$\"",
 					Result: "$http_origin",
 				},
 			},
@@ -701,7 +701,7 @@ func TestBuildCORSOriginMapParameters(t *testing.T) {
 			origins: []string{"https://*.example.com:8080"},
 			expected: []shared.MapParameter{
 				{
-					Value:  "\"~^https://.*.example.com:8080$\"",
+					Value:  "\"~^https://.*\\.example\\.com:8080$\"",
 					Result: "$http_origin",
 				},
 			},
@@ -783,11 +783,11 @@ func TestBuildCorsMaps(t *testing.T) {
 					Variable: "$cors_allowed_origin_server0_path0_match0",
 					Parameters: []shared.MapParameter{
 						{
-							Value:  "\"~^example.com$\"",
+							Value:  "\"~^example\\.com$\"",
 							Result: "$http_origin",
 						},
 						{
-							Value:  "\"~^.*.test.com$\"",
+							Value:  "\"~^.*\\.test\\.com$\"",
 							Result: "$http_origin",
 						},
 					},
@@ -822,7 +822,7 @@ func TestBuildCorsMaps(t *testing.T) {
 					Variable: "$cors_allowed_origin_server0_path0_match0",
 					Parameters: []shared.MapParameter{
 						{
-							Value:  "\"~^.*.example.com$\"",
+							Value:  "\"~^.*\\.example\\.com$\"",
 							Result: "$http_origin",
 						},
 					},
@@ -832,7 +832,7 @@ func TestBuildCorsMaps(t *testing.T) {
 					Variable: "$cors_allow_credentials_server0_path0_match0",
 					Parameters: []shared.MapParameter{
 						{
-							Value:  "\"~^.*.example.com$\"",
+							Value:  "\"~^.*\\.example\\.com$\"",
 							Result: "true",
 						},
 					},
@@ -886,7 +886,7 @@ func TestBuildCorsMaps(t *testing.T) {
 					Variable: "$cors_allowed_origin_server0_path0_match0",
 					Parameters: []shared.MapParameter{
 						{
-							Value:  "\"~^example.com$\"",
+							Value:  "\"~^example\\.com$\"",
 							Result: "$http_origin",
 						},
 					},
@@ -896,7 +896,7 @@ func TestBuildCorsMaps(t *testing.T) {
 					Variable: "$cors_allowed_origin_server0_path0_match1",
 					Parameters: []shared.MapParameter{
 						{
-							Value:  "\"~^.*.test.com$\"",
+							Value:  "\"~^.*\\.test\\.com$\"",
 							Result: "$http_origin",
 						},
 					},
@@ -906,7 +906,7 @@ func TestBuildCorsMaps(t *testing.T) {
 					Variable: "$cors_allow_credentials_server0_path0_match1",
 					Parameters: []shared.MapParameter{
 						{
-							Value:  "\"~^.*.test.com$\"",
+							Value:  "\"~^.*\\.test\\.com$\"",
 							Result: "true",
 						},
 					},
@@ -916,7 +916,7 @@ func TestBuildCorsMaps(t *testing.T) {
 					Variable: "$cors_allowed_origin_server0_path1_match0",
 					Parameters: []shared.MapParameter{
 						{
-							Value:  "\"~^docs.example.com$\"",
+							Value:  "\"~^docs\\.example\\.com$\"",
 							Result: "$http_origin",
 						},
 					},
@@ -957,22 +957,22 @@ func TestConvertToNginxRegex(t *testing.T) {
 		{
 			name:     "simple domain",
 			input:    "example.com",
-			expected: "\"~^example.com$\"",
+			expected: "\"~^example\\.com$\"",
 		},
 		{
 			name:     "subdomain wildcard",
 			input:    "*.example.com",
-			expected: "\"~^.*.example.com$\"",
+			expected: "\"~^.*\\.example\\.com$\"",
 		},
 		{
 			name:     "wildcard at end",
 			input:    "example.*",
-			expected: "\"~^example..*$\"",
+			expected: "\"~^example\\..*$\"",
 		},
 		{
 			name:     "multiple wildcards",
 			input:    "*.example.*",
-			expected: "\"~^.*.example..*$\"",
+			expected: "\"~^.*\\.example\\..*$\"",
 		},
 	}
 
@@ -1005,7 +1005,7 @@ func TestBuildCORSAllowCredentialsMapParameters(t *testing.T) {
 			origins: []string{"example.com"},
 			expected: []shared.MapParameter{
 				{
-					Value:  "\"~^example.com$\"",
+					Value:  "\"~^example\\.com$\"",
 					Result: "true",
 				},
 			},
@@ -1015,11 +1015,11 @@ func TestBuildCORSAllowCredentialsMapParameters(t *testing.T) {
 			origins: []string{"example.com", "test.com"},
 			expected: []shared.MapParameter{
 				{
-					Value:  "\"~^example.com$\"",
+					Value:  "\"~^example\\.com$\"",
 					Result: "true",
 				},
 				{
-					Value:  "\"~^test.com$\"",
+					Value:  "\"~^test\\.com$\"",
 					Result: "true",
 				},
 			},
@@ -1029,11 +1029,11 @@ func TestBuildCORSAllowCredentialsMapParameters(t *testing.T) {
 			origins: []string{"*.example.com", "*.test.com"},
 			expected: []shared.MapParameter{
 				{
-					Value:  "\"~^.*.example.com$\"",
+					Value:  "\"~^.*\\.example\\.com$\"",
 					Result: "true",
 				},
 				{
-					Value:  "\"~^.*.test.com$\"",
+					Value:  "\"~^.*\\.test\\.com$\"",
 					Result: "true",
 				},
 			},

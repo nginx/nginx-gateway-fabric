@@ -307,7 +307,7 @@ func getAndValidateListenerSupportedKinds(listener v1.Listener) (
 	var conds []conditions.Condition
 	var supportedKinds []v1.RouteGroupKind
 
-	validKinds := getValidKindsForProtocol(listener.Protocol)
+	validKinds := getValidKindsForProtocol(listener)
 
 	validProtocolRouteKind := func(kind v1.RouteGroupKind) bool {
 		if kind.Group != nil && *kind.Group != v1.GroupName {
@@ -352,17 +352,20 @@ func getAndValidateListenerSupportedKinds(listener v1.Listener) (
 }
 
 // getValidKindsForProtocol returns the valid route kinds for a given protocol.
-func getValidKindsForProtocol(protocol v1.ProtocolType) []v1.RouteGroupKind {
-	switch protocol {
+func getValidKindsForProtocol(listener v1.Listener) []v1.RouteGroupKind {
+	switch listener.Protocol {
 	case v1.HTTPProtocolType, v1.HTTPSProtocolType:
 		return []v1.RouteGroupKind{
 			{Kind: v1.Kind(kinds.HTTPRoute), Group: helpers.GetPointer[v1.Group](v1.GroupName)},
 			{Kind: v1.Kind(kinds.GRPCRoute), Group: helpers.GetPointer[v1.Group](v1.GroupName)},
 		}
 	case v1.TLSProtocolType:
-		return []v1.RouteGroupKind{
-			{Kind: v1.Kind(kinds.TLSRoute), Group: helpers.GetPointer[v1.Group](v1.GroupName)},
+		if listener.TLS != nil && listener.TLS.Mode != nil && *listener.TLS.Mode == v1.TLSModePassthrough {
+			return []v1.RouteGroupKind{
+				{Kind: v1.Kind(kinds.TLSRoute), Group: helpers.GetPointer[v1.Group](v1.GroupName)},
+			}
 		}
+		return nil
 	case v1.TCPProtocolType:
 		return []v1.RouteGroupKind{
 			{Kind: v1.Kind(kinds.TCPRoute), Group: helpers.GetPointer[v1.Group](v1.GroupName)},

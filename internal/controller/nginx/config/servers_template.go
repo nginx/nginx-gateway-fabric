@@ -141,6 +141,12 @@ server {
                     {{- else }}
         add_header {{ $h.Name }} "{{ $h.Value }}" always;
                     {{- end }}
+                {{- else if eq $h.Name "Access-Control-Allow-Methods" }}
+                    {{- if eq $h.Value "*" }}
+        add_header {{ $h.Name }} $http_access_control_request_method always;
+                    {{- else }}
+        add_header {{ $h.Name }} "{{ $h.Value }}" always;
+                    {{- end }}
                 {{- else }}
         add_header {{ $h.Name }} "{{ $h.Value }}" always;
                 {{- end }}

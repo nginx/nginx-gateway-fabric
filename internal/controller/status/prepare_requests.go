@@ -42,14 +42,14 @@ func PrepareRouteRequests(
 		)
 
 		switch r.Source.(type) {
-		case *v1alpha2.TLSRoute:
-			status := v1alpha2.TLSRouteStatus{
+		case *v1.TLSRoute:
+			status := v1.TLSRouteStatus{
 				RouteStatus: routeStatus,
 			}
 
 			req := UpdateRequest{
 				NsName:       routeKey.NamespacedName,
-				ResourceType: &v1alpha2.TLSRoute{},
+				ResourceType: &v1.TLSRoute{},
 				Setter:       newTLSRouteStatusSetter(status, gatewayCtlrName),
 			}
 			reqs = append(reqs, req)

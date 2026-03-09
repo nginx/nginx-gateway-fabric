@@ -714,7 +714,7 @@ spec:
 ```yaml
 # ReferenceGrant to allow WAFGatewayBindingPolicy in applications namespace
 # to reference APPolicy in security namespace
-apiVersion: gateway.networking.k8s.io/v1beta1
+apiVersion: gateway.networking.k8s.io/v1
 kind: ReferenceGrant
 metadata:
   name: allow-WAFGatewayBindingPolicy-APPolicy-ref
@@ -1170,7 +1170,7 @@ spec:
 
 ---
 # 6. Allow cross-namespace APPolicy and APLogConf references
-apiVersion: gateway.networking.k8s.io/v1beta1
+apiVersion: gateway.networking.k8s.io/v1
 kind: ReferenceGrant
 metadata:
   name: allow-wgbp-references
