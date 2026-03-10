@@ -36,6 +36,9 @@ func TestSupportedFeatures(t *testing.T) {
 		gatewayv1.FeatureName(features.SupportHTTPRouteRequestPercentageMirror),
 		gatewayv1.FeatureName(features.SupportHTTPRouteResponseHeaderModification),
 		gatewayv1.FeatureName(features.SupportHTTPRouteSchemeRedirect),
+		gatewayv1.FeatureName(features.SupportHTTPRoute303RedirectStatusCode),
+		gatewayv1.FeatureName(features.SupportHTTPRoute307RedirectStatusCode),
+		gatewayv1.FeatureName(features.SupportHTTPRoute308RedirectStatusCode),
 		gatewayv1.FeatureName(features.SupportReferenceGrant),
 		gatewayv1.FeatureName(features.SupportTLSRoute),
 		gatewayv1.FeatureName(features.SupportHTTPRouteCORS),
@@ -43,6 +46,7 @@ func TestSupportedFeatures(t *testing.T) {
 
 	experimentalFeatures := []gatewayv1.FeatureName{
 		gatewayv1.FeatureName(features.SupportUDPRoute),
+		gatewayv1.FeatureName("TCPRoute"),
 	}
 
 	allFeatures := append(slices.Clone(standardFeatures), experimentalFeatures...)

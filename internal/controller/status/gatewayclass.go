@@ -46,6 +46,9 @@ func supportedFeatures(experimental bool) []gatewayv1.SupportedFeature {
 		features.SupportHTTPRouteRequestPercentageMirror,
 		features.SupportHTTPRouteResponseHeaderModification,
 		features.SupportHTTPRouteSchemeRedirect,
+		features.SupportHTTPRoute303RedirectStatusCode,
+		features.SupportHTTPRoute307RedirectStatusCode,
+		features.SupportHTTPRoute308RedirectStatusCode,
 		features.SupportHTTPRouteCORS,
 	}
 
@@ -54,6 +57,7 @@ func supportedFeatures(experimental bool) []gatewayv1.SupportedFeature {
 		featureNames = append(
 			featureNames,
 			features.SupportUDPRoute,
+			features.FeatureName("TCPRoute"),
 		)
 	}
 
