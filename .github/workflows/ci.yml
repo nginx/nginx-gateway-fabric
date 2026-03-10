@@ -110,7 +110,6 @@ jobs:
       min_k8s_version: ${{ steps.vars.outputs.min_k8s_version }}
       k8s_latest: ${{ steps.vars.outputs.k8s_latest }}
       helm_changes: ${{ steps.filter.outputs.charts }}
-      operator_changes: ${{ steps.filter.outputs.operator }}
     steps:
       - name: Checkout Repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -146,7 +145,7 @@ jobs:
           filters: |
             charts:
             - charts/nginx-gateway-fabric/**/*
-            operator:
+            rbac:
             - operators/**/*
             - charts/nginx-gateway-fabric/**/*
 
@@ -483,7 +482,6 @@ jobs:
       packages: write # for docker/build-push-action to push to GHCR
       id-token: write # for docker/login to login to NGINX registry
     secrets: inherit
-    if: ${{ needs.vars.outputs.operator_changes == 'true' || github.event_name == 'push' || github.event_name == 'schedule' || inputs.is_production_release }}
 
   redhat-certification:
     name: Submit images for RedHat certification
