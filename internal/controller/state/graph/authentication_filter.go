@@ -1,6 +1,9 @@
 package graph
 
 import (
+	"fmt"
+
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -54,7 +57,7 @@ func processAuthenticationFilters(
 	resourceResolver resolver.Resolver,
 	authValidator validation.AuthFieldsValidator,
 	genericValidator validation.GenericValidator,
-	plus bool,
+	isPlus bool,
 ) map[types.NamespacedName]*AuthenticationFilter {
 	if len(authenticationFilters) == 0 {
 		return nil
@@ -63,19 +66,11 @@ func processAuthenticationFilters(
 	processed := make(map[types.NamespacedName]*AuthenticationFilter, len(authenticationFilters))
 
 	for nsname, af := range authenticationFilters {
-		cond := validateAuthenticationFilter(af, nsname, resourceResolver, authValidator, genericValidator, plus)
-		if cond != nil {
-			processed[nsname] = &AuthenticationFilter{
-				Source:     af,
-				Conditions: []conditions.Condition{*cond},
-				Valid:      false,
-			}
-
-			continue
-		}
+		conds, valid := validateAuthenticationFilter(af, nsname, resourceResolver, authValidator, genericValidator, isPlus)
 		processed[nsname] = &AuthenticationFilter{
-			Source: af,
-			Valid:  true,
+			Source:     af,
+			Conditions: conds,
+			Valid:      valid,
 		}
 	}
 
@@ -88,42 +83,110 @@ func validateAuthenticationFilter(
 	resourceResolver resolver.Resolver,
 	authValidator validation.AuthFieldsValidator,
 	genericValidator validation.GenericValidator,
-	plus bool,
-) *conditions.Condition {
-	var allErrs field.ErrorList
+	isPlus bool,
+) ([]conditions.Condition, bool) {
+	var conds []conditions.Condition
+	valid := true
 
 	//revive:disable-next-line:unnecessary-stmt future-proof switch form; additional auth types will be added
 	switch af.Spec.Type {
 	case ngfAPI.AuthTypeBasic:
 		authBasicSecretNsName := types.NamespacedName{Namespace: nsname.Namespace, Name: af.Spec.Basic.SecretRef.Name}
-		if err := resourceResolver.Resolve(resolver.ResourceTypeSecret, authBasicSecretNsName); err != nil {
-			allErrs = append(allErrs, field.Invalid(
-				field.NewPath("spec.basic.secretRef"),
-				af.Spec.Basic.SecretRef.Name,
-				err.Error(),
-			))
-		}
-
-	case ngfAPI.AuthTypeOIDC:
-		allErrs = append(
-			allErrs,
-			validateOIDC(af.Spec.OIDC, nsname, resourceResolver, authValidator, genericValidator, plus)...,
+		conds, valid = resolveAuthenticationFilterSecret(
+			authBasicSecretNsName,
+			resourceResolver,
+			field.NewPath("spec.basic.secretRef"),
 		)
-
+	case ngfAPI.AuthTypeJWT:
+		if !isPlus {
+			cond := conditions.NewAuthenticationFilterInvalid("JWT Authentication requires NGINX Plus.")
+			return []conditions.Condition{cond}, false
+		}
+		if af.Spec.JWT.Source == ngfAPI.JWTKeySourceFile {
+			authJWTSecretNsName := types.NamespacedName{Namespace: nsname.Namespace, Name: af.Spec.JWT.File.SecretRef.Name}
+			conds, valid = resolveAuthenticationFilterSecret(
+				authJWTSecretNsName,
+				resourceResolver,
+				field.NewPath("spec.jwt.file.secretRef"),
+			)
+		}
+	case ngfAPI.AuthTypeOIDC:
+		if !isPlus {
+			cond := conditions.NewAuthenticationFilterInvalid("OIDC Authentication requires NGINX Plus.")
+			return []conditions.Condition{cond}, false
+		}
+		conds, valid = validateOIDC(af.Spec.OIDC, nsname, resourceResolver, authValidator, genericValidator)
 	default:
-		allErrs = append(allErrs, field.Invalid(
+		err := field.Invalid(
 			field.NewPath("spec.type"),
 			af.Spec.Type,
 			"unsupported authentication type",
+		)
+		conds = append(conds, conditions.NewAuthenticationFilterInvalid(err.Error()))
+		valid = false
+	}
+
+	return conds, valid
+}
+
+func resolveAuthenticationFilterSecret(
+	authSecretNsName types.NamespacedName,
+	resourceResolver resolver.Resolver,
+	path *field.Path,
+) ([]conditions.Condition, bool) {
+	var allErrs field.ErrorList
+
+	if err := resourceResolver.Resolve(
+		resolver.ResourceTypeSecret,
+		authSecretNsName,
+		resolver.WithExpectedSecretKey(secrets.AuthKey),
+	); err != nil {
+		allErrs = append(allErrs, field.Invalid(
+			path,
+			fmt.Sprintf("secret %s/%s is invalid", authSecretNsName.Namespace, authSecretNsName.Name),
+			err.Error(),
 		))
 	}
 
 	if allErrs != nil {
 		cond := conditions.NewAuthenticationFilterInvalid(allErrs.ToAggregate().Error())
-		return &cond
+		return []conditions.Condition{cond}, false
 	}
 
-	return nil
+	// FIXME(s.odonovan): Remove this secret type 3 releases after 2.5.0.
+	// Issue https://github.com/nginx/nginx-gateway-fabric/issues/4870 will remove this secret type.
+	return resolveHtPasswdSecret(authSecretNsName, resourceResolver)
+}
+
+func resolveHtPasswdSecret(
+	authSecretNsName types.NamespacedName,
+	resourceResolver resolver.Resolver,
+) ([]conditions.Condition, bool) {
+	secretsMap := resourceResolver.GetSecrets()[authSecretNsName]
+	if secretsMap == nil || secretsMap.Source == nil {
+		cond := conditions.NewAuthenticationFilterInvalid(
+			fmt.Sprintf("failed to resolve resource. Secret %s/%s is invalid or missing.",
+				authSecretNsName.Namespace,
+				authSecretNsName.Name),
+		)
+		return []conditions.Condition{cond}, false
+	}
+
+	if secretsMap.Source.Type == corev1.SecretType(secrets.SecretTypeHtpasswd) {
+		msg := fmt.Sprintf(
+			"The AuthenticationFilter is accepted,"+
+				" but the referenced Secret %s/%s of type %q is now deprecated."+
+				" This secret type will be removed in a future release."+
+				" Please use type %q instead.",
+			authSecretNsName.Namespace,
+			authSecretNsName.Name,
+			secretsMap.Source.Type,
+			corev1.SecretTypeOpaque,
+		)
+		cond := conditions.NewAuthenticationFilterAcceptedWithMessage(msg)
+		return []conditions.Condition{cond}, true
+	}
+	return nil, true
 }
 
 func validateOIDC(
@@ -132,23 +195,18 @@ func validateOIDC(
 	resourceResolver resolver.Resolver,
 	authValidator validation.AuthFieldsValidator,
 	genericValidator validation.GenericValidator,
-	plus bool,
-) field.ErrorList {
-	if !plus {
-		return field.ErrorList{field.Invalid(
-			field.NewPath("spec.oidc"),
-			oidcSpec,
-			"OIDC authentication filters are only supported with NGINX Plus",
-		)}
-	}
-
+) ([]conditions.Condition, bool) {
 	var allErrs field.ErrorList
 
 	allErrs = append(allErrs, validateOIDCFields(oidcSpec, authValidator, genericValidator)...)
 	allErrs = append(allErrs, validateOIDCSecretRefs(oidcSpec, nsname, resourceResolver)...)
 	allErrs = append(allErrs, validateOIDCLogoutURIs(oidcSpec, authValidator)...)
 
-	return allErrs
+	if allErrs != nil {
+		return []conditions.Condition{conditions.NewAuthenticationFilterInvalid(allErrs.ToAggregate().Error())}, false
+	}
+
+	return nil, true
 }
 
 func validateOIDCFields(

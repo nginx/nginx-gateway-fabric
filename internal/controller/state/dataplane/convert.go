@@ -205,6 +205,23 @@ func convertAuthenticationFilter(
 		return result
 	}
 
+	switch filter.Source.Spec.Type {
+	case ngfAPI.AuthTypeBasic:
+		result.Basic = convertAuthenticationFilterBasicAuth(filter, referencedSecrets)
+	case ngfAPI.AuthTypeOIDC:
+		result.OIDC = convertAuthenticationFilterOIDC(filter, referencedSecrets)
+	case ngfAPI.AuthTypeJWT:
+		result.JWT = convertAuthenticationFilterJwtAuth(filter, referencedSecrets)
+	}
+
+	return result
+}
+
+func convertAuthenticationFilterBasicAuth(
+	filter *graph.AuthenticationFilter,
+	referencedSecrets map[types.NamespacedName]*secrets.Secret,
+) *AuthBasic {
+	var result *AuthBasic
 	if specBasic := filter.Source.Spec.Basic; specBasic != nil {
 		referencedSecret, isReferenced := referencedSecrets[types.NamespacedName{
 			Namespace: filter.Source.Namespace,
@@ -212,7 +229,7 @@ func convertAuthenticationFilter(
 		}]
 
 		if isReferenced && referencedSecret.Source != nil {
-			result.Basic = &AuthBasic{
+			result = &AuthBasic{
 				SecretName:      specBasic.SecretRef.Name,
 				SecretNamespace: referencedSecret.Source.Namespace,
 				Data:            referencedSecret.Source.Data[secrets.AuthKey],
@@ -221,18 +238,18 @@ func convertAuthenticationFilter(
 		}
 	}
 
-	if specOIDC := filter.Source.Spec.OIDC; specOIDC != nil {
-		result.OIDC = buildOIDCProvider(*specOIDC, referencedSecrets, filter)
-	}
-
 	return result
 }
 
-func buildOIDCProvider(
-	specOIDC ngfAPI.OIDCAuth,
-	referencedSecrets map[types.NamespacedName]*secrets.Secret,
+func convertAuthenticationFilterOIDC(
 	filter *graph.AuthenticationFilter,
+	referencedSecrets map[types.NamespacedName]*secrets.Secret,
 ) *OIDCProvider {
+	if filter.Source.Spec.OIDC == nil {
+		return nil
+	}
+	specOIDC := filter.Source.Spec.OIDC
+
 	referencedClientSecret, isReferenced := referencedSecrets[types.NamespacedName{
 		Namespace: filter.Source.Namespace,
 		Name:      specOIDC.ClientSecretRef.Name,
@@ -283,6 +300,31 @@ func buildOIDCProvider(
 	}
 
 	return oidc
+}
+
+func convertAuthenticationFilterJwtAuth(
+	filter *graph.AuthenticationFilter,
+	referencedSecrets map[types.NamespacedName]*secrets.Secret,
+) *AuthJWT {
+	var result *AuthJWT
+	if specJWT := filter.Source.Spec.JWT; specJWT != nil && specJWT.File != nil {
+		referencedSecret, isReferenced := referencedSecrets[types.NamespacedName{
+			Namespace: filter.Source.Namespace,
+			Name:      specJWT.File.SecretRef.Name,
+		}]
+
+		if isReferenced && referencedSecret.Source != nil {
+			result = &AuthJWT{
+				SecretName:      specJWT.File.SecretRef.Name,
+				SecretNamespace: referencedSecret.Source.Namespace,
+				Data:            referencedSecret.Source.Data[secrets.AuthKey],
+				Realm:           specJWT.Realm,
+				KeyCache:        specJWT.KeyCache,
+			}
+		}
+	}
+
+	return result
 }
 
 func convertDNSResolverAddresses(addresses []ngfAPIv1alpha2.DNSResolverAddress) []string {
