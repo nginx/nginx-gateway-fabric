@@ -37,18 +37,18 @@ type Configuration struct {
 	// AuxiliarySecrets contains additional secret data, like certificates/keys/tokens that are not related to
 	// Gateway API resources.
 	AuxiliarySecrets map[graph.SecretFileType][]byte
+	// OIDCProvider holds the OIDC provider configuration at HTTP level.
+	OIDCProvider OIDCProvider
 	// DeploymentContext contains metadata about NGF and the cluster.
 	DeploymentContext DeploymentContext
 	// Logging defines logging related settings for NGINX.
 	Logging Logging
-	// MainSnippets holds all the snippets that apply to the main context.
-	MainSnippets []Snippet
-	// HTTPServers holds all HTTPServers.
-	HTTPServers []VirtualServer
-	// Policies holds the policies attached to the Gateway.
-	Policies []policies.Policy
 	// BackendGroups holds all unique BackendGroups.
 	BackendGroups []BackendGroup
+	// TCPServers holds all TCPServers
+	TCPServers []Layer4VirtualServer
+	// HTTPServers holds all HTTPServers.
+	HTTPServers []VirtualServer
 	// NginxPlus specifies NGINX Plus additional settings.
 	NginxPlus NginxPlus
 	// StreamUpstreams holds all unique stream Upstreams (TLS, TCP, UDP)
@@ -57,8 +57,8 @@ type Configuration struct {
 	SSLServers []VirtualServer
 	// Upstreams holds all unique http Upstreams.
 	Upstreams []Upstream
-	// TCPServers holds all TCPServers
-	TCPServers []Layer4VirtualServer
+	// Policies holds the policies attached to the Gateway.
+	Policies []policies.Policy
 	// UDPServers holds all UDPServers
 	UDPServers []Layer4VirtualServer
 	// TLSPassthroughServers hold all TLSPassthroughServers
@@ -67,6 +67,8 @@ type Configuration struct {
 	// An empty string represents a listener with no hostname (catch-all).
 	// Used to build NGINX maps for misdirected request detection.
 	SSLListenerHostnames map[int32][]string
+	// MainSnippets holds all the snippets that apply to the main context.
+	MainSnippets []Snippet
 	// Telemetry holds the Otel configuration.
 	Telemetry Telemetry
 	// BaseHTTPConfig holds the configuration options at the http context.
@@ -271,6 +273,9 @@ type HTTPCORSFilter struct {
 type AuthenticationFilter struct {
 	// Basic contains fields related to basic authentication.
 	Basic *AuthBasic
+
+	// OIDC contains fields related to OIDC authentication.
+	OIDC *AuthOIDC
 }
 
 // AuthBasic contains fields related to basic authentication.
@@ -285,6 +290,37 @@ type AuthBasic struct {
 	Realm string
 	// Data contains the user data required for authentication.
 	Data []byte
+}
+
+// AuthOIDC contains fields related to OIDC authentication.
+type AuthOIDC struct {
+	// ProviderName is the unique name for the OIDC provider (used in location block).
+	ProviderName string
+	// Issuer is the OIDC issuer URL.
+	Issuer string
+	// ClientID is the OIDC client ID.
+	ClientID string
+	// ClientSecret is the OIDC client secret value.
+	ClientSecret string //nolint:gosec // holds OIDC client secret value
+	// CACertBundleID is the ID of the CA certificate bundle for SSL verification.
+	CACertBundleID CertBundleID
+	// CACertData is the raw PEM bytes of the CA certificate.
+	CACertData []byte
+}
+
+// OIDCProvider represents an OIDC provider configuration at HTTP level.
+type OIDCProvider struct {
+	// Name is the internal name used to reference this provider.
+	Name string
+	// Issuer is the OIDC issuer URL.
+	Issuer string
+	// ClientID is the OIDC client ID.
+	ClientID string
+	// ClientSecret is the OIDC client secret value.
+	ClientSecret string //nolint:gosec // holds OIDC client secret value
+	// CACertBundleID is the ID of the CA certificate bundle for SSL verification.
+	// The path is resolved by the config package using generateCertBundleFileName.
+	CACertBundleID CertBundleID
 }
 
 // HTTPHeader represents an HTTP header.

@@ -219,6 +219,43 @@ func convertAuthenticationFilter(
 		}
 	}
 
+	if specOIDC := filter.Source.Spec.OIDC; specOIDC != nil {
+		referencedClientSecret, isReferenced := referencedSecrets[types.NamespacedName{
+			Namespace: filter.Source.Namespace,
+			Name:      specOIDC.ClientSecretRef.Name,
+		}]
+
+		if !isReferenced || referencedClientSecret.Source == nil {
+			return result
+		}
+
+		providerName := fmt.Sprintf("oidc_%s_%s", filter.Source.Namespace, filter.Source.Name)
+
+		oidc := &AuthOIDC{
+			ProviderName: providerName,
+			Issuer:       specOIDC.Issuer,
+			ClientID:     specOIDC.ClientID,
+			ClientSecret: string(referencedClientSecret.Source.Data[secrets.ClientSecretKey]),
+		}
+
+		// Handle CA certificate if specified
+		if specOIDC.CACertificateRefs != nil {
+			for _, caCertRef := range specOIDC.CACertificateRefs {
+				caCertNsName := types.NamespacedName{
+					Namespace: filter.Source.Namespace,
+					Name:      caCertRef.Name,
+				}
+				if caCertSecret, exists := referencedSecrets[caCertNsName]; exists && caCertSecret.Source != nil {
+					oidc.CACertBundleID = generateCertBundleID(caCertNsName)
+					oidc.CACertData = caCertSecret.Source.Data[secrets.CAKey]
+					break
+				}
+			}
+		}
+
+		result.OIDC = oidc
+	}
+
 	return result
 }
 

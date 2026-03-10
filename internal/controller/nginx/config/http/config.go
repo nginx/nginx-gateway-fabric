@@ -80,6 +80,8 @@ type Location struct {
 	Path string
 	// AuthBasic contains the configuration for basic authentication.
 	AuthBasic *AuthBasic
+	// AuthOIDCProviderName is the name of the oidc_provider to be referenced in this location.
+	AuthOIDCProviderName string
 	// ResponseHeaders are custom response headers to be sent.
 	ResponseHeaders ResponseHeaders
 	// ProxySetHeaders are headers to set when proxying requests upstream.

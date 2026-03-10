@@ -741,6 +741,207 @@ func TestConvertAuthenticationFilter(t *testing.T) {
 			},
 			expected: &AuthenticationFilter{},
 		},
+		{
+			name: "oidc filter invalid",
+			filter: &graph.AuthenticationFilter{
+				Source: &ngfAPIv1alpha1.AuthenticationFilter{
+					ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "oidc-af"},
+					Spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+						Type: ngfAPIv1alpha1.AuthTypeOIDC,
+						OIDC: &ngfAPIv1alpha1.OIDCAuth{
+							Issuer:          "https://idp.example.com",
+							ClientID:        "client-id",
+							ClientSecretRef: ngfAPIv1alpha1.LocalObjectReference{Name: "oidc-secret"},
+						},
+					},
+				},
+				Valid: false,
+			},
+			referencedSecrets: nil,
+			expected:          &AuthenticationFilter{},
+		},
+		{
+			name: "oidc client secret not in referencedSecrets",
+			filter: &graph.AuthenticationFilter{
+				Source: &ngfAPIv1alpha1.AuthenticationFilter{
+					ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "oidc-af"},
+					Spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+						Type: ngfAPIv1alpha1.AuthTypeOIDC,
+						OIDC: &ngfAPIv1alpha1.OIDCAuth{
+							Issuer:          "https://idp.example.com",
+							ClientID:        "client-id",
+							ClientSecretRef: ngfAPIv1alpha1.LocalObjectReference{Name: "oidc-secret"},
+						},
+					},
+				},
+				Valid:      false,
+				Referenced: true,
+			},
+			referencedSecrets: map[types.NamespacedName]*secrets.Secret{},
+			expected:          &AuthenticationFilter{},
+		},
+		{
+			name: "oidc client secret referenced but source is nil",
+			filter: &graph.AuthenticationFilter{
+				Source: &ngfAPIv1alpha1.AuthenticationFilter{
+					ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "oidc-af"},
+					Spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+						Type: ngfAPIv1alpha1.AuthTypeOIDC,
+						OIDC: &ngfAPIv1alpha1.OIDCAuth{
+							Issuer:          "https://idp.example.com",
+							ClientID:        "client-id",
+							ClientSecretRef: ngfAPIv1alpha1.LocalObjectReference{Name: "oidc-secret"},
+						},
+					},
+				},
+				Valid:      false,
+				Referenced: true,
+			},
+			referencedSecrets: map[types.NamespacedName]*secrets.Secret{
+				{Namespace: "test", Name: "oidc-secret"}: {Source: nil},
+			},
+			expected: &AuthenticationFilter{},
+		},
+		{
+			name: "oidc valid, no CA cert refs",
+			filter: &graph.AuthenticationFilter{
+				Source: &ngfAPIv1alpha1.AuthenticationFilter{
+					ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "oidc-af"},
+					Spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+						Type: ngfAPIv1alpha1.AuthTypeOIDC,
+						OIDC: &ngfAPIv1alpha1.OIDCAuth{
+							Issuer:          "https://idp.example.com",
+							ClientID:        "client-id",
+							ClientSecretRef: ngfAPIv1alpha1.LocalObjectReference{Name: "oidc-secret"},
+						},
+					},
+				},
+				Valid:      true,
+				Referenced: true,
+			},
+			referencedSecrets: map[types.NamespacedName]*secrets.Secret{
+				{Namespace: "test", Name: "oidc-secret"}: {
+					Source: &apiv1.Secret{
+						ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "oidc-secret"},
+						Data:       map[string][]byte{secrets.ClientSecretKey: []byte("my-client-secret")},
+					},
+				},
+			},
+			expected: &AuthenticationFilter{
+				OIDC: &AuthOIDC{
+					ProviderName: "oidc_test_oidc-af",
+					Issuer:       "https://idp.example.com",
+					ClientID:     "client-id",
+					ClientSecret: "my-client-secret",
+				},
+			},
+		},
+		{
+			name: "oidc valid with CA cert",
+			filter: &graph.AuthenticationFilter{
+				Source: &ngfAPIv1alpha1.AuthenticationFilter{
+					ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "oidc-af"},
+					Spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+						Type: ngfAPIv1alpha1.AuthTypeOIDC,
+						OIDC: &ngfAPIv1alpha1.OIDCAuth{
+							Issuer:          "https://idp.example.com",
+							ClientID:        "client-id",
+							ClientSecretRef: ngfAPIv1alpha1.LocalObjectReference{Name: "oidc-secret"},
+							CACertificateRefs: []ngfAPIv1alpha1.LocalObjectReference{
+								{Name: "oidc-ca"},
+							},
+						},
+					},
+				},
+				Valid:      true,
+				Referenced: true,
+			},
+			referencedSecrets: map[types.NamespacedName]*secrets.Secret{
+				{Namespace: "test", Name: "oidc-secret"}: {
+					Source: &apiv1.Secret{
+						ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "oidc-secret"},
+						Data:       map[string][]byte{secrets.ClientSecretKey: []byte("my-client-secret")},
+					},
+				},
+				{Namespace: "test", Name: "oidc-ca"}: {
+					Source: &apiv1.Secret{
+						ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "oidc-ca"},
+						Data:       map[string][]byte{secrets.CAKey: []byte("ca-cert-pem")},
+					},
+				},
+			},
+			expected: &AuthenticationFilter{
+				OIDC: &AuthOIDC{
+					ProviderName:   "oidc_test_oidc-af",
+					Issuer:         "https://idp.example.com",
+					ClientID:       "client-id",
+					ClientSecret:   "my-client-secret",
+					CACertBundleID: generateCertBundleID(types.NamespacedName{Namespace: "test", Name: "oidc-ca"}),
+					CACertData:     []byte("ca-cert-pem"),
+				},
+			},
+		},
+		{
+			name: "oidc invalid, CA cert ref present but not in referencedSecrets",
+			filter: &graph.AuthenticationFilter{
+				Source: &ngfAPIv1alpha1.AuthenticationFilter{
+					ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "oidc-af"},
+					Spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+						Type: ngfAPIv1alpha1.AuthTypeOIDC,
+						OIDC: &ngfAPIv1alpha1.OIDCAuth{
+							Issuer:          "https://idp.example.com",
+							ClientID:        "client-id",
+							ClientSecretRef: ngfAPIv1alpha1.LocalObjectReference{Name: "oidc-secret"},
+							CACertificateRefs: []ngfAPIv1alpha1.LocalObjectReference{
+								{Name: "missing-ca"},
+							},
+						},
+					},
+				},
+				Valid:      false,
+				Referenced: true,
+			},
+			referencedSecrets: map[types.NamespacedName]*secrets.Secret{
+				{Namespace: "test", Name: "oidc-secret"}: {
+					Source: &apiv1.Secret{
+						ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "oidc-secret"},
+						Data:       map[string][]byte{secrets.ClientSecretKey: []byte("my-client-secret")},
+					},
+				},
+			},
+			expected: &AuthenticationFilter{},
+		},
+		{
+			name: "oidc invalid, CA cert ref present but source is nil",
+			filter: &graph.AuthenticationFilter{
+				Source: &ngfAPIv1alpha1.AuthenticationFilter{
+					ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "oidc-af"},
+					Spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+						Type: ngfAPIv1alpha1.AuthTypeOIDC,
+						OIDC: &ngfAPIv1alpha1.OIDCAuth{
+							Issuer:          "https://idp.example.com",
+							ClientID:        "client-id",
+							ClientSecretRef: ngfAPIv1alpha1.LocalObjectReference{Name: "oidc-secret"},
+							CACertificateRefs: []ngfAPIv1alpha1.LocalObjectReference{
+								{Name: "oidc-ca"},
+							},
+						},
+					},
+				},
+				Valid:      false,
+				Referenced: true,
+			},
+			referencedSecrets: map[types.NamespacedName]*secrets.Secret{
+				{Namespace: "test", Name: "oidc-secret"}: {
+					Source: &apiv1.Secret{
+						ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "oidc-secret"},
+						Data:       map[string][]byte{secrets.ClientSecretKey: []byte("my-client-secret")},
+					},
+				},
+				{Namespace: "test", Name: "oidc-ca"}: {Source: nil},
+			},
+			expected: &AuthenticationFilter{},
+		},
 	}
 
 	for _, tc := range tests {

@@ -457,21 +457,13 @@ func createLocations(
 
 	var rootPathExists bool
 	var grpcServer bool
+	var oidcCallbackAdded bool
 
 	mirrorPathToPercentage := extractMirrorTargetsWithPercentages(server.PathRules)
 
 	for pathRuleIdx, rule := range server.PathRules {
-		if !rootPathExists {
-			if rule.Path == rootPath {
-				rootPathExists = true
-			} else if rule.PathType == dataplane.PathTypeRegularExpression {
-				// Uses regexp2 with RE2 flag to match the engine used by the validation layer.
-				if re, err := regexp2.Compile(rule.Path, regexp2.RE2); err == nil {
-					if matched, _ := re.MatchString("/"); matched {
-						rootPathExists = true
-					}
-				}
-			}
+		if !rootPathExists && matchesRootPath(rule) {
+			rootPathExists = true
 		}
 
 		if rule.GRPC {
@@ -485,6 +477,8 @@ func createLocations(
 				generator.GenerateForLocation(rule.Policies, extLocations[i]),
 			)
 		}
+
+		start := len(locs)
 
 		switch {
 		case !needsInternalLocationsForMatches(rule) && !rule.HasInferenceBackends:
@@ -528,6 +522,16 @@ func createLocations(
 				keepAliveCheck,
 				mirrorPercentage)...,
 			)
+		}
+
+		if !oidcCallbackAdded {
+			for _, loc := range locs[start:] {
+				if loc.AuthOIDCProviderName != "" {
+					locs = append(locs, createOIDCCallbackLocation(loc))
+					oidcCallbackAdded = true
+					break
+				}
+			}
 		}
 	}
 
@@ -1139,18 +1143,25 @@ func updateLocationAuthenticationFilter(
 	location http.Location,
 	authenticationFilter *dataplane.AuthenticationFilter,
 ) http.Location {
-	if authenticationFilter != nil {
-		if authenticationFilter.Basic != nil {
-			id := dataplane.GenerateAuthFileID(
-				authenticationFilter.Basic.SecretNamespace,
-				authenticationFilter.Basic.SecretName,
-			)
-			location.AuthBasic = &http.AuthBasic{
-				Realm: authenticationFilter.Basic.Realm,
-				File:  generateAuthBasicFileName(id),
-			}
+	if authenticationFilter == nil {
+		return location
+	}
+
+	if authenticationFilter.Basic != nil {
+		id := dataplane.GenerateAuthFileID(
+			authenticationFilter.Basic.SecretNamespace,
+			authenticationFilter.Basic.SecretName,
+		)
+		location.AuthBasic = &http.AuthBasic{
+			Realm: authenticationFilter.Basic.Realm,
+			File:  generateAuthBasicFileName(id),
 		}
 	}
+
+	if authenticationFilter.OIDC != nil {
+		location.AuthOIDCProviderName = authenticationFilter.OIDC.ProviderName
+	}
+
 	return location
 }
 
@@ -1735,6 +1746,30 @@ func createDefaultRootLocation() http.Location {
 		Path:   "= /",
 		Return: &http.Return{Code: http.StatusNotFound},
 	}
+}
+
+func matchesRootPath(rule dataplane.PathRule) bool {
+	if rule.Path == rootPath {
+		return true
+	}
+	if rule.PathType != dataplane.PathTypeRegularExpression {
+		return false
+	}
+	// Uses regexp2 with RE2 flag to match the engine used by the validation layer.
+	re, err := regexp2.Compile(rule.Path, regexp2.RE2)
+	if err != nil {
+		return false
+	}
+	matched, _ := re.MatchString("/")
+	return matched
+}
+
+// createOIDCCallbackLocation creates the OIDC callback location based on the source location configuration.
+func createOIDCCallbackLocation(src http.Location) http.Location {
+	callback := src
+	callback.Path = "= /oidc_callback"
+	callback.Type = http.ExternalLocationType
+	return callback
 }
 
 // isNonSlashedPrefixPath returns whether or not a path is of type Prefix and does not contain a trailing slash.

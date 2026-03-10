@@ -5555,3 +5555,360 @@ func TestUpdateLocationCORSFilter(t *testing.T) {
 		})
 	}
 }
+
+func TestUpdateLocationAuthenticationFilter(t *testing.T) {
+	t.Parallel()
+
+	baseLocation := http.Location{
+		Path: "/",
+		Type: http.ExternalLocationType,
+	}
+
+	tests := []struct {
+		filter   *dataplane.AuthenticationFilter
+		name     string
+		expected http.Location
+	}{
+		{
+			name:     "nil authentication filter",
+			filter:   nil,
+			expected: baseLocation,
+		},
+		{
+			name:     "empty authentication filter",
+			filter:   &dataplane.AuthenticationFilter{},
+			expected: baseLocation,
+		},
+		{
+			name: "authentication filter with Basic auth",
+			filter: &dataplane.AuthenticationFilter{
+				Basic: &dataplane.AuthBasic{
+					SecretName:      "auth-secret",
+					SecretNamespace: "test-ns",
+					Realm:           "Restricted",
+				},
+			},
+			expected: http.Location{
+				Path: "/",
+				Type: http.ExternalLocationType,
+				AuthBasic: &http.AuthBasic{
+					Realm: "Restricted",
+					File:  "/etc/nginx/secrets/test-ns_auth-secret",
+				},
+			},
+		},
+		{
+			name: "authentication filter with OIDC",
+			filter: &dataplane.AuthenticationFilter{
+				OIDC: &dataplane.AuthOIDC{
+					ProviderName: "oidc_test_my-filter",
+				},
+			},
+			expected: http.Location{
+				Path:                 "/",
+				Type:                 http.ExternalLocationType,
+				AuthOIDCProviderName: "oidc_test_my-filter",
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			result := updateLocationAuthenticationFilter(baseLocation, test.filter)
+			g.Expect(result).To(Equal(test.expected))
+		})
+	}
+}
+
+func TestExecuteServers_OIDCAuth(t *testing.T) {
+	t.Parallel()
+
+	backend := dataplane.BackendGroup{
+		Source:  types.NamespacedName{Namespace: "test", Name: "route1"},
+		RuleIdx: 0,
+		Backends: []dataplane.Backend{
+			{UpstreamName: "test_foo_80", Valid: true, Weight: 1},
+		},
+	}
+
+	tests := []struct {
+		name       string
+		expPresent []string
+		expAbsent  []string
+		conf       dataplane.Configuration
+	}{
+		{
+			name: "OIDC auth present in location when authentication filter with OIDC is set",
+			conf: dataplane.Configuration{
+				HTTPServers: []dataplane.VirtualServer{
+					{
+						Hostname: "example.com",
+						Port:     8080,
+						PathRules: []dataplane.PathRule{
+							{
+								Path:     "/",
+								PathType: dataplane.PathTypePrefix,
+								MatchRules: []dataplane.MatchRule{
+									{
+										Match:        dataplane.Match{},
+										BackendGroup: backend,
+										Filters: dataplane.HTTPFilters{
+											AuthenticationFilter: &dataplane.AuthenticationFilter{
+												OIDC: &dataplane.AuthOIDC{
+													ProviderName: "oidc_test_my-filter",
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expPresent: []string{"auth_oidc oidc_test_my-filter;"},
+			expAbsent:  []string{"auth_basic"},
+		},
+		{
+			name: "nil AuthenticationFilter results in no auth_oidc in location",
+			conf: dataplane.Configuration{
+				HTTPServers: []dataplane.VirtualServer{
+					{
+						Hostname: "example.com",
+						Port:     8080,
+						PathRules: []dataplane.PathRule{
+							{
+								Path:     "/",
+								PathType: dataplane.PathTypePrefix,
+								MatchRules: []dataplane.MatchRule{
+									{
+										Match:        dataplane.Match{},
+										BackendGroup: backend,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expAbsent: []string{"auth_oidc", "auth_basic"},
+		},
+		{
+			name: "Empty authentication filter results in no auth_oidc in location",
+			conf: dataplane.Configuration{
+				HTTPServers: []dataplane.VirtualServer{
+					{
+						Hostname: "example.com",
+						Port:     8080,
+						PathRules: []dataplane.PathRule{
+							{
+								Path:     "/",
+								PathType: dataplane.PathTypePrefix,
+								MatchRules: []dataplane.MatchRule{
+									{
+										Match:        dataplane.Match{},
+										BackendGroup: backend,
+										Filters: dataplane.HTTPFilters{
+											AuthenticationFilter: &dataplane.AuthenticationFilter{},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expAbsent: []string{"auth_oidc"},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			gen := GeneratorImpl{}
+			results := gen.executeServers(test.conf, &policiesfakes.FakeGenerator{}, alwaysFalseKeepAliveChecker)
+
+			var httpData string
+			for _, res := range results {
+				if res.dest == httpConfigFile {
+					httpData = string(res.data)
+					break
+				}
+			}
+
+			for _, sub := range test.expPresent {
+				g.Expect(httpData).To(ContainSubstring(sub))
+			}
+			for _, absent := range test.expAbsent {
+				g.Expect(httpData).NotTo(ContainSubstring(absent))
+			}
+		})
+	}
+}
+
+func TestOIDCCallbackLocation(t *testing.T) {
+	t.Parallel()
+
+	const providerName = "oidc_test_my-filter"
+
+	hrNsName := types.NamespacedName{Namespace: "test", Name: "route1"}
+
+	oidcFilter := &dataplane.AuthenticationFilter{
+		OIDC: &dataplane.AuthOIDC{ProviderName: providerName},
+	}
+
+	singleBackend := dataplane.BackendGroup{
+		Source:  hrNsName,
+		RuleIdx: 0,
+		Backends: []dataplane.Backend{
+			{UpstreamName: "test_coffee_80", Valid: true, Weight: 1},
+		},
+	}
+
+	weightedBackend := dataplane.BackendGroup{
+		Source:  hrNsName,
+		RuleIdx: 0,
+		Backends: []dataplane.Backend{
+			{UpstreamName: "test_coffee_80", Valid: true, Weight: 80},
+			{UpstreamName: "test_coffee_canary_80", Valid: true, Weight: 20},
+		},
+	}
+
+	inferenceBackend := dataplane.BackendGroup{
+		Source:  hrNsName,
+		RuleIdx: 0,
+		Backends: []dataplane.Backend{
+			{
+				UpstreamName: "test_model_pool_80",
+				Valid:        true,
+				Weight:       1,
+				EndpointPickerConfig: &dataplane.EndpointPickerConfig{
+					EndpointPickerRef: &inference.EndpointPickerRef{
+						Name: "test-epp",
+						Port: &inference.Port{Number: 80},
+					},
+					NsName: hrNsName.Namespace,
+				},
+			},
+		},
+	}
+
+	oidcPathRule := func(bg dataplane.BackendGroup, hasInference bool) dataplane.PathRule {
+		return dataplane.PathRule{
+			Path:                 "/coffee",
+			PathType:             dataplane.PathTypePrefix,
+			HasInferenceBackends: hasInference,
+			MatchRules: []dataplane.MatchRule{
+				{
+					Match:        dataplane.Match{},
+					BackendGroup: bg,
+					Filters:      dataplane.HTTPFilters{AuthenticationFilter: oidcFilter},
+				},
+			},
+		}
+	}
+
+	callbackFrom := func(pathRules []dataplane.PathRule) *http.Location {
+		locs, _, _ := createLocations(
+			&dataplane.VirtualServer{PathRules: pathRules, Port: 80},
+			"1",
+			&policiesfakes.FakeGenerator{},
+			alwaysFalseKeepAliveChecker,
+		)
+		for i := range locs {
+			if locs[i].Path == "= /oidc_callback" {
+				return &locs[i]
+			}
+		}
+		return nil
+	}
+
+	tests := []struct {
+		run  func(t *testing.T)
+		name string
+	}{
+		{
+			name: "createOIDCCallbackLocation: creates new /oidc_callback location cloning proxy settings from source",
+			run: func(t *testing.T) {
+				t.Helper()
+				g := NewWithT(t)
+				src := http.Location{ //nolint:gosec
+					Path:                 "/coffee",
+					Type:                 http.ExternalLocationType,
+					AuthOIDCProviderName: providerName,
+					ProxyPass:            "http://test_coffee_80$request_uri",
+					ProxySetHeaders:      httpBaseHeaders,
+				}
+				cb := createOIDCCallbackLocation(src)
+				g.Expect(cb.Path).To(Equal("= /oidc_callback"))
+				g.Expect(cb.Type).To(Equal(http.ExternalLocationType))
+				g.Expect(cb.AuthOIDCProviderName).To(Equal(providerName))
+				g.Expect(cb.ProxyPass).To(Equal(src.ProxyPass))
+				g.Expect(cb.ProxySetHeaders).To(Equal(src.ProxySetHeaders))
+			},
+		},
+		{
+			name: "createLocations: single backend with OIDC generates /oidc_callback",
+			run: func(t *testing.T) {
+				t.Helper()
+				g := NewWithT(t)
+				cb := callbackFrom([]dataplane.PathRule{oidcPathRule(singleBackend, false)})
+				g.Expect(cb).NotTo(BeNil())
+				g.Expect(cb.AuthOIDCProviderName).To(Equal(providerName))
+				g.Expect(cb.Type).To(Equal(http.ExternalLocationType))
+				g.Expect(cb.ProxyPass).To(Equal("http://test_coffee_80$request_uri"))
+			},
+		},
+		{
+			name: "createLocations: weighted backends with OIDC generate /oidc_callback",
+			run: func(t *testing.T) {
+				t.Helper()
+				g := NewWithT(t)
+				cb := callbackFrom([]dataplane.PathRule{oidcPathRule(weightedBackend, false)})
+				g.Expect(cb).NotTo(BeNil())
+				g.Expect(cb.AuthOIDCProviderName).To(Equal(providerName))
+				g.Expect(cb.Type).To(Equal(http.ExternalLocationType))
+			},
+		},
+		{
+			name: "createLocations: inference pool backend with OIDC generates /oidc_callback",
+			run: func(t *testing.T) {
+				t.Helper()
+				g := NewWithT(t)
+				cb := callbackFrom([]dataplane.PathRule{oidcPathRule(inferenceBackend, true)})
+				g.Expect(cb).NotTo(BeNil())
+				g.Expect(cb.AuthOIDCProviderName).To(Equal(providerName))
+				g.Expect(cb.Type).To(Equal(http.ExternalLocationType))
+			},
+		},
+		{
+			name: "createLocations: no OIDC filter does not generate /oidc_callback",
+			run: func(t *testing.T) {
+				t.Helper()
+				g := NewWithT(t)
+				cb := callbackFrom([]dataplane.PathRule{
+					{
+						Path:     "/coffee",
+						PathType: dataplane.PathTypePrefix,
+						MatchRules: []dataplane.MatchRule{
+							{Match: dataplane.Match{}, BackendGroup: singleBackend},
+						},
+					},
+				})
+				g.Expect(cb).To(BeNil())
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			test.run(t)
+		})
+	}
+}

@@ -267,7 +267,11 @@ func BuildGraph(
 
 	processedSnippetsFilters := processSnippetsFilters(state.SnippetsFilters)
 
-	processedAuthenticationFilters := processAuthenticationFilters(state.AuthenticationFilters, resourceResolver)
+	processedAuthenticationFilters := processAuthenticationFilters(
+		state.AuthenticationFilters,
+		resourceResolver,
+		featureFlags.Plus,
+	)
 
 	routes := buildRoutesForGateways(
 		validators.HTTPFieldsValidator,
@@ -279,6 +283,11 @@ func BuildGraph(
 		state.InferencePools,
 		featureFlags,
 	)
+
+	// enforceOIDCProviderConstraint marks extra referenced OIDC filters invalid and propagates
+	// the condition to any routes referencing them. Must run after buildRoutesForGateways so
+	// the referenced flag is set on each filter.
+	enforceOIDCProviderConstraint(processedAuthenticationFilters, routes)
 
 	referencedInferencePools := buildReferencedInferencePools(routes, gws, state.InferencePools, state.Services)
 

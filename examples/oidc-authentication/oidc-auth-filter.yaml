@@ -1,0 +1,27 @@
+apiVersion: gateway.nginx.org/v1alpha1
+kind: AuthenticationFilter
+metadata:
+  name: oidc-auth
+spec:
+  type: OIDC
+  oidc:
+    clientSecretRef:
+      name: keycloak-secret
+    clientID: nginx-gateway
+    issuer: https://host.docker.internal:8443/realms/nginx-gateway
+    caCertificateRefs:
+      - name: keycloak-ca
+---
+apiVersion: gateway.nginx.org/v1alpha1
+kind: AuthenticationFilter
+metadata:
+  name: zzz-oidc-auth
+spec:
+  type: OIDC
+  oidc:
+    clientSecretRef:
+      name: keycloak-secret
+    clientID: nginx-gateway
+    issuer: https://host.docker.internal:8443/realms/nginx-gateway
+    caCertificateRefs:
+      - name: keycloak-ca

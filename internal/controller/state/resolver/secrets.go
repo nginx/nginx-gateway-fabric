@@ -11,8 +11,8 @@ import (
 
 type secretEntry struct {
 	secrets.Secret
-	// err holds the corresponding error if the Secret is invalid or does not exist.
-	err error
+	err         error
+	expectedKey string
 }
 
 func (s *secretEntry) setError(err error) {
@@ -54,10 +54,11 @@ func (s *secretEntry) validate(obj client.Object) {
 
 		certBundle = secrets.NewCertificateBundle(client.ObjectKeyFromObject(secret), "Secret", cert)
 	case secret.Type == v1.SecretType(secrets.SecretTypeHtpasswd):
-		// Validate Htpasswd secret
 		if _, exists := secret.Data[secrets.AuthKey]; !exists {
 			validationErr = fmt.Errorf("missing required key %q in secret type %q", secrets.AuthKey, secret.Type)
 		}
+	case secret.Type == v1.SecretTypeOpaque && s.expectedKey != "":
+		validationErr = s.validateOpaqueSecret(secret)
 	default:
 		validationErr = fmt.Errorf("unsupported secret type %q", secret.Type)
 	}
@@ -67,4 +68,21 @@ func (s *secretEntry) validate(obj client.Object) {
 		CertBundle: certBundle,
 	}
 	s.setError(validationErr)
+}
+
+func (s *secretEntry) validateOpaqueSecret(secret *v1.Secret) error {
+	if s.expectedKey == "" {
+		return nil
+	}
+
+	if data, exists := secret.Data[s.expectedKey]; !exists || len(data) == 0 {
+		return fmt.Errorf(
+			"opaque secret %s/%s does not contain the expected key %q",
+			secret.Namespace,
+			secret.Name,
+			s.expectedKey,
+		)
+	}
+
+	return nil
 }

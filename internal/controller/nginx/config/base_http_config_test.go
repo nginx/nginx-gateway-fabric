@@ -609,3 +609,80 @@ func TestExecuteBaseHttp_ServerTokens(t *testing.T) {
 		})
 	}
 }
+
+func TestExecuteBaseHttp_OIDCProvider(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		expSubStrings []string
+		expAbsent     []string
+		conf          dataplane.Configuration
+	}{
+		{
+			name: "no OIDC configuration, missing OIDC directives",
+			conf: dataplane.Configuration{},
+			expAbsent: []string{
+				"oidc_provider",
+				"client_secret",
+			},
+		},
+		{
+			name: "OIDC provider without CA cert specified",
+			conf: dataplane.Configuration{
+				OIDCProvider: dataplane.OIDCProvider{
+					Name:         "oidc_test_my-filter",
+					Issuer:       "https://idp.example.com",
+					ClientID:     "my-client-id",
+					ClientSecret: "my-client-secret",
+				},
+			},
+			expSubStrings: []string{
+				"oidc_provider oidc_test_my-filter {",
+				"issuer https://idp.example.com;",
+				"client_id my-client-id;",
+				"client_secret my-client-secret;",
+			},
+			expAbsent: []string{
+				"ssl_trusted_certificate",
+			},
+		},
+		{
+			name: "OIDC provider with CA cert specified",
+			conf: dataplane.Configuration{
+				OIDCProvider: dataplane.OIDCProvider{
+					Name:           "oidc_test_my-filter",
+					Issuer:         "https://idp.example.com",
+					ClientID:       "my-client-id",
+					ClientSecret:   "my-client-secret",
+					CACertBundleID: "oidc_ca_test_my-ca",
+				},
+			},
+			expSubStrings: []string{
+				"oidc_provider oidc_test_my-filter {",
+				"issuer https://idp.example.com;",
+				"client_id my-client-id;",
+				`client_secret my-client-secret;`,
+				"ssl_trusted_certificate /etc/nginx/secrets/oidc_ca_test_my-ca.crt;",
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			res := executeBaseHTTPConfig(test.conf, &policiesfakes.FakeGenerator{})
+			g.Expect(res).To(HaveLen(1))
+			data := string(res[0].data)
+
+			for _, sub := range test.expSubStrings {
+				g.Expect(data).To(ContainSubstring(sub))
+			}
+			for _, absent := range test.expAbsent {
+				g.Expect(data).NotTo(ContainSubstring(absent))
+			}
+		})
+	}
+}

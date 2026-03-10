@@ -35,6 +35,9 @@ const (
 	// CAKey is the certificate key for optional root certificate authority.
 	CAKey = "ca.crt"
 
+	// ClientSecretKey is the Secret key for the OIDC client secret.
+	ClientSecretKey = "client-secret"
+
 	// TLSCertKey is the certificate key for TLS certificates.
 	TLSCertKey = corev1.TLSCertKey
 

@@ -20,9 +20,20 @@ type AccessLog struct {
 	FormatName string // Internal format name (ngf_user_defined_log_format)
 	Disable    bool   // User's disable flag
 }
+
+// oidcConfiguration holds the OIDC config.
+type oidcConfiguration struct {
+	Name                   string
+	Issuer                 string
+	ClientID               string
+	ClientSecret           string //nolint:gosec // holds OIDC client secret value
+	TrustedCertificatePath string
+}
+
 type httpConfig struct {
 	DNSResolver             *dataplane.DNSResolverConfig
 	AccessLog               *AccessLog
+	OIDCProvider            *oidcConfiguration
 	GatewaySecretID         dataplane.SSLKeyPairID
 	NginxReadinessProbePath string
 	ServerTokens            string
@@ -54,6 +65,7 @@ func executeBaseHTTPConfig(conf dataplane.Configuration, generator policies.Gene
 		AccessLog:               buildAccessLog(conf.Logging.AccessLog),
 		GatewaySecretID:         conf.BaseHTTPConfig.GatewaySecretID,
 		ServerTokens:            conf.BaseHTTPConfig.ServerTokens,
+		OIDCProvider:            buildOIDCProvider(conf.OIDCProvider),
 	}
 
 	results := make([]executeResult, 0, len(includes)+1)
@@ -92,6 +104,26 @@ func buildDNSResolver(dnsResolver *dataplane.DNSResolverConfig) *dataplane.DNSRe
 	}
 
 	return fixed
+}
+
+// buildOIDCProvider returns an oidcConfiguration if the provided OIDCProvider has a non-empty Name,
+// otherwise it returns nil.
+func buildOIDCProvider(provider dataplane.OIDCProvider) *oidcConfiguration {
+	if provider.Name == "" {
+		return nil
+	}
+
+	oidc := &oidcConfiguration{
+		Name:         provider.Name,
+		Issuer:       provider.Issuer,
+		ClientID:     provider.ClientID,
+		ClientSecret: provider.ClientSecret,
+	}
+	if provider.CACertBundleID != "" {
+		oidc.TrustedCertificatePath = generateCertBundleFileName(provider.CACertBundleID)
+	}
+
+	return oidc
 }
 
 func buildAccessLog(accessLogConfig *dataplane.AccessLog) *AccessLog {
