@@ -10,7 +10,9 @@ metadata:
   {{- toYaml . | nindent 4 }}
   {{- end }}
 spec:
+  {{- if not .Values.nginxGateway.autoscaling.enable }}
   replicas: {{ .Values.nginxGateway.replicas }}
+  {{- end }}
   selector:
     matchLabels:
     {{- include "nginx-gateway.selectorLabels" . | nindent 6 }}
