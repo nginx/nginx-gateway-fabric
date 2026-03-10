@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/go-logr/logr"
-	coreV1 "k8s.io/api/core/v1"
 	discoveryV1 "k8s.io/api/discovery/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -118,7 +117,7 @@ func BuildConfiguration(
 		),
 		BackendGroups:        backendGroups,
 		SSLKeyPairs:          buildSSLKeyPairs(g.ReferencedSecrets, gateway),
-		AuthSecrets:          buildAuthSecrets(g.ReferencedSecrets),
+		AuthSecrets:          buildAuthSecrets(g.AuthenticationFilters, g.ReferencedSecrets),
 		Telemetry:            buildTelemetry(g, gateway),
 		BaseHTTPConfig:       baseHTTPConfig,
 		BaseStreamConfig:     baseStreamConfig,
@@ -463,19 +462,62 @@ func buildCertBundles(
 	return bundles
 }
 
-func buildAuthSecrets(secretsMap map[types.NamespacedName]*secrets.Secret) map[AuthFileID]AuthFileData {
-	authBasics := make(map[AuthFileID]AuthFileData, len(secretsMap))
+func buildAuthSecrets(
+	authenticationFilters map[types.NamespacedName]*graph.AuthenticationFilter,
+	secretsMap map[types.NamespacedName]*secrets.Secret,
+) map[AuthFileID]AuthFileData {
+	authFileData := make(map[AuthFileID]AuthFileData, len(authenticationFilters))
 
-	for nsname, secret := range secretsMap {
-		if secret != nil && secret.Source != nil &&
-			secret.Source.Type == coreV1.SecretType(secrets.SecretTypeHtpasswd) {
-			if data, exists := secret.Source.Data[secrets.AuthKey]; exists {
-				id := AuthFileID(fmt.Sprintf("%s_%s", nsname.Namespace, nsname.Name))
-				authBasics[id] = data
-			}
+	for _, filter := range authenticationFilters {
+		if filter == nil || filter.Source == nil {
+			continue
 		}
+
+		id, data := getAuthFileIDAndData(filter, secretsMap)
+
+		if id == "" || data == nil {
+			continue
+		}
+
+		authFileData[id] = data
 	}
-	return authBasics
+
+	return authFileData
+}
+
+func getAuthFileIDAndData(
+	filter *graph.AuthenticationFilter,
+	secretsMap map[types.NamespacedName]*secrets.Secret,
+) (authFileID AuthFileID, data []byte) {
+	secretNsName := types.NamespacedName{
+		Namespace: filter.Source.Namespace,
+	}
+
+	switch filter.Source.Spec.Type {
+	case ngfAPIv1alpha1.AuthTypeBasic:
+		if filter.Source.Spec.Basic == nil {
+			return "", nil
+		}
+		secretNsName.Name = filter.Source.Spec.Basic.SecretRef.Name
+		authFileID = GenerateAuthBasicFileID(secretNsName.Namespace, secretNsName.Name)
+	case ngfAPIv1alpha1.AuthTypeJWT:
+		if filter.Source.Spec.JWT == nil || filter.Source.Spec.JWT.File == nil {
+			return "", nil
+		}
+		secretNsName.Name = filter.Source.Spec.JWT.File.SecretRef.Name
+		authFileID = GenerateAuthJWTFileID(secretNsName.Namespace, secretNsName.Name)
+	}
+
+	secret := secretsMap[secretNsName]
+	if secret == nil || secret.Source == nil {
+		return "", nil
+	}
+	data, exists := secret.Source.Data[secrets.AuthKey]
+	if !exists {
+		return "", nil
+	}
+
+	return authFileID, data
 }
 
 func buildBackendGroups(servers []VirtualServer) []BackendGroup {
@@ -505,12 +547,11 @@ func buildBackendGroups(servers []VirtualServer) []BackendGroup {
 		}
 	}
 
-	numGroups := len(uniqueGroups)
 	if len(uniqueGroups) == 0 {
 		return nil
 	}
 
-	groups := make([]BackendGroup, 0, numGroups)
+	groups := make([]BackendGroup, 0, len(uniqueGroups))
 	for _, group := range uniqueGroups {
 		groups = append(groups, group)
 	}
@@ -1183,9 +1224,14 @@ func (id CertBundleID) IsCRLBundle() bool {
 	return strings.HasPrefix(string(id), crlBundleIDPrefix)
 }
 
-// GenerateAuthFileID is used to generate IDs for both basic auth and jwt auth user files.
-func GenerateAuthFileID(namespace, name string) AuthFileID {
-	return AuthFileID(fmt.Sprintf("%s_%s", namespace, name))
+// GenerateAuthBasicFileID is used to generate IDs for basic auth files.
+func GenerateAuthBasicFileID(namespace, name string) AuthFileID {
+	return AuthFileID(fmt.Sprintf("basic_auth_%s_%s", namespace, name))
+}
+
+// GenerateAuthJWTFileID is used to generate IDs for jwt auth files.
+func GenerateAuthJWTFileID(namespace, name string) AuthFileID {
+	return AuthFileID(fmt.Sprintf("jwt_auth_%s_%s", namespace, name))
 }
 
 // buildOIDCProviderFromAuthenticationFilters builds the OIDC provider configs from the processed
