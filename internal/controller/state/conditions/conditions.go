@@ -164,14 +164,6 @@ const (
 	// parametersRef resource is invalid.
 	GatewayReasonParamsRefInvalid v1.GatewayConditionReason = "ParametersRefInvalid"
 
-	// GatewayReasonSecretRefInvalid is used with the "GatewayResolvedRefs" condition when the
-	// secretRef resource is invalid.
-	GatewayReasonSecretRefInvalid v1.GatewayConditionReason = "SecretRefInvalid"
-
-	// GatewayReasonSecretRefNotPermitted is used with the "GatewayResolvedRefs" condition when the
-	// secretRef resource is not permitted by any ReferenceGrant.
-	GatewayReasonSecretRefNotPermitted v1.GatewayConditionReason = "SecretRefNotPermitted"
-
 	// PolicyReasonAncestorLimitReached is used with the "PolicyAccepted" condition when a policy
 	// cannot be applied because the ancestor status list has reached the maximum size of 16.
 	PolicyReasonAncestorLimitReached v1.PolicyConditionReason = "AncestorLimitReached"
@@ -318,13 +310,13 @@ func NewGatewayClassUnsupportedVersion(recommendedVersion string) []Condition {
 	}
 }
 
-// NewGatewaySecretRefNotPermitted returns Condition that indicates that the Gateway references a TLS secret that is not
+// NewGatewayRefNotPermitted returns Condition that indicates that the Gateway references a resource that is not
 // permitted by any ReferenceGrant.
-func NewGatewaySecretRefNotPermitted(msg string) Condition {
+func NewGatewayRefNotPermitted(msg string) Condition {
 	return Condition{
 		Type:    string(GatewayReasonResolvedRefs),
 		Status:  metav1.ConditionFalse,
-		Reason:  string(GatewayReasonSecretRefNotPermitted),
+		Reason:  string(v1.GatewayReasonRefNotPermitted),
 		Message: msg,
 	}
 }
@@ -334,7 +326,7 @@ func NewGatewaySecretRefInvalid(msg string) Condition {
 	return Condition{
 		Type:    string(GatewayReasonResolvedRefs),
 		Status:  metav1.ConditionFalse,
-		Reason:  string(GatewayReasonSecretRefInvalid),
+		Reason:  string(v1.GatewayReasonInvalidClientCertificateRef),
 		Message: msg,
 	}
 }
@@ -998,25 +990,14 @@ func NewNginxGatewayInvalid(msg string) Condition {
 	}
 }
 
-// NewGatewayResolvedRefs returns a Condition that indicates that the parametersRef
-// on the Gateway is resolved.
+// NewGatewayResolvedRefs returns a Condition that indicates that the referenced resources
+// on the Gateway are resolved.
 func NewGatewayResolvedRefs() Condition {
 	return Condition{
 		Type:    string(GatewayResolvedRefs),
 		Status:  metav1.ConditionTrue,
 		Reason:  string(GatewayReasonResolvedRefs),
-		Message: "The ParametersRef resource is resolved",
-	}
-}
-
-// NewGatewayRefNotFound returns a Condition that indicates that the parametersRef
-// on the Gateway could not be resolved.
-func NewGatewayRefNotFound() Condition {
-	return Condition{
-		Type:    string(GatewayResolvedRefs),
-		Status:  metav1.ConditionFalse,
-		Reason:  string(GatewayReasonParamsRefNotFound),
-		Message: "The ParametersRef resource could not be found",
+		Message: "The referenced resources are resolved",
 	}
 }
 
