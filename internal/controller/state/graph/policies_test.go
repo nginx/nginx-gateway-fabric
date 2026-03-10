@@ -291,7 +291,7 @@ func TestAttachPolicyToRoute(t *testing.T) {
 	createExpAncestor := func(kind v1.Kind) v1.ParentReference {
 		return v1.ParentReference{
 			Group:     helpers.GetPointer[v1.Group](v1.GroupName),
-			Kind:      helpers.GetPointer[v1.Kind](kind),
+			Kind:      helpers.GetPointer(kind),
 			Namespace: (*v1.Namespace)(&routeNsName.Namespace),
 			Name:      v1.ObjectName(routeNsName.Name),
 		}
@@ -1311,6 +1311,24 @@ func TestProcessPolicies_RouteOverlap(t *testing.T) {
 					RouteType:      RouteTypeHTTP,
 					NamespacedName: types.NamespacedName{Namespace: testNs, Name: "hr-tea"},
 				}: createTestRouteWithMultipleGateways("hr-tea", []string{"private-gateway", "public-gateway"}, "/tea"),
+			},
+			valid: true,
+		},
+		{
+			name:      "non-targeted route with same path appearing multiple times in its matches",
+			validator: &policiesfakes.FakeValidator{},
+			policies: map[PolicyKey]policies.Policy{
+				pol1Key: pol1,
+			},
+			routes: map[RouteKey]*L7Route{
+				{
+					RouteType:      RouteTypeHTTP,
+					NamespacedName: types.NamespacedName{Namespace: testNs, Name: "hr-coffee"},
+				}: createTestRouteWithPaths("hr-coffee", "/coffee"),
+				{
+					RouteType:      RouteTypeHTTP,
+					NamespacedName: types.NamespacedName{Namespace: testNs, Name: "hr-other"},
+				}: createTestRouteWithPaths("hr-other", "/tea", "/tea"),
 			},
 			valid: true,
 		},

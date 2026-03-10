@@ -363,8 +363,6 @@ func (rm *ResourceManager) readAndHandleObject(
 
 // GetFileContents takes a string that can either be a local file
 // path or an https:// URL to YAML manifests and provides the contents.
-//
-//nolint:gosec // Test framework intentionally uses dynamic URLs
 func (rm *ResourceManager) GetFileContents(file string) (*bytes.Buffer, error) {
 	if strings.HasPrefix(file, "http://") {
 		err := fmt.Errorf("data can't be retrieved from %s: http is not supported, use https", file)
