@@ -532,9 +532,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # On PRs: run nginx only, latest k8s, experimental enabled (1 job - most coverage)
+        # On PRs: run latest k8s, experimental enabled (1 job - most coverage)
         # On main/release: run full matrix (16 jobs)
-        image: ${{ github.event_name == 'pull_request' && fromJSON('["nginx"]') || fromJSON('["nginx", "plus"]') }}
+        image: [nginx, plus]
         build-os: ${{ github.event_name == 'pull_request' && fromJSON('[""]') || fromJSON('["", "ubi"]') }}
         k8s-version: ${{ github.event_name == 'pull_request' && fromJSON(format('["{0}"]', needs.vars.outputs.k8s_latest)) || fromJSON(format('["{0}", "{1}"]', needs.vars.outputs.min_k8s_version, needs.vars.outputs.k8s_latest)) }}
         enable-experimental: ${{ github.event_name == 'pull_request' && fromJSON('[true]') || fromJSON('[true, false]') }}
