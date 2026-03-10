@@ -1073,7 +1073,7 @@ func TestCreatePLMSecretMetadata(t *testing.T) {
 		},
 		{
 			name: "only credentials secret specified",
-			plmCfg: config.PLMStorageConfig{
+			plmCfg: config.PLMStorageConfig{ //nolint:gosec // test data, not real credentials
 				URL:                   "http://plm-storage:8333",
 				CredentialsSecretName: "plm-creds",
 			},
@@ -1085,7 +1085,7 @@ func TestCreatePLMSecretMetadata(t *testing.T) {
 		},
 		{
 			name: "credentials and CA secrets specified",
-			plmCfg: config.PLMStorageConfig{
+			plmCfg: config.PLMStorageConfig{ //nolint:gosec // test data, not real credentials
 				URL:                   "http://plm-storage:8333",
 				CredentialsSecretName: "plm-creds",
 				TLSCACertSecretName:   "plm-ca",
@@ -1101,7 +1101,7 @@ func TestCreatePLMSecretMetadata(t *testing.T) {
 		},
 		{
 			name: "all secrets specified",
-			plmCfg: config.PLMStorageConfig{
+			plmCfg: config.PLMStorageConfig{ //nolint:gosec // test data, not real credentials
 				URL:                    "https://plm-storage:8333",
 				CredentialsSecretName:  "plm-creds",
 				TLSCACertSecretName:    "plm-ca",
@@ -1121,7 +1121,7 @@ func TestCreatePLMSecretMetadata(t *testing.T) {
 		},
 		{
 			name: "secrets with namespace prefix",
-			plmCfg: config.PLMStorageConfig{
+			plmCfg: config.PLMStorageConfig{ //nolint:gosec // test data, not real credentials
 				URL:                    "https://plm-storage:8333",
 				CredentialsSecretName:  "other-ns/plm-creds",
 				TLSCACertSecretName:    "ca-ns/plm-ca",
