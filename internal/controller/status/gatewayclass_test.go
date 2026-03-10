@@ -21,6 +21,7 @@ func TestSupportedFeatures(t *testing.T) {
 		gatewayv1.FeatureName(features.SupportGatewayInfrastructurePropagation),
 		gatewayv1.FeatureName(features.SupportGatewayPort8080),
 		gatewayv1.FeatureName(features.SupportGatewayStaticAddresses),
+		gatewayv1.FeatureName(features.SupportGatewayBackendClientCertificate),
 		gatewayv1.FeatureName(features.SupportHTTPRoute),
 		gatewayv1.FeatureName(features.SupportHTTPRouteBackendProtocolWebSocket),
 		gatewayv1.FeatureName(features.SupportHTTPRouteDestinationPortMatching),

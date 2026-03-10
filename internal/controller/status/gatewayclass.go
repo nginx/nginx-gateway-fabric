@@ -30,6 +30,7 @@ func supportedFeatures(experimental bool) []gatewayv1.SupportedFeature {
 		features.SupportGatewayInfrastructurePropagation,
 		features.SupportGatewayPort8080,
 		features.SupportGatewayStaticAddresses,
+		features.SupportGatewayBackendClientCertificate,
 
 		// HTTPRoute extended
 		features.SupportHTTPRouteBackendProtocolWebSocket,
