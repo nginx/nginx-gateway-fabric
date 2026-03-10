@@ -514,7 +514,7 @@ jobs:
       matrix:
         # On PRs: run nginx + plus with latest k8s only (2 jobs)
         # On main/release: run full matrix (8 jobs)
-        image: ${{ github.event_name == 'pull_request' && fromJSON('["nginx", "plus"]') || fromJSON('["nginx", "plus"]') }}
+        image: [nginx, plus]
         build-os: ${{ github.event_name == 'pull_request' && fromJSON('[""]') || fromJSON('["", "ubi"]') }}
         k8s-version: ${{ github.event_name == 'pull_request' && fromJSON(format('["{0}"]', needs.vars.outputs.k8s_latest)) || fromJSON(format('["{0}", "{1}"]', needs.vars.outputs.min_k8s_version, needs.vars.outputs.k8s_latest)) }}
     uses: ./.github/workflows/functional.yml
@@ -550,6 +550,17 @@ jobs:
     secrets: inherit
     permissions:
       contents: write
+
+  # Since the name of the test jobs change whenever we update the k8s version, it makes it tedious
+  # to manually update Github settings to require those jobs to pass. This bypasses that by
+  # requiring this job to pass.
+  test-completion:
+    name: Ensure tests passed
+    needs: [functional-tests, conformance-tests]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: All tests passed
+        run: echo "All tests passed successfully!"
 
   helm-tests:
     name: Helm Tests
