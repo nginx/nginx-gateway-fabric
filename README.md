@@ -131,11 +131,11 @@ contact us directly on the [NGINX Community Forum][forum].
 
 ## Community Meetings
 
-Every Tuesday at 9:30AM Pacific / 5:30PM GMT
+Every Tuesday, alternating time zones at 9:30AM Pacific / 5:30PM GMT or 12:00PM GMT.
 
-For the meeting link, updates, agenda, and meeting notes, check the calendar below:
+For the meeting link, updates, agenda, and meeting notes, check the link below:
 
-[NGINX Gateway Fabric Meeting Calendar](https://calendar.google.com/calendar/embed?src=901278554a5187740a1cef8c6fd92351eb592550cb5936ba04d318f8859888f4%40group.calendar.google.com&ctz=America%2FLos_Angeles)
+[NGINX Gateway Fabric Community Meeting](https://github.com/nginx/nginx-gateway-fabric/discussions/1472)
 
 If you have a use case for NGINX Gateway Fabric that the project can't quite meet yet, bugs, problems, success stories, or just want to be more involved with the project, come by and say hi!
 

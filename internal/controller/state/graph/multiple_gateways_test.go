@@ -22,9 +22,8 @@ import (
 )
 
 const (
-	controllerName          = "nginx"
-	gcName                  = "my-gateway-class"
-	experimentalFeaturesOff = false
+	controllerName = "nginx"
+	gcName         = "my-gateway-class"
 )
 
 var (
@@ -371,7 +370,7 @@ func Test_MultipleGateways_WithNginxProxy(t *testing.T) {
 							DisableHTTP2: helpers.GetPointer(true),
 						},
 						[]*Listener{},
-						gcConditions,
+						[]conditions.Condition{conditions.NewGatewayResolvedRefs()},
 					),
 					client.ObjectKeyFromObject(gateway2): convertedGateway(
 						gateway2,
@@ -392,7 +391,7 @@ func Test_MultipleGateways_WithNginxProxy(t *testing.T) {
 							DisableHTTP2: helpers.GetPointer(false),
 						},
 						[]*Listener{},
-						gcConditions,
+						[]conditions.Condition{conditions.NewGatewayResolvedRefs()},
 					),
 				},
 				ReferencedNginxProxies: map[types.NamespacedName]*NginxProxy{
@@ -443,7 +442,7 @@ func Test_MultipleGateways_WithNginxProxy(t *testing.T) {
 							},
 						},
 						[]*Listener{},
-						gcConditions,
+						[]conditions.Condition{conditions.NewGatewayResolvedRefs()},
 					),
 				},
 				ReferencedNginxProxies: map[types.NamespacedName]*NginxProxy{
@@ -703,7 +702,7 @@ func Test_MultipleGateways_WithListeners(t *testing.T) {
 								map[L4RouteKey]*L4Route{},
 							),
 						},
-						[]conditions.Condition{conditions.NewGatewayClassResolvedRefs()},
+						[]conditions.Condition{conditions.NewGatewayResolvedRefs()},
 					),
 					client.ObjectKeyFromObject(gateway2): convertedGateway(
 						gateway2,
@@ -719,7 +718,7 @@ func Test_MultipleGateways_WithListeners(t *testing.T) {
 								map[L4RouteKey]*L4Route{},
 							),
 						},
-						[]conditions.Condition{conditions.NewGatewayClassResolvedRefs()},
+						[]conditions.Condition{conditions.NewGatewayResolvedRefs()},
 					),
 				},
 				Routes:      map[RouteKey]*L7Route{},
@@ -795,7 +794,7 @@ func Test_MultipleGateways_WithListeners(t *testing.T) {
 								map[L4RouteKey]*L4Route{},
 							),
 						},
-						[]conditions.Condition{conditions.NewGatewayClassResolvedRefs()},
+						[]conditions.Condition{conditions.NewGatewayResolvedRefs()},
 					),
 					client.ObjectKeyFromObject(gatewayMultipleListeners2): convertedGateway(
 						gatewayMultipleListeners2,
@@ -827,7 +826,7 @@ func Test_MultipleGateways_WithListeners(t *testing.T) {
 								map[L4RouteKey]*L4Route{},
 							),
 						},
-						[]conditions.Condition{conditions.NewGatewayClassResolvedRefs()},
+						[]conditions.Condition{conditions.NewGatewayResolvedRefs()},
 					),
 					client.ObjectKeyFromObject(gatewayMultipleListeners3): convertedGateway(
 						gatewayMultipleListeners3,
@@ -859,7 +858,7 @@ func Test_MultipleGateways_WithListeners(t *testing.T) {
 								map[L4RouteKey]*L4Route{},
 							),
 						},
-						[]conditions.Condition{conditions.NewGatewayClassResolvedRefs()},
+						[]conditions.Condition{conditions.NewGatewayResolvedRefs()},
 					),
 				},
 				Routes:      map[RouteKey]*L7Route{},
@@ -917,7 +916,7 @@ func Test_MultipleGateways_WithListeners(t *testing.T) {
 								map[L4RouteKey]*L4Route{},
 							),
 						},
-						[]conditions.Condition{conditions.NewGatewayClassResolvedRefs()},
+						[]conditions.Condition{conditions.NewGatewayResolvedRefs()},
 					),
 					client.ObjectKeyFromObject(gatewayHTTPSSamePortHostname): convertedGateway(
 						gatewayHTTPSSamePortHostname,
@@ -933,7 +932,7 @@ func Test_MultipleGateways_WithListeners(t *testing.T) {
 								map[L4RouteKey]*L4Route{},
 							),
 						},
-						[]conditions.Condition{conditions.NewGatewayClassResolvedRefs()},
+						[]conditions.Condition{conditions.NewGatewayResolvedRefs()},
 					),
 				},
 				Routes:      map[RouteKey]*L7Route{},

@@ -485,6 +485,8 @@ func checkTargetRoutesForOverlap(
 // checkForRouteOverlap checks if any route references the same namespace/gateway-name:hostname:port/path combination
 // as a route referenced in a policy.
 func checkForRouteOverlap(route *L7Route, gatewayHostPortPaths map[string]string) *conditions.Condition {
+	currentRouteName := fmt.Sprintf("%s/%s", route.Source.GetNamespace(), route.Source.GetName())
+
 	for _, parentRef := range route.ParentRefs {
 		if parentRef.Attachment != nil && parentRef.Gateway != nil {
 			port := parentRef.Attachment.ListenerPort
@@ -497,13 +499,13 @@ func checkForRouteOverlap(route *L7Route, gatewayHostPortPaths map[string]string
 						if match.Path != nil && match.Path.Value != nil {
 							key := fmt.Sprintf("%s:%s:%d%s", parentRef.Gateway.NamespacedName.String(), hostname, port, *match.Path.Value)
 							if val, ok := gatewayHostPortPaths[key]; !ok {
-								gatewayHostPortPaths[key] = fmt.Sprintf("%s/%s", route.Source.GetNamespace(), route.Source.GetName())
-							} else {
-								conflictingRouteName := fmt.Sprintf("%s/%s", route.Source.GetNamespace(), route.Source.GetName())
+								gatewayHostPortPaths[key] = currentRouteName
+							} else if val != currentRouteName {
+								// Only report conflict if it's a different route
 								msg := fmt.Sprintf(
 									"Policy cannot be applied to target %q since another "+
 										"Route %q shares a namespace/gateway-name:hostname:port/path combination with this target",
-									val, conflictingRouteName,
+									val, currentRouteName,
 								)
 								cond := conditions.NewPolicyNotAcceptedTargetConflict(msg)
 

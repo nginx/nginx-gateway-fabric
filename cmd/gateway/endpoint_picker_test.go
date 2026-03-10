@@ -123,7 +123,7 @@ func TestEndpointPickerHandler_Success(t *testing.T) {
 	}
 
 	h := createEndpointPickerHandler(factory, logr.Discard())
-	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader("test body"))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/", strings.NewReader("test body"))
 	req.Header.Set(types.EPPEndpointHostHeader, "test-host")
 	req.Header.Set(types.EPPEndpointPortHeader, "1234")
 	req.Header.Set("Content-Type", "application/json")
@@ -166,7 +166,7 @@ func TestEndpointPickerHandler_ImmediateResponse(t *testing.T) {
 	}
 
 	h := createEndpointPickerHandler(factory, logr.Discard())
-	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader("test body"))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/", strings.NewReader("test body"))
 	req.Header.Set(types.EPPEndpointHostHeader, "test-host")
 	req.Header.Set(types.EPPEndpointPortHeader, "1234")
 	w := httptest.NewRecorder()
@@ -190,7 +190,7 @@ func TestEndpointPickerHandler_Errors(t *testing.T) {
 		expectedBodySubstring string,
 	) {
 		h := createEndpointPickerHandler(factory, logr.Discard())
-		req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader("test body"))
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/", strings.NewReader("test body"))
 		if setHeaders {
 			req.Header.Set(types.EPPEndpointHostHeader, "test-host")
 			req.Header.Set(types.EPPEndpointPortHeader, "1234")
@@ -254,7 +254,7 @@ func TestEndpointPickerHandler_Errors(t *testing.T) {
 		return extProcClient, func() error { return nil }, nil
 	}
 	h := createEndpointPickerHandler(factory, logr.Discard())
-	req := httptest.NewRequest(http.MethodPost, "/", nil) // nil body, ContentLength = 0
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/", nil) // nil body, ContentLength = 0
 	req.Header.Set(types.EPPEndpointHostHeader, "test-host")
 	req.Header.Set(types.EPPEndpointPortHeader, "1234")
 	w := httptest.NewRecorder()

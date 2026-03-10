@@ -334,7 +334,6 @@ func (h *eventHandlerImpl) waitForStatusUpdates(ctx context.Context) {
 					msg+": %s",
 					err.Error(),
 				)
-				continue
 			}
 
 			transitionTime := metav1.Now()
