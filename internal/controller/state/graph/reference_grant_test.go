@@ -466,35 +466,35 @@ func TestRefAllowedFrom(t *testing.T) {
 			},
 		},
 		{Namespace: allowedAPPolicyNs, Name: "waf-2-appolicy"}: {
-			Spec: v1beta1.ReferenceGrantSpec{
-				From: []v1beta1.ReferenceGrantFrom{
+			Spec: gatewayv1.ReferenceGrantSpec{
+				From: []gatewayv1.ReferenceGrantFrom{
 					{
 						Group:     "gateway.nginx.org",
 						Kind:      kinds.WAFGatewayBindingPolicy,
-						Namespace: v1beta1.Namespace(wafPolicyNs),
+						Namespace: gatewayv1.Namespace(wafPolicyNs),
 					},
 				},
-				To: []v1beta1.ReferenceGrantTo{
+				To: []gatewayv1.ReferenceGrantTo{
 					{
-						Group: v1beta1.Group(kinds.APPolicyGVK.Group),
-						Kind:  v1beta1.Kind(kinds.APPolicyGVK.Kind),
+						Group: gatewayv1.Group(kinds.APPolicyGVK.Group),
+						Kind:  gatewayv1.Kind(kinds.APPolicyGVK.Kind),
 					},
 				},
 			},
 		},
 		{Namespace: allowedAPLogConfNs, Name: "waf-2-aplogconf"}: {
-			Spec: v1beta1.ReferenceGrantSpec{
-				From: []v1beta1.ReferenceGrantFrom{
+			Spec: gatewayv1.ReferenceGrantSpec{
+				From: []gatewayv1.ReferenceGrantFrom{
 					{
 						Group:     "gateway.nginx.org",
 						Kind:      kinds.WAFGatewayBindingPolicy,
-						Namespace: v1beta1.Namespace(wafPolicyNs),
+						Namespace: gatewayv1.Namespace(wafPolicyNs),
 					},
 				},
-				To: []v1beta1.ReferenceGrantTo{
+				To: []gatewayv1.ReferenceGrantTo{
 					{
-						Group: v1beta1.Group(kinds.APLogConfGVK.Group),
-						Kind:  v1beta1.Kind(kinds.APLogConfGVK.Kind),
+						Group: gatewayv1.Group(kinds.APLogConfGVK.Group),
+						Kind:  gatewayv1.Kind(kinds.APLogConfGVK.Kind),
 					},
 				},
 			},

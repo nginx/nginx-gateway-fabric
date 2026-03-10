@@ -2329,6 +2329,7 @@ func TestBuildNginxResourceObjects_WAF(t *testing.T) {
 				Version:   "1.0.0",
 			},
 			AgentTLSSecretName: agentTLSTestSecretName,
+			AgentLabels:        make(map[string]string),
 		},
 		k8sClient: fakeClient,
 		baseLabelSelector: metav1.LabelSelector{
