@@ -556,11 +556,21 @@ jobs:
   # requiring this job to pass.
   test-completion:
     name: Functional/Conformance Tests Pass
+    if: always()
     needs: [functional-tests, conformance-tests]
     runs-on: ubuntu-24.04
     steps:
-      - name: All tests passed
-        run: echo "All tests passed successfully!"
+      - name: Check test results
+        run: |
+          if [[ "${{ needs.functional-tests.result }}" == "failure" || "${{ needs.functional-tests.result }}" == "cancelled" ]]; then
+          echo "❌ Functional tests ${{ needs.functional-tests.result }}"
+          exit 1
+          fi
+          if [[ "${{ needs.conformance-tests.result }}" == "failure" || "${{ needs.conformance-tests.result }}" == "cancelled" ]]; then
+          echo "❌ Conformance tests ${{ needs.conformance-tests.result }}"
+          exit 1
+          fi
+          echo "✅ All tests passed successfully!"
 
   helm-tests:
     name: Helm Tests
