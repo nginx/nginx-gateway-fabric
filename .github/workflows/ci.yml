@@ -555,7 +555,7 @@ jobs:
   # to manually update Github settings to require those jobs to pass. This bypasses that by
   # requiring this job to pass.
   test-completion:
-    name: Ensure tests passed
+    name: Functional/Conformance Tests Pass
     needs: [functional-tests, conformance-tests]
     runs-on: ubuntu-24.04
     steps:
