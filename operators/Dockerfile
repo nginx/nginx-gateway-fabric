@@ -6,7 +6,7 @@ ARG TARGETOS
 WORKDIR /workspace
 
 # renovate: datasource=github-tags depName=operator-framework/operator-sdk versioning=semver
-ARG HELM_OPERATOR_VERSION=1.42.0
+ARG HELM_OPERATOR_VERSION=1.42.1
 RUN git clone --depth 1 --branch v${HELM_OPERATOR_VERSION} https://github.com/operator-framework/operator-sdk.git .
 RUN go mod download
 RUN GOOS=$TARGETOS GOARCH=$TARGETARCH make build/helm-operator
