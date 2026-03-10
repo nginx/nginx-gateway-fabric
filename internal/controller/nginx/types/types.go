@@ -1,4 +1,4 @@
-package types //nolint:revive // ignoring meaningless package name
+package types
 
 const (
 	// Nginx503Server is used as a backend for services that cannot be resolved (have no IP address).
