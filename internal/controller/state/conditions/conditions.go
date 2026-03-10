@@ -1174,6 +1174,17 @@ func NewAuthenticationFilterAccepted() Condition {
 	}
 }
 
+// NewAuthenticationFilterAcceptedWithMessage returns a Condition that indicates that the AuthenticationFilter is
+// accepted, and provides a custom message. Useful for surfacing warning messages.
+func NewAuthenticationFilterAcceptedWithMessage(msg string) Condition {
+	return Condition{
+		Type:    string(ngfAPI.AuthenticationFilterConditionTypeAccepted),
+		Status:  metav1.ConditionTrue,
+		Reason:  string(ngfAPI.AuthenticationFilterConditionReasonAccepted),
+		Message: msg,
+	}
+}
+
 // NewObservabilityPolicyAffected returns a Condition that indicates that an ObservabilityPolicy
 // is applied to the resource.
 func NewObservabilityPolicyAffected() Condition {

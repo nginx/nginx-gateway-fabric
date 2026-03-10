@@ -268,7 +268,11 @@ func BuildGraph(
 
 	processedSnippetsFilters := processSnippetsFilters(state.SnippetsFilters)
 
-	processedAuthenticationFilters := processAuthenticationFilters(state.AuthenticationFilters, resourceResolver)
+	processedAuthenticationFilters := processAuthenticationFilters(
+		state.AuthenticationFilters,
+		resourceResolver,
+		featureFlags.Plus,
+	)
 
 	routes := buildRoutesForGateways(
 		validators.HTTPFieldsValidator,

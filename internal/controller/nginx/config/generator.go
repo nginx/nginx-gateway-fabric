@@ -140,7 +140,7 @@ func (g GeneratorImpl) Generate(conf dataplane.Configuration) []agent.File {
 	}
 
 	for id, data := range conf.AuthSecrets {
-		files = append(files, generateAuthBasicFile(id, data))
+		files = append(files, generateAuthFile(id, data))
 	}
 	return files
 }
@@ -262,10 +262,11 @@ func generateCertBundleFileName(id dataplane.CertBundleID) string {
 	return filepath.Join(secretsFolder, string(id)+".crt")
 }
 
-func generateAuthBasicFile(id dataplane.AuthFileID, data []byte) agent.File {
+// generateAuthFile generates a file with data related to authentication in NGINX (e.g. auth_basic or auth_jwt).
+func generateAuthFile(id dataplane.AuthFileID, data []byte) agent.File {
 	return agent.File{
 		Meta: &pb.FileMeta{
-			Name:        generateAuthBasicFileName(id),
+			Name:        generateAuthFileName(id),
 			Hash:        filesHelper.GenerateHash(data),
 			Permissions: file.SecretFileMode,
 			Size:        int64(len(data)),
@@ -274,6 +275,6 @@ func generateAuthBasicFile(id dataplane.AuthFileID, data []byte) agent.File {
 	}
 }
 
-func generateAuthBasicFileName(id dataplane.AuthFileID) string {
+func generateAuthFileName(id dataplane.AuthFileID) string {
 	return filepath.Join(secretsFolder, string(id))
 }

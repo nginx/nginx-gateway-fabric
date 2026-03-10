@@ -203,6 +203,21 @@ func convertAuthenticationFilter(
 		return result
 	}
 
+	switch filter.Source.Spec.Type {
+	case ngfAPI.AuthTypeBasic:
+		result.Basic = convertAuthenticationFilterBasicAuth(filter, referencedSecrets)
+	case ngfAPI.AuthTypeJWT:
+		result.JWT = convertAuthenticationFilterJwtAuth(filter, referencedSecrets)
+	}
+
+	return result
+}
+
+func convertAuthenticationFilterBasicAuth(
+	filter *graph.AuthenticationFilter,
+	referencedSecrets map[types.NamespacedName]*secrets.Secret,
+) *AuthBasic {
+	var result *AuthBasic
 	if specBasic := filter.Source.Spec.Basic; specBasic != nil {
 		referencedSecret, isReferenced := referencedSecrets[types.NamespacedName{
 			Namespace: filter.Source.Namespace,
@@ -210,11 +225,36 @@ func convertAuthenticationFilter(
 		}]
 
 		if isReferenced && referencedSecret.Source != nil {
-			result.Basic = &AuthBasic{
+			result = &AuthBasic{
 				SecretName:      specBasic.SecretRef.Name,
 				SecretNamespace: referencedSecret.Source.Namespace,
 				Data:            referencedSecret.Source.Data[secrets.AuthKey],
 				Realm:           specBasic.Realm,
+			}
+		}
+	}
+
+	return result
+}
+
+func convertAuthenticationFilterJwtAuth(
+	filter *graph.AuthenticationFilter,
+	referencedSecrets map[types.NamespacedName]*secrets.Secret,
+) *AuthJWT {
+	var result *AuthJWT
+	if specJWT := filter.Source.Spec.JWT; specJWT != nil && specJWT.File != nil {
+		referencedSecret, isReferenced := referencedSecrets[types.NamespacedName{
+			Namespace: filter.Source.Namespace,
+			Name:      specJWT.File.SecretRef.Name,
+		}]
+
+		if isReferenced && referencedSecret.Source != nil {
+			result = &AuthJWT{
+				SecretName:      specJWT.File.SecretRef.Name,
+				SecretNamespace: referencedSecret.Source.Namespace,
+				Data:            referencedSecret.Source.Data[secrets.AuthKey],
+				Realm:           specJWT.Realm,
+				KeyCache:        specJWT.KeyCache,
 			}
 		}
 	}

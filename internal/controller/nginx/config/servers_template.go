@@ -121,6 +121,16 @@ server {
         auth_basic_user_file {{ $l.AuthBasic.File }};
         {{- end }}
 
+        {{- if $l.AuthJWT }}
+        auth_jwt "{{ $l.AuthJWT.Realm }}";
+        {{- if $l.AuthJWT.File }}
+        auth_jwt_key_file {{ $l.AuthJWT.File }};
+        {{- end }}
+        {{- if $l.AuthJWT.KeyCache }}
+        auth_jwt_key_cache {{ $l.AuthJWT.KeyCache }};
+        {{- end }}
+        {{- end }}
+
         {{ range $r := $l.Rewrites }}
         rewrite {{ $r }};
         {{- end }}

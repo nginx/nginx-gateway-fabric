@@ -68,6 +68,8 @@ type Location struct {
 	Path string
 	// AuthBasic contains the configuration for basic authentication.
 	AuthBasic *AuthBasic
+	// AuthJWT contains the configuration for JWT authentication.
+	AuthJWT *AuthJWT
 	// ResponseHeaders are custom response headers to be sent.
 	ResponseHeaders ResponseHeaders
 	// ProxySetHeaders are headers to set when proxying requests upstream.
@@ -181,6 +183,14 @@ type ProxySSLVerify struct {
 type AuthBasic struct {
 	Realm string
 	File  string
+}
+
+// AuthJWT holds the configuration for JWT authentication using the auth_jwt directive.
+// See https://nginx.org/en/docs/http/ngx_http_auth_jwt_module.html
+type AuthJWT struct {
+	KeyCache *ngfAPI.Duration
+	Realm    string
+	File     string
 }
 
 // ServerConfig holds configuration for an HTTP server and IP family to be used by NGINX.

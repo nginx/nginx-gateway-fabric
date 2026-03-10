@@ -1081,13 +1081,24 @@ func updateLocationAuthenticationFilter(
 ) http.Location {
 	if authenticationFilter != nil {
 		if authenticationFilter.Basic != nil {
-			id := dataplane.GenerateAuthFileID(
+			id := dataplane.GenerateAuthBasicFileID(
 				authenticationFilter.Basic.SecretNamespace,
 				authenticationFilter.Basic.SecretName,
 			)
 			location.AuthBasic = &http.AuthBasic{
 				Realm: authenticationFilter.Basic.Realm,
-				File:  generateAuthBasicFileName(id),
+				File:  generateAuthFileName(id),
+			}
+		}
+		if authenticationFilter.JWT != nil {
+			id := dataplane.GenerateAuthJWTFileID(
+				authenticationFilter.JWT.SecretNamespace,
+				authenticationFilter.JWT.SecretName,
+			)
+			location.AuthJWT = &http.AuthJWT{
+				Realm:    authenticationFilter.JWT.Realm,
+				KeyCache: authenticationFilter.JWT.KeyCache,
+				File:     generateAuthFileName(id),
 			}
 		}
 	}

@@ -53,10 +53,14 @@ func (s *secretEntry) validate(obj client.Object) {
 		}
 
 		certBundle = secrets.NewCertificateBundle(client.ObjectKeyFromObject(secret), "Secret", cert)
+	// FIXME(s.odonovan): Remove this secret type 3 releases after 2.5.0.
+	// Issue https://github.com/nginx/nginx-gateway-fabric/issues/4870 will remove this secret type.
 	case secret.Type == v1.SecretType(secrets.SecretTypeHtpasswd):
-		// Validate Htpasswd secret
+		fallthrough
+	case secret.Type == v1.SecretTypeOpaque:
+		// Process opaque secrets with the expected key for authentication.
 		if _, exists := secret.Data[secrets.AuthKey]; !exists {
-			validationErr = fmt.Errorf("missing required key %q in secret type %q", secrets.AuthKey, secret.Type)
+			validationErr = fmt.Errorf("missing required key %q", secrets.AuthKey)
 		}
 	default:
 		validationErr = fmt.Errorf("unsupported secret type %q", secret.Type)
