@@ -63,6 +63,10 @@ type Configuration struct {
 	UDPServers []Layer4VirtualServer
 	// TLSPassthroughServers hold all TLSPassthroughServers
 	TLSPassthroughServers []Layer4VirtualServer
+	// SSLListenerHostnames maps each HTTPS port to its list of raw listener hostnames.
+	// An empty string represents a listener with no hostname (catch-all).
+	// Used to build NGINX maps for misdirected request detection.
+	SSLListenerHostnames map[int32][]string
 	// Telemetry holds the Otel configuration.
 	Telemetry Telemetry
 	// BaseHTTPConfig holds the configuration options at the http context.

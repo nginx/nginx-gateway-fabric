@@ -10,6 +10,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/shared"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/resolver"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
 
 func TestExecuteMaps(t *testing.T) {
@@ -83,6 +84,9 @@ func TestExecuteMaps(t *testing.T) {
 				},
 			},
 		},
+		SSLListenerHostnames: map[int32][]string{
+			443: {"foo.example.com", "*.wildcard.com"},
+		},
 	}
 
 	expSubStrings := map[string]int{
@@ -95,6 +99,8 @@ func TestExecuteMaps(t *testing.T) {
 		"$inference_workload_endpoint":                                        2,
 		"$inference_backend":                                                  1,
 		"invalid-backend-ref":                                                 1,
+		"map $ssl_server_name $sni_listener_id_443":                           1,
+		"map $host $host_listener_id_443":                                     1,
 	}
 
 	mapResult := executeMaps(conf)
@@ -1051,6 +1057,87 @@ func TestBuildCORSAllowCredentialsMapParameters(t *testing.T) {
 			for i, expected := range test.expected {
 				g.Expect(result[i].Value).To(Equal(expected.Value))
 				g.Expect(result[i].Result).To(Equal(expected.Result))
+			}
+		})
+	}
+}
+
+func TestBuildMisdirectedRequestMaps(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		hostnamesByPort  map[int32][]string
+		name             string
+		expectedContains []string
+		expectedMaps     int
+	}{
+		{
+			name:         "nil input",
+			expectedMaps: 0,
+		},
+		{
+			name:            "empty input",
+			hostnamesByPort: map[int32][]string{},
+			expectedMaps:    0,
+		},
+		{
+			name: "single port with exact and wildcard hostnames",
+			hostnamesByPort: map[int32][]string{
+				443: {"second-example.org", "*.wildcard.org", "fourth-example.wildcard.org"},
+			},
+			expectedMaps: 2,
+			expectedContains: []string{
+				"$ssl_server_name",
+				"$sni_listener_id_443",
+				"$host",
+				"$host_listener_id_443",
+				"*.wildcard.org",
+				"fourth-example.wildcard.org",
+				"second-example.org",
+				"hostnames",
+			},
+		},
+		{
+			name: "single port with empty hostname (catch-all)",
+			hostnamesByPort: map[int32][]string{
+				443: {"", "second-example.org"},
+			},
+			expectedMaps: 2,
+			expectedContains: []string{
+				"second-example.org",
+			},
+		},
+		{
+			name: "multiple ports",
+			hostnamesByPort: map[int32][]string{
+				443:  {"foo.example.com"},
+				8443: {"bar.example.com"},
+			},
+			expectedMaps: 4,
+			expectedContains: []string{
+				"$sni_listener_id_443",
+				"$host_listener_id_443",
+				"$sni_listener_id_8443",
+				"$host_listener_id_8443",
+				"foo.example.com",
+				"bar.example.com",
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			maps := buildMisdirectedRequestMaps(tc.hostnamesByPort)
+			g.Expect(maps).To(HaveLen(tc.expectedMaps))
+
+			if tc.expectedMaps > 0 {
+				rendered := string(helpers.MustExecuteTemplate(mapsTemplate, maps))
+				for _, s := range tc.expectedContains {
+					g.Expect(rendered).To(ContainSubstring(s))
+				}
 			}
 		})
 	}
