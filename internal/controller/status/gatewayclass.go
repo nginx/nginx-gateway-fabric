@@ -31,6 +31,7 @@ func supportedFeatures(experimental bool) []gatewayv1.SupportedFeature {
 		features.SupportGatewayPort8080,
 		features.SupportGatewayStaticAddresses,
 		features.SupportGatewayBackendClientCertificate,
+		features.SupportGatewayHTTPSListenerDetectMisdirectedRequests,
 
 		// HTTPRoute extended
 		features.SupportHTTPRouteBackendProtocolWebSocket,

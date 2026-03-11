@@ -31,7 +31,22 @@ const (
 	// HeaderMatchSeparator is the separator for constructing header-based match for NJS.
 	HeaderMatchSeparator = ":"
 	rootPath             = "/"
+
+	// misdirectedRequestSNIVarPrefix is the prefix for the per-port SNI listener ID variable.
+	misdirectedRequestSNIVarPrefix = "$sni_listener_id_"
+	// misdirectedRequestHostVarPrefix is the prefix for the per-port Host listener ID variable.
+	misdirectedRequestHostVarPrefix = "$host_listener_id_"
 )
+
+// misdirectedRequestSNIVar returns the NGINX variable name for the SNI-derived listener ID for a given port.
+func misdirectedRequestSNIVar(port int32) string {
+	return misdirectedRequestSNIVarPrefix + strconv.Itoa(int(port))
+}
+
+// misdirectedRequestHostVar returns the NGINX variable name for the Host-derived listener ID for a given port.
+func misdirectedRequestHostVar(port int32) string {
+	return misdirectedRequestHostVarPrefix + strconv.Itoa(int(port))
+}
 
 var grpcAuthorityHeader = http.Header{
 	Name:  "Authority",
@@ -135,10 +150,12 @@ func createServers(
 		maps.Copy(finalMatchPairs, matchPairs)
 	}
 
+	disableSNI := conf.BaseHTTPConfig.DisableSNIHostValidation
+
 	for idx, s := range conf.SSLServers {
 		serverID := fmt.Sprintf("SSL_%d", idx)
 
-		sslServer, matchPairs := createSSLServer(s, serverID, generator, keepAliveCheck)
+		sslServer, matchPairs := createSSLServer(s, serverID, generator, keepAliveCheck, disableSNI)
 		if _, portInUse := sharedTLSPorts[s.Port]; portInUse {
 			sslServer.Listen = getSocketNameHTTPS(s.Port)
 			sslServer.IsSocket = true
@@ -155,13 +172,25 @@ func createSSLServer(
 	serverID string,
 	generator policies.Generator,
 	keepAliveCheck keepAliveChecker,
+	disableSNIHostValidation bool,
 ) (http.Server, httpMatchPairs) {
 	listen := fmt.Sprint(virtualServer.Port)
 	if virtualServer.IsDefault {
-		return http.Server{
+		server := http.Server{
 			IsDefaultSSL: true,
 			Listen:       listen,
-		}, nil
+		}
+		if virtualServer.SSL != nil {
+			server.SSL = &http.SSL{
+				Certificate:         generatePEMFileName(virtualServer.SSL.KeyPairID),
+				CertificateKey:      generatePEMFileName(virtualServer.SSL.KeyPairID),
+				Protocols:           virtualServer.SSL.Protocols,
+				Ciphers:             virtualServer.SSL.Ciphers,
+				PreferServerCiphers: virtualServer.SSL.PreferServerCiphers,
+			}
+		}
+
+		return server, nil
 	}
 
 	locs, matchPairs, grpc := createLocations(&virtualServer, serverID, generator, keepAliveCheck)
@@ -178,6 +207,13 @@ func createSSLServer(
 		Locations: locs,
 		GRPC:      grpc,
 		Listen:    listen,
+	}
+
+	if !disableSNIHostValidation {
+		server.MisdirectedRequestVars = &http.MisdirectedRequestVars{
+			SNIVar:  misdirectedRequestSNIVar(virtualServer.Port),
+			HostVar: misdirectedRequestHostVar(virtualServer.Port),
+		}
 	}
 
 	policyIncludes := createIncludesFromPolicyGenerateResult(

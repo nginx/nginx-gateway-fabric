@@ -403,6 +403,7 @@ func assertBuildConfiguration(g *WithT, result, expected Configuration) {
 	g.Expect(result.BaseHTTPConfig).To(Equal(expected.BaseHTTPConfig))
 	g.Expect(result.Logging).To(Equal(expected.Logging))
 	g.Expect(result.NginxPlus).To(Equal(expected.NginxPlus))
+	g.Expect(result.SSLListenerHostnames).To(Equal(expected.SSLListenerHostnames))
 }
 
 func TestBuildConfiguration(t *testing.T) {
@@ -1274,6 +1275,7 @@ func TestBuildConfiguration(t *testing.T) {
 				}...)
 				conf.Upstreams = []Upstream{fooUpstream}
 				conf.BackendGroups = []BackendGroup{expHTTPSHR1Groups[0], expHTTPSHR2Groups[0], expHTTPSHR5Groups[0]}
+				conf.SSLServers[0].SSL = &SSL{KeyPairID: "ssl_keypair_test_secret-1"}
 				conf.SSLKeyPairs = map[SSLKeyPairID]SSLKeyPair{
 					"ssl_keypair_test_secret-1": {
 						Cert: []byte("cert-1"),
@@ -1284,6 +1286,7 @@ func TestBuildConfiguration(t *testing.T) {
 						Key:  []byte("privateKey-2"),
 					},
 				}
+				conf.SSLListenerHostnames = map[int32][]string{443: {"", "example.com"}}
 				return conf
 			}),
 			msg: "two https listeners each with routes for different hostnames",
@@ -1427,6 +1430,8 @@ func TestBuildConfiguration(t *testing.T) {
 					setPathRuleIdx(expHTTPSHR4Groups[0], 0),
 					setPathRuleIdx(expHTTPSHR4Groups[1], 2),
 				}
+				conf.SSLServers[0].SSL = &SSL{KeyPairID: "ssl_keypair_test_secret-1"}
+				conf.SSLListenerHostnames = map[int32][]string{443: {""}}
 				return conf
 			}),
 			msg: "one http and one https listener with two routes with the same hostname with and without collisions",
@@ -1580,6 +1585,7 @@ func TestBuildConfiguration(t *testing.T) {
 					{
 						IsDefault: true,
 						Port:      8443,
+						SSL:       &SSL{KeyPairID: "ssl_keypair_test_secret-1"},
 					},
 					{
 						Hostname: "foo.example.com",
@@ -1625,6 +1631,8 @@ func TestBuildConfiguration(t *testing.T) {
 					setPathRuleIdx(expHTTPSHR7Groups[0], 1),
 					setPathRuleIdx(expHTTPSHR7Groups[1], 0),
 				}
+				conf.SSLServers[0].SSL = &SSL{KeyPairID: "ssl_keypair_test_secret-1"}
+				conf.SSLListenerHostnames = map[int32][]string{443: {""}, 8443: {""}}
 				return conf
 			}),
 			msg: "multiple http and https listener; different ports",
@@ -1860,6 +1868,8 @@ func TestBuildConfiguration(t *testing.T) {
 						IsDefault: false,
 					},
 				}
+				conf.SSLServers[0].SSL = &SSL{KeyPairID: "ssl_keypair_test_secret-1"}
+				conf.SSLListenerHostnames = map[int32][]string{443: {""}}
 				return conf
 			}),
 			msg: "one http, one https listener, and three tls listeners with routes with valid and invalid rules",
@@ -1995,6 +2005,8 @@ func TestBuildConfiguration(t *testing.T) {
 						Key:  []byte("privateKey-2"),
 					},
 				}
+				conf.SSLServers[0].SSL = &SSL{KeyPairID: "ssl_keypair_test_secret-1"}
+				conf.SSLListenerHostnames = map[int32][]string{443: {"example.com", ""}}
 				return conf
 			}),
 			msg: "two https listeners with different hostnames but same route; chooses listener with more specific hostname",
@@ -2056,6 +2068,8 @@ func TestBuildConfiguration(t *testing.T) {
 				conf.CertBundles = map[CertBundleID]CertBundle{
 					"cert_bundle_test_configmap-1": []byte("cert-1"),
 				}
+				conf.SSLServers[0].SSL = &SSL{KeyPairID: "ssl_keypair_test_secret-1"}
+				conf.SSLListenerHostnames = map[int32][]string{443: {""}}
 				return conf
 			}),
 			msg: "https listener with httproute with backend that has a backend TLS policy attached",
@@ -2117,6 +2131,8 @@ func TestBuildConfiguration(t *testing.T) {
 				conf.CertBundles = map[CertBundleID]CertBundle{
 					"cert_bundle_test_configmap-2": []byte("cert-2"),
 				}
+				conf.SSLServers[0].SSL = &SSL{KeyPairID: "ssl_keypair_test_secret-1"}
+				conf.SSLListenerHostnames = map[int32][]string{443: {""}}
 				return conf
 			}),
 			msg: "https listener with httproute with backend that has a backend TLS policy with binaryData attached",
@@ -2215,6 +2231,7 @@ func TestBuildConfiguration(t *testing.T) {
 						IsDefault: true,
 						Port:      443,
 						Policies:  []policies.Policy{gwPolicy1.Source, gwPolicy2.Source},
+						SSL:       &SSL{KeyPairID: "ssl_keypair_test_secret-1"},
 					},
 					{
 						Hostname: "policy.com",
@@ -2269,6 +2286,7 @@ func TestBuildConfiguration(t *testing.T) {
 				}
 				conf.Upstreams = []Upstream{fooUpstream}
 				conf.BackendGroups = []BackendGroup{expHRWithPolicyGroups[0], expHTTPSHRWithPolicyGroups[0]}
+				conf.SSLListenerHostnames = map[int32][]string{443: {""}}
 				return conf
 			}),
 			msg: "Simple Gateway and HTTPRoute with policies attached",
@@ -2785,6 +2803,7 @@ func TestBuildConfiguration_Plus(t *testing.T) {
 			g.Expect(result.BaseHTTPConfig).To(Equal(test.expConf.BaseHTTPConfig))
 			g.Expect(result.Logging).To(Equal(test.expConf.Logging))
 			g.Expect(result.NginxPlus).To(Equal(test.expConf.NginxPlus))
+			g.Expect(result.SSLListenerHostnames).To(Equal(test.expConf.SSLListenerHostnames))
 		})
 	}
 }
@@ -6450,6 +6469,8 @@ func TestBuildConfiguration_GatewaysAndListeners(t *testing.T) {
 					SSL:      &SSL{KeyPairID: "ssl_keypair_test_secret-1"},
 					Port:     443,
 				})
+				conf.SSLServers[0].SSL = &SSL{KeyPairID: "ssl_keypair_test_secret-1"}
+				conf.SSLListenerHostnames = map[int32][]string{443: {""}}
 				return conf
 			}),
 			msg: "http and https listeners with no valid routes",
@@ -6500,6 +6521,8 @@ func TestBuildConfiguration_GatewaysAndListeners(t *testing.T) {
 					Cert: []byte("cert-2"),
 					Key:  []byte("privateKey-2"),
 				}
+				conf.SSLServers[0].SSL = &SSL{KeyPairID: "ssl_keypair_test_secret-1"}
+				conf.SSLListenerHostnames = map[int32][]string{443: {"", "example.com"}}
 				return conf
 			}),
 			msg: "https listeners with no routes",
@@ -6654,6 +6677,12 @@ func TestBuildConfiguration_GatewaysAndListeners(t *testing.T) {
 						{
 							IsDefault: true,
 							Port:      443,
+							SSL: &SSL{
+								KeyPairID:           "ssl_keypair_test_secret-1",
+								Protocols:           "TLSv1.2 TLSv1.3",
+								Ciphers:             "ECDHE-RSA-AES256-GCM-SHA384:HIGH:!aNULL:!MD5",
+								PreferServerCiphers: true,
+							},
 						},
 						{
 							IsDefault: false,
@@ -6684,9 +6713,9 @@ func TestBuildConfiguration_GatewaysAndListeners(t *testing.T) {
 							Hostname:  "~^",
 							SSL: &SSL{
 								KeyPairID:           "ssl_keypair_test_secret-1",
-								Protocols:           "",
-								Ciphers:             "",
-								PreferServerCiphers: false,
+								Protocols:           "TLSv1.2 TLSv1.3",
+								Ciphers:             "ECDHE-RSA-AES256-GCM-SHA384:HIGH:!aNULL:!MD5",
+								PreferServerCiphers: true,
 							},
 						},
 					}
@@ -6698,6 +6727,7 @@ func TestBuildConfiguration_GatewaysAndListeners(t *testing.T) {
 							Key:  []byte("privateKey-1"),
 						},
 					}
+					conf.SSLListenerHostnames = map[int32][]string{443: {""}}
 					return conf
 				})
 			}(),
