@@ -55,6 +55,10 @@ type Fetcher interface {
 	// GetObject fetches an object from S3-compatible storage.
 	// The location should be in the format "bucket/key" or just "key" if bucket is configured.
 	GetObject(ctx context.Context, bucket, key string) ([]byte, error)
+	// ValidateConnectivity checks that the storage endpoint is reachable and the configured
+	// credentials are accepted. It should be called once at startup to surface auth or
+	// connectivity problems early, before any bundle fetch is attempted.
+	ValidateConnectivity(ctx context.Context) error
 	// UpdateTLSConfig updates the TLS configuration and recreates the underlying client.
 	// This is used to refresh TLS certificates when secrets change.
 	UpdateTLSConfig(tlsConfig *tls.Config) error
@@ -75,10 +79,10 @@ type S3Fetcher struct {
 
 // NewS3Fetcher creates a new S3Fetcher for the given endpoint URL.
 // The endpoint URL should be the storage service URL.
-// If the URL does not include a scheme, http:// is prepended.
+// If the URL does not include a scheme, https:// is prepended.
 func NewS3Fetcher(endpointURL string, opts ...Option) (*S3Fetcher, error) {
 	if !strings.Contains(endpointURL, "://") {
-		endpointURL = "http://" + endpointURL
+		endpointURL = "https://" + endpointURL
 	}
 
 	fetcher := &S3Fetcher{
@@ -121,6 +125,21 @@ func (f *S3Fetcher) GetObject(ctx context.Context, bucket, key string) ([]byte, 
 	}
 
 	return data, nil
+}
+
+// ValidateConnectivity verifies that the storage endpoint is reachable and the configured
+// credentials are valid by issuing a ListBuckets request. It returns an error if the endpoint
+// is unreachable or the credentials are rejected, allowing auth problems to be surfaced at
+// startup rather than at bundle-fetch time.
+func (f *S3Fetcher) ValidateConnectivity(ctx context.Context) error {
+	ctx, cancel := context.WithTimeout(ctx, f.timeout)
+	defer cancel()
+
+	if _, err := f.client.ListBuckets(ctx, &s3.ListBucketsInput{}); err != nil {
+		return fmt.Errorf("connectivity check failed: %w", err)
+	}
+
+	return nil
 }
 
 // UpdateTLSConfig updates the TLS configuration and recreates the S3 client.
