@@ -25,6 +25,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/licensing"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent"
 	ngxConfig "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/plm"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/provisioner"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
@@ -94,6 +95,10 @@ const (
 	groupAllExceptGateways = "all-graphs-except-gateways"
 	groupGateways          = "gateways"
 	groupControlPlane      = "control-plane"
+
+	// apResourceFinalizer is the finalizer NGF adds to APPolicy and APLogConf resources that are actively
+	// referenced by a WAFGatewayBindingPolicy. It prevents accidental deletion of in-use WAF policies.
+	apResourceFinalizer = "gateway.nginx.org/ap-policy-protection"
 )
 
 // filterKey is the `kind_namespace_name" of an object being filtered.
@@ -105,6 +110,14 @@ type objectFilter struct {
 	upsert               func(context.Context, logr.Logger, client.Object)
 	delete               func(context.Context, logr.Logger, types.NamespacedName)
 	captureChangeInGraph bool
+}
+
+// apResourceKey uniquely identifies an APPolicy or APLogConf by GVK and namespaced name.
+// It is used to track which AP resources NGF has added finalizers to.
+type apResourceKey struct {
+	nsName types.NamespacedName
+	// isAPPolicy is true for APPolicy, false for APLogConf.
+	isAPPolicy bool
 }
 
 // eventHandlerImpl implements EventHandler.
@@ -120,6 +133,10 @@ type eventHandlerImpl struct {
 	// objectFilters contains all created objectFilters, with the key being a filterKey
 	objectFilters map[filterKey]objectFilter
 
+	// finalizedAPResources tracks the APPolicy and APLogConf resources that NGF has added
+	// the apResourceFinalizer to. Updated under h.lock during sendNginxConfig.
+	finalizedAPResources map[apResourceKey]struct{}
+
 	cfg        eventHandlerConfig
 	lock       sync.RWMutex
 	leaderLock sync.RWMutex
@@ -131,6 +148,7 @@ func newEventHandlerImpl(cfg eventHandlerConfig) *eventHandlerImpl {
 	handler := &eventHandlerImpl{
 		cfg:                  cfg,
 		latestConfigurations: make(map[types.NamespacedName]*dataplane.Configuration),
+		finalizedAPResources: make(map[apResourceKey]struct{}),
 	}
 
 	handler.objectFilters = map[filterKey]objectFilter{
@@ -187,6 +205,8 @@ func (h *eventHandlerImpl) sendNginxConfig(ctx context.Context, logger logr.Logg
 	if gr == nil {
 		return
 	}
+
+	h.reconcileAPResourceFinalizers(ctx, logger, gr)
 
 	if len(gr.Gateways) == 0 {
 		// still need to update GatewayClass status
@@ -742,6 +762,93 @@ func (h *eventHandlerImpl) ensureInferencePoolServices(
 			)
 		}
 	}
+}
+
+// reconcileAPResourceFinalizers adds or removes the apResourceFinalizer on APPolicy and APLogConf resources
+// based on which are currently referenced by valid WAFGatewayBindingPolicies in the graph.
+//
+// Finalizers prevent users from accidentally deleting APPolicy/APLogConf resources that are actively
+// referenced by a WAFGatewayBindingPolicy. When the last referencing policy is removed (or becomes
+// invalid), NGF removes the finalizer so the pending deletion can complete.
+//
+// This is a no-op when NGF is not the leader, since only the leader manages NGINX configuration.
+func (h *eventHandlerImpl) reconcileAPResourceFinalizers(
+	ctx context.Context,
+	logger logr.Logger,
+	gr *graph.Graph,
+) {
+	if !h.isLeader() {
+		return
+	}
+
+	// Build the desired set of AP resources that should be protected by the finalizer.
+	desired := make(map[apResourceKey]struct{})
+	for nsName := range gr.ReferencedAPPolicies {
+		desired[apResourceKey{nsName: nsName, isAPPolicy: true}] = struct{}{}
+	}
+	for nsName := range gr.ReferencedAPLogConfs {
+		desired[apResourceKey{nsName: nsName, isAPPolicy: false}] = struct{}{}
+	}
+
+	// Add finalizer to newly referenced AP resources.
+	for key := range desired {
+		if _, alreadyFinalized := h.finalizedAPResources[key]; alreadyFinalized {
+			continue
+		}
+		if err := h.updateAPResourceFinalizer(ctx, key, true); err != nil {
+			logger.Error(err, "Failed to add finalizer to AP resource",
+				"resource", key.nsName, "isAPPolicy", key.isAPPolicy)
+			continue
+		}
+		h.finalizedAPResources[key] = struct{}{}
+	}
+
+	// Remove finalizer from AP resources no longer referenced.
+	for key := range h.finalizedAPResources {
+		if _, stillReferenced := desired[key]; stillReferenced {
+			continue
+		}
+		if err := h.updateAPResourceFinalizer(ctx, key, false); err != nil {
+			logger.Error(err, "Failed to remove finalizer from AP resource",
+				"resource", key.nsName, "isAPPolicy", key.isAPPolicy)
+			continue
+		}
+		delete(h.finalizedAPResources, key)
+	}
+}
+
+// updateAPResourceFinalizer adds or removes apResourceFinalizer on an APPolicy or APLogConf resource.
+// add=true adds the finalizer; add=false removes it.
+func (h *eventHandlerImpl) updateAPResourceFinalizer(
+	ctx context.Context,
+	key apResourceKey,
+	add bool,
+) error {
+	obj := plm.NewAPPolicyUnstructured()
+	if !key.isAPPolicy {
+		obj = plm.NewAPLogConfUnstructured()
+	}
+
+	if err := h.cfg.k8sClient.Get(ctx, key.nsName, obj); err != nil {
+		return fmt.Errorf("getting AP resource: %w", err)
+	}
+
+	var changed bool
+	if add {
+		changed = controllerutil.AddFinalizer(obj, apResourceFinalizer)
+	} else {
+		changed = controllerutil.RemoveFinalizer(obj, apResourceFinalizer)
+	}
+
+	if !changed {
+		return nil
+	}
+
+	if err := h.cfg.k8sClient.Update(ctx, obj); err != nil {
+		return fmt.Errorf("updating AP resource finalizer: %w", err)
+	}
+
+	return nil
 }
 
 func serviceSpecSetter(
