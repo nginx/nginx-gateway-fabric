@@ -1209,7 +1209,7 @@ var _ = Describe("reconcileAPResourceFinalizers", func() {
 		Expect(updated.GetFinalizers()).To(BeEmpty())
 	})
 
-	It("nil ReferencedAPPolicies and ReferencedAPLogConfs are handled safely", func() {
+	It("handles nil ReferencedAPPolicies and ReferencedAPLogConfs safely", func() {
 		gr := &graph.Graph{}
 		Expect(func() {
 			handler.reconcileAPResourceFinalizers(context.Background(), logr.Discard(), gr)

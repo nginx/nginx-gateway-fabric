@@ -134,7 +134,7 @@ type eventHandlerImpl struct {
 	objectFilters map[filterKey]objectFilter
 
 	// finalizedAPResources tracks the APPolicy and APLogConf resources that NGF has added
-	// the apResourceFinalizer to. Updated under h.lock during sendNginxConfig.
+	// the apResourceFinalizer to. Only accessed from sendNginxConfig, which is not called concurrently.
 	finalizedAPResources map[apResourceKey]struct{}
 
 	cfg        eventHandlerConfig
@@ -771,7 +771,7 @@ func (h *eventHandlerImpl) ensureInferencePoolServices(
 // referenced by a WAFGatewayBindingPolicy. When the last referencing policy is removed (or becomes
 // invalid), NGF removes the finalizer so the pending deletion can complete.
 //
-// This is a no-op when NGF is not the leader, since only the leader manages NGINX configuration.
+// This is a no-op when NGF is not the leader, since only the leader manages k8s resources.
 func (h *eventHandlerImpl) reconcileAPResourceFinalizers(
 	ctx context.Context,
 	logger logr.Logger,
@@ -795,7 +795,7 @@ func (h *eventHandlerImpl) reconcileAPResourceFinalizers(
 		if _, alreadyFinalized := h.finalizedAPResources[key]; alreadyFinalized {
 			continue
 		}
-		if err := h.updateAPResourceFinalizer(ctx, key, true); err != nil {
+		if err := h.addAPResourceFinalizer(ctx, key); err != nil {
 			logger.Error(err, "Failed to add finalizer to AP resource",
 				"resource", key.nsName, "isAPPolicy", key.isAPPolicy)
 			continue
@@ -808,7 +808,7 @@ func (h *eventHandlerImpl) reconcileAPResourceFinalizers(
 		if _, stillReferenced := desired[key]; stillReferenced {
 			continue
 		}
-		if err := h.updateAPResourceFinalizer(ctx, key, false); err != nil {
+		if err := h.removeAPResourceFinalizer(ctx, key); err != nil {
 			logger.Error(err, "Failed to remove finalizer from AP resource",
 				"resource", key.nsName, "isAPPolicy", key.isAPPolicy)
 			continue
@@ -817,12 +817,22 @@ func (h *eventHandlerImpl) reconcileAPResourceFinalizers(
 	}
 }
 
-// updateAPResourceFinalizer adds or removes apResourceFinalizer on an APPolicy or APLogConf resource.
-// add=true adds the finalizer; add=false removes it.
+// addAPResourceFinalizer adds apResourceFinalizer to an APPolicy or APLogConf resource.
+func (h *eventHandlerImpl) addAPResourceFinalizer(ctx context.Context, key apResourceKey) error {
+	return h.updateAPResourceFinalizer(ctx, key, controllerutil.AddFinalizer)
+}
+
+// removeAPResourceFinalizer removes apResourceFinalizer from an APPolicy or APLogConf resource.
+func (h *eventHandlerImpl) removeAPResourceFinalizer(ctx context.Context, key apResourceKey) error {
+	return h.updateAPResourceFinalizer(ctx, key, controllerutil.RemoveFinalizer)
+}
+
+// updateAPResourceFinalizer gets the AP resource identified by key and calls mutateFinalizer on it,
+// then updates the resource if the finalizer changed.
 func (h *eventHandlerImpl) updateAPResourceFinalizer(
 	ctx context.Context,
 	key apResourceKey,
-	add bool,
+	mutateFinalizer func(client.Object, string) bool,
 ) error {
 	obj := plm.NewAPPolicyUnstructured()
 	if !key.isAPPolicy {
@@ -833,14 +843,7 @@ func (h *eventHandlerImpl) updateAPResourceFinalizer(
 		return fmt.Errorf("getting AP resource: %w", err)
 	}
 
-	var changed bool
-	if add {
-		changed = controllerutil.AddFinalizer(obj, apResourceFinalizer)
-	} else {
-		changed = controllerutil.RemoveFinalizer(obj, apResourceFinalizer)
-	}
-
-	if !changed {
+	if changed := mutateFinalizer(obj, apResourceFinalizer); !changed {
 		return nil
 	}
 
