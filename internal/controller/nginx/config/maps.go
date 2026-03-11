@@ -2,7 +2,9 @@ package config
 
 import (
 	"fmt"
+	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	gotemplate "text/template"
 
@@ -36,6 +38,10 @@ func executeMaps(conf dataplane.Configuration) []executeResult {
 	maps := buildAddHeaderMaps(httpAndSSLServers)
 	maps = append(maps, buildInferenceMaps(conf.BackendGroups)...)
 	maps = append(maps, buildCorsMaps(httpAndSSLServers)...)
+
+	if !conf.BaseHTTPConfig.DisableSNIHostValidation {
+		maps = append(maps, buildMisdirectedRequestMaps(conf.SSLListenerHostnames)...)
+	}
 
 	result := executeResult{
 		dest: httpConfigFile,
@@ -204,6 +210,74 @@ func createStreamMaps(conf dataplane.Configuration) []shared.Map {
 			})
 		}
 		maps = append(maps, m)
+	}
+
+	return maps
+}
+
+// buildMisdirectedRequestMaps creates per-port maps that resolve both $ssl_server_name and $host
+// to a listener group ID. This is used to detect misdirected HTTPS requests per the Gateway API spec.
+// When SNI and Host resolve to different listener groups, the server returns 421 Misdirected Request.
+func buildMisdirectedRequestMaps(hostnamesByPort map[int32][]string) []shared.Map {
+	if len(hostnamesByPort) == 0 {
+		return nil
+	}
+
+	// Sort ports for deterministic output.
+	ports := make([]int32, 0, len(hostnamesByPort))
+	for port := range hostnamesByPort {
+		ports = append(ports, port)
+	}
+	slices.Sort(ports)
+
+	maps := make([]shared.Map, 0, len(ports)*2)
+
+	for _, port := range ports {
+		hostnames := hostnamesByPort[port]
+
+		// Sort hostnames for deterministic output.
+		sorted := make([]string, len(hostnames))
+		copy(sorted, hostnames)
+		sort.Strings(sorted)
+
+		// Assign each unique listener hostname a listener ID, starting from 1.
+		// ID 0 is reserved for the "default" entry (catch-all / empty listener).
+		params := make([]shared.MapParameter, 0, len(sorted)+1)
+		nextID := 1
+
+		for _, h := range sorted {
+			if h == "" {
+				continue
+			}
+			params = append(params, shared.MapParameter{
+				Value:  h,
+				Result: strconv.Itoa(nextID),
+			})
+			nextID++
+		}
+
+		// The default entry represents either an explicit empty-hostname listener
+		// or the fallback for unmatched hostnames. In both cases, ID is "0".
+		params = append(params, shared.MapParameter{
+			Value:  "default",
+			Result: "0",
+		})
+
+		sniMap := shared.Map{
+			Source:       "$ssl_server_name",
+			Variable:     misdirectedRequestSNIVar(port),
+			Parameters:   params,
+			UseHostnames: true,
+		}
+
+		hostMap := shared.Map{
+			Source:       "$host",
+			Variable:     misdirectedRequestHostVar(port),
+			Parameters:   params,
+			UseHostnames: true,
+		}
+
+		maps = append(maps, sniMap, hostMap)
 	}
 
 	return maps

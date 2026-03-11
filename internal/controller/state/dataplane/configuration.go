@@ -71,7 +71,7 @@ func BuildConfiguration(
 	baseHTTPConfig := buildBaseHTTPConfig(gateway, gatewaySnippetsFilters, gatewayRateLimitPolicies)
 	baseStreamConfig := buildBaseStreamConfig(gateway)
 
-	httpServers, sslServers := buildServers(gateway, g.ReferencedServices, g.ReferencedSecrets)
+	httpServers, sslServers, sslListenerHostnames := buildServers(gateway, g.ReferencedServices, g.ReferencedSecrets)
 	backendGroups := buildBackendGroups(append(httpServers, sslServers...))
 	upstreams := buildUpstreams(
 		ctx,
@@ -108,16 +108,17 @@ func BuildConfiguration(
 			buildRefCertificateBundles(g.ReferencedSecrets, g.ReferencedCaCertConfigMaps),
 			backendGroups,
 		),
-		AuthSecrets:       buildAuthSecrets(g.ReferencedSecrets),
-		Telemetry:         buildTelemetry(g, gateway),
-		BaseHTTPConfig:    baseHTTPConfig,
-		BaseStreamConfig:  baseStreamConfig,
-		Logging:           buildLogging(gateway),
-		NginxPlus:         nginxPlus,
-		MainSnippets:      buildSnippetsForContext(gatewaySnippetsFilters, ngfAPIv1alpha1.NginxContextMain),
-		Policies:          buildPolicies(gateway, gateway.Policies),
-		AuxiliarySecrets:  buildAuxiliarySecrets(g.PlusSecrets),
-		WorkerConnections: buildWorkerConnections(gateway),
+		AuthSecrets:          buildAuthSecrets(g.ReferencedSecrets),
+		Telemetry:            buildTelemetry(g, gateway),
+		BaseHTTPConfig:       baseHTTPConfig,
+		BaseStreamConfig:     baseStreamConfig,
+		Logging:              buildLogging(gateway),
+		NginxPlus:            nginxPlus,
+		MainSnippets:         buildSnippetsForContext(gatewaySnippetsFilters, ngfAPIv1alpha1.NginxContextMain),
+		Policies:             buildPolicies(gateway, gateway.Policies),
+		AuxiliarySecrets:     buildAuxiliarySecrets(g.PlusSecrets),
+		WorkerConnections:    buildWorkerConnections(gateway),
+		SSLListenerHostnames: sslListenerHostnames,
 	}
 
 	return config
@@ -577,7 +578,7 @@ func buildServers(
 	gateway *graph.Gateway,
 	referencedServices map[types.NamespacedName]*graph.ReferencedService,
 	referencedSecrets map[types.NamespacedName]*secrets.Secret,
-) (http, ssl []VirtualServer) {
+) (http, ssl []VirtualServer, sslListenerHostnames map[int32][]string) {
 	rulesForProtocol := map[v1.ProtocolType]portPathRules{
 		v1.HTTPProtocolType:  make(portPathRules),
 		v1.HTTPSProtocolType: make(portPathRules),
@@ -597,6 +598,17 @@ func buildServers(
 			}
 
 			rules.upsertListener(l, gateway, referencedServices, referencedSecrets)
+
+			if l.Source.Protocol == v1.HTTPSProtocolType {
+				hostname := ""
+				if l.Source.Hostname != nil {
+					hostname = string(*l.Source.Hostname)
+				}
+				if sslListenerHostnames == nil {
+					sslListenerHostnames = make(map[int32][]string)
+				}
+				sslListenerHostnames[l.Source.Port] = append(sslListenerHostnames[l.Source.Port], hostname)
+			}
 		}
 	}
 
@@ -615,7 +627,7 @@ func buildServers(
 		sslServers[i].Policies = pols
 	}
 
-	return httpServers, sslServers
+	return httpServers, sslServers, sslListenerHostnames
 }
 
 // portPathRules keeps track of hostPathRules per port.
@@ -796,7 +808,7 @@ func (hpr *hostPathRules) buildServers() []VirtualServer {
 		}
 
 		if l.ResolvedSecret != nil {
-			s.SSL = hpr.buildSSL(l)
+			s.SSL = buildSSL(l)
 		}
 
 		for _, r := range rules {
@@ -816,10 +828,13 @@ func (hpr *hostPathRules) buildServers() []VirtualServer {
 		servers = append(servers, s)
 	}
 
+	var defaultSSL *SSL
 	for _, l := range hpr.httpsListeners {
 		hostname := getListenerHostname(l.Source.Hostname)
 		// Generate a 404 ssl server block for listeners with no routes or listeners with wildcard (match-all) routes.
-		// This server overrides the default ssl server.
+		// If SNI isn't set in a request, the default ssl server will be used first to terminate TLS,
+		// then the Host header will be used to route to the correct server block.
+		// If there is no matching hostname, then this wildcard server will be used.
 		if len(l.Routes) == 0 || hostname == wildcardHostname {
 			s := VirtualServer{
 				Hostname: hostname,
@@ -827,8 +842,11 @@ func (hpr *hostPathRules) buildServers() []VirtualServer {
 			}
 
 			if l.ResolvedSecret != nil {
-				s.SSL = &SSL{
-					KeyPairID: generateSSLKeyPairID(*l.ResolvedSecret),
+				s.SSL = buildSSL(l)
+
+				// If this is a wildcard, save SSL config for default server
+				if hostname == wildcardHostname {
+					defaultSSL = s.SSL
 				}
 			}
 
@@ -838,10 +856,13 @@ func (hpr *hostPathRules) buildServers() []VirtualServer {
 
 	// if any listeners exist, we need to generate a default server block.
 	if hpr.listenersExist {
-		servers = append(servers, VirtualServer{
+		vs := VirtualServer{
 			IsDefault: true,
 			Port:      hpr.port,
-		})
+			SSL:       defaultSSL,
+		}
+
+		servers = append(servers, vs)
 	}
 
 	// We sort the servers so the order is preserved after reconfiguration.
@@ -852,7 +873,7 @@ func (hpr *hostPathRules) buildServers() []VirtualServer {
 	return servers
 }
 
-func (*hostPathRules) buildSSL(listener *graph.Listener) *SSL {
+func buildSSL(listener *graph.Listener) *SSL {
 	ssl := &SSL{
 		KeyPairID: generateSSLKeyPairID(*listener.ResolvedSecret),
 	}
