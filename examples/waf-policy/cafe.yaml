@@ -1,0 +1,68 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: coffee
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: coffee
+  template:
+    metadata:
+      labels:
+        app: coffee
+    spec:
+      containers:
+      - name: coffee
+        image: hashicorp/http-echo:latest
+        args:
+        - "-listen=:8080"
+        - "-text=Welcome to Coffee Shop!\nCustomer: John Doe\nCredit Card: 4111-1111-1111-1111\nSSN: 123-45-6789\n"
+        ports:
+        - containerPort: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: coffee
+spec:
+  ports:
+  - port: 80
+    targetPort: 8080
+    protocol: TCP
+    name: http
+  selector:
+    app: coffee
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tea
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tea
+  template:
+    metadata:
+      labels:
+        app: tea
+    spec:
+      containers:
+      - name: tea
+        image: nginxdemos/nginx-hello:plain-text
+        ports:
+        - containerPort: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tea
+spec:
+  ports:
+  - port: 80
+    targetPort: 8080
+    protocol: TCP
+    name: http
+  selector:
+    app: tea
