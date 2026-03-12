@@ -112,12 +112,19 @@ type objectFilter struct {
 	captureChangeInGraph bool
 }
 
-// apResourceKey uniquely identifies an APPolicy or APLogConf by GVK and namespaced name.
+// apResourceType identifies the type of an AP resource.
+type apResourceType int
+
+const (
+	apResourceTypePolicy  apResourceType = iota
+	apResourceTypeLogConf apResourceType = iota
+)
+
+// apResourceKey uniquely identifies an APPolicy or APLogConf by type and namespaced name.
 // It is used to track which AP resources NGF has added finalizers to.
 type apResourceKey struct {
-	nsName types.NamespacedName
-	// isAPPolicy is true for APPolicy, false for APLogConf.
-	isAPPolicy bool
+	nsName       types.NamespacedName
+	resourceType apResourceType
 }
 
 // eventHandlerImpl implements EventHandler.
@@ -784,10 +791,10 @@ func (h *eventHandlerImpl) reconcileAPResourceFinalizers(
 	// Build the desired set of AP resources that should be protected by the finalizer.
 	desired := make(map[apResourceKey]struct{})
 	for nsName := range gr.ReferencedAPPolicies {
-		desired[apResourceKey{nsName: nsName, isAPPolicy: true}] = struct{}{}
+		desired[apResourceKey{nsName: nsName, resourceType: apResourceTypePolicy}] = struct{}{}
 	}
 	for nsName := range gr.ReferencedAPLogConfs {
-		desired[apResourceKey{nsName: nsName, isAPPolicy: false}] = struct{}{}
+		desired[apResourceKey{nsName: nsName, resourceType: apResourceTypeLogConf}] = struct{}{}
 	}
 
 	// Add finalizer to newly referenced AP resources.
@@ -797,7 +804,7 @@ func (h *eventHandlerImpl) reconcileAPResourceFinalizers(
 		}
 		if err := h.addAPResourceFinalizer(ctx, key); err != nil {
 			logger.Error(err, "Failed to add finalizer to AP resource",
-				"resource", key.nsName, "isAPPolicy", key.isAPPolicy)
+				"resource", key.nsName, "resourceType", key.resourceType)
 			continue
 		}
 		h.finalizedAPResources[key] = struct{}{}
@@ -810,7 +817,7 @@ func (h *eventHandlerImpl) reconcileAPResourceFinalizers(
 		}
 		if err := h.removeAPResourceFinalizer(ctx, key); err != nil {
 			logger.Error(err, "Failed to remove finalizer from AP resource",
-				"resource", key.nsName, "isAPPolicy", key.isAPPolicy)
+				"resource", key.nsName, "resourceType", key.resourceType)
 			continue
 		}
 		delete(h.finalizedAPResources, key)
@@ -835,7 +842,7 @@ func (h *eventHandlerImpl) updateAPResourceFinalizer(
 	mutateFinalizer func(client.Object, string) bool,
 ) error {
 	obj := plm.NewAPPolicyUnstructured()
-	if !key.isAPPolicy {
+	if key.resourceType == apResourceTypeLogConf {
 		obj = plm.NewAPLogConfUnstructured()
 	}
 

@@ -1092,8 +1092,8 @@ var _ = Describe("reconcileAPResourceFinalizers", func() {
 		)).To(Succeed())
 		Expect(updated.GetFinalizers()).To(ContainElement(apResourceFinalizer))
 		Expect(handler.finalizedAPResources).To(HaveKey(apResourceKey{
-			nsName:     types.NamespacedName{Namespace: "test", Name: "my-policy"},
-			isAPPolicy: true,
+			nsName:       types.NamespacedName{Namespace: "test", Name: "my-policy"},
+			resourceType: apResourceTypePolicy,
 		}))
 	})
 
@@ -1151,8 +1151,8 @@ var _ = Describe("reconcileAPResourceFinalizers", func() {
 		)).To(Succeed())
 		Expect(updated.GetFinalizers()).NotTo(ContainElement(apResourceFinalizer))
 		Expect(handler.finalizedAPResources).NotTo(HaveKey(apResourceKey{
-			nsName:     types.NamespacedName{Namespace: "test", Name: "my-policy"},
-			isAPPolicy: true,
+			nsName:       types.NamespacedName{Namespace: "test", Name: "my-policy"},
+			resourceType: apResourceTypePolicy,
 		}))
 	})
 
