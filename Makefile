@@ -57,7 +57,7 @@ PLUS_ENABLED ?= false
 PLUS_LICENSE_FILE ?= $(SELF_DIR)license.jwt
 PLUS_USAGE_ENDPOINT ?=## The N+ usage endpoint. For development, please set to the N1 staging endpoint.
 HELM_PARAMETERS ?=## Optional extra parameters for the Helm install
-HELM_WAF_PARAMETERS = --set nginxGateway.plmStorage.url=nginx-app-protect-seaweed-filer.ngf-nginx-app-protect.svc.cluster.local:8333 --set nginxGateway.plmStorage.credentialsSecretName=ngf-nginx-app-protect/nginx-app-protect-seaweedfs-auth
+# HELM_WAF_PARAMETERS = --set nginxGateway.plmStorage.url=f5-waf-seaweed-filer.nap5-helm-policy.svc.cluster.local:9333 --set nginxGateway.plmStorage.credentialsSecretName=nap5-helm-policy/f5-waf-seaweedfs-auth --set nginxGateway.plmStorage.tls.caSecretName=nap5-helm-policy/f5-waf-seaweedfs-ca-cert --set nginxGateway.plmStorage.tls.clientSSLSecretName=nap5-helm-policy/f5-waf-seaweedfs-client-cert --set nginxGateway.plmStorage.tls.insecureSkipVerify=true
 
 override NGINX_DOCKER_BUILD_OPTIONS += --build-arg NJS_DIR=$(NJS_DIR) --build-arg NGINX_CONF_DIR=$(NGINX_CONF_DIR) --build-arg BUILD_AGENT=$(BUILD_AGENT)
 
@@ -265,7 +265,7 @@ install-ngf-local-build: build-images load-images helm-install-local ## Install 
 install-ngf-local-build-with-plus: check-for-plus-usage-endpoint build-images-with-plus load-images-with-plus helm-install-local-with-plus ## Install NGF with NGINX Plus from local build on configured kind cluster.
 
 .PHONY: install-ngf-local-build-with-waf
-install-ngf-local-build-with-waf: check-for-plus-usage-endpoint build-images-with-nap-waf load-images-with-plus helm-install-local-with-plus ## Install NGF with NGINX Plus from local build on configured kind cluster.
+install-ngf-local-build-with-waf: check-for-plus-usage-endpoint build-images-with-nap-waf load-images-with-plus helm-install-local-with-waf ## Install NGF with NGINX Plus from local build on configured kind cluster.
 
 .PHONY: helm-install-local
 helm-install-local: install-gateway-crds ## Helm install NGF on configured kind cluster with local images. To build, load, and install with helm run make install-ngf-local-build.

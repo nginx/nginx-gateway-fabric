@@ -19,7 +19,7 @@ GOARCH="${GOARCH:-amd64}"
 NJS_DIR="${NJS_DIR:-internal/controller/nginx/modules/src}"
 NGINX_CONF_DIR="${NGINX_CONF_DIR:-internal/controller/nginx/conf}"
 BUILD_AGENT="${BUILD_AGENT:-local}"
-APP_PROTECT_VERSION="${APP_PROTECT_VERSION:-5.591.0-r1}"
+APP_PROTECT_VERSION="${APP_PROTECT_VERSION:-36.5.581.0-r1}"
 
 DOCKERFILE="${ROOT_DIR}/build/Dockerfile.nginxplus"
 DOCKERFILE_TMP="${ROOT_DIR}/build/Dockerfile.nginxplus.nap-dev"
