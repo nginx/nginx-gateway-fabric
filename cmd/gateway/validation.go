@@ -113,9 +113,19 @@ func validateEndpointOptionalPort(value string) error {
 		return errors.New("must be set")
 	}
 
+	// Strip optional scheme (e.g. "https://", "http://") before validating the host and port.
+	hostPort := value
+	if i := strings.Index(value, "://"); i != -1 {
+		scheme := value[:i]
+		if scheme != "http" && scheme != "https" {
+			return fmt.Errorf("unsupported scheme %q: must be http or https", scheme)
+		}
+		hostPort = value[i+3:]
+	}
+
 	// This function assumes a port exists. If it doesn't, ignore those errors. Any errors with the endpoint
 	// will be caught by further validation.
-	host, port, err := net.SplitHostPort(value)
+	host, port, err := net.SplitHostPort(hostPort)
 	if err != nil &&
 		(!strings.Contains(err.Error(), "missing port") && !strings.Contains(err.Error(), "too many colons")) {
 		return fmt.Errorf("error splitting %q into host and port: %w", value, err)
@@ -133,7 +143,7 @@ func validateEndpointOptionalPort(value string) error {
 	}
 
 	if host == "" {
-		host = value
+		host = hostPort
 	}
 
 	if err := validateIP(host); err == nil {

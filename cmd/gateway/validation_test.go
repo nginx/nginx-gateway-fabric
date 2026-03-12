@@ -358,6 +358,31 @@ func TestValidateEndpointOptionalPort(t *testing.T) {
 			endp:   "loc@lhost:8080",
 			expErr: true,
 		},
+		{
+			name:   "valid endpoint with http scheme",
+			endp:   "http://localhost:8080",
+			expErr: false,
+		},
+		{
+			name:   "valid endpoint with https scheme",
+			endp:   "https://localhost:9333",
+			expErr: false,
+		},
+		{
+			name:   "valid endpoint with https scheme, no port",
+			endp:   "https://localhost",
+			expErr: false,
+		},
+		{
+			name:   "valid endpoint with https scheme and hostname",
+			endp:   "https://my-service.my-namespace.svc.cluster.local:9333",
+			expErr: false,
+		},
+		{
+			name:   "invalid scheme",
+			endp:   "ftp://localhost:8080",
+			expErr: true,
+		},
 	}
 
 	for _, tc := range tests {

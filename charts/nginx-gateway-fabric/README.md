@@ -50,6 +50,10 @@ kubectl kustomize https://github.com/nginx/nginx-gateway-fabric/config/crd/gatew
 
 Kubernetes: `>= 1.31.0-0`
 
+| Repository | Name | Version |
+|------------|------|---------|
+| https://helm.nginx.com/stable | f5-waf-plm | * |
+
 ## Installing the Chart
 
 ### Installing the Chart from the OCI Registry
@@ -207,6 +211,8 @@ The following table lists the configurable parameters of the NGINX Gateway Fabri
 | `certGenerator.topologySpreadConstraints` | The topology spread constraints for the cert-generator pod. | list | `[]` |
 | `certGenerator.ttlSecondsAfterFinished` | How long to wait after the cert generator job has finished before it is removed by the job controller. | int | `30` |
 | `clusterDomain` | The DNS cluster domain of your Kubernetes cluster. | string | `"cluster.local"` |
+| `f5-waf-plm` | f5-waf-plm is an optional subchart for deploying the F5 WAF Policy Lifecycle Manager (PLM), which manages APPolicy and APLogConf CRDs and compiles WAF policy bundles. When enabled, PLM is deployed as part of this chart. When disabled (default), PLM must be installed separately before WAF features can be used. See: https://helm.nginx.com/stable for the available chart and its full values reference. | object | `{"enabled":false}` |
+| `f5-waf-plm.enabled` | Enable the f5-waf-plm subchart. | bool | `false` |
 | `gateways` | A list of Gateway objects. View https://gateway-api.sigs.k8s.io/reference/spec/#gateway for full Gateway reference. | list | `[]` |
 | `nginx` | The nginx section contains the configuration for all NGINX data plane deployments installed by the NGINX Gateway Fabric control plane. | object | `{"autoscaling":{"enable":false},"config":{},"container":{"hostPorts":[],"lifecycle":{},"readinessProbe":{},"resources":{},"volumeMounts":[]},"debug":false,"image":{"pullPolicy":"Always","repository":"ghcr.io/nginx/nginx-gateway-fabric/nginx","tag":"edge"},"imagePullSecret":"","imagePullSecrets":[],"kind":"deployment","nginxOneConsole":{"dataplaneKeySecretName":"","endpointHost":"agent.connect.nginx.com","endpointPort":443,"skipVerify":false},"patches":[],"plus":false,"pod":{},"replicas":1,"service":{"externalTrafficPolicy":"Local","loadBalancerClass":"","loadBalancerIP":"","loadBalancerSourceRanges":[],"nodePorts":[],"patches":[],"type":"LoadBalancer"},"usage":{"caSecretName":"","clientSSLSecretName":"","endpoint":"","enforceInitialReport":true,"resolver":"","secretName":"nplus-license","skipVerify":false},"wafContainers":{}}` |
 | `nginx.autoscaling` | Autoscaling configuration for the NGINX data plane. | object | `{"enable":false}` |
@@ -275,7 +281,7 @@ The following table lists the configurable parameters of the NGINX Gateway Fabri
 | `nginxGateway.metrics.secure` | Enable serving metrics via https. By default metrics are served via http. Please note that this endpoint will be secured with a self-signed certificate. | bool | `false` |
 | `nginxGateway.name` | The name of the NGINX Gateway Fabric deployment - if not present, then by default uses release name given during installation. | string | `""` |
 | `nginxGateway.nodeSelector` | The nodeSelector of the NGINX Gateway Fabric control plane pod. | object | `{}` |
-| `nginxGateway.plmStorage` | PLM (Policy Lifecycle Manager) storage configuration for WAF bundles. Used when WAF is enabled to fetch APPolicy and APLogConf bundles from S3-compatible storage. | object | `{"credentialsSecretName":"","tls":{"caSecretName":"","clientSSLSecretName":"","insecureSkipVerify":false},"url":""}` |
+| `nginxGateway.plmStorage` | PLM (Policy Lifecycle Manager) storage configuration for WAF bundles. Used when WAF is enabled to fetch APPolicy and APLogConf bundles from S3-compatible storage. Optional if the PLM subchart is enabled, as the values will be derived from there. | object | `{"credentialsSecretName":"","tls":{"caSecretName":"","clientSSLSecretName":"","insecureSkipVerify":false},"url":""}` |
 | `nginxGateway.plmStorage.credentialsSecretName` | The name of the Secret containing S3 credentials for PLM storage. If the secret is in a different namespace, should be in form "ns/name", otherwise the control plane namespace (where the NGF Deployment runs) will be assumed. | string | `""` |
 | `nginxGateway.plmStorage.tls` | TLS configuration for PLM storage connections. | object | `{"caSecretName":"","clientSSLSecretName":"","insecureSkipVerify":false}` |
 | `nginxGateway.plmStorage.tls.caSecretName` | Name of the secret for the CA certificate file for TLS verification. | string | `""` |

@@ -79,6 +79,20 @@
       "title": "clusterDomain",
       "type": "string"
     },
+    "f5-waf-plm": {
+      "description": "f5-waf-plm is an optional subchart for deploying the F5 WAF Policy Lifecycle Manager (PLM),\nwhich manages APPolicy and APLogConf CRDs and compiles WAF policy bundles.\nWhen enabled, PLM is deployed as part of this chart. When disabled (default), PLM must be\ninstalled separately before WAF features can be used.\nSee: https://helm.nginx.com/stable for the available chart and its full values reference.",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "description": "Enable the f5-waf-plm subchart.",
+          "title": "enabled",
+          "type": "boolean"
+        }
+      },
+      "required": [],
+      "title": "f5-waf-plm",
+      "type": "object"
+    },
     "gateways": {
       "description": "A list of Gateway objects. View https://gateway-api.sigs.k8s.io/reference/spec/#gateway for full Gateway reference.",
       "items": {
@@ -951,7 +965,7 @@
           "type": "object"
         },
         "plmStorage": {
-          "description": "PLM (Policy Lifecycle Manager) storage configuration for WAF bundles.\nUsed when WAF is enabled to fetch APPolicy and APLogConf bundles from S3-compatible storage.",
+          "description": "PLM (Policy Lifecycle Manager) storage configuration for WAF bundles.\nUsed when WAF is enabled to fetch APPolicy and APLogConf bundles from S3-compatible storage.\nOptional if the PLM subchart is enabled, as the values will be derived from there.",
           "properties": {
             "credentialsSecretName": {
               "default": "",

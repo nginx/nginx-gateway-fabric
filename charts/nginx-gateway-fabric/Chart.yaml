@@ -16,3 +16,8 @@ keywords:
 maintainers:
   - name: nginx/nginx-gateway-fabric
     email: kubernetes@nginx.com
+dependencies:
+  - name: f5-waf-plm
+    version: "*"
+    repository: https://helm.nginx.com/stable
+    condition: f5-waf-plm.enabled
