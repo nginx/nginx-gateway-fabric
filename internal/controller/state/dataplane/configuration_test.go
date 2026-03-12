@@ -5348,9 +5348,9 @@ func TestBuildOIDCProviderFromAuthenticationFilters(t *testing.T) {
 	tests := []struct {
 		authFilters         map[types.NamespacedName]*graph.AuthenticationFilter
 		referencedSecrets   map[types.NamespacedName]*secrets.Secret
-		expected            OIDCProvider
 		expectedCertBundles map[CertBundleID]CertBundle
 		name                string
+		expected            OIDCProvider
 	}{
 		{
 			name:              "nil auth filters",
@@ -5419,6 +5419,7 @@ func TestBuildOIDCProviderFromAuthenticationFilters(t *testing.T) {
 				Issuer:       "https://idp.example.com",
 				ClientID:     "my-client-id",
 				ClientSecret: "super-secret",
+				RedirectURI:  "/oidc_callback_test_oidc-filter",
 			},
 		},
 		{
@@ -5436,6 +5437,8 @@ func TestBuildOIDCProviderFromAuthenticationFilters(t *testing.T) {
 				ClientID:       "my-client-id",
 				ClientSecret:   "super-secret",
 				CACertBundleID: generateCertBundleID(caSecretNsName),
+				CACertData:     []byte("ca-cert-data"),
+				RedirectURI:    "/oidc_callback_test_oidc-filter",
 			},
 			expectedCertBundles: map[CertBundleID]CertBundle{
 				generateCertBundleID(caSecretNsName): []byte("ca-cert-data"),

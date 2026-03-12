@@ -628,13 +628,14 @@ func TestExecuteBaseHttp_OIDCProvider(t *testing.T) {
 			},
 		},
 		{
-			name: "OIDC provider without CA cert specified",
+			name: "OIDC provider without CA cert specified and custom redirect URI",
 			conf: dataplane.Configuration{
 				OIDCProvider: dataplane.OIDCProvider{
 					Name:         "oidc_test_my-filter",
 					Issuer:       "https://idp.example.com",
 					ClientID:     "my-client-id",
 					ClientSecret: "my-client-secret",
+					RedirectURI:  "/custom_callback/path",
 				},
 			},
 			expSubStrings: []string{
@@ -642,13 +643,14 @@ func TestExecuteBaseHttp_OIDCProvider(t *testing.T) {
 				"issuer https://idp.example.com;",
 				"client_id my-client-id;",
 				"client_secret my-client-secret;",
+				`redirect_uri /custom_callback/path;`,
 			},
 			expAbsent: []string{
 				"ssl_trusted_certificate",
 			},
 		},
 		{
-			name: "OIDC provider with CA cert specified",
+			name: "OIDC provider with CA cert specified and no redirectURI",
 			conf: dataplane.Configuration{
 				OIDCProvider: dataplane.OIDCProvider{
 					Name:           "oidc_test_my-filter",
@@ -656,6 +658,7 @@ func TestExecuteBaseHttp_OIDCProvider(t *testing.T) {
 					ClientID:       "my-client-id",
 					ClientSecret:   "my-client-secret",
 					CACertBundleID: "oidc_ca_test_my-ca",
+					RedirectURI:    "/oidc_callback_test_my-filter",
 				},
 			},
 			expSubStrings: []string{
@@ -663,6 +666,7 @@ func TestExecuteBaseHttp_OIDCProvider(t *testing.T) {
 				"issuer https://idp.example.com;",
 				"client_id my-client-id;",
 				`client_secret my-client-secret;`,
+				`redirect_uri /oidc_callback_test_my-filter;`,
 				"ssl_trusted_certificate /etc/nginx/secrets/oidc_ca_test_my-ca.crt;",
 			},
 		},

@@ -828,11 +828,48 @@ func TestConvertAuthenticationFilter(t *testing.T) {
 				},
 			},
 			expected: &AuthenticationFilter{
-				OIDC: &AuthOIDC{
-					ProviderName: "oidc_test_oidc-af",
+				OIDC: &OIDCProvider{
+					Name:         "oidc_test_oidc-af",
 					Issuer:       "https://idp.example.com",
 					ClientID:     "client-id",
 					ClientSecret: "my-client-secret",
+					RedirectURI:  "/oidc_callback_test_oidc-af",
+				},
+			},
+		},
+		{
+			name: "oidc valid with user-provided redirectURI",
+			filter: &graph.AuthenticationFilter{
+				Source: &ngfAPIv1alpha1.AuthenticationFilter{
+					ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "oidc-af"},
+					Spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+						Type: ngfAPIv1alpha1.AuthTypeOIDC,
+						OIDC: &ngfAPIv1alpha1.OIDCAuth{
+							Issuer:          "https://idp.example.com",
+							ClientID:        "client-id",
+							ClientSecretRef: ngfAPIv1alpha1.LocalObjectReference{Name: "oidc-secret"},
+							RedirectURI:     helpers.GetPointer("/custom/callback"),
+						},
+					},
+				},
+				Valid:      true,
+				Referenced: true,
+			},
+			referencedSecrets: map[types.NamespacedName]*secrets.Secret{
+				{Namespace: "test", Name: "oidc-secret"}: {
+					Source: &apiv1.Secret{
+						ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "oidc-secret"},
+						Data:       map[string][]byte{secrets.ClientSecretKey: []byte("my-client-secret")},
+					},
+				},
+			},
+			expected: &AuthenticationFilter{
+				OIDC: &OIDCProvider{
+					Name:         "oidc_test_oidc-af",
+					Issuer:       "https://idp.example.com",
+					ClientID:     "client-id",
+					ClientSecret: "my-client-secret",
+					RedirectURI:  "/custom/callback",
 				},
 			},
 		},
@@ -871,13 +908,14 @@ func TestConvertAuthenticationFilter(t *testing.T) {
 				},
 			},
 			expected: &AuthenticationFilter{
-				OIDC: &AuthOIDC{
-					ProviderName:   "oidc_test_oidc-af",
+				OIDC: &OIDCProvider{
+					Name:           "oidc_test_oidc-af",
 					Issuer:         "https://idp.example.com",
 					ClientID:       "client-id",
 					ClientSecret:   "my-client-secret",
 					CACertBundleID: generateCertBundleID(types.NamespacedName{Namespace: "test", Name: "oidc-ca"}),
 					CACertData:     []byte("ca-cert-pem"),
+					RedirectURI:    "/oidc_callback_test_oidc-af",
 				},
 			},
 		},

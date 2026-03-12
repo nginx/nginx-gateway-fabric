@@ -26,8 +26,9 @@ type oidcConfiguration struct {
 	Name                   string
 	Issuer                 string
 	ClientID               string
-	ClientSecret           string //nolint:gosec // holds OIDC client secret value
+	ClientSecret           string
 	TrustedCertificatePath string
+	RedirectURI            string
 }
 
 type httpConfig struct {
@@ -118,6 +119,7 @@ func buildOIDCProvider(provider dataplane.OIDCProvider) *oidcConfiguration {
 		Issuer:       provider.Issuer,
 		ClientID:     provider.ClientID,
 		ClientSecret: provider.ClientSecret,
+		RedirectURI:  provider.RedirectURI,
 	}
 	if provider.CACertBundleID != "" {
 		oidc.TrustedCertificatePath = generateCertBundleFileName(provider.CACertBundleID)

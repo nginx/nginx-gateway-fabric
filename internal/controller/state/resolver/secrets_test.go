@@ -317,6 +317,32 @@ func TestSecretResolver(t *testing.T) {
 			},
 			Type: v1.SecretTypeOpaque,
 		}
+
+		// opaqueBothKeysSecret has both client-secret and ca.crt keys, used to test cache hit with a different expected key
+		opaqueBothKeysSecret = &v1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: "test",
+				Name:      "opaque-both-keys",
+			},
+			Data: map[string][]byte{
+				secrets.ClientSecretKey: []byte("client-secret"),
+				secrets.CAKey:           []byte("ca-cert"),
+			},
+			Type: v1.SecretTypeOpaque,
+		}
+
+		// opaqueClientSecretOnly has only the client-secret key, used to verify that a subsequent resolve
+		// with a different expected key is re-validated and not served from the cache unchecked
+		opaqueClientSecretOnly = &v1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: "test",
+				Name:      "opaque-client-secret-only",
+			},
+			Data: map[string][]byte{
+				secrets.ClientSecretKey: []byte("client-secret"),
+			},
+			Type: v1.SecretTypeOpaque,
+		}
 	)
 
 	resourceResolver := resolver.NewResourceResolver(
@@ -377,6 +403,14 @@ func TestSecretResolver(t *testing.T) {
 				NamespacedName: client.ObjectKeyFromObject(opaqueNoExpectedKeySecret),
 				ResourceType:   resolver.ResourceTypeSecret,
 			}: opaqueNoExpectedKeySecret,
+			{
+				NamespacedName: client.ObjectKeyFromObject(opaqueBothKeysSecret),
+				ResourceType:   resolver.ResourceTypeSecret,
+			}: opaqueBothKeysSecret,
+			{
+				NamespacedName: client.ObjectKeyFromObject(opaqueClientSecretOnly),
+				ResourceType:   resolver.ResourceTypeSecret,
+			}: opaqueClientSecretOnly,
 		})
 
 	tests := []struct {
@@ -464,6 +498,29 @@ func TestSecretResolver(t *testing.T) {
 			nsname:         client.ObjectKeyFromObject(invalidOpaqueCACertSecret),
 			resolveOpts:    []resolver.ResolveOption{resolver.WithExpectedSecretKey(secrets.CAKey)},
 			expectedErrMsg: "opaque secret test/invalid-opaque-ca-cert does not contain the expected key \"ca.crt\"",
+		},
+		{
+			name:        "opaque secret with both keys is valid when first resolved with client-secret key",
+			nsname:      client.ObjectKeyFromObject(opaqueBothKeysSecret),
+			resolveOpts: []resolver.ResolveOption{resolver.WithExpectedSecretKey(secrets.ClientSecretKey)},
+		},
+		{
+			name: "opaque secret with both keys is valid when " +
+				"resolved again with ca.crt key after being cached with client-secret key",
+			nsname:      client.ObjectKeyFromObject(opaqueBothKeysSecret),
+			resolveOpts: []resolver.ResolveOption{resolver.WithExpectedSecretKey(secrets.CAKey)},
+		},
+		{
+			name:        "opaque secret with only client-secret key is valid when first resolved with client-secret key",
+			nsname:      client.ObjectKeyFromObject(opaqueClientSecretOnly),
+			resolveOpts: []resolver.ResolveOption{resolver.WithExpectedSecretKey(secrets.ClientSecretKey)},
+		},
+		{
+			name: "opaque secret with only client-secret key " +
+				"fails when resolved with ca.crt key even though it was cached as valid",
+			nsname:         client.ObjectKeyFromObject(opaqueClientSecretOnly),
+			resolveOpts:    []resolver.ResolveOption{resolver.WithExpectedSecretKey(secrets.CAKey)},
+			expectedErrMsg: "opaque secret test/opaque-client-secret-only does not contain the expected key \"ca.crt\"",
 		},
 	}
 
@@ -560,6 +617,12 @@ func TestSecretResolver(t *testing.T) {
 		},
 		client.ObjectKeyFromObject(opaqueNoExpectedKeySecret): {
 			Source: opaqueNoExpectedKeySecret,
+		},
+		client.ObjectKeyFromObject(opaqueBothKeysSecret): {
+			Source: opaqueBothKeysSecret,
+		},
+		client.ObjectKeyFromObject(opaqueClientSecretOnly): {
+			Source: opaqueClientSecretOnly,
 		},
 	}
 

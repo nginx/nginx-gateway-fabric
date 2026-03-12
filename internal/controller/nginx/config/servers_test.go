@@ -5600,8 +5600,8 @@ func TestUpdateLocationAuthenticationFilter(t *testing.T) {
 		{
 			name: "authentication filter with OIDC",
 			filter: &dataplane.AuthenticationFilter{
-				OIDC: &dataplane.AuthOIDC{
-					ProviderName: "oidc_test_my-filter",
+				OIDC: &dataplane.OIDCProvider{
+					Name: "oidc_test_my-filter",
 				},
 			},
 			expected: http.Location{
@@ -5657,8 +5657,8 @@ func TestExecuteServers_OIDCAuth(t *testing.T) {
 										BackendGroup: backend,
 										Filters: dataplane.HTTPFilters{
 											AuthenticationFilter: &dataplane.AuthenticationFilter{
-												OIDC: &dataplane.AuthOIDC{
-													ProviderName: "oidc_test_my-filter",
+												OIDC: &dataplane.OIDCProvider{
+													Name: "oidc_test_my-filter",
 												},
 											},
 										},
@@ -5754,12 +5754,15 @@ func TestExecuteServers_OIDCAuth(t *testing.T) {
 func TestOIDCCallbackLocation(t *testing.T) {
 	t.Parallel()
 
-	const providerName = "oidc_test_my-filter"
+	const (
+		providerName     = "oidc_test_my-filter"
+		oidcCallbackPath = "/oidc_callback_test_my-filter"
+	)
 
 	hrNsName := types.NamespacedName{Namespace: "test", Name: "route1"}
 
 	oidcFilter := &dataplane.AuthenticationFilter{
-		OIDC: &dataplane.AuthOIDC{ProviderName: providerName},
+		OIDC: &dataplane.OIDCProvider{Name: providerName, RedirectURI: oidcCallbackPath},
 	}
 
 	singleBackend := dataplane.BackendGroup{
@@ -5821,7 +5824,7 @@ func TestOIDCCallbackLocation(t *testing.T) {
 			alwaysFalseKeepAliveChecker,
 		)
 		for i := range locs {
-			if locs[i].Path == "= /oidc_callback" {
+			if locs[i].Path == "= "+oidcCallbackPath {
 				return &locs[i]
 			}
 		}
@@ -5833,27 +5836,24 @@ func TestOIDCCallbackLocation(t *testing.T) {
 		name string
 	}{
 		{
-			name: "createOIDCCallbackLocation: creates new /oidc_callback location cloning proxy settings from source",
+			name: "createOIDCCallbackLocation: creates a minimal location with only auth_oidc and the callback path",
 			run: func(t *testing.T) {
 				t.Helper()
 				g := NewWithT(t)
-				src := http.Location{ //nolint:gosec
-					Path:                 "/coffee",
-					Type:                 http.ExternalLocationType,
-					AuthOIDCProviderName: providerName,
-					ProxyPass:            "http://test_coffee_80$request_uri",
-					ProxySetHeaders:      httpBaseHeaders,
+				provider := &dataplane.OIDCProvider{
+					Name:        providerName,
+					RedirectURI: oidcCallbackPath,
 				}
-				cb := createOIDCCallbackLocation(src)
-				g.Expect(cb.Path).To(Equal("= /oidc_callback"))
+				cb := createOIDCCallbackLocation(provider)
+				g.Expect(cb.Path).To(Equal("= " + oidcCallbackPath))
 				g.Expect(cb.Type).To(Equal(http.ExternalLocationType))
 				g.Expect(cb.AuthOIDCProviderName).To(Equal(providerName))
-				g.Expect(cb.ProxyPass).To(Equal(src.ProxyPass))
-				g.Expect(cb.ProxySetHeaders).To(Equal(src.ProxySetHeaders))
+				g.Expect(cb.ProxyPass).To(BeEmpty())
+				g.Expect(cb.ProxySetHeaders).To(BeNil())
 			},
 		},
 		{
-			name: "createLocations: single backend with OIDC generates /oidc_callback",
+			name: "createLocations: single backend with OIDC generates callback location with only auth_oidc",
 			run: func(t *testing.T) {
 				t.Helper()
 				g := NewWithT(t)
@@ -5861,7 +5861,7 @@ func TestOIDCCallbackLocation(t *testing.T) {
 				g.Expect(cb).NotTo(BeNil())
 				g.Expect(cb.AuthOIDCProviderName).To(Equal(providerName))
 				g.Expect(cb.Type).To(Equal(http.ExternalLocationType))
-				g.Expect(cb.ProxyPass).To(Equal("http://test_coffee_80$request_uri"))
+				g.Expect(cb.ProxyPass).To(BeEmpty())
 			},
 		},
 		{

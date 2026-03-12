@@ -58,7 +58,7 @@ func (s *secretEntry) validate(obj client.Object) {
 			validationErr = fmt.Errorf("missing required key %q in secret type %q", secrets.AuthKey, secret.Type)
 		}
 	case secret.Type == v1.SecretTypeOpaque && s.expectedKey != "":
-		validationErr = s.validateOpaqueSecret(secret)
+		validationErr = validateOpaqueSecretKey(secret, s.expectedKey)
 	default:
 		validationErr = fmt.Errorf("unsupported secret type %q", secret.Type)
 	}
@@ -70,17 +70,13 @@ func (s *secretEntry) validate(obj client.Object) {
 	s.setError(validationErr)
 }
 
-func (s *secretEntry) validateOpaqueSecret(secret *v1.Secret) error {
-	if s.expectedKey == "" {
-		return nil
-	}
-
-	if data, exists := secret.Data[s.expectedKey]; !exists || len(data) == 0 {
+func validateOpaqueSecretKey(secret *v1.Secret, key string) error {
+	if data, exists := secret.Data[key]; !exists || len(data) == 0 {
 		return fmt.Errorf(
 			"opaque secret %s/%s does not contain the expected key %q",
 			secret.Namespace,
 			secret.Name,
-			s.expectedKey,
+			key,
 		)
 	}
 

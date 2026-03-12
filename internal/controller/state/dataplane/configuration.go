@@ -1194,16 +1194,9 @@ func buildOIDCProviderFromAuthenticationFilters(
 		if converted.OIDC == nil {
 			continue
 		}
-		oidc := converted.OIDC
-		provider := OIDCProvider{
-			Name:           oidc.ProviderName,
-			Issuer:         oidc.Issuer,
-			ClientID:       oidc.ClientID,
-			ClientSecret:   oidc.ClientSecret,
-			CACertBundleID: oidc.CACertBundleID,
-		}
-		if oidc.CACertBundleID != "" && oidc.CACertData != nil {
-			return provider, map[CertBundleID]CertBundle{oidc.CACertBundleID: oidc.CACertData}
+		provider := *converted.OIDC
+		if provider.CACertBundleID != "" && provider.CACertData != nil {
+			return provider, map[CertBundleID]CertBundle{provider.CACertBundleID: provider.CACertData}
 		}
 		return provider, nil
 	}

@@ -457,7 +457,6 @@ func createLocations(
 
 	var rootPathExists bool
 	var grpcServer bool
-	var oidcCallbackAdded bool
 
 	mirrorPathToPercentage := extractMirrorTargetsWithPercentages(server.PathRules)
 
@@ -477,8 +476,6 @@ func createLocations(
 				generator.GenerateForLocation(rule.Policies, extLocations[i]),
 			)
 		}
-
-		start := len(locs)
 
 		switch {
 		case !needsInternalLocationsForMatches(rule) && !rule.HasInferenceBackends:
@@ -523,16 +520,10 @@ func createLocations(
 				mirrorPercentage)...,
 			)
 		}
+	}
 
-		if !oidcCallbackAdded {
-			for _, loc := range locs[start:] {
-				if loc.AuthOIDCProviderName != "" {
-					locs = append(locs, createOIDCCallbackLocation(loc))
-					oidcCallbackAdded = true
-					break
-				}
-			}
-		}
+	if oidcProvider := findOIDCProvider(server.PathRules); oidcProvider != nil {
+		locs = append(locs, createOIDCCallbackLocation(oidcProvider))
 	}
 
 	if !rootPathExists {
@@ -1159,7 +1150,8 @@ func updateLocationAuthenticationFilter(
 	}
 
 	if authenticationFilter.OIDC != nil {
-		location.AuthOIDCProviderName = authenticationFilter.OIDC.ProviderName
+		location.AuthOIDCProviderName = authenticationFilter.OIDC.Name
+		location.RedirectURI = authenticationFilter.OIDC.RedirectURI
 	}
 
 	return location
@@ -1764,12 +1756,25 @@ func matchesRootPath(rule dataplane.PathRule) bool {
 	return matched
 }
 
-// createOIDCCallbackLocation creates the OIDC callback location based on the source location configuration.
-func createOIDCCallbackLocation(src http.Location) http.Location {
-	callback := src
-	callback.Path = "= /oidc_callback"
-	callback.Type = http.ExternalLocationType
-	return callback
+// findOIDCProvider returns the first OIDCProvider found across all path rules, or nil if none exist.
+func findOIDCProvider(pathRules []dataplane.PathRule) *dataplane.OIDCProvider {
+	for _, rule := range pathRules {
+		for _, matchRule := range rule.MatchRules {
+			if matchRule.Filters.AuthenticationFilter != nil && matchRule.Filters.AuthenticationFilter.OIDC != nil {
+				return matchRule.Filters.AuthenticationFilter.OIDC
+			}
+		}
+	}
+	return nil
+}
+
+// createOIDCCallbackLocation creates a minimal OIDC callback location containing only the auth_oidc directive.
+func createOIDCCallbackLocation(provider *dataplane.OIDCProvider) http.Location {
+	return http.Location{
+		Path:                 "= " + provider.RedirectURI,
+		Type:                 http.ExternalLocationType,
+		AuthOIDCProviderName: provider.Name,
+	}
 }
 
 // isNonSlashedPrefixPath returns whether or not a path is of type Prefix and does not contain a trailing slash.

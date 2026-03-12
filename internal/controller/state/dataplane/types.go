@@ -275,7 +275,7 @@ type AuthenticationFilter struct {
 	Basic *AuthBasic
 
 	// OIDC contains fields related to OIDC authentication.
-	OIDC *AuthOIDC
+	OIDC *OIDCProvider
 }
 
 // AuthBasic contains fields related to basic authentication.
@@ -292,35 +292,23 @@ type AuthBasic struct {
 	Data []byte
 }
 
-// AuthOIDC contains fields related to OIDC authentication.
-type AuthOIDC struct {
-	// ProviderName is the unique name for the OIDC provider (used in location block).
-	ProviderName string
-	// Issuer is the OIDC issuer URL.
-	Issuer string
-	// ClientID is the OIDC client ID.
-	ClientID string
-	// ClientSecret is the OIDC client secret value.
-	ClientSecret string //nolint:gosec // holds OIDC client secret value
-	// CACertBundleID is the ID of the CA certificate bundle for SSL verification.
-	CACertBundleID CertBundleID
-	// CACertData is the raw PEM bytes of the CA certificate.
-	CACertData []byte
-}
-
-// OIDCProvider represents an OIDC provider configuration at HTTP level.
+// OIDCProvider represents an OIDC provider configuration.
 type OIDCProvider struct {
-	// Name is the internal name used to reference this provider.
+	// Name is the name of the OIDC provider.
 	Name string
-	// Issuer is the OIDC issuer URL.
+	// Issuer is the issuer URL to discover OIDC configuration from.
 	Issuer string
-	// ClientID is the OIDC client ID.
+	// ClientID is the unique identifier for the OIDC client.
 	ClientID string
-	// ClientSecret is the OIDC client secret value.
-	ClientSecret string //nolint:gosec // holds OIDC client secret value
+	// ClientSecret is the secret for the OIDC client.
+	// This is used for authentication with the OIDC provider.
+	ClientSecret string
 	// CACertBundleID is the ID of the CA certificate bundle for SSL verification.
-	// The path is resolved by the config package using generateCertBundleFileName.
 	CACertBundleID CertBundleID
+	// RedirectURI is the URI used for the OIDC callback.
+	RedirectURI string
+	// CACertData is the raw PEM bytes of the CA certificates.
+	CACertData []byte
 }
 
 // HTTPHeader represents an HTTP header.

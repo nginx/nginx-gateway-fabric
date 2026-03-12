@@ -159,6 +159,16 @@ type OIDCAuth struct {
 	// +kubebuilder:validation:MaxItems=1
 	CACertificateRefs []LocalObjectReference `json:"caCertificateRefs,omitempty"`
 
+	// RedirectURI sets a custom redirect URI for the authentication flow.
+	// It only accepts path-only URIs (e.g. /redirect).
+	// Directive: https://nginx.org/en/docs/http/ngx_http_oidc_module.html#redirect_uri
+	// The generated callback path might be different than the NGINX default.
+	// NGINX Default: /oidc_callback
+	//
+	// +optional
+	// +kubebuilder:validation:Pattern=`^/[A-Za-z0-9._~!$&'()*+,;=@/-]*$`
+	RedirectURI *string `json:"redirectURI,omitempty"`
+
 	// The OIDC scopes to be used in the Authentication Request.
 	// By default, the "openid" scope is always added to the list of scopes
 	// if not already specified.
