@@ -136,7 +136,7 @@ jobs:
           go-version: stable
           cache-dependency-path: |
             go.sum
-            .github/.cache/buster-for-vars
+            tests/go.sum
 
       - name: Check for changes
         uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3.0.2
@@ -146,8 +146,8 @@ jobs:
             charts:
             - charts/nginx-gateway-fabric/**/*
             rbac:
-            - operators/config/rbac/role.yaml
-            - charts/nginx-gateway-fabric/templates/clusterrole.yaml
+            - operators/**/*
+            - charts/nginx-gateway-fabric/**/*
 
       - name: Output Variables
         id: vars
@@ -195,7 +195,7 @@ jobs:
           go-version: stable
           cache-dependency-path: |
             go.sum
-            .github/.cache/buster-for-unit-tests
+            tests/go.sum
 
       - name: Run Tests
         run: make unit-test
@@ -224,6 +224,8 @@ jobs:
         uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
         with:
           node-version-file: .nvmrc
+          cache: 'npm'
+          cache-dependency-path: internal/controller/nginx/modules/package-lock.json
 
       - name: Run tests
         run: npm --prefix ${{ github.workspace }}/internal/controller/nginx/modules install-ci-test
@@ -236,7 +238,8 @@ jobs:
   binary:
     name: Build Binary
     runs-on: ${{ github.repository_owner == 'nginx' && (inputs.is_production_release || ((github.event_name == 'push' || github.event_name == 'schedule') && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release-')))) && 'ubuntu-24.04-amd64' || 'ubuntu-24.04' }}
-    needs: [vars, unit-tests, njs-unit-tests]
+    # Run in parallel with tests - they're independent validations
+    needs: [vars]
     outputs:
       json: ${{ steps.gateway_binaries.outputs.json }}
     permissions:
@@ -271,7 +274,7 @@ jobs:
           go-version: stable
           cache-dependency-path: |
             go.sum
-            .github/.cache/buster-for-binary
+            tests/go.sum
 
       - name: Set Go module cache
         run: |
@@ -303,7 +306,9 @@ jobs:
         uses: goreleaser/goreleaser-action@ec59f474b9834571250b370d4735c50f8e2d1e29 # v7.0.0
         with:
           version: v2.14.3 # renovate: datasource=github-tags depName=goreleaser/goreleaser
-          args: ${{ (inputs.is_production_release && (inputs.dry_run == false || inputs.dry_run == null)) && 'release' || 'build --snapshot' }} --clean
+          # On PRs: build only amd64 for speed (tests run on amd64 runners)
+          # On main/release: build both amd64 and arm64
+          args: ${{ (inputs.is_production_release && (inputs.dry_run == false || inputs.dry_run == null)) && 'release' || (github.event_name == 'pull_request' && 'build --single-target --snapshot' || 'build --snapshot') }} --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GOPATH: ${{ needs.vars.outputs.go_path }}
@@ -412,8 +417,12 @@ jobs:
       fail-fast: false
       matrix:
         image: [ngf, nginx]
-        platforms: ["linux/arm64, linux/amd64"]
-        build-os: ["", ubi]
+        # On PRs: build only amd64 for speed (tests run on amd64)
+        # On main/release: build both amd64 and arm64
+        platforms: ${{ github.event_name == 'pull_request' && fromJSON('["linux/amd64"]') || fromJSON('["linux/arm64, linux/amd64"]') }}
+        # On PRs: only standard OS (2 jobs)
+        # On main/release: include ubi (4 jobs)
+        build-os: ${{ github.event_name == 'pull_request' && fromJSON('[""]') || fromJSON('["", "ubi"]') }}
     uses: ./.github/workflows/build.yml
     with:
       image: ${{ matrix.image }}
@@ -436,10 +445,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        build-os: ["", ubi]
+        # On PRs: only standard OS (1 job)
+        # On main/release: include ubi (2 jobs)
+        build-os: ${{ github.event_name == 'pull_request' && fromJSON('[""]') || fromJSON('["", "ubi"]') }}
     with:
       image: plus
-      platforms: "linux/arm64, linux/amd64"
+      # On PRs: build only amd64 for speed (tests run on amd64)
+      # On main/release: build both amd64 and arm64
+      platforms: ${{ github.event_name == 'pull_request' && 'linux/amd64' || 'linux/arm64, linux/amd64' }}
       build-os: ${{ matrix.build-os }}
       tag: ${{ inputs.release_version || '' }}
       dry_run: ${{ inputs.dry_run || false }}
@@ -457,7 +470,9 @@ jobs:
     uses: ./.github/workflows/build.yml
     with:
       image: operator
-      platforms: "linux/arm64, linux/amd64"
+      # On PRs: build only amd64 for speed (tests run on amd64)
+      # On main/release: build both amd64 and arm64
+      platforms: ${{ github.event_name == 'pull_request' && 'linux/amd64' || 'linux/arm64, linux/amd64' }}
       tag: ${{ inputs.operator_version || '' }}
       dry_run: ${{ inputs.dry_run || false }}
       runner: ${{ github.repository_owner == 'nginx' && (inputs.is_production_release || ((github.event_name == 'push' || github.event_name == 'schedule') && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release-')))) && 'ubuntu-24.04-amd64' || 'ubuntu-24.04' }}
@@ -495,13 +510,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # On PRs: run nginx + plus with latest k8s only (2 jobs)
+        # On main/release: run full matrix (8 jobs)
         image: [nginx, plus]
-        build-os: ["", ubi]
-        k8s-version:
-          [
-            "${{ needs.vars.outputs.min_k8s_version }}",
-            "${{ needs.vars.outputs.k8s_latest }}",
-          ]
+        build-os: ${{ github.event_name == 'pull_request' && fromJSON('[""]') || fromJSON('["", "ubi"]') }}
+        k8s-version: ${{ github.event_name == 'pull_request' && fromJSON(format('["{0}"]', needs.vars.outputs.k8s_latest)) || fromJSON(format('["{0}", "{1}"]', needs.vars.outputs.min_k8s_version, needs.vars.outputs.k8s_latest)) }}
     uses: ./.github/workflows/functional.yml
     with:
       image: ${{ matrix.image }}
@@ -517,14 +530,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # On PRs: run latest k8s, experimental enabled (1 job - most coverage)
+        # On main/release: run full matrix (16 jobs)
         image: [nginx, plus]
-        build-os: ["", ubi]
-        k8s-version:
-          [
-            "${{ needs.vars.outputs.min_k8s_version }}",
-            "${{ needs.vars.outputs.k8s_latest }}",
-          ]
-        enable-experimental: [true, false]
+        build-os: ${{ github.event_name == 'pull_request' && fromJSON('[""]') || fromJSON('["", "ubi"]') }}
+        k8s-version: ${{ github.event_name == 'pull_request' && fromJSON(format('["{0}"]', needs.vars.outputs.k8s_latest)) || fromJSON(format('["{0}", "{1}"]', needs.vars.outputs.min_k8s_version, needs.vars.outputs.k8s_latest)) }}
+        enable-experimental: ${{ github.event_name == 'pull_request' && fromJSON('[true]') || fromJSON('[true, false]') }}
     uses: ./.github/workflows/conformance.yml
     with:
       image: ${{ matrix.image }}
@@ -537,6 +548,27 @@ jobs:
     secrets: inherit
     permissions:
       contents: write
+
+  # Since the name of the test jobs change whenever we update the k8s version, it makes it tedious
+  # to manually update Github settings to require those jobs to pass. This bypasses that by
+  # requiring this job to pass.
+  test-completion:
+    name: Functional/Conformance Tests Pass
+    if: always()
+    needs: [functional-tests, conformance-tests]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check test results
+        run: |
+          if [[ "${{ needs.functional-tests.result }}" == "failure" || "${{ needs.functional-tests.result }}" == "cancelled" ]]; then
+          echo "❌ Functional tests ${{ needs.functional-tests.result }}"
+          exit 1
+          fi
+          if [[ "${{ needs.conformance-tests.result }}" == "failure" || "${{ needs.conformance-tests.result }}" == "cancelled" ]]; then
+          echo "❌ Conformance tests ${{ needs.conformance-tests.result }}"
+          exit 1
+          fi
+          echo "✅ All tests passed successfully!"
 
   helm-tests:
     name: Helm Tests
@@ -615,7 +647,7 @@ jobs:
           go-version: stable
           cache-dependency-path: |
             go.sum
-            .github/.cache/buster-for-unit-tests
+            tests/go.sum
 
       - name: Deploy Kubernetes
         id: k8s
