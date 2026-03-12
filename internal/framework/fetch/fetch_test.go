@@ -85,7 +85,7 @@ func TestNewS3Fetcher(t *testing.T) {
 			expectError: false,
 		},
 		{
-			name:        "endpoint without scheme gets http prepended",
+			name:        "endpoint without scheme gets https prepended",
 			endpointURL: "storage.example.svc.cluster.local:8333",
 			options:     []Option{},
 			expectError: false,
@@ -126,6 +126,22 @@ func TestGetObjectError(t *testing.T) {
 	_, err = fetcher.GetObject(ctx, "test-bucket", "test-key")
 	g.Expect(err).To(HaveOccurred())
 	g.Expect(err.Error()).To(ContainSubstring("failed to get object"))
+}
+
+func TestValidateConnectivity(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	// Pointing to a non-existent endpoint surfaces a connectivity error.
+	fetcher, err := NewS3Fetcher(
+		"http://localhost:1",
+		WithTimeout(100*time.Millisecond),
+	)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	err = fetcher.ValidateConnectivity(context.Background())
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(err.Error()).To(ContainSubstring("connectivity check failed"))
 }
 
 func TestTLSConfigFromSecret(t *testing.T) {
