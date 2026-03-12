@@ -287,6 +287,7 @@ Create namespaced RBAC rules.
   verbs:
   - get
   - list
+  - update
   - watch
   {{- end }}
   {{- if .Values.nginxGateway.leaderElection.enable }}

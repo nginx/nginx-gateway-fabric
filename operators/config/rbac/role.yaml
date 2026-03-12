@@ -225,6 +225,7 @@ rules:
   verbs:
   - get
   - list
+  - update
   - watch
 
 # +kubebuilder:scaffold:rules
