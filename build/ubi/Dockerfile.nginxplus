@@ -5,6 +5,7 @@ FROM scratch AS nginx-files
 ADD --link --chown=101:1001 https://cs.nginx.com/static/files/plus-9.repo nginx-plus.repo
 ADD --link --chown=101:1001 https://nginx.org/keys/nginx_signing.key nginx_signing.key
 ADD --link --chown=101:1001 build/ubi/repos/agent.repo agent.repo
+ADD --link --chown=101:1001 build/ubi/repos/app-protect.repo app-protect.repo
 
 FROM ghcr.io/nginx/dependencies/nginx-ubi:ubi9@sha256:68091f761610baa832b2de241ea8cc559324cda109a668dbaec6a6f55284dd30 AS ubi9-packages
 
@@ -13,6 +14,8 @@ FROM registry.access.redhat.com/ubi9/ubi-minimal:9.7 AS ubi-nginx-plus
 RUN microdnf -y update glib2 && microdnf clean all
 
 ARG NGINX_PLUS_VERSION=R36
+ARG APP_PROTECT_VERSION=36+5.575
+ARG INCLUDE_NAP_WAF=false
 
 # renovate: datasource=github-tags depName=nginx/agent
 ARG NGINX_AGENT_VERSION=v3.9.0
@@ -34,6 +37,7 @@ COPY --link --chown=101:1001 LICENSE /licenses/
 # Install NGINX Plus and modules
 RUN --mount=type=bind,from=nginx-files,src=nginx-plus.repo,target=/etc/yum.repos.d/nginx-plus.repo \
     --mount=type=bind,from=nginx-files,src=agent.repo,target=/etc/yum.repos.d/agent.repo \
+    --mount=type=bind,from=nginx-files,src=app-protect.repo,target=/etc/yum.repos.d/app-protect.repo \
     --mount=type=bind,from=nginx-files,src=nginx_signing.key,target=/tmp/nginx_signing.key \
     --mount=type=bind,from=ubi9-packages,src=/,target=/ubi-bin/ \
     --mount=type=secret,id=nginx-repo.crt,dst=/etc/ssl/nginx/nginx-repo.crt,mode=0644 \
@@ -48,6 +52,10 @@ RUN --mount=type=bind,from=nginx-files,src=nginx-plus.repo,target=/etc/yum.repos
     # Install NGINX Plus and modules (njs, otel)
     && microdnf --nodocs install -y nginx-plus-${NGINX_PLUS_VERSION,,} \
     && microdnf --nodocs install -y nginx-plus-module-njs-${NGINX_PLUS_VERSION,,} nginx-plus-module-otel-${NGINX_PLUS_VERSION,,} \
+    # Optionally install NAP WAF
+    && if [ "${INCLUDE_NAP_WAF}" = "true" ]; then \
+           microdnf --nodocs install -y --enablerepo=app-protect-x-plus app-protect-module-plus-${APP_PROTECT_VERSION}*; \
+       fi \
     # Install nginx-agent
     && microdnf --nodocs install -y nginx-agent-${NGINX_AGENT_VERSION#v}* \
     # Clean up
@@ -79,4 +87,5 @@ RUN mkdir -p /run && touch /run/.containerenv
 # Switch to non-root user
 USER 101:1001
 
+ENV USE_NAP_WAF=${INCLUDE_NAP_WAF}
 ENTRYPOINT ["/agent/entrypoint.sh"]
