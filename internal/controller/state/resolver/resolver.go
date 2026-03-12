@@ -319,7 +319,11 @@ func (r *ResourceResolver) Resolve(resType ResourceType, nsname types.Namespaced
 	r.lock.RLock()
 	if res, resolved := r.resolvedResources[key]; resolved {
 		r.lock.RUnlock()
+
+		// this should only be done for secrets with an expected key
 		if res.needsRevalidation(options) {
+			// get the current object from the cluster resources to
+			// re-validate against the new expected key
 			obj, exist := r.clusterResources[key]
 			if !exist {
 				return fmt.Errorf("%s %s does not exist", resType, nsname.String())

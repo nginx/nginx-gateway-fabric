@@ -5416,7 +5416,7 @@ func TestBuildOIDCProviderFromAuthenticationFilters(t *testing.T) {
 			},
 			expected: []OIDCProvider{
 				{
-					Name:         "oidc_test_oidc-filter",
+					Name:         "test_oidc-filter",
 					Issuer:       "https://idp.example.com",
 					ClientID:     "my-client-id",
 					ClientSecret: "super-secret",
@@ -5435,7 +5435,7 @@ func TestBuildOIDCProviderFromAuthenticationFilters(t *testing.T) {
 			},
 			expected: []OIDCProvider{
 				{
-					Name:           "oidc_test_oidc-filter",
+					Name:           "test_oidc-filter",
 					Issuer:         "https://idp.example.com",
 					ClientID:       "my-client-id",
 					ClientSecret:   "super-secret",
@@ -5460,14 +5460,14 @@ func TestBuildOIDCProviderFromAuthenticationFilters(t *testing.T) {
 			},
 			expected: []OIDCProvider{
 				{
-					Name:         "oidc_test_oidc-filter-one",
+					Name:         "test_oidc-filter-one",
 					Issuer:       "https://idp.example.com",
 					ClientID:     "my-client-id",
 					ClientSecret: "super-secret",
 					RedirectURI:  "/oidc_callback_test_oidc-filter-one",
 				},
 				{
-					Name:           "oidc_test_oidc-filter-two",
+					Name:           "test_oidc-filter-two",
 					Issuer:         "https://idp.example.com",
 					ClientID:       "my-client-id",
 					ClientSecret:   "super-secret",

@@ -356,19 +356,6 @@ func TestSecretResolver(t *testing.T) {
 			},
 			Type: v1.SecretTypeOpaque,
 		}
-
-		// tlsSecretWithExpectedKey is used to verify that a TLS secret is rejected when resolved with an expected key
-		tlsSecretWithExpectedKey = &v1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Namespace: "test",
-				Name:      "tls-secret-with-expected-key",
-			},
-			Data: map[string][]byte{
-				v1.TLSCertKey:       cert,
-				v1.TLSPrivateKeyKey: key,
-			},
-			Type: v1.SecretTypeTLS,
-		}
 	)
 
 	resourceResolver := resolver.NewResourceResolver(
@@ -441,10 +428,6 @@ func TestSecretResolver(t *testing.T) {
 				NamespacedName: client.ObjectKeyFromObject(opaqueCAKeyOnly),
 				ResourceType:   resolver.ResourceTypeSecret,
 			}: opaqueCAKeyOnly,
-			{
-				NamespacedName: client.ObjectKeyFromObject(tlsSecretWithExpectedKey),
-				ResourceType:   resolver.ResourceTypeSecret,
-			}: tlsSecretWithExpectedKey,
 		})
 
 	tests := []struct {
@@ -569,13 +552,6 @@ func TestSecretResolver(t *testing.T) {
 			nsname:      client.ObjectKeyFromObject(opaqueCAKeyOnly),
 			resolveOpts: []resolver.ResolveOption{resolver.WithExpectedSecretKey(secrets.CAKey)},
 		},
-		{
-			name: "TLS secret resolved with an expected key fails" +
-				"because only Opaque secrets are valid for key-based resolution",
-			nsname:         client.ObjectKeyFromObject(tlsSecretWithExpectedKey),
-			resolveOpts:    []resolver.ResolveOption{resolver.WithExpectedSecretKey(secrets.ClientSecretKey)},
-			expectedErrMsg: `secret must be of type Opaque to use an expected key, got "kubernetes.io/tls"`,
-		},
 	}
 
 	// Not running tests with t.Run(...) because the last one (getResolvedSecrets) depends on the execution of
@@ -680,9 +656,6 @@ func TestSecretResolver(t *testing.T) {
 		},
 		client.ObjectKeyFromObject(opaqueCAKeyOnly): {
 			Source: opaqueCAKeyOnly,
-		},
-		client.ObjectKeyFromObject(tlsSecretWithExpectedKey): {
-			Source: tlsSecretWithExpectedKey,
 		},
 	}
 

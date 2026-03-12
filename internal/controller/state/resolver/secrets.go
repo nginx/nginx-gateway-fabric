@@ -37,10 +37,10 @@ func (s *secretEntry) validate(obj client.Object) {
 	// in order to track them.
 	case s.expectedKey != "":
 		if secret.Type != v1.SecretTypeOpaque {
-			validationErr = fmt.Errorf("secret must be of type Opaque to use an expected key, got %q", secret.Type)
-		} else {
-			validationErr = validateOpaqueSecretKey(secret, s.expectedKey)
+			panic(fmt.Sprintf("secret must be of type Opaque to use an expected key, got %q", secret.Type))
 		}
+		validationErr = validateOpaqueSecretKey(secret, s.expectedKey)
+
 	case secret.Type == v1.SecretTypeTLS:
 		// A TLS Secret is guaranteed to have these data fields.
 		cert := &secrets.Certificate{
@@ -78,18 +78,21 @@ func (s *secretEntry) needsRevalidation(opts *resolveOptions) bool {
 	return opts.expectedSecretKey != "" && opts.expectedSecretKey != s.expectedKey
 }
 
+// revalidate checks are only done on Opaque secrets with an expected key,
+// it will panic without expectedKey, which is also verified in needsRevalidation.
 func (s *secretEntry) revalidate(opts *resolveOptions, obj client.Object) error {
 	secret, ok := obj.(*v1.Secret)
 	if !ok {
 		panic(fmt.Sprintf("expected Secret object, got %T", obj))
 	}
+
 	if secret.Type != v1.SecretTypeOpaque {
-		return fmt.Errorf("secret must be of type Opaque to use an expected key, got %q", secret.Type)
+		panic(fmt.Sprintf("secret must be of type Opaque to use an expected key, got %q", secret.Type))
 	}
+
 	err := validateOpaqueSecretKey(secret, opts.expectedSecretKey)
-	if err == nil {
-		s.expectedKey = opts.expectedSecretKey
-	}
+	s.expectedKey = opts.expectedSecretKey
+	s.setError(err)
 	return err
 }
 

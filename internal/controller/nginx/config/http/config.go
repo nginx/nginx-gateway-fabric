@@ -82,8 +82,6 @@ type Location struct {
 	AuthBasic *AuthBasic
 	// AuthOIDCProviderName is the name of the oidc_provider to be referenced in this location.
 	AuthOIDCProviderName string
-	// RedirectURI is the OIDC callback path for this location's provider.
-	RedirectURI string
 	// ResponseHeaders are custom response headers to be sent.
 	ResponseHeaders ResponseHeaders
 	// ProxySetHeaders are headers to set when proxying requests upstream.

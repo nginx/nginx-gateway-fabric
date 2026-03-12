@@ -829,7 +829,7 @@ func TestConvertAuthenticationFilter(t *testing.T) {
 			},
 			expected: &AuthenticationFilter{
 				OIDC: &OIDCProvider{
-					Name:         "oidc_test_oidc-af",
+					Name:         "test_oidc-af",
 					Issuer:       "https://idp.example.com",
 					ClientID:     "client-id",
 					ClientSecret: "my-client-secret",
@@ -865,7 +865,7 @@ func TestConvertAuthenticationFilter(t *testing.T) {
 			},
 			expected: &AuthenticationFilter{
 				OIDC: &OIDCProvider{
-					Name:         "oidc_test_oidc-af",
+					Name:         "test_oidc-af",
 					Issuer:       "https://idp.example.com",
 					ClientID:     "client-id",
 					ClientSecret: "my-client-secret",
@@ -909,7 +909,7 @@ func TestConvertAuthenticationFilter(t *testing.T) {
 			},
 			expected: &AuthenticationFilter{
 				OIDC: &OIDCProvider{
-					Name:           "oidc_test_oidc-af",
+					Name:           "test_oidc-af",
 					Issuer:         "https://idp.example.com",
 					ClientID:       "client-id",
 					ClientSecret:   "my-client-secret",
