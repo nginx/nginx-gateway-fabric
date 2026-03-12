@@ -1151,7 +1151,6 @@ func updateLocationAuthenticationFilter(
 
 	if authenticationFilter.OIDC != nil {
 		location.AuthOIDCProviderName = authenticationFilter.OIDC.Name
-		location.RedirectURI = authenticationFilter.OIDC.RedirectURI
 	}
 
 	return location

@@ -35,6 +35,12 @@ func (s *secretEntry) validate(obj client.Object) {
 	switch {
 	// Any future Secret keys that are needed MUST be added to cache/transform.go
 	// in order to track them.
+	case s.expectedKey != "":
+		if secret.Type != v1.SecretTypeOpaque {
+			validationErr = fmt.Errorf("secret must be of type Opaque to use an expected key, got %q", secret.Type)
+		} else {
+			validationErr = validateOpaqueSecretKey(secret, s.expectedKey)
+		}
 	case secret.Type == v1.SecretTypeTLS:
 		// A TLS Secret is guaranteed to have these data fields.
 		cert := &secrets.Certificate{
@@ -57,8 +63,6 @@ func (s *secretEntry) validate(obj client.Object) {
 		if _, exists := secret.Data[secrets.AuthKey]; !exists {
 			validationErr = fmt.Errorf("missing required key %q in secret type %q", secrets.AuthKey, secret.Type)
 		}
-	case secret.Type == v1.SecretTypeOpaque && s.expectedKey != "":
-		validationErr = validateOpaqueSecretKey(secret, s.expectedKey)
 	default:
 		validationErr = fmt.Errorf("unsupported secret type %q", secret.Type)
 	}
@@ -78,6 +82,9 @@ func (s *secretEntry) revalidate(opts *resolveOptions, obj client.Object) error 
 	secret, ok := obj.(*v1.Secret)
 	if !ok {
 		panic(fmt.Sprintf("expected Secret object, got %T", obj))
+	}
+	if secret.Type != v1.SecretTypeOpaque {
+		return fmt.Errorf("secret must be of type Opaque to use an expected key, got %q", secret.Type)
 	}
 	err := validateOpaqueSecretKey(secret, opts.expectedSecretKey)
 	if err == nil {

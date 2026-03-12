@@ -166,7 +166,7 @@ type OIDCAuth struct {
 	// NGINX Default: /oidc_callback
 	//
 	// +optional
-	// +kubebuilder:validation:Pattern=`^/[A-Za-z0-9._~!$&'()*+,;=@/-]*$`
+	// +kubebuilder:validation:Pattern=`^/[A-Za-z0-9._~!&'()*+,=@/-]*$`
 	RedirectURI *string `json:"redirectURI,omitempty"`
 
 	// The OIDC scopes to be used in the Authentication Request.

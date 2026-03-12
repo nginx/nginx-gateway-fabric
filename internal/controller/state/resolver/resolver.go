@@ -320,9 +320,6 @@ func (r *ResourceResolver) Resolve(resType ResourceType, nsname types.Namespaced
 	if res, resolved := r.resolvedResources[key]; resolved {
 		r.lock.RUnlock()
 		if res.needsRevalidation(options) {
-			if err := res.error(); err != nil {
-				return err
-			}
 			obj, exist := r.clusterResources[key]
 			if !exist {
 				return fmt.Errorf("%s %s does not exist", resType, nsname.String())

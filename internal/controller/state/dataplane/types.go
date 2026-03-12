@@ -312,8 +312,7 @@ type OIDCProvider struct {
 }
 
 const (
-	oidcDirective = "oidc"
-	oidcCallBack  = "/oidc_callback"
+	oidcCallBack = "/oidc_callback"
 )
 
 // HTTPHeader represents an HTTP header.

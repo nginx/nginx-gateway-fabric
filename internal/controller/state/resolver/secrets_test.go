@@ -343,6 +343,32 @@ func TestSecretResolver(t *testing.T) {
 			},
 			Type: v1.SecretTypeOpaque,
 		}
+
+		// opaqueCAKeyOnly has only the ca.crt key, used to verify that a cached error from a previous
+		// resolve with the wrong expected key does not block revalidation with the correct key
+		opaqueCAKeyOnly = &v1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: "test",
+				Name:      "opaque-ca-key-only",
+			},
+			Data: map[string][]byte{
+				secrets.CAKey: []byte("ca-cert"),
+			},
+			Type: v1.SecretTypeOpaque,
+		}
+
+		// tlsSecretWithExpectedKey is used to verify that a TLS secret is rejected when resolved with an expected key
+		tlsSecretWithExpectedKey = &v1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: "test",
+				Name:      "tls-secret-with-expected-key",
+			},
+			Data: map[string][]byte{
+				v1.TLSCertKey:       cert,
+				v1.TLSPrivateKeyKey: key,
+			},
+			Type: v1.SecretTypeTLS,
+		}
 	)
 
 	resourceResolver := resolver.NewResourceResolver(
@@ -411,6 +437,14 @@ func TestSecretResolver(t *testing.T) {
 				NamespacedName: client.ObjectKeyFromObject(opaqueClientSecretOnly),
 				ResourceType:   resolver.ResourceTypeSecret,
 			}: opaqueClientSecretOnly,
+			{
+				NamespacedName: client.ObjectKeyFromObject(opaqueCAKeyOnly),
+				ResourceType:   resolver.ResourceTypeSecret,
+			}: opaqueCAKeyOnly,
+			{
+				NamespacedName: client.ObjectKeyFromObject(tlsSecretWithExpectedKey),
+				ResourceType:   resolver.ResourceTypeSecret,
+			}: tlsSecretWithExpectedKey,
 		})
 
 	tests := []struct {
@@ -522,6 +556,26 @@ func TestSecretResolver(t *testing.T) {
 			resolveOpts:    []resolver.ResolveOption{resolver.WithExpectedSecretKey(secrets.CAKey)},
 			expectedErrMsg: "opaque secret test/opaque-client-secret-only does not contain the expected key \"ca.crt\"",
 		},
+		{
+			name: "opaque secret with only ca.crt key fails " +
+				"when first resolved with client-secret key",
+			nsname:         client.ObjectKeyFromObject(opaqueCAKeyOnly),
+			resolveOpts:    []resolver.ResolveOption{resolver.WithExpectedSecretKey(secrets.ClientSecretKey)},
+			expectedErrMsg: "opaque secret test/opaque-ca-key-only does not contain the expected key \"client-secret\"",
+		},
+		{
+			name: "opaque secret with only ca.crt key succeeds when " +
+				"resolved again with the correct key after a cached error",
+			nsname:      client.ObjectKeyFromObject(opaqueCAKeyOnly),
+			resolveOpts: []resolver.ResolveOption{resolver.WithExpectedSecretKey(secrets.CAKey)},
+		},
+		{
+			name: "TLS secret resolved with an expected key fails" +
+				"because only Opaque secrets are valid for key-based resolution",
+			nsname:         client.ObjectKeyFromObject(tlsSecretWithExpectedKey),
+			resolveOpts:    []resolver.ResolveOption{resolver.WithExpectedSecretKey(secrets.ClientSecretKey)},
+			expectedErrMsg: `secret must be of type Opaque to use an expected key, got "kubernetes.io/tls"`,
+		},
 	}
 
 	// Not running tests with t.Run(...) because the last one (getResolvedSecrets) depends on the execution of
@@ -623,6 +677,12 @@ func TestSecretResolver(t *testing.T) {
 		},
 		client.ObjectKeyFromObject(opaqueClientSecretOnly): {
 			Source: opaqueClientSecretOnly,
+		},
+		client.ObjectKeyFromObject(opaqueCAKeyOnly): {
+			Source: opaqueCAKeyOnly,
+		},
+		client.ObjectKeyFromObject(tlsSecretWithExpectedKey): {
+			Source: tlsSecretWithExpectedKey,
 		},
 	}
 

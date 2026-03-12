@@ -202,7 +202,7 @@ spec:
                       Directive: https://nginx.org/en/docs/http/ngx_http_oidc_module.html#redirect_uri
                       The generated callback path will be `/oidc_callback_filternamespace_filtername` if not specified.
                       NGINX Default: /oidc_callback
-                    pattern: ^/[A-Za-z0-9._~!$&'()*+,;=@/-]*$
+                    pattern: ^/[A-Za-z0-9._~!&'()*+,=@/-]*$
                     type: string
                   scopes:
                     description: |-
