@@ -104,6 +104,11 @@ func init() {
 	utilruntime.Must(authv1.AddToScheme(scheme))
 	utilruntime.Must(rbacv1.AddToScheme(scheme))
 	utilruntime.Must(inference.Install(scheme))
+
+	// Pre-register unstructured AP types so fake clients built with this scheme don't lazily
+	// mutate a shared scheme during parallel test execution, which causes data races.
+	scheme.AddKnownTypeWithName(kinds.APPolicyGVK, plm.NewAPPolicyUnstructured())
+	scheme.AddKnownTypeWithName(kinds.APLogConfGVK, plm.NewAPLogConfUnstructured())
 }
 
 func StartManager(cfg config.Config) error {

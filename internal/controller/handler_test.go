@@ -1058,7 +1058,7 @@ var _ = Describe("reconcileAPResourceFinalizers", func() {
 	)
 
 	BeforeEach(func() {
-		fakeK8sClient = fake.NewFakeClient()
+		fakeK8sClient = fake.NewClientBuilder().WithScheme(scheme).Build()
 		handler = newEventHandlerImpl(eventHandlerConfig{
 			ctx:           context.Background(),
 			k8sClient:     fakeK8sClient,
