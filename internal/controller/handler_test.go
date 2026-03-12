@@ -21,6 +21,8 @@ import (
 	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	"github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/config"
@@ -30,6 +32,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent/agentfakes"
 	agentgrpcfakes "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent/grpc/grpcfakes"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/configfakes"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/plm"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/provisioner/provisionerfakes"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
@@ -1045,6 +1048,172 @@ var _ = Describe("ensureInferencePoolServices", func() {
 		Eventually(func() int { return len(fakeEventRecorder.Events) }).Should(BeNumerically(">=", 1))
 		event := <-fakeEventRecorder.Events
 		Expect(event).To(ContainSubstring("ServiceCreateOrUpdateFailed"))
+	})
+})
+
+var _ = Describe("reconcileAPResourceFinalizers", func() {
+	var (
+		handler       *eventHandlerImpl
+		fakeK8sClient client.Client
+	)
+
+	BeforeEach(func() {
+		fakeK8sClient = fake.NewClientBuilder().WithScheme(scheme).Build()
+		handler = newEventHandlerImpl(eventHandlerConfig{
+			ctx:           context.Background(),
+			k8sClient:     fakeK8sClient,
+			statusQueue:   status.NewQueue(),
+			eventRecorder: k8sEvents.NewFakeRecorder(0),
+			logger:        logr.Discard(),
+		})
+		handler.leader = true
+	})
+
+	It("adds finalizer to referenced APPolicy", func() {
+		apPolicy := plm.NewAPPolicyUnstructured()
+		apPolicy.SetNamespace("test")
+		apPolicy.SetName("my-policy")
+		Expect(fakeK8sClient.Create(context.Background(), apPolicy)).To(Succeed())
+
+		gr := &graph.Graph{
+			ReferencedAPPolicies: map[types.NamespacedName]*unstructured.Unstructured{
+				{Namespace: "test", Name: "my-policy"}: apPolicy,
+			},
+			ReferencedAPLogConfs: make(map[types.NamespacedName]*unstructured.Unstructured),
+		}
+
+		handler.reconcileAPResourceFinalizers(context.Background(), logr.Discard(), gr)
+
+		updated := plm.NewAPPolicyUnstructured()
+		Expect(fakeK8sClient.Get(
+			context.Background(),
+			types.NamespacedName{Namespace: "test", Name: "my-policy"},
+			updated,
+		)).To(Succeed())
+		Expect(updated.GetFinalizers()).To(ContainElement(apResourceFinalizer))
+		Expect(handler.finalizedAPResources).To(HaveKey(apResourceKey{
+			nsName:       types.NamespacedName{Namespace: "test", Name: "my-policy"},
+			resourceType: apResourceTypePolicy,
+		}))
+	})
+
+	It("adds finalizer to referenced APLogConf", func() {
+		apLogConf := plm.NewAPLogConfUnstructured()
+		apLogConf.SetNamespace("test")
+		apLogConf.SetName("my-logconf")
+		Expect(fakeK8sClient.Create(context.Background(), apLogConf)).To(Succeed())
+
+		gr := &graph.Graph{
+			ReferencedAPPolicies: make(map[types.NamespacedName]*unstructured.Unstructured),
+			ReferencedAPLogConfs: map[types.NamespacedName]*unstructured.Unstructured{
+				{Namespace: "test", Name: "my-logconf"}: apLogConf,
+			},
+		}
+
+		handler.reconcileAPResourceFinalizers(context.Background(), logr.Discard(), gr)
+
+		updated := plm.NewAPLogConfUnstructured()
+		Expect(fakeK8sClient.Get(
+			context.Background(),
+			types.NamespacedName{Namespace: "test", Name: "my-logconf"},
+			updated,
+		)).To(Succeed())
+		Expect(updated.GetFinalizers()).To(ContainElement(apResourceFinalizer))
+	})
+
+	It("removes finalizer when AP resource is no longer referenced", func() {
+		apPolicy := plm.NewAPPolicyUnstructured()
+		apPolicy.SetNamespace("test")
+		apPolicy.SetName("my-policy")
+		Expect(fakeK8sClient.Create(context.Background(), apPolicy)).To(Succeed())
+
+		// First, add the finalizer by processing a graph that references the resource.
+		gr := &graph.Graph{
+			ReferencedAPPolicies: map[types.NamespacedName]*unstructured.Unstructured{
+				{Namespace: "test", Name: "my-policy"}: apPolicy,
+			},
+			ReferencedAPLogConfs: make(map[types.NamespacedName]*unstructured.Unstructured),
+		}
+		handler.reconcileAPResourceFinalizers(context.Background(), logr.Discard(), gr)
+
+		// Now process a graph that no longer references the resource.
+		emptyGr := &graph.Graph{
+			ReferencedAPPolicies: make(map[types.NamespacedName]*unstructured.Unstructured),
+			ReferencedAPLogConfs: make(map[types.NamespacedName]*unstructured.Unstructured),
+		}
+		handler.reconcileAPResourceFinalizers(context.Background(), logr.Discard(), emptyGr)
+
+		updated := plm.NewAPPolicyUnstructured()
+		Expect(fakeK8sClient.Get(
+			context.Background(),
+			types.NamespacedName{Namespace: "test", Name: "my-policy"},
+			updated,
+		)).To(Succeed())
+		Expect(updated.GetFinalizers()).NotTo(ContainElement(apResourceFinalizer))
+		Expect(handler.finalizedAPResources).NotTo(HaveKey(apResourceKey{
+			nsName:       types.NamespacedName{Namespace: "test", Name: "my-policy"},
+			resourceType: apResourceTypePolicy,
+		}))
+	})
+
+	It("does not re-add finalizer if already tracked", func() {
+		apPolicy := plm.NewAPPolicyUnstructured()
+		apPolicy.SetNamespace("test")
+		apPolicy.SetName("my-policy")
+		Expect(fakeK8sClient.Create(context.Background(), apPolicy)).To(Succeed())
+
+		gr := &graph.Graph{
+			ReferencedAPPolicies: map[types.NamespacedName]*unstructured.Unstructured{
+				{Namespace: "test", Name: "my-policy"}: apPolicy,
+			},
+			ReferencedAPLogConfs: make(map[types.NamespacedName]*unstructured.Unstructured),
+		}
+
+		// First call adds the finalizer.
+		handler.reconcileAPResourceFinalizers(context.Background(), logr.Discard(), gr)
+		// Second call should not fail or duplicate.
+		handler.reconcileAPResourceFinalizers(context.Background(), logr.Discard(), gr)
+
+		updated := plm.NewAPPolicyUnstructured()
+		Expect(fakeK8sClient.Get(
+			context.Background(),
+			types.NamespacedName{Namespace: "test", Name: "my-policy"},
+			updated,
+		)).To(Succeed())
+		Expect(updated.GetFinalizers()).To(HaveLen(1))
+		Expect(updated.GetFinalizers()).To(ContainElement(apResourceFinalizer))
+	})
+
+	It("does nothing when not leader", func() {
+		handler.leader = false
+		apPolicy := plm.NewAPPolicyUnstructured()
+		apPolicy.SetNamespace("test")
+		apPolicy.SetName("my-policy")
+		Expect(fakeK8sClient.Create(context.Background(), apPolicy)).To(Succeed())
+
+		gr := &graph.Graph{
+			ReferencedAPPolicies: map[types.NamespacedName]*unstructured.Unstructured{
+				{Namespace: "test", Name: "my-policy"}: apPolicy,
+			},
+			ReferencedAPLogConfs: make(map[types.NamespacedName]*unstructured.Unstructured),
+		}
+
+		handler.reconcileAPResourceFinalizers(context.Background(), logr.Discard(), gr)
+
+		updated := plm.NewAPPolicyUnstructured()
+		Expect(fakeK8sClient.Get(
+			context.Background(),
+			types.NamespacedName{Namespace: "test", Name: "my-policy"},
+			updated,
+		)).To(Succeed())
+		Expect(updated.GetFinalizers()).To(BeEmpty())
+	})
+
+	It("handles nil ReferencedAPPolicies and ReferencedAPLogConfs safely", func() {
+		gr := &graph.Graph{}
+		Expect(func() {
+			handler.reconcileAPResourceFinalizers(context.Background(), logr.Discard(), gr)
+		}).NotTo(Panic())
 	})
 })
 
