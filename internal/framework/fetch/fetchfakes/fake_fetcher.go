@@ -48,6 +48,17 @@ type FakeFetcher struct {
 	updateTLSConfigReturnsOnCall map[int]struct {
 		result1 error
 	}
+	ValidateConnectivityStub        func(context.Context) error
+	validateConnectivityMutex       sync.RWMutex
+	validateConnectivityArgsForCall []struct {
+		arg1 context.Context
+	}
+	validateConnectivityReturns struct {
+		result1 error
+	}
+	validateConnectivityReturnsOnCall map[int]struct {
+		result1 error
+	}
 	invocations      map[string][][]interface{}
 	invocationsMutex sync.RWMutex
 }
@@ -237,6 +248,67 @@ func (fake *FakeFetcher) UpdateTLSConfigReturnsOnCall(i int, result1 error) {
 		})
 	}
 	fake.updateTLSConfigReturnsOnCall[i] = struct {
+		result1 error
+	}{result1}
+}
+
+func (fake *FakeFetcher) ValidateConnectivity(arg1 context.Context) error {
+	fake.validateConnectivityMutex.Lock()
+	ret, specificReturn := fake.validateConnectivityReturnsOnCall[len(fake.validateConnectivityArgsForCall)]
+	fake.validateConnectivityArgsForCall = append(fake.validateConnectivityArgsForCall, struct {
+		arg1 context.Context
+	}{arg1})
+	stub := fake.ValidateConnectivityStub
+	fakeReturns := fake.validateConnectivityReturns
+	fake.recordInvocation("ValidateConnectivity", []interface{}{arg1})
+	fake.validateConnectivityMutex.Unlock()
+	if stub != nil {
+		return stub(arg1)
+	}
+	if specificReturn {
+		return ret.result1
+	}
+	return fakeReturns.result1
+}
+
+func (fake *FakeFetcher) ValidateConnectivityCallCount() int {
+	fake.validateConnectivityMutex.RLock()
+	defer fake.validateConnectivityMutex.RUnlock()
+	return len(fake.validateConnectivityArgsForCall)
+}
+
+func (fake *FakeFetcher) ValidateConnectivityCalls(stub func(context.Context) error) {
+	fake.validateConnectivityMutex.Lock()
+	defer fake.validateConnectivityMutex.Unlock()
+	fake.ValidateConnectivityStub = stub
+}
+
+func (fake *FakeFetcher) ValidateConnectivityArgsForCall(i int) context.Context {
+	fake.validateConnectivityMutex.RLock()
+	defer fake.validateConnectivityMutex.RUnlock()
+	argsForCall := fake.validateConnectivityArgsForCall[i]
+	return argsForCall.arg1
+}
+
+func (fake *FakeFetcher) ValidateConnectivityReturns(result1 error) {
+	fake.validateConnectivityMutex.Lock()
+	defer fake.validateConnectivityMutex.Unlock()
+	fake.ValidateConnectivityStub = nil
+	fake.validateConnectivityReturns = struct {
+		result1 error
+	}{result1}
+}
+
+func (fake *FakeFetcher) ValidateConnectivityReturnsOnCall(i int, result1 error) {
+	fake.validateConnectivityMutex.Lock()
+	defer fake.validateConnectivityMutex.Unlock()
+	fake.ValidateConnectivityStub = nil
+	if fake.validateConnectivityReturnsOnCall == nil {
+		fake.validateConnectivityReturnsOnCall = make(map[int]struct {
+			result1 error
+		})
+	}
+	fake.validateConnectivityReturnsOnCall[i] = struct {
 		result1 error
 	}{result1}
 }

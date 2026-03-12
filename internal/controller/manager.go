@@ -1106,6 +1106,10 @@ func createWAFFetcher(
 		return nil, fmt.Errorf("failed to create S3 fetcher: %w", err)
 	}
 
+	if err := fetcher.ValidateConnectivity(context.Background()); err != nil {
+		logger.Error(err, "PLM storage connectivity check failed; bundle fetches may fail until the issue is resolved")
+	}
+
 	logger.Info("Created WAF fetcher for PLM storage", "url", plmStorageURL)
 
 	return fetcher, nil
