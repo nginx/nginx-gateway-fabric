@@ -179,13 +179,13 @@ jobs:
       contents: write # needed for opening PR with the results files
       pull-requests: write # needed for opening PR with the results files
     needs: [vars, setup-and-run-tests]
-    if: ${{ inputs.open_pull_request == true }}
+    if: ${{ github.event.inputs.open_pull_request == true }}
     steps:
       - name: Checkout Repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Download Artifacts
-        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           path: tests/results/
           merge-multiple: true
