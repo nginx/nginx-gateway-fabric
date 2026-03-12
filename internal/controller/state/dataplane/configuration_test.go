@@ -5350,19 +5350,19 @@ func TestBuildOIDCProviderFromAuthenticationFilters(t *testing.T) {
 		referencedSecrets   map[types.NamespacedName]*secrets.Secret
 		expectedCertBundles map[CertBundleID]CertBundle
 		name                string
-		expected            OIDCProvider
+		expected            []OIDCProvider
 	}{
 		{
 			name:              "nil auth filters",
 			authFilters:       nil,
 			referencedSecrets: nil,
-			expected:          OIDCProvider{},
+			expected:          nil,
 		},
 		{
 			name:              "empty auth filters",
 			authFilters:       map[types.NamespacedName]*graph.AuthenticationFilter{},
 			referencedSecrets: nil,
-			expected:          OIDCProvider{},
+			expected:          nil,
 		},
 		{
 			name: "filter is invalid",
@@ -5370,7 +5370,7 @@ func TestBuildOIDCProviderFromAuthenticationFilters(t *testing.T) {
 				{Namespace: "test", Name: "oidc-filter"}: makeOIDCFilter("test", "oidc-filter", false, true),
 			},
 			referencedSecrets: map[types.NamespacedName]*secrets.Secret{clientSecretNsName: validClientSecret},
-			expected:          OIDCProvider{},
+			expected:          nil,
 		},
 		{
 			name: "filter is not referenced",
@@ -5378,7 +5378,7 @@ func TestBuildOIDCProviderFromAuthenticationFilters(t *testing.T) {
 				{Namespace: "test", Name: "oidc-filter"}: makeOIDCFilter("test", "oidc-filter", true, false),
 			},
 			referencedSecrets: map[types.NamespacedName]*secrets.Secret{clientSecretNsName: validClientSecret},
-			expected:          OIDCProvider{},
+			expected:          nil,
 		},
 		{
 			name: "filter is not OIDC type",
@@ -5396,7 +5396,7 @@ func TestBuildOIDCProviderFromAuthenticationFilters(t *testing.T) {
 				},
 			},
 			referencedSecrets: nil,
-			expected:          OIDCProvider{},
+			expected:          nil,
 		},
 		{
 			name: "client secret not in referencedSecrets",
@@ -5404,7 +5404,7 @@ func TestBuildOIDCProviderFromAuthenticationFilters(t *testing.T) {
 				{Namespace: "test", Name: "oidc-filter"}: makeOIDCFilter("test", "oidc-filter", true, true),
 			},
 			referencedSecrets: map[types.NamespacedName]*secrets.Secret{},
-			expected:          OIDCProvider{},
+			expected:          nil,
 		},
 		{
 			name: "valid OIDC filter without CA cert",
@@ -5414,12 +5414,14 @@ func TestBuildOIDCProviderFromAuthenticationFilters(t *testing.T) {
 			referencedSecrets: map[types.NamespacedName]*secrets.Secret{
 				clientSecretNsName: validClientSecret,
 			},
-			expected: OIDCProvider{
-				Name:         "oidc_test_oidc-filter",
-				Issuer:       "https://idp.example.com",
-				ClientID:     "my-client-id",
-				ClientSecret: "super-secret",
-				RedirectURI:  "/oidc_callback_test_oidc-filter",
+			expected: []OIDCProvider{
+				{
+					Name:         "oidc_test_oidc-filter",
+					Issuer:       "https://idp.example.com",
+					ClientID:     "my-client-id",
+					ClientSecret: "super-secret",
+					RedirectURI:  "/oidc_callback_test_oidc-filter",
+				},
 			},
 		},
 		{
@@ -5431,14 +5433,48 @@ func TestBuildOIDCProviderFromAuthenticationFilters(t *testing.T) {
 				clientSecretNsName: validClientSecret,
 				caSecretNsName:     validCASecret,
 			},
-			expected: OIDCProvider{
-				Name:           "oidc_test_oidc-filter",
-				Issuer:         "https://idp.example.com",
-				ClientID:       "my-client-id",
-				ClientSecret:   "super-secret",
-				CACertBundleID: generateCertBundleID(caSecretNsName),
-				CACertData:     []byte("ca-cert-data"),
-				RedirectURI:    "/oidc_callback_test_oidc-filter",
+			expected: []OIDCProvider{
+				{
+					Name:           "oidc_test_oidc-filter",
+					Issuer:         "https://idp.example.com",
+					ClientID:       "my-client-id",
+					ClientSecret:   "super-secret",
+					CACertBundleID: generateCertBundleID(caSecretNsName),
+					CACertData:     []byte("ca-cert-data"),
+					RedirectURI:    "/oidc_callback_test_oidc-filter",
+				},
+			},
+			expectedCertBundles: map[CertBundleID]CertBundle{
+				generateCertBundleID(caSecretNsName): []byte("ca-cert-data"),
+			},
+		},
+		{
+			name: "two valid OIDC filters both appear in the result",
+			authFilters: map[types.NamespacedName]*graph.AuthenticationFilter{
+				{Namespace: "test", Name: "oidc-filter-one"}: makeOIDCFilter("test", "oidc-filter-one", true, true),
+				{Namespace: "test", Name: "oidc-filter-two"}: makeOIDCFilterWithCA("test", "oidc-filter-two"),
+			},
+			referencedSecrets: map[types.NamespacedName]*secrets.Secret{
+				clientSecretNsName: validClientSecret,
+				caSecretNsName:     validCASecret,
+			},
+			expected: []OIDCProvider{
+				{
+					Name:         "oidc_test_oidc-filter-one",
+					Issuer:       "https://idp.example.com",
+					ClientID:     "my-client-id",
+					ClientSecret: "super-secret",
+					RedirectURI:  "/oidc_callback_test_oidc-filter-one",
+				},
+				{
+					Name:           "oidc_test_oidc-filter-two",
+					Issuer:         "https://idp.example.com",
+					ClientID:       "my-client-id",
+					ClientSecret:   "super-secret",
+					CACertBundleID: generateCertBundleID(caSecretNsName),
+					CACertData:     []byte("ca-cert-data"),
+					RedirectURI:    "/oidc_callback_test_oidc-filter-two",
+				},
 			},
 			expectedCertBundles: map[CertBundleID]CertBundle{
 				generateCertBundleID(caSecretNsName): []byte("ca-cert-data"),
@@ -5452,7 +5488,7 @@ func TestBuildOIDCProviderFromAuthenticationFilters(t *testing.T) {
 			g := NewWithT(t)
 
 			result, certBundles := buildOIDCProviderFromAuthenticationFilters(tc.authFilters, tc.referencedSecrets)
-			g.Expect(result).To(Equal(tc.expected))
+			g.Expect(result).To(ConsistOf(tc.expected))
 			g.Expect(certBundles).To(Equal(tc.expectedCertBundles))
 		})
 	}

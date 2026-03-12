@@ -37,8 +37,8 @@ type Configuration struct {
 	// AuxiliarySecrets contains additional secret data, like certificates/keys/tokens that are not related to
 	// Gateway API resources.
 	AuxiliarySecrets map[graph.SecretFileType][]byte
-	// OIDCProvider holds the OIDC provider configuration at HTTP level.
-	OIDCProvider OIDCProvider
+	// OIDCProviders holds all OIDC provider configurations at the HTTP level.
+	OIDCProviders []OIDCProvider
 	// DeploymentContext contains metadata about NGF and the cluster.
 	DeploymentContext DeploymentContext
 	// Logging defines logging related settings for NGINX.
@@ -310,6 +310,11 @@ type OIDCProvider struct {
 	// CACertData is the raw PEM bytes of the CA certificates.
 	CACertData []byte
 }
+
+const (
+	oidcDirective = "oidc"
+	oidcCallBack  = "/oidc_callback"
+)
 
 // HTTPHeader represents an HTTP header.
 type HTTPHeader struct {

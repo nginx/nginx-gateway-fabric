@@ -240,9 +240,9 @@ func buildOIDCProvider(
 		return nil
 	}
 
-	providerName := fmt.Sprintf("oidc_%s_%s", filter.Source.Namespace, filter.Source.Name)
+	providerName := fmt.Sprintf("%s_%s_%s", oidcDirective, filter.Source.Namespace, filter.Source.Name)
 
-	redirectURI := fmt.Sprintf("/oidc_callback_%s_%s", filter.Source.Namespace, filter.Source.Name)
+	redirectURI := fmt.Sprintf("%s_%s_%s", oidcCallBack, filter.Source.Namespace, filter.Source.Name)
 	if specOIDC.RedirectURI != nil {
 		redirectURI = *specOIDC.RedirectURI
 	}

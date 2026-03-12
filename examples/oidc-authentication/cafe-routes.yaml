@@ -13,6 +13,9 @@ spec:
     - path:
         type: PathPrefix
         value: /coffee
+    - path:
+        type: PathPrefix
+        value: /tea
     backendRefs:
     - name: coffee
       port: 80
@@ -21,7 +24,7 @@ spec:
       extensionRef:
         group: gateway.nginx.org
         kind: AuthenticationFilter
-        name: oidc-auth
+        name: oidc-nginx-gateway
   - matches:
     - path:
         type: PathPrefix
@@ -34,4 +37,4 @@ spec:
       extensionRef:
         group: gateway.nginx.org
         kind: AuthenticationFilter
-        name: zzz-oidc-auth
+        name: oidc-user-service

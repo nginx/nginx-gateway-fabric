@@ -522,7 +522,7 @@ func createLocations(
 		}
 	}
 
-	if oidcProvider := findOIDCProvider(server.PathRules); oidcProvider != nil {
+	for _, oidcProvider := range findOIDCProviders(server.PathRules) {
 		locs = append(locs, createOIDCCallbackLocation(oidcProvider))
 	}
 
@@ -1756,16 +1756,23 @@ func matchesRootPath(rule dataplane.PathRule) bool {
 	return matched
 }
 
-// findOIDCProvider returns the first OIDCProvider found across all path rules, or nil if none exist.
-func findOIDCProvider(pathRules []dataplane.PathRule) *dataplane.OIDCProvider {
+// findOIDCProviders returns all unique OIDCProviders referenced across the path rules, de-duped by provider name.
+func findOIDCProviders(pathRules []dataplane.PathRule) []*dataplane.OIDCProvider {
+	seen := make(map[string]struct{})
+	var providers []*dataplane.OIDCProvider
 	for _, rule := range pathRules {
 		for _, matchRule := range rule.MatchRules {
-			if matchRule.Filters.AuthenticationFilter != nil && matchRule.Filters.AuthenticationFilter.OIDC != nil {
-				return matchRule.Filters.AuthenticationFilter.OIDC
+			if matchRule.Filters.AuthenticationFilter == nil || matchRule.Filters.AuthenticationFilter.OIDC == nil {
+				continue
+			}
+			provider := matchRule.Filters.AuthenticationFilter.OIDC
+			if _, exists := seen[provider.Name]; !exists {
+				seen[provider.Name] = struct{}{}
+				providers = append(providers, provider)
 			}
 		}
 	}
-	return nil
+	return providers
 }
 
 // createOIDCCallbackLocation creates a minimal OIDC callback location containing only the auth_oidc directive.

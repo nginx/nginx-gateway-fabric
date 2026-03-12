@@ -282,6 +282,11 @@ type resourceEntry interface {
 	validate(client.Object)
 	setError(error)
 	error() error
+	// needsRevalidation returns true if the cached entry must be re-validated given the current resolve options.
+	needsRevalidation(opts *resolveOptions) bool
+	// revalidate performs additional validation against the underlying object using the resolve options,
+	// and returns the result. It is only called when needsRevalidation returns true.
+	revalidate(opts *resolveOptions, obj client.Object) error
 }
 
 // ResourceResolver implements the Resolver interface.
@@ -314,25 +319,15 @@ func (r *ResourceResolver) Resolve(resType ResourceType, nsname types.Namespaced
 	r.lock.RLock()
 	if res, resolved := r.resolvedResources[key]; resolved {
 		r.lock.RUnlock()
-		// If the cached entry was validated against a different expected key, re-validate for the new key.
-		// This handles the case where the same Opaque secret is referenced for two different purposes
-		// (e.g. as a client secret and as a CA cert) — the cache key doesn't include the expected key,
-		// so we must explicitly check the new key against the full secret data in clusterResources.
-		if secretRes, ok := res.(*secretEntry); ok &&
-			options.expectedSecretKey != "" &&
-			options.expectedSecretKey != secretRes.expectedKey {
-			if secretRes.error() != nil {
-				return secretRes.error()
+		if res.needsRevalidation(options) {
+			if err := res.error(); err != nil {
+				return err
 			}
 			obj, exist := r.clusterResources[key]
 			if !exist {
 				return fmt.Errorf("%s %s does not exist", resType, nsname.String())
 			}
-			secret, ok := obj.(*v1.Secret)
-			if !ok {
-				panic(fmt.Sprintf("expected Secret object, got %T", obj))
-			}
-			return validateOpaqueSecretKey(secret, options.expectedSecretKey)
+			return res.revalidate(options, obj)
 		}
 		return res.error()
 	}

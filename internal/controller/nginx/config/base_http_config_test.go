@@ -610,7 +610,7 @@ func TestExecuteBaseHttp_ServerTokens(t *testing.T) {
 	}
 }
 
-func TestExecuteBaseHttp_OIDCProvider(t *testing.T) {
+func TestExecuteBaseHttp_OIDCProviders(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -628,14 +628,16 @@ func TestExecuteBaseHttp_OIDCProvider(t *testing.T) {
 			},
 		},
 		{
-			name: "OIDC provider without CA cert specified and custom redirect URI",
+			name: "single OIDC provider without CA cert and with custom redirect URI",
 			conf: dataplane.Configuration{
-				OIDCProvider: dataplane.OIDCProvider{
-					Name:         "oidc_test_my-filter",
-					Issuer:       "https://idp.example.com",
-					ClientID:     "my-client-id",
-					ClientSecret: "my-client-secret",
-					RedirectURI:  "/custom_callback/path",
+				OIDCProviders: []dataplane.OIDCProvider{
+					{
+						Name:         "oidc_test_my-filter",
+						Issuer:       "https://idp.example.com",
+						ClientID:     "my-client-id",
+						ClientSecret: "my-client-secret",
+						RedirectURI:  "/custom_callback/path",
+					},
 				},
 			},
 			expSubStrings: []string{
@@ -643,31 +645,86 @@ func TestExecuteBaseHttp_OIDCProvider(t *testing.T) {
 				"issuer https://idp.example.com;",
 				"client_id my-client-id;",
 				"client_secret my-client-secret;",
-				`redirect_uri /custom_callback/path;`,
+				"redirect_uri /custom_callback/path;",
 			},
 			expAbsent: []string{
 				"ssl_trusted_certificate",
 			},
 		},
 		{
-			name: "OIDC provider with CA cert specified and no redirectURI",
+			name: "single OIDC provider with CA cert",
 			conf: dataplane.Configuration{
-				OIDCProvider: dataplane.OIDCProvider{
-					Name:           "oidc_test_my-filter",
-					Issuer:         "https://idp.example.com",
-					ClientID:       "my-client-id",
-					ClientSecret:   "my-client-secret",
-					CACertBundleID: "oidc_ca_test_my-ca",
-					RedirectURI:    "/oidc_callback_test_my-filter",
+				OIDCProviders: []dataplane.OIDCProvider{
+					{
+						Name:           "oidc_test_my-filter",
+						Issuer:         "https://idp.example.com",
+						ClientID:       "my-client-id",
+						ClientSecret:   "my-client-secret",
+						CACertBundleID: "oidc_ca_test_my-ca",
+						RedirectURI:    "/oidc_callback_test_my-filter",
+					},
 				},
 			},
 			expSubStrings: []string{
 				"oidc_provider oidc_test_my-filter {",
 				"issuer https://idp.example.com;",
 				"client_id my-client-id;",
-				`client_secret my-client-secret;`,
-				`redirect_uri /oidc_callback_test_my-filter;`,
+				"client_secret my-client-secret;",
+				"redirect_uri /oidc_callback_test_my-filter;",
 				"ssl_trusted_certificate /etc/nginx/secrets/oidc_ca_test_my-ca.crt;",
+			},
+		},
+		{
+			name: "OIDC provider with empty name is skipped and generates no oidc_provider block",
+			conf: dataplane.Configuration{
+				OIDCProviders: []dataplane.OIDCProvider{
+					{
+						Name:         "",
+						Issuer:       "https://idp.example.com",
+						ClientID:     "my-client-id",
+						ClientSecret: "my-client-secret",
+						RedirectURI:  "/oidc_callback",
+					},
+				},
+			},
+			expAbsent: []string{
+				"oidc_provider",
+				"client_secret",
+			},
+		},
+		{
+			name: "two OIDC providers each generates its own oidc_provider block",
+			conf: dataplane.Configuration{
+				OIDCProviders: []dataplane.OIDCProvider{
+					{
+						Name:         "oidc_test_filter-one",
+						Issuer:       "https://idp1.example.com",
+						ClientID:     "client-id-1",
+						ClientSecret: "client-secret-1",
+						RedirectURI:  "/oidc_callback_test_filter-one",
+					},
+					{
+						Name:           "oidc_test_filter-two",
+						Issuer:         "https://idp2.example.com",
+						ClientID:       "client-id-2",
+						ClientSecret:   "client-secret-2",
+						CACertBundleID: "oidc_ca_test_filter-two",
+						RedirectURI:    "/oidc_callback_test_filter-two",
+					},
+				},
+			},
+			expSubStrings: []string{
+				"oidc_provider oidc_test_filter-one {",
+				"issuer https://idp1.example.com;",
+				"client_id client-id-1;",
+				"client_secret client-secret-1;",
+				"redirect_uri /oidc_callback_test_filter-one;",
+				"oidc_provider oidc_test_filter-two {",
+				"issuer https://idp2.example.com;",
+				"client_id client-id-2;",
+				"client_secret client-secret-2;",
+				"redirect_uri /oidc_callback_test_filter-two;",
+				"ssl_trusted_certificate /etc/nginx/secrets/oidc_ca_test_filter-two.crt;",
 			},
 		},
 	}

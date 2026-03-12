@@ -101,7 +101,7 @@ func BuildConfiguration(
 	config := Configuration{
 		HTTPServers:           httpServers,
 		SSLServers:            sslServers,
-		OIDCProvider:          oidcProvider,
+		OIDCProviders:         oidcProvider,
 		TLSPassthroughServers: buildPassthroughServers(gateway),
 		TCPServers:            buildL4Servers(logger, gateway, v1.TCPProtocolType),
 		UDPServers:            buildL4Servers(logger, gateway, v1.UDPProtocolType),
@@ -1175,14 +1175,15 @@ func GenerateAuthFileID(namespace, name string) AuthFileID {
 	return AuthFileID(fmt.Sprintf("%s_%s", namespace, name))
 }
 
-// buildOIDCProviderFromAuthenticationFilters builds the OIDC provider config from the processed
-// authentication filters. Only one OIDC provider is supported per gateway; extra referenced OIDC
-// filters are already invalidated at graph construction layer.
-// It also returns any CA certificate bundles that are needed.
+// buildOIDCProviderFromAuthenticationFilters builds the OIDC provider configs from the processed
+// authentication filters. It also returns any CA certificate bundles that are needed.
 func buildOIDCProviderFromAuthenticationFilters(
 	authFilters map[types.NamespacedName]*graph.AuthenticationFilter,
 	referencedSecrets map[types.NamespacedName]*secrets.Secret,
-) (OIDCProvider, map[CertBundleID]CertBundle) {
+) ([]OIDCProvider, map[CertBundleID]CertBundle) {
+	var providers []OIDCProvider
+	caCertBundles := make(map[CertBundleID]CertBundle)
+
 	for _, af := range authFilters {
 		if !af.Valid || !af.Referenced {
 			continue
@@ -1196,11 +1197,15 @@ func buildOIDCProviderFromAuthenticationFilters(
 		}
 		provider := *converted.OIDC
 		if provider.CACertBundleID != "" && provider.CACertData != nil {
-			return provider, map[CertBundleID]CertBundle{provider.CACertBundleID: provider.CACertData}
+			caCertBundles[provider.CACertBundleID] = provider.CACertData
 		}
-		return provider, nil
+		providers = append(providers, provider)
 	}
-	return OIDCProvider{}, nil
+
+	if len(caCertBundles) == 0 {
+		return providers, nil
+	}
+	return providers, caCertBundles
 }
 
 func telemetryEnabled(gw *graph.Gateway) bool {

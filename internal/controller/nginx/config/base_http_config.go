@@ -34,7 +34,7 @@ type oidcConfiguration struct {
 type httpConfig struct {
 	DNSResolver             *dataplane.DNSResolverConfig
 	AccessLog               *AccessLog
-	OIDCProvider            *oidcConfiguration
+	OIDCProviders           []*oidcConfiguration
 	GatewaySecretID         dataplane.SSLKeyPairID
 	NginxReadinessProbePath string
 	ServerTokens            string
@@ -66,7 +66,7 @@ func executeBaseHTTPConfig(conf dataplane.Configuration, generator policies.Gene
 		AccessLog:               buildAccessLog(conf.Logging.AccessLog),
 		GatewaySecretID:         conf.BaseHTTPConfig.GatewaySecretID,
 		ServerTokens:            conf.BaseHTTPConfig.ServerTokens,
-		OIDCProvider:            buildOIDCProvider(conf.OIDCProvider),
+		OIDCProviders:           buildOIDCProviders(conf.OIDCProviders),
 	}
 
 	results := make([]executeResult, 0, len(includes)+1)
@@ -107,25 +107,29 @@ func buildDNSResolver(dnsResolver *dataplane.DNSResolverConfig) *dataplane.DNSRe
 	return fixed
 }
 
-// buildOIDCProvider returns an oidcConfiguration if the provided OIDCProvider has a non-empty Name,
-// otherwise it returns nil.
-func buildOIDCProvider(provider dataplane.OIDCProvider) *oidcConfiguration {
-	if provider.Name == "" {
+// buildOIDCProviders converts a slice of dataplane OIDCProviders to oidcConfiguration pointers.
+func buildOIDCProviders(providers []dataplane.OIDCProvider) []*oidcConfiguration {
+	if len(providers) == 0 {
 		return nil
 	}
-
-	oidc := &oidcConfiguration{
-		Name:         provider.Name,
-		Issuer:       provider.Issuer,
-		ClientID:     provider.ClientID,
-		ClientSecret: provider.ClientSecret,
-		RedirectURI:  provider.RedirectURI,
+	result := make([]*oidcConfiguration, 0, len(providers))
+	for _, provider := range providers {
+		if provider.Name == "" {
+			continue
+		}
+		oidc := &oidcConfiguration{
+			Name:         provider.Name,
+			Issuer:       provider.Issuer,
+			ClientID:     provider.ClientID,
+			ClientSecret: provider.ClientSecret,
+			RedirectURI:  provider.RedirectURI,
+		}
+		if provider.CACertBundleID != "" {
+			oidc.TrustedCertificatePath = generateCertBundleFileName(provider.CACertBundleID)
+		}
+		result = append(result, oidc)
 	}
-	if provider.CACertBundleID != "" {
-		oidc.TrustedCertificatePath = generateCertBundleFileName(provider.CACertBundleID)
-	}
-
-	return oidc
+	return result
 }
 
 func buildAccessLog(accessLogConfig *dataplane.AccessLog) *AccessLog {

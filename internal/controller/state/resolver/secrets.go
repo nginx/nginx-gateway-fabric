@@ -70,6 +70,22 @@ func (s *secretEntry) validate(obj client.Object) {
 	s.setError(validationErr)
 }
 
+func (s *secretEntry) needsRevalidation(opts *resolveOptions) bool {
+	return opts.expectedSecretKey != "" && opts.expectedSecretKey != s.expectedKey
+}
+
+func (s *secretEntry) revalidate(opts *resolveOptions, obj client.Object) error {
+	secret, ok := obj.(*v1.Secret)
+	if !ok {
+		panic(fmt.Sprintf("expected Secret object, got %T", obj))
+	}
+	err := validateOpaqueSecretKey(secret, opts.expectedSecretKey)
+	if err == nil {
+		s.expectedKey = opts.expectedSecretKey
+	}
+	return err
+}
+
 func validateOpaqueSecretKey(secret *v1.Secret, key string) error {
 	if data, exists := secret.Data[key]; !exists || len(data) == 0 {
 		return fmt.Errorf(

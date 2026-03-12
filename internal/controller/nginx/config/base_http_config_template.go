@@ -86,14 +86,14 @@ include {{ $i.Name }};
 # Server tokens
 server_tokens {{ .ServerTokens }};
 
-{{- if .OIDCProvider }}
-oidc_provider {{ .OIDCProvider.Name }} {
-    issuer {{ .OIDCProvider.Issuer }};
-    client_id {{ .OIDCProvider.ClientID }};
-    client_secret {{ .OIDCProvider.ClientSecret }};
-    redirect_uri {{ .OIDCProvider.RedirectURI }};
-    {{- if .OIDCProvider.TrustedCertificatePath }}
-    ssl_trusted_certificate {{ .OIDCProvider.TrustedCertificatePath }};
+{{- range .OIDCProviders }}
+oidc_provider {{ .Name }} {
+    issuer {{ .Issuer }};
+    client_id {{ .ClientID }};
+    client_secret {{ .ClientSecret }};
+    redirect_uri {{ .RedirectURI }};
+    {{- if .TrustedCertificatePath }}
+    ssl_trusted_certificate {{ .TrustedCertificatePath }};
     {{- end }}
 }
 {{- end }}

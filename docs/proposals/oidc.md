@@ -270,7 +270,7 @@ type OIDCLogoutConfig struct {
 
 ```
 
-For simplicity, only one OIDC provider can be configured at this time. To set up authentication with an OpenID Provider, you must specify the issuer URL, client ID, and client secret.
+We will be supporting multiple OIDC providers. To set up authentication with an OpenID Provider, you must specify the issuer URL, client ID, and client secret.
 
 TLS is required in two places:
 

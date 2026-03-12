@@ -14,7 +14,6 @@ import (
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 	v1alpha "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/ngfsort"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/validation"
@@ -1610,65 +1609,4 @@ func validateBackendRefL4RouteMulti(
 	}
 
 	return backendRef, conds
-}
-
-// enforceOIDCProviderConstraint enforces the one-OIDC-provider-per-gateway constraint.
-// It collects all valid referenced OIDC filters, keeps the lexicographically first as the winner,
-// marks the rest invalid and unreferenced, then propagates a ResolvedRefs/False/InvalidFilter
-// condition to any route rules that reference the now-invalid filters.
-// Must be called after routes are built so that the referenced flag is set on each filter.
-func enforceOIDCProviderConstraint(
-	authFilters map[types.NamespacedName]*AuthenticationFilter,
-	routes map[RouteKey]*L7Route,
-) {
-	var oidcNames []types.NamespacedName
-	for nsname, af := range authFilters {
-		if af.Valid && af.Referenced && af.Source.Spec.Type == ngfAPI.AuthTypeOIDC {
-			oidcNames = append(oidcNames, nsname)
-		}
-	}
-	if len(oidcNames) <= 1 {
-		return
-	}
-
-	sort.Slice(oidcNames, func(i, j int) bool {
-		if oidcNames[i].Namespace != oidcNames[j].Namespace {
-			return oidcNames[i].Namespace < oidcNames[j].Namespace
-		}
-		return oidcNames[i].Name < oidcNames[j].Name
-	})
-
-	winner := oidcNames[0]
-	for _, nsname := range oidcNames[1:] {
-		af := authFilters[nsname]
-		cond := conditions.NewAuthenticationFilterInvalid(
-			"only one OIDC AuthenticationFilter can be referenced per gateway; " +
-				"this filter conflicts with " + winner.String(),
-		)
-		af.Valid = false
-		af.Referenced = false
-		af.Conditions = append(af.Conditions, cond)
-	}
-
-	// mark the routes rules that reference the loser OIDC filter as invalid
-	for _, route := range routes {
-		for i := range route.Spec.Rules {
-			for _, filter := range route.Spec.Rules[i].Filters.Filters {
-				if filter.ResolvedExtensionRef == nil || !filter.ResolvedExtensionRef.Valid {
-					continue
-				}
-				af := filter.ResolvedExtensionRef.AuthenticationFilter
-				if af == nil || af.Valid {
-					continue
-				}
-				route.Spec.Rules[i].Filters.Valid = false
-				route.Conditions = append(route.Conditions,
-					conditions.NewRouteResolvedRefsInvalidFilter(
-						"referenced AuthenticationFilter "+
-							client.ObjectKeyFromObject(af.Source).String()+" is invalid",
-					),
-				)
-			}
-		}
-	}
 }
