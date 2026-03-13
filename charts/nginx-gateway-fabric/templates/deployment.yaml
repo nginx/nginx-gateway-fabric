@@ -122,15 +122,17 @@ spec:
         {{- if $plmURL }}
         - --plm-storage-url={{ $plmURL }}
         {{- $plmEnabled := index .Values "f5-waf-plm" "enabled" }}
-        {{- $credSecret := .Values.nginxGateway.plmStorage.credentialsSecretName | default (ternary (include "plm.credentialsSecretName" .) "" $plmEnabled) }}
+        {{- $derivedURL := eq (default "" .Values.nginxGateway.plmStorage.url) "" }}
+        {{- $autoDefaultSecrets := and $plmEnabled $derivedURL }}
+        {{- $credSecret := .Values.nginxGateway.plmStorage.credentialsSecretName | default (ternary (include "plm.credentialsSecretName" .) "" $autoDefaultSecrets) }}
         {{- if $credSecret }}
         - --plm-storage-credentials-secret={{ $credSecret }}
         {{- end }}
-        {{- $caSecret := .Values.nginxGateway.plmStorage.tls.caSecretName | default (ternary (include "plm.caSecretName" .) "" $plmEnabled) }}
+        {{- $caSecret := .Values.nginxGateway.plmStorage.tls.caSecretName | default (ternary (include "plm.caSecretName" .) "" $autoDefaultSecrets) }}
         {{- if $caSecret }}
         - --plm-storage-ca-secret={{ $caSecret }}
         {{- end }}
-        {{- $clientSecret := .Values.nginxGateway.plmStorage.tls.clientSSLSecretName | default (ternary (include "plm.clientSSLSecretName" .) "" $plmEnabled) }}
+        {{- $clientSecret := .Values.nginxGateway.plmStorage.tls.clientSSLSecretName | default (ternary (include "plm.clientSSLSecretName" .) "" $autoDefaultSecrets) }}
         {{- if $clientSecret }}
         - --plm-storage-client-ssl-secret={{ $clientSecret }}
         {{- end }}

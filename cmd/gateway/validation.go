@@ -156,7 +156,7 @@ func validateEndpointOptionalPort(value string) error {
 
 	// we don't know if the user intended to use a hostname or an IP address,
 	// so we return a generic error message
-	return fmt.Errorf("%q must be a domain name or IP address with optional port", value)
+	return fmt.Errorf("%q must be in the format [http://|https://]<host>[:<port>]", value)
 }
 
 // validatePort makes sure a given port is inside the valid port range for its usage.

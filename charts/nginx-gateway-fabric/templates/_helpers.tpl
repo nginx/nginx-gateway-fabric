@@ -131,15 +131,17 @@ Secrets follow the same prefix:
 {{- end }}
 
 {{- define "plm.storageURL" -}}
-{{- $plm := index .Values "f5-waf-plm" }}
-{{- $certs := $plm.seaweedfsOperatorConfig.seaweedfs.certificates }}
-{{- $filer := $plm.seaweedfsOperatorConfig.seaweedfs.filer }}
+{{- $plm := (index .Values "f5-waf-plm") | default (dict) }}
+{{- $seaweedfs := dig "seaweedfsOperatorConfig" "seaweedfs" (dict) $plm }}
+{{- $certs := dig "certificates" (dict) $seaweedfs }}
+{{- $filer := dig "filer" (dict) $seaweedfs }}
+{{- $clusterDomain := .Values.clusterDomain | default "cluster.local" }}
 {{- if $certs.enabled }}
 {{- $port := $filer.filerS3HttpsPort | default 9333 }}
-{{- printf "https://%s-seaweed-filer.%s.svc.cluster.local:%d" (include "plm.fullname" .) (include "plm.namespace" .) (int $port) }}
+{{- printf "https://%s-seaweed-filer.%s.svc.%s:%d" (include "plm.fullname" .) (include "plm.namespace" .) $clusterDomain (int $port) }}
 {{- else }}
 {{- $port := $filer.filerS3Port | default 8333 }}
-{{- printf "http://%s-seaweed-filer.%s.svc.cluster.local:%d" (include "plm.fullname" .) (include "plm.namespace" .) (int $port) }}
+{{- printf "http://%s-seaweed-filer.%s.svc.%s:%d" (include "plm.fullname" .) (include "plm.namespace" .) $clusterDomain (int $port) }}
 {{- end }}
 {{- end }}
 
