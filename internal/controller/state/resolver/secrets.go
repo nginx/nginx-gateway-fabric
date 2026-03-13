@@ -11,8 +11,8 @@ import (
 
 type secretEntry struct {
 	secrets.Secret
-	// err holds the corresponding error if the Secret is invalid or does not exist.
-	err error
+	err         error
+	expectedKey string
 }
 
 func (s *secretEntry) setError(err error) {
@@ -35,6 +35,12 @@ func (s *secretEntry) validate(obj client.Object) {
 	switch {
 	// Any future Secret keys that are needed MUST be added to cache/transform.go
 	// in order to track them.
+	case s.expectedKey != "":
+		if secret.Type != v1.SecretTypeOpaque {
+			panic(fmt.Sprintf("secret must be of type Opaque to use an expected key, got %q", secret.Type))
+		}
+		validationErr = validateOpaqueSecretKey(secret, s.expectedKey)
+
 	case secret.Type == v1.SecretTypeTLS:
 		// A TLS Secret is guaranteed to have these data fields.
 		cert := &secrets.Certificate{
@@ -54,7 +60,6 @@ func (s *secretEntry) validate(obj client.Object) {
 
 		certBundle = secrets.NewCertificateBundle(client.ObjectKeyFromObject(secret), "Secret", cert)
 	case secret.Type == v1.SecretType(secrets.SecretTypeHtpasswd):
-		// Validate Htpasswd secret
 		if _, exists := secret.Data[secrets.AuthKey]; !exists {
 			validationErr = fmt.Errorf("missing required key %q in secret type %q", secrets.AuthKey, secret.Type)
 		}
@@ -67,4 +72,39 @@ func (s *secretEntry) validate(obj client.Object) {
 		CertBundle: certBundle,
 	}
 	s.setError(validationErr)
+}
+
+func (s *secretEntry) needsRevalidation(opts *resolveOptions) bool {
+	return opts.expectedSecretKey != "" && opts.expectedSecretKey != s.expectedKey
+}
+
+// revalidate checks are only done on Opaque secrets with an expected key,
+// it will panic without expectedKey, which is also verified in needsRevalidation.
+func (s *secretEntry) revalidate(opts *resolveOptions, obj client.Object) error {
+	secret, ok := obj.(*v1.Secret)
+	if !ok {
+		panic(fmt.Sprintf("expected Secret object, got %T", obj))
+	}
+
+	if secret.Type != v1.SecretTypeOpaque {
+		panic(fmt.Sprintf("secret must be of type Opaque to use an expected key, got %q", secret.Type))
+	}
+
+	err := validateOpaqueSecretKey(secret, opts.expectedSecretKey)
+	s.expectedKey = opts.expectedSecretKey
+	s.setError(err)
+	return err
+}
+
+func validateOpaqueSecretKey(secret *v1.Secret, key string) error {
+	if data, exists := secret.Data[key]; !exists || len(data) == 0 {
+		return fmt.Errorf(
+			"opaque secret %s/%s does not contain the expected key %q",
+			secret.Namespace,
+			secret.Name,
+			key,
+		)
+	}
+
+	return nil
 }

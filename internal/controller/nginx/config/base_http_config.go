@@ -20,9 +20,21 @@ type AccessLog struct {
 	FormatName string // Internal format name (ngf_user_defined_log_format)
 	Disable    bool   // User's disable flag
 }
+
+// oidcConfiguration holds the OIDC config.
+type oidcConfiguration struct {
+	Name                   string
+	Issuer                 string
+	ClientID               string
+	ClientSecret           string
+	TrustedCertificatePath string
+	RedirectURI            string
+}
+
 type httpConfig struct {
 	DNSResolver             *dataplane.DNSResolverConfig
 	AccessLog               *AccessLog
+	OIDCProviders           []*oidcConfiguration
 	GatewaySecretID         dataplane.SSLKeyPairID
 	NginxReadinessProbePath string
 	ServerTokens            string
@@ -54,6 +66,7 @@ func executeBaseHTTPConfig(conf dataplane.Configuration, generator policies.Gene
 		AccessLog:               buildAccessLog(conf.Logging.AccessLog),
 		GatewaySecretID:         conf.BaseHTTPConfig.GatewaySecretID,
 		ServerTokens:            conf.BaseHTTPConfig.ServerTokens,
+		OIDCProviders:           buildOIDCProviders(conf.OIDCProviders),
 	}
 
 	results := make([]executeResult, 0, len(includes)+1)
@@ -92,6 +105,31 @@ func buildDNSResolver(dnsResolver *dataplane.DNSResolverConfig) *dataplane.DNSRe
 	}
 
 	return fixed
+}
+
+// buildOIDCProviders converts a slice of dataplane OIDCProviders to oidcConfiguration pointers.
+func buildOIDCProviders(providers []dataplane.OIDCProvider) []*oidcConfiguration {
+	if len(providers) == 0 {
+		return nil
+	}
+	result := make([]*oidcConfiguration, 0, len(providers))
+	for _, provider := range providers {
+		if provider.Name == "" {
+			continue
+		}
+		oidc := &oidcConfiguration{
+			Name:         provider.Name,
+			Issuer:       provider.Issuer,
+			ClientID:     provider.ClientID,
+			ClientSecret: provider.ClientSecret,
+			RedirectURI:  provider.RedirectURI,
+		}
+		if provider.CACertBundleID != "" {
+			oidc.TrustedCertificatePath = generateCertBundleFileName(provider.CACertBundleID)
+		}
+		result = append(result, oidc)
+	}
+	return result
 }
 
 func buildAccessLog(accessLogConfig *dataplane.AccessLog) *AccessLog {

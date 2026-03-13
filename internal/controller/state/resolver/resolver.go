@@ -248,9 +248,16 @@ func findPort(ports []discoveryV1.EndpointPort, svcPort v1.ServicePort) int32 {
 
 // Resolver defines an interface for resolving resources that are referenced by other resources.
 type Resolver interface {
-	Resolve(ResourceType, types.NamespacedName) error
+	Resolve(ResourceType, types.NamespacedName, ...ResolveOption) error
 	GetSecrets() map[types.NamespacedName]*secrets.Secret
 	GetConfigMaps() map[types.NamespacedName]*configmaps.CaCertConfigMap
+}
+
+// ResolveOption is an option for the Resolve method.
+type ResolveOption func(*resolveOptions)
+
+type resolveOptions struct {
+	expectedSecretKey string
 }
 
 // ResourceType represents the type of resource to be resolved.
@@ -275,6 +282,11 @@ type resourceEntry interface {
 	validate(client.Object)
 	setError(error)
 	error() error
+	// needsRevalidation returns true if the cached entry must be re-validated given the current resolve options.
+	needsRevalidation(opts *resolveOptions) bool
+	// revalidate performs additional validation against the underlying object using the resolve options,
+	// and returns the result. It is only called when needsRevalidation returns true.
+	revalidate(opts *resolveOptions, obj client.Object) error
 }
 
 // ResourceResolver implements the Resolver interface.
@@ -295,15 +307,29 @@ func NewResourceResolver(resources map[ResourceKey]client.Object) Resolver {
 // Resolve resolves the resource of the given type and namespaced name. A resource is resolved if
 // it exists in the cluster. If there is a validation error, the resource is still included
 // in the map of resolved resources, but with an error defined.
-func (r *ResourceResolver) Resolve(resType ResourceType, nsname types.NamespacedName) error {
+func (r *ResourceResolver) Resolve(resType ResourceType, nsname types.NamespacedName, opts ...ResolveOption) error {
 	key := ResourceKey{
 		NamespacedName: nsname,
 		ResourceType:   resType,
 	}
-
+	options := &resolveOptions{}
+	for _, opt := range opts {
+		opt(options)
+	}
 	r.lock.RLock()
 	if res, resolved := r.resolvedResources[key]; resolved {
 		r.lock.RUnlock()
+
+		// this should only be done for secrets with an expected key
+		if res.needsRevalidation(options) {
+			// get the current object from the cluster resources to
+			// re-validate against the new expected key
+			obj, exist := r.clusterResources[key]
+			if !exist {
+				return fmt.Errorf("%s %s does not exist", resType, nsname.String())
+			}
+			return res.revalidate(options, obj)
+		}
 		return res.error()
 	}
 	r.lock.RUnlock()
@@ -313,7 +339,7 @@ func (r *ResourceResolver) Resolve(resType ResourceType, nsname types.Namespaced
 
 	switch resType {
 	case ResourceTypeSecret:
-		resource = &secretEntry{}
+		resource = &secretEntry{expectedKey: options.expectedSecretKey}
 	case ResourceTypeConfigMap:
 		resource = &configMapEntry{}
 	default:
@@ -327,7 +353,6 @@ func (r *ResourceResolver) Resolve(resType ResourceType, nsname types.Namespaced
 	if !exist {
 		resource.setError(fmt.Errorf("%s %s does not exist", resType, nsname.String()))
 		r.resolvedResources[key] = resource
-
 		return resource.error()
 	}
 
@@ -388,4 +413,11 @@ func (r *ResourceResolver) GetConfigMaps() map[types.NamespacedName]*configmaps.
 	}
 
 	return configMaps
+}
+
+// WithExpectedSecretKey sets the expected key for an Opaque secret.
+func WithExpectedSecretKey(key string) ResolveOption {
+	return func(o *resolveOptions) {
+		o.expectedSecretKey = key
+	}
 }

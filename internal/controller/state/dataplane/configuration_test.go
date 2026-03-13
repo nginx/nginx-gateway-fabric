@@ -5298,6 +5298,202 @@ func TestBuildL4Servers(t *testing.T) {
 	}
 }
 
+func TestBuildOIDCProviderFromAuthenticationFilters(t *testing.T) {
+	t.Parallel()
+
+	makeOIDCFilter := func(ns, name string, valid, referenced bool) *graph.AuthenticationFilter {
+		return &graph.AuthenticationFilter{
+			Source: &ngfAPIv1alpha1.AuthenticationFilter{
+				ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: name},
+				Spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+					Type: ngfAPIv1alpha1.AuthTypeOIDC,
+					OIDC: &ngfAPIv1alpha1.OIDCAuth{
+						Issuer:   "https://idp.example.com",
+						ClientID: "my-client-id",
+						ClientSecretRef: ngfAPIv1alpha1.LocalObjectReference{
+							Name: "oidc-client-secret",
+						},
+					},
+				},
+			},
+			Valid:      valid,
+			Referenced: referenced,
+		}
+	}
+
+	makeOIDCFilterWithCA := func(ns, name string) *graph.AuthenticationFilter {
+		af := makeOIDCFilter(ns, name, true, true)
+		af.Source.Spec.OIDC.CACertificateRefs = []ngfAPIv1alpha1.LocalObjectReference{
+			{Name: "oidc-ca-cert"},
+		}
+		return af
+	}
+
+	clientSecretNsName := types.NamespacedName{Namespace: "test", Name: "oidc-client-secret"}
+	caSecretNsName := types.NamespacedName{Namespace: "test", Name: "oidc-ca-cert"}
+
+	validClientSecret := &secrets.Secret{
+		Source: &apiv1.Secret{
+			ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "oidc-client-secret"},
+			Data:       map[string][]byte{secrets.ClientSecretKey: []byte("super-secret")},
+		},
+	}
+	validCASecret := &secrets.Secret{
+		Source: &apiv1.Secret{
+			ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "oidc-ca-cert"},
+			Data:       map[string][]byte{secrets.CAKey: []byte("ca-cert-data")},
+		},
+	}
+
+	tests := []struct {
+		authFilters         map[types.NamespacedName]*graph.AuthenticationFilter
+		referencedSecrets   map[types.NamespacedName]*secrets.Secret
+		expectedCertBundles map[CertBundleID]CertBundle
+		name                string
+		expected            []OIDCProvider
+	}{
+		{
+			name:              "nil auth filters",
+			authFilters:       nil,
+			referencedSecrets: nil,
+			expected:          nil,
+		},
+		{
+			name:              "empty auth filters",
+			authFilters:       map[types.NamespacedName]*graph.AuthenticationFilter{},
+			referencedSecrets: nil,
+			expected:          nil,
+		},
+		{
+			name: "filter is invalid",
+			authFilters: map[types.NamespacedName]*graph.AuthenticationFilter{
+				{Namespace: "test", Name: "oidc-filter"}: makeOIDCFilter("test", "oidc-filter", false, true),
+			},
+			referencedSecrets: map[types.NamespacedName]*secrets.Secret{clientSecretNsName: validClientSecret},
+			expected:          nil,
+		},
+		{
+			name: "filter is not referenced",
+			authFilters: map[types.NamespacedName]*graph.AuthenticationFilter{
+				{Namespace: "test", Name: "oidc-filter"}: makeOIDCFilter("test", "oidc-filter", true, false),
+			},
+			referencedSecrets: map[types.NamespacedName]*secrets.Secret{clientSecretNsName: validClientSecret},
+			expected:          nil,
+		},
+		{
+			name: "filter is not OIDC type",
+			authFilters: map[types.NamespacedName]*graph.AuthenticationFilter{
+				{Namespace: "test", Name: "basic-filter"}: {
+					Source: &ngfAPIv1alpha1.AuthenticationFilter{
+						ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "basic-filter"},
+						Spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+							Type:  ngfAPIv1alpha1.AuthTypeBasic,
+							Basic: &ngfAPIv1alpha1.BasicAuth{SecretRef: ngfAPIv1alpha1.LocalObjectReference{Name: "auth-secret"}},
+						},
+					},
+					Valid:      true,
+					Referenced: true,
+				},
+			},
+			referencedSecrets: nil,
+			expected:          nil,
+		},
+		{
+			name: "client secret not in referencedSecrets",
+			authFilters: map[types.NamespacedName]*graph.AuthenticationFilter{
+				{Namespace: "test", Name: "oidc-filter"}: makeOIDCFilter("test", "oidc-filter", true, true),
+			},
+			referencedSecrets: map[types.NamespacedName]*secrets.Secret{},
+			expected:          nil,
+		},
+		{
+			name: "valid OIDC filter without CA cert",
+			authFilters: map[types.NamespacedName]*graph.AuthenticationFilter{
+				{Namespace: "test", Name: "oidc-filter"}: makeOIDCFilter("test", "oidc-filter", true, true),
+			},
+			referencedSecrets: map[types.NamespacedName]*secrets.Secret{
+				clientSecretNsName: validClientSecret,
+			},
+			expected: []OIDCProvider{
+				{
+					Name:         "test_oidc-filter",
+					Issuer:       "https://idp.example.com",
+					ClientID:     "my-client-id",
+					ClientSecret: "super-secret",
+					RedirectURI:  "/oidc_callback_test_oidc-filter",
+				},
+			},
+		},
+		{
+			name: "valid OIDC filter with CA cert",
+			authFilters: map[types.NamespacedName]*graph.AuthenticationFilter{
+				{Namespace: "test", Name: "oidc-filter"}: makeOIDCFilterWithCA("test", "oidc-filter"),
+			},
+			referencedSecrets: map[types.NamespacedName]*secrets.Secret{
+				clientSecretNsName: validClientSecret,
+				caSecretNsName:     validCASecret,
+			},
+			expected: []OIDCProvider{
+				{
+					Name:           "test_oidc-filter",
+					Issuer:         "https://idp.example.com",
+					ClientID:       "my-client-id",
+					ClientSecret:   "super-secret",
+					CACertBundleID: generateCertBundleID(caSecretNsName),
+					CACertData:     []byte("ca-cert-data"),
+					RedirectURI:    "/oidc_callback_test_oidc-filter",
+				},
+			},
+			expectedCertBundles: map[CertBundleID]CertBundle{
+				generateCertBundleID(caSecretNsName): []byte("ca-cert-data"),
+			},
+		},
+		{
+			name: "two valid OIDC filters both appear in the result",
+			authFilters: map[types.NamespacedName]*graph.AuthenticationFilter{
+				{Namespace: "test", Name: "oidc-filter-one"}: makeOIDCFilter("test", "oidc-filter-one", true, true),
+				{Namespace: "test", Name: "oidc-filter-two"}: makeOIDCFilterWithCA("test", "oidc-filter-two"),
+			},
+			referencedSecrets: map[types.NamespacedName]*secrets.Secret{
+				clientSecretNsName: validClientSecret,
+				caSecretNsName:     validCASecret,
+			},
+			expected: []OIDCProvider{
+				{
+					Name:         "test_oidc-filter-one",
+					Issuer:       "https://idp.example.com",
+					ClientID:     "my-client-id",
+					ClientSecret: "super-secret",
+					RedirectURI:  "/oidc_callback_test_oidc-filter-one",
+				},
+				{
+					Name:           "test_oidc-filter-two",
+					Issuer:         "https://idp.example.com",
+					ClientID:       "my-client-id",
+					ClientSecret:   "super-secret",
+					CACertBundleID: generateCertBundleID(caSecretNsName),
+					CACertData:     []byte("ca-cert-data"),
+					RedirectURI:    "/oidc_callback_test_oidc-filter-two",
+				},
+			},
+			expectedCertBundles: map[CertBundleID]CertBundle{
+				generateCertBundleID(caSecretNsName): []byte("ca-cert-data"),
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			result, certBundles := buildOIDCProviderFromAuthenticationFilters(tc.authFilters, tc.referencedSecrets)
+			g.Expect(result).To(ConsistOf(tc.expected))
+			g.Expect(certBundles).To(Equal(tc.expectedCertBundles))
+		})
+	}
+}
+
 func TestBuildRewriteIPSettings(t *testing.T) {
 	t.Parallel()
 	tests := []struct {

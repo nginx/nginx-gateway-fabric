@@ -252,12 +252,24 @@ func TestBuildGraph(t *testing.T) {
 		Name:  "ref-authentication-filter",
 	}
 
+	basicAuthSecret := &v1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: testNs,
+			Name:      "basic-auth-secret",
+		},
+		Type: v1.SecretType(secrets.SecretTypeHtpasswd),
+		Data: map[string][]byte{
+			secrets.AuthKey: []byte("user:pass"),
+		},
+	}
+
 	unreferencedAuthenticationFilter := &ngfAPIv1alpha1.AuthenticationFilter{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "unref-authentication-filter",
 			Namespace: testNs,
 		},
 		Spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+			Type: ngfAPIv1alpha1.AuthTypeBasic,
 			Basic: &ngfAPIv1alpha1.BasicAuth{
 				SecretRef: ngfAPIv1alpha1.LocalObjectReference{
 					Name: "basic-auth-secret",
@@ -272,6 +284,7 @@ func TestBuildGraph(t *testing.T) {
 			Namespace: testNs,
 		},
 		Spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+			Type: ngfAPIv1alpha1.AuthTypeBasic,
 			Basic: &ngfAPIv1alpha1.BasicAuth{
 				SecretRef: ngfAPIv1alpha1.LocalObjectReference{
 					Name: "basic-auth-secret",
@@ -284,6 +297,56 @@ func TestBuildGraph(t *testing.T) {
 		Source:     unreferencedAuthenticationFilter,
 		Valid:      true,
 		Referenced: false,
+	}
+
+	oidcClientSecret := &v1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: testNs,
+			Name:      "oidc-client-secret",
+		},
+		Type: v1.SecretTypeOpaque,
+		Data: map[string][]byte{
+			secrets.ClientSecretKey: []byte("oidc-client-secret-value"),
+		},
+	}
+
+	oidcCACertSecret := &v1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: testNs,
+			Name:      "oidc-ca-cert",
+		},
+		Type: v1.SecretTypeOpaque,
+		Data: map[string][]byte{
+			secrets.CAKey: []byte(caBlock),
+		},
+	}
+
+	referencedOIDCAuthenticationFilter := &ngfAPIv1alpha1.AuthenticationFilter{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "ref-oidc-authentication-filter",
+			Namespace: testNs,
+		},
+		Spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+			Type: ngfAPIv1alpha1.AuthTypeOIDC,
+			OIDC: &ngfAPIv1alpha1.OIDCAuth{
+				Issuer:   "https://example.com/auth",
+				ClientID: "my-client-id",
+				ClientSecretRef: ngfAPIv1alpha1.LocalObjectReference{
+					Name: "oidc-client-secret",
+				},
+				CACertificateRefs: []ngfAPIv1alpha1.LocalObjectReference{
+					{
+						Name: "oidc-ca-cert",
+					},
+				},
+			},
+		},
+	}
+
+	processedRefOIDCAuthenticationFilter := &AuthenticationFilter{
+		Source:     referencedOIDCAuthenticationFilter,
+		Valid:      true,
+		Referenced: true,
 	}
 
 	processedRefAuthenticationFilter := &AuthenticationFilter{
@@ -506,6 +569,21 @@ func TestBuildGraph(t *testing.T) {
 
 	hr2 := createRoute("hr-2", "wrong-gateway", "listener-80-1")
 	hr3 := createRoute("hr-3", "gateway-1", "listener-443-1") // https listener; should not conflict with hr1
+
+	refOIDCAuthenticationFilterExtensionRef := &gatewayv1.LocalObjectReference{
+		Group: ngfAPIv1alpha1.GroupName,
+		Kind:  kinds.AuthenticationFilter,
+		Name:  "ref-oidc-authentication-filter",
+	}
+	addElementsToPath(
+		hr3,
+		"/",
+		gatewayv1.HTTPRouteFilter{
+			Type:         gatewayv1.HTTPRouteFilterExtensionRef,
+			ExtensionRef: refOIDCAuthenticationFilterExtensionRef,
+		},
+		nil,
+	)
 
 	// These TLS Routes do not specify section names so that they attempt to attach to all listeners.
 	tr := createRouteTLS("tr", "gateway-1")
@@ -1066,9 +1144,12 @@ func TestBuildGraph(t *testing.T) {
 				client.ObjectKeyFromObject(grToServiceNsRefGrant): grToServiceNsRefGrant,
 			},
 			Secrets: map[types.NamespacedName]*v1.Secret{
-				client.ObjectKeyFromObject(secret):        secret,
-				client.ObjectKeyFromObject(plusSecret):    plusSecret,
-				client.ObjectKeyFromObject(gatewaySecret): gatewaySecret,
+				client.ObjectKeyFromObject(secret):           secret,
+				client.ObjectKeyFromObject(plusSecret):       plusSecret,
+				client.ObjectKeyFromObject(gatewaySecret):    gatewaySecret,
+				client.ObjectKeyFromObject(basicAuthSecret):  basicAuthSecret,
+				client.ObjectKeyFromObject(oidcClientSecret): oidcClientSecret,
+				client.ObjectKeyFromObject(oidcCACertSecret): oidcCACertSecret,
 			},
 			BackendTLSPolicies: map[types.NamespacedName]*gatewayv1.BackendTLSPolicy{
 				client.ObjectKeyFromObject(btp.Source): btp.Source,
@@ -1090,8 +1171,9 @@ func TestBuildGraph(t *testing.T) {
 				client.ObjectKeyFromObject(referencedSnippetsFilter):   referencedSnippetsFilter,
 			},
 			AuthenticationFilters: map[types.NamespacedName]*ngfAPIv1alpha1.AuthenticationFilter{
-				client.ObjectKeyFromObject(unreferencedAuthenticationFilter): unreferencedAuthenticationFilter,
-				client.ObjectKeyFromObject(referencedAuthenticationFilter):   referencedAuthenticationFilter,
+				client.ObjectKeyFromObject(unreferencedAuthenticationFilter):   unreferencedAuthenticationFilter,
+				client.ObjectKeyFromObject(referencedAuthenticationFilter):     referencedAuthenticationFilter,
+				client.ObjectKeyFromObject(referencedOIDCAuthenticationFilter): referencedOIDCAuthenticationFilter,
 			},
 		}
 	}
@@ -1519,7 +1601,32 @@ func TestBuildGraph(t *testing.T) {
 		},
 		Spec: L7RouteSpec{
 			Hostnames: hr3.Spec.Hostnames,
-			Rules:     []RouteRule{createValidRuleWithBackendRefs(routeMatches, nil)},
+			Rules: []RouteRule{
+				{
+					ValidMatches: true,
+					Matches:      routeMatches,
+					BackendRefs:  []BackendRef{createValidRuleWithBackendRefs(routeMatches, nil).BackendRefs[0]},
+					RouteBackendRefs: []RouteBackendRef{
+						{
+							BackendRef: commonGWBackendRef,
+						},
+					},
+					Filters: RouteRuleFilters{
+						Filters: []Filter{
+							{
+								RouteType:    RouteTypeHTTP,
+								FilterType:   FilterExtensionRef,
+								ExtensionRef: refOIDCAuthenticationFilterExtensionRef,
+								ResolvedExtensionRef: &ExtensionRefFilter{
+									AuthenticationFilter: processedRefOIDCAuthenticationFilter,
+									Valid:                true,
+								},
+							},
+						},
+						Valid: true,
+					},
+				},
+			},
 		},
 	}
 
@@ -1769,6 +1876,15 @@ func TestBuildGraph(t *testing.T) {
 							TLSPrivateKey: key,
 						}),
 				},
+				client.ObjectKeyFromObject(basicAuthSecret): {
+					Source: basicAuthSecret,
+				},
+				client.ObjectKeyFromObject(oidcClientSecret): {
+					Source: oidcClientSecret,
+				},
+				client.ObjectKeyFromObject(oidcCACertSecret): {
+					Source: oidcCACertSecret,
+				},
 			},
 			ReferencedNamespaces: map[types.NamespacedName]*v1.Namespace{
 				client.ObjectKeyFromObject(ns): ns,
@@ -1834,8 +1950,9 @@ func TestBuildGraph(t *testing.T) {
 				client.ObjectKeyFromObject(referencedSnippetsFilter):   processedRefSnippetsFilter,
 			},
 			AuthenticationFilters: map[types.NamespacedName]*AuthenticationFilter{
-				client.ObjectKeyFromObject(unreferencedAuthenticationFilter): processedUnrefAuthenticationFilter,
-				client.ObjectKeyFromObject(referencedAuthenticationFilter):   processedRefAuthenticationFilter,
+				client.ObjectKeyFromObject(unreferencedAuthenticationFilter):   processedUnrefAuthenticationFilter,
+				client.ObjectKeyFromObject(referencedAuthenticationFilter):     processedRefAuthenticationFilter,
+				client.ObjectKeyFromObject(referencedOIDCAuthenticationFilter): processedRefOIDCAuthenticationFilter,
 			},
 			PlusSecrets: map[types.NamespacedName][]PlusSecretFile{
 				client.ObjectKeyFromObject(plusSecret): {
@@ -1922,6 +2039,7 @@ func TestBuildGraph(t *testing.T) {
 				validation.Validators{
 					HTTPFieldsValidator: createAllValidValidator(),
 					GenericValidator:    &validationfakes.FakeGenericValidator{},
+					AuthFieldsValidator: &validationfakes.FakeAuthFieldsValidator{},
 					PolicyValidator:     fakePolicyValidator,
 				},
 				logr.Discard(),

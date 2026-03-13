@@ -518,6 +518,11 @@ func (in *OIDCAuth) DeepCopyInto(out *OIDCAuth) {
 		*out = make([]LocalObjectReference, len(*in))
 		copy(*out, *in)
 	}
+	if in.RedirectURI != nil {
+		in, out := &in.RedirectURI, &out.RedirectURI
+		*out = new(string)
+		**out = **in
+	}
 	if in.Scopes != nil {
 		in, out := &in.Scopes, &out.Scopes
 		*out = make([]string, len(*in))
