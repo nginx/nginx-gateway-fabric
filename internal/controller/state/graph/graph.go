@@ -270,6 +270,7 @@ func BuildGraph(
 	processedAuthenticationFilters := processAuthenticationFilters(
 		state.AuthenticationFilters,
 		resourceResolver,
+		validators.GenericValidator,
 		featureFlags.Plus,
 	)
 

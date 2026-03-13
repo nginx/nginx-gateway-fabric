@@ -74,6 +74,28 @@ type FakeGenericValidator struct {
 	validateServiceNameReturnsOnCall map[int]struct {
 		result1 error
 	}
+	ValidateOIDCIssuerStub        func(string) error
+	validateOIDCIssuerMutex       sync.RWMutex
+	validateOIDCIssuerArgsForCall []struct {
+		arg1 string
+	}
+	validateOIDCIssuerReturns struct {
+		result1 error
+	}
+	validateOIDCIssuerReturnsOnCall map[int]struct {
+		result1 error
+	}
+	ValidateOIDCRedirectURIStub        func(string) error
+	validateOIDCRedirectURIMutex       sync.RWMutex
+	validateOIDCRedirectURIArgsForCall []struct {
+		arg1 string
+	}
+	validateOIDCRedirectURIReturns struct {
+		result1 error
+	}
+	validateOIDCRedirectURIReturnsOnCall map[int]struct {
+		result1 error
+	}
 	invocations      map[string][][]interface{}
 	invocationsMutex sync.RWMutex
 }
@@ -440,6 +462,128 @@ func (fake *FakeGenericValidator) ValidateServiceNameReturnsOnCall(i int, result
 		})
 	}
 	fake.validateServiceNameReturnsOnCall[i] = struct {
+		result1 error
+	}{result1}
+}
+
+func (fake *FakeGenericValidator) ValidateOIDCIssuer(arg1 string) error {
+	fake.validateOIDCIssuerMutex.Lock()
+	ret, specificReturn := fake.validateOIDCIssuerReturnsOnCall[len(fake.validateOIDCIssuerArgsForCall)]
+	fake.validateOIDCIssuerArgsForCall = append(fake.validateOIDCIssuerArgsForCall, struct {
+		arg1 string
+	}{arg1})
+	stub := fake.ValidateOIDCIssuerStub
+	fakeReturns := fake.validateOIDCIssuerReturns
+	fake.recordInvocation("ValidateOIDCIssuer", []interface{}{arg1})
+	fake.validateOIDCIssuerMutex.Unlock()
+	if stub != nil {
+		return stub(arg1)
+	}
+	if specificReturn {
+		return ret.result1
+	}
+	return fakeReturns.result1
+}
+
+func (fake *FakeGenericValidator) ValidateOIDCIssuerCallCount() int {
+	fake.validateOIDCIssuerMutex.RLock()
+	defer fake.validateOIDCIssuerMutex.RUnlock()
+	return len(fake.validateOIDCIssuerArgsForCall)
+}
+
+func (fake *FakeGenericValidator) ValidateOIDCIssuerCalls(stub func(string) error) {
+	fake.validateOIDCIssuerMutex.Lock()
+	defer fake.validateOIDCIssuerMutex.Unlock()
+	fake.ValidateOIDCIssuerStub = stub
+}
+
+func (fake *FakeGenericValidator) ValidateOIDCIssuerArgsForCall(i int) string {
+	fake.validateOIDCIssuerMutex.RLock()
+	defer fake.validateOIDCIssuerMutex.RUnlock()
+	argsForCall := fake.validateOIDCIssuerArgsForCall[i]
+	return argsForCall.arg1
+}
+
+func (fake *FakeGenericValidator) ValidateOIDCIssuerReturns(result1 error) {
+	fake.validateOIDCIssuerMutex.Lock()
+	defer fake.validateOIDCIssuerMutex.Unlock()
+	fake.ValidateOIDCIssuerStub = nil
+	fake.validateOIDCIssuerReturns = struct {
+		result1 error
+	}{result1}
+}
+
+func (fake *FakeGenericValidator) ValidateOIDCIssuerReturnsOnCall(i int, result1 error) {
+	fake.validateOIDCIssuerMutex.Lock()
+	defer fake.validateOIDCIssuerMutex.Unlock()
+	fake.ValidateOIDCIssuerStub = nil
+	if fake.validateOIDCIssuerReturnsOnCall == nil {
+		fake.validateOIDCIssuerReturnsOnCall = make(map[int]struct {
+			result1 error
+		})
+	}
+	fake.validateOIDCIssuerReturnsOnCall[i] = struct {
+		result1 error
+	}{result1}
+}
+
+func (fake *FakeGenericValidator) ValidateOIDCRedirectURI(arg1 string) error {
+	fake.validateOIDCRedirectURIMutex.Lock()
+	ret, specificReturn := fake.validateOIDCRedirectURIReturnsOnCall[len(fake.validateOIDCRedirectURIArgsForCall)]
+	fake.validateOIDCRedirectURIArgsForCall = append(fake.validateOIDCRedirectURIArgsForCall, struct {
+		arg1 string
+	}{arg1})
+	stub := fake.ValidateOIDCRedirectURIStub
+	fakeReturns := fake.validateOIDCRedirectURIReturns
+	fake.recordInvocation("ValidateOIDCRedirectURI", []interface{}{arg1})
+	fake.validateOIDCRedirectURIMutex.Unlock()
+	if stub != nil {
+		return stub(arg1)
+	}
+	if specificReturn {
+		return ret.result1
+	}
+	return fakeReturns.result1
+}
+
+func (fake *FakeGenericValidator) ValidateOIDCRedirectURICallCount() int {
+	fake.validateOIDCRedirectURIMutex.RLock()
+	defer fake.validateOIDCRedirectURIMutex.RUnlock()
+	return len(fake.validateOIDCRedirectURIArgsForCall)
+}
+
+func (fake *FakeGenericValidator) ValidateOIDCRedirectURICalls(stub func(string) error) {
+	fake.validateOIDCRedirectURIMutex.Lock()
+	defer fake.validateOIDCRedirectURIMutex.Unlock()
+	fake.ValidateOIDCRedirectURIStub = stub
+}
+
+func (fake *FakeGenericValidator) ValidateOIDCRedirectURIArgsForCall(i int) string {
+	fake.validateOIDCRedirectURIMutex.RLock()
+	defer fake.validateOIDCRedirectURIMutex.RUnlock()
+	argsForCall := fake.validateOIDCRedirectURIArgsForCall[i]
+	return argsForCall.arg1
+}
+
+func (fake *FakeGenericValidator) ValidateOIDCRedirectURIReturns(result1 error) {
+	fake.validateOIDCRedirectURIMutex.Lock()
+	defer fake.validateOIDCRedirectURIMutex.Unlock()
+	fake.ValidateOIDCRedirectURIStub = nil
+	fake.validateOIDCRedirectURIReturns = struct {
+		result1 error
+	}{result1}
+}
+
+func (fake *FakeGenericValidator) ValidateOIDCRedirectURIReturnsOnCall(i int, result1 error) {
+	fake.validateOIDCRedirectURIMutex.Lock()
+	defer fake.validateOIDCRedirectURIMutex.Unlock()
+	fake.ValidateOIDCRedirectURIStub = nil
+	if fake.validateOIDCRedirectURIReturnsOnCall == nil {
+		fake.validateOIDCRedirectURIReturnsOnCall = make(map[int]struct {
+			result1 error
+		})
+	}
+	fake.validateOIDCRedirectURIReturnsOnCall[i] = struct {
 		result1 error
 	}{result1}
 }

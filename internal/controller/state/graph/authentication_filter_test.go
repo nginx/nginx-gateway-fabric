@@ -1,6 +1,7 @@
 package graph
 
 import (
+	"errors"
 	"testing"
 
 	. "github.com/onsi/gomega"
@@ -14,6 +15,8 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/secrets"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/resolver"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/validation"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/validation/validationfakes"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
 
@@ -53,6 +56,8 @@ func TestProcessAuthenticationFilters(t *testing.T) {
 		oidcFilterNsName,
 		"oidc-client-secret",
 		[]string{"oidc-ca-cert"},
+		"",
+
 		true,
 	)
 	oidcSystemCAFilterNsName := types.NamespacedName{Namespace: "test", Name: "oidc-system-ca"}
@@ -60,10 +65,13 @@ func TestProcessAuthenticationFilters(t *testing.T) {
 		oidcSystemCAFilterNsName,
 		"oidc-client-secret",
 		nil,
+		"",
+
 		true,
 	)
 	invalidOIDCFilter := createAuthenticationFilterWithOIDC(
-		invalidOIDCFilterNsName, "unresolved-client-secret", []string{"oidc-ca-cert"}, false,
+		invalidOIDCFilterNsName, "unresolved-client-secret", []string{"oidc-ca-cert"}, "",
+		false,
 	)
 
 	tests := []struct {
@@ -154,7 +162,7 @@ func TestProcessAuthenticationFilters(t *testing.T) {
 					Source: oidcFilter.Source,
 					Conditions: []conditions.Condition{
 						conditions.NewAuthenticationFilterInvalid(
-							`spec.oidc: Invalid value: {"issuer":"","clientID":"client-id",` +
+							`spec.oidc: Invalid value: {"issuer":"https://accounts.example.com","clientID":"client-id",` +
 								`"clientSecretRef":{"name":"oidc-client-secret"},` +
 								`"caCertificateRefs":[{"name":"oidc-ca-cert"}]}:` +
 								` OIDC authentication filters are only supported with NGINX Plus`,
@@ -170,7 +178,9 @@ func TestProcessAuthenticationFilters(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
-			processed := processAuthenticationFilters(tt.authenticationFiltersInput, resourceResolver, tt.plus)
+			processed := processAuthenticationFilters(
+				tt.authenticationFiltersInput, resourceResolver, &validationfakes.FakeGenericValidator{}, tt.plus,
+			)
 			g.Expect(processed).To(BeEquivalentTo(tt.expProcessed))
 		})
 	}
@@ -180,6 +190,7 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 	t.Parallel()
 
 	type args struct {
+		validator validation.GenericValidator
 		filter    *ngfAPI.AuthenticationFilter
 		resources map[resolver.ResourceKey]client.Object
 		secNsName types.NamespacedName
@@ -273,6 +284,8 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 					types.NamespacedName{Namespace: "test", Name: "oidc"},
 					"client-secret",
 					[]string{"ca1"},
+					"",
+
 					true,
 				).Source,
 				resources: map[resolver.ResourceKey]client.Object{
@@ -297,6 +310,8 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 					types.NamespacedName{Namespace: "test", Name: "oidc"},
 					"client-secret",
 					[]string{"ca1"},
+					"",
+
 					false,
 				).Source,
 				resources: map[resolver.ResourceKey]client.Object{},
@@ -314,6 +329,8 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 					types.NamespacedName{Namespace: "test", Name: "oidc"},
 					"not-found",
 					nil,
+					"",
+
 					false,
 				).Source,
 				resources: map[resolver.ResourceKey]client.Object{},
@@ -331,6 +348,8 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 					types.NamespacedName{Namespace: "test", Name: "oidc"},
 					"client-secret-missing",
 					nil,
+					"",
+
 					false,
 				).Source,
 				resources: map[resolver.ResourceKey]client.Object{
@@ -353,6 +372,8 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 					types.NamespacedName{Namespace: "test", Name: "oidc"},
 					"client-secret",
 					[]string{"ca-not-found"},
+					"",
+
 					false,
 				).Source,
 				resources: map[resolver.ResourceKey]client.Object{
@@ -375,6 +396,8 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 					types.NamespacedName{Namespace: "test", Name: "oidc"},
 					"client-secret",
 					[]string{"ca-missing"},
+					"",
+
 					false,
 				).Source,
 				resources: map[resolver.ResourceKey]client.Object{
@@ -401,6 +424,8 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 					types.NamespacedName{Namespace: "test", Name: "oidc"},
 					"client-secret",
 					nil,
+					"",
+
 					true,
 				).Source,
 				resources: map[resolver.ResourceKey]client.Object{
@@ -413,6 +438,58 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 			expCond: conditions.Condition{},
 		},
 		{
+			name: "invalid: OIDC issuer fails regex validation",
+			args: args{
+				secNsName: types.NamespacedName{Namespace: "test", Name: "oidc"},
+				plus:      true,
+				validator: &validationfakes.FakeGenericValidator{
+					ValidateOIDCIssuerStub: func(string) error {
+						return errors.New("must be a valid HTTPS URL")
+					},
+				},
+				filter: createAuthenticationFilterWithOIDC(
+					types.NamespacedName{Namespace: "test", Name: "oidc"},
+					"client-secret",
+					nil,
+					"",
+					false,
+				).Source,
+				resources: map[resolver.ResourceKey]client.Object{
+					{
+						ResourceType:   resolver.ResourceTypeSecret,
+						NamespacedName: types.NamespacedName{Namespace: "test", Name: "client-secret"},
+					}: createOpaqueClientSecret("client-secret", true),
+				},
+			},
+			expCond: conditions.NewAuthenticationFilterInvalid("must be a valid HTTPS URL"),
+		},
+		{
+			name: "invalid: OIDC redirect URI fails regex validation",
+			args: args{
+				secNsName: types.NamespacedName{Namespace: "test", Name: "oidc"},
+				plus:      true,
+				validator: &validationfakes.FakeGenericValidator{
+					ValidateOIDCRedirectURIStub: func(string) error {
+						return errors.New("must be an absolute path starting with '/'")
+					},
+				},
+				filter: createAuthenticationFilterWithOIDC(
+					types.NamespacedName{Namespace: "test", Name: "oidc"},
+					"client-secret",
+					nil,
+					"bad-redirect",
+					false,
+				).Source,
+				resources: map[resolver.ResourceKey]client.Object{
+					{
+						ResourceType:   resolver.ResourceTypeSecret,
+						NamespacedName: types.NamespacedName{Namespace: "test", Name: "client-secret"},
+					}: createOpaqueClientSecret("client-secret", true),
+				},
+			},
+			expCond: conditions.NewAuthenticationFilterInvalid("must be an absolute path starting with '/'"),
+		},
+		{
 			name: "invalid: OIDC multiple CA cert refs",
 			args: args{
 				secNsName: types.NamespacedName{Namespace: "test", Name: "oidc"},
@@ -421,6 +498,8 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 					types.NamespacedName{Namespace: "test", Name: "oidc"},
 					"client-secret",
 					[]string{"ca1", "ca2"},
+					"",
+
 					false,
 				).Source,
 				resources: map[resolver.ResourceKey]client.Object{
@@ -442,7 +521,11 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 			g := NewWithT(t)
 
 			resourceResolver := resolver.NewResourceResolver(tt.args.resources)
-			cond := validateAuthenticationFilter(tt.args.filter, tt.args.secNsName, resourceResolver, tt.args.plus)
+			v := tt.args.validator
+			if v == nil {
+				v = &validationfakes.FakeGenericValidator{}
+			}
+			cond := validateAuthenticationFilter(tt.args.filter, tt.args.secNsName, resourceResolver, v, tt.args.plus)
 
 			if tt.expCond != (conditions.Condition{}) {
 				g.Expect(cond).ToNot(BeNil())
@@ -474,18 +557,24 @@ func TestGetAuthenticationFilterResolverForNamespace(t *testing.T) {
 				defaultAuthFilterOIDCNsName,
 				"client-secret",
 				[]string{"ca1"},
+				"",
+
 				true,
 			),
 			fooAuthFilterOIDCNsName: createAuthenticationFilterWithOIDC(
 				fooAuthFilterOIDCNsName,
 				"client-secret",
 				[]string{"ca1"},
+				"",
+
 				true,
 			),
 			invalidAuthFilterOIDCNsName: createAuthenticationFilterWithOIDC(
 				invalidAuthFilterOIDCNsName,
 				"client-secret",
 				[]string{"ca1"},
+				"",
+
 				false,
 			),
 		}
@@ -649,28 +738,27 @@ func createAuthenticationFilterWithBasicAuth(
 func createAuthenticationFilterWithOIDC(
 	nsname types.NamespacedName,
 	clientSecretName string,
-	caSecretRef []string,
+	caSecretRefs []string,
+	redirectURI string,
 	valid bool,
 ) *AuthenticationFilter {
+	oidc := &ngfAPI.OIDCAuth{
+		Issuer:          "https://accounts.example.com",
+		ClientID:        "client-id",
+		ClientSecretRef: ngfAPI.LocalObjectReference{Name: clientSecretName},
+	}
+	for _, name := range caSecretRefs {
+		oidc.CACertificateRefs = append(oidc.CACertificateRefs, ngfAPI.LocalObjectReference{Name: name})
+	}
+	if redirectURI != "" {
+		oidc.RedirectURI = &redirectURI
+	}
 	return &AuthenticationFilter{
 		Source: &ngfAPI.AuthenticationFilter{
-			ObjectMeta: metav1.ObjectMeta{
-				Namespace: nsname.Namespace,
-				Name:      nsname.Name,
-			},
+			ObjectMeta: metav1.ObjectMeta{Namespace: nsname.Namespace, Name: nsname.Name},
 			Spec: ngfAPI.AuthenticationFilterSpec{
 				Type: ngfAPI.AuthTypeOIDC,
-				OIDC: &ngfAPI.OIDCAuth{
-					ClientID:        "client-id",
-					ClientSecretRef: ngfAPI.LocalObjectReference{Name: clientSecretName},
-					CACertificateRefs: func() []ngfAPI.LocalObjectReference {
-						refs := make([]ngfAPI.LocalObjectReference, len(caSecretRef))
-						for i, name := range caSecretRef {
-							refs[i] = ngfAPI.LocalObjectReference{Name: name}
-						}
-						return refs
-					}(),
-				},
+				OIDC: oidc,
 			},
 		},
 		Valid: valid,

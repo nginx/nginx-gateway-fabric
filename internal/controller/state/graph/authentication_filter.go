@@ -9,6 +9,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/secrets"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/resolver"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/validation"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
 
@@ -51,6 +52,7 @@ func getAuthenticationFilterResolverForNamespace(
 func processAuthenticationFilters(
 	authenticationFilters map[types.NamespacedName]*ngfAPI.AuthenticationFilter,
 	resourceResolver resolver.Resolver,
+	validator validation.GenericValidator,
 	plus bool,
 ) map[types.NamespacedName]*AuthenticationFilter {
 	if len(authenticationFilters) == 0 {
@@ -60,7 +62,7 @@ func processAuthenticationFilters(
 	processed := make(map[types.NamespacedName]*AuthenticationFilter, len(authenticationFilters))
 
 	for nsname, af := range authenticationFilters {
-		if cond := validateAuthenticationFilter(af, nsname, resourceResolver, plus); cond != nil {
+		if cond := validateAuthenticationFilter(af, nsname, resourceResolver, validator, plus); cond != nil {
 			processed[nsname] = &AuthenticationFilter{
 				Source:     af,
 				Conditions: []conditions.Condition{*cond},
@@ -82,6 +84,7 @@ func validateAuthenticationFilter(
 	af *ngfAPI.AuthenticationFilter,
 	nsname types.NamespacedName,
 	resourceResolver resolver.Resolver,
+	validator validation.GenericValidator,
 	plus bool,
 ) *conditions.Condition {
 	var allErrs field.ErrorList
@@ -109,6 +112,22 @@ func validateAuthenticationFilter(
 		}
 
 		oidcSpec := af.Spec.OIDC
+		if err := validator.ValidateOIDCIssuer(oidcSpec.Issuer); err != nil {
+			allErrs = append(allErrs, field.Invalid(
+				field.NewPath("spec.oidc.issuer"),
+				oidcSpec.Issuer,
+				err.Error(),
+			))
+		}
+		if oidcSpec.RedirectURI != nil {
+			if err := validator.ValidateOIDCRedirectURI(*oidcSpec.RedirectURI); err != nil {
+				allErrs = append(allErrs, field.Invalid(
+					field.NewPath("spec.oidc.redirectURI"),
+					*oidcSpec.RedirectURI,
+					err.Error(),
+				))
+			}
+		}
 		clientSecretNsName := types.NamespacedName{Namespace: nsname.Namespace, Name: oidcSpec.ClientSecretRef.Name}
 		resolveOpt := resolver.WithExpectedSecretKey(secrets.ClientSecretKey)
 		if err := resourceResolver.Resolve(resolver.ResourceTypeSecret, clientSecretNsName, resolveOpt); err != nil {
