@@ -30,22 +30,31 @@ func (AuthFieldValidator) ValidateOIDCIssuer(issuer string) error {
 	return nil
 }
 
-//nolint:gosec
+//nolint:lll
 const (
-	oidcRedirectURIFmt    = `^/[A-Za-z0-9._~!&'()*+,=@/-]*$`
-	oidcRedirectURIErrMsg = "must be a path-only URI starting with '/' and must not include scheme, host, or port"
+	oidcURIFmt    = `^(https?://[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*(:[0-9]{1,5})?)?(/[a-zA-Z0-9._~:/?@!$&'()*+,;=-]*)?$`
+	oidcURIErrMsg = "must be a valid full URI (e.g. https://example.com/path) or a path-only URI (e.g. /path)"
 )
 
-var oidcRedirectURIRegexp = regexp.MustCompile(oidcRedirectURIFmt)
+var oidcURIRegexp = regexp.MustCompile(oidcURIFmt)
 
-// ValidateOIDCRedirectURI validates an OIDC redirect URI path.
-func (AuthFieldValidator) ValidateOIDCRedirectURI(uri string) error {
-	if !oidcRedirectURIRegexp.MatchString(uri) {
+func validateOIDCURI(uri string) error {
+	if !oidcURIRegexp.MatchString(uri) {
 		examples := []string{
-			"/callback",
-			"/auth/callback",
+			"https://example.com/path",
+			"/path",
 		}
-		return errors.New(k8svalidation.RegexError(oidcRedirectURIErrMsg, oidcRedirectURIFmt, examples...))
+		return errors.New(k8svalidation.RegexError(oidcURIErrMsg, oidcURIFmt, examples...))
 	}
 	return nil
+}
+
+// ValidateOIDCRedirectURI validates an OIDC redirect URI (full URI or path-only).
+func (AuthFieldValidator) ValidateOIDCRedirectURI(uri string) error {
+	return validateOIDCURI(uri)
+}
+
+// ValidateOIDCLogoutURI validates an OIDC logout URI (full URI or path-only).
+func (AuthFieldValidator) ValidateOIDCLogoutURI(uri string) error {
+	return validateOIDCURI(uri)
 }

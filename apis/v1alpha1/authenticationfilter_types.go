@@ -159,14 +159,16 @@ type OIDCAuth struct {
 	// +kubebuilder:validation:MaxItems=1
 	CACertificateRefs []LocalObjectReference `json:"caCertificateRefs,omitempty"`
 
-	// RedirectURI sets a custom redirect URI for the authentication flow.
-	// It only accepts path-only URIs (e.g. /redirect).
+	// RedirectURI sets a custom redirect URI for the OIDC callback.
+	// Accepts either a full URI (e.g. https://example.com/callback) or a path-only URI (e.g. /callback).
+	// If a full URI is specified, the callback is handled by an external service.
+	// If a path-only URI is specified, a callback location block is generated to handle it locally.
+	// If not specified, defaults to `/oidc_callback_filternamespace_filtername`.
 	// Directive: https://nginx.org/en/docs/http/ngx_http_oidc_module.html#redirect_uri
-	// The generated callback path will be `/oidc_callback_filternamespace_filtername` if not specified.
 	// NGINX Default: /oidc_callback
 	//
 	// +optional
-	// +kubebuilder:validation:Pattern=`^/[A-Za-z0-9._~!&'()*+,=@/-]*$`
+	// +kubebuilder:validation:Pattern=`^(https?://[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*(:[0-9]{1,5})?)?(/[a-zA-Z0-9._~:/?@!$&'()*+,;=-]*)?$`
 	RedirectURI *string `json:"redirectURI,omitempty"`
 
 	// The OIDC scopes to be used in the Authentication Request.
@@ -208,9 +210,13 @@ type OIDCLogoutConfig struct {
 	// +kubebuilder:validation:Pattern=`^(https?://[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*(:[0-9]{1,5})?)?(/[a-zA-Z0-9._~:/?@!$&'()*+,;=-]*)?$`
 	URI *string `json:"uri,omitempty"`
 
-	// PostLogoutURI defines the URI to redirect to after logout. Accepts either a full URI
-	// (e.g. https://example.com/logged_out.html) or a path-only URI (e.g. /logged_out.html).
+	// PostLogoutURI defines the URI to redirect to after logout.
+	// Accepts either a full URI (e.g. https://example.com/logged_out.html) or a path-only URI (e.g. /logged_out.html).
 	// Must match the configuration on the provider's side.
+	//
+	// If a full URI is specified, NGINX redirects to the external address after logout without any additional handling.
+	// If a path-only URI is specified, NGINX Gateway Fabric handles the request and returns a 200 response with the message
+	// "You have been logged out".
 	// Directive: https://nginx.org/en/docs/http/ngx_http_oidc_module.html#post_logout_uri
 	//
 	// +optional

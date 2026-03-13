@@ -11,6 +11,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/policiesfakes"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
 
 func TestLoggingSettingsTemplate(t *testing.T) {
@@ -725,6 +726,64 @@ func TestExecuteBaseHttp_OIDCProviders(t *testing.T) {
 				"client_secret client-secret-2;",
 				"redirect_uri /oidc_callback_test_filter-two;",
 				"ssl_trusted_certificate /etc/nginx/secrets/oidc_ca_test_filter-two.crt;",
+			},
+		},
+		{
+			name: "OIDC provider with all optional fields renders all corresponding directives",
+			conf: dataplane.Configuration{
+				OIDCProviders: []dataplane.OIDCProvider{
+					{
+						Name:                  "oidc_test_full",
+						Issuer:                "https://idp.example.com",
+						ClientID:              "client-id",
+						ClientSecret:          "client-secret",
+						RedirectURI:           "/oidc_callback_test_full",
+						CACertBundleID:        "oidc_ca_test_full",
+						CRLBundleID:           "oidc_crl_test_full",
+						ConfigURL:             helpers.GetPointer("https://idp.example.com/.well-known/openid-configuration"),
+						PKCE:                  helpers.GetPointer(true),
+						ExtraAuthArgs:         "audience=api&prompt=consent",
+						CookieName:            helpers.GetPointer("MY_SESSION"),
+						Timeout:               helpers.GetPointer("2h"),
+						LogoutURI:             helpers.GetPointer("/logout"),
+						PostLogoutURI:         helpers.GetPointer("/logged-out"),
+						FrontChannelLogoutURI: helpers.GetPointer("/frontchannel-logout"),
+						TokenHint:             helpers.GetPointer(true),
+					},
+				},
+			},
+			expSubStrings: []string{
+				"ssl_trusted_certificate /etc/nginx/secrets/oidc_ca_test_full.crt;",
+				"ssl_crl /etc/nginx/secrets/oidc_crl_test_full.pem;",
+				"config_url https://idp.example.com/.well-known/openid-configuration;",
+				"pkce on;",
+				`extra_auth_args "audience=api&prompt=consent";`,
+				"cookie_name MY_SESSION;",
+				"session_timeout 2h;",
+				"logout_uri /logout;",
+				"post_logout_uri /logged-out;",
+				"frontchannel_logout_uri /frontchannel-logout;",
+				"logout_token_hint on;",
+			},
+		},
+		{
+			name: "OIDC provider with PKCE off and TokenHint off renders off directives",
+			conf: dataplane.Configuration{
+				OIDCProviders: []dataplane.OIDCProvider{
+					{
+						Name:         "oidc_test_off",
+						Issuer:       "https://idp.example.com",
+						ClientID:     "client-id",
+						ClientSecret: "client-secret",
+						RedirectURI:  "/oidc_callback",
+						PKCE:         helpers.GetPointer(false),
+						TokenHint:    helpers.GetPointer(false),
+					},
+				},
+			},
+			expSubStrings: []string{
+				"pkce off;",
+				"logout_token_hint off;",
 			},
 		},
 	}

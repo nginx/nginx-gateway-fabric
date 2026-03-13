@@ -26,7 +26,7 @@ const (
 
 // Configuration is an intermediate representation of dataplane configuration.
 type Configuration struct {
-	// CertBundles holds all unique Certificate Bundles.
+	// CertBundles holds all unique Certificate Bundles, including CA certs and CRL files.
 	CertBundles map[CertBundleID]CertBundle
 	// BaseStreamConfig holds the configuration options at the stream context.
 	BaseStreamConfig BaseStreamConfig
@@ -294,21 +294,53 @@ type AuthBasic struct {
 
 // OIDCProvider represents an OIDC provider configuration.
 type OIDCProvider struct {
-	// Name is the name of the OIDC provider.
+	// Name is the unique name of the OIDC provider, derived from the filter namespace and name.
 	Name string
-	// Issuer is the issuer URL to discover OIDC configuration from.
+	// Issuer is the issuer URL used to discover the OIDC provider configuration.
 	Issuer string
-	// ClientID is the unique identifier for the OIDC client.
+	// ClientID is the client identifier registered with the OIDC provider.
 	ClientID string
-	// ClientSecret is the secret for the OIDC client.
-	// This is used for authentication with the OIDC provider.
+	// ClientSecret is the client secret used for authentication with the OIDC provider.
 	ClientSecret string
-	// CACertBundleID is the ID of the CA certificate bundle for SSL verification.
-	CACertBundleID CertBundleID
-	// RedirectURI is the URI used for the OIDC callback.
+	// RedirectURI is the URI to which the provider redirects after authentication.
+	// Can be a full URL (external callback service) or a path-only URI (handled locally by NGF).
 	RedirectURI string
-	// CACertData is the raw PEM bytes of the CA certificates.
+	// RedirectURIPath is set to the path value of RedirectURI when it is a path-only URI (starts with '/').
+	// When non-empty, a callback location block is created to handle the OIDC redirect locally.
+	// When empty, RedirectURI is a full URL pointing to an external service.
+	RedirectURIPath string
+	// ConfigURL is an optional URL to fetch the provider's OIDC configuration from.
+	// When nil, the issuer URL is used to construct the discovery endpoint.
+	ConfigURL *string
+	// PKCE enables or disables Proof Key for Code Exchange. When nil, the directive is omitted.
+	PKCE *bool
+	// ExtraAuthArgs is an optional set of additional key=value pairs appended to the authorization request.
+	ExtraAuthArgs string
+	// CookieName is the name of the session cookie. When nil, the provider default is used.
+	CookieName *string
+	// Timeout is the session timeout duration in nginx duration format. When nil, the provider default is used.
+	Timeout *string
+	// LogoutURI is the URI that triggers an OIDC logout. When nil, the directive is omitted.
+	LogoutURI *string
+	// PostLogoutURI is the URI the user is sent to after logout.
+	// Can be a full URL (external redirect) or a path-only URI (served locally by NGF).
+	PostLogoutURI *string
+	// PostLogoutURIPath is set to the path value of PostLogoutURI when it is a path-only URI (starts with '/').
+	// When non-empty, a location block is created to serve the post-logout page directly.
+	// When empty, PostLogoutURI is a full URL and the user is redirected externally.
+	PostLogoutURIPath string
+	// FrontChannelLogoutURI is the URI used for front-channel logout. When nil, the directive is omitted.
+	FrontChannelLogoutURI *string
+	// TokenHint controls whether the ID token is sent as a hint during logout. When nil, the directive is omitted.
+	TokenHint *bool
+	// CACertBundleID is the ID of the CA certificate bundle used for TLS verification of the provider.
+	CACertBundleID CertBundleID
+	// CACertData is the raw PEM bytes of the CA certificate bundle.
 	CACertData []byte
+	// CRLBundleID is the ID of the certificate revocation list bundle used for TLS verification.
+	CRLBundleID CertBundleID
+	// CRLData is the raw PEM bytes of the certificate revocation list.
+	CRLData []byte
 }
 
 const (

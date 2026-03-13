@@ -23,23 +23,31 @@ func TestValidateOIDCIssuer(t *testing.T) {
 	)
 }
 
-func TestValidateOIDCRedirectURI(t *testing.T) {
+func TestValidateOIDCURI(t *testing.T) {
 	t.Parallel()
 	validator := AuthFieldValidator{}
 
-	testValidValuesForSimpleValidator(
-		t,
-		validator.ValidateOIDCRedirectURI,
+	validValues := []string{
 		`/callback`,
 		`/auth/callback`,
-		`/redirect/path`,
-	)
-
-	testInvalidValuesForSimpleValidator(
-		t,
-		validator.ValidateOIDCRedirectURI,
-		`callback`,
+		`/logout`,
 		`https://example.com/callback`,
+		`https://example.com/logout`,
+		`http://auth.example.com:8080/logout`,
+	}
+
+	invalidValues := []string{
+		`callback`,
+		`ftp://example.com/logout`,
+		`https://UPPERCASE.com`,
 		`/path with spaces`,
-	)
+	}
+
+	for _, fn := range []func(string) error{
+		validator.ValidateOIDCRedirectURI,
+		validator.ValidateOIDCLogoutURI,
+	} {
+		testValidValuesForSimpleValidator(t, fn, validValues...)
+		testInvalidValuesForSimpleValidator(t, fn, invalidValues...)
+	}
 }

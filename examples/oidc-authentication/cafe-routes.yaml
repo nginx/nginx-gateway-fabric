@@ -15,7 +15,7 @@ spec:
         value: /coffee
     - path:
         type: PathPrefix
-        value: /tea
+        value: /filter
     backendRefs:
     - name: coffee
       port: 80
@@ -28,9 +28,9 @@ spec:
   - matches:
     - path:
         type: PathPrefix
-        value: /coffee-extra-oidc
+        value: /tea
     backendRefs:
-    - name: coffee
+    - name: tea
       port: 80
     filters:
     - type: ExtensionRef

@@ -182,8 +182,8 @@ func createSSLServer(
 		}
 		if virtualServer.SSL != nil {
 			server.SSL = &http.SSL{
-				Certificate:         generatePEMFileName(virtualServer.SSL.KeyPairID),
-				CertificateKey:      generatePEMFileName(virtualServer.SSL.KeyPairID),
+				Certificate:         generatePEMFileName(string(virtualServer.SSL.KeyPairID)),
+				CertificateKey:      generatePEMFileName(string(virtualServer.SSL.KeyPairID)),
 				Protocols:           virtualServer.SSL.Protocols,
 				Ciphers:             virtualServer.SSL.Ciphers,
 				PreferServerCiphers: virtualServer.SSL.PreferServerCiphers,
@@ -198,8 +198,8 @@ func createSSLServer(
 	server := http.Server{
 		ServerName: virtualServer.Hostname,
 		SSL: &http.SSL{
-			Certificate:         generatePEMFileName(virtualServer.SSL.KeyPairID),
-			CertificateKey:      generatePEMFileName(virtualServer.SSL.KeyPairID),
+			Certificate:         generatePEMFileName(string(virtualServer.SSL.KeyPairID)),
+			CertificateKey:      generatePEMFileName(string(virtualServer.SSL.KeyPairID)),
 			Protocols:           virtualServer.SSL.Protocols,
 			Ciphers:             virtualServer.SSL.Ciphers,
 			PreferServerCiphers: virtualServer.SSL.PreferServerCiphers,
@@ -522,9 +522,7 @@ func createLocations(
 		}
 	}
 
-	for _, oidcProvider := range findOIDCProviders(server.PathRules) {
-		locs = append(locs, createOIDCCallbackLocation(oidcProvider))
-	}
+	locs = append(locs, createOIDCLocations(server.PathRules)...)
 
 	if !rootPathExists {
 		locs = append(locs, createDefaultRootLocation())
@@ -1774,12 +1772,63 @@ func findOIDCProviders(pathRules []dataplane.PathRule) []*dataplane.OIDCProvider
 	return providers
 }
 
+// createOIDCLocations creates callback and (when applicable) post-logout locations for all OIDC providers.
+// A location is skipped if its path is already defined by an existing route rule or has already been generated.
+func createOIDCLocations(pathRules []dataplane.PathRule) []http.Location {
+	existing := existingPathSet(pathRules)
+	var locs []http.Location
+	seenPaths := make(map[string]struct{})
+	for _, provider := range findOIDCProviders(pathRules) {
+		if provider.RedirectURIPath != "" {
+			if _, exists := existing[provider.RedirectURIPath]; !exists {
+				if _, seen := seenPaths[provider.RedirectURIPath]; !seen {
+					seenPaths[provider.RedirectURIPath] = struct{}{}
+					locs = append(locs, createOIDCCallbackLocation(provider))
+				}
+			}
+		}
+		if provider.PostLogoutURIPath != "" {
+			if _, exists := existing[provider.PostLogoutURIPath]; !exists {
+				if _, seen := seenPaths[provider.PostLogoutURIPath]; !seen {
+					seenPaths[provider.PostLogoutURIPath] = struct{}{}
+					locs = append(locs, createOIDCPostLogoutLocation(provider.PostLogoutURIPath))
+				}
+			}
+		}
+	}
+	return locs
+}
+
+// existingPathSet returns a set of all paths already defined in the route rules.
+func existingPathSet(pathRules []dataplane.PathRule) map[string]struct{} {
+	paths := make(map[string]struct{}, len(pathRules))
+	for _, rule := range pathRules {
+		paths[rule.Path] = struct{}{}
+	}
+	return paths
+}
+
 // createOIDCCallbackLocation creates a minimal OIDC callback location containing only the auth_oidc directive.
 func createOIDCCallbackLocation(provider *dataplane.OIDCProvider) http.Location {
 	return http.Location{
-		Path:                 "= " + provider.RedirectURI,
+		Path:                 "= " + provider.RedirectURIPath,
 		Type:                 http.ExternalLocationType,
 		AuthOIDCProviderName: provider.Name,
+	}
+}
+
+// createOIDCPostLogoutLocation creates a location block that serves a plain-text logout confirmation page.
+// It is only used when PostLogoutURI is a path-only URI (not a full URL); NGF serves the response
+// directly rather than redirecting to an external address.
+func createOIDCPostLogoutLocation(uri string) http.Location {
+	return http.Location{
+		Path: "= " + uri,
+		Type: http.ExternalLocationType,
+		Return: &http.Return{
+			Code:        http.StatusOK,
+			Body:        `You have been logged out.\n`,
+			DefaultType: "text/plain",
+		},
 	}
 }
 

@@ -113,8 +113,9 @@ type ResponseHeaders struct {
 
 // Return represents an HTTP return.
 type Return struct {
-	Body string
-	Code StatusCode
+	Body        string
+	DefaultType string
+	Code        StatusCode
 }
 
 // SSL holds all SSL related configuration.
@@ -130,6 +131,8 @@ type SSL struct {
 type StatusCode int
 
 const (
+	// StatusOK is the HTTP 200 status code.
+	StatusOK StatusCode = 200
 	// StatusFound is the HTTP 302 status code.
 	StatusFound StatusCode = 302
 	// StatusNotFound is the HTTP 404 status code.

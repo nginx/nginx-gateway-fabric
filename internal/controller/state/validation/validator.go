@@ -59,6 +59,7 @@ type GenericValidator interface {
 type AuthFieldsValidator interface {
 	ValidateOIDCIssuer(issuer string) error
 	ValidateOIDCRedirectURI(uri string) error
+	ValidateOIDCLogoutURI(uri string) error
 }
 
 // PolicyValidator validates an NGF Policy.

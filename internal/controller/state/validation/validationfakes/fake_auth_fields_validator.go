@@ -30,6 +30,17 @@ type FakeAuthFieldsValidator struct {
 	validateOIDCRedirectURIReturnsOnCall map[int]struct {
 		result1 error
 	}
+	ValidateOIDCLogoutURIStub        func(string) error
+	validateOIDCLogoutURIMutex       sync.RWMutex
+	validateOIDCLogoutURIArgsForCall []struct {
+		arg1 string
+	}
+	validateOIDCLogoutURIReturns struct {
+		result1 error
+	}
+	validateOIDCLogoutURIReturnsOnCall map[int]struct {
+		result1 error
+	}
 	invocations      map[string][][]interface{}
 	invocationsMutex sync.RWMutex
 }
@@ -152,6 +163,67 @@ func (fake *FakeAuthFieldsValidator) ValidateOIDCRedirectURIReturnsOnCall(i int,
 		})
 	}
 	fake.validateOIDCRedirectURIReturnsOnCall[i] = struct {
+		result1 error
+	}{result1}
+}
+
+func (fake *FakeAuthFieldsValidator) ValidateOIDCLogoutURI(arg1 string) error {
+	fake.validateOIDCLogoutURIMutex.Lock()
+	ret, specificReturn := fake.validateOIDCLogoutURIReturnsOnCall[len(fake.validateOIDCLogoutURIArgsForCall)]
+	fake.validateOIDCLogoutURIArgsForCall = append(fake.validateOIDCLogoutURIArgsForCall, struct {
+		arg1 string
+	}{arg1})
+	stub := fake.ValidateOIDCLogoutURIStub
+	fakeReturns := fake.validateOIDCLogoutURIReturns
+	fake.recordInvocation("ValidateOIDCLogoutURI", []interface{}{arg1})
+	fake.validateOIDCLogoutURIMutex.Unlock()
+	if stub != nil {
+		return stub(arg1)
+	}
+	if specificReturn {
+		return ret.result1
+	}
+	return fakeReturns.result1
+}
+
+func (fake *FakeAuthFieldsValidator) ValidateOIDCLogoutURICallCount() int {
+	fake.validateOIDCLogoutURIMutex.RLock()
+	defer fake.validateOIDCLogoutURIMutex.RUnlock()
+	return len(fake.validateOIDCLogoutURIArgsForCall)
+}
+
+func (fake *FakeAuthFieldsValidator) ValidateOIDCLogoutURICalls(stub func(string) error) {
+	fake.validateOIDCLogoutURIMutex.Lock()
+	defer fake.validateOIDCLogoutURIMutex.Unlock()
+	fake.ValidateOIDCLogoutURIStub = stub
+}
+
+func (fake *FakeAuthFieldsValidator) ValidateOIDCLogoutURIArgsForCall(i int) string {
+	fake.validateOIDCLogoutURIMutex.RLock()
+	defer fake.validateOIDCLogoutURIMutex.RUnlock()
+	argsForCall := fake.validateOIDCLogoutURIArgsForCall[i]
+	return argsForCall.arg1
+}
+
+func (fake *FakeAuthFieldsValidator) ValidateOIDCLogoutURIReturns(result1 error) {
+	fake.validateOIDCLogoutURIMutex.Lock()
+	defer fake.validateOIDCLogoutURIMutex.Unlock()
+	fake.ValidateOIDCLogoutURIStub = nil
+	fake.validateOIDCLogoutURIReturns = struct {
+		result1 error
+	}{result1}
+}
+
+func (fake *FakeAuthFieldsValidator) ValidateOIDCLogoutURIReturnsOnCall(i int, result1 error) {
+	fake.validateOIDCLogoutURIMutex.Lock()
+	defer fake.validateOIDCLogoutURIMutex.Unlock()
+	fake.ValidateOIDCLogoutURIStub = nil
+	if fake.validateOIDCLogoutURIReturnsOnCall == nil {
+		fake.validateOIDCLogoutURIReturnsOnCall = make(map[int]struct {
+			result1 error
+		})
+	}
+	fake.validateOIDCLogoutURIReturnsOnCall[i] = struct {
 		result1 error
 	}{result1}
 }
