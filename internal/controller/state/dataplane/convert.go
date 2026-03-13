@@ -255,18 +255,16 @@ func buildOIDCProvider(
 		RedirectURI:  redirectURI,
 	}
 
-	// Handle CA certificate if specified
-	if specOIDC.CACertificateRefs != nil {
-		for _, caCertRef := range specOIDC.CACertificateRefs {
-			caCertNsName := types.NamespacedName{
-				Namespace: filter.Source.Namespace,
-				Name:      caCertRef.Name,
-			}
-			if caCertSecret, exists := referencedSecrets[caCertNsName]; exists && caCertSecret.Source != nil {
-				oidc.CACertBundleID = generateCertBundleID(caCertNsName)
-				oidc.CACertData = caCertSecret.Source.Data[secrets.CAKey]
-				break
-			}
+	// Handle CA certificates if specified
+	for _, caCertRef := range specOIDC.CACertificateRefs {
+		caCertNsName := types.NamespacedName{
+			Namespace: filter.Source.Namespace,
+			Name:      caCertRef.Name,
+		}
+		if caCertSecret, exists := referencedSecrets[caCertNsName]; exists && caCertSecret.Source != nil {
+			oidc.CACertBundleID = generateCertBundleID(caCertNsName)
+			oidc.CACertData = caCertSecret.Source.Data[secrets.CAKey]
+			break
 		}
 	}
 

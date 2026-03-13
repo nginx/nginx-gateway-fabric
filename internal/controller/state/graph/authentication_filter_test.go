@@ -179,7 +179,7 @@ func TestProcessAuthenticationFilters(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 			processed := processAuthenticationFilters(
-				tt.authenticationFiltersInput, resourceResolver, &validationfakes.FakeGenericValidator{}, tt.plus,
+				tt.authenticationFiltersInput, resourceResolver, &validationfakes.FakeAuthFieldsValidator{}, tt.plus,
 			)
 			g.Expect(processed).To(BeEquivalentTo(tt.expProcessed))
 		})
@@ -190,7 +190,7 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 	t.Parallel()
 
 	type args struct {
-		validator validation.GenericValidator
+		validator validation.AuthFieldsValidator
 		filter    *ngfAPI.AuthenticationFilter
 		resources map[resolver.ResourceKey]client.Object
 		secNsName types.NamespacedName
@@ -442,7 +442,7 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 			args: args{
 				secNsName: types.NamespacedName{Namespace: "test", Name: "oidc"},
 				plus:      true,
-				validator: &validationfakes.FakeGenericValidator{
+				validator: &validationfakes.FakeAuthFieldsValidator{
 					ValidateOIDCIssuerStub: func(string) error {
 						return errors.New("must be a valid HTTPS URL")
 					},
@@ -468,7 +468,7 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 			args: args{
 				secNsName: types.NamespacedName{Namespace: "test", Name: "oidc"},
 				plus:      true,
-				validator: &validationfakes.FakeGenericValidator{
+				validator: &validationfakes.FakeAuthFieldsValidator{
 					ValidateOIDCRedirectURIStub: func(string) error {
 						return errors.New("must be an absolute path starting with '/'")
 					},
@@ -523,7 +523,7 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 			resourceResolver := resolver.NewResourceResolver(tt.args.resources)
 			v := tt.args.validator
 			if v == nil {
-				v = &validationfakes.FakeGenericValidator{}
+				v = &validationfakes.FakeAuthFieldsValidator{}
 			}
 			cond := validateAuthenticationFilter(tt.args.filter, tt.args.secNsName, resourceResolver, v, tt.args.plus)
 

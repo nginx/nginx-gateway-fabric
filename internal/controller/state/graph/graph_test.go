@@ -2039,6 +2039,7 @@ func TestBuildGraph(t *testing.T) {
 				validation.Validators{
 					HTTPFieldsValidator: createAllValidValidator(),
 					GenericValidator:    &validationfakes.FakeGenericValidator{},
+					AuthFieldsValidator: &validationfakes.FakeAuthFieldsValidator{},
 					PolicyValidator:     fakePolicyValidator,
 				},
 				logr.Discard(),

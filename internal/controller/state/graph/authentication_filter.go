@@ -52,7 +52,7 @@ func getAuthenticationFilterResolverForNamespace(
 func processAuthenticationFilters(
 	authenticationFilters map[types.NamespacedName]*ngfAPI.AuthenticationFilter,
 	resourceResolver resolver.Resolver,
-	validator validation.GenericValidator,
+	validator validation.AuthFieldsValidator,
 	plus bool,
 ) map[types.NamespacedName]*AuthenticationFilter {
 	if len(authenticationFilters) == 0 {
@@ -84,7 +84,7 @@ func validateAuthenticationFilter(
 	af *ngfAPI.AuthenticationFilter,
 	nsname types.NamespacedName,
 	resourceResolver resolver.Resolver,
-	validator validation.GenericValidator,
+	validator validation.AuthFieldsValidator,
 	plus bool,
 ) *conditions.Condition {
 	var allErrs field.ErrorList

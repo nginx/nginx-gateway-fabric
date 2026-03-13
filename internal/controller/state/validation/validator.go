@@ -14,6 +14,7 @@ import (
 type Validators struct {
 	HTTPFieldsValidator HTTPFieldsValidator
 	GenericValidator    GenericValidator
+	AuthFieldsValidator AuthFieldsValidator
 	PolicyValidator     PolicyValidator
 }
 
@@ -50,6 +51,12 @@ type GenericValidator interface {
 	ValidateNginxSize(size string) error
 	ValidateEndpoint(endpoint string) error
 	ValidateNginxVariableName(name string) error
+}
+
+// AuthFieldsValidator validates authentication-related fields from NGF API resources.
+//
+//counterfeiter:generate . AuthFieldsValidator
+type AuthFieldsValidator interface {
 	ValidateOIDCIssuer(issuer string) error
 	ValidateOIDCRedirectURI(uri string) error
 }
