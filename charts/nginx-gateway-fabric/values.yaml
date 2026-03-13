@@ -818,3 +818,133 @@ gateways: []
 #       clientCertificateRef:
 #         name: gateway-client-cert
 #         kind: Secret
+
+# -- f5-waf-plm is an optional subchart for deploying the F5 WAF Policy Lifecycle Manager (PLM),
+# which manages APPolicy and APLogConf CRDs and compiles WAF policy bundles.
+# When enabled, PLM is deployed as part of this chart. When disabled (default), PLM must be
+# installed separately before WAF features can be used.
+# See: https://helm.nginx.com/stable for the available chart and its full values reference.
+f5-waf-plm:
+  # -- Enable the f5-waf-plm subchart.
+  enabled: false
+
+  # namespace: ""
+
+  # policyController:
+  #   replicas: 1
+  #   watchNamespace: ""
+  #   s3:
+  #     skipTlsVerify: false
+  #   image:
+  #     repository: private-registry.nginx.com/nap/waf-policy-controller
+  #     tag: ""
+  #     pullPolicy: IfNotPresent
+  #   resources:
+  #     requests:
+  #       memory: 128Mi
+  #       cpu: 100m
+  #     limits:
+  #       memory: 256Mi
+  #       cpu: 250m
+  #   securityContext:
+  #     runAsUser: 101
+  #     runAsGroup: 101
+  #     runAsNonRoot: true
+  #     allowPrivilegeEscalation: false
+  #     readOnlyRootFilesystem: true
+  #     capabilities:
+  #       drop:
+  #         - all
+  #   env: []
+  #   initContainers: []
+  #   apsignatures:
+  #     latestAll: false
+
+  # compiler:
+  #   replicas: 1
+  #   image:
+  #     repository: private-registry.nginx.com/nap/waf-compiler
+  #     tag: ""
+  #     pullPolicy: IfNotPresent
+  #   resources:
+  #     requests:
+  #       memory: 256Mi
+  #       cpu: 100m
+  #     limits:
+  #       memory: 1Gi
+  #       cpu: 500m
+  #   securityContext:
+  #     runAsUser: 101
+  #     runAsGroup: 101
+  #     runAsNonRoot: true
+  #     allowPrivilegeEscalation: false
+  #     readOnlyRootFilesystem: true
+  #     capabilities:
+  #       drop:
+  #         - all
+
+  # redis:
+  #   replicas: 1
+  #   password: ""
+  #   image:
+  #     repository: private-registry.nginx.com/nap/waf-redis
+  #     tag: ""
+  #     pullPolicy: IfNotPresent
+  #   resources:
+  #     requests:
+  #       memory: 64Mi
+  #       cpu: 50m
+  #     limits:
+  #       memory: 128Mi
+  #       cpu: 100m
+  #   securityContext:
+  #     runAsUser: 999
+  #     runAsGroup: 999
+  #     runAsNonRoot: true
+  #     allowPrivilegeEscalation: false
+  #     readOnlyRootFilesystem: true
+  #     capabilities:
+  #       drop:
+  #         - all
+
+  # securityUpdatesRepo:
+  #   cert: ""
+  #   key: ""
+
+  # imagePullSecrets: []
+
+  # dependencyWait:
+  #   enabled: true
+  #   image:
+  #     repository: curlimages/curl
+  #     tag: "8.8.0"
+  #     pullPolicy: IfNotPresent
+  #   timeoutSeconds: 300
+
+  # seaweedfs-operator:
+  #   webhook:
+  #     enabled: false
+  #   grafanaDashboard:
+  #     enabled: false
+
+  # seaweedfsOperatorConfig:
+  #   enabled: true
+  #   seaweedfs:
+  #     loggingLevel: 1
+  #     image:
+  #       repository: private-registry.nginx.com/nap/waf-seaweedfs
+  #       tag: ""
+  #     volumeServerDiskCount: 1
+  #     master:
+  #       replicas: 1
+  #       volumeSizeLimitMB: 1024
+  #     volume:
+  #       replicas: 3
+  #       requests:
+  #         storage: 2Gi
+  #     filer:
+  #       replicas: 1
+  #     certificates:
+  #       enabled: false
+  #       securityConfigMapName: seaweed-security-config
+  #       warnBefore: "360h"

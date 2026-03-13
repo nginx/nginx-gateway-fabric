@@ -1,22 +1,22 @@
 apiVersion: cert-manager.io/v1
 kind: Issuer
 metadata:
-  name: f5-waf-seaweedfs-issuer
-  namespace: nap5-helm-policy
+  name: nginx-gateway-f5-waf-seaweedfs-issuer
+  namespace: nginx-gateway
 spec:
   selfSigned: {}
 ---
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
-  name: f5-waf-seaweedfs-ca-cert
-  namespace: nap5-helm-policy
+  name: nginx-gateway-f5-waf-seaweedfs-ca-cert
+  namespace: nginx-gateway
 spec:
-  secretName: f5-waf-seaweedfs-ca-cert
+  secretName: nginx-gateway-f5-waf-seaweedfs-ca-cert
   commonName: "seaweedfs-root-ca"
   isCA: true
   issuerRef:
-    name: f5-waf-seaweedfs-issuer
+    name: nginx-gateway-f5-waf-seaweedfs-issuer
     kind: Issuer
   duration: 87600h  # 10 years
   renewBefore: 720h  # 30 days
@@ -24,31 +24,31 @@ spec:
 apiVersion: cert-manager.io/v1
 kind: Issuer
 metadata:
-  name: f5-waf-seaweedfs-ca-issuer
-  namespace: nap5-helm-policy
+  name: nginx-gateway-f5-waf-seaweedfs-ca-issuer
+  namespace: nginx-gateway
 spec:
   ca:
-    secretName: f5-waf-seaweedfs-ca-cert
+    secretName: nginx-gateway-f5-waf-seaweedfs-ca-cert
 ---
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
-  name: f5-waf-seaweedfs-master-cert
-  namespace: nap5-helm-policy
+  name: nginx-gateway-f5-waf-seaweedfs-master-cert
+  namespace: nginx-gateway
 spec:
-  secretName: f5-waf-seaweedfs-master-cert
+  secretName: nginx-gateway-f5-waf-seaweedfs-master-cert
   issuerRef:
-    name: f5-waf-seaweedfs-ca-issuer
+    name: nginx-gateway-f5-waf-seaweedfs-ca-issuer
     kind: Issuer
   commonName: "SeaweedFS CA"
   dnsNames:
-    - '*.nap5-helm-policy'
-    - '*.nap5-helm-policy.svc'
-    - '*.nap5-helm-policy.svc.cluster.local'
+    - '*.nginx-gateway'
+    - '*.nginx-gateway.svc'
+    - '*.nginx-gateway.svc.cluster.local'
     - '*.seaweedfs-master'
-    - '*.seaweedfs-master.nap5-helm-policy'
-    - '*.seaweedfs-master.nap5-helm-policy.svc'
-    - '*.seaweedfs-master.nap5-helm-policy.svc.cluster.local'
+    - '*.seaweedfs-master.nginx-gateway'
+    - '*.seaweedfs-master.nginx-gateway.svc'
+    - '*.seaweedfs-master.nginx-gateway.svc.cluster.local'
   privateKey:
     algorithm: RSA
     size: 2048
@@ -58,22 +58,22 @@ spec:
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
-  name: f5-waf-seaweedfs-volume-cert
-  namespace: nap5-helm-policy
+  name: nginx-gateway-f5-waf-seaweedfs-volume-cert
+  namespace: nginx-gateway
 spec:
-  secretName: f5-waf-seaweedfs-volume-cert
+  secretName: nginx-gateway-f5-waf-seaweedfs-volume-cert
   issuerRef:
-    name: f5-waf-seaweedfs-ca-issuer
+    name: nginx-gateway-f5-waf-seaweedfs-ca-issuer
     kind: Issuer
   commonName: "SeaweedFS CA"
   dnsNames:
-    - '*.nap5-helm-policy'
-    - '*.nap5-helm-policy.svc'
-    - '*.nap5-helm-policy.svc.cluster.local'
+    - '*.nginx-gateway'
+    - '*.nginx-gateway.svc'
+    - '*.nginx-gateway.svc.cluster.local'
     - '*.seaweedfs-volume'
-    - '*.seaweedfs-volume.nap5-helm-policy'
-    - '*.seaweedfs-volume.nap5-helm-policy.svc'
-    - '*.seaweedfs-volume.nap5-helm-policy.svc.cluster.local'
+    - '*.seaweedfs-volume.nginx-gateway'
+    - '*.seaweedfs-volume.nginx-gateway.svc'
+    - '*.seaweedfs-volume.nginx-gateway.svc.cluster.local'
   privateKey:
     algorithm: RSA
     size: 2048
@@ -83,22 +83,22 @@ spec:
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
-  name: f5-waf-seaweedfs-filer-cert
-  namespace: nap5-helm-policy
+  name: nginx-gateway-f5-waf-seaweedfs-filer-cert
+  namespace: nginx-gateway
 spec:
-  secretName: f5-waf-seaweedfs-filer-cert
+  secretName: nginx-gateway-f5-waf-seaweedfs-filer-cert
   issuerRef:
-    name: f5-waf-seaweedfs-ca-issuer
+    name: nginx-gateway-f5-waf-seaweedfs-ca-issuer
     kind: Issuer
   commonName: "SeaweedFS CA"
   dnsNames:
-    - '*.nap5-helm-policy'
-    - '*.nap5-helm-policy.svc'
-    - '*.nap5-helm-policy.svc.cluster.local'
+    - '*.nginx-gateway'
+    - '*.nginx-gateway.svc'
+    - '*.nginx-gateway.svc.cluster.local'
     - '*.seaweedfs-filer'
-    - '*.seaweedfs-filer.nap5-helm-policy'
-    - '*.seaweedfs-filer.nap5-helm-policy.svc'
-    - '*.seaweedfs-filer.nap5-helm-policy.svc.cluster.local'
+    - '*.seaweedfs-filer.nginx-gateway'
+    - '*.seaweedfs-filer.nginx-gateway.svc'
+    - '*.seaweedfs-filer.nginx-gateway.svc.cluster.local'
   privateKey:
     algorithm: RSA
     size: 2048
@@ -108,18 +108,18 @@ spec:
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
-  name: f5-waf-seaweedfs-client-cert
-  namespace: nap5-helm-policy
+  name: nginx-gateway-f5-waf-seaweedfs-client-cert
+  namespace: nginx-gateway
 spec:
-  secretName: f5-waf-seaweedfs-client-cert
+  secretName: nginx-gateway-f5-waf-seaweedfs-client-cert
   issuerRef:
-    name: f5-waf-seaweedfs-ca-issuer
+    name: nginx-gateway-f5-waf-seaweedfs-ca-issuer
     kind: Issuer
   commonName: "SeaweedFS CA"
   dnsNames:
-    - '*.nap5-helm-policy'
-    - '*.nap5-helm-policy.svc'
-    - '*.nap5-helm-policy.svc.cluster.local'
+    - '*.nginx-gateway'
+    - '*.nginx-gateway.svc'
+    - '*.nginx-gateway.svc.cluster.local'
     - client
   privateKey:
     algorithm: RSA

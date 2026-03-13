@@ -3,6 +3,10 @@
   {{- if not (has .Release.Namespace $watchNamespaces) }}
     {{- $watchNamespaces = append $watchNamespaces .Release.Namespace }}
   {{- end }}
+  {{- $plmNS := include "plm.namespace" . }}
+  {{- if and (index .Values "f5-waf-plm" "enabled") (not (has $plmNS $watchNamespaces)) }}
+    {{- $watchNamespaces = append $watchNamespaces $plmNS }}
+  {{- end }}
   {{- range $ns := $watchNamespaces }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1

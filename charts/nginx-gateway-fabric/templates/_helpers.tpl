@@ -112,6 +112,64 @@ Filters out empty fields from a struct.
 {{- end }}
 
 {{/*
+When the f5-waf-plm subchart is enabled, derive the PLM storage values from the subchart's
+naming conventions so the user does not have to set nginxGateway.plmStorage manually.
+
+The PLM chart's f5-waf.fullname helper produces: {release-name}-f5-waf
+The filer service is therefore:               {release-name}-f5-waf-seaweed-filer
+Secrets follow the same prefix:
+  auth:        {release-name}-f5-waf-seaweedfs-auth
+  ca cert:     {release-name}-f5-waf-seaweedfs-ca-cert
+  client cert: {release-name}-f5-waf-seaweedfs-client-cert
+*/}}
+{{- define "plm.fullname" -}}
+{{- printf "%s-f5-waf" .Release.Name | trunc 63 | trimSuffix "-" }}
+{{- end }}
+
+{{- define "plm.namespace" -}}
+{{- index .Values "f5-waf-plm" "namespace" | default .Release.Namespace }}
+{{- end }}
+
+{{- define "plm.storageURL" -}}
+{{- $plm := (index .Values "f5-waf-plm") | default (dict) }}
+{{- $seaweedfs := dig "seaweedfsOperatorConfig" "seaweedfs" (dict) $plm }}
+{{- $certs := dig "certificates" (dict) $seaweedfs }}
+{{- $filer := dig "filer" (dict) $seaweedfs }}
+{{- $clusterDomain := .Values.clusterDomain | default "cluster.local" }}
+{{- $filerSvc := printf "%s-seaweed-filer" (include "plm.fullname" .) | trunc 63 | trimSuffix "-" }}
+{{- if $certs.enabled }}
+{{- $port := $filer.filerS3HttpsPort | default 9333 }}
+{{- printf "https://%s.%s.svc.%s:%d" $filerSvc (include "plm.namespace" .) $clusterDomain (int $port) }}
+{{- else }}
+{{- $port := $filer.filerS3Port | default 8333 }}
+{{- printf "http://%s.%s.svc.%s:%d" $filerSvc (include "plm.namespace" .) $clusterDomain (int $port) }}
+{{- end }}
+{{- end }}
+
+{{- define "plm.credentialsSecretName" -}}
+{{- printf "%s/%s-seaweedfs-auth" (include "plm.namespace" .) (include "plm.fullname" .) }}
+{{- end }}
+
+{{- define "plm.caSecretName" -}}
+{{- printf "%s/%s-seaweedfs-ca-cert" (include "plm.namespace" .) (include "plm.fullname" .) }}
+{{- end }}
+
+{{- define "plm.clientSSLSecretName" -}}
+{{- printf "%s/%s-seaweedfs-client-cert" (include "plm.namespace" .) (include "plm.fullname" .) }}
+{{- end }}
+
+{{/*
+Resolve the effective plmStorage URL: explicit value takes precedence, then subchart-derived.
+*/}}
+{{- define "plm.effectiveStorageURL" -}}
+{{- if .Values.nginxGateway.plmStorage.url }}
+{{- .Values.nginxGateway.plmStorage.url }}
+{{- else if index .Values "f5-waf-plm" "enabled" }}
+{{- include "plm.storageURL" . }}
+{{- end }}
+{{- end }}
+
+{{/*
 Create namespaced RBAC rules.
 */}}
 {{- define "rbac.namespacedRules" -}}
@@ -276,7 +334,7 @@ Create namespaced RBAC rules.
   verbs:
   - update
   {{- end }}
-  {{- if .Values.nginxGateway.plmStorage.url }}
+  {{- if (include "plm.effectiveStorageURL" .) }}
 - apiGroups:
   - appprotect.f5.com
   resources:

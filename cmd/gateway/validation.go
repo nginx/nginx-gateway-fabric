@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -113,27 +114,15 @@ func validateEndpointOptionalPort(value string) error {
 		return errors.New("must be set")
 	}
 
-	// This function assumes a port exists. If it doesn't, ignore those errors. Any errors with the endpoint
-	// will be caught by further validation.
-	host, port, err := net.SplitHostPort(value)
-	if err != nil &&
-		(!strings.Contains(err.Error(), "missing port") && !strings.Contains(err.Error(), "too many colons")) {
-		return fmt.Errorf("error splitting %q into host and port: %w", value, err)
+	host, port, err := splitHostPort(value)
+	if err != nil {
+		return err
 	}
 
 	if port != "" {
-		portVal, err := strconv.ParseInt(port, 10, 16)
-		if err != nil {
-			return fmt.Errorf("port must be a valid number: %w", err)
+		if err := validatePortString(port); err != nil {
+			return err
 		}
-
-		if portVal < 1 || portVal > 65535 {
-			return fmt.Errorf("port outside of valid port range [1 - 65535]: %v", port)
-		}
-	}
-
-	if host == "" {
-		host = value
 	}
 
 	if err := validateIP(host); err == nil {
@@ -146,7 +135,45 @@ func validateEndpointOptionalPort(value string) error {
 
 	// we don't know if the user intended to use a hostname or an IP address,
 	// so we return a generic error message
-	return fmt.Errorf("%q must be a domain name or IP address with optional port", value)
+	return fmt.Errorf("%q must be in the format [http://|https://]<host>[:<port>]", value)
+}
+
+// splitHostPort extracts the host and optional port from an endpoint value that may include an http/https scheme.
+// It uses net/url for scheme-prefixed values to correctly handle bracketed IPv6 addresses.
+func splitHostPort(value string) (host, port string, err error) {
+	if strings.Contains(value, "://") {
+		u, parseErr := url.Parse(value)
+		if parseErr != nil {
+			return "", "", fmt.Errorf("invalid URL %q: %w", value, parseErr)
+		}
+		if u.Scheme != "http" && u.Scheme != "https" {
+			return "", "", fmt.Errorf("unsupported scheme %q: must be http or https", u.Scheme)
+		}
+		return u.Hostname(), u.Port(), nil
+	}
+
+	// This function assumes a port exists. If it doesn't, ignore those errors. Any errors with the endpoint
+	// will be caught by further validation.
+	host, port, splitErr := net.SplitHostPort(value)
+	if splitErr != nil {
+		if strings.Contains(splitErr.Error(), "missing port") || strings.Contains(splitErr.Error(), "too many colons") {
+			return value, "", nil
+		}
+		return "", "", fmt.Errorf("error splitting %q into host and port: %w", value, splitErr)
+	}
+
+	return host, port, nil
+}
+
+func validatePortString(port string) error {
+	portVal, err := strconv.ParseInt(port, 10, 16)
+	if err != nil {
+		return fmt.Errorf("port must be a valid number: %w", err)
+	}
+	if portVal < 1 || portVal > 65535 {
+		return fmt.Errorf("port outside of valid port range [1 - 65535]: %v", port)
+	}
+	return nil
 }
 
 // validatePort makes sure a given port is inside the valid port range for its usage.

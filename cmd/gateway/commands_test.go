@@ -359,7 +359,7 @@ func TestControllerCmdFlagValidation(t *testing.T) {
 			},
 			wantErr: true,
 			expectedErrPrefix: `invalid argument "$*(invalid)" for "--usage-report-endpoint" flag: ` +
-				`"$*(invalid)" must be a domain name or IP address with optional port`,
+				`"$*(invalid)" must be in the format [http://|https://]<host>[:<port>]`,
 		},
 		{
 			name: "usage-report-resolver is set to empty string",
@@ -376,7 +376,7 @@ func TestControllerCmdFlagValidation(t *testing.T) {
 			},
 			wantErr: true,
 			expectedErrPrefix: `invalid argument "$*(invalid)" for "--usage-report-resolver" flag: ` +
-				`"$*(invalid)" must be a domain name or IP address with optional port`,
+				`"$*(invalid)" must be in the format [http://|https://]<host>[:<port>]`,
 		},
 		{
 			name: "usage-report-ca-secret is set to empty string",
