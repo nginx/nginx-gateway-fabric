@@ -195,6 +195,9 @@ func createSSLServer(
 
 	locs, matchPairs, grpc := createLocations(&virtualServer, serverID, generator, keepAliveCheck)
 
+	// Add internal JWKS locations for remote JWT authentication
+	locs = append(locs, extractUniqueJWKSLocations(locs)...)
+
 	server := http.Server{
 		ServerName: virtualServer.Hostname,
 		SSL: &http.SSL{
@@ -204,10 +207,9 @@ func createSSLServer(
 			Ciphers:             virtualServer.SSL.Ciphers,
 			PreferServerCiphers: virtualServer.SSL.PreferServerCiphers,
 		},
-		Locations:             locs,
-		InternalJWKSLocations: extractUniqueJWKSLocations(locs),
-		GRPC:                  grpc,
-		Listen:                listen,
+		Locations: locs,
+		GRPC:      grpc,
+		Listen:    listen,
 	}
 
 	if !disableSNIHostValidation {
@@ -246,12 +248,14 @@ func createServer(
 
 	locs, matchPairs, grpc := createLocations(&virtualServer, serverID, generator, keepAliveCheck)
 
+	// Add internal JWKS locations for remote JWT authentication
+	locs = append(locs, extractUniqueJWKSLocations(locs)...)
+
 	server := http.Server{
-		ServerName:            virtualServer.Hostname,
-		Locations:             locs,
-		InternalJWKSLocations: extractUniqueJWKSLocations(locs),
-		Listen:                listen,
-		GRPC:                  grpc,
+		ServerName: virtualServer.Hostname,
+		Locations:  locs,
+		Listen:     listen,
+		GRPC:       grpc,
 	}
 
 	policyIncludes := createIncludesFromPolicyGenerateResult(
@@ -1247,9 +1251,9 @@ func updateLocationMirrorRoute(location http.Location, path string, grpc bool) h
 
 // extractUniqueJWKSLocations extracts unique internal JWKS locations from a list of locations.
 // This prevents duplicate NGINX location blocks when multiple locations reference the same AuthenticationFilter.
-func extractUniqueJWKSLocations(locations []http.Location) []http.InternalJWKSLocation {
+func extractUniqueJWKSLocations(locations []http.Location) []http.Location {
 	seen := make(map[string]string) // map of path to remoteURI
-	var result []http.InternalJWKSLocation
+	var result []http.Location
 
 	for _, loc := range locations {
 		if loc.AuthJWT != nil && loc.AuthJWT.Remote != nil {
@@ -1262,13 +1266,31 @@ func extractUniqueJWKSLocations(locations []http.Location) []http.InternalJWKSLo
 			if _, exists := seen[path]; !exists {
 				seen[path] = loc.AuthJWT.Remote.URI
 
-				jwksLocation := http.InternalJWKSLocation{
+				jwksLocation := http.Location{
 					Path:      path,
-					RemoteURI: loc.AuthJWT.Remote.URI,
+					Type:      http.InternalLocationType,
+					ProxyPass: loc.AuthJWT.Remote.URI,
 				}
 
 				if loc.AuthJWT.Remote.TLS != nil {
-					jwksLocation.TLS = loc.AuthJWT.Remote.TLS
+					tls := loc.AuthJWT.Remote.TLS
+
+					// Set up ProxySSLVerify with granular control
+					jwksLocation.ProxySSLVerify = &http.ProxySSLVerify{
+						Name:   tls.SNIName,
+						Verify: &tls.Verify,
+						SNI:    &tls.SNI,
+					}
+
+					if tls.TrustedCertificate != "" {
+						jwksLocation.ProxySSLVerify.TrustedCertificate = tls.TrustedCertificate
+					}
+
+					// Set client certificate if provided
+					if tls.Certificate != "" {
+						jwksLocation.ProxySSLCertificate = tls.Certificate
+						jwksLocation.ProxySSLCertificateKey = tls.CertificateKey
+					}
 				}
 
 				result = append(result, jwksLocation)

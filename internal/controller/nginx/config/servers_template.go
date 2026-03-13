@@ -208,6 +208,10 @@ server {
 
         proxy_http_version 1.1;
         {{- if $l.ProxyPass -}}
+            {{- if $l.ProxySSLCertificate }}
+        proxy_ssl_certificate {{ $l.ProxySSLCertificate }};
+        proxy_ssl_certificate_key {{ $l.ProxySSLCertificateKey }};
+            {{- end }}
             {{ range $h := $l.ProxySetHeaders }}
         {{ $proxyOrGRPC }}_set_header {{ $h.Name }} "{{ $h.Value }}";
             {{- end }}
@@ -223,10 +227,33 @@ server {
         proxy_hide_header {{ $h }};
             {{- end }}
             {{- if $l.ProxySSLVerify }}
-        {{ $proxyOrGRPC }}_ssl_server_name on;
+                {{- with $l.ProxySSLVerify.Verify }}
+                    {{- if . }}
         {{ $proxyOrGRPC }}_ssl_verify on;
-        {{ $proxyOrGRPC }}_ssl_name {{ $l.ProxySSLVerify.Name }};
+                        {{- if $l.ProxySSLVerify.TrustedCertificate }}
         {{ $proxyOrGRPC }}_ssl_trusted_certificate {{ $l.ProxySSLVerify.TrustedCertificate }};
+                        {{- end }}
+                    {{- else }}
+        {{ $proxyOrGRPC }}_ssl_verify off;
+                    {{- end }}
+                {{- else }}
+        {{ $proxyOrGRPC }}_ssl_verify on;
+                    {{- if $l.ProxySSLVerify.TrustedCertificate }}
+        {{ $proxyOrGRPC }}_ssl_trusted_certificate {{ $l.ProxySSLVerify.TrustedCertificate }};
+                    {{- end }}
+                {{- end }}
+                {{- with $l.ProxySSLVerify.SNI }}
+                    {{- if . }}
+        {{ $proxyOrGRPC }}_ssl_server_name on;
+                    {{- else }}
+        {{ $proxyOrGRPC }}_ssl_server_name off;
+                    {{- end }}
+                {{- else }}
+        {{ $proxyOrGRPC }}_ssl_server_name on;
+                {{- end }}
+                {{- if $l.ProxySSLVerify.Name }}
+        {{ $proxyOrGRPC }}_ssl_name {{ $l.ProxySSLVerify.Name }};
+                {{- end }}
             {{- end }}
         {{- end }}
     }
@@ -234,35 +261,6 @@ server {
 
         {{- if $s.GRPC }}
         include /etc/nginx/grpc-error-locations.conf;
-        {{- end }}
-
-        {{- range $jwks := $s.InternalJWKSLocations }}
-    location = {{ $jwks.Path }} {
-        internal;
-        {{- if $jwks.TLS }}
-        {{- if $jwks.TLS.Certificate }}
-        proxy_ssl_certificate {{ $jwks.TLS.Certificate }};
-        proxy_ssl_certificate_key {{ $jwks.TLS.CertificateKey }};
-        {{- end }}
-        {{- if $jwks.TLS.Verify }}
-        proxy_ssl_verify on;
-        {{- if $jwks.TLS.TrustedCertificate }}
-        proxy_ssl_trusted_certificate {{ $jwks.TLS.TrustedCertificate }};
-        {{- end }}
-        {{- else }}
-        proxy_ssl_verify off;
-        {{- end }}
-        {{- if $jwks.TLS.SNI }}
-        proxy_ssl_server_name on;
-        {{- else }}
-        proxy_ssl_server_name off;
-        {{- end }}
-        {{- if $jwks.TLS.SNIName }}
-        proxy_ssl_name {{ $jwks.TLS.SNIName }};
-        {{- end }}
-        {{- end }}
-        proxy_pass {{ $jwks.RemoteURI }};
-    }
         {{- end }}
 }
     {{- end }}

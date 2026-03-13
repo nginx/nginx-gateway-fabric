@@ -352,7 +352,6 @@ func convertAuthenticationFilterJwtAuth(
 							remoteTLS.CertificatePath = generateJWTRemoteTLSKeyPairID(
 								filter.Source.Namespace,
 								specJWT.Remote.TLS.SecretRef.Name,
-								filter.Source.Name,
 							)
 						}
 
@@ -361,7 +360,6 @@ func convertAuthenticationFilterJwtAuth(
 							remoteTLS.CACertBundlePath = generateJWTRemoteTLSCABundleID(
 								filter.Source.Namespace,
 								specJWT.Remote.TLS.SecretRef.Name,
-								filter.Source.Name,
 							)
 						}
 					}

@@ -423,7 +423,7 @@ func addJWTRemoteTLSKeyPairs(
 			Namespace: filter.Source.Namespace,
 			Name:      specJWT.Remote.TLS.SecretRef.Name,
 		}
-		id := generateJWTRemoteTLSKeyPairID(secretNsName.Namespace, secretNsName.Name, filter.Source.Name)
+		id := generateJWTRemoteTLSKeyPairID(secretNsName.Namespace, secretNsName.Name)
 		secret := secretsMap[secretNsName]
 		if secret != nil && secret.Source != nil {
 			keyPairs[id] = SSLKeyPair{
@@ -459,7 +459,7 @@ func buildJWTRemoteTLSCABundles(
 		}
 		secret := secretsMap[secretNsName]
 		if secret != nil && secret.Source != nil && secret.Source.Data[secrets.CAKey] != nil {
-			id := generateJWTRemoteTLSCABundleID(secretNsName.Namespace, secretNsName.Name, filter.Source.Name)
+			id := generateJWTRemoteTLSCABundleID(secretNsName.Namespace, secretNsName.Name)
 			bundles[id] = secret.Source.Data[secrets.CAKey]
 		}
 	}
@@ -500,6 +500,11 @@ func buildCertBundles(
 		bundles[id] = cert
 	}
 
+	// Add CA certificates for JWT remote authentication
+	for id, data := range jwtRemoteTLSCABundles {
+		bundles[id] = data
+	}
+
 	// We only need to build the cert bundles if there are valid backend groups that reference them.
 	if len(backendGroups) == 0 {
 		return bundles
@@ -529,11 +534,6 @@ func buildCertBundles(
 			}
 			bundles[id] = data
 		}
-	}
-
-	// Add CA certificates for JWT remote authentication
-	for id, data := range jwtRemoteTLSCABundles {
-		bundles[id] = data
 	}
 
 	return bundles
@@ -1301,18 +1301,18 @@ func (id CertBundleID) IsCRLBundle() bool {
 	return strings.HasPrefix(string(id), crlBundleIDPrefix)
 }
 
-// generateJWTRemoteTLSKeyPairID generates an ID for JWT remote TLS key pair based on the Secret namespaced name
-// and the filter name. It is guaranteed to be unique per unique combination.
+// generateJWTRemoteTLSKeyPairID generates an ID for JWT remote TLS key pair based on the Secret namespaced name.
+// It is guaranteed to be unique per unique namespaced name.
 // The ID is safe to use as a file name.
-func generateJWTRemoteTLSKeyPairID(namespace, secretName, filterName string) SSLKeyPairID {
-	return SSLKeyPairID(fmt.Sprintf("jwt_remote_tls_%s_%s_%s", namespace, secretName, filterName))
+func generateJWTRemoteTLSKeyPairID(namespace, secretName string) SSLKeyPairID {
+	return SSLKeyPairID(fmt.Sprintf("jwt_remote_tls_%s_%s", namespace, secretName))
 }
 
-// generateJWTRemoteTLSCABundleID generates an ID for JWT remote TLS CA bundle based on the Secret namespaced name
-// and the filter name. It is guaranteed to be unique per unique combination.
+// generateJWTRemoteTLSCABundleID generates an ID for JWT remote TLS CA bundle based on the Secret namespaced name.
+// It is guaranteed to be unique per unique namespaced name.
 // The ID is safe to use as a file name.
-func generateJWTRemoteTLSCABundleID(namespace, secretName, filterName string) CertBundleID {
-	return CertBundleID(fmt.Sprintf("jwt_remote_tls_ca_%s_%s_%s", namespace, secretName, filterName))
+func generateJWTRemoteTLSCABundleID(namespace, secretName string) CertBundleID {
+	return CertBundleID(fmt.Sprintf("jwt_remote_tls_ca_%s_%s", namespace, secretName))
 }
 
 // GenerateAuthBasicFileID is used to generate IDs for basic auth files.

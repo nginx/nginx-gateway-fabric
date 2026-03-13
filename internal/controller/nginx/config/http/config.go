@@ -19,18 +19,11 @@ type Server struct {
 	ServerName             string
 	Listen                 string
 	Locations              []Location
-	InternalJWKSLocations  []InternalJWKSLocation
 	Includes               []shared.Include
 	IsDefaultHTTP          bool
 	IsDefaultSSL           bool
 	GRPC                   bool
 	IsSocket               bool
-}
-
-type InternalJWKSLocation struct {
-	TLS       *AuthJWTRemoteTLS
-	Path      string
-	RemoteURI string
 }
 
 // MisdirectedRequestVars holds the per-port NGINX variable names used
@@ -69,6 +62,10 @@ type Location struct {
 	Return *Return
 	// ProxySSLVerify controls SSL verification for upstreams when proxying requests.
 	ProxySSLVerify *ProxySSLVerify
+	// ProxySSLCertificate is the path to the client certificate for mTLS with the upstream.
+	ProxySSLCertificate string
+	// ProxySSLCertificateKey is the path to the client certificate key for mTLS with the upstream.
+	ProxySSLCertificateKey string
 	// ProxyPass is the upstream backend (URL or name) to which requests are proxied.
 	ProxyPass string
 	// CORSHeaders are the CORS headers to be added for this location.
@@ -197,6 +194,8 @@ type SplitClientDistribution struct {
 
 // ProxySSLVerify holds the proxied HTTPS server verification configuration.
 type ProxySSLVerify struct {
+	Verify             *bool
+	SNI                *bool
 	TrustedCertificate string
 	Name               string
 }

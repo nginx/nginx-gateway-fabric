@@ -7555,7 +7555,6 @@ func TestBuildSSLKeyPairs(t *testing.T) {
 				generateJWTRemoteTLSKeyPairID(
 					jwtTLSSecretNsName.Namespace,
 					jwtTLSSecretNsName.Name,
-					jwtFilterNsName.Name,
 				): {
 					Cert: []byte("jwt-cert-data"),
 					Key:  []byte("jwt-key-data"),
@@ -7701,7 +7700,6 @@ func TestBuildSSLKeyPairs(t *testing.T) {
 				generateJWTRemoteTLSKeyPairID(
 					jwtTLSSecretNsName.Namespace,
 					jwtTLSSecretNsName.Name,
-					jwtFilterNsName.Name,
 				): {
 					Cert: []byte("jwt-cert-data"),
 					Key:  []byte("jwt-key-data"),
