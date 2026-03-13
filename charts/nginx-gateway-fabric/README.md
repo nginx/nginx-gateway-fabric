@@ -24,6 +24,7 @@
     - [Uninstalling the Gateway Resources](#uninstalling-the-gateway-resources)
   - [Configuration](#configuration)
 
+
 ## Introduction
 
 This chart deploys the NGINX Gateway Fabric in your Kubernetes cluster.
@@ -49,6 +50,8 @@ kubectl kustomize https://github.com/nginx/nginx-gateway-fabric/config/crd/gatew
 ## Requirements
 
 Kubernetes: `>= 1.31.0-0`
+
+
 
 ## Installing the Chart
 
@@ -193,13 +196,18 @@ The following table lists the configurable parameters of the NGINX Gateway Fabri
 > More granular configuration options may not show up in this table.
 > Viewing the `values.yaml` file directly can show all available options.
 
+
+
 | Key | Description | Type | Default |
 |-----|-------------|------|---------|
-| `certGenerator` | The certGenerator section contains the configuration for the cert-generator Job. | object | `{"affinity":{},"agentTLSSecretName":"agent-tls","annotations":{},"enable":true,"nodeSelector":{},"overwrite":false,"serverTLSSecretName":"server-tls","tolerations":[],"topologySpreadConstraints":[],"ttlSecondsAfterFinished":30}` |
+| `certGenerator` | The certGenerator section contains the configuration for the cert-generator Job. | object | `{"affinity":{},"agentTLSSecretName":"agent-tls","annotations":{},"automountServiceAccountToken":true,"enable":true,"extraVolumeMounts":[],"extraVolumes":[],"nodeSelector":{},"overwrite":false,"serverTLSSecretName":"server-tls","tolerations":[],"topologySpreadConstraints":[],"ttlSecondsAfterFinished":30}` |
 | `certGenerator.affinity` | The affinity of the cert-generator pod. | object | `{}` |
 | `certGenerator.agentTLSSecretName` | The name of the base Secret containing TLS CA, certificate, and key for the NGINX Agent to securely communicate with the NGINX Gateway Fabric control plane. Must exist in the same namespace that the NGINX Gateway Fabric control plane is running in (default namespace: nginx-gateway). | string | `"agent-tls"` |
 | `certGenerator.annotations` | The annotations of the cert-generator Job. | object | `{}` |
+| `certGenerator.automountServiceAccountToken` | Automount the service account token for the cert-generator pod. | bool | `true` |
 | `certGenerator.enable` | Enable the cert-generator Job. If this is disabled, then cert-manager or some other method must be used to create the required Secrets. | bool | `true` |
+| `certGenerator.extraVolumeMounts` | extraVolumeMounts are the additional volume mounts for the cert-generator container. | list | `[]` |
+| `certGenerator.extraVolumes` | extraVolumes for the cert-generator pod. Use in conjunction with certGenerator.extraVolumeMounts to mount additional volumes to the container. | list | `[]` |
 | `certGenerator.nodeSelector` | The nodeSelector of the cert-generator pod. | object | `{}` |
 | `certGenerator.overwrite` | Overwrite existing TLS Secrets on startup. | bool | `false` |
 | `certGenerator.serverTLSSecretName` | The name of the Secret containing TLS CA, certificate, and key for the NGINX Gateway Fabric control plane to securely communicate with the NGINX Agent. Must exist in the same namespace that the NGINX Gateway Fabric control plane is running in (default namespace: nginx-gateway). | string | `"server-tls"` |
@@ -246,8 +254,9 @@ The following table lists the configurable parameters of the NGINX Gateway Fabri
 | `nginx.usage.resolver` | The nameserver used to resolve the NGINX Plus usage reporting endpoint. Used with NGINX Instance Manager. | string | `""` |
 | `nginx.usage.secretName` | The name of the Secret containing the JWT for NGINX Plus usage reporting. Must exist in the same namespace that the NGINX Gateway Fabric control plane is running in (default namespace: nginx-gateway). | string | `"nplus-license"` |
 | `nginx.usage.skipVerify` | Disable client verification of the NGINX Plus usage reporting server certificate. | bool | `false` |
-| `nginxGateway` | The nginxGateway section contains configuration for the NGINX Gateway Fabric control plane deployment. | object | `{"affinity":{},"autoscaling":{"enable":false},"config":{"logging":{"level":"info"}},"configAnnotations":{},"extraVolumeMounts":[],"extraVolumes":[],"gatewayClassAnnotations":{},"gatewayClassName":"nginx","gatewayControllerName":"gateway.nginx.org/nginx-gateway-controller","gwAPIExperimentalFeatures":{"enable":false},"gwAPIInferenceExtension":{"enable":false,"endpointPicker":{"disableTLS":false,"skipVerify":true}},"image":{"pullPolicy":"Always","repository":"ghcr.io/nginx/nginx-gateway-fabric","tag":"edge"},"kind":"deployment","labels":{},"leaderElection":{"enable":true,"lockName":""},"lifecycle":{},"metrics":{"enable":true,"port":9113,"secure":false},"name":"","nodeSelector":{},"podAnnotations":{},"priorityClassName":"","productTelemetry":{"enable":true},"readinessProbe":{"enable":true,"initialDelaySeconds":3,"port":8081},"replicas":1,"resources":{},"service":{"annotations":{},"labels":{}},"serviceAccount":{"annotations":{},"imagePullSecret":"","imagePullSecrets":[],"name":""},"snippets":{"enable":false},"snippetsFilters":{"enable":false},"terminationGracePeriodSeconds":30,"tolerations":[],"topologySpreadConstraints":[],"watchNamespaces":[]}` |
+| `nginxGateway` | The nginxGateway section contains configuration for the NGINX Gateway Fabric control plane deployment. | object | `{"affinity":{},"automountServiceAccountToken":true,"autoscaling":{"enable":false},"config":{"logging":{"level":"info"}},"configAnnotations":{},"extraVolumeMounts":[],"extraVolumes":[],"gatewayClassAnnotations":{},"gatewayClassName":"nginx","gatewayControllerName":"gateway.nginx.org/nginx-gateway-controller","gwAPIExperimentalFeatures":{"enable":false},"gwAPIInferenceExtension":{"enable":false,"endpointPicker":{"disableTLS":false,"skipVerify":true}},"image":{"pullPolicy":"Always","repository":"ghcr.io/nginx/nginx-gateway-fabric","tag":"edge"},"kind":"deployment","labels":{},"leaderElection":{"enable":true,"lockName":""},"lifecycle":{},"metrics":{"enable":true,"port":9113,"secure":false},"name":"","nodeSelector":{},"podAnnotations":{},"priorityClassName":"","productTelemetry":{"enable":true},"readinessProbe":{"enable":true,"initialDelaySeconds":3,"port":8081},"replicas":1,"resources":{},"service":{"annotations":{},"labels":{}},"serviceAccount":{"annotations":{},"imagePullSecret":"","imagePullSecrets":[],"name":""},"snippets":{"enable":false},"snippetsFilters":{"enable":false},"terminationGracePeriodSeconds":30,"tolerations":[],"topologySpreadConstraints":[],"watchNamespaces":[]}` |
 | `nginxGateway.affinity` | The affinity of the NGINX Gateway Fabric control plane pod. | object | `{}` |
+| `nginxGateway.automountServiceAccountToken` | Automount the service account token for the NGINX Gateway Fabric control plane pod. | bool | `true` |
 | `nginxGateway.autoscaling` | Autoscaling configuration for the NGINX Gateway Fabric control plane. | object | `{"enable":false}` |
 | `nginxGateway.autoscaling.enable` | Enable or disable Horizontal Pod Autoscaler for the control plane. | bool | `false` |
 | `nginxGateway.config.logging.level` | Log level. | string | `"info"` |
@@ -296,6 +305,8 @@ The following table lists the configurable parameters of the NGINX Gateway Fabri
 | `nginxGateway.tolerations` | Tolerations for the NGINX Gateway Fabric control plane pod. | list | `[]` |
 | `nginxGateway.topologySpreadConstraints` | The topology spread constraints for the NGINX Gateway Fabric control plane pod. | list | `[]` |
 | `nginxGateway.watchNamespaces` | List of namespaces to watch for resources. If not set, all namespaces are watched. The controller's own namespace is always included. | list | `[]` |
+
+
 
 ----------------------------------------------
 Autogenerated from chart metadata using [helm-docs](https://github.com/norwoodj/helm-docs)
