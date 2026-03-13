@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"slices"
 	"sort"
+	"strings"
 
 	"github.com/go-logr/logr"
 	coreV1 "k8s.io/api/core/v1"
@@ -41,6 +42,7 @@ const (
 	// the Gateway itself; in this situation we need an additional policy to generate the http context
 	// configuration.
 	InternalRateLimitShadowPolicyAnnotationKey = "nginx.org/internal-annotation-http-context-only"
+	crlBundleIDPrefix                          = "crl_bundle"
 )
 
 // BuildConfiguration builds the Configuration from the Graph.
@@ -72,7 +74,7 @@ func BuildConfiguration(
 	baseStreamConfig := buildBaseStreamConfig(gateway)
 
 	httpServers, sslServers, sslListenerHostnames := buildServers(gateway, g.ReferencedServices, g.ReferencedSecrets)
-	oidcProvider, oidcCACertBundles := buildOIDCProviderFromAuthenticationFilters(
+	oidcProvider, oidcCertBundles := buildOIDCProviderFromAuthenticationFilters(
 		g.AuthenticationFilters,
 		g.ReferencedSecrets,
 	)
@@ -95,7 +97,7 @@ func BuildConfiguration(
 	certBundles := buildCertBundles(
 		buildRefCertificateBundles(g.ReferencedSecrets, g.ReferencedCaCertConfigMaps),
 		backendGroups,
-		oidcCACertBundles,
+		oidcCertBundles,
 	)
 
 	config := Configuration{
@@ -1170,19 +1172,30 @@ func generateCertBundleID(caCertRef types.NamespacedName) CertBundleID {
 	return CertBundleID(fmt.Sprintf("cert_bundle_%s_%s", caCertRef.Namespace, caCertRef.Name))
 }
 
+// generateCRLBundleID generates an ID for a CRL bundle.
+// Uses a distinct prefix to avoid collisions when the same secret is referenced as both CA cert and CRL.
+func generateCRLBundleID(ref types.NamespacedName) CertBundleID {
+	return CertBundleID(fmt.Sprintf("%s_%s_%s", crlBundleIDPrefix, ref.Namespace, ref.Name))
+}
+
+// IsCRLBundle reports whether this CertBundleID identifies a CRL bundle.
+func (id CertBundleID) IsCRLBundle() bool {
+	return strings.HasPrefix(string(id), crlBundleIDPrefix)
+}
+
 // GenerateAuthFileID is used to generate IDs for both basic auth and jwt auth user files.
 func GenerateAuthFileID(namespace, name string) AuthFileID {
 	return AuthFileID(fmt.Sprintf("%s_%s", namespace, name))
 }
 
 // buildOIDCProviderFromAuthenticationFilters builds the OIDC provider configs from the processed
-// authentication filters. It also returns any CA certificate bundles that are needed.
+// authentication filters. It also returns any certificate bundles (CA certs and CRLs) that are needed.
 func buildOIDCProviderFromAuthenticationFilters(
 	authFilters map[types.NamespacedName]*graph.AuthenticationFilter,
 	referencedSecrets map[types.NamespacedName]*secrets.Secret,
 ) ([]OIDCProvider, map[CertBundleID]CertBundle) {
 	var providers []OIDCProvider
-	caCertBundles := make(map[CertBundleID]CertBundle)
+	certBundles := make(map[CertBundleID]CertBundle)
 
 	for _, af := range authFilters {
 		if !af.Valid || !af.Referenced {
@@ -1197,15 +1210,18 @@ func buildOIDCProviderFromAuthenticationFilters(
 		}
 		provider := *converted.OIDC
 		if provider.CACertBundleID != "" && provider.CACertData != nil {
-			caCertBundles[provider.CACertBundleID] = provider.CACertData
+			certBundles[provider.CACertBundleID] = provider.CACertData
+		}
+		if provider.CRLBundleID != "" && provider.CRLData != nil {
+			certBundles[provider.CRLBundleID] = provider.CRLData
 		}
 		providers = append(providers, provider)
 	}
 
-	if len(caCertBundles) == 0 {
+	if len(certBundles) == 0 {
 		return providers, nil
 	}
-	return providers, caCertBundles
+	return providers, certBundles
 }
 
 func telemetryEnabled(gw *graph.Gateway) bool {
