@@ -965,7 +965,7 @@
           "type": "object"
         },
         "plmStorage": {
-          "description": "PLM (Policy Lifecycle Manager) storage configuration for WAF bundles.\nUsed when WAF is enabled to fetch APPolicy and APLogConf bundles from S3-compatible storage.\nOptional if the PLM subchart is enabled, as the values will be derived from there.",
+          "description": "PLM (Policy Lifecycle Manager) storage configuration for WAF bundles.\nUsed when WAF is enabled to fetch APPolicy and APLogConf bundles from S3-compatible storage.",
           "properties": {
             "credentialsSecretName": {
               "default": "",

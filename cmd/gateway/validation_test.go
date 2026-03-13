@@ -383,6 +383,21 @@ func TestValidateEndpointOptionalPort(t *testing.T) {
 			endp:   "ftp://localhost:8080",
 			expErr: true,
 		},
+		{
+			name:   "valid endpoint with https scheme and IPv6 with port",
+			endp:   "https://[::1]:8333",
+			expErr: false,
+		},
+		{
+			name:   "valid endpoint with https scheme and IPv6, no port",
+			endp:   "https://[::1]",
+			expErr: false,
+		},
+		{
+			name:   "invalid endpoint with https scheme and bare IPv6",
+			endp:   "https://::1",
+			expErr: true,
+		},
 	}
 
 	for _, tc := range tests {

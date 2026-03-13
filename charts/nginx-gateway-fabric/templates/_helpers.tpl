@@ -136,12 +136,13 @@ Secrets follow the same prefix:
 {{- $certs := dig "certificates" (dict) $seaweedfs }}
 {{- $filer := dig "filer" (dict) $seaweedfs }}
 {{- $clusterDomain := .Values.clusterDomain | default "cluster.local" }}
+{{- $filerSvc := printf "%s-seaweed-filer" (include "plm.fullname" .) | trunc 63 | trimSuffix "-" }}
 {{- if $certs.enabled }}
 {{- $port := $filer.filerS3HttpsPort | default 9333 }}
-{{- printf "https://%s-seaweed-filer.%s.svc.%s:%d" (include "plm.fullname" .) (include "plm.namespace" .) $clusterDomain (int $port) }}
+{{- printf "https://%s.%s.svc.%s:%d" $filerSvc (include "plm.namespace" .) $clusterDomain (int $port) }}
 {{- else }}
 {{- $port := $filer.filerS3Port | default 8333 }}
-{{- printf "http://%s-seaweed-filer.%s.svc.%s:%d" (include "plm.fullname" .) (include "plm.namespace" .) $clusterDomain (int $port) }}
+{{- printf "http://%s.%s.svc.%s:%d" $filerSvc (include "plm.namespace" .) $clusterDomain (int $port) }}
 {{- end }}
 {{- end }}
 
