@@ -1,0 +1,9 @@
+apiVersion: gateway.nginx.org/v1alpha2
+kind: NginxProxy
+metadata:
+  name: nginx-proxy
+spec:
+  dnsResolver:
+    addresses:
+    - type: IPAddress
+      value: "8.8.8.8"

@@ -175,9 +175,10 @@ func createSSLServer(
 			Ciphers:             virtualServer.SSL.Ciphers,
 			PreferServerCiphers: virtualServer.SSL.PreferServerCiphers,
 		},
-		Locations: locs,
-		GRPC:      grpc,
-		Listen:    listen,
+		Locations:             locs,
+		InternalJWKSLocations: extractUniqueJWKSLocations(locs),
+		GRPC:                  grpc,
+		Listen:                listen,
 	}
 
 	policyIncludes := createIncludesFromPolicyGenerateResult(
@@ -210,10 +211,11 @@ func createServer(
 	locs, matchPairs, grpc := createLocations(&virtualServer, serverID, generator, keepAliveCheck)
 
 	server := http.Server{
-		ServerName: virtualServer.Hostname,
-		Locations:  locs,
-		Listen:     listen,
-		GRPC:       grpc,
+		ServerName:            virtualServer.Hostname,
+		Locations:             locs,
+		InternalJWKSLocations: extractUniqueJWKSLocations(locs),
+		Listen:                listen,
+		GRPC:                  grpc,
 	}
 
 	policyIncludes := createIncludesFromPolicyGenerateResult(
@@ -1090,18 +1092,68 @@ func updateLocationAuthenticationFilter(
 				File:  generateAuthFileName(id),
 			}
 		}
+
 		if authenticationFilter.JWT != nil {
-			id := dataplane.GenerateAuthJWTFileID(
-				authenticationFilter.JWT.SecretNamespace,
-				authenticationFilter.JWT.SecretName,
-			)
-			location.AuthJWT = &http.AuthJWT{
-				Realm:    authenticationFilter.JWT.Realm,
-				KeyCache: authenticationFilter.JWT.KeyCache,
-				File:     generateAuthFileName(id),
+			jwt := &http.AuthJWT{
+				Realm:           authenticationFilter.JWT.Realm,
+				KeyCache:        authenticationFilter.JWT.KeyCache,
+				FilterNamespace: authenticationFilter.JWT.FilterNamespace,
+				FilterName:      authenticationFilter.JWT.FilterName,
 			}
+
+			if authenticationFilter.JWT.Remote != nil {
+				remote := &http.AuthJWTRemote{
+					URI: authenticationFilter.JWT.Remote.URI,
+				}
+
+				if authenticationFilter.JWT.Remote.TLS != nil {
+					remoteTLS := &http.AuthJWTRemoteTLS{
+						Verify: true,
+						SNI:    true,
+					}
+
+					if authenticationFilter.JWT.Remote.TLS.Verify != nil {
+						remoteTLS.Verify = *authenticationFilter.JWT.Remote.TLS.Verify
+					}
+					if authenticationFilter.JWT.Remote.TLS.SNI != nil {
+						remoteTLS.SNI = *authenticationFilter.JWT.Remote.TLS.SNI
+					}
+					if authenticationFilter.JWT.Remote.TLS.SNIName != nil {
+						remoteTLS.SNIName = *authenticationFilter.JWT.Remote.TLS.SNIName
+					}
+
+					if authenticationFilter.JWT.Remote.TLS.CertificatePath != "" {
+						certPath := generatePEMFileName(authenticationFilter.JWT.Remote.TLS.CertificatePath)
+						remoteTLS.Certificate = certPath
+						remoteTLS.CertificateKey = certPath
+					}
+
+					if remoteTLS.Verify {
+						if authenticationFilter.JWT.Remote.TLS.CACertBundlePath != "" {
+							remoteTLS.TrustedCertificate = generateCertBundleFileName(
+								authenticationFilter.JWT.Remote.TLS.CACertBundlePath,
+							)
+						} else {
+							remoteTLS.TrustedCertificate = dataplane.AlpineSSLRootCAPath
+						}
+					}
+
+					remote.TLS = remoteTLS
+				}
+
+				jwt.Remote = remote
+			} else {
+				id := dataplane.GenerateAuthJWTFileID(
+					authenticationFilter.JWT.SecretNamespace,
+					authenticationFilter.JWT.SecretName,
+				)
+				jwt.File = generateAuthFileName(id)
+			}
+
+			location.AuthJWT = jwt
 		}
 	}
+
 	return location
 }
 
@@ -1114,6 +1166,40 @@ func updateLocationMirrorRoute(location http.Location, path string, grpc bool) h
 	}
 
 	return location
+}
+
+// extractUniqueJWKSLocations extracts unique internal JWKS locations from a list of locations.
+// This prevents duplicate NGINX location blocks when multiple locations reference the same AuthenticationFilter.
+func extractUniqueJWKSLocations(locations []http.Location) []http.InternalJWKSLocation {
+	seen := make(map[string]string) // map of path to remoteURI
+	var result []http.InternalJWKSLocation
+
+	for _, loc := range locations {
+		if loc.AuthJWT != nil && loc.AuthJWT.Remote != nil {
+			path := fmt.Sprintf(
+				"/_ngf-internal-%s_%s_jwks_uri",
+				loc.AuthJWT.FilterNamespace,
+				loc.AuthJWT.FilterName,
+			)
+
+			if _, exists := seen[path]; !exists {
+				seen[path] = loc.AuthJWT.Remote.URI
+
+				jwksLocation := http.InternalJWKSLocation{
+					Path:      path,
+					RemoteURI: loc.AuthJWT.Remote.URI,
+				}
+
+				if loc.AuthJWT.Remote.TLS != nil {
+					jwksLocation.TLS = loc.AuthJWT.Remote.TLS
+				}
+
+				result = append(result, jwksLocation)
+			}
+		}
+	}
+
+	return result
 }
 
 func updateLocationRedirectFilter(

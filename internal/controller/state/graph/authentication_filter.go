@@ -82,7 +82,7 @@ func validateAuthenticationFilter(
 ) ([]conditions.Condition, bool) {
 	var conds []conditions.Condition
 	valid := true
-	//revive:disable-next-line:unnecessary-stmt future-proof switch form; additional auth types will be added
+
 	switch af.Spec.Type {
 	case ngfAPI.AuthTypeBasic:
 		authBasicSecretNsName := types.NamespacedName{Namespace: nsname.Namespace, Name: af.Spec.Basic.SecretRef.Name}
@@ -102,6 +102,20 @@ func validateAuthenticationFilter(
 				authJWTSecretNsName,
 				resourceResolver,
 				field.NewPath("spec.jwt.file.secretRef"),
+			)
+		} else if af.Spec.JWT.Source == ngfAPI.JWTKeySourceRemote &&
+			af.Spec.JWT.Remote != nil &&
+			af.Spec.JWT.Remote.TLS != nil &&
+			af.Spec.JWT.Remote.TLS.SecretRef != nil {
+			// Resolve the TLS client certificate secret for remote JWKS with mTLS
+			tlsSecretNsName := types.NamespacedName{
+				Namespace: nsname.Namespace,
+				Name:      af.Spec.JWT.Remote.TLS.SecretRef.Name,
+			}
+			conds, valid = resolveAuthenticationFilterSecret(
+				tlsSecretNsName,
+				resourceResolver,
+				field.NewPath("spec.jwt.remote.tls.secretRef"),
 			)
 		}
 	}

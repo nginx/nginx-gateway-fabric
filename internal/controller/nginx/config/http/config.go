@@ -14,15 +14,23 @@ const (
 
 // Server holds all configuration for an HTTP server.
 type Server struct {
-	SSL           *SSL
-	ServerName    string
-	Listen        string
-	Locations     []Location
-	Includes      []shared.Include
-	IsDefaultHTTP bool
-	IsDefaultSSL  bool
-	GRPC          bool
-	IsSocket      bool
+	SSL                   *SSL
+	ServerName            string
+	Listen                string
+	Locations             []Location
+	InternalJWKSLocations []InternalJWKSLocation
+	Includes              []shared.Include
+	IsDefaultHTTP         bool
+	IsDefaultSSL          bool
+	GRPC                  bool
+	IsSocket              bool
+}
+
+// InternalJWKSLocation represents an internal NGINX location for fetching remote JWKS.
+type InternalJWKSLocation struct {
+	TLS       *AuthJWTRemoteTLS
+	Path      string
+	RemoteURI string
 }
 
 type LocationType string
@@ -188,9 +196,28 @@ type AuthBasic struct {
 // AuthJWT holds the configuration for JWT authentication using the auth_jwt directive.
 // See https://nginx.org/en/docs/http/ngx_http_auth_jwt_module.html
 type AuthJWT struct {
-	KeyCache *ngfAPI.Duration
-	Realm    string
-	File     string
+	KeyCache        *ngfAPI.Duration
+	Remote          *AuthJWTRemote
+	Realm           string
+	File            string
+	FilterNamespace string
+	FilterName      string
+}
+
+// AuthJWTRemote holds configuration for remote JWKS retrieval.
+type AuthJWTRemote struct {
+	TLS *AuthJWTRemoteTLS
+	URI string
+}
+
+// AuthJWTRemoteTLS holds TLS configuration for remote JWKS retrieval.
+type AuthJWTRemoteTLS struct {
+	SNIName            string
+	Certificate        string
+	CertificateKey     string
+	TrustedCertificate string
+	Verify             bool
+	SNI                bool
 }
 
 // ServerConfig holds configuration for an HTTP server and IP family to be used by NGINX.

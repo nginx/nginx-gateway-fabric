@@ -123,7 +123,9 @@ server {
 
         {{- if $l.AuthJWT }}
         auth_jwt "{{ $l.AuthJWT.Realm }}";
-        {{- if $l.AuthJWT.File }}
+        {{- if $l.AuthJWT.Remote }}
+        auth_jwt_key_request /_ngf-internal-{{ $l.AuthJWT.FilterNamespace }}_{{ $l.AuthJWT.FilterName }}_jwks_uri;
+        {{- else if $l.AuthJWT.File }}
         auth_jwt_key_file {{ $l.AuthJWT.File }};
         {{- end }}
         {{- if $l.AuthJWT.KeyCache }}
@@ -190,6 +192,35 @@ server {
 
         {{- if $s.GRPC }}
         include /etc/nginx/grpc-error-locations.conf;
+        {{- end }}
+
+        {{- range $jwks := $s.InternalJWKSLocations }}
+    location = {{ $jwks.Path }} {
+        internal;
+        {{- if $jwks.TLS }}
+        {{- if $jwks.TLS.Certificate }}
+        proxy_ssl_certificate {{ $jwks.TLS.Certificate }};
+        proxy_ssl_certificate_key {{ $jwks.TLS.CertificateKey }};
+        {{- end }}
+        {{- if $jwks.TLS.Verify }}
+        proxy_ssl_verify on;
+        {{- if $jwks.TLS.TrustedCertificate }}
+        proxy_ssl_trusted_certificate {{ $jwks.TLS.TrustedCertificate }};
+        {{- end }}
+        {{- else }}
+        proxy_ssl_verify off;
+        {{- end }}
+        {{- if $jwks.TLS.SNI }}
+        proxy_ssl_server_name on;
+        {{- else }}
+        proxy_ssl_server_name off;
+        {{- end }}
+        {{- if $jwks.TLS.SNIName }}
+        proxy_ssl_name {{ $jwks.TLS.SNIName }};
+        {{- end }}
+        {{- end }}
+        proxy_pass {{ $jwks.RemoteURI }};
+    }
         {{- end }}
 }
     {{- end }}
