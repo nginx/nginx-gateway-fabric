@@ -52,7 +52,8 @@ func getAuthenticationFilterResolverForNamespace(
 func processAuthenticationFilters(
 	authenticationFilters map[types.NamespacedName]*ngfAPI.AuthenticationFilter,
 	resourceResolver resolver.Resolver,
-	validator validation.AuthFieldsValidator,
+	authValidator validation.AuthFieldsValidator,
+	genericValidator validation.GenericValidator,
 	plus bool,
 ) map[types.NamespacedName]*AuthenticationFilter {
 	if len(authenticationFilters) == 0 {
@@ -62,7 +63,8 @@ func processAuthenticationFilters(
 	processed := make(map[types.NamespacedName]*AuthenticationFilter, len(authenticationFilters))
 
 	for nsname, af := range authenticationFilters {
-		if cond := validateAuthenticationFilter(af, nsname, resourceResolver, validator, plus); cond != nil {
+		cond := validateAuthenticationFilter(af, nsname, resourceResolver, authValidator, genericValidator, plus)
+		if cond != nil {
 			processed[nsname] = &AuthenticationFilter{
 				Source:     af,
 				Conditions: []conditions.Condition{*cond},
@@ -84,7 +86,8 @@ func validateAuthenticationFilter(
 	af *ngfAPI.AuthenticationFilter,
 	nsname types.NamespacedName,
 	resourceResolver resolver.Resolver,
-	validator validation.AuthFieldsValidator,
+	authValidator validation.AuthFieldsValidator,
+	genericValidator validation.GenericValidator,
 	plus bool,
 ) *conditions.Condition {
 	var allErrs field.ErrorList
@@ -102,60 +105,10 @@ func validateAuthenticationFilter(
 		}
 
 	case ngfAPI.AuthTypeOIDC:
-		if !plus {
-			allErrs = append(allErrs, field.Invalid(
-				field.NewPath("spec.oidc"),
-				af.Spec.OIDC,
-				"OIDC authentication filters are only supported with NGINX Plus",
-			))
-			break
-		}
-
-		oidcSpec := af.Spec.OIDC
-		if err := validator.ValidateOIDCIssuer(oidcSpec.Issuer); err != nil {
-			allErrs = append(allErrs, field.Invalid(
-				field.NewPath("spec.oidc.issuer"),
-				oidcSpec.Issuer,
-				err.Error(),
-			))
-		}
-		if oidcSpec.RedirectURI != nil {
-			if err := validator.ValidateOIDCRedirectURI(*oidcSpec.RedirectURI); err != nil {
-				allErrs = append(allErrs, field.Invalid(
-					field.NewPath("spec.oidc.redirectURI"),
-					*oidcSpec.RedirectURI,
-					err.Error(),
-				))
-			}
-		}
-		clientSecretNsName := types.NamespacedName{Namespace: nsname.Namespace, Name: oidcSpec.ClientSecretRef.Name}
-		resolveOpt := resolver.WithExpectedSecretKey(secrets.ClientSecretKey)
-		if err := resourceResolver.Resolve(resolver.ResourceTypeSecret, clientSecretNsName, resolveOpt); err != nil {
-			allErrs = append(allErrs, field.Invalid(
-				field.NewPath("spec.oidc.clientSecretRef"),
-				oidcSpec.ClientSecretRef.Name,
-				err.Error(),
-			))
-		}
-		if len(oidcSpec.CACertificateRefs) > 1 {
-			allErrs = append(allErrs, field.Invalid(
-				field.NewPath("spec.oidc.caCertificateRefs"),
-				len(oidcSpec.CACertificateRefs),
-				"at most one CA certificate reference is supported for OIDC authentication filters",
-			))
-			break
-		}
-		for _, caCertRef := range oidcSpec.CACertificateRefs {
-			caCertNsName := types.NamespacedName{Namespace: nsname.Namespace, Name: caCertRef.Name}
-			if err := resourceResolver.Resolve(resolver.ResourceTypeSecret, caCertNsName,
-				resolver.WithExpectedSecretKey(secrets.CAKey)); err != nil {
-				allErrs = append(allErrs, field.Invalid(
-					field.NewPath("spec.oidc.caCertificateRefs"),
-					caCertRef.Name,
-					err.Error(),
-				))
-			}
-		}
+		allErrs = append(
+			allErrs,
+			validateOIDC(af.Spec.OIDC, nsname, resourceResolver, authValidator, genericValidator, plus)...,
+		)
 
 	default:
 		allErrs = append(allErrs, field.Invalid(
@@ -171,4 +124,160 @@ func validateAuthenticationFilter(
 	}
 
 	return nil
+}
+
+func validateOIDC(
+	oidcSpec *ngfAPI.OIDCAuth,
+	nsname types.NamespacedName,
+	resourceResolver resolver.Resolver,
+	authValidator validation.AuthFieldsValidator,
+	genericValidator validation.GenericValidator,
+	plus bool,
+) field.ErrorList {
+	if !plus {
+		return field.ErrorList{field.Invalid(
+			field.NewPath("spec.oidc"),
+			oidcSpec,
+			"OIDC authentication filters are only supported with NGINX Plus",
+		)}
+	}
+
+	var allErrs field.ErrorList
+
+	allErrs = append(allErrs, validateOIDCFields(oidcSpec, authValidator, genericValidator)...)
+	allErrs = append(allErrs, validateOIDCSecretRefs(oidcSpec, nsname, resourceResolver)...)
+	allErrs = append(allErrs, validateOIDCLogoutURIs(oidcSpec, authValidator)...)
+
+	return allErrs
+}
+
+func validateOIDCFields(
+	oidcSpec *ngfAPI.OIDCAuth,
+	authValidator validation.AuthFieldsValidator,
+	genericValidator validation.GenericValidator,
+) field.ErrorList {
+	var allErrs field.ErrorList
+
+	if err := authValidator.ValidateOIDCIssuer(oidcSpec.Issuer); err != nil {
+		allErrs = append(allErrs, field.Invalid(
+			field.NewPath("spec.oidc.issuer"),
+			oidcSpec.Issuer,
+			err.Error(),
+		))
+	}
+	if oidcSpec.ConfigURL != nil {
+		if err := authValidator.ValidateOIDCConfigURL(*oidcSpec.ConfigURL); err != nil {
+			allErrs = append(allErrs, field.Invalid(
+				field.NewPath("spec.oidc.configURL"),
+				*oidcSpec.ConfigURL,
+				err.Error(),
+			))
+		}
+	}
+	if oidcSpec.RedirectURI != nil {
+		if err := authValidator.ValidateOIDCRedirectURI(*oidcSpec.RedirectURI); err != nil {
+			allErrs = append(allErrs, field.Invalid(
+				field.NewPath("spec.oidc.redirectURI"),
+				*oidcSpec.RedirectURI,
+				err.Error(),
+			))
+		}
+	}
+	if oidcSpec.Session != nil && oidcSpec.Session.Timeout != nil {
+		if err := genericValidator.ValidateNginxDuration(string(*oidcSpec.Session.Timeout)); err != nil {
+			allErrs = append(allErrs, field.Invalid(
+				field.NewPath("spec.oidc.session.timeout"),
+				*oidcSpec.Session.Timeout,
+				err.Error(),
+			))
+		}
+	}
+
+	return allErrs
+}
+
+func validateOIDCSecretRefs(
+	oidcSpec *ngfAPI.OIDCAuth,
+	nsname types.NamespacedName,
+	resourceResolver resolver.Resolver,
+) field.ErrorList {
+	var allErrs field.ErrorList
+
+	clientSecretNsName := types.NamespacedName{Namespace: nsname.Namespace, Name: oidcSpec.ClientSecretRef.Name}
+	if err := resourceResolver.Resolve(resolver.ResourceTypeSecret, clientSecretNsName,
+		resolver.WithExpectedSecretKey(secrets.ClientSecretKey)); err != nil {
+		allErrs = append(allErrs, field.Invalid(
+			field.NewPath("spec.oidc.clientSecretRef"),
+			oidcSpec.ClientSecretRef.Name,
+			err.Error(),
+		))
+	}
+	if len(oidcSpec.CACertificateRefs) > 1 {
+		allErrs = append(allErrs, field.Invalid(
+			field.NewPath("spec.oidc.caCertificateRefs"),
+			len(oidcSpec.CACertificateRefs),
+			"at most one CA certificate reference is supported for OIDC authentication filters",
+		))
+		return allErrs
+	}
+	for _, caCertRef := range oidcSpec.CACertificateRefs {
+		caCertNsName := types.NamespacedName{Namespace: nsname.Namespace, Name: caCertRef.Name}
+		if err := resourceResolver.Resolve(resolver.ResourceTypeSecret, caCertNsName,
+			resolver.WithExpectedSecretKey(secrets.CAKey)); err != nil {
+			allErrs = append(allErrs, field.Invalid(
+				field.NewPath("spec.oidc.caCertificateRefs"),
+				caCertRef.Name,
+				err.Error(),
+			))
+		}
+	}
+	if oidcSpec.CRLSecretRef != nil {
+		crlNsName := types.NamespacedName{Namespace: nsname.Namespace, Name: oidcSpec.CRLSecretRef.Name}
+		if err := resourceResolver.Resolve(resolver.ResourceTypeSecret, crlNsName,
+			resolver.WithExpectedSecretKey(secrets.CRLKey)); err != nil {
+			allErrs = append(allErrs, field.Invalid(
+				field.NewPath("spec.oidc.crlSecretRef"),
+				oidcSpec.CRLSecretRef.Name,
+				err.Error(),
+			))
+		}
+	}
+
+	return allErrs
+}
+
+func validateOIDCLogoutURIs(
+	oidcSpec *ngfAPI.OIDCAuth,
+	authValidator validation.AuthFieldsValidator,
+) field.ErrorList {
+	logout := oidcSpec.Logout
+	if logout == nil {
+		return nil
+	}
+
+	var allErrs field.ErrorList
+
+	if logout.URI != nil {
+		if err := authValidator.ValidateOIDCLogoutURI(*logout.URI); err != nil {
+			allErrs = append(allErrs, field.Invalid(field.NewPath("spec.oidc.logout.uri"), *logout.URI, err.Error()))
+		}
+	}
+	if logout.PostLogoutURI != nil {
+		if err := authValidator.ValidateOIDCPostLogoutURI(*logout.PostLogoutURI); err != nil {
+			allErrs = append(
+				allErrs,
+				field.Invalid(field.NewPath("spec.oidc.logout.postLogoutURI"), *logout.PostLogoutURI, err.Error()),
+			)
+		}
+	}
+	if logout.FrontChannelLogoutURI != nil {
+		if err := authValidator.ValidateOIDCFrontChannelLogoutURI(*logout.FrontChannelLogoutURI); err != nil {
+			allErrs = append(
+				allErrs,
+				field.Invalid(field.NewPath("spec.oidc.logout.frontChannelLogoutURI"), *logout.FrontChannelLogoutURI, err.Error()),
+			)
+		}
+	}
+
+	return allErrs
 }

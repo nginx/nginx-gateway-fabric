@@ -26,7 +26,7 @@ const (
 
 // Configuration is an intermediate representation of dataplane configuration.
 type Configuration struct {
-	// CertBundles holds all unique Certificate Bundles.
+	// CertBundles holds all unique Certificate Bundles, including CA certs and CRL files.
 	CertBundles map[CertBundleID]CertBundle
 	// BaseStreamConfig holds the configuration options at the stream context.
 	BaseStreamConfig BaseStreamConfig
@@ -294,19 +294,45 @@ type AuthBasic struct {
 
 // OIDCProvider represents an OIDC provider configuration.
 type OIDCProvider struct {
-	// Name is the name of the OIDC provider.
-	Name string
-	// Issuer is the issuer URL to discover OIDC configuration from.
-	Issuer string
+	// TokenHint specifies whether to include the token hint in the authentication request to the OIDC provider.
+	TokenHint *bool
+	// LogoutURI specifies the logout URI path for the OIDC provider.
+	LogoutURI *string
+	// FrontChannelLogoutURI specifies the front-channel logout URI path for the OIDC provider.
+	FrontChannelLogoutURI *string
+	// Timeout specifies the session timeout for the OIDC provider.
+	Timeout *string
+	// PostLogout URI specifies the post-logout URI for the OIDC provider.
+	PostLogoutURI *string
+	// CookieName specifies the session name for the OIDC provider.
+	CookieName *string
+	// ConfigURL specifies the URL for the OIDC provider's configuration endpoint.
+	ConfigURL *string
+	// PKCE specifies whether to use PKCE for the OIDC provider.
+	PKCE *bool
 	// ClientID is the unique identifier for the OIDC client.
 	ClientID string
+	// RedirectURIPath is the path for the OIDC redirect URI.
+	RedirectURIPath string
+	// Issuer is the issuer URL to discover OIDC configuration from.
+	Issuer string
+	// RedirectURI is the URI used for the OIDC callback.
+	RedirectURI string
 	// ClientSecret is the secret for the OIDC client.
 	// This is used for authentication with the OIDC provider.
 	ClientSecret string
+	// Name is the name of the OIDC provider.
+	Name string
+	// PostLogoutURIPath is the path for the OIDC post-logout redirect URI.
+	PostLogoutURIPath string
+	// ExtraAuthArgs specifies any extra arguments to include in the authentication request to the OIDC provider.
+	ExtraAuthArgs string
 	// CACertBundleID is the ID of the CA certificate bundle for SSL verification.
 	CACertBundleID CertBundleID
-	// RedirectURI is the URI used for the OIDC callback.
-	RedirectURI string
+	// CRLBundleID is the ID of the CRL bundle for SSL verification.
+	CRLBundleID CertBundleID
+	// CRLData is the raw PEM bytes of the CRL.
+	CRLData []byte
 	// CACertData is the raw PEM bytes of the CA certificates.
 	CACertData []byte
 }

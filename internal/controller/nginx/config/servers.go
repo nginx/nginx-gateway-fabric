@@ -522,9 +522,7 @@ func createLocations(
 		}
 	}
 
-	for _, oidcProvider := range findOIDCProviders(server.PathRules) {
-		locs = append(locs, createOIDCCallbackLocation(oidcProvider))
-	}
+	locs = append(locs, createOIDCLocations(server.PathRules)...)
 
 	if !rootPathExists {
 		locs = append(locs, createDefaultRootLocation())
@@ -1774,12 +1772,72 @@ func findOIDCProviders(pathRules []dataplane.PathRule) []*dataplane.OIDCProvider
 	return providers
 }
 
-// createOIDCCallbackLocation creates a minimal OIDC callback location containing only the auth_oidc directive.
+// createOIDCLocations creates callback and post-logout locations for all OIDC providers.
+// A location is skipped if an exact-match route already occupies the same path or if the location has already
+// been generated. Both callback and post-logout locations use exact nginx matches, so they safely take
+// precedence over any prefix route at the same path.
+func createOIDCLocations(pathRules []dataplane.PathRule) []http.Location {
+	existingExact := existingExactPathSet(pathRules)
+
+	var locs []http.Location
+	seenPaths := make(map[string]struct{})
+	for _, provider := range findOIDCProviders(pathRules) {
+		if provider.RedirectURIPath != "" {
+			if _, exists := existingExact[provider.RedirectURIPath]; !exists {
+				if _, seen := seenPaths[provider.RedirectURIPath]; !seen {
+					seenPaths[provider.RedirectURIPath] = struct{}{}
+					locs = append(locs, createOIDCCallbackLocation(provider))
+				}
+			}
+		}
+		if provider.PostLogoutURIPath != "" {
+			if _, exists := existingExact[provider.PostLogoutURIPath]; !exists {
+				if _, seen := seenPaths[provider.PostLogoutURIPath]; !seen {
+					seenPaths[provider.PostLogoutURIPath] = struct{}{}
+					locs = append(locs, createOIDCPostLogoutLocation(provider.PostLogoutURIPath))
+				}
+			}
+		}
+	}
+	return locs
+}
+
+// existingExactPathSet returns the set of paths that correspond to exact locations.
+// Paths that are treated as non-slashed PathPrefix rules are excluded, so that only
+// exact (or otherwise non-prefix) paths are considered for conflict detection.
+func existingExactPathSet(pathRules []dataplane.PathRule) map[string]struct{} {
+	paths := make(map[string]struct{}, len(pathRules))
+	for _, rule := range pathRules {
+		if !isNonSlashedPrefixPath(rule.PathType, rule.Path) {
+			paths[rule.Path] = struct{}{}
+		}
+	}
+	return paths
+}
+
+// createOIDCCallbackLocation creates a OIDC callback location containing only the auth_oidc directive.
+// This is created only when redirectURI is a path-only URI.
 func createOIDCCallbackLocation(provider *dataplane.OIDCProvider) http.Location {
 	return http.Location{
-		Path:                 "= " + provider.RedirectURI,
+		Path:                 "= " + provider.RedirectURIPath,
 		Type:                 http.ExternalLocationType,
 		AuthOIDCProviderName: provider.Name,
+	}
+}
+
+// createOIDCPostLogoutLocation creates a location block that serves a plain-text logout confirmation page.
+// It is only created when postLogoutURI is a path-only URI. It also unsets the auth_oidc directive since
+// we do not need authentication post logout.
+func createOIDCPostLogoutLocation(uri string) http.Location {
+	return http.Location{
+		AuthOIDCProviderName: "",
+		Path:                 "= " + uri,
+		Type:                 http.ExternalLocationType,
+		Return: &http.Return{
+			Code:        http.StatusOK,
+			Body:        `You have been logged out.`,
+			DefaultType: "text/plain",
+		},
 	}
 }
 

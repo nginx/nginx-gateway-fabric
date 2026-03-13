@@ -9,8 +9,21 @@ spec:
       name: keycloak-dual-secret
     clientID: nginx-gateway
     issuer: https://host.docker.internal:8443/realms/nginx-gateway
+    redirectURI: https://cafe.example.com:8442/coffee/my_callback
     caCertificateRefs:
       - name: keycloak-dual-secret
+    pkce: true
+    extraAuthArgs:
+      "prompt": "login"
+      "max_age": "3600"
+    session:
+      cookieName: nginx-gateway-session
+      timeout: 30m
+    logout:
+      postLogoutURI: /after_logout/
+      uri: /logout
+      frontChannelLogoutURI: /frontchannel_logout
+      tokenHint: true
 ---
 apiVersion: gateway.nginx.org/v1alpha1
 kind: AuthenticationFilter
@@ -20,8 +33,13 @@ spec:
   type: OIDC
   oidc:
     clientSecretRef:
-      name: keycloak-dual-secret
+      name: keycloak-user-service-secret
     clientID: user-service
     issuer: https://host.docker.internal:8443/realms/user-service
     caCertificateRefs:
-      - name: keycloak-dual-secret
+      - name: keycloak-user-service-secret
+    crlSecretRef:
+      name: keycloak-user-service-secret # this revokes the current CA certificate
+    logout:
+      postLogoutURI: /after_logout/
+    redirectURI: /custom_callback

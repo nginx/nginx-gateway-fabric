@@ -2,6 +2,8 @@ package dataplane
 
 import (
 	"fmt"
+	"sort"
+	"strings"
 
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -253,18 +255,45 @@ func buildOIDCProvider(
 		ClientID:     specOIDC.ClientID,
 		ClientSecret: string(referencedClientSecret.Source.Data[secrets.ClientSecretKey]),
 		RedirectURI:  redirectURI,
+		ConfigURL:    specOIDC.ConfigURL,
+		PKCE:         specOIDC.PKCE,
 	}
 
-	// Handle CA certificates if specified
-	for _, caCertRef := range specOIDC.CACertificateRefs {
-		caCertNsName := types.NamespacedName{
-			Namespace: filter.Source.Namespace,
-			Name:      caCertRef.Name,
+	if strings.HasPrefix(redirectURI, "/") {
+		redirectURIPath := redirectURI
+		if i := strings.IndexAny(redirectURI, "?#"); i != -1 {
+			redirectURIPath = redirectURI[:i]
 		}
-		if caCertSecret, exists := referencedSecrets[caCertNsName]; exists && caCertSecret.Source != nil {
-			oidc.CACertBundleID = generateCertBundleID(caCertNsName)
-			oidc.CACertData = caCertSecret.Source.Data[secrets.CAKey]
-			break
+		oidc.RedirectURIPath = redirectURIPath
+	}
+
+	setOIDCCACert(oidc, specOIDC.CACertificateRefs, filter.Source.Namespace, referencedSecrets)
+
+	if specOIDC.CRLSecretRef != nil {
+		setOIDCCRLCert(oidc, specOIDC.CRLSecretRef.Name, filter.Source.Namespace, referencedSecrets)
+	}
+
+	oidc.ExtraAuthArgs = buildSortedExtraAuthArgs(specOIDC.ExtraAuthArgs)
+
+	if specOIDC.Session != nil {
+		oidc.CookieName = specOIDC.Session.CookieName
+		if specOIDC.Session.Timeout != nil {
+			t := string(*specOIDC.Session.Timeout)
+			oidc.Timeout = &t
+		}
+	}
+
+	if specOIDC.Logout != nil {
+		oidc.LogoutURI = specOIDC.Logout.URI
+		oidc.PostLogoutURI = specOIDC.Logout.PostLogoutURI
+		oidc.FrontChannelLogoutURI = specOIDC.Logout.FrontChannelLogoutURI
+		oidc.TokenHint = specOIDC.Logout.TokenHint
+		if specOIDC.Logout.PostLogoutURI != nil && strings.HasPrefix(*specOIDC.Logout.PostLogoutURI, "/") {
+			postLogoutPath := *specOIDC.Logout.PostLogoutURI
+			if i := strings.IndexAny(postLogoutPath, "?#"); i != -1 {
+				postLogoutPath = postLogoutPath[:i]
+			}
+			oidc.PostLogoutURIPath = postLogoutPath
 		}
 	}
 
@@ -324,4 +353,49 @@ func convertHTTPCORSFilter(filter *v1.HTTPCORSFilter) *HTTPCORSFilter {
 	result.MaxAge = filter.MaxAge
 
 	return result
+}
+
+func setOIDCCACert(
+	oidc *OIDCProvider,
+	refs []ngfAPI.LocalObjectReference,
+	namespace string,
+	referencedSecrets map[types.NamespacedName]*secrets.Secret,
+) {
+	for _, caCertRef := range refs {
+		nsName := types.NamespacedName{Namespace: namespace, Name: caCertRef.Name}
+		if secret, exists := referencedSecrets[nsName]; exists && secret.Source != nil {
+			oidc.CACertBundleID = generateCertBundleID(nsName)
+			oidc.CACertData = secret.Source.Data[secrets.CAKey]
+			return
+		}
+	}
+}
+
+func setOIDCCRLCert(
+	oidc *OIDCProvider,
+	secretName string,
+	namespace string,
+	referencedSecrets map[types.NamespacedName]*secrets.Secret,
+) {
+	nsName := types.NamespacedName{Namespace: namespace, Name: secretName}
+	if secret, exists := referencedSecrets[nsName]; exists && secret.Source != nil {
+		oidc.CRLBundleID = generateCRLBundleID(nsName)
+		oidc.CRLData = secret.Source.Data[secrets.CRLKey]
+	}
+}
+
+func buildSortedExtraAuthArgs(extraAuthArgs map[string]string) string {
+	if len(extraAuthArgs) == 0 {
+		return ""
+	}
+	keys := make([]string, 0, len(extraAuthArgs))
+	for k := range extraAuthArgs {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	pairs := make([]string, 0, len(keys))
+	for _, k := range keys {
+		pairs = append(pairs, k+"="+extraAuthArgs[k])
+	}
+	return strings.Join(pairs, "&")
 }

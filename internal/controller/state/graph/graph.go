@@ -271,6 +271,7 @@ func BuildGraph(
 		state.AuthenticationFilters,
 		resourceResolver,
 		validators.AuthFieldsValidator,
+		validators.GenericValidator,
 		featureFlags.Plus,
 	)
 
