@@ -307,19 +307,75 @@ func convertAuthenticationFilterJwtAuth(
 	referencedSecrets map[types.NamespacedName]*secrets.Secret,
 ) *AuthJWT {
 	var result *AuthJWT
-	if specJWT := filter.Source.Spec.JWT; specJWT != nil && specJWT.File != nil {
-		referencedSecret, isReferenced := referencedSecrets[types.NamespacedName{
-			Namespace: filter.Source.Namespace,
-			Name:      specJWT.File.SecretRef.Name,
-		}]
+	if specJWT := filter.Source.Spec.JWT; specJWT != nil {
+		if specJWT.Source == ngfAPI.JWTKeySourceFile && specJWT.File != nil {
+			// Handle File-based JWT (local JWKS)
+			referencedSecret, isReferenced := referencedSecrets[types.NamespacedName{
+				Namespace: filter.Source.Namespace,
+				Name:      specJWT.File.SecretRef.Name,
+			}]
 
-		if isReferenced && referencedSecret.Source != nil {
+			if isReferenced && referencedSecret.Source != nil {
+				result = &AuthJWT{
+					SecretName:      specJWT.File.SecretRef.Name,
+					SecretNamespace: referencedSecret.Source.Namespace,
+					Data:            referencedSecret.Source.Data[secrets.AuthKey],
+					Realm:           specJWT.Realm,
+					KeyCache:        specJWT.KeyCache,
+				}
+			}
+		} else if specJWT.Source == ngfAPI.JWTKeySourceRemote && specJWT.Remote != nil {
+			// Handle Remote JWT (remote JWKS)
+			remote := &AuthJWTRemote{
+				URI: specJWT.Remote.URI,
+			}
+
+			// Handle TLS configuration for remote JWKS
+			if specJWT.Remote.TLS != nil {
+				remoteTLS := &AuthJWTRemoteTLS{
+					Verify:  specJWT.Remote.TLS.Verify,
+					SNI:     specJWT.Remote.TLS.SNI,
+					SNIName: specJWT.Remote.TLS.SNIName,
+				}
+
+				// Handle TLS client certificate if SecretRef is provided
+				if specJWT.Remote.TLS.SecretRef != nil {
+					referencedSecret, isReferenced := referencedSecrets[types.NamespacedName{
+						Namespace: filter.Source.Namespace,
+						Name:      specJWT.Remote.TLS.SecretRef.Name,
+					}]
+
+					if isReferenced && referencedSecret.Source != nil {
+						// Set the CertificatePath if the secret contains client cert/key
+						if referencedSecret.Source.Data[secrets.TLSCertKey] != nil &&
+							referencedSecret.Source.Data[secrets.TLSKeyKey] != nil {
+							remoteTLS.CertificatePath = generateJWTRemoteTLSKeyPairID(
+								filter.Source.Namespace,
+								specJWT.Remote.TLS.SecretRef.Name,
+								filter.Source.Name,
+							)
+						}
+
+						// Set the CACertBundlePath if the secret contains CA cert
+						if referencedSecret.Source.Data[secrets.CAKey] != nil {
+							remoteTLS.CACertBundlePath = generateJWTRemoteTLSCABundleID(
+								filter.Source.Namespace,
+								specJWT.Remote.TLS.SecretRef.Name,
+								filter.Source.Name,
+							)
+						}
+					}
+				}
+
+				remote.TLS = remoteTLS
+			}
+
 			result = &AuthJWT{
-				SecretName:      specJWT.File.SecretRef.Name,
-				SecretNamespace: referencedSecret.Source.Namespace,
-				Data:            referencedSecret.Source.Data[secrets.AuthKey],
 				Realm:           specJWT.Realm,
 				KeyCache:        specJWT.KeyCache,
+				Remote:          remote,
+				FilterNamespace: filter.Source.Namespace,
+				FilterName:      filter.Source.Name,
 			}
 		}
 	}

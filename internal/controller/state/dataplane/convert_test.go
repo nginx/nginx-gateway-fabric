@@ -1311,6 +1311,286 @@ func TestConvertAuthenticationFilter(t *testing.T) {
 			},
 			expected: &AuthenticationFilter{},
 		},
+		{
+			name: "jwt auth remote valid with basic URI",
+			filter: &graph.AuthenticationFilter{
+				Source: &ngfAPIv1alpha1.AuthenticationFilter{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "af",
+						Namespace: "test",
+					},
+					Spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+						Type: ngfAPIv1alpha1.AuthTypeJWT,
+						JWT: &ngfAPIv1alpha1.JWTAuth{
+							Realm:  "my-realm",
+							Source: ngfAPIv1alpha1.JWTKeySourceRemote,
+							Remote: &ngfAPIv1alpha1.JWTRemoteKeySource{
+								URI: "https://idp.example.com/jwks",
+							},
+							KeyCache: helpers.GetPointer(ngfAPIv1alpha1.Duration("1h")),
+						},
+					},
+				},
+				Valid:      true,
+				Referenced: true,
+			},
+			referencedSecrets: nil,
+			expected: &AuthenticationFilter{
+				JWT: &AuthJWT{
+					Realm:    "my-realm",
+					KeyCache: helpers.GetPointer(ngfAPIv1alpha1.Duration("1h")),
+					Remote: &AuthJWTRemote{
+						URI: "https://idp.example.com/jwks",
+					},
+					FilterNamespace: "test",
+					FilterName:      "af",
+				},
+			},
+		},
+		{
+			name: "jwt auth remote with TLS configuration without secret",
+			filter: &graph.AuthenticationFilter{
+				Source: &ngfAPIv1alpha1.AuthenticationFilter{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "af",
+						Namespace: "test",
+					},
+					Spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+						Type: ngfAPIv1alpha1.AuthTypeJWT,
+						JWT: &ngfAPIv1alpha1.JWTAuth{
+							Realm:  "secure-realm",
+							Source: ngfAPIv1alpha1.JWTKeySourceRemote,
+							Remote: &ngfAPIv1alpha1.JWTRemoteKeySource{
+								URI: "https://idp.example.com/jwks",
+								TLS: &ngfAPIv1alpha1.JWTRemoteTLSConfig{
+									Verify:  helpers.GetPointer(true),
+									SNI:     helpers.GetPointer(true),
+									SNIName: helpers.GetPointer("idp.example.com"),
+								},
+							},
+							KeyCache: helpers.GetPointer(ngfAPIv1alpha1.Duration("30m")),
+						},
+					},
+				},
+				Valid:      true,
+				Referenced: true,
+			},
+			referencedSecrets: nil,
+			expected: &AuthenticationFilter{
+				JWT: &AuthJWT{
+					Realm:    "secure-realm",
+					KeyCache: helpers.GetPointer(ngfAPIv1alpha1.Duration("30m")),
+					Remote: &AuthJWTRemote{
+						URI: "https://idp.example.com/jwks",
+						TLS: &AuthJWTRemoteTLS{
+							Verify:  helpers.GetPointer(true),
+							SNI:     helpers.GetPointer(true),
+							SNIName: helpers.GetPointer("idp.example.com"),
+						},
+					},
+					FilterNamespace: "test",
+					FilterName:      "af",
+				},
+			},
+		},
+		{
+			name: "jwt auth remote with TLS certificate from secret",
+			filter: &graph.AuthenticationFilter{
+				Source: &ngfAPIv1alpha1.AuthenticationFilter{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "af",
+						Namespace: "test",
+					},
+					Spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+						Type: ngfAPIv1alpha1.AuthTypeJWT,
+						JWT: &ngfAPIv1alpha1.JWTAuth{
+							Realm:  "secure-realm",
+							Source: ngfAPIv1alpha1.JWTKeySourceRemote,
+							Remote: &ngfAPIv1alpha1.JWTRemoteKeySource{
+								URI: "https://idp.example.com/jwks",
+								TLS: &ngfAPIv1alpha1.JWTRemoteTLSConfig{
+									Verify:    helpers.GetPointer(false),
+									SNI:       helpers.GetPointer(false),
+									SecretRef: &ngfAPIv1alpha1.LocalObjectReference{Name: "tls-secret"},
+								},
+							},
+						},
+					},
+				},
+				Valid:      true,
+				Referenced: true,
+			},
+			referencedSecrets: map[types.NamespacedName]*secrets.Secret{
+				{Namespace: "test", Name: "tls-secret"}: {
+					Source: &apiv1.Secret{
+						ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "tls-secret"},
+						Type:       apiv1.SecretTypeTLS,
+						Data: map[string][]byte{
+							secrets.TLSCertKey: []byte("cert-data"),
+							secrets.TLSKeyKey:  []byte("key-data"),
+						},
+					},
+				},
+			},
+			expected: &AuthenticationFilter{
+				JWT: &AuthJWT{
+					Realm: "secure-realm",
+					Remote: &AuthJWTRemote{
+						URI: "https://idp.example.com/jwks",
+						TLS: &AuthJWTRemoteTLS{
+							Verify:          helpers.GetPointer(false),
+							SNI:             helpers.GetPointer(false),
+							CertificatePath: "jwt_remote_tls_test_tls-secret_af",
+						},
+					},
+					FilterNamespace: "test",
+					FilterName:      "af",
+				},
+			},
+		},
+		{
+			name: "jwt auth remote with TLS secret not referenced",
+			filter: &graph.AuthenticationFilter{
+				Source: &ngfAPIv1alpha1.AuthenticationFilter{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "af",
+						Namespace: "test",
+					},
+					Spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+						Type: ngfAPIv1alpha1.AuthTypeJWT,
+						JWT: &ngfAPIv1alpha1.JWTAuth{
+							Realm:  "secure-realm",
+							Source: ngfAPIv1alpha1.JWTKeySourceRemote,
+							Remote: &ngfAPIv1alpha1.JWTRemoteKeySource{
+								URI: "https://idp.example.com/jwks",
+								TLS: &ngfAPIv1alpha1.JWTRemoteTLSConfig{
+									Verify:    helpers.GetPointer(true),
+									SecretRef: &ngfAPIv1alpha1.LocalObjectReference{Name: "tls-secret"},
+								},
+							},
+						},
+					},
+				},
+				Valid:      true,
+				Referenced: true,
+			},
+			referencedSecrets: map[types.NamespacedName]*secrets.Secret{
+				{Namespace: "test", Name: "other-secret"}: {
+					Source: &apiv1.Secret{
+						ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "other-secret"},
+						Type:       apiv1.SecretTypeTLS,
+						Data: map[string][]byte{
+							secrets.TLSCertKey: []byte("cert-data"),
+							secrets.TLSKeyKey:  []byte("key-data"),
+						},
+					},
+				},
+			},
+			expected: &AuthenticationFilter{
+				JWT: &AuthJWT{
+					Realm: "secure-realm",
+					Remote: &AuthJWTRemote{
+						URI: "https://idp.example.com/jwks",
+						TLS: &AuthJWTRemoteTLS{
+							Verify: helpers.GetPointer(true),
+						},
+					},
+					FilterNamespace: "test",
+					FilterName:      "af",
+				},
+			},
+		},
+		{
+			name: "jwt auth remote with TLS secret referenced but source is nil",
+			filter: &graph.AuthenticationFilter{
+				Source: &ngfAPIv1alpha1.AuthenticationFilter{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "af",
+						Namespace: "test",
+					},
+					Spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+						Type: ngfAPIv1alpha1.AuthTypeJWT,
+						JWT: &ngfAPIv1alpha1.JWTAuth{
+							Realm:  "secure-realm",
+							Source: ngfAPIv1alpha1.JWTKeySourceRemote,
+							Remote: &ngfAPIv1alpha1.JWTRemoteKeySource{
+								URI: "https://idp.example.com/jwks",
+								TLS: &ngfAPIv1alpha1.JWTRemoteTLSConfig{
+									SNI:       helpers.GetPointer(true),
+									SecretRef: &ngfAPIv1alpha1.LocalObjectReference{Name: "tls-secret"},
+								},
+							},
+						},
+					},
+				},
+				Valid:      true,
+				Referenced: true,
+			},
+			referencedSecrets: map[types.NamespacedName]*secrets.Secret{
+				{Namespace: "test", Name: "tls-secret"}: {
+					Source: nil,
+				},
+			},
+			expected: &AuthenticationFilter{
+				JWT: &AuthJWT{
+					Realm: "secure-realm",
+					Remote: &AuthJWTRemote{
+						URI: "https://idp.example.com/jwks",
+						TLS: &AuthJWTRemoteTLS{
+							SNI: helpers.GetPointer(true),
+						},
+					},
+					FilterNamespace: "test",
+					FilterName:      "af",
+				},
+			},
+		},
+		{
+			name: "jwt auth remote with TLS secret missing cert data",
+			filter: &graph.AuthenticationFilter{
+				Source: &ngfAPIv1alpha1.AuthenticationFilter{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "af",
+						Namespace: "test",
+					},
+					Spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+						Type: ngfAPIv1alpha1.AuthTypeJWT,
+						JWT: &ngfAPIv1alpha1.JWTAuth{
+							Realm:  "secure-realm",
+							Source: ngfAPIv1alpha1.JWTKeySourceRemote,
+							Remote: &ngfAPIv1alpha1.JWTRemoteKeySource{
+								URI: "https://idp.example.com/jwks",
+								TLS: &ngfAPIv1alpha1.JWTRemoteTLSConfig{
+									SecretRef: &ngfAPIv1alpha1.LocalObjectReference{Name: "tls-secret"},
+								},
+							},
+						},
+					},
+				},
+				Valid:      true,
+				Referenced: true,
+			},
+			referencedSecrets: map[types.NamespacedName]*secrets.Secret{
+				{Namespace: "test", Name: "tls-secret"}: {
+					Source: &apiv1.Secret{
+						ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "tls-secret"},
+						Type:       apiv1.SecretTypeTLS,
+						Data:       map[string][]byte{},
+					},
+				},
+			},
+			expected: &AuthenticationFilter{
+				JWT: &AuthJWT{
+					Realm: "secure-realm",
+					Remote: &AuthJWTRemote{
+						URI: "https://idp.example.com/jwks",
+						TLS: &AuthJWTRemoteTLS{},
+					},
+					FilterNamespace: "test",
+					FilterName:      "af",
+				},
+			},
+		},
 	}
 
 	for _, tc := range tests {

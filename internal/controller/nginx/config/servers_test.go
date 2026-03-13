@@ -5395,6 +5395,155 @@ func TestGenerateCORSHeaders(t *testing.T) {
 	}
 }
 
+func TestExtractUniqueJWKSLocations(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	tests := []struct {
+		name      string
+		locations []http.Location
+		expected  []http.InternalJWKSLocation
+	}{
+		{
+			name:      "no locations with JWT",
+			locations: []http.Location{{Path: "/path1"}, {Path: "/path2"}},
+			expected:  nil,
+		},
+		{
+			name: "single location with remote JWT",
+			locations: []http.Location{
+				{
+					Path: "/path1",
+					AuthJWT: &http.AuthJWT{
+						FilterNamespace: "default",
+						FilterName:      "jwt-filter",
+						Remote: &http.AuthJWTRemote{
+							URI: "https://example.com/jwks",
+						},
+					},
+				},
+			},
+			expected: []http.InternalJWKSLocation{
+				{
+					Path:      "/_ngf-internal-default_jwt-filter_jwks_uri",
+					RemoteURI: "https://example.com/jwks",
+				},
+			},
+		},
+		{
+			name: "multiple locations with same JWT filter (should deduplicate)",
+			locations: []http.Location{
+				{
+					Path: "/path1",
+					AuthJWT: &http.AuthJWT{
+						FilterNamespace: "default",
+						FilterName:      "jwt-filter",
+						Remote: &http.AuthJWTRemote{
+							URI: "https://example.com/jwks",
+						},
+					},
+				},
+				{
+					Path: "/path2",
+					AuthJWT: &http.AuthJWT{
+						FilterNamespace: "default",
+						FilterName:      "jwt-filter",
+						Remote: &http.AuthJWTRemote{
+							URI: "https://example.com/jwks",
+						},
+					},
+				},
+			},
+			expected: []http.InternalJWKSLocation{
+				{
+					Path:      "/_ngf-internal-default_jwt-filter_jwks_uri",
+					RemoteURI: "https://example.com/jwks",
+				},
+			},
+		},
+		{
+			name: "multiple locations with different JWT filters",
+			locations: []http.Location{
+				{
+					Path: "/path1",
+					AuthJWT: &http.AuthJWT{
+						FilterNamespace: "default",
+						FilterName:      "jwt-filter-1",
+						Remote: &http.AuthJWTRemote{
+							URI: "https://example1.com/jwks",
+						},
+					},
+				},
+				{
+					Path: "/path2",
+					AuthJWT: &http.AuthJWT{
+						FilterNamespace: "default",
+						FilterName:      "jwt-filter-2",
+						Remote: &http.AuthJWTRemote{
+							URI: "https://example2.com/jwks",
+						},
+					},
+				},
+			},
+			expected: []http.InternalJWKSLocation{
+				{
+					Path:      "/_ngf-internal-default_jwt-filter-1_jwks_uri",
+					RemoteURI: "https://example1.com/jwks",
+				},
+				{
+					Path:      "/_ngf-internal-default_jwt-filter-2_jwks_uri",
+					RemoteURI: "https://example2.com/jwks",
+				},
+			},
+		},
+		{
+			name: "mixed locations with and without JWT",
+			locations: []http.Location{
+				{Path: "/path1"},
+				{
+					Path: "/path2",
+					AuthJWT: &http.AuthJWT{
+						FilterNamespace: "default",
+						FilterName:      "jwt-filter",
+						Remote: &http.AuthJWTRemote{
+							URI: "https://example.com/jwks",
+						},
+					},
+				},
+				{Path: "/path3"},
+			},
+			expected: []http.InternalJWKSLocation{
+				{
+					Path:      "/_ngf-internal-default_jwt-filter_jwks_uri",
+					RemoteURI: "https://example.com/jwks",
+				},
+			},
+		},
+		{
+			name: "JWT with file-based key (should be ignored)",
+			locations: []http.Location{
+				{
+					Path: "/path1",
+					AuthJWT: &http.AuthJWT{
+						FilterNamespace: "default",
+						FilterName:      "jwt-filter",
+						File:            "/etc/nginx/secrets/jwt-keys",
+					},
+				},
+			},
+			expected: nil,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			result := extractUniqueJWKSLocations(test.locations)
+			g.Expect(result).To(Equal(test.expected))
+		})
+	}
+}
+
 func TestUpdateLocationCORSFilter(t *testing.T) {
 	t.Parallel()
 
