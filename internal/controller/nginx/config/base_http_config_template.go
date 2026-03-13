@@ -85,4 +85,16 @@ include {{ $i.Name }};
 
 # Server tokens
 server_tokens {{ .ServerTokens }};
+
+{{- range .OIDCProviders }}
+oidc_provider {{ .Name }} {
+    issuer {{ .Issuer }};
+    client_id {{ .ClientID }};
+    client_secret {{ .ClientSecret }};
+    redirect_uri {{ .RedirectURI }};
+    {{- if .TrustedCertificatePath }}
+    ssl_trusted_certificate {{ .TrustedCertificatePath }};
+    {{- end }}
+}
+{{- end }}
 `

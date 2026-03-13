@@ -461,17 +461,8 @@ func createLocations(
 	mirrorPathToPercentage := extractMirrorTargetsWithPercentages(server.PathRules)
 
 	for pathRuleIdx, rule := range server.PathRules {
-		if !rootPathExists {
-			if rule.Path == rootPath {
-				rootPathExists = true
-			} else if rule.PathType == dataplane.PathTypeRegularExpression {
-				// Uses regexp2 with RE2 flag to match the engine used by the validation layer.
-				if re, err := regexp2.Compile(rule.Path, regexp2.RE2); err == nil {
-					if matched, _ := re.MatchString("/"); matched {
-						rootPathExists = true
-					}
-				}
-			}
+		if !rootPathExists && matchesRootPath(rule) {
+			rootPathExists = true
 		}
 
 		if rule.GRPC {
@@ -529,6 +520,10 @@ func createLocations(
 				mirrorPercentage)...,
 			)
 		}
+	}
+
+	for _, oidcProvider := range findOIDCProviders(server.PathRules) {
+		locs = append(locs, createOIDCCallbackLocation(oidcProvider))
 	}
 
 	if !rootPathExists {
@@ -1139,18 +1134,25 @@ func updateLocationAuthenticationFilter(
 	location http.Location,
 	authenticationFilter *dataplane.AuthenticationFilter,
 ) http.Location {
-	if authenticationFilter != nil {
-		if authenticationFilter.Basic != nil {
-			id := dataplane.GenerateAuthFileID(
-				authenticationFilter.Basic.SecretNamespace,
-				authenticationFilter.Basic.SecretName,
-			)
-			location.AuthBasic = &http.AuthBasic{
-				Realm: authenticationFilter.Basic.Realm,
-				File:  generateAuthBasicFileName(id),
-			}
+	if authenticationFilter == nil {
+		return location
+	}
+
+	if authenticationFilter.Basic != nil {
+		id := dataplane.GenerateAuthFileID(
+			authenticationFilter.Basic.SecretNamespace,
+			authenticationFilter.Basic.SecretName,
+		)
+		location.AuthBasic = &http.AuthBasic{
+			Realm: authenticationFilter.Basic.Realm,
+			File:  generateAuthBasicFileName(id),
 		}
 	}
+
+	if authenticationFilter.OIDC != nil {
+		location.AuthOIDCProviderName = authenticationFilter.OIDC.Name
+	}
+
 	return location
 }
 
@@ -1734,6 +1736,50 @@ func createDefaultRootLocation() http.Location {
 	return http.Location{
 		Path:   "= /",
 		Return: &http.Return{Code: http.StatusNotFound},
+	}
+}
+
+func matchesRootPath(rule dataplane.PathRule) bool {
+	if rule.Path == rootPath {
+		return true
+	}
+	if rule.PathType != dataplane.PathTypeRegularExpression {
+		return false
+	}
+	// Uses regexp2 with RE2 flag to match the engine used by the validation layer.
+	re, err := regexp2.Compile(rule.Path, regexp2.RE2)
+	if err != nil {
+		return false
+	}
+	matched, _ := re.MatchString("/")
+	return matched
+}
+
+// findOIDCProviders returns all unique OIDCProviders referenced across the path rules, de-duped by provider name.
+func findOIDCProviders(pathRules []dataplane.PathRule) []*dataplane.OIDCProvider {
+	seen := make(map[string]struct{})
+	var providers []*dataplane.OIDCProvider
+	for _, rule := range pathRules {
+		for _, matchRule := range rule.MatchRules {
+			if matchRule.Filters.AuthenticationFilter == nil || matchRule.Filters.AuthenticationFilter.OIDC == nil {
+				continue
+			}
+			provider := matchRule.Filters.AuthenticationFilter.OIDC
+			if _, exists := seen[provider.Name]; !exists {
+				seen[provider.Name] = struct{}{}
+				providers = append(providers, provider)
+			}
+		}
+	}
+	return providers
+}
+
+// createOIDCCallbackLocation creates a minimal OIDC callback location containing only the auth_oidc directive.
+func createOIDCCallbackLocation(provider *dataplane.OIDCProvider) http.Location {
+	return http.Location{
+		Path:                 "= " + provider.RedirectURI,
+		Type:                 http.ExternalLocationType,
+		AuthOIDCProviderName: provider.Name,
 	}
 }
 

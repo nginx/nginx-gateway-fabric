@@ -143,6 +143,7 @@ func StartManager(cfg config.Config) error {
 		Validators: validation.Validators{
 			HTTPFieldsValidator: ngxvalidation.HTTPValidator{},
 			GenericValidator:    genericValidator,
+			AuthFieldsValidator: ngxvalidation.AuthFieldValidator{},
 			PolicyValidator:     policyManager,
 		},
 		EventRecorder:  recorder,

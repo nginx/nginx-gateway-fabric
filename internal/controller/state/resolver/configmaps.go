@@ -25,6 +25,10 @@ func (c *configMapEntry) error() error {
 	return c.err
 }
 
+func (c *configMapEntry) needsRevalidation(_ *resolveOptions) bool { return false }
+
+func (c *configMapEntry) revalidate(_ *resolveOptions, _ client.Object) error { return nil }
+
 func (c *configMapEntry) validate(obj client.Object) {
 	cm, ok := obj.(*v1.ConfigMap)
 	if !ok {

@@ -219,7 +219,56 @@ func convertAuthenticationFilter(
 		}
 	}
 
+	if specOIDC := filter.Source.Spec.OIDC; specOIDC != nil {
+		result.OIDC = buildOIDCProvider(*specOIDC, referencedSecrets, filter)
+	}
+
 	return result
+}
+
+func buildOIDCProvider(
+	specOIDC ngfAPI.OIDCAuth,
+	referencedSecrets map[types.NamespacedName]*secrets.Secret,
+	filter *graph.AuthenticationFilter,
+) *OIDCProvider {
+	referencedClientSecret, isReferenced := referencedSecrets[types.NamespacedName{
+		Namespace: filter.Source.Namespace,
+		Name:      specOIDC.ClientSecretRef.Name,
+	}]
+
+	if !isReferenced || referencedClientSecret.Source == nil {
+		return nil
+	}
+
+	providerName := fmt.Sprintf("%s_%s", filter.Source.Namespace, filter.Source.Name)
+
+	redirectURI := fmt.Sprintf("%s_%s_%s", oidcCallBack, filter.Source.Namespace, filter.Source.Name)
+	if specOIDC.RedirectURI != nil {
+		redirectURI = *specOIDC.RedirectURI
+	}
+
+	oidc := &OIDCProvider{
+		Name:         providerName,
+		Issuer:       specOIDC.Issuer,
+		ClientID:     specOIDC.ClientID,
+		ClientSecret: string(referencedClientSecret.Source.Data[secrets.ClientSecretKey]),
+		RedirectURI:  redirectURI,
+	}
+
+	// Handle CA certificates if specified
+	for _, caCertRef := range specOIDC.CACertificateRefs {
+		caCertNsName := types.NamespacedName{
+			Namespace: filter.Source.Namespace,
+			Name:      caCertRef.Name,
+		}
+		if caCertSecret, exists := referencedSecrets[caCertNsName]; exists && caCertSecret.Source != nil {
+			oidc.CACertBundleID = generateCertBundleID(caCertNsName)
+			oidc.CACertData = caCertSecret.Source.Data[secrets.CAKey]
+			break
+		}
+	}
+
+	return oidc
 }
 
 func convertDNSResolverAddresses(addresses []ngfAPIv1alpha2.DNSResolverAddress) []string {

@@ -609,3 +609,141 @@ func TestExecuteBaseHttp_ServerTokens(t *testing.T) {
 		})
 	}
 }
+
+func TestExecuteBaseHttp_OIDCProviders(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		expSubStrings []string
+		expAbsent     []string
+		conf          dataplane.Configuration
+	}{
+		{
+			name: "no OIDC configuration, missing OIDC directives",
+			conf: dataplane.Configuration{},
+			expAbsent: []string{
+				"oidc_provider",
+				"client_secret",
+			},
+		},
+		{
+			name: "single OIDC provider without CA cert and with custom redirect URI",
+			conf: dataplane.Configuration{
+				OIDCProviders: []dataplane.OIDCProvider{
+					{
+						Name:         "oidc_test_my-filter",
+						Issuer:       "https://idp.example.com",
+						ClientID:     "my-client-id",
+						ClientSecret: "my-client-secret",
+						RedirectURI:  "/custom_callback/path",
+					},
+				},
+			},
+			expSubStrings: []string{
+				"oidc_provider oidc_test_my-filter {",
+				"issuer https://idp.example.com;",
+				"client_id my-client-id;",
+				"client_secret my-client-secret;",
+				"redirect_uri /custom_callback/path;",
+			},
+			expAbsent: []string{
+				"ssl_trusted_certificate",
+			},
+		},
+		{
+			name: "single OIDC provider with CA cert",
+			conf: dataplane.Configuration{
+				OIDCProviders: []dataplane.OIDCProvider{
+					{
+						Name:           "oidc_test_my-filter",
+						Issuer:         "https://idp.example.com",
+						ClientID:       "my-client-id",
+						ClientSecret:   "my-client-secret",
+						CACertBundleID: "oidc_ca_test_my-ca",
+						RedirectURI:    "/oidc_callback_test_my-filter",
+					},
+				},
+			},
+			expSubStrings: []string{
+				"oidc_provider oidc_test_my-filter {",
+				"issuer https://idp.example.com;",
+				"client_id my-client-id;",
+				"client_secret my-client-secret;",
+				"redirect_uri /oidc_callback_test_my-filter;",
+				"ssl_trusted_certificate /etc/nginx/secrets/oidc_ca_test_my-ca.crt;",
+			},
+		},
+		{
+			name: "OIDC provider with empty name is skipped and generates no oidc_provider block",
+			conf: dataplane.Configuration{
+				OIDCProviders: []dataplane.OIDCProvider{
+					{
+						Name:         "",
+						Issuer:       "https://idp.example.com",
+						ClientID:     "my-client-id",
+						ClientSecret: "my-client-secret",
+						RedirectURI:  "/oidc_callback",
+					},
+				},
+			},
+			expAbsent: []string{
+				"oidc_provider",
+				"client_secret",
+			},
+		},
+		{
+			name: "two OIDC providers each generates its own oidc_provider block",
+			conf: dataplane.Configuration{
+				OIDCProviders: []dataplane.OIDCProvider{
+					{
+						Name:         "oidc_test_filter-one",
+						Issuer:       "https://idp1.example.com",
+						ClientID:     "client-id-1",
+						ClientSecret: "client-secret-1",
+						RedirectURI:  "/oidc_callback_test_filter-one",
+					},
+					{
+						Name:           "oidc_test_filter-two",
+						Issuer:         "https://idp2.example.com",
+						ClientID:       "client-id-2",
+						ClientSecret:   "client-secret-2",
+						CACertBundleID: "oidc_ca_test_filter-two",
+						RedirectURI:    "/oidc_callback_test_filter-two",
+					},
+				},
+			},
+			expSubStrings: []string{
+				"oidc_provider oidc_test_filter-one {",
+				"issuer https://idp1.example.com;",
+				"client_id client-id-1;",
+				"client_secret client-secret-1;",
+				"redirect_uri /oidc_callback_test_filter-one;",
+				"oidc_provider oidc_test_filter-two {",
+				"issuer https://idp2.example.com;",
+				"client_id client-id-2;",
+				"client_secret client-secret-2;",
+				"redirect_uri /oidc_callback_test_filter-two;",
+				"ssl_trusted_certificate /etc/nginx/secrets/oidc_ca_test_filter-two.crt;",
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			res := executeBaseHTTPConfig(test.conf, &policiesfakes.FakeGenerator{})
+			g.Expect(res).To(HaveLen(1))
+			data := string(res[0].data)
+
+			for _, sub := range test.expSubStrings {
+				g.Expect(data).To(ContainSubstring(sub))
+			}
+			for _, absent := range test.expAbsent {
+				g.Expect(data).NotTo(ContainSubstring(absent))
+			}
+		})
+	}
+}
