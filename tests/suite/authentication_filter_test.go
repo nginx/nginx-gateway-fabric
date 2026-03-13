@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
@@ -610,6 +609,10 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "authentic
 		})
 
 		AfterAll(func() {
+			if !*plusEnabled {
+				Skip("Skipping JWT AuthenticationFilter tests on NGINX OSS deployment (JWT requires NGINX Plus)")
+			}
+
 			framework.AddNginxLogsAndEventsToReport(resourceManager, namespace)
 
 			// Delete resources
@@ -729,6 +732,10 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "authentic
 		})
 
 		AfterAll(func() {
+			if !*plusEnabled {
+				Skip("Skipping JWT AuthenticationFilter tests on NGINX OSS deployment (JWT requires NGINX Plus)")
+			}
+
 			framework.AddNginxLogsAndEventsToReport(resourceManager, namespace)
 
 			// Delete resources
@@ -768,6 +775,10 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "authentic
 		})
 
 		AfterAll(func() {
+			if !*plusEnabled {
+				Skip("Skipping JWT AuthenticationFilter tests on NGINX OSS deployment (JWT requires NGINX Plus)")
+			}
+
 			framework.AddNginxLogsAndEventsToReport(resourceManager, namespace)
 
 			// Delete resources
@@ -800,8 +811,8 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "authentic
 			keycloakTLSSecret         *core.Secret
 			jwksClientSecret          *core.Secret
 			keycloakManifestFiles     = []string{
+				"authentication-filter/keycloak-realm-config.yaml",
 				"authentication-filter/keycloak.yaml",
-				"authentication-filter/nginx-proxy.yaml",
 			}
 			jwtRemoteManifestFiles = []string{
 				"authentication-filter/jwt-remote-auth.yaml",
@@ -848,7 +859,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "authentic
 			// Apply secrets
 			Expect(resourceManager.Apply([]client.Object{keycloakTLSSecret, jwksClientSecret})).To(Succeed())
 
-			// Deploy Keycloak and NginxProxy with DNS resolver
+			// Deploy Keycloak
 			Expect(resourceManager.ApplyFromFiles(keycloakManifestFiles, namespace)).To(Succeed())
 
 			// Wait for Keycloak to be ready
@@ -872,7 +883,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "authentic
 				}
 				return fmt.Errorf("keycloak pod not ready")
 			}).
-				WithTimeout(1*time.Minute).
+				WithTimeout(2*time.Minute).
 				WithPolling(5*time.Second).
 				Should(Succeed(), "Keycloak should be ready")
 
@@ -885,58 +896,13 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "authentic
 			Expect(pods).ToNot(BeEmpty())
 			keycloakPodName := pods[0].Name
 
-			// Set up port forwarding using framework
+			// Set up port forwarding using framework for token retrieval
 			keycloakPortForwardStopCh = make(chan struct{})
 			ports := []string{"8443:8443"}
 			err = framework.PortForward(resourceManager.K8sConfig, namespace, keycloakPodName, ports, keycloakPortForwardStopCh)
 			Expect(err).ToNot(HaveOccurred())
 
-			// Configure Keycloak via Admin API
-			GinkgoWriter.Println("Configuring Keycloak...")
-
-			// Wait for port-forward to establish and get admin token
-			var adminToken string
-			GinkgoWriter.Println("Waiting for port-forward to establish and obtaining admin token...")
-			Eventually(func() error {
-				var err error
-				adminToken, err = getKeycloakAdminToken(caCertPEM)
-				if err != nil {
-					GinkgoWriter.Printf("Port-forward not ready yet or token request failed: %v\n", err)
-					return err
-				}
-				return nil
-			}).
-				WithTimeout(30*time.Second).
-				WithPolling(2*time.Second).
-				Should(Succeed(), "Should establish port-forward and obtain admin token")
-
-			// Create realm
-			err = createKeycloakRealm(adminToken, caCertPEM)
-			if err != nil {
-				GinkgoWriter.Printf("Warning: Failed to create realm (may already exist): %v\n", err)
-			}
-
-			// Create client
-			err = createKeycloakClient(adminToken, caCertPEM)
-			if err != nil {
-				GinkgoWriter.Printf("Warning: Failed to create client (may already exist): %v\n", err)
-			}
-
-			// Create user
-			err = createKeycloakUser(adminToken, caCertPEM)
-			if err != nil {
-				GinkgoWriter.Printf("Warning: Failed to create user (may already exist): %v\n", err)
-			}
-
-			// Set user password using reset-password endpoint
-			err = updateKeycloakUser(adminToken, caCertPEM)
-			if err != nil {
-				GinkgoWriter.Printf("Warning: Failed to set user password: %v\n", err)
-			} else {
-				GinkgoWriter.Println("✅ User password set successfully")
-			}
-
-			// Get JWT token for test user
+			// Get JWT token for test user (realm is imported via ConfigMap)
 			GinkgoWriter.Println("Obtaining JWT token from Keycloak...")
 			Eventually(func() error {
 				var err error
@@ -962,6 +928,10 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "authentic
 		})
 
 		AfterAll(func() {
+			if !*plusEnabled {
+				Skip("Skipping JWT AuthenticationFilter tests on NGINX OSS deployment (JWT requires NGINX Plus)")
+			}
+
 			framework.AddNginxLogsAndEventsToReport(resourceManager, namespace)
 
 			// Clean up port forward
@@ -1117,7 +1087,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "authentic
 
 				// Validate TLS client certificate settings (mTLS)
 				clientCertPath := fmt.Sprintf(
-					"/etc/nginx/secrets/jwt_remote_tls_%s_jwks-client-cert_jwt-remote-auth.pem", namespace,
+					"/etc/nginx/secrets/jwt_remote_tls_%s_jwks-client-cert.pem", namespace,
 				)
 				Expect(framework.ValidateNginxFieldExists(conf, framework.ExpectedNginxField{
 					Directive: "proxy_ssl_certificate",
@@ -1144,7 +1114,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "authentic
 					Location:  internalLocation,
 				})).To(Succeed())
 
-				caCertPath := fmt.Sprintf("/etc/nginx/secrets/jwt_remote_tls_ca_%s_jwks-client-cert_jwt-remote-auth.crt", namespace)
+				caCertPath := fmt.Sprintf("/etc/nginx/secrets/jwt_remote_tls_ca_%s_jwks-client-cert.crt", namespace)
 				Expect(framework.ValidateNginxFieldExists(conf, framework.ExpectedNginxField{
 					Directive: "proxy_ssl_trusted_certificate",
 					Value:     caCertPath,
@@ -1292,286 +1262,6 @@ func (h *JWTTestHelper) Cleanup() {
 
 // Keycloak helper functions for JWT remote authentication testing
 
-// getKeycloakAdminToken retrieves an admin access token from Keycloak.
-func getKeycloakAdminToken(caCert []byte) (string, error) {
-	// Using HTTPS via port-forward to localhost:8443
-	url := "https://localhost:8443/realms/master/protocol/openid-connect/token"
-
-	data := "client_id=admin-cli&username=admin&password=admin&grant_type=password"
-
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, url, strings.NewReader(data))
-	if err != nil {
-		return "", fmt.Errorf("failed to create request: %w", err)
-	}
-
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-
-	// Create HTTP client with proper certificate verification
-	httpClient, err := createSecureHTTPClient(caCert)
-	if err != nil {
-		return "", fmt.Errorf("failed to create HTTP client: %w", err)
-	}
-	resp, err := httpClient.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("failed to get admin token: %w", err)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("failed to read response body: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("failed to get admin token, status: %d, body: %s", resp.StatusCode, string(body))
-	}
-
-	var result map[string]interface{}
-	if err := json.Unmarshal(body, &result); err != nil {
-		return "", fmt.Errorf("failed to parse token response: %w", err)
-	}
-
-	token, ok := result["access_token"].(string)
-	if !ok {
-		return "", fmt.Errorf("access_token not found in response")
-	}
-
-	return token, nil
-}
-
-// createKeycloakRealm creates the 'myrealm' realm in Keycloak.
-func createKeycloakRealm(adminToken string, caCert []byte) error {
-	url := "https://localhost:8443/admin/realms"
-
-	realmData := map[string]interface{}{
-		"realm":                       "myrealm",
-		"enabled":                     true,
-		"verifyEmail":                 false,
-		"loginWithEmailAllowed":       true,
-		"registrationEmailAsUsername": false,
-	}
-
-	jsonData, err := json.Marshal(realmData)
-	if err != nil {
-		return fmt.Errorf("failed to marshal realm data: %w", err)
-	}
-
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, url, bytes.NewReader(jsonData))
-	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+adminToken)
-
-	httpClient, err := createSecureHTTPClient(caCert)
-	if err != nil {
-		return fmt.Errorf("failed to create HTTP client: %w", err)
-	}
-	resp, err := httpClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("failed to create realm: %w", err)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return fmt.Errorf("failed to read response body: %w", err)
-	}
-
-	// 201 = created, 409 = already exists
-	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusConflict {
-		return fmt.Errorf("failed to create realm, status: %d, body: %s", resp.StatusCode, string(body))
-	}
-
-	return nil
-}
-
-// createKeycloakClient creates a client in the 'myrealm' realm.
-func createKeycloakClient(adminToken string, caCert []byte) error {
-	url := "https://localhost:8443/admin/realms/myrealm/clients"
-
-	clientData := map[string]interface{}{
-		"clientId":                  "cafe-app",
-		"enabled":                   true,
-		"publicClient":              true,
-		"directAccessGrantsEnabled": true,
-		"standardFlowEnabled":       true,
-	}
-
-	jsonData, err := json.Marshal(clientData)
-	if err != nil {
-		return fmt.Errorf("failed to marshal client data: %w", err)
-	}
-
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, url, bytes.NewReader(jsonData))
-	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+adminToken)
-
-	httpClient, err := createSecureHTTPClient(caCert)
-	if err != nil {
-		return fmt.Errorf("failed to create HTTP client: %w", err)
-	}
-	resp, err := httpClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("failed to create client: %w", err)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return fmt.Errorf("failed to read response body: %w", err)
-	}
-
-	// 201 = created, 409 = already exists
-	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusConflict {
-		return fmt.Errorf("failed to create client, status: %d, body: %s", resp.StatusCode, string(body))
-	}
-
-	return nil
-}
-
-// createKeycloakUser creates a test user in the 'myrealm' realm.
-func createKeycloakUser(adminToken string, caCert []byte) error {
-	url := "https://localhost:8443/admin/realms/myrealm/users"
-
-	userData := map[string]interface{}{
-		"username":      "testuser",
-		"enabled":       true,
-		"email":         "testuser@example.com",
-		"emailVerified": true,
-		"firstName":     "Test",
-		"lastName":      "User",
-	}
-
-	jsonData, err := json.Marshal(userData)
-	if err != nil {
-		return fmt.Errorf("failed to marshal user data: %w", err)
-	}
-
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, url, bytes.NewReader(jsonData))
-	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+adminToken)
-
-	httpClient, err := createSecureHTTPClient(caCert)
-	if err != nil {
-		return fmt.Errorf("failed to create HTTP client: %w", err)
-	}
-	resp, err := httpClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("failed to create user: %w", err)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return fmt.Errorf("failed to read response body: %w", err)
-	}
-
-	// 201 = created, 409 = already exists
-	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusConflict {
-		return fmt.Errorf("failed to create user, status: %d, body: %s", resp.StatusCode, string(body))
-	}
-
-	return nil
-}
-
-// updateKeycloakUser updates the test user to ensure no required actions.
-func updateKeycloakUser(adminToken string, caCert []byte) error {
-	// First, get the user ID
-	getUserURL := "https://localhost:8443/admin/realms/myrealm/users?username=testuser"
-
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, getUserURL, nil)
-	if err != nil {
-		return fmt.Errorf("failed to create get user request: %w", err)
-	}
-
-	req.Header.Set("Authorization", "Bearer "+adminToken)
-
-	httpClient, err := createSecureHTTPClient(caCert)
-	if err != nil {
-		return fmt.Errorf("failed to create HTTP client: %w", err)
-	}
-	resp, err := httpClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("failed to get user: %w", err)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return fmt.Errorf("failed to read get user response: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("failed to get user, status: %d, body: %s", resp.StatusCode, string(body))
-	}
-
-	// Parse response to get user ID
-	var users []map[string]interface{}
-	if err := json.Unmarshal(body, &users); err != nil {
-		return fmt.Errorf("failed to parse users response: %w", err)
-	}
-
-	if len(users) == 0 {
-		return fmt.Errorf("user not found")
-	}
-
-	userID, ok := users[0]["id"].(string)
-	if !ok {
-		return fmt.Errorf("failed to get user ID")
-	}
-
-	// Set the user password using reset-password endpoint
-	resetPasswordURL := fmt.Sprintf("https://localhost:8443/admin/realms/myrealm/users/%s/reset-password", userID)
-
-	passwordData := map[string]interface{}{
-		"type":      "password",
-		"value":     "testpassword",
-		"temporary": false,
-	}
-
-	jsonData, err := json.Marshal(passwordData)
-	if err != nil {
-		return fmt.Errorf("failed to marshal password data: %w", err)
-	}
-
-	req, err = http.NewRequestWithContext(
-		context.Background(), http.MethodPut, resetPasswordURL, bytes.NewReader(jsonData),
-	)
-	if err != nil {
-		return fmt.Errorf("failed to create reset password request: %w", err)
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+adminToken)
-
-	resp, err = httpClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("failed to reset password: %w", err)
-	}
-	defer resp.Body.Close()
-
-	body, err = io.ReadAll(resp.Body)
-	if err != nil {
-		return fmt.Errorf("failed to read reset password response: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusNoContent {
-		return fmt.Errorf("failed to reset password, status: %d, body: %s", resp.StatusCode, string(body))
-	}
-
-	return nil
-}
-
 // getKeycloakUserToken obtains a JWT token for the test user.
 func getKeycloakUserToken(caCert []byte) (string, error) {
 	url := "https://localhost:8443/realms/myrealm/protocol/openid-connect/token"
@@ -1598,6 +1288,10 @@ func getKeycloakUserToken(caCert []byte) (string, error) {
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("failed to get user token: status code %d, body: %s", resp.StatusCode, string(body))
 	}
 
 	var result map[string]interface{}

@@ -1023,7 +1023,7 @@ func TestConvertAuthenticationFilter(t *testing.T) {
 						TLS: &AuthJWTRemoteTLS{
 							Verify:          helpers.GetPointer(false),
 							SNI:             helpers.GetPointer(false),
-							CertificatePath: "jwt_remote_tls_test_tls-secret_af",
+							CertificatePath: "jwt_remote_tls_test_tls-secret",
 						},
 					},
 					FilterNamespace: "test",

@@ -38,6 +38,7 @@ spec:
         - "start-dev"
         - "--https-certificate-file=/etc/keycloak-certs/tls.crt"
         - "--https-certificate-key-file=/etc/keycloak-certs/tls.key"
+        - "--import-realm"
         env:
         - name: KC_BOOTSTRAP_ADMIN_USERNAME
           value: "admin"
@@ -58,6 +59,9 @@ spec:
         - name: keycloak-certs
           mountPath: /etc/keycloak-certs
           readOnly: true
+        - name: realm-config
+          mountPath: /opt/keycloak/data/import
+          readOnly: true
         readinessProbe:
           httpGet:
             path: /realms/master
@@ -68,3 +72,6 @@ spec:
       - name: keycloak-certs
         secret:
           secretName: keycloak-tls-cert
+      - name: realm-config
+        configMap:
+          name: keycloak-realm-config

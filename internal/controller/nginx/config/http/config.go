@@ -14,23 +14,15 @@ const (
 
 // Server holds all configuration for an HTTP server.
 type Server struct {
-	SSL                   *SSL
-	ServerName            string
-	Listen                string
-	Locations             []Location
-	InternalJWKSLocations []InternalJWKSLocation
-	Includes              []shared.Include
-	IsDefaultHTTP         bool
-	IsDefaultSSL          bool
-	GRPC                  bool
-	IsSocket              bool
-}
-
-// InternalJWKSLocation represents an internal NGINX location for fetching remote JWKS.
-type InternalJWKSLocation struct {
-	TLS       *AuthJWTRemoteTLS
-	Path      string
-	RemoteURI string
+	SSL           *SSL
+	ServerName    string
+	Listen        string
+	Locations     []Location
+	Includes      []shared.Include
+	IsDefaultHTTP bool
+	IsDefaultSSL  bool
+	GRPC          bool
+	IsSocket      bool
 }
 
 type LocationType string
@@ -60,6 +52,10 @@ type Location struct {
 	Return *Return
 	// ProxySSLVerify controls SSL verification for upstreams when proxying requests.
 	ProxySSLVerify *ProxySSLVerify
+	// ProxySSLCertificate is the path to the client certificate for mTLS with the upstream.
+	ProxySSLCertificate string
+	// ProxySSLCertificateKey is the path to the client certificate key for mTLS with the upstream.
+	ProxySSLCertificateKey string
 	// ProxyPass is the upstream backend (URL or name) to which requests are proxied.
 	ProxyPass string
 	// HTTPMatchKey is the key for associating HTTP match rules, used for routing and NJS module logic.
@@ -182,6 +178,8 @@ type SplitClientDistribution struct {
 
 // ProxySSLVerify holds the proxied HTTPS server verification configuration.
 type ProxySSLVerify struct {
+	Verify             *bool
+	SNI                *bool
 	TrustedCertificate string
 	Name               string
 }
