@@ -638,6 +638,37 @@
           "title": "service",
           "type": "object"
         },
+        "serviceMonitor": {
+          "properties": {
+            "annotations": {
+              "description": "Annotations for the data plane ServiceMonitor.",
+              "required": [],
+              "title": "annotations",
+              "type": "object"
+            },
+            "enable": {
+              "default": false,
+              "description": "Create a ServiceMonitor resource for the data plane.",
+              "title": "enable",
+              "type": "boolean"
+            },
+            "interval": {
+              "default": "",
+              "description": "Scrape interval for the data plane ServiceMonitor (e.g. \"30s\"). Empty uses Prometheus default.",
+              "title": "interval",
+              "type": "string"
+            },
+            "labels": {
+              "description": "Additional labels for the data plane ServiceMonitor.",
+              "required": [],
+              "title": "labels",
+              "type": "object"
+            }
+          },
+          "required": [],
+          "title": "serviceMonitor",
+          "type": "object"
+        },
         "usage": {
           "description": "Configuration for NGINX Plus usage reporting.",
           "properties": {
@@ -918,6 +949,37 @@
               "description": "Enable serving metrics via https. By default metrics are served via http.\nPlease note that this endpoint will be secured with a self-signed certificate.",
               "title": "secure",
               "type": "boolean"
+            },
+            "serviceMonitor": {
+              "properties": {
+                "annotations": {
+                  "description": "Annotations for the control plane ServiceMonitor.",
+                  "required": [],
+                  "title": "annotations",
+                  "type": "object"
+                },
+                "enable": {
+                  "default": false,
+                  "description": "Create a ServiceMonitor resource for the control plane.",
+                  "title": "enable",
+                  "type": "boolean"
+                },
+                "interval": {
+                  "default": "",
+                  "description": "Scrape interval for the control plane ServiceMonitor (e.g. \"30s\"). Empty uses Prometheus default.",
+                  "title": "interval",
+                  "type": "string"
+                },
+                "labels": {
+                  "description": "Additional labels for the control plane ServiceMonitor.",
+                  "required": [],
+                  "title": "labels",
+                  "type": "object"
+                }
+              },
+              "required": [],
+              "title": "serviceMonitor",
+              "type": "object"
             }
           },
           "required": [],
