@@ -26,8 +26,8 @@ import (
 
 const (
 	wildcardHostname               = "~^"
-	alpineSSLRootCAPath            = "/etc/ssl/cert.pem"
 	defaultErrorLogLevel           = "info"
+	AlpineSSLRootCAPath            = "/etc/ssl/cert.pem"
 	DefaultWorkerConnections       = int32(1024)
 	DefaultNginxReadinessProbePort = int32(8081)
 	DefaultNginxReadinessProbePath = "/readyz"
@@ -102,10 +102,11 @@ func BuildConfiguration(
 			baseHTTPConfig.IPFamily,
 		),
 		BackendGroups: backendGroups,
-		SSLKeyPairs:   buildSSLKeyPairs(g.ReferencedSecrets, gateway),
+		SSLKeyPairs:   buildSSLKeyPairs(g.ReferencedSecrets, gateway, g.AuthenticationFilters),
 		CertBundles: buildCertBundles(
 			buildRefCertificateBundles(g.ReferencedSecrets, g.ReferencedCaCertConfigMaps),
 			backendGroups,
+			buildJWTRemoteTLSCABundles(g.AuthenticationFilters, g.ReferencedSecrets),
 		),
 		AuthSecrets:       buildAuthSecrets(g.AuthenticationFilters, g.ReferencedSecrets),
 		Telemetry:         buildTelemetry(g, gateway),
@@ -354,6 +355,7 @@ func buildStreamUpstreams(
 func buildSSLKeyPairs(
 	secretsMap map[types.NamespacedName]*secrets.Secret,
 	gateway *graph.Gateway,
+	authFilters map[types.NamespacedName]*graph.AuthenticationFilter,
 ) map[SSLKeyPairID]SSLKeyPair {
 	keyPairs := make(map[SSLKeyPairID]SSLKeyPair)
 
@@ -381,7 +383,76 @@ func buildSSLKeyPairs(
 		}
 	}
 
+	// Add TLS certificates for JWT remote authentication
+	addJWTRemoteTLSKeyPairs(keyPairs, authFilters, secretsMap)
+
 	return keyPairs
+}
+
+func addJWTRemoteTLSKeyPairs(
+	keyPairs map[SSLKeyPairID]SSLKeyPair,
+	authFilters map[types.NamespacedName]*graph.AuthenticationFilter,
+	secretsMap map[types.NamespacedName]*secrets.Secret,
+) {
+	for _, filter := range authFilters {
+		if !filter.Valid || filter.Source.Spec.JWT == nil {
+			continue
+		}
+
+		specJWT := filter.Source.Spec.JWT
+		if specJWT.Source != ngfAPIv1alpha1.JWTKeySourceRemote {
+			continue
+		}
+		if specJWT.Remote == nil || specJWT.Remote.TLS == nil || specJWT.Remote.TLS.SecretRef == nil {
+			continue
+		}
+
+		secretNsName := types.NamespacedName{
+			Namespace: filter.Source.Namespace,
+			Name:      specJWT.Remote.TLS.SecretRef.Name,
+		}
+		id := generateJWTRemoteTLSKeyPairID(secretNsName.Namespace, secretNsName.Name)
+		secret := secretsMap[secretNsName]
+		if secret != nil && secret.Source != nil {
+			keyPairs[id] = SSLKeyPair{
+				Cert: secret.Source.Data[secrets.TLSCertKey],
+				Key:  secret.Source.Data[secrets.TLSKeyKey],
+			}
+		}
+	}
+}
+
+func buildJWTRemoteTLSCABundles(
+	authFilters map[types.NamespacedName]*graph.AuthenticationFilter,
+	secretsMap map[types.NamespacedName]*secrets.Secret,
+) map[CertBundleID]CertBundle {
+	bundles := make(map[CertBundleID]CertBundle)
+
+	for _, filter := range authFilters {
+		if !filter.Valid || filter.Source.Spec.JWT == nil {
+			continue
+		}
+
+		specJWT := filter.Source.Spec.JWT
+		if specJWT.Source != ngfAPIv1alpha1.JWTKeySourceRemote {
+			continue
+		}
+		if specJWT.Remote == nil || specJWT.Remote.TLS == nil || specJWT.Remote.TLS.SecretRef == nil {
+			continue
+		}
+
+		secretNsName := types.NamespacedName{
+			Namespace: filter.Source.Namespace,
+			Name:      specJWT.Remote.TLS.SecretRef.Name,
+		}
+		secret := secretsMap[secretNsName]
+		if secret != nil && secret.Source != nil && secret.Source.Data[secrets.CAKey] != nil {
+			id := generateJWTRemoteTLSCABundleID(secretNsName.Namespace, secretNsName.Name)
+			bundles[id] = secret.Source.Data[secrets.CAKey]
+		}
+	}
+
+	return bundles
 }
 
 func buildRefCertificateBundles(
@@ -408,9 +479,15 @@ func buildRefCertificateBundles(
 func buildCertBundles(
 	refCertBundles []secrets.CertificateBundle,
 	backendGroups []BackendGroup,
+	jwtRemoteTLSCABundles map[CertBundleID]CertBundle,
 ) map[CertBundleID]CertBundle {
 	bundles := make(map[CertBundleID]CertBundle)
 	refByBG := make(map[CertBundleID]struct{})
+
+	// Add CA certificates for JWT remote authentication
+	for id, data := range jwtRemoteTLSCABundles {
+		bundles[id] = data
+	}
 
 	// We only need to build the cert bundles if there are valid backend groups that reference them.
 	if len(backendGroups) == 0 {
@@ -608,7 +685,7 @@ func convertBackendTLS(btp *graph.BackendTLSPolicy, gwNsName types.NamespacedNam
 	if btp.CaCertRef.Name != "" {
 		verify.CertBundleID = generateCertBundleID(btp.CaCertRef)
 	} else {
-		verify.RootCAPath = alpineSSLRootCAPath
+		verify.RootCAPath = AlpineSSLRootCAPath
 	}
 	verify.Hostname = string(btp.Source.Spec.Validation.Hostname)
 	return verify
@@ -1168,6 +1245,20 @@ func generateSSLKeyPairID(secret types.NamespacedName) SSLKeyPairID {
 // The ID is safe to use as a file name.
 func generateCertBundleID(caCertRef types.NamespacedName) CertBundleID {
 	return CertBundleID(fmt.Sprintf("cert_bundle_%s_%s", caCertRef.Namespace, caCertRef.Name))
+}
+
+// generateJWTRemoteTLSKeyPairID generates an ID for JWT remote TLS key pair based on the Secret namespaced name.
+// It is guaranteed to be unique per unique namespaced name.
+// The ID is safe to use as a file name.
+func generateJWTRemoteTLSKeyPairID(namespace, secretName string) SSLKeyPairID {
+	return SSLKeyPairID(fmt.Sprintf("jwt_remote_tls_%s_%s", namespace, secretName))
+}
+
+// generateJWTRemoteTLSCABundleID generates an ID for JWT remote TLS CA bundle based on the Secret namespaced name.
+// It is guaranteed to be unique per unique namespaced name.
+// The ID is safe to use as a file name.
+func generateJWTRemoteTLSCABundleID(namespace, secretName string) CertBundleID {
+	return CertBundleID(fmt.Sprintf("jwt_remote_tls_ca_%s_%s", namespace, secretName))
 }
 
 // GenerateAuthBasicFileID is used to generate IDs for basic auth files.

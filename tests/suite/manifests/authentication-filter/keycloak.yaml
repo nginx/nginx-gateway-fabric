@@ -1,0 +1,77 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: keycloak
+  labels:
+    app: keycloak
+spec:
+  ports:
+  - name: http
+    port: 8080
+    targetPort: 8080
+  - name: https
+    port: 8443
+    targetPort: 8443
+  selector:
+    app: keycloak
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: keycloak
+  labels:
+    app: keycloak
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: keycloak
+  template:
+    metadata:
+      labels:
+        app: keycloak
+    spec:
+      containers:
+      - name: keycloak
+        image: quay.io/keycloak/keycloak:26.5.3
+        args:
+        - "start-dev"
+        - "--https-certificate-file=/etc/keycloak-certs/tls.crt"
+        - "--https-certificate-key-file=/etc/keycloak-certs/tls.key"
+        - "--import-realm"
+        env:
+        - name: KC_BOOTSTRAP_ADMIN_USERNAME
+          value: "admin"
+        - name: KC_BOOTSTRAP_ADMIN_PASSWORD
+          value: "admin"
+        - name: KC_HTTP_ENABLED
+          value: "true"
+        - name: KC_HTTPS_ENABLED
+          value: "true"
+        - name: KC_PROXY_HEADERS
+          value: "xforwarded"
+        ports:
+        - name: http
+          containerPort: 8080
+        - name: https
+          containerPort: 8443
+        volumeMounts:
+        - name: keycloak-certs
+          mountPath: /etc/keycloak-certs
+          readOnly: true
+        - name: realm-config
+          mountPath: /opt/keycloak/data/import
+          readOnly: true
+        readinessProbe:
+          httpGet:
+            path: /realms/master
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+      volumes:
+      - name: keycloak-certs
+        secret:
+          secretName: keycloak-tls-cert
+      - name: realm-config
+        configMap:
+          name: keycloak-realm-config

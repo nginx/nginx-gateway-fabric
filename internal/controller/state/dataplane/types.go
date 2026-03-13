@@ -270,17 +270,44 @@ type AuthBasic struct {
 }
 
 type AuthJWT struct {
+	// KeyCache specifies the time to cache JSON Web Keys.
+	KeyCache *ngfAPIv1alpha1.Duration
+	// Remote holds the configuration for remote JWKS retrieval.
+	Remote *AuthJWTRemote
 	// SecretName is the name of the secret containing the JWT authentication data.
 	SecretName string
 	// SecretNamespace is the namespace of the secret containing the JWT authentication data.
 	SecretNamespace string
-	// Realm is the authentication realm. This is an arbitrary string
-	// displayed to users when prompting for credentials.
+	// Realm is the authentication realm. This is an arbitrary string displayed to users when prompting for credentials.
 	Realm string
-	// KeyCache represents the local JWK(s) local cache duration.
-	KeyCache *ngfAPIv1alpha1.Duration
+	// FilterNamespace is the namespace of the AuthenticationFilter.
+	FilterNamespace string
+	// FilterName is the name of the AuthenticationFilter.
+	FilterName string
 	// Data contains the JWT public key data required for authentication.
 	Data []byte
+}
+
+// AuthJWTRemote holds configuration for remote JWKS retrieval.
+type AuthJWTRemote struct {
+	// TLS holds the TLS configuration for remote JWKS retrieval.
+	TLS *AuthJWTRemoteTLS
+	// URI is the URI for the remote JWKS endpoint.
+	URI string
+}
+
+// AuthJWTRemoteTLS holds TLS configuration for remote JWKS retrieval.
+type AuthJWTRemoteTLS struct {
+	// Verify specifies whether to verify the remote TLS certificate.
+	Verify *bool
+	// SNI specifies whether to enable Server Name Indication (SNI).
+	SNI *bool
+	// SNIName is the server name to use for SNI.
+	SNIName *string
+	// CertificatePath is the path to the client certificate for mTLS.
+	CertificatePath SSLKeyPairID
+	// CACertBundlePath is the path to the CA certificate bundle for verification.
+	CACertBundlePath CertBundleID
 }
 
 // HTTPHeader represents an HTTP header.

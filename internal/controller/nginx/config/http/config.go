@@ -52,6 +52,10 @@ type Location struct {
 	Return *Return
 	// ProxySSLVerify controls SSL verification for upstreams when proxying requests.
 	ProxySSLVerify *ProxySSLVerify
+	// ProxySSLCertificate is the path to the client certificate for mTLS with the upstream.
+	ProxySSLCertificate string
+	// ProxySSLCertificateKey is the path to the client certificate key for mTLS with the upstream.
+	ProxySSLCertificateKey string
 	// ProxyPass is the upstream backend (URL or name) to which requests are proxied.
 	ProxyPass string
 	// HTTPMatchKey is the key for associating HTTP match rules, used for routing and NJS module logic.
@@ -174,6 +178,8 @@ type SplitClientDistribution struct {
 
 // ProxySSLVerify holds the proxied HTTPS server verification configuration.
 type ProxySSLVerify struct {
+	Verify             *bool
+	SNI                *bool
 	TrustedCertificate string
 	Name               string
 }
@@ -188,9 +194,28 @@ type AuthBasic struct {
 // AuthJWT holds the configuration for JWT authentication using the auth_jwt directive.
 // See https://nginx.org/en/docs/http/ngx_http_auth_jwt_module.html
 type AuthJWT struct {
-	KeyCache *ngfAPI.Duration
-	Realm    string
-	File     string
+	KeyCache        *ngfAPI.Duration
+	Remote          *AuthJWTRemote
+	Realm           string
+	File            string
+	FilterNamespace string
+	FilterName      string
+}
+
+// AuthJWTRemote holds configuration for remote JWKS retrieval.
+type AuthJWTRemote struct {
+	TLS *AuthJWTRemoteTLS
+	URI string
+}
+
+// AuthJWTRemoteTLS holds TLS configuration for remote JWKS retrieval.
+type AuthJWTRemoteTLS struct {
+	SNIName            string
+	Certificate        string
+	CertificateKey     string
+	TrustedCertificate string
+	Verify             bool
+	SNI                bool
 }
 
 // ServerConfig holds configuration for an HTTP server and IP family to be used by NGINX.
