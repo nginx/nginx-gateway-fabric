@@ -15,7 +15,7 @@ spec:
         value: /coffee
     - path:
         type: PathPrefix
-        value: /tea
+        value: /after_logout/ # same URI as postLogoutURI in oidc-nginx-gateway filter
     backendRefs:
     - name: coffee
       port: 80
@@ -25,12 +25,24 @@ spec:
         group: gateway.nginx.org
         kind: AuthenticationFilter
         name: oidc-nginx-gateway
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: tea
+spec:
+  parentRefs:
+  - name: gateway
+    sectionName: https
+  hostnames:
+  - "cafe.example.com"
+  rules:
   - matches:
     - path:
-        type: PathPrefix
-        value: /coffee-extra-oidc
+        type: Exact
+        value: /tea
     backendRefs:
-    - name: coffee
+    - name: tea
       port: 80
     filters:
     - type: ExtensionRef

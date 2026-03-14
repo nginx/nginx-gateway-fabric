@@ -148,6 +148,9 @@ server {
         {{- end }}
 
         {{- if $l.Return }}
+            {{- if $l.Return.DefaultType }}
+        default_type {{ $l.Return.DefaultType }};
+            {{- end }}
         return {{ $l.Return.Code }} "{{ $l.Return.Body }}";
         {{- end }}
 

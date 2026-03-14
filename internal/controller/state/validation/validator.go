@@ -58,7 +58,11 @@ type GenericValidator interface {
 //counterfeiter:generate . AuthFieldsValidator
 type AuthFieldsValidator interface {
 	ValidateOIDCIssuer(issuer string) error
+	ValidateOIDCConfigURL(url string) error
 	ValidateOIDCRedirectURI(uri string) error
+	ValidateOIDCLogoutURI(uri string) error
+	ValidateOIDCPostLogoutURI(uri string) error
+	ValidateOIDCFrontChannelLogoutURI(uri string) error
 }
 
 // PolicyValidator validates an NGF Policy.

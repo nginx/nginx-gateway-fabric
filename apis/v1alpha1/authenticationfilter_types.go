@@ -95,7 +95,7 @@ type OIDCAuth struct {
 	// NGINX Default: <issuer>/.well-known/openid-configuration
 	//
 	// +optional
-	// +kubebuilder:validation:Pattern=`^https://[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*(:[0-9]{1,5})?(/[a-zA-Z0-9._~:/?@!$&'()*+,;=-]*)?$`
+	// +kubebuilder:validation:Pattern=`^https:\/\/[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*(:[0-9]{1,5})?(\/[a-zA-Z0-9._~:\/?@!&'()*+,=-]*)?$`
 	ConfigURL *string `json:"configURL,omitempty"`
 
 	// PKCE enables Proof Key for Code Exchange (PKCE) for the authentication flow.
@@ -122,6 +122,18 @@ type OIDCAuth struct {
 	// +optional
 	Logout *OIDCLogoutConfig `json:"logout,omitempty"`
 
+	// RedirectURI sets a custom redirect URI for the OIDC callback.
+	// If a path-only URI is specified, a callback location block is created to handle the redirect from the OIDC provider.
+	// If a full URI is specified, it points to an external callback handler; no location block is created.
+	// If not specified, defaults to /oidc_callback_<filternamespace>_<filtername>.
+	// Directive: https://nginx.org/en/docs/http/ngx_http_oidc_module.html#redirect_uri
+	// NGINX Default: /oidc_callback
+	// Example: /oidc_callback, https://cafe.example.com:8442/oidc_callback
+	//
+	// +optional
+	// +kubebuilder:validation:Pattern=`^(https:\/\/[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*(:[0-9]{1,5})?(\/[a-zA-Z0-9._~:\/?@!&'()*+,=-]*)?|\/[a-zA-Z0-9._~:\/?@!&'()*+,=-]*)$`
+	RedirectURI *string `json:"redirectURI,omitempty"`
+
 	// Issuer is the URL of the OpenID Provider.
 	// Must exactly match the "issuer" value from the provider's
 	// .well-known/openid-configuration endpoint.
@@ -131,7 +143,7 @@ type OIDCAuth struct {
 	//   - Okta: "https://dev-123456.okta.com/oauth2/default"
 	//   - Auth0: "https://my-tenant.auth0.com/"
 	//
-	// +kubebuilder:validation:Pattern=`^https://[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*(:[0-9]{1,5})?(/[a-zA-Z0-9._~:/?@!$&'()*+,;=-]*)?$`
+	// +kubebuilder:validation:Pattern=`^https:\/\/[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*(:[0-9]{1,5})?(\/[a-zA-Z0-9._~:\/?@!&'()*+,=-]*)?$`
 	Issuer string `json:"issuer"`
 
 	// ClientID is the client identifier registered with the OpenID Provider.
@@ -158,25 +170,6 @@ type OIDCAuth struct {
 	// +optional
 	// +kubebuilder:validation:MaxItems=1
 	CACertificateRefs []LocalObjectReference `json:"caCertificateRefs,omitempty"`
-
-	// RedirectURI sets a custom redirect URI for the authentication flow.
-	// It only accepts path-only URIs (e.g. /redirect).
-	// Directive: https://nginx.org/en/docs/http/ngx_http_oidc_module.html#redirect_uri
-	// The generated callback path will be `/oidc_callback_filternamespace_filtername` if not specified.
-	// NGINX Default: /oidc_callback
-	//
-	// +optional
-	// +kubebuilder:validation:Pattern=`^/[A-Za-z0-9._~!&'()*+,=@/-]*$`
-	RedirectURI *string `json:"redirectURI,omitempty"`
-
-	// The OIDC scopes to be used in the Authentication Request.
-	// By default, the "openid" scope is always added to the list of scopes
-	// if not already specified.
-	// Directive: https://nginx.org/en/docs/http/ngx_http_oidc_module.html#scope
-	// NGINX Default: openid
-	//
-	// +optional
-	Scopes []string `json:"scopes,omitempty"`
 }
 
 // OIDCSessionConfig configures session management for OIDC authentication.
@@ -200,30 +193,32 @@ type OIDCSessionConfig struct {
 //
 //nolint:lll
 type OIDCLogoutConfig struct {
-	// URI defines the URI for initiating session logout. Accepts either a full URI
-	// (e.g. https://example.com/logout) or a path-only URI (e.g. /logout).
+	// URI defines the URI for initiating session logout. Accepts path-only URI.
 	// Directive: https://nginx.org/en/docs/http/ngx_http_oidc_module.html#logout_uri
+	// Example: /logout
 	//
 	// +optional
-	// +kubebuilder:validation:Pattern=`^(https?://[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*(:[0-9]{1,5})?)?(/[a-zA-Z0-9._~:/?@!$&'()*+,;=-]*)?$`
+	// +kubebuilder:validation:Pattern=`^/[A-Za-z0-9._~!&'()*+,=@/-]*$`
 	URI *string `json:"uri,omitempty"`
 
-	// PostLogoutURI defines the URI to redirect to after logout. Accepts either a full URI
-	// (e.g. https://example.com/logged_out.html) or a path-only URI (e.g. /logged_out.html).
+	// PostLogoutURI defines the URI to redirect to after logout.
 	// Must match the configuration on the provider's side.
+	// If a full URI is specified, the user is redirected to that address after logout with no additional handling.
+	// If a path-only URI is specified, NGINX handles the request and returns a 200 response with "You have been logged out".
 	// Directive: https://nginx.org/en/docs/http/ngx_http_oidc_module.html#post_logout_uri
+	// Example: /after_logout, https://example.com/after_logout
 	//
 	// +optional
-	// +kubebuilder:validation:Pattern=`^(https?://[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*(:[0-9]{1,5})?)?(/[a-zA-Z0-9._~:/?@!$&'()*+,;=-]*)?$`
+	// +kubebuilder:validation:Pattern=`^(https?:\/\/[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*(:[0-9]{1,5})?(\/[a-zA-Z0-9._~:\/?@!&'()*+,=-]*)?|\/[a-zA-Z0-9._~:\/?@!&'()*+,=-]*)$`
 	PostLogoutURI *string `json:"postLogoutURI,omitempty"`
 
-	// FrontChannelLogoutURI defines the URI for front-channel logout. Accepts either a full URI
-	// (e.g. https://example.com/frontchannel_logout) or a path-only URI (e.g. /frontchannel_logout).
+	// FrontChannelLogoutURI defines the URI for front-channel logout. Accepts path-only URI.
 	// The OpenID Provider should be configured to set "iss" and "sid" arguments.
 	// Directive: https://nginx.org/en/docs/http/ngx_http_oidc_module.html#frontchannel_logout_uri
+	// Example: /frontchannel_logout
 	//
 	// +optional
-	// +kubebuilder:validation:Pattern=`^(https?://[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*(:[0-9]{1,5})?)?(/[a-zA-Z0-9._~:/?@!$&'()*+,;=-]*)?$`
+	// +kubebuilder:validation:Pattern=`^/[A-Za-z0-9._~!&'()*+,=@/-]*$`
 	FrontChannelLogoutURI *string `json:"frontChannelLogoutURI,omitempty"`
 
 	// TokenHint adds the id_token_hint argument to the provider's Logout Endpoint.

@@ -86,14 +86,56 @@ include {{ $i.Name }};
 # Server tokens
 server_tokens {{ .ServerTokens }};
 
+
 {{- range .OIDCProviders }}
 oidc_provider {{ .Name }} {
     issuer {{ .Issuer }};
     client_id {{ .ClientID }};
     client_secret {{ .ClientSecret }};
     redirect_uri {{ .RedirectURI }};
+
     {{- if .TrustedCertificatePath }}
     ssl_trusted_certificate {{ .TrustedCertificatePath }};
+    {{- end }}
+
+    {{- if .CRLPath }}
+    ssl_crl {{ .CRLPath }};
+    {{- end }}
+
+    {{- if .ConfigURL }}
+    config_url {{ .ConfigURL }};
+    {{- end }}
+
+    {{- if .PKCE }}
+    pkce {{ .PKCE }};
+    {{- end }}
+
+    {{- if .ExtraAuthArgs }}
+    extra_auth_args "{{ .ExtraAuthArgs }}";
+    {{- end }}
+
+    {{- if .CookieName }}
+    cookie_name {{ .CookieName }};
+    {{- end }}
+
+    {{- if .Timeout }}
+    session_timeout {{ .Timeout }};
+    {{- end }}
+
+    {{- if .LogoutURI }}
+    logout_uri {{ .LogoutURI }};
+    {{- end }}
+
+    {{- if .PostLogoutURI }}
+    post_logout_uri {{ .PostLogoutURI }};
+    {{- end }}
+
+    {{- if .FrontChannelLogoutURI }}
+    frontchannel_logout_uri {{ .FrontChannelLogoutURI }};
+    {{- end }}
+
+    {{- if .TokenHint }}
+    logout_token_hint {{ .TokenHint }};
     {{- end }}
 }
 {{- end }}
