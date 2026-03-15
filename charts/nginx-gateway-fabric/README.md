@@ -23,6 +23,7 @@
   - [Uninstalling the Chart](#uninstalling-the-chart)
     - [Uninstalling the Gateway Resources](#uninstalling-the-gateway-resources)
   - [Configuration](#configuration)
+    - [Horizontal Pod Autoscaler (HPA)](#horizontal-pod-autoscaler-hpa)
 
 ## Introduction
 
@@ -211,6 +212,12 @@ The following table lists the configurable parameters of the NGINX Gateway Fabri
 | `nginx` | The nginx section contains the configuration for all NGINX data plane deployments installed by the NGINX Gateway Fabric control plane. | object | `{"autoscaling":{"enable":false},"config":{},"container":{"hostPorts":[],"lifecycle":{},"readinessProbe":{},"resources":{},"volumeMounts":[]},"debug":false,"image":{"pullPolicy":"Always","repository":"ghcr.io/nginx/nginx-gateway-fabric/nginx","tag":"edge"},"imagePullSecret":"","imagePullSecrets":[],"kind":"deployment","nginxOneConsole":{"dataplaneKeySecretName":"","endpointHost":"agent.connect.nginx.com","endpointPort":443,"skipVerify":false},"patches":[],"plus":false,"pod":{},"replicas":1,"service":{"externalTrafficPolicy":"Local","loadBalancerClass":"","loadBalancerIP":"","loadBalancerSourceRanges":[],"nodePorts":[],"patches":[],"type":"LoadBalancer"},"usage":{"caSecretName":"","clientSSLSecretName":"","endpoint":"","enforceInitialReport":true,"resolver":"","secretName":"nplus-license","skipVerify":false}}` |
 | `nginx.autoscaling` | Autoscaling configuration for the NGINX data plane. | object | `{"enable":false}` |
 | `nginx.autoscaling.enable` | Enable or disable Horizontal Pod Autoscaler for the NGINX data plane. | bool | `false` |
+| `nginx.autoscaling.minReplicas` | Minimum number of replicas for the NGINX data plane HPA. | int | `1` |
+| `nginx.autoscaling.maxReplicas` | Maximum number of replicas for the NGINX data plane HPA. | int | `11` |
+| `nginx.autoscaling.targetCPUUtilizationPercentage` | Target CPU utilization percentage for the NGINX data plane HPA. Requires `nginx.container.resources` to be set. | int | `50` |
+| `nginx.autoscaling.targetMemoryUtilizationPercentage` | Target memory utilization percentage for the NGINX data plane HPA. Requires `nginx.container.resources` to be set. | int | `50` |
+| `nginx.autoscaling.behavior` | The full HPA `spec.behavior` object, passed as-is to the HPA resource. Accepts any valid Kubernetes HPA behavior spec. See the [Kubernetes docs](https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/#configurable-scaling-behavior) for all available fields. | object | `{}` |
+| `nginx.autoscaling.metrics` | Custom or additional autoscaling metrics. See [Kubernetes HPA docs](https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/#scaling-on-custom-metrics). Example metric: `container_memory_usage_bytes` with `AverageValue` target of `400Mi`. | list | `[]` |
 | `nginx.config` | The configuration for the data plane that is contained in the NginxProxy resource. This is applied globally to all Gateways managed by this instance of NGINX Gateway Fabric. | object | `{}` |
 | `nginx.container` | The container configuration for the NGINX container. This is applied globally to all Gateways managed by this instance of NGINX Gateway Fabric. | object | `{"hostPorts":[],"lifecycle":{},"readinessProbe":{},"resources":{},"volumeMounts":[]}` |
 | `nginx.container.hostPorts` | A list of HostPorts to expose on the host. This configuration allows containers to bind to a specific port on the host node, enabling external network traffic to reach the container directly through the host's IP address and port. Use this option when you need to expose container ports on the host for direct access, such as for debugging, legacy integrations, or when NodePort/LoadBalancer services are not suitable. Note: Using hostPort may have security and scheduling implications, as it ties pods to specific nodes and ports. | list | `[]` |
@@ -250,6 +257,13 @@ The following table lists the configurable parameters of the NGINX Gateway Fabri
 | `nginxGateway.affinity` | The affinity of the NGINX Gateway Fabric control plane pod. | object | `{}` |
 | `nginxGateway.autoscaling` | Autoscaling configuration for the NGINX Gateway Fabric control plane. | object | `{"enable":false}` |
 | `nginxGateway.autoscaling.enable` | Enable or disable Horizontal Pod Autoscaler for the control plane. | bool | `false` |
+| `nginxGateway.autoscaling.annotations` | Annotations to add to the control plane HPA resource. | object | `{}` |
+| `nginxGateway.autoscaling.minReplicas` | Minimum number of replicas for the control plane HPA. | int | `1` |
+| `nginxGateway.autoscaling.maxReplicas` | Maximum number of replicas for the control plane HPA. | int | `11` |
+| `nginxGateway.autoscaling.targetCPUUtilizationPercentage` | Target CPU utilization percentage for the control plane HPA. Requires `nginxGateway.resources` to be set. | int | `50` |
+| `nginxGateway.autoscaling.targetMemoryUtilizationPercentage` | Target memory utilization percentage for the control plane HPA. Requires `nginxGateway.resources` to be set. | int | `50` |
+| `nginxGateway.autoscaling.behavior` | Scaling behavior passed directly to the HPA `spec.behavior` field. Supports `scaleDown` and `scaleUp`, each accepting `stabilizationWindowSeconds` (seconds the HPA looks back to prevent flapping) and `policies` (list of `{type, value, periodSeconds}` rules). Example: scaleDown 1 pod per 180s with a 300s window; scaleUp 2 pods per 60s with a 300s window. | object | `{}` |
+| `nginxGateway.autoscaling.metrics` | Custom or additional autoscaling metrics. See [Kubernetes HPA docs](https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/#scaling-on-custom-metrics). Example metric: `container_memory_usage_bytes` with `AverageValue` target of `400Mi`. | list | `[]` |
 | `nginxGateway.config.logging.level` | Log level. | string | `"info"` |
 | `nginxGateway.configAnnotations` | Set of custom annotations for NginxGateway objects. | object | `{}` |
 | `nginxGateway.extraVolumeMounts` | extraVolumeMounts are the additional volume mounts for the nginx-gateway container. | list | `[]` |

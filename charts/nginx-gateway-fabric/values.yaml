@@ -169,10 +169,15 @@ nginxGateway:
     # -- Enable or disable Horizontal Pod Autoscaler for the control plane.
     enable: false
     # annotations: {}
+    annotations: {}
     # minReplicas: 1
+    minReplicas: 1
     # maxReplicas: 11
+    maxReplicas: 11
     # targetCPUUtilizationPercentage: 50
+    targetCPUUtilizationPercentage: 50
     # targetMemoryUtilizationPercentage: 50
+    targetMemoryUtilizationPercentage: 50
     # behavior:
       # scaleDown:
       #   stabilizationWindowSeconds: 300
@@ -186,6 +191,7 @@ nginxGateway:
       #   - type: Pods
       #     value: 2
       #     periodSeconds: 60
+    behavior: {}
     # Custom or additional autoscaling metrics. https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/#scaling-on-custom-metrics
     # metrics:
     # - type: Pods
@@ -195,6 +201,7 @@ nginxGateway:
     #     target:
     #       type: AverageValue
     #       averageValue: "400Mi"
+    metrics: []
 
   metrics:
     # -- Enable exposing metrics in the Prometheus format.
@@ -272,10 +279,16 @@ nginx:
   autoscaling:
     # -- Enable or disable Horizontal Pod Autoscaler for the NGINX data plane.
     enable: false
+    # annotations: {}
+    annotations: {}
     # minReplicas: 1
+    minReplicas: 1
     # maxReplicas: 11
+    maxReplicas: 11
     # targetCPUUtilizationPercentage: 50
+    targetCPUUtilizationPercentage: 50
     # targetMemoryUtilizationPercentage: 50
+    targetMemoryUtilizationPercentage: 50
     # behavior:
       # scaleDown:
       #   stabilizationWindowSeconds: 300
@@ -289,6 +302,7 @@ nginx:
       #   - type: Pods
       #     value: 2
       #     periodSeconds: 60
+    behavior: {}
     # Custom or additional autoscaling metrics. https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/#scaling-on-custom-metrics
     # metrics:
     # - type: Pods
@@ -297,7 +311,8 @@ nginx:
     #       name: nginx_gateway_fabric_nginx_process_requests_total
     #     target:
     #       type: AverageValue
-    #       averageValue: 400
+    #       averageValue: "400Mi"
+    metrics: []
   image:
     # -- The NGINX image to use.
     repository: ghcr.io/nginx/nginx-gateway-fabric/nginx
