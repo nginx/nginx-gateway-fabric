@@ -5741,9 +5741,8 @@ func TestExecuteServers_OIDCAuth(t *testing.T) {
 										Filters: dataplane.HTTPFilters{
 											AuthenticationFilter: &dataplane.AuthenticationFilter{
 												OIDC: &dataplane.OIDCProvider{
-													Name:            "oidc_test_my-filter",
-													RedirectURI:     "/oidc_callback_test_my-filter",
-													RedirectURIPath: "/oidc_callback_test_my-filter",
+													Name:        "oidc_test_my-filter",
+													RedirectURI: "/oidc_callback_test_my-filter",
 												},
 											},
 										},
@@ -5777,9 +5776,8 @@ func TestExecuteServers_OIDCAuth(t *testing.T) {
 										Filters: dataplane.HTTPFilters{
 											AuthenticationFilter: &dataplane.AuthenticationFilter{
 												OIDC: &dataplane.OIDCProvider{
-													Name:            "oidc_test_filter-one",
-													RedirectURI:     "/oidc_callback_test_filter-one",
-													RedirectURIPath: "/oidc_callback_test_filter-one",
+													Name:        "oidc_test_filter-one",
+													RedirectURI: "/oidc_callback_test_filter-one",
 												},
 											},
 										},
@@ -5796,9 +5794,8 @@ func TestExecuteServers_OIDCAuth(t *testing.T) {
 										Filters: dataplane.HTTPFilters{
 											AuthenticationFilter: &dataplane.AuthenticationFilter{
 												OIDC: &dataplane.OIDCProvider{
-													Name:            "oidc_test_filter-two",
-													RedirectURI:     "/oidc_callback_test_filter-two",
-													RedirectURIPath: "/oidc_callback_test_filter-two",
+													Name:        "oidc_test_filter-two",
+													RedirectURI: "/oidc_callback_test_filter-two",
 												},
 											},
 										},
@@ -5855,7 +5852,7 @@ func TestOIDCCallbackLocation(t *testing.T) {
 	hrNsName := types.NamespacedName{Namespace: "test", Name: "route1"}
 
 	oidcFilter := &dataplane.AuthenticationFilter{
-		OIDC: &dataplane.OIDCProvider{Name: providerName, RedirectURI: oidcCallbackPath, RedirectURIPath: oidcCallbackPath},
+		OIDC: &dataplane.OIDCProvider{Name: providerName, RedirectURI: oidcCallbackPath},
 	}
 
 	singleBackend := dataplane.BackendGroup{
@@ -5934,11 +5931,10 @@ func TestOIDCCallbackLocation(t *testing.T) {
 				t.Helper()
 				g := NewWithT(t)
 				provider := &dataplane.OIDCProvider{
-					Name:            providerName,
-					RedirectURI:     oidcCallbackPath,
-					RedirectURIPath: oidcCallbackPath,
+					Name:        providerName,
+					RedirectURI: oidcCallbackPath,
 				}
-				cb := createOIDCCallbackLocation(provider)
+				cb := createOIDCCallbackLocation(provider, oidcCallbackPath)
 				g.Expect(cb.Path).To(Equal("= " + oidcCallbackPath))
 				g.Expect(cb.Type).To(Equal(http.ExternalLocationType))
 				g.Expect(cb.AuthOIDCProviderName).To(Equal(providerName))
@@ -6007,9 +6003,8 @@ func TestOIDCCallbackLocation(t *testing.T) {
 				coffeeSlashPath := "/coffee/"
 				conflictingFilter := &dataplane.AuthenticationFilter{
 					OIDC: &dataplane.OIDCProvider{
-						Name:            providerName,
-						RedirectURI:     coffeeSlashPath,
-						RedirectURIPath: coffeeSlashPath,
+						Name:        providerName,
+						RedirectURI: coffeeSlashPath,
 					},
 				}
 
@@ -6054,9 +6049,8 @@ func TestOIDCCallbackLocation(t *testing.T) {
 				exactCallbackPath := "/my-callback"
 				exactFilter := &dataplane.AuthenticationFilter{
 					OIDC: &dataplane.OIDCProvider{
-						Name:            providerName,
-						RedirectURI:     exactCallbackPath,
-						RedirectURIPath: exactCallbackPath,
+						Name:        providerName,
+						RedirectURI: exactCallbackPath,
 					},
 				}
 
@@ -6103,9 +6097,8 @@ func TestOIDCCallbackLocation(t *testing.T) {
 				provider2CallbackPath := "/oidc_callback_test_other-filter"
 				oidcFilter2 := &dataplane.AuthenticationFilter{
 					OIDC: &dataplane.OIDCProvider{
-						Name:            provider2Name,
-						RedirectURI:     provider2CallbackPath,
-						RedirectURIPath: provider2CallbackPath,
+						Name:        provider2Name,
+						RedirectURI: provider2CallbackPath,
 					},
 				}
 
@@ -6258,10 +6251,9 @@ func TestOIDCPostLogoutLocation(t *testing.T) {
 				postLogoutPath := "/logged_out"
 				filter := &dataplane.AuthenticationFilter{
 					OIDC: &dataplane.OIDCProvider{
-						Name:              providerName,
-						RedirectURI:       oidcCallbackPath,
-						PostLogoutURI:     &postLogoutPath,
-						PostLogoutURIPath: postLogoutPath,
+						Name:          providerName,
+						RedirectURI:   oidcCallbackPath,
+						PostLogoutURI: &postLogoutPath,
 					},
 				}
 				locs, _, _ := createLocations(
@@ -6345,10 +6337,9 @@ func TestOIDCPostLogoutLocation(t *testing.T) {
 				postLogoutPath := "/logged_out"
 				filter := &dataplane.AuthenticationFilter{
 					OIDC: &dataplane.OIDCProvider{
-						Name:              providerName,
-						RedirectURI:       oidcCallbackPath,
-						PostLogoutURI:     &postLogoutPath,
-						PostLogoutURIPath: postLogoutPath,
+						Name:          providerName,
+						RedirectURI:   oidcCallbackPath,
+						PostLogoutURI: &postLogoutPath,
 					},
 				}
 				locs, _, _ := createLocations(
@@ -6391,10 +6382,9 @@ func TestOIDCPostLogoutLocation(t *testing.T) {
 				postLogoutPath := "/logged_out"
 				filter := &dataplane.AuthenticationFilter{
 					OIDC: &dataplane.OIDCProvider{
-						Name:              providerName,
-						RedirectURI:       oidcCallbackPath,
-						PostLogoutURI:     &postLogoutPath,
-						PostLogoutURIPath: postLogoutPath,
+						Name:          providerName,
+						RedirectURI:   oidcCallbackPath,
+						PostLogoutURI: &postLogoutPath,
 					},
 				}
 				locs, _, _ := createLocations(
@@ -6437,18 +6427,16 @@ func TestOIDCPostLogoutLocation(t *testing.T) {
 				provider2CallbackPath := "/oidc_callback_test_other-filter"
 				filter2 := &dataplane.AuthenticationFilter{
 					OIDC: &dataplane.OIDCProvider{
-						Name:              provider2Name,
-						RedirectURI:       provider2CallbackPath,
-						PostLogoutURI:     &postLogoutPath,
-						PostLogoutURIPath: postLogoutPath,
+						Name:          provider2Name,
+						RedirectURI:   provider2CallbackPath,
+						PostLogoutURI: &postLogoutPath,
 					},
 				}
 				filter1WithPostLogout := &dataplane.AuthenticationFilter{
 					OIDC: &dataplane.OIDCProvider{
-						Name:              providerName,
-						RedirectURI:       oidcCallbackPath,
-						PostLogoutURI:     &postLogoutPath,
-						PostLogoutURIPath: postLogoutPath,
+						Name:          providerName,
+						RedirectURI:   oidcCallbackPath,
+						PostLogoutURI: &postLogoutPath,
 					},
 				}
 				locs, _, _ := createLocations(
@@ -6647,6 +6635,46 @@ func TestExistingExactPathSet(t *testing.T) {
 				keys = append(keys, k)
 			}
 			g.Expect(keys).To(ConsistOf(test.expPaths))
+		})
+	}
+}
+
+func TestPathFromURI(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		uri      string
+		expected string
+	}{
+		{
+			name:     "path with no query string or fragment is returned unchanged",
+			uri:      "/callback",
+			expected: "/callback",
+		},
+		{
+			name: "path with query string returns only the path component, " +
+				"stripping the query string so the nginx location matches correctly",
+			uri:      "/callback?state=abc&code=xyz",
+			expected: "/callback",
+		},
+		{
+			name:     "path with fragment returns only the path component",
+			uri:      "/callback#section",
+			expected: "/callback",
+		},
+		{
+			name:     "path with both query string and fragment returns only the path component",
+			uri:      "/callback?state=abc#section",
+			expected: "/callback",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+			g.Expect(pathFromURI(test.uri)).To(Equal(test.expected))
 		})
 	}
 }

@@ -312,8 +312,6 @@ type OIDCProvider struct {
 	PKCE *bool
 	// ClientID is the unique identifier for the OIDC client.
 	ClientID string
-	// RedirectURIPath is the path for the OIDC redirect URI.
-	RedirectURIPath string
 	// Issuer is the issuer URL to discover OIDC configuration from.
 	Issuer string
 	// RedirectURI is the URI used for the OIDC callback.
@@ -323,8 +321,6 @@ type OIDCProvider struct {
 	ClientSecret string
 	// Name is the name of the OIDC provider.
 	Name string
-	// PostLogoutURIPath is the path for the OIDC post-logout redirect URI.
-	PostLogoutURIPath string
 	// ExtraAuthArgs specifies any extra arguments to include in the authentication request to the OIDC provider.
 	ExtraAuthArgs string
 	// CACertBundleID is the ID of the CA certificate bundle for SSL verification.

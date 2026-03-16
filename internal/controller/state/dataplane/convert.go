@@ -259,14 +259,6 @@ func buildOIDCProvider(
 		PKCE:         specOIDC.PKCE,
 	}
 
-	if strings.HasPrefix(redirectURI, "/") {
-		redirectURIPath := redirectURI
-		if i := strings.IndexAny(redirectURI, "?#"); i != -1 {
-			redirectURIPath = redirectURI[:i]
-		}
-		oidc.RedirectURIPath = redirectURIPath
-	}
-
 	setOIDCCACert(oidc, specOIDC.CACertificateRefs, filter.Source.Namespace, referencedSecrets)
 
 	if specOIDC.CRLSecretRef != nil {
@@ -288,13 +280,6 @@ func buildOIDCProvider(
 		oidc.PostLogoutURI = specOIDC.Logout.PostLogoutURI
 		oidc.FrontChannelLogoutURI = specOIDC.Logout.FrontChannelLogoutURI
 		oidc.TokenHint = specOIDC.Logout.TokenHint
-		if specOIDC.Logout.PostLogoutURI != nil && strings.HasPrefix(*specOIDC.Logout.PostLogoutURI, "/") {
-			postLogoutPath := *specOIDC.Logout.PostLogoutURI
-			if i := strings.IndexAny(postLogoutPath, "?#"); i != -1 {
-				postLogoutPath = postLogoutPath[:i]
-			}
-			oidc.PostLogoutURIPath = postLogoutPath
-		}
 	}
 
 	return oidc

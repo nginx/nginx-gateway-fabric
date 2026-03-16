@@ -1772,29 +1772,40 @@ func findOIDCProviders(pathRules []dataplane.PathRule) []*dataplane.OIDCProvider
 	return providers
 }
 
+// pathFromURI returns the path component of a URI, stripping any query string or fragment.
+// It is used to derive the nginx location path from a redirect or post-logout URI.
+func pathFromURI(uri string) string {
+	if i := strings.IndexAny(uri, "?#"); i != -1 {
+		return uri[:i]
+	}
+	return uri
+}
+
 // createOIDCLocations creates callback and post-logout locations for all OIDC providers.
-// A location is skipped if an exact-match route already occupies the same path or if the location has already
-// been generated. Both callback and post-logout locations use exact nginx matches, so they safely take
-// precedence over any prefix route at the same path.
+// A location is only created for path-only URIs (starting with /). A location is skipped if an exact-match
+// route already occupies the same path or if the location has already been generated. Both callback and
+// post-logout locations use exact nginx matches, so they safely take precedence over any prefix route.
 func createOIDCLocations(pathRules []dataplane.PathRule) []http.Location {
 	existingExact := existingExactPathSet(pathRules)
 
 	var locs []http.Location
 	seenPaths := make(map[string]struct{})
 	for _, provider := range findOIDCProviders(pathRules) {
-		if provider.RedirectURIPath != "" {
-			if _, exists := existingExact[provider.RedirectURIPath]; !exists {
-				if _, seen := seenPaths[provider.RedirectURIPath]; !seen {
-					seenPaths[provider.RedirectURIPath] = struct{}{}
-					locs = append(locs, createOIDCCallbackLocation(provider))
+		if strings.HasPrefix(provider.RedirectURI, "/") {
+			path := pathFromURI(provider.RedirectURI)
+			if _, exists := existingExact[path]; !exists {
+				if _, seen := seenPaths[path]; !seen {
+					seenPaths[path] = struct{}{}
+					locs = append(locs, createOIDCCallbackLocation(provider, path))
 				}
 			}
 		}
-		if provider.PostLogoutURIPath != "" {
-			if _, exists := existingExact[provider.PostLogoutURIPath]; !exists {
-				if _, seen := seenPaths[provider.PostLogoutURIPath]; !seen {
-					seenPaths[provider.PostLogoutURIPath] = struct{}{}
-					locs = append(locs, createOIDCPostLogoutLocation(provider.PostLogoutURIPath))
+		if provider.PostLogoutURI != nil && strings.HasPrefix(*provider.PostLogoutURI, "/") {
+			path := pathFromURI(*provider.PostLogoutURI)
+			if _, exists := existingExact[path]; !exists {
+				if _, seen := seenPaths[path]; !seen {
+					seenPaths[path] = struct{}{}
+					locs = append(locs, createOIDCPostLogoutLocation(path))
 				}
 			}
 		}
@@ -1817,9 +1828,9 @@ func existingExactPathSet(pathRules []dataplane.PathRule) map[string]struct{} {
 
 // createOIDCCallbackLocation creates a OIDC callback location containing only the auth_oidc directive.
 // This is created only when redirectURI is a path-only URI.
-func createOIDCCallbackLocation(provider *dataplane.OIDCProvider) http.Location {
+func createOIDCCallbackLocation(provider *dataplane.OIDCProvider, path string) http.Location {
 	return http.Location{
-		Path:                 "= " + provider.RedirectURIPath,
+		Path:                 "= " + path,
 		Type:                 http.ExternalLocationType,
 		AuthOIDCProviderName: provider.Name,
 	}
@@ -1830,9 +1841,8 @@ func createOIDCCallbackLocation(provider *dataplane.OIDCProvider) http.Location 
 // we do not need authentication post logout.
 func createOIDCPostLogoutLocation(uri string) http.Location {
 	return http.Location{
-		AuthOIDCProviderName: "",
-		Path:                 "= " + uri,
-		Type:                 http.ExternalLocationType,
+		Path: "= " + uri,
+		Type: http.ExternalLocationType,
 		Return: &http.Return{
 			Code:        http.StatusOK,
 			Body:        `You have been logged out.`,
