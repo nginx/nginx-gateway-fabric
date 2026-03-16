@@ -116,17 +116,14 @@ func (b *DeploymentBroadcaster) run(ctx context.Context, stopCh chan struct{}) {
 			delete(b.listeners, id)
 		case msg := <-b.publishCh:
 			var wg sync.WaitGroup
-			wg.Add(len(b.listeners))
 
 			for _, channels := range b.listeners {
-				go func() {
-					defer wg.Done()
-
+				wg.Go(func() {
 					// send message and wait for it to be read
 					channels.listenCh <- msg
 					// wait for response
 					<-channels.responseCh
-				}()
+				})
 			}
 			wg.Wait()
 
