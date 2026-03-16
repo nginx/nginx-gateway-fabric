@@ -553,8 +553,6 @@ func (p *NginxProvisioner) deprovisionNginxForInvalidGateway(
 		}
 	}
 
-	fmt.Println("We are in deprovision nginx for invalid Gateway")
-
 	p.store.deleteResourcesForGateway(gatewayNSName)
 	p.cfg.DeploymentStore.Remove(deploymentNSName)
 
