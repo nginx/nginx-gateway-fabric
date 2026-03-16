@@ -1541,21 +1541,21 @@ func TestCreateServers(t *testing.T) {
 			},
 			{
 				Path:            "/path-only/",
-				ProxyPass:       "http://invalid-backend-ref$request_uri",
+				ProxyPass:       "http://invalid-backend-ref",
 				ProxySetHeaders: httpBaseHeaders,
 				Type:            http.ExternalLocationType,
 				Includes:        externalIncludes,
 			},
 			{
 				Path:            "= /path-only",
-				ProxyPass:       "http://invalid-backend-ref$request_uri",
+				ProxyPass:       "http://invalid-backend-ref",
 				ProxySetHeaders: httpBaseHeaders,
 				Type:            http.ExternalLocationType,
 				Includes:        externalIncludes,
 			},
 			{
 				Path:            "/backend-tls-policy/",
-				ProxyPass:       "https://test_btp_80$request_uri",
+				ProxyPass:       "https://test_btp_80",
 				ProxySetHeaders: httpBaseHeaders,
 				ProxySSLVerify: &http.ProxySSLVerify{
 					Name:               "test-btp.example.com",
@@ -1566,7 +1566,7 @@ func TestCreateServers(t *testing.T) {
 			},
 			{
 				Path:            "= /backend-tls-policy",
-				ProxyPass:       "https://test_btp_80$request_uri",
+				ProxyPass:       "https://test_btp_80",
 				ProxySetHeaders: httpBaseHeaders,
 				ProxySSLVerify: &http.ProxySSLVerify{
 					Name:               "test-btp.example.com",
@@ -1670,7 +1670,7 @@ func TestCreateServers(t *testing.T) {
 			},
 			{
 				Path:            "/mirror/",
-				ProxyPass:       "http://test_foo_80$request_uri",
+				ProxyPass:       "http://test_foo_80",
 				ProxySetHeaders: httpBaseHeaders,
 				MirrorPaths:     []string{"/_ngf-internal-mirror-my-backend-test/route1-0"},
 				Type:            http.ExternalLocationType,
@@ -1678,7 +1678,7 @@ func TestCreateServers(t *testing.T) {
 			},
 			{
 				Path:            "= /mirror",
-				ProxyPass:       "http://test_foo_80$request_uri",
+				ProxyPass:       "http://test_foo_80",
 				ProxySetHeaders: httpBaseHeaders,
 				MirrorPaths:     []string{"/_ngf-internal-mirror-my-backend-test/route1-0"},
 				Type:            http.ExternalLocationType,
@@ -1693,7 +1693,7 @@ func TestCreateServers(t *testing.T) {
 			},
 			{
 				Path:            "= /mirror-filter-percentage-defined",
-				ProxyPass:       "http://test_foo_80$request_uri",
+				ProxyPass:       "http://test_foo_80",
 				ProxySetHeaders: httpBaseHeaders,
 				MirrorPaths:     []string{"/_ngf-internal-mirror-my-backend-test/route1-1"},
 				Type:            http.ExternalLocationType,
@@ -1709,7 +1709,7 @@ func TestCreateServers(t *testing.T) {
 			},
 			{
 				Path:            "= /mirror-filter-100-percent",
-				ProxyPass:       "http://test_foo_80$request_uri",
+				ProxyPass:       "http://test_foo_80",
 				ProxySetHeaders: httpBaseHeaders,
 				MirrorPaths:     []string{"/_ngf-internal-mirror-my-backend-test/route1-2"},
 				Type:            http.ExternalLocationType,
@@ -1724,7 +1724,7 @@ func TestCreateServers(t *testing.T) {
 			},
 			{
 				Path:            "= /mirror-filter-0-percent",
-				ProxyPass:       "http://test_foo_80$request_uri",
+				ProxyPass:       "http://test_foo_80",
 				ProxySetHeaders: httpBaseHeaders,
 				MirrorPaths:     []string{"/_ngf-internal-mirror-my-backend-test/route1-3"},
 				Type:            http.ExternalLocationType,
@@ -1740,7 +1740,7 @@ func TestCreateServers(t *testing.T) {
 			},
 			{
 				Path:            "= /mirror-filter-duplicate-targets",
-				ProxyPass:       "http://test_foo_80$request_uri",
+				ProxyPass:       "http://test_foo_80",
 				ProxySetHeaders: httpBaseHeaders,
 				MirrorPaths:     []string{"/_ngf-internal-mirror-my-backend-test/route1-4"},
 				Type:            http.ExternalLocationType,
@@ -1810,7 +1810,7 @@ func TestCreateServers(t *testing.T) {
 			},
 			{
 				Path:            "= /exact",
-				ProxyPass:       "http://test_foo_80$request_uri",
+				ProxyPass:       "http://test_foo_80",
 				ProxySetHeaders: httpBaseHeaders,
 				Type:            http.ExternalLocationType,
 				Includes:        externalIncludes,
@@ -1830,7 +1830,7 @@ func TestCreateServers(t *testing.T) {
 			},
 			{
 				Path:      "/proxy-set-headers/",
-				ProxyPass: "http://test_foo_80$request_uri",
+				ProxyPass: "http://test_foo_80",
 				ProxySetHeaders: append([]http.Header{
 					{
 						Name:  "my-header",
@@ -1852,7 +1852,7 @@ func TestCreateServers(t *testing.T) {
 			},
 			{
 				Path:      "= /proxy-set-headers",
-				ProxyPass: "http://test_foo_80$request_uri",
+				ProxyPass: "http://test_foo_80",
 				ProxySetHeaders: append([]http.Header{
 					{
 						Name:  "my-header",
@@ -1894,7 +1894,7 @@ func TestCreateServers(t *testing.T) {
 			},
 			{
 				Path:            "= /include-path-only-match",
-				ProxyPass:       "http://test_foo_80$request_uri",
+				ProxyPass:       "http://test_foo_80",
 				ProxySetHeaders: httpBaseHeaders,
 				Type:            http.ExternalLocationType,
 				Includes:        externalIncludes,
@@ -1914,7 +1914,7 @@ func TestCreateServers(t *testing.T) {
 			},
 			{
 				Path:            "= /keep-alive-enabled",
-				ProxyPass:       "http://test_keep_alive_80$request_uri",
+				ProxyPass:       "http://test_keep_alive_80",
 				ProxySetHeaders: createBaseProxySetHeaders("", httpUpgradeHeader, keepAliveConnectionHeader),
 				Type:            http.ExternalLocationType,
 				Includes:        externalIncludes,
@@ -2089,13 +2089,13 @@ func TestCreateServersConflicts(t *testing.T) {
 			expLocs: []http.Location{
 				{
 					Path:            "/coffee/",
-					ProxyPass:       "http://test_foo_80$request_uri",
+					ProxyPass:       "http://test_foo_80",
 					ProxySetHeaders: httpBaseHeaders,
 					Type:            http.ExternalLocationType,
 				},
 				{
 					Path:            "= /coffee",
-					ProxyPass:       "http://test_bar_80$request_uri",
+					ProxyPass:       "http://test_bar_80",
 					ProxySetHeaders: httpBaseHeaders,
 					Type:            http.ExternalLocationType,
 				},
@@ -2129,13 +2129,13 @@ func TestCreateServersConflicts(t *testing.T) {
 			expLocs: []http.Location{
 				{
 					Path:            "= /coffee",
-					ProxyPass:       "http://test_foo_80$request_uri",
+					ProxyPass:       "http://test_foo_80",
 					ProxySetHeaders: httpBaseHeaders,
 					Type:            http.ExternalLocationType,
 				},
 				{
 					Path:            "/coffee/",
-					ProxyPass:       "http://test_bar_80$request_uri",
+					ProxyPass:       "http://test_bar_80",
 					ProxySetHeaders: httpBaseHeaders,
 					Type:            http.ExternalLocationType,
 				},
@@ -2179,13 +2179,13 @@ func TestCreateServersConflicts(t *testing.T) {
 			expLocs: []http.Location{
 				{
 					Path:            "/coffee/",
-					ProxyPass:       "http://test_bar_80$request_uri",
+					ProxyPass:       "http://test_bar_80",
 					ProxySetHeaders: httpBaseHeaders,
 					Type:            http.ExternalLocationType,
 				},
 				{
 					Path:            "= /coffee",
-					ProxyPass:       "http://test_baz_80$request_uri",
+					ProxyPass:       "http://test_baz_80",
 					ProxySetHeaders: httpBaseHeaders,
 					Type:            http.ExternalLocationType,
 				},
@@ -3140,13 +3140,13 @@ func TestCreateLocationsRootPath(t *testing.T) {
 			expLocations: []http.Location{
 				{
 					Path:            "= /path-1",
-					ProxyPass:       "http://test_foo_80$request_uri",
+					ProxyPass:       "http://test_foo_80",
 					ProxySetHeaders: httpBaseHeaders,
 					Type:            http.ExternalLocationType,
 				},
 				{
 					Path:            "= /path-2",
-					ProxyPass:       "http://test_foo_80$request_uri",
+					ProxyPass:       "http://test_foo_80",
 					ProxySetHeaders: httpBaseHeaders,
 					Type:            http.ExternalLocationType,
 				},
@@ -3165,13 +3165,13 @@ func TestCreateLocationsRootPath(t *testing.T) {
 			expLocations: []http.Location{
 				{
 					Path:            "= /path-1",
-					ProxyPass:       "http://test_foo_80$request_uri",
+					ProxyPass:       "http://test_foo_80",
 					ProxySetHeaders: httpBaseHeaders,
 					Type:            http.ExternalLocationType,
 				},
 				{
 					Path:            "= /path-2",
-					ProxyPass:       "http://test_foo_80$request_uri",
+					ProxyPass:       "http://test_foo_80",
 					ProxySetHeaders: httpBaseHeaders,
 					Type:            http.ExternalLocationType,
 				},
@@ -3196,19 +3196,19 @@ func TestCreateLocationsRootPath(t *testing.T) {
 			expLocations: []http.Location{
 				{
 					Path:            "= /path-1",
-					ProxyPass:       "http://test_foo_80$request_uri",
+					ProxyPass:       "http://test_foo_80",
 					ProxySetHeaders: httpBaseHeaders,
 					Type:            http.ExternalLocationType,
 				},
 				{
 					Path:            "= /path-2",
-					ProxyPass:       "http://test_foo_80$request_uri",
+					ProxyPass:       "http://test_foo_80",
 					ProxySetHeaders: httpBaseHeaders,
 					Type:            http.ExternalLocationType,
 				},
 				{
 					Path:            "= /",
-					ProxyPass:       "http://test_foo_80$request_uri",
+					ProxyPass:       "http://test_foo_80",
 					ProxySetHeaders: httpBaseHeaders,
 					Type:            http.ExternalLocationType,
 				},
@@ -3321,31 +3321,31 @@ func TestCreateLocationsPath(t *testing.T) {
 			expLocations: []http.Location{
 				{
 					Path:            "= /exact-path",
-					ProxyPass:       "http://test_foo_80$request_uri",
+					ProxyPass:       "http://test_foo_80",
 					ProxySetHeaders: httpBaseHeaders,
 					Type:            http.ExternalLocationType,
 				},
 				{
 					Path:            "/prefix-path-with-trailing-slash/",
-					ProxyPass:       "http://test_foo_80$request_uri",
+					ProxyPass:       "http://test_foo_80",
 					ProxySetHeaders: httpBaseHeaders,
 					Type:            http.ExternalLocationType,
 				},
 				{
 					Path:            "/prefix-path-without-trailing-slash/",
-					ProxyPass:       "http://test_foo_80$request_uri",
+					ProxyPass:       "http://test_foo_80",
 					ProxySetHeaders: httpBaseHeaders,
 					Type:            http.ExternalLocationType,
 				},
 				{
 					Path:            "= /prefix-path-without-trailing-slash",
-					ProxyPass:       "http://test_foo_80$request_uri",
+					ProxyPass:       "http://test_foo_80",
 					ProxySetHeaders: httpBaseHeaders,
 					Type:            http.ExternalLocationType,
 				},
 				{
 					Path:            "~ ^/regular-expression-path/(.*)$",
-					ProxyPass:       "http://test_foo_80$request_uri",
+					ProxyPass:       "http://test_foo_80",
 					ProxySetHeaders: httpBaseHeaders,
 					Type:            http.ExternalLocationType,
 				},
@@ -4307,7 +4307,21 @@ func TestCreateProxyPass(t *testing.T) {
 		grp              dataplane.BackendGroup
 		GRPC             bool
 		inferenceBackend bool
+		locationType     http.LocationType
 	}{
+		{
+			expected: "http://10.0.0.1:80",
+			grp: dataplane.BackendGroup{
+				Backends: []dataplane.Backend{
+					{
+						UpstreamName: "10.0.0.1:80",
+						Valid:        true,
+						Weight:       1,
+					},
+				},
+			},
+			locationType: http.ExternalLocationType,
+		},
 		{
 			expected: "http://10.0.0.1:80$request_uri",
 			grp: dataplane.BackendGroup{
@@ -4319,6 +4333,7 @@ func TestCreateProxyPass(t *testing.T) {
 					},
 				},
 			},
+			locationType: http.InternalLocationType,
 		},
 		// Inference case
 		{
@@ -4333,9 +4348,10 @@ func TestCreateProxyPass(t *testing.T) {
 				},
 			},
 			inferenceBackend: true,
+			locationType:     http.InternalLocationType,
 		},
 		{
-			expected: "http://$group_ns1__bg_rule0_pathRule0$request_uri",
+			expected: "http://$group_ns1__bg_rule0_pathRule0",
 			grp: dataplane.BackendGroup{
 				Source: types.NamespacedName{Namespace: "ns1", Name: "bg"},
 				Backends: []dataplane.Backend{
@@ -4351,6 +4367,7 @@ func TestCreateProxyPass(t *testing.T) {
 					},
 				},
 			},
+			locationType: http.ExternalLocationType,
 		},
 		{
 			expected: "http://10.0.0.1:80",
@@ -4366,6 +4383,7 @@ func TestCreateProxyPass(t *testing.T) {
 					},
 				},
 			},
+			locationType: http.ExternalLocationType,
 		},
 		{
 			expected: "grpc://10.0.0.1:80",
@@ -4378,7 +4396,8 @@ func TestCreateProxyPass(t *testing.T) {
 					},
 				},
 			},
-			GRPC: true,
+			GRPC:         true,
+			locationType: http.ExternalLocationType,
 		},
 	}
 
@@ -4392,6 +4411,7 @@ func TestCreateProxyPass(t *testing.T) {
 				generateProtocolString(nil, tc.GRPC),
 				tc.GRPC,
 				tc.inferenceBackend,
+				tc.locationType,
 			)
 			g.Expect(result).To(Equal(tc.expected))
 		})
