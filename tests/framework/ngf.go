@@ -36,8 +36,16 @@ type InstallationConfig struct {
 	ImagePullPolicy      string
 	ServiceType          string
 	PlusUsageEndpoint    string
-	Plus                 bool
-	Telemetry            bool
+	// NginxImagePullSecret is the name of the image pull secret for the NGINX data plane image.
+	// Maps to nginx.imagePullSecret in the Helm chart.
+	NginxImagePullSecret string
+	// PLMImagePullSecret is the name of the image pull secret for PLM images
+	// (private-registry.nginx.com). Used when WAFEnabled is true.
+	PLMImagePullSecret string
+	Plus               bool
+	Telemetry          bool
+	// WAFEnabled installs NGF with the f5-waf-plm subchart enabled.
+	WAFEnabled bool
 }
 
 // InstallGatewayAPI installs the specified version of the Gateway API resources.
@@ -259,8 +267,20 @@ func setImageArgs(cfg InstallationConfig) []string {
 		}
 	}
 
+	if cfg.NginxImagePullSecret != "" {
+		args = append(args, formatValueSet("nginx.imagePullSecret", cfg.NginxImagePullSecret)...)
+	}
+
 	if cfg.ServiceType != "" {
 		args = append(args, formatValueSet("nginx.service.type", cfg.ServiceType)...)
+	}
+
+	if cfg.WAFEnabled {
+		args = append(args, formatValueSet("f5-waf-plm.enabled", "true")...)
+		args = append(args, formatValueSet("f5-waf-plm.seaweedfsOperatorConfig.seaweedfs.certificates.enabled", "true")...)
+		if cfg.PLMImagePullSecret != "" {
+			args = append(args, formatValueSet("f5-waf-plm.imagePullSecrets[0].name", cfg.PLMImagePullSecret)...)
+		}
 	}
 
 	return args

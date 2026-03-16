@@ -63,6 +63,9 @@ var (
 	plusEnabled              = flag.Bool("plus-enabled", false, "Is NGINX Plus enabled")
 	plusLicenseFileName      = flag.String("plus-license-file-name", "", "File name containing the NGINX Plus JWT")
 	plusUsageEndpoint        = flag.String("plus-usage-endpoint", "", "Endpoint for reporting NGINX Plus usage")
+	wafEnabled               = flag.Bool("waf-enabled", false, "Run WAF tests with PLM subchart")
+	nginxImagePullSecret     = flag.String("nginx-image-pull-secret", "", "Name of image pull secret for N+ images")
+	plmImagePullSecret       = flag.String("plm-image-pull-secret", "", "Name of image pull secret for PLM images")
 	clusterName              = flag.String("cluster-name", "kind", "Cluster name")
 	gkeProject               = flag.String("gke-project", "", "GKE Project name")
 )
@@ -325,6 +328,7 @@ var _ = BeforeSuite(func() {
 		"telemetry",          // - running telemetry test (NGF will be deployed as part of the test)
 		"scale",              // - running scale test (this test will deploy its own version)
 		"reconfiguration",    // - running reconfiguration test (test will deploy its own instances)
+		"waf",                // - running WAF test (deploys NGF with PLM subchart enabled)
 	}
 	for _, s := range skipSubstrings {
 		if strings.Contains(labelFilter, s) {

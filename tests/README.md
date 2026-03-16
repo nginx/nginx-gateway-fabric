@@ -31,6 +31,7 @@ This directory contains the tests for NGINX Gateway Fabric. The tests are divide
   - [Logging in tests](#logging-in-tests)
   - [Step 1 - Run the tests](#step-1---run-the-tests)
     - [Run the functional tests locally](#run-the-functional-tests-locally)
+    - [Run the WAF tests](#run-the-waf-tests)
     - [Run the NFR tests on a GKE cluster from a GCP VM](#run-the-nfr-tests-on-a-gke-cluster-from-a-gcp-vm)
       - [Longevity testing](#longevity-testing)
   - [Common test amendments](#common-test-amendments)
@@ -113,6 +114,12 @@ Or, to build NGF with NGINX Plus enabled (NGINX Plus cert and key must exist in 
 
 ```makefile
 make build-images-with-plus load-images-with-plus TAG=$(whoami)
+```
+
+Or, to build NGF with NGINX Plus and WAF enabled (NGINX Plus cert and key must exist in the root of the repo):
+
+```makefile
+make build-images-with-nap-waf load-images-with-plus TAG=$(whoami)
 ```
 
 For the telemetry test, which requires a OTel collector, build an image with the following variables set:
@@ -294,6 +301,34 @@ To run the telemetry test:
 ```makefile
 make test TAG=$(whoami) GINKGO_LABEL=telemetry
 ```
+
+> The telemetry test requires a specially built image with OpenTelemetry endpoint configuration. See above for details.
+
+#### Run the WAF tests
+
+The WAF tests install cert-manager and the `f5-waf-plm` Helm subchart into the cluster, deploy NGF with WAF
+enabled, and manage their own lifecycle independently from the main functional test suite. They can be run on a GKE cluster only (amd64 only — NAP WAF does not support ARM).
+
+Prerequisites:
+
+- NGINX Plus with NAP WAF images (built with `make build-images-nap-waf` from the repo root)
+- An JWT token for `private-registry.nginx.com` in a file called `dockerconfig.jwt` in the repo root for the registry secret creation (required for pulling the WAF images)
+- Egress from the cluster to pull images and cert-manager manifests at test time
+- Run `helm dependency update ../charts/nginx-gateway-fabric` to pull the PLM subchart
+
+**On a GKE cluster:**
+
+Push the NGF images to a registry accessible from GKE, then run the tests. Note the `GKE_PROJECT` variable must be set:
+
+```makefile
+make test-waf-gke \
+  PREFIX=${NGF_IMAGE_REPO}$ \
+  NGINX_PLUS_PREFIX=${NGINX_IMAGE_REPO} \
+  TAG=${NGF_IMAGE_TAG} \
+  GKE_PROJECT=${GKW_PROJECT}
+```
+
+The `test-waf-gke` target sets `PULL_POLICY=Always` and `GW_SERVICE_TYPE=LoadBalancer` automatically.
 
 #### Run the NFR tests on a GKE cluster from a GCP VM
 

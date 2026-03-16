@@ -200,6 +200,25 @@ test: build-crossplane-image ## Runs the functional tests on your kind k8s clust
 test-with-plus: PLUS_ENABLED=true
 test-with-plus: check-for-plus-usage-endpoint test ## Runs the functional tests for NGF with NGINX Plus on your default k8s cluster
 
+PLM_IMAGE_PULL_SECRET ?= nginx-plus-registry-secret## Image pull secret name for PLM images from private-registry.nginx.com
+
+.PHONY: test-waf-gke
+test-waf-gke: PLUS_ENABLED=true
+test-waf-gke: GOARCH=amd64
+test-waf-gke: check-for-plus-usage-endpoint build-crossplane-image create-image-pull-secret ## Runs the WAF tests with PLM subchart on a GKE cluster (amd64 only)
+	./scripts/push-crossplane-image.sh
+	go run github.com/onsi/ginkgo/v2/ginkgo --race --randomize-all --keep-going --fail-on-pending \
+		--trace -r -v --buildvcs --force-newlines $(GITHUB_OUTPUT) \
+		--label-filter "waf" $(GINKGO_FLAGS) ./suite -- \
+		--gateway-api-version=$(GW_API_VERSION) --gateway-api-prev-version=$(GW_API_PREV_VERSION) \
+		--image-tag=$(TAG) --version-under-test=$(NGF_VERSION) \
+		--ngf-image-repo=$(PREFIX) --nginx-image-repo=$(NGINX_PLUS_PREFIX) --nginx-plus-image-repo=$(NGINX_PLUS_PREFIX) \
+		--pull-policy=Always --service-type=LoadBalancer \
+		--plus-enabled=$(PLUS_ENABLED) \
+		--plus-license-file-name=$(PLUS_LICENSE_FILE) --plus-usage-endpoint=$(PLUS_USAGE_ENDPOINT) \
+		--gke-project=$(GKE_PROJECT) \
+		--waf-enabled=true --nginx-image-pull-secret=$(NGINX_IMAGE_PULL_SECRET) --plm-image-pull-secret=$(PLM_IMAGE_PULL_SECRET)
+
 .PHONY: cleanup-gcp
 cleanup-gcp: cleanup-router cleanup-vm delete-gke-cluster ## Cleanup all GCP resources
 

@@ -1,0 +1,15 @@
+apiVersion: appprotect.f5.com/v1
+kind: APPolicy
+metadata:
+  name: attack-signatures-blocking
+spec:
+  policy:
+    name: attack_signatures_blocking
+    template:
+      name: POLICY_TEMPLATE_NGINX_BASE
+    applicationLanguage: utf-8
+    enforcementMode: blocking
+    signature-sets:
+    - name: All Signatures
+      block: true
+      alarm: true
