@@ -6206,7 +6206,7 @@ func TestOIDCCallbackLocation(t *testing.T) {
 	}
 }
 
-func TestOIDCPostLogoutLocation(t *testing.T) {
+func TestOIDCLogoutLocation(t *testing.T) {
 	t.Parallel()
 
 	const (
@@ -6229,117 +6229,17 @@ func TestOIDCPostLogoutLocation(t *testing.T) {
 		name string
 	}{
 		{
-			name: "creates a location with return 200 and text/plain content type",
-			run: func(t *testing.T) {
-				t.Helper()
-				g := NewWithT(t)
-				loc := createOIDCPostLogoutLocation("/logged_out")
-				g.Expect(loc.Path).To(Equal("= /logged_out"))
-				g.Expect(loc.Type).To(Equal(http.ExternalLocationType))
-				g.Expect(loc.Return).NotTo(BeNil())
-				g.Expect(loc.Return.Code).To(Equal(http.StatusOK))
-				g.Expect(loc.Return.DefaultType).To(Equal("text/plain"))
-				g.Expect(loc.Return.Body).NotTo(BeEmpty())
-				g.Expect(loc.AuthOIDCProviderName).To(BeEmpty())
-			},
-		},
-		{
-			name: "path-only PostLogoutURI creates a post-logout location block",
-			run: func(t *testing.T) {
-				t.Helper()
-				g := NewWithT(t)
-				postLogoutPath := "/logged_out"
-				filter := &dataplane.AuthenticationFilter{
-					OIDC: &dataplane.OIDCProvider{
-						Name:          providerName,
-						RedirectURI:   oidcCallbackPath,
-						PostLogoutURI: &postLogoutPath,
-					},
-				}
-				locs, _, _ := createLocations(
-					&dataplane.VirtualServer{
-						Port: 80,
-						PathRules: []dataplane.PathRule{
-							{
-								Path:     "/coffee",
-								PathType: dataplane.PathTypePrefix,
-								MatchRules: []dataplane.MatchRule{
-									{
-										Match:        dataplane.Match{},
-										BackendGroup: singleBackend,
-										Filters:      dataplane.HTTPFilters{AuthenticationFilter: filter},
-									},
-								},
-							},
-						},
-					},
-					"1",
-					&policiesfakes.FakeGenerator{},
-					alwaysFalseKeepAliveChecker,
-				)
-				var postLogoutLoc *http.Location
-				for i := range locs {
-					if locs[i].Path == "= "+postLogoutPath {
-						postLogoutLoc = &locs[i]
-					}
-				}
-				g.Expect(postLogoutLoc).NotTo(BeNil())
-				g.Expect(postLogoutLoc.Return).NotTo(BeNil())
-				g.Expect(postLogoutLoc.Return.Code).To(Equal(http.StatusOK))
-				g.Expect(postLogoutLoc.Return.DefaultType).To(Equal("text/plain"))
-			},
-		},
-		{
-			name: "full URI PostLogoutURI does not create a post-logout location block",
-			run: func(t *testing.T) {
-				t.Helper()
-				g := NewWithT(t)
-				fullURI := "https://example.com/logged_out"
-				filter := &dataplane.AuthenticationFilter{
-					OIDC: &dataplane.OIDCProvider{
-						Name:          providerName,
-						RedirectURI:   oidcCallbackPath,
-						PostLogoutURI: &fullURI,
-					},
-				}
-				locs, _, _ := createLocations(
-					&dataplane.VirtualServer{
-						Port: 80,
-						PathRules: []dataplane.PathRule{
-							{
-								Path:     "/coffee",
-								PathType: dataplane.PathTypePrefix,
-								MatchRules: []dataplane.MatchRule{
-									{
-										Match:        dataplane.Match{},
-										BackendGroup: singleBackend,
-										Filters:      dataplane.HTTPFilters{AuthenticationFilter: filter},
-									},
-								},
-							},
-						},
-					},
-					"1",
-					&policiesfakes.FakeGenerator{},
-					alwaysFalseKeepAliveChecker,
-				)
-				for _, loc := range locs {
-					g.Expect(loc.Path).NotTo(HavePrefix("= https://"))
-				}
-			},
-		},
-		{
-			name: "path-only PostLogoutURI generates an exact post-logout location " +
+			name: "LogoutURI generates an exact logout location " +
 				"even when a prefix route occupies the same path, because the exact match takes precedence in nginx",
 			run: func(t *testing.T) {
 				t.Helper()
 				g := NewWithT(t)
-				postLogoutPath := "/logged_out"
+				logoutPath := "/logged_out"
 				filter := &dataplane.AuthenticationFilter{
 					OIDC: &dataplane.OIDCProvider{
 						Name:          providerName,
 						RedirectURI:   oidcCallbackPath,
-						PostLogoutURI: &postLogoutPath,
+						PostLogoutURI: &logoutPath,
 					},
 				}
 				locs, _, _ := createLocations(
@@ -6363,28 +6263,27 @@ func TestOIDCPostLogoutLocation(t *testing.T) {
 					&policiesfakes.FakeGenerator{},
 					alwaysFalseKeepAliveChecker,
 				)
-				var postLogoutLoc *http.Location
+				var logoutLoc *http.Location
 				for i := range locs {
-					if locs[i].Path == "= "+postLogoutPath {
-						postLogoutLoc = &locs[i]
+					if locs[i].Path == "= "+logoutPath {
+						logoutLoc = &locs[i]
 					}
 				}
-				g.Expect(postLogoutLoc).NotTo(BeNil())
-				g.Expect(postLogoutLoc.Return).NotTo(BeNil())
+				g.Expect(logoutLoc).NotTo(BeNil())
+				g.Expect(logoutLoc.AuthOIDCProviderName).To(Equal(providerName))
 			},
 		},
 		{
-			name: "path-only PostLogoutURI does not generate a post-logout " +
-				"location when an exact route already occupies the same path",
+			name: "LogoutURI does not generate a logout location when an exact route already occupies the same path",
 			run: func(t *testing.T) {
 				t.Helper()
 				g := NewWithT(t)
-				postLogoutPath := "/logged_out"
+				logoutPath := "/logged_out"
 				filter := &dataplane.AuthenticationFilter{
 					OIDC: &dataplane.OIDCProvider{
 						Name:          providerName,
 						RedirectURI:   oidcCallbackPath,
-						PostLogoutURI: &postLogoutPath,
+						PostLogoutURI: &logoutPath,
 					},
 				}
 				locs, _, _ := createLocations(
@@ -6408,76 +6307,13 @@ func TestOIDCPostLogoutLocation(t *testing.T) {
 					&policiesfakes.FakeGenerator{},
 					alwaysFalseKeepAliveChecker,
 				)
-				// The exact app route occupies "= /logged_out" so no post-logout location (which has Return set)
+				// The exact app route occupies "= /logged_out" so no logout location
 				// should be generated for that path.
 				for _, loc := range locs {
-					if loc.Path == "= "+postLogoutPath {
+					if loc.Path == "= "+logoutPath {
 						g.Expect(loc.Return).To(BeNil())
 					}
 				}
-			},
-		},
-		{
-			name: "two OIDC providers with the same path-only PostLogoutURI generate only one post-logout location",
-			run: func(t *testing.T) {
-				t.Helper()
-				g := NewWithT(t)
-				postLogoutPath := "/logged_out"
-				provider2Name := "oidc_test_other-filter"
-				provider2CallbackPath := "/oidc_callback_test_other-filter"
-				filter2 := &dataplane.AuthenticationFilter{
-					OIDC: &dataplane.OIDCProvider{
-						Name:          provider2Name,
-						RedirectURI:   provider2CallbackPath,
-						PostLogoutURI: &postLogoutPath,
-					},
-				}
-				filter1WithPostLogout := &dataplane.AuthenticationFilter{
-					OIDC: &dataplane.OIDCProvider{
-						Name:          providerName,
-						RedirectURI:   oidcCallbackPath,
-						PostLogoutURI: &postLogoutPath,
-					},
-				}
-				locs, _, _ := createLocations(
-					&dataplane.VirtualServer{
-						Port: 80,
-						PathRules: []dataplane.PathRule{
-							{
-								Path:     "/tea",
-								PathType: dataplane.PathTypePrefix,
-								MatchRules: []dataplane.MatchRule{
-									{
-										Match:        dataplane.Match{},
-										BackendGroup: singleBackend,
-										Filters:      dataplane.HTTPFilters{AuthenticationFilter: filter1WithPostLogout},
-									},
-								},
-							},
-							{
-								Path:     "/coffee",
-								PathType: dataplane.PathTypePrefix,
-								MatchRules: []dataplane.MatchRule{
-									{
-										Match:        dataplane.Match{},
-										BackendGroup: singleBackend,
-										Filters:      dataplane.HTTPFilters{AuthenticationFilter: filter2},
-									},
-								},
-							},
-						},
-					},
-					"1",
-					&policiesfakes.FakeGenerator{},
-					alwaysFalseKeepAliveChecker,
-				)
-				var postLogoutLocs []http.Location
-				for _, loc := range locs {
-					if loc.Path == "= "+postLogoutPath {
-						postLogoutLocs = append(postLogoutLocs, loc)
-					}
-				}
-				g.Expect(postLogoutLocs).To(HaveLen(1))
 			},
 		},
 	}

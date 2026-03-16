@@ -9,3 +9,12 @@ spec:
     port: 80
     protocol: HTTP
     hostname: "*.example.com"
+  - name: https
+    port: 443
+    protocol: HTTPS
+    hostname: cafe.example.com
+    tls:
+      mode: Terminate
+      certificateRefs:
+      - kind: Secret
+        name: cafe-tls-secret

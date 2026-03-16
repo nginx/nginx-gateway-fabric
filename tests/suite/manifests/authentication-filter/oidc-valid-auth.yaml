@@ -1,0 +1,85 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: keycloak-coffee-client-secret
+type: Opaque
+data:
+  client-secret: b2lkYy1jb2ZmZWUtY2xpZW50LXNlY3JldA==
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: keycloak-tea-client-secret
+type: Opaque
+data:
+  client-secret: b2lkYy10ZWEtY2xpZW50LXNlY3JldA==
+---
+apiVersion: gateway.nginx.org/v1alpha1
+kind: AuthenticationFilter
+metadata:
+  name: oidc-auth-coffee
+spec:
+  type: OIDC
+  oidc:
+    issuer: https://keycloak.authentication-filter.svc.cluster.local:8443/realms/nginx-gateway
+    clientID: nginx-gateway-coffee
+    clientSecretRef:
+      name: keycloak-coffee-client-secret
+    caCertificateRefs:
+      - name: keycloak-ca-secret
+    logout:
+      uri: /logout
+---
+apiVersion: gateway.nginx.org/v1alpha1
+kind: AuthenticationFilter
+metadata:
+  name: oidc-auth-tea
+spec:
+  type: OIDC
+  oidc:
+    issuer: https://keycloak.authentication-filter.svc.cluster.local:8443/realms/nginx-gateway
+    clientID: nginx-gateway-tea
+    clientSecretRef:
+      name: keycloak-tea-client-secret
+    caCertificateRefs:
+      - name: keycloak-ca-secret
+    logout:
+      uri: /logout
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: oidc-cafe-route
+spec:
+  parentRefs:
+    - name: auth-gateway
+      sectionName: https
+  hostnames:
+    - cafe.example.com
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /coffee
+      backendRefs:
+        - name: coffee
+          port: 80
+      filters:
+        - type: ExtensionRef
+          extensionRef:
+            group: gateway.nginx.org
+            kind: AuthenticationFilter
+            name: oidc-auth-coffee
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /tea
+      backendRefs:
+        - name: tea
+          port: 80
+      filters:
+        - type: ExtensionRef
+          extensionRef:
+            group: gateway.nginx.org
+            kind: AuthenticationFilter
+            name: oidc-auth-tea

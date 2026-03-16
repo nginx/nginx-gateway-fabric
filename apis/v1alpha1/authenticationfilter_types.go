@@ -193,7 +193,9 @@ type OIDCSessionConfig struct {
 //
 //nolint:lll
 type OIDCLogoutConfig struct {
-	// URI defines the URI for initiating session logout. Accepts path-only URI.
+	// URI defines the URI for initiating session logout. Accepts path-only URI. This path
+	// should not conflict with the logout path of other AuthenticationFilters used within
+	// the same hostname.
 	// Directive: https://nginx.org/en/docs/http/ngx_http_oidc_module.html#logout_uri
 	// Example: /logout
 	//
@@ -202,9 +204,7 @@ type OIDCLogoutConfig struct {
 	URI *string `json:"uri,omitempty"`
 
 	// PostLogoutURI defines the URI to redirect to after logout.
-	// Must match the configuration on the provider's side.
-	// If a full URI is specified, the user is redirected to that address after logout with no additional handling.
-	// If a path-only URI is specified, NGINX handles the request and returns a 200 response with "You have been logged out".
+	// Must match the configuration on the provider's side..
 	// Directive: https://nginx.org/en/docs/http/ngx_http_oidc_module.html#post_logout_uri
 	// Example: /after_logout, https://example.com/after_logout
 	//
