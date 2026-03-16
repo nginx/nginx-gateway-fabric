@@ -179,7 +179,7 @@ jobs:
       contents: write # needed for opening PR with the results files
       pull-requests: write # needed for opening PR with the results files
     needs: [vars, setup-and-run-tests]
-    if: ${{ github.event.inputs.open_pull_request == true }}
+    if: ${{ github.event.inputs.open_pull_request == true || github.event_name == 'schedule' }}
     steps:
       - name: Checkout Repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
