@@ -137,6 +137,8 @@ oidc_provider {{ .Name }} {
     {{- if .TokenHint }}
     logout_token_hint {{ .TokenHint }};
     {{- end }}
+
+    scope openid profile email;
 }
 {{- end }}
 `
