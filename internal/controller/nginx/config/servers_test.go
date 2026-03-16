@@ -4304,10 +4304,10 @@ func TestCreateProxyPass(t *testing.T) {
 	tests := []struct {
 		rewrite          *dataplane.HTTPURLRewriteFilter
 		expected         string
+		locationType     http.LocationType
 		grp              dataplane.BackendGroup
 		GRPC             bool
 		inferenceBackend bool
-		locationType     http.LocationType
 	}{
 		{
 			expected: "http://10.0.0.1:80",
