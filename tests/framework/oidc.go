@@ -21,7 +21,11 @@ var hiddenInputRegex = regexp.MustCompile(
 	`<input\s+type="hidden"\s+name="([^"]*)"\s+value="([^"]*)"`,
 )
 
-// parseFormAction extracts the action URL from the first HTML form in the body.
+// parseFormAction extracts the action URL from the first HTML <form> element in the body.
+// During the OIDC Authorization Code flow, Keycloak returns HTML pages that contain forms
+// (e.g., the login form, the logout confirmation form). The form's action attribute contains
+// the URL where credentials or confirmation data should be POSTed. Keycloak HTML-encodes
+// ampersands in the URL as "&amp;", so this function also unescapes them.
 func parseFormAction(body string) (string, error) {
 	matches := formActionRegex.FindStringSubmatch(body)
 	if len(matches) < 2 {
@@ -32,7 +36,11 @@ func parseFormAction(body string) (string, error) {
 	return action, nil
 }
 
-// parseHiddenInputs extracts all hidden input name=value pairs from the HTML body.
+// parseHiddenInputs extracts all <input type="hidden"> name/value pairs from the HTML body.
+// Keycloak embeds hidden fields in its forms to carry state through the flow. For example,
+// the logout confirmation page includes a hidden "session_code" field that must be POSTed
+// back to Keycloak to complete the logout. This function collects all such fields so they
+// can be included in the subsequent POST request.
 func parseHiddenInputs(body string) map[string]string {
 	inputs := make(map[string]string)
 	for _, match := range hiddenInputRegex.FindAllStringSubmatch(body, -1) {
