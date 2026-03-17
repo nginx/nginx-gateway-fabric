@@ -17,6 +17,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/resolver"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/validation"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/validation/validationfakes"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
 
@@ -54,23 +55,32 @@ func TestProcessAuthenticationFilters(t *testing.T) {
 	invalidFilter := createAuthenticationFilterWithBasicAuth(invalidFilterNsName, "unresolved", false)
 	oidcFilter := createAuthenticationFilterWithOIDC(
 		oidcFilterNsName,
-		"oidc-client-secret",
-		[]string{"oidc-ca-cert"},
-		"",
-
+		&ngfAPI.OIDCAuth{
+			Issuer:            "https://accounts.example.com",
+			ClientID:          "client-id",
+			ClientSecretRef:   ngfAPI.LocalObjectReference{Name: "oidc-client-secret"},
+			CACertificateRefs: []ngfAPI.LocalObjectReference{{Name: "oidc-ca-cert"}},
+		},
 		true,
 	)
 	oidcSystemCAFilterNsName := types.NamespacedName{Namespace: "test", Name: "oidc-system-ca"}
 	oidcSystemCAFilter := createAuthenticationFilterWithOIDC(
 		oidcSystemCAFilterNsName,
-		"oidc-client-secret",
-		nil,
-		"",
-
+		&ngfAPI.OIDCAuth{
+			Issuer:          "https://accounts.example.com",
+			ClientID:        "client-id",
+			ClientSecretRef: ngfAPI.LocalObjectReference{Name: "oidc-client-secret"},
+		},
 		true,
 	)
 	invalidOIDCFilter := createAuthenticationFilterWithOIDC(
-		invalidOIDCFilterNsName, "unresolved-client-secret", []string{"oidc-ca-cert"}, "",
+		invalidOIDCFilterNsName,
+		&ngfAPI.OIDCAuth{
+			Issuer:            "https://accounts.example.com",
+			ClientID:          "client-id",
+			ClientSecretRef:   ngfAPI.LocalObjectReference{Name: "unresolved-client-secret"},
+			CACertificateRefs: []ngfAPI.LocalObjectReference{{Name: "oidc-ca-cert"}},
+		},
 		false,
 	)
 
@@ -179,7 +189,11 @@ func TestProcessAuthenticationFilters(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 			processed := processAuthenticationFilters(
-				tt.authenticationFiltersInput, resourceResolver, &validationfakes.FakeAuthFieldsValidator{}, tt.plus,
+				tt.authenticationFiltersInput,
+				resourceResolver,
+				&validationfakes.FakeAuthFieldsValidator{},
+				&validationfakes.FakeGenericValidator{},
+				tt.plus,
 			)
 			g.Expect(processed).To(BeEquivalentTo(tt.expProcessed))
 		})
@@ -190,11 +204,12 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 	t.Parallel()
 
 	type args struct {
-		validator validation.AuthFieldsValidator
-		filter    *ngfAPI.AuthenticationFilter
-		resources map[resolver.ResourceKey]client.Object
-		secNsName types.NamespacedName
-		plus      bool
+		authValidator    validation.AuthFieldsValidator
+		genericValidator validation.GenericValidator
+		filter           *ngfAPI.AuthenticationFilter
+		resources        map[resolver.ResourceKey]client.Object
+		secNsName        types.NamespacedName
+		plus             bool
 	}
 
 	tests := []struct {
@@ -282,10 +297,11 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 				plus:      true,
 				filter: createAuthenticationFilterWithOIDC(
 					types.NamespacedName{Namespace: "test", Name: "oidc"},
-					"client-secret",
-					[]string{"ca1"},
-					"",
-
+					&ngfAPI.OIDCAuth{
+						ClientID:          "client-id",
+						ClientSecretRef:   ngfAPI.LocalObjectReference{Name: "client-secret"},
+						CACertificateRefs: []ngfAPI.LocalObjectReference{{Name: "ca1"}},
+					},
 					true,
 				).Source,
 				resources: map[resolver.ResourceKey]client.Object{
@@ -308,10 +324,11 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 				plus:      false,
 				filter: createAuthenticationFilterWithOIDC(
 					types.NamespacedName{Namespace: "test", Name: "oidc"},
-					"client-secret",
-					[]string{"ca1"},
-					"",
-
+					&ngfAPI.OIDCAuth{
+						ClientID:          "client-id",
+						ClientSecretRef:   ngfAPI.LocalObjectReference{Name: "client-secret"},
+						CACertificateRefs: []ngfAPI.LocalObjectReference{{Name: "ca1"}},
+					},
 					false,
 				).Source,
 				resources: map[resolver.ResourceKey]client.Object{},
@@ -327,10 +344,10 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 				plus:      true,
 				filter: createAuthenticationFilterWithOIDC(
 					types.NamespacedName{Namespace: "test", Name: "oidc"},
-					"not-found",
-					nil,
-					"",
-
+					&ngfAPI.OIDCAuth{
+						ClientID:        "client-id",
+						ClientSecretRef: ngfAPI.LocalObjectReference{Name: "not-found"},
+					},
 					false,
 				).Source,
 				resources: map[resolver.ResourceKey]client.Object{},
@@ -346,10 +363,10 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 				plus:      true,
 				filter: createAuthenticationFilterWithOIDC(
 					types.NamespacedName{Namespace: "test", Name: "oidc"},
-					"client-secret-missing",
-					nil,
-					"",
-
+					&ngfAPI.OIDCAuth{
+						ClientID:        "client-id",
+						ClientSecretRef: ngfAPI.LocalObjectReference{Name: "client-secret-missing"},
+					},
 					false,
 				).Source,
 				resources: map[resolver.ResourceKey]client.Object{
@@ -370,10 +387,11 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 				plus:      true,
 				filter: createAuthenticationFilterWithOIDC(
 					types.NamespacedName{Namespace: "test", Name: "oidc"},
-					"client-secret",
-					[]string{"ca-not-found"},
-					"",
-
+					&ngfAPI.OIDCAuth{
+						ClientID:          "client-id",
+						ClientSecretRef:   ngfAPI.LocalObjectReference{Name: "client-secret"},
+						CACertificateRefs: []ngfAPI.LocalObjectReference{{Name: "ca-not-found"}},
+					},
 					false,
 				).Source,
 				resources: map[resolver.ResourceKey]client.Object{
@@ -394,10 +412,11 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 				plus:      true,
 				filter: createAuthenticationFilterWithOIDC(
 					types.NamespacedName{Namespace: "test", Name: "oidc"},
-					"client-secret",
-					[]string{"ca-missing"},
-					"",
-
+					&ngfAPI.OIDCAuth{
+						ClientID:          "client-id",
+						ClientSecretRef:   ngfAPI.LocalObjectReference{Name: "client-secret"},
+						CACertificateRefs: []ngfAPI.LocalObjectReference{{Name: "ca-missing"}},
+					},
 					false,
 				).Source,
 				resources: map[resolver.ResourceKey]client.Object{
@@ -422,10 +441,10 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 				plus:      true,
 				filter: createAuthenticationFilterWithOIDC(
 					types.NamespacedName{Namespace: "test", Name: "oidc"},
-					"client-secret",
-					nil,
-					"",
-
+					&ngfAPI.OIDCAuth{
+						ClientID:        "client-id",
+						ClientSecretRef: ngfAPI.LocalObjectReference{Name: "client-secret"},
+					},
 					true,
 				).Source,
 				resources: map[resolver.ResourceKey]client.Object{
@@ -442,16 +461,45 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 			args: args{
 				secNsName: types.NamespacedName{Namespace: "test", Name: "oidc"},
 				plus:      true,
-				validator: &validationfakes.FakeAuthFieldsValidator{
+				authValidator: &validationfakes.FakeAuthFieldsValidator{
 					ValidateOIDCIssuerStub: func(string) error {
 						return errors.New("must be a valid HTTPS URL")
 					},
 				},
 				filter: createAuthenticationFilterWithOIDC(
 					types.NamespacedName{Namespace: "test", Name: "oidc"},
-					"client-secret",
-					nil,
-					"",
+					&ngfAPI.OIDCAuth{
+						ClientID:        "client-id",
+						ClientSecretRef: ngfAPI.LocalObjectReference{Name: "client-secret"},
+					},
+					false,
+				).Source,
+				resources: map[resolver.ResourceKey]client.Object{
+					{
+						ResourceType:   resolver.ResourceTypeSecret,
+						NamespacedName: types.NamespacedName{Namespace: "test", Name: "client-secret"},
+					}: createOpaqueClientSecret("client-secret", true),
+				},
+			},
+			expCond: conditions.NewAuthenticationFilterInvalid("must be a valid HTTPS URL"),
+		},
+		{
+			name: "invalid: OIDC configURL fails regex validation",
+			args: args{
+				secNsName: types.NamespacedName{Namespace: "test", Name: "oidc"},
+				plus:      true,
+				authValidator: &validationfakes.FakeAuthFieldsValidator{
+					ValidateOIDCConfigURLStub: func(string) error {
+						return errors.New("must be a valid HTTPS URL")
+					},
+				},
+				filter: createAuthenticationFilterWithOIDC(
+					types.NamespacedName{Namespace: "test", Name: "oidc"},
+					&ngfAPI.OIDCAuth{
+						ClientID:        "client-id",
+						ClientSecretRef: ngfAPI.LocalObjectReference{Name: "client-secret"},
+						ConfigURL:       helpers.GetPointer("http://not-https.example.com/config"),
+					},
 					false,
 				).Source,
 				resources: map[resolver.ResourceKey]client.Object{
@@ -468,16 +516,18 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 			args: args{
 				secNsName: types.NamespacedName{Namespace: "test", Name: "oidc"},
 				plus:      true,
-				validator: &validationfakes.FakeAuthFieldsValidator{
+				authValidator: &validationfakes.FakeAuthFieldsValidator{
 					ValidateOIDCRedirectURIStub: func(string) error {
 						return errors.New("must be an absolute path starting with '/'")
 					},
 				},
 				filter: createAuthenticationFilterWithOIDC(
 					types.NamespacedName{Namespace: "test", Name: "oidc"},
-					"client-secret",
-					nil,
-					"bad-redirect",
+					&ngfAPI.OIDCAuth{
+						ClientID:        "client-id",
+						ClientSecretRef: ngfAPI.LocalObjectReference{Name: "client-secret"},
+						RedirectURI:     helpers.GetPointer("bad-redirect"),
+					},
 					false,
 				).Source,
 				resources: map[resolver.ResourceKey]client.Object{
@@ -496,10 +546,14 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 				plus:      true,
 				filter: createAuthenticationFilterWithOIDC(
 					types.NamespacedName{Namespace: "test", Name: "oidc"},
-					"client-secret",
-					[]string{"ca1", "ca2"},
-					"",
-
+					&ngfAPI.OIDCAuth{
+						ClientID:        "client-id",
+						ClientSecretRef: ngfAPI.LocalObjectReference{Name: "client-secret"},
+						CACertificateRefs: []ngfAPI.LocalObjectReference{
+							{Name: "ca1"},
+							{Name: "ca2"},
+						},
+					},
 					false,
 				).Source,
 				resources: map[resolver.ResourceKey]client.Object{
@@ -513,6 +567,262 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 				"at most one CA certificate reference is supported for OIDC authentication filters",
 			),
 		},
+		{
+			name: "invalid: OIDC logout URI fails validation",
+			args: args{
+				secNsName: types.NamespacedName{Namespace: "test", Name: "oidc"},
+				plus:      true,
+				authValidator: &validationfakes.FakeAuthFieldsValidator{
+					ValidateOIDCLogoutURIStub: func(string) error {
+						return errors.New("must be a valid full URI or path-only URI")
+					},
+				},
+				filter: createAuthenticationFilterWithOIDC(
+					types.NamespacedName{Namespace: "test", Name: "oidc"},
+					&ngfAPI.OIDCAuth{
+						ClientID:        "client-id",
+						ClientSecretRef: ngfAPI.LocalObjectReference{Name: "client-secret"},
+						Logout:          &ngfAPI.OIDCLogoutConfig{URI: helpers.GetPointer("bad://uri")},
+					},
+					false,
+				).Source,
+				resources: map[resolver.ResourceKey]client.Object{
+					{
+						ResourceType:   resolver.ResourceTypeSecret,
+						NamespacedName: types.NamespacedName{Namespace: "test", Name: "client-secret"},
+					}: createOpaqueClientSecret("client-secret", true),
+				},
+			},
+			expCond: conditions.NewAuthenticationFilterInvalid("must be a valid full URI or path-only URI"),
+		},
+		{
+			name: "invalid: OIDC postLogoutURI fails validation",
+			args: args{
+				secNsName: types.NamespacedName{Namespace: "test", Name: "oidc"},
+				plus:      true,
+				authValidator: &validationfakes.FakeAuthFieldsValidator{
+					ValidateOIDCPostLogoutURIStub: func(string) error {
+						return errors.New("must be a valid HTTP or HTTPS URL or a path starting with /")
+					},
+				},
+				filter: createAuthenticationFilterWithOIDC(
+					types.NamespacedName{Namespace: "test", Name: "oidc"},
+					&ngfAPI.OIDCAuth{
+						ClientID:        "client-id",
+						ClientSecretRef: ngfAPI.LocalObjectReference{Name: "client-secret"},
+						Logout:          &ngfAPI.OIDCLogoutConfig{PostLogoutURI: helpers.GetPointer("bad-uri")},
+					},
+					false,
+				).Source,
+				resources: map[resolver.ResourceKey]client.Object{
+					{
+						ResourceType:   resolver.ResourceTypeSecret,
+						NamespacedName: types.NamespacedName{Namespace: "test", Name: "client-secret"},
+					}: createOpaqueClientSecret("client-secret", true),
+				},
+			},
+			expCond: conditions.NewAuthenticationFilterInvalid("must be a valid HTTP or HTTPS URL or a path starting with /"),
+		},
+		{
+			name: "invalid: OIDC redirect URI is a path-only URI containing query parameters",
+			args: args{
+				secNsName: types.NamespacedName{Namespace: "test", Name: "oidc"},
+				plus:      true,
+				authValidator: &validationfakes.FakeAuthFieldsValidator{
+					ValidateOIDCRedirectURIStub: func(string) error {
+						return errors.New("query parameters are not allowed in path-only URIs")
+					},
+				},
+				filter: createAuthenticationFilterWithOIDC(
+					types.NamespacedName{Namespace: "test", Name: "oidc"},
+					&ngfAPI.OIDCAuth{
+						ClientID:        "client-id",
+						ClientSecretRef: ngfAPI.LocalObjectReference{Name: "client-secret"},
+						RedirectURI:     helpers.GetPointer("/callback?state=abc"),
+					},
+					false,
+				).Source,
+				resources: map[resolver.ResourceKey]client.Object{
+					{
+						ResourceType:   resolver.ResourceTypeSecret,
+						NamespacedName: types.NamespacedName{Namespace: "test", Name: "client-secret"},
+					}: createOpaqueClientSecret("client-secret", true),
+				},
+			},
+			expCond: conditions.NewAuthenticationFilterInvalid(
+				"query parameters are not allowed in path-only URIs",
+			),
+		},
+		{
+			name: "invalid: OIDC postLogoutURI is a path-only URI containing query parameters",
+			args: args{
+				secNsName: types.NamespacedName{Namespace: "test", Name: "oidc"},
+				plus:      true,
+				authValidator: &validationfakes.FakeAuthFieldsValidator{
+					ValidateOIDCPostLogoutURIStub: func(string) error {
+						return errors.New("query parameters are not allowed in path-only URIs")
+					},
+				},
+				filter: createAuthenticationFilterWithOIDC(
+					types.NamespacedName{Namespace: "test", Name: "oidc"},
+					&ngfAPI.OIDCAuth{
+						ClientID:        "client-id",
+						ClientSecretRef: ngfAPI.LocalObjectReference{Name: "client-secret"},
+						Logout:          &ngfAPI.OIDCLogoutConfig{PostLogoutURI: helpers.GetPointer("/logged_out?hint=token")},
+					},
+					false,
+				).Source,
+				resources: map[resolver.ResourceKey]client.Object{
+					{
+						ResourceType:   resolver.ResourceTypeSecret,
+						NamespacedName: types.NamespacedName{Namespace: "test", Name: "client-secret"},
+					}: createOpaqueClientSecret("client-secret", true),
+				},
+			},
+			expCond: conditions.NewAuthenticationFilterInvalid(
+				"query parameters are not allowed in path-only URIs",
+			),
+		},
+		{
+			name: "invalid: OIDC frontChannelLogoutURI fails validation",
+			args: args{
+				secNsName: types.NamespacedName{Namespace: "test", Name: "oidc"},
+				plus:      true,
+				authValidator: &validationfakes.FakeAuthFieldsValidator{
+					ValidateOIDCFrontChannelLogoutURIStub: func(string) error {
+						return errors.New("must be a path-only URI starting with /")
+					},
+				},
+				filter: createAuthenticationFilterWithOIDC(
+					types.NamespacedName{Namespace: "test", Name: "oidc"},
+					&ngfAPI.OIDCAuth{
+						ClientID:        "client-id",
+						ClientSecretRef: ngfAPI.LocalObjectReference{Name: "client-secret"},
+						Logout:          &ngfAPI.OIDCLogoutConfig{FrontChannelLogoutURI: helpers.GetPointer("http://example.com/fcl")},
+					},
+					false,
+				).Source,
+				resources: map[resolver.ResourceKey]client.Object{
+					{
+						ResourceType:   resolver.ResourceTypeSecret,
+						NamespacedName: types.NamespacedName{Namespace: "test", Name: "client-secret"},
+					}: createOpaqueClientSecret("client-secret", true),
+				},
+			},
+			expCond: conditions.NewAuthenticationFilterInvalid("must be a path-only URI starting with /"),
+		},
+		{
+			name: "valid OIDC filter with CRL secret",
+			args: args{
+				secNsName: types.NamespacedName{Namespace: "test", Name: "oidc"},
+				plus:      true,
+				filter: createAuthenticationFilterWithOIDC(types.NamespacedName{Namespace: "test", Name: "oidc"}, &ngfAPI.OIDCAuth{
+					ClientID:        "client-id",
+					ClientSecretRef: ngfAPI.LocalObjectReference{Name: "client-secret"},
+					CRLSecretRef:    &ngfAPI.LocalObjectReference{Name: "my-crl"},
+				}, true).Source,
+				resources: map[resolver.ResourceKey]client.Object{
+					{
+						ResourceType:   resolver.ResourceTypeSecret,
+						NamespacedName: types.NamespacedName{Namespace: "test", Name: "client-secret"},
+					}: createOpaqueClientSecret("client-secret", true),
+					{
+						ResourceType:   resolver.ResourceTypeSecret,
+						NamespacedName: types.NamespacedName{Namespace: "test", Name: "my-crl"},
+					}: createOpaqueCRLSecret("my-crl", true),
+				},
+			},
+			expCond: conditions.Condition{},
+		},
+		{
+			name: "invalid: OIDC CRL secret does not exist",
+			args: args{
+				secNsName: types.NamespacedName{Namespace: "test", Name: "oidc"},
+				plus:      true,
+				filter: createAuthenticationFilterWithOIDC(types.NamespacedName{Namespace: "test", Name: "oidc"}, &ngfAPI.OIDCAuth{
+					ClientID:        "client-id",
+					ClientSecretRef: ngfAPI.LocalObjectReference{Name: "client-secret"},
+					CRLSecretRef:    &ngfAPI.LocalObjectReference{Name: "crl-not-found"},
+				}, false).Source,
+				resources: map[resolver.ResourceKey]client.Object{
+					{
+						ResourceType:   resolver.ResourceTypeSecret,
+						NamespacedName: types.NamespacedName{Namespace: "test", Name: "client-secret"},
+					}: createOpaqueClientSecret("client-secret", true),
+				},
+			},
+			expCond: conditions.NewAuthenticationFilterInvalid(
+				"Secret test/crl-not-found does not exist",
+			),
+		},
+		{
+			name: "invalid: OIDC CRL secret missing required key",
+			args: args{
+				secNsName: types.NamespacedName{Namespace: "test", Name: "oidc"},
+				plus:      true,
+				filter: createAuthenticationFilterWithOIDC(types.NamespacedName{Namespace: "test", Name: "oidc"}, &ngfAPI.OIDCAuth{
+					ClientID:        "client-id",
+					ClientSecretRef: ngfAPI.LocalObjectReference{Name: "client-secret"},
+					CRLSecretRef:    &ngfAPI.LocalObjectReference{Name: "crl-missing"},
+				}, false).Source,
+				resources: map[resolver.ResourceKey]client.Object{
+					{
+						ResourceType:   resolver.ResourceTypeSecret,
+						NamespacedName: types.NamespacedName{Namespace: "test", Name: "client-secret"},
+					}: createOpaqueClientSecret("client-secret", true),
+					{
+						ResourceType:   resolver.ResourceTypeSecret,
+						NamespacedName: types.NamespacedName{Namespace: "test", Name: "crl-missing"},
+					}: createOpaqueCRLSecret("crl-missing", false),
+				},
+			},
+			expCond: conditions.NewAuthenticationFilterInvalid(
+				`opaque secret test/crl-missing does not contain the expected key "ca.crl"`,
+			),
+		},
+		{
+			name: "valid OIDC filter with valid session timeout",
+			args: args{
+				secNsName: types.NamespacedName{Namespace: "test", Name: "oidc"},
+				plus:      true,
+				filter: createAuthenticationFilterWithOIDC(types.NamespacedName{Namespace: "test", Name: "oidc"}, &ngfAPI.OIDCAuth{
+					ClientID:        "client-id",
+					ClientSecretRef: ngfAPI.LocalObjectReference{Name: "client-secret"},
+					Session:         &ngfAPI.OIDCSessionConfig{Timeout: (*ngfAPI.Duration)(helpers.GetPointer("8h"))},
+				}, true).Source,
+				resources: map[resolver.ResourceKey]client.Object{
+					{
+						ResourceType:   resolver.ResourceTypeSecret,
+						NamespacedName: types.NamespacedName{Namespace: "test", Name: "client-secret"},
+					}: createOpaqueClientSecret("client-secret", true),
+				},
+			},
+			expCond: conditions.Condition{},
+		},
+		{
+			name: "invalid: OIDC filter with invalid session timeout fails nginx duration validation",
+			args: args{
+				secNsName: types.NamespacedName{Namespace: "test", Name: "oidc"},
+				plus:      true,
+				filter: createAuthenticationFilterWithOIDC(types.NamespacedName{Namespace: "test", Name: "oidc"}, &ngfAPI.OIDCAuth{
+					ClientID:        "client-id",
+					ClientSecretRef: ngfAPI.LocalObjectReference{Name: "client-secret"},
+					Session:         &ngfAPI.OIDCSessionConfig{Timeout: (*ngfAPI.Duration)(helpers.GetPointer("bad-value"))},
+				}, true).Source,
+				genericValidator: func() *validationfakes.FakeGenericValidator {
+					v := &validationfakes.FakeGenericValidator{}
+					v.ValidateNginxDurationReturns(errors.New("invalid duration"))
+					return v
+				}(),
+				resources: map[resolver.ResourceKey]client.Object{
+					{
+						ResourceType:   resolver.ResourceTypeSecret,
+						NamespacedName: types.NamespacedName{Namespace: "test", Name: "client-secret"},
+					}: createOpaqueClientSecret("client-secret", true),
+				},
+			},
+			expCond: conditions.NewAuthenticationFilterInvalid("invalid duration"),
+		},
 	}
 
 	for _, tt := range tests {
@@ -520,12 +830,23 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			resourceResolver := resolver.NewResourceResolver(tt.args.resources)
-			v := tt.args.validator
-			if v == nil {
-				v = &validationfakes.FakeAuthFieldsValidator{}
+			authV := tt.args.authValidator
+			if authV == nil {
+				authV = &validationfakes.FakeAuthFieldsValidator{}
 			}
-			cond := validateAuthenticationFilter(tt.args.filter, tt.args.secNsName, resourceResolver, v, tt.args.plus)
+			genericV := tt.args.genericValidator
+			if genericV == nil {
+				genericV = &validationfakes.FakeGenericValidator{}
+			}
+			resourceResolver := resolver.NewResourceResolver(tt.args.resources)
+			cond := validateAuthenticationFilter(
+				tt.args.filter,
+				tt.args.secNsName,
+				resourceResolver,
+				authV,
+				genericV,
+				tt.args.plus,
+			)
 
 			if tt.expCond != (conditions.Condition{}) {
 				g.Expect(cond).ToNot(BeNil())
@@ -555,26 +876,29 @@ func TestGetAuthenticationFilterResolverForNamespace(t *testing.T) {
 			fooAf2InvalidNsName: createAuthenticationFilterWithBasicAuth(fooAf2InvalidNsName, "hp", false),
 			defaultAuthFilterOIDCNsName: createAuthenticationFilterWithOIDC(
 				defaultAuthFilterOIDCNsName,
-				"client-secret",
-				[]string{"ca1"},
-				"",
-
+				&ngfAPI.OIDCAuth{
+					ClientID:          "client-id",
+					ClientSecretRef:   ngfAPI.LocalObjectReference{Name: "client-secret"},
+					CACertificateRefs: []ngfAPI.LocalObjectReference{{Name: "ca1"}},
+				},
 				true,
 			),
 			fooAuthFilterOIDCNsName: createAuthenticationFilterWithOIDC(
 				fooAuthFilterOIDCNsName,
-				"client-secret",
-				[]string{"ca1"},
-				"",
-
+				&ngfAPI.OIDCAuth{
+					ClientID:          "client-id",
+					ClientSecretRef:   ngfAPI.LocalObjectReference{Name: "client-secret"},
+					CACertificateRefs: []ngfAPI.LocalObjectReference{{Name: "ca1"}},
+				},
 				true,
 			),
 			invalidAuthFilterOIDCNsName: createAuthenticationFilterWithOIDC(
 				invalidAuthFilterOIDCNsName,
-				"client-secret",
-				[]string{"ca1"},
-				"",
-
+				&ngfAPI.OIDCAuth{
+					ClientID:          "client-id",
+					ClientSecretRef:   ngfAPI.LocalObjectReference{Name: "client-secret"},
+					CACertificateRefs: []ngfAPI.LocalObjectReference{{Name: "ca1"}},
+				},
 				false,
 			),
 		}
@@ -737,22 +1061,9 @@ func createAuthenticationFilterWithBasicAuth(
 
 func createAuthenticationFilterWithOIDC(
 	nsname types.NamespacedName,
-	clientSecretName string,
-	caSecretRefs []string,
-	redirectURI string,
+	oidc *ngfAPI.OIDCAuth,
 	valid bool,
 ) *AuthenticationFilter {
-	oidc := &ngfAPI.OIDCAuth{
-		Issuer:          "https://accounts.example.com",
-		ClientID:        "client-id",
-		ClientSecretRef: ngfAPI.LocalObjectReference{Name: clientSecretName},
-	}
-	for _, name := range caSecretRefs {
-		oidc.CACertificateRefs = append(oidc.CACertificateRefs, ngfAPI.LocalObjectReference{Name: name})
-	}
-	if redirectURI != "" {
-		oidc.RedirectURI = &redirectURI
-	}
 	return &AuthenticationFilter{
 		Source: &ngfAPI.AuthenticationFilter{
 			ObjectMeta: metav1.ObjectMeta{Namespace: nsname.Namespace, Name: nsname.Name},
@@ -785,6 +1096,18 @@ func createOpaqueCACertSecret(name string, withCAKey bool) *corev1.Secret {
 	}
 	if withCAKey {
 		sec.Data[secrets.CAKey] = []byte("ca-cert-value")
+	}
+	return sec
+}
+
+func createOpaqueCRLSecret(name string, withCRLKey bool) *corev1.Secret {
+	sec := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: name},
+		Type:       corev1.SecretTypeOpaque,
+		Data:       map[string][]byte{},
+	}
+	if withCRLKey {
+		sec.Data[secrets.CRLKey] = []byte("crl-value")
 	}
 	return sec
 }

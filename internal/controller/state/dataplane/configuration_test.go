@@ -5321,16 +5321,18 @@ func TestBuildOIDCProviderFromAuthenticationFilters(t *testing.T) {
 		}
 	}
 
-	makeOIDCFilterWithCA := func(ns, name string) *graph.AuthenticationFilter {
+	makeOIDCFilterWithCAAndCRL := func(ns, name string) *graph.AuthenticationFilter {
 		af := makeOIDCFilter(ns, name, true, true)
 		af.Source.Spec.OIDC.CACertificateRefs = []ngfAPIv1alpha1.LocalObjectReference{
 			{Name: "oidc-ca-cert"},
 		}
+		af.Source.Spec.OIDC.CRLSecretRef = &ngfAPIv1alpha1.LocalObjectReference{Name: "oidc-crl-secret"}
 		return af
 	}
 
 	clientSecretNsName := types.NamespacedName{Namespace: "test", Name: "oidc-client-secret"}
 	caSecretNsName := types.NamespacedName{Namespace: "test", Name: "oidc-ca-cert"}
+	crlSecretNsName := types.NamespacedName{Namespace: "test", Name: "oidc-crl-secret"}
 
 	validClientSecret := &secrets.Secret{
 		Source: &apiv1.Secret{
@@ -5342,6 +5344,12 @@ func TestBuildOIDCProviderFromAuthenticationFilters(t *testing.T) {
 		Source: &apiv1.Secret{
 			ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "oidc-ca-cert"},
 			Data:       map[string][]byte{secrets.CAKey: []byte("ca-cert-data")},
+		},
+	}
+	validCRLSecret := &secrets.Secret{
+		Source: &apiv1.Secret{
+			ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "oidc-crl-secret"},
+			Data:       map[string][]byte{secrets.CRLKey: []byte("crl-pem-data")},
 		},
 	}
 
@@ -5425,13 +5433,14 @@ func TestBuildOIDCProviderFromAuthenticationFilters(t *testing.T) {
 			},
 		},
 		{
-			name: "valid OIDC filter with CA cert",
+			name: "valid OIDC filter with CA cert and CRL secret populates both bundle IDs and certBundles map",
 			authFilters: map[types.NamespacedName]*graph.AuthenticationFilter{
-				{Namespace: "test", Name: "oidc-filter"}: makeOIDCFilterWithCA("test", "oidc-filter"),
+				{Namespace: "test", Name: "oidc-filter"}: makeOIDCFilterWithCAAndCRL("test", "oidc-filter"),
 			},
 			referencedSecrets: map[types.NamespacedName]*secrets.Secret{
 				clientSecretNsName: validClientSecret,
 				caSecretNsName:     validCASecret,
+				crlSecretNsName:    validCRLSecret,
 			},
 			expected: []OIDCProvider{
 				{
@@ -5441,22 +5450,26 @@ func TestBuildOIDCProviderFromAuthenticationFilters(t *testing.T) {
 					ClientSecret:   "super-secret",
 					CACertBundleID: generateCertBundleID(caSecretNsName),
 					CACertData:     []byte("ca-cert-data"),
+					CRLBundleID:    generateCRLBundleID(crlSecretNsName),
+					CRLData:        []byte("crl-pem-data"),
 					RedirectURI:    "/oidc_callback_test_oidc-filter",
 				},
 			},
 			expectedCertBundles: map[CertBundleID]CertBundle{
 				generateCertBundleID(caSecretNsName): []byte("ca-cert-data"),
+				generateCRLBundleID(crlSecretNsName): []byte("crl-pem-data"),
 			},
 		},
 		{
 			name: "two valid OIDC filters both appear in the result",
 			authFilters: map[types.NamespacedName]*graph.AuthenticationFilter{
 				{Namespace: "test", Name: "oidc-filter-one"}: makeOIDCFilter("test", "oidc-filter-one", true, true),
-				{Namespace: "test", Name: "oidc-filter-two"}: makeOIDCFilterWithCA("test", "oidc-filter-two"),
+				{Namespace: "test", Name: "oidc-filter-two"}: makeOIDCFilterWithCAAndCRL("test", "oidc-filter-two"),
 			},
 			referencedSecrets: map[types.NamespacedName]*secrets.Secret{
 				clientSecretNsName: validClientSecret,
 				caSecretNsName:     validCASecret,
+				crlSecretNsName:    validCRLSecret,
 			},
 			expected: []OIDCProvider{
 				{
@@ -5473,11 +5486,14 @@ func TestBuildOIDCProviderFromAuthenticationFilters(t *testing.T) {
 					ClientSecret:   "super-secret",
 					CACertBundleID: generateCertBundleID(caSecretNsName),
 					CACertData:     []byte("ca-cert-data"),
+					CRLBundleID:    generateCRLBundleID(crlSecretNsName),
+					CRLData:        []byte("crl-pem-data"),
 					RedirectURI:    "/oidc_callback_test_oidc-filter-two",
 				},
 			},
 			expectedCertBundles: map[CertBundleID]CertBundle{
 				generateCertBundleID(caSecretNsName): []byte("ca-cert-data"),
+				generateCRLBundleID(crlSecretNsName): []byte("crl-pem-data"),
 			},
 		},
 	}

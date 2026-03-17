@@ -204,14 +204,6 @@ type OIDCAuth struct {
 	// +optional
 	// +kubebuilder:validation:MaxItems=8
 	CACertificateRefs []LocalObjectReference `json:"caCertificateRefs,omitempty"`
-
-	// The OIDC scopes to be used in the Authentication Request.
-	// The "openid" scope is always added to the list of scopes if not already
-	// specified.
-	// Directive: https://nginx.org/en/docs/http/ngx_http_oidc_module.html#scope
-	//
-	// +optional
-	Scopes []string `json:"scopes,omitempty"`
 }
 
 // OIDCSessionConfig configures session management for OIDC authentication.
@@ -302,11 +294,6 @@ spec:
 
     # provider metadata (optional override)
     configURL: "https://keycloak.example.com/realms/my-realm/.well-known/openid-configuration"
-
-    scopes:
-      - openid
-      - profile
-      - email
 
     pkce: true
 
@@ -425,7 +412,6 @@ http {
         ssl_crl /etc/nginx/certs/ca.crl;
         config_url https://keycloak.example.com/realms/my-realm/.well-known/openid-configuration;
 
-        scope openid profile email;
         pkce on;
         extra_auth_args "display=page&prompt=login&audience=my-api";
 

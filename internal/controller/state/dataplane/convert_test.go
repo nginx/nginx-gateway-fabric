@@ -980,6 +980,184 @@ func TestConvertAuthenticationFilter(t *testing.T) {
 			},
 			expected: &AuthenticationFilter{},
 		},
+		{
+			name: "oidc valid with CRL secret referenced populates CRLBundleID and CRLData",
+			filter: &graph.AuthenticationFilter{
+				Source: &ngfAPIv1alpha1.AuthenticationFilter{
+					ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "oidc-af"},
+					Spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+						Type: ngfAPIv1alpha1.AuthTypeOIDC,
+						OIDC: &ngfAPIv1alpha1.OIDCAuth{
+							Issuer:          "https://idp.example.com",
+							ClientID:        "client-id",
+							ClientSecretRef: ngfAPIv1alpha1.LocalObjectReference{Name: "oidc-secret"},
+							CRLSecretRef:    &ngfAPIv1alpha1.LocalObjectReference{Name: "oidc-crl"},
+						},
+					},
+				},
+				Valid:      true,
+				Referenced: true,
+			},
+			referencedSecrets: map[types.NamespacedName]*secrets.Secret{
+				{Namespace: "test", Name: "oidc-secret"}: {
+					Source: &apiv1.Secret{
+						ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "oidc-secret"},
+						Data:       map[string][]byte{secrets.ClientSecretKey: []byte("my-client-secret")},
+					},
+				},
+				{Namespace: "test", Name: "oidc-crl"}: {
+					Source: &apiv1.Secret{
+						ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "oidc-crl"},
+						Data:       map[string][]byte{secrets.CRLKey: []byte("crl-pem-data")},
+					},
+				},
+			},
+			expected: &AuthenticationFilter{
+				OIDC: &OIDCProvider{
+					Name:         "test_oidc-af",
+					Issuer:       "https://idp.example.com",
+					ClientID:     "client-id",
+					ClientSecret: "my-client-secret",
+					RedirectURI:  "/oidc_callback_test_oidc-af",
+					CRLBundleID:  generateCRLBundleID(types.NamespacedName{Namespace: "test", Name: "oidc-crl"}),
+					CRLData:      []byte("crl-pem-data"),
+				},
+			},
+		},
+		{
+			name: "oidc valid with CRL secret not in referencedSecrets leaves CRL fields empty",
+			filter: &graph.AuthenticationFilter{
+				Source: &ngfAPIv1alpha1.AuthenticationFilter{
+					ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "oidc-af"},
+					Spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+						Type: ngfAPIv1alpha1.AuthTypeOIDC,
+						OIDC: &ngfAPIv1alpha1.OIDCAuth{
+							Issuer:          "https://idp.example.com",
+							ClientID:        "client-id",
+							ClientSecretRef: ngfAPIv1alpha1.LocalObjectReference{Name: "oidc-secret"},
+							CRLSecretRef:    &ngfAPIv1alpha1.LocalObjectReference{Name: "missing-crl"},
+						},
+					},
+				},
+				Valid:      true,
+				Referenced: true,
+			},
+			referencedSecrets: map[types.NamespacedName]*secrets.Secret{
+				{Namespace: "test", Name: "oidc-secret"}: {
+					Source: &apiv1.Secret{
+						ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "oidc-secret"},
+						Data:       map[string][]byte{secrets.ClientSecretKey: []byte("my-client-secret")},
+					},
+				},
+			},
+			expected: &AuthenticationFilter{
+				OIDC: &OIDCProvider{
+					Name:         "test_oidc-af",
+					Issuer:       "https://idp.example.com",
+					ClientID:     "client-id",
+					ClientSecret: "my-client-secret",
+					RedirectURI:  "/oidc_callback_test_oidc-af",
+				},
+			},
+		},
+		{
+			name: "oidc valid with all optional fields: " +
+				"extraAuthArgs sorted alphabetically, session, logout, pkce, configURL all set",
+			filter: &graph.AuthenticationFilter{
+				Source: &ngfAPIv1alpha1.AuthenticationFilter{
+					ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "oidc-af"},
+					Spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+						Type: ngfAPIv1alpha1.AuthTypeOIDC,
+						OIDC: &ngfAPIv1alpha1.OIDCAuth{
+							Issuer:          "https://idp.example.com",
+							ClientID:        "client-id",
+							ClientSecretRef: ngfAPIv1alpha1.LocalObjectReference{Name: "oidc-secret"},
+							ExtraAuthArgs:   map[string]string{"scope": "openid profile", "acr_values": "urn:mace:incommon:iap:silver"},
+							Session: &ngfAPIv1alpha1.OIDCSessionConfig{
+								CookieName: helpers.GetPointer("my_session"),
+								Timeout:    (*ngfAPIv1alpha1.Duration)(helpers.GetPointer("1h")),
+							},
+							Logout: &ngfAPIv1alpha1.OIDCLogoutConfig{
+								URI:                   helpers.GetPointer("/logout"),
+								PostLogoutURI:         helpers.GetPointer("/logged-out"),
+								FrontChannelLogoutURI: helpers.GetPointer("/frontchannel-logout"),
+								TokenHint:             helpers.GetPointer(true),
+							},
+							PKCE:      helpers.GetPointer(true),
+							ConfigURL: helpers.GetPointer("https://idp.example.com/.well-known/openid-configuration"),
+						},
+					},
+				},
+				Valid:      true,
+				Referenced: true,
+			},
+			referencedSecrets: map[types.NamespacedName]*secrets.Secret{
+				{Namespace: "test", Name: "oidc-secret"}: {
+					Source: &apiv1.Secret{
+						ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "oidc-secret"},
+						Data:       map[string][]byte{secrets.ClientSecretKey: []byte("my-client-secret")},
+					},
+				},
+			},
+			expected: &AuthenticationFilter{
+				OIDC: &OIDCProvider{
+					Name:                  "test_oidc-af",
+					Issuer:                "https://idp.example.com",
+					ClientID:              "client-id",
+					ClientSecret:          "my-client-secret",
+					RedirectURI:           "/oidc_callback_test_oidc-af",
+					ExtraAuthArgs:         "acr_values=urn:mace:incommon:iap:silver&scope=openid profile",
+					CookieName:            helpers.GetPointer("my_session"),
+					Timeout:               helpers.GetPointer("1h"),
+					LogoutURI:             helpers.GetPointer("/logout"),
+					PostLogoutURI:         helpers.GetPointer("/logged-out"),
+					FrontChannelLogoutURI: helpers.GetPointer("/frontchannel-logout"),
+					TokenHint:             helpers.GetPointer(true),
+					PKCE:                  helpers.GetPointer(true),
+					ConfigURL:             helpers.GetPointer("https://idp.example.com/.well-known/openid-configuration"),
+				},
+			},
+		},
+		{
+			name: "oidc valid with full URL for RedirectURI and PostLogoutURI is stored as is",
+			filter: &graph.AuthenticationFilter{
+				Source: &ngfAPIv1alpha1.AuthenticationFilter{
+					ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "oidc-af"},
+					Spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+						Type: ngfAPIv1alpha1.AuthTypeOIDC,
+						OIDC: &ngfAPIv1alpha1.OIDCAuth{
+							Issuer:          "https://idp.example.com",
+							ClientID:        "client-id",
+							ClientSecretRef: ngfAPIv1alpha1.LocalObjectReference{Name: "oidc-secret"},
+							RedirectURI:     helpers.GetPointer("https://auth.example.com/callback"),
+							Logout: &ngfAPIv1alpha1.OIDCLogoutConfig{
+								PostLogoutURI: helpers.GetPointer("https://example.com/logged-out"),
+							},
+						},
+					},
+				},
+				Valid:      true,
+				Referenced: true,
+			},
+			referencedSecrets: map[types.NamespacedName]*secrets.Secret{
+				{Namespace: "test", Name: "oidc-secret"}: {
+					Source: &apiv1.Secret{
+						ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "oidc-secret"},
+						Data:       map[string][]byte{secrets.ClientSecretKey: []byte("my-client-secret")},
+					},
+				},
+			},
+			expected: &AuthenticationFilter{
+				OIDC: &OIDCProvider{
+					Name:          "test_oidc-af",
+					Issuer:        "https://idp.example.com",
+					ClientID:      "client-id",
+					ClientSecret:  "my-client-secret",
+					RedirectURI:   "https://auth.example.com/callback",
+					PostLogoutURI: helpers.GetPointer("https://example.com/logged-out"),
+				},
+			},
+		},
 	}
 
 	for _, tc := range tests {
