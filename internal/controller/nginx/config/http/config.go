@@ -113,9 +113,8 @@ type ResponseHeaders struct {
 
 // Return represents an HTTP return.
 type Return struct {
-	Body        string
-	DefaultType string
-	Code        StatusCode
+	Body string
+	Code StatusCode
 }
 
 // SSL holds all SSL related configuration.

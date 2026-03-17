@@ -83,7 +83,6 @@ proxy_ssl_certificate_key /etc/nginx/secrets/{{ $.GatewaySecretID }}.pem;
 include {{ $i.Name }};
 {{ end -}}
 
-# Server tokens
 server_tokens {{ .ServerTokens }};
 
 

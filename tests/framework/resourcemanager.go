@@ -44,7 +44,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/remotecommand"
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -1237,32 +1236,32 @@ func (rm *ResourceManager) GetNginxConfig(
 		return nil, err
 	}
 
-	exec, err := createCrossplaneExecutor(rm.ClientGoClient, rm.K8sConfig, nginxPodName, namespace)
-	if err != nil {
-		GinkgoWriter.Printf("ERROR occurred during creating crossplane executor, error: %s\n", err)
-
-		return nil, err
-	}
-
 	ctx, cancel := context.WithTimeout(context.Background(), rm.TimeoutConfig.RequestTimeout)
 	defer cancel()
 
-	buf := &bytes.Buffer{}
-	errBuf := &bytes.Buffer{}
+	crossplaneCmd := []string{"./crossplane", "/etc/nginx/nginx.conf"}
 
+	var result execResult
 	if err := wait.PollUntilContextCancel(
 		ctx,
 		500*time.Millisecond,
 		true, /* poll immediately */
 		func(ctx context.Context) (bool, error) {
-			if err := exec.StreamWithContext(ctx, remotecommand.StreamOptions{
-				Stdout: buf,
-				Stderr: errBuf,
-			}); err != nil {
+			var execErr error
+			result, execErr = execInPod(
+				ctx,
+				rm.ClientGoClient,
+				rm.K8sConfig,
+				namespace,
+				nginxPodName,
+				"crossplane",
+				crossplaneCmd,
+			)
+			if execErr != nil {
 				return false, nil //nolint:nilerr // we want to retry if there's an error
 			}
 
-			if errBuf.String() != "" {
+			if result.Stderr != "" {
 				return false, nil
 			}
 
@@ -1281,7 +1280,7 @@ func (rm *ResourceManager) GetNginxConfig(
 	}
 
 	conf := &Payload{}
-	if err := json.Unmarshal(buf.Bytes(), conf); err != nil {
+	if err := json.Unmarshal([]byte(result.Stdout), conf); err != nil {
 		unmarshalErr := fmt.Errorf("error unmarshaling nginx config: %w", err)
 		GinkgoWriter.Printf("ERROR occurred during unmarshaling nginx config from pod %q in namespace %q, error: %s\n",
 			nginxPodName,
