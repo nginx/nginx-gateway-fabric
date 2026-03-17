@@ -28,7 +28,7 @@ spec:
     caCertificateRefs:
       - name: keycloak-ca-secret
     logout:
-      uri: /logout
+      uri: /logout-coffee
 ---
 apiVersion: gateway.nginx.org/v1alpha1
 kind: AuthenticationFilter
@@ -44,7 +44,7 @@ spec:
     caCertificateRefs:
       - name: keycloak-ca-secret
     logout:
-      uri: /logout
+      uri: /logout-tea
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute

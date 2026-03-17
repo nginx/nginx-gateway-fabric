@@ -215,12 +215,16 @@ func PerformOIDCLoginInCluster(
 
 	// Step 2: POST the login credentials to the form action URL.
 	// Follow redirects back through the OIDC callback on NGINX.
+	formData := url.Values{}
+	formData.Set("username", username)
+	formData.Set("password", password)
+
 	return curlFollowRedirects(
 		ctx,
 		opts,
 		formAction,
 		fmt.Sprintf("/tmp/final-response-%s.html", suffix),
-		"-d", fmt.Sprintf("username=%s&password=%s", username, password),
+		"-d", formData.Encode(),
 	)
 }
 
@@ -285,11 +289,11 @@ func PerformOIDCLogoutInCluster(
 
 	// Build POST data from hidden inputs (e.g., session_code).
 	hiddenInputs := parseHiddenInputs(step1Result.Body)
-	var postParts []string
+	formValues := url.Values{}
 	for k, v := range hiddenInputs {
-		postParts = append(postParts, fmt.Sprintf("%s=%s", k, v))
+		formValues.Add(k, v)
 	}
-	postData := strings.Join(postParts, "&")
+	postData := formValues.Encode()
 
 	GinkgoWriter.Printf("OIDC in-cluster: Logout Step 2 - POST confirmation to %s\n", formAction)
 

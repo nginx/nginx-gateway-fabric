@@ -6237,9 +6237,9 @@ func TestOIDCLogoutLocation(t *testing.T) {
 				logoutPath := "/logged_out"
 				filter := &dataplane.AuthenticationFilter{
 					OIDC: &dataplane.OIDCProvider{
-						Name:          providerName,
-						RedirectURI:   oidcCallbackPath,
-						PostLogoutURI: &logoutPath,
+						Name:        providerName,
+						RedirectURI: oidcCallbackPath,
+						LogoutURI:   &logoutPath,
 					},
 				}
 				locs, _, _ := createLocations(
@@ -6281,9 +6281,9 @@ func TestOIDCLogoutLocation(t *testing.T) {
 				logoutPath := "/logged_out"
 				filter := &dataplane.AuthenticationFilter{
 					OIDC: &dataplane.OIDCProvider{
-						Name:          providerName,
-						RedirectURI:   oidcCallbackPath,
-						PostLogoutURI: &logoutPath,
+						Name:        providerName,
+						RedirectURI: oidcCallbackPath,
+						LogoutURI:   &logoutPath,
 					},
 				}
 				locs, _, _ := createLocations(

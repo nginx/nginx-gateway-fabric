@@ -193,9 +193,10 @@ type OIDCSessionConfig struct {
 //
 //nolint:lll
 type OIDCLogoutConfig struct {
-	// URI defines the URI for initiating session logout. Accepts path-only URI. This path
+	// URI defines the path for initiating session logout. This path
 	// should not conflict with the logout path of other AuthenticationFilters used within
-	// the same hostname.
+	// the same hostname. If there is overlap, visiting the logout URI will log out the client
+	// defined in the first AuthenticationFilter.
 	// Directive: https://nginx.org/en/docs/http/ngx_http_oidc_module.html#logout_uri
 	// Example: /logout
 	//
@@ -204,7 +205,7 @@ type OIDCLogoutConfig struct {
 	URI *string `json:"uri,omitempty"`
 
 	// PostLogoutURI defines the URI to redirect to after logout.
-	// Must match the configuration on the provider's side..
+	// Must match the configuration on the provider's side.
 	// Directive: https://nginx.org/en/docs/http/ngx_http_oidc_module.html#post_logout_uri
 	// Example: /after_logout, https://example.com/after_logout
 	//
@@ -212,7 +213,7 @@ type OIDCLogoutConfig struct {
 	// +kubebuilder:validation:Pattern=`^(https?:\/\/[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*(:[0-9]{1,5})?(\/[a-zA-Z0-9._~:\/?@!&'()*+,=-]*)?|\/[a-zA-Z0-9._~:\/?@!&'()*+,=-]*)$`
 	PostLogoutURI *string `json:"postLogoutURI,omitempty"`
 
-	// FrontChannelLogoutURI defines the URI for front-channel logout. Accepts path-only URI.
+	// FrontChannelLogoutURI defines the path for front-channel logout.
 	// The OpenID Provider should be configured to set "iss" and "sid" arguments.
 	// Directive: https://nginx.org/en/docs/http/ngx_http_oidc_module.html#frontchannel_logout_uri
 	// Example: /frontchannel_logout

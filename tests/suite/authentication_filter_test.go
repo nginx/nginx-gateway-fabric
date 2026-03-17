@@ -771,7 +771,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 				})
 
 				DescribeTable("should successfully authenticate and log out via OIDC",
-					func(path, expectedBody string) {
+					func(path, logoutPath, expectedBody string) {
 						// Login
 						Eventually(func() error {
 							ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.RequestTimeout)
@@ -811,7 +811,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 								resourceManager.K8sConfig,
 								namespace, clientPodName,
 								nginxServiceIP, "cafe.example.com",
-								"/logout", path,
+								logoutPath, path,
 							)
 							if err != nil {
 								return fmt.Errorf("OIDC logout failed: %w", err)
@@ -831,8 +831,8 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 							WithPolling(5 * time.Second).
 							Should(Succeed())
 					},
-					Entry("coffee path with nginx-gateway-coffee client", "/coffee", "URI: /coffee"),
-					Entry("tea path with nginx-gateway-tea client", "/tea", "URI: /tea"),
+					Entry("coffee path with nginx-gateway-coffee client", "/coffee", "/logout-coffee", "URI: /coffee"),
+					Entry("tea path with nginx-gateway-tea client", "/tea", "/logout-tea", "URI: /tea"),
 				)
 
 				Context("nginx directives", func() {
@@ -895,7 +895,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 							},
 							{
 								Directive:  "logout_uri",
-								Value:      "/logout",
+								Value:      "/logout-coffee",
 								File:       "http.conf",
 								Block:      "oidc_provider",
 								BlockValue: coffeeProvider,
@@ -941,7 +941,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 							},
 							{
 								Directive:  "logout_uri",
-								Value:      "/logout",
+								Value:      "/logout-tea",
 								File:       "http.conf",
 								Block:      "oidc_provider",
 								BlockValue: teaProvider,
