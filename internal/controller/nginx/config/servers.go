@@ -1772,15 +1772,6 @@ func findOIDCProviders(pathRules []dataplane.PathRule) []*dataplane.OIDCProvider
 	return providers
 }
 
-// pathFromURI returns the path component of a URI, stripping any query string or fragment.
-// It is used to derive the nginx location path from a redirect or post-logout URI.
-func pathFromURI(uri string) string {
-	if i := strings.IndexAny(uri, "?#"); i != -1 {
-		return uri[:i]
-	}
-	return uri
-}
-
 // createOIDCLocations creates callback and post-logout locations for all OIDC providers.
 // A location is only created for path-only URIs (starting with /). A location is skipped if an exact-match
 // route already occupies the same path or if the location has already been generated. Both callback and
@@ -1792,7 +1783,7 @@ func createOIDCLocations(pathRules []dataplane.PathRule) []http.Location {
 	seenPaths := make(map[string]struct{})
 	for _, provider := range findOIDCProviders(pathRules) {
 		if strings.HasPrefix(provider.RedirectURI, "/") {
-			path := pathFromURI(provider.RedirectURI)
+			path := provider.RedirectURI
 			if _, exists := existingExact[path]; !exists {
 				if _, seen := seenPaths[path]; !seen {
 					seenPaths[path] = struct{}{}
@@ -1801,7 +1792,7 @@ func createOIDCLocations(pathRules []dataplane.PathRule) []http.Location {
 			}
 		}
 		if provider.PostLogoutURI != nil && strings.HasPrefix(*provider.PostLogoutURI, "/") {
-			path := pathFromURI(*provider.PostLogoutURI)
+			path := *provider.PostLogoutURI
 			if _, exists := existingExact[path]; !exists {
 				if _, seen := seenPaths[path]; !seen {
 					seenPaths[path] = struct{}{}

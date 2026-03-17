@@ -11,10 +11,11 @@ import (
 type AuthFieldValidator struct{}
 
 var (
-	oidcHTTPSURLRegexp      = regexp.MustCompile(oidcHTTPSURLFmt)
-	oidcRedirectURIRegexp   = regexp.MustCompile(oidcRedirectURIFmt)
-	oidcPostLogoutURIRegexp = regexp.MustCompile(oidcPostLogoutURIFmt)
-	oidcPathURIRegexp       = regexp.MustCompile(oidcPathURIFmt)
+	oidcHTTPSURLRegexp           = regexp.MustCompile(oidcHTTPSURLFmt)
+	oidcRedirectURIRegexp        = regexp.MustCompile(oidcRedirectURIFmt)
+	oidcPostLogoutURIRegexp      = regexp.MustCompile(oidcPostLogoutURIFmt)
+	oidcPathURIRegexp            = regexp.MustCompile(oidcPathURIFmt)
+	oidcPathWithQueryParamRegexp = regexp.MustCompile(oidcPathWithQueryParamFmt)
 )
 
 //nolint:lll
@@ -39,7 +40,7 @@ func validateHTTPSURL(url string) error {
 const (
 	// oidcPathURIFmt validates path-only URIs. It is used by the logoutURI and frontChannelLogoutURI fields.
 	// Semicolons and dollar signs are disallowed in the path.
-	oidcPathURIFmt    = `^/[a-zA-Z0-9._~:/?@!&'()*+,=-]*$`
+	oidcPathURIFmt    = `^/[A-Za-z0-9._~!&'()*+,=@/-]*$`
 	oidcPathURIErrMsg = "must be a path-only URI starting with /"
 )
 
@@ -60,6 +61,12 @@ func (AuthFieldValidator) ValidateOIDCConfigURL(url string) error {
 	return validateHTTPSURL(url)
 }
 
+const (
+	// oidcPathWithQueryParamFmt matches path-only URIs (starting with /) that contain query parameters.
+	oidcPathWithQueryParamFmt    = `^\/[^?]*\?`
+	oidcPathWithQueryParamErrMsg = "query parameters are not allowed in path-only URIs"
+)
+
 //nolint:lll,gosec
 const (
 	// oidcRedirectURIFmt validates redirect URIs. It accepts HTTPS full URIs or path-only URIs starting with /.
@@ -69,11 +76,15 @@ const (
 
 // ValidateOIDCRedirectURI validates an OIDC redirect URI.
 // Only HTTPS full URIs or path-only URIs starting with / are accepted.
+// Query parameters are not allowed in path-only URIs.
 func (AuthFieldValidator) ValidateOIDCRedirectURI(uri string) error {
 	if !oidcRedirectURIRegexp.MatchString(uri) {
 		return errors.New(k8svalidation.RegexError(
 			oidcRedirectURIErrMsg, oidcRedirectURIFmt, "/callback", "https://example.com/callback",
 		))
+	}
+	if oidcPathWithQueryParamRegexp.MatchString(uri) {
+		return errors.New(oidcPathWithQueryParamErrMsg)
 	}
 	return nil
 }
@@ -87,11 +98,15 @@ const (
 
 // ValidateOIDCPostLogoutURI validates an OIDC post-logout URI.
 // HTTP and HTTPS full URIs and path-only URIs starting with / are accepted.
+// Query parameters are not allowed in path-only URIs.
 func (AuthFieldValidator) ValidateOIDCPostLogoutURI(uri string) error {
 	if !oidcPostLogoutURIRegexp.MatchString(uri) {
 		return errors.New(k8svalidation.RegexError(
 			oidcPostLogoutURIErrMsg, oidcPostLogoutURIFmt, "/logged_out", "https://example.com/logged_out",
 		))
+	}
+	if oidcPathWithQueryParamRegexp.MatchString(uri) {
+		return errors.New(oidcPathWithQueryParamErrMsg)
 	}
 	return nil
 }

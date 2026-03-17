@@ -66,15 +66,17 @@ func TestValidateOIDCRedirectURI(t *testing.T) {
 		`/callback`,
 		`/oidc/callback`,
 		`/oidc_callback_default_my-filter`,
-		`/callback?state=abc`,
 		`https://example.com/callback`,
 		`https://cafe.example.com:8442/oidc_callback`,
 		`https://auth.example.com/realms/master/callback`,
+		`https://example.com/callback?state=abc`,
+		`https://cafe.example.com:8442/oidc_callback?foo=bar&baz=qux`,
 	)
 
 	testInvalidValuesForSimpleValidator(
 		t,
 		validator.ValidateOIDCRedirectURI,
+		`/callback?state=abc`,
 		`http://example.com/callback`,
 		`ftp://example.com/callback`,
 		`callback`,
@@ -104,11 +106,14 @@ func TestValidateOIDCPostLogoutURI(t *testing.T) {
 		`https://example.com:8443/after_logout`,
 		`http://example.com/logged_out`,
 		`http://auth.example.com:8080/logged_out`,
+		`https://example.com/logged_out?hint=token`,
+		`http://example.com/logged_out?hint=token`,
 	)
 
 	testInvalidValuesForSimpleValidator(
 		t,
 		validator.ValidateOIDCPostLogoutURI,
+		`/logged_out?hint=token`,
 		`ftp://example.com/logged_out`,
 		`logged_out`,
 		`example.com/logged_out`,
@@ -138,6 +143,7 @@ func TestValidateOIDCLogoutURI(t *testing.T) {
 	testInvalidValuesForSimpleValidator(
 		t,
 		validator.ValidateOIDCLogoutURI,
+		`/logout?session=abc`,
 		`logout`,
 		`https://example.com/logout`,
 		`http://example.com/logout`,
@@ -163,6 +169,7 @@ func TestValidateOIDCFrontChannelLogoutURI(t *testing.T) {
 	testInvalidValuesForSimpleValidator(
 		t,
 		validator.ValidateOIDCFrontChannelLogoutURI,
+		`/frontchannel_logout?sid=abc`,
 		`frontchannel_logout`,
 		`https://example.com/frontchannel_logout`,
 		`http://example.com/frontchannel_logout`,

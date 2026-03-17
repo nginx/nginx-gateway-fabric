@@ -624,6 +624,66 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 			expCond: conditions.NewAuthenticationFilterInvalid("must be a valid HTTP or HTTPS URL or a path starting with /"),
 		},
 		{
+			name: "invalid: OIDC redirect URI is a path-only URI containing query parameters",
+			args: args{
+				secNsName: types.NamespacedName{Namespace: "test", Name: "oidc"},
+				plus:      true,
+				authValidator: &validationfakes.FakeAuthFieldsValidator{
+					ValidateOIDCRedirectURIStub: func(string) error {
+						return errors.New("query parameters are not allowed in path-only URIs")
+					},
+				},
+				filter: createAuthenticationFilterWithOIDC(
+					types.NamespacedName{Namespace: "test", Name: "oidc"},
+					&ngfAPI.OIDCAuth{
+						ClientID:        "client-id",
+						ClientSecretRef: ngfAPI.LocalObjectReference{Name: "client-secret"},
+						RedirectURI:     helpers.GetPointer("/callback?state=abc"),
+					},
+					false,
+				).Source,
+				resources: map[resolver.ResourceKey]client.Object{
+					{
+						ResourceType:   resolver.ResourceTypeSecret,
+						NamespacedName: types.NamespacedName{Namespace: "test", Name: "client-secret"},
+					}: createOpaqueClientSecret("client-secret", true),
+				},
+			},
+			expCond: conditions.NewAuthenticationFilterInvalid(
+				"query parameters are not allowed in path-only URIs",
+			),
+		},
+		{
+			name: "invalid: OIDC postLogoutURI is a path-only URI containing query parameters",
+			args: args{
+				secNsName: types.NamespacedName{Namespace: "test", Name: "oidc"},
+				plus:      true,
+				authValidator: &validationfakes.FakeAuthFieldsValidator{
+					ValidateOIDCPostLogoutURIStub: func(string) error {
+						return errors.New("query parameters are not allowed in path-only URIs")
+					},
+				},
+				filter: createAuthenticationFilterWithOIDC(
+					types.NamespacedName{Namespace: "test", Name: "oidc"},
+					&ngfAPI.OIDCAuth{
+						ClientID:        "client-id",
+						ClientSecretRef: ngfAPI.LocalObjectReference{Name: "client-secret"},
+						Logout:          &ngfAPI.OIDCLogoutConfig{PostLogoutURI: helpers.GetPointer("/logged_out?hint=token")},
+					},
+					false,
+				).Source,
+				resources: map[resolver.ResourceKey]client.Object{
+					{
+						ResourceType:   resolver.ResourceTypeSecret,
+						NamespacedName: types.NamespacedName{Namespace: "test", Name: "client-secret"},
+					}: createOpaqueClientSecret("client-secret", true),
+				},
+			},
+			expCond: conditions.NewAuthenticationFilterInvalid(
+				"query parameters are not allowed in path-only URIs",
+			),
+		},
+		{
 			name: "invalid: OIDC frontChannelLogoutURI fails validation",
 			args: args{
 				secNsName: types.NamespacedName{Namespace: "test", Name: "oidc"},
