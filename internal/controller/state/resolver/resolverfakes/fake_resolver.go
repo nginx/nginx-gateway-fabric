@@ -31,11 +31,12 @@ type FakeResolver struct {
 	getSecretsReturnsOnCall map[int]struct {
 		result1 map[types.NamespacedName]*secrets.Secret
 	}
-	ResolveStub        func(resolver.ResourceType, types.NamespacedName) error
+	ResolveStub        func(resolver.ResourceType, types.NamespacedName, ...resolver.ResolveOption) error
 	resolveMutex       sync.RWMutex
 	resolveArgsForCall []struct {
 		arg1 resolver.ResourceType
 		arg2 types.NamespacedName
+		arg3 []resolver.ResolveOption
 	}
 	resolveReturns struct {
 		result1 error
@@ -153,19 +154,20 @@ func (fake *FakeResolver) GetSecretsReturnsOnCall(i int, result1 map[types.Names
 	}{result1}
 }
 
-func (fake *FakeResolver) Resolve(arg1 resolver.ResourceType, arg2 types.NamespacedName) error {
+func (fake *FakeResolver) Resolve(arg1 resolver.ResourceType, arg2 types.NamespacedName, arg3 ...resolver.ResolveOption) error {
 	fake.resolveMutex.Lock()
 	ret, specificReturn := fake.resolveReturnsOnCall[len(fake.resolveArgsForCall)]
 	fake.resolveArgsForCall = append(fake.resolveArgsForCall, struct {
 		arg1 resolver.ResourceType
 		arg2 types.NamespacedName
-	}{arg1, arg2})
+		arg3 []resolver.ResolveOption
+	}{arg1, arg2, arg3})
 	stub := fake.ResolveStub
 	fakeReturns := fake.resolveReturns
-	fake.recordInvocation("Resolve", []interface{}{arg1, arg2})
+	fake.recordInvocation("Resolve", []interface{}{arg1, arg2, arg3})
 	fake.resolveMutex.Unlock()
 	if stub != nil {
-		return stub(arg1, arg2)
+		return stub(arg1, arg2, arg3...)
 	}
 	if specificReturn {
 		return ret.result1
@@ -179,17 +181,17 @@ func (fake *FakeResolver) ResolveCallCount() int {
 	return len(fake.resolveArgsForCall)
 }
 
-func (fake *FakeResolver) ResolveCalls(stub func(resolver.ResourceType, types.NamespacedName) error) {
+func (fake *FakeResolver) ResolveCalls(stub func(resolver.ResourceType, types.NamespacedName, ...resolver.ResolveOption) error) {
 	fake.resolveMutex.Lock()
 	defer fake.resolveMutex.Unlock()
 	fake.ResolveStub = stub
 }
 
-func (fake *FakeResolver) ResolveArgsForCall(i int) (resolver.ResourceType, types.NamespacedName) {
+func (fake *FakeResolver) ResolveArgsForCall(i int) (resolver.ResourceType, types.NamespacedName, []resolver.ResolveOption) {
 	fake.resolveMutex.RLock()
 	defer fake.resolveMutex.RUnlock()
 	argsForCall := fake.resolveArgsForCall[i]
-	return argsForCall.arg1, argsForCall.arg2
+	return argsForCall.arg1, argsForCall.arg2, argsForCall.arg3
 }
 
 func (fake *FakeResolver) ResolveReturns(result1 error) {

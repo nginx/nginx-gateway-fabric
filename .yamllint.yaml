@@ -32,6 +32,7 @@ rules:
       examples/proxy-settings-policy/app.yaml
       tests/suite/manifests/proxy-settings-policy/app.yaml
       tests/suite/manifests/longevity
+      tests/suite/manifests/authentication-filter/keycloak.yaml
   key-duplicates: enable
   key-ordering: disable
   line-length:

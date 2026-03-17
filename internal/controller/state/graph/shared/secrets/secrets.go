@@ -35,6 +35,12 @@ const (
 	// CAKey is the certificate key for optional root certificate authority.
 	CAKey = "ca.crt"
 
+	// ClientSecretKey is the Secret key for the OIDC client secret.
+	ClientSecretKey = "client-secret"
+
+	// CRLKey is the Secret key for a certificate revocation list (CRL) in PEM format.
+	CRLKey = "ca.crl"
+
 	// TLSCertKey is the certificate key for TLS certificates.
 	TLSCertKey = corev1.TLSCertKey
 

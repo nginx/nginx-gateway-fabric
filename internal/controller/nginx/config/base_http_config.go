@@ -20,9 +20,31 @@ type AccessLog struct {
 	FormatName string // Internal format name (ngf_user_defined_log_format)
 	Disable    bool   // User's disable flag
 }
+
+// oidcConfiguration holds the OIDC config.
+type oidcConfiguration struct {
+	Name                   string
+	Issuer                 string
+	ClientID               string
+	ClientSecret           string
+	TrustedCertificatePath string
+	CRLPath                string
+	RedirectURI            string
+	ConfigURL              string
+	PKCE                   string
+	ExtraAuthArgs          string
+	CookieName             string
+	Timeout                string
+	LogoutURI              string
+	PostLogoutURI          string
+	FrontChannelLogoutURI  string
+	TokenHint              string
+}
+
 type httpConfig struct {
 	DNSResolver             *dataplane.DNSResolverConfig
 	AccessLog               *AccessLog
+	OIDCProviders           []*oidcConfiguration
 	GatewaySecretID         dataplane.SSLKeyPairID
 	NginxReadinessProbePath string
 	ServerTokens            string
@@ -54,6 +76,7 @@ func executeBaseHTTPConfig(conf dataplane.Configuration, generator policies.Gene
 		AccessLog:               buildAccessLog(conf.Logging.AccessLog),
 		GatewaySecretID:         conf.BaseHTTPConfig.GatewaySecretID,
 		ServerTokens:            conf.BaseHTTPConfig.ServerTokens,
+		OIDCProviders:           buildOIDCProviders(conf.OIDCProviders),
 	}
 
 	results := make([]executeResult, 0, len(includes)+1)
@@ -92,6 +115,71 @@ func buildDNSResolver(dnsResolver *dataplane.DNSResolverConfig) *dataplane.DNSRe
 	}
 
 	return fixed
+}
+
+// buildOIDCProviders converts a slice of dataplane OIDCProviders to oidcConfiguration pointers.
+func buildOIDCProviders(providers []dataplane.OIDCProvider) []*oidcConfiguration {
+	if len(providers) == 0 {
+		return nil
+	}
+	result := make([]*oidcConfiguration, 0, len(providers))
+	for _, provider := range providers {
+		if provider.Name == "" {
+			continue
+		}
+		result = append(result, buildOIDCConfiguration(provider))
+	}
+	return result
+}
+
+// boolToNginxFlag converts a boolean pointer to Nginx acceptable values.
+func boolToNginxFlag(v *bool) string {
+	if v == nil {
+		return ""
+	}
+	if *v {
+		return "on"
+	}
+	return "off"
+}
+
+// buildOIDCConfiguration builds the OIDC configuration for a provider.
+func buildOIDCConfiguration(provider dataplane.OIDCProvider) *oidcConfiguration {
+	oidc := &oidcConfiguration{
+		Name:          provider.Name,
+		Issuer:        provider.Issuer,
+		ClientID:      provider.ClientID,
+		ClientSecret:  provider.ClientSecret,
+		RedirectURI:   provider.RedirectURI,
+		ExtraAuthArgs: provider.ExtraAuthArgs,
+		PKCE:          boolToNginxFlag(provider.PKCE),
+		TokenHint:     boolToNginxFlag(provider.TokenHint),
+	}
+	if provider.CACertBundleID != "" {
+		oidc.TrustedCertificatePath = generateCertBundleFileName(provider.CACertBundleID)
+	}
+	if provider.CRLBundleID != "" {
+		oidc.CRLPath = generateCRLBundleFileName(provider.CRLBundleID)
+	}
+	if provider.ConfigURL != nil {
+		oidc.ConfigURL = *provider.ConfigURL
+	}
+	if provider.CookieName != nil {
+		oidc.CookieName = *provider.CookieName
+	}
+	if provider.Timeout != nil {
+		oidc.Timeout = *provider.Timeout
+	}
+	if provider.LogoutURI != nil {
+		oidc.LogoutURI = *provider.LogoutURI
+	}
+	if provider.PostLogoutURI != nil {
+		oidc.PostLogoutURI = *provider.PostLogoutURI
+	}
+	if provider.FrontChannelLogoutURI != nil {
+		oidc.FrontChannelLogoutURI = *provider.FrontChannelLogoutURI
+	}
+	return oidc
 }
 
 func buildAccessLog(accessLogConfig *dataplane.AccessLog) *AccessLog {

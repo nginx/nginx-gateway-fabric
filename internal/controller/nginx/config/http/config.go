@@ -80,6 +80,8 @@ type Location struct {
 	Path string
 	// AuthBasic contains the configuration for basic authentication.
 	AuthBasic *AuthBasic
+	// AuthOIDCProviderName is the name of the oidc_provider to be referenced in this location.
+	AuthOIDCProviderName string
 	// ResponseHeaders are custom response headers to be sent.
 	ResponseHeaders ResponseHeaders
 	// ProxySetHeaders are headers to set when proxying requests upstream.
@@ -128,6 +130,8 @@ type SSL struct {
 type StatusCode int
 
 const (
+	// StatusOK is the HTTP 200 status code.
+	StatusOK StatusCode = 200
 	// StatusFound is the HTTP 302 status code.
 	StatusFound StatusCode = 302
 	// StatusNotFound is the HTTP 404 status code.

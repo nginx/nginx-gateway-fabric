@@ -16,6 +16,8 @@ var (
 		secrets.CAKey,
 		secrets.TLSCertKey,
 		secrets.TLSKeyKey,
+		secrets.ClientSecretKey,
+		secrets.CRLKey,
 		corev1.DockerConfigJsonKey,
 		corev1.DockerConfigKey,
 	}
