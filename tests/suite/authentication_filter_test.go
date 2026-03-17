@@ -796,7 +796,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 							}
 							return nil
 						}).
-							WithTimeout(1 * time.Minute).
+							WithTimeout(timeoutConfig.RequestTimeout).
 							WithPolling(5 * time.Second).
 							Should(Succeed())
 
@@ -827,7 +827,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 							}
 							return nil
 						}).
-							WithTimeout(1 * time.Minute).
+							WithTimeout(timeoutConfig.RequestTimeout).
 							WithPolling(5 * time.Second).
 							Should(Succeed())
 					},
