@@ -1,6 +1,10 @@
 package graph
 
 import (
+	"fmt"
+	"slices"
+	"strings"
+
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -280,4 +284,125 @@ func validateOIDCLogoutURIs(
 	}
 
 	return allErrs
+}
+
+// validateOIDCURIConflictsPerHostname marks OIDC filters as invalid if multiple filters referenced by routes
+// with the same hostname define the same logout URI, front-channel logout URI, or path-only redirect URI.
+// When a conflict is detected, the filter that sorts later by namespace/name is marked invalid; the one
+// that sorts first retains the URI.
+func validateOIDCURIConflictsPerHostname(routes map[RouteKey]*L7Route) {
+	for hostname, filtersMap := range buildHostnameToOIDCFilters(routes) {
+		if len(filtersMap) >= 2 {
+			checkOIDCURIConflictsForHostname(hostname, filtersMap)
+		}
+	}
+}
+
+// buildHostnameToOIDCFilters returns a map from each hostname to the unique OIDC filters referenced on it.
+func buildHostnameToOIDCFilters(
+	routes map[RouteKey]*L7Route,
+) map[v1.Hostname]map[types.NamespacedName]*AuthenticationFilter {
+	hostnameToFilters := make(map[v1.Hostname]map[types.NamespacedName]*AuthenticationFilter)
+
+	for _, route := range routes {
+		for _, rule := range route.Spec.Rules {
+			for _, f := range rule.Filters.Filters {
+				af := oidcAuthFilterFrom(f)
+				if af == nil {
+					continue
+				}
+				nsname := types.NamespacedName{Namespace: af.Source.Namespace, Name: af.Source.Name}
+				for _, hostname := range route.Spec.Hostnames {
+					if hostnameToFilters[hostname] == nil {
+						hostnameToFilters[hostname] = make(map[types.NamespacedName]*AuthenticationFilter)
+					}
+					hostnameToFilters[hostname][nsname] = af
+				}
+			}
+		}
+	}
+
+	return hostnameToFilters
+}
+
+// oidcAuthFilterFrom returns the AuthenticationFilter from a Filter if it is an OIDC extension ref, or nil.
+func oidcAuthFilterFrom(f Filter) *AuthenticationFilter {
+	if f.FilterType != FilterExtensionRef ||
+		f.ResolvedExtensionRef == nil ||
+		f.ResolvedExtensionRef.AuthenticationFilter == nil {
+		return nil
+	}
+	af := f.ResolvedExtensionRef.AuthenticationFilter
+	if af.Source.Spec.Type != ngfAPI.AuthTypeOIDC {
+		return nil
+	}
+	return af
+}
+
+// checkOIDCURIConflictsForHostname checks the given filters for duplicate logout, front-channel logout,
+// and path-only redirect URIs on a single hostname, marking conflicting filters invalid.
+func checkOIDCURIConflictsForHostname(
+	hostname v1.Hostname,
+	filtersMap map[types.NamespacedName]*AuthenticationFilter,
+) {
+	type filterEntry struct {
+		filter *AuthenticationFilter
+		nsname types.NamespacedName
+	}
+
+	entries := make([]filterEntry, 0, len(filtersMap))
+	for nsname, af := range filtersMap {
+		entries = append(entries, filterEntry{nsname: nsname, filter: af})
+	}
+	slices.SortFunc(entries, func(a, b filterEntry) int {
+		if cmp := strings.Compare(a.nsname.Namespace, b.nsname.Namespace); cmp != 0 {
+			return cmp
+		}
+		return strings.Compare(a.nsname.Name, b.nsname.Name)
+	})
+
+	logoutURIs := make(map[string]types.NamespacedName)
+	frontChannelURIs := make(map[string]types.NamespacedName)
+	redirectURIs := make(map[string]types.NamespacedName)
+
+	for _, entry := range entries {
+		if !entry.filter.Valid {
+			continue
+		}
+		oidc := entry.filter.Source.Spec.OIDC
+		if oidc.Logout != nil && oidc.Logout.URI != nil {
+			claimOIDCURI(entry.filter, entry.nsname, *oidc.Logout.URI, "logout URI", hostname, logoutURIs)
+		}
+		if entry.filter.Valid && oidc.Logout != nil && oidc.Logout.FrontChannelLogoutURI != nil {
+			claimOIDCURI(
+				entry.filter, entry.nsname,
+				*oidc.Logout.FrontChannelLogoutURI, "front-channel logout URI", hostname, frontChannelURIs,
+			)
+		}
+		if entry.filter.Valid && oidc.RedirectURI != nil && strings.HasPrefix(*oidc.RedirectURI, "/") {
+			claimOIDCURI(entry.filter, entry.nsname, *oidc.RedirectURI, "redirect URI", hostname, redirectURIs)
+		}
+	}
+}
+
+// claimOIDCURI attempts to register uri for the given filter on a hostname. If another filter already claimed
+// that URI on the same hostname, the current filter is marked invalid with a condition.
+func claimOIDCURI(
+	af *AuthenticationFilter,
+	afNsname types.NamespacedName,
+	uri, uriType string,
+	hostname v1.Hostname,
+	claimed map[string]types.NamespacedName,
+) {
+	if winner, exists := claimed[uri]; exists {
+		msg := fmt.Sprintf(
+			"%s %q conflicts with OIDC filter %s/%s on hostname %q",
+			uriType, uri, winner.Namespace, winner.Name, hostname,
+		)
+		cond := conditions.NewAuthenticationFilterInvalid(msg)
+		af.Conditions = append(af.Conditions, cond)
+		af.Valid = false
+	} else {
+		claimed[uri] = afNsname
+	}
 }
