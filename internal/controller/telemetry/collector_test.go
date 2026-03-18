@@ -330,6 +330,11 @@ var _ = Describe("Collector", Ordered, func() {
 								},
 							},
 						},
+						{Name: "WAFGateway"}: {
+							EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+								WAF: helpers.GetPointer(v1alpha2.WAFEnabled),
+							},
+						},
 					},
 					IgnoredGatewayClasses: map[types.NamespacedName]*gatewayv1.GatewayClass{
 						{Name: "ignoredGC1"}: {},
@@ -536,6 +541,14 @@ var _ = Describe("Collector", Ordered, func() {
 							NsName: types.NamespacedName{Namespace: "test", Name: "RateLimitPolicy-2"},
 							GVK:    schema.GroupVersionKind{Kind: kinds.RateLimitPolicy},
 						}: {TargetRefs: []graph.PolicyTargetRef{{Kind: kinds.Gateway}}},
+						{
+							NsName: types.NamespacedName{Namespace: "test", Name: "WAFGatewayBindingPolicy-1"},
+							GVK:    schema.GroupVersionKind{Kind: kinds.WAFGatewayBindingPolicy},
+						}: {TargetRefs: []graph.PolicyTargetRef{{Kind: kinds.HTTPRoute}, {Kind: kinds.GRPCRoute}}},
+						{
+							NsName: types.NamespacedName{Namespace: "test", Name: "WAFGatewayBindingPolicy-2"},
+							GVK:    schema.GroupVersionKind{Kind: kinds.WAFGatewayBindingPolicy},
+						}: {TargetRefs: []graph.PolicyTargetRef{{Kind: kinds.Gateway}}},
 					},
 					ReferencedNginxProxies: map[types.NamespacedName]*graph.NginxProxy{
 						{Namespace: "test", Name: "NginxProxy-1"}: &gcNP,
@@ -645,28 +658,34 @@ var _ = Describe("Collector", Ordered, func() {
 
 				expData.ClusterNodeCount = 3
 				expData.NGFResourceCounts = telemetry.NGFResourceCounts{
-					GatewayCount:                             4,
-					GatewayClassCount:                        3,
-					HTTPRouteCount:                           3,
-					TLSRouteCount:                            3,
-					TCPRouteCount:                            2,
-					UDPRouteCount:                            2,
-					RouteAttachedRateLimitPolicyCount:        2,
-					GatewayAttachedRateLimitPolicyCount:      1,
-					AuthenticationFilterCount:                1,
-					SnippetsPolicyCount:                      4,
-					SecretCount:                              3,
-					ServiceCount:                             3,
-					EndpointCount:                            5,
-					GRPCRouteCount:                           2,
-					BackendTLSPolicyCount:                    3,
-					GatewayAttachedClientSettingsPolicyCount: 1,
-					RouteAttachedClientSettingsPolicyCount:   2,
-					ObservabilityPolicyCount:                 1,
-					NginxProxyCount:                          3,
-					SnippetsFilterCount:                      3,
-					UpstreamSettingsPolicyCount:              1,
-					GatewayAttachedNpCount:                   2,
+					GatewayCount:                                5,
+					GatewayClassCount:                           3,
+					HTTPRouteCount:                              3,
+					TLSRouteCount:                               3,
+					TCPRouteCount:                               2,
+					UDPRouteCount:                               2,
+					RouteAttachedRateLimitPolicyCount:           2,
+					GatewayAttachedRateLimitPolicyCount:         1,
+					AuthenticationFilterCount:                   1,
+					SnippetsPolicyCount:                         4,
+					SecretCount:                                 3,
+					ServiceCount:                                3,
+					EndpointCount:                               5,
+					GRPCRouteCount:                              2,
+					BackendTLSPolicyCount:                       3,
+					GatewayAttachedClientSettingsPolicyCount:    1,
+					RouteAttachedClientSettingsPolicyCount:      2,
+					ObservabilityPolicyCount:                    1,
+					NginxProxyCount:                             3,
+					SnippetsFilterCount:                         3,
+					UpstreamSettingsPolicyCount:                 1,
+					GatewayAttachedNpCount:                      2,
+					InferencePoolCount:                          3,
+					GatewayAttachedProxySettingsPolicyCount:     2,
+					RouteAttachedProxySettingsPolicyCount:       4,
+					GatewayAttachedWAFGatewayBindingPolicyCount: 1,
+					RouteAttachedWAFGatewayBindingPolicyCount:   2,
+					WAFEnabledGatewayCount:                      1,
 				}
 				expData.ClusterVersion = "1.29.2"
 				expData.ClusterPlatform = "kind"
@@ -707,15 +726,11 @@ var _ = Describe("Collector", Ordered, func() {
 				}
 
 				// one gateway with one replica + one gateway with three replicas + one gateway with replica field
-				// empty + one gateway using daemonset
-				expData.NginxPodCount = int64(8)
+				// empty + one gateway using daemonset + one gateway with WAF enabled which is counted as having one replica
+				expData.NginxPodCount = int64(9)
 				expData.ControlPlanePodCount = int64(2)
 				expData.NginxOneConnectionEnabled = true
 				expData.BuildOS = "alpine"
-
-				expData.InferencePoolCount = 3
-				expData.GatewayAttachedProxySettingsPolicyCount = 2
-				expData.RouteAttachedProxySettingsPolicyCount = 4
 
 				data, err := dataCollector.Collect(ctx)
 				Expect(err).ToNot(HaveOccurred())
@@ -850,7 +865,9 @@ var _ = Describe("Collector", Ordered, func() {
 			graph1 = &graph.Graph{
 				GatewayClass: &graph.GatewayClass{NginxProxy: &graph.NginxProxy{Valid: true}},
 				Gateways: map[types.NamespacedName]*graph.Gateway{
-					{Name: "gateway1"}: {},
+					{Name: "gateway1"}: {EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+						WAF: helpers.GetPointer(v1alpha2.WAFEnabled),
+					}},
 				},
 				Routes: map[graph.RouteKey]*graph.L7Route{
 					{NamespacedName: types.NamespacedName{Namespace: "test", Name: "hr-1"}}: {RouteType: graph.RouteTypeHTTP},
@@ -917,6 +934,14 @@ var _ = Describe("Collector", Ordered, func() {
 					{
 						NsName: types.NamespacedName{Namespace: "test", Name: "RateLimitPolicy-2"},
 						GVK:    schema.GroupVersionKind{Kind: kinds.RateLimitPolicy},
+					}: {TargetRefs: []graph.PolicyTargetRef{{Kind: kinds.Gateway}}},
+					{
+						NsName: types.NamespacedName{Namespace: "test", Name: "WAFGatewayBindingPolicy-1"},
+						GVK:    schema.GroupVersionKind{Kind: kinds.WAFGatewayBindingPolicy},
+					}: {TargetRefs: []graph.PolicyTargetRef{{Kind: kinds.HTTPRoute}, {Kind: kinds.GRPCRoute}}},
+					{
+						NsName: types.NamespacedName{Namespace: "test", Name: "WAFGatewayBindingPolicy-2"},
+						GVK:    schema.GroupVersionKind{Kind: kinds.WAFGatewayBindingPolicy},
 					}: {TargetRefs: []graph.PolicyTargetRef{{Kind: kinds.Gateway}}},
 				},
 				ReferencedNginxProxies: map[types.NamespacedName]*graph.NginxProxy{
@@ -1000,33 +1025,36 @@ var _ = Describe("Collector", Ordered, func() {
 				fakeConfigurationGetter.GetLatestConfigurationReturns(config1)
 
 				expData.NGFResourceCounts = telemetry.NGFResourceCounts{
-					GatewayCount:                             1,
-					GatewayClassCount:                        1,
-					HTTPRouteCount:                           1,
-					TLSRouteCount:                            1,
-					TCPRouteCount:                            1,
-					UDPRouteCount:                            1,
-					RouteAttachedRateLimitPolicyCount:        2,
-					GatewayAttachedRateLimitPolicyCount:      1,
-					AuthenticationFilterCount:                1,
-					SnippetsPolicyCount:                      1,
-					GRPCRouteCount:                           1,
-					SecretCount:                              1,
-					ServiceCount:                             1,
-					EndpointCount:                            1,
-					GatewayAttachedClientSettingsPolicyCount: 1,
-					RouteAttachedClientSettingsPolicyCount:   1,
-					ObservabilityPolicyCount:                 1,
-					NginxProxyCount:                          1,
-					SnippetsFilterCount:                      1,
-					UpstreamSettingsPolicyCount:              1,
-					GatewayAttachedNpCount:                   1,
-					BackendTLSPolicyCount:                    1,
+					GatewayCount:                                1,
+					GatewayClassCount:                           1,
+					HTTPRouteCount:                              1,
+					TLSRouteCount:                               1,
+					TCPRouteCount:                               1,
+					UDPRouteCount:                               1,
+					RouteAttachedRateLimitPolicyCount:           2,
+					GatewayAttachedRateLimitPolicyCount:         1,
+					AuthenticationFilterCount:                   1,
+					SnippetsPolicyCount:                         1,
+					GRPCRouteCount:                              1,
+					SecretCount:                                 1,
+					ServiceCount:                                1,
+					EndpointCount:                               1,
+					GatewayAttachedClientSettingsPolicyCount:    1,
+					RouteAttachedClientSettingsPolicyCount:      1,
+					ObservabilityPolicyCount:                    1,
+					NginxProxyCount:                             1,
+					SnippetsFilterCount:                         1,
+					UpstreamSettingsPolicyCount:                 1,
+					GatewayAttachedNpCount:                      1,
+					BackendTLSPolicyCount:                       1,
+					InferencePoolCount:                          1,
+					GatewayAttachedProxySettingsPolicyCount:     2,
+					RouteAttachedProxySettingsPolicyCount:       3,
+					GatewayAttachedWAFGatewayBindingPolicyCount: 1,
+					RouteAttachedWAFGatewayBindingPolicyCount:   2,
+					WAFEnabledGatewayCount:                      1,
 				}
 				expData.NginxPodCount = 1
-				expData.InferencePoolCount = 1
-				expData.GatewayAttachedProxySettingsPolicyCount = 2
-				expData.RouteAttachedProxySettingsPolicyCount = 3
 
 				data, err := dataCollector.Collect(ctx)
 

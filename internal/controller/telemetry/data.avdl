@@ -123,6 +123,28 @@ attached at the Gateway level. */
 		/** UDPRouteCount is the number of relevant UDPRoutes. */
 		long? UDPRouteCount = null;
 		
+		/** InferencePoolCount is the number of InferencePools that are referenced by at least one Route. */
+		long? InferencePoolCount = null;
+		
+		/** GatewayAttachedProxySettingsPolicyCount is the number of relevant ProxySettingsPolicies
+attached at the Gateway level. */
+		long? GatewayAttachedProxySettingsPolicyCount = null;
+		
+		/** RouteAttachedProxySettingsPolicyCount is the number of relevant ProxySettingsPolicies
+attached at the Route level. */
+		long? RouteAttachedProxySettingsPolicyCount = null;
+		
+		/** GatewayAttachedWAFGatewayBindingPolicyCount is the number of WAFGatewayBindingPolicy resources
+attached at the Gateway level. */
+		long? GatewayAttachedWAFGatewayBindingPolicyCount = null;
+		
+		/** RouteAttachedWAFGatewayBindingPolicyCount is the number of WAFGatewayBindingPolicy resources
+attached at the Route level. */
+		long? RouteAttachedWAFGatewayBindingPolicyCount = null;
+		
+		/** WAFEnabledGatewayCount is the number of Gateways with WAF enabled on their effective NginxProxy. */
+		long? WAFEnabledGatewayCount = null;
+		
 		/** NginxPodCount is the total number of Nginx data plane Pods. */
 		long? NginxPodCount = null;
 		
@@ -132,19 +154,8 @@ attached at the Gateway level. */
 		/** NginxOneConnectionEnabled is a boolean that indicates whether the connection to the Nginx One Console is enabled. */
 		boolean? NginxOneConnectionEnabled = null;
 		
-		/** InferencePoolCount is the number of InferencePools that are referenced by at least one Route. */
-		long? InferencePoolCount = null;
-		
 		/** BuildOS is the base operating system the control plane was built on (e.g. alpine, ubi). */
 		string? BuildOS = null;
-		
-		/** GatewayAttachedProxySettingsPolicyCount is the number of relevant ProxySettingsPolicies
-attached at the Gateway level. */
-		long? GatewayAttachedProxySettingsPolicyCount = null;
-		
-		/** RouteAttachedProxySettingsPolicyCount is the number of relevant ProxySettingsPolicies
-attached at the Route level. */
-		long? RouteAttachedProxySettingsPolicyCount = null;
 		
 		/** SnippetsPoliciesDirectives contains the directive-context strings of all applied SnippetsPolicy.
 Both lists are ordered first by count, then by lexicographical order of the context string,
