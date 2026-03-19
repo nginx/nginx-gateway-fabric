@@ -1143,6 +1143,16 @@ func TestValidateOIDCURIConflictsPerHostname(t *testing.T) {
 				Hostnames: []v1.Hostname{hostname},
 				Rules:     rules,
 			},
+			ParentRefs: []ParentRef{
+				{
+					Attachment: &ParentRefAttachmentStatus{
+						AcceptedHostnames: map[string][]string{
+							"gateway/listener": {string(hostname)},
+						},
+						Attached: true,
+					},
+				},
+			},
 		}
 		return key, route
 	}
@@ -1192,7 +1202,7 @@ func TestValidateOIDCURIConflictsPerHostname(t *testing.T) {
 			expBValid: false,
 			expBConditions: []conditions.Condition{
 				conditions.NewAuthenticationFilterInvalid(
-					`logout URI "/logout" conflicts with OIDC filter a-ns/filter-a on hostname "cafe.example.com"`,
+					`logout URI "/logout" conflicts with logout URI of OIDC filter a-ns/filter-a on hostname "cafe.example.com"`,
 				),
 			},
 		},
@@ -1213,7 +1223,8 @@ func TestValidateOIDCURIConflictsPerHostname(t *testing.T) {
 			expBValid: false,
 			expBConditions: []conditions.Condition{
 				conditions.NewAuthenticationFilterInvalid(
-					`front-channel logout URI "/front" conflicts with OIDC filter a-ns/filter-a on hostname "cafe.example.com"`,
+					`front-channel logout URI "/front" conflicts with front-channel " +
+					"logout URI of OIDC filter a-ns/filter-a on hostname "cafe.example.com"`,
 				),
 			},
 		},
@@ -1234,7 +1245,7 @@ func TestValidateOIDCURIConflictsPerHostname(t *testing.T) {
 			expBValid: false,
 			expBConditions: []conditions.Condition{
 				conditions.NewAuthenticationFilterInvalid(
-					`redirect URI "/callback" conflicts with OIDC filter a-ns/filter-a on hostname "cafe.example.com"`,
+					`redirect URI "/callback" conflicts with redirect URI of OIDC filter a-ns/filter-a on hostname "cafe.example.com"`,
 				),
 			},
 		},
@@ -1299,6 +1310,67 @@ func TestValidateOIDCURIConflictsPerHostname(t *testing.T) {
 			},
 			expAValid: true,
 			expBValid: false,
+		},
+		{
+			name: "two valid OIDC filters on the same hostname where a-ns/filter-a has redirect URI /cb " +
+				"and b-ns/filter-b has logout URI /cb causing cross-type conflict, b-ns/filter-b is marked invalid",
+			buildRoutes: func() map[RouteKey]*L7Route {
+				filterA := createAuthenticationFilterWithOIDC(filterANsName, &ngfAPI.OIDCAuth{
+					RedirectURI: helpers.GetPointer("/cb"),
+				}, true)
+				filterB := createAuthenticationFilterWithOIDC(filterBNsName, &ngfAPI.OIDCAuth{
+					Logout: &ngfAPI.OIDCLogoutConfig{URI: helpers.GetPointer("/cb")},
+				}, true)
+				k, r := makeRoute(types.NamespacedName{Namespace: "ns", Name: "route"}, cafe, filterA, filterB)
+				return map[RouteKey]*L7Route{k: r}
+			},
+			expAValid: true,
+			expBValid: false,
+			expBConditions: []conditions.Condition{
+				conditions.NewAuthenticationFilterInvalid(
+					`logout URI "/cb" conflicts with redirect URI of OIDC filter a-ns/filter-a on hostname "cafe.example.com"`,
+				),
+			},
+		},
+		{
+			name: "two valid OIDC filters on routes with no spec hostnames that both attach to the same listener " +
+				"hostname cafe.example.com duplicate logout URI /logout is detected via " +
+				"accepted hostnames b-ns/filter-b is marked invalid",
+			buildRoutes: func() map[RouteKey]*L7Route {
+				filterA := createAuthenticationFilterWithOIDC(filterANsName, &ngfAPI.OIDCAuth{
+					Logout: &ngfAPI.OIDCLogoutConfig{URI: helpers.GetPointer("/logout")},
+				}, true)
+				filterB := createAuthenticationFilterWithOIDC(filterBNsName, &ngfAPI.OIDCAuth{
+					Logout: &ngfAPI.OIDCLogoutConfig{URI: helpers.GetPointer("/logout")},
+				}, true)
+				acceptedHostnames := map[string][]string{"gateway/listener": {"cafe.example.com"}}
+				makeNoHostnameRoute := func(nsname types.NamespacedName, af *AuthenticationFilter) (RouteKey, *L7Route) {
+					return RouteKey{NamespacedName: nsname, RouteType: RouteTypeHTTP}, &L7Route{
+						Spec: L7RouteSpec{Rules: []RouteRule{{Filters: RouteRuleFilters{
+							Filters: []Filter{
+								{
+									FilterType:           FilterExtensionRef,
+									ResolvedExtensionRef: &ExtensionRefFilter{AuthenticationFilter: af, Valid: true},
+								},
+							},
+							Valid: true,
+						}}}},
+						ParentRefs: []ParentRef{
+							{Attachment: &ParentRefAttachmentStatus{AcceptedHostnames: acceptedHostnames, Attached: true}},
+						},
+					}
+				}
+				kA, rA := makeNoHostnameRoute(types.NamespacedName{Namespace: "ns", Name: "route-a"}, filterA)
+				kB, rB := makeNoHostnameRoute(types.NamespacedName{Namespace: "ns", Name: "route-b"}, filterB)
+				return map[RouteKey]*L7Route{kA: rA, kB: rB}
+			},
+			expAValid: true,
+			expBValid: false,
+			expBConditions: []conditions.Condition{
+				conditions.NewAuthenticationFilterInvalid(
+					`logout URI "/logout" conflicts with logout URI of OIDC filter a-ns/filter-a on hostname "cafe.example.com"`,
+				),
+			},
 		},
 	}
 

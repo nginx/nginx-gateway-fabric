@@ -17,6 +17,12 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
 
+// oidcClaimedEntry records which filter first claimed a given NGINX callback path on a hostname.
+type oidcClaimedEntry struct {
+	owner   types.NamespacedName
+	uriType string
+}
+
 // AuthenticationFilter represents a ngfAPI.AuthenticationFilter.
 type AuthenticationFilter struct {
 	// Source is the AuthenticationFilter.
@@ -296,15 +302,47 @@ func validateOIDCURIConflictsPerHostname(routes map[RouteKey]*L7Route) {
 			checkOIDCURIConflictsForHostname(hostname, filtersMap)
 		}
 	}
+	propagateInvalidOIDCFiltersToRouteRules(routes)
 }
 
-// buildHostnameToOIDCFilters returns a map from each hostname to the unique OIDC filters referenced on it.
+// propagateInvalidOIDCFiltersToRouteRules marks route rules and the route itself as having an invalid filter
+// when their referenced OIDC filter was invalidated by URI conflict detection. This ensures the dataplane
+// treats those rules as invalid rather than silently skipping authentication.
+func propagateInvalidOIDCFiltersToRouteRules(routes map[RouteKey]*L7Route) {
+	for _, route := range routes {
+		routeInvalidated := false
+		for i, rule := range route.Spec.Rules {
+			for j, f := range rule.Filters.Filters {
+				af := oidcAuthFilterFrom(f)
+				if af == nil || af.Valid {
+					continue
+				}
+				route.Spec.Rules[i].Filters.Filters[j].ResolvedExtensionRef.Valid = false
+				route.Spec.Rules[i].Filters.Valid = false
+				routeInvalidated = true
+			}
+		}
+		if routeInvalidated {
+			route.Conditions = append(route.Conditions, conditions.NewRouteResolvedRefsInvalidFilter(
+				"OIDC filter is invalid due to URI conflict on a shared hostname; see filter status for details",
+			))
+		}
+	}
+}
+
+// buildHostnameToOIDCFilters returns a map from each accepted hostname to the unique OIDC filters referenced on it.
+// It uses the accepted hostnames computed during listener binding,
+// so it reflects the actual hostnames the route serves.
 func buildHostnameToOIDCFilters(
 	routes map[RouteKey]*L7Route,
 ) map[v1.Hostname]map[types.NamespacedName]*AuthenticationFilter {
 	hostnameToFilters := make(map[v1.Hostname]map[types.NamespacedName]*AuthenticationFilter)
 
 	for _, route := range routes {
+		acceptedHostnames := collectAcceptedHostnames(route.ParentRefs)
+		if len(acceptedHostnames) == 0 {
+			continue
+		}
 		for _, rule := range route.Spec.Rules {
 			for _, f := range rule.Filters.Filters {
 				af := oidcAuthFilterFrom(f)
@@ -312,7 +350,7 @@ func buildHostnameToOIDCFilters(
 					continue
 				}
 				nsname := types.NamespacedName{Namespace: af.Source.Namespace, Name: af.Source.Name}
-				for _, hostname := range route.Spec.Hostnames {
+				for _, hostname := range acceptedHostnames {
 					if hostnameToFilters[hostname] == nil {
 						hostnameToFilters[hostname] = make(map[types.NamespacedName]*AuthenticationFilter)
 					}
@@ -323,6 +361,27 @@ func buildHostnameToOIDCFilters(
 	}
 
 	return hostnameToFilters
+}
+
+// collectAcceptedHostnames returns a deduplicated list of all accepted hostnames across all parent refs.
+func collectAcceptedHostnames(parentRefs []ParentRef) []v1.Hostname {
+	seen := make(map[v1.Hostname]struct{})
+	var hostnames []v1.Hostname
+	for _, ref := range parentRefs {
+		if ref.Attachment == nil {
+			continue
+		}
+		for _, hs := range ref.Attachment.AcceptedHostnames {
+			for _, h := range hs {
+				hostname := v1.Hostname(h)
+				if _, exists := seen[hostname]; !exists {
+					seen[hostname] = struct{}{}
+					hostnames = append(hostnames, hostname)
+				}
+			}
+		}
+	}
+	return hostnames
 }
 
 // oidcAuthFilterFrom returns the AuthenticationFilter from a Filter if it is an OIDC extension ref, or nil.
@@ -361,9 +420,9 @@ func checkOIDCURIConflictsForHostname(
 		return strings.Compare(a.nsname.Name, b.nsname.Name)
 	})
 
-	logoutURIs := make(map[string]types.NamespacedName)
-	frontChannelURIs := make(map[string]types.NamespacedName)
-	redirectURIs := make(map[string]types.NamespacedName)
+	// All three URI types share the same NGINX location path spaces,
+	// so we use a single map to catch both same-type and cross-type conflicts.
+	claimedPaths := make(map[string]oidcClaimedEntry)
 
 	for _, entry := range entries {
 		if !entry.filter.Valid {
@@ -371,16 +430,16 @@ func checkOIDCURIConflictsForHostname(
 		}
 		oidc := entry.filter.Source.Spec.OIDC
 		if oidc.Logout != nil && oidc.Logout.URI != nil {
-			claimOIDCURI(entry.filter, entry.nsname, *oidc.Logout.URI, "logout URI", hostname, logoutURIs)
+			claimOIDCURI(entry.filter, entry.nsname, *oidc.Logout.URI, "logout URI", hostname, claimedPaths)
 		}
 		if entry.filter.Valid && oidc.Logout != nil && oidc.Logout.FrontChannelLogoutURI != nil {
 			claimOIDCURI(
 				entry.filter, entry.nsname,
-				*oidc.Logout.FrontChannelLogoutURI, "front-channel logout URI", hostname, frontChannelURIs,
+				*oidc.Logout.FrontChannelLogoutURI, "front-channel logout URI", hostname, claimedPaths,
 			)
 		}
 		if entry.filter.Valid && oidc.RedirectURI != nil && strings.HasPrefix(*oidc.RedirectURI, "/") {
-			claimOIDCURI(entry.filter, entry.nsname, *oidc.RedirectURI, "redirect URI", hostname, redirectURIs)
+			claimOIDCURI(entry.filter, entry.nsname, *oidc.RedirectURI, "redirect URI", hostname, claimedPaths)
 		}
 	}
 }
@@ -392,17 +451,17 @@ func claimOIDCURI(
 	afNsname types.NamespacedName,
 	uri, uriType string,
 	hostname v1.Hostname,
-	claimed map[string]types.NamespacedName,
+	claimed map[string]oidcClaimedEntry,
 ) {
 	if winner, exists := claimed[uri]; exists {
 		msg := fmt.Sprintf(
-			"%s %q conflicts with OIDC filter %s/%s on hostname %q",
-			uriType, uri, winner.Namespace, winner.Name, hostname,
+			"%s %q conflicts with %s of OIDC filter %s/%s on hostname %q",
+			uriType, uri, winner.uriType, winner.owner.Namespace, winner.owner.Name, hostname,
 		)
 		cond := conditions.NewAuthenticationFilterInvalid(msg)
 		af.Conditions = append(af.Conditions, cond)
 		af.Valid = false
 	} else {
-		claimed[uri] = afNsname
+		claimed[uri] = oidcClaimedEntry{owner: afNsname, uriType: uriType}
 	}
 }

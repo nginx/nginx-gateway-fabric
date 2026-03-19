@@ -286,8 +286,6 @@ func BuildGraph(
 		featureFlags,
 	)
 
-	validateOIDCURIConflictsPerHostname(routes)
-
 	referencedInferencePools := buildReferencedInferencePools(routes, gws, state.InferencePools, state.Services)
 
 	l4routes := buildL4RoutesForGateways(
@@ -307,6 +305,8 @@ func BuildGraph(
 		processedBackendTLSPolicies,
 	)
 	bindRoutesToListeners(routes, l4routes, gws, state.Namespaces)
+
+	validateOIDCURIConflictsPerHostname(routes)
 
 	referencedNamespaces := buildReferencedNamespaces(state.Namespaces, gws)
 
