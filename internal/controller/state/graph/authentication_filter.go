@@ -300,49 +300,18 @@ func validateOIDCLogoutURIs(
 	return allErrs
 }
 
-// validateOIDCFilters runs all post-binding OIDC validations in order:
-// first it rejects filters attached to non-HTTPS listeners, then it checks for URI conflicts
-// among the remaining valid filters across shared hostnames.
+// validateOIDCFilters performs all post-binding OIDC validations in a single pass over routes and rules:
+//   - filters attached to non-HTTPS listeners are marked invalid immediately
+//   - the remaining valid filters are collected for URI conflict detection across shared hostnames
 func validateOIDCFilters(routes map[RouteKey]*L7Route, gws map[types.NamespacedName]*Gateway) {
-	validateOIDCHTTPSListeners(routes, gws)
-	validateOIDCURIConflictsPerHostname(routes)
-}
-
-// validateOIDCHTTPSListeners marks OIDC filters invalid when any of the route's active listener attachments
-// are not HTTPS.
-// The filter and the referencing route rules are both marked invalid.
-func validateOIDCHTTPSListeners(routes map[RouteKey]*L7Route, gws map[types.NamespacedName]*Gateway) {
 	listenerProtocols := buildListenerProtocolMap(gws)
-
-	for _, route := range routes {
-		if !route.Valid {
-			continue
-		}
-		if !hasNonHTTPSAttachment(route.ParentRefs, listenerProtocols) {
-			continue
-		}
-		for i, rule := range route.Spec.Rules {
-			if !rule.ValidMatches || !rule.Filters.Valid {
-				continue
-			}
-			for j, f := range rule.Filters.Filters {
-				af := oidcAuthFilterFrom(f)
-				if af == nil || !af.Valid {
-					continue
-				}
-				cond := conditions.NewAuthenticationFilterInvalid(
-					"OIDC authentication requires an HTTPS listener",
-				)
-				af.Conditions = append(af.Conditions, cond)
-				af.Valid = false
-				route.Spec.Rules[i].Filters.Filters[j].ResolvedExtensionRef.Valid = false
-				route.Spec.Rules[i].Filters.Valid = false
-				mergeOrAppendRouteCondition(route, conditions.NewRouteResolvedRefsInvalidFilter(
-					"OIDC filter is invalid: OIDC authentication requires an HTTPS listener",
-				))
-			}
+	hostnameToFilters, filterRefs := collectOIDCFilterInfo(routes, listenerProtocols)
+	for hostname, filtersMap := range hostnameToFilters {
+		if len(filtersMap) >= 2 {
+			checkOIDCURIConflictsForHostname(hostname, filtersMap)
 		}
 	}
+	propagateInvalidOIDCFiltersToRouteRules(filterRefs)
 }
 
 // buildListenerProtocolMap returns a map from listener key to protocol for all listeners across all gateways.
@@ -380,25 +349,13 @@ func hasNonHTTPSAttachment(parentRefs []ParentRef, listenerProtocols map[string]
 	return false
 }
 
-// validateOIDCURIConflictsPerHostname marks OIDC filters as invalid if multiple filters referenced by routes
-// with the same hostname define the same logout URI, front-channel logout URI, or path-only redirect URI.
-// When a conflict is detected, the filter that sorts later (by creation timestamp, then namespace/name) is
-// marked invalid; the one that sorts first retains the URI.
-func validateOIDCURIConflictsPerHostname(routes map[RouteKey]*L7Route) {
-	hostnameToFilters, filterRefs := collectOIDCFilterInfo(routes)
-	for hostname, filtersMap := range hostnameToFilters {
-		if len(filtersMap) >= 2 {
-			checkOIDCURIConflictsForHostname(hostname, filtersMap)
-		}
-	}
-	propagateInvalidOIDCFiltersToRouteRules(filterRefs)
-}
-
-// collectOIDCFilterInfo performs a single pass over all valid routes and rules, returning:
-//   - hostnameToFilters: maps each accepted hostname to the unique OIDC filters referenced on it
-//   - filterRefs: maps each OIDC filter to the route rules that reference it, for targeted propagation
+// collectOIDCFilterInfo performs a single pass over all valid routes and rules.
+// For each OIDC filter encountered:
+//   - if its route has a non-HTTPS listener attachment, it is marked invalid immediately
+//   - otherwise it is registered in hostnameToFilters (for URI conflict detection) and filterRefs (for propagation)
 func collectOIDCFilterInfo(
 	routes map[RouteKey]*L7Route,
+	listenerProtocols map[string]v1.ProtocolType,
 ) (
 	map[v1.Hostname]map[types.NamespacedName]*AuthenticationFilter,
 	map[*AuthenticationFilter][]oidcRuleRef,
@@ -410,6 +367,7 @@ func collectOIDCFilterInfo(
 		if !route.Valid {
 			continue
 		}
+		nonHTTPS := hasNonHTTPSAttachment(route.ParentRefs, listenerProtocols)
 		acceptedHostnames := collectAcceptedHostnames(route.ParentRefs)
 		if len(acceptedHostnames) == 0 {
 			continue
@@ -418,9 +376,21 @@ func collectOIDCFilterInfo(
 			if !rule.ValidMatches || !rule.Filters.Valid {
 				continue
 			}
-			for j, filter := range rule.Filters.Filters {
-				af := oidcAuthFilterFrom(filter)
-				if af == nil {
+			for j, f := range rule.Filters.Filters {
+				af := oidcAuthFilterFrom(f)
+				if af == nil || !af.Valid {
+					continue
+				}
+				if nonHTTPS {
+					af.Conditions = append(af.Conditions,
+						conditions.NewAuthenticationFilterInvalid("OIDC authentication requires an HTTPS listener"),
+					)
+					af.Valid = false
+					route.Spec.Rules[i].Filters.Filters[j].ResolvedExtensionRef.Valid = false
+					route.Spec.Rules[i].Filters.Valid = false
+					mergeOrAppendRouteCondition(route, conditions.NewRouteResolvedRefsInvalidFilter(
+						"OIDC filter is invalid: OIDC authentication requires an HTTPS listener",
+					))
 					continue
 				}
 				nsname := types.NamespacedName{Namespace: af.Source.Namespace, Name: af.Source.Name}

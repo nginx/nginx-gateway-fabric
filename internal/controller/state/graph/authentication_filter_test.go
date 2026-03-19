@@ -1229,7 +1229,7 @@ func TestValidateOIDCHTTPSListeners(t *testing.T) {
 			g := NewWithT(t)
 
 			routes, gws := tt.buildRouteAndGateway()
-			validateOIDCHTTPSListeners(routes, gws)
+			validateOIDCFilters(routes, gws)
 
 			var af *AuthenticationFilter
 			for _, route := range routes {
@@ -1562,7 +1562,7 @@ func TestValidateOIDCURIConflictsPerHostname(t *testing.T) {
 			g := NewWithT(t)
 
 			routes := tt.buildRoutes()
-			validateOIDCURIConflictsPerHostname(routes)
+			validateOIDCFilters(routes, nil)
 
 			var filterA, filterB *AuthenticationFilter
 			for _, route := range routes {
