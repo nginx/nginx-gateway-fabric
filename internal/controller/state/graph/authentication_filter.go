@@ -10,6 +10,7 @@ import (
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/ngfsort"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/secrets"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/resolver"
@@ -21,6 +22,13 @@ import (
 type oidcClaimedEntry struct {
 	owner   types.NamespacedName
 	uriType string
+}
+
+// oidcRuleRef identifies a specific filter within a route rule, used for targeted propagation.
+type oidcRuleRef struct {
+	route     *L7Route
+	ruleIdx   int
+	filterIdx int
 }
 
 // AuthenticationFilter represents a ngfAPI.AuthenticationFilter.
@@ -294,58 +302,44 @@ func validateOIDCLogoutURIs(
 
 // validateOIDCURIConflictsPerHostname marks OIDC filters as invalid if multiple filters referenced by routes
 // with the same hostname define the same logout URI, front-channel logout URI, or path-only redirect URI.
-// When a conflict is detected, the filter that sorts later by namespace/name is marked invalid; the one
-// that sorts first retains the URI.
+// When a conflict is detected, the filter that sorts later (by creation timestamp, then namespace/name) is
+// marked invalid; the one that sorts first retains the URI.
 func validateOIDCURIConflictsPerHostname(routes map[RouteKey]*L7Route) {
-	for hostname, filtersMap := range buildHostnameToOIDCFilters(routes) {
+	hostnameToFilters, filterRefs := collectOIDCFilterInfo(routes)
+	for hostname, filtersMap := range hostnameToFilters {
 		if len(filtersMap) >= 2 {
 			checkOIDCURIConflictsForHostname(hostname, filtersMap)
 		}
 	}
-	propagateInvalidOIDCFiltersToRouteRules(routes)
+	propagateInvalidOIDCFiltersToRouteRules(filterRefs)
 }
 
-// propagateInvalidOIDCFiltersToRouteRules marks route rules and the route itself as having an invalid filter
-// when their referenced OIDC filter was invalidated by URI conflict detection. This ensures the dataplane
-// treats those rules as invalid rather than silently skipping authentication.
-func propagateInvalidOIDCFiltersToRouteRules(routes map[RouteKey]*L7Route) {
-	for _, route := range routes {
-		routeInvalidated := false
-		for i, rule := range route.Spec.Rules {
-			for j, f := range rule.Filters.Filters {
-				af := oidcAuthFilterFrom(f)
-				if af == nil || af.Valid {
-					continue
-				}
-				route.Spec.Rules[i].Filters.Filters[j].ResolvedExtensionRef.Valid = false
-				route.Spec.Rules[i].Filters.Valid = false
-				routeInvalidated = true
-			}
-		}
-		if routeInvalidated {
-			route.Conditions = append(route.Conditions, conditions.NewRouteResolvedRefsInvalidFilter(
-				"OIDC filter is invalid due to URI conflict on a shared hostname; see filter status for details",
-			))
-		}
-	}
-}
-
-// buildHostnameToOIDCFilters returns a map from each accepted hostname to the unique OIDC filters referenced on it.
-// It uses the accepted hostnames computed during listener binding,
-// so it reflects the actual hostnames the route serves.
-func buildHostnameToOIDCFilters(
+// collectOIDCFilterInfo performs a single pass over all valid routes and rules, returning:
+//   - hostnameToFilters: maps each accepted hostname to the unique OIDC filters referenced on it
+//   - filterRefs: maps each OIDC filter to the route rules that reference it, for targeted propagation
+func collectOIDCFilterInfo(
 	routes map[RouteKey]*L7Route,
-) map[v1.Hostname]map[types.NamespacedName]*AuthenticationFilter {
+) (
+	map[v1.Hostname]map[types.NamespacedName]*AuthenticationFilter,
+	map[*AuthenticationFilter][]oidcRuleRef,
+) {
 	hostnameToFilters := make(map[v1.Hostname]map[types.NamespacedName]*AuthenticationFilter)
+	filterRefs := make(map[*AuthenticationFilter][]oidcRuleRef)
 
 	for _, route := range routes {
+		if !route.Valid {
+			continue
+		}
 		acceptedHostnames := collectAcceptedHostnames(route.ParentRefs)
 		if len(acceptedHostnames) == 0 {
 			continue
 		}
-		for _, rule := range route.Spec.Rules {
-			for _, f := range rule.Filters.Filters {
-				af := oidcAuthFilterFrom(f)
+		for i, rule := range route.Spec.Rules {
+			if !rule.ValidMatches || !rule.Filters.Valid {
+				continue
+			}
+			for j, filter := range rule.Filters.Filters {
+				af := oidcAuthFilterFrom(filter)
 				if af == nil {
 					continue
 				}
@@ -356,11 +350,50 @@ func buildHostnameToOIDCFilters(
 					}
 					hostnameToFilters[hostname][nsname] = af
 				}
+				filterRefs[af] = append(filterRefs[af], oidcRuleRef{route: route, ruleIdx: i, filterIdx: j})
 			}
 		}
 	}
 
-	return hostnameToFilters
+	return hostnameToFilters, filterRefs
+}
+
+// propagateInvalidOIDCFiltersToRouteRules marks route rules as having an invalid filter when their referenced
+// OIDC filter was invalidated by URI conflict detection. This ensures the dataplane treats those rules as
+// invalid rather than silently skipping authentication.
+func propagateInvalidOIDCFiltersToRouteRules(filterRefs map[*AuthenticationFilter][]oidcRuleRef) {
+	const conflictMsg = "OIDC filter is invalid due to URI conflict on a shared hostname; see filter status for details"
+
+	invalidatedRoutes := make(map[*L7Route]struct{})
+	for af, refs := range filterRefs {
+		if af.Valid {
+			continue
+		}
+		for _, ref := range refs {
+			ref.route.Spec.Rules[ref.ruleIdx].Filters.Filters[ref.filterIdx].ResolvedExtensionRef.Valid = false
+			ref.route.Spec.Rules[ref.ruleIdx].Filters.Valid = false
+			invalidatedRoutes[ref.route] = struct{}{}
+		}
+	}
+
+	for route := range invalidatedRoutes {
+		mergeOrAppendRouteCondition(route, conditions.NewRouteResolvedRefsInvalidFilter(conflictMsg))
+	}
+}
+
+// mergeOrAppendRouteCondition appends newCond to route.Conditions unless a condition with the same
+// Type/Status/Reason already exists, in which case newCond's message is appended to it to avoid
+// the last-wins deduplication in status preparation silently dropping earlier messages.
+func mergeOrAppendRouteCondition(route *L7Route, newCond conditions.Condition) {
+	for i, existing := range route.Conditions {
+		if existing.Type == newCond.Type && existing.Status == newCond.Status && existing.Reason == newCond.Reason {
+			if !strings.Contains(existing.Message, newCond.Message) {
+				route.Conditions[i].Message = existing.Message + "; " + newCond.Message
+			}
+			return
+		}
+	}
+	route.Conditions = append(route.Conditions, newCond)
 }
 
 // collectAcceptedHostnames returns a deduplicated list of all accepted hostnames across all parent refs.
@@ -414,10 +447,13 @@ func checkOIDCURIConflictsForHostname(
 		entries = append(entries, filterEntry{nsname: nsname, filter: af})
 	}
 	slices.SortFunc(entries, func(a, b filterEntry) int {
-		if cmp := strings.Compare(a.nsname.Namespace, b.nsname.Namespace); cmp != 0 {
-			return cmp
+		if ngfsort.LessObjectMeta(&a.filter.Source.ObjectMeta, &b.filter.Source.ObjectMeta) {
+			return -1
 		}
-		return strings.Compare(a.nsname.Name, b.nsname.Name)
+		if ngfsort.LessObjectMeta(&b.filter.Source.ObjectMeta, &a.filter.Source.ObjectMeta) {
+			return 1
+		}
+		return 0
 	})
 
 	// All three URI types share the same NGINX location path spaces,

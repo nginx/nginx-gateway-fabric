@@ -1123,6 +1123,7 @@ func TestValidateOIDCURIConflictsPerHostname(t *testing.T) {
 		rules := make([]RouteRule, len(filters))
 		for i, af := range filters {
 			rules[i] = RouteRule{
+				ValidMatches: true,
 				Filters: RouteRuleFilters{
 					Filters: []Filter{
 						{
@@ -1139,6 +1140,7 @@ func TestValidateOIDCURIConflictsPerHostname(t *testing.T) {
 		}
 		key := RouteKey{NamespacedName: nsname, RouteType: RouteTypeHTTP}
 		route := &L7Route{
+			Valid: true,
 			Spec: L7RouteSpec{
 				Hostnames: []v1.Hostname{hostname},
 				Rules:     rules,
@@ -1223,8 +1225,8 @@ func TestValidateOIDCURIConflictsPerHostname(t *testing.T) {
 			expBValid: false,
 			expBConditions: []conditions.Condition{
 				conditions.NewAuthenticationFilterInvalid(
-					`front-channel logout URI "/front" conflicts with front-channel " +
-					"logout URI of OIDC filter a-ns/filter-a on hostname "cafe.example.com"`,
+					`front-channel logout URI "/front" conflicts with front-channel ` +
+						`logout URI of OIDC filter a-ns/filter-a on hostname "cafe.example.com"`,
 				),
 			},
 		},
@@ -1346,15 +1348,19 @@ func TestValidateOIDCURIConflictsPerHostname(t *testing.T) {
 				acceptedHostnames := map[string][]string{"gateway/listener": {"cafe.example.com"}}
 				makeNoHostnameRoute := func(nsname types.NamespacedName, af *AuthenticationFilter) (RouteKey, *L7Route) {
 					return RouteKey{NamespacedName: nsname, RouteType: RouteTypeHTTP}, &L7Route{
-						Spec: L7RouteSpec{Rules: []RouteRule{{Filters: RouteRuleFilters{
-							Filters: []Filter{
-								{
-									FilterType:           FilterExtensionRef,
-									ResolvedExtensionRef: &ExtensionRefFilter{AuthenticationFilter: af, Valid: true},
+						Valid: true,
+						Spec: L7RouteSpec{Rules: []RouteRule{{
+							ValidMatches: true,
+							Filters: RouteRuleFilters{
+								Filters: []Filter{
+									{
+										FilterType:           FilterExtensionRef,
+										ResolvedExtensionRef: &ExtensionRefFilter{AuthenticationFilter: af, Valid: true},
+									},
 								},
+								Valid: true,
 							},
-							Valid: true,
-						}}}},
+						}}},
 						ParentRefs: []ParentRef{
 							{Attachment: &ParentRefAttachmentStatus{AcceptedHostnames: acceptedHostnames, Attached: true}},
 						},
@@ -1371,6 +1377,44 @@ func TestValidateOIDCURIConflictsPerHostname(t *testing.T) {
 					`logout URI "/logout" conflicts with logout URI of OIDC filter a-ns/filter-a on hostname "cafe.example.com"`,
 				),
 			},
+		},
+		{
+			name: "two OIDC filters with the same logout URI /logout on the same hostname where the " +
+				"route referencing b-ns/filter-b is invalid " +
+				"b-ns/filter-b is not considered and no conflict is reported",
+			buildRoutes: func() map[RouteKey]*L7Route {
+				filterA := createAuthenticationFilterWithOIDC(filterANsName, &ngfAPI.OIDCAuth{
+					Logout: &ngfAPI.OIDCLogoutConfig{URI: helpers.GetPointer("/logout")},
+				}, true)
+				filterB := createAuthenticationFilterWithOIDC(filterBNsName, &ngfAPI.OIDCAuth{
+					Logout: &ngfAPI.OIDCLogoutConfig{URI: helpers.GetPointer("/logout")},
+				}, true)
+				kA, rA := makeRoute(types.NamespacedName{Namespace: "ns", Name: "route-a"}, cafe, filterA)
+				kB, rB := makeRoute(types.NamespacedName{Namespace: "ns", Name: "route-b"}, cafe, filterB)
+				rB.Valid = false
+				return map[RouteKey]*L7Route{kA: rA, kB: rB}
+			},
+			expAValid: true,
+			expBValid: true,
+		},
+		{
+			name: "two OIDC filters with the same logout URI /logout on the same hostname " +
+				"where the rule referencing b-ns/filter-b has invalid matches " +
+				"b-ns/filter-b is not considered and no conflict is reported",
+			buildRoutes: func() map[RouteKey]*L7Route {
+				filterA := createAuthenticationFilterWithOIDC(filterANsName, &ngfAPI.OIDCAuth{
+					Logout: &ngfAPI.OIDCLogoutConfig{URI: helpers.GetPointer("/logout")},
+				}, true)
+				filterB := createAuthenticationFilterWithOIDC(filterBNsName, &ngfAPI.OIDCAuth{
+					Logout: &ngfAPI.OIDCLogoutConfig{URI: helpers.GetPointer("/logout")},
+				}, true)
+				kA, rA := makeRoute(types.NamespacedName{Namespace: "ns", Name: "route-a"}, cafe, filterA)
+				kB, rB := makeRoute(types.NamespacedName{Namespace: "ns", Name: "route-b"}, cafe, filterB)
+				rB.Spec.Rules[0].ValidMatches = false
+				return map[RouteKey]*L7Route{kA: rA, kB: rB}
+			},
+			expAValid: true,
+			expBValid: true,
 		},
 	}
 
