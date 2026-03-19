@@ -305,8 +305,7 @@ func BuildGraph(
 		processedBackendTLSPolicies,
 	)
 	bindRoutesToListeners(routes, l4routes, gws, state.Namespaces)
-
-	validateOIDCURIConflictsPerHostname(routes)
+	validateOIDCFilters(routes, gws)
 
 	referencedNamespaces := buildReferencedNamespaces(state.Namespaces, gws)
 

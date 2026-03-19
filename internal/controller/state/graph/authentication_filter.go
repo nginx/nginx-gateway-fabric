@@ -300,6 +300,86 @@ func validateOIDCLogoutURIs(
 	return allErrs
 }
 
+// validateOIDCFilters runs all post-binding OIDC validations in order:
+// first it rejects filters attached to non-HTTPS listeners, then it checks for URI conflicts
+// among the remaining valid filters across shared hostnames.
+func validateOIDCFilters(routes map[RouteKey]*L7Route, gws map[types.NamespacedName]*Gateway) {
+	validateOIDCHTTPSListeners(routes, gws)
+	validateOIDCURIConflictsPerHostname(routes)
+}
+
+// validateOIDCHTTPSListeners marks OIDC filters invalid when any of the route's active listener attachments
+// are not HTTPS.
+// The filter and the referencing route rules are both marked invalid.
+func validateOIDCHTTPSListeners(routes map[RouteKey]*L7Route, gws map[types.NamespacedName]*Gateway) {
+	listenerProtocols := buildListenerProtocolMap(gws)
+
+	for _, route := range routes {
+		if !route.Valid {
+			continue
+		}
+		if !hasNonHTTPSAttachment(route.ParentRefs, listenerProtocols) {
+			continue
+		}
+		for i, rule := range route.Spec.Rules {
+			if !rule.ValidMatches || !rule.Filters.Valid {
+				continue
+			}
+			for j, f := range rule.Filters.Filters {
+				af := oidcAuthFilterFrom(f)
+				if af == nil || !af.Valid {
+					continue
+				}
+				cond := conditions.NewAuthenticationFilterInvalid(
+					"OIDC authentication requires an HTTPS listener",
+				)
+				af.Conditions = append(af.Conditions, cond)
+				af.Valid = false
+				route.Spec.Rules[i].Filters.Filters[j].ResolvedExtensionRef.Valid = false
+				route.Spec.Rules[i].Filters.Valid = false
+				mergeOrAppendRouteCondition(route, conditions.NewRouteResolvedRefsInvalidFilter(
+					"OIDC filter is invalid: OIDC authentication requires an HTTPS listener",
+				))
+			}
+		}
+	}
+}
+
+// buildListenerProtocolMap returns a map from listener key to protocol for all listeners across all gateways.
+func buildListenerProtocolMap(gws map[types.NamespacedName]*Gateway) map[string]v1.ProtocolType {
+	protocols := make(map[string]v1.ProtocolType)
+	for gwNSName, gw := range gws {
+		for _, l := range gw.Listeners {
+			key := CreateGatewayListenerKey(gwNSName, l.Name)
+			protocols[key] = l.Source.Protocol
+		}
+	}
+	return protocols
+}
+
+// hasNonHTTPSAttachment reports whether any of the parent refs has at least one accepted hostname
+// on a non-HTTPS listener.
+func hasNonHTTPSAttachment(parentRefs []ParentRef, listenerProtocols map[string]v1.ProtocolType) bool {
+	for _, ref := range parentRefs {
+		if ref.Attachment == nil {
+			continue
+		}
+		for listenerKey, hostnames := range ref.Attachment.AcceptedHostnames {
+			if len(hostnames) == 0 {
+				continue
+			}
+			protocol, ok := listenerProtocols[listenerKey]
+			if !ok {
+				continue
+			}
+			if protocol != v1.HTTPSProtocolType {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // validateOIDCURIConflictsPerHostname marks OIDC filters as invalid if multiple filters referenced by routes
 // with the same hostname define the same logout URI, front-channel logout URI, or path-only redirect URI.
 // When a conflict is detected, the filter that sorts later (by creation timestamp, then namespace/name) is

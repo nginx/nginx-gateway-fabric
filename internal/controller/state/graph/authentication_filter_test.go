@@ -1112,6 +1112,144 @@ func createOpaqueCRLSecret(name string, withCRLKey bool) *corev1.Secret {
 	return sec
 }
 
+func TestValidateOIDCHTTPSListeners(t *testing.T) {
+	t.Parallel()
+
+	makeGateway := func(nsname types.NamespacedName, protocol v1.ProtocolType) *Gateway {
+		return &Gateway{
+			Source: &v1.Gateway{ObjectMeta: metav1.ObjectMeta{Name: nsname.Name, Namespace: nsname.Namespace}},
+			Listeners: []*Listener{
+				{
+					Name:   "listener",
+					Source: v1.Listener{Protocol: protocol},
+				},
+			},
+		}
+	}
+
+	makeRouteWithProtocol := func(af *AuthenticationFilter, gwNSName types.NamespacedName) *L7Route {
+		listenerKey := CreateGatewayListenerKey(gwNSName, "listener")
+		return &L7Route{
+			Valid: true,
+			Spec: L7RouteSpec{
+				Rules: []RouteRule{{
+					ValidMatches: true,
+					Filters: RouteRuleFilters{
+						Filters: []Filter{{
+							FilterType:           FilterExtensionRef,
+							ResolvedExtensionRef: &ExtensionRefFilter{AuthenticationFilter: af, Valid: af.Valid},
+						}},
+						Valid: true,
+					},
+				}},
+			},
+			ParentRefs: []ParentRef{{
+				Attachment: &ParentRefAttachmentStatus{
+					AcceptedHostnames: map[string][]string{listenerKey: {"cafe.example.com"}},
+					Attached:          true,
+				},
+			}},
+		}
+	}
+
+	gwNSName := types.NamespacedName{Namespace: "default", Name: "gw"}
+	filterNsName := types.NamespacedName{Namespace: "ns", Name: "oidc-filter"}
+
+	tests := []struct {
+		buildRouteAndGateway func() (map[RouteKey]*L7Route, map[types.NamespacedName]*Gateway)
+		name                 string
+		expConditions        []conditions.Condition
+		expFilterValid       bool
+	}{
+		{
+			name: "OIDC filter on route attached to HTTPS listener - valid, no condition added",
+			buildRouteAndGateway: func() (map[RouteKey]*L7Route, map[types.NamespacedName]*Gateway) {
+				af := createAuthenticationFilterWithOIDC(filterNsName, &ngfAPI.OIDCAuth{}, true)
+				gw := makeGateway(gwNSName, v1.HTTPSProtocolType)
+				r := makeRouteWithProtocol(af, gwNSName)
+				return map[RouteKey]*L7Route{
+						{NamespacedName: types.NamespacedName{Namespace: "ns", Name: "route"}, RouteType: RouteTypeHTTP}: r,
+					},
+					map[types.NamespacedName]*Gateway{gwNSName: gw}
+			},
+			expFilterValid: true,
+		},
+		{
+			name: "OIDC filter on route attached to HTTP listener - filter marked invalid with HTTPS required condition",
+			buildRouteAndGateway: func() (map[RouteKey]*L7Route, map[types.NamespacedName]*Gateway) {
+				af := createAuthenticationFilterWithOIDC(filterNsName, &ngfAPI.OIDCAuth{}, true)
+				gw := makeGateway(gwNSName, v1.HTTPProtocolType)
+				r := makeRouteWithProtocol(af, gwNSName)
+				return map[RouteKey]*L7Route{
+						{NamespacedName: types.NamespacedName{Namespace: "ns", Name: "route"}, RouteType: RouteTypeHTTP}: r,
+					},
+					map[types.NamespacedName]*Gateway{gwNSName: gw}
+			},
+			expFilterValid: false,
+			expConditions: []conditions.Condition{
+				conditions.NewAuthenticationFilterInvalid("OIDC authentication requires an HTTPS listener"),
+			},
+		},
+		{
+			name: "OIDC filter already invalid before HTTPS check - not double-processed, stays invalid",
+			buildRouteAndGateway: func() (map[RouteKey]*L7Route, map[types.NamespacedName]*Gateway) {
+				af := createAuthenticationFilterWithOIDC(filterNsName, &ngfAPI.OIDCAuth{}, false)
+				gw := makeGateway(gwNSName, v1.HTTPProtocolType)
+				r := makeRouteWithProtocol(af, gwNSName)
+				return map[RouteKey]*L7Route{
+						{NamespacedName: types.NamespacedName{Namespace: "ns", Name: "route"}, RouteType: RouteTypeHTTP}: r,
+					},
+					map[types.NamespacedName]*Gateway{gwNSName: gw}
+			},
+			expFilterValid: false,
+			expConditions:  nil,
+		},
+		{
+			name: "OIDC filter on route with no active listener attachments - skipped, stays valid",
+			buildRouteAndGateway: func() (map[RouteKey]*L7Route, map[types.NamespacedName]*Gateway) {
+				af := createAuthenticationFilterWithOIDC(filterNsName, &ngfAPI.OIDCAuth{}, true)
+				gw := makeGateway(gwNSName, v1.HTTPProtocolType)
+				r := makeRouteWithProtocol(af, gwNSName)
+				// Empty hostnames means the listener didn't accept the route.
+				r.ParentRefs[0].Attachment.AcceptedHostnames = map[string][]string{
+					CreateGatewayListenerKey(gwNSName, "listener"): {},
+				}
+				return map[RouteKey]*L7Route{
+						{NamespacedName: types.NamespacedName{Namespace: "ns", Name: "route"}, RouteType: RouteTypeHTTP}: r,
+					},
+					map[types.NamespacedName]*Gateway{gwNSName: gw}
+			},
+			expFilterValid: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			routes, gws := tt.buildRouteAndGateway()
+			validateOIDCHTTPSListeners(routes, gws)
+
+			var af *AuthenticationFilter
+			for _, route := range routes {
+				for _, rule := range route.Spec.Rules {
+					for _, f := range rule.Filters.Filters {
+						if f.ResolvedExtensionRef != nil && f.ResolvedExtensionRef.AuthenticationFilter != nil {
+							af = f.ResolvedExtensionRef.AuthenticationFilter
+						}
+					}
+				}
+			}
+			g.Expect(af).ToNot(BeNil())
+			g.Expect(af.Valid).To(Equal(tt.expFilterValid))
+			if tt.expConditions != nil {
+				g.Expect(af.Conditions).To(Equal(tt.expConditions))
+			}
+		})
+	}
+}
+
 func TestValidateOIDCURIConflictsPerHostname(t *testing.T) {
 	t.Parallel()
 
