@@ -195,9 +195,6 @@ func createSSLServer(
 
 	locs, matchPairs, grpc := createLocations(&virtualServer, serverID, generator, keepAliveCheck)
 
-	// Add internal JWKS locations for remote JWT authentication
-	locs = append(locs, extractUniqueJWKSLocations(locs)...)
-
 	server := http.Server{
 		ServerName: virtualServer.Hostname,
 		SSL: &http.SSL{
@@ -247,9 +244,6 @@ func createServer(
 	}
 
 	locs, matchPairs, grpc := createLocations(&virtualServer, serverID, generator, keepAliveCheck)
-
-	// Add internal JWKS locations for remote JWT authentication
-	locs = append(locs, extractUniqueJWKSLocations(locs)...)
 
 	server := http.Server{
 		ServerName: virtualServer.Hostname,
@@ -533,6 +527,9 @@ func createLocations(
 	if !rootPathExists {
 		locs = append(locs, createDefaultRootLocation())
 	}
+
+	// Add internal JWKS locations for remote JWT authentication
+	locs = append(locs, extractUniqueJWKSLocations(locs)...)
 
 	return locs, matchPairs, grpcServer
 }
@@ -1155,50 +1152,20 @@ func updateLocationAuthenticationFilter(
 
 	if authenticationFilter.JWT != nil {
 		jwt := &http.AuthJWT{
-			Realm:           authenticationFilter.JWT.Realm,
-			KeyCache:        authenticationFilter.JWT.KeyCache,
-			FilterNamespace: authenticationFilter.JWT.FilterNamespace,
-			FilterName:      authenticationFilter.JWT.FilterName,
+			Realm:    authenticationFilter.JWT.Realm,
+			KeyCache: authenticationFilter.JWT.KeyCache,
 		}
 
 		if authenticationFilter.JWT.Remote != nil {
 			remote := &http.AuthJWTRemote{
-				URI: authenticationFilter.JWT.Remote.URI,
+				URI:  authenticationFilter.JWT.Remote.URI,
+				Path: authenticationFilter.JWT.Remote.Path,
 			}
 
-			if authenticationFilter.JWT.Remote.TLS != nil {
-				remoteTLS := &http.AuthJWTRemoteTLS{
-					Verify: true,
-					SNI:    true,
-				}
-
-				if authenticationFilter.JWT.Remote.TLS.Verify != nil {
-					remoteTLS.Verify = *authenticationFilter.JWT.Remote.TLS.Verify
-				}
-				if authenticationFilter.JWT.Remote.TLS.SNI != nil {
-					remoteTLS.SNI = *authenticationFilter.JWT.Remote.TLS.SNI
-				}
-				if authenticationFilter.JWT.Remote.TLS.SNIName != nil {
-					remoteTLS.SNIName = *authenticationFilter.JWT.Remote.TLS.SNIName
-				}
-
-				if authenticationFilter.JWT.Remote.TLS.CertificatePath != "" {
-					certPath := generatePEMFileName(authenticationFilter.JWT.Remote.TLS.CertificatePath)
-					remoteTLS.Certificate = certPath
-					remoteTLS.CertificateKey = certPath
-				}
-
-				if remoteTLS.Verify {
-					if authenticationFilter.JWT.Remote.TLS.CACertBundlePath != "" {
-						remoteTLS.TrustedCertificate = generateCertBundleFileName(
-							authenticationFilter.JWT.Remote.TLS.CACertBundlePath,
-						)
-					} else {
-						remoteTLS.TrustedCertificate = dataplane.AlpineSSLRootCAPath
-					}
-				}
-
-				remote.TLS = remoteTLS
+			if authenticationFilter.JWT.Remote.CACertBundlePath != "" {
+				remote.TrustedCertificate = generateCertBundleFileName(
+					authenticationFilter.JWT.Remote.CACertBundlePath,
+				)
 			}
 
 			jwt.Remote = remote
@@ -1257,11 +1224,7 @@ func extractUniqueJWKSLocations(locations []http.Location) []http.Location {
 
 	for _, loc := range locations {
 		if loc.AuthJWT != nil && loc.AuthJWT.Remote != nil {
-			path := fmt.Sprintf(
-				"/_ngf-internal-%s_%s_jwks_uri",
-				loc.AuthJWT.FilterNamespace,
-				loc.AuthJWT.FilterName,
-			)
+			path := loc.AuthJWT.Remote.Path
 
 			if _, exists := seen[path]; !exists {
 				seen[path] = loc.AuthJWT.Remote.URI
@@ -1272,24 +1235,9 @@ func extractUniqueJWKSLocations(locations []http.Location) []http.Location {
 					ProxyPass: loc.AuthJWT.Remote.URI,
 				}
 
-				if loc.AuthJWT.Remote.TLS != nil {
-					tls := loc.AuthJWT.Remote.TLS
-
-					// Set up ProxySSLVerify with granular control
+				if loc.AuthJWT.Remote.TrustedCertificate != "" {
 					jwksLocation.ProxySSLVerify = &http.ProxySSLVerify{
-						Name:   tls.SNIName,
-						Verify: &tls.Verify,
-						SNI:    &tls.SNI,
-					}
-
-					if tls.TrustedCertificate != "" {
-						jwksLocation.ProxySSLVerify.TrustedCertificate = tls.TrustedCertificate
-					}
-
-					// Set client certificate if provided
-					if tls.Certificate != "" {
-						jwksLocation.ProxySSLCertificate = tls.Certificate
-						jwksLocation.ProxySSLCertificateKey = tls.CertificateKey
+						TrustedCertificate: loc.AuthJWT.Remote.TrustedCertificate,
 					}
 				}
 

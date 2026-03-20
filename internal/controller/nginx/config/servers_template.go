@@ -142,7 +142,7 @@ server {
         {{- if $l.AuthJWT }}
         auth_jwt "{{ $l.AuthJWT.Realm }}";
             {{- if $l.AuthJWT.Remote }}
-        auth_jwt_key_request /_ngf-internal-{{ $l.AuthJWT.FilterNamespace }}_{{ $l.AuthJWT.FilterName }}_jwks_uri;
+        auth_jwt_key_request {{ $l.AuthJWT.Remote.Path }};
             {{- else if $l.AuthJWT.File }}
         auth_jwt_key_file {{ $l.AuthJWT.File }};
             {{- end }}
@@ -208,10 +208,6 @@ server {
 
         proxy_http_version 1.1;
         {{- if $l.ProxyPass -}}
-            {{- if $l.ProxySSLCertificate }}
-        proxy_ssl_certificate {{ $l.ProxySSLCertificate }};
-        proxy_ssl_certificate_key {{ $l.ProxySSLCertificateKey }};
-            {{- end }}
             {{ range $h := $l.ProxySetHeaders }}
         {{ $proxyOrGRPC }}_set_header {{ $h.Name }} "{{ $h.Value }}";
             {{- end }}
@@ -227,32 +223,13 @@ server {
         proxy_hide_header {{ $h }};
             {{- end }}
             {{- if $l.ProxySSLVerify }}
-                {{- with $l.ProxySSLVerify.Verify }}
-                    {{- if . }}
-        {{ $proxyOrGRPC }}_ssl_verify on;
-                        {{- if $l.ProxySSLVerify.TrustedCertificate }}
-        {{ $proxyOrGRPC }}_ssl_trusted_certificate {{ $l.ProxySSLVerify.TrustedCertificate }};
-                        {{- end }}
-                    {{- else }}
-        {{ $proxyOrGRPC }}_ssl_verify off;
-                    {{- end }}
-                {{- else }}
-        {{ $proxyOrGRPC }}_ssl_verify on;
-                    {{- if $l.ProxySSLVerify.TrustedCertificate }}
-        {{ $proxyOrGRPC }}_ssl_trusted_certificate {{ $l.ProxySSLVerify.TrustedCertificate }};
-                    {{- end }}
-                {{- end }}
-                {{- with $l.ProxySSLVerify.SNI }}
-                    {{- if . }}
         {{ $proxyOrGRPC }}_ssl_server_name on;
-                    {{- else }}
-        {{ $proxyOrGRPC }}_ssl_server_name off;
-                    {{- end }}
-                {{- else }}
-        {{ $proxyOrGRPC }}_ssl_server_name on;
-                {{- end }}
-                {{- if $l.ProxySSLVerify.Name }}
+        {{ $proxyOrGRPC }}_ssl_verify on;
+                {{- if $l.ProxySSLVerify.Name}}
         {{ $proxyOrGRPC }}_ssl_name {{ $l.ProxySSLVerify.Name }};
+                {{- end }}
+                {{- if $l.ProxySSLVerify.TrustedCertificate }}
+        {{ $proxyOrGRPC }}_ssl_trusted_certificate {{ $l.ProxySSLVerify.TrustedCertificate }};
                 {{- end }}
             {{- end }}
         {{- end }}

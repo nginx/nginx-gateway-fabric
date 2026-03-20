@@ -21,9 +21,8 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
 
-var (
-	// Valid TLS certificate and key for testing.
-	testCert = []byte(`-----BEGIN CERTIFICATE-----
+// Valid CA certificate for testing.
+var testCert = []byte(`-----BEGIN CERTIFICATE-----
 MIIDLjCCAhYCCQDAOF9tLsaXWjANBgkqhkiG9w0BAQsFADBaMQswCQYDVQQGEwJV
 UzELMAkGA1UECAwCQ0ExITAfBgNVBAoMGEludGVybmV0IFdpZGdpdHMgUHR5IEx0
 ZDEbMBkGA1UEAwwSY2FmZS5leGFtcGxlLmNvbSAgMB4XDTE4MDkxMjE2MTUzNVoX
@@ -43,34 +42,6 @@ PpuwvuatqjO1208BjfE/cZHIg8Hw9mvW9x9C+IQMIMDE7b/g6OcK7LGTLwlFxvA8
 7WjEequnayIphMhKRXVf1N349eN98Ez38fOTHTPbdJjFA/PcC+Gyme+iGt5OQdFh
 yRE=
 -----END CERTIFICATE-----`)
-	testKey = []byte(`-----BEGIN RSA PRIVATE KEY-----
-MIIEowIBAAKCAQEAqeip+7MvNadI7if3MpPrwgJpbH47RTNprmTStCrXnKhtn41k
-G+ecUNWBQNlzksBwGL0ncCNo2a7lvKl1wi9q2+AmQhccKVRAq3MXY5t7XlYkV1bG
-CJpiRzz0skIKYqG7Pcew5S3OiAQNGY1DspdD6hvUiXsTFe91iCGuaw1Uhdq+JEpG
-wI+A3I+y13hZVVx9iOV8FwqbQp+uyQoONn/pPMIM3EVafF2ZGVmVY8KvUVCg15hQ
-dmMjdVxFnWdHsEbimFCZbJuvdrJDqykI9L5KD5+NRBP/k2lRKai00aFGN684Ow5H
-c33QYsxTtnbDzRcdgltI15DS7yqNuQmazoVwBwIDAQABAoIBAQCPSdSYnQtSPyql
-FfVFpTOsoOYRhf8sI+ibFxIOuRauWehhJxdm5RORpAzmCLyL5VhjtJme223gLrw2
-N99EjUKb/VOmZuDsBc6oCF6QNR58dz8cnORTewcotsJR1pn1hhlnR5HqJJBJask1
-ZEnUQfcXZrL94lo9JH3E+Uqjo1FFs8xxE8woPBqjZsV7pRUZgC3LhxnwLSExyFo4
-cxb9SOG5OmAJozStFoQ2GJOes8rJ5qfdvytgg9xbLaQL/x0kpQ62BoFMBDdqOePW
-KfP5zZ6/07/vpj48yA1Q32PzobubsBLd3Kcn32jfm1E7prtWl+JeOFiOznBQFJbN
-4qPVRz5hAoGBANtWyxhNCSLu4P+XgKyckljJ6F5668fNj5CzgFRqJ09zn0TlsNro
-FTLZcxDqnR3HPYM42JERh2J/qDFZynRQo3cg3oeivUdBVGY8+FI1W0qdub/L9+yu
-edOZTQ5XmGGp6r6jexymcJim/OsB3ZnYOpOrlD7SPmBvzNLk4MF6gxbXAoGBAMZO
-0p6HbBmcP0tjFXfcKE77ImLm0sAG4uHoUx0ePj/2qrnTnOBBNE4MvgDuTJzy+caU
-k8RqmdHCbHzTe6fzYq/9it8sZ77KVN1qkbIcuc+RTxA9nNh1TjsRne74Z0j1FCLk
-hHcqH0ri7PYSKHTE8FvFCxZYdbuB84CmZihvxbpRAoGAIbjqaMYPTYuklCda5S79
-YSFJ1JzZe1Kja//tDw1zFcgVCKa31jAwciz0f/lSRq3HS1GGGmezhPVTiqLfeZqc
-R0iKbhgbOcVVkJJ3K0yAyKwPTumxKHZ6zImZS0c0am+RY9YGq5T7YrzpzcfvpiOU
-ffe3RyFT7cfCmfoOhDCtzukCgYB30oLC1RLFOrqn43vCS51zc5zoY44uBzspwwYN
-TwvP/ExWMf3VJrDjBCH+T/6sysePbJEImlzM+IwytFpANfiIXEt/48Xf60Nx8gWM
-uHyxZZx/NKtDw0V8vX1POnq2A5eiKa+8jRARYKJLYNdfDuwolxvG6bZhkPi/4EtT
-3Y18sQKBgHtKbk+7lNJVeswXE5cUG6EDUsDe/2Ua7fXp7FcjqBEoap1LSw+6TXp0
-ZgrmKE8ARzM47+EJHUviiq/nupE15g0kJW3syhpU9zZLO7ltB0KIkO9ZRcmUjo8Q
-cpLlHMAqbLJ8WYGJCkhiWxyal6hYTyWY4cVkC0xtTl/hUE9IeNKo
------END RSA PRIVATE KEY-----`)  // gitleaks:allow just used for unit tests and does not contain any real credentials.
-)
 
 func TestProcessAuthenticationFilters(t *testing.T) {
 	t.Parallel()
@@ -474,27 +445,23 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 			expCond: conditions.Condition{},
 		},
 		{
-			name: "valid remote JWT auth filter with TLS",
+			name: "valid remote JWT auth filter with CA",
 			args: args{
 				secretNsName: types.NamespacedName{Namespace: "test", Name: "af"},
 				filter: createAuthenticationFilterJWTRemote(
 					types.NamespacedName{Namespace: "test", Name: "af"},
-
-					&ngfAPI.JWTRemoteTLSConfig{
-						SecretRef: &ngfAPI.LocalObjectReference{Name: "tls-secret"},
-					},
+					[]ngfAPI.LocalObjectReference{{Name: "ca-secret"}},
 				).Source,
 				isPlus: true,
 				resources: map[resolver.ResourceKey]client.Object{
 					{
 						ResourceType:   resolver.ResourceTypeSecret,
-						NamespacedName: types.NamespacedName{Namespace: "test", Name: "tls-secret"},
+						NamespacedName: types.NamespacedName{Namespace: "test", Name: "ca-secret"},
 					}: &corev1.Secret{
-						ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "tls-secret"},
-						Type:       corev1.SecretTypeTLS,
+						ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "ca-secret"},
+						Type:       corev1.SecretTypeOpaque,
 						Data: map[string][]byte{
-							corev1.TLSCertKey:       testCert,
-							corev1.TLSPrivateKeyKey: testKey,
+							secrets.CAKey: testCert,
 						},
 					},
 				},
@@ -502,33 +469,27 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 			expCond: conditions.Condition{},
 		},
 		{
-			name: "invalid: remote JWT auth filter TLS secret does not exist",
+			name: "invalid: remote JWT auth filter CA secret does not exist",
 			args: args{
 				secretNsName: types.NamespacedName{Namespace: "test", Name: "af"},
 				filter: createAuthenticationFilterJWTRemote(
 					types.NamespacedName{Namespace: "test", Name: "af"},
-
-					&ngfAPI.JWTRemoteTLSConfig{
-						SecretRef: &ngfAPI.LocalObjectReference{Name: "missing-tls"},
-					},
+					[]ngfAPI.LocalObjectReference{{Name: "missing-type"}},
 				).Source,
 				isPlus:    true,
 				resources: map[resolver.ResourceKey]client.Object{},
 			},
 			expCond: conditions.NewAuthenticationFilterInvalid(
-				"Secret test/missing-tls does not exist",
+				"Secret test/missing-type does not exist",
 			),
 		},
 		{
-			name: "invalid: remote JWT auth filter TLS secret has wrong type",
+			name: "invalid: remote JWT auth filter CA secret has wrong type",
 			args: args{
 				secretNsName: types.NamespacedName{Namespace: "test", Name: "af"},
 				filter: createAuthenticationFilterJWTRemote(
 					types.NamespacedName{Namespace: "test", Name: "af"},
-
-					&ngfAPI.JWTRemoteTLSConfig{
-						SecretRef: &ngfAPI.LocalObjectReference{Name: "wrong-type"},
-					},
+					[]ngfAPI.LocalObjectReference{{Name: "wrong-type"}},
 				).Source,
 				isPlus: true,
 				resources: map[resolver.ResourceKey]client.Object{
@@ -543,7 +504,7 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 				},
 			},
 			expCond: conditions.NewAuthenticationFilterInvalid(
-				"spec.jwt.remote.tls.secretRef: Invalid value: \"secret test/wrong-type is invalid\": " +
+				"spec.jwt.remote.caCertificateRefs: Invalid value: \"wrong-type\": " +
 					"unsupported secret type \"kubernetes.io/basic-auth\"",
 			),
 		},
@@ -553,67 +514,6 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 				secretNsName: types.NamespacedName{Namespace: "test", Name: "af"},
 				filter: createAuthenticationFilterJWTRemote(
 					types.NamespacedName{Namespace: "test", Name: "af"},
-
-					nil,
-				).Source,
-				isPlus:    false,
-				resources: map[resolver.ResourceKey]client.Object{},
-			},
-			expCond: conditions.NewAuthenticationFilterInvalid("JWT Authentication requires NGINX Plus."),
-		},
-		{
-			name: "invalid: remote JWT auth filter TLS secret does not exist",
-			args: args{
-				secretNsName: types.NamespacedName{Namespace: "test", Name: "af"},
-				filter: createAuthenticationFilterJWTRemote(
-					types.NamespacedName{Namespace: "test", Name: "af"},
-
-					&ngfAPI.JWTRemoteTLSConfig{
-						SecretRef: &ngfAPI.LocalObjectReference{Name: "missing-tls"},
-					},
-				).Source,
-				isPlus:    true,
-				resources: map[resolver.ResourceKey]client.Object{},
-			},
-			expCond: conditions.NewAuthenticationFilterInvalid(
-				"Secret test/missing-tls does not exist",
-			),
-		},
-		{
-			name: "invalid: remote JWT auth filter TLS secret has wrong type",
-			args: args{
-				secretNsName: types.NamespacedName{Namespace: "test", Name: "af"},
-				filter: createAuthenticationFilterJWTRemote(
-					types.NamespacedName{Namespace: "test", Name: "af"},
-
-					&ngfAPI.JWTRemoteTLSConfig{
-						SecretRef: &ngfAPI.LocalObjectReference{Name: "wrong-type"},
-					},
-				).Source,
-				isPlus: true,
-				resources: map[resolver.ResourceKey]client.Object{
-					{
-						ResourceType:   resolver.ResourceTypeSecret,
-						NamespacedName: types.NamespacedName{Namespace: "test", Name: "wrong-type"},
-					}: &corev1.Secret{
-						ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "wrong-type"},
-						Type:       corev1.SecretTypeBasicAuth,
-						Data:       map[string][]byte{"username": []byte("user"), "password": []byte("pass")},
-					},
-				},
-			},
-			expCond: conditions.NewAuthenticationFilterInvalid(
-				"spec.jwt.remote.tls.secretRef: Invalid value: \"secret test/wrong-type is invalid\": " +
-					"unsupported secret type \"kubernetes.io/basic-auth\"",
-			),
-		},
-		{
-			name: "invalid: remote JWT auth requires NGINX Plus",
-			args: args{
-				secretNsName: types.NamespacedName{Namespace: "test", Name: "af"},
-				filter: createAuthenticationFilterJWTRemote(
-					types.NamespacedName{Namespace: "test", Name: "af"},
-
 					nil,
 				).Source,
 				isPlus:    false,
@@ -1473,7 +1373,7 @@ func createOpaqueCRLSecret(name string, withCRLKey bool) *corev1.Secret {
 
 func createAuthenticationFilterJWTRemote(
 	nsname types.NamespacedName,
-	tlsConfig *ngfAPI.JWTRemoteTLSConfig,
+	caCertificateRefs []ngfAPI.LocalObjectReference,
 ) *AuthenticationFilter {
 	return &AuthenticationFilter{
 		Source: &ngfAPI.AuthenticationFilter{
@@ -1486,8 +1386,8 @@ func createAuthenticationFilterJWTRemote(
 				JWT: &ngfAPI.JWTAuth{
 					Source: ngfAPI.JWTKeySourceRemote,
 					Remote: &ngfAPI.JWTRemoteKeySource{
-						URI: "https://example.com/.well-known/jwks.json",
-						TLS: tlsConfig,
+						URI:               "https://example.com/.well-known/jwks.json",
+						CACertificateRefs: caCertificateRefs,
 					},
 					Realm: "remote-jwt",
 				},

@@ -4080,7 +4080,7 @@ func TestConvertBackendTLS(t *testing.T) {
 
 	expectedWithWellKnownCerts := &VerifyTLS{
 		Hostname:   "example.com",
-		RootCAPath: AlpineSSLRootCAPath,
+		RootCAPath: alpineSSLRootCAPath,
 	}
 
 	tests := []struct {
@@ -7388,8 +7388,6 @@ func TestBuildSSLKeyPairs(t *testing.T) {
 
 	secretNsName := types.NamespacedName{Namespace: "test", Name: "secret"}
 	gatewaySecretNsName := types.NamespacedName{Namespace: "test", Name: "gateway-secret"}
-	jwtTLSSecretNsName := types.NamespacedName{Namespace: "test", Name: "jwt-tls-secret"}
-	jwtFilterNsName := types.NamespacedName{Namespace: "test", Name: "jwt-filter"}
 
 	validSecret := &secrets.Secret{
 		Source: &apiv1.Secret{
@@ -7418,26 +7416,11 @@ func TestBuildSSLKeyPairs(t *testing.T) {
 		CertBundle: nil,
 	}
 
-	jwtTLSSecret := &secrets.Secret{
-		Source: &apiv1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      jwtTLSSecretNsName.Name,
-				Namespace: jwtTLSSecretNsName.Namespace,
-			},
-			Type: apiv1.SecretTypeTLS,
-			Data: map[string][]byte{
-				secrets.TLSCertKey: []byte("jwt-cert-data"),
-				secrets.TLSKeyKey:  []byte("jwt-key-data"),
-			},
-		},
-	}
-
 	tests := []struct {
-		secrets     map[types.NamespacedName]*secrets.Secret
-		gateway     *graph.Gateway
-		authFilters map[types.NamespacedName]*graph.AuthenticationFilter
-		expected    map[SSLKeyPairID]SSLKeyPair
-		name        string
+		secrets  map[types.NamespacedName]*secrets.Secret
+		gateway  *graph.Gateway
+		expected map[SSLKeyPairID]SSLKeyPair
+		name     string
 	}{
 		{
 			name: "valid listener with valid TLS secret",
@@ -7452,7 +7435,6 @@ func TestBuildSSLKeyPairs(t *testing.T) {
 					},
 				},
 			},
-			authFilters: nil,
 			expected: map[SSLKeyPairID]SSLKeyPair{
 				generateSSLKeyPairID(secretNsName): {
 					Cert: []byte("cert-data"),
@@ -7473,8 +7455,7 @@ func TestBuildSSLKeyPairs(t *testing.T) {
 					},
 				},
 			},
-			authFilters: nil,
-			expected:    map[SSLKeyPairID]SSLKeyPair{},
+			expected: map[SSLKeyPairID]SSLKeyPair{},
 		},
 		{
 			name: "gateway backend TLS with nil CertBundle",
@@ -7485,8 +7466,7 @@ func TestBuildSSLKeyPairs(t *testing.T) {
 				Valid:     true,
 				SecretRef: &gatewaySecretNsName,
 			},
-			authFilters: nil,
-			expected:    map[SSLKeyPairID]SSLKeyPair{},
+			expected: map[SSLKeyPairID]SSLKeyPair{},
 		},
 		{
 			name: "invalid listener should not generate key pair",
@@ -7501,8 +7481,7 @@ func TestBuildSSLKeyPairs(t *testing.T) {
 					},
 				},
 			},
-			authFilters: nil,
-			expected:    map[SSLKeyPairID]SSLKeyPair{},
+			expected: map[SSLKeyPairID]SSLKeyPair{},
 		},
 		{
 			name: "listener with nil resolved secret",
@@ -7517,194 +7496,7 @@ func TestBuildSSLKeyPairs(t *testing.T) {
 					},
 				},
 			},
-			authFilters: nil,
-			expected:    map[SSLKeyPairID]SSLKeyPair{},
-		},
-		{
-			name: "JWT remote authentication with TLS secret",
-			secrets: map[types.NamespacedName]*secrets.Secret{
-				jwtTLSSecretNsName: jwtTLSSecret,
-			},
-			gateway: &graph.Gateway{},
-			authFilters: map[types.NamespacedName]*graph.AuthenticationFilter{
-				jwtFilterNsName: {
-					Valid: true,
-					Source: &ngfAPIv1alpha1.AuthenticationFilter{
-						ObjectMeta: metav1.ObjectMeta{
-							Name:      jwtFilterNsName.Name,
-							Namespace: jwtFilterNsName.Namespace,
-						},
-						Spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
-							Type: ngfAPIv1alpha1.AuthTypeJWT,
-							JWT: &ngfAPIv1alpha1.JWTAuth{
-								Source: ngfAPIv1alpha1.JWTKeySourceRemote,
-								Remote: &ngfAPIv1alpha1.JWTRemoteKeySource{
-									URI: "https://idp.example.com/jwks",
-									TLS: &ngfAPIv1alpha1.JWTRemoteTLSConfig{
-										SecretRef: &ngfAPIv1alpha1.LocalObjectReference{
-											Name: jwtTLSSecretNsName.Name,
-										},
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-			expected: map[SSLKeyPairID]SSLKeyPair{
-				generateJWTRemoteTLSKeyPairID(
-					jwtTLSSecretNsName.Namespace,
-					jwtTLSSecretNsName.Name,
-				): {
-					Cert: []byte("jwt-cert-data"),
-					Key:  []byte("jwt-key-data"),
-				},
-			},
-		},
-		{
-			name: "JWT remote authentication with invalid filter",
-			secrets: map[types.NamespacedName]*secrets.Secret{
-				jwtTLSSecretNsName: jwtTLSSecret,
-			},
-			gateway: &graph.Gateway{},
-			authFilters: map[types.NamespacedName]*graph.AuthenticationFilter{
-				jwtFilterNsName: {
-					Valid: false,
-					Source: &ngfAPIv1alpha1.AuthenticationFilter{
-						ObjectMeta: metav1.ObjectMeta{
-							Name:      jwtFilterNsName.Name,
-							Namespace: jwtFilterNsName.Namespace,
-						},
-						Spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
-							Type: ngfAPIv1alpha1.AuthTypeJWT,
-							JWT: &ngfAPIv1alpha1.JWTAuth{
-								Source: ngfAPIv1alpha1.JWTKeySourceRemote,
-								Remote: &ngfAPIv1alpha1.JWTRemoteKeySource{
-									URI: "https://idp.example.com/jwks",
-									TLS: &ngfAPIv1alpha1.JWTRemoteTLSConfig{
-										SecretRef: &ngfAPIv1alpha1.LocalObjectReference{
-											Name: jwtTLSSecretNsName.Name,
-										},
-									},
-								},
-							},
-						},
-					},
-				},
-			},
 			expected: map[SSLKeyPairID]SSLKeyPair{},
-		},
-		{
-			name: "JWT remote authentication without TLS",
-			secrets: map[types.NamespacedName]*secrets.Secret{
-				jwtTLSSecretNsName: jwtTLSSecret,
-			},
-			gateway: &graph.Gateway{},
-			authFilters: map[types.NamespacedName]*graph.AuthenticationFilter{
-				jwtFilterNsName: {
-					Valid: true,
-					Source: &ngfAPIv1alpha1.AuthenticationFilter{
-						ObjectMeta: metav1.ObjectMeta{
-							Name:      jwtFilterNsName.Name,
-							Namespace: jwtFilterNsName.Namespace,
-						},
-						Spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
-							Type: ngfAPIv1alpha1.AuthTypeJWT,
-							JWT: &ngfAPIv1alpha1.JWTAuth{
-								Source: ngfAPIv1alpha1.JWTKeySourceRemote,
-								Remote: &ngfAPIv1alpha1.JWTRemoteKeySource{
-									URI: "https://idp.example.com/jwks",
-									TLS: nil,
-								},
-							},
-						},
-					},
-				},
-			},
-			expected: map[SSLKeyPairID]SSLKeyPair{},
-		},
-		{
-			name: "JWT file-based authentication should not generate TLS key pair",
-			secrets: map[types.NamespacedName]*secrets.Secret{
-				jwtTLSSecretNsName: jwtTLSSecret,
-			},
-			gateway: &graph.Gateway{},
-			authFilters: map[types.NamespacedName]*graph.AuthenticationFilter{
-				jwtFilterNsName: {
-					Valid: true,
-					Source: &ngfAPIv1alpha1.AuthenticationFilter{
-						ObjectMeta: metav1.ObjectMeta{
-							Name:      jwtFilterNsName.Name,
-							Namespace: jwtFilterNsName.Namespace,
-						},
-						Spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
-							Type: ngfAPIv1alpha1.AuthTypeJWT,
-							JWT: &ngfAPIv1alpha1.JWTAuth{
-								Source: ngfAPIv1alpha1.JWTKeySourceFile,
-								File: &ngfAPIv1alpha1.JWTFileKeySource{
-									SecretRef: ngfAPIv1alpha1.LocalObjectReference{
-										Name: jwtTLSSecretNsName.Name,
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-			expected: map[SSLKeyPairID]SSLKeyPair{},
-		},
-		{
-			name: "combination of listener secret and JWT remote TLS",
-			secrets: map[types.NamespacedName]*secrets.Secret{
-				secretNsName:       validSecret,
-				jwtTLSSecretNsName: jwtTLSSecret,
-			},
-			gateway: &graph.Gateway{
-				Listeners: []*graph.Listener{
-					{
-						Valid:          true,
-						ResolvedSecret: &secretNsName,
-					},
-				},
-			},
-			authFilters: map[types.NamespacedName]*graph.AuthenticationFilter{
-				jwtFilterNsName: {
-					Valid: true,
-					Source: &ngfAPIv1alpha1.AuthenticationFilter{
-						ObjectMeta: metav1.ObjectMeta{
-							Name:      jwtFilterNsName.Name,
-							Namespace: jwtFilterNsName.Namespace,
-						},
-						Spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
-							Type: ngfAPIv1alpha1.AuthTypeJWT,
-							JWT: &ngfAPIv1alpha1.JWTAuth{
-								Source: ngfAPIv1alpha1.JWTKeySourceRemote,
-								Remote: &ngfAPIv1alpha1.JWTRemoteKeySource{
-									URI: "https://idp.example.com/jwks",
-									TLS: &ngfAPIv1alpha1.JWTRemoteTLSConfig{
-										SecretRef: &ngfAPIv1alpha1.LocalObjectReference{
-											Name: jwtTLSSecretNsName.Name,
-										},
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-			expected: map[SSLKeyPairID]SSLKeyPair{
-				generateSSLKeyPairID(secretNsName): {
-					Cert: []byte("cert-data"),
-					Key:  []byte("key-data"),
-				},
-				generateJWTRemoteTLSKeyPairID(
-					jwtTLSSecretNsName.Namespace,
-					jwtTLSSecretNsName.Name,
-				): {
-					Cert: []byte("jwt-cert-data"),
-					Key:  []byte("jwt-key-data"),
-				},
-			},
 		},
 	}
 
@@ -7713,7 +7505,7 @@ func TestBuildSSLKeyPairs(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			result := buildSSLKeyPairs(test.secrets, test.gateway, test.authFilters)
+			result := buildSSLKeyPairs(test.secrets, test.gateway)
 
 			g.Expect(result).To(Equal(test.expected))
 		})

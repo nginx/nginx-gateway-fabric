@@ -108,20 +108,8 @@ func validateAuthenticationFilter(
 				resourceResolver,
 				field.NewPath("spec.jwt.file.secretRef"),
 			)
-		} else if af.Spec.JWT.Source == ngfAPI.JWTKeySourceRemote &&
-			af.Spec.JWT.Remote != nil &&
-			af.Spec.JWT.Remote.TLS != nil &&
-			af.Spec.JWT.Remote.TLS.SecretRef != nil {
-			// Resolve the TLS client certificate secret for remote JWKS with mTLS
-			tlsSecretNsName := types.NamespacedName{
-				Namespace: nsname.Namespace,
-				Name:      af.Spec.JWT.Remote.TLS.SecretRef.Name,
-			}
-			conds, valid = resolveAuthenticationFilterSecret(
-				tlsSecretNsName,
-				resourceResolver,
-				field.NewPath("spec.jwt.remote.tls.secretRef"),
-			)
+		} else if af.Spec.JWT.Source == ngfAPI.JWTKeySourceRemote && af.Spec.JWT.Remote != nil {
+			conds, valid = validRemoteJWT(af, nsname, resourceResolver)
 		}
 	case ngfAPI.AuthTypeOIDC:
 		if !isPlus {
@@ -140,6 +128,43 @@ func validateAuthenticationFilter(
 	}
 
 	return conds, valid
+}
+
+func validRemoteJWT(
+	af *ngfAPI.AuthenticationFilter,
+	nsname types.NamespacedName,
+	resourceResolver resolver.Resolver,
+) ([]conditions.Condition, bool) {
+	if len(af.Spec.JWT.Remote.CACertificateRefs) > 1 {
+		cond := conditions.NewAuthenticationFilterInvalid(
+			field.Invalid(
+				field.NewPath("spec.jwt.remote.caCertificateRefs"),
+				len(af.Spec.JWT.Remote.CACertificateRefs),
+				"at most one CA certificate reference is supported for remote JWT authentication filters",
+			).Error(),
+		)
+		return []conditions.Condition{cond}, false
+	}
+
+	var allErrs field.ErrorList
+	for _, caCertRef := range af.Spec.JWT.Remote.CACertificateRefs {
+		caCertNsName := types.NamespacedName{Namespace: nsname.Namespace, Name: caCertRef.Name}
+		if err := resourceResolver.Resolve(resolver.ResourceTypeSecret, caCertNsName,
+			resolver.WithExpectedSecretKey(secrets.CAKey)); err != nil {
+			allErrs = append(allErrs, field.Invalid(
+				field.NewPath("spec.jwt.remote.caCertificateRefs"),
+				caCertRef.Name,
+				err.Error(),
+			))
+		}
+	}
+
+	if allErrs != nil {
+		cond := conditions.NewAuthenticationFilterInvalid(allErrs.ToAggregate().Error())
+		return []conditions.Condition{cond}, false
+	}
+
+	return nil, true
 }
 
 func resolveAuthenticationFilterSecret(

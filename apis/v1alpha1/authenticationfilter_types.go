@@ -309,47 +309,8 @@ type JWTFileKeySource struct {
 
 // JWTRemoteKeySource specifies remote JWKS configuration.
 type JWTRemoteKeySource struct {
-	// TLS defines HTTPS client parameters for retrieving JWKS.
-	//
-	// +optional
-	TLS *JWTRemoteTLSConfig `json:"tls,omitempty"`
-
-	// URI is the JWKS endpoint.
-	//
-	//nolint:lll
-	// +kubebuilder:validation:Pattern=`^(?:https?:\/\/)?[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*(?::\d{1,5})?(?:\/[a-zA-Z0-9._~:\/?#\[\]@!$&'()*+,;=-]*)?$`
-	URI string `json:"uri"`
-}
-
-// JWTRemoteTLSConfig defines TLS settings for remote JWKS retrieval.
-type JWTRemoteTLSConfig struct {
-	// SecretRef references a Secret containing client TLS cert and key.
-	// Expects secret type kubernetes.io/tls.
-	//
-	// +optional
-	SecretRef *LocalObjectReference `json:"secretRef,omitempty"`
-
-	// Verify controls server certificate verification.
-	//
-	// +optional
-	// +kubebuilder:default=true
-	Verify *bool `json:"verify,omitempty"`
-
-	// SNI controls server name indication.
-	// Configures `proxy_ssl_server_name` directive.
-	// https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_ssl_server_name
-	//
-	// +optional
-	// +kubebuilder:default=true
-	SNI *bool `json:"sni,omitempty"`
-
-	// SNIName sets a custom SNI.
-	// By default, NGINX uses the host from proxy_pass.
-	// Configures `proxy_ssl_name` directive.
-	// https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_ssl_name
-	//
-	// +optional
-	SNIName *string `json:"sniName,omitempty"`
+	URI               string                 `json:"uri"`
+	CACertificateRefs []LocalObjectReference `json:"caCertificateRefs,omitempty"`
 }
 
 // AuthenticationFilterStatus defines the state of AuthenticationFilter.

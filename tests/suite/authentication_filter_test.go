@@ -6,14 +6,11 @@ import (
 	"crypto/rsa"
 	"crypto/tls"
 	"crypto/x509"
-	"crypto/x509/pkix"
 	"encoding/base64"
 	"encoding/json"
-	"encoding/pem"
 	"fmt"
 	"io"
 	"math/big"
-	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -600,6 +597,8 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 			"authentication-filter/keycloak.yaml",
 		}
 
+		var ca framework.KeyPair
+
 		BeforeAll(func() {
 			if !*plusEnabled {
 				Skip("Skipping NGINX Plus AuthFilter tests on NGINX OSS")
@@ -608,10 +607,11 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 			// Generate self-signed CA and server TLS certificate for Keycloak
 			keycloakDNS := fmt.Sprintf("keycloak.%s.svc.cluster.local", namespace)
 
-			ca, err := framework.GenerateSelfSignedCACert("Keycloak Test CA")
+			var err error
+			ca, err = framework.GenerateSelfSignedCACert("Keycloak Test CA")
 			Expect(err).ToNot(HaveOccurred())
 
-			serverCert, err := framework.GenerateSignedServerCert(ca, keycloakDNS, []string{keycloakDNS})
+			serverCert, err := framework.GenerateSignedServerCert(ca, keycloakDNS, []string{keycloakDNS, "localhost"})
 			Expect(err).ToNot(HaveOccurred())
 
 			// Create the TLS secret for Keycloak to serve HTTPS
@@ -660,6 +660,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 			Expect(resourceManager.DeleteResources([]client.Object{
 				&core.Secret{ObjectMeta: metav1.ObjectMeta{Name: "keycloak-tls-cert", Namespace: namespace}},
 				&core.Secret{ObjectMeta: metav1.ObjectMeta{Name: "keycloak-ca-secret", Namespace: namespace}},
+				&core.Secret{ObjectMeta: metav1.ObjectMeta{Name: "jwks-client-cert", Namespace: namespace}},
 			})).To(Succeed())
 		})
 
@@ -986,10 +987,6 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 			)
 
 			BeforeAll(func() {
-				if !*plusEnabled {
-					Skip("Skipping JWT AuthenticationFilter tests on NGINX OSS deployment (JWT requires NGINX Plus)")
-				}
-
 				var err error
 				// Generate JWT keys, JWKS, and token
 				jwtHelper, err = NewJWTTestHelper("test-key-id")
@@ -1117,421 +1114,297 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 				)
 			})
 		})
-	})
 
-	When("JWT AuthenticationFilter with incorrect secretRef is applied", func() {
-		invalidSecretManifestFiles := []string{"authentication-filter/jwt-invalid-secret.yaml"}
+		When("JWT AuthenticationFilter with incorrect secretRef is applied", func() {
+			invalidSecretManifestFiles := []string{"authentication-filter/jwt-invalid-secret.yaml"}
 
-		BeforeAll(func() {
-			if !*plusEnabled {
-				Skip("Skipping JWT AuthenticationFilter tests on NGINX OSS deployment (JWT requires NGINX Plus)")
-			}
+			BeforeAll(func() {
+				// Apply manifest resources
+				Expect(resourceManager.ApplyFromFiles(invalidSecretManifestFiles, namespace)).To(Succeed())
+				Expect(resourceManager.WaitForAppsToBeReady(namespace)).To(Succeed())
+			})
 
-			// Apply manifest resources
-			Expect(resourceManager.ApplyFromFiles(invalidSecretManifestFiles, namespace)).To(Succeed())
-			Expect(resourceManager.WaitForAppsToBeReady(namespace)).To(Succeed())
-		})
+			AfterAll(func() {
+				framework.AddNginxLogsAndEventsToReport(resourceManager, namespace)
 
-		AfterAll(func() {
-			if !*plusEnabled {
-				Skip("Skipping JWT AuthenticationFilter tests on NGINX OSS deployment (JWT requires NGINX Plus)")
-			}
+				// Delete resources
+				Expect(resourceManager.DeleteFromFiles(invalidSecretManifestFiles, namespace)).To(Succeed())
+			})
 
-			framework.AddNginxLogsAndEventsToReport(resourceManager, namespace)
-
-			// Delete resources
-			Expect(resourceManager.DeleteFromFiles(invalidSecretManifestFiles, namespace)).To(Succeed())
-		})
-
-		Context("verify traffic returns 500 for misconfigured JWT filter", func() {
-			It("should return 500 when JWT filter references non-existent secret", func() {
-				Eventually(
-					func() error {
-						return framework.Expect500Response(
-							timeoutConfig.RequestTimeout,
-							fmt.Sprintf("http://cafe.example.com:%d/jwt-invalid-secret", port),
-							address,
-							framework.WithRequestHeaders(map[string]string{
-								"Authorization": "Bearer some.jwt.token",
-							}))
-					}).
-					WithTimeout(timeoutConfig.RequestTimeout).
-					WithPolling(500 * time.Millisecond).
-					Should(Succeed())
+			Context("verify traffic returns 500 for misconfigured JWT filter", func() {
+				It("should return 500 when JWT filter references non-existent secret", func() {
+					Eventually(
+						func() error {
+							return framework.Expect500Response(
+								timeoutConfig.RequestTimeout,
+								fmt.Sprintf("http://cafe.example.com:%d/jwt-invalid-secret", port),
+								address,
+								framework.WithRequestHeaders(map[string]string{
+									"Authorization": "Bearer some.jwt.token",
+								}))
+						}).
+						WithTimeout(timeoutConfig.RequestTimeout).
+						WithPolling(500 * time.Millisecond).
+						Should(Succeed())
+				})
 			})
 		})
-	})
 
-	When("JWT AuthenticationFilter with invalid secret value is applied", func() {
-		invalidJWKSManifestFiles := []string{"authentication-filter/jwt-invalid-jwks.yaml"}
+		When("JWT AuthenticationFilter with invalid secret value is applied", func() {
+			invalidJWKSManifestFiles := []string{"authentication-filter/jwt-invalid-jwks.yaml"}
 
-		BeforeAll(func() {
-			if !*plusEnabled {
-				Skip("Skipping JWT AuthenticationFilter tests on NGINX OSS deployment (JWT requires NGINX Plus)")
-			}
+			BeforeAll(func() {
+				// Apply manifest resources
+				Expect(resourceManager.ApplyFromFiles(invalidJWKSManifestFiles, namespace)).To(Succeed())
+				Expect(resourceManager.WaitForAppsToBeReady(namespace)).To(Succeed())
+			})
 
-			// Apply manifest resources
-			Expect(resourceManager.ApplyFromFiles(invalidJWKSManifestFiles, namespace)).To(Succeed())
-			Expect(resourceManager.WaitForAppsToBeReady(namespace)).To(Succeed())
-		})
+			AfterAll(func() {
+				framework.AddNginxLogsAndEventsToReport(resourceManager, namespace)
 
-		AfterAll(func() {
-			if !*plusEnabled {
-				Skip("Skipping JWT AuthenticationFilter tests on NGINX OSS deployment (JWT requires NGINX Plus)")
-			}
+				// Delete resources
+				Expect(resourceManager.DeleteFromFiles(invalidJWKSManifestFiles, namespace)).To(Succeed())
+			})
 
-			framework.AddNginxLogsAndEventsToReport(resourceManager, namespace)
-
-			// Delete resources
-			Expect(resourceManager.DeleteFromFiles(invalidJWKSManifestFiles, namespace)).To(Succeed())
-		})
-
-		Context("verify traffic returns 401 for JWT filter with invalid JWKS", func() {
-			It("should return 401 when JWT filter uses secret with invalid JWKS data", func() {
-				Eventually(
-					func() error {
-						return framework.ExpectUnauthenticatedRequest(
-							timeoutConfig.RequestTimeout,
-							fmt.Sprintf("http://cafe.example.com:%d/jwt-invalid-jwks", port),
-							address,
-							framework.WithRequestHeaders(map[string]string{
-								"Authorization": "Bearer some.jwt.token",
-							}))
-					}).
-					WithTimeout(timeoutConfig.RequestTimeout).
-					WithPolling(500 * time.Millisecond).
-					Should(Succeed())
+			Context("verify traffic returns 401 for JWT filter with invalid JWKS", func() {
+				It("should return 401 when JWT filter uses secret with invalid JWKS data", func() {
+					Eventually(
+						func() error {
+							return framework.ExpectUnauthenticatedRequest(
+								timeoutConfig.RequestTimeout,
+								fmt.Sprintf("http://cafe.example.com:%d/jwt-invalid-jwks", port),
+								address,
+								framework.WithRequestHeaders(map[string]string{
+									"Authorization": "Bearer some.jwt.token",
+								}))
+						}).
+						WithTimeout(timeoutConfig.RequestTimeout).
+						WithPolling(500 * time.Millisecond).
+						Should(Succeed())
+				})
 			})
 		})
-	})
 
-	When("valid JWT AuthenticationFilter with Remote source (Keycloak) is applied", func() {
-		var (
-			keycloakToken             string
-			keycloakPortForwardStopCh chan struct{}
-			keycloakTLSSecret         *core.Secret
-			jwksClientSecret          *core.Secret
-			keycloakManifestFiles     = []string{
-				"authentication-filter/keycloak-realm-config.yaml",
-				"authentication-filter/keycloak.yaml",
-			}
-			jwtRemoteManifestFiles = []string{
-				"authentication-filter/jwt-remote-auth.yaml",
-			}
-		)
+		When("valid JWT AuthenticationFilter with Remote source (Keycloak) is applied", func() {
+			var (
+				keycloakToken             string
+				keycloakPortForwardStopCh chan struct{}
+				jwtRemoteManifestFiles    = []string{
+					"authentication-filter/jwt-remote-auth.yaml",
+				}
+			)
 
-		BeforeAll(func() {
-			if !*plusEnabled {
-				Skip("Skipping JWT Remote AuthenticationFilter tests on NGINX OSS deployment (JWT requires NGINX Plus)")
-			}
-
-			// Generate TLS certificates
-			GinkgoWriter.Println("Generating TLS certificates for Keycloak...")
-			caCertPEM, _, serverCert, serverKey, clientCert, clientKey, err := generateTLSCertificates(namespace)
-			Expect(err).ToNot(HaveOccurred())
-
-			// Create Keycloak TLS secret
-			keycloakTLSSecret = &core.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "keycloak-tls-cert",
-					Namespace: namespace,
-				},
-				Type: core.SecretTypeTLS,
-				Data: map[string][]byte{
-					"tls.crt": serverCert,
-					"tls.key": serverKey,
-				},
-			}
-
-			// Create client certificate secret with CA
-			jwksClientSecret = &core.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "jwks-client-cert",
-					Namespace: namespace,
-				},
-				Type: core.SecretTypeTLS,
-				Data: map[string][]byte{
-					"tls.crt": clientCert,
-					"tls.key": clientKey,
-					"ca.crt":  caCertPEM,
-				},
-			}
-
-			// Apply secrets
-			Expect(resourceManager.Apply([]client.Object{keycloakTLSSecret, jwksClientSecret})).To(Succeed())
-
-			// Deploy Keycloak
-			Expect(resourceManager.ApplyFromFiles(keycloakManifestFiles, namespace)).To(Succeed())
-
-			// Wait for Keycloak to be ready
-			GinkgoWriter.Println("Waiting for Keycloak to be ready...")
-			Eventually(func() error {
+			BeforeAll(func() {
+				// Port forward to Keycloak for configuration
+				GinkgoWriter.Println("Setting up port-forward to Keycloak...")
 				pods, err := resourceManager.GetPods(namespace, client.MatchingLabels{
 					"app": "keycloak",
 				})
-				if err != nil {
-					return err
-				}
-				if len(pods) == 0 {
-					return fmt.Errorf("no keycloak pods found")
-				}
-				for _, pod := range pods {
-					for _, condition := range pod.Status.Conditions {
-						if condition.Type == core.PodReady && condition.Status == core.ConditionTrue {
-							return nil
-						}
-					}
-				}
-				return fmt.Errorf("keycloak pod not ready")
-			}).
-				WithTimeout(2*time.Minute).
-				WithPolling(5*time.Second).
-				Should(Succeed(), "Keycloak should be ready")
-
-			// Port forward to Keycloak for configuration
-			GinkgoWriter.Println("Setting up port-forward to Keycloak...")
-			pods, err := resourceManager.GetPods(namespace, client.MatchingLabels{
-				"app": "keycloak",
-			})
-			Expect(err).ToNot(HaveOccurred())
-			Expect(pods).ToNot(BeEmpty())
-			keycloakPodName := pods[0].Name
-
-			// Set up port forwarding using framework for token retrieval
-			keycloakPortForwardStopCh = make(chan struct{})
-			ports := []string{"8443:8443"}
-			err = framework.PortForward(resourceManager.K8sConfig, namespace, keycloakPodName, ports, keycloakPortForwardStopCh)
-			Expect(err).ToNot(HaveOccurred())
-
-			// Get JWT token for test user (realm is imported via ConfigMap)
-			GinkgoWriter.Println("Obtaining JWT token from Keycloak...")
-			Eventually(func() error {
-				var err error
-				keycloakToken, err = getKeycloakUserToken(caCertPEM)
-				if err != nil {
-					GinkgoWriter.Printf("Token retrieval attempt failed: %v\n", err)
-					return err
-				}
-				if keycloakToken == "" {
-					return fmt.Errorf("received empty token")
-				}
-				return nil
-			}).
-				WithTimeout(30*time.Second).
-				WithPolling(2*time.Second).
-				Should(Succeed(), "Should obtain JWT token from Keycloak")
-
-			GinkgoWriter.Printf("Successfully obtained token (length: %d)\n", len(keycloakToken))
-
-			// Apply JWT Remote AuthenticationFilter and HTTPRoute
-			Expect(resourceManager.ApplyFromFiles(jwtRemoteManifestFiles, namespace)).To(Succeed())
-			Expect(resourceManager.WaitForAppsToBeReady(namespace)).To(Succeed())
-		})
-
-		AfterAll(func() {
-			if !*plusEnabled {
-				Skip("Skipping JWT AuthenticationFilter tests on NGINX OSS deployment (JWT requires NGINX Plus)")
-			}
-
-			framework.AddNginxLogsAndEventsToReport(resourceManager, namespace)
-
-			// Clean up port forward
-			if keycloakPortForwardStopCh != nil {
-				GinkgoWriter.Println("Cleaning up Keycloak port-forward...")
-				close(keycloakPortForwardStopCh)
-			}
-
-			// Delete resources
-			Expect(resourceManager.DeleteFromFiles(jwtRemoteManifestFiles, namespace)).To(Succeed())
-			Expect(resourceManager.DeleteFromFiles(keycloakManifestFiles, namespace)).To(Succeed())
-
-			// Delete secrets
-			ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.DeleteTimeout)
-			defer cancel()
-
-			if keycloakTLSSecret != nil {
-				Expect(resourceManager.Delete(ctx, keycloakTLSSecret, nil)).To(Succeed())
-			}
-			if jwksClientSecret != nil {
-				Expect(resourceManager.Delete(ctx, jwksClientSecret, nil)).To(Succeed())
-			}
-		})
-
-		Specify("JWT remote authenticationFilter is accepted", func() {
-			nsname := types.NamespacedName{Name: "jwt-remote-auth", Namespace: namespace}
-
-			Eventually(checkForAuthenticationFilterToBeAccepted).
-				WithArguments(nsname).
-				WithTimeout(timeoutConfig.GetStatusTimeout).
-				WithPolling(500*time.Millisecond).
-				Should(Succeed(), "jwt-remote-auth was not accepted")
-		})
-
-		Context("verify traffic with valid JWT Remote AuthenticationFilter configuration for HTTPRoutes", func() {
-			It("should successfully authenticate with valid JWT token from Keycloak", func() {
-				Eventually(
-					func() error {
-						return framework.ExpectRequestToSucceed(
-							timeoutConfig.RequestTimeout,
-							fmt.Sprintf("http://cafe.example.com:%d/jwt-remote-coffee", port),
-							address,
-							"URI: /jwt-remote-coffee",
-							framework.WithRequestHeaders(map[string]string{
-								"Authorization": fmt.Sprintf("Bearer %s", keycloakToken),
-							}))
-					}).
-					WithTimeout(timeoutConfig.RequestTimeout).
-					WithPolling(500 * time.Millisecond).
-					Should(Succeed())
-			})
-
-			It("should return 401 for invalid JWT token", func() {
-				Eventually(
-					func() error {
-						return framework.ExpectUnauthenticatedRequest(
-							timeoutConfig.RequestTimeout,
-							fmt.Sprintf("http://cafe.example.com:%d/jwt-remote-coffee", port),
-							address,
-							framework.WithRequestHeaders(map[string]string{
-								"Authorization": "Bearer invalid.jwt.token",
-							}))
-					}).
-					WithTimeout(timeoutConfig.RequestTimeout).
-					WithPolling(500 * time.Millisecond).
-					Should(Succeed())
-			})
-
-			It("should return 401 when no token is provided", func() {
-				Eventually(
-					func() error {
-						return framework.ExpectUnauthenticatedRequest(
-							timeoutConfig.RequestTimeout,
-							fmt.Sprintf("http://cafe.example.com:%d/jwt-remote-coffee", port),
-							address,
-						)
-					}).
-					WithTimeout(timeoutConfig.RequestTimeout).
-					WithPolling(500 * time.Millisecond).
-					Should(Succeed())
-			})
-
-			It("should allow access to unprotected endpoint without authentication", func() {
-				Eventually(
-					func() error {
-						return framework.ExpectRequestToSucceed(
-							timeoutConfig.RequestTimeout,
-							fmt.Sprintf("http://cafe.example.com:%d/jwt-remote-tea", port),
-							address,
-							"URI: /jwt-remote-tea",
-						)
-					}).
-					WithTimeout(timeoutConfig.RequestTimeout).
-					WithPolling(500 * time.Millisecond).
-					Should(Succeed())
-			})
-		})
-
-		Context("nginx directives", func() {
-			var conf *framework.Payload
-
-			BeforeAll(func() {
-				var err error
-				conf, err = resourceManager.GetNginxConfig(nginxPodName, namespace, "")
 				Expect(err).ToNot(HaveOccurred())
+				Expect(pods).ToNot(BeEmpty())
+				keycloakPodName := pods[0].Name
+
+				// Set up port forwarding using framework for token retrieval
+				keycloakPortForwardStopCh = make(chan struct{})
+				ports := []string{"8443:8443"}
+				err = framework.PortForward(resourceManager.K8sConfig, namespace, keycloakPodName, ports, keycloakPortForwardStopCh)
+				Expect(err).ToNot(HaveOccurred())
+
+				// Get JWT token for test user (realm is imported via ConfigMap)
+				GinkgoWriter.Println("Obtaining JWT token from Keycloak...")
+				Eventually(func() error {
+					var err error
+					keycloakToken, err = getKeycloakUserToken(ca.CertPEM)
+					if err != nil {
+						GinkgoWriter.Printf("Token retrieval attempt failed: %v\n", err)
+						return err
+					}
+					if keycloakToken == "" {
+						return fmt.Errorf("received empty token")
+					}
+					return nil
+				}).
+					WithTimeout(30*time.Second).
+					WithPolling(2*time.Second).
+					Should(Succeed(), "Should obtain JWT token from Keycloak")
+
+				GinkgoWriter.Printf("Successfully obtained token (length: %d)\n", len(keycloakToken))
+
+				// Apply JWT Remote AuthenticationFilter and HTTPRoute
+				Expect(resourceManager.ApplyFromFiles(jwtRemoteManifestFiles, namespace)).To(Succeed())
+				Expect(resourceManager.WaitForAppsToBeReady(namespace)).To(Succeed())
 			})
 
-			DescribeTable("are set properly for",
-				func(expCfgs []framework.ExpectedNginxField) {
-					for _, expCfg := range expCfgs {
-						Expect(framework.ValidateNginxFieldExists(conf, expCfg)).To(Succeed())
-					}
-				},
-				Entry("JWT remote authentication", []framework.ExpectedNginxField{
-					{
-						Directive: "auth_jwt",
-						Value:     "JWT Remote Authentication",
-						File:      "http.conf",
-						Server:    "*.example.com",
-						Location:  "/jwt-remote-coffee",
-					},
-					{
-						Directive: "auth_jwt_key_request",
-						Value:     fmt.Sprintf("/_ngf-internal-%s_jwt-remote-auth_jwks_uri", namespace),
-						File:      "http.conf",
-						Server:    "*.example.com",
-						Location:  "/jwt-remote-coffee",
-					},
-					{
-						Directive: "auth_jwt_key_cache",
-						Value:     "10m",
-						File:      "http.conf",
-						Server:    "*.example.com",
-						Location:  "/jwt-remote-coffee",
-					},
-				}),
-			)
+			AfterAll(func() {
+				framework.AddNginxLogsAndEventsToReport(resourceManager, namespace)
 
-			It("should have internal location for JWKS retrieval with HTTPS", func() {
-				internalLocation := fmt.Sprintf("/_ngf-internal-%s_jwt-remote-auth_jwks_uri", namespace)
+				// Clean up port forward
+				if keycloakPortForwardStopCh != nil {
+					GinkgoWriter.Println("Cleaning up Keycloak port-forward...")
+					close(keycloakPortForwardStopCh)
+				}
 
-				keycloakURL := fmt.Sprintf(
-					"https://keycloak.%s.svc.cluster.local:8443/realms/myrealm/protocol/openid-connect/certs", namespace,
+				// Delete resources
+				Expect(resourceManager.DeleteFromFiles(jwtRemoteManifestFiles, namespace)).To(Succeed())
+			})
+
+			Specify("JWT remote authenticationFilter is accepted", func() {
+				nsname := types.NamespacedName{Name: "jwt-remote-auth", Namespace: namespace}
+
+				Eventually(checkForAuthenticationFilterToBeAccepted).
+					WithArguments(nsname).
+					WithTimeout(timeoutConfig.GetStatusTimeout).
+					WithPolling(500*time.Millisecond).
+					Should(Succeed(), "jwt-remote-auth was not accepted")
+			})
+
+			Context("verify traffic with valid JWT Remote AuthenticationFilter configuration for HTTPRoutes", func() {
+				It("should successfully authenticate with valid JWT token from Keycloak", func() {
+					Eventually(
+						func() error {
+							return framework.ExpectRequestToSucceed(
+								timeoutConfig.RequestTimeout,
+								fmt.Sprintf("http://cafe.example.com:%d/jwt-remote-coffee", port),
+								address,
+								"URI: /jwt-remote-coffee",
+								framework.WithRequestHeaders(map[string]string{
+									"Authorization": fmt.Sprintf("Bearer %s", keycloakToken),
+								}))
+						}).
+						WithTimeout(timeoutConfig.RequestTimeout).
+						WithPolling(500 * time.Millisecond).
+						Should(Succeed())
+				})
+
+				It("should return 401 for invalid JWT token", func() {
+					Eventually(
+						func() error {
+							return framework.ExpectUnauthenticatedRequest(
+								timeoutConfig.RequestTimeout,
+								fmt.Sprintf("http://cafe.example.com:%d/jwt-remote-coffee", port),
+								address,
+								framework.WithRequestHeaders(map[string]string{
+									"Authorization": "Bearer invalid.jwt.token",
+								}))
+						}).
+						WithTimeout(timeoutConfig.RequestTimeout).
+						WithPolling(500 * time.Millisecond).
+						Should(Succeed())
+				})
+
+				It("should return 401 when no token is provided", func() {
+					Eventually(
+						func() error {
+							return framework.ExpectUnauthenticatedRequest(
+								timeoutConfig.RequestTimeout,
+								fmt.Sprintf("http://cafe.example.com:%d/jwt-remote-coffee", port),
+								address,
+							)
+						}).
+						WithTimeout(timeoutConfig.RequestTimeout).
+						WithPolling(500 * time.Millisecond).
+						Should(Succeed())
+				})
+
+				It("should allow access to unprotected endpoint without authentication", func() {
+					Eventually(
+						func() error {
+							return framework.ExpectRequestToSucceed(
+								timeoutConfig.RequestTimeout,
+								fmt.Sprintf("http://cafe.example.com:%d/jwt-remote-tea", port),
+								address,
+								"URI: /jwt-remote-tea",
+							)
+						}).
+						WithTimeout(timeoutConfig.RequestTimeout).
+						WithPolling(500 * time.Millisecond).
+						Should(Succeed())
+				})
+			})
+
+			Context("nginx directives", func() {
+				var conf *framework.Payload
+
+				BeforeAll(func() {
+					var err error
+					conf, err = resourceManager.GetNginxConfig(nginxPodName, namespace, "")
+					Expect(err).ToNot(HaveOccurred())
+				})
+
+				DescribeTable("are set properly for",
+					func(expCfgs []framework.ExpectedNginxField) {
+						for _, expCfg := range expCfgs {
+							Expect(framework.ValidateNginxFieldExists(conf, expCfg)).To(Succeed())
+						}
+					},
+					Entry("JWT remote authentication", []framework.ExpectedNginxField{
+						{
+							Directive: "auth_jwt",
+							Value:     "JWT Remote Authentication",
+							File:      "http.conf",
+							Server:    "*.example.com",
+							Location:  "/jwt-remote-coffee",
+						},
+						{
+							Directive: "auth_jwt_key_request",
+							Value:     fmt.Sprintf("/_ngf-internal-%s_jwt-remote-auth_jwks_uri", namespace),
+							File:      "http.conf",
+							Server:    "*.example.com",
+							Location:  "/jwt-remote-coffee",
+						},
+						{
+							Directive: "auth_jwt_key_cache",
+							Value:     "10m",
+							File:      "http.conf",
+							Server:    "*.example.com",
+							Location:  "/jwt-remote-coffee",
+						},
+					}),
 				)
-				// Validate proxy_pass
-				Expect(framework.ValidateNginxFieldExists(conf, framework.ExpectedNginxField{
-					Directive: "proxy_pass",
-					Value:     keycloakURL,
-					File:      "http.conf",
-					Server:    "*.example.com",
-					Location:  internalLocation,
-				})).To(Succeed())
 
-				// Validate TLS client certificate settings (mTLS)
-				clientCertPath := fmt.Sprintf(
-					"/etc/nginx/secrets/jwt_remote_tls_%s_jwks-client-cert.pem", namespace,
-				)
-				Expect(framework.ValidateNginxFieldExists(conf, framework.ExpectedNginxField{
-					Directive: "proxy_ssl_certificate",
-					Value:     clientCertPath,
-					File:      "http.conf",
-					Server:    "*.example.com",
-					Location:  internalLocation,
-				})).To(Succeed())
+				It("should have internal location for JWKS retrieval with HTTPS", func() {
+					internalLocation := fmt.Sprintf("/_ngf-internal-%s_jwt-remote-auth_jwks_uri", namespace)
 
-				Expect(framework.ValidateNginxFieldExists(conf, framework.ExpectedNginxField{
-					Directive: "proxy_ssl_certificate_key",
-					Value:     clientCertPath,
-					File:      "http.conf",
-					Server:    "*.example.com",
-					Location:  internalLocation,
-				})).To(Succeed())
+					keycloakURL := fmt.Sprintf(
+						"https://keycloak.%s.svc.cluster.local:8443/realms/nginx-gateway/protocol/openid-connect/certs", namespace,
+					)
+					// Validate proxy_pass
+					Expect(framework.ValidateNginxFieldExists(conf, framework.ExpectedNginxField{
+						Directive: "proxy_pass",
+						Value:     keycloakURL,
+						File:      "http.conf",
+						Server:    "*.example.com",
+						Location:  internalLocation,
+					})).To(Succeed())
 
-				// Validate server certificate verification
-				Expect(framework.ValidateNginxFieldExists(conf, framework.ExpectedNginxField{
-					Directive: "proxy_ssl_verify",
-					Value:     "on",
-					File:      "http.conf",
-					Server:    "*.example.com",
-					Location:  internalLocation,
-				})).To(Succeed())
+					// Validate trusted CA certificate configuration
+					caCertPath := fmt.Sprintf("/etc/nginx/secrets/jwt_remote_tls_ca_%s_keycloak-ca-secret.crt", namespace)
+					Expect(framework.ValidateNginxFieldExists(conf, framework.ExpectedNginxField{
+						Directive: "proxy_ssl_trusted_certificate",
+						Value:     caCertPath,
+						File:      "http.conf",
+						Server:    "*.example.com",
+						Location:  internalLocation,
+					})).To(Succeed())
 
-				caCertPath := fmt.Sprintf("/etc/nginx/secrets/jwt_remote_tls_ca_%s_jwks-client-cert.crt", namespace)
-				Expect(framework.ValidateNginxFieldExists(conf, framework.ExpectedNginxField{
-					Directive: "proxy_ssl_trusted_certificate",
-					Value:     caCertPath,
-					File:      "http.conf",
-					Server:    "*.example.com",
-					Location:  internalLocation,
-				})).To(Succeed())
+					// Validate server certificate verification
+					Expect(framework.ValidateNginxFieldExists(conf, framework.ExpectedNginxField{
+						Directive: "proxy_ssl_verify",
+						Value:     "on",
+						File:      "http.conf",
+						Server:    "*.example.com",
+						Location:  internalLocation,
+					})).To(Succeed())
 
-				// Validate SNI settings
-				Expect(framework.ValidateNginxFieldExists(conf, framework.ExpectedNginxField{
-					Directive: "proxy_ssl_server_name",
-					Value:     "on",
-					File:      "http.conf",
-					Server:    "*.example.com",
-					Location:  internalLocation,
-				})).To(Succeed())
+					// Validate SNI settings
+					Expect(framework.ValidateNginxFieldExists(conf, framework.ExpectedNginxField{
+						Directive: "proxy_ssl_server_name",
+						Value:     "on",
+						File:      "http.conf",
+						Server:    "*.example.com",
+						Location:  internalLocation,
+					})).To(Succeed())
+				})
 			})
 		})
 	})
@@ -1665,7 +1538,7 @@ func (h *JWTTestHelper) Cleanup() {
 
 // getKeycloakUserToken obtains a JWT token for the test user.
 func getKeycloakUserToken(caCert []byte) (string, error) {
-	url := "https://localhost:8443/realms/myrealm/protocol/openid-connect/token"
+	url := "https://localhost:8443/realms/nginx-gateway/protocol/openid-connect/token"
 
 	data := "client_id=cafe-app&username=testuser&password=testpassword&grant_type=password"
 
@@ -1729,114 +1602,4 @@ func createSecureHTTPClient(caCert []byte) (*http.Client, error) {
 			TLSClientConfig: tlsConfig,
 		},
 	}, nil
-}
-
-// generateTLSCertificates generates CA, server, and client certificates for TLS testing.
-func generateTLSCertificates(namespace string) (
-	caCertPEM, caKeyPEM,
-	serverCertPEM, serverKeyPEM,
-	clientCertPEM, clientKeyPEM []byte,
-	err error,
-) {
-	// Generate CA certificate
-	caPrivKey, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		return nil, nil, nil, nil, nil, nil, fmt.Errorf("failed to generate CA private key: %w", err)
-	}
-
-	caTemplate := x509.Certificate{
-		SerialNumber: big.NewInt(1),
-		Subject: pkix.Name{
-			CommonName: "Keycloak-CA",
-			Country:    []string{"US"},
-			Locality:   []string{"San Francisco"},
-		},
-		NotBefore:             time.Now(),
-		NotAfter:              time.Now().Add(365 * 24 * time.Hour),
-		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageDigitalSignature,
-		BasicConstraintsValid: true,
-		IsCA:                  true,
-	}
-
-	caCertDER, err := x509.CreateCertificate(rand.Reader, &caTemplate, &caTemplate, &caPrivKey.PublicKey, caPrivKey)
-	if err != nil {
-		return nil, nil, nil, nil, nil, nil, fmt.Errorf("failed to create CA certificate: %w", err)
-	}
-
-	caCertPEM = pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: caCertDER})
-	caKeyPEM = pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(caPrivKey)})
-
-	// Parse CA cert for signing
-	caCert, err := x509.ParseCertificate(caCertDER)
-	if err != nil {
-		return nil, nil, nil, nil, nil, nil, fmt.Errorf("failed to parse CA certificate: %w", err)
-	}
-
-	// Generate server certificate
-	serverPrivKey, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		return nil, nil, nil, nil, nil, nil, fmt.Errorf("failed to generate server private key: %w", err)
-	}
-
-	serverTemplate := x509.Certificate{
-		SerialNumber: big.NewInt(2),
-		Subject: pkix.Name{
-			CommonName: fmt.Sprintf("keycloak.%s.svc.cluster.local", namespace),
-			Country:    []string{"US"},
-			Locality:   []string{"San Francisco"},
-		},
-		NotBefore:   time.Now(),
-		NotAfter:    time.Now().Add(365 * 24 * time.Hour),
-		KeyUsage:    x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
-		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
-		DNSNames: []string{
-			"keycloak",
-			fmt.Sprintf("keycloak.%s", namespace),
-			fmt.Sprintf("keycloak.%s.svc", namespace),
-			fmt.Sprintf("keycloak.%s.svc.cluster.local", namespace),
-			"localhost",
-		},
-		IPAddresses: []net.IP{net.ParseIP("127.0.0.1")},
-	}
-
-	serverCertDER, err := x509.CreateCertificate(rand.Reader, &serverTemplate, caCert, &serverPrivKey.PublicKey, caPrivKey)
-	if err != nil {
-		return nil, nil, nil, nil, nil, nil, fmt.Errorf("failed to create server certificate: %w", err)
-	}
-
-	serverCertPEM = pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: serverCertDER})
-	serverKeyPEM = pem.EncodeToMemory(
-		&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(serverPrivKey)},
-	)
-
-	// Generate client certificate
-	clientPrivKey, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		return nil, nil, nil, nil, nil, nil, fmt.Errorf("failed to generate client private key: %w", err)
-	}
-
-	clientTemplate := x509.Certificate{
-		SerialNumber: big.NewInt(3),
-		Subject: pkix.Name{
-			CommonName: "nginx-gateway-client",
-			Country:    []string{"US"},
-			Locality:   []string{"San Francisco"},
-		},
-		NotBefore:   time.Now(),
-		NotAfter:    time.Now().Add(365 * 24 * time.Hour),
-		KeyUsage:    x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
-		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
-	}
-
-	clientCertDER, err := x509.CreateCertificate(rand.Reader, &clientTemplate, caCert, &clientPrivKey.PublicKey, caPrivKey)
-	if err != nil {
-		return nil, nil, nil, nil, nil, nil, fmt.Errorf("failed to create client certificate: %w", err)
-	}
-
-	clientCertPEM = pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: clientCertDER})
-	clientKeyPEM = pem.EncodeToMemory(
-		&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(clientPrivKey)},
-	)
-
-	return caCertPEM, caKeyPEM, serverCertPEM, serverKeyPEM, clientCertPEM, clientKeyPEM, nil
 }

@@ -352,34 +352,18 @@ type AuthJWT struct {
 	SecretNamespace string
 	// Realm is the authentication realm. This is an arbitrary string displayed to users when prompting for credentials.
 	Realm string
-	// FilterNamespace is the namespace of the AuthenticationFilter.
-	FilterNamespace string
-	// FilterName is the name of the AuthenticationFilter.
-	FilterName string
 	// Data contains the JWT public key data required for authentication.
 	Data []byte
 }
 
 // AuthJWTRemote holds configuration for remote JWKS retrieval.
 type AuthJWTRemote struct {
-	// TLS holds the TLS configuration for remote JWKS retrieval.
-	TLS *AuthJWTRemoteTLS
-	// URI is the URI for the remote JWKS endpoint.
-	URI string
-}
-
-// AuthJWTRemoteTLS holds TLS configuration for remote JWKS retrieval.
-type AuthJWTRemoteTLS struct {
-	// Verify specifies whether to verify the remote TLS certificate.
-	Verify *bool
-	// SNI specifies whether to enable Server Name Indication (SNI).
-	SNI *bool
-	// SNIName is the server name to use for SNI.
-	SNIName *string
-	// CertificatePath is the path to the client certificate for mTLS.
-	CertificatePath SSLKeyPairID
 	// CACertBundlePath is the path to the CA certificate bundle for verification.
 	CACertBundlePath CertBundleID
+	// URI is the URI for the remote JWKS endpoint.
+	URI string
+	// Path is the internal path used for remote JWKS retrieval.
+	Path string
 }
 
 // HTTPHeader represents an HTTP header.

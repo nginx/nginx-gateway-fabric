@@ -8,12 +8,9 @@ spec:
     realm: "JWT Remote Authentication"
     source: Remote
     remote:
-      uri: https://keycloak.authentication-filter.svc.cluster.local:8443/realms/myrealm/protocol/openid-connect/certs
-      tls:
-        secretRef:
-          name: jwks-client-cert
-        verify: true
-        sni: true
+      uri: https://keycloak.authentication-filter.svc.cluster.local:8443/realms/nginx-gateway/protocol/openid-connect/certs
+      caCertificateRefs:
+        - name: keycloak-ca-secret
     keyCache: 10m
 ---
 apiVersion: gateway.networking.k8s.io/v1
