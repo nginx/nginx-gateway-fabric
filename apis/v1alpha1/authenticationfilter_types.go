@@ -193,10 +193,7 @@ type OIDCSessionConfig struct {
 //
 //nolint:lll
 type OIDCLogoutConfig struct {
-	// URI defines the path for initiating session logout. This path
-	// should not conflict with the logout path of other AuthenticationFilters used within
-	// the same hostname. If there is overlap, visiting the logout URI will log out the client
-	// defined in the first AuthenticationFilter.
+	// URI defines the path for initiating session logout.
 	// Directive: https://nginx.org/en/docs/http/ngx_http_oidc_module.html#logout_uri
 	// Example: /logout
 	//
@@ -214,10 +211,7 @@ type OIDCLogoutConfig struct {
 	PostLogoutURI *string `json:"postLogoutURI,omitempty"`
 
 	// FrontChannelLogoutURI defines the path for front-channel logout.
-	// The OpenID Provider should be configured to set "iss" and "sid" arguments. This path
-	// should not conflict with the frontchannel logout path of other AuthenticationFilters used within
-	// the same hostname. If there is overlap, visiting the frontchannel logout URI will log out the client
-	// defined in the first AuthenticationFilter.
+	// The OpenID Provider should be configured to set "iss" and "sid" arguments.
 	// Directive: https://nginx.org/en/docs/http/ngx_http_oidc_module.html#frontchannel_logout_uri
 	// Example: /frontchannel_logout
 	//

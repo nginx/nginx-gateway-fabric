@@ -1111,3 +1111,516 @@ func createOpaqueCRLSecret(name string, withCRLKey bool) *corev1.Secret {
 	}
 	return sec
 }
+
+func TestValidateOIDCHTTPSListeners(t *testing.T) {
+	t.Parallel()
+
+	makeGateway := func(nsname types.NamespacedName, protocol v1.ProtocolType) *Gateway {
+		return &Gateway{
+			Source: &v1.Gateway{ObjectMeta: metav1.ObjectMeta{Name: nsname.Name, Namespace: nsname.Namespace}},
+			Listeners: []*Listener{
+				{
+					Name:   "listener",
+					Source: v1.Listener{Protocol: protocol},
+				},
+			},
+		}
+	}
+
+	makeRouteWithProtocol := func(af *AuthenticationFilter, gwNSName types.NamespacedName) *L7Route {
+		listenerKey := CreateGatewayListenerKey(gwNSName, "listener")
+		return &L7Route{
+			Valid: true,
+			Spec: L7RouteSpec{
+				Rules: []RouteRule{{
+					ValidMatches: true,
+					Filters: RouteRuleFilters{
+						Filters: []Filter{{
+							FilterType:           FilterExtensionRef,
+							ResolvedExtensionRef: &ExtensionRefFilter{AuthenticationFilter: af, Valid: af.Valid},
+						}},
+						Valid: true,
+					},
+				}},
+			},
+			ParentRefs: []ParentRef{{
+				Attachment: &ParentRefAttachmentStatus{
+					AcceptedHostnames: map[string][]string{listenerKey: {"cafe.example.com"}},
+					Attached:          true,
+				},
+			}},
+		}
+	}
+
+	gwNSName := types.NamespacedName{Namespace: "default", Name: "gw"}
+	filterNsName := types.NamespacedName{Namespace: "ns", Name: "oidc-filter"}
+
+	tests := []struct {
+		buildRouteAndGateway func() (map[RouteKey]*L7Route, map[types.NamespacedName]*Gateway)
+		name                 string
+		expConditions        []conditions.Condition
+		expFilterValid       bool
+	}{
+		{
+			name: "OIDC filter on route attached to HTTPS listener - valid, no condition added",
+			buildRouteAndGateway: func() (map[RouteKey]*L7Route, map[types.NamespacedName]*Gateway) {
+				af := createAuthenticationFilterWithOIDC(filterNsName, &ngfAPI.OIDCAuth{}, true)
+				gw := makeGateway(gwNSName, v1.HTTPSProtocolType)
+				r := makeRouteWithProtocol(af, gwNSName)
+				return map[RouteKey]*L7Route{
+						{NamespacedName: types.NamespacedName{Namespace: "ns", Name: "route"}, RouteType: RouteTypeHTTP}: r,
+					},
+					map[types.NamespacedName]*Gateway{gwNSName: gw}
+			},
+			expFilterValid: true,
+		},
+		{
+			name: "OIDC filter on route attached to HTTP listener - filter marked invalid with HTTPS required condition",
+			buildRouteAndGateway: func() (map[RouteKey]*L7Route, map[types.NamespacedName]*Gateway) {
+				af := createAuthenticationFilterWithOIDC(filterNsName, &ngfAPI.OIDCAuth{}, true)
+				gw := makeGateway(gwNSName, v1.HTTPProtocolType)
+				r := makeRouteWithProtocol(af, gwNSName)
+				return map[RouteKey]*L7Route{
+						{NamespacedName: types.NamespacedName{Namespace: "ns", Name: "route"}, RouteType: RouteTypeHTTP}: r,
+					},
+					map[types.NamespacedName]*Gateway{gwNSName: gw}
+			},
+			expFilterValid: false,
+			expConditions: []conditions.Condition{
+				conditions.NewAuthenticationFilterInvalid("OIDC authentication requires an HTTPS listener"),
+			},
+		},
+		{
+			name: "OIDC filter already invalid before HTTPS check - not double-processed, stays invalid",
+			buildRouteAndGateway: func() (map[RouteKey]*L7Route, map[types.NamespacedName]*Gateway) {
+				af := createAuthenticationFilterWithOIDC(filterNsName, &ngfAPI.OIDCAuth{}, false)
+				gw := makeGateway(gwNSName, v1.HTTPProtocolType)
+				r := makeRouteWithProtocol(af, gwNSName)
+				return map[RouteKey]*L7Route{
+						{NamespacedName: types.NamespacedName{Namespace: "ns", Name: "route"}, RouteType: RouteTypeHTTP}: r,
+					},
+					map[types.NamespacedName]*Gateway{gwNSName: gw}
+			},
+			expFilterValid: false,
+			expConditions:  nil,
+		},
+		{
+			name: "OIDC filter on route with no active listener attachments - skipped, stays valid",
+			buildRouteAndGateway: func() (map[RouteKey]*L7Route, map[types.NamespacedName]*Gateway) {
+				af := createAuthenticationFilterWithOIDC(filterNsName, &ngfAPI.OIDCAuth{}, true)
+				gw := makeGateway(gwNSName, v1.HTTPProtocolType)
+				r := makeRouteWithProtocol(af, gwNSName)
+				// Empty hostnames means the listener didn't accept the route.
+				r.ParentRefs[0].Attachment.AcceptedHostnames = map[string][]string{
+					CreateGatewayListenerKey(gwNSName, "listener"): {},
+				}
+				return map[RouteKey]*L7Route{
+						{NamespacedName: types.NamespacedName{Namespace: "ns", Name: "route"}, RouteType: RouteTypeHTTP}: r,
+					},
+					map[types.NamespacedName]*Gateway{gwNSName: gw}
+			},
+			expFilterValid: true,
+		},
+		{
+			name: "shared OIDC filter referenced by a route on HTTP listener and another route on HTTPS listener " +
+				"filter is marked invalid due to HTTP attachment and both routes rules are marked invalid via propagation",
+			buildRouteAndGateway: func() (map[RouteKey]*L7Route, map[types.NamespacedName]*Gateway) {
+				af := createAuthenticationFilterWithOIDC(filterNsName, &ngfAPI.OIDCAuth{}, true)
+				httpGWNSName := types.NamespacedName{Namespace: "default", Name: "http-gw"}
+				httpsGWNSName := types.NamespacedName{Namespace: "default", Name: "https-gw"}
+				httpGW := makeGateway(httpGWNSName, v1.HTTPProtocolType)
+				httpsGW := makeGateway(httpsGWNSName, v1.HTTPSProtocolType)
+				httpRoute := makeRouteWithProtocol(af, httpGWNSName)
+				httpsRoute := makeRouteWithProtocol(af, httpsGWNSName)
+				return map[RouteKey]*L7Route{
+						{
+							NamespacedName: types.NamespacedName{Namespace: "ns", Name: "http-route"}, RouteType: RouteTypeHTTP,
+						}: httpRoute,
+						{
+							NamespacedName: types.NamespacedName{Namespace: "ns", Name: "https-route"}, RouteType: RouteTypeHTTP,
+						}: httpsRoute,
+					},
+					map[types.NamespacedName]*Gateway{httpGWNSName: httpGW, httpsGWNSName: httpsGW}
+			},
+			expFilterValid: false,
+			expConditions: []conditions.Condition{
+				conditions.NewAuthenticationFilterInvalid("OIDC authentication requires an HTTPS listener"),
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			routes, gws := tt.buildRouteAndGateway()
+			validateOIDCFilters(routes, gws)
+
+			var af *AuthenticationFilter
+			for _, route := range routes {
+				for _, rule := range route.Spec.Rules {
+					for _, f := range rule.Filters.Filters {
+						if f.ResolvedExtensionRef != nil && f.ResolvedExtensionRef.AuthenticationFilter != nil {
+							af = f.ResolvedExtensionRef.AuthenticationFilter
+						}
+					}
+				}
+			}
+			g.Expect(af).ToNot(BeNil())
+			g.Expect(af.Valid).To(Equal(tt.expFilterValid))
+			if tt.expConditions != nil {
+				g.Expect(af.Conditions).To(Equal(tt.expConditions))
+			}
+		})
+	}
+}
+
+func TestValidateOIDCURIConflictsPerHostname(t *testing.T) {
+	t.Parallel()
+
+	makeRoute := func(
+		nsname types.NamespacedName,
+		hostname v1.Hostname,
+		filters ...*AuthenticationFilter,
+	) (RouteKey, *L7Route) {
+		rules := make([]RouteRule, len(filters))
+		for i, af := range filters {
+			rules[i] = RouteRule{
+				ValidMatches: true,
+				Filters: RouteRuleFilters{
+					Filters: []Filter{
+						{
+							FilterType: FilterExtensionRef,
+							ResolvedExtensionRef: &ExtensionRefFilter{
+								AuthenticationFilter: af,
+								Valid:                af.Valid,
+							},
+						},
+					},
+					Valid: true,
+				},
+			}
+		}
+		key := RouteKey{NamespacedName: nsname, RouteType: RouteTypeHTTP}
+		route := &L7Route{
+			Valid: true,
+			Spec: L7RouteSpec{
+				Hostnames: []v1.Hostname{hostname},
+				Rules:     rules,
+			},
+			ParentRefs: []ParentRef{
+				{
+					Attachment: &ParentRefAttachmentStatus{
+						AcceptedHostnames: map[string][]string{
+							"gateway/listener": {string(hostname)},
+						},
+						Attached: true,
+					},
+				},
+			},
+		}
+		return key, route
+	}
+
+	const cafe = v1.Hostname("cafe.example.com")
+	const tea = v1.Hostname("tea.example.com")
+
+	filterANsName := types.NamespacedName{Namespace: "a-ns", Name: "filter-a"}
+	filterBNsName := types.NamespacedName{Namespace: "b-ns", Name: "filter-b"}
+
+	tests := []struct {
+		buildRoutes    func() map[RouteKey]*L7Route
+		name           string
+		expBConditions []conditions.Condition
+		expAValid      bool
+		expBValid      bool
+	}{
+		{
+			name: "two valid OIDC filters on the same hostname each with a unique logout URI - no conflict",
+			buildRoutes: func() map[RouteKey]*L7Route {
+				filterA := createAuthenticationFilterWithOIDC(filterANsName, &ngfAPI.OIDCAuth{
+					Logout: &ngfAPI.OIDCLogoutConfig{URI: helpers.GetPointer("/logout-a")},
+				}, true)
+				filterB := createAuthenticationFilterWithOIDC(filterBNsName, &ngfAPI.OIDCAuth{
+					Logout: &ngfAPI.OIDCLogoutConfig{URI: helpers.GetPointer("/logout-b")},
+				}, true)
+				k, r := makeRoute(types.NamespacedName{Namespace: "ns", Name: "route"}, cafe, filterA, filterB)
+				return map[RouteKey]*L7Route{k: r}
+			},
+			expAValid: true,
+			expBValid: true,
+		},
+		{
+			name: "two valid OIDC filters on the same hostname with the same logout URI /logout" +
+				" a-ns/filter-a wins because it sorts first by namespace, b-ns/filter-b is marked invalid",
+			buildRoutes: func() map[RouteKey]*L7Route {
+				filterA := createAuthenticationFilterWithOIDC(filterANsName, &ngfAPI.OIDCAuth{
+					Logout: &ngfAPI.OIDCLogoutConfig{URI: helpers.GetPointer("/logout")},
+				}, true)
+				filterB := createAuthenticationFilterWithOIDC(filterBNsName, &ngfAPI.OIDCAuth{
+					Logout: &ngfAPI.OIDCLogoutConfig{URI: helpers.GetPointer("/logout")},
+				}, true)
+				k, r := makeRoute(types.NamespacedName{Namespace: "ns", Name: "route"}, cafe, filterA, filterB)
+				return map[RouteKey]*L7Route{k: r}
+			},
+			expAValid: true,
+			expBValid: false,
+			expBConditions: []conditions.Condition{
+				conditions.NewAuthenticationFilterInvalid(
+					`logout URI "/logout" conflicts with logout URI of OIDC filter a-ns/filter-a on hostname "cafe.example.com"`,
+				),
+			},
+		},
+		{
+			name: "two valid OIDC filters on the same hostname with the same front-channel logout URI /front " +
+				"a-ns/filter-a wins because it sorts first by namespace, b-ns/filter-b is marked invalid",
+			buildRoutes: func() map[RouteKey]*L7Route {
+				filterA := createAuthenticationFilterWithOIDC(filterANsName, &ngfAPI.OIDCAuth{
+					Logout: &ngfAPI.OIDCLogoutConfig{FrontChannelLogoutURI: helpers.GetPointer("/front")},
+				}, true)
+				filterB := createAuthenticationFilterWithOIDC(filterBNsName, &ngfAPI.OIDCAuth{
+					Logout: &ngfAPI.OIDCLogoutConfig{FrontChannelLogoutURI: helpers.GetPointer("/front")},
+				}, true)
+				k, r := makeRoute(types.NamespacedName{Namespace: "ns", Name: "route"}, cafe, filterA, filterB)
+				return map[RouteKey]*L7Route{k: r}
+			},
+			expAValid: true,
+			expBValid: false,
+			expBConditions: []conditions.Condition{
+				conditions.NewAuthenticationFilterInvalid(
+					`front-channel logout URI "/front" conflicts with front-channel ` +
+						`logout URI of OIDC filter a-ns/filter-a on hostname "cafe.example.com"`,
+				),
+			},
+		},
+		{
+			name: "two valid OIDC filters on the same hostname with the same path-only redirect URI /callback " +
+				"a-ns/filter-a wins because it sorts first by namespace, b-ns/filter-b is marked invalid",
+			buildRoutes: func() map[RouteKey]*L7Route {
+				filterA := createAuthenticationFilterWithOIDC(filterANsName, &ngfAPI.OIDCAuth{
+					RedirectURI: helpers.GetPointer("/callback"),
+				}, true)
+				filterB := createAuthenticationFilterWithOIDC(filterBNsName, &ngfAPI.OIDCAuth{
+					RedirectURI: helpers.GetPointer("/callback"),
+				}, true)
+				k, r := makeRoute(types.NamespacedName{Namespace: "ns", Name: "route"}, cafe, filterA, filterB)
+				return map[RouteKey]*L7Route{k: r}
+			},
+			expAValid: true,
+			expBValid: false,
+			expBConditions: []conditions.Condition{
+				conditions.NewAuthenticationFilterInvalid(
+					`redirect URI "/callback" conflicts with redirect URI of OIDC filter a-ns/filter-a on hostname "cafe.example.com"`,
+				),
+			},
+		},
+		{
+			name: "two valid OIDC filters on the same hostname with the same full-URL redirect URI " +
+				" no conflict because full URLs do not create NGINX location blocks",
+			buildRoutes: func() map[RouteKey]*L7Route {
+				filterA := createAuthenticationFilterWithOIDC(filterANsName, &ngfAPI.OIDCAuth{
+					RedirectURI: helpers.GetPointer("https://auth.example.com/callback"),
+				}, true)
+				filterB := createAuthenticationFilterWithOIDC(filterBNsName, &ngfAPI.OIDCAuth{
+					RedirectURI: helpers.GetPointer("https://auth.example.com/callback"),
+				}, true)
+				k, r := makeRoute(types.NamespacedName{Namespace: "ns", Name: "route"}, cafe, filterA, filterB)
+				return map[RouteKey]*L7Route{k: r}
+			},
+			expAValid: true,
+			expBValid: true,
+		},
+		{
+			name: "two valid OIDC filters on different hostnames with the same logout URI /logout " +
+				"no conflict because hostnames are validated independently",
+			buildRoutes: func() map[RouteKey]*L7Route {
+				filterA := createAuthenticationFilterWithOIDC(filterANsName, &ngfAPI.OIDCAuth{
+					Logout: &ngfAPI.OIDCLogoutConfig{URI: helpers.GetPointer("/logout")},
+				}, true)
+				filterB := createAuthenticationFilterWithOIDC(filterBNsName, &ngfAPI.OIDCAuth{
+					Logout: &ngfAPI.OIDCLogoutConfig{URI: helpers.GetPointer("/logout")},
+				}, true)
+				kA, rA := makeRoute(types.NamespacedName{Namespace: "ns", Name: "route-a"}, cafe, filterA)
+				kB, rB := makeRoute(types.NamespacedName{Namespace: "ns", Name: "route-b"}, tea, filterB)
+				return map[RouteKey]*L7Route{kA: rA, kB: rB}
+			},
+			expAValid: true,
+			expBValid: true,
+		},
+		{
+			name: "the same OIDC filter referenced by two rules on the same hostname " +
+				"no conflict because the filter is deduplicated per hostname",
+			buildRoutes: func() map[RouteKey]*L7Route {
+				filterA := createAuthenticationFilterWithOIDC(filterANsName, &ngfAPI.OIDCAuth{
+					Logout: &ngfAPI.OIDCLogoutConfig{URI: helpers.GetPointer("/logout")},
+				}, true)
+				k, r := makeRoute(types.NamespacedName{Namespace: "ns", Name: "route"}, cafe, filterA, filterA)
+				return map[RouteKey]*L7Route{k: r}
+			},
+			expAValid: true,
+			expBValid: true,
+		},
+		{
+			name: "two OIDC filters on the same hostname with the same logout URI where b-ns/filter-b is already invalid" +
+				"b-ns/filter-b does not claim the URI, a-ns/filter-a remains valid",
+			buildRoutes: func() map[RouteKey]*L7Route {
+				filterA := createAuthenticationFilterWithOIDC(filterANsName, &ngfAPI.OIDCAuth{
+					Logout: &ngfAPI.OIDCLogoutConfig{URI: helpers.GetPointer("/logout")},
+				}, true)
+				filterB := createAuthenticationFilterWithOIDC(filterBNsName, &ngfAPI.OIDCAuth{
+					Logout: &ngfAPI.OIDCLogoutConfig{URI: helpers.GetPointer("/logout")},
+				}, false)
+				k, r := makeRoute(types.NamespacedName{Namespace: "ns", Name: "route"}, cafe, filterA, filterB)
+				return map[RouteKey]*L7Route{k: r}
+			},
+			expAValid: true,
+			expBValid: false,
+		},
+		{
+			name: "two valid OIDC filters on the same hostname where a-ns/filter-a has redirect URI /cb " +
+				"and b-ns/filter-b has logout URI /cb causing cross-type conflict, b-ns/filter-b is marked invalid",
+			buildRoutes: func() map[RouteKey]*L7Route {
+				filterA := createAuthenticationFilterWithOIDC(filterANsName, &ngfAPI.OIDCAuth{
+					RedirectURI: helpers.GetPointer("/cb"),
+				}, true)
+				filterB := createAuthenticationFilterWithOIDC(filterBNsName, &ngfAPI.OIDCAuth{
+					Logout: &ngfAPI.OIDCLogoutConfig{URI: helpers.GetPointer("/cb")},
+				}, true)
+				k, r := makeRoute(types.NamespacedName{Namespace: "ns", Name: "route"}, cafe, filterA, filterB)
+				return map[RouteKey]*L7Route{k: r}
+			},
+			expAValid: true,
+			expBValid: false,
+			expBConditions: []conditions.Condition{
+				conditions.NewAuthenticationFilterInvalid(
+					`logout URI "/cb" conflicts with redirect URI of OIDC filter a-ns/filter-a on hostname "cafe.example.com"`,
+				),
+			},
+		},
+		{
+			name: "two valid OIDC filters on routes with no spec hostnames that both attach to the same listener " +
+				"hostname cafe.example.com duplicate logout URI /logout is detected via " +
+				"accepted hostnames b-ns/filter-b is marked invalid",
+			buildRoutes: func() map[RouteKey]*L7Route {
+				filterA := createAuthenticationFilterWithOIDC(filterANsName, &ngfAPI.OIDCAuth{
+					Logout: &ngfAPI.OIDCLogoutConfig{URI: helpers.GetPointer("/logout")},
+				}, true)
+				filterB := createAuthenticationFilterWithOIDC(filterBNsName, &ngfAPI.OIDCAuth{
+					Logout: &ngfAPI.OIDCLogoutConfig{URI: helpers.GetPointer("/logout")},
+				}, true)
+				acceptedHostnames := map[string][]string{"gateway/listener": {"cafe.example.com"}}
+				makeNoHostnameRoute := func(nsname types.NamespacedName, af *AuthenticationFilter) (RouteKey, *L7Route) {
+					return RouteKey{NamespacedName: nsname, RouteType: RouteTypeHTTP}, &L7Route{
+						Valid: true,
+						Spec: L7RouteSpec{Rules: []RouteRule{{
+							ValidMatches: true,
+							Filters: RouteRuleFilters{
+								Filters: []Filter{
+									{
+										FilterType:           FilterExtensionRef,
+										ResolvedExtensionRef: &ExtensionRefFilter{AuthenticationFilter: af, Valid: true},
+									},
+								},
+								Valid: true,
+							},
+						}}},
+						ParentRefs: []ParentRef{
+							{Attachment: &ParentRefAttachmentStatus{AcceptedHostnames: acceptedHostnames, Attached: true}},
+						},
+					}
+				}
+				kA, rA := makeNoHostnameRoute(types.NamespacedName{Namespace: "ns", Name: "route-a"}, filterA)
+				kB, rB := makeNoHostnameRoute(types.NamespacedName{Namespace: "ns", Name: "route-b"}, filterB)
+				return map[RouteKey]*L7Route{kA: rA, kB: rB}
+			},
+			expAValid: true,
+			expBValid: false,
+			expBConditions: []conditions.Condition{
+				conditions.NewAuthenticationFilterInvalid(
+					`logout URI "/logout" conflicts with logout URI of OIDC filter a-ns/filter-a on hostname "cafe.example.com"`,
+				),
+			},
+		},
+		{
+			name: "two OIDC filters with the same logout URI /logout on the same hostname where the " +
+				"route referencing b-ns/filter-b is invalid " +
+				"b-ns/filter-b is not considered and no conflict is reported",
+			buildRoutes: func() map[RouteKey]*L7Route {
+				filterA := createAuthenticationFilterWithOIDC(filterANsName, &ngfAPI.OIDCAuth{
+					Logout: &ngfAPI.OIDCLogoutConfig{URI: helpers.GetPointer("/logout")},
+				}, true)
+				filterB := createAuthenticationFilterWithOIDC(filterBNsName, &ngfAPI.OIDCAuth{
+					Logout: &ngfAPI.OIDCLogoutConfig{URI: helpers.GetPointer("/logout")},
+				}, true)
+				kA, rA := makeRoute(types.NamespacedName{Namespace: "ns", Name: "route-a"}, cafe, filterA)
+				kB, rB := makeRoute(types.NamespacedName{Namespace: "ns", Name: "route-b"}, cafe, filterB)
+				rB.Valid = false
+				return map[RouteKey]*L7Route{kA: rA, kB: rB}
+			},
+			expAValid: true,
+			expBValid: true,
+		},
+		{
+			name: "two OIDC filters with the same logout URI /logout on the same hostname " +
+				"where the rule referencing b-ns/filter-b has invalid matches " +
+				"b-ns/filter-b is not considered and no conflict is reported",
+			buildRoutes: func() map[RouteKey]*L7Route {
+				filterA := createAuthenticationFilterWithOIDC(filterANsName, &ngfAPI.OIDCAuth{
+					Logout: &ngfAPI.OIDCLogoutConfig{URI: helpers.GetPointer("/logout")},
+				}, true)
+				filterB := createAuthenticationFilterWithOIDC(filterBNsName, &ngfAPI.OIDCAuth{
+					Logout: &ngfAPI.OIDCLogoutConfig{URI: helpers.GetPointer("/logout")},
+				}, true)
+				kA, rA := makeRoute(types.NamespacedName{Namespace: "ns", Name: "route-a"}, cafe, filterA)
+				kB, rB := makeRoute(types.NamespacedName{Namespace: "ns", Name: "route-b"}, cafe, filterB)
+				rB.Spec.Rules[0].ValidMatches = false
+				return map[RouteKey]*L7Route{kA: rA, kB: rB}
+			},
+			expAValid: true,
+			expBValid: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			routes := tt.buildRoutes()
+			validateOIDCFilters(routes, nil)
+
+			var filterA, filterB *AuthenticationFilter
+			for _, route := range routes {
+				for _, rule := range route.Spec.Rules {
+					for _, f := range rule.Filters.Filters {
+						if f.ResolvedExtensionRef == nil || f.ResolvedExtensionRef.AuthenticationFilter == nil {
+							continue
+						}
+						af := f.ResolvedExtensionRef.AuthenticationFilter
+						nsname := types.NamespacedName{
+							Namespace: af.Source.Namespace,
+							Name:      af.Source.Name,
+						}
+						switch nsname {
+						case filterANsName:
+							filterA = af
+						case filterBNsName:
+							filterB = af
+						}
+					}
+				}
+			}
+
+			if filterA != nil {
+				g.Expect(filterA.Valid).To(Equal(tt.expAValid))
+			}
+			if filterB != nil {
+				g.Expect(filterB.Valid).To(Equal(tt.expBValid))
+				if len(tt.expBConditions) > 0 {
+					g.Expect(filterB.Conditions).To(Equal(tt.expBConditions))
+				}
+			}
+		})
+	}
+}
