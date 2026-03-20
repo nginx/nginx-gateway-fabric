@@ -2,16 +2,13 @@ package graph
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"slices"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/go-logr/logr"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -20,8 +17,8 @@ import (
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/ngfsort"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
-	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/plm"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/secrets"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/validation"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/fetch"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
@@ -73,37 +70,21 @@ type PolicyKey struct {
 	GVK schema.GroupVersionKind
 }
 
-// WAFBundleKey uniquely identifies a WAF bundle (APPolicy or APLogConf).
-// Format: "<namespace>/<name>" for APPolicy bundles, or "<namespace>/<name>/log/<logname>" for APLogConf bundles.
+// WAFBundleKey uniquely identifies a WAF bundle on disk.
+// Format: "<namespace>_<policyName>" for policy bundles, or "<namespace>_<policyName>_log_<index>" for log bundles.
 type WAFBundleKey string
 
-// WAFBundleData contains the fetched WAF bundle and its metadata.
+// WAFBundleData contains the fetched WAF bundle content.
 type WAFBundleData struct {
-	Location   string
-	Checksum   string
-	BundleType WAFBundleType
-	Data       []byte
+	Checksum string
+	Data     []byte
 }
-
-// WAFBundleType indicates the type of WAF bundle.
-type WAFBundleType string
-
-const (
-	// WAFBundleTypePolicy indicates an APPolicy bundle.
-	WAFBundleTypePolicy WAFBundleType = "policy"
-	// WAFBundleTypeLogConf indicates an APLogConf bundle.
-	WAFBundleTypeLogConf WAFBundleType = "logconf"
-)
-
-// fetchBundleTimeout is the timeout for fetching WAF bundles from PLM storage.
-const fetchBundleTimeout = 30 * time.Second
 
 const (
 	gatewayGroupKind = v1.GroupName + "/" + kinds.Gateway
 	hrGroupKind      = v1.GroupName + "/" + kinds.HTTPRoute
 	grpcGroupKind    = v1.GroupName + "/" + kinds.GRPCRoute
 	serviceGroupKind = "core" + "/" + kinds.Service
-	s3Prefix         = "s3://"
 )
 
 // attachPolicies attaches the graph's processed policies to the resources they target. It modifies the graph in place.
@@ -430,24 +411,22 @@ func propagateSnippetsPolicyToRoutes(
 
 // WAFProcessingInput contains the input needed for WAF policy processing.
 type WAFProcessingInput struct {
-	// APPolicies contains the APPolicy resources from the cluster.
-	APPolicies map[types.NamespacedName]*unstructured.Unstructured
-	// APLogConfs contains the APLogConf resources from the cluster.
-	APLogConfs map[types.NamespacedName]*unstructured.Unstructured
-	// Fetcher is the S3-compatible fetcher for PLM storage (nil if WAF not enabled).
+	// Fetcher fetches bundle files from HTTP/HTTPS URLs.
 	Fetcher fetch.Fetcher
-	// RefGrantResolver validates cross-namespace references.
-	RefGrantResolver *referenceGrantResolver
+	// Secrets contains the Secrets from the cluster, used to resolve bundle auth credentials.
+	Secrets map[types.NamespacedName]*corev1.Secret
+	// PreviousBundles contains the bundles successfully fetched in the previous processing cycle.
+	// Used to keep the last-known-good bundle active when a re-fetch fails.
+	PreviousBundles map[WAFBundleKey]*WAFBundleData
 }
 
 // WAFProcessingOutput contains the output from WAF policy processing.
 type WAFProcessingOutput struct {
 	// Bundles contains the fetched WAF bundles keyed by bundle key.
 	Bundles map[WAFBundleKey]*WAFBundleData
-	// ReferencedAPPolicies contains APPolicy resources referenced by WAFGatewayBindingPolicies.
-	ReferencedAPPolicies map[types.NamespacedName]*unstructured.Unstructured
-	// ReferencedAPLogConfs contains APLogConf resources referenced by WAFGatewayBindingPolicies.
-	ReferencedAPLogConfs map[types.NamespacedName]*unstructured.Unstructured
+	// ReferencedWAFAuthSecrets contains the Secrets referenced by WAFGatewayBindingPolicy auth fields.
+	// These must be watched by the change tracker.
+	ReferencedWAFAuthSecrets map[types.NamespacedName]*corev1.Secret
 }
 
 func processPolicies(
@@ -521,7 +500,7 @@ func processPolicies(
 
 	markConflictedPolicies(processedPolicies, validator)
 
-	wafOutput := processWAFPolicies(processedPolicies, wafInput)
+	wafOutput := processWAFGatewayBindingPolicies(processedPolicies, wafInput)
 
 	return processedPolicies, wafOutput
 }
@@ -766,9 +745,8 @@ func addStatusToTargetRefs(policyKind string, conditionsList *[]conditions.Condi
 	}
 }
 
-// processWAFPolicies processes WAFGatewayBindingPolicy resources and fetches their bundles.
-// It extracts APPolicy/APLogConf references and fetches compiled bundles from PLM storage.
-func processWAFPolicies(
+// processWAFGatewayBindingPolicies processes WAFGatewayBindingPolicy resources and fetches their bundles.
+func processWAFGatewayBindingPolicies(
 	processedPolicies map[PolicyKey]*Policy,
 	wafInput *WAFProcessingInput,
 ) *WAFProcessingOutput {
@@ -777,300 +755,247 @@ func processWAFPolicies(
 	}
 
 	output := &WAFProcessingOutput{
-		Bundles:              make(map[WAFBundleKey]*WAFBundleData),
-		ReferencedAPPolicies: make(map[types.NamespacedName]*unstructured.Unstructured),
-		ReferencedAPLogConfs: make(map[types.NamespacedName]*unstructured.Unstructured),
+		Bundles:                  make(map[WAFBundleKey]*WAFBundleData),
+		ReferencedWAFAuthSecrets: make(map[types.NamespacedName]*corev1.Secret),
 	}
 
 	for key, policy := range processedPolicies {
-		// Only process WAFGatewayBindingPolicy resources
 		if key.GVK.Kind != kinds.WAFGatewayBindingPolicy {
 			continue
 		}
 
-		// Skip invalid policies
 		if !policy.Valid {
 			continue
 		}
 
-		wafPolicy, ok := policy.Source.(*ngfAPIv1alpha1.WAFGatewayBindingPolicy)
+		WAFGatewayBindingPolicy, ok := policy.Source.(*ngfAPIv1alpha1.WAFGatewayBindingPolicy)
 		if !ok {
 			continue
 		}
 
-		// Process APPolicy reference
-		if !processAPPolicyReference(wafPolicy, policy, wafInput, output) {
-			continue
-		}
-
-		// Process SecurityLogs (APLogConf references)
-		processSecurityLogs(wafPolicy, policy, wafInput, output)
+		fetchPolicyBundle(WAFGatewayBindingPolicy, policy, wafInput, output)
+		fetchSecurityLogBundles(WAFGatewayBindingPolicy, policy, wafInput, output)
 	}
 
 	return output
 }
 
-// processAPPolicyReference processes the APPolicy reference for a WAFGatewayBindingPolicy.
-// Returns false if the policy should be skipped (invalid or error occurred).
-func processAPPolicyReference(
-	wafPolicy *ngfAPIv1alpha1.WAFGatewayBindingPolicy,
-	policy *Policy,
-	wafInput *WAFProcessingInput,
-	output *WAFProcessingOutput,
-) bool {
-	if wafPolicy.Spec.APPolicySource == nil {
-		return true
+// buildPolicyFetchRequest constructs a fetch.Request from a PolicySource, resolved auth, and TLS CA data.
+func buildPolicyFetchRequest(
+	policySource *ngfAPIv1alpha1.PolicySource,
+	policyType ngfAPIv1alpha1.PolicySourceType,
+	auth *fetch.BundleAuth,
+	tlsCA []byte,
+) fetch.Request {
+	req := fetch.Request{
+		URL:                policySource.URL,
+		Auth:               auth,
+		TLSCAData:          tlsCA,
+		InsecureSkipVerify: policySource.InsecureSkipVerify,
+		VerifyChecksum:     policySource.Validation != nil && policySource.Validation.VerifyChecksum,
+		Timeout:            policySource.Timeout,
 	}
 
-	apPolNsName := resolveAPResourceNamespace(wafPolicy.Spec.APPolicySource, wafPolicy.Namespace)
-
-	// Check ReferenceGrant for cross-namespace references
-	if apPolNsName.Namespace != wafPolicy.Namespace {
-		if wafInput.RefGrantResolver == nil ||
-			!wafInput.RefGrantResolver.refAllowed(
-				toAPPolicy(apPolNsName),
-				fromWAFGatewayBindingPolicy(wafPolicy.Namespace),
-			) {
-			policy.Conditions = append(policy.Conditions,
-				conditions.NewPolicyRefsNotResolvedAPPolicyRefNotPermitted(apPolNsName.String()))
-			policy.Valid = false
-			return false
+	if policySource.ManagedSource != nil {
+		req.NIMPolicyName = policySource.ManagedSource.PolicyName
+		if policyType == ngfAPIv1alpha1.PolicySourceTypeN1C && policySource.ManagedSource.Namespace != nil {
+			req.N1CNamespace = *policySource.ManagedSource.Namespace
+			// N1C uses the APIToken auth scheme rather than Bearer.
+			// Move the token value from BearerToken to APIToken.
+			if auth != nil && auth.BearerToken != "" {
+				req.Auth = &fetch.BundleAuth{APIToken: auth.BearerToken}
+			}
 		}
 	}
 
-	apPolicy, exists := wafInput.APPolicies[apPolNsName]
-	if !exists {
-		policy.Conditions = append(policy.Conditions,
-			conditions.NewPolicyRefsNotResolvedAPPolicyNotFound(apPolNsName.String()))
-		policy.Valid = false
-		return false
-	}
-
-	output.ReferencedAPPolicies[apPolNsName] = apPolicy
-
-	apStatus, err := plm.ExtractAPResourceStatus(apPolicy)
-	if err != nil {
-		policy.Conditions = append(policy.Conditions,
-			conditions.NewPolicyRefsNotResolvedAPPolicyStatusError(err.Error()))
-		policy.Valid = false
-		return false
-	}
-
-	bundleData, cond := fetchBundle(
-		apPolNsName,
-		apStatus,
-		wafInput.Fetcher,
-		WAFBundleTypePolicy,
-		apPolicyCondFuncs,
-	)
-	if cond != nil {
-		policy.Conditions = append(policy.Conditions, *cond)
-		policy.Valid = false
-		return false
-	}
-
-	if bundleData != nil {
-		bundleKey := wafBundleKey(apPolNsName)
-		output.Bundles[bundleKey] = bundleData
-	}
-
-	return true
+	return req
 }
 
-// wafBundleKey generates a file-safe bundle key for a namespaced resource.
-// Format: "namespace_name" (uses underscore to be file-path safe).
-func wafBundleKey(nsName types.NamespacedName) WAFBundleKey {
-	return WAFBundleKey(fmt.Sprintf("%s_%s", nsName.Namespace, nsName.Name))
+// buildLogFetchRequest constructs a fetch.Request from a LogSource, resolved auth, and TLS CA data.
+func buildLogFetchRequest(logSource *ngfAPIv1alpha1.LogSource, auth *fetch.BundleAuth, tlsCA []byte) fetch.Request {
+	return fetch.Request{
+		URL:            *logSource.URL,
+		Auth:           auth,
+		TLSCAData:      tlsCA,
+		VerifyChecksum: logSource.Validation != nil && logSource.Validation.VerifyChecksum,
+		Timeout:        logSource.Timeout,
+	}
 }
 
-// processSecurityLogs processes the SecurityLogs for a WAFGatewayBindingPolicy.
-func processSecurityLogs(
+// fetchPolicyBundle fetches the policy bundle for a WAFGatewayBindingPolicy.
+func fetchPolicyBundle(
 	wafPolicy *ngfAPIv1alpha1.WAFGatewayBindingPolicy,
 	policy *Policy,
 	wafInput *WAFProcessingInput,
 	output *WAFProcessingOutput,
 ) {
-	for _, secLog := range wafPolicy.Spec.SecurityLogs {
-		apLogNsName := resolveAPResourceNamespace(&secLog.APLogConfSource, wafPolicy.Namespace)
+	if wafPolicy.Spec.PolicySource == nil || wafPolicy.Spec.PolicySource.URL == "" {
+		return
+	}
 
-		// Check ReferenceGrant for cross-namespace references
-		if apLogNsName.Namespace != wafPolicy.Namespace {
-			if wafInput.RefGrantResolver == nil ||
-				!wafInput.RefGrantResolver.refAllowed(
-					toAPLogConf(apLogNsName),
-					fromWAFGatewayBindingPolicy(wafPolicy.Namespace),
-				) {
-				policy.Conditions = append(policy.Conditions,
-					conditions.NewPolicyRefsNotResolvedAPLogConfRefNotPermitted(apLogNsName.String()))
+	policySource := wafPolicy.Spec.PolicySource
+
+	var auth *fetch.BundleAuth
+	if policySource.Auth != nil {
+		var err error
+		auth, err = resolveBundleAuth(policySource.Auth, wafPolicy.Namespace, wafInput, output)
+		if err != nil {
+			cond := conditions.NewPolicyNotProgrammedBundleFetchError(err.Error())
+			policy.Conditions = append(policy.Conditions, cond)
+			policy.Valid = false
+			return
+		}
+	}
+
+	var tlsCA []byte
+	if policySource.TLSSecret != nil {
+		var err error
+		tlsCA, err = resolveTLSCA(policySource.TLSSecret, wafPolicy.Namespace, wafInput, output)
+		if err != nil {
+			cond := conditions.NewPolicyNotProgrammedBundleFetchError(err.Error())
+			policy.Conditions = append(policy.Conditions, cond)
+			policy.Valid = false
+			return
+		}
+	}
+
+	bundleKey := WAFBundleKey(fmt.Sprintf("%s_%s", wafPolicy.Namespace, wafPolicy.Name))
+
+	req := buildPolicyFetchRequest(policySource, wafPolicy.Spec.Type, auth, tlsCA)
+
+	data, checksum, err := wafInput.Fetcher.Fetch(context.Background(), req)
+	if err != nil {
+		if prev, ok := wafInput.PreviousBundles[bundleKey]; ok {
+			cond := conditions.NewPolicyProgrammedStaleBundleWarning(err.Error())
+			policy.Conditions = append(policy.Conditions, cond)
+			output.Bundles[bundleKey] = prev
+			return
+		}
+		cond := conditions.NewPolicyNotProgrammedBundleFetchError(err.Error())
+		policy.Conditions = append(policy.Conditions, cond)
+		policy.Valid = false
+		return
+	}
+
+	output.Bundles[bundleKey] = &WAFBundleData{Data: data, Checksum: checksum}
+}
+
+// fetchSecurityLogBundles fetches log profile bundles for each SecurityLog entry.
+func fetchSecurityLogBundles(
+	wafPolicy *ngfAPIv1alpha1.WAFGatewayBindingPolicy,
+	policy *Policy,
+	wafInput *WAFProcessingInput,
+	output *WAFProcessingOutput,
+) {
+	for i, secLog := range wafPolicy.Spec.SecurityLogs {
+		if secLog.LogSource.URL == nil {
+			// DefaultProfile is used; no bundle to fetch.
+			continue
+		}
+
+		var auth *fetch.BundleAuth
+		if secLog.LogSource.Auth != nil {
+			var err error
+			auth, err = resolveBundleAuth(secLog.LogSource.Auth, wafPolicy.Namespace, wafInput, output)
+			if err != nil {
+				cond := conditions.NewPolicyNotProgrammedBundleFetchError(err.Error())
+				policy.Conditions = append(policy.Conditions, cond)
 				policy.Valid = false
 				continue
 			}
 		}
 
-		apLogConf, exists := wafInput.APLogConfs[apLogNsName]
-		if !exists {
-			policy.Conditions = append(policy.Conditions,
-				conditions.NewPolicyRefsNotResolvedAPLogConfNotFound(apLogNsName.String()))
-			policy.Valid = false
-			continue
+		var tlsCA []byte
+		if secLog.LogSource.TLSSecret != nil {
+			var err error
+			tlsCA, err = resolveTLSCA(secLog.LogSource.TLSSecret, wafPolicy.Namespace, wafInput, output)
+			if err != nil {
+				cond := conditions.NewPolicyNotProgrammedBundleFetchError(err.Error())
+				policy.Conditions = append(policy.Conditions, cond)
+				policy.Valid = false
+				continue
+			}
 		}
 
-		output.ReferencedAPLogConfs[apLogNsName] = apLogConf
+		bundleKey := WAFBundleKey(fmt.Sprintf("%s_%s_log_%d", wafPolicy.Namespace, wafPolicy.Name, i))
 
-		apLogStatus, err := plm.ExtractAPResourceStatus(apLogConf)
+		req := buildLogFetchRequest(&secLog.LogSource, auth, tlsCA)
+
+		data, checksum, err := wafInput.Fetcher.Fetch(context.Background(), req)
 		if err != nil {
-			policy.Conditions = append(policy.Conditions,
-				conditions.NewPolicyRefsNotResolvedAPLogConfStatusError(err.Error()))
+			if prev, ok := wafInput.PreviousBundles[bundleKey]; ok {
+				cond := conditions.NewPolicyProgrammedStaleBundleWarning(err.Error())
+				policy.Conditions = append(policy.Conditions, cond)
+				output.Bundles[bundleKey] = prev
+				continue
+			}
+			cond := conditions.NewPolicyNotProgrammedBundleFetchError(err.Error())
+			policy.Conditions = append(policy.Conditions, cond)
 			policy.Valid = false
 			continue
 		}
 
-		bundleData, cond := fetchBundle(
-			apLogNsName,
-			apLogStatus,
-			wafInput.Fetcher,
-			WAFBundleTypeLogConf,
-			apLogConfCondFuncs,
-		)
-		if cond != nil {
-			policy.Conditions = append(policy.Conditions, *cond)
-			policy.Valid = false
-			continue
-		}
-
-		if bundleData != nil {
-			// Use APLogConf nsname as bundle key - this ensures the same APLogConf
-			// referenced by multiple WGBPolicies or SecurityLogs is only stored once.
-			bundleKey := wafBundleKey(apLogNsName)
-			output.Bundles[bundleKey] = bundleData
-		}
+		output.Bundles[bundleKey] = &WAFBundleData{Data: data, Checksum: checksum}
 	}
 }
 
-// resolveAPResourceNamespace is the shared implementation for resolving namespaces in AP resource references.
-func resolveAPResourceNamespace(ref *ngfAPIv1alpha1.APResourceReference, defaultNs string) types.NamespacedName {
-	ns := defaultNs
-	if ref.Namespace != nil && *ref.Namespace != "" {
-		ns = *ref.Namespace
+// resolveBundleAuth resolves a BundleAuth reference into fetch.BundleAuth credentials.
+// It looks up the referenced Secret from wafInput.Secrets and adds it to output.ReferencedWAFAuthSecrets.
+// bundleAuth must not be nil.
+func resolveBundleAuth(
+	bundleAuth *ngfAPIv1alpha1.BundleAuth,
+	policyNamespace string,
+	wafInput *WAFProcessingInput,
+	output *WAFProcessingOutput,
+) (*fetch.BundleAuth, error) {
+	secretNsName := types.NamespacedName{
+		Namespace: policyNamespace,
+		Name:      bundleAuth.SecretRef.Name,
 	}
-	return types.NamespacedName{Namespace: ns, Name: ref.Name}
+
+	secret, exists := wafInput.Secrets[secretNsName]
+	if !exists {
+		return nil, fmt.Errorf("auth secret %q not found", secretNsName)
+	}
+
+	output.ReferencedWAFAuthSecrets[secretNsName] = secret
+
+	auth := &fetch.BundleAuth{}
+	if token, ok := secret.Data[secrets.BundleTokenKey]; ok {
+		auth.BearerToken = strings.TrimSpace(string(token))
+	} else {
+		auth.Username = strings.TrimSpace(string(secret.Data[secrets.BundleUsernameKey]))
+		auth.Password = strings.TrimSpace(string(secret.Data[secrets.BundlePasswordKey]))
+	}
+
+	return auth, nil
 }
 
-// bundleConditionFuncs holds resource-specific condition constructors for bundle fetching.
-type bundleConditionFuncs struct {
-	notCompiled  func(name string) conditions.Condition
-	invalid      func(errMsg string) conditions.Condition
-	noLocation   func(name string) conditions.Condition
-	unknownState func(state string) conditions.Condition
-}
-
-var apPolicyCondFuncs = bundleConditionFuncs{
-	notCompiled:  conditions.NewPolicyRefsNotResolvedAPPolicyNotCompiled,
-	invalid:      conditions.NewPolicyRefsNotResolvedAPPolicyInvalid,
-	noLocation:   conditions.NewPolicyRefsNotResolvedAPPolicyNoLocation,
-	unknownState: conditions.NewPolicyRefsNotResolvedAPPolicyUnknownState,
-}
-
-var apLogConfCondFuncs = bundleConditionFuncs{
-	notCompiled:  conditions.NewPolicyRefsNotResolvedAPLogConfNotCompiled,
-	invalid:      conditions.NewPolicyRefsNotResolvedAPLogConfInvalid,
-	noLocation:   conditions.NewPolicyRefsNotResolvedAPLogConfNoLocation,
-	unknownState: conditions.NewPolicyRefsNotResolvedAPLogConfUnknownState,
-}
-
-// fetchBundle is the shared implementation for fetching compiled bundles from PLM storage.
-// It validates the bundle state, fetches the data, and verifies checksums.
-func fetchBundle(
-	nsName types.NamespacedName,
-	status *plm.APResourceStatus,
-	fetcher fetch.Fetcher,
-	bundleType WAFBundleType,
-	condFuncs bundleConditionFuncs,
-) (*WAFBundleData, *conditions.Condition) {
-	switch status.Bundle.State {
-	case "", plm.StatePending, plm.StateProcessing:
-		// Not yet compiled - this is not an error, just pending.
-		// Empty state means PLM has not yet set the status on this resource.
-		cond := condFuncs.notCompiled(nsName.String())
-		return nil, &cond
-	case plm.StateInvalid:
-		// Compilation failed
-		errMsg := "compilation failed"
-		if len(status.Processing.Errors) > 0 {
-			errMsg = strings.Join(status.Processing.Errors, "; ")
-		}
-		cond := condFuncs.invalid(errMsg)
-		return nil, &cond
-	case plm.StateReady:
-		if status.Bundle.Location == "" {
-			cond := condFuncs.noLocation(nsName.String())
-			return nil, &cond
-		}
-	default:
-		cond := condFuncs.unknownState(string(status.Bundle.State))
-		return nil, &cond
+// resolveTLSCA resolves a TLS CA secret reference into a PEM-encoded CA certificate byte slice.
+// It looks up the referenced Secret from wafInput.Secrets and adds it to output.ReferencedWAFAuthSecrets.
+// tlsSecret must not be nil.
+func resolveTLSCA(
+	tlsSecret *corev1.LocalObjectReference,
+	policyNamespace string,
+	wafInput *WAFProcessingInput,
+	output *WAFProcessingOutput,
+) ([]byte, error) {
+	secretNsName := types.NamespacedName{
+		Namespace: policyNamespace,
+		Name:      tlsSecret.Name,
 	}
 
-	// No fetcher configured - skip fetching but allow policy to be valid.
-	// This allows testing without actual PLM storage.
-	if fetcher == nil {
-		return &WAFBundleData{
-			Location:   status.Bundle.Location,
-			Checksum:   status.Bundle.Sha256,
-			BundleType: bundleType,
-		}, nil
+	secret, exists := wafInput.Secrets[secretNsName]
+	if !exists {
+		return nil, fmt.Errorf("TLS CA secret %q not found", secretNsName)
 	}
 
-	bucket, key := parseBundleLocation(status.Bundle.Location)
-
-	ctx, cancel := context.WithTimeout(context.Background(), fetchBundleTimeout)
-	defer cancel()
-
-	data, err := fetcher.GetObject(ctx, bucket, key)
-	if err != nil {
-		cond := conditions.NewPolicyNotProgrammedBundleFetchError(err.Error())
-		return nil, &cond
+	caData, ok := secret.Data["ca.crt"]
+	if !ok {
+		return nil, fmt.Errorf("TLS CA secret %q missing ca.crt key", secretNsName)
 	}
 
-	// Verify checksum if provided
-	if status.Bundle.Sha256 != "" {
-		if err := verifyChecksum(data, status.Bundle.Sha256); err != nil {
-			cond := conditions.NewPolicyNotProgrammedIntegrityError(err.Error())
-			return nil, &cond
-		}
-	}
+	output.ReferencedWAFAuthSecrets[secretNsName] = secret
 
-	return &WAFBundleData{
-		Data:       data,
-		Location:   status.Bundle.Location,
-		Checksum:   status.Bundle.Sha256,
-		BundleType: bundleType,
-	}, nil
-}
-
-// verifyChecksum verifies that the data matches the expected SHA256 checksum.
-func verifyChecksum(data []byte, expectedChecksum string) error {
-	hasher := sha256.New()
-	hasher.Write(data)
-	actualChecksum := hex.EncodeToString(hasher.Sum(nil))
-
-	if actualChecksum != expectedChecksum {
-		return fmt.Errorf("checksum mismatch: expected %s, got %s", expectedChecksum, actualChecksum)
-	}
-	return nil
-}
-
-// parseBundleLocation parses an S3 location into bucket and key.
-// Expected format: "bucket/path/to/bundle.tgz" or "s3://bucket/path/to/bundle.tgz".
-func parseBundleLocation(location string) (bucket, key string) {
-	// Remove s3:// prefix if present
-	location = strings.TrimPrefix(location, s3Prefix)
-
-	// Split into bucket and key
-	parts := strings.SplitN(location, "/", 2)
-	if len(parts) == 2 {
-		return parts[0], parts[1]
-	}
-	// If no slash, treat entire location as key with empty bucket
-	return "", location
+	return caData, nil
 }

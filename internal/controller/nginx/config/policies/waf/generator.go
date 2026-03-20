@@ -22,7 +22,11 @@ app_protect_policy_file "{{ .BundlePath }}";
 {{- if .SecurityLogs }}
 app_protect_security_log_enable on;
 {{- range .SecurityLogs }}
+{{- if .LogProfileBundlePath }}
 app_protect_security_log "{{ .LogProfileBundlePath }}" {{ .Destination }};
+{{- else }}
+app_protect_security_log {{ .LogProfileName }} {{ .Destination }};
+{{- end }}
 {{- end }}
 {{- end }}
 `
@@ -58,13 +62,8 @@ func generate(pols []policies.Policy) policies.GenerateResultFiles {
 
 		fields := map[string]any{}
 
-		if wp.Spec.APPolicySource != nil {
-			// Generate bundle path from APPolicy reference
-			namespace := wp.Namespace
-			if wp.Spec.APPolicySource.Namespace != nil {
-				namespace = *wp.Spec.APPolicySource.Namespace
-			}
-			bundleName := fmt.Sprintf("%s_%s", namespace, wp.Spec.APPolicySource.Name)
+		if wp.Spec.PolicySource != nil && wp.Spec.PolicySource.URL != "" {
+			bundleName := fmt.Sprintf("%s_%s", wp.Namespace, wp.Name)
 			bundlePath := fmt.Sprintf("%s/%s.tgz", appProtectBundleFolder, bundleName)
 			fields["BundlePath"] = bundlePath
 		}
@@ -72,25 +71,27 @@ func generate(pols []policies.Policy) policies.GenerateResultFiles {
 		if len(wp.Spec.SecurityLogs) > 0 {
 			securityLogs := make([]map[string]string, 0, len(wp.Spec.SecurityLogs))
 
-			for _, secLog := range wp.Spec.SecurityLogs {
+			for i, secLog := range wp.Spec.SecurityLogs {
 				logEntry := map[string]string{}
 
-				// Generate log profile bundle path from APLogConf reference
-				namespace := wp.Namespace
-				if secLog.APLogConfSource.Namespace != nil {
-					namespace = *secLog.APLogConfSource.Namespace
+				switch {
+				case secLog.LogSource.URL != nil:
+					bundleName := fmt.Sprintf("%s_%s_log_%d", wp.Namespace, wp.Name, i)
+					bundlePath := fmt.Sprintf("%s/%s.tgz", appProtectBundleFolder, bundleName)
+					logEntry["LogProfileBundlePath"] = bundlePath
+				case secLog.LogSource.DefaultProfile != nil:
+					logEntry["LogProfileName"] = string(*secLog.LogSource.DefaultProfile)
+				default:
+					continue
 				}
-				bundleName := fmt.Sprintf("%s_%s", namespace, secLog.APLogConfSource.Name)
-				bundlePath := fmt.Sprintf("%s/%s.tgz", appProtectBundleFolder, bundleName)
-				logEntry["LogProfileBundlePath"] = bundlePath
 
-				destination := formatSecurityLogDestination(secLog.Destination)
-				logEntry["Destination"] = destination
-
+				logEntry["Destination"] = formatSecurityLogDestination(secLog.Destination)
 				securityLogs = append(securityLogs, logEntry)
 			}
 
-			fields["SecurityLogs"] = securityLogs
+			if len(securityLogs) > 0 {
+				fields["SecurityLogs"] = securityLogs
+			}
 		}
 
 		files = append(files, policies.File{
