@@ -1221,6 +1221,32 @@ func TestValidateOIDCHTTPSListeners(t *testing.T) {
 			},
 			expFilterValid: true,
 		},
+		{
+			name: "shared OIDC filter referenced by a route on HTTP listener and another route on HTTPS listener " +
+				"filter is marked invalid due to HTTP attachment and both routes rules are marked invalid via propagation",
+			buildRouteAndGateway: func() (map[RouteKey]*L7Route, map[types.NamespacedName]*Gateway) {
+				af := createAuthenticationFilterWithOIDC(filterNsName, &ngfAPI.OIDCAuth{}, true)
+				httpGWNSName := types.NamespacedName{Namespace: "default", Name: "http-gw"}
+				httpsGWNSName := types.NamespacedName{Namespace: "default", Name: "https-gw"}
+				httpGW := makeGateway(httpGWNSName, v1.HTTPProtocolType)
+				httpsGW := makeGateway(httpsGWNSName, v1.HTTPSProtocolType)
+				httpRoute := makeRouteWithProtocol(af, httpGWNSName)
+				httpsRoute := makeRouteWithProtocol(af, httpsGWNSName)
+				return map[RouteKey]*L7Route{
+						{
+							NamespacedName: types.NamespacedName{Namespace: "ns", Name: "http-route"}, RouteType: RouteTypeHTTP,
+						}: httpRoute,
+						{
+							NamespacedName: types.NamespacedName{Namespace: "ns", Name: "https-route"}, RouteType: RouteTypeHTTP,
+						}: httpsRoute,
+					},
+					map[types.NamespacedName]*Gateway{httpGWNSName: httpGW, httpsGWNSName: httpsGW}
+			},
+			expFilterValid: false,
+			expConditions: []conditions.Condition{
+				conditions.NewAuthenticationFilterInvalid("OIDC authentication requires an HTTPS listener"),
+			},
+		},
 	}
 
 	for _, tt := range tests {

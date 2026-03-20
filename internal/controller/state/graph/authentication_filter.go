@@ -351,8 +351,9 @@ func hasNonHTTPSAttachment(parentRefs []ParentRef, listenerProtocols map[string]
 
 // collectOIDCFilterInfo performs a single pass over all valid routes and rules.
 // For each OIDC filter encountered:
-//   - if its route has a non-HTTPS listener attachment, it is marked invalid immediately
-//   - otherwise it is registered in hostnameToFilters (for URI conflict detection) and filterRefs (for propagation)
+//   - if its route has a non-HTTPS listener attachment and the filter is still valid, it is marked invalid
+//   - all filters (valid or not) are registered in filterRefs for propagation
+//   - only valid filters are registered in hostnameToFilters for URI conflict detection
 func collectOIDCFilterInfo(
 	routes map[RouteKey]*L7Route,
 	listenerProtocols map[string]v1.ProtocolType,
@@ -378,29 +379,25 @@ func collectOIDCFilterInfo(
 			}
 			for j, f := range rule.Filters.Filters {
 				af := oidcAuthFilterFrom(f)
-				if af == nil || !af.Valid {
+				if af == nil {
 					continue
 				}
-				if nonHTTPS {
+				if nonHTTPS && af.Valid {
 					af.Conditions = append(af.Conditions,
 						conditions.NewAuthenticationFilterInvalid("OIDC authentication requires an HTTPS listener"),
 					)
 					af.Valid = false
-					route.Spec.Rules[i].Filters.Filters[j].ResolvedExtensionRef.Valid = false
-					route.Spec.Rules[i].Filters.Valid = false
-					mergeOrAppendRouteCondition(route, conditions.NewRouteResolvedRefsInvalidFilter(
-						"OIDC filter is invalid: OIDC authentication requires an HTTPS listener",
-					))
-					continue
-				}
-				nsname := types.NamespacedName{Namespace: af.Source.Namespace, Name: af.Source.Name}
-				for _, hostname := range acceptedHostnames {
-					if hostnameToFilters[hostname] == nil {
-						hostnameToFilters[hostname] = make(map[types.NamespacedName]*AuthenticationFilter)
-					}
-					hostnameToFilters[hostname][nsname] = af
 				}
 				filterRefs[af] = append(filterRefs[af], oidcRuleRef{route: route, ruleIdx: i, filterIdx: j})
+				if af.Valid {
+					nsname := types.NamespacedName{Namespace: af.Source.Namespace, Name: af.Source.Name}
+					for _, hostname := range acceptedHostnames {
+						if hostnameToFilters[hostname] == nil {
+							hostnameToFilters[hostname] = make(map[types.NamespacedName]*AuthenticationFilter)
+						}
+						hostnameToFilters[hostname][nsname] = af
+					}
+				}
 			}
 		}
 	}
@@ -412,7 +409,7 @@ func collectOIDCFilterInfo(
 // OIDC filter was invalidated by URI conflict detection. This ensures the dataplane treats those rules as
 // invalid rather than silently skipping authentication.
 func propagateInvalidOIDCFiltersToRouteRules(filterRefs map[*AuthenticationFilter][]oidcRuleRef) {
-	const conflictMsg = "OIDC filter is invalid due to URI conflict on a shared hostname; see filter status for details"
+	const invalidMsg = "OIDC filter is invalid; see filter status for details"
 
 	invalidatedRoutes := make(map[*L7Route]struct{})
 	for af, refs := range filterRefs {
@@ -427,7 +424,7 @@ func propagateInvalidOIDCFiltersToRouteRules(filterRefs map[*AuthenticationFilte
 	}
 
 	for route := range invalidatedRoutes {
-		mergeOrAppendRouteCondition(route, conditions.NewRouteResolvedRefsInvalidFilter(conflictMsg))
+		mergeOrAppendRouteCondition(route, conditions.NewRouteResolvedRefsInvalidFilter(invalidMsg))
 	}
 }
 
