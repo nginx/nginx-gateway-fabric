@@ -63,10 +63,11 @@ run-conformance-tests: ## Run conformance tests
 	./scripts/check-pod-exit-code.sh conformance
 	sed -e '1,/CONFORMANCE PROFILE/d' output.txt > conformance-profile.yaml
 	rm output.txt
-	grpc_core_result=`yq '.profiles[0].core.result' conformance-profile.yaml`; \
-	http_core_result=`yq '.profiles[1].core.result' conformance-profile.yaml`; \
-	http_extended_result=`yq '.profiles[1].extended.result' conformance-profile.yaml`; \
-	if [ "$$grpc_core_result" != "failure" ] && [ "$$http_core_result" != "failure" ] && [ "$$http_extended_result" != "failure" ] ; then \
+	grpc_core_result=`yq '.profiles[] | select(.name == "GATEWAY-GRPC") | .core.result' conformance-profile.yaml`; \
+	tls_core_result=`yq '.profiles[] | select(.name == "GATEWAY-TLS") | .core.result' conformance-profile.yaml`; \
+	http_core_result=`yq '.profiles[] | select(.name == "GATEWAY-HTTP") | .core.result' conformance-profile.yaml`; \
+	http_extended_result=`yq '.profiles[] | select(.name == "GATEWAY-HTTP") | .extended.result' conformance-profile.yaml`; \
+	if [ "$$grpc_core_result" != "failure" ] && [ "$$tls_core_result" != "failure" ] && [ "$$http_core_result" != "failure" ] && [ "$$http_extended_result" != "failure" ] ; then \
 		exit 0; \
 	else \
 		exit 2; \
@@ -84,10 +85,11 @@ run-conformance-tests-openshift: ## Run conformance tests on OpenShift (skips te
 	./scripts/check-pod-exit-code.sh conformance
 	sed -e '1,/CONFORMANCE PROFILE/d' output.txt > conformance-profile.yaml
 	rm output.txt
-	grpc_core_result=`yq '.profiles[0].core.result' conformance-profile.yaml`; \
-	http_core_result=`yq '.profiles[1].core.result' conformance-profile.yaml`; \
-	http_extended_result=`yq '.profiles[1].extended.result' conformance-profile.yaml`; \
-	if [ "$$grpc_core_result" != "failure" ] && [ "$$http_core_result" != "failure" ] && [ "$$http_extended_result" != "failure" ] ; then \
+	grpc_core_result=`yq '.profiles[] | select(.name == "GATEWAY-GRPC") | .core.result' conformance-profile.yaml`; \
+	tls_core_result=`yq '.profiles[] | select(.name == "GATEWAY-TLS") | .core.result' conformance-profile.yaml`; \
+	http_core_result=`yq '.profiles[] | select(.name == "GATEWAY-HTTP") | .core.result' conformance-profile.yaml`; \
+	http_extended_result=`yq '.profiles[] | select(.name == "GATEWAY-HTTP") | .extended.result' conformance-profile.yaml`; \
+	if [ "$$grpc_core_result" != "failure" ] && [ "$$tls_core_result" != "failure" ] && [ "$$http_core_result" != "failure" ] && [ "$$http_extended_result" != "failure" ] ; then \
 		exit 0; \
 	else \
 		exit 2; \
