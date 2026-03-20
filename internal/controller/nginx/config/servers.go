@@ -1166,6 +1166,8 @@ func updateLocationAuthenticationFilter(
 				remote.TrustedCertificate = generateCertBundleFileName(
 					authenticationFilter.JWT.Remote.CACertBundlePath,
 				)
+			} else {
+				remote.TrustedCertificate = dataplane.AlpineSSLRootCAPath
 			}
 
 			jwt.Remote = remote

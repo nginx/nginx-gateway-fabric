@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"maps"
 	"slices"
 	"sort"
 	"strings"
@@ -28,7 +29,7 @@ import (
 const (
 	wildcardHostname               = "~^"
 	defaultErrorLogLevel           = "info"
-	alpineSSLRootCAPath            = "/etc/ssl/cert.pem"
+	AlpineSSLRootCAPath            = "/etc/ssl/cert.pem"
 	DefaultWorkerConnections       = int32(1024)
 	DefaultNginxReadinessProbePort = int32(8081)
 	DefaultNginxReadinessProbePath = "/readyz"
@@ -73,10 +74,16 @@ func BuildConfiguration(
 	baseStreamConfig := buildBaseStreamConfig(gateway)
 
 	httpServers, sslServers, sslListenerHostnames := buildServers(gateway, g.ReferencedServices, g.ReferencedSecrets)
+
+	authCertBundles := make(map[CertBundleID]CertBundle)
+
 	oidcProvider, oidcCertBundles := buildOIDCProviderFromAuthenticationFilters(
 		g.AuthenticationFilters,
 		g.ReferencedSecrets,
 	)
+	maps.Copy(authCertBundles, oidcCertBundles)
+	maps.Copy(authCertBundles, buildJWTRemoteTLSCABundles(g.AuthenticationFilters, g.ReferencedSecrets))
+
 	backendGroups := buildBackendGroups(append(httpServers, sslServers...))
 
 	upstreams := buildUpstreams(
@@ -96,8 +103,7 @@ func BuildConfiguration(
 	certBundles := buildCertBundles(
 		buildRefCertificateBundles(g.ReferencedSecrets, g.ReferencedCaCertConfigMaps),
 		backendGroups,
-		oidcCertBundles,
-		buildJWTRemoteTLSCABundles(g.AuthenticationFilters, g.ReferencedSecrets),
+		authCertBundles,
 	)
 
 	config := Configuration{
@@ -456,18 +462,12 @@ func buildRefCertificateBundles(
 func buildCertBundles(
 	refCertBundles []secrets.CertificateBundle,
 	backendGroups []BackendGroup,
-	oidcCertBundles map[CertBundleID]CertBundle,
-	jwtRemoteTLSCABundles map[CertBundleID]CertBundle,
+	authCertBundles map[CertBundleID]CertBundle,
 ) map[CertBundleID]CertBundle {
 	bundles := make(map[CertBundleID]CertBundle)
 
-	for id, cert := range oidcCertBundles {
+	for id, cert := range authCertBundles {
 		bundles[id] = cert
-	}
-
-	// Add CA certificates for JWT remote authentication
-	for id, data := range jwtRemoteTLSCABundles {
-		bundles[id] = data
 	}
 
 	// We only need to build the cert bundles if there are valid backend groups that reference them.
@@ -668,7 +668,7 @@ func convertBackendTLS(btp *graph.BackendTLSPolicy, gwNsName types.NamespacedNam
 	if btp.CaCertRef.Name != "" {
 		verify.CertBundleID = generateCertBundleID(btp.CaCertRef)
 	} else {
-		verify.RootCAPath = alpineSSLRootCAPath
+		verify.RootCAPath = AlpineSSLRootCAPath
 	}
 	verify.Hostname = string(btp.Source.Spec.Validation.Hostname)
 	return verify

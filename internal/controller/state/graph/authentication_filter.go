@@ -109,7 +109,7 @@ func validateAuthenticationFilter(
 				field.NewPath("spec.jwt.file.secretRef"),
 			)
 		} else if af.Spec.JWT.Source == ngfAPI.JWTKeySourceRemote && af.Spec.JWT.Remote != nil {
-			conds, valid = validRemoteJWT(af, nsname, resourceResolver)
+			conds, valid = validateRemoteJWT(af, nsname, resourceResolver)
 		}
 	case ngfAPI.AuthTypeOIDC:
 		if !isPlus {
@@ -130,22 +130,11 @@ func validateAuthenticationFilter(
 	return conds, valid
 }
 
-func validRemoteJWT(
+func validateRemoteJWT(
 	af *ngfAPI.AuthenticationFilter,
 	nsname types.NamespacedName,
 	resourceResolver resolver.Resolver,
 ) ([]conditions.Condition, bool) {
-	if len(af.Spec.JWT.Remote.CACertificateRefs) > 1 {
-		cond := conditions.NewAuthenticationFilterInvalid(
-			field.Invalid(
-				field.NewPath("spec.jwt.remote.caCertificateRefs"),
-				len(af.Spec.JWT.Remote.CACertificateRefs),
-				"at most one CA certificate reference is supported for remote JWT authentication filters",
-			).Error(),
-		)
-		return []conditions.Condition{cond}, false
-	}
-
 	var allErrs field.ErrorList
 	for _, caCertRef := range af.Spec.JWT.Remote.CACertificateRefs {
 		caCertNsName := types.NamespacedName{Namespace: nsname.Namespace, Name: caCertRef.Name}

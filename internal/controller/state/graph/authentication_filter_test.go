@@ -431,12 +431,11 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 			),
 		},
 		{
-			name: "valid remote JWT auth filter without TLS",
+			name: "valid remote JWT auth filter with empty CA list",
 			args: args{
 				secretNsName: types.NamespacedName{Namespace: "test", Name: "af"},
 				filter: createAuthenticationFilterJWTRemote(
 					types.NamespacedName{Namespace: "test", Name: "af"},
-
 					nil,
 				).Source,
 				isPlus:    true,

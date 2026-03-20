@@ -1206,7 +1206,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 
 				// Set up port forwarding using framework for token retrieval
 				keycloakPortForwardStopCh = make(chan struct{})
-				ports := []string{"8443:8443"}
+				ports := []string{"9443:8443"}
 				err = framework.PortForward(resourceManager.K8sConfig, namespace, keycloakPodName, ports, keycloakPortForwardStopCh)
 				Expect(err).ToNot(HaveOccurred())
 
@@ -1228,7 +1228,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 					WithPolling(2*time.Second).
 					Should(Succeed(), "Should obtain JWT token from Keycloak")
 
-				GinkgoWriter.Printf("Successfully obtained token (length: %d)\n", len(keycloakToken))
+				GinkgoWriter.Printf("Successfully obtained token\n")
 
 				// Apply JWT Remote AuthenticationFilter and HTTPRoute
 				Expect(resourceManager.ApplyFromFiles(jwtRemoteManifestFiles, namespace)).To(Succeed())
@@ -1331,6 +1331,12 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 					Expect(err).ToNot(HaveOccurred())
 				})
 
+				internalLocation := fmt.Sprintf("/_ngf-internal-%s_jwt-remote-auth_jwks_uri", namespace)
+				keycloakURL := fmt.Sprintf(
+					"https://keycloak.%s.svc.cluster.local:8443/realms/nginx-gateway/protocol/openid-connect/certs", namespace,
+				)
+				caCertPath := fmt.Sprintf("/etc/nginx/secrets/jwt_remote_tls_ca_%s_keycloak-ca-secret.crt", namespace)
+
 				DescribeTable("are set properly for",
 					func(expCfgs []framework.ExpectedNginxField) {
 						for _, expCfg := range expCfgs {
@@ -1360,51 +1366,37 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 							Location:  "/jwt-remote-coffee",
 						},
 					}),
+					Entry("JWKS location block", []framework.ExpectedNginxField{
+						{
+							Directive: "proxy_pass",
+							Value:     keycloakURL,
+							File:      "http.conf",
+							Server:    "*.example.com",
+							Location:  internalLocation,
+						},
+						{
+							Directive: "proxy_ssl_trusted_certificate",
+							Value:     caCertPath,
+							File:      "http.conf",
+							Server:    "*.example.com",
+							Location:  internalLocation,
+						},
+						{
+							Directive: "proxy_ssl_verify",
+							Value:     "on",
+							File:      "http.conf",
+							Server:    "*.example.com",
+							Location:  internalLocation,
+						},
+						{
+							Directive: "proxy_ssl_server_name",
+							Value:     "on",
+							File:      "http.conf",
+							Server:    "*.example.com",
+							Location:  internalLocation,
+						},
+					}),
 				)
-
-				It("should have internal location for JWKS retrieval with HTTPS", func() {
-					internalLocation := fmt.Sprintf("/_ngf-internal-%s_jwt-remote-auth_jwks_uri", namespace)
-
-					keycloakURL := fmt.Sprintf(
-						"https://keycloak.%s.svc.cluster.local:8443/realms/nginx-gateway/protocol/openid-connect/certs", namespace,
-					)
-					// Validate proxy_pass
-					Expect(framework.ValidateNginxFieldExists(conf, framework.ExpectedNginxField{
-						Directive: "proxy_pass",
-						Value:     keycloakURL,
-						File:      "http.conf",
-						Server:    "*.example.com",
-						Location:  internalLocation,
-					})).To(Succeed())
-
-					// Validate trusted CA certificate configuration
-					caCertPath := fmt.Sprintf("/etc/nginx/secrets/jwt_remote_tls_ca_%s_keycloak-ca-secret.crt", namespace)
-					Expect(framework.ValidateNginxFieldExists(conf, framework.ExpectedNginxField{
-						Directive: "proxy_ssl_trusted_certificate",
-						Value:     caCertPath,
-						File:      "http.conf",
-						Server:    "*.example.com",
-						Location:  internalLocation,
-					})).To(Succeed())
-
-					// Validate server certificate verification
-					Expect(framework.ValidateNginxFieldExists(conf, framework.ExpectedNginxField{
-						Directive: "proxy_ssl_verify",
-						Value:     "on",
-						File:      "http.conf",
-						Server:    "*.example.com",
-						Location:  internalLocation,
-					})).To(Succeed())
-
-					// Validate SNI settings
-					Expect(framework.ValidateNginxFieldExists(conf, framework.ExpectedNginxField{
-						Directive: "proxy_ssl_server_name",
-						Value:     "on",
-						File:      "http.conf",
-						Server:    "*.example.com",
-						Location:  internalLocation,
-					})).To(Succeed())
-				})
 			})
 		})
 	})
@@ -1538,7 +1530,7 @@ func (h *JWTTestHelper) Cleanup() {
 
 // getKeycloakUserToken obtains a JWT token for the test user.
 func getKeycloakUserToken(caCert []byte) (string, error) {
-	url := "https://localhost:8443/realms/nginx-gateway/protocol/openid-connect/token"
+	url := "https://localhost:9443/realms/nginx-gateway/protocol/openid-connect/token"
 
 	data := "client_id=cafe-app&username=testuser&password=testpassword&grant_type=password"
 

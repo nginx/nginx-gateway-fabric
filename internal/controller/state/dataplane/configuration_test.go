@@ -4080,7 +4080,7 @@ func TestConvertBackendTLS(t *testing.T) {
 
 	expectedWithWellKnownCerts := &VerifyTLS{
 		Hostname:   "example.com",
-		RootCAPath: alpineSSLRootCAPath,
+		RootCAPath: AlpineSSLRootCAPath,
 	}
 
 	tests := []struct {
@@ -7838,5 +7838,233 @@ func buildJWTAuthFilter(
 				JWT:  jwtAuth,
 			},
 		},
+	}
+}
+
+func TestBuildJWTRemoteTLSCABundles(t *testing.T) {
+	t.Parallel()
+
+	const (
+		filterNS = "test"
+		caName1  = "ca-secret-1"
+		caName2  = "ca-secret-2"
+	)
+
+	caSecret1NsName := types.NamespacedName{Namespace: filterNS, Name: caName1}
+	caSecret2NsName := types.NamespacedName{Namespace: filterNS, Name: caName2}
+
+	caData1 := []byte("ca-cert-pem-data-1")
+	caData2 := []byte("ca-cert-pem-data-2")
+
+	makeRemoteJWTFilter := func(ns, name string, valid bool, caCertRefs ...string) *graph.AuthenticationFilter {
+		refs := make([]ngfAPIv1alpha1.LocalObjectReference, 0, len(caCertRefs))
+		for _, r := range caCertRefs {
+			refs = append(refs, ngfAPIv1alpha1.LocalObjectReference{Name: r})
+		}
+		return &graph.AuthenticationFilter{
+			Valid: valid,
+			Source: &ngfAPIv1alpha1.AuthenticationFilter{
+				ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: name},
+				Spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+					Type: ngfAPIv1alpha1.AuthTypeJWT,
+					JWT: &ngfAPIv1alpha1.JWTAuth{
+						Source: ngfAPIv1alpha1.JWTKeySourceRemote,
+						Remote: &ngfAPIv1alpha1.JWTRemoteKeySource{
+							URI:               "https://jwks.example.com/.well-known/jwks.json",
+							CACertificateRefs: refs,
+						},
+					},
+				},
+			},
+		}
+	}
+
+	makeCASecret := func(nsName types.NamespacedName, caData []byte) *secrets.Secret {
+		return &secrets.Secret{
+			Source: &apiv1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: nsName.Namespace,
+					Name:      nsName.Name,
+				},
+				Data: map[string][]byte{
+					secrets.CAKey: caData,
+				},
+			},
+		}
+	}
+
+	tests := []struct {
+		authFilters map[types.NamespacedName]*graph.AuthenticationFilter
+		secretsMap  map[types.NamespacedName]*secrets.Secret
+		expected    map[CertBundleID]CertBundle
+		name        string
+	}{
+		{
+			name:        "nil auth filters returns empty map",
+			authFilters: nil,
+			secretsMap:  nil,
+			expected:    map[CertBundleID]CertBundle{},
+		},
+		{
+			name:        "empty auth filters returns empty map",
+			authFilters: map[types.NamespacedName]*graph.AuthenticationFilter{},
+			secretsMap:  nil,
+			expected:    map[CertBundleID]CertBundle{},
+		},
+		{
+			name: "invalid filter is skipped",
+			authFilters: map[types.NamespacedName]*graph.AuthenticationFilter{
+				{Namespace: filterNS, Name: "f1"}: makeRemoteJWTFilter(filterNS, "f1", false, caName1),
+			},
+			secretsMap: map[types.NamespacedName]*secrets.Secret{
+				caSecret1NsName: makeCASecret(caSecret1NsName, caData1),
+			},
+			expected: map[CertBundleID]CertBundle{},
+		},
+		{
+			name: "filter with nil JWT spec is skipped",
+			authFilters: map[types.NamespacedName]*graph.AuthenticationFilter{
+				{Namespace: filterNS, Name: "f1"}: {
+					Valid: true,
+					Source: &ngfAPIv1alpha1.AuthenticationFilter{
+						ObjectMeta: metav1.ObjectMeta{Namespace: filterNS, Name: "f1"},
+						Spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+							Type: ngfAPIv1alpha1.AuthTypeBasic,
+							Basic: &ngfAPIv1alpha1.BasicAuth{
+								SecretRef: ngfAPIv1alpha1.LocalObjectReference{Name: "basic-secret"},
+							},
+						},
+					},
+				},
+			},
+			secretsMap: nil,
+			expected:   map[CertBundleID]CertBundle{},
+		},
+		{
+			name: "remote filter with nil Remote field is skipped",
+			authFilters: map[types.NamespacedName]*graph.AuthenticationFilter{
+				{Namespace: filterNS, Name: "f1"}: {
+					Valid: true,
+					Source: &ngfAPIv1alpha1.AuthenticationFilter{
+						ObjectMeta: metav1.ObjectMeta{Namespace: filterNS, Name: "f1"},
+						Spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+							Type: ngfAPIv1alpha1.AuthTypeJWT,
+							JWT: &ngfAPIv1alpha1.JWTAuth{
+								Source: ngfAPIv1alpha1.JWTKeySourceRemote,
+								Remote: nil,
+							},
+						},
+					},
+				},
+			},
+			secretsMap: nil,
+			expected:   map[CertBundleID]CertBundle{},
+		},
+		{
+			name: "remote filter with empty CACertificateRefs is skipped",
+			authFilters: map[types.NamespacedName]*graph.AuthenticationFilter{
+				{Namespace: filterNS, Name: "f1"}: makeRemoteJWTFilter(filterNS, "f1", true /* no ca refs */),
+			},
+			secretsMap: nil,
+			expected:   map[CertBundleID]CertBundle{},
+		},
+		{
+			name: "CA secret not in secretsMap is skipped",
+			authFilters: map[types.NamespacedName]*graph.AuthenticationFilter{
+				{Namespace: filterNS, Name: "f1"}: makeRemoteJWTFilter(filterNS, "f1", true, caName1),
+			},
+			secretsMap: map[types.NamespacedName]*secrets.Secret{},
+			expected:   map[CertBundleID]CertBundle{},
+		},
+		{
+			name: "CA secret with nil Source is skipped",
+			authFilters: map[types.NamespacedName]*graph.AuthenticationFilter{
+				{Namespace: filterNS, Name: "f1"}: makeRemoteJWTFilter(filterNS, "f1", true, caName1),
+			},
+			secretsMap: map[types.NamespacedName]*secrets.Secret{
+				caSecret1NsName: {Source: nil},
+			},
+			expected: map[CertBundleID]CertBundle{},
+		},
+		{
+			name: "CA secret missing ca.crt key is skipped",
+			authFilters: map[types.NamespacedName]*graph.AuthenticationFilter{
+				{Namespace: filterNS, Name: "f1"}: makeRemoteJWTFilter(filterNS, "f1", true, caName1),
+			},
+			secretsMap: map[types.NamespacedName]*secrets.Secret{
+				caSecret1NsName: {
+					Source: &apiv1.Secret{
+						ObjectMeta: metav1.ObjectMeta{Namespace: filterNS, Name: caName1},
+						Data:       map[string][]byte{"wrong-key": []byte("data")},
+					},
+				},
+			},
+			expected: map[CertBundleID]CertBundle{},
+		},
+		{
+			name: "valid remote filter with one CA cert ref produces bundle",
+			authFilters: map[types.NamespacedName]*graph.AuthenticationFilter{
+				{Namespace: filterNS, Name: "f1"}: makeRemoteJWTFilter(filterNS, "f1", true, caName1),
+			},
+			secretsMap: map[types.NamespacedName]*secrets.Secret{
+				caSecret1NsName: makeCASecret(caSecret1NsName, caData1),
+			},
+			expected: map[CertBundleID]CertBundle{
+				generateJWTRemoteTLSCABundleID(filterNS, caName1): caData1,
+			},
+		},
+		{
+			name: "two filters each with a different CA cert ref produce two bundles",
+			authFilters: map[types.NamespacedName]*graph.AuthenticationFilter{
+				{Namespace: filterNS, Name: "f1"}: makeRemoteJWTFilter(filterNS, "f1", true, caName1),
+				{Namespace: filterNS, Name: "f2"}: makeRemoteJWTFilter(filterNS, "f2", true, caName2),
+			},
+			secretsMap: map[types.NamespacedName]*secrets.Secret{
+				caSecret1NsName: makeCASecret(caSecret1NsName, caData1),
+				caSecret2NsName: makeCASecret(caSecret2NsName, caData2),
+			},
+			expected: map[CertBundleID]CertBundle{
+				generateJWTRemoteTLSCABundleID(filterNS, caName1): caData1,
+				generateJWTRemoteTLSCABundleID(filterNS, caName2): caData2,
+			},
+		},
+		{
+			name: "two filters referencing the same CA cert ref produce one bundle",
+			authFilters: map[types.NamespacedName]*graph.AuthenticationFilter{
+				{Namespace: filterNS, Name: "f1"}: makeRemoteJWTFilter(filterNS, "f1", true, caName1),
+				{Namespace: filterNS, Name: "f2"}: makeRemoteJWTFilter(filterNS, "f2", true, caName1),
+			},
+			secretsMap: map[types.NamespacedName]*secrets.Secret{
+				caSecret1NsName: makeCASecret(caSecret1NsName, caData1),
+			},
+			expected: map[CertBundleID]CertBundle{
+				generateJWTRemoteTLSCABundleID(filterNS, caName1): caData1,
+			},
+		},
+		{
+			name: "mix of valid and invalid filters only produces bundles for valid ones",
+			authFilters: map[types.NamespacedName]*graph.AuthenticationFilter{
+				{Namespace: filterNS, Name: "valid"}:   makeRemoteJWTFilter(filterNS, "valid", true, caName1),
+				{Namespace: filterNS, Name: "invalid"}: makeRemoteJWTFilter(filterNS, "invalid", false, caName2),
+			},
+			secretsMap: map[types.NamespacedName]*secrets.Secret{
+				caSecret1NsName: makeCASecret(caSecret1NsName, caData1),
+				caSecret2NsName: makeCASecret(caSecret2NsName, caData2),
+			},
+			expected: map[CertBundleID]CertBundle{
+				generateJWTRemoteTLSCABundleID(filterNS, caName1): caData1,
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			result := buildJWTRemoteTLSCABundles(test.authFilters, test.secretsMap)
+
+			g.Expect(result).To(Equal(test.expected))
+		})
 	}
 }
