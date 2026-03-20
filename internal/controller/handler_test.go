@@ -936,6 +936,47 @@ var _ = Describe("ensureInferencePoolServices", func() {
 		handler.leader = true
 	})
 
+	It("creates a headless Service for a referenced InferencePool with multiple ports", func() {
+		pools := map[types.NamespacedName]*graph.ReferencedInferencePool{
+			{Namespace: namespace, Name: poolName}: {
+				Source: &inference.InferencePool{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      poolName,
+						Namespace: namespace,
+						UID:       poolUID,
+					},
+					Spec: inference.InferencePoolSpec{
+						Selector: inference.LabelSelector{
+							MatchLabels: map[inference.LabelKey]inference.LabelValue{"app": "foo"},
+						},
+						TargetPorts: []inference.Port{
+							{Number: 8080},
+							{Number: 8443},
+							{Number: 9090},
+						},
+					},
+				},
+			},
+		}
+
+		handler.ensureInferencePoolServices(context.Background(), pools)
+
+		// The Service should have been created with multiple ports
+		svc := &v1.Service{}
+		svcName := controller.CreateInferencePoolServiceName(poolName)
+		err := fakeK8sClient.Get(context.Background(), types.NamespacedName{Name: svcName, Namespace: namespace}, svc)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(svc.Spec.ClusterIP).To(Equal(v1.ClusterIPNone))
+		Expect(svc.Spec.Selector).To(HaveKeyWithValue("app", "foo"))
+		Expect(svc.Spec.Ports).To(HaveLen(3))
+		Expect(svc.Spec.Ports[0].Port).To(Equal(int32(8080)))
+		Expect(svc.Spec.Ports[1].Port).To(Equal(int32(8443)))
+		Expect(svc.Spec.Ports[2].Port).To(Equal(int32(9090)))
+		Expect(svc.OwnerReferences).To(HaveLen(1))
+		Expect(svc.OwnerReferences[0].Name).To(Equal(poolName))
+		Expect(svc.OwnerReferences[0].UID).To(Equal(poolUID))
+	})
+
 	It("creates a headless Service for a referenced InferencePool", func() {
 		pools := map[types.NamespacedName]*graph.ReferencedInferencePool{
 			{Namespace: namespace, Name: poolName}: {
