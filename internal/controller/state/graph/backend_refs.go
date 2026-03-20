@@ -121,7 +121,7 @@ func addBackendRefsToRules(
 			}
 			routeNs := route.Source.GetNamespace()
 
-			// if we have an InferencePool backend disguised as a Service, set the port value
+			// if we have an InferencePool backend disguised as a Service, set any necessary values
 			if ref.IsInferencePool {
 				namespace := routeNs
 				if ref.Namespace != nil {
@@ -144,6 +144,7 @@ func addBackendRefsToRules(
 						))
 						continue
 					}
+
 					port := gatewayv1.PortNumber(pool.Source.Spec.TargetPorts[0].Number)
 					ref.Port = helpers.GetPointer(port)
 					ref.EndpointPickerConfig.EndpointPickerRef = &pool.Source.Spec.EndpointPickerRef
