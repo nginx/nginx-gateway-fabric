@@ -116,7 +116,7 @@ spec:
                       caCertificateRefs:
                         description: |-
                           CACertificateRefs references a list of secrets containing trusted CA certificates
-                          in PEM format used to verify the TLS connection to the JWKS endpoint.
+                          in PEM format used to verify the server certificate of the JWKS endpoint.
                           The referenced secrets must contain an entry with the key "ca.crt".
                           Only one secret can be referenced currently.
                           If not specified, the system CA bundle is used.

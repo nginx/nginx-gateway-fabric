@@ -309,7 +309,22 @@ type JWTFileKeySource struct {
 
 // JWTRemoteKeySource specifies remote JWKS configuration.
 type JWTRemoteKeySource struct {
-	URI               string                 `json:"uri"`
+	// URI is the JWKS endpoint.
+	//
+	//nolint:lll
+	// +kubebuilder:validation:Pattern=`^(?:https?:\/\/)?[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*(?::\d{1,5})?(?:\/[a-zA-Z0-9._~:\/?#\[\]@!$&'()*+,;=-]*)?$`
+	URI string `json:"uri"`
+	// CACertificateRefs references a list of secrets containing trusted CA certificates
+	// in PEM format used to verify the server certificate of the JWKS endpoint.
+	// The referenced secrets must contain an entry with the key "ca.crt".
+	// Only one secret can be referenced currently.
+	// If not specified, the system CA bundle is used.
+	//
+	// Directive: https://nginx.org/en/docs/http/ngx_http_oidc_module.html#ssl_trusted_certificate
+	// NGINX Default: system CA bundle
+	//
+	// +optional
+	// +kubebuilder:validation:MaxItems=1
 	CACertificateRefs []LocalObjectReference `json:"caCertificateRefs,omitempty"`
 }
 
