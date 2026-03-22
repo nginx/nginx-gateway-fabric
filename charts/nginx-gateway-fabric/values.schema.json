@@ -99,11 +99,55 @@
         "autoscaling": {
           "description": "Autoscaling configuration for the NGINX data plane.",
           "properties": {
+            "annotations": {
+              "description": "Set of custom annotations for the HPA object.",
+              "required": [],
+              "title": "annotations",
+              "type": "object"
+            },
+            "behavior": {
+              "description": "The full HPA `spec.behavior` object, passed as-is to the HPA resource. Accepts any valid Kubernetes HPA behavior spec. See the [Kubernetes docs](https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/#configurable-scaling-behavior) for all available fields.",
+              "required": [],
+              "title": "behavior",
+              "type": "object"
+            },
             "enable": {
               "default": false,
               "description": "Enable or disable Horizontal Pod Autoscaler for the NGINX data plane.",
               "title": "enable",
               "type": "boolean"
+            },
+            "maxReplicas": {
+              "default": 10,
+              "description": "Maximum number of replicas for the NGINX data plane HPA.",
+              "title": "maxReplicas",
+              "type": "integer"
+            },
+            "metrics": {
+              "description": " scaleDown:\n   stabilizationWindowSeconds: 300\n   policies:\n   - type: Pods\n     value: 1\n     periodSeconds: 180\n scaleUp:\n   stabilizationWindowSeconds: 300\n     policies:\n     - type: Pods\n       value: 2\n       periodSeconds: 60\nCustom or additional autoscaling metrics. https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/#scaling-on-custom-metrics",
+              "items": {
+                "required": []
+              },
+              "title": "metrics",
+              "type": "array"
+            },
+            "minReplicas": {
+              "default": 1,
+              "description": "Minimum number of replicas for the NGINX data plane HPA.",
+              "title": "minReplicas",
+              "type": "integer"
+            },
+            "targetCPUUtilizationPercentage": {
+              "default": 50,
+              "description": "Target CPU utilization percentage for the NGINX data plane HPA. Requires `nginx.container.resources` to be set.",
+              "title": "targetCPUUtilizationPercentage",
+              "type": "integer"
+            },
+            "targetMemoryUtilizationPercentage": {
+              "default": 50,
+              "description": "Target memory utilization percentage for the NGINX data plane HPA. Requires `nginx.container.resources` to be set. |",
+              "title": "targetMemoryUtilizationPercentage",
+              "type": "integer"
             }
           },
           "required": [],
@@ -705,11 +749,55 @@
         "autoscaling": {
           "description": "Autoscaling configuration for the NGINX Gateway Fabric control plane.",
           "properties": {
+            "annotations": {
+              "description": "Set of custom annotations for the HPA object.",
+              "required": [],
+              "title": "annotations",
+              "type": "object"
+            },
+            "behavior": {
+              "description": "The full HPA `spec.behavior` object, passed as-is to the HPA resource. Accepts any valid Kubernetes HPA behavior spec. See the [Kubernetes docs](https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/#configurable-scaling-behavior) for all available fields.",
+              "required": [],
+              "title": "behavior",
+              "type": "object"
+            },
             "enable": {
               "default": false,
               "description": "Enable or disable Horizontal Pod Autoscaler for the control plane.",
               "title": "enable",
               "type": "boolean"
+            },
+            "maxReplicas": {
+              "default": 10,
+              "description": "Maximum number of replicas for the NGINX data plane HPA.",
+              "title": "maxReplicas",
+              "type": "integer"
+            },
+            "metrics": {
+              "description": " scaleDown:\n   stabilizationWindowSeconds: 300\n   policies:\n   - type: Pods\n     value: 1\n     periodSeconds: 180\n scaleUp:\n   stabilizationWindowSeconds: 300\n     policies:\n     - type: Pods\n       value: 2\n       periodSeconds: 60\nCustom or additional autoscaling metrics. https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/#scaling-on-custom-metrics",
+              "items": {
+                "required": []
+              },
+              "title": "metrics",
+              "type": "array"
+            },
+            "minReplicas": {
+              "default": 1,
+              "description": "Minimum number of replicas for the NGINX data plane HPA.",
+              "title": "minReplicas",
+              "type": "integer"
+            },
+            "targetCPUUtilizationPercentage": {
+              "default": 50,
+              "description": "Target CPU utilization percentage for the NGINX data plane HPA. Requires `nginx.container.resources` to be set.",
+              "title": "targetCPUUtilizationPercentage",
+              "type": "integer"
+            },
+            "targetMemoryUtilizationPercentage": {
+              "default": 50,
+              "description": "Target memory utilization percentage for the NGINX data plane HPA. Requires `nginx.container.resources` to be set. |",
+              "title": "targetMemoryUtilizationPercentage",
+              "type": "integer"
             }
           },
           "required": [],

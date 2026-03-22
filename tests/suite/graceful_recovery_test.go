@@ -533,6 +533,22 @@ var _ = Describe("Graceful Recovery test", Ordered, FlakeAttempts(2), Label("gra
 			WithPolling(500 * time.Millisecond).
 			Should(Succeed())
 
+		cleanUpPortForward()
+
+		// The nginx pod shouldn't necessarily change when the NGF pod is restarted,
+		// but in case there were any errors during this test which causes a re-run,
+		// we'll need to get the nginx pod name again since it may have changed and
+		// the loadbalancer IP address may have changed as well.
+		nginxPodNames, err := resourceManager.GetReadyNginxPodNames(
+			ns.Name,
+			timeoutConfig.GetStatusTimeout,
+		)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(nginxPodNames).To(HaveLen(1))
+		activeNginxPodName = nginxPodNames[0]
+
+		setUpPortForward(activeNginxPodName, ns.Name)
+
 		// sets activeNginxPodName to new pod
 		checkNGFFunctionality(teaURL, coffeeURL, files, &ns)
 

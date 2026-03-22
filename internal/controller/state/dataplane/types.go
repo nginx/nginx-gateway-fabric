@@ -26,7 +26,7 @@ const (
 
 // Configuration is an intermediate representation of dataplane configuration.
 type Configuration struct {
-	// CertBundles holds all unique Certificate Bundles.
+	// CertBundles holds all unique Certificate Bundles, including CA certs and CRL files.
 	CertBundles map[CertBundleID]CertBundle
 	// BaseStreamConfig holds the configuration options at the stream context.
 	BaseStreamConfig BaseStreamConfig
@@ -37,18 +37,18 @@ type Configuration struct {
 	// AuxiliarySecrets contains additional secret data, like certificates/keys/tokens that are not related to
 	// Gateway API resources.
 	AuxiliarySecrets map[graph.SecretFileType][]byte
+	// OIDCProviders holds all OIDC provider configurations at the HTTP level.
+	OIDCProviders []OIDCProvider
 	// DeploymentContext contains metadata about NGF and the cluster.
 	DeploymentContext DeploymentContext
 	// Logging defines logging related settings for NGINX.
 	Logging Logging
-	// MainSnippets holds all the snippets that apply to the main context.
-	MainSnippets []Snippet
-	// HTTPServers holds all HTTPServers.
-	HTTPServers []VirtualServer
-	// Policies holds the policies attached to the Gateway.
-	Policies []policies.Policy
 	// BackendGroups holds all unique BackendGroups.
 	BackendGroups []BackendGroup
+	// TCPServers holds all TCPServers
+	TCPServers []Layer4VirtualServer
+	// HTTPServers holds all HTTPServers.
+	HTTPServers []VirtualServer
 	// NginxPlus specifies NGINX Plus additional settings.
 	NginxPlus NginxPlus
 	// StreamUpstreams holds all unique stream Upstreams (TLS, TCP, UDP)
@@ -57,8 +57,8 @@ type Configuration struct {
 	SSLServers []VirtualServer
 	// Upstreams holds all unique http Upstreams.
 	Upstreams []Upstream
-	// TCPServers holds all TCPServers
-	TCPServers []Layer4VirtualServer
+	// Policies holds the policies attached to the Gateway.
+	Policies []policies.Policy
 	// UDPServers holds all UDPServers
 	UDPServers []Layer4VirtualServer
 	// TLSPassthroughServers hold all TLSPassthroughServers
@@ -67,6 +67,8 @@ type Configuration struct {
 	// An empty string represents a listener with no hostname (catch-all).
 	// Used to build NGINX maps for misdirected request detection.
 	SSLListenerHostnames map[int32][]string
+	// MainSnippets holds all the snippets that apply to the main context.
+	MainSnippets []Snippet
 	// Telemetry holds the Otel configuration.
 	Telemetry Telemetry
 	// BaseHTTPConfig holds the configuration options at the http context.
@@ -271,6 +273,9 @@ type HTTPCORSFilter struct {
 type AuthenticationFilter struct {
 	// Basic contains fields related to basic authentication.
 	Basic *AuthBasic
+
+	// OIDC contains fields related to OIDC authentication.
+	OIDC *OIDCProvider
 }
 
 // AuthBasic contains fields related to basic authentication.
@@ -286,6 +291,51 @@ type AuthBasic struct {
 	// Data contains the user data required for authentication.
 	Data []byte
 }
+
+// OIDCProvider represents an OIDC provider configuration.
+type OIDCProvider struct {
+	// TokenHint specifies whether to include the token hint in the authentication request to the OIDC provider.
+	TokenHint *bool
+	// LogoutURI specifies the logout URI path for the OIDC provider.
+	LogoutURI *string
+	// FrontChannelLogoutURI specifies the front-channel logout URI path for the OIDC provider.
+	FrontChannelLogoutURI *string
+	// Timeout specifies the session timeout for the OIDC provider.
+	Timeout *string
+	// PostLogout URI specifies the post-logout URI for the OIDC provider.
+	PostLogoutURI *string
+	// CookieName specifies the session name for the OIDC provider.
+	CookieName *string
+	// ConfigURL specifies the URL for the OIDC provider's configuration endpoint.
+	ConfigURL *string
+	// PKCE specifies whether to use PKCE for the OIDC provider.
+	PKCE *bool
+	// ClientID is the unique identifier for the OIDC client.
+	ClientID string
+	// Issuer is the issuer URL to discover OIDC configuration from.
+	Issuer string
+	// RedirectURI is the URI used for the OIDC callback.
+	RedirectURI string
+	// ClientSecret is the secret for the OIDC client.
+	// This is used for authentication with the OIDC provider.
+	ClientSecret string
+	// Name is the name of the OIDC provider.
+	Name string
+	// ExtraAuthArgs specifies any extra arguments to include in the authentication request to the OIDC provider.
+	ExtraAuthArgs string
+	// CACertBundleID is the ID of the CA certificate bundle for SSL verification.
+	CACertBundleID CertBundleID
+	// CRLBundleID is the ID of the CRL bundle for SSL verification.
+	CRLBundleID CertBundleID
+	// CRLData is the raw PEM bytes of the CRL.
+	CRLData []byte
+	// CACertData is the raw PEM bytes of the CA certificates.
+	CACertData []byte
+}
+
+const (
+	oidcCallBack = "/oidc_callback"
+)
 
 // HTTPHeader represents an HTTP header.
 type HTTPHeader struct {

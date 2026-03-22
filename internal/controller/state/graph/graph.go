@@ -267,7 +267,13 @@ func BuildGraph(
 
 	processedSnippetsFilters := processSnippetsFilters(state.SnippetsFilters)
 
-	processedAuthenticationFilters := processAuthenticationFilters(state.AuthenticationFilters, resourceResolver)
+	processedAuthenticationFilters := processAuthenticationFilters(
+		state.AuthenticationFilters,
+		resourceResolver,
+		validators.AuthFieldsValidator,
+		validators.GenericValidator,
+		featureFlags.Plus,
+	)
 
 	routes := buildRoutesForGateways(
 		validators.HTTPFieldsValidator,
@@ -299,6 +305,7 @@ func BuildGraph(
 		processedBackendTLSPolicies,
 	)
 	bindRoutesToListeners(routes, l4routes, gws, state.Namespaces)
+	validateOIDCFilters(routes, gws)
 
 	referencedNamespaces := buildReferencedNamespaces(state.Namespaces, gws)
 

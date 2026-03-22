@@ -136,7 +136,11 @@ func (g GeneratorImpl) Generate(conf dataplane.Configuration) []agent.File {
 	files = append(files, g.executeConfigTemplates(conf, policyGenerator)...)
 
 	for id, bundle := range conf.CertBundles {
-		files = append(files, generateCertBundle(id, bundle))
+		if id.IsCRLBundle() {
+			files = append(files, generateCRLBundle(id, bundle))
+		} else {
+			files = append(files, generateCertBundle(id, bundle))
+		}
 	}
 
 	for id, data := range conf.AuthSecrets {
@@ -260,6 +264,22 @@ func generateCertBundle(id dataplane.CertBundleID, cert []byte) agent.File {
 
 func generateCertBundleFileName(id dataplane.CertBundleID) string {
 	return filepath.Join(secretsFolder, string(id)+".crt")
+}
+
+func generateCRLBundle(id dataplane.CertBundleID, crl []byte) agent.File {
+	return agent.File{
+		Meta: &pb.FileMeta{
+			Name:        generateCRLBundleFileName(id),
+			Hash:        filesHelper.GenerateHash(crl),
+			Permissions: file.SecretFileMode,
+			Size:        int64(len(crl)),
+		},
+		Contents: crl,
+	}
+}
+
+func generateCRLBundleFileName(id dataplane.CertBundleID) string {
+	return filepath.Join(secretsFolder, string(id)+".pem")
 }
 
 func generateAuthBasicFile(id dataplane.AuthFileID, data []byte) agent.File {

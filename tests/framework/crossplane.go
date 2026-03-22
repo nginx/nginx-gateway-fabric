@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"strings"
 	"time"
 
@@ -12,9 +11,6 @@ import (
 	core "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/kubernetes/scheme"
-	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/remotecommand"
 )
 
 // ExpectedNginxField contains an nginx directive key and value,
@@ -33,6 +29,12 @@ type ExpectedNginxField struct {
 	Server string
 	// Upstream is the upstream name that the directive should exist in.
 	Upstream string
+	// Block is the name of a parent block directive (e.g., "oidc_provider") that contains
+	// the directive we are looking for. When set, BlockValue must also be set.
+	Block string
+	// BlockValue is the argument of the parent block directive that identifies which block
+	// instance to search within (e.g., the provider name for "oidc_provider").
+	BlockValue string
 	// ValueSubstringAllowed allows the expected value to be a substring of the real value.
 	// This makes it easier for cases when real values are complex file names or contain things we
 	// don't care about, and we just want to check if a substring exists.
@@ -59,7 +61,11 @@ func ValidateNginxFieldExists(conf *Payload, expFieldCfg ExpectedNginxField, opt
 
 		for _, directive := range config.Parsed {
 			if expFieldCfg.Server == "" && expFieldCfg.Upstream == "" {
-				if expFieldCfg.fieldFound(directive, opts...) {
+				if expFieldCfg.Block != "" {
+					if fieldExistsInBlock(expFieldCfg, *directive, opts...) {
+						return nil
+					}
+				} else if expFieldCfg.fieldFound(directive, opts...) {
 					return nil
 				}
 				continue
@@ -113,6 +119,23 @@ func fieldExistsInUpstream(
 	if directive.Directive == "upstream" && directive.Args[0] == expFieldCfg.Upstream {
 		for _, directive := range directive.Block {
 			if expFieldCfg.fieldFound(directive) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// fieldExistsInBlock checks whether the expected directive exists inside a named block directive
+// (e.g., inside an "oidc_provider" block whose argument matches BlockValue).
+func fieldExistsInBlock(
+	expFieldCfg ExpectedNginxField,
+	directive Directive,
+	opts ...Option,
+) bool {
+	if directive.Directive == expFieldCfg.Block && strings.Join(directive.Args, " ") == expFieldCfg.BlockValue {
+		for _, blockDirective := range directive.Block {
+			if expFieldCfg.fieldFound(blockDirective, opts...) {
 				return true
 			}
 		}
@@ -237,39 +260,6 @@ func injectCrossplaneContainer(
 	}
 
 	return nil
-}
-
-// createCrossplaneExecutor creates the executor for the crossplane command.
-func createCrossplaneExecutor(
-	k8sClient kubernetes.Interface,
-	k8sConfig *rest.Config,
-	nginxPodName,
-	namespace string,
-) (remotecommand.Executor, error) {
-	cmd := []string{"./crossplane", "/etc/nginx/nginx.conf"}
-	opts := &core.PodExecOptions{
-		Command:   cmd,
-		Container: "crossplane",
-		Stdout:    true,
-		Stderr:    true,
-	}
-
-	req := k8sClient.CoreV1().RESTClient().Post().
-		Resource("pods").
-		SubResource("exec").
-		Name(nginxPodName).
-		Namespace(namespace).
-		VersionedParams(opts, scheme.ParameterCodec)
-
-	exec, err := remotecommand.NewSPDYExecutor(k8sConfig, http.MethodPost, req.URL())
-	if err != nil {
-		executorErr := fmt.Errorf("error creating executor: %w", err)
-		GinkgoWriter.Printf("%v\n", executorErr)
-
-		return nil, executorErr
-	}
-
-	return exec, nil
 }
 
 // The following types are copied from https://github.com/nginxinc/nginx-go-crossplane,

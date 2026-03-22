@@ -13,3 +13,5 @@ tests/suite/manifests/authentication-filter/basic-valid-auth.yaml:generic-api-ke
 tests/suite/manifests/authentication-filter/basic-invalid-auth.yaml:generic-api-key:88
 tests/suite/manifests/authentication-filter/basic-invalid-auth.yaml:generic-api-key:109
 tests/suite/manifests/authentication-filter/basic-invalid-auth.yaml:generic-api-key:144
+examples/oidc-authentication/client-secret.yaml:generic-api-key:7
+examples/oidc-authentication/client-secret.yaml:generic-api-key:45

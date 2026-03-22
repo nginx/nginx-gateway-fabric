@@ -135,6 +135,10 @@ server {
         auth_basic_user_file {{ $l.AuthBasic.File }};
         {{- end }}
 
+        {{- if $l.AuthOIDCProviderName }}
+        auth_oidc {{ $l.AuthOIDCProviderName }};
+        {{- end }}
+
         {{ range $r := $l.Rewrites }}
         rewrite {{ $r }};
         {{- end }}

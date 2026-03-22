@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"slices"
 	"sort"
+	"strings"
 
 	"github.com/go-logr/logr"
 	coreV1 "k8s.io/api/core/v1"
@@ -41,6 +42,7 @@ const (
 	// the Gateway itself; in this situation we need an additional policy to generate the http context
 	// configuration.
 	InternalRateLimitShadowPolicyAnnotationKey = "nginx.org/internal-annotation-http-context-only"
+	crlBundleIDPrefix                          = "crl_bundle"
 )
 
 // BuildConfiguration builds the Configuration from the Graph.
@@ -72,7 +74,12 @@ func BuildConfiguration(
 	baseStreamConfig := buildBaseStreamConfig(gateway)
 
 	httpServers, sslServers, sslListenerHostnames := buildServers(gateway, g.ReferencedServices, g.ReferencedSecrets)
+	oidcProvider, oidcCertBundles := buildOIDCProviderFromAuthenticationFilters(
+		g.AuthenticationFilters,
+		g.ReferencedSecrets,
+	)
 	backendGroups := buildBackendGroups(append(httpServers, sslServers...))
+
 	upstreams := buildUpstreams(
 		ctx,
 		logger,
@@ -87,9 +94,16 @@ func BuildConfiguration(
 		nginxPlus = buildNginxPlus(gateway)
 	}
 
+	certBundles := buildCertBundles(
+		buildRefCertificateBundles(g.ReferencedSecrets, g.ReferencedCaCertConfigMaps),
+		backendGroups,
+		oidcCertBundles,
+	)
+
 	config := Configuration{
 		HTTPServers:           httpServers,
 		SSLServers:            sslServers,
+		OIDCProviders:         oidcProvider,
 		TLSPassthroughServers: buildPassthroughServers(gateway),
 		TCPServers:            buildL4Servers(logger, gateway, v1.TCPProtocolType),
 		UDPServers:            buildL4Servers(logger, gateway, v1.UDPProtocolType),
@@ -102,12 +116,8 @@ func BuildConfiguration(
 			g.ReferencedServices,
 			baseHTTPConfig.IPFamily,
 		),
-		BackendGroups: backendGroups,
-		SSLKeyPairs:   buildSSLKeyPairs(g.ReferencedSecrets, gateway),
-		CertBundles: buildCertBundles(
-			buildRefCertificateBundles(g.ReferencedSecrets, g.ReferencedCaCertConfigMaps),
-			backendGroups,
-		),
+		BackendGroups:        backendGroups,
+		SSLKeyPairs:          buildSSLKeyPairs(g.ReferencedSecrets, gateway),
 		AuthSecrets:          buildAuthSecrets(g.ReferencedSecrets),
 		Telemetry:            buildTelemetry(g, gateway),
 		BaseHTTPConfig:       baseHTTPConfig,
@@ -119,6 +129,7 @@ func BuildConfiguration(
 		AuxiliarySecrets:     buildAuxiliarySecrets(g.PlusSecrets),
 		WorkerConnections:    buildWorkerConnections(gateway),
 		SSLListenerHostnames: sslListenerHostnames,
+		CertBundles:          certBundles,
 	}
 
 	return config
@@ -410,14 +421,20 @@ func buildRefCertificateBundles(
 func buildCertBundles(
 	refCertBundles []secrets.CertificateBundle,
 	backendGroups []BackendGroup,
+	oidcCertBundles map[CertBundleID]CertBundle,
 ) map[CertBundleID]CertBundle {
 	bundles := make(map[CertBundleID]CertBundle)
-	refByBG := make(map[CertBundleID]struct{})
+
+	for id, cert := range oidcCertBundles {
+		bundles[id] = cert
+	}
 
 	// We only need to build the cert bundles if there are valid backend groups that reference them.
 	if len(backendGroups) == 0 {
 		return bundles
 	}
+
+	referencedByBackendGroup := make(map[CertBundleID]struct{})
 	for _, bg := range backendGroups {
 		if bg.Backends == nil {
 			continue
@@ -426,13 +443,13 @@ func buildCertBundles(
 			if !b.Valid || b.VerifyTLS == nil {
 				continue
 			}
-			refByBG[b.VerifyTLS.CertBundleID] = struct{}{}
+			referencedByBackendGroup[b.VerifyTLS.CertBundleID] = struct{}{}
 		}
 	}
 
 	for _, bundle := range refCertBundles {
 		id := generateCertBundleID(bundle.Name)
-		if _, exists := refByBG[id]; exists {
+		if _, exists := referencedByBackendGroup[id]; exists {
 			// the cert could be base64 encoded or plaintext
 			data := make([]byte, base64.StdEncoding.DecodedLen(len(bundle.Cert.CACert)))
 			_, err := base64.StdEncoding.Decode(data, bundle.Cert.CACert)
@@ -1155,9 +1172,56 @@ func generateCertBundleID(caCertRef types.NamespacedName) CertBundleID {
 	return CertBundleID(fmt.Sprintf("cert_bundle_%s_%s", caCertRef.Namespace, caCertRef.Name))
 }
 
+// generateCRLBundleID generates an ID for a CRL bundle.
+// Uses a distinct prefix to avoid collisions when the same secret is referenced as both CA cert and CRL.
+func generateCRLBundleID(ref types.NamespacedName) CertBundleID {
+	return CertBundleID(fmt.Sprintf("%s_%s_%s", crlBundleIDPrefix, ref.Namespace, ref.Name))
+}
+
+// IsCRLBundle reports whether this CertBundleID identifies a CRL bundle.
+func (id CertBundleID) IsCRLBundle() bool {
+	return strings.HasPrefix(string(id), crlBundleIDPrefix)
+}
+
 // GenerateAuthFileID is used to generate IDs for both basic auth and jwt auth user files.
 func GenerateAuthFileID(namespace, name string) AuthFileID {
 	return AuthFileID(fmt.Sprintf("%s_%s", namespace, name))
+}
+
+// buildOIDCProviderFromAuthenticationFilters builds the OIDC provider configs from the processed
+// authentication filters. It also returns any certificate bundles (CA certs and CRLs) that are needed.
+func buildOIDCProviderFromAuthenticationFilters(
+	authFilters map[types.NamespacedName]*graph.AuthenticationFilter,
+	referencedSecrets map[types.NamespacedName]*secrets.Secret,
+) ([]OIDCProvider, map[CertBundleID]CertBundle) {
+	var providers []OIDCProvider
+	certBundles := make(map[CertBundleID]CertBundle)
+
+	for _, af := range authFilters {
+		if !af.Valid || !af.Referenced {
+			continue
+		}
+		if af.Source.Spec.Type != ngfAPIv1alpha1.AuthTypeOIDC {
+			continue
+		}
+		converted := convertAuthenticationFilter(af, referencedSecrets)
+		if converted.OIDC == nil {
+			continue
+		}
+		provider := *converted.OIDC
+		if provider.CACertBundleID != "" && provider.CACertData != nil {
+			certBundles[provider.CACertBundleID] = provider.CACertData
+		}
+		if provider.CRLBundleID != "" && provider.CRLData != nil {
+			certBundles[provider.CRLBundleID] = provider.CRLData
+		}
+		providers = append(providers, provider)
+	}
+
+	if len(certBundles) == 0 {
+		return providers, nil
+	}
+	return providers, certBundles
 }
 
 func telemetryEnabled(gw *graph.Gateway) bool {

@@ -461,17 +461,8 @@ func createLocations(
 	mirrorPathToPercentage := extractMirrorTargetsWithPercentages(server.PathRules)
 
 	for pathRuleIdx, rule := range server.PathRules {
-		if !rootPathExists {
-			if rule.Path == rootPath {
-				rootPathExists = true
-			} else if rule.PathType == dataplane.PathTypeRegularExpression {
-				// Uses regexp2 with RE2 flag to match the engine used by the validation layer.
-				if re, err := regexp2.Compile(rule.Path, regexp2.RE2); err == nil {
-					if matched, _ := re.MatchString("/"); matched {
-						rootPathExists = true
-					}
-				}
-			}
+		if !rootPathExists && matchesRootPath(rule) {
+			rootPathExists = true
 		}
 
 		if rule.GRPC {
@@ -530,6 +521,8 @@ func createLocations(
 			)
 		}
 	}
+
+	locs = append(locs, createOIDCLocations(server.PathRules)...)
 
 	if !rootPathExists {
 		locs = append(locs, createDefaultRootLocation())
@@ -1139,18 +1132,25 @@ func updateLocationAuthenticationFilter(
 	location http.Location,
 	authenticationFilter *dataplane.AuthenticationFilter,
 ) http.Location {
-	if authenticationFilter != nil {
-		if authenticationFilter.Basic != nil {
-			id := dataplane.GenerateAuthFileID(
-				authenticationFilter.Basic.SecretNamespace,
-				authenticationFilter.Basic.SecretName,
-			)
-			location.AuthBasic = &http.AuthBasic{
-				Realm: authenticationFilter.Basic.Realm,
-				File:  generateAuthBasicFileName(id),
-			}
+	if authenticationFilter == nil {
+		return location
+	}
+
+	if authenticationFilter.Basic != nil {
+		id := dataplane.GenerateAuthFileID(
+			authenticationFilter.Basic.SecretNamespace,
+			authenticationFilter.Basic.SecretName,
+		)
+		location.AuthBasic = &http.AuthBasic{
+			Realm: authenticationFilter.Basic.Realm,
+			File:  generateAuthBasicFileName(id),
 		}
 	}
+
+	if authenticationFilter.OIDC != nil {
+		location.AuthOIDCProviderName = authenticationFilter.OIDC.Name
+	}
+
 	return location
 }
 
@@ -1602,7 +1602,7 @@ func createProxyPass(
 
 	backendName := backendGroupName(backendGroup)
 
-	if inferenceBackend {
+	if inferenceBackend && !strings.Contains(backendName, invalidBackendRef) {
 		backendVarName := strings.ReplaceAll(backendName, "-", "_")
 		return "http://$inference_backend_" + backendVarName + requestURI
 	}
@@ -1740,6 +1740,97 @@ func createDefaultRootLocation() http.Location {
 	return http.Location{
 		Path:   "= /",
 		Return: &http.Return{Code: http.StatusNotFound},
+	}
+}
+
+func matchesRootPath(rule dataplane.PathRule) bool {
+	if rule.Path == rootPath {
+		return true
+	}
+	if rule.PathType != dataplane.PathTypeRegularExpression {
+		return false
+	}
+	// Uses regexp2 with RE2 flag to match the engine used by the validation layer.
+	re, err := regexp2.Compile(rule.Path, regexp2.RE2)
+	if err != nil {
+		return false
+	}
+	matched, _ := re.MatchString("/")
+	return matched
+}
+
+// findOIDCProviders returns all unique OIDCProviders referenced across the path rules, de-duped by provider name.
+func findOIDCProviders(pathRules []dataplane.PathRule) []*dataplane.OIDCProvider {
+	seen := make(map[string]struct{})
+	var providers []*dataplane.OIDCProvider
+	for _, rule := range pathRules {
+		for _, matchRule := range rule.MatchRules {
+			if matchRule.Filters.AuthenticationFilter == nil || matchRule.Filters.AuthenticationFilter.OIDC == nil {
+				continue
+			}
+			provider := matchRule.Filters.AuthenticationFilter.OIDC
+			if _, exists := seen[provider.Name]; !exists {
+				seen[provider.Name] = struct{}{}
+				providers = append(providers, provider)
+			}
+		}
+	}
+	return providers
+}
+
+// createOIDCLocations creates redirect, logout, and front-channel logout locations for all OIDC providers.
+// A location is only created for path-only URIs (starting with /). A location is skipped if an exact-match
+// route already occupies the same path or if the location has already been generated. These OIDC
+// locations use exact nginx matches, so they safely take precedence over any prefix route.
+func createOIDCLocations(pathRules []dataplane.PathRule) []http.Location {
+	existingExact := existingExactPathSet(pathRules)
+
+	var locs []http.Location
+	seenPaths := make(map[string]struct{})
+	for _, provider := range findOIDCProviders(pathRules) {
+		paths := make([]string, 0, 3)
+		if strings.HasPrefix(provider.RedirectURI, "/") {
+			paths = append(paths, provider.RedirectURI)
+		}
+		if provider.LogoutURI != nil {
+			paths = append(paths, *provider.LogoutURI)
+		}
+		if provider.FrontChannelLogoutURI != nil {
+			paths = append(paths, *provider.FrontChannelLogoutURI)
+		}
+
+		for _, path := range paths {
+			if _, exists := existingExact[path]; !exists {
+				if _, seen := seenPaths[path]; !seen {
+					seenPaths[path] = struct{}{}
+					locs = append(locs, createOIDCCallbackLocation(provider, path))
+				}
+			}
+		}
+	}
+	return locs
+}
+
+// existingExactPathSet returns the set of paths that correspond to exact locations.
+// Paths that are treated as non-slashed PathPrefix rules are excluded, so that only
+// exact (or otherwise non-prefix) paths are considered for conflict detection.
+func existingExactPathSet(pathRules []dataplane.PathRule) map[string]struct{} {
+	paths := make(map[string]struct{}, len(pathRules))
+	for _, rule := range pathRules {
+		if !isNonSlashedPrefixPath(rule.PathType, rule.Path) {
+			paths[rule.Path] = struct{}{}
+		}
+	}
+	return paths
+}
+
+// createOIDCCallbackLocation creates a OIDC callback location containing only the auth_oidc directive.
+// This is created for path-only URIs: redirectURI, logoutURI, or frontChannelLogoutURI.
+func createOIDCCallbackLocation(provider *dataplane.OIDCProvider, path string) http.Location {
+	return http.Location{
+		Path:                 "= " + path,
+		Type:                 http.ExternalLocationType,
+		AuthOIDCProviderName: provider.Name,
 	}
 }
 
