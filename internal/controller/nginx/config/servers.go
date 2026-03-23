@@ -1281,6 +1281,7 @@ func updateLocationProxySettings(
 		generateProtocolString(location.ProxySSLVerify, grpc),
 		grpc,
 		inferenceBackend,
+		location.Type,
 	)
 
 	location.ResponseHeaders = responseHeaders
@@ -1586,9 +1587,14 @@ func createProxyPass(
 	protocol string,
 	grpc bool,
 	inferenceBackend bool,
+	locationType http.LocationType,
 ) string {
 	var requestURI string
-	if !grpc {
+	// Only append $request_uri for internal locations where the URI has been changed by an
+	// internal redirect and needs to be restored to the original client request URI.
+	// For external locations, nginx's default behavior of using the processed URI is correct
+	// and also works properly with SSI (server-side includes).
+	if !grpc && locationType == http.InternalLocationType {
 		if filter == nil || filter.Path == nil {
 			requestURI = "$request_uri"
 		}
