@@ -139,7 +139,8 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 		ports[healthcheckPort] = corev1.ProtocolTCP
 	}
 
-	// build service and deployment only if there are ports to expose
+	// ports list will be empty if there are no listeners
+	// In this case, we don't want to create NGINX resources
 	var service *corev1.Service
 	var deployment client.Object
 	if len(ports) > 0 {
