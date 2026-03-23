@@ -241,6 +241,67 @@ func TestBuildNginxResourceObjects(t *testing.T) {
 	g.Expect(initContainer.ImagePullPolicy).To(Equal(defaultImagePullPolicy))
 }
 
+func TestBuildNginxResourceObjects_NoListeners(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	agentTLSSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      agentTLSTestSecretName,
+			Namespace: ngfNamespace,
+		},
+		Data: map[string][]byte{secrets.TLSCertKey: []byte("tls")},
+	}
+	fakeClient := createFakeClientWithScheme(agentTLSSecret)
+
+	provisioner := &NginxProvisioner{
+		cfg: Config{
+			GatewayPodConfig: &config.GatewayPodConfig{
+				Namespace: ngfNamespace,
+				Version:   "1.0.0",
+				Image:     "ngf-image",
+			},
+			AgentTLSSecretName: agentTLSTestSecretName,
+			AgentLabels:        make(map[string]string),
+		},
+		baseLabelSelector: metav1.LabelSelector{
+			MatchLabels: map[string]string{
+				"app": "nginx",
+			},
+		},
+		k8sClient: fakeClient,
+	}
+
+	gateway := &gatewayv1.Gateway{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "gw",
+			Namespace: "default",
+		},
+		Spec: gatewayv1.GatewaySpec{
+			// No listeners specified - this should be supported for ListenerSets
+			Listeners: []gatewayv1.Listener{},
+		},
+	}
+
+	objects, err := provisioner.buildNginxResourceObjects("gw-nginx", gateway, nil)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// When there are no listeners, no Service or Deployment should be created
+	g.Expect(objects).To(HaveLen(4))
+
+	// Verify no Service, Deployment, or DaemonSet is created
+	for _, obj := range objects {
+		_, isService := obj.(*corev1.Service)
+		g.Expect(isService).To(BeFalse(), "Service should not be created when there are no listeners")
+
+		_, isDeployment := obj.(*appsv1.Deployment)
+		g.Expect(isDeployment).To(BeFalse(), "Deployment should not be created when there are no listeners")
+
+		_, isDaemonSet := obj.(*appsv1.DaemonSet)
+		g.Expect(isDaemonSet).To(BeFalse(), "DaemonSet should not be created when there are no listeners")
+	}
+}
+
 func TestBuildNginxResourceObjects_NginxProxyConfig(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
@@ -767,6 +828,7 @@ func TestBuildNginxResourceObjects_Plus(t *testing.T) {
 					"annotation": "value",
 				},
 			},
+			Listeners: []gatewayv1.Listener{{Port: 80}},
 		},
 	}
 
@@ -912,6 +974,9 @@ func TestBuildNginxResourceObjects_DockerSecrets(t *testing.T) {
 			Name:      "gw",
 			Namespace: "default",
 		},
+		Spec: gatewayv1.GatewaySpec{
+			Listeners: []gatewayv1.Listener{{Port: 80}},
+		},
 	}
 
 	resourceName := "gw-nginx"
@@ -1004,6 +1069,9 @@ func TestBuildNginxResourceObjects_DaemonSet(t *testing.T) {
 			Name:      "gw",
 			Namespace: "default",
 		},
+		Spec: gatewayv1.GatewaySpec{
+			Listeners: []gatewayv1.Listener{{Port: 80}},
+		},
 	}
 
 	nProxyCfg := &graph.EffectiveNginxProxy{
@@ -1091,6 +1159,9 @@ func TestBuildNginxResourceObjects_OpenShift(t *testing.T) {
 			Name:      "gw",
 			Namespace: "default",
 		},
+		Spec: gatewayv1.GatewaySpec{
+			Listeners: []gatewayv1.Listener{{Port: 80}},
+		},
 	}
 
 	resourceName := "gw-nginx"
@@ -1164,6 +1235,9 @@ func TestBuildNginxResourceObjects_DataplaneKeySecret(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "gw",
 			Namespace: "default",
+		},
+		Spec: gatewayv1.GatewaySpec{
+			Listeners: []gatewayv1.Listener{{Port: 80}},
 		},
 	}
 

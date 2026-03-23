@@ -334,6 +334,9 @@ func TestRegisterGateway(t *testing.T) {
 				Name:      "gw",
 				Namespace: "default",
 			},
+			Spec: gatewayv1.GatewaySpec{
+				Listeners: []gatewayv1.Listener{{Port: 80}},
+			},
 		},
 		Valid: true,
 	}
@@ -478,6 +481,9 @@ func TestRegisterGateway_CleansUpOldDeploymentOrDaemonSet(t *testing.T) {
 				Name:      "gw",
 				Namespace: "default",
 			},
+			Spec: gatewayv1.GatewaySpec{
+				Listeners: []gatewayv1.Listener{{Port: 80}},
+			},
 		},
 		Valid: true,
 		EffectiveNginxProxy: &graph.EffectiveNginxProxy{
@@ -621,6 +627,9 @@ func TestProvisionerRestartsDeployment(t *testing.T) {
 				Name:      "gw",
 				Namespace: "default",
 			},
+			Spec: gatewayv1.GatewaySpec{
+				Listeners: []gatewayv1.Listener{{Port: 80}},
+			},
 		},
 		Valid: true,
 		EffectiveNginxProxy: &graph.EffectiveNginxProxy{
@@ -653,6 +662,9 @@ func TestProvisionerRestartsDeployment(t *testing.T) {
 				Name:      "gw",
 				Namespace: "default",
 			},
+			Spec: gatewayv1.GatewaySpec{
+				Listeners: []gatewayv1.Listener{{Port: 80}},
+			},
 		},
 		Valid: true,
 		EffectiveNginxProxy: &graph.EffectiveNginxProxy{
@@ -680,6 +692,9 @@ func TestProvisionerRestartsDaemonSet(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "gw",
 				Namespace: "default",
+			},
+			Spec: gatewayv1.GatewaySpec{
+				Listeners: []gatewayv1.Listener{{Port: 80}},
 			},
 		},
 		Valid: true,
@@ -715,6 +730,9 @@ func TestProvisionerRestartsDaemonSet(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "gw",
 				Namespace: "default",
+			},
+			Spec: gatewayv1.GatewaySpec{
+				Listeners: []gatewayv1.Listener{{Port: 80}},
 			},
 		},
 		Valid: true,

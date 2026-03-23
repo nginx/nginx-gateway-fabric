@@ -47,6 +47,9 @@ func TestHandleEventBatch_Upsert(t *testing.T) {
 			Namespace: "default",
 			Labels:    map[string]string{"app": "nginx"},
 		},
+		Spec: gatewayv1.GatewaySpec{
+			Listeners: []gatewayv1.Listener{{Port: 80}},
+		},
 	}
 
 	deployment := &appsv1.Deployment{
@@ -243,6 +246,9 @@ func TestHandleEventBatch_Delete(t *testing.T) {
 			Name:      "gw",
 			Namespace: "default",
 			Labels:    map[string]string{"app": "nginx"},
+		},
+		Spec: gatewayv1.GatewaySpec{
+			Listeners: []gatewayv1.Listener{{Port: 80}},
 		},
 	}
 
