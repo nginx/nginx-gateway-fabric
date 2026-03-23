@@ -15,3 +15,5 @@ tests/suite/manifests/authentication-filter/basic-invalid-auth.yaml:generic-api-
 tests/suite/manifests/authentication-filter/basic-invalid-auth.yaml:generic-api-key:144
 examples/oidc-authentication/oidc-auth-filter.yaml:generic-api-key:21
 examples/oidc-authentication/gateway.yaml:private-key:24
+examples/oidc-authentication/keycloak.yaml:kubernetes-secret-yaml:2
+examples/oidc-authentication/keycloak.yaml:private-key:8
