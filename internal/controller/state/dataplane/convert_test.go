@@ -641,10 +641,23 @@ func TestConvertAuthenticationFilter(t *testing.T) {
 			expected:          &AuthenticationFilter{},
 		},
 		{
-			name: "basic auth invalid",
+			name: "invalid filter",
 			filter: &graph.AuthenticationFilter{
 				Source: &ngfAPIv1alpha1.AuthenticationFilter{},
 				Valid:  false,
+			},
+			referencedSecrets: nil,
+			expected:          &AuthenticationFilter{},
+		},
+		{
+			name: "unsupported auth type",
+			filter: &graph.AuthenticationFilter{
+				Source: &ngfAPIv1alpha1.AuthenticationFilter{
+					Spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+						Type: "UnsupportedType",
+					},
+				},
+				Valid: true,
 			},
 			referencedSecrets: nil,
 			expected:          &AuthenticationFilter{},
@@ -658,6 +671,7 @@ func TestConvertAuthenticationFilter(t *testing.T) {
 						Namespace: "test",
 					},
 					Spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+						Type: ngfAPIv1alpha1.AuthTypeBasic,
 						Basic: &ngfAPIv1alpha1.BasicAuth{
 							SecretRef: ngfAPIv1alpha1.LocalObjectReference{Name: "auth-basic"},
 							Realm:     "",
@@ -687,6 +701,80 @@ func TestConvertAuthenticationFilter(t *testing.T) {
 			},
 		},
 		{
+			name: "jwt auth spec nil",
+			filter: &graph.AuthenticationFilter{
+				Source: &ngfAPIv1alpha1.AuthenticationFilter{
+					Spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+						Type: ngfAPIv1alpha1.AuthTypeJWT,
+						JWT:  nil,
+					},
+				},
+			},
+			referencedSecrets: nil,
+			expected:          &AuthenticationFilter{},
+		},
+		{
+			name: "jwt auth source nil",
+			filter: &graph.AuthenticationFilter{
+				Source: &ngfAPIv1alpha1.AuthenticationFilter{
+					Spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+						Type: ngfAPIv1alpha1.AuthTypeJWT,
+						JWT: &ngfAPIv1alpha1.JWTAuth{
+							Realm:  "",
+							Source: "",
+						},
+					},
+				},
+				Valid:      true,
+				Referenced: true,
+			},
+			referencedSecrets: nil,
+			expected:          &AuthenticationFilter{},
+		},
+		{
+			name: "jwt auth valid",
+			filter: &graph.AuthenticationFilter{
+				Source: &ngfAPIv1alpha1.AuthenticationFilter{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "af",
+						Namespace: "test",
+					},
+					Spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+						Type: ngfAPIv1alpha1.AuthTypeJWT,
+						JWT: &ngfAPIv1alpha1.JWTAuth{
+							Realm:  "",
+							Source: ngfAPIv1alpha1.JWTKeySourceFile,
+							File: &ngfAPIv1alpha1.JWTFileKeySource{
+								SecretRef: ngfAPIv1alpha1.LocalObjectReference{Name: "jwt-secret"},
+							},
+							KeyCache: helpers.GetPointer(ngfAPIv1alpha1.Duration("60s")),
+						},
+					},
+				},
+				Valid:      true,
+				Referenced: true,
+			},
+			referencedSecrets: map[types.NamespacedName]*secrets.Secret{
+				{Namespace: "test", Name: "jwt-secret"}: {
+					Source: &apiv1.Secret{
+						ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "jwt-secret"},
+						Data: map[string][]byte{
+							secrets.AuthKey: []byte("token"),
+						},
+					},
+				},
+			},
+			expected: &AuthenticationFilter{
+				JWT: &AuthJWT{
+					SecretName:      "jwt-secret",
+					SecretNamespace: "test",
+					Realm:           "",
+					KeyCache:        helpers.GetPointer(ngfAPIv1alpha1.Duration("60s")),
+					Data:            []byte("token"),
+				},
+			},
+		},
+		{
 			name: "basic auth secret not referenced and source is not nil",
 			filter: &graph.AuthenticationFilter{
 				Source: &ngfAPIv1alpha1.AuthenticationFilter{
@@ -695,6 +783,7 @@ func TestConvertAuthenticationFilter(t *testing.T) {
 						Namespace: "test",
 					},
 					Spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+						Type: ngfAPIv1alpha1.AuthTypeBasic,
 						Basic: &ngfAPIv1alpha1.BasicAuth{
 							SecretRef: ngfAPIv1alpha1.LocalObjectReference{Name: "auth-basic"},
 							Realm:     "",
@@ -725,6 +814,7 @@ func TestConvertAuthenticationFilter(t *testing.T) {
 						Namespace: "test",
 					},
 					Spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+						Type: ngfAPIv1alpha1.AuthTypeBasic,
 						Basic: &ngfAPIv1alpha1.BasicAuth{
 							SecretRef: ngfAPIv1alpha1.LocalObjectReference{Name: "auth-basic"},
 							Realm:     "",
@@ -1155,6 +1245,150 @@ func TestConvertAuthenticationFilter(t *testing.T) {
 					ClientSecret:  "my-client-secret",
 					RedirectURI:   "https://auth.example.com/callback",
 					PostLogoutURI: helpers.GetPointer("https://example.com/logged-out"),
+				},
+			},
+		},
+		{
+			name: "jwt auth secret not referenced and source is not nil",
+			filter: &graph.AuthenticationFilter{
+				Source: &ngfAPIv1alpha1.AuthenticationFilter{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "af",
+						Namespace: "test",
+					},
+					Spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+						Type: ngfAPIv1alpha1.AuthTypeJWT,
+						JWT: &ngfAPIv1alpha1.JWTAuth{
+							Realm:  "",
+							Source: ngfAPIv1alpha1.JWTKeySourceFile,
+							File: &ngfAPIv1alpha1.JWTFileKeySource{
+								SecretRef: ngfAPIv1alpha1.LocalObjectReference{Name: "jwt-secret"},
+							},
+						},
+					},
+				},
+				Valid:      true,
+				Referenced: false,
+			},
+			referencedSecrets: map[types.NamespacedName]*secrets.Secret{
+				{Namespace: "test", Name: "non-auth-secret"}: {
+					Source: &apiv1.Secret{
+						ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "non-auth-secret"},
+						Data: map[string][]byte{
+							secrets.AuthKey: []byte("token"),
+						},
+					},
+				},
+			},
+			expected: &AuthenticationFilter{},
+		},
+		{
+			name: "jwt auth secret referenced and source is nil",
+			filter: &graph.AuthenticationFilter{
+				Source: &ngfAPIv1alpha1.AuthenticationFilter{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "af",
+						Namespace: "test",
+					},
+					Spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+						Type: ngfAPIv1alpha1.AuthTypeJWT,
+						JWT: &ngfAPIv1alpha1.JWTAuth{
+							Realm:  "",
+							Source: ngfAPIv1alpha1.JWTKeySourceFile,
+							File: &ngfAPIv1alpha1.JWTFileKeySource{
+								SecretRef: ngfAPIv1alpha1.LocalObjectReference{Name: "jwt-secret"},
+							},
+						},
+					},
+				},
+				Valid:      true,
+				Referenced: true,
+			},
+			referencedSecrets: map[types.NamespacedName]*secrets.Secret{
+				{Namespace: "test", Name: "jwt-secret"}: {
+					Source: nil,
+				},
+			},
+			expected: &AuthenticationFilter{},
+		},
+		{
+			name: "jwt auth remote valid with basic URI",
+			filter: &graph.AuthenticationFilter{
+				Source: &ngfAPIv1alpha1.AuthenticationFilter{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "af",
+						Namespace: "test",
+					},
+					Spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+						Type: ngfAPIv1alpha1.AuthTypeJWT,
+						JWT: &ngfAPIv1alpha1.JWTAuth{
+							Realm:  "my-realm",
+							Source: ngfAPIv1alpha1.JWTKeySourceRemote,
+							Remote: &ngfAPIv1alpha1.JWTRemoteKeySource{
+								URI: "https://idp.example.com/jwks",
+							},
+							KeyCache: helpers.GetPointer(ngfAPIv1alpha1.Duration("1h")),
+						},
+					},
+				},
+				Valid:      true,
+				Referenced: true,
+			},
+			referencedSecrets: nil,
+			expected: &AuthenticationFilter{
+				JWT: &AuthJWT{
+					Realm:    "my-realm",
+					KeyCache: helpers.GetPointer(ngfAPIv1alpha1.Duration("1h")),
+					Remote: &AuthJWTRemote{
+						URI:  "https://idp.example.com/jwks",
+						Path: "/_ngf-internal-test_af_jwks_uri",
+					},
+				},
+			},
+		},
+		{
+			name: "jwt auth remote valid with basic URI & CA Cert",
+			filter: &graph.AuthenticationFilter{
+				Source: &ngfAPIv1alpha1.AuthenticationFilter{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "af",
+						Namespace: "test",
+					},
+					Spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+						Type: ngfAPIv1alpha1.AuthTypeJWT,
+						JWT: &ngfAPIv1alpha1.JWTAuth{
+							Realm:  "my-realm",
+							Source: ngfAPIv1alpha1.JWTKeySourceRemote,
+							Remote: &ngfAPIv1alpha1.JWTRemoteKeySource{
+								URI: "https://idp.example.com/jwks",
+								CACertificateRefs: []ngfAPIv1alpha1.LocalObjectReference{
+									{Name: "jwt-ca-secret"},
+								},
+							},
+							KeyCache: helpers.GetPointer(ngfAPIv1alpha1.Duration("1h")),
+						},
+					},
+				},
+				Valid:      true,
+				Referenced: true,
+			},
+			referencedSecrets: map[types.NamespacedName]*secrets.Secret{
+				{Namespace: "test", Name: "jwt-ca-secret"}: {
+					Source: &apiv1.Secret{
+						ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "jwt-ca-secret"},
+						Data:       map[string][]byte{secrets.CAKey: []byte("ca-cert-pem")},
+					},
+				},
+			},
+			expected: &AuthenticationFilter{
+				JWT: &AuthJWT{
+					Realm:    "my-realm",
+					KeyCache: helpers.GetPointer(ngfAPIv1alpha1.Duration("1h")),
+					Remote: &AuthJWTRemote{
+						URI:              "https://idp.example.com/jwks",
+						Path:             "/_ngf-internal-test_af_jwks_uri",
+						CACertBundlePath: generateJWTRemoteTLSCABundleID("test", "jwt-ca-secret"),
+					},
 				},
 			},
 		},

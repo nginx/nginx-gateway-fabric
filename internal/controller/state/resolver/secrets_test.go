@@ -193,9 +193,9 @@ func TestSecretResolver(t *testing.T) {
 				Name:      "secret-4",
 			},
 			Data: map[string][]byte{
-				secrets.AuthKey: []byte("dXNlcjpwYXNzd29yZA=="), // base64 for user:password
+				secrets.AuthKey: []byte("dXNlcjpwYXNzd29yZA=="),
 			},
-			Type: v1.SecretType(secrets.SecretTypeHtpasswd),
+			Type: v1.SecretTypeOpaque,
 		}
 
 		invalidAuthKeySecret = &v1.Secret{
@@ -204,9 +204,9 @@ func TestSecretResolver(t *testing.T) {
 				Name:      "invalid-auth-key",
 			},
 			Data: map[string][]byte{
-				"invalid-key": []byte("dXNlcjpwYXNzd29yZA=="), // base64 for user:password
+				"invalid-key": []byte("data"),
 			},
-			Type: v1.SecretType(secrets.SecretTypeHtpasswd),
+			Type: v1.SecretTypeOpaque,
 		}
 
 		invalidSecretType = &v1.Secret{
@@ -449,8 +449,9 @@ func TestSecretResolver(t *testing.T) {
 			nsname: client.ObjectKeyFromObject(validSecret3),
 		},
 		{
-			name:   "valid htpasswd secret",
-			nsname: client.ObjectKeyFromObject(validSecret4),
+			name:        "valid auth secret",
+			nsname:      client.ObjectKeyFromObject(validSecret4),
+			resolveOpts: []resolver.ResolveOption{resolver.WithExpectedSecretKey(secrets.AuthKey)},
 		},
 		{
 			name:        "valid opaque client-secret secret",
@@ -469,9 +470,10 @@ func TestSecretResolver(t *testing.T) {
 			expectedErrMsg: `unsupported secret type "Opaque"`,
 		},
 		{
-			name:           "invalid htpasswd secret",
+			name:           "invalid auth secret",
 			nsname:         client.ObjectKeyFromObject(invalidAuthKeySecret),
-			expectedErrMsg: "missing required key \"auth\" in secret type \"nginx.org/htpasswd\"",
+			resolveOpts:    []resolver.ResolveOption{resolver.WithExpectedSecretKey(secrets.AuthKey)},
+			expectedErrMsg: "opaque secret test/invalid-auth-key does not contain the expected key \"auth\"",
 		},
 		{
 			name:           "doesn't exist",

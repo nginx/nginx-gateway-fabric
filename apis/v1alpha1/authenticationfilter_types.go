@@ -34,10 +34,16 @@ type AuthenticationFilterList struct {
 }
 
 // AuthenticationFilterSpec defines the desired configuration.
-// +kubebuilder:validation:XValidation:message="for type=Basic, spec.basic must be set",rule="!(!has(self.basic) && self.type == 'Basic')"
-// +kubebuilder:validation:XValidation:message="for type=OIDC, spec.oidc must be set",rule="!(!has(self.oidc) && self.type == 'OIDC')"
-// +kubebuilder:validation:XValidation:message="type Basic must not be set when spec.oidc is set", rule="self.type != 'Basic' || !has(self.oidc)"
-// +kubebuilder:validation:XValidation:message="type OIDC must not be set when spec.basic is set", rule="self.type != 'OIDC' || !has(self.basic)"
+//
+// +kubebuilder:validation:XValidation:message="type Basic requires spec.basic to be set",rule="self.type != 'Basic' || has(self.basic)"
+// +kubebuilder:validation:XValidation:message="type Basic must not set spec.jwt", rule="self.type != 'Basic' || !has(self.jwt)"
+// +kubebuilder:validation:XValidation:message="type Basic must not set spec.oidc", rule="self.type != 'Basic' || !has(self.oidc)"
+// +kubebuilder:validation:XValidation:message="type OIDC requires spec.oidc to be set",rule="self.type != 'OIDC' || has(self.oidc)"
+// +kubebuilder:validation:XValidation:message="type OIDC must not set spec.basic", rule="self.type != 'OIDC' || !has(self.basic)"
+// +kubebuilder:validation:XValidation:message="type OIDC must not set spec.jwt", rule="self.type != 'OIDC' || !has(self.jwt)"
+// +kubebuilder:validation:XValidation:message="type JWT requires spec.jwt to be set",rule="self.type != 'JWT' || has(self.jwt)"
+// +kubebuilder:validation:XValidation:message="type JWT must not set spec.basic", rule="self.type != 'JWT' || !has(self.basic)"
+// +kubebuilder:validation:XValidation:message="type JWT must not set spec.oidc", rule="self.type != 'JWT' || !has(self.oidc)"
 //
 //nolint:lll
 type AuthenticationFilterSpec struct {
@@ -46,10 +52,15 @@ type AuthenticationFilterSpec struct {
 	// +optional
 	Basic *BasicAuth `json:"basic,omitempty"`
 
-	// OIDC configures OpenID Connect Authentication.
+	// OIDC configures OpenID Connect Authentication (NGINX Plus).
 	//
 	// +optional
 	OIDC *OIDCAuth `json:"oidc,omitempty"`
+
+	// JWT configures JSON Web Token authentication (NGINX Plus).
+	//
+	// +optional
+	JWT *JWTAuth `json:"jwt,omitempty"`
 
 	// Type selects the authentication mechanism.
 	Type AuthType `json:"type"`
@@ -57,7 +68,7 @@ type AuthenticationFilterSpec struct {
 
 // AuthType defines the authentication mechanism.
 //
-// +kubebuilder:validation:Enum=Basic;OIDC
+// +kubebuilder:validation:Enum=Basic;OIDC;JWT
 type AuthType string
 
 const (
@@ -65,6 +76,8 @@ const (
 	AuthTypeBasic AuthType = "Basic"
 	// AuthTypeOIDC is the OpenID Connect Authentication mechanism.
 	AuthTypeOIDC AuthType = "OIDC"
+	// AuthTypeJWT is the JWT Authentication mechanism.
+	AuthTypeJWT AuthType = "JWT"
 )
 
 // BasicAuth configures HTTP Basic Authentication.
@@ -232,6 +245,80 @@ type OIDCLogoutConfig struct {
 type LocalObjectReference struct {
 	// Name is the name of the referenced object.
 	Name string `json:"name"`
+}
+
+// JWTKeySource specifies the source of the keys used to verify JWT signatures.
+// +kubebuilder:validation:Enum=File;Remote
+type JWTKeySource string
+
+const (
+	// JWTKeySourceFile configures JWT to fetch JWKS from a local secret.
+	JWTKeySourceFile JWTKeySource = "File"
+	// JWTKeySourceRemote configures JWT to fetch JWKS from a remote source.
+	JWTKeySourceRemote JWTKeySource = "Remote"
+)
+
+// JWTAuth configures JWT-based authentication (NGINX Plus).
+// +kubebuilder:validation:XValidation:message="source File requires spec.file to be set.",rule="self.source != 'File' || has(self.file)"
+// +kubebuilder:validation:XValidation:message="source File must not set spec.remote.", rule="self.source != 'File' || !has(self.remote)"
+// +kubebuilder:validation:XValidation:message="source Remote requires spec.remote to be set.",rule="self.source != 'Remote' || has(self.remote)"
+// +kubebuilder:validation:XValidation:message="source Remote must not set spec.file.", rule="self.source != 'Remote' || !has(self.file)"
+//
+//nolint:lll
+type JWTAuth struct {
+	// File specifies local JWKS configuration.
+	// Required when Source == File.
+	//
+	// +optional
+	File *JWTFileKeySource `json:"file,omitempty"`
+
+	// KeyCache is the cache duration for keys.
+	// Configures `auth_jwt_key_cache` directive.
+	// https://nginx.org/en/docs/http/ngx_http_auth_jwt_module.html#auth_jwt_key_cache
+	// Example: "auth_jwt_key_cache 10m;".
+	//
+	// +optional
+	KeyCache *Duration `json:"keyCache,omitempty"`
+
+	// Remote specifies remote JWKS configuration.
+	// Required when Source == Remote.
+	//
+	// +optional
+	Remote *JWTRemoteKeySource `json:"remote,omitempty"`
+
+	// Realm used by NGINX `auth_jwt` directive
+	// https://nginx.org/en/docs/http/ngx_http_auth_jwt_module.html#auth_jwt
+	// Configures "realm="<realm_value>" in WWW-Authenticate header in error page location.
+	Realm string `json:"realm"`
+
+	// Source selects how JWT keys are provided: local file or remote JWKS.
+	Source JWTKeySource `json:"source"`
+}
+
+// JWTFileKeySource specifies local JWKS key configuration.
+type JWTFileKeySource struct {
+	// SecretRef references a Secret containing the JWKS.
+	SecretRef LocalObjectReference `json:"secretRef"`
+}
+
+// JWTRemoteKeySource specifies remote JWKS configuration.
+type JWTRemoteKeySource struct {
+	// URI is the JWKS endpoint.
+	//
+	//nolint:lll
+	// +kubebuilder:validation:Pattern=`^https:\/\/[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*(:[0-9]{1,5})?(\/[a-zA-Z0-9._~:\/?@!&'()*+,=-]*)?$`
+	URI string `json:"uri"`
+	// CACertificateRefs references a list of secrets containing trusted CA certificates
+	// in PEM format used to verify the server certificate of the JWKS endpoint.
+	// The referenced secrets must contain an entry with the key "ca.crt".
+	// Only one secret can be referenced currently.
+	// If not specified, the system CA bundle is used.
+	//
+	// Directive: https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_ssl_trusted_certificate
+	//
+	// +optional
+	// +kubebuilder:validation:MaxItems=1
+	CACertificateRefs []LocalObjectReference `json:"caCertificateRefs,omitempty"`
 }
 
 // AuthenticationFilterStatus defines the state of AuthenticationFilter.

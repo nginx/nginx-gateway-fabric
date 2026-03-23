@@ -257,7 +257,7 @@ func TestBuildGraph(t *testing.T) {
 			Namespace: testNs,
 			Name:      "basic-auth-secret",
 		},
-		Type: v1.SecretType(secrets.SecretTypeHtpasswd),
+		Type: v1.SecretTypeOpaque,
 		Data: map[string][]byte{
 			secrets.AuthKey: []byte("user:pass"),
 		},

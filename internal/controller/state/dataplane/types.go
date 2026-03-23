@@ -7,6 +7,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 
+	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/resolver"
@@ -276,6 +277,9 @@ type AuthenticationFilter struct {
 
 	// OIDC contains fields related to OIDC authentication.
 	OIDC *OIDCProvider
+
+	// JWT contains fields related to JWT authentication.
+	JWT *AuthJWT
 }
 
 // AuthBasic contains fields related to basic authentication.
@@ -336,6 +340,31 @@ type OIDCProvider struct {
 const (
 	oidcCallBack = "/oidc_callback"
 )
+
+type AuthJWT struct {
+	// KeyCache specifies the time to cache JSON Web Keys.
+	KeyCache *ngfAPIv1alpha1.Duration
+	// Remote holds the configuration for remote JWKS retrieval.
+	Remote *AuthJWTRemote
+	// SecretName is the name of the secret containing the JWT authentication data.
+	SecretName string
+	// SecretNamespace is the namespace of the secret containing the JWT authentication data.
+	SecretNamespace string
+	// Realm is the authentication realm. This is an arbitrary string displayed to users when prompting for credentials.
+	Realm string
+	// Data contains the JWT public key data required for authentication.
+	Data []byte
+}
+
+// AuthJWTRemote holds configuration for remote JWKS retrieval.
+type AuthJWTRemote struct {
+	// CACertBundlePath is the path to the CA certificate bundle for verification.
+	CACertBundlePath CertBundleID
+	// URI is the URI for the remote JWKS endpoint.
+	URI string
+	// Path is the internal path used for remote JWKS retrieval.
+	Path string
+}
 
 // HTTPHeader represents an HTTP header.
 type HTTPHeader struct {
