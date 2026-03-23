@@ -139,11 +139,10 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 		ports[healthcheckPort] = corev1.ProtocolTCP
 	}
 
-	// ports list will be empty if there are no listeners
-	// In this case, we don't want to create NGINX resources
+	// Do not create NGINX related resources if there are not listeners deinfed on the Gateway
 	var service *corev1.Service
 	var deployment client.Object
-	if len(ports) > 0 {
+	if len(gateway.Spec.Listeners) > 0 {
 		var err error
 		service, err = buildNginxService(
 			cloneObjectMeta(objectMeta),
