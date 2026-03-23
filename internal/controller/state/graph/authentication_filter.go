@@ -104,7 +104,6 @@ func validateAuthenticationFilter(
 	var conds []conditions.Condition
 	valid := true
 
-	//revive:disable-next-line:unnecessary-stmt future-proof switch form; additional auth types will be added
 	switch af.Spec.Type {
 	case ngfAPI.AuthTypeBasic:
 		authBasicSecretNsName := types.NamespacedName{Namespace: nsname.Namespace, Name: af.Spec.Basic.SecretRef.Name}
@@ -125,6 +124,8 @@ func validateAuthenticationFilter(
 				resourceResolver,
 				field.NewPath("spec.jwt.file.secretRef"),
 			)
+		} else if af.Spec.JWT.Source == ngfAPI.JWTKeySourceRemote && af.Spec.JWT.Remote != nil {
+			conds, valid = validateRemoteJWT(af, nsname, resourceResolver)
 		}
 	case ngfAPI.AuthTypeOIDC:
 		if !isPlus {
@@ -143,6 +144,32 @@ func validateAuthenticationFilter(
 	}
 
 	return conds, valid
+}
+
+func validateRemoteJWT(
+	af *ngfAPI.AuthenticationFilter,
+	nsname types.NamespacedName,
+	resourceResolver resolver.Resolver,
+) ([]conditions.Condition, bool) {
+	var allErrs field.ErrorList
+	for _, caCertRef := range af.Spec.JWT.Remote.CACertificateRefs {
+		caCertNsName := types.NamespacedName{Namespace: nsname.Namespace, Name: caCertRef.Name}
+		if err := resourceResolver.Resolve(resolver.ResourceTypeSecret, caCertNsName,
+			resolver.WithExpectedSecretKey(secrets.CAKey)); err != nil {
+			allErrs = append(allErrs, field.Invalid(
+				field.NewPath("spec.jwt.remote.caCertificateRefs"),
+				caCertRef.Name,
+				err.Error(),
+			))
+		}
+	}
+
+	if allErrs != nil {
+		cond := conditions.NewAuthenticationFilterInvalid(allErrs.ToAggregate().Error())
+		return []conditions.Condition{cond}, false
+	}
+
+	return nil, true
 }
 
 func resolveAuthenticationFilterSecret(

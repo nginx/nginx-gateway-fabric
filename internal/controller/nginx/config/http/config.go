@@ -205,8 +205,16 @@ type AuthBasic struct {
 // See https://nginx.org/en/docs/http/ngx_http_auth_jwt_module.html
 type AuthJWT struct {
 	KeyCache *ngfAPI.Duration
+	Remote   *AuthJWTRemote
 	Realm    string
 	File     string
+}
+
+// AuthJWTRemote holds configuration for remote JWKS retrieval.
+type AuthJWTRemote struct {
+	TrustedCertificate string
+	URI                string
+	Path               string
 }
 
 // ServerConfig holds configuration for an HTTP server and IP family to be used by NGINX.

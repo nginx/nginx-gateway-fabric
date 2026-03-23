@@ -11,6 +11,7 @@ import (
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/http"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/secrets"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/mirror"
@@ -307,24 +308,68 @@ func convertAuthenticationFilterJwtAuth(
 	referencedSecrets map[types.NamespacedName]*secrets.Secret,
 ) *AuthJWT {
 	var result *AuthJWT
-	if specJWT := filter.Source.Spec.JWT; specJWT != nil && specJWT.File != nil {
-		referencedSecret, isReferenced := referencedSecrets[types.NamespacedName{
-			Namespace: filter.Source.Namespace,
-			Name:      specJWT.File.SecretRef.Name,
-		}]
+	if specJWT := filter.Source.Spec.JWT; specJWT != nil {
+		if specJWT.Source == ngfAPI.JWTKeySourceFile && specJWT.File != nil {
+			// Handle File-based JWT (local JWKS)
+			referencedSecret, isReferenced := referencedSecrets[types.NamespacedName{
+				Namespace: filter.Source.Namespace,
+				Name:      specJWT.File.SecretRef.Name,
+			}]
 
-		if isReferenced && referencedSecret.Source != nil {
+			if isReferenced && referencedSecret.Source != nil {
+				result = &AuthJWT{
+					SecretName:      specJWT.File.SecretRef.Name,
+					SecretNamespace: referencedSecret.Source.Namespace,
+					Data:            referencedSecret.Source.Data[secrets.AuthKey],
+					Realm:           specJWT.Realm,
+					KeyCache:        specJWT.KeyCache,
+				}
+			}
+		} else if specJWT.Source == ngfAPI.JWTKeySourceRemote && specJWT.Remote != nil {
+			// Handle Remote JWT (remote JWKS)
+			remote := convertRemoteJWTJwtAuthFilter(specJWT, filter, referencedSecrets)
+
 			result = &AuthJWT{
-				SecretName:      specJWT.File.SecretRef.Name,
-				SecretNamespace: referencedSecret.Source.Namespace,
-				Data:            referencedSecret.Source.Data[secrets.AuthKey],
-				Realm:           specJWT.Realm,
-				KeyCache:        specJWT.KeyCache,
+				Realm:    specJWT.Realm,
+				KeyCache: specJWT.KeyCache,
+				Remote:   remote,
 			}
 		}
 	}
 
 	return result
+}
+
+func convertRemoteJWTJwtAuthFilter(
+	specJWT *ngfAPI.JWTAuth,
+	filter *graph.AuthenticationFilter,
+	referencedSecrets map[types.NamespacedName]*secrets.Secret,
+) *AuthJWTRemote {
+	remote := &AuthJWTRemote{
+		URI: specJWT.Remote.URI,
+		Path: fmt.Sprintf(
+			"%s-%s_%s_jwks_uri",
+			http.InternalRoutePathPrefix,
+			filter.Source.Namespace,
+			filter.Source.Name,
+		),
+	}
+
+	if len(specJWT.Remote.CACertificateRefs) > 0 {
+		for _, ref := range specJWT.Remote.CACertificateRefs {
+			referencedSecret, isReferenced := referencedSecrets[types.NamespacedName{
+				Namespace: filter.Source.Namespace,
+				Name:      ref.Name,
+			}]
+
+			if isReferenced && referencedSecret.Source != nil && referencedSecret.Source.Data[secrets.CAKey] != nil {
+				remote.CACertBundlePath = generateJWTRemoteTLSCABundleID(filter.Source.Namespace, ref.Name)
+				break
+			}
+		}
+	}
+
+	return remote
 }
 
 func convertDNSResolverAddresses(addresses []ngfAPIv1alpha2.DNSResolverAddress) []string {

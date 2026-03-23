@@ -112,43 +112,30 @@ spec:
                       Remote specifies remote JWKS configuration.
                       Required when Source == Remote.
                     properties:
-                      tls:
-                        description: TLS defines HTTPS client parameters for retrieving
-                          JWKS.
-                        properties:
-                          secretRef:
-                            description: |-
-                              SecretRef references a Secret containing client TLS cert and key.
-                              Expects secret type kubernetes.io/tls.
-                            properties:
-                              name:
-                                description: Name is the name of the referenced object.
-                                type: string
-                            required:
-                            - name
-                            type: object
-                          sni:
-                            default: true
-                            description: |-
-                              SNI controls server name indication.
-                              Configures `proxy_ssl_server_name` directive.
-                              https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_ssl_server_name
-                            type: boolean
-                          sniName:
-                            description: |-
-                              SNIName sets a custom SNI.
-                              By default, NGINX uses the host from proxy_pass.
-                              Configures `proxy_ssl_name` directive.
-                              https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_ssl_name
-                            type: string
-                          verify:
-                            default: true
-                            description: Verify controls server certificate verification.
-                            type: boolean
-                        type: object
+                      caCertificateRefs:
+                        description: |-
+                          CACertificateRefs references a list of secrets containing trusted CA certificates
+                          in PEM format used to verify the server certificate of the JWKS endpoint.
+                          The referenced secrets must contain an entry with the key "ca.crt".
+                          Only one secret can be referenced currently.
+                          If not specified, the system CA bundle is used.
+
+                          Directive: https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_ssl_trusted_certificate
+                        items:
+                          description: LocalObjectReference specifies a local Kubernetes
+                            object.
+                          properties:
+                            name:
+                              description: Name is the name of the referenced object.
+                              type: string
+                          required:
+                          - name
+                          type: object
+                        maxItems: 1
+                        type: array
                       uri:
                         description: URI is the JWKS endpoint.
-                        pattern: ^(?:https?:\/\/)?[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*(?::\d{1,5})?(?:\/[a-zA-Z0-9._~:\/?#\[\]@!$&'()*+,;=-]*)?$
+                        pattern: ^https:\/\/[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*(:[0-9]{1,5})?(\/[a-zA-Z0-9._~:\/?@!&'()*+,=-]*)?$
                         type: string
                     required:
                     - uri

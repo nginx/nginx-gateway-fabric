@@ -1311,6 +1311,87 @@ func TestConvertAuthenticationFilter(t *testing.T) {
 			},
 			expected: &AuthenticationFilter{},
 		},
+		{
+			name: "jwt auth remote valid with basic URI",
+			filter: &graph.AuthenticationFilter{
+				Source: &ngfAPIv1alpha1.AuthenticationFilter{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "af",
+						Namespace: "test",
+					},
+					Spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+						Type: ngfAPIv1alpha1.AuthTypeJWT,
+						JWT: &ngfAPIv1alpha1.JWTAuth{
+							Realm:  "my-realm",
+							Source: ngfAPIv1alpha1.JWTKeySourceRemote,
+							Remote: &ngfAPIv1alpha1.JWTRemoteKeySource{
+								URI: "https://idp.example.com/jwks",
+							},
+							KeyCache: helpers.GetPointer(ngfAPIv1alpha1.Duration("1h")),
+						},
+					},
+				},
+				Valid:      true,
+				Referenced: true,
+			},
+			referencedSecrets: nil,
+			expected: &AuthenticationFilter{
+				JWT: &AuthJWT{
+					Realm:    "my-realm",
+					KeyCache: helpers.GetPointer(ngfAPIv1alpha1.Duration("1h")),
+					Remote: &AuthJWTRemote{
+						URI:  "https://idp.example.com/jwks",
+						Path: "/_ngf-internal-test_af_jwks_uri",
+					},
+				},
+			},
+		},
+		{
+			name: "jwt auth remote valid with basic URI & CA Cert",
+			filter: &graph.AuthenticationFilter{
+				Source: &ngfAPIv1alpha1.AuthenticationFilter{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "af",
+						Namespace: "test",
+					},
+					Spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+						Type: ngfAPIv1alpha1.AuthTypeJWT,
+						JWT: &ngfAPIv1alpha1.JWTAuth{
+							Realm:  "my-realm",
+							Source: ngfAPIv1alpha1.JWTKeySourceRemote,
+							Remote: &ngfAPIv1alpha1.JWTRemoteKeySource{
+								URI: "https://idp.example.com/jwks",
+								CACertificateRefs: []ngfAPIv1alpha1.LocalObjectReference{
+									{Name: "jwt-ca-secret"},
+								},
+							},
+							KeyCache: helpers.GetPointer(ngfAPIv1alpha1.Duration("1h")),
+						},
+					},
+				},
+				Valid:      true,
+				Referenced: true,
+			},
+			referencedSecrets: map[types.NamespacedName]*secrets.Secret{
+				{Namespace: "test", Name: "jwt-ca-secret"}: {
+					Source: &apiv1.Secret{
+						ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "jwt-ca-secret"},
+						Data:       map[string][]byte{secrets.CAKey: []byte("ca-cert-pem")},
+					},
+				},
+			},
+			expected: &AuthenticationFilter{
+				JWT: &AuthJWT{
+					Realm:    "my-realm",
+					KeyCache: helpers.GetPointer(ngfAPIv1alpha1.Duration("1h")),
+					Remote: &AuthJWTRemote{
+						URI:              "https://idp.example.com/jwks",
+						Path:             "/_ngf-internal-test_af_jwks_uri",
+						CACertBundlePath: generateJWTRemoteTLSCABundleID("test", "jwt-ca-secret"),
+					},
+				},
+			},
+		},
 	}
 
 	for _, tc := range tests {

@@ -4,10 +4,14 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math/big"
+	"net/http"
 	"strings"
 	"time"
 
@@ -18,11 +22,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
-	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/v2/tests/framework"
 )
 
@@ -595,6 +597,8 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 			"authentication-filter/keycloak.yaml",
 		}
 
+		var ca framework.KeyPair
+
 		BeforeAll(func() {
 			if !*plusEnabled {
 				Skip("Skipping NGINX Plus AuthFilter tests on NGINX OSS")
@@ -603,10 +607,11 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 			// Generate self-signed CA and server TLS certificate for Keycloak
 			keycloakDNS := fmt.Sprintf("keycloak.%s.svc.cluster.local", namespace)
 
-			ca, err := framework.GenerateSelfSignedCACert("Keycloak Test CA")
+			var err error
+			ca, err = framework.GenerateSelfSignedCACert("Keycloak Test CA")
 			Expect(err).ToNot(HaveOccurred())
 
-			serverCert, err := framework.GenerateSignedServerCert(ca, keycloakDNS, []string{keycloakDNS})
+			serverCert, err := framework.GenerateSignedServerCert(ca, keycloakDNS, []string{keycloakDNS, "localhost"})
 			Expect(err).ToNot(HaveOccurred())
 
 			// Create the TLS secret for Keycloak to serve HTTPS
@@ -655,6 +660,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 			Expect(resourceManager.DeleteResources([]client.Object{
 				&core.Secret{ObjectMeta: metav1.ObjectMeta{Name: "keycloak-tls-cert", Namespace: namespace}},
 				&core.Secret{ObjectMeta: metav1.ObjectMeta{Name: "keycloak-ca-secret", Namespace: namespace}},
+				&core.Secret{ObjectMeta: metav1.ObjectMeta{Name: "jwks-client-cert", Namespace: namespace}},
 			})).To(Succeed())
 		})
 
@@ -975,17 +981,12 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 		})
 		When("valid JWT AuthenticationFilter is applied to the resources", func() {
 			var (
-				jwtHelper *JWTTestHelper
-				jwtSecret *core.Secret
-				jwtRoute  *gatewayv1.HTTPRoute
-				jwtFilter *ngfAPI.AuthenticationFilter
+				jwtHelper        *JWTTestHelper
+				jwtSecret        *core.Secret
+				jwtManifestFiles = []string{"authentication-filter/jwt-valid-auth.yaml"}
 			)
 
 			BeforeAll(func() {
-				if !*plusEnabled {
-					Skip("Skipping JWT AuthenticationFilter tests on NGINX OSS deployment (JWT requires NGINX Plus)")
-				}
-
 				var err error
 				// Generate JWT keys, JWKS, and token
 				jwtHelper, err = NewJWTTestHelper("test-key-id")
@@ -1003,90 +1004,20 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 					},
 				}
 
-				// Create AuthenticationFilter
-				jwtFilter = &ngfAPI.AuthenticationFilter{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "jwt-auth-file",
-						Namespace: namespace,
-					},
-					Spec: ngfAPI.AuthenticationFilterSpec{
-						Type: ngfAPI.AuthTypeJWT,
-						JWT: &ngfAPI.JWTAuth{
-							Realm:  "JWT Authentication",
-							Source: ngfAPI.JWTKeySourceFile,
-							File: &ngfAPI.JWTFileKeySource{
-								SecretRef: ngfAPI.LocalObjectReference{
-									Name: "jwks-secret",
-								},
-							},
-							KeyCache: helpers.GetPointer[ngfAPI.Duration]("10m"),
-						},
-					},
-				}
-
-				// Create HTTPRoute
-				jwtRoute = &gatewayv1.HTTPRoute{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "jwt-cafe-routes",
-						Namespace: namespace,
-					},
-					Spec: gatewayv1.HTTPRouteSpec{
-						CommonRouteSpec: gatewayv1.CommonRouteSpec{
-							ParentRefs: []gatewayv1.ParentReference{
-								{
-									Name: "auth-gateway",
-								},
-							},
-						},
-						Rules: []gatewayv1.HTTPRouteRule{
-							{
-								Matches: []gatewayv1.HTTPRouteMatch{
-									{
-										Path: &gatewayv1.HTTPPathMatch{
-											Type:  helpers.GetPointer(gatewayv1.PathMatchPathPrefix),
-											Value: helpers.GetPointer("/jwt-coffee"),
-										},
-									},
-								},
-								BackendRefs: []gatewayv1.HTTPBackendRef{
-									{
-										BackendRef: gatewayv1.BackendRef{
-											BackendObjectReference: gatewayv1.BackendObjectReference{
-												Name: "coffee",
-												Port: helpers.GetPointer[gatewayv1.PortNumber](80),
-											},
-										},
-									},
-								},
-								Filters: []gatewayv1.HTTPRouteFilter{
-									{
-										Type: gatewayv1.HTTPRouteFilterExtensionRef,
-										ExtensionRef: &gatewayv1.LocalObjectReference{
-											Group: "gateway.nginx.org",
-											Kind:  "AuthenticationFilter",
-											Name:  "jwt-auth-file",
-										},
-									},
-								},
-							},
-						},
-					},
-				}
-
-				// Apply resources
-				Expect(resourceManager.Apply([]client.Object{jwtSecret, jwtFilter, jwtRoute})).To(Succeed())
-				Expect(resourceManager.WaitForAppsToBeReady(namespace)).To(Succeed())
+				// Apply secret and manifest resources
+				Expect(resourceManager.Apply([]client.Object{jwtSecret})).To(Succeed())
+				Expect(resourceManager.ApplyFromFiles(jwtManifestFiles, namespace)).To(Succeed())
 			})
 
 			AfterAll(func() {
 				framework.AddNginxLogsAndEventsToReport(resourceManager, namespace)
 
 				// Delete resources
+				Expect(resourceManager.DeleteFromFiles(jwtManifestFiles, namespace)).To(Succeed())
+
 				ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.DeleteTimeout)
 				defer cancel()
 
-				Expect(resourceManager.Delete(ctx, jwtRoute, nil)).To(Succeed())
-				Expect(resourceManager.Delete(ctx, jwtFilter, nil)).To(Succeed())
 				Expect(resourceManager.Delete(ctx, jwtSecret, nil)).To(Succeed())
 
 				// Cleanup JWT helper (zero out sensitive data)
@@ -1185,88 +1116,11 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 		})
 
 		When("JWT AuthenticationFilter with incorrect secretRef is applied", func() {
-			var (
-				invalidJWTFilter *ngfAPI.AuthenticationFilter
-				invalidJWTRoute  *gatewayv1.HTTPRoute
-			)
+			invalidSecretManifestFiles := []string{"authentication-filter/jwt-invalid-secret.yaml"}
 
 			BeforeAll(func() {
-				if !*plusEnabled {
-					Skip("Skipping JWT AuthenticationFilter tests on NGINX OSS deployment (JWT requires NGINX Plus)")
-				}
-
-				// Create AuthenticationFilter with non-existent secret reference
-				invalidJWTFilter = &ngfAPI.AuthenticationFilter{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "jwt-auth-invalid-secret",
-						Namespace: namespace,
-					},
-					Spec: ngfAPI.AuthenticationFilterSpec{
-						Type: ngfAPI.AuthTypeJWT,
-						JWT: &ngfAPI.JWTAuth{
-							Realm:  "JWT Authentication",
-							Source: ngfAPI.JWTKeySourceFile,
-							File: &ngfAPI.JWTFileKeySource{
-								SecretRef: ngfAPI.LocalObjectReference{
-									Name: "non-existent-secret",
-								},
-							},
-							KeyCache: helpers.GetPointer[ngfAPI.Duration]("10m"),
-						},
-					},
-				}
-
-				// Create HTTPRoute
-				invalidJWTRoute = &gatewayv1.HTTPRoute{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "jwt-invalid-secret-route",
-						Namespace: namespace,
-					},
-					Spec: gatewayv1.HTTPRouteSpec{
-						CommonRouteSpec: gatewayv1.CommonRouteSpec{
-							ParentRefs: []gatewayv1.ParentReference{
-								{
-									Name: "auth-gateway",
-								},
-							},
-						},
-						Rules: []gatewayv1.HTTPRouteRule{
-							{
-								Matches: []gatewayv1.HTTPRouteMatch{
-									{
-										Path: &gatewayv1.HTTPPathMatch{
-											Type:  helpers.GetPointer(gatewayv1.PathMatchPathPrefix),
-											Value: helpers.GetPointer("/jwt-invalid-secret"),
-										},
-									},
-								},
-								BackendRefs: []gatewayv1.HTTPBackendRef{
-									{
-										BackendRef: gatewayv1.BackendRef{
-											BackendObjectReference: gatewayv1.BackendObjectReference{
-												Name: "coffee",
-												Port: helpers.GetPointer[gatewayv1.PortNumber](80),
-											},
-										},
-									},
-								},
-								Filters: []gatewayv1.HTTPRouteFilter{
-									{
-										Type: gatewayv1.HTTPRouteFilterExtensionRef,
-										ExtensionRef: &gatewayv1.LocalObjectReference{
-											Group: "gateway.nginx.org",
-											Kind:  "AuthenticationFilter",
-											Name:  "jwt-auth-invalid-secret",
-										},
-									},
-								},
-							},
-						},
-					},
-				}
-
-				// Apply resources
-				Expect(resourceManager.Apply([]client.Object{invalidJWTFilter, invalidJWTRoute})).To(Succeed())
+				// Apply manifest resources
+				Expect(resourceManager.ApplyFromFiles(invalidSecretManifestFiles, namespace)).To(Succeed())
 				Expect(resourceManager.WaitForAppsToBeReady(namespace)).To(Succeed())
 			})
 
@@ -1274,11 +1128,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 				framework.AddNginxLogsAndEventsToReport(resourceManager, namespace)
 
 				// Delete resources
-				ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.DeleteTimeout)
-				defer cancel()
-
-				Expect(resourceManager.Delete(ctx, invalidJWTRoute, nil)).To(Succeed())
-				Expect(resourceManager.Delete(ctx, invalidJWTFilter, nil)).To(Succeed())
+				Expect(resourceManager.DeleteFromFiles(invalidSecretManifestFiles, namespace)).To(Succeed())
 			})
 
 			Context("verify traffic returns 500 for misconfigured JWT filter", func() {
@@ -1301,101 +1151,11 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 		})
 
 		When("JWT AuthenticationFilter with invalid secret value is applied", func() {
-			var (
-				invalidJWKSSecret *core.Secret
-				invalidJWKSFilter *ngfAPI.AuthenticationFilter
-				invalidJWKSRoute  *gatewayv1.HTTPRoute
-			)
+			invalidJWKSManifestFiles := []string{"authentication-filter/jwt-invalid-jwks.yaml"}
 
 			BeforeAll(func() {
-				if !*plusEnabled {
-					Skip("Skipping JWT AuthenticationFilter tests on NGINX OSS deployment (JWT requires NGINX Plus)")
-				}
-
-				// Create Secret with invalid JWKS data
-				invalidJWKSSecret = &core.Secret{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "invalid-jwks-secret",
-						Namespace: namespace,
-					},
-					Type: core.SecretTypeOpaque,
-					StringData: map[string]string{
-						"auth": "invalid-jwks-data",
-					},
-				}
-
-				// Create AuthenticationFilter
-				invalidJWKSFilter = &ngfAPI.AuthenticationFilter{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "jwt-auth-invalid-jwks",
-						Namespace: namespace,
-					},
-					Spec: ngfAPI.AuthenticationFilterSpec{
-						Type: ngfAPI.AuthTypeJWT,
-						JWT: &ngfAPI.JWTAuth{
-							Realm:  "JWT Authentication",
-							Source: ngfAPI.JWTKeySourceFile,
-							File: &ngfAPI.JWTFileKeySource{
-								SecretRef: ngfAPI.LocalObjectReference{
-									Name: "invalid-jwks-secret",
-								},
-							},
-							KeyCache: helpers.GetPointer[ngfAPI.Duration]("10m"),
-						},
-					},
-				}
-
-				// Create HTTPRoute
-				invalidJWKSRoute = &gatewayv1.HTTPRoute{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "jwt-invalid-jwks-route",
-						Namespace: namespace,
-					},
-					Spec: gatewayv1.HTTPRouteSpec{
-						CommonRouteSpec: gatewayv1.CommonRouteSpec{
-							ParentRefs: []gatewayv1.ParentReference{
-								{
-									Name: "auth-gateway",
-								},
-							},
-						},
-						Rules: []gatewayv1.HTTPRouteRule{
-							{
-								Matches: []gatewayv1.HTTPRouteMatch{
-									{
-										Path: &gatewayv1.HTTPPathMatch{
-											Type:  helpers.GetPointer(gatewayv1.PathMatchPathPrefix),
-											Value: helpers.GetPointer("/jwt-invalid-jwks"),
-										},
-									},
-								},
-								BackendRefs: []gatewayv1.HTTPBackendRef{
-									{
-										BackendRef: gatewayv1.BackendRef{
-											BackendObjectReference: gatewayv1.BackendObjectReference{
-												Name: "coffee",
-												Port: helpers.GetPointer[gatewayv1.PortNumber](80),
-											},
-										},
-									},
-								},
-								Filters: []gatewayv1.HTTPRouteFilter{
-									{
-										Type: gatewayv1.HTTPRouteFilterExtensionRef,
-										ExtensionRef: &gatewayv1.LocalObjectReference{
-											Group: "gateway.nginx.org",
-											Kind:  "AuthenticationFilter",
-											Name:  "jwt-auth-invalid-jwks",
-										},
-									},
-								},
-							},
-						},
-					},
-				}
-
-				// Apply resources
-				Expect(resourceManager.Apply([]client.Object{invalidJWKSSecret, invalidJWKSFilter, invalidJWKSRoute})).To(Succeed())
+				// Apply manifest resources
+				Expect(resourceManager.ApplyFromFiles(invalidJWKSManifestFiles, namespace)).To(Succeed())
 				Expect(resourceManager.WaitForAppsToBeReady(namespace)).To(Succeed())
 			})
 
@@ -1403,12 +1163,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 				framework.AddNginxLogsAndEventsToReport(resourceManager, namespace)
 
 				// Delete resources
-				ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.DeleteTimeout)
-				defer cancel()
-
-				Expect(resourceManager.Delete(ctx, invalidJWKSRoute, nil)).To(Succeed())
-				Expect(resourceManager.Delete(ctx, invalidJWKSFilter, nil)).To(Succeed())
-				Expect(resourceManager.Delete(ctx, invalidJWKSSecret, nil)).To(Succeed())
+				Expect(resourceManager.DeleteFromFiles(invalidJWKSManifestFiles, namespace)).To(Succeed())
 			})
 
 			Context("verify traffic returns 401 for JWT filter with invalid JWKS", func() {
@@ -1427,6 +1182,221 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 						WithPolling(500 * time.Millisecond).
 						Should(Succeed())
 				})
+			})
+		})
+
+		When("valid JWT AuthenticationFilter with Remote source (Keycloak) is applied", func() {
+			var (
+				keycloakToken             string
+				keycloakPortForwardStopCh chan struct{}
+				jwtRemoteManifestFiles    = []string{
+					"authentication-filter/jwt-remote-auth.yaml",
+				}
+			)
+
+			BeforeAll(func() {
+				// Port forward to Keycloak for configuration
+				GinkgoWriter.Println("Setting up port-forward to Keycloak...")
+				pods, err := resourceManager.GetPods(namespace, client.MatchingLabels{
+					"app": "keycloak",
+				})
+				Expect(err).ToNot(HaveOccurred())
+				Expect(pods).ToNot(BeEmpty())
+				keycloakPodName := pods[0].Name
+
+				// Set up port forwarding using framework for token retrieval
+				keycloakPortForwardStopCh = make(chan struct{})
+				ports := []string{"9443:8443"}
+				err = framework.PortForward(resourceManager.K8sConfig, namespace, keycloakPodName, ports, keycloakPortForwardStopCh)
+				Expect(err).ToNot(HaveOccurred())
+
+				// Get JWT token for test user (realm is imported via ConfigMap)
+				GinkgoWriter.Println("Obtaining JWT token from Keycloak...")
+				Eventually(func() error {
+					var err error
+					keycloakToken, err = getKeycloakUserToken(ca.CertPEM)
+					if err != nil {
+						GinkgoWriter.Printf("Token retrieval attempt failed: %v\n", err)
+						return err
+					}
+					if keycloakToken == "" {
+						return fmt.Errorf("received empty token")
+					}
+					return nil
+				}).
+					WithTimeout(30*time.Second).
+					WithPolling(2*time.Second).
+					Should(Succeed(), "Should obtain JWT token from Keycloak")
+
+				GinkgoWriter.Printf("Successfully obtained token\n")
+
+				// Apply JWT Remote AuthenticationFilter and HTTPRoute
+				Expect(resourceManager.ApplyFromFiles(jwtRemoteManifestFiles, namespace)).To(Succeed())
+				Expect(resourceManager.WaitForAppsToBeReady(namespace)).To(Succeed())
+			})
+
+			AfterAll(func() {
+				framework.AddNginxLogsAndEventsToReport(resourceManager, namespace)
+
+				// Clean up port forward
+				if keycloakPortForwardStopCh != nil {
+					GinkgoWriter.Println("Cleaning up Keycloak port-forward...")
+					close(keycloakPortForwardStopCh)
+				}
+
+				// Delete resources
+				Expect(resourceManager.DeleteFromFiles(jwtRemoteManifestFiles, namespace)).To(Succeed())
+			})
+
+			Specify("JWT remote authenticationFilter is accepted", func() {
+				nsname := types.NamespacedName{Name: "jwt-remote-auth", Namespace: namespace}
+
+				Eventually(checkForAuthenticationFilterToBeAccepted).
+					WithArguments(nsname).
+					WithTimeout(timeoutConfig.GetStatusTimeout).
+					WithPolling(500*time.Millisecond).
+					Should(Succeed(), "jwt-remote-auth was not accepted")
+			})
+
+			Context("verify traffic with valid JWT Remote AuthenticationFilter configuration for HTTPRoutes", func() {
+				It("should successfully authenticate with valid JWT token from Keycloak", func() {
+					Eventually(
+						func() error {
+							return framework.ExpectRequestToSucceed(
+								timeoutConfig.RequestTimeout,
+								fmt.Sprintf("http://cafe.example.com:%d/jwt-remote-coffee", port),
+								address,
+								"URI: /jwt-remote-coffee",
+								framework.WithRequestHeaders(map[string]string{
+									"Authorization": fmt.Sprintf("Bearer %s", keycloakToken),
+								}))
+						}).
+						WithTimeout(timeoutConfig.RequestTimeout).
+						WithPolling(500 * time.Millisecond).
+						Should(Succeed())
+				})
+
+				It("should return 401 for invalid JWT token", func() {
+					Eventually(
+						func() error {
+							return framework.ExpectUnauthenticatedRequest(
+								timeoutConfig.RequestTimeout,
+								fmt.Sprintf("http://cafe.example.com:%d/jwt-remote-coffee", port),
+								address,
+								framework.WithRequestHeaders(map[string]string{
+									"Authorization": "Bearer invalid.jwt.token",
+								}))
+						}).
+						WithTimeout(timeoutConfig.RequestTimeout).
+						WithPolling(500 * time.Millisecond).
+						Should(Succeed())
+				})
+
+				It("should return 401 when no token is provided", func() {
+					Eventually(
+						func() error {
+							return framework.ExpectUnauthenticatedRequest(
+								timeoutConfig.RequestTimeout,
+								fmt.Sprintf("http://cafe.example.com:%d/jwt-remote-coffee", port),
+								address,
+							)
+						}).
+						WithTimeout(timeoutConfig.RequestTimeout).
+						WithPolling(500 * time.Millisecond).
+						Should(Succeed())
+				})
+
+				It("should allow access to unprotected endpoint without authentication", func() {
+					Eventually(
+						func() error {
+							return framework.ExpectRequestToSucceed(
+								timeoutConfig.RequestTimeout,
+								fmt.Sprintf("http://cafe.example.com:%d/jwt-remote-tea", port),
+								address,
+								"URI: /jwt-remote-tea",
+							)
+						}).
+						WithTimeout(timeoutConfig.RequestTimeout).
+						WithPolling(500 * time.Millisecond).
+						Should(Succeed())
+				})
+			})
+
+			Context("nginx directives", func() {
+				var conf *framework.Payload
+
+				BeforeAll(func() {
+					var err error
+					conf, err = resourceManager.GetNginxConfig(nginxPodName, namespace, "")
+					Expect(err).ToNot(HaveOccurred())
+				})
+
+				internalLocation := fmt.Sprintf("/_ngf-internal-%s_jwt-remote-auth_jwks_uri", namespace)
+				keycloakURL := fmt.Sprintf(
+					"https://keycloak.%s.svc.cluster.local:8443/realms/nginx-gateway/protocol/openid-connect/certs", namespace,
+				)
+				caCertPath := fmt.Sprintf("/etc/nginx/secrets/jwt_remote_tls_ca_%s_keycloak-ca-secret.crt", namespace)
+
+				DescribeTable("are set properly for",
+					func(expCfgs []framework.ExpectedNginxField) {
+						for _, expCfg := range expCfgs {
+							Expect(framework.ValidateNginxFieldExists(conf, expCfg)).To(Succeed())
+						}
+					},
+					Entry("JWT remote authentication", []framework.ExpectedNginxField{
+						{
+							Directive: "auth_jwt",
+							Value:     "JWT Remote Authentication",
+							File:      "http.conf",
+							Server:    "*.example.com",
+							Location:  "/jwt-remote-coffee",
+						},
+						{
+							Directive: "auth_jwt_key_request",
+							Value:     fmt.Sprintf("/_ngf-internal-%s_jwt-remote-auth_jwks_uri", namespace),
+							File:      "http.conf",
+							Server:    "*.example.com",
+							Location:  "/jwt-remote-coffee",
+						},
+						{
+							Directive: "auth_jwt_key_cache",
+							Value:     "10m",
+							File:      "http.conf",
+							Server:    "*.example.com",
+							Location:  "/jwt-remote-coffee",
+						},
+					}),
+					Entry("JWKS location block", []framework.ExpectedNginxField{
+						{
+							Directive: "proxy_pass",
+							Value:     keycloakURL,
+							File:      "http.conf",
+							Server:    "*.example.com",
+							Location:  internalLocation,
+						},
+						{
+							Directive: "proxy_ssl_trusted_certificate",
+							Value:     caCertPath,
+							File:      "http.conf",
+							Server:    "*.example.com",
+							Location:  internalLocation,
+						},
+						{
+							Directive: "proxy_ssl_verify",
+							Value:     "on",
+							File:      "http.conf",
+							Server:    "*.example.com",
+							Location:  internalLocation,
+						},
+						{
+							Directive: "proxy_ssl_server_name",
+							Value:     "on",
+							File:      "http.conf",
+							Server:    "*.example.com",
+							Location:  internalLocation,
+						},
+					}),
+				)
 			})
 		})
 	})
@@ -1554,4 +1524,74 @@ func (h *JWTTestHelper) Cleanup() {
 		h.PrivateKey = nil
 	}
 	h.Token = ""
+}
+
+// Keycloak helper functions for JWT remote authentication testing
+
+// getKeycloakUserToken obtains a JWT token for the test user.
+func getKeycloakUserToken(caCert []byte) (string, error) {
+	url := "https://localhost:9443/realms/nginx-gateway/protocol/openid-connect/token"
+
+	data := "client_id=cafe-app&username=testuser&password=testpassword&grant_type=password"
+
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, url, strings.NewReader(data))
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	httpClient, err := createSecureHTTPClient(caCert)
+	if err != nil {
+		return "", fmt.Errorf("failed to create HTTP client: %w", err)
+	}
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to get user token: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("failed to get user token: status code %d, body: %s", resp.StatusCode, string(body))
+	}
+
+	var result map[string]interface{}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return "", fmt.Errorf("failed to parse token response: %w", err)
+	}
+
+	token, ok := result["access_token"].(string)
+	if !ok {
+		return "", fmt.Errorf("access_token not found in response")
+	}
+
+	return token, nil
+}
+
+// createSecureHTTPClient creates an HTTP client that properly validates TLS certificates
+// using the provided CA certificate. This ensures secure communication with Keycloak.
+func createSecureHTTPClient(caCert []byte) (*http.Client, error) {
+	// Create a certificate pool and add the CA certificate
+	caCertPool := x509.NewCertPool()
+	if !caCertPool.AppendCertsFromPEM(caCert) {
+		return nil, fmt.Errorf("failed to add CA certificate to pool")
+	}
+
+	// Create TLS config with proper certificate verification
+	tlsConfig := &tls.Config{
+		RootCAs:    caCertPool,
+		MinVersion: tls.VersionTLS12,
+	}
+
+	return &http.Client{
+		Timeout: 30 * time.Second,
+		Transport: &http.Transport{
+			TLSClientConfig: tlsConfig,
+		},
+	}, nil
 }

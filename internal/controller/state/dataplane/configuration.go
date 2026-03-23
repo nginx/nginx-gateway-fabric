@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"maps"
 	"slices"
 	"sort"
 	"strings"
@@ -27,8 +28,8 @@ import (
 
 const (
 	wildcardHostname               = "~^"
-	alpineSSLRootCAPath            = "/etc/ssl/cert.pem"
 	defaultErrorLogLevel           = "info"
+	AlpineSSLRootCAPath            = "/etc/ssl/cert.pem"
 	DefaultWorkerConnections       = int32(1024)
 	DefaultNginxReadinessProbePort = int32(8081)
 	DefaultNginxReadinessProbePath = "/readyz"
@@ -73,10 +74,16 @@ func BuildConfiguration(
 	baseStreamConfig := buildBaseStreamConfig(gateway)
 
 	httpServers, sslServers, sslListenerHostnames := buildServers(gateway, g.ReferencedServices, g.ReferencedSecrets)
+
+	authCertBundles := make(map[CertBundleID]CertBundle)
+
 	oidcProvider, oidcCertBundles := buildOIDCProviderFromAuthenticationFilters(
 		g.AuthenticationFilters,
 		g.ReferencedSecrets,
 	)
+	maps.Copy(authCertBundles, oidcCertBundles)
+	maps.Copy(authCertBundles, buildJWTRemoteTLSCABundles(g.AuthenticationFilters, g.ReferencedSecrets))
+
 	backendGroups := buildBackendGroups(append(httpServers, sslServers...))
 
 	upstreams := buildUpstreams(
@@ -96,7 +103,7 @@ func BuildConfiguration(
 	certBundles := buildCertBundles(
 		buildRefCertificateBundles(g.ReferencedSecrets, g.ReferencedCaCertConfigMaps),
 		backendGroups,
-		oidcCertBundles,
+		authCertBundles,
 	)
 
 	config := Configuration{
@@ -396,6 +403,41 @@ func buildSSLKeyPairs(
 	return keyPairs
 }
 
+func buildJWTRemoteTLSCABundles(
+	authFilters map[types.NamespacedName]*graph.AuthenticationFilter,
+	secretsMap map[types.NamespacedName]*secrets.Secret,
+) map[CertBundleID]CertBundle {
+	bundles := make(map[CertBundleID]CertBundle)
+
+	for _, filter := range authFilters {
+		if !filter.Valid || filter.Source.Spec.JWT == nil {
+			continue
+		}
+
+		specJWT := filter.Source.Spec.JWT
+		if specJWT.Source != ngfAPIv1alpha1.JWTKeySourceRemote {
+			continue
+		}
+		if specJWT.Remote == nil || len(specJWT.Remote.CACertificateRefs) == 0 {
+			continue
+		}
+
+		for _, ref := range specJWT.Remote.CACertificateRefs {
+			secretNsName := types.NamespacedName{
+				Namespace: filter.Source.Namespace,
+				Name:      ref.Name,
+			}
+			secret := secretsMap[secretNsName]
+			if secret != nil && secret.Source != nil && secret.Source.Data[secrets.CAKey] != nil {
+				id := generateJWTRemoteTLSCABundleID(secretNsName.Namespace, secretNsName.Name)
+				bundles[id] = secret.Source.Data[secrets.CAKey]
+			}
+		}
+	}
+
+	return bundles
+}
+
 func buildRefCertificateBundles(
 	secretsMap map[types.NamespacedName]*secrets.Secret,
 	configMaps map[types.NamespacedName]*configmaps.CaCertConfigMap,
@@ -420,11 +462,11 @@ func buildRefCertificateBundles(
 func buildCertBundles(
 	refCertBundles []secrets.CertificateBundle,
 	backendGroups []BackendGroup,
-	oidcCertBundles map[CertBundleID]CertBundle,
+	authCertBundles map[CertBundleID]CertBundle,
 ) map[CertBundleID]CertBundle {
 	bundles := make(map[CertBundleID]CertBundle)
 
-	for id, cert := range oidcCertBundles {
+	for id, cert := range authCertBundles {
 		bundles[id] = cert
 	}
 
@@ -626,7 +668,7 @@ func convertBackendTLS(btp *graph.BackendTLSPolicy, gwNsName types.NamespacedNam
 	if btp.CaCertRef.Name != "" {
 		verify.CertBundleID = generateCertBundleID(btp.CaCertRef)
 	} else {
-		verify.RootCAPath = alpineSSLRootCAPath
+		verify.RootCAPath = AlpineSSLRootCAPath
 	}
 	verify.Hostname = string(btp.Source.Spec.Validation.Hostname)
 	return verify
@@ -1222,6 +1264,13 @@ func generateCRLBundleID(ref types.NamespacedName) CertBundleID {
 // IsCRLBundle reports whether this CertBundleID identifies a CRL bundle.
 func (id CertBundleID) IsCRLBundle() bool {
 	return strings.HasPrefix(string(id), crlBundleIDPrefix)
+}
+
+// generateJWTRemoteTLSCABundleID generates an ID for JWT remote TLS CA bundle based on the Secret namespaced name.
+// It is guaranteed to be unique per unique namespaced name.
+// The ID is safe to use as a file name.
+func generateJWTRemoteTLSCABundleID(namespace, secretName string) CertBundleID {
+	return CertBundleID(fmt.Sprintf("jwt_remote_tls_ca_%s_%s", namespace, secretName))
 }
 
 // GenerateAuthBasicFileID is used to generate IDs for basic auth files.

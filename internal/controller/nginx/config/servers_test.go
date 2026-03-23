@@ -216,7 +216,9 @@ func TestExecuteServers(t *testing.T) {
 	expectedResults := map[string]assertion{
 		httpConfigFile: func(g *WithT, data string) {
 			for expSubStr, expCount := range expSubStrings {
-				g.Expect(strings.Count(data, expSubStr)).To(Equal(expCount))
+				g.Expect(strings.Count(data, expSubStr)).To(
+					Equal(expCount), fmt.Sprintf("expected '%s' to appear %d times in generated config", expSubStr, expCount),
+				)
 			}
 		},
 		httpMatchVarsFile: func(g *WithT, data string) {
@@ -5411,6 +5413,177 @@ func TestGenerateCORSHeaders(t *testing.T) {
 			} else {
 				g.Expect(result).To(Equal(test.expected))
 			}
+		})
+	}
+}
+
+func TestExtractUniqueJWKSLocations(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		locations []http.Location
+		expected  []http.Location
+	}{
+		{
+			name:      "no locations with JWT",
+			locations: []http.Location{{Path: "/path1"}, {Path: "/path2"}},
+			expected:  nil,
+		},
+		{
+			name: "single location with remote JWT",
+			locations: []http.Location{
+				{
+					Path: "/path1",
+					AuthJWT: &http.AuthJWT{
+						Remote: &http.AuthJWTRemote{
+							URI:  "https://example.com/jwks",
+							Path: "/_ngf-internal-default_jwt-filter_jwks_uri",
+						},
+					},
+				},
+			},
+			expected: []http.Location{
+				{
+					Path:      "/_ngf-internal-default_jwt-filter_jwks_uri", // #nosec G101
+					Type:      http.InternalLocationType,
+					ProxyPass: "https://example.com/jwks",
+				},
+			},
+		},
+		{
+			name: "multiple locations with same JWT filter (should deduplicate)",
+			locations: []http.Location{
+				{
+					Path: "/path1",
+					AuthJWT: &http.AuthJWT{
+						Remote: &http.AuthJWTRemote{
+							URI:  "https://example.com/jwks",
+							Path: "/_ngf-internal-default_jwt-filter_jwks_uri",
+						},
+					},
+				},
+				{
+					Path: "/path2",
+					AuthJWT: &http.AuthJWT{
+						Remote: &http.AuthJWTRemote{
+							URI:  "https://example.com/jwks",
+							Path: "/_ngf-internal-default_jwt-filter_jwks_uri",
+						},
+					},
+				},
+			},
+			expected: []http.Location{
+				{
+					Path:      "/_ngf-internal-default_jwt-filter_jwks_uri", // #nosec G101
+					Type:      http.InternalLocationType,
+					ProxyPass: "https://example.com/jwks",
+				},
+			},
+		},
+		{
+			name: "multiple locations with different JWT filters",
+			locations: []http.Location{
+				{
+					Path: "/path1",
+					AuthJWT: &http.AuthJWT{
+						Remote: &http.AuthJWTRemote{
+							URI:  "https://example1.com/jwks",
+							Path: "/_ngf-internal-default_jwt-filter-1_jwks_uri",
+						},
+					},
+				},
+				{
+					Path: "/path2",
+					AuthJWT: &http.AuthJWT{
+						Remote: &http.AuthJWTRemote{
+							URI:  "https://example2.com/jwks",
+							Path: "/_ngf-internal-default_jwt-filter-2_jwks_uri",
+						},
+					},
+				},
+			},
+			expected: []http.Location{
+				{
+					Path:      "/_ngf-internal-default_jwt-filter-1_jwks_uri", // #nosec G101
+					Type:      http.InternalLocationType,
+					ProxyPass: "https://example1.com/jwks",
+				},
+				{
+					Path:      "/_ngf-internal-default_jwt-filter-2_jwks_uri", // #nosec G101
+					Type:      http.InternalLocationType,
+					ProxyPass: "https://example2.com/jwks",
+				},
+			},
+		},
+		{
+			name: "mixed locations with and without JWT",
+			locations: []http.Location{
+				{Path: "/path1"},
+				{
+					Path: "/path2",
+					AuthJWT: &http.AuthJWT{
+						Remote: &http.AuthJWTRemote{
+							URI:  "https://example.com/jwks",
+							Path: "/_ngf-internal-default_jwt-filter_jwks_uri",
+						},
+					},
+				},
+				{Path: "/path3"},
+			},
+			expected: []http.Location{
+				{
+					Path:      "/_ngf-internal-default_jwt-filter_jwks_uri", // #nosec G101
+					Type:      http.InternalLocationType,
+					ProxyPass: "https://example.com/jwks",
+				},
+			},
+		},
+		{
+			name: "JWT with file-based key (should be ignored)",
+			locations: []http.Location{
+				{
+					Path: "/path1",
+					AuthJWT: &http.AuthJWT{
+						File: "/etc/nginx/secrets/jwt-keys",
+					},
+				},
+			},
+			expected: nil,
+		},
+		{
+			name: "JWT with Trusted Certificate configuration",
+			locations: []http.Location{
+				{
+					Path: "/path1",
+					AuthJWT: &http.AuthJWT{
+						Remote: &http.AuthJWTRemote{
+							URI:                "https://example.com/jwks",
+							Path:               "/_ngf-internal-default_jwt-filter_jwks_uri",
+							TrustedCertificate: "/etc/nginx/certs/ca.crt",
+						},
+					},
+				},
+			},
+			expected: []http.Location{
+				{
+					Path:      "/_ngf-internal-default_jwt-filter_jwks_uri", // #nosec G101
+					Type:      http.InternalLocationType,
+					ProxyPass: "https://example.com/jwks",
+					ProxySSLVerify: &http.ProxySSLVerify{
+						TrustedCertificate: "/etc/nginx/certs/ca.crt",
+					},
+				},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+			result := extractUniqueJWKSLocations(test.locations)
+			g.Expect(result).To(Equal(test.expected))
 		})
 	}
 }
