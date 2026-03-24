@@ -7,7 +7,7 @@ spec:
   jwt:
     source: Remote
     remote:
-      uri: https://idp.example.com/realms/nginx-gateway/protocol/openid-connect/certs
+      uri: https://keycloak.default.svc.cluster.local:8443/realms/nginx-gateway/protocol/openid-connect/certs
       caCertificateRefs:
         - name: keycloak-secret
     realm: "nginx-gateway"
