@@ -559,7 +559,6 @@ func (p *NginxProvisioner) RegisterGateway(
 			return fmt.Errorf("error provisioning nginx resources: %w", err)
 		}
 	} else {
-		// Deprovision resources for invalid gateways or gateways with no listeners
 		if err := p.deprovisionNginxForInvalidGateway(ctx, gatewayNSName); err != nil {
 			return fmt.Errorf("error deprovisioning nginx resources: %w", err)
 		}

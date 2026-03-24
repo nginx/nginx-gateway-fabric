@@ -69,8 +69,6 @@ type resourceNames struct {
 }
 
 // buildNginxResourceObjects builds all the NGINX resource objects for a given Gateway and EffectiveNginxProxy.
-//
-
 func (p *NginxProvisioner) buildNginxResourceObjects(
 	resourceName string,
 	gateway *gatewayv1.Gateway,
