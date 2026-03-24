@@ -20,6 +20,7 @@ package conformance
 import (
 	"os"
 	"testing"
+	"time"
 
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
@@ -70,6 +71,7 @@ func TestConformance(t *testing.T) {
 	)
 
 	opts := conformance.DefaultOptions(t)
+	opts.TimeoutConfig.MaxTimeToConsistency = 3 * time.Minute
 
 	ipaddressType := gatewayv1.IPAddressType
 	opts.UnusableNetworkAddresses = []gatewayv1.GatewaySpecAddress{{Type: &ipaddressType, Value: unusableGatewayIPAddress}}
