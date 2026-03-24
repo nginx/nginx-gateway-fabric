@@ -1,0 +1,44 @@
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: invalid-jwks-secret
+type: Opaque
+stringData:
+  auth: "invalid-jwks-data"
+---
+apiVersion: gateway.nginx.org/v1alpha1
+kind: AuthenticationFilter
+metadata:
+  name: jwt-auth-invalid-jwks
+spec:
+  type: JWT
+  jwt:
+    realm: "JWT Authentication"
+    source: File
+    file:
+      secretRef:
+        name: invalid-jwks-secret
+    keyCache: 10m
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: jwt-invalid-jwks-route
+spec:
+  parentRefs:
+    - name: auth-gateway
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /jwt-invalid-jwks
+      backendRefs:
+        - name: coffee
+          port: 80
+      filters:
+        - type: ExtensionRef
+          extensionRef:
+            group: gateway.nginx.org
+            kind: AuthenticationFilter
+            name: jwt-auth-invalid-jwks

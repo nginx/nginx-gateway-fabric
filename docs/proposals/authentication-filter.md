@@ -126,7 +126,9 @@ type AuthenticationFilterList struct {
 
 // AuthenticationFilterSpec defines the desired configuration.
 // +kubebuilder:validation:XValidation:message="type Basic requires spec.basic to be set.",rule="self.type != 'Basic' || has(self.basic)"
+// +kubebuilder:validation:XValidation:message="type Basic must not set spec.jwt.", rule="self.type != 'Basic' || !has(self.jwt)"
 // +kubebuilder:validation:XValidation:message="type JWT requires spec.jwt to be set.",rule="self.type != 'JWT' || has(self.jwt)"
+// +kubebuilder:validation:XValidation:message="type JWT must not set spec.basic.", rule="self.type != 'JWT' || !has(self.basic)"
 //
 //nolint:lll
 type AuthenticationFilterSpec struct {
@@ -185,7 +187,9 @@ const (
 
 // JWTAuth configures JWT-based authentication (NGINX Plus).
 // +kubebuilder:validation:XValidation:message="source File requires spec.file to be set.",rule="self.source != 'File' || has(self.file)"
+// +kubebuilder:validation:XValidation:message="source File must not set spec.remote.", rule="self.source != 'File' || !has(self.remote)"
 // +kubebuilder:validation:XValidation:message="source Remote requires spec.remote to be set.",rule="self.source != 'Remote' || has(self.remote)"
+// +kubebuilder:validation:XValidation:message="source Remote must not set spec.file.", rule="self.source != 'Remote' || !has(self.file)"
 //
 //nolint:lll
 type JWTAuth struct {
@@ -207,7 +211,7 @@ type JWTAuth struct {
   // Required when Source == Remote.
   //
   // +optional
-  Remote *RemoteKeySource `json:"remote,omitempty"`
+  Remote *JWTRemoteKeySource `json:"remote,omitempty"`
 
   // Require defines claims that must match exactly (e.g. iss, aud).
   // These translate into NGINX maps and auth_jwt_require directives.
@@ -246,7 +250,7 @@ type JWTAuth struct {
   Realm string `json:"realm"`
 
   // Source selects how JWT keys are provided: local file or remote JWKS.
-  Source JWTKeyMode `json:"source"`
+  Source JWTKeySource `json:"source"`
 }
 
 // JWTFileKeySource specifies local JWKS key configuration.
@@ -255,15 +259,24 @@ type JWTFileKeySource struct {
   SecretRef LocalObjectReference `json:"secretRef"`
 }
 
- // RemoteKeySource specifies remote JWKS configuration.
-type RemoteKeySource struct {
-  // URI is the JWKS endpoint, e.g. "https://issuer.example.com/.well-known/jwks.json".
-  URI string `json:"url"`
-
-  // TLS defines HTTPS client parameters for retrieving JWKS.
+// JWTRemoteKeySource specifies remote JWKS configuration.
+type JWTRemoteKeySource struct {
+  // URI is the JWKS endpoint.
+  //
+  //nolint:lll
+  // +kubebuilder:validation:Pattern=`^https:\/\/[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*(:[0-9]{1,5})?(\/[a-zA-Z0-9._~:\/?@!&'()*+,=-]*)?$`
+  URI string `json:"uri"`
+  // CACertificateRefs references a list of secrets containing trusted CA certificates
+  // in PEM format used to verify the server certificate of the JWKS endpoint.
+  // The referenced secrets must contain an entry with the key "ca.crt".
+  // Only one secret can be referenced currently.
+  // If not specified, the system CA bundle is used.
+  //
+  // Directive: https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_ssl_trusted_certificate
   //
   // +optional
-  TLS *RemoteTLSConfig `json:"tls,omitempty"`
+  // +kubebuilder:validation:MaxItems=1
+  CACertificateRefs []LocalObjectReference `json:"caCertificateRefs,omitempty"`
 }
 
 // JWTRequiredClaims specifies exact-match requirements for JWT claims.
@@ -300,38 +313,6 @@ type JWTCustomClaim struct {
   Value  *string  `json:"value,omitempty"`
   // +optional
   Values []string `json:"values,omitempty"`
-}
-
-// RemoteTLSConfig defines TLS settings for remote JWKS retrieval.
-type RemoteTLSConfig struct {
-  // SecretRef references a Secret containing client TLS cert and key.
-  // Expectes secret type kubernetes.io/tls.
-  //
-  // +optional
-  SecretRef *gatewayv1.SecretObjectReference `json:"secretRef,omitempty"`
-
-
-  // Verify controls server certificate verification.
-  //
-  // +optional
-  // +kubebuilder:default=true
-  Verify *bool `json:"verify,omitempty"`
-
-  // SNI controls server name indication.
-  // Configures `proxy_ssl_server_name` directive.
-  // https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_ssl_server_name
-  //
-  // +optional
-  // +kubebuilder:default=true
-  SNI *bool `json:"sni,omitempty"`
-
-  // SNIName sets a custom SNI.
-  // By default, NGINX uses the host from proxy_pass.
-  // Configures `proxy_ssl_name` directive.
-  // https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_ssl_name
-  //
-  // +optional
-  SNIName *string `json:"sniName,omitempty"`
 }
 
 // AuthenticationFilterStatus defines the state of AuthenticationFilter.
@@ -532,7 +513,7 @@ spec:
 
 This configuration will access the public JSON Web Key Set (JWKS) from a remote server.
 This could be a self-hosted server or a hosted identity provider (IdP).
-To ensure a secure connection can be established to the remote JWKS URI, the `remote.tls` will allow users to define a secret of type `kubernetes.io/tls` with the TLS cert and key of their IdP.
+The `remote.uri` must use HTTPS. To verify the JWKS endpoint's server certificate with a custom CA, users can optionally reference a Secret containing the CA certificate in PEM format (key `ca.crt`) via `remote.caCertificateRefs`. If omitted, the system CA bundle is used.
 
 ```yaml
 apiVersion: gateway.nginx.org/v1alpha1
@@ -547,18 +528,13 @@ spec:
     source: Remote
     remote:
       uri: https://issuer.example.com/.well-known/jwks.json
-      tls:
-        secretRef:
-          name: cafe-secret
-        verify: true # Defaults to true
-        sni: true # Defaults to true
-        sniName: foo.bar.com # Defaults to server name in proxy_pass
+      # Optional: CA certificate for verifying the JWKS endpoint's TLS certificate.
+      # If omitted, the system CA bundle is used.
+      caCertificateRefs:
+        - name: idp-ca-secret
 ```
 
-Optionally, users can also toggle and configure SNI capabilities through `remote.tls.sni` and `remote.tls.sniName`.
-SNI will be enabled by default using the [proxy_ssl_server_name](https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_ssl_server_name) directive.
-By default, NGINX will use the server name defined in the `proxy_pass` when `proxy_ssl_server_name` is on.
-Users can optionally set a specific host using `remote.tls.sniName`, which will configure the [proxy_ssl_name](https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_ssl_name) directive
+The `remote.uri` must use HTTPS. To verify the JWKS endpoint's server certificate with a custom CA, reference a Secret containing the CA certificate in PEM format with the key `ca.crt` via `remote.caCertificateRefs`. If `caCertificateRefs` is omitted, the system CA bundle is used. Up to one CA certificate secret may be referenced.
 
 ### Secret creation and reference for JWT Auth
 
@@ -1069,7 +1045,7 @@ The table below summarizes the capabilities enabled by the current JWT Authentic
 | Enable JWT authentication and set realm | `spec.type = "JWT"`; `spec.jwt.realm` | `auth_jwt "<realm>"` | Currently does not expose defining `token` |
 | Provide JWT keys from local JWKS (Secret) | `spec.jwt.source = "File"`; `spec.jwt.file.secretRef.name`; Secret type `nginx.org/jwt`; data key `auth` | `auth_jwt_key_file /etc/nginx/secrets/jwt_auth_<namespace>_<secret-name>` | Secret must exist in same namespace and must be of type `nginx.org/jwt` |
 | Secret handling/validation for local JWKS | Secret type `nginx.org/jwt`; data key `auth`; `LocalObjectReference` | Validates presence/type/key; NGF loads JWKS into key file | Cross-namespace secrets not supported initially; future work may add `ReferenceGrant`-based access |
-| Provide JWT keys from remote JWKS | `spec.jwt.source = "Remote"`; `spec.jwt.remote.uri`; `spec.jwt.remote.tls.secretRef` (type `kubernetes.io/tls`); `spec.jwt.remote.tls.verify` (default `true`); `spec.jwt.remote.tls.sni` (default `true`); `spec.jwt.remote.tls.sniName` (optional; default to server name in `proxy_pass`) | `auth_jwt_key_request /_ngf-internal-<namespace>_<filter-name>_jwks_uri`; internal location `proxy_pass` to remote JWKS; optional client TLS. | Requires DNS resolver via `NginxProxy.spec.dnsResolver`; `verify` controls server cert verification; key caching optional |
+| Provide JWT keys from remote JWKS | `spec.jwt.source = "Remote"`; `spec.jwt.remote.uri` (HTTPS only); `spec.jwt.remote.caCertificateRefs[]` (optional; Secret with key `ca.crt`; max 1) | `auth_jwt_key_request /_ngf-internal-<namespace>_<filter-name>_jwks_uri`; internal location `proxy_pass` to remote JWKS; `proxy_ssl_trusted_certificate` set when CA ref provided. | Requires DNS resolver via `NginxProxy.spec.dnsResolver`; URI must be HTTPS; if `caCertificateRefs` is omitted, system CA bundle is used; key caching optional |
 | Configure DNS resolver for remote JWKS | `NginxProxy.spec.dnsResolver.addresses` (separate resource) | `resolver` set at `http` context for name resolution used by `auth_jwt_key_request` | Required for remote JWKS URIs; managed outside the filter |
 | Configure JWT key cache duration | `spec.jwt.keyCache` (Duration) | `auth_jwt_key_cache <duration>` | Disabled by default to avoid stale keys |
 | Configure acceptable clock skew for `exp`/`nbf` | `spec.jwt.leeway` (Duration) | `auth_jwt_leeway <duration>` | Applies only if `exp`/`nbf` claims are present; default `0s` |

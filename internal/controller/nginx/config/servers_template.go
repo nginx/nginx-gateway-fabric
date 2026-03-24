@@ -139,6 +139,18 @@ server {
         auth_oidc {{ $l.AuthOIDCProviderName }};
         {{- end }}
 
+        {{- if $l.AuthJWT }}
+        auth_jwt "{{ $l.AuthJWT.Realm }}";
+            {{- if $l.AuthJWT.Remote }}
+        auth_jwt_key_request {{ $l.AuthJWT.Remote.Path }};
+            {{- else if $l.AuthJWT.File }}
+        auth_jwt_key_file {{ $l.AuthJWT.File }};
+            {{- end }}
+            {{- if $l.AuthJWT.KeyCache }}
+        auth_jwt_key_cache {{ $l.AuthJWT.KeyCache }};
+            {{- end }}
+        {{- end }}
+
         {{ range $r := $l.Rewrites }}
         rewrite {{ $r }};
         {{- end }}
@@ -213,8 +225,12 @@ server {
             {{- if $l.ProxySSLVerify }}
         {{ $proxyOrGRPC }}_ssl_server_name on;
         {{ $proxyOrGRPC }}_ssl_verify on;
+                {{- if $l.ProxySSLVerify.Name}}
         {{ $proxyOrGRPC }}_ssl_name {{ $l.ProxySSLVerify.Name }};
+                {{- end }}
+                {{- if $l.ProxySSLVerify.TrustedCertificate }}
         {{ $proxyOrGRPC }}_ssl_trusted_certificate {{ $l.ProxySSLVerify.TrustedCertificate }};
+                {{- end }}
             {{- end }}
         {{- end }}
     }

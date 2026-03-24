@@ -4,12 +4,12 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"maps"
 	"slices"
 	"sort"
 	"strings"
 
 	"github.com/go-logr/logr"
-	coreV1 "k8s.io/api/core/v1"
 	discoveryV1 "k8s.io/api/discovery/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -28,8 +28,8 @@ import (
 
 const (
 	wildcardHostname               = "~^"
-	alpineSSLRootCAPath            = "/etc/ssl/cert.pem"
 	defaultErrorLogLevel           = "info"
+	AlpineSSLRootCAPath            = "/etc/ssl/cert.pem"
 	DefaultWorkerConnections       = int32(1024)
 	DefaultNginxReadinessProbePort = int32(8081)
 	DefaultNginxReadinessProbePath = "/readyz"
@@ -74,10 +74,16 @@ func BuildConfiguration(
 	baseStreamConfig := buildBaseStreamConfig(gateway)
 
 	httpServers, sslServers, sslListenerHostnames := buildServers(gateway, g.ReferencedServices, g.ReferencedSecrets)
+
+	authCertBundles := make(map[CertBundleID]CertBundle)
+
 	oidcProvider, oidcCertBundles := buildOIDCProviderFromAuthenticationFilters(
 		g.AuthenticationFilters,
 		g.ReferencedSecrets,
 	)
+	maps.Copy(authCertBundles, oidcCertBundles)
+	maps.Copy(authCertBundles, buildJWTRemoteTLSCABundles(g.AuthenticationFilters, g.ReferencedSecrets))
+
 	backendGroups := buildBackendGroups(append(httpServers, sslServers...))
 
 	upstreams := buildUpstreams(
@@ -97,7 +103,7 @@ func BuildConfiguration(
 	certBundles := buildCertBundles(
 		buildRefCertificateBundles(g.ReferencedSecrets, g.ReferencedCaCertConfigMaps),
 		backendGroups,
-		oidcCertBundles,
+		authCertBundles,
 	)
 
 	config := Configuration{
@@ -118,7 +124,7 @@ func BuildConfiguration(
 		),
 		BackendGroups:        backendGroups,
 		SSLKeyPairs:          buildSSLKeyPairs(g.ReferencedSecrets, gateway),
-		AuthSecrets:          buildAuthSecrets(g.ReferencedSecrets),
+		AuthSecrets:          buildAuthSecrets(g.AuthenticationFilters, g.ReferencedSecrets),
 		Telemetry:            buildTelemetry(g, gateway),
 		BaseHTTPConfig:       baseHTTPConfig,
 		BaseStreamConfig:     baseStreamConfig,
@@ -397,6 +403,41 @@ func buildSSLKeyPairs(
 	return keyPairs
 }
 
+func buildJWTRemoteTLSCABundles(
+	authFilters map[types.NamespacedName]*graph.AuthenticationFilter,
+	secretsMap map[types.NamespacedName]*secrets.Secret,
+) map[CertBundleID]CertBundle {
+	bundles := make(map[CertBundleID]CertBundle)
+
+	for _, filter := range authFilters {
+		if !filter.Valid || filter.Source.Spec.JWT == nil {
+			continue
+		}
+
+		specJWT := filter.Source.Spec.JWT
+		if specJWT.Source != ngfAPIv1alpha1.JWTKeySourceRemote {
+			continue
+		}
+		if specJWT.Remote == nil || len(specJWT.Remote.CACertificateRefs) == 0 {
+			continue
+		}
+
+		for _, ref := range specJWT.Remote.CACertificateRefs {
+			secretNsName := types.NamespacedName{
+				Namespace: filter.Source.Namespace,
+				Name:      ref.Name,
+			}
+			secret := secretsMap[secretNsName]
+			if secret != nil && secret.Source != nil && secret.Source.Data[secrets.CAKey] != nil {
+				id := generateJWTRemoteTLSCABundleID(secretNsName.Namespace, secretNsName.Name)
+				bundles[id] = secret.Source.Data[secrets.CAKey]
+			}
+		}
+	}
+
+	return bundles
+}
+
 func buildRefCertificateBundles(
 	secretsMap map[types.NamespacedName]*secrets.Secret,
 	configMaps map[types.NamespacedName]*configmaps.CaCertConfigMap,
@@ -421,11 +462,11 @@ func buildRefCertificateBundles(
 func buildCertBundles(
 	refCertBundles []secrets.CertificateBundle,
 	backendGroups []BackendGroup,
-	oidcCertBundles map[CertBundleID]CertBundle,
+	authCertBundles map[CertBundleID]CertBundle,
 ) map[CertBundleID]CertBundle {
 	bundles := make(map[CertBundleID]CertBundle)
 
-	for id, cert := range oidcCertBundles {
+	for id, cert := range authCertBundles {
 		bundles[id] = cert
 	}
 
@@ -463,19 +504,62 @@ func buildCertBundles(
 	return bundles
 }
 
-func buildAuthSecrets(secretsMap map[types.NamespacedName]*secrets.Secret) map[AuthFileID]AuthFileData {
-	authBasics := make(map[AuthFileID]AuthFileData, len(secretsMap))
+func buildAuthSecrets(
+	authenticationFilters map[types.NamespacedName]*graph.AuthenticationFilter,
+	secretsMap map[types.NamespacedName]*secrets.Secret,
+) map[AuthFileID]AuthFileData {
+	authFileData := make(map[AuthFileID]AuthFileData, len(authenticationFilters))
 
-	for nsname, secret := range secretsMap {
-		if secret != nil && secret.Source != nil &&
-			secret.Source.Type == coreV1.SecretType(secrets.SecretTypeHtpasswd) {
-			if data, exists := secret.Source.Data[secrets.AuthKey]; exists {
-				id := AuthFileID(fmt.Sprintf("%s_%s", nsname.Namespace, nsname.Name))
-				authBasics[id] = data
-			}
+	for _, filter := range authenticationFilters {
+		if filter == nil || filter.Source == nil {
+			continue
 		}
+
+		id, data := getAuthFileIDAndData(filter, secretsMap)
+
+		if id == "" || data == nil {
+			continue
+		}
+
+		authFileData[id] = data
 	}
-	return authBasics
+
+	return authFileData
+}
+
+func getAuthFileIDAndData(
+	filter *graph.AuthenticationFilter,
+	secretsMap map[types.NamespacedName]*secrets.Secret,
+) (authFileID AuthFileID, data []byte) {
+	secretNsName := types.NamespacedName{
+		Namespace: filter.Source.Namespace,
+	}
+
+	switch filter.Source.Spec.Type {
+	case ngfAPIv1alpha1.AuthTypeBasic:
+		if filter.Source.Spec.Basic == nil {
+			return "", nil
+		}
+		secretNsName.Name = filter.Source.Spec.Basic.SecretRef.Name
+		authFileID = GenerateAuthBasicFileID(secretNsName.Namespace, secretNsName.Name)
+	case ngfAPIv1alpha1.AuthTypeJWT:
+		if filter.Source.Spec.JWT == nil || filter.Source.Spec.JWT.File == nil {
+			return "", nil
+		}
+		secretNsName.Name = filter.Source.Spec.JWT.File.SecretRef.Name
+		authFileID = GenerateAuthJWTFileID(secretNsName.Namespace, secretNsName.Name)
+	}
+
+	secret := secretsMap[secretNsName]
+	if secret == nil || secret.Source == nil {
+		return "", nil
+	}
+	data, exists := secret.Source.Data[secrets.AuthKey]
+	if !exists {
+		return "", nil
+	}
+
+	return authFileID, data
 }
 
 func buildBackendGroups(servers []VirtualServer) []BackendGroup {
@@ -505,12 +589,11 @@ func buildBackendGroups(servers []VirtualServer) []BackendGroup {
 		}
 	}
 
-	numGroups := len(uniqueGroups)
 	if len(uniqueGroups) == 0 {
 		return nil
 	}
 
-	groups := make([]BackendGroup, 0, numGroups)
+	groups := make([]BackendGroup, 0, len(uniqueGroups))
 	for _, group := range uniqueGroups {
 		groups = append(groups, group)
 	}
@@ -585,7 +668,7 @@ func convertBackendTLS(btp *graph.BackendTLSPolicy, gwNsName types.NamespacedNam
 	if btp.CaCertRef.Name != "" {
 		verify.CertBundleID = generateCertBundleID(btp.CaCertRef)
 	} else {
-		verify.RootCAPath = alpineSSLRootCAPath
+		verify.RootCAPath = AlpineSSLRootCAPath
 	}
 	verify.Hostname = string(btp.Source.Spec.Validation.Hostname)
 	return verify
@@ -1183,9 +1266,21 @@ func (id CertBundleID) IsCRLBundle() bool {
 	return strings.HasPrefix(string(id), crlBundleIDPrefix)
 }
 
-// GenerateAuthFileID is used to generate IDs for both basic auth and jwt auth user files.
-func GenerateAuthFileID(namespace, name string) AuthFileID {
-	return AuthFileID(fmt.Sprintf("%s_%s", namespace, name))
+// generateJWTRemoteTLSCABundleID generates an ID for JWT remote TLS CA bundle based on the Secret namespaced name.
+// It is guaranteed to be unique per unique namespaced name.
+// The ID is safe to use as a file name.
+func generateJWTRemoteTLSCABundleID(namespace, secretName string) CertBundleID {
+	return CertBundleID(fmt.Sprintf("jwt_remote_tls_ca_%s_%s", namespace, secretName))
+}
+
+// GenerateAuthBasicFileID is used to generate IDs for basic auth files.
+func GenerateAuthBasicFileID(namespace, name string) AuthFileID {
+	return AuthFileID(fmt.Sprintf("basic_auth_%s_%s", namespace, name))
+}
+
+// GenerateAuthJWTFileID is used to generate IDs for jwt auth files.
+func GenerateAuthJWTFileID(namespace, name string) AuthFileID {
+	return AuthFileID(fmt.Sprintf("jwt_auth_%s_%s", namespace, name))
 }
 
 // buildOIDCProviderFromAuthenticationFilters builds the OIDC provider configs from the processed

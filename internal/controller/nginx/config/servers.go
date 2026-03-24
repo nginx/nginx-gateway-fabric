@@ -528,6 +528,9 @@ func createLocations(
 		locs = append(locs, createDefaultRootLocation())
 	}
 
+	// Add internal JWKS locations for remote JWT authentication
+	locs = append(locs, extractUniqueJWKSLocations(locs)...)
+
 	return locs, matchPairs, grpcServer
 }
 
@@ -1137,14 +1140,46 @@ func updateLocationAuthenticationFilter(
 	}
 
 	if authenticationFilter.Basic != nil {
-		id := dataplane.GenerateAuthFileID(
+		id := dataplane.GenerateAuthBasicFileID(
 			authenticationFilter.Basic.SecretNamespace,
 			authenticationFilter.Basic.SecretName,
 		)
 		location.AuthBasic = &http.AuthBasic{
 			Realm: authenticationFilter.Basic.Realm,
-			File:  generateAuthBasicFileName(id),
+			File:  generateAuthFileName(id),
 		}
+	}
+
+	if authenticationFilter.JWT != nil {
+		jwt := &http.AuthJWT{
+			Realm:    authenticationFilter.JWT.Realm,
+			KeyCache: authenticationFilter.JWT.KeyCache,
+		}
+
+		if authenticationFilter.JWT.Remote != nil {
+			remote := &http.AuthJWTRemote{
+				URI:  authenticationFilter.JWT.Remote.URI,
+				Path: authenticationFilter.JWT.Remote.Path,
+			}
+
+			if authenticationFilter.JWT.Remote.CACertBundlePath != "" {
+				remote.TrustedCertificate = generateCertBundleFileName(
+					authenticationFilter.JWT.Remote.CACertBundlePath,
+				)
+			} else {
+				remote.TrustedCertificate = dataplane.AlpineSSLRootCAPath
+			}
+
+			jwt.Remote = remote
+		} else {
+			id := dataplane.GenerateAuthJWTFileID(
+				authenticationFilter.JWT.SecretNamespace,
+				authenticationFilter.JWT.SecretName,
+			)
+			jwt.File = generateAuthFileName(id)
+		}
+
+		location.AuthJWT = jwt
 	}
 
 	if authenticationFilter.OIDC != nil {
@@ -1181,6 +1216,39 @@ func updateLocationMirrorRoute(location http.Location, path string, grpc bool) h
 	}
 
 	return location
+}
+
+// extractUniqueJWKSLocations extracts unique internal JWKS locations from a list of locations.
+// This prevents duplicate NGINX location blocks when multiple locations reference the same AuthenticationFilter.
+func extractUniqueJWKSLocations(locations []http.Location) []http.Location {
+	seen := make(map[string]string) // map of path to remoteURI
+	var result []http.Location
+
+	for _, loc := range locations {
+		if loc.AuthJWT != nil && loc.AuthJWT.Remote != nil {
+			path := loc.AuthJWT.Remote.Path
+
+			if _, exists := seen[path]; !exists {
+				seen[path] = loc.AuthJWT.Remote.URI
+
+				jwksLocation := http.Location{
+					Path:      path,
+					Type:      http.InternalLocationType,
+					ProxyPass: loc.AuthJWT.Remote.URI,
+				}
+
+				if loc.AuthJWT.Remote.TrustedCertificate != "" {
+					jwksLocation.ProxySSLVerify = &http.ProxySSLVerify{
+						TrustedCertificate: loc.AuthJWT.Remote.TrustedCertificate,
+					}
+				}
+
+				result = append(result, jwksLocation)
+			}
+		}
+	}
+
+	return result
 }
 
 func updateLocationRedirectFilter(

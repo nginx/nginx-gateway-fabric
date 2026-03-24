@@ -11,6 +11,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 
+	"github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/http"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/policiesfakes"
@@ -76,7 +77,7 @@ func TestExecuteServers(t *testing.T) {
 										Basic: &dataplane.AuthBasic{
 											SecretName:      "auth-basic-filter",
 											SecretNamespace: "test-ns",
-											Realm:           "Restricted",
+											Realm:           "Basic Restricted",
 											Data:            []byte("user:$apr1$cred"),
 										},
 									},
@@ -162,6 +163,17 @@ func TestExecuteServers(t *testing.T) {
 										},
 									},
 								},
+								Filters: dataplane.HTTPFilters{
+									AuthenticationFilter: &dataplane.AuthenticationFilter{
+										JWT: &dataplane.AuthJWT{
+											SecretName:      "auth-jwt-filter",
+											SecretNamespace: "test-ns",
+											Realm:           "JWT Restricted",
+											KeyCache:        helpers.GetPointer(v1alpha1.Duration("10s")),
+											Data:            []byte("token"),
+										},
+									},
+								},
 							},
 						},
 					},
@@ -184,15 +196,18 @@ func TestExecuteServers(t *testing.T) {
 		"ssl_certificate_key /etc/nginx/secrets/test-keypair.pem;": 2,
 		"ssl_protocols TLSv1.2 TLSv1.3;":                           1,
 		"ssl_ciphers ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384:HIGH:!aNULL:!MD5;": 1,
-		"ssl_prefer_server_ciphers on;":                                      1,
-		"proxy_ssl_server_name on;":                                          1,
-		"status_zone":                                                        0,
-		"include /etc/nginx/includes/location-snippet.conf":                  1,
-		"include /etc/nginx/includes/server-snippet.conf":                    1,
-		"auth_basic \"Restricted\";":                                         1,
-		"auth_basic_user_file /etc/nginx/secrets/test-ns_auth-basic-filter;": 1,
-		"mirror /_ngf-internal-mirror-my-backend-test/route1-0;":             1,
-		"if ($__ngf_internal_mirror_my_backend_test_route1_0_50_00 = \"\")":  1,
+		"ssl_prefer_server_ciphers on;":                     1,
+		"proxy_ssl_server_name on;":                         1,
+		"status_zone":                                       0,
+		"include /etc/nginx/includes/location-snippet.conf": 1,
+		"include /etc/nginx/includes/server-snippet.conf":   1,
+		"auth_basic \"Basic Restricted\";":                  1,
+		"auth_basic_user_file /etc/nginx/secrets/basic_auth_test-ns_auth-basic-filter;": 1,
+		"auth_jwt \"JWT Restricted\";":                                           1,
+		"auth_jwt_key_file /etc/nginx/secrets/jwt_auth_test-ns_auth-jwt-filter;": 1,
+		"auth_jwt_key_cache 10s;":                                                1,
+		"mirror /_ngf-internal-mirror-my-backend-test/route1-0;":                 1,
+		"if ($__ngf_internal_mirror_my_backend_test_route1_0_50_00 = \"\")":      1,
 		"return 204": 1,
 	}
 
@@ -201,7 +216,9 @@ func TestExecuteServers(t *testing.T) {
 	expectedResults := map[string]assertion{
 		httpConfigFile: func(g *WithT, data string) {
 			for expSubStr, expCount := range expSubStrings {
-				g.Expect(strings.Count(data, expSubStr)).To(Equal(expCount))
+				g.Expect(strings.Count(data, expSubStr)).To(
+					Equal(expCount), fmt.Sprintf("expected '%s' to appear %d times in generated config", expSubStr, expCount),
+				)
 			}
 		},
 		httpMatchVarsFile: func(g *WithT, data string) {
@@ -5400,6 +5417,177 @@ func TestGenerateCORSHeaders(t *testing.T) {
 	}
 }
 
+func TestExtractUniqueJWKSLocations(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		locations []http.Location
+		expected  []http.Location
+	}{
+		{
+			name:      "no locations with JWT",
+			locations: []http.Location{{Path: "/path1"}, {Path: "/path2"}},
+			expected:  nil,
+		},
+		{
+			name: "single location with remote JWT",
+			locations: []http.Location{
+				{
+					Path: "/path1",
+					AuthJWT: &http.AuthJWT{
+						Remote: &http.AuthJWTRemote{
+							URI:  "https://example.com/jwks",
+							Path: "/_ngf-internal-default_jwt-filter_jwks_uri",
+						},
+					},
+				},
+			},
+			expected: []http.Location{
+				{
+					Path:      "/_ngf-internal-default_jwt-filter_jwks_uri", // #nosec G101
+					Type:      http.InternalLocationType,
+					ProxyPass: "https://example.com/jwks",
+				},
+			},
+		},
+		{
+			name: "multiple locations with same JWT filter (should deduplicate)",
+			locations: []http.Location{
+				{
+					Path: "/path1",
+					AuthJWT: &http.AuthJWT{
+						Remote: &http.AuthJWTRemote{
+							URI:  "https://example.com/jwks",
+							Path: "/_ngf-internal-default_jwt-filter_jwks_uri",
+						},
+					},
+				},
+				{
+					Path: "/path2",
+					AuthJWT: &http.AuthJWT{
+						Remote: &http.AuthJWTRemote{
+							URI:  "https://example.com/jwks",
+							Path: "/_ngf-internal-default_jwt-filter_jwks_uri",
+						},
+					},
+				},
+			},
+			expected: []http.Location{
+				{
+					Path:      "/_ngf-internal-default_jwt-filter_jwks_uri", // #nosec G101
+					Type:      http.InternalLocationType,
+					ProxyPass: "https://example.com/jwks",
+				},
+			},
+		},
+		{
+			name: "multiple locations with different JWT filters",
+			locations: []http.Location{
+				{
+					Path: "/path1",
+					AuthJWT: &http.AuthJWT{
+						Remote: &http.AuthJWTRemote{
+							URI:  "https://example1.com/jwks",
+							Path: "/_ngf-internal-default_jwt-filter-1_jwks_uri",
+						},
+					},
+				},
+				{
+					Path: "/path2",
+					AuthJWT: &http.AuthJWT{
+						Remote: &http.AuthJWTRemote{
+							URI:  "https://example2.com/jwks",
+							Path: "/_ngf-internal-default_jwt-filter-2_jwks_uri",
+						},
+					},
+				},
+			},
+			expected: []http.Location{
+				{
+					Path:      "/_ngf-internal-default_jwt-filter-1_jwks_uri", // #nosec G101
+					Type:      http.InternalLocationType,
+					ProxyPass: "https://example1.com/jwks",
+				},
+				{
+					Path:      "/_ngf-internal-default_jwt-filter-2_jwks_uri", // #nosec G101
+					Type:      http.InternalLocationType,
+					ProxyPass: "https://example2.com/jwks",
+				},
+			},
+		},
+		{
+			name: "mixed locations with and without JWT",
+			locations: []http.Location{
+				{Path: "/path1"},
+				{
+					Path: "/path2",
+					AuthJWT: &http.AuthJWT{
+						Remote: &http.AuthJWTRemote{
+							URI:  "https://example.com/jwks",
+							Path: "/_ngf-internal-default_jwt-filter_jwks_uri",
+						},
+					},
+				},
+				{Path: "/path3"},
+			},
+			expected: []http.Location{
+				{
+					Path:      "/_ngf-internal-default_jwt-filter_jwks_uri", // #nosec G101
+					Type:      http.InternalLocationType,
+					ProxyPass: "https://example.com/jwks",
+				},
+			},
+		},
+		{
+			name: "JWT with file-based key (should be ignored)",
+			locations: []http.Location{
+				{
+					Path: "/path1",
+					AuthJWT: &http.AuthJWT{
+						File: "/etc/nginx/secrets/jwt-keys",
+					},
+				},
+			},
+			expected: nil,
+		},
+		{
+			name: "JWT with Trusted Certificate configuration",
+			locations: []http.Location{
+				{
+					Path: "/path1",
+					AuthJWT: &http.AuthJWT{
+						Remote: &http.AuthJWTRemote{
+							URI:                "https://example.com/jwks",
+							Path:               "/_ngf-internal-default_jwt-filter_jwks_uri",
+							TrustedCertificate: "/etc/nginx/certs/ca.crt",
+						},
+					},
+				},
+			},
+			expected: []http.Location{
+				{
+					Path:      "/_ngf-internal-default_jwt-filter_jwks_uri", // #nosec G101
+					Type:      http.InternalLocationType,
+					ProxyPass: "https://example.com/jwks",
+					ProxySSLVerify: &http.ProxySSLVerify{
+						TrustedCertificate: "/etc/nginx/certs/ca.crt",
+					},
+				},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+			result := extractUniqueJWKSLocations(test.locations)
+			g.Expect(result).To(Equal(test.expected))
+		})
+	}
+}
+
 func TestUpdateLocationCORSFilter(t *testing.T) {
 	t.Parallel()
 
@@ -5613,7 +5801,7 @@ func TestUpdateLocationAuthenticationFilter(t *testing.T) {
 				Type: http.ExternalLocationType,
 				AuthBasic: &http.AuthBasic{
 					Realm: "Restricted",
-					File:  "/etc/nginx/secrets/test-ns_auth-secret",
+					File:  "/etc/nginx/secrets/basic_auth_test-ns_auth-secret",
 				},
 			},
 		},

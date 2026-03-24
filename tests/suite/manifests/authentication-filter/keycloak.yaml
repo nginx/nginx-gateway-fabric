@@ -38,6 +38,13 @@ data:
           "standardFlowEnabled": true,
           "redirectUris": ["https://cafe.example.com/*"],
           "webOrigins": ["https://cafe.example.com"]
+        },
+        {
+          "clientId": "cafe-app",
+          "enabled": true,
+          "publicClient": true,
+          "directAccessGrantsEnabled": true,
+          "standardFlowEnabled": true
         }
       ],
       "users": [
