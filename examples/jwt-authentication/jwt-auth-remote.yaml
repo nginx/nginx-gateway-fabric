@@ -1,0 +1,14 @@
+apiVersion: gateway.nginx.org/v1alpha1
+kind: AuthenticationFilter
+metadata:
+  name: jwt-auth-remote
+spec:
+  type: JWT
+  jwt:
+    source: Remote
+    remote:
+      uri: https://idp.example.com/realms/nginx-gateway/protocol/openid-connect/certs
+      caCertificateRefs:
+        - name: keycloak-secret
+    realm: "nginx-gateway"
+    keyCache: "1h"
