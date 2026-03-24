@@ -189,11 +189,7 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 		objects = append(objects, openshiftObjs...)
 	}
 
-	// Only add service if it was created
-	if service != nil {
-		objects = append(objects, service)
-	}
-	objects = append(objects, deployment)
+	objects = append(objects, service, deployment)
 
 	if hpa := p.buildHPA(objectMeta, nProxyCfg); hpa != nil {
 		if err := p.setOwnerReference(hpa, gateway); err != nil {

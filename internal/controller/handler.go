@@ -319,28 +319,25 @@ func (h *eventHandlerImpl) waitForStatusUpdates(ctx context.Context) {
 			var gwAddresses []gatewayv1.GatewayStatusAddress
 			var err error
 
-			// Only get addresses if the gateway has listeners
-			if len(gw.Listeners) > 0 {
-				gwAddresses, err = getGatewayAddresses(
-					ctx,
-					h.cfg.k8sClient,
+			gwAddresses, err = getGatewayAddresses(
+				ctx,
+				h.cfg.k8sClient,
+				item.GatewayService,
+				gw,
+				h.cfg.gatewayClassName,
+			)
+			if err != nil {
+				msg := "error getting Gateway Service IP address"
+				h.cfg.logger.Error(err, msg)
+				h.cfg.eventRecorder.Eventf(
 					item.GatewayService,
-					gw,
-					h.cfg.gatewayClassName,
+					gw.Source,
+					v1.EventTypeWarning,
+					"GetServiceIPFailed",
+					"None",
+					msg+": %s",
+					err.Error(),
 				)
-				if err != nil {
-					msg := "error getting Gateway Service IP address"
-					h.cfg.logger.Error(err, msg)
-					h.cfg.eventRecorder.Eventf(
-						item.GatewayService,
-						gw.Source,
-						v1.EventTypeWarning,
-						"GetServiceIPFailed",
-						"None",
-						msg+": %s",
-						err.Error(),
-					)
-				}
 			}
 
 			transitionTime := metav1.Now()
@@ -370,22 +367,19 @@ func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph, 
 	var gwAddresses []gatewayv1.GatewayStatusAddress
 	var err error
 
-	// Only get addresses if the gateway has listeners
-	if len(gw.Listeners) > 0 {
-		gwAddresses, err = getGatewayAddresses(ctx, h.cfg.k8sClient, nil, gw, h.cfg.gatewayClassName)
-		if err != nil {
-			msg := "error getting Gateway Service IP address"
-			h.cfg.logger.Error(err, msg)
-			h.cfg.eventRecorder.Eventf(
-				&v1.Service{},
-				gw.Source,
-				v1.EventTypeWarning,
-				"GetServiceIPFailed",
-				"None",
-				msg+": %s",
-				err.Error(),
-			)
-		}
+	gwAddresses, err = getGatewayAddresses(ctx, h.cfg.k8sClient, nil, gw, h.cfg.gatewayClassName)
+	if err != nil {
+		msg := "error getting Gateway Service IP address"
+		h.cfg.logger.Error(err, msg)
+		h.cfg.eventRecorder.Eventf(
+			&v1.Service{},
+			gw.Source,
+			v1.EventTypeWarning,
+			"GetServiceIPFailed",
+			"None",
+			msg+": %s",
+			err.Error(),
+		)
 	}
 
 	routeReqs := status.PrepareRouteRequests(
@@ -547,6 +541,8 @@ func (h *eventHandlerImpl) updateControlPlaneAndSetStatus(
 }
 
 // getGatewayAddresses gets the addresses for the Gateway.
+//
+//nolint:gocyclo
 func getGatewayAddresses(
 	ctx context.Context,
 	k8sClient client.Client,
@@ -554,7 +550,7 @@ func getGatewayAddresses(
 	gateway *graph.Gateway,
 	gatewayClassName string,
 ) ([]gatewayv1.GatewayStatusAddress, error) {
-	if gateway == nil {
+	if gateway == nil || len(gateway.Listeners) == 0 {
 		return nil, nil
 	}
 

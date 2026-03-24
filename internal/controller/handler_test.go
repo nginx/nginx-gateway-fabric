@@ -849,6 +849,9 @@ var _ = Describe("getGatewayAddresses", func() {
 					},
 				},
 			},
+			Listeners: []*graph.Listener{
+				{},
+			},
 		}
 
 		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)

@@ -380,34 +380,35 @@ func (p *NginxProvisioner) reprovisionNginx(
 	if !p.isLeader() {
 		return nil
 	}
-	if len(gateway.Spec.Listeners) > 0 {
-		objects, err := p.buildNginxResourceObjects(resourceName, gateway, nProxyCfg)
-		if err != nil {
-			p.cfg.Logger.Error(err, "error provisioning some nginx resources")
-		}
+	if len(gateway.Spec.Listeners) == 0 {
+		return nil
+	}
+	objects, err := p.buildNginxResourceObjects(resourceName, gateway, nProxyCfg)
+	if err != nil {
+		p.cfg.Logger.Error(err, "error provisioning some nginx resources")
+	}
 
-		p.cfg.Logger.Info(
-			"Re-creating nginx resources",
-			"namespace", gateway.GetNamespace(),
-			"name", resourceName,
-		)
+	p.cfg.Logger.Info(
+		"Re-creating nginx resources",
+		"namespace", gateway.GetNamespace(),
+		"name", resourceName,
+	)
 
-		createCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-		defer cancel()
+	createCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
 
-		for _, obj := range objects {
-			if err := p.k8sClient.Create(createCtx, obj); err != nil && !apierrors.IsAlreadyExists(err) {
-				p.cfg.EventRecorder.Eventf(
-					obj,
-					gateway,
-					corev1.EventTypeWarning,
-					"CreateFailed",
-					"None",
-					"Failed to create nginx resource: %s",
-					err.Error(),
-				)
-				return err
-			}
+	for _, obj := range objects {
+		if err := p.k8sClient.Create(createCtx, obj); err != nil && !apierrors.IsAlreadyExists(err) {
+			p.cfg.EventRecorder.Eventf(
+				obj,
+				gateway,
+				corev1.EventTypeWarning,
+				"CreateFailed",
+				"None",
+				"Failed to create nginx resource: %s",
+				err.Error(),
+			)
+			return err
 		}
 	}
 
