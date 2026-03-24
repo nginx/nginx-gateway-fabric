@@ -207,7 +207,8 @@ func (h *eventHandlerImpl) sendNginxConfig(ctx context.Context, logger logr.Logg
 			}
 		}()
 
-		if !gw.Valid {
+		// If no listeners or invalid, update status but skip config generation
+		if len(gw.Listeners) == 0 || !gw.Valid {
 			obj := &status.QueueObject{
 				Deployment: status.Deployment{
 					NamespacedName: gw.DeploymentName,
@@ -216,7 +217,7 @@ func (h *eventHandlerImpl) sendNginxConfig(ctx context.Context, logger logr.Logg
 				UpdateType: status.UpdateAll,
 			}
 			h.cfg.statusQueue.Enqueue(obj)
-			return
+			continue
 		}
 
 		stopCh := make(chan struct{})
@@ -315,25 +316,31 @@ func (h *eventHandlerImpl) waitForStatusUpdates(ctx context.Context) {
 				continue
 			}
 
-			gwAddresses, err := getGatewayAddresses(
-				ctx,
-				h.cfg.k8sClient,
-				item.GatewayService,
-				gw,
-				h.cfg.gatewayClassName,
-			)
-			if err != nil {
-				msg := "error getting Gateway Service IP address"
-				h.cfg.logger.Error(err, msg)
-				h.cfg.eventRecorder.Eventf(
+			var gwAddresses []gatewayv1.GatewayStatusAddress
+			var err error
+
+			// Only get addresses if the gateway has listeners
+			if len(gw.Listeners) > 0 {
+				gwAddresses, err = getGatewayAddresses(
+					ctx,
+					h.cfg.k8sClient,
 					item.GatewayService,
-					gw.Source,
-					v1.EventTypeWarning,
-					"GetServiceIPFailed",
-					"None",
-					msg+": %s",
-					err.Error(),
+					gw,
+					h.cfg.gatewayClassName,
 				)
+				if err != nil {
+					msg := "error getting Gateway Service IP address"
+					h.cfg.logger.Error(err, msg)
+					h.cfg.eventRecorder.Eventf(
+						item.GatewayService,
+						gw.Source,
+						v1.EventTypeWarning,
+						"GetServiceIPFailed",
+						"None",
+						msg+": %s",
+						err.Error(),
+					)
+				}
 			}
 
 			transitionTime := metav1.Now()
@@ -360,19 +367,25 @@ func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph, 
 		return
 	}
 
-	gwAddresses, err := getGatewayAddresses(ctx, h.cfg.k8sClient, nil, gw, h.cfg.gatewayClassName)
-	if err != nil {
-		msg := "error getting Gateway Service IP address"
-		h.cfg.logger.Error(err, msg)
-		h.cfg.eventRecorder.Eventf(
-			&v1.Service{},
-			gw.Source,
-			v1.EventTypeWarning,
-			"GetServiceIPFailed",
-			"None",
-			msg+": %s",
-			err.Error(),
-		)
+	var gwAddresses []gatewayv1.GatewayStatusAddress
+	var err error
+
+	// Only get addresses if the gateway has listeners
+	if len(gw.Listeners) > 0 {
+		gwAddresses, err = getGatewayAddresses(ctx, h.cfg.k8sClient, nil, gw, h.cfg.gatewayClassName)
+		if err != nil {
+			msg := "error getting Gateway Service IP address"
+			h.cfg.logger.Error(err, msg)
+			h.cfg.eventRecorder.Eventf(
+				&v1.Service{},
+				gw.Source,
+				v1.EventTypeWarning,
+				"GetServiceIPFailed",
+				"None",
+				msg+": %s",
+				err.Error(),
+			)
+		}
 	}
 
 	routeReqs := status.PrepareRouteRequests(

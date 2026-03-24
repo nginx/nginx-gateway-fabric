@@ -232,15 +232,20 @@ func (h *eventHandler) provisionResource(
 ) error {
 	resources := h.store.getNginxResourcesForGateway(gatewayNSName)
 	if resources != nil && resources.Gateway != nil {
+		var objects []client.Object
+		var err error
 		resourceName := controller.CreateNginxResourceName(gatewayNSName.Name, h.gcName)
 
-		objects, err := h.provisioner.buildNginxResourceObjects(
-			resourceName,
-			resources.Gateway.Source,
-			resources.Gateway.EffectiveNginxProxy,
-		)
-		if err != nil {
-			logger.Error(err, "error building some nginx resources")
+		// Provision NGINX resources only when listeners are defined on the Gateway.
+		if len(resources.Gateway.Source.Spec.Listeners) > 0 {
+			objects, err = h.provisioner.buildNginxResourceObjects(
+				resourceName,
+				resources.Gateway.Source,
+				resources.Gateway.EffectiveNginxProxy,
+			)
+			if err != nil {
+				logger.Error(err, "error building some nginx resources")
+			}
 		}
 
 		// only provision the object that was updated

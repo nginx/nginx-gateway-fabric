@@ -70,7 +70,7 @@ type resourceNames struct {
 
 // buildNginxResourceObjects builds all the NGINX resource objects for a given Gateway and EffectiveNginxProxy.
 //
-//nolint:gocyclo
+
 func (p *NginxProvisioner) buildNginxResourceObjects(
 	resourceName string,
 	gateway *gatewayv1.Gateway,
@@ -139,45 +139,39 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 		ports[healthcheckPort] = corev1.ProtocolTCP
 	}
 
-	// Do not create NGINX related resources if there are not listeners deinfed on the Gateway
-	var service *corev1.Service
-	var deployment client.Object
-	if len(gateway.Spec.Listeners) > 0 {
-		var err error
-		service, err = buildNginxService(
-			cloneObjectMeta(objectMeta),
-			nProxyCfg,
-			ports,
-			healthcheckPort,
-			selectorLabels,
-			gateway.Spec.Addresses,
-		)
-		if err != nil {
-			errs = append(errs, err)
-		}
-		if err := p.setOwnerReference(service, gateway); err != nil {
-			errs = append(errs, fmt.Errorf("failed to set owner reference on Service %s: %w", service.GetName(), err))
-		}
+	service, err := buildNginxService(
+		cloneObjectMeta(objectMeta),
+		nProxyCfg,
+		ports,
+		healthcheckPort,
+		selectorLabels,
+		gateway.Spec.Addresses,
+	)
+	if err != nil {
+		errs = append(errs, err)
+	}
+	if err := p.setOwnerReference(service, gateway); err != nil {
+		errs = append(errs, fmt.Errorf("failed to set owner reference on Service %s: %w", service.GetName(), err))
+	}
 
-		// build deployment/daemonset
-		deployment, err = p.buildNginxDeployment(
-			cloneObjectMeta(objectMeta),
-			nProxyCfg,
-			ports,
-			selectorLabels,
-			resourceNames,
-		)
-		if err != nil {
-			errs = append(errs, err)
-		}
-		if err := p.setOwnerReference(deployment, gateway); err != nil {
-			errs = append(errs, fmt.Errorf(
-				"failed to set owner reference on %s %s: %w",
-				deployment.GetObjectKind().GroupVersionKind().Kind,
-				deployment.GetName(),
-				err,
-			))
-		}
+	// build deployment/daemonset
+	deployment, err := p.buildNginxDeployment(
+		cloneObjectMeta(objectMeta),
+		nProxyCfg,
+		ports,
+		selectorLabels,
+		resourceNames,
+	)
+	if err != nil {
+		errs = append(errs, err)
+	}
+	if err := p.setOwnerReference(deployment, gateway); err != nil {
+		errs = append(errs, fmt.Errorf(
+			"failed to set owner reference on %s %s: %w",
+			deployment.GetObjectKind().GroupVersionKind().Kind,
+			deployment.GetName(),
+			err,
+		))
 	}
 
 	// order to install resources:
@@ -197,13 +191,11 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 		objects = append(objects, openshiftObjs...)
 	}
 
-	// Only add service and deployment if they were created
+	// Only add service if it was created
 	if service != nil {
 		objects = append(objects, service)
 	}
-	if deployment != nil {
-		objects = append(objects, deployment)
-	}
+	objects = append(objects, deployment)
 
 	if hpa := p.buildHPA(objectMeta, nProxyCfg); hpa != nil {
 		if err := p.setOwnerReference(hpa, gateway); err != nil {

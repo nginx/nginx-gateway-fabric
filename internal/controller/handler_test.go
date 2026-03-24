@@ -82,7 +82,10 @@ var _ = Describe("eventHandler", func() {
 		Expect(name).To(Equal(groupGateways))
 		Expect(reqs).To(HaveLen(1))
 
-		Expect(fakeProvisioner.RegisterGatewayCallCount()).Should(Equal(1))
+		Eventually(
+			func() int {
+				return fakeProvisioner.RegisterGatewayCallCount()
+			}).Should(Equal(1))
 	}
 
 	BeforeEach(func() {
@@ -97,6 +100,9 @@ var _ = Describe("eventHandler", func() {
 							Name:      "gateway",
 							Namespace: "test",
 						},
+					},
+					Listeners: []*graph.Listener{
+						{},
 					},
 					DeploymentName: types.NamespacedName{
 						Namespace: "test",
@@ -267,6 +273,9 @@ var _ = Describe("eventHandler", func() {
 									Namespace: "test",
 								},
 							},
+							Listeners: []*graph.Listener{
+								{},
+							},
 						},
 					},
 				})
@@ -282,6 +291,55 @@ var _ = Describe("eventHandler", func() {
 					func() int {
 						return fakeStatusUpdater.UpdateGroupCallCount()
 					}).Should(Equal(1))
+			})
+			It("should handle gateway with no listeners", func() {
+				fakeProcessor.ProcessReturns(&graph.Graph{
+					Gateways: map[types.NamespacedName]*graph.Gateway{
+						{Namespace: "test", Name: "gateway"}: {
+							Valid: true,
+							Source: &gatewayv1.Gateway{
+								ObjectMeta: metav1.ObjectMeta{
+									Name:      "gateway",
+									Namespace: "test",
+								},
+							},
+							Listeners: []*graph.Listener{},
+							DeploymentName: types.NamespacedName{
+								Namespace: "test",
+								Name:      controller.CreateNginxResourceName("gateway", "nginx"),
+							},
+						},
+					},
+				})
+
+				e := &events.UpsertEvent{Resource: &gatewayv1.HTTPRoute{}}
+				batch := []any{e}
+
+				handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
+
+				checkUpsertEventExpectations(e)
+
+				// Provisioner should still be called to deprovision resources
+				Eventually(
+					func() int {
+						return fakeProvisioner.RegisterGatewayCallCount()
+					}).Should(Equal(1))
+
+				// Generator should not be called since no listeners
+				Expect(fakeGenerator.GenerateCallCount()).Should(Equal(0))
+
+				// Status update should occur
+				Eventually(
+					func() int {
+						return fakeStatusUpdater.UpdateGroupCallCount()
+					}).Should(Equal(2))
+
+				// Verify that status updates were made for both all-except-gateways and gateways groups
+				_, name, _ := fakeStatusUpdater.UpdateGroupArgsForCall(0)
+				Expect(name).To(Equal(groupAllExceptGateways))
+
+				_, name, _ = fakeStatusUpdater.UpdateGroupArgsForCall(1)
+				Expect(name).To(Equal(groupGateways))
 			})
 		})
 
@@ -417,6 +475,9 @@ var _ = Describe("eventHandler", func() {
 								Name:      "gateway",
 							},
 						},
+						Listeners: []*graph.Listener{
+							{},
+						},
 						Valid: true,
 					},
 				},
@@ -515,6 +576,9 @@ var _ = Describe("eventHandler", func() {
 							Namespace: "test",
 							Name:      "gateway",
 						},
+					},
+					Listeners: []*graph.Listener{
+						{},
 					},
 					Valid: true,
 				},
@@ -668,6 +732,9 @@ var _ = Describe("eventHandler", func() {
 							Namespace: "test",
 						},
 					},
+					Listeners: []*graph.Listener{
+						{},
+					},
 					DeploymentName: types.NamespacedName{
 						Namespace: "test",
 						Name:      controller.CreateNginxResourceName("gateway", "nginx"),
@@ -716,6 +783,9 @@ var _ = Describe("eventHandler", func() {
 							Name:      "gateway",
 							Namespace: "test",
 						},
+					},
+					Listeners: []*graph.Listener{
+						{},
 					},
 					DeploymentName: types.NamespacedName{
 						Namespace: "test",

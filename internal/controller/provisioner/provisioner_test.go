@@ -334,9 +334,9 @@ func TestRegisterGateway(t *testing.T) {
 				Name:      "gw",
 				Namespace: "default",
 			},
-			Spec: gatewayv1.GatewaySpec{
-				Listeners: []gatewayv1.Listener{{Port: 80}},
-			},
+		},
+		Listeners: []*graph.Listener{
+			{},
 		},
 		Valid: true,
 	}
@@ -414,6 +414,9 @@ func TestRegisterGateway_CreateOrUpdateError(t *testing.T) {
 				Namespace: "default",
 			},
 		},
+		Listeners: []*graph.Listener{
+			{},
+		},
 		Valid: true,
 	}
 
@@ -481,9 +484,9 @@ func TestRegisterGateway_CleansUpOldDeploymentOrDaemonSet(t *testing.T) {
 				Name:      "gw",
 				Namespace: "default",
 			},
-			Spec: gatewayv1.GatewaySpec{
-				Listeners: []gatewayv1.Listener{{Port: 80}},
-			},
+		},
+		Listeners: []*graph.Listener{
+			{},
 		},
 		Valid: true,
 		EffectiveNginxProxy: &graph.EffectiveNginxProxy{
@@ -566,6 +569,9 @@ func TestRegisterGateway_CleansUpOldHPA(t *testing.T) {
 				Namespace: "default",
 			},
 		},
+		Listeners: []*graph.Listener{
+			{},
+		},
 		Valid: true,
 		EffectiveNginxProxy: &graph.EffectiveNginxProxy{
 			Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
@@ -627,9 +633,9 @@ func TestProvisionerRestartsDeployment(t *testing.T) {
 				Name:      "gw",
 				Namespace: "default",
 			},
-			Spec: gatewayv1.GatewaySpec{
-				Listeners: []gatewayv1.Listener{{Port: 80}},
-			},
+		},
+		Listeners: []*graph.Listener{
+			{},
 		},
 		Valid: true,
 		EffectiveNginxProxy: &graph.EffectiveNginxProxy{
@@ -662,9 +668,9 @@ func TestProvisionerRestartsDeployment(t *testing.T) {
 				Name:      "gw",
 				Namespace: "default",
 			},
-			Spec: gatewayv1.GatewaySpec{
-				Listeners: []gatewayv1.Listener{{Port: 80}},
-			},
+		},
+		Listeners: []*graph.Listener{
+			{},
 		},
 		Valid: true,
 		EffectiveNginxProxy: &graph.EffectiveNginxProxy{
@@ -693,9 +699,9 @@ func TestProvisionerRestartsDaemonSet(t *testing.T) {
 				Name:      "gw",
 				Namespace: "default",
 			},
-			Spec: gatewayv1.GatewaySpec{
-				Listeners: []gatewayv1.Listener{{Port: 80}},
-			},
+		},
+		Listeners: []*graph.Listener{
+			{},
 		},
 		Valid: true,
 		EffectiveNginxProxy: &graph.EffectiveNginxProxy{
@@ -731,9 +737,9 @@ func TestProvisionerRestartsDaemonSet(t *testing.T) {
 				Name:      "gw",
 				Namespace: "default",
 			},
-			Spec: gatewayv1.GatewaySpec{
-				Listeners: []gatewayv1.Listener{{Port: 80}},
-			},
+		},
+		Listeners: []*graph.Listener{
+			{},
 		},
 		Valid: true,
 		EffectiveNginxProxy: &graph.EffectiveNginxProxy{
