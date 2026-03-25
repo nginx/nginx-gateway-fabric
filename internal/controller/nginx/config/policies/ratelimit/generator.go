@@ -11,34 +11,15 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
 
-var (
-	tmplHTTP     = template.Must(template.New("rate limit policy http").Parse(rateLimitHTTPTemplate))
-	tmplLocation = template.Must(template.New("rate limit policy location").Parse(rateLimitLocationTemplate))
-)
-
-//nolint:lll
+// rateLimitHTTPTemplate generates only the limit_req_zone directive at the http context.
 const rateLimitHTTPTemplate = `
 {{ range $r := .Rule }}
 limit_req_zone {{ .Key }} zone={{ .ZoneName }}:{{ .ZoneSize }} rate={{ .Rate }};
-  {{- if not $.LimitZoneOnly }}
-limit_req zone={{ .ZoneName }}{{ if .Burst }} burst={{ .Burst }}{{ end }}{{ if .NoDelay }} nodelay{{ end }}{{ if .Delay }} delay={{ .Delay }}{{ end }};
-  {{- end }}
 {{ end }}
-{{- if not .LimitZoneOnly }}
-  {{- if .LogLevel }}
-limit_req_log_level {{ .LogLevel }};
-  {{- end }}
-  {{- if .RejectCode }}
-limit_req_status {{ .RejectCode }};
-  {{- end }}
-  {{- if .DryRun }}
-limit_req_dry_run on;
-  {{- end }}
-{{- end }}
 `
 
 //nolint:lll
-const rateLimitLocationTemplate = `
+const rateLimitReqTemplate = `
 {{ range $r := .Rule }}
 limit_req zone={{ .ZoneName }}{{ if .Burst }} burst={{ .Burst }}{{ end }}{{ if .NoDelay }} nodelay{{ end }}{{ if .Delay }} delay={{ .Delay }}{{ end }};
 {{ end }}
@@ -53,7 +34,21 @@ limit_req_dry_run on;
 {{- end }}
 `
 
+var (
+	tmplHTTP     = template.Must(template.New("rate limit policy http").Parse(rateLimitHTTPTemplate))
+	tmplServer   = template.Must(template.New("rate limit policy server").Parse(rateLimitReqTemplate))
+	tmplLocation = template.Must(template.New("rate limit policy location").Parse(rateLimitReqTemplate))
+)
+
 const (
+	// fileNamePrefix is the prefix for all generated rate limit policy config file names.
+	fileNamePrefix = "RateLimitPolicy"
+
+	fileNameSuffixGateway  = "gateway"
+	fileNameSuffixHTTP     = "internal_http"
+	fileNameSuffixServer   = "gateway_server"
+	fileNameSuffixLocation = "route"
+
 	// defaultZoneSize is the default size of the shared memory zone in the limit_req_zone NGINX directive.
 	defaultZoneSize = "10m"
 	// defaultRate is the default request rate in the limit_req_zone NGINX directive.
@@ -74,10 +69,6 @@ type rateLimitSettings struct {
 	// DryRun enables the dry run mode, where the rate limit is not actually applied, but the number
 	// of excessive requests is accounted as usual in the shared memory zone.
 	DryRun bool
-	// LimitZoneOnly indicates whether this policy should only generate the limit_req_zone directive.
-	// This is used for internally-created policies that only target the http context because the original
-	// policy targeted a Route and needs to generate limit_req_zone directives at the http context.
-	LimitZoneOnly bool
 }
 
 // rateLimitRule represents a single rate limit rule.
@@ -170,6 +161,11 @@ func (g Generator) GenerateForHTTP(pols []policies.Policy) policies.GenerateResu
 	return generate(pols, tmplHTTP)
 }
 
+// GenerateForServer generates policy configuration for the server block.
+func (g Generator) GenerateForServer(pols []policies.Policy, _ http.Server) policies.GenerateResultFiles {
+	return generate(pols, tmplServer)
+}
+
 // GenerateForLocation generates policy configuration for a normal location block.
 func (g Generator) GenerateForLocation(pols []policies.Policy, _ http.Location) policies.GenerateResultFiles {
 	return generate(pols, tmplLocation)
@@ -184,32 +180,31 @@ func generate(pols []policies.Policy, tmpl *template.Template) policies.Generate
 			continue
 		}
 
+		isHTTPContextOnly := isShadowPolicy(rlp)
+
+		// shadow policies (internally created for Route-attached policies) only contribute
+		// limit_req_zone at the http context.
+		if tmpl == tmplServer && isHTTPContextOnly {
+			continue
+		}
+
 		settings := getRateLimitSettings(*rlp)
 
-		// Check if this is a shadow HTTP context only policy
-		isHTTPContextOnly := false
-		if rlp.Annotations != nil {
-			if val, exists := rlp.Annotations[dataplane.InternalRateLimitShadowPolicyAnnotationKey]; exists && val == "true" {
-				isHTTPContextOnly = true
-			}
-		}
-
-		// Set the flag in settings
-		settings.LimitZoneOnly = isHTTPContextOnly
-
-		var targetRefType string
+		var suffix string
 		switch tmpl {
 		case tmplHTTP:
-			targetRefType = "gateway"
+			if isHTTPContextOnly {
+				suffix = fileNameSuffixHTTP
+			} else {
+				suffix = fileNameSuffixGateway
+			}
+		case tmplServer:
+			suffix = fileNameSuffixServer
 		case tmplLocation:
-			targetRefType = "route"
+			suffix = fileNameSuffixLocation
 		}
 
-		name := fmt.Sprintf("RateLimitPolicy_%s_%s_%s.conf", rlp.Namespace, rlp.Name, targetRefType)
-
-		if isHTTPContextOnly {
-			name = fmt.Sprintf("RateLimitPolicy_%s_%s_internal_http.conf", rlp.Namespace, rlp.Name)
-		}
+		name := fmt.Sprintf("%s_%s_%s_%s.conf", fileNamePrefix, rlp.Namespace, rlp.Name, suffix)
 
 		files = append(files, policies.File{
 			Name:    name,
@@ -218,4 +213,14 @@ func generate(pols []policies.Policy, tmpl *template.Template) policies.Generate
 	}
 
 	return files
+}
+
+// isShadowPolicy checks if a RateLimitPolicy is intended to
+// generate configuration only for the http context by looking for a specific annotation.
+func isShadowPolicy(rlp *ngfAPI.RateLimitPolicy) bool {
+	if rlp.Annotations == nil {
+		return false
+	}
+	val, exists := rlp.Annotations[dataplane.InternalRLPAnnotationKey]
+	return exists && val == dataplane.InternalRLPAnnotationValue
 }
