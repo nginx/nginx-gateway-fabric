@@ -10,6 +10,7 @@ import (
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
 
@@ -46,7 +47,7 @@ func TestConvertingReferenceGrantStore(t *testing.T) {
 				{
 					Group: gatewayv1beta1.Group(""),
 					Kind:  gatewayv1beta1.Kind("Service"),
-					Name:  ptrTo(gatewayv1beta1.ObjectName("my-svc")),
+					Name:  helpers.GetPointer(gatewayv1beta1.ObjectName("my-svc")),
 				},
 				{
 					Group: gatewayv1beta1.Group(""),
@@ -183,8 +184,4 @@ func TestRefGrantTrackingCfg(t *testing.T) {
 			g.Expect(cfg.predicate).To(BeNil())
 		})
 	}
-}
-
-func ptrTo[T any](v T) *T {
-	return &v
 }
