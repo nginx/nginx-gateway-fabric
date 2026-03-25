@@ -316,10 +316,7 @@ func (h *eventHandlerImpl) waitForStatusUpdates(ctx context.Context) {
 				continue
 			}
 
-			var gwAddresses []gatewayv1.GatewayStatusAddress
-			var err error
-
-			gwAddresses, err = getGatewayAddresses(
+			gwAddresses, err := getGatewayAddresses(
 				ctx,
 				h.cfg.k8sClient,
 				item.GatewayService,
@@ -364,10 +361,7 @@ func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph, 
 		return
 	}
 
-	var gwAddresses []gatewayv1.GatewayStatusAddress
-	var err error
-
-	gwAddresses, err = getGatewayAddresses(ctx, h.cfg.k8sClient, nil, gw, h.cfg.gatewayClassName)
+	gwAddresses, err := getGatewayAddresses(ctx, h.cfg.k8sClient, nil, gw, h.cfg.gatewayClassName)
 	if err != nil {
 		msg := "error getting Gateway Service IP address"
 		h.cfg.logger.Error(err, msg)
@@ -578,10 +572,10 @@ func getGatewayAddresses(
 		gwSvc = *svc
 	}
 
-	return getGatewayAddressesForGatewayType(&gwSvc, gateway), nil
+	return getGatewayAddressesForStatus(&gwSvc, gateway), nil
 }
 
-func getGatewayAddressesForGatewayType(
+func getGatewayAddressesForStatus(
 	svc *v1.Service,
 	gateway *graph.Gateway,
 ) (gwAddresses []gatewayv1.GatewayStatusAddress) {
