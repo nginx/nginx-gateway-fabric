@@ -75,8 +75,8 @@ func NewDeploymentBroadcaster(ctx context.Context, stopCh chan struct{}) *Deploy
 		broadcasterCancel: broadcasterCancel,
 	}
 
-	go broadcaster.subscriber(ctx, stopCh)
-	go broadcaster.publisher(broadcasterCtx)
+	go broadcaster.subscriber(stopCh)
+	go broadcaster.publisher()
 
 	return broadcaster
 }
@@ -109,26 +109,25 @@ func (b *DeploymentBroadcaster) Subscribe() SubscriberChannels {
 }
 
 // Send the message to all listeners. Wait for all listeners to respond.
-// Returns true if there were listeners that received the message.
+// Returns true if there were listeners that received and responded to the message.
 func (b *DeploymentBroadcaster) Send(message NginxAgentMessage) bool {
-	// Take snapshot of listener count before publishing
-	b.mu.RLock()
-	listenerCount := len(b.listeners)
-	b.mu.RUnlock()
-
 	// Try to send message, but can be interrupted by shutdown
 	select {
 	case <-b.broadcasterCtx.Done():
-		return listenerCount > 0
+		return false
 	case b.publishCh <- message:
 	}
 
 	// Wait for completion, but can be interrupted by shutdown
 	select {
 	case <-b.broadcasterCtx.Done():
-		return listenerCount > 0
+		return false
 	case <-b.doneCh:
 	}
+
+	b.mu.RLock()
+	listenerCount := len(b.listeners)
+	b.mu.RUnlock()
 
 	return listenerCount > 0
 }
@@ -141,7 +140,7 @@ func (b *DeploymentBroadcaster) CancelSubscription(id string) {
 // subscriber handles subscription management and stop conditions. It is responsible for cleaning up resources
 // on shutdown/function return, specifically by canceling the broadcaster context and closing response channels
 // to unblock any pending publisher goroutines.
-func (b *DeploymentBroadcaster) subscriber(ctx context.Context, stopCh chan struct{}) {
+func (b *DeploymentBroadcaster) subscriber(stopCh chan struct{}) {
 	defer func() {
 		// Canceling the broadcaster context will cancel all listener contexts since they are children,
 		// which will unblock any publishers waiting on those contexts. We also close all response channels to unblock
@@ -159,7 +158,7 @@ func (b *DeploymentBroadcaster) subscriber(ctx context.Context, stopCh chan stru
 		select {
 		case <-stopCh:
 			return
-		case <-ctx.Done():
+		case <-b.broadcasterCtx.Done():
 			return
 		case channels := <-b.subCh:
 			b.mu.Lock()
@@ -180,13 +179,13 @@ func (b *DeploymentBroadcaster) subscriber(ctx context.Context, stopCh chan stru
 }
 
 // publisher handles message publishing.
-func (b *DeploymentBroadcaster) publisher(ctx context.Context) {
+func (b *DeploymentBroadcaster) publisher() {
 	// Due to the split between the subscription management and publishing,
 	// every blocking select in this function needs a way to be unblocked
 	// by the subscriber function.
 	for {
 		select {
-		case <-ctx.Done():
+		case <-b.broadcasterCtx.Done():
 			return
 		case msg := <-b.publishCh:
 			b.mu.RLock()
@@ -203,7 +202,7 @@ func (b *DeploymentBroadcaster) publisher(ctx context.Context) {
 					select {
 					case <-channels.listenerCtx.Done():
 						return
-					case <-ctx.Done():
+					case <-b.broadcasterCtx.Done():
 						return
 					case channels.listenCh <- msg:
 						// Message sent, wait for response

@@ -21,6 +21,9 @@ func TestSubscribe(t *testing.T) {
 	subscriber := broadcaster.Subscribe()
 	g.Expect(subscriber.ID).NotTo(BeEmpty())
 
+	// Give time for subscription to be processed by the subscriber goroutine
+	time.Sleep(10 * time.Millisecond)
+
 	message := broadcast.NginxAgentMessage{
 		ConfigVersion: "v1",
 		Type:          broadcast.ConfigApplyRequest,
@@ -53,6 +56,12 @@ func TestSubscribe_MultipleListeners(t *testing.T) {
 
 	subscriber1 := broadcaster.Subscribe()
 	subscriber2 := broadcaster.Subscribe()
+
+	g.Expect(subscriber1.ID).NotTo(BeEmpty())
+	g.Expect(subscriber2.ID).NotTo(BeEmpty())
+
+	// Give time for both subscriptions to be processed by the subscriber goroutine
+	time.Sleep(10 * time.Millisecond)
 
 	message := broadcast.NginxAgentMessage{
 		ConfigVersion: "v1",
@@ -107,7 +116,6 @@ func TestCancelSubscription(t *testing.T) {
 	subscriber := broadcaster.Subscribe()
 
 	broadcaster.CancelSubscription(subscriber.ID)
-	time.Sleep(1 * time.Second)
 
 	message := broadcast.NginxAgentMessage{
 		ConfigVersion: "v1",
@@ -115,7 +123,7 @@ func TestCancelSubscription(t *testing.T) {
 	}
 
 	result := broadcaster.Send(message)
-	g.Expect(result).To(BeFalse()) // No listeners after cancellation
+	g.Expect(result).To(BeFalse())
 
 	g.Consistently(subscriber.ListenCh).ShouldNot(Receive())
 }
@@ -137,19 +145,21 @@ func TestShutdown_MessagesIgnoredAfterStopCh(t *testing.T) {
 	// Close stopCh to trigger shutdown
 	close(stopCh)
 
-	// Wait for shutdown to process by trying repeatedly
-	g.Eventually(func() bool {
+	sendDone := make(chan bool)
+	go func() {
+		// Send message after shutdown
 		result := broadcaster.Send(message)
-		// Send() returns listener count from snapshot, so should still be true
-		// But message should not be sent due to context cancellation
-		return result == true
-	}).Should(BeTrue())
+		sendDone <- result
+	}()
+
+	// Send should return false because broadcaster is shut down
+	g.Eventually(sendDone).Should(Receive(BeFalse()))
 
 	// Message should NOT reach subscriber during shutdown
 	g.Consistently(subscriber.ListenCh, "100ms").ShouldNot(Receive())
 }
 
-func TestShutdown_ResponseChannelsClosedOnExit(t *testing.T) {
+func TestShutdown_ResponseChannelsClosedOnExitListenerReceivedMessage(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
@@ -177,8 +187,8 @@ func TestShutdown_ResponseChannelsClosedOnExit(t *testing.T) {
 	close(stopCh)
 
 	// Send should complete because response channel gets closed during shutdown
-	// Note: Returns true because listener existed when message was queued
-	g.Eventually(sendDone).Should(Receive(BeTrue()))
+	// Note: Returns false because listener was canceled before message was received
+	g.Eventually(sendDone).Should(Receive(BeFalse()))
 }
 
 func TestCancelSubscription_UnblocksPublisherListenerReceivedMessage(t *testing.T) {
@@ -211,8 +221,8 @@ func TestCancelSubscription_UnblocksPublisherListenerReceivedMessage(t *testing.
 	broadcaster.CancelSubscription(subscriber.ID)
 
 	// Send should complete because response channel gets closed during cancellation
-	// Note: Returns true because listener existed when message was queued
-	g.Eventually(sendDone).Should(Receive(BeTrue()))
+	// Note: Returns false because listener was canceled before message was received
+	g.Eventually(sendDone).Should(Receive(BeFalse()))
 }
 
 func TestCancelSubscription_UnblocksPublisherListenerDidNotReceiveMessage(t *testing.T) {
@@ -238,10 +248,16 @@ func TestCancelSubscription_UnblocksPublisherListenerDidNotReceiveMessage(t *tes
 		sendDone <- result
 	}()
 
-	// Cancel subscription before publisher can receive message
+	// Cancel subscription before publisher can send message to listenCh
+	//
+	// Note: Technically the publisher can receive the message before cancellation
+	// due to goroutine scheduling, but the immediate cancellation following the
+	// send should make it unlikely that the message is sent to the listenCh before cancellation.
+	// However, in both situations where the message is received or not received, the cancellation
+	// should unblock the publisher and allow Send to complete.
 	broadcaster.CancelSubscription(subscriber.ID)
 
 	// Send should complete because response channel gets closed during cancellation
-	// Note: Returns true because listener existed when message was queued
-	g.Eventually(sendDone).Should(Receive(BeTrue()))
+	// Note: Returns false because listener was canceled before message was received
+	g.Eventually(sendDone).Should(Receive(BeFalse()))
 }
