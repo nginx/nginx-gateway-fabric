@@ -19,6 +19,7 @@ import (
 	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
@@ -56,6 +57,7 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 			},
 			discoveredCRDs: map[string]bool{
 				"BackendTLSPolicy": true,
+				"ReferenceGrant":   true,
 			},
 			expectedObjects: []client.Object{
 				&gatewayv1.GatewayClass{ObjectMeta: metav1.ObjectMeta{Name: "nginx"}},
@@ -88,6 +90,7 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 			},
 			discoveredCRDs: map[string]bool{
 				"BackendTLSPolicy": false,
+				"ReferenceGrant":   true,
 			},
 			expectedObjects: []client.Object{
 				&gatewayv1.GatewayClass{ObjectMeta: metav1.ObjectMeta{Name: "nginx"}},
@@ -120,6 +123,7 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 			},
 			discoveredCRDs: map[string]bool{
 				"BackendTLSPolicy": true,
+				"ReferenceGrant":   true,
 				"TLSRoute":         true,
 				"TCPRoute":         true,
 				"UDPRoute":         true,
@@ -159,6 +163,7 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 			},
 			discoveredCRDs: map[string]bool{
 				"BackendTLSPolicy": true,
+				"ReferenceGrant":   true,
 				"InferencePool":    true,
 			},
 			expectedObjects: []client.Object{
@@ -194,6 +199,7 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 			},
 			discoveredCRDs: map[string]bool{
 				"BackendTLSPolicy": true,
+				"ReferenceGrant":   true,
 			},
 			expectedObjects: []client.Object{
 				&gatewayv1.GatewayClass{ObjectMeta: metav1.ObjectMeta{Name: "nginx"}},
@@ -228,6 +234,7 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 			},
 			discoveredCRDs: map[string]bool{
 				"BackendTLSPolicy": true,
+				"ReferenceGrant":   true,
 			},
 			expectedObjects: []client.Object{
 				&gatewayv1.GatewayClass{ObjectMeta: metav1.ObjectMeta{Name: "nginx"}},
@@ -265,6 +272,7 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 			},
 			discoveredCRDs: map[string]bool{
 				"BackendTLSPolicy": true,
+				"ReferenceGrant":   true,
 				"TLSRoute":         true,
 				"TCPRoute":         true,
 				"UDPRoute":         true,
@@ -309,6 +317,7 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 			},
 			discoveredCRDs: map[string]bool{
 				"BackendTLSPolicy": true,
+				"ReferenceGrant":   true,
 				"TLSRoute":         true,
 				"TCPRoute":         true,
 				"UDPRoute":         true,
@@ -338,6 +347,39 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&ngfAPIv1alpha2.ObservabilityPolicyList{},
 				&ngfAPIv1alpha1.SnippetsFilterList{},
 				&ngfAPIv1alpha1.SnippetsPolicyList{},
+				&ngfAPIv1alpha1.ProxySettingsPolicyList{},
+				&ngfAPIv1alpha1.UpstreamSettingsPolicyList{},
+				&ngfAPIv1alpha1.AuthenticationFilterList{},
+				&ngfAPIv1alpha1.RateLimitPolicyList{},
+			},
+		},
+		{
+			name: "v1beta1 ReferenceGrant fallback",
+			cfg: config.Config{
+				GatewayClassName: gcName,
+			},
+			discoveredCRDs: map[string]bool{
+				"BackendTLSPolicy": true,
+				"ReferenceGrant":   false,
+			},
+			expectedObjects: []client.Object{
+				&gatewayv1.GatewayClass{ObjectMeta: metav1.ObjectMeta{Name: "nginx"}},
+			},
+			expectedObjectLists: []client.ObjectList{
+				&apiv1.ServiceList{},
+				&apiv1.SecretList{},
+				&apiv1.NamespaceList{},
+				&discoveryV1.EndpointSliceList{},
+				&gatewayv1.HTTPRouteList{},
+				&gatewayv1.BackendTLSPolicyList{},
+				&apiv1.ConfigMapList{},
+				&gatewayv1.GatewayList{},
+				&gatewayv1beta1.ReferenceGrantList{},
+				&ngfAPIv1alpha2.NginxProxyList{},
+				&gatewayv1.GRPCRouteList{},
+				partialObjectMetadataList,
+				&ngfAPIv1alpha1.ClientSettingsPolicyList{},
+				&ngfAPIv1alpha2.ObservabilityPolicyList{},
 				&ngfAPIv1alpha1.ProxySettingsPolicyList{},
 				&ngfAPIv1alpha1.UpstreamSettingsPolicyList{},
 				&ngfAPIv1alpha1.AuthenticationFilterList{},

@@ -38,6 +38,7 @@ import (
 	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 	"sigs.k8s.io/gateway-api/pkg/consts"
 
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
@@ -98,6 +99,7 @@ func init() {
 	utilruntime.Must(autoscalingv2.AddToScheme(scheme))
 	utilruntime.Must(authv1.AddToScheme(scheme))
 	utilruntime.Must(rbacv1.AddToScheme(scheme))
+	utilruntime.Must(gatewayv1beta1.Install(scheme))
 	utilruntime.Must(inference.Install(scheme))
 }
 
@@ -153,7 +155,8 @@ func StartManager(cfg config.Config) error {
 			Plus:         cfg.Plus,
 			Experimental: cfg.ExperimentalFeatures,
 		},
-		Snippets: cfg.Snippets,
+		DiscoveredCRDs: discoveredCRDs,
+		Snippets:       cfg.Snippets,
 	})
 
 	var handlerCollector handlerMetricsCollector = collectors.NewControllerNoopCollector()
@@ -617,6 +620,12 @@ func registerControllers(
 			options: []controller.Option{
 				controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
 			},
+			requireCRDCheck: true,
+			crdGVK: &schema.GroupVersionKind{
+				Group:   gatewayv1.GroupName,
+				Version: "v1",
+				Kind:    kinds.ReferenceGrant,
+			},
 		},
 		{
 			objectType: &crdWithGVK,
@@ -802,6 +811,21 @@ func registerControllers(
 	)
 	if err != nil {
 		return nil, fmt.Errorf("error filtering controllers by CRD existence: %w", err)
+	}
+
+	// If v1 ReferenceGrant CRD was not found, fall back to v1beta1.
+	// We can't skip ReferenceGrant entirely (unlike other optional CRDs) because it's required
+	// for cross-namespace reference validation.
+	if !discoveredCRDs[kinds.ReferenceGrant] {
+		cfg.Logger.Info(
+			"ReferenceGrant v1 CRD not found, falling back to v1beta1",
+		)
+		controllerRegCfgs = append(controllerRegCfgs, ctlrCfg{
+			objectType: &gatewayv1beta1.ReferenceGrant{},
+			options: []controller.Option{
+				controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
+			},
+		})
 	}
 
 	// Log discovered CRDs
@@ -998,7 +1022,6 @@ func prepareFirstEventBatchPreparerArgs(
 		&discoveryV1.EndpointSliceList{},
 		&gatewayv1.HTTPRouteList{},
 		&apiv1.ConfigMapList{},
-		&gatewayv1.ReferenceGrantList{},
 		&ngfAPIv1alpha2.NginxProxyList{},
 		&gatewayv1.GRPCRouteList{},
 		&ngfAPIv1alpha1.ClientSettingsPolicyList{},
@@ -1008,6 +1031,13 @@ func prepareFirstEventBatchPreparerArgs(
 		&ngfAPIv1alpha1.AuthenticationFilterList{},
 		&ngfAPIv1alpha1.RateLimitPolicyList{},
 		partialObjectMetadataList,
+	}
+
+	// Add ReferenceGrant list - use v1 if available, otherwise fall back to v1beta1
+	if discoveredCRDs[kinds.ReferenceGrant] {
+		objectLists = append(objectLists, &gatewayv1.ReferenceGrantList{})
+	} else {
+		objectLists = append(objectLists, &gatewayv1beta1.ReferenceGrantList{})
 	}
 
 	// Add object lists for CRDs that were discovered
