@@ -86,6 +86,7 @@ rules:
   resources:
   - inferencepools
   - inferenceobjectives
+  - inferencemodelrewrites
   verbs:
   - get
   - list
