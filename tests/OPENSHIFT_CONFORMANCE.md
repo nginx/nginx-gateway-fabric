@@ -18,39 +18,17 @@ This document describes the steps required to run Gateway API conformance tests 
 
 OpenShift has stricter security constraints than standard Kubernetes, requiring additional configuration to run the Gateway API conformance test suite.
 
-## Step 1: Check Gateway API Version
+## Step 1: Setup tests to run or skip
 
 OpenShift ships with Gateway API CRDs pre-installed. To find out which version is installed, run the following command:
 
-    ```bash
-    kubectl get crd gateways.gateway.networking.k8s.io -o jsonpath='{.metadata.annotations.gateway\.networking\.k8s\.io/bundle-version}'
-    ```
+```bash
+kubectl get crd gateways.gateway.networking.k8s.io -o jsonpath='{.metadata.annotations.gateway\.networking\.k8s\.io/bundle-version}'
+```
 
-### Updating NGF to Match OpenShift's Gateway API Version
+1. Update the `SKIP_TESTS_OPENSHIFT` list in the Makefile to remove features not available in the OCP-installed Gateway API version.
 
-To run conformance tests that match the exact Gateway API version on OpenShift:
-
-1. Update Go modules:
-
-   ```bash
-   # Update parent module
-   go get sigs.k8s.io/gateway-api@<OCP-version>
-   go mod tidy
-
-   # Update tests module
-   cd tests
-   go get sigs.k8s.io/gateway-api@<OCP-version>
-   go mod tidy
-   cd ..
-   ```
-
-    **Important:** Due to the `replace` directive in `tests/go.mod`, you must update both the parent and tests modules for the version change to take effect.
-
-2. Update test configuration to remove features not available in the OCP-installed Gateway API version.
-
-For **Gateway API v1.2.1**, you must update tests/conformance/conformance_test.go to eliminate references to v1beta1.GatewayStaticAddresses. This field was only introduced in Gateway API v1.3.0, and leaving it in place will cause the test to fail to compile in a v1.2.1 environment.
-
-**Note:** This is separate from `SUPPORTED_EXTENDED_FEATURES_OPENSHIFT` in the Makefile, which controls which features are tested. This change is required because the conformance test code itself references v1.3.0+ features that don't exist in v1.2.1.
+2. Add any missing extended supported features to `SUPPORTED_EXTENDED_FEATURES_OPENSHIFT` in the Makefile that can be run.
 
 ## Step 2: Build and Push Conformance Test Image
 
@@ -80,7 +58,7 @@ OpenShift requires explicit permissions for pods to run with elevated privileges
 
 ## Step 4: Run Conformance Tests
 
-### Using the Makefile (Recommended)
+Helm install NGF using publicly accessible images. These could be the release candidate (RC) images in Github, or locally built images (amd64) that you've pushed to a public repository. **Don't push NGINX Plus images to a public repository.** Ensure that the NGINX service type is set to NodePort.
 
 Run the OpenShift-specific conformance test target:
 
@@ -94,7 +72,7 @@ This target:
 
 - Applies the RBAC configuration
 - Runs only the extended features supported on the GatewayAPIs shipped with OpenShift
-- Skips `HTTPRouteServiceTypes` test (incompatible with OpenShift)
+- Skips `HTTPRouteServiceTypes` test (incompatible with OpenShift) and any other tests you've added to the list
 - Pulls the image from your registry
 
 ## Step 5: Known Test Failures on OpenShift
@@ -131,7 +109,7 @@ kubectl delete -f tests/conformance/conformance-rbac.yaml
 
 **Cause:** OpenShift cluster DNS cannot resolve external ELB/LoadBalancer hostnames
 
-**Solution:** Use `GW_SERVICE_TYPE=ClusterIP`
+**Solution:** Ensure that the NGINX Service type is set to NodePort in the NginxProxy CRD
 
 ### Architecture mismatch errors ("Exec format error")
 
