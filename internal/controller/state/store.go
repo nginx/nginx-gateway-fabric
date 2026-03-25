@@ -7,6 +7,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
+	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
@@ -108,6 +110,61 @@ func (m *objectStoreMapAdapter[T]) upsert(obj client.Object) {
 
 func (m *objectStoreMapAdapter[T]) delete(_ ngftypes.ObjectType, nsname types.NamespacedName) {
 	delete(m.objects, nsname)
+}
+
+// convertingReferenceGrantStore converts v1beta1 ReferenceGrant objects to v1 before storing them.
+// This allows the system to handle v1beta1 ReferenceGrants transparently when the v1 CRD is not available.
+type convertingReferenceGrantStore struct {
+	v1Store *objectStoreMapAdapter[*gatewayv1.ReferenceGrant]
+}
+
+func newConvertingReferenceGrantStore(
+	objects map[types.NamespacedName]*gatewayv1.ReferenceGrant,
+) *convertingReferenceGrantStore {
+	return &convertingReferenceGrantStore{
+		v1Store: newObjectStoreMapAdapter(objects),
+	}
+}
+
+func (s *convertingReferenceGrantStore) get(objType ngftypes.ObjectType, nsname types.NamespacedName) client.Object {
+	return s.v1Store.get(objType, nsname)
+}
+
+func (s *convertingReferenceGrantStore) upsert(obj client.Object) {
+	beta, ok := obj.(*gatewayv1beta1.ReferenceGrant)
+	if !ok {
+		panic(fmt.Errorf("obj type mismatch: got %T, expected *v1beta1.ReferenceGrant", obj))
+	}
+
+	converted := &gatewayv1.ReferenceGrant{
+		ObjectMeta: beta.ObjectMeta,
+	}
+	// Copy spec fields. The v1beta1 and v1 types share identical From/To structures.
+	for _, from := range beta.Spec.From {
+		converted.Spec.From = append(converted.Spec.From, gatewayv1.ReferenceGrantFrom{
+			Group:     from.Group,
+			Kind:      from.Kind,
+			Namespace: from.Namespace,
+		})
+	}
+	for _, to := range beta.Spec.To {
+		var name *gatewayv1.ObjectName
+		if to.Name != nil {
+			n := *to.Name
+			name = &n
+		}
+		converted.Spec.To = append(converted.Spec.To, gatewayv1.ReferenceGrantTo{
+			Group: to.Group,
+			Kind:  to.Kind,
+			Name:  name,
+		})
+	}
+
+	s.v1Store.upsert(converted)
+}
+
+func (s *convertingReferenceGrantStore) delete(objType ngftypes.ObjectType, nsname types.NamespacedName) {
+	s.v1Store.delete(objType, nsname)
 }
 
 type gvkList []schema.GroupVersionKind

@@ -179,6 +179,7 @@ rules:
   resources:
   - httproutes/status
   - gateways/status
+  - gateways/finalizers
   - gatewayclasses/status
   - grpcroutes/status
   - backendtlspolicies/status
