@@ -939,6 +939,38 @@ func TestBuildGatewayStatuses(t *testing.T) {
 			expected: map[types.NamespacedName]v1.GatewayStatus{},
 		},
 		{
+			name: "valid gateway; no listeners",
+			gateway: &graph.Gateway{
+				Source:    createGateway(),
+				Listeners: []*graph.Listener{}, // Empty listeners array
+				Valid:     true,
+			},
+			expected: map[types.NamespacedName]v1.GatewayStatus{
+				{Namespace: "test", Name: "gateway"}: {
+					Addresses: addr,
+					Conditions: []metav1.Condition{
+						{
+							Type:               string(v1.GatewayConditionAccepted),
+							Status:             metav1.ConditionTrue,
+							ObservedGeneration: 2,
+							LastTransitionTime: transitionTime,
+							Reason:             string(v1.GatewayReasonAccepted),
+							Message:            "The Gateway is accepted",
+						},
+						{
+							Type:               string(v1.GatewayConditionProgrammed),
+							Status:             metav1.ConditionTrue,
+							ObservedGeneration: 2,
+							LastTransitionTime: transitionTime,
+							Reason:             string(v1.GatewayReasonProgrammed),
+							Message:            "The Gateway is programmed",
+						},
+					},
+					Listeners: nil,
+				},
+			},
+		},
+		{
 			name: "valid gateway; all valid listeners",
 			gateway: &graph.Gateway{
 				Source: createGateway(),
