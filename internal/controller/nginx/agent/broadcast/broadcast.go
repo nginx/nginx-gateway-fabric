@@ -62,7 +62,7 @@ type DeploymentBroadcaster struct {
 
 // NewDeploymentBroadcaster returns a new instance of a DeploymentBroadcaster.
 func NewDeploymentBroadcaster(ctx context.Context, stopCh chan struct{}) *DeploymentBroadcaster {
-	//nolint:gosec // G118: broadcasterCancel is called in run() defer
+	//nolint:gosec // G118: broadcasterCancel is called in subscriber() defer
 	broadcasterCtx, broadcasterCancel := context.WithCancel(ctx)
 
 	broadcaster := &DeploymentBroadcaster{
@@ -88,7 +88,7 @@ func (b *DeploymentBroadcaster) Subscribe() SubscriberChannels {
 	responseCh := make(chan struct{})
 	id := string(uuid.NewUUID())
 	// Create listener context as child of broadcaster context
-	//nolint:gosec // G118: cancel is called when unsubscribing in run()
+	//nolint:gosec // G118: cancel is called when unsubscribing in subscriber()
 	listenerCtx, cancel := context.WithCancel(b.broadcasterCtx)
 
 	subscriberChans := SubscriberChannels{
