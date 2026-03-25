@@ -113,16 +113,16 @@ func (b *DeploymentBroadcaster) Subscribe() SubscriberChannels {
 func (b *DeploymentBroadcaster) Send(message NginxAgentMessage) bool {
 	// Try to send message, but can be interrupted by shutdown
 	select {
+	case b.publishCh <- message:
 	case <-b.broadcasterCtx.Done():
 		return false
-	case b.publishCh <- message:
 	}
 
 	// Wait for completion, but can be interrupted by shutdown
 	select {
+	case <-b.doneCh:
 	case <-b.broadcasterCtx.Done():
 		return false
-	case <-b.doneCh:
 	}
 
 	b.mu.RLock()
