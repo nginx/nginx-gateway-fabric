@@ -601,6 +601,26 @@ func TestRegisterGateway_CleansUpOldHPA(t *testing.T) {
 	g.Expect(hpaErr).To(HaveOccurred())
 }
 
+func TestRegisterGateway_EmptyListeners(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+	gateway := &graph.Gateway{
+		Source: &gatewayv1.Gateway{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "gw",
+				Namespace: "default",
+			},
+		},
+		Listeners: []*graph.Listener{}, // Empty array
+		Valid:     true,
+	}
+
+	provisioner, fakeClient, _ := defaultNginxProvisioner(gateway.Source)
+	g.Expect(provisioner.RegisterGateway(t.Context(), gateway, "gw-nginx")).To(Succeed())
+
+	expectResourcesToNotExist(t, g, fakeClient, types.NamespacedName{Name: "gw-nginx", Namespace: "default"})
+}
+
 func TestNonLeaderProvisioner(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)

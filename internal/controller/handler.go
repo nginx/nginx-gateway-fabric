@@ -541,8 +541,6 @@ func (h *eventHandlerImpl) updateControlPlaneAndSetStatus(
 }
 
 // getGatewayAddresses gets the addresses for the Gateway.
-//
-//nolint:gocyclo
 func getGatewayAddresses(
 	ctx context.Context,
 	k8sClient client.Client,
@@ -580,10 +578,17 @@ func getGatewayAddresses(
 		gwSvc = *svc
 	}
 
+	return getGatewayAddressesForGatewayType(&gwSvc, gateway), nil
+}
+
+func getGatewayAddressesForGatewayType(
+	svc *v1.Service,
+	gateway *graph.Gateway,
+) (gwAddresses []gatewayv1.GatewayStatusAddress) {
 	var addresses, hostnames []string
-	switch gwSvc.Spec.Type {
+	switch svc.Spec.Type {
 	case v1.ServiceTypeLoadBalancer:
-		for _, ingress := range gwSvc.Status.LoadBalancer.Ingress {
+		for _, ingress := range svc.Status.LoadBalancer.Ingress {
 			if ingress.IP != "" {
 				addresses = append(addresses, ingress.IP)
 			} else if ingress.Hostname != "" {
@@ -591,7 +596,7 @@ func getGatewayAddresses(
 			}
 		}
 	default:
-		addresses = append(addresses, gwSvc.Spec.ClusterIP)
+		addresses = append(addresses, svc.Spec.ClusterIP)
 	}
 
 	for _, address := range gateway.Source.Spec.Addresses {
@@ -602,7 +607,7 @@ func getGatewayAddresses(
 		}
 	}
 
-	gwAddresses := make([]gatewayv1.GatewayStatusAddress, 0, len(addresses)+len(hostnames))
+	gwAddresses = make([]gatewayv1.GatewayStatusAddress, 0, len(addresses)+len(hostnames))
 	for _, addr := range addresses {
 		statusAddr := gatewayv1.GatewayStatusAddress{
 			Type:  helpers.GetPointer(gatewayv1.IPAddressType),
@@ -618,8 +623,7 @@ func getGatewayAddresses(
 		}
 		gwAddresses = append(gwAddresses, statusAddr)
 	}
-
-	return gwAddresses, nil
+	return gwAddresses
 }
 
 // getDeploymentContext gets the deployment context metadata for N+ reporting.
