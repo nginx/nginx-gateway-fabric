@@ -32,8 +32,8 @@ type SubscriberChannels struct {
 // and can be looked up in the map using the same ID.
 type storedChannels struct {
 	listenCh chan<- NginxAgentMessage
-	// bidirectional so we can close it to unblock the publisher
-	responseCh chan struct{}
+	// responseCh is only received from by the broadcaster; subscribers send on it to signal completion.
+	responseCh <-chan struct{}
 	// listenerCtx is used to unblock the publisher if a listener unsubscribes or if the broadcaster is shutting
 	// down. It is a child of the broadcaster context, so it will also be canceled on shutdown.
 	listenerCtx context.Context
