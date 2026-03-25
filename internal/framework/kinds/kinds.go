@@ -27,6 +27,8 @@ const (
 	UDPRoute = "UDPRoute"
 	// BackendTLSPolicy is the BackendTLSPolicy kind.
 	BackendTLSPolicy = "BackendTLSPolicy"
+	// ReferenceGrant is the ReferenceGrant kind.
+	ReferenceGrant = "ReferenceGrant"
 )
 
 // Gateway API Inference Extension kinds.
