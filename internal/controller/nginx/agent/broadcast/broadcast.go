@@ -196,7 +196,7 @@ func (b *DeploymentBroadcaster) publisher() {
 					case <-b.broadcasterCtx.Done():
 						return
 					case channels.listenCh <- msg:
-						// Message sent, wait for response
+						// Message sent successfully, now wait for response in next select
 					}
 
 					select {
@@ -212,7 +212,14 @@ func (b *DeploymentBroadcaster) publisher() {
 			}
 			wg.Wait()
 
-			b.doneCh <- struct{}{}
+			select {
+			// If the broadcaster context is done, there may be nothing to receive
+			// the done signal, so we return to avoid blocking.
+			case <-b.broadcasterCtx.Done():
+				return
+			case b.doneCh <- struct{}{}:
+				// Signal that publishing is done and all responses received
+			}
 		}
 	}
 }
