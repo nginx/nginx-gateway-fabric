@@ -143,15 +143,8 @@ func (b *DeploymentBroadcaster) CancelSubscription(id string) {
 func (b *DeploymentBroadcaster) subscriber(stopCh chan struct{}) {
 	defer func() {
 		// Canceling the broadcaster context will cancel all listener contexts since they are children,
-		// which will unblock any publishers waiting on those contexts. We also close all response channels to unblock
-		// any publishers waiting on those channels.
+		// which will unblock any publishers waiting on those contexts.
 		b.broadcasterCancel()
-
-		b.mu.Lock()
-		for _, channels := range b.listeners {
-			close(channels.responseCh)
-		}
-		b.mu.Unlock()
 	}()
 
 	for {
@@ -169,8 +162,6 @@ func (b *DeploymentBroadcaster) subscriber(stopCh chan struct{}) {
 			if channels, exists := b.listeners[id]; exists {
 				// Cancel listener's context to unblock publisher
 				channels.cancel()
-				// Unblock publisher waiting for this response
-				close(channels.responseCh)
 				delete(b.listeners, id)
 			}
 			b.mu.Unlock()
@@ -206,7 +197,16 @@ func (b *DeploymentBroadcaster) publisher() {
 						return
 					case channels.listenCh <- msg:
 						// Message sent, wait for response
-						<-channels.responseCh // Response received or channel closed
+					}
+
+					select {
+					case <-channels.listenerCtx.Done():
+						return
+					case <-b.broadcasterCtx.Done():
+						return
+					case <-channels.responseCh:
+						// Response received, continue
+						return
 					}
 				})
 			}

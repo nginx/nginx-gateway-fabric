@@ -187,7 +187,8 @@ func TestShutdown_ResponseChannelsClosedOnExitListenerReceivedMessage(t *testing
 	close(stopCh)
 
 	// Send should complete because response channel gets closed during shutdown
-	// Note: Returns false because listener was canceled before message was received
+	// Note: Returns false because shutdown closes the response channel while the
+	// publisher is waiting for the response
 	g.Eventually(sendDone).Should(Receive(BeFalse()))
 }
 
@@ -221,7 +222,8 @@ func TestCancelSubscription_UnblocksPublisherListenerReceivedMessage(t *testing.
 	broadcaster.CancelSubscription(subscriber.ID)
 
 	// Send should complete because response channel gets closed during cancellation
-	// Note: Returns false because listener was canceled before message was received
+	// Note: Returns false because listener was canceled while the publisher was waiting
+	// for the response (after the message was received)
 	g.Eventually(sendDone).Should(Receive(BeFalse()))
 }
 
