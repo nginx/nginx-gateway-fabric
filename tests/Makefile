@@ -19,8 +19,7 @@ CONFORMANCE_PROFILES = $(STANDARD_CONFORMANCE_PROFILES) # by default we use the 
 SKIP_TESTS_OPENSHIFT = HTTPRouteServiceTypes # Doesn't work on OpenShift due to security restrictions
 SKIP_TESTS =
 CEL_TEST_TARGET =
-INFERENCE_SUPPORTED_FEATURES = GatewayFollowingEPPRouting,EppUnAvailableFailOpen,HTTPRouteInvalidInferencePoolRef,InferencePoolAccepted,HTTPRouteMultipleGatewaysDifferentPools,HTTPRouteMultipleRulesDifferentPools,InferencePoolHTTPRoutePortValidation,InferencePoolInvalidEPPService,InferencePoolResolvedRefsCondition,GatewayWeightedAcrossTwoInferencePools
-INFERENCE_SKIP_TESTS =
+INFERENCE_SKIP_TESTS = GatewayDestinationEndpointServed,InferencePoolAppProtocol
 
 # Check if ENABLE_EXPERIMENTAL is true
 # ifeq ($(ENABLE_EXPERIMENTAL),true)
@@ -105,7 +104,6 @@ run-inference-conformance-tests: ## Run inference conformance tests
 		--restart=Never -- sh -c "go test -v -run TestInferenceExtensionConformance . -tags conformance -args --gateway-class=$(GATEWAY_CLASS) \
 		--version=$(NGF_VERSION) \
 		--skip-tests=$(INFERENCE_SKIP_TESTS) \
-		--supported-features=$(INFERENCE_SUPPORTED_FEATURES) \
 		--report-output=output.txt; cat output.txt" | tee output.txt
 	./scripts/check-pod-exit-code.sh conformance-inference
 	sed -e '1,/GatewayAPIInferenceExtensionVersion/d' output.txt > conformance-profile-inference.yaml
