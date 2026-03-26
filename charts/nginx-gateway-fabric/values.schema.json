@@ -495,7 +495,7 @@
         "image": {
           "properties": {
             "pullPolicy": {
-              "default": "Always",
+              "default": "IfNotPresent",
               "enum": [
                 "Always",
                 "IfNotPresent",
@@ -511,7 +511,7 @@
               "type": "string"
             },
             "tag": {
-              "default": "edge",
+              "default": "2.5.0",
               "title": "tag",
               "type": "string"
             }
@@ -921,7 +921,7 @@
           "description": "The image configuration for the NGINX Gateway Fabric control plane.",
           "properties": {
             "pullPolicy": {
-              "default": "Always",
+              "default": "IfNotPresent",
               "enum": [
                 "Always",
                 "IfNotPresent",
@@ -937,7 +937,7 @@
               "type": "string"
             },
             "tag": {
-              "default": "edge",
+              "default": "2.5.0",
               "title": "tag",
               "type": "string"
             }

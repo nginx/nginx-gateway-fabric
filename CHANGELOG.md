@@ -4,6 +4,70 @@ This document includes a curated changelog for each release. We also publish a c
 a [GitHub release](https://github.com/nginx/nginx-gateway-fabric/releases), which, by contrast, is auto-generated
 and includes links to all PRs that went into the release.
 
+## Release 2.5.0
+
+* Extend the readiness probe configuration by @ciarams87 in https://github.com/nginx/nginx-gateway-fabric/pull/4673
+* Reduce irrelevant resource caching by @sjberman in https://github.com/nginx/nginx-gateway-fabric/pull/4680
+* Update dnsResolver value type to string by @bjee19 in https://github.com/nginx/nginx-gateway-fabric/pull/4719
+* Add owner references to gateway resources by @salonichf5 in https://github.com/nginx/nginx-gateway-fabric/pull/4684
+* Fix regex location ordering, prefix modifier, and regex anchoring by @sanmeshkakade in https://github.com/nginx/nginx-gateway-fabric/pull/4764
+* Fix status updates for long-named Gateways by @sjberman in https://github.com/nginx/nginx-gateway-fabric/pull/4774
+* Design for OpenID Connect by @salonichf5 in https://github.com/nginx/nginx-gateway-fabric/pull/4775
+* Add support for server_tokens by @salonichf5 in https://github.com/nginx/nginx-gateway-fabric/pull/4817
+* Fix concurrent map writes by @sjberman in https://github.com/nginx/nginx-gateway-fabric/pull/4830
+* Bump minimum k8s version to v1.31 by @sjberman in https://github.com/nginx/nginx-gateway-fabric/pull/4840
+* Fix wildcard detection for listeners with hostnames  by @salonichf5 in https://github.com/nginx/nginx-gateway-fabric/pull/4843
+* Add HTTPCORSFilter support by @dhurley in https://github.com/nginx/nginx-gateway-fabric/pull/4813
+* Add gateway name to key when checking for route overlaps by @dhurley in https://github.com/nginx/nginx-gateway-fabric/pull/4855
+* Update Gateway API to 1.5 by @sjberman in https://github.com/nginx/nginx-gateway-fabric/pull/4839
+* Only set helm replicas if autoscaling disabled by @sjberman in https://github.com/nginx/nginx-gateway-fabric/pull/4897
+* Fix policy TargetConflict for unrelated routes by @sjberman in https://github.com/nginx/nginx-gateway-fabric/pull/4899
+* Allow non-SNI requests and fix 421 responses by @sjberman in https://github.com/nginx/nginx-gateway-fabric/pull/4878
+* NGINX Plus: OpenID Connect Support by @sjberman in https://github.com/nginx/nginx-gateway-fabric/pull/4944
+* NGINX Plus: JWT Authentication Support by @sjberman in https://github.com/nginx/nginx-gateway-fabric/pull/4975
+
+
+%%DATE%%
+
+FEATURES:
+
+-
+
+BUG FIXES:
+
+-
+
+DOCUMENTATION:
+
+-
+
+HELM CHART:
+
+- The version of the Helm chart is now 2.5.0
+
+UPGRADE:
+
+-
+
+KNOWN ISSUES:
+
+-
+
+COMPATIBILITY:
+
+- Gateway API version: ``
+- Gateway API Inference Extension version: ``
+- NGINX version: ``
+- NGINX Plus version: ``
+- NGINX Agent version: ``
+- Kubernetes version: ``
+
+CONTAINER IMAGES:
+
+- Control plane: `ghcr.io/nginx/nginx-gateway-fabric:2.5.0`
+- Data plane: `ghcr.io/nginx/nginx-gateway-fabric/nginx:2.5.0`
+- Data plane with NGINX Plus: `private-registry.nginx.com/nginx-gateway-fabric/nginx-plus:2.5.0`
+- Operator: `ghcr.io/nginx/nginx-gateway-fabric/operator:1.3.0`
 ## Release 2.4.2
 
 _February 18, 2026_
