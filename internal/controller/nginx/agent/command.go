@@ -154,13 +154,29 @@ func (cs *commandService) Subscribe(in pb.CommandService_SubscribeServer) error 
 	go msgr.Run(ctx)
 
 	// apply current config before starting event loop
+	// Lock deployment for entire initial config + subscription process to prevent race conditions.
+	// Without this lock, the following race condition could occur:
+	// 1. New agent calls Subscribe() and starts setInitialConfig()
+	// 2. Concurrently, event handler calls broadcaster.Send() with a config update (file lock is held through
+	//    the entire broadcast transaction)
+	// 3. New agent gets stale config from setInitialConfig(), then subscribes
+	// 4. New agent misses the concurrent config update, leading to configuration drift
+	//
+	// By holding the lock across both setInitialConfig() and broadcaster.Subscribe(), we ensure atomicity:
+	// either the new subscriber gets the lock, applies the latest config before subscribing,
+	// then applies any concurrent updates that come in after subscribing, or the subscriber gets the lock after the
+	// concurrent update, and applies that latest config in setInitialConfig() before subscribing,
+	// ensuring it doesn't miss any updates.
+	deployment.FileLock.Lock()
 	if err := cs.setInitialConfig(ctx, &grpcInfo, deployment, conn, msgr); err != nil {
+		deployment.FileLock.Unlock()
 		return err
 	}
 
 	// subscribe to the deployment broadcaster to get file updates
 	broadcaster := deployment.GetBroadcaster()
 	channels := broadcaster.Subscribe()
+	deployment.FileLock.Unlock()
 	defer broadcaster.CancelSubscription(channels.ID)
 
 	var pendingBroadcastRequest *broadcast.NginxAgentMessage
@@ -284,6 +300,7 @@ func (cs *commandService) waitForConnection(
 }
 
 // setInitialConfig gets the initial configuration for this connection and applies it.
+// The deployment FileLock MUST already be locked before calling this function.
 func (cs *commandService) setInitialConfig(
 	ctx context.Context,
 	grpcInfo *grpcContext.GrpcInfo,
@@ -291,9 +308,6 @@ func (cs *commandService) setInitialConfig(
 	conn *agentgrpc.Connection,
 	msgr messenger.Messenger,
 ) error {
-	deployment.FileLock.Lock()
-	defer deployment.FileLock.Unlock()
-
 	if err := cs.validatePodImageVersion(conn.ParentName, conn.ParentType, deployment.imageVersion); err != nil {
 		cs.logAndSendErrorStatus(grpcInfo, deployment, conn, err)
 		return grpcStatus.Errorf(codes.FailedPrecondition, "nginx image version validation failed: %s", err.Error())
