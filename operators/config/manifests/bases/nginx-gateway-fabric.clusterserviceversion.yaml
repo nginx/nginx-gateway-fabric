@@ -34,13 +34,13 @@ spec:
   - kubernetes
   - networking
   links:
-  - name: Nginx Gateway Fabric
+  - name: NGINX Gateway Fabric
     url: https://nginx-gateway-fabric.domain
   maintainers:
   - email: kubernetes@nginx.com
     name: F5NGINX
   maturity: alpha
-  minKubeVersion: 1.25.0
+  minKubeVersion: 1.31.0
   provider:
     name: F5 NGINX
     url: https://www.f5.com/go/product/welcome-to-nginx
