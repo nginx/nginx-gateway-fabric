@@ -207,7 +207,8 @@ func (h *eventHandlerImpl) sendNginxConfig(ctx context.Context, logger logr.Logg
 			}
 		}()
 
-		if !gw.Valid {
+		// If no listeners or invalid, update status but skip config generation
+		if len(gw.Listeners) == 0 || !gw.Valid {
 			obj := &status.QueueObject{
 				Deployment: status.Deployment{
 					NamespacedName: gw.DeploymentName,
@@ -216,7 +217,7 @@ func (h *eventHandlerImpl) sendNginxConfig(ctx context.Context, logger logr.Logg
 				UpdateType: status.UpdateAll,
 			}
 			h.cfg.statusQueue.Enqueue(obj)
-			return
+			continue
 		}
 
 		stopCh := make(chan struct{})
@@ -541,7 +542,7 @@ func getGatewayAddresses(
 	gateway *graph.Gateway,
 	gatewayClassName string,
 ) ([]gatewayv1.GatewayStatusAddress, error) {
-	if gateway == nil {
+	if gateway == nil || len(gateway.Listeners) == 0 {
 		return nil, nil
 	}
 
@@ -571,10 +572,17 @@ func getGatewayAddresses(
 		gwSvc = *svc
 	}
 
+	return getGatewayAddressesForStatus(&gwSvc, gateway), nil
+}
+
+func getGatewayAddressesForStatus(
+	svc *v1.Service,
+	gateway *graph.Gateway,
+) (gwAddresses []gatewayv1.GatewayStatusAddress) {
 	var addresses, hostnames []string
-	switch gwSvc.Spec.Type {
+	switch svc.Spec.Type {
 	case v1.ServiceTypeLoadBalancer:
-		for _, ingress := range gwSvc.Status.LoadBalancer.Ingress {
+		for _, ingress := range svc.Status.LoadBalancer.Ingress {
 			if ingress.IP != "" {
 				addresses = append(addresses, ingress.IP)
 			} else if ingress.Hostname != "" {
@@ -582,7 +590,7 @@ func getGatewayAddresses(
 			}
 		}
 	default:
-		addresses = append(addresses, gwSvc.Spec.ClusterIP)
+		addresses = append(addresses, svc.Spec.ClusterIP)
 	}
 
 	for _, address := range gateway.Source.Spec.Addresses {
@@ -593,7 +601,7 @@ func getGatewayAddresses(
 		}
 	}
 
-	gwAddresses := make([]gatewayv1.GatewayStatusAddress, 0, len(addresses)+len(hostnames))
+	gwAddresses = make([]gatewayv1.GatewayStatusAddress, 0, len(addresses)+len(hostnames))
 	for _, addr := range addresses {
 		statusAddr := gatewayv1.GatewayStatusAddress{
 			Type:  helpers.GetPointer(gatewayv1.IPAddressType),
@@ -609,8 +617,7 @@ func getGatewayAddresses(
 		}
 		gwAddresses = append(gwAddresses, statusAddr)
 	}
-
-	return gwAddresses, nil
+	return gwAddresses
 }
 
 // getDeploymentContext gets the deployment context metadata for N+ reporting.

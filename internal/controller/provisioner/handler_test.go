@@ -47,6 +47,9 @@ func TestHandleEventBatch_Upsert(t *testing.T) {
 			Namespace: "default",
 			Labels:    map[string]string{"app": "nginx"},
 		},
+		Spec: gatewayv1.GatewaySpec{
+			Listeners: []gatewayv1.Listener{{Port: 80}},
+		},
 	}
 
 	deployment := &appsv1.Deployment{
@@ -244,6 +247,9 @@ func TestHandleEventBatch_Delete(t *testing.T) {
 			Namespace: "default",
 			Labels:    map[string]string{"app": "nginx"},
 		},
+		Spec: gatewayv1.GatewaySpec{
+			Listeners: []gatewayv1.Listener{{Port: 80}},
+		},
 	}
 
 	store.registerResourceInGatewayConfig(
@@ -385,6 +391,119 @@ func TestHandleEventBatch_Delete(t *testing.T) {
 	handler.HandleEventBatch(ctx, logger, batch)
 
 	g.Expect(store.getGateway(client.ObjectKeyFromObject(gateway))).To(BeNil())
+}
+
+func TestHandleEventBatch_NoListeners(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	store := newStore([]string{dockerTestSecretName}, agentTLSTestSecretName, "", "", "", "")
+	provisioner, fakeClient, _ := defaultNginxProvisioner()
+	provisioner.cfg.StatusQueue = status.NewQueue()
+
+	labelSelector := metav1.LabelSelector{
+		MatchLabels: map[string]string{"app": "nginx"},
+	}
+	gcName := "nginx"
+
+	handler, err := newEventHandler(store, provisioner, provisioner.k8sClient, labelSelector, gcName)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	ctx := t.Context()
+	logger := logr.Discard()
+
+	// Create a gateway with no listeners
+	gateway := &gatewayv1.Gateway{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "gw-no-listeners",
+			Namespace: "default",
+			Labels:    map[string]string{"app": "nginx"},
+		},
+		Spec: gatewayv1.GatewaySpec{
+			Listeners: []gatewayv1.Listener{}, // Empty listeners
+		},
+	}
+
+	// Create agentTLS secret that's needed for provisioning
+	agentTLSSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      agentTLSTestSecretName,
+			Namespace: ngfNamespace,
+		},
+		Data: map[string][]byte{
+			"tls.crt": []byte("cert"),
+			"tls.key": []byte("key"),
+		},
+	}
+	g.Expect(fakeClient.Create(ctx, agentTLSSecret)).To(Succeed())
+
+	// Test handling Gateway upsert
+	upsertEvent := &events.UpsertEvent{Resource: gateway}
+	batch := events.EventBatch{upsertEvent}
+	handler.HandleEventBatch(ctx, logger, batch)
+
+	g.Expect(store.getGateway(client.ObjectKeyFromObject(gateway))).To(Equal(gateway))
+
+	// Register the gateway in the store as valid
+	store.registerResourceInGatewayConfig(
+		client.ObjectKeyFromObject(gateway),
+		&graph.Gateway{Source: gateway, Valid: true},
+	)
+
+	// Dummy deployment resource to trigger upsert event on gateway with no listeners
+	// This verifies the handler doesn't panic when processing resources for gateways without listeners
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "gw-no-listeners-nginx",
+			Namespace: "default",
+			Labels:    map[string]string{"app": "nginx", controller.GatewayLabel: "gw-no-listeners"},
+		},
+	}
+	g.Expect(fakeClient.Create(ctx, deployment)).To(Succeed())
+
+	// Test handling Deployment upsert
+	upsertEvent = &events.UpsertEvent{Resource: deployment}
+	batch = events.EventBatch{upsertEvent}
+	handler.HandleEventBatch(ctx, logger, batch)
+
+	// Deployment remains unchanged (handler does nothing since there are no listeners to provision)
+	g.Expect(fakeClient.Get(ctx, client.ObjectKeyFromObject(deployment), &appsv1.Deployment{})).To(Succeed())
+
+	// Dummy service resource to trigger upsert event on gateway with no listeners
+	service := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "gw-no-listeners-nginx",
+			Namespace: "default",
+			Labels:    map[string]string{"app": "nginx", controller.GatewayLabel: "gw-no-listeners"},
+		},
+	}
+	g.Expect(fakeClient.Create(ctx, service)).To(Succeed())
+
+	// Test handling Service upsert
+	upsertEvent = &events.UpsertEvent{Resource: service}
+	batch = events.EventBatch{upsertEvent}
+	handler.HandleEventBatch(ctx, logger, batch)
+
+	// Service remains unchanged - handler does nothing since there are no listeners to provision
+	g.Expect(fakeClient.Get(ctx, client.ObjectKeyFromObject(service), &corev1.Service{})).To(Succeed())
+
+	// Now test delete event - when deployment is deleted, handler will attempt to re-provision
+	// with no listeners and nothing should be created
+	store.registerResourceInGatewayConfig(client.ObjectKeyFromObject(gateway), deployment)
+
+	deleteEvent := &events.DeleteEvent{Type: deployment, NamespacedName: client.ObjectKeyFromObject(deployment)}
+	batch = events.EventBatch{deleteEvent}
+
+	// Delete the deployment first
+	g.Expect(fakeClient.Delete(ctx, deployment)).To(Succeed())
+
+	// Handle the delete event - should not panic even with no listeners
+	handler.HandleEventBatch(ctx, logger, batch)
+
+	// Deployment should still not exist because gateway has no listeners
+	err = fakeClient.Get(ctx, client.ObjectKeyFromObject(deployment), &appsv1.Deployment{})
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(err.Error()).To(ContainSubstring("not found"))
 }
 
 func TestEventHandler_HasResourceVersionChanged(t *testing.T) {
