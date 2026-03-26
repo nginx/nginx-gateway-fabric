@@ -37,11 +37,12 @@ const (
 	DefaultLogFormatName = "ngf_user_defined_log_format"
 	// DefaultAccessLogPath is the default path for the access log.
 	DefaultAccessLogPath = "/dev/stdout"
-	// InternalRateLimitShadowPolicyAnnotationKey is the annotation key used to mark internally generated
+	// InternalRLPAnnotationKey is the annotation key used to mark internally generated
 	// RateLimitPolicies. These policies are created when a RateLimitPolicy targets a route and not
 	// the Gateway itself; in this situation we need an additional policy to generate the http context
 	// configuration.
-	InternalRLPAnnotationKey   = "nginx.org/internal-annotation-http-context-only"
+	InternalRLPAnnotationKey = "nginx.org/internal-annotation-http-context-only"
+	// InternalRLPAnnotationValue is the annotation value used to mark internally generated RateLimitPolicies.
 	InternalRLPAnnotationValue = "true"
 	crlBundleIDPrefix          = "crl_bundle"
 )
