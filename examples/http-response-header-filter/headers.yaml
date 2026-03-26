@@ -51,6 +51,9 @@ data:
             add_header X-Header-Set "overwrite";
             add_header X-Header-Remove "remove";
 
+            add_header X-Address $upstream_addr;
+            add_header X-Method $request_method;
+
             return 200 "ok";
         }
     }

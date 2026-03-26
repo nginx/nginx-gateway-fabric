@@ -65,6 +65,30 @@ func validateEscapedStringNoVarExpansion(value string, examples []string) error 
 }
 
 const (
+	escapedStringsWithNginxVarsFmt    = `([^"$\\]|\\[^$]|\$(\{[a-z_][a-z0-9_]*\}|[a-z_][a-z0-9_]*))*`
+	escapedStringsWithNginxVarsErrMsg = `a valid value must have all '"' escaped, must not end with an unescaped '\', ` +
+		`and may only contain '$' as part of a valid NGINX variable reference (e.g. $remote_addr or ${remote_addr})`
+)
+
+var escapedStringsWithNginxVarsFmtRegexp = regexp.MustCompile("^" + escapedStringsWithNginxVarsFmt + "$")
+
+// validateEscapedStringWithNginxVars validates a string that may contain NGINX variable references
+// of the form $variable_name or ${variable_name}, where the name starts with a lowercase letter or
+// underscore followed by lowercase letters, digits, or underscores.
+// All '"' must be escaped and the string must not end with an unescaped '\'.
+func validateEscapedStringWithNginxVars(value string, examples []string) error {
+	if !escapedStringsWithNginxVarsFmtRegexp.MatchString(value) {
+		msg := k8svalidation.RegexError(
+			escapedStringsWithNginxVarsErrMsg,
+			escapedStringsWithNginxVarsFmt,
+			examples...,
+		)
+		return errors.New(msg)
+	}
+	return nil
+}
+
+const (
 	invalidHeadersErrMsg string = "unsupported header name configured, unsupported names are: "
 	maxHeaderLength      int    = 256
 )

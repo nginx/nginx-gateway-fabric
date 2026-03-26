@@ -19,9 +19,13 @@ spec:
         set:
         - name: X-Header-Set
           value: overwritten-value
+        - name: X-Address
+          value: $remote_addr
         add:
         - name: X-Header-Add
           value: this-is-the-appended-value
+        - name: X-Method
+          value: $request_id
         remove:
         - X-Header-Remove
     backendRefs:

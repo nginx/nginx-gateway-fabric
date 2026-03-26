@@ -152,16 +152,24 @@ function testMatch(r, match) {
 function headersMatch(requestHeaders, headers) {
 	for (let i = 0; i < headers.length; i++) {
 		const h = headers[i];
-		const kv = h.split(':');
 
 		// header should be of the format "key:MatchType:value"
-		if (kv.length !== 3) {
+		// The value may itself contain ':', so we locate the first two ':' delimiters and
+		// treat everything after the second ':' as the value.
+		const firstColon = h.indexOf(':');
+		const secondColon = h.indexOf(':', firstColon + 1);
+		if (firstColon === -1 || secondColon === -1) {
 			throw Error(`invalid header match: ${h}`);
 		}
+
+		const name = h.slice(0, firstColon);
+		const type = h.slice(firstColon + 1, secondColon);
+		const matchValue = h.slice(secondColon + 1);
+
 		// Header names are compared in a case-insensitive manner, meaning header name "FOO" is equivalent to "foo".
 		// The NGINX request's headersIn object lookup is case-insensitive as well.
 		// This means that requestHeaders['FOO'] is equivalent to requestHeaders['foo'].
-		let val = requestHeaders[kv[0]];
+		let val = requestHeaders[name];
 
 		if (!val) {
 			return false;
@@ -170,7 +178,6 @@ function headersMatch(requestHeaders, headers) {
 		// split on comma because nginx uses commas to delimit multiple header values
 		const values = val.split(',');
 
-		let type = kv[1];
 		// verify the type of header match
 		if (!(type == 'Exact' || type == 'RegularExpression')) {
 			throw Error(`invalid header match type: ${type}`);
@@ -178,11 +185,11 @@ function headersMatch(requestHeaders, headers) {
 
 		// match the value based on the type
 		if (type === 'Exact') {
-			if (!values.includes(kv[2])) {
+			if (!values.includes(matchValue)) {
 				return false;
 			}
 		} else if (type === 'RegularExpression') {
-			if (!values.some((v) => new RegExp(kv[2]).test(v))) {
+			if (!values.some((v) => new RegExp(matchValue).test(v))) {
 				return false;
 			}
 		}

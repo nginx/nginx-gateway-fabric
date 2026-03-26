@@ -46,6 +46,39 @@ func TestValidateEscapedStringNoVarExpansion(t *testing.T) {
 	)
 }
 
+func TestValidateEscapedStringWithNginxVars(t *testing.T) {
+	t.Parallel()
+	validator := func(value string) error { return validateEscapedStringWithNginxVars(value, []string{"example"}) }
+
+	testValidValuesForSimpleValidator(
+		t,
+		validator,
+		`test`,
+		`test test`,
+		`\"`,
+		`\\`,
+		`$remote_addr`,
+		`$http_x_forwarded_for`,
+		`$_internal`,
+		`Bearer $jwt_token`,
+		`prefix-$remote_addr-suffix`,
+		`${remote_addr}`,
+		`${_internal_var}`,
+		`prefix-${remote_addr}suffix`,
+	)
+	testInvalidValuesForSimpleValidator(
+		t,
+		validator,
+		`\`,
+		`test"test`,
+		`$`,
+		`$Uppercase`,
+		`$123invalid`,
+		`${Uppercase}`,
+		`${}`,
+	)
+}
+
 func TestValidateValidHeaderName(t *testing.T) {
 	t.Parallel()
 	validator := validateHeaderName

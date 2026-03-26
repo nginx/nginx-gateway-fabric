@@ -100,6 +100,11 @@ func TestValidateFilterHeaderValue(t *testing.T) {
 		"ssl_(server_name}",
 		"example/1234==",
 		"1234:3456",
+		"$remote_addr",
+		"$http_x_forwarded_for",
+		"$jwt_claim_sub",
+		"$arg_foo",
+		"$upstream_status",
 	)
 
 	testInvalidValuesForSimpleValidator(
@@ -107,5 +112,6 @@ func TestValidateFilterHeaderValue(t *testing.T) {
 		validator.ValidateFilterHeaderValue,
 		"$Content-Encoding",
 		`"example"`,
+		"value$",
 	)
 }
