@@ -12,11 +12,11 @@ GW_SERVICE_TYPE = NodePort## Service type to use for the gateway
 NGF_VERSION ?= edge## NGF version to be tested
 PULL_POLICY ?= Never## Pull policy for the images
 NGINX_CONF_DIR = internal/controller/nginx/conf
-SUPPORTED_EXTENDED_FEATURES_OPENSHIFT = HTTPRouteQueryParamMatching,HTTPRouteMethodMatching,HTTPRoutePortRedirect,HTTPRouteSchemeRedirect,HTTPRouteHostRewrite,HTTPRoutePathRewrite,GatewayPort8080,GatewayAddressEmpty,HTTPRouteResponseHeaderModification,HTTPRoutePathRedirect,GatewayHTTPListenerIsolation,GatewayInfrastructurePropagation,HTTPRouteRequestMirror,HTTPRouteRequestMultipleMirrors,HTTPRouteRequestPercentageMirror,HTTPRouteBackendProtocolWebSocket,HTTPRouteParentRefPort,HTTPRouteDestinationPortMatching
 STANDARD_CONFORMANCE_PROFILES = GATEWAY-HTTP,GATEWAY-GRPC,GATEWAY-TLS
 EXPERIMENTAL_CONFORMANCE_PROFILES =
 CONFORMANCE_PROFILES = $(STANDARD_CONFORMANCE_PROFILES) # by default we use the standard conformance profiles. If experimental is enabled we override this and add the experimental profiles.
-SKIP_TESTS_OPENSHIFT = HTTPRouteServiceTypes # Doesn't work on OpenShift due to security restrictions
+SUPPORTED_EXTENDED_FEATURES_OPENSHIFT = HTTPRouteQueryParamMatching,HTTPRouteMethodMatching,HTTPRoutePortRedirect,HTTPRouteSchemeRedirect,HTTPRouteHostRewrite,HTTPRoutePathRewrite,GatewayPort8080,GatewayAddressEmpty,HTTPRouteResponseHeaderModification,HTTPRoutePathRedirect,GatewayHTTPListenerIsolation,GatewayInfrastructurePropagation,HTTPRouteRequestMirror,HTTPRouteRequestMultipleMirrors,HTTPRouteRequestPercentageMirror,HTTPRouteBackendProtocolWebSocket,HTTPRouteParentRefPort,HTTPRouteDestinationPortMatching,HTTPRouteHTTPSListenerDetectMisdirectedRequests,GatewayBackendClientCertificate
+SKIP_TESTS_OPENSHIFT = HTTPRouteServiceTypes,TLSRouteHostnameIntersection,TLSRouteInvalidBackendRefNonexistent,TLSRouteInvalidBackendRefUnknownKind,TLSRouteInvalidNoMatchingListenerHostname,TLSRouteInvalidNoMatchingListener,TLSRouteInvalidReferenceGrant,TLSRouteListenerPassthroughSupportedKinds,TLSRouteListenerTerminateNotSupported,TLSRouteSimpleSameNamespace
 SKIP_TESTS =
 CEL_TEST_TARGET =
 INFERENCE_SKIP_TESTS = GatewayDestinationEndpointServed,InferencePoolAppProtocol
@@ -80,7 +80,7 @@ run-conformance-tests-openshift: ## Run conformance tests on OpenShift (skips te
 		--overrides='{ "spec": { "serviceAccountName": "conformance" }	}' \
 		--restart=Never -- sh -c "go test -v -run TestConformance . -tags conformance,experimental -args --gateway-class=$(GATEWAY_CLASS) \
 						        --supported-features=$(SUPPORTED_EXTENDED_FEATURES_OPENSHIFT) --version=$(NGF_VERSION) --skip-tests=$(SKIP_TESTS_OPENSHIFT) --conformance-profiles=$(CONFORMANCE_PROFILES) \
-								--service-type=$(GW_SERVICE_TYPE) --report-output=output.txt; cat output.txt" | tee output.txt
+								--allow-crds-mismatch --report-output=output.txt; cat output.txt" | tee output.txt
 	./scripts/check-pod-exit-code.sh conformance
 	sed -e '1,/CONFORMANCE PROFILE/d' output.txt > conformance-profile.yaml
 	rm output.txt

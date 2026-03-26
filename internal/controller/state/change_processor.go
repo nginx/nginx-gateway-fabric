@@ -14,6 +14,7 @@ import (
 	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 	"sigs.k8s.io/gateway-api/apis/v1alpha2"
+	v1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 	"sigs.k8s.io/gateway-api/pkg/consts"
 
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
@@ -57,6 +58,9 @@ type ChangeProcessorConfig struct {
 	MustExtractGVK kinds.MustExtractGVK
 	// PlusSecrets is a list of secret files used for NGINX Plus reporting (JWT, client SSL, CA).
 	PlusSecrets map[types.NamespacedName][]graph.PlusSecretFile
+	// DiscoveredCRDs is a map of discovered CRDs in the cluster,
+	// where the key is the CRD name and the value indicates if the CRD exists.
+	DiscoveredCRDs map[string]bool
 	// Logger is the logger for this Change Processor.
 	Logger logr.Logger
 	// GatewayCtlrName is the name of the Gateway controller.
@@ -147,11 +151,7 @@ func NewChangeProcessorImpl(cfg ChangeProcessorConfig) *ChangeProcessorImpl {
 			store:     newObjectStoreMapAdapter(clusterStore.HTTPRoutes),
 			predicate: nil,
 		},
-		{
-			gvk:       cfg.MustExtractGVK(&v1.ReferenceGrant{}),
-			store:     newObjectStoreMapAdapter(clusterStore.ReferenceGrants),
-			predicate: nil,
-		},
+		refGrantTrackingCfg(cfg.MustExtractGVK, cfg.DiscoveredCRDs, clusterStore.ReferenceGrants),
 		{
 			gvk:       cfg.MustExtractGVK(&v1.BackendTLSPolicy{}),
 			store:     newObjectStoreMapAdapter(clusterStore.BackendTLSPolicies),
@@ -328,4 +328,30 @@ func (c *ChangeProcessorImpl) GetLatestGraph() *graph.Graph {
 	defer c.lock.Unlock()
 
 	return c.latestGraph
+}
+
+// refGrantTrackingCfg returns the change tracking updater config for ReferenceGrant.
+// If v1 ReferenceGrant CRD exists in the cluster (or discoveredCRDs is nil, i.e. not populated),
+// it tracks the v1 GVK directly.
+// If v1 is explicitly not found, it falls back to tracking v1beta1 and converting objects to v1 before storing.
+func refGrantTrackingCfg(
+	mustExtractGVK kinds.MustExtractGVK,
+	discoveredCRDs map[string]bool,
+	refGrants map[types.NamespacedName]*v1.ReferenceGrant,
+) changeTrackingUpdaterObjectTypeCfg {
+	// Use v1beta1 only when we've explicitly checked and v1 is not available.
+	exists, checked := discoveredCRDs[kinds.ReferenceGrant]
+	if checked && !exists {
+		return changeTrackingUpdaterObjectTypeCfg{
+			gvk:       mustExtractGVK(&v1beta1.ReferenceGrant{}),
+			store:     newConvertingReferenceGrantStore(refGrants),
+			predicate: nil,
+		}
+	}
+
+	return changeTrackingUpdaterObjectTypeCfg{
+		gvk:       mustExtractGVK(&v1.ReferenceGrant{}),
+		store:     newObjectStoreMapAdapter(refGrants),
+		predicate: nil,
+	}
 }

@@ -203,6 +203,7 @@ Create namespaced RBAC rules.
   resources:
   - httproutes/status
   - gateways/status
+  - gateways/finalizers
   - gatewayclasses/status
   - grpcroutes/status
   - backendtlspolicies/status
@@ -271,6 +272,7 @@ Create namespaced RBAC rules.
   - inference.networking.k8s.io
   resources:
   - inferencepools/status
+  - inferencepools/finalizers
   verbs:
   - update
   {{- end }}
