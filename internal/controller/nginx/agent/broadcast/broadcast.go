@@ -106,8 +106,7 @@ func (b *DeploymentBroadcaster) Subscribe() SubscriberChannels {
 
 	select {
 	case <-b.broadcasterCtx.Done():
-		// Broadcaster is shutting down or already shut down; existing value to
-		// unblock subscriber, but return channels so the caller
+		// Broadcaster is shutting down or already shut down. Returns channels so the caller
 		// can still interact with them while shutting down.
 		return subscriberChans
 	case b.subCh <- storedChans:
