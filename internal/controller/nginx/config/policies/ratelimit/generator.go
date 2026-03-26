@@ -182,8 +182,10 @@ func generate(pols []policies.Policy, tmpl *template.Template) policies.Generate
 
 		isHTTPContextOnly := isShadowPolicy(rlp)
 
-		// shadow policies (internally created for Route-attached policies) only contribute
-		// limit_req_zone at the http context.
+		// Route-attached policies generate limit_req_zone at the http context via an internally-created
+		// copy (marked with the http-context-only annotation). That copy should never generate limit_req
+		// at the server level doing so would incorrectly rate limit all routes on the server, and the block
+		// could possibly have its own limit_req directives.
 		if tmpl == tmplServer && isHTTPContextOnly {
 			continue
 		}
