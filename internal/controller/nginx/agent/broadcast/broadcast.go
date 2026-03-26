@@ -104,7 +104,16 @@ func (b *DeploymentBroadcaster) Subscribe() SubscriberChannels {
 		cancel:      cancel,
 	}
 
-	b.subCh <- storedChans
+	select {
+	case <-b.broadcasterCtx.Done():
+		// Broadcaster is shutting down or already shut down; existing value to
+		// unblock subscriber, but return channels so the caller
+		// can still interact with them while shutting down.
+		return subscriberChans
+	case b.subCh <- storedChans:
+		// Subscription sent successfully
+	}
+
 	return subscriberChans
 }
 
@@ -134,12 +143,17 @@ func (b *DeploymentBroadcaster) Send(message NginxAgentMessage) bool {
 
 // CancelSubscription removes a Subscriber from the channel list.
 func (b *DeploymentBroadcaster) CancelSubscription(id string) {
-	b.unsubCh <- id
+	select {
+	case b.unsubCh <- id:
+	case <-b.broadcasterCtx.Done():
+		// Broadcaster is shutting down or already shut down; avoid blocking send.
+		return
+	}
 }
 
 // subscriber handles subscription management and stop conditions. It is responsible for cleaning up resources
-// on shutdown/function return, specifically by canceling the broadcaster context and closing response channels
-// to unblock any pending publisher goroutines.
+// on shutdown/function return, specifically by canceling the broadcaster context (and thus all listener
+// contexts) to unblock any pending publisher goroutines.
 func (b *DeploymentBroadcaster) subscriber(stopCh chan struct{}) {
 	defer func() {
 		// Canceling the broadcaster context will cancel all listener contexts since they are children,

@@ -159,7 +159,7 @@ func TestShutdown_MessagesIgnoredAfterStopCh(t *testing.T) {
 	g.Consistently(subscriber.ListenCh, "100ms").ShouldNot(Receive())
 }
 
-func TestShutdown_ResponseChannelsClosedOnExitListenerReceivedMessage(t *testing.T) {
+func TestShutdown_ClosedStopChannelAfterListenerReceivedMessage(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
