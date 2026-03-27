@@ -1,6 +1,7 @@
 package broadcast_test
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -13,10 +14,7 @@ func TestSubscribe(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	stopCh := make(chan struct{})
-	defer close(stopCh)
-
-	broadcaster := broadcast.NewDeploymentBroadcaster(t.Context(), stopCh)
+	broadcaster := broadcast.NewDeploymentBroadcaster(t.Context())
 
 	subscriber := broadcaster.Subscribe()
 	g.Expect(subscriber.ID).NotTo(BeEmpty())
@@ -49,10 +47,7 @@ func TestSubscribe_MultipleListeners(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	stopCh := make(chan struct{})
-	defer close(stopCh)
-
-	broadcaster := broadcast.NewDeploymentBroadcaster(t.Context(), stopCh)
+	broadcaster := broadcast.NewDeploymentBroadcaster(t.Context())
 
 	subscriber1 := broadcaster.Subscribe()
 	subscriber2 := broadcaster.Subscribe()
@@ -90,10 +85,7 @@ func TestSubscribe_NoListeners(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	stopCh := make(chan struct{})
-	defer close(stopCh)
-
-	broadcaster := broadcast.NewDeploymentBroadcaster(t.Context(), stopCh)
+	broadcaster := broadcast.NewDeploymentBroadcaster(t.Context())
 
 	message := broadcast.NginxAgentMessage{
 		ConfigVersion: "v1",
@@ -108,10 +100,7 @@ func TestCancelSubscription(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	stopCh := make(chan struct{})
-	defer close(stopCh)
-
-	broadcaster := broadcast.NewDeploymentBroadcaster(t.Context(), stopCh)
+	broadcaster := broadcast.NewDeploymentBroadcaster(t.Context())
 
 	subscriber := broadcaster.Subscribe()
 
@@ -128,12 +117,12 @@ func TestCancelSubscription(t *testing.T) {
 	g.Consistently(subscriber.ListenCh).ShouldNot(Receive())
 }
 
-func TestShutdown_MessagesIgnoredAfterStopCh(t *testing.T) {
+func TestShutdown_MessagesIgnoredAfterContextCancel(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	stopCh := make(chan struct{})
-	broadcaster := broadcast.NewDeploymentBroadcaster(t.Context(), stopCh)
+	ctx, cancel := context.WithCancel(context.Background())
+	broadcaster := broadcast.NewDeploymentBroadcaster(ctx)
 
 	subscriber := broadcaster.Subscribe()
 
@@ -142,8 +131,8 @@ func TestShutdown_MessagesIgnoredAfterStopCh(t *testing.T) {
 		Type:          broadcast.ConfigApplyRequest,
 	}
 
-	// Close stopCh to trigger shutdown
-	close(stopCh)
+	// Cancel context to shut down broadcaster
+	cancel()
 
 	sendDone := make(chan bool)
 	go func() {
@@ -159,12 +148,12 @@ func TestShutdown_MessagesIgnoredAfterStopCh(t *testing.T) {
 	g.Consistently(subscriber.ListenCh, "100ms").ShouldNot(Receive())
 }
 
-func TestShutdown_ClosedStopChannelAfterListenerReceivedMessage(t *testing.T) {
+func TestShutdown_ContextCancelAfterListenerReceivedMessage(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	stopCh := make(chan struct{})
-	broadcaster := broadcast.NewDeploymentBroadcaster(t.Context(), stopCh)
+	ctx, cancel := context.WithCancel(context.Background())
+	broadcaster := broadcast.NewDeploymentBroadcaster(ctx)
 
 	subscriber := broadcaster.Subscribe()
 
@@ -183,8 +172,8 @@ func TestShutdown_ClosedStopChannelAfterListenerReceivedMessage(t *testing.T) {
 	// Wait for message to be received
 	g.Eventually(subscriber.ListenCh).Should(Receive(Equal(message)))
 
-	// Close stopCh while publisher is waiting for response
-	close(stopCh)
+	// Cancel context to shut down broadcaster while publisher is waiting for response
+	cancel()
 
 	// Returns false because the broadcaster context is canceled while the
 	// publisher is waiting for the response
@@ -195,10 +184,7 @@ func TestCancelSubscription_UnblocksPublisherListenerReceivedMessage(t *testing.
 	t.Parallel()
 	g := NewWithT(t)
 
-	stopCh := make(chan struct{})
-	defer close(stopCh)
-
-	broadcaster := broadcast.NewDeploymentBroadcaster(t.Context(), stopCh)
+	broadcaster := broadcast.NewDeploymentBroadcaster(t.Context())
 
 	subscriber := broadcaster.Subscribe()
 
@@ -229,10 +215,7 @@ func TestCancelSubscription_UnblocksPublisherListenerDidNotReceiveMessage(t *tes
 	t.Parallel()
 	g := NewWithT(t)
 
-	stopCh := make(chan struct{})
-	defer close(stopCh)
-
-	broadcaster := broadcast.NewDeploymentBroadcaster(t.Context(), stopCh)
+	broadcaster := broadcast.NewDeploymentBroadcaster(t.Context())
 
 	subscriber := broadcaster.Subscribe()
 

@@ -61,8 +61,7 @@ type DeploymentBroadcaster struct {
 }
 
 // NewDeploymentBroadcaster returns a new instance of a DeploymentBroadcaster.
-func NewDeploymentBroadcaster(ctx context.Context, stopCh chan struct{}) *DeploymentBroadcaster {
-	//nolint:gosec // G118: broadcasterCancel is called in subscriber() defer
+func NewDeploymentBroadcaster(ctx context.Context) *DeploymentBroadcaster {
 	broadcasterCtx, broadcasterCancel := context.WithCancel(ctx)
 
 	broadcaster := &DeploymentBroadcaster{
@@ -75,7 +74,7 @@ func NewDeploymentBroadcaster(ctx context.Context, stopCh chan struct{}) *Deploy
 		broadcasterCancel: broadcasterCancel,
 	}
 
-	go broadcaster.subscriber(stopCh)
+	go broadcaster.subscriber()
 	go broadcaster.publisher()
 
 	return broadcaster
@@ -134,10 +133,9 @@ func (b *DeploymentBroadcaster) Send(message NginxAgentMessage) bool {
 	}
 
 	b.mu.RLock()
-	listenerCount := len(b.listeners)
-	b.mu.RUnlock()
+	defer b.mu.RUnlock()
 
-	return listenerCount > 0
+	return len(b.listeners) > 0
 }
 
 // CancelSubscription removes a Subscriber from the channel list.
@@ -153,17 +151,13 @@ func (b *DeploymentBroadcaster) CancelSubscription(id string) {
 // subscriber handles subscription management and stop conditions. It is responsible for cleaning up resources
 // on shutdown/function return, specifically by canceling the broadcaster context (and thus all listener
 // contexts) to unblock any pending publisher goroutines.
-func (b *DeploymentBroadcaster) subscriber(stopCh chan struct{}) {
-	defer func() {
-		// Canceling the broadcaster context will cancel all listener contexts since they are children,
-		// which will unblock any publishers waiting on those contexts.
-		b.broadcasterCancel()
-	}()
+func (b *DeploymentBroadcaster) subscriber() {
+	// Canceling the broadcaster context will cancel all listener contexts since they are children,
+	// which will unblock any publishers waiting on those contexts.
+	defer b.broadcasterCancel()
 
 	for {
 		select {
-		case <-stopCh:
-			return
 		case <-b.broadcasterCtx.Done():
 			return
 		case channels := <-b.subCh:
