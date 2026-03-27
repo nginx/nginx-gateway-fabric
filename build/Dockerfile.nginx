@@ -16,6 +16,9 @@ RUN --mount=type=bind,from=nginx-files,src=nginx_signing.rsa.pub,target=/etc/apk
     printf "%s\n" "https://packages.nginx.org/nginx-agent/alpine/v$(egrep -o '^[0-9]+\.[0-9]+' /etc/alpine-release)/main" >> /etc/apk/repositories \
     && apk add --no-cache nginx-agent=${NGINX_AGENT_VERSION#v}
 
+# Upgrade for CVEs 2026-33416 and 2026-33636
+RUN apk update && apk upgrade --no-cache libpng
+
 RUN apk add --no-cache bash \
     && mkdir -p /usr/lib/nginx/modules \
     # forward request and error logs to docker log collector
