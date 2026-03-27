@@ -103,6 +103,7 @@ func TestCancelSubscription(t *testing.T) {
 	broadcaster := broadcast.NewDeploymentBroadcaster(t.Context())
 
 	subscriber := broadcaster.Subscribe()
+	g.Expect(subscriber.ID).NotTo(BeEmpty())
 
 	broadcaster.CancelSubscription(subscriber.ID)
 
@@ -125,6 +126,7 @@ func TestShutdown_MessagesIgnoredAfterContextCancel(t *testing.T) {
 	broadcaster := broadcast.NewDeploymentBroadcaster(ctx)
 
 	subscriber := broadcaster.Subscribe()
+	g.Expect(subscriber.ID).NotTo(BeEmpty())
 
 	message := broadcast.NginxAgentMessage{
 		ConfigVersion: "v1",
@@ -156,6 +158,10 @@ func TestShutdown_ContextCancelAfterListenerReceivedMessage(t *testing.T) {
 	broadcaster := broadcast.NewDeploymentBroadcaster(ctx)
 
 	subscriber := broadcaster.Subscribe()
+	g.Expect(subscriber.ID).NotTo(BeEmpty())
+
+	// Give time for subscription to be processed by the subscriber goroutine
+	time.Sleep(10 * time.Millisecond)
 
 	message := broadcast.NginxAgentMessage{
 		ConfigVersion: "v1",
@@ -187,6 +193,10 @@ func TestCancelSubscription_UnblocksPublisherListenerReceivedMessage(t *testing.
 	broadcaster := broadcast.NewDeploymentBroadcaster(t.Context())
 
 	subscriber := broadcaster.Subscribe()
+	g.Expect(subscriber.ID).NotTo(BeEmpty())
+
+	// Give time for subscription to be processed by the subscriber goroutine
+	time.Sleep(10 * time.Millisecond)
 
 	message := broadcast.NginxAgentMessage{
 		ConfigVersion: "v1",
@@ -218,6 +228,7 @@ func TestCancelSubscription_UnblocksPublisherListenerDidNotReceiveMessage(t *tes
 	broadcaster := broadcast.NewDeploymentBroadcaster(t.Context())
 
 	subscriber := broadcaster.Subscribe()
+	g.Expect(subscriber.ID).NotTo(BeEmpty())
 
 	message := broadcast.NginxAgentMessage{
 		ConfigVersion: "v1",
