@@ -4,6 +4,66 @@ This document includes a curated changelog for each release. We also publish a c
 a [GitHub release](https://github.com/nginx/nginx-gateway-fabric/releases), which, by contrast, is auto-generated
 and includes links to all PRs that went into the release.
 
+## Release 2.5.0
+
+_March 30, 2026_
+
+FEATURES:
+
+- Support Gateway API v1.5. TLSRoute has moved to the standard channel and is now v1. ReferenceGrant has also been promoted to v1. [4839](https://github.com/nginx/nginx-gateway-fabric/pull/4839)
+- Add ability to define Cross-Origin Request Sharing (CORS) using the HTTPCORSFilter. [4813](https://github.com/nginx/nginx-gateway-fabric/pull/4813)
+- JWT validation support in the AuthenticationFilter for NGINX Plus users. [4975](https://github.com/nginx/nginx-gateway-fabric/pull/4975)
+- OpenID Connect (OIDC) support in the AuthenticationFilter for NGINX Plus users. [4944](https://github.com/nginx/nginx-gateway-fabric/pull/4944)
+- Extended the readiness probe configuration to enable configuring the health check path and added a toggle to optionally expose the endpoint on the Gateway service for external load balancer health checks. [4673](https://github.com/nginx/nginx-gateway-fabric/pull/4673)
+- Adds support to add owner references to all data plane resources. [4684](https://github.com/nginx/nginx-gateway-fabric/pull/4684)
+- Adds support for `server_tokens`. Allowed values for NGINX OSS users is "on", "off", "build" and NGINX Plus users can provide custom strings. [4817](https://github.com/nginx/nginx-gateway-fabric/pull/4817)
+
+
+BUG FIXES:
+
+- Client requests without SNI can now be routed properly as long as an HTTPS Listener without a hostname is defined on the Gateway. Also aligned 421 Misdirected Requests behavior with the Gateway API specifications, adding flexibility to mismatched SNI and Host header values based on the Listener that these requests are intended for. [4878](https://github.com/nginx/nginx-gateway-fabric/pull/4878)
+- Reduce controller memory consumption by adjusting what we add to the API cache. [4680](https://github.com/nginx/nginx-gateway-fabric/pull/4680)
+- Fix regex location ordering to use descending path length (longest-first) so specific regex patterns match before catch-all patterns. Remove `^~` modifier from prefix locations to allow regex fallthrough. Anchor regex paths with `^` to prevent mid-URI matching. [4764](https://github.com/nginx/nginx-gateway-fabric/pull/4764) Thanks to [sanmeshkakade](https://github.com/sanmeshkakade).
+- Fix an issue where Gateways with long names would not get their status set. [4774](https://github.com/nginx/nginx-gateway-fabric/pull/4774)
+- Fix a crash that could occur due to concurrent map writes when provisioning NGINX resources. [4830](https://github.com/nginx/nginx-gateway-fabric/pull/4830)
+- Fix an issue with false positive wildcard matching with bare domains and wildcard hostnames when determining overlapping hostnames. [4843](https://github.com/nginx/nginx-gateway-fabric/pull/4843)
+- Fix a scenario where TargetConflicts prevent policies from attaching to shared Routes for multiple Gateways. [4855](https://github.com/nginx/nginx-gateway-fabric/pull/4855)
+- Fix a bug where `$request_uri` was unconditionally appended to `proxy_pass` for all non-gRPC routes, breaking SSI (server-side includes). `$request_uri` is now only appended for internal locations. [4935](https://github.com/nginx/nginx-gateway-fabric/pull/4935) Thanks to [oyiz-michael](https://github.com/oyiz-michael).
+- Fix an issue where a policy may incorrectly report a TargetConflict when a route exists with overlapping paths. [4899](https://github.com/nginx/nginx-gateway-fabric/pull/4899)
+
+HELM CHART:
+
+- The version of the Helm chart is now 2.5.0.
+- Minimum supported Kubernetes version is now 1.31.
+- Helm upgrade now works properly when autoscaling is enabled. [4897](https://github.com/nginx/nginx-gateway-fabric/pull/4897)
+
+UPGRADE:
+
+- Minimum supported Kubernetes version is now 1.31.
+- Gateway API has been updated to 1.5.1. TLSRoute has been promoted to the standard channel v1. ReferenceGrants are moved from v1beta1 to v1. Ensure that this version of the Gateway API is installed before upgrading NGINX Gateway Fabric.
+
+KNOWN ISSUES:
+
+- Data plane configuration can go stale due to connection issues between control plane and data plane. [4697](https://github.com/nginx/nginx-gateway-fabric/issues/4697), [4068](https://github.com/nginx/nginx-gateway-fabric/issues/4068)
+- TCPRoute and UDPRoute on same gateway with same port number causes failure for both. [4945](https://github.com/nginx/nginx-gateway-fabric/issues/4945)
+- verifyIPFamily rejects dual-stack and cross-family backend Services. [4959](https://github.com/nginx/nginx-gateway-fabric/issues/4959)
+
+COMPATIBILITY:
+
+- Gateway API version: `1.5.1`
+- Gateway API Inference Extension version: `1.4.0`
+- NGINX version: `1.29.7`
+- NGINX Plus version: `R36`
+- NGINX Agent version: `v3.8.0`
+- Kubernetes version: `1.31+`
+
+CONTAINER IMAGES:
+
+- Control plane: `ghcr.io/nginx/nginx-gateway-fabric:2.5.0`
+- Data plane: `ghcr.io/nginx/nginx-gateway-fabric/nginx:2.5.0`
+- Data plane with NGINX Plus: `private-registry.nginx.com/nginx-gateway-fabric/nginx-plus:2.5.0`
+- Operator: `ghcr.io/nginx/nginx-gateway-fabric/operator:1.3.0`
+
 ## Release 2.4.2
 
 _February 18, 2026_
