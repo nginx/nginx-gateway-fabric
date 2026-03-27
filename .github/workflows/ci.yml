@@ -308,7 +308,7 @@ jobs:
           version: v2.14.3 # renovate: datasource=github-tags depName=goreleaser/goreleaser
           # On PRs: build only amd64 for speed (tests run on amd64 runners)
           # On main/release: build both amd64 and arm64
-          args: ${{ (inputs.is_production_release && (inputs.dry_run == false || inputs.dry_run == null)) && 'release' || (github.event_name == 'pull_request' && 'build --single-target --snapshot' || 'build --snapshot') }} --clean
+          args: ${{ (inputs.is_production_release && (inputs.dry_run == false || inputs.dry_run == null)) && 'release' || 'build --snapshot' }} --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GOPATH: ${{ needs.vars.outputs.go_path }}
