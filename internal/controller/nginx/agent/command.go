@@ -167,16 +167,16 @@ func (cs *commandService) Subscribe(in pb.CommandService_SubscribeServer) error 
 	// then applies any concurrent updates that come in after subscribing, or the subscriber gets the lock after the
 	// concurrent update, and applies that latest config in setInitialConfig() before subscribing,
 	// ensuring it doesn't miss any updates.
-	deployment.FileLock.Lock()
+	deployment.FileLock.RLock()
 	if err := cs.setInitialConfig(ctx, &grpcInfo, deployment, conn, msgr); err != nil {
-		deployment.FileLock.Unlock()
+		deployment.FileLock.RUnlock()
 		return err
 	}
 
 	// subscribe to the deployment broadcaster to get file updates
 	broadcaster := deployment.GetBroadcaster()
 	channels := broadcaster.Subscribe()
-	deployment.FileLock.Unlock()
+	deployment.FileLock.RUnlock()
 	defer broadcaster.CancelSubscription(channels.ID)
 
 	var pendingBroadcastRequest *broadcast.NginxAgentMessage
