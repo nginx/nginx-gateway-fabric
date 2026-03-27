@@ -79,6 +79,14 @@
       "title": "clusterDomain",
       "type": "string"
     },
+    "extraObjects": {
+      "description": "A list of extra Kubernetes manifests to deploy. Each item is a raw YAML string representing a complete Kubernetes resource.",
+      "items": {
+        "type": "string"
+      },
+      "title": "extraObjects",
+      "type": "array"
+    },
     "gateways": {
       "description": "A list of Gateway objects. View https://gateway-api.sigs.k8s.io/reference/spec/#gateway for full Gateway reference.",
       "items": {
