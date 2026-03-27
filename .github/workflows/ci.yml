@@ -136,18 +136,18 @@ jobs:
           go-version: stable
           cache-dependency-path: |
             go.sum
-            .github/.cache/buster-for-vars
+            tests/go.sum
 
       - name: Check for changes
-        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3.0.2
+        uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
         id: filter
         with:
           filters: |
             charts:
             - charts/nginx-gateway-fabric/**/*
             rbac:
-            - operators/config/rbac/role.yaml
-            - charts/nginx-gateway-fabric/templates/clusterrole.yaml
+            - operators/**/*
+            - charts/nginx-gateway-fabric/**/*
 
       - name: Output Variables
         id: vars
@@ -195,13 +195,13 @@ jobs:
           go-version: stable
           cache-dependency-path: |
             go.sum
-            .github/.cache/buster-for-unit-tests
+            tests/go.sum
 
       - name: Run Tests
         run: make unit-test
 
       - name: Upload coverage reports to Codecov
-        uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
+        uses: codecov/codecov-action@1af58845a975a7985b0beb0cbe6fbbb71a41dbad # v5.5.3
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
 
@@ -224,19 +224,22 @@ jobs:
         uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
         with:
           node-version-file: .nvmrc
+          cache: 'npm'
+          cache-dependency-path: internal/controller/nginx/modules/package-lock.json
 
       - name: Run tests
         run: npm --prefix ${{ github.workspace }}/internal/controller/nginx/modules install-ci-test
 
       - name: Upload coverage reports to Codecov
-        uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
+        uses: codecov/codecov-action@1af58845a975a7985b0beb0cbe6fbbb71a41dbad # v5.5.3
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
 
   binary:
     name: Build Binary
     runs-on: ${{ github.repository_owner == 'nginx' && (inputs.is_production_release || ((github.event_name == 'push' || github.event_name == 'schedule') && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release-')))) && 'ubuntu-24.04-amd64' || 'ubuntu-24.04' }}
-    needs: [vars, unit-tests, njs-unit-tests]
+    # Run in parallel with tests - they're independent validations
+    needs: [vars]
     outputs:
       json: ${{ steps.gateway_binaries.outputs.json }}
     permissions:
@@ -271,7 +274,7 @@ jobs:
           go-version: stable
           cache-dependency-path: |
             go.sum
-            .github/.cache/buster-for-binary
+            tests/go.sum
 
       - name: Set Go module cache
         run: |
@@ -293,7 +296,7 @@ jobs:
 
       - name: Download Syft
         if: ${{ inputs.is_production_release }}
-        uses: anchore/sbom-action/download-syft@57aae528053a48a3f6235f2d9461b05fbcb7366d # v0.23.1
+        uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
 
       - name: Install Cosign
         if: ${{ inputs.is_production_release }}
@@ -303,7 +306,9 @@ jobs:
         uses: goreleaser/goreleaser-action@ec59f474b9834571250b370d4735c50f8e2d1e29 # v7.0.0
         with:
           version: v2.14.3 # renovate: datasource=github-tags depName=goreleaser/goreleaser
-          args: ${{ (inputs.is_production_release && (inputs.dry_run == false || inputs.dry_run == null)) && 'release' || 'build --snapshot' }} --clean
+          # On PRs: build only amd64 for speed (tests run on amd64 runners)
+          # On main/release: build both amd64 and arm64
+          args: ${{ (inputs.is_production_release && (inputs.dry_run == false || inputs.dry_run == null)) && 'release' || (github.event_name == 'pull_request' && 'build --single-target --snapshot' || 'build --snapshot') }} --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GOPATH: ${{ needs.vars.outputs.go_path }}
@@ -495,6 +500,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # On PRs: run nginx + plus with latest k8s only (2 jobs)
+        # On main/release: run full matrix (8 jobs)
         image: [nginx, plus]
         build-os: ["", ubi]
         k8s-version:
@@ -517,6 +524,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # On PRs: run latest k8s, experimental enabled (1 job - most coverage)
+        # On main/release: run full matrix (16 jobs)
         image: [nginx, plus]
         build-os: ["", ubi]
         k8s-version:
@@ -537,6 +546,27 @@ jobs:
     secrets: inherit
     permissions:
       contents: write
+
+  # Since the name of the test jobs change whenever we update the k8s version, it makes it tedious
+  # to manually update Github settings to require those jobs to pass. This bypasses that by
+  # requiring this job to pass.
+  test-completion:
+    name: Functional/Conformance Tests Pass
+    if: always()
+    needs: [functional-tests, conformance-tests]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check test results
+        run: |
+          if [[ "${{ needs.functional-tests.result }}" == "failure" || "${{ needs.functional-tests.result }}" == "cancelled" ]]; then
+          echo "❌ Functional tests ${{ needs.functional-tests.result }}"
+          exit 1
+          fi
+          if [[ "${{ needs.conformance-tests.result }}" == "failure" || "${{ needs.conformance-tests.result }}" == "cancelled" ]]; then
+          echo "❌ Conformance tests ${{ needs.conformance-tests.result }}"
+          exit 1
+          fi
+          echo "✅ All tests passed successfully!"
 
   helm-tests:
     name: Helm Tests
@@ -571,7 +601,7 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Setup Helm
-        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4.3.1
+        uses: azure/setup-helm@dda3372f752e03dde6b3237bc9431cdc2f7a02a2 # v5.0.0
 
       - name: Login to GitHub Container Registry
         uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2 # v4.0.0
@@ -615,7 +645,7 @@ jobs:
           go-version: stable
           cache-dependency-path: |
             go.sum
-            .github/.cache/buster-for-unit-tests
+            tests/go.sum
 
       - name: Deploy Kubernetes
         id: k8s
