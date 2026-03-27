@@ -153,8 +153,8 @@ func (cs *commandService) Subscribe(in pb.CommandService_SubscribeServer) error 
 	msgr := messenger.New(in)
 	go msgr.Run(ctx)
 
-	// apply current config before starting event loop
-	// Lock deployment for entire initial config + subscription process to prevent race conditions.
+	// Subscribe to broadcaster first, then apply current config before starting event loop
+	// Lock deployment for entire subscription + initial config process to prevent race conditions.
 	// Without this lock, the following race condition could occur:
 	// 1. New agent calls Subscribe() and starts setInitialConfig()
 	// 2. Concurrently, event handler calls broadcaster.Send() with a config update (file lock is held through
@@ -162,20 +162,27 @@ func (cs *commandService) Subscribe(in pb.CommandService_SubscribeServer) error 
 	// 3. New agent gets stale config from setInitialConfig(), then subscribes
 	// 4. New agent misses the concurrent config update, leading to configuration drift
 	//
-	// By holding the lock across both setInitialConfig() and broadcaster.Subscribe(), we ensure atomicity:
-	// either the new subscriber gets the lock, applies the latest config before subscribing,
-	// then applies any concurrent updates that come in after subscribing, or the subscriber gets the lock after the
-	// concurrent update, and applies that latest config in setInitialConfig() before subscribing,
-	// ensuring it doesn't miss any updates.
+	// By holding the lock across both broadcaster.Subscribe() and setInitialConfig(), we ensure atomicity:
+	// either the new subscriber gets the lock, subscribes and applies the latest config,
+	// then applies any concurrent updates that come in after the lock is released, or the subscriber gets the lock
+	// after the concurrent update, and applies that latest config in setInitialConfig() after subscribing,
+	// ensuring it doesn't miss any updates. Subscribing first also gives more time for the async subscription
+	// registration to complete before the lock is released.
 	deployment.FileLock.RLock()
+	// subscribe to the deployment broadcaster to get file updates
+	broadcaster := deployment.GetBroadcaster()
+	channels := broadcaster.Subscribe()
+
 	if err := cs.setInitialConfig(ctx, &grpcInfo, deployment, conn, msgr); err != nil {
+		// Cancel subscription BEFORE releasing lock, this should help in cleaning
+		// up any channels or goroutines that are waiting on this subscription.
+		// This should also help in preventing the broadcaster from sending messages to this
+		// subscriber while we're trying to clean up and return due to the error.
+		broadcaster.CancelSubscription(channels.ID)
 		deployment.FileLock.RUnlock()
 		return err
 	}
 
-	// subscribe to the deployment broadcaster to get file updates
-	broadcaster := deployment.GetBroadcaster()
-	channels := broadcaster.Subscribe()
 	deployment.FileLock.RUnlock()
 	defer broadcaster.CancelSubscription(channels.ID)
 
