@@ -744,19 +744,6 @@ certGenerator:
 # -- A list of Gateway objects. View https://gateway-api.sigs.k8s.io/reference/spec/#gateway for full Gateway reference.
 gateways: []
 
-# -- A list of extra Kubernetes manifests to deploy. Each item is a raw YAML string representing a complete
-# Kubernetes resource. Useful for deploying additional resources (e.g. ConfigMaps, Secrets, NetworkPolicies)
-# alongside the chart without creating a separate chart.
-extraObjects: []
-# -- Example:
-# - |
-#   apiVersion: v1
-#   kind: ConfigMap
-#   metadata:
-#     name: my-config
-#   data:
-#     key: value
-
 # Example gateway object:
 # name: nginx-gateway
 # namespace: default
@@ -790,3 +777,16 @@ extraObjects: []
 #       clientCertificateRef:
 #         name: gateway-client-cert
 #         kind: Secret
+
+# -- A list of extra Kubernetes manifests to deploy. Each item is a raw YAML string representing a complete
+# Kubernetes resource. Useful for deploying additional resources (e.g. ConfigMaps, Secrets, NetworkPolicies)
+# alongside the chart without creating a separate chart.
+extraObjects: []
+# -- Example:
+# - |
+#   apiVersion: v1
+#   kind: ConfigMap
+#   metadata:
+#     name: my-config
+#   data:
+#     key: value
