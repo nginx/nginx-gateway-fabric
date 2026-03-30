@@ -308,7 +308,7 @@ jobs:
           version: v2.14.3 # renovate: datasource=github-tags depName=goreleaser/goreleaser
           # On PRs: build only amd64 for speed (tests run on amd64 runners)
           # On main/release: build both amd64 and arm64
-          args: ${{ (inputs.is_production_release && (inputs.dry_run == false || inputs.dry_run == null)) && 'release' || 'build --snapshot' }} --clean
+          args: ${{ (inputs.is_production_release && (inputs.dry_run == false || inputs.dry_run == null)) && 'release' || (github.event_name == 'pull_request' && 'build --single-target --snapshot' || 'build --snapshot') }} --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GOPATH: ${{ needs.vars.outputs.go_path }}
@@ -417,8 +417,12 @@ jobs:
       fail-fast: false
       matrix:
         image: [ngf, nginx]
-        platforms: ["linux/arm64, linux/amd64"]
-        build-os: ["", ubi]
+        # On PRs: build only amd64 for speed (tests run on amd64)
+        # On main/release: build both amd64 and arm64
+        platforms: ${{ github.event_name == 'pull_request' && fromJSON('["linux/amd64"]') || fromJSON('["linux/arm64, linux/amd64"]') }}
+        # On PRs: only standard OS (2 jobs)
+        # On main/release: include ubi (4 jobs)
+        build-os: ${{ github.event_name == 'pull_request' && fromJSON('[""]') || fromJSON('["", "ubi"]') }}
     uses: ./.github/workflows/build.yml
     with:
       image: ${{ matrix.image }}
@@ -441,10 +445,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        build-os: ["", ubi]
+        # On PRs: only standard OS (1 job)
+        # On main/release: include ubi (2 jobs)
+        build-os: ${{ github.event_name == 'pull_request' && fromJSON('[""]') || fromJSON('["", "ubi"]') }}
     with:
       image: plus
-      platforms: "linux/arm64, linux/amd64"
+      # On PRs: build only amd64 for speed (tests run on amd64)
+      # On main/release: build both amd64 and arm64
+      platforms: ${{ github.event_name == 'pull_request' && 'linux/amd64' || 'linux/arm64, linux/amd64' }}
       build-os: ${{ matrix.build-os }}
       tag: ${{ inputs.release_version || '' }}
       dry_run: ${{ inputs.dry_run || false }}
@@ -462,7 +470,9 @@ jobs:
     uses: ./.github/workflows/build.yml
     with:
       image: operator
-      platforms: "linux/arm64, linux/amd64"
+      # On PRs: build only amd64 for speed (tests run on amd64)
+      # On main/release: build both amd64 and arm64
+      platforms: ${{ github.event_name == 'pull_request' && 'linux/amd64' || 'linux/arm64, linux/amd64' }}
       tag: ${{ inputs.operator_version || '' }}
       dry_run: ${{ inputs.dry_run || false }}
       runner: ${{ github.repository_owner == 'nginx' && (inputs.is_production_release || ((github.event_name == 'push' || github.event_name == 'schedule') && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release-')))) && 'ubuntu-24.04-amd64' || 'ubuntu-24.04' }}
@@ -503,12 +513,8 @@ jobs:
         # On PRs: run nginx + plus with latest k8s only (2 jobs)
         # On main/release: run full matrix (8 jobs)
         image: [nginx, plus]
-        build-os: ["", ubi]
-        k8s-version:
-          [
-            "${{ needs.vars.outputs.min_k8s_version }}",
-            "${{ needs.vars.outputs.k8s_latest }}",
-          ]
+        build-os: ${{ github.event_name == 'pull_request' && fromJSON('[""]') || fromJSON('["", "ubi"]') }}
+        k8s-version: ${{ github.event_name == 'pull_request' && fromJSON(format('["{0}"]', needs.vars.outputs.k8s_latest)) || fromJSON(format('["{0}", "{1}"]', needs.vars.outputs.min_k8s_version, needs.vars.outputs.k8s_latest)) }}
     uses: ./.github/workflows/functional.yml
     with:
       image: ${{ matrix.image }}
@@ -527,13 +533,9 @@ jobs:
         # On PRs: run latest k8s, experimental enabled (1 job - most coverage)
         # On main/release: run full matrix (16 jobs)
         image: [nginx, plus]
-        build-os: ["", ubi]
-        k8s-version:
-          [
-            "${{ needs.vars.outputs.min_k8s_version }}",
-            "${{ needs.vars.outputs.k8s_latest }}",
-          ]
-        enable-experimental: [true, false]
+        build-os: ${{ github.event_name == 'pull_request' && fromJSON('[""]') || fromJSON('["", "ubi"]') }}
+        k8s-version: ${{ github.event_name == 'pull_request' && fromJSON(format('["{0}"]', needs.vars.outputs.k8s_latest)) || fromJSON(format('["{0}", "{1}"]', needs.vars.outputs.min_k8s_version, needs.vars.outputs.k8s_latest)) }}
+        enable-experimental: ${{ github.event_name == 'pull_request' && fromJSON('[true]') || fromJSON('[true, false]') }}
     uses: ./.github/workflows/conformance.yml
     with:
       image: ${{ matrix.image }}
