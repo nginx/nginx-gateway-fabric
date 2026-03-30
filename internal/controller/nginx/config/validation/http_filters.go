@@ -56,7 +56,7 @@ func (HTTPHeaderValidator) ValidateFilterHeaderName(name string) error {
 	return validateHeaderName(name)
 }
 
-var requestHeaderValueExamples = []string{"my-header-value", "$remote_addr", "${remote_addr}", "example/12345=="}
+var requestHeaderValueExamples = []string{"my-header-value", "$remote_addr", "example/12345=="}
 
 func (HTTPHeaderValidator) ValidateFilterHeaderValue(value string) error {
 	return validateEscapedStringWithNginxVars(value, requestHeaderValueExamples)

@@ -17,14 +17,10 @@ func (HTTPNJSMatchValidator) ValidateHeaderNameInMatch(name string) error {
 		return errors.New(err[0])
 	}
 
-	return validateNJSHeaderPart(name)
+	return validateCommonNJSMatchPart(name)
 }
 
 func (HTTPNJSMatchValidator) ValidateHeaderValueInMatch(value string) error {
-	return validateNJSHeaderPart(value)
-}
-
-func validateNJSHeaderPart(value string) error {
 	return validateCommonNJSMatchPart(value)
 }
 

@@ -19,12 +19,12 @@ spec:
         set:
         - name: X-Header-Set
           value: overwritten-value
-        - name: X-Address
+        - name: X-Real-IP
           value: $remote_addr
         add:
         - name: X-Header-Add
           value: this-is-the-appended-value
-        - name: X-Method
+        - name: X-Request-ID
           value: $request_id
         remove:
         - X-Header-Remove

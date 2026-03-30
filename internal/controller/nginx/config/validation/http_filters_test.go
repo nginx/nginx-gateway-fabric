@@ -105,13 +105,16 @@ func TestValidateFilterHeaderValue(t *testing.T) {
 		"$jwt_claim_sub",
 		"$arg_foo",
 		"$upstream_status",
+		"${remote_addr}",
+		"${http_x_forwarded_for}",
 	)
 
 	testInvalidValuesForSimpleValidator(
 		t,
 		validator.ValidateFilterHeaderValue,
-		"$Content-Encoding",
 		`"example"`,
+		"$Content-Encoding",
 		"value$",
+		"Bearer $jwt_token",
 	)
 }

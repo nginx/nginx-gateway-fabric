@@ -38,14 +38,14 @@ spec:
       headers:
       - name: headerRegex
         type: RegularExpression
-        value: "^https://example\\.com(/|$)"
+        value: "header-[a-z]{1}"
     - path:
         type: PathPrefix
         value: /coffee
       queryParams:
       - name: queryRegex
         type: RegularExpression
-        value: "^v[0-9]+\\.[0-9]+$"
+        value: "query-[a-z]{1}"
     backendRefs:
     - name: coffee-v3-svc
       port: 80
