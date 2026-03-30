@@ -108,9 +108,9 @@ func (GenericValidator) ValidateEndpoint(endpoint string) error {
 }
 
 const (
-	variableNameFmt    = `\$(\{[a-z_][a-z0-9_]*\}|[a-z_][a-z0-9_]*)`
+	variableNameFmt    = `\$(\{[a-z][a-z0-9_]*\}|[a-z][a-z0-9_]*)`
 	variableNameErrMsg = "must be a valid NGINX variable of the form $name or ${name}, " +
-		"where name starts with a lowercase letter or underscore followed by lowercase letters, digits, or underscores"
+		"where name starts with a lowercase letter followed by lowercase letters, digits, or underscores"
 )
 
 var variableNameRegexp = regexp.MustCompile("^" + variableNameFmt + "$")

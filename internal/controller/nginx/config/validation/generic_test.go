@@ -123,10 +123,8 @@ func TestValidateNginxVariableName(t *testing.T) {
 		`$upstream_bytes_sent`,
 		`$upstream_last_server_name`,
 		`$remote_addr`,
-		`$_internal`,
 		`$http2`,
 		`${remote_addr}`,
-		`${_internal_var}`,
 	)
 
 	testInvalidValuesForSimpleValidator(
@@ -139,5 +137,8 @@ func TestValidateNginxVariableName(t *testing.T) {
 		`$Uppercase`,
 		`${}`,
 		`$`,
+		`$_internal`,
+		`${_internal_var}`,
+		`$request_id;`,
 	)
 }

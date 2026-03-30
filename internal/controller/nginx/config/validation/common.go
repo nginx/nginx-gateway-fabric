@@ -68,7 +68,10 @@ func validateEscapedStringNoVarExpansion(value string, examples []string) error 
 // (no '$') or a valid NGINX variable reference (e.g. $remote_addr or ${remote_addr}).
 func validateEscapedStringWithNginxVars(value string, examples []string) error {
 	if err := validateEscapedStringNoVarExpansion(value, examples); err != nil {
-		if (GenericValidator{}).ValidateNginxVariableName(value) != nil {
+		if varErr := (GenericValidator{}).ValidateNginxVariableName(value); varErr != nil {
+			if strings.HasPrefix(value, "$") {
+				return varErr
+			}
 			return err
 		}
 	}

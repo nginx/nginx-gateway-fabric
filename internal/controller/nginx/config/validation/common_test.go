@@ -59,10 +59,8 @@ func TestValidateEscapedStringWithNginxVars(t *testing.T) {
 		`\\`,
 		`$remote_addr`,
 		`$http_x_forwarded_for`,
-		`$_internal`,
 		`$http2`,
 		`${remote_addr}`,
-		`${_internal_var}`,
 	)
 	testInvalidValuesForSimpleValidator(
 		t,
@@ -76,6 +74,9 @@ func TestValidateEscapedStringWithNginxVars(t *testing.T) {
 		`${}`,
 		`Bearer $jwt_token`,
 		`prefix-$remote_addr`,
+		`$remote_addr;`,
+		`$_internal`,
+		`${_internal_var}`,
 	)
 }
 
