@@ -139,8 +139,8 @@ func (cs *commandService) Subscribe(in pb.CommandService_SubscribeServer) error 
 	// wait for the agent to report itself and nginx
 	conn, deployment, err := cs.waitForConnection(ctx, grpcInfo)
 	if err != nil {
-		cs.logger.Error(err, "error waiting for connection")
-		return err
+		cs.logger.Error(err, "error waiting for connection", "uuid", grpcInfo.UUID)
+		return grpcStatus.Error(codes.DeadlineExceeded, err.Error())
 	}
 	defer deployment.RemovePodStatus(grpcInfo.UUID)
 
@@ -187,15 +187,30 @@ func (cs *commandService) Subscribe(in pb.CommandService_SubscribeServer) error 
 			switch msg.Type {
 			case broadcast.ConfigApplyRequest:
 				req = buildRequest(msg.FileOverviews, conn.InstanceID, msg.ConfigVersion)
+				cs.logger.Info(
+					"Building config apply request",
+					"number_of_files", len(msg.FileOverviews),
+					"uuid", grpcInfo.UUID,
+					"correlation_id", req.GetMessageMeta().GetCorrelationId(),
+				)
 			case broadcast.APIRequest:
 				req = buildPlusAPIRequest(msg.NGINXPlusAction, conn.InstanceID)
 			default:
 				panic(fmt.Sprintf("unknown request type %d", msg.Type))
 			}
 
-			cs.logger.V(1).Info("Sending configuration to agent", "requestType", msg.Type)
+			cs.logger.V(1).Info(
+				"Sending configuration to agent",
+				"requestType", msg.Type,
+				"uuid", grpcInfo.UUID,
+				"correlation_id", req.GetMessageMeta().GetCorrelationId(),
+			)
 			if err := msgr.Send(ctx, req); err != nil {
-				cs.logger.Error(err, "error sending request to agent")
+				cs.logger.Error(
+					err, "error sending request to agent",
+					"uuid", grpcInfo.UUID,
+					"correlation_id", req.GetMessageMeta().GetCorrelationId(),
+				)
 				deployment.SetPodErrorStatus(grpcInfo.UUID, err)
 				channels.ResponseCh <- struct{}{}
 
@@ -206,14 +221,18 @@ func (cs *commandService) Subscribe(in pb.CommandService_SubscribeServer) error 
 			// Only broadcast operations should signal ResponseCh for coordination.
 			pendingBroadcastRequest = &msg
 		case err = <-msgr.Errors():
-			cs.logger.Error(err, "connection error", conn.ParentType, conn.ParentName, "uuid", grpcInfo.UUID)
+			cs.logger.Error(
+				err, "connection error",
+				conn.ParentType, conn.ParentName,
+				"uuid", grpcInfo.UUID,
+			)
 			deployment.SetPodErrorStatus(grpcInfo.UUID, err)
 			select {
 			case channels.ResponseCh <- struct{}{}:
 			default:
 			}
 			if pendingBroadcastRequest != nil {
-				cs.logger.V(1).Info("Connection error during pending request, operation failed")
+				cs.logger.V(1).Info("Connection error during pending request, operation failed", "uuid", grpcInfo.UUID)
 			}
 
 			if errors.Is(err, io.EOF) {
@@ -316,9 +335,9 @@ func (cs *commandService) setInitialConfig(
 
 	applyErr, connErr := cs.waitForInitialConfigApply(ctx, msgr)
 	if connErr != nil {
-		cs.logger.Error(connErr, "error setting initial configuration")
+		cs.logger.Error(connErr, "error setting initial configuration", "uuid", grpcInfo.UUID)
 
-		return connErr
+		return grpcStatus.Error(codes.DeadlineExceeded, connErr.Error())
 	}
 
 	errs := []error{applyErr}
@@ -340,7 +359,7 @@ func (cs *commandService) setInitialConfig(
 
 				upstreamApplyErr, connErr := cs.waitForInitialConfigApply(ctx, msgr)
 				if connErr != nil {
-					cs.logger.Error(connErr, "error setting initial configuration")
+					cs.logger.Error(connErr, "error setting initial configuration", "uuid", grpcInfo.UUID)
 
 					return false, connErr
 				}
@@ -412,7 +431,7 @@ func (cs *commandService) logAndSendErrorStatus(
 	err error,
 ) {
 	if err != nil {
-		cs.logger.Error(err, "error sending request to agent")
+		cs.logger.Error(err, "error sending request to agent", "uuid", grpcInfo.UUID)
 	} else {
 		cs.logger.Info(
 			"Successfully configured nginx for new subscription",

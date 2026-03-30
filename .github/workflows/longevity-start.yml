@@ -91,9 +91,9 @@ jobs:
         run: |
           echo "RESOURCE_NAME=longevity-tests-${{ github.run_id }}-${{ matrix.type }}" >> vars.env
           echo "TAG=${{ needs.vars.outputs.image_tag }}" >> vars.env
-          echo "PREFIX=ghcr.io/nginx/nginx-gateway-fabric" >> vars.env
-          echo "NGINX_PREFIX=ghcr.io/nginx/nginx-gateway-fabric/nginx" >> vars.env
-          echo "NGINX_PLUS_PREFIX=us-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/nginx-gateway-fabric/nginx-plus" >> vars.env
+          echo "PREFIX=gcr.io/${{ secrets.GCP_PROJECT_ID }}/nginx-gateway-fabric" >> vars.env
+          echo "NGINX_PREFIX=gcr.io/${{ secrets.GCP_PROJECT_ID }}/nginx-gateway-fabric/nginx" >> vars.env
+          echo "NGINX_PLUS_PREFIX=gcr.io/${{ secrets.GCP_PROJECT_ID }}/nginx-gateway-fabric/nginx-plus" >> vars.env
           echo "GKE_CLUSTER_NAME=longevity-tests-${{ github.run_id }}-${{ matrix.type }}" >> vars.env
           echo "GKE_CLUSTER_ZONE=${{ inputs.zone }}" >> vars.env
           echo "GKE_CLUSTER_REGION=${{ inputs.region }}" >> vars.env
