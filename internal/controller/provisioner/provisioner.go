@@ -221,76 +221,47 @@ func (p *NginxProvisioner) setResourceToDelete(gatewayNSName types.NamespacedNam
 	p.resourcesToDeleteOnStartup = append(p.resourcesToDeleteOnStartup, gatewayNSName)
 }
 
+// minimalObjectFactory is a map of constructors for creating minimal objects with only name and namespace set.
+var minimalObjectFactory = map[reflect.Type]func(name, namespace string) client.Object{
+	reflect.TypeOf(&appsv1.Deployment{}): func(name, namespace string) client.Object {
+		return &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace}}
+	},
+	reflect.TypeOf(&appsv1.DaemonSet{}): func(name, namespace string) client.Object {
+		return &appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace}}
+	},
+	reflect.TypeOf(&corev1.Service{}): func(name, namespace string) client.Object {
+		return &corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace}}
+	},
+	reflect.TypeOf(&corev1.ServiceAccount{}): func(name, namespace string) client.Object {
+		return &corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace}}
+	},
+	reflect.TypeOf(&corev1.ConfigMap{}): func(name, namespace string) client.Object {
+		return &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace}}
+	},
+	reflect.TypeOf(&corev1.Secret{}): func(name, namespace string) client.Object {
+		return &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace}}
+	},
+	reflect.TypeOf(&rbacv1.Role{}): func(name, namespace string) client.Object {
+		return &rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace}}
+	},
+	reflect.TypeOf(&rbacv1.RoleBinding{}): func(name, namespace string) client.Object {
+		return &rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace}}
+	},
+	reflect.TypeOf(&autoscalingv2.HorizontalPodAutoscaler{}): func(name, namespace string) client.Object {
+		return &autoscalingv2.HorizontalPodAutoscaler{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace}}
+	},
+}
+
 // createMinimalClone creates a new object of the same type with only name and namespace set.
 // This follows CreateOrUpdate's requirement that only name/namespace should be set on the input object.
 func createMinimalClone(obj client.Object) (client.Object, error) {
-	switch obj.(type) {
-	case *appsv1.Deployment:
-		return &appsv1.Deployment{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      obj.GetName(),
-				Namespace: obj.GetNamespace(),
-			},
-		}, nil
-	case *appsv1.DaemonSet:
-		return &appsv1.DaemonSet{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      obj.GetName(),
-				Namespace: obj.GetNamespace(),
-			},
-		}, nil
-	case *corev1.Service:
-		return &corev1.Service{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      obj.GetName(),
-				Namespace: obj.GetNamespace(),
-			},
-		}, nil
-	case *corev1.ServiceAccount:
-		return &corev1.ServiceAccount{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      obj.GetName(),
-				Namespace: obj.GetNamespace(),
-			},
-		}, nil
-	case *corev1.ConfigMap:
-		return &corev1.ConfigMap{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      obj.GetName(),
-				Namespace: obj.GetNamespace(),
-			},
-		}, nil
-	case *corev1.Secret:
-		return &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      obj.GetName(),
-				Namespace: obj.GetNamespace(),
-			},
-		}, nil
-	case *rbacv1.Role:
-		return &rbacv1.Role{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      obj.GetName(),
-				Namespace: obj.GetNamespace(),
-			},
-		}, nil
-	case *rbacv1.RoleBinding:
-		return &rbacv1.RoleBinding{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      obj.GetName(),
-				Namespace: obj.GetNamespace(),
-			},
-		}, nil
-	case *autoscalingv2.HorizontalPodAutoscaler:
-		return &autoscalingv2.HorizontalPodAutoscaler{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      obj.GetName(),
-				Namespace: obj.GetNamespace(),
-			},
-		}, nil
-	default:
+	objType := reflect.TypeOf(obj)
+	factory, exists := minimalObjectFactory[objType]
+	if !exists {
 		return nil, fmt.Errorf("createMinimalClone: unsupported object type %T", obj)
 	}
+
+	return factory(obj.GetName(), obj.GetNamespace()), nil
 }
 
 //nolint:gocyclo // will refactor at some point
@@ -428,13 +399,13 @@ func (p *NginxProvisioner) provisionNginx(
 		var object client.Object
 		if deploymentObj != nil {
 			if deploymentObj.Spec.Template.Annotations == nil {
-				deploymentObj.Annotations = make(map[string]string)
+				deploymentObj.Spec.Template.Annotations = make(map[string]string)
 			}
 			deploymentObj.Spec.Template.Annotations[controller.RestartedAnnotation] = time.Now().Format(time.RFC3339)
 			object = deploymentObj
 		} else if daemonSetObj != nil {
 			if daemonSetObj.Spec.Template.Annotations == nil {
-				daemonSetObj.Annotations = make(map[string]string)
+				daemonSetObj.Spec.Template.Annotations = make(map[string]string)
 			}
 			daemonSetObj.Spec.Template.Annotations[controller.RestartedAnnotation] = time.Now().Format(time.RFC3339)
 			object = daemonSetObj

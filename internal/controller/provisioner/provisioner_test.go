@@ -2,6 +2,7 @@ package provisioner
 
 import (
 	"context"
+	"reflect"
 	"testing"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -52,6 +54,7 @@ func createScheme() *runtime.Scheme {
 	utilruntime.Must(corev1.AddToScheme(scheme))
 	utilruntime.Must(appsv1.AddToScheme(scheme))
 	utilruntime.Must(autoscalingv2.AddToScheme(scheme))
+	utilruntime.Must(rbacv1.AddToScheme(scheme))
 
 	return scheme
 }
@@ -795,4 +798,317 @@ func TestDefaultLabelCollectorFactory(t *testing.T) {
 
 	collector := defaultLabelCollectorFactory(mgr, cfg)
 	g.Expect(collector).NotTo(BeNil())
+}
+
+func TestCreateMinimalClone(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		input    client.Object
+		validate func(*WithT, client.Object)
+		name     string
+	}{
+		{
+			name: "creates minimal Deployment",
+			input: &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:        "test-deployment",
+					Namespace:   "test-namespace",
+					Labels:      map[string]string{"app": "test"},
+					Annotations: map[string]string{"version": "1.0"},
+				},
+				Spec: appsv1.DeploymentSpec{
+					Replicas: helpers.GetPointer(int32(3)),
+				},
+			},
+			validate: func(g *WithT, obj client.Object) {
+				dep, ok := obj.(*appsv1.Deployment)
+				g.Expect(ok).To(BeTrue())
+				g.Expect(dep.GetName()).To(Equal("test-deployment"))
+				g.Expect(dep.GetNamespace()).To(Equal("test-namespace"))
+				g.Expect(dep.GetLabels()).To(BeEmpty())
+				g.Expect(dep.GetAnnotations()).To(BeEmpty())
+				g.Expect(dep.Spec.Replicas).To(BeNil())
+			},
+		},
+		{
+			name: "creates minimal DaemonSet",
+			input: &appsv1.DaemonSet{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:        "test-daemonset",
+					Namespace:   "test-namespace",
+					Labels:      map[string]string{"component": "agent"},
+					Annotations: map[string]string{"config": "updated"},
+				},
+				Spec: appsv1.DaemonSetSpec{
+					UpdateStrategy: appsv1.DaemonSetUpdateStrategy{
+						Type: appsv1.RollingUpdateDaemonSetStrategyType,
+					},
+				},
+			},
+			validate: func(g *WithT, obj client.Object) {
+				ds, ok := obj.(*appsv1.DaemonSet)
+				g.Expect(ok).To(BeTrue())
+				g.Expect(ds.GetName()).To(Equal("test-daemonset"))
+				g.Expect(ds.GetNamespace()).To(Equal("test-namespace"))
+				g.Expect(ds.GetLabels()).To(BeEmpty())
+				g.Expect(ds.GetAnnotations()).To(BeEmpty())
+				g.Expect(ds.Spec.UpdateStrategy.Type).To(BeEmpty())
+			},
+		},
+		{
+			name: "creates minimal Service",
+			input: &corev1.Service{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:        "test-service",
+					Namespace:   "test-namespace",
+					Labels:      map[string]string{"tier": "frontend"},
+					Annotations: map[string]string{"loadbalancer": "enabled"},
+				},
+				Spec: corev1.ServiceSpec{
+					Type: corev1.ServiceTypeLoadBalancer,
+				},
+			},
+			validate: func(g *WithT, obj client.Object) {
+				svc, ok := obj.(*corev1.Service)
+				g.Expect(ok).To(BeTrue())
+				g.Expect(svc.GetName()).To(Equal("test-service"))
+				g.Expect(svc.GetNamespace()).To(Equal("test-namespace"))
+				g.Expect(svc.GetLabels()).To(BeEmpty())
+				g.Expect(svc.GetAnnotations()).To(BeEmpty())
+				g.Expect(svc.Spec.Type).To(BeEmpty())
+			},
+		},
+		{
+			name: "creates minimal ServiceAccount",
+			input: &corev1.ServiceAccount{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:        "test-sa",
+					Namespace:   "test-namespace",
+					Labels:      map[string]string{"role": "service"},
+					Annotations: map[string]string{"description": "test service account"},
+				},
+				AutomountServiceAccountToken: helpers.GetPointer(false),
+			},
+			validate: func(g *WithT, obj client.Object) {
+				sa, ok := obj.(*corev1.ServiceAccount)
+				g.Expect(ok).To(BeTrue())
+				g.Expect(sa.GetName()).To(Equal("test-sa"))
+				g.Expect(sa.GetNamespace()).To(Equal("test-namespace"))
+				g.Expect(sa.GetLabels()).To(BeEmpty())
+				g.Expect(sa.GetAnnotations()).To(BeEmpty())
+				g.Expect(sa.AutomountServiceAccountToken).To(BeNil())
+			},
+		},
+		{
+			name: "creates minimal ConfigMap",
+			input: &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:        "test-cm",
+					Namespace:   "test-namespace",
+					Labels:      map[string]string{"config": "nginx"},
+					Annotations: map[string]string{"checksum": "abc123"},
+				},
+				Data: map[string]string{"nginx.conf": "server {}"},
+			},
+			validate: func(g *WithT, obj client.Object) {
+				cm, ok := obj.(*corev1.ConfigMap)
+				g.Expect(ok).To(BeTrue())
+				g.Expect(cm.GetName()).To(Equal("test-cm"))
+				g.Expect(cm.GetNamespace()).To(Equal("test-namespace"))
+				g.Expect(cm.GetLabels()).To(BeEmpty())
+				g.Expect(cm.GetAnnotations()).To(BeEmpty())
+				g.Expect(cm.Data).To(BeEmpty())
+			},
+		},
+		{
+			name: "creates minimal Secret",
+			input: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:        "test-secret",
+					Namespace:   "test-namespace",
+					Labels:      map[string]string{"type": "tls"},
+					Annotations: map[string]string{"cert-manager": "true"},
+				},
+				Type: corev1.SecretTypeTLS,
+				Data: map[string][]byte{"tls.crt": []byte("cert"), "tls.key": []byte("key")},
+			},
+			validate: func(g *WithT, obj client.Object) {
+				secret, ok := obj.(*corev1.Secret)
+				g.Expect(ok).To(BeTrue())
+				g.Expect(secret.GetName()).To(Equal("test-secret"))
+				g.Expect(secret.GetNamespace()).To(Equal("test-namespace"))
+				g.Expect(secret.GetLabels()).To(BeEmpty())
+				g.Expect(secret.GetAnnotations()).To(BeEmpty())
+				g.Expect(secret.Type).To(BeEmpty())
+				g.Expect(secret.Data).To(BeEmpty())
+			},
+		},
+		{
+			name: "creates minimal HorizontalPodAutoscaler",
+			input: &autoscalingv2.HorizontalPodAutoscaler{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:        "test-hpa",
+					Namespace:   "test-namespace",
+					Labels:      map[string]string{"autoscaling": "enabled"},
+					Annotations: map[string]string{"policy": "conservative"},
+				},
+				Spec: autoscalingv2.HorizontalPodAutoscalerSpec{
+					MinReplicas: helpers.GetPointer(int32(2)),
+					MaxReplicas: 10,
+				},
+			},
+			validate: func(g *WithT, obj client.Object) {
+				hpa, ok := obj.(*autoscalingv2.HorizontalPodAutoscaler)
+				g.Expect(ok).To(BeTrue())
+				g.Expect(hpa.GetName()).To(Equal("test-hpa"))
+				g.Expect(hpa.GetNamespace()).To(Equal("test-namespace"))
+				g.Expect(hpa.GetLabels()).To(BeEmpty())
+				g.Expect(hpa.GetAnnotations()).To(BeEmpty())
+				g.Expect(hpa.Spec.MinReplicas).To(BeNil())
+				g.Expect(hpa.Spec.MaxReplicas).To(Equal(int32(0)))
+			},
+		},
+		{
+			name: "creates minimal Role",
+			input: &rbacv1.Role{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:        "test-role",
+					Namespace:   "test-namespace",
+					Labels:      map[string]string{"rbac": "enabled"},
+					Annotations: map[string]string{"description": "test role"},
+				},
+				Rules: []rbacv1.PolicyRule{
+					{
+						APIGroups: []string{""},
+						Resources: []string{"pods"},
+						Verbs:     []string{"get", "list"},
+					},
+				},
+			},
+			validate: func(g *WithT, obj client.Object) {
+				role, ok := obj.(*rbacv1.Role)
+				g.Expect(ok).To(BeTrue())
+				g.Expect(role.GetName()).To(Equal("test-role"))
+				g.Expect(role.GetNamespace()).To(Equal("test-namespace"))
+				g.Expect(role.GetLabels()).To(BeEmpty())
+				g.Expect(role.GetAnnotations()).To(BeEmpty())
+				g.Expect(role.Rules).To(BeEmpty())
+			},
+		},
+		{
+			name: "creates minimal RoleBinding",
+			input: &rbacv1.RoleBinding{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:        "test-rolebinding",
+					Namespace:   "test-namespace",
+					Labels:      map[string]string{"binding": "service"},
+					Annotations: map[string]string{"owner": "platform"},
+				},
+				RoleRef: rbacv1.RoleRef{
+					APIGroup: rbacv1.GroupName,
+					Kind:     "Role",
+					Name:     "test-role",
+				},
+				Subjects: []rbacv1.Subject{
+					{
+						Kind:      "ServiceAccount",
+						Name:      "test-sa",
+						Namespace: "test-namespace",
+					},
+				},
+			},
+			validate: func(g *WithT, obj client.Object) {
+				rb, ok := obj.(*rbacv1.RoleBinding)
+				g.Expect(ok).To(BeTrue())
+				g.Expect(rb.GetName()).To(Equal("test-rolebinding"))
+				g.Expect(rb.GetNamespace()).To(Equal("test-namespace"))
+				g.Expect(rb.GetLabels()).To(BeEmpty())
+				g.Expect(rb.GetAnnotations()).To(BeEmpty())
+				g.Expect(rb.RoleRef).To(Equal(rbacv1.RoleRef{}))
+				g.Expect(rb.Subjects).To(BeEmpty())
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			result, err := createMinimalClone(tt.input)
+			g.Expect(err).ToNot(HaveOccurred())
+			g.Expect(result).ToNot(BeNil())
+
+			// Validate that the result is the same type as input
+			g.Expect(result).To(BeAssignableToTypeOf(tt.input))
+
+			// Run specific validations
+			tt.validate(g, result)
+		})
+	}
+}
+
+func TestCreateMinimalClone_UnsupportedType(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	// Test with an unsupported type
+	unsupported := &gatewayv1.Gateway{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-gateway",
+			Namespace: "test-namespace",
+		},
+	}
+
+	result, err := createMinimalClone(unsupported)
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(err.Error()).To(ContainSubstring("unsupported object type *v1.Gateway"))
+	g.Expect(result).To(BeNil())
+}
+
+func TestCreateMinimalClone_CreatesSeparateInstances(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "version-test",
+			Namespace: "default",
+		},
+	}
+
+	// First call
+	result1, err1 := createMinimalClone(deployment)
+	g.Expect(err1).ToNot(HaveOccurred())
+
+	// Second call with same type should use same factory
+	result2, err2 := createMinimalClone(deployment)
+	g.Expect(err2).ToNot(HaveOccurred())
+
+	// Both results should be the same type and have correct name/namespace
+	g.Expect(result1).To(BeAssignableToTypeOf(result2))
+	g.Expect(result1.GetName()).To(Equal(result2.GetName()))
+	g.Expect(result1.GetNamespace()).To(Equal(result2.GetNamespace()))
+
+	// Verify they are separate object instances, not the same underlying resource
+	g.Expect(result1).ToNot(BeIdenticalTo(result2), "createMinimalClone should create separate object instances")
+
+	// Cast to concrete types for more specific validation
+	dep1, ok1 := result1.(*appsv1.Deployment)
+	dep2, ok2 := result2.(*appsv1.Deployment)
+	g.Expect(ok1).To(BeTrue())
+	g.Expect(ok2).To(BeTrue())
+
+	// Verify pointer addresses are different (separate objects in memory)
+	g.Expect(dep1).ToNot(BeIdenticalTo(dep2), "Deployments should be separate instances with different memory addresses")
+
+	// Verify that modifying one doesn't affect the other
+	dep1.SetLabels(map[string]string{"modified": "true"})
+	g.Expect(dep2.GetLabels()).To(BeEmpty(), "Modifying one object should not affect the other")
+
+	// Verify factory map contains the expected key
+	deploymentType := reflect.TypeOf(deployment)
+	_, exists := minimalObjectFactory[deploymentType]
+	g.Expect(exists).To(BeTrue(), "Factory should contain entry for Deployment type")
 }
