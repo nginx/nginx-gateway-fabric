@@ -41,6 +41,7 @@ UPGRADE:
 
 - Minimum supported Kubernetes version is now 1.31.
 - Gateway API has been updated to 1.5.1. TLSRoute has been promoted to the standard channel v1. ReferenceGrants are moved from v1beta1 to v1. Ensure that this version of the Gateway API is installed before upgrading NGINX Gateway Fabric.
+- `nginx.org/htpasswd` Secret type for Basic Auth has been deprecated in favor of using an Opaque Secret type.
 
 KNOWN ISSUES:
 
