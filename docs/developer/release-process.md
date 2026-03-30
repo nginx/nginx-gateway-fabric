@@ -101,6 +101,7 @@ To create a new release, follow these steps:
 13. Submit the `conformance-profile.yaml` artifact from the release to the [Gateway API repo](https://github.com/kubernetes-sigs/gateway-api/tree/main/conformance/reports).
     - Create a fork of the repository
     - Name the file based on the requirements of the [README](https://github.com/kubernetes-sigs/gateway-api/blob/main/conformance/reports/README.md). Update the README in the ngf directory and update the site source if necessary (see following example).
+    - Ensure that the NGF `version` is correct.
     - Open a PR. [Example](https://github.com/kubernetes-sigs/gateway-api/pull/3149)
       If it's your first time submitting a PR, you will need to sign a CLA using F5, Inc. as the organization.
 14. Follow the same steps to upload the `conformance-profile-inference.yaml` to the [Inference Extension repo](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/conformance/reports).
