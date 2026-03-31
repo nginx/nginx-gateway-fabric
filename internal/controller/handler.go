@@ -220,8 +220,7 @@ func (h *eventHandlerImpl) sendNginxConfig(ctx context.Context, logger logr.Logg
 			continue
 		}
 
-		stopCh := make(chan struct{})
-		deployment := h.cfg.nginxDeployments.GetOrStore(ctx, gw.DeploymentName, gw.Source.GetName(), stopCh)
+		deployment := h.cfg.nginxDeployments.GetOrStore(ctx, gw.DeploymentName, gw.Source.GetName())
 		if deployment == nil {
 			panic("expected deployment, got nil")
 		}
