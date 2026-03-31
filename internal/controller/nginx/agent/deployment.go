@@ -259,7 +259,7 @@ func (d *Deployment) SetNGINXPlusActions(actions []*pb.NGINXPlusAction) {
 // DeploymentStorer is an interface to store Deployments.
 type DeploymentStorer interface {
 	Get(types.NamespacedName) *Deployment
-	GetOrStore(context.Context, types.NamespacedName, string, chan struct{}) *Deployment
+	GetOrStore(context.Context, types.NamespacedName, string) *Deployment
 	Remove(types.NamespacedName)
 }
 
@@ -297,13 +297,12 @@ func (d *DeploymentStore) GetOrStore(
 	ctx context.Context,
 	nsName types.NamespacedName,
 	gatewayName string,
-	stopCh chan struct{},
 ) *Deployment {
 	if deployment := d.Get(nsName); deployment != nil {
 		return deployment
 	}
 
-	deployment := newDeployment(broadcast.NewDeploymentBroadcaster(ctx, stopCh), gatewayName)
+	deployment := newDeployment(broadcast.NewDeploymentBroadcaster(ctx), gatewayName)
 	d.deployments.Store(nsName, deployment)
 
 	return deployment
