@@ -21,13 +21,12 @@ type FakeDeploymentStorer struct {
 	getReturnsOnCall map[int]struct {
 		result1 *agent.Deployment
 	}
-	GetOrStoreStub        func(context.Context, types.NamespacedName, string, chan struct{}) *agent.Deployment
+	GetOrStoreStub        func(context.Context, types.NamespacedName, string) *agent.Deployment
 	getOrStoreMutex       sync.RWMutex
 	getOrStoreArgsForCall []struct {
 		arg1 context.Context
 		arg2 types.NamespacedName
 		arg3 string
-		arg4 chan struct{}
 	}
 	getOrStoreReturns struct {
 		result1 *agent.Deployment
@@ -105,21 +104,20 @@ func (fake *FakeDeploymentStorer) GetReturnsOnCall(i int, result1 *agent.Deploym
 	}{result1}
 }
 
-func (fake *FakeDeploymentStorer) GetOrStore(arg1 context.Context, arg2 types.NamespacedName, arg3 string, arg4 chan struct{}) *agent.Deployment {
+func (fake *FakeDeploymentStorer) GetOrStore(arg1 context.Context, arg2 types.NamespacedName, arg3 string) *agent.Deployment {
 	fake.getOrStoreMutex.Lock()
 	ret, specificReturn := fake.getOrStoreReturnsOnCall[len(fake.getOrStoreArgsForCall)]
 	fake.getOrStoreArgsForCall = append(fake.getOrStoreArgsForCall, struct {
 		arg1 context.Context
 		arg2 types.NamespacedName
 		arg3 string
-		arg4 chan struct{}
-	}{arg1, arg2, arg3, arg4})
+	}{arg1, arg2, arg3})
 	stub := fake.GetOrStoreStub
 	fakeReturns := fake.getOrStoreReturns
-	fake.recordInvocation("GetOrStore", []interface{}{arg1, arg2, arg3, arg4})
+	fake.recordInvocation("GetOrStore", []interface{}{arg1, arg2, arg3})
 	fake.getOrStoreMutex.Unlock()
 	if stub != nil {
-		return stub(arg1, arg2, arg3, arg4)
+		return stub(arg1, arg2, arg3)
 	}
 	if specificReturn {
 		return ret.result1
@@ -133,17 +131,17 @@ func (fake *FakeDeploymentStorer) GetOrStoreCallCount() int {
 	return len(fake.getOrStoreArgsForCall)
 }
 
-func (fake *FakeDeploymentStorer) GetOrStoreCalls(stub func(context.Context, types.NamespacedName, string, chan struct{}) *agent.Deployment) {
+func (fake *FakeDeploymentStorer) GetOrStoreCalls(stub func(context.Context, types.NamespacedName, string) *agent.Deployment) {
 	fake.getOrStoreMutex.Lock()
 	defer fake.getOrStoreMutex.Unlock()
 	fake.GetOrStoreStub = stub
 }
 
-func (fake *FakeDeploymentStorer) GetOrStoreArgsForCall(i int) (context.Context, types.NamespacedName, string, chan struct{}) {
+func (fake *FakeDeploymentStorer) GetOrStoreArgsForCall(i int) (context.Context, types.NamespacedName, string) {
 	fake.getOrStoreMutex.RLock()
 	defer fake.getOrStoreMutex.RUnlock()
 	argsForCall := fake.getOrStoreArgsForCall[i]
-	return argsForCall.arg1, argsForCall.arg2, argsForCall.arg3, argsForCall.arg4
+	return argsForCall.arg1, argsForCall.arg2, argsForCall.arg3
 }
 
 func (fake *FakeDeploymentStorer) GetOrStoreReturns(result1 *agent.Deployment) {
