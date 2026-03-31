@@ -352,7 +352,7 @@ func prepareGatewayRequest(
 	gwConds := conditions.NewDefaultGatewayConditions()
 	gwConds = append(gwConds, gateway.Conditions...)
 
-	if validListenerCount == 0 {
+	if validListenerCount == 0 && len(gateway.Listeners) > 0 {
 		gwConds = append(gwConds, conditions.NewGatewayNotAcceptedListenersNotValid()...)
 	} else if validListenerCount < len(gateway.Listeners) {
 		gwConds = append(gwConds, conditions.NewGatewayAcceptedListenersNotValid())

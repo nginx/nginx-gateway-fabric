@@ -137,7 +137,6 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 		ports[healthcheckPort] = corev1.ProtocolTCP
 	}
 
-	// build service
 	service, err := buildNginxService(
 		cloneObjectMeta(objectMeta),
 		nProxyCfg,

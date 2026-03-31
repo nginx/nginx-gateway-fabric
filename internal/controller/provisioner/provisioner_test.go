@@ -335,6 +335,9 @@ func TestRegisterGateway(t *testing.T) {
 				Namespace: "default",
 			},
 		},
+		Listeners: []*graph.Listener{
+			{},
+		},
 		Valid: true,
 	}
 
@@ -411,6 +414,9 @@ func TestRegisterGateway_CreateOrUpdateError(t *testing.T) {
 				Namespace: "default",
 			},
 		},
+		Listeners: []*graph.Listener{
+			{},
+		},
 		Valid: true,
 	}
 
@@ -478,6 +484,9 @@ func TestRegisterGateway_CleansUpOldDeploymentOrDaemonSet(t *testing.T) {
 				Name:      "gw",
 				Namespace: "default",
 			},
+		},
+		Listeners: []*graph.Listener{
+			{},
 		},
 		Valid: true,
 		EffectiveNginxProxy: &graph.EffectiveNginxProxy{
@@ -560,6 +569,9 @@ func TestRegisterGateway_CleansUpOldHPA(t *testing.T) {
 				Namespace: "default",
 			},
 		},
+		Listeners: []*graph.Listener{
+			{},
+		},
 		Valid: true,
 		EffectiveNginxProxy: &graph.EffectiveNginxProxy{
 			Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
@@ -587,6 +599,26 @@ func TestRegisterGateway_CleansUpOldHPA(t *testing.T) {
 		&autoscalingv2.HorizontalPodAutoscaler{},
 	)
 	g.Expect(hpaErr).To(HaveOccurred())
+}
+
+func TestRegisterGateway_EmptyListeners(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+	gateway := &graph.Gateway{
+		Source: &gatewayv1.Gateway{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "gw",
+				Namespace: "default",
+			},
+		},
+		Listeners: []*graph.Listener{}, // Empty array
+		Valid:     true,
+	}
+
+	provisioner, fakeClient, _ := defaultNginxProvisioner(gateway.Source)
+	g.Expect(provisioner.RegisterGateway(t.Context(), gateway, "gw-nginx")).To(Succeed())
+
+	expectResourcesToNotExist(t, g, fakeClient, types.NamespacedName{Name: "gw-nginx", Namespace: "default"})
 }
 
 func TestNonLeaderProvisioner(t *testing.T) {
@@ -622,6 +654,9 @@ func TestProvisionerRestartsDeployment(t *testing.T) {
 				Namespace: "default",
 			},
 		},
+		Listeners: []*graph.Listener{
+			{},
+		},
 		Valid: true,
 		EffectiveNginxProxy: &graph.EffectiveNginxProxy{
 			Logging: &ngfAPIv1alpha2.NginxLogging{
@@ -654,6 +689,9 @@ func TestProvisionerRestartsDeployment(t *testing.T) {
 				Namespace: "default",
 			},
 		},
+		Listeners: []*graph.Listener{
+			{},
+		},
 		Valid: true,
 		EffectiveNginxProxy: &graph.EffectiveNginxProxy{
 			Logging: &ngfAPIv1alpha2.NginxLogging{
@@ -681,6 +719,9 @@ func TestProvisionerRestartsDaemonSet(t *testing.T) {
 				Name:      "gw",
 				Namespace: "default",
 			},
+		},
+		Listeners: []*graph.Listener{
+			{},
 		},
 		Valid: true,
 		EffectiveNginxProxy: &graph.EffectiveNginxProxy{
@@ -716,6 +757,9 @@ func TestProvisionerRestartsDaemonSet(t *testing.T) {
 				Name:      "gw",
 				Namespace: "default",
 			},
+		},
+		Listeners: []*graph.Listener{
+			{},
 		},
 		Valid: true,
 		EffectiveNginxProxy: &graph.EffectiveNginxProxy{

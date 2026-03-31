@@ -63,16 +63,18 @@ HELM_RENDERED=$(helm template test "$HELM_CHART_DIR" \
     2>/dev/null)
 
 # Extract ClusterRole rules from rendered template
+# NOTE: We use "::" as the delimiter instead of "/" because Kubernetes subresources
+# (e.g., gateways/finalizers, inferencepools/status) contain "/" in the resource name.
 echo "Extracting Helm chart RBAC rules (all possible permissions)..."
-HELM_RULES=$(echo "$HELM_RENDERED" | yq eval 'select(.kind == "ClusterRole") | .rules[] | .apiGroups[] as $group | .resources[] as $res | .verbs[] | $group + "/" + $res + "/" + .' - 2>/dev/null | sort -u)
+HELM_RULES=$(echo "$HELM_RENDERED" | yq eval 'select(.kind == "ClusterRole") | .rules[] | .apiGroups[] as $group | .resources[] as $res | .verbs[] | $group + "::" + $res + "::" + .' - 2>/dev/null | sort -u)
 
 # Extract operator RBAC rules including wildcard expansion
 echo "Extracting operator RBAC rules..."
-# Get rules with explicit verbs
-OPERATOR_EXPLICIT=$(yq eval '.rules[] | select(.verbs[] != "*") | .apiGroups[] as $group | .resources[] as $res | .verbs[] | $group + "/" + $res + "/" + .' "$OPERATOR_RBAC" 2>/dev/null | sort -u)
+# Get rules with explicit verbs (rules that do NOT have "*" in verbs)
+OPERATOR_EXPLICIT=$(yq eval '.rules[] | select(.verbs | contains(["*"]) | not) | .apiGroups[] as $group | .resources[] as $res | .verbs[] | $group + "::" + $res + "::" + .' "$OPERATOR_RBAC" 2>/dev/null | sort -u)
 
 # Get rules with wildcard verbs - these match ANY verb for the apiGroup/resource combo
-OPERATOR_WILDCARDS=$(yq eval '.rules[] | select(.verbs[] == "*") | .apiGroups[] as $group | .resources[] | $group + "/" + .' "$OPERATOR_RBAC" 2>/dev/null | sort -u)
+OPERATOR_WILDCARDS=$(yq eval '.rules[] | select(.verbs | contains(["*"])) | .apiGroups[] as $group | .resources[] | $group + "::" + .' "$OPERATOR_RBAC" 2>/dev/null | sort -u)
 
 # Create temp file for missing rules
 MISSING_TEMP=$(mktemp)
@@ -80,8 +82,8 @@ MISSING_TEMP=$(mktemp)
 # Check each Helm rule
 echo "$HELM_RULES" | while IFS= read -r helm_rule; do
     if [ -n "$helm_rule" ]; then
-        # Extract apiGroup/resource from the rule
-        api_group_resource=$(echo "$helm_rule" | cut -d'/' -f1-2)
+        # Extract apiGroup::resource from the rule (everything except the last ::verb segment)
+        api_group_resource=$(echo "$helm_rule" | sed 's/::[^:]*$//')
 
         # Check if this rule is explicitly in operator RBAC
         if ! echo "$OPERATOR_EXPLICIT" | grep -qF "$helm_rule"; then
@@ -105,9 +107,9 @@ if [ -s "$MISSING_TEMP" ]; then
     CURRENT_API_GROUP=""
     echo "$MISSING_RULES" | while IFS= read -r rule; do
         if [ -n "$rule" ]; then
-            apiGroup=$(echo "$rule" | cut -d'/' -f1)
-            resource=$(echo "$rule" | cut -d'/' -f2)
-            verb=$(echo "$rule" | cut -d'/' -f3)
+            apiGroup=$(echo "$rule" | awk -F'::' '{print $1}')
+            resource=$(echo "$rule" | awk -F'::' '{print $2}')
+            verb=$(echo "$rule" | awk -F'::' '{print $3}')
 
             # Display empty string as "core" for readability
             display_group="$apiGroup"

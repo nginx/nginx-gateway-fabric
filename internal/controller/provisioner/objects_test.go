@@ -767,6 +767,7 @@ func TestBuildNginxResourceObjects_Plus(t *testing.T) {
 					"annotation": "value",
 				},
 			},
+			Listeners: []gatewayv1.Listener{{Port: 80}},
 		},
 	}
 
@@ -912,6 +913,9 @@ func TestBuildNginxResourceObjects_DockerSecrets(t *testing.T) {
 			Name:      "gw",
 			Namespace: "default",
 		},
+		Spec: gatewayv1.GatewaySpec{
+			Listeners: []gatewayv1.Listener{{Port: 80}},
+		},
 	}
 
 	resourceName := "gw-nginx"
@@ -1004,6 +1008,9 @@ func TestBuildNginxResourceObjects_DaemonSet(t *testing.T) {
 			Name:      "gw",
 			Namespace: "default",
 		},
+		Spec: gatewayv1.GatewaySpec{
+			Listeners: []gatewayv1.Listener{{Port: 80}},
+		},
 	}
 
 	nProxyCfg := &graph.EffectiveNginxProxy{
@@ -1091,6 +1098,9 @@ func TestBuildNginxResourceObjects_OpenShift(t *testing.T) {
 			Name:      "gw",
 			Namespace: "default",
 		},
+		Spec: gatewayv1.GatewaySpec{
+			Listeners: []gatewayv1.Listener{{Port: 80}},
+		},
 	}
 
 	resourceName := "gw-nginx"
@@ -1164,6 +1174,9 @@ func TestBuildNginxResourceObjects_DataplaneKeySecret(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "gw",
 			Namespace: "default",
+		},
+		Spec: gatewayv1.GatewaySpec{
+			Listeners: []gatewayv1.Listener{{Port: 80}},
 		},
 	}
 

@@ -12,6 +12,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/http"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/ratelimit"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
 
@@ -247,13 +248,30 @@ func TestGenerate(t *testing.T) {
 		},
 	}
 
-	checkResults := func(t *testing.T, resFiles policies.GenerateResultFiles, expStrings []string, isLocation bool) {
+	// checkHTTPResults verifies that the http-context output contains only limit_req_zone directives.
+	checkHTTPResults := func(t *testing.T, resFiles policies.GenerateResultFiles, expStrings []string) {
 		t.Helper()
 		g := NewWithT(t)
 		g.Expect(resFiles).To(HaveLen(1))
 
 		for _, str := range expStrings {
-			if isLocation && strings.Contains(str, "limit_req_zone") {
+			if strings.Contains(str, "limit_req_zone") {
+				g.Expect(string(resFiles[0].Content)).To(ContainSubstring(str))
+			} else {
+				g.Expect(string(resFiles[0].Content)).ToNot(ContainSubstring(str))
+			}
+		}
+	}
+
+	// checkLimitReqResults verifies that server/location-context output contains limit_req
+	// directives but not limit_req_zone.
+	checkLimitReqResults := func(t *testing.T, resFiles policies.GenerateResultFiles, expStrings []string) {
+		t.Helper()
+		g := NewWithT(t)
+		g.Expect(resFiles).To(HaveLen(1))
+
+		for _, str := range expStrings {
+			if strings.Contains(str, "limit_req_zone") {
 				g.Expect(string(resFiles[0].Content)).ToNot(ContainSubstring(str))
 			} else {
 				g.Expect(string(resFiles[0].Content)).To(ContainSubstring(str))
@@ -268,10 +286,13 @@ func TestGenerate(t *testing.T) {
 			generator := ratelimit.NewGenerator()
 
 			resFiles := generator.GenerateForHTTP([]policies.Policy{test.policy})
-			checkResults(t, resFiles, test.expStrings, false)
+			checkHTTPResults(t, resFiles, test.expStrings)
+
+			resFiles = generator.GenerateForServer([]policies.Policy{test.policy}, http.Server{})
+			checkLimitReqResults(t, resFiles, test.expStrings)
 
 			resFiles = generator.GenerateForLocation([]policies.Policy{test.policy}, http.Location{})
-			checkResults(t, resFiles, test.expStrings, true)
+			checkLimitReqResults(t, resFiles, test.expStrings)
 
 			resFiles = generator.GenerateForInternalLocation([]policies.Policy{test.policy})
 			g.Expect(resFiles).To(BeEmpty())
@@ -302,4 +323,35 @@ func TestGenerateNoPolicies(t *testing.T) {
 
 	resFiles = generator.GenerateForInternalLocation([]policies.Policy{&ngfAPIv1alpha2.ObservabilityPolicy{}})
 	g.Expect(resFiles).To(BeEmpty())
+}
+
+func TestGenerateServerSkipsShadowPolicies(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	generator := ratelimit.NewGenerator()
+
+	shadowPolicy := &ngfAPIv1alpha1.RateLimitPolicy{
+		ObjectMeta: v1.ObjectMeta{
+			Name:      "shadow-policy",
+			Namespace: "default",
+			Annotations: map[string]string{
+				dataplane.InternalRLPAnnotationKey: dataplane.InternalRLPAnnotationValue,
+			},
+		},
+		Spec: ngfAPIv1alpha1.RateLimitPolicySpec{
+			RateLimit: &ngfAPIv1alpha1.RateLimit{
+				Local: &ngfAPIv1alpha1.LocalRateLimit{
+					Rules: []ngfAPIv1alpha1.RateLimitRule{{}},
+				},
+			},
+		},
+	}
+
+	resFiles := generator.GenerateForServer([]policies.Policy{shadowPolicy}, http.Server{})
+	g.Expect(resFiles).To(BeEmpty())
+
+	resFiles = generator.GenerateForHTTP([]policies.Policy{shadowPolicy})
+	g.Expect(resFiles).To(HaveLen(1))
+	g.Expect(resFiles[0].Name).To(ContainSubstring("internal_http"))
 }
