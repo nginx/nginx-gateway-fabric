@@ -325,7 +325,7 @@ make test-waf-gke \
   PREFIX=${NGF_IMAGE_REPO}$ \
   NGINX_PLUS_PREFIX=${NGINX_IMAGE_REPO} \
   TAG=${NGF_IMAGE_TAG} \
-  GKE_PROJECT=${GKW_PROJECT}
+  GKE_PROJECT=${GKE_PROJECT}
 ```
 
 The `test-waf-gke` target sets `PULL_POLICY=Always` and `GW_SERVICE_TYPE=LoadBalancer` automatically.

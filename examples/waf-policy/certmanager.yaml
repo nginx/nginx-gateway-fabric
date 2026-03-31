@@ -40,7 +40,7 @@ spec:
   issuerRef:
     name: nginx-gateway-f5-waf-seaweedfs-ca-issuer
     kind: Issuer
-  commonName: "SeaweedFS CA"
+  commonName: "seaweedfs-master"
   dnsNames:
     - '*.nginx-gateway'
     - '*.nginx-gateway.svc'
@@ -49,6 +49,11 @@ spec:
     - '*.seaweedfs-master.nginx-gateway'
     - '*.seaweedfs-master.nginx-gateway.svc'
     - '*.seaweedfs-master.nginx-gateway.svc.cluster.local'
+  usages:
+    - digital signature
+    - key encipherment
+    - server auth
+    - client auth
   privateKey:
     algorithm: RSA
     size: 2048
@@ -65,7 +70,7 @@ spec:
   issuerRef:
     name: nginx-gateway-f5-waf-seaweedfs-ca-issuer
     kind: Issuer
-  commonName: "SeaweedFS CA"
+  commonName: "seaweedfs-volume"
   dnsNames:
     - '*.nginx-gateway'
     - '*.nginx-gateway.svc'
@@ -74,6 +79,11 @@ spec:
     - '*.seaweedfs-volume.nginx-gateway'
     - '*.seaweedfs-volume.nginx-gateway.svc'
     - '*.seaweedfs-volume.nginx-gateway.svc.cluster.local'
+  usages:
+    - digital signature
+    - key encipherment
+    - server auth
+    - client auth
   privateKey:
     algorithm: RSA
     size: 2048
@@ -90,7 +100,7 @@ spec:
   issuerRef:
     name: nginx-gateway-f5-waf-seaweedfs-ca-issuer
     kind: Issuer
-  commonName: "SeaweedFS CA"
+  commonName: "seaweedfs-filer"
   dnsNames:
     - '*.nginx-gateway'
     - '*.nginx-gateway.svc'
@@ -99,6 +109,11 @@ spec:
     - '*.seaweedfs-filer.nginx-gateway'
     - '*.seaweedfs-filer.nginx-gateway.svc'
     - '*.seaweedfs-filer.nginx-gateway.svc.cluster.local'
+  usages:
+    - digital signature
+    - key encipherment
+    - server auth
+    - client auth
   privateKey:
     algorithm: RSA
     size: 2048
@@ -115,12 +130,16 @@ spec:
   issuerRef:
     name: nginx-gateway-f5-waf-seaweedfs-ca-issuer
     kind: Issuer
-  commonName: "SeaweedFS CA"
+  commonName: "nginx-gateway-plm-client"
   dnsNames:
     - '*.nginx-gateway'
     - '*.nginx-gateway.svc'
     - '*.nginx-gateway.svc.cluster.local'
     - client
+  usages:
+    - digital signature
+    - key encipherment
+    - client auth
   privateKey:
     algorithm: RSA
     size: 2048
