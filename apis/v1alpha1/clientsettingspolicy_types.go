@@ -106,7 +106,7 @@ type ClientKeepAlive struct {
 	//nolint:lll
 	Timeout *ClientKeepAliveTimeout `json:"timeout,omitempty"`
 
-	// MinimumTimeout defines the timeout for which the keep-alive client connection
+	// MinTimeout defines the timeout for which the keep-alive client connection
 	// will not be closed on the server side for connection reuse or on
 	// graceful shutdown of worker processes.
 	// Default: https://nginx.org/en/docs/http/ngx_http_core_module.html#keepalive_min_timeout.
