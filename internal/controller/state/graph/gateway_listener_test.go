@@ -338,10 +338,8 @@ func TestValidateHTTPSListener(t *testing.T) {
 					CertificateRefs: []v1.SecretObjectReference{validSecretRef, validSecretRef},
 				},
 			},
-			expected: conditions.NewListenerUnsupportedValue(
-				"tls.certificateRefs: Too many: 2: must have at most 1 item",
-			),
-			name: "too many cert refs",
+			expected: nil,
+			name:     "multiple cert refs",
 		},
 	}
 

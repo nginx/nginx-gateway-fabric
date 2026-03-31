@@ -14,8 +14,12 @@ server {
     listen [::]:{{ $s.Listen }} ssl default_server{{ $.RewriteClientIP.ProxyProtocol }};
         {{- end }}
     {{- if $s.SSL }}
-    ssl_certificate {{ $s.SSL.Certificate }};
-    ssl_certificate_key {{ $s.SSL.CertificateKey }};
+        {{- range $cert := $s.SSL.Certificates }}
+    ssl_certificate {{ $cert }};
+        {{- end }}
+        {{- range $key := $s.SSL.CertificateKeys }}
+    ssl_certificate_key {{ $key }};
+        {{- end }}
         {{- if $s.SSL.Protocols }}
     ssl_protocols {{ $s.SSL.Protocols }};
         {{- end }}
@@ -67,8 +71,12 @@ server {
           {{- if and ($.IPFamily.IPv6) (not $s.IsSocket) }}
     listen [::]:{{ $s.Listen }} ssl{{ $.RewriteClientIP.ProxyProtocol }};
           {{- end }}
-    ssl_certificate {{ $s.SSL.Certificate }};
-    ssl_certificate_key {{ $s.SSL.CertificateKey }};
+        {{- range $cert := $s.SSL.Certificates }}
+    ssl_certificate {{ $cert }};
+        {{- end }}
+        {{- range $key := $s.SSL.CertificateKeys }}
+    ssl_certificate_key {{ $key }};
+        {{- end }}
 
           {{- if $s.SSL.Protocols }}
     ssl_protocols {{ $s.SSL.Protocols }};

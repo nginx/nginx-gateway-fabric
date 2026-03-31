@@ -53,9 +53,9 @@ type Listener struct {
 	L4Routes map[L4RouteKey]*L4Route
 	// AllowedRouteLabelSelector is the label selector for this Listener's allowed routes, if defined.
 	AllowedRouteLabelSelector labels.Selector
-	// ResolvedSecret is the namespaced name of the Secret resolved for this listener.
-	// Only applicable for HTTPS listeners.
-	ResolvedSecret *types.NamespacedName
+	// ResolvedSecrets is the list of namespaced names of the Secrets resolved for this listener.
+	// Only applicable for HTTPS listeners. Supports multiple certificates for SNI-based selection.
+	ResolvedSecrets []types.NamespacedName
 	// Conditions holds the conditions of the Listener.
 	Conditions []conditions.Condition
 	// SupportedKinds is the list of RouteGroupKinds allowed by the listener.
@@ -481,27 +481,21 @@ func createHTTPSListenerValidator(protectedPorts ProtectedPorts) listenerValidat
 			return conds, true
 		}
 
-		certRef := listener.TLS.CertificateRefs[0]
+		for i, certRef := range listener.TLS.CertificateRefs {
+			certRefPath := tlsPath.Child("certificateRefs").Index(i)
 
-		certRefPath := tlsPath.Child("certificateRefs").Index(0)
+			if certRef.Kind != nil && *certRef.Kind != "Secret" {
+				path := certRefPath.Child("kind")
+				valErr := field.NotSupported(path, *certRef.Kind, []string{"Secret"})
+				conds = append(conds, conditions.NewListenerInvalidCertificateRef(valErr.Error())...)
+			}
 
-		if certRef.Kind != nil && *certRef.Kind != "Secret" {
-			path := certRefPath.Child("kind")
-			valErr := field.NotSupported(path, *certRef.Kind, []string{"Secret"})
-			conds = append(conds, conditions.NewListenerInvalidCertificateRef(valErr.Error())...)
-		}
-
-		// for Kind Secret, certRef.Group must be nil or empty
-		if certRef.Group != nil && *certRef.Group != "" {
-			path := certRefPath.Child("group")
-			valErr := field.NotSupported(path, *certRef.Group, []string{""})
-			conds = append(conds, conditions.NewListenerInvalidCertificateRef(valErr.Error())...)
-		}
-
-		if l := len(listener.TLS.CertificateRefs); l > 1 {
-			path := tlsPath.Child("certificateRefs")
-			valErr := field.TooMany(path, l, 1)
-			conds = append(conds, conditions.NewListenerUnsupportedValue(valErr.Error())...)
+			// for Kind Secret, certRef.Group must be nil or empty
+			if certRef.Group != nil && *certRef.Group != "" {
+				path := certRefPath.Child("group")
+				valErr := field.NotSupported(path, *certRef.Group, []string{""})
+				conds = append(conds, conditions.NewListenerInvalidCertificateRef(valErr.Error())...)
+			}
 		}
 
 		return conds, true
@@ -682,37 +676,38 @@ func createExternalReferencesForTLSSecretsResolver(
 	refGrantResolver *referenceGrantResolver,
 ) listenerExternalReferenceResolver {
 	return func(l *Listener) {
-		certRef := l.Source.TLS.CertificateRefs[0]
+		for i, certRef := range l.Source.TLS.CertificateRefs {
+			certRefNs := gwNs
+			if certRef.Namespace != nil {
+				certRefNs = string(*certRef.Namespace)
+			}
 
-		certRefNs := gwNs
-		if certRef.Namespace != nil {
-			certRefNs = string(*certRef.Namespace)
-		}
+			certRefNsName := types.NamespacedName{
+				Namespace: certRefNs,
+				Name:      string(certRef.Name),
+			}
 
-		certRefNsName := types.NamespacedName{
-			Namespace: certRefNs,
-			Name:      string(certRef.Name),
-		}
+			if certRefNs != gwNs {
+				if !refGrantResolver.refAllowed(toSecret(certRefNsName), fromGateway(gwNs)) {
+					msg := fmt.Sprintf("Certificate ref to secret %s not permitted by any ReferenceGrant", certRefNsName)
 
-		if certRefNs != gwNs {
-			if !refGrantResolver.refAllowed(toSecret(certRefNsName), fromGateway(gwNs)) {
-				msg := fmt.Sprintf("Certificate ref to secret %s not permitted by any ReferenceGrant", certRefNsName)
+					l.Conditions = append(l.Conditions, conditions.NewListenerRefNotPermitted(msg)...)
+					l.Valid = false
+					return
+				}
+			}
 
-				l.Conditions = append(l.Conditions, conditions.NewListenerRefNotPermitted(msg)...)
+			if err := resourceResolver.Resolve(resolver.ResourceTypeSecret, certRefNsName); err != nil {
+				path := field.NewPath("tls", "certificateRefs").Index(i)
+				// field.NotFound could be better, but it doesn't allow us to set the error message.
+				valErr := field.Invalid(path, certRefNsName, err.Error())
+
+				l.Conditions = append(l.Conditions, conditions.NewListenerInvalidCertificateRef(valErr.Error())...)
 				l.Valid = false
 				return
 			}
-		}
 
-		if err := resourceResolver.Resolve(resolver.ResourceTypeSecret, certRefNsName); err != nil {
-			path := field.NewPath("tls", "certificateRefs").Index(0)
-			// field.NotFound could be better, but it doesn't allow us to set the error message.
-			valErr := field.Invalid(path, certRefNsName, err.Error())
-
-			l.Conditions = append(l.Conditions, conditions.NewListenerInvalidCertificateRef(valErr.Error())...)
-			l.Valid = false
-		} else {
-			l.ResolvedSecret = &certRefNsName
+			l.ResolvedSecrets = append(l.ResolvedSecrets, certRefNsName)
 		}
 	}
 }

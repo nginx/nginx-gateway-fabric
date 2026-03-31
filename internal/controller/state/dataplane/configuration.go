@@ -379,13 +379,15 @@ func buildSSLKeyPairs(
 	keyPairs := make(map[SSLKeyPairID]SSLKeyPair)
 
 	for _, l := range gateway.Listeners {
-		if l.Valid && l.ResolvedSecret != nil {
-			id := generateSSLKeyPairID(*l.ResolvedSecret)
-			secret := secretsMap[*l.ResolvedSecret]
-			if secret != nil && secret.CertBundle != nil {
-				keyPairs[id] = SSLKeyPair{
-					Cert: secret.CertBundle.Cert.TLSCert,
-					Key:  secret.CertBundle.Cert.TLSPrivateKey,
+		if l.Valid && len(l.ResolvedSecrets) > 0 {
+			for _, secretNsName := range l.ResolvedSecrets {
+				id := generateSSLKeyPairID(secretNsName)
+				secret := secretsMap[secretNsName]
+				if secret != nil && secret.CertBundle != nil {
+					keyPairs[id] = SSLKeyPair{
+						Cert: secret.CertBundle.Cert.TLSCert,
+						Key:  secret.CertBundle.Cert.TLSPrivateKey,
+					}
 				}
 			}
 		}
@@ -909,7 +911,7 @@ func (hpr *hostPathRules) buildServers() []VirtualServer {
 			panic(fmt.Sprintf("no listener found for hostname: %s", h))
 		}
 
-		if l.ResolvedSecret != nil {
+		if len(l.ResolvedSecrets) > 0 {
 			s.SSL = buildSSL(l)
 		}
 
@@ -943,7 +945,7 @@ func (hpr *hostPathRules) buildServers() []VirtualServer {
 				Port:     hpr.port,
 			}
 
-			if l.ResolvedSecret != nil {
+			if len(l.ResolvedSecrets) > 0 {
 				s.SSL = buildSSL(l)
 
 				// If this is a wildcard, save SSL config for default server
@@ -976,8 +978,13 @@ func (hpr *hostPathRules) buildServers() []VirtualServer {
 }
 
 func buildSSL(listener *graph.Listener) *SSL {
+	keyPairIDs := make([]SSLKeyPairID, 0, len(listener.ResolvedSecrets))
+	for _, secretNsName := range listener.ResolvedSecrets {
+		keyPairIDs = append(keyPairIDs, generateSSLKeyPairID(secretNsName))
+	}
+
 	ssl := &SSL{
-		KeyPairID: generateSSLKeyPairID(*listener.ResolvedSecret),
+		KeyPairIDs: keyPairIDs,
 	}
 
 	if listener.Source.TLS != nil && listener.Source.TLS.Options != nil {

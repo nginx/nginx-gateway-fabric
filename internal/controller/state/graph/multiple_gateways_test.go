@@ -210,7 +210,7 @@ func convertListener(
 	}
 
 	if secret != nil {
-		l.ResolvedSecret = helpers.GetPointer(client.ObjectKeyFromObject(secret))
+		l.ResolvedSecrets = []types.NamespacedName{client.ObjectKeyFromObject(secret)}
 	}
 	return l
 }

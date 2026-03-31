@@ -128,14 +128,14 @@ func TestExecuteServers(t *testing.T) {
 			{
 				Hostname: "example.com",
 				SSL: &dataplane.SSL{
-					KeyPairID: "test-keypair",
+					KeyPairIDs: []dataplane.SSLKeyPairID{"test-keypair"},
 				},
 				Port: 8443,
 			},
 			{
 				Hostname: "cafe.example.com",
 				SSL: &dataplane.SSL{
-					KeyPairID:           "test-keypair",
+					KeyPairIDs:          []dataplane.SSLKeyPairID{"test-keypair"},
 					Protocols:           "TLSv1.2 TLSv1.3",
 					Ciphers:             "ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384:HIGH:!aNULL:!MD5",
 					PreferServerCiphers: true,
@@ -273,23 +273,23 @@ func TestExecuteServers_TLSOptions(t *testing.T) {
 			{
 				Hostname: "test-protocols-only.com",
 				SSL: &dataplane.SSL{
-					KeyPairID: "test-keypair-1",
-					Protocols: "TLSv1.3",
+					KeyPairIDs: []dataplane.SSLKeyPairID{"test-keypair-1"},
+					Protocols:  "TLSv1.3",
 				},
 				Port: 8443,
 			},
 			{
 				Hostname: "test-ciphers-only.com",
 				SSL: &dataplane.SSL{
-					KeyPairID: "test-keypair-2",
-					Ciphers:   "ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384",
+					KeyPairIDs: []dataplane.SSLKeyPairID{"test-keypair-2"},
+					Ciphers:    "ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384",
 				},
 				Port: 8443,
 			},
 			{
 				Hostname: "test-prefer-server-ciphers.com",
 				SSL: &dataplane.SSL{
-					KeyPairID:           "test-keypair-3",
+					KeyPairIDs:          []dataplane.SSLKeyPairID{"test-keypair-3"},
 					PreferServerCiphers: true,
 				},
 				Port: 8443,
@@ -297,7 +297,7 @@ func TestExecuteServers_TLSOptions(t *testing.T) {
 			{
 				Hostname: "test-all-options.com",
 				SSL: &dataplane.SSL{
-					KeyPairID:           "test-keypair-4",
+					KeyPairIDs:          []dataplane.SSLKeyPairID{"test-keypair-4"},
 					Protocols:           "TLSv1.2 TLSv1.3",
 					Ciphers:             "ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384:HIGH:!aNULL:!MD5",
 					PreferServerCiphers: true,
@@ -367,7 +367,7 @@ func TestExecuteServers_IPFamily(t *testing.T) {
 		{
 			Hostname: "example.com",
 			SSL: &dataplane.SSL{
-				KeyPairID: "test-keypair",
+				KeyPairIDs: []dataplane.SSLKeyPairID{"test-keypair"},
 			},
 			Port: 8443,
 		},
@@ -380,7 +380,7 @@ func TestExecuteServers_IPFamily(t *testing.T) {
 		{
 			Hostname: "example.com",
 			SSL: &dataplane.SSL{
-				KeyPairID: "test-keypair",
+				KeyPairIDs: []dataplane.SSLKeyPairID{"test-keypair"},
 			},
 			Port: 443,
 		},
@@ -510,7 +510,7 @@ func TestExecuteServers_RewriteClientIP(t *testing.T) {
 		{
 			Hostname: "example.com",
 			SSL: &dataplane.SSL{
-				KeyPairID: "test-keypair",
+				KeyPairIDs: []dataplane.SSLKeyPairID{"test-keypair"},
 			},
 			Port: 8443,
 		},
@@ -622,7 +622,7 @@ func TestExecuteServers_Plus(t *testing.T) {
 			{
 				Hostname: "example.com",
 				SSL: &dataplane.SSL{
-					KeyPairID: "test-keypair",
+					KeyPairIDs: []dataplane.SSLKeyPairID{"test-keypair"},
 				},
 			},
 		},
@@ -1393,7 +1393,7 @@ func TestCreateServers(t *testing.T) {
 			},
 			{
 				Hostname:  "cafe.example.com",
-				SSL:       &dataplane.SSL{KeyPairID: sslKeyPairID},
+				SSL:       &dataplane.SSL{KeyPairIDs: []dataplane.SSLKeyPairID{sslKeyPairID}},
 				PathRules: cafePathRules,
 				Port:      8443,
 				Policies: []policies.Policy{
@@ -1981,8 +1981,8 @@ func TestCreateServers(t *testing.T) {
 		{
 			ServerName: "cafe.example.com",
 			SSL: &http.SSL{
-				Certificate:    expectedPEMPath,
-				CertificateKey: expectedPEMPath,
+				Certificates:    []string{expectedPEMPath},
+				CertificateKeys: []string{expectedPEMPath},
 			},
 			MisdirectedRequestVars: &http.MisdirectedRequestVars{
 				SNIVar:  "$sni_listener_id_8443",
@@ -2300,7 +2300,7 @@ func TestCreateServers_Includes(t *testing.T) {
 		},
 		{
 			Hostname:  "ssl.example.com",
-			SSL:       &dataplane.SSL{KeyPairID: "test-keypair"},
+			SSL:       &dataplane.SSL{KeyPairIDs: []dataplane.SSLKeyPairID{"test-keypair"}},
 			PathRules: pathRules,
 			Port:      8443,
 			Policies: []policies.Policy{
@@ -5060,7 +5060,7 @@ func TestExecuteServers_DisableSNIHostValidation(t *testing.T) {
 	sslServer := dataplane.VirtualServer{
 		Hostname: "example.com",
 		SSL: &dataplane.SSL{
-			KeyPairID: "test-keypair",
+			KeyPairIDs: []dataplane.SSLKeyPairID{"test-keypair"},
 		},
 		Port: 8443,
 	}
