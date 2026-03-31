@@ -71,6 +71,10 @@ func deploymentSpecSetter(
 
 		deployment.TypeMeta = typeMeta
 		deployment.ObjectMeta = objectMeta
+
+		// This works because the deployment object passed to this setter (minObj) gets updated by
+		// controllerutil.CreateOrUpdate with the existing cluster state. objectMeta.Annotations
+		// contains the desired annotations calculated when building the objects.
 		deployment.Annotations = mergeAnnotations(existingAnnotations, objectMeta.Annotations)
 		deployment.Spec = spec
 		return nil

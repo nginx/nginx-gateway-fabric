@@ -5,7 +5,9 @@ import (
 
 	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
+	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -348,4 +350,319 @@ func TestDeploymentAndDaemonSetSpecSetter(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestHpaSpecSetter(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	existing := &autoscalingv2.HorizontalPodAutoscaler{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-hpa",
+			Namespace: "default",
+		},
+	}
+
+	labels := map[string]string{
+		"app": "nginx-gateway",
+	}
+
+	annotations := map[string]string{
+		"custom.annotation": "test-value",
+	}
+
+	desiredMeta := metav1.ObjectMeta{
+		Labels:      labels,
+		Annotations: annotations,
+	}
+
+	minReplicas := int32(1)
+	maxReplicas := int32(10)
+	spec := autoscalingv2.HorizontalPodAutoscalerSpec{
+		MinReplicas: &minReplicas,
+		MaxReplicas: maxReplicas,
+		ScaleTargetRef: autoscalingv2.CrossVersionObjectReference{
+			APIVersion: "apps/v1",
+			Kind:       "Deployment",
+			Name:       "nginx-gateway",
+		},
+		Metrics: []autoscalingv2.MetricSpec{
+			{
+				Type: autoscalingv2.ResourceMetricSourceType,
+				Resource: &autoscalingv2.ResourceMetricSource{
+					Name: corev1.ResourceCPU,
+					Target: autoscalingv2.MetricTarget{
+						Type:               autoscalingv2.UtilizationMetricType,
+						AverageUtilization: &[]int32{50}[0],
+					},
+				},
+			},
+		},
+	}
+
+	err := hpaSpecSetter(existing, spec, desiredMeta, metav1.TypeMeta{})()
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(existing.Labels).To(Equal(labels))
+	g.Expect(existing.Annotations).To(Equal(annotations))
+	g.Expect(existing.Spec).To(Equal(spec))
+}
+
+func TestServiceAccountSpecSetter(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	existing := &corev1.ServiceAccount{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-service-account",
+			Namespace: "default",
+		},
+	}
+
+	labels := map[string]string{
+		"app": "nginx-gateway",
+	}
+
+	annotations := map[string]string{
+		"custom.annotation": "test-value",
+	}
+
+	desiredMeta := metav1.ObjectMeta{
+		Labels:      labels,
+		Annotations: annotations,
+	}
+
+	err := serviceAccountSpecSetter(existing, desiredMeta, metav1.TypeMeta{})()
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(existing.Labels).To(Equal(labels))
+	g.Expect(existing.Annotations).To(Equal(annotations))
+}
+
+func TestConfigMapSpecSetter(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		existingData   map[string]string
+		existingLabels map[string]string
+		existingAnns   map[string]string
+		desiredData    map[string]string
+		desiredLabels  map[string]string
+		desiredAnns    map[string]string
+		name           string
+		shouldUpdate   bool
+	}{
+		{
+			name:           "updates when data differs",
+			existingData:   map[string]string{"key1": "old-value"},
+			existingLabels: map[string]string{"app": "nginx-gateway"},
+			existingAnns:   map[string]string{"annotation": "value"},
+			desiredData:    map[string]string{"key1": "new-value"},
+			desiredLabels:  map[string]string{"app": "nginx-gateway"},
+			desiredAnns:    map[string]string{"annotation": "value"},
+			shouldUpdate:   true,
+		},
+		{
+			name:           "updates when labels differ",
+			existingData:   map[string]string{"key1": "value"},
+			existingLabels: map[string]string{"app": "old-app"},
+			existingAnns:   map[string]string{"annotation": "value"},
+			desiredData:    map[string]string{"key1": "value"},
+			desiredLabels:  map[string]string{"app": "nginx-gateway"},
+			desiredAnns:    map[string]string{"annotation": "value"},
+			shouldUpdate:   true,
+		},
+		{
+			name:           "updates when annotations differ",
+			existingData:   map[string]string{"key1": "value"},
+			existingLabels: map[string]string{"app": "nginx-gateway"},
+			existingAnns:   map[string]string{"annotation": "old-value"},
+			desiredData:    map[string]string{"key1": "value"},
+			desiredLabels:  map[string]string{"app": "nginx-gateway"},
+			desiredAnns:    map[string]string{"annotation": "new-value"},
+			shouldUpdate:   true,
+		},
+		{
+			name:           "no update when everything matches",
+			existingData:   map[string]string{"key1": "value"},
+			existingLabels: map[string]string{"app": "nginx-gateway"},
+			existingAnns:   map[string]string{"annotation": "value"},
+			desiredData:    map[string]string{"key1": "value"},
+			desiredLabels:  map[string]string{"app": "nginx-gateway"},
+			desiredAnns:    map[string]string{"annotation": "value"},
+			shouldUpdate:   false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			existing := &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:        "test-configmap",
+					Namespace:   "default",
+					Labels:      tt.existingLabels,
+					Annotations: tt.existingAnns,
+				},
+				Data: tt.existingData,
+			}
+
+			originalData := make(map[string]string)
+			for k, v := range existing.Data {
+				originalData[k] = v
+			}
+			originalLabels := make(map[string]string)
+			for k, v := range existing.Labels {
+				originalLabels[k] = v
+			}
+			originalAnns := make(map[string]string)
+			for k, v := range existing.Annotations {
+				originalAnns[k] = v
+			}
+
+			desiredMeta := metav1.ObjectMeta{
+				Labels:      tt.desiredLabels,
+				Annotations: tt.desiredAnns,
+			}
+
+			err := configMapSpecSetter(existing, tt.desiredData, desiredMeta, metav1.TypeMeta{})()
+			g.Expect(err).ToNot(HaveOccurred())
+
+			if tt.shouldUpdate {
+				g.Expect(existing.Labels).To(Equal(tt.desiredLabels))
+				g.Expect(existing.Annotations).To(Equal(tt.desiredAnns))
+				g.Expect(existing.Data).To(Equal(tt.desiredData))
+			} else {
+				g.Expect(existing.Data).To(Equal(originalData))
+				g.Expect(existing.Labels).To(Equal(originalLabels))
+				g.Expect(existing.Annotations).To(Equal(originalAnns))
+			}
+		})
+	}
+}
+
+func TestSecretSpecSetter(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	existing := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-secret",
+			Namespace: "default",
+		},
+	}
+
+	labels := map[string]string{
+		"app": "nginx-gateway",
+	}
+
+	annotations := map[string]string{
+		"custom.annotation": "test-value",
+	}
+
+	desiredMeta := metav1.ObjectMeta{
+		Labels:      labels,
+		Annotations: annotations,
+	}
+
+	data := map[string][]byte{
+		"username": []byte("admin"),
+		"password": []byte("secret"),
+	}
+
+	err := secretSpecSetter(existing, data, desiredMeta, metav1.TypeMeta{})()
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(existing.Labels).To(Equal(labels))
+	g.Expect(existing.Annotations).To(Equal(annotations))
+	g.Expect(existing.Data).To(Equal(data))
+}
+
+func TestRoleSpecSetter(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	existing := &rbacv1.Role{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-role",
+			Namespace: "default",
+		},
+	}
+
+	labels := map[string]string{
+		"app": "nginx-gateway",
+	}
+
+	annotations := map[string]string{
+		"custom.annotation": "test-value",
+	}
+
+	desiredMeta := metav1.ObjectMeta{
+		Labels:      labels,
+		Annotations: annotations,
+	}
+
+	rules := []rbacv1.PolicyRule{
+		{
+			APIGroups: []string{""},
+			Resources: []string{"services"},
+			Verbs:     []string{"get", "list", "watch"},
+		},
+		{
+			APIGroups: []string{"apps"},
+			Resources: []string{"deployments"},
+			Verbs:     []string{"get", "list", "watch", "create", "update", "patch"},
+		},
+	}
+
+	err := roleSpecSetter(existing, rules, desiredMeta, metav1.TypeMeta{})()
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(existing.Labels).To(Equal(labels))
+	g.Expect(existing.Annotations).To(Equal(annotations))
+	g.Expect(existing.Rules).To(Equal(rules))
+}
+
+func TestRoleBindingSpecSetter(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	existing := &rbacv1.RoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-rolebinding",
+			Namespace: "default",
+		},
+	}
+
+	labels := map[string]string{
+		"app": "nginx-gateway",
+	}
+
+	annotations := map[string]string{
+		"custom.annotation": "test-value",
+	}
+
+	desiredMeta := metav1.ObjectMeta{
+		Labels:      labels,
+		Annotations: annotations,
+	}
+
+	roleRef := rbacv1.RoleRef{
+		APIGroup: "rbac.authorization.k8s.io",
+		Kind:     "Role",
+		Name:     "nginx-gateway-role",
+	}
+
+	subjects := []rbacv1.Subject{
+		{
+			Kind:      "ServiceAccount",
+			Name:      "nginx-gateway",
+			Namespace: "nginx-gateway",
+		},
+	}
+
+	err := roleBindingSpecSetter(existing, roleRef, subjects, desiredMeta, metav1.TypeMeta{})()
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(existing.Labels).To(Equal(labels))
+	g.Expect(existing.Annotations).To(Equal(annotations))
+	g.Expect(existing.RoleRef).To(Equal(roleRef))
+	g.Expect(existing.Subjects).To(Equal(subjects))
 }
