@@ -141,17 +141,23 @@ var _ = Describe("RateLimitPolicy", Ordered, Label("functional", "rate-limit-pol
 						Value:     "$binary_remote_addr zone=rate-limit-policy_rl_gateway-rate-limit_rule0:10m rate=15r/m",
 					},
 					{
-						File:      fmt.Sprintf("%s%s", filePrefix, "_gateway-rate-limit_gateway.conf"),
+						Directive: "include",
+						Value:     fmt.Sprintf("%s%s", filePrefix, "_gateway-rate-limit_gateway_server.conf"),
+						File:      "http.conf",
+						Server:    "cafe.example.com",
+					},
+					{
+						File:      fmt.Sprintf("%s%s", filePrefix, "_gateway-rate-limit_gateway_server.conf"),
 						Directive: "limit_req",
 						Value:     "zone=rate-limit-policy_rl_gateway-rate-limit_rule0 burst=3",
 					},
 					{
-						File:      fmt.Sprintf("%s%s", filePrefix, "_gateway-rate-limit_gateway.conf"),
+						File:      fmt.Sprintf("%s%s", filePrefix, "_gateway-rate-limit_gateway_server.conf"),
 						Directive: "limit_req_log_level",
 						Value:     "info",
 					},
 					{
-						File:      fmt.Sprintf("%s%s", filePrefix, "_gateway-rate-limit_gateway.conf"),
+						File:      fmt.Sprintf("%s%s", filePrefix, "_gateway-rate-limit_gateway_server.conf"),
 						Directive: "limit_req_status",
 						Value:     "429",
 					},
