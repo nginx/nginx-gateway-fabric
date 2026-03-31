@@ -37,12 +37,14 @@ const (
 	DefaultLogFormatName = "ngf_user_defined_log_format"
 	// DefaultAccessLogPath is the default path for the access log.
 	DefaultAccessLogPath = "/dev/stdout"
-	// InternalRateLimitShadowPolicyAnnotationKey is the annotation key used to mark internally generated
+	// InternalRLPAnnotationKey is the annotation key used to mark internally generated
 	// RateLimitPolicies. These policies are created when a RateLimitPolicy targets a route and not
 	// the Gateway itself; in this situation we need an additional policy to generate the http context
 	// configuration.
-	InternalRateLimitShadowPolicyAnnotationKey = "nginx.org/internal-annotation-http-context-only"
-	crlBundleIDPrefix                          = "crl_bundle"
+	InternalRLPAnnotationKey = "nginx.org/internal-annotation-http-context-only"
+	// InternalRLPAnnotationValue is the annotation value used to mark internally generated RateLimitPolicies.
+	InternalRLPAnnotationValue = "true"
+	crlBundleIDPrefix          = "crl_bundle"
 )
 
 // BuildConfiguration builds the Configuration from the Graph.
@@ -1500,7 +1502,7 @@ func buildHTTPContextRateLimitPolicies(gatewayRateLimitPolicies map[graph.Policy
 		if httpContextPolicy.Annotations == nil {
 			httpContextPolicy.Annotations = make(map[string]string)
 		}
-		httpContextPolicy.Annotations[InternalRateLimitShadowPolicyAnnotationKey] = "true"
+		httpContextPolicy.Annotations[InternalRLPAnnotationKey] = InternalRLPAnnotationValue
 
 		// Convert to policies.Policy interface and add to the list
 		httpContextRateLimitPolicies = append(httpContextRateLimitPolicies, httpContextPolicy)
