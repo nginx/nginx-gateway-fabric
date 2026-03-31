@@ -19,11 +19,15 @@ spec:
         set:
         - name: My-Overwrite-Header
           value: this-is-the-only-value
+        - name: X-Client-IP
+          value: $remote_addr
         add:
         - name: Accept-Encoding
           value: compress
         - name: My-cool-header
           value: this-is-an-appended-value
+        - name: X-Request-Method
+          value: $request_method
         remove:
         - User-Agent
     backendRefs:
