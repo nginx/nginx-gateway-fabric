@@ -305,7 +305,7 @@ jobs:
       - name: Build binary
         uses: goreleaser/goreleaser-action@ec59f474b9834571250b370d4735c50f8e2d1e29 # v7.0.0
         with:
-          version: v2.15.1 # renovate: datasource=github-tags depName=goreleaser/goreleaser
+          version: v2.15.2 # renovate: datasource=github-tags depName=goreleaser/goreleaser
           # On PRs: build only amd64 for speed (tests run on amd64 runners)
           # On main/release: build both amd64 and arm64
           args: ${{ (inputs.is_production_release && (inputs.dry_run == false || inputs.dry_run == null)) && 'release' || (github.event_name == 'pull_request' && 'build --single-target --snapshot' || 'build --snapshot') }} --clean
