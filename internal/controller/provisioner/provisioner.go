@@ -261,6 +261,7 @@ func createMinimalClone(obj client.Object) (client.Object, error) {
 		return nil, fmt.Errorf("createMinimalClone: unsupported object type %T", obj)
 	}
 
+	// A new object will be created by this factory function
 	return factory(obj.GetName(), obj.GetNamespace()), nil
 }
 
@@ -308,8 +309,8 @@ func (p *NginxProvisioner) provisionNginx(
 			500*time.Millisecond,
 			true, /* poll immediately */
 			func(ctx context.Context) (bool, error) {
-				// Use minimalObj for CreateOrUpdate but pass both to objectSpecSetter
-
+				// Use minimalObj for CreateOrUpdate but pass both to objectSpecSetter so we can transfer
+				// the desired spec and other meta details of the object
 				res, upsertErr = controllerutil.CreateOrUpdate(ctx, p.k8sClient, minimalObj, objectSpecSetter(minimalObj, obj))
 
 				if upsertErr != nil {

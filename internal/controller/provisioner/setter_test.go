@@ -131,6 +131,12 @@ func TestServiceSpecSetter_PreservesExternalAnnotations(t *testing.T) {
 				Annotations: tt.desiredAnnotations,
 			}
 
+			// Create desired TypeMeta
+			desiredTypeMeta := metav1.TypeMeta{
+				APIVersion: "v1",
+				Kind:       "Service",
+			}
+
 			// Create desired spec
 			desiredSpec := corev1.ServiceSpec{
 				Type: corev1.ServiceTypeLoadBalancer,
@@ -144,13 +150,14 @@ func TestServiceSpecSetter_PreservesExternalAnnotations(t *testing.T) {
 			}
 
 			// Execute the setter
-			setter := serviceSpecSetter(existingService, desiredSpec, desiredMeta, metav1.TypeMeta{})
+			setter := serviceSpecSetter(existingService, desiredSpec, desiredMeta, desiredTypeMeta)
 			err := setter()
 
 			g.Expect(err).ToNot(HaveOccurred())
 			g.Expect(existingService.Annotations).To(Equal(tt.expectedAnnotations))
 			g.Expect(existingService.Labels).To(Equal(desiredMeta.Labels))
 			g.Expect(existingService.Spec).To(Equal(desiredSpec))
+			g.Expect(existingService.TypeMeta).To(Equal(desiredTypeMeta))
 		})
 	}
 }
@@ -305,11 +312,17 @@ func TestDeploymentAndDaemonSetSpecSetter(t *testing.T) {
 					Template: podTemplate,
 				}
 
-				err := deploymentSpecSetter(existing, spec, makeDesiredMeta(tc.desiredAnnotations), metav1.TypeMeta{})()
+				desiredTypeMeta := metav1.TypeMeta{
+					APIVersion: "apps/v1",
+					Kind:       "Deployment",
+				}
+
+				err := deploymentSpecSetter(existing, spec, makeDesiredMeta(tc.desiredAnnotations), desiredTypeMeta)()
 				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(existing.Annotations).To(Equal(tc.expectedAnnotations))
 				g.Expect(existing.Labels).To(Equal(labels))
 				g.Expect(existing.Spec).To(Equal(spec))
+				g.Expect(existing.TypeMeta).To(Equal(desiredTypeMeta))
 			},
 		},
 		{
@@ -331,11 +344,17 @@ func TestDeploymentAndDaemonSetSpecSetter(t *testing.T) {
 					Template: podTemplate,
 				}
 
-				err := daemonSetSpecSetter(existing, spec, makeDesiredMeta(tc.desiredAnnotations), metav1.TypeMeta{})()
+				desiredTypeMeta := metav1.TypeMeta{
+					APIVersion: "apps/v1",
+					Kind:       "DaemonSet",
+				}
+
+				err := daemonSetSpecSetter(existing, spec, makeDesiredMeta(tc.desiredAnnotations), desiredTypeMeta)()
 				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(existing.Annotations).To(Equal(tc.expectedAnnotations))
 				g.Expect(existing.Labels).To(Equal(labels))
 				g.Expect(existing.Spec).To(Equal(spec))
+				g.Expect(existing.TypeMeta).To(Equal(desiredTypeMeta))
 			},
 		},
 	}
@@ -400,11 +419,17 @@ func TestHpaSpecSetter(t *testing.T) {
 		},
 	}
 
-	err := hpaSpecSetter(existing, spec, desiredMeta, metav1.TypeMeta{})()
+	desiredTypeMeta := metav1.TypeMeta{
+		APIVersion: "autoscaling/v2",
+		Kind:       "HorizontalPodAutoscaler",
+	}
+
+	err := hpaSpecSetter(existing, spec, desiredMeta, desiredTypeMeta)()
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(existing.Labels).To(Equal(labels))
 	g.Expect(existing.Annotations).To(Equal(annotations))
 	g.Expect(existing.Spec).To(Equal(spec))
+	g.Expect(existing.TypeMeta).To(Equal(desiredTypeMeta))
 }
 
 func TestServiceAccountSpecSetter(t *testing.T) {
@@ -431,10 +456,16 @@ func TestServiceAccountSpecSetter(t *testing.T) {
 		Annotations: annotations,
 	}
 
-	err := serviceAccountSpecSetter(existing, desiredMeta, metav1.TypeMeta{})()
+	desiredTypeMeta := metav1.TypeMeta{
+		APIVersion: "v1",
+		Kind:       "ServiceAccount",
+	}
+
+	err := serviceAccountSpecSetter(existing, desiredMeta, desiredTypeMeta)()
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(existing.Labels).To(Equal(labels))
 	g.Expect(existing.Annotations).To(Equal(annotations))
+	g.Expect(existing.TypeMeta).To(Equal(desiredTypeMeta))
 }
 
 func TestConfigMapSpecSetter(t *testing.T) {
@@ -525,17 +556,25 @@ func TestConfigMapSpecSetter(t *testing.T) {
 				Annotations: tt.desiredAnns,
 			}
 
-			err := configMapSpecSetter(existing, tt.desiredData, desiredMeta, metav1.TypeMeta{})()
+			desiredTypeMeta := metav1.TypeMeta{
+				APIVersion: "v1",
+				Kind:       "ConfigMap",
+			}
+
+			err := configMapSpecSetter(existing, tt.desiredData, desiredMeta, desiredTypeMeta)()
 			g.Expect(err).ToNot(HaveOccurred())
 
 			if tt.shouldUpdate {
 				g.Expect(existing.Labels).To(Equal(tt.desiredLabels))
 				g.Expect(existing.Annotations).To(Equal(tt.desiredAnns))
 				g.Expect(existing.Data).To(Equal(tt.desiredData))
+				g.Expect(existing.TypeMeta).To(Equal(desiredTypeMeta))
 			} else {
 				g.Expect(existing.Data).To(Equal(originalData))
 				g.Expect(existing.Labels).To(Equal(originalLabels))
 				g.Expect(existing.Annotations).To(Equal(originalAnns))
+				// TypeMeta should not be set when no update occurs
+				g.Expect(existing.TypeMeta).To(Equal(metav1.TypeMeta{}))
 			}
 		})
 	}
@@ -570,11 +609,17 @@ func TestSecretSpecSetter(t *testing.T) {
 		"password": []byte("secret"),
 	}
 
-	err := secretSpecSetter(existing, data, desiredMeta, metav1.TypeMeta{})()
+	desiredTypeMeta := metav1.TypeMeta{
+		APIVersion: "v1",
+		Kind:       "Secret",
+	}
+
+	err := secretSpecSetter(existing, data, desiredMeta, desiredTypeMeta)()
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(existing.Labels).To(Equal(labels))
 	g.Expect(existing.Annotations).To(Equal(annotations))
 	g.Expect(existing.Data).To(Equal(data))
+	g.Expect(existing.TypeMeta).To(Equal(desiredTypeMeta))
 }
 
 func TestRoleSpecSetter(t *testing.T) {
@@ -614,11 +659,17 @@ func TestRoleSpecSetter(t *testing.T) {
 		},
 	}
 
-	err := roleSpecSetter(existing, rules, desiredMeta, metav1.TypeMeta{})()
+	desiredTypeMeta := metav1.TypeMeta{
+		APIVersion: "rbac.authorization.k8s.io/v1",
+		Kind:       "Role",
+	}
+
+	err := roleSpecSetter(existing, rules, desiredMeta, desiredTypeMeta)()
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(existing.Labels).To(Equal(labels))
 	g.Expect(existing.Annotations).To(Equal(annotations))
 	g.Expect(existing.Rules).To(Equal(rules))
+	g.Expect(existing.TypeMeta).To(Equal(desiredTypeMeta))
 }
 
 func TestRoleBindingSpecSetter(t *testing.T) {
@@ -659,10 +710,16 @@ func TestRoleBindingSpecSetter(t *testing.T) {
 		},
 	}
 
-	err := roleBindingSpecSetter(existing, roleRef, subjects, desiredMeta, metav1.TypeMeta{})()
+	desiredTypeMeta := metav1.TypeMeta{
+		APIVersion: "rbac.authorization.k8s.io/v1",
+		Kind:       "RoleBinding",
+	}
+
+	err := roleBindingSpecSetter(existing, roleRef, subjects, desiredMeta, desiredTypeMeta)()
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(existing.Labels).To(Equal(labels))
 	g.Expect(existing.Annotations).To(Equal(annotations))
 	g.Expect(existing.RoleRef).To(Equal(roleRef))
 	g.Expect(existing.Subjects).To(Equal(subjects))
+	g.Expect(existing.TypeMeta).To(Equal(desiredTypeMeta))
 }
