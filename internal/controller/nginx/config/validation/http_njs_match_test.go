@@ -37,13 +37,14 @@ func TestValidateHeaderValueInMatch(t *testing.T) {
 		"value",
 		"version%!",
 		"version-2",
+		"https://example.com",
+		`^https://zoom\.us(/|$)`,
+		"hello$world",
 	)
 	testInvalidValuesForSimpleValidator(
 		t,
 		validator.ValidateHeaderValueInMatch,
-		":",
 		"",
-		"hello$world",
 		"   ",
 	)
 }
@@ -110,12 +111,13 @@ func TestValidateCommonMatchPart(t *testing.T) {
 		t,
 		validateCommonNJSMatchPart,
 		"test",
+		"$",
+		"hello$world",
 	)
 	testInvalidValuesForSimpleValidator(
 		t,
 		validateCommonNJSMatchPart,
 		"",
 		" ",
-		"$",
 	)
 }

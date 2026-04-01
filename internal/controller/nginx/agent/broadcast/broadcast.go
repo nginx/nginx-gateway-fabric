@@ -31,9 +31,14 @@ type SubscriberChannels struct {
 // These are used to store the channels for the broadcaster to send and listen on,
 // and can be looked up in the map using the same ID.
 type storedChannels struct {
-	listenCh   chan<- NginxAgentMessage
+	listenCh chan<- NginxAgentMessage
+	// responseCh is only received from by the broadcaster; subscribers send on it to signal completion.
 	responseCh <-chan struct{}
-	id         string
+	// listenerCtx is used to unblock the publisher if a listener unsubscribes or if the broadcaster is shutting
+	// down. It is a child of the broadcaster context, so it will also be canceled on shutdown.
+	listenerCtx context.Context
+	cancel      context.CancelFunc
+	id          string
 }
 
 // DeploymentBroadcaster sends out a signal when an nginx Deployment has updated
@@ -46,18 +51,31 @@ type DeploymentBroadcaster struct {
 	unsubCh   chan string
 	listeners map[string]storedChannels
 	doneCh    chan struct{}
+	// broadcasterCtx is the main context for the broadcaster, which is canceled on shutdown.
+	// It is the parent context for all listener contexts.
+	broadcasterCtx    context.Context
+	broadcasterCancel context.CancelFunc
+	// mu protects the listeners map. It is needed for concurrent access to
+	// the listeners map in the publisher and subscriber goroutines.
+	mu sync.RWMutex
 }
 
 // NewDeploymentBroadcaster returns a new instance of a DeploymentBroadcaster.
-func NewDeploymentBroadcaster(ctx context.Context, stopCh chan struct{}) *DeploymentBroadcaster {
+func NewDeploymentBroadcaster(ctx context.Context) *DeploymentBroadcaster {
+	broadcasterCtx, broadcasterCancel := context.WithCancel(ctx)
+
 	broadcaster := &DeploymentBroadcaster{
-		listeners: make(map[string]storedChannels),
-		publishCh: make(chan NginxAgentMessage),
-		subCh:     make(chan storedChannels),
-		unsubCh:   make(chan string),
-		doneCh:    make(chan struct{}),
+		listeners:         make(map[string]storedChannels),
+		publishCh:         make(chan NginxAgentMessage),
+		subCh:             make(chan storedChannels),
+		unsubCh:           make(chan string),
+		doneCh:            make(chan struct{}),
+		broadcasterCtx:    broadcasterCtx,
+		broadcasterCancel: broadcasterCancel,
 	}
-	go broadcaster.run(ctx, stopCh)
+
+	go broadcaster.subscriber()
+	go broadcaster.publisher()
 
 	return broadcaster
 }
@@ -68,6 +86,9 @@ func (b *DeploymentBroadcaster) Subscribe() SubscriberChannels {
 	listenCh := make(chan NginxAgentMessage)
 	responseCh := make(chan struct{})
 	id := string(uuid.NewUUID())
+	// Create listener context as child of broadcaster context
+	//nolint:gosec // G118: cancel is called when unsubscribing in subscriber()
+	listenerCtx, cancel := context.WithCancel(b.broadcasterCtx)
 
 	subscriberChans := SubscriberChannels{
 		ID:         id,
@@ -75,59 +96,137 @@ func (b *DeploymentBroadcaster) Subscribe() SubscriberChannels {
 		ResponseCh: responseCh,
 	}
 	storedChans := storedChannels{
-		id:         id,
-		listenCh:   listenCh,
-		responseCh: responseCh,
+		id:          id,
+		listenCh:    listenCh,
+		responseCh:  responseCh,
+		listenerCtx: listenerCtx,
+		cancel:      cancel,
 	}
 
-	b.subCh <- storedChans
+	select {
+	case <-b.broadcasterCtx.Done():
+		// Broadcaster is shutting down or already shut down. Returns channels so the caller
+		// can still interact with them while shutting down.
+		return subscriberChans
+	case b.subCh <- storedChans:
+		// Subscription sent successfully
+	}
+
 	return subscriberChans
 }
 
 // Send the message to all listeners. Wait for all listeners to respond.
-// Returns true if there were listeners that received the message.
+// Returns true if there were listeners that received and responded to the message.
 func (b *DeploymentBroadcaster) Send(message NginxAgentMessage) bool {
-	b.publishCh <- message
-	<-b.doneCh
+	// Try to send message, but can be interrupted by shutdown
+	select {
+	case b.publishCh <- message:
+	case <-b.broadcasterCtx.Done():
+		return false
+	}
+
+	// Wait for completion, but can be interrupted by shutdown
+	select {
+	case <-b.doneCh:
+	case <-b.broadcasterCtx.Done():
+		return false
+	}
+
+	b.mu.RLock()
+	defer b.mu.RUnlock()
 
 	return len(b.listeners) > 0
 }
 
 // CancelSubscription removes a Subscriber from the channel list.
 func (b *DeploymentBroadcaster) CancelSubscription(id string) {
-	b.unsubCh <- id
+	select {
+	case b.unsubCh <- id:
+	case <-b.broadcasterCtx.Done():
+		// Broadcaster is shutting down or already shut down; avoid blocking send.
+		return
+	}
 }
 
-// run starts the broadcaster loop. It handles the following events:
-// - if stopCh is closed, return.
-// - if receiving a new subscriber, add it to the subscriber list.
-// - if receiving a canceled subscription, remove it from the subscriber list.
-// - if receiving a message to publish, send it to all subscribers.
-func (b *DeploymentBroadcaster) run(ctx context.Context, stopCh chan struct{}) {
+// subscriber handles subscription management and stop conditions. It is responsible for cleaning up resources
+// on shutdown/function return, specifically by canceling the broadcaster context (and thus all listener
+// contexts) to unblock any pending publisher goroutines.
+func (b *DeploymentBroadcaster) subscriber() {
+	// Canceling the broadcaster context will cancel all listener contexts since they are children,
+	// which will unblock any publishers waiting on those contexts.
+	defer b.broadcasterCancel()
+
 	for {
 		select {
-		case <-stopCh:
-			return
-		case <-ctx.Done():
+		case <-b.broadcasterCtx.Done():
 			return
 		case channels := <-b.subCh:
+			b.mu.Lock()
 			b.listeners[channels.id] = channels
+			b.mu.Unlock()
 		case id := <-b.unsubCh:
-			delete(b.listeners, id)
-		case msg := <-b.publishCh:
-			var wg sync.WaitGroup
+			b.mu.Lock()
+			if channels, exists := b.listeners[id]; exists {
+				// Cancel listener's context to unblock publisher
+				channels.cancel()
+				delete(b.listeners, id)
+			}
+			b.mu.Unlock()
+		}
+	}
+}
 
-			for _, channels := range b.listeners {
+// publisher handles message publishing.
+func (b *DeploymentBroadcaster) publisher() {
+	// Due to the split between the subscription management and publishing,
+	// every blocking select in this function needs a way to be unblocked
+	// by the subscriber function.
+	for {
+		select {
+		case <-b.broadcasterCtx.Done():
+			return
+		case msg := <-b.publishCh:
+			b.mu.RLock()
+			currentListeners := make(map[string]storedChannels, len(b.listeners))
+			for k, v := range b.listeners {
+				currentListeners[k] = v
+			}
+			b.mu.RUnlock()
+
+			// Send to all listeners
+			var wg sync.WaitGroup
+			for _, channels := range currentListeners {
 				wg.Go(func() {
-					// send message and wait for it to be read
-					channels.listenCh <- msg
-					// wait for response
-					<-channels.responseCh
+					select {
+					case <-channels.listenerCtx.Done():
+						return
+					case <-b.broadcasterCtx.Done():
+						return
+					case channels.listenCh <- msg:
+						// Message sent successfully, now wait for response in next select
+					}
+
+					select {
+					case <-channels.listenerCtx.Done():
+						return
+					case <-b.broadcasterCtx.Done():
+						return
+					case <-channels.responseCh:
+						// Response received, continue
+						return
+					}
 				})
 			}
 			wg.Wait()
 
-			b.doneCh <- struct{}{}
+			select {
+			// If the broadcaster context is done, there may be nothing to receive
+			// the done signal, so we return to avoid blocking.
+			case <-b.broadcasterCtx.Done():
+				return
+			case b.doneCh <- struct{}{}:
+				// Signal that publishing is done and all responses received
+			}
 		}
 	}
 }

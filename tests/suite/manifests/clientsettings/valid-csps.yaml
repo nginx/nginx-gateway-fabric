@@ -49,6 +49,7 @@ spec:
   keepAlive:
     requests: 100
     time: 5s
+    minTimeout: 3s
     timeout:
       server: 2s
       header: 1s

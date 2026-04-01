@@ -50,6 +50,7 @@ data:
             add_header X-Header-Add "add-to";
             add_header X-Header-Set "overwrite";
             add_header X-Header-Remove "remove";
+            add_header X-Real-IP $server_addr;
 
             return 200 "ok";
         }
