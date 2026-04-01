@@ -21,39 +21,39 @@ func objectSpecSetter(minimalObject, object client.Object) controllerutil.Mutate
 	switch obj := object.(type) {
 	case *appsv1.Deployment:
 		if minObj, ok := minimalObject.(*appsv1.Deployment); ok {
-			return deploymentSpecSetter(minObj, obj.Spec, obj.ObjectMeta, obj.TypeMeta)
+			return deploymentSpecSetter(minObj, obj.Spec, obj.ObjectMeta)
 		}
 	case *autoscalingv2.HorizontalPodAutoscaler:
 		if minObj, ok := minimalObject.(*autoscalingv2.HorizontalPodAutoscaler); ok {
-			return hpaSpecSetter(minObj, obj.Spec, obj.ObjectMeta, obj.TypeMeta)
+			return hpaSpecSetter(minObj, obj.Spec, obj.ObjectMeta)
 		}
 	case *appsv1.DaemonSet:
 		if minObj, ok := minimalObject.(*appsv1.DaemonSet); ok {
-			return daemonSetSpecSetter(minObj, obj.Spec, obj.ObjectMeta, obj.TypeMeta)
+			return daemonSetSpecSetter(minObj, obj.Spec, obj.ObjectMeta)
 		}
 	case *corev1.Service:
 		if minObj, ok := minimalObject.(*corev1.Service); ok {
-			return serviceSpecSetter(minObj, obj.Spec, obj.ObjectMeta, obj.TypeMeta)
+			return serviceSpecSetter(minObj, obj.Spec, obj.ObjectMeta)
 		}
 	case *corev1.ServiceAccount:
 		if minObj, ok := minimalObject.(*corev1.ServiceAccount); ok {
-			return serviceAccountSpecSetter(minObj, obj.AutomountServiceAccountToken, obj.ObjectMeta, obj.TypeMeta)
+			return serviceAccountSpecSetter(minObj, obj.AutomountServiceAccountToken, obj.ObjectMeta)
 		}
 	case *corev1.ConfigMap:
 		if minObj, ok := minimalObject.(*corev1.ConfigMap); ok {
-			return configMapSpecSetter(minObj, obj.Data, obj.ObjectMeta, obj.TypeMeta)
+			return configMapSpecSetter(minObj, obj.Data, obj.ObjectMeta)
 		}
 	case *corev1.Secret:
 		if minObj, ok := minimalObject.(*corev1.Secret); ok {
-			return secretSpecSetter(minObj, obj.Data, obj.Type, obj.ObjectMeta, obj.TypeMeta)
+			return secretSpecSetter(minObj, obj.Data, obj.Type, obj.ObjectMeta)
 		}
 	case *rbacv1.Role:
 		if minObj, ok := minimalObject.(*rbacv1.Role); ok {
-			return roleSpecSetter(minObj, obj.Rules, obj.ObjectMeta, obj.TypeMeta)
+			return roleSpecSetter(minObj, obj.Rules, obj.ObjectMeta)
 		}
 	case *rbacv1.RoleBinding:
 		if minObj, ok := minimalObject.(*rbacv1.RoleBinding); ok {
-			return roleBindingSpecSetter(minObj, obj.RoleRef, obj.Subjects, obj.ObjectMeta, obj.TypeMeta)
+			return roleBindingSpecSetter(minObj, obj.RoleRef, obj.Subjects, obj.ObjectMeta)
 		}
 	}
 
@@ -64,12 +64,9 @@ func deploymentSpecSetter(
 	deployment *appsv1.Deployment,
 	spec appsv1.DeploymentSpec,
 	objectMeta metav1.ObjectMeta,
-	typeMeta metav1.TypeMeta,
 ) controllerutil.MutateFn {
 	return func() error {
 		existingAnnotations := deployment.Annotations
-
-		deployment.TypeMeta = typeMeta
 
 		// objectMeta fields
 		deployment.Labels = objectMeta.Labels
@@ -88,11 +85,8 @@ func hpaSpecSetter(
 	hpa *autoscalingv2.HorizontalPodAutoscaler,
 	spec autoscalingv2.HorizontalPodAutoscalerSpec,
 	objectMeta metav1.ObjectMeta,
-	typeMeta metav1.TypeMeta,
 ) controllerutil.MutateFn {
 	return func() error {
-		hpa.TypeMeta = typeMeta
-
 		// objectMeta fields
 		hpa.Labels = objectMeta.Labels
 		hpa.Annotations = objectMeta.Annotations
@@ -107,12 +101,9 @@ func daemonSetSpecSetter(
 	daemonSet *appsv1.DaemonSet,
 	spec appsv1.DaemonSetSpec,
 	objectMeta metav1.ObjectMeta,
-	typeMeta metav1.TypeMeta,
 ) controllerutil.MutateFn {
 	return func() error {
 		existingAnnotations := daemonSet.Annotations
-
-		daemonSet.TypeMeta = typeMeta
 
 		// objectMeta fields
 		daemonSet.Labels = objectMeta.Labels
@@ -128,12 +119,9 @@ func serviceSpecSetter(
 	service *corev1.Service,
 	spec corev1.ServiceSpec,
 	objectMeta metav1.ObjectMeta,
-	typeMeta metav1.TypeMeta,
 ) controllerutil.MutateFn {
 	return func() error {
 		existingAnnotations := service.Annotations
-
-		service.TypeMeta = typeMeta
 
 		// objectMeta fields
 		service.Labels = objectMeta.Labels
@@ -149,11 +137,8 @@ func serviceAccountSpecSetter(
 	serviceAccount *corev1.ServiceAccount,
 	automountServiceAccountToken *bool,
 	objectMeta metav1.ObjectMeta,
-	typeMeta metav1.TypeMeta,
 ) controllerutil.MutateFn {
 	return func() error {
-		serviceAccount.TypeMeta = typeMeta
-
 		// objectMeta fields
 		serviceAccount.Labels = objectMeta.Labels
 		serviceAccount.Annotations = objectMeta.Annotations
@@ -169,7 +154,6 @@ func configMapSpecSetter(
 	configMap *corev1.ConfigMap,
 	data map[string]string,
 	objectMeta metav1.ObjectMeta,
-	typeMeta metav1.TypeMeta,
 ) controllerutil.MutateFn {
 	return func() error {
 		// this check ensures we don't trigger an unnecessary update to the agent ConfigMap
@@ -180,8 +164,6 @@ func configMapSpecSetter(
 			slices.Equal(configMap.OwnerReferences, objectMeta.OwnerReferences) {
 			return nil
 		}
-
-		configMap.TypeMeta = typeMeta
 
 		// objectMeta fields
 		configMap.Labels = objectMeta.Labels
@@ -198,11 +180,8 @@ func secretSpecSetter(
 	data map[string][]byte,
 	secretType corev1.SecretType,
 	objectMeta metav1.ObjectMeta,
-	typeMeta metav1.TypeMeta,
 ) controllerutil.MutateFn {
 	return func() error {
-		secret.TypeMeta = typeMeta
-
 		// objectMeta fields
 		secret.Labels = objectMeta.Labels
 		secret.Annotations = objectMeta.Annotations
@@ -219,11 +198,8 @@ func roleSpecSetter(
 	role *rbacv1.Role,
 	rules []rbacv1.PolicyRule,
 	objectMeta metav1.ObjectMeta,
-	typeMeta metav1.TypeMeta,
 ) controllerutil.MutateFn {
 	return func() error {
-		role.TypeMeta = typeMeta
-
 		// objectMeta fields
 		role.Labels = objectMeta.Labels
 		role.Annotations = objectMeta.Annotations
@@ -239,11 +215,8 @@ func roleBindingSpecSetter(
 	roleRef rbacv1.RoleRef,
 	subjects []rbacv1.Subject,
 	objectMeta metav1.ObjectMeta,
-	typeMeta metav1.TypeMeta,
 ) controllerutil.MutateFn {
 	return func() error {
-		roleBinding.TypeMeta = typeMeta
-
 		// objectMeta fields
 		roleBinding.Labels = objectMeta.Labels
 		roleBinding.Annotations = objectMeta.Annotations

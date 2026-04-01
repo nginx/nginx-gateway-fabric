@@ -131,12 +131,6 @@ func TestServiceSpecSetter_PreservesExternalAnnotations(t *testing.T) {
 				Annotations: tt.desiredAnnotations,
 			}
 
-			// Create desired TypeMeta
-			desiredTypeMeta := metav1.TypeMeta{
-				APIVersion: "v1",
-				Kind:       "Service",
-			}
-
 			// Create desired spec
 			desiredSpec := corev1.ServiceSpec{
 				Type: corev1.ServiceTypeLoadBalancer,
@@ -149,10 +143,8 @@ func TestServiceSpecSetter_PreservesExternalAnnotations(t *testing.T) {
 				},
 			}
 
-			err := serviceSpecSetter(existingService, desiredSpec, desiredMeta, desiredTypeMeta)()
+			err := serviceSpecSetter(existingService, desiredSpec, desiredMeta)()
 			g.Expect(err).ToNot(HaveOccurred())
-
-			g.Expect(existingService.TypeMeta).To(Equal(desiredTypeMeta))
 
 			// Object meta fields, ensure name and namespace didn't change
 			g.Expect(existingService.Name).To(Equal("test-service"))
@@ -315,15 +307,8 @@ func TestDeploymentAndDaemonSetSpecSetter(t *testing.T) {
 					Template: podTemplate,
 				}
 
-				desiredTypeMeta := metav1.TypeMeta{
-					APIVersion: "apps/v1",
-					Kind:       "Deployment",
-				}
-
-				err := deploymentSpecSetter(existing, spec, makeDesiredMeta(tc.desiredAnnotations), desiredTypeMeta)()
+				err := deploymentSpecSetter(existing, spec, makeDesiredMeta(tc.desiredAnnotations))()
 				g.Expect(err).ToNot(HaveOccurred())
-
-				g.Expect(existing.TypeMeta).To(Equal(desiredTypeMeta))
 
 				// Object meta fields, ensure name and namespace didn't change
 				g.Expect(existing.Name).To(Equal("nginx-gateway"))
@@ -353,15 +338,8 @@ func TestDeploymentAndDaemonSetSpecSetter(t *testing.T) {
 					Template: podTemplate,
 				}
 
-				desiredTypeMeta := metav1.TypeMeta{
-					APIVersion: "apps/v1",
-					Kind:       "DaemonSet",
-				}
-
-				err := daemonSetSpecSetter(existing, spec, makeDesiredMeta(tc.desiredAnnotations), desiredTypeMeta)()
+				err := daemonSetSpecSetter(existing, spec, makeDesiredMeta(tc.desiredAnnotations))()
 				g.Expect(err).ToNot(HaveOccurred())
-
-				g.Expect(existing.TypeMeta).To(Equal(desiredTypeMeta))
 
 				// Object meta fields, ensure name and namespace didn't change
 				g.Expect(existing.Name).To(Equal("nginx-gateway"))
@@ -434,15 +412,8 @@ func TestHpaSpecSetter(t *testing.T) {
 		},
 	}
 
-	desiredTypeMeta := metav1.TypeMeta{
-		APIVersion: "autoscaling/v2",
-		Kind:       "HorizontalPodAutoscaler",
-	}
-
-	err := hpaSpecSetter(existing, spec, desiredMeta, desiredTypeMeta)()
+	err := hpaSpecSetter(existing, spec, desiredMeta)()
 	g.Expect(err).ToNot(HaveOccurred())
-
-	g.Expect(existing.TypeMeta).To(Equal(desiredTypeMeta))
 
 	// Object meta fields, ensure name and namespace didn't change
 	g.Expect(existing.Name).To(Equal("test-hpa"))
@@ -477,18 +448,11 @@ func TestServiceAccountSpecSetter(t *testing.T) {
 		Annotations: annotations,
 	}
 
-	desiredTypeMeta := metav1.TypeMeta{
-		APIVersion: "v1",
-		Kind:       "ServiceAccount",
-	}
-
 	// Test with AutomountServiceAccountToken set to false
 	automountToken := false
 
-	err := serviceAccountSpecSetter(existing, &automountToken, desiredMeta, desiredTypeMeta)()
+	err := serviceAccountSpecSetter(existing, &automountToken, desiredMeta)()
 	g.Expect(err).ToNot(HaveOccurred())
-
-	g.Expect(existing.TypeMeta).To(Equal(desiredTypeMeta))
 
 	// Object meta fields, ensure name and namespace didn't change
 	g.Expect(existing.Name).To(Equal("test-service-account"))
@@ -627,12 +591,7 @@ func TestConfigMapSpecSetter(t *testing.T) {
 				OwnerReferences: tt.desiredOwnerRefs,
 			}
 
-			desiredTypeMeta := metav1.TypeMeta{
-				APIVersion: "v1",
-				Kind:       "ConfigMap",
-			}
-
-			err := configMapSpecSetter(existing, tt.desiredData, desiredMeta, desiredTypeMeta)()
+			err := configMapSpecSetter(existing, tt.desiredData, desiredMeta)()
 			g.Expect(err).ToNot(HaveOccurred())
 
 			// Object meta fields, ensure name and namespace didn't change
@@ -640,8 +599,6 @@ func TestConfigMapSpecSetter(t *testing.T) {
 			g.Expect(existing.Namespace).To(Equal("default"))
 
 			if tt.shouldUpdate {
-				g.Expect(existing.TypeMeta).To(Equal(desiredTypeMeta))
-
 				g.Expect(existing.Annotations).To(Equal(tt.desiredAnns))
 				g.Expect(existing.Labels).To(Equal(tt.desiredLabels))
 				g.Expect(existing.OwnerReferences).To(Equal(tt.desiredOwnerRefs))
@@ -653,9 +610,6 @@ func TestConfigMapSpecSetter(t *testing.T) {
 				g.Expect(existing.Labels).To(Equal(originalLabels))
 				g.Expect(existing.Annotations).To(Equal(originalAnns))
 				g.Expect(existing.OwnerReferences).To(Equal(originalOwnerRefs))
-
-				// TypeMeta should not be set when no update occurs
-				g.Expect(existing.TypeMeta).To(Equal(metav1.TypeMeta{}))
 			}
 		})
 	}
@@ -690,17 +644,10 @@ func TestSecretSpecSetter(t *testing.T) {
 		"password": []byte("secret"),
 	}
 
-	desiredTypeMeta := metav1.TypeMeta{
-		APIVersion: "v1",
-		Kind:       "Secret",
-	}
-
 	secretType := corev1.SecretTypeOpaque
 
-	err := secretSpecSetter(existing, data, secretType, desiredMeta, desiredTypeMeta)()
+	err := secretSpecSetter(existing, data, secretType, desiredMeta)()
 	g.Expect(err).ToNot(HaveOccurred())
-
-	g.Expect(existing.TypeMeta).To(Equal(desiredTypeMeta))
 
 	// Object meta fields, ensure name and namespace didn't change
 	g.Expect(existing.Name).To(Equal("test-secret"))
@@ -749,15 +696,8 @@ func TestRoleSpecSetter(t *testing.T) {
 		},
 	}
 
-	desiredTypeMeta := metav1.TypeMeta{
-		APIVersion: "rbac.authorization.k8s.io/v1",
-		Kind:       "Role",
-	}
-
-	err := roleSpecSetter(existing, rules, desiredMeta, desiredTypeMeta)()
+	err := roleSpecSetter(existing, rules, desiredMeta)()
 	g.Expect(err).ToNot(HaveOccurred())
-
-	g.Expect(existing.TypeMeta).To(Equal(desiredTypeMeta))
 
 	// Object meta fields, ensure name and namespace didn't change
 	g.Expect(existing.Name).To(Equal("test-role"))
@@ -806,15 +746,8 @@ func TestRoleBindingSpecSetter(t *testing.T) {
 		},
 	}
 
-	desiredTypeMeta := metav1.TypeMeta{
-		APIVersion: "rbac.authorization.k8s.io/v1",
-		Kind:       "RoleBinding",
-	}
-
-	err := roleBindingSpecSetter(existing, roleRef, subjects, desiredMeta, desiredTypeMeta)()
+	err := roleBindingSpecSetter(existing, roleRef, subjects, desiredMeta)()
 	g.Expect(err).ToNot(HaveOccurred())
-
-	g.Expect(existing.TypeMeta).To(Equal(desiredTypeMeta))
 
 	// Object meta fields, ensure name and namespace didn't change
 	g.Expect(existing.Name).To(Equal("test-rolebinding"))
