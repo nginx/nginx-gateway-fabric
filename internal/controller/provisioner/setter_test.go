@@ -9,6 +9,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
 
 func TestServiceSpecSetter_PreservesExternalAnnotations(t *testing.T) {
@@ -467,17 +469,31 @@ func TestConfigMapSpecSetter(t *testing.T) {
 	t.Parallel()
 
 	ownerRef1 := metav1.OwnerReference{
-		APIVersion: "apps/v1",
-		Kind:       "Deployment",
-		Name:       "nginx-gateway",
-		UID:        "12345",
+		APIVersion:         "apps/v1",
+		Kind:               "Deployment",
+		Name:               "nginx-gateway",
+		UID:                "12345",
+		Controller:         helpers.GetPointer(true),
+		BlockOwnerDeletion: helpers.GetPointer(true),
+	}
+
+	// testing that owner references are compared based on their content, not their memory address
+	ownerRef1Copy := metav1.OwnerReference{
+		APIVersion:         "apps/v1",
+		Kind:               "Deployment",
+		Name:               "nginx-gateway",
+		UID:                "12345",
+		Controller:         helpers.GetPointer(true),
+		BlockOwnerDeletion: helpers.GetPointer(true),
 	}
 
 	ownerRef2 := metav1.OwnerReference{
-		APIVersion: "apps/v1",
-		Kind:       "Deployment",
-		Name:       "other-deployment",
-		UID:        "67890",
+		APIVersion:         "apps/v1",
+		Kind:               "Deployment",
+		Name:               "other-deployment",
+		UID:                "67890",
+		Controller:         helpers.GetPointer(true),
+		BlockOwnerDeletion: helpers.GetPointer(true),
 	}
 
 	tests := []struct {
@@ -549,7 +565,7 @@ func TestConfigMapSpecSetter(t *testing.T) {
 			desiredData:       map[string]string{"key1": "value"},
 			desiredLabels:     map[string]string{"app": "nginx-gateway"},
 			desiredAnns:       map[string]string{"annotation": "value"},
-			desiredOwnerRefs:  []metav1.OwnerReference{ownerRef1},
+			desiredOwnerRefs:  []metav1.OwnerReference{ownerRef1Copy},
 			shouldUpdate:      false,
 		},
 	}

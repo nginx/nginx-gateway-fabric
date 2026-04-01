@@ -2,6 +2,7 @@ package provisioner
 
 import (
 	"maps"
+	"reflect"
 	"slices"
 	"strings"
 
@@ -161,7 +162,7 @@ func configMapSpecSetter(
 		if maps.Equal(configMap.Labels, objectMeta.Labels) &&
 			maps.Equal(configMap.Annotations, objectMeta.Annotations) &&
 			maps.Equal(configMap.Data, data) &&
-			slices.Equal(configMap.OwnerReferences, objectMeta.OwnerReferences) {
+			reflect.DeepEqual(configMap.OwnerReferences, objectMeta.OwnerReferences) {
 			return nil
 		}
 
