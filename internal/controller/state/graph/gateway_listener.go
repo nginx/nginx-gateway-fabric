@@ -671,8 +671,8 @@ func createPortConflictResolver() listenerConflictResolver {
 }
 
 type certRefError struct {
-	msg          string
-	refNotPermit bool
+	msg             string
+	refNotPermitted bool
 }
 
 func createExternalReferencesForTLSSecretsResolver(
@@ -701,7 +701,7 @@ func createExternalReferencesForTLSSecretsResolver(
 			if certRefNs != gwNs {
 				if !refGrantResolver.refAllowed(toSecret(certRefNsName), fromGateway(gwNs)) {
 					msg := fmt.Sprintf("Certificate ref to secret %s not permitted by any ReferenceGrant", certRefNsName)
-					certRefErrors = append(certRefErrors, certRefError{msg: msg, refNotPermit: true})
+					certRefErrors = append(certRefErrors, certRefError{msg: msg, refNotPermitted: true})
 					continue
 				}
 			}
@@ -723,7 +723,7 @@ func createExternalReferencesForTLSSecretsResolver(
 			hasInvalidRef := false
 			for _, certErr := range certRefErrors {
 				allMsgs = append(allMsgs, certErr.msg)
-				if !certErr.refNotPermit {
+				if !certErr.refNotPermitted {
 					hasInvalidRef = true
 				}
 			}
