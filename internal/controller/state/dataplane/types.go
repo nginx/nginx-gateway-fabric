@@ -184,12 +184,13 @@ const (
 
 // SSL is the SSL configuration for a server.
 type SSL struct {
-	// KeyPairID is the ID of the corresponding SSLKeyPair for the server.
-	KeyPairID SSLKeyPairID
 	// Protocols specifies the SSL/TLS protocols to enable.
 	Protocols string
 	// Ciphers specifies the SSL/TLS ciphers to use.
 	Ciphers string
+	// KeyPairIDs are the IDs of the corresponding SSLKeyPairs for the server.
+	// Multiple IDs allow nginx to select the appropriate certificate via SNI.
+	KeyPairIDs []SSLKeyPairID
 	// PreferServerCiphers specifies whether server ciphers should be preferred over client ciphers.
 	PreferServerCiphers bool
 }

@@ -181,13 +181,7 @@ func createSSLServer(
 			Listen:       listen,
 		}
 		if virtualServer.SSL != nil {
-			server.SSL = &http.SSL{
-				Certificate:         generatePEMFileName(virtualServer.SSL.KeyPairID),
-				CertificateKey:      generatePEMFileName(virtualServer.SSL.KeyPairID),
-				Protocols:           virtualServer.SSL.Protocols,
-				Ciphers:             virtualServer.SSL.Ciphers,
-				PreferServerCiphers: virtualServer.SSL.PreferServerCiphers,
-			}
+			server.SSL = buildHTTPSSL(virtualServer.SSL)
 		}
 
 		return server, nil
@@ -197,16 +191,10 @@ func createSSLServer(
 
 	server := http.Server{
 		ServerName: virtualServer.Hostname,
-		SSL: &http.SSL{
-			Certificate:         generatePEMFileName(virtualServer.SSL.KeyPairID),
-			CertificateKey:      generatePEMFileName(virtualServer.SSL.KeyPairID),
-			Protocols:           virtualServer.SSL.Protocols,
-			Ciphers:             virtualServer.SSL.Ciphers,
-			PreferServerCiphers: virtualServer.SSL.PreferServerCiphers,
-		},
-		Locations: locs,
-		GRPC:      grpc,
-		Listen:    listen,
+		SSL:        buildHTTPSSL(virtualServer.SSL),
+		Locations:  locs,
+		GRPC:       grpc,
+		Listen:     listen,
 	}
 
 	if !disableSNIHostValidation {
@@ -226,6 +214,27 @@ func createSSLServer(
 	server.Includes = append(server.Includes, snippetIncludes...)
 
 	return server, matchPairs
+}
+
+// buildHTTPSSL converts a dataplane SSL config into an http.SSL config,
+// generating the PEM file paths for each certificate/key pair.
+func buildHTTPSSL(ssl *dataplane.SSL) *http.SSL {
+	certs := make([]string, 0, len(ssl.KeyPairIDs))
+	keys := make([]string, 0, len(ssl.KeyPairIDs))
+
+	for _, id := range ssl.KeyPairIDs {
+		pemFile := generatePEMFileName(id)
+		certs = append(certs, pemFile)
+		keys = append(keys, pemFile)
+	}
+
+	return &http.SSL{
+		Certificates:        certs,
+		CertificateKeys:     keys,
+		Protocols:           ssl.Protocols,
+		Ciphers:             ssl.Ciphers,
+		PreferServerCiphers: ssl.PreferServerCiphers,
+	}
 }
 
 func createServer(
