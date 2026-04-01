@@ -180,6 +180,11 @@ var _ = Describe("ClientSettingsPolicy", Ordered, Label("functional", "cspolicy"
 						File:      fmt.Sprintf("%s_gw-csp.conf", filePrefix),
 					},
 					{
+						Directive: "keepalive_min_timeout",
+						Value:     "3s",
+						File:      fmt.Sprintf("%s_gw-csp.conf", filePrefix),
+					},
+					{
 						Directive: "keepalive_timeout",
 						Value:     "2s 1s",
 						File:      fmt.Sprintf("%s_gw-csp.conf", filePrefix),
@@ -318,7 +323,9 @@ var _ = Describe("ClientSettingsPolicy", Ordered, Label("functional", "cspolicy"
 				conflictedPolicyNames := []string{
 					"z-hr-conflict-1",
 					"z-hr-conflict-2",
+					"z-hr-conflict-3",
 					"z-grpc-conflict",
+					"z-grpc-conflict-2",
 				}
 
 				Expect(resourceManager.ApplyFromFiles(policies, namespace)).To(Succeed())
