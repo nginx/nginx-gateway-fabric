@@ -853,7 +853,7 @@ func bindToListenerL4(
 	hostnames := make([]string, 0)
 
 	for _, h := range acceptedListenerHostnames {
-		portHostname := fmt.Sprintf("%s:%d", h, l.Source.Port)
+		portHostname := fmt.Sprintf("%s:%d:%s", h, l.Source.Port, l.Source.Protocol)
 		_, ok := portHostnamesMap[portHostname]
 		if !ok {
 			portHostnamesMap[portHostname] = struct{}{}
