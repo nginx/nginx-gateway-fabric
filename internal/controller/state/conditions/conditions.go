@@ -710,6 +710,28 @@ func NewListenerInvalidCertificateRefNotAccepted(msg string) []Condition {
 	}
 }
 
+// NewListenerAllInvalidCertificateRefs returns Conditions that mark the listener as not Accepted,
+// ResolvedRefs false, and not Programmed when all CertificateRefs failed to resolve.
+// The reason should be one of the Gateway API ListenerConditionReason values
+// (e.g. InvalidCertificateRef or RefNotPermitted).
+func NewListenerAllInvalidCertificateRefs(msg string, reason string) []Condition {
+	return []Condition{
+		{
+			Type:    string(v1.ListenerConditionAccepted),
+			Status:  metav1.ConditionFalse,
+			Reason:  reason,
+			Message: msg,
+		},
+		{
+			Type:    string(v1.ListenerConditionResolvedRefs),
+			Status:  metav1.ConditionFalse,
+			Reason:  reason,
+			Message: msg,
+		},
+		NewListenerNotProgrammedInvalid(msg),
+	}
+}
+
 // NewListenerUnresolvedCertificateRef returns a Condition that indicates that one or more CertificateRefs
 // of a Listener could not be resolved, but the listener is still valid because other certificate refs
 // were resolved successfully. This only sets ResolvedRefs to false without affecting the Accepted condition.

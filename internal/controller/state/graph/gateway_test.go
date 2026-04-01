@@ -209,6 +209,23 @@ func TestBuildGateway(t *testing.T) {
 		},
 	}
 
+	// TLS config with two invalid certs (both do not exist).
+	tlsConfigTwoInvalidSecrets := &v1.ListenerTLSConfig{
+		Mode: helpers.GetPointer(v1.TLSModeTerminate),
+		CertificateRefs: []v1.SecretObjectReference{
+			{
+				Kind:      helpers.GetPointer[v1.Kind]("Secret"),
+				Name:      "does-not-exist-1",
+				Namespace: helpers.GetPointer[v1.Namespace]("test"),
+			},
+			{
+				Kind:      helpers.GetPointer[v1.Kind]("Secret"),
+				Name:      "does-not-exist-2",
+				Namespace: helpers.GetPointer[v1.Namespace]("test"),
+			},
+		},
+	}
+
 	// TLS config with one valid cert (same-ns secret) and one invalid cert (does not exist).
 	tlsConfigOneValidOneInvalid := &v1.ListenerTLSConfig{
 		Mode: helpers.GetPointer(v1.TLSModeTerminate),
@@ -336,6 +353,12 @@ func TestBuildGateway(t *testing.T) {
 		"foo.example.com",
 		443,
 		tlsConfigOneValidOneRefNotPermitted,
+	)
+	allInvalidCertsListener := createHTTPSListener(
+		"all-invalid-certs",
+		"foo.example.com",
+		443,
+		tlsConfigTwoInvalidSecrets,
 	)
 	invalidHTTPSPortListener := createHTTPSListener(
 		"invalid-https-port",
@@ -774,8 +797,9 @@ func TestBuildGateway(t *testing.T) {
 							Source:      crossNamespaceSecretListener,
 							Valid:       false,
 							Attachable:  true,
-							Conditions: conditions.NewListenerRefNotPermitted(
+							Conditions: conditions.NewListenerAllInvalidCertificateRefs(
 								`Certificate ref to secret diff-ns/secret not permitted by any ReferenceGrant`,
+								string(v1.ListenerReasonRefNotPermitted),
 							),
 							Routes:         map[RouteKey]*L7Route{},
 							L4Routes:       map[L4RouteKey]*L4Route{},
@@ -974,9 +998,10 @@ func TestBuildGateway(t *testing.T) {
 							Attachable:  true,
 							Routes:      map[RouteKey]*L7Route{},
 							L4Routes:    map[L4RouteKey]*L4Route{},
-							Conditions: conditions.NewListenerInvalidCertificateRefNotAccepted(
-								"tls.certificateRefs[0]: Invalid value: {\"Namespace\":\"test\",\"Name\":\"does-not-exist\"}: " +
+							Conditions: conditions.NewListenerAllInvalidCertificateRefs(
+								"tls.certificateRefs[0]: Invalid value: {\"Namespace\":\"test\",\"Name\":\"does-not-exist\"}: "+
 									"Secret test/does-not-exist does not exist",
+								string(v1.ListenerReasonInvalidCertificateRef),
 							),
 							SupportedKinds: supportedKindsForListeners,
 						},
@@ -989,6 +1014,42 @@ func TestBuildGateway(t *testing.T) {
 				},
 			},
 			name: "invalid https listener (secret does not exist)",
+		},
+		{
+			gateway:      createGateway(gatewayCfg{name: "gateway1", listeners: []v1.Listener{allInvalidCertsListener}}),
+			gatewayClass: validGC,
+			expected: map[types.NamespacedName]*Gateway{
+				{Namespace: "test", Name: "gateway1"}: {
+					Source: getLastCreatedGateway(),
+					Listeners: []*Listener{
+						{
+							Name:        "all-invalid-certs",
+							GatewayName: client.ObjectKeyFromObject(getLastCreatedGateway()),
+							Source:      allInvalidCertsListener,
+							Valid:       false,
+							Attachable:  true,
+							Routes:      map[RouteKey]*L7Route{},
+							L4Routes:    map[L4RouteKey]*L4Route{},
+							Conditions: conditions.NewListenerAllInvalidCertificateRefs(
+								"tls.certificateRefs[0]: Invalid value: "+
+									"{\"Namespace\":\"test\",\"Name\":\"does-not-exist-1\"}: "+
+									"Secret test/does-not-exist-1 does not exist; "+
+									"tls.certificateRefs[1]: Invalid value: "+
+									"{\"Namespace\":\"test\",\"Name\":\"does-not-exist-2\"}: "+
+									"Secret test/does-not-exist-2 does not exist",
+								string(v1.ListenerReasonInvalidCertificateRef),
+							),
+							SupportedKinds: supportedKindsForListeners,
+						},
+					},
+					DeploymentName: types.NamespacedName{
+						Namespace: "test",
+						Name:      controller.CreateNginxResourceName("gateway1", gcName),
+					},
+					Valid: true,
+				},
+			},
+			name: "https listener with multiple invalid cert refs (all fail, aggregated)",
 		},
 		{
 			gateway: createGateway(

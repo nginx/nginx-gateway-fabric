@@ -717,41 +717,41 @@ func createExternalReferencesForTLSSecretsResolver(
 		}
 
 		if len(certRefErrors) > 0 {
+			// Aggregate all error messages into a single condition so that
+			// deduplication (which keeps one condition per Type) does not drop any information.
+			var allMsgs []string
+			hasInvalidRef := false
+			for _, certErr := range certRefErrors {
+				allMsgs = append(allMsgs, certErr.msg)
+				if !certErr.refNotPermit {
+					hasInvalidRef = true
+				}
+			}
+
+			// Pick the most representative reason.
+			// If any cert ref is invalid, use InvalidCertificateRef (the broader reason).
+			// If all errors are ref-not-permitted, use RefNotPermitted.
+			reason := string(v1.ListenerReasonRefNotPermitted)
+			if hasInvalidRef {
+				reason = string(v1.ListenerReasonInvalidCertificateRef)
+			}
+
+			msg := strings.Join(allMsgs, "; ")
+
 			if len(l.ResolvedSecrets) == 0 {
 				// All certs are invalid; the listener is not valid.
 				l.Valid = false
-				for _, certErr := range certRefErrors {
-					if certErr.refNotPermit {
-						l.Conditions = append(l.Conditions, conditions.NewListenerRefNotPermitted(certErr.msg)...)
-					} else {
-						l.Conditions = append(l.Conditions, conditions.NewListenerInvalidCertificateRefNotAccepted(certErr.msg)...)
-					}
-				}
-			} else {
-				// Some certs are valid, some are not.
-				// Set ResolvedRefs to false but keep the listener valid so valid certs are still configured.
-				// Emit a single ResolvedRefs condition that aggregates all error messages so that
-				// deduplication (which keeps one condition per Type) does not drop any information.
-				var allMsgs []string
-				hasInvalidRef := false
-				for _, certErr := range certRefErrors {
-					allMsgs = append(allMsgs, certErr.msg)
-					if !certErr.refNotPermit {
-						hasInvalidRef = true
-					}
-				}
-
-				// Pick the most representative reason.
-				// If any cert ref is invalid, use InvalidCertificateRef (the broader reason).
-				// If all errors are ref-not-permitted, use RefNotPermitted.
-				reason := string(v1.ListenerReasonRefNotPermitted)
-				if hasInvalidRef {
-					reason = string(v1.ListenerReasonInvalidCertificateRef)
-				}
-
 				l.Conditions = append(
 					l.Conditions,
-					conditions.NewListenerUnresolvedCertificateRef(strings.Join(allMsgs, "; "), reason),
+					conditions.NewListenerAllInvalidCertificateRefs(msg, reason)...,
+				)
+			} else {
+				// Some certs are valid, some are not.
+				// Keep the listener valid so valid certs are still configured,
+				// but set ResolvedRefs to false.
+				l.Conditions = append(
+					l.Conditions,
+					conditions.NewListenerUnresolvedCertificateRef(msg, reason),
 				)
 			}
 		}
