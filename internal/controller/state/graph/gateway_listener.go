@@ -681,6 +681,10 @@ func createExternalReferencesForTLSSecretsResolver(
 	refGrantResolver *referenceGrantResolver,
 ) listenerExternalReferenceResolver {
 	return func(l *Listener) {
+		if !l.Valid {
+			return
+		}
+
 		var certRefErrors []certRefError
 
 		for i, certRef := range l.Source.TLS.CertificateRefs {

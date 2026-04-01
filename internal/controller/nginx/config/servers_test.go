@@ -347,6 +347,51 @@ func TestExecuteServers_TLSOptions(t *testing.T) {
 	}
 }
 
+func TestExecuteServers_MultiCertSNI(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	conf := dataplane.Configuration{
+		SSLServers: []dataplane.VirtualServer{
+			{
+				Hostname: "multi-cert.example.com",
+				SSL: &dataplane.SSL{
+					KeyPairIDs: []dataplane.SSLKeyPairID{"keypair-rsa", "keypair-ecdsa"},
+				},
+				Port: 8443,
+			},
+		},
+	}
+
+	expSubStrings := map[string]int{
+		"ssl_certificate /etc/nginx/secrets/keypair-rsa.pem;":       1,
+		"ssl_certificate /etc/nginx/secrets/keypair-ecdsa.pem;":     1,
+		"ssl_certificate_key /etc/nginx/secrets/keypair-rsa.pem;":   1,
+		"ssl_certificate_key /etc/nginx/secrets/keypair-ecdsa.pem;": 1,
+	}
+
+	fakeGenerator := &policiesfakes.FakeGenerator{}
+	gen := GeneratorImpl{}
+	results := gen.executeServers(conf, fakeGenerator, alwaysFalseKeepAliveChecker)
+
+	var configData string
+	for _, res := range results {
+		if res.dest == httpConfigFile {
+			configData = string(res.data)
+			break
+		}
+	}
+
+	g.Expect(configData).NotTo(BeEmpty(), "expected http config file to be generated")
+
+	for expSubStr, expCount := range expSubStrings {
+		g.Expect(strings.Count(configData, expSubStr)).To(
+			Equal(expCount),
+			fmt.Sprintf("expected '%s' to appear %d time(s) in generated config", expSubStr, expCount),
+		)
+	}
+}
+
 func TestExecuteServers_IPFamily(t *testing.T) {
 	t.Parallel()
 	httpServers := []dataplane.VirtualServer{

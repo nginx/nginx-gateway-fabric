@@ -740,7 +740,7 @@ func NewListenerUnresolvedRefNotPermitted(msg string) Condition {
 func NewListenerInvalidRouteKinds(msg string) []Condition {
 	return []Condition{
 		{
-			Type:    string(v1.ListenerReasonResolvedRefs),
+			Type:    string(v1.ListenerConditionResolvedRefs),
 			Status:  metav1.ConditionFalse,
 			Reason:  string(v1.ListenerReasonInvalidRouteKinds),
 			Message: msg,
@@ -813,7 +813,7 @@ func NewListenerRefNotPermitted(msg string) []Condition {
 			Message: msg,
 		},
 		{
-			Type:    string(v1.ListenerReasonResolvedRefs),
+			Type:    string(v1.ListenerConditionResolvedRefs),
 			Status:  metav1.ConditionFalse,
 			Reason:  string(v1.ListenerReasonRefNotPermitted),
 			Message: msg,
