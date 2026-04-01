@@ -6,16 +6,16 @@ NGINX Plus: false
 
 NGINX Gateway Fabric:
 
-- Commit: 89aee48bf6e660a828ffd32ca35fc7f52e358e00
-- Date: 2025-12-12T20:04:38Z
+- Commit: 2f3153c547e0442fbb26aa9165118f4dc2b20f23
+- Date: 2026-04-01T15:39:22Z
 - Dirty: false
 
 GKE Cluster:
 
 - Node count: 12
-- k8s version: v1.33.5-gke.1308000
+- k8s version: v1.35.1-gke.1396002
 - vCPUs per node: 16
-- RAM per node: 65851520Ki
+- RAM per node: 65848316Ki
 - Max pods per node: 110
 - Zone: us-west1-b
 - Instance Type: n2d-standard-16
@@ -24,19 +24,19 @@ GKE Cluster:
 
 ### Event Batch Processing
 
-- Total: 301
-- Average Time: 11ms
+- Total: 264
+- Average Time: 53ms
 - Event Batch Processing distribution:
-	- 500.0ms: 300
-	- 1000.0ms: 301
-	- 5000.0ms: 301
-	- 10000.0ms: 301
-	- 30000.0ms: 301
-	- +Infms: 301
+	- 500.0ms: 253
+	- 1000.0ms: 264
+	- 5000.0ms: 264
+	- 10000.0ms: 264
+	- 30000.0ms: 264
+	- +Infms: 264
 
 ### Errors
 
-- NGF errors: 3
+- NGF errors: 10
 - NGF container restarts: 0
 - NGINX errors: 0
 - NGINX container restarts: 0
@@ -50,19 +50,19 @@ The logs are attached only if there are errors.
 
 ### Event Batch Processing
 
-- Total: 338
-- Average Time: 10ms
+- Total: 331
+- Average Time: 35ms
 - Event Batch Processing distribution:
-	- 500.0ms: 338
-	- 1000.0ms: 338
-	- 5000.0ms: 338
-	- 10000.0ms: 338
-	- 30000.0ms: 338
-	- +Infms: 338
+	- 500.0ms: 325
+	- 1000.0ms: 331
+	- 5000.0ms: 331
+	- 10000.0ms: 331
+	- 30000.0ms: 331
+	- +Infms: 331
 
 ### Errors
 
-- NGF errors: 2
+- NGF errors: 14
 - NGF container restarts: 0
 - NGINX errors: 0
 - NGINX container restarts: 0
@@ -76,15 +76,15 @@ The logs are attached only if there are errors.
 
 ### Event Batch Processing
 
-- Total: 1255
-- Average Time: 136ms
+- Total: 1011
+- Average Time: 182ms
 - Event Batch Processing distribution:
-	- 500.0ms: 1176
-	- 1000.0ms: 1255
-	- 5000.0ms: 1255
-	- 10000.0ms: 1255
-	- 30000.0ms: 1255
-	- +Infms: 1255
+	- 500.0ms: 915
+	- 1000.0ms: 1011
+	- 5000.0ms: 1011
+	- 10000.0ms: 1011
+	- 30000.0ms: 1011
+	- +Infms: 1011
 
 ### Errors
 
@@ -102,19 +102,19 @@ The logs are attached only if there are errors.
 
 ### Event Batch Processing
 
-- Total: 138
-- Average Time: 140ms
+- Total: 77
+- Average Time: 216ms
 - Event Batch Processing distribution:
-	- 500.0ms: 122
-	- 1000.0ms: 137
-	- 5000.0ms: 138
-	- 10000.0ms: 138
-	- 30000.0ms: 138
-	- +Infms: 138
+	- 500.0ms: 59
+	- 1000.0ms: 77
+	- 5000.0ms: 77
+	- 10000.0ms: 77
+	- 30000.0ms: 77
+	- +Infms: 77
 
 ### Errors
 
-- NGF errors: 0
+- NGF errors: 1
 - NGF container restarts: 0
 - NGINX errors: 0
 - NGINX container restarts: 0
@@ -127,20 +127,20 @@ The logs are attached only if there are errors.
 ## Test TestScale_HTTPMatches
 
 ```text
-Requests      [total, rate, throughput]         29999, 1000.00, 999.97
-Duration      [total, attack, wait]             30s, 29.999s, 1.04ms
-Latencies     [min, mean, 50, 90, 95, 99, max]  733.443µs, 996µs, 970.279µs, 1.097ms, 1.145ms, 1.295ms, 28.664ms
-Bytes In      [total, mean]                     4769841, 159.00
+Requests      [total, rate, throughput]         30000, 1000.04, 999.99
+Duration      [total, attack, wait]             30s, 29.999s, 1.406ms
+Latencies     [min, mean, 50, 90, 95, 99, max]  656.195µs, 1.057ms, 1.014ms, 1.291ms, 1.373ms, 1.593ms, 26.605ms
+Bytes In      [total, mean]                     4830000, 161.00
 Bytes Out     [total, mean]                     0, 0.00
 Success       [ratio]                           100.00%
-Status Codes  [code:count]                      200:29999  
+Status Codes  [code:count]                      200:30000  
 Error Set:
 ```
 ```text
-Requests      [total, rate, throughput]         30000, 1000.02, 999.97
-Duration      [total, attack, wait]             30.001s, 29.999s, 1.383ms
-Latencies     [min, mean, 50, 90, 95, 99, max]  833.3µs, 1.062ms, 1.042ms, 1.16ms, 1.213ms, 1.372ms, 18.505ms
-Bytes In      [total, mean]                     4770000, 159.00
+Requests      [total, rate, throughput]         30000, 1000.02, 999.99
+Duration      [total, attack, wait]             30s, 29.999s, 1.121ms
+Latencies     [min, mean, 50, 90, 95, 99, max]  779.038µs, 1.241ms, 1.201ms, 1.527ms, 1.627ms, 1.941ms, 17.944ms
+Bytes In      [total, mean]                     4830000, 161.00
 Bytes Out     [total, mean]                     0, 0.00
 Success       [ratio]                           100.00%
 Status Codes  [code:count]                      200:30000  
