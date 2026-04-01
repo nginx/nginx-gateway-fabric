@@ -597,7 +597,7 @@ func TestBuildTLSRoute(t *testing.T) {
 						ServicePort: apiv1.ServicePort{Port: 80},
 						InvalidForGateways: map[types.NamespacedName]conditions.Condition{
 							{Namespace: "test", Name: "gateway"}: conditions.NewRouteInvalidIPFamily(
-								"The Service configured with IPv4 family but NginxProxy is configured with IPv6",
+								`service "test/hi" supports ["IPv4"] but NginxProxy is configured with IPv6`,
 							),
 						},
 						Valid: true,

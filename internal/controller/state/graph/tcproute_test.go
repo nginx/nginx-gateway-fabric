@@ -536,7 +536,7 @@ func TestBuildTCPRoute(t *testing.T) {
 							Valid:  true,
 							InvalidForGateways: map[types.NamespacedName]conditions.Condition{
 								{Namespace: "test", Name: "gateway"}: conditions.NewRouteInvalidIPFamily(
-									"The Service configured with IPv4 family but NginxProxy is configured with IPv6",
+									`service "test/svc1" supports ["IPv4"] but NginxProxy is configured with IPv6`,
 								),
 							},
 						},

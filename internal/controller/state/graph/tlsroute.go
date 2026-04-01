@@ -133,7 +133,7 @@ func validateBackendRefTLSRoute(
 
 	var conds []conditions.Condition
 	for _, parentRef := range parentRefs {
-		if err := verifyIPFamily(parentRef.Gateway.EffectiveNginxProxy, svcIPFamily); err != nil {
+		if err := verifyIPFamily(parentRef.Gateway.EffectiveNginxProxy, svcIPFamily, svcNsName); err != nil {
 			backendRef.Valid = backendRef.Valid || false
 			backendRef.InvalidForGateways[parentRef.Gateway.NamespacedName] = conditions.NewRouteInvalidIPFamily(err.Error())
 		}

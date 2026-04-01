@@ -1,7 +1,6 @@
 package graph
 
 import (
-	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -272,7 +271,7 @@ func createBackendRef(
 	}
 
 	for _, parentRef := range route.ParentRefs {
-		if err := verifyIPFamily(parentRef.Gateway.EffectiveNginxProxy, svcIPFamily); err != nil {
+		if err := verifyIPFamily(parentRef.Gateway.EffectiveNginxProxy, svcIPFamily, svcNsName); err != nil {
 			invalidForGateways[parentRef.Gateway.NamespacedName] = conditions.NewRouteInvalidIPFamily(err.Error())
 		}
 	}
@@ -468,7 +467,7 @@ func getIPFamilyAndPortFromRef(
 	return svc.Spec.IPFamilies, svcPort, nil
 }
 
-func verifyIPFamily(npCfg *EffectiveNginxProxy, svcIPFamily []v1.IPFamily) error {
+func verifyIPFamily(npCfg *EffectiveNginxProxy, svcIPFamily []v1.IPFamily, svcNsName types.NamespacedName) error {
 	if npCfg == nil {
 		return nil
 	}
@@ -476,24 +475,19 @@ func verifyIPFamily(npCfg *EffectiveNginxProxy, svcIPFamily []v1.IPFamily) error
 	containsIPv6 := slices.Contains(svcIPFamily, v1.IPv6Protocol)
 	containsIPv4 := slices.Contains(svcIPFamily, v1.IPv4Protocol)
 
-	//nolint: staticcheck // used in status condition which is normally capitalized
-	errIPv6Mismatch := errors.New("The Service configured with IPv6 family but NginxProxy is configured with IPv4")
-	//nolint: staticcheck // used in status condition which is normally capitalized
-	errIPv4Mismatch := errors.New("The Service configured with IPv4 family but NginxProxy is configured with IPv6")
-
 	npIPFamily := npCfg.IPFamily
 
+	// default is dual so we don't need to check the service IPFamily.
 	if npIPFamily == nil {
-		// default is dual so we don't need to check the service IPFamily.
 		return nil
 	}
 
-	if *npIPFamily == ngfAPIv1alpha2.IPv4 && containsIPv6 {
-		return errIPv6Mismatch
+	if *npIPFamily == ngfAPIv1alpha2.IPv4 && !containsIPv4 {
+		return fmt.Errorf("service %q supports %q but NginxProxy is configured with IPv4", svcNsName, svcIPFamily)
 	}
 
-	if *npIPFamily == ngfAPIv1alpha2.IPv6 && containsIPv4 {
-		return errIPv4Mismatch
+	if *npIPFamily == ngfAPIv1alpha2.IPv6 && !containsIPv6 {
+		return fmt.Errorf("service %q supports %q but NginxProxy is configured with IPv6", svcNsName, svcIPFamily)
 	}
 
 	return nil

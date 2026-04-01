@@ -592,6 +592,9 @@ func TestGetIPFamilyAndPortFromRef(t *testing.T) {
 
 func TestVerifyIPFamily(t *testing.T) {
 	t.Parallel()
+
+	svcNsName := types.NamespacedName{Namespace: "test", Name: "backend"}
+
 	test := []struct {
 		name        string
 		expErr      error
@@ -618,7 +621,7 @@ func TestVerifyIPFamily(t *testing.T) {
 				IPFamily: helpers.GetPointer(ngfAPIv1alpha2.IPv4),
 			},
 			svcIPFamily: []v1.IPFamily{v1.IPv6Protocol},
-			expErr:      errors.New("The Service configured with IPv6 family but NginxProxy is configured with IPv4"),
+			expErr:      errors.New(`service "test/backend" supports ["IPv6"] but NginxProxy is configured with IPv4`),
 		},
 		{
 			name: "Invalid - IPv6 configured for NGINX, service has only IPv4",
@@ -626,7 +629,23 @@ func TestVerifyIPFamily(t *testing.T) {
 				IPFamily: helpers.GetPointer(ngfAPIv1alpha2.IPv6),
 			},
 			svcIPFamily: []v1.IPFamily{v1.IPv4Protocol},
-			expErr:      errors.New("The Service configured with IPv4 family but NginxProxy is configured with IPv6"),
+			expErr:      errors.New(`service "test/backend" supports ["IPv4"] but NginxProxy is configured with IPv6`),
+		},
+		{
+			name: "Valid - IPv4 configured for NGINX and service " +
+				"is dual-stack with IPv4 and IPv6",
+			npCfg: &EffectiveNginxProxy{
+				IPFamily: helpers.GetPointer(ngfAPIv1alpha2.IPv4),
+			},
+			svcIPFamily: []v1.IPFamily{v1.IPv4Protocol, v1.IPv6Protocol},
+		},
+		{
+			name: "IPv6 configured for NGINX and service " +
+				"is dual-stack with IPv4 and IPv6",
+			npCfg: &EffectiveNginxProxy{
+				IPFamily: helpers.GetPointer(ngfAPIv1alpha2.IPv6),
+			},
+			svcIPFamily: []v1.IPFamily{v1.IPv4Protocol, v1.IPv6Protocol},
 		},
 		{
 			name:        "Valid - When NginxProxy is nil",
@@ -638,7 +657,7 @@ func TestVerifyIPFamily(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
-			err := verifyIPFamily(test.npCfg, test.svcIPFamily)
+			err := verifyIPFamily(test.npCfg, test.svcIPFamily, svcNsName)
 			if test.expErr != nil {
 				g.Expect(err).To(Equal(test.expErr))
 			} else {
@@ -1541,7 +1560,7 @@ func TestCreateBackend(t *testing.T) {
 				Valid:       true,
 				InvalidForGateways: map[types.NamespacedName]conditions.Condition{
 					{Namespace: "test", Name: "gateway"}: conditions.NewRouteInvalidIPFamily(
-						`The Service configured with IPv4 family but NginxProxy is configured with IPv6`,
+						`service "test/service1" supports ["IPv4"] but NginxProxy is configured with IPv6`,
 					),
 				},
 				SessionPersistence: &expectedSPConfig,
