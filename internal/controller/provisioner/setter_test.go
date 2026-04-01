@@ -149,15 +149,18 @@ func TestServiceSpecSetter_PreservesExternalAnnotations(t *testing.T) {
 				},
 			}
 
-			// Execute the setter
-			setter := serviceSpecSetter(existingService, desiredSpec, desiredMeta, desiredTypeMeta)
-			err := setter()
-
+			err := serviceSpecSetter(existingService, desiredSpec, desiredMeta, desiredTypeMeta)()
 			g.Expect(err).ToNot(HaveOccurred())
+
+			g.Expect(existingService.TypeMeta).To(Equal(desiredTypeMeta))
+
+			// Object meta fields, ensure name and namespace didn't change
+			g.Expect(existingService.Name).To(Equal("test-service"))
+			g.Expect(existingService.Namespace).To(Equal("default"))
 			g.Expect(existingService.Annotations).To(Equal(tt.expectedAnnotations))
 			g.Expect(existingService.Labels).To(Equal(desiredMeta.Labels))
+
 			g.Expect(existingService.Spec).To(Equal(desiredSpec))
-			g.Expect(existingService.TypeMeta).To(Equal(desiredTypeMeta))
 		})
 	}
 }
@@ -319,10 +322,16 @@ func TestDeploymentAndDaemonSetSpecSetter(t *testing.T) {
 
 				err := deploymentSpecSetter(existing, spec, makeDesiredMeta(tc.desiredAnnotations), desiredTypeMeta)()
 				g.Expect(err).ToNot(HaveOccurred())
+
+				g.Expect(existing.TypeMeta).To(Equal(desiredTypeMeta))
+
+				// Object meta fields, ensure name and namespace didn't change
+				g.Expect(existing.Name).To(Equal("nginx-gateway"))
+				g.Expect(existing.Namespace).To(Equal("nginx-gateway"))
 				g.Expect(existing.Annotations).To(Equal(tc.expectedAnnotations))
 				g.Expect(existing.Labels).To(Equal(labels))
+
 				g.Expect(existing.Spec).To(Equal(spec))
-				g.Expect(existing.TypeMeta).To(Equal(desiredTypeMeta))
 			},
 		},
 		{
@@ -351,10 +360,16 @@ func TestDeploymentAndDaemonSetSpecSetter(t *testing.T) {
 
 				err := daemonSetSpecSetter(existing, spec, makeDesiredMeta(tc.desiredAnnotations), desiredTypeMeta)()
 				g.Expect(err).ToNot(HaveOccurred())
+
+				g.Expect(existing.TypeMeta).To(Equal(desiredTypeMeta))
+
+				// Object meta fields, ensure name and namespace didn't change
+				g.Expect(existing.Name).To(Equal("nginx-gateway"))
+				g.Expect(existing.Namespace).To(Equal("nginx-gateway"))
 				g.Expect(existing.Annotations).To(Equal(tc.expectedAnnotations))
 				g.Expect(existing.Labels).To(Equal(labels))
+
 				g.Expect(existing.Spec).To(Equal(spec))
-				g.Expect(existing.TypeMeta).To(Equal(desiredTypeMeta))
 			},
 		},
 	}
@@ -426,10 +441,16 @@ func TestHpaSpecSetter(t *testing.T) {
 
 	err := hpaSpecSetter(existing, spec, desiredMeta, desiredTypeMeta)()
 	g.Expect(err).ToNot(HaveOccurred())
-	g.Expect(existing.Labels).To(Equal(labels))
-	g.Expect(existing.Annotations).To(Equal(annotations))
-	g.Expect(existing.Spec).To(Equal(spec))
+
 	g.Expect(existing.TypeMeta).To(Equal(desiredTypeMeta))
+
+	// Object meta fields, ensure name and namespace didn't change
+	g.Expect(existing.Name).To(Equal("test-hpa"))
+	g.Expect(existing.Namespace).To(Equal("default"))
+	g.Expect(existing.Annotations).To(Equal(annotations))
+	g.Expect(existing.Labels).To(Equal(labels))
+
+	g.Expect(existing.Spec).To(Equal(spec))
 }
 
 func TestServiceAccountSpecSetter(t *testing.T) {
@@ -461,11 +482,21 @@ func TestServiceAccountSpecSetter(t *testing.T) {
 		Kind:       "ServiceAccount",
 	}
 
-	err := serviceAccountSpecSetter(existing, desiredMeta, desiredTypeMeta)()
+	// Test with AutomountServiceAccountToken set to false
+	automountToken := false
+
+	err := serviceAccountSpecSetter(existing, &automountToken, desiredMeta, desiredTypeMeta)()
 	g.Expect(err).ToNot(HaveOccurred())
-	g.Expect(existing.Labels).To(Equal(labels))
-	g.Expect(existing.Annotations).To(Equal(annotations))
+
 	g.Expect(existing.TypeMeta).To(Equal(desiredTypeMeta))
+
+	// Object meta fields, ensure name and namespace didn't change
+	g.Expect(existing.Name).To(Equal("test-service-account"))
+	g.Expect(existing.Namespace).To(Equal("default"))
+	g.Expect(existing.Annotations).To(Equal(annotations))
+	g.Expect(existing.Labels).To(Equal(labels))
+
+	g.Expect(existing.AutomountServiceAccountToken).To(Equal(&automountToken))
 }
 
 func TestConfigMapSpecSetter(t *testing.T) {
@@ -564,15 +595,23 @@ func TestConfigMapSpecSetter(t *testing.T) {
 			err := configMapSpecSetter(existing, tt.desiredData, desiredMeta, desiredTypeMeta)()
 			g.Expect(err).ToNot(HaveOccurred())
 
+			// Object meta fields, ensure name and namespace didn't change
+			g.Expect(existing.Name).To(Equal("test-configmap"))
+			g.Expect(existing.Namespace).To(Equal("default"))
+
 			if tt.shouldUpdate {
-				g.Expect(existing.Labels).To(Equal(tt.desiredLabels))
-				g.Expect(existing.Annotations).To(Equal(tt.desiredAnns))
-				g.Expect(existing.Data).To(Equal(tt.desiredData))
 				g.Expect(existing.TypeMeta).To(Equal(desiredTypeMeta))
+
+				g.Expect(existing.Annotations).To(Equal(tt.desiredAnns))
+				g.Expect(existing.Labels).To(Equal(tt.desiredLabels))
+
+				g.Expect(existing.Data).To(Equal(tt.desiredData))
 			} else {
 				g.Expect(existing.Data).To(Equal(originalData))
+
 				g.Expect(existing.Labels).To(Equal(originalLabels))
 				g.Expect(existing.Annotations).To(Equal(originalAnns))
+
 				// TypeMeta should not be set when no update occurs
 				g.Expect(existing.TypeMeta).To(Equal(metav1.TypeMeta{}))
 			}
@@ -614,12 +653,21 @@ func TestSecretSpecSetter(t *testing.T) {
 		Kind:       "Secret",
 	}
 
-	err := secretSpecSetter(existing, data, desiredMeta, desiredTypeMeta)()
+	secretType := corev1.SecretTypeOpaque
+
+	err := secretSpecSetter(existing, data, secretType, desiredMeta, desiredTypeMeta)()
 	g.Expect(err).ToNot(HaveOccurred())
-	g.Expect(existing.Labels).To(Equal(labels))
-	g.Expect(existing.Annotations).To(Equal(annotations))
-	g.Expect(existing.Data).To(Equal(data))
+
 	g.Expect(existing.TypeMeta).To(Equal(desiredTypeMeta))
+
+	// Object meta fields, ensure name and namespace didn't change
+	g.Expect(existing.Name).To(Equal("test-secret"))
+	g.Expect(existing.Namespace).To(Equal("default"))
+	g.Expect(existing.Annotations).To(Equal(annotations))
+	g.Expect(existing.Labels).To(Equal(labels))
+
+	g.Expect(existing.Data).To(Equal(data))
+	g.Expect(existing.Type).To(Equal(secretType))
 }
 
 func TestRoleSpecSetter(t *testing.T) {
@@ -666,10 +714,16 @@ func TestRoleSpecSetter(t *testing.T) {
 
 	err := roleSpecSetter(existing, rules, desiredMeta, desiredTypeMeta)()
 	g.Expect(err).ToNot(HaveOccurred())
-	g.Expect(existing.Labels).To(Equal(labels))
-	g.Expect(existing.Annotations).To(Equal(annotations))
-	g.Expect(existing.Rules).To(Equal(rules))
+
 	g.Expect(existing.TypeMeta).To(Equal(desiredTypeMeta))
+
+	// Object meta fields, ensure name and namespace didn't change
+	g.Expect(existing.Name).To(Equal("test-role"))
+	g.Expect(existing.Namespace).To(Equal("default"))
+	g.Expect(existing.Annotations).To(Equal(annotations))
+	g.Expect(existing.Labels).To(Equal(labels))
+
+	g.Expect(existing.Rules).To(Equal(rules))
 }
 
 func TestRoleBindingSpecSetter(t *testing.T) {
@@ -717,9 +771,15 @@ func TestRoleBindingSpecSetter(t *testing.T) {
 
 	err := roleBindingSpecSetter(existing, roleRef, subjects, desiredMeta, desiredTypeMeta)()
 	g.Expect(err).ToNot(HaveOccurred())
-	g.Expect(existing.Labels).To(Equal(labels))
+
+	g.Expect(existing.TypeMeta).To(Equal(desiredTypeMeta))
+
+	// Object meta fields, ensure name and namespace didn't change
+	g.Expect(existing.Name).To(Equal("test-rolebinding"))
+	g.Expect(existing.Namespace).To(Equal("default"))
 	g.Expect(existing.Annotations).To(Equal(annotations))
+	g.Expect(existing.Labels).To(Equal(labels))
+
 	g.Expect(existing.RoleRef).To(Equal(roleRef))
 	g.Expect(existing.Subjects).To(Equal(subjects))
-	g.Expect(existing.TypeMeta).To(Equal(desiredTypeMeta))
 }
