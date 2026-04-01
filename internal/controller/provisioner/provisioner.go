@@ -254,15 +254,15 @@ var minimalObjectFactory = map[reflect.Type]func(name, namespace string) client.
 
 // createMinimalClone creates a new object of the same type with only name and namespace set.
 // This follows CreateOrUpdate's requirement that only name/namespace should be set on the input object.
-func createMinimalClone(obj client.Object) (client.Object, error) {
+func createMinimalClone(obj client.Object) client.Object {
 	objType := reflect.TypeOf(obj)
 	factory, exists := minimalObjectFactory[objType]
 	if !exists {
-		return nil, fmt.Errorf("createMinimalClone: unsupported object type %T", obj)
+		panic(fmt.Errorf("failed to create minimal clone: no factory mapping for object type %T", obj))
 	}
 
 	// A new object will be created by this factory function
-	return factory(obj.GetName(), obj.GetNamespace()), nil
+	return factory(obj.GetName(), obj.GetNamespace())
 }
 
 //nolint:gocyclo // will refactor at some point
@@ -294,11 +294,7 @@ func (p *NginxProvisioner) provisionNginx(
 	for _, obj := range objects {
 		// Create a minimal clone with only name and namespace for CreateOrUpdate
 		// This follows the CreateOrUpdate documentation that says only name/namespace should be set
-		minimalObj, err := createMinimalClone(obj)
-		if err != nil {
-			p.cfg.Logger.Error(err, "Failed to create minimal clone", "object type", reflect.TypeOf(obj).Elem().Name())
-			return err
-		}
+		minimalObj := createMinimalClone(obj)
 
 		createCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 

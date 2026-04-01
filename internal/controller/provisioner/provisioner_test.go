@@ -1036,8 +1036,7 @@ func TestCreateMinimalClone(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			result, err := createMinimalClone(tt.input)
-			g.Expect(err).ToNot(HaveOccurred())
+			result := createMinimalClone(tt.input)
 			g.Expect(result).ToNot(BeNil())
 
 			// Validate that the result is the same type as input
@@ -1061,10 +1060,9 @@ func TestCreateMinimalClone_UnsupportedType(t *testing.T) {
 		},
 	}
 
-	result, err := createMinimalClone(unsupported)
-	g.Expect(err).To(HaveOccurred())
-	g.Expect(err.Error()).To(ContainSubstring("unsupported object type *v1.Gateway"))
-	g.Expect(result).To(BeNil())
+	g.Expect(func() {
+		createMinimalClone(unsupported)
+	}).To(Panic())
 }
 
 func TestCreateMinimalClone_CreatesSeparateInstances(t *testing.T) {
@@ -1079,12 +1077,10 @@ func TestCreateMinimalClone_CreatesSeparateInstances(t *testing.T) {
 	}
 
 	// First call
-	result1, err1 := createMinimalClone(deployment)
-	g.Expect(err1).ToNot(HaveOccurred())
+	result1 := createMinimalClone(deployment)
 
 	// Second call with same type should use same factory
-	result2, err2 := createMinimalClone(deployment)
-	g.Expect(err2).ToNot(HaveOccurred())
+	result2 := createMinimalClone(deployment)
 
 	// Both results should be the same type and have correct name/namespace
 	g.Expect(result1).To(BeAssignableToTypeOf(result2))
