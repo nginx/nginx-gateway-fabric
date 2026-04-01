@@ -529,6 +529,14 @@ spec:
               keepAlive:
                 description: KeepAlive defines the keep-alive settings.
                 properties:
+                  minTimeout:
+                    description: |-
+                      MinTimeout defines the timeout for which the keep-alive client connection
+                      will not be closed on the server side for connection reuse or on
+                      graceful shutdown of worker processes.
+                      Default: https://nginx.org/en/docs/http/ngx_http_core_module.html#keepalive_min_timeout.
+                    pattern: ^[0-9]{1,4}(ms|s|m|h)?$
+                    type: string
                   requests:
                     description: |-
                       Requests sets the maximum number of requests that can be served through one keep-alive connection.

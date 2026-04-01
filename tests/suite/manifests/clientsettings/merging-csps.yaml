@@ -35,6 +35,7 @@ spec:
     timeout: 30s
   keepAlive:
     time: 5s
+    minTimeout: 10s
     timeout:
       server: 2s
       header: 1s
@@ -64,6 +65,7 @@ spec:
     timeout: 50s
   keepAlive:
     time: 3s
+    minTimeout: 10s
     timeout:
       server: 30s
       header: 60s
@@ -96,6 +98,18 @@ spec:
 apiVersion: gateway.nginx.org/v1alpha1
 kind: ClientSettingsPolicy
 metadata:
+  name: z-hr-conflict-3
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: coffee
+  keepAlive:
+    minTimeout: 5s
+---
+apiVersion: gateway.nginx.org/v1alpha1
+kind: ClientSettingsPolicy
+metadata:
   name: z-grpc-conflict
 spec:
   targetRef:
@@ -104,3 +118,15 @@ spec:
     name: grpc-route
   keepAlive:
     time: 15s
+---
+apiVersion: gateway.nginx.org/v1alpha1
+kind: ClientSettingsPolicy
+metadata:
+  name: z-grpc-conflict-2
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: GRPCRoute
+    name: grpc-route
+  keepAlive:
+    minTimeout: 5s

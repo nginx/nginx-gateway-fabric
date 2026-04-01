@@ -92,6 +92,18 @@ func TestValidator_Validate(t *testing.T) {
 			},
 		},
 		{
+			name: "invalid keepalive minTimeout duration",
+			policy: createModifiedPolicy(func(p *ngfAPI.ClientSettingsPolicy) *ngfAPI.ClientSettingsPolicy {
+				p.Spec.KeepAlive.MinTimeout = helpers.GetPointer[ngfAPI.Duration]("invalid")
+				return p
+			}),
+			expConditions: []conditions.Condition{
+				conditions.NewPolicyInvalid("spec.keepAlive.minTimeout: Invalid value: \"invalid\": ^[0-9]{1,4}(ms|s|m|h)? " +
+					"(e.g. '5ms',  or '10s',  or '500m',  or '1000h', regex used for validation is " +
+					"'must contain an, at most, four digit number followed by 'ms', 's', 'm', or 'h'')"),
+			},
+		},
+		{
 			name: "invalid durations",
 			policy: createModifiedPolicy(func(p *ngfAPI.ClientSettingsPolicy) *ngfAPI.ClientSettingsPolicy {
 				p.Spec.Body.Timeout = helpers.GetPointer[ngfAPI.Duration]("invalid")
@@ -262,6 +274,24 @@ func TestValidator_Conflicts(t *testing.T) {
 						Timeout: &ngfAPI.ClientKeepAliveTimeout{
 							Server: helpers.GetPointer[ngfAPI.Duration]("30s"),
 						},
+					},
+				},
+			},
+			conflicts: true,
+		},
+		{
+			name: "keepalive minTimeout conflicts",
+			polA: &ngfAPI.ClientSettingsPolicy{
+				Spec: ngfAPI.ClientSettingsPolicySpec{
+					KeepAlive: &ngfAPI.ClientKeepAlive{
+						MinTimeout: helpers.GetPointer[ngfAPI.Duration]("5s"),
+					},
+				},
+			},
+			polB: &ngfAPI.ClientSettingsPolicy{
+				Spec: ngfAPI.ClientSettingsPolicySpec{
+					KeepAlive: &ngfAPI.ClientKeepAlive{
+						MinTimeout: helpers.GetPointer[ngfAPI.Duration]("10s"),
 					},
 				},
 			},
