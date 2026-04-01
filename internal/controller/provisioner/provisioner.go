@@ -369,7 +369,7 @@ func (p *NginxProvisioner) provisionNginx(
 			}
 		case *corev1.ConfigMap:
 			if res == controllerutil.OperationResultUpdated &&
-				strings.Contains(minimalObj.GetName(), nginxAgentConfigMapNameSuffix) {
+				strings.HasSuffix(minimalObj.GetName(), nginxAgentConfigMapNameSuffix) {
 				agentConfigMapUpdated = true
 			}
 		}
