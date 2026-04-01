@@ -713,24 +713,13 @@ func NewListenerInvalidCertificateRefNotAccepted(msg string) []Condition {
 // NewListenerUnresolvedCertificateRef returns a Condition that indicates that one or more CertificateRefs
 // of a Listener could not be resolved, but the listener is still valid because other certificate refs
 // were resolved successfully. This only sets ResolvedRefs to false without affecting the Accepted condition.
-func NewListenerUnresolvedCertificateRef(msg string) Condition {
+// The reason parameter should be one of the Gateway API ListenerConditionReason values
+// (e.g. InvalidCertificateRef or RefNotPermitted).
+func NewListenerUnresolvedCertificateRef(msg string, reason string) Condition {
 	return Condition{
 		Type:    string(v1.ListenerConditionResolvedRefs),
 		Status:  metav1.ConditionFalse,
-		Reason:  string(v1.ListenerReasonInvalidCertificateRef),
-		Message: msg,
-	}
-}
-
-// NewListenerUnresolvedRefNotPermitted returns a Condition that indicates that one or more CertificateRefs
-// of a Listener are not permitted by a ReferenceGrant, but the listener is still valid because other
-// certificate refs were resolved successfully. This only sets ResolvedRefs to false without affecting
-// the Accepted condition.
-func NewListenerUnresolvedRefNotPermitted(msg string) Condition {
-	return Condition{
-		Type:    string(v1.ListenerConditionResolvedRefs),
-		Status:  metav1.ConditionFalse,
-		Reason:  string(v1.ListenerReasonRefNotPermitted),
+		Reason:  reason,
 		Message: msg,
 	}
 }

@@ -1012,9 +1012,10 @@ func TestBuildGateway(t *testing.T) {
 							},
 							Conditions: []conditions.Condition{
 								conditions.NewListenerUnresolvedCertificateRef(
-									"tls.certificateRefs[1]: Invalid value: " +
-										"{\"Namespace\":\"test\",\"Name\":\"does-not-exist\"}: " +
+									"tls.certificateRefs[1]: Invalid value: "+
+										"{\"Namespace\":\"test\",\"Name\":\"does-not-exist\"}: "+
 										"Secret test/does-not-exist does not exist",
+									string(v1.ListenerReasonInvalidCertificateRef),
 								),
 							},
 							SupportedKinds: supportedKindsForListeners,
@@ -1050,8 +1051,9 @@ func TestBuildGateway(t *testing.T) {
 								client.ObjectKeyFromObject(secretSameNs),
 							},
 							Conditions: []conditions.Condition{
-								conditions.NewListenerUnresolvedRefNotPermitted(
+								conditions.NewListenerUnresolvedCertificateRef(
 									"Certificate ref to secret diff-ns/secret not permitted by any ReferenceGrant",
+									string(v1.ListenerReasonRefNotPermitted),
 								),
 							},
 							SupportedKinds: supportedKindsForListeners,

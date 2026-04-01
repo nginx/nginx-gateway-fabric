@@ -163,14 +163,14 @@ func TestNewDefaultListenerConditions(t *testing.T) {
 		{
 			name: "existing ResolvedRefs condition (InvalidCertificateRef) is preserved",
 			existingConditions: []Condition{
-				NewListenerUnresolvedCertificateRef("some cert ref error"),
+				NewListenerUnresolvedCertificateRef("some cert ref error", string(v1.ListenerReasonInvalidCertificateRef)),
 			},
 			expectResolvedRefs: false,
 		},
 		{
 			name: "existing ResolvedRefs condition (RefNotPermitted) is preserved",
 			existingConditions: []Condition{
-				NewListenerUnresolvedRefNotPermitted("some ref not permitted error"),
+				NewListenerUnresolvedCertificateRef("some ref not permitted error", string(v1.ListenerReasonRefNotPermitted)),
 			},
 			expectResolvedRefs: false,
 		},

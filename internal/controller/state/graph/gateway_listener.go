@@ -730,27 +730,29 @@ func createExternalReferencesForTLSSecretsResolver(
 			} else {
 				// Some certs are valid, some are not.
 				// Set ResolvedRefs to false but keep the listener valid so valid certs are still configured.
-				// Aggregate error messages by reason so that deduplication doesn't drop earlier errors.
-				var invalidRefMsgs, refNotPermitMsgs []string
+				// Emit a single ResolvedRefs condition that aggregates all error messages so that
+				// deduplication (which keeps one condition per Type) does not drop any information.
+				var allMsgs []string
+				hasInvalidRef := false
 				for _, certErr := range certRefErrors {
-					if certErr.refNotPermit {
-						refNotPermitMsgs = append(refNotPermitMsgs, certErr.msg)
-					} else {
-						invalidRefMsgs = append(invalidRefMsgs, certErr.msg)
+					allMsgs = append(allMsgs, certErr.msg)
+					if !certErr.refNotPermit {
+						hasInvalidRef = true
 					}
 				}
-				if len(invalidRefMsgs) > 0 {
-					l.Conditions = append(
-						l.Conditions,
-						conditions.NewListenerUnresolvedCertificateRef(strings.Join(invalidRefMsgs, "; ")),
-					)
+
+				// Pick the most representative reason.
+				// If any cert ref is invalid, use InvalidCertificateRef (the broader reason).
+				// If all errors are ref-not-permitted, use RefNotPermitted.
+				reason := string(v1.ListenerReasonRefNotPermitted)
+				if hasInvalidRef {
+					reason = string(v1.ListenerReasonInvalidCertificateRef)
 				}
-				if len(refNotPermitMsgs) > 0 {
-					l.Conditions = append(
-						l.Conditions,
-						conditions.NewListenerUnresolvedRefNotPermitted(strings.Join(refNotPermitMsgs, "; ")),
-					)
-				}
+
+				l.Conditions = append(
+					l.Conditions,
+					conditions.NewListenerUnresolvedCertificateRef(strings.Join(allMsgs, "; "), reason),
+				)
 			}
 		}
 	}
