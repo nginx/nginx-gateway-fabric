@@ -691,8 +691,7 @@ func NewListenerUnsupportedValue(msg string) []Condition {
 }
 
 // NewListenerInvalidCertificateRefNotAccepted returns Conditions that marks the listener as not Accepted,
-// ResolvedRefs false, and not Programmed. Use this when ALL certificate refs are invalid
-// and the listener cannot be configured.
+// ResolvedRefs false, and not Programmed.
 func NewListenerInvalidCertificateRefNotAccepted(msg string) []Condition {
 	return []Condition{
 		{
@@ -711,14 +710,27 @@ func NewListenerInvalidCertificateRefNotAccepted(msg string) []Condition {
 	}
 }
 
-// NewListenerUnresolvedCertificateRef returns a Condition that indicates that a CertificateRef of a Listener
-// could not be resolved, but the listener is still valid because other certificate refs were resolved successfully.
-// This only sets ResolvedRefs to false without affecting the Accepted condition.
+// NewListenerUnresolvedCertificateRef returns a Condition that indicates that one or more CertificateRefs
+// of a Listener could not be resolved, but the listener is still valid because other certificate refs
+// were resolved successfully. This only sets ResolvedRefs to false without affecting the Accepted condition.
 func NewListenerUnresolvedCertificateRef(msg string) Condition {
 	return Condition{
 		Type:    string(v1.ListenerConditionResolvedRefs),
 		Status:  metav1.ConditionFalse,
 		Reason:  string(v1.ListenerReasonInvalidCertificateRef),
+		Message: msg,
+	}
+}
+
+// NewListenerUnresolvedRefNotPermitted returns a Condition that indicates that one or more CertificateRefs
+// of a Listener are not permitted by a ReferenceGrant, but the listener is still valid because other
+// certificate refs were resolved successfully. This only sets ResolvedRefs to false without affecting
+// the Accepted condition.
+func NewListenerUnresolvedRefNotPermitted(msg string) Condition {
+	return Condition{
+		Type:    string(v1.ListenerConditionResolvedRefs),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(v1.ListenerReasonRefNotPermitted),
 		Message: msg,
 	}
 }

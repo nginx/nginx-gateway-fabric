@@ -5,6 +5,7 @@ import (
 
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	v1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
 func TestDeduplicateConditions(t *testing.T) {
@@ -160,9 +161,16 @@ func TestNewDefaultListenerConditions(t *testing.T) {
 			expectResolvedRefs: true,
 		},
 		{
-			name: "existing ResolvedRefs condition is preserved (not overridden)",
+			name: "existing ResolvedRefs condition (InvalidCertificateRef) is preserved",
 			existingConditions: []Condition{
 				NewListenerUnresolvedCertificateRef("some cert ref error"),
+			},
+			expectResolvedRefs: false,
+		},
+		{
+			name: "existing ResolvedRefs condition (RefNotPermitted) is preserved",
+			existingConditions: []Condition{
+				NewListenerUnresolvedRefNotPermitted("some ref not permitted error"),
 			},
 			expectResolvedRefs: false,
 		},
@@ -177,7 +185,7 @@ func TestNewDefaultListenerConditions(t *testing.T) {
 
 			hasResolvedRefs := false
 			for _, c := range result {
-				if c.Type == "ResolvedRefs" {
+				if c.Type == string(v1.ListenerConditionResolvedRefs) {
 					hasResolvedRefs = true
 				}
 			}

@@ -1050,7 +1050,7 @@ func TestBuildGateway(t *testing.T) {
 								client.ObjectKeyFromObject(secretSameNs),
 							},
 							Conditions: []conditions.Condition{
-								conditions.NewListenerUnresolvedCertificateRef(
+								conditions.NewListenerUnresolvedRefNotPermitted(
 									"Certificate ref to secret diff-ns/secret not permitted by any ReferenceGrant",
 								),
 							},

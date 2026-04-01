@@ -726,8 +726,26 @@ func createExternalReferencesForTLSSecretsResolver(
 			} else {
 				// Some certs are valid, some are not.
 				// Set ResolvedRefs to false but keep the listener valid so valid certs are still configured.
+				// Aggregate error messages by reason so that deduplication doesn't drop earlier errors.
+				var invalidRefMsgs, refNotPermitMsgs []string
 				for _, certErr := range certRefErrors {
-					l.Conditions = append(l.Conditions, conditions.NewListenerUnresolvedCertificateRef(certErr.msg))
+					if certErr.refNotPermit {
+						refNotPermitMsgs = append(refNotPermitMsgs, certErr.msg)
+					} else {
+						invalidRefMsgs = append(invalidRefMsgs, certErr.msg)
+					}
+				}
+				if len(invalidRefMsgs) > 0 {
+					l.Conditions = append(
+						l.Conditions,
+						conditions.NewListenerUnresolvedCertificateRef(strings.Join(invalidRefMsgs, "; ")),
+					)
+				}
+				if len(refNotPermitMsgs) > 0 {
+					l.Conditions = append(
+						l.Conditions,
+						conditions.NewListenerUnresolvedRefNotPermitted(strings.Join(refNotPermitMsgs, "; ")),
+					)
 				}
 			}
 		}
