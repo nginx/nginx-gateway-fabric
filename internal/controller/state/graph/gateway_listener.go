@@ -477,7 +477,7 @@ func createHTTPSListenerValidator(protectedPorts ProtectedPorts) listenerValidat
 		if len(listener.TLS.CertificateRefs) == 0 {
 			msg := "certificateRefs must be defined for TLS mode terminate"
 			valErr := field.Required(tlsPath.Child("certificateRefs"), msg)
-			conds = append(conds, conditions.NewListenerInvalidCertificateRef(valErr.Error())...)
+			conds = append(conds, conditions.NewListenerInvalidCertificateRefNotAccepted(valErr.Error())...)
 			return conds, true
 		}
 
@@ -487,14 +487,14 @@ func createHTTPSListenerValidator(protectedPorts ProtectedPorts) listenerValidat
 			if certRef.Kind != nil && *certRef.Kind != "Secret" {
 				path := certRefPath.Child("kind")
 				valErr := field.NotSupported(path, *certRef.Kind, []string{"Secret"})
-				conds = append(conds, conditions.NewListenerInvalidCertificateRef(valErr.Error())...)
+				conds = append(conds, conditions.NewListenerInvalidCertificateRefNotAccepted(valErr.Error())...)
 			}
 
 			// for Kind Secret, certRef.Group must be nil or empty
 			if certRef.Group != nil && *certRef.Group != "" {
 				path := certRefPath.Child("group")
 				valErr := field.NotSupported(path, *certRef.Group, []string{""})
-				conds = append(conds, conditions.NewListenerInvalidCertificateRef(valErr.Error())...)
+				conds = append(conds, conditions.NewListenerInvalidCertificateRefNotAccepted(valErr.Error())...)
 			}
 		}
 
@@ -670,12 +670,19 @@ func createPortConflictResolver() listenerConflictResolver {
 	}
 }
 
+type certRefError struct {
+	msg          string
+	refNotPermit bool
+}
+
 func createExternalReferencesForTLSSecretsResolver(
 	gwNs string,
 	resourceResolver resolver.Resolver,
 	refGrantResolver *referenceGrantResolver,
 ) listenerExternalReferenceResolver {
 	return func(l *Listener) {
+		var certRefErrors []certRefError
+
 		for i, certRef := range l.Source.TLS.CertificateRefs {
 			certRefNs := gwNs
 			if certRef.Namespace != nil {
@@ -690,24 +697,39 @@ func createExternalReferencesForTLSSecretsResolver(
 			if certRefNs != gwNs {
 				if !refGrantResolver.refAllowed(toSecret(certRefNsName), fromGateway(gwNs)) {
 					msg := fmt.Sprintf("Certificate ref to secret %s not permitted by any ReferenceGrant", certRefNsName)
-
-					l.Conditions = append(l.Conditions, conditions.NewListenerRefNotPermitted(msg)...)
-					l.Valid = false
-					return
+					certRefErrors = append(certRefErrors, certRefError{msg: msg, refNotPermit: true})
+					continue
 				}
 			}
 
 			if err := resourceResolver.Resolve(resolver.ResourceTypeSecret, certRefNsName); err != nil {
 				path := field.NewPath("tls", "certificateRefs").Index(i)
-				// field.NotFound could be better, but it doesn't allow us to set the error message.
 				valErr := field.Invalid(path, certRefNsName, err.Error())
-
-				l.Conditions = append(l.Conditions, conditions.NewListenerInvalidCertificateRef(valErr.Error())...)
-				l.Valid = false
-				return
+				certRefErrors = append(certRefErrors, certRefError{msg: valErr.Error()})
+				continue
 			}
 
 			l.ResolvedSecrets = append(l.ResolvedSecrets, certRefNsName)
+		}
+
+		if len(certRefErrors) > 0 {
+			if len(l.ResolvedSecrets) == 0 {
+				// All certs are invalid; the listener is not valid.
+				l.Valid = false
+				for _, certErr := range certRefErrors {
+					if certErr.refNotPermit {
+						l.Conditions = append(l.Conditions, conditions.NewListenerRefNotPermitted(certErr.msg)...)
+					} else {
+						l.Conditions = append(l.Conditions, conditions.NewListenerInvalidCertificateRefNotAccepted(certErr.msg)...)
+					}
+				}
+			} else {
+				// Some certs are valid, some are not.
+				// Set ResolvedRefs to false but keep the listener valid so valid certs are still configured.
+				for _, certErr := range certRefErrors {
+					l.Conditions = append(l.Conditions, conditions.NewListenerUnresolvedCertificateRef(certErr.msg))
+				}
+			}
 		}
 	}
 }

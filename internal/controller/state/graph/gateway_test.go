@@ -209,6 +209,40 @@ func TestBuildGateway(t *testing.T) {
 		},
 	}
 
+	// TLS config with one valid cert (same-ns secret) and one invalid cert (does not exist).
+	tlsConfigOneValidOneInvalid := &v1.ListenerTLSConfig{
+		Mode: helpers.GetPointer(v1.TLSModeTerminate),
+		CertificateRefs: []v1.SecretObjectReference{
+			{
+				Kind:      helpers.GetPointer[v1.Kind]("Secret"),
+				Name:      v1.ObjectName(secretSameNs.Name),
+				Namespace: (*v1.Namespace)(&secretSameNs.Namespace),
+			},
+			{
+				Kind:      helpers.GetPointer[v1.Kind]("Secret"),
+				Name:      "does-not-exist",
+				Namespace: helpers.GetPointer[v1.Namespace]("test"),
+			},
+		},
+	}
+
+	// TLS config with one valid cert (same-ns secret) and one cross-namespace cert without reference grant.
+	tlsConfigOneValidOneRefNotPermitted := &v1.ListenerTLSConfig{
+		Mode: helpers.GetPointer(v1.TLSModeTerminate),
+		CertificateRefs: []v1.SecretObjectReference{
+			{
+				Kind:      helpers.GetPointer[v1.Kind]("Secret"),
+				Name:      v1.ObjectName(secretSameNs.Name),
+				Namespace: (*v1.Namespace)(&secretSameNs.Namespace),
+			},
+			{
+				Kind:      helpers.GetPointer[v1.Kind]("Secret"),
+				Name:      v1.ObjectName(secretDiffNamespace.Name),
+				Namespace: (*v1.Namespace)(&secretDiffNamespace.Namespace),
+			},
+		},
+	}
+
 	createListener := func(
 		name string,
 		hostname string,
@@ -290,6 +324,18 @@ func TestBuildGateway(t *testing.T) {
 		"foo.example.com",
 		443,
 		tlsConfigInvalidSecret,
+	)
+	partialInvalidCertListener := createHTTPSListener(
+		"partial-invalid-cert",
+		"foo.example.com",
+		443,
+		tlsConfigOneValidOneInvalid,
+	)
+	partialRefNotPermittedListener := createHTTPSListener(
+		"partial-ref-not-permitted",
+		"foo.example.com",
+		443,
+		tlsConfigOneValidOneRefNotPermitted,
 	)
 	invalidHTTPSPortListener := createHTTPSListener(
 		"invalid-https-port",
@@ -928,7 +974,7 @@ func TestBuildGateway(t *testing.T) {
 							Attachable:  true,
 							Routes:      map[RouteKey]*L7Route{},
 							L4Routes:    map[L4RouteKey]*L4Route{},
-							Conditions: conditions.NewListenerInvalidCertificateRef(
+							Conditions: conditions.NewListenerInvalidCertificateRefNotAccepted(
 								"tls.certificateRefs[0]: Invalid value: {\"Namespace\":\"test\",\"Name\":\"does-not-exist\"}: " +
 									"Secret test/does-not-exist does not exist",
 							),
@@ -943,6 +989,82 @@ func TestBuildGateway(t *testing.T) {
 				},
 			},
 			name: "invalid https listener (secret does not exist)",
+		},
+		{
+			gateway: createGateway(
+				gatewayCfg{name: "gateway1", listeners: []v1.Listener{partialInvalidCertListener}},
+			),
+			gatewayClass: validGC,
+			expected: map[types.NamespacedName]*Gateway{
+				{Namespace: "test", Name: "gateway1"}: {
+					Source: getLastCreatedGateway(),
+					Listeners: []*Listener{
+						{
+							Name:        "partial-invalid-cert",
+							GatewayName: client.ObjectKeyFromObject(getLastCreatedGateway()),
+							Source:      partialInvalidCertListener,
+							Valid:       true,
+							Attachable:  true,
+							Routes:      map[RouteKey]*L7Route{},
+							L4Routes:    map[L4RouteKey]*L4Route{},
+							ResolvedSecrets: []types.NamespacedName{
+								client.ObjectKeyFromObject(secretSameNs),
+							},
+							Conditions: []conditions.Condition{
+								conditions.NewListenerUnresolvedCertificateRef(
+									"tls.certificateRefs[1]: Invalid value: " +
+										"{\"Namespace\":\"test\",\"Name\":\"does-not-exist\"}: " +
+										"Secret test/does-not-exist does not exist",
+								),
+							},
+							SupportedKinds: supportedKindsForListeners,
+						},
+					},
+					DeploymentName: types.NamespacedName{
+						Namespace: "test",
+						Name:      controller.CreateNginxResourceName("gateway1", gcName),
+					},
+					Valid: true,
+				},
+			},
+			name: "https listener with one valid and one invalid cert ref (partial failure)",
+		},
+		{
+			gateway: createGateway(
+				gatewayCfg{name: "gateway1", listeners: []v1.Listener{partialRefNotPermittedListener}},
+			),
+			gatewayClass: validGC,
+			expected: map[types.NamespacedName]*Gateway{
+				{Namespace: "test", Name: "gateway1"}: {
+					Source: getLastCreatedGateway(),
+					Listeners: []*Listener{
+						{
+							Name:        "partial-ref-not-permitted",
+							GatewayName: client.ObjectKeyFromObject(getLastCreatedGateway()),
+							Source:      partialRefNotPermittedListener,
+							Valid:       true,
+							Attachable:  true,
+							Routes:      map[RouteKey]*L7Route{},
+							L4Routes:    map[L4RouteKey]*L4Route{},
+							ResolvedSecrets: []types.NamespacedName{
+								client.ObjectKeyFromObject(secretSameNs),
+							},
+							Conditions: []conditions.Condition{
+								conditions.NewListenerUnresolvedCertificateRef(
+									"Certificate ref to secret diff-ns/secret not permitted by any ReferenceGrant",
+								),
+							},
+							SupportedKinds: supportedKindsForListeners,
+						},
+					},
+					DeploymentName: types.NamespacedName{
+						Namespace: "test",
+						Name:      controller.CreateNginxResourceName("gateway1", gcName),
+					},
+					Valid: true,
+				},
+			},
+			name: "https listener with one valid cert and one cross-namespace cert not permitted (partial failure)",
 		},
 		{
 			gateway: createGateway(

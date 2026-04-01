@@ -1564,7 +1564,7 @@ func TestBuildConfiguration(t *testing.T) {
 						Routes: map[graph.RouteKey]*graph.L7Route{
 							graph.CreateRouteKey(httpsHR7): httpsRouteHR7,
 						},
-						ResolvedSecrets: []types.NamespacedName{secret1NsName},
+						ResolvedSecrets: []types.NamespacedName{secret2NsName},
 					},
 				}...)
 				g.Routes = map[graph.RouteKey]*graph.L7Route{
@@ -1575,6 +1575,7 @@ func TestBuildConfiguration(t *testing.T) {
 				}
 				g.ReferencedSecrets = map[types.NamespacedName]*secrets.Secret{
 					secret1NsName: secret1,
+					secret2NsName: secret2,
 				}
 				return g
 			}),
@@ -1673,11 +1674,11 @@ func TestBuildConfiguration(t *testing.T) {
 					{
 						IsDefault: true,
 						Port:      8443,
-						SSL:       &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}},
+						SSL:       &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-2"}},
 					},
 					{
 						Hostname: "foo.example.com",
-						SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}},
+						SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-2"}},
 						PathRules: []PathRule{
 							{
 								Path:     "/third",
@@ -1704,7 +1705,7 @@ func TestBuildConfiguration(t *testing.T) {
 					},
 					{
 						Hostname: wildcardHostname,
-						SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}},
+						SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-2"}},
 						Port:     8443,
 					},
 				}...)
@@ -1720,10 +1721,20 @@ func TestBuildConfiguration(t *testing.T) {
 					setPathRuleIdx(expHTTPSHR7Groups[1], 0),
 				}
 				conf.SSLServers[0].SSL = &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}}
+				conf.SSLKeyPairs = map[SSLKeyPairID]SSLKeyPair{
+					"ssl_keypair_test_secret-1": {
+						Cert: []byte("cert-1"),
+						Key:  []byte("privateKey-1"),
+					},
+					"ssl_keypair_test_secret-2": {
+						Cert: []byte("cert-2"),
+						Key:  []byte("privateKey-2"),
+					},
+				}
 				conf.SSLListenerHostnames = map[int32][]string{443: {""}, 8443: {""}}
 				return conf
 			}),
-			msg: "multiple http and https listener; different ports",
+			msg: "multiple http and https listeners; different ports with different secrets",
 		},
 		{
 			graph: getModifiedGraph(func(g *graph.Graph) *graph.Graph {

@@ -145,3 +145,43 @@ func TestHasMatchingCondition(t *testing.T) {
 		})
 	}
 }
+
+func TestNewDefaultListenerConditions(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name               string
+		existingConditions []Condition
+		expectResolvedRefs bool
+	}{
+		{
+			name:               "no existing conditions includes ResolvedRefs",
+			existingConditions: nil,
+			expectResolvedRefs: true,
+		},
+		{
+			name: "existing ResolvedRefs condition is preserved (not overridden)",
+			existingConditions: []Condition{
+				NewListenerUnresolvedCertificateRef("some cert ref error"),
+			},
+			expectResolvedRefs: false,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			result := NewDefaultListenerConditions(test.existingConditions)
+
+			hasResolvedRefs := false
+			for _, c := range result {
+				if c.Type == "ResolvedRefs" {
+					hasResolvedRefs = true
+				}
+			}
+			g.Expect(hasResolvedRefs).To(Equal(test.expectResolvedRefs))
+		})
+	}
+}
