@@ -121,10 +121,10 @@ type Return struct {
 
 // SSL holds all SSL related configuration.
 type SSL struct {
-	Certificate         string
-	CertificateKey      string
 	Protocols           string
 	Ciphers             string
+	Certificates        []string
+	CertificateKeys     []string
 	PreferServerCiphers bool
 }
 

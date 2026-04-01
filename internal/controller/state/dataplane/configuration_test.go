@@ -1277,7 +1277,7 @@ func TestBuildConfiguration(t *testing.T) {
 							graph.CreateRouteKey(httpsHR1): httpsRouteHR1,
 							graph.CreateRouteKey(httpsHR2): httpsRouteHR2,
 						},
-						ResolvedSecret: &secret1NsName,
+						ResolvedSecrets: []types.NamespacedName{secret1NsName},
 					},
 					{
 						Name:        "listener-443-with-hostname",
@@ -1287,7 +1287,7 @@ func TestBuildConfiguration(t *testing.T) {
 						Routes: map[graph.RouteKey]*graph.L7Route{
 							graph.CreateRouteKey(httpsHR5): httpsRouteHR5,
 						},
-						ResolvedSecret: &secret2NsName,
+						ResolvedSecrets: []types.NamespacedName{secret2NsName},
 					},
 				}...)
 				g.Routes = map[graph.RouteKey]*graph.L7Route{
@@ -1318,7 +1318,7 @@ func TestBuildConfiguration(t *testing.T) {
 								},
 							},
 						},
-						SSL:  &SSL{KeyPairID: "ssl_keypair_test_secret-1"},
+						SSL:  &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}},
 						Port: 443,
 					},
 					{
@@ -1335,7 +1335,7 @@ func TestBuildConfiguration(t *testing.T) {
 								},
 							},
 						},
-						SSL:  &SSL{KeyPairID: "ssl_keypair_test_secret-2"},
+						SSL:  &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-2"}},
 						Port: 443,
 					},
 					{
@@ -1352,18 +1352,18 @@ func TestBuildConfiguration(t *testing.T) {
 								},
 							},
 						},
-						SSL:  &SSL{KeyPairID: "ssl_keypair_test_secret-1"},
+						SSL:  &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}},
 						Port: 443,
 					},
 					{
 						Hostname: wildcardHostname,
-						SSL:      &SSL{KeyPairID: "ssl_keypair_test_secret-1"},
+						SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}},
 						Port:     443,
 					},
 				}...)
 				conf.Upstreams = []Upstream{fooUpstream}
 				conf.BackendGroups = []BackendGroup{expHTTPSHR1Groups[0], expHTTPSHR2Groups[0], expHTTPSHR5Groups[0]}
-				conf.SSLServers[0].SSL = &SSL{KeyPairID: "ssl_keypair_test_secret-1"}
+				conf.SSLServers[0].SSL = &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}}
 				conf.SSLKeyPairs = map[SSLKeyPairID]SSLKeyPair{
 					"ssl_keypair_test_secret-1": {
 						Cert: []byte("cert-1"),
@@ -1402,7 +1402,7 @@ func TestBuildConfiguration(t *testing.T) {
 							graph.CreateRouteKey(httpsHR3): httpsRouteHR3,
 							graph.CreateRouteKey(httpsHR4): httpsRouteHR4,
 						},
-						ResolvedSecret: &secret1NsName,
+						ResolvedSecrets: []types.NamespacedName{secret1NsName},
 					},
 				}...)
 				g.Routes = map[graph.RouteKey]*graph.L7Route{
@@ -1462,7 +1462,7 @@ func TestBuildConfiguration(t *testing.T) {
 				conf.SSLServers = append(conf.SSLServers, []VirtualServer{
 					{
 						Hostname: "foo.example.com",
-						SSL:      &SSL{KeyPairID: "ssl_keypair_test_secret-1"},
+						SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}},
 						PathRules: []PathRule{
 							{
 								Path:     "/fourth",
@@ -1503,7 +1503,7 @@ func TestBuildConfiguration(t *testing.T) {
 					},
 					{
 						Hostname: wildcardHostname,
-						SSL:      &SSL{KeyPairID: "ssl_keypair_test_secret-1"},
+						SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}},
 						Port:     443,
 					},
 				}...)
@@ -1518,7 +1518,7 @@ func TestBuildConfiguration(t *testing.T) {
 					setPathRuleIdx(expHTTPSHR4Groups[0], 0),
 					setPathRuleIdx(expHTTPSHR4Groups[1], 2),
 				}
-				conf.SSLServers[0].SSL = &SSL{KeyPairID: "ssl_keypair_test_secret-1"}
+				conf.SSLServers[0].SSL = &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}}
 				conf.SSLListenerHostnames = map[int32][]string{443: {""}}
 				return conf
 			}),
@@ -1554,7 +1554,7 @@ func TestBuildConfiguration(t *testing.T) {
 						Routes: map[graph.RouteKey]*graph.L7Route{
 							graph.CreateRouteKey(httpsHR3): httpsRouteHR3,
 						},
-						ResolvedSecret: &secret1NsName,
+						ResolvedSecrets: []types.NamespacedName{secret1NsName},
 					},
 					{
 						Name:        "listener-8443",
@@ -1564,7 +1564,7 @@ func TestBuildConfiguration(t *testing.T) {
 						Routes: map[graph.RouteKey]*graph.L7Route{
 							graph.CreateRouteKey(httpsHR7): httpsRouteHR7,
 						},
-						ResolvedSecret: &secret1NsName,
+						ResolvedSecrets: []types.NamespacedName{secret2NsName},
 					},
 				}...)
 				g.Routes = map[graph.RouteKey]*graph.L7Route{
@@ -1575,6 +1575,7 @@ func TestBuildConfiguration(t *testing.T) {
 				}
 				g.ReferencedSecrets = map[types.NamespacedName]*secrets.Secret{
 					secret1NsName: secret1,
+					secret2NsName: secret2,
 				}
 				return g
 			}),
@@ -1640,7 +1641,7 @@ func TestBuildConfiguration(t *testing.T) {
 				conf.SSLServers = append(conf.SSLServers, []VirtualServer{
 					{
 						Hostname: "foo.example.com",
-						SSL:      &SSL{KeyPairID: "ssl_keypair_test_secret-1"},
+						SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}},
 						PathRules: []PathRule{
 							{
 								Path:     "/third",
@@ -1667,17 +1668,17 @@ func TestBuildConfiguration(t *testing.T) {
 					},
 					{
 						Hostname: wildcardHostname,
-						SSL:      &SSL{KeyPairID: "ssl_keypair_test_secret-1"},
+						SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}},
 						Port:     443,
 					},
 					{
 						IsDefault: true,
 						Port:      8443,
-						SSL:       &SSL{KeyPairID: "ssl_keypair_test_secret-1"},
+						SSL:       &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-2"}},
 					},
 					{
 						Hostname: "foo.example.com",
-						SSL:      &SSL{KeyPairID: "ssl_keypair_test_secret-1"},
+						SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-2"}},
 						PathRules: []PathRule{
 							{
 								Path:     "/third",
@@ -1704,7 +1705,7 @@ func TestBuildConfiguration(t *testing.T) {
 					},
 					{
 						Hostname: wildcardHostname,
-						SSL:      &SSL{KeyPairID: "ssl_keypair_test_secret-1"},
+						SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-2"}},
 						Port:     8443,
 					},
 				}...)
@@ -1719,11 +1720,21 @@ func TestBuildConfiguration(t *testing.T) {
 					setPathRuleIdx(expHTTPSHR7Groups[0], 1),
 					setPathRuleIdx(expHTTPSHR7Groups[1], 0),
 				}
-				conf.SSLServers[0].SSL = &SSL{KeyPairID: "ssl_keypair_test_secret-1"}
+				conf.SSLServers[0].SSL = &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}}
+				conf.SSLKeyPairs = map[SSLKeyPairID]SSLKeyPair{
+					"ssl_keypair_test_secret-1": {
+						Cert: []byte("cert-1"),
+						Key:  []byte("privateKey-1"),
+					},
+					"ssl_keypair_test_secret-2": {
+						Cert: []byte("cert-2"),
+						Key:  []byte("privateKey-2"),
+					},
+				}
 				conf.SSLListenerHostnames = map[int32][]string{443: {""}, 8443: {""}}
 				return conf
 			}),
-			msg: "multiple http and https listener; different ports",
+			msg: "multiple http and https listeners; different ports with different secrets",
 		},
 		{
 			graph: getModifiedGraph(func(g *graph.Graph) *graph.Graph {
@@ -1894,7 +1905,7 @@ func TestBuildConfiguration(t *testing.T) {
 						Routes: map[graph.RouteKey]*graph.L7Route{
 							graph.CreateRouteKey(httpsHR6): httpsRouteHR6,
 						},
-						ResolvedSecret: &secret1NsName,
+						ResolvedSecrets: []types.NamespacedName{secret1NsName},
 					},
 					{
 						Name:        "listener-443-2",
@@ -1906,7 +1917,7 @@ func TestBuildConfiguration(t *testing.T) {
 							TR1Key: &tlsTR1,
 							TR2Key: &invalidBackendRefTR2,
 						},
-						ResolvedSecret: &secret1NsName,
+						ResolvedSecrets: []types.NamespacedName{secret1NsName},
 					},
 					{
 						Name:        "listener-444-3",
@@ -1918,16 +1929,16 @@ func TestBuildConfiguration(t *testing.T) {
 							TR1Key: &tlsTR1,
 							TR2Key: &invalidBackendRefTR2,
 						},
-						ResolvedSecret: &secret1NsName,
+						ResolvedSecrets: []types.NamespacedName{secret1NsName},
 					},
 					{
-						Name:           "listener-443-4",
-						GatewayName:    gatewayNsName,
-						Source:         listener443_4,
-						Valid:          true,
-						Routes:         map[graph.RouteKey]*graph.L7Route{},
-						L4Routes:       map[graph.L4RouteKey]*graph.L4Route{},
-						ResolvedSecret: &secret1NsName,
+						Name:            "listener-443-4",
+						GatewayName:     gatewayNsName,
+						Source:          listener443_4,
+						Valid:           true,
+						Routes:          map[graph.RouteKey]*graph.L7Route{},
+						L4Routes:        map[graph.L4RouteKey]*graph.L4Route{},
+						ResolvedSecrets: []types.NamespacedName{secret1NsName},
 					},
 				}...)
 				g.Routes = map[graph.RouteKey]*graph.L7Route{
@@ -1965,7 +1976,7 @@ func TestBuildConfiguration(t *testing.T) {
 				conf.SSLServers = append(conf.SSLServers, []VirtualServer{
 					{
 						Hostname: "foo.example.com",
-						SSL:      &SSL{KeyPairID: "ssl_keypair_test_secret-1"},
+						SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}},
 						PathRules: []PathRule{
 							{
 								Path:     "/valid",
@@ -1982,7 +1993,7 @@ func TestBuildConfiguration(t *testing.T) {
 					},
 					{
 						Hostname: wildcardHostname,
-						SSL:      &SSL{KeyPairID: "ssl_keypair_test_secret-1"},
+						SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}},
 						Port:     443,
 					},
 				}...)
@@ -2023,7 +2034,7 @@ func TestBuildConfiguration(t *testing.T) {
 						IsDefault: false,
 					},
 				}
-				conf.SSLServers[0].SSL = &SSL{KeyPairID: "ssl_keypair_test_secret-1"}
+				conf.SSLServers[0].SSL = &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}}
 				conf.SSLListenerHostnames = map[int32][]string{443: {""}}
 				return conf
 			}),
@@ -2095,7 +2106,7 @@ func TestBuildConfiguration(t *testing.T) {
 						Routes: map[graph.RouteKey]*graph.L7Route{
 							graph.CreateRouteKey(httpsHR5): httpsRouteHR5,
 						},
-						ResolvedSecret: &secret2NsName,
+						ResolvedSecrets: []types.NamespacedName{secret2NsName},
 					},
 					{
 						Name:        "listener-443-1",
@@ -2105,7 +2116,7 @@ func TestBuildConfiguration(t *testing.T) {
 						Routes: map[graph.RouteKey]*graph.L7Route{
 							graph.CreateRouteKey(httpsHR5): httpsRouteHR5,
 						},
-						ResolvedSecret: &secret1NsName,
+						ResolvedSecrets: []types.NamespacedName{secret1NsName},
 					},
 				}...)
 				g.Routes = map[graph.RouteKey]*graph.L7Route{
@@ -2138,12 +2149,12 @@ func TestBuildConfiguration(t *testing.T) {
 								},
 							},
 						},
-						SSL:  &SSL{KeyPairID: "ssl_keypair_test_secret-2"},
+						SSL:  &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-2"}},
 						Port: 443,
 					},
 					{
 						Hostname: wildcardHostname,
-						SSL:      &SSL{KeyPairID: "ssl_keypair_test_secret-1"},
+						SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}},
 						Port:     443,
 					},
 				}...)
@@ -2160,7 +2171,7 @@ func TestBuildConfiguration(t *testing.T) {
 						Key:  []byte("privateKey-2"),
 					},
 				}
-				conf.SSLServers[0].SSL = &SSL{KeyPairID: "ssl_keypair_test_secret-1"}
+				conf.SSLServers[0].SSL = &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}}
 				conf.SSLListenerHostnames = map[int32][]string{443: {"example.com", ""}}
 				return conf
 			}),
@@ -2177,7 +2188,7 @@ func TestBuildConfiguration(t *testing.T) {
 					Routes: map[graph.RouteKey]*graph.L7Route{
 						graph.CreateRouteKey(httpsHR8): httpsRouteHR8,
 					},
-					ResolvedSecret: &secret1NsName,
+					ResolvedSecrets: []types.NamespacedName{secret1NsName},
 				})
 				g.Routes = map[graph.RouteKey]*graph.L7Route{
 					graph.CreateRouteKey(httpsHR8): httpsRouteHR8,
@@ -2208,12 +2219,12 @@ func TestBuildConfiguration(t *testing.T) {
 								},
 							},
 						},
-						SSL:  &SSL{KeyPairID: "ssl_keypair_test_secret-1"},
+						SSL:  &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}},
 						Port: 443,
 					},
 					{
 						Hostname: wildcardHostname,
-						SSL:      &SSL{KeyPairID: "ssl_keypair_test_secret-1"},
+						SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}},
 						Port:     443,
 					},
 				}...)
@@ -2223,7 +2234,7 @@ func TestBuildConfiguration(t *testing.T) {
 				conf.CertBundles = map[CertBundleID]CertBundle{
 					"cert_bundle_test_configmap-1": []byte("cert-1"),
 				}
-				conf.SSLServers[0].SSL = &SSL{KeyPairID: "ssl_keypair_test_secret-1"}
+				conf.SSLServers[0].SSL = &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}}
 				conf.SSLListenerHostnames = map[int32][]string{443: {""}}
 				return conf
 			}),
@@ -2240,7 +2251,7 @@ func TestBuildConfiguration(t *testing.T) {
 					Routes: map[graph.RouteKey]*graph.L7Route{
 						graph.CreateRouteKey(httpsHR9): httpsRouteHR9,
 					},
-					ResolvedSecret: &secret1NsName,
+					ResolvedSecrets: []types.NamespacedName{secret1NsName},
 				})
 				g.Routes = map[graph.RouteKey]*graph.L7Route{
 					graph.CreateRouteKey(httpsHR9): httpsRouteHR9,
@@ -2271,12 +2282,12 @@ func TestBuildConfiguration(t *testing.T) {
 								},
 							},
 						},
-						SSL:  &SSL{KeyPairID: "ssl_keypair_test_secret-1"},
+						SSL:  &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}},
 						Port: 443,
 					},
 					{
 						Hostname: wildcardHostname,
-						SSL:      &SSL{KeyPairID: "ssl_keypair_test_secret-1"},
+						SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}},
 						Port:     443,
 					},
 				}...)
@@ -2286,7 +2297,7 @@ func TestBuildConfiguration(t *testing.T) {
 				conf.CertBundles = map[CertBundleID]CertBundle{
 					"cert_bundle_test_configmap-2": []byte("cert-2"),
 				}
-				conf.SSLServers[0].SSL = &SSL{KeyPairID: "ssl_keypair_test_secret-1"}
+				conf.SSLServers[0].SSL = &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}}
 				conf.SSLListenerHostnames = map[int32][]string{443: {""}}
 				return conf
 			}),
@@ -2366,7 +2377,7 @@ func TestBuildConfiguration(t *testing.T) {
 						Routes: map[graph.RouteKey]*graph.L7Route{
 							graph.CreateRouteKey(httpsHRWithPolicy): l7HTTPSRouteWithPolicy,
 						},
-						ResolvedSecret: &secret1NsName,
+						ResolvedSecrets: []types.NamespacedName{secret1NsName},
 					},
 				}...)
 				gw.Policies = []*graph.Policy{gwPolicy1, gwPolicy2}
@@ -2386,7 +2397,7 @@ func TestBuildConfiguration(t *testing.T) {
 						IsDefault: true,
 						Port:      443,
 						Policies:  []policies.Policy{gwPolicy1.Source, gwPolicy2.Source},
-						SSL:       &SSL{KeyPairID: "ssl_keypair_test_secret-1"},
+						SSL:       &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}},
 					},
 					{
 						Hostname: "policy.com",
@@ -2403,13 +2414,13 @@ func TestBuildConfiguration(t *testing.T) {
 								Policies: []policies.Policy{hrPolicy2.Source},
 							},
 						},
-						SSL:      &SSL{KeyPairID: "ssl_keypair_test_secret-1"},
+						SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}},
 						Port:     443,
 						Policies: []policies.Policy{gwPolicy1.Source, gwPolicy2.Source},
 					},
 					{
 						Hostname: wildcardHostname,
-						SSL:      &SSL{KeyPairID: "ssl_keypair_test_secret-1"},
+						SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}},
 						Port:     443,
 						Policies: []policies.Policy{gwPolicy1.Source, gwPolicy2.Source},
 					},
@@ -6819,7 +6830,7 @@ func TestBuildConfiguration_GatewaysAndListeners(t *testing.T) {
 						Routes: map[graph.RouteKey]*graph.L7Route{
 							graph.CreateRouteKey(httpsHR1Invalid): httpsRouteHR1Invalid,
 						},
-						ResolvedSecret: &secret1NsName,
+						ResolvedSecrets: []types.NamespacedName{secret1NsName},
 					},
 				}...)
 				g.Routes[graph.CreateRouteKey(hr1Invalid)] = routeHR1Invalid
@@ -6833,10 +6844,10 @@ func TestBuildConfiguration_GatewaysAndListeners(t *testing.T) {
 				}}
 				conf.SSLServers = append(conf.SSLServers, VirtualServer{
 					Hostname: wildcardHostname,
-					SSL:      &SSL{KeyPairID: "ssl_keypair_test_secret-1"},
+					SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}},
 					Port:     443,
 				})
-				conf.SSLServers[0].SSL = &SSL{KeyPairID: "ssl_keypair_test_secret-1"}
+				conf.SSLServers[0].SSL = &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}}
 				conf.SSLListenerHostnames = map[int32][]string{443: {""}}
 				return conf
 			}),
@@ -6848,20 +6859,20 @@ func TestBuildConfiguration_GatewaysAndListeners(t *testing.T) {
 				gw := g.Gateways[gatewayNsName]
 				gw.Listeners = append(gw.Listeners, []*graph.Listener{
 					{
-						Name:           "listener-443-1",
-						GatewayName:    gatewayNsName,
-						Source:         listener443, // nil hostname
-						Valid:          true,
-						Routes:         map[graph.RouteKey]*graph.L7Route{},
-						ResolvedSecret: &secret1NsName,
+						Name:            "listener-443-1",
+						GatewayName:     gatewayNsName,
+						Source:          listener443, // nil hostname
+						Valid:           true,
+						Routes:          map[graph.RouteKey]*graph.L7Route{},
+						ResolvedSecrets: []types.NamespacedName{secret1NsName},
 					},
 					{
-						Name:           "listener-443-with-hostname",
-						GatewayName:    gatewayNsName,
-						Source:         listener443WithHostname, // non-nil hostname
-						Valid:          true,
-						Routes:         map[graph.RouteKey]*graph.L7Route{},
-						ResolvedSecret: &secret2NsName,
+						Name:            "listener-443-with-hostname",
+						GatewayName:     gatewayNsName,
+						Source:          listener443WithHostname, // non-nil hostname
+						Valid:           true,
+						Routes:          map[graph.RouteKey]*graph.L7Route{},
+						ResolvedSecrets: []types.NamespacedName{secret2NsName},
 					},
 				}...)
 				g.ReferencedSecrets = map[types.NamespacedName]*secrets.Secret{
@@ -6875,12 +6886,12 @@ func TestBuildConfiguration_GatewaysAndListeners(t *testing.T) {
 				conf.SSLServers = append(conf.SSLServers, []VirtualServer{
 					{
 						Hostname: string(hostname),
-						SSL:      &SSL{KeyPairID: "ssl_keypair_test_secret-2"},
+						SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-2"}},
 						Port:     443,
 					},
 					{
 						Hostname: wildcardHostname,
-						SSL:      &SSL{KeyPairID: "ssl_keypair_test_secret-1"},
+						SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}},
 						Port:     443,
 					},
 				}...)
@@ -6888,7 +6899,7 @@ func TestBuildConfiguration_GatewaysAndListeners(t *testing.T) {
 					Cert: []byte("cert-2"),
 					Key:  []byte("privateKey-2"),
 				}
-				conf.SSLServers[0].SSL = &SSL{KeyPairID: "ssl_keypair_test_secret-1"}
+				conf.SSLServers[0].SSL = &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}}
 				conf.SSLListenerHostnames = map[int32][]string{443: {"", "example.com"}}
 				return conf
 			}),
@@ -6898,11 +6909,11 @@ func TestBuildConfiguration_GatewaysAndListeners(t *testing.T) {
 			graph: getModifiedGraph(func(g *graph.Graph) *graph.Graph {
 				gw := g.Gateways[gatewayNsName]
 				gw.Listeners = append(gw.Listeners, &graph.Listener{
-					Name:           "invalid-listener",
-					GatewayName:    gatewayNsName,
-					Source:         invalidListener,
-					Valid:          false,
-					ResolvedSecret: &secret1NsName,
+					Name:            "invalid-listener",
+					GatewayName:     gatewayNsName,
+					Source:          invalidListener,
+					Valid:           false,
+					ResolvedSecrets: []types.NamespacedName{secret1NsName},
 				})
 				g.Routes = map[graph.RouteKey]*graph.L7Route{
 					graph.CreateRouteKey(httpsHR1): httpsRouteHR1,
@@ -7021,7 +7032,7 @@ func TestBuildConfiguration_GatewaysAndListeners(t *testing.T) {
 						Routes: map[graph.RouteKey]*graph.L7Route{
 							graph.CreateRouteKey(tlsHR): tlsRoute,
 						},
-						ResolvedSecret: &secret1NsName,
+						ResolvedSecrets: []types.NamespacedName{secret1NsName},
 					})
 					g.Routes = map[graph.RouteKey]*graph.L7Route{
 						graph.CreateRouteKey(tlsHR): tlsRoute,
@@ -7045,7 +7056,7 @@ func TestBuildConfiguration_GatewaysAndListeners(t *testing.T) {
 							IsDefault: true,
 							Port:      443,
 							SSL: &SSL{
-								KeyPairID:           "ssl_keypair_test_secret-1",
+								KeyPairIDs:          []SSLKeyPairID{"ssl_keypair_test_secret-1"},
 								Protocols:           "TLSv1.2 TLSv1.3",
 								Ciphers:             "ECDHE-RSA-AES256-GCM-SHA384:HIGH:!aNULL:!MD5",
 								PreferServerCiphers: true,
@@ -7056,7 +7067,7 @@ func TestBuildConfiguration_GatewaysAndListeners(t *testing.T) {
 							Port:      443,
 							Hostname:  "foo.example.com",
 							SSL: &SSL{
-								KeyPairID:           "ssl_keypair_test_secret-1",
+								KeyPairIDs:          []SSLKeyPairID{"ssl_keypair_test_secret-1"},
 								Protocols:           "TLSv1.2 TLSv1.3",
 								Ciphers:             "ECDHE-RSA-AES256-GCM-SHA384:HIGH:!aNULL:!MD5",
 								PreferServerCiphers: true,
@@ -7079,7 +7090,7 @@ func TestBuildConfiguration_GatewaysAndListeners(t *testing.T) {
 							Port:      443,
 							Hostname:  "~^",
 							SSL: &SSL{
-								KeyPairID:           "ssl_keypair_test_secret-1",
+								KeyPairIDs:          []SSLKeyPairID{"ssl_keypair_test_secret-1"},
 								Protocols:           "TLSv1.2 TLSv1.3",
 								Ciphers:             "ECDHE-RSA-AES256-GCM-SHA384:HIGH:!aNULL:!MD5",
 								PreferServerCiphers: true,
@@ -7430,8 +7441,8 @@ func TestBuildSSLKeyPairs(t *testing.T) {
 			gateway: &graph.Gateway{
 				Listeners: []*graph.Listener{
 					{
-						Valid:          true,
-						ResolvedSecret: &secretNsName,
+						Valid:           true,
+						ResolvedSecrets: []types.NamespacedName{secretNsName},
 					},
 				},
 			},
@@ -7450,8 +7461,8 @@ func TestBuildSSLKeyPairs(t *testing.T) {
 			gateway: &graph.Gateway{
 				Listeners: []*graph.Listener{
 					{
-						Valid:          true,
-						ResolvedSecret: &secretNsName,
+						Valid:           true,
+						ResolvedSecrets: []types.NamespacedName{secretNsName},
 					},
 				},
 			},
@@ -7476,8 +7487,8 @@ func TestBuildSSLKeyPairs(t *testing.T) {
 			gateway: &graph.Gateway{
 				Listeners: []*graph.Listener{
 					{
-						Valid:          false,
-						ResolvedSecret: &secretNsName,
+						Valid:           false,
+						ResolvedSecrets: []types.NamespacedName{secretNsName},
 					},
 				},
 			},
@@ -7491,8 +7502,8 @@ func TestBuildSSLKeyPairs(t *testing.T) {
 			gateway: &graph.Gateway{
 				Listeners: []*graph.Listener{
 					{
-						Valid:          true,
-						ResolvedSecret: nil,
+						Valid:           true,
+						ResolvedSecrets: nil,
 					},
 				},
 			},

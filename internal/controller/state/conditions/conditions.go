@@ -589,7 +589,11 @@ func NewDefaultListenerConditions(existingConditions []Condition) []Condition {
 	defaultConds := []Condition{
 		NewListenerAccepted(),
 		NewListenerProgrammed(),
-		NewListenerResolvedRefs(),
+	}
+
+	// Only add ResolvedRefs=true if there are no existing ResolvedRefs conditions
+	if !hasResolvedRefsConditions(existingConditions) {
+		defaultConds = append(defaultConds, NewListenerResolvedRefs())
 	}
 
 	// Only add NoConflicts condition if there are no existing conflict-related conditions
@@ -598,6 +602,16 @@ func NewDefaultListenerConditions(existingConditions []Condition) []Condition {
 	}
 
 	return defaultConds
+}
+
+// hasResolvedRefsConditions checks if there are any existing ResolvedRefs conditions.
+func hasResolvedRefsConditions(conditions []Condition) bool {
+	for _, cond := range conditions {
+		if cond.Type == string(v1.ListenerConditionResolvedRefs) {
+			return true
+		}
+	}
+	return false
 }
 
 // hasConflictConditions checks if the Listener has any conflict-related conditions.
@@ -676,8 +690,9 @@ func NewListenerUnsupportedValue(msg string) []Condition {
 	}
 }
 
-// NewListenerInvalidCertificateRef returns Conditions that indicate that a CertificateRef of a Listener is invalid.
-func NewListenerInvalidCertificateRef(msg string) []Condition {
+// NewListenerInvalidCertificateRefNotAccepted returns Conditions that marks the listener as not Accepted,
+// ResolvedRefs false, and not Programmed.
+func NewListenerInvalidCertificateRefNotAccepted(msg string) []Condition {
 	return []Condition{
 		{
 			Type:    string(v1.ListenerConditionAccepted),
@@ -686,7 +701,7 @@ func NewListenerInvalidCertificateRef(msg string) []Condition {
 			Message: msg,
 		},
 		{
-			Type:    string(v1.ListenerReasonResolvedRefs),
+			Type:    string(v1.ListenerConditionResolvedRefs),
 			Status:  metav1.ConditionFalse,
 			Reason:  string(v1.ListenerReasonInvalidCertificateRef),
 			Message: msg,
@@ -695,12 +710,48 @@ func NewListenerInvalidCertificateRef(msg string) []Condition {
 	}
 }
 
+// NewListenerAllInvalidCertificateRefs returns Conditions that mark the listener as not Accepted,
+// ResolvedRefs false, and not Programmed when all CertificateRefs failed to resolve.
+// The reason should be one of the Gateway API ListenerConditionReason values
+// (e.g. InvalidCertificateRef or RefNotPermitted).
+func NewListenerAllInvalidCertificateRefs(msg string, reason string) []Condition {
+	return []Condition{
+		{
+			Type:    string(v1.ListenerConditionAccepted),
+			Status:  metav1.ConditionFalse,
+			Reason:  reason,
+			Message: msg,
+		},
+		{
+			Type:    string(v1.ListenerConditionResolvedRefs),
+			Status:  metav1.ConditionFalse,
+			Reason:  reason,
+			Message: msg,
+		},
+		NewListenerNotProgrammedInvalid(msg),
+	}
+}
+
+// NewListenerUnresolvedCertificateRef returns a Condition that indicates that one or more CertificateRefs
+// of a Listener could not be resolved, but the listener is still valid because other certificate refs
+// were resolved successfully. This only sets ResolvedRefs to false without affecting the Accepted condition.
+// The reason parameter should be one of the Gateway API ListenerConditionReason values
+// (e.g. InvalidCertificateRef or RefNotPermitted).
+func NewListenerUnresolvedCertificateRef(msg string, reason string) Condition {
+	return Condition{
+		Type:    string(v1.ListenerConditionResolvedRefs),
+		Status:  metav1.ConditionFalse,
+		Reason:  reason,
+		Message: msg,
+	}
+}
+
 // NewListenerInvalidRouteKinds returns Conditions that indicate that an invalid or unsupported Route kind is
 // specified by the Listener.
 func NewListenerInvalidRouteKinds(msg string) []Condition {
 	return []Condition{
 		{
-			Type:    string(v1.ListenerReasonResolvedRefs),
+			Type:    string(v1.ListenerConditionResolvedRefs),
 			Status:  metav1.ConditionFalse,
 			Reason:  string(v1.ListenerReasonInvalidRouteKinds),
 			Message: msg,
@@ -773,7 +824,7 @@ func NewListenerRefNotPermitted(msg string) []Condition {
 			Message: msg,
 		},
 		{
-			Type:    string(v1.ListenerReasonResolvedRefs),
+			Type:    string(v1.ListenerConditionResolvedRefs),
 			Status:  metav1.ConditionFalse,
 			Reason:  string(v1.ListenerReasonRefNotPermitted),
 			Message: msg,
