@@ -141,7 +141,7 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 	var healthcheckPort int32
 	if isNginxReadinessProbeExposed(nProxyCfg) {
 		healthcheckPort = dataplane.GetNginxReadinessProbePort(nProxyCfg)
-		ports = append(ports, portProtoEntry{Port: healthcheckPort, Protocol: corev1.ProtocolTCP})
+		ports = appendUniquePortProtoEntry(ports, portProtoEntry{Port: healthcheckPort, Protocol: corev1.ProtocolTCP})
 	}
 
 	service, err := buildNginxService(
@@ -311,6 +311,16 @@ func (p *NginxProvisioner) buildPortsFromListeners(listeners []gatewayv1.Listene
 		}
 	}
 	return ports
+}
+
+// appendUniquePortProtoEntry appends the entry to ports only if an identical port+protocol does not already exist.
+func appendUniquePortProtoEntry(ports []portProtoEntry, entry portProtoEntry) []portProtoEntry {
+	for _, p := range ports {
+		if p.Port == entry.Port && p.Protocol == entry.Protocol {
+			return ports
+		}
+	}
+	return append(ports, entry)
 }
 
 // cloneObjectMeta clones the given ObjectMeta.
@@ -696,7 +706,7 @@ func buildServicePorts(
 		if protocolsPerPort[entry.Port] > 1 {
 			name = fmt.Sprintf("port-%d-%s", entry.Port, strings.ToLower(string(entry.Protocol)))
 		}
-		if healthcheckPort > 0 && entry.Port == healthcheckPort {
+		if healthcheckPort > 0 && entry.Port == healthcheckPort && entry.Protocol == corev1.ProtocolTCP {
 			name = "health"
 		}
 		servicePort := corev1.ServicePort{
@@ -983,7 +993,10 @@ func (p *NginxProvisioner) buildNginxPodTemplateSpec(
 	// need to sort ports so everytime buildNginxPodTemplateSpec is called it will generate the exact same
 	// array of ports. This is needed to satisfy deterministic results of the method.
 	sort.Slice(containerPorts, func(i, j int) bool {
-		return containerPorts[i].ContainerPort < containerPorts[j].ContainerPort
+		if containerPorts[i].ContainerPort != containerPorts[j].ContainerPort {
+			return containerPorts[i].ContainerPort < containerPorts[j].ContainerPort
+		}
+		return containerPorts[i].Protocol < containerPorts[j].Protocol
 	})
 
 	image, pullPolicy := p.buildImage(nProxyCfg)
