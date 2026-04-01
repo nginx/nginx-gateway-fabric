@@ -2480,6 +2480,141 @@ func TestBindL4RouteToListeners(t *testing.T) {
 	}
 }
 
+func TestBindL4RouteToListeners_TCPAndUDPSamePortNoConflict(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	gw := &gatewayv1.Gateway{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: "test",
+			Name:      "gateway",
+		},
+	}
+	gwNsName := client.ObjectKeyFromObject(gw)
+
+	// Two listeners on the same port (53) but different protocols.
+	tcpListener := &Listener{
+		Name:        "tcp-listener",
+		GatewayName: gwNsName,
+		Source: gatewayv1.Listener{
+			Name:     "tcp-listener",
+			Port:     53,
+			Protocol: gatewayv1.TCPProtocolType,
+		},
+		SupportedKinds: []gatewayv1.RouteGroupKind{
+			{Kind: gatewayv1.Kind(kinds.TCPRoute)},
+		},
+		Valid:      true,
+		Attachable: true,
+		Routes:     map[RouteKey]*L7Route{},
+		L4Routes:   map[L4RouteKey]*L4Route{},
+	}
+	udpListener := &Listener{
+		Name:        "udp-listener",
+		GatewayName: gwNsName,
+		Source: gatewayv1.Listener{
+			Name:     "udp-listener",
+			Port:     53,
+			Protocol: gatewayv1.UDPProtocolType,
+		},
+		SupportedKinds: []gatewayv1.RouteGroupKind{
+			{Kind: gatewayv1.Kind(kinds.UDPRoute)},
+		},
+		Valid:      true,
+		Attachable: true,
+		Routes:     map[RouteKey]*L7Route{},
+		L4Routes:   map[L4RouteKey]*L4Route{},
+	}
+
+	gateway := &Gateway{
+		Source: gw,
+		Valid:  true,
+		DeploymentName: types.NamespacedName{
+			Namespace: "test",
+			Name:      "gateway",
+		},
+		Listeners: []*Listener{tcpListener, udpListener},
+	}
+
+	tcpRoute := &L4Route{
+		Source: &v1alpha2.TCPRoute{
+			ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "tcp-dns"},
+			Spec: v1alpha2.TCPRouteSpec{
+				CommonRouteSpec: gatewayv1.CommonRouteSpec{
+					ParentRefs: []gatewayv1.ParentReference{
+						{
+							Name:        gatewayv1.ObjectName(gw.Name),
+							SectionName: helpers.GetPointer[gatewayv1.SectionName]("tcp-listener"),
+						},
+					},
+				},
+			},
+		},
+		Valid:      true,
+		Attachable: true,
+		Spec:       L4RouteSpec{Hostnames: []gatewayv1.Hostname{}},
+		ParentRefs: []ParentRef{
+			{
+				Idx:         0,
+				Gateway:     &ParentRefGateway{NamespacedName: gwNsName},
+				SectionName: helpers.GetPointer[gatewayv1.SectionName]("tcp-listener"),
+			},
+		},
+	}
+
+	udpRoute := &L4Route{
+		Source: &v1alpha2.UDPRoute{
+			ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "udp-dns"},
+			Spec: v1alpha2.UDPRouteSpec{
+				CommonRouteSpec: gatewayv1.CommonRouteSpec{
+					ParentRefs: []gatewayv1.ParentReference{
+						{
+							Name:        gatewayv1.ObjectName(gw.Name),
+							SectionName: helpers.GetPointer[gatewayv1.SectionName]("udp-listener"),
+						},
+					},
+				},
+			},
+		},
+		Valid:      true,
+		Attachable: true,
+		Spec:       L4RouteSpec{Hostnames: []gatewayv1.Hostname{}},
+		ParentRefs: []ParentRef{
+			{
+				Idx:         0,
+				Gateway:     &ParentRefGateway{NamespacedName: gwNsName},
+				SectionName: helpers.GetPointer[gatewayv1.SectionName]("udp-listener"),
+			},
+		},
+	}
+
+	namespaces := map[types.NamespacedName]*v1.Namespace{
+		{Name: "test"}: {
+			ObjectMeta: metav1.ObjectMeta{
+				Name:   "test",
+				Labels: map[string]string{"app": "allowed"},
+			},
+		},
+	}
+
+	// Use a shared portHostnamesMap so hostname conflict detection spans both bind calls.
+	portHostnamesMap := map[string]struct{}{}
+
+	bindL4RouteToListeners(tcpRoute, gateway, namespaces, portHostnamesMap)
+	bindL4RouteToListeners(udpRoute, gateway, namespaces, portHostnamesMap)
+
+	// Both routes should attach successfully without HostnameConflict.
+	g.Expect(tcpRoute.ParentRefs[0].Attachment).ToNot(BeNil())
+	g.Expect(tcpRoute.ParentRefs[0].Attachment.Attached).To(BeTrue(),
+		"TCPRoute should attach to TCP listener on port 53")
+	g.Expect(tcpRoute.ParentRefs[0].Attachment.FailedConditions).To(BeEmpty())
+
+	g.Expect(udpRoute.ParentRefs[0].Attachment).ToNot(BeNil())
+	g.Expect(udpRoute.ParentRefs[0].Attachment.Attached).To(BeTrue(),
+		"UDPRoute should attach to UDP listener on port 53 without hostname conflict")
+	g.Expect(udpRoute.ParentRefs[0].Attachment.FailedConditions).To(BeEmpty())
+}
+
 // Helper functions for L4 route testing.
 func createTestL4Gateway(name string, listeners ...*Listener) *Gateway {
 	return &Gateway{
