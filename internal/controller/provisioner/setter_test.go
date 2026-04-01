@@ -502,55 +502,91 @@ func TestServiceAccountSpecSetter(t *testing.T) {
 func TestConfigMapSpecSetter(t *testing.T) {
 	t.Parallel()
 
+	ownerRef1 := metav1.OwnerReference{
+		APIVersion: "apps/v1",
+		Kind:       "Deployment",
+		Name:       "nginx-gateway",
+		UID:        "12345",
+	}
+
+	ownerRef2 := metav1.OwnerReference{
+		APIVersion: "apps/v1",
+		Kind:       "Deployment",
+		Name:       "other-deployment",
+		UID:        "67890",
+	}
+
 	tests := []struct {
-		existingData   map[string]string
-		existingLabels map[string]string
-		existingAnns   map[string]string
-		desiredData    map[string]string
-		desiredLabels  map[string]string
-		desiredAnns    map[string]string
-		name           string
-		shouldUpdate   bool
+		existingData      map[string]string
+		existingLabels    map[string]string
+		existingAnns      map[string]string
+		desiredData       map[string]string
+		desiredLabels     map[string]string
+		desiredAnns       map[string]string
+		name              string
+		existingOwnerRefs []metav1.OwnerReference
+		desiredOwnerRefs  []metav1.OwnerReference
+		shouldUpdate      bool
 	}{
 		{
-			name:           "updates when data differs",
-			existingData:   map[string]string{"key1": "old-value"},
-			existingLabels: map[string]string{"app": "nginx-gateway"},
-			existingAnns:   map[string]string{"annotation": "value"},
-			desiredData:    map[string]string{"key1": "new-value"},
-			desiredLabels:  map[string]string{"app": "nginx-gateway"},
-			desiredAnns:    map[string]string{"annotation": "value"},
-			shouldUpdate:   true,
+			name:              "updates when data differs",
+			existingData:      map[string]string{"key1": "old-value"},
+			existingLabels:    map[string]string{"app": "nginx-gateway"},
+			existingAnns:      map[string]string{"annotation": "value"},
+			existingOwnerRefs: []metav1.OwnerReference{ownerRef1},
+			desiredData:       map[string]string{"key1": "new-value"},
+			desiredLabels:     map[string]string{"app": "nginx-gateway"},
+			desiredAnns:       map[string]string{"annotation": "value"},
+			desiredOwnerRefs:  []metav1.OwnerReference{ownerRef1},
+			shouldUpdate:      true,
 		},
 		{
-			name:           "updates when labels differ",
-			existingData:   map[string]string{"key1": "value"},
-			existingLabels: map[string]string{"app": "old-app"},
-			existingAnns:   map[string]string{"annotation": "value"},
-			desiredData:    map[string]string{"key1": "value"},
-			desiredLabels:  map[string]string{"app": "nginx-gateway"},
-			desiredAnns:    map[string]string{"annotation": "value"},
-			shouldUpdate:   true,
+			name:              "updates when labels differ",
+			existingData:      map[string]string{"key1": "value"},
+			existingLabels:    map[string]string{"app": "old-app"},
+			existingAnns:      map[string]string{"annotation": "value"},
+			existingOwnerRefs: []metav1.OwnerReference{ownerRef1},
+			desiredData:       map[string]string{"key1": "value"},
+			desiredLabels:     map[string]string{"app": "nginx-gateway"},
+			desiredAnns:       map[string]string{"annotation": "value"},
+			desiredOwnerRefs:  []metav1.OwnerReference{ownerRef1},
+			shouldUpdate:      true,
 		},
 		{
-			name:           "updates when annotations differ",
-			existingData:   map[string]string{"key1": "value"},
-			existingLabels: map[string]string{"app": "nginx-gateway"},
-			existingAnns:   map[string]string{"annotation": "old-value"},
-			desiredData:    map[string]string{"key1": "value"},
-			desiredLabels:  map[string]string{"app": "nginx-gateway"},
-			desiredAnns:    map[string]string{"annotation": "new-value"},
-			shouldUpdate:   true,
+			name:              "updates when annotations differ",
+			existingData:      map[string]string{"key1": "value"},
+			existingLabels:    map[string]string{"app": "nginx-gateway"},
+			existingAnns:      map[string]string{"annotation": "old-value"},
+			existingOwnerRefs: []metav1.OwnerReference{ownerRef1},
+			desiredData:       map[string]string{"key1": "value"},
+			desiredLabels:     map[string]string{"app": "nginx-gateway"},
+			desiredAnns:       map[string]string{"annotation": "new-value"},
+			desiredOwnerRefs:  []metav1.OwnerReference{ownerRef1},
+			shouldUpdate:      true,
 		},
 		{
-			name:           "no update when everything matches",
-			existingData:   map[string]string{"key1": "value"},
-			existingLabels: map[string]string{"app": "nginx-gateway"},
-			existingAnns:   map[string]string{"annotation": "value"},
-			desiredData:    map[string]string{"key1": "value"},
-			desiredLabels:  map[string]string{"app": "nginx-gateway"},
-			desiredAnns:    map[string]string{"annotation": "value"},
-			shouldUpdate:   false,
+			name:              "updates when owner references differ",
+			existingData:      map[string]string{"key1": "value"},
+			existingLabels:    map[string]string{"app": "nginx-gateway"},
+			existingAnns:      map[string]string{"annotation": "value"},
+			existingOwnerRefs: []metav1.OwnerReference{ownerRef1},
+			desiredData:       map[string]string{"key1": "value"},
+			desiredLabels:     map[string]string{"app": "nginx-gateway"},
+			desiredAnns:       map[string]string{"annotation": "value"},
+			desiredOwnerRefs:  []metav1.OwnerReference{ownerRef2},
+			shouldUpdate:      true,
+		},
+		{
+			name:              "no update when everything matches",
+			existingData:      map[string]string{"key1": "value"},
+			existingLabels:    map[string]string{"app": "nginx-gateway"},
+			existingAnns:      map[string]string{"annotation": "value"},
+			existingOwnerRefs: []metav1.OwnerReference{ownerRef1},
+			desiredData:       map[string]string{"key1": "value"},
+			desiredLabels:     map[string]string{"app": "nginx-gateway"},
+			desiredAnns:       map[string]string{"annotation": "value"},
+			desiredOwnerRefs:  []metav1.OwnerReference{ownerRef1},
+			shouldUpdate:      false,
 		},
 	}
 
@@ -561,10 +597,11 @@ func TestConfigMapSpecSetter(t *testing.T) {
 
 			existing := &corev1.ConfigMap{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:        "test-configmap",
-					Namespace:   "default",
-					Labels:      tt.existingLabels,
-					Annotations: tt.existingAnns,
+					Name:            "test-configmap",
+					Namespace:       "default",
+					Labels:          tt.existingLabels,
+					Annotations:     tt.existingAnns,
+					OwnerReferences: tt.existingOwnerRefs,
 				},
 				Data: tt.existingData,
 			}
@@ -581,10 +618,13 @@ func TestConfigMapSpecSetter(t *testing.T) {
 			for k, v := range existing.Annotations {
 				originalAnns[k] = v
 			}
+			originalOwnerRefs := make([]metav1.OwnerReference, len(existing.OwnerReferences))
+			copy(originalOwnerRefs, existing.OwnerReferences)
 
 			desiredMeta := metav1.ObjectMeta{
-				Labels:      tt.desiredLabels,
-				Annotations: tt.desiredAnns,
+				Labels:          tt.desiredLabels,
+				Annotations:     tt.desiredAnns,
+				OwnerReferences: tt.desiredOwnerRefs,
 			}
 
 			desiredTypeMeta := metav1.TypeMeta{
@@ -604,6 +644,7 @@ func TestConfigMapSpecSetter(t *testing.T) {
 
 				g.Expect(existing.Annotations).To(Equal(tt.desiredAnns))
 				g.Expect(existing.Labels).To(Equal(tt.desiredLabels))
+				g.Expect(existing.OwnerReferences).To(Equal(tt.desiredOwnerRefs))
 
 				g.Expect(existing.Data).To(Equal(tt.desiredData))
 			} else {
@@ -611,6 +652,7 @@ func TestConfigMapSpecSetter(t *testing.T) {
 
 				g.Expect(existing.Labels).To(Equal(originalLabels))
 				g.Expect(existing.Annotations).To(Equal(originalAnns))
+				g.Expect(existing.OwnerReferences).To(Equal(originalOwnerRefs))
 
 				// TypeMeta should not be set when no update occurs
 				g.Expect(existing.TypeMeta).To(Equal(metav1.TypeMeta{}))

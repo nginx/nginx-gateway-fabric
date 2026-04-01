@@ -176,7 +176,8 @@ func configMapSpecSetter(
 		// and trigger a Deployment restart
 		if maps.Equal(configMap.Labels, objectMeta.Labels) &&
 			maps.Equal(configMap.Annotations, objectMeta.Annotations) &&
-			maps.Equal(configMap.Data, data) {
+			maps.Equal(configMap.Data, data) &&
+			slices.Equal(configMap.OwnerReferences, objectMeta.OwnerReferences) {
 			return nil
 		}
 
