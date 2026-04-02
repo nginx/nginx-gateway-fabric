@@ -1791,7 +1791,7 @@ func TestValidateGatewayParametersRef(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			conds, _ := validateGatewayRefs(test.gw, test.np, nil, nil)
+			conds, _, _, _ := validateGatewayRefs(test.gw, test.np, nil, nil)
 			g.Expect(conds).To(BeEquivalentTo(test.expConds))
 		})
 	}

@@ -30,6 +30,12 @@ type Gateway struct {
 	EffectiveNginxProxy *EffectiveNginxProxy
 	// SecretRef is the namespaced name of the secret referenced by the Gateway for backend TLS.
 	SecretRef *types.NamespacedName
+	// PerPortFrontendSecretRefs maps port numbers to a list of namespaced names
+	// of secrets referenced by the Gateway for frontend TLS on that port.
+	PerPortFrontendSecretRefs map[int32][]*types.NamespacedName
+	// DefaultFrontendSecretRefs is the namespaced name of the secret referenced
+	// defined in the default section of the frontend TLS spec of the Gateway.
+	DefaultFrontendSecretRefs []*types.NamespacedName
 	// DeploymentName is the name of the nginx Deployment associated with this Gateway.
 	DeploymentName types.NamespacedName
 	// Listeners include the listeners of the Gateway.
@@ -41,6 +47,15 @@ type Gateway struct {
 	// Valid indicates whether the Gateway Spec is valid.
 	Valid bool
 }
+
+// type FrontendTLSConfig struct {
+// 	// PerPortFrontendSecretRefs maps port numbers to a list of namespaced names
+// 	// of secrets referenced by the Gateway for frontend TLS on that port.
+// 	PerPortFrontendSecretRefs map[int32][]*types.NamespacedName
+// 	// DefaultFrontendSecretRefs is the namespaced name of the secret referenced
+// 	// defined in the default section of the frontend TLS spec of the Gateway.
+// 	DefaultFrontendSecretRefs []*types.NamespacedName
+// }
 
 // processGateways determines which Gateway resources belong to NGF (determined by the Gateway GatewayClassName field).
 func processGateways(
@@ -92,7 +107,13 @@ func buildGateways(
 
 		effectiveNginxProxy := buildEffectiveNginxProxy(gcNp, np)
 
-		conds, valid, secretRefNsName := validateGateway(gw, gc, np, resourceResolver, refGrantResolver)
+		conds, valid, secretRefNsName, defaultFrontendSecretRefs, perPortFrontendSecretRefs := validateGateway(
+			gw,
+			gc,
+			np,
+			resourceResolver,
+			refGrantResolver,
+		)
 
 		protectedPorts := make(ProtectedPorts)
 		if port, enabled := MetricsEnabledForNginxProxy(effectiveNginxProxy); enabled {
@@ -120,14 +141,16 @@ func buildGateways(
 			}
 		} else {
 			builtGateways[gwNsName] = &Gateway{
-				Source:              gw,
-				Listeners:           buildListeners(gw, resourceResolver, refGrantResolver, protectedPorts),
-				NginxProxy:          np,
-				EffectiveNginxProxy: effectiveNginxProxy,
-				Valid:               true,
-				Conditions:          conds,
-				DeploymentName:      deploymentName,
-				SecretRef:           secretRefNsName,
+				Source:                    gw,
+				Listeners:                 buildListeners(gw, resourceResolver, refGrantResolver, protectedPorts),
+				NginxProxy:                np,
+				EffectiveNginxProxy:       effectiveNginxProxy,
+				Valid:                     true,
+				Conditions:                conds,
+				DeploymentName:            deploymentName,
+				SecretRef:                 secretRefNsName,
+				DefaultFrontendSecretRefs: defaultFrontendSecretRefs,
+				PerPortFrontendSecretRefs: perPortFrontendSecretRefs,
 			}
 		}
 	}
@@ -141,43 +164,56 @@ func validateGatewayRefs(
 	npCfg *NginxProxy,
 	resourceResolver resolver.Resolver,
 	refGrantResolver *referenceGrantResolver,
-) ([]conditions.Condition, *types.NamespacedName) {
+) ([]conditions.Condition, *types.NamespacedName, []*types.NamespacedName, map[int32][]*types.NamespacedName) {
 	if (gw.Spec.Infrastructure == nil || gw.Spec.Infrastructure.ParametersRef == nil) &&
-		(gw.Spec.TLS == nil || gw.Spec.TLS.Backend == nil) {
-		return nil, nil
+		(gw.Spec.TLS == nil || (gw.Spec.TLS.Backend == nil && gw.Spec.TLS.Frontend == nil)) {
+		return nil, nil, nil, nil
 	}
 
 	conds, parametersRefErrMsg := validateParametersRef(gw, npCfg)
 	paramsRefValid := len(conds) == 0
 
-	var secretNsName *types.NamespacedName
-	var tlsCond conditions.Condition
+	var backendSecretNsName *types.NamespacedName
+	var defaultFrontendSecretRefs []*types.NamespacedName
+	var perPortFrontendSecretRefs map[int32][]*types.NamespacedName
+	var backendTLSCond conditions.Condition
+	var frontendTLSCond conditions.Condition
 
 	if gw.Spec.TLS != nil {
 		path := field.NewPath("spec.tls")
 
 		if gw.Spec.TLS.Backend != nil {
 			backendPath := path.Child("backend")
-			tlsCond, secretNsName = validateGatewayTLSBackend(
+			backendTLSCond, backendSecretNsName = validateGatewayTLSBackend(
 				gw,
 				backendPath,
 				resourceResolver,
 				refGrantResolver,
 			)
 		}
+
+		if gw.Spec.TLS.Frontend != nil {
+			frontendPath := path.Child("frontend")
+			frontendTLSCond, defaultFrontendSecretRefs, perPortFrontendSecretRefs = validateGatewayTLSFrontend(
+				gw,
+				frontendPath,
+				resourceResolver,
+				refGrantResolver,
+			)
+		}
 	}
-	tlsValid := tlsCond == conditions.Condition{}
+	tlsValid := backendTLSCond == conditions.Condition{} || frontendTLSCond == conditions.Condition{}
 
 	switch {
 	case paramsRefValid && tlsValid:
 		conds = append(conds, conditions.NewGatewayResolvedRefs())
 	case !tlsValid:
-		conds = append(conds, tlsCond)
+		conds = append(conds, backendTLSCond, frontendTLSCond)
 	default:
 		conds = append(conds, conditions.NewGatewayRefInvalid(parametersRefErrMsg))
 	}
 
-	return conds, secretNsName
+	return conds, backendSecretNsName, defaultFrontendSecretRefs, perPortFrontendSecretRefs
 }
 
 // validateParametersRef validates the parametersRef field of the Gateway.
@@ -203,6 +239,62 @@ func validateParametersRef(gw *v1.Gateway, npCfg *NginxProxy) ([]conditions.Cond
 	}
 
 	return conds, parametersRefErrMsg
+}
+
+func validateGatewayTLSFrontend(
+	gw *v1.Gateway,
+	path *field.Path,
+	resourceResolver resolver.Resolver,
+	refGrantResolver *referenceGrantResolver,
+) (conditions.Condition, []*types.NamespacedName, map[int32][]*types.NamespacedName) {
+	var cond conditions.Condition
+
+	if gw.Spec.TLS == nil || gw.Spec.TLS.Frontend == nil {
+		return cond, nil, nil
+	}
+
+	frontend := gw.Spec.TLS.Frontend
+	var defaultFrontendSecretRefs []*types.NamespacedName
+	perPortFrontendSecretRefs := make(map[int32][]*types.NamespacedName)
+
+	if frontend.Default.Validation != nil && len(frontend.Default.Validation.CACertificateRefs) > 0 {
+		defaultCertRefs := frontend.Default.Validation.CACertificateRefs
+		defaultFieldPath := path.Child("spec.tls.frontend.default.validation.caCertificateRefs").Child("kind")
+		cond, defaultFrontendSecretRefs = getGatewayFrontendTLSSecretRefs(
+			gw,
+			defaultFieldPath,
+			resourceResolver,
+			refGrantResolver,
+			defaultCertRefs,
+		)
+	}
+
+	if len(frontend.PerPort) > 0 {
+		perPortCertRefs := make(map[int32][]v1.ObjectReference)
+
+		for _, port := range frontend.PerPort {
+			if port.TLS.Validation == nil || len(port.TLS.Validation.CACertificateRefs) == 0 {
+				continue
+			}
+			if _, exists := perPortCertRefs[port.Port]; !exists {
+				perPortCertRefs[port.Port] = port.TLS.Validation.CACertificateRefs
+			}
+		}
+		perPortFieldPath := path.Child("spec.tls.frontend.perPort.validation.caCertificateRefs").Child("kind")
+		for _, listener := range gw.Spec.Listeners {
+			if perPortCertRefs, foundPort := perPortCertRefs[listener.Port]; foundPort {
+				cond, perPortFrontendSecretRefs[listener.Port] = getGatewayFrontendTLSSecretRefs(
+					gw,
+					perPortFieldPath,
+					resourceResolver,
+					refGrantResolver,
+					perPortCertRefs,
+				)
+			}
+		}
+	}
+
+	return cond, defaultFrontendSecretRefs, perPortFrontendSecretRefs
 }
 
 func validateGatewayTLSBackend(
@@ -261,7 +353,7 @@ func validateGateway(
 	npCfg *NginxProxy,
 	resourceResolver resolver.Resolver,
 	refGrantResolver *referenceGrantResolver,
-) ([]conditions.Condition, bool, *types.NamespacedName) {
+) ([]conditions.Condition, bool, *types.NamespacedName, []*types.NamespacedName, map[int32][]*types.NamespacedName) {
 	var conds []conditions.Condition
 
 	if gc == nil {
@@ -287,10 +379,79 @@ func validateGateway(
 	conds = append(conds, validateUnsupportedGatewayFields(gw)...)
 
 	// Validate referenced resources
-	refsConds, secretRefNsName := validateGatewayRefs(gw, npCfg, resourceResolver, refGrantResolver)
+	refsConds, secretRefNsName, defaultFrontendSecretRefs, perPortFrontendSecretRefs := validateGatewayRefs(
+		gw,
+		npCfg,
+		resourceResolver,
+		refGrantResolver,
+	)
 	conds = append(conds, refsConds...)
 
-	return conds, valid, secretRefNsName
+	return conds, valid, secretRefNsName, defaultFrontendSecretRefs, perPortFrontendSecretRefs
+}
+
+func getGatewayFrontendTLSSecretRefs(
+	gw *v1.Gateway,
+	path *field.Path,
+	resourceResolver resolver.Resolver,
+	refGrantResolver *referenceGrantResolver,
+	certRefs []v1.ObjectReference,
+) (conditions.Condition, []*types.NamespacedName) {
+	if gw.Spec.TLS == nil || gw.Spec.TLS.Frontend == nil {
+		return conditions.Condition{}, nil
+	}
+
+	var secretRefs []*types.NamespacedName
+	var cond conditions.Condition
+
+	for _, cert := range certRefs {
+		if cert.Kind != kinds.Secret {
+			valErr := field.NotSupported(
+				path,
+				cert.Kind, []string{kinds.Secret},
+			)
+			msg := helpers.CapitalizeString(valErr.Error())
+			cond = conditions.NewGatewaySecretRefInvalid(msg)
+			continue
+		}
+
+		if cert.Group != "" && cert.Group != "core" {
+			valErr := field.NotSupported(
+				path,
+				cert.Group, []string{"core", ""},
+			)
+			msg := helpers.CapitalizeString(valErr.Error())
+			cond = conditions.NewGatewaySecretRefInvalid(msg)
+			continue
+		}
+
+		secretNsName, secretNs := getGatewayFrontendTLSSecretNsName(cert, gw)
+
+		if cert.Namespace != nil {
+			secretNsName.Namespace = string(*cert.Namespace)
+		}
+
+		if err := resourceResolver.Resolve(resolver.ResourceTypeSecret, *secretNsName); err != nil {
+			valErr := field.Invalid(path.Child("clientCertificateRef"), secretNsName, err.Error())
+			msg := helpers.CapitalizeString(valErr.Error())
+
+			return conditions.NewGatewaySecretRefInvalid(msg), nil
+		} else if secretNs != gw.Namespace {
+			if !refGrantResolver.refAllowed(toSecret(*secretNsName), fromGateway(gw.Namespace)) {
+				msg := fmt.Sprintf("secret ref %s not permitted by any ReferenceGrant", secretNsName)
+
+				return conditions.NewGatewayRefNotPermitted(msg), nil
+			}
+		}
+
+		secretRefs = append(secretRefs, secretNsName)
+	}
+
+	if len(secretRefs) == 0 {
+		return cond, nil
+	}
+
+	return cond, secretRefs
 }
 
 // getGatewayCertSecretNsName returns the NamespacedName of the secret referenced by the Gateway for backend TLS.
@@ -303,6 +464,19 @@ func getGatewayCertSecretNsName(gw *v1.Gateway) (*types.NamespacedName, string) 
 	return &types.NamespacedName{
 		Namespace: secretRefNs,
 		Name:      string(gatewayCert.Name),
+	}, secretRefNs
+}
+
+// getGatewayFrontendTLSSecretNsName returns the NamespacedName of the secret
+// referenced by the Gateway for frontend TLS.
+func getGatewayFrontendTLSSecretNsName(cert v1.ObjectReference, gw *v1.Gateway) (*types.NamespacedName, string) {
+	secretRefNs := gw.Namespace
+	if cert.Namespace != nil {
+		secretRefNs = string(*cert.Namespace)
+	}
+	return &types.NamespacedName{
+		Namespace: secretRefNs,
+		Name:      string(cert.Name),
 	}, secretRefNs
 }
 
@@ -446,10 +620,6 @@ func validateUnsupportedGatewayFields(gw *v1.Gateway) []conditions.Condition {
 
 	if gw.Spec.AllowedListeners != nil {
 		conds = append(conds, conditions.NewGatewayAcceptedUnsupportedField("AllowedListeners"))
-	}
-
-	if gw.Spec.TLS != nil && gw.Spec.TLS.Frontend != nil {
-		conds = append(conds, conditions.NewGatewayAcceptedUnsupportedField("TLS.Frontend"))
 	}
 
 	return conds

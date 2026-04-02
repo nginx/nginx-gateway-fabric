@@ -79,6 +79,9 @@ server {
           {{- if $s.SSL.PreferServerCiphers }}
     ssl_prefer_server_ciphers on;
           {{- end }}
+          {{- if $s.SSL.ClientCertificate}}
+    ssl_client_certificate {{ $s.SSL.ClientCertificate }};
+          {{- end }}
 
           {{- if $s.MisdirectedRequestVars }}
     if ({{ $s.MisdirectedRequestVars.SNIVar }} != {{ $s.MisdirectedRequestVars.HostVar }}) {

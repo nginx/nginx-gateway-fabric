@@ -125,6 +125,7 @@ type SSL struct {
 	CertificateKey      string
 	Protocols           string
 	Ciphers             string
+	ClientCertificate   string
 	PreferServerCiphers bool
 }
 

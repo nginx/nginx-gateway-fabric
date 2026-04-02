@@ -107,6 +107,7 @@ func BuildConfiguration(
 		backendGroups,
 		authCertBundles,
 	)
+	maps.Copy(certBundles, buildFrontendTLSCertBundles(gateway, sslServers, g.ReferencedSecrets))
 
 	config := Configuration{
 		HTTPServers:           httpServers,
@@ -438,6 +439,95 @@ func buildJWTRemoteTLSCABundles(
 	}
 
 	return bundles
+}
+
+func buildFrontendTLSCertBundles(
+	gateway *graph.Gateway,
+	sslServers []VirtualServer,
+	secretsMap map[types.NamespacedName]*secrets.Secret,
+) map[CertBundleID]CertBundle {
+	bundles := make(map[CertBundleID]CertBundle)
+
+	if !gateway.Valid || gateway.Source.Spec.TLS == nil || gateway.Source.Spec.TLS.Frontend == nil {
+		return bundles
+	}
+
+	// listenerCaCertRefs := make(map[int32]types.NamespacedName, 0)
+	for _, listener := range gateway.Listeners {
+		if listener.Source.Protocol != v1.HTTPSProtocolType {
+			continue
+		}
+		// listenerCaCertRefs maps listener ports to a types.NamespacedName
+		// The namespace/name is the port & name of the HTTPS listener
+		// This is used later to create a unique CertBundleID for each listener that references a CA cert bundle.
+		// e.g. /etc/nginx/certs/ssl_client_ca_443_https for a listener on port 443 that references a CA cert bundle.
+		// listenerCaCertRefs[listener.Source.Port] =
+		// 	types.NamespacedName{
+		// 		Namespace: fmt.Sprintf("%d", listener.Source.Port),
+		// 		Name:      listener.Name,
+		// 	}
+		perPortBundleData := make([]CertBundle, 0)
+		if perPortSecretRefs, exists := gateway.PerPortFrontendSecretRefs[listener.Source.Port]; exists {
+			for _, ref := range perPortSecretRefs {
+				perPortBundleData = append(perPortBundleData, getFrontendTLSCertBundleData(ref, gateway, secretsMap))
+			}
+			buildBundlesForSSLServers(sslServers, perPortBundleData, bundles, listener.Source.Port, listener.Name)
+		} else if gateway.Source.Spec.TLS.Frontend.Default.Validation != nil &&
+			gateway.Source.Spec.TLS.Frontend.Default.Validation.CACertificateRefs != nil {
+			defaultBundleData := make([]CertBundle, 0)
+			if defaultSecretRefs := gateway.DefaultFrontendSecretRefs; len(defaultSecretRefs) > 0 {
+				for _, ref := range defaultSecretRefs {
+					defaultBundleData = append(defaultBundleData, getFrontendTLSCertBundleData(ref, gateway, secretsMap))
+				}
+				buildBundlesForSSLServers(sslServers, defaultBundleData, bundles, listener.Source.Port, listener.Name)
+			}
+		}
+	}
+	return bundles
+}
+
+func getFrontendTLSCertBundleData(
+	ref *types.NamespacedName,
+	gateway *graph.Gateway,
+	secretsMap map[types.NamespacedName]*secrets.Secret,
+) []byte {
+	if ref.Name == "" {
+		return nil
+	}
+	secretNsName := types.NamespacedName{
+		Namespace: gateway.Source.Namespace,
+		Name:      ref.Name,
+	}
+	secret := secretsMap[secretNsName]
+	if secret == nil || secret.Source == nil || secret.Source.Data[secrets.CAKey] == nil {
+		return nil
+	}
+	return secret.Source.Data[secrets.CAKey]
+}
+
+func buildBundlesForSSLServers(
+	sslServers []VirtualServer,
+	bundleData []CertBundle,
+	bundles map[CertBundleID]CertBundle,
+	port int32,
+	listenerName string,
+) {
+	for _, server := range sslServers {
+		if server.SSL == nil {
+			continue
+		}
+		// ref := listenerCaCertRefs[server.Port]
+		id := generateCertBundleIDFrontendTLS(port, listenerName)
+		if _, exists := bundles[id]; !exists {
+			for _, v := range bundleData {
+				bundles[id] = append(bundles[id], v...)
+			}
+		}
+
+		for id := range bundles {
+			server.SSL.ClientCertBundleID = id
+		}
+	}
 }
 
 func buildRefCertificateBundles(
@@ -1248,6 +1338,13 @@ func listenerHostnameMoreSpecific(host1, host2 *v1.Hostname) bool {
 // The ID is safe to use as a file name.
 func generateSSLKeyPairID(secret types.NamespacedName) SSLKeyPairID {
 	return SSLKeyPairID(fmt.Sprintf("ssl_keypair_%s_%s", secret.Namespace, secret.Name))
+}
+
+// generateCertBundleIDFrontendTLS generates an ID for the certificate bundle based on the listener port and name.
+// It is guaranteed to be unique per unique listener port and name combination.
+// The ID is safe to use as a file name.
+func generateCertBundleIDFrontendTLS(port int32, listenerName string) CertBundleID {
+	return CertBundleID(fmt.Sprintf("cert_bundle_%d_%s", port, listenerName))
 }
 
 // generateCertBundleID generates an ID for the certificate bundle based on the ConfigMap/Secret namespaced name.

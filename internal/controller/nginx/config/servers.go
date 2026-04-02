@@ -203,6 +203,7 @@ func createSSLServer(
 			Protocols:           virtualServer.SSL.Protocols,
 			Ciphers:             virtualServer.SSL.Ciphers,
 			PreferServerCiphers: virtualServer.SSL.PreferServerCiphers,
+			ClientCertificate:   generateCertBundleFileName(virtualServer.SSL.ClientCertBundleID),
 		},
 		Locations: locs,
 		GRPC:      grpc,

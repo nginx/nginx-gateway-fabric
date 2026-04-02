@@ -184,13 +184,10 @@ const (
 
 // SSL is the SSL configuration for a server.
 type SSL struct {
-	// KeyPairID is the ID of the corresponding SSLKeyPair for the server.
-	KeyPairID SSLKeyPairID
-	// Protocols specifies the SSL/TLS protocols to enable.
-	Protocols string
-	// Ciphers specifies the SSL/TLS ciphers to use.
-	Ciphers string
-	// PreferServerCiphers specifies whether server ciphers should be preferred over client ciphers.
+	KeyPairID           SSLKeyPairID
+	Protocols           string
+	Ciphers             string
+	ClientCertBundleID  CertBundleID
 	PreferServerCiphers bool
 }
 
