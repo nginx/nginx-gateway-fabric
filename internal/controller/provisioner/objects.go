@@ -50,8 +50,8 @@ const (
 	defaultWAFEnforcerImagePath  = "private-registry.nginx.com/nap/waf-enforcer"
 	defaultWAFConfigMgrImagePath = "private-registry.nginx.com/nap/waf-config-mgr"
 	// FIXME(ciarams87): Figure out best way to handle WAF image tags.
-	defaultWAFEnforcerImageTag  = "5.11.2"
-	defaultWAFConfigMgrImageTag = "5.11.2"
+	defaultWAFEnforcerImageTag  = "5.12.1"
+	defaultWAFConfigMgrImageTag = "5.12.1"
 
 	// WAF shared volume names.
 	appProtectBundlesVolumeName  = "app-protect-bundles"
