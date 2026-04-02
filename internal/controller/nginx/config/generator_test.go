@@ -50,7 +50,7 @@ func TestGenerate(t *testing.T) {
 			{
 				Hostname: "example.com",
 				SSL: &dataplane.SSL{
-					KeyPairID: "test-keypair",
+					KeyPairIDs: []dataplane.SSLKeyPairID{"test-keypair"},
 				},
 				Port: 443,
 			},
