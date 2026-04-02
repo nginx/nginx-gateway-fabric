@@ -699,7 +699,7 @@ func TestProcessLayer4Servers(t *testing.T) {
 
 	tests := []struct {
 		upstreams      map[string]dataplane.Upstream
-		portSet        map[int32]struct{}
+		portSet        map[portProtoKey]struct{}
 		expectedServer *stream.Server
 		name           string
 		protocol       string
@@ -710,7 +710,7 @@ func TestProcessLayer4Servers(t *testing.T) {
 			name:          "empty servers",
 			servers:       []dataplane.Layer4VirtualServer{},
 			upstreams:     map[string]dataplane.Upstream{},
-			portSet:       map[int32]struct{}{},
+			portSet:       map[portProtoKey]struct{}{},
 			protocol:      string(v1.TCPProtocolType),
 			expectedCount: 0,
 		},
@@ -725,7 +725,7 @@ func TestProcessLayer4Servers(t *testing.T) {
 					Endpoints: []resolver.Endpoint{{Address: "10.0.0.1", Port: 8080}},
 				},
 			},
-			portSet:       map[int32]struct{}{},
+			portSet:       map[portProtoKey]struct{}{},
 			protocol:      string(v1.TCPProtocolType),
 			expectedCount: 1,
 			expectedServer: &stream.Server{
@@ -745,7 +745,7 @@ func TestProcessLayer4Servers(t *testing.T) {
 					Endpoints: []resolver.Endpoint{{Address: "10.0.0.2", Port: 53}},
 				},
 			},
-			portSet:       map[int32]struct{}{},
+			portSet:       map[portProtoKey]struct{}{},
 			protocol:      string(v1.UDPProtocolType),
 			expectedCount: 1,
 			expectedServer: &stream.Server{
@@ -775,7 +775,7 @@ func TestProcessLayer4Servers(t *testing.T) {
 					Endpoints: []resolver.Endpoint{{Address: "10.0.0.4", Port: 9000}},
 				},
 			},
-			portSet:       map[int32]struct{}{},
+			portSet:       map[portProtoKey]struct{}{},
 			protocol:      string(v1.TCPProtocolType),
 			expectedCount: 1,
 			expectedServer: &stream.Server{
@@ -785,7 +785,7 @@ func TestProcessLayer4Servers(t *testing.T) {
 			},
 		},
 		{
-			name: "skip server on port already in portSet",
+			name: "skip server on port+protocol already in portSet",
 			servers: []dataplane.Layer4VirtualServer{
 				{Port: 8080, Upstreams: []dataplane.Layer4Upstream{{Name: "backend1"}}},
 			},
@@ -795,9 +795,29 @@ func TestProcessLayer4Servers(t *testing.T) {
 					Endpoints: []resolver.Endpoint{{Address: "10.0.0.1", Port: 8080}},
 				},
 			},
-			portSet:       map[int32]struct{}{8080: {}},
+			portSet:       map[portProtoKey]struct{}{{port: 8080, protocol: "TCP"}: {}},
 			protocol:      string(v1.TCPProtocolType),
 			expectedCount: 0,
+		},
+		{
+			name: "allow UDP server when TCP already in portSet for same port",
+			servers: []dataplane.Layer4VirtualServer{
+				{Port: 8080, Upstreams: []dataplane.Layer4Upstream{{Name: "backend1"}}},
+			},
+			upstreams: map[string]dataplane.Upstream{
+				"backend1": {
+					Name:      "backend1",
+					Endpoints: []resolver.Endpoint{{Address: "10.0.0.1", Port: 8080}},
+				},
+			},
+			portSet:       map[portProtoKey]struct{}{{port: 8080, protocol: "TCP"}: {}},
+			protocol:      string(v1.UDPProtocolType),
+			expectedCount: 1,
+			expectedServer: &stream.Server{
+				Listen:     "8080 udp",
+				StatusZone: "UDP_8080",
+				ProxyPass:  "backend1",
+			},
 		},
 		{
 			name: "skip server with no upstreams",
@@ -805,7 +825,7 @@ func TestProcessLayer4Servers(t *testing.T) {
 				{Port: 8080, Upstreams: []dataplane.Layer4Upstream{}},
 			},
 			upstreams:     map[string]dataplane.Upstream{},
-			portSet:       map[int32]struct{}{},
+			portSet:       map[portProtoKey]struct{}{},
 			protocol:      string(v1.TCPProtocolType),
 			expectedCount: 0,
 		},
@@ -815,7 +835,7 @@ func TestProcessLayer4Servers(t *testing.T) {
 				{Port: 8080, Upstreams: []dataplane.Layer4Upstream{{Name: "missing-backend"}}},
 			},
 			upstreams:     map[string]dataplane.Upstream{},
-			portSet:       map[int32]struct{}{},
+			portSet:       map[portProtoKey]struct{}{},
 			protocol:      string(v1.TCPProtocolType),
 			expectedCount: 0,
 		},
@@ -830,7 +850,7 @@ func TestProcessLayer4Servers(t *testing.T) {
 					Endpoints: []resolver.Endpoint{},
 				},
 			},
-			portSet:       map[int32]struct{}{},
+			portSet:       map[portProtoKey]struct{}{},
 			protocol:      string(v1.TCPProtocolType),
 			expectedCount: 0,
 		},
@@ -849,7 +869,7 @@ func TestProcessLayer4Servers(t *testing.T) {
 				"backend-v1": {Name: "backend-v1", Endpoints: []resolver.Endpoint{}},
 				"backend-v2": {Name: "backend-v2", Endpoints: []resolver.Endpoint{}},
 			},
-			portSet:       map[int32]struct{}{},
+			portSet:       map[portProtoKey]struct{}{},
 			protocol:      string(v1.TCPProtocolType),
 			expectedCount: 0,
 		},
@@ -871,7 +891,7 @@ func TestProcessLayer4Servers(t *testing.T) {
 				},
 				"backend-v2": {Name: "backend-v2", Endpoints: []resolver.Endpoint{}},
 			},
-			portSet:       map[int32]struct{}{},
+			portSet:       map[portProtoKey]struct{}{},
 			protocol:      string(v1.TCPProtocolType),
 			expectedCount: 1,
 			expectedServer: &stream.Server{
@@ -896,7 +916,7 @@ func TestProcessLayer4Servers(t *testing.T) {
 					Endpoints: []resolver.Endpoint{{Address: "10.0.0.2", Port: 9000}},
 				},
 			},
-			portSet:       map[int32]struct{}{},
+			portSet:       map[portProtoKey]struct{}{},
 			protocol:      string(v1.TCPProtocolType),
 			expectedCount: 2,
 			expectedServer: &stream.Server{
@@ -915,7 +935,7 @@ func TestProcessLayer4Servers(t *testing.T) {
 			streamServers := []stream.Server{}
 			portSet := tt.portSet
 			if portSet == nil {
-				portSet = map[int32]struct{}{}
+				portSet = map[portProtoKey]struct{}{}
 			}
 
 			logger := logr.Discard()
