@@ -586,7 +586,7 @@ func TestBuildTLSRoute(t *testing.T) {
 				svcNsName: ipv4Svc,
 			},
 			resolver: alwaysTrueRefGrantResolver,
-			name: "IPv6 NginxProxy with IPv4-only Service" +
+			name: "IPv6 NginxProxy with IPv4-only Service " +
 				"BackendRef is accepted because Service IP family is not validated against NginxProxy IP family",
 		},
 		{
