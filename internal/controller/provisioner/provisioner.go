@@ -16,6 +16,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -220,6 +221,50 @@ func (p *NginxProvisioner) setResourceToDelete(gatewayNSName types.NamespacedNam
 	p.resourcesToDeleteOnStartup = append(p.resourcesToDeleteOnStartup, gatewayNSName)
 }
 
+// minimalObjectFactory is a map of constructors for creating minimal objects with only name and namespace set.
+var minimalObjectFactory = map[reflect.Type]func(name, namespace string) client.Object{
+	reflect.TypeOf(&appsv1.Deployment{}): func(name, namespace string) client.Object {
+		return &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace}}
+	},
+	reflect.TypeOf(&appsv1.DaemonSet{}): func(name, namespace string) client.Object {
+		return &appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace}}
+	},
+	reflect.TypeOf(&corev1.Service{}): func(name, namespace string) client.Object {
+		return &corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace}}
+	},
+	reflect.TypeOf(&corev1.ServiceAccount{}): func(name, namespace string) client.Object {
+		return &corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace}}
+	},
+	reflect.TypeOf(&corev1.ConfigMap{}): func(name, namespace string) client.Object {
+		return &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace}}
+	},
+	reflect.TypeOf(&corev1.Secret{}): func(name, namespace string) client.Object {
+		return &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace}}
+	},
+	reflect.TypeOf(&rbacv1.Role{}): func(name, namespace string) client.Object {
+		return &rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace}}
+	},
+	reflect.TypeOf(&rbacv1.RoleBinding{}): func(name, namespace string) client.Object {
+		return &rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace}}
+	},
+	reflect.TypeOf(&autoscalingv2.HorizontalPodAutoscaler{}): func(name, namespace string) client.Object {
+		return &autoscalingv2.HorizontalPodAutoscaler{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace}}
+	},
+}
+
+// createMinimalClone creates a new object of the same type with only name and namespace set.
+// This follows CreateOrUpdate's requirement that only name/namespace should be set on the input object.
+func createMinimalClone(obj client.Object) client.Object {
+	objType := reflect.TypeOf(obj)
+	factory, exists := minimalObjectFactory[objType]
+	if !exists {
+		panic(fmt.Errorf("failed to create minimal clone: no factory mapping for object type %T", obj))
+	}
+
+	// A new object will be created by this factory function
+	return factory(obj.GetName(), obj.GetNamespace())
+}
+
 //nolint:gocyclo // will refactor at some point
 func (p *NginxProvisioner) provisionNginx(
 	ctx context.Context,
@@ -247,6 +292,10 @@ func (p *NginxProvisioner) provisionNginx(
 	var deploymentObj *appsv1.Deployment
 	var daemonSetObj *appsv1.DaemonSet
 	for _, obj := range objects {
+		// Create a minimal clone with only name and namespace for CreateOrUpdate
+		// This follows the CreateOrUpdate documentation that says only name/namespace should be set
+		minimalObj := createMinimalClone(obj)
+
 		createCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 
 		var res controllerutil.OperationResult
@@ -256,7 +305,10 @@ func (p *NginxProvisioner) provisionNginx(
 			500*time.Millisecond,
 			true, /* poll immediately */
 			func(ctx context.Context) (bool, error) {
-				res, upsertErr = controllerutil.CreateOrUpdate(ctx, p.k8sClient, obj, objectSpecSetter(obj))
+				// Use minimalObj for CreateOrUpdate but pass both to objectSpecSetter so we can transfer
+				// the desired spec and other meta details of the object
+				res, upsertErr = controllerutil.CreateOrUpdate(ctx, p.k8sClient, minimalObj, objectSpecSetter(minimalObj, obj))
+
 				if upsertErr != nil {
 					if apierrors.IsInvalid(upsertErr) { // log this error at the error level
 						p.cfg.Logger.Error(
@@ -278,6 +330,13 @@ func (p *NginxProvisioner) provisionNginx(
 				return true, nil
 			},
 		); err != nil {
+			p.cfg.Logger.Error(
+				err,
+				"Failed to CreateOrUpdate nginx resource after retries",
+				"namespace", gateway.GetNamespace(),
+				"name", fmt.Sprintf("%s (%s)", resourceName, reflect.TypeOf(obj).Elem().Name()),
+			)
+
 			fullErr := errors.Join(err, upsertErr)
 			p.cfg.EventRecorder.Eventf(
 				obj,
@@ -293,7 +352,7 @@ func (p *NginxProvisioner) provisionNginx(
 		}
 		cancel()
 
-		switch o := obj.(type) {
+		switch o := minimalObj.(type) {
 		case *appsv1.Deployment:
 			deploymentObj = o
 			if res == controllerutil.OperationResultCreated {
@@ -306,22 +365,27 @@ func (p *NginxProvisioner) provisionNginx(
 			}
 		case *corev1.ConfigMap:
 			if res == controllerutil.OperationResultUpdated &&
-				strings.Contains(obj.GetName(), nginxAgentConfigMapNameSuffix) {
+				strings.HasSuffix(minimalObj.GetName(), nginxAgentConfigMapNameSuffix) {
 				agentConfigMapUpdated = true
 			}
 		}
 
 		if res != controllerutil.OperationResultCreated && res != controllerutil.OperationResultUpdated {
+			p.cfg.Logger.V(1).Info(
+				"nginx resource already up to date with this result: "+string(res),
+				"namespace", gateway.GetNamespace(),
+				"name", fmt.Sprintf("%s (%s)", resourceName, reflect.TypeOf(minimalObj).Elem().Name()),
+			)
 			continue
 		}
 
 		result := cases.Title(language.English, cases.Compact).String(string(res))
 		p.cfg.Logger.V(1).Info(
-			fmt.Sprintf("%s nginx %s", result, obj.GetObjectKind().GroupVersionKind().Kind),
+			fmt.Sprintf("%s nginx %s", result, reflect.TypeOf(minimalObj).Elem().Name()),
 			"namespace", gateway.GetNamespace(),
 			"name", resourceName,
 		)
-		p.store.registerResourceInGatewayConfig(client.ObjectKeyFromObject(gateway), obj)
+		p.store.registerResourceInGatewayConfig(client.ObjectKeyFromObject(gateway), minimalObj)
 	}
 
 	// if agent configmap was updated, then we'll need to restart the deployment/daemonset
@@ -332,13 +396,13 @@ func (p *NginxProvisioner) provisionNginx(
 		var object client.Object
 		if deploymentObj != nil {
 			if deploymentObj.Spec.Template.Annotations == nil {
-				deploymentObj.Annotations = make(map[string]string)
+				deploymentObj.Spec.Template.Annotations = make(map[string]string)
 			}
 			deploymentObj.Spec.Template.Annotations[controller.RestartedAnnotation] = time.Now().Format(time.RFC3339)
 			object = deploymentObj
 		} else if daemonSetObj != nil {
 			if daemonSetObj.Spec.Template.Annotations == nil {
-				daemonSetObj.Annotations = make(map[string]string)
+				daemonSetObj.Spec.Template.Annotations = make(map[string]string)
 			}
 			daemonSetObj.Spec.Template.Annotations[controller.RestartedAnnotation] = time.Now().Format(time.RFC3339)
 			object = daemonSetObj

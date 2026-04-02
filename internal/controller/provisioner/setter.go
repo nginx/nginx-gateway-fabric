@@ -2,6 +2,7 @@ package provisioner
 
 import (
 	"maps"
+	"reflect"
 	"slices"
 	"strings"
 
@@ -15,26 +16,46 @@ import (
 )
 
 // objectSpecSetter sets the spec of the provided object. This is used when creating or updating the object.
-func objectSpecSetter(object client.Object) controllerutil.MutateFn {
+//
+//nolint:gocyclo // This is the best we can do
+func objectSpecSetter(minimalObject, object client.Object) controllerutil.MutateFn {
 	switch obj := object.(type) {
 	case *appsv1.Deployment:
-		return deploymentSpecSetter(obj, obj.Spec, obj.ObjectMeta)
+		if minObj, ok := minimalObject.(*appsv1.Deployment); ok {
+			return deploymentSpecSetter(minObj, obj.Spec, obj.ObjectMeta)
+		}
 	case *autoscalingv2.HorizontalPodAutoscaler:
-		return hpaSpecSetter(obj, obj.Spec, obj.ObjectMeta)
+		if minObj, ok := minimalObject.(*autoscalingv2.HorizontalPodAutoscaler); ok {
+			return hpaSpecSetter(minObj, obj.Spec, obj.ObjectMeta)
+		}
 	case *appsv1.DaemonSet:
-		return daemonSetSpecSetter(obj, obj.Spec, obj.ObjectMeta)
+		if minObj, ok := minimalObject.(*appsv1.DaemonSet); ok {
+			return daemonSetSpecSetter(minObj, obj.Spec, obj.ObjectMeta)
+		}
 	case *corev1.Service:
-		return serviceSpecSetter(obj, obj.Spec, obj.ObjectMeta)
+		if minObj, ok := minimalObject.(*corev1.Service); ok {
+			return serviceSpecSetter(minObj, obj.Spec, obj.ObjectMeta)
+		}
 	case *corev1.ServiceAccount:
-		return serviceAccountSpecSetter(obj, obj.ObjectMeta)
+		if minObj, ok := minimalObject.(*corev1.ServiceAccount); ok {
+			return serviceAccountSpecSetter(minObj, obj.AutomountServiceAccountToken, obj.ObjectMeta)
+		}
 	case *corev1.ConfigMap:
-		return configMapSpecSetter(obj, obj.Data, obj.ObjectMeta)
+		if minObj, ok := minimalObject.(*corev1.ConfigMap); ok {
+			return configMapSpecSetter(minObj, obj.Data, obj.ObjectMeta)
+		}
 	case *corev1.Secret:
-		return secretSpecSetter(obj, obj.Data, obj.ObjectMeta)
+		if minObj, ok := minimalObject.(*corev1.Secret); ok {
+			return secretSpecSetter(minObj, obj.Data, obj.Type, obj.ObjectMeta)
+		}
 	case *rbacv1.Role:
-		return roleSpecSetter(obj, obj.Rules, obj.ObjectMeta)
+		if minObj, ok := minimalObject.(*rbacv1.Role); ok {
+			return roleSpecSetter(minObj, obj.Rules, obj.ObjectMeta)
+		}
 	case *rbacv1.RoleBinding:
-		return roleBindingSpecSetter(obj, obj.RoleRef, obj.Subjects, obj.ObjectMeta)
+		if minObj, ok := minimalObject.(*rbacv1.RoleBinding); ok {
+			return roleBindingSpecSetter(minObj, obj.RoleRef, obj.Subjects, obj.ObjectMeta)
+		}
 	}
 
 	return nil
@@ -46,8 +67,16 @@ func deploymentSpecSetter(
 	objectMeta metav1.ObjectMeta,
 ) controllerutil.MutateFn {
 	return func() error {
+		existingAnnotations := deployment.Annotations
+
+		// objectMeta fields
 		deployment.Labels = objectMeta.Labels
-		deployment.Annotations = mergeAnnotations(deployment.Annotations, objectMeta.Annotations)
+		deployment.OwnerReferences = objectMeta.OwnerReferences
+		// This works because the deployment object passed to this setter (minObj) gets updated by
+		// controllerutil.CreateOrUpdate with the existing cluster state. objectMeta.Annotations
+		// contains the desired annotations calculated when building the objects.
+		deployment.Annotations = mergeAnnotations(existingAnnotations, objectMeta.Annotations)
+
 		deployment.Spec = spec
 		return nil
 	}
@@ -59,8 +88,11 @@ func hpaSpecSetter(
 	objectMeta metav1.ObjectMeta,
 ) controllerutil.MutateFn {
 	return func() error {
+		// objectMeta fields
 		hpa.Labels = objectMeta.Labels
 		hpa.Annotations = objectMeta.Annotations
+		hpa.OwnerReferences = objectMeta.OwnerReferences
+
 		hpa.Spec = spec
 		return nil
 	}
@@ -72,8 +104,13 @@ func daemonSetSpecSetter(
 	objectMeta metav1.ObjectMeta,
 ) controllerutil.MutateFn {
 	return func() error {
+		existingAnnotations := daemonSet.Annotations
+
+		// objectMeta fields
 		daemonSet.Labels = objectMeta.Labels
-		daemonSet.Annotations = mergeAnnotations(daemonSet.Annotations, objectMeta.Annotations)
+		daemonSet.OwnerReferences = objectMeta.OwnerReferences
+		daemonSet.Annotations = mergeAnnotations(existingAnnotations, objectMeta.Annotations)
+
 		daemonSet.Spec = spec
 		return nil
 	}
@@ -85,8 +122,13 @@ func serviceSpecSetter(
 	objectMeta metav1.ObjectMeta,
 ) controllerutil.MutateFn {
 	return func() error {
+		existingAnnotations := service.Annotations
+
+		// objectMeta fields
 		service.Labels = objectMeta.Labels
-		service.Annotations = mergeAnnotations(service.Annotations, objectMeta.Annotations)
+		service.OwnerReferences = objectMeta.OwnerReferences
+		service.Annotations = mergeAnnotations(existingAnnotations, objectMeta.Annotations)
+
 		service.Spec = spec
 		return nil
 	}
@@ -94,11 +136,17 @@ func serviceSpecSetter(
 
 func serviceAccountSpecSetter(
 	serviceAccount *corev1.ServiceAccount,
+	automountServiceAccountToken *bool,
 	objectMeta metav1.ObjectMeta,
 ) controllerutil.MutateFn {
 	return func() error {
+		// objectMeta fields
 		serviceAccount.Labels = objectMeta.Labels
 		serviceAccount.Annotations = objectMeta.Annotations
+		serviceAccount.OwnerReferences = objectMeta.OwnerReferences
+
+		serviceAccount.AutomountServiceAccountToken = automountServiceAccountToken
+
 		return nil
 	}
 }
@@ -113,12 +161,16 @@ func configMapSpecSetter(
 		// and trigger a Deployment restart
 		if maps.Equal(configMap.Labels, objectMeta.Labels) &&
 			maps.Equal(configMap.Annotations, objectMeta.Annotations) &&
-			maps.Equal(configMap.Data, data) {
+			maps.Equal(configMap.Data, data) &&
+			reflect.DeepEqual(configMap.OwnerReferences, objectMeta.OwnerReferences) {
 			return nil
 		}
 
+		// objectMeta fields
 		configMap.Labels = objectMeta.Labels
 		configMap.Annotations = objectMeta.Annotations
+		configMap.OwnerReferences = objectMeta.OwnerReferences
+
 		configMap.Data = data
 		return nil
 	}
@@ -127,12 +179,18 @@ func configMapSpecSetter(
 func secretSpecSetter(
 	secret *corev1.Secret,
 	data map[string][]byte,
+	secretType corev1.SecretType,
 	objectMeta metav1.ObjectMeta,
 ) controllerutil.MutateFn {
 	return func() error {
+		// objectMeta fields
 		secret.Labels = objectMeta.Labels
 		secret.Annotations = objectMeta.Annotations
+		secret.OwnerReferences = objectMeta.OwnerReferences
+
 		secret.Data = data
+		secret.Type = secretType
+
 		return nil
 	}
 }
@@ -143,8 +201,11 @@ func roleSpecSetter(
 	objectMeta metav1.ObjectMeta,
 ) controllerutil.MutateFn {
 	return func() error {
+		// objectMeta fields
 		role.Labels = objectMeta.Labels
 		role.Annotations = objectMeta.Annotations
+		role.OwnerReferences = objectMeta.OwnerReferences
+
 		role.Rules = rules
 		return nil
 	}
@@ -157,8 +218,11 @@ func roleBindingSpecSetter(
 	objectMeta metav1.ObjectMeta,
 ) controllerutil.MutateFn {
 	return func() error {
+		// objectMeta fields
 		roleBinding.Labels = objectMeta.Labels
 		roleBinding.Annotations = objectMeta.Annotations
+		roleBinding.OwnerReferences = objectMeta.OwnerReferences
+
 		roleBinding.RoleRef = roleRef
 		roleBinding.Subjects = subjects
 		return nil
