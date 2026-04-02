@@ -3893,9 +3893,75 @@ func TestBuildUpstreams(t *testing.T) {
 		gateway,
 		fakeResolver,
 		referencedServices,
-		Dual,
 	)
 	g.Expect(upstreams).To(ConsistOf(expUpstreams))
+}
+
+func TestBuildUpstreamsAlwaysResolvesAllAddressTypes(t *testing.T) {
+	t.Parallel()
+
+	ref := graph.BackendRef{
+		SvcNsName:   types.NamespacedName{Namespace: "test", Name: "svc"},
+		ServicePort: apiv1.ServicePort{Port: 80},
+		Valid:       true,
+	}
+	referencedServices := map[types.NamespacedName]*graph.ReferencedService{
+		{Name: "svc", Namespace: "test"}: {},
+	}
+	makeGateway := func(np *graph.EffectiveNginxProxy) *graph.Gateway {
+		return &graph.Gateway{
+			Source:              &v1.Gateway{ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "gateway"}},
+			EffectiveNginxProxy: np,
+			Listeners: []*graph.Listener{
+				{
+					Valid: true,
+					Routes: map[graph.RouteKey]*graph.L7Route{
+						{NamespacedName: types.NamespacedName{Name: "hr", Namespace: "test"}}: {
+							Valid: true,
+							Spec:  graph.L7RouteSpec{Rules: refsToValidRules([]graph.BackendRef{ref})},
+						},
+					},
+				},
+			},
+		}
+	}
+
+	tests := []struct {
+		gateway *graph.Gateway
+		name    string
+	}{
+		{
+			name: "NginxProxy configured with IPv4" +
+				" resolver receives both IPv4 and IPv6 address types",
+			gateway: makeGateway(&graph.EffectiveNginxProxy{IPFamily: helpers.GetPointer(ngfAPIv1alpha2.IPv4)}),
+		},
+		{
+			name: "NginxProxy configured with IPv6" +
+				" resolver receives both IPv4 and IPv6 address types",
+			gateway: makeGateway(&graph.EffectiveNginxProxy{IPFamily: helpers.GetPointer(ngfAPIv1alpha2.IPv6)}),
+		},
+		{
+			name: "NginxProxy configured with Dual" +
+				" resolver receives both IPv4 and IPv6 address types",
+			gateway: makeGateway(&graph.EffectiveNginxProxy{IPFamily: helpers.GetPointer(ngfAPIv1alpha2.Dual)}),
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			fakeResolver := &resolverfakes.FakeServiceResolver{}
+			fakeResolver.ResolveReturns([]resolver.Endpoint{{Address: "10.0.0.1", Port: 80}}, nil)
+
+			buildUpstreams(t.Context(), logr.Discard(), tc.gateway, fakeResolver, referencedServices)
+
+			g.Expect(fakeResolver.ResolveCallCount()).To(Equal(1))
+			_, _, _, _, addressTypes := fakeResolver.ResolveArgsForCall(0)
+			g.Expect(addressTypes).To(ConsistOf(discoveryV1.AddressTypeIPv4, discoveryV1.AddressTypeIPv6))
+		})
+	}
 }
 
 func createBackendGroup(name string, ruleIdx int, backendNames ...string) BackendGroup {
@@ -4538,44 +4604,6 @@ func TestBuildPolicies(t *testing.T) {
 	}
 }
 
-func TestGetAllowedAddressType(t *testing.T) {
-	t.Parallel()
-	test := []struct {
-		msg      string
-		ipFamily IPFamilyType
-		expected []discoveryV1.AddressType
-	}{
-		{
-			msg:      "dual ip family",
-			ipFamily: Dual,
-			expected: []discoveryV1.AddressType{discoveryV1.AddressTypeIPv4, discoveryV1.AddressTypeIPv6},
-		},
-		{
-			msg:      "ipv4 ip family",
-			ipFamily: IPv4,
-			expected: []discoveryV1.AddressType{discoveryV1.AddressTypeIPv4},
-		},
-		{
-			msg:      "ipv6 ip family",
-			ipFamily: IPv6,
-			expected: []discoveryV1.AddressType{discoveryV1.AddressTypeIPv6},
-		},
-		{
-			msg:      "unknown ip family",
-			ipFamily: "unknown",
-			expected: []discoveryV1.AddressType{},
-		},
-	}
-
-	for _, tc := range test {
-		t.Run(tc.msg, func(t *testing.T) {
-			t.Parallel()
-			g := NewWithT(t)
-			g.Expect(getAllowedAddressType(tc.ipFamily)).To(Equal(tc.expected))
-		})
-	}
-}
-
 func TestCreateRatioVarName(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
@@ -4913,7 +4941,6 @@ func TestBuildStreamUpstreams(t *testing.T) {
 		gateway,
 		&fakeResolver,
 		referencedServices,
-		Dual,
 	)
 
 	expectedStreamUpstreams := []Upstream{
