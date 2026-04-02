@@ -10,6 +10,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
+	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
@@ -546,6 +547,47 @@ func TestBuildTLSRoute(t *testing.T) {
 			},
 			resolver: alwaysTrueRefGrantResolver,
 			name:     "BackendRef port nil",
+		},
+		{
+			gtr: validRefSameNs,
+			expected: &L4Route{
+				Source:    validRefSameNs,
+				RouteType: RouteTypeTLS,
+				ParentRefs: []ParentRef{
+					{
+						SectionName: helpers.GetPointer[gatewayv1.SectionName]("l1"),
+						Gateway: &ParentRefGateway{
+							NamespacedName: types.NamespacedName{
+								Namespace: "test",
+								Name:      "gateway",
+							},
+							EffectiveNginxProxy: &EffectiveNginxProxy{IPFamily: helpers.GetPointer(ngfAPI.IPv6)},
+						},
+					},
+				},
+				Spec: L4RouteSpec{
+					Hostnames: []gatewayv1.Hostname{"app.example.com"},
+					BackendRef: BackendRef{
+						SvcNsName:          svcNsName,
+						ServicePort:        apiv1.ServicePort{Port: 80},
+						Valid:              true,
+						InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
+					},
+				},
+				Attachable: true,
+				Valid:      true,
+			},
+			gateway: func() *Gateway {
+				gw := createGateway()
+				gw.EffectiveNginxProxy = &EffectiveNginxProxy{IPFamily: helpers.GetPointer(ngfAPI.IPv6)}
+				return gw
+			}(),
+			services: map[types.NamespacedName]*apiv1.Service{
+				svcNsName: ipv4Svc,
+			},
+			resolver: alwaysTrueRefGrantResolver,
+			name: "IPv6 NginxProxy with IPv4-only Service" +
+				"BackendRef is accepted because Service IP family is not validated against NginxProxy IP family",
 		},
 		{
 			gtr: diffNsBackendRef,

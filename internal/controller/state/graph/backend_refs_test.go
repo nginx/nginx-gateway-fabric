@@ -505,7 +505,7 @@ func TestValidateWeight(t *testing.T) {
 	}
 }
 
-func TestGetIPFamilyAndPortFromRef(t *testing.T) {
+func TestGetPortFromRef(t *testing.T) {
 	t.Parallel()
 	svc1 := &v1.Service{
 		ObjectMeta: metav1.ObjectMeta{

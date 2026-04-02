@@ -61,11 +61,6 @@ const (
 	// Used with Accepted (false).
 	RouteReasonUnsupportedConfiguration v1.RouteConditionReason = "UnsupportedConfiguration"
 
-	// RouteReasonInvalidIPFamily is used when the Service associated with the Route is not configured with
-	// the same IP family as the NGINX server.
-	// Used with ResolvedRefs (false).
-	RouteReasonInvalidIPFamily v1.RouteConditionReason = "InvalidServiceIPFamily"
-
 	// RouteReasonInvalidFilter is used when an extension ref filter referenced by a Route cannot be resolved, or is
 	// invalid. Used with ResolvedRefs (false).
 	RouteReasonInvalidFilter v1.RouteConditionReason = "InvalidFilter"
@@ -556,17 +551,6 @@ func NewRouteUnsupportedConfiguration(msg string) Condition {
 		Type:    string(v1.RouteConditionAccepted),
 		Status:  metav1.ConditionFalse,
 		Reason:  string(RouteReasonUnsupportedConfiguration),
-		Message: msg,
-	}
-}
-
-// NewRouteInvalidIPFamily returns a Condition that indicates that the Service associated with the Route
-// is not configured with the same IP family as the NGINX server.
-func NewRouteInvalidIPFamily(msg string) Condition {
-	return Condition{
-		Type:    string(v1.RouteConditionResolvedRefs),
-		Status:  metav1.ConditionFalse,
-		Reason:  string(RouteReasonInvalidIPFamily),
 		Message: msg,
 	}
 }
