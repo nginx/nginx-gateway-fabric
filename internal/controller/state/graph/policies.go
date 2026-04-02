@@ -3,6 +3,8 @@ package graph
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"slices"
 	"sort"
@@ -72,7 +74,8 @@ type PolicyKey struct {
 }
 
 // WAFBundleKey uniquely identifies a WAF bundle on disk.
-// Format: "<namespace>_<policyName>" for policy bundles, or "<namespace>_<policyName>_log_<index>" for log bundles.
+// Format: "<namespace>_<policyName>" for policy bundles, or "<namespace>_<policyName>_log_<urlHash>" for log bundles,
+// where urlHash is a truncated SHA-256 hex digest of the log source URL.
 type WAFBundleKey string
 
 // WAFBundleData contains the fetched WAF bundle content.
@@ -886,7 +889,7 @@ func fetchSecurityLogBundles(
 	wafInput *WAFProcessingInput,
 	output *WAFProcessingOutput,
 ) {
-	for i, secLog := range wafPolicy.Spec.SecurityLogs {
+	for _, secLog := range wafPolicy.Spec.SecurityLogs {
 		if secLog.LogSource.URL == nil {
 			// DefaultProfile is used; no bundle to fetch.
 			continue
@@ -914,7 +917,9 @@ func fetchSecurityLogBundles(
 			}
 		}
 
-		bundleKey := WAFBundleKey(fmt.Sprintf("%s_%s_log_%d", wafPolicy.Namespace, wafPolicy.Name, i))
+		bundleKey := WAFBundleKey(
+			fmt.Sprintf("%s_%s_log_%s", wafPolicy.Namespace, wafPolicy.Name, urlHash(*secLog.LogSource.URL)),
+		)
 
 		req := buildLogFetchRequest(&secLog.LogSource, auth, tlsCA)
 
@@ -934,6 +939,15 @@ func fetchSecurityLogBundles(
 
 		output.Bundles[bundleKey] = &WAFBundleData{Data: data, Checksum: checksum}
 	}
+}
+
+// urlHash returns the first 16 hex characters of the SHA-256 digest of rawURL.
+// Used to derive a stable, filesystem-safe component for log bundle keys so that
+// reordering or inserting SecurityLog entries does not change existing bundle filenames
+// or break the stale-bundle fallback.
+func urlHash(rawURL string) string {
+	sum := sha256.Sum256([]byte(rawURL))
+	return hex.EncodeToString(sum[:])[:16]
 }
 
 // resolveBundleAuth resolves a BundleAuth reference into fetch.BundleAuth credentials.

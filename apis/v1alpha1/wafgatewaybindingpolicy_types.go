@@ -13,7 +13,9 @@ import (
 // +kubebuilder:metadata:labels="gateway.networking.k8s.io/policy=inherited"
 
 // WAFGatewayBindingPolicy is an Inherited Attached Policy. It provides a way to configure F5 WAF for NGINX
-// for Gateways and Routes by referencing compiled WAF policy bundles via direct URLs or NGINX Instance Manager.
+// for Gateways and Routes by referencing compiled WAF policy bundles. Bundles can be fetched directly from an
+// HTTP/HTTPS URL (type: HTTP), from an NGINX Instance Manager instance (type: NIM), or from an F5 NGINX One
+// Console instance (type: N1C).
 type WAFGatewayBindingPolicy struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -131,7 +133,21 @@ type PolicySource struct {
 	// +optional
 	RetryPolicy *BundleRetryPolicy `json:"retryPolicy,omitempty"`
 
-	// URL is the HTTP or HTTPS address of the compiled policy bundle (.tgz).
+	// URL semantics differ by type:
+	//
+	//   - HTTP: the full URL of the compiled policy bundle (.tgz), e.g.
+	//     "https://storage.example.com/bundles/policy.tgz".
+	//
+	//   - NIM: the base URL of the NGINX Instance Manager instance, e.g.
+	//     "https://nim.example.com". NGF appends
+	//     "/api/platform/v1/security/policies/bundles?policyName=<name>&includeBundleContent=true"
+	//     to this value. Do not include a path, query string, or fragment.
+	//
+	//   - N1C: the base URL of the F5 NGINX One Console instance, e.g.
+	//     "https://f5xc.example.com". NGF appends
+	//     "/api/nginx/one/namespaces/<namespace>/security-policies/<policyName>/bundle"
+	//     to this value. Do not include a path, query string, or fragment.
+	//
 	// Required when type is HTTP, NIM, or N1C.
 	//
 	// +kubebuilder:validation:MinLength=1

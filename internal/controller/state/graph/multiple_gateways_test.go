@@ -1,7 +1,6 @@
 package graph
 
 import (
-	"context"
 	"testing"
 
 	"github.com/go-logr/logr"
@@ -466,7 +465,7 @@ func Test_MultipleGateways_WithNginxProxy(t *testing.T) {
 			fakePolicyValidator := &validationfakes.FakePolicyValidator{}
 
 			result := BuildGraph(
-				context.Background(),
+				t.Context(),
 				test.clusterState,
 				controllerName,
 				gcName,
@@ -970,7 +969,7 @@ func Test_MultipleGateways_WithListeners(t *testing.T) {
 			fakePolicyValidator := &validationfakes.FakePolicyValidator{}
 
 			result := BuildGraph(
-				context.Background(),
+				t.Context(),
 				test.clusterState,
 				controllerName,
 				gcName,

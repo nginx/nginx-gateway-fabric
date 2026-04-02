@@ -2,7 +2,6 @@ package graph
 
 import (
 	"bytes"
-	"context"
 	"fmt"
 	"slices"
 	"testing"
@@ -1262,7 +1261,7 @@ func TestProcessPolicies(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			processed, _ := processPolicies(context.Background(), test.policies, test.validator, routes, services, gateways, nil)
+			processed, _ := processPolicies(t.Context(), test.policies, test.validator, routes, services, gateways, nil)
 			g.Expect(processed).To(BeEquivalentTo(test.expProcessedPolicies))
 		})
 	}
@@ -1479,7 +1478,7 @@ func TestProcessPolicies_RouteOverlap(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			processed, _ := processPolicies(context.Background(), test.policies, test.validator, test.routes, nil, gateways, nil)
+			processed, _ := processPolicies(t.Context(), test.policies, test.validator, test.routes, nil, gateways, nil)
 			g.Expect(processed).To(HaveLen(len(test.policies)))
 
 			for _, pol := range processed {
@@ -2508,7 +2507,7 @@ func TestNGFPolicyAncestorLimitHandling(t *testing.T) {
 
 	// Process policies which should trigger ancestor limit handling
 	processedPolicies, _ := processPolicies(
-		context.Background(), testPolicies, validator, routes, referencedServices, gateways, nil,
+		t.Context(), testPolicies, validator, routes, referencedServices, gateways, nil,
 	)
 
 	// Create a graph and attach policies to trigger ancestor limit handling
@@ -2814,7 +2813,7 @@ func TestProcessWAFGatewayBindingPolicies(t *testing.T) {
 	tlsSecretNsName := types.NamespacedName{Namespace: policyNs, Name: tlsSecretName}
 
 	bundleKey := WAFBundleKey(fmt.Sprintf("%s_%s", policyNs, policyName))
-	logBundleKey := WAFBundleKey(fmt.Sprintf("%s_%s_log_0", policyNs, policyName))
+	logBundleKey := WAFBundleKey(fmt.Sprintf("%s_%s_log_%s", policyNs, policyName, urlHash(logBundleURL)))
 
 	fetchedData := []byte("bundle-data")
 	fetchedChecksum := "abc123"
@@ -2877,6 +2876,10 @@ func TestProcessWAFGatewayBindingPolicies(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: tlsSecretName, Namespace: policyNs},
 		Data:       map[string][]byte{"ca.crt": []byte("ca-data")},
 	}
+
+	// multiLogURL1 is defined at table scope so it can be referenced in both the
+	// processedPolicies closure and the expBundles map of the multi-log test case.
+	multiLogURL1 := "https://example.com/log1.tgz"
 
 	tests := []struct {
 		processedPolicies func() map[PolicyKey]*Policy
@@ -3385,7 +3388,7 @@ func TestProcessWAFGatewayBindingPolicies(t *testing.T) {
 			processedPolicies: func() map[PolicyKey]*Policy {
 				wafPolicy := makeWAFPolicy(policyName, false, false, false)
 				logURL0 := "https://example.com/log0.tgz"
-				logURL1 := "https://example.com/log1.tgz"
+				logURL1 := multiLogURL1
 				wafPolicy.Spec.SecurityLogs = []ngfAPIv1alpha1.WAFSecurityLog{
 					{
 						LogSource: ngfAPIv1alpha1.LogSource{
@@ -3423,7 +3426,7 @@ func TestProcessWAFGatewayBindingPolicies(t *testing.T) {
 			},
 			expBundles: map[WAFBundleKey]*WAFBundleData{
 				bundleKey: {Data: fetchedData, Checksum: fetchedChecksum},
-				WAFBundleKey(fmt.Sprintf("%s_%s_log_1", "test-ns", policyName)): {
+				WAFBundleKey(fmt.Sprintf("%s_%s_log_%s", "test-ns", policyName, urlHash(multiLogURL1))): {
 					Data: fetchedData, Checksum: fetchedChecksum,
 				},
 			},
@@ -3481,7 +3484,7 @@ func TestProcessWAFGatewayBindingPolicies(t *testing.T) {
 			processedPolicies := tc.processedPolicies()
 			wafInput := tc.wafInput()
 
-			output := processWAFGatewayBindingPolicies(context.Background(), processedPolicies, wafInput)
+			output := processWAFGatewayBindingPolicies(t.Context(), processedPolicies, wafInput)
 
 			if wafInput == nil {
 				g.Expect(output).To(BeNil())

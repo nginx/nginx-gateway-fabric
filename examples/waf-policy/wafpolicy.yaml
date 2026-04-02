@@ -9,9 +9,11 @@ spec:
       name: gateway
   type: NIM
   policySource:
+    # For NIM/N1C, url is the base URL of the API server - not a direct bundle URL.
+    # NGF constructs the full API path from this value and managedSource.policyName.
     url: https://apigw.nim.svc.cluster.local
     managedSource:
-      policyName: NginxDefaultPolicy
+      policyName: NginxStrictPolicy
     auth:
       secretRef:
         name: nim-credentials
