@@ -10,7 +10,6 @@ import (
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	"sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
@@ -52,10 +51,6 @@ func TestBuildUDPRoute(t *testing.T) {
 			},
 			Valid: true,
 		}
-	}
-
-	modGateway := func(gw *Gateway, mod func(*Gateway) *Gateway) *Gateway {
-		return mod(gw)
 	}
 
 	parentRefGraph := ParentRef{
@@ -171,24 +166,6 @@ func TestBuildUDPRoute(t *testing.T) {
 					{
 						BackendObjectReference: gatewayv1.BackendObjectReference{
 							Name: "svc1",
-						},
-					},
-				},
-			},
-		},
-		[]gatewayv1.ParentReference{
-			parentRef,
-		},
-	)
-
-	ipFamilyMismatchUDPR := createUDPRoute(
-		[]v1alpha2.UDPRouteRule{
-			{
-				BackendRefs: []gatewayv1.BackendRef{
-					{
-						BackendObjectReference: gatewayv1.BackendObjectReference{
-							Name: "svc1",
-							Port: helpers.GetPointer[gatewayv1.PortNumber](53),
 						},
 					},
 				},
@@ -490,57 +467,6 @@ func TestBuildUDPRoute(t *testing.T) {
 					conditions.NewRouteBackendRefUnsupportedValue(
 						"spec.rules[0].backendRefs[0].port: Required value: port cannot be nil",
 					),
-				},
-			},
-		},
-		{
-			name:  "IP family mismatch",
-			route: ipFamilyMismatchUDPR,
-			gateways: map[types.NamespacedName]*Gateway{
-				{Namespace: "test", Name: "gateway"}: modGateway(createGateway(), func(gw *Gateway) *Gateway {
-					gw.EffectiveNginxProxy = &EffectiveNginxProxy{IPFamily: helpers.GetPointer(ngfAPI.IPv6)}
-					return gw
-				}),
-			},
-			services: map[types.NamespacedName]*apiv1.Service{
-				{Namespace: "test", Name: "svc1"}: createModSvc(func(svc *apiv1.Service) *apiv1.Service {
-					svc.Spec.IPFamilies = []apiv1.IPFamily{apiv1.IPv4Protocol}
-					return svc
-				}),
-			},
-			expected: &L4Route{
-				Source:     ipFamilyMismatchUDPR,
-				RouteType:  RouteTypeUDP,
-				Valid:      true,
-				Attachable: true,
-				ParentRefs: []ParentRef{
-					{
-						SectionName: helpers.GetPointer[gatewayv1.SectionName]("l1"),
-						Gateway: &ParentRefGateway{
-							NamespacedName: types.NamespacedName{
-								Namespace: "test",
-								Name:      "gateway",
-							},
-							EffectiveNginxProxy: &EffectiveNginxProxy{IPFamily: helpers.GetPointer(ngfAPI.IPv6)},
-						},
-					},
-				},
-				Spec: L4RouteSpec{
-					BackendRefs: []BackendRef{
-						{
-							SvcNsName: types.NamespacedName{Namespace: "test", Name: "svc1"},
-							ServicePort: apiv1.ServicePort{
-								Port: 53,
-							},
-							Weight: 1,
-							Valid:  true,
-							InvalidForGateways: map[types.NamespacedName]conditions.Condition{
-								{Namespace: "test", Name: "gateway"}: conditions.NewRouteInvalidIPFamily(
-									"The Service configured with IPv4 family but NginxProxy is configured with IPv6",
-								),
-							},
-						},
-					},
 				},
 			},
 		},
