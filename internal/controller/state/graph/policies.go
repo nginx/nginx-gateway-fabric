@@ -430,6 +430,7 @@ type WAFProcessingOutput struct {
 }
 
 func processPolicies(
+	ctx context.Context,
 	pols map[PolicyKey]policies.Policy,
 	validator validation.PolicyValidator,
 	routes map[RouteKey]*L7Route,
@@ -500,7 +501,7 @@ func processPolicies(
 
 	markConflictedPolicies(processedPolicies, validator)
 
-	wafOutput := processWAFGatewayBindingPolicies(processedPolicies, wafInput)
+	wafOutput := processWAFGatewayBindingPolicies(ctx, processedPolicies, wafInput)
 
 	return processedPolicies, wafOutput
 }
@@ -747,6 +748,7 @@ func addStatusToTargetRefs(policyKind string, conditionsList *[]conditions.Condi
 
 // processWAFGatewayBindingPolicies processes WAFGatewayBindingPolicy resources and fetches their bundles.
 func processWAFGatewayBindingPolicies(
+	ctx context.Context,
 	processedPolicies map[PolicyKey]*Policy,
 	wafInput *WAFProcessingInput,
 ) *WAFProcessingOutput {
@@ -773,8 +775,8 @@ func processWAFGatewayBindingPolicies(
 			continue
 		}
 
-		fetchPolicyBundle(WAFGatewayBindingPolicy, policy, wafInput, output)
-		fetchSecurityLogBundles(WAFGatewayBindingPolicy, policy, wafInput, output)
+		fetchPolicyBundle(ctx, WAFGatewayBindingPolicy, policy, wafInput, output)
+		fetchSecurityLogBundles(ctx, WAFGatewayBindingPolicy, policy, wafInput, output)
 	}
 
 	return output
@@ -824,6 +826,7 @@ func buildLogFetchRequest(logSource *ngfAPIv1alpha1.LogSource, auth *fetch.Bundl
 
 // fetchPolicyBundle fetches the policy bundle for a WAFGatewayBindingPolicy.
 func fetchPolicyBundle(
+	ctx context.Context,
 	wafPolicy *ngfAPIv1alpha1.WAFGatewayBindingPolicy,
 	policy *Policy,
 	wafInput *WAFProcessingInput,
@@ -833,11 +836,10 @@ func fetchPolicyBundle(
 
 	var auth *fetch.BundleAuth
 	if policySource.Auth != nil {
-		var err error
-		auth, err = resolveBundleAuth(policySource.Auth, wafPolicy.Namespace, wafInput, output)
-		if err != nil {
-			cond := conditions.NewPolicyRefsNotResolvedBundleAuthSecretInvalid(err.Error())
-			policy.Conditions = append(policy.Conditions, cond)
+		var cond *conditions.Condition
+		auth, cond = resolveBundleAuth(policySource.Auth, wafPolicy.Namespace, wafInput, output)
+		if cond != nil {
+			policy.Conditions = append(policy.Conditions, *cond)
 			policy.Valid = false
 			return
 		}
@@ -859,7 +861,7 @@ func fetchPolicyBundle(
 
 	req := buildPolicyFetchRequest(&policySource, wafPolicy.Spec.Type, auth, tlsCA)
 
-	data, checksum, err := wafInput.Fetcher.Fetch(context.Background(), req)
+	data, checksum, err := wafInput.Fetcher.Fetch(ctx, req)
 	if err != nil {
 		if prev, ok := wafInput.PreviousBundles[bundleKey]; ok {
 			cond := conditions.NewPolicyProgrammedStaleBundleWarning(err.Error())
@@ -878,6 +880,7 @@ func fetchPolicyBundle(
 
 // fetchSecurityLogBundles fetches log profile bundles for each SecurityLog entry.
 func fetchSecurityLogBundles(
+	ctx context.Context,
 	wafPolicy *ngfAPIv1alpha1.WAFGatewayBindingPolicy,
 	policy *Policy,
 	wafInput *WAFProcessingInput,
@@ -891,11 +894,10 @@ func fetchSecurityLogBundles(
 
 		var auth *fetch.BundleAuth
 		if secLog.LogSource.Auth != nil {
-			var err error
-			auth, err = resolveBundleAuth(secLog.LogSource.Auth, wafPolicy.Namespace, wafInput, output)
-			if err != nil {
-				cond := conditions.NewPolicyRefsNotResolvedBundleAuthSecretInvalid(err.Error())
-				policy.Conditions = append(policy.Conditions, cond)
+			var cond *conditions.Condition
+			auth, cond = resolveBundleAuth(secLog.LogSource.Auth, wafPolicy.Namespace, wafInput, output)
+			if cond != nil {
+				policy.Conditions = append(policy.Conditions, *cond)
 				policy.Valid = false
 				continue
 			}
@@ -917,7 +919,7 @@ func fetchSecurityLogBundles(
 
 		req := buildLogFetchRequest(&secLog.LogSource, auth, tlsCA)
 
-		data, checksum, err := wafInput.Fetcher.Fetch(context.Background(), req)
+		data, checksum, err := wafInput.Fetcher.Fetch(ctx, req)
 		if err != nil {
 			if prev, ok := wafInput.PreviousBundles[bundleKey]; ok {
 				cond := conditions.NewPolicyProgrammedStaleBundleWarning(err.Error())
@@ -938,12 +940,14 @@ func fetchSecurityLogBundles(
 // resolveBundleAuth resolves a BundleAuth reference into fetch.BundleAuth credentials.
 // It looks up the referenced Secret from wafInput.Secrets and adds it to output.ReferencedWAFSecrets.
 // bundleAuth must not be nil.
+// Returns a non-nil *conditions.Condition on failure so callers can append it directly;
+// uses NotFound for a missing Secret and Invalid for wrong/empty credential keys.
 func resolveBundleAuth(
 	bundleAuth *ngfAPIv1alpha1.BundleAuth,
 	policyNamespace string,
 	wafInput *WAFProcessingInput,
 	output *WAFProcessingOutput,
-) (*fetch.BundleAuth, error) {
+) (*fetch.BundleAuth, *conditions.Condition) {
 	secretNsName := types.NamespacedName{
 		Namespace: policyNamespace,
 		Name:      bundleAuth.SecretRef.Name,
@@ -951,7 +955,10 @@ func resolveBundleAuth(
 
 	secret, exists := wafInput.Secrets[secretNsName]
 	if !exists {
-		return nil, fmt.Errorf("auth secret %q not found", secretNsName)
+		cond := conditions.NewPolicyRefsNotResolvedBundleAuthSecretNotFound(
+			fmt.Sprintf("auth secret %q not found", secretNsName),
+		)
+		return nil, &cond
 	}
 
 	output.ReferencedWAFSecrets[secretNsName] = secret
@@ -960,18 +967,20 @@ func resolveBundleAuth(
 	if token, ok := secret.Data[secrets.BundleTokenKey]; ok {
 		auth.BearerToken = strings.TrimSpace(string(token))
 		if auth.BearerToken == "" {
-			return nil, fmt.Errorf(
-				"auth secret %q has empty %q key", secretNsName, secrets.BundleTokenKey,
+			cond := conditions.NewPolicyRefsNotResolvedBundleAuthSecretInvalid(
+				fmt.Sprintf("auth secret %q has empty %q key", secretNsName, secrets.BundleTokenKey),
 			)
+			return nil, &cond
 		}
 	} else {
 		auth.Username = strings.TrimSpace(string(secret.Data[secrets.BundleUsernameKey]))
 		auth.Password = strings.TrimSpace(string(secret.Data[secrets.BundlePasswordKey]))
 		if auth.Username == "" || auth.Password == "" {
-			return nil, fmt.Errorf(
+			cond := conditions.NewPolicyRefsNotResolvedBundleAuthSecretInvalid(fmt.Sprintf(
 				"auth secret %q must contain either %q or both %q and %q",
 				secretNsName, secrets.BundleTokenKey, secrets.BundleUsernameKey, secrets.BundlePasswordKey,
-			)
+			))
+			return nil, &cond
 		}
 	}
 
@@ -997,9 +1006,9 @@ func resolveTLSCA(
 		return nil, fmt.Errorf("TLS CA secret %q not found", secretNsName)
 	}
 
-	caData, ok := secret.Data["ca.crt"]
+	caData, ok := secret.Data[secrets.CAKey]
 	if !ok {
-		return nil, fmt.Errorf("TLS CA secret %q missing ca.crt key", secretNsName)
+		return nil, fmt.Errorf("TLS CA secret %q missing %q key", secretNsName, secrets.CAKey)
 	}
 
 	output.ReferencedWAFSecrets[secretNsName] = secret

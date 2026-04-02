@@ -303,7 +303,9 @@ endif
 .PHONY: create-image-pull-secret
 create-image-pull-secret: ## Creates the nginx-plus-registry-secret image pull secret in the nginx-gateway namespace using dockerconfig.jwt
 	kubectl create namespace nginx-gateway || true
-	JWT=$$(cat $(REGISTRY_JWT_FILE)); \
+	test -f $(REGISTRY_JWT_FILE) || { echo "Error: $(REGISTRY_JWT_FILE) not found"; exit 1; }; \
+	JWT=$$(tr -d '[:space:]' < $(REGISTRY_JWT_FILE)); \
+	test -n "$$JWT" || { echo "Error: $(REGISTRY_JWT_FILE) is empty"; exit 1; }; \
 	kubectl create secret docker-registry $(NGINX_IMAGE_PULL_SECRET) \
 		--docker-server=private-registry.nginx.com \
 		--docker-username=$$JWT \

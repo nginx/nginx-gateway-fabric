@@ -163,11 +163,11 @@ func fetchHTTP(ctx context.Context, client *http.Client, req Request) ([]byte, s
 		if len(fields) == 0 {
 			return nil, "", fmt.Errorf("checksum file at %s is empty", checksumURL)
 		}
-		expectedChecksum := fields[0]
-		if len(expectedChecksum) != 64 {
+		expectedChecksum := strings.ToLower(fields[0])
+		if _, err := hex.DecodeString(expectedChecksum); err != nil || len(expectedChecksum) != 64 {
 			return nil, "", fmt.Errorf(
 				"checksum file at %s contains invalid checksum %q: expected 64 hex characters",
-				checksumURL, expectedChecksum,
+				checksumURL, fields[0],
 			)
 		}
 		if expectedChecksum != actualChecksum {
@@ -239,6 +239,8 @@ func buildN1CURL(baseURL, namespace, policyName string) (string, error) {
 	base.Path = strings.TrimRight(base.Path, "/") +
 		"/api/nginx/one/namespaces/" + url.PathEscape(namespace) +
 		"/security-policies/" + url.PathEscape(policyName) + "/bundle"
+	base.RawQuery = ""
+	base.Fragment = ""
 	return base.String(), nil
 }
 
@@ -249,7 +251,8 @@ func buildNIMURL(baseURL, policyName string) (string, error) {
 		return "", fmt.Errorf("invalid NIM base URL %q: %w", baseURL, err)
 	}
 	base.Path = strings.TrimRight(base.Path, "/") + "/api/platform/v1/security/policies/bundles"
-	q := base.Query()
+	base.Fragment = ""
+	q := url.Values{}
 	q.Set("includeBundleContent", "true")
 	q.Set("policyName", policyName)
 	base.RawQuery = q.Encode()

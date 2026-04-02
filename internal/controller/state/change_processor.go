@@ -1,6 +1,7 @@
 package state
 
 import (
+	"context"
 	"sync"
 
 	"github.com/go-logr/logr"
@@ -43,7 +44,7 @@ type ChangeProcessor interface {
 	CaptureDeleteChange(resourceType ngftypes.ObjectType, nsname types.NamespacedName)
 	// Process produces a graph-like representation of GatewayAPI resources.
 	// If no changes were captured, the graph will be empty.
-	Process() (graphCfg *graph.Graph)
+	Process(ctx context.Context) (graphCfg *graph.Graph)
 	// GetLatestGraph returns the latest Graph.
 	GetLatestGraph() *graph.Graph
 }
@@ -310,7 +311,7 @@ func (c *ChangeProcessorImpl) CaptureDeleteChange(resourceType ngftypes.ObjectTy
 	c.updater.Delete(resourceType, nsname)
 }
 
-func (c *ChangeProcessorImpl) Process() *graph.Graph {
+func (c *ChangeProcessorImpl) Process(ctx context.Context) *graph.Graph {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
@@ -324,6 +325,7 @@ func (c *ChangeProcessorImpl) Process() *graph.Graph {
 	}
 
 	c.latestGraph = graph.BuildGraph(
+		ctx,
 		c.clusterState,
 		c.cfg.GatewayCtlrName,
 		c.cfg.GatewayClassName,

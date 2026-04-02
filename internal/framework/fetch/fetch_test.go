@@ -160,6 +160,50 @@ func TestHTTPFetcherFetchChecksumInvalidFormat(t *testing.T) {
 	g.Expect(err.Error()).To(ContainSubstring("invalid checksum"))
 }
 
+func TestHTTPFetcherFetchChecksumUppercase(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	body := []byte("bundle-content")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, ".sha256") {
+			// uppercase hex of the actual content checksum — should be accepted after normalisation
+			sum := sha256.Sum256(body)
+			fmt.Fprintf(w, "%X", sum)
+			return
+		}
+		w.Write(body) //nolint:errcheck
+	}))
+	defer srv.Close()
+
+	f := fetch.NewHTTPFetcher()
+	req := fetch.Request{URL: srv.URL + "/bundle.tgz", VerifyChecksum: true}
+	_, _, err := f.Fetch(context.Background(), req)
+	g.Expect(err).ToNot(HaveOccurred())
+}
+
+func TestHTTPFetcherFetchChecksumNonHex64Chars(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	body := []byte("bundle-content")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, ".sha256") {
+			// exactly 64 chars but not valid hex
+			fmt.Fprint(w, "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz")
+			return
+		}
+		w.Write(body) //nolint:errcheck
+	}))
+	defer srv.Close()
+
+	f := fetch.NewHTTPFetcher()
+	req := fetch.Request{URL: srv.URL + "/bundle.tgz", VerifyChecksum: true}
+	_, _, err := f.Fetch(context.Background(), req)
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(err.Error()).To(ContainSubstring("invalid checksum"))
+}
+
 func TestHTTPFetcherFetchNon200(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
@@ -185,6 +229,65 @@ func TestHTTPFetcherFetchNetworkError(t *testing.T) {
 	_, _, err := f.Fetch(context.Background(), req)
 	g.Expect(err).To(HaveOccurred())
 	g.Expect(err.Error()).To(ContainSubstring("failed to fetch"))
+}
+
+func TestBuildNIMURLStripsBaseQueryAndFragment(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	bundleContent := []byte("nim-bundle-data")
+	encoded := base64.StdEncoding.EncodeToString(bundleContent)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Should not have any leftover query params from the base URL
+		g.Expect(r.URL.Query().Get("extra")).To(BeEmpty())
+		// Should not carry the fragment (fragments are client-side only, but ensure path is clean)
+		g.Expect(r.URL.Path).To(Equal("/api/platform/v1/security/policies/bundles"))
+		g.Expect(r.URL.Query().Get("policyName")).To(Equal("my-policy"))
+		g.Expect(r.URL.Query().Get("includeBundleContent")).To(Equal("true"))
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck
+			"items": []map[string]any{{"content": encoded}},
+		})
+	}))
+	defer srv.Close()
+
+	f := fetch.NewHTTPFetcher()
+	req := fetch.Request{
+		URL:           srv.URL + "?extra=leftover#somefragment",
+		NIMPolicyName: "my-policy",
+	}
+	data, _, err := f.Fetch(context.Background(), req)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(data).To(Equal(bundleContent))
+}
+
+func TestBuildN1CURLStripsBaseQueryAndFragment(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	bundleContent := []byte("n1c-bundle-data")
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Should not have any leftover query params from the base URL
+		g.Expect(r.URL.RawQuery).To(BeEmpty())
+		// Path should be the N1C API path only
+		g.Expect(r.URL.Path).To(Equal("/api/nginx/one/namespaces/my-ns/security-policies/my-policy/bundle"))
+
+		w.Write(bundleContent) //nolint:errcheck
+	}))
+	defer srv.Close()
+
+	f := fetch.NewHTTPFetcher()
+	req := fetch.Request{
+		URL:           srv.URL + "?extra=leftover#somefragment",
+		N1CNamespace:  "my-ns",
+		NIMPolicyName: "my-policy",
+	}
+	data, _, err := f.Fetch(context.Background(), req)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(data).To(Equal(bundleContent))
 }
 
 func TestHTTPFetcherFetchNIM(t *testing.T) {

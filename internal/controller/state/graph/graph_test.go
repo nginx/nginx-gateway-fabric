@@ -1,6 +1,7 @@
 package graph
 
 import (
+	"context"
 	"testing"
 
 	"github.com/go-logr/logr"
@@ -1908,6 +1909,7 @@ func TestBuildGraph(t *testing.T) {
 			}
 
 			result := BuildGraph(
+				context.Background(),
 				test.store,
 				controllerName,
 				gcName,

@@ -1,6 +1,7 @@
 package graph
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/go-logr/logr"
@@ -226,6 +227,7 @@ func (g *Graph) gatewayAPIResourceExist(ref gatewayv1.LocalPolicyTargetReference
 
 // BuildGraph builds a Graph from a state.
 func BuildGraph(
+	ctx context.Context,
 	state ClusterState,
 	controllerName string,
 	gcName string,
@@ -327,6 +329,7 @@ func BuildGraph(
 
 	// policies must be processed last because they rely on the state of the other resources in the graph
 	processedPolicies, wafOutput := processPolicies(
+		ctx,
 		state.NGFPolicies,
 		validators.PolicyValidator,
 		routes,
