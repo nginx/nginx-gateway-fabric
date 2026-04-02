@@ -1402,16 +1402,6 @@ func NewPolicyProgrammed() Condition {
 	}
 }
 
-// NewPolicyRefsNotResolvedBundleURLMissing returns a Condition that indicates the policyBundle.url is empty.
-func NewPolicyRefsNotResolvedBundleURLMissing(msg string) Condition {
-	return Condition{
-		Type:    string(WAFResolvedRefsConditionType),
-		Status:  metav1.ConditionFalse,
-		Reason:  string(PolicyReasonInvalidRef),
-		Message: msg,
-	}
-}
-
 // NewPolicyRefsNotResolvedBundleAuthSecretNotFound returns a Condition that indicates the auth secret was not found.
 func NewPolicyRefsNotResolvedBundleAuthSecretNotFound(msg string) Condition {
 	return Condition{

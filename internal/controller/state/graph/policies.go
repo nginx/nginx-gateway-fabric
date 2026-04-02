@@ -424,9 +424,9 @@ type WAFProcessingInput struct {
 type WAFProcessingOutput struct {
 	// Bundles contains the fetched WAF bundles keyed by bundle key.
 	Bundles map[WAFBundleKey]*WAFBundleData
-	// ReferencedWAFAuthSecrets contains the Secrets referenced by WAFGatewayBindingPolicy auth fields.
+	// ReferencedWAFSecrets contains the Secrets referenced by WAFGatewayBindingPolicy (auth and TLS CA).
 	// These must be watched by the change tracker.
-	ReferencedWAFAuthSecrets map[types.NamespacedName]*corev1.Secret
+	ReferencedWAFSecrets map[types.NamespacedName]*corev1.Secret
 }
 
 func processPolicies(
@@ -755,8 +755,8 @@ func processWAFGatewayBindingPolicies(
 	}
 
 	output := &WAFProcessingOutput{
-		Bundles:                  make(map[WAFBundleKey]*WAFBundleData),
-		ReferencedWAFAuthSecrets: make(map[types.NamespacedName]*corev1.Secret),
+		Bundles:              make(map[WAFBundleKey]*WAFBundleData),
+		ReferencedWAFSecrets: make(map[types.NamespacedName]*corev1.Secret),
 	}
 
 	for key, policy := range processedPolicies {
@@ -829,10 +829,6 @@ func fetchPolicyBundle(
 	wafInput *WAFProcessingInput,
 	output *WAFProcessingOutput,
 ) {
-	if wafPolicy.Spec.PolicySource.URL == "" {
-		return
-	}
-
 	policySource := wafPolicy.Spec.PolicySource
 
 	var auth *fetch.BundleAuth
@@ -840,7 +836,7 @@ func fetchPolicyBundle(
 		var err error
 		auth, err = resolveBundleAuth(policySource.Auth, wafPolicy.Namespace, wafInput, output)
 		if err != nil {
-			cond := conditions.NewPolicyNotProgrammedBundleFetchError(err.Error())
+			cond := conditions.NewPolicyRefsNotResolvedBundleAuthSecretInvalid(err.Error())
 			policy.Conditions = append(policy.Conditions, cond)
 			policy.Valid = false
 			return
@@ -898,7 +894,7 @@ func fetchSecurityLogBundles(
 			var err error
 			auth, err = resolveBundleAuth(secLog.LogSource.Auth, wafPolicy.Namespace, wafInput, output)
 			if err != nil {
-				cond := conditions.NewPolicyNotProgrammedBundleFetchError(err.Error())
+				cond := conditions.NewPolicyRefsNotResolvedBundleAuthSecretInvalid(err.Error())
 				policy.Conditions = append(policy.Conditions, cond)
 				policy.Valid = false
 				continue
@@ -940,7 +936,7 @@ func fetchSecurityLogBundles(
 }
 
 // resolveBundleAuth resolves a BundleAuth reference into fetch.BundleAuth credentials.
-// It looks up the referenced Secret from wafInput.Secrets and adds it to output.ReferencedWAFAuthSecrets.
+// It looks up the referenced Secret from wafInput.Secrets and adds it to output.ReferencedWAFSecrets.
 // bundleAuth must not be nil.
 func resolveBundleAuth(
 	bundleAuth *ngfAPIv1alpha1.BundleAuth,
@@ -958,21 +954,32 @@ func resolveBundleAuth(
 		return nil, fmt.Errorf("auth secret %q not found", secretNsName)
 	}
 
-	output.ReferencedWAFAuthSecrets[secretNsName] = secret
+	output.ReferencedWAFSecrets[secretNsName] = secret
 
 	auth := &fetch.BundleAuth{}
 	if token, ok := secret.Data[secrets.BundleTokenKey]; ok {
 		auth.BearerToken = strings.TrimSpace(string(token))
+		if auth.BearerToken == "" {
+			return nil, fmt.Errorf(
+				"auth secret %q has empty %q key", secretNsName, secrets.BundleTokenKey,
+			)
+		}
 	} else {
 		auth.Username = strings.TrimSpace(string(secret.Data[secrets.BundleUsernameKey]))
 		auth.Password = strings.TrimSpace(string(secret.Data[secrets.BundlePasswordKey]))
+		if auth.Username == "" || auth.Password == "" {
+			return nil, fmt.Errorf(
+				"auth secret %q must contain either %q or both %q and %q",
+				secretNsName, secrets.BundleTokenKey, secrets.BundleUsernameKey, secrets.BundlePasswordKey,
+			)
+		}
 	}
 
 	return auth, nil
 }
 
 // resolveTLSCA resolves a TLS CA secret reference into a PEM-encoded CA certificate byte slice.
-// It looks up the referenced Secret from wafInput.Secrets and adds it to output.ReferencedWAFAuthSecrets.
+// It looks up the referenced Secret from wafInput.Secrets and adds it to output.ReferencedWAFSecrets.
 // tlsSecret must not be nil.
 func resolveTLSCA(
 	tlsSecret *ngfAPIv1alpha1.LocalObjectReference,
@@ -995,7 +1002,7 @@ func resolveTLSCA(
 		return nil, fmt.Errorf("TLS CA secret %q missing ca.crt key", secretNsName)
 	}
 
-	output.ReferencedWAFAuthSecrets[secretNsName] = secret
+	output.ReferencedWAFSecrets[secretNsName] = secret
 
 	return caData, nil
 }

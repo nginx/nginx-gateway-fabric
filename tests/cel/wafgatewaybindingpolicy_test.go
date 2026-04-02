@@ -790,14 +790,6 @@ func TestWAFGatewayBindingPolicyPolicySource(t *testing.T) {
 				},
 			},
 		},
-		{
-			name:       "HTTP type without policySource.url is invalid",
-			wantErrors: []string{expectedWAFPolicySourceURLRequiredError},
-			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
-				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
-				Type:       ngfAPIv1alpha1.PolicySourceTypeHTTP,
-			},
-		},
 	}
 
 	for _, tt := range tests {

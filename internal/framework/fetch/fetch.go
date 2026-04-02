@@ -58,11 +58,17 @@ type Fetcher interface {
 }
 
 // HTTPFetcher implements Fetcher using HTTP/HTTPS.
-type HTTPFetcher struct{}
+// It keeps a default client for requests that need no custom TLS settings,
+// and builds a short-lived client only when a per-request CA or insecure flag is set.
+type HTTPFetcher struct {
+	defaultClient *http.Client
+}
 
 // NewHTTPFetcher creates a new HTTPFetcher.
 func NewHTTPFetcher() *HTTPFetcher {
-	return &HTTPFetcher{}
+	return &HTTPFetcher{
+		defaultClient: &http.Client{},
+	}
 }
 
 // Fetch retrieves bundle bytes.
@@ -75,11 +81,23 @@ func (f *HTTPFetcher) Fetch(ctx context.Context, req Request) ([]byte, string, e
 		timeout = req.Timeout.Duration
 	}
 
+	needsCustomTLS := len(req.TLSCAData) > 0 || req.InsecureSkipVerify
+	if !needsCustomTLS {
+		client := *f.defaultClient
+		client.Timeout = timeout
+		return f.dispatch(ctx, &client, req)
+	}
+
 	client, err := buildClient(req.TLSCAData, req.InsecureSkipVerify, timeout)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to build HTTP client: %w", err)
 	}
+	defer client.CloseIdleConnections()
 
+	return f.dispatch(ctx, client, req)
+}
+
+func (f *HTTPFetcher) dispatch(ctx context.Context, client *http.Client, req Request) ([]byte, string, error) {
 	switch {
 	case req.N1CNamespace != "":
 		return fetchN1C(ctx, client, req)
@@ -97,7 +115,12 @@ func buildClient(caData []byte, insecureSkipVerify bool, timeout time.Duration) 
 		return &http.Client{Timeout: timeout}, nil
 	}
 
-	tlsCfg := &tls.Config{
+	transport, ok := http.DefaultTransport.(*http.Transport)
+	if !ok {
+		return nil, fmt.Errorf("http.DefaultTransport is not *http.Transport")
+	}
+	transport = transport.Clone()
+	transport.TLSClientConfig = &tls.Config{
 		MinVersion:         tls.VersionTLS12,
 		InsecureSkipVerify: insecureSkipVerify, //nolint:gosec // intentional; documented as testing-only
 	}
@@ -110,12 +133,12 @@ func buildClient(caData []byte, insecureSkipVerify bool, timeout time.Duration) 
 		if !pool.AppendCertsFromPEM(caData) {
 			return nil, fmt.Errorf("failed to append CA certificate to pool")
 		}
-		tlsCfg.RootCAs = pool
+		transport.TLSClientConfig.RootCAs = pool
 	}
 
 	return &http.Client{
 		Timeout:   timeout,
-		Transport: &http.Transport{TLSClientConfig: tlsCfg},
+		Transport: transport,
 	}, nil
 }
 
@@ -136,7 +159,17 @@ func fetchHTTP(ctx context.Context, client *http.Client, req Request) ([]byte, s
 		if err != nil {
 			return nil, "", fmt.Errorf("failed to fetch bundle checksum from %s: %w", checksumURL, err)
 		}
-		expectedChecksum := strings.TrimSpace(strings.Fields(string(checksumData))[0])
+		fields := strings.Fields(string(checksumData))
+		if len(fields) == 0 {
+			return nil, "", fmt.Errorf("checksum file at %s is empty", checksumURL)
+		}
+		expectedChecksum := fields[0]
+		if len(expectedChecksum) != 64 {
+			return nil, "", fmt.Errorf(
+				"checksum file at %s contains invalid checksum %q: expected 64 hex characters",
+				checksumURL, expectedChecksum,
+			)
+		}
 		if expectedChecksum != actualChecksum {
 			return nil, "", fmt.Errorf("bundle checksum mismatch: expected %s, got %s", expectedChecksum, actualChecksum)
 		}

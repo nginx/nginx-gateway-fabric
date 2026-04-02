@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	. "github.com/onsi/gomega"
@@ -41,7 +42,7 @@ func newHTTPBundleServer(body []byte, auth *fetch.BundleAuth) *httptest.Server {
 				}
 			}
 		}
-		if r.URL.Path == "/.sha256" || len(r.URL.Path) > 0 && r.URL.Path[len(r.URL.Path)-7:] == ".sha256" {
+		if strings.HasSuffix(r.URL.Path, ".sha256") {
 			fmt.Fprint(w, checksum)
 			return
 		}
@@ -101,7 +102,7 @@ func TestHTTPFetcherFetchChecksumMismatch(t *testing.T) {
 	body := []byte("bundle-content")
 	// Server returns wrong checksum
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if len(r.URL.Path) > 7 && r.URL.Path[len(r.URL.Path)-7:] == ".sha256" {
+		if len(r.URL.Path) > 7 && strings.HasSuffix(r.URL.Path, ".sha256") {
 			fmt.Fprint(w, "0000000000000000000000000000000000000000000000000000000000000000")
 			return
 		}
@@ -114,6 +115,49 @@ func TestHTTPFetcherFetchChecksumMismatch(t *testing.T) {
 	_, _, err := f.Fetch(context.Background(), req)
 	g.Expect(err).To(HaveOccurred())
 	g.Expect(err.Error()).To(ContainSubstring("checksum mismatch"))
+}
+
+func TestHTTPFetcherFetchChecksumEmpty(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	body := []byte("bundle-content")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if len(r.URL.Path) > 7 && strings.HasSuffix(r.URL.Path, ".sha256") {
+			fmt.Fprint(w, "   ") // whitespace-only
+			return
+		}
+		w.Write(body) //nolint:errcheck
+	}))
+	defer srv.Close()
+
+	f := fetch.NewHTTPFetcher()
+	req := fetch.Request{URL: srv.URL + "/bundle.tgz", VerifyChecksum: true}
+	_, _, err := f.Fetch(context.Background(), req)
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(err.Error()).To(ContainSubstring("checksum file"))
+	g.Expect(err.Error()).To(ContainSubstring("empty"))
+}
+
+func TestHTTPFetcherFetchChecksumInvalidFormat(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	body := []byte("bundle-content")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if len(r.URL.Path) > 7 && strings.HasSuffix(r.URL.Path, ".sha256") {
+			fmt.Fprint(w, "notahexchecksum")
+			return
+		}
+		w.Write(body) //nolint:errcheck
+	}))
+	defer srv.Close()
+
+	f := fetch.NewHTTPFetcher()
+	req := fetch.Request{URL: srv.URL + "/bundle.tgz", VerifyChecksum: true}
+	_, _, err := f.Fetch(context.Background(), req)
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(err.Error()).To(ContainSubstring("invalid checksum"))
 }
 
 func TestHTTPFetcherFetchNon200(t *testing.T) {
@@ -152,7 +196,7 @@ func TestHTTPFetcherFetchNIM(t *testing.T) {
 	tests := []struct {
 		name       string
 		policyName string
-		serverBody interface{}
+		serverBody any
 		auth       *fetch.BundleAuth
 		expectErr  string
 		expectData []byte
@@ -160,8 +204,8 @@ func TestHTTPFetcherFetchNIM(t *testing.T) {
 		{
 			name:       "successful NIM fetch",
 			policyName: "my-policy",
-			serverBody: map[string]interface{}{
-				"items": []map[string]interface{}{
+			serverBody: map[string]any{
+				"items": []map[string]any{
 					{"content": encoded},
 				},
 			},
@@ -170,15 +214,15 @@ func TestHTTPFetcherFetchNIM(t *testing.T) {
 		{
 			name:       "NIM response with no items",
 			policyName: "missing-policy",
-			serverBody: map[string]interface{}{"items": []interface{}{}},
+			serverBody: map[string]any{"items": []any{}},
 			expectErr:  "NIM response contains no items",
 		},
 		{
 			name:       "NIM fetch with bearer auth",
 			policyName: "secured-policy",
 			auth:       &fetch.BundleAuth{BearerToken: "nimtoken"},
-			serverBody: map[string]interface{}{
-				"items": []map[string]interface{}{
+			serverBody: map[string]any{
+				"items": []map[string]any{
 					{"content": encoded},
 				},
 			},

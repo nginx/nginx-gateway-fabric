@@ -79,10 +79,9 @@ const (
 	expectedWAFSyslogNilIfNotSyslogTypeError       = "destination.syslog must be nil if the destination.type is not syslog"
 	expectedWAFSyslogRequiredIfSyslogTypeError     = "destination.syslog must be specified for syslog destination.type"
 	expectedWAFLogSourceMutualExclusionError       = "exactly one of logSource.url or logSource.defaultProfile must be set"
-	expectedWAFPolicySourceURLRequiredError        = "policySource.url must be set when type is HTTP, NIM, or N1C"
 	expectedWAFManagedSourceRequiredError          = "policySource.managedSource is required when type is NIM or N1C"
 	expectedWAFManagedSourceForbiddenError         = "policySource.managedSource must not be set when type is HTTP"
-	expectedWAFManagedSourceNamespaceRequiredError = "policySource.managedSource.namespace is required when type is N1C"
+	expectedWAFManagedSourceNamespaceRequiredError = "policySource.managedSource.n1cNamespace is required when type is N1C"
 
 	// Namespace for tests.
 	defaultNamespace = "default"

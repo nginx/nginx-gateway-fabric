@@ -413,16 +413,13 @@ spec:
             - type
             type: object
             x-kubernetes-validations:
-            - message: policySource.url must be set when type is HTTP, NIM, or N1C
-              rule: 'self.type == ''HTTP'' || self.type == ''NIM'' || self.type ==
-                ''N1C'' ? has(self.policySource) && has(self.policySource.url) : true'
             - message: policySource.managedSource is required when type is NIM or
                 N1C
               rule: (self.type != 'NIM' && self.type != 'N1C') || (has(self.policySource)
                 && has(self.policySource.managedSource))
             - message: policySource.managedSource must not be set when type is HTTP
               rule: self.type != 'HTTP' || !has(self.policySource) || !has(self.policySource.managedSource)
-            - message: policySource.managedSource.namespace is required when type
+            - message: policySource.managedSource.n1cNamespace is required when type
                 is N1C
               rule: self.type != 'N1C' || (has(self.policySource) && has(self.policySource.managedSource)
                 && has(self.policySource.managedSource.n1cNamespace))

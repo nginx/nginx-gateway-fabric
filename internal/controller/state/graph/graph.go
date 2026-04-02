@@ -87,8 +87,8 @@ type Graph struct {
 	// ReferencedWAFBundles includes the WAFGatewayBindingPolicy Bundles that have been referenced by any Gateways
 	// or Routes.
 	ReferencedWAFBundles map[WAFBundleKey]*WAFBundleData
-	// ReferencedWAFAuthSecrets includes Secrets referenced by WAFGatewayBindingPolicy auth fields.
-	ReferencedWAFAuthSecrets map[types.NamespacedName]*v1.Secret
+	// ReferencedWAFSecrets includes Secrets referenced by WAFGatewayBindingPolicy (auth and TLS CA).
+	ReferencedWAFSecrets map[types.NamespacedName]*v1.Secret
 	// SnippetsFilters holds all the SnippetsFilters.
 	SnippetsFilters map[types.NamespacedName]*SnippetsFilter
 	// AuthenticationFilters holds all the AuthenticationFilters.
@@ -122,7 +122,7 @@ func (g *Graph) IsReferenced(resourceType ngftypes.ObjectType, nsname types.Name
 		// NGINX Plus reporting or WAF bundle auth.
 		_, exists := g.ReferencedSecrets[nsname]
 		_, plusSecretExists := g.PlusSecrets[nsname]
-		_, wafAuthSecretExists := g.ReferencedWAFAuthSecrets[nsname]
+		_, wafAuthSecretExists := g.ReferencedWAFSecrets[nsname]
 		return exists || plusSecretExists || wafAuthSecretExists
 	case *v1.ConfigMap:
 		_, exists := g.ReferencedCaCertConfigMaps[nsname]
@@ -344,7 +344,7 @@ func BuildGraph(
 	var referencedWAFAuthSecrets map[types.NamespacedName]*v1.Secret
 	if wafOutput != nil {
 		referencedWAFBundles = wafOutput.Bundles
-		referencedWAFAuthSecrets = wafOutput.ReferencedWAFAuthSecrets
+		referencedWAFAuthSecrets = wafOutput.ReferencedWAFSecrets
 	}
 
 	g := &Graph{
@@ -365,7 +365,7 @@ func BuildGraph(
 		AuthenticationFilters:      processedAuthenticationFilters,
 		PlusSecrets:                plusSecrets,
 		ReferencedWAFBundles:       referencedWAFBundles,
-		ReferencedWAFAuthSecrets:   referencedWAFAuthSecrets,
+		ReferencedWAFSecrets:       referencedWAFAuthSecrets,
 	}
 
 	g.attachPolicies(validators.PolicyValidator, controllerName, logger)

@@ -36,10 +36,9 @@ type WAFGatewayBindingPolicyList struct {
 
 // WAFGatewayBindingPolicySpec defines the desired state of a WAFGatewayBindingPolicy.
 //
-// +kubebuilder:validation:XValidation:message="policySource.url must be set when type is HTTP, NIM, or N1C",rule="self.type == 'HTTP' || self.type == 'NIM' || self.type == 'N1C' ? has(self.policySource) && has(self.policySource.url) : true"
 // +kubebuilder:validation:XValidation:message="policySource.managedSource is required when type is NIM or N1C",rule="(self.type != 'NIM' && self.type != 'N1C') || (has(self.policySource) && has(self.policySource.managedSource))"
 // +kubebuilder:validation:XValidation:message="policySource.managedSource must not be set when type is HTTP",rule="self.type != 'HTTP' || !has(self.policySource) || !has(self.policySource.managedSource)"
-// +kubebuilder:validation:XValidation:message="policySource.managedSource.namespace is required when type is N1C",rule="self.type != 'N1C' || (has(self.policySource) && has(self.policySource.managedSource) && has(self.policySource.managedSource.n1cNamespace))"
+// +kubebuilder:validation:XValidation:message="policySource.managedSource.n1cNamespace is required when type is N1C",rule="self.type != 'N1C' || (has(self.policySource) && has(self.policySource.managedSource) && has(self.policySource.managedSource.n1cNamespace))"
 //
 //nolint:lll
 type WAFGatewayBindingPolicySpec struct {
