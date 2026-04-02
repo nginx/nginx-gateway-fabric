@@ -1,6 +1,7 @@
 package graph
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"slices"
@@ -770,13 +771,13 @@ func processWAFGatewayBindingPolicies(
 			continue
 		}
 
-		WAFGatewayBindingPolicy, ok := policy.Source.(*ngfAPIv1alpha1.WAFGatewayBindingPolicy)
+		wgbPolicy, ok := policy.Source.(*ngfAPIv1alpha1.WAFGatewayBindingPolicy)
 		if !ok {
 			continue
 		}
 
-		fetchPolicyBundle(ctx, WAFGatewayBindingPolicy, policy, wafInput, output)
-		fetchSecurityLogBundles(ctx, WAFGatewayBindingPolicy, policy, wafInput, output)
+		fetchPolicyBundle(ctx, wgbPolicy, policy, wafInput, output)
+		fetchSecurityLogBundles(ctx, wgbPolicy, policy, wafInput, output)
 	}
 
 	return output
@@ -847,11 +848,10 @@ func fetchPolicyBundle(
 
 	var tlsCA []byte
 	if policySource.TLSSecretRef != nil {
-		var err error
-		tlsCA, err = resolveTLSCA(policySource.TLSSecretRef, wafPolicy.Namespace, wafInput, output)
-		if err != nil {
-			cond := conditions.NewPolicyNotProgrammedBundleFetchError(err.Error())
-			policy.Conditions = append(policy.Conditions, cond)
+		var cond *conditions.Condition
+		tlsCA, cond = resolveTLSCA(policySource.TLSSecretRef, wafPolicy.Namespace, wafInput, output)
+		if cond != nil {
+			policy.Conditions = append(policy.Conditions, *cond)
 			policy.Valid = false
 			return
 		}
@@ -905,11 +905,10 @@ func fetchSecurityLogBundles(
 
 		var tlsCA []byte
 		if secLog.LogSource.TLSSecretRef != nil {
-			var err error
-			tlsCA, err = resolveTLSCA(secLog.LogSource.TLSSecretRef, wafPolicy.Namespace, wafInput, output)
-			if err != nil {
-				cond := conditions.NewPolicyNotProgrammedBundleFetchError(err.Error())
-				policy.Conditions = append(policy.Conditions, cond)
+			var cond *conditions.Condition
+			tlsCA, cond = resolveTLSCA(secLog.LogSource.TLSSecretRef, wafPolicy.Namespace, wafInput, output)
+			if cond != nil {
+				policy.Conditions = append(policy.Conditions, *cond)
 				policy.Valid = false
 				continue
 			}
@@ -990,12 +989,14 @@ func resolveBundleAuth(
 // resolveTLSCA resolves a TLS CA secret reference into a PEM-encoded CA certificate byte slice.
 // It looks up the referenced Secret from wafInput.Secrets and adds it to output.ReferencedWAFSecrets.
 // tlsSecret must not be nil.
+// Returns a non-nil *conditions.Condition on failure so callers can append it directly;
+// uses NotFound for a missing Secret and Invalid for a missing ca.crt key.
 func resolveTLSCA(
 	tlsSecret *ngfAPIv1alpha1.LocalObjectReference,
 	policyNamespace string,
 	wafInput *WAFProcessingInput,
 	output *WAFProcessingOutput,
-) ([]byte, error) {
+) ([]byte, *conditions.Condition) {
 	secretNsName := types.NamespacedName{
 		Namespace: policyNamespace,
 		Name:      tlsSecret.Name,
@@ -1003,12 +1004,25 @@ func resolveTLSCA(
 
 	secret, exists := wafInput.Secrets[secretNsName]
 	if !exists {
-		return nil, fmt.Errorf("TLS CA secret %q not found", secretNsName)
+		cond := conditions.NewPolicyRefsNotResolvedTLSSecretNotFound(
+			fmt.Sprintf("TLS CA secret %q not found", secretNsName),
+		)
+		return nil, &cond
 	}
 
 	caData, ok := secret.Data[secrets.CAKey]
 	if !ok {
-		return nil, fmt.Errorf("TLS CA secret %q missing %q key", secretNsName, secrets.CAKey)
+		cond := conditions.NewPolicyRefsNotResolvedTLSSecretInvalid(
+			fmt.Sprintf("TLS CA secret %q missing %q key", secretNsName, secrets.CAKey),
+		)
+		return nil, &cond
+	}
+
+	if len(bytes.TrimSpace(caData)) == 0 {
+		cond := conditions.NewPolicyRefsNotResolvedTLSSecretInvalid(
+			fmt.Sprintf("TLS CA secret %q has empty %q key", secretNsName, secrets.CAKey),
+		)
+		return nil, &cond
 	}
 
 	output.ReferencedWAFSecrets[secretNsName] = secret

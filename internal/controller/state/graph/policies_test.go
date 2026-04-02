@@ -3076,8 +3076,66 @@ func TestProcessWAFGatewayBindingPolicies(t *testing.T) {
 			expSecrets: map[types.NamespacedName]*corev1.Secret{},
 			expConditions: func(_ *Policy) []conditions.Condition {
 				return []conditions.Condition{
-					conditions.NewPolicyNotProgrammedBundleFetchError(
+					conditions.NewPolicyRefsNotResolvedTLSSecretNotFound(
 						fmt.Sprintf("TLS CA secret %q not found", tlsSecretNsName),
+					),
+				}
+			},
+			expValid: false,
+		},
+		{
+			name: "TLS secret with empty ca.crt marks policy invalid",
+			processedPolicies: func() map[PolicyKey]*Policy {
+				wafPolicy := makeWAFPolicy(policyName, false, true, false)
+				key, pol := makePolicyEntry(wafPolicy, true)
+				return map[PolicyKey]*Policy{key: pol}
+			},
+			wafInput: func() *WAFProcessingInput {
+				emptyTLSSecret := &corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{Name: tlsSecretName, Namespace: policyNs},
+					Data:       map[string][]byte{secrets.CAKey: {}},
+				}
+				return &WAFProcessingInput{
+					Fetcher:         &fetchfakes.FakeFetcher{},
+					Secrets:         map[types.NamespacedName]*corev1.Secret{tlsSecretNsName: emptyTLSSecret},
+					PreviousBundles: map[WAFBundleKey]*WAFBundleData{},
+				}
+			},
+			expBundles: map[WAFBundleKey]*WAFBundleData{},
+			expSecrets: map[types.NamespacedName]*corev1.Secret{},
+			expConditions: func(_ *Policy) []conditions.Condition {
+				return []conditions.Condition{
+					conditions.NewPolicyRefsNotResolvedTLSSecretInvalid(
+						fmt.Sprintf("TLS CA secret %q has empty %q key", tlsSecretNsName, secrets.CAKey),
+					),
+				}
+			},
+			expValid: false,
+		},
+		{
+			name: "TLS secret with whitespace-only ca.crt marks policy invalid",
+			processedPolicies: func() map[PolicyKey]*Policy {
+				wafPolicy := makeWAFPolicy(policyName, false, true, false)
+				key, pol := makePolicyEntry(wafPolicy, true)
+				return map[PolicyKey]*Policy{key: pol}
+			},
+			wafInput: func() *WAFProcessingInput {
+				whitespaceTLSSecret := &corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{Name: tlsSecretName, Namespace: policyNs},
+					Data:       map[string][]byte{secrets.CAKey: []byte("   \n  ")},
+				}
+				return &WAFProcessingInput{
+					Fetcher:         &fetchfakes.FakeFetcher{},
+					Secrets:         map[types.NamespacedName]*corev1.Secret{tlsSecretNsName: whitespaceTLSSecret},
+					PreviousBundles: map[WAFBundleKey]*WAFBundleData{},
+				}
+			},
+			expBundles: map[WAFBundleKey]*WAFBundleData{},
+			expSecrets: map[types.NamespacedName]*corev1.Secret{},
+			expConditions: func(_ *Policy) []conditions.Condition {
+				return []conditions.Condition{
+					conditions.NewPolicyRefsNotResolvedTLSSecretInvalid(
+						fmt.Sprintf("TLS CA secret %q has empty %q key", tlsSecretNsName, secrets.CAKey),
 					),
 				}
 			},
@@ -3285,7 +3343,7 @@ func TestProcessWAFGatewayBindingPolicies(t *testing.T) {
 			expSecrets: map[types.NamespacedName]*corev1.Secret{},
 			expConditions: func(_ *Policy) []conditions.Condition {
 				return []conditions.Condition{
-					conditions.NewPolicyNotProgrammedBundleFetchError(
+					conditions.NewPolicyRefsNotResolvedTLSSecretNotFound(
 						fmt.Sprintf("TLS CA secret %q not found", tlsSecretNsName),
 					),
 				}

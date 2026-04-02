@@ -1423,6 +1423,27 @@ func NewPolicyRefsNotResolvedBundleAuthSecretInvalid(msg string) Condition {
 	}
 }
 
+// NewPolicyRefsNotResolvedTLSSecretNotFound returns a Condition that indicates the TLS CA secret was not found.
+func NewPolicyRefsNotResolvedTLSSecretNotFound(msg string) Condition {
+	return Condition{
+		Type:    string(WAFResolvedRefsConditionType),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(PolicyReasonInvalidRef),
+		Message: msg,
+	}
+}
+
+// NewPolicyRefsNotResolvedTLSSecretInvalid returns a Condition that indicates the TLS CA secret is missing
+// the expected ca.crt key.
+func NewPolicyRefsNotResolvedTLSSecretInvalid(msg string) Condition {
+	return Condition{
+		Type:    string(WAFResolvedRefsConditionType),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(PolicyReasonInvalidRef),
+		Message: msg,
+	}
+}
+
 // NewPolicyNotProgrammedBundleFetchError returns a Condition that indicates a bundle fetch error.
 func NewPolicyNotProgrammedBundleFetchError(errMsg string) Condition {
 	return Condition{

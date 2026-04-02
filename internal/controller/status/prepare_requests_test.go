@@ -2186,7 +2186,7 @@ func TestBuildWAFGatewayBindingPolicyStatuses(t *testing.T) {
 		}
 	}
 
-	WAFGatewayBindingPolicyKey := func(name string) graph.PolicyKey {
+	wgbPolicyKey := func(name string) graph.PolicyKey {
 		return graph.PolicyKey{
 			NsName: types.NamespacedName{Namespace: "test", Name: name},
 			GVK:    schema.GroupVersionKind{Group: ngfAPI.GroupName, Kind: kinds.WAFGatewayBindingPolicy},
@@ -2226,7 +2226,7 @@ func TestBuildWAFGatewayBindingPolicyStatuses(t *testing.T) {
 		{
 			name: "valid WAF policy gets all three default conditions",
 			policies: map[graph.PolicyKey]*graph.Policy{
-				WAFGatewayBindingPolicyKey("valid-waf"): getWAFGatewayBindingPolicy(policyCfg{
+				wgbPolicyKey("valid-waf"): getWAFGatewayBindingPolicy(policyCfg{
 					Name: "valid-waf",
 					Ancestors: []graph.PolicyAncestor{
 						{
@@ -2258,7 +2258,7 @@ func TestBuildWAFGatewayBindingPolicyStatuses(t *testing.T) {
 		{
 			name: "WAF policy with Programmed error overrides default",
 			policies: map[graph.PolicyKey]*graph.Policy{
-				WAFGatewayBindingPolicyKey("fetch-err-waf"): getWAFGatewayBindingPolicy(policyCfg{
+				wgbPolicyKey("fetch-err-waf"): getWAFGatewayBindingPolicy(policyCfg{
 					Name: "fetch-err-waf",
 					Conditions: []conditions.Condition{
 						conditions.NewPolicyNotProgrammedBundleFetchError("connection refused"),
@@ -2300,7 +2300,7 @@ func TestBuildWAFGatewayBindingPolicyStatuses(t *testing.T) {
 		{
 			name: "WAF policy with integrity error",
 			policies: map[graph.PolicyKey]*graph.Policy{
-				WAFGatewayBindingPolicyKey("integrity-err-waf"): getWAFGatewayBindingPolicy(policyCfg{
+				wgbPolicyKey("integrity-err-waf"): getWAFGatewayBindingPolicy(policyCfg{
 					Name: "integrity-err-waf",
 					Conditions: []conditions.Condition{
 						conditions.NewPolicyNotProgrammedIntegrityError("checksum mismatch"),
@@ -2342,7 +2342,7 @@ func TestBuildWAFGatewayBindingPolicyStatuses(t *testing.T) {
 		{
 			name: "WAF policy with Accepted error overrides default Accepted",
 			policies: map[graph.PolicyKey]*graph.Policy{
-				WAFGatewayBindingPolicyKey("invalid-waf"): getWAFGatewayBindingPolicy(policyCfg{
+				wgbPolicyKey("invalid-waf"): getWAFGatewayBindingPolicy(policyCfg{
 					Name: "invalid-waf",
 					Conditions: []conditions.Condition{
 						conditions.NewPolicyInvalid("spec is invalid"),

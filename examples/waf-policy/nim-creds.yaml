@@ -3,6 +3,7 @@ kind: Secret
 metadata:
   name: nim-credentials
 type: Opaque
-data:
-  username: YWRtaW4=
-  password: YWRtaW4=
+stringData:
+  # Replace with your own credentials before applying this Secret.
+  username: "<NIM_USERNAME>"
+  password: "<NIM_PASSWORD>"
