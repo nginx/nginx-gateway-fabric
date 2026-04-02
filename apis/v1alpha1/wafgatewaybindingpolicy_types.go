@@ -1,7 +1,6 @@
 package v1alpha1
 
 import (
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
@@ -40,7 +39,7 @@ type WAFGatewayBindingPolicyList struct {
 // +kubebuilder:validation:XValidation:message="policySource.url must be set when type is HTTP, NIM, or N1C",rule="self.type == 'HTTP' || self.type == 'NIM' || self.type == 'N1C' ? has(self.policySource) && has(self.policySource.url) : true"
 // +kubebuilder:validation:XValidation:message="policySource.managedSource is required when type is NIM or N1C",rule="(self.type != 'NIM' && self.type != 'N1C') || (has(self.policySource) && has(self.policySource.managedSource))"
 // +kubebuilder:validation:XValidation:message="policySource.managedSource must not be set when type is HTTP",rule="self.type != 'HTTP' || !has(self.policySource) || !has(self.policySource.managedSource)"
-// +kubebuilder:validation:XValidation:message="policySource.managedSource.namespace is required when type is N1C",rule="self.type != 'N1C' || (has(self.policySource) && has(self.policySource.managedSource) && has(self.policySource.managedSource.namespace))"
+// +kubebuilder:validation:XValidation:message="policySource.managedSource.namespace is required when type is N1C",rule="self.type != 'N1C' || (has(self.policySource) && has(self.policySource.managedSource) && has(self.policySource.managedSource.n1cNamespace))"
 //
 //nolint:lll
 type WAFGatewayBindingPolicySpec struct {
@@ -64,9 +63,7 @@ type WAFGatewayBindingPolicySpec struct {
 	Type PolicySourceType `json:"type"`
 
 	// PolicySource holds all policy bundle fetch configuration.
-	//
-	// +optional
-	PolicySource *PolicySource `json:"policySource,omitempty"`
+	PolicySource PolicySource `json:"policySource"`
 
 	// SecurityLogs defines security logging configurations.
 	//
@@ -88,7 +85,7 @@ const (
 	PolicySourceTypeNIM PolicySourceType = "NIM"
 
 	// PolicySourceTypeN1C fetches a compiled bundle from the F5 NGINX One Console security policies API.
-	// Requires managedSource.namespace in addition to managedSource.policyName.
+	// Requires managedSource.n1cNamespace in addition to managedSource.policyName.
 	// Authentication uses the APIToken scheme: the "token" key from the referenced Secret is sent as
 	// "Authorization: APIToken <token>".
 	PolicySourceTypeN1C PolicySourceType = "N1C"
@@ -96,15 +93,58 @@ const (
 
 // PolicySource holds all configuration for fetching a WAF policy bundle.
 type PolicySource struct {
-	ManagedSource      *ManagedBundleSource         `json:"managedSource,omitempty"`
-	Auth               *BundleAuth                  `json:"auth,omitempty"`
-	TLSSecret          *corev1.LocalObjectReference `json:"tlsSecret,omitempty"`
-	Validation         *BundleValidation            `json:"validation,omitempty"`
-	Polling            *BundlePolling               `json:"polling,omitempty"`
-	Timeout            *metav1.Duration             `json:"timeout,omitempty"`
-	RetryPolicy        *BundleRetryPolicy           `json:"retryPolicy,omitempty"`
-	URL                string                       `json:"url"`
-	InsecureSkipVerify bool                         `json:"insecureSkipVerify,omitempty"`
+	// ManagedSource configures bundle fetching from NGINX Instance Manager (NIM) or F5 NGINX One Console (N1C).
+	// Required when type is NIM or N1C.
+	//
+	// +optional
+	ManagedSource *ManagedBundleSource `json:"managedSource,omitempty"`
+
+	// Auth configures authentication credentials for fetching the bundle.
+	//
+	// +optional
+	Auth *BundleAuth `json:"auth,omitempty"`
+
+	// TLSSecretRef references a Secret containing a custom CA certificate (key: "ca.crt") for
+	// verifying the bundle server's TLS certificate.
+	//
+	// +optional
+	TLSSecretRef *LocalObjectReference `json:"tlsSecret,omitempty"`
+
+	// Validation configures integrity verification for the downloaded bundle.
+	//
+	// +optional
+	Validation *BundleValidation `json:"validation,omitempty"`
+
+	// Polling configures automatic periodic re-fetching of the bundle.
+	//
+	// +optional
+	Polling *BundlePolling `json:"polling,omitempty"`
+
+	// Timeout is the maximum duration for a single bundle fetch attempt.
+	// Defaults to 30s when not set.
+	//
+	// +optional
+	Timeout *metav1.Duration `json:"timeout,omitempty"`
+
+	// RetryPolicy configures retry behavior for transient fetch failures during the
+	// initial bundle fetch.
+	//
+	// +optional
+	RetryPolicy *BundleRetryPolicy `json:"retryPolicy,omitempty"`
+
+	// URL is the HTTP or HTTPS address of the compiled policy bundle (.tgz).
+	// Required when type is HTTP, NIM, or N1C.
+	//
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=2083
+	// +kubebuilder:validation:Pattern=`^https?://`
+	URL string `json:"url"`
+
+	// InsecureSkipVerify disables TLS certificate verification when fetching the bundle.
+	// Not recommended for production use.
+	//
+	// +optional
+	InsecureSkipVerify bool `json:"insecureSkipVerify,omitempty"`
 }
 
 // BundleValidation configures integrity verification for a bundle.
@@ -144,14 +184,14 @@ type BundleRetryPolicy struct {
 
 // ManagedBundleSource configures bundle fetching from NGINX Instance Manager (NIM) or F5 NGINX One Console (N1C).
 type ManagedBundleSource struct {
-	// Namespace is the N1C namespace the policy belongs to.
+	// N1CNamespace is the N1C namespace the policy belongs to.
 	// Required when the parent type is N1C; ignored for NIM.
 	// The value is percent-encoded before being included in the request URL.
 	//
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=253
-	Namespace *string `json:"namespace,omitempty"`
+	N1CNamespace *string `json:"n1cNamespace,omitempty"`
 
 	// PolicyName is the name of the security policy to fetch.
 	// For NIM: used as the policyName query parameter in the NIM security policies bundles API.
@@ -169,7 +209,7 @@ type BundleAuth struct {
 	// The Secret may contain:
 	//   - "username" and "password" fields for HTTP Basic Authentication
 	//   - "token" field for Bearer Token Authentication (NIM) or APIToken Authentication (N1C)
-	SecretRef corev1.LocalObjectReference `json:"secretRef"`
+	SecretRef LocalObjectReference `json:"secretRef"`
 }
 
 // DefaultLogProfile identifies a built-in WAF log profile bundle.
@@ -234,11 +274,11 @@ type LogSource struct {
 	// +optional
 	Auth *BundleAuth `json:"auth,omitempty"`
 
-	// TLSSecret references a Secret containing a custom CA certificate (key: "ca.crt").
+	// TLSSecretRef references a Secret containing a custom CA certificate (key: "ca.crt").
 	// Only applicable when url is set.
 	//
 	// +optional
-	TLSSecret *corev1.LocalObjectReference `json:"tlsSecret,omitempty"`
+	TLSSecretRef *LocalObjectReference `json:"tlsSecret,omitempty"`
 
 	// Validation configures integrity verification for the downloaded log bundle.
 	// Only applicable when url is set.

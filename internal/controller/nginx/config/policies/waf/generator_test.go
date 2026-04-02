@@ -34,7 +34,7 @@ func TestGenerate(t *testing.T) {
 					Namespace: "my-namespace",
 				},
 				Spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
-					PolicySource: &ngfAPIv1alpha1.PolicySource{
+					PolicySource: ngfAPIv1alpha1.PolicySource{
 						URL: policyURL,
 					},
 				},
@@ -52,7 +52,7 @@ func TestGenerate(t *testing.T) {
 					Namespace: "test-ns",
 				},
 				Spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
-					PolicySource: &ngfAPIv1alpha1.PolicySource{
+					PolicySource: ngfAPIv1alpha1.PolicySource{
 						URL: policyURL,
 					},
 					SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
@@ -82,7 +82,7 @@ func TestGenerate(t *testing.T) {
 					Namespace: "test-ns",
 				},
 				Spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
-					PolicySource: &ngfAPIv1alpha1.PolicySource{
+					PolicySource: ngfAPIv1alpha1.PolicySource{
 						URL: policyURL,
 					},
 					SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
@@ -142,7 +142,7 @@ func TestGenerate(t *testing.T) {
 					Namespace: "app-ns",
 				},
 				Spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
-					PolicySource: &ngfAPIv1alpha1.PolicySource{
+					PolicySource: ngfAPIv1alpha1.PolicySource{
 						URL: policyURL,
 					},
 					SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{

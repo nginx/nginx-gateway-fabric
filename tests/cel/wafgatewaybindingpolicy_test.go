@@ -19,7 +19,7 @@ func newWAFGatewayBindingPolicy(
 	t.Helper()
 	if spec.Type == "" {
 		spec.Type = ngfAPIv1alpha1.PolicySourceTypeHTTP
-		spec.PolicySource = &ngfAPIv1alpha1.PolicySource{URL: "https://example.com/policy.tgz"}
+		spec.PolicySource = ngfAPIv1alpha1.PolicySource{URL: "https://example.com/policy.tgz"}
 	}
 	return &ngfAPIv1alpha1.WAFGatewayBindingPolicy{
 		ObjectMeta: controllerruntime.ObjectMeta{
@@ -720,7 +720,7 @@ func TestWAFGatewayBindingPolicyPolicySource(t *testing.T) {
 			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
 				TargetRefs:   []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
 				Type:         ngfAPIv1alpha1.PolicySourceTypeHTTP,
-				PolicySource: &ngfAPIv1alpha1.PolicySource{URL: "https://example.com/policy.tgz"},
+				PolicySource: ngfAPIv1alpha1.PolicySource{URL: "https://example.com/policy.tgz"},
 			},
 		},
 		{
@@ -728,7 +728,7 @@ func TestWAFGatewayBindingPolicyPolicySource(t *testing.T) {
 			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
 				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
 				Type:       ngfAPIv1alpha1.PolicySourceTypeNIM,
-				PolicySource: &ngfAPIv1alpha1.PolicySource{
+				PolicySource: ngfAPIv1alpha1.PolicySource{
 					URL:           "https://nim.example.com",
 					ManagedSource: &ngfAPIv1alpha1.ManagedBundleSource{PolicyName: "my-policy"},
 				},
@@ -739,11 +739,11 @@ func TestWAFGatewayBindingPolicyPolicySource(t *testing.T) {
 			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
 				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
 				Type:       ngfAPIv1alpha1.PolicySourceTypeN1C,
-				PolicySource: &ngfAPIv1alpha1.PolicySource{
+				PolicySource: ngfAPIv1alpha1.PolicySource{
 					URL: "https://n1c.example.com",
 					ManagedSource: &ngfAPIv1alpha1.ManagedBundleSource{
-						PolicyName: "my-policy",
-						Namespace:  &namespace,
+						PolicyName:   "my-policy",
+						N1CNamespace: &namespace,
 					},
 				},
 			},
@@ -754,7 +754,7 @@ func TestWAFGatewayBindingPolicyPolicySource(t *testing.T) {
 			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
 				TargetRefs:   []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
 				Type:         ngfAPIv1alpha1.PolicySourceTypeNIM,
-				PolicySource: &ngfAPIv1alpha1.PolicySource{URL: "https://nim.example.com"},
+				PolicySource: ngfAPIv1alpha1.PolicySource{URL: "https://nim.example.com"},
 			},
 		},
 		{
@@ -763,7 +763,7 @@ func TestWAFGatewayBindingPolicyPolicySource(t *testing.T) {
 			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
 				TargetRefs:   []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
 				Type:         ngfAPIv1alpha1.PolicySourceTypeN1C,
-				PolicySource: &ngfAPIv1alpha1.PolicySource{URL: "https://n1c.example.com"},
+				PolicySource: ngfAPIv1alpha1.PolicySource{URL: "https://n1c.example.com"},
 			},
 		},
 		{
@@ -772,7 +772,7 @@ func TestWAFGatewayBindingPolicyPolicySource(t *testing.T) {
 			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
 				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
 				Type:       ngfAPIv1alpha1.PolicySourceTypeN1C,
-				PolicySource: &ngfAPIv1alpha1.PolicySource{
+				PolicySource: ngfAPIv1alpha1.PolicySource{
 					URL:           "https://n1c.example.com",
 					ManagedSource: &ngfAPIv1alpha1.ManagedBundleSource{PolicyName: "my-policy"},
 				},
@@ -784,7 +784,7 @@ func TestWAFGatewayBindingPolicyPolicySource(t *testing.T) {
 			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
 				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
 				Type:       ngfAPIv1alpha1.PolicySourceTypeHTTP,
-				PolicySource: &ngfAPIv1alpha1.PolicySource{
+				PolicySource: ngfAPIv1alpha1.PolicySource{
 					URL:           "https://example.com/policy.tgz",
 					ManagedSource: &ngfAPIv1alpha1.ManagedBundleSource{PolicyName: "my-policy"},
 				},

@@ -27,7 +27,7 @@ func createValidPolicy() *ngfAPI.WAFGatewayBindingPolicy {
 					Name:  "gateway",
 				},
 			},
-			PolicySource: &ngfAPI.PolicySource{
+			PolicySource: ngfAPI.PolicySource{
 				URL: "https://storage.example.com/policy.tgz",
 			},
 		},
@@ -58,7 +58,7 @@ func TestValidator_Validate(t *testing.T) {
 							Name:  "gateway",
 						},
 					},
-					PolicySource: &ngfAPI.PolicySource{
+					PolicySource: ngfAPI.PolicySource{
 						URL: "https://storage.example.com/policy.tgz",
 					},
 				},

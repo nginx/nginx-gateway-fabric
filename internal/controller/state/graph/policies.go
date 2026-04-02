@@ -798,8 +798,8 @@ func buildPolicyFetchRequest(
 
 	if policySource.ManagedSource != nil {
 		req.NIMPolicyName = policySource.ManagedSource.PolicyName
-		if policyType == ngfAPIv1alpha1.PolicySourceTypeN1C && policySource.ManagedSource.Namespace != nil {
-			req.N1CNamespace = *policySource.ManagedSource.Namespace
+		if policyType == ngfAPIv1alpha1.PolicySourceTypeN1C && policySource.ManagedSource.N1CNamespace != nil {
+			req.N1CNamespace = *policySource.ManagedSource.N1CNamespace
 			// N1C uses the APIToken auth scheme rather than Bearer.
 			// Move the token value from BearerToken to APIToken.
 			if auth != nil && auth.BearerToken != "" {
@@ -829,7 +829,7 @@ func fetchPolicyBundle(
 	wafInput *WAFProcessingInput,
 	output *WAFProcessingOutput,
 ) {
-	if wafPolicy.Spec.PolicySource == nil || wafPolicy.Spec.PolicySource.URL == "" {
+	if wafPolicy.Spec.PolicySource.URL == "" {
 		return
 	}
 
@@ -848,9 +848,9 @@ func fetchPolicyBundle(
 	}
 
 	var tlsCA []byte
-	if policySource.TLSSecret != nil {
+	if policySource.TLSSecretRef != nil {
 		var err error
-		tlsCA, err = resolveTLSCA(policySource.TLSSecret, wafPolicy.Namespace, wafInput, output)
+		tlsCA, err = resolveTLSCA(policySource.TLSSecretRef, wafPolicy.Namespace, wafInput, output)
 		if err != nil {
 			cond := conditions.NewPolicyNotProgrammedBundleFetchError(err.Error())
 			policy.Conditions = append(policy.Conditions, cond)
@@ -861,7 +861,7 @@ func fetchPolicyBundle(
 
 	bundleKey := WAFBundleKey(fmt.Sprintf("%s_%s", wafPolicy.Namespace, wafPolicy.Name))
 
-	req := buildPolicyFetchRequest(policySource, wafPolicy.Spec.Type, auth, tlsCA)
+	req := buildPolicyFetchRequest(&policySource, wafPolicy.Spec.Type, auth, tlsCA)
 
 	data, checksum, err := wafInput.Fetcher.Fetch(context.Background(), req)
 	if err != nil {
@@ -906,9 +906,9 @@ func fetchSecurityLogBundles(
 		}
 
 		var tlsCA []byte
-		if secLog.LogSource.TLSSecret != nil {
+		if secLog.LogSource.TLSSecretRef != nil {
 			var err error
-			tlsCA, err = resolveTLSCA(secLog.LogSource.TLSSecret, wafPolicy.Namespace, wafInput, output)
+			tlsCA, err = resolveTLSCA(secLog.LogSource.TLSSecretRef, wafPolicy.Namespace, wafInput, output)
 			if err != nil {
 				cond := conditions.NewPolicyNotProgrammedBundleFetchError(err.Error())
 				policy.Conditions = append(policy.Conditions, cond)
@@ -975,7 +975,7 @@ func resolveBundleAuth(
 // It looks up the referenced Secret from wafInput.Secrets and adds it to output.ReferencedWAFAuthSecrets.
 // tlsSecret must not be nil.
 func resolveTLSCA(
-	tlsSecret *corev1.LocalObjectReference,
+	tlsSecret *ngfAPIv1alpha1.LocalObjectReference,
 	policyNamespace string,
 	wafInput *WAFProcessingInput,
 	output *WAFProcessingOutput,

@@ -12392,7 +12392,8 @@ spec:
                 description: PolicySource holds all policy bundle fetch configuration.
                 properties:
                   auth:
-                    description: BundleAuth configures authentication for bundle fetching.
+                    description: Auth configures authentication credentials for fetching
+                      the bundle.
                     properties:
                       secretRef:
                         description: |-
@@ -12402,28 +12403,27 @@ spec:
                             - "token" field for Bearer Token Authentication (NIM) or APIToken Authentication (N1C)
                         properties:
                           name:
-                            default: ""
-                            description: |-
-                              Name of the referent.
-                              This field is effectively required, but due to backwards compatibility is
-                              allowed to be empty. Instances of this type with an empty value here are
-                              almost certainly wrong.
-                              More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                            description: Name is the referenced object.
                             type: string
+                        required:
+                        - name
                         type: object
-                        x-kubernetes-map-type: atomic
                     required:
                     - secretRef
                     type: object
                   insecureSkipVerify:
+                    description: |-
+                      InsecureSkipVerify disables TLS certificate verification when fetching the bundle.
+                      Not recommended for production use.
                     type: boolean
                   managedSource:
-                    description: ManagedBundleSource configures bundle fetching from
-                      NGINX Instance Manager (NIM) or F5 NGINX One Console (N1C).
+                    description: |-
+                      ManagedSource configures bundle fetching from NGINX Instance Manager (NIM) or F5 NGINX One Console (N1C).
+                      Required when type is NIM or N1C.
                     properties:
-                      namespace:
+                      n1cNamespace:
                         description: |-
-                          Namespace is the N1C namespace the policy belongs to.
+                          N1CNamespace is the N1C namespace the policy belongs to.
                           Required when the parent type is N1C; ignored for NIM.
                           The value is percent-encoded before being included in the request URL.
                         maxLength: 253
@@ -12442,8 +12442,8 @@ spec:
                     - policyName
                     type: object
                   polling:
-                    description: BundlePolling configures automatic re-fetching of
-                      a bundle.
+                    description: Polling configures automatic periodic re-fetching
+                      of the bundle.
                     properties:
                       enabled:
                         description: |-
@@ -12458,8 +12458,9 @@ spec:
                         type: string
                     type: object
                   retryPolicy:
-                    description: BundleRetryPolicy configures retry behavior on bundle
-                      fetch failures.
+                    description: |-
+                      RetryPolicy configures retry behavior for transient fetch failures during the
+                      initial bundle fetch.
                     properties:
                       attempts:
                         description: Attempts is the maximum number of fetch attempts
@@ -12470,28 +12471,32 @@ spec:
                         type: integer
                     type: object
                   timeout:
+                    description: |-
+                      Timeout is the maximum duration for a single bundle fetch attempt.
+                      Defaults to 30s when not set.
                     type: string
                   tlsSecret:
                     description: |-
-                      LocalObjectReference contains enough information to let you locate the
-                      referenced object inside the same namespace.
+                      TLSSecretRef references a Secret containing a custom CA certificate (key: "ca.crt") for
+                      verifying the bundle server's TLS certificate.
                     properties:
                       name:
-                        default: ""
-                        description: |-
-                          Name of the referent.
-                          This field is effectively required, but due to backwards compatibility is
-                          allowed to be empty. Instances of this type with an empty value here are
-                          almost certainly wrong.
-                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                        description: Name is the referenced object.
                         type: string
+                    required:
+                    - name
                     type: object
-                    x-kubernetes-map-type: atomic
                   url:
+                    description: |-
+                      URL is the HTTP or HTTPS address of the compiled policy bundle (.tgz).
+                      Required when type is HTTP, NIM, or N1C.
+                    maxLength: 2083
+                    minLength: 1
+                    pattern: ^https?://
                     type: string
                   validation:
-                    description: BundleValidation configures integrity verification
-                      for a bundle.
+                    description: Validation configures integrity verification for
+                      the downloaded bundle.
                     properties:
                       verifyChecksum:
                         description: |-
@@ -12583,16 +12588,11 @@ spec:
                                   - "token" field for Bearer Token Authentication (NIM) or APIToken Authentication (N1C)
                               properties:
                                 name:
-                                  default: ""
-                                  description: |-
-                                    Name of the referent.
-                                    This field is effectively required, but due to backwards compatibility is
-                                    allowed to be empty. Instances of this type with an empty value here are
-                                    almost certainly wrong.
-                                    More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                  description: Name is the referenced object.
                                   type: string
+                              required:
+                              - name
                               type: object
-                              x-kubernetes-map-type: atomic
                           required:
                           - secretRef
                           type: object
@@ -12646,20 +12646,15 @@ spec:
                           type: string
                         tlsSecret:
                           description: |-
-                            TLSSecret references a Secret containing a custom CA certificate (key: "ca.crt").
+                            TLSSecretRef references a Secret containing a custom CA certificate (key: "ca.crt").
                             Only applicable when url is set.
                           properties:
                             name:
-                              default: ""
-                              description: |-
-                                Name of the referent.
-                                This field is effectively required, but due to backwards compatibility is
-                                allowed to be empty. Instances of this type with an empty value here are
-                                almost certainly wrong.
-                                More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                              description: Name is the referenced object.
                               type: string
+                          required:
+                          - name
                           type: object
-                          x-kubernetes-map-type: atomic
                         url:
                           description: |-
                             URL is the HTTP or HTTPS address of the compiled log profile bundle (.tgz).
@@ -12750,6 +12745,7 @@ spec:
                 - N1C
                 type: string
             required:
+            - policySource
             - targetRefs
             - type
             type: object
@@ -12766,7 +12762,7 @@ spec:
             - message: policySource.managedSource.namespace is required when type
                 is N1C
               rule: self.type != 'N1C' || (has(self.policySource) && has(self.policySource.managedSource)
-                && has(self.policySource.managedSource.namespace))
+                && has(self.policySource.managedSource.n1cNamespace))
           status:
             description: Status defines the state of the WAFGatewayBindingPolicy.
             properties:
