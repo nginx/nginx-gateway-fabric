@@ -81,6 +81,9 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 	gateway *gatewayv1.Gateway,
 	nProxyCfg *graph.EffectiveNginxProxy,
 ) ([]client.Object, error) {
+	// NOTE: When adding new fields to the generated objects, please ensure to update the corresponding spec
+	// setter function in setter.go to set the new fields when updating the object.
+
 	var errs []error
 
 	// Need to ensure nginx resource objects are generated deterministically. Specifically when generating
