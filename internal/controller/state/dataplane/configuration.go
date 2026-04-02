@@ -1812,9 +1812,8 @@ func resolveUpstreamEndpoints(
 		return []resolver.Endpoint{endpoint}, nil
 	}
 
-	// For regular services, resolve endpoints for both IPv4 and IPv6 address types.
-	// The NginxProxy ipFamily setting only determines which type of IPAddress does,
-	// NGINX listens on and not upstream endpoint selection.
+	// Resolve endpoints for both IPv4 and IPv6. NginxProxy ipFamily controls only the
+	// NGINX listen directives, not which upstream endpoints are selected.
 	return svcResolver.Resolve(
 		ctx,
 		logger,
