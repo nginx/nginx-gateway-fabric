@@ -74,16 +74,12 @@ const (
 		`is 'hash' or 'hash consistent'`
 
 	// WAFGatewayBindingPolicy errors.
-	expectedWAFFileNilIfNotFileTypeError       = "destination.file must be nil if the destination.type is not file"
-	expectedWAFFileRequiredIfFileTypeError     = "destination.file must be specified for file destination.type"
-	expectedWAFSyslogNilIfNotSyslogTypeError   = "destination.syslog must be nil if the destination.type is not syslog"
-	expectedWAFSyslogRequiredIfSyslogTypeError = "destination.syslog must be specified for syslog destination.type"
-	expectedWAFLogSourceMutualExclusionError   = "exactly one of logSource.url or logSource.defaultProfile must be set"
-	expectedWAFValidationMutualExclusionError  = "verifyChecksum and expectedChecksum are mutually exclusive"
-	expectedWAFNIMSourceRequiredError          = "policySource.nimSource is required when type is NIM"
-	expectedWAFN1CSourceRequiredError          = "policySource.n1cSource is required when type is N1C"
-	expectedWAFNIMSourceForbiddenError         = "policySource.nimSource must not be set when type is not NIM"
-	expectedWAFN1CSourceForbiddenError         = "policySource.n1cSource must not be set when type is not N1C"
+	expectedWAFFileIfAndOnlyIfFileTypeError   = "destination.file must be set if and only if type is file"
+	expectedWAFSyslogIfAndOnlyIfSyslogType    = "destination.syslog must be set if and only if type is syslog"
+	expectedWAFLogSourceMutualExclusionError  = "exactly one of logSource.url or logSource.defaultProfile must be set"
+	expectedWAFValidationMutualExclusionError = "verifyChecksum and expectedChecksum are mutually exclusive"
+	expectedWAFNIMSourceIfAndOnlyIfNIMType    = "policySource.nimSource must be set if and only if type is NIM"
+	expectedWAFN1CSourceIfAndOnlyIfN1CType    = "policySource.n1cSource must be set if and only if type is N1C"
 
 	// Namespace for tests.
 	defaultNamespace = "default"

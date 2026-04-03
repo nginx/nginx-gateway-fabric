@@ -252,16 +252,12 @@ spec:
                       - type
                       type: object
                       x-kubernetes-validations:
-                      - message: destination.file must be nil if the destination.type
-                          is not file
-                        rule: '!(has(self.file) && self.type != ''file'')'
-                      - message: destination.file must be specified for file destination.type
-                        rule: '!(!has(self.file) && self.type == ''file'')'
-                      - message: destination.syslog must be nil if the destination.type
-                          is not syslog
-                        rule: '!(has(self.syslog) && self.type != ''syslog'')'
-                      - message: destination.syslog must be specified for syslog destination.type
-                        rule: '!(!has(self.syslog) && self.type == ''syslog'')'
+                      - message: destination.file must be set if and only if type
+                          is file
+                        rule: (self.type == 'file') == has(self.file)
+                      - message: destination.syslog must be set if and only if type
+                          is syslog
+                        rule: (self.type == 'syslog') == has(self.syslog)
                     logSource:
                       description: LogSource configures the log profile bundle source
                         for this log configuration.
@@ -445,18 +441,13 @@ spec:
             - type
             type: object
             x-kubernetes-validations:
-            - message: policySource.httpSource is required when type is HTTP
-              rule: self.type != 'HTTP' || (has(self.policySource) && has(self.policySource.httpSource))
-            - message: policySource.nimSource is required when type is NIM
-              rule: self.type != 'NIM' || (has(self.policySource) && has(self.policySource.nimSource))
-            - message: policySource.n1cSource is required when type is N1C
-              rule: self.type != 'N1C' || (has(self.policySource) && has(self.policySource.n1cSource))
-            - message: policySource.httpSource must not be set when type is not HTTP
-              rule: self.type == 'HTTP' || !has(self.policySource) || !has(self.policySource.httpSource)
-            - message: policySource.nimSource must not be set when type is not NIM
-              rule: self.type == 'NIM' || !has(self.policySource) || !has(self.policySource.nimSource)
-            - message: policySource.n1cSource must not be set when type is not N1C
-              rule: self.type == 'N1C' || !has(self.policySource) || !has(self.policySource.n1cSource)
+            - message: policySource.httpSource must be set if and only if type is
+                HTTP
+              rule: (self.type == 'HTTP') == (has(self.policySource) && has(self.policySource.httpSource))
+            - message: policySource.nimSource must be set if and only if type is NIM
+              rule: (self.type == 'NIM') == (has(self.policySource) && has(self.policySource.nimSource))
+            - message: policySource.n1cSource must be set if and only if type is N1C
+              rule: (self.type == 'N1C') == (has(self.policySource) && has(self.policySource.n1cSource))
           status:
             description: Status defines the state of the WAFGatewayBindingPolicy.
             properties:

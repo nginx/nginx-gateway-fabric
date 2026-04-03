@@ -38,12 +38,9 @@ type WAFGatewayBindingPolicyList struct {
 
 // WAFGatewayBindingPolicySpec defines the desired state of a WAFGatewayBindingPolicy.
 //
-// +kubebuilder:validation:XValidation:message="policySource.httpSource is required when type is HTTP",rule="self.type != 'HTTP' || (has(self.policySource) && has(self.policySource.httpSource))"
-// +kubebuilder:validation:XValidation:message="policySource.nimSource is required when type is NIM",rule="self.type != 'NIM' || (has(self.policySource) && has(self.policySource.nimSource))"
-// +kubebuilder:validation:XValidation:message="policySource.n1cSource is required when type is N1C",rule="self.type != 'N1C' || (has(self.policySource) && has(self.policySource.n1cSource))"
-// +kubebuilder:validation:XValidation:message="policySource.httpSource must not be set when type is not HTTP",rule="self.type == 'HTTP' || !has(self.policySource) || !has(self.policySource.httpSource)"
-// +kubebuilder:validation:XValidation:message="policySource.nimSource must not be set when type is not NIM",rule="self.type == 'NIM' || !has(self.policySource) || !has(self.policySource.nimSource)"
-// +kubebuilder:validation:XValidation:message="policySource.n1cSource must not be set when type is not N1C",rule="self.type == 'N1C' || !has(self.policySource) || !has(self.policySource.n1cSource)"
+// +kubebuilder:validation:XValidation:message="policySource.httpSource must be set if and only if type is HTTP",rule="(self.type == 'HTTP') == (has(self.policySource) && has(self.policySource.httpSource))"
+// +kubebuilder:validation:XValidation:message="policySource.nimSource must be set if and only if type is NIM",rule="(self.type == 'NIM') == (has(self.policySource) && has(self.policySource.nimSource))"
+// +kubebuilder:validation:XValidation:message="policySource.n1cSource must be set if and only if type is N1C",rule="(self.type == 'N1C') == (has(self.policySource) && has(self.policySource.n1cSource))"
 //
 //nolint:lll
 type WAFGatewayBindingPolicySpec struct {
@@ -333,10 +330,8 @@ type LogSource struct {
 
 // SecurityLogDestination defines the destination for security logs.
 //
-// +kubebuilder:validation:XValidation:message="destination.file must be nil if the destination.type is not file",rule="!(has(self.file) && self.type != 'file')"
-// +kubebuilder:validation:XValidation:message="destination.file must be specified for file destination.type",rule="!(!has(self.file) && self.type == 'file')"
-// +kubebuilder:validation:XValidation:message="destination.syslog must be nil if the destination.type is not syslog",rule="!(has(self.syslog) && self.type != 'syslog')"
-// +kubebuilder:validation:XValidation:message="destination.syslog must be specified for syslog destination.type",rule="!(!has(self.syslog) && self.type == 'syslog')"
+// +kubebuilder:validation:XValidation:message="destination.file must be set if and only if type is file",rule="(self.type == 'file') == has(self.file)"
+// +kubebuilder:validation:XValidation:message="destination.syslog must be set if and only if type is syslog",rule="(self.type == 'syslog') == has(self.syslog)"
 //
 //nolint:lll
 type SecurityLogDestination struct {

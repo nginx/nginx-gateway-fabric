@@ -425,7 +425,7 @@ func TestWAFGatewayBindingPolicySecurityLogDestinationFile(t *testing.T) {
 		},
 		{
 			name:       "file field set with type stderr is invalid",
-			wantErrors: []string{expectedWAFFileNilIfNotFileTypeError},
+			wantErrors: []string{expectedWAFFileIfAndOnlyIfFileTypeError},
 			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
 				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
 				SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
@@ -441,7 +441,7 @@ func TestWAFGatewayBindingPolicySecurityLogDestinationFile(t *testing.T) {
 		},
 		{
 			name:       "file field set with type syslog is invalid",
-			wantErrors: []string{expectedWAFFileNilIfNotFileTypeError},
+			wantErrors: []string{expectedWAFFileIfAndOnlyIfFileTypeError},
 			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
 				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
 				SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
@@ -457,7 +457,7 @@ func TestWAFGatewayBindingPolicySecurityLogDestinationFile(t *testing.T) {
 		},
 		{
 			name:       "missing file field with type file is invalid",
-			wantErrors: []string{expectedWAFFileRequiredIfFileTypeError},
+			wantErrors: []string{expectedWAFFileIfAndOnlyIfFileTypeError},
 			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
 				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
 				SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
@@ -472,7 +472,7 @@ func TestWAFGatewayBindingPolicySecurityLogDestinationFile(t *testing.T) {
 		},
 		{
 			name:       "both file and syslog set with type file is invalid",
-			wantErrors: []string{expectedWAFSyslogNilIfNotSyslogTypeError},
+			wantErrors: []string{expectedWAFSyslogIfAndOnlyIfSyslogType},
 			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
 				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
 				SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
@@ -550,7 +550,7 @@ func TestWAFGatewayBindingPolicySecurityLogDestinationSyslog(t *testing.T) {
 		},
 		{
 			name:       "syslog field set with type stderr is invalid",
-			wantErrors: []string{expectedWAFSyslogNilIfNotSyslogTypeError},
+			wantErrors: []string{expectedWAFSyslogIfAndOnlyIfSyslogType},
 			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
 				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
 				SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
@@ -566,7 +566,7 @@ func TestWAFGatewayBindingPolicySecurityLogDestinationSyslog(t *testing.T) {
 		},
 		{
 			name:       "syslog field set with type file is invalid",
-			wantErrors: []string{expectedWAFSyslogNilIfNotSyslogTypeError},
+			wantErrors: []string{expectedWAFSyslogIfAndOnlyIfSyslogType},
 			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
 				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
 				SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
@@ -582,7 +582,7 @@ func TestWAFGatewayBindingPolicySecurityLogDestinationSyslog(t *testing.T) {
 		},
 		{
 			name:       "missing syslog field with type syslog is invalid",
-			wantErrors: []string{expectedWAFSyslogRequiredIfSyslogTypeError},
+			wantErrors: []string{expectedWAFSyslogIfAndOnlyIfSyslogType},
 			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
 				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
 				SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
@@ -597,7 +597,7 @@ func TestWAFGatewayBindingPolicySecurityLogDestinationSyslog(t *testing.T) {
 		},
 		{
 			name:       "both file and syslog set with type syslog is invalid",
-			wantErrors: []string{expectedWAFFileNilIfNotFileTypeError},
+			wantErrors: []string{expectedWAFFileIfAndOnlyIfFileTypeError},
 			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
 				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
 				SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
@@ -757,7 +757,7 @@ func TestWAFGatewayBindingPolicyPolicySource(t *testing.T) {
 		},
 		{
 			name:       "NIM type without nimSource is invalid",
-			wantErrors: []string{expectedWAFNIMSourceRequiredError},
+			wantErrors: []string{expectedWAFNIMSourceIfAndOnlyIfNIMType},
 			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
 				TargetRefs:   []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
 				Type:         ngfAPIv1alpha1.PolicySourceTypeNIM,
@@ -766,7 +766,7 @@ func TestWAFGatewayBindingPolicyPolicySource(t *testing.T) {
 		},
 		{
 			name:       "N1C type without n1cSource is invalid",
-			wantErrors: []string{expectedWAFN1CSourceRequiredError},
+			wantErrors: []string{expectedWAFN1CSourceIfAndOnlyIfN1CType},
 			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
 				TargetRefs:   []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
 				Type:         ngfAPIv1alpha1.PolicySourceTypeN1C,
@@ -775,7 +775,7 @@ func TestWAFGatewayBindingPolicyPolicySource(t *testing.T) {
 		},
 		{
 			name:       "nimSource set with HTTP type is invalid",
-			wantErrors: []string{expectedWAFNIMSourceForbiddenError},
+			wantErrors: []string{expectedWAFNIMSourceIfAndOnlyIfNIMType},
 			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
 				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
 				Type:       ngfAPIv1alpha1.PolicySourceTypeHTTP,
@@ -790,7 +790,7 @@ func TestWAFGatewayBindingPolicyPolicySource(t *testing.T) {
 		},
 		{
 			name:       "n1cSource set with HTTP type is invalid",
-			wantErrors: []string{expectedWAFN1CSourceForbiddenError},
+			wantErrors: []string{expectedWAFN1CSourceIfAndOnlyIfN1CType},
 			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
 				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
 				Type:       ngfAPIv1alpha1.PolicySourceTypeHTTP,
@@ -806,7 +806,7 @@ func TestWAFGatewayBindingPolicyPolicySource(t *testing.T) {
 		},
 		{
 			name:       "nimSource set with N1C type is invalid",
-			wantErrors: []string{expectedWAFNIMSourceForbiddenError},
+			wantErrors: []string{expectedWAFNIMSourceIfAndOnlyIfNIMType},
 			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
 				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
 				Type:       ngfAPIv1alpha1.PolicySourceTypeN1C,
@@ -825,7 +825,7 @@ func TestWAFGatewayBindingPolicyPolicySource(t *testing.T) {
 		},
 		{
 			name:       "n1cSource set with NIM type is invalid",
-			wantErrors: []string{expectedWAFN1CSourceForbiddenError},
+			wantErrors: []string{expectedWAFN1CSourceIfAndOnlyIfN1CType},
 			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
 				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
 				Type:       ngfAPIv1alpha1.PolicySourceTypeNIM,
