@@ -1510,7 +1510,7 @@ func buildGenericL4Route(
 		if len(rule.backendRefs) > 0 {
 			for refIdx, ref := range rule.backendRefs {
 				br, conds := validateBackendRefL4RouteMulti(
-					config.namespace, ref, services, r.ParentRefs,
+					config.namespace, ref, services,
 					config.refGrantResolver, ruleIdx, refIdx,
 				)
 				allBackendRefs = append(allBackendRefs, br)
@@ -1536,7 +1536,6 @@ func validateBackendRefL4RouteMulti(
 	namespace string,
 	ref v1alpha.BackendRef,
 	services map[types.NamespacedName]*apiv1.Service,
-	parentRefs []ParentRef,
 	refGrantResolver func(resource toResource) bool,
 	ruleIdx int,
 	refIdx int,
@@ -1567,7 +1566,7 @@ func validateBackendRefL4RouteMulti(
 		Name:      string(ref.Name),
 	}
 
-	svcIPFamily, svcPort, err := getIPFamilyAndPortFromRef(
+	svcPort, err := getPortFromRef(
 		ref,
 		svcNsName,
 		services,
@@ -1601,12 +1600,5 @@ func validateBackendRefL4RouteMulti(
 	// For TCP/UDPRoute, we don't need to validate app protocol compatibility
 	// as TCP/UDP are protocol-agnostic at the application layer
 
-	var conds []conditions.Condition
-	for _, parentRef := range parentRefs {
-		if err := verifyIPFamily(parentRef.Gateway.EffectiveNginxProxy, svcIPFamily); err != nil {
-			backendRef.InvalidForGateways[parentRef.Gateway.NamespacedName] = conditions.NewRouteInvalidIPFamily(err.Error())
-		}
-	}
-
-	return backendRef, conds
+	return backendRef, nil
 }

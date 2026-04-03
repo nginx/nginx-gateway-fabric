@@ -734,18 +734,20 @@ func TestBuildCorsMaps(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name           string
-		virtualServers []dataplane.VirtualServer
-		expected       []shared.Map
+		name        string
+		httpServers []dataplane.VirtualServer
+		sslServers  []dataplane.VirtualServer
+		expected    []shared.Map
 	}{
 		{
-			name:           "empty virtual servers",
-			virtualServers: []dataplane.VirtualServer{},
-			expected:       []shared.Map{},
+			name:        "empty virtual servers",
+			httpServers: []dataplane.VirtualServer{},
+			sslServers:  []dataplane.VirtualServer{},
+			expected:    []shared.Map{},
 		},
 		{
 			name: "virtual server with no CORS filter",
-			virtualServers: []dataplane.VirtualServer{
+			httpServers: []dataplane.VirtualServer{
 				{
 					Port: 80,
 					PathRules: []dataplane.PathRule{
@@ -760,11 +762,12 @@ func TestBuildCorsMaps(t *testing.T) {
 					},
 				},
 			},
-			expected: []shared.Map{},
+			sslServers: []dataplane.VirtualServer{},
+			expected:   []shared.Map{},
 		},
 		{
 			name: "virtual server with CORS filter - AllowOrigins only",
-			virtualServers: []dataplane.VirtualServer{
+			httpServers: []dataplane.VirtualServer{
 				{
 					Port: 80,
 					PathRules: []dataplane.PathRule{
@@ -783,6 +786,7 @@ func TestBuildCorsMaps(t *testing.T) {
 					},
 				},
 			},
+			sslServers: []dataplane.VirtualServer{},
 			expected: []shared.Map{
 				{
 					Source:   "$http_origin",
@@ -801,10 +805,12 @@ func TestBuildCorsMaps(t *testing.T) {
 			},
 		},
 		{
-			name: "virtual server with CORS filter - both AllowOrigins and AllowCredentials",
-			virtualServers: []dataplane.VirtualServer{
+			name:        "SSL virtual server with CORS filter - both AllowOrigins and AllowCredentials",
+			httpServers: []dataplane.VirtualServer{},
+			sslServers: []dataplane.VirtualServer{
 				{
 					Port: 443,
+					SSL:  &dataplane.SSL{},
 					PathRules: []dataplane.PathRule{
 						{
 							Path: "/test-path",
@@ -825,7 +831,7 @@ func TestBuildCorsMaps(t *testing.T) {
 			expected: []shared.Map{
 				{
 					Source:   "$http_origin",
-					Variable: "$cors_allowed_origin_server0_path0_match0",
+					Variable: "$cors_allowed_origin_serverSSL_0_path0_match0",
 					Parameters: []shared.MapParameter{
 						{
 							Value:  "\"~^.*\\.example\\.com$\"",
@@ -835,7 +841,7 @@ func TestBuildCorsMaps(t *testing.T) {
 				},
 				{
 					Source:   "$http_origin",
-					Variable: "$cors_allow_credentials_server0_path0_match0",
+					Variable: "$cors_allow_credentials_serverSSL_0_path0_match0",
 					Parameters: []shared.MapParameter{
 						{
 							Value:  "\"~^.*\\.example\\.com$\"",
@@ -847,7 +853,7 @@ func TestBuildCorsMaps(t *testing.T) {
 		},
 		{
 			name: "virtual server with multiple PathRules and multiple MatchRules",
-			virtualServers: []dataplane.VirtualServer{
+			httpServers: []dataplane.VirtualServer{
 				{
 					Port: 80,
 					PathRules: []dataplane.PathRule{
@@ -886,6 +892,7 @@ func TestBuildCorsMaps(t *testing.T) {
 					},
 				},
 			},
+			sslServers: []dataplane.VirtualServer{},
 			expected: []shared.Map{
 				{
 					Source:   "$http_origin",
@@ -929,6 +936,70 @@ func TestBuildCorsMaps(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "HTTP and SSL servers with CORS - indices are independent",
+			httpServers: []dataplane.VirtualServer{
+				{
+					Port: 80,
+					PathRules: []dataplane.PathRule{
+						{
+							Path: "/api",
+							MatchRules: []dataplane.MatchRule{
+								{
+									Filters: dataplane.HTTPFilters{
+										CORSFilter: &dataplane.HTTPCORSFilter{
+											AllowOrigins: []string{"http.example.com"},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			sslServers: []dataplane.VirtualServer{
+				{
+					Port: 443,
+					SSL:  &dataplane.SSL{},
+					PathRules: []dataplane.PathRule{
+						{
+							Path: "/secure",
+							MatchRules: []dataplane.MatchRule{
+								{
+									Filters: dataplane.HTTPFilters{
+										CORSFilter: &dataplane.HTTPCORSFilter{
+											AllowOrigins: []string{"ssl.example.com"},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expected: []shared.Map{
+				{
+					Source:   "$http_origin",
+					Variable: "$cors_allowed_origin_server0_path0_match0",
+					Parameters: []shared.MapParameter{
+						{
+							Value:  "\"~^http\\.example\\.com$\"",
+							Result: "$http_origin",
+						},
+					},
+				},
+				{
+					Source:   "$http_origin",
+					Variable: "$cors_allowed_origin_serverSSL_0_path0_match0",
+					Parameters: []shared.MapParameter{
+						{
+							Value:  "\"~^ssl\\.example\\.com$\"",
+							Result: "$http_origin",
+						},
+					},
+				},
+			},
+		},
 	}
 
 	for _, test := range tests {
@@ -936,7 +1007,7 @@ func TestBuildCorsMaps(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			result := buildCorsMaps(test.virtualServers)
+			result := buildCorsMaps(test.httpServers, test.sslServers)
 
 			g.Expect(result).To(HaveLen(len(test.expected)))
 			for i, expected := range test.expected {

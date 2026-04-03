@@ -56,10 +56,6 @@ func TestBuildTLSRoute(t *testing.T) {
 		}
 	}
 
-	modGateway := func(gw *Gateway, mod func(*Gateway) *Gateway) *Gateway {
-		return mod(gw)
-	}
-
 	parentRefGraph := ParentRef{
 		SectionName: helpers.GetPointer[gatewayv1.SectionName]("l1"),
 		Gateway: &ParentRefGateway{
@@ -181,25 +177,6 @@ func TestBuildTLSRoute(t *testing.T) {
 					{
 						BackendObjectReference: gatewayv1.BackendObjectReference{
 							Name: "hi",
-						},
-					},
-				},
-			},
-		},
-		[]gatewayv1.ParentReference{
-			parentRef,
-		},
-	)
-
-	ipFamilyMismatchGtr := createTLSRoute(
-		"app.example.com",
-		[]gatewayv1.TLSRouteRule{
-			{
-				BackendRefs: []gatewayv1.BackendRef{
-					{
-						BackendObjectReference: gatewayv1.BackendObjectReference{
-							Name: "hi",
-							Port: helpers.GetPointer[gatewayv1.PortNumber](80),
 						},
 					},
 				},
@@ -572,9 +549,9 @@ func TestBuildTLSRoute(t *testing.T) {
 			name:     "BackendRef port nil",
 		},
 		{
-			gtr: ipFamilyMismatchGtr,
+			gtr: validRefSameNs,
 			expected: &L4Route{
-				Source:    ipFamilyMismatchGtr,
+				Source:    validRefSameNs,
 				RouteType: RouteTypeTLS,
 				ParentRefs: []ParentRef{
 					{
@@ -589,32 +566,28 @@ func TestBuildTLSRoute(t *testing.T) {
 					},
 				},
 				Spec: L4RouteSpec{
-					Hostnames: []gatewayv1.Hostname{
-						"app.example.com",
-					},
+					Hostnames: []gatewayv1.Hostname{"app.example.com"},
 					BackendRef: BackendRef{
-						SvcNsName:   svcNsName,
-						ServicePort: apiv1.ServicePort{Port: 80},
-						InvalidForGateways: map[types.NamespacedName]conditions.Condition{
-							{Namespace: "test", Name: "gateway"}: conditions.NewRouteInvalidIPFamily(
-								"The Service configured with IPv4 family but NginxProxy is configured with IPv6",
-							),
-						},
-						Valid: true,
+						SvcNsName:          svcNsName,
+						ServicePort:        apiv1.ServicePort{Port: 80},
+						Valid:              true,
+						InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
 					},
 				},
 				Attachable: true,
 				Valid:      true,
 			},
-			gateway: modGateway(createGateway(), func(gw *Gateway) *Gateway {
+			gateway: func() *Gateway {
+				gw := createGateway()
 				gw.EffectiveNginxProxy = &EffectiveNginxProxy{IPFamily: helpers.GetPointer(ngfAPI.IPv6)}
 				return gw
-			}),
+			}(),
 			services: map[types.NamespacedName]*apiv1.Service{
 				svcNsName: ipv4Svc,
 			},
 			resolver: alwaysTrueRefGrantResolver,
-			name:     "service and npcfg ip family mismatch",
+			name: "IPv6 NginxProxy with IPv4-only Service " +
+				"BackendRef is accepted because Service IP family is not validated against NginxProxy IP family",
 		},
 		{
 			gtr: diffNsBackendRef,
