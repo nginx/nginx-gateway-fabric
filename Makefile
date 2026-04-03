@@ -55,6 +55,8 @@ GOARCH ?= amd64## The architecture of the image and/or binary. For example: amd6
 GOOS ?= linux## The OS of the image and/or binary. For example: linux or darwin
 PLUS_ENABLED ?= false
 PLUS_LICENSE_FILE ?= $(SELF_DIR)license.jwt
+REGISTRY_JWT_FILE ?= $(SELF_DIR)/dockerconfig.jwt## Path to the JWT file for the NGINX private registry
+NGINX_IMAGE_PULL_SECRET ?= nginx-plus-registry-secret## Image pull secret name for the NGINX Plus registry
 PLUS_USAGE_ENDPOINT ?=## The N+ usage endpoint. For development, please set to the N1 staging endpoint.
 HELM_PARAMETERS ?=## Optional extra parameters for the Helm install
 # HELM_WAF_PARAMETERS = --set nginxGateway.plmStorage.url=f5-waf-seaweed-filer.nap5-helm-policy.svc.cluster.local:9333 --set nginxGateway.plmStorage.credentialsSecretName=nap5-helm-policy/f5-waf-seaweedfs-auth --set nginxGateway.plmStorage.tls.caSecretName=nap5-helm-policy/f5-waf-seaweedfs-ca-cert --set nginxGateway.plmStorage.tls.clientSSLSecretName=nap5-helm-policy/f5-waf-seaweedfs-client-cert --set nginxGateway.plmStorage.tls.insecureSkipVerify=true
@@ -297,6 +299,19 @@ check-for-plus-usage-endpoint: ## Checks that the PLUS_USAGE_ENDPOINT is set in 
 ifndef PLUS_USAGE_ENDPOINT
 	$(error PLUS_USAGE_ENDPOINT must be defined in your environment)
 endif
+
+.PHONY: create-image-pull-secret
+create-image-pull-secret: ## Creates the nginx-plus-registry-secret image pull secret in the nginx-gateway namespace using dockerconfig.jwt
+	kubectl create namespace nginx-gateway || true
+	test -f $(REGISTRY_JWT_FILE) || { echo "Error: $(REGISTRY_JWT_FILE) not found"; exit 1; }; \
+	JWT=$$(tr -d '[:space:]' < $(REGISTRY_JWT_FILE)); \
+	test -n "$$JWT" || { echo "Error: $(REGISTRY_JWT_FILE) is empty"; exit 1; }; \
+	kubectl create secret docker-registry $(NGINX_IMAGE_PULL_SECRET) \
+		--docker-server=private-registry.nginx.com \
+		--docker-username=$$JWT \
+		--docker-password=none \
+		-n nginx-gateway \
+		--dry-run=client -o yaml | kubectl apply -f -
 
 # Debug Targets
 .PHONY: debug-build

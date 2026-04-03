@@ -12624,7 +12624,7 @@ spec:
     listKind: WAFGatewayBindingPolicyList
     plural: wafgatewaybindingpolicies
     shortNames:
-    - wafbinding
+    - wgbpolicy
     singular: wafgatewaybindingpolicy
   scope: Namespaced
   versions:
@@ -12637,7 +12637,9 @@ spec:
       openAPIV3Schema:
         description: |-
           WAFGatewayBindingPolicy is an Inherited Attached Policy. It provides a way to configure F5 WAF for NGINX
-          with Policy Lifecycle Management (PLM) for Gateways and Routes by referencing PLM-managed APPolicy resources.
+          for Gateways and Routes by referencing compiled WAF policy bundles. Bundles can be fetched directly from an
+          HTTP/HTTPS URL (type: HTTP), from an NGINX Instance Manager instance (type: NIM), or from an F5 NGINX One
+          Console instance (type: N1C).
         properties:
           apiVersion:
             description: |-
@@ -12659,42 +12661,146 @@ spec:
           spec:
             description: Spec defines the desired state of the WAFGatewayBindingPolicy.
             properties:
-              apPolicySource:
-                description: |-
-                  APPolicySource references the APPolicy CRD managed by PLM.
-                  The APPolicy contains the WAF policy definition which PLM compiles and stores.
-                  NGF watches the APPolicy status for the compiled bundle location.
+              policySource:
+                description: PolicySource holds all policy bundle fetch configuration.
                 properties:
-                  name:
+                  auth:
+                    description: Auth configures authentication credentials for fetching
+                      the bundle.
+                    properties:
+                      secretRef:
+                        description: |-
+                          SecretRef references a Kubernetes Secret in the same namespace as the WAFGatewayBindingPolicy.
+                          The Secret may contain:
+                            - "username" and "password" fields for HTTP Basic Authentication
+                            - "token" field for Bearer Token Authentication (NIM) or APIToken Authentication (N1C)
+                        properties:
+                          name:
+                            description: Name is the referenced object.
+                            type: string
+                        required:
+                        - name
+                        type: object
+                    required:
+                    - secretRef
+                    type: object
+                  insecureSkipVerify:
+                    description: |-
+                      InsecureSkipVerify disables TLS certificate verification when fetching the bundle.
+                      Not recommended for production use.
+                    type: boolean
+                  managedSource:
+                    description: |-
+                      ManagedSource configures bundle fetching from NGINX Instance Manager (NIM) or F5 NGINX One Console (N1C).
+                      Required when type is NIM or N1C.
+                    properties:
+                      n1cNamespace:
+                        description: |-
+                          N1CNamespace is the N1C namespace the policy belongs to.
+                          Required when the parent type is N1C; ignored for NIM.
+                          The value is percent-encoded before being included in the request URL.
+                        maxLength: 253
+                        minLength: 1
+                        type: string
+                      policyName:
+                        description: |-
+                          PolicyName is the name of the security policy to fetch.
+                          For NIM: used as the policyName query parameter in the NIM security policies bundles API.
+                          For N1C: used as the policy name path segment in the N1C security policies API.
+                          The value is percent-encoded before being included in the request URL.
+                        maxLength: 253
+                        minLength: 1
+                        type: string
+                    required:
+                    - policyName
+                    type: object
+                  polling:
+                    description: Polling configures automatic periodic re-fetching
+                      of the bundle.
+                    properties:
+                      enabled:
+                        description: |-
+                          Enabled activates periodic re-fetching of the bundle.
+                          When true, NGF fetches the bundle on each interval and deploys it only if
+                          its checksum differs from the last successfully fetched version.
+                        type: boolean
+                      interval:
+                        description: |-
+                          Interval is the period between poll cycles.
+                          Defaults to 5m when polling is enabled but no interval is set.
+                        type: string
+                    type: object
+                  retryPolicy:
+                    description: |-
+                      RetryPolicy configures retry behavior for transient fetch failures during the
+                      initial bundle fetch.
+                    properties:
+                      attempts:
+                        description: Attempts is the maximum number of fetch attempts
+                          before giving up.
+                        format: int32
+                        maximum: 10
+                        minimum: 1
+                        type: integer
+                    type: object
+                  timeout:
+                    description: |-
+                      Timeout is the maximum duration for a single bundle fetch attempt.
+                      Defaults to 30s when not set.
+                    type: string
+                  tlsSecret:
+                    description: |-
+                      TLSSecretRef references a Secret containing a custom CA certificate (key: "ca.crt") for
+                      verifying the bundle server's TLS certificate.
+                    properties:
+                      name:
+                        description: Name is the referenced object.
+                        type: string
+                    required:
+                    - name
+                    type: object
+                  url:
+                    description: |-
+                      URL semantics differ by type:
+
+                        - HTTP: the full URL of the compiled policy bundle (.tgz), e.g.
+                          "https://storage.example.com/bundles/policy.tgz".
+
+                        - NIM: the base URL of the NGINX Instance Manager instance, e.g.
+                          "https://nim.example.com". NGF appends
+                          "/api/platform/v1/security/policies/bundles?policyName=<name>&includeBundleContent=true"
+                          to this value. Do not include a path, query string, or fragment.
+
+                        - N1C: the base URL of the F5 NGINX One Console instance, e.g.
+                          "https://f5xc.example.com". NGF appends
+                          "/api/nginx/one/namespaces/<namespace>/security-policies/<policyName>/bundle"
+                          to this value. Do not include a path, query string, or fragment.
+
+                      Required when type is HTTP, NIM, or N1C.
+                    maxLength: 2083
                     minLength: 1
+                    pattern: ^https?://
                     type: string
-                  namespace:
-                    type: string
+                  validation:
+                    description: Validation configures integrity verification for
+                      the downloaded bundle.
+                    properties:
+                      verifyChecksum:
+                        description: |-
+                          VerifyChecksum enables SHA-256 integrity verification.
+                          When true, NGF fetches <url>.sha256 and verifies the downloaded bundle matches it.
+                        type: boolean
+                    type: object
                 required:
-                - name
+                - url
                 type: object
               securityLogs:
-                description: |-
-                  SecurityLogs defines security logging configurations.
-                  Each entry references an APLogConf CRD managed by PLM for log profile compilation.
+                description: SecurityLogs defines security logging configurations.
                 items:
                   description: |-
                     WAFSecurityLog defines security logging configuration for app_protect_security_log directives.
-                    Each entry references a PLM-managed APLogConf CRD for the compiled log profile bundle.
+                    Exactly one of logSource.url (via LogSource) or logSource.defaultProfile must be set.
                   properties:
-                    apLogConfSource:
-                      description: |-
-                        APLogConfSource references the APLogConf CRD for this log configuration.
-                        PLM compiles the APLogConf and NGF fetches the compiled bundle from PLM storage.
-                      properties:
-                        name:
-                          minLength: 1
-                          type: string
-                        namespace:
-                          type: string
-                      required:
-                      - name
-                      type: object
                     destination:
                       description: Destination defines where security logs should
                         be sent.
@@ -12752,16 +12858,119 @@ spec:
                         rule: '!(has(self.syslog) && self.type != ''syslog'')'
                       - message: destination.syslog must be specified for syslog destination.type
                         rule: '!(!has(self.syslog) && self.type == ''syslog'')'
-                    name:
-                      description: Name is the name of this security log configuration.
-                      maxLength: 63
-                      minLength: 1
-                      pattern: ^[a-zA-Z0-9]([a-zA-Z0-9_-]*[a-zA-Z0-9])?$
-                      type: string
+                    logSource:
+                      description: LogSource configures the log profile bundle source
+                        for this log configuration.
+                      properties:
+                        auth:
+                          description: |-
+                            Auth configures authentication credentials for fetching the log bundle.
+                            Only applicable when url is set.
+                          properties:
+                            secretRef:
+                              description: |-
+                                SecretRef references a Kubernetes Secret in the same namespace as the WAFGatewayBindingPolicy.
+                                The Secret may contain:
+                                  - "username" and "password" fields for HTTP Basic Authentication
+                                  - "token" field for Bearer Token Authentication (NIM) or APIToken Authentication (N1C)
+                              properties:
+                                name:
+                                  description: Name is the referenced object.
+                                  type: string
+                              required:
+                              - name
+                              type: object
+                          required:
+                          - secretRef
+                          type: object
+                        defaultProfile:
+                          description: |-
+                            DefaultProfile selects one of the built-in WAF log profile bundles shipped with the WAF engine.
+                            Mutually exclusive with URL.
+                          enum:
+                          - log_default
+                          - log_all
+                          - log_illegal
+                          - log_blocked
+                          - log_grpc_all
+                          - log_grpc_blocked
+                          - log_grpc_illegal
+                          type: string
+                        polling:
+                          description: |-
+                            Polling configures automatic periodic re-fetching of the log bundle.
+                            Only applicable when url is set.
+                          properties:
+                            enabled:
+                              description: |-
+                                Enabled activates periodic re-fetching of the bundle.
+                                When true, NGF fetches the bundle on each interval and deploys it only if
+                                its checksum differs from the last successfully fetched version.
+                              type: boolean
+                            interval:
+                              description: |-
+                                Interval is the period between poll cycles.
+                                Defaults to 5m when polling is enabled but no interval is set.
+                              type: string
+                          type: object
+                        retryPolicy:
+                          description: |-
+                            RetryPolicy configures retry behavior for transient fetch failures during the
+                            initial log bundle fetch. Only applicable when url is set.
+                          properties:
+                            attempts:
+                              description: Attempts is the maximum number of fetch
+                                attempts before giving up.
+                              format: int32
+                              maximum: 10
+                              minimum: 1
+                              type: integer
+                          type: object
+                        timeout:
+                          description: |-
+                            Timeout is the maximum duration for a single log bundle fetch attempt.
+                            Defaults to 30s when not set. Only applicable when url is set.
+                          type: string
+                        tlsSecret:
+                          description: |-
+                            TLSSecretRef references a Secret containing a custom CA certificate (key: "ca.crt").
+                            Only applicable when url is set.
+                          properties:
+                            name:
+                              description: Name is the referenced object.
+                              type: string
+                          required:
+                          - name
+                          type: object
+                        url:
+                          description: |-
+                            URL is the HTTP or HTTPS address of the compiled log profile bundle (.tgz).
+                            Mutually exclusive with DefaultProfile.
+                          maxLength: 2083
+                          minLength: 1
+                          pattern: ^https?://
+                          type: string
+                        validation:
+                          description: |-
+                            Validation configures integrity verification for the downloaded log bundle.
+                            Only applicable when url is set.
+                          properties:
+                            verifyChecksum:
+                              description: |-
+                                VerifyChecksum enables SHA-256 integrity verification.
+                                When true, NGF fetches <url>.sha256 and verifies the downloaded bundle matches it.
+                              type: boolean
+                          type: object
+                      type: object
                   required:
-                  - apLogConfSource
                   - destination
+                  - logSource
                   type: object
+                  x-kubernetes-validations:
+                  - message: exactly one of logSource.url or logSource.defaultProfile
+                      must be set
+                    rule: (has(self.logSource) && has(self.logSource.url) && !has(self.logSource.defaultProfile))
+                      || (has(self.logSource) && !has(self.logSource.url) && has(self.logSource.defaultProfile))
                 maxItems: 32
                 type: array
               targetRefs:
@@ -12812,10 +13021,32 @@ spec:
                   rule: self.all(t, t.group=='gateway.networking.k8s.io')
                 - message: TargetRef Name must be unique
                   rule: self.all(t1, self.exists_one(t2, t1.name == t2.name))
+              type:
+                description: |-
+                  Type identifies the source type for the policy bundle.
+                  HTTP fetches directly from a URL; NIM uses the NGINX Instance Manager bundles API;
+                  N1C uses the F5 NGINX One Console security policies API.
+                enum:
+                - HTTP
+                - NIM
+                - N1C
+                type: string
             required:
-            - apPolicySource
+            - policySource
             - targetRefs
+            - type
             type: object
+            x-kubernetes-validations:
+            - message: policySource.managedSource is required when type is NIM or
+                N1C
+              rule: (self.type != 'NIM' && self.type != 'N1C') || (has(self.policySource)
+                && has(self.policySource.managedSource))
+            - message: policySource.managedSource must not be set when type is HTTP
+              rule: self.type != 'HTTP' || !has(self.policySource) || !has(self.policySource.managedSource)
+            - message: policySource.managedSource.n1cNamespace is required when type
+                is N1C
+              rule: self.type != 'N1C' || (has(self.policySource) && has(self.policySource.managedSource)
+                && has(self.policySource.managedSource.n1cNamespace))
           status:
             description: Status defines the state of the WAFGatewayBindingPolicy.
             properties:

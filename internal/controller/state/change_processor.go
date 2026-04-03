@@ -1,6 +1,7 @@
 package state
 
 import (
+	"context"
 	"sync"
 
 	"github.com/go-logr/logr"
@@ -8,7 +9,6 @@ import (
 	discoveryV1 "k8s.io/api/discovery/v1"
 	apiext "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/events"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -45,7 +45,7 @@ type ChangeProcessor interface {
 	CaptureDeleteChange(resourceType ngftypes.ObjectType, nsname types.NamespacedName)
 	// Process produces a graph-like representation of GatewayAPI resources.
 	// If no changes were captured, the graph will be empty.
-	Process() (graphCfg *graph.Graph)
+	Process(ctx context.Context) (graphCfg *graph.Graph)
 	// GetLatestGraph returns the latest Graph.
 	GetLatestGraph() *graph.Graph
 }
@@ -56,7 +56,7 @@ type ChangeProcessorConfig struct {
 	Validators validation.Validators
 	// EventRecorder records events for Kubernetes resources.
 	EventRecorder events.EventRecorder
-	// WAFFetcher is an S3-compatible fetcher for WAF policy bundles from PLM storage.
+	// WAFFetcher fetches WAF policy bundles from HTTP/HTTPS URLs.
 	WAFFetcher fetch.Fetcher
 	// MustExtractGVK is a function that extracts schema.GroupVersionKind from a client.Object.
 	MustExtractGVK kinds.MustExtractGVK
@@ -65,8 +65,6 @@ type ChangeProcessorConfig struct {
 	// DiscoveredCRDs is a map of discovered CRDs in the cluster,
 	// where the key is the CRD name and the value indicates if the CRD exists.
 	DiscoveredCRDs map[string]bool
-	// PLMSecrets holds metadata about PLM-related secrets for watching and re-creating the WAF fetcher.
-	PLMSecrets map[types.NamespacedName]*graph.PLMSecretConfig
 	// Logger is the logger for this Change Processor.
 	Logger logr.Logger
 	// GatewayCtlrName is the name of the Gateway controller.
@@ -75,8 +73,6 @@ type ChangeProcessorConfig struct {
 	GatewayClassName string
 	// FeatureFlags holds the feature flags for building the Graph.
 	FeatureFlags graph.FeatureFlags
-	// PLMInsecureSkipVerify skips TLS certificate verification for PLM storage connections.
-	PLMInsecureSkipVerify bool
 	// Snippets indicates if Snippets are enabled. This will enable both SnippetsFilter and SnippetsPolicy APIs.
 	Snippets bool
 }
@@ -118,8 +114,6 @@ func NewChangeProcessorImpl(cfg ChangeProcessorConfig) *ChangeProcessorImpl {
 		SnippetsFilters:       make(map[types.NamespacedName]*ngfAPIv1alpha1.SnippetsFilter),
 		AuthenticationFilters: make(map[types.NamespacedName]*ngfAPIv1alpha1.AuthenticationFilter),
 		InferencePools:        make(map[types.NamespacedName]*inference.InferencePool),
-		APPolicies:            make(map[types.NamespacedName]*unstructured.Unstructured),
-		APLogConfs:            make(map[types.NamespacedName]*unstructured.Unstructured),
 	}
 
 	processor := &ChangeProcessorImpl{
@@ -267,16 +261,6 @@ func NewChangeProcessorImpl(cfg ChangeProcessorConfig) *ChangeProcessorImpl {
 			store:     commonPolicyObjectStore,
 			predicate: funcPredicate{stateChanged: isNGFPolicyRelevant},
 		},
-		{
-			gvk:       kinds.APPolicyGVK,
-			store:     newObjectStoreMapAdapter(clusterStore.APPolicies),
-			predicate: funcPredicate{stateChanged: isReferenced},
-		},
-		{
-			gvk:       kinds.APLogConfGVK,
-			store:     newObjectStoreMapAdapter(clusterStore.APLogConfs),
-			predicate: funcPredicate{stateChanged: isReferenced},
-		},
 	}
 
 	if cfg.Snippets {
@@ -327,7 +311,7 @@ func (c *ChangeProcessorImpl) CaptureDeleteChange(resourceType ngftypes.ObjectTy
 	c.updater.Delete(resourceType, nsname)
 }
 
-func (c *ChangeProcessorImpl) Process() *graph.Graph {
+func (c *ChangeProcessorImpl) Process(ctx context.Context) *graph.Graph {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
@@ -335,21 +319,19 @@ func (c *ChangeProcessorImpl) Process() *graph.Graph {
 		return nil
 	}
 
-	var plmConfig *graph.PLMConfig
-	if c.cfg.WAFFetcher != nil || len(c.cfg.PLMSecrets) > 0 {
-		plmConfig = &graph.PLMConfig{
-			Fetcher:            c.cfg.WAFFetcher,
-			Secrets:            c.cfg.PLMSecrets,
-			InsecureSkipVerify: c.cfg.PLMInsecureSkipVerify,
-		}
+	var previousWAFBundles map[graph.WAFBundleKey]*graph.WAFBundleData
+	if c.latestGraph != nil {
+		previousWAFBundles = c.latestGraph.ReferencedWAFBundles
 	}
 
 	c.latestGraph = graph.BuildGraph(
+		ctx,
 		c.clusterState,
 		c.cfg.GatewayCtlrName,
 		c.cfg.GatewayClassName,
 		c.cfg.PlusSecrets,
-		plmConfig,
+		c.cfg.WAFFetcher,
+		previousWAFBundles,
 		c.cfg.Validators,
 		c.cfg.Logger,
 		c.cfg.FeatureFlags,

@@ -11,7 +11,7 @@ RUN apk update && apk upgrade --no-cache musl musl-utils zlib
 ARG NGINX_PLUS_VERSION=R36
 # renovate: datasource=github-tags depName=nginx/agent
 ARG NGINX_AGENT_VERSION=v3.9.0
-ARG APP_PROTECT_VERSION=36.5.575
+ARG APP_PROTECT_VERSION=36.5.607
 ARG INCLUDE_NAP_WAF=false
 ARG NJS_DIR
 ARG NGINX_CONF_DIR
