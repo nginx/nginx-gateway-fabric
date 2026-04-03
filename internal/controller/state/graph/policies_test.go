@@ -2824,7 +2824,7 @@ func TestProcessWAFGatewayBindingPolicies(t *testing.T) {
 			Spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
 				Type: ngfAPIv1alpha1.PolicySourceTypeHTTP,
 				PolicySource: ngfAPIv1alpha1.PolicySource{
-					URL: bundleURL,
+					HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: bundleURL},
 				},
 			},
 		}
@@ -3221,8 +3221,10 @@ func TestProcessWAFGatewayBindingPolicies(t *testing.T) {
 			processedPolicies: func() map[PolicyKey]*Policy {
 				wafPolicy := makeWAFPolicy(policyName, false, false, false)
 				wafPolicy.Spec.Type = ngfAPIv1alpha1.PolicySourceTypeNIM
-				wafPolicy.Spec.PolicySource.ManagedSource = &ngfAPIv1alpha1.ManagedBundleSource{
-					PolicyName: "my-nim-policy",
+				wafPolicy.Spec.PolicySource.HTTPSource = nil
+				wafPolicy.Spec.PolicySource.NIMSource = &ngfAPIv1alpha1.NIMBundleSource{
+					URL:        bundleURL,
+					PolicyName: helpers.GetPointer("my-nim-policy"),
 				}
 				key, pol := makePolicyEntry(wafPolicy, true)
 				return map[PolicyKey]*Policy{key: pol}
@@ -3248,9 +3250,11 @@ func TestProcessWAFGatewayBindingPolicies(t *testing.T) {
 				wafPolicy := makeWAFPolicy(policyName, true, false, false)
 				wafPolicy.Spec.Type = ngfAPIv1alpha1.PolicySourceTypeN1C
 				n1cNs := "my-n1c-namespace"
-				wafPolicy.Spec.PolicySource.ManagedSource = &ngfAPIv1alpha1.ManagedBundleSource{
-					PolicyName:   "my-n1c-policy",
-					N1CNamespace: &n1cNs,
+				wafPolicy.Spec.PolicySource.HTTPSource = nil
+				wafPolicy.Spec.PolicySource.N1CSource = &ngfAPIv1alpha1.N1CBundleSource{
+					URL:          bundleURL,
+					PolicyName:   helpers.GetPointer("my-n1c-policy"),
+					N1CNamespace: n1cNs,
 				}
 				key, pol := makePolicyEntry(wafPolicy, true)
 				return map[PolicyKey]*Policy{key: pol}
@@ -3658,10 +3662,10 @@ func TestBuildPolicyFetchRequest(t *testing.T) {
 		expRequest   fetch.Request
 	}{
 		{
-			name:       "HTTP type with no managed source",
+			name:       "HTTP type",
 			policyType: ngfAPIv1alpha1.PolicySourceTypeHTTP,
 			policySource: ngfAPIv1alpha1.PolicySource{
-				URL: baseURL,
+				HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: baseURL},
 			},
 			expRequest: fetch.Request{
 				URL: baseURL,
@@ -3671,7 +3675,7 @@ func TestBuildPolicyFetchRequest(t *testing.T) {
 			name:       "HTTP type with checksum verification enabled",
 			policyType: ngfAPIv1alpha1.PolicySourceTypeHTTP,
 			policySource: ngfAPIv1alpha1.PolicySource{
-				URL:        baseURL,
+				HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: baseURL},
 				Validation: &ngfAPIv1alpha1.BundleValidation{VerifyChecksum: true},
 			},
 			expRequest: fetch.Request{
@@ -3680,10 +3684,28 @@ func TestBuildPolicyFetchRequest(t *testing.T) {
 			},
 		},
 		{
+			name:       "NIM type with expected checksum",
+			policyType: ngfAPIv1alpha1.PolicySourceTypeNIM,
+			policySource: ngfAPIv1alpha1.PolicySource{
+				NIMSource: &ngfAPIv1alpha1.NIMBundleSource{
+					URL:        baseURL,
+					PolicyName: helpers.GetPointer(nimPolicyName),
+				},
+				Validation: &ngfAPIv1alpha1.BundleValidation{
+					ExpectedChecksum: helpers.GetPointer("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+				},
+			},
+			expRequest: fetch.Request{
+				URL:              baseURL,
+				NIMPolicyName:    nimPolicyName,
+				ExpectedChecksum: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			},
+		},
+		{
 			name:       "HTTP type with TLS CA data",
 			policyType: ngfAPIv1alpha1.PolicySourceTypeHTTP,
 			policySource: ngfAPIv1alpha1.PolicySource{
-				URL: baseURL,
+				HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: baseURL},
 			},
 			tlsCA: caData,
 			expRequest: fetch.Request{
@@ -3695,9 +3717,9 @@ func TestBuildPolicyFetchRequest(t *testing.T) {
 			name:       "NIM type sets NIMPolicyName",
 			policyType: ngfAPIv1alpha1.PolicySourceTypeNIM,
 			policySource: ngfAPIv1alpha1.PolicySource{
-				URL: baseURL,
-				ManagedSource: &ngfAPIv1alpha1.ManagedBundleSource{
-					PolicyName: nimPolicyName,
+				NIMSource: &ngfAPIv1alpha1.NIMBundleSource{
+					URL:        baseURL,
+					PolicyName: helpers.GetPointer(nimPolicyName),
 				},
 			},
 			expRequest: fetch.Request{
@@ -3709,10 +3731,10 @@ func TestBuildPolicyFetchRequest(t *testing.T) {
 			name:       "N1C type sets NIMPolicyName and N1CNamespace",
 			policyType: ngfAPIv1alpha1.PolicySourceTypeN1C,
 			policySource: ngfAPIv1alpha1.PolicySource{
-				URL: baseURL,
-				ManagedSource: &ngfAPIv1alpha1.ManagedBundleSource{
-					PolicyName:   nimPolicyName,
-					N1CNamespace: &n1cNamespace,
+				N1CSource: &ngfAPIv1alpha1.N1CBundleSource{
+					URL:          baseURL,
+					PolicyName:   helpers.GetPointer(nimPolicyName),
+					N1CNamespace: n1cNamespace,
 				},
 			},
 			expRequest: fetch.Request{
@@ -3725,10 +3747,10 @@ func TestBuildPolicyFetchRequest(t *testing.T) {
 			name:       "N1C type swaps BearerToken to APIToken",
 			policyType: ngfAPIv1alpha1.PolicySourceTypeN1C,
 			policySource: ngfAPIv1alpha1.PolicySource{
-				URL: baseURL,
-				ManagedSource: &ngfAPIv1alpha1.ManagedBundleSource{
-					PolicyName:   nimPolicyName,
-					N1CNamespace: &n1cNamespace,
+				N1CSource: &ngfAPIv1alpha1.N1CBundleSource{
+					URL:          baseURL,
+					PolicyName:   helpers.GetPointer(nimPolicyName),
+					N1CNamespace: n1cNamespace,
 				},
 			},
 			auth: &fetch.BundleAuth{BearerToken: bearerToken},
@@ -3743,10 +3765,10 @@ func TestBuildPolicyFetchRequest(t *testing.T) {
 			name:       "N1C type with no BearerToken does not set APIToken",
 			policyType: ngfAPIv1alpha1.PolicySourceTypeN1C,
 			policySource: ngfAPIv1alpha1.PolicySource{
-				URL: baseURL,
-				ManagedSource: &ngfAPIv1alpha1.ManagedBundleSource{
-					PolicyName:   nimPolicyName,
-					N1CNamespace: &n1cNamespace,
+				N1CSource: &ngfAPIv1alpha1.N1CBundleSource{
+					URL:          baseURL,
+					PolicyName:   helpers.GetPointer(nimPolicyName),
+					N1CNamespace: n1cNamespace,
 				},
 			},
 			auth: &fetch.BundleAuth{Username: "user", Password: "pass"},
@@ -3761,10 +3783,10 @@ func TestBuildPolicyFetchRequest(t *testing.T) {
 			name:       "N1C type with nil auth does not panic",
 			policyType: ngfAPIv1alpha1.PolicySourceTypeN1C,
 			policySource: ngfAPIv1alpha1.PolicySource{
-				URL: baseURL,
-				ManagedSource: &ngfAPIv1alpha1.ManagedBundleSource{
-					PolicyName:   nimPolicyName,
-					N1CNamespace: &n1cNamespace,
+				N1CSource: &ngfAPIv1alpha1.N1CBundleSource{
+					URL:          baseURL,
+					PolicyName:   helpers.GetPointer(nimPolicyName),
+					N1CNamespace: n1cNamespace,
 				},
 			},
 			expRequest: fetch.Request{
@@ -3774,19 +3796,17 @@ func TestBuildPolicyFetchRequest(t *testing.T) {
 			},
 		},
 		{
-			name:       "NIM type does not set N1CNamespace even if N1CNamespace is present on managed source",
+			name:       "NIM type does not set N1CNamespace",
 			policyType: ngfAPIv1alpha1.PolicySourceTypeNIM,
 			policySource: ngfAPIv1alpha1.PolicySource{
-				URL: baseURL,
-				ManagedSource: &ngfAPIv1alpha1.ManagedBundleSource{
-					PolicyName:   nimPolicyName,
-					N1CNamespace: &n1cNamespace,
+				NIMSource: &ngfAPIv1alpha1.NIMBundleSource{
+					URL:        baseURL,
+					PolicyName: helpers.GetPointer(nimPolicyName),
 				},
 			},
 			expRequest: fetch.Request{
 				URL:           baseURL,
 				NIMPolicyName: nimPolicyName,
-				// N1CNamespace must NOT be set for NIM type
 			},
 		},
 	}

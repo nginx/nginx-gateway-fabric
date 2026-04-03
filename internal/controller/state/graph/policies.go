@@ -794,18 +794,41 @@ func buildPolicyFetchRequest(
 	tlsCA []byte,
 ) fetch.Request {
 	req := fetch.Request{
-		URL:                policySource.URL,
 		Auth:               auth,
 		TLSCAData:          tlsCA,
 		InsecureSkipVerify: policySource.InsecureSkipVerify,
 		VerifyChecksum:     policySource.Validation != nil && policySource.Validation.VerifyChecksum,
+		ExpectedChecksum:   expectedChecksum(policySource.Validation),
 		Timeout:            policySource.Timeout,
 	}
 
-	if policySource.ManagedSource != nil {
-		req.NIMPolicyName = policySource.ManagedSource.PolicyName
-		if policyType == ngfAPIv1alpha1.PolicySourceTypeN1C && policySource.ManagedSource.N1CNamespace != nil {
-			req.N1CNamespace = *policySource.ManagedSource.N1CNamespace
+	switch policyType {
+	case ngfAPIv1alpha1.PolicySourceTypeHTTP:
+		if policySource.HTTPSource != nil {
+			req.URL = policySource.HTTPSource.URL
+		}
+	case ngfAPIv1alpha1.PolicySourceTypeNIM:
+		if policySource.NIMSource != nil {
+			req.URL = policySource.NIMSource.URL
+			if policySource.NIMSource.PolicyUID != nil {
+				req.NIMPolicyUID = *policySource.NIMSource.PolicyUID
+			} else if policySource.NIMSource.PolicyName != nil {
+				req.NIMPolicyName = *policySource.NIMSource.PolicyName
+			}
+		}
+	case ngfAPIv1alpha1.PolicySourceTypeN1C:
+		if policySource.N1CSource != nil {
+			req.URL = policySource.N1CSource.URL
+			req.N1CNamespace = policySource.N1CSource.N1CNamespace
+			if policySource.N1CSource.PolicyObjectID != nil {
+				req.N1CPolicyObjectID = *policySource.N1CSource.PolicyObjectID
+			}
+			if policySource.N1CSource.PolicyName != nil {
+				req.NIMPolicyName = *policySource.N1CSource.PolicyName
+			}
+			if policySource.N1CSource.PolicyVersion != nil {
+				req.N1CPolicyVersion = *policySource.N1CSource.PolicyVersion
+			}
 			// N1C uses the APIToken auth scheme rather than Bearer.
 			// Move the token value from BearerToken to APIToken.
 			if auth != nil && auth.BearerToken != "" {
@@ -820,11 +843,12 @@ func buildPolicyFetchRequest(
 // buildLogFetchRequest constructs a fetch.Request from a LogSource, resolved auth, and TLS CA data.
 func buildLogFetchRequest(logSource *ngfAPIv1alpha1.LogSource, auth *fetch.BundleAuth, tlsCA []byte) fetch.Request {
 	return fetch.Request{
-		URL:            *logSource.URL,
-		Auth:           auth,
-		TLSCAData:      tlsCA,
-		VerifyChecksum: logSource.Validation != nil && logSource.Validation.VerifyChecksum,
-		Timeout:        logSource.Timeout,
+		URL:              *logSource.URL,
+		Auth:             auth,
+		TLSCAData:        tlsCA,
+		VerifyChecksum:   logSource.Validation != nil && logSource.Validation.VerifyChecksum,
+		ExpectedChecksum: expectedChecksum(logSource.Validation),
+		Timeout:          logSource.Timeout,
 	}
 }
 
@@ -945,6 +969,14 @@ func fetchSecurityLogBundles(
 // Used to derive a stable, filesystem-safe component for log bundle keys so that
 // reordering or inserting SecurityLog entries does not change existing bundle filenames
 // or break the stale-bundle fallback.
+// expectedChecksum returns the ExpectedChecksum value from a BundleValidation, or empty string if nil.
+func expectedChecksum(v *ngfAPIv1alpha1.BundleValidation) string {
+	if v == nil || v.ExpectedChecksum == nil {
+		return ""
+	}
+	return *v.ExpectedChecksum
+}
+
 func urlHash(rawURL string) string {
 	sum := sha256.Sum256([]byte(rawURL))
 	return hex.EncodeToString(sum[:])[:16]

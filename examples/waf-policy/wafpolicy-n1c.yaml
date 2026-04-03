@@ -7,20 +7,17 @@ spec:
     - group: gateway.networking.k8s.io
       kind: Gateway
       name: gateway
-  type: NIM
+  type: N1C
   policySource:
-    nimSource:
-      url: https://apigw.nim.svc.cluster.local
-      policyName: ngfBlocking
-      # Optional - use policyUID instead for version pinning
-      # policyUID: ""
-      # Optional - add checksum for integrity verification of the bundle
-    # validation:
-    #   expectedChecksum: "sha256:12345"
+    n1cSource:
+      url: https://<tenant>.volterra.us
+      namespace: default  # N1C namespace the policy belongs to
+      policyName: "ngfExample"
+      policyObjectID: pol_-IUuEUN7ST63oRC7AlQPLw
+      policyVersion: "2026-04-02 20:55:06"
     auth:
       secretRef:
-        name: nim-credentials
-    insecureSkipVerify: true # testing only - do not use in production
+        name: n1c-credentials
   securityLogs:
     - destination:
         type: syslog

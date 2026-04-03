@@ -35,7 +35,7 @@ func TestGenerate(t *testing.T) {
 				},
 				Spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
 					PolicySource: ngfAPIv1alpha1.PolicySource{
-						URL: policyURL,
+						HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: policyURL},
 					},
 				},
 			},
@@ -53,7 +53,7 @@ func TestGenerate(t *testing.T) {
 				},
 				Spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
 					PolicySource: ngfAPIv1alpha1.PolicySource{
-						URL: policyURL,
+						HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: policyURL},
 					},
 					SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
 						{
@@ -83,7 +83,7 @@ func TestGenerate(t *testing.T) {
 				},
 				Spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
 					PolicySource: ngfAPIv1alpha1.PolicySource{
-						URL: policyURL,
+						HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: policyURL},
 					},
 					SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
 						{
@@ -143,7 +143,7 @@ func TestGenerate(t *testing.T) {
 				},
 				Spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
 					PolicySource: ngfAPIv1alpha1.PolicySource{
-						URL: policyURL,
+						HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: policyURL},
 					},
 					SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
 						{

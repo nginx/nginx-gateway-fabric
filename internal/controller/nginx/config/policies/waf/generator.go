@@ -62,7 +62,9 @@ func generate(pols []policies.Policy) policies.GenerateResultFiles {
 
 		fields := map[string]any{}
 
-		if wp.Spec.PolicySource.URL != "" {
+		if wp.Spec.PolicySource.HTTPSource != nil ||
+			wp.Spec.PolicySource.NIMSource != nil ||
+			wp.Spec.PolicySource.N1CSource != nil {
 			bundleName := fmt.Sprintf("%s_%s", wp.Namespace, wp.Name)
 			bundlePath := fmt.Sprintf("%s/%s.tgz", appProtectBundleFolder, bundleName)
 			fields["BundlePath"] = bundlePath
