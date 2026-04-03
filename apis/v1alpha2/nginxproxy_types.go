@@ -21,12 +21,10 @@ import (
 // If referenced from a Gateway, the settings apply to that Gateway alone. If both a Gateway and its GatewayClass
 // reference an NginxProxy, the settings are merged. Settings specified on the Gateway NginxProxy override those
 // set on the GatewayClass NginxProxy.
-type NginxProxy struct { //nolint:govet // standard field alignment, don't change it
+type NginxProxy struct {
+	Spec              NginxProxySpec `json:"spec"`
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
-
-	// Spec defines the desired state of the NginxProxy.
-	Spec NginxProxySpec `json:"spec"`
 }
 
 // +kubebuilder:object:root=true
@@ -118,6 +116,12 @@ type NginxProxySpec struct {
 	//
 	// +optional
 	ServerTokens *string `json:"serverTokens,omitempty"`
+	// Compression defines the configuration for HTTP response compression.
+	// When set, NGINX compresses responses for clients that support it,
+	// reducing bandwidth usage.
+	//
+	// +optional
+	Compression *Compression `json:"compression,omitempty"`
 }
 
 // Telemetry specifies the OpenTelemetry configuration.
@@ -909,3 +913,111 @@ type HostPort struct {
 	// +kubebuilder:validation:Maximum=65535
 	ContainerPort int32 `json:"containerPort"`
 }
+
+// Compression defines the configuration for HTTP response compression.
+// +kubebuilder:validation:XValidation:message="types must be specified when compression is set",rule="has(self.types) && size(self.types) > 0"
+// +kubebuilder:validation:XValidation:message="gzip must be set when type is gzip",rule="self.type == 'gzip' ? has(self.gzip) : true"
+//
+//nolint:lll
+type Compression struct {
+	// Gzip defines gzip module-specific compression settings.
+	//
+	// +optional
+	Gzip *GzipSettings `json:"gzip,omitempty"`
+	// Level sets the compression level.
+	// Higher values provide better compression but use more CPU.
+	//
+	// NGINX directive: https://nginx.org/en/docs/http/ngx_http_gzip_module.html#gzip_comp_level
+	// Default is 1.
+	//
+	// +optional
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=9
+	// +kubebuilder:default:=1
+	Level *int32 `json:"level,omitempty"`
+	// MinLength sets the minimum length of a response that will be compressed.
+	// The length is determined from the "Content-Length" response header field.
+	//
+	// NGINX directive: https://nginx.org/en/docs/http/ngx_http_gzip_module.html#gzip_min_length
+	// Default is 20.
+	//
+	// +optional
+	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:default:=20
+	MinLength *int32 `json:"minLength,omitempty"`
+	// Vary enables or disables inserting the "Vary: Accept-Encoding" response header
+	// when compression is active.
+	//
+	// NGINX directive: https://nginx.org/en/docs/http/ngx_http_gzip_module.html#gzip_vary
+	// Default is false.
+	//
+	// +optional
+	Vary *bool `json:"vary,omitempty"`
+	// Type specifies the compression algorithm to use.
+	// Currently only gzip is supported.
+	//
+	// +kubebuilder:validation:Enum=gzip
+	Type CompressionType `json:"type"`
+	// Types specifies the MIME types to compress in addition to "text/html".
+	// "text/html" is always compressed when compression is enabled.
+	// Wildcards like "text/*" are not supported by NGINX.
+	// Example: ["application/json", "text/css", "application/javascript"]
+	//
+	// NGINX directive: https://nginx.org/en/docs/http/ngx_http_gzip_module.html#gzip_types
+	//
+	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=32
+	Types []string `json:"types"`
+}
+
+// CompressionType defines the type of compression algorithm.
+// +kubebuilder:validation:Enum=gzip
+type CompressionType string
+
+const (
+	// GzipCompressionType specifies gzip compression.
+	GzipCompressionType CompressionType = "gzip"
+)
+
+// GzipSettings defines gzip module-specific compression settings.
+type GzipSettings struct {
+	// Proxied enables or disables gzip compression for proxied requests depending on the request and response.
+	// Accepted values are: "off", "expired", "no-cache", "no-store", "private", "no_last_modified",
+	// "no_etag", "auth", "any".
+	// Multiple values can be specified.
+	//
+	// NGINX directive: https://nginx.org/en/docs/http/ngx_http_gzip_module.html#gzip_proxied
+	//
+	// +optional
+	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=9
+	Proxied []GzipProxiedType `json:"proxied,omitempty"`
+}
+
+// GzipProxiedType defines the conditions under which responses from proxied requests are compressed.
+// +kubebuilder:validation:Enum=off;expired;no-cache;no-store;private;no_last_modified;no_etag;auth;any
+type GzipProxiedType string
+
+const (
+	// GzipProxiedOff disables compression for all proxied requests.
+	GzipProxiedOff GzipProxiedType = "off"
+	// GzipProxiedExpired enables compression if a response header includes the "Expires" field.
+	GzipProxiedExpired GzipProxiedType = "expired"
+	// GzipProxiedNoCache enables compression if a response header includes
+	// "Cache-Control" with the "no-cache" parameter.
+	GzipProxiedNoCache GzipProxiedType = "no-cache"
+	// GzipProxiedNoStore enables compression if a response header includes
+	// "Cache-Control" with the "no-store" parameter.
+	GzipProxiedNoStore GzipProxiedType = "no-store"
+	// GzipProxiedPrivate enables compression if a response header includes
+	// "Cache-Control" with the "private" parameter.
+	GzipProxiedPrivate GzipProxiedType = "private"
+	// GzipProxiedNoLastModified enables compression if a response header does not include "Last-Modified".
+	GzipProxiedNoLastModified GzipProxiedType = "no_last_modified"
+	// GzipProxiedNoETag enables compression if a response header does not include "ETag".
+	GzipProxiedNoETag GzipProxiedType = "no_etag"
+	// GzipProxiedAuth enables compression if a request header includes "Authorization".
+	GzipProxiedAuth GzipProxiedType = "auth"
+	// GzipProxiedAny enables compression for all proxied requests.
+	GzipProxiedAny GzipProxiedType = "any"
+)

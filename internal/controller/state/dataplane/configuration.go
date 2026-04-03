@@ -1454,6 +1454,8 @@ func buildBaseHTTPConfig(
 
 	baseConfig.ServerTokens = buildServerTokens(gateway)
 
+	baseConfig.Compression = buildCompressionConfig(np.Compression)
+
 	return baseConfig
 }
 
@@ -1841,4 +1843,36 @@ func buildServerTokens(gateway *graph.Gateway) string {
 	}
 
 	return fmt.Sprintf(`"%s"`, serverToken)
+}
+
+func buildCompressionConfig(compression *ngfAPIv1alpha2.Compression) *CompressionSettings {
+	if compression == nil {
+		return nil
+	}
+
+	settings := &CompressionSettings{
+		Level: 1,
+		Types: compression.Types,
+	}
+
+	if compression.Level != nil {
+		settings.Level = *compression.Level
+	}
+
+	if compression.MinLength != nil {
+		settings.MinLength = *compression.MinLength
+	}
+
+	if compression.Vary != nil {
+		settings.Vary = *compression.Vary
+	}
+
+	if compression.Gzip != nil && len(compression.Gzip.Proxied) > 0 {
+		settings.Proxied = make([]string, 0, len(compression.Gzip.Proxied))
+		for _, p := range compression.Gzip.Proxied {
+			settings.Proxied = append(settings.Proxied, string(p))
+		}
+	}
+
+	return settings
 }

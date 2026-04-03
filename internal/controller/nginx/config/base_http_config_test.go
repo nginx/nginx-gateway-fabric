@@ -821,3 +821,97 @@ func TestExecuteBaseHttp_OIDCProviders(t *testing.T) {
 		})
 	}
 }
+
+func TestExecuteBaseHttp_Compression(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		expSubStrings []string
+		expAbsent     []string
+		conf          dataplane.Configuration
+	}{
+		{
+			name: "compression disabled",
+			conf: dataplane.Configuration{
+				BaseHTTPConfig: dataplane.BaseHTTPConfig{},
+			},
+			expAbsent: []string{"gzip on;"},
+		},
+		{
+			name: "compression enabled with defaults",
+			conf: dataplane.Configuration{
+				BaseHTTPConfig: dataplane.BaseHTTPConfig{
+					Compression: &dataplane.CompressionSettings{
+						Level: 1,
+						Types: []string{"text/css", "application/json"},
+					},
+				},
+			},
+			expSubStrings: []string{
+				"gzip on;",
+				"gzip_comp_level 1;",
+				"gzip_min_length 0;",
+				"gzip_types text/css application/json;",
+			},
+			expAbsent: []string{"gzip_vary", "gzip_proxied"},
+		},
+		{
+			name: "compression enabled with all options",
+			conf: dataplane.Configuration{
+				BaseHTTPConfig: dataplane.BaseHTTPConfig{
+					Compression: &dataplane.CompressionSettings{
+						Level:     6,
+						MinLength: 256,
+						Types:     []string{"text/css", "application/json", "application/javascript"},
+						Proxied:   []string{"any"},
+						Vary:      true,
+					},
+				},
+			},
+			expSubStrings: []string{
+				"gzip on;",
+				"gzip_comp_level 6;",
+				"gzip_min_length 256;",
+				"gzip_types text/css application/json application/javascript;",
+				"gzip_proxied any;",
+				"gzip_vary on;",
+			},
+		},
+		{
+			name: "compression with multiple proxied values",
+			conf: dataplane.Configuration{
+				BaseHTTPConfig: dataplane.BaseHTTPConfig{
+					Compression: &dataplane.CompressionSettings{
+						Level:   3,
+						Types:   []string{"text/plain"},
+						Proxied: []string{"no-cache", "no-store", "expired"},
+					},
+				},
+			},
+			expSubStrings: []string{
+				"gzip on;",
+				"gzip_proxied no-cache no-store expired;",
+			},
+			expAbsent: []string{"gzip_vary"},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			res := executeBaseHTTPConfig(test.conf, &policiesfakes.FakeGenerator{})
+			g.Expect(res).To(HaveLen(1))
+			data := string(res[0].data)
+
+			for _, sub := range test.expSubStrings {
+				g.Expect(data).To(ContainSubstring(sub))
+			}
+			for _, absent := range test.expAbsent {
+				g.Expect(data).NotTo(ContainSubstring(absent))
+			}
+		})
+	}
+}

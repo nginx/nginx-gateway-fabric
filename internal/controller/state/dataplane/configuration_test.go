@@ -8106,3 +8106,60 @@ func TestBuildJWTRemoteTLSCABundles(t *testing.T) {
 		})
 	}
 }
+
+func TestBuildCompressionConfig(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		compression *ngfAPIv1alpha2.Compression
+		expected    *CompressionSettings
+		name        string
+	}{
+		{
+			name:        "nil compression",
+			compression: nil,
+			expected:    nil,
+		},
+		{
+			name: "compression with defaults",
+			compression: &ngfAPIv1alpha2.Compression{
+				Type:  ngfAPIv1alpha2.GzipCompressionType,
+				Types: []string{"text/css", "application/json"},
+			},
+			expected: &CompressionSettings{
+				Level: 1,
+				Types: []string{"text/css", "application/json"},
+			},
+		},
+		{
+			name: "compression with all options",
+			compression: &ngfAPIv1alpha2.Compression{
+				Type:      ngfAPIv1alpha2.GzipCompressionType,
+				Types:     []string{"text/css"},
+				Level:     helpers.GetPointer[int32](6),
+				MinLength: helpers.GetPointer[int32](256),
+				Vary:      helpers.GetPointer(true),
+				Gzip: &ngfAPIv1alpha2.GzipSettings{
+					Proxied: []ngfAPIv1alpha2.GzipProxiedType{ngfAPIv1alpha2.GzipProxiedAny},
+				},
+			},
+			expected: &CompressionSettings{
+				Level:     6,
+				MinLength: 256,
+				Types:     []string{"text/css"},
+				Vary:      true,
+				Proxied:   []string{"any"},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			result := buildCompressionConfig(test.compression)
+			g.Expect(result).To(Equal(test.expected))
+		})
+	}
+}

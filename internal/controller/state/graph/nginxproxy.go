@@ -90,7 +90,21 @@ func buildEffectiveNginxProxy(gatewayClassNp, gatewayNp *NginxProxy) *EffectiveN
 // cleanupEffectiveNginxProxy handles post-JSON merge cleanup for the effective NginxProxy configuration.
 // This includes manually unsetting slices and handling mutual exclusion between certain fields.
 func cleanupEffectiveNginxProxy(local, global *EffectiveNginxProxy) {
-	// Handle slice unsetting, JSON unmarshaling doesn't clear slices when they're set to empty
+	unsetEmptySlices(local, global)
+
+	// Handle mutual exclusion between DaemonSet and Deployment
+	if local.Kubernetes != nil && global.Kubernetes != nil {
+		if local.Kubernetes.DaemonSet != nil && global.Kubernetes.Deployment != nil {
+			global.Kubernetes.Deployment = nil
+		} else if local.Kubernetes.Deployment != nil && global.Kubernetes.DaemonSet != nil {
+			global.Kubernetes.DaemonSet = nil
+		}
+	}
+}
+
+// unsetEmptySlices handles explicitly empty slices in the local config that should override global slices.
+// JSON unmarshaling doesn't clear slices when they're set to empty, so this must be done manually.
+func unsetEmptySlices(local, global *EffectiveNginxProxy) {
 	if local.Telemetry != nil {
 		if local.Telemetry.DisabledFeatures != nil && len(local.Telemetry.DisabledFeatures) == 0 {
 			global.Telemetry.DisabledFeatures = []ngfAPIv1alpha2.DisableTelemetryFeature{}
@@ -107,12 +121,22 @@ func cleanupEffectiveNginxProxy(local, global *EffectiveNginxProxy) {
 		}
 	}
 
-	// Handle mutual exclusion between DaemonSet and Deployment
-	if local.Kubernetes != nil && global.Kubernetes != nil {
-		if local.Kubernetes.DaemonSet != nil && global.Kubernetes.Deployment != nil {
-			global.Kubernetes.Deployment = nil
-		} else if local.Kubernetes.Deployment != nil && global.Kubernetes.DaemonSet != nil {
-			global.Kubernetes.DaemonSet = nil
+	if local.Compression != nil {
+		unsetEmptyCompressionSlices(local.Compression, global)
+	}
+}
+
+func unsetEmptyCompressionSlices(compression *ngfAPIv1alpha2.Compression, global *EffectiveNginxProxy) {
+	if compression.Types != nil && len(compression.Types) == 0 {
+		global.Compression.Types = []string{}
+	}
+
+	if compression.Gzip != nil {
+		if global.Compression.Gzip == nil {
+			global.Compression.Gzip = &ngfAPIv1alpha2.GzipSettings{}
+		}
+		if compression.Gzip.Proxied != nil && len(compression.Gzip.Proxied) == 0 {
+			global.Compression.Gzip.Proxied = []ngfAPIv1alpha2.GzipProxiedType{}
 		}
 	}
 }
@@ -305,6 +329,8 @@ func validateNginxProxy(
 	allErrs = append(allErrs, validateNginxPlus(npCfg)...)
 
 	allErrs = append(allErrs, validateServerTokens(npCfg, plus)...)
+
+	allErrs = append(allErrs, validateCompression(validator, npCfg)...)
 
 	return allErrs
 }
@@ -554,5 +580,28 @@ func validateServerTokens(npCfg *ngfAPIv1alpha2.NginxProxy, plus bool) field.Err
 			)
 		}
 	}
+	return allErrs
+}
+
+func validateCompression(
+	validator validation.GenericValidator,
+	npCfg *ngfAPIv1alpha2.NginxProxy,
+) field.ErrorList {
+	if npCfg.Spec.Compression == nil {
+		return nil
+	}
+
+	var allErrs field.ErrorList
+	compressionPath := field.NewPath("spec").Child("compression")
+
+	for i, t := range npCfg.Spec.Compression.Types {
+		if err := validator.ValidateEscapedStringNoVarExpansion(t); err != nil {
+			allErrs = append(
+				allErrs,
+				field.Invalid(compressionPath.Child("types").Index(i), t, err.Error()),
+			)
+		}
+	}
+
 	return allErrs
 }

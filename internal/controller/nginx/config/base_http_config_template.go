@@ -85,6 +85,21 @@ include {{ $i.Name }};
 
 server_tokens {{ .ServerTokens }};
 
+{{- if .Compression }}
+
+# Gzip compression
+gzip on;
+gzip_comp_level {{ .Compression.Level }};
+gzip_min_length {{ .Compression.MinLength }};
+gzip_types{{ range .Compression.Types }} {{ . }}{{ end }};
+{{- if .Compression.Proxied }}
+gzip_proxied{{ range .Compression.Proxied }} {{ . }}{{ end }};
+{{- end }}
+{{- if .Compression.Vary }}
+gzip_vary on;
+{{- end }}
+{{- end }}
+
 
 {{- range .OIDCProviders }}
 oidc_provider {{ .Name }} {
