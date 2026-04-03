@@ -37,7 +37,7 @@ func executeMaps(conf dataplane.Configuration) []executeResult {
 
 	maps := buildAddHeaderMaps(httpAndSSLServers)
 	maps = append(maps, buildInferenceMaps(conf.BackendGroups)...)
-	maps = append(maps, buildCorsMaps(httpAndSSLServers)...)
+	maps = append(maps, buildCorsMaps(conf.HTTPServers, conf.SSLServers)...)
 
 	if !conf.BaseHTTPConfig.DisableSNIHostValidation {
 		maps = append(maps, buildMisdirectedRequestMaps(conf.SSLListenerHostnames)...)
@@ -51,35 +51,44 @@ func executeMaps(conf dataplane.Configuration) []executeResult {
 	return []executeResult{result}
 }
 
-func buildCorsMaps(servers []dataplane.VirtualServer) []shared.Map {
+func buildCorsMaps(httpServers, sslServers []dataplane.VirtualServer) []shared.Map {
 	originMaps := make([]shared.Map, 0)
 
-	for serverIndex, s := range servers {
+	for serverIndex, s := range httpServers {
 		serverID := fmt.Sprintf("%d", serverIndex)
-		if s.SSL != nil {
-			serverID = fmt.Sprintf("SSL_%d", serverIndex)
-		}
+		originMaps = append(originMaps, buildCorsMapsForServer(s, serverID)...)
+	}
 
-		for pathRuleIndex, pr := range s.PathRules {
-			for matchRuleIndex, mr := range pr.MatchRules {
-				if mr.Filters.CORSFilter != nil {
-					corsFilter := mr.Filters.CORSFilter
-					if corsFilter.AllowOrigins != nil {
-						nginxVar := generateCORSAllowedOriginVariableName(serverID, pathRuleIndex, matchRuleIndex)
-						originMaps = append(originMaps, shared.Map{
-							Source:     "$http_origin",
-							Variable:   nginxVar,
-							Parameters: buildCORSOriginMapParameters(corsFilter.AllowOrigins),
-						})
-					}
-					if corsFilter.AllowCredentials {
-						nginxVar := generateCORSAllowCredentialsVariableName(serverID, pathRuleIndex, matchRuleIndex)
-						originMaps = append(originMaps, shared.Map{
-							Source:     "$http_origin",
-							Variable:   nginxVar,
-							Parameters: buildCORSAllowCredentialsMapParameters(corsFilter.AllowOrigins),
-						})
-					}
+	for serverIndex, s := range sslServers {
+		serverID := fmt.Sprintf("SSL_%d", serverIndex)
+		originMaps = append(originMaps, buildCorsMapsForServer(s, serverID)...)
+	}
+
+	return originMaps
+}
+
+func buildCorsMapsForServer(s dataplane.VirtualServer, serverID string) []shared.Map {
+	originMaps := make([]shared.Map, 0)
+
+	for pathRuleIndex, pr := range s.PathRules {
+		for matchRuleIndex, mr := range pr.MatchRules {
+			if mr.Filters.CORSFilter != nil {
+				corsFilter := mr.Filters.CORSFilter
+				if corsFilter.AllowOrigins != nil {
+					nginxVar := generateCORSAllowedOriginVariableName(serverID, pathRuleIndex, matchRuleIndex)
+					originMaps = append(originMaps, shared.Map{
+						Source:     "$http_origin",
+						Variable:   nginxVar,
+						Parameters: buildCORSOriginMapParameters(corsFilter.AllowOrigins),
+					})
+				}
+				if corsFilter.AllowCredentials {
+					nginxVar := generateCORSAllowCredentialsVariableName(serverID, pathRuleIndex, matchRuleIndex)
+					originMaps = append(originMaps, shared.Map{
+						Source:     "$http_origin",
+						Variable:   nginxVar,
+						Parameters: buildCORSAllowCredentialsMapParameters(corsFilter.AllowOrigins),
+					})
 				}
 			}
 		}
