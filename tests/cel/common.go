@@ -74,10 +74,14 @@ const (
 		`is 'hash' or 'hash consistent'`
 
 	// WAFGatewayBindingPolicy errors.
-	expectedWAFFileNilIfNotFileTypeError       = "destination.file must be nil if the destination.type is not file"
-	expectedWAFFileRequiredIfFileTypeError     = "destination.file must be specified for file destination.type"
-	expectedWAFSyslogNilIfNotSyslogTypeError   = "destination.syslog must be nil if the destination.type is not syslog"
-	expectedWAFSyslogRequiredIfSyslogTypeError = "destination.syslog must be specified for syslog destination.type"
+	expectedWAFFileNilIfNotFileTypeError           = "destination.file must be nil if the destination.type is not file"
+	expectedWAFFileRequiredIfFileTypeError         = "destination.file must be specified for file destination.type"
+	expectedWAFSyslogNilIfNotSyslogTypeError       = "destination.syslog must be nil if the destination.type is not syslog"
+	expectedWAFSyslogRequiredIfSyslogTypeError     = "destination.syslog must be specified for syslog destination.type"
+	expectedWAFLogSourceMutualExclusionError       = "exactly one of logSource.url or logSource.defaultProfile must be set"
+	expectedWAFManagedSourceRequiredError          = "policySource.managedSource is required when type is NIM or N1C"
+	expectedWAFManagedSourceForbiddenError         = "policySource.managedSource must not be set when type is HTTP"
+	expectedWAFManagedSourceNamespaceRequiredError = "policySource.managedSource.n1cNamespace is required when type is N1C"
 
 	// Namespace for tests.
 	defaultNamespace = "default"

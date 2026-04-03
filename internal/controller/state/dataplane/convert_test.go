@@ -883,9 +883,7 @@ func TestConvertWAFBundles(t *testing.T) {
 			name: "single bundle with data",
 			input: map[graph.WAFBundleKey]*graph.WAFBundleData{
 				"bundle1.tgz": {
-					Data:       []byte("bundle data"),
-					Location:   "bucket/path/bundle1.tgz",
-					BundleType: graph.WAFBundleTypePolicy,
+					Data: []byte("bundle data"),
 				},
 			},
 			expected: map[WAFBundleID]WAFBundle{
@@ -905,15 +903,11 @@ func TestConvertWAFBundles(t *testing.T) {
 			name: "multiple bundles with mixed data",
 			input: map[graph.WAFBundleKey]*graph.WAFBundleData{
 				"bundle1.tgz": {
-					Data:       []byte("first bundle"),
-					Location:   "bucket/path/bundle1.tgz",
-					BundleType: graph.WAFBundleTypePolicy,
+					Data: []byte("first bundle"),
 				},
 				"bundle2.tgz": nil,
 				"bundle3.tgz": {
-					Data:       []byte("third bundle"),
-					Location:   "bucket/path/bundle3.tgz",
-					BundleType: graph.WAFBundleTypeLogConf,
+					Data: []byte("third bundle"),
 				},
 			},
 			expected: map[WAFBundleID]WAFBundle{

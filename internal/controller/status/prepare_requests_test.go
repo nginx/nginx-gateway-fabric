@@ -2172,7 +2172,7 @@ func TestBuildWAFGatewayBindingPolicyStatuses(t *testing.T) {
 		Conditions []conditions.Condition
 	}
 
-	getWAFPolicy := func(cfg policyCfg) *graph.Policy {
+	getWAFGatewayBindingPolicy := func(cfg policyCfg) *graph.Policy {
 		return &graph.Policy{
 			Source: &ngfAPI.WAFGatewayBindingPolicy{
 				ObjectMeta: metav1.ObjectMeta{
@@ -2186,7 +2186,7 @@ func TestBuildWAFGatewayBindingPolicyStatuses(t *testing.T) {
 		}
 	}
 
-	wafPolicyKey := func(name string) graph.PolicyKey {
+	wgbPolicyKey := func(name string) graph.PolicyKey {
 		return graph.PolicyKey{
 			NsName: types.NamespacedName{Namespace: "test", Name: name},
 			GVK:    schema.GroupVersionKind{Group: ngfAPI.GroupName, Kind: kinds.WAFGatewayBindingPolicy},
@@ -2226,7 +2226,7 @@ func TestBuildWAFGatewayBindingPolicyStatuses(t *testing.T) {
 		{
 			name: "valid WAF policy gets all three default conditions",
 			policies: map[graph.PolicyKey]*graph.Policy{
-				wafPolicyKey("valid-waf"): getWAFPolicy(policyCfg{
+				wgbPolicyKey("valid-waf"): getWAFGatewayBindingPolicy(policyCfg{
 					Name: "valid-waf",
 					Ancestors: []graph.PolicyAncestor{
 						{
@@ -2256,52 +2256,9 @@ func TestBuildWAFGatewayBindingPolicyStatuses(t *testing.T) {
 			},
 		},
 		{
-			name: "WAF policy with ResolvedRefs error overrides default",
-			policies: map[graph.PolicyKey]*graph.Policy{
-				wafPolicyKey("unresolved-waf"): getWAFPolicy(policyCfg{
-					Name: "unresolved-waf",
-					Conditions: []conditions.Condition{
-						conditions.NewPolicyRefsNotResolvedAPPolicyNotFound("test/my-policy"),
-					},
-					Ancestors: []graph.PolicyAncestor{
-						{
-							Ancestor: v1.ParentReference{
-								Name: "ancestor1",
-							},
-						},
-					},
-				}),
-			},
-			expected: map[types.NamespacedName]v1.PolicyStatus{
-				{Namespace: "test", Name: "unresolved-waf"}: {
-					Ancestors: []v1.PolicyAncestorStatus{
-						{
-							AncestorRef: v1.ParentReference{
-								Name: "ancestor1",
-							},
-							ControllerName: gatewayCtlrName,
-							Conditions: []metav1.Condition{
-								acceptedCond,
-								programmedCond,
-								{
-									Type:               string(conditions.WAFResolvedRefsConditionType),
-									Status:             metav1.ConditionFalse,
-									ObservedGeneration: 1,
-									LastTransitionTime: transitionTime,
-									Reason:             string(conditions.PolicyReasonInvalidRef),
-									Message: "The referenced APPolicy \"test/my-policy\"" +
-										" was not found",
-								},
-							},
-						},
-					},
-				},
-			},
-		},
-		{
 			name: "WAF policy with Programmed error overrides default",
 			policies: map[graph.PolicyKey]*graph.Policy{
-				wafPolicyKey("fetch-err-waf"): getWAFPolicy(policyCfg{
+				wgbPolicyKey("fetch-err-waf"): getWAFGatewayBindingPolicy(policyCfg{
 					Name: "fetch-err-waf",
 					Conditions: []conditions.Condition{
 						conditions.NewPolicyNotProgrammedBundleFetchError("connection refused"),
@@ -2332,7 +2289,7 @@ func TestBuildWAFGatewayBindingPolicyStatuses(t *testing.T) {
 									ObservedGeneration: 1,
 									LastTransitionTime: transitionTime,
 									Reason:             string(conditions.PolicyReasonFetchError),
-									Message:            "Failed to fetch bundle from PLM storage: connection refused",
+									Message:            "Failed to fetch bundle: connection refused",
 								},
 							},
 						},
@@ -2343,7 +2300,7 @@ func TestBuildWAFGatewayBindingPolicyStatuses(t *testing.T) {
 		{
 			name: "WAF policy with integrity error",
 			policies: map[graph.PolicyKey]*graph.Policy{
-				wafPolicyKey("integrity-err-waf"): getWAFPolicy(policyCfg{
+				wgbPolicyKey("integrity-err-waf"): getWAFGatewayBindingPolicy(policyCfg{
 					Name: "integrity-err-waf",
 					Conditions: []conditions.Condition{
 						conditions.NewPolicyNotProgrammedIntegrityError("checksum mismatch"),
@@ -2383,60 +2340,9 @@ func TestBuildWAFGatewayBindingPolicyStatuses(t *testing.T) {
 			},
 		},
 		{
-			name: "WAF policy with multiple error conditions across types",
-			policies: map[graph.PolicyKey]*graph.Policy{
-				wafPolicyKey("multi-err-waf"): getWAFPolicy(policyCfg{
-					Name: "multi-err-waf",
-					Conditions: []conditions.Condition{
-						conditions.NewPolicyRefsNotResolvedAPLogConfNotFound("test/my-logconf"),
-						conditions.NewPolicyNotProgrammedBundleFetchError("timeout"),
-					},
-					Ancestors: []graph.PolicyAncestor{
-						{
-							Ancestor: v1.ParentReference{
-								Name: "ancestor1",
-							},
-						},
-					},
-				}),
-			},
-			expected: map[types.NamespacedName]v1.PolicyStatus{
-				{Namespace: "test", Name: "multi-err-waf"}: {
-					Ancestors: []v1.PolicyAncestorStatus{
-						{
-							AncestorRef: v1.ParentReference{
-								Name: "ancestor1",
-							},
-							ControllerName: gatewayCtlrName,
-							Conditions: []metav1.Condition{
-								acceptedCond,
-								{
-									Type:               string(conditions.WAFResolvedRefsConditionType),
-									Status:             metav1.ConditionFalse,
-									ObservedGeneration: 1,
-									LastTransitionTime: transitionTime,
-									Reason:             string(conditions.PolicyReasonInvalidRef),
-									Message: "The referenced APLogConf \"test/my-logconf\"" +
-										" was not found",
-								},
-								{
-									Type:               string(conditions.WAFProgrammedConditionType),
-									Status:             metav1.ConditionFalse,
-									ObservedGeneration: 1,
-									LastTransitionTime: transitionTime,
-									Reason:             string(conditions.PolicyReasonFetchError),
-									Message:            "Failed to fetch bundle from PLM storage: timeout",
-								},
-							},
-						},
-					},
-				},
-			},
-		},
-		{
 			name: "WAF policy with Accepted error overrides default Accepted",
 			policies: map[graph.PolicyKey]*graph.Policy{
-				wafPolicyKey("invalid-waf"): getWAFPolicy(policyCfg{
+				wgbPolicyKey("invalid-waf"): getWAFGatewayBindingPolicy(policyCfg{
 					Name: "invalid-waf",
 					Conditions: []conditions.Condition{
 						conditions.NewPolicyInvalid("spec is invalid"),

@@ -44,11 +44,14 @@ const (
 	// LicenseJWTKey is the key for the NGINX Plus license JWT.
 	LicenseJWTKey = "license.jwt"
 
-	// PLMCredentialsKey is the Secret data key for PLM storage credentials (S3 secret access key).
-	PLMCredentialsKey = "seaweedfs_admin_secret"
+	// BundleUsernameKey is the Secret key for WAF bundle Basic Auth username.
+	BundleUsernameKey = "username"
 
-	// PLMAccessKeyID is the access key ID used for S3-compatible PLM storage authentication.
-	PLMAccessKeyID = "adminKey"
+	// BundlePasswordKey is the Secret key for WAF bundle Basic Auth password.
+	BundlePasswordKey = "password"
+
+	// BundleTokenKey is the Secret key for WAF bundle Bearer Token authentication.
+	BundleTokenKey = "token"
 )
 
 // CertificateBundle is used to submit certificate data to nginx that is kubernetes aware.

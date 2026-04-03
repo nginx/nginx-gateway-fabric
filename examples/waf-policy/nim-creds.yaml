@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: nim-credentials
+type: Opaque
+stringData:
+  # Replace with your own credentials before applying this Secret.
+  username: "<NIM_USERNAME>"
+  password: "<NIM_PASSWORD>"

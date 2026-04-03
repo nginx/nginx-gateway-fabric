@@ -68,12 +68,6 @@ type BasicAuth struct {
 	Realm string `json:"realm"`
 }
 
-// LocalObjectReference specifies a local Kubernetes object.
-type LocalObjectReference struct {
-	// Name is the referenced object.
-	Name string `json:"name"`
-}
-
 // AuthenticationFilterStatus defines the state of AuthenticationFilter.
 type AuthenticationFilterStatus struct {
 	// Controllers is a list of Gateway API controllers that processed the AuthenticationFilter
