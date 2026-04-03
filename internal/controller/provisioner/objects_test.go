@@ -2394,8 +2394,14 @@ func TestBuildNginxResourceObjects_ClusterIPWithExternalIPs(t *testing.T) {
 			objects, err := provisioner.buildNginxResourceObjects("gw-nginx", gateway, test.nProxyCfg)
 			g.Expect(err).ToNot(HaveOccurred())
 
-			svc, ok := objects[4].(*corev1.Service)
-			g.Expect(ok).To(BeTrue())
+			var svc *corev1.Service
+			for _, obj := range objects {
+				if s, ok := obj.(*corev1.Service); ok {
+					svc = s
+					break
+				}
+			}
+			g.Expect(svc).ToNot(BeNil())
 			g.Expect(svc.Spec.Type).To(Equal(corev1.ServiceTypeClusterIP))
 			g.Expect(svc.Spec.ExternalIPs).To(Equal(test.expectedExternalIPs))
 			g.Expect(svc.Spec.ExternalTrafficPolicy).To(Equal(test.expectedExternalTrafficPolicy))

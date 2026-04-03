@@ -811,8 +811,7 @@ type ServiceSpec struct {
 
 	// ExternalTrafficPolicy describes how nodes distribute service traffic they
 	// receive on one of the Service's "externally-facing" addresses (NodePorts, ExternalIPs,
-	// and LoadBalancer IPs). This applies to ClusterIP services with externalIPs set
-	// using the Gateway's `spec.addresses` field.
+	// and LoadBalancer IPs).
 	//
 	// +optional
 	// +kubebuilder:default:=Local
@@ -869,7 +868,7 @@ const (
 
 // ExternalTrafficPolicy describes how nodes distribute service traffic they
 // receive on one of the Service's "externally-facing" addresses (NodePorts, ExternalIPs,
-// and LoadBalancer IPs). Also applies to ClusterIP services with externalIPs set via Gateway spec.addresses.
+// and LoadBalancer IPs).
 // +kubebuilder:validation:Enum=Cluster;Local
 type ExternalTrafficPolicy corev1.ServiceExternalTrafficPolicy
 
