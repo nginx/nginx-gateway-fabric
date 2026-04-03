@@ -5116,25 +5116,6 @@ func TestL4RouteSpec_GetBackendRefs(t *testing.T) {
 				{SvcNsName: svc1, Valid: true, Weight: 100},
 			},
 		},
-		{
-			name: "route with InvalidForGateways should be returned",
-			spec: L4RouteSpec{
-				BackendRef: BackendRef{
-					Valid: true,
-					InvalidForGateways: map[types.NamespacedName]conditions.Condition{
-						{Namespace: "test", Name: "gw"}: conditions.NewRouteInvalidIPFamily("mismatch"),
-					},
-				},
-			},
-			expected: []BackendRef{
-				{
-					Valid: true,
-					InvalidForGateways: map[types.NamespacedName]conditions.Condition{
-						{Namespace: "test", Name: "gw"}: conditions.NewRouteInvalidIPFamily("mismatch"),
-					},
-				},
-			},
-		},
 	}
 
 	for _, test := range tests {

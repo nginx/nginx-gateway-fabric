@@ -1,7 +1,6 @@
 package graph
 
 import (
-	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -11,7 +10,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
 	sort "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/ngfsort"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
@@ -228,7 +226,7 @@ func createBackendRef(
 		ns = string(*ref.Namespace)
 	}
 	svcNsName := types.NamespacedName{Name: string(ref.Name), Namespace: ns}
-	svcIPFamily, svcPort, err := getIPFamilyAndPortFromRef(ref.BackendRef, svcNsName, services, refPath)
+	svcPort, err := getPortFromRef(ref.BackendRef, svcNsName, services, refPath)
 	if err != nil {
 		backendRef := BackendRef{
 			Weight:               weight,
@@ -268,12 +266,6 @@ func createBackendRef(
 			return backendRef, append(conds, conditions.NewRouteBackendRefUnsupportedValue(
 				"ExternalName service has empty or invalid externalName field",
 			))
-		}
-	}
-
-	for _, parentRef := range route.ParentRefs {
-		if err := verifyIPFamily(parentRef.Gateway.EffectiveNginxProxy, svcIPFamily); err != nil {
-			invalidForGateways[parentRef.Gateway.NamespacedName] = conditions.NewRouteInvalidIPFamily(err.Error())
 		}
 	}
 
@@ -444,59 +436,28 @@ func findBackendTLSPolicyForService(
 	return beTLSPolicy, err
 }
 
-// getIPFamilyAndPortFromRef extracts the IPFamily of the Service and the port from a BackendRef.
+// getPortFromRef extracts the port from a BackendRef.
 // It can return an error and an empty v1.ServicePort in two cases:
 // 1. The Service referenced from the BackendRef does not exist in the cluster/state.
 // 2. The Port on the BackendRef does not match any of the ServicePorts on the Service.
-func getIPFamilyAndPortFromRef(
+func getPortFromRef(
 	ref gatewayv1.BackendRef,
 	svcNsName types.NamespacedName,
 	services map[types.NamespacedName]*v1.Service,
 	refPath *field.Path,
-) ([]v1.IPFamily, v1.ServicePort, error) {
+) (v1.ServicePort, error) {
 	svc, ok := services[svcNsName]
 	if !ok {
-		return []v1.IPFamily{}, v1.ServicePort{}, field.NotFound(refPath.Child("name"), ref.Name)
+		return v1.ServicePort{}, field.NotFound(refPath.Child("name"), ref.Name)
 	}
 
 	// safe to dereference port here because we already validated that the port is not nil in validateBackendRef.
 	svcPort, err := getServicePort(svc, *ref.Port)
 	if err != nil {
-		return []v1.IPFamily{}, v1.ServicePort{}, err
+		return v1.ServicePort{}, err
 	}
 
-	return svc.Spec.IPFamilies, svcPort, nil
-}
-
-func verifyIPFamily(npCfg *EffectiveNginxProxy, svcIPFamily []v1.IPFamily) error {
-	if npCfg == nil {
-		return nil
-	}
-
-	containsIPv6 := slices.Contains(svcIPFamily, v1.IPv6Protocol)
-	containsIPv4 := slices.Contains(svcIPFamily, v1.IPv4Protocol)
-
-	//nolint: staticcheck // used in status condition which is normally capitalized
-	errIPv6Mismatch := errors.New("The Service configured with IPv6 family but NginxProxy is configured with IPv4")
-	//nolint: staticcheck // used in status condition which is normally capitalized
-	errIPv4Mismatch := errors.New("The Service configured with IPv4 family but NginxProxy is configured with IPv6")
-
-	npIPFamily := npCfg.IPFamily
-
-	if npIPFamily == nil {
-		// default is dual so we don't need to check the service IPFamily.
-		return nil
-	}
-
-	if *npIPFamily == ngfAPIv1alpha2.IPv4 && containsIPv6 {
-		return errIPv6Mismatch
-	}
-
-	if *npIPFamily == ngfAPIv1alpha2.IPv6 && containsIPv4 {
-		return errIPv4Mismatch
-	}
-
-	return nil
+	return svcPort, nil
 }
 
 func checkExternalNameValidForGateways(

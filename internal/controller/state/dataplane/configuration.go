@@ -94,7 +94,6 @@ func BuildConfiguration(
 		gateway,
 		serviceResolver,
 		g.ReferencedServices,
-		baseHTTPConfig.IPFamily,
 	)
 
 	var nginxPlus NginxPlus
@@ -122,7 +121,6 @@ func BuildConfiguration(
 			gateway,
 			serviceResolver,
 			g.ReferencedServices,
-			baseHTTPConfig.IPFamily,
 		),
 		BackendGroups:        backendGroups,
 		SSLKeyPairs:          buildSSLKeyPairs(g.ReferencedSecrets, gateway),
@@ -287,14 +285,12 @@ func buildStreamUpstreams(
 	gateway *graph.Gateway,
 	serviceResolver resolver.ServiceResolver,
 	referencedServices map[types.NamespacedName]*graph.ReferencedService,
-	ipFamily IPFamilyType,
 ) []Upstream {
 	// There can be duplicate upstreams if multiple routes reference the same upstream.
 	// We use a map to deduplicate them.
 	uniqueUpstreams := make(map[string]Upstream)
 
 	gatewayNSName := client.ObjectKeyFromObject(gateway.Source)
-	allowedAddressType := getAllowedAddressType(ipFamily)
 
 	// Supported protocols for stream upstreams
 	supportedProtocols := map[v1.ProtocolType]bool{
@@ -343,7 +339,6 @@ func buildStreamUpstreams(
 					br,
 					serviceResolver,
 					referencedServices,
-					allowedAddressType,
 				)
 				if err != nil {
 					errMsg = err.Error()
@@ -1010,14 +1005,10 @@ func buildUpstreams(
 	gateway *graph.Gateway,
 	svcResolver resolver.ServiceResolver,
 	referencedServices map[types.NamespacedName]*graph.ReferencedService,
-	ipFamily IPFamilyType,
 ) []Upstream {
 	// There can be duplicate upstreams if multiple routes reference the same upstream.
 	// We use a map to deduplicate them.
 	uniqueUpstreams := make(map[string]Upstream)
-
-	// We need to build endpoints based on the IPFamily of NGINX.
-	allowedAddressType := getAllowedAddressType(ipFamily)
 
 	for _, l := range gateway.Listeners {
 		if !l.Valid {
@@ -1044,7 +1035,6 @@ func buildUpstreams(
 						svcResolver,
 						referencedServices,
 						uniqueUpstreams,
-						allowedAddressType,
 						br.SessionPersistence,
 					); upstream != nil {
 						uniqueUpstreams[upstream.Name] = *upstream
@@ -1080,7 +1070,6 @@ func buildUpstream(
 	svcResolver resolver.ServiceResolver,
 	referencedServices map[types.NamespacedName]*graph.ReferencedService,
 	uniqueUpstreams map[string]Upstream,
-	allowedAddressType []discoveryV1.AddressType,
 	sessionPersistence *graph.SessionPersistenceConfig,
 ) *Upstream {
 	if !br.Valid {
@@ -1106,7 +1095,6 @@ func buildUpstream(
 		br,
 		svcResolver,
 		referencedServices,
-		allowedAddressType,
 	)
 	if err != nil {
 		errMsg = err.Error()
@@ -1137,19 +1125,6 @@ func buildUpstream(
 		Policies:           upstreamPolicies,
 		SessionPersistence: sp,
 		StateFileKey:       br.BaseServicePortKey(),
-	}
-}
-
-func getAllowedAddressType(ipFamily IPFamilyType) []discoveryV1.AddressType {
-	switch ipFamily {
-	case IPv4:
-		return []discoveryV1.AddressType{discoveryV1.AddressTypeIPv4}
-	case IPv6:
-		return []discoveryV1.AddressType{discoveryV1.AddressTypeIPv6}
-	case Dual:
-		return []discoveryV1.AddressType{discoveryV1.AddressTypeIPv4, discoveryV1.AddressTypeIPv6}
-	default:
-		return []discoveryV1.AddressType{}
 	}
 }
 
@@ -1818,7 +1793,6 @@ func resolveUpstreamEndpoints(
 	br graph.BackendRef,
 	svcResolver resolver.ServiceResolver,
 	referencedServices map[types.NamespacedName]*graph.ReferencedService,
-	allowedAddressType []discoveryV1.AddressType,
 ) ([]resolver.Endpoint, error) {
 	// Check if this is an ExternalName service
 	if externalName := getExternalHostname(br.SvcNsName, referencedServices); externalName != "" {
@@ -1838,13 +1812,14 @@ func resolveUpstreamEndpoints(
 		return []resolver.Endpoint{endpoint}, nil
 	}
 
-	// For regular services, use the existing Resolve method
+	// Resolve endpoints for both IPv4 and IPv6. NginxProxy ipFamily controls only the
+	// NGINX listen directives, not which upstream endpoints are selected.
 	return svcResolver.Resolve(
 		ctx,
 		logger,
 		br.SvcNsName,
 		br.ServicePort,
-		allowedAddressType,
+		[]discoveryV1.AddressType{discoveryV1.AddressTypeIPv4, discoveryV1.AddressTypeIPv6},
 	)
 }
 
