@@ -27,13 +27,17 @@ import (
 	ngxConfig "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/provisioner"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/resolver"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/status"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/events"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/fetch"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/waf"
 )
 
 type handlerMetricsCollector interface {
@@ -71,6 +75,8 @@ type eventHandlerConfig struct {
 	statusQueue *status.Queue
 	// nginxDeployments contains a map of all nginx Deployments, and data about them.
 	nginxDeployments *agent.DeploymentStore
+	// wafPollerManager manages WAF bundle polling for policies with polling enabled.
+	wafPollerManager waf.PollerManager
 	// logger is the logger for the event handler.
 	logger logr.Logger
 	// gatewayPodConfig contains information about this Pod.
@@ -188,6 +194,10 @@ func (h *eventHandlerImpl) sendNginxConfig(ctx context.Context, logger logr.Logg
 		return
 	}
 
+	// Reconcile WAF bundle pollers on every graph update, regardless of Gateway state.
+	// This ensures pollers for deleted or orphaned policies are stopped even on early returns.
+	defer h.reconcileWAFPollers(ctx, gr)
+
 	if len(gr.Gateways) == 0 {
 		// still need to update GatewayClass status
 		obj := &status.QueueObject{
@@ -270,6 +280,144 @@ func (h *eventHandlerImpl) sendNginxConfig(ctx context.Context, logger logr.Logg
 			},
 		}
 		h.cfg.statusQueue.Enqueue(obj)
+	}
+}
+
+// reconcileWAFPollers starts, updates, or stops WAF bundle pollers based on the current graph state.
+// For each valid WAFGatewayBindingPolicy with polling enabled, a poller is started.
+// For policies that are deleted or no longer have polling enabled, the poller is stopped.
+func (h *eventHandlerImpl) reconcileWAFPollers(ctx context.Context, gr *graph.Graph) {
+	if h.cfg.wafPollerManager == nil {
+		return
+	}
+
+	activePolicies := make(map[types.NamespacedName]struct{})
+
+	for key, policy := range gr.NGFPolicies {
+		if key.GVK.Kind != kinds.WAFGatewayBindingPolicy {
+			continue
+		}
+
+		wafPolicy, ok := policy.Source.(*ngfAPI.WAFGatewayBindingPolicy)
+		if !ok {
+			continue
+		}
+
+		if !policy.Valid {
+			// Invalid policy - stop any existing poller.
+			h.cfg.wafPollerManager.StopPoller(key.NsName)
+			continue
+		}
+
+		// Build bundle sources (only includes sources with polling enabled).
+		var resolvedAuth *fetch.BundleAuth
+		var resolvedTLSCA []byte
+		if policy.WAFState != nil {
+			resolvedAuth = policy.WAFState.ResolvedAuth
+			resolvedTLSCA = policy.WAFState.ResolvedTLSCA
+		}
+
+		sources := waf.BuildBundleSources(key.NsName, wafPolicy.Spec, resolvedAuth, resolvedTLSCA)
+		if len(sources) == 0 {
+			// No sources with polling enabled - stop any existing poller.
+			h.cfg.wafPollerManager.StopPoller(key.NsName)
+			continue
+		}
+
+		// Determine target deployments by looking at what gateways this policy targets.
+		// WAF policies can target Gateways directly, or HTTPRoutes/GRPCRoutes which are attached to Gateways.
+		targetDeployments := collectPolicyTargetDeployments(gr, policy.TargetRefs)
+
+		if len(targetDeployments) == 0 {
+			// No valid target gateways - stop any existing poller.
+			h.cfg.wafPollerManager.StopPoller(key.NsName)
+			continue
+		}
+
+		// Collect initial checksums from the just-fetched bundles.
+		var wafBundles map[graph.WAFBundleKey]*graph.WAFBundleData
+		if policy.WAFState != nil {
+			wafBundles = policy.WAFState.Bundles
+		}
+
+		initialChecksums := make(map[graph.WAFBundleKey]string, len(wafBundles))
+		for bundleKey, bundleData := range wafBundles {
+			if bundleData != nil {
+				initialChecksums[bundleKey] = bundleData.Checksum
+			}
+		}
+
+		activePolicies[key.NsName] = struct{}{}
+
+		// Reconcile the poller: starts a new one if needed, updates targets if sources
+		// haven't changed, or restarts if sources changed. This avoids unnecessary churn
+		// when only unrelated resources in the graph changed.
+		h.cfg.wafPollerManager.ReconcilePoller(ctx, waf.PollerConfig{
+			PolicyNsName:      key.NsName,
+			Sources:           sources,
+			TargetDeployments: targetDeployments,
+			InitialChecksums:  initialChecksums,
+		})
+	}
+
+	// Stop pollers for policies that are no longer in the graph.
+	h.cfg.wafPollerManager.StopPollersNotIn(activePolicies)
+}
+
+// collectPolicyTargetDeployments returns the unique set of deployment names that a policy targets.
+// It handles policies targeting Gateways directly, as well as policies targeting HTTPRoutes/GRPCRoutes
+// (which are attached to Gateways via ParentRefs).
+func collectPolicyTargetDeployments(gr *graph.Graph, targetRefs []graph.PolicyTargetRef) []types.NamespacedName {
+	seen := make(map[types.NamespacedName]struct{})
+	var deployments []types.NamespacedName
+
+	for _, targetRef := range targetRefs {
+		switch targetRef.Kind {
+		case kinds.Gateway:
+			if gw, exists := gr.Gateways[targetRef.Nsname]; exists && gw.Valid {
+				if _, ok := seen[gw.DeploymentName]; !ok {
+					seen[gw.DeploymentName] = struct{}{}
+					deployments = append(deployments, gw.DeploymentName)
+				}
+			}
+		case kinds.HTTPRoute, kinds.GRPCRoute:
+			routeKey := graph.RouteKey{
+				NamespacedName: targetRef.Nsname,
+				RouteType:      routeTypeForKind(targetRef.Kind),
+			}
+			route, exists := gr.Routes[routeKey]
+			if !exists || !route.Valid {
+				continue
+			}
+			// Follow the route's ParentRefs to find all attached Gateways.
+			for _, parentRef := range route.ParentRefs {
+				if parentRef.Gateway == nil {
+					continue
+				}
+				gw, exists := gr.Gateways[parentRef.Gateway.NamespacedName]
+				if !exists || !gw.Valid {
+					continue
+				}
+				if _, ok := seen[gw.DeploymentName]; !ok {
+					seen[gw.DeploymentName] = struct{}{}
+					deployments = append(deployments, gw.DeploymentName)
+				}
+			}
+		}
+	}
+
+	return deployments
+}
+
+// routeTypeForKind returns the RouteType for a given kind string.
+func routeTypeForKind(kind gatewayv1.Kind) graph.RouteType {
+	switch kind {
+	case kinds.HTTPRoute:
+		return graph.RouteTypeHTTP
+	case kinds.GRPCRoute:
+		return graph.RouteTypeGRPC
+	default:
+		return ""
 	}
 }
 
@@ -384,6 +532,10 @@ func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph, 
 	)
 
 	polReqs := status.PrepareBackendTLSPolicyRequests(gr.BackendTLSPolicies, transitionTime, h.cfg.gatewayCtlrName)
+
+	// Merge any WAF poll errors into policy conditions before preparing status requests.
+	h.mergeWAFPollErrors(gr)
+
 	ngfPolReqs := status.PrepareNGFPolicyRequests(gr.NGFPolicies, transitionTime, h.cfg.gatewayCtlrName)
 	snippetsFilterReqs := status.PrepareSnippetsFilterRequests(
 		gr.SnippetsFilters,
@@ -446,6 +598,44 @@ func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph, 
 		gw.LatestReloadResult,
 	)
 	h.cfg.statusUpdater.UpdateGroup(ctx, groupGateways, gwReqs...)
+}
+
+// mergeWAFPollErrors adds StaleBundleWarning conditions to policies that have active poll errors.
+// This is called before preparing status requests so that poll failures are reflected in status.
+func (h *eventHandlerImpl) mergeWAFPollErrors(gr *graph.Graph) {
+	if h.cfg.wafPollerManager == nil {
+		return
+	}
+
+	pollErrors := h.cfg.wafPollerManager.GetAllPollErrors()
+	for policyNsName, pollError := range pollErrors {
+		policyKey := findWAFPolicyKey(gr, policyNsName)
+		if policyKey == nil {
+			continue
+		}
+
+		policy := gr.NGFPolicies[*policyKey]
+		if policy == nil || !policy.Valid {
+			continue
+		}
+
+		// Add a stale-bundle warning condition for the poll error.
+		// This uses the same condition type as the initial fetch stale-bundle fallback.
+		cond := conditions.NewPolicyProgrammedStaleBundleWarning(
+			fmt.Sprintf("polling %s: %s", pollError.BundleKey, pollError.Err.Error()),
+		)
+		policy.Conditions = append(policy.Conditions, cond)
+	}
+}
+
+// findWAFPolicyKey finds the PolicyKey in the graph for a given WAFGatewayBindingPolicy namespace/name.
+func findWAFPolicyKey(gr *graph.Graph, nsName types.NamespacedName) *graph.PolicyKey {
+	for key := range gr.NGFPolicies {
+		if key.GVK.Kind == kinds.WAFGatewayBindingPolicy && key.NsName == nsName {
+			return &key
+		}
+	}
+	return nil
 }
 
 func (h *eventHandlerImpl) parseAndCaptureEvent(ctx context.Context, logger logr.Logger, event any) {

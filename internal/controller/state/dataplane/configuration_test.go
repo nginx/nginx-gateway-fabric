@@ -7289,17 +7289,14 @@ func TestBuildWAF(t *testing.T) {
 
 	tests := []struct {
 		name         string
-		graph        *graph.Graph
 		gateway      *graph.Gateway
 		expWAFConfig WAFConfig
 	}{
 		{
 			name: "WAF disabled, no bundles",
-			graph: &graph.Graph{
-				ReferencedWAFBundles: map[graph.WAFBundleKey]*graph.WAFBundleData{},
-			},
 			gateway: &graph.Gateway{
 				EffectiveNginxProxy: nil,
+				Policies:            []*graph.Policy{},
 			},
 			expWAFConfig: WAFConfig{
 				Enabled:    false,
@@ -7308,13 +7305,11 @@ func TestBuildWAF(t *testing.T) {
 		},
 		{
 			name: "WAF enabled, no bundles",
-			graph: &graph.Graph{
-				ReferencedWAFBundles: map[graph.WAFBundleKey]*graph.WAFBundleData{},
-			},
 			gateway: &graph.Gateway{
 				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
 					WAF: helpers.GetPointer(ngfAPIv1alpha2.WAFEnabled),
 				},
+				Policies: []*graph.Policy{},
 			},
 			expWAFConfig: WAFConfig{
 				Enabled:    true,
@@ -7322,17 +7317,19 @@ func TestBuildWAF(t *testing.T) {
 			},
 		},
 		{
-			name: "WAF disabled, with bundles",
-			graph: &graph.Graph{
-				ReferencedWAFBundles: map[graph.WAFBundleKey]*graph.WAFBundleData{
-					"bundle1.tgz": {
-						Data: []byte("bundle data"),
-					},
-				},
-			},
+			name: "WAF disabled, with bundles on policy",
 			gateway: &graph.Gateway{
 				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
 					WAF: helpers.GetPointer(ngfAPIv1alpha2.WAFDisabled),
+				},
+				Policies: []*graph.Policy{
+					{
+						WAFState: &graph.PolicyWAFState{
+							Bundles: map[graph.WAFBundleKey]*graph.WAFBundleData{
+								"bundle1.tgz": {Data: []byte("bundle data")},
+							},
+						},
+					},
 				},
 			},
 			expWAFConfig: WAFConfig{
@@ -7343,18 +7340,20 @@ func TestBuildWAF(t *testing.T) {
 			},
 		},
 		{
-			name: "WAF enabled, with bundles",
-			graph: &graph.Graph{
-				ReferencedWAFBundles: map[graph.WAFBundleKey]*graph.WAFBundleData{
-					"bundle1.tgz": {
-						Data: []byte("first bundle"),
-					},
-					"bundle2.tgz": nil,
-				},
-			},
+			name: "WAF enabled, with bundles on policy",
 			gateway: &graph.Gateway{
 				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
 					WAF: helpers.GetPointer(ngfAPIv1alpha2.WAFEnabled),
+				},
+				Policies: []*graph.Policy{
+					{
+						WAFState: &graph.PolicyWAFState{
+							Bundles: map[graph.WAFBundleKey]*graph.WAFBundleData{
+								"bundle1.tgz": {Data: []byte("first bundle")},
+								"bundle2.tgz": nil,
+							},
+						},
+					},
 				},
 			},
 			expWAFConfig: WAFConfig{
@@ -7365,6 +7364,127 @@ func TestBuildWAF(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "WAF enabled, policy with nil WAFState",
+			gateway: &graph.Gateway{
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+					WAF: helpers.GetPointer(ngfAPIv1alpha2.WAFEnabled),
+				},
+				Policies: []*graph.Policy{
+					{
+						WAFState: nil, // Non-WAF policy.
+					},
+				},
+			},
+			expWAFConfig: WAFConfig{
+				Enabled:    true,
+				WAFBundles: map[WAFBundleID]WAFBundle{},
+			},
+		},
+		{
+			name: "WAF enabled, multiple policies with bundles",
+			gateway: &graph.Gateway{
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+					WAF: helpers.GetPointer(ngfAPIv1alpha2.WAFEnabled),
+				},
+				Policies: []*graph.Policy{
+					{
+						WAFState: &graph.PolicyWAFState{
+							Bundles: map[graph.WAFBundleKey]*graph.WAFBundleData{
+								"policy1_bundle": {Data: []byte("bundle 1")},
+							},
+						},
+					},
+					{
+						WAFState: &graph.PolicyWAFState{
+							Bundles: map[graph.WAFBundleKey]*graph.WAFBundleData{
+								"policy2_bundle": {Data: []byte("bundle 2")},
+							},
+						},
+					},
+				},
+			},
+			expWAFConfig: WAFConfig{
+				Enabled: true,
+				WAFBundles: map[WAFBundleID]WAFBundle{
+					"policy1_bundle": WAFBundle([]byte("bundle 1")),
+					"policy2_bundle": WAFBundle([]byte("bundle 2")),
+				},
+			},
+		},
+		{
+			name: "WAF enabled, bundles on route-targeted policy",
+			gateway: &graph.Gateway{
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+					WAF: helpers.GetPointer(ngfAPIv1alpha2.WAFEnabled),
+				},
+				Policies: []*graph.Policy{},
+				Listeners: []*graph.Listener{
+					{
+						Routes: map[graph.RouteKey]*graph.L7Route{
+							{NamespacedName: types.NamespacedName{Namespace: "ns", Name: "route1"}}: {
+								Policies: []*graph.Policy{
+									{
+										WAFState: &graph.PolicyWAFState{
+											Bundles: map[graph.WAFBundleKey]*graph.WAFBundleData{
+												"route_bundle": {Data: []byte("route bundle data")},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expWAFConfig: WAFConfig{
+				Enabled: true,
+				WAFBundles: map[WAFBundleID]WAFBundle{
+					"route_bundle": WAFBundle([]byte("route bundle data")),
+				},
+			},
+		},
+		{
+			name: "WAF enabled, bundles on both gateway and route policies",
+			gateway: &graph.Gateway{
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+					WAF: helpers.GetPointer(ngfAPIv1alpha2.WAFEnabled),
+				},
+				Policies: []*graph.Policy{
+					{
+						WAFState: &graph.PolicyWAFState{
+							Bundles: map[graph.WAFBundleKey]*graph.WAFBundleData{
+								"gw_bundle": {Data: []byte("gateway bundle")},
+							},
+						},
+					},
+				},
+				Listeners: []*graph.Listener{
+					{
+						Routes: map[graph.RouteKey]*graph.L7Route{
+							{NamespacedName: types.NamespacedName{Namespace: "ns", Name: "route1"}}: {
+								Policies: []*graph.Policy{
+									{
+										WAFState: &graph.PolicyWAFState{
+											Bundles: map[graph.WAFBundleKey]*graph.WAFBundleData{
+												"route_bundle": {Data: []byte("route bundle")},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expWAFConfig: WAFConfig{
+				Enabled: true,
+				WAFBundles: map[WAFBundleID]WAFBundle{
+					"gw_bundle":    WAFBundle([]byte("gateway bundle")),
+					"route_bundle": WAFBundle([]byte("route bundle")),
+				},
+			},
+		},
 	}
 
 	for _, test := range tests {
@@ -7372,7 +7492,7 @@ func TestBuildWAF(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			result := buildWAF(test.graph, test.gateway)
+			result := buildWAF(test.gateway)
 			g.Expect(result).To(Equal(test.expWAFConfig))
 		})
 	}

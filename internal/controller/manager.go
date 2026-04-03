@@ -8,7 +8,6 @@ import (
 
 	"github.com/go-logr/logr"
 	tel "github.com/nginx/telemetry-exporter/pkg/telemetry"
-	"github.com/prometheus/client_golang/prometheus"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"google.golang.org/grpc"
 	appsv1 "k8s.io/api/apps/v1"
@@ -77,6 +76,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/runnables"
 	ngftypes "github.com/nginx/nginx-gateway-fabric/v2/internal/framework/types"
+	wafpolling "github.com/nginx/nginx-gateway-fabric/v2/internal/framework/waf"
 )
 
 const (
@@ -138,6 +138,8 @@ func StartManager(cfg config.Config) error {
 		return err
 	}
 
+	wafFetcher := createWAFFetcher()
+
 	processor := state.NewChangeProcessorImpl(state.ChangeProcessorConfig{
 		GatewayCtlrName:  cfg.GatewayCtlrName,
 		GatewayClassName: cfg.GatewayClassName,
@@ -150,27 +152,13 @@ func StartManager(cfg config.Config) error {
 		EventRecorder:  recorder,
 		MustExtractGVK: mustExtractGVK,
 		PlusSecrets:    plusSecrets,
-		WAFFetcher:     createWAFFetcher(),
+		WAFFetcher:     wafFetcher,
 		FeatureFlags: graph.FeatureFlags{
 			Plus:         cfg.Plus,
 			Experimental: cfg.ExperimentalFeatures,
 		},
 		Snippets: cfg.Snippets,
 	})
-
-	var handlerCollector handlerMetricsCollector = collectors.NewControllerNoopCollector()
-
-	if cfg.MetricsConfig.Enabled {
-		constLabels := map[string]string{"class": cfg.GatewayClassName}
-
-		handlerCollector = collectors.NewControllerCollector(constLabels)
-		handlerCollector, ok := handlerCollector.(prometheus.Collector)
-		if !ok {
-			return fmt.Errorf("handlerCollector is not a prometheus.Collector: %w", status.ErrFailedAssert)
-		}
-
-		metrics.Registry.MustRegister(handlerCollector)
-	}
 
 	statusUpdater := status.NewUpdater(
 		mgr.GetClient(),
@@ -185,6 +173,105 @@ func StartManager(cfg config.Config) error {
 	})
 
 	statusQueue := status.NewQueue()
+
+	nginxUpdater, err := createAgentServices(cfg, mgr, statusQueue)
+	if err != nil {
+		return err
+	}
+
+	nginxProvisioner, err := createAndRegisterProvisioner(ctx, cfg, mgr, nginxUpdater, statusQueue, recorder)
+	if err != nil {
+		return err
+	}
+
+	wafPollerManager := createWAFPollerManager(cfg, wafFetcher, nginxUpdater, statusQueue)
+
+	eventHandler := newEventHandlerImpl(eventHandlerConfig{
+		ctx:              ctx,
+		nginxUpdater:     nginxUpdater,
+		nginxProvisioner: nginxProvisioner,
+		metricsCollector: createMetricsCollector(cfg),
+		statusUpdater:    groupStatusUpdater,
+		processor:        processor,
+		serviceResolver:  resolver.NewServiceResolverImpl(mgr.GetClient()),
+		generator: ngxcfg.NewGeneratorImpl(
+			cfg.Plus,
+			&cfg.UsageReportConfig,
+			cfg.Logger.WithName("generator"),
+		),
+		k8sClient:               mgr.GetClient(),
+		logger:                  cfg.Logger.WithName("eventHandler"),
+		logLevelSetter:          logLevelSetter,
+		eventRecorder:           recorder,
+		deployCtxCollector:      deployCtxCollector,
+		graphBuiltHealthChecker: healthChecker,
+		gatewayPodConfig:        cfg.GatewayPodConfig,
+		controlConfigNSName:     controlConfigNSName,
+		gatewayCtlrName:         cfg.GatewayCtlrName,
+		gatewayInstanceName:     cfg.GatewayPodConfig.InstanceName,
+		gatewayClassName:        cfg.GatewayClassName,
+		plus:                    cfg.Plus,
+		statusQueue:             statusQueue,
+		nginxDeployments:        nginxUpdater.NginxDeployments,
+		wafPollerManager:        wafPollerManager,
+		inferenceExtension:      cfg.InferenceExtension,
+	})
+
+	objects, objectLists := prepareFirstEventBatchPreparerArgs(cfg, discoveredCRDs)
+
+	firstBatchPreparer := events.NewFirstEventBatchPreparerImpl(mgr.GetCache(), objects, objectLists)
+	eventLoop := events.NewEventLoop(
+		eventCh,
+		cfg.Logger.WithName("eventLoop"),
+		eventHandler,
+		firstBatchPreparer,
+	)
+
+	if err = mgr.Add(&runnables.LeaderOrNonLeader{Runnable: eventLoop}); err != nil {
+		return fmt.Errorf("cannot register event loop: %w", err)
+	}
+
+	if err = mgr.Add(runnables.NewCallFunctionsAfterBecameLeader([]func(context.Context){
+		groupStatusUpdater.Enable,
+		nginxProvisioner.Enable,
+		eventHandler.enable,
+	})); err != nil {
+		return fmt.Errorf("cannot register functions that get called after Pod becomes leader: %w", err)
+	}
+
+	if err = registerTelemetry(cfg, mgr, processor, eventHandler, healthChecker); err != nil {
+		return err
+	}
+
+	cfg.Logger.Info("Starting manager")
+	go func() {
+		<-ctx.Done()
+		cfg.Logger.Info("Shutting down")
+	}()
+
+	return mgr.Start(ctx)
+}
+
+// createMetricsCollector creates a handler metrics collector and registers it with the Prometheus registry if enabled.
+func createMetricsCollector(cfg config.Config) handlerMetricsCollector {
+	if !cfg.MetricsConfig.Enabled {
+		return collectors.NewControllerNoopCollector()
+	}
+
+	constLabels := map[string]string{"class": cfg.GatewayClassName}
+
+	handlerCollector := collectors.NewControllerCollector(constLabels)
+	metrics.Registry.MustRegister(handlerCollector)
+
+	return handlerCollector
+}
+
+// createAgentServices creates the NGINX agent updater and gRPC server, and registers the server with the manager.
+func createAgentServices(
+	cfg config.Config,
+	mgr manager.Manager,
+	statusQueue *status.Queue,
+) (*agent.NginxUpdaterImpl, error) {
 	resetConnChan := make(chan struct{})
 	nginxUpdater := agent.NewNginxUpdater(
 		cfg.Logger.WithName("nginxUpdater"),
@@ -212,10 +299,22 @@ func StartManager(cfg config.Config) error {
 		resetConnChan,
 	)
 
-	if err = mgr.Add(&runnables.LeaderOrNonLeader{Runnable: grpcServer}); err != nil {
-		return fmt.Errorf("cannot register grpc server: %w", err)
+	if err := mgr.Add(&runnables.LeaderOrNonLeader{Runnable: grpcServer}); err != nil {
+		return nil, fmt.Errorf("cannot register grpc server: %w", err)
 	}
 
+	return nginxUpdater, nil
+}
+
+// createAndRegisterProvisioner creates the NGINX provisioner and registers its event loop with the manager.
+func createAndRegisterProvisioner(
+	ctx context.Context,
+	cfg config.Config,
+	mgr manager.Manager,
+	nginxUpdater *agent.NginxUpdaterImpl,
+	statusQueue *status.Queue,
+	recorder k8sEvents.EventRecorder,
+) (*provisioner.NginxProvisioner, error) {
 	nginxProvisioner, provLoop, err := provisioner.NewNginxProvisioner(
 		ctx,
 		mgr,
@@ -238,97 +337,86 @@ func StartManager(cfg config.Config) error {
 		},
 	)
 	if err != nil {
-		return fmt.Errorf("error building provisioner: %w", err)
+		return nil, fmt.Errorf("error building provisioner: %w", err)
 	}
 
 	if err := mgr.Add(&runnables.LeaderOrNonLeader{Runnable: provLoop}); err != nil {
-		return fmt.Errorf("cannot register provisioner event loop: %w", err)
+		return nil, fmt.Errorf("cannot register provisioner event loop: %w", err)
 	}
 
-	eventHandler := newEventHandlerImpl(eventHandlerConfig{
-		ctx:              ctx,
-		nginxUpdater:     nginxUpdater,
-		nginxProvisioner: nginxProvisioner,
-		metricsCollector: handlerCollector,
-		statusUpdater:    groupStatusUpdater,
-		processor:        processor,
-		serviceResolver:  resolver.NewServiceResolverImpl(mgr.GetClient()),
-		generator: ngxcfg.NewGeneratorImpl(
-			cfg.Plus,
-			&cfg.UsageReportConfig,
-			cfg.Logger.WithName("generator"),
-		),
-		k8sClient:               mgr.GetClient(),
-		logger:                  cfg.Logger.WithName("eventHandler"),
-		logLevelSetter:          logLevelSetter,
-		eventRecorder:           recorder,
-		deployCtxCollector:      deployCtxCollector,
-		graphBuiltHealthChecker: healthChecker,
-		gatewayPodConfig:        cfg.GatewayPodConfig,
-		controlConfigNSName:     controlConfigNSName,
-		gatewayCtlrName:         cfg.GatewayCtlrName,
-		gatewayInstanceName:     cfg.GatewayPodConfig.InstanceName,
-		gatewayClassName:        cfg.GatewayClassName,
-		plus:                    cfg.Plus,
-		statusQueue:             statusQueue,
-		nginxDeployments:        nginxUpdater.NginxDeployments,
-		inferenceExtension:      cfg.InferenceExtension,
+	return nginxProvisioner, nil
+}
+
+// createWAFPollerManager creates a WAF polling manager if Plus is enabled.
+// Returns nil when Plus is not enabled.
+func createWAFPollerManager(
+	cfg config.Config,
+	wafFetcher fetch.Fetcher,
+	nginxUpdater *agent.NginxUpdaterImpl,
+	statusQueue *status.Queue,
+) wafpolling.PollerManager {
+	if !cfg.Plus {
+		return nil
+	}
+
+	return wafpolling.NewManager(wafpolling.ManagerConfig{
+		Logger:      cfg.Logger.WithName("wafPollingManager"),
+		Fetcher:     wafFetcher,
+		Deployments: nginxUpdater.NginxDeployments,
+		StatusCallback: func(targets []types.NamespacedName) {
+			for _, nsName := range targets {
+				dep := nginxUpdater.NginxDeployments.Get(nsName)
+				if dep == nil {
+					continue
+				}
+				statusQueue.Enqueue(&status.QueueObject{
+					UpdateType: status.UpdateAll,
+					Deployment: status.Deployment{
+						NamespacedName: nsName,
+						GatewayName:    dep.GetGatewayName(),
+					},
+				})
+			}
+		},
+	})
+}
+
+// registerTelemetry sets up product telemetry if enabled.
+func registerTelemetry(
+	cfg config.Config,
+	mgr manager.Manager,
+	processor *state.ChangeProcessorImpl,
+	eventHandler *eventHandlerImpl,
+	healthChecker *graphBuiltHealthChecker,
+) error {
+	if !cfg.ProductTelemetryConfig.Enabled {
+		return nil
+	}
+
+	dataCollector := telemetry.NewDataCollectorImpl(telemetry.DataCollectorConfig{
+		K8sClientReader:     mgr.GetAPIReader(),
+		GraphGetter:         processor,
+		ConfigurationGetter: eventHandler,
+		Version:             cfg.GatewayPodConfig.Version,
+		PodNSName: types.NamespacedName{
+			Namespace: cfg.GatewayPodConfig.Namespace,
+			Name:      cfg.GatewayPodConfig.Name,
+		},
+		ImageSource:               cfg.ImageSource,
+		Flags:                     cfg.Flags,
+		NginxOneConsoleConnection: cfg.NginxOneConsoleTelemetryConfig.DataplaneKeySecretName != "",
 	})
 
-	objects, objectLists := prepareFirstEventBatchPreparerArgs(cfg, discoveredCRDs)
-
-	firstBatchPreparer := events.NewFirstEventBatchPreparerImpl(mgr.GetCache(), objects, objectLists)
-	eventLoop := events.NewEventLoop(
-		eventCh,
-		cfg.Logger.WithName("eventLoop"),
-		eventHandler,
-		firstBatchPreparer,
-	)
-
-	if err = mgr.Add(&runnables.LeaderOrNonLeader{Runnable: eventLoop}); err != nil {
-		return fmt.Errorf("cannot register event loop: %w", err)
+	job, err := createTelemetryJob(cfg, dataCollector, healthChecker.getReadyCh())
+	if err != nil {
+		return fmt.Errorf("cannot create telemetry job: %w", err)
 	}
 
-	if err = mgr.Add(runnables.NewCallFunctionsAfterBecameLeader([]func(context.Context){
-		groupStatusUpdater.Enable,
-		nginxProvisioner.Enable,
-		eventHandler.enable,
-	})); err != nil {
-		return fmt.Errorf("cannot register functions that get called after Pod becomes leader: %w", err)
+	if err = mgr.Add(job); err != nil {
+		return fmt.Errorf("cannot register telemetry job: %w", err)
 	}
 
-	if cfg.ProductTelemetryConfig.Enabled {
-		dataCollector := telemetry.NewDataCollectorImpl(telemetry.DataCollectorConfig{
-			K8sClientReader:     mgr.GetAPIReader(),
-			GraphGetter:         processor,
-			ConfigurationGetter: eventHandler,
-			Version:             cfg.GatewayPodConfig.Version,
-			PodNSName: types.NamespacedName{
-				Namespace: cfg.GatewayPodConfig.Namespace,
-				Name:      cfg.GatewayPodConfig.Name,
-			},
-			ImageSource:               cfg.ImageSource,
-			Flags:                     cfg.Flags,
-			NginxOneConsoleConnection: cfg.NginxOneConsoleTelemetryConfig.DataplaneKeySecretName != "",
-		})
-
-		job, err := createTelemetryJob(cfg, dataCollector, healthChecker.getReadyCh())
-		if err != nil {
-			return fmt.Errorf("cannot create telemetry job: %w", err)
-		}
-
-		if err = mgr.Add(job); err != nil {
-			return fmt.Errorf("cannot register telemetry job: %w", err)
-		}
-	}
-
-	cfg.Logger.Info("Starting manager")
-	go func() {
-		<-ctx.Done()
-		cfg.Logger.Info("Shutting down")
-	}()
-
-	return mgr.Start(ctx)
+	return nil
 }
 
 func createPolicyManager(
