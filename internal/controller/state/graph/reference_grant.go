@@ -74,24 +74,6 @@ func toInferencePool(nsname types.NamespacedName) toResource {
 	}
 }
 
-func toAPPolicy(nsname types.NamespacedName) toResource {
-	return toResource{
-		group:     kinds.APPolicyGVK.Group,
-		kind:      kinds.APPolicyGVK.Kind,
-		name:      nsname.Name,
-		namespace: nsname.Namespace,
-	}
-}
-
-func toAPLogConf(nsname types.NamespacedName) toResource {
-	return toResource{
-		group:     kinds.APLogConfGVK.Group,
-		kind:      kinds.APLogConfGVK.Kind,
-		name:      nsname.Name,
-		namespace: nsname.Namespace,
-	}
-}
-
 func fromGateway(namespace string) fromResource {
 	return fromResource{
 		group:     v1.GroupName,

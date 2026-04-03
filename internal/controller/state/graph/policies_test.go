@@ -2,14 +2,14 @@ package graph
 
 import (
 	"bytes"
-	"errors"
+	"fmt"
 	"slices"
 	"testing"
 
 	"github.com/go-logr/logr"
 	. "github.com/onsi/gomega"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -18,8 +18,8 @@ import (
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/policiesfakes"
-	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/plm"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/secrets"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/validation"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/fetch"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/fetch/fetchfakes"
@@ -1259,7 +1259,7 @@ func TestProcessPolicies(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			processed, _ := processPolicies(test.policies, test.validator, routes, services, gateways, nil)
+			processed, _ := processPolicies(t.Context(), test.policies, test.validator, routes, services, gateways, nil)
 			g.Expect(processed).To(BeEquivalentTo(test.expProcessedPolicies))
 		})
 	}
@@ -1476,7 +1476,7 @@ func TestProcessPolicies_RouteOverlap(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			processed, _ := processPolicies(test.policies, test.validator, test.routes, nil, gateways, nil)
+			processed, _ := processPolicies(t.Context(), test.policies, test.validator, test.routes, nil, gateways, nil)
 			g.Expect(processed).To(HaveLen(len(test.policies)))
 
 			for _, pol := range processed {
@@ -2502,7 +2502,9 @@ func TestNGFPolicyAncestorLimitHandling(t *testing.T) {
 	g := NewWithT(t)
 
 	// Process policies which should trigger ancestor limit handling
-	processedPolicies, _ := processPolicies(testPolicies, validator, routes, referencedServices, gateways, nil)
+	processedPolicies, _ := processPolicies(
+		t.Context(), testPolicies, validator, routes, referencedServices, gateways, nil,
+	)
 
 	// Create a graph and attach policies to trigger ancestor limit handling
 	graph := &Graph{
@@ -2790,899 +2792,1012 @@ func TestSnippetsPolicyPropagation(t *testing.T) {
 	g.Expect(route3.Policies).To(Not(ContainElement(otherPolicy)), "Route3 should NOT have other policy")
 }
 
-func TestParseBundleLocation(t *testing.T) {
+func TestProcessWAFGatewayBindingPolicies(t *testing.T) {
 	t.Parallel()
-
-	tests := []struct {
-		name           string
-		location       string
-		expectedBucket string
-		expectedKey    string
-	}{
-		{
-			name:           "s3 scheme with bucket and key",
-			location:       "s3://my-bucket/path/to/bundle.tgz",
-			expectedBucket: "my-bucket",
-			expectedKey:    "path/to/bundle.tgz",
-		},
-		{
-			name:           "no scheme with bucket and key",
-			location:       "my-bucket/path/to/bundle.tgz",
-			expectedBucket: "my-bucket",
-			expectedKey:    "path/to/bundle.tgz",
-		},
-		{
-			name:           "s3 scheme with bucket and simple key",
-			location:       "s3://default/bundle.tgz",
-			expectedBucket: "default",
-			expectedKey:    "bundle.tgz",
-		},
-		{
-			name:           "no slash - treated as key only",
-			location:       "bundle.tgz",
-			expectedBucket: "",
-			expectedKey:    "bundle.tgz",
-		},
-		{
-			name:           "s3 scheme with nested path",
-			location:       "s3://default/bundles/policies/my-policy.tgz",
-			expectedBucket: "default",
-			expectedKey:    "bundles/policies/my-policy.tgz",
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			g := NewWithT(t)
-
-			bucket, key := parseBundleLocation(tc.location)
-			g.Expect(bucket).To(Equal(tc.expectedBucket))
-			g.Expect(key).To(Equal(tc.expectedKey))
-		})
-	}
-}
-
-func TestVerifyChecksum(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name      string
-		checksum  string
-		errSubstr string
-		data      []byte
-		expectErr bool
-	}{
-		{
-			name:     "matching checksum",
-			data:     []byte("test bundle data"),
-			checksum: "6f95d18247f958c7253d542229a427db008152f02856bd52f3023cb610ecdf21",
-		},
-		{
-			name:      "mismatching checksum",
-			data:      []byte("test bundle data"),
-			checksum:  "0000000000000000000000000000000000000000000000000000000000000000",
-			expectErr: true,
-			errSubstr: "checksum mismatch",
-		},
-		{
-			name:     "empty data with correct checksum",
-			data:     []byte{},
-			checksum: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			g := NewWithT(t)
-
-			err := verifyChecksum(tc.data, tc.checksum)
-			if tc.expectErr {
-				g.Expect(err).To(HaveOccurred())
-				g.Expect(err.Error()).To(ContainSubstring(tc.errSubstr))
-			} else {
-				g.Expect(err).ToNot(HaveOccurred())
-			}
-		})
-	}
-}
-
-func TestResolveAPResourceNamespace(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name     string
-		ref      *ngfAPIv1alpha1.APResourceReference
-		defNs    string
-		expected types.NamespacedName
-	}{
-		{
-			name:     "Uses default namespace when ref namespace is nil",
-			ref:      &ngfAPIv1alpha1.APResourceReference{Name: "my-policy"},
-			defNs:    "default",
-			expected: types.NamespacedName{Namespace: "default", Name: "my-policy"},
-		},
-		{
-			name:     "Uses ref namespace when specified",
-			ref:      &ngfAPIv1alpha1.APResourceReference{Name: "my-policy", Namespace: helpers.GetPointer("other-ns")},
-			defNs:    "default",
-			expected: types.NamespacedName{Namespace: "other-ns", Name: "my-policy"},
-		},
-		{
-			name:     "Uses default namespace when ref namespace is empty string",
-			ref:      &ngfAPIv1alpha1.APResourceReference{Name: "my-policy", Namespace: helpers.GetPointer("")},
-			defNs:    "default",
-			expected: types.NamespacedName{Namespace: "default", Name: "my-policy"},
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			g := NewWithT(t)
-
-			result := resolveAPResourceNamespace(tc.ref, tc.defNs)
-			g.Expect(result).To(Equal(tc.expected))
-		})
-	}
-}
-
-func TestFetchBundle(t *testing.T) {
-	t.Parallel()
-
-	bundleTypes := []struct {
-		condFuncs bundleConditionFuncs
-		nsName    types.NamespacedName
-		name      string
-		wafType   WAFBundleType
-	}{
-		{
-			name:      "APPolicy",
-			nsName:    types.NamespacedName{Namespace: "test", Name: "my-policy"},
-			wafType:   WAFBundleTypePolicy,
-			condFuncs: apPolicyCondFuncs,
-		},
-		{
-			name:      "APLogConf",
-			nsName:    types.NamespacedName{Namespace: "test", Name: "my-logconf"},
-			wafType:   WAFBundleTypeLogConf,
-			condFuncs: apLogConfCondFuncs,
-		},
-	}
-
-	tests := []struct {
-		fetcher  fetch.Fetcher
-		status   *plm.APResourceStatus
-		validate func(g Gomega, bundle *WAFBundleData, cond *conditions.Condition)
-		name     string
-	}{
-		{
-			name: "empty state returns not compiled condition",
-			status: &plm.APResourceStatus{
-				Bundle: plm.BundleStatus{State: plm.BundleState("")},
-			},
-			validate: func(g Gomega, bundle *WAFBundleData, cond *conditions.Condition) {
-				g.Expect(bundle).To(BeNil())
-				g.Expect(cond).ToNot(BeNil())
-				g.Expect(cond.Type).To(Equal(string(conditions.WAFResolvedRefsConditionType)))
-				g.Expect(cond.Message).To(ContainSubstring("pending compilation"))
-			},
-		},
-		{
-			name: "pending state returns not compiled condition",
-			status: &plm.APResourceStatus{
-				Bundle: plm.BundleStatus{State: plm.StatePending},
-			},
-			validate: func(g Gomega, bundle *WAFBundleData, cond *conditions.Condition) {
-				g.Expect(bundle).To(BeNil())
-				g.Expect(cond).ToNot(BeNil())
-				g.Expect(cond.Type).To(Equal(string(conditions.WAFResolvedRefsConditionType)))
-				g.Expect(cond.Message).To(ContainSubstring("pending compilation"))
-			},
-		},
-		{
-			name: "processing state returns not compiled condition",
-			status: &plm.APResourceStatus{
-				Bundle: plm.BundleStatus{State: plm.StateProcessing},
-			},
-			validate: func(g Gomega, bundle *WAFBundleData, cond *conditions.Condition) {
-				g.Expect(bundle).To(BeNil())
-				g.Expect(cond).ToNot(BeNil())
-				g.Expect(cond.Type).To(Equal(string(conditions.WAFResolvedRefsConditionType)))
-			},
-		},
-		{
-			name: "invalid state with errors returns invalid condition",
-			status: &plm.APResourceStatus{
-				Bundle: plm.BundleStatus{State: plm.StateInvalid},
-				Processing: plm.ProcessingStatus{
-					Errors: []string{"syntax error in policy", "invalid directive"},
-				},
-			},
-			validate: func(g Gomega, bundle *WAFBundleData, cond *conditions.Condition) {
-				g.Expect(bundle).To(BeNil())
-				g.Expect(cond).ToNot(BeNil())
-				g.Expect(cond.Type).To(Equal(string(conditions.WAFResolvedRefsConditionType)))
-				g.Expect(cond.Reason).To(Equal(string(conditions.PolicyReasonInvalidRef)))
-				g.Expect(cond.Message).To(ContainSubstring("syntax error in policy"))
-				g.Expect(cond.Message).To(ContainSubstring("invalid directive"))
-			},
-		},
-		{
-			name: "invalid state without errors returns generic message",
-			status: &plm.APResourceStatus{
-				Bundle: plm.BundleStatus{State: plm.StateInvalid},
-			},
-			validate: func(g Gomega, bundle *WAFBundleData, cond *conditions.Condition) {
-				g.Expect(bundle).To(BeNil())
-				g.Expect(cond).ToNot(BeNil())
-				g.Expect(cond.Message).To(ContainSubstring("compilation failed"))
-			},
-		},
-		{
-			name: "ready state with no location returns no location condition",
-			status: &plm.APResourceStatus{
-				Bundle: plm.BundleStatus{State: plm.StateReady, Location: ""},
-			},
-			validate: func(g Gomega, bundle *WAFBundleData, cond *conditions.Condition) {
-				g.Expect(bundle).To(BeNil())
-				g.Expect(cond).ToNot(BeNil())
-				g.Expect(cond.Type).To(Equal(string(conditions.WAFResolvedRefsConditionType)))
-				g.Expect(cond.Message).To(ContainSubstring("no bundle location"))
-			},
-		},
-		{
-			name: "unknown state returns unknown state condition",
-			status: &plm.APResourceStatus{
-				Bundle: plm.BundleStatus{State: plm.BundleState("some-unknown-state")},
-			},
-			validate: func(g Gomega, bundle *WAFBundleData, cond *conditions.Condition) {
-				g.Expect(bundle).To(BeNil())
-				g.Expect(cond).ToNot(BeNil())
-				g.Expect(cond.Type).To(Equal(string(conditions.WAFResolvedRefsConditionType)))
-				g.Expect(cond.Message).To(ContainSubstring("unknown state"))
-				g.Expect(cond.Message).To(ContainSubstring("some-unknown-state"))
-			},
-		},
-		{
-			name: "ready state with nil fetcher returns bundle data without fetching",
-			status: &plm.APResourceStatus{
-				Bundle: plm.BundleStatus{
-					State:    plm.StateReady,
-					Location: "s3://default/bundles/policy.tgz",
-					Sha256:   "abc123",
-				},
-			},
-			validate: func(g Gomega, bundle *WAFBundleData, cond *conditions.Condition) {
-				g.Expect(cond).To(BeNil())
-				g.Expect(bundle).ToNot(BeNil())
-				g.Expect(bundle.Location).To(Equal("s3://default/bundles/policy.tgz"))
-				g.Expect(bundle.Checksum).To(Equal("abc123"))
-				// BundleType is set based on bundleType parameter
-				g.Expect(bundle.Data).To(BeNil())
-			},
-		},
-		{
-			name: "ready state with fetcher returns fetched bundle data",
-			status: &plm.APResourceStatus{
-				Bundle: plm.BundleStatus{
-					State:    plm.StateReady,
-					Location: "s3://default/bundles/policy.tgz",
-				},
-			},
-			fetcher: func() fetch.Fetcher {
-				f := &fetchfakes.FakeFetcher{}
-				f.GetObjectReturns([]byte("bundle-content"), nil)
-				return f
-			}(),
-			validate: func(g Gomega, bundle *WAFBundleData, cond *conditions.Condition) {
-				g.Expect(cond).To(BeNil())
-				g.Expect(bundle).ToNot(BeNil())
-				g.Expect(bundle.Data).To(Equal([]byte("bundle-content")))
-				// BundleType is set based on bundleType parameter
-			},
-		},
-		{
-			name: "fetch error returns programmed condition",
-			status: &plm.APResourceStatus{
-				Bundle: plm.BundleStatus{
-					State:    plm.StateReady,
-					Location: "s3://default/bundles/policy.tgz",
-				},
-			},
-			fetcher: func() fetch.Fetcher {
-				f := &fetchfakes.FakeFetcher{}
-				f.GetObjectReturns(nil, errors.New("connection refused"))
-				return f
-			}(),
-			validate: func(g Gomega, bundle *WAFBundleData, cond *conditions.Condition) {
-				g.Expect(bundle).To(BeNil())
-				g.Expect(cond).ToNot(BeNil())
-				g.Expect(cond.Type).To(Equal(string(conditions.WAFProgrammedConditionType)))
-				g.Expect(cond.Reason).To(Equal(string(conditions.PolicyReasonFetchError)))
-				g.Expect(cond.Message).To(ContainSubstring("connection refused"))
-			},
-		},
-		{
-			name: "checksum match succeeds",
-			status: &plm.APResourceStatus{
-				Bundle: plm.BundleStatus{
-					State:    plm.StateReady,
-					Location: "s3://default/bundles/policy.tgz",
-					Sha256:   "6f95d18247f958c7253d542229a427db008152f02856bd52f3023cb610ecdf21",
-				},
-			},
-			fetcher: func() fetch.Fetcher {
-				f := &fetchfakes.FakeFetcher{}
-				f.GetObjectReturns([]byte("test bundle data"), nil)
-				return f
-			}(),
-			validate: func(g Gomega, bundle *WAFBundleData, cond *conditions.Condition) {
-				g.Expect(cond).To(BeNil())
-				g.Expect(bundle).ToNot(BeNil())
-				g.Expect(bundle.Data).To(Equal([]byte("test bundle data")))
-			},
-		},
-		{
-			name: "checksum mismatch returns integrity error",
-			status: &plm.APResourceStatus{
-				Bundle: plm.BundleStatus{
-					State:    plm.StateReady,
-					Location: "s3://default/bundles/policy.tgz",
-					Sha256:   "wrong-checksum",
-				},
-			},
-			fetcher: func() fetch.Fetcher {
-				f := &fetchfakes.FakeFetcher{}
-				f.GetObjectReturns([]byte("some data"), nil)
-				return f
-			}(),
-			validate: func(g Gomega, bundle *WAFBundleData, cond *conditions.Condition) {
-				g.Expect(bundle).To(BeNil())
-				g.Expect(cond).ToNot(BeNil())
-				g.Expect(cond.Type).To(Equal(string(conditions.WAFProgrammedConditionType)))
-				g.Expect(cond.Reason).To(Equal(string(conditions.PolicyReasonIntegrityError)))
-				g.Expect(cond.Message).To(ContainSubstring("checksum mismatch"))
-			},
-		},
-		{
-			name: "empty checksum skips verification",
-			status: &plm.APResourceStatus{
-				Bundle: plm.BundleStatus{
-					State:    plm.StateReady,
-					Location: "s3://default/bundles/policy.tgz",
-					Sha256:   "",
-				},
-			},
-			fetcher: func() fetch.Fetcher {
-				f := &fetchfakes.FakeFetcher{}
-				f.GetObjectReturns([]byte("bundle-content"), nil)
-				return f
-			}(),
-			validate: func(g Gomega, bundle *WAFBundleData, cond *conditions.Condition) {
-				g.Expect(cond).To(BeNil())
-				g.Expect(bundle).ToNot(BeNil())
-				g.Expect(bundle.Data).To(Equal([]byte("bundle-content")))
-			},
-		},
-	}
-
-	for _, bundleType := range bundleTypes {
-		for _, test := range tests {
-			testName := bundleType.name + " - " + test.name
-			t.Run(testName, func(t *testing.T) {
-				t.Parallel()
-				g := NewWithT(t)
-
-				bundle, cond := fetchBundle(bundleType.nsName, test.status, test.fetcher, bundleType.wafType, bundleType.condFuncs)
-				test.validate(g, bundle, cond)
-			})
-		}
-	}
-}
-
-func TestProcessAPPolicyReference(t *testing.T) {
-	t.Parallel()
-
-	createWAFPolicy := func(ns, name, apPolicyName string, apPolicyNs *string) *ngfAPIv1alpha1.WAFGatewayBindingPolicy {
-		return &ngfAPIv1alpha1.WAFGatewayBindingPolicy{
-			ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: name},
-			Spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
-				APPolicySource: &ngfAPIv1alpha1.APResourceReference{
-					Name:      apPolicyName,
-					Namespace: apPolicyNs,
-				},
-			},
-		}
-	}
-
-	createAPPolicy := func(ns, name, bundleState, location, sha string) *unstructured.Unstructured {
-		obj := &unstructured.Unstructured{}
-		obj.SetNamespace(ns)
-		obj.SetName(name)
-		obj.Object["status"] = map[string]any{
-			"bundle": map[string]any{
-				"state":    bundleState,
-				"location": location,
-				"sha256":   sha,
-			},
-		}
-		return obj
-	}
-
-	t.Run("nil APPolicySource returns true (no-op)", func(t *testing.T) {
-		t.Parallel()
-		g := NewWithT(t)
-
-		wafPolicy := &ngfAPIv1alpha1.WAFGatewayBindingPolicy{
-			ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "waf1"},
-			Spec:       ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{},
-		}
-		policy := &Policy{Valid: true}
-		wafInput := &WAFProcessingInput{
-			APPolicies: make(map[types.NamespacedName]*unstructured.Unstructured),
-		}
-		output := &WAFProcessingOutput{
-			Bundles:              make(map[WAFBundleKey]*WAFBundleData),
-			ReferencedAPPolicies: make(map[types.NamespacedName]*unstructured.Unstructured),
-			ReferencedAPLogConfs: make(map[types.NamespacedName]*unstructured.Unstructured),
-		}
-
-		result := processAPPolicyReference(wafPolicy, policy, wafInput, output)
-		g.Expect(result).To(BeTrue())
-		g.Expect(policy.Conditions).To(BeEmpty())
-	})
-
-	t.Run("APPolicy not found sets condition and returns false", func(t *testing.T) {
-		t.Parallel()
-		g := NewWithT(t)
-
-		wafPolicy := createWAFPolicy("test", "waf1", "missing-policy", nil)
-		policy := &Policy{Valid: true}
-		wafInput := &WAFProcessingInput{
-			APPolicies: make(map[types.NamespacedName]*unstructured.Unstructured),
-		}
-		output := &WAFProcessingOutput{
-			Bundles:              make(map[WAFBundleKey]*WAFBundleData),
-			ReferencedAPPolicies: make(map[types.NamespacedName]*unstructured.Unstructured),
-			ReferencedAPLogConfs: make(map[types.NamespacedName]*unstructured.Unstructured),
-		}
-
-		result := processAPPolicyReference(wafPolicy, policy, wafInput, output)
-		g.Expect(result).To(BeFalse())
-		g.Expect(policy.Valid).To(BeFalse())
-		g.Expect(policy.Conditions).To(HaveLen(1))
-		g.Expect(policy.Conditions[0].Type).To(Equal(string(conditions.WAFResolvedRefsConditionType)))
-		g.Expect(policy.Conditions[0].Message).To(ContainSubstring("missing-policy"))
-	})
-
-	t.Run("cross-namespace ref not permitted sets condition and returns false", func(t *testing.T) {
-		t.Parallel()
-		g := NewWithT(t)
-
-		otherNs := "other-ns"
-		wafPolicy := createWAFPolicy("test", "waf1", "my-policy", &otherNs)
-		policy := &Policy{Valid: true}
-		wafInput := &WAFProcessingInput{
-			APPolicies:       make(map[types.NamespacedName]*unstructured.Unstructured),
-			RefGrantResolver: &referenceGrantResolver{allowed: make(map[allowedReference]struct{})},
-		}
-		output := &WAFProcessingOutput{
-			Bundles:              make(map[WAFBundleKey]*WAFBundleData),
-			ReferencedAPPolicies: make(map[types.NamespacedName]*unstructured.Unstructured),
-			ReferencedAPLogConfs: make(map[types.NamespacedName]*unstructured.Unstructured),
-		}
-
-		result := processAPPolicyReference(wafPolicy, policy, wafInput, output)
-		g.Expect(result).To(BeFalse())
-		g.Expect(policy.Valid).To(BeFalse())
-		g.Expect(policy.Conditions).To(HaveLen(1))
-		g.Expect(policy.Conditions[0].Reason).To(Equal(string(conditions.PolicyReasonRefNotPermitted)))
-	})
-
-	t.Run("cross-namespace ref with nil resolver sets condition and returns false", func(t *testing.T) {
-		t.Parallel()
-		g := NewWithT(t)
-
-		otherNs := "other-ns"
-		wafPolicy := createWAFPolicy("test", "waf1", "my-policy", &otherNs)
-		policy := &Policy{Valid: true}
-		wafInput := &WAFProcessingInput{
-			APPolicies:       make(map[types.NamespacedName]*unstructured.Unstructured),
-			RefGrantResolver: nil,
-		}
-		output := &WAFProcessingOutput{
-			Bundles:              make(map[WAFBundleKey]*WAFBundleData),
-			ReferencedAPPolicies: make(map[types.NamespacedName]*unstructured.Unstructured),
-			ReferencedAPLogConfs: make(map[types.NamespacedName]*unstructured.Unstructured),
-		}
-
-		result := processAPPolicyReference(wafPolicy, policy, wafInput, output)
-		g.Expect(result).To(BeFalse())
-		g.Expect(policy.Valid).To(BeFalse())
-	})
-
-	t.Run("same-namespace APPolicy found and ready with nil fetcher", func(t *testing.T) {
-		t.Parallel()
-		g := NewWithT(t)
-
-		apPolicy := createAPPolicy("test", "my-policy", string(plm.StateReady), "s3://default/bundle.tgz", "abc123")
-		wafPolicy := createWAFPolicy("test", "waf1", "my-policy", nil)
-		policy := &Policy{Valid: true}
-		wafInput := &WAFProcessingInput{
-			APPolicies: map[types.NamespacedName]*unstructured.Unstructured{
-				{Namespace: "test", Name: "my-policy"}: apPolicy,
-			},
-		}
-		output := &WAFProcessingOutput{
-			Bundles:              make(map[WAFBundleKey]*WAFBundleData),
-			ReferencedAPPolicies: make(map[types.NamespacedName]*unstructured.Unstructured),
-			ReferencedAPLogConfs: make(map[types.NamespacedName]*unstructured.Unstructured),
-		}
-
-		result := processAPPolicyReference(wafPolicy, policy, wafInput, output)
-		g.Expect(result).To(BeTrue())
-		g.Expect(policy.Valid).To(BeTrue())
-		g.Expect(policy.Conditions).To(BeEmpty())
-		g.Expect(output.ReferencedAPPolicies).To(HaveKey(types.NamespacedName{Namespace: "test", Name: "my-policy"}))
-		g.Expect(output.Bundles).To(HaveLen(1))
-	})
-
-	t.Run("APPolicy in pending state sets condition", func(t *testing.T) {
-		t.Parallel()
-		g := NewWithT(t)
-
-		apPolicy := createAPPolicy("test", "my-policy", string(plm.StatePending), "", "")
-		wafPolicy := createWAFPolicy("test", "waf1", "my-policy", nil)
-		policy := &Policy{Valid: true}
-		wafInput := &WAFProcessingInput{
-			APPolicies: map[types.NamespacedName]*unstructured.Unstructured{
-				{Namespace: "test", Name: "my-policy"}: apPolicy,
-			},
-		}
-		output := &WAFProcessingOutput{
-			Bundles:              make(map[WAFBundleKey]*WAFBundleData),
-			ReferencedAPPolicies: make(map[types.NamespacedName]*unstructured.Unstructured),
-			ReferencedAPLogConfs: make(map[types.NamespacedName]*unstructured.Unstructured),
-		}
-
-		result := processAPPolicyReference(wafPolicy, policy, wafInput, output)
-		g.Expect(result).To(BeFalse())
-		g.Expect(policy.Valid).To(BeFalse())
-		g.Expect(policy.Conditions).To(HaveLen(1))
-		g.Expect(policy.Conditions[0].Type).To(Equal(string(conditions.WAFResolvedRefsConditionType)))
-	})
-}
-
-func TestProcessSecurityLogs(t *testing.T) {
-	t.Parallel()
-
-	createAPLogConf := func(ns, name, bundleState, location string) *unstructured.Unstructured {
-		obj := &unstructured.Unstructured{}
-		obj.SetNamespace(ns)
-		obj.SetName(name)
-		obj.Object["status"] = map[string]any{
-			"bundle": map[string]any{
-				"state":    bundleState,
-				"location": location,
-			},
-		}
-		return obj
-	}
-
-	t.Run("no security logs is a no-op", func(t *testing.T) {
-		t.Parallel()
-		g := NewWithT(t)
-
-		wafPolicy := &ngfAPIv1alpha1.WAFGatewayBindingPolicy{
-			ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "waf1"},
-		}
-		policy := &Policy{Valid: true}
-		wafInput := &WAFProcessingInput{}
-		output := &WAFProcessingOutput{
-			Bundles:              make(map[WAFBundleKey]*WAFBundleData),
-			ReferencedAPPolicies: make(map[types.NamespacedName]*unstructured.Unstructured),
-			ReferencedAPLogConfs: make(map[types.NamespacedName]*unstructured.Unstructured),
-		}
-
-		processSecurityLogs(wafPolicy, policy, wafInput, output)
-		g.Expect(policy.Conditions).To(BeEmpty())
-		g.Expect(output.Bundles).To(BeEmpty())
-	})
-
-	t.Run("APLogConf not found sets condition", func(t *testing.T) {
-		t.Parallel()
-		g := NewWithT(t)
-
-		wafPolicy := &ngfAPIv1alpha1.WAFGatewayBindingPolicy{
-			ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "waf1"},
-			Spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
-				SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
-					{
-						APLogConfSource: ngfAPIv1alpha1.APResourceReference{Name: "missing-logconf"},
-						Destination: ngfAPIv1alpha1.SecurityLogDestination{
-							Type: ngfAPIv1alpha1.SecurityLogDestinationTypeStderr,
-						},
-					},
-				},
-			},
-		}
-		policy := &Policy{Valid: true}
-		wafInput := &WAFProcessingInput{
-			APLogConfs: make(map[types.NamespacedName]*unstructured.Unstructured),
-		}
-		output := &WAFProcessingOutput{
-			Bundles:              make(map[WAFBundleKey]*WAFBundleData),
-			ReferencedAPPolicies: make(map[types.NamespacedName]*unstructured.Unstructured),
-			ReferencedAPLogConfs: make(map[types.NamespacedName]*unstructured.Unstructured),
-		}
-
-		processSecurityLogs(wafPolicy, policy, wafInput, output)
-		g.Expect(policy.Valid).To(BeFalse())
-		g.Expect(policy.Conditions).To(HaveLen(1))
-		g.Expect(policy.Conditions[0].Type).To(Equal(string(conditions.WAFResolvedRefsConditionType)))
-		g.Expect(policy.Conditions[0].Message).To(ContainSubstring("missing-logconf"))
-	})
-
-	t.Run("APLogConf found and ready with nil fetcher", func(t *testing.T) {
-		t.Parallel()
-		g := NewWithT(t)
-
-		logConf := createAPLogConf("test", "my-logconf", string(plm.StateReady), "s3://default/logconf.tgz")
-		wafPolicy := &ngfAPIv1alpha1.WAFGatewayBindingPolicy{
-			ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "waf1"},
-			Spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
-				SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
-					{
-						APLogConfSource: ngfAPIv1alpha1.APResourceReference{Name: "my-logconf"},
-						Destination: ngfAPIv1alpha1.SecurityLogDestination{
-							Type: ngfAPIv1alpha1.SecurityLogDestinationTypeStderr,
-						},
-					},
-				},
-			},
-		}
-		policy := &Policy{Valid: true}
-		wafInput := &WAFProcessingInput{
-			APLogConfs: map[types.NamespacedName]*unstructured.Unstructured{
-				{Namespace: "test", Name: "my-logconf"}: logConf,
-			},
-		}
-		output := &WAFProcessingOutput{
-			Bundles:              make(map[WAFBundleKey]*WAFBundleData),
-			ReferencedAPPolicies: make(map[types.NamespacedName]*unstructured.Unstructured),
-			ReferencedAPLogConfs: make(map[types.NamespacedName]*unstructured.Unstructured),
-		}
-
-		processSecurityLogs(wafPolicy, policy, wafInput, output)
-		g.Expect(policy.Conditions).To(BeEmpty())
-		g.Expect(output.ReferencedAPLogConfs).To(HaveKey(types.NamespacedName{Namespace: "test", Name: "my-logconf"}))
-		g.Expect(output.Bundles).To(HaveLen(1))
-	})
-
-	t.Run("multiple security logs with mixed results", func(t *testing.T) {
-		t.Parallel()
-		g := NewWithT(t)
-
-		logConf1 := createAPLogConf("test", "logconf-1", string(plm.StateReady), "s3://default/lc1.tgz")
-		wafPolicy := &ngfAPIv1alpha1.WAFGatewayBindingPolicy{
-			ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "waf1"},
-			Spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
-				SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
-					{
-						APLogConfSource: ngfAPIv1alpha1.APResourceReference{Name: "logconf-1"},
-						Destination: ngfAPIv1alpha1.SecurityLogDestination{
-							Type: ngfAPIv1alpha1.SecurityLogDestinationTypeStderr,
-						},
-					},
-					{
-						APLogConfSource: ngfAPIv1alpha1.APResourceReference{Name: "logconf-missing"},
-						Destination: ngfAPIv1alpha1.SecurityLogDestination{
-							Type: ngfAPIv1alpha1.SecurityLogDestinationTypeStderr,
-						},
-					},
-				},
-			},
-		}
-		policy := &Policy{Valid: true}
-		wafInput := &WAFProcessingInput{
-			APLogConfs: map[types.NamespacedName]*unstructured.Unstructured{
-				{Namespace: "test", Name: "logconf-1"}: logConf1,
-			},
-		}
-		output := &WAFProcessingOutput{
-			Bundles:              make(map[WAFBundleKey]*WAFBundleData),
-			ReferencedAPPolicies: make(map[types.NamespacedName]*unstructured.Unstructured),
-			ReferencedAPLogConfs: make(map[types.NamespacedName]*unstructured.Unstructured),
-		}
-
-		processSecurityLogs(wafPolicy, policy, wafInput, output)
-		// First logconf succeeds, second fails
-		g.Expect(policy.Valid).To(BeFalse())
-		g.Expect(policy.Conditions).To(HaveLen(1))
-		g.Expect(output.ReferencedAPLogConfs).To(HaveLen(1))
-		g.Expect(output.Bundles).To(HaveLen(1))
-	})
-
-	t.Run("cross-namespace ref not permitted sets condition", func(t *testing.T) {
-		t.Parallel()
-		g := NewWithT(t)
-
-		otherNs := "other-ns"
-		wafPolicy := &ngfAPIv1alpha1.WAFGatewayBindingPolicy{
-			ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "waf1"},
-			Spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
-				SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
-					{
-						APLogConfSource: ngfAPIv1alpha1.APResourceReference{
-							Name:      "my-logconf",
-							Namespace: &otherNs,
-						},
-						Destination: ngfAPIv1alpha1.SecurityLogDestination{
-							Type: ngfAPIv1alpha1.SecurityLogDestinationTypeStderr,
-						},
-					},
-				},
-			},
-		}
-		policy := &Policy{Valid: true}
-		wafInput := &WAFProcessingInput{
-			APLogConfs:       make(map[types.NamespacedName]*unstructured.Unstructured),
-			RefGrantResolver: &referenceGrantResolver{allowed: make(map[allowedReference]struct{})},
-		}
-		output := &WAFProcessingOutput{
-			Bundles:              make(map[WAFBundleKey]*WAFBundleData),
-			ReferencedAPPolicies: make(map[types.NamespacedName]*unstructured.Unstructured),
-			ReferencedAPLogConfs: make(map[types.NamespacedName]*unstructured.Unstructured),
-		}
-
-		processSecurityLogs(wafPolicy, policy, wafInput, output)
-		g.Expect(policy.Valid).To(BeFalse())
-		g.Expect(policy.Conditions).To(HaveLen(1))
-		g.Expect(policy.Conditions[0].Reason).To(Equal(string(conditions.PolicyReasonRefNotPermitted)))
-	})
-}
-
-func TestProcessWAFPolicies(t *testing.T) {
-	t.Parallel()
-
-	createAPPolicy := func(ns, name, bundleState, location string) *unstructured.Unstructured {
-		obj := &unstructured.Unstructured{}
-		obj.SetNamespace(ns)
-		obj.SetName(name)
-		obj.Object["status"] = map[string]any{
-			"bundle": map[string]any{
-				"state":    bundleState,
-				"location": location,
-			},
-		}
-		return obj
-	}
 
 	wafGVK := schema.GroupVersionKind{
 		Group:   ngfAPIv1alpha1.GroupName,
 		Version: "v1alpha1",
 		Kind:    kinds.WAFGatewayBindingPolicy,
 	}
+	otherGVK := schema.GroupVersionKind{Group: "Group", Version: "Version", Kind: "OtherPolicy"}
 
-	t.Run("nil wafInput returns nil output", func(t *testing.T) {
-		t.Parallel()
-		g := NewWithT(t)
+	policyNs := "test-ns"
+	policyName := "my-waf-policy"
+	bundleURL := "https://example.com/bundle.tgz"
+	logBundleURL := "https://example.com/log-bundle.tgz"
+	authSecretName := "auth-secret"
+	tlsSecretName := "tls-secret"
 
-		output := processWAFPolicies(map[PolicyKey]*Policy{}, nil)
-		g.Expect(output).To(BeNil())
-	})
+	authSecretNsName := types.NamespacedName{Namespace: policyNs, Name: authSecretName}
+	tlsSecretNsName := types.NamespacedName{Namespace: policyNs, Name: tlsSecretName}
 
-	t.Run("no WAF policies in processedPolicies returns empty output", func(t *testing.T) {
-		t.Parallel()
-		g := NewWithT(t)
+	bundleKey := WAFBundleKey(fmt.Sprintf("%s_%s", policyNs, policyName))
+	logBundleKey := WAFBundleKey(fmt.Sprintf("%s_%s_log_%s", policyNs, policyName, urlHash(logBundleURL)))
 
-		otherKey := PolicyKey{
-			NsName: types.NamespacedName{Namespace: "test", Name: "csp"},
-			GVK: schema.GroupVersionKind{
-				Group: ngfAPIv1alpha1.GroupName, Kind: "ClientSettingsPolicy",
-			},
-		}
-		policies := map[PolicyKey]*Policy{
-			otherKey: {Valid: true},
-		}
+	fetchedData := []byte("bundle-data")
+	fetchedChecksum := "abc123"
 
-		output := processWAFPolicies(policies, &WAFProcessingInput{
-			APPolicies: make(map[types.NamespacedName]*unstructured.Unstructured),
-		})
-		g.Expect(output).ToNot(BeNil())
-		g.Expect(output.Bundles).To(BeEmpty())
-	})
-
-	t.Run("skips invalid WAF policies", func(t *testing.T) {
-		t.Parallel()
-		g := NewWithT(t)
-
-		key := PolicyKey{
-			NsName: types.NamespacedName{Namespace: "test", Name: "waf1"},
-			GVK:    wafGVK,
-		}
-
-		policies := map[PolicyKey]*Policy{
-			key: {
-				Valid: false,
-				Source: &ngfAPIv1alpha1.WAFGatewayBindingPolicy{
-					ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "waf1"},
+	makeWAFPolicy := func(name string, withAuth, withTLS, withLogURL bool) *ngfAPIv1alpha1.WAFGatewayBindingPolicy {
+		p := &ngfAPIv1alpha1.WAFGatewayBindingPolicy{
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: policyNs},
+			Spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
+				Type: ngfAPIv1alpha1.PolicySourceTypeHTTP,
+				PolicySource: ngfAPIv1alpha1.PolicySource{
+					URL: bundleURL,
 				},
 			},
 		}
 
-		output := processWAFPolicies(policies, &WAFProcessingInput{
-			APPolicies: make(map[types.NamespacedName]*unstructured.Unstructured),
-		})
-		g.Expect(output.Bundles).To(BeEmpty())
-	})
-
-	t.Run("processes valid WAF policy with ready APPolicy", func(t *testing.T) {
-		t.Parallel()
-		g := NewWithT(t)
-
-		apPolicy := createAPPolicy("test", "my-policy", string(plm.StateReady), "s3://default/bundle.tgz")
-
-		key := PolicyKey{
-			NsName: types.NamespacedName{Namespace: "test", Name: "waf1"},
-			GVK:    wafGVK,
+		if withAuth {
+			p.Spec.PolicySource.Auth = &ngfAPIv1alpha1.BundleAuth{
+				SecretRef: ngfAPIv1alpha1.LocalObjectReference{Name: authSecretName},
+			}
 		}
 
-		policies := map[PolicyKey]*Policy{
-			key: {
-				Valid: true,
-				Source: &ngfAPIv1alpha1.WAFGatewayBindingPolicy{
-					ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "waf1"},
-					Spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
-						APPolicySource: &ngfAPIv1alpha1.APResourceReference{Name: "my-policy"},
+		if withTLS {
+			p.Spec.PolicySource.TLSSecretRef = &ngfAPIv1alpha1.LocalObjectReference{Name: tlsSecretName}
+		}
+
+		if withLogURL {
+			p.Spec.SecurityLogs = []ngfAPIv1alpha1.WAFSecurityLog{
+				{
+					LogSource: ngfAPIv1alpha1.LogSource{
+						URL: helpers.GetPointer(logBundleURL),
+					},
+					Destination: ngfAPIv1alpha1.SecurityLogDestination{
+						Type: ngfAPIv1alpha1.SecurityLogDestinationTypeStderr,
 					},
 				},
-			},
+			}
 		}
 
-		wafInput := &WAFProcessingInput{
-			APPolicies: map[types.NamespacedName]*unstructured.Unstructured{
-				{Namespace: "test", Name: "my-policy"}: apPolicy,
-			},
-			APLogConfs: make(map[types.NamespacedName]*unstructured.Unstructured),
-		}
+		return p
+	}
 
-		output := processWAFPolicies(policies, wafInput)
-		g.Expect(output.Bundles).To(HaveLen(1))
-		g.Expect(output.ReferencedAPPolicies).To(HaveLen(1))
-	})
-
-	t.Run("APPolicy not found skips to next policy", func(t *testing.T) {
-		t.Parallel()
-		g := NewWithT(t)
-
+	makePolicyEntry := func(wafPolicy *ngfAPIv1alpha1.WAFGatewayBindingPolicy, valid bool) (PolicyKey, *Policy) {
 		key := PolicyKey{
-			NsName: types.NamespacedName{Namespace: "test", Name: "waf1"},
 			GVK:    wafGVK,
+			NsName: types.NamespacedName{Namespace: policyNs, Name: wafPolicy.Name},
 		}
+		pol := &Policy{
+			Source: wafPolicy,
+			Valid:  valid,
+		}
+		return key, pol
+	}
 
-		policies := map[PolicyKey]*Policy{
-			key: {
-				Valid: true,
-				Source: &ngfAPIv1alpha1.WAFGatewayBindingPolicy{
-					ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "waf1"},
-					Spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
-						APPolicySource: &ngfAPIv1alpha1.APResourceReference{Name: "missing"},
+	tokenSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: authSecretName, Namespace: policyNs},
+		Data:       map[string][]byte{secrets.BundleTokenKey: []byte("my-token")},
+	}
+
+	tlsSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: tlsSecretName, Namespace: policyNs},
+		Data:       map[string][]byte{"ca.crt": []byte("ca-data")},
+	}
+
+	// multiLogURL1 is defined at table scope so it can be referenced in both the
+	// processedPolicies closure and the expBundles map of the multi-log test case.
+	multiLogURL1 := "https://example.com/log1.tgz"
+
+	tests := []struct {
+		processedPolicies func() map[PolicyKey]*Policy
+		wafInput          func() *WAFProcessingInput
+		expBundles        map[WAFBundleKey]*WAFBundleData
+		expSecrets        map[types.NamespacedName]*corev1.Secret
+		expConditions     func(pol *Policy) []conditions.Condition
+		name              string
+		expValid          bool
+	}{
+		{
+			name: "nil wafInput returns nil",
+			processedPolicies: func() map[PolicyKey]*Policy {
+				wafPolicy := makeWAFPolicy(policyName, false, false, false)
+				key, pol := makePolicyEntry(wafPolicy, true)
+				return map[PolicyKey]*Policy{key: pol}
+			},
+			wafInput: func() *WAFProcessingInput { return nil },
+		},
+		{
+			name: "non-WAFGatewayBindingPolicy kind is skipped",
+			processedPolicies: func() map[PolicyKey]*Policy {
+				return map[PolicyKey]*Policy{
+					{GVK: otherGVK, NsName: types.NamespacedName{Namespace: policyNs, Name: "other"}}: {
+						Source: &policiesfakes.FakePolicy{},
+						Valid:  true,
 					},
+				}
+			},
+			wafInput: func() *WAFProcessingInput {
+				fetcher := &fetchfakes.FakeFetcher{}
+				return &WAFProcessingInput{
+					Fetcher:         fetcher,
+					Secrets:         map[types.NamespacedName]*corev1.Secret{},
+					PreviousBundles: map[WAFBundleKey]*WAFBundleData{},
+				}
+			},
+			expBundles: map[WAFBundleKey]*WAFBundleData{},
+			expSecrets: map[types.NamespacedName]*corev1.Secret{},
+		},
+		{
+			name: "invalid policy is skipped",
+			processedPolicies: func() map[PolicyKey]*Policy {
+				wafPolicy := makeWAFPolicy(policyName, false, false, false)
+				key, pol := makePolicyEntry(wafPolicy, false)
+				return map[PolicyKey]*Policy{key: pol}
+			},
+			wafInput: func() *WAFProcessingInput {
+				fetcher := &fetchfakes.FakeFetcher{}
+				return &WAFProcessingInput{
+					Fetcher:         fetcher,
+					Secrets:         map[types.NamespacedName]*corev1.Secret{},
+					PreviousBundles: map[WAFBundleKey]*WAFBundleData{},
+				}
+			},
+			expBundles: map[WAFBundleKey]*WAFBundleData{},
+			expSecrets: map[types.NamespacedName]*corev1.Secret{},
+			expValid:   false,
+		},
+		{
+			name: "successful fetch stores bundle in output",
+			processedPolicies: func() map[PolicyKey]*Policy {
+				wafPolicy := makeWAFPolicy(policyName, false, false, false)
+				key, pol := makePolicyEntry(wafPolicy, true)
+				return map[PolicyKey]*Policy{key: pol}
+			},
+			wafInput: func() *WAFProcessingInput {
+				fetcher := &fetchfakes.FakeFetcher{}
+				fetcher.FetchReturns(fetchedData, fetchedChecksum, nil)
+				return &WAFProcessingInput{
+					Fetcher:         fetcher,
+					Secrets:         map[types.NamespacedName]*corev1.Secret{},
+					PreviousBundles: map[WAFBundleKey]*WAFBundleData{},
+				}
+			},
+			expBundles: map[WAFBundleKey]*WAFBundleData{
+				bundleKey: {Data: fetchedData, Checksum: fetchedChecksum},
+			},
+			expSecrets: map[types.NamespacedName]*corev1.Secret{},
+			expValid:   true,
+		},
+		{
+			name: "fetch error with no previous bundle marks policy invalid",
+			processedPolicies: func() map[PolicyKey]*Policy {
+				wafPolicy := makeWAFPolicy(policyName, false, false, false)
+				key, pol := makePolicyEntry(wafPolicy, true)
+				return map[PolicyKey]*Policy{key: pol}
+			},
+			wafInput: func() *WAFProcessingInput {
+				fetcher := &fetchfakes.FakeFetcher{}
+				fetcher.FetchReturns(nil, "", fmt.Errorf("fetch failed"))
+				return &WAFProcessingInput{
+					Fetcher:         fetcher,
+					Secrets:         map[types.NamespacedName]*corev1.Secret{},
+					PreviousBundles: map[WAFBundleKey]*WAFBundleData{},
+				}
+			},
+			expBundles: map[WAFBundleKey]*WAFBundleData{},
+			expSecrets: map[types.NamespacedName]*corev1.Secret{},
+			expConditions: func(_ *Policy) []conditions.Condition {
+				return []conditions.Condition{conditions.NewPolicyNotProgrammedBundleFetchError("fetch failed")}
+			},
+			expValid: false,
+		},
+		{
+			name: "fetch error with previous bundle uses stale bundle and adds warning condition",
+			processedPolicies: func() map[PolicyKey]*Policy {
+				wafPolicy := makeWAFPolicy(policyName, false, false, false)
+				key, pol := makePolicyEntry(wafPolicy, true)
+				return map[PolicyKey]*Policy{key: pol}
+			},
+			wafInput: func() *WAFProcessingInput {
+				fetcher := &fetchfakes.FakeFetcher{}
+				fetcher.FetchReturns(nil, "", fmt.Errorf("fetch failed"))
+				prevData := &WAFBundleData{Data: []byte("old-data"), Checksum: "old-checksum"}
+				return &WAFProcessingInput{
+					Fetcher: fetcher,
+					Secrets: map[types.NamespacedName]*corev1.Secret{},
+					PreviousBundles: map[WAFBundleKey]*WAFBundleData{
+						bundleKey: prevData,
+					},
+				}
+			},
+			expBundles: map[WAFBundleKey]*WAFBundleData{
+				bundleKey: {Data: []byte("old-data"), Checksum: "old-checksum"},
+			},
+			expSecrets: map[types.NamespacedName]*corev1.Secret{},
+			expConditions: func(_ *Policy) []conditions.Condition {
+				return []conditions.Condition{conditions.NewPolicyProgrammedStaleBundleWarning("fetch failed")}
+			},
+			expValid: true,
+		},
+		{
+			name: "auth secret missing marks policy invalid",
+			processedPolicies: func() map[PolicyKey]*Policy {
+				wafPolicy := makeWAFPolicy(policyName, true, false, false)
+				key, pol := makePolicyEntry(wafPolicy, true)
+				return map[PolicyKey]*Policy{key: pol}
+			},
+			wafInput: func() *WAFProcessingInput {
+				fetcher := &fetchfakes.FakeFetcher{}
+				return &WAFProcessingInput{
+					Fetcher:         fetcher,
+					Secrets:         map[types.NamespacedName]*corev1.Secret{},
+					PreviousBundles: map[WAFBundleKey]*WAFBundleData{},
+				}
+			},
+			expBundles: map[WAFBundleKey]*WAFBundleData{},
+			expSecrets: map[types.NamespacedName]*corev1.Secret{},
+			expConditions: func(_ *Policy) []conditions.Condition {
+				return []conditions.Condition{
+					conditions.NewPolicyRefsNotResolvedBundleAuthSecretNotFound(
+						fmt.Sprintf("auth secret %q not found", authSecretNsName),
+					),
+				}
+			},
+			expValid: false,
+		},
+		{
+			name: "auth secret present is resolved and stored in output",
+			processedPolicies: func() map[PolicyKey]*Policy {
+				wafPolicy := makeWAFPolicy(policyName, true, false, false)
+				key, pol := makePolicyEntry(wafPolicy, true)
+				return map[PolicyKey]*Policy{key: pol}
+			},
+			wafInput: func() *WAFProcessingInput {
+				fetcher := &fetchfakes.FakeFetcher{}
+				fetcher.FetchReturns(fetchedData, fetchedChecksum, nil)
+				return &WAFProcessingInput{
+					Fetcher:         fetcher,
+					Secrets:         map[types.NamespacedName]*corev1.Secret{authSecretNsName: tokenSecret},
+					PreviousBundles: map[WAFBundleKey]*WAFBundleData{},
+				}
+			},
+			expBundles: map[WAFBundleKey]*WAFBundleData{
+				bundleKey: {Data: fetchedData, Checksum: fetchedChecksum},
+			},
+			expSecrets: map[types.NamespacedName]*corev1.Secret{authSecretNsName: tokenSecret},
+			expValid:   true,
+		},
+		{
+			name: "TLS secret missing marks policy invalid",
+			processedPolicies: func() map[PolicyKey]*Policy {
+				wafPolicy := makeWAFPolicy(policyName, false, true, false)
+				key, pol := makePolicyEntry(wafPolicy, true)
+				return map[PolicyKey]*Policy{key: pol}
+			},
+			wafInput: func() *WAFProcessingInput {
+				fetcher := &fetchfakes.FakeFetcher{}
+				return &WAFProcessingInput{
+					Fetcher:         fetcher,
+					Secrets:         map[types.NamespacedName]*corev1.Secret{},
+					PreviousBundles: map[WAFBundleKey]*WAFBundleData{},
+				}
+			},
+			expBundles: map[WAFBundleKey]*WAFBundleData{},
+			expSecrets: map[types.NamespacedName]*corev1.Secret{},
+			expConditions: func(_ *Policy) []conditions.Condition {
+				return []conditions.Condition{
+					conditions.NewPolicyRefsNotResolvedTLSSecretNotFound(
+						fmt.Sprintf("TLS CA secret %q not found", tlsSecretNsName),
+					),
+				}
+			},
+			expValid: false,
+		},
+		{
+			name: "TLS secret with empty ca.crt marks policy invalid",
+			processedPolicies: func() map[PolicyKey]*Policy {
+				wafPolicy := makeWAFPolicy(policyName, false, true, false)
+				key, pol := makePolicyEntry(wafPolicy, true)
+				return map[PolicyKey]*Policy{key: pol}
+			},
+			wafInput: func() *WAFProcessingInput {
+				emptyTLSSecret := &corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{Name: tlsSecretName, Namespace: policyNs},
+					Data:       map[string][]byte{secrets.CAKey: {}},
+				}
+				return &WAFProcessingInput{
+					Fetcher:         &fetchfakes.FakeFetcher{},
+					Secrets:         map[types.NamespacedName]*corev1.Secret{tlsSecretNsName: emptyTLSSecret},
+					PreviousBundles: map[WAFBundleKey]*WAFBundleData{},
+				}
+			},
+			expBundles: map[WAFBundleKey]*WAFBundleData{},
+			expSecrets: map[types.NamespacedName]*corev1.Secret{},
+			expConditions: func(_ *Policy) []conditions.Condition {
+				return []conditions.Condition{
+					conditions.NewPolicyRefsNotResolvedTLSSecretInvalid(
+						fmt.Sprintf("TLS CA secret %q has empty %q key", tlsSecretNsName, secrets.CAKey),
+					),
+				}
+			},
+			expValid: false,
+		},
+		{
+			name: "TLS secret with whitespace-only ca.crt marks policy invalid",
+			processedPolicies: func() map[PolicyKey]*Policy {
+				wafPolicy := makeWAFPolicy(policyName, false, true, false)
+				key, pol := makePolicyEntry(wafPolicy, true)
+				return map[PolicyKey]*Policy{key: pol}
+			},
+			wafInput: func() *WAFProcessingInput {
+				whitespaceTLSSecret := &corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{Name: tlsSecretName, Namespace: policyNs},
+					Data:       map[string][]byte{secrets.CAKey: []byte("   \n  ")},
+				}
+				return &WAFProcessingInput{
+					Fetcher:         &fetchfakes.FakeFetcher{},
+					Secrets:         map[types.NamespacedName]*corev1.Secret{tlsSecretNsName: whitespaceTLSSecret},
+					PreviousBundles: map[WAFBundleKey]*WAFBundleData{},
+				}
+			},
+			expBundles: map[WAFBundleKey]*WAFBundleData{},
+			expSecrets: map[types.NamespacedName]*corev1.Secret{},
+			expConditions: func(_ *Policy) []conditions.Condition {
+				return []conditions.Condition{
+					conditions.NewPolicyRefsNotResolvedTLSSecretInvalid(
+						fmt.Sprintf("TLS CA secret %q has empty %q key", tlsSecretNsName, secrets.CAKey),
+					),
+				}
+			},
+			expValid: false,
+		},
+		{
+			name: "TLS secret present is resolved and stored in output",
+			processedPolicies: func() map[PolicyKey]*Policy {
+				wafPolicy := makeWAFPolicy(policyName, false, true, false)
+				key, pol := makePolicyEntry(wafPolicy, true)
+				return map[PolicyKey]*Policy{key: pol}
+			},
+			wafInput: func() *WAFProcessingInput {
+				fetcher := &fetchfakes.FakeFetcher{}
+				fetcher.FetchReturns(fetchedData, fetchedChecksum, nil)
+				return &WAFProcessingInput{
+					Fetcher:         fetcher,
+					Secrets:         map[types.NamespacedName]*corev1.Secret{tlsSecretNsName: tlsSecret},
+					PreviousBundles: map[WAFBundleKey]*WAFBundleData{},
+				}
+			},
+			expBundles: map[WAFBundleKey]*WAFBundleData{
+				bundleKey: {Data: fetchedData, Checksum: fetchedChecksum},
+			},
+			expSecrets: map[types.NamespacedName]*corev1.Secret{tlsSecretNsName: tlsSecret},
+			expValid:   true,
+		},
+		{
+			name: "security log with URL fetches log bundle",
+			processedPolicies: func() map[PolicyKey]*Policy {
+				wafPolicy := makeWAFPolicy(policyName, false, false, true)
+				key, pol := makePolicyEntry(wafPolicy, true)
+				return map[PolicyKey]*Policy{key: pol}
+			},
+			wafInput: func() *WAFProcessingInput {
+				fetcher := &fetchfakes.FakeFetcher{}
+				fetcher.FetchReturns(fetchedData, fetchedChecksum, nil)
+				return &WAFProcessingInput{
+					Fetcher:         fetcher,
+					Secrets:         map[types.NamespacedName]*corev1.Secret{},
+					PreviousBundles: map[WAFBundleKey]*WAFBundleData{},
+				}
+			},
+			expBundles: map[WAFBundleKey]*WAFBundleData{
+				bundleKey:    {Data: fetchedData, Checksum: fetchedChecksum},
+				logBundleKey: {Data: fetchedData, Checksum: fetchedChecksum},
+			},
+			expSecrets: map[types.NamespacedName]*corev1.Secret{},
+			expValid:   true,
+		},
+		{
+			name: "security log fetch error with no previous bundle marks policy invalid",
+			processedPolicies: func() map[PolicyKey]*Policy {
+				wafPolicy := makeWAFPolicy(policyName, false, false, true)
+				key, pol := makePolicyEntry(wafPolicy, true)
+				return map[PolicyKey]*Policy{key: pol}
+			},
+			wafInput: func() *WAFProcessingInput {
+				fetcher := &fetchfakes.FakeFetcher{}
+				// first call (policy bundle) succeeds; second call (log bundle) fails
+				fetcher.FetchReturnsOnCall(0, fetchedData, fetchedChecksum, nil)
+				fetcher.FetchReturnsOnCall(1, nil, "", fmt.Errorf("log fetch failed"))
+				return &WAFProcessingInput{
+					Fetcher:         fetcher,
+					Secrets:         map[types.NamespacedName]*corev1.Secret{},
+					PreviousBundles: map[WAFBundleKey]*WAFBundleData{},
+				}
+			},
+			expBundles: map[WAFBundleKey]*WAFBundleData{
+				bundleKey: {Data: fetchedData, Checksum: fetchedChecksum},
+			},
+			expSecrets: map[types.NamespacedName]*corev1.Secret{},
+			expConditions: func(_ *Policy) []conditions.Condition {
+				return []conditions.Condition{conditions.NewPolicyNotProgrammedBundleFetchError("log fetch failed")}
+			},
+			expValid: false,
+		},
+		{
+			name: "NIM managed source sets NIMPolicyName on fetch request",
+			processedPolicies: func() map[PolicyKey]*Policy {
+				wafPolicy := makeWAFPolicy(policyName, false, false, false)
+				wafPolicy.Spec.Type = ngfAPIv1alpha1.PolicySourceTypeNIM
+				wafPolicy.Spec.PolicySource.ManagedSource = &ngfAPIv1alpha1.ManagedBundleSource{
+					PolicyName: "my-nim-policy",
+				}
+				key, pol := makePolicyEntry(wafPolicy, true)
+				return map[PolicyKey]*Policy{key: pol}
+			},
+			wafInput: func() *WAFProcessingInput {
+				fetcher := &fetchfakes.FakeFetcher{}
+				fetcher.FetchReturns(fetchedData, fetchedChecksum, nil)
+				return &WAFProcessingInput{
+					Fetcher:         fetcher,
+					Secrets:         map[types.NamespacedName]*corev1.Secret{},
+					PreviousBundles: map[WAFBundleKey]*WAFBundleData{},
+				}
+			},
+			expBundles: map[WAFBundleKey]*WAFBundleData{
+				bundleKey: {Data: fetchedData, Checksum: fetchedChecksum},
+			},
+			expSecrets: map[types.NamespacedName]*corev1.Secret{},
+			expValid:   true,
+		},
+		{
+			name: "N1C managed source sets N1CNamespace and swaps BearerToken to APIToken",
+			processedPolicies: func() map[PolicyKey]*Policy {
+				wafPolicy := makeWAFPolicy(policyName, true, false, false)
+				wafPolicy.Spec.Type = ngfAPIv1alpha1.PolicySourceTypeN1C
+				n1cNs := "my-n1c-namespace"
+				wafPolicy.Spec.PolicySource.ManagedSource = &ngfAPIv1alpha1.ManagedBundleSource{
+					PolicyName:   "my-n1c-policy",
+					N1CNamespace: &n1cNs,
+				}
+				key, pol := makePolicyEntry(wafPolicy, true)
+				return map[PolicyKey]*Policy{key: pol}
+			},
+			wafInput: func() *WAFProcessingInput {
+				fetcher := &fetchfakes.FakeFetcher{}
+				fetcher.FetchReturns(fetchedData, fetchedChecksum, nil)
+				return &WAFProcessingInput{
+					Fetcher:         fetcher,
+					Secrets:         map[types.NamespacedName]*corev1.Secret{authSecretNsName: tokenSecret},
+					PreviousBundles: map[WAFBundleKey]*WAFBundleData{},
+				}
+			},
+			expBundles: map[WAFBundleKey]*WAFBundleData{
+				bundleKey: {Data: fetchedData, Checksum: fetchedChecksum},
+			},
+			expSecrets: map[types.NamespacedName]*corev1.Secret{authSecretNsName: tokenSecret},
+			expValid:   true,
+		},
+		{
+			name: "security log auth secret missing marks policy invalid and continues",
+			processedPolicies: func() map[PolicyKey]*Policy {
+				wafPolicy := makeWAFPolicy(policyName, false, false, false)
+				wafPolicy.Spec.SecurityLogs = []ngfAPIv1alpha1.WAFSecurityLog{
+					{
+						LogSource: ngfAPIv1alpha1.LogSource{
+							URL: helpers.GetPointer(logBundleURL),
+							Auth: &ngfAPIv1alpha1.BundleAuth{
+								SecretRef: ngfAPIv1alpha1.LocalObjectReference{Name: authSecretName},
+							},
+						},
+						Destination: ngfAPIv1alpha1.SecurityLogDestination{
+							Type: ngfAPIv1alpha1.SecurityLogDestinationTypeStderr,
+						},
+					},
+				}
+				key, pol := makePolicyEntry(wafPolicy, true)
+				return map[PolicyKey]*Policy{key: pol}
+			},
+			wafInput: func() *WAFProcessingInput {
+				fetcher := &fetchfakes.FakeFetcher{}
+				// policy bundle fetch succeeds; log auth secret is missing so log fetch never runs
+				fetcher.FetchReturns(fetchedData, fetchedChecksum, nil)
+				return &WAFProcessingInput{
+					Fetcher:         fetcher,
+					Secrets:         map[types.NamespacedName]*corev1.Secret{},
+					PreviousBundles: map[WAFBundleKey]*WAFBundleData{},
+				}
+			},
+			expBundles: map[WAFBundleKey]*WAFBundleData{
+				bundleKey: {Data: fetchedData, Checksum: fetchedChecksum},
+			},
+			expSecrets: map[types.NamespacedName]*corev1.Secret{},
+			expConditions: func(_ *Policy) []conditions.Condition {
+				return []conditions.Condition{
+					conditions.NewPolicyRefsNotResolvedBundleAuthSecretNotFound(
+						fmt.Sprintf("auth secret %q not found", authSecretNsName),
+					),
+				}
+			},
+			expValid: false,
+		},
+		{
+			name: "security log TLS secret missing marks policy invalid and continues",
+			processedPolicies: func() map[PolicyKey]*Policy {
+				wafPolicy := makeWAFPolicy(policyName, false, false, false)
+				wafPolicy.Spec.SecurityLogs = []ngfAPIv1alpha1.WAFSecurityLog{
+					{
+						LogSource: ngfAPIv1alpha1.LogSource{
+							URL:          helpers.GetPointer(logBundleURL),
+							TLSSecretRef: &ngfAPIv1alpha1.LocalObjectReference{Name: tlsSecretName},
+						},
+						Destination: ngfAPIv1alpha1.SecurityLogDestination{
+							Type: ngfAPIv1alpha1.SecurityLogDestinationTypeStderr,
+						},
+					},
+				}
+				key, pol := makePolicyEntry(wafPolicy, true)
+				return map[PolicyKey]*Policy{key: pol}
+			},
+			wafInput: func() *WAFProcessingInput {
+				fetcher := &fetchfakes.FakeFetcher{}
+				fetcher.FetchReturns(fetchedData, fetchedChecksum, nil)
+				return &WAFProcessingInput{
+					Fetcher:         fetcher,
+					Secrets:         map[types.NamespacedName]*corev1.Secret{},
+					PreviousBundles: map[WAFBundleKey]*WAFBundleData{},
+				}
+			},
+			expBundles: map[WAFBundleKey]*WAFBundleData{
+				bundleKey: {Data: fetchedData, Checksum: fetchedChecksum},
+			},
+			expSecrets: map[types.NamespacedName]*corev1.Secret{},
+			expConditions: func(_ *Policy) []conditions.Condition {
+				return []conditions.Condition{
+					conditions.NewPolicyRefsNotResolvedTLSSecretNotFound(
+						fmt.Sprintf("TLS CA secret %q not found", tlsSecretNsName),
+					),
+				}
+			},
+			expValid: false,
+		},
+		{
+			name: "security log fetch error with previous bundle uses stale bundle",
+			processedPolicies: func() map[PolicyKey]*Policy {
+				wafPolicy := makeWAFPolicy(policyName, false, false, true)
+				key, pol := makePolicyEntry(wafPolicy, true)
+				return map[PolicyKey]*Policy{key: pol}
+			},
+			wafInput: func() *WAFProcessingInput {
+				fetcher := &fetchfakes.FakeFetcher{}
+				fetcher.FetchReturnsOnCall(0, fetchedData, fetchedChecksum, nil)
+				fetcher.FetchReturnsOnCall(1, nil, "", fmt.Errorf("log fetch failed"))
+				prevLogBundle := &WAFBundleData{Data: []byte("old-log-data"), Checksum: "old-log-checksum"}
+				return &WAFProcessingInput{
+					Fetcher: fetcher,
+					Secrets: map[types.NamespacedName]*corev1.Secret{},
+					PreviousBundles: map[WAFBundleKey]*WAFBundleData{
+						logBundleKey: prevLogBundle,
+					},
+				}
+			},
+			expBundles: map[WAFBundleKey]*WAFBundleData{
+				bundleKey:    {Data: fetchedData, Checksum: fetchedChecksum},
+				logBundleKey: {Data: []byte("old-log-data"), Checksum: "old-log-checksum"},
+			},
+			expSecrets: map[types.NamespacedName]*corev1.Secret{},
+			expConditions: func(_ *Policy) []conditions.Condition {
+				return []conditions.Condition{conditions.NewPolicyProgrammedStaleBundleWarning("log fetch failed")}
+			},
+			expValid: true,
+		},
+		{
+			name: "multiple security logs: first fails auth, second succeeds",
+			processedPolicies: func() map[PolicyKey]*Policy {
+				wafPolicy := makeWAFPolicy(policyName, false, false, false)
+				logURL0 := "https://example.com/log0.tgz"
+				logURL1 := multiLogURL1
+				wafPolicy.Spec.SecurityLogs = []ngfAPIv1alpha1.WAFSecurityLog{
+					{
+						LogSource: ngfAPIv1alpha1.LogSource{
+							URL: helpers.GetPointer(logURL0),
+							Auth: &ngfAPIv1alpha1.BundleAuth{
+								SecretRef: ngfAPIv1alpha1.LocalObjectReference{Name: authSecretName},
+							},
+						},
+						Destination: ngfAPIv1alpha1.SecurityLogDestination{
+							Type: ngfAPIv1alpha1.SecurityLogDestinationTypeStderr,
+						},
+					},
+					{
+						LogSource: ngfAPIv1alpha1.LogSource{
+							URL: helpers.GetPointer(logURL1),
+						},
+						Destination: ngfAPIv1alpha1.SecurityLogDestination{
+							Type: ngfAPIv1alpha1.SecurityLogDestinationTypeStderr,
+						},
+					},
+				}
+				key, pol := makePolicyEntry(wafPolicy, true)
+				return map[PolicyKey]*Policy{key: pol}
+			},
+			wafInput: func() *WAFProcessingInput {
+				fetcher := &fetchfakes.FakeFetcher{}
+				// call 0: policy bundle; call 1: log[1] bundle (log[0] skipped due to auth error)
+				fetcher.FetchReturnsOnCall(0, fetchedData, fetchedChecksum, nil)
+				fetcher.FetchReturnsOnCall(1, fetchedData, fetchedChecksum, nil)
+				return &WAFProcessingInput{
+					Fetcher:         fetcher,
+					Secrets:         map[types.NamespacedName]*corev1.Secret{},
+					PreviousBundles: map[WAFBundleKey]*WAFBundleData{},
+				}
+			},
+			expBundles: map[WAFBundleKey]*WAFBundleData{
+				bundleKey: {Data: fetchedData, Checksum: fetchedChecksum},
+				WAFBundleKey(fmt.Sprintf("%s_%s_log_%s", "test-ns", policyName, urlHash(multiLogURL1))): {
+					Data: fetchedData, Checksum: fetchedChecksum,
 				},
 			},
-		}
+			expSecrets: map[types.NamespacedName]*corev1.Secret{},
+			expConditions: func(_ *Policy) []conditions.Condition {
+				return []conditions.Condition{
+					conditions.NewPolicyRefsNotResolvedBundleAuthSecretNotFound(
+						fmt.Sprintf("auth secret %q not found", authSecretNsName),
+					),
+				}
+			},
+			expValid: false,
+		},
+		{
+			name: "security log with default profile skips bundle fetch",
+			processedPolicies: func() map[PolicyKey]*Policy {
+				defaultProfile := ngfAPIv1alpha1.DefaultLogProfileDefault
+				wafPolicy := makeWAFPolicy(policyName, false, false, false)
+				wafPolicy.Spec.SecurityLogs = []ngfAPIv1alpha1.WAFSecurityLog{
+					{
+						LogSource: ngfAPIv1alpha1.LogSource{
+							DefaultProfile: &defaultProfile,
+						},
+						Destination: ngfAPIv1alpha1.SecurityLogDestination{
+							Type: ngfAPIv1alpha1.SecurityLogDestinationTypeStderr,
+						},
+					},
+				}
+				key, pol := makePolicyEntry(wafPolicy, true)
+				return map[PolicyKey]*Policy{key: pol}
+			},
+			wafInput: func() *WAFProcessingInput {
+				fetcher := &fetchfakes.FakeFetcher{}
+				fetcher.FetchReturns(fetchedData, fetchedChecksum, nil)
+				return &WAFProcessingInput{
+					Fetcher:         fetcher,
+					Secrets:         map[types.NamespacedName]*corev1.Secret{},
+					PreviousBundles: map[WAFBundleKey]*WAFBundleData{},
+				}
+			},
+			expBundles: map[WAFBundleKey]*WAFBundleData{
+				// only the policy bundle, no log bundle
+				bundleKey: {Data: fetchedData, Checksum: fetchedChecksum},
+			},
+			expSecrets: map[types.NamespacedName]*corev1.Secret{},
+			expValid:   true,
+		},
+	}
 
-		wafInput := &WAFProcessingInput{
-			APPolicies: make(map[types.NamespacedName]*unstructured.Unstructured),
-		}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
 
-		output := processWAFPolicies(policies, wafInput)
-		g.Expect(output.Bundles).To(BeEmpty())
-		// Policy should be marked invalid
-		g.Expect(policies[key].Valid).To(BeFalse())
-		g.Expect(policies[key].Conditions).ToNot(BeEmpty())
-	})
+			processedPolicies := tc.processedPolicies()
+			wafInput := tc.wafInput()
+
+			output := processWAFGatewayBindingPolicies(t.Context(), processedPolicies, wafInput)
+
+			if wafInput == nil {
+				g.Expect(output).To(BeNil())
+				return
+			}
+
+			g.Expect(output).NotTo(BeNil())
+			g.Expect(output.Bundles).To(Equal(tc.expBundles))
+			g.Expect(output.ReferencedWAFSecrets).To(Equal(tc.expSecrets))
+
+			for _, pol := range processedPolicies {
+				if pol.Source == nil {
+					continue
+				}
+				if _, ok := pol.Source.(*ngfAPIv1alpha1.WAFGatewayBindingPolicy); !ok {
+					continue
+				}
+				if tc.expConditions != nil {
+					g.Expect(pol.Conditions).To(Equal(tc.expConditions(pol)))
+				} else {
+					g.Expect(pol.Conditions).To(BeEmpty())
+				}
+				if tc.expValid {
+					g.Expect(pol.Valid).To(BeTrue())
+				} else if pol.Conditions != nil {
+					g.Expect(pol.Valid).To(BeFalse())
+				}
+			}
+		})
+	}
+}
+
+func TestResolveBundleAuth(t *testing.T) {
+	t.Parallel()
+
+	policyNs := "test-ns"
+	secretName := "auth-secret"
+	secretNsName := types.NamespacedName{Namespace: policyNs, Name: secretName}
+
+	bundleAuth := &ngfAPIv1alpha1.BundleAuth{
+		SecretRef: ngfAPIv1alpha1.LocalObjectReference{Name: secretName},
+	}
+
+	makeInput := func(secret *corev1.Secret) (*WAFProcessingInput, *WAFProcessingOutput) {
+		s := map[types.NamespacedName]*corev1.Secret{}
+		if secret != nil {
+			s[secretNsName] = secret
+		}
+		input := &WAFProcessingInput{
+			Secrets:         s,
+			PreviousBundles: map[WAFBundleKey]*WAFBundleData{},
+		}
+		output := &WAFProcessingOutput{
+			Bundles:              make(map[WAFBundleKey]*WAFBundleData),
+			ReferencedWAFSecrets: make(map[types.NamespacedName]*corev1.Secret),
+		}
+		return input, output
+	}
+
+	tests := []struct {
+		secret    *corev1.Secret
+		expAuth   *fetch.BundleAuth
+		expCond   *conditions.Condition
+		name      string
+		expSecret bool
+	}{
+		{
+			name:   "secret not found",
+			secret: nil,
+			expCond: helpers.GetPointer(conditions.NewPolicyRefsNotResolvedBundleAuthSecretNotFound(
+				fmt.Sprintf("auth secret %q not found", secretNsName),
+			)),
+		},
+		{
+			name: "token key present and non-empty",
+			secret: &corev1.Secret{
+				Data: map[string][]byte{secrets.BundleTokenKey: []byte("my-token")},
+			},
+			expAuth:   &fetch.BundleAuth{BearerToken: "my-token"},
+			expSecret: true,
+		},
+		{
+			name: "token key present but empty after trimming",
+			secret: &corev1.Secret{
+				Data: map[string][]byte{secrets.BundleTokenKey: []byte("   ")},
+			},
+			expCond: helpers.GetPointer(conditions.NewPolicyRefsNotResolvedBundleAuthSecretInvalid(
+				fmt.Sprintf("auth secret %q has empty %q key", secretNsName, secrets.BundleTokenKey),
+			)),
+			expSecret: true,
+		},
+		{
+			name: "username and password present",
+			secret: &corev1.Secret{
+				Data: map[string][]byte{
+					secrets.BundleUsernameKey: []byte("user"),
+					secrets.BundlePasswordKey: []byte("pass"),
+				},
+			},
+			expAuth:   &fetch.BundleAuth{Username: "user", Password: "pass"},
+			expSecret: true,
+		},
+		{
+			name: "username present but password empty",
+			secret: &corev1.Secret{
+				Data: map[string][]byte{
+					secrets.BundleUsernameKey: []byte("user"),
+					secrets.BundlePasswordKey: []byte(""),
+				},
+			},
+			expCond: helpers.GetPointer(conditions.NewPolicyRefsNotResolvedBundleAuthSecretInvalid(fmt.Sprintf(
+				"auth secret %q must contain either %q or both %q and %q",
+				secretNsName, secrets.BundleTokenKey, secrets.BundleUsernameKey, secrets.BundlePasswordKey,
+			))),
+			expSecret: true,
+		},
+		{
+			name: "both username and password empty",
+			secret: &corev1.Secret{
+				Data: map[string][]byte{},
+			},
+			expCond: helpers.GetPointer(conditions.NewPolicyRefsNotResolvedBundleAuthSecretInvalid(fmt.Sprintf(
+				"auth secret %q must contain either %q or both %q and %q",
+				secretNsName, secrets.BundleTokenKey, secrets.BundleUsernameKey, secrets.BundlePasswordKey,
+			))),
+			expSecret: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			input, output := makeInput(tc.secret)
+
+			got, cond := resolveBundleAuth(bundleAuth, policyNs, input, output)
+
+			if tc.expCond != nil {
+				g.Expect(cond).To(Equal(tc.expCond))
+				g.Expect(got).To(BeNil())
+			} else {
+				g.Expect(cond).To(BeNil())
+				g.Expect(got).To(Equal(tc.expAuth))
+			}
+
+			if tc.expSecret {
+				g.Expect(output.ReferencedWAFSecrets).To(HaveKey(secretNsName))
+			} else {
+				g.Expect(output.ReferencedWAFSecrets).To(BeEmpty())
+			}
+		})
+	}
+}
+
+func TestBuildPolicyFetchRequest(t *testing.T) {
+	t.Parallel()
+
+	baseURL := "https://example.com/bundle.tgz"
+	nimPolicyName := "my-nim-policy"
+	n1cNamespace := "my-n1c-ns"
+	bearerToken := "my-token"
+	caData := []byte("ca-cert-data")
+
+	tests := []struct {
+		name         string
+		policyType   ngfAPIv1alpha1.PolicySourceType
+		policySource ngfAPIv1alpha1.PolicySource
+		auth         *fetch.BundleAuth
+		tlsCA        []byte
+		expRequest   fetch.Request
+	}{
+		{
+			name:       "HTTP type with no managed source",
+			policyType: ngfAPIv1alpha1.PolicySourceTypeHTTP,
+			policySource: ngfAPIv1alpha1.PolicySource{
+				URL: baseURL,
+			},
+			expRequest: fetch.Request{
+				URL: baseURL,
+			},
+		},
+		{
+			name:       "HTTP type with checksum verification enabled",
+			policyType: ngfAPIv1alpha1.PolicySourceTypeHTTP,
+			policySource: ngfAPIv1alpha1.PolicySource{
+				URL:        baseURL,
+				Validation: &ngfAPIv1alpha1.BundleValidation{VerifyChecksum: true},
+			},
+			expRequest: fetch.Request{
+				URL:            baseURL,
+				VerifyChecksum: true,
+			},
+		},
+		{
+			name:       "HTTP type with TLS CA data",
+			policyType: ngfAPIv1alpha1.PolicySourceTypeHTTP,
+			policySource: ngfAPIv1alpha1.PolicySource{
+				URL: baseURL,
+			},
+			tlsCA: caData,
+			expRequest: fetch.Request{
+				URL:       baseURL,
+				TLSCAData: caData,
+			},
+		},
+		{
+			name:       "NIM type sets NIMPolicyName",
+			policyType: ngfAPIv1alpha1.PolicySourceTypeNIM,
+			policySource: ngfAPIv1alpha1.PolicySource{
+				URL: baseURL,
+				ManagedSource: &ngfAPIv1alpha1.ManagedBundleSource{
+					PolicyName: nimPolicyName,
+				},
+			},
+			expRequest: fetch.Request{
+				URL:           baseURL,
+				NIMPolicyName: nimPolicyName,
+			},
+		},
+		{
+			name:       "N1C type sets NIMPolicyName and N1CNamespace",
+			policyType: ngfAPIv1alpha1.PolicySourceTypeN1C,
+			policySource: ngfAPIv1alpha1.PolicySource{
+				URL: baseURL,
+				ManagedSource: &ngfAPIv1alpha1.ManagedBundleSource{
+					PolicyName:   nimPolicyName,
+					N1CNamespace: &n1cNamespace,
+				},
+			},
+			expRequest: fetch.Request{
+				URL:           baseURL,
+				NIMPolicyName: nimPolicyName,
+				N1CNamespace:  n1cNamespace,
+			},
+		},
+		{
+			name:       "N1C type swaps BearerToken to APIToken",
+			policyType: ngfAPIv1alpha1.PolicySourceTypeN1C,
+			policySource: ngfAPIv1alpha1.PolicySource{
+				URL: baseURL,
+				ManagedSource: &ngfAPIv1alpha1.ManagedBundleSource{
+					PolicyName:   nimPolicyName,
+					N1CNamespace: &n1cNamespace,
+				},
+			},
+			auth: &fetch.BundleAuth{BearerToken: bearerToken},
+			expRequest: fetch.Request{
+				URL:           baseURL,
+				NIMPolicyName: nimPolicyName,
+				N1CNamespace:  n1cNamespace,
+				Auth:          &fetch.BundleAuth{APIToken: bearerToken},
+			},
+		},
+		{
+			name:       "N1C type with no BearerToken does not set APIToken",
+			policyType: ngfAPIv1alpha1.PolicySourceTypeN1C,
+			policySource: ngfAPIv1alpha1.PolicySource{
+				URL: baseURL,
+				ManagedSource: &ngfAPIv1alpha1.ManagedBundleSource{
+					PolicyName:   nimPolicyName,
+					N1CNamespace: &n1cNamespace,
+				},
+			},
+			auth: &fetch.BundleAuth{Username: "user", Password: "pass"},
+			expRequest: fetch.Request{
+				URL:           baseURL,
+				NIMPolicyName: nimPolicyName,
+				N1CNamespace:  n1cNamespace,
+				Auth:          &fetch.BundleAuth{Username: "user", Password: "pass"},
+			},
+		},
+		{
+			name:       "N1C type with nil auth does not panic",
+			policyType: ngfAPIv1alpha1.PolicySourceTypeN1C,
+			policySource: ngfAPIv1alpha1.PolicySource{
+				URL: baseURL,
+				ManagedSource: &ngfAPIv1alpha1.ManagedBundleSource{
+					PolicyName:   nimPolicyName,
+					N1CNamespace: &n1cNamespace,
+				},
+			},
+			expRequest: fetch.Request{
+				URL:           baseURL,
+				NIMPolicyName: nimPolicyName,
+				N1CNamespace:  n1cNamespace,
+			},
+		},
+		{
+			name:       "NIM type does not set N1CNamespace even if N1CNamespace is present on managed source",
+			policyType: ngfAPIv1alpha1.PolicySourceTypeNIM,
+			policySource: ngfAPIv1alpha1.PolicySource{
+				URL: baseURL,
+				ManagedSource: &ngfAPIv1alpha1.ManagedBundleSource{
+					PolicyName:   nimPolicyName,
+					N1CNamespace: &n1cNamespace,
+				},
+			},
+			expRequest: fetch.Request{
+				URL:           baseURL,
+				NIMPolicyName: nimPolicyName,
+				// N1CNamespace must NOT be set for NIM type
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			got := buildPolicyFetchRequest(&tc.policySource, tc.policyType, tc.auth, tc.tlsCA)
+			g.Expect(got).To(Equal(tc.expRequest))
+		})
+	}
 }

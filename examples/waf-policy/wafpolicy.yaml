@@ -1,0 +1,28 @@
+apiVersion: gateway.nginx.org/v1alpha1
+kind: WAFGatewayBindingPolicy
+metadata:
+  name: gateway-base-protection
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: gateway
+  type: NIM
+  policySource:
+    # For NIM/N1C, url is the base URL of the API server - not a direct bundle URL.
+    # NGF constructs the full API path from this value and managedSource.policyName.
+    url: https://apigw.nim.svc.cluster.local
+    managedSource:
+      policyName: NginxStrictPolicy
+    auth:
+      secretRef:
+        name: nim-credentials
+    insecureSkipVerify: true # testing only - do not use in production
+  securityLogs:
+    - destination:
+        type: syslog
+        syslog:
+          server: syslog-svc.default.svc.cluster.local:514
+      logSource:
+        # Use one of the built-in log profiles:
+        defaultProfile: log_illegal

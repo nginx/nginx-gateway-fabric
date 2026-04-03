@@ -3,314 +3,98 @@ package fetchfakes
 
 import (
 	"context"
-	"crypto/tls"
 	"sync"
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/fetch"
 )
 
 type FakeFetcher struct {
-	GetObjectStub        func(context.Context, string, string) ([]byte, error)
-	getObjectMutex       sync.RWMutex
-	getObjectArgsForCall []struct {
+	FetchStub        func(context.Context, fetch.Request) ([]byte, string, error)
+	fetchMutex       sync.RWMutex
+	fetchArgsForCall []struct {
 		arg1 context.Context
-		arg2 string
-		arg3 string
+		arg2 fetch.Request
 	}
-	getObjectReturns struct {
+	fetchReturns struct {
 		result1 []byte
-		result2 error
+		result2 string
+		result3 error
 	}
-	getObjectReturnsOnCall map[int]struct {
+	fetchReturnsOnCall map[int]struct {
 		result1 []byte
-		result2 error
-	}
-	UpdateCredentialsStub        func(string, string) error
-	updateCredentialsMutex       sync.RWMutex
-	updateCredentialsArgsForCall []struct {
-		arg1 string
-		arg2 string
-	}
-	updateCredentialsReturns struct {
-		result1 error
-	}
-	updateCredentialsReturnsOnCall map[int]struct {
-		result1 error
-	}
-	UpdateTLSConfigStub        func(*tls.Config) error
-	updateTLSConfigMutex       sync.RWMutex
-	updateTLSConfigArgsForCall []struct {
-		arg1 *tls.Config
-	}
-	updateTLSConfigReturns struct {
-		result1 error
-	}
-	updateTLSConfigReturnsOnCall map[int]struct {
-		result1 error
-	}
-	ValidateConnectivityStub        func(context.Context) error
-	validateConnectivityMutex       sync.RWMutex
-	validateConnectivityArgsForCall []struct {
-		arg1 context.Context
-	}
-	validateConnectivityReturns struct {
-		result1 error
-	}
-	validateConnectivityReturnsOnCall map[int]struct {
-		result1 error
+		result2 string
+		result3 error
 	}
 	invocations      map[string][][]interface{}
 	invocationsMutex sync.RWMutex
 }
 
-func (fake *FakeFetcher) GetObject(arg1 context.Context, arg2 string, arg3 string) ([]byte, error) {
-	fake.getObjectMutex.Lock()
-	ret, specificReturn := fake.getObjectReturnsOnCall[len(fake.getObjectArgsForCall)]
-	fake.getObjectArgsForCall = append(fake.getObjectArgsForCall, struct {
+func (fake *FakeFetcher) Fetch(arg1 context.Context, arg2 fetch.Request) ([]byte, string, error) {
+	fake.fetchMutex.Lock()
+	ret, specificReturn := fake.fetchReturnsOnCall[len(fake.fetchArgsForCall)]
+	fake.fetchArgsForCall = append(fake.fetchArgsForCall, struct {
 		arg1 context.Context
-		arg2 string
-		arg3 string
-	}{arg1, arg2, arg3})
-	stub := fake.GetObjectStub
-	fakeReturns := fake.getObjectReturns
-	fake.recordInvocation("GetObject", []interface{}{arg1, arg2, arg3})
-	fake.getObjectMutex.Unlock()
-	if stub != nil {
-		return stub(arg1, arg2, arg3)
-	}
-	if specificReturn {
-		return ret.result1, ret.result2
-	}
-	return fakeReturns.result1, fakeReturns.result2
-}
-
-func (fake *FakeFetcher) GetObjectCallCount() int {
-	fake.getObjectMutex.RLock()
-	defer fake.getObjectMutex.RUnlock()
-	return len(fake.getObjectArgsForCall)
-}
-
-func (fake *FakeFetcher) GetObjectCalls(stub func(context.Context, string, string) ([]byte, error)) {
-	fake.getObjectMutex.Lock()
-	defer fake.getObjectMutex.Unlock()
-	fake.GetObjectStub = stub
-}
-
-func (fake *FakeFetcher) GetObjectArgsForCall(i int) (context.Context, string, string) {
-	fake.getObjectMutex.RLock()
-	defer fake.getObjectMutex.RUnlock()
-	argsForCall := fake.getObjectArgsForCall[i]
-	return argsForCall.arg1, argsForCall.arg2, argsForCall.arg3
-}
-
-func (fake *FakeFetcher) GetObjectReturns(result1 []byte, result2 error) {
-	fake.getObjectMutex.Lock()
-	defer fake.getObjectMutex.Unlock()
-	fake.GetObjectStub = nil
-	fake.getObjectReturns = struct {
-		result1 []byte
-		result2 error
-	}{result1, result2}
-}
-
-func (fake *FakeFetcher) GetObjectReturnsOnCall(i int, result1 []byte, result2 error) {
-	fake.getObjectMutex.Lock()
-	defer fake.getObjectMutex.Unlock()
-	fake.GetObjectStub = nil
-	if fake.getObjectReturnsOnCall == nil {
-		fake.getObjectReturnsOnCall = make(map[int]struct {
-			result1 []byte
-			result2 error
-		})
-	}
-	fake.getObjectReturnsOnCall[i] = struct {
-		result1 []byte
-		result2 error
-	}{result1, result2}
-}
-
-func (fake *FakeFetcher) UpdateCredentials(arg1 string, arg2 string) error {
-	fake.updateCredentialsMutex.Lock()
-	ret, specificReturn := fake.updateCredentialsReturnsOnCall[len(fake.updateCredentialsArgsForCall)]
-	fake.updateCredentialsArgsForCall = append(fake.updateCredentialsArgsForCall, struct {
-		arg1 string
-		arg2 string
+		arg2 fetch.Request
 	}{arg1, arg2})
-	stub := fake.UpdateCredentialsStub
-	fakeReturns := fake.updateCredentialsReturns
-	fake.recordInvocation("UpdateCredentials", []interface{}{arg1, arg2})
-	fake.updateCredentialsMutex.Unlock()
+	stub := fake.FetchStub
+	fakeReturns := fake.fetchReturns
+	fake.recordInvocation("Fetch", []interface{}{arg1, arg2})
+	fake.fetchMutex.Unlock()
 	if stub != nil {
 		return stub(arg1, arg2)
 	}
 	if specificReturn {
-		return ret.result1
+		return ret.result1, ret.result2, ret.result3
 	}
-	return fakeReturns.result1
+	return fakeReturns.result1, fakeReturns.result2, fakeReturns.result3
 }
 
-func (fake *FakeFetcher) UpdateCredentialsCallCount() int {
-	fake.updateCredentialsMutex.RLock()
-	defer fake.updateCredentialsMutex.RUnlock()
-	return len(fake.updateCredentialsArgsForCall)
+func (fake *FakeFetcher) FetchCallCount() int {
+	fake.fetchMutex.RLock()
+	defer fake.fetchMutex.RUnlock()
+	return len(fake.fetchArgsForCall)
 }
 
-func (fake *FakeFetcher) UpdateCredentialsCalls(stub func(string, string) error) {
-	fake.updateCredentialsMutex.Lock()
-	defer fake.updateCredentialsMutex.Unlock()
-	fake.UpdateCredentialsStub = stub
+func (fake *FakeFetcher) FetchCalls(stub func(context.Context, fetch.Request) ([]byte, string, error)) {
+	fake.fetchMutex.Lock()
+	defer fake.fetchMutex.Unlock()
+	fake.FetchStub = stub
 }
 
-func (fake *FakeFetcher) UpdateCredentialsArgsForCall(i int) (string, string) {
-	fake.updateCredentialsMutex.RLock()
-	defer fake.updateCredentialsMutex.RUnlock()
-	argsForCall := fake.updateCredentialsArgsForCall[i]
+func (fake *FakeFetcher) FetchArgsForCall(i int) (context.Context, fetch.Request) {
+	fake.fetchMutex.RLock()
+	defer fake.fetchMutex.RUnlock()
+	argsForCall := fake.fetchArgsForCall[i]
 	return argsForCall.arg1, argsForCall.arg2
 }
 
-func (fake *FakeFetcher) UpdateCredentialsReturns(result1 error) {
-	fake.updateCredentialsMutex.Lock()
-	defer fake.updateCredentialsMutex.Unlock()
-	fake.UpdateCredentialsStub = nil
-	fake.updateCredentialsReturns = struct {
-		result1 error
-	}{result1}
+func (fake *FakeFetcher) FetchReturns(result1 []byte, result2 string, result3 error) {
+	fake.fetchMutex.Lock()
+	defer fake.fetchMutex.Unlock()
+	fake.FetchStub = nil
+	fake.fetchReturns = struct {
+		result1 []byte
+		result2 string
+		result3 error
+	}{result1, result2, result3}
 }
 
-func (fake *FakeFetcher) UpdateCredentialsReturnsOnCall(i int, result1 error) {
-	fake.updateCredentialsMutex.Lock()
-	defer fake.updateCredentialsMutex.Unlock()
-	fake.UpdateCredentialsStub = nil
-	if fake.updateCredentialsReturnsOnCall == nil {
-		fake.updateCredentialsReturnsOnCall = make(map[int]struct {
-			result1 error
+func (fake *FakeFetcher) FetchReturnsOnCall(i int, result1 []byte, result2 string, result3 error) {
+	fake.fetchMutex.Lock()
+	defer fake.fetchMutex.Unlock()
+	fake.FetchStub = nil
+	if fake.fetchReturnsOnCall == nil {
+		fake.fetchReturnsOnCall = make(map[int]struct {
+			result1 []byte
+			result2 string
+			result3 error
 		})
 	}
-	fake.updateCredentialsReturnsOnCall[i] = struct {
-		result1 error
-	}{result1}
-}
-
-func (fake *FakeFetcher) UpdateTLSConfig(arg1 *tls.Config) error {
-	fake.updateTLSConfigMutex.Lock()
-	ret, specificReturn := fake.updateTLSConfigReturnsOnCall[len(fake.updateTLSConfigArgsForCall)]
-	fake.updateTLSConfigArgsForCall = append(fake.updateTLSConfigArgsForCall, struct {
-		arg1 *tls.Config
-	}{arg1})
-	stub := fake.UpdateTLSConfigStub
-	fakeReturns := fake.updateTLSConfigReturns
-	fake.recordInvocation("UpdateTLSConfig", []interface{}{arg1})
-	fake.updateTLSConfigMutex.Unlock()
-	if stub != nil {
-		return stub(arg1)
-	}
-	if specificReturn {
-		return ret.result1
-	}
-	return fakeReturns.result1
-}
-
-func (fake *FakeFetcher) UpdateTLSConfigCallCount() int {
-	fake.updateTLSConfigMutex.RLock()
-	defer fake.updateTLSConfigMutex.RUnlock()
-	return len(fake.updateTLSConfigArgsForCall)
-}
-
-func (fake *FakeFetcher) UpdateTLSConfigCalls(stub func(*tls.Config) error) {
-	fake.updateTLSConfigMutex.Lock()
-	defer fake.updateTLSConfigMutex.Unlock()
-	fake.UpdateTLSConfigStub = stub
-}
-
-func (fake *FakeFetcher) UpdateTLSConfigArgsForCall(i int) *tls.Config {
-	fake.updateTLSConfigMutex.RLock()
-	defer fake.updateTLSConfigMutex.RUnlock()
-	argsForCall := fake.updateTLSConfigArgsForCall[i]
-	return argsForCall.arg1
-}
-
-func (fake *FakeFetcher) UpdateTLSConfigReturns(result1 error) {
-	fake.updateTLSConfigMutex.Lock()
-	defer fake.updateTLSConfigMutex.Unlock()
-	fake.UpdateTLSConfigStub = nil
-	fake.updateTLSConfigReturns = struct {
-		result1 error
-	}{result1}
-}
-
-func (fake *FakeFetcher) UpdateTLSConfigReturnsOnCall(i int, result1 error) {
-	fake.updateTLSConfigMutex.Lock()
-	defer fake.updateTLSConfigMutex.Unlock()
-	fake.UpdateTLSConfigStub = nil
-	if fake.updateTLSConfigReturnsOnCall == nil {
-		fake.updateTLSConfigReturnsOnCall = make(map[int]struct {
-			result1 error
-		})
-	}
-	fake.updateTLSConfigReturnsOnCall[i] = struct {
-		result1 error
-	}{result1}
-}
-
-func (fake *FakeFetcher) ValidateConnectivity(arg1 context.Context) error {
-	fake.validateConnectivityMutex.Lock()
-	ret, specificReturn := fake.validateConnectivityReturnsOnCall[len(fake.validateConnectivityArgsForCall)]
-	fake.validateConnectivityArgsForCall = append(fake.validateConnectivityArgsForCall, struct {
-		arg1 context.Context
-	}{arg1})
-	stub := fake.ValidateConnectivityStub
-	fakeReturns := fake.validateConnectivityReturns
-	fake.recordInvocation("ValidateConnectivity", []interface{}{arg1})
-	fake.validateConnectivityMutex.Unlock()
-	if stub != nil {
-		return stub(arg1)
-	}
-	if specificReturn {
-		return ret.result1
-	}
-	return fakeReturns.result1
-}
-
-func (fake *FakeFetcher) ValidateConnectivityCallCount() int {
-	fake.validateConnectivityMutex.RLock()
-	defer fake.validateConnectivityMutex.RUnlock()
-	return len(fake.validateConnectivityArgsForCall)
-}
-
-func (fake *FakeFetcher) ValidateConnectivityCalls(stub func(context.Context) error) {
-	fake.validateConnectivityMutex.Lock()
-	defer fake.validateConnectivityMutex.Unlock()
-	fake.ValidateConnectivityStub = stub
-}
-
-func (fake *FakeFetcher) ValidateConnectivityArgsForCall(i int) context.Context {
-	fake.validateConnectivityMutex.RLock()
-	defer fake.validateConnectivityMutex.RUnlock()
-	argsForCall := fake.validateConnectivityArgsForCall[i]
-	return argsForCall.arg1
-}
-
-func (fake *FakeFetcher) ValidateConnectivityReturns(result1 error) {
-	fake.validateConnectivityMutex.Lock()
-	defer fake.validateConnectivityMutex.Unlock()
-	fake.ValidateConnectivityStub = nil
-	fake.validateConnectivityReturns = struct {
-		result1 error
-	}{result1}
-}
-
-func (fake *FakeFetcher) ValidateConnectivityReturnsOnCall(i int, result1 error) {
-	fake.validateConnectivityMutex.Lock()
-	defer fake.validateConnectivityMutex.Unlock()
-	fake.ValidateConnectivityStub = nil
-	if fake.validateConnectivityReturnsOnCall == nil {
-		fake.validateConnectivityReturnsOnCall = make(map[int]struct {
-			result1 error
-		})
-	}
-	fake.validateConnectivityReturnsOnCall[i] = struct {
-		result1 error
-	}{result1}
+	fake.fetchReturnsOnCall[i] = struct {
+		result1 []byte
+		result2 string
+		result3 error
+	}{result1, result2, result3}
 }
 
 func (fake *FakeFetcher) Invocations() map[string][][]interface{} {

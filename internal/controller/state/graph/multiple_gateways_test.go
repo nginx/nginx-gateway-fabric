@@ -464,6 +464,7 @@ func Test_MultipleGateways_WithNginxProxy(t *testing.T) {
 			fakePolicyValidator := &validationfakes.FakePolicyValidator{}
 
 			result := BuildGraph(
+				t.Context(),
 				test.clusterState,
 				controllerName,
 				gcName,
@@ -475,7 +476,8 @@ func Test_MultipleGateways_WithNginxProxy(t *testing.T) {
 						},
 					},
 				},
-				nil, // plmConfig
+				nil, // wafFetcher
+				nil, // previousWAFBundles
 				validation.Validators{
 					HTTPFieldsValidator: &validationfakes.FakeHTTPFieldsValidator{},
 					GenericValidator:    &validationfakes.FakeGenericValidator{},
@@ -983,6 +985,7 @@ func Test_MultipleGateways_WithListeners(t *testing.T) {
 			fakePolicyValidator := &validationfakes.FakePolicyValidator{}
 
 			result := BuildGraph(
+				t.Context(),
 				test.clusterState,
 				controllerName,
 				gcName,
@@ -994,7 +997,8 @@ func Test_MultipleGateways_WithListeners(t *testing.T) {
 						},
 					},
 				},
-				nil, // plmConfig
+				nil, // wafFetcher
+				nil, // previousWAFBundles
 				validation.Validators{
 					HTTPFieldsValidator: &validationfakes.FakeHTTPFieldsValidator{},
 					GenericValidator:    &validationfakes.FakeGenericValidator{},

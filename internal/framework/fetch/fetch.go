@@ -2,246 +2,300 @@ package fetch
 
 import (
 	"context"
+	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/base64"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/credentials"
-	"github.com/aws/aws-sdk-go-v2/service/s3"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 //go:generate go tool counterfeiter -generate
 
-const (
-	// Default configuration values.
-	defaultTimeout = 30 * time.Second
-)
+const defaultTimeout = 30 * time.Second
 
-// Option defines a function that modifies fetcher options.
-type Option func(*S3Fetcher)
-
-// WithTimeout sets the request timeout.
-func WithTimeout(timeout time.Duration) Option {
-	return func(f *S3Fetcher) {
-		f.timeout = timeout
-	}
+// BundleAuth holds authentication credentials for bundle fetching.
+type BundleAuth struct {
+	Username    string
+	Password    string
+	BearerToken string
+	// APIToken is used for F5 NGINX One Console (N1C) requests.
+	// Sent as "Authorization: APIToken <token>" rather than the Bearer scheme.
+	APIToken string
 }
 
-// WithCredentials sets the S3 credentials from access key and secret.
-func WithCredentials(accessKeyID, secretAccessKey string) Option {
-	return func(f *S3Fetcher) {
-		f.accessKeyID = accessKeyID
-		f.secretAccessKey = secretAccessKey
-	}
+// Request carries all parameters needed to fetch a single bundle.
+type Request struct {
+	Auth          *BundleAuth
+	Timeout       *metav1.Duration
+	URL           string
+	NIMPolicyName string
+	// N1CNamespace is the F5 NGINX One Console namespace the policy belongs to.
+	// Required when fetching from N1C (i.e. when NIMPolicyName is set and the source is N1C).
+	N1CNamespace       string
+	TLSCAData          []byte
+	InsecureSkipVerify bool
+	VerifyChecksum     bool
 }
 
-// WithTLSConfig sets the TLS configuration for the S3 client.
-func WithTLSConfig(tlsConfig *tls.Config) Option {
-	return func(f *S3Fetcher) {
-		f.tlsConfig = tlsConfig
-	}
-}
-
-// Fetcher defines the interface for fetching remote files.
+// Fetcher fetches WAF policy bundles from remote sources.
 //
 //counterfeiter:generate . Fetcher
 type Fetcher interface {
-	// GetObject fetches an object from S3-compatible storage.
-	// The location should be in the format "bucket/key" or just "key" if bucket is configured.
-	GetObject(ctx context.Context, bucket, key string) ([]byte, error)
-	// ValidateConnectivity checks that the storage endpoint is reachable and the configured
-	// credentials are accepted. It should be called once at startup to surface auth or
-	// connectivity problems early, before any bundle fetch is attempted.
-	ValidateConnectivity(ctx context.Context) error
-	// UpdateTLSConfig updates the TLS configuration and recreates the underlying client.
-	// This is used to refresh TLS certificates when secrets change.
-	UpdateTLSConfig(tlsConfig *tls.Config) error
-	// UpdateCredentials updates the S3 credentials and recreates the underlying client.
-	// This is used to refresh credentials when secrets change.
-	UpdateCredentials(accessKeyID, secretAccessKey string) error
+	// Fetch retrieves the bundle bytes described by req.
+	// For HTTP type: GETs req.URL. If req.VerifyChecksum is true, fetches req.URL+".sha256" to verify integrity.
+	// For NIM type: calls the NIM bundles API and base64-decodes items[0].content.
+	// Returns (data, checksum, error). checksum is hex-encoded SHA-256 of the returned data.
+	Fetch(ctx context.Context, req Request) (data []byte, checksum string, err error)
 }
 
-// S3Fetcher fetches files from S3-compatible storage.
-type S3Fetcher struct {
-	client          *s3.Client
-	tlsConfig       *tls.Config
-	accessKeyID     string
-	secretAccessKey string
-	endpointURL     string
-	timeout         time.Duration
+// HTTPFetcher implements Fetcher using HTTP/HTTPS.
+// It keeps a default client for requests that need no custom TLS settings,
+// and builds a short-lived client only when a per-request CA or insecure flag is set.
+type HTTPFetcher struct {
+	defaultClient *http.Client
 }
 
-// NewS3Fetcher creates a new S3Fetcher for the given endpoint URL.
-// The endpoint URL should be the storage service URL.
-// If the URL does not include a scheme, https:// is prepended.
-func NewS3Fetcher(endpointURL string, opts ...Option) (*S3Fetcher, error) {
-	if !strings.Contains(endpointURL, "://") {
-		endpointURL = "https://" + endpointURL
+// NewHTTPFetcher creates a new HTTPFetcher.
+func NewHTTPFetcher() *HTTPFetcher {
+	return &HTTPFetcher{
+		defaultClient: &http.Client{},
 	}
-
-	fetcher := &S3Fetcher{
-		endpointURL: endpointURL,
-		timeout:     defaultTimeout,
-	}
-
-	for _, opt := range opts {
-		opt(fetcher)
-	}
-
-	client, err := fetcher.createS3Client()
-	if err != nil {
-		return nil, fmt.Errorf("failed to create S3 client: %w", err)
-	}
-	fetcher.client = client
-
-	return fetcher, nil
 }
 
-// GetObject fetches an object from S3-compatible storage.
-func (f *S3Fetcher) GetObject(ctx context.Context, bucket, key string) ([]byte, error) {
-	ctx, cancel := context.WithTimeout(ctx, f.timeout)
-	defer cancel()
-
-	input := &s3.GetObjectInput{
-		Bucket: aws.String(bucket),
-		Key:    aws.String(key),
+// Fetch retrieves bundle bytes.
+// When req.N1CNamespace is set, uses N1C fetch logic (APIToken auth, N1C API path).
+// When req.NIMPolicyName is set (and N1CNamespace is empty), uses NIM fetch logic.
+// Otherwise performs a plain GET to req.URL, optionally verifying the checksum.
+func (f *HTTPFetcher) Fetch(ctx context.Context, req Request) ([]byte, string, error) {
+	timeout := defaultTimeout
+	if req.Timeout != nil {
+		timeout = req.Timeout.Duration
 	}
 
-	result, err := f.client.GetObject(ctx, input)
+	needsCustomTLS := len(req.TLSCAData) > 0 || req.InsecureSkipVerify
+	if !needsCustomTLS {
+		client := *f.defaultClient
+		client.Timeout = timeout
+		return f.dispatch(ctx, &client, req)
+	}
+
+	client, err := buildClient(req.TLSCAData, req.InsecureSkipVerify, timeout)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get object %s/%s: %w", bucket, key, err)
+		return nil, "", fmt.Errorf("failed to build HTTP client: %w", err)
 	}
-	defer result.Body.Close()
+	defer client.CloseIdleConnections()
 
-	data, err := io.ReadAll(result.Body)
+	return f.dispatch(ctx, client, req)
+}
+
+func (f *HTTPFetcher) dispatch(ctx context.Context, client *http.Client, req Request) ([]byte, string, error) {
+	switch {
+	case req.N1CNamespace != "":
+		return fetchN1C(ctx, client, req)
+	case req.NIMPolicyName != "":
+		return fetchNIM(ctx, client, req)
+	default:
+		return fetchHTTP(ctx, client, req)
+	}
+}
+
+// buildClient returns an *http.Client with the given timeout. When caData is non-nil, the CA is
+// appended to the system cert pool. When insecureSkipVerify is true, TLS verification is disabled.
+func buildClient(caData []byte, insecureSkipVerify bool, timeout time.Duration) (*http.Client, error) {
+	if caData == nil && !insecureSkipVerify {
+		return &http.Client{Timeout: timeout}, nil
+	}
+
+	transport, ok := http.DefaultTransport.(*http.Transport)
+	if !ok {
+		return nil, fmt.Errorf("http.DefaultTransport is not *http.Transport")
+	}
+	transport = transport.Clone()
+	transport.TLSClientConfig = &tls.Config{
+		MinVersion:         tls.VersionTLS12,
+		InsecureSkipVerify: insecureSkipVerify, //nolint:gosec // intentional; documented as testing-only
+	}
+
+	if caData != nil {
+		pool, err := x509.SystemCertPool()
+		if err != nil {
+			pool = x509.NewCertPool()
+		}
+		if !pool.AppendCertsFromPEM(caData) {
+			return nil, fmt.Errorf("failed to append CA certificate to pool")
+		}
+		transport.TLSClientConfig.RootCAs = pool
+	}
+
+	return &http.Client{
+		Timeout:   timeout,
+		Transport: transport,
+	}, nil
+}
+
+// fetchHTTP performs a GET to req.URL.
+// If req.VerifyChecksum is true, fetches req.URL+".sha256" and verifies integrity.
+// Returns the bundle bytes, the hex checksum, and any error.
+func fetchHTTP(ctx context.Context, client *http.Client, req Request) ([]byte, string, error) {
+	data, err := doGet(ctx, client, req.URL, req.Auth)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read object body: %w", err)
+		return nil, "", fmt.Errorf("failed to fetch bundle: %w", err)
 	}
 
+	actualChecksum := computeChecksum(data)
+
+	if req.VerifyChecksum {
+		checksumURL := req.URL + ".sha256"
+		checksumData, err := doGet(ctx, client, checksumURL, req.Auth)
+		if err != nil {
+			return nil, "", fmt.Errorf("failed to fetch bundle checksum from %s: %w", checksumURL, err)
+		}
+		fields := strings.Fields(string(checksumData))
+		if len(fields) == 0 {
+			return nil, "", fmt.Errorf("checksum file at %s is empty", checksumURL)
+		}
+		expectedChecksum := strings.ToLower(fields[0])
+		if _, err := hex.DecodeString(expectedChecksum); err != nil || len(expectedChecksum) != 64 {
+			return nil, "", fmt.Errorf(
+				"checksum file at %s contains invalid checksum %q: expected 64 hex characters",
+				checksumURL, fields[0],
+			)
+		}
+		if expectedChecksum != actualChecksum {
+			return nil, "", fmt.Errorf("bundle checksum mismatch: expected %s, got %s", expectedChecksum, actualChecksum)
+		}
+	}
+
+	return data, actualChecksum, nil
+}
+
+// nimResponse is the JSON envelope returned by the NIM bundles API.
+type nimResponse struct {
+	Items []struct {
+		Content string `json:"content"`
+	} `json:"items"`
+}
+
+// fetchNIM calls the NIM security policies bundles API and decodes the bundle from the response.
+func fetchNIM(ctx context.Context, client *http.Client, req Request) ([]byte, string, error) {
+	nimURL, err := buildNIMURL(req.URL, req.NIMPolicyName)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to build NIM URL: %w", err)
+	}
+
+	body, err := doGet(ctx, client, nimURL, req.Auth)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to fetch bundle from NIM: %w", err)
+	}
+
+	var resp nimResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return nil, "", fmt.Errorf("failed to parse NIM response: %w", err)
+	}
+	if len(resp.Items) == 0 {
+		return nil, "", fmt.Errorf("NIM response contains no items for policy %q", req.NIMPolicyName)
+	}
+
+	data, err := base64.StdEncoding.DecodeString(resp.Items[0].Content)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to base64-decode NIM bundle content: %w", err)
+	}
+
+	return data, computeChecksum(data), nil
+}
+
+// fetchN1C calls the F5 NGINX One Console security policies API and returns the bundle bytes.
+// Authentication uses the APIToken scheme rather than Bearer.
+func fetchN1C(ctx context.Context, client *http.Client, req Request) ([]byte, string, error) {
+	n1cURL, err := buildN1CURL(req.URL, req.N1CNamespace, req.NIMPolicyName)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to build N1C URL: %w", err)
+	}
+
+	body, err := doGet(ctx, client, n1cURL, req.Auth)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to fetch bundle from N1C: %w", err)
+	}
+
+	return body, computeChecksum(body), nil
+}
+
+// buildN1CURL constructs the N1C security policies bundle API URL.
+// Format: <baseURL>/api/nginx/one/namespaces/<namespace>/security-policies/<policyName>/bundle.
+func buildN1CURL(baseURL, namespace, policyName string) (string, error) {
+	base, err := url.Parse(baseURL)
+	if err != nil {
+		return "", fmt.Errorf("invalid N1C base URL %q: %w", baseURL, err)
+	}
+	base.Path = strings.TrimRight(base.Path, "/") +
+		"/api/nginx/one/namespaces/" + url.PathEscape(namespace) +
+		"/security-policies/" + url.PathEscape(policyName) + "/bundle"
+	base.RawQuery = ""
+	base.Fragment = ""
+	return base.String(), nil
+}
+
+// buildNIMURL constructs the NIM bundles API URL.
+func buildNIMURL(baseURL, policyName string) (string, error) {
+	base, err := url.Parse(baseURL)
+	if err != nil {
+		return "", fmt.Errorf("invalid NIM base URL %q: %w", baseURL, err)
+	}
+	base.Path = strings.TrimRight(base.Path, "/") + "/api/platform/v1/security/policies/bundles"
+	base.Fragment = ""
+	q := url.Values{}
+	q.Set("includeBundleContent", "true")
+	q.Set("policyName", policyName)
+	base.RawQuery = q.Encode()
+	return base.String(), nil
+}
+
+// doGet performs a GET request, optionally setting auth headers, and returns the response body.
+func doGet(ctx context.Context, client *http.Client, rawURL string, auth *BundleAuth) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request for %s: %w", rawURL, err)
+	}
+
+	if auth != nil {
+		switch {
+		case auth.APIToken != "":
+			req.Header.Set("Authorization", "APIToken "+auth.APIToken)
+		case auth.BearerToken != "":
+			req.Header.Set("Authorization", "Bearer "+auth.BearerToken)
+		case auth.Username != "":
+			req.SetBasicAuth(auth.Username, auth.Password)
+		}
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request to %s failed: %w", rawURL, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status %d from %s", resp.StatusCode, rawURL)
+	}
+
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response from %s: %w", rawURL, err)
+	}
 	return data, nil
 }
 
-// ValidateConnectivity verifies that the storage endpoint is reachable and the configured
-// credentials are valid by issuing a ListBuckets request. It returns an error if the endpoint
-// is unreachable or the credentials are rejected, allowing auth problems to be surfaced at
-// startup rather than at bundle-fetch time.
-func (f *S3Fetcher) ValidateConnectivity(ctx context.Context) error {
-	ctx, cancel := context.WithTimeout(ctx, f.timeout)
-	defer cancel()
-
-	if _, err := f.client.ListBuckets(ctx, &s3.ListBucketsInput{}); err != nil {
-		return fmt.Errorf("connectivity check failed: %w", err)
-	}
-
-	return nil
-}
-
-// UpdateTLSConfig updates the TLS configuration and recreates the S3 client.
-// This allows updating TLS certificates when secrets change without recreating the fetcher.
-func (f *S3Fetcher) UpdateTLSConfig(tlsConfig *tls.Config) error {
-	f.tlsConfig = tlsConfig
-	client, err := f.createS3Client()
-	if err != nil {
-		return fmt.Errorf("failed to recreate S3 client with new TLS config: %w", err)
-	}
-	f.client = client
-	return nil
-}
-
-// UpdateCredentials updates the S3 credentials and recreates the S3 client.
-// This allows updating credentials when secrets change without recreating the fetcher.
-func (f *S3Fetcher) UpdateCredentials(accessKeyID, secretAccessKey string) error {
-	f.accessKeyID = accessKeyID
-	f.secretAccessKey = secretAccessKey
-	client, err := f.createS3Client()
-	if err != nil {
-		return fmt.Errorf("failed to recreate S3 client with new credentials: %w", err)
-	}
-	f.client = client
-	return nil
-}
-
-// createS3Client creates an S3 client with the configured options.
-func (f *S3Fetcher) createS3Client() (*s3.Client, error) {
-	// Create HTTP client with TLS configuration
-	httpClient := &http.Client{
-		Timeout: f.timeout,
-	}
-
-	if f.tlsConfig != nil {
-		httpClient.Transport = &http.Transport{
-			TLSClientConfig: f.tlsConfig,
-		}
-	}
-
-	// Build AWS config options
-	var awsOpts []func(*config.LoadOptions) error
-
-	// Use static credentials if provided, otherwise use anonymous credentials
-	if f.accessKeyID != "" && f.secretAccessKey != "" {
-		awsOpts = append(awsOpts, config.WithCredentialsProvider(
-			credentials.NewStaticCredentialsProvider(f.accessKeyID, f.secretAccessKey, ""),
-		))
-	} else {
-		// Use anonymous credentials for public access
-		awsOpts = append(awsOpts, config.WithCredentialsProvider(
-			aws.AnonymousCredentials{},
-		))
-	}
-
-	awsOpts = append(awsOpts, config.WithHTTPClient(httpClient))
-	// Set a default region; required by the AWS SDK but unused by S3-compatible storage like SeaweedFS/MinIO.
-	awsOpts = append(awsOpts, config.WithRegion("us-east-1"))
-
-	cfg, err := config.LoadDefaultConfig(context.Background(), awsOpts...)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load AWS config: %w", err)
-	}
-
-	// Create S3 client with custom endpoint
-	client := s3.NewFromConfig(cfg, func(o *s3.Options) {
-		o.BaseEndpoint = aws.String(f.endpointURL)
-		o.UsePathStyle = true // Required for most S3-compatible storage
-	})
-
-	return client, nil
-}
-
-// TLSConfigFromSecret creates a TLS configuration from secret data.
-// caCert is the CA certificate PEM data for server verification.
-// clientCert and clientKey are the client certificate and key PEM data for mutual TLS.
-func TLSConfigFromSecret(
-	caCert, clientCert, clientKey []byte,
-	insecureSkipVerify bool,
-) (*tls.Config, error) {
-	tlsConfig := &tls.Config{
-		MinVersion:         tls.VersionTLS12,
-		InsecureSkipVerify: insecureSkipVerify, //nolint:gosec // Configurable for testing environments
-	}
-
-	// Load CA certificate if provided
-	if len(caCert) > 0 {
-		caCertPool := x509.NewCertPool()
-		if !caCertPool.AppendCertsFromPEM(caCert) {
-			return nil, fmt.Errorf("failed to parse CA certificate")
-		}
-		tlsConfig.RootCAs = caCertPool
-	}
-
-	// Load client certificate and key if provided (for mutual TLS)
-	if len(clientCert) > 0 && len(clientKey) > 0 {
-		cert, err := tls.X509KeyPair(clientCert, clientKey)
-		if err != nil {
-			return nil, fmt.Errorf("failed to load client certificate: %w", err)
-		}
-		tlsConfig.Certificates = []tls.Certificate{cert}
-	}
-
-	return tlsConfig, nil
+// computeChecksum returns the lowercase hex-encoded SHA-256 of data.
+func computeChecksum(data []byte) string {
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:])
 }

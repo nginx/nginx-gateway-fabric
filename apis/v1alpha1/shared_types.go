@@ -1,5 +1,11 @@
 package v1alpha1
 
+// LocalObjectReference specifies a local Kubernetes object.
+type LocalObjectReference struct {
+	// Name is the referenced object.
+	Name string `json:"name"`
+}
+
 // Duration is a string value representing a duration in time.
 // Duration can be specified in milliseconds (ms), seconds (s), minutes (m), hours (h).
 // A value without a suffix is seconds.

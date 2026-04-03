@@ -2,6 +2,7 @@
 package statefakes
 
 import (
+	"context"
 	"sync"
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state"
@@ -33,9 +34,10 @@ type FakeChangeProcessor struct {
 	getLatestGraphReturnsOnCall map[int]struct {
 		result1 *graph.Graph
 	}
-	ProcessStub        func() *graph.Graph
+	ProcessStub        func(context.Context) *graph.Graph
 	processMutex       sync.RWMutex
 	processArgsForCall []struct {
+		arg1 context.Context
 	}
 	processReturns struct {
 		result1 *graph.Graph
@@ -165,17 +167,18 @@ func (fake *FakeChangeProcessor) GetLatestGraphReturnsOnCall(i int, result1 *gra
 	}{result1}
 }
 
-func (fake *FakeChangeProcessor) Process() *graph.Graph {
+func (fake *FakeChangeProcessor) Process(arg1 context.Context) *graph.Graph {
 	fake.processMutex.Lock()
 	ret, specificReturn := fake.processReturnsOnCall[len(fake.processArgsForCall)]
 	fake.processArgsForCall = append(fake.processArgsForCall, struct {
-	}{})
+		arg1 context.Context
+	}{arg1})
 	stub := fake.ProcessStub
 	fakeReturns := fake.processReturns
-	fake.recordInvocation("Process", []interface{}{})
+	fake.recordInvocation("Process", []interface{}{arg1})
 	fake.processMutex.Unlock()
 	if stub != nil {
-		return stub()
+		return stub(arg1)
 	}
 	if specificReturn {
 		return ret.result1
@@ -189,10 +192,17 @@ func (fake *FakeChangeProcessor) ProcessCallCount() int {
 	return len(fake.processArgsForCall)
 }
 
-func (fake *FakeChangeProcessor) ProcessCalls(stub func() *graph.Graph) {
+func (fake *FakeChangeProcessor) ProcessCalls(stub func(context.Context) *graph.Graph) {
 	fake.processMutex.Lock()
 	defer fake.processMutex.Unlock()
 	fake.ProcessStub = stub
+}
+
+func (fake *FakeChangeProcessor) ProcessArgsForCall(i int) context.Context {
+	fake.processMutex.RLock()
+	defer fake.processMutex.RUnlock()
+	argsForCall := fake.processArgsForCall[i]
+	return argsForCall.arg1
 }
 
 func (fake *FakeChangeProcessor) ProcessReturns(result1 *graph.Graph) {

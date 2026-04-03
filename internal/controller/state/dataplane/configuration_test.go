@@ -9250,9 +9250,7 @@ func TestBuildWAF(t *testing.T) {
 			graph: &graph.Graph{
 				ReferencedWAFBundles: map[graph.WAFBundleKey]*graph.WAFBundleData{
 					"bundle1.tgz": {
-						Data:       []byte("bundle data"),
-						Location:   "bucket/path/bundle1.tgz",
-						BundleType: graph.WAFBundleTypePolicy,
+						Data: []byte("bundle data"),
 					},
 				},
 			},
@@ -9273,9 +9271,7 @@ func TestBuildWAF(t *testing.T) {
 			graph: &graph.Graph{
 				ReferencedWAFBundles: map[graph.WAFBundleKey]*graph.WAFBundleData{
 					"bundle1.tgz": {
-						Data:       []byte("first bundle"),
-						Location:   "bucket/path/bundle1.tgz",
-						BundleType: graph.WAFBundleTypePolicy,
+						Data: []byte("first bundle"),
 					},
 					"bundle2.tgz": nil,
 				},
