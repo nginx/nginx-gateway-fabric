@@ -17,7 +17,7 @@ spec:
         image: hashicorp/http-echo:latest
         args:
         - "-listen=:8080"
-        - "-text=Welcome to Coffee Shop!\nCustomer: John Doe\nCredit Card: 4111-1111-1111-1111\nSSN: 123-45-6789\n"
+        - "-text=Customer List:\n\nName: John Doe\nCredit Card: 4111-1111-1111-1111\nSSN: 123-45-6789\n"
         ports:
         - containerPort: 8080
 ---
