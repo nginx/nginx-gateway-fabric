@@ -2310,3 +2310,95 @@ func TestOwnerReferencesAreSet(t *testing.T) {
 		g.Expect(*ownerRefs[0].BlockOwnerDeletion).To(BeTrue())
 	}
 }
+
+func TestBuildNginxResourceObjects_ClusterIPWithExternalIPs(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		nProxyCfg                     *graph.EffectiveNginxProxy
+		name                          string
+		expectedExternalTrafficPolicy corev1.ServiceExternalTrafficPolicy
+		gatewayAddresses              []gatewayv1.GatewaySpecAddress
+		expectedExternalIPs           []string
+	}{
+		{
+			name: "ClusterIP service with an IP-type Gateway address sets externalTrafficPolicy to Local",
+			gatewayAddresses: []gatewayv1.GatewaySpecAddress{
+				{
+					Type:  helpers.GetPointer(gatewayv1.IPAddressType),
+					Value: "10.0.0.1",
+				},
+			},
+			nProxyCfg: &graph.EffectiveNginxProxy{
+				Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+					Service: &ngfAPIv1alpha2.ServiceSpec{
+						ServiceType:           helpers.GetPointer(ngfAPIv1alpha2.ServiceTypeClusterIP),
+						ExternalTrafficPolicy: helpers.GetPointer(ngfAPIv1alpha2.ExternalTrafficPolicyLocal),
+					},
+				},
+			},
+			expectedExternalIPs:           []string{"10.0.0.1"},
+			expectedExternalTrafficPolicy: corev1.ServiceExternalTrafficPolicyLocal,
+		},
+		{
+			name: "ClusterIP service with no Gateway addresses leaves externalTrafficPolicy unset",
+			nProxyCfg: &graph.EffectiveNginxProxy{
+				Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+					Service: &ngfAPIv1alpha2.ServiceSpec{
+						ServiceType: helpers.GetPointer(ngfAPIv1alpha2.ServiceTypeClusterIP),
+					},
+				},
+			},
+			expectedExternalIPs:           nil,
+			expectedExternalTrafficPolicy: "",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			agentTLSSecret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      agentTLSTestSecretName,
+					Namespace: ngfNamespace,
+				},
+				Data: map[string][]byte{secrets.TLSCertKey: []byte("tls")},
+			}
+			fakeClient := createFakeClientWithScheme(agentTLSSecret)
+
+			provisioner := &NginxProvisioner{
+				cfg: Config{
+					GatewayPodConfig: &config.GatewayPodConfig{
+						Namespace: ngfNamespace,
+						Version:   "1.0.0",
+					},
+					AgentTLSSecretName: agentTLSTestSecretName,
+					AgentLabels:        make(map[string]string),
+				},
+				baseLabelSelector: metav1.LabelSelector{
+					MatchLabels: map[string]string{"app": "nginx"},
+				},
+				k8sClient: fakeClient,
+			}
+
+			gateway := &gatewayv1.Gateway{
+				ObjectMeta: metav1.ObjectMeta{Name: "gw", Namespace: "default"},
+				Spec: gatewayv1.GatewaySpec{
+					Listeners: []gatewayv1.Listener{{Port: 80}},
+					Addresses: test.gatewayAddresses,
+				},
+			}
+
+			objects, err := provisioner.buildNginxResourceObjects("gw-nginx", gateway, test.nProxyCfg)
+			g.Expect(err).ToNot(HaveOccurred())
+
+			svc, ok := objects[4].(*corev1.Service)
+			g.Expect(ok).To(BeTrue())
+			g.Expect(svc.Spec.Type).To(Equal(corev1.ServiceTypeClusterIP))
+			g.Expect(svc.Spec.ExternalIPs).To(Equal(test.expectedExternalIPs))
+			g.Expect(svc.Spec.ExternalTrafficPolicy).To(Equal(test.expectedExternalTrafficPolicy))
+		})
+	}
+}

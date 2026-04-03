@@ -655,7 +655,14 @@ func buildNginxService(
 	}
 
 	var servicePolicy corev1.ServiceExternalTrafficPolicy
-	if serviceType != corev1.ServiceTypeClusterIP {
+	hasExternalIPs := false
+	for _, addr := range addresses {
+		if addr.Type != nil && *addr.Type == gatewayv1.IPAddressType {
+			hasExternalIPs = true
+			break
+		}
+	}
+	if serviceType != corev1.ServiceTypeClusterIP || hasExternalIPs {
 		servicePolicy = defaultServicePolicy
 		if serviceCfg.ExternalTrafficPolicy != nil {
 			servicePolicy = corev1.ServiceExternalTrafficPolicy(*serviceCfg.ExternalTrafficPolicy)
