@@ -66,6 +66,7 @@ func TestTransformSecret(t *testing.T) {
 			secrets.CAKey:              []byte("ca"),
 			secrets.TLSCertKey:         []byte("cert"),
 			secrets.TLSKeyKey:          []byte("key"),
+			secrets.N1CDataplaneKey:    []byte("dataplane.key"),
 			corev1.DockerConfigJsonKey: []byte("docker"),
 			corev1.DockerConfigKey:     []byte("docker2"),
 			secrets.ClientSecretKey:    []byte("client-secret"),
@@ -87,6 +88,7 @@ func TestTransformSecret(t *testing.T) {
 	g.Expect(resSecret.Data).To(HaveKey(secrets.CAKey))
 	g.Expect(resSecret.Data).To(HaveKey(secrets.TLSCertKey))
 	g.Expect(resSecret.Data).To(HaveKey(secrets.TLSKeyKey))
+	g.Expect(resSecret.Data).To(HaveKey(secrets.N1CDataplaneKey))
 	g.Expect(resSecret.Data).To(HaveKey(corev1.DockerConfigJsonKey))
 	g.Expect(resSecret.Data).To(HaveKey(corev1.DockerConfigKey))
 	g.Expect(resSecret.Data).To(HaveKey(secrets.ClientSecretKey))
