@@ -26,7 +26,7 @@ repos:
         exclude: (^examples/|^docs/|.*_test.go$)
 
   - repo: https://github.com/gitleaks/gitleaks
-    rev: v8.30.1
+    rev: v8.30.0
     hooks:
       - id: gitleaks
 
@@ -64,7 +64,7 @@ repos:
       - id: yamllint
 
   - repo: https://github.com/thlorenz/doctoc
-    rev: v2.3.0
+    rev: v2.4.0
     hooks:
       - id: doctoc
         args: [--update-only, --title, "## Table of Contents"]
@@ -79,7 +79,7 @@ repos:
           - --template-files=README.md.gotmpl
 
   - repo: https://github.com/scop/pre-commit-shfmt
-    rev: v3.12.0-2
+    rev: v3.13.0-1
     hooks:
       - id: shfmt-src
         args: [-w, -s, -i, "4"]
