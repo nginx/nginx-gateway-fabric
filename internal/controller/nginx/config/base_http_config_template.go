@@ -86,8 +86,6 @@ include {{ $i.Name }};
 server_tokens {{ .ServerTokens }};
 
 {{- if .Compression }}
-
-# Gzip compression
 gzip on;
 {{- if .Compression.Level }}
 gzip_comp_level {{ .Compression.Level }};
@@ -98,7 +96,12 @@ gzip_min_length {{ .Compression.MinLength }};
 {{- if .Compression.BufferNumber }}
 gzip_buffers {{ .Compression.BufferNumber }} {{ .Compression.BufferSize }};
 {{- end }}
-gzip_types{{ range .Compression.Types }} {{ . }}{{ end }};
+{{- if .Compression.HTTPVersion }}
+gzip_http_version {{ .Compression.HTTPVersion }};
+{{- end }}
+{{- if .Compression.MimeTypes }}
+gzip_types{{ range .Compression.MimeTypes }} {{ . }}{{ end }};
+{{- end }}
 {{- if .Compression.Proxied }}
 gzip_proxied{{ range .Compression.Proxied }} {{ . }}{{ end }};
 {{- end }}

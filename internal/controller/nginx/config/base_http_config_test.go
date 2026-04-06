@@ -839,11 +839,11 @@ func TestExecuteBaseHttp_Compression(t *testing.T) {
 			expAbsent: []string{"gzip on;"},
 		},
 		{
-			name: "compression enabled with defaults",
+			name: "compression enabled with mime types only",
 			conf: dataplane.Configuration{
 				BaseHTTPConfig: dataplane.BaseHTTPConfig{
 					Compression: &dataplane.CompressionSettings{
-						Types: []string{"text/css", "application/json"},
+						MimeTypes: []string{"text/css", "application/json"},
 					},
 				},
 			},
@@ -854,6 +854,7 @@ func TestExecuteBaseHttp_Compression(t *testing.T) {
 			expAbsent: []string{
 				"gzip_vary", "gzip_proxied", "gzip_comp_level",
 				"gzip_min_length", "gzip_disable", "gzip_buffers",
+				"gzip_http_version",
 			},
 		},
 		{
@@ -865,10 +866,11 @@ func TestExecuteBaseHttp_Compression(t *testing.T) {
 						MinLength:    256,
 						BufferNumber: 32,
 						BufferSize:   "4k",
-						Types:        []string{"text/css", "application/json", "application/javascript"},
+						MimeTypes:    []string{"text/css", "application/json", "application/javascript"},
 						Proxied:      []string{"any"},
 						Disable:      []string{"msie6"},
 						Vary:         true,
+						HTTPVersion:  "1.0",
 					},
 				},
 			},
@@ -877,6 +879,7 @@ func TestExecuteBaseHttp_Compression(t *testing.T) {
 				"gzip_comp_level 6;",
 				"gzip_min_length 256;",
 				"gzip_buffers 32 4k;",
+				"gzip_http_version 1.0;",
 				"gzip_types text/css application/json application/javascript;",
 				"gzip_proxied any;",
 				`gzip_disable "msie6";`,
@@ -888,9 +891,9 @@ func TestExecuteBaseHttp_Compression(t *testing.T) {
 			conf: dataplane.Configuration{
 				BaseHTTPConfig: dataplane.BaseHTTPConfig{
 					Compression: &dataplane.CompressionSettings{
-						Level:   3,
-						Types:   []string{"text/plain"},
-						Proxied: []string{"no-cache", "no-store", "expired"},
+						Level:     3,
+						MimeTypes: []string{"text/plain"},
+						Proxied:   []string{"no-cache", "no-store", "expired"},
 					},
 				},
 			},

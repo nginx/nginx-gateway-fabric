@@ -1851,7 +1851,7 @@ func buildCompressionConfig(compression *ngfAPIv1alpha2.Compression) *Compressio
 	}
 
 	settings := &CompressionSettings{
-		Types: compression.Types,
+		MimeTypes: compression.MimeTypes,
 	}
 
 	if compression.Level != nil {
@@ -1870,6 +1870,10 @@ func buildCompressionConfig(compression *ngfAPIv1alpha2.Compression) *Compressio
 	if compression.Gzip != nil {
 		if compression.Gzip.Vary != nil {
 			settings.Vary = *compression.Gzip.Vary
+		}
+
+		if compression.Gzip.HTTPVersion != nil {
+			settings.HTTPVersion = string(*compression.Gzip.HTTPVersion)
 		}
 
 		if len(compression.Gzip.Proxied) > 0 {

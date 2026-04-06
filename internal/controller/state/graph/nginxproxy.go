@@ -127,8 +127,8 @@ func unsetEmptySlices(local, global *EffectiveNginxProxy) {
 }
 
 func unsetEmptyCompressionSlices(compression *ngfAPIv1alpha2.Compression, global *EffectiveNginxProxy) {
-	if compression.Types != nil && len(compression.Types) == 0 {
-		global.Compression.Types = []string{}
+	if compression.MimeTypes != nil && len(compression.MimeTypes) == 0 {
+		global.Compression.MimeTypes = []string{}
 	}
 
 	if compression.Gzip != nil {
@@ -597,11 +597,11 @@ func validateCompression(
 	var allErrs field.ErrorList
 	compressionPath := field.NewPath("spec").Child("compression")
 
-	for i, t := range npCfg.Spec.Compression.Types {
+	for i, t := range npCfg.Spec.Compression.MimeTypes {
 		if err := validator.ValidateEscapedStringNoVarExpansion(t); err != nil {
 			allErrs = append(
 				allErrs,
-				field.Invalid(compressionPath.Child("types").Index(i), t, err.Error()),
+				field.Invalid(compressionPath.Child("mimeTypes").Index(i), t, err.Error()),
 			)
 		}
 	}

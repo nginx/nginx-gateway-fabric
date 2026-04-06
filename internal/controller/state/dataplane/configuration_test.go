@@ -8121,20 +8121,25 @@ func TestBuildCompressionConfig(t *testing.T) {
 			expected:    nil,
 		},
 		{
-			name: "compression with defaults",
+			name:        "empty compression struct",
+			compression: &ngfAPIv1alpha2.Compression{},
+			expected:    &CompressionSettings{},
+		},
+		{
+			name: "compression with mime types only",
 			compression: &ngfAPIv1alpha2.Compression{
-				Type:  ngfAPIv1alpha2.GzipCompressionType,
-				Types: []string{"text/css", "application/json"},
+				Type:      ngfAPIv1alpha2.GzipCompressionType,
+				MimeTypes: []string{"text/css", "application/json"},
 			},
 			expected: &CompressionSettings{
-				Types: []string{"text/css", "application/json"},
+				MimeTypes: []string{"text/css", "application/json"},
 			},
 		},
 		{
 			name: "compression with all options",
 			compression: &ngfAPIv1alpha2.Compression{
 				Type:      ngfAPIv1alpha2.GzipCompressionType,
-				Types:     []string{"text/css"},
+				MimeTypes: []string{"text/css"},
 				Level:     helpers.GetPointer[int32](6),
 				MinLength: helpers.GetPointer[int32](256),
 				Buffers: &ngfAPIv1alpha2.CompressionBuffers{
@@ -8142,9 +8147,10 @@ func TestBuildCompressionConfig(t *testing.T) {
 					Size:   "4k",
 				},
 				Gzip: &ngfAPIv1alpha2.GzipSettings{
-					Proxied: []ngfAPIv1alpha2.GzipProxiedType{ngfAPIv1alpha2.GzipProxiedAny},
-					Vary:    helpers.GetPointer(true),
-					Disable: []string{"msie6"},
+					Proxied:     []ngfAPIv1alpha2.GzipProxiedType{ngfAPIv1alpha2.GzipProxiedAny},
+					Vary:        helpers.GetPointer(true),
+					Disable:     []string{"msie6"},
+					HTTPVersion: helpers.GetPointer(ngfAPIv1alpha2.GzipHTTPVersion10),
 				},
 			},
 			expected: &CompressionSettings{
@@ -8152,10 +8158,11 @@ func TestBuildCompressionConfig(t *testing.T) {
 				MinLength:    256,
 				BufferNumber: 32,
 				BufferSize:   "4k",
-				Types:        []string{"text/css"},
+				MimeTypes:    []string{"text/css"},
 				Vary:         true,
 				Proxied:      []string{"any"},
 				Disable:      []string{"msie6"},
+				HTTPVersion:  "1.0",
 			},
 		},
 	}

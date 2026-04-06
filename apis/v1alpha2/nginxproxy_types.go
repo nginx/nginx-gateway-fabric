@@ -21,10 +21,12 @@ import (
 // If referenced from a Gateway, the settings apply to that Gateway alone. If both a Gateway and its GatewayClass
 // reference an NginxProxy, the settings are merged. Settings specified on the Gateway NginxProxy override those
 // set on the GatewayClass NginxProxy.
-type NginxProxy struct {
-	Spec              NginxProxySpec `json:"spec"`
+type NginxProxy struct { //nolint:govet // standard field alignment, don't change it
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
+
+	// Spec defines the desired state of the NginxProxy.
+	Spec NginxProxySpec `json:"spec"`
 }
 
 // +kubebuilder:object:root=true
@@ -915,10 +917,6 @@ type HostPort struct {
 }
 
 // Compression defines the configuration for HTTP response compression.
-// +kubebuilder:validation:XValidation:message="types must be specified when compression is set",rule="has(self.types) && size(self.types) > 0"
-// +kubebuilder:validation:XValidation:message="gzip must be set when type is gzip",rule="self.type == 'gzip' ? has(self.gzip) : true"
-//
-//nolint:lll
 type Compression struct {
 	// Gzip defines gzip module-specific compression settings.
 	//
@@ -950,18 +948,18 @@ type Compression struct {
 	// Type specifies the compression algorithm to use.
 	// Currently only gzip is supported.
 	//
-	// +kubebuilder:validation:Enum=gzip
 	Type CompressionType `json:"type"`
-	// Types specifies the MIME types to compress in addition to "text/html".
+	// MimeTypes specifies the MIME types to compress in addition to "text/html".
 	// "text/html" is always compressed when compression is enabled.
 	// Wildcards like "text/*" are not supported by NGINX.
 	// Example: ["application/json", "text/css", "application/javascript"]
 	//
 	// NGINX directive: https://nginx.org/en/docs/http/ngx_http_gzip_module.html#gzip_types
 	//
+	// +optional
 	// +kubebuilder:validation:MinItems=1
 	// +kubebuilder:validation:MaxItems=32
-	Types []string `json:"types"`
+	MimeTypes []string `json:"mimeTypes,omitempty"`
 }
 
 // CompressionBuffers defines the number and size of buffers used for compression.
@@ -994,6 +992,13 @@ type GzipSettings struct {
 	//
 	// +optional
 	Vary *bool `json:"vary,omitempty"`
+	// HTTPVersion sets the minimum HTTP version of a request required to compress a response.
+	//
+	// NGINX directive: https://nginx.org/en/docs/http/ngx_http_gzip_module.html#gzip_http_version
+	//
+	// +optional
+	// +kubebuilder:validation:Enum="1.0";"1.1"
+	HTTPVersion *GzipHTTPVersion `json:"httpVersion,omitempty"`
 	// Disable specifies regular expressions to match User-Agent headers of requests
 	// that should not be gzip-compressed.
 	//
@@ -1042,4 +1047,15 @@ const (
 	GzipProxiedAuth GzipProxiedType = "auth"
 	// GzipProxiedAny enables compression for all proxied requests.
 	GzipProxiedAny GzipProxiedType = "any"
+)
+
+// GzipHTTPVersion defines the minimum HTTP version required for gzip compression.
+// +kubebuilder:validation:Enum="1.0";"1.1"
+type GzipHTTPVersion string
+
+const (
+	// GzipHTTPVersion10 sets the minimum HTTP version to 1.0.
+	GzipHTTPVersion10 GzipHTTPVersion = "1.0"
+	// GzipHTTPVersion11 sets the minimum HTTP version to 1.1.
+	GzipHTTPVersion11 GzipHTTPVersion = "1.1"
 )
