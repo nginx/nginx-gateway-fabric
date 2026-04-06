@@ -815,7 +815,7 @@ type ServiceSpec struct {
 
 	// ExternalTrafficPolicy describes how nodes distribute service traffic they
 	// receive on one of the Service's "externally-facing" addresses (NodePorts, ExternalIPs,
-	// and LoadBalancer IPs.
+	// and LoadBalancer IPs).
 	//
 	// +optional
 	// +kubebuilder:default:=Local
@@ -872,7 +872,7 @@ const (
 
 // ExternalTrafficPolicy describes how nodes distribute service traffic they
 // receive on one of the Service's "externally-facing" addresses (NodePorts, ExternalIPs,
-// and LoadBalancer IPs. Ignored for ClusterIP services.
+// and LoadBalancer IPs).
 // +kubebuilder:validation:Enum=Cluster;Local
 type ExternalTrafficPolicy corev1.ServiceExternalTrafficPolicy
 
@@ -924,35 +924,29 @@ type Compression struct {
 	//
 	// +optional
 	Gzip *GzipSettings `json:"gzip,omitempty"`
+	// Buffers sets the number and size of buffers used to compress a response.
+	//
+	// NGINX directive: https://nginx.org/en/docs/http/ngx_http_gzip_module.html#gzip_buffers
+	//
+	// +optional
+	Buffers *CompressionBuffers `json:"buffers,omitempty"`
 	// Level sets the compression level.
 	// Higher values provide better compression but use more CPU.
 	//
 	// NGINX directive: https://nginx.org/en/docs/http/ngx_http_gzip_module.html#gzip_comp_level
-	// Default is 1.
 	//
 	// +optional
 	// +kubebuilder:validation:Minimum=1
 	// +kubebuilder:validation:Maximum=9
-	// +kubebuilder:default:=1
 	Level *int32 `json:"level,omitempty"`
 	// MinLength sets the minimum length of a response that will be compressed.
 	// The length is determined from the "Content-Length" response header field.
 	//
 	// NGINX directive: https://nginx.org/en/docs/http/ngx_http_gzip_module.html#gzip_min_length
-	// Default is 20.
 	//
 	// +optional
 	// +kubebuilder:validation:Minimum=0
-	// +kubebuilder:default:=20
 	MinLength *int32 `json:"minLength,omitempty"`
-	// Vary enables or disables inserting the "Vary: Accept-Encoding" response header
-	// when compression is active.
-	//
-	// NGINX directive: https://nginx.org/en/docs/http/ngx_http_gzip_module.html#gzip_vary
-	// Default is false.
-	//
-	// +optional
-	Vary *bool `json:"vary,omitempty"`
 	// Type specifies the compression algorithm to use.
 	// Currently only gzip is supported.
 	//
@@ -970,6 +964,18 @@ type Compression struct {
 	Types []string `json:"types"`
 }
 
+// CompressionBuffers defines the number and size of buffers used for compression.
+type CompressionBuffers struct {
+	// Size sets the size of each buffer.
+	Size v1alpha1.Size `json:"size"`
+
+	// Number sets the number of buffers.
+	//
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=256
+	Number int32 `json:"number"`
+}
+
 // CompressionType defines the type of compression algorithm.
 // +kubebuilder:validation:Enum=gzip
 type CompressionType string
@@ -981,6 +987,22 @@ const (
 
 // GzipSettings defines gzip module-specific compression settings.
 type GzipSettings struct {
+	// Vary enables or disables inserting the "Vary: Accept-Encoding" response header
+	// when gzip compression is active.
+	//
+	// NGINX directive: https://nginx.org/en/docs/http/ngx_http_gzip_module.html#gzip_vary
+	//
+	// +optional
+	Vary *bool `json:"vary,omitempty"`
+	// Disable specifies regular expressions to match User-Agent headers of requests
+	// that should not be gzip-compressed.
+	//
+	// NGINX directive: https://nginx.org/en/docs/http/ngx_http_gzip_module.html#gzip_disable
+	//
+	// +optional
+	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=16
+	Disable []string `json:"disable,omitempty"`
 	// Proxied enables or disables gzip compression for proxied requests depending on the request and response.
 	// Accepted values are: "off", "expired", "no-cache", "no-store", "private", "no_last_modified",
 	// "no_etag", "auth", "any".

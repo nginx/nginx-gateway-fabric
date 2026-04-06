@@ -1851,7 +1851,6 @@ func buildCompressionConfig(compression *ngfAPIv1alpha2.Compression) *Compressio
 	}
 
 	settings := &CompressionSettings{
-		Level: 1,
 		Types: compression.Types,
 	}
 
@@ -1863,14 +1862,25 @@ func buildCompressionConfig(compression *ngfAPIv1alpha2.Compression) *Compressio
 		settings.MinLength = *compression.MinLength
 	}
 
-	if compression.Vary != nil {
-		settings.Vary = *compression.Vary
+	if compression.Buffers != nil {
+		settings.BufferNumber = compression.Buffers.Number
+		settings.BufferSize = string(compression.Buffers.Size)
 	}
 
-	if compression.Gzip != nil && len(compression.Gzip.Proxied) > 0 {
-		settings.Proxied = make([]string, 0, len(compression.Gzip.Proxied))
-		for _, p := range compression.Gzip.Proxied {
-			settings.Proxied = append(settings.Proxied, string(p))
+	if compression.Gzip != nil {
+		if compression.Gzip.Vary != nil {
+			settings.Vary = *compression.Gzip.Vary
+		}
+
+		if len(compression.Gzip.Proxied) > 0 {
+			settings.Proxied = make([]string, 0, len(compression.Gzip.Proxied))
+			for _, p := range compression.Gzip.Proxied {
+				settings.Proxied = append(settings.Proxied, string(p))
+			}
+		}
+
+		if len(compression.Gzip.Disable) > 0 {
+			settings.Disable = compression.Gzip.Disable
 		}
 	}
 

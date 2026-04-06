@@ -654,8 +654,15 @@ func buildNginxService(
 		serviceType = corev1.ServiceType(*serviceCfg.ServiceType)
 	}
 
+	var externalIPs []string
+	for _, addr := range addresses {
+		if addr.Type != nil && *addr.Type == gatewayv1.IPAddressType {
+			externalIPs = append(externalIPs, addr.Value)
+		}
+	}
+
 	var servicePolicy corev1.ServiceExternalTrafficPolicy
-	if serviceType != corev1.ServiceTypeClusterIP {
+	if serviceType != corev1.ServiceTypeClusterIP || len(externalIPs) > 0 {
 		servicePolicy = defaultServicePolicy
 		if serviceCfg.ExternalTrafficPolicy != nil {
 			servicePolicy = corev1.ServiceExternalTrafficPolicy(*serviceCfg.ExternalTrafficPolicy)
@@ -670,12 +677,11 @@ func buildNginxService(
 			Type:                  serviceType,
 			Ports:                 servicePorts,
 			ExternalTrafficPolicy: servicePolicy,
+			ExternalIPs:           externalIPs,
 			Selector:              selectorLabels,
 			IPFamilyPolicy:        helpers.GetPointer(corev1.IPFamilyPolicyPreferDualStack),
 		},
 	}
-
-	setSvcExternalIPs(svc, addresses)
 
 	setIPFamily(nProxyCfg, svc)
 
@@ -740,14 +746,6 @@ func buildServicePorts(
 	})
 
 	return servicePorts
-}
-
-func setSvcExternalIPs(svc *corev1.Service, addresses []gatewayv1.GatewaySpecAddress) {
-	for _, address := range addresses {
-		if address.Type != nil && *address.Type == gatewayv1.IPAddressType {
-			svc.Spec.ExternalIPs = append(svc.Spec.ExternalIPs, address.Value)
-		}
-	}
 }
 
 func setIPFamily(nProxyCfg *graph.EffectiveNginxProxy, svc *corev1.Service) {

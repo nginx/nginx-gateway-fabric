@@ -138,6 +138,9 @@ func unsetEmptyCompressionSlices(compression *ngfAPIv1alpha2.Compression, global
 		if compression.Gzip.Proxied != nil && len(compression.Gzip.Proxied) == 0 {
 			global.Compression.Gzip.Proxied = []ngfAPIv1alpha2.GzipProxiedType{}
 		}
+		if compression.Gzip.Disable != nil && len(compression.Gzip.Disable) == 0 {
+			global.Compression.Gzip.Disable = []string{}
+		}
 	}
 }
 
@@ -600,6 +603,18 @@ func validateCompression(
 				allErrs,
 				field.Invalid(compressionPath.Child("types").Index(i), t, err.Error()),
 			)
+		}
+	}
+
+	if npCfg.Spec.Compression.Gzip != nil {
+		gzipPath := compressionPath.Child("gzip")
+		for i, d := range npCfg.Spec.Compression.Gzip.Disable {
+			if err := validator.ValidateEscapedStringNoVarExpansion(d); err != nil {
+				allErrs = append(
+					allErrs,
+					field.Invalid(gzipPath.Child("disable").Index(i), d, err.Error()),
+				)
+			}
 		}
 	}
 

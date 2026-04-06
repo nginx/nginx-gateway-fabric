@@ -627,14 +627,20 @@ type DNSResolverConfig struct {
 
 // CompressionSettings defines the compression configuration for NGINX.
 type CompressionSettings struct {
+	// BufferSize is the size of each compression buffer.
+	BufferSize string
 	// Types specifies the MIME types to compress.
 	Types []string
 	// Proxied specifies the proxied request conditions for compression.
 	Proxied []string
+	// Disable specifies User-Agent regex patterns to disable compression.
+	Disable []string
 	// Level is the compression level (1-9).
 	Level int32
 	// MinLength is the minimum response length to compress.
 	MinLength int32
+	// BufferNumber is the number of compression buffers.
+	BufferNumber int32
 	// Vary enables the "Vary: Accept-Encoding" response header.
 	Vary bool
 }

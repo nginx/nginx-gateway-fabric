@@ -843,29 +843,32 @@ func TestExecuteBaseHttp_Compression(t *testing.T) {
 			conf: dataplane.Configuration{
 				BaseHTTPConfig: dataplane.BaseHTTPConfig{
 					Compression: &dataplane.CompressionSettings{
-						Level: 1,
 						Types: []string{"text/css", "application/json"},
 					},
 				},
 			},
 			expSubStrings: []string{
 				"gzip on;",
-				"gzip_comp_level 1;",
-				"gzip_min_length 0;",
 				"gzip_types text/css application/json;",
 			},
-			expAbsent: []string{"gzip_vary", "gzip_proxied"},
+			expAbsent: []string{
+				"gzip_vary", "gzip_proxied", "gzip_comp_level",
+				"gzip_min_length", "gzip_disable", "gzip_buffers",
+			},
 		},
 		{
 			name: "compression enabled with all options",
 			conf: dataplane.Configuration{
 				BaseHTTPConfig: dataplane.BaseHTTPConfig{
 					Compression: &dataplane.CompressionSettings{
-						Level:     6,
-						MinLength: 256,
-						Types:     []string{"text/css", "application/json", "application/javascript"},
-						Proxied:   []string{"any"},
-						Vary:      true,
+						Level:        6,
+						MinLength:    256,
+						BufferNumber: 32,
+						BufferSize:   "4k",
+						Types:        []string{"text/css", "application/json", "application/javascript"},
+						Proxied:      []string{"any"},
+						Disable:      []string{"msie6"},
+						Vary:         true,
 					},
 				},
 			},
@@ -873,8 +876,10 @@ func TestExecuteBaseHttp_Compression(t *testing.T) {
 				"gzip on;",
 				"gzip_comp_level 6;",
 				"gzip_min_length 256;",
+				"gzip_buffers 32 4k;",
 				"gzip_types text/css application/json application/javascript;",
 				"gzip_proxied any;",
+				`gzip_disable "msie6";`,
 				"gzip_vary on;",
 			},
 		},
