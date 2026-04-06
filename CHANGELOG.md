@@ -4,6 +4,60 @@ This document includes a curated changelog for each release. We also publish a c
 a [GitHub release](https://github.com/nginx/nginx-gateway-fabric/releases), which, by contrast, is auto-generated
 and includes links to all PRs that went into the release.
 
+## Release 2.5.1
+
+* Increase http hash bucket sizes by @nginx-bot in https://github.com/nginx/nginx-gateway-fabric/pull/5036
+* Fix broadcaster loop by @nginx-bot in https://github.com/nginx/nginx-gateway-fabric/pull/5038
+* Move gateway define rate-limit-policy directives from HTTP to Server … by @salonichf5 in https://github.com/nginx/nginx-gateway-fabric/pull/5039
+* fix: allow TCPRoute and UDPRoute on same gateway port (#5016) by @sjberman in https://github.com/nginx/nginx-gateway-fabric/pull/5053
+* Add fix for effective NginxProxy when different Kubernetes types are specified by @nginx-bot in https://github.com/nginx/nginx-gateway-fabric/pull/5062
+* Update validation check for IPFamily between BackendRefs and NginxProxy by @nginx-bot in https://github.com/nginx/nginx-gateway-fabric/pull/5063
+* Fix bug where N1C dataplane key is ignored by @nginx-bot in https://github.com/nginx/nginx-gateway-fabric/pull/5073
+* Fix CORS failure when attached to HTTPS Listener (#5071) by @sjberman in https://github.com/nginx/nginx-gateway-fabric/pull/5074
+* Allow externalTrafficPolicy on ClusterIP services with externalIPs (#… by @salonichf5 in https://github.com/nginx/nginx-gateway-fabric/pull/5076
+
+
+%%DATE%%
+
+FEATURES:
+
+-
+
+BUG FIXES:
+
+-
+
+DOCUMENTATION:
+
+-
+
+HELM CHART:
+
+- The version of the Helm chart is now 2.5.1
+
+UPGRADE:
+
+-
+
+KNOWN ISSUES:
+
+-
+
+COMPATIBILITY:
+
+- Gateway API version: ``
+- Gateway API Inference Extension version: ``
+- NGINX version: ``
+- NGINX Plus version: ``
+- NGINX Agent version: ``
+- Kubernetes version: ``
+
+CONTAINER IMAGES:
+
+- Control plane: `ghcr.io/nginx/nginx-gateway-fabric:2.5.1`
+- Data plane: `ghcr.io/nginx/nginx-gateway-fabric/nginx:2.5.1`
+- Data plane with NGINX Plus: `private-registry.nginx.com/nginx-gateway-fabric/nginx-plus:2.5.1`
+- Operator: `ghcr.io/nginx/nginx-gateway-fabric/operator:1.3.1`
 ## Release 2.5.0
 
 _March 30, 2026_
