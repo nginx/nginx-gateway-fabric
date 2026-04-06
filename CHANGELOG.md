@@ -6,51 +6,36 @@ and includes links to all PRs that went into the release.
 
 ## Release 2.5.1
 
-* Increase http hash bucket sizes by @nginx-bot in https://github.com/nginx/nginx-gateway-fabric/pull/5036
-* Fix broadcaster loop by @nginx-bot in https://github.com/nginx/nginx-gateway-fabric/pull/5038
-* Move gateway define rate-limit-policy directives from HTTP to Server … by @salonichf5 in https://github.com/nginx/nginx-gateway-fabric/pull/5039
-* fix: allow TCPRoute and UDPRoute on same gateway port (#5016) by @sjberman in https://github.com/nginx/nginx-gateway-fabric/pull/5053
-* Add fix for effective NginxProxy when different Kubernetes types are specified by @nginx-bot in https://github.com/nginx/nginx-gateway-fabric/pull/5062
-* Update validation check for IPFamily between BackendRefs and NginxProxy by @nginx-bot in https://github.com/nginx/nginx-gateway-fabric/pull/5063
-* Fix bug where N1C dataplane key is ignored by @nginx-bot in https://github.com/nginx/nginx-gateway-fabric/pull/5073
-* Fix CORS failure when attached to HTTPS Listener (#5071) by @sjberman in https://github.com/nginx/nginx-gateway-fabric/pull/5074
-* Allow externalTrafficPolicy on ClusterIP services with externalIPs (#… by @salonichf5 in https://github.com/nginx/nginx-gateway-fabric/pull/5076
-
-
-%%DATE%%
-
-FEATURES:
-
--
+_April 7, 2026_
 
 BUG FIXES:
 
--
-
-DOCUMENTATION:
-
--
+- Increased map_hash_bucket_size and server_names_hash_bucket_size in the http context to fix config failures with very long hostnames. [5034](https://github.com/nginx/nginx-gateway-fabric/pull/5034)
+- Fix a timing issue with communication between the controller and NGINX Pods which could lead to deadlocking and the controller no longer sending NGINX configuration. [4978](https://github.com/nginx/nginx-gateway-fabric/pull/4978)
+- Resolved Agent and Plus communication rate limiting by moving gateway-level RateLimitPolicy directives from HTTP context to server context. [4993](https://github.com/nginx/nginx-gateway-fabric/pull/4993)
+- Fixed an issue where TCPRoute and UDPRoute attached to the same Gateway port (e.g., port 53 for DNS) would cause both routes to fail. TCP and UDP listeners on the same port are now correctly supported. [5016](https://github.com/nginx/nginx-gateway-fabric/pull/5016) Thanks to [oyiz-michael](https://github.com/oyiz-michael).
+- Fix an issue where DaemonSet settings would be ignored on an NginxProxy attached to a Gateway if there is an NginxProxy attached to the GatewayClass that sets Deployment settings. [5058](https://github.com/nginx/nginx-gateway-fabric/pull/5058)
+- Fix an issue where dual-stack Services were incorrectly rejected during IP family validation when a single-stack `NginxProxy` was configured, even if the required IP family was present in the Service's list. [5052](https://github.com/nginx/nginx-gateway-fabric/pull/5052)
+- Fix an issue where the NGINX One Console dataplane key was not being picked up by the controller. [5072](https://github.com/nginx/nginx-gateway-fabric/pull/5072)
+- Fix an issue where CORS would not work when attached to an HTTPS Listener, causing invalid NGINX config. [5071](https://github.com/nginx/nginx-gateway-fabric/pull/5071)
+- Fix an issue where `externalTrafficPolicy: Local` could not be set on a ClusterIP service with externalIPs configured via Gateway `spec.addresses`. The field [externalIPs](https://kubernetes.io/blog/2026/03/30/kubernetes-v1-36-sneak-peek/#deprecation-of-spec-externalips-in-service) for the Service spec will be deprecated and removed completely by Kubernetes v1.43. [5075](https://github.com/nginx/nginx-gateway-fabric/pull/5075)
 
 HELM CHART:
 
 - The version of the Helm chart is now 2.5.1
 
-UPGRADE:
-
--
-
 KNOWN ISSUES:
 
--
+- Data plane configuration can go stale due to connection issues between control plane and data plane. [4697](https://github.com/nginx/nginx-gateway-fabric/issues/4697), [4068](https://github.com/nginx/nginx-gateway-fabric/issues/4068)
 
 COMPATIBILITY:
 
-- Gateway API version: ``
-- Gateway API Inference Extension version: ``
-- NGINX version: ``
-- NGINX Plus version: ``
-- NGINX Agent version: ``
-- Kubernetes version: ``
+- Gateway API version: `1.5.1`
+- Gateway API Inference Extension version: `1.4.0`
+- NGINX version: `1.29.7`
+- NGINX Plus version: `R36`
+- NGINX Agent version: `v3.8.0`
+- Kubernetes version: `1.31+`
 
 CONTAINER IMAGES:
 
@@ -58,6 +43,7 @@ CONTAINER IMAGES:
 - Data plane: `ghcr.io/nginx/nginx-gateway-fabric/nginx:2.5.1`
 - Data plane with NGINX Plus: `private-registry.nginx.com/nginx-gateway-fabric/nginx-plus:2.5.1`
 - Operator: `ghcr.io/nginx/nginx-gateway-fabric/operator:1.3.1`
+
 ## Release 2.5.0
 
 _March 30, 2026_
