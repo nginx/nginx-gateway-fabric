@@ -59,10 +59,9 @@ type Request struct {
 	// N1CPolicyObjectID is the opaque N1C policy object ID (e.g. "pol_-IUuEUN7ST63oRC7AlQPLw").
 	// When set, the policies list call is skipped and this ID is used directly.
 	N1CPolicyObjectID string
-	// N1CPolicyVersion pins the fetch to a specific human-readable version string
-	// (e.g. "2026-04-02 20:55:06") as shown in the N1C UI.
-	// When empty, the latest version is used.
-	N1CPolicyVersion string
+	// N1CPolicyVersionID pins the fetch to a specific version using its opaque version ID
+	// (e.g. "pv_1234"). When empty, the latest version is used.
+	N1CPolicyVersionID string
 	// ExpectedChecksum is the hex-encoded SHA-256 checksum the downloaded bundle must match.
 	// When set, NGF verifies the bundle after download and rejects it if the checksum differs.
 	// Mutually exclusive with VerifyChecksum.
@@ -288,7 +287,6 @@ type n1cVersionsResponse struct {
 
 type n1cVersionItem struct {
 	ObjectID string `json:"object_id"`
-	Version  string `json:"version"`
 	Latest   bool   `json:"latest"`
 }
 
@@ -298,9 +296,9 @@ type n1cVersionItem struct {
 //
 // Flow:
 //  1. GET /api/nginx/one/namespaces/<ns>/app-protect/policies — find policy by name, get pol_obj_id.
-//     The response also includes latest.object_id, so no second call is needed when policyVersion is empty.
-//  2. If req.N1CPolicyVersion is set: GET .../policies/<pol_obj_id>/versions — find version by string,
-//     get pol_version_id.
+//     The response also includes latest.object_id, so no second call is needed when policyVersionID is empty.
+//  2. If req.N1CPolicyVersionID is set, it is used directly as pol_version_id (no versions list call needed).
+//     Otherwise the latest version ID from step 1 (or findN1CLatestVersion) is used.
 //  3. GET .../policies/<pol_obj_id>/versions/<pol_version_id>/compile?nap_release=<release>&download=true
 func fetchN1C(ctx context.Context, client *http.Client, req Request) ([]byte, string, error) {
 	polObjID, polVersionID, err := resolveN1CIDs(ctx, client, req)
@@ -324,37 +322,29 @@ func fetchN1C(ctx context.Context, client *http.Client, req Request) ([]byte, st
 // resolveN1CIDs returns the policy object ID and version object ID for the given request.
 // If req.N1CPolicyObjectID is set, it is used directly and the policies list call is skipped.
 // Otherwise, it pages through the policies list to resolve req.NIMPolicyName to an object ID.
-// If req.N1CPolicyVersion is set, the versions list is queried to resolve it to a version object ID;
-// otherwise the latest version from the list response is used.
+// If req.N1CPolicyVersionID is set, it is used directly as the version object ID.
+// Otherwise the latest version is used.
 func resolveN1CIDs(ctx context.Context, client *http.Client, req Request) (polObjID, polVersionID string, err error) {
-	var latestVersionID string
-
 	if req.N1CPolicyObjectID != "" {
 		polObjID = req.N1CPolicyObjectID
-		// With a known object ID we still need the latest version ID when no version is pinned,
-		// which requires calling the versions list. That happens below via findN1CVersion when
-		// N1CPolicyVersion is empty — but findN1CVersion needs a version string to match, so
-		// we call findN1CLatestVersion instead.
-		if req.N1CPolicyVersion == "" {
-			polVersionID, err = findN1CLatestVersion(ctx, client, req.URL, req.N1CNamespace, polObjID, req.Auth)
-			if err != nil {
-				return "", "", err
-			}
-			return polObjID, polVersionID, nil
-		}
 	} else {
+		var latestVersionID string
 		polObjID, latestVersionID, err = findN1CPolicy(
 			ctx, client, req.URL, req.N1CNamespace, req.NIMPolicyName, req.Auth,
 		)
 		if err != nil {
 			return "", "", err
 		}
-		if req.N1CPolicyVersion == "" {
+		if req.N1CPolicyVersionID == "" {
 			return polObjID, latestVersionID, nil
 		}
 	}
 
-	polVersionID, err = findN1CVersion(ctx, client, req.URL, req.N1CNamespace, polObjID, req.N1CPolicyVersion, req.Auth)
+	if req.N1CPolicyVersionID != "" {
+		return polObjID, req.N1CPolicyVersionID, nil
+	}
+
+	polVersionID, err = findN1CLatestVersion(ctx, client, req.URL, req.N1CNamespace, polObjID, req.Auth)
 	if err != nil {
 		return "", "", err
 	}
@@ -400,46 +390,6 @@ func findN1CPolicy(
 	}
 
 	return "", "", fmt.Errorf("N1C policy %q not found in namespace %q", policyName, namespace)
-}
-
-// findN1CVersion pages through the N1C versions list and returns the object_id for the
-// version matching the human-readable versionStr.
-func findN1CVersion(
-	ctx context.Context,
-	client *http.Client,
-	baseURL, namespace, polObjID, versionStr string,
-	auth *BundleAuth,
-) (string, error) {
-	const pageSize = 100
-
-	for startIndex := 1; ; startIndex += pageSize {
-		versionsURL, err := buildN1CVersionsURL(baseURL, namespace, polObjID, startIndex, pageSize)
-		if err != nil {
-			return "", fmt.Errorf("failed to build N1C versions URL: %w", err)
-		}
-
-		body, err := doGet(ctx, client, versionsURL, auth)
-		if err != nil {
-			return "", fmt.Errorf("failed to list N1C policy versions: %w", err)
-		}
-
-		var resp n1cVersionsResponse
-		if err := json.Unmarshal(body, &resp); err != nil {
-			return "", fmt.Errorf("failed to parse N1C versions response: %w", err)
-		}
-
-		for _, item := range resp.Items {
-			if item.Version == versionStr {
-				return item.ObjectID, nil
-			}
-		}
-
-		if startIndex+pageSize-1 >= resp.Total {
-			break
-		}
-	}
-
-	return "", fmt.Errorf("N1C policy version %q not found", versionStr)
 }
 
 // findN1CLatestVersion pages through the N1C versions list and returns the object_id of the

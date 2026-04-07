@@ -826,8 +826,8 @@ func buildPolicyFetchRequest(
 			if policySource.N1CSource.PolicyName != nil {
 				req.NIMPolicyName = *policySource.N1CSource.PolicyName
 			}
-			if policySource.N1CSource.PolicyVersion != nil {
-				req.N1CPolicyVersion = *policySource.N1CSource.PolicyVersion
+			if policySource.N1CSource.PolicyVersionID != nil {
+				req.N1CPolicyVersionID = *policySource.N1CSource.PolicyVersionID
 			}
 			// N1C uses the APIToken auth scheme rather than Bearer.
 			// Move the token value from BearerToken to APIToken.

@@ -159,8 +159,17 @@ type PolicySource struct {
 //
 //nolint:lll
 type BundleValidation struct {
+	// ExpectedChecksum is the expected SHA256 checksum of the bundle.
+	// If set, the downloaded bundle must match this checksum or it will be rejected.
+	//
+	// +optional
 	ExpectedChecksum *string `json:"expectedChecksum,omitempty"`
-	VerifyChecksum   bool    `json:"verifyChecksum,omitempty"`
+
+	// VerifyChecksum enables automatic checksum verification using a checksum file
+	// fetched alongside the bundle. Mutually exclusive with expectedChecksum.
+	//
+	// +optional
+	VerifyChecksum bool `json:"verifyChecksum,omitempty"`
 }
 
 // BundlePolling configures automatic re-fetching of a bundle.
@@ -207,9 +216,23 @@ type HTTPBundleSource struct {
 //
 //nolint:lll
 type NIMBundleSource struct {
+	// PolicyName is the name of the compiled policy bundle in NIM.
+	// Mutually exclusive with policyUID.
+	//
+	// +optional
 	PolicyName *string `json:"policyName,omitempty"`
-	PolicyUID  *string `json:"policyUID,omitempty"`
-	URL        string  `json:"url"`
+
+	// PolicyUID is the unique identifier of the compiled policy bundle in NIM.
+	// Mutually exclusive with policyName.
+	// Must be a valid UUID (e.g. "2bc1e3ac-7990-4ca4-910a-8634c444c804").
+	//
+	// +optional
+	// +kubebuilder:validation:Pattern=`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`
+	PolicyUID *string `json:"policyUID,omitempty"`
+
+	// URL is the base URL of the NGINX Instance Manager instance,
+	// e.g. "https://nim.example.com".
+	URL string `json:"url"`
 }
 
 // N1CBundleSource configures bundle fetching from F5 NGINX One Console (N1C).
@@ -219,11 +242,33 @@ type NIMBundleSource struct {
 //
 //nolint:lll
 type N1CBundleSource struct {
-	PolicyName     *string `json:"policyName,omitempty"`
+	// PolicyName is the name of the security policy in N1C.
+	// Mutually exclusive with policyObjectID.
+	//
+	// +optional
+	PolicyName *string `json:"policyName,omitempty"`
+
+	// PolicyObjectID is the unique object identifier of the security policy in N1C
+	// (e.g. "pol_-IUuEUN7ST63oRC7AlQPLw").
+	// Mutually exclusive with policyName.
+	//
+	// +optional
+	// +kubebuilder:validation:Pattern=`^pol_[A-Za-z0-9_-]+$`
 	PolicyObjectID *string `json:"policyObjectID,omitempty"`
-	PolicyVersion  *string `json:"policyVersion,omitempty"`
-	URL            string  `json:"url"`
-	N1CNamespace   string  `json:"namespace"`
+
+	// PolicyVersionID pins a specific version of the policy bundle using its opaque version ID
+	// (e.g. "pv_UJ2gL5fOQ3Gnb3OVuVo1XA"). When omitted, the latest available version is used.
+	//
+	// +optional
+	// +kubebuilder:validation:Pattern=`^pv_[A-Za-z0-9_-]+$`
+	PolicyVersionID *string `json:"policyVersionID,omitempty"`
+
+	// URL is the base URL of the F5 NGINX One Console instance,
+	// e.g. "https://<tenant>.volterra.us".
+	URL string `json:"url"`
+
+	// N1CNamespace is the NGINX One Console namespace that owns the security policy.
+	N1CNamespace string `json:"namespace"`
 }
 
 // BundleAuth configures authentication for bundle fetching.
@@ -266,10 +311,11 @@ const (
 //
 //nolint:lll
 type WAFSecurityLog struct {
-	// LogSource configures the log profile bundle source for this log configuration.
+	// LogSource configures the log profile bundle source for this log entry.
+	// Exactly one of url or defaultProfile must be set.
 	LogSource LogSource `json:"logSource"`
 
-	// Destination defines where security logs should be sent.
+	// Destination defines where security logs are sent.
 	Destination SecurityLogDestination `json:"destination"`
 }
 

@@ -12440,14 +12440,31 @@ spec:
                       Required when type is N1C; must not be set for other types.
                     properties:
                       namespace:
+                        description: N1CNamespace is the NGINX One Console namespace
+                          that owns the security policy.
                         type: string
                       policyName:
+                        description: |-
+                          PolicyName is the name of the security policy in N1C.
+                          Mutually exclusive with policyObjectID.
                         type: string
                       policyObjectID:
+                        description: |-
+                          PolicyObjectID is the unique object identifier of the security policy in N1C
+                          (e.g. "pol_-IUuEUN7ST63oRC7AlQPLw").
+                          Mutually exclusive with policyName.
+                        pattern: ^pol_[A-Za-z0-9_-]+$
                         type: string
-                      policyVersion:
+                      policyVersionID:
+                        description: |-
+                          PolicyVersionID pins a specific version of the policy bundle using its opaque version ID
+                          (e.g. "pv_UJ2gL5fOQ3Gnb3OVuVo1XA"). When omitted, the latest available version is used.
+                        pattern: ^pv_[A-Za-z0-9_-]+$
                         type: string
                       url:
+                        description: |-
+                          URL is the base URL of the F5 NGINX One Console instance,
+                          e.g. "https://<tenant>.volterra.us".
                         type: string
                     required:
                     - namespace
@@ -12464,10 +12481,21 @@ spec:
                       Required when type is NIM; must not be set for other types.
                     properties:
                       policyName:
+                        description: |-
+                          PolicyName is the name of the compiled policy bundle in NIM.
+                          Mutually exclusive with policyUID.
                         type: string
                       policyUID:
+                        description: |-
+                          PolicyUID is the unique identifier of the compiled policy bundle in NIM.
+                          Mutually exclusive with policyName.
+                          Must be a valid UUID (e.g. "2bc1e3ac-7990-4ca4-910a-8634c444c804").
+                        pattern: ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$
                         type: string
                       url:
+                        description: |-
+                          URL is the base URL of the NGINX Instance Manager instance,
+                          e.g. "https://nim.example.com".
                         type: string
                     required:
                     - url
@@ -12526,8 +12554,14 @@ spec:
                       the downloaded bundle.
                     properties:
                       expectedChecksum:
+                        description: |-
+                          ExpectedChecksum is the expected SHA256 checksum of the bundle.
+                          If set, the downloaded bundle must match this checksum or it will be rejected.
                         type: string
                       verifyChecksum:
+                        description: |-
+                          VerifyChecksum enables automatic checksum verification using a checksum file
+                          fetched alongside the bundle. Mutually exclusive with expectedChecksum.
                         type: boolean
                     type: object
                     x-kubernetes-validations:
@@ -12543,8 +12577,7 @@ spec:
                     Exactly one of logSource.url (via LogSource) or logSource.defaultProfile must be set.
                   properties:
                     destination:
-                      description: Destination defines where security logs should
-                        be sent.
+                      description: Destination defines where security logs are sent.
                       properties:
                         file:
                           description: |-
@@ -12596,8 +12629,9 @@ spec:
                           is syslog
                         rule: (self.type == 'syslog') == has(self.syslog)
                     logSource:
-                      description: LogSource configures the log profile bundle source
-                        for this log configuration.
+                      description: |-
+                        LogSource configures the log profile bundle source for this log entry.
+                        Exactly one of url or defaultProfile must be set.
                       properties:
                         auth:
                           description: |-
@@ -12693,8 +12727,14 @@ spec:
                             Only applicable when url is set.
                           properties:
                             expectedChecksum:
+                              description: |-
+                                ExpectedChecksum is the expected SHA256 checksum of the bundle.
+                                If set, the downloaded bundle must match this checksum or it will be rejected.
                               type: string
                             verifyChecksum:
+                              description: |-
+                                VerifyChecksum enables automatic checksum verification using a checksum file
+                                fetched alongside the bundle. Mutually exclusive with expectedChecksum.
                               type: boolean
                           type: object
                           x-kubernetes-validations:

@@ -80,6 +80,9 @@ const (
 	expectedWAFValidationMutualExclusionError = "verifyChecksum and expectedChecksum are mutually exclusive"
 	expectedWAFNIMSourceIfAndOnlyIfNIMType    = "policySource.nimSource must be set if and only if type is NIM"
 	expectedWAFN1CSourceIfAndOnlyIfN1CType    = "policySource.n1cSource must be set if and only if type is N1C"
+	expectedWAFNIMPolicyUIDPatternError       = `^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`
+	expectedWAFN1CPolicyObjectIDPatternError  = `^pol_[A-Za-z0-9_-]+$`
+	expectedWAFN1CPolicyVersionIDPatternError = `^pv_[A-Za-z0-9_-]+$`
 
 	// Namespace for tests.
 	defaultNamespace = "default"

@@ -351,8 +351,7 @@ func TestN1CFetchPinnedVersion(t *testing.T) {
 
 	bundleContent := []byte("n1c-pinned-bundle")
 	polObjID := "pol_-IUuEUN7ST63oRC7AlQPLw"
-	pinnedVersionID := "pv_gzd1Ck-rQzihZjAojX9G5w"
-	pinnedVersionStr := "2026-04-02 19:44:45"
+	pinnedVersionUID := "pv_gzd1Ck-rQzihZjAojX9G5w"
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -366,16 +365,8 @@ func TestN1CFetchPinnedVersion(t *testing.T) {
 					"latest":    map[string]any{"object_id": "pv_latest"},
 				}},
 			})
-		case "/api/nginx/one/namespaces/my-ns/app-protect/policies/" + polObjID + "/versions":
-			json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck
-				"total": 2,
-				"items": []map[string]any{
-					{"object_id": "pv_latest", "version": "2026-04-02 20:55:06"},
-					{"object_id": pinnedVersionID, "version": pinnedVersionStr},
-				},
-			})
 		case "/api/nginx/one/namespaces/my-ns/app-protect/policies/" + polObjID +
-			"/versions/" + pinnedVersionID + "/compile":
+			"/versions/" + pinnedVersionUID + "/compile":
 			w.Header().Set("Content-Type", "application/octet-stream")
 			w.Write(bundleContent) //nolint:errcheck
 		default:
@@ -386,10 +377,10 @@ func TestN1CFetchPinnedVersion(t *testing.T) {
 
 	f := fetch.NewHTTPFetcher()
 	req := fetch.Request{
-		URL:              srv.URL,
-		N1CNamespace:     "my-ns",
-		NIMPolicyName:    "my-policy",
-		N1CPolicyVersion: pinnedVersionStr,
+		URL:                srv.URL,
+		N1CNamespace:       "my-ns",
+		NIMPolicyName:      "my-policy",
+		N1CPolicyVersionID: pinnedVersionUID,
 	}
 	data, _, err := f.Fetch(t.Context(), req)
 	g.Expect(err).ToNot(HaveOccurred())
@@ -423,6 +414,8 @@ func TestN1CFetchVersionNotFound(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
+	polObjID := "pol_abc"
+
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
@@ -431,27 +424,26 @@ func TestN1CFetchVersionNotFound(t *testing.T) {
 				"total": 1,
 				"items": []map[string]any{{
 					"name":      "my-policy",
-					"object_id": "pol_abc",
+					"object_id": polObjID,
 					"latest":    map[string]any{"object_id": "pv_latest"},
 				}},
 			})
 		default:
-			// versions endpoint returns empty
-			json.NewEncoder(w).Encode(map[string]any{"total": 0, "items": []any{}}) //nolint:errcheck
+			http.NotFound(w, r)
 		}
 	}))
 	defer srv.Close()
 
 	f := fetch.NewHTTPFetcher()
 	req := fetch.Request{
-		URL:              srv.URL,
-		N1CNamespace:     "my-ns",
-		NIMPolicyName:    "my-policy",
-		N1CPolicyVersion: "2099-01-01 00:00:00",
+		URL:                srv.URL,
+		N1CNamespace:       "my-ns",
+		NIMPolicyName:      "my-policy",
+		N1CPolicyVersionID: "pv_doesnotexist",
 	}
 	_, _, err := f.Fetch(t.Context(), req)
 	g.Expect(err).To(HaveOccurred())
-	g.Expect(err.Error()).To(ContainSubstring(`"2099-01-01 00:00:00" not found`))
+	g.Expect(err.Error()).To(ContainSubstring("404"))
 }
 
 func TestHTTPFetcherFetchNIM(t *testing.T) {
