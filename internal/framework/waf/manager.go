@@ -117,6 +117,8 @@ func (m *Manager) startPollerLocked(ctx context.Context, cfg PollerConfig, stopE
 		if entry, exists := m.pollers[cfg.PolicyNsName]; exists {
 			m.logger.V(1).Info("Stopping existing poller before starting new one", "policy", cfg.PolicyNsName)
 			entry.cancel()
+			delete(m.pollErrors, cfg.PolicyNsName)
+
 			// Don't wait for it to stop here to avoid blocking under lock.
 			// The old poller will exit on its own.
 		}
@@ -237,6 +239,7 @@ func (m *Manager) stopAll() {
 		entries = append(entries, entry)
 	}
 	m.pollers = make(map[types.NamespacedName]*pollerEntry)
+	m.pollErrors = make(map[types.NamespacedName]*PollError)
 	m.mu.Unlock()
 
 	for _, entry := range entries {
@@ -262,6 +265,7 @@ func (m *Manager) StopPollersNotIn(activePolicies map[types.NamespacedName]struc
 		if entry, exists := m.pollers[nsName]; exists {
 			entriesToCancel = append(entriesToCancel, entry)
 			delete(m.pollers, nsName)
+			delete(m.pollErrors, nsName) // Clear any poll error when stopping.
 		}
 	}
 	m.mu.Unlock()

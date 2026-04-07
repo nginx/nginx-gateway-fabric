@@ -97,7 +97,7 @@ func (p *poller) run(ctx context.Context) {
 
 	if minInterval <= 0 {
 		p.logger.Error(nil, fmt.Sprintf(
-			"Invalid polling interval , must be greater than zero. Using default interval: %v", defaultPollingInterval,
+			"Invalid polling interval, must be greater than zero. Using default interval: %v", defaultPollingInterval,
 		))
 		minInterval = defaultPollingInterval
 	}

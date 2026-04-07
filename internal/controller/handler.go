@@ -326,7 +326,7 @@ func (h *eventHandlerImpl) reconcileWAFPollers(ctx context.Context, gr *graph.Gr
 
 		// Determine target deployments by looking at what gateways this policy targets.
 		// WAF policies can target Gateways directly, or HTTPRoutes/GRPCRoutes which are attached to Gateways.
-		targetDeployments := collectPolicyTargetDeployments(gr, policy.TargetRefs)
+		targetDeployments := collectPolicyTargetDeployments(gr, policy.TargetRefs, policy.InvalidForGateways)
 
 		if len(targetDeployments) == 0 {
 			// No valid target gateways - stop any existing poller.
@@ -367,19 +367,34 @@ func (h *eventHandlerImpl) reconcileWAFPollers(ctx context.Context, gr *graph.Gr
 // collectPolicyTargetDeployments returns the unique set of deployment names that a policy targets.
 // It handles policies targeting Gateways directly, as well as policies targeting HTTPRoutes/GRPCRoutes
 // (which are attached to Gateways via ParentRefs).
-func collectPolicyTargetDeployments(gr *graph.Graph, targetRefs []graph.PolicyTargetRef) []types.NamespacedName {
+// Gateways present in invalidForGateways are excluded, since the policy will never be applied there.
+func collectPolicyTargetDeployments(
+	gr *graph.Graph,
+	targetRefs []graph.PolicyTargetRef,
+	invalidForGateways map[types.NamespacedName]struct{},
+) []types.NamespacedName {
 	seen := make(map[types.NamespacedName]struct{})
 	var deployments []types.NamespacedName
+
+	addGateway := func(gwNsName types.NamespacedName) {
+		if _, invalid := invalidForGateways[gwNsName]; invalid {
+			return
+		}
+		gw, exists := gr.Gateways[gwNsName]
+		if !exists || !gw.Valid {
+			return
+		}
+		if _, ok := seen[gw.DeploymentName]; ok {
+			return
+		}
+		seen[gw.DeploymentName] = struct{}{}
+		deployments = append(deployments, gw.DeploymentName)
+	}
 
 	for _, targetRef := range targetRefs {
 		switch targetRef.Kind {
 		case kinds.Gateway:
-			if gw, exists := gr.Gateways[targetRef.Nsname]; exists && gw.Valid {
-				if _, ok := seen[gw.DeploymentName]; !ok {
-					seen[gw.DeploymentName] = struct{}{}
-					deployments = append(deployments, gw.DeploymentName)
-				}
-			}
+			addGateway(targetRef.Nsname)
 		case kinds.HTTPRoute, kinds.GRPCRoute:
 			routeKey := graph.RouteKey{
 				NamespacedName: targetRef.Nsname,
@@ -389,18 +404,9 @@ func collectPolicyTargetDeployments(gr *graph.Graph, targetRefs []graph.PolicyTa
 			if !exists || !route.Valid {
 				continue
 			}
-			// Follow the route's ParentRefs to find all attached Gateways.
 			for _, parentRef := range route.ParentRefs {
-				if parentRef.Gateway == nil {
-					continue
-				}
-				gw, exists := gr.Gateways[parentRef.Gateway.NamespacedName]
-				if !exists || !gw.Valid {
-					continue
-				}
-				if _, ok := seen[gw.DeploymentName]; !ok {
-					seen[gw.DeploymentName] = struct{}{}
-					deployments = append(deployments, gw.DeploymentName)
+				if parentRef.Gateway != nil {
+					addGateway(parentRef.Gateway.NamespacedName)
 				}
 			}
 		}
@@ -639,7 +645,8 @@ func (h *eventHandlerImpl) mergeWAFPollErrors(gr *graph.Graph) {
 func findWAFPolicyKey(gr *graph.Graph, nsName types.NamespacedName) *graph.PolicyKey {
 	for key := range gr.NGFPolicies {
 		if key.GVK.Kind == kinds.WAFGatewayBindingPolicy && key.NsName == nsName {
-			return &key
+			k := key
+			return &k
 		}
 	}
 	return nil
