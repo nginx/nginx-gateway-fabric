@@ -1,8 +1,6 @@
 package waf
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"text/template"
 
@@ -80,7 +78,7 @@ func generate(pols []policies.Policy) policies.GenerateResultFiles {
 
 				switch {
 				case secLog.LogSource.URL != nil:
-					bundleName := fmt.Sprintf("%s_%s_log_%s", wp.Namespace, wp.Name, logURLHash(*secLog.LogSource.URL))
+					bundleName := fmt.Sprintf("%s_%s_log_%s", wp.Namespace, wp.Name, helpers.URLHash(*secLog.LogSource.URL))
 					bundlePath := fmt.Sprintf("%s/%s.tgz", appProtectBundleFolder, bundleName)
 					logEntry["LogProfileBundlePath"] = bundlePath
 				case secLog.LogSource.DefaultProfile != nil:
@@ -105,14 +103,6 @@ func generate(pols []policies.Policy) policies.GenerateResultFiles {
 	}
 
 	return files
-}
-
-// logURLHash returns the first 16 hex characters of the SHA-256 digest of rawURL.
-// Must produce the same value as urlHash in internal/controller/state/graph/policies.go
-// so that the bundle path written here matches the bundle key used when fetching.
-func logURLHash(rawURL string) string {
-	sum := sha256.Sum256([]byte(rawURL))
-	return hex.EncodeToString(sum[:])[:16]
 }
 
 func formatSecurityLogDestination(dest ngfAPI.SecurityLogDestination) string {

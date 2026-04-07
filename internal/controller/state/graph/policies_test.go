@@ -2813,7 +2813,7 @@ func TestProcessWAFGatewayBindingPolicies(t *testing.T) {
 	tlsSecretNsName := types.NamespacedName{Namespace: policyNs, Name: tlsSecretName}
 
 	bundleKey := WAFBundleKey(fmt.Sprintf("%s_%s", policyNs, policyName))
-	logBundleKey := WAFBundleKey(fmt.Sprintf("%s_%s_log_%s", policyNs, policyName, urlHash(logBundleURL)))
+	logBundleKey := WAFBundleKey(fmt.Sprintf("%s_%s_log_%s", policyNs, policyName, helpers.URLHash(logBundleURL)))
 
 	fetchedData := []byte("bundle-data")
 	fetchedChecksum := "abc123"
@@ -3430,7 +3430,7 @@ func TestProcessWAFGatewayBindingPolicies(t *testing.T) {
 			},
 			expBundles: map[WAFBundleKey]*WAFBundleData{
 				bundleKey: {Data: fetchedData, Checksum: fetchedChecksum},
-				WAFBundleKey(fmt.Sprintf("%s_%s_log_%s", "test-ns", policyName, urlHash(multiLogURL1))): {
+				WAFBundleKey(fmt.Sprintf("%s_%s_log_%s", "test-ns", policyName, helpers.URLHash(multiLogURL1))): {
 					Data: fetchedData, Checksum: fetchedChecksum,
 				},
 			},

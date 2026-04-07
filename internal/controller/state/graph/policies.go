@@ -3,8 +3,6 @@ package graph
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"slices"
 	"sort"
@@ -24,6 +22,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/secrets"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/validation"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/fetch"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
 
@@ -942,7 +941,7 @@ func fetchSecurityLogBundles(
 		}
 
 		bundleKey := WAFBundleKey(
-			fmt.Sprintf("%s_%s_log_%s", wafPolicy.Namespace, wafPolicy.Name, urlHash(*secLog.LogSource.URL)),
+			fmt.Sprintf("%s_%s_log_%s", wafPolicy.Namespace, wafPolicy.Name, helpers.URLHash(*secLog.LogSource.URL)),
 		)
 
 		req := buildLogFetchRequest(&secLog.LogSource, auth, tlsCA)
@@ -971,15 +970,6 @@ func expectedChecksum(v *ngfAPIv1alpha1.BundleValidation) string {
 		return ""
 	}
 	return *v.ExpectedChecksum
-}
-
-// urlHash returns the first 16 hex characters of the SHA-256 digest of rawURL.
-// Used to derive a stable, filesystem-safe component for log bundle keys so that
-// reordering or inserting SecurityLog entries does not change existing bundle filenames
-// or break the stale-bundle fallback.
-func urlHash(rawURL string) string {
-	sum := sha256.Sum256([]byte(rawURL))
-	return hex.EncodeToString(sum[:])[:16]
 }
 
 // resolveBundleAuth resolves a BundleAuth reference into fetch.BundleAuth credentials.

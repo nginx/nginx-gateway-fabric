@@ -106,6 +106,16 @@ func (f *HTTPFetcher) Fetch(ctx context.Context, req Request) ([]byte, string, e
 		return nil, "", fmt.Errorf("ExpectedChecksum and VerifyChecksum are mutually exclusive")
 	}
 
+	if req.ExpectedChecksum != "" {
+		normalized := strings.ToLower(req.ExpectedChecksum)
+		if _, err := hex.DecodeString(normalized); err != nil || len(normalized) != 64 {
+			return nil, "", fmt.Errorf(
+				"invalid expected checksum %q: must be 64 hex characters", req.ExpectedChecksum,
+			)
+		}
+		req.ExpectedChecksum = normalized
+	}
+
 	timeout := defaultTimeout
 	if req.N1CNamespace != "" && req.Timeout == nil {
 		// N1C requires up to three sequential HTTP calls; give it a longer default.
@@ -140,18 +150,10 @@ func (f *HTTPFetcher) Fetch(ctx context.Context, req Request) ([]byte, string, e
 		return nil, "", fetchErr
 	}
 
-	if req.ExpectedChecksum != "" {
-		normalized := strings.ToLower(req.ExpectedChecksum)
-		if _, err := hex.DecodeString(normalized); err != nil || len(normalized) != 64 {
-			return nil, "", fmt.Errorf(
-				"invalid expected checksum %q: must be 64 hex characters", req.ExpectedChecksum,
-			)
-		}
-		if checksum != normalized {
-			return nil, "", fmt.Errorf(
-				"bundle checksum mismatch: expected %s, got %s", normalized, checksum,
-			)
-		}
+	if req.ExpectedChecksum != "" && checksum != req.ExpectedChecksum {
+		return nil, "", fmt.Errorf(
+			"bundle checksum mismatch: expected %s, got %s", req.ExpectedChecksum, checksum,
+		)
 	}
 
 	return data, checksum, nil

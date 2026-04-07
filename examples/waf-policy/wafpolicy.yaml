@@ -14,7 +14,7 @@ spec:
       policyName: ngfBlocking
       # Optional - use policyUID instead for version pinning
       # policyUID: ""
-      # Optional - add checksum for integrity verification of the bundle
+    # Optional - add checksum for integrity verification of the bundle
     # validation:
     #   expectedChecksum: "abc123..." # 64 hex characters, e.g. output of: sha256sum policy.tgz | awk '{print $1}'
     auth:
