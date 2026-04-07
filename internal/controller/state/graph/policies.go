@@ -813,7 +813,7 @@ func buildPolicyFetchRequest(
 			if policySource.NIMSource.PolicyUID != nil {
 				req.NIMPolicyUID = *policySource.NIMSource.PolicyUID
 			} else if policySource.NIMSource.PolicyName != nil {
-				req.NIMPolicyName = *policySource.NIMSource.PolicyName
+				req.PolicyName = *policySource.NIMSource.PolicyName
 			}
 		}
 	case ngfAPIv1alpha1.PolicySourceTypeN1C:
@@ -824,7 +824,7 @@ func buildPolicyFetchRequest(
 				req.N1CPolicyObjectID = *policySource.N1CSource.PolicyObjectID
 			}
 			if policySource.N1CSource.PolicyName != nil {
-				req.NIMPolicyName = *policySource.N1CSource.PolicyName
+				req.PolicyName = *policySource.N1CSource.PolicyName
 			}
 			if policySource.N1CSource.PolicyVersionID != nil {
 				req.N1CPolicyVersionID = *policySource.N1CSource.PolicyVersionID
@@ -965,10 +965,6 @@ func fetchSecurityLogBundles(
 	}
 }
 
-// urlHash returns the first 16 hex characters of the SHA-256 digest of rawURL.
-// Used to derive a stable, filesystem-safe component for log bundle keys so that
-// reordering or inserting SecurityLog entries does not change existing bundle filenames
-// or break the stale-bundle fallback.
 // expectedChecksum returns the ExpectedChecksum value from a BundleValidation, or empty string if nil.
 func expectedChecksum(v *ngfAPIv1alpha1.BundleValidation) string {
 	if v == nil || v.ExpectedChecksum == nil {
@@ -977,6 +973,10 @@ func expectedChecksum(v *ngfAPIv1alpha1.BundleValidation) string {
 	return *v.ExpectedChecksum
 }
 
+// urlHash returns the first 16 hex characters of the SHA-256 digest of rawURL.
+// Used to derive a stable, filesystem-safe component for log bundle keys so that
+// reordering or inserting SecurityLog entries does not change existing bundle filenames
+// or break the stale-bundle fallback.
 func urlHash(rawURL string) string {
 	sum := sha256.Sum256([]byte(rawURL))
 	return hex.EncodeToString(sum[:])[:16]

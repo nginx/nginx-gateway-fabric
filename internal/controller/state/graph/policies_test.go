@@ -3217,7 +3217,7 @@ func TestProcessWAFGatewayBindingPolicies(t *testing.T) {
 			expValid: false,
 		},
 		{
-			name: "NIM managed source sets NIMPolicyName on fetch request",
+			name: "NIM managed source sets PolicyName on fetch request",
 			processedPolicies: func() map[PolicyKey]*Policy {
 				wafPolicy := makeWAFPolicy(policyName, false, false, false)
 				wafPolicy.Spec.Type = ngfAPIv1alpha1.PolicySourceTypeNIM
@@ -3697,7 +3697,7 @@ func TestBuildPolicyFetchRequest(t *testing.T) {
 			},
 			expRequest: fetch.Request{
 				URL:              baseURL,
-				NIMPolicyName:    nimPolicyName,
+				PolicyName:       nimPolicyName,
 				ExpectedChecksum: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 			},
 		},
@@ -3714,7 +3714,7 @@ func TestBuildPolicyFetchRequest(t *testing.T) {
 			},
 		},
 		{
-			name:       "NIM type sets NIMPolicyName",
+			name:       "NIM type sets PolicyName",
 			policyType: ngfAPIv1alpha1.PolicySourceTypeNIM,
 			policySource: ngfAPIv1alpha1.PolicySource{
 				NIMSource: &ngfAPIv1alpha1.NIMBundleSource{
@@ -3723,12 +3723,12 @@ func TestBuildPolicyFetchRequest(t *testing.T) {
 				},
 			},
 			expRequest: fetch.Request{
-				URL:           baseURL,
-				NIMPolicyName: nimPolicyName,
+				URL:        baseURL,
+				PolicyName: nimPolicyName,
 			},
 		},
 		{
-			name:       "N1C type sets NIMPolicyName and N1CNamespace",
+			name:       "N1C type sets PolicyName and N1CNamespace",
 			policyType: ngfAPIv1alpha1.PolicySourceTypeN1C,
 			policySource: ngfAPIv1alpha1.PolicySource{
 				N1CSource: &ngfAPIv1alpha1.N1CBundleSource{
@@ -3738,9 +3738,9 @@ func TestBuildPolicyFetchRequest(t *testing.T) {
 				},
 			},
 			expRequest: fetch.Request{
-				URL:           baseURL,
-				NIMPolicyName: nimPolicyName,
-				N1CNamespace:  n1cNamespace,
+				URL:          baseURL,
+				PolicyName:   nimPolicyName,
+				N1CNamespace: n1cNamespace,
 			},
 		},
 		{
@@ -3755,10 +3755,10 @@ func TestBuildPolicyFetchRequest(t *testing.T) {
 			},
 			auth: &fetch.BundleAuth{BearerToken: bearerToken},
 			expRequest: fetch.Request{
-				URL:           baseURL,
-				NIMPolicyName: nimPolicyName,
-				N1CNamespace:  n1cNamespace,
-				Auth:          &fetch.BundleAuth{APIToken: bearerToken},
+				URL:          baseURL,
+				PolicyName:   nimPolicyName,
+				N1CNamespace: n1cNamespace,
+				Auth:         &fetch.BundleAuth{APIToken: bearerToken},
 			},
 		},
 		{
@@ -3773,10 +3773,10 @@ func TestBuildPolicyFetchRequest(t *testing.T) {
 			},
 			auth: &fetch.BundleAuth{Username: "user", Password: "pass"},
 			expRequest: fetch.Request{
-				URL:           baseURL,
-				NIMPolicyName: nimPolicyName,
-				N1CNamespace:  n1cNamespace,
-				Auth:          &fetch.BundleAuth{Username: "user", Password: "pass"},
+				URL:          baseURL,
+				PolicyName:   nimPolicyName,
+				N1CNamespace: n1cNamespace,
+				Auth:         &fetch.BundleAuth{Username: "user", Password: "pass"},
 			},
 		},
 		{
@@ -3790,9 +3790,9 @@ func TestBuildPolicyFetchRequest(t *testing.T) {
 				},
 			},
 			expRequest: fetch.Request{
-				URL:           baseURL,
-				NIMPolicyName: nimPolicyName,
-				N1CNamespace:  n1cNamespace,
+				URL:          baseURL,
+				PolicyName:   nimPolicyName,
+				N1CNamespace: n1cNamespace,
 			},
 		},
 		{
@@ -3805,8 +3805,8 @@ func TestBuildPolicyFetchRequest(t *testing.T) {
 				},
 			},
 			expRequest: fetch.Request{
-				URL:           baseURL,
-				NIMPolicyName: nimPolicyName,
+				URL:        baseURL,
+				PolicyName: nimPolicyName,
 			},
 		},
 	}

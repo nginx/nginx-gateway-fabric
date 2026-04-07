@@ -45,13 +45,14 @@ type Request struct {
 	Auth    *BundleAuth
 	Timeout *metav1.Duration
 	URL     string
-	// NIMPolicyName is the human-readable name of the NIM policy.
+	// PolicyName is the human-readable name of the policy.
+	// Used to look up the policy by name when fetching from NIM or N1C.
 	// Mutually exclusive with NIMPolicyUID.
-	NIMPolicyName string
+	PolicyName string
 	// NIMPolicyUID is the unique identifier of a specific version of the NIM policy
 	// (e.g. "2bc1e3ac-7990-4ca4-910a-8634c444c804"). Each policy version has a distinct UID,
 	// so setting this field pins the fetch to that exact version.
-	// Mutually exclusive with NIMPolicyName.
+	// Mutually exclusive with PolicyName.
 	NIMPolicyUID string
 	// N1CNamespace is the F5 NGINX One Console namespace the policy belongs to.
 	// Required when fetching from N1C (i.e. when N1CNamespace is non-empty).
@@ -98,9 +99,13 @@ func NewHTTPFetcher() *HTTPFetcher {
 
 // Fetch retrieves bundle bytes.
 // When req.N1CNamespace is set, uses N1C fetch logic (APIToken auth, N1C API path).
-// When req.NIMPolicyName or req.NIMPolicyUID is set (and N1CNamespace is empty), uses NIM fetch logic.
+// When req.PolicyName or req.NIMPolicyUID is set (and N1CNamespace is empty), uses NIM fetch logic.
 // Otherwise performs a plain GET to req.URL, optionally verifying the checksum.
 func (f *HTTPFetcher) Fetch(ctx context.Context, req Request) ([]byte, string, error) {
+	if req.ExpectedChecksum != "" && req.VerifyChecksum {
+		return nil, "", fmt.Errorf("ExpectedChecksum and VerifyChecksum are mutually exclusive")
+	}
+
 	timeout := defaultTimeout
 	if req.N1CNamespace != "" && req.Timeout == nil {
 		// N1C requires up to three sequential HTTP calls; give it a longer default.
@@ -156,7 +161,7 @@ func (f *HTTPFetcher) dispatch(ctx context.Context, client *http.Client, req Req
 	switch {
 	case req.N1CNamespace != "":
 		return fetchN1C(ctx, client, req)
-	case req.NIMPolicyName != "" || req.NIMPolicyUID != "":
+	case req.PolicyName != "" || req.NIMPolicyUID != "":
 		return fetchNIM(ctx, client, req)
 	default:
 		return fetchHTTP(ctx, client, req)
@@ -242,7 +247,7 @@ type nimResponse struct {
 
 // fetchNIM calls the NIM security policies bundles API and decodes the bundle from the response.
 func fetchNIM(ctx context.Context, client *http.Client, req Request) ([]byte, string, error) {
-	nimURL, err := buildNIMURL(req.URL, req.NIMPolicyName, req.NIMPolicyUID)
+	nimURL, err := buildNIMURL(req.URL, req.PolicyName, req.NIMPolicyUID)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to build NIM URL: %w", err)
 	}
@@ -257,7 +262,7 @@ func fetchNIM(ctx context.Context, client *http.Client, req Request) ([]byte, st
 		return nil, "", fmt.Errorf("failed to parse NIM response: %w", err)
 	}
 
-	policyRef := req.NIMPolicyName
+	policyRef := req.PolicyName
 	if policyRef == "" {
 		policyRef = req.NIMPolicyUID
 	}
@@ -329,7 +334,7 @@ func fetchN1C(ctx context.Context, client *http.Client, req Request) ([]byte, st
 
 // resolveN1CIDs returns the policy object ID and version object ID for the given request.
 // If req.N1CPolicyObjectID is set, it is used directly and the policies list call is skipped.
-// Otherwise, it pages through the policies list to resolve req.NIMPolicyName to an object ID.
+// Otherwise, it pages through the policies list to resolve req.PolicyName to an object ID.
 // If req.N1CPolicyVersionID is set, it is used directly as the version object ID.
 // Otherwise the latest version is used.
 func resolveN1CIDs(ctx context.Context, client *http.Client, req Request) (polObjID, polVersionID string, err error) {
@@ -338,7 +343,7 @@ func resolveN1CIDs(ctx context.Context, client *http.Client, req Request) (polOb
 	} else {
 		var latestVersionID string
 		polObjID, latestVersionID, err = findN1CPolicy(
-			ctx, client, req.URL, req.N1CNamespace, req.NIMPolicyName, req.Auth,
+			ctx, client, req.URL, req.N1CNamespace, req.PolicyName, req.Auth,
 		)
 		if err != nil {
 			return "", "", err

@@ -309,6 +309,22 @@ func TestHTTPFetcherFetchExpectedChecksumInvalid(t *testing.T) {
 	g.Expect(err.Error()).To(ContainSubstring("invalid expected checksum"))
 }
 
+func TestHTTPFetcherFetchExpectedChecksumAndVerifyChecksumMutuallyExclusive(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	f := fetch.NewHTTPFetcher()
+	req := fetch.Request{
+		URL:              "http://example.com/bundle.tgz",
+		ExpectedChecksum: "a" + strings.Repeat("0", 63),
+		VerifyChecksum:   true,
+	}
+	_, _, err := f.Fetch(context.Background(), req)
+
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(err.Error()).To(ContainSubstring("mutually exclusive"))
+}
+
 func TestBuildNIMURLStripsBaseQueryAndFragment(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
@@ -333,8 +349,8 @@ func TestBuildNIMURLStripsBaseQueryAndFragment(t *testing.T) {
 
 	f := fetch.NewHTTPFetcher()
 	req := fetch.Request{
-		URL:           srv.URL + "?extra=leftover#somefragment",
-		NIMPolicyName: "my-policy",
+		URL:        srv.URL + "?extra=leftover#somefragment",
+		PolicyName: "my-policy",
 	}
 	data, _, err := f.Fetch(context.Background(), req)
 	g.Expect(err).ToNot(HaveOccurred())
@@ -347,9 +363,9 @@ func TestNIMFetchBothPolicyNameAndUIDIsInvalid(t *testing.T) {
 
 	f := fetch.NewHTTPFetcher()
 	_, _, err := f.Fetch(t.Context(), fetch.Request{
-		URL:           "https://nim.example.com",
-		NIMPolicyName: "my-policy",
-		NIMPolicyUID:  "2bc1e3ac-7990-4ca4-910a-8634c444c804",
+		URL:          "https://nim.example.com",
+		PolicyName:   "my-policy",
+		NIMPolicyUID: "2bc1e3ac-7990-4ca4-910a-8634c444c804",
 	})
 	g.Expect(err).To(HaveOccurred())
 	g.Expect(err.Error()).To(ContainSubstring("both were provided"))
@@ -389,9 +405,9 @@ func TestN1CFetchLatestVersion(t *testing.T) {
 
 	f := fetch.NewHTTPFetcher()
 	req := fetch.Request{
-		URL:           srv.URL + "?extra=leftover#somefragment",
-		N1CNamespace:  "my-ns",
-		NIMPolicyName: "my-policy",
+		URL:          srv.URL + "?extra=leftover#somefragment",
+		N1CNamespace: "my-ns",
+		PolicyName:   "my-policy",
 	}
 	data, _, err := f.Fetch(t.Context(), req)
 	g.Expect(err).ToNot(HaveOccurred())
@@ -432,7 +448,7 @@ func TestN1CFetchPinnedVersion(t *testing.T) {
 	req := fetch.Request{
 		URL:                srv.URL,
 		N1CNamespace:       "my-ns",
-		NIMPolicyName:      "my-policy",
+		PolicyName:         "my-policy",
 		N1CPolicyVersionID: pinnedVersionUID,
 	}
 	data, _, err := f.Fetch(t.Context(), req)
@@ -452,9 +468,9 @@ func TestN1CFetchPolicyNotFound(t *testing.T) {
 
 	f := fetch.NewHTTPFetcher()
 	req := fetch.Request{
-		URL:           srv.URL,
-		N1CNamespace:  "my-ns",
-		NIMPolicyName: "missing-policy",
+		URL:          srv.URL,
+		N1CNamespace: "my-ns",
+		PolicyName:   "missing-policy",
 	}
 	_, _, err := f.Fetch(t.Context(), req)
 	g.Expect(err).To(HaveOccurred())
@@ -491,7 +507,7 @@ func TestN1CFetchVersionNotFound(t *testing.T) {
 	req := fetch.Request{
 		URL:                srv.URL,
 		N1CNamespace:       "my-ns",
-		NIMPolicyName:      "my-policy",
+		PolicyName:         "my-policy",
 		N1CPolicyVersionID: "pv_doesnotexist",
 	}
 	_, _, err := f.Fetch(t.Context(), req)
@@ -566,9 +582,9 @@ func TestHTTPFetcherFetchNIM(t *testing.T) {
 
 			f := fetch.NewHTTPFetcher()
 			req := fetch.Request{
-				URL:           srv.URL,
-				NIMPolicyName: tc.policyName,
-				Auth:          tc.auth,
+				URL:        srv.URL,
+				PolicyName: tc.policyName,
+				Auth:       tc.auth,
 			}
 			data, checksum, err := f.Fetch(context.Background(), req)
 
