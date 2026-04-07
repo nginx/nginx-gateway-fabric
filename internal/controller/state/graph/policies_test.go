@@ -3445,6 +3445,55 @@ func TestProcessWAFGatewayBindingPolicies(t *testing.T) {
 			expValid: false,
 		},
 		{
+			name: "duplicate security log URLs: bundle fetched once, second entry reuses result",
+			processedPolicies: func() map[PolicyKey]*Policy {
+				logURL := multiLogURL1
+				wafPolicy := makeWAFPolicy(policyName, false, false, false)
+				wafPolicy.Spec.SecurityLogs = []ngfAPIv1alpha1.WAFSecurityLog{
+					{
+						LogSource: ngfAPIv1alpha1.LogSource{
+							URL: helpers.GetPointer(logURL),
+						},
+						Destination: ngfAPIv1alpha1.SecurityLogDestination{
+							Type: ngfAPIv1alpha1.SecurityLogDestinationTypeStderr,
+						},
+					},
+					{
+						// Same URL as above — must not trigger a second fetch.
+						LogSource: ngfAPIv1alpha1.LogSource{
+							URL: helpers.GetPointer(logURL),
+						},
+						Destination: ngfAPIv1alpha1.SecurityLogDestination{
+							Type: ngfAPIv1alpha1.SecurityLogDestinationTypeStderr,
+						},
+					},
+				}
+				key, pol := makePolicyEntry(wafPolicy, true)
+				return map[PolicyKey]*Policy{key: pol}
+			},
+			wafInput: func() *WAFProcessingInput {
+				fetcher := &fetchfakes.FakeFetcher{}
+				// call 0: policy bundle; call 1: log bundle (second log entry must not cause call 2)
+				fetcher.FetchReturnsOnCall(0, fetchedData, fetchedChecksum, nil)
+				fetcher.FetchReturnsOnCall(1, fetchedData, fetchedChecksum, nil)
+				fetcher.FetchReturnsOnCall(2, nil, "", fmt.Errorf("unexpected fetch call for duplicate log URL"))
+				return &WAFProcessingInput{
+					Fetcher:         fetcher,
+					Secrets:         map[types.NamespacedName]*corev1.Secret{},
+					PreviousBundles: map[WAFBundleKey]*WAFBundleData{},
+				}
+			},
+			expBundles: map[WAFBundleKey]*WAFBundleData{
+				bundleKey: {Data: fetchedData, Checksum: fetchedChecksum},
+				WAFBundleKey(fmt.Sprintf("%s_%s_log_%s", "test-ns", policyName, helpers.URLHash(multiLogURL1))): {
+					Data: fetchedData, Checksum: fetchedChecksum,
+				},
+			},
+			expSecrets:    map[types.NamespacedName]*corev1.Secret{},
+			expConditions: func(_ *Policy) []conditions.Condition { return nil },
+			expValid:      true,
+		},
+		{
 			name: "security log with default profile skips bundle fetch",
 			processedPolicies: func() map[PolicyKey]*Policy {
 				defaultProfile := ngfAPIv1alpha1.DefaultLogProfileDefault

@@ -351,7 +351,7 @@ func TestHTTPFetcherVerifyChecksumRejectedForNIMAndN1C(t *testing.T) {
 			f := fetch.NewHTTPFetcher()
 			_, _, err := f.Fetch(t.Context(), tc.req)
 			g.Expect(err).To(HaveOccurred())
-			g.Expect(err.Error()).To(ContainSubstring("VerifyChecksum is only supported for plain HTTP fetches"))
+			g.Expect(err.Error()).To(ContainSubstring("verifyChecksum is only supported for plain HTTP fetches"))
 		})
 	}
 }

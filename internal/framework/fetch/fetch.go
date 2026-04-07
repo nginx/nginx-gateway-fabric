@@ -113,12 +113,12 @@ func NewHTTPFetcher() *HTTPFetcher {
 // ExpectedChecksum to lowercase. It returns the updated Request or an error.
 func validateAndNormalizeRequest(req Request) (Request, error) {
 	if req.ExpectedChecksum != "" && req.VerifyChecksum {
-		return Request{}, fmt.Errorf("ExpectedChecksum and VerifyChecksum are mutually exclusive")
+		return Request{}, fmt.Errorf("expectedChecksum and verifyChecksum are mutually exclusive")
 	}
 
 	if req.VerifyChecksum && (req.N1CNamespace != "" || req.PolicyName != "" || req.NIMPolicyUID != "") {
 		return Request{}, fmt.Errorf(
-			"VerifyChecksum is only supported for plain HTTP fetches; use ExpectedChecksum for NIM/N1C sources",
+			"verifyChecksum is only supported for plain HTTP fetches; use expectedChecksum for NIM/N1C sources",
 		)
 	}
 

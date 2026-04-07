@@ -944,6 +944,14 @@ func fetchSecurityLogBundles(
 			fmt.Sprintf("%s_%s_log_%s", wafPolicy.Namespace, wafPolicy.Name, helpers.URLHash(*secLog.LogSource.URL)),
 		)
 
+		// Multiple SecurityLog entries may reference the same URL and therefore produce the same
+		// bundleKey. Once the bundle has been fetched, skip subsequent entries with the same key
+		// to avoid redundant network calls and to prevent a failed fetch (e.g. due to different
+		// auth settings on the duplicate entry) from invalidating the policy.
+		if _, alreadyFetched := output.Bundles[bundleKey]; alreadyFetched {
+			continue
+		}
+
 		req := buildLogFetchRequest(&secLog.LogSource, auth, tlsCA)
 
 		data, checksum, err := wafInput.Fetcher.Fetch(ctx, req)
