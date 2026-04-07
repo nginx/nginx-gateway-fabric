@@ -35,11 +35,6 @@ type FakeDeploymentStorer struct {
 	getOrStoreReturnsOnCall map[int]struct {
 		result1 *agent.Deployment
 	}
-	RangeStub        func(func(types.NamespacedName, *agent.Deployment) bool)
-	rangeMutex       sync.RWMutex
-	rangeArgsForCall []struct {
-		arg1 func(types.NamespacedName, *agent.Deployment) bool
-	}
 	RemoveStub        func(types.NamespacedName)
 	removeMutex       sync.RWMutex
 	removeArgsForCall []struct {
@@ -172,31 +167,6 @@ func (fake *FakeDeploymentStorer) GetOrStoreReturnsOnCall(i int, result1 *agent.
 	fake.getOrStoreReturnsOnCall[i] = struct {
 		result1 *agent.Deployment
 	}{result1}
-}
-
-func (fake *FakeDeploymentStorer) Range(arg1 func(types.NamespacedName, *agent.Deployment) bool) {
-	fake.rangeMutex.Lock()
-	fake.rangeArgsForCall = append(fake.rangeArgsForCall, struct {
-		arg1 func(types.NamespacedName, *agent.Deployment) bool
-	}{arg1})
-	stub := fake.RangeStub
-	fake.recordInvocation("Range", []interface{}{arg1})
-	fake.rangeMutex.Unlock()
-	if stub != nil {
-		fake.RangeStub(arg1)
-	}
-}
-
-func (fake *FakeDeploymentStorer) RangeCallCount() int {
-	fake.rangeMutex.RLock()
-	defer fake.rangeMutex.RUnlock()
-	return len(fake.rangeArgsForCall)
-}
-
-func (fake *FakeDeploymentStorer) RangeCalls(stub func(func(types.NamespacedName, *agent.Deployment) bool)) {
-	fake.rangeMutex.Lock()
-	defer fake.rangeMutex.Unlock()
-	fake.RangeStub = stub
 }
 
 func (fake *FakeDeploymentStorer) Remove(arg1 types.NamespacedName) {

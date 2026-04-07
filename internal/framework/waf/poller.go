@@ -2,6 +2,7 @@ package waf
 
 import (
 	"context"
+	"fmt"
 	"maps"
 	"reflect"
 	"sync"
@@ -94,18 +95,27 @@ func (p *poller) run(ctx context.Context) {
 		minInterval = min(minInterval, src.Interval)
 	}
 
-	ticker := time.NewTicker(minInterval)
-	defer ticker.Stop()
-
-	// Track last poll time for each source to handle different intervals.
-	lastPoll := make(map[graph.WAFBundleKey]time.Time, len(p.sources))
-	now := time.Now()
-	for _, src := range p.sources {
-		// Initialize to now minus interval so first tick triggers immediately.
-		lastPoll[src.BundleKey] = now.Add(-src.Interval)
+	if minInterval <= 0 {
+		p.logger.Error(nil, fmt.Sprintf(
+			"Invalid polling interval , must be greater than zero. Using default interval: %v", defaultPollingInterval,
+		))
+		minInterval = defaultPollingInterval
 	}
 
 	p.logger.Info("WAF polling started", "interval", minInterval, "sourceCount", len(p.sources))
+
+	// Track last poll time for each source to handle different intervals.
+	lastPoll := make(map[graph.WAFBundleKey]time.Time, len(p.sources))
+
+	// Poll all sources immediately on startup, then start the ticker for subsequent polls.
+	now := time.Now()
+	for _, src := range p.sources {
+		p.pollSource(ctx, src)
+		lastPoll[src.BundleKey] = now
+	}
+
+	ticker := time.NewTicker(minInterval)
+	defer ticker.Stop()
 
 	for {
 		select {
@@ -181,6 +191,9 @@ func (p *poller) pollSource(ctx context.Context, src BundleSource) {
 
 	if checksum == lastChecksum {
 		p.logger.V(1).Info("Bundle unchanged, skipping push")
+		if p.statusCallback != nil {
+			p.statusCallback(p.policyNsName, src.BundleKey, nil)
+		}
 		return
 	}
 

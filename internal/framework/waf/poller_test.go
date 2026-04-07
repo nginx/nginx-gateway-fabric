@@ -103,7 +103,7 @@ func Test_poller_runExitsOnContextCancel(t *testing.T) {
 		t.Fatal("Poller did not exit after context cancellation")
 	}
 
-	g.Expect(fetcher.FetchCallCount()).To(BeZero()) // Too short to trigger poll.
+	g.Expect(fetcher.FetchCallCount()).To(Equal(1)) // One immediate poll on startup.
 }
 
 func Test_poller_runExitsWithNoSources(t *testing.T) {

@@ -166,15 +166,17 @@ func (m *Manager) startPollerLocked(ctx context.Context, cfg PollerConfig, stopE
 }
 
 // recordPollResult records the result of a poll attempt for a policy.
-// If err is nil, it clears any previous error. If err is non-nil, it stores the error.
+// If err is nil, it clears any previous error only if it was for the same bundle key.
+// If err is non-nil, it stores the error for this bundle key.
 // This method is called by the internal status callback.
 func (m *Manager) recordPollResult(policyNsName types.NamespacedName, bundleKey graph.WAFBundleKey, err error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	if err == nil {
-		// Clear error on successful poll.
-		delete(m.pollErrors, policyNsName)
+		if existing := m.pollErrors[policyNsName]; existing != nil && existing.BundleKey == bundleKey {
+			delete(m.pollErrors, policyNsName)
+		}
 	} else {
 		m.pollErrors[policyNsName] = &PollError{
 			BundleKey: bundleKey,

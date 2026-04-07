@@ -619,6 +619,13 @@ func (h *eventHandlerImpl) mergeWAFPollErrors(gr *graph.Graph) {
 			continue
 		}
 
+		// Only add a stale-bundle warning if the bundle was previously fetched successfully.
+		// If no bundle exists for this key, the initial fetch failed and there's already a
+		// Programmed=False condition that we shouldn't mask.
+		if policy.WAFState == nil || policy.WAFState.Bundles[pollError.BundleKey] == nil {
+			continue
+		}
+
 		// Add a stale-bundle warning condition for the poll error.
 		// This uses the same condition type as the initial fetch stale-bundle fallback.
 		cond := conditions.NewPolicyProgrammedStaleBundleWarning(
