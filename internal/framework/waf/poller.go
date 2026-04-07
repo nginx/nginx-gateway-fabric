@@ -162,11 +162,11 @@ func sourcesEqual(a, b []BundleSource) bool {
 
 // pollSource fetches a single bundle source and pushes it to deployments if changed.
 func (p *poller) pollSource(ctx context.Context, src BundleSource) {
-	p.logger.V(1).Info("Polling bundle source", "bundleKey", src.BundleKey)
+	p.logger.V(1).Info("Polling bundle source")
 
 	data, checksum, err := p.fetcher.Fetch(ctx, src.Request)
 	if err != nil {
-		p.logger.Error(err, "Failed to fetch bundle during poll", "bundleKey", src.BundleKey)
+		p.logger.Error(err, "Failed to fetch bundle during poll")
 		if p.statusCallback != nil {
 			p.statusCallback(p.policyNsName, src.BundleKey, err)
 		}
@@ -180,12 +180,11 @@ func (p *poller) pollSource(ctx context.Context, src BundleSource) {
 	p.checksumMu.RUnlock()
 
 	if checksum == lastChecksum {
-		p.logger.V(1).Info("Bundle unchanged, skipping push", "bundleKey", src.BundleKey)
+		p.logger.V(1).Info("Bundle unchanged, skipping push")
 		return
 	}
 
-	p.logger.Info("Bundle changed, pushing to deployments",
-		"bundleKey", src.BundleKey, "newChecksum", checksum)
+	p.logger.Info("Bundle changed, pushing to deployments", "newChecksum", checksum)
 
 	// Push to all target deployments.
 	p.pushBundleToDeployments(src.BundleKey, data)
@@ -210,8 +209,7 @@ func (p *poller) pushBundleToDeployments(bundleKey graph.WAFBundleKey, data []by
 	for depName := range p.targetDeployments {
 		deployment := p.deployments.Get(depName)
 		if deployment == nil {
-			p.logger.V(1).Info("Deployment not found, skipping bundle push",
-				"deployment", depName, "bundleKey", bundleKey)
+			p.logger.V(1).Info("Deployment not found, skipping bundle push", "deployment", depName)
 			continue
 		}
 
@@ -220,11 +218,15 @@ func (p *poller) pushBundleToDeployments(bundleKey graph.WAFBundleKey, data []by
 		if msg != nil {
 			applied := deployment.GetBroadcaster().Send(*msg)
 			if applied {
-				p.logger.Info("Pushed updated WAF bundle to deployment",
-					"deployment", depName, "bundleKey", bundleKey)
+				p.logger.Info(
+					"Pushed updated WAF bundle to deployment",
+					"deployment", depName,
+				)
 			} else {
-				p.logger.V(1).Info("No subscribers for deployment, bundle stored but not pushed",
-					"deployment", depName, "bundleKey", bundleKey)
+				p.logger.V(1).Info(
+					"No subscribers for deployment, bundle stored but not pushed",
+					"deployment", depName,
+				)
 			}
 		}
 		deployment.FileLock.Unlock()
