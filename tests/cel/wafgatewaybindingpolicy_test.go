@@ -924,6 +924,97 @@ func TestWAFGatewayBindingPolicyBundleValidation(t *testing.T) {
 	}
 }
 
+func TestWAFGatewayBindingPolicyVerifyChecksumHTTPOnly(t *testing.T) {
+	t.Parallel()
+	k8sClient := getKubernetesClient(t)
+
+	nimSource := &ngfAPIv1alpha1.NIMBundleSource{
+		URL:        "https://nim.example.com",
+		PolicyName: helpers.GetPointer("my-policy"),
+	}
+	n1cSource := &ngfAPIv1alpha1.N1CBundleSource{
+		URL:          "https://n1c.example.com",
+		N1CNamespace: "my-ns",
+		PolicyName:   helpers.GetPointer("my-policy"),
+	}
+
+	tests := []struct {
+		spec       ngfAPIv1alpha1.WAFGatewayBindingPolicySpec
+		name       string
+		wantErrors []string
+	}{
+		{
+			name: "verifyChecksum with HTTP type is valid",
+			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
+				Type:       ngfAPIv1alpha1.PolicySourceTypeHTTP,
+				PolicySource: ngfAPIv1alpha1.PolicySource{
+					HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: "https://example.com/policy.tgz"},
+					Validation: &ngfAPIv1alpha1.BundleValidation{VerifyChecksum: true},
+				},
+			},
+		},
+		{
+			name:       "verifyChecksum with NIM type is invalid",
+			wantErrors: []string{expectedWAFVerifyChecksumHTTPOnlyError},
+			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
+				Type:       ngfAPIv1alpha1.PolicySourceTypeNIM,
+				PolicySource: ngfAPIv1alpha1.PolicySource{
+					NIMSource:  nimSource,
+					Validation: &ngfAPIv1alpha1.BundleValidation{VerifyChecksum: true},
+				},
+			},
+		},
+		{
+			name:       "verifyChecksum with N1C type is invalid",
+			wantErrors: []string{expectedWAFVerifyChecksumHTTPOnlyError},
+			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
+				Type:       ngfAPIv1alpha1.PolicySourceTypeN1C,
+				PolicySource: ngfAPIv1alpha1.PolicySource{
+					N1CSource:  n1cSource,
+					Validation: &ngfAPIv1alpha1.BundleValidation{VerifyChecksum: true},
+				},
+			},
+		},
+		{
+			name: "verifyChecksum false with NIM type is valid",
+			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
+				Type:       ngfAPIv1alpha1.PolicySourceTypeNIM,
+				PolicySource: ngfAPIv1alpha1.PolicySource{
+					NIMSource:  nimSource,
+					Validation: &ngfAPIv1alpha1.BundleValidation{VerifyChecksum: false},
+				},
+			},
+		},
+		{
+			name: "verifyChecksum false with N1C type is valid",
+			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
+				Type:       ngfAPIv1alpha1.PolicySourceTypeN1C,
+				PolicySource: ngfAPIv1alpha1.PolicySource{
+					N1CSource:  n1cSource,
+					Validation: &ngfAPIv1alpha1.BundleValidation{VerifyChecksum: false},
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			for i := range tt.spec.TargetRefs {
+				if tt.spec.TargetRefs[i].Name == "" {
+					tt.spec.TargetRefs[i].Name = gatewayv1.ObjectName(uniqueResourceName(testTargetRefName))
+				}
+			}
+			validateCrd(t, tt.wantErrors, newWAFGatewayBindingPolicy(t, tt.spec), k8sClient)
+		})
+	}
+}
+
 func TestWAFGatewayBindingPolicyNIMPolicyUID(t *testing.T) {
 	t.Parallel()
 	k8sClient := getKubernetesClient(t)

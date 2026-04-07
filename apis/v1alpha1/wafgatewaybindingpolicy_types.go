@@ -41,6 +41,7 @@ type WAFGatewayBindingPolicyList struct {
 // +kubebuilder:validation:XValidation:message="policySource.httpSource must be set if and only if type is HTTP",rule="(self.type == 'HTTP') == (has(self.policySource) && has(self.policySource.httpSource))"
 // +kubebuilder:validation:XValidation:message="policySource.nimSource must be set if and only if type is NIM",rule="(self.type == 'NIM') == (has(self.policySource) && has(self.policySource.nimSource))"
 // +kubebuilder:validation:XValidation:message="policySource.n1cSource must be set if and only if type is N1C",rule="(self.type == 'N1C') == (has(self.policySource) && has(self.policySource.n1cSource))"
+// +kubebuilder:validation:XValidation:message="policySource.validation.verifyChecksum is only supported for type HTTP",rule="!(self.type != 'HTTP' && has(self.policySource) && has(self.policySource.validation) && has(self.policySource.validation.verifyChecksum) && self.policySource.validation.verifyChecksum)"
 //
 //nolint:lll
 type WAFGatewayBindingPolicySpec struct {
@@ -168,8 +169,11 @@ type BundleValidation struct {
 	// +kubebuilder:validation:Pattern=`^[0-9a-fA-F]{64}$`
 	ExpectedChecksum *string `json:"expectedChecksum,omitempty"`
 
-	// VerifyChecksum enables automatic checksum verification using a checksum file
-	// fetched alongside the bundle. Mutually exclusive with expectedChecksum.
+	// VerifyChecksum enables automatic checksum verification by fetching a companion
+	// checksum file at <url>.sha256 and comparing it against the downloaded bundle.
+	// Only supported when the policy source type is HTTP (policySource.httpSource or
+	// logSource.url); setting this for NIM or N1C sources is rejected at admission.
+	// Mutually exclusive with expectedChecksum.
 	//
 	// +optional
 	VerifyChecksum bool `json:"verifyChecksum,omitempty"`

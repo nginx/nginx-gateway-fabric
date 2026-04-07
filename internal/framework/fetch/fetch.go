@@ -65,11 +65,17 @@ type Request struct {
 	N1CPolicyVersionID string
 	// ExpectedChecksum is the hex-encoded SHA-256 checksum the downloaded bundle must match.
 	// When set, NGF verifies the bundle after download and rejects it if the checksum differs.
-	// Mutually exclusive with VerifyChecksum.
-	ExpectedChecksum   string
-	TLSCAData          []byte
+	// Mutually exclusive with VerifyChecksum. Supported for all source types.
+	ExpectedChecksum string
+	// TLSCAData is the PEM-encoded CA certificate used to verify the bundle server's TLS certificate.
+	// When nil, the system certificate pool is used.
+	TLSCAData []byte
+	// InsecureSkipVerify disables TLS certificate verification. Not recommended for production use.
 	InsecureSkipVerify bool
-	VerifyChecksum     bool
+	// VerifyChecksum enables checksum verification by fetching a companion <url>.sha256 file.
+	// Only supported for plain HTTP fetches (no PolicyName, NIMPolicyUID, or N1CNamespace set).
+	// Mutually exclusive with ExpectedChecksum.
+	VerifyChecksum bool
 }
 
 // Fetcher fetches WAF policy bundles from remote sources.
@@ -79,6 +85,8 @@ type Fetcher interface {
 	// Fetch retrieves the bundle bytes described by req.
 	// For HTTP type: GETs req.URL. If req.VerifyChecksum is true, fetches req.URL+".sha256" to verify integrity.
 	// For NIM type: calls the NIM bundles API and base64-decodes items[0].content.
+	// For N1C type: resolves the policy via the N1C API and downloads the compiled bundle.
+	// VerifyChecksum is only supported for plain HTTP fetches; returns an error for NIM/N1C.
 	// Returns (data, checksum, error). checksum is hex-encoded SHA-256 of the returned data.
 	Fetch(ctx context.Context, req Request) (data []byte, checksum string, err error)
 }
@@ -101,19 +109,36 @@ func NewHTTPFetcher() *HTTPFetcher {
 // When req.N1CNamespace is set, uses N1C fetch logic (APIToken auth, N1C API path).
 // When req.PolicyName or req.NIMPolicyUID is set (and N1CNamespace is empty), uses NIM fetch logic.
 // Otherwise performs a plain GET to req.URL, optionally verifying the checksum.
-func (f *HTTPFetcher) Fetch(ctx context.Context, req Request) ([]byte, string, error) {
+// validateAndNormalizeRequest checks mutual-exclusion rules and normalises
+// ExpectedChecksum to lowercase. It returns the updated Request or an error.
+func validateAndNormalizeRequest(req Request) (Request, error) {
 	if req.ExpectedChecksum != "" && req.VerifyChecksum {
-		return nil, "", fmt.Errorf("ExpectedChecksum and VerifyChecksum are mutually exclusive")
+		return Request{}, fmt.Errorf("ExpectedChecksum and VerifyChecksum are mutually exclusive")
+	}
+
+	if req.VerifyChecksum && (req.N1CNamespace != "" || req.PolicyName != "" || req.NIMPolicyUID != "") {
+		return Request{}, fmt.Errorf(
+			"VerifyChecksum is only supported for plain HTTP fetches; use ExpectedChecksum for NIM/N1C sources",
+		)
 	}
 
 	if req.ExpectedChecksum != "" {
 		normalized := strings.ToLower(req.ExpectedChecksum)
 		if _, err := hex.DecodeString(normalized); err != nil || len(normalized) != 64 {
-			return nil, "", fmt.Errorf(
+			return Request{}, fmt.Errorf(
 				"invalid expected checksum %q: must be 64 hex characters", req.ExpectedChecksum,
 			)
 		}
 		req.ExpectedChecksum = normalized
+	}
+
+	return req, nil
+}
+
+func (f *HTTPFetcher) Fetch(ctx context.Context, req Request) ([]byte, string, error) {
+	var err error
+	if req, err = validateAndNormalizeRequest(req); err != nil {
+		return nil, "", err
 	}
 
 	timeout := defaultTimeout
