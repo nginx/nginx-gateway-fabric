@@ -12449,6 +12449,8 @@ spec:
                         description: |-
                           PolicyName is the name of the security policy in N1C.
                           Mutually exclusive with policyObjectID.
+                        maxLength: 253
+                        minLength: 1
                         type: string
                       policyObjectID:
                         description: |-
@@ -12489,6 +12491,8 @@ spec:
                         description: |-
                           PolicyName is the name of the compiled policy bundle in NIM.
                           Mutually exclusive with policyUID.
+                        maxLength: 253
+                        minLength: 1
                         type: string
                       policyUID:
                         description: |-

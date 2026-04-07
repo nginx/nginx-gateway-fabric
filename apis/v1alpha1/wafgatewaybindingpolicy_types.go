@@ -223,6 +223,8 @@ type NIMBundleSource struct {
 	// Mutually exclusive with policyUID.
 	//
 	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=253
 	PolicyName *string `json:"policyName,omitempty"`
 
 	// PolicyUID is the unique identifier of the compiled policy bundle in NIM.
@@ -253,6 +255,8 @@ type N1CBundleSource struct {
 	// Mutually exclusive with policyObjectID.
 	//
 	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=253
 	PolicyName *string `json:"policyName,omitempty"`
 
 	// PolicyObjectID is the unique object identifier of the security policy in N1C
