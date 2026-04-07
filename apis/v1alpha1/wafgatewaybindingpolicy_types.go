@@ -163,6 +163,9 @@ type BundleValidation struct {
 	// If set, the downloaded bundle must match this checksum or it will be rejected.
 	//
 	// +optional
+	// +kubebuilder:validation:MinLength=64
+	// +kubebuilder:validation:MaxLength=64
+	// +kubebuilder:validation:Pattern=`^[0-9a-fA-F]{64}$`
 	ExpectedChecksum *string `json:"expectedChecksum,omitempty"`
 
 	// VerifyChecksum enables automatic checksum verification using a checksum file
@@ -232,6 +235,10 @@ type NIMBundleSource struct {
 
 	// URL is the base URL of the NGINX Instance Manager instance,
 	// e.g. "https://nim.example.com".
+	//
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=2083
+	// +kubebuilder:validation:Pattern=`^https?://`
 	URL string `json:"url"`
 }
 
@@ -265,9 +272,16 @@ type N1CBundleSource struct {
 
 	// URL is the base URL of the F5 NGINX One Console instance,
 	// e.g. "https://<tenant>.volterra.us".
+	//
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=2083
+	// +kubebuilder:validation:Pattern=`^https?://`
 	URL string `json:"url"`
 
 	// N1CNamespace is the NGINX One Console namespace that owns the security policy.
+	//
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=253
 	N1CNamespace string `json:"namespace"`
 }
 

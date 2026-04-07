@@ -105,6 +105,8 @@ spec:
                       namespace:
                         description: N1CNamespace is the NGINX One Console namespace
                           that owns the security policy.
+                        maxLength: 253
+                        minLength: 1
                         type: string
                       policyName:
                         description: |-
@@ -128,6 +130,9 @@ spec:
                         description: |-
                           URL is the base URL of the F5 NGINX One Console instance,
                           e.g. "https://<tenant>.volterra.us".
+                        maxLength: 2083
+                        minLength: 1
+                        pattern: ^https?://
                         type: string
                     required:
                     - namespace
@@ -159,6 +164,9 @@ spec:
                         description: |-
                           URL is the base URL of the NGINX Instance Manager instance,
                           e.g. "https://nim.example.com".
+                        maxLength: 2083
+                        minLength: 1
+                        pattern: ^https?://
                         type: string
                     required:
                     - url
@@ -220,6 +228,9 @@ spec:
                         description: |-
                           ExpectedChecksum is the expected SHA256 checksum of the bundle.
                           If set, the downloaded bundle must match this checksum or it will be rejected.
+                        maxLength: 64
+                        minLength: 64
+                        pattern: ^[0-9a-fA-F]{64}$
                         type: string
                       verifyChecksum:
                         description: |-
@@ -393,6 +404,9 @@ spec:
                               description: |-
                                 ExpectedChecksum is the expected SHA256 checksum of the bundle.
                                 If set, the downloaded bundle must match this checksum or it will be rejected.
+                              maxLength: 64
+                              minLength: 64
+                              pattern: ^[0-9a-fA-F]{64}$
                               type: string
                             verifyChecksum:
                               description: |-

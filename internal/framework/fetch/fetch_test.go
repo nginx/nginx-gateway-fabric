@@ -270,6 +270,45 @@ func TestHTTPFetcherFetchExpectedChecksumMismatch(t *testing.T) {
 	g.Expect(err.Error()).To(ContainSubstring("bundle checksum mismatch"))
 }
 
+func TestHTTPFetcherFetchExpectedChecksumUppercase(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	body := []byte("bundle-content")
+	srv := newHTTPBundleServer(body, nil)
+	defer srv.Close()
+
+	sum := sha256.Sum256(body)
+	f := fetch.NewHTTPFetcher()
+	req := fetch.Request{
+		URL:              srv.URL + "/bundle.tgz",
+		ExpectedChecksum: strings.ToUpper(hex.EncodeToString(sum[:])),
+	}
+	data, _, err := f.Fetch(context.Background(), req)
+
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(data).To(Equal(body))
+}
+
+func TestHTTPFetcherFetchExpectedChecksumInvalid(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	body := []byte("bundle-content")
+	srv := newHTTPBundleServer(body, nil)
+	defer srv.Close()
+
+	f := fetch.NewHTTPFetcher()
+	req := fetch.Request{
+		URL:              srv.URL + "/bundle.tgz",
+		ExpectedChecksum: "notahexchecksum",
+	}
+	_, _, err := f.Fetch(context.Background(), req)
+
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(err.Error()).To(ContainSubstring("invalid expected checksum"))
+}
+
 func TestBuildNIMURLStripsBaseQueryAndFragment(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
@@ -300,6 +339,20 @@ func TestBuildNIMURLStripsBaseQueryAndFragment(t *testing.T) {
 	data, _, err := f.Fetch(context.Background(), req)
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(data).To(Equal(bundleContent))
+}
+
+func TestNIMFetchBothPolicyNameAndUIDIsInvalid(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	f := fetch.NewHTTPFetcher()
+	_, _, err := f.Fetch(t.Context(), fetch.Request{
+		URL:           "https://nim.example.com",
+		NIMPolicyName: "my-policy",
+		NIMPolicyUID:  "2bc1e3ac-7990-4ca4-910a-8634c444c804",
+	})
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(err.Error()).To(ContainSubstring("both were provided"))
 }
 
 func TestN1CFetchLatestVersion(t *testing.T) {

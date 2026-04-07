@@ -135,10 +135,18 @@ func (f *HTTPFetcher) Fetch(ctx context.Context, req Request) ([]byte, string, e
 		return nil, "", fetchErr
 	}
 
-	if req.ExpectedChecksum != "" && checksum != req.ExpectedChecksum {
-		return nil, "", fmt.Errorf(
-			"bundle checksum mismatch: expected %s, got %s", req.ExpectedChecksum, checksum,
-		)
+	if req.ExpectedChecksum != "" {
+		normalized := strings.ToLower(req.ExpectedChecksum)
+		if _, err := hex.DecodeString(normalized); err != nil || len(normalized) != 64 {
+			return nil, "", fmt.Errorf(
+				"invalid expected checksum %q: must be 64 hex characters", req.ExpectedChecksum,
+			)
+		}
+		if checksum != normalized {
+			return nil, "", fmt.Errorf(
+				"bundle checksum mismatch: expected %s, got %s", normalized, checksum,
+			)
+		}
 	}
 
 	return data, checksum, nil
@@ -489,6 +497,10 @@ func buildN1CCompileURL(baseURL, namespace, polObjID, polVersionID string) (stri
 // buildNIMURL constructs the NIM bundles API URL.
 // Exactly one of policyName or policyUID must be non-empty.
 func buildNIMURL(baseURL, policyName, policyUID string) (string, error) {
+	if policyName != "" && policyUID != "" {
+		return "", fmt.Errorf("exactly one of policyName or policyUID must be set, but both were provided")
+	}
+
 	base, err := url.Parse(baseURL)
 	if err != nil {
 		return "", fmt.Errorf("invalid NIM base URL %q: %w", baseURL, err)

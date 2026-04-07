@@ -16,7 +16,7 @@ spec:
       # policyUID: ""
       # Optional - add checksum for integrity verification of the bundle
     # validation:
-    #   expectedChecksum: "sha256:12345"
+    #   expectedChecksum: "abc123..." # 64 hex characters, e.g. output of: sha256sum policy.tgz | awk '{print $1}'
     auth:
       secretRef:
         name: nim-credentials
