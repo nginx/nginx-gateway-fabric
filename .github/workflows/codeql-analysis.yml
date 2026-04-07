@@ -26,6 +26,6 @@ jobs:
       actions: read # for github/codeql-action/init to get workflow details
       contents: read # for actions/checkout to fetch code
       security-events: write # for github/codeql-action/autobuild to send a status report
-    uses: nginxinc/compliance-rules/.github/workflows/codeql.yml@f7c1b54b34eade478560c7fd5300b7e6b6bf1b07 # v0.3.2
+    uses: nginx/compliance-rules/.github/workflows/codeql.yml@f7c1b54b34eade478560c7fd5300b7e6b6bf1b07 # v0.3.2
     with:
       requested_languages: go,javascript-typescript,actions
