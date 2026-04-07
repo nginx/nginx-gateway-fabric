@@ -357,6 +357,39 @@ func TestBuildNIMURLStripsBaseQueryAndFragment(t *testing.T) {
 	g.Expect(data).To(Equal(bundleContent))
 }
 
+func TestHTTPFetcherFetchNIMByUID(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	bundleContent := []byte("nim-uid-bundle-data")
+	encoded := base64.StdEncoding.EncodeToString(bundleContent)
+	policyUID := "2bc1e3ac-7990-4ca4-910a-8634c444c804"
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		g.Expect(r.URL.Path).To(Equal("/api/platform/v1/security/policies/bundles"))
+		g.Expect(r.URL.Query().Get("policyUID")).To(Equal(policyUID))
+		g.Expect(r.URL.Query().Get("includeBundleContent")).To(Equal("true"))
+		// policyName must not be sent when fetching by UID
+		g.Expect(r.URL.Query().Get("policyName")).To(BeEmpty())
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck
+			"items": []map[string]any{{"content": encoded}},
+		})
+	}))
+	defer srv.Close()
+
+	f := fetch.NewHTTPFetcher()
+	req := fetch.Request{
+		URL:          srv.URL,
+		NIMPolicyUID: policyUID,
+	}
+	data, checksum, err := f.Fetch(context.Background(), req)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(data).To(Equal(bundleContent))
+	g.Expect(checksum).To(Equal(computeChecksum(bundleContent)))
+}
+
 func TestNIMFetchBothPolicyNameAndUIDIsInvalid(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
@@ -513,6 +546,90 @@ func TestN1CFetchVersionNotFound(t *testing.T) {
 	_, _, err := f.Fetch(t.Context(), req)
 	g.Expect(err).To(HaveOccurred())
 	g.Expect(err.Error()).To(ContainSubstring("404"))
+}
+
+// TestN1CFetchByObjectIDLatestVersion exercises the branch where N1CPolicyObjectID is provided
+// without a pinned N1CPolicyVersionID. resolveN1CIDs must skip the policies-list call and instead
+// call the versions-list API to find the version marked latest:true.
+func TestN1CFetchByObjectIDLatestVersion(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	bundleContent := []byte("n1c-objid-latest-bundle")
+	polObjID := "pol_KnownObjectID"
+	latestVersionID := "pv_LatestVersion"
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/api/nginx/one/namespaces/my-ns/app-protect/policies/" + polObjID + "/versions":
+			json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck
+				"total": 2,
+				"items": []map[string]any{
+					{"object_id": "pv_OlderVersion", "latest": false},
+					{"object_id": latestVersionID, "latest": true},
+				},
+			})
+		case "/api/nginx/one/namespaces/my-ns/app-protect/policies/" + polObjID +
+			"/versions/" + latestVersionID + "/compile":
+			g.Expect(r.URL.Query().Get("download")).To(Equal("true"))
+			g.Expect(r.URL.Query().Get("nap_release")).NotTo(BeEmpty())
+			w.Header().Set("Content-Type", "application/octet-stream")
+			w.Write(bundleContent) //nolint:errcheck
+		default:
+			// policies-list must NOT be called when N1CPolicyObjectID is set
+			http.Error(w, "unexpected call to "+r.URL.Path, http.StatusInternalServerError)
+		}
+	}))
+	defer srv.Close()
+
+	f := fetch.NewHTTPFetcher()
+	req := fetch.Request{
+		URL:               srv.URL,
+		N1CNamespace:      "my-ns",
+		N1CPolicyObjectID: polObjID,
+		// N1CPolicyVersionID intentionally omitted — should trigger versions-list lookup
+	}
+	data, _, err := f.Fetch(t.Context(), req)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(data).To(Equal(bundleContent))
+}
+
+// TestN1CFetchByObjectIDPinnedVersion exercises the branch where both N1CPolicyObjectID and
+// N1CPolicyVersionID are set. resolveN1CIDs must skip both the policies-list and versions-list
+// calls and use the provided IDs directly.
+func TestN1CFetchByObjectIDPinnedVersion(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	bundleContent := []byte("n1c-objid-pinned-bundle")
+	polObjID := "pol_KnownObjectID"
+	pinnedVersionID := "pv_PinnedVersion"
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/api/nginx/one/namespaces/my-ns/app-protect/policies/" + polObjID +
+			"/versions/" + pinnedVersionID + "/compile":
+			w.Header().Set("Content-Type", "application/octet-stream")
+			w.Write(bundleContent) //nolint:errcheck
+		default:
+			// Neither policies-list nor versions-list should be called
+			http.Error(w, "unexpected call to "+r.URL.Path, http.StatusInternalServerError)
+		}
+	}))
+	defer srv.Close()
+
+	f := fetch.NewHTTPFetcher()
+	req := fetch.Request{
+		URL:                srv.URL,
+		N1CNamespace:       "my-ns",
+		N1CPolicyObjectID:  polObjID,
+		N1CPolicyVersionID: pinnedVersionID,
+	}
+	data, _, err := f.Fetch(t.Context(), req)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(data).To(Equal(bundleContent))
 }
 
 func TestHTTPFetcherFetchNIM(t *testing.T) {
