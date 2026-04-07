@@ -139,6 +139,7 @@ func StartManager(cfg config.Config) error {
 	}
 
 	wafFetcher := createWAFFetcher()
+	var wafPollerManager wafpolling.PollerManager
 
 	processor := state.NewChangeProcessorImpl(state.ChangeProcessorConfig{
 		GatewayCtlrName:  cfg.GatewayCtlrName,
@@ -153,6 +154,12 @@ func StartManager(cfg config.Config) error {
 		MustExtractGVK: mustExtractGVK,
 		PlusSecrets:    plusSecrets,
 		WAFFetcher:     wafFetcher,
+		PolledWAFBundles: func() map[graph.WAFBundleKey]*graph.WAFBundleData {
+			if wafPollerManager == nil {
+				return nil
+			}
+			return wafPollerManager.GetLatestBundles()
+		},
 		FeatureFlags: graph.FeatureFlags{
 			Plus:         cfg.Plus,
 			Experimental: cfg.ExperimentalFeatures,
@@ -184,7 +191,7 @@ func StartManager(cfg config.Config) error {
 		return err
 	}
 
-	wafPollerManager := createWAFPollerManager(cfg, wafFetcher, nginxUpdater, statusQueue)
+	wafPollerManager = createWAFPollerManager(cfg, wafFetcher, nginxUpdater, statusQueue)
 
 	eventHandler := newEventHandlerImpl(eventHandlerConfig{
 		ctx:              ctx,

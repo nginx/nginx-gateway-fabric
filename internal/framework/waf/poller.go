@@ -36,28 +36,30 @@ type BundleSource struct {
 // poller handles periodic re-fetching of WAF bundles for a single WAFGatewayBindingPolicy.
 // It compares checksums to detect changes and pushes updated bundles to relevant deployments.
 type poller struct {
-	fetcher           fetch.Fetcher
-	deployments       agent.DeploymentStorer
-	targetDeployments map[types.NamespacedName]struct{}
-	lastChecksums     map[graph.WAFBundleKey]string
-	statusCallback    func(policyNsName types.NamespacedName, bundleKey graph.WAFBundleKey, err error)
-	policyNsName      types.NamespacedName
-	logger            logr.Logger
-	sources           []BundleSource
-	targetMu          sync.RWMutex
-	checksumMu        sync.RWMutex
+	fetcher              fetch.Fetcher
+	deployments          agent.DeploymentStorer
+	targetDeployments    map[types.NamespacedName]struct{}
+	lastChecksums        map[graph.WAFBundleKey]string
+	statusCallback       func(policyNsName types.NamespacedName, bundleKey graph.WAFBundleKey, err error)
+	bundleUpdateCallback func(bundleKey graph.WAFBundleKey, data []byte, checksum string)
+	policyNsName         types.NamespacedName
+	logger               logr.Logger
+	sources              []BundleSource
+	targetMu             sync.RWMutex
+	checksumMu           sync.RWMutex
 }
 
 // pollerConfig contains the configuration for creating a new poller.
 type pollerConfig struct {
-	fetcher           fetch.Fetcher
-	deployments       agent.DeploymentStorer
-	initialChecksums  map[graph.WAFBundleKey]string
-	statusCallback    func(policyNsName types.NamespacedName, bundleKey graph.WAFBundleKey, err error)
-	policyNsName      types.NamespacedName
-	logger            logr.Logger
-	sources           []BundleSource
-	targetDeployments []types.NamespacedName
+	fetcher              fetch.Fetcher
+	deployments          agent.DeploymentStorer
+	initialChecksums     map[graph.WAFBundleKey]string
+	statusCallback       func(policyNsName types.NamespacedName, bundleKey graph.WAFBundleKey, err error)
+	bundleUpdateCallback func(bundleKey graph.WAFBundleKey, data []byte, checksum string)
+	policyNsName         types.NamespacedName
+	logger               logr.Logger
+	sources              []BundleSource
+	targetDeployments    []types.NamespacedName
 }
 
 // newPoller creates a new poller for the given WAFGatewayBindingPolicy.
@@ -71,14 +73,15 @@ func newPoller(cfg pollerConfig) *poller {
 	maps.Copy(checksums, cfg.initialChecksums)
 
 	return &poller{
-		logger:            cfg.logger.WithValues("policy", cfg.policyNsName),
-		policyNsName:      cfg.policyNsName,
-		sources:           cfg.sources,
-		fetcher:           cfg.fetcher,
-		deployments:       cfg.deployments,
-		targetDeployments: targets,
-		lastChecksums:     checksums,
-		statusCallback:    cfg.statusCallback,
+		logger:               cfg.logger.WithValues("policy", cfg.policyNsName),
+		policyNsName:         cfg.policyNsName,
+		sources:              cfg.sources,
+		fetcher:              cfg.fetcher,
+		deployments:          cfg.deployments,
+		targetDeployments:    targets,
+		lastChecksums:        checksums,
+		statusCallback:       cfg.statusCallback,
+		bundleUpdateCallback: cfg.bundleUpdateCallback,
 	}
 }
 
@@ -206,6 +209,11 @@ func (p *poller) pollSource(ctx context.Context, src BundleSource) {
 	p.checksumMu.Lock()
 	p.lastChecksums[src.BundleKey] = checksum
 	p.checksumMu.Unlock()
+
+	// Cache the new bundle so graph rebuilds can use it as stale-bundle fallback.
+	if p.bundleUpdateCallback != nil {
+		p.bundleUpdateCallback(src.BundleKey, data, checksum)
+	}
 
 	if p.statusCallback != nil {
 		p.statusCallback(p.policyNsName, src.BundleKey, nil)

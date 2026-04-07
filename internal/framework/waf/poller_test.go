@@ -402,6 +402,139 @@ func Test_poller_pollSourceSuccessWithCallback(t *testing.T) {
 	g.Expect(callbackErr).ToNot(HaveOccurred())
 }
 
+func Test_poller_bundleUpdateCallbackOnChange(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	fetcher := &fetchfakes.FakeFetcher{}
+	deployments := &agentfakes.FakeDeploymentStorer{}
+	logger := logr.Discard()
+
+	bundleKey := graph.WAFBundleKey("default_test")
+	oldChecksum := "abc123"
+	newChecksum := "def456"
+	newData := []byte("new bundle data")
+
+	// Fetcher returns new data.
+	fetcher.FetchReturns(newData, newChecksum, nil)
+	deployments.GetReturns(nil)
+
+	var callbackKey graph.WAFBundleKey
+	var callbackData []byte
+	var callbackChecksum string
+	var callbackCalled bool
+
+	poller := newPoller(pollerConfig{
+		logger:       logger,
+		policyNsName: types.NamespacedName{Namespace: "default", Name: "test"},
+		sources: []BundleSource{
+			{
+				BundleKey: bundleKey,
+				Request:   fetch.Request{URL: "http://example.com/bundle.tgz"},
+				Interval:  5 * time.Minute,
+			},
+		},
+		fetcher:           fetcher,
+		deployments:       deployments,
+		targetDeployments: []types.NamespacedName{{Namespace: "nginx-gateway", Name: "nginx"}},
+		initialChecksums:  map[graph.WAFBundleKey]string{bundleKey: oldChecksum},
+		bundleUpdateCallback: func(key graph.WAFBundleKey, data []byte, checksum string) {
+			callbackCalled = true
+			callbackKey = key
+			callbackData = data
+			callbackChecksum = checksum
+		},
+	})
+
+	src := poller.sources[0]
+	poller.pollSource(t.Context(), src)
+
+	g.Expect(callbackCalled).To(BeTrue())
+	g.Expect(callbackKey).To(Equal(bundleKey))
+	g.Expect(callbackData).To(Equal(newData))
+	g.Expect(callbackChecksum).To(Equal(newChecksum))
+}
+
+func Test_poller_bundleUpdateCallbackNotCalledOnUnchanged(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	fetcher := &fetchfakes.FakeFetcher{}
+	deployments := &agentfakes.FakeDeploymentStorer{}
+	logger := logr.Discard()
+
+	bundleKey := graph.WAFBundleKey("default_test")
+	checksum := "abc123"
+
+	// Fetcher returns same checksum — no change.
+	fetcher.FetchReturns([]byte("data"), checksum, nil)
+
+	var callbackCalled bool
+
+	poller := newPoller(pollerConfig{
+		logger:       logger,
+		policyNsName: types.NamespacedName{Namespace: "default", Name: "test"},
+		sources: []BundleSource{
+			{
+				BundleKey: bundleKey,
+				Request:   fetch.Request{URL: "http://example.com/bundle.tgz"},
+				Interval:  5 * time.Minute,
+			},
+		},
+		fetcher:           fetcher,
+		deployments:       deployments,
+		targetDeployments: []types.NamespacedName{{Namespace: "nginx-gateway", Name: "nginx"}},
+		initialChecksums:  map[graph.WAFBundleKey]string{bundleKey: checksum},
+		bundleUpdateCallback: func(_ graph.WAFBundleKey, _ []byte, _ string) {
+			callbackCalled = true
+		},
+	})
+
+	src := poller.sources[0]
+	poller.pollSource(t.Context(), src)
+
+	g.Expect(callbackCalled).To(BeFalse())
+}
+
+func Test_poller_bundleUpdateCallbackNotCalledOnError(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	fetcher := &fetchfakes.FakeFetcher{}
+	deployments := &agentfakes.FakeDeploymentStorer{}
+	logger := logr.Discard()
+
+	bundleKey := graph.WAFBundleKey("default_test")
+
+	// Fetcher returns error.
+	fetcher.FetchReturns(nil, "", errors.New("network error"))
+
+	var callbackCalled bool
+
+	poller := newPoller(pollerConfig{
+		logger:       logger,
+		policyNsName: types.NamespacedName{Namespace: "default", Name: "test"},
+		sources: []BundleSource{
+			{
+				BundleKey: bundleKey,
+				Request:   fetch.Request{URL: "http://example.com/bundle.tgz"},
+				Interval:  5 * time.Minute,
+			},
+		},
+		fetcher:           fetcher,
+		deployments:       deployments,
+		targetDeployments: []types.NamespacedName{{Namespace: "nginx-gateway", Name: "nginx"}},
+		bundleUpdateCallback: func(_ graph.WAFBundleKey, _ []byte, _ string) {
+			callbackCalled = true
+		},
+	})
+
+	src := poller.sources[0]
+	poller.pollSource(t.Context(), src)
+
+	g.Expect(callbackCalled).To(BeFalse())
+}
+
 func Test_poller_pushBundleNoSubscribers(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)

@@ -27,8 +27,12 @@ type PollError struct {
 type PollerManager interface {
 	// ReconcilePoller ensures a poller is running with the correct configuration.
 	ReconcilePoller(ctx context.Context, cfg PollerConfig)
-	// GetAllPollErrors returns a copy of all current poll errors.
-	GetAllPollErrors() map[types.NamespacedName]*PollError
+	// GetAllPollErrors returns a deep copy of all current poll errors.
+	GetAllPollErrors() map[types.NamespacedName]PollError
+	// GetLatestBundles returns a copy of all bundles that have been successfully fetched by pollers.
+	// These represent the freshest known bundle data and should take precedence over
+	// graph-cached bundles when constructing stale-bundle fallback state.
+	GetLatestBundles() map[graph.WAFBundleKey]*graph.WAFBundleData
 	// StopPoller stops the poller for a WAFGatewayBindingPolicy.
 	StopPoller(policyNsName types.NamespacedName)
 	// StopPollersNotIn stops all pollers whose policy namespace/name is not in the given set.
@@ -42,6 +46,7 @@ type Manager struct {
 	deployments    agent.DeploymentStorer
 	pollers        map[types.NamespacedName]*pollerEntry
 	pollErrors     map[types.NamespacedName]*PollError
+	bundleCache    map[graph.WAFBundleKey]*graph.WAFBundleData
 	statusCallback func(targets []types.NamespacedName)
 	logger         logr.Logger
 	mu             sync.RWMutex
@@ -69,6 +74,7 @@ func NewManager(cfg ManagerConfig) *Manager {
 		deployments:    cfg.Deployments,
 		pollers:        make(map[types.NamespacedName]*pollerEntry),
 		pollErrors:     make(map[types.NamespacedName]*PollError),
+		bundleCache:    make(map[graph.WAFBundleKey]*graph.WAFBundleData),
 		statusCallback: cfg.StatusCallback,
 	}
 }
@@ -134,14 +140,15 @@ func (m *Manager) startPoller(ctx context.Context, cfg PollerConfig) {
 	}
 
 	poller = newPoller(pollerConfig{
-		logger:            m.logger,
-		policyNsName:      cfg.PolicyNsName,
-		sources:           cfg.Sources,
-		fetcher:           m.fetcher,
-		deployments:       m.deployments,
-		targetDeployments: cfg.TargetDeployments,
-		initialChecksums:  cfg.InitialChecksums,
-		statusCallback:    wrappedCallback,
+		logger:               m.logger,
+		policyNsName:         cfg.PolicyNsName,
+		sources:              cfg.Sources,
+		fetcher:              m.fetcher,
+		deployments:          m.deployments,
+		targetDeployments:    cfg.TargetDeployments,
+		initialChecksums:     cfg.InitialChecksums,
+		statusCallback:       wrappedCallback,
+		bundleUpdateCallback: m.cacheBundleUpdate,
 	})
 
 	m.pollers[cfg.PolicyNsName] = &pollerEntry{
@@ -183,8 +190,21 @@ func (m *Manager) recordPollResult(policyNsName types.NamespacedName, bundleKey 
 	}
 }
 
-// GetAllPollErrors returns a copy of all current poll errors.
-func (m *Manager) GetAllPollErrors() map[types.NamespacedName]*PollError {
+// cacheBundleUpdate stores the latest successfully polled bundle data in the manager's cache.
+// This is called by pollers when they detect a changed bundle, ensuring the freshest data
+// is available for graph rebuild stale-bundle fallback.
+func (m *Manager) cacheBundleUpdate(bundleKey graph.WAFBundleKey, data []byte, checksum string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.bundleCache[bundleKey] = &graph.WAFBundleData{
+		Data:     data,
+		Checksum: checksum,
+	}
+}
+
+// GetAllPollErrors returns a deep copy of all current poll errors.
+func (m *Manager) GetAllPollErrors() map[types.NamespacedName]PollError {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -192,8 +212,26 @@ func (m *Manager) GetAllPollErrors() map[types.NamespacedName]*PollError {
 		return nil
 	}
 
-	result := make(map[types.NamespacedName]*PollError, len(m.pollErrors))
-	maps.Copy(result, m.pollErrors)
+	result := make(map[types.NamespacedName]PollError, len(m.pollErrors))
+	for k, v := range m.pollErrors {
+		result[k] = *v
+	}
+	return result
+}
+
+// GetLatestBundles returns a copy of all bundles that have been successfully fetched by pollers.
+// These represent the freshest known bundle data and should take precedence over
+// graph-cached bundles when constructing stale-bundle fallback state.
+func (m *Manager) GetLatestBundles() map[graph.WAFBundleKey]*graph.WAFBundleData {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	if len(m.bundleCache) == 0 {
+		return nil
+	}
+
+	result := make(map[graph.WAFBundleKey]*graph.WAFBundleData, len(m.bundleCache))
+	maps.Copy(result, m.bundleCache)
 	return result
 }
 
@@ -207,6 +245,7 @@ func (m *Manager) StopPoller(policyNsName types.NamespacedName) {
 	}
 	delete(m.pollers, policyNsName)
 	delete(m.pollErrors, policyNsName) // Clear any poll error when stopping.
+	m.clearBundleCacheLocked(entry.poller)
 	m.mu.Unlock()
 
 	entry.cancel()
@@ -236,6 +275,7 @@ func (m *Manager) stopAll() {
 	}
 	m.pollers = make(map[types.NamespacedName]*pollerEntry)
 	m.pollErrors = make(map[types.NamespacedName]*PollError)
+	m.bundleCache = make(map[graph.WAFBundleKey]*graph.WAFBundleData)
 	m.mu.Unlock()
 
 	for _, entry := range entries {
@@ -243,6 +283,14 @@ func (m *Manager) stopAll() {
 	}
 
 	m.logger.Info("Stopped all WAF pollers", "count", len(entries))
+}
+
+// clearBundleCacheLocked removes cached bundle data for all bundle keys owned by the given poller.
+// Must be called while m.mu is held.
+func (m *Manager) clearBundleCacheLocked(p *poller) {
+	for _, src := range p.getSources() {
+		delete(m.bundleCache, src.BundleKey)
+	}
 }
 
 // StopPollersNotIn stops all pollers whose policy namespace/name is not in the given set.
@@ -262,6 +310,7 @@ func (m *Manager) StopPollersNotIn(activePolicies map[types.NamespacedName]struc
 			entriesToCancel = append(entriesToCancel, entry)
 			delete(m.pollers, nsName)
 			delete(m.pollErrors, nsName) // Clear any poll error when stopping.
+			m.clearBundleCacheLocked(entry.poller)
 		}
 	}
 	m.mu.Unlock()

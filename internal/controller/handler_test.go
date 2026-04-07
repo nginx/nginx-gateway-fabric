@@ -1364,7 +1364,7 @@ func TestMergeWAFPollErrors(t *testing.T) {
 	bundleKey := graph.PolicyBundleKey(policyNsName)
 
 	tests := []struct {
-		pollErrors      map[types.NamespacedName]*waf.PollError
+		pollErrors      map[types.NamespacedName]waf.PollError
 		policy          *graph.Policy
 		name            string
 		expectCondCount int
@@ -1373,7 +1373,7 @@ func TestMergeWAFPollErrors(t *testing.T) {
 	}{
 		{
 			name: "adds stale-bundle warning when bundle exists",
-			pollErrors: map[types.NamespacedName]*waf.PollError{
+			pollErrors: map[types.NamespacedName]waf.PollError{
 				policyNsName: {
 					BundleKey: bundleKey,
 					Err:       errors.New("fetch timeout"),
@@ -1392,7 +1392,7 @@ func TestMergeWAFPollErrors(t *testing.T) {
 		},
 		{
 			name: "skips warning when no bundle exists (initial fetch failed)",
-			pollErrors: map[types.NamespacedName]*waf.PollError{
+			pollErrors: map[types.NamespacedName]waf.PollError{
 				policyNsName: {
 					BundleKey: bundleKey,
 					Err:       errors.New("fetch timeout"),
@@ -1409,7 +1409,7 @@ func TestMergeWAFPollErrors(t *testing.T) {
 		},
 		{
 			name: "skips warning when WAFState is nil",
-			pollErrors: map[types.NamespacedName]*waf.PollError{
+			pollErrors: map[types.NamespacedName]waf.PollError{
 				policyNsName: {
 					BundleKey: bundleKey,
 					Err:       errors.New("fetch timeout"),
@@ -1424,7 +1424,7 @@ func TestMergeWAFPollErrors(t *testing.T) {
 		},
 		{
 			name: "skips warning for invalid policy",
-			pollErrors: map[types.NamespacedName]*waf.PollError{
+			pollErrors: map[types.NamespacedName]waf.PollError{
 				policyNsName: {
 					BundleKey: bundleKey,
 					Err:       errors.New("fetch timeout"),
@@ -1466,7 +1466,7 @@ func TestMergeWAFPollErrors(t *testing.T) {
 		{
 			name:          "skips when policy is not in graph",
 			useEmptyGraph: true,
-			pollErrors: map[types.NamespacedName]*waf.PollError{
+			pollErrors: map[types.NamespacedName]waf.PollError{
 				policyNsName: {
 					BundleKey: bundleKey,
 					Err:       errors.New("fetch timeout"),
@@ -1532,7 +1532,7 @@ func TestMergeWAFPollErrors(t *testing.T) {
 		g := NewWithT(t)
 
 		fakeManager := &waffakes.FakePollerManager{}
-		fakeManager.GetAllPollErrorsReturns(map[types.NamespacedName]*waf.PollError{
+		fakeManager.GetAllPollErrorsReturns(map[types.NamespacedName]waf.PollError{
 			policyNsName: {BundleKey: bundleKey, Err: errors.New("fetch timeout")},
 		})
 
@@ -1591,13 +1591,13 @@ func TestMergeWAFPollErrors(t *testing.T) {
 		}
 
 		// First call with one error message.
-		fakeManager.GetAllPollErrorsReturns(map[types.NamespacedName]*waf.PollError{
+		fakeManager.GetAllPollErrorsReturns(map[types.NamespacedName]waf.PollError{
 			policyNsName: {BundleKey: bundleKey, Err: errors.New("timeout")},
 		})
 		handler.mergeWAFPollErrors(gr)
 
 		// Second call with a different error message.
-		fakeManager.GetAllPollErrorsReturns(map[types.NamespacedName]*waf.PollError{
+		fakeManager.GetAllPollErrorsReturns(map[types.NamespacedName]waf.PollError{
 			policyNsName: {BundleKey: bundleKey, Err: errors.New("connection refused")},
 		})
 		handler.mergeWAFPollErrors(gr)

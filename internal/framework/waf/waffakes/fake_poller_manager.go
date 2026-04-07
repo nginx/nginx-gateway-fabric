@@ -5,20 +5,31 @@ import (
 	"context"
 	"sync"
 
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/waf"
 	"k8s.io/apimachinery/pkg/types"
 )
 
 type FakePollerManager struct {
-	GetAllPollErrorsStub        func() map[types.NamespacedName]*waf.PollError
+	GetAllPollErrorsStub        func() map[types.NamespacedName]waf.PollError
 	getAllPollErrorsMutex       sync.RWMutex
 	getAllPollErrorsArgsForCall []struct {
 	}
 	getAllPollErrorsReturns struct {
-		result1 map[types.NamespacedName]*waf.PollError
+		result1 map[types.NamespacedName]waf.PollError
 	}
 	getAllPollErrorsReturnsOnCall map[int]struct {
-		result1 map[types.NamespacedName]*waf.PollError
+		result1 map[types.NamespacedName]waf.PollError
+	}
+	GetLatestBundlesStub        func() map[graph.WAFBundleKey]*graph.WAFBundleData
+	getLatestBundlesMutex       sync.RWMutex
+	getLatestBundlesArgsForCall []struct {
+	}
+	getLatestBundlesReturns struct {
+		result1 map[graph.WAFBundleKey]*graph.WAFBundleData
+	}
+	getLatestBundlesReturnsOnCall map[int]struct {
+		result1 map[graph.WAFBundleKey]*graph.WAFBundleData
 	}
 	ReconcilePollerStub        func(context.Context, waf.PollerConfig)
 	reconcilePollerMutex       sync.RWMutex
@@ -40,7 +51,7 @@ type FakePollerManager struct {
 	invocationsMutex sync.RWMutex
 }
 
-func (fake *FakePollerManager) GetAllPollErrors() map[types.NamespacedName]*waf.PollError {
+func (fake *FakePollerManager) GetAllPollErrors() map[types.NamespacedName]waf.PollError {
 	fake.getAllPollErrorsMutex.Lock()
 	ret, specificReturn := fake.getAllPollErrorsReturnsOnCall[len(fake.getAllPollErrorsArgsForCall)]
 	fake.getAllPollErrorsArgsForCall = append(fake.getAllPollErrorsArgsForCall, struct {
@@ -64,32 +75,85 @@ func (fake *FakePollerManager) GetAllPollErrorsCallCount() int {
 	return len(fake.getAllPollErrorsArgsForCall)
 }
 
-func (fake *FakePollerManager) GetAllPollErrorsCalls(stub func() map[types.NamespacedName]*waf.PollError) {
+func (fake *FakePollerManager) GetAllPollErrorsCalls(stub func() map[types.NamespacedName]waf.PollError) {
 	fake.getAllPollErrorsMutex.Lock()
 	defer fake.getAllPollErrorsMutex.Unlock()
 	fake.GetAllPollErrorsStub = stub
 }
 
-func (fake *FakePollerManager) GetAllPollErrorsReturns(result1 map[types.NamespacedName]*waf.PollError) {
+func (fake *FakePollerManager) GetAllPollErrorsReturns(result1 map[types.NamespacedName]waf.PollError) {
 	fake.getAllPollErrorsMutex.Lock()
 	defer fake.getAllPollErrorsMutex.Unlock()
 	fake.GetAllPollErrorsStub = nil
 	fake.getAllPollErrorsReturns = struct {
-		result1 map[types.NamespacedName]*waf.PollError
+		result1 map[types.NamespacedName]waf.PollError
 	}{result1}
 }
 
-func (fake *FakePollerManager) GetAllPollErrorsReturnsOnCall(i int, result1 map[types.NamespacedName]*waf.PollError) {
+func (fake *FakePollerManager) GetAllPollErrorsReturnsOnCall(i int, result1 map[types.NamespacedName]waf.PollError) {
 	fake.getAllPollErrorsMutex.Lock()
 	defer fake.getAllPollErrorsMutex.Unlock()
 	fake.GetAllPollErrorsStub = nil
 	if fake.getAllPollErrorsReturnsOnCall == nil {
 		fake.getAllPollErrorsReturnsOnCall = make(map[int]struct {
-			result1 map[types.NamespacedName]*waf.PollError
+			result1 map[types.NamespacedName]waf.PollError
 		})
 	}
 	fake.getAllPollErrorsReturnsOnCall[i] = struct {
-		result1 map[types.NamespacedName]*waf.PollError
+		result1 map[types.NamespacedName]waf.PollError
+	}{result1}
+}
+
+func (fake *FakePollerManager) GetLatestBundles() map[graph.WAFBundleKey]*graph.WAFBundleData {
+	fake.getLatestBundlesMutex.Lock()
+	ret, specificReturn := fake.getLatestBundlesReturnsOnCall[len(fake.getLatestBundlesArgsForCall)]
+	fake.getLatestBundlesArgsForCall = append(fake.getLatestBundlesArgsForCall, struct {
+	}{})
+	stub := fake.GetLatestBundlesStub
+	fakeReturns := fake.getLatestBundlesReturns
+	fake.recordInvocation("GetLatestBundles", []interface{}{})
+	fake.getLatestBundlesMutex.Unlock()
+	if stub != nil {
+		return stub()
+	}
+	if specificReturn {
+		return ret.result1
+	}
+	return fakeReturns.result1
+}
+
+func (fake *FakePollerManager) GetLatestBundlesCallCount() int {
+	fake.getLatestBundlesMutex.RLock()
+	defer fake.getLatestBundlesMutex.RUnlock()
+	return len(fake.getLatestBundlesArgsForCall)
+}
+
+func (fake *FakePollerManager) GetLatestBundlesCalls(stub func() map[graph.WAFBundleKey]*graph.WAFBundleData) {
+	fake.getLatestBundlesMutex.Lock()
+	defer fake.getLatestBundlesMutex.Unlock()
+	fake.GetLatestBundlesStub = stub
+}
+
+func (fake *FakePollerManager) GetLatestBundlesReturns(result1 map[graph.WAFBundleKey]*graph.WAFBundleData) {
+	fake.getLatestBundlesMutex.Lock()
+	defer fake.getLatestBundlesMutex.Unlock()
+	fake.GetLatestBundlesStub = nil
+	fake.getLatestBundlesReturns = struct {
+		result1 map[graph.WAFBundleKey]*graph.WAFBundleData
+	}{result1}
+}
+
+func (fake *FakePollerManager) GetLatestBundlesReturnsOnCall(i int, result1 map[graph.WAFBundleKey]*graph.WAFBundleData) {
+	fake.getLatestBundlesMutex.Lock()
+	defer fake.getLatestBundlesMutex.Unlock()
+	fake.GetLatestBundlesStub = nil
+	if fake.getLatestBundlesReturnsOnCall == nil {
+		fake.getLatestBundlesReturnsOnCall = make(map[int]struct {
+			result1 map[graph.WAFBundleKey]*graph.WAFBundleData
+		})
+	}
+	fake.getLatestBundlesReturnsOnCall[i] = struct {
+		result1 map[graph.WAFBundleKey]*graph.WAFBundleData
 	}{result1}
 }
 

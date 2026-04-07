@@ -495,7 +495,7 @@ func TestManager_pollErrors(t *testing.T) {
 
 	allErrors := mgr.GetAllPollErrors()
 	g.Expect(allErrors).To(HaveLen(1))
-	g.Expect(allErrors[policyNsName]).ToNot(BeNil())
+	g.Expect(allErrors).To(HaveKey(policyNsName))
 	g.Expect(allErrors[policyNsName].BundleKey).To(Equal(bundleKey))
 	g.Expect(allErrors[policyNsName].Err).To(Equal(testErr))
 
@@ -545,6 +545,194 @@ func TestManager_stopPollerClearsPollError(t *testing.T) {
 	mgr.StopPoller(policyNsName)
 
 	g.Expect(mgr.GetAllPollErrors()).ToNot(HaveKey(policyNsName))
+}
+
+func TestManager_stopPollerClearsBundleCache(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	mgr := NewManager(ManagerConfig{
+		Logger:      logr.Discard(),
+		Fetcher:     &fetchfakes.FakeFetcher{},
+		Deployments: &agentfakes.FakeDeploymentStorer{},
+	})
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	policyNsName := types.NamespacedName{Namespace: "default", Name: "test-policy"}
+	bundleKey := graph.WAFBundleKey("test_policy")
+	sources := []BundleSource{
+		{
+			BundleKey: bundleKey,
+			Request:   fetch.Request{URL: "http://example.com/bundle.tgz"},
+			Interval:  1 * time.Hour,
+		},
+	}
+
+	mgr.ReconcilePoller(ctx, PollerConfig{
+		PolicyNsName:      policyNsName,
+		Sources:           sources,
+		TargetDeployments: []types.NamespacedName{{Namespace: "nginx-gateway", Name: "nginx"}},
+	})
+
+	// Simulate a cached bundle.
+	mgr.cacheBundleUpdate(bundleKey, []byte("data"), "checksum")
+	g.Expect(mgr.GetLatestBundles()).To(HaveKey(bundleKey))
+
+	// StopPoller should clear the cached bundle.
+	mgr.StopPoller(policyNsName)
+
+	g.Expect(mgr.GetLatestBundles()).ToNot(HaveKey(bundleKey))
+}
+
+func TestManager_stopPollersNotInClearsBundleCache(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	mgr := NewManager(ManagerConfig{
+		Logger:      logr.Discard(),
+		Fetcher:     &fetchfakes.FakeFetcher{},
+		Deployments: &agentfakes.FakeDeploymentStorer{},
+	})
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	policyA := types.NamespacedName{Namespace: "default", Name: "policy-a"}
+	policyB := types.NamespacedName{Namespace: "default", Name: "policy-b"}
+	bundleKeyA := graph.WAFBundleKey("policy_a")
+	bundleKeyB := graph.WAFBundleKey("policy_b")
+
+	mgr.ReconcilePoller(ctx, PollerConfig{
+		PolicyNsName: policyA,
+		Sources: []BundleSource{{
+			BundleKey: bundleKeyA,
+			Request:   fetch.Request{URL: "http://example.com/a.tgz"},
+			Interval:  1 * time.Hour,
+		}},
+		TargetDeployments: []types.NamespacedName{{Namespace: "nginx-gateway", Name: "nginx"}},
+	})
+	mgr.ReconcilePoller(ctx, PollerConfig{
+		PolicyNsName: policyB,
+		Sources: []BundleSource{{
+			BundleKey: bundleKeyB,
+			Request:   fetch.Request{URL: "http://example.com/b.tgz"},
+			Interval:  1 * time.Hour,
+		}},
+		TargetDeployments: []types.NamespacedName{{Namespace: "nginx-gateway", Name: "nginx"}},
+	})
+
+	mgr.cacheBundleUpdate(bundleKeyA, []byte("data-a"), "checksum-a")
+	mgr.cacheBundleUpdate(bundleKeyB, []byte("data-b"), "checksum-b")
+	g.Expect(mgr.GetLatestBundles()).To(HaveLen(2))
+
+	// Keep only policyA active — policyB's cached bundle should be cleared.
+	mgr.StopPollersNotIn(map[types.NamespacedName]struct{}{policyA: {}})
+
+	bundles := mgr.GetLatestBundles()
+	g.Expect(bundles).To(HaveLen(1))
+	g.Expect(bundles).To(HaveKey(bundleKeyA))
+	g.Expect(bundles).ToNot(HaveKey(bundleKeyB))
+}
+
+func TestManager_GetLatestBundles(t *testing.T) {
+	t.Parallel()
+
+	t.Run("empty cache returns nil", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+
+		mgr := NewManager(ManagerConfig{
+			Logger:      logr.Discard(),
+			Fetcher:     &fetchfakes.FakeFetcher{},
+			Deployments: &agentfakes.FakeDeploymentStorer{},
+		})
+
+		g.Expect(mgr.GetLatestBundles()).To(BeNil())
+	})
+
+	t.Run("returns cached bundles after update", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+
+		mgr := NewManager(ManagerConfig{
+			Logger:      logr.Discard(),
+			Fetcher:     &fetchfakes.FakeFetcher{},
+			Deployments: &agentfakes.FakeDeploymentStorer{},
+		})
+
+		bundleKey := graph.WAFBundleKey("default_my-policy")
+		bundleData := []byte("bundle content")
+		checksum := "abc123"
+
+		mgr.cacheBundleUpdate(bundleKey, bundleData, checksum)
+
+		bundles := mgr.GetLatestBundles()
+		g.Expect(bundles).To(HaveLen(1))
+		g.Expect(bundles[bundleKey]).To(Equal(&graph.WAFBundleData{
+			Data:     bundleData,
+			Checksum: checksum,
+		}))
+	})
+
+	t.Run("overwrites existing entry for same key", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+
+		mgr := NewManager(ManagerConfig{
+			Logger:      logr.Discard(),
+			Fetcher:     &fetchfakes.FakeFetcher{},
+			Deployments: &agentfakes.FakeDeploymentStorer{},
+		})
+
+		bundleKey := graph.WAFBundleKey("default_my-policy")
+		mgr.cacheBundleUpdate(bundleKey, []byte("old"), "old-checksum")
+		mgr.cacheBundleUpdate(bundleKey, []byte("new"), "new-checksum")
+
+		bundles := mgr.GetLatestBundles()
+		g.Expect(bundles).To(HaveLen(1))
+		g.Expect(bundles[bundleKey].Checksum).To(Equal("new-checksum"))
+		g.Expect(bundles[bundleKey].Data).To(Equal([]byte("new")))
+	})
+
+	t.Run("returns independent copy", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+
+		mgr := NewManager(ManagerConfig{
+			Logger:      logr.Discard(),
+			Fetcher:     &fetchfakes.FakeFetcher{},
+			Deployments: &agentfakes.FakeDeploymentStorer{},
+		})
+
+		bundleKey := graph.WAFBundleKey("default_my-policy")
+		mgr.cacheBundleUpdate(bundleKey, []byte("data"), "checksum")
+
+		copy1 := mgr.GetLatestBundles()
+		copy2 := mgr.GetLatestBundles()
+
+		// Mutating one copy should not affect the other.
+		delete(copy1, bundleKey)
+		g.Expect(copy2).To(HaveLen(1))
+	})
+
+	t.Run("stopAll clears cache", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+
+		mgr := NewManager(ManagerConfig{
+			Logger:      logr.Discard(),
+			Fetcher:     &fetchfakes.FakeFetcher{},
+			Deployments: &agentfakes.FakeDeploymentStorer{},
+		})
+
+		mgr.cacheBundleUpdate(graph.WAFBundleKey("default_policy"), []byte("data"), "checksum")
+		g.Expect(mgr.GetLatestBundles()).To(HaveLen(1))
+
+		mgr.stopAll()
+		g.Expect(mgr.GetLatestBundles()).To(BeNil())
+	})
 }
 
 func TestManager_StatusCallbackViaConfig(t *testing.T) {
