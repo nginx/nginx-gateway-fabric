@@ -864,6 +864,61 @@ func TestBuildBundleSources(t *testing.T) {
 			},
 			expectedSources: 3, // 1 policy + 2 log sources.
 		},
+		{
+			name: "zero interval falls back to default",
+			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
+				PolicySource: ngfAPIv1alpha1.PolicySource{
+					URL: "http://example.com/policy.tgz",
+					Polling: &ngfAPIv1alpha1.BundlePolling{
+						Enabled:  true,
+						Interval: &metav1.Duration{Duration: 0},
+					},
+				},
+			},
+			expectedSources: 1,
+			validateSources: func(g Gomega, sources []BundleSource) {
+				g.Expect(sources[0].Interval).To(Equal(defaultPollingInterval))
+			},
+		},
+		{
+			name: "negative interval falls back to default",
+			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
+				PolicySource: ngfAPIv1alpha1.PolicySource{
+					URL: "http://example.com/policy.tgz",
+					Polling: &ngfAPIv1alpha1.BundlePolling{
+						Enabled:  true,
+						Interval: &metav1.Duration{Duration: -1 * time.Minute},
+					},
+				},
+			},
+			expectedSources: 1,
+			validateSources: func(g Gomega, sources []BundleSource) {
+				g.Expect(sources[0].Interval).To(Equal(defaultPollingInterval))
+			},
+		},
+		{
+			name: "negative log source interval falls back to default",
+			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
+				PolicySource: ngfAPIv1alpha1.PolicySource{
+					URL: "http://example.com/policy.tgz",
+				},
+				SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
+					{
+						LogSource: ngfAPIv1alpha1.LogSource{
+							URL: helpers.GetPointer("http://example.com/log.tgz"),
+							Polling: &ngfAPIv1alpha1.BundlePolling{
+								Enabled:  true,
+								Interval: &metav1.Duration{Duration: -5 * time.Second},
+							},
+						},
+					},
+				},
+			},
+			expectedSources: 1,
+			validateSources: func(g Gomega, sources []BundleSource) {
+				g.Expect(sources[0].Interval).To(Equal(defaultPollingInterval))
+			},
+		},
 	}
 
 	for _, tc := range tests {

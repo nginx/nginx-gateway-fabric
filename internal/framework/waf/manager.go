@@ -103,25 +103,21 @@ func (m *Manager) ReconcilePoller(ctx context.Context, cfg PollerConfig) {
 	m.mu.Unlock()
 
 	// Sources changed or poller doesn't exist - need to (re)start.
-	m.startPollerLocked(ctx, cfg, exists)
+	m.startPoller(ctx, cfg)
 }
 
-// startPollerLocked starts a new poller, stopping any existing one first.
-// The caller indicates whether an existing poller should be stopped.
-func (m *Manager) startPollerLocked(ctx context.Context, cfg PollerConfig, stopExisting bool) {
+// startPoller starts a new poller, stopping any existing one first.
+func (m *Manager) startPoller(ctx context.Context, cfg PollerConfig) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	// Stop existing poller if any.
-	if stopExisting {
-		if entry, exists := m.pollers[cfg.PolicyNsName]; exists {
-			m.logger.V(1).Info("Stopping existing poller before starting new one", "policy", cfg.PolicyNsName)
-			entry.cancel()
-			delete(m.pollErrors, cfg.PolicyNsName)
-
-			// Don't wait for it to stop here to avoid blocking under lock.
-			// The old poller will exit on its own.
-		}
+	// Always cancel any existing poller before overwriting the map entry.
+	// This is safe even if the caller didn't observe one, because another
+	// goroutine may have started one between our check and acquiring this lock.
+	if entry, exists := m.pollers[cfg.PolicyNsName]; exists {
+		m.logger.V(1).Info("Stopping existing poller before starting new one", "policy", cfg.PolicyNsName)
+		entry.cancel()
+		delete(m.pollErrors, cfg.PolicyNsName)
 	}
 
 	pollerCtx, cancel := context.WithCancel(ctx) //nolint:gosec // Cancel is handled externally to this function

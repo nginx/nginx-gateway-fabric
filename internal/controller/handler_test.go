@@ -1526,6 +1526,88 @@ func TestMergeWAFPollErrors(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("idempotent on repeated calls", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+
+		fakeManager := &waffakes.FakePollerManager{}
+		fakeManager.GetAllPollErrorsReturns(map[types.NamespacedName]*waf.PollError{
+			policyNsName: {BundleKey: bundleKey, Err: errors.New("fetch timeout")},
+		})
+
+		handler := &eventHandlerImpl{
+			cfg: eventHandlerConfig{wafPollerManager: fakeManager},
+		}
+
+		policy := &graph.Policy{
+			Source: makeWAFPolicy(true),
+			Valid:  true,
+			WAFState: &graph.PolicyWAFState{
+				Bundles: map[graph.WAFBundleKey]*graph.WAFBundleData{
+					bundleKey: {Checksum: "abc123"},
+				},
+			},
+		}
+
+		gr := &graph.Graph{
+			NGFPolicies: map[graph.PolicyKey]*graph.Policy{
+				wafPolicyKey("waf-policy"): policy,
+			},
+		}
+
+		// Call three times to simulate repeated status updates on the same graph.
+		handler.mergeWAFPollErrors(gr)
+		handler.mergeWAFPollErrors(gr)
+		handler.mergeWAFPollErrors(gr)
+
+		g.Expect(policy.Conditions).To(HaveLen(1))
+	})
+
+	t.Run("upserts condition with updated message", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+
+		fakeManager := &waffakes.FakePollerManager{}
+
+		handler := &eventHandlerImpl{
+			cfg: eventHandlerConfig{wafPollerManager: fakeManager},
+		}
+
+		policy := &graph.Policy{
+			Source: makeWAFPolicy(true),
+			Valid:  true,
+			WAFState: &graph.PolicyWAFState{
+				Bundles: map[graph.WAFBundleKey]*graph.WAFBundleData{
+					bundleKey: {Checksum: "abc123"},
+				},
+			},
+		}
+
+		gr := &graph.Graph{
+			NGFPolicies: map[graph.PolicyKey]*graph.Policy{
+				wafPolicyKey("waf-policy"): policy,
+			},
+		}
+
+		// First call with one error message.
+		fakeManager.GetAllPollErrorsReturns(map[types.NamespacedName]*waf.PollError{
+			policyNsName: {BundleKey: bundleKey, Err: errors.New("timeout")},
+		})
+		handler.mergeWAFPollErrors(gr)
+
+		// Second call with a different error message.
+		fakeManager.GetAllPollErrorsReturns(map[types.NamespacedName]*waf.PollError{
+			policyNsName: {BundleKey: bundleKey, Err: errors.New("connection refused")},
+		})
+		handler.mergeWAFPollErrors(gr)
+
+		g.Expect(policy.Conditions).To(HaveLen(1))
+		expectedCond := conditions.NewPolicyProgrammedStaleBundleWarning(
+			"polling " + string(bundleKey) + ": connection refused",
+		)
+		g.Expect(policy.Conditions[0]).To(Equal(expectedCond))
+	})
 }
 
 func TestCollectPolicyTargetDeployments(t *testing.T) {

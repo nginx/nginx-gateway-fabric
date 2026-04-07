@@ -259,7 +259,7 @@ func BuildBundleSources(
 	// Check if policySource has polling enabled.
 	if spec.PolicySource.Polling != nil && spec.PolicySource.Polling.Enabled {
 		interval := defaultPollingInterval
-		if spec.PolicySource.Polling.Interval != nil {
+		if spec.PolicySource.Polling.Interval != nil && spec.PolicySource.Polling.Interval.Duration > 0 {
 			interval = spec.PolicySource.Polling.Interval.Duration
 		}
 
@@ -280,7 +280,7 @@ func BuildBundleSources(
 		}
 
 		interval := defaultPollingInterval
-		if secLog.LogSource.Polling.Interval != nil {
+		if secLog.LogSource.Polling.Interval != nil && secLog.LogSource.Polling.Interval.Duration > 0 {
 			interval = secLog.LogSource.Polling.Interval.Duration
 		}
 

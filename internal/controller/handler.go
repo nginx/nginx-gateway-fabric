@@ -632,12 +632,25 @@ func (h *eventHandlerImpl) mergeWAFPollErrors(gr *graph.Graph) {
 			continue
 		}
 
-		// Add a stale-bundle warning condition for the poll error.
-		// This uses the same condition type as the initial fetch stale-bundle fallback.
+		// Upsert a stale-bundle warning condition for the poll error.
+		// Replace any existing condition with the same Type+Reason so that repeated
+		// calls (e.g., multiple status updates reusing the same graph) don't accumulate
+		// duplicate conditions.
 		cond := conditions.NewPolicyProgrammedStaleBundleWarning(
 			fmt.Sprintf("polling %s: %s", pollError.BundleKey, pollError.Err.Error()),
 		)
-		policy.Conditions = append(policy.Conditions, cond)
+
+		replaced := false
+		for i, existing := range policy.Conditions {
+			if existing.Type == cond.Type && existing.Reason == cond.Reason {
+				policy.Conditions[i] = cond
+				replaced = true
+				break
+			}
+		}
+		if !replaced {
+			policy.Conditions = append(policy.Conditions, cond)
+		}
 	}
 }
 
