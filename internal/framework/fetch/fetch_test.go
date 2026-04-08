@@ -17,15 +17,10 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/fetch"
 )
 
-func computeChecksum(data []byte) string {
-	sum := sha256.Sum256(data)
-	return hex.EncodeToString(sum[:])
-}
-
 // newChecksumServer returns an httptest.Server that serves bundle and its .sha256 sidecar.
 // The handler optionally checks for auth based on checkAuth.
 func newHTTPBundleServer(body []byte, auth *fetch.BundleAuth) *httptest.Server {
-	checksum := computeChecksum(body)
+	checksum := fetch.ComputeChecksum(body)
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if auth != nil {
 			switch {
@@ -90,7 +85,7 @@ func TestHTTPFetcherFetch(t *testing.T) {
 
 			g.Expect(err).ToNot(HaveOccurred())
 			g.Expect(data).To(Equal(body))
-			g.Expect(checksum).To(Equal(computeChecksum(body)))
+			g.Expect(checksum).To(Equal(fetch.ComputeChecksum(body)))
 		})
 	}
 }
@@ -168,8 +163,7 @@ func TestHTTPFetcherFetchChecksumUppercase(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasSuffix(r.URL.Path, ".sha256") {
 			// uppercase hex of the actual content checksum — should be accepted after normalisation
-			sum := sha256.Sum256(body)
-			fmt.Fprintf(w, "%X", sum)
+			fmt.Fprintf(w, "%s", strings.ToUpper(fetch.ComputeChecksum(body)))
 			return
 		}
 		w.Write(body) //nolint:errcheck
@@ -242,13 +236,13 @@ func TestHTTPFetcherFetchExpectedChecksumMatch(t *testing.T) {
 	f := fetch.NewHTTPFetcher()
 	req := fetch.Request{
 		URL:              srv.URL + "/bundle.tgz",
-		ExpectedChecksum: computeChecksum(body),
+		ExpectedChecksum: fetch.ComputeChecksum(body),
 	}
 	data, checksum, err := f.Fetch(context.Background(), req)
 
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(data).To(Equal(body))
-	g.Expect(checksum).To(Equal(computeChecksum(body)))
+	g.Expect(checksum).To(Equal(fetch.ComputeChecksum(body)))
 }
 
 func TestHTTPFetcherFetchExpectedChecksumMismatch(t *testing.T) {
@@ -390,7 +384,7 @@ func TestNIMFetchExpectedChecksumEnforced(t *testing.T) {
 		data, _, err := f.Fetch(t.Context(), fetch.Request{
 			URL:              srv.URL,
 			PolicyName:       "my-policy",
-			ExpectedChecksum: computeChecksum(bundleContent),
+			ExpectedChecksum: fetch.ComputeChecksum(bundleContent),
 		})
 		g.Expect(err).ToNot(HaveOccurred())
 		g.Expect(data).To(Equal(bundleContent))
@@ -467,7 +461,7 @@ func TestN1CFetchExpectedChecksumEnforced(t *testing.T) {
 				Namespace: "my-ns",
 			},
 			PolicyName:       "my-policy",
-			ExpectedChecksum: computeChecksum(bundleContent),
+			ExpectedChecksum: fetch.ComputeChecksum(bundleContent),
 		})
 		g.Expect(err).ToNot(HaveOccurred())
 		g.Expect(data).To(Equal(bundleContent))
@@ -560,7 +554,7 @@ func TestHTTPFetcherFetchNIMByUID(t *testing.T) {
 	data, checksum, err := f.Fetch(context.Background(), req)
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(data).To(Equal(bundleContent))
-	g.Expect(checksum).To(Equal(computeChecksum(bundleContent)))
+	g.Expect(checksum).To(Equal(fetch.ComputeChecksum(bundleContent)))
 }
 
 func TestN1CFetchLatestVersion(t *testing.T) {
@@ -883,7 +877,7 @@ func TestHTTPFetcherFetchNIM(t *testing.T) {
 			} else {
 				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(data).To(Equal(tc.expectData))
-				g.Expect(checksum).To(Equal(computeChecksum(tc.expectData)))
+				g.Expect(checksum).To(Equal(fetch.ComputeChecksum(tc.expectData)))
 			}
 		})
 	}

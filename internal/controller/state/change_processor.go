@@ -2,6 +2,7 @@ package state
 
 import (
 	"context"
+	"maps"
 	"sync"
 
 	"github.com/go-logr/logr"
@@ -65,6 +66,11 @@ type ChangeProcessorConfig struct {
 	// DiscoveredCRDs is a map of discovered CRDs in the cluster,
 	// where the key is the CRD name and the value indicates if the CRD exists.
 	DiscoveredCRDs map[string]bool
+	// PolledWAFBundles returns the latest bundles fetched by WAF pollers.
+	// These take precedence over graph-cached bundles during stale-bundle fallback,
+	// preventing a graph rebuild from overwriting newer polled data with older cached data.
+	// May be nil if WAF polling is not enabled.
+	PolledWAFBundles func() map[graph.WAFBundleKey]*graph.WAFBundleData
 	// Logger is the logger for this Change Processor.
 	Logger logr.Logger
 	// GatewayCtlrName is the name of the Gateway controller.
@@ -319,10 +325,7 @@ func (c *ChangeProcessorImpl) Process(ctx context.Context) *graph.Graph {
 		return nil
 	}
 
-	var previousWAFBundles map[graph.WAFBundleKey]*graph.WAFBundleData
-	if c.latestGraph != nil {
-		previousWAFBundles = c.latestGraph.ReferencedWAFBundles
-	}
+	previousWAFBundles := c.mergedWAFBundles()
 
 	c.latestGraph = graph.BuildGraph(
 		ctx,
@@ -338,6 +341,36 @@ func (c *ChangeProcessorImpl) Process(ctx context.Context) *graph.Graph {
 	)
 
 	return c.latestGraph
+}
+
+// mergedWAFBundles combines graph-cached bundles with any fresher bundles from WAF pollers.
+// Polled bundles take precedence because they may be newer than what the graph last stored.
+// This prevents a graph rebuild from overwriting polled data with stale cached data
+// when a re-fetch fails.
+func (c *ChangeProcessorImpl) mergedWAFBundles() map[graph.WAFBundleKey]*graph.WAFBundleData {
+	var graphBundles map[graph.WAFBundleKey]*graph.WAFBundleData
+	if c.latestGraph != nil {
+		graphBundles = c.latestGraph.ReferencedWAFBundles
+	}
+
+	var polledBundles map[graph.WAFBundleKey]*graph.WAFBundleData
+	if c.cfg.PolledWAFBundles != nil {
+		polledBundles = c.cfg.PolledWAFBundles()
+	}
+
+	if len(graphBundles) == 0 && len(polledBundles) == 0 {
+		return nil
+	}
+
+	merged := make(map[graph.WAFBundleKey]*graph.WAFBundleData, len(graphBundles)+len(polledBundles))
+
+	// Start with graph-cached bundles.
+	maps.Copy(merged, graphBundles)
+
+	// Overlay polled bundles — these are newer and take precedence.
+	maps.Copy(merged, polledBundles)
+
+	return merged
 }
 
 func (c *ChangeProcessorImpl) GetLatestGraph() *graph.Graph {
