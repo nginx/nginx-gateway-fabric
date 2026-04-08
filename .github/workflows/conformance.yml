@@ -43,7 +43,7 @@ permissions:
 jobs:
   conformance-tests:
     name: Run Tests
-    runs-on: ubuntu-24.04
+    runs-on: ${{ github.event.pull_request.head.repo.fork && 'ubuntu-24.04' || 'ubuntu-24.04-amd64' }}
     if: ${{ !github.event.pull_request.head.repo.fork || inputs.image != 'plus' }}
     permissions:
       contents: write # needed for uploading release artifacts

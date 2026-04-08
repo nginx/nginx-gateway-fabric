@@ -18,7 +18,7 @@ concurrency:
 jobs:
   check:
     name: Check for changes
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-24.04-amd64
     outputs:
       generate: ${{ steps.filter.outputs.generate }}
     permissions:
@@ -39,7 +39,7 @@ jobs:
             - Makefile
   build:
     name: Build for renovate PRs
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-24.04-amd64
     needs: check
     permissions:
       contents: write

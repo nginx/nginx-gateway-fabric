@@ -20,7 +20,7 @@ permissions:
 jobs:
   helm-tests-local:
     name: Helm Tests Local
-    runs-on: ubuntu-24.04
+    runs-on: ${{ github.event.pull_request.head.repo.fork && 'ubuntu-24.04' || 'ubuntu-24.04-amd64' }}
     if: ${{ github.event_name != 'schedule' && (!github.event.pull_request.head.repo.fork || inputs.image != 'plus') }}
     steps:
       - name: Checkout Repository

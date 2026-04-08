@@ -104,7 +104,7 @@ jobs:
 
   vars:
     name: Checks and variables
-    runs-on: ubuntu-24.04
+    runs-on: ${{ github.event.pull_request.head.repo.fork && 'ubuntu-24.04' || 'ubuntu-24.04-amd64' }}
     outputs:
       go_path: ${{ steps.vars.outputs.go_path }}
       min_k8s_version: ${{ steps.vars.outputs.min_k8s_version }}
@@ -173,7 +173,7 @@ jobs:
 
   unit-tests:
     name: Unit Tests
-    runs-on: ubuntu-24.04
+    runs-on: ${{ github.event.pull_request.head.repo.fork && 'ubuntu-24.04' || 'ubuntu-24.04-amd64' }}
     needs: vars
     steps:
       - name: Checkout Repository
@@ -214,7 +214,7 @@ jobs:
 
   njs-unit-tests:
     name: NJS Unit Tests
-    runs-on: ubuntu-24.04
+    runs-on: ${{ github.event.pull_request.head.repo.fork && 'ubuntu-24.04' || 'ubuntu-24.04-amd64' }}
     needs: vars
     steps:
       - name: Checkout Repository
@@ -237,7 +237,7 @@ jobs:
 
   binary:
     name: Build Binary
-    runs-on: ${{ github.repository_owner == 'nginx' && (inputs.is_production_release || ((github.event_name == 'push' || github.event_name == 'schedule') && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release-')))) && 'ubuntu-24.04-amd64' || 'ubuntu-24.04' }}
+    runs-on: ${{ github.event.pull_request.head.repo.fork && 'ubuntu-24.04' || 'ubuntu-24.04-amd64' }}
     # Run in parallel with tests - they're independent validations
     needs: [vars]
     outputs:
@@ -430,7 +430,7 @@ jobs:
       build-os: ${{ matrix.build-os }}
       tag: ${{ inputs.release_version || '' }}
       dry_run: ${{ inputs.dry_run || false}}
-      runner: ${{ github.repository_owner == 'nginx' && (inputs.is_production_release || ((github.event_name == 'push' || github.event_name == 'schedule') && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release-')))) && 'ubuntu-24.04-amd64' || 'ubuntu-24.04' }}
+      runner: ${{ github.event.pull_request.head.repo.fork && 'ubuntu-24.04' || 'ubuntu-24.04-amd64' }}
     permissions:
       contents: read # for docker/build-push-action to read repo content
       security-events: write # for github/codeql-action/upload-sarif to upload SARIF results
@@ -456,7 +456,7 @@ jobs:
       build-os: ${{ matrix.build-os }}
       tag: ${{ inputs.release_version || '' }}
       dry_run: ${{ inputs.dry_run || false }}
-      runner: ${{ github.repository_owner == 'nginx' && (inputs.is_production_release || ((github.event_name == 'push' || github.event_name == 'schedule') && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release-')))) && 'ubuntu-24.04-amd64' || 'ubuntu-24.04' }}
+      runner: ${{ github.event.pull_request.head.repo.fork && 'ubuntu-24.04' || 'ubuntu-24.04-amd64' }}
     permissions:
       contents: read # for docker/build-push-action to read repo content
       security-events: write # for github/codeql-action/upload-sarif to upload SARIF results
@@ -475,7 +475,7 @@ jobs:
       platforms: ${{ github.event_name == 'pull_request' && 'linux/amd64' || 'linux/arm64, linux/amd64' }}
       tag: ${{ inputs.operator_version || '' }}
       dry_run: ${{ inputs.dry_run || false }}
-      runner: ${{ github.repository_owner == 'nginx' && (inputs.is_production_release || ((github.event_name == 'push' || github.event_name == 'schedule') && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release-')))) && 'ubuntu-24.04-amd64' || 'ubuntu-24.04' }}
+      runner: ${{ github.event.pull_request.head.repo.fork && 'ubuntu-24.04' || 'ubuntu-24.04-amd64' }}
     permissions:
       contents: read # for docker/build-push-action to read repo content
       security-events: write # for github/codeql-action/upload-sarif to upload SARIF results
@@ -556,7 +556,7 @@ jobs:
     name: Functional/Conformance Tests Pass
     if: always()
     needs: [functional-tests, conformance-tests]
-    runs-on: ubuntu-24.04
+    runs-on: ${{ github.event.pull_request.head.repo.fork && 'ubuntu-24.04' || 'ubuntu-24.04-amd64' }}
     steps:
       - name: Check test results
         run: |
@@ -625,7 +625,7 @@ jobs:
 
   cel-tests:
     name: CEL Tests
-    runs-on: ubuntu-24.04
+    runs-on: ${{ github.event.pull_request.head.repo.fork && 'ubuntu-24.04' || 'ubuntu-24.04-amd64' }}
     needs: vars
     steps:
       - name: Checkout Repository
