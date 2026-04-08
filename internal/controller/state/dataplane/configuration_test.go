@@ -7340,7 +7340,7 @@ func TestBuildWAF(t *testing.T) {
 			},
 		},
 		{
-			name: "WAF enabled, with bundles on policy",
+			name: "WAF enabled, with bundles on gateway-targeted policy",
 			gateway: &graph.Gateway{
 				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
 					WAF: helpers.GetPointer(ngfAPIv1alpha2.WAFEnabled),
