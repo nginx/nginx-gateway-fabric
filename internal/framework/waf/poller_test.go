@@ -1000,8 +1000,9 @@ func TestBuildBundleSources(t *testing.T) {
 		{
 			name: "zero interval falls back to default",
 			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
+				Type: ngfAPIv1alpha1.PolicySourceTypeHTTP,
 				PolicySource: ngfAPIv1alpha1.PolicySource{
-					URL: "http://example.com/policy.tgz",
+					HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: "http://example.com/policy.tgz"},
 					Polling: &ngfAPIv1alpha1.BundlePolling{
 						Enabled:  true,
 						Interval: &metav1.Duration{Duration: 0},
@@ -1016,8 +1017,9 @@ func TestBuildBundleSources(t *testing.T) {
 		{
 			name: "negative interval falls back to default",
 			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
+				Type: ngfAPIv1alpha1.PolicySourceTypeHTTP,
 				PolicySource: ngfAPIv1alpha1.PolicySource{
-					URL: "http://example.com/policy.tgz",
+					HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: "http://example.com/policy.tgz"},
 					Polling: &ngfAPIv1alpha1.BundlePolling{
 						Enabled:  true,
 						Interval: &metav1.Duration{Duration: -1 * time.Minute},
@@ -1032,8 +1034,9 @@ func TestBuildBundleSources(t *testing.T) {
 		{
 			name: "negative log source interval falls back to default",
 			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
+				Type: ngfAPIv1alpha1.PolicySourceTypeHTTP,
 				PolicySource: ngfAPIv1alpha1.PolicySource{
-					URL: "http://example.com/policy.tgz",
+					HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: "http://example.com/policy.tgz"},
 				},
 				SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
 					{

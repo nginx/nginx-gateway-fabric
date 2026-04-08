@@ -1096,7 +1096,7 @@ func makeWAFPolicy(pollingEnabled bool) *ngfAPI.WAFGatewayBindingPolicy {
 			},
 		},
 		PolicySource: ngfAPI.PolicySource{
-			URL: "https://example.com/bundle.tgz",
+			HTTPSource: &ngfAPI.HTTPBundleSource{URL: "http://example.com/policy.tgz"},
 		},
 	}
 	if pollingEnabled {
