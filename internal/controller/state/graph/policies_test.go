@@ -1261,7 +1261,16 @@ func TestProcessPolicies(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			processed, _ := processPolicies(t.Context(), test.policies, test.validator, routes, services, gateways, nil)
+			processed, _ := processPolicies(
+				t.Context(),
+				logr.Discard(),
+				test.policies,
+				test.validator,
+				routes,
+				services,
+				gateways,
+				nil,
+			)
 			g.Expect(processed).To(BeEquivalentTo(test.expProcessedPolicies))
 		})
 	}
@@ -1478,7 +1487,16 @@ func TestProcessPolicies_RouteOverlap(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			processed, _ := processPolicies(t.Context(), test.policies, test.validator, test.routes, nil, gateways, nil)
+			processed, _ := processPolicies(
+				t.Context(),
+				logr.Discard(),
+				test.policies,
+				test.validator,
+				test.routes,
+				nil,
+				gateways,
+				nil,
+			)
 			g.Expect(processed).To(HaveLen(len(test.policies)))
 
 			for _, pol := range processed {
@@ -2507,7 +2525,7 @@ func TestNGFPolicyAncestorLimitHandling(t *testing.T) {
 
 	// Process policies which should trigger ancestor limit handling
 	processedPolicies, _ := processPolicies(
-		t.Context(), testPolicies, validator, routes, referencedServices, gateways, nil,
+		t.Context(), logr.Discard(), testPolicies, validator, routes, referencedServices, gateways, nil,
 	)
 
 	// Create a graph and attach policies to trigger ancestor limit handling
@@ -3561,7 +3579,7 @@ func TestProcessWAFGatewayBindingPolicies(t *testing.T) {
 			processedPolicies := tc.processedPolicies()
 			wafInput := tc.wafInput()
 
-			output := processWAFGatewayBindingPolicies(t.Context(), processedPolicies, wafInput)
+			output := processWAFGatewayBindingPolicies(t.Context(), logr.Discard(), processedPolicies, wafInput)
 
 			if wafInput == nil {
 				g.Expect(output).To(BeNil())
@@ -3741,7 +3759,8 @@ func TestBuildPolicyFetchRequest(t *testing.T) {
 				HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: baseURL},
 			},
 			expRequest: fetch.Request{
-				URL: baseURL,
+				URL:           baseURL,
+				RetryAttempts: 3,
 			},
 		},
 		{
@@ -3754,6 +3773,7 @@ func TestBuildPolicyFetchRequest(t *testing.T) {
 			expRequest: fetch.Request{
 				URL:            baseURL,
 				VerifyChecksum: true,
+				RetryAttempts:  3,
 			},
 		},
 		{
@@ -3772,6 +3792,7 @@ func TestBuildPolicyFetchRequest(t *testing.T) {
 				URL:              baseURL,
 				PolicyName:       nimPolicyName,
 				ExpectedChecksum: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+				RetryAttempts:    3,
 			},
 		},
 		{
@@ -3782,8 +3803,9 @@ func TestBuildPolicyFetchRequest(t *testing.T) {
 			},
 			tlsCA: caData,
 			expRequest: fetch.Request{
-				URL:       baseURL,
-				TLSCAData: caData,
+				URL:           baseURL,
+				TLSCAData:     caData,
+				RetryAttempts: 3,
 			},
 		},
 		{
@@ -3796,8 +3818,9 @@ func TestBuildPolicyFetchRequest(t *testing.T) {
 				},
 			},
 			expRequest: fetch.Request{
-				URL:        baseURL,
-				PolicyName: nimPolicyName,
+				URL:           baseURL,
+				PolicyName:    nimPolicyName,
+				RetryAttempts: 3,
 			},
 		},
 		{
@@ -3816,6 +3839,7 @@ func TestBuildPolicyFetchRequest(t *testing.T) {
 				N1C: fetch.N1CRequest{
 					Namespace: n1cNamespace,
 				},
+				RetryAttempts: 3,
 			},
 		},
 		{
@@ -3835,7 +3859,8 @@ func TestBuildPolicyFetchRequest(t *testing.T) {
 				N1C: fetch.N1CRequest{
 					Namespace: n1cNamespace,
 				},
-				Auth: &fetch.BundleAuth{APIToken: bearerToken},
+				Auth:          &fetch.BundleAuth{APIToken: bearerToken},
+				RetryAttempts: 3,
 			},
 		},
 		{
@@ -3855,7 +3880,8 @@ func TestBuildPolicyFetchRequest(t *testing.T) {
 				N1C: fetch.N1CRequest{
 					Namespace: n1cNamespace,
 				},
-				Auth: &fetch.BundleAuth{Username: "user", Password: "pass"},
+				Auth:          &fetch.BundleAuth{Username: "user", Password: "pass"},
+				RetryAttempts: 3,
 			},
 		},
 		{
@@ -3874,6 +3900,7 @@ func TestBuildPolicyFetchRequest(t *testing.T) {
 				N1C: fetch.N1CRequest{
 					Namespace: n1cNamespace,
 				},
+				RetryAttempts: 3,
 			},
 		},
 		{
@@ -3886,8 +3913,33 @@ func TestBuildPolicyFetchRequest(t *testing.T) {
 				},
 			},
 			expRequest: fetch.Request{
-				URL:        baseURL,
-				PolicyName: nimPolicyName,
+				URL:           baseURL,
+				PolicyName:    nimPolicyName,
+				RetryAttempts: 3,
+			},
+		},
+		{
+			name:       "HTTP type with retry attempts",
+			policyType: ngfAPIv1alpha1.PolicySourceTypeHTTP,
+			policySource: ngfAPIv1alpha1.PolicySource{
+				HTTPSource:    &ngfAPIv1alpha1.HTTPBundleSource{URL: baseURL},
+				RetryAttempts: helpers.GetPointer[int32](2),
+			},
+			expRequest: fetch.Request{
+				URL:           baseURL,
+				RetryAttempts: 2,
+			},
+		},
+		{
+			name:       "HTTP type with zero retry attempts disables retries",
+			policyType: ngfAPIv1alpha1.PolicySourceTypeHTTP,
+			policySource: ngfAPIv1alpha1.PolicySource{
+				HTTPSource:    &ngfAPIv1alpha1.HTTPBundleSource{URL: baseURL},
+				RetryAttempts: helpers.GetPointer[int32](0),
+			},
+			expRequest: fetch.Request{
+				URL:           baseURL,
+				RetryAttempts: 0,
 			},
 		},
 	}
@@ -3898,6 +3950,65 @@ func TestBuildPolicyFetchRequest(t *testing.T) {
 			g := NewWithT(t)
 
 			got := BuildPolicyFetchRequest(&tc.policySource, tc.policyType, tc.auth, tc.tlsCA)
+			g.Expect(got).To(Equal(tc.expRequest))
+		})
+	}
+}
+
+func TestBuildLogFetchRequest(t *testing.T) {
+	t.Parallel()
+
+	baseURL := "https://example.com/log.tgz"
+	caData := []byte("ca-cert-data")
+
+	tests := []struct {
+		name       string
+		logSource  ngfAPIv1alpha1.LogSource
+		auth       *fetch.BundleAuth
+		tlsCA      []byte
+		expRequest fetch.Request
+	}{
+		{
+			name: "basic log fetch",
+			logSource: ngfAPIv1alpha1.LogSource{
+				URL: helpers.GetPointer(baseURL),
+			},
+			expRequest: fetch.Request{
+				URL:           baseURL,
+				RetryAttempts: 3,
+			},
+		},
+		{
+			name: "log fetch with 0 retry attempts",
+			logSource: ngfAPIv1alpha1.LogSource{
+				URL:           helpers.GetPointer(baseURL),
+				RetryAttempts: helpers.GetPointer[int32](0),
+			},
+			expRequest: fetch.Request{
+				URL:           baseURL,
+				RetryAttempts: 0,
+			},
+		},
+		{
+			name: "log fetch with TLS CA",
+			logSource: ngfAPIv1alpha1.LogSource{
+				URL: helpers.GetPointer(baseURL),
+			},
+			tlsCA: caData,
+			expRequest: fetch.Request{
+				URL:           baseURL,
+				TLSCAData:     caData,
+				RetryAttempts: 3,
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			got := BuildLogFetchRequest(&tc.logSource, tc.auth, tc.tlsCA)
 			g.Expect(got).To(Equal(tc.expRequest))
 		})
 	}
