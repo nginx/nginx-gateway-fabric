@@ -1,7 +1,8 @@
-package state_test
+package state
 
 import (
 	"context"
+	"testing"
 
 	"github.com/go-logr/logr"
 	. "github.com/onsi/ginkgo/v2"
@@ -23,7 +24,6 @@ import (
 
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
-	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/secrets"
@@ -428,7 +428,7 @@ var _ = Describe("ChangeProcessor", func() {
 					ControllerName: controllerName,
 				},
 			}
-			processor state.ChangeProcessor
+			processor ChangeProcessor
 		)
 
 		testUpsertTriggersChange := func(obj client.Object) {
@@ -452,7 +452,7 @@ var _ = Describe("ChangeProcessor", func() {
 		}
 
 		BeforeEach(OncePerOrdered, func() {
-			processor = state.NewChangeProcessorImpl(state.ChangeProcessorConfig{
+			processor = NewChangeProcessorImpl(ChangeProcessorConfig{
 				GatewayCtlrName:  controllerName,
 				GatewayClassName: gcName,
 				Logger:           logr.Discard(),
@@ -3084,7 +3084,7 @@ var _ = Describe("ChangeProcessor", func() {
 						},
 					},
 				}
-				processor = state.NewChangeProcessorImpl(state.ChangeProcessorConfig{
+				processor = NewChangeProcessorImpl(ChangeProcessorConfig{
 					GatewayCtlrName:  controllerName,
 					GatewayClassName: gcName,
 					Logger:           logr.Discard(),
@@ -3753,7 +3753,7 @@ var _ = Describe("ChangeProcessor", func() {
 		// -- this is done in 'Normal cases of processing changes'
 
 		var (
-			processor                                                                         *state.ChangeProcessorImpl
+			processor                                                                         *ChangeProcessorImpl
 			gcNsName, gwNsName, hrNsName, hr2NsName, grNsName, gr2NsName, rgNsName, svcNsName types.NamespacedName
 			sliceNsName, secretNsName, cmNsName, btlsNsName, npNsName, lsNsName               types.NamespacedName
 			gc, gcUpdated                                                                     *v1.GatewayClass
@@ -3772,7 +3772,7 @@ var _ = Describe("ChangeProcessor", func() {
 		)
 
 		BeforeEach(OncePerOrdered, func() {
-			processor = state.NewChangeProcessorImpl(state.ChangeProcessorConfig{
+			processor = NewChangeProcessorImpl(ChangeProcessorConfig{
 				GatewayCtlrName:  "test.controller",
 				GatewayClassName: "test-class",
 				Validators:       createAlwaysValidValidators(),
@@ -4309,10 +4309,10 @@ var _ = Describe("ChangeProcessor", func() {
 		})
 	})
 	Describe("Edge cases with panic", func() {
-		var processor state.ChangeProcessor
+		var processor ChangeProcessor
 
 		BeforeEach(func() {
-			processor = state.NewChangeProcessorImpl(state.ChangeProcessorConfig{
+			processor = NewChangeProcessorImpl(ChangeProcessorConfig{
 				GatewayCtlrName:  "test.controller",
 				GatewayClassName: "my-class",
 				Validators:       createAlwaysValidValidators(),
@@ -4358,3 +4358,112 @@ var _ = Describe("ChangeProcessor", func() {
 		)
 	})
 })
+
+func TestMergedWAFBundles(t *testing.T) {
+	t.Parallel()
+
+	bundleKeyA := graph.WAFBundleKey("default_policy-a")
+	bundleKeyB := graph.WAFBundleKey("default_policy-b")
+
+	graphBundle := &graph.WAFBundleData{Data: []byte("graph data"), Checksum: "graph-checksum"}
+	polledBundle := &graph.WAFBundleData{Data: []byte("polled data"), Checksum: "polled-checksum"}
+
+	tests := []struct {
+		name            string
+		graphBundles    map[graph.WAFBundleKey]*graph.WAFBundleData
+		polledBundles   map[graph.WAFBundleKey]*graph.WAFBundleData
+		polledFunc      func() map[graph.WAFBundleKey]*graph.WAFBundleData
+		expectedKeys    []graph.WAFBundleKey
+		expectNil       bool
+		expectPolledWin bool // for overlapping key, polled data should win
+	}{
+		{
+			name:         "both nil returns nil",
+			graphBundles: nil,
+			polledFunc:   nil,
+			expectNil:    true,
+		},
+		{
+			name:         "nil PolledWAFBundles func returns graph bundles only",
+			graphBundles: map[graph.WAFBundleKey]*graph.WAFBundleData{bundleKeyA: graphBundle},
+			polledFunc:   nil,
+			expectedKeys: []graph.WAFBundleKey{bundleKeyA},
+		},
+		{
+			name:         "nil graph bundles returns polled bundles only",
+			graphBundles: nil,
+			polledFunc: func() map[graph.WAFBundleKey]*graph.WAFBundleData {
+				return map[graph.WAFBundleKey]*graph.WAFBundleData{bundleKeyA: polledBundle}
+			},
+			expectedKeys: []graph.WAFBundleKey{bundleKeyA},
+		},
+		{
+			name:         "polled bundles override graph bundles for same key",
+			graphBundles: map[graph.WAFBundleKey]*graph.WAFBundleData{bundleKeyA: graphBundle},
+			polledFunc: func() map[graph.WAFBundleKey]*graph.WAFBundleData {
+				return map[graph.WAFBundleKey]*graph.WAFBundleData{bundleKeyA: polledBundle}
+			},
+			expectedKeys:    []graph.WAFBundleKey{bundleKeyA},
+			expectPolledWin: true,
+		},
+		{
+			name:         "disjoint keys are merged",
+			graphBundles: map[graph.WAFBundleKey]*graph.WAFBundleData{bundleKeyA: graphBundle},
+			polledFunc: func() map[graph.WAFBundleKey]*graph.WAFBundleData {
+				return map[graph.WAFBundleKey]*graph.WAFBundleData{bundleKeyB: polledBundle}
+			},
+			expectedKeys: []graph.WAFBundleKey{bundleKeyA, bundleKeyB},
+		},
+		{
+			name:         "PolledWAFBundles returning nil treated as empty",
+			graphBundles: map[graph.WAFBundleKey]*graph.WAFBundleData{bundleKeyA: graphBundle},
+			polledFunc: func() map[graph.WAFBundleKey]*graph.WAFBundleData {
+				return nil
+			},
+			expectedKeys: []graph.WAFBundleKey{bundleKeyA},
+		},
+		{
+			name:         "both empty returns nil",
+			graphBundles: map[graph.WAFBundleKey]*graph.WAFBundleData{},
+			polledFunc: func() map[graph.WAFBundleKey]*graph.WAFBundleData {
+				return map[graph.WAFBundleKey]*graph.WAFBundleData{}
+			},
+			expectNil: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			processor := &ChangeProcessorImpl{
+				cfg: ChangeProcessorConfig{
+					PolledWAFBundles: tt.polledFunc,
+				},
+			}
+
+			if tt.graphBundles != nil {
+				processor.latestGraph = &graph.Graph{
+					ReferencedWAFBundles: tt.graphBundles,
+				}
+			}
+
+			result := processor.mergedWAFBundles()
+
+			if tt.expectNil {
+				g.Expect(result).To(BeNil())
+				return
+			}
+
+			g.Expect(result).To(HaveLen(len(tt.expectedKeys)))
+			for _, key := range tt.expectedKeys {
+				g.Expect(result).To(HaveKey(key))
+			}
+
+			if tt.expectPolledWin {
+				g.Expect(result[bundleKeyA]).To(Equal(polledBundle))
+			}
+		})
+	}
+}

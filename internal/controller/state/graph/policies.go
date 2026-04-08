@@ -34,6 +34,8 @@ type Policy struct {
 	// configurations may result in a policy not being valid for some Gateways, but not others.
 	// This includes gateways that cannot accept the policy due to ancestor status limits.
 	InvalidForGateways map[types.NamespacedName]struct{}
+	// WAFState holds WAF-specific state for this policy. Only populated for WAFGatewayBindingPolicy resources.
+	WAFState *PolicyWAFState
 	// Ancestors is a list of ancestor objects of the Policy. Used in status.
 	Ancestors []PolicyAncestor
 	// TargetRefs are the resources that the Policy targets.
@@ -44,6 +46,19 @@ type Policy struct {
 	Conditions []conditions.Condition
 	// Valid indicates whether the Policy is valid.
 	Valid bool
+}
+
+// PolicyWAFState holds WAF-specific state for a Policy.
+// This is only populated for WAFGatewayBindingPolicy resources.
+type PolicyWAFState struct {
+	// Bundles contains the fetched WAF bundle data for this policy.
+	// This allows each gateway to receive only the bundles for policies that target it.
+	Bundles map[WAFBundleKey]*WAFBundleData
+	// ResolvedAuth contains the resolved authentication credentials for WAF bundle fetching.
+	// Stored so that the WAF polling manager can re-use them without re-resolving secrets.
+	ResolvedAuth *fetch.BundleAuth
+	// ResolvedTLSCA contains the resolved TLS CA certificate data for WAF bundle fetching.
+	ResolvedTLSCA []byte
 }
 
 // PolicyAncestor represents an ancestor of a Policy.
@@ -76,6 +91,19 @@ type PolicyKey struct {
 // Format: "<namespace>_<policyName>" for policy bundles, or "<namespace>_<policyName>_log_<urlHash>" for log bundles,
 // where urlHash is a truncated SHA-256 hex digest of the log source URL.
 type WAFBundleKey string
+
+// PolicyBundleKey returns the WAFBundleKey for a WAFGatewayBindingPolicy's main policy bundle.
+func PolicyBundleKey(policyNsName types.NamespacedName) WAFBundleKey {
+	return WAFBundleKey(fmt.Sprintf("%s_%s", policyNsName.Namespace, policyNsName.Name))
+}
+
+// LogBundleKey returns the WAFBundleKey for a SecurityLog entry's bundle.
+// The key embeds a truncated SHA-256 hash of the URL so that each log source URL is uniquely identified.
+func LogBundleKey(policyNsName types.NamespacedName, logSourceURL string) WAFBundleKey {
+	return WAFBundleKey(
+		fmt.Sprintf("%s_%s_log_%s", policyNsName.Namespace, policyNsName.Name, helpers.URLHash(logSourceURL)),
+	)
+}
 
 // WAFBundleData contains the fetched WAF bundle content.
 type WAFBundleData struct {
@@ -777,6 +805,12 @@ func processWAFGatewayBindingPolicies(
 			continue
 		}
 
+		// Initialize the WAFBundles map on the policy to store fetched bundles.
+		// This allows each gateway to receive only the bundles for policies that target it.
+		policy.WAFState = &PolicyWAFState{
+			Bundles: make(map[WAFBundleKey]*WAFBundleData),
+		}
+
 		fetchPolicyBundle(ctx, wgbPolicy, policy, wafInput, output)
 		fetchSecurityLogBundles(ctx, wgbPolicy, policy, wafInput, output)
 	}
@@ -784,8 +818,8 @@ func processWAFGatewayBindingPolicies(
 	return output
 }
 
-// buildPolicyFetchRequest constructs a fetch.Request from a PolicySource, resolved auth, and TLS CA data.
-func buildPolicyFetchRequest(
+// BuildPolicyFetchRequest constructs a fetch.Request from a PolicySource, resolved auth, and TLS CA data.
+func BuildPolicyFetchRequest(
 	policySource *ngfAPIv1alpha1.PolicySource,
 	policyType ngfAPIv1alpha1.PolicySourceType,
 	auth *fetch.BundleAuth,
@@ -838,8 +872,8 @@ func buildPolicyFetchRequest(
 	return req
 }
 
-// buildLogFetchRequest constructs a fetch.Request from a LogSource, resolved auth, and TLS CA data.
-func buildLogFetchRequest(logSource *ngfAPIv1alpha1.LogSource, auth *fetch.BundleAuth, tlsCA []byte) fetch.Request {
+// BuildLogFetchRequest constructs a fetch.Request from a LogSource, resolved auth, and TLS CA data.
+func BuildLogFetchRequest(logSource *ngfAPIv1alpha1.LogSource, auth *fetch.BundleAuth, tlsCA []byte) fetch.Request {
 	return fetch.Request{
 		URL:              *logSource.URL,
 		Auth:             auth,
@@ -882,9 +916,13 @@ func fetchPolicyBundle(
 		}
 	}
 
-	bundleKey := WAFBundleKey(fmt.Sprintf("%s_%s", wafPolicy.Namespace, wafPolicy.Name))
+	// Store resolved auth/TLS for use by the WAF polling manager.
+	policy.WAFState.ResolvedAuth = auth
+	policy.WAFState.ResolvedTLSCA = tlsCA
 
-	req := buildPolicyFetchRequest(&policySource, wafPolicy.Spec.Type, auth, tlsCA)
+	bundleKey := PolicyBundleKey(types.NamespacedName{Namespace: wafPolicy.Namespace, Name: wafPolicy.Name})
+
+	req := BuildPolicyFetchRequest(&policySource, wafPolicy.Spec.Type, auth, tlsCA)
 
 	data, checksum, err := wafInput.Fetcher.Fetch(ctx, req)
 	if err != nil {
@@ -892,6 +930,7 @@ func fetchPolicyBundle(
 			cond := conditions.NewPolicyProgrammedStaleBundleWarning(err.Error())
 			policy.Conditions = append(policy.Conditions, cond)
 			output.Bundles[bundleKey] = prev
+			policy.WAFState.Bundles[bundleKey] = prev
 			return
 		}
 		cond := conditions.NewPolicyNotProgrammedBundleFetchError(err.Error())
@@ -900,7 +939,9 @@ func fetchPolicyBundle(
 		return
 	}
 
-	output.Bundles[bundleKey] = &WAFBundleData{Data: data, Checksum: checksum}
+	bundleData := &WAFBundleData{Data: data, Checksum: checksum}
+	output.Bundles[bundleKey] = bundleData
+	policy.WAFState.Bundles[bundleKey] = bundleData
 }
 
 // fetchSecurityLogBundles fetches log profile bundles for each SecurityLog entry.
@@ -939,8 +980,9 @@ func fetchSecurityLogBundles(
 			}
 		}
 
-		bundleKey := WAFBundleKey(
-			fmt.Sprintf("%s_%s_log_%s", wafPolicy.Namespace, wafPolicy.Name, helpers.URLHash(*secLog.LogSource.URL)),
+		bundleKey := LogBundleKey(
+			types.NamespacedName{Namespace: wafPolicy.Namespace, Name: wafPolicy.Name},
+			*secLog.LogSource.URL,
 		)
 
 		// Multiple SecurityLog entries may reference the same URL and therefore produce the same
@@ -951,7 +993,7 @@ func fetchSecurityLogBundles(
 			continue
 		}
 
-		req := buildLogFetchRequest(&secLog.LogSource, auth, tlsCA)
+		req := BuildLogFetchRequest(&secLog.LogSource, auth, tlsCA)
 
 		data, checksum, err := wafInput.Fetcher.Fetch(ctx, req)
 		if err != nil {
@@ -959,6 +1001,7 @@ func fetchSecurityLogBundles(
 				cond := conditions.NewPolicyProgrammedStaleBundleWarning(err.Error())
 				policy.Conditions = append(policy.Conditions, cond)
 				output.Bundles[bundleKey] = prev
+				policy.WAFState.Bundles[bundleKey] = prev
 				continue
 			}
 			cond := conditions.NewPolicyNotProgrammedBundleFetchError(err.Error())
@@ -967,7 +1010,9 @@ func fetchSecurityLogBundles(
 			continue
 		}
 
-		output.Bundles[bundleKey] = &WAFBundleData{Data: data, Checksum: checksum}
+		bundleData := &WAFBundleData{Data: data, Checksum: checksum}
+		output.Bundles[bundleKey] = bundleData
+		policy.WAFState.Bundles[bundleKey] = bundleData
 	}
 }
 
