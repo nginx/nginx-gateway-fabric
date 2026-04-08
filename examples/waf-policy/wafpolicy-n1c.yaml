@@ -1,0 +1,28 @@
+apiVersion: gateway.nginx.org/v1alpha1
+kind: WAFGatewayBindingPolicy
+metadata:
+  name: gateway-base-protection
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: gateway
+  type: N1C
+  policySource:
+    n1cSource:
+      url: https://<tenant>.volterra.us
+      namespace: default  # N1C namespace the policy belongs to
+      # policyName: "ngfExample"
+      policyObjectID: pol_-IUuEUN7ST63oRC7AlQPLw
+      policyVersionID: pv_UJ2gL5fOQ3Gnb3OVuVo1XA
+    auth:
+      secretRef:
+        name: n1c-credentials
+  securityLogs:
+    - destination:
+        type: syslog
+        syslog:
+          server: syslog-svc.default.svc.cluster.local:514
+      logSource:
+        # Use one of the built-in log profiles:
+        defaultProfile: log_illegal

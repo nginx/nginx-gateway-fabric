@@ -1,22 +1,17 @@
 apiVersion: gateway.nginx.org/v1alpha1
 kind: WAFGatewayBindingPolicy
 metadata:
-  name: gateway-base-protection
+  name: route-protection-http
 spec:
   targetRefs:
     - group: gateway.networking.k8s.io
-      kind: Gateway
-      name: gateway
+      kind: HTTPRoute
+      name: customers
   type: NIM
   policySource:
     nimSource:
       url: https://apigw.nim.svc.cluster.local
-      policyName: ngfBlocking
-      # Optional - use policyUID instead for version pinning
-      # policyUID: ""
-    # Optional - add checksum for integrity verification of the bundle
-    # validation:
-    #   expectedChecksum: "abc123..." # 64 hex characters, e.g. output of: sha256sum policy.tgz | awk '{print $1}'
+      policyName: ngfDataguard
     auth:
       secretRef:
         name: nim-credentials

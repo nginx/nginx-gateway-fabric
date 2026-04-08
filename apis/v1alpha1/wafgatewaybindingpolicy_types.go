@@ -38,9 +38,10 @@ type WAFGatewayBindingPolicyList struct {
 
 // WAFGatewayBindingPolicySpec defines the desired state of a WAFGatewayBindingPolicy.
 //
-// +kubebuilder:validation:XValidation:message="policySource.managedSource is required when type is NIM or N1C",rule="(self.type != 'NIM' && self.type != 'N1C') || (has(self.policySource) && has(self.policySource.managedSource))"
-// +kubebuilder:validation:XValidation:message="policySource.managedSource must not be set when type is HTTP",rule="self.type != 'HTTP' || !has(self.policySource) || !has(self.policySource.managedSource)"
-// +kubebuilder:validation:XValidation:message="policySource.managedSource.n1cNamespace is required when type is N1C",rule="self.type != 'N1C' || (has(self.policySource) && has(self.policySource.managedSource) && has(self.policySource.managedSource.n1cNamespace))"
+// +kubebuilder:validation:XValidation:message="policySource.httpSource must be set if and only if type is HTTP",rule="(self.type == 'HTTP') == (has(self.policySource) && has(self.policySource.httpSource))"
+// +kubebuilder:validation:XValidation:message="policySource.nimSource must be set if and only if type is NIM",rule="(self.type == 'NIM') == (has(self.policySource) && has(self.policySource.nimSource))"
+// +kubebuilder:validation:XValidation:message="policySource.n1cSource must be set if and only if type is N1C",rule="(self.type == 'N1C') == (has(self.policySource) && has(self.policySource.n1cSource))"
+// +kubebuilder:validation:XValidation:message="policySource.validation.verifyChecksum is only supported for type HTTP",rule="!(self.type != 'HTTP' && has(self.policySource) && has(self.policySource.validation) && has(self.policySource.validation.verifyChecksum) && self.policySource.validation.verifyChecksum)"
 //
 //nolint:lll
 type WAFGatewayBindingPolicySpec struct {
@@ -94,11 +95,23 @@ const (
 
 // PolicySource holds all configuration for fetching a WAF policy bundle.
 type PolicySource struct {
-	// ManagedSource configures bundle fetching from NGINX Instance Manager (NIM) or F5 NGINX One Console (N1C).
-	// Required when type is NIM or N1C.
+	// HTTPSource configures direct bundle fetching from an HTTP/HTTPS URL.
+	// Required when type is HTTP; must not be set for other types.
 	//
 	// +optional
-	ManagedSource *ManagedBundleSource `json:"managedSource,omitempty"`
+	HTTPSource *HTTPBundleSource `json:"httpSource,omitempty"`
+
+	// NIMSource configures bundle fetching from NGINX Instance Manager.
+	// Required when type is NIM; must not be set for other types.
+	//
+	// +optional
+	NIMSource *NIMBundleSource `json:"nimSource,omitempty"`
+
+	// N1CSource configures bundle fetching from F5 NGINX One Console.
+	// Required when type is N1C; must not be set for other types.
+	//
+	// +optional
+	N1CSource *N1CBundleSource `json:"n1cSource,omitempty"`
 
 	// Auth configures authentication credentials for fetching the bundle.
 	//
@@ -133,28 +146,6 @@ type PolicySource struct {
 	// +optional
 	RetryPolicy *BundleRetryPolicy `json:"retryPolicy,omitempty"`
 
-	// URL semantics differ by type:
-	//
-	//   - HTTP: the full URL of the compiled policy bundle (.tgz), e.g.
-	//     "https://storage.example.com/bundles/policy.tgz".
-	//
-	//   - NIM: the base URL of the NGINX Instance Manager instance, e.g.
-	//     "https://nim.example.com". NGF appends
-	//     "/api/platform/v1/security/policies/bundles?policyName=<name>&includeBundleContent=true"
-	//     to this value. Do not include a path, query string, or fragment.
-	//
-	//   - N1C: the base URL of the F5 NGINX One Console instance, e.g.
-	//     "https://f5xc.example.com". NGF appends
-	//     "/api/nginx/one/namespaces/<namespace>/security-policies/<policyName>/bundle"
-	//     to this value. Do not include a path, query string, or fragment.
-	//
-	// Required when type is HTTP, NIM, or N1C.
-	//
-	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:MaxLength=2083
-	// +kubebuilder:validation:Pattern=`^https?://`
-	URL string `json:"url"`
-
 	// InsecureSkipVerify disables TLS certificate verification when fetching the bundle.
 	// Not recommended for production use.
 	//
@@ -163,9 +154,26 @@ type PolicySource struct {
 }
 
 // BundleValidation configures integrity verification for a bundle.
+// Exactly one of verifyChecksum or expectedChecksum may be set.
+//
+// +kubebuilder:validation:XValidation:message="verifyChecksum and expectedChecksum are mutually exclusive",rule="!(has(self.verifyChecksum) && self.verifyChecksum && has(self.expectedChecksum))"
+//
+//nolint:lll
 type BundleValidation struct {
-	// VerifyChecksum enables SHA-256 integrity verification.
-	// When true, NGF fetches <url>.sha256 and verifies the downloaded bundle matches it.
+	// ExpectedChecksum is the expected SHA256 checksum of the bundle.
+	// If set, the downloaded bundle must match this checksum or it will be rejected.
+	//
+	// +optional
+	// +kubebuilder:validation:MinLength=64
+	// +kubebuilder:validation:MaxLength=64
+	// +kubebuilder:validation:Pattern=`^[0-9a-fA-F]{64}$`
+	ExpectedChecksum *string `json:"expectedChecksum,omitempty"`
+
+	// VerifyChecksum enables automatic checksum verification by fetching a companion
+	// checksum file at <url>.sha256 and comparing it against the downloaded bundle.
+	// Only supported when the policy source type is HTTP (policySource.httpSource or
+	// logSource.url); setting this for NIM or N1C sources is rejected at admission.
+	// Mutually exclusive with expectedChecksum.
 	//
 	// +optional
 	VerifyChecksum bool `json:"verifyChecksum,omitempty"`
@@ -197,25 +205,92 @@ type BundleRetryPolicy struct {
 	Attempts *int32 `json:"attempts,omitempty"`
 }
 
-// ManagedBundleSource configures bundle fetching from NGINX Instance Manager (NIM) or F5 NGINX One Console (N1C).
-type ManagedBundleSource struct {
-	// N1CNamespace is the N1C namespace the policy belongs to.
-	// Required when the parent type is N1C; ignored for NIM.
-	// The value is percent-encoded before being included in the request URL.
+// HTTPBundleSource configures direct bundle fetching from an HTTP/HTTPS URL.
+type HTTPBundleSource struct {
+	// URL is the full URL of the compiled policy bundle (.tgz),
+	// e.g. "https://storage.example.com/bundles/policy.tgz".
+	//
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=2083
+	// +kubebuilder:validation:Pattern=`^https?://`
+	URL string `json:"url"`
+}
+
+// NIMBundleSource configures bundle fetching from NGINX Instance Manager (NIM).
+// Exactly one of policyName or policyUID must be set.
+//
+// +kubebuilder:validation:XValidation:message="exactly one of policyName or policyUID must be set",rule="(has(self.policyName) && !has(self.policyUID)) || (!has(self.policyName) && has(self.policyUID))"
+//
+//nolint:lll
+type NIMBundleSource struct {
+	// PolicyName is the name of the compiled policy bundle in NIM.
+	// Mutually exclusive with policyUID.
 	//
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=253
-	N1CNamespace *string `json:"n1cNamespace,omitempty"`
+	PolicyName *string `json:"policyName,omitempty"`
 
-	// PolicyName is the name of the security policy to fetch.
-	// For NIM: used as the policyName query parameter in the NIM security policies bundles API.
-	// For N1C: used as the policy name path segment in the N1C security policies API.
-	// The value is percent-encoded before being included in the request URL.
+	// PolicyUID is the unique identifier of the compiled policy bundle in NIM.
+	// Mutually exclusive with policyName.
+	// Must be a valid UUID (e.g. "2bc1e3ac-7990-4ca4-910a-8634c444c804").
+	//
+	// +optional
+	// +kubebuilder:validation:Pattern=`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`
+	PolicyUID *string `json:"policyUID,omitempty"`
+
+	// URL is the base URL of the NGINX Instance Manager instance,
+	// e.g. "https://nim.example.com".
+	//
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=2083
+	// +kubebuilder:validation:Pattern=`^https?://`
+	URL string `json:"url"`
+}
+
+// N1CBundleSource configures bundle fetching from F5 NGINX One Console (N1C).
+// Exactly one of policyName or policyObjectID must be set.
+//
+// +kubebuilder:validation:XValidation:message="exactly one of policyName or policyObjectID must be set",rule="(has(self.policyName) && !has(self.policyObjectID)) || (!has(self.policyName) && has(self.policyObjectID))"
+//
+//nolint:lll
+type N1CBundleSource struct {
+	// PolicyName is the name of the security policy in N1C.
+	// Mutually exclusive with policyObjectID.
+	//
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=253
+	PolicyName *string `json:"policyName,omitempty"`
+
+	// PolicyObjectID is the unique object identifier of the security policy in N1C
+	// (e.g. "pol_-IUuEUN7ST63oRC7AlQPLw").
+	// Mutually exclusive with policyName.
+	//
+	// +optional
+	// +kubebuilder:validation:Pattern=`^pol_[A-Za-z0-9_-]+$`
+	PolicyObjectID *string `json:"policyObjectID,omitempty"`
+
+	// PolicyVersionID pins a specific version of the policy bundle using its opaque version ID
+	// (e.g. "pv_UJ2gL5fOQ3Gnb3OVuVo1XA"). When omitted, the latest available version is used.
+	//
+	// +optional
+	// +kubebuilder:validation:Pattern=`^pv_[A-Za-z0-9_-]+$`
+	PolicyVersionID *string `json:"policyVersionID,omitempty"`
+
+	// URL is the base URL of the F5 NGINX One Console instance,
+	// e.g. "https://<tenant>.volterra.us".
+	//
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=2083
+	// +kubebuilder:validation:Pattern=`^https?://`
+	URL string `json:"url"`
+
+	// Namespace is the NGINX One Console namespace that owns the security policy.
 	//
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=253
-	PolicyName string `json:"policyName"`
+	Namespace string `json:"namespace"`
 }
 
 // BundleAuth configures authentication for bundle fetching.
@@ -258,10 +333,11 @@ const (
 //
 //nolint:lll
 type WAFSecurityLog struct {
-	// LogSource configures the log profile bundle source for this log configuration.
+	// LogSource configures the log profile bundle source for this log entry.
+	// Exactly one of url or defaultProfile must be set.
 	LogSource LogSource `json:"logSource"`
 
-	// Destination defines where security logs should be sent.
+	// Destination defines where security logs are sent.
 	Destination SecurityLogDestination `json:"destination"`
 }
 
@@ -322,10 +398,8 @@ type LogSource struct {
 
 // SecurityLogDestination defines the destination for security logs.
 //
-// +kubebuilder:validation:XValidation:message="destination.file must be nil if the destination.type is not file",rule="!(has(self.file) && self.type != 'file')"
-// +kubebuilder:validation:XValidation:message="destination.file must be specified for file destination.type",rule="!(!has(self.file) && self.type == 'file')"
-// +kubebuilder:validation:XValidation:message="destination.syslog must be nil if the destination.type is not syslog",rule="!(has(self.syslog) && self.type != 'syslog')"
-// +kubebuilder:validation:XValidation:message="destination.syslog must be specified for syslog destination.type",rule="!(!has(self.syslog) && self.type == 'syslog')"
+// +kubebuilder:validation:XValidation:message="destination.file must be set if and only if type is file",rule="(self.type == 'file') == has(self.file)"
+// +kubebuilder:validation:XValidation:message="destination.syslog must be set if and only if type is syslog",rule="(self.type == 'syslog') == has(self.syslog)"
 //
 //nolint:lll
 type SecurityLogDestination struct {
