@@ -286,11 +286,11 @@ type N1CBundleSource struct {
 	// +kubebuilder:validation:Pattern=`^https?://`
 	URL string `json:"url"`
 
-	// N1CNamespace is the NGINX One Console namespace that owns the security policy.
+	// Namespace is the NGINX One Console namespace that owns the security policy.
 	//
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=253
-	N1CNamespace string `json:"namespace"`
+	Namespace string `json:"namespace"`
 }
 
 // BundleAuth configures authentication for bundle fetching.

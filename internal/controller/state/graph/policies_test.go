@@ -3252,9 +3252,9 @@ func TestProcessWAFGatewayBindingPolicies(t *testing.T) {
 				n1cNs := "my-n1c-namespace"
 				wafPolicy.Spec.PolicySource.HTTPSource = nil
 				wafPolicy.Spec.PolicySource.N1CSource = &ngfAPIv1alpha1.N1CBundleSource{
-					URL:          bundleURL,
-					PolicyName:   helpers.GetPointer("my-n1c-policy"),
-					N1CNamespace: n1cNs,
+					URL:        bundleURL,
+					PolicyName: helpers.GetPointer("my-n1c-policy"),
+					Namespace:  n1cNs,
 				}
 				key, pol := makePolicyEntry(wafPolicy, true)
 				return map[PolicyKey]*Policy{key: pol}
@@ -3781,15 +3781,17 @@ func TestBuildPolicyFetchRequest(t *testing.T) {
 			policyType: ngfAPIv1alpha1.PolicySourceTypeN1C,
 			policySource: ngfAPIv1alpha1.PolicySource{
 				N1CSource: &ngfAPIv1alpha1.N1CBundleSource{
-					URL:          baseURL,
-					PolicyName:   helpers.GetPointer(nimPolicyName),
-					N1CNamespace: n1cNamespace,
+					URL:        baseURL,
+					PolicyName: helpers.GetPointer(nimPolicyName),
+					Namespace:  n1cNamespace,
 				},
 			},
 			expRequest: fetch.Request{
-				URL:          baseURL,
-				PolicyName:   nimPolicyName,
-				N1CNamespace: n1cNamespace,
+				URL:        baseURL,
+				PolicyName: nimPolicyName,
+				N1C: fetch.N1CRequest{
+					Namespace: n1cNamespace,
+				},
 			},
 		},
 		{
@@ -3797,17 +3799,19 @@ func TestBuildPolicyFetchRequest(t *testing.T) {
 			policyType: ngfAPIv1alpha1.PolicySourceTypeN1C,
 			policySource: ngfAPIv1alpha1.PolicySource{
 				N1CSource: &ngfAPIv1alpha1.N1CBundleSource{
-					URL:          baseURL,
-					PolicyName:   helpers.GetPointer(nimPolicyName),
-					N1CNamespace: n1cNamespace,
+					URL:        baseURL,
+					PolicyName: helpers.GetPointer(nimPolicyName),
+					Namespace:  n1cNamespace,
 				},
 			},
 			auth: &fetch.BundleAuth{BearerToken: bearerToken},
 			expRequest: fetch.Request{
-				URL:          baseURL,
-				PolicyName:   nimPolicyName,
-				N1CNamespace: n1cNamespace,
-				Auth:         &fetch.BundleAuth{APIToken: bearerToken},
+				URL:        baseURL,
+				PolicyName: nimPolicyName,
+				N1C: fetch.N1CRequest{
+					Namespace: n1cNamespace,
+				},
+				Auth: &fetch.BundleAuth{APIToken: bearerToken},
 			},
 		},
 		{
@@ -3815,17 +3819,19 @@ func TestBuildPolicyFetchRequest(t *testing.T) {
 			policyType: ngfAPIv1alpha1.PolicySourceTypeN1C,
 			policySource: ngfAPIv1alpha1.PolicySource{
 				N1CSource: &ngfAPIv1alpha1.N1CBundleSource{
-					URL:          baseURL,
-					PolicyName:   helpers.GetPointer(nimPolicyName),
-					N1CNamespace: n1cNamespace,
+					URL:        baseURL,
+					PolicyName: helpers.GetPointer(nimPolicyName),
+					Namespace:  n1cNamespace,
 				},
 			},
 			auth: &fetch.BundleAuth{Username: "user", Password: "pass"},
 			expRequest: fetch.Request{
-				URL:          baseURL,
-				PolicyName:   nimPolicyName,
-				N1CNamespace: n1cNamespace,
-				Auth:         &fetch.BundleAuth{Username: "user", Password: "pass"},
+				URL:        baseURL,
+				PolicyName: nimPolicyName,
+				N1C: fetch.N1CRequest{
+					Namespace: n1cNamespace,
+				},
+				Auth: &fetch.BundleAuth{Username: "user", Password: "pass"},
 			},
 		},
 		{
@@ -3833,15 +3839,17 @@ func TestBuildPolicyFetchRequest(t *testing.T) {
 			policyType: ngfAPIv1alpha1.PolicySourceTypeN1C,
 			policySource: ngfAPIv1alpha1.PolicySource{
 				N1CSource: &ngfAPIv1alpha1.N1CBundleSource{
-					URL:          baseURL,
-					PolicyName:   helpers.GetPointer(nimPolicyName),
-					N1CNamespace: n1cNamespace,
+					URL:        baseURL,
+					PolicyName: helpers.GetPointer(nimPolicyName),
+					Namespace:  n1cNamespace,
 				},
 			},
 			expRequest: fetch.Request{
-				URL:          baseURL,
-				PolicyName:   nimPolicyName,
-				N1CNamespace: n1cNamespace,
+				URL:        baseURL,
+				PolicyName: nimPolicyName,
+				N1C: fetch.N1CRequest{
+					Namespace: n1cNamespace,
+				},
 			},
 		},
 		{

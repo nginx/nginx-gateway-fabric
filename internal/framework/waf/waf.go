@@ -1,6 +1,6 @@
 // Package nap contains constants shared across components that interact with
 // F5 NGINX App Protect (NAP) v5.
-package nap
+package waf
 
 // Release is the NAP v5 release version deployed by NGINX Gateway Fabric.
 // It is used both as the default image tag for the waf-enforcer and waf-config-mgr

@@ -810,7 +810,7 @@ func buildPolicyFetchRequest(
 		if policySource.NIMSource != nil {
 			req.URL = policySource.NIMSource.URL
 			if policySource.NIMSource.PolicyUID != nil {
-				req.NIMPolicyUID = *policySource.NIMSource.PolicyUID
+				req.NIM.PolicyUID = *policySource.NIMSource.PolicyUID
 			} else if policySource.NIMSource.PolicyName != nil {
 				req.PolicyName = *policySource.NIMSource.PolicyName
 			}
@@ -818,15 +818,15 @@ func buildPolicyFetchRequest(
 	case ngfAPIv1alpha1.PolicySourceTypeN1C:
 		if policySource.N1CSource != nil {
 			req.URL = policySource.N1CSource.URL
-			req.N1CNamespace = policySource.N1CSource.N1CNamespace
+			req.N1C.Namespace = policySource.N1CSource.Namespace
 			if policySource.N1CSource.PolicyObjectID != nil {
-				req.N1CPolicyObjectID = *policySource.N1CSource.PolicyObjectID
+				req.N1C.PolicyObjectID = *policySource.N1CSource.PolicyObjectID
 			}
 			if policySource.N1CSource.PolicyName != nil {
 				req.PolicyName = *policySource.N1CSource.PolicyName
 			}
 			if policySource.N1CSource.PolicyVersionID != nil {
-				req.N1CPolicyVersionID = *policySource.N1CSource.PolicyVersionID
+				req.N1C.PolicyVersionID = *policySource.N1CSource.PolicyVersionID
 			}
 			// N1C uses the APIToken auth scheme rather than Bearer.
 			// Move the token value from BearerToken to APIToken.

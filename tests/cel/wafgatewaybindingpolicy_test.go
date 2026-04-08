@@ -748,9 +748,9 @@ func TestWAFGatewayBindingPolicyPolicySource(t *testing.T) {
 				Type:       ngfAPIv1alpha1.PolicySourceTypeN1C,
 				PolicySource: ngfAPIv1alpha1.PolicySource{
 					N1CSource: &ngfAPIv1alpha1.N1CBundleSource{
-						URL:          "https://n1c.example.com",
-						PolicyName:   helpers.GetPointer("my-policy"),
-						N1CNamespace: namespace,
+						URL:        "https://n1c.example.com",
+						PolicyName: helpers.GetPointer("my-policy"),
+						Namespace:  namespace,
 					},
 				},
 			},
@@ -797,9 +797,9 @@ func TestWAFGatewayBindingPolicyPolicySource(t *testing.T) {
 				PolicySource: ngfAPIv1alpha1.PolicySource{
 					HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: "https://example.com/policy.tgz"},
 					N1CSource: &ngfAPIv1alpha1.N1CBundleSource{
-						URL:          "https://n1c.example.com",
-						PolicyName:   helpers.GetPointer("my-policy"),
-						N1CNamespace: namespace,
+						URL:        "https://n1c.example.com",
+						PolicyName: helpers.GetPointer("my-policy"),
+						Namespace:  namespace,
 					},
 				},
 			},
@@ -812,9 +812,9 @@ func TestWAFGatewayBindingPolicyPolicySource(t *testing.T) {
 				Type:       ngfAPIv1alpha1.PolicySourceTypeN1C,
 				PolicySource: ngfAPIv1alpha1.PolicySource{
 					N1CSource: &ngfAPIv1alpha1.N1CBundleSource{
-						URL:          "https://n1c.example.com",
-						PolicyName:   helpers.GetPointer("my-policy"),
-						N1CNamespace: namespace,
+						URL:        "https://n1c.example.com",
+						PolicyName: helpers.GetPointer("my-policy"),
+						Namespace:  namespace,
 					},
 					NIMSource: &ngfAPIv1alpha1.NIMBundleSource{
 						URL:        "https://nim.example.com",
@@ -835,9 +835,9 @@ func TestWAFGatewayBindingPolicyPolicySource(t *testing.T) {
 						PolicyName: helpers.GetPointer("my-policy"),
 					},
 					N1CSource: &ngfAPIv1alpha1.N1CBundleSource{
-						URL:          "https://n1c.example.com",
-						PolicyName:   helpers.GetPointer("my-policy"),
-						N1CNamespace: namespace,
+						URL:        "https://n1c.example.com",
+						PolicyName: helpers.GetPointer("my-policy"),
+						Namespace:  namespace,
 					},
 				},
 			},
@@ -933,9 +933,9 @@ func TestWAFGatewayBindingPolicyVerifyChecksumHTTPOnly(t *testing.T) {
 		PolicyName: helpers.GetPointer("my-policy"),
 	}
 	n1cSource := &ngfAPIv1alpha1.N1CBundleSource{
-		URL:          "https://n1c.example.com",
-		N1CNamespace: "my-ns",
-		PolicyName:   helpers.GetPointer("my-policy"),
+		URL:        "https://n1c.example.com",
+		Namespace:  "my-ns",
+		PolicyName: helpers.GetPointer("my-policy"),
 	}
 
 	tests := []struct {
@@ -1100,7 +1100,7 @@ func TestWAFGatewayBindingPolicyN1CPolicyObjectID(t *testing.T) {
 					N1CSource: &ngfAPIv1alpha1.N1CBundleSource{
 						URL:            "https://n1c.example.com",
 						PolicyObjectID: helpers.GetPointer("pol_-IUuEUN7ST63oRC7AlQPLw"),
-						N1CNamespace:   namespace,
+						Namespace:      namespace,
 					},
 				},
 			},
@@ -1115,7 +1115,7 @@ func TestWAFGatewayBindingPolicyN1CPolicyObjectID(t *testing.T) {
 					N1CSource: &ngfAPIv1alpha1.N1CBundleSource{
 						URL:            "https://n1c.example.com",
 						PolicyObjectID: helpers.GetPointer("IUuEUN7ST63oRC7AlQPLw"),
-						N1CNamespace:   namespace,
+						Namespace:      namespace,
 					},
 				},
 			},
@@ -1130,7 +1130,7 @@ func TestWAFGatewayBindingPolicyN1CPolicyObjectID(t *testing.T) {
 					N1CSource: &ngfAPIv1alpha1.N1CBundleSource{
 						URL:            "https://n1c.example.com",
 						PolicyObjectID: helpers.GetPointer("pol_invalid!chars"),
-						N1CNamespace:   namespace,
+						Namespace:      namespace,
 					},
 				},
 			},
@@ -1171,7 +1171,7 @@ func TestWAFGatewayBindingPolicyN1CPolicyVersionID(t *testing.T) {
 						URL:             "https://n1c.example.com",
 						PolicyName:      helpers.GetPointer("my-policy"),
 						PolicyVersionID: helpers.GetPointer("pv_UJ2gL5fOQ3Gnb3OVuVo1XA"),
-						N1CNamespace:    namespace,
+						Namespace:       namespace,
 					},
 				},
 			},
@@ -1187,7 +1187,7 @@ func TestWAFGatewayBindingPolicyN1CPolicyVersionID(t *testing.T) {
 						URL:             "https://n1c.example.com",
 						PolicyName:      helpers.GetPointer("my-policy"),
 						PolicyVersionID: helpers.GetPointer("UJ2gL5fOQ3Gnb3OVuVo1XA"),
-						N1CNamespace:    namespace,
+						Namespace:       namespace,
 					},
 				},
 			},
@@ -1203,7 +1203,7 @@ func TestWAFGatewayBindingPolicyN1CPolicyVersionID(t *testing.T) {
 						URL:             "https://n1c.example.com",
 						PolicyName:      helpers.GetPointer("my-policy"),
 						PolicyVersionID: helpers.GetPointer("pv_invalid!chars"),
-						N1CNamespace:    namespace,
+						Namespace:       namespace,
 					},
 				},
 			},

@@ -12440,7 +12440,7 @@ spec:
                       Required when type is N1C; must not be set for other types.
                     properties:
                       namespace:
-                        description: N1CNamespace is the NGINX One Console namespace
+                        description: Namespace is the NGINX One Console namespace
                           that owns the security policy.
                         maxLength: 253
                         minLength: 1
