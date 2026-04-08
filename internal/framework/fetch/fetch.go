@@ -30,6 +30,10 @@ const (
 	defaultN1CTimeout = 120 * time.Second
 )
 
+// unixEpochRFC3339 is the Unix epoch formatted as RFC3339, used as a startTime sentinel
+// to retrieve all policies regardless of age.
+var unixEpochRFC3339 = time.Unix(0, 0).UTC().Format(time.RFC3339)
+
 // BundleAuth holds authentication credentials for bundle fetching.
 type BundleAuth struct {
 	Username    string
@@ -553,7 +557,7 @@ func buildNIMURL(baseURL, policyName, policyUID string) (string, error) {
 	// NIM defaults startTime to now-24h when omitted, which silently excludes policies that
 	// haven't been recompiled in the last 24 hours. Set it to the Unix epoch to return all
 	// matching policies regardless of age.
-	q.Set("startTime", "1970-01-01T00:00:00Z")
+	q.Set("startTime", unixEpochRFC3339)
 	if policyUID != "" {
 		q.Set("policyUID", policyUID)
 	} else {
