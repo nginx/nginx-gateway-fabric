@@ -3,8 +3,6 @@ package graph
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"slices"
 	"sort"
@@ -24,6 +22,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/secrets"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/validation"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/fetch"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
 
@@ -793,18 +792,41 @@ func buildPolicyFetchRequest(
 	tlsCA []byte,
 ) fetch.Request {
 	req := fetch.Request{
-		URL:                policySource.URL,
 		Auth:               auth,
 		TLSCAData:          tlsCA,
 		InsecureSkipVerify: policySource.InsecureSkipVerify,
 		VerifyChecksum:     policySource.Validation != nil && policySource.Validation.VerifyChecksum,
+		ExpectedChecksum:   expectedChecksum(policySource.Validation),
 		Timeout:            policySource.Timeout,
 	}
 
-	if policySource.ManagedSource != nil {
-		req.NIMPolicyName = policySource.ManagedSource.PolicyName
-		if policyType == ngfAPIv1alpha1.PolicySourceTypeN1C && policySource.ManagedSource.N1CNamespace != nil {
-			req.N1CNamespace = *policySource.ManagedSource.N1CNamespace
+	switch policyType {
+	case ngfAPIv1alpha1.PolicySourceTypeHTTP:
+		if policySource.HTTPSource != nil {
+			req.URL = policySource.HTTPSource.URL
+		}
+	case ngfAPIv1alpha1.PolicySourceTypeNIM:
+		if policySource.NIMSource != nil {
+			req.URL = policySource.NIMSource.URL
+			if policySource.NIMSource.PolicyUID != nil {
+				req.NIM.PolicyUID = *policySource.NIMSource.PolicyUID
+			} else if policySource.NIMSource.PolicyName != nil {
+				req.PolicyName = *policySource.NIMSource.PolicyName
+			}
+		}
+	case ngfAPIv1alpha1.PolicySourceTypeN1C:
+		if policySource.N1CSource != nil {
+			req.URL = policySource.N1CSource.URL
+			req.N1C.Namespace = policySource.N1CSource.Namespace
+			if policySource.N1CSource.PolicyObjectID != nil {
+				req.N1C.PolicyObjectID = *policySource.N1CSource.PolicyObjectID
+			}
+			if policySource.N1CSource.PolicyName != nil {
+				req.PolicyName = *policySource.N1CSource.PolicyName
+			}
+			if policySource.N1CSource.PolicyVersionID != nil {
+				req.N1C.PolicyVersionID = *policySource.N1CSource.PolicyVersionID
+			}
 			// N1C uses the APIToken auth scheme rather than Bearer.
 			// Move the token value from BearerToken to APIToken.
 			if auth != nil && auth.BearerToken != "" {
@@ -819,11 +841,12 @@ func buildPolicyFetchRequest(
 // buildLogFetchRequest constructs a fetch.Request from a LogSource, resolved auth, and TLS CA data.
 func buildLogFetchRequest(logSource *ngfAPIv1alpha1.LogSource, auth *fetch.BundleAuth, tlsCA []byte) fetch.Request {
 	return fetch.Request{
-		URL:            *logSource.URL,
-		Auth:           auth,
-		TLSCAData:      tlsCA,
-		VerifyChecksum: logSource.Validation != nil && logSource.Validation.VerifyChecksum,
-		Timeout:        logSource.Timeout,
+		URL:              *logSource.URL,
+		Auth:             auth,
+		TLSCAData:        tlsCA,
+		VerifyChecksum:   logSource.Validation != nil && logSource.Validation.VerifyChecksum,
+		ExpectedChecksum: expectedChecksum(logSource.Validation),
+		Timeout:          logSource.Timeout,
 	}
 }
 
@@ -917,8 +940,16 @@ func fetchSecurityLogBundles(
 		}
 
 		bundleKey := WAFBundleKey(
-			fmt.Sprintf("%s_%s_log_%s", wafPolicy.Namespace, wafPolicy.Name, urlHash(*secLog.LogSource.URL)),
+			fmt.Sprintf("%s_%s_log_%s", wafPolicy.Namespace, wafPolicy.Name, helpers.URLHash(*secLog.LogSource.URL)),
 		)
+
+		// Multiple SecurityLog entries may reference the same URL and therefore produce the same
+		// bundleKey. Once the bundle has been fetched, skip subsequent entries with the same key
+		// to avoid redundant network calls and to prevent a failed fetch (e.g. due to different
+		// auth settings on the duplicate entry) from invalidating the policy.
+		if _, alreadyFetched := output.Bundles[bundleKey]; alreadyFetched {
+			continue
+		}
 
 		req := buildLogFetchRequest(&secLog.LogSource, auth, tlsCA)
 
@@ -940,13 +971,12 @@ func fetchSecurityLogBundles(
 	}
 }
 
-// urlHash returns the first 16 hex characters of the SHA-256 digest of rawURL.
-// Used to derive a stable, filesystem-safe component for log bundle keys so that
-// reordering or inserting SecurityLog entries does not change existing bundle filenames
-// or break the stale-bundle fallback.
-func urlHash(rawURL string) string {
-	sum := sha256.Sum256([]byte(rawURL))
-	return hex.EncodeToString(sum[:])[:16]
+// expectedChecksum returns the ExpectedChecksum value from a BundleValidation, or empty string if nil.
+func expectedChecksum(v *ngfAPIv1alpha1.BundleValidation) string {
+	if v == nil || v.ExpectedChecksum == nil {
+		return ""
+	}
+	return *v.ExpectedChecksum
 }
 
 // resolveBundleAuth resolves a BundleAuth reference into fetch.BundleAuth credentials.

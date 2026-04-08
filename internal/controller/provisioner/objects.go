@@ -32,6 +32,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/configmaps"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/waf"
 )
 
 const (
@@ -50,9 +51,6 @@ const (
 	// WAF container defaults.
 	defaultWAFEnforcerImagePath  = "private-registry.nginx.com/nap/waf-enforcer"
 	defaultWAFConfigMgrImagePath = "private-registry.nginx.com/nap/waf-config-mgr"
-	// FIXME(ciarams87): Figure out best way to handle WAF image tags.
-	defaultWAFEnforcerImageTag  = "5.12.1"
-	defaultWAFConfigMgrImageTag = "5.12.1"
 
 	// WAF shared volume names.
 	appProtectBundlesVolumeName  = "app-protect-bundles"
@@ -1642,7 +1640,7 @@ func (p *NginxProvisioner) buildWAFEnforcerContainer(
 ) corev1.Container {
 	image := p.buildWAFImage(
 		defaultWAFEnforcerImagePath,
-		defaultWAFEnforcerImageTag,
+		waf.Release,
 		wafContainersCfg,
 		"enforcer",
 	)
@@ -1691,7 +1689,7 @@ func (p *NginxProvisioner) buildWAFConfigManagerContainer(
 ) corev1.Container {
 	image := p.buildWAFImage(
 		defaultWAFConfigMgrImagePath,
-		defaultWAFConfigMgrImageTag,
+		waf.Release,
 		wafContainersCfg,
 		"configManager",
 	)

@@ -86,14 +86,16 @@ const (
 		`is 'hash' or 'hash consistent'`
 
 	// WAFGatewayBindingPolicy errors.
-	expectedWAFFileNilIfNotFileTypeError           = "destination.file must be nil if the destination.type is not file"
-	expectedWAFFileRequiredIfFileTypeError         = "destination.file must be specified for file destination.type"
-	expectedWAFSyslogNilIfNotSyslogTypeError       = "destination.syslog must be nil if the destination.type is not syslog"
-	expectedWAFSyslogRequiredIfSyslogTypeError     = "destination.syslog must be specified for syslog destination.type"
-	expectedWAFLogSourceMutualExclusionError       = "exactly one of logSource.url or logSource.defaultProfile must be set"
-	expectedWAFManagedSourceRequiredError          = "policySource.managedSource is required when type is NIM or N1C"
-	expectedWAFManagedSourceForbiddenError         = "policySource.managedSource must not be set when type is HTTP"
-	expectedWAFManagedSourceNamespaceRequiredError = "policySource.managedSource.n1cNamespace is required when type is N1C"
+	expectedWAFFileIfAndOnlyIfFileTypeError   = "destination.file must be set if and only if type is file"
+	expectedWAFSyslogIfAndOnlyIfSyslogType    = "destination.syslog must be set if and only if type is syslog"
+	expectedWAFLogSourceMutualExclusionError  = "exactly one of logSource.url or logSource.defaultProfile must be set"
+	expectedWAFValidationMutualExclusionError = "verifyChecksum and expectedChecksum are mutually exclusive"
+	expectedWAFVerifyChecksumHTTPOnlyError    = "policySource.validation.verifyChecksum is only supported for type HTTP"
+	expectedWAFNIMSourceIfAndOnlyIfNIMType    = "policySource.nimSource must be set if and only if type is NIM"
+	expectedWAFN1CSourceIfAndOnlyIfN1CType    = "policySource.n1cSource must be set if and only if type is N1C"
+	expectedWAFNIMPolicyUIDPatternError       = `^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`
+	expectedWAFN1CPolicyObjectIDPatternError  = `^pol_[A-Za-z0-9_-]+$`
+	expectedWAFN1CPolicyVersionIDPatternError = `^pv_[A-Za-z0-9_-]+$`
 
 	// Namespace for tests.
 	defaultNamespace = "default"
