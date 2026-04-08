@@ -2812,8 +2812,9 @@ func TestProcessWAFGatewayBindingPolicies(t *testing.T) {
 	authSecretNsName := types.NamespacedName{Namespace: policyNs, Name: authSecretName}
 	tlsSecretNsName := types.NamespacedName{Namespace: policyNs, Name: tlsSecretName}
 
-	bundleKey := WAFBundleKey(fmt.Sprintf("%s_%s", policyNs, policyName))
-	logBundleKey := WAFBundleKey(fmt.Sprintf("%s_%s_log_%s", policyNs, policyName, helpers.URLHash(logBundleURL)))
+	policyNsName := types.NamespacedName{Namespace: policyNs, Name: policyName}
+	bundleKey := PolicyBundleKey(policyNsName)
+	logBundleKey := LogBundleKey(policyNsName, logBundleURL)
 
 	fetchedData := []byte("bundle-data")
 	fetchedChecksum := "abc123"
@@ -3430,7 +3431,7 @@ func TestProcessWAFGatewayBindingPolicies(t *testing.T) {
 			},
 			expBundles: map[WAFBundleKey]*WAFBundleData{
 				bundleKey: {Data: fetchedData, Checksum: fetchedChecksum},
-				WAFBundleKey(fmt.Sprintf("%s_%s_log_%s", "test-ns", policyName, helpers.URLHash(multiLogURL1))): {
+				LogBundleKey(types.NamespacedName{Namespace: "test-ns", Name: policyName}, multiLogURL1): {
 					Data: fetchedData, Checksum: fetchedChecksum,
 				},
 			},
@@ -3873,7 +3874,7 @@ func TestBuildPolicyFetchRequest(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			got := buildPolicyFetchRequest(&tc.policySource, tc.policyType, tc.auth, tc.tlsCA)
+			got := BuildPolicyFetchRequest(&tc.policySource, tc.policyType, tc.auth, tc.tlsCA)
 			g.Expect(got).To(Equal(tc.expRequest))
 		})
 	}

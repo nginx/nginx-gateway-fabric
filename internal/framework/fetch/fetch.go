@@ -16,8 +16,6 @@ import (
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
-	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/waf"
 )
 
 //go:generate go tool counterfeiter -generate
@@ -28,6 +26,12 @@ const (
 	// N1C requires up to three sequential HTTP calls (list policies, optionally list versions,
 	// then download the compiled bundle), so a longer default is needed.
 	defaultN1CTimeout = 120 * time.Second
+
+	// Release is the NAP v5 release version deployed by NGINX Gateway Fabric.
+	// It is used both as the default image tag for the waf-enforcer and waf-config-mgr
+	// sidecar containers and as the nap_release query parameter when compiling
+	// policy bundles via the F5 NGINX One Console API.
+	Release = "5.12.1"
 )
 
 // unixEpochRFC3339 is the Unix epoch formatted as RFC3339, used as a startTime sentinel
@@ -250,7 +254,7 @@ func fetchHTTP(ctx context.Context, client *http.Client, req Request) ([]byte, s
 		return nil, "", fmt.Errorf("failed to fetch bundle: %w", err)
 	}
 
-	actualChecksum := computeChecksum(data)
+	actualChecksum := ComputeChecksum(data)
 
 	if req.VerifyChecksum {
 		checksumURL := req.URL + ".sha256"
@@ -314,7 +318,7 @@ func fetchNIM(ctx context.Context, client *http.Client, req Request) ([]byte, st
 		return nil, "", fmt.Errorf("failed to base64-decode NIM bundle content: %w", err)
 	}
 
-	return data, computeChecksum(data), nil
+	return data, ComputeChecksum(data), nil
 }
 
 // n1cPoliciesResponse is the JSON envelope returned by the N1C list-policies API.
@@ -368,7 +372,7 @@ func fetchN1C(ctx context.Context, client *http.Client, req Request) ([]byte, st
 		return nil, "", fmt.Errorf("failed to fetch N1C compiled bundle: %w", err)
 	}
 
-	return body, computeChecksum(body), nil
+	return body, ComputeChecksum(body), nil
 }
 
 // resolveN1CIDs returns the policy object ID and version object ID for the given request.
@@ -537,7 +541,7 @@ func buildN1CCompileURL(baseURL, namespace, polObjID, polVersionID string) (stri
 		"/versions/" + url.PathEscape(polVersionID) + "/compile"
 	base.Fragment = ""
 	q := url.Values{}
-	q.Set("nap_release", waf.Release)
+	q.Set("nap_release", Release)
 	q.Set("download", "true")
 	base.RawQuery = q.Encode()
 	return base.String(), nil
@@ -602,8 +606,8 @@ func doGet(ctx context.Context, client *http.Client, rawURL string, auth *Bundle
 	return data, nil
 }
 
-// computeChecksum returns the lowercase hex-encoded SHA-256 of data.
-func computeChecksum(data []byte) string {
+// ComputeChecksum returns the lowercase hex-encoded SHA-256 of data.
+func ComputeChecksum(data []byte) string {
 	sum := sha256.Sum256(data)
 	return hex.EncodeToString(sum[:])
 }
