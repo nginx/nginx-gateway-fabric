@@ -6,7 +6,7 @@ and includes links to all PRs that went into the release.
 
 ## Release 2.5.1
 
-_April 7, 2026_
+_April 8, 2026_
 
 BUG FIXES:
 
