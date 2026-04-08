@@ -12413,36 +12413,109 @@ spec:
                     required:
                     - secretRef
                     type: object
+                  httpSource:
+                    description: |-
+                      HTTPSource configures direct bundle fetching from an HTTP/HTTPS URL.
+                      Required when type is HTTP; must not be set for other types.
+                    properties:
+                      url:
+                        description: |-
+                          URL is the full URL of the compiled policy bundle (.tgz),
+                          e.g. "https://storage.example.com/bundles/policy.tgz".
+                        maxLength: 2083
+                        minLength: 1
+                        pattern: ^https?://
+                        type: string
+                    required:
+                    - url
+                    type: object
                   insecureSkipVerify:
                     description: |-
                       InsecureSkipVerify disables TLS certificate verification when fetching the bundle.
                       Not recommended for production use.
                     type: boolean
-                  managedSource:
+                  n1cSource:
                     description: |-
-                      ManagedSource configures bundle fetching from NGINX Instance Manager (NIM) or F5 NGINX One Console (N1C).
-                      Required when type is NIM or N1C.
+                      N1CSource configures bundle fetching from F5 NGINX One Console.
+                      Required when type is N1C; must not be set for other types.
                     properties:
-                      n1cNamespace:
-                        description: |-
-                          N1CNamespace is the N1C namespace the policy belongs to.
-                          Required when the parent type is N1C; ignored for NIM.
-                          The value is percent-encoded before being included in the request URL.
+                      namespace:
+                        description: Namespace is the NGINX One Console namespace
+                          that owns the security policy.
                         maxLength: 253
                         minLength: 1
                         type: string
                       policyName:
                         description: |-
-                          PolicyName is the name of the security policy to fetch.
-                          For NIM: used as the policyName query parameter in the NIM security policies bundles API.
-                          For N1C: used as the policy name path segment in the N1C security policies API.
-                          The value is percent-encoded before being included in the request URL.
+                          PolicyName is the name of the security policy in N1C.
+                          Mutually exclusive with policyObjectID.
                         maxLength: 253
                         minLength: 1
                         type: string
+                      policyObjectID:
+                        description: |-
+                          PolicyObjectID is the unique object identifier of the security policy in N1C
+                          (e.g. "pol_-IUuEUN7ST63oRC7AlQPLw").
+                          Mutually exclusive with policyName.
+                        pattern: ^pol_[A-Za-z0-9_-]+$
+                        type: string
+                      policyVersionID:
+                        description: |-
+                          PolicyVersionID pins a specific version of the policy bundle using its opaque version ID
+                          (e.g. "pv_UJ2gL5fOQ3Gnb3OVuVo1XA"). When omitted, the latest available version is used.
+                        pattern: ^pv_[A-Za-z0-9_-]+$
+                        type: string
+                      url:
+                        description: |-
+                          URL is the base URL of the F5 NGINX One Console instance,
+                          e.g. "https://<tenant>.volterra.us".
+                        maxLength: 2083
+                        minLength: 1
+                        pattern: ^https?://
+                        type: string
                     required:
-                    - policyName
+                    - namespace
+                    - url
                     type: object
+                    x-kubernetes-validations:
+                    - message: exactly one of policyName or policyObjectID must be
+                        set
+                      rule: (has(self.policyName) && !has(self.policyObjectID)) ||
+                        (!has(self.policyName) && has(self.policyObjectID))
+                  nimSource:
+                    description: |-
+                      NIMSource configures bundle fetching from NGINX Instance Manager.
+                      Required when type is NIM; must not be set for other types.
+                    properties:
+                      policyName:
+                        description: |-
+                          PolicyName is the name of the compiled policy bundle in NIM.
+                          Mutually exclusive with policyUID.
+                        maxLength: 253
+                        minLength: 1
+                        type: string
+                      policyUID:
+                        description: |-
+                          PolicyUID is the unique identifier of the compiled policy bundle in NIM.
+                          Mutually exclusive with policyName.
+                          Must be a valid UUID (e.g. "2bc1e3ac-7990-4ca4-910a-8634c444c804").
+                        pattern: ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$
+                        type: string
+                      url:
+                        description: |-
+                          URL is the base URL of the NGINX Instance Manager instance,
+                          e.g. "https://nim.example.com".
+                        maxLength: 2083
+                        minLength: 1
+                        pattern: ^https?://
+                        type: string
+                    required:
+                    - url
+                    type: object
+                    x-kubernetes-validations:
+                    - message: exactly one of policyName or policyUID must be set
+                      rule: (has(self.policyName) && !has(self.policyUID)) || (!has(self.policyName)
+                        && has(self.policyUID))
                   polling:
                     description: Polling configures automatic periodic re-fetching
                       of the bundle.
@@ -12488,40 +12561,31 @@ spec:
                     required:
                     - name
                     type: object
-                  url:
-                    description: |-
-                      URL semantics differ by type:
-
-                        - HTTP: the full URL of the compiled policy bundle (.tgz), e.g.
-                          "https://storage.example.com/bundles/policy.tgz".
-
-                        - NIM: the base URL of the NGINX Instance Manager instance, e.g.
-                          "https://nim.example.com". NGF appends
-                          "/api/platform/v1/security/policies/bundles?policyName=<name>&includeBundleContent=true"
-                          to this value. Do not include a path, query string, or fragment.
-
-                        - N1C: the base URL of the F5 NGINX One Console instance, e.g.
-                          "https://f5xc.example.com". NGF appends
-                          "/api/nginx/one/namespaces/<namespace>/security-policies/<policyName>/bundle"
-                          to this value. Do not include a path, query string, or fragment.
-
-                      Required when type is HTTP, NIM, or N1C.
-                    maxLength: 2083
-                    minLength: 1
-                    pattern: ^https?://
-                    type: string
                   validation:
                     description: Validation configures integrity verification for
                       the downloaded bundle.
                     properties:
+                      expectedChecksum:
+                        description: |-
+                          ExpectedChecksum is the expected SHA256 checksum of the bundle.
+                          If set, the downloaded bundle must match this checksum or it will be rejected.
+                        maxLength: 64
+                        minLength: 64
+                        pattern: ^[0-9a-fA-F]{64}$
+                        type: string
                       verifyChecksum:
                         description: |-
-                          VerifyChecksum enables SHA-256 integrity verification.
-                          When true, NGF fetches <url>.sha256 and verifies the downloaded bundle matches it.
+                          VerifyChecksum enables automatic checksum verification by fetching a companion
+                          checksum file at <url>.sha256 and comparing it against the downloaded bundle.
+                          Only supported when the policy source type is HTTP (policySource.httpSource or
+                          logSource.url); setting this for NIM or N1C sources is rejected at admission.
+                          Mutually exclusive with expectedChecksum.
                         type: boolean
                     type: object
-                required:
-                - url
+                    x-kubernetes-validations:
+                    - message: verifyChecksum and expectedChecksum are mutually exclusive
+                      rule: '!(has(self.verifyChecksum) && self.verifyChecksum &&
+                        has(self.expectedChecksum))'
                 type: object
               securityLogs:
                 description: SecurityLogs defines security logging configurations.
@@ -12531,8 +12595,7 @@ spec:
                     Exactly one of logSource.url (via LogSource) or logSource.defaultProfile must be set.
                   properties:
                     destination:
-                      description: Destination defines where security logs should
-                        be sent.
+                      description: Destination defines where security logs are sent.
                       properties:
                         file:
                           description: |-
@@ -12577,19 +12640,16 @@ spec:
                       - type
                       type: object
                       x-kubernetes-validations:
-                      - message: destination.file must be nil if the destination.type
-                          is not file
-                        rule: '!(has(self.file) && self.type != ''file'')'
-                      - message: destination.file must be specified for file destination.type
-                        rule: '!(!has(self.file) && self.type == ''file'')'
-                      - message: destination.syslog must be nil if the destination.type
-                          is not syslog
-                        rule: '!(has(self.syslog) && self.type != ''syslog'')'
-                      - message: destination.syslog must be specified for syslog destination.type
-                        rule: '!(!has(self.syslog) && self.type == ''syslog'')'
+                      - message: destination.file must be set if and only if type
+                          is file
+                        rule: (self.type == 'file') == has(self.file)
+                      - message: destination.syslog must be set if and only if type
+                          is syslog
+                        rule: (self.type == 'syslog') == has(self.syslog)
                     logSource:
-                      description: LogSource configures the log profile bundle source
-                        for this log configuration.
+                      description: |-
+                        LogSource configures the log profile bundle source for this log entry.
+                        Exactly one of url or defaultProfile must be set.
                       properties:
                         auth:
                           description: |-
@@ -12684,12 +12744,28 @@ spec:
                             Validation configures integrity verification for the downloaded log bundle.
                             Only applicable when url is set.
                           properties:
+                            expectedChecksum:
+                              description: |-
+                                ExpectedChecksum is the expected SHA256 checksum of the bundle.
+                                If set, the downloaded bundle must match this checksum or it will be rejected.
+                              maxLength: 64
+                              minLength: 64
+                              pattern: ^[0-9a-fA-F]{64}$
+                              type: string
                             verifyChecksum:
                               description: |-
-                                VerifyChecksum enables SHA-256 integrity verification.
-                                When true, NGF fetches <url>.sha256 and verifies the downloaded bundle matches it.
+                                VerifyChecksum enables automatic checksum verification by fetching a companion
+                                checksum file at <url>.sha256 and comparing it against the downloaded bundle.
+                                Only supported when the policy source type is HTTP (policySource.httpSource or
+                                logSource.url); setting this for NIM or N1C sources is rejected at admission.
+                                Mutually exclusive with expectedChecksum.
                               type: boolean
                           type: object
+                          x-kubernetes-validations:
+                          - message: verifyChecksum and expectedChecksum are mutually
+                              exclusive
+                            rule: '!(has(self.verifyChecksum) && self.verifyChecksum
+                              && has(self.expectedChecksum))'
                       type: object
                   required:
                   - destination
@@ -12766,16 +12842,17 @@ spec:
             - type
             type: object
             x-kubernetes-validations:
-            - message: policySource.managedSource is required when type is NIM or
-                N1C
-              rule: (self.type != 'NIM' && self.type != 'N1C') || (has(self.policySource)
-                && has(self.policySource.managedSource))
-            - message: policySource.managedSource must not be set when type is HTTP
-              rule: self.type != 'HTTP' || !has(self.policySource) || !has(self.policySource.managedSource)
-            - message: policySource.managedSource.n1cNamespace is required when type
-                is N1C
-              rule: self.type != 'N1C' || (has(self.policySource) && has(self.policySource.managedSource)
-                && has(self.policySource.managedSource.n1cNamespace))
+            - message: policySource.httpSource must be set if and only if type is
+                HTTP
+              rule: (self.type == 'HTTP') == (has(self.policySource) && has(self.policySource.httpSource))
+            - message: policySource.nimSource must be set if and only if type is NIM
+              rule: (self.type == 'NIM') == (has(self.policySource) && has(self.policySource.nimSource))
+            - message: policySource.n1cSource must be set if and only if type is N1C
+              rule: (self.type == 'N1C') == (has(self.policySource) && has(self.policySource.n1cSource))
+            - message: policySource.validation.verifyChecksum is only supported for
+                type HTTP
+              rule: '!(self.type != ''HTTP'' && has(self.policySource) && has(self.policySource.validation)
+                && has(self.policySource.validation.verifyChecksum) && self.policySource.validation.verifyChecksum)'
           status:
             description: Status defines the state of the WAFGatewayBindingPolicy.
             properties:

@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"strings"
 	"text/template"
@@ -98,6 +99,13 @@ func CapitalizeString(s string) string {
 	}
 
 	return strings.ToUpper(s[:1]) + s[1:]
+}
+
+// URLHash returns the first 16 hex characters of the SHA-256 digest of rawURL.
+// Used to derive a stable, filesystem-safe component for keys.
+func URLHash(rawURL string) string {
+	sum := sha256.Sum256([]byte(rawURL))
+	return hex.EncodeToString(sum[:])[:16]
 }
 
 // ToSafeFileName converts any string to a filesystem-safe filename using SHA256 hash.

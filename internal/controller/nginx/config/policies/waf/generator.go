@@ -62,7 +62,9 @@ func generate(pols []policies.Policy) policies.GenerateResultFiles {
 
 		fields := map[string]any{}
 
-		if wp.Spec.PolicySource.URL != "" {
+		if wp.Spec.PolicySource.HTTPSource != nil ||
+			wp.Spec.PolicySource.NIMSource != nil ||
+			wp.Spec.PolicySource.N1CSource != nil {
 			bundleName := fmt.Sprintf("%s_%s", wp.Namespace, wp.Name)
 			bundlePath := fmt.Sprintf("%s/%s.tgz", appProtectBundleFolder, bundleName)
 			fields["BundlePath"] = bundlePath
@@ -71,12 +73,12 @@ func generate(pols []policies.Policy) policies.GenerateResultFiles {
 		if len(wp.Spec.SecurityLogs) > 0 {
 			securityLogs := make([]map[string]string, 0, len(wp.Spec.SecurityLogs))
 
-			for i, secLog := range wp.Spec.SecurityLogs {
+			for _, secLog := range wp.Spec.SecurityLogs {
 				logEntry := map[string]string{}
 
 				switch {
 				case secLog.LogSource.URL != nil:
-					bundleName := fmt.Sprintf("%s_%s_log_%d", wp.Namespace, wp.Name, i)
+					bundleName := fmt.Sprintf("%s_%s_log_%s", wp.Namespace, wp.Name, helpers.URLHash(*secLog.LogSource.URL))
 					bundlePath := fmt.Sprintf("%s/%s.tgz", appProtectBundleFolder, bundleName)
 					logEntry["LogProfileBundlePath"] = bundlePath
 				case secLog.LogSource.DefaultProfile != nil:
