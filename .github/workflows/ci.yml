@@ -118,14 +118,14 @@ jobs:
       - name: Configure GOPROXY
         id: goproxy
         run: |
-          if [[ "${{ secrets.ARTIFACTORY_USER }}" == "" ]]; then
-          echo "No Artifactory secrets available - using direct GOPROXY"
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+          echo "Pull request - using direct GOPROXY"
           GOPROXY_VALUE="proxy.golang.org,direct"
-          elif [[ "${{ inputs.is_production_release }}" == "true" ]] || [[ ("${{ github.event_name }}" == "push" || "${{ github.event_name }}" == "schedule") && ("${{ github.ref }}" == "refs/heads/main" || "${{ github.ref }}" =~ ^refs/heads/release-) ]]; then
-          echo "Production mode - using production Artifactory"
+          elif [[ "${{ inputs.is_production_release }}" == "true" ]]; then
+          echo "Production release - using production Artifactory"
           GOPROXY_VALUE="https://${{ secrets.ARTIFACTORY_USER }}:${{ secrets.ARTIFACTORY_TOKEN }}@${{ secrets.ARTIFACTORY_ENDPOINT }}"
           else
-          echo "Development mode - using dev Artifactory"
+          echo "Main/nightly/edge build - using dev Artifactory"
           GOPROXY_VALUE="https://${{ secrets.ARTIFACTORY_USER }}:${{ secrets.ARTIFACTORY_TOKEN }}@${{ secrets.ARTIFACTORY_DEV_ENDPOINT }}"
           fi
           echo "GOPROXY=${GOPROXY_VALUE}" >> $GITHUB_ENV
@@ -182,9 +182,14 @@ jobs:
       - name: Configure GOPROXY
         id: goproxy
         run: |
-          if [[ "${{ secrets.ARTIFACTORY_USER }}" == "" ]]; then
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+          echo "Pull request - using direct GOPROXY"
           GOPROXY_VALUE="proxy.golang.org,direct"
+          elif [[ "${{ inputs.is_production_release }}" == "true" ]]; then
+          echo "Production release - using production Artifactory"
+          GOPROXY_VALUE="https://${{ secrets.ARTIFACTORY_USER }}:${{ secrets.ARTIFACTORY_TOKEN }}@${{ secrets.ARTIFACTORY_ENDPOINT }}"
           else
+          echo "Main/nightly/edge build - using dev Artifactory"
           GOPROXY_VALUE="https://${{ secrets.ARTIFACTORY_USER }}:${{ secrets.ARTIFACTORY_TOKEN }}@${{ secrets.ARTIFACTORY_DEV_ENDPOINT }}"
           fi
           echo "GOPROXY=${GOPROXY_VALUE}" >> $GITHUB_ENV
@@ -256,14 +261,14 @@ jobs:
       - name: Configure GOPROXY
         id: goproxy
         run: |
-          if [[ "${{ secrets.ARTIFACTORY_USER }}" == "" ]]; then
-          echo "No Artifactory secrets available - using direct GOPROXY"
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+          echo "Pull request - using direct GOPROXY"
           GOPROXY_VALUE="proxy.golang.org,direct"
-          elif [[ "${{ inputs.is_production_release }}" == "true" ]] || [[ ("${{ github.event_name }}" == "push" || "${{ github.event_name }}" == "schedule") && ("${{ github.ref }}" == "refs/heads/main" || "${{ github.ref }}" =~ ^refs/heads/release-) ]]; then
-          echo "Production mode - using production Artifactory"
+          elif [[ "${{ inputs.is_production_release }}" == "true" ]]; then
+          echo "Production release - using production Artifactory"
           GOPROXY_VALUE="https://${{ secrets.ARTIFACTORY_USER }}:${{ secrets.ARTIFACTORY_TOKEN }}@${{ secrets.ARTIFACTORY_ENDPOINT }}"
           else
-          echo "Development mode - using dev Artifactory"
+          echo "Main/nightly/edge build - using dev Artifactory"
           GOPROXY_VALUE="https://${{ secrets.ARTIFACTORY_USER }}:${{ secrets.ARTIFACTORY_TOKEN }}@${{ secrets.ARTIFACTORY_DEV_ENDPOINT }}"
           fi
           echo "GOPROXY=${GOPROXY_VALUE}" >> $GITHUB_ENV
@@ -520,6 +525,7 @@ jobs:
       image: ${{ matrix.image }}
       k8s-version: ${{ matrix.k8s-version }}
       build-os: ${{ matrix.build-os }}
+      production-release: ${{ inputs.is_production_release == true && (inputs.dry_run == false || inputs.dry_run == null) }}
     secrets: inherit
     permissions:
       contents: read
@@ -634,9 +640,14 @@ jobs:
       - name: Configure GOPROXY
         id: goproxy
         run: |
-          if [[ "${{ secrets.ARTIFACTORY_USER }}" == "" ]]; then
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+          echo "Pull request - using direct GOPROXY"
           GOPROXY_VALUE="proxy.golang.org,direct"
+          elif [[ "${{ inputs.is_production_release }}" == "true" ]]; then
+          echo "Production release - using production Artifactory"
+          GOPROXY_VALUE="https://${{ secrets.ARTIFACTORY_USER }}:${{ secrets.ARTIFACTORY_TOKEN }}@${{ secrets.ARTIFACTORY_ENDPOINT }}"
           else
+          echo "Main/nightly/edge build - using dev Artifactory"
           GOPROXY_VALUE="https://${{ secrets.ARTIFACTORY_USER }}:${{ secrets.ARTIFACTORY_TOKEN }}@${{ secrets.ARTIFACTORY_DEV_ENDPOINT }}"
           fi
           echo "GOPROXY=${GOPROXY_VALUE}" >> $GITHUB_ENV

@@ -54,11 +54,7 @@ jobs:
       - name: Configure GOPROXY
         id: goproxy
         run: |
-          if [[ "${{ secrets.ARTIFACTORY_USER }}" == "" ]]; then
           GOPROXY_VALUE="proxy.golang.org,direct"
-          else
-          GOPROXY_VALUE="https://${{ secrets.ARTIFACTORY_USER }}:${{ secrets.ARTIFACTORY_TOKEN }}@${{ secrets.ARTIFACTORY_DEV_ENDPOINT }}"
-          fi
           echo "GOPROXY=${GOPROXY_VALUE}" >> $GITHUB_ENV
 
       - name: Setup Golang Environment
