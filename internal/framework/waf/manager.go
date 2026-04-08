@@ -252,20 +252,6 @@ func (m *Manager) StopPoller(policyNsName types.NamespacedName) {
 	m.logger.Info("Stopped WAF poller", "policy", policyNsName)
 }
 
-// updatePollerTargets updates the target deployments for an existing poller.
-// This is called when the policy's target gateways change.
-func (m *Manager) updatePollerTargets(policyNsName types.NamespacedName, targets []types.NamespacedName) {
-	m.mu.RLock()
-	entry, exists := m.pollers[policyNsName]
-	m.mu.RUnlock()
-
-	if !exists {
-		return
-	}
-
-	entry.poller.updateTargetDeployments(targets)
-}
-
 // stopAll stops all running pollers. Should be called during shutdown.
 func (m *Manager) stopAll() {
 	m.mu.Lock()
