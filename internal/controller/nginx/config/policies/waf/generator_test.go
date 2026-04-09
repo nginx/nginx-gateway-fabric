@@ -74,7 +74,7 @@ func TestGenerate(t *testing.T) {
 				"app_protect_enable on;",
 				"app_protect_policy_file \"/etc/app_protect/bundles/test-ns_waf-with-log.tgz\";",
 				"app_protect_security_log_enable on;",
-				"app_protect_security_log \"/etc/app_protect/bundles/test-ns_waf-with-log_log_0.tgz\" stderr;",
+				"app_protect_security_log \"/etc/app_protect/bundles/test-ns_waf-with-log_log_be666560841a5b89.tgz\" stderr;",
 			},
 		},
 		{
@@ -105,7 +105,8 @@ func TestGenerate(t *testing.T) {
 			},
 			expStrings: []string{
 				"app_protect_security_log_enable on;",
-				"app_protect_security_log \"/etc/app_protect/bundles/test-ns_waf-file-log_log_0.tgz\" /var/log/nginx/security.log;",
+				"app_protect_security_log \"/etc/app_protect/bundles/test-ns_waf-file-log_log_be666560841a5b89.tgz\"" +
+					" /var/log/nginx/security.log;",
 			},
 		},
 		{
@@ -133,7 +134,7 @@ func TestGenerate(t *testing.T) {
 			},
 			expStrings: []string{
 				"app_protect_security_log_enable on;",
-				"app_protect_security_log \"/etc/app_protect/bundles/test-ns_waf-syslog_log_0.tgz\" " +
+				"app_protect_security_log \"/etc/app_protect/bundles/test-ns_waf-syslog_log_be666560841a5b89.tgz\" " +
 					"syslog:server=syslog.example.com:514;",
 			},
 		},
@@ -170,7 +171,8 @@ func TestGenerate(t *testing.T) {
 				"app_protect_enable on;",
 				"app_protect_policy_file \"/etc/app_protect/bundles/test-ns_waf-nim-log.tgz\";",
 				"app_protect_security_log_enable on;",
-				"app_protect_security_log \"/etc/app_protect/bundles/test-ns_waf-nim-log_log_0.tgz\" stderr;",
+				//nolint: lll
+				"app_protect_security_log \"/etc/app_protect/bundles/test-ns_waf-nim-log_log_be666560841a5b89_nim-log-profile.tgz\" stderr;",
 			},
 		},
 		{
@@ -214,8 +216,9 @@ func TestGenerate(t *testing.T) {
 				"app_protect_enable on;",
 				"app_protect_policy_file \"/etc/app_protect/bundles/app-ns_waf-multi-log.tgz\";",
 				"app_protect_security_log_enable on;",
-				"app_protect_security_log \"/etc/app_protect/bundles/app-ns_waf-multi-log_log_0.tgz\" stderr;",
-				"app_protect_security_log \"/etc/app_protect/bundles/app-ns_waf-multi-log_log_1.tgz\" /var/log/blocked.log;",
+				"app_protect_security_log \"/etc/app_protect/bundles/app-ns_waf-multi-log_log_be666560841a5b89.tgz\" stderr;",
+				//nolint: lll
+				"app_protect_security_log \"/etc/app_protect/bundles/app-ns_waf-multi-log_log_ab3b8795a7cf07f6_nim-log-profile.tgz\" /var/log/blocked.log;",
 			},
 		},
 		{

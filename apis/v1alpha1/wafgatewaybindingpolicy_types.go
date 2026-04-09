@@ -38,12 +38,10 @@ type WAFGatewayBindingPolicyList struct {
 
 // WAFGatewayBindingPolicySpec defines the desired state of a WAFGatewayBindingPolicy.
 //
-// +kubebuilder:validation:XValidation:message="policySource.httpSource is required when type is HTTP",rule="self.type != 'HTTP' || (has(self.policySource) && has(self.policySource.httpSource))"
-// +kubebuilder:validation:XValidation:message="policySource.nimSource is required when type is NIM",rule="self.type != 'NIM' || (has(self.policySource) && has(self.policySource.nimSource))"
-// +kubebuilder:validation:XValidation:message="policySource.n1cSource is required when type is N1C",rule="self.type != 'N1C' || (has(self.policySource) && has(self.policySource.n1cSource))"
-// +kubebuilder:validation:XValidation:message="policySource.httpSource must not be set when type is not HTTP",rule="self.type == 'HTTP' || !has(self.policySource) || !has(self.policySource.httpSource)"
-// +kubebuilder:validation:XValidation:message="policySource.nimSource must not be set when type is not NIM",rule="self.type == 'NIM' || !has(self.policySource) || !has(self.policySource.nimSource)"
-// +kubebuilder:validation:XValidation:message="policySource.n1cSource must not be set when type is not N1C",rule="self.type == 'N1C' || !has(self.policySource) || !has(self.policySource.n1cSource)"
+// +kubebuilder:validation:XValidation:message="policySource.httpSource must be set if and only if type is HTTP",rule="(self.type == 'HTTP') == (has(self.policySource) && has(self.policySource.httpSource))"
+// +kubebuilder:validation:XValidation:message="policySource.nimSource must be set if and only if type is NIM",rule="(self.type == 'NIM') == (has(self.policySource) && has(self.policySource.nimSource))"
+// +kubebuilder:validation:XValidation:message="policySource.n1cSource must be set if and only if type is N1C",rule="(self.type == 'N1C') == (has(self.policySource) && has(self.policySource.n1cSource))"
+// +kubebuilder:validation:XValidation:message="policySource.validation.verifyChecksum is only supported for type HTTP",rule="!(self.type != 'HTTP' && has(self.policySource) && has(self.policySource.validation) && has(self.policySource.validation.verifyChecksum) && self.policySource.validation.verifyChecksum)"
 //
 //nolint:lll
 type WAFGatewayBindingPolicySpec struct {
@@ -162,8 +160,23 @@ type PolicySource struct {
 //
 //nolint:lll
 type BundleValidation struct {
+	// ExpectedChecksum is the expected SHA256 checksum of the bundle.
+	// If set, the downloaded bundle must match this checksum or it will be rejected.
+	//
+	// +optional
+	// +kubebuilder:validation:MinLength=64
+	// +kubebuilder:validation:MaxLength=64
+	// +kubebuilder:validation:Pattern=`^[0-9a-fA-F]{64}$`
 	ExpectedChecksum *string `json:"expectedChecksum,omitempty"`
-	VerifyChecksum   bool    `json:"verifyChecksum,omitempty"`
+
+	// VerifyChecksum enables automatic checksum verification by fetching a companion
+	// checksum file at <url>.sha256 and comparing it against the downloaded bundle.
+	// Only supported when the policy source type is HTTP (policySource.httpSource or
+	// logSource.url); setting this for NIM or N1C sources is rejected at admission.
+	// Mutually exclusive with expectedChecksum.
+	//
+	// +optional
+	VerifyChecksum bool `json:"verifyChecksum,omitempty"`
 }
 
 // BundlePolling configures automatic re-fetching of a bundle.
@@ -210,15 +223,45 @@ type HTTPBundleSource struct {
 //
 //nolint:lll
 type NIMBundleSource struct {
+	// PolicyName is the name of the compiled policy bundle in NIM.
+	// Mutually exclusive with policyUID.
+	//
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=253
 	PolicyName *string `json:"policyName,omitempty"`
-	PolicyUID  *string `json:"policyUID,omitempty"`
-	URL        string  `json:"url"`
+
+	// PolicyUID is the unique identifier of the compiled policy bundle in NIM.
+	// Mutually exclusive with policyName.
+	// Must be a valid UUID (e.g. "2bc1e3ac-7990-4ca4-910a-8634c444c804").
+	//
+	// +optional
+	// +kubebuilder:validation:Pattern=`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`
+	PolicyUID *string `json:"policyUID,omitempty"`
+
+	// URL is the base URL of the NGINX Instance Manager instance,
+	// e.g. "https://nim.example.com".
+	//
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=2083
+	// +kubebuilder:validation:Pattern=`^https?://`
+	URL string `json:"url"`
 }
 
 // NIMLogProfileBundleSource configures log profile bundle fetching from NGINX Instance Manager (NIM).
 type NIMLogProfileBundleSource struct {
+	// ProfileName is the name of the compiled log profile bundle in NIM.
+	//
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=253
 	ProfileName *string `json:"profileName,omitempty"`
-	URL         string  `json:"url"`
+
+	// URL is the base URL of the NGINX Instance Manager instance,
+	// e.g. "https://nim.example.com".
+	//
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=2083
+	// +kubebuilder:validation:Pattern=`^https?://`
+	URL string `json:"url"`
 }
 
 // N1CBundleSource configures bundle fetching from F5 NGINX One Console (N1C).
@@ -228,11 +271,42 @@ type NIMLogProfileBundleSource struct {
 //
 //nolint:lll
 type N1CBundleSource struct {
-	PolicyName     *string `json:"policyName,omitempty"`
+	// PolicyName is the name of the security policy in N1C.
+	// Mutually exclusive with policyObjectID.
+	//
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=253
+	PolicyName *string `json:"policyName,omitempty"`
+
+	// PolicyObjectID is the unique object identifier of the security policy in N1C
+	// (e.g. "pol_-IUuEUN7ST63oRC7AlQPLw").
+	// Mutually exclusive with policyName.
+	//
+	// +optional
+	// +kubebuilder:validation:Pattern=`^pol_[A-Za-z0-9_-]+$`
 	PolicyObjectID *string `json:"policyObjectID,omitempty"`
-	PolicyVersion  *string `json:"policyVersion,omitempty"`
-	URL            string  `json:"url"`
-	N1CNamespace   string  `json:"namespace"`
+
+	// PolicyVersionID pins a specific version of the policy bundle using its opaque version ID
+	// (e.g. "pv_UJ2gL5fOQ3Gnb3OVuVo1XA"). When omitted, the latest available version is used.
+	//
+	// +optional
+	// +kubebuilder:validation:Pattern=`^pv_[A-Za-z0-9_-]+$`
+	PolicyVersionID *string `json:"policyVersionID,omitempty"`
+
+	// URL is the base URL of the F5 NGINX One Console instance,
+	// e.g. "https://<tenant>.volterra.us".
+	//
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=2083
+	// +kubebuilder:validation:Pattern=`^https?://`
+	URL string `json:"url"`
+
+	// Namespace is the NGINX One Console namespace that owns the security policy.
+	//
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=253
+	Namespace string `json:"namespace"`
 }
 
 // BundleAuth configures authentication for bundle fetching.
@@ -273,10 +347,11 @@ const (
 //
 
 type WAFSecurityLog struct {
-	// LogSource configures the log profile bundle source for this log configuration.
+	// LogSource configures the log profile bundle source for this log entry.
+	// Exactly one of url or defaultProfile must be set.
 	LogSource LogSource `json:"logSource"`
 
-	// Destination defines where security logs should be sent.
+	// Destination defines where security logs are sent.
 	Destination SecurityLogDestination `json:"destination"`
 }
 
@@ -350,10 +425,8 @@ type LogSource struct {
 
 // SecurityLogDestination defines the destination for security logs.
 //
-// +kubebuilder:validation:XValidation:message="destination.file must be nil if the destination.type is not file",rule="!(has(self.file) && self.type != 'file')"
-// +kubebuilder:validation:XValidation:message="destination.file must be specified for file destination.type",rule="!(!has(self.file) && self.type == 'file')"
-// +kubebuilder:validation:XValidation:message="destination.syslog must be nil if the destination.type is not syslog",rule="!(has(self.syslog) && self.type != 'syslog')"
-// +kubebuilder:validation:XValidation:message="destination.syslog must be specified for syslog destination.type",rule="!(!has(self.syslog) && self.type == 'syslog')"
+// +kubebuilder:validation:XValidation:message="destination.file must be set if and only if type is file",rule="(self.type == 'file') == has(self.file)"
+// +kubebuilder:validation:XValidation:message="destination.syslog must be set if and only if type is syslog",rule="(self.type == 'syslog') == has(self.syslog)"
 //
 //nolint:lll
 type SecurityLogDestination struct {

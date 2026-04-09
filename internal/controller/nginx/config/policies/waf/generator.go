@@ -4,9 +4,12 @@ import (
 	"fmt"
 	"text/template"
 
+	"k8s.io/apimachinery/pkg/types"
+
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/http"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
 
@@ -73,12 +76,15 @@ func generate(pols []policies.Policy) policies.GenerateResultFiles {
 		if len(wp.Spec.SecurityLogs) > 0 {
 			securityLogs := make([]map[string]string, 0, len(wp.Spec.SecurityLogs))
 
-			for i, secLog := range wp.Spec.SecurityLogs {
+			for _, secLog := range wp.Spec.SecurityLogs {
 				logEntry := map[string]string{}
 
 				switch {
 				case secLog.LogSource.HTTPSource != nil || secLog.LogSource.NIMSource != nil:
-					bundleName := fmt.Sprintf("%s_%s_log_%d", wp.Namespace, wp.Name, i)
+					bundleName := graph.LogBundleKey(
+						types.NamespacedName{Namespace: pol.GetNamespace(), Name: pol.GetName()},
+						&secLog.LogSource,
+					)
 					bundlePath := fmt.Sprintf("%s/%s.tgz", appProtectBundleFolder, bundleName)
 					logEntry["LogProfileBundlePath"] = bundlePath
 				case secLog.LogSource.DefaultProfile != nil:

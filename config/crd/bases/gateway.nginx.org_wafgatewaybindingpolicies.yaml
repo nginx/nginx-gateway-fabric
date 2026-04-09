@@ -103,14 +103,38 @@ spec:
                       Required when type is N1C; must not be set for other types.
                     properties:
                       namespace:
+                        description: Namespace is the NGINX One Console namespace
+                          that owns the security policy.
+                        maxLength: 253
+                        minLength: 1
                         type: string
                       policyName:
+                        description: |-
+                          PolicyName is the name of the security policy in N1C.
+                          Mutually exclusive with policyObjectID.
+                        maxLength: 253
+                        minLength: 1
                         type: string
                       policyObjectID:
+                        description: |-
+                          PolicyObjectID is the unique object identifier of the security policy in N1C
+                          (e.g. "pol_-IUuEUN7ST63oRC7AlQPLw").
+                          Mutually exclusive with policyName.
+                        pattern: ^pol_[A-Za-z0-9_-]+$
                         type: string
-                      policyVersion:
+                      policyVersionID:
+                        description: |-
+                          PolicyVersionID pins a specific version of the policy bundle using its opaque version ID
+                          (e.g. "pv_UJ2gL5fOQ3Gnb3OVuVo1XA"). When omitted, the latest available version is used.
+                        pattern: ^pv_[A-Za-z0-9_-]+$
                         type: string
                       url:
+                        description: |-
+                          URL is the base URL of the F5 NGINX One Console instance,
+                          e.g. "https://<tenant>.volterra.us".
+                        maxLength: 2083
+                        minLength: 1
+                        pattern: ^https?://
                         type: string
                     required:
                     - namespace
@@ -127,10 +151,26 @@ spec:
                       Required when type is NIM; must not be set for other types.
                     properties:
                       policyName:
+                        description: |-
+                          PolicyName is the name of the compiled policy bundle in NIM.
+                          Mutually exclusive with policyUID.
+                        maxLength: 253
+                        minLength: 1
                         type: string
                       policyUID:
+                        description: |-
+                          PolicyUID is the unique identifier of the compiled policy bundle in NIM.
+                          Mutually exclusive with policyName.
+                          Must be a valid UUID (e.g. "2bc1e3ac-7990-4ca4-910a-8634c444c804").
+                        pattern: ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$
                         type: string
                       url:
+                        description: |-
+                          URL is the base URL of the NGINX Instance Manager instance,
+                          e.g. "https://nim.example.com".
+                        maxLength: 2083
+                        minLength: 1
+                        pattern: ^https?://
                         type: string
                     required:
                     - url
@@ -189,8 +229,20 @@ spec:
                       the downloaded bundle.
                     properties:
                       expectedChecksum:
+                        description: |-
+                          ExpectedChecksum is the expected SHA256 checksum of the bundle.
+                          If set, the downloaded bundle must match this checksum or it will be rejected.
+                        maxLength: 64
+                        minLength: 64
+                        pattern: ^[0-9a-fA-F]{64}$
                         type: string
                       verifyChecksum:
+                        description: |-
+                          VerifyChecksum enables automatic checksum verification by fetching a companion
+                          checksum file at <url>.sha256 and comparing it against the downloaded bundle.
+                          Only supported when the policy source type is HTTP (policySource.httpSource or
+                          logSource.url); setting this for NIM or N1C sources is rejected at admission.
+                          Mutually exclusive with expectedChecksum.
                         type: boolean
                     type: object
                     x-kubernetes-validations:
@@ -203,8 +255,7 @@ spec:
                 items:
                   properties:
                     destination:
-                      description: Destination defines where security logs should
-                        be sent.
+                      description: Destination defines where security logs are sent.
                       properties:
                         file:
                           description: |-
@@ -249,19 +300,16 @@ spec:
                       - type
                       type: object
                       x-kubernetes-validations:
-                      - message: destination.file must be nil if the destination.type
-                          is not file
-                        rule: '!(has(self.file) && self.type != ''file'')'
-                      - message: destination.file must be specified for file destination.type
-                        rule: '!(!has(self.file) && self.type == ''file'')'
-                      - message: destination.syslog must be nil if the destination.type
-                          is not syslog
-                        rule: '!(has(self.syslog) && self.type != ''syslog'')'
-                      - message: destination.syslog must be specified for syslog destination.type
-                        rule: '!(!has(self.syslog) && self.type == ''syslog'')'
+                      - message: destination.file must be set if and only if type
+                          is file
+                        rule: (self.type == 'file') == has(self.file)
+                      - message: destination.syslog must be set if and only if type
+                          is syslog
+                        rule: (self.type == 'syslog') == has(self.syslog)
                     logSource:
-                      description: LogSource configures the log profile bundle source
-                        for this log configuration.
+                      description: |-
+                        LogSource configures the log profile bundle source for this log entry.
+                        Exactly one of url or defaultProfile must be set.
                       properties:
                         auth:
                           description: |-
@@ -324,8 +372,18 @@ spec:
                             Mutually exclusive with DefaultProfile and HTTPSource.
                           properties:
                             profileName:
+                              description: ProfileName is the name of the compiled
+                                log profile bundle in NIM.
+                              maxLength: 253
+                              minLength: 1
                               type: string
                             url:
+                              description: |-
+                                URL is the base URL of the NGINX Instance Manager instance,
+                                e.g. "https://nim.example.com".
+                              maxLength: 2083
+                              minLength: 1
+                              pattern: ^https?://
                               type: string
                           required:
                           - url
@@ -382,8 +440,20 @@ spec:
                             Only applicable when url is set.
                           properties:
                             expectedChecksum:
+                              description: |-
+                                ExpectedChecksum is the expected SHA256 checksum of the bundle.
+                                If set, the downloaded bundle must match this checksum or it will be rejected.
+                              maxLength: 64
+                              minLength: 64
+                              pattern: ^[0-9a-fA-F]{64}$
                               type: string
                             verifyChecksum:
+                              description: |-
+                                VerifyChecksum enables automatic checksum verification by fetching a companion
+                                checksum file at <url>.sha256 and comparing it against the downloaded bundle.
+                                Only supported when the policy source type is HTTP (policySource.httpSource or
+                                logSource.url); setting this for NIM or N1C sources is rejected at admission.
+                                Mutually exclusive with expectedChecksum.
                               type: boolean
                           type: object
                           x-kubernetes-validations:
@@ -469,18 +539,17 @@ spec:
             - type
             type: object
             x-kubernetes-validations:
-            - message: policySource.httpSource is required when type is HTTP
-              rule: self.type != 'HTTP' || (has(self.policySource) && has(self.policySource.httpSource))
-            - message: policySource.nimSource is required when type is NIM
-              rule: self.type != 'NIM' || (has(self.policySource) && has(self.policySource.nimSource))
-            - message: policySource.n1cSource is required when type is N1C
-              rule: self.type != 'N1C' || (has(self.policySource) && has(self.policySource.n1cSource))
-            - message: policySource.httpSource must not be set when type is not HTTP
-              rule: self.type == 'HTTP' || !has(self.policySource) || !has(self.policySource.httpSource)
-            - message: policySource.nimSource must not be set when type is not NIM
-              rule: self.type == 'NIM' || !has(self.policySource) || !has(self.policySource.nimSource)
-            - message: policySource.n1cSource must not be set when type is not N1C
-              rule: self.type == 'N1C' || !has(self.policySource) || !has(self.policySource.n1cSource)
+            - message: policySource.httpSource must be set if and only if type is
+                HTTP
+              rule: (self.type == 'HTTP') == (has(self.policySource) && has(self.policySource.httpSource))
+            - message: policySource.nimSource must be set if and only if type is NIM
+              rule: (self.type == 'NIM') == (has(self.policySource) && has(self.policySource.nimSource))
+            - message: policySource.n1cSource must be set if and only if type is N1C
+              rule: (self.type == 'N1C') == (has(self.policySource) && has(self.policySource.n1cSource))
+            - message: policySource.validation.verifyChecksum is only supported for
+                type HTTP
+              rule: '!(self.type != ''HTTP'' && has(self.policySource) && has(self.policySource.validation)
+                && has(self.policySource.validation.verifyChecksum) && self.policySource.validation.verifyChecksum)'
           status:
             description: Status defines the state of the WAFGatewayBindingPolicy.
             properties:

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"maps"
 	"slices"
 	"sort"
 
@@ -118,7 +119,7 @@ func BuildConfiguration(
 		Policies:          buildPolicies(gateway, gateway.Policies),
 		AuxiliarySecrets:  buildAuxiliarySecrets(g.PlusSecrets),
 		WorkerConnections: buildWorkerConnections(gateway),
-		WAF:               buildWAF(g, gateway),
+		WAF:               buildWAF(gateway),
 	}
 
 	return config
@@ -1680,12 +1681,43 @@ func buildServerTokens(gateway *graph.Gateway) string {
 	return fmt.Sprintf(`"%s"`, serverToken)
 }
 
-func buildWAF(g *graph.Graph, gateway *graph.Gateway) WAFConfig {
-	wb := convertWAFBundles(g.ReferencedWAFBundles)
+func buildWAF(gateway *graph.Gateway) WAFConfig {
+	gatewayBundles := collectGatewayWAFBundles(gateway)
+	wb := convertWAFBundles(gatewayBundles)
 
 	wc := WAFConfig{
 		Enabled:    graph.WAFEnabledForNginxProxy(gateway.EffectiveNginxProxy),
 		WAFBundles: wb,
 	}
 	return wc
+}
+
+// collectGatewayWAFBundles collects WAF bundles from all WAFGatewayBindingPolicies that target
+// this gateway directly or target routes attached to this gateway.
+func collectGatewayWAFBundles(gateway *graph.Gateway) map[graph.WAFBundleKey]*graph.WAFBundleData {
+	bundles := make(map[graph.WAFBundleKey]*graph.WAFBundleData)
+
+	// Collect bundles from policies targeting the gateway directly.
+	for _, policy := range gateway.Policies {
+		if policy.WAFState == nil {
+			continue
+		}
+
+		maps.Copy(bundles, policy.WAFState.Bundles)
+	}
+
+	// Collect bundles from policies targeting routes attached to this gateway.
+	for _, listener := range gateway.Listeners {
+		for _, route := range listener.Routes {
+			for _, policy := range route.Policies {
+				if policy.WAFState == nil {
+					continue
+				}
+
+				maps.Copy(bundles, policy.WAFState.Bundles)
+			}
+		}
+	}
+
+	return bundles
 }

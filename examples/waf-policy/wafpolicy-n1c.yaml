@@ -12,9 +12,9 @@ spec:
     n1cSource:
       url: https://<tenant>.volterra.us
       namespace: default  # N1C namespace the policy belongs to
-      policyName: "ngfExample"
+      # policyName: "ngfExample"
       policyObjectID: pol_-IUuEUN7ST63oRC7AlQPLw
-      policyVersion: "2026-04-02 20:55:06"
+      policyVersionID: pv_UJ2gL5fOQ3Gnb3OVuVo1XA
     auth:
       secretRef:
         name: n1c-credentials

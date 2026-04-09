@@ -535,8 +535,8 @@ func (in *N1CBundleSource) DeepCopyInto(out *N1CBundleSource) {
 		*out = new(string)
 		**out = **in
 	}
-	if in.PolicyVersion != nil {
-		in, out := &in.PolicyVersion, &out.PolicyVersion
+	if in.PolicyVersionID != nil {
+		in, out := &in.PolicyVersionID, &out.PolicyVersionID
 		*out = new(string)
 		**out = **in
 	}

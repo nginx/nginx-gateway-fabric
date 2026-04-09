@@ -16,8 +16,6 @@ import (
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
-	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/nap"
 )
 
 //go:generate go tool counterfeiter -generate
@@ -28,7 +26,17 @@ const (
 	// N1C requires up to three sequential HTTP calls (list policies, optionally list versions,
 	// then download the compiled bundle), so a longer default is needed.
 	defaultN1CTimeout = 120 * time.Second
+
+	// Release is the NAP v5 release version deployed by NGINX Gateway Fabric.
+	// It is used both as the default image tag for the waf-enforcer and waf-config-mgr
+	// sidecar containers and as the nap_release query parameter when compiling
+	// policy bundles via the F5 NGINX One Console API.
+	Release = "5.12.1"
 )
+
+// unixEpochRFC3339 is the Unix epoch formatted as RFC3339, used as a startTime sentinel
+// to retrieve all policies regardless of age.
+var unixEpochRFC3339 = time.Unix(0, 0).UTC().Format(time.RFC3339)
 
 type NAPCompilerVersionResponse struct {
 	Version string `json:"version"`
@@ -65,31 +73,49 @@ type Request struct {
 	URL     string
 	// NIMProfileName is the human-readable name of the NIM log profile.
 	NIMProfileName string
-	// NIMPolicyName is the human-readable name of the NIM policy.
+	// PolicyName is the human-readable name of the policy.
+	// Used to look up the policy by name when fetching from NIM or N1C.
 	// Mutually exclusive with NIMPolicyUID.
-	NIMPolicyName string
-	// NIMPolicyUID is the unique identifier of a specific version of the NIM policy
-	// (e.g. "2bc1e3ac-7990-4ca4-910a-8634c444c804"). Each policy version has a distinct UID,
-	// so setting this field pins the fetch to that exact version.
-	// Mutually exclusive with NIMPolicyName.
-	NIMPolicyUID string
-	// N1CNamespace is the F5 NGINX One Console namespace the policy belongs to.
-	// Required when fetching from N1C (i.e. when N1CNamespace is non-empty).
-	N1CNamespace string
-	// N1CPolicyObjectID is the opaque N1C policy object ID (e.g. "pol_-IUuEUN7ST63oRC7AlQPLw").
-	// When set, the policies list call is skipped and this ID is used directly.
-	N1CPolicyObjectID string
-	// N1CPolicyVersion pins the fetch to a specific human-readable version string
-	// (e.g. "2026-04-02 20:55:06") as shown in the N1C UI.
-	// When empty, the latest version is used.
-	N1CPolicyVersion string
+	PolicyName string
+	// NIM holds the NIM specific request details.
+	NIM NIMRequest
+	// N1C holds the N1C specific request details.
+	N1C N1CRequest
 	// ExpectedChecksum is the hex-encoded SHA-256 checksum the downloaded bundle must match.
 	// When set, NGF verifies the bundle after download and rejects it if the checksum differs.
-	// Mutually exclusive with VerifyChecksum.
-	ExpectedChecksum   string
-	TLSCAData          []byte
+	// Mutually exclusive with VerifyChecksum. Supported for all source types.
+	ExpectedChecksum string
+	// TLSCAData is the PEM-encoded CA certificate used to verify the bundle server's TLS certificate.
+	// When nil, the system certificate pool is used.
+	TLSCAData []byte
+	// InsecureSkipVerify disables TLS certificate verification. Not recommended for production use.
 	InsecureSkipVerify bool
-	VerifyChecksum     bool
+	// VerifyChecksum enables checksum verification by fetching a companion <url>.sha256 file.
+	// Only supported for plain HTTP fetches (no PolicyName, NIMPolicyUID, or N1CNamespace set).
+	// Mutually exclusive with ExpectedChecksum.
+	VerifyChecksum bool
+}
+
+// N1CRequest carries all the N1C specific parameters to fetch a single bundle.
+type N1CRequest struct {
+	// Namespace is the F5 NGINX One Console namespace the policy belongs to.
+	// Required when fetching from N1C (i.e. when Namespace is non-empty).
+	Namespace string
+	// PolicyObjectID is the opaque N1C policy object ID (e.g. "pol_-IUuEUN7ST63oRC7AlQPLw").
+	// When set, the policies list call is skipped and this ID is used directly.
+	PolicyObjectID string
+	// PolicyVersionID pins the fetch to a specific version using its opaque version ID
+	// (e.g. "pv_1234"). When empty, the latest version is used.
+	PolicyVersionID string
+}
+
+// NIRequest carries all the NIM specific parameters to fetch a single bundle.
+type NIMRequest struct {
+	// PolicyUID is the unique identifier of a specific version of the NIM policy
+	// (e.g. "2bc1e3ac-7990-4ca4-910a-8634c444c804"). Each policy version has a distinct UID,
+	// so setting this field pins the fetch to that exact version.
+	// Mutually exclusive with PolicyName.
+	PolicyUID string
 }
 
 // Fetcher fetches WAF policy bundles and log profile bundles from remote sources.
@@ -99,6 +125,8 @@ type Fetcher interface {
 	// FetchPolicyBundle retrieves the bundle bytes described by req.
 	// For HTTP type: GETs req.URL. If req.VerifyChecksum is true, fetches req.URL+".sha256" to verify integrity.
 	// For NIM type: calls the NIM bundles API and base64-decodes items[0].content.
+	// For N1C type: resolves the policy via the N1C API and downloads the compiled bundle.
+	// VerifyChecksum is only supported for plain HTTP fetches; returns an error for NIM/N1C.
 	// Returns (data, checksum, error). checksum is hex-encoded SHA-256 of the returned data.
 	FetchPolicyBundle(ctx context.Context, req Request) (data []byte, checksum string, err error)
 	// FetchLogProfileBundle retrieves the log profile bundle bytes for the given request.
@@ -122,6 +150,30 @@ func NewHTTPFetcher() *HTTPFetcher {
 	}
 }
 
+// When req.PolicyName or req.NIMPolicyUID is set (and N1CNamespace is empty), uses NIM fetch logic.
+// Otherwise performs a plain GET to req.URL, optionally verifying the checksum.
+// validateAndNormalizeRequest checks mutual-exclusion rules and normalises
+// ExpectedChecksum to lowercase. It returns the updated Request or an error.
+func validateAndNormalizeRequest(req Request) (Request, error) {
+	if req.VerifyChecksum && (req.N1C.Namespace != "" || req.PolicyName != "" || req.NIM.PolicyUID != "") {
+		return Request{}, fmt.Errorf(
+			"verifyChecksum is only supported for plain HTTP fetches; use expectedChecksum for NIM/N1C sources",
+		)
+	}
+
+	if req.ExpectedChecksum != "" {
+		normalized := strings.ToLower(req.ExpectedChecksum)
+		if _, err := hex.DecodeString(normalized); err != nil || len(normalized) != 64 {
+			return Request{}, fmt.Errorf(
+				"invalid expected checksum %q: must be 64 hex characters", req.ExpectedChecksum,
+			)
+		}
+		req.ExpectedChecksum = normalized
+	}
+
+	return req, nil
+}
+
 // FetchPolicyBundle retrieves bundle bytes.
 // When req.N1CNamespace is set, uses N1C fetch logic (APIToken auth, N1C API path).
 // When req.NIMPolicyName or req.NIMPolicyUID is set (and N1CNamespace is empty), uses NIM fetch logic.
@@ -139,8 +191,13 @@ func (f *HTTPFetcher) fetch(
 	req Request,
 	dispatch func(ctx context.Context, client *http.Client, req Request) ([]byte, string, error),
 ) ([]byte, string, error) {
+	var err error
+	if req, err = validateAndNormalizeRequest(req); err != nil {
+		return nil, "", err
+	}
+
 	timeout := defaultTimeout
-	if req.N1CNamespace != "" && req.Timeout == nil {
+	if req.N1C.Namespace != "" && req.Timeout == nil {
 		// N1C requires up to three sequential HTTP calls; give it a longer default.
 		timeout = defaultN1CTimeout
 	}
@@ -184,9 +241,9 @@ func (f *HTTPFetcher) fetch(
 
 func (f *HTTPFetcher) dispatch(ctx context.Context, client *http.Client, req Request) ([]byte, string, error) {
 	switch {
-	case req.N1CNamespace != "":
+	case req.N1C.Namespace != "":
 		return fetchN1C(ctx, client, req)
-	case req.NIMPolicyName != "" || req.NIMPolicyUID != "":
+	case req.PolicyName != "" || req.NIM.PolicyUID != "":
 		return fetchNIM(ctx, client, req)
 	default:
 		return fetchHTTP(ctx, client, req)
@@ -199,9 +256,9 @@ func (f *HTTPFetcher) logProfileDispatch(
 	req Request,
 ) ([]byte, string, error) {
 	switch {
-	case req.N1CNamespace != "":
+	case req.N1C.Namespace != "":
 		return nil, "", fmt.Errorf("fetching log profile bundles from N1C is not supported")
-	case req.NIMPolicyName != "":
+	case req.NIMProfileName != "":
 		return fetchNIMLogProfile(ctx, client, req)
 	default:
 		return fetchHTTP(ctx, client, req)
@@ -251,7 +308,7 @@ func fetchHTTP(ctx context.Context, client *http.Client, req Request) ([]byte, s
 		return nil, "", fmt.Errorf("failed to fetch bundle: %w", err)
 	}
 
-	actualChecksum := computeChecksum(data)
+	actualChecksum := ComputeChecksum(data)
 
 	if req.VerifyChecksum {
 		checksumURL := req.URL + ".sha256"
@@ -287,7 +344,7 @@ type nimResponse struct {
 
 // fetchNIM calls the NIM security policies bundles API and decodes the bundle from the response.
 func fetchNIM(ctx context.Context, client *http.Client, req Request) ([]byte, string, error) {
-	nimURL, err := buildNIMURL(req.URL, req.NIMPolicyName, req.NIMPolicyUID)
+	nimURL, err := buildNIMURL(req.URL, req.PolicyName, req.NIM.PolicyUID)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to build NIM URL: %w", err)
 	}
@@ -302,9 +359,9 @@ func fetchNIM(ctx context.Context, client *http.Client, req Request) ([]byte, st
 		return nil, "", fmt.Errorf("failed to parse NIM response: %w", err)
 	}
 
-	policyRef := req.NIMPolicyName
+	policyRef := req.PolicyName
 	if policyRef == "" {
-		policyRef = req.NIMPolicyUID
+		policyRef = req.NIM.PolicyUID
 	}
 	if len(resp.Items) == 0 {
 		return nil, "", fmt.Errorf("NIM response contains no items for policy %q", policyRef)
@@ -315,7 +372,7 @@ func fetchNIM(ctx context.Context, client *http.Client, req Request) ([]byte, st
 		return nil, "", fmt.Errorf("failed to base64-decode NIM bundle content: %w", err)
 	}
 
-	return data, computeChecksum(data), nil
+	return data, ComputeChecksum(data), nil
 }
 
 func fetchNIMLogProfile(ctx context.Context, client *http.Client, req Request) ([]byte, string, error) {
@@ -350,7 +407,7 @@ func fetchNIMLogProfile(ctx context.Context, client *http.Client, req Request) (
 		return nil, "", fmt.Errorf("failed to base64-decode NIM bundle content: %w", err)
 	}
 
-	return data, computeChecksum(data), nil
+	return data, ComputeChecksum(data), nil
 }
 
 // n1cPoliciesResponse is the JSON envelope returned by the N1C list-policies API.
@@ -375,7 +432,6 @@ type n1cVersionsResponse struct {
 
 type n1cVersionItem struct {
 	ObjectID string `json:"object_id"`
-	Version  string `json:"version"`
 	Latest   bool   `json:"latest"`
 }
 
@@ -385,9 +441,9 @@ type n1cVersionItem struct {
 //
 // Flow:
 //  1. GET /api/nginx/one/namespaces/<ns>/app-protect/policies — find policy by name, get pol_obj_id.
-//     The response also includes latest.object_id, so no second call is needed when policyVersion is empty.
-//  2. If req.N1CPolicyVersion is set: GET .../policies/<pol_obj_id>/versions — find version by string,
-//     get pol_version_id.
+//     The response also includes latest.object_id, so no second call is needed when policyVersionID is empty.
+//  2. If req.N1CPolicyVersionID is set, it is used directly as pol_version_id (no versions list call needed).
+//     Otherwise the latest version ID from step 1 (or findN1CLatestVersion) is used.
 //  3. GET .../policies/<pol_obj_id>/versions/<pol_version_id>/compile?nap_release=<release>&download=true
 func fetchN1C(ctx context.Context, client *http.Client, req Request) ([]byte, string, error) {
 	polObjID, polVersionID, err := resolveN1CIDs(ctx, client, req)
@@ -395,7 +451,7 @@ func fetchN1C(ctx context.Context, client *http.Client, req Request) ([]byte, st
 		return nil, "", err
 	}
 
-	compileURL, err := buildN1CCompileURL(req.URL, req.N1CNamespace, polObjID, polVersionID)
+	compileURL, err := buildN1CCompileURL(req.URL, req.N1C.Namespace, polObjID, polVersionID)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to build N1C compile URL: %w", err)
 	}
@@ -405,43 +461,40 @@ func fetchN1C(ctx context.Context, client *http.Client, req Request) ([]byte, st
 		return nil, "", fmt.Errorf("failed to fetch N1C compiled bundle: %w", err)
 	}
 
-	return body, computeChecksum(body), nil
+	return body, ComputeChecksum(body), nil
 }
 
 // resolveN1CIDs returns the policy object ID and version object ID for the given request.
 // If req.N1CPolicyObjectID is set, it is used directly and the policies list call is skipped.
-// Otherwise, it pages through the policies list to resolve req.NIMPolicyName to an object ID.
-// If req.N1CPolicyVersion is set, the versions list is queried to resolve it to a version object ID;
-// otherwise the latest version from the list response is used.
+// Otherwise, it pages through the policies list to resolve req.PolicyName to an object ID.
+// If req.N1CPolicyVersionID is set, it is used directly as the version object ID.
+// Otherwise the latest version is used.
 func resolveN1CIDs(ctx context.Context, client *http.Client, req Request) (polObjID, polVersionID string, err error) {
-	var latestVersionID string
-
-	if req.N1CPolicyObjectID != "" {
-		polObjID = req.N1CPolicyObjectID
-		// With a known object ID we still need the latest version ID when no version is pinned,
-		// which requires calling the versions list. That happens below via findN1CVersion when
-		// N1CPolicyVersion is empty — but findN1CVersion needs a version string to match, so
-		// we call findN1CLatestVersion instead.
-		if req.N1CPolicyVersion == "" {
-			polVersionID, err = findN1CLatestVersion(ctx, client, req.URL, req.N1CNamespace, polObjID, req.Auth)
-			if err != nil {
-				return "", "", err
-			}
-			return polObjID, polVersionID, nil
-		}
+	if req.N1C.PolicyObjectID != "" {
+		polObjID = req.N1C.PolicyObjectID
 	} else {
+		var latestVersionID string
 		polObjID, latestVersionID, err = findN1CPolicy(
-			ctx, client, req.URL, req.N1CNamespace, req.NIMPolicyName, req.Auth,
+			ctx,
+			client,
+			req.URL,
+			req.N1C.Namespace,
+			req.PolicyName,
+			req.Auth,
 		)
 		if err != nil {
 			return "", "", err
 		}
-		if req.N1CPolicyVersion == "" {
+		if req.N1C.PolicyVersionID == "" {
 			return polObjID, latestVersionID, nil
 		}
 	}
 
-	polVersionID, err = findN1CVersion(ctx, client, req.URL, req.N1CNamespace, polObjID, req.N1CPolicyVersion, req.Auth)
+	if req.N1C.PolicyVersionID != "" {
+		return polObjID, req.N1C.PolicyVersionID, nil
+	}
+
+	polVersionID, err = findN1CLatestVersion(ctx, client, req.URL, req.N1C.Namespace, polObjID, req.Auth)
 	if err != nil {
 		return "", "", err
 	}
@@ -487,46 +540,6 @@ func findN1CPolicy(
 	}
 
 	return "", "", fmt.Errorf("N1C policy %q not found in namespace %q", policyName, namespace)
-}
-
-// findN1CVersion pages through the N1C versions list and returns the object_id for the
-// version matching the human-readable versionStr.
-func findN1CVersion(
-	ctx context.Context,
-	client *http.Client,
-	baseURL, namespace, polObjID, versionStr string,
-	auth *BundleAuth,
-) (string, error) {
-	const pageSize = 100
-
-	for startIndex := 1; ; startIndex += pageSize {
-		versionsURL, err := buildN1CVersionsURL(baseURL, namespace, polObjID, startIndex, pageSize)
-		if err != nil {
-			return "", fmt.Errorf("failed to build N1C versions URL: %w", err)
-		}
-
-		body, err := doGet(ctx, client, versionsURL, auth)
-		if err != nil {
-			return "", fmt.Errorf("failed to list N1C policy versions: %w", err)
-		}
-
-		var resp n1cVersionsResponse
-		if err := json.Unmarshal(body, &resp); err != nil {
-			return "", fmt.Errorf("failed to parse N1C versions response: %w", err)
-		}
-
-		for _, item := range resp.Items {
-			if item.Version == versionStr {
-				return item.ObjectID, nil
-			}
-		}
-
-		if startIndex+pageSize-1 >= resp.Total {
-			break
-		}
-	}
-
-	return "", fmt.Errorf("N1C policy version %q not found", versionStr)
 }
 
 // findN1CLatestVersion pages through the N1C versions list and returns the object_id of the
@@ -617,7 +630,7 @@ func buildN1CCompileURL(baseURL, namespace, polObjID, polVersionID string) (stri
 		"/versions/" + url.PathEscape(polVersionID) + "/compile"
 	base.Fragment = ""
 	q := url.Values{}
-	q.Set("nap_release", nap.Release)
+	q.Set("nap_release", Release)
 	q.Set("download", "true")
 	base.RawQuery = q.Encode()
 	return base.String(), nil
@@ -634,6 +647,10 @@ func buildNIMURL(baseURL, policyName, policyUID string) (string, error) {
 	base.Fragment = ""
 	q := url.Values{}
 	q.Set("includeBundleContent", "true")
+	// NIM defaults startTime to now-24h when omitted, which silently excludes policies that
+	// haven't been recompiled in the last 24 hours. Set it to the Unix epoch to return all
+	// matching policies regardless of age.
+	q.Set("startTime", unixEpochRFC3339)
 	if policyUID != "" {
 		q.Set("policyUID", policyUID)
 	} else {
@@ -678,8 +695,8 @@ func doGet(ctx context.Context, client *http.Client, rawURL string, auth *Bundle
 	return data, nil
 }
 
-// computeChecksum returns the lowercase hex-encoded SHA-256 of data.
-func computeChecksum(data []byte) string {
+// ComputeChecksum returns the lowercase hex-encoded SHA-256 of data.
+func ComputeChecksum(data []byte) string {
 	sum := sha256.Sum256(data)
 	return hex.EncodeToString(sum[:])
 }

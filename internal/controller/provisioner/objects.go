@@ -31,7 +31,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/configmaps"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
-	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/nap"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/waf"
 )
 
 const (
@@ -1588,7 +1588,7 @@ func (p *NginxProvisioner) buildWAFEnforcerContainer(
 ) corev1.Container {
 	image := p.buildWAFImage(
 		defaultWAFEnforcerImagePath,
-		nap.Release,
+		waf.Release,
 		wafContainersCfg,
 		"enforcer",
 	)
@@ -1637,7 +1637,7 @@ func (p *NginxProvisioner) buildWAFConfigManagerContainer(
 ) corev1.Container {
 	image := p.buildWAFImage(
 		defaultWAFConfigMgrImagePath,
-		nap.Release,
+		waf.Release,
 		wafContainersCfg,
 		"configManager",
 	)

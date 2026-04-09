@@ -424,7 +424,7 @@ func TestWAFGatewayBindingPolicySecurityLogDestinationFile(t *testing.T) {
 		},
 		{
 			name:       "file field set with type stderr is invalid",
-			wantErrors: []string{expectedWAFFileNilIfNotFileTypeError},
+			wantErrors: []string{expectedWAFFileIfAndOnlyIfFileTypeError},
 			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
 				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
 				SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
@@ -440,7 +440,7 @@ func TestWAFGatewayBindingPolicySecurityLogDestinationFile(t *testing.T) {
 		},
 		{
 			name:       "file field set with type syslog is invalid",
-			wantErrors: []string{expectedWAFFileNilIfNotFileTypeError},
+			wantErrors: []string{expectedWAFFileIfAndOnlyIfFileTypeError},
 			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
 				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
 				SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
@@ -456,7 +456,7 @@ func TestWAFGatewayBindingPolicySecurityLogDestinationFile(t *testing.T) {
 		},
 		{
 			name:       "missing file field with type file is invalid",
-			wantErrors: []string{expectedWAFFileRequiredIfFileTypeError},
+			wantErrors: []string{expectedWAFFileIfAndOnlyIfFileTypeError},
 			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
 				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
 				SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
@@ -471,7 +471,7 @@ func TestWAFGatewayBindingPolicySecurityLogDestinationFile(t *testing.T) {
 		},
 		{
 			name:       "both file and syslog set with type file is invalid",
-			wantErrors: []string{expectedWAFSyslogNilIfNotSyslogTypeError},
+			wantErrors: []string{expectedWAFSyslogIfAndOnlyIfSyslogType},
 			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
 				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
 				SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
@@ -549,7 +549,7 @@ func TestWAFGatewayBindingPolicySecurityLogDestinationSyslog(t *testing.T) {
 		},
 		{
 			name:       "syslog field set with type stderr is invalid",
-			wantErrors: []string{expectedWAFSyslogNilIfNotSyslogTypeError},
+			wantErrors: []string{expectedWAFSyslogIfAndOnlyIfSyslogType},
 			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
 				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
 				SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
@@ -565,7 +565,7 @@ func TestWAFGatewayBindingPolicySecurityLogDestinationSyslog(t *testing.T) {
 		},
 		{
 			name:       "syslog field set with type file is invalid",
-			wantErrors: []string{expectedWAFSyslogNilIfNotSyslogTypeError},
+			wantErrors: []string{expectedWAFSyslogIfAndOnlyIfSyslogType},
 			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
 				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
 				SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
@@ -581,7 +581,7 @@ func TestWAFGatewayBindingPolicySecurityLogDestinationSyslog(t *testing.T) {
 		},
 		{
 			name:       "missing syslog field with type syslog is invalid",
-			wantErrors: []string{expectedWAFSyslogRequiredIfSyslogTypeError},
+			wantErrors: []string{expectedWAFSyslogIfAndOnlyIfSyslogType},
 			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
 				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
 				SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
@@ -596,7 +596,7 @@ func TestWAFGatewayBindingPolicySecurityLogDestinationSyslog(t *testing.T) {
 		},
 		{
 			name:       "both file and syslog set with type syslog is invalid",
-			wantErrors: []string{expectedWAFFileNilIfNotFileTypeError},
+			wantErrors: []string{expectedWAFFileIfAndOnlyIfFileTypeError},
 			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
 				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
 				SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
@@ -797,16 +797,16 @@ func TestWAFGatewayBindingPolicyPolicySource(t *testing.T) {
 				Type:       ngfAPIv1alpha1.PolicySourceTypeN1C,
 				PolicySource: ngfAPIv1alpha1.PolicySource{
 					N1CSource: &ngfAPIv1alpha1.N1CBundleSource{
-						URL:          "https://n1c.example.com",
-						PolicyName:   helpers.GetPointer("my-policy"),
-						N1CNamespace: namespace,
+						URL:        "https://n1c.example.com",
+						PolicyName: helpers.GetPointer("my-policy"),
+						Namespace:  namespace,
 					},
 				},
 			},
 		},
 		{
 			name:       "NIM type without nimSource is invalid",
-			wantErrors: []string{expectedWAFNIMSourceRequiredError},
+			wantErrors: []string{expectedWAFNIMSourceIfAndOnlyIfNIMType},
 			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
 				TargetRefs:   []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
 				Type:         ngfAPIv1alpha1.PolicySourceTypeNIM,
@@ -815,7 +815,7 @@ func TestWAFGatewayBindingPolicyPolicySource(t *testing.T) {
 		},
 		{
 			name:       "N1C type without n1cSource is invalid",
-			wantErrors: []string{expectedWAFN1CSourceRequiredError},
+			wantErrors: []string{expectedWAFN1CSourceIfAndOnlyIfN1CType},
 			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
 				TargetRefs:   []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
 				Type:         ngfAPIv1alpha1.PolicySourceTypeN1C,
@@ -824,7 +824,7 @@ func TestWAFGatewayBindingPolicyPolicySource(t *testing.T) {
 		},
 		{
 			name:       "nimSource set with HTTP type is invalid",
-			wantErrors: []string{expectedWAFNIMSourceForbiddenError},
+			wantErrors: []string{expectedWAFNIMSourceIfAndOnlyIfNIMType},
 			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
 				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
 				Type:       ngfAPIv1alpha1.PolicySourceTypeHTTP,
@@ -839,31 +839,31 @@ func TestWAFGatewayBindingPolicyPolicySource(t *testing.T) {
 		},
 		{
 			name:       "n1cSource set with HTTP type is invalid",
-			wantErrors: []string{expectedWAFN1CSourceForbiddenError},
+			wantErrors: []string{expectedWAFN1CSourceIfAndOnlyIfN1CType},
 			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
 				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
 				Type:       ngfAPIv1alpha1.PolicySourceTypeHTTP,
 				PolicySource: ngfAPIv1alpha1.PolicySource{
 					HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: "https://example.com/policy.tgz"},
 					N1CSource: &ngfAPIv1alpha1.N1CBundleSource{
-						URL:          "https://n1c.example.com",
-						PolicyName:   helpers.GetPointer("my-policy"),
-						N1CNamespace: namespace,
+						URL:        "https://n1c.example.com",
+						PolicyName: helpers.GetPointer("my-policy"),
+						Namespace:  namespace,
 					},
 				},
 			},
 		},
 		{
 			name:       "nimSource set with N1C type is invalid",
-			wantErrors: []string{expectedWAFNIMSourceForbiddenError},
+			wantErrors: []string{expectedWAFNIMSourceIfAndOnlyIfNIMType},
 			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
 				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
 				Type:       ngfAPIv1alpha1.PolicySourceTypeN1C,
 				PolicySource: ngfAPIv1alpha1.PolicySource{
 					N1CSource: &ngfAPIv1alpha1.N1CBundleSource{
-						URL:          "https://n1c.example.com",
-						PolicyName:   helpers.GetPointer("my-policy"),
-						N1CNamespace: namespace,
+						URL:        "https://n1c.example.com",
+						PolicyName: helpers.GetPointer("my-policy"),
+						Namespace:  namespace,
 					},
 					NIMSource: &ngfAPIv1alpha1.NIMBundleSource{
 						URL:        "https://nim.example.com",
@@ -874,7 +874,7 @@ func TestWAFGatewayBindingPolicyPolicySource(t *testing.T) {
 		},
 		{
 			name:       "n1cSource set with NIM type is invalid",
-			wantErrors: []string{expectedWAFN1CSourceForbiddenError},
+			wantErrors: []string{expectedWAFN1CSourceIfAndOnlyIfN1CType},
 			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
 				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
 				Type:       ngfAPIv1alpha1.PolicySourceTypeNIM,
@@ -884,9 +884,9 @@ func TestWAFGatewayBindingPolicyPolicySource(t *testing.T) {
 						PolicyName: helpers.GetPointer("my-policy"),
 					},
 					N1CSource: &ngfAPIv1alpha1.N1CBundleSource{
-						URL:          "https://n1c.example.com",
-						PolicyName:   helpers.GetPointer("my-policy"),
-						N1CNamespace: namespace,
+						URL:        "https://n1c.example.com",
+						PolicyName: helpers.GetPointer("my-policy"),
+						Namespace:  namespace,
 					},
 				},
 			},
@@ -954,6 +954,305 @@ func TestWAFGatewayBindingPolicyBundleValidation(t *testing.T) {
 					Validation: &ngfAPIv1alpha1.BundleValidation{
 						VerifyChecksum:   true,
 						ExpectedChecksum: &validChecksum,
+					},
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			for i := range tt.spec.TargetRefs {
+				if tt.spec.TargetRefs[i].Name == "" {
+					tt.spec.TargetRefs[i].Name = gatewayv1.ObjectName(uniqueResourceName(testTargetRefName))
+				}
+			}
+			validateCrd(t, tt.wantErrors, newWAFGatewayBindingPolicy(t, tt.spec), k8sClient)
+		})
+	}
+}
+
+func TestWAFGatewayBindingPolicyVerifyChecksumHTTPOnly(t *testing.T) {
+	t.Parallel()
+	k8sClient := getKubernetesClient(t)
+
+	nimSource := &ngfAPIv1alpha1.NIMBundleSource{
+		URL:        "https://nim.example.com",
+		PolicyName: helpers.GetPointer("my-policy"),
+	}
+	n1cSource := &ngfAPIv1alpha1.N1CBundleSource{
+		URL:        "https://n1c.example.com",
+		Namespace:  "my-ns",
+		PolicyName: helpers.GetPointer("my-policy"),
+	}
+
+	tests := []struct {
+		spec       ngfAPIv1alpha1.WAFGatewayBindingPolicySpec
+		name       string
+		wantErrors []string
+	}{
+		{
+			name: "verifyChecksum with HTTP type is valid",
+			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
+				Type:       ngfAPIv1alpha1.PolicySourceTypeHTTP,
+				PolicySource: ngfAPIv1alpha1.PolicySource{
+					HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: "https://example.com/policy.tgz"},
+					Validation: &ngfAPIv1alpha1.BundleValidation{VerifyChecksum: true},
+				},
+			},
+		},
+		{
+			name:       "verifyChecksum with NIM type is invalid",
+			wantErrors: []string{expectedWAFVerifyChecksumHTTPOnlyError},
+			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
+				Type:       ngfAPIv1alpha1.PolicySourceTypeNIM,
+				PolicySource: ngfAPIv1alpha1.PolicySource{
+					NIMSource:  nimSource,
+					Validation: &ngfAPIv1alpha1.BundleValidation{VerifyChecksum: true},
+				},
+			},
+		},
+		{
+			name:       "verifyChecksum with N1C type is invalid",
+			wantErrors: []string{expectedWAFVerifyChecksumHTTPOnlyError},
+			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
+				Type:       ngfAPIv1alpha1.PolicySourceTypeN1C,
+				PolicySource: ngfAPIv1alpha1.PolicySource{
+					N1CSource:  n1cSource,
+					Validation: &ngfAPIv1alpha1.BundleValidation{VerifyChecksum: true},
+				},
+			},
+		},
+		{
+			name: "verifyChecksum false with NIM type is valid",
+			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
+				Type:       ngfAPIv1alpha1.PolicySourceTypeNIM,
+				PolicySource: ngfAPIv1alpha1.PolicySource{
+					NIMSource:  nimSource,
+					Validation: &ngfAPIv1alpha1.BundleValidation{VerifyChecksum: false},
+				},
+			},
+		},
+		{
+			name: "verifyChecksum false with N1C type is valid",
+			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
+				Type:       ngfAPIv1alpha1.PolicySourceTypeN1C,
+				PolicySource: ngfAPIv1alpha1.PolicySource{
+					N1CSource:  n1cSource,
+					Validation: &ngfAPIv1alpha1.BundleValidation{VerifyChecksum: false},
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			for i := range tt.spec.TargetRefs {
+				if tt.spec.TargetRefs[i].Name == "" {
+					tt.spec.TargetRefs[i].Name = gatewayv1.ObjectName(uniqueResourceName(testTargetRefName))
+				}
+			}
+			validateCrd(t, tt.wantErrors, newWAFGatewayBindingPolicy(t, tt.spec), k8sClient)
+		})
+	}
+}
+
+func TestWAFGatewayBindingPolicyNIMPolicyUID(t *testing.T) {
+	t.Parallel()
+	k8sClient := getKubernetesClient(t)
+
+	tests := []struct {
+		spec       ngfAPIv1alpha1.WAFGatewayBindingPolicySpec
+		name       string
+		wantErrors []string
+	}{
+		{
+			name: "valid UUID is accepted",
+			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
+				Type:       ngfAPIv1alpha1.PolicySourceTypeNIM,
+				PolicySource: ngfAPIv1alpha1.PolicySource{
+					NIMSource: &ngfAPIv1alpha1.NIMBundleSource{
+						URL:       "https://nim.example.com",
+						PolicyUID: helpers.GetPointer("2bc1e3ac-7990-4ca4-910a-8634c444c804"),
+					},
+				},
+			},
+		},
+		{
+			name:       "non-UUID string is rejected",
+			wantErrors: []string{expectedWAFNIMPolicyUIDPatternError},
+			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
+				Type:       ngfAPIv1alpha1.PolicySourceTypeNIM,
+				PolicySource: ngfAPIv1alpha1.PolicySource{
+					NIMSource: &ngfAPIv1alpha1.NIMBundleSource{
+						URL:       "https://nim.example.com",
+						PolicyUID: helpers.GetPointer("not-a-uuid"),
+					},
+				},
+			},
+		},
+		{
+			name:       "UUID with uppercase letters is rejected",
+			wantErrors: []string{expectedWAFNIMPolicyUIDPatternError},
+			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
+				Type:       ngfAPIv1alpha1.PolicySourceTypeNIM,
+				PolicySource: ngfAPIv1alpha1.PolicySource{
+					NIMSource: &ngfAPIv1alpha1.NIMBundleSource{
+						URL:       "https://nim.example.com",
+						PolicyUID: helpers.GetPointer("2BC1E3AC-7990-4CA4-910A-8634C444C804"),
+					},
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			for i := range tt.spec.TargetRefs {
+				if tt.spec.TargetRefs[i].Name == "" {
+					tt.spec.TargetRefs[i].Name = gatewayv1.ObjectName(uniqueResourceName(testTargetRefName))
+				}
+			}
+			validateCrd(t, tt.wantErrors, newWAFGatewayBindingPolicy(t, tt.spec), k8sClient)
+		})
+	}
+}
+
+func TestWAFGatewayBindingPolicyN1CPolicyObjectID(t *testing.T) {
+	t.Parallel()
+	k8sClient := getKubernetesClient(t)
+
+	namespace := "my-namespace"
+
+	tests := []struct {
+		spec       ngfAPIv1alpha1.WAFGatewayBindingPolicySpec
+		name       string
+		wantErrors []string
+	}{
+		{
+			name: "valid pol_ ID is accepted",
+			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
+				Type:       ngfAPIv1alpha1.PolicySourceTypeN1C,
+				PolicySource: ngfAPIv1alpha1.PolicySource{
+					N1CSource: &ngfAPIv1alpha1.N1CBundleSource{
+						URL:            "https://n1c.example.com",
+						PolicyObjectID: helpers.GetPointer("pol_-IUuEUN7ST63oRC7AlQPLw"),
+						Namespace:      namespace,
+					},
+				},
+			},
+		},
+		{
+			name:       "missing pol_ prefix is rejected",
+			wantErrors: []string{expectedWAFN1CPolicyObjectIDPatternError},
+			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
+				Type:       ngfAPIv1alpha1.PolicySourceTypeN1C,
+				PolicySource: ngfAPIv1alpha1.PolicySource{
+					N1CSource: &ngfAPIv1alpha1.N1CBundleSource{
+						URL:            "https://n1c.example.com",
+						PolicyObjectID: helpers.GetPointer("IUuEUN7ST63oRC7AlQPLw"),
+						Namespace:      namespace,
+					},
+				},
+			},
+		},
+		{
+			name:       "invalid characters in pol_ ID are rejected",
+			wantErrors: []string{expectedWAFN1CPolicyObjectIDPatternError},
+			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
+				Type:       ngfAPIv1alpha1.PolicySourceTypeN1C,
+				PolicySource: ngfAPIv1alpha1.PolicySource{
+					N1CSource: &ngfAPIv1alpha1.N1CBundleSource{
+						URL:            "https://n1c.example.com",
+						PolicyObjectID: helpers.GetPointer("pol_invalid!chars"),
+						Namespace:      namespace,
+					},
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			for i := range tt.spec.TargetRefs {
+				if tt.spec.TargetRefs[i].Name == "" {
+					tt.spec.TargetRefs[i].Name = gatewayv1.ObjectName(uniqueResourceName(testTargetRefName))
+				}
+			}
+			validateCrd(t, tt.wantErrors, newWAFGatewayBindingPolicy(t, tt.spec), k8sClient)
+		})
+	}
+}
+
+func TestWAFGatewayBindingPolicyN1CPolicyVersionID(t *testing.T) {
+	t.Parallel()
+	k8sClient := getKubernetesClient(t)
+
+	namespace := "my-namespace"
+
+	tests := []struct {
+		spec       ngfAPIv1alpha1.WAFGatewayBindingPolicySpec
+		name       string
+		wantErrors []string
+	}{
+		{
+			name: "valid pv_ UID is accepted",
+			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
+				Type:       ngfAPIv1alpha1.PolicySourceTypeN1C,
+				PolicySource: ngfAPIv1alpha1.PolicySource{
+					N1CSource: &ngfAPIv1alpha1.N1CBundleSource{
+						URL:             "https://n1c.example.com",
+						PolicyName:      helpers.GetPointer("my-policy"),
+						PolicyVersionID: helpers.GetPointer("pv_UJ2gL5fOQ3Gnb3OVuVo1XA"),
+						Namespace:       namespace,
+					},
+				},
+			},
+		},
+		{
+			name:       "missing pv_ prefix is rejected",
+			wantErrors: []string{expectedWAFN1CPolicyVersionIDPatternError},
+			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
+				Type:       ngfAPIv1alpha1.PolicySourceTypeN1C,
+				PolicySource: ngfAPIv1alpha1.PolicySource{
+					N1CSource: &ngfAPIv1alpha1.N1CBundleSource{
+						URL:             "https://n1c.example.com",
+						PolicyName:      helpers.GetPointer("my-policy"),
+						PolicyVersionID: helpers.GetPointer("UJ2gL5fOQ3Gnb3OVuVo1XA"),
+						Namespace:       namespace,
+					},
+				},
+			},
+		},
+		{
+			name:       "invalid characters in pv_ UID are rejected",
+			wantErrors: []string{expectedWAFN1CPolicyVersionIDPatternError},
+			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
+				Type:       ngfAPIv1alpha1.PolicySourceTypeN1C,
+				PolicySource: ngfAPIv1alpha1.PolicySource{
+					N1CSource: &ngfAPIv1alpha1.N1CBundleSource{
+						URL:             "https://n1c.example.com",
+						PolicyName:      helpers.GetPointer("my-policy"),
+						PolicyVersionID: helpers.GetPointer("pv_invalid!chars"),
+						Namespace:       namespace,
 					},
 				},
 			},
