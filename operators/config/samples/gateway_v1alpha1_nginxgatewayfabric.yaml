@@ -38,7 +38,7 @@ spec:
     image:
       pullPolicy: IfNotPresent
       repository: ghcr.io/nginx/nginx-gateway-fabric/nginx
-      tag: "2.5.0-ubi"
+      tag: "2.5.1-ubi"
     imagePullSecret: ""
     imagePullSecrets: []
     kind: deployment
@@ -98,7 +98,7 @@ spec:
     image:
       pullPolicy: IfNotPresent
       repository: ghcr.io/nginx/nginx-gateway-fabric
-      tag: "2.5.0-ubi"
+      tag: "2.5.1-ubi"
     kind: deployment
     labels: {}
     leaderElection:
