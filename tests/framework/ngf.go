@@ -36,8 +36,10 @@ type InstallationConfig struct {
 	ImagePullPolicy      string
 	ServiceType          string
 	PlusUsageEndpoint    string
+	GatewayClassName     string
 	Plus                 bool
 	Telemetry            bool
+	SkipCRDCleanup       bool
 }
 
 // InstallGatewayAPI installs the specified version of the Gateway API resources.
@@ -57,6 +59,28 @@ func InstallGatewayAPI(apiVersion string) ([]byte, error) {
 	}
 	GinkgoWriter.Printf("Successfully installed Gateway API version %q\n", apiVersion)
 
+	return nil, nil
+}
+
+// InstallNGFCRDs installs the NGF CRDs from the chart's crds directory.
+func InstallNGFCRDs(chartPath string) ([]byte, error) {
+	crdPath := filepath.Join(chartPath, "crds") + "/"
+	GinkgoWriter.Printf("Installing NGF CRDs from %q\n", crdPath)
+	cmd := exec.CommandContext(
+		context.Background(),
+		"kubectl",
+		"apply",
+		"--server-side",
+		"--force-conflicts",
+		"-f",
+		crdPath,
+	)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		GinkgoWriter.Printf("Error installing NGF CRDs: %v\n", err)
+		return output, err
+	}
+	GinkgoWriter.Printf("Successfully installed NGF CRDs\n")
 	return nil, nil
 }
 
@@ -96,6 +120,9 @@ func InstallNGF(cfg InstallationConfig, extraArgs ...string) ([]byte, error) {
 	args = append(args, setImageArgs(cfg)...)
 	args = append(args, setTelemetryArgs(cfg)...)
 	args = append(args, setPlusUsageEndpointArg(cfg)...)
+	if cfg.GatewayClassName != "" {
+		args = append(args, "--set", fmt.Sprintf("nginxGateway.gatewayClassName=%s", cfg.GatewayClassName))
+	}
 	fullArgs := append(args, extraArgs...) //nolint:gocritic
 
 	GinkgoWriter.Printf("Installing NGF with command: helm %v\n", strings.Join(fullArgs, " "))
@@ -204,21 +231,35 @@ func UninstallNGF(cfg InstallationConfig, rm ResourceManager) ([]byte, error) {
 		return nil, err
 	}
 
+	if !cfg.SkipCRDCleanup {
+		if err := DeleteNGFCRDs(rm); err != nil {
+			return nil, err
+		}
+	}
+
+	return nil, nil
+}
+
+// DeleteNGFCRDs deletes all NGF CRDs from the cluster.
+func DeleteNGFCRDs(rm ResourceManager) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
 	var crList apiext.CustomResourceDefinitionList
 	if err := rm.List(ctx, &crList); err != nil {
-		return nil, err
+		return err
 	}
 
 	for _, cr := range crList.Items {
 		if strings.Contains(cr.Spec.Group, "gateway.nginx.org") {
 			cr := cr
 			if err := rm.Delete(ctx, &cr, nil); err != nil && !apierrors.IsNotFound(err) {
-				return nil, err
+				return err
 			}
 		}
 	}
 
-	return nil, nil
+	return nil
 }
 
 func setTelemetryArgs(cfg InstallationConfig) []string {

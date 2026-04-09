@@ -53,11 +53,12 @@ import (
 
 // ResourceManager handles creating/updating/deleting Kubernetes resources.
 type ResourceManager struct {
-	K8sClient      client.Client
-	ClientGoClient kubernetes.Interface // used when k8sClient is not enough
-	K8sConfig      *rest.Config
-	FS             embed.FS
-	TimeoutConfig  TimeoutConfig
+	K8sClient        client.Client
+	ClientGoClient   kubernetes.Interface
+	K8sConfig        *rest.Config
+	FS               embed.FS
+	TextReplacements map[string]string
+	TimeoutConfig    TimeoutConfig
 }
 
 // ClusterInfo holds the cluster metadata.
@@ -168,6 +169,14 @@ func (rm *ResourceManager) ApplyFromBuffer(buffer *bytes.Buffer, namespace strin
 	options := TestOptions(opts...)
 	if options.logEnabled {
 		GinkgoWriter.Printf("Applying resources from buffer to namespace %q\n", namespace)
+	}
+
+	if len(rm.TextReplacements) > 0 {
+		content := buffer.String()
+		for old, replacement := range rm.TextReplacements {
+			content = strings.ReplaceAll(content, old, replacement)
+		}
+		buffer = bytes.NewBufferString(content)
 	}
 
 	handlerFunc := func(obj unstructured.Unstructured) error {
@@ -323,6 +332,14 @@ func (rm *ResourceManager) DeleteFromFiles(files []string, namespace string) err
 		data, err := rm.GetFileContents(file)
 		if err != nil {
 			return err
+		}
+
+		if len(rm.TextReplacements) > 0 {
+			content := data.String()
+			for old, replacement := range rm.TextReplacements {
+				content = strings.ReplaceAll(content, old, replacement)
+			}
+			data = bytes.NewBufferString(content)
 		}
 
 		if err = rm.readAndHandleObject(handlerFunc, data); err != nil {

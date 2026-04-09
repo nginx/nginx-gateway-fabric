@@ -25,13 +25,16 @@ var _ = Describe("SnippetsFilter", Ordered, Label("functional", "snippets-filter
 			"snippets-filter/grpc-backend.yaml",
 		}
 
-		namespace = "snippets-filter"
+		namespace string
 
 		nginxPodName  string
-		gatewayNsName = types.NamespacedName{Name: "gateway", Namespace: namespace}
+		gatewayNsName types.NamespacedName
 	)
 
 	BeforeAll(func() {
+		namespace = fmt.Sprintf("snippets-filter-%d", GinkgoParallelProcess())
+		gatewayNsName = types.NamespacedName{Name: "gateway", Namespace: namespace}
+
 		ns := &core.Namespace{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: namespace,
@@ -112,29 +115,27 @@ var _ = Describe("SnippetsFilter", Ordered, Label("functional", "snippets-filter
 
 		Context("nginx directives", func() {
 			var conf *framework.Payload
-			snippetsFilterFilePrefix := "/etc/nginx/includes/SnippetsFilter_"
-
-			mainContext := fmt.Sprintf("%smain_", snippetsFilterFilePrefix)
-			httpContext := fmt.Sprintf("%shttp_", snippetsFilterFilePrefix)
-			httpServerContext := fmt.Sprintf("%shttp.server_", snippetsFilterFilePrefix)
-			httpServerLocationContext := fmt.Sprintf("%shttp.server.location_", snippetsFilterFilePrefix)
-
-			httpRouteSuffix := fmt.Sprintf("%s_all-contexts.conf", namespace)
-			grpcRouteSuffix := fmt.Sprintf("%s_grpc-all-contexts.conf", namespace)
+			var (
+				mainContext, httpContext, httpServerContext, httpServerLocationContext string
+				httpRouteSuffix, grpcRouteSuffix                                       string
+			)
 
 			BeforeAll(func() {
+				snippetsFilterFilePrefix := "/etc/nginx/includes/SnippetsFilter_"
+				mainContext = fmt.Sprintf("%smain_", snippetsFilterFilePrefix)
+				httpContext = fmt.Sprintf("%shttp_", snippetsFilterFilePrefix)
+				httpServerContext = fmt.Sprintf("%shttp.server_", snippetsFilterFilePrefix)
+				httpServerLocationContext = fmt.Sprintf("%shttp.server.location_", snippetsFilterFilePrefix)
+				httpRouteSuffix = fmt.Sprintf("%s_all-contexts.conf", namespace)
+				grpcRouteSuffix = fmt.Sprintf("%s_grpc-all-contexts.conf", namespace)
+
 				var err error
 				conf, err = resourceManager.GetNginxConfig(nginxPodName, namespace, "")
 				Expect(err).ToNot(HaveOccurred())
 			})
 
-			DescribeTable("are set properly for",
-				func(expCfgs []framework.ExpectedNginxField) {
-					for _, expCfg := range expCfgs {
-						Expect(framework.ValidateNginxFieldExists(conf, expCfg)).To(Succeed())
-					}
-				},
-				Entry("HTTPRoute", []framework.ExpectedNginxField{
+			It("are set properly for HTTPRoute", func() {
+				expCfgs := []framework.ExpectedNginxField{
 					{
 						Directive: "worker_priority",
 						Value:     "0",
@@ -178,8 +179,14 @@ var _ = Describe("SnippetsFilter", Ordered, Label("functional", "snippets-filter
 						Value:     "1h",
 						File:      fmt.Sprintf("%s%s", httpServerLocationContext, httpRouteSuffix),
 					},
-				}),
-				Entry("GRPCRoute", []framework.ExpectedNginxField{
+				}
+				for _, expCfg := range expCfgs {
+					Expect(framework.ValidateNginxFieldExists(conf, expCfg)).To(Succeed())
+				}
+			})
+
+			It("are set properly for GRPCRoute", func() {
+				expCfgs := []framework.ExpectedNginxField{
 					{
 						Directive: "worker_shutdown_timeout",
 						Value:     "120s",
@@ -223,8 +230,11 @@ var _ = Describe("SnippetsFilter", Ordered, Label("functional", "snippets-filter
 						Location:  "/helloworld.Greeter/SayHello",
 						Server:    "*.example.com",
 					},
-				}),
-			)
+				}
+				for _, expCfg := range expCfgs {
+					Expect(framework.ValidateNginxFieldExists(conf, expCfg)).To(Succeed())
+				}
+			})
 		})
 	})
 

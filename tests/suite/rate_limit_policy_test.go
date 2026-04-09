@@ -28,12 +28,15 @@ var _ = Describe("RateLimitPolicy", Ordered, Label("functional", "rate-limit-pol
 			"rate-limit-policy/routes.yaml",
 		}
 
-		namespace    = "rate-limit-policy"
+		namespace    string
 		nginxPodName string
-		filePrefix   = "/etc/nginx/includes/RateLimitPolicy_rate-limit-policy"
+		filePrefix   string
 	)
 
 	BeforeAll(func() {
+		namespace = fmt.Sprintf("rate-limit-policy-%d", GinkgoParallelProcess())
+		filePrefix = fmt.Sprintf("/etc/nginx/includes/RateLimitPolicy_%s", namespace)
+
 		ns := &core.Namespace{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: namespace,
@@ -123,13 +126,8 @@ var _ = Describe("RateLimitPolicy", Ordered, Label("functional", "rate-limit-pol
 				Expect(err).ToNot(HaveOccurred())
 			})
 
-			DescribeTable("are set properly for",
-				func(expCfgs []framework.ExpectedNginxField) {
-					for _, expCfg := range expCfgs {
-						Expect(framework.ValidateNginxFieldExists(conf, expCfg)).To(Succeed())
-					}
-				},
-				Entry("gateway policy", []framework.ExpectedNginxField{
+			It("are set properly for gateway policy", func() {
+				expCfgs := []framework.ExpectedNginxField{
 					{
 						Directive: "include",
 						Value:     fmt.Sprintf("%s%s", filePrefix, "_gateway-rate-limit_gateway.conf"),
@@ -138,7 +136,7 @@ var _ = Describe("RateLimitPolicy", Ordered, Label("functional", "rate-limit-pol
 					{
 						File:      fmt.Sprintf("%s%s", filePrefix, "_gateway-rate-limit_gateway.conf"),
 						Directive: "limit_req_zone",
-						Value:     "$binary_remote_addr zone=rate-limit-policy_rl_gateway-rate-limit_rule0:10m rate=15r/m",
+						Value:     fmt.Sprintf("$binary_remote_addr zone=%s_rl_gateway-rate-limit_rule0:10m rate=15r/m", namespace),
 					},
 					{
 						Directive: "include",
@@ -149,7 +147,7 @@ var _ = Describe("RateLimitPolicy", Ordered, Label("functional", "rate-limit-pol
 					{
 						File:      fmt.Sprintf("%s%s", filePrefix, "_gateway-rate-limit_gateway_server.conf"),
 						Directive: "limit_req",
-						Value:     "zone=rate-limit-policy_rl_gateway-rate-limit_rule0 burst=3",
+						Value:     fmt.Sprintf("zone=%s_rl_gateway-rate-limit_rule0 burst=3", namespace),
 					},
 					{
 						File:      fmt.Sprintf("%s%s", filePrefix, "_gateway-rate-limit_gateway_server.conf"),
@@ -161,8 +159,14 @@ var _ = Describe("RateLimitPolicy", Ordered, Label("functional", "rate-limit-pol
 						Directive: "limit_req_status",
 						Value:     "429",
 					},
-				}),
-				Entry("httproute policy", []framework.ExpectedNginxField{
+				}
+				for _, expCfg := range expCfgs {
+					Expect(framework.ValidateNginxFieldExists(conf, expCfg)).To(Succeed())
+				}
+			})
+
+			It("are set properly for httproute policy", func() {
+				expCfgs := []framework.ExpectedNginxField{
 					{
 						Directive: "include",
 						Value:     fmt.Sprintf("%s%s", filePrefix, "_httproute-rate-limit_internal_http.conf"),
@@ -178,12 +182,12 @@ var _ = Describe("RateLimitPolicy", Ordered, Label("functional", "rate-limit-pol
 					{
 						File:      fmt.Sprintf("%s%s", filePrefix, "_httproute-rate-limit_internal_http.conf"),
 						Directive: "limit_req_zone",
-						Value:     "$binary_remote_addr zone=rate-limit-policy_rl_httproute-rate-limit_rule0:20m rate=1r/m",
+						Value:     fmt.Sprintf("$binary_remote_addr zone=%s_rl_httproute-rate-limit_rule0:20m rate=1r/m", namespace),
 					},
 					{
 						File:      fmt.Sprintf("%s%s", filePrefix, "_httproute-rate-limit_route.conf"),
 						Directive: "limit_req",
-						Value:     "zone=rate-limit-policy_rl_httproute-rate-limit_rule0 burst=5",
+						Value:     fmt.Sprintf("zone=%s_rl_httproute-rate-limit_rule0 burst=5", namespace),
 					},
 					{
 						File:      fmt.Sprintf("%s%s", filePrefix, "_httproute-rate-limit_route.conf"),
@@ -195,8 +199,14 @@ var _ = Describe("RateLimitPolicy", Ordered, Label("functional", "rate-limit-pol
 						Directive: "limit_req_status",
 						Value:     "466",
 					},
-				}),
-				Entry("grpcroute policy", []framework.ExpectedNginxField{
+				}
+				for _, expCfg := range expCfgs {
+					Expect(framework.ValidateNginxFieldExists(conf, expCfg)).To(Succeed())
+				}
+			})
+
+			It("are set properly for grpcroute policy", func() {
+				expCfgs := []framework.ExpectedNginxField{
 					{
 						Directive: "include",
 						Value:     fmt.Sprintf("%s%s", filePrefix, "_grpcroute-rate-limit_internal_http.conf"),
@@ -212,12 +222,12 @@ var _ = Describe("RateLimitPolicy", Ordered, Label("functional", "rate-limit-pol
 					{
 						File:      fmt.Sprintf("%s%s", filePrefix, "_grpcroute-rate-limit_internal_http.conf"),
 						Directive: "limit_req_zone",
-						Value:     "$binary_remote_addr zone=rate-limit-policy_rl_grpcroute-rate-limit_rule0:20m rate=5r/s",
+						Value:     fmt.Sprintf("$binary_remote_addr zone=%s_rl_grpcroute-rate-limit_rule0:20m rate=5r/s", namespace),
 					},
 					{
 						File:      fmt.Sprintf("%s%s", filePrefix, "_grpcroute-rate-limit_route.conf"),
 						Directive: "limit_req",
-						Value:     "zone=rate-limit-policy_rl_grpcroute-rate-limit_rule0 burst=2",
+						Value:     fmt.Sprintf("zone=%s_rl_grpcroute-rate-limit_rule0 burst=2", namespace),
 					},
 					{
 						File:      fmt.Sprintf("%s%s", filePrefix, "_grpcroute-rate-limit_route.conf"),
@@ -229,8 +239,11 @@ var _ = Describe("RateLimitPolicy", Ordered, Label("functional", "rate-limit-pol
 						Directive: "limit_req_status",
 						Value:     "466",
 					},
-				}),
-			)
+				}
+				for _, expCfg := range expCfgs {
+					Expect(framework.ValidateNginxFieldExists(conf, expCfg)).To(Succeed())
+				}
+			})
 		})
 	})
 
@@ -288,13 +301,8 @@ var _ = Describe("RateLimitPolicy", Ordered, Label("functional", "rate-limit-pol
 				Expect(err).ToNot(HaveOccurred())
 			})
 
-			DescribeTable("are set properly for",
-				func(expCfgs []framework.ExpectedNginxField) {
-					for _, expCfg := range expCfgs {
-						Expect(framework.ValidateNginxFieldExists(conf, expCfg)).To(Succeed())
-					}
-				},
-				Entry("route policy", []framework.ExpectedNginxField{
+			It("are set properly for route policy", func() {
+				expCfgs := []framework.ExpectedNginxField{
 					{
 						Directive: "include",
 						Value:     fmt.Sprintf("%s%s", filePrefix, "_rlp-multiple-targets_internal_http.conf"),
@@ -302,7 +310,7 @@ var _ = Describe("RateLimitPolicy", Ordered, Label("functional", "rate-limit-pol
 					},
 					{
 						Directive: "limit_req_zone",
-						Value:     "$binary_remote_addr zone=rate-limit-policy_rl_rlp-multiple-targets_rule0:10m rate=2r/m",
+						Value:     fmt.Sprintf("$binary_remote_addr zone=%s_rl_rlp-multiple-targets_rule0:10m rate=2r/m", namespace),
 						File:      fmt.Sprintf("%s%s", filePrefix, "_rlp-multiple-targets_internal_http.conf"),
 					},
 					{
@@ -322,7 +330,7 @@ var _ = Describe("RateLimitPolicy", Ordered, Label("functional", "rate-limit-pol
 					{
 						File:      fmt.Sprintf("%s%s", filePrefix, "_rlp-multiple-targets_route.conf"),
 						Directive: "limit_req",
-						Value:     "zone=rate-limit-policy_rl_rlp-multiple-targets_rule0 burst=3",
+						Value:     fmt.Sprintf("zone=%s_rl_rlp-multiple-targets_rule0 burst=3", namespace),
 					},
 					{
 						File:      fmt.Sprintf("%s%s", filePrefix, "_rlp-multiple-targets_route.conf"),
@@ -334,8 +342,11 @@ var _ = Describe("RateLimitPolicy", Ordered, Label("functional", "rate-limit-pol
 						Directive: "limit_req_status",
 						Value:     "429",
 					},
-				}),
-			)
+				}
+				for _, expCfg := range expCfgs {
+					Expect(framework.ValidateNginxFieldExists(conf, expCfg)).To(Succeed())
+				}
+			})
 		})
 	})
 
@@ -393,13 +404,8 @@ var _ = Describe("RateLimitPolicy", Ordered, Label("functional", "rate-limit-pol
 				Expect(err).ToNot(HaveOccurred())
 			})
 
-			DescribeTable("are set properly for",
-				func(expCfgs []framework.ExpectedNginxField) {
-					for _, expCfg := range expCfgs {
-						Expect(framework.ValidateNginxFieldExists(conf, expCfg)).To(Succeed())
-					}
-				},
-				Entry("route policy", []framework.ExpectedNginxField{
+			It("are set properly for route policy", func() {
+				expCfgs := []framework.ExpectedNginxField{
 					{
 						Directive: "include",
 						Value:     fmt.Sprintf("%s%s", filePrefix, "_rlp-multiple-rules_internal_http.conf"),
@@ -415,22 +421,22 @@ var _ = Describe("RateLimitPolicy", Ordered, Label("functional", "rate-limit-pol
 					{
 						File:      fmt.Sprintf("%s%s", filePrefix, "_rlp-multiple-rules_internal_http.conf"),
 						Directive: "limit_req_zone",
-						Value:     "$binary_remote_addr zone=rate-limit-policy_rl_rlp-multiple-rules_rule0:20m rate=1r/m",
+						Value:     fmt.Sprintf("$binary_remote_addr zone=%s_rl_rlp-multiple-rules_rule0:20m rate=1r/m", namespace),
 					},
 					{
 						File:      fmt.Sprintf("%s%s", filePrefix, "_rlp-multiple-rules_internal_http.conf"),
 						Directive: "limit_req_zone",
-						Value:     "$binary_remote_addr zone=rate-limit-policy_rl_rlp-multiple-rules_rule1:10m rate=1r/m",
+						Value:     fmt.Sprintf("$binary_remote_addr zone=%s_rl_rlp-multiple-rules_rule1:10m rate=1r/m", namespace),
 					},
 					{
 						File:      fmt.Sprintf("%s%s", filePrefix, "_rlp-multiple-rules_route.conf"),
 						Directive: "limit_req",
-						Value:     "zone=rate-limit-policy_rl_rlp-multiple-rules_rule0 burst=2 nodelay",
+						Value:     fmt.Sprintf("zone=%s_rl_rlp-multiple-rules_rule0 burst=2 nodelay", namespace),
 					},
 					{
 						File:      fmt.Sprintf("%s%s", filePrefix, "_rlp-multiple-rules_route.conf"),
 						Directive: "limit_req",
-						Value:     "zone=rate-limit-policy_rl_rlp-multiple-rules_rule1 burst=1 nodelay",
+						Value:     fmt.Sprintf("zone=%s_rl_rlp-multiple-rules_rule1 burst=1 nodelay", namespace),
 					},
 					{
 						File:      fmt.Sprintf("%s%s", filePrefix, "_rlp-multiple-rules_route.conf"),
@@ -442,8 +448,11 @@ var _ = Describe("RateLimitPolicy", Ordered, Label("functional", "rate-limit-pol
 						Directive: "limit_req_status",
 						Value:     "466",
 					},
-				}),
-			)
+				}
+				for _, expCfg := range expCfgs {
+					Expect(framework.ValidateNginxFieldExists(conf, expCfg)).To(Succeed())
+				}
+			})
 		})
 	})
 })

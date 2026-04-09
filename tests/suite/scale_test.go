@@ -833,6 +833,7 @@ The logs are attached only if there are errors.
 
 	AfterAll(func() {
 		close(promPortForwardStopCh)
+		promInstance.WaitForPortForwardExit()
 		Expect(framework.UninstallPrometheus(resourceManager)).To(Succeed())
 		Expect(outFile.Close()).To(Succeed())
 

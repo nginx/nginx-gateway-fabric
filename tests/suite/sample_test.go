@@ -23,10 +23,11 @@ var _ = Describe("Basic test example", Label("functional"), func() {
 			"hello-world/routes.yaml",
 		}
 
-		namespace = "helloworld"
+		namespace string
 	)
 
 	BeforeEach(func() {
+		namespace = fmt.Sprintf("helloworld-%d", GinkgoParallelProcess())
 		ns := &core.Namespace{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: namespace,
