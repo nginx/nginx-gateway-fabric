@@ -77,7 +77,7 @@ func generate(pols []policies.Policy) policies.GenerateResultFiles {
 				logEntry := map[string]string{}
 
 				switch {
-				case secLog.LogSource.URL != nil:
+				case secLog.LogSource.HTTPSource != nil || secLog.LogSource.NIMSource != nil:
 					bundleName := fmt.Sprintf("%s_%s_log_%d", wp.Namespace, wp.Name, i)
 					bundlePath := fmt.Sprintf("%s/%s.tgz", appProtectBundleFolder, bundleName)
 					logEntry["LogProfileBundlePath"] = bundlePath

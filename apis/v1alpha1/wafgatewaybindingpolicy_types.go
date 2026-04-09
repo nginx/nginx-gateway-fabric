@@ -215,6 +215,12 @@ type NIMBundleSource struct {
 	URL        string  `json:"url"`
 }
 
+// NIMLogProfileBundleSource configures log profile bundle fetching from NGINX Instance Manager (NIM).
+type NIMLogProfileBundleSource struct {
+	ProfileName *string `json:"profileName,omitempty"`
+	URL         string  `json:"url"`
+}
+
 // N1CBundleSource configures bundle fetching from F5 NGINX One Console (N1C).
 // Exactly one of policyName or policyObjectID must be set.
 //
@@ -263,11 +269,9 @@ const (
 )
 
 // WAFSecurityLog defines security logging configuration for app_protect_security_log directives.
-// Exactly one of logSource.url (via LogSource) or logSource.defaultProfile must be set.
+// Exactly one of logSource.defaultProfile, logSource.httpSource, or logSource.nimSource must be set.
 //
-// +kubebuilder:validation:XValidation:message="exactly one of logSource.url or logSource.defaultProfile must be set",rule="(has(self.logSource) && has(self.logSource.url) && !has(self.logSource.defaultProfile)) || (has(self.logSource) && !has(self.logSource.url) && has(self.logSource.defaultProfile))"
-//
-//nolint:lll
+
 type WAFSecurityLog struct {
 	// LogSource configures the log profile bundle source for this log configuration.
 	LogSource LogSource `json:"logSource"`
@@ -277,22 +281,29 @@ type WAFSecurityLog struct {
 }
 
 // LogSource holds all configuration for fetching a WAF log profile bundle.
-// Exactly one of DefaultProfile or URL must be set.
+// Exactly one of DefaultProfile, HTTPSource, or NIMSource must be set.
+//
+// +kubebuilder:validation:XValidation:message="exactly one of logSource.defaultProfile, logSource.httpSource, or logSource.nimSource must be set",rule="(has(self.defaultProfile) && !has(self.httpSource) && !has(self.nimSource)) || (!has(self.defaultProfile) && has(self.httpSource) && !has(self.nimSource)) || (!has(self.defaultProfile) && !has(self.httpSource) && has(self.nimSource))"
+//
+//nolint:lll
 type LogSource struct {
 	// DefaultProfile selects one of the built-in WAF log profile bundles shipped with the WAF engine.
-	// Mutually exclusive with URL.
+	// Mutually exclusive with HTTPSource and NIMSource.
 	//
 	// +optional
 	DefaultProfile *DefaultLogProfile `json:"defaultProfile,omitempty"`
 
-	// URL is the HTTP or HTTPS address of the compiled log profile bundle (.tgz).
-	// Mutually exclusive with DefaultProfile.
+	// HTTPSource configures direct bundle fetching from an HTTP/HTTPS URL.
+	// Mutually exclusive with DefaultProfile and NIMSource.
 	//
 	// +optional
-	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:MaxLength=2083
-	// +kubebuilder:validation:Pattern=`^https?://`
-	URL *string `json:"url,omitempty"`
+	HTTPSource *HTTPBundleSource `json:"httpSource,omitempty"`
+
+	// NIMSource configures bundle fetching from NGINX Instance Manager.
+	// Mutually exclusive with DefaultProfile and HTTPSource.
+	//
+	// +optional
+	NIMSource *NIMLogProfileBundleSource `json:"nimSource,omitempty"`
 
 	// Auth configures authentication credentials for fetching the log bundle.
 	// Only applicable when url is set.
@@ -329,6 +340,12 @@ type LogSource struct {
 	//
 	// +optional
 	RetryPolicy *BundleRetryPolicy `json:"retryPolicy,omitempty"`
+
+	// InsecureSkipVerify disables TLS certificate verification when fetching the bundle.
+	// Not recommended for production use.
+	//
+	// +optional
+	InsecureSkipVerify bool `json:"insecureSkipVerify,omitempty"`
 }
 
 // SecurityLogDestination defines the destination for security logs.

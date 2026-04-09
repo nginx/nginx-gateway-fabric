@@ -3,8 +3,6 @@ package graph
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"slices"
 	"sort"
@@ -841,15 +839,29 @@ func buildPolicyFetchRequest(
 }
 
 // buildLogFetchRequest constructs a fetch.Request from a LogSource, resolved auth, and TLS CA data.
-func buildLogFetchRequest(logSource *ngfAPIv1alpha1.LogSource, auth *fetch.BundleAuth, tlsCA []byte) fetch.Request {
-	return fetch.Request{
-		URL:              *logSource.URL,
-		Auth:             auth,
-		TLSCAData:        tlsCA,
-		VerifyChecksum:   logSource.Validation != nil && logSource.Validation.VerifyChecksum,
-		ExpectedChecksum: expectedChecksum(logSource.Validation),
-		Timeout:          logSource.Timeout,
+func buildLogFetchRequest(
+	logSource *ngfAPIv1alpha1.LogSource,
+	auth *fetch.BundleAuth,
+	tlsCA []byte,
+	logURL string,
+) fetch.Request {
+	req := fetch.Request{
+		URL:                logURL,
+		Auth:               auth,
+		TLSCAData:          tlsCA,
+		InsecureSkipVerify: logSource.InsecureSkipVerify,
+		VerifyChecksum:     logSource.Validation != nil && logSource.Validation.VerifyChecksum,
+		ExpectedChecksum:   expectedChecksum(logSource.Validation),
+		Timeout:            logSource.Timeout,
 	}
+
+	if logSource.NIMSource != nil {
+		if logSource.NIMSource.ProfileName != nil {
+			req.NIMProfileName = *logSource.NIMSource.ProfileName
+		}
+	}
+
+	return req
 }
 
 // fetchPolicyBundle fetches the policy bundle for a WAFGatewayBindingPolicy.
@@ -888,7 +900,7 @@ func fetchPolicyBundle(
 
 	req := buildPolicyFetchRequest(&policySource, wafPolicy.Spec.Type, auth, tlsCA)
 
-	data, checksum, err := wafInput.Fetcher.Fetch(ctx, req)
+	data, checksum, err := wafInput.Fetcher.FetchPolicyBundle(ctx, req)
 	if err != nil {
 		if prev, ok := wafInput.PreviousBundles[bundleKey]; ok {
 			cond := conditions.NewPolicyProgrammedStaleBundleWarning(err.Error())
@@ -913,8 +925,8 @@ func fetchSecurityLogBundles(
 	wafInput *WAFProcessingInput,
 	output *WAFProcessingOutput,
 ) {
-	for _, secLog := range wafPolicy.Spec.SecurityLogs {
-		if secLog.LogSource.URL == nil {
+	for i, secLog := range wafPolicy.Spec.SecurityLogs {
+		if secLog.LogSource.HTTPSource == nil && secLog.LogSource.NIMSource == nil {
 			// DefaultProfile is used; no bundle to fetch.
 			continue
 		}
@@ -941,13 +953,20 @@ func fetchSecurityLogBundles(
 			}
 		}
 
+		var logURL string
+		if secLog.LogSource.HTTPSource != nil {
+			logURL = secLog.LogSource.HTTPSource.URL
+		} else if secLog.LogSource.NIMSource != nil {
+			logURL = secLog.LogSource.NIMSource.URL
+		}
+
 		bundleKey := WAFBundleKey(
-			fmt.Sprintf("%s_%s_log_%s", wafPolicy.Namespace, wafPolicy.Name, urlHash(*secLog.LogSource.URL)),
+			fmt.Sprintf("%s_%s_log_%d", wafPolicy.Namespace, wafPolicy.Name, i),
 		)
 
-		req := buildLogFetchRequest(&secLog.LogSource, auth, tlsCA)
+		req := buildLogFetchRequest(&secLog.LogSource, auth, tlsCA, logURL)
 
-		data, checksum, err := wafInput.Fetcher.Fetch(ctx, req)
+		data, checksum, err := wafInput.Fetcher.FetchLogProfileBundle(ctx, req)
 		if err != nil {
 			if prev, ok := wafInput.PreviousBundles[bundleKey]; ok {
 				cond := conditions.NewPolicyProgrammedStaleBundleWarning(err.Error())
@@ -975,11 +994,6 @@ func expectedChecksum(v *ngfAPIv1alpha1.BundleValidation) string {
 		return ""
 	}
 	return *v.ExpectedChecksum
-}
-
-func urlHash(rawURL string) string {
-	sum := sha256.Sum256([]byte(rawURL))
-	return hex.EncodeToString(sum[:])[:16]
 }
 
 // resolveBundleAuth resolves a BundleAuth reference into fetch.BundleAuth credentials.
