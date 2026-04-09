@@ -8,6 +8,6 @@ spec:
   restartPolicy: Never
   containers:
     - name: client
-      image: curlimages/curl:8.18.0
+      image: curlimages/curl:8.19.0
       imagePullPolicy: IfNotPresent
       command: ["sleep", "3600"]
