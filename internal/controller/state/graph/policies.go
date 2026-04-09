@@ -890,15 +890,7 @@ func BuildLogFetchRequest(
 	auth *fetch.BundleAuth,
 	tlsCA []byte,
 ) fetch.Request {
-	var logURL string
-	if logSource.HTTPSource != nil {
-		logURL = logSource.HTTPSource.URL
-	} else if logSource.NIMSource != nil {
-		logURL = logSource.NIMSource.URL
-	}
-
 	req := fetch.Request{
-		URL:                logURL,
 		Auth:               auth,
 		TLSCAData:          tlsCA,
 		InsecureSkipVerify: logSource.InsecureSkipVerify,
@@ -908,8 +900,15 @@ func BuildLogFetchRequest(
 	}
 
 	if logSource.NIMSource != nil {
+		if logSource.NIMSource.URL != "" {
+			req.URL = logSource.NIMSource.URL
+		}
 		if logSource.NIMSource.ProfileName != nil {
 			req.NIMProfileName = *logSource.NIMSource.ProfileName
+		}
+	} else if logSource.HTTPSource != nil {
+		if logSource.HTTPSource.URL != "" {
+			req.URL = logSource.HTTPSource.URL
 		}
 	}
 

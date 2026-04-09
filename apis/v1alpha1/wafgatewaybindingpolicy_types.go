@@ -226,6 +226,7 @@ type NIMBundleSource struct {
 	// PolicyName is the name of the compiled policy bundle in NIM.
 	// Mutually exclusive with policyUID.
 	//
+	// +optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=253
 	PolicyName *string `json:"policyName,omitempty"`
