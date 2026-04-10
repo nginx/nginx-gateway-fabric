@@ -376,7 +376,7 @@ func fetchNIM(ctx context.Context, client *http.Client, req Request) ([]byte, st
 }
 
 func fetchNIMLogProfile(ctx context.Context, client *http.Client, req Request) ([]byte, string, error) {
-	compilerVersionURL := req.URL + "/api/platform/v1/security/nap-compiler/versions/latest"
+	compilerVersionURL := strings.TrimRight(req.URL, "/") + "/api/platform/v1/security/nap-compiler/versions/latest"
 	body, err := doGet(ctx, client, compilerVersionURL, req.Auth)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to fetch latest NIM NAP compiler version: %w", err)
@@ -388,9 +388,8 @@ func fetchNIMLogProfile(ctx context.Context, client *http.Client, req Request) (
 		return nil, "", fmt.Errorf("failed to parse NIM NAP compiler version response: %w", err)
 	}
 
-	logProfileBundleURL := fmt.Sprintf("%s/api/platform/v1/security/logprofiles/%s/%s/bundle",
-		req.URL, req.NIMProfileName, versionResp.Version,
-	)
+	logProfileBundleURL := strings.TrimRight(req.URL, "/") +
+		fmt.Sprintf("/api/platform/v1/security/logprofiles/%s/%s/bundle", req.NIMProfileName, versionResp.Version)
 	body, err = doGet(ctx, client, logProfileBundleURL, req.Auth)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to fetch NIM log profile bundle: %w", err)

@@ -249,12 +249,14 @@ type NIMBundleSource struct {
 }
 
 // NIMLogProfileBundleSource configures log profile bundle fetching from NGINX Instance Manager (NIM).
+//
+// +kubebuilder:validation:XValidation:message="profileName is required",rule="has(self.profileName)"
 type NIMLogProfileBundleSource struct {
 	// ProfileName is the name of the compiled log profile bundle in NIM.
 	//
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=253
-	ProfileName *string `json:"profileName,omitempty"`
+	ProfileName *string `json:"profileName"`
 
 	// URL is the base URL of the NGINX Instance Manager instance,
 	// e.g. "https://nim.example.com".

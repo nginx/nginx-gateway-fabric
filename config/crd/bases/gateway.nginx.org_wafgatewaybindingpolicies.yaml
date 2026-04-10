@@ -386,8 +386,12 @@ spec:
                               pattern: ^https?://
                               type: string
                           required:
+                          - profileName
                           - url
                           type: object
+                          x-kubernetes-validations:
+                          - message: profileName is required
+                            rule: has(self.profileName)
                         polling:
                           description: |-
                             Polling configures automatic periodic re-fetching of the log bundle.
