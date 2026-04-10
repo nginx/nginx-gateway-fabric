@@ -32,12 +32,6 @@ type Gateway struct {
 	EffectiveNginxProxy *EffectiveNginxProxy
 	// SecretRef is the namespaced name of the secret referenced by the Gateway for backend TLS.
 	SecretRef *types.NamespacedName
-	// PerPortFrontendCaRefs maps port numbers to a list of namespaced names
-	// of secrets referenced by the Gateway for frontend TLS on that port.
-	PerPortFrontendCaRefs map[int32][]*types.NamespacedName
-	// DefaultFrontendCaRefs is the namespaced name of the secret referenced
-	// defined in the default section of the frontend TLS spec of the Gateway.
-	DefaultFrontendCaRefs []*types.NamespacedName
 	// FrontendTLSConfig is the TLS configuration for the frontend TLS of the Gateway.
 	FrontendTLSConfig *FrontendTLSConfig
 	// DeploymentName is the name of the nginx Deployment associated with this Gateway.
@@ -53,8 +47,9 @@ type Gateway struct {
 }
 
 type FrontendTLSConfig struct {
-	// Mode is the TLS mode for the frontend TLS configuration.
-	Mode v1.FrontendValidationModeType
+	// PortModes maps port numbers to the validation mode for frontend TLS on that port.
+	// If a port is not included in this map, the default validation mode applies.
+	PortModes map[int32]v1.FrontendValidationModeType
 	// PerPortFrontendCaRefs maps port numbers to a list of namespaced names
 	// of secrets referenced by the Gateway for frontend TLS on that port.
 	PerPortFrontendCaRefs map[int32][]*types.NamespacedName
@@ -147,14 +142,14 @@ func buildGateways(
 			}
 		} else {
 			gateway := &Gateway{
-				Source:                gw,
-				NginxProxy:            np,
-				EffectiveNginxProxy:   effectiveNginxProxy,
-				Valid:                 true,
-				Conditions:            conds,
-				DeploymentName:        deploymentName,
-				SecretRef:             secretRefNsName,
-				PerPortFrontendCaRefs: make(map[int32][]*types.NamespacedName),
+				Source:              gw,
+				NginxProxy:          np,
+				EffectiveNginxProxy: effectiveNginxProxy,
+				Valid:               true,
+				Conditions:          conds,
+				DeploymentName:      deploymentName,
+				SecretRef:           secretRefNsName,
+				FrontendTLSConfig:   &FrontendTLSConfig{},
 			}
 			gateway.Listeners = buildListeners(gateway, resourceResolver, refGrantResolver, protectedPorts)
 			builtGateways[gwNsName] = gateway

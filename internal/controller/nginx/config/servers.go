@@ -208,6 +208,10 @@ func createSSLServer(
 		ssl.ClientCertificate = generateCertBundleFileName(virtualServer.SSL.ClientCertBundleID)
 	}
 
+	if virtualServer.SSL.VerifyClient != "" {
+		ssl.VerifyClient = virtualServer.SSL.VerifyClient
+	}
+
 	server := http.Server{
 		ServerName: virtualServer.Hostname,
 		SSL:        ssl,

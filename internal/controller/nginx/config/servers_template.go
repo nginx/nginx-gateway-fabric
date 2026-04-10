@@ -81,7 +81,7 @@ server {
           {{- end }}
           {{- if $s.SSL.ClientCertificate }}
     ssl_client_certificate {{ $s.SSL.ClientCertificate }};
-    ssl_verify_client on;
+    ssl_verify_client {{ $s.SSL.VerifyClient }};
           {{- end }}
 
           {{- if $s.MisdirectedRequestVars }}

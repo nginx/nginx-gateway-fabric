@@ -471,8 +471,10 @@ func buildFrontendTLSCertBundles(
 			Name:      listener.Name,
 		}
 
+		gwFrontendTLSConfig := gateway.FrontendTLSConfig
+
 		perPortBundleData := make([]CertBundle, 0)
-		if perPortCaRefs, exists := gateway.PerPortFrontendCaRefs[listener.Source.Port]; exists {
+		if perPortCaRefs, exists := gwFrontendTLSConfig.PerPortFrontendCaRefs[listener.Source.Port]; exists {
 			for _, ref := range perPortCaRefs {
 				bundleData := getFrontendTLSCertBundleData(ref, gateway, secretsMap, caCertConfigMaps)
 				if len(bundleData) > 0 {
@@ -480,12 +482,18 @@ func buildFrontendTLSCertBundles(
 				}
 			}
 			if len(perPortBundleData) > 0 {
-				buildBundlesForSSLServers(sslServers, perPortBundleData, bundles, listener.Source.Port, listenerRef)
+				id := buildBundlesForSSLServers(perPortBundleData, bundles, listenerRef)
+				buildClientConfigForSSLServers(
+					id,
+					sslServers,
+					listener.Source.Port,
+					gwFrontendTLSConfig.PortModes[listener.Source.Port],
+				)
 			}
 		} else if gateway.Source.Spec.TLS.Frontend.Default.Validation != nil &&
 			gateway.Source.Spec.TLS.Frontend.Default.Validation.CACertificateRefs != nil {
 			defaultBundleData := make([]CertBundle, 0)
-			if defaultCaRefs := gateway.DefaultFrontendCaRefs; len(defaultCaRefs) > 0 {
+			if defaultCaRefs := gwFrontendTLSConfig.DefaultFrontendCaRefs; len(defaultCaRefs) > 0 {
 				for _, ref := range defaultCaRefs {
 					bundleData := getFrontendTLSCertBundleData(ref, gateway, secretsMap, caCertConfigMaps)
 					if len(bundleData) > 0 {
@@ -493,7 +501,13 @@ func buildFrontendTLSCertBundles(
 					}
 				}
 				if len(defaultBundleData) > 0 {
-					buildBundlesForSSLServers(sslServers, defaultBundleData, bundles, listener.Source.Port, listenerRef)
+					id := buildBundlesForSSLServers(defaultBundleData, bundles, listenerRef)
+					buildClientConfigForSSLServers(
+						id,
+						sslServers,
+						listener.Source.Port,
+						gwFrontendTLSConfig.PortModes[listener.Source.Port],
+					)
 				}
 			}
 		}
@@ -544,12 +558,10 @@ func getFrontendTLSCertBundleData(
 }
 
 func buildBundlesForSSLServers(
-	sslServers []VirtualServer,
 	bundleData []CertBundle,
 	bundles map[CertBundleID]CertBundle,
-	listenerPort int32,
 	listenerRef types.NamespacedName,
-) {
+) CertBundleID {
 	// Generate the cert bundle ID for this listener
 	id := generateCertBundleID(listenerRef)
 
@@ -558,6 +570,23 @@ func buildBundlesForSSLServers(
 		for _, v := range bundleData {
 			bundles[id] = append(bundles[id], v...)
 		}
+	}
+	return id
+}
+
+func buildClientConfigForSSLServers(
+	id CertBundleID,
+	sslServers []VirtualServer,
+	listenerPort int32,
+	frontendValidationMode v1.FrontendValidationModeType,
+) {
+	var veryifyClient string
+
+	switch frontendValidationMode {
+	case v1.AllowValidOnly:
+		veryifyClient = SSLVerifyClientOn
+	case v1.AllowInsecureFallback:
+		veryifyClient = SSLVerifyClientOptNoCa
 	}
 
 	// Assign the bundle ID to all SSL servers on this listener's port
@@ -568,6 +597,7 @@ func buildBundlesForSSLServers(
 		}
 		if sslServers[i].Port == listenerPort && sslServers[i].SSL.ClientCertBundleID == "" {
 			sslServers[i].SSL.ClientCertBundleID = id
+			sslServers[i].SSL.VerifyClient = veryifyClient
 		}
 	}
 }

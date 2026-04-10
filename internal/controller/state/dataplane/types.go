@@ -25,6 +25,11 @@ const (
 	PathTypeRegularExpression PathType = "regularExpression"
 )
 
+const (
+	SSLVerifyClientOn      = "on"
+	SSLVerifyClientOptNoCa = "optional_no_ca"
+)
+
 // Configuration is an intermediate representation of dataplane configuration.
 type Configuration struct {
 	// CertBundles holds all unique Certificate Bundles, including CA certs and CRL files.
@@ -188,6 +193,7 @@ type SSL struct {
 	Protocols           string
 	Ciphers             string
 	ClientCertBundleID  CertBundleID
+	VerifyClient        string
 	PreferServerCiphers bool
 }
 

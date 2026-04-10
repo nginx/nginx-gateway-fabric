@@ -737,6 +737,12 @@ func createFrontendTLSCaCertReferenceResolver(
 	resourceResolver resolver.Resolver,
 	refGrantResolver *referenceGrantResolver,
 ) listenerFrontendTLSCaCertReferenceResolver {
+	frontendTLSConfig := &FrontendTLSConfig{
+		DefaultFrontendCaRefs: make([]*types.NamespacedName, 0),
+		PerPortFrontendCaRefs: make(map[int32][]*types.NamespacedName),
+		PortModes:             make(map[int32]v1.FrontendValidationModeType),
+	}
+
 	return func(l *Listener, gw *Gateway) {
 		if gw.Source.Spec.TLS == nil || gw.Source.Spec.TLS.Frontend == nil || l.Source.TLS == nil {
 			return
@@ -745,33 +751,31 @@ func createFrontendTLSCaCertReferenceResolver(
 		frontend := gw.Source.Spec.TLS.Frontend
 
 		if frontend.Default.Validation != nil && len(frontend.Default.Validation.CACertificateRefs) > 0 {
-			defaultCertRefs := frontend.Default.Validation.CACertificateRefs
-			defaultFieldPath := field.NewPath("tls", "frontend", "default", "validation")
-			defaultConds, refs := getGatewayFrontendTLSCaRefs(
-				gw.Source,
-				defaultFieldPath,
-				resourceResolver,
-				refGrantResolver,
-				defaultCertRefs,
-			)
-			l.Conditions = append(l.Conditions, defaultConds...)
-			gw.DefaultFrontendCaRefs = refs
+			if len(frontendTLSConfig.DefaultFrontendCaRefs) == 0 {
+				defaultCertRefs := frontend.Default.Validation.CACertificateRefs
+				defaultFieldPath := field.NewPath("tls", "frontend", "default", "validation")
+				defaultConds, refs := getGatewayFrontendTLSCaRefs(
+					gw.Source,
+					defaultFieldPath,
+					resourceResolver,
+					refGrantResolver,
+					defaultCertRefs,
+				)
+				l.Conditions = append(l.Conditions, defaultConds...)
+				frontendTLSConfig.DefaultFrontendCaRefs = refs
+			}
+			frontendTLSConfig.PortModes[l.Source.Port] = frontend.Default.Validation.Mode
 		}
 
 		if len(frontend.PerPort) > 0 {
-			perPortCertRefs := make(map[int32][]v1.ObjectReference)
-
+			perPortFieldPath := field.NewPath("tls", "frontend", "perPort").Child("validation")
 			for _, port := range frontend.PerPort {
 				if port.TLS.Validation == nil || len(port.TLS.Validation.CACertificateRefs) == 0 {
 					continue
 				}
-				if _, exists := perPortCertRefs[port.Port]; !exists {
-					perPortCertRefs[port.Port] = port.TLS.Validation.CACertificateRefs
-				}
-			}
-			perPortFieldPath := field.NewPath("tls", "frontend", "perPort").Child("validation")
-			for _, listener := range gw.Source.Spec.Listeners {
-				if portCertRefs, foundPort := perPortCertRefs[listener.Port]; foundPort {
+				if port.Port == l.Source.Port {
+					portCertRefs := port.TLS.Validation.CACertificateRefs
+					portValidationMode := port.TLS.Validation.Mode
 					perPortConds, refs := getGatewayFrontendTLSCaRefs(
 						gw.Source,
 						perPortFieldPath,
@@ -780,10 +784,13 @@ func createFrontendTLSCaCertReferenceResolver(
 						portCertRefs,
 					)
 					l.Conditions = append(l.Conditions, perPortConds...)
-					gw.PerPortFrontendCaRefs[listener.Port] = refs
+					frontendTLSConfig.PortModes[l.Source.Port] = portValidationMode
+					frontendTLSConfig.PerPortFrontendCaRefs[l.Source.Port] = refs
+					break
 				}
 			}
 		}
+		gw.FrontendTLSConfig = frontendTLSConfig
 	}
 }
 
