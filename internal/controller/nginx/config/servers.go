@@ -195,19 +195,25 @@ func createSSLServer(
 
 	locs, matchPairs, grpc := createLocations(&virtualServer, serverID, generator, keepAliveCheck)
 
+	ssl := &http.SSL{
+		Certificate:         generatePEMFileName(virtualServer.SSL.KeyPairID),
+		CertificateKey:      generatePEMFileName(virtualServer.SSL.KeyPairID),
+		Protocols:           virtualServer.SSL.Protocols,
+		Ciphers:             virtualServer.SSL.Ciphers,
+		PreferServerCiphers: virtualServer.SSL.PreferServerCiphers,
+	}
+
+	// Only set ClientCertificate if a valid bundle ID exists
+	if virtualServer.SSL.ClientCertBundleID != "" {
+		ssl.ClientCertificate = generateCertBundleFileName(virtualServer.SSL.ClientCertBundleID)
+	}
+
 	server := http.Server{
 		ServerName: virtualServer.Hostname,
-		SSL: &http.SSL{
-			Certificate:         generatePEMFileName(virtualServer.SSL.KeyPairID),
-			CertificateKey:      generatePEMFileName(virtualServer.SSL.KeyPairID),
-			Protocols:           virtualServer.SSL.Protocols,
-			Ciphers:             virtualServer.SSL.Ciphers,
-			PreferServerCiphers: virtualServer.SSL.PreferServerCiphers,
-			ClientCertificate:   generateCertBundleFileName(virtualServer.SSL.ClientCertBundleID),
-		},
-		Locations: locs,
-		GRPC:      grpc,
-		Listen:    listen,
+		SSL:        ssl,
+		Locations:  locs,
+		GRPC:       grpc,
+		Listen:     listen,
 	}
 
 	if !disableSNIHostValidation {

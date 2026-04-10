@@ -1121,7 +1121,12 @@ func TestOverlappingTLSConfigCondition(t *testing.T) {
 			refGrantResolver := newReferenceGrantResolver(nil)
 
 			// Build listeners
-			listeners := buildListeners(test.gateway, &resolverfakes.FakeResolver{}, refGrantResolver, protectedPorts)
+			listeners := buildListeners(
+				&Gateway{Source: test.gateway},
+				&resolverfakes.FakeResolver{},
+				refGrantResolver,
+				protectedPorts,
+			)
 
 			if test.expectedCondition {
 				// Check that the expected listeners have the OverlappingTLSConfig condition

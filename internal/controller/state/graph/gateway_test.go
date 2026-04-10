@@ -1791,7 +1791,7 @@ func TestValidateGatewayParametersRef(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			conds, _, _, _ := validateGatewayRefs(test.gw, test.np, nil, nil)
+			conds, _ := validateGatewayRefs(test.gw, test.np, nil, nil)
 			g.Expect(conds).To(BeEquivalentTo(test.expConds))
 		})
 	}
@@ -2595,3 +2595,72 @@ func TestGateway_BackendTLSConfig(t *testing.T) {
 		})
 	}
 }
+
+// func TestValidateGatewayRefs_FrontendConfigMapMissingCAKey(t *testing.T) {
+// 	t.Parallel()
+
+// 	gw := &v1.Gateway{
+// 		ObjectMeta: metav1.ObjectMeta{
+// 			Namespace: "test",
+// 			Name:      "gateway",
+// 		},
+// 		Spec: v1.GatewaySpec{
+// 			Listeners: []v1.Listener{{
+// 				Name:     "https",
+// 				Port:     443,
+// 				Protocol: v1.HTTPSProtocolType,
+// 			}},
+// 			TLS: &v1.GatewayTLSConfig{
+// 				Frontend: &v1.FrontendTLSConfig{
+// 					Default: v1.TLSConfig{
+// 						Validation: &v1.FrontendTLSValidation{
+// 							CACertificateRefs: []v1.ObjectReference{{
+// 								Group:     v1.Group(""),
+// 								Kind:      v1.Kind(kinds.ConfigMap),
+// 								Name:      v1.ObjectName("cm-missing-ca"),
+// 								Namespace: helpers.GetPointer(v1.Namespace("test")),
+// 							}},
+// 						},
+// 					},
+// 				},
+// 			},
+// 		},
+// 	}
+
+// 	cm := &apiv1.ConfigMap{
+// 		ObjectMeta: metav1.ObjectMeta{
+// 			Namespace: "test",
+// 			Name:      "cm-missing-ca",
+// 		},
+// 		Data: map[string]string{
+// 			"not-ca": "value",
+// 		},
+// 	}
+
+// 	resourceResolver := resolver.NewResourceResolver(
+// 		map[resolver.ResourceKey]client.Object{
+// 			{
+// 				ResourceType:   resolver.ResourceTypeConfigMap,
+// 				NamespacedName: client.ObjectKeyFromObject(cm),
+// 			}: cm,
+// 		},
+// 	)
+
+// 	conds, _, defaultRefs, _ := validateGatewayRefs(gw, nil, resourceResolver, newReferenceGrantResolver(nil))
+
+// 	g := NewWithT(t)
+// 	g.Expect(defaultRefs).To(BeNil())
+
+// 	hasInvalidCARef := false
+// 	for _, cond := range conds {
+// 		if cond.Type == string(v1.ListenerConditionResolvedRefs) &&
+// 			cond.Status == metav1.ConditionFalse &&
+// 			cond.Reason == string(v1.ListenerReasonInvalidCACertificateRef) &&
+// 			strings.Contains(cond.Message, "ca.crt") {
+// 			hasInvalidCARef = true
+// 			break
+// 		}
+// 	}
+
+// 	g.Expect(hasInvalidCARef).To(BeTrue(), "expected InvalidCACertificateRef condition for ConfigMap missing ca.crt")
+// }

@@ -48,6 +48,14 @@ func toSecret(nsname types.NamespacedName) toResource {
 	}
 }
 
+func toConfigMap(nsname types.NamespacedName) toResource {
+	return toResource{
+		kind:      "ConfigMap",
+		name:      nsname.Name,
+		namespace: nsname.Namespace,
+	}
+}
+
 func toService(nsname types.NamespacedName) toResource {
 	return toResource{
 		kind:      kinds.Service,

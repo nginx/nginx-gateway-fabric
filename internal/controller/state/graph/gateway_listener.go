@@ -69,18 +69,19 @@ type Listener struct {
 }
 
 func buildListeners(
-	gw *v1.Gateway,
+	gateway *Gateway,
 	resourceResolver resolver.Resolver,
 	refGrantResolver *referenceGrantResolver,
 	protectedPorts ProtectedPorts,
 ) []*Listener {
+	gw := gateway.Source
 	listeners := make([]*Listener, 0, len(gw.Spec.Listeners))
 
 	listenerFactory := newListenerConfiguratorFactory(gw, resourceResolver, refGrantResolver, protectedPorts)
 
 	for _, gl := range gw.Spec.Listeners {
 		configurator := listenerFactory.getConfiguratorForListener(gl)
-		listeners = append(listeners, configurator.configure(gl, client.ObjectKeyFromObject(gw)))
+		listeners = append(listeners, configurator.configure(gl, client.ObjectKeyFromObject(gw), gateway))
 	}
 
 	return listeners
@@ -157,6 +158,9 @@ func newListenerConfiguratorFactory(
 			externalReferenceResolvers: []listenerExternalReferenceResolver{
 				createExternalReferencesForTLSSecretsResolver(gw.Namespace, resourceResolver, refGrantResolver),
 			},
+			frontendTLSCaCertreferenceResolvers: []listenerFrontendTLSCaCertReferenceResolver{
+				createFrontendTLSCaCertReferenceResolver(resourceResolver, refGrantResolver),
+			},
 		},
 		tls: &listenerConfigurator{
 			validators: []listenerValidator{
@@ -169,7 +173,8 @@ func newListenerConfiguratorFactory(
 				sharedPortConflictResolver,
 				sharedOverlappingTLSConfigResolver,
 			},
-			externalReferenceResolvers: []listenerExternalReferenceResolver{},
+			externalReferenceResolvers:          []listenerExternalReferenceResolver{},
+			frontendTLSCaCertreferenceResolvers: []listenerFrontendTLSCaCertReferenceResolver{},
 		},
 		tcp: &listenerConfigurator{
 			validators: []listenerValidator{
@@ -207,6 +212,11 @@ type listenerConflictResolver func(listener *Listener)
 // the resolver will make the listener invalid and add appropriate conditions.
 type listenerExternalReferenceResolver func(listener *Listener)
 
+// listenerFrontendTLSCaCertReferenceResolver resolves the CA certificate references
+// for TLS listeners configured for frontend TLS.
+// If the reference is not resolvable, the resolver will make the listener invalid and add appropriate conditions.
+type listenerFrontendTLSCaCertReferenceResolver func(listener *Listener, gw *Gateway)
+
 // listenerConfigurator is responsible for configuring a listener.
 // validators, conflictResolvers, externalReferenceResolvers generate conditions for invalid fields of the listener.
 // Because the Gateway status includes a status field for each listener, the messages in those conditions
@@ -218,9 +228,11 @@ type listenerConfigurator struct {
 	conflictResolvers []listenerConflictResolver
 	// externalReferenceResolvers can depend on validators - they will only be executed if all validators pass.
 	externalReferenceResolvers []listenerExternalReferenceResolver
+	// frontendTLSCaCertreferenceResolvers can depend on validators - they will only be executed if all validators pass.
+	frontendTLSCaCertreferenceResolvers []listenerFrontendTLSCaCertReferenceResolver
 }
 
-func (c *listenerConfigurator) configure(listener v1.Listener, gwNSName types.NamespacedName) *Listener {
+func (c *listenerConfigurator) configure(listener v1.Listener, gwNSName types.NamespacedName, gw *Gateway) *Listener {
 	var conds []conditions.Condition
 
 	attachable := true
@@ -273,6 +285,10 @@ func (c *listenerConfigurator) configure(listener v1.Listener, gwNSName types.Na
 
 	for _, externalReferenceResolver := range c.externalReferenceResolvers {
 		externalReferenceResolver(l)
+	}
+
+	for _, frontendTLSResolver := range c.frontendTLSCaCertreferenceResolvers {
+		frontendTLSResolver(l, gw)
 	}
 
 	return l
@@ -713,6 +729,60 @@ func createExternalReferencesForTLSSecretsResolver(
 			l.Valid = false
 		} else {
 			l.ResolvedSecret = &certRefNsName
+		}
+	}
+}
+
+func createFrontendTLSCaCertReferenceResolver(
+	resourceResolver resolver.Resolver,
+	refGrantResolver *referenceGrantResolver,
+) listenerFrontendTLSCaCertReferenceResolver {
+	return func(l *Listener, gw *Gateway) {
+		if gw.Source.Spec.TLS == nil || gw.Source.Spec.TLS.Frontend == nil || l.Source.TLS == nil {
+			return
+		}
+
+		frontend := gw.Source.Spec.TLS.Frontend
+
+		if frontend.Default.Validation != nil && len(frontend.Default.Validation.CACertificateRefs) > 0 {
+			defaultCertRefs := frontend.Default.Validation.CACertificateRefs
+			defaultFieldPath := field.NewPath("tls", "frontend", "default", "validation")
+			defaultConds, refs := getGatewayFrontendTLSCaRefs(
+				gw.Source,
+				defaultFieldPath,
+				resourceResolver,
+				refGrantResolver,
+				defaultCertRefs,
+			)
+			l.Conditions = append(l.Conditions, defaultConds...)
+			gw.DefaultFrontendCaRefs = refs
+		}
+
+		if len(frontend.PerPort) > 0 {
+			perPortCertRefs := make(map[int32][]v1.ObjectReference)
+
+			for _, port := range frontend.PerPort {
+				if port.TLS.Validation == nil || len(port.TLS.Validation.CACertificateRefs) == 0 {
+					continue
+				}
+				if _, exists := perPortCertRefs[port.Port]; !exists {
+					perPortCertRefs[port.Port] = port.TLS.Validation.CACertificateRefs
+				}
+			}
+			perPortFieldPath := field.NewPath("tls", "frontend", "perPort").Child("validation")
+			for _, listener := range gw.Source.Spec.Listeners {
+				if portCertRefs, foundPort := perPortCertRefs[listener.Port]; foundPort {
+					perPortConds, refs := getGatewayFrontendTLSCaRefs(
+						gw.Source,
+						perPortFieldPath,
+						resourceResolver,
+						refGrantResolver,
+						portCertRefs,
+					)
+					l.Conditions = append(l.Conditions, perPortConds...)
+					gw.PerPortFrontendCaRefs[listener.Port] = refs
+				}
+			}
 		}
 	}
 }

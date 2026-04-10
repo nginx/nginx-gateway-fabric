@@ -970,6 +970,24 @@ func NewGatewayNotProgrammedInvalid(msg string) Condition {
 	}
 }
 
+func NewListenerInvalidCaCertificateRef(msg string) Condition {
+	return Condition{
+		Type:    string(v1.ListenerConditionResolvedRefs),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(v1.ListenerReasonInvalidCACertificateRef),
+		Message: msg,
+	}
+}
+
+func NewListenerInvalidCaCertificateKind(msg string) Condition {
+	return Condition{
+		Type:    string(v1.ListenerConditionResolvedRefs),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(v1.ListenerReasonInvalidCACertificateKind),
+		Message: msg,
+	}
+}
+
 // NewNginxGatewayValid returns a Condition that indicates that the NginxGateway config is valid.
 func NewNginxGatewayValid() Condition {
 	return Condition{
