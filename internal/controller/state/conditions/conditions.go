@@ -587,9 +587,16 @@ func NewRouteResolvedRefsInvalidFilter(msg string) Condition {
 // the NoConflicts condition is excluded to avoid conflicting condition states.
 func NewDefaultListenerConditions(existingConditions []Condition) []Condition {
 	defaultConds := []Condition{
-		NewListenerAccepted(),
 		NewListenerProgrammed(),
-		NewListenerResolvedRefs(),
+	}
+
+	if !hasNotAcceptedListener(existingConditions) {
+		defaultConds = append(defaultConds, NewListenerAccepted())
+	}
+
+	// Only add ResolvedRefs=True if there are no existing ResolvedRefs=False conditions
+	if !hasResolvedRefsFailure(existingConditions) {
+		defaultConds = append(defaultConds, NewListenerResolvedRefs())
 	}
 
 	// Only add NoConflicts condition if there are no existing conflict-related conditions
@@ -598,6 +605,26 @@ func NewDefaultListenerConditions(existingConditions []Condition) []Condition {
 	}
 
 	return defaultConds
+}
+
+// hasNotAcceptedListener checks if the Listener has an Accepted=False condition.
+func hasNotAcceptedListener(conditions []Condition) bool {
+	for _, cond := range conditions {
+		if cond.Type == string(v1.ListenerConditionAccepted) && cond.Status == metav1.ConditionFalse {
+			return true
+		}
+	}
+	return false
+}
+
+// hasResolvedRefsFailure checks if the Listener has any ResolvedRefs=False conditions.
+func hasResolvedRefsFailure(conditions []Condition) bool {
+	for _, cond := range conditions {
+		if cond.Type == string(v1.ListenerConditionResolvedRefs) && cond.Status == metav1.ConditionFalse {
+			return true
+		}
+	}
+	return false
 }
 
 // hasConflictConditions checks if the Listener has any conflict-related conditions.
@@ -970,6 +997,7 @@ func NewGatewayNotProgrammedInvalid(msg string) Condition {
 	}
 }
 
+// TODO: Comments.
 func NewListenerInvalidCaCertificateRef(msg string) Condition {
 	return Condition{
 		Type:    string(v1.ListenerConditionResolvedRefs),
@@ -979,11 +1007,21 @@ func NewListenerInvalidCaCertificateRef(msg string) Condition {
 	}
 }
 
+// TODO: Comments.
 func NewListenerInvalidCaCertificateKind(msg string) Condition {
 	return Condition{
 		Type:    string(v1.ListenerConditionResolvedRefs),
 		Status:  metav1.ConditionFalse,
 		Reason:  string(v1.ListenerReasonInvalidCACertificateKind),
+		Message: msg,
+	}
+}
+
+func NewListenerInvalidNoValidCACertificate(msg string) Condition {
+	return Condition{
+		Type:    string(v1.ListenerConditionAccepted),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(v1.ListenerReasonNoValidCACertificate),
 		Message: msg,
 	}
 }

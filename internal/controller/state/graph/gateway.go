@@ -325,6 +325,7 @@ func validateGateway(
 //nolint:gocyclo
 func getGatewayFrontendTLSCaRefs(
 	gw *v1.Gateway,
+	l *Listener,
 	path *field.Path,
 	resourceResolver resolver.Resolver,
 	refGrantResolver *referenceGrantResolver,
@@ -399,9 +400,18 @@ func getGatewayFrontendTLSCaRefs(
 		caRefs = append(caRefs, certNsName)
 	}
 
+	if len(conds) > 0 && len(conds) == len(certRefs) {
+		allInvalidCond := []conditions.Condition{}
+		msg := "All frontend TLS CA certificate refs are invalid for this listener"
+		allInvalidCond = append(allInvalidCond, conditions.NewListenerInvalidNoValidCACertificate(msg))
+		l.Valid = false
+		return allInvalidCond, nil
+	}
+
 	if len(caRefs) == 0 {
 		return conds, nil
 	}
+
 	return conds, caRefs
 }
 

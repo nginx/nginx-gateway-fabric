@@ -750,23 +750,6 @@ func createFrontendTLSCaCertReferenceResolver(
 
 		frontend := gw.Source.Spec.TLS.Frontend
 
-		if frontend.Default.Validation != nil && len(frontend.Default.Validation.CACertificateRefs) > 0 {
-			if len(frontendTLSConfig.DefaultFrontendCaRefs) == 0 {
-				defaultCertRefs := frontend.Default.Validation.CACertificateRefs
-				defaultFieldPath := field.NewPath("tls", "frontend", "default", "validation")
-				defaultConds, refs := getGatewayFrontendTLSCaRefs(
-					gw.Source,
-					defaultFieldPath,
-					resourceResolver,
-					refGrantResolver,
-					defaultCertRefs,
-				)
-				l.Conditions = append(l.Conditions, defaultConds...)
-				frontendTLSConfig.DefaultFrontendCaRefs = refs
-			}
-			frontendTLSConfig.PortModes[l.Source.Port] = frontend.Default.Validation.Mode
-		}
-
 		if len(frontend.PerPort) > 0 {
 			perPortFieldPath := field.NewPath("tls", "frontend", "perPort").Child("validation")
 			for _, port := range frontend.PerPort {
@@ -778,6 +761,7 @@ func createFrontendTLSCaCertReferenceResolver(
 					portValidationMode := port.TLS.Validation.Mode
 					perPortConds, refs := getGatewayFrontendTLSCaRefs(
 						gw.Source,
+						l,
 						perPortFieldPath,
 						resourceResolver,
 						refGrantResolver,
@@ -790,6 +774,26 @@ func createFrontendTLSCaCertReferenceResolver(
 				}
 			}
 		}
+
+		if frontend.Default.Validation != nil && len(frontend.Default.Validation.CACertificateRefs) > 0 {
+			_, isPerPortRef := frontendTLSConfig.PerPortFrontendCaRefs[l.Source.Port]
+			if len(frontendTLSConfig.DefaultFrontendCaRefs) == 0 && !isPerPortRef {
+				defaultCertRefs := frontend.Default.Validation.CACertificateRefs
+				defaultFieldPath := field.NewPath("tls", "frontend", "default", "validation")
+				defaultConds, refs := getGatewayFrontendTLSCaRefs(
+					gw.Source,
+					l,
+					defaultFieldPath,
+					resourceResolver,
+					refGrantResolver,
+					defaultCertRefs,
+				)
+				l.Conditions = append(l.Conditions, defaultConds...)
+				frontendTLSConfig.DefaultFrontendCaRefs = refs
+			}
+			frontendTLSConfig.PortModes[l.Source.Port] = frontend.Default.Validation.Mode
+		}
+
 		gw.FrontendTLSConfig = frontendTLSConfig
 	}
 }
