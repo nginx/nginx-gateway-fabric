@@ -756,67 +756,6 @@ func TestWAFGatewayBindingPolicyLogSourceMutualExclusion(t *testing.T) {
 	}
 }
 
-func TestWAFGatewayBindingPolicyNIMLogProfileName(t *testing.T) {
-	t.Parallel()
-	k8sClient := getKubernetesClient(t)
-
-	logURL := "https://nim.example.com"
-
-	tests := []struct {
-		spec       ngfAPIv1alpha1.WAFGatewayBindingPolicySpec
-		name       string
-		wantErrors []string
-	}{
-		{
-			name: "nimSource with profileName set is valid",
-			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
-				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
-				SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
-					{
-						LogSource: ngfAPIv1alpha1.LogSource{
-							NIMSource: &ngfAPIv1alpha1.NIMLogProfileBundleSource{
-								URL:         logURL,
-								ProfileName: helpers.GetPointer("my-profile"),
-							},
-						},
-						Destination: ngfAPIv1alpha1.SecurityLogDestination{Type: ngfAPIv1alpha1.SecurityLogDestinationTypeStderr},
-					},
-				},
-			},
-		},
-		{
-			name:       "nimSource with nil profileName is invalid",
-			wantErrors: []string{"profileName is required"},
-			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
-				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
-				SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
-					{
-						LogSource: ngfAPIv1alpha1.LogSource{
-							NIMSource: &ngfAPIv1alpha1.NIMLogProfileBundleSource{
-								URL:         logURL,
-								ProfileName: nil,
-							},
-						},
-						Destination: ngfAPIv1alpha1.SecurityLogDestination{Type: ngfAPIv1alpha1.SecurityLogDestinationTypeStderr},
-					},
-				},
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			for i := range tt.spec.TargetRefs {
-				if tt.spec.TargetRefs[i].Name == "" {
-					tt.spec.TargetRefs[i].Name = gatewayv1.ObjectName(uniqueResourceName(testTargetRefName))
-				}
-			}
-			validateCrd(t, tt.wantErrors, newWAFGatewayBindingPolicy(t, tt.spec), k8sClient)
-		})
-	}
-}
-
 func TestWAFGatewayBindingPolicyPolicySource(t *testing.T) {
 	t.Parallel()
 	k8sClient := getKubernetesClient(t)
