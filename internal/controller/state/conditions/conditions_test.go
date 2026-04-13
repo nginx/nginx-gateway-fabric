@@ -153,26 +153,76 @@ func TestNewDefaultListenerConditions(t *testing.T) {
 	tests := []struct {
 		name               string
 		existingConditions []Condition
+		expectAccepted     bool
 		expectResolvedRefs bool
+		expectNoConflicts  bool
 	}{
 		{
-			name:               "no existing conditions includes ResolvedRefs",
+			name:               "no existing conditions includes all defaults",
 			existingConditions: nil,
+			expectAccepted:     true,
 			expectResolvedRefs: true,
+			expectNoConflicts:  true,
 		},
 		{
-			name: "existing ResolvedRefs condition (InvalidCertificateRef) is preserved",
+			name: "existing ResolvedRefs=False (InvalidCertificateRef) suppresses default ResolvedRefs",
 			existingConditions: []Condition{
 				NewListenerUnresolvedCertificateRef("some cert ref error", string(v1.ListenerReasonInvalidCertificateRef)),
 			},
+			expectAccepted:     true,
 			expectResolvedRefs: false,
+			expectNoConflicts:  true,
 		},
 		{
-			name: "existing ResolvedRefs condition (RefNotPermitted) is preserved",
+			name: "existing ResolvedRefs=False (RefNotPermitted) suppresses default ResolvedRefs",
 			existingConditions: []Condition{
 				NewListenerUnresolvedCertificateRef("some ref not permitted error", string(v1.ListenerReasonRefNotPermitted)),
 			},
+			expectAccepted:     true,
 			expectResolvedRefs: false,
+			expectNoConflicts:  true,
+		},
+		{
+			name: "existing Accepted=False suppresses default Accepted",
+			existingConditions: []Condition{
+				NewListenerInvalidNoValidCACertificate("no valid CA certificate"),
+			},
+			expectAccepted:     false,
+			expectResolvedRefs: true,
+			expectNoConflicts:  true,
+		},
+		{
+			name: "existing Conflicted condition suppresses default NoConflicts",
+			existingConditions: []Condition{
+				{
+					Type:   string(v1.ListenerConditionConflicted),
+					Status: metav1.ConditionTrue,
+					Reason: "SomeConflict",
+				},
+			},
+			expectAccepted:     true,
+			expectResolvedRefs: true,
+			expectNoConflicts:  false,
+		},
+		{
+			name: "existing OverlappingTLSConfig condition suppresses default NoConflicts",
+			existingConditions: []Condition{
+				NewListenerOverlappingTLSConfig(v1.ListenerReasonHostnameConflict, "overlapping TLS"),
+			},
+			expectAccepted:     true,
+			expectResolvedRefs: true,
+			expectNoConflicts:  false,
+		},
+		{
+			name: "multiple existing failure conditions suppress corresponding defaults",
+			existingConditions: []Condition{
+				NewListenerInvalidNoValidCACertificate("no valid CA certificate"),
+				NewListenerInvalidCaCertificateRef("invalid CA cert ref"),
+				NewListenerOverlappingTLSConfig(v1.ListenerReasonHostnameConflict, "overlapping TLS"),
+			},
+			expectAccepted:     false,
+			expectResolvedRefs: false,
+			expectNoConflicts:  false,
 		},
 	}
 
@@ -183,13 +233,59 @@ func TestNewDefaultListenerConditions(t *testing.T) {
 
 			result := NewDefaultListenerConditions(test.existingConditions)
 
+			hasAccepted := false
 			hasResolvedRefs := false
+			hasNoConflicts := false
 			for _, c := range result {
-				if c.Type == string(v1.ListenerConditionResolvedRefs) {
+				switch c.Type {
+				case string(v1.ListenerConditionAccepted):
+					hasAccepted = true
+				case string(v1.ListenerConditionResolvedRefs):
 					hasResolvedRefs = true
+				case string(v1.ListenerConditionConflicted):
+					hasNoConflicts = true
 				}
 			}
+			g.Expect(hasAccepted).To(Equal(test.expectAccepted))
 			g.Expect(hasResolvedRefs).To(Equal(test.expectResolvedRefs))
+			g.Expect(hasNoConflicts).To(Equal(test.expectNoConflicts))
 		})
 	}
+}
+
+func TestNewListenerCACertificateConditions(t *testing.T) {
+	t.Parallel()
+
+	t.Run("NewListenerInvalidCaCertificateRef", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+
+		cond := NewListenerInvalidCaCertificateRef("invalid CA cert ref")
+		g.Expect(cond.Type).To(Equal(string(v1.ListenerConditionResolvedRefs)))
+		g.Expect(cond.Status).To(Equal(metav1.ConditionFalse))
+		g.Expect(cond.Reason).To(Equal(string(v1.ListenerReasonInvalidCACertificateRef)))
+		g.Expect(cond.Message).To(Equal("invalid CA cert ref"))
+	})
+
+	t.Run("NewListenerInvalidCaCertificateKind", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+
+		cond := NewListenerInvalidCaCertificateKind("invalid CA cert kind")
+		g.Expect(cond.Type).To(Equal(string(v1.ListenerConditionResolvedRefs)))
+		g.Expect(cond.Status).To(Equal(metav1.ConditionFalse))
+		g.Expect(cond.Reason).To(Equal(string(v1.ListenerReasonInvalidCACertificateKind)))
+		g.Expect(cond.Message).To(Equal("invalid CA cert kind"))
+	})
+
+	t.Run("NewListenerInvalidNoValidCACertificate", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+
+		cond := NewListenerInvalidNoValidCACertificate("all CA certs invalid")
+		g.Expect(cond.Type).To(Equal(string(v1.ListenerConditionAccepted)))
+		g.Expect(cond.Status).To(Equal(metav1.ConditionFalse))
+		g.Expect(cond.Reason).To(Equal(string(v1.ListenerReasonNoValidCACertificate)))
+		g.Expect(cond.Message).To(Equal("all CA certs invalid"))
+	})
 }

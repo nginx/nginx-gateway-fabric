@@ -6766,3 +6766,47 @@ func TestExistingExactPathSet(t *testing.T) {
 		})
 	}
 }
+
+func TestBuildHTTPSSLFrontendTLS(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name                      string
+		ssl                       *dataplane.SSL
+		expectedClientCertificate string
+		expectedVerifyClient      string
+	}{
+		{
+			name: "frontend TLS disabled by default",
+			ssl: &dataplane.SSL{
+				KeyPairIDs: []dataplane.SSLKeyPairID{"test-keypair"},
+			},
+			expectedClientCertificate: "",
+			expectedVerifyClient:      "",
+		},
+		{
+			name: "frontend TLS client certificate verification enabled",
+			ssl: &dataplane.SSL{
+				KeyPairIDs:         []dataplane.SSLKeyPairID{"test-keypair"},
+				ClientCertBundleID: dataplane.CertBundleID("test-ca-bundle"),
+				VerifyClient:       "on",
+			},
+			expectedClientCertificate: generateCertBundleFileName(dataplane.CertBundleID("test-ca-bundle")),
+			expectedVerifyClient:      "on",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			result := buildHTTPSSL(test.ssl)
+
+			g.Expect(result.ClientCertificate).To(Equal(test.expectedClientCertificate))
+			g.Expect(result.VerifyClient).To(Equal(test.expectedVerifyClient))
+			g.Expect(result.Certificates).To(Equal([]string{generatePEMFileName(dataplane.SSLKeyPairID("test-keypair"))}))
+			g.Expect(result.CertificateKeys).To(Equal([]string{generatePEMFileName(dataplane.SSLKeyPairID("test-keypair"))}))
+		})
+	}
+}
