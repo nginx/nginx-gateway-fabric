@@ -660,7 +660,7 @@ func TestWAFGatewayBindingPolicyLogSourceMutualExclusion(t *testing.T) {
 						LogSource: ngfAPIv1alpha1.LogSource{
 							NIMSource: &ngfAPIv1alpha1.NIMLogProfileBundleSource{
 								URL:         logURL,
-								ProfileName: &profileName,
+								ProfileName: profileName,
 							},
 						},
 						Destination: ngfAPIv1alpha1.SecurityLogDestination{Type: ngfAPIv1alpha1.SecurityLogDestinationTypeStderr},
@@ -704,7 +704,7 @@ func TestWAFGatewayBindingPolicyLogSourceMutualExclusion(t *testing.T) {
 				SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
 					{
 						LogSource: ngfAPIv1alpha1.LogSource{
-							NIMSource:      &ngfAPIv1alpha1.NIMLogProfileBundleSource{URL: logURL, ProfileName: &profileName},
+							NIMSource:      &ngfAPIv1alpha1.NIMLogProfileBundleSource{URL: logURL, ProfileName: profileName},
 							DefaultProfile: &defaultProfile,
 						},
 						Destination: ngfAPIv1alpha1.SecurityLogDestination{Type: ngfAPIv1alpha1.SecurityLogDestinationTypeStderr},
@@ -721,7 +721,7 @@ func TestWAFGatewayBindingPolicyLogSourceMutualExclusion(t *testing.T) {
 					{
 						LogSource: ngfAPIv1alpha1.LogSource{
 							HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: logURL},
-							NIMSource:  &ngfAPIv1alpha1.NIMLogProfileBundleSource{URL: logURL, ProfileName: &profileName},
+							NIMSource:  &ngfAPIv1alpha1.NIMLogProfileBundleSource{URL: logURL, ProfileName: profileName},
 						},
 						Destination: ngfAPIv1alpha1.SecurityLogDestination{Type: ngfAPIv1alpha1.SecurityLogDestinationTypeStderr},
 					},

@@ -254,7 +254,7 @@ type NIMLogProfileBundleSource struct {
 	//
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=253
-	ProfileName *string `json:"profileName"`
+	ProfileName string `json:"profileName"`
 
 	// URL is the base URL of the NGINX Instance Manager instance,
 	// e.g. "https://nim.example.com".

@@ -157,7 +157,7 @@ func TestGenerate(t *testing.T) {
 							LogSource: ngfAPIv1alpha1.LogSource{
 								NIMSource: &ngfAPIv1alpha1.NIMLogProfileBundleSource{
 									URL:         logURL,
-									ProfileName: &nimLogProfileName,
+									ProfileName: nimLogProfileName,
 								},
 							},
 							Destination: ngfAPIv1alpha1.SecurityLogDestination{
@@ -199,7 +199,7 @@ func TestGenerate(t *testing.T) {
 							LogSource: ngfAPIv1alpha1.LogSource{
 								NIMSource: &ngfAPIv1alpha1.NIMLogProfileBundleSource{
 									URL:         logURL2,
-									ProfileName: &nimLogProfileName,
+									ProfileName: nimLogProfileName,
 								},
 							},
 							Destination: ngfAPIv1alpha1.SecurityLogDestination{

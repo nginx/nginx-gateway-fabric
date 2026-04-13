@@ -106,7 +106,7 @@ func LogBundleKey(policyNsName types.NamespacedName, logSource *ngfAPIv1alpha1.L
 				"%s_%s_log_%s_%s",
 				policyNsName.Namespace, policyNsName.Name,
 				helpers.URLHash(logSource.NIMSource.URL),
-				*logSource.NIMSource.ProfileName,
+				logSource.NIMSource.ProfileName,
 			),
 		)
 	}
@@ -903,8 +903,8 @@ func BuildLogFetchRequest(
 		if logSource.NIMSource.URL != "" {
 			req.URL = logSource.NIMSource.URL
 		}
-		if logSource.NIMSource.ProfileName != nil {
-			req.NIMProfileName = *logSource.NIMSource.ProfileName
+		if logSource.NIMSource.ProfileName != "" {
+			req.NIMProfileName = logSource.NIMSource.ProfileName
 		}
 	} else if logSource.HTTPSource != nil {
 		if logSource.HTTPSource.URL != "" {
