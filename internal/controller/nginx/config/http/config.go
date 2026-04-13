@@ -127,6 +127,7 @@ type SSL struct {
 	VerifyClient        string
 	Certificates        []string
 	CertificateKeys     []string
+	RequireVerifiedCert bool
 	PreferServerCiphers bool
 }
 

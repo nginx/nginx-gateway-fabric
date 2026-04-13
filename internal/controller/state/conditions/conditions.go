@@ -580,7 +580,7 @@ func NewDefaultListenerConditions(existingConditions []Condition) []Condition {
 	}
 
 	// Only add ResolvedRefs=true if there are no existing ResolvedRefs conditions
-	if !hasResolvedRefsFailure(existingConditions) {
+	if !hasResolvedRefsConditions(existingConditions) {
 		defaultConds = append(defaultConds, NewListenerResolvedRefs())
 	}
 
@@ -602,8 +602,8 @@ func hasNotAcceptedListener(conditions []Condition) bool {
 	return false
 }
 
-// hasResolvedRefsFailure checks if the Listener has any ResolvedRefs=False conditions.
-func hasResolvedRefsFailure(conditions []Condition) bool {
+// hasResolvedRefsConditions checks if the Listener has any ResolvedRefs=False conditions.
+func hasResolvedRefsConditions(conditions []Condition) bool {
 	for _, cond := range conditions {
 		if cond.Type == string(v1.ListenerConditionResolvedRefs) && cond.Status == metav1.ConditionFalse {
 			return true
@@ -1019,6 +1019,17 @@ func NewGatewayNotProgrammedInvalid(msg string) Condition {
 	}
 }
 
+// NewGatewayInsecureFrontendValidationMode returns a Condition that indicates the Gateway is accepted
+// but is using an insecure frontend validation mode.
+func NewGatewayInsecureFrontendValidationMode(msg string) Condition {
+	return Condition{
+		Type:    string(v1.GatewayConditionInsecureFrontendValidationMode),
+		Status:  metav1.ConditionTrue,
+		Reason:  string(v1.GatewayReasonConfigurationChanged),
+		Message: msg,
+	}
+}
+
 // NewListenerInvalidCaCertificateRef returns a Condition indicating
 // that a CA CertificateRef for a Listener is invalid.
 func NewListenerInvalidCaCertificateRef(msg string) Condition {
@@ -1041,14 +1052,18 @@ func NewListenerInvalidCaCertificateKind(msg string) Condition {
 	}
 }
 
-// NewListenerInvalidNoValidCACertificate returns a Condition indicating
+// NewListenerInvalidNoValidCACertificate returns Conditions indicating
 // that all CA Certificates for a Listener are invalid.
-func NewListenerInvalidNoValidCACertificate(msg string) Condition {
-	return Condition{
-		Type:    string(v1.ListenerConditionAccepted),
-		Status:  metav1.ConditionFalse,
-		Reason:  string(v1.ListenerReasonNoValidCACertificate),
-		Message: msg,
+// It marks the listener as not Accepted and not Programmed.
+func NewListenerInvalidNoValidCACertificate(msg string) []Condition {
+	return []Condition{
+		{
+			Type:    string(v1.ListenerConditionAccepted),
+			Status:  metav1.ConditionFalse,
+			Reason:  string(v1.ListenerReasonNoValidCACertificate),
+			Message: msg,
+		},
+		NewListenerNotProgrammedInvalid(msg),
 	}
 }
 

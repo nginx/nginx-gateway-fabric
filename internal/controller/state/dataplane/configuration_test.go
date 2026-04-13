@@ -8106,3 +8106,60 @@ func TestBuildJWTRemoteTLSCABundles(t *testing.T) {
 		})
 	}
 }
+
+func TestBuildClientConfigForSSLServersFrontendValidationModes(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		mode                    v1.FrontendValidationModeType
+		expectedBundle          CertBundleID
+		expectedVerifyClient    string
+		name                    string
+		expectedRequireVerified bool
+	}{
+		{
+			name:                    "empty mode defaults to AllowValidOnly",
+			mode:                    "",
+			expectedBundle:          CertBundleID("cert_bundle_test_listener"),
+			expectedVerifyClient:    SSLVerifyClientOptionalNoCA,
+			expectedRequireVerified: true,
+		},
+		{
+			name:                    "AllowValidOnly requires verified cert",
+			mode:                    v1.AllowValidOnly,
+			expectedBundle:          CertBundleID("cert_bundle_test_listener"),
+			expectedVerifyClient:    SSLVerifyClientOptionalNoCA,
+			expectedRequireVerified: true,
+		},
+		{
+			name:                    "AllowInsecureFallback allows any cert",
+			mode:                    v1.AllowInsecureFallback,
+			expectedBundle:          "",
+			expectedVerifyClient:    SSLVerifyClientOptionalNoCA,
+			expectedRequireVerified: false,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			servers := []VirtualServer{{
+				Port: 443,
+				SSL:  &SSL{},
+			}}
+
+			buildClientConfigForSSLServers(
+				CertBundleID("cert_bundle_test_listener"),
+				servers,
+				443,
+				test.mode,
+			)
+
+			g.Expect(servers[0].SSL.ClientCertBundleID).To(Equal(test.expectedBundle))
+			g.Expect(servers[0].SSL.VerifyClient).To(Equal(test.expectedVerifyClient))
+			g.Expect(servers[0].SSL.RequireVerifiedCert).To(Equal(test.expectedRequireVerified))
+		})
+	}
+}

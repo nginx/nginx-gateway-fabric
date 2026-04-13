@@ -28,8 +28,9 @@ const (
 const (
 	// SSLVerifyClientOn indicates that client certificates are required and must pass CA validation.
 	SSLVerifyClientOn = "on"
-	// SSLVerifyClientOptional indicates that client certificates are required, but CA validation is not performed.
-	SSLVerifyClientOptNoCa = "optional_no_ca"
+	// SSLVerifyClientOptionalNoCA indicates that client certificates are requested but not required or validated.
+	// Any certificate or none is accepted without CA validation.
+	SSLVerifyClientOptionalNoCA = "optional_no_ca"
 )
 
 // Configuration is an intermediate representation of dataplane configuration.
@@ -196,6 +197,7 @@ type SSL struct {
 	ClientCertBundleID  CertBundleID
 	VerifyClient        string
 	KeyPairIDs          []SSLKeyPairID
+	RequireVerifiedCert bool
 	PreferServerCiphers bool
 }
 

@@ -183,10 +183,8 @@ func TestNewDefaultListenerConditions(t *testing.T) {
 			expectNoConflicts:  true,
 		},
 		{
-			name: "existing Accepted=False suppresses default Accepted",
-			existingConditions: []Condition{
-				NewListenerInvalidNoValidCACertificate("no valid CA certificate"),
-			},
+			name:               "existing Accepted=False suppresses default Accepted",
+			existingConditions: NewListenerInvalidNoValidCACertificate("no valid CA certificate"),
 			expectAccepted:     false,
 			expectResolvedRefs: true,
 			expectNoConflicts:  true,
@@ -215,11 +213,11 @@ func TestNewDefaultListenerConditions(t *testing.T) {
 		},
 		{
 			name: "multiple existing failure conditions suppress corresponding defaults",
-			existingConditions: []Condition{
+			existingConditions: append(
 				NewListenerInvalidNoValidCACertificate("no valid CA certificate"),
 				NewListenerInvalidCaCertificateRef("invalid CA cert ref"),
 				NewListenerOverlappingTLSConfig(v1.ListenerReasonHostnameConflict, "overlapping TLS"),
-			},
+			),
 			expectAccepted:     false,
 			expectResolvedRefs: false,
 			expectNoConflicts:  false,
@@ -282,10 +280,13 @@ func TestNewListenerCACertificateConditions(t *testing.T) {
 		t.Parallel()
 		g := NewWithT(t)
 
-		cond := NewListenerInvalidNoValidCACertificate("all CA certs invalid")
-		g.Expect(cond.Type).To(Equal(string(v1.ListenerConditionAccepted)))
-		g.Expect(cond.Status).To(Equal(metav1.ConditionFalse))
-		g.Expect(cond.Reason).To(Equal(string(v1.ListenerReasonNoValidCACertificate)))
-		g.Expect(cond.Message).To(Equal("all CA certs invalid"))
+		conds := NewListenerInvalidNoValidCACertificate("all CA certs invalid")
+		g.Expect(conds).To(HaveLen(2))
+		g.Expect(conds[0].Type).To(Equal(string(v1.ListenerConditionAccepted)))
+		g.Expect(conds[0].Status).To(Equal(metav1.ConditionFalse))
+		g.Expect(conds[0].Reason).To(Equal(string(v1.ListenerReasonNoValidCACertificate)))
+		g.Expect(conds[0].Message).To(Equal("all CA certs invalid"))
+		g.Expect(conds[1].Type).To(Equal(string(v1.ListenerConditionProgrammed)))
+		g.Expect(conds[1].Status).To(Equal(metav1.ConditionFalse))
 	})
 }

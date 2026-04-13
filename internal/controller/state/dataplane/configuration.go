@@ -577,24 +577,29 @@ func buildClientConfigForSSLServers(
 	listenerPort int32,
 	frontendValidationMode v1.FrontendValidationModeType,
 ) {
-	var veryifyClient string
-
-	switch frontendValidationMode {
-	case v1.AllowValidOnly:
-		veryifyClient = SSLVerifyClientOn
-	case v1.AllowInsecureFallback:
-		veryifyClient = SSLVerifyClientOptNoCa
-	}
-
-	// Assign the bundle ID to all SSL servers on this listener's port
-	// that don't already have a client cert bundle assigned
+	// Assign client certificate verification settings to all SSL servers on this listener's port.
 	for i := range sslServers {
 		if sslServers[i].SSL == nil {
 			continue
 		}
-		if sslServers[i].Port == listenerPort && sslServers[i].SSL.ClientCertBundleID == "" {
-			sslServers[i].SSL.ClientCertBundleID = id
-			sslServers[i].SSL.VerifyClient = veryifyClient
+		if sslServers[i].Port != listenerPort {
+			continue
+		}
+
+		switch frontendValidationMode {
+		case v1.AllowInsecureFallback:
+			// Request client certificate but allow any certificate (valid, invalid, or none).
+			// Do not configure CA bundle verification in this mode.
+			sslServers[i].SSL.ClientCertBundleID = ""
+			sslServers[i].SSL.VerifyClient = SSLVerifyClientOptionalNoCA
+			sslServers[i].SSL.RequireVerifiedCert = false
+		default:
+			// AllowValidOnly is default when no validation mode is specified.
+			if sslServers[i].SSL.ClientCertBundleID == "" {
+				sslServers[i].SSL.ClientCertBundleID = id
+				sslServers[i].SSL.VerifyClient = SSLVerifyClientOptionalNoCA
+				sslServers[i].SSL.RequireVerifiedCert = true
+			}
 		}
 	}
 }

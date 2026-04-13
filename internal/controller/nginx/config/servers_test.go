@@ -6775,6 +6775,7 @@ func TestBuildHTTPSSLFrontendTLS(t *testing.T) {
 		ssl                       *dataplane.SSL
 		expectedClientCertificate string
 		expectedVerifyClient      string
+		expectedRequireVerified   bool
 	}{
 		{
 			name: "frontend TLS disabled by default",
@@ -6783,16 +6784,19 @@ func TestBuildHTTPSSLFrontendTLS(t *testing.T) {
 			},
 			expectedClientCertificate: "",
 			expectedVerifyClient:      "",
+			expectedRequireVerified:   false,
 		},
 		{
 			name: "frontend TLS client certificate verification enabled",
 			ssl: &dataplane.SSL{
-				KeyPairIDs:         []dataplane.SSLKeyPairID{"test-keypair"},
-				ClientCertBundleID: dataplane.CertBundleID("test-ca-bundle"),
-				VerifyClient:       "on",
+				KeyPairIDs:          []dataplane.SSLKeyPairID{"test-keypair"},
+				ClientCertBundleID:  dataplane.CertBundleID("test-ca-bundle"),
+				VerifyClient:        "optional_no_ca",
+				RequireVerifiedCert: true,
 			},
 			expectedClientCertificate: generateCertBundleFileName(dataplane.CertBundleID("test-ca-bundle")),
-			expectedVerifyClient:      "on",
+			expectedVerifyClient:      "optional_no_ca",
+			expectedRequireVerified:   true,
 		},
 	}
 
@@ -6805,6 +6809,7 @@ func TestBuildHTTPSSLFrontendTLS(t *testing.T) {
 
 			g.Expect(result.ClientCertificate).To(Equal(test.expectedClientCertificate))
 			g.Expect(result.VerifyClient).To(Equal(test.expectedVerifyClient))
+			g.Expect(result.RequireVerifiedCert).To(Equal(test.expectedRequireVerified))
 			g.Expect(result.Certificates).To(Equal([]string{generatePEMFileName(dataplane.SSLKeyPairID("test-keypair"))}))
 			g.Expect(result.CertificateKeys).To(Equal([]string{generatePEMFileName(dataplane.SSLKeyPairID("test-keypair"))}))
 		})

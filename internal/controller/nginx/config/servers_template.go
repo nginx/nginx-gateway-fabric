@@ -87,10 +87,18 @@ server {
           {{- if $s.SSL.PreferServerCiphers }}
     ssl_prefer_server_ciphers on;
           {{- end }}
-          {{- if $s.SSL.ClientCertificate }}
-    ssl_client_certificate {{ $s.SSL.ClientCertificate }};
-    ssl_verify_client {{ $s.SSL.VerifyClient }};
-          {{- end }}
+            {{- if $s.SSL.ClientCertificate }}
+        ssl_client_certificate {{ $s.SSL.ClientCertificate }};
+            {{- end }}
+            {{- if $s.SSL.VerifyClient }}
+        ssl_verify_client {{ $s.SSL.VerifyClient }};
+            {{- end }}
+            {{- if $s.SSL.RequireVerifiedCert }}
+    error_page 495 496 = @frontend_tls_verify_failed;
+    if ($ssl_client_verify != SUCCESS) {
+        return 444;
+    }
+            {{- end }}
 
           {{- if $s.MisdirectedRequestVars }}
     if ({{ $s.MisdirectedRequestVars.SNIVar }} != {{ $s.MisdirectedRequestVars.HostVar }}) {
@@ -245,6 +253,12 @@ server {
                 {{- end }}
             {{- end }}
         {{- end }}
+    }
+        {{- end }}
+
+        {{- if and $s.SSL $s.SSL.RequireVerifiedCert }}
+    location @frontend_tls_verify_failed {
+        return 444;
     }
         {{- end }}
 

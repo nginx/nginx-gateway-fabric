@@ -776,8 +776,11 @@ func createFrontendTLSCaCertReferenceResolver(
 	refGrantResolver *referenceGrantResolver,
 ) listenerFrontendTLSCaCertReferenceResolver {
 	return func(l *Listener, gw *Gateway) {
-		if gw.Source.Spec.TLS == nil || gw.Source.Spec.TLS.Frontend == nil ||
-			l.Source.TLS == nil || l.Source.TLS.Mode == nil || *l.Source.TLS.Mode != v1.TLSModeTerminate {
+		if gw.Source.Spec.TLS == nil || gw.Source.Spec.TLS.Frontend == nil {
+			return
+		}
+
+		if l.Source.TLS == nil || l.Source.TLS.Mode != nil && *l.Source.TLS.Mode != v1.TLSModeTerminate {
 			return
 		}
 
@@ -831,6 +834,10 @@ func createFrontendTLSCaCertReferenceResolver(
 			}
 		}
 
+		if frontendTLSConfig.ValidationMode == v1.AllowInsecureFallback {
+			msg := fmt.Sprintf("Validation Mode: AllowInsecureFallback is set for listener %s.", l.Name)
+			gw.Conditions = append(gw.Conditions, conditions.NewGatewayInsecureFrontendValidationMode(msg))
+		}
 		l.FrontendTLSConfig = frontendTLSConfig
 	}
 }
@@ -1016,11 +1023,10 @@ func getListenerFrontendTLSCaRefs(
 	}
 
 	if len(conds) > 0 && len(conds) == len(certRefs) {
-		allInvalidCond := []conditions.Condition{}
 		msg := "All frontend TLS CA certificate refs are invalid for this listener"
-		allInvalidCond = append(allInvalidCond, conditions.NewListenerInvalidNoValidCACertificate(msg))
+		conds = append(conds, conditions.NewListenerInvalidNoValidCACertificate(msg)...)
 		listener.Valid = false
-		return allInvalidCond, nil
+		return conds, nil
 	}
 
 	if len(caRefs) == 0 {

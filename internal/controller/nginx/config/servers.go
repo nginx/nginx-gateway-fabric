@@ -247,6 +247,7 @@ func buildHTTPSSL(ssl *dataplane.SSL) *http.SSL {
 		PreferServerCiphers: ssl.PreferServerCiphers,
 		ClientCertificate:   sslCertificateID,
 		VerifyClient:        sslVerifyClient,
+		RequireVerifiedCert: ssl.RequireVerifiedCert,
 	}
 }
 
