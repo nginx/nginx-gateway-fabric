@@ -997,7 +997,8 @@ func NewGatewayNotProgrammedInvalid(msg string) Condition {
 	}
 }
 
-// TODO: Comments.
+// NewListenerInvalidCaCertificateRef returns a Condition indicating
+// that a CA CertificateRef for a Listener is invalid.
 func NewListenerInvalidCaCertificateRef(msg string) Condition {
 	return Condition{
 		Type:    string(v1.ListenerConditionResolvedRefs),
@@ -1007,7 +1008,8 @@ func NewListenerInvalidCaCertificateRef(msg string) Condition {
 	}
 }
 
-// TODO: Comments.
+// NewListenerInvalidCaCertificateKind returns a Condition indicating
+// that a CA CertificateRef Kind for a Listener is invalid.
 func NewListenerInvalidCaCertificateKind(msg string) Condition {
 	return Condition{
 		Type:    string(v1.ListenerConditionResolvedRefs),
@@ -1017,6 +1019,8 @@ func NewListenerInvalidCaCertificateKind(msg string) Condition {
 	}
 }
 
+// NewListenerInvalidNoValidCACertificate returns a Condition indicating
+// that all CA Certificates for a Listener are invalid.
 func NewListenerInvalidNoValidCACertificate(msg string) Condition {
 	return Condition{
 		Type:    string(v1.ListenerConditionAccepted),
