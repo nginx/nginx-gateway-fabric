@@ -46,15 +46,16 @@ type Gateway struct {
 	Valid bool
 }
 
+// FrontendTLSConfig holds the configuration for frontend TLS for the Gateway.
 type FrontendTLSConfig struct {
 	// PortModes maps port numbers to the validation mode for frontend TLS on that port.
 	// If a port is not included in this map, the default validation mode applies.
 	PortModes map[int32]v1.FrontendValidationModeType
 	// PerPortFrontendCaRefs maps port numbers to a list of namespaced names
-	// of secrets referenced by the Gateway for frontend TLS on that port.
+	// of secrets or configmaps referenced by the Gateway for frontend TLS on that port.
 	PerPortFrontendCaRefs map[int32][]*types.NamespacedName
-	// DefaultFrontendCaRefs is the namespaced name of the secret referenced
-	// defined in the default section of the frontend TLS spec of the Gateway.
+	// DefaultFrontendCaRefs is the namespaced name of the secret or configmap referenced
+	// in the default section of the frontend TLS spec of the Gateway.
 	DefaultFrontendCaRefs []*types.NamespacedName
 }
 
@@ -325,7 +326,7 @@ func validateGateway(
 //nolint:gocyclo
 func getGatewayFrontendTLSCaRefs(
 	gw *v1.Gateway,
-	l *Listener,
+	listener *Listener,
 	path *field.Path,
 	resourceResolver resolver.Resolver,
 	refGrantResolver *referenceGrantResolver,
@@ -335,15 +336,15 @@ func getGatewayFrontendTLSCaRefs(
 		return []conditions.Condition{}, nil
 	}
 
-	var caRefs []*types.NamespacedName
-	var conds []conditions.Condition
-
 	if len(certRefs) == 0 {
-		return conds, nil
+		return []conditions.Condition{}, nil
 	}
 
+	var caRefs []*types.NamespacedName
+	var conds []conditions.Condition
+	allowedKinds := []string{kinds.Secret, kinds.ConfigMap}
+
 	for _, cert := range certRefs {
-		allowedKinds := []string{kinds.Secret, kinds.ConfigMap}
 		if !slices.Contains(allowedKinds, string(cert.Kind)) {
 			valErr := field.NotSupported(path, cert.Kind, allowedKinds)
 			msg := helpers.CapitalizeString(valErr.Error())
@@ -366,8 +367,11 @@ func getGatewayFrontendTLSCaRefs(
 			certNsName.Namespace = string(*cert.Namespace)
 		}
 
-		resourceType := resolver.ResourceTypeSecret
-		if cert.Kind == kinds.ConfigMap {
+		var resourceType resolver.ResourceType
+		switch cert.Kind {
+		case kinds.Secret:
+			resourceType = resolver.ResourceTypeSecret
+		case kinds.ConfigMap:
 			resourceType = resolver.ResourceTypeConfigMap
 		}
 
@@ -404,7 +408,7 @@ func getGatewayFrontendTLSCaRefs(
 		allInvalidCond := []conditions.Condition{}
 		msg := "All frontend TLS CA certificate refs are invalid for this listener"
 		allInvalidCond = append(allInvalidCond, conditions.NewListenerInvalidNoValidCACertificate(msg))
-		l.Valid = false
+		listener.Valid = false
 		return allInvalidCond, nil
 	}
 

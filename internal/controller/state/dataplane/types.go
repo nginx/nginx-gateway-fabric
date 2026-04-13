@@ -26,7 +26,9 @@ const (
 )
 
 const (
-	SSLVerifyClientOn      = "on"
+	// SSLVerifyClientOn indicates that client certificates are required and must pass CA validation.
+	SSLVerifyClientOn = "on"
+	// SSLVerifyClientOptional indicates that client certificates are required, but CA validation is not performed.
 	SSLVerifyClientOptNoCa = "optional_no_ca"
 )
 
