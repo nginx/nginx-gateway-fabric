@@ -115,17 +115,15 @@ var _ = Describe("SnippetsFilter", Ordered, Label("functional", "snippets-filter
 
 		Context("nginx directives", func() {
 			var conf *framework.Payload
-			var (
-				mainContext, httpContext, httpServerContext, httpServerLocationContext string
-				httpRouteSuffix, grpcRouteSuffix                                       string
-			)
+			var httpRouteSuffix, grpcRouteSuffix string
+
+			const snippetsFilterFilePrefix = "/etc/nginx/includes/SnippetsFilter_"
+			mainContext := fmt.Sprintf("%smain_", snippetsFilterFilePrefix)
+			httpContext := fmt.Sprintf("%shttp_", snippetsFilterFilePrefix)
+			httpServerContext := fmt.Sprintf("%shttp.server_", snippetsFilterFilePrefix)
+			httpServerLocationContext := fmt.Sprintf("%shttp.server.location_", snippetsFilterFilePrefix)
 
 			BeforeAll(func() {
-				snippetsFilterFilePrefix := "/etc/nginx/includes/SnippetsFilter_"
-				mainContext = fmt.Sprintf("%smain_", snippetsFilterFilePrefix)
-				httpContext = fmt.Sprintf("%shttp_", snippetsFilterFilePrefix)
-				httpServerContext = fmt.Sprintf("%shttp.server_", snippetsFilterFilePrefix)
-				httpServerLocationContext = fmt.Sprintf("%shttp.server.location_", snippetsFilterFilePrefix)
 				httpRouteSuffix = fmt.Sprintf("%s_all-contexts.conf", namespace)
 				grpcRouteSuffix = fmt.Sprintf("%s_grpc-all-contexts.conf", namespace)
 
@@ -134,107 +132,107 @@ var _ = Describe("SnippetsFilter", Ordered, Label("functional", "snippets-filter
 				Expect(err).ToNot(HaveOccurred())
 			})
 
-			It("are set properly for HTTPRoute", func() {
-				expCfgs := []framework.ExpectedNginxField{
-					{
-						Directive: "worker_priority",
-						Value:     "0",
-						File:      fmt.Sprintf("%s%s", mainContext, httpRouteSuffix),
-					},
-					{
-						Directive: "include",
-						Value:     fmt.Sprintf("%s%s", mainContext, httpRouteSuffix),
-						File:      "main.conf",
-					},
-					{
-						Directive: "aio",
-						Value:     "off",
-						File:      fmt.Sprintf("%s%s", httpContext, httpRouteSuffix),
-					},
-					{
-						Directive: "include",
-						Value:     fmt.Sprintf("%s%s", httpContext, httpRouteSuffix),
-						File:      "http.conf",
-					},
-					{
-						Directive: "auth_delay",
-						Value:     "0s",
-						File:      fmt.Sprintf("%s%s", httpServerContext, httpRouteSuffix),
-					},
-					{
-						Directive: "include",
-						Value:     fmt.Sprintf("%s%s", httpServerContext, httpRouteSuffix),
-						Server:    "cafe.example.com",
-						File:      "http.conf",
-					},
-					{
-						Directive: "include",
-						Value:     fmt.Sprintf("%s%s", httpServerLocationContext, httpRouteSuffix),
-						File:      "http.conf",
-						Location:  "/coffee",
-						Server:    "cafe.example.com",
-					},
-					{
-						Directive: "keepalive_time",
-						Value:     "1h",
-						File:      fmt.Sprintf("%s%s", httpServerLocationContext, httpRouteSuffix),
-					},
-				}
-				for _, expCfg := range expCfgs {
-					Expect(framework.ValidateNginxFieldExists(conf, expCfg)).To(Succeed())
-				}
-			})
-
-			It("are set properly for GRPCRoute", func() {
-				expCfgs := []framework.ExpectedNginxField{
-					{
-						Directive: "worker_shutdown_timeout",
-						Value:     "120s",
-						File:      fmt.Sprintf("%s%s", mainContext, grpcRouteSuffix),
-					},
-					{
-						Directive: "include",
-						Value:     fmt.Sprintf("%s%s", mainContext, grpcRouteSuffix),
-						File:      "main.conf",
-					},
-					{
-						Directive: "types_hash_bucket_size",
-						Value:     "64",
-						File:      fmt.Sprintf("%s%s", httpContext, grpcRouteSuffix),
-					},
-					{
-						Directive: "include",
-						Value:     fmt.Sprintf("%s%s", httpContext, grpcRouteSuffix),
-						File:      "http.conf",
-					},
-					{
-						Directive: "send_lowat",
-						Value:     "1024",
-						File:      fmt.Sprintf("%s%s", httpServerContext, grpcRouteSuffix),
-					},
-					{
-						Directive: "include",
-						Value:     fmt.Sprintf("%s%s", httpServerContext, grpcRouteSuffix),
-						Server:    "*.example.com",
-						File:      "http.conf",
-					},
-					{
-						Directive: "tcp_nodelay",
-						Value:     "on",
-						File:      fmt.Sprintf("%s%s", httpServerLocationContext, grpcRouteSuffix),
-					},
-					{
-						Directive: "include",
-						Value:     fmt.Sprintf("%s%s", httpServerLocationContext, grpcRouteSuffix),
-						File:      "http.conf",
-						Location:  "/helloworld.Greeter/SayHello",
-						Server:    "*.example.com",
-					},
-				}
-				for _, expCfg := range expCfgs {
-					Expect(framework.ValidateNginxFieldExists(conf, expCfg)).To(Succeed())
-				}
-			})
+			DescribeTable("are set properly for",
+				func(getCfgs func() []framework.ExpectedNginxField) {
+					for _, expCfg := range getCfgs() {
+						Expect(framework.ValidateNginxFieldExists(conf, expCfg)).To(Succeed())
+					}
+				},
+				Entry("HTTPRoute", func() []framework.ExpectedNginxField {
+					return []framework.ExpectedNginxField{
+						{
+							Directive: "worker_priority",
+							Value:     "0",
+							File:      fmt.Sprintf("%s%s", mainContext, httpRouteSuffix),
+						},
+						{
+							Directive: "include",
+							Value:     fmt.Sprintf("%s%s", mainContext, httpRouteSuffix),
+							File:      "main.conf",
+						},
+						{
+							Directive: "aio",
+							Value:     "off",
+							File:      fmt.Sprintf("%s%s", httpContext, httpRouteSuffix),
+						},
+						{
+							Directive: "include",
+							Value:     fmt.Sprintf("%s%s", httpContext, httpRouteSuffix),
+							File:      "http.conf",
+						},
+						{
+							Directive: "auth_delay",
+							Value:     "0s",
+							File:      fmt.Sprintf("%s%s", httpServerContext, httpRouteSuffix),
+						},
+						{
+							Directive: "include",
+							Value:     fmt.Sprintf("%s%s", httpServerContext, httpRouteSuffix),
+							Server:    "cafe.example.com",
+							File:      "http.conf",
+						},
+						{
+							Directive: "include",
+							Value:     fmt.Sprintf("%s%s", httpServerLocationContext, httpRouteSuffix),
+							File:      "http.conf",
+							Location:  "/coffee",
+							Server:    "cafe.example.com",
+						},
+						{
+							Directive: "keepalive_time",
+							Value:     "1h",
+							File:      fmt.Sprintf("%s%s", httpServerLocationContext, httpRouteSuffix),
+						},
+					}
+				}),
+				Entry("GRPCRoute", func() []framework.ExpectedNginxField {
+					return []framework.ExpectedNginxField{
+						{
+							Directive: "worker_shutdown_timeout",
+							Value:     "120s",
+							File:      fmt.Sprintf("%s%s", mainContext, grpcRouteSuffix),
+						},
+						{
+							Directive: "include",
+							Value:     fmt.Sprintf("%s%s", mainContext, grpcRouteSuffix),
+							File:      "main.conf",
+						},
+						{
+							Directive: "types_hash_bucket_size",
+							Value:     "64",
+							File:      fmt.Sprintf("%s%s", httpContext, grpcRouteSuffix),
+						},
+						{
+							Directive: "include",
+							Value:     fmt.Sprintf("%s%s", httpContext, grpcRouteSuffix),
+							File:      "http.conf",
+						},
+						{
+							Directive: "send_lowat",
+							Value:     "1024",
+							File:      fmt.Sprintf("%s%s", httpServerContext, grpcRouteSuffix),
+						},
+						{
+							Directive: "include",
+							Value:     fmt.Sprintf("%s%s", httpServerContext, grpcRouteSuffix),
+							Server:    "*.example.com",
+							File:      "http.conf",
+						},
+						{
+							Directive: "tcp_nodelay",
+							Value:     "on",
+							File:      fmt.Sprintf("%s%s", httpServerLocationContext, grpcRouteSuffix),
+						},
+						{
+							Directive: "include",
+							Value:     fmt.Sprintf("%s%s", httpServerLocationContext, grpcRouteSuffix),
+							File:      "http.conf",
+							Location:  "/helloworld.Greeter/SayHello",
+							Server:    "*.example.com",
+						},
+					}
+				}),
+			)
 		})
 	})
 

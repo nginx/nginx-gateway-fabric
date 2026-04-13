@@ -47,134 +47,132 @@ var gracefulRecoveryFiles = []string{
 // Tests 3 and 4 (node restarts) are marked Serial because they restart the kind Docker
 // container, which kills the entire Kubernetes node and would interfere with any other
 // test running concurrently on the same cluster.
-var _ = Describe("Graceful Recovery: nginx container restart",
-	Label("graceful-recovery"), FlakeAttempts(2), func() {
-		var (
-			ns                 core.Namespace
-			activeNGFPodName   string
-			activeNginxPodName string
-			teaURL             = baseHTTPSURL + "/tea"
-			coffeeURL          = baseHTTPURL + "/coffee"
-		)
+var _ = Describe("Graceful Recovery: nginx container restart", Label("graceful-recovery"), FlakeAttempts(2), func() {
+	var (
+		ns                 core.Namespace
+		activeNGFPodName   string
+		activeNginxPodName string
+		teaURL             = baseHTTPSURL + "/tea"
+		coffeeURL          = baseHTTPURL + "/coffee"
+	)
 
-		BeforeEach(func() {
-			grSetup(&ns, &activeNGFPodName, &activeNginxPodName, &teaURL, &coffeeURL)
-		})
-
-		AfterEach(func() {
-			grTeardown(&ns)
-		})
-
-		It("recovers when nginx container is restarted", func() {
-			restartNginxContainer(activeNginxPodName, ns.Name, nginxContainerName)
-
-			nginxPodNames, err := resourceManager.GetReadyNginxPodNames(
-				ns.Name,
-				timeoutConfig.GetStatusTimeout,
-			)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(nginxPodNames).To(HaveLen(1))
-			activeNginxPodName = nginxPodNames[0]
-
-			setUpPortForward(activeNginxPodName, ns.Name)
-			grRefreshURLs(&teaURL, &coffeeURL)
-
-			checkNGFFunctionality(gracefulRecoveryFiles, &ns, &activeNginxPodName, &teaURL, &coffeeURL)
-
-			if errorLogs := getNGFErrorLogs(activeNGFPodName); errorLogs != "" {
-				GinkgoWriter.Printf("NGF has error logs: \n%s", errorLogs)
-			}
-			if errorLogs := getUnexpectedNginxErrorLogs(activeNginxPodName, ns.Name); errorLogs != "" {
-				GinkgoWriter.Printf("NGINX has unexpected error logs: \n%s", errorLogs)
-			}
-		})
+	BeforeEach(func() {
+		grSetup(&ns, &activeNGFPodName, &activeNginxPodName, &teaURL, &coffeeURL)
 	})
 
-var _ = Describe("Graceful Recovery: NGF pod restart",
-	Label("graceful-recovery"), FlakeAttempts(2), func() {
-		var (
-			ns                 core.Namespace
-			activeNGFPodName   string
-			activeNginxPodName string
-			teaURL             = baseHTTPSURL + "/tea"
-			coffeeURL          = baseHTTPURL + "/coffee"
-		)
-
-		BeforeEach(func() {
-			grSetup(&ns, &activeNGFPodName, &activeNginxPodName, &teaURL, &coffeeURL)
-		})
-
-		AfterEach(func() {
-			grTeardown(&ns)
-		})
-
-		It("recovers when NGF pod is restarted", func() {
-			leaseName, err := getLeaderElectionLeaseHolderName()
-			Expect(err).ToNot(HaveOccurred())
-
-			ngfPod, err := resourceManager.GetPod(ngfNamespace, activeNGFPodName)
-			Expect(err).ToNot(HaveOccurred())
-
-			ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.DeleteTimeout)
-			defer cancel()
-
-			Expect(resourceManager.Delete(ctx, ngfPod, nil)).To(Succeed())
-
-			var newNGFPodNames []string
-			Eventually(
-				func() bool {
-					newNGFPodNames, err = resourceManager.GetReadyNGFPodNames(
-						ngfNamespace,
-						releaseName,
-						timeoutConfig.GetStatusTimeout,
-					)
-					return len(newNGFPodNames) == 1 && err == nil
-				}).
-				WithTimeout(timeoutConfig.CreateTimeout * 2).
-				WithPolling(500 * time.Millisecond).
-				MustPassRepeatedly(3).
-				Should(BeTrue())
-
-			newNGFPodName := newNGFPodNames[0]
-			Expect(newNGFPodName).ToNot(BeEmpty())
-			Expect(newNGFPodName).ToNot(Equal(activeNGFPodName))
-			activeNGFPodName = newNGFPodName
-
-			Eventually(
-				func() error {
-					return checkLeaderLeaseChange(leaseName)
-				}).
-				WithTimeout(timeoutConfig.GetLeaderLeaseTimeout).
-				WithPolling(500 * time.Millisecond).
-				Should(Succeed())
-
-			cleanUpPortForward()
-
-			// The nginx pod shouldn't necessarily change when the NGF pod is restarted,
-			// but in case there were any errors during this test which causes a re-run,
-			// we'll need to get the nginx pod name again since it may have changed and
-			// the loadbalancer IP address may have changed as well.
-			nginxPodNames, err := resourceManager.GetReadyNginxPodNames(
-				ns.Name,
-				timeoutConfig.GetStatusTimeout,
-			)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(nginxPodNames).To(HaveLen(1))
-			activeNginxPodName = nginxPodNames[0]
-
-			setUpPortForward(activeNginxPodName, ns.Name)
-			grRefreshURLs(&teaURL, &coffeeURL)
-
-			checkNGFFunctionality(gracefulRecoveryFiles, &ns, &activeNginxPodName, &teaURL, &coffeeURL)
-
-			if errorLogs := getNGFErrorLogs(activeNGFPodName); errorLogs != "" {
-				GinkgoWriter.Printf("NGF has error logs: \n%s", errorLogs)
-			}
-			if errorLogs := getUnexpectedNginxErrorLogs(activeNginxPodName, ns.Name); errorLogs != "" {
-				GinkgoWriter.Printf("NGINX has unexpected error logs: \n%s", errorLogs)
-			}
-		})
+	AfterEach(func() {
+		grTeardown(&ns)
 	})
+
+	It("recovers when nginx container is restarted", func() {
+		restartNginxContainer(activeNginxPodName, ns.Name, nginxContainerName)
+
+		nginxPodNames, err := resourceManager.GetReadyNginxPodNames(
+			ns.Name,
+			timeoutConfig.GetStatusTimeout,
+		)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(nginxPodNames).To(HaveLen(1))
+		activeNginxPodName = nginxPodNames[0]
+
+		setUpPortForward(activeNginxPodName, ns.Name)
+		grRefreshURLs(&teaURL, &coffeeURL)
+
+		checkNGFFunctionality(gracefulRecoveryFiles, &ns, &activeNginxPodName, &teaURL, &coffeeURL)
+
+		if errorLogs := getNGFErrorLogs(activeNGFPodName); errorLogs != "" {
+			GinkgoWriter.Printf("NGF has error logs: \n%s", errorLogs)
+		}
+		if errorLogs := getUnexpectedNginxErrorLogs(activeNginxPodName, ns.Name); errorLogs != "" {
+			GinkgoWriter.Printf("NGINX has unexpected error logs: \n%s", errorLogs)
+		}
+	})
+})
+
+var _ = Describe("Graceful Recovery: NGF pod restart", Label("graceful-recovery"), FlakeAttempts(2), func() {
+	var (
+		ns                 core.Namespace
+		activeNGFPodName   string
+		activeNginxPodName string
+		teaURL             = baseHTTPSURL + "/tea"
+		coffeeURL          = baseHTTPURL + "/coffee"
+	)
+
+	BeforeEach(func() {
+		grSetup(&ns, &activeNGFPodName, &activeNginxPodName, &teaURL, &coffeeURL)
+	})
+
+	AfterEach(func() {
+		grTeardown(&ns)
+	})
+
+	It("recovers when NGF pod is restarted", func() {
+		leaseName, err := getLeaderElectionLeaseHolderName()
+		Expect(err).ToNot(HaveOccurred())
+
+		ngfPod, err := resourceManager.GetPod(ngfNamespace, activeNGFPodName)
+		Expect(err).ToNot(HaveOccurred())
+
+		ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.DeleteTimeout)
+		defer cancel()
+
+		Expect(resourceManager.Delete(ctx, ngfPod, nil)).To(Succeed())
+
+		var newNGFPodNames []string
+		Eventually(
+			func() bool {
+				newNGFPodNames, err = resourceManager.GetReadyNGFPodNames(
+					ngfNamespace,
+					releaseName,
+					timeoutConfig.GetStatusTimeout,
+				)
+				return len(newNGFPodNames) == 1 && err == nil
+			}).
+			WithTimeout(timeoutConfig.CreateTimeout * 2).
+			WithPolling(500 * time.Millisecond).
+			MustPassRepeatedly(3).
+			Should(BeTrue())
+
+		newNGFPodName := newNGFPodNames[0]
+		Expect(newNGFPodName).ToNot(BeEmpty())
+		Expect(newNGFPodName).ToNot(Equal(activeNGFPodName))
+		activeNGFPodName = newNGFPodName
+
+		Eventually(
+			func() error {
+				return checkLeaderLeaseChange(leaseName)
+			}).
+			WithTimeout(timeoutConfig.GetLeaderLeaseTimeout).
+			WithPolling(500 * time.Millisecond).
+			Should(Succeed())
+
+		cleanUpPortForward()
+
+		// The nginx pod shouldn't necessarily change when the NGF pod is restarted,
+		// but in case there were any errors during this test which causes a re-run,
+		// we'll need to get the nginx pod name again since it may have changed and
+		// the loadbalancer IP address may have changed as well.
+		nginxPodNames, err := resourceManager.GetReadyNginxPodNames(
+			ns.Name,
+			timeoutConfig.GetStatusTimeout,
+		)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(nginxPodNames).To(HaveLen(1))
+		activeNginxPodName = nginxPodNames[0]
+
+		setUpPortForward(activeNginxPodName, ns.Name)
+		grRefreshURLs(&teaURL, &coffeeURL)
+
+		checkNGFFunctionality(gracefulRecoveryFiles, &ns, &activeNginxPodName, &teaURL, &coffeeURL)
+
+		if errorLogs := getNGFErrorLogs(activeNGFPodName); errorLogs != "" {
+			GinkgoWriter.Printf("NGF has error logs: \n%s", errorLogs)
+		}
+		if errorLogs := getUnexpectedNginxErrorLogs(activeNginxPodName, ns.Name); errorLogs != "" {
+			GinkgoWriter.Printf("NGINX has unexpected error logs: \n%s", errorLogs)
+		}
+	})
+})
 
 // Serial: this test restarts the kind Docker container (the entire Kubernetes node).
 // Running it concurrently with other tests on the same cluster would kill their pods.

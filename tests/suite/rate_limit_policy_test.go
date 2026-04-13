@@ -126,124 +126,120 @@ var _ = Describe("RateLimitPolicy", Ordered, Label("functional", "rate-limit-pol
 				Expect(err).ToNot(HaveOccurred())
 			})
 
-			It("are set properly for gateway policy", func() {
-				expCfgs := []framework.ExpectedNginxField{
-					{
-						Directive: "include",
-						Value:     fmt.Sprintf("%s%s", filePrefix, "_gateway-rate-limit_gateway.conf"),
-						File:      "http.conf",
-					},
-					{
-						File:      fmt.Sprintf("%s%s", filePrefix, "_gateway-rate-limit_gateway.conf"),
-						Directive: "limit_req_zone",
-						Value:     fmt.Sprintf("$binary_remote_addr zone=%s_rl_gateway-rate-limit_rule0:10m rate=15r/m", namespace),
-					},
-					{
-						Directive: "include",
-						Value:     fmt.Sprintf("%s%s", filePrefix, "_gateway-rate-limit_gateway_server.conf"),
-						File:      "http.conf",
-						Server:    "cafe.example.com",
-					},
-					{
-						File:      fmt.Sprintf("%s%s", filePrefix, "_gateway-rate-limit_gateway_server.conf"),
-						Directive: "limit_req",
-						Value:     fmt.Sprintf("zone=%s_rl_gateway-rate-limit_rule0 burst=3", namespace),
-					},
-					{
-						File:      fmt.Sprintf("%s%s", filePrefix, "_gateway-rate-limit_gateway_server.conf"),
-						Directive: "limit_req_log_level",
-						Value:     "info",
-					},
-					{
-						File:      fmt.Sprintf("%s%s", filePrefix, "_gateway-rate-limit_gateway_server.conf"),
-						Directive: "limit_req_status",
-						Value:     "429",
-					},
-				}
-				for _, expCfg := range expCfgs {
-					Expect(framework.ValidateNginxFieldExists(conf, expCfg)).To(Succeed())
-				}
-			})
-
-			It("are set properly for httproute policy", func() {
-				expCfgs := []framework.ExpectedNginxField{
-					{
-						Directive: "include",
-						Value:     fmt.Sprintf("%s%s", filePrefix, "_httproute-rate-limit_internal_http.conf"),
-						File:      "http.conf",
-					},
-					{
-						Directive: "include",
-						Value:     fmt.Sprintf("%s%s", filePrefix, "_httproute-rate-limit_route.conf"),
-						File:      "http.conf",
-						Server:    "cafe.example.com",
-						Location:  "/coffee",
-					},
-					{
-						File:      fmt.Sprintf("%s%s", filePrefix, "_httproute-rate-limit_internal_http.conf"),
-						Directive: "limit_req_zone",
-						Value:     fmt.Sprintf("$binary_remote_addr zone=%s_rl_httproute-rate-limit_rule0:20m rate=1r/m", namespace),
-					},
-					{
-						File:      fmt.Sprintf("%s%s", filePrefix, "_httproute-rate-limit_route.conf"),
-						Directive: "limit_req",
-						Value:     fmt.Sprintf("zone=%s_rl_httproute-rate-limit_rule0 burst=5", namespace),
-					},
-					{
-						File:      fmt.Sprintf("%s%s", filePrefix, "_httproute-rate-limit_route.conf"),
-						Directive: "limit_req_log_level",
-						Value:     "warn",
-					},
-					{
-						File:      fmt.Sprintf("%s%s", filePrefix, "_httproute-rate-limit_route.conf"),
-						Directive: "limit_req_status",
-						Value:     "466",
-					},
-				}
-				for _, expCfg := range expCfgs {
-					Expect(framework.ValidateNginxFieldExists(conf, expCfg)).To(Succeed())
-				}
-			})
-
-			It("are set properly for grpcroute policy", func() {
-				expCfgs := []framework.ExpectedNginxField{
-					{
-						Directive: "include",
-						Value:     fmt.Sprintf("%s%s", filePrefix, "_grpcroute-rate-limit_internal_http.conf"),
-						File:      "http.conf",
-					},
-					{
-						Directive: "include",
-						File:      "http.conf",
-						Value:     fmt.Sprintf("%s%s", filePrefix, "_grpcroute-rate-limit_route.conf"),
-						Server:    "*.example.com",
-						Location:  "/helloworld.Greeter/SayHello",
-					},
-					{
-						File:      fmt.Sprintf("%s%s", filePrefix, "_grpcroute-rate-limit_internal_http.conf"),
-						Directive: "limit_req_zone",
-						Value:     fmt.Sprintf("$binary_remote_addr zone=%s_rl_grpcroute-rate-limit_rule0:20m rate=5r/s", namespace),
-					},
-					{
-						File:      fmt.Sprintf("%s%s", filePrefix, "_grpcroute-rate-limit_route.conf"),
-						Directive: "limit_req",
-						Value:     fmt.Sprintf("zone=%s_rl_grpcroute-rate-limit_rule0 burst=2", namespace),
-					},
-					{
-						File:      fmt.Sprintf("%s%s", filePrefix, "_grpcroute-rate-limit_route.conf"),
-						Directive: "limit_req_log_level",
-						Value:     "warn",
-					},
-					{
-						File:      fmt.Sprintf("%s%s", filePrefix, "_grpcroute-rate-limit_route.conf"),
-						Directive: "limit_req_status",
-						Value:     "466",
-					},
-				}
-				for _, expCfg := range expCfgs {
-					Expect(framework.ValidateNginxFieldExists(conf, expCfg)).To(Succeed())
-				}
-			})
+			DescribeTable("are set properly for",
+				func(getCfgs func() []framework.ExpectedNginxField) {
+					for _, expCfg := range getCfgs() {
+						Expect(framework.ValidateNginxFieldExists(conf, expCfg)).To(Succeed())
+					}
+				},
+				Entry("gateway policy", func() []framework.ExpectedNginxField {
+					return []framework.ExpectedNginxField{
+						{
+							Directive: "include",
+							Value:     fmt.Sprintf("%s%s", filePrefix, "_gateway-rate-limit_gateway.conf"),
+							File:      "http.conf",
+						},
+						{
+							File:      fmt.Sprintf("%s%s", filePrefix, "_gateway-rate-limit_gateway.conf"),
+							Directive: "limit_req_zone",
+							Value:     fmt.Sprintf("$binary_remote_addr zone=%s_rl_gateway-rate-limit_rule0:10m rate=15r/m", namespace),
+						},
+						{
+							Directive: "include",
+							Value:     fmt.Sprintf("%s%s", filePrefix, "_gateway-rate-limit_gateway_server.conf"),
+							File:      "http.conf",
+							Server:    "cafe.example.com",
+						},
+						{
+							File:      fmt.Sprintf("%s%s", filePrefix, "_gateway-rate-limit_gateway_server.conf"),
+							Directive: "limit_req",
+							Value:     fmt.Sprintf("zone=%s_rl_gateway-rate-limit_rule0 burst=3", namespace),
+						},
+						{
+							File:      fmt.Sprintf("%s%s", filePrefix, "_gateway-rate-limit_gateway_server.conf"),
+							Directive: "limit_req_log_level",
+							Value:     "info",
+						},
+						{
+							File:      fmt.Sprintf("%s%s", filePrefix, "_gateway-rate-limit_gateway_server.conf"),
+							Directive: "limit_req_status",
+							Value:     "429",
+						},
+					}
+				}),
+				Entry("httproute policy", func() []framework.ExpectedNginxField {
+					return []framework.ExpectedNginxField{
+						{
+							Directive: "include",
+							Value:     fmt.Sprintf("%s%s", filePrefix, "_httproute-rate-limit_internal_http.conf"),
+							File:      "http.conf",
+						},
+						{
+							Directive: "include",
+							Value:     fmt.Sprintf("%s%s", filePrefix, "_httproute-rate-limit_route.conf"),
+							File:      "http.conf",
+							Server:    "cafe.example.com",
+							Location:  "/coffee",
+						},
+						{
+							File:      fmt.Sprintf("%s%s", filePrefix, "_httproute-rate-limit_internal_http.conf"),
+							Directive: "limit_req_zone",
+							Value:     fmt.Sprintf("$binary_remote_addr zone=%s_rl_httproute-rate-limit_rule0:20m rate=1r/m", namespace),
+						},
+						{
+							File:      fmt.Sprintf("%s%s", filePrefix, "_httproute-rate-limit_route.conf"),
+							Directive: "limit_req",
+							Value:     fmt.Sprintf("zone=%s_rl_httproute-rate-limit_rule0 burst=5", namespace),
+						},
+						{
+							File:      fmt.Sprintf("%s%s", filePrefix, "_httproute-rate-limit_route.conf"),
+							Directive: "limit_req_log_level",
+							Value:     "warn",
+						},
+						{
+							File:      fmt.Sprintf("%s%s", filePrefix, "_httproute-rate-limit_route.conf"),
+							Directive: "limit_req_status",
+							Value:     "466",
+						},
+					}
+				}),
+				Entry("grpcroute policy", func() []framework.ExpectedNginxField {
+					return []framework.ExpectedNginxField{
+						{
+							Directive: "include",
+							Value:     fmt.Sprintf("%s%s", filePrefix, "_grpcroute-rate-limit_internal_http.conf"),
+							File:      "http.conf",
+						},
+						{
+							Directive: "include",
+							File:      "http.conf",
+							Value:     fmt.Sprintf("%s%s", filePrefix, "_grpcroute-rate-limit_route.conf"),
+							Server:    "*.example.com",
+							Location:  "/helloworld.Greeter/SayHello",
+						},
+						{
+							File:      fmt.Sprintf("%s%s", filePrefix, "_grpcroute-rate-limit_internal_http.conf"),
+							Directive: "limit_req_zone",
+							Value:     fmt.Sprintf("$binary_remote_addr zone=%s_rl_grpcroute-rate-limit_rule0:20m rate=5r/s", namespace),
+						},
+						{
+							File:      fmt.Sprintf("%s%s", filePrefix, "_grpcroute-rate-limit_route.conf"),
+							Directive: "limit_req",
+							Value:     fmt.Sprintf("zone=%s_rl_grpcroute-rate-limit_rule0 burst=2", namespace),
+						},
+						{
+							File:      fmt.Sprintf("%s%s", filePrefix, "_grpcroute-rate-limit_route.conf"),
+							Directive: "limit_req_log_level",
+							Value:     "warn",
+						},
+						{
+							File:      fmt.Sprintf("%s%s", filePrefix, "_grpcroute-rate-limit_route.conf"),
+							Directive: "limit_req_status",
+							Value:     "466",
+						},
+					}
+				}),
+			)
 		})
 	})
 

@@ -163,8 +163,6 @@ var _ = Describe("Tracing", FlakeAttempts(2), Ordered, Label("functional", "trac
 	}
 
 	checkStatusAndTraces := func() {
-		// GatewayClass ResolvedRefs and policy status depend on NGF resolving external references
-		// (the OTel collector endpoint), which can take longer than a simple API read.
 		Eventually(
 			verifyGatewayClassResolvedRefs).
 			WithTimeout(timeoutConfig.GetStatusTimeout).
