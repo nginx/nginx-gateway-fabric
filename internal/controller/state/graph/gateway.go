@@ -2,7 +2,6 @@ package graph
 
 import (
 	"fmt"
-	"slices"
 
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation/field"
@@ -11,7 +10,6 @@ import (
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/config"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
-	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/secrets"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/resolver"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
@@ -152,7 +150,7 @@ func validateGatewayRefs(
 	refGrantResolver *referenceGrantResolver,
 ) ([]conditions.Condition, *types.NamespacedName) {
 	if (gw.Spec.Infrastructure == nil || gw.Spec.Infrastructure.ParametersRef == nil) &&
-		(gw.Spec.TLS == nil || (gw.Spec.TLS.Backend == nil && gw.Spec.TLS.Frontend == nil)) {
+		(gw.Spec.TLS == nil || gw.Spec.TLS.Backend == nil) {
 		return nil, nil
 	}
 
@@ -305,102 +303,6 @@ func validateGateway(
 	conds = append(conds, refsConds...)
 
 	return conds, valid, secretRefNsName
-}
-
-//nolint:gocyclo
-func getGatewayFrontendTLSCaRefs(
-	gw *v1.Gateway,
-	listener *Listener,
-	path *field.Path,
-	resourceResolver resolver.Resolver,
-	refGrantResolver *referenceGrantResolver,
-	certRefs []v1.ObjectReference,
-) ([]conditions.Condition, []*types.NamespacedName) {
-	if gw.Spec.TLS == nil || gw.Spec.TLS.Frontend == nil {
-		return []conditions.Condition{}, nil
-	}
-
-	if len(certRefs) == 0 {
-		return []conditions.Condition{}, nil
-	}
-
-	var caRefs []*types.NamespacedName
-	var conds []conditions.Condition
-	allowedKinds := []string{kinds.Secret, kinds.ConfigMap}
-
-	for _, cert := range certRefs {
-		if !slices.Contains(allowedKinds, string(cert.Kind)) {
-			valErr := field.NotSupported(path, cert.Kind, allowedKinds)
-			msg := helpers.CapitalizeString(valErr.Error())
-			conds = append(conds, conditions.NewListenerInvalidCaCertificateKind(msg))
-			continue
-		}
-
-		if cert.Group != "" && cert.Group != "core" {
-			valErr := field.NotSupported(
-				path,
-				cert.Group, []string{"core", ""},
-			)
-			msg := helpers.CapitalizeString(valErr.Error())
-			conds = append(conds, conditions.NewListenerInvalidCaCertificateKind(msg))
-			continue
-		}
-
-		certNsName, certNs := getGatewayFrontendTLSCertNsName(cert, gw)
-		if cert.Namespace != nil {
-			certNsName.Namespace = string(*cert.Namespace)
-		}
-
-		var resourceType resolver.ResourceType
-		switch cert.Kind {
-		case kinds.Secret:
-			resourceType = resolver.ResourceTypeSecret
-		case kinds.ConfigMap:
-			resourceType = resolver.ResourceTypeConfigMap
-		}
-
-		if err := resourceResolver.Resolve(
-			resourceType,
-			*certNsName,
-			resolver.WithExpectedSecretKey(secrets.CAKey),
-		); err != nil {
-			valErr := field.Invalid(path.Child("caCertificateRefs"), certNsName, err.Error())
-			msg := helpers.CapitalizeString(valErr.Error())
-			conds = append(conds, conditions.NewListenerInvalidCaCertificateRef(msg))
-			continue
-		}
-
-		if certNs != gw.Namespace {
-			var cond conditions.Condition
-			switch cert.Kind {
-			case kinds.Secret:
-				msg := fmt.Sprintf("secret ref %s not permitted by any ReferenceGrant", certNsName)
-				cond = resolveResourceRefGrant(msg, gw.Namespace, toSecret(*certNsName), refGrantResolver)
-			case kinds.ConfigMap:
-				msg := fmt.Sprintf("configmap ref %s not permitted by any ReferenceGrant", certNsName)
-				cond = resolveResourceRefGrant(msg, gw.Namespace, toConfigMap(*certNsName), refGrantResolver)
-			}
-			if cond != (conditions.Condition{}) {
-				conds = append(conds, cond)
-				continue
-			}
-		}
-		caRefs = append(caRefs, certNsName)
-	}
-
-	if len(conds) > 0 && len(conds) == len(certRefs) {
-		allInvalidCond := []conditions.Condition{}
-		msg := "All frontend TLS CA certificate refs are invalid for this listener"
-		allInvalidCond = append(allInvalidCond, conditions.NewListenerInvalidNoValidCACertificate(msg))
-		listener.Valid = false
-		return allInvalidCond, nil
-	}
-
-	if len(caRefs) == 0 {
-		return conds, nil
-	}
-
-	return conds, caRefs
 }
 
 func resolveResourceRefGrant(msg, gwNs string,
