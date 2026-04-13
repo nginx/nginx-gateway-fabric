@@ -886,20 +886,20 @@ func TestBuildGatewayStatuses(t *testing.T) {
 
 	validListenerConditions := []metav1.Condition{
 		{
-			Type:               string(v1.ListenerConditionAccepted),
-			Status:             metav1.ConditionTrue,
-			ObservedGeneration: 2,
-			LastTransitionTime: transitionTime,
-			Reason:             string(v1.ListenerReasonAccepted),
-			Message:            "The Listener is accepted",
-		},
-		{
 			Type:               string(v1.ListenerConditionProgrammed),
 			Status:             metav1.ConditionTrue,
 			ObservedGeneration: 2,
 			LastTransitionTime: transitionTime,
 			Reason:             string(v1.ListenerReasonProgrammed),
 			Message:            "The Listener is programmed",
+		},
+		{
+			Type:               string(v1.ListenerConditionAccepted),
+			Status:             metav1.ConditionTrue,
+			ObservedGeneration: 2,
+			LastTransitionTime: transitionTime,
+			Reason:             string(v1.ListenerReasonAccepted),
+			Message:            "The Listener is accepted",
 		},
 		{
 			Type:               string(v1.ListenerConditionResolvedRefs),

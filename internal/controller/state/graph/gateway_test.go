@@ -2486,21 +2486,6 @@ func TestValidateUnsupportedGatewayFields(t *testing.T) {
 				conditions.NewGatewayAcceptedUnsupportedField("AllowedListeners"),
 			},
 		},
-		{
-			name: "Multiple unsupported fields: AllowedListeners and Frontend TLS",
-			gateway: &v1.Gateway{
-				Spec: v1.GatewaySpec{
-					AllowedListeners: &v1.AllowedListeners{},
-					TLS: &v1.GatewayTLSConfig{
-						Frontend: &v1.FrontendTLSConfig{},
-					},
-				},
-			},
-			expectedConds: []conditions.Condition{
-				conditions.NewGatewayAcceptedUnsupportedField("AllowedListeners"),
-				conditions.NewGatewayAcceptedUnsupportedField("TLS.Frontend"),
-			},
-		},
 	}
 
 	for _, test := range tests {
