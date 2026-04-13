@@ -249,8 +249,9 @@ describe('headersMatch', () => {
 
 	const tests = [
 		{
-			name: 'throws an error if a header has multiple colons',
-			headers: ['too:Exact:many:colons'],
+			name: 'throws an error if a header has fewer than two colons',
+			headers: ['name:value'],
+			requestHeaders: {},
 			expectThrow: true,
 		},
 		{
@@ -304,6 +305,30 @@ describe('headersMatch', () => {
 				multiValueHeader: 'val1,val2,val3,val4,val5',
 			},
 			expected: true,
+		},
+		{
+			name: 'returns true if header value contains colons such as a URL and matches exactly',
+			headers: ['Referer:Exact:https://example.com/path'],
+			requestHeaders: {
+				Referer: 'https://example.com/path',
+			},
+			expected: true,
+		},
+		{
+			name: 'returns true if header value is a regex containing colons and end-of-string anchor and the request header matches',
+			headers: ['Referer:RegularExpression:^https://zoom\\.us(/|$)'],
+			requestHeaders: {
+				Referer: 'https://zoom.us/meeting',
+			},
+			expected: true,
+		},
+		{
+			name: 'returns false if header value is a regex containing colons and end-of-string anchor and the request header does not match',
+			headers: ['Referer:RegularExpression:^https://zoom\\.us(/|$)'],
+			requestHeaders: {
+				Referer: 'https://invalid.com',
+			},
+			expected: false,
 		},
 	];
 
@@ -445,6 +470,22 @@ describe('paramsMatch', () => {
 				Arg1: ['value2', 'value1'], // 'value2' wins but it does not match
 				arg2: 'value2=SOME=other=value',
 				arg3: '==value3&*1(*+',
+			},
+			expected: false,
+		},
+		{
+			name: 'returns true if param matches a regex with an end-of-string anchor and no trailing characters',
+			params: ['version=RegularExpression=^v[0-9]+\\.[0-9]+$'],
+			requestParams: {
+				version: 'v1.2',
+			},
+			expected: true,
+		},
+		{
+			name: 'returns false if param does not match a regex with an end-of-string anchor due to trailing characters',
+			params: ['version=RegularExpression=^v[0-9]+\\.[0-9]+$'],
+			requestParams: {
+				version: 'v1.2-beta',
 			},
 			expected: false,
 		},

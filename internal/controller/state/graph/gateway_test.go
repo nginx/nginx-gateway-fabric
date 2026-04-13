@@ -209,6 +209,57 @@ func TestBuildGateway(t *testing.T) {
 		},
 	}
 
+	// TLS config with two invalid certs (both do not exist).
+	tlsConfigTwoInvalidSecrets := &v1.ListenerTLSConfig{
+		Mode: helpers.GetPointer(v1.TLSModeTerminate),
+		CertificateRefs: []v1.SecretObjectReference{
+			{
+				Kind:      helpers.GetPointer[v1.Kind]("Secret"),
+				Name:      "does-not-exist-1",
+				Namespace: helpers.GetPointer[v1.Namespace]("test"),
+			},
+			{
+				Kind:      helpers.GetPointer[v1.Kind]("Secret"),
+				Name:      "does-not-exist-2",
+				Namespace: helpers.GetPointer[v1.Namespace]("test"),
+			},
+		},
+	}
+
+	// TLS config with one valid cert (same-ns secret) and one invalid cert (does not exist).
+	tlsConfigOneValidOneInvalid := &v1.ListenerTLSConfig{
+		Mode: helpers.GetPointer(v1.TLSModeTerminate),
+		CertificateRefs: []v1.SecretObjectReference{
+			{
+				Kind:      helpers.GetPointer[v1.Kind]("Secret"),
+				Name:      v1.ObjectName(secretSameNs.Name),
+				Namespace: (*v1.Namespace)(&secretSameNs.Namespace),
+			},
+			{
+				Kind:      helpers.GetPointer[v1.Kind]("Secret"),
+				Name:      "does-not-exist",
+				Namespace: helpers.GetPointer[v1.Namespace]("test"),
+			},
+		},
+	}
+
+	// TLS config with one valid cert (same-ns secret) and one cross-namespace cert without reference grant.
+	tlsConfigOneValidOneRefNotPermitted := &v1.ListenerTLSConfig{
+		Mode: helpers.GetPointer(v1.TLSModeTerminate),
+		CertificateRefs: []v1.SecretObjectReference{
+			{
+				Kind:      helpers.GetPointer[v1.Kind]("Secret"),
+				Name:      v1.ObjectName(secretSameNs.Name),
+				Namespace: (*v1.Namespace)(&secretSameNs.Namespace),
+			},
+			{
+				Kind:      helpers.GetPointer[v1.Kind]("Secret"),
+				Name:      v1.ObjectName(secretDiffNamespace.Name),
+				Namespace: (*v1.Namespace)(&secretDiffNamespace.Namespace),
+			},
+		},
+	}
+
 	createListener := func(
 		name string,
 		hostname string,
@@ -290,6 +341,24 @@ func TestBuildGateway(t *testing.T) {
 		"foo.example.com",
 		443,
 		tlsConfigInvalidSecret,
+	)
+	partialInvalidCertListener := createHTTPSListener(
+		"partial-invalid-cert",
+		"foo.example.com",
+		443,
+		tlsConfigOneValidOneInvalid,
+	)
+	partialRefNotPermittedListener := createHTTPSListener(
+		"partial-ref-not-permitted",
+		"foo.example.com",
+		443,
+		tlsConfigOneValidOneRefNotPermitted,
+	)
+	allInvalidCertsListener := createHTTPSListener(
+		"all-invalid-certs",
+		"foo.example.com",
+		443,
+		tlsConfigTwoInvalidSecrets,
 	)
 	invalidHTTPSPortListener := createHTTPSListener(
 		"invalid-https-port",
@@ -481,26 +550,26 @@ func TestBuildGateway(t *testing.T) {
 					Source: getLastCreatedGateway(),
 					Listeners: []*Listener{
 						{
-							Name:           "foo-443-https-1",
-							GatewayName:    client.ObjectKeyFromObject(getLastCreatedGateway()),
-							Source:         foo443HTTPSListener1,
-							Valid:          true,
-							Attachable:     true,
-							Routes:         map[RouteKey]*L7Route{},
-							L4Routes:       map[L4RouteKey]*L4Route{},
-							ResolvedSecret: helpers.GetPointer(client.ObjectKeyFromObject(secretSameNs)),
-							SupportedKinds: supportedKindsForListeners,
+							Name:            "foo-443-https-1",
+							GatewayName:     client.ObjectKeyFromObject(getLastCreatedGateway()),
+							Source:          foo443HTTPSListener1,
+							Valid:           true,
+							Attachable:      true,
+							Routes:          map[RouteKey]*L7Route{},
+							L4Routes:        map[L4RouteKey]*L4Route{},
+							ResolvedSecrets: []types.NamespacedName{client.ObjectKeyFromObject(secretSameNs)},
+							SupportedKinds:  supportedKindsForListeners,
 						},
 						{
-							Name:           "foo-8443-https",
-							GatewayName:    client.ObjectKeyFromObject(getLastCreatedGateway()),
-							Source:         foo8443HTTPSListener,
-							Valid:          true,
-							Attachable:     true,
-							Routes:         map[RouteKey]*L7Route{},
-							L4Routes:       map[L4RouteKey]*L4Route{},
-							ResolvedSecret: helpers.GetPointer(client.ObjectKeyFromObject(secretSameNs)),
-							SupportedKinds: supportedKindsForListeners,
+							Name:            "foo-8443-https",
+							GatewayName:     client.ObjectKeyFromObject(getLastCreatedGateway()),
+							Source:          foo8443HTTPSListener,
+							Valid:           true,
+							Attachable:      true,
+							Routes:          map[RouteKey]*L7Route{},
+							L4Routes:        map[L4RouteKey]*L4Route{},
+							ResolvedSecrets: []types.NamespacedName{client.ObjectKeyFromObject(secretSameNs)},
+							SupportedKinds:  supportedKindsForListeners,
 						},
 					},
 					DeploymentName: types.NamespacedName{
@@ -574,15 +643,15 @@ func TestBuildGateway(t *testing.T) {
 					Source: getLastCreatedGateway(),
 					Listeners: []*Listener{
 						{
-							Name:           "listener-cross-ns-secret",
-							GatewayName:    client.ObjectKeyFromObject(getLastCreatedGateway()),
-							Source:         crossNamespaceSecretListener,
-							Valid:          true,
-							Attachable:     true,
-							Routes:         map[RouteKey]*L7Route{},
-							L4Routes:       map[L4RouteKey]*L4Route{},
-							ResolvedSecret: helpers.GetPointer(client.ObjectKeyFromObject(secretDiffNamespace)),
-							SupportedKinds: supportedKindsForListeners,
+							Name:            "listener-cross-ns-secret",
+							GatewayName:     client.ObjectKeyFromObject(getLastCreatedGateway()),
+							Source:          crossNamespaceSecretListener,
+							Valid:           true,
+							Attachable:      true,
+							Routes:          map[RouteKey]*L7Route{},
+							L4Routes:        map[L4RouteKey]*L4Route{},
+							ResolvedSecrets: []types.NamespacedName{client.ObjectKeyFromObject(secretDiffNamespace)},
+							SupportedKinds:  supportedKindsForListeners,
 						},
 					},
 					DeploymentName: types.NamespacedName{
@@ -728,8 +797,9 @@ func TestBuildGateway(t *testing.T) {
 							Source:      crossNamespaceSecretListener,
 							Valid:       false,
 							Attachable:  true,
-							Conditions: conditions.NewListenerRefNotPermitted(
+							Conditions: conditions.NewListenerAllInvalidCertificateRefs(
 								`Certificate ref to secret diff-ns/secret not permitted by any ReferenceGrant`,
+								string(v1.ListenerReasonRefNotPermitted),
 							),
 							Routes:         map[RouteKey]*L7Route{},
 							L4Routes:       map[L4RouteKey]*L4Route{},
@@ -928,9 +998,10 @@ func TestBuildGateway(t *testing.T) {
 							Attachable:  true,
 							Routes:      map[RouteKey]*L7Route{},
 							L4Routes:    map[L4RouteKey]*L4Route{},
-							Conditions: conditions.NewListenerInvalidCertificateRef(
-								"tls.certificateRefs[0]: Invalid value: {\"Namespace\":\"test\",\"Name\":\"does-not-exist\"}: " +
+							Conditions: conditions.NewListenerAllInvalidCertificateRefs(
+								"tls.certificateRefs[0]: Invalid value: {\"Namespace\":\"test\",\"Name\":\"does-not-exist\"}: "+
 									"Secret test/does-not-exist does not exist",
+								string(v1.ListenerReasonInvalidCertificateRef),
 							),
 							SupportedKinds: supportedKindsForListeners,
 						},
@@ -943,6 +1014,120 @@ func TestBuildGateway(t *testing.T) {
 				},
 			},
 			name: "invalid https listener (secret does not exist)",
+		},
+		{
+			gateway:      createGateway(gatewayCfg{name: "gateway1", listeners: []v1.Listener{allInvalidCertsListener}}),
+			gatewayClass: validGC,
+			expected: map[types.NamespacedName]*Gateway{
+				{Namespace: "test", Name: "gateway1"}: {
+					Source: getLastCreatedGateway(),
+					Listeners: []*Listener{
+						{
+							Name:        "all-invalid-certs",
+							GatewayName: client.ObjectKeyFromObject(getLastCreatedGateway()),
+							Source:      allInvalidCertsListener,
+							Valid:       false,
+							Attachable:  true,
+							Routes:      map[RouteKey]*L7Route{},
+							L4Routes:    map[L4RouteKey]*L4Route{},
+							Conditions: conditions.NewListenerAllInvalidCertificateRefs(
+								"tls.certificateRefs[0]: Invalid value: "+
+									"{\"Namespace\":\"test\",\"Name\":\"does-not-exist-1\"}: "+
+									"Secret test/does-not-exist-1 does not exist; "+
+									"tls.certificateRefs[1]: Invalid value: "+
+									"{\"Namespace\":\"test\",\"Name\":\"does-not-exist-2\"}: "+
+									"Secret test/does-not-exist-2 does not exist",
+								string(v1.ListenerReasonInvalidCertificateRef),
+							),
+							SupportedKinds: supportedKindsForListeners,
+						},
+					},
+					DeploymentName: types.NamespacedName{
+						Namespace: "test",
+						Name:      controller.CreateNginxResourceName("gateway1", gcName),
+					},
+					Valid: true,
+				},
+			},
+			name: "https listener with multiple invalid cert refs (all fail, aggregated)",
+		},
+		{
+			gateway: createGateway(
+				gatewayCfg{name: "gateway1", listeners: []v1.Listener{partialInvalidCertListener}},
+			),
+			gatewayClass: validGC,
+			expected: map[types.NamespacedName]*Gateway{
+				{Namespace: "test", Name: "gateway1"}: {
+					Source: getLastCreatedGateway(),
+					Listeners: []*Listener{
+						{
+							Name:        "partial-invalid-cert",
+							GatewayName: client.ObjectKeyFromObject(getLastCreatedGateway()),
+							Source:      partialInvalidCertListener,
+							Valid:       true,
+							Attachable:  true,
+							Routes:      map[RouteKey]*L7Route{},
+							L4Routes:    map[L4RouteKey]*L4Route{},
+							ResolvedSecrets: []types.NamespacedName{
+								client.ObjectKeyFromObject(secretSameNs),
+							},
+							Conditions: []conditions.Condition{
+								conditions.NewListenerUnresolvedCertificateRef(
+									"tls.certificateRefs[1]: Invalid value: "+
+										"{\"Namespace\":\"test\",\"Name\":\"does-not-exist\"}: "+
+										"Secret test/does-not-exist does not exist",
+									string(v1.ListenerReasonInvalidCertificateRef),
+								),
+							},
+							SupportedKinds: supportedKindsForListeners,
+						},
+					},
+					DeploymentName: types.NamespacedName{
+						Namespace: "test",
+						Name:      controller.CreateNginxResourceName("gateway1", gcName),
+					},
+					Valid: true,
+				},
+			},
+			name: "https listener with one valid and one invalid cert ref (partial failure)",
+		},
+		{
+			gateway: createGateway(
+				gatewayCfg{name: "gateway1", listeners: []v1.Listener{partialRefNotPermittedListener}},
+			),
+			gatewayClass: validGC,
+			expected: map[types.NamespacedName]*Gateway{
+				{Namespace: "test", Name: "gateway1"}: {
+					Source: getLastCreatedGateway(),
+					Listeners: []*Listener{
+						{
+							Name:        "partial-ref-not-permitted",
+							GatewayName: client.ObjectKeyFromObject(getLastCreatedGateway()),
+							Source:      partialRefNotPermittedListener,
+							Valid:       true,
+							Attachable:  true,
+							Routes:      map[RouteKey]*L7Route{},
+							L4Routes:    map[L4RouteKey]*L4Route{},
+							ResolvedSecrets: []types.NamespacedName{
+								client.ObjectKeyFromObject(secretSameNs),
+							},
+							Conditions: []conditions.Condition{
+								conditions.NewListenerUnresolvedCertificateRef(
+									"Certificate ref to secret diff-ns/secret not permitted by any ReferenceGrant",
+									string(v1.ListenerReasonRefNotPermitted),
+								),
+							},
+							SupportedKinds: supportedKindsForListeners,
+						},
+					},
+					DeploymentName: types.NamespacedName{
+						Namespace: "test",
+						Name:      controller.CreateNginxResourceName("gateway1", gcName),
+					},
+					Valid: true,
+				},
+			},
+			name: "https listener with one valid cert and one cross-namespace cert not permitted (partial failure)",
 		},
 		{
 			gateway: createGateway(
@@ -996,26 +1181,26 @@ func TestBuildGateway(t *testing.T) {
 							SupportedKinds: supportedKindsForListeners,
 						},
 						{
-							Name:           "foo-443-https-1",
-							GatewayName:    client.ObjectKeyFromObject(getLastCreatedGateway()),
-							Source:         foo443HTTPSListener1,
-							Valid:          true,
-							Attachable:     true,
-							Routes:         map[RouteKey]*L7Route{},
-							L4Routes:       map[L4RouteKey]*L4Route{},
-							ResolvedSecret: helpers.GetPointer(client.ObjectKeyFromObject(secretSameNs)),
-							SupportedKinds: supportedKindsForListeners,
+							Name:            "foo-443-https-1",
+							GatewayName:     client.ObjectKeyFromObject(getLastCreatedGateway()),
+							Source:          foo443HTTPSListener1,
+							Valid:           true,
+							Attachable:      true,
+							Routes:          map[RouteKey]*L7Route{},
+							L4Routes:        map[L4RouteKey]*L4Route{},
+							ResolvedSecrets: []types.NamespacedName{client.ObjectKeyFromObject(secretSameNs)},
+							SupportedKinds:  supportedKindsForListeners,
 						},
 						{
-							Name:           "foo-8443-https",
-							GatewayName:    client.ObjectKeyFromObject(getLastCreatedGateway()),
-							Source:         foo8443HTTPSListener,
-							Valid:          true,
-							Attachable:     true,
-							Routes:         map[RouteKey]*L7Route{},
-							L4Routes:       map[L4RouteKey]*L4Route{},
-							ResolvedSecret: helpers.GetPointer(client.ObjectKeyFromObject(secretSameNs)),
-							SupportedKinds: supportedKindsForListeners,
+							Name:            "foo-8443-https",
+							GatewayName:     client.ObjectKeyFromObject(getLastCreatedGateway()),
+							Source:          foo8443HTTPSListener,
+							Valid:           true,
+							Attachable:      true,
+							Routes:          map[RouteKey]*L7Route{},
+							L4Routes:        map[L4RouteKey]*L4Route{},
+							ResolvedSecrets: []types.NamespacedName{client.ObjectKeyFromObject(secretSameNs)},
+							SupportedKinds:  supportedKindsForListeners,
 						},
 						{
 							Name:           "bar-80",
@@ -1028,26 +1213,26 @@ func TestBuildGateway(t *testing.T) {
 							SupportedKinds: supportedKindsForListeners,
 						},
 						{
-							Name:           "bar-443-https",
-							GatewayName:    client.ObjectKeyFromObject(getLastCreatedGateway()),
-							Source:         bar443HTTPSListener,
-							Valid:          true,
-							Attachable:     true,
-							Routes:         map[RouteKey]*L7Route{},
-							L4Routes:       map[L4RouteKey]*L4Route{},
-							ResolvedSecret: helpers.GetPointer(client.ObjectKeyFromObject(secretSameNs)),
-							SupportedKinds: supportedKindsForListeners,
+							Name:            "bar-443-https",
+							GatewayName:     client.ObjectKeyFromObject(getLastCreatedGateway()),
+							Source:          bar443HTTPSListener,
+							Valid:           true,
+							Attachable:      true,
+							Routes:          map[RouteKey]*L7Route{},
+							L4Routes:        map[L4RouteKey]*L4Route{},
+							ResolvedSecrets: []types.NamespacedName{client.ObjectKeyFromObject(secretSameNs)},
+							SupportedKinds:  supportedKindsForListeners,
 						},
 						{
-							Name:           "bar-8443-https",
-							GatewayName:    client.ObjectKeyFromObject(getLastCreatedGateway()),
-							Source:         bar8443HTTPSListener,
-							Valid:          true,
-							Attachable:     true,
-							Routes:         map[RouteKey]*L7Route{},
-							L4Routes:       map[L4RouteKey]*L4Route{},
-							ResolvedSecret: helpers.GetPointer(client.ObjectKeyFromObject(secretSameNs)),
-							SupportedKinds: supportedKindsForListeners,
+							Name:            "bar-8443-https",
+							GatewayName:     client.ObjectKeyFromObject(getLastCreatedGateway()),
+							Source:          bar8443HTTPSListener,
+							Valid:           true,
+							Attachable:      true,
+							Routes:          map[RouteKey]*L7Route{},
+							L4Routes:        map[L4RouteKey]*L4Route{},
+							ResolvedSecrets: []types.NamespacedName{client.ObjectKeyFromObject(secretSameNs)},
+							SupportedKinds:  supportedKindsForListeners,
 						},
 					},
 					DeploymentName: types.NamespacedName{
@@ -1120,7 +1305,6 @@ func TestBuildGateway(t *testing.T) {
 							Routes:         map[RouteKey]*L7Route{},
 							L4Routes:       map[L4RouteKey]*L4Route{},
 							Conditions:     conditions.NewListenerProtocolConflict(conflict80PortMsg),
-							ResolvedSecret: helpers.GetPointer(client.ObjectKeyFromObject(secretSameNs)),
 							SupportedKinds: supportedKindsForListeners,
 						},
 						{
@@ -1132,7 +1316,6 @@ func TestBuildGateway(t *testing.T) {
 							Routes:         map[RouteKey]*L7Route{},
 							L4Routes:       map[L4RouteKey]*L4Route{},
 							Conditions:     conditions.NewListenerProtocolConflict(conflict443PortMsg),
-							ResolvedSecret: helpers.GetPointer(client.ObjectKeyFromObject(secretSameNs)),
 							SupportedKinds: supportedKindsForListeners,
 						},
 						{
@@ -1144,7 +1327,6 @@ func TestBuildGateway(t *testing.T) {
 							Routes:         map[RouteKey]*L7Route{},
 							L4Routes:       map[L4RouteKey]*L4Route{},
 							Conditions:     conditions.NewListenerProtocolConflict(conflict443PortMsg),
-							ResolvedSecret: helpers.GetPointer(client.ObjectKeyFromObject(secretSameNs)),
 							SupportedKinds: supportedKindsForListeners,
 						},
 					},
@@ -1275,14 +1457,13 @@ func TestBuildGateway(t *testing.T) {
 							},
 						},
 						{
-							Name:           "splat-443-https",
-							GatewayName:    client.ObjectKeyFromObject(getLastCreatedGateway()),
-							Source:         splat443HTTPSListener,
-							Valid:          false,
-							Attachable:     true,
-							ResolvedSecret: helpers.GetPointer(client.ObjectKeyFromObject(secretSameNs)),
-							Routes:         map[RouteKey]*L7Route{},
-							L4Routes:       map[L4RouteKey]*L4Route{},
+							Name:        "splat-443-https",
+							GatewayName: client.ObjectKeyFromObject(getLastCreatedGateway()),
+							Source:      splat443HTTPSListener,
+							Valid:       false,
+							Attachable:  true,
+							Routes:      map[RouteKey]*L7Route{},
+							L4Routes:    map[L4RouteKey]*L4Route{},
 							Conditions: append(
 								conditions.NewListenerHostnameConflict(conflict443HostnameMsg),
 								conditions.NewListenerOverlappingTLSConfig(
@@ -1324,15 +1505,15 @@ func TestBuildGateway(t *testing.T) {
 							},
 						},
 						{
-							Name:           "bar-443-https",
-							GatewayName:    client.ObjectKeyFromObject(getLastCreatedGateway()),
-							Source:         bar443HTTPSListener,
-							Valid:          true,
-							Attachable:     true,
-							ResolvedSecret: helpers.GetPointer(client.ObjectKeyFromObject(secretSameNs)),
-							Routes:         map[RouteKey]*L7Route{},
-							L4Routes:       map[L4RouteKey]*L4Route{},
-							SupportedKinds: supportedKindsForListeners,
+							Name:            "bar-443-https",
+							GatewayName:     client.ObjectKeyFromObject(getLastCreatedGateway()),
+							Source:          bar443HTTPSListener,
+							Valid:           true,
+							Attachable:      true,
+							ResolvedSecrets: []types.NamespacedName{client.ObjectKeyFromObject(secretSameNs)},
+							Routes:          map[RouteKey]*L7Route{},
+							L4Routes:        map[L4RouteKey]*L4Route{},
+							SupportedKinds:  supportedKindsForListeners,
 						},
 					},
 				},

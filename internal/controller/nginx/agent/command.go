@@ -153,14 +153,37 @@ func (cs *commandService) Subscribe(in pb.CommandService_SubscribeServer) error 
 	msgr := messenger.New(in)
 	go msgr.Run(ctx)
 
-	// apply current config before starting event loop
-	if err := cs.setInitialConfig(ctx, &grpcInfo, deployment, conn, msgr); err != nil {
-		return err
-	}
-
+	// Subscribe to broadcaster first, then apply current config before starting event loop
+	// Lock deployment for entire subscription + initial config process to prevent race conditions.
+	// Without this lock, the following race condition could occur:
+	// 1. New agent calls Subscribe() and starts setInitialConfig()
+	// 2. Concurrently, event handler calls broadcaster.Send() with a config update (file lock is held through
+	//    the entire broadcast transaction)
+	// 3. New agent gets stale config from setInitialConfig(), then subscribes
+	// 4. New agent misses the concurrent config update, leading to configuration drift
+	//
+	// By holding the lock across both broadcaster.Subscribe() and setInitialConfig(), we ensure atomicity:
+	// either the new subscriber gets the lock, subscribes and applies the latest config,
+	// then applies any concurrent updates that come in after the lock is released, or the subscriber gets the lock
+	// after the concurrent update, and applies that latest config in setInitialConfig() after subscribing,
+	// ensuring it doesn't miss any updates. Subscribing first also gives more time for the async subscription
+	// registration to complete before the lock is released.
+	deployment.FileLock.RLock()
 	// subscribe to the deployment broadcaster to get file updates
 	broadcaster := deployment.GetBroadcaster()
 	channels := broadcaster.Subscribe()
+
+	if err := cs.setInitialConfig(ctx, &grpcInfo, deployment, conn, msgr); err != nil {
+		// Cancel subscription BEFORE releasing lock, this should help in cleaning
+		// up any channels or goroutines that are waiting on this subscription.
+		// This should also help in preventing the broadcaster from sending messages to this
+		// subscriber while we're trying to clean up and return due to the error.
+		broadcaster.CancelSubscription(channels.ID)
+		deployment.FileLock.RUnlock()
+		return err
+	}
+
+	deployment.FileLock.RUnlock()
 	defer broadcaster.CancelSubscription(channels.ID)
 
 	var pendingBroadcastRequest *broadcast.NginxAgentMessage
@@ -284,6 +307,7 @@ func (cs *commandService) waitForConnection(
 }
 
 // setInitialConfig gets the initial configuration for this connection and applies it.
+// The deployment FileLock MUST already be locked before calling this function.
 func (cs *commandService) setInitialConfig(
 	ctx context.Context,
 	grpcInfo *grpcContext.GrpcInfo,
@@ -291,9 +315,6 @@ func (cs *commandService) setInitialConfig(
 	conn *agentgrpc.Connection,
 	msgr messenger.Messenger,
 ) error {
-	deployment.FileLock.Lock()
-	defer deployment.FileLock.Unlock()
-
 	if err := cs.validatePodImageVersion(conn.ParentName, conn.ParentType, deployment.imageVersion); err != nil {
 		cs.logAndSendErrorStatus(grpcInfo, deployment, conn, err)
 		return grpcStatus.Errorf(codes.FailedPrecondition, "nginx image version validation failed: %s", err.Error())

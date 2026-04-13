@@ -59,31 +59,26 @@ func (v *Validator) Conflicts(polA, polB policies.Policy) bool {
 }
 
 func conflicts(a, b ngfAPI.ClientSettingsPolicySpec) bool {
-	if a.Body != nil && b.Body != nil {
-		if a.Body.Timeout != nil && b.Body.Timeout != nil {
-			return true
-		}
-
-		if a.Body.MaxSize != nil && b.Body.MaxSize != nil {
-			return true
-		}
+	if a.Body != nil && b.Body != nil && bodyConflicts(*a.Body, *b.Body) {
+		return true
 	}
 
-	if a.KeepAlive != nil && b.KeepAlive != nil {
-		if a.KeepAlive.Requests != nil && b.KeepAlive.Requests != nil {
-			return true
-		}
-
-		if a.KeepAlive.Time != nil && b.KeepAlive.Time != nil {
-			return true
-		}
-
-		if a.KeepAlive.Timeout != nil && b.KeepAlive.Timeout != nil {
-			return true
-		}
+	if a.KeepAlive != nil && b.KeepAlive != nil && keepAliveConflicts(*a.KeepAlive, *b.KeepAlive) {
+		return true
 	}
 
 	return false
+}
+
+func bodyConflicts(a, b ngfAPI.ClientBody) bool {
+	return (a.Timeout != nil && b.Timeout != nil) || (a.MaxSize != nil && b.MaxSize != nil)
+}
+
+func keepAliveConflicts(a, b ngfAPI.ClientKeepAlive) bool {
+	return (a.Requests != nil && b.Requests != nil) ||
+		(a.Time != nil && b.Time != nil) ||
+		(a.MinTimeout != nil && b.MinTimeout != nil) ||
+		(a.Timeout != nil && b.Timeout != nil)
 }
 
 // validateSettings performs validation on fields in the spec that are vulnerable to code injection.
@@ -132,6 +127,14 @@ func (v *Validator) validateClientKeepAlive(keepAlive ngfAPI.ClientKeepAlive, fi
 			path := fieldPath.Child("time")
 
 			allErrs = append(allErrs, field.Invalid(path, *keepAlive.Time, err.Error()))
+		}
+	}
+
+	if keepAlive.MinTimeout != nil {
+		if err := v.genericValidator.ValidateNginxDuration(string(*keepAlive.MinTimeout)); err != nil {
+			path := fieldPath.Child("minTimeout")
+
+			allErrs = append(allErrs, field.Invalid(path, *keepAlive.MinTimeout, err.Error()))
 		}
 	}
 

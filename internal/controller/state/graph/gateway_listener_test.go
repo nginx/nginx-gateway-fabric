@@ -299,7 +299,7 @@ func TestValidateHTTPSListener(t *testing.T) {
 					CertificateRefs: []v1.SecretObjectReference{invalidSecretRefGroup},
 				},
 			},
-			expected: conditions.NewListenerInvalidCertificateRef(
+			expected: conditions.NewListenerInvalidCertificateRefNotAccepted(
 				`tls.certificateRefs[0].group: Unsupported value: "some-group": supported values: ""`,
 			),
 			name: "invalid cert ref group",
@@ -312,7 +312,7 @@ func TestValidateHTTPSListener(t *testing.T) {
 					CertificateRefs: []v1.SecretObjectReference{},
 				},
 			},
-			expected: conditions.NewListenerInvalidCertificateRef(
+			expected: conditions.NewListenerInvalidCertificateRefNotAccepted(
 				`tls.certificateRefs: Required value: certificateRefs must be defined for TLS mode terminate`,
 			),
 			name: "zero cert refs",
@@ -325,7 +325,7 @@ func TestValidateHTTPSListener(t *testing.T) {
 					CertificateRefs: []v1.SecretObjectReference{invalidSecretRefKind},
 				},
 			},
-			expected: conditions.NewListenerInvalidCertificateRef(
+			expected: conditions.NewListenerInvalidCertificateRefNotAccepted(
 				`tls.certificateRefs[0].kind: Unsupported value: "ConfigMap": supported values: "Secret"`,
 			),
 			name: "invalid cert ref kind",
@@ -338,10 +338,8 @@ func TestValidateHTTPSListener(t *testing.T) {
 					CertificateRefs: []v1.SecretObjectReference{validSecretRef, validSecretRef},
 				},
 			},
-			expected: conditions.NewListenerUnsupportedValue(
-				"tls.certificateRefs: Too many: 2: must have at most 1 item",
-			),
-			name: "too many cert refs",
+			expected: nil,
+			name:     "multiple cert refs",
 		},
 	}
 

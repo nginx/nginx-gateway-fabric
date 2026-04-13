@@ -28,6 +28,9 @@ keepalive_requests {{ .KeepAlive.Requests }};
 	{{- if .KeepAlive.Time }}
 keepalive_time {{ .KeepAlive.Time }};
 	{{- end }}
+	{{- if .KeepAlive.MinTimeout }}
+keepalive_min_timeout {{ .KeepAlive.MinTimeout }};
+	{{- end }}
     {{- if .KeepAlive.Timeout }}
         {{- if and .KeepAlive.Timeout.Server .KeepAlive.Timeout.Header }}
 keepalive_timeout {{ .KeepAlive.Timeout.Server }} {{ .KeepAlive.Timeout.Header }};

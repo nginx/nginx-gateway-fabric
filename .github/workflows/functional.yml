@@ -48,7 +48,7 @@ jobs:
           echo "GOPROXY=${GOPROXY_VALUE}" >> $GITHUB_ENV
 
       - name: Setup Golang Environment
-        uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
         with:
           go-version: stable
 
@@ -87,7 +87,7 @@ jobs:
       - name: Build binary
         uses: goreleaser/goreleaser-action@ec59f474b9834571250b370d4735c50f8e2d1e29 # v7.0.0
         with:
-          version: v2.14.3 # renovate: datasource=github-tags depName=goreleaser/goreleaser
+          version: v2.15.2 # renovate: datasource=github-tags depName=goreleaser/goreleaser
           args: build --single-target --snapshot --clean
         env:
           TELEMETRY_ENDPOINT: otel-collector-opentelemetry-collector.collector.svc.cluster.local:4317

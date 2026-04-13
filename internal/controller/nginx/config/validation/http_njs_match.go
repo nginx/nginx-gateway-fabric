@@ -2,12 +2,9 @@ package validation
 
 import (
 	"errors"
-	"fmt"
 	"strings"
 
 	k8svalidation "k8s.io/apimachinery/pkg/util/validation"
-
-	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config"
 )
 
 // HTTPNJSMatchValidator validates values used for matching a request.
@@ -20,19 +17,10 @@ func (HTTPNJSMatchValidator) ValidateHeaderNameInMatch(name string) error {
 		return errors.New(err[0])
 	}
 
-	return validateNJSHeaderPart(name)
+	return validateCommonNJSMatchPart(name)
 }
 
 func (HTTPNJSMatchValidator) ValidateHeaderValueInMatch(value string) error {
-	return validateNJSHeaderPart(value)
-}
-
-func validateNJSHeaderPart(value string) error {
-	// if it contains the separator, it will break NJS code.
-	if strings.Contains(value, config.HeaderMatchSeparator) {
-		return fmt.Errorf("cannot contain %q", config.HeaderMatchSeparator)
-	}
-
 	return validateCommonNJSMatchPart(value)
 }
 
@@ -55,13 +43,6 @@ func validateCommonNJSMatchPart(value string) error {
 	trimmed := strings.TrimSpace(value)
 	if len(trimmed) == 0 {
 		return errors.New("cannot be empty after trimming whitespace")
-	}
-
-	// the JSON marshaled match (see config.httpMatch) is used as a value of the set directive in a location.
-	// The directive supports NGINX variables.
-	// We don't want to allow them, as any undefined variable will cause NGINX to fail to reload.
-	if strings.Contains(value, "$") {
-		return errors.New("cannot contain $")
 	}
 
 	return nil

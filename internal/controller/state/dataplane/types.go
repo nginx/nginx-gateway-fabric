@@ -191,11 +191,11 @@ const (
 
 // SSL is the SSL configuration for a server.
 type SSL struct {
-	KeyPairID           SSLKeyPairID
 	Protocols           string
 	Ciphers             string
 	ClientCertBundleID  CertBundleID
 	VerifyClient        string
+	KeyPairIDs          []SSLKeyPairID
 	PreferServerCiphers bool
 }
 

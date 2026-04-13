@@ -1,7 +1,7 @@
 
 # NGINX Gateway Fabric Helm Chart
 
-![Version: 2.4.2](https://img.shields.io/badge/Version-2.4.2-informational?style=flat-square) ![AppVersion: edge](https://img.shields.io/badge/AppVersion-edge-informational?style=flat-square)
+![Version: 2.5.1](https://img.shields.io/badge/Version-2.5.1-informational?style=flat-square) ![AppVersion: edge](https://img.shields.io/badge/AppVersion-edge-informational?style=flat-square)
 
 - [NGINX Gateway Fabric Helm Chart](#nginx-gateway-fabric-helm-chart)
   - [Introduction](#introduction)
@@ -207,6 +207,7 @@ The following table lists the configurable parameters of the NGINX Gateway Fabri
 | `certGenerator.topologySpreadConstraints` | The topology spread constraints for the cert-generator pod. | list | `[]` |
 | `certGenerator.ttlSecondsAfterFinished` | How long to wait after the cert generator job has finished before it is removed by the job controller. | int | `30` |
 | `clusterDomain` | The DNS cluster domain of your Kubernetes cluster. | string | `"cluster.local"` |
+| `extraObjects` | A list of extra Kubernetes manifests to deploy. Each item is a raw YAML string representing a complete Kubernetes resource. Useful for deploying additional resources (e.g. ConfigMaps, Secrets, NetworkPolicies) alongside the chart without creating a separate chart. | list | `[]` |
 | `gateways` | A list of Gateway objects. View https://gateway-api.sigs.k8s.io/reference/spec/#gateway for full Gateway reference. | list | `[]` |
 | `nginx` | The nginx section contains the configuration for all NGINX data plane deployments installed by the NGINX Gateway Fabric control plane. | object | `{"autoscaling":{"annotations":{},"behavior":{},"enable":false,"maxReplicas":10,"metrics":[],"minReplicas":1,"targetCPUUtilizationPercentage":50,"targetMemoryUtilizationPercentage":50},"config":{},"container":{"hostPorts":[],"lifecycle":{},"readinessProbe":{},"resources":{},"volumeMounts":[]},"debug":false,"image":{"pullPolicy":"Always","repository":"ghcr.io/nginx/nginx-gateway-fabric/nginx","tag":"edge"},"imagePullSecret":"","imagePullSecrets":[],"kind":"deployment","nginxOneConsole":{"dataplaneKeySecretName":"","endpointHost":"agent.connect.nginx.com","endpointPort":443,"skipVerify":false},"patches":[],"plus":false,"pod":{},"replicas":1,"service":{"externalTrafficPolicy":"Local","loadBalancerClass":"","loadBalancerIP":"","loadBalancerSourceRanges":[],"nodePorts":[],"patches":[],"type":"LoadBalancer"},"usage":{"caSecretName":"","clientSSLSecretName":"","endpoint":"","enforceInitialReport":true,"resolver":"","secretName":"nplus-license","skipVerify":false}}` |
 | `nginx.autoscaling` | Autoscaling configuration for the NGINX data plane. | object | `{"annotations":{},"behavior":{},"enable":false,"maxReplicas":10,"metrics":[],"minReplicas":1,"targetCPUUtilizationPercentage":50,"targetMemoryUtilizationPercentage":50}` |

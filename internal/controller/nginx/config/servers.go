@@ -181,13 +181,7 @@ func createSSLServer(
 			Listen:       listen,
 		}
 		if virtualServer.SSL != nil {
-			server.SSL = &http.SSL{
-				Certificate:         generatePEMFileName(virtualServer.SSL.KeyPairID),
-				CertificateKey:      generatePEMFileName(virtualServer.SSL.KeyPairID),
-				Protocols:           virtualServer.SSL.Protocols,
-				Ciphers:             virtualServer.SSL.Ciphers,
-				PreferServerCiphers: virtualServer.SSL.PreferServerCiphers,
-			}
+			server.SSL = buildHTTPSSL(virtualServer.SSL)
 		}
 
 		return server, nil
@@ -195,26 +189,9 @@ func createSSLServer(
 
 	locs, matchPairs, grpc := createLocations(&virtualServer, serverID, generator, keepAliveCheck)
 
-	ssl := &http.SSL{
-		Certificate:         generatePEMFileName(virtualServer.SSL.KeyPairID),
-		CertificateKey:      generatePEMFileName(virtualServer.SSL.KeyPairID),
-		Protocols:           virtualServer.SSL.Protocols,
-		Ciphers:             virtualServer.SSL.Ciphers,
-		PreferServerCiphers: virtualServer.SSL.PreferServerCiphers,
-	}
-
-	// Only set ClientCertificate if a valid bundle ID exists
-	if virtualServer.SSL.ClientCertBundleID != "" {
-		ssl.ClientCertificate = generateCertBundleFileName(virtualServer.SSL.ClientCertBundleID)
-	}
-
-	if virtualServer.SSL.VerifyClient != "" {
-		ssl.VerifyClient = virtualServer.SSL.VerifyClient
-	}
-
 	server := http.Server{
 		ServerName: virtualServer.Hostname,
-		SSL:        ssl,
+		SSL:        buildHTTPSSL(virtualServer.SSL),
 		Locations:  locs,
 		GRPC:       grpc,
 		Listen:     listen,
@@ -237,6 +214,40 @@ func createSSLServer(
 	server.Includes = append(server.Includes, snippetIncludes...)
 
 	return server, matchPairs
+}
+
+// buildHTTPSSL converts a dataplane SSL config into an http.SSL config,
+// generating the PEM file paths for each certificate/key pair.
+func buildHTTPSSL(ssl *dataplane.SSL) *http.SSL {
+	certs := make([]string, 0, len(ssl.KeyPairIDs))
+	keys := make([]string, 0, len(ssl.KeyPairIDs))
+
+	var sslCertificateID string
+	var sslVerifyClient string
+
+	for _, id := range ssl.KeyPairIDs {
+		pemFile := generatePEMFileName(id)
+		certs = append(certs, pemFile)
+		keys = append(keys, pemFile)
+	}
+
+	if ssl.ClientCertBundleID != "" {
+		sslCertificateID = generateCertBundleFileName(ssl.ClientCertBundleID)
+	}
+
+	if ssl.VerifyClient != "" {
+		sslVerifyClient = ssl.VerifyClient
+	}
+
+	return &http.SSL{
+		Certificates:        certs,
+		CertificateKeys:     keys,
+		Protocols:           ssl.Protocols,
+		Ciphers:             ssl.Ciphers,
+		PreferServerCiphers: ssl.PreferServerCiphers,
+		ClientCertificate:   sslCertificateID,
+		VerifyClient:        sslVerifyClient,
+	}
 }
 
 func createServer(

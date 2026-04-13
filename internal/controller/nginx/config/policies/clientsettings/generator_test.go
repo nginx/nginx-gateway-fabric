@@ -21,6 +21,7 @@ func TestGenerate(t *testing.T) {
 	keepaliveTime := helpers.GetPointer[ngfAPIv1alpha1.Duration]("50s")
 	keepaliveServerTimeout := helpers.GetPointer[ngfAPIv1alpha1.Duration]("30s")
 	keepaliveHeaderTimeout := helpers.GetPointer[ngfAPIv1alpha1.Duration]("60s")
+	keepaliveMinTimeout := helpers.GetPointer[ngfAPIv1alpha1.Duration]("5s")
 
 	tests := []struct {
 		name       string
@@ -124,6 +125,19 @@ func TestGenerate(t *testing.T) {
 			expStrings: []string{}, // header timeout is ignored if server timeout is not populated
 		},
 		{
+			name: "keepalive minTimeout populated",
+			policy: &ngfAPIv1alpha1.ClientSettingsPolicy{
+				Spec: ngfAPIv1alpha1.ClientSettingsPolicySpec{
+					KeepAlive: &ngfAPIv1alpha1.ClientKeepAlive{
+						MinTimeout: keepaliveMinTimeout,
+					},
+				},
+			},
+			expStrings: []string{
+				"keepalive_min_timeout 5s;",
+			},
+		},
+		{
 			name: "all fields populated",
 			policy: &ngfAPIv1alpha1.ClientSettingsPolicy{
 				Spec: ngfAPIv1alpha1.ClientSettingsPolicySpec{
@@ -132,8 +146,9 @@ func TestGenerate(t *testing.T) {
 						Timeout: bodyTimeout,
 					},
 					KeepAlive: &ngfAPIv1alpha1.ClientKeepAlive{
-						Requests: keepaliveRequests,
-						Time:     keepaliveTime,
+						Requests:   keepaliveRequests,
+						Time:       keepaliveTime,
+						MinTimeout: keepaliveMinTimeout,
 						Timeout: &ngfAPIv1alpha1.ClientKeepAliveTimeout{
 							Server: keepaliveServerTimeout,
 							Header: keepaliveHeaderTimeout,
@@ -146,6 +161,7 @@ func TestGenerate(t *testing.T) {
 				"client_body_timeout 600ms",
 				"keepalive_requests 900;",
 				"keepalive_time 50s;",
+				"keepalive_min_timeout 5s;",
 				"keepalive_timeout 30s 60s;",
 			},
 		},
