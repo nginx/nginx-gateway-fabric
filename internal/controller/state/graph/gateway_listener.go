@@ -744,7 +744,8 @@ func createFrontendTLSCaCertReferenceResolver(
 	}
 
 	return func(l *Listener, gw *Gateway) {
-		if gw.Source.Spec.TLS == nil || gw.Source.Spec.TLS.Frontend == nil || l.Source.TLS == nil {
+		if gw.Source.Spec.TLS == nil || gw.Source.Spec.TLS.Frontend == nil ||
+			l.Source.TLS == nil || l.Source.TLS.Mode == nil || *l.Source.TLS.Mode != v1.TLSModeTerminate {
 			return
 		}
 
