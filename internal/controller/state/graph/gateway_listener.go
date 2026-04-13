@@ -41,31 +41,26 @@ var (
 // Listener represents a Listener of the Gateway resource.
 // For now, we only support HTTP and HTTPS listeners.
 type Listener struct {
-	Name string
-	// GatewayName is the name of the Gateway resource this Listener belongs to.
-	GatewayName types.NamespacedName
-	// Source holds the source of the Listener from the Gateway resource.
-	Source v1.Listener
-	// Routes holds the GRPC/HTTPRoutes attached to the Listener.
-	// Only valid routes are attached.
-	Routes map[RouteKey]*L7Route
-	// L4Routes holds the TLSRoutes attached to the Listener.
-	L4Routes map[L4RouteKey]*L4Route
-	// AllowedRouteLabelSelector is the label selector for this Listener's allowed routes, if defined.
+	Source                    v1.Listener
 	AllowedRouteLabelSelector labels.Selector
-	// ResolvedSecrets is the list of namespaced names of the Secrets resolved for this listener.
-	// Only applicable for HTTPS listeners. Supports multiple certificates for SNI-based selection.
-	ResolvedSecrets []types.NamespacedName
-	// Conditions holds the conditions of the Listener.
-	Conditions []conditions.Condition
-	// SupportedKinds is the list of RouteGroupKinds allowed by the listener.
-	SupportedKinds []v1.RouteGroupKind
-	// Valid shows whether the Listener is valid.
-	// A Listener is considered valid if NGF can generate valid NGINX configuration for it.
-	Valid bool
-	// Attachable shows whether Routes can attach to the Listener.
-	// Listener can be invalid but still attachable.
-	Attachable bool
+	Routes                    map[RouteKey]*L7Route
+	L4Routes                  map[L4RouteKey]*L4Route
+	FrontendTLSConfig         *FrontendTLSConfig
+	GatewayName               types.NamespacedName
+	Name                      string
+	ResolvedSecrets           []types.NamespacedName
+	Conditions                []conditions.Condition
+	SupportedKinds            []v1.RouteGroupKind
+	Valid                     bool
+	Attachable                bool
+}
+
+// FrontendTLSConfig holds the configuration for frontend TLS for a listener.
+type FrontendTLSConfig struct {
+	// Validation holds the TLS validation configuration for the listener.
+	ValidationMode v1.FrontendValidationModeType
+	// CACertificateRefs holds the resolved CA certificate references for the listener.
+	CACertificateRefs []*types.NamespacedName
 }
 
 func buildListeners(
@@ -778,16 +773,14 @@ func createFrontendTLSCaCertReferenceResolver(
 	resourceResolver resolver.Resolver,
 	refGrantResolver *referenceGrantResolver,
 ) listenerFrontendTLSCaCertReferenceResolver {
-	frontendTLSConfig := &FrontendTLSConfig{
-		DefaultFrontendCaRefs: make([]*types.NamespacedName, 0),
-		PerPortFrontendCaRefs: make(map[int32][]*types.NamespacedName),
-		PortModes:             make(map[int32]v1.FrontendValidationModeType),
-	}
-
 	return func(l *Listener, gw *Gateway) {
 		if gw.Source.Spec.TLS == nil || gw.Source.Spec.TLS.Frontend == nil ||
 			l.Source.TLS == nil || l.Source.TLS.Mode == nil || *l.Source.TLS.Mode != v1.TLSModeTerminate {
 			return
+		}
+
+		frontendTLSConfig := &FrontendTLSConfig{
+			CACertificateRefs: make([]*types.NamespacedName, 0),
 		}
 
 		frontend := gw.Source.Spec.TLS.Frontend
@@ -810,17 +803,17 @@ func createFrontendTLSCaCertReferenceResolver(
 						portCertRefs,
 					)
 					l.Conditions = append(l.Conditions, perPortConds...)
-					frontendTLSConfig.PortModes[l.Source.Port] = portValidationMode
-					frontendTLSConfig.PerPortFrontendCaRefs[l.Source.Port] = refs
+					frontendTLSConfig.ValidationMode = portValidationMode
+					frontendTLSConfig.CACertificateRefs = refs
 					break
 				}
 			}
 		}
 
 		if frontend.Default.Validation != nil && len(frontend.Default.Validation.CACertificateRefs) > 0 {
-			_, isPerPortRef := frontendTLSConfig.PerPortFrontendCaRefs[l.Source.Port]
-			if len(frontendTLSConfig.DefaultFrontendCaRefs) == 0 && !isPerPortRef {
+			if len(frontendTLSConfig.CACertificateRefs) == 0 {
 				defaultCertRefs := frontend.Default.Validation.CACertificateRefs
+				defaultValidationMode := frontend.Default.Validation.Mode
 				defaultFieldPath := field.NewPath("tls", "frontend", "default", "validation")
 				defaultConds, refs := getGatewayFrontendTLSCaRefs(
 					gw.Source,
@@ -831,12 +824,12 @@ func createFrontendTLSCaCertReferenceResolver(
 					defaultCertRefs,
 				)
 				l.Conditions = append(l.Conditions, defaultConds...)
-				frontendTLSConfig.DefaultFrontendCaRefs = refs
+				frontendTLSConfig.CACertificateRefs = refs
+				frontendTLSConfig.ValidationMode = defaultValidationMode
 			}
-			frontendTLSConfig.PortModes[l.Source.Port] = frontend.Default.Validation.Mode
 		}
 
-		gw.FrontendTLSConfig = frontendTLSConfig
+		l.FrontendTLSConfig = frontendTLSConfig
 	}
 }
 

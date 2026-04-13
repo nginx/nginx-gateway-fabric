@@ -32,8 +32,6 @@ type Gateway struct {
 	EffectiveNginxProxy *EffectiveNginxProxy
 	// SecretRef is the namespaced name of the secret referenced by the Gateway for backend TLS.
 	SecretRef *types.NamespacedName
-	// FrontendTLSConfig is the TLS configuration for the frontend TLS of the Gateway.
-	FrontendTLSConfig *FrontendTLSConfig
 	// DeploymentName is the name of the nginx Deployment associated with this Gateway.
 	DeploymentName types.NamespacedName
 	// Listeners include the listeners of the Gateway.
@@ -44,19 +42,6 @@ type Gateway struct {
 	Policies []*Policy
 	// Valid indicates whether the Gateway Spec is valid.
 	Valid bool
-}
-
-// FrontendTLSConfig holds the configuration for frontend TLS for the Gateway.
-type FrontendTLSConfig struct {
-	// PortModes maps port numbers to the validation mode for frontend TLS on that port.
-	// If a port is not included in this map, the default validation mode applies.
-	PortModes map[int32]v1.FrontendValidationModeType
-	// PerPortFrontendCaRefs maps port numbers to a list of namespaced names
-	// of secrets or configmaps referenced by the Gateway for frontend TLS on that port.
-	PerPortFrontendCaRefs map[int32][]*types.NamespacedName
-	// DefaultFrontendCaRefs is the namespaced name of the secret or configmap referenced
-	// in the default section of the frontend TLS spec of the Gateway.
-	DefaultFrontendCaRefs []*types.NamespacedName
 }
 
 // processGateways determines which Gateway resources belong to NGF (determined by the Gateway GatewayClassName field).
@@ -150,7 +135,6 @@ func buildGateways(
 				Conditions:          conds,
 				DeploymentName:      deploymentName,
 				SecretRef:           secretRefNsName,
-				FrontendTLSConfig:   &FrontendTLSConfig{},
 			}
 			gateway.Listeners = buildListeners(gateway, resourceResolver, refGrantResolver, protectedPorts)
 			builtGateways[gwNsName] = gateway

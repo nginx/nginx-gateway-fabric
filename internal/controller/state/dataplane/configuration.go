@@ -468,10 +468,10 @@ func buildFrontendTLSCertBundles(
 			Name:      listener.Name,
 		}
 
-		gwFrontendTLSConfig := gateway.FrontendTLSConfig
+		// gwFrontendTLSConfig := gateway.FrontendTLSConfig
 
 		perPortBundleData := make([]CertBundle, 0)
-		if perPortCaRefs, exists := gwFrontendTLSConfig.PerPortFrontendCaRefs[listener.Source.Port]; exists {
+		if perPortCaRefs := listener.FrontendTLSConfig.CACertificateRefs; len(perPortCaRefs) > 0 {
 			for _, ref := range perPortCaRefs {
 				bundleData := getFrontendTLSCertBundleData(ref, gateway, secretsMap, caCertConfigMaps)
 				if len(bundleData) > 0 {
@@ -484,13 +484,13 @@ func buildFrontendTLSCertBundles(
 					id,
 					sslServers,
 					listener.Source.Port,
-					gwFrontendTLSConfig.PortModes[listener.Source.Port],
+					listener.FrontendTLSConfig.ValidationMode,
 				)
 			}
 		} else if gateway.Source.Spec.TLS.Frontend.Default.Validation != nil &&
 			gateway.Source.Spec.TLS.Frontend.Default.Validation.CACertificateRefs != nil {
 			defaultBundleData := make([]CertBundle, 0)
-			if defaultCaRefs := gwFrontendTLSConfig.DefaultFrontendCaRefs; len(defaultCaRefs) > 0 {
+			if defaultCaRefs := listener.FrontendTLSConfig.CACertificateRefs; len(defaultCaRefs) > 0 {
 				for _, ref := range defaultCaRefs {
 					bundleData := getFrontendTLSCertBundleData(ref, gateway, secretsMap, caCertConfigMaps)
 					if len(bundleData) > 0 {
@@ -503,7 +503,7 @@ func buildFrontendTLSCertBundles(
 						id,
 						sslServers,
 						listener.Source.Port,
-						gwFrontendTLSConfig.PortModes[listener.Source.Port],
+						listener.FrontendTLSConfig.ValidationMode,
 					)
 				}
 			}
