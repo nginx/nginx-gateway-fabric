@@ -4048,6 +4048,23 @@ func TestCreateRewritesValForRewriteFilter(t *testing.T) {
 			},
 			msg: "prefix path both with trailing slashes",
 		},
+		{
+			pathRule: dataplane.PathRule{
+				Path:     "/$coffee",
+				PathType: dataplane.PathTypePrefix,
+			},
+			filter: &dataplane.HTTPURLRewriteFilter{
+				Path: &dataplane.HTTPPathModifier{
+					Type:        dataplane.ReplacePrefixMatch,
+					Replacement: "/",
+				},
+			},
+			expected: &rewriteConfig{
+				InternalRewrite: "^ $request_uri",
+				MainRewrite:     `^/\$coffee(?:/([^?]*))? /$1?$args? break`,
+			},
+			msg: "prefix path with dollar sign is escaped in regex",
+		},
 	}
 
 	for _, test := range tests {
