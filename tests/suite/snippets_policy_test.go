@@ -136,15 +136,10 @@ var _ = Describe("SnippetsPolicy", Ordered, Label("functional", "snippets-policy
 				}
 
 				Eventually(
-					func() error {
+					func(g Gomega) {
 						resp, err := framework.Get(request)
-						if err != nil {
-							return err
-						}
-						if resp.StatusCode != http.StatusOK {
-							return fmt.Errorf("expected 200, got %d", resp.StatusCode)
-						}
-						return nil
+						g.Expect(err).ToNot(HaveOccurred())
+						g.Expect(resp.StatusCode).To(Equal(http.StatusOK))
 					},
 				).
 					WithTimeout(timeoutConfig.RequestTimeout).
