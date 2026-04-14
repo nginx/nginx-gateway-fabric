@@ -24,16 +24,15 @@ retcode=$?
 ## tar them up preserving directory structure, and extract locally.
 mkdir -p results
 
-gcloud compute ssh --zone "${GKE_CLUSTER_ZONE}" --project="${GKE_PROJECT}" username@"${RESOURCE_NAME}" \
+tar_output=$(gcloud compute ssh --zone "${GKE_CLUSTER_ZONE}" --project="${GKE_PROJECT}" username@"${RESOURCE_NAME}" \
     --command="cd ~/nginx-gateway-fabric/tests && \
         find results -newer ~/results-marker -type f > /tmp/changed-results.txt && \
         if [ -s /tmp/changed-results.txt ]; then \
-            tar cf /tmp/changed-results.tar -T /tmp/changed-results.txt; \
-        fi"
+            tar cf /tmp/changed-results.tar -T /tmp/changed-results.txt && echo TAR_READY; \
+        fi")
 
-## Copy the tar back and extract if it exists (it won't exist if no results were generated).
-if gcloud compute ssh --zone "${GKE_CLUSTER_ZONE}" --project="${GKE_PROJECT}" username@"${RESOURCE_NAME}" \
-    --command="test -f /tmp/changed-results.tar"; then
+## Copy the tar back and extract if it was created (it won't be if no results were generated).
+if [[ ${tar_output} == *"TAR_READY"* ]]; then
     gcloud compute scp --zone "${GKE_CLUSTER_ZONE}" --project="${GKE_PROJECT}" \
         username@"${RESOURCE_NAME}":/tmp/changed-results.tar /tmp/changed-results.tar
     tar xf /tmp/changed-results.tar -C .
