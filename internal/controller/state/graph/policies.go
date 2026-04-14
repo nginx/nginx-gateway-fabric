@@ -472,6 +472,7 @@ type WAFProcessingOutput struct {
 
 func processPolicies(
 	ctx context.Context,
+	logger logr.Logger,
 	pols map[PolicyKey]policies.Policy,
 	validator validation.PolicyValidator,
 	routes map[RouteKey]*L7Route,
@@ -542,7 +543,7 @@ func processPolicies(
 
 	markConflictedPolicies(processedPolicies, validator)
 
-	wafOutput := processWAFGatewayBindingPolicies(ctx, processedPolicies, wafInput)
+	wafOutput := processWAFGatewayBindingPolicies(ctx, logger, processedPolicies, wafInput)
 
 	return processedPolicies, wafOutput
 }
@@ -790,6 +791,7 @@ func addStatusToTargetRefs(policyKind string, conditionsList *[]conditions.Condi
 // processWAFGatewayBindingPolicies processes WAFGatewayBindingPolicy resources and fetches their bundles.
 func processWAFGatewayBindingPolicies(
 	ctx context.Context,
+	logger logr.Logger,
 	processedPolicies map[PolicyKey]*Policy,
 	wafInput *WAFProcessingInput,
 ) *WAFProcessingOutput {
@@ -822,8 +824,8 @@ func processWAFGatewayBindingPolicies(
 			Bundles: make(map[WAFBundleKey]*WAFBundleData),
 		}
 
-		fetchPolicyBundle(ctx, wgbPolicy, policy, wafInput, output)
-		fetchSecurityLogBundles(ctx, wgbPolicy, policy, wafInput, output)
+		fetchPolicyBundle(ctx, logger, wgbPolicy, policy, wafInput, output)
+		fetchSecurityLogBundles(ctx, logger, wgbPolicy, policy, wafInput, output)
 	}
 
 	return output
@@ -843,6 +845,7 @@ func BuildPolicyFetchRequest(
 		VerifyChecksum:     policySource.Validation != nil && policySource.Validation.VerifyChecksum,
 		ExpectedChecksum:   expectedChecksum(policySource.Validation),
 		Timeout:            policySource.Timeout,
+		RetryAttempts:      retryAttempts(policySource.RetryAttempts),
 	}
 
 	switch policyType {
@@ -896,6 +899,7 @@ func BuildLogFetchRequest(
 		VerifyChecksum:     logSource.Validation != nil && logSource.Validation.VerifyChecksum,
 		ExpectedChecksum:   expectedChecksum(logSource.Validation),
 		Timeout:            logSource.Timeout,
+		RetryAttempts:      retryAttempts(logSource.RetryAttempts),
 	}
 
 	if logSource.NIMSource != nil {
@@ -914,9 +918,18 @@ func BuildLogFetchRequest(
 	return req
 }
 
+// retryAttempts dereferences a retry attempts pointer, returning the default of 3 when nil.
+func retryAttempts(attempts *int32) int32 {
+	if attempts == nil {
+		return 3
+	}
+	return *attempts
+}
+
 // fetchPolicyBundle fetches the policy bundle for a WAFGatewayBindingPolicy.
 func fetchPolicyBundle(
 	ctx context.Context,
+	logger logr.Logger,
 	wafPolicy *ngfAPIv1alpha1.WAFGatewayBindingPolicy,
 	policy *Policy,
 	wafInput *WAFProcessingInput,
@@ -956,6 +969,7 @@ func fetchPolicyBundle(
 
 	data, checksum, err := wafInput.Fetcher.FetchPolicyBundle(ctx, req)
 	if err != nil {
+		logger.Error(err, "Failed to fetch WAF policy bundle", "resource", wafPolicy.Name)
 		if prev, ok := wafInput.PreviousBundles[bundleKey]; ok {
 			cond := conditions.NewPolicyProgrammedStaleBundleWarning(err.Error())
 			policy.Conditions = append(policy.Conditions, cond)
@@ -977,6 +991,7 @@ func fetchPolicyBundle(
 // fetchSecurityLogBundles fetches log profile bundles for each SecurityLog entry.
 func fetchSecurityLogBundles(
 	ctx context.Context,
+	logger logr.Logger,
 	wafPolicy *ngfAPIv1alpha1.WAFGatewayBindingPolicy,
 	policy *Policy,
 	wafInput *WAFProcessingInput,
@@ -1027,6 +1042,12 @@ func fetchSecurityLogBundles(
 
 		data, checksum, err := wafInput.Fetcher.FetchLogProfileBundle(ctx, req)
 		if err != nil {
+			logger.Error(
+				err,
+				"Failed to fetch WAF security log bundle",
+				"resource",
+				wafPolicy.Name,
+			)
 			if prev, ok := wafInput.PreviousBundles[bundleKey]; ok {
 				cond := conditions.NewPolicyProgrammedStaleBundleWarning(err.Error())
 				policy.Conditions = append(policy.Conditions, cond)

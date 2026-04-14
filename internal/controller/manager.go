@@ -140,7 +140,7 @@ func StartManager(cfg config.Config) error {
 		return err
 	}
 
-	wafFetcher := createWAFFetcher()
+	wafFetcher := createWAFFetcher(cfg.Logger.WithName("wafFetcher"))
 	var wafPollerManager wafpolling.PollerManager
 
 	processor := state.NewChangeProcessorImpl(state.ChangeProcessorConfig{
@@ -1068,8 +1068,8 @@ func validateSecret(reader client.Reader, nsName types.NamespacedName, fields ..
 }
 
 // createWAFFetcher creates an HTTP fetcher for WAF policy bundles.
-func createWAFFetcher() fetch.Fetcher {
-	return fetch.NewHTTPFetcher()
+func createWAFFetcher(logger logr.Logger) fetch.Fetcher {
+	return fetch.NewHTTPFetcher(logger)
 }
 
 // 10 min jitter is enough per telemetry destination recommendation

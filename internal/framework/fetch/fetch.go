@@ -8,24 +8,33 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+	"slices"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/go-logr/logr"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/wait"
 )
 
 //go:generate go tool counterfeiter -generate
 
 const (
 	defaultTimeout = 30 * time.Second
-	// defaultN1CTimeout is the default timeout for N1C fetches.
-	// N1C requires up to three sequential HTTP calls (list policies, optionally list versions,
-	// then download the compiled bundle), so a longer default is needed.
-	defaultN1CTimeout = 120 * time.Second
+	// n1cCompileStatusPollInterval is the interval between polls when waiting for an N1C
+	// async compilation job to complete.
+	n1cCompileStatusPollInterval = 10 * time.Second
+
+	// retryBaseDelay is the initial delay for retrying fetches on transient failures.
+	retryBaseDelay = 1 * time.Second
+	// retryMaxDelay is the maximum delay for retrying fetches on transient failures.
+	retryMaxDelay = 30 * time.Second
 
 	// Release is the NAP v5 release version deployed by NGINX Gateway Fabric.
 	// It is used both as the default image tag for the waf-enforcer and waf-config-mgr
@@ -94,6 +103,11 @@ type Request struct {
 	// Only supported for plain HTTP fetches (no PolicyName, NIMPolicyUID, or N1CNamespace set).
 	// Mutually exclusive with ExpectedChecksum.
 	VerifyChecksum bool
+	// RetryAttempts is the maximum number of additional retries for transient errors
+	// (network failures, HTTP 5xx responses). Non-transient errors (HTTP 4xx,
+	// checksum mismatch) are never retried. When zero, the request is
+	// attempted exactly once with no retries.
+	RetryAttempts int32
 }
 
 // N1CRequest carries all the N1C specific parameters to fetch a single bundle.
@@ -109,7 +123,7 @@ type N1CRequest struct {
 	PolicyVersionID string
 }
 
-// NIRequest carries all the NIM specific parameters to fetch a single bundle.
+// NIMRequest carries all the NIM specific parameters to fetch a single bundle.
 type NIMRequest struct {
 	// PolicyUID is the unique identifier of a specific version of the NIM policy
 	// (e.g. "2bc1e3ac-7990-4ca4-910a-8634c444c804"). Each policy version has a distinct UID,
@@ -140,18 +154,27 @@ type Fetcher interface {
 // It keeps a default client for requests that need no custom TLS settings,
 // and builds a short-lived client only when a per-request CA or insecure flag is set.
 type HTTPFetcher struct {
-	defaultClient *http.Client
+	defaultClient       *http.Client
+	logger              logr.Logger
+	n1cCompilePollDelay time.Duration
 }
 
 // NewHTTPFetcher creates a new HTTPFetcher.
-func NewHTTPFetcher() *HTTPFetcher {
+func NewHTTPFetcher(logger logr.Logger) *HTTPFetcher {
 	return &HTTPFetcher{
-		defaultClient: &http.Client{},
+		logger:              logger,
+		defaultClient:       &http.Client{},
+		n1cCompilePollDelay: n1cCompileStatusPollInterval,
 	}
 }
 
-// When req.PolicyName or req.NIMPolicyUID is set (and N1CNamespace is empty), uses NIM fetch logic.
-// Otherwise performs a plain GET to req.URL, optionally verifying the checksum.
+// WithN1CCompilePollDelay overrides the interval between N1C compile status polls.
+// Intended for testing only.
+func (f *HTTPFetcher) WithN1CCompilePollDelay(d time.Duration) *HTTPFetcher {
+	f.n1cCompilePollDelay = d
+	return f
+}
+
 // validateAndNormalizeRequest checks mutual-exclusion rules and normalises
 // ExpectedChecksum to lowercase. It returns the updated Request or an error.
 func validateAndNormalizeRequest(req Request) (Request, error) {
@@ -174,6 +197,16 @@ func validateAndNormalizeRequest(req Request) (Request, error) {
 	return req, nil
 }
 
+// nonTransientError wraps errors that must not be retried (HTTP 4xx, checksum mismatch, etc.).
+type nonTransientError struct {
+	err error
+}
+
+func (e *nonTransientError) Error() string { return e.err.Error() }
+func (e *nonTransientError) Unwrap() error { return e.err }
+
+// Fetch retrieves the bundle bytes described by req, dispatching to the appropriate
+// fetch strategy (plain HTTP, NIM, or N1C) based on which fields are set.
 // FetchPolicyBundle retrieves bundle bytes.
 // When req.N1CNamespace is set, uses N1C fetch logic (APIToken auth, N1C API path).
 // When req.NIMPolicyName or req.NIMPolicyUID is set (and N1CNamespace is empty), uses NIM fetch logic.
@@ -196,38 +229,57 @@ func (f *HTTPFetcher) fetch(
 		return nil, "", err
 	}
 
-	timeout := defaultTimeout
-	if req.N1C.Namespace != "" && req.Timeout == nil {
-		// N1C requires up to three sequential HTTP calls; give it a longer default.
-		timeout = defaultN1CTimeout
+	client, err := f.buildHTTPClient(req)
+	if err != nil {
+		return nil, "", err
 	}
-	if req.Timeout != nil {
-		timeout = req.Timeout.Duration
+	// buildHTTPClient creates a custom transport when TLS or insecure settings are configured.
+	// Unlike the shared default transport, this transport is not managed globally, so we close
+	// its idle connections when Fetch returns to prevent connection leaks.
+	if len(req.TLSCAData) > 0 || req.InsecureSkipVerify {
+		defer client.CloseIdleConnections()
 	}
 
-	needsCustomTLS := len(req.TLSCAData) > 0 || req.InsecureSkipVerify
+	// FIXME(ciarams87): The retry loop runs synchronously
+	// inside Process(), which blocks the event handler and delays all config pushes to NGINX until
+	// retries complete. We should investigate making this async as retry
+	// counts or server latency could grow large enough to cause meaningful delays.
+	backoff := wait.Backoff{
+		Duration: retryBaseDelay,
+		Factor:   2.0,
+		Jitter:   1.0,
+		Cap:      retryMaxDelay,
+		Steps:    int(req.RetryAttempts) + 1,
+	}
 
 	var (
-		data     []byte
+		result   []byte
 		checksum string
-		fetchErr error
+		lastErr  error
 	)
-
-	if !needsCustomTLS {
-		client := *f.defaultClient
-		client.Timeout = timeout
-		data, checksum, fetchErr = dispatch(ctx, &client, req)
-	} else {
-		client, err := buildClient(req.TLSCAData, req.InsecureSkipVerify, timeout)
-		if err != nil {
-			return nil, "", fmt.Errorf("failed to build HTTP client: %w", err)
+	attempt := 0
+	err = wait.ExponentialBackoffWithContext(ctx, backoff, func(ctx context.Context) (bool, error) {
+		attempt++
+		data, cs, fetchErr := dispatch(ctx, client, req)
+		if fetchErr != nil {
+			var nte *nonTransientError
+			if errors.As(fetchErr, &nte) {
+				return false, fetchErr
+			}
+			lastErr = fetchErr
+			f.logger.V(1).Info("Transient fetch error, retrying",
+				"attempt", attempt, "maxAttempts", backoff.Steps, "error", fetchErr)
+			return false, nil
 		}
-		defer client.CloseIdleConnections()
-		data, checksum, fetchErr = dispatch(ctx, client, req)
-	}
-
-	if fetchErr != nil {
-		return nil, "", fetchErr
+		result = data
+		checksum = cs
+		return true, nil
+	})
+	if err != nil {
+		if wait.Interrupted(err) {
+			return nil, "", lastErr
+		}
+		return nil, "", err
 	}
 
 	if req.ExpectedChecksum != "" && checksum != req.ExpectedChecksum {
@@ -236,13 +288,13 @@ func (f *HTTPFetcher) fetch(
 		)
 	}
 
-	return data, checksum, nil
+	return result, checksum, nil
 }
 
 func (f *HTTPFetcher) dispatch(ctx context.Context, client *http.Client, req Request) ([]byte, string, error) {
 	switch {
 	case req.N1C.Namespace != "":
-		return fetchN1C(ctx, client, req)
+		return fetchN1C(ctx, client, req, f.n1cCompilePollDelay, f.logger)
 	case req.PolicyName != "" || req.NIM.PolicyUID != "":
 		return fetchNIM(ctx, client, req)
 	default:
@@ -263,6 +315,26 @@ func (f *HTTPFetcher) logProfileDispatch(
 	default:
 		return fetchHTTP(ctx, client, req)
 	}
+}
+
+// buildHTTPClient returns an *http.Client configured for the given request.
+func (f *HTTPFetcher) buildHTTPClient(req Request) (*http.Client, error) {
+	timeout := defaultTimeout
+	if req.Timeout != nil {
+		timeout = req.Timeout.Duration
+	}
+
+	if len(req.TLSCAData) == 0 && !req.InsecureSkipVerify {
+		c := *f.defaultClient
+		c.Timeout = timeout
+		return &c, nil
+	}
+
+	client, err := buildClient(req.TLSCAData, req.InsecureSkipVerify, timeout)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build HTTP client: %w", err)
+	}
+	return client, nil
 }
 
 // buildClient returns an *http.Client with the given timeout. When caData is non-nil, the CA is
@@ -328,7 +400,9 @@ func fetchHTTP(ctx context.Context, client *http.Client, req Request) ([]byte, s
 			)
 		}
 		if expectedChecksum != actualChecksum {
-			return nil, "", fmt.Errorf("bundle checksum mismatch: expected %s, got %s", expectedChecksum, actualChecksum)
+			return nil, "", &nonTransientError{
+				err: fmt.Errorf("bundle checksum mismatch: expected %s, got %s", expectedChecksum, actualChecksum),
+			}
 		}
 	}
 
@@ -434,6 +508,14 @@ type n1cVersionItem struct {
 	Latest   bool   `json:"latest"`
 }
 
+// n1cCompileStatusResponse is the JSON envelope returned by the N1C compile status endpoint
+// (i.e. the compile URL without download=true).
+type n1cCompileStatusResponse struct {
+	Status string `json:"status"`
+	// Hash is the hex-encoded SHA-256 of the compiled bundle, present when status is "succeeded".
+	Hash string `json:"hash"`
+}
+
 // fetchN1C resolves the N1C policy name (and optional version) to internal object IDs via the
 // N1C policies API, then downloads the compiled bundle from the compile endpoint.
 // Authentication uses the APIToken scheme rather than Bearer.
@@ -443,24 +525,112 @@ type n1cVersionItem struct {
 //     The response also includes latest.object_id, so no second call is needed when policyVersionID is empty.
 //  2. If req.N1CPolicyVersionID is set, it is used directly as pol_version_id (no versions list call needed).
 //     Otherwise the latest version ID from step 1 (or findN1CLatestVersion) is used.
-//  3. GET .../policies/<pol_obj_id>/versions/<pol_version_id>/compile?nap_release=<release>&download=true
-func fetchN1C(ctx context.Context, client *http.Client, req Request) ([]byte, string, error) {
+//  3. GET .../policies/<pol_obj_id>/versions/<pol_version_id>/compile?nap_release=<release>
+//     Poll until status is "succeeded" (or fail on "failed"). The response includes the bundle hash.
+//  4. GET .../compile?nap_release=<release>&download=true — download the binary bundle.
+//     Verify it against the hash returned in step 3.
+func fetchN1C(
+	ctx context.Context,
+	client *http.Client,
+	req Request,
+	pollDelay time.Duration,
+	logger logr.Logger,
+) ([]byte, string, error) {
 	polObjID, polVersionID, err := resolveN1CIDs(ctx, client, req)
 	if err != nil {
 		return nil, "", err
 	}
 
-	compileURL, err := buildN1CCompileURL(req.URL, req.N1C.Namespace, polObjID, polVersionID)
+	statusURL, err := buildN1CCompileStatusURL(req.URL, req.N1C.Namespace, polObjID, polVersionID)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to build N1C compile URL: %w", err)
+		return nil, "", fmt.Errorf("failed to build N1C compile status URL: %w", err)
 	}
 
-	body, err := doGet(ctx, client, compileURL, req.Auth)
+	compileTimeout := defaultTimeout
+	if req.Timeout != nil {
+		compileTimeout = req.Timeout.Duration
+	}
+	pollCtx, cancel := context.WithTimeout(ctx, compileTimeout)
+	defer cancel()
+
+	bundleHash, err := pollN1CCompileStatus(pollCtx, client, statusURL, req.Auth, pollDelay, logger)
+	if err != nil {
+		return nil, "", err
+	}
+
+	downloadURL, err := buildN1CCompileDownloadURL(req.URL, req.N1C.Namespace, polObjID, polVersionID)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to build N1C compile download URL: %w", err)
+	}
+
+	body, err := doGet(ctx, client, downloadURL, req.Auth)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to fetch N1C compiled bundle: %w", err)
 	}
 
-	return body, ComputeChecksum(body), nil
+	actualChecksum := ComputeChecksum(body)
+
+	// Verify the downloaded bundle against the hash reported by the N1C API,
+	// unless the caller supplied their own ExpectedChecksum via BundleValidation
+	// (the outer Fetch loop will check that instead).
+	if bundleHash != "" && req.ExpectedChecksum == "" {
+		if actualChecksum != strings.ToLower(bundleHash) {
+			return nil, "", &nonTransientError{
+				err: fmt.Errorf("N1C bundle integrity check failed: expected %s, got %s", bundleHash, actualChecksum),
+			}
+		}
+	}
+
+	return body, actualChecksum, nil
+}
+
+// pollN1CCompileStatus polls the N1C compile status endpoint until the compilation job succeeds or
+// fails. It returns the bundle hash on success.
+// Transient errors (5xx, network failures) are treated as "still pending" and retried after
+// pollDelay. Non-transient errors (4xx) are returned immediately.
+func pollN1CCompileStatus(
+	ctx context.Context,
+	client *http.Client,
+	statusURL string,
+	auth *BundleAuth,
+	pollDelay time.Duration,
+	logger logr.Logger,
+) (string, error) {
+	for {
+		body, err := doGet(ctx, client, statusURL, auth, http.StatusOK, http.StatusAccepted)
+		if err != nil {
+			var nte *nonTransientError
+			if errors.As(err, &nte) {
+				return "", fmt.Errorf("failed to check N1C compile status: %w", err)
+			}
+			// Transient error (5xx, network) — log and retry.
+			logger.V(1).Info("Transient error polling N1C compile status, retrying", "error", err)
+		} else {
+			var status n1cCompileStatusResponse
+			if parseErr := json.Unmarshal(body, &status); parseErr != nil {
+				return "", fmt.Errorf("failed to parse N1C compile status response: %w", parseErr)
+			}
+
+			switch status.Status {
+			case "succeeded":
+				logger.V(1).Info("N1C bundle compilation succeeded", "hash", status.Hash)
+				return status.Hash, nil
+			case "failed":
+				return "", &nonTransientError{
+					err: fmt.Errorf("N1C bundle compilation failed"),
+				}
+			default:
+				logger.V(1).Info("N1C bundle compilation in progress", "status", status.Status)
+			}
+			// Any other status (e.g. "pending") — fall through to wait and retry.
+		}
+
+		select {
+		case <-ctx.Done():
+			return "", ctx.Err()
+		case <-time.After(pollDelay):
+		}
+	}
 }
 
 // resolveN1CIDs returns the policy object ID and version object ID for the given request.
@@ -591,8 +761,8 @@ func buildN1CPoliciesURL(baseURL, namespace string, startIndex, pageSize int) (s
 		"/api/nginx/one/namespaces/" + url.PathEscape(namespace) + "/app-protect/policies"
 	base.Fragment = ""
 	q := url.Values{}
-	q.Set("start_index", fmt.Sprintf("%d", startIndex))
-	q.Set("items_per_page", fmt.Sprintf("%d", pageSize))
+	q.Set("start_index", strconv.Itoa(startIndex))
+	q.Set("items_per_page", strconv.Itoa(pageSize))
 	base.RawQuery = q.Encode()
 	return base.String(), nil
 }
@@ -608,17 +778,32 @@ func buildN1CVersionsURL(baseURL, namespace, polObjID string, startIndex, pageSi
 		"/app-protect/policies/" + url.PathEscape(polObjID) + "/versions"
 	base.Fragment = ""
 	q := url.Values{}
-	q.Set("start_index", fmt.Sprintf("%d", startIndex))
-	q.Set("items_per_page", fmt.Sprintf("%d", pageSize))
+	q.Set("start_index", strconv.Itoa(startIndex))
+	q.Set("items_per_page", strconv.Itoa(pageSize))
 	base.RawQuery = q.Encode()
 	return base.String(), nil
 }
 
-// buildN1CCompileURL constructs the N1C compile endpoint URL.
+// buildN1CCompileStatusURL constructs the N1C compile status endpoint URL (no download param).
+// Polling this endpoint returns a JSON status response until compilation succeeds or fails.
+// Format: <baseURL>/api/nginx/one/namespaces/<ns>/app-protect/policies/<pol_obj_id>/versions/<pol_version_id>/compile
+//
+//	?nap_release=<release>
+func buildN1CCompileStatusURL(baseURL, namespace, polObjID, polVersionID string) (string, error) {
+	return buildN1CCompileBaseURL(baseURL, namespace, polObjID, polVersionID, false)
+}
+
+// buildN1CCompileDownloadURL constructs the N1C compile download endpoint URL.
 // Format: <baseURL>/api/nginx/one/namespaces/<ns>/app-protect/policies/<pol_obj_id>/versions/<pol_version_id>/compile
 //
 //	?nap_release=<release>&download=true
-func buildN1CCompileURL(baseURL, namespace, polObjID, polVersionID string) (string, error) {
+func buildN1CCompileDownloadURL(baseURL, namespace, polObjID, polVersionID string) (string, error) {
+	return buildN1CCompileBaseURL(baseURL, namespace, polObjID, polVersionID, true)
+}
+
+// buildN1CCompileBaseURL constructs the N1C compile endpoint URL. When download is true,
+// the response is the binary bundle; when false, the response is the JSON compilation status.
+func buildN1CCompileBaseURL(baseURL, namespace, polObjID, polVersionID string, download bool) (string, error) {
 	base, err := url.Parse(baseURL)
 	if err != nil {
 		return "", fmt.Errorf("invalid N1C base URL %q: %w", baseURL, err)
@@ -630,7 +815,9 @@ func buildN1CCompileURL(baseURL, namespace, polObjID, polVersionID string) (stri
 	base.Fragment = ""
 	q := url.Values{}
 	q.Set("nap_release", Release)
-	q.Set("download", "true")
+	if download {
+		q.Set("download", "true")
+	}
 	base.RawQuery = q.Encode()
 	return base.String(), nil
 }
@@ -660,7 +847,9 @@ func buildNIMURL(baseURL, policyName, policyUID string) (string, error) {
 }
 
 // doGet performs a GET request, optionally setting auth headers, and returns the response body.
-func doGet(ctx context.Context, client *http.Client, rawURL string, auth *BundleAuth) ([]byte, error) {
+// acceptedCodes lists the HTTP status codes treated as success; defaults to 200 OK when empty.
+func doGet(ctx context.Context, client *http.Client, rawURL string, auth *BundleAuth, acceptedCodes ...int,
+) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request for %s: %w", rawURL, err)
@@ -683,8 +872,16 @@ func doGet(ctx context.Context, client *http.Client, rawURL string, auth *Bundle
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status %d from %s", resp.StatusCode, rawURL)
+	accepted := acceptedCodes
+	if len(accepted) == 0 {
+		accepted = []int{http.StatusOK}
+	}
+	if !slices.Contains(accepted, resp.StatusCode) {
+		err := fmt.Errorf("unexpected status %d from %s", resp.StatusCode, rawURL)
+		if resp.StatusCode >= http.StatusBadRequest && resp.StatusCode < http.StatusInternalServerError {
+			return nil, &nonTransientError{err: err}
+		}
+		return nil, err
 	}
 
 	data, err := io.ReadAll(resp.Body)

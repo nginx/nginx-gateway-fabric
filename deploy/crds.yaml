@@ -12826,19 +12826,16 @@ spec:
                           Defaults to 5m when polling is enabled but no interval is set.
                         type: string
                     type: object
-                  retryPolicy:
+                  retryAttempts:
+                    default: 3
                     description: |-
-                      RetryPolicy configures retry behavior for transient fetch failures during the
-                      initial bundle fetch.
-                    properties:
-                      attempts:
-                        description: Attempts is the maximum number of fetch attempts
-                          before giving up.
-                        format: int32
-                        maximum: 10
-                        minimum: 1
-                        type: integer
-                    type: object
+                      RetryAttempts is the maximum number of additional fetch attempts on transient failures
+                      (network errors, HTTP 5xx). Set to 0 to disable retries. Defaults to 3.
+                      Non-transient errors (HTTP 4xx, checksum mismatch) are never retried.
+                    format: int32
+                    maximum: 10
+                    minimum: 0
+                    type: integer
                   timeout:
                     description: |-
                       Timeout is the maximum duration for a single bundle fetch attempt.
@@ -12863,6 +12860,8 @@ spec:
                         description: |-
                           ExpectedChecksum is the expected SHA256 checksum of the bundle.
                           If set, the downloaded bundle must match this checksum or it will be rejected.
+                          For N1C sources, the checksum reported by the N1C API is verified automatically;
+                          set this field only if you want to enforce an additional, independently known value.
                         maxLength: 64
                         minLength: 64
                         pattern: ^[0-9a-fA-F]{64}$
@@ -12873,6 +12872,8 @@ spec:
                           checksum file at <url>.sha256 and comparing it against the downloaded bundle.
                           Only supported when the policy source type is HTTP (policySource.httpSource or
                           logSource.url); setting this for NIM or N1C sources is rejected at admission.
+                          Note: for N1C sources, bundle integrity is always verified automatically using
+                          the checksum returned by the N1C compile API — this field is not needed.
                           Mutually exclusive with expectedChecksum.
                         type: boolean
                     type: object
@@ -13037,19 +13038,17 @@ spec:
                                 Defaults to 5m when polling is enabled but no interval is set.
                               type: string
                           type: object
-                        retryPolicy:
+                        retryAttempts:
+                          default: 3
                           description: |-
-                            RetryPolicy configures retry behavior for transient fetch failures during the
-                            initial log bundle fetch. Only applicable when url is set.
-                          properties:
-                            attempts:
-                              description: Attempts is the maximum number of fetch
-                                attempts before giving up.
-                              format: int32
-                              maximum: 10
-                              minimum: 1
-                              type: integer
-                          type: object
+                            RetryAttempts is the maximum number of additional fetch attempts on transient failures
+                            (network errors, HTTP 5xx). Set to 0 to disable retries. Defaults to 3.
+                            Non-transient errors (HTTP 4xx, checksum mismatch) are never retried.
+                            Only applicable when url is set.
+                          format: int32
+                          maximum: 10
+                          minimum: 0
+                          type: integer
                         timeout:
                           description: |-
                             Timeout is the maximum duration for a single log bundle fetch attempt.
@@ -13075,6 +13074,8 @@ spec:
                               description: |-
                                 ExpectedChecksum is the expected SHA256 checksum of the bundle.
                                 If set, the downloaded bundle must match this checksum or it will be rejected.
+                                For N1C sources, the checksum reported by the N1C API is verified automatically;
+                                set this field only if you want to enforce an additional, independently known value.
                               maxLength: 64
                               minLength: 64
                               pattern: ^[0-9a-fA-F]{64}$
@@ -13085,6 +13086,8 @@ spec:
                                 checksum file at <url>.sha256 and comparing it against the downloaded bundle.
                                 Only supported when the policy source type is HTTP (policySource.httpSource or
                                 logSource.url); setting this for NIM or N1C sources is rejected at admission.
+                                Note: for N1C sources, bundle integrity is always verified automatically using
+                                the checksum returned by the N1C compile API — this field is not needed.
                                 Mutually exclusive with expectedChecksum.
                               type: boolean
                           type: object

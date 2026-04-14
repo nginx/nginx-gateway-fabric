@@ -351,6 +351,7 @@ func BuildGraph(
 	// policies must be processed last because they rely on the state of the other resources in the graph
 	processedPolicies, wafOutput := processPolicies(
 		ctx,
+		logger,
 		state.NGFPolicies,
 		validators.PolicyValidator,
 		routes,
