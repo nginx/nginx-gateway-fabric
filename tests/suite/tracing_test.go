@@ -132,20 +132,15 @@ var _ = Describe("Tracing", FlakeAttempts(2), Ordered, Label("functional", "trac
 		GinkgoWriter.Printf("Sending %d requests to %s\n", count, url)
 		for range count {
 			Eventually(
-				func() error {
+				func(g Gomega) {
 					request := framework.Request{
 						URL:     url,
 						Address: address,
 						Timeout: timeoutConfig.RequestTimeout,
 					}
 					resp, err := framework.Get(request, framework.WithLoggingDisabled())
-					if err != nil {
-						return err
-					}
-					if resp.StatusCode != http.StatusOK {
-						return fmt.Errorf("status not 200; got %d", resp.StatusCode)
-					}
-					return nil
+					g.Expect(err).ToNot(HaveOccurred())
+					g.Expect(resp.StatusCode).To(Equal(http.StatusOK))
 				}).
 				WithTimeout(timeoutConfig.RequestTimeout).
 				WithPolling(500 * time.Millisecond).
