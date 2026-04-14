@@ -43,26 +43,36 @@ var (
 // Listener represents a Listener of the Gateway resource.
 // For now, we only support HTTP and HTTPS listeners.
 type Listener struct {
-	Source                    v1.Listener
+	// Source holds the source of the Listener from the Gateway resource.
+	Source v1.Listener
+	// AllowedRouteLabelSelector is the label selector for this Listener's allowed routes, if defined.
 	AllowedRouteLabelSelector labels.Selector
-	Routes                    map[RouteKey]*L7Route
-	L4Routes                  map[L4RouteKey]*L4Route
-	FrontendTLSConfig         *FrontendTLSConfig
-	GatewayName               types.NamespacedName
-	Name                      string
-	ResolvedSecrets           []types.NamespacedName
-	Conditions                []conditions.Condition
-	SupportedKinds            []v1.RouteGroupKind
-	Valid                     bool
-	Attachable                bool
-}
-
-// FrontendTLSConfig holds the configuration for frontend TLS for a listener.
-type FrontendTLSConfig struct {
-	// Validation holds the TLS validation configuration for the listener.
+	// Routes holds the GRPC/HTTPRoutes attached to the Listener.
+	// Only valid routes are attached.
+	Routes map[RouteKey]*L7Route
+	// L4Routes holds the TLSRoutes attached to the Listener.
+	L4Routes map[L4RouteKey]*L4Route
+	// ValidationMode holds the TLS validation configuration for the listener.
 	ValidationMode v1.FrontendValidationModeType
 	// CACertificateRefs holds the resolved CA certificate references for the listener.
 	CACertificateRefs []*types.NamespacedName
+	// GatewayName is the name of the Gateway resource this Listener belongs to.
+	GatewayName types.NamespacedName
+	// Name is the name of the Listener.
+	Name string
+	// ResolvedSecrets is the list of namespaced names of the Secrets resolved for this listener.
+	// Only applicable for HTTPS listeners. Supports multiple certificates for SNI-based selection.
+	ResolvedSecrets []types.NamespacedName
+	// Conditions holds the conditions of the Listener.
+	Conditions []conditions.Condition
+	// SupportedKinds is the list of RouteGroupKinds allowed by the listener.
+	SupportedKinds []v1.RouteGroupKind
+	// Valid shows whether the Listener is valid.
+	// A Listener is considered valid if NGF can generate valid NGINX configuration for it.
+	Valid bool
+	// Attachable shows whether Routes can attach to the Listener.
+	// Listener can be invalid but still attachable.
+	Attachable bool
 }
 
 func buildListeners(
@@ -210,7 +220,7 @@ type listenerConflictResolver func(listener *Listener)
 type listenerExternalReferenceResolver func(listener *Listener)
 
 // listenerFrontendTLSCaCertReferenceResolver resolves the CA certificate references
-// for TLS listeners configured for frontend TLS.
+// for HTTPS listeners configured for frontend TLS.
 // If the reference is not resolvable, the resolver will make the listener invalid and add appropriate conditions.
 type listenerFrontendTLSCaCertReferenceResolver func(listener *Listener, gw *Gateway)
 
@@ -780,12 +790,8 @@ func createFrontendTLSCaCertReferenceResolver(
 			return
 		}
 
-		if l.Source.TLS == nil || l.Source.TLS.Mode != nil && *l.Source.TLS.Mode != v1.TLSModeTerminate {
+		if l.Source.TLS == nil || (l.Source.TLS.Mode != nil && *l.Source.TLS.Mode != v1.TLSModeTerminate) {
 			return
-		}
-
-		frontendTLSConfig := &FrontendTLSConfig{
-			CACertificateRefs: make([]*types.NamespacedName, 0),
 		}
 
 		frontend := gw.Source.Spec.TLS.Frontend
@@ -808,15 +814,15 @@ func createFrontendTLSCaCertReferenceResolver(
 						portCertRefs,
 					)
 					l.Conditions = append(l.Conditions, perPortConds...)
-					frontendTLSConfig.ValidationMode = portValidationMode
-					frontendTLSConfig.CACertificateRefs = refs
+					l.ValidationMode = portValidationMode
+					l.CACertificateRefs = refs
 					break
 				}
 			}
 		}
 
 		if frontend.Default.Validation != nil && len(frontend.Default.Validation.CACertificateRefs) > 0 {
-			if len(frontendTLSConfig.CACertificateRefs) == 0 {
+			if len(l.CACertificateRefs) == 0 {
 				defaultCertRefs := frontend.Default.Validation.CACertificateRefs
 				defaultValidationMode := frontend.Default.Validation.Mode
 				defaultFieldPath := field.NewPath("tls", "frontend", "default", "validation")
@@ -829,16 +835,15 @@ func createFrontendTLSCaCertReferenceResolver(
 					defaultCertRefs,
 				)
 				l.Conditions = append(l.Conditions, defaultConds...)
-				frontendTLSConfig.CACertificateRefs = refs
-				frontendTLSConfig.ValidationMode = defaultValidationMode
+				l.CACertificateRefs = refs
+				l.ValidationMode = defaultValidationMode
 			}
 		}
 
-		if frontendTLSConfig.ValidationMode == v1.AllowInsecureFallback {
+		if l.ValidationMode == v1.AllowInsecureFallback {
 			msg := fmt.Sprintf("Validation Mode: AllowInsecureFallback is set for listener %s.", l.Name)
 			gw.Conditions = append(gw.Conditions, conditions.NewGatewayInsecureFrontendValidationMode(msg))
 		}
-		l.FrontendTLSConfig = frontendTLSConfig
 	}
 }
 
@@ -980,7 +985,7 @@ func getListenerFrontendTLSCaRefs(
 			continue
 		}
 
-		certNsName, certNs := getGatewayFrontendTLSCertNsName(cert, gw)
+		certNsName, certNs := getFrontendTLSCertNsName(cert, gw)
 		if cert.Namespace != nil {
 			certNsName.Namespace = string(*cert.Namespace)
 		}
@@ -1034,4 +1039,29 @@ func getListenerFrontendTLSCaRefs(
 	}
 
 	return conds, caRefs
+}
+
+// resolveResourceRefGrant checks if a reference grant allows the listener
+// to reference a resource in another namespace.
+func resolveResourceRefGrant(msg, gwNs string,
+	to toResource,
+	refGrantResolver *referenceGrantResolver,
+) conditions.Condition {
+	if !refGrantResolver.refAllowed(to, fromGateway(gwNs)) {
+		return conditions.NewGatewayRefNotPermitted(msg)
+	}
+	return conditions.Condition{}
+}
+
+// getFrontendTLSCertNsName returns the NamespacedName of the Secret or ConfigMap
+// referenced by the Gateway for frontend TLS.
+func getFrontendTLSCertNsName(cert v1.ObjectReference, gw *v1.Gateway) (*types.NamespacedName, string) {
+	caRefNs := gw.Namespace
+	if cert.Namespace != nil {
+		caRefNs = string(*cert.Namespace)
+	}
+	return &types.NamespacedName{
+		Namespace: caRefNs,
+		Name:      string(cert.Name),
+	}, caRefNs
 }

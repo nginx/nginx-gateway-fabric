@@ -92,13 +92,7 @@ func buildGateways(
 
 		effectiveNginxProxy := buildEffectiveNginxProxy(gcNp, np)
 
-		conds, valid, secretRefNsName := validateGateway(
-			gw,
-			gc,
-			np,
-			resourceResolver,
-			refGrantResolver,
-		)
+		conds, valid, secretRefNsName := validateGateway(gw, gc, np, resourceResolver, refGrantResolver)
 
 		protectedPorts := make(ProtectedPorts)
 		if port, enabled := MetricsEnabledForNginxProxy(effectiveNginxProxy); enabled {
@@ -294,25 +288,10 @@ func validateGateway(
 	conds = append(conds, validateUnsupportedGatewayFields(gw)...)
 
 	// Validate referenced resources
-	refsConds, secretRefNsName := validateGatewayRefs(
-		gw,
-		npCfg,
-		resourceResolver,
-		refGrantResolver,
-	)
+	refsConds, secretRefNsName := validateGatewayRefs(gw, npCfg, resourceResolver, refGrantResolver)
 	conds = append(conds, refsConds...)
 
 	return conds, valid, secretRefNsName
-}
-
-func resolveResourceRefGrant(msg, gwNs string,
-	to toResource,
-	refGrantResolver *referenceGrantResolver,
-) conditions.Condition {
-	if !refGrantResolver.refAllowed(to, fromGateway(gwNs)) {
-		return conditions.NewGatewayRefNotPermitted(msg)
-	}
-	return conditions.Condition{}
 }
 
 // getGatewayCertSecretNsName returns the NamespacedName of the secret referenced by the Gateway for backend TLS.
@@ -326,19 +305,6 @@ func getGatewayCertSecretNsName(gw *v1.Gateway) (*types.NamespacedName, string) 
 		Namespace: secretRefNs,
 		Name:      string(gatewayCert.Name),
 	}, secretRefNs
-}
-
-// getGatewayFrontendTLSCertNsName returns the NamespacedName of the secret
-// referenced by the Gateway for frontend TLS.
-func getGatewayFrontendTLSCertNsName(cert v1.ObjectReference, gw *v1.Gateway) (*types.NamespacedName, string) {
-	caRefNs := gw.Namespace
-	if cert.Namespace != nil {
-		caRefNs = string(*cert.Namespace)
-	}
-	return &types.NamespacedName{
-		Namespace: caRefNs,
-		Name:      string(cert.Name),
-	}, caRefNs
 }
 
 // GetReferencedSnippetsFilters returns all SnippetsFilters that are referenced by routes attached to this Gateway.

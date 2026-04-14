@@ -192,12 +192,21 @@ const (
 
 // SSL is the SSL configuration for a server.
 type SSL struct {
-	Protocols           string
-	Ciphers             string
-	ClientCertBundleID  CertBundleID
-	VerifyClient        string
-	KeyPairIDs          []SSLKeyPairID
+	// Protocols specifies the SSL/TLS protocols to enable.
+	Protocols string
+	// Ciphers specifies the SSL/TLS ciphers to use.
+	Ciphers string
+	// ClientCertBundleID is the ID of the client certificate bundle for client verification.
+	ClientCertBundleID CertBundleID
+	// VerifyClient specifies the client certificate verification mode.
+	// This can be "on" or "optional_no_ca".
+	VerifyClient string
+	// KeyPairIDs are the IDs of the corresponding SSLKeyPairs for the server.
+	// Multiple IDs allow nginx to select the appropriate certificate via SNI.
+	KeyPairIDs []SSLKeyPairID
+	// RequireVerifiedCert specifies whether to require a any (valid or invalid) client certificate for the server.
 	RequireVerifiedCert bool
+	// PreferServerCiphers specifies whether server ciphers should be preferred over client ciphers.
 	PreferServerCiphers bool
 }
 

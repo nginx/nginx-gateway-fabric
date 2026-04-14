@@ -468,10 +468,8 @@ func buildFrontendTLSCertBundles(
 			Name:      listener.Name,
 		}
 
-		// gwFrontendTLSConfig := gateway.FrontendTLSConfig
-
 		perPortBundleData := make([]CertBundle, 0)
-		if perPortCaRefs := listener.FrontendTLSConfig.CACertificateRefs; len(perPortCaRefs) > 0 {
+		if perPortCaRefs := listener.CACertificateRefs; len(perPortCaRefs) > 0 {
 			for _, ref := range perPortCaRefs {
 				bundleData := getFrontendTLSCertBundleData(ref, gateway, secretsMap, caCertConfigMaps)
 				if len(bundleData) > 0 {
@@ -484,13 +482,13 @@ func buildFrontendTLSCertBundles(
 					id,
 					sslServers,
 					listener.Source.Port,
-					listener.FrontendTLSConfig.ValidationMode,
+					listener.ValidationMode,
 				)
 			}
 		} else if gateway.Source.Spec.TLS.Frontend.Default.Validation != nil &&
 			gateway.Source.Spec.TLS.Frontend.Default.Validation.CACertificateRefs != nil {
 			defaultBundleData := make([]CertBundle, 0)
-			if defaultCaRefs := listener.FrontendTLSConfig.CACertificateRefs; len(defaultCaRefs) > 0 {
+			if defaultCaRefs := listener.CACertificateRefs; len(defaultCaRefs) > 0 {
 				for _, ref := range defaultCaRefs {
 					bundleData := getFrontendTLSCertBundleData(ref, gateway, secretsMap, caCertConfigMaps)
 					if len(bundleData) > 0 {
@@ -503,7 +501,7 @@ func buildFrontendTLSCertBundles(
 						id,
 						sslServers,
 						listener.Source.Port,
-						listener.FrontendTLSConfig.ValidationMode,
+						listener.ValidationMode,
 					)
 				}
 			}
@@ -536,7 +534,7 @@ func getFrontendTLSCertBundleData(
 
 	if cm := caCertConfigMaps[nsName]; cm != nil && cm.Source != nil {
 		if cm.Source.Data != nil && cm.Source.Data[secrets.CAKey] != "" {
-			// the cert could be base64 encoded or plaintext
+			// The cert could be base64 encoded or plaintext
 			raw := []byte(cm.Source.Data[secrets.CAKey])
 			decoded := make([]byte, base64.StdEncoding.DecodedLen(len(raw)))
 			n, err := base64.StdEncoding.Decode(decoded, raw)
@@ -577,7 +575,7 @@ func buildClientConfigForSSLServers(
 	listenerPort int32,
 	frontendValidationMode v1.FrontendValidationModeType,
 ) {
-	// Assign client certificate verification settings to all SSL servers on this listener's port.
+	// Assign client certificate verification settings to all SSL servers on this listener's port
 	for i := range sslServers {
 		if sslServers[i].SSL == nil {
 			continue
@@ -588,8 +586,8 @@ func buildClientConfigForSSLServers(
 
 		switch frontendValidationMode {
 		case v1.AllowInsecureFallback:
-			// Request client certificate but allow any certificate (valid, invalid, or none).
-			// Do not configure CA bundle verification in this mode.
+			// Request client certificate but allow any certificate (valid, invalid, or none)
+			// Do not configure CA bundle verification for this mode
 			sslServers[i].SSL.ClientCertBundleID = ""
 			sslServers[i].SSL.VerifyClient = SSLVerifyClientOptionalNoCA
 			sslServers[i].SSL.RequireVerifiedCert = false

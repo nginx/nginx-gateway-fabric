@@ -1019,8 +1019,8 @@ func NewGatewayNotProgrammedInvalid(msg string) Condition {
 	}
 }
 
-// NewGatewayInsecureFrontendValidationMode returns a Condition that indicates the Gateway is accepted
-// but is using an insecure frontend validation mode.
+// NewGatewayInsecureFrontendValidationMode returns a Condition that indicates
+// the Gateway is accepted, but is using an insecure frontend validation mode.
 func NewGatewayInsecureFrontendValidationMode(msg string) Condition {
 	return Condition{
 		Type:    string(v1.GatewayConditionInsecureFrontendValidationMode),
