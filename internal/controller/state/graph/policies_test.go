@@ -3971,7 +3971,7 @@ func TestBuildLogFetchRequest(t *testing.T) {
 		{
 			name: "basic log fetch",
 			logSource: ngfAPIv1alpha1.LogSource{
-				URL: helpers.GetPointer(baseURL),
+				HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: baseURL},
 			},
 			expRequest: fetch.Request{
 				URL:           baseURL,
@@ -3981,7 +3981,7 @@ func TestBuildLogFetchRequest(t *testing.T) {
 		{
 			name: "log fetch with 0 retry attempts",
 			logSource: ngfAPIv1alpha1.LogSource{
-				URL:           helpers.GetPointer(baseURL),
+				HTTPSource:    &ngfAPIv1alpha1.HTTPBundleSource{URL: baseURL},
 				RetryAttempts: helpers.GetPointer[int32](0),
 			},
 			expRequest: fetch.Request{
@@ -3992,7 +3992,7 @@ func TestBuildLogFetchRequest(t *testing.T) {
 		{
 			name: "log fetch with TLS CA",
 			logSource: ngfAPIv1alpha1.LogSource{
-				URL: helpers.GetPointer(baseURL),
+				HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: baseURL},
 			},
 			tlsCA: caData,
 			expRequest: fetch.Request{
