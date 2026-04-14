@@ -33,11 +33,10 @@ func newWAFGatewayBindingPolicy(
 	}
 }
 
-// baseLogSource returns a minimal valid LogSource with a URL for use in tests.
+// baseLogSource returns a minimal valid LogSource with an HTTPSource for use in tests.
 func baseLogSource() ngfAPIv1alpha1.LogSource {
-	url := "https://example.com/log.tgz"
 	return ngfAPIv1alpha1.LogSource{
-		URL: &url,
+		HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: "https://example.com/log.tgz"},
 	}
 }
 
@@ -633,6 +632,7 @@ func TestWAFGatewayBindingPolicyLogSourceMutualExclusion(t *testing.T) {
 
 	logURL := "https://example.com/log.tgz"
 	defaultProfile := ngfAPIv1alpha1.DefaultLogProfileBlocked
+	profileName := "my-profile"
 
 	tests := []struct {
 		spec       ngfAPIv1alpha1.WAFGatewayBindingPolicySpec
@@ -640,12 +640,29 @@ func TestWAFGatewayBindingPolicyLogSourceMutualExclusion(t *testing.T) {
 		wantErrors []string
 	}{
 		{
-			name: "url only is valid",
+			name: "httpSource only is valid",
 			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
 				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
 				SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
 					{
-						LogSource:   ngfAPIv1alpha1.LogSource{URL: &logURL},
+						LogSource:   ngfAPIv1alpha1.LogSource{HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: logURL}},
+						Destination: ngfAPIv1alpha1.SecurityLogDestination{Type: ngfAPIv1alpha1.SecurityLogDestinationTypeStderr},
+					},
+				},
+			},
+		},
+		{
+			name: "nimSource only is valid",
+			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
+				SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
+					{
+						LogSource: ngfAPIv1alpha1.LogSource{
+							NIMSource: &ngfAPIv1alpha1.NIMLogProfileBundleSource{
+								URL:         logURL,
+								ProfileName: profileName,
+							},
+						},
 						Destination: ngfAPIv1alpha1.SecurityLogDestination{Type: ngfAPIv1alpha1.SecurityLogDestinationTypeStderr},
 					},
 				},
@@ -664,14 +681,14 @@ func TestWAFGatewayBindingPolicyLogSourceMutualExclusion(t *testing.T) {
 			},
 		},
 		{
-			name:       "both url and defaultProfile set is invalid",
+			name:       "both httpSource and defaultProfile set is invalid",
 			wantErrors: []string{expectedWAFLogSourceMutualExclusionError},
 			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
 				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
 				SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
 					{
 						LogSource: ngfAPIv1alpha1.LogSource{
-							URL:            &logURL,
+							HTTPSource:     &ngfAPIv1alpha1.HTTPBundleSource{URL: logURL},
 							DefaultProfile: &defaultProfile,
 						},
 						Destination: ngfAPIv1alpha1.SecurityLogDestination{Type: ngfAPIv1alpha1.SecurityLogDestinationTypeStderr},
@@ -680,7 +697,39 @@ func TestWAFGatewayBindingPolicyLogSourceMutualExclusion(t *testing.T) {
 			},
 		},
 		{
-			name:       "neither url nor defaultProfile set is invalid",
+			name:       "both nimSource and defaultProfile set is invalid",
+			wantErrors: []string{expectedWAFLogSourceMutualExclusionError},
+			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
+				SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
+					{
+						LogSource: ngfAPIv1alpha1.LogSource{
+							NIMSource:      &ngfAPIv1alpha1.NIMLogProfileBundleSource{URL: logURL, ProfileName: profileName},
+							DefaultProfile: &defaultProfile,
+						},
+						Destination: ngfAPIv1alpha1.SecurityLogDestination{Type: ngfAPIv1alpha1.SecurityLogDestinationTypeStderr},
+					},
+				},
+			},
+		},
+		{
+			name:       "both httpSource and nimSource set is invalid",
+			wantErrors: []string{expectedWAFLogSourceMutualExclusionError},
+			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
+				SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
+					{
+						LogSource: ngfAPIv1alpha1.LogSource{
+							HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: logURL},
+							NIMSource:  &ngfAPIv1alpha1.NIMLogProfileBundleSource{URL: logURL, ProfileName: profileName},
+						},
+						Destination: ngfAPIv1alpha1.SecurityLogDestination{Type: ngfAPIv1alpha1.SecurityLogDestinationTypeStderr},
+					},
+				},
+			},
+		},
+		{
+			name:       "no source fields set is invalid",
 			wantErrors: []string{expectedWAFLogSourceMutualExclusionError},
 			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
 				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},

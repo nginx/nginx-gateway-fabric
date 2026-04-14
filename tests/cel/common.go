@@ -74,9 +74,10 @@ const (
 		`is 'hash' or 'hash consistent'`
 
 	// WAFGatewayBindingPolicy errors.
-	expectedWAFFileIfAndOnlyIfFileTypeError   = "destination.file must be set if and only if type is file"
-	expectedWAFSyslogIfAndOnlyIfSyslogType    = "destination.syslog must be set if and only if type is syslog"
-	expectedWAFLogSourceMutualExclusionError  = "exactly one of logSource.url or logSource.defaultProfile must be set"
+	expectedWAFFileIfAndOnlyIfFileTypeError = "destination.file must be set if and only if type is file"
+	expectedWAFSyslogIfAndOnlyIfSyslogType  = "destination.syslog must be set if and only if type is syslog"
+	//nolint: lll
+	expectedWAFLogSourceMutualExclusionError  = "exactly one of logSource.defaultProfile, logSource.httpSource, or logSource.nimSource must be set"
 	expectedWAFValidationMutualExclusionError = "verifyChecksum and expectedChecksum are mutually exclusive"
 	expectedWAFVerifyChecksumHTTPOnlyError    = "policySource.validation.verifyChecksum is only supported for type HTTP"
 	expectedWAFNIMSourceIfAndOnlyIfNIMType    = "policySource.nimSource must be set if and only if type is NIM"

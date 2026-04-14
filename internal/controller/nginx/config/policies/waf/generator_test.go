@@ -11,7 +11,6 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/http"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/waf"
-	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
 
 func TestGenerate(t *testing.T) {
@@ -20,6 +19,8 @@ func TestGenerate(t *testing.T) {
 	policyURL := "https://storage.example.com/policy.tgz"
 	logURL := "https://storage.example.com/log.tgz"
 	logURL2 := "https://storage.example.com/log2.tgz"
+	nimPolicyName := "nim-policy"
+	nimLogProfileName := "nim-log-profile"
 
 	tests := []struct {
 		name       string
@@ -58,7 +59,9 @@ func TestGenerate(t *testing.T) {
 					SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
 						{
 							LogSource: ngfAPIv1alpha1.LogSource{
-								URL: helpers.GetPointer(logURL),
+								HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{
+									URL: logURL,
+								},
 							},
 							Destination: ngfAPIv1alpha1.SecurityLogDestination{
 								Type: ngfAPIv1alpha1.SecurityLogDestinationTypeStderr,
@@ -88,7 +91,7 @@ func TestGenerate(t *testing.T) {
 					SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
 						{
 							LogSource: ngfAPIv1alpha1.LogSource{
-								URL: helpers.GetPointer(logURL),
+								HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: logURL},
 							},
 							Destination: ngfAPIv1alpha1.SecurityLogDestination{
 								Type: ngfAPIv1alpha1.SecurityLogDestinationTypeFile,
@@ -117,7 +120,7 @@ func TestGenerate(t *testing.T) {
 					SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
 						{
 							LogSource: ngfAPIv1alpha1.LogSource{
-								URL: helpers.GetPointer(logURL),
+								HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: logURL},
 							},
 							Destination: ngfAPIv1alpha1.SecurityLogDestination{
 								Type: ngfAPIv1alpha1.SecurityLogDestinationTypeSyslog,
@@ -136,6 +139,43 @@ func TestGenerate(t *testing.T) {
 			},
 		},
 		{
+			name: "security log with NIM source and stderr destination",
+			policy: &ngfAPIv1alpha1.WAFGatewayBindingPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "waf-nim-log",
+					Namespace: "test-ns",
+				},
+				Spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
+					PolicySource: ngfAPIv1alpha1.PolicySource{
+						NIMSource: &ngfAPIv1alpha1.NIMBundleSource{
+							URL:        policyURL,
+							PolicyName: &nimPolicyName,
+						},
+					},
+					SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
+						{
+							LogSource: ngfAPIv1alpha1.LogSource{
+								NIMSource: &ngfAPIv1alpha1.NIMLogProfileBundleSource{
+									URL:         logURL,
+									ProfileName: nimLogProfileName,
+								},
+							},
+							Destination: ngfAPIv1alpha1.SecurityLogDestination{
+								Type: ngfAPIv1alpha1.SecurityLogDestinationTypeStderr,
+							},
+						},
+					},
+				},
+			},
+			expStrings: []string{
+				"app_protect_enable on;",
+				"app_protect_policy_file \"/etc/app_protect/bundles/test-ns_waf-nim-log.tgz\";",
+				"app_protect_security_log_enable on;",
+				//nolint: lll
+				"app_protect_security_log \"/etc/app_protect/bundles/test-ns_waf-nim-log_log_be666560841a5b89_nim-log-profile.tgz\" stderr;",
+			},
+		},
+		{
 			name: "multiple security logs",
 			policy: &ngfAPIv1alpha1.WAFGatewayBindingPolicy{
 				ObjectMeta: metav1.ObjectMeta{
@@ -149,7 +189,7 @@ func TestGenerate(t *testing.T) {
 					SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
 						{
 							LogSource: ngfAPIv1alpha1.LogSource{
-								URL: helpers.GetPointer(logURL),
+								HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: logURL},
 							},
 							Destination: ngfAPIv1alpha1.SecurityLogDestination{
 								Type: ngfAPIv1alpha1.SecurityLogDestinationTypeStderr,
@@ -157,7 +197,10 @@ func TestGenerate(t *testing.T) {
 						},
 						{
 							LogSource: ngfAPIv1alpha1.LogSource{
-								URL: helpers.GetPointer(logURL2),
+								NIMSource: &ngfAPIv1alpha1.NIMLogProfileBundleSource{
+									URL:         logURL2,
+									ProfileName: nimLogProfileName,
+								},
 							},
 							Destination: ngfAPIv1alpha1.SecurityLogDestination{
 								Type: ngfAPIv1alpha1.SecurityLogDestinationTypeFile,
@@ -174,8 +217,8 @@ func TestGenerate(t *testing.T) {
 				"app_protect_policy_file \"/etc/app_protect/bundles/app-ns_waf-multi-log.tgz\";",
 				"app_protect_security_log_enable on;",
 				"app_protect_security_log \"/etc/app_protect/bundles/app-ns_waf-multi-log_log_be666560841a5b89.tgz\" stderr;",
-				"app_protect_security_log \"/etc/app_protect/bundles/app-ns_waf-multi-log_log_ab3b8795a7cf07f6.tgz\"" +
-					" /var/log/blocked.log;",
+				//nolint: lll
+				"app_protect_security_log \"/etc/app_protect/bundles/app-ns_waf-multi-log_log_ab3b8795a7cf07f6_nim-log-profile.tgz\" /var/log/blocked.log;",
 			},
 		},
 		{

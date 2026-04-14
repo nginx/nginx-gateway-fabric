@@ -38,6 +38,24 @@ const (
 // to retrieve all policies regardless of age.
 var unixEpochRFC3339 = time.Unix(0, 0).UTC().Format(time.RFC3339)
 
+type NAPCompilerVersionResponse struct {
+	Version string `json:"version"`
+}
+
+type LogProfileBundleResponse struct {
+	CompiledBundle string             `json:"compiledBundle"`
+	MetaData       LogProfileMetaData `json:"metaData"`
+}
+
+type LogProfileMetaData struct {
+	CompilerVersion string `json:"compilerVersion"`
+	Created         string `json:"created"`
+	LogProfileName  string `json:"logProfileName"`
+	LogProfileUID   string `json:"logProfileUid"`
+	Modified        string `json:"modified"`
+	UID             string `json:"uid"`
+}
+
 // BundleAuth holds authentication credentials for bundle fetching.
 type BundleAuth struct {
 	Username    string
@@ -53,6 +71,8 @@ type Request struct {
 	Auth    *BundleAuth
 	Timeout *metav1.Duration
 	URL     string
+	// NIMProfileName is the human-readable name of the NIM log profile.
+	NIMProfileName string
 	// PolicyName is the human-readable name of the policy.
 	// Used to look up the policy by name when fetching from NIM or N1C.
 	// Mutually exclusive with NIMPolicyUID.
@@ -98,17 +118,22 @@ type NIMRequest struct {
 	PolicyUID string
 }
 
-// Fetcher fetches WAF policy bundles from remote sources.
+// Fetcher fetches WAF policy bundles and log profile bundles from remote sources.
 //
 //counterfeiter:generate . Fetcher
 type Fetcher interface {
-	// Fetch retrieves the bundle bytes described by req.
+	// FetchPolicyBundle retrieves the bundle bytes described by req.
 	// For HTTP type: GETs req.URL. If req.VerifyChecksum is true, fetches req.URL+".sha256" to verify integrity.
 	// For NIM type: calls the NIM bundles API and base64-decodes items[0].content.
 	// For N1C type: resolves the policy via the N1C API and downloads the compiled bundle.
 	// VerifyChecksum is only supported for plain HTTP fetches; returns an error for NIM/N1C.
 	// Returns (data, checksum, error). checksum is hex-encoded SHA-256 of the returned data.
-	Fetch(ctx context.Context, req Request) (data []byte, checksum string, err error)
+	FetchPolicyBundle(ctx context.Context, req Request) (data []byte, checksum string, err error)
+	// FetchLogProfileBundle retrieves the log profile bundle bytes for the given request.
+	// For HTTP type: GETs req.URL. If req.VerifyChecksum is true, fetches req.URL+".sha256" to verify integrity.
+	// For NIM type: calls the NIM log profile bundles API and base64-decodes the compiledBundle field.
+	// Returns (data, checksum, error). checksum is hex-encoded SHA-256 of the returned data.
+	FetchLogProfileBundle(ctx context.Context, req Request) (data []byte, checksum string, err error)
 }
 
 // HTTPFetcher implements Fetcher using HTTP/HTTPS.
@@ -125,8 +150,6 @@ func NewHTTPFetcher() *HTTPFetcher {
 	}
 }
 
-// Fetch retrieves bundle bytes.
-// When req.N1CNamespace is set, uses N1C fetch logic (APIToken auth, N1C API path).
 // When req.PolicyName or req.NIMPolicyUID is set (and N1CNamespace is empty), uses NIM fetch logic.
 // Otherwise performs a plain GET to req.URL, optionally verifying the checksum.
 // validateAndNormalizeRequest checks mutual-exclusion rules and normalises
@@ -151,7 +174,23 @@ func validateAndNormalizeRequest(req Request) (Request, error) {
 	return req, nil
 }
 
-func (f *HTTPFetcher) Fetch(ctx context.Context, req Request) ([]byte, string, error) {
+// FetchPolicyBundle retrieves bundle bytes.
+// When req.N1CNamespace is set, uses N1C fetch logic (APIToken auth, N1C API path).
+// When req.NIMPolicyName or req.NIMPolicyUID is set (and N1CNamespace is empty), uses NIM fetch logic.
+// Otherwise performs a plain GET to req.URL, optionally verifying the checksum.
+func (f *HTTPFetcher) FetchPolicyBundle(ctx context.Context, req Request) ([]byte, string, error) {
+	return f.fetch(ctx, req, f.dispatch)
+}
+
+func (f *HTTPFetcher) FetchLogProfileBundle(ctx context.Context, req Request) ([]byte, string, error) {
+	return f.fetch(ctx, req, f.logProfileDispatch)
+}
+
+func (f *HTTPFetcher) fetch(
+	ctx context.Context,
+	req Request,
+	dispatch func(ctx context.Context, client *http.Client, req Request) ([]byte, string, error),
+) ([]byte, string, error) {
 	var err error
 	if req, err = validateAndNormalizeRequest(req); err != nil {
 		return nil, "", err
@@ -177,14 +216,14 @@ func (f *HTTPFetcher) Fetch(ctx context.Context, req Request) ([]byte, string, e
 	if !needsCustomTLS {
 		client := *f.defaultClient
 		client.Timeout = timeout
-		data, checksum, fetchErr = f.dispatch(ctx, &client, req)
+		data, checksum, fetchErr = dispatch(ctx, &client, req)
 	} else {
 		client, err := buildClient(req.TLSCAData, req.InsecureSkipVerify, timeout)
 		if err != nil {
 			return nil, "", fmt.Errorf("failed to build HTTP client: %w", err)
 		}
 		defer client.CloseIdleConnections()
-		data, checksum, fetchErr = f.dispatch(ctx, client, req)
+		data, checksum, fetchErr = dispatch(ctx, client, req)
 	}
 
 	if fetchErr != nil {
@@ -206,6 +245,21 @@ func (f *HTTPFetcher) dispatch(ctx context.Context, client *http.Client, req Req
 		return fetchN1C(ctx, client, req)
 	case req.PolicyName != "" || req.NIM.PolicyUID != "":
 		return fetchNIM(ctx, client, req)
+	default:
+		return fetchHTTP(ctx, client, req)
+	}
+}
+
+func (f *HTTPFetcher) logProfileDispatch(
+	ctx context.Context,
+	client *http.Client,
+	req Request,
+) ([]byte, string, error) {
+	switch {
+	case req.N1C.Namespace != "":
+		return nil, "", fmt.Errorf("fetching log profile bundles from N1C is not supported")
+	case req.NIMProfileName != "":
+		return fetchNIMLogProfile(ctx, client, req)
 	default:
 		return fetchHTTP(ctx, client, req)
 	}
@@ -314,6 +368,40 @@ func fetchNIM(ctx context.Context, client *http.Client, req Request) ([]byte, st
 	}
 
 	data, err := base64.StdEncoding.DecodeString(resp.Items[0].Content)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to base64-decode NIM bundle content: %w", err)
+	}
+
+	return data, ComputeChecksum(data), nil
+}
+
+func fetchNIMLogProfile(ctx context.Context, client *http.Client, req Request) ([]byte, string, error) {
+	compilerVersionURL := strings.TrimRight(req.URL, "/") + "/api/platform/v1/security/nap-compiler/versions/latest"
+	body, err := doGet(ctx, client, compilerVersionURL, req.Auth)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to fetch latest NIM NAP compiler version: %w", err)
+	}
+
+	var versionResp NAPCompilerVersionResponse
+	err = json.Unmarshal(body, &versionResp)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to parse NIM NAP compiler version response: %w", err)
+	}
+
+	logProfileBundleURL := strings.TrimRight(req.URL, "/") +
+		fmt.Sprintf("/api/platform/v1/security/logprofiles/%s/%s/bundle", req.NIMProfileName, versionResp.Version)
+	body, err = doGet(ctx, client, logProfileBundleURL, req.Auth)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to fetch NIM log profile bundle: %w", err)
+	}
+
+	var resp LogProfileBundleResponse
+	err = json.Unmarshal(body, &resp)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to parse NIM log profile bundle response: %w", err)
+	}
+
+	data, err := base64.StdEncoding.DecodeString(resp.CompiledBundle)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to base64-decode NIM bundle content: %w", err)
 	}
