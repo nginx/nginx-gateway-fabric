@@ -18,7 +18,6 @@ CONFORMANCE_PROFILES = $(STANDARD_CONFORMANCE_PROFILES) # by default we use the 
 SUPPORTED_EXTENDED_FEATURES_OPENSHIFT = HTTPRouteQueryParamMatching,HTTPRouteMethodMatching,HTTPRoutePortRedirect,HTTPRouteSchemeRedirect,HTTPRouteHostRewrite,HTTPRoutePathRewrite,GatewayPort8080,GatewayAddressEmpty,HTTPRouteResponseHeaderModification,HTTPRoutePathRedirect,GatewayHTTPListenerIsolation,GatewayInfrastructurePropagation,HTTPRouteRequestMirror,HTTPRouteRequestMultipleMirrors,HTTPRouteRequestPercentageMirror,HTTPRouteBackendProtocolWebSocket,HTTPRouteParentRefPort,HTTPRouteDestinationPortMatching,HTTPRouteHTTPSListenerDetectMisdirectedRequests,GatewayBackendClientCertificate
 SKIP_TESTS_OPENSHIFT = HTTPRouteServiceTypes,TLSRouteHostnameIntersection,TLSRouteInvalidBackendRefNonexistent,TLSRouteInvalidBackendRefUnknownKind,TLSRouteInvalidNoMatchingListenerHostname,TLSRouteInvalidNoMatchingListener,TLSRouteInvalidReferenceGrant,TLSRouteListenerPassthroughSupportedKinds,TLSRouteListenerTerminateNotSupported,TLSRouteSimpleSameNamespace
 SKIP_TESTS =
-RUN_TEST = GatewayFrontendClientCertificateValidationInsecureFallback
 CEL_TEST_TARGET =
 INFERENCE_SKIP_TESTS = GatewayDestinationEndpointServed,InferencePoolAppProtocol
 
@@ -58,7 +57,7 @@ run-conformance-tests: ## Run conformance tests
 		--image=$(CONFORMANCE_PREFIX):$(CONFORMANCE_TAG) --image-pull-policy=Never \
 		--overrides='{ "spec": { "serviceAccountName": "conformance" }	}' \
 		--restart=Never -- sh -c "go test -v -timeout 15m -run TestConformance . -tags conformance,experimental -args --gateway-class=$(GATEWAY_CLASS) \
-						        --version=$(NGF_VERSION) --skip-tests=$(SKIP_TESTS) --run-test=$(RUN_TEST) --conformance-profiles=$(CONFORMANCE_PROFILES) \
+						        --version=$(NGF_VERSION) --skip-tests=$(SKIP_TESTS) --conformance-profiles=$(CONFORMANCE_PROFILES) \
 								--report-output=output.txt; cat output.txt" | tee output.txt
 	./scripts/check-pod-exit-code.sh conformance
 	sed -e '1,/CONFORMANCE PROFILE/d' output.txt > conformance-profile.yaml
