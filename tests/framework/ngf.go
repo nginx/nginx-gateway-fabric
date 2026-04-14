@@ -45,7 +45,7 @@ type InstallationConfig struct {
 // InstallGatewayAPI installs the specified version of the Gateway API resources.
 func InstallGatewayAPI(apiVersion string) ([]byte, error) {
 	apiPath := fmt.Sprintf("%s/v%s/experimental-install.yaml", gwInstallBasePath, apiVersion)
-	GinkgoWriter.Printf("Installing Gateway API CRDs from experimental channel %q", apiVersion, apiPath)
+	GinkgoWriter.Printf("Installing Gateway API CRDs from experimental channel %q %q\n", apiVersion, apiPath)
 
 	cmd := exec.CommandContext(
 		context.Background(),

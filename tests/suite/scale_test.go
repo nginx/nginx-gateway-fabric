@@ -662,7 +662,7 @@ The logs are attached only if there are errors.
 		testResultsDir := filepath.Join(resultsDir, testName)
 		Expect(os.MkdirAll(testResultsDir, 0o755)).To(Succeed())
 
-		objects, err := framework.GenerateScaleListenerObjects(httpListenerCount, false /*non-tls*/)
+		objects, err := framework.GenerateScaleListenerObjects(httpListenerCount, false /*non-tls*/, gatewayClassName)
 		Expect(err).ToNot(HaveOccurred())
 
 		setNamespace(objects)
@@ -686,7 +686,7 @@ The logs are attached only if there are errors.
 		testResultsDir := filepath.Join(resultsDir, testName)
 		Expect(os.MkdirAll(testResultsDir, 0o755)).To(Succeed())
 
-		objects, err := framework.GenerateScaleListenerObjects(httpsListenerCount, true /*tls*/)
+		objects, err := framework.GenerateScaleListenerObjects(httpsListenerCount, true /*tls*/, gatewayClassName)
 		Expect(err).ToNot(HaveOccurred())
 
 		setNamespace(objects)
@@ -710,7 +710,7 @@ The logs are attached only if there are errors.
 		testResultsDir := filepath.Join(resultsDir, testName)
 		Expect(os.MkdirAll(testResultsDir, 0o755)).To(Succeed())
 
-		objects, err := framework.GenerateScaleHTTPRouteObjects(httpRouteCount)
+		objects, err := framework.GenerateScaleHTTPRouteObjects(httpRouteCount, gatewayClassName)
 		Expect(err).ToNot(HaveOccurred())
 
 		setNamespace(objects)

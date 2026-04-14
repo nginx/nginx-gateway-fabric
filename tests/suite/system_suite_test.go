@@ -175,9 +175,12 @@ func setup(cfg setupConfig, extraInstallArgs ...string) {
 
 	// Set text replacements for per-proc resource names so manifests reference the correct
 	// GatewayClass and NginxGateway config for this parallel process.
-	resourceManager.TextReplacements = map[string]string{
-		"gatewayClassName: nginx": fmt.Sprintf("gatewayClassName: %s", gatewayClassName),
-		"name: ngf-test-config":   fmt.Sprintf("name: %s-config", releaseName),
+	// Longevity installs NGF with the default "nginx" class, so no replacement is needed.
+	if !strings.Contains(GinkgoLabelFilter(), "longevity") {
+		resourceManager.TextReplacements = map[string]string{
+			"gatewayClassName: nginx": fmt.Sprintf("gatewayClassName: %s", gatewayClassName),
+			"name: ngf-test-config":   fmt.Sprintf("name: %s-config", releaseName),
+		}
 	}
 
 	if !cfg.deploy {
@@ -377,10 +380,12 @@ var _ = SynchronizedBeforeSuite(
 		}
 
 		// use a different release name for longevity to allow us to filter on a specific label when collecting
-		// logs from GKE
+		// logs from GKE. Also reset gateway class and namespace to defaults since longevity runs standalone.
 		if strings.Contains(labelFilter, "longevity") {
 			cfg.releaseName = "ngf-longevity"
 			releaseName = cfg.releaseName
+			gatewayClassName = "nginx"
+			ngfNamespace = "nginx-gateway"
 		}
 
 		setup(cfg)
@@ -411,7 +416,12 @@ var _ = SynchronizedAfterSuite(
 	},
 	// Phase 2: runs on proc 1 only, after all procs complete phase 1.
 	// Delete cluster-wide CRDs once all per-proc helm releases are gone.
+	// Skip for longevity-setup: the environment must remain intact for the duration of the longevity run.
 	func() {
+		if strings.Contains(GinkgoLabelFilter(), "longevity-setup") {
+			return
+		}
+
 		Expect(framework.DeleteNGFCRDs(resourceManager)).To(Succeed())
 
 		output, err := framework.UninstallGatewayAPI(*gatewayAPIVersion)
