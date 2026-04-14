@@ -32,7 +32,7 @@ permissions:
 jobs:
   mend:
     if: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false) || (github.event_name == 'push' && github.event.repository.fork == false) }}
-    uses: nginxinc/compliance-rules/.github/workflows/mend.yml@f7c1b54b34eade478560c7fd5300b7e6b6bf1b07 # v0.3.2
+    uses: nginx/compliance-rules/.github/workflows/mend.yml@543d32464b56e6a695939f41ba8009cbb10e413a # v0.3.3
     secrets: inherit
     with:
       product_name: nginx-gateway-fabric_${{ github.ref_name }}
