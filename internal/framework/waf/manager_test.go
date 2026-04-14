@@ -442,6 +442,9 @@ func TestManager_stopPollerClearsPollError(t *testing.T) {
 	g := NewWithT(t)
 
 	fetcher := &fetchfakes.FakeFetcher{}
+	testErr := errors.New("test error")
+	fetcher.FetchPolicyBundleReturns(nil, "", testErr)
+
 	deployments := &agentfakes.FakeDeploymentStorer{}
 	logger := logr.Discard()
 
@@ -469,8 +472,11 @@ func TestManager_stopPollerClearsPollError(t *testing.T) {
 		TargetDeployments: []types.NamespacedName{{Namespace: "nginx-gateway", Name: "nginx"}},
 	})
 
-	// Record an error.
-	mgr.recordPollResult(policyNsName, "test_policy", errors.New("test error"))
+	// Wait for poller to poll and record the error.
+	g.Eventually(func() bool {
+		return mgr.GetAllPollErrors() != nil && len(mgr.GetAllPollErrors()) > 0
+	}).WithTimeout(time.Second).Should(BeTrue())
+
 	g.Expect(mgr.GetAllPollErrors()).To(HaveKey(policyNsName))
 
 	// Stop poller should clear the error.

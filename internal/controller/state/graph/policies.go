@@ -99,9 +99,20 @@ func PolicyBundleKey(policyNsName types.NamespacedName) WAFBundleKey {
 
 // LogBundleKey returns the WAFBundleKey for a SecurityLog entry's bundle.
 // The key embeds a truncated SHA-256 hash of the URL so that each log source URL is uniquely identified.
-func LogBundleKey(policyNsName types.NamespacedName, logSourceURL string) WAFBundleKey {
+func LogBundleKey(policyNsName types.NamespacedName, logSource *ngfAPIv1alpha1.LogSource) WAFBundleKey {
+	if logSource.NIMSource != nil && logSource.NIMSource.URL != "" {
+		return WAFBundleKey(
+			fmt.Sprintf(
+				"%s_%s_log_%s_%s",
+				policyNsName.Namespace, policyNsName.Name,
+				helpers.URLHash(logSource.NIMSource.URL),
+				logSource.NIMSource.ProfileName,
+			),
+		)
+	}
+
 	return WAFBundleKey(
-		fmt.Sprintf("%s_%s_log_%s", policyNsName.Namespace, policyNsName.Name, helpers.URLHash(logSourceURL)),
+		fmt.Sprintf("%s_%s_log_%s", policyNsName.Namespace, policyNsName.Name, helpers.URLHash(logSource.HTTPSource.URL)),
 	)
 }
 
@@ -873,15 +884,34 @@ func BuildPolicyFetchRequest(
 }
 
 // BuildLogFetchRequest constructs a fetch.Request from a LogSource, resolved auth, and TLS CA data.
-func BuildLogFetchRequest(logSource *ngfAPIv1alpha1.LogSource, auth *fetch.BundleAuth, tlsCA []byte) fetch.Request {
-	return fetch.Request{
-		URL:              *logSource.URL,
-		Auth:             auth,
-		TLSCAData:        tlsCA,
-		VerifyChecksum:   logSource.Validation != nil && logSource.Validation.VerifyChecksum,
-		ExpectedChecksum: expectedChecksum(logSource.Validation),
-		Timeout:          logSource.Timeout,
+func BuildLogFetchRequest(
+	logSource *ngfAPIv1alpha1.LogSource,
+	auth *fetch.BundleAuth,
+	tlsCA []byte,
+) fetch.Request {
+	req := fetch.Request{
+		Auth:               auth,
+		TLSCAData:          tlsCA,
+		InsecureSkipVerify: logSource.InsecureSkipVerify,
+		VerifyChecksum:     logSource.Validation != nil && logSource.Validation.VerifyChecksum,
+		ExpectedChecksum:   expectedChecksum(logSource.Validation),
+		Timeout:            logSource.Timeout,
 	}
+
+	if logSource.NIMSource != nil {
+		if logSource.NIMSource.URL != "" {
+			req.URL = logSource.NIMSource.URL
+		}
+		if logSource.NIMSource.ProfileName != "" {
+			req.NIMProfileName = logSource.NIMSource.ProfileName
+		}
+	} else if logSource.HTTPSource != nil {
+		if logSource.HTTPSource.URL != "" {
+			req.URL = logSource.HTTPSource.URL
+		}
+	}
+
+	return req
 }
 
 // fetchPolicyBundle fetches the policy bundle for a WAFGatewayBindingPolicy.
@@ -924,7 +954,7 @@ func fetchPolicyBundle(
 
 	req := BuildPolicyFetchRequest(&policySource, wafPolicy.Spec.Type, auth, tlsCA)
 
-	data, checksum, err := wafInput.Fetcher.Fetch(ctx, req)
+	data, checksum, err := wafInput.Fetcher.FetchPolicyBundle(ctx, req)
 	if err != nil {
 		if prev, ok := wafInput.PreviousBundles[bundleKey]; ok {
 			cond := conditions.NewPolicyProgrammedStaleBundleWarning(err.Error())
@@ -953,7 +983,7 @@ func fetchSecurityLogBundles(
 	output *WAFProcessingOutput,
 ) {
 	for _, secLog := range wafPolicy.Spec.SecurityLogs {
-		if secLog.LogSource.URL == nil {
+		if secLog.LogSource.HTTPSource == nil && secLog.LogSource.NIMSource == nil {
 			// DefaultProfile is used; no bundle to fetch.
 			continue
 		}
@@ -982,7 +1012,7 @@ func fetchSecurityLogBundles(
 
 		bundleKey := LogBundleKey(
 			types.NamespacedName{Namespace: wafPolicy.Namespace, Name: wafPolicy.Name},
-			*secLog.LogSource.URL,
+			&secLog.LogSource,
 		)
 
 		// Multiple SecurityLog entries may reference the same URL and therefore produce the same
@@ -995,7 +1025,7 @@ func fetchSecurityLogBundles(
 
 		req := BuildLogFetchRequest(&secLog.LogSource, auth, tlsCA)
 
-		data, checksum, err := wafInput.Fetcher.Fetch(ctx, req)
+		data, checksum, err := wafInput.Fetcher.FetchLogProfileBundle(ctx, req)
 		if err != nil {
 			if prev, ok := wafInput.PreviousBundles[bundleKey]; ok {
 				cond := conditions.NewPolicyProgrammedStaleBundleWarning(err.Error())

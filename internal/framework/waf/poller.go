@@ -22,6 +22,13 @@ import (
 // defaultPollingInterval is the default interval between poll cycles.
 const defaultPollingInterval = 5 * time.Minute
 
+type BundleType int
+
+const (
+	PolicyBundle BundleType = iota
+	LogProfileBundle
+)
+
 // BundleSource represents a single bundle source that needs polling.
 // This can be either the main policy bundle or a log bundle.
 type BundleSource struct {
@@ -29,6 +36,8 @@ type BundleSource struct {
 	BundleKey graph.WAFBundleKey
 	// Request contains the fetch configuration for this bundle.
 	Request fetch.Request
+	// Type indicates whether this is a policy bundle or a log profile bundle, which determines the fetch method used.
+	Type BundleType
 	// Interval is the polling interval for this source.
 	Interval time.Duration
 }
@@ -177,7 +186,16 @@ func sourcesEqual(a, b []BundleSource) bool {
 func (p *poller) pollSource(ctx context.Context, src BundleSource) {
 	p.logger.V(1).Info("Polling bundle source")
 
-	data, checksum, err := p.fetcher.Fetch(ctx, src.Request)
+	var data []byte
+	var checksum string
+	var err error
+
+	if src.Type == LogProfileBundle {
+		data, checksum, err = p.fetcher.FetchLogProfileBundle(ctx, src.Request)
+	} else {
+		data, checksum, err = p.fetcher.FetchPolicyBundle(ctx, src.Request)
+	}
+
 	if err != nil {
 		p.logger.Error(err, "Failed to fetch bundle during poll")
 		if p.statusCallback != nil {
@@ -272,6 +290,7 @@ func BuildBundleSources(
 		}
 
 		sources = append(sources, BundleSource{
+			Type:      PolicyBundle,
 			BundleKey: graph.PolicyBundleKey(policyNsName),
 			Request:   graph.BuildPolicyFetchRequest(&spec.PolicySource, spec.Type, auth, tlsCA),
 			Interval:  interval,
@@ -280,7 +299,7 @@ func BuildBundleSources(
 
 	// Check each logSource for polling.
 	for _, secLog := range spec.SecurityLogs {
-		if secLog.LogSource.URL == nil {
+		if secLog.LogSource.HTTPSource == nil && secLog.LogSource.NIMSource == nil {
 			continue // DefaultProfile, no polling needed.
 		}
 		if secLog.LogSource.Polling == nil || !secLog.LogSource.Polling.Enabled {
@@ -293,7 +312,8 @@ func BuildBundleSources(
 		}
 
 		sources = append(sources, BundleSource{
-			BundleKey: graph.LogBundleKey(policyNsName, *secLog.LogSource.URL),
+			Type:      LogProfileBundle,
+			BundleKey: graph.LogBundleKey(policyNsName, &secLog.LogSource),
 			Request:   graph.BuildLogFetchRequest(&secLog.LogSource, auth, tlsCA),
 			Interval:  interval,
 		})

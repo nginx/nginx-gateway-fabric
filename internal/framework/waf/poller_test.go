@@ -19,7 +19,6 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/fetch"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/fetch/fetchfakes"
-	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
 
 func Test_newPoller(t *testing.T) {
@@ -103,7 +102,7 @@ func Test_poller_runExitsOnContextCancel(t *testing.T) {
 		t.Fatal("Poller did not exit after context cancellation")
 	}
 
-	g.Expect(fetcher.FetchCallCount()).To(Equal(1)) // One immediate poll on startup.
+	g.Expect(fetcher.FetchPolicyBundleCallCount()).To(Equal(1)) // One immediate poll on startup.
 }
 
 func Test_poller_runExitsWithNoSources(t *testing.T) {
@@ -138,7 +137,7 @@ func Test_poller_runExitsWithNoSources(t *testing.T) {
 		t.Fatal("Poller did not exit with no sources")
 	}
 
-	g.Expect(fetcher.FetchCallCount()).To(BeZero())
+	g.Expect(fetcher.FetchPolicyBundleCallCount()).To(BeZero())
 }
 
 func Test_poller_updateTargetDeployments(t *testing.T) {
@@ -190,7 +189,7 @@ func Test_poller_pollSourceUnchanged(t *testing.T) {
 	checksum := "abc123"
 
 	// Fetcher returns the same checksum as initial.
-	fetcher.FetchReturns([]byte("bundle data"), checksum, nil)
+	fetcher.FetchPolicyBundleReturns([]byte("bundle data"), checksum, nil)
 
 	poller := newPoller(pollerConfig{
 		logger:       logger,
@@ -211,7 +210,7 @@ func Test_poller_pollSourceUnchanged(t *testing.T) {
 	src := poller.sources[0]
 	poller.pollSource(t.Context(), src)
 
-	g.Expect(fetcher.FetchCallCount()).To(Equal(1))
+	g.Expect(fetcher.FetchPolicyBundleCallCount()).To(Equal(1))
 	// Deployment.Get should NOT be called since checksum is unchanged.
 	g.Expect(deployments.GetCallCount()).To(Equal(0))
 }
@@ -229,7 +228,7 @@ func Test_poller_pollSourceChanged(t *testing.T) {
 	newChecksum := "def456"
 
 	// Fetcher returns a new checksum.
-	fetcher.FetchReturns([]byte("new bundle data"), newChecksum, nil)
+	fetcher.FetchPolicyBundleReturns([]byte("new bundle data"), newChecksum, nil)
 
 	// Deployment returns nil (not found) so push is skipped.
 	deployments.GetReturns(nil)
@@ -253,7 +252,7 @@ func Test_poller_pollSourceChanged(t *testing.T) {
 	src := poller.sources[0]
 	poller.pollSource(t.Context(), src)
 
-	g.Expect(fetcher.FetchCallCount()).To(Equal(1))
+	g.Expect(fetcher.FetchPolicyBundleCallCount()).To(Equal(1))
 	// Deployment.Get should be called to push the bundle.
 	g.Expect(deployments.GetCallCount()).To(Equal(1))
 
@@ -273,7 +272,7 @@ func Test_poller_pollSourceFetchError(t *testing.T) {
 	oldChecksum := "abc123"
 
 	// Fetcher returns an error.
-	fetcher.FetchReturns(nil, "", errors.New("network error"))
+	fetcher.FetchPolicyBundleReturns(nil, "", errors.New("network error"))
 
 	var callbackErr error
 	poller := newPoller(pollerConfig{
@@ -298,7 +297,7 @@ func Test_poller_pollSourceFetchError(t *testing.T) {
 	src := poller.sources[0]
 	poller.pollSource(t.Context(), src)
 
-	g.Expect(fetcher.FetchCallCount()).To(Equal(1))
+	g.Expect(fetcher.FetchPolicyBundleCallCount()).To(Equal(1))
 	// Deployment.Get should NOT be called on fetch error.
 	g.Expect(deployments.GetCallCount()).To(Equal(0))
 	// Checksum should NOT be updated.
@@ -365,7 +364,7 @@ func Test_poller_pollSourceSuccessWithCallback(t *testing.T) {
 	}
 
 	// Fetcher returns new data with different checksum.
-	fetcher.FetchReturns([]byte("new bundle data"), newChecksum, nil)
+	fetcher.FetchPolicyBundleReturns([]byte("new bundle data"), newChecksum, nil)
 
 	var callbackCalled bool
 	var callbackErr error
@@ -392,7 +391,7 @@ func Test_poller_pollSourceSuccessWithCallback(t *testing.T) {
 	src := poller.sources[0]
 	poller.pollSource(t.Context(), src)
 
-	g.Expect(fetcher.FetchCallCount()).To(Equal(1))
+	g.Expect(fetcher.FetchPolicyBundleCallCount()).To(Equal(1))
 	g.Expect(fakeDeployments.GetCallCount()).To(Equal(1))
 	g.Expect(fakeBroadcaster.SendCallCount()).To(Equal(1))
 	// Checksum should be updated.
@@ -416,7 +415,7 @@ func Test_poller_bundleUpdateCallbackOnChange(t *testing.T) {
 	newData := []byte("new bundle data")
 
 	// Fetcher returns new data.
-	fetcher.FetchReturns(newData, newChecksum, nil)
+	fetcher.FetchPolicyBundleReturns(newData, newChecksum, nil)
 	deployments.GetReturns(nil)
 
 	var callbackKey graph.WAFBundleKey
@@ -467,7 +466,7 @@ func Test_poller_bundleUpdateCallbackNotCalledOnUnchanged(t *testing.T) {
 	checksum := "abc123"
 
 	// Fetcher returns same checksum — no change.
-	fetcher.FetchReturns([]byte("data"), checksum, nil)
+	fetcher.FetchPolicyBundleReturns([]byte("data"), checksum, nil)
 
 	var callbackCalled bool
 
@@ -507,7 +506,7 @@ func Test_poller_bundleUpdateCallbackNotCalledOnError(t *testing.T) {
 	bundleKey := graph.WAFBundleKey("default_test")
 
 	// Fetcher returns error.
-	fetcher.FetchReturns(nil, "", errors.New("network error"))
+	fetcher.FetchPolicyBundleReturns(nil, "", errors.New("network error"))
 
 	var callbackCalled bool
 
@@ -564,7 +563,7 @@ func Test_poller_pushBundleNoSubscribers(t *testing.T) {
 	}
 
 	// Fetcher returns new data with different checksum.
-	fetcher.FetchReturns([]byte("new bundle data"), newChecksum, nil)
+	fetcher.FetchPolicyBundleReturns([]byte("new bundle data"), newChecksum, nil)
 
 	poller := newPoller(pollerConfig{
 		logger:       logger,
@@ -585,7 +584,7 @@ func Test_poller_pushBundleNoSubscribers(t *testing.T) {
 	src := poller.sources[0]
 	poller.pollSource(t.Context(), src)
 
-	g.Expect(fetcher.FetchCallCount()).To(Equal(1))
+	g.Expect(fetcher.FetchPolicyBundleCallCount()).To(Equal(1))
 	g.Expect(fakeDeployments.GetCallCount()).To(Equal(1))
 	// Broadcaster.Send should be called even with no subscribers; it just returns false.
 	g.Expect(fakeBroadcaster.SendCallCount()).To(Equal(1))
@@ -929,7 +928,7 @@ func TestBuildBundleSources(t *testing.T) {
 				SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
 					{
 						LogSource: ngfAPIv1alpha1.LogSource{
-							URL: helpers.GetPointer("http://example.com/log-profile.tgz"),
+							HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: "http://example.com/log-profile.tgz"},
 							Polling: &ngfAPIv1alpha1.BundlePolling{
 								Enabled: true,
 							},
@@ -956,7 +955,7 @@ func TestBuildBundleSources(t *testing.T) {
 				SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
 					{
 						LogSource: ngfAPIv1alpha1.LogSource{
-							URL: nil, // DefaultProfile.
+							HTTPSource: nil, // DefaultProfile.
 							Polling: &ngfAPIv1alpha1.BundlePolling{
 								Enabled: true, // Should be ignored for default profile.
 							},
@@ -979,7 +978,7 @@ func TestBuildBundleSources(t *testing.T) {
 				SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
 					{
 						LogSource: ngfAPIv1alpha1.LogSource{
-							URL: helpers.GetPointer("http://example.com/log1.tgz"),
+							HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: "http://example.com/log1.tgz"},
 							Polling: &ngfAPIv1alpha1.BundlePolling{
 								Enabled: true,
 							},
@@ -987,7 +986,7 @@ func TestBuildBundleSources(t *testing.T) {
 					},
 					{
 						LogSource: ngfAPIv1alpha1.LogSource{
-							URL: helpers.GetPointer("http://example.com/log2.tgz"),
+							HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: "http://example.com/log2.tgz"},
 							Polling: &ngfAPIv1alpha1.BundlePolling{
 								Enabled: true,
 							},
@@ -1041,7 +1040,7 @@ func TestBuildBundleSources(t *testing.T) {
 				SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
 					{
 						LogSource: ngfAPIv1alpha1.LogSource{
-							URL: helpers.GetPointer("http://example.com/log.tgz"),
+							HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: "http://example.com/log.tgz"},
 							Polling: &ngfAPIv1alpha1.BundlePolling{
 								Enabled:  true,
 								Interval: &metav1.Duration{Duration: -5 * time.Second},
