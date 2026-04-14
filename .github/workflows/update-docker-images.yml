@@ -67,7 +67,7 @@ jobs:
 
       - name: Check if update available for nginx image
         id: update
-        uses: lucacome/docker-image-update-checker@03e3f8ff4b69a3bf845e2f6b56f0e0b0ad7e1d1e # v3.0.1
+        uses: lucacome/docker-image-update-checker@3233adf42bb1dddf92f18cf024a8e202dbeaa9b3 # v3.1.0
         with:
           base-image: ${{ needs.variables.outputs.nginx_version }}
           image: ghcr.io/nginx/nginx-gateway-fabric/nginx:${{ needs.variables.outputs.ngf_tag }}
