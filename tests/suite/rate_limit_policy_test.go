@@ -297,52 +297,56 @@ var _ = Describe("RateLimitPolicy", Ordered, Label("functional", "rate-limit-pol
 				Expect(err).ToNot(HaveOccurred())
 			})
 
-			It("are set properly for route policy", func() {
-				expCfgs := []framework.ExpectedNginxField{
-					{
-						Directive: "include",
-						Value:     fmt.Sprintf("%s%s", filePrefix, "_rlp-multiple-targets_internal_http.conf"),
-						File:      "http.conf",
-					},
-					{
-						Directive: "limit_req_zone",
-						Value:     fmt.Sprintf("$binary_remote_addr zone=%s_rl_rlp-multiple-targets_rule0:10m rate=2r/m", namespace),
-						File:      fmt.Sprintf("%s%s", filePrefix, "_rlp-multiple-targets_internal_http.conf"),
-					},
-					{
-						Directive: "include",
-						Value:     fmt.Sprintf("%s%s", filePrefix, "_rlp-multiple-targets_route.conf"),
-						File:      "http.conf",
-						Location:  "/coffee",
-						Server:    "cafe.example.com",
-					},
-					{
-						Directive: "include",
-						Value:     fmt.Sprintf("%s%s", filePrefix, "_rlp-multiple-targets_route.conf"),
-						File:      "http.conf",
-						Server:    "*.example.com",
-						Location:  "/helloworld.Greeter/SayHello",
-					},
-					{
-						File:      fmt.Sprintf("%s%s", filePrefix, "_rlp-multiple-targets_route.conf"),
-						Directive: "limit_req",
-						Value:     fmt.Sprintf("zone=%s_rl_rlp-multiple-targets_rule0 burst=3", namespace),
-					},
-					{
-						File:      fmt.Sprintf("%s%s", filePrefix, "_rlp-multiple-targets_route.conf"),
-						Directive: "limit_req_log_level",
-						Value:     "info",
-					},
-					{
-						File:      fmt.Sprintf("%s%s", filePrefix, "_rlp-multiple-targets_route.conf"),
-						Directive: "limit_req_status",
-						Value:     "429",
-					},
-				}
-				for _, expCfg := range expCfgs {
-					Expect(framework.ValidateNginxFieldExists(conf, expCfg)).To(Succeed())
-				}
-			})
+			DescribeTable("are set properly for",
+				func(getCfgs func() []framework.ExpectedNginxField) {
+					for _, expCfg := range getCfgs() {
+						Expect(framework.ValidateNginxFieldExists(conf, expCfg)).To(Succeed())
+					}
+				},
+				Entry("route policy", func() []framework.ExpectedNginxField {
+					return []framework.ExpectedNginxField{
+						{
+							Directive: "include",
+							Value:     fmt.Sprintf("%s%s", filePrefix, "_rlp-multiple-targets_internal_http.conf"),
+							File:      "http.conf",
+						},
+						{
+							Directive: "limit_req_zone",
+							Value:     fmt.Sprintf("$binary_remote_addr zone=%s_rl_rlp-multiple-targets_rule0:10m rate=2r/m", namespace),
+							File:      fmt.Sprintf("%s%s", filePrefix, "_rlp-multiple-targets_internal_http.conf"),
+						},
+						{
+							Directive: "include",
+							Value:     fmt.Sprintf("%s%s", filePrefix, "_rlp-multiple-targets_route.conf"),
+							File:      "http.conf",
+							Location:  "/coffee",
+							Server:    "cafe.example.com",
+						},
+						{
+							Directive: "include",
+							Value:     fmt.Sprintf("%s%s", filePrefix, "_rlp-multiple-targets_route.conf"),
+							File:      "http.conf",
+							Server:    "*.example.com",
+							Location:  "/helloworld.Greeter/SayHello",
+						},
+						{
+							File:      fmt.Sprintf("%s%s", filePrefix, "_rlp-multiple-targets_route.conf"),
+							Directive: "limit_req",
+							Value:     fmt.Sprintf("zone=%s_rl_rlp-multiple-targets_rule0 burst=3", namespace),
+						},
+						{
+							File:      fmt.Sprintf("%s%s", filePrefix, "_rlp-multiple-targets_route.conf"),
+							Directive: "limit_req_log_level",
+							Value:     "info",
+						},
+						{
+							File:      fmt.Sprintf("%s%s", filePrefix, "_rlp-multiple-targets_route.conf"),
+							Directive: "limit_req_status",
+							Value:     "429",
+						},
+					}
+				}),
+			)
 		})
 	})
 
@@ -400,55 +404,59 @@ var _ = Describe("RateLimitPolicy", Ordered, Label("functional", "rate-limit-pol
 				Expect(err).ToNot(HaveOccurred())
 			})
 
-			It("are set properly for route policy", func() {
-				expCfgs := []framework.ExpectedNginxField{
-					{
-						Directive: "include",
-						Value:     fmt.Sprintf("%s%s", filePrefix, "_rlp-multiple-rules_internal_http.conf"),
-						File:      "http.conf",
-					},
-					{
-						Directive: "include",
-						Value:     fmt.Sprintf("%s%s", filePrefix, "_rlp-multiple-rules_route.conf"),
-						File:      "http.conf",
-						Location:  "/coffee",
-						Server:    "cafe.example.com",
-					},
-					{
-						File:      fmt.Sprintf("%s%s", filePrefix, "_rlp-multiple-rules_internal_http.conf"),
-						Directive: "limit_req_zone",
-						Value:     fmt.Sprintf("$binary_remote_addr zone=%s_rl_rlp-multiple-rules_rule0:20m rate=1r/m", namespace),
-					},
-					{
-						File:      fmt.Sprintf("%s%s", filePrefix, "_rlp-multiple-rules_internal_http.conf"),
-						Directive: "limit_req_zone",
-						Value:     fmt.Sprintf("$binary_remote_addr zone=%s_rl_rlp-multiple-rules_rule1:10m rate=1r/m", namespace),
-					},
-					{
-						File:      fmt.Sprintf("%s%s", filePrefix, "_rlp-multiple-rules_route.conf"),
-						Directive: "limit_req",
-						Value:     fmt.Sprintf("zone=%s_rl_rlp-multiple-rules_rule0 burst=2 nodelay", namespace),
-					},
-					{
-						File:      fmt.Sprintf("%s%s", filePrefix, "_rlp-multiple-rules_route.conf"),
-						Directive: "limit_req",
-						Value:     fmt.Sprintf("zone=%s_rl_rlp-multiple-rules_rule1 burst=1 nodelay", namespace),
-					},
-					{
-						File:      fmt.Sprintf("%s%s", filePrefix, "_rlp-multiple-rules_route.conf"),
-						Directive: "limit_req_log_level",
-						Value:     "warn",
-					},
-					{
-						File:      fmt.Sprintf("%s%s", filePrefix, "_rlp-multiple-rules_route.conf"),
-						Directive: "limit_req_status",
-						Value:     "466",
-					},
-				}
-				for _, expCfg := range expCfgs {
-					Expect(framework.ValidateNginxFieldExists(conf, expCfg)).To(Succeed())
-				}
-			})
+			DescribeTable("are set properly for",
+				func(getCfgs func() []framework.ExpectedNginxField) {
+					for _, expCfg := range getCfgs() {
+						Expect(framework.ValidateNginxFieldExists(conf, expCfg)).To(Succeed())
+					}
+				},
+				Entry("route policy", func() []framework.ExpectedNginxField {
+					return []framework.ExpectedNginxField{
+						{
+							Directive: "include",
+							Value:     fmt.Sprintf("%s%s", filePrefix, "_rlp-multiple-rules_internal_http.conf"),
+							File:      "http.conf",
+						},
+						{
+							Directive: "include",
+							Value:     fmt.Sprintf("%s%s", filePrefix, "_rlp-multiple-rules_route.conf"),
+							File:      "http.conf",
+							Location:  "/coffee",
+							Server:    "cafe.example.com",
+						},
+						{
+							File:      fmt.Sprintf("%s%s", filePrefix, "_rlp-multiple-rules_internal_http.conf"),
+							Directive: "limit_req_zone",
+							Value:     fmt.Sprintf("$binary_remote_addr zone=%s_rl_rlp-multiple-rules_rule0:20m rate=1r/m", namespace),
+						},
+						{
+							File:      fmt.Sprintf("%s%s", filePrefix, "_rlp-multiple-rules_internal_http.conf"),
+							Directive: "limit_req_zone",
+							Value:     fmt.Sprintf("$binary_remote_addr zone=%s_rl_rlp-multiple-rules_rule1:10m rate=1r/m", namespace),
+						},
+						{
+							File:      fmt.Sprintf("%s%s", filePrefix, "_rlp-multiple-rules_route.conf"),
+							Directive: "limit_req",
+							Value:     fmt.Sprintf("zone=%s_rl_rlp-multiple-rules_rule0 burst=2 nodelay", namespace),
+						},
+						{
+							File:      fmt.Sprintf("%s%s", filePrefix, "_rlp-multiple-rules_route.conf"),
+							Directive: "limit_req",
+							Value:     fmt.Sprintf("zone=%s_rl_rlp-multiple-rules_rule1 burst=1 nodelay", namespace),
+						},
+						{
+							File:      fmt.Sprintf("%s%s", filePrefix, "_rlp-multiple-rules_route.conf"),
+							Directive: "limit_req_log_level",
+							Value:     "warn",
+						},
+						{
+							File:      fmt.Sprintf("%s%s", filePrefix, "_rlp-multiple-rules_route.conf"),
+							Directive: "limit_req_status",
+							Value:     "466",
+						},
+					}
+				}),
+			)
 		})
 	})
 })
