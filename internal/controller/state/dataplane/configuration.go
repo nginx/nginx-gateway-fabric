@@ -443,7 +443,6 @@ func buildJWTRemoteTLSCABundles(
 	return bundles
 }
 
-//nolint:gocyclo
 func buildFrontendTLSCertBundles(
 	gateway *graph.Gateway,
 	sslServers []VirtualServer,
@@ -468,42 +467,22 @@ func buildFrontendTLSCertBundles(
 			Name:      listener.Name,
 		}
 
-		perPortBundleData := make([]CertBundle, 0)
-		if perPortCaRefs := listener.CACertificateRefs; len(perPortCaRefs) > 0 {
-			for _, ref := range perPortCaRefs {
+		caRefBundleData := make([]CertBundle, 0)
+		if caRefs := listener.CACertificateRefs; len(caRefs) > 0 {
+			for _, ref := range caRefs {
 				bundleData := getFrontendTLSCertBundleData(ref, gateway, secretsMap, caCertConfigMaps)
 				if len(bundleData) > 0 {
-					perPortBundleData = append(perPortBundleData, bundleData)
+					caRefBundleData = append(caRefBundleData, bundleData)
 				}
 			}
-			if len(perPortBundleData) > 0 {
-				id := buildBundlesForSSLServers(perPortBundleData, bundles, listenerRef)
+			if len(caRefBundleData) > 0 {
+				id := buildBundlesForSSLServers(caRefBundleData, bundles, listenerRef)
 				buildClientConfigForSSLServers(
 					id,
 					sslServers,
 					listener.Source.Port,
 					listener.ValidationMode,
 				)
-			}
-		} else if gateway.Source.Spec.TLS.Frontend.Default.Validation != nil &&
-			gateway.Source.Spec.TLS.Frontend.Default.Validation.CACertificateRefs != nil {
-			defaultBundleData := make([]CertBundle, 0)
-			if defaultCaRefs := listener.CACertificateRefs; len(defaultCaRefs) > 0 {
-				for _, ref := range defaultCaRefs {
-					bundleData := getFrontendTLSCertBundleData(ref, gateway, secretsMap, caCertConfigMaps)
-					if len(bundleData) > 0 {
-						defaultBundleData = append(defaultBundleData, bundleData)
-					}
-				}
-				if len(defaultBundleData) > 0 {
-					id := buildBundlesForSSLServers(defaultBundleData, bundles, listenerRef)
-					buildClientConfigForSSLServers(
-						id,
-						sslServers,
-						listener.Source.Port,
-						listener.ValidationMode,
-					)
-				}
 			}
 		}
 	}

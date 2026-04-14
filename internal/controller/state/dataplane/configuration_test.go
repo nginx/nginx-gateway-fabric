@@ -2,6 +2,7 @@ package dataplane
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"sort"
@@ -8103,6 +8104,369 @@ func TestBuildJWTRemoteTLSCABundles(t *testing.T) {
 			result := buildJWTRemoteTLSCABundles(test.authFilters, test.secretsMap)
 
 			g.Expect(result).To(Equal(test.expected))
+		})
+	}
+}
+
+func TestGetFrontendTLSCertBundleData(t *testing.T) {
+	t.Parallel()
+
+	gatewayNs := "gateway-ns"
+	gateway := &graph.Gateway{
+		Source: &v1.Gateway{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: gatewayNs,
+			},
+		},
+	}
+
+	encodedCMData := base64.StdEncoding.EncodeToString([]byte("cm-base64-ca"))
+
+	tests := []struct {
+		ref              *types.NamespacedName
+		secretsMap       map[types.NamespacedName]*secrets.Secret
+		caCertConfigMaps map[types.NamespacedName]*configmaps.CaCertConfigMap
+		name             string
+		expected         []byte
+	}{
+		{
+			name:     "Empty ref name",
+			ref:      &types.NamespacedName{},
+			expected: nil,
+		},
+		{
+			name: "CA bundle from secret",
+			ref:  &types.NamespacedName{Name: "frontend-ca-secret"},
+			secretsMap: map[types.NamespacedName]*secrets.Secret{
+				{Namespace: gatewayNs, Name: "frontend-ca-secret"}: {
+					Source: &apiv1.Secret{
+						Data: map[string][]byte{
+							secrets.CAKey: []byte("secret-ca"),
+						},
+					},
+				},
+			},
+			expected: []byte("secret-ca"),
+		},
+		{
+			name: "CA bundle from configmap plaintext",
+			ref:  &types.NamespacedName{Name: "frontend-ca-cm-plain"},
+			caCertConfigMaps: map[types.NamespacedName]*configmaps.CaCertConfigMap{
+				{Namespace: gatewayNs, Name: "frontend-ca-cm-plain"}: {
+					Source: &apiv1.ConfigMap{
+						Data: map[string]string{
+							secrets.CAKey: "cm-plain-ca",
+						},
+					},
+				},
+			},
+			expected: []byte("cm-plain-ca"),
+		},
+		{
+			name: "CA bundle from configmap base64 data",
+			ref:  &types.NamespacedName{Name: "frontend-ca-cm-b64"},
+			caCertConfigMaps: map[types.NamespacedName]*configmaps.CaCertConfigMap{
+				{Namespace: gatewayNs, Name: "frontend-ca-cm-b64"}: {
+					Source: &apiv1.ConfigMap{
+						Data: map[string]string{
+							secrets.CAKey: encodedCMData,
+						},
+					},
+				},
+			},
+			expected: []byte("cm-base64-ca"),
+		},
+		{
+			name: "ConfigMap binary data takes precedence",
+			ref:  &types.NamespacedName{Name: "frontend-ca-cm-bin"},
+			caCertConfigMaps: map[types.NamespacedName]*configmaps.CaCertConfigMap{
+				{Namespace: gatewayNs, Name: "frontend-ca-cm-bin"}: {
+					Source: &apiv1.ConfigMap{
+						Data: map[string]string{
+							secrets.CAKey: "cm-plain-ca",
+						},
+						BinaryData: map[string][]byte{
+							secrets.CAKey: []byte("cm-binary-ca"),
+						},
+					},
+				},
+			},
+			expected: []byte("cm-binary-ca"),
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			result := getFrontendTLSCertBundleData(test.ref, gateway, test.secretsMap, test.caCertConfigMaps)
+
+			g.Expect(result).To(Equal(test.expected))
+		})
+	}
+}
+
+func TestBuildFrontendTLSCertBundles(t *testing.T) {
+	t.Parallel()
+
+	gatewayNs := "gateway-ns"
+	caRefName := "frontend-ca"
+	caRef := &types.NamespacedName{Namespace: gatewayNs, Name: caRefName}
+	caRefName2 := "frontend-ca-2"
+	caRef2 := &types.NamespacedName{Namespace: gatewayNs, Name: caRefName2}
+
+	buildGateway := func(listener *graph.Listener) *graph.Gateway {
+		return &graph.Gateway{
+			Valid: true,
+			Source: &v1.Gateway{
+				ObjectMeta: metav1.ObjectMeta{Namespace: gatewayNs},
+				Spec: v1.GatewaySpec{
+					TLS: &v1.GatewayTLSConfig{
+						Frontend: &v1.FrontendTLSConfig{
+							Default: v1.TLSConfig{
+								Validation: &v1.FrontendTLSValidation{
+									CACertificateRefs: []v1.ObjectReference{
+										{Name: v1.ObjectName("default-ca")},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			Listeners: []*graph.Listener{listener},
+		}
+	}
+
+	tests := []struct {
+		secretsMap             map[types.NamespacedName]*secrets.Secret
+		caCertConfigMaps       map[types.NamespacedName]*configmaps.CaCertConfigMap
+		gateway                *graph.Gateway
+		expectedServerBundle1  CertBundleID
+		expectedVerifyClient1  string
+		name                   string
+		expectedBundleID       CertBundleID
+		expectedServerBundle   CertBundleID
+		expectedVerifyClient   string
+		expectedBundleData     CertBundle
+		sslServers             []VirtualServer
+		expectedRequireVerify  bool
+		expectedRequireVerify1 bool
+		checkSecondServer      bool
+		expectBundle           bool
+	}{
+		{
+			name: "Listener-resolved frontend CA refs from secret configure ssl servers",
+			gateway: buildGateway(&graph.Listener{
+				Name:              "https-listener",
+				Valid:             true,
+				ValidationMode:    v1.AllowValidOnly,
+				CACertificateRefs: []*types.NamespacedName{caRef},
+				Source: v1.Listener{
+					Protocol: v1.HTTPSProtocolType,
+					Port:     443,
+				},
+			}),
+			sslServers: []VirtualServer{
+				{Port: 443, SSL: &SSL{}},
+				{Port: 8443, SSL: &SSL{}},
+			},
+			secretsMap: map[types.NamespacedName]*secrets.Secret{
+				{Namespace: gatewayNs, Name: caRefName}: {
+					Source: &apiv1.Secret{Data: map[string][]byte{secrets.CAKey: []byte("frontend-ca-data")}},
+				},
+			},
+			expectedBundleID:       generateCertBundleID(types.NamespacedName{Namespace: "443", Name: "https-listener"}),
+			expectedBundleData:     []byte("frontend-ca-data"),
+			expectedServerBundle:   generateCertBundleID(types.NamespacedName{Namespace: "443", Name: "https-listener"}),
+			expectedVerifyClient:   SSLVerifyClientOptionalNoCA,
+			expectedRequireVerify:  true,
+			expectedServerBundle1:  "",
+			expectedVerifyClient1:  "",
+			expectedRequireVerify1: false,
+			checkSecondServer:      true,
+			expectBundle:           true,
+		},
+		{
+			name: "AllowInsecureFallback disables verified cert requirement",
+			gateway: buildGateway(&graph.Listener{
+				Name:              "https-listener",
+				Valid:             true,
+				ValidationMode:    v1.AllowInsecureFallback,
+				CACertificateRefs: []*types.NamespacedName{caRef},
+				Source: v1.Listener{
+					Protocol: v1.HTTPSProtocolType,
+					Port:     443,
+				},
+			}),
+			sslServers: []VirtualServer{{Port: 443, SSL: &SSL{}}},
+			secretsMap: map[types.NamespacedName]*secrets.Secret{
+				{Namespace: gatewayNs, Name: caRefName}: {
+					Source: &apiv1.Secret{Data: map[string][]byte{secrets.CAKey: []byte("frontend-ca-data")}},
+				},
+			},
+			expectedBundleID:      generateCertBundleID(types.NamespacedName{Namespace: "443", Name: "https-listener"}),
+			expectedBundleData:    []byte("frontend-ca-data"),
+			expectedServerBundle:  "",
+			expectedVerifyClient:  SSLVerifyClientOptionalNoCA,
+			expectedRequireVerify: false,
+			expectBundle:          true,
+		},
+		{
+			name: "HTTPS listener with no resolved CA refs produces no bundle and no SSL mutation",
+			gateway: buildGateway(&graph.Listener{
+				Name:           "https-listener",
+				Valid:          true,
+				ValidationMode: v1.AllowValidOnly,
+				Source: v1.Listener{
+					Protocol: v1.HTTPSProtocolType,
+					Port:     443,
+				},
+			}),
+			sslServers: []VirtualServer{{
+				Port: 443,
+				SSL: &SSL{
+					ClientCertBundleID:  "existing-bundle",
+					VerifyClient:        "on",
+					RequireVerifiedCert: true,
+				},
+			}},
+			expectedServerBundle:  "existing-bundle",
+			expectedVerifyClient:  "on",
+			expectedRequireVerify: true,
+			expectBundle:          false,
+		},
+		{
+			name: "Resolved CA refs with missing secret/configmap data produce no bundle and no SSL mutation",
+			gateway: buildGateway(&graph.Listener{
+				Name:              "https-listener",
+				Valid:             true,
+				ValidationMode:    v1.AllowValidOnly,
+				CACertificateRefs: []*types.NamespacedName{caRef},
+				Source: v1.Listener{
+					Protocol: v1.HTTPSProtocolType,
+					Port:     443,
+				},
+			}),
+			sslServers: []VirtualServer{{
+				Port: 443,
+				SSL: &SSL{
+					ClientCertBundleID:  "existing-bundle",
+					VerifyClient:        "on",
+					RequireVerifiedCert: true,
+				},
+			}},
+			secretsMap:            map[types.NamespacedName]*secrets.Secret{},
+			expectedServerBundle:  "existing-bundle",
+			expectedVerifyClient:  "on",
+			expectedRequireVerify: true,
+			expectBundle:          false,
+		},
+		{
+			name: "Multiple listener CA refs are concatenated in a single bundle",
+			gateway: buildGateway(&graph.Listener{
+				Name:              "https-listener",
+				Valid:             true,
+				ValidationMode:    v1.AllowValidOnly,
+				CACertificateRefs: []*types.NamespacedName{caRef, caRef2},
+				Source: v1.Listener{
+					Protocol: v1.HTTPSProtocolType,
+					Port:     443,
+				},
+			}),
+			sslServers: []VirtualServer{{Port: 443, SSL: &SSL{}}},
+			secretsMap: map[types.NamespacedName]*secrets.Secret{
+				{Namespace: gatewayNs, Name: caRefName}: {
+					Source: &apiv1.Secret{Data: map[string][]byte{secrets.CAKey: []byte("frontend-ca-data")}},
+				},
+				{Namespace: gatewayNs, Name: caRefName2}: {
+					Source: &apiv1.Secret{Data: map[string][]byte{secrets.CAKey: []byte("frontend-ca-data-2")}},
+				},
+			},
+			expectedBundleID:      generateCertBundleID(types.NamespacedName{Namespace: "443", Name: "https-listener"}),
+			expectedBundleData:    []byte("frontend-ca-datafrontend-ca-data-2"),
+			expectedServerBundle:  generateCertBundleID(types.NamespacedName{Namespace: "443", Name: "https-listener"}),
+			expectedVerifyClient:  SSLVerifyClientOptionalNoCA,
+			expectedRequireVerify: true,
+			expectBundle:          true,
+		},
+		{
+			name: "ConfigMap CA ref produces bundle and SSL client config",
+			gateway: buildGateway(&graph.Listener{
+				Name:              "https-listener",
+				Valid:             true,
+				ValidationMode:    v1.AllowValidOnly,
+				CACertificateRefs: []*types.NamespacedName{caRef},
+				Source: v1.Listener{
+					Protocol: v1.HTTPSProtocolType,
+					Port:     443,
+				},
+			}),
+			sslServers: []VirtualServer{{Port: 443, SSL: &SSL{}}},
+			caCertConfigMaps: map[types.NamespacedName]*configmaps.CaCertConfigMap{
+				{Namespace: gatewayNs, Name: caRefName}: {
+					Source: &apiv1.ConfigMap{
+						Data: map[string]string{
+							secrets.CAKey: "configmap-ca-data",
+						},
+					},
+				},
+			},
+			expectedBundleID:      generateCertBundleID(types.NamespacedName{Namespace: "443", Name: "https-listener"}),
+			expectedBundleData:    []byte("configmap-ca-data"),
+			expectedServerBundle:  generateCertBundleID(types.NamespacedName{Namespace: "443", Name: "https-listener"}),
+			expectedVerifyClient:  SSLVerifyClientOptionalNoCA,
+			expectedRequireVerify: true,
+			expectBundle:          true,
+		},
+		{
+			name: "Non-HTTPS listener is ignored",
+			gateway: buildGateway(&graph.Listener{
+				Name:              "http-listener",
+				Valid:             true,
+				CACertificateRefs: []*types.NamespacedName{caRef},
+				Source: v1.Listener{
+					Protocol: v1.HTTPProtocolType,
+					Port:     80,
+				},
+			}),
+			sslServers: []VirtualServer{{Port: 80, SSL: &SSL{}}},
+			secretsMap: map[types.NamespacedName]*secrets.Secret{
+				{Namespace: gatewayNs, Name: caRefName}: {
+					Source: &apiv1.Secret{Data: map[string][]byte{secrets.CAKey: []byte("frontend-ca-data")}},
+				},
+			},
+			expectedServerBundle:  "",
+			expectedVerifyClient:  "",
+			expectedRequireVerify: false,
+			expectBundle:          false,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			bundles := buildFrontendTLSCertBundles(test.gateway, test.sslServers, test.secretsMap, test.caCertConfigMaps)
+
+			if test.expectBundle {
+				g.Expect(bundles).To(HaveKey(test.expectedBundleID))
+				g.Expect(bundles[test.expectedBundleID]).To(Equal(test.expectedBundleData))
+			} else {
+				g.Expect(bundles).To(BeEmpty())
+			}
+
+			g.Expect(test.sslServers[0].SSL.ClientCertBundleID).To(Equal(test.expectedServerBundle))
+			g.Expect(test.sslServers[0].SSL.VerifyClient).To(Equal(test.expectedVerifyClient))
+			g.Expect(test.sslServers[0].SSL.RequireVerifiedCert).To(Equal(test.expectedRequireVerify))
+
+			if test.checkSecondServer {
+				g.Expect(test.sslServers[1].SSL.ClientCertBundleID).To(Equal(test.expectedServerBundle1))
+				g.Expect(test.sslServers[1].SSL.VerifyClient).To(Equal(test.expectedVerifyClient1))
+				g.Expect(test.sslServers[1].SSL.RequireVerifiedCert).To(Equal(test.expectedRequireVerify1))
+			}
 		})
 	}
 }
