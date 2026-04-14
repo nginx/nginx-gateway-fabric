@@ -8,6 +8,10 @@ source scripts/vars.env
 
 gcloud compute scp --zone "${GKE_CLUSTER_ZONE}" --project="${GKE_PROJECT}" "${SCRIPT_DIR}"/vars.env username@"${RESOURCE_NAME}":~
 
+## Create a timestamp marker on the VM so we can identify only new/modified results files after the test run.
+gcloud compute ssh --zone "${GKE_CLUSTER_ZONE}" --project="${GKE_PROJECT}" username@"${RESOURCE_NAME}" \
+    --command="touch ~/results-marker"
+
 gcloud compute ssh --zone "${GKE_CLUSTER_ZONE}" --project="${GKE_PROJECT}" username@"${RESOURCE_NAME}" \
     --command="export START_LONGEVITY=${START_LONGEVITY} &&\
         export STOP_LONGEVITY=${STOP_LONGEVITY} &&\
@@ -15,13 +19,25 @@ gcloud compute ssh --zone "${GKE_CLUSTER_ZONE}" --project="${GKE_PROJECT}" usern
         bash -s" <"${SCRIPT_DIR}"/remote-scripts/run-nfr-tests.sh
 retcode=$?
 
-## Download results regardless of test outcome (needed for debugging failures)
-## Use rsync if running locally (faster); otherwise if in the pipeline don't download an SSH config
-if [ "${CI}" = "false" ]; then
-    gcloud compute config-ssh --ssh-config-file ngf-gcp.ssh >/dev/null
-    rsync -ave 'ssh -F ngf-gcp.ssh' username@"${RESOURCE_NAME}"."${GKE_CLUSTER_ZONE}"."${GKE_PROJECT}":~/nginx-gateway-fabric/tests/results .
-else
-    gcloud compute scp --zone "${GKE_CLUSTER_ZONE}" --project="${GKE_PROJECT}" --recurse username@"${RESOURCE_NAME}":~/nginx-gateway-fabric/tests/results .
+## Download only new/modified results files from the VM (not the entire historical results directory).
+## We use the timestamp marker created before the test run to identify changed files,
+## tar them up preserving directory structure, and extract locally.
+mkdir -p results
+
+gcloud compute ssh --zone "${GKE_CLUSTER_ZONE}" --project="${GKE_PROJECT}" username@"${RESOURCE_NAME}" \
+    --command="cd ~/nginx-gateway-fabric/tests && \
+        find results -newer ~/results-marker -type f > /tmp/changed-results.txt && \
+        if [ -s /tmp/changed-results.txt ]; then \
+            tar cf /tmp/changed-results.tar -T /tmp/changed-results.txt; \
+        fi"
+
+## Copy the tar back and extract if it exists (it won't exist if no results were generated).
+if gcloud compute ssh --zone "${GKE_CLUSTER_ZONE}" --project="${GKE_PROJECT}" username@"${RESOURCE_NAME}" \
+    --command="test -f /tmp/changed-results.tar"; then
+    gcloud compute scp --zone "${GKE_CLUSTER_ZONE}" --project="${GKE_PROJECT}" \
+        username@"${RESOURCE_NAME}":/tmp/changed-results.tar /tmp/changed-results.tar
+    tar xf /tmp/changed-results.tar -C .
+    rm -f /tmp/changed-results.tar
 fi
 
 ## Exit with error code after downloading results if tests failed
