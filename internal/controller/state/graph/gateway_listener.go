@@ -946,6 +946,10 @@ func createOverlappingTLSConfigResolver() listenerConflictResolver {
 	}
 }
 
+// getListenerFrontendTLSCaRefs validates and resolves the CA certificate references
+// for a listener configured with frontend TLS.
+// Returns conditions related to invalid CA certificate references and a list of valid CA certificate references.
+//
 //nolint:gocyclo
 func getListenerFrontendTLSCaRefs(
 	gw *v1.Gateway,

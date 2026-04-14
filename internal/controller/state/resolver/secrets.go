@@ -53,7 +53,7 @@ func (s *secretEntry) validate(obj client.Object) {
 		} else if s.expectedKey == secrets.CAKey {
 			// For Frontend TLS, we need to ensure the ca.crt key exists
 			// as TLS secrets are considered valid by default without a CA certificate.
-			validationErr = fmt.Errorf("missing expected key %s in secret %s/%s", secrets.CAKey, secret.Namespace, secret.Name)
+			validationErr = fmt.Errorf("missing expected key %q in secret %s/%s", secrets.CAKey, secret.Namespace, secret.Name)
 		}
 
 		certBundle = secrets.NewCertificateBundle(client.ObjectKeyFromObject(secret), "Secret", cert)
