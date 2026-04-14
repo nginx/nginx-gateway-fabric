@@ -216,9 +216,11 @@ func setUpPortForward(nginxPodName, nginxNamespace string) {
 			ports,
 			portForwardStopCh,
 		)
-		address = "127.0.0.1"
-		portFwdPort = httpPort
-		portFwdHTTPSPort = httpsPort
+		if err == nil {
+			address = "127.0.0.1"
+			portFwdPort = httpPort
+			portFwdHTTPSPort = httpsPort
+		}
 	} else {
 		GinkgoWriter.Printf("Service Type: LoadBalancer\n")
 		address, err = resourceManager.GetLBIPAddress(nginxNamespace)
