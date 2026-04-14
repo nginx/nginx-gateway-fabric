@@ -12861,9 +12861,6 @@ spec:
               securityLogs:
                 description: SecurityLogs defines security logging configurations.
                 items:
-                  description: |-
-                    WAFSecurityLog defines security logging configuration for app_protect_security_log directives.
-                    Exactly one of logSource.url (via LogSource) or logSource.defaultProfile must be set.
                   properties:
                     destination:
                       description: Destination defines where security logs are sent.
@@ -12946,7 +12943,7 @@ spec:
                         defaultProfile:
                           description: |-
                             DefaultProfile selects one of the built-in WAF log profile bundles shipped with the WAF engine.
-                            Mutually exclusive with URL.
+                            Mutually exclusive with HTTPSource and NIMSource.
                           enum:
                           - log_default
                           - log_all
@@ -12956,6 +12953,50 @@ spec:
                           - log_grpc_blocked
                           - log_grpc_illegal
                           type: string
+                        httpSource:
+                          description: |-
+                            HTTPSource configures direct bundle fetching from an HTTP/HTTPS URL.
+                            Mutually exclusive with DefaultProfile and NIMSource.
+                          properties:
+                            url:
+                              description: |-
+                                URL is the full URL of the compiled policy bundle (.tgz),
+                                e.g. "https://storage.example.com/bundles/policy.tgz".
+                              maxLength: 2083
+                              minLength: 1
+                              pattern: ^https?://
+                              type: string
+                          required:
+                          - url
+                          type: object
+                        insecureSkipVerify:
+                          description: |-
+                            InsecureSkipVerify disables TLS certificate verification when fetching the bundle.
+                            Not recommended for production use.
+                          type: boolean
+                        nimSource:
+                          description: |-
+                            NIMSource configures bundle fetching from NGINX Instance Manager.
+                            Mutually exclusive with DefaultProfile and HTTPSource.
+                          properties:
+                            profileName:
+                              description: ProfileName is the name of the compiled
+                                log profile bundle in NIM.
+                              maxLength: 253
+                              minLength: 1
+                              type: string
+                            url:
+                              description: |-
+                                URL is the base URL of the NGINX Instance Manager instance,
+                                e.g. "https://nim.example.com".
+                              maxLength: 2083
+                              minLength: 1
+                              pattern: ^https?://
+                              type: string
+                          required:
+                          - profileName
+                          - url
+                          type: object
                         polling:
                           description: |-
                             Polling configures automatic periodic re-fetching of the log bundle.
@@ -13002,14 +13043,6 @@ spec:
                           required:
                           - name
                           type: object
-                        url:
-                          description: |-
-                            URL is the HTTP or HTTPS address of the compiled log profile bundle (.tgz).
-                            Mutually exclusive with DefaultProfile.
-                          maxLength: 2083
-                          minLength: 1
-                          pattern: ^https?://
-                          type: string
                         validation:
                           description: |-
                             Validation configures integrity verification for the downloaded log bundle.
@@ -13038,15 +13071,17 @@ spec:
                             rule: '!(has(self.verifyChecksum) && self.verifyChecksum
                               && has(self.expectedChecksum))'
                       type: object
+                      x-kubernetes-validations:
+                      - message: exactly one of logSource.defaultProfile, logSource.httpSource,
+                          or logSource.nimSource must be set
+                        rule: (has(self.defaultProfile) && !has(self.httpSource) &&
+                          !has(self.nimSource)) || (!has(self.defaultProfile) && has(self.httpSource)
+                          && !has(self.nimSource)) || (!has(self.defaultProfile) &&
+                          !has(self.httpSource) && has(self.nimSource))
                   required:
                   - destination
                   - logSource
                   type: object
-                  x-kubernetes-validations:
-                  - message: exactly one of logSource.url or logSource.defaultProfile
-                      must be set
-                    rule: (has(self.logSource) && has(self.logSource.url) && !has(self.logSource.defaultProfile))
-                      || (has(self.logSource) && !has(self.logSource.url) && has(self.logSource.defaultProfile))
                 maxItems: 32
                 type: array
               targetRefs:

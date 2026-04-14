@@ -1,0 +1,33 @@
+apiVersion: gateway.nginx.org/v1alpha1
+kind: WAFGatewayBindingPolicy
+metadata:
+  name: route-protection-http
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: customers
+  type: NIM
+  policySource:
+    nimSource:
+      url: <NIM URL>
+      policyName: example-policy
+    auth:
+      secretRef:
+        name: nim-credentials
+    insecureSkipVerify: true # testing only - do not use in production
+  securityLogs:
+    - destination:
+        type: syslog
+        syslog:
+          server: syslog-svc.default.svc.cluster.local:514
+      logSource:
+        # Use one of the built-in log profiles:
+        # defaultProfile: log_illegal
+        nimSource:
+          url: <NIM URL>
+          profileName: example-log-profile
+        auth:
+          secretRef:
+            name: nim-credentials
+        insecureSkipVerify: true # testing only - do not use in production

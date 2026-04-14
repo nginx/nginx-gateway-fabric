@@ -9,18 +9,34 @@ import (
 )
 
 type FakeFetcher struct {
-	FetchStub        func(context.Context, fetch.Request) ([]byte, string, error)
-	fetchMutex       sync.RWMutex
-	fetchArgsForCall []struct {
+	FetchLogProfileBundleStub        func(context.Context, fetch.Request) ([]byte, string, error)
+	fetchLogProfileBundleMutex       sync.RWMutex
+	fetchLogProfileBundleArgsForCall []struct {
 		arg1 context.Context
 		arg2 fetch.Request
 	}
-	fetchReturns struct {
+	fetchLogProfileBundleReturns struct {
 		result1 []byte
 		result2 string
 		result3 error
 	}
-	fetchReturnsOnCall map[int]struct {
+	fetchLogProfileBundleReturnsOnCall map[int]struct {
+		result1 []byte
+		result2 string
+		result3 error
+	}
+	FetchPolicyBundleStub        func(context.Context, fetch.Request) ([]byte, string, error)
+	fetchPolicyBundleMutex       sync.RWMutex
+	fetchPolicyBundleArgsForCall []struct {
+		arg1 context.Context
+		arg2 fetch.Request
+	}
+	fetchPolicyBundleReturns struct {
+		result1 []byte
+		result2 string
+		result3 error
+	}
+	fetchPolicyBundleReturnsOnCall map[int]struct {
 		result1 []byte
 		result2 string
 		result3 error
@@ -29,17 +45,17 @@ type FakeFetcher struct {
 	invocationsMutex sync.RWMutex
 }
 
-func (fake *FakeFetcher) Fetch(arg1 context.Context, arg2 fetch.Request) ([]byte, string, error) {
-	fake.fetchMutex.Lock()
-	ret, specificReturn := fake.fetchReturnsOnCall[len(fake.fetchArgsForCall)]
-	fake.fetchArgsForCall = append(fake.fetchArgsForCall, struct {
+func (fake *FakeFetcher) FetchLogProfileBundle(arg1 context.Context, arg2 fetch.Request) ([]byte, string, error) {
+	fake.fetchLogProfileBundleMutex.Lock()
+	ret, specificReturn := fake.fetchLogProfileBundleReturnsOnCall[len(fake.fetchLogProfileBundleArgsForCall)]
+	fake.fetchLogProfileBundleArgsForCall = append(fake.fetchLogProfileBundleArgsForCall, struct {
 		arg1 context.Context
 		arg2 fetch.Request
 	}{arg1, arg2})
-	stub := fake.FetchStub
-	fakeReturns := fake.fetchReturns
-	fake.recordInvocation("Fetch", []interface{}{arg1, arg2})
-	fake.fetchMutex.Unlock()
+	stub := fake.FetchLogProfileBundleStub
+	fakeReturns := fake.fetchLogProfileBundleReturns
+	fake.recordInvocation("FetchLogProfileBundle", []interface{}{arg1, arg2})
+	fake.fetchLogProfileBundleMutex.Unlock()
 	if stub != nil {
 		return stub(arg1, arg2)
 	}
@@ -49,48 +65,116 @@ func (fake *FakeFetcher) Fetch(arg1 context.Context, arg2 fetch.Request) ([]byte
 	return fakeReturns.result1, fakeReturns.result2, fakeReturns.result3
 }
 
-func (fake *FakeFetcher) FetchCallCount() int {
-	fake.fetchMutex.RLock()
-	defer fake.fetchMutex.RUnlock()
-	return len(fake.fetchArgsForCall)
+func (fake *FakeFetcher) FetchLogProfileBundleCallCount() int {
+	fake.fetchLogProfileBundleMutex.RLock()
+	defer fake.fetchLogProfileBundleMutex.RUnlock()
+	return len(fake.fetchLogProfileBundleArgsForCall)
 }
 
-func (fake *FakeFetcher) FetchCalls(stub func(context.Context, fetch.Request) ([]byte, string, error)) {
-	fake.fetchMutex.Lock()
-	defer fake.fetchMutex.Unlock()
-	fake.FetchStub = stub
+func (fake *FakeFetcher) FetchLogProfileBundleCalls(stub func(context.Context, fetch.Request) ([]byte, string, error)) {
+	fake.fetchLogProfileBundleMutex.Lock()
+	defer fake.fetchLogProfileBundleMutex.Unlock()
+	fake.FetchLogProfileBundleStub = stub
 }
 
-func (fake *FakeFetcher) FetchArgsForCall(i int) (context.Context, fetch.Request) {
-	fake.fetchMutex.RLock()
-	defer fake.fetchMutex.RUnlock()
-	argsForCall := fake.fetchArgsForCall[i]
+func (fake *FakeFetcher) FetchLogProfileBundleArgsForCall(i int) (context.Context, fetch.Request) {
+	fake.fetchLogProfileBundleMutex.RLock()
+	defer fake.fetchLogProfileBundleMutex.RUnlock()
+	argsForCall := fake.fetchLogProfileBundleArgsForCall[i]
 	return argsForCall.arg1, argsForCall.arg2
 }
 
-func (fake *FakeFetcher) FetchReturns(result1 []byte, result2 string, result3 error) {
-	fake.fetchMutex.Lock()
-	defer fake.fetchMutex.Unlock()
-	fake.FetchStub = nil
-	fake.fetchReturns = struct {
+func (fake *FakeFetcher) FetchLogProfileBundleReturns(result1 []byte, result2 string, result3 error) {
+	fake.fetchLogProfileBundleMutex.Lock()
+	defer fake.fetchLogProfileBundleMutex.Unlock()
+	fake.FetchLogProfileBundleStub = nil
+	fake.fetchLogProfileBundleReturns = struct {
 		result1 []byte
 		result2 string
 		result3 error
 	}{result1, result2, result3}
 }
 
-func (fake *FakeFetcher) FetchReturnsOnCall(i int, result1 []byte, result2 string, result3 error) {
-	fake.fetchMutex.Lock()
-	defer fake.fetchMutex.Unlock()
-	fake.FetchStub = nil
-	if fake.fetchReturnsOnCall == nil {
-		fake.fetchReturnsOnCall = make(map[int]struct {
+func (fake *FakeFetcher) FetchLogProfileBundleReturnsOnCall(i int, result1 []byte, result2 string, result3 error) {
+	fake.fetchLogProfileBundleMutex.Lock()
+	defer fake.fetchLogProfileBundleMutex.Unlock()
+	fake.FetchLogProfileBundleStub = nil
+	if fake.fetchLogProfileBundleReturnsOnCall == nil {
+		fake.fetchLogProfileBundleReturnsOnCall = make(map[int]struct {
 			result1 []byte
 			result2 string
 			result3 error
 		})
 	}
-	fake.fetchReturnsOnCall[i] = struct {
+	fake.fetchLogProfileBundleReturnsOnCall[i] = struct {
+		result1 []byte
+		result2 string
+		result3 error
+	}{result1, result2, result3}
+}
+
+func (fake *FakeFetcher) FetchPolicyBundle(arg1 context.Context, arg2 fetch.Request) ([]byte, string, error) {
+	fake.fetchPolicyBundleMutex.Lock()
+	ret, specificReturn := fake.fetchPolicyBundleReturnsOnCall[len(fake.fetchPolicyBundleArgsForCall)]
+	fake.fetchPolicyBundleArgsForCall = append(fake.fetchPolicyBundleArgsForCall, struct {
+		arg1 context.Context
+		arg2 fetch.Request
+	}{arg1, arg2})
+	stub := fake.FetchPolicyBundleStub
+	fakeReturns := fake.fetchPolicyBundleReturns
+	fake.recordInvocation("FetchPolicyBundle", []interface{}{arg1, arg2})
+	fake.fetchPolicyBundleMutex.Unlock()
+	if stub != nil {
+		return stub(arg1, arg2)
+	}
+	if specificReturn {
+		return ret.result1, ret.result2, ret.result3
+	}
+	return fakeReturns.result1, fakeReturns.result2, fakeReturns.result3
+}
+
+func (fake *FakeFetcher) FetchPolicyBundleCallCount() int {
+	fake.fetchPolicyBundleMutex.RLock()
+	defer fake.fetchPolicyBundleMutex.RUnlock()
+	return len(fake.fetchPolicyBundleArgsForCall)
+}
+
+func (fake *FakeFetcher) FetchPolicyBundleCalls(stub func(context.Context, fetch.Request) ([]byte, string, error)) {
+	fake.fetchPolicyBundleMutex.Lock()
+	defer fake.fetchPolicyBundleMutex.Unlock()
+	fake.FetchPolicyBundleStub = stub
+}
+
+func (fake *FakeFetcher) FetchPolicyBundleArgsForCall(i int) (context.Context, fetch.Request) {
+	fake.fetchPolicyBundleMutex.RLock()
+	defer fake.fetchPolicyBundleMutex.RUnlock()
+	argsForCall := fake.fetchPolicyBundleArgsForCall[i]
+	return argsForCall.arg1, argsForCall.arg2
+}
+
+func (fake *FakeFetcher) FetchPolicyBundleReturns(result1 []byte, result2 string, result3 error) {
+	fake.fetchPolicyBundleMutex.Lock()
+	defer fake.fetchPolicyBundleMutex.Unlock()
+	fake.FetchPolicyBundleStub = nil
+	fake.fetchPolicyBundleReturns = struct {
+		result1 []byte
+		result2 string
+		result3 error
+	}{result1, result2, result3}
+}
+
+func (fake *FakeFetcher) FetchPolicyBundleReturnsOnCall(i int, result1 []byte, result2 string, result3 error) {
+	fake.fetchPolicyBundleMutex.Lock()
+	defer fake.fetchPolicyBundleMutex.Unlock()
+	fake.FetchPolicyBundleStub = nil
+	if fake.fetchPolicyBundleReturnsOnCall == nil {
+		fake.fetchPolicyBundleReturnsOnCall = make(map[int]struct {
+			result1 []byte
+			result2 string
+			result3 error
+		})
+	}
+	fake.fetchPolicyBundleReturnsOnCall[i] = struct {
 		result1 []byte
 		result2 string
 		result3 error
