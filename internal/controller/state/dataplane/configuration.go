@@ -574,7 +574,7 @@ func buildClientConfigForSSLServers(
 			// AllowValidOnly is default when no validation mode is specified.
 			if sslServers[i].SSL.ClientCertBundleID == "" {
 				sslServers[i].SSL.ClientCertBundleID = id
-				sslServers[i].SSL.VerifyClient = SSLVerifyClientOptionalNoCA
+				sslServers[i].SSL.VerifyClient = SSLVerifyClientOn
 				sslServers[i].SSL.RequireVerifiedCert = true
 			}
 		}
