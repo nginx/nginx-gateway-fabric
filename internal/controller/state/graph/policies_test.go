@@ -3902,3 +3902,84 @@ func TestBuildPolicyFetchRequest(t *testing.T) {
 		})
 	}
 }
+
+func TestLogBundleKey(t *testing.T) {
+	t.Parallel()
+
+	policyNsName := types.NamespacedName{Namespace: "mynamespace", Name: "mypolicy"}
+
+	nimURL := "https://nim.example.com"
+	n1cURL := "https://n1c.example.com"
+	httpURL := "https://http.example.com"
+
+	profileObjectID := "lp_abc123"
+	profileName := "my-log-profile"
+
+	tests := []struct {
+		name      string
+		logSource ngfAPIv1alpha1.LogSource
+		expKey    WAFBundleKey
+	}{
+		{
+			name: "NIM source",
+			logSource: ngfAPIv1alpha1.LogSource{
+				NIMSource: &ngfAPIv1alpha1.NIMLogProfileBundleSource{
+					URL:         nimURL,
+					ProfileName: profileName,
+				},
+			},
+			expKey: WAFBundleKey(fmt.Sprintf("mynamespace_mypolicy_log_%s_%s", helpers.URLHash(nimURL), profileName)),
+		},
+		{
+			name: "N1C source with ProfileObjectID",
+			logSource: ngfAPIv1alpha1.LogSource{
+				N1CSource: &ngfAPIv1alpha1.N1CLogProfileBundleSource{
+					URL:             n1cURL,
+					Namespace:       "n1c-ns",
+					ProfileObjectID: &profileObjectID,
+				},
+			},
+			expKey: WAFBundleKey(fmt.Sprintf("mynamespace_mypolicy_log_%s_n1c-ns_%s", helpers.URLHash(n1cURL), profileObjectID)),
+		},
+		{
+			name: "N1C source with ProfileName (no ObjectID)",
+			logSource: ngfAPIv1alpha1.LogSource{
+				N1CSource: &ngfAPIv1alpha1.N1CLogProfileBundleSource{
+					URL:         n1cURL,
+					Namespace:   "n1c-ns",
+					ProfileName: &profileName,
+				},
+			},
+			expKey: WAFBundleKey(fmt.Sprintf("mynamespace_mypolicy_log_%s_n1c-ns_%s", helpers.URLHash(n1cURL), profileName)),
+		},
+		{
+			name: "N1C source with neither ProfileObjectID nor ProfileName",
+			logSource: ngfAPIv1alpha1.LogSource{
+				N1CSource: &ngfAPIv1alpha1.N1CLogProfileBundleSource{
+					URL:       n1cURL,
+					Namespace: "n1c-ns",
+				},
+			},
+			expKey: WAFBundleKey(fmt.Sprintf("mynamespace_mypolicy_log_%s_n1c-ns_", helpers.URLHash(n1cURL))),
+		},
+		{
+			name: "HTTP source",
+			logSource: ngfAPIv1alpha1.LogSource{
+				HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{
+					URL: httpURL,
+				},
+			},
+			expKey: WAFBundleKey(fmt.Sprintf("mynamespace_mypolicy_log_%s", helpers.URLHash(httpURL))),
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			got := LogBundleKey(policyNsName, &tc.logSource)
+			g.Expect(got).To(Equal(tc.expKey))
+		})
+	}
+}

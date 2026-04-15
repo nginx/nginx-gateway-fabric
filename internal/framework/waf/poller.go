@@ -295,7 +295,7 @@ func BuildBundleSources(
 
 	// Check each logSource for polling.
 	for _, secLog := range spec.SecurityLogs {
-		if secLog.LogSource.HTTPSource == nil && secLog.LogSource.NIMSource == nil {
+		if secLog.LogSource.HTTPSource == nil && secLog.LogSource.NIMSource == nil && secLog.LogSource.N1CSource == nil {
 			continue // DefaultProfile, no polling needed.
 		}
 		if secLog.LogSource.Polling == nil || !secLog.LogSource.Polling.Enabled {

@@ -71,8 +71,10 @@ type Request struct {
 	Auth    *BundleAuth
 	Timeout *metav1.Duration
 	URL     string
-	// NIMProfileName is the human-readable name of the NIM log profile.
-	NIMProfileName string
+	// LogProfileName is the human-readable name of the log profile.
+	// Used to look up the log profile by name when fetching from NIM or N1C.
+	// Mutually exclusive with LogProfileObjectID.
+	LogProfileName string
 	// PolicyName is the human-readable name of the policy.
 	// Used to look up the policy by name when fetching from NIM or N1C.
 	// Mutually exclusive with NIMPolicyUID.
@@ -107,6 +109,9 @@ type N1CRequest struct {
 	// PolicyVersionID pins the fetch to a specific version using its opaque version ID
 	// (e.g. "pv_1234"). When empty, the latest version is used.
 	PolicyVersionID string
+	// LogProfileObjectID is the opaque N1C log profile object ID (e.g. "lp_8s8uZxLpThWwEGF7LTn_rA").
+	// When set, the log profiles list call is skipped and this ID is used directly.
+	LogProfileObjectID string
 }
 
 // NIRequest carries all the NIM specific parameters to fetch a single bundle.
@@ -132,6 +137,7 @@ type Fetcher interface {
 	// FetchLogProfileBundle retrieves the log profile bundle bytes for the given request.
 	// For HTTP type: GETs req.URL. If req.VerifyChecksum is true, fetches req.URL+".sha256" to verify integrity.
 	// For NIM type: calls the NIM log profile bundles API and base64-decodes the compiledBundle field.
+	// For N1C type: resolves the log profile via the N1C API and downloads the compiled bundle.
 	// Returns (data, checksum, error). checksum is hex-encoded SHA-256 of the returned data.
 	FetchLogProfileBundle(ctx context.Context, req Request) (data []byte, checksum string, err error)
 }
@@ -257,8 +263,8 @@ func (f *HTTPFetcher) logProfileDispatch(
 ) ([]byte, string, error) {
 	switch {
 	case req.N1C.Namespace != "":
-		return nil, "", fmt.Errorf("fetching log profile bundles from N1C is not supported")
-	case req.NIMProfileName != "":
+		return fetchN1CLogProfile(ctx, client, req)
+	case req.LogProfileName != "":
 		return fetchNIMLogProfile(ctx, client, req)
 	default:
 		return fetchHTTP(ctx, client, req)
@@ -389,7 +395,7 @@ func fetchNIMLogProfile(ctx context.Context, client *http.Client, req Request) (
 	}
 
 	logProfileBundleURL := strings.TrimRight(req.URL, "/") +
-		fmt.Sprintf("/api/platform/v1/security/logprofiles/%s/%s/bundle", req.NIMProfileName, versionResp.Version)
+		fmt.Sprintf("/api/platform/v1/security/logprofiles/%s/%s/bundle", req.LogProfileName, versionResp.Version)
 	body, err = doGet(ctx, client, logProfileBundleURL, req.Auth)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to fetch NIM log profile bundle: %w", err)
@@ -407,6 +413,17 @@ func fetchNIMLogProfile(ctx context.Context, client *http.Client, req Request) (
 	}
 
 	return data, ComputeChecksum(data), nil
+}
+
+// n1cLogProfilesResponse is the JSON envelope returned by the N1C list-log-profiles API.
+type n1cLogProfilesResponse struct {
+	Items []n1cLogProfileItem `json:"items"`
+	Total int                 `json:"total"`
+}
+
+type n1cLogProfileItem struct {
+	Name     string `json:"name"`
+	ObjectID string `json:"object_id"`
 }
 
 // n1cPoliciesResponse is the JSON envelope returned by the N1C list-policies API.
@@ -461,6 +478,113 @@ func fetchN1C(ctx context.Context, client *http.Client, req Request) ([]byte, st
 	}
 
 	return body, ComputeChecksum(body), nil
+}
+
+// fetchN1CLogProfile resolves the log profile object ID via the N1C log profiles API (when needed),
+// then downloads the compiled bundle from the compile endpoint.
+// Authentication uses the APIToken scheme rather than Bearer.
+//
+// Flow:
+//  1. If req.N1C.LogProfileObjectID is set, use it directly (skip the list call).
+//     Otherwise, GET .../app-protect/log-profiles — find the profile by req.LogProfileName.
+//  2. GET .../app-protect/log-profiles/<lp_obj_id>/compile?nap_release=<release>&download=true
+func fetchN1CLogProfile(ctx context.Context, client *http.Client, req Request) ([]byte, string, error) {
+	lpObjID := req.N1C.LogProfileObjectID
+	if lpObjID == "" {
+		var err error
+		lpObjID, err = findN1CLogProfile(ctx, client, req.URL, req.N1C.Namespace, req.LogProfileName, req.Auth)
+		if err != nil {
+			return nil, "", err
+		}
+	}
+
+	compileURL, err := buildN1CLogProfileCompileURL(req.URL, req.N1C.Namespace, lpObjID)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to build N1C log profile compile URL: %w", err)
+	}
+
+	body, err := doGet(ctx, client, compileURL, req.Auth)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to fetch N1C compiled log profile bundle: %w", err)
+	}
+
+	return body, ComputeChecksum(body), nil
+}
+
+// findN1CLogProfile pages through the N1C log profiles list and returns the object_id
+// for the log profile matching profileName.
+func findN1CLogProfile(
+	ctx context.Context,
+	client *http.Client,
+	baseURL, namespace, profileName string,
+	auth *BundleAuth,
+) (string, error) {
+	const pageSize = 100
+
+	for offset := 1; ; offset += pageSize {
+		listURL, err := buildN1CLogProfilesURL(baseURL, namespace, offset, pageSize)
+		if err != nil {
+			return "", fmt.Errorf("failed to build N1C log profiles URL: %w", err)
+		}
+
+		body, err := doGet(ctx, client, listURL, auth)
+		if err != nil {
+			return "", fmt.Errorf("failed to list N1C log profiles: %w", err)
+		}
+
+		var resp n1cLogProfilesResponse
+		if err := json.Unmarshal(body, &resp); err != nil {
+			return "", fmt.Errorf("failed to parse N1C log profiles response: %w", err)
+		}
+
+		for _, item := range resp.Items {
+			if item.Name == profileName {
+				return item.ObjectID, nil
+			}
+		}
+
+		if offset+pageSize-1 >= resp.Total {
+			break
+		}
+	}
+
+	return "", fmt.Errorf("N1C log profile %q not found in namespace %q", profileName, namespace)
+}
+
+// buildN1CLogProfilesURL constructs the N1C list-log-profiles API URL with pagination parameters.
+func buildN1CLogProfilesURL(baseURL, namespace string, offset, limit int) (string, error) {
+	base, err := url.Parse(baseURL)
+	if err != nil {
+		return "", fmt.Errorf("invalid N1C base URL %q: %w", baseURL, err)
+	}
+	base.Path = strings.TrimRight(base.Path, "/") +
+		"/api/nginx/one/namespaces/" + url.PathEscape(namespace) + "/app-protect/log-profiles"
+	base.Fragment = ""
+	q := url.Values{}
+	q.Set("offset", fmt.Sprintf("%d", offset))
+	q.Set("limit", fmt.Sprintf("%d", limit))
+	base.RawQuery = q.Encode()
+	return base.String(), nil
+}
+
+// buildN1CLogProfileCompileURL constructs the N1C log profile compile endpoint URL.
+// Format: <baseURL>/api/nginx/one/namespaces/<ns>/app-protect/log-profiles/<lp_obj_id>/compile
+//
+//	?nap_release=<release>&download=true
+func buildN1CLogProfileCompileURL(baseURL, namespace, lpObjID string) (string, error) {
+	base, err := url.Parse(baseURL)
+	if err != nil {
+		return "", fmt.Errorf("invalid N1C base URL %q: %w", baseURL, err)
+	}
+	base.Path = strings.TrimRight(base.Path, "/") +
+		"/api/nginx/one/namespaces/" + url.PathEscape(namespace) +
+		"/app-protect/log-profiles/" + url.PathEscape(lpObjID) + "/compile"
+	base.Fragment = ""
+	q := url.Values{}
+	q.Set("nap_release", Release)
+	q.Set("download", "true")
+	base.RawQuery = q.Encode()
+	return base.String(), nil
 }
 
 // resolveN1CIDs returns the policy object ID and version object ID for the given request.
