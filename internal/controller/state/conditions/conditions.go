@@ -168,6 +168,8 @@ const (
 	PolicyMessageAncestorLimitReached = "Policies cannot be applied because the ancestor status list " +
 		"has reached the maximum size. The following policies have been ignored:"
 
+	// ListenerSetReasonParentNotProgrammed is used with the "Programmed" condition when the parent
+	// Gateway of a ListenerSet is not programmed.
 	ListenerSetReasonParentNotProgrammed v1.ListenerSetConditionReason = "ParentNotProgrammed"
 )
 
@@ -1373,6 +1375,8 @@ func NewListenerSetAccepted() Condition {
 }
 
 // NewListenerSetInvalid returns a Condition that indicates that the ListenerSet is invalid.
+//
+// NOTE: Currently not being used, in the future iteration this may be used, else it will be removed.
 func NewListenerSetInvalid(msg string) Condition {
 	return Condition{
 		Type:    string(v1.ListenerSetConditionAccepted),

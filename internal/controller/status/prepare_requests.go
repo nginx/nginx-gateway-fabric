@@ -612,7 +612,7 @@ func PrepareListenerSetRequests(
 			listenerStatuses = append(listenerStatuses, v1.ListenerEntryStatus{
 				Name:           v1.SectionName(l.Name),
 				SupportedKinds: l.SupportedKinds,
-				AttachedRoutes: 0, // ListenerSets don't have attached routes directly
+				AttachedRoutes: 0, // NOTE: Support for this field will be added later
 				Conditions:     listenerAPIConds,
 			})
 		}
