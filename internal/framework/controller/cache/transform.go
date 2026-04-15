@@ -11,6 +11,7 @@ import (
 
 var (
 	secretKeys = []string{
+		"token",
 		secrets.AuthKey,
 		secrets.LicenseJWTKey,
 		secrets.CAKey,

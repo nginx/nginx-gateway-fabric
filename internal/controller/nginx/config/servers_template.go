@@ -200,6 +200,14 @@ server {
         js_content httpmatches.redirect;
         {{- end }}
 
+        {{- if eq $l.Type "guardrails" -}}
+        set $guardrails_url {{ $l.GuardrailsURL }};
+        set $guardrails_token_file {{ $l.GuardrailsTokenFile }};
+        set $guardrails_fail_mode {{ $l.GuardrailsFailMode }};
+        set $guardrails_next_path {{ $l.GuardrailsNextPath }};
+        js_content guardrails.validateRequest;
+        {{- end }}
+
         {{- if contains $l.Type "inference" -}}
         js_var $inference_workload_endpoint;
         set $epp_internal_path {{ $l.EPPInternalPath }};

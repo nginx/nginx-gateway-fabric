@@ -35,6 +35,8 @@ type Configuration struct {
 	SSLKeyPairs map[SSLKeyPairID]SSLKeyPair
 	// AuthSecrets holds all unique secrets for authentication.
 	AuthSecrets map[AuthFileID]AuthFileData
+	// GuardrailsTokenFiles holds the token data for AI guardrails secret files.
+	GuardrailsTokenFiles map[GuardrailsTokenFileID][]byte
 	// AuxiliarySecrets contains additional secret data, like certificates/keys/tokens that are not related to
 	// Gateway API resources.
 	AuxiliarySecrets map[graph.SecretFileType][]byte
@@ -581,8 +583,25 @@ type SpanAttribute struct {
 	Value string
 }
 
+// GuardrailsTokenFileID is a unique identifier for a guardrails API token file.
+// The ID is safe to use as a file name.
+type GuardrailsTokenFileID string
+
+// AIGuardrailsConfig holds the configuration for AI guardrails integration.
+type AIGuardrailsConfig struct {
+	// URL is the endpoint of the AI guardrails service.
+	URL string
+	// TokenFileID is the identifier for the file containing the API token.
+	TokenFileID GuardrailsTokenFileID
+	// FailMode specifies the behavior when the guardrails service is unavailable.
+	// Values: "open" (allow through) or "closed" (block request).
+	FailMode string
+}
+
 // BaseHTTPConfig holds the configuration options at the http context.
 type BaseHTTPConfig struct {
+	// AIGuardrails holds the AI guardrails configuration for inference requests.
+	AIGuardrails *AIGuardrailsConfig
 	// DNSResolver defines the DNS resolver configuration for NGINX.
 	DNSResolver *DNSResolverConfig
 	// IPFamily specifies the IP family for all servers.

@@ -1100,6 +1100,45 @@ spec:
           spec:
             description: Spec defines the desired state of the NginxProxy.
             properties:
+              aiGuardrails:
+                description: |-
+                  AIGuardrails specifies the configuration for AI guardrails integration.
+                  When configured, inference requests will be forwarded to the guardrails service
+                  for content validation before being sent to the Endpoint Picker.
+                properties:
+                  apiTokenSecretRef:
+                    description: |-
+                      APITokenSecretRef is a reference to a Secret containing the API token
+                      for authenticating with the guardrails service. The secret must contain
+                      a key named "token" with the Bearer token value.
+                    properties:
+                      name:
+                        description: Name is the name of the referenced object.
+                        type: string
+                    required:
+                    - name
+                    type: object
+                  failMode:
+                    default: FailOpen
+                    description: |-
+                      FailMode specifies the behavior when the guardrails service is unreachable
+                      or returns an error. Default is "FailOpen".
+                    enum:
+                    - FailOpen
+                    - FailClosed
+                    type: string
+                  url:
+                    description: |-
+                      URL is the endpoint of the AI guardrails service.
+                      The service should accept POST requests with the original request body
+                      and return a JSON response with a "result.outcome" field indicating
+                      whether the request should be "cleared" or "flagged".
+                    pattern: ^https?://.*$
+                    type: string
+                required:
+                - apiTokenSecretRef
+                - url
+                type: object
               disableHTTP2:
                 description: |-
                   DisableHTTP2 defines if http2 should be disabled for all servers.

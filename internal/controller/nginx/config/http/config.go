@@ -54,6 +54,9 @@ const (
 	// to that endpoint. This is used when an HTTP redirect location is also defined that redirects
 	// to this internal inference location.
 	InferenceInternalLocationType LocationType = "inference-internal"
+	// GuardrailsLocationType defines an internal location that validates requests against
+	// an AI guardrails service before forwarding to the EPP location.
+	GuardrailsLocationType LocationType = "guardrails"
 )
 
 // Location holds all configuration for an HTTP location.
@@ -96,6 +99,14 @@ type Location struct {
 	Includes []shared.Include
 	// EPPPort is the port for the EndpointPicker, used for inference routing.
 	EPPPort int
+	// GuardrailsURL is the URL of the AI guardrails service for content validation.
+	GuardrailsURL string
+	// GuardrailsTokenFile is the path to the file containing the API token for the guardrails service.
+	GuardrailsTokenFile string
+	// GuardrailsFailMode specifies the behavior when guardrails service is unavailable ("open" or "closed").
+	GuardrailsFailMode string
+	// GuardrailsNextPath is the internal path to redirect to after guardrails validation (the EPP location).
+	GuardrailsNextPath string
 	// GRPC indicates if this location proxies gRPC traffic.
 	GRPC bool
 }

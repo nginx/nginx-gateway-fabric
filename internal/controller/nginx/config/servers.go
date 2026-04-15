@@ -143,9 +143,11 @@ func createServers(
 		sharedTLSPorts[passthroughServer.Port] = struct{}{}
 	}
 
+	guardrails := conf.BaseHTTPConfig.AIGuardrails
+
 	for idx, s := range conf.HTTPServers {
 		serverID := fmt.Sprintf("%d", idx)
-		httpServer, matchPairs := createServer(s, serverID, generator, keepAliveCheck)
+		httpServer, matchPairs := createServer(s, serverID, generator, keepAliveCheck, guardrails)
 		servers = append(servers, httpServer)
 		maps.Copy(finalMatchPairs, matchPairs)
 	}
@@ -155,7 +157,7 @@ func createServers(
 	for idx, s := range conf.SSLServers {
 		serverID := fmt.Sprintf("SSL_%d", idx)
 
-		sslServer, matchPairs := createSSLServer(s, serverID, generator, keepAliveCheck, disableSNI)
+		sslServer, matchPairs := createSSLServer(s, serverID, generator, keepAliveCheck, disableSNI, guardrails)
 		if _, portInUse := sharedTLSPorts[s.Port]; portInUse {
 			sslServer.Listen = getSocketNameHTTPS(s.Port)
 			sslServer.IsSocket = true
@@ -173,6 +175,7 @@ func createSSLServer(
 	generator policies.Generator,
 	keepAliveCheck keepAliveChecker,
 	disableSNIHostValidation bool,
+	guardrails *dataplane.AIGuardrailsConfig,
 ) (http.Server, httpMatchPairs) {
 	listen := fmt.Sprint(virtualServer.Port)
 	if virtualServer.IsDefault {
@@ -187,7 +190,7 @@ func createSSLServer(
 		return server, nil
 	}
 
-	locs, matchPairs, grpc := createLocations(&virtualServer, serverID, generator, keepAliveCheck)
+	locs, matchPairs, grpc := createLocations(&virtualServer, serverID, generator, keepAliveCheck, guardrails)
 
 	server := http.Server{
 		ServerName: virtualServer.Hostname,
@@ -242,6 +245,7 @@ func createServer(
 	serverID string,
 	generator policies.Generator,
 	keepAliveCheck keepAliveChecker,
+	guardrails *dataplane.AIGuardrailsConfig,
 ) (http.Server, httpMatchPairs) {
 	listen := fmt.Sprint(virtualServer.Port)
 
@@ -252,7 +256,7 @@ func createServer(
 		}, nil
 	}
 
-	locs, matchPairs, grpc := createLocations(&virtualServer, serverID, generator, keepAliveCheck)
+	locs, matchPairs, grpc := createLocations(&virtualServer, serverID, generator, keepAliveCheck, guardrails)
 
 	server := http.Server{
 		ServerName: virtualServer.Hostname,
@@ -459,6 +463,7 @@ func createLocations(
 	serverID string,
 	generator policies.Generator,
 	keepAliveCheck keepAliveChecker,
+	guardrails *dataplane.AIGuardrailsConfig,
 ) ([]http.Location, httpMatchPairs, bool) {
 	maxLocs, pathsAndTypes := getMaxLocationCountAndPathMap(server.PathRules)
 	locs := make([]http.Location, 0, maxLocs)
@@ -526,7 +531,8 @@ func createLocations(
 				generator,
 				server.Port,
 				keepAliveCheck,
-				mirrorPercentage)...,
+				mirrorPercentage,
+				guardrails)...,
 			)
 		}
 	}
@@ -744,6 +750,7 @@ func createInferenceLocationsForRule(
 	port int32,
 	keepAliveCheck keepAliveChecker,
 	mirrorPercentage *float64,
+	guardrails *dataplane.AIGuardrailsConfig,
 ) []http.Location {
 	capacity := len(extLocations)
 
@@ -757,6 +764,13 @@ func createInferenceLocationsForRule(
 				b.EndpointPickerConfig.EndpointPickerRef != nil {
 				capacity++ // intEPPLocation
 			}
+
+			// intGuardrailsLocation (created when guardrails is configured and EPP is present)
+			if guardrails != nil &&
+				b.EndpointPickerConfig != nil &&
+				b.EndpointPickerConfig.EndpointPickerRef != nil {
+				capacity++ // intGuardrailsLocation
+			}
 		}
 	}
 
@@ -765,6 +779,22 @@ func createInferenceLocationsForRule(
 	// There will only be one rule.MatchRules, since if there are multiple, createInternalLocationsForRule
 	// would have been called instead.
 	for matchRuleIdx, r := range rule.MatchRules {
+		// With guardrails configured and multiple inference backends, we need 4 locations:
+		// 1. (external location) external location which rewrites to the guardrails internal location
+		//    based on a split clients variable
+		// 2. (intGuardrailsLocation) internal guardrails location which validates request content
+		//    and redirects to EPP internal location on success
+		// 3. (intEPPLocation) internal inference location which calls the EPP NJS module to get endpoint
+		//    and redirects to final internal location
+		// 4. (intProxyPassLocation) final internal inference location which proxy_passes to backend
+		//
+		// With guardrails configured and a single inference backend, we need 3 locations:
+		// 1. (external location) external location which calls guardrails NJS module
+		//    and redirects to the EPP internal location
+		// 2. (intEPPLocation) internal inference location which calls the EPP NJS module
+		// 3. (intProxyPassLocation) final internal inference location which proxy_passes to backend
+		//
+		// Without guardrails (original behavior):
 		// If there are multiple inference backends, we need 3 locations:
 		// 1. (external location) external location which rewrites to the EPP internal location based on a
 		//    split clients variable
@@ -836,9 +866,56 @@ func createInferenceLocationsForRule(
 					)
 					intEPPLocation = setLocationEPPConfig(intEPPLocation, intProxyPassLocation.Path, eppHost, portNum)
 					locs = append(locs, intEPPLocation)
+
+					// Insert guardrails location before the EPP location for multi-backend.
+					// The split_clients variable will rewrite to the guardrails location,
+					// which validates the request, then redirects to the EPP location.
+					if guardrails != nil {
+						intGuardrailsLocation := initializeInternalGuardrailsLocation(
+							b,
+							r.BackendGroup.Source,
+							r.BackendGroup.RuleIdx,
+							r.BackendGroup.PathRuleIdx,
+						)
+						intGuardrailsLocation = setLocationGuardrailsConfig(
+							intGuardrailsLocation,
+							intEPPLocation.Path,
+							guardrails,
+						)
+						locs = append(locs, intGuardrailsLocation)
+					}
 				} else {
-					for i := range extLocations {
-						extLocations[i] = setLocationEPPConfig(extLocations[i], intProxyPassLocation.Path, eppHost, portNum)
+					if guardrails != nil {
+						// Single backend with guardrails: external location calls guardrails,
+						// which redirects to a new internal EPP location on success.
+						intEPPLocation := initializeInternalInferenceEPPLocation(
+							b,
+							r.BackendGroup.Source,
+							r.BackendGroup.RuleIdx,
+							r.BackendGroup.PathRuleIdx,
+						)
+						intEPPLocation.Includes = createIncludesFromPolicyGenerateResult(
+							generator.GenerateForInternalLocation(rule.Policies),
+						)
+						intEPPLocation = setLocationEPPConfig(
+							intEPPLocation, intProxyPassLocation.Path, eppHost, portNum,
+						)
+						locs = append(locs, intEPPLocation)
+
+						// External location becomes a guardrails location
+						for i := range extLocations {
+							extLocations[i] = setLocationGuardrailsConfig(
+								extLocations[i],
+								intEPPLocation.Path,
+								guardrails,
+							)
+						}
+					} else {
+						for i := range extLocations {
+							extLocations[i] = setLocationEPPConfig(
+								extLocations[i], intProxyPassLocation.Path, eppHost, portNum,
+							)
+						}
 					}
 				}
 			}
@@ -854,6 +931,52 @@ func setLocationEPPConfig(location http.Location, eppInternalPath, eppHost strin
 	location.EPPHost = eppHost
 	location.EPPPort = eppPort
 	return location
+}
+
+// setLocationGuardrailsConfig configures a location to call the AI guardrails NJS module.
+// The guardrails module validates the request content, then redirects to nextPath (the EPP location) on success.
+func setLocationGuardrailsConfig(
+	location http.Location,
+	nextPath string,
+	guardrails *dataplane.AIGuardrailsConfig,
+) http.Location {
+	location.Type = http.GuardrailsLocationType
+	location.GuardrailsURL = guardrails.URL
+	location.GuardrailsTokenFile = generateGuardrailsTokenFileName(guardrails.TokenFileID)
+	location.GuardrailsFailMode = guardrails.FailMode
+	location.GuardrailsNextPath = nextPath
+	return location
+}
+
+// initializeInternalGuardrailsLocation creates an internal location for AI guardrails validation.
+// This location validates the request before forwarding to the EPP location.
+func initializeInternalGuardrailsLocation(
+	backend dataplane.Backend,
+	source types.NamespacedName,
+	ruleIdx int,
+	pathRuleIdx int,
+) http.Location {
+	return http.Location{
+		Path: generateInternalGuardrailsLocationPath(backend.UpstreamName, source, ruleIdx, pathRuleIdx),
+		Type: http.GuardrailsLocationType,
+	}
+}
+
+// generateInternalGuardrailsLocationPath generates the path for an internal guardrails validation location.
+func generateInternalGuardrailsLocationPath(
+	upstreamName string,
+	source types.NamespacedName,
+	ruleIdx int,
+	pathRuleIdx int,
+) string {
+	return fmt.Sprintf(
+		"%s-guardrails-%s_%s-rule%d-pr%d",
+		http.InternalRoutePathPrefix,
+		upstreamName,
+		source.String(),
+		ruleIdx,
+		pathRuleIdx,
+	)
 }
 
 func extractEPPConfig(backend dataplane.Backend) (string, int) {

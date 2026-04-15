@@ -146,6 +146,11 @@ func (g GeneratorImpl) Generate(conf dataplane.Configuration) []agent.File {
 	for id, data := range conf.AuthSecrets {
 		files = append(files, generateAuthFile(id, data))
 	}
+
+	for id, data := range conf.GuardrailsTokenFiles {
+		files = append(files, generateGuardrailsTokenFile(id, data))
+	}
+
 	return files
 }
 
@@ -296,5 +301,22 @@ func generateAuthFile(id dataplane.AuthFileID, data []byte) agent.File {
 }
 
 func generateAuthFileName(id dataplane.AuthFileID) string {
+	return filepath.Join(secretsFolder, string(id))
+}
+
+// generateGuardrailsTokenFile generates a secret file containing the AI guardrails API token.
+func generateGuardrailsTokenFile(id dataplane.GuardrailsTokenFileID, data []byte) agent.File {
+	return agent.File{
+		Meta: &pb.FileMeta{
+			Name:        generateGuardrailsTokenFileName(id),
+			Hash:        filesHelper.GenerateHash(data),
+			Permissions: file.SecretFileMode,
+			Size:        int64(len(data)),
+		},
+		Contents: data,
+	}
+}
+
+func generateGuardrailsTokenFileName(id dataplane.GuardrailsTokenFileID) string {
 	return filepath.Join(secretsFolder, string(id))
 }

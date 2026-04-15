@@ -259,6 +259,9 @@ func BuildGraph(
 		processedNginxProxies,
 	)
 
+	// Resolve guardrails secrets for any gateway with AIGuardrails configured.
+	resolveGuardrailsSecrets(gws, resourceResolver)
+
 	processedBackendTLSPolicies := processBackendTLSPolicies(
 		state.BackendTLSPolicies,
 		resourceResolver,
@@ -358,6 +361,30 @@ func gatewayExists(gwNsName types.NamespacedName, gateways map[types.NamespacedN
 
 	_, exists := gateways[gwNsName]
 	return exists
+}
+
+// resolveGuardrailsSecrets ensures that guardrails API token secrets referenced by NginxProxy
+// are resolved by the resource resolver so they appear in ReferencedSecrets.
+func resolveGuardrailsSecrets(gateways map[types.NamespacedName]*Gateway, resourceResolver resolver.Resolver) {
+	for _, gw := range gateways {
+		if gw == nil || gw.EffectiveNginxProxy == nil || gw.EffectiveNginxProxy.AIGuardrails == nil {
+			continue
+		}
+
+		guardrails := gw.EffectiveNginxProxy.AIGuardrails
+		secretNsName := types.NamespacedName{
+			Namespace: gw.Source.Namespace,
+			Name:      guardrails.APITokenSecretRef.Name,
+		}
+
+		// Resolve the secret so it appears in ReferencedSecrets.
+		// We use "token" as the expected key for the guardrails API token.
+		_ = resourceResolver.Resolve(
+			resolver.ResourceTypeSecret,
+			secretNsName,
+			resolver.WithExpectedSecretKey("token"),
+		)
+	}
 }
 
 func newResourceResolver(state ClusterState) resolver.Resolver {

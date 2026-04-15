@@ -72,7 +72,9 @@ func BuildConfiguration(
 	// policies that are attached directly to the Gateway
 	gatewayRateLimitPolicies := gateway.GetReferencedRateLimitPolicies(g.Routes, g.NGFPolicies)
 
-	baseHTTPConfig := buildBaseHTTPConfig(gateway, gatewaySnippetsFilters, gatewayRateLimitPolicies)
+	baseHTTPConfig, guardrailsTokenFiles := buildBaseHTTPConfig(
+		gateway, gatewaySnippetsFilters, gatewayRateLimitPolicies, g.ReferencedSecrets,
+	)
 	baseStreamConfig := buildBaseStreamConfig(gateway)
 
 	httpServers, sslServers, sslListenerHostnames := buildServers(gateway, g.ReferencedServices, g.ReferencedSecrets)
@@ -136,6 +138,7 @@ func BuildConfiguration(
 		WorkerConnections:    buildWorkerConnections(gateway),
 		SSLListenerHostnames: sslListenerHostnames,
 		CertBundles:          certBundles,
+		GuardrailsTokenFiles: guardrailsTokenFiles,
 	}
 
 	return config
@@ -1395,11 +1398,13 @@ func CreateRatioVarName(ratio int32) string {
 }
 
 // buildBaseHTTPConfig generates the base http context config that should be applied to all servers.
+// It also returns any guardrails token files that need to be written as secret files.
 func buildBaseHTTPConfig(
 	gateway *graph.Gateway,
 	gatewaySnippetsFilters map[types.NamespacedName]*graph.SnippetsFilter,
 	gatewayRateLimitPolicies map[graph.PolicyKey]*graph.Policy,
-) BaseHTTPConfig {
+	referencedSecrets map[types.NamespacedName]*secrets.Secret,
+) (BaseHTTPConfig, map[GuardrailsTokenFileID][]byte) {
 	baseConfig := BaseHTTPConfig{
 		// HTTP2 should be enabled by default
 		HTTP2:    true,
@@ -1428,7 +1433,7 @@ func buildBaseHTTPConfig(
 	baseConfig.NginxReadinessProbePath = GetNginxReadinessProbePath(np)
 
 	if np == nil {
-		return baseConfig
+		return baseConfig, nil
 	}
 
 	if np.DisableHTTP2 != nil && *np.DisableHTTP2 {
@@ -1454,7 +1459,61 @@ func buildBaseHTTPConfig(
 
 	baseConfig.ServerTokens = buildServerTokens(gateway)
 
-	return baseConfig
+	var guardrailsTokenFiles map[GuardrailsTokenFileID][]byte
+	baseConfig.AIGuardrails, guardrailsTokenFiles = buildAIGuardrailsConfig(np, gateway, referencedSecrets)
+
+	return baseConfig, guardrailsTokenFiles
+}
+
+// buildAIGuardrailsConfig builds the AI guardrails configuration from the NginxProxy spec.
+// It returns the config and a map of token file data to be written as secret files.
+func buildAIGuardrailsConfig(
+	np *graph.EffectiveNginxProxy,
+	gateway *graph.Gateway,
+	referencedSecrets map[types.NamespacedName]*secrets.Secret,
+) (*AIGuardrailsConfig, map[GuardrailsTokenFileID][]byte) {
+	if np == nil || np.AIGuardrails == nil {
+		return nil, nil
+	}
+
+	guardrails := np.AIGuardrails
+
+	failMode := "open"
+	if guardrails.FailMode != nil && *guardrails.FailMode == ngfAPIv1alpha2.AIGuardrailsFailModeFailClosed {
+		failMode = "closed"
+	}
+
+	tokenFileID := GenerateGuardrailsTokenFileID(
+		gateway.Source.Namespace,
+		guardrails.APITokenSecretRef.Name,
+	)
+
+	config := &AIGuardrailsConfig{
+		URL:         guardrails.URL,
+		TokenFileID: tokenFileID,
+		FailMode:    failMode,
+	}
+
+	tokenFiles := make(map[GuardrailsTokenFileID][]byte)
+
+	// Resolve the API token from the referenced secret and store as file data.
+	secretNsName := types.NamespacedName{
+		Namespace: gateway.Source.Namespace,
+		Name:      guardrails.APITokenSecretRef.Name,
+	}
+
+	if secret, exists := referencedSecrets[secretNsName]; exists && secret.Source != nil {
+		if tokenBytes, ok := secret.Source.Data["token"]; ok {
+			tokenFiles[tokenFileID] = tokenBytes
+		}
+	}
+
+	return config, tokenFiles
+}
+
+// GenerateGuardrailsTokenFileID generates a unique file ID for a guardrails token secret.
+func GenerateGuardrailsTokenFileID(namespace, name string) GuardrailsTokenFileID {
+	return GuardrailsTokenFileID(fmt.Sprintf("guardrails_token_%s_%s", namespace, name))
 }
 
 // buildHTTPContextRateLimitPolicies creates HTTP context versions of RateLimitPolicies that target routes.

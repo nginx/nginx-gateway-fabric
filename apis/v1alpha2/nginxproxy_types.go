@@ -118,7 +118,50 @@ type NginxProxySpec struct {
 	//
 	// +optional
 	ServerTokens *string `json:"serverTokens,omitempty"`
+	// AIGuardrails specifies the configuration for AI guardrails integration.
+	// When configured, inference requests will be forwarded to the guardrails service
+	// for content validation before being sent to the Endpoint Picker.
+	//
+	// +optional
+	AIGuardrails *AIGuardrails `json:"aiGuardrails,omitempty"`
 }
+
+// AIGuardrails specifies the configuration for AI guardrails integration.
+// This enables content validation for inference requests before they are
+// forwarded to the Endpoint Picker.
+type AIGuardrails struct {
+	// URL is the endpoint of the AI guardrails service.
+	// The service should accept POST requests with the original request body
+	// and return a JSON response with a "result.outcome" field indicating
+	// whether the request should be "cleared" or "flagged".
+	//
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Pattern=`^https?://.*$`
+	URL string `json:"url"`
+	// APITokenSecretRef is a reference to a Secret containing the API token
+	// for authenticating with the guardrails service. The secret must contain
+	// a key named "token" with the Bearer token value.
+	//
+	// +kubebuilder:validation:Required
+	APITokenSecretRef v1alpha1.LocalObjectReference `json:"apiTokenSecretRef"`
+	// FailMode specifies the behavior when the guardrails service is unreachable
+	// or returns an error. Default is "FailOpen".
+	//
+	// +optional
+	// +kubebuilder:default=FailOpen
+	FailMode *AIGuardrailsFailMode `json:"failMode,omitempty"`
+}
+
+// AIGuardrailsFailMode specifies how to handle guardrails service failures.
+// +kubebuilder:validation:Enum=FailOpen;FailClosed
+type AIGuardrailsFailMode string
+
+const (
+	// AIGuardrailsFailModeFailOpen allows requests through when guardrails service is unavailable.
+	AIGuardrailsFailModeFailOpen AIGuardrailsFailMode = "FailOpen"
+	// AIGuardrailsFailModeFailClosed blocks requests when guardrails service is unavailable.
+	AIGuardrailsFailModeFailClosed AIGuardrailsFailMode = "FailClosed"
+)
 
 // Telemetry specifies the OpenTelemetry configuration.
 type Telemetry struct {
