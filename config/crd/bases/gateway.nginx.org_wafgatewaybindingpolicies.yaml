@@ -339,7 +339,7 @@ spec:
                         defaultProfile:
                           description: |-
                             DefaultProfile selects one of the built-in WAF log profile bundles shipped with the WAF engine.
-                            Mutually exclusive with URL.
+                            Mutually exclusive with HTTPSource, NIMSource, and N1CSource.
                           enum:
                           - log_default
                           - log_all
@@ -510,6 +510,15 @@ spec:
                             rule: '!(has(self.verifyChecksum) && self.verifyChecksum
                               && has(self.expectedChecksum))'
                       type: object
+                      x-kubernetes-validations:
+                      - message: exactly one of logSource.defaultProfile, logSource.httpSource,
+                          logSource.nimSource, or logSource.n1cSource must be set
+                        rule: (has(self.defaultProfile) && !has(self.httpSource) &&
+                          !has(self.nimSource) && !has(self.n1cSource)) || (!has(self.defaultProfile)
+                          && has(self.httpSource) && !has(self.nimSource) && !has(self.n1cSource))
+                          || (!has(self.defaultProfile) && !has(self.httpSource) &&
+                          has(self.nimSource) && !has(self.n1cSource)) || (!has(self.defaultProfile)
+                          && !has(self.httpSource) && !has(self.nimSource) && has(self.n1cSource))
                   required:
                   - destination
                   - logSource

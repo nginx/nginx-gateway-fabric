@@ -440,11 +440,6 @@ func (in *LogSource) DeepCopyInto(out *LogSource) {
 		*out = new(NIMLogProfileBundleSource)
 		**out = **in
 	}
-	if in.NIMSource != nil {
-		in, out := &in.NIMSource, &out.NIMSource
-		*out = new(NIMLogProfileBundleSource)
-		**out = **in
-	}
 	if in.N1CSource != nil {
 		in, out := &in.N1CSource, &out.N1CSource
 		*out = new(N1CLogProfileBundleSource)
