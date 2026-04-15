@@ -708,6 +708,79 @@ func TestBuildGraph(t *testing.T) {
 		},
 	}
 
+	// ListenerSet test objects
+	validListenerSet := &gatewayv1.ListenerSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: testNs,
+			Name:      "valid-listenerset",
+		},
+		Spec: gatewayv1.ListenerSetSpec{
+			ParentRef: gatewayv1.ParentGatewayReference{
+				Name: "gateway-1",
+			},
+			Listeners: []gatewayv1.ListenerEntry{
+				{
+					Name:     "http-8080",
+					Port:     8080,
+					Protocol: gatewayv1.HTTPProtocolType,
+				},
+				{
+					Name:     "https-9443",
+					Port:     9443,
+					Protocol: gatewayv1.HTTPSProtocolType,
+					TLS: &gatewayv1.ListenerTLSConfig{
+						Mode: helpers.GetPointer(gatewayv1.TLSModeTerminate),
+						CertificateRefs: []gatewayv1.SecretObjectReference{
+							{
+								Name: gatewayv1.ObjectName("secret"),
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	nonexistentParentRefListenerSet := &gatewayv1.ListenerSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: testNs,
+			Name:      "invalid-listenerset",
+		},
+		Spec: gatewayv1.ListenerSetSpec{
+			ParentRef: gatewayv1.ParentGatewayReference{
+				Name: "nonexistent-gateway",
+			},
+			Listeners: []gatewayv1.ListenerEntry{
+				{
+					Name:     "http-9090",
+					Port:     9090,
+					Protocol: gatewayv1.HTTPProtocolType,
+				},
+			},
+		},
+	}
+
+	// ListenerSet that will be rejected due to AllowedListeners policy (different namespace)
+	notAllowedListenerSet := &gatewayv1.ListenerSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: "other-ns",
+			Name:      "not-allowed-listenerset",
+		},
+		Spec: gatewayv1.ListenerSetSpec{
+			ParentRef: gatewayv1.ParentGatewayReference{
+				Namespace: helpers.GetPointer(gatewayv1.Namespace(testNs)),
+				Name:      "gateway-2",
+			},
+			Listeners: []gatewayv1.ListenerEntry{
+				{
+					Name:     "http-7070",
+					Port:     7070,
+					Protocol: gatewayv1.HTTPProtocolType,
+				},
+			},
+		},
+	}
+
 	ir := createRoute("ir", "gateway-1", "listener-80-1")
 	ir.Spec.Hostnames = []gatewayv1.Hostname{"inference.example.com"}
 	// Update the backend ref to point to the InferencePool instead of a Service
@@ -785,6 +858,11 @@ func TestBuildGraph(t *testing.T) {
 							Group: ngfAPIv1alpha2.GroupName,
 							Kind:  kinds.NginxProxy,
 							Name:  nginxProxyName,
+						},
+					},
+					AllowedListeners: &gatewayv1.AllowedListeners{
+						Namespaces: &gatewayv1.ListenerNamespaces{
+							From: helpers.GetPointer(gatewayv1.NamespacesFromSame),
 						},
 					},
 					Listeners: []gatewayv1.Listener{
@@ -1174,6 +1252,11 @@ func TestBuildGraph(t *testing.T) {
 				client.ObjectKeyFromObject(unreferencedAuthenticationFilter):   unreferencedAuthenticationFilter,
 				client.ObjectKeyFromObject(referencedAuthenticationFilter):     referencedAuthenticationFilter,
 				client.ObjectKeyFromObject(referencedOIDCAuthenticationFilter): referencedOIDCAuthenticationFilter,
+			},
+			ListenerSets: map[types.NamespacedName]*gatewayv1.ListenerSet{
+				client.ObjectKeyFromObject(validListenerSet):                validListenerSet,
+				client.ObjectKeyFromObject(nonexistentParentRefListenerSet): nonexistentParentRefListenerSet,
+				client.ObjectKeyFromObject(notAllowedListenerSet):           notAllowedListenerSet,
 			},
 		}
 	}
@@ -1738,6 +1821,9 @@ func TestBuildGraph(t *testing.T) {
 						Source: np1,
 						Valid:  true,
 					},
+					ListenerNamespaces: &gatewayv1.ListenerNamespaces{
+						From: helpers.GetPointer(gatewayv1.NamespacesFromSame),
+					},
 					EffectiveNginxProxy: &EffectiveNginxProxy{
 						Telemetry: &ngfAPIv1alpha2.Telemetry{
 							Exporter: &ngfAPIv1alpha2.TelemetryExporter{
@@ -1819,6 +1905,9 @@ func TestBuildGraph(t *testing.T) {
 					NginxProxy: &NginxProxy{
 						Source: np2,
 						Valid:  true,
+					},
+					ListenerNamespaces: &gatewayv1.ListenerNamespaces{
+						From: helpers.GetPointer(gatewayv1.NamespacesFromSame),
 					},
 					EffectiveNginxProxy: &EffectiveNginxProxy{
 						Telemetry: &ngfAPIv1alpha2.Telemetry{
@@ -1953,6 +2042,64 @@ func TestBuildGraph(t *testing.T) {
 				client.ObjectKeyFromObject(unreferencedAuthenticationFilter):   processedUnrefAuthenticationFilter,
 				client.ObjectKeyFromObject(referencedAuthenticationFilter):     processedRefAuthenticationFilter,
 				client.ObjectKeyFromObject(referencedOIDCAuthenticationFilter): processedRefOIDCAuthenticationFilter,
+			},
+			ListenerSets: map[types.NamespacedName]*ListenerSet{
+				client.ObjectKeyFromObject(validListenerSet): {
+					Source:  validListenerSet,
+					Gateway: gw1.Source,
+					Valid:   true,
+					Listeners: []*Listener{
+						{
+							Name:        "http-8080",
+							GatewayName: types.NamespacedName{Namespace: "test", Name: "valid-listenerset-validate"},
+							Source: gatewayv1.Listener{
+								Name:     "http-8080",
+								Port:     8080,
+								Protocol: "HTTP",
+							},
+							Routes:         map[RouteKey]*L7Route{},
+							L4Routes:       map[L4RouteKey]*L4Route{},
+							SupportedKinds: supportedKindsForListeners,
+							Valid:          true,
+							Attachable:     true,
+						},
+						{
+							Name:        "https-9443",
+							GatewayName: types.NamespacedName{Namespace: "test", Name: "valid-listenerset-validate"},
+							Source: gatewayv1.Listener{
+								Name:     "https-9443",
+								Port:     9443,
+								Protocol: "HTTPS",
+								TLS: &gatewayv1.ListenerTLSConfig{
+									Mode: helpers.GetPointer(gatewayv1.TLSModeTerminate),
+									CertificateRefs: []gatewayv1.SecretObjectReference{
+										{
+											Name: gatewayv1.ObjectName("secret"),
+										},
+									},
+								},
+							},
+							Routes:          map[RouteKey]*L7Route{},
+							L4Routes:        map[L4RouteKey]*L4Route{},
+							ResolvedSecrets: []types.NamespacedName{client.ObjectKeyFromObject(secret)},
+							SupportedKinds:  supportedKindsForListeners,
+							Valid:           true,
+							Attachable:      true,
+						},
+					},
+					Conditions: []conditions.Condition{
+						conditions.NewListenerSetAccepted(),
+					},
+				},
+				client.ObjectKeyFromObject(notAllowedListenerSet): {
+					Source:  notAllowedListenerSet,
+					Gateway: gw2.Source,
+					Valid:   false,
+					Conditions: []conditions.Condition{
+						conditions.NewListenerSetNotAllowed("ListenerSet is not allowed by parent Gateway" +
+							" test/gateway-2 AllowedListeners configuration"),
+					},
+				},
 			},
 			PlusSecrets: map[types.NamespacedName][]PlusSecretFile{
 				client.ObjectKeyFromObject(plusSecret): {

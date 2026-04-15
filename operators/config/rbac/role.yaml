@@ -103,6 +103,7 @@ rules:
   - tlsroutes
   - tcproutes
   - udproutes
+  - listenersets
   verbs:
   - create
   - delete
@@ -123,6 +124,7 @@ rules:
   - tlsroutes/status
   - tcproutes/status
   - udproutes/status
+  - listenersets/status
   verbs:
   - update
 - apiGroups:

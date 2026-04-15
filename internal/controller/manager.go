@@ -628,6 +628,12 @@ func registerControllers(
 			},
 		},
 		{
+			objectType: &gatewayv1.ListenerSet{},
+			options: []controller.Option{
+				controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
+			},
+		},
+		{
 			objectType: &crdWithGVK,
 			options: []controller.Option{
 				controller.WithOnlyMetadata(),
@@ -1021,6 +1027,7 @@ func prepareFirstEventBatchPreparerArgs(
 		&apiv1.NamespaceList{},
 		&discoveryV1.EndpointSliceList{},
 		&gatewayv1.HTTPRouteList{},
+		&gatewayv1.ListenerSetList{},
 		&apiv1.ConfigMapList{},
 		&ngfAPIv1alpha2.NginxProxyList{},
 		&gatewayv1.GRPCRouteList{},

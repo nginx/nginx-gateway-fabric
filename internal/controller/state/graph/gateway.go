@@ -18,28 +18,17 @@ import (
 
 // Gateway represents a Gateway resource.
 type Gateway struct {
-	// LatestReloadResult is the result of the last nginx reload attempt.
-	LatestReloadResult NginxReloadResult
-	// Source is the corresponding Gateway resource.
-	Source *v1.Gateway
-	// NginxProxy is the NginxProxy referenced by this Gateway.
-	NginxProxy *NginxProxy
-	// EffectiveNginxProxy holds the result of merging the NginxProxySpec on this resource with the NginxProxySpec on
-	// the GatewayClass resource. This is the effective set of config that should be applied to the Gateway.
-	// If non-nil, then this config is valid.
+	LatestReloadResult  NginxReloadResult
+	Source              *v1.Gateway
+	NginxProxy          *NginxProxy
 	EffectiveNginxProxy *EffectiveNginxProxy
-	// SecretRef is the namespaced name of the secret referenced by the Gateway for backend TLS.
-	SecretRef *types.NamespacedName
-	// DeploymentName is the name of the nginx Deployment associated with this Gateway.
-	DeploymentName types.NamespacedName
-	// Listeners include the listeners of the Gateway.
-	Listeners []*Listener
-	// Conditions holds the conditions for the Gateway.
-	Conditions []conditions.Condition
-	// Policies holds the policies attached to the Gateway.
-	Policies []*Policy
-	// Valid indicates whether the Gateway Spec is valid.
-	Valid bool
+	SecretRef           *types.NamespacedName
+	ListenerNamespaces  *v1.ListenerNamespaces
+	DeploymentName      types.NamespacedName
+	Listeners           []*Listener
+	Conditions          []conditions.Condition
+	Policies            []*Policy
+	Valid               bool
 }
 
 // processGateways determines which Gateway resources belong to NGF (determined by the Gateway GatewayClassName field).
@@ -80,6 +69,7 @@ func buildGateways(
 	for gwNsName, gw := range gws {
 		var np *NginxProxy
 		var npNsName types.NamespacedName
+		var listenerNamespaces *v1.ListenerNamespaces
 		if gw.Spec.Infrastructure != nil && gw.Spec.Infrastructure.ParametersRef != nil {
 			npNsName = types.NamespacedName{Namespace: gw.Namespace, Name: gw.Spec.Infrastructure.ParametersRef.Name}
 			np = nps[npNsName]
@@ -94,18 +84,15 @@ func buildGateways(
 
 		conds, valid, secretRefNsName := validateGateway(gw, gc, np, resourceResolver, refGrantResolver)
 
-		protectedPorts := make(ProtectedPorts)
-		if port, enabled := MetricsEnabledForNginxProxy(effectiveNginxProxy); enabled {
-			metricsPort := config.DefaultNginxMetricsPort
-			if port != nil {
-				metricsPort = *port
-			}
-			protectedPorts[metricsPort] = "MetricsPort"
-		}
+		protectedPorts := buildProtectedPorts(effectiveNginxProxy)
 
 		deploymentName := types.NamespacedName{
 			Namespace: gw.GetNamespace(),
 			Name:      controller.CreateNginxResourceName(gw.GetName(), string(gw.Spec.GatewayClassName)),
+		}
+
+		if gw.Spec.AllowedListeners != nil && gw.Spec.AllowedListeners.Namespaces != nil {
+			listenerNamespaces = gw.Spec.AllowedListeners.Namespaces
 		}
 
 		if !valid {
@@ -117,6 +104,7 @@ func buildGateways(
 				Conditions:          conds,
 				DeploymentName:      deploymentName,
 				SecretRef:           secretRefNsName,
+				ListenerNamespaces:  listenerNamespaces,
 			}
 		} else {
 			builtGateways[gwNsName] = &Gateway{
@@ -128,6 +116,7 @@ func buildGateways(
 				Conditions:          conds,
 				DeploymentName:      deploymentName,
 				SecretRef:           secretRefNsName,
+				ListenerNamespaces:  listenerNamespaces,
 			}
 		}
 	}
@@ -441,12 +430,21 @@ func (g *Gateway) collectSnippetsFiltersFromRoute(
 	}
 }
 
+// buildProtectedPorts creates protected ports from an EffectiveNginxProxy configuration.
+func buildProtectedPorts(effectiveNginxProxy *EffectiveNginxProxy) ProtectedPorts {
+	protectedPorts := make(ProtectedPorts)
+	if port, enabled := MetricsEnabledForNginxProxy(effectiveNginxProxy); enabled {
+		metricsPort := config.DefaultNginxMetricsPort
+		if port != nil {
+			metricsPort = *port
+		}
+		protectedPorts[metricsPort] = "MetricsPort"
+	}
+	return protectedPorts
+}
+
 func validateUnsupportedGatewayFields(gw *v1.Gateway) []conditions.Condition {
 	var conds []conditions.Condition
-
-	if gw.Spec.AllowedListeners != nil {
-		conds = append(conds, conditions.NewGatewayAcceptedUnsupportedField("AllowedListeners"))
-	}
 
 	if gw.Spec.TLS != nil && gw.Spec.TLS.Frontend != nil {
 		conds = append(conds, conditions.NewGatewayAcceptedUnsupportedField("TLS.Frontend"))

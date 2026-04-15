@@ -533,6 +533,67 @@ func authenticationStatusEqual(status1, status2 ngfAPI.ControllerStatus) bool {
 	return ConditionsEqual(status1.Conditions, status2.Conditions)
 }
 
+func newListenerSetStatusSetter(lsStatus gatewayv1.ListenerSetStatus) Setter {
+	return func(obj client.Object) (wasSet bool) {
+		ls := helpers.MustCastObject[*gatewayv1.ListenerSet](obj)
+
+		if listenerSetStatusEqual(lsStatus, ls.Status) {
+			return false
+		}
+
+		ls.Status = lsStatus
+		return true
+	}
+}
+
+func listenerSetStatusEqual(status1, status2 gatewayv1.ListenerSetStatus) bool {
+	if !ConditionsEqual(status1.Conditions, status2.Conditions) {
+		return false
+	}
+
+	// Compare listener statuses
+	if len(status1.Listeners) != len(status2.Listeners) {
+		return false
+	}
+
+	for i, listener1 := range status1.Listeners {
+		listener2 := status2.Listeners[i]
+
+		if listener1.Name != listener2.Name {
+			return false
+		}
+
+		if listener1.AttachedRoutes != listener2.AttachedRoutes {
+			return false
+		}
+
+		if len(listener1.SupportedKinds) != len(listener2.SupportedKinds) {
+			return false
+		}
+
+		for j, kind1 := range listener1.SupportedKinds {
+			kind2 := listener2.SupportedKinds[j]
+			if kind1.Kind != kind2.Kind {
+				return false
+			}
+
+			if (kind1.Group == nil) != (kind2.Group == nil) {
+				return false
+			}
+
+			if kind1.Group != nil && kind2.Group != nil && *kind1.Group != *kind2.Group {
+				return false
+			}
+		}
+
+		if !ConditionsEqual(listener1.Conditions, listener2.Conditions) {
+			return false
+		}
+	}
+
+	return true
+}
+
 func newInferencePoolStatusSetter(status inference.InferencePoolStatus) Setter {
 	return func(obj client.Object) (wasSet bool) {
 		ip := helpers.MustCastObject[*inference.InferencePool](obj)

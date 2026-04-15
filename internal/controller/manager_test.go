@@ -81,6 +81,7 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&ngfAPIv1alpha1.UpstreamSettingsPolicyList{},
 				&ngfAPIv1alpha1.AuthenticationFilterList{},
 				&ngfAPIv1alpha1.RateLimitPolicyList{},
+				&gatewayv1.ListenerSetList{},
 			},
 		},
 		{
@@ -113,6 +114,7 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&ngfAPIv1alpha1.RateLimitPolicyList{},
 				partialObjectMetadataList,
 				&gatewayv1.GatewayList{},
+				&gatewayv1.ListenerSetList{},
 			},
 		},
 		{
@@ -153,6 +155,7 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&ngfAPIv1alpha1.UpstreamSettingsPolicyList{},
 				&ngfAPIv1alpha1.AuthenticationFilterList{},
 				&ngfAPIv1alpha1.RateLimitPolicyList{},
+				&gatewayv1.ListenerSetList{},
 			},
 		},
 		{
@@ -189,6 +192,7 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&inference.InferencePoolList{},
 				&gatewayv1.GatewayList{},
 				&ngfAPIv1alpha1.AuthenticationFilterList{},
+				&gatewayv1.ListenerSetList{},
 			},
 		},
 		{
@@ -224,6 +228,7 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&ngfAPIv1alpha1.UpstreamSettingsPolicyList{},
 				&ngfAPIv1alpha1.AuthenticationFilterList{},
 				&ngfAPIv1alpha1.RateLimitPolicyList{},
+				&gatewayv1.ListenerSetList{},
 			},
 		},
 		{
@@ -260,6 +265,7 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&ngfAPIv1alpha1.UpstreamSettingsPolicyList{},
 				&ngfAPIv1alpha1.AuthenticationFilterList{},
 				&ngfAPIv1alpha1.RateLimitPolicyList{},
+				&gatewayv1.ListenerSetList{},
 			},
 		},
 		{
@@ -305,6 +311,7 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&ngfAPIv1alpha1.UpstreamSettingsPolicyList{},
 				&ngfAPIv1alpha1.AuthenticationFilterList{},
 				&ngfAPIv1alpha1.RateLimitPolicyList{},
+				&gatewayv1.ListenerSetList{},
 			},
 		},
 		{
@@ -351,6 +358,7 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&ngfAPIv1alpha1.UpstreamSettingsPolicyList{},
 				&ngfAPIv1alpha1.AuthenticationFilterList{},
 				&ngfAPIv1alpha1.RateLimitPolicyList{},
+				&gatewayv1.ListenerSetList{},
 			},
 		},
 		{
@@ -384,6 +392,7 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&ngfAPIv1alpha1.UpstreamSettingsPolicyList{},
 				&ngfAPIv1alpha1.AuthenticationFilterList{},
 				&ngfAPIv1alpha1.RateLimitPolicyList{},
+				&gatewayv1.ListenerSetList{},
 			},
 		},
 	}

@@ -559,6 +559,82 @@ func PrepareAuthenticationFilterRequests(
 	return reqs
 }
 
+// PrepareListenerSetRequests prepares status UpdateRequests for the given ListenerSets.
+func PrepareListenerSetRequests(
+	listenerSets map[types.NamespacedName]*graph.ListenerSet,
+	transitionTime metav1.Time,
+) []UpdateRequest {
+	reqs := make([]UpdateRequest, 0, len(listenerSets))
+
+	for nsname, listenerSet := range listenerSets {
+		// Add default conditions first
+		defaultConds := conditions.NewDefaultListenerSetConditions()
+		allConds := make([]conditions.Condition, 0, len(listenerSet.Conditions)+len(defaultConds))
+		allConds = append(allConds, defaultConds...)
+		allConds = append(allConds, listenerSet.Conditions...)
+
+		// Check if ListenerSet has failure conditions that indicate it should not be programmed
+		for _, cond := range listenerSet.Conditions {
+			if cond.Type == string(v1.ListenerSetConditionAccepted) && cond.Status == metav1.ConditionFalse {
+				switch cond.Reason {
+				case string(v1.ListenerSetReasonInvalid):
+					allConds = append(allConds, conditions.NewListenerSetNotProgrammedInvalid("ListenerSet is invalid"))
+				case string(v1.ListenerSetReasonListenersNotValid):
+					allConds = append(allConds, conditions.NewListenerSetNotProgrammedListenersNotValid("All listeners are invalid"))
+				case string(v1.ListenerSetReasonNotAllowed):
+					allConds = append(allConds, conditions.NewListenerSetNotProgrammedNotAllowed("ListenerSet is not allowed to be"+
+						" accepted by its parent Gateway"))
+				case string(v1.ListenerSetReasonParentNotAccepted):
+					allConds = append(allConds, conditions.NewListenerSetNotProgrammedParentNotAccepted("Parent Gateway is"+
+						" not accepted"))
+				}
+
+				break
+			}
+		}
+
+		// Create per-listener statuses
+		listenerStatuses := make([]v1.ListenerEntryStatus, 0, len(listenerSet.Listeners))
+
+		for _, l := range listenerSet.Listeners {
+			listenerConds := l.Conditions
+
+			if l.Valid {
+				listenerConds = append(listenerConds, conditions.NewDefaultListenerConditions(listenerConds)...)
+			}
+
+			listenerAPIConds := conditions.ConvertConditions(
+				conditions.DeduplicateConditions(listenerConds),
+				listenerSet.Source.GetGeneration(),
+				transitionTime,
+			)
+
+			listenerStatuses = append(listenerStatuses, v1.ListenerEntryStatus{
+				Name:           v1.SectionName(l.Name),
+				SupportedKinds: l.SupportedKinds,
+				AttachedRoutes: 0, // ListenerSets don't have attached routes directly
+				Conditions:     listenerAPIConds,
+			})
+		}
+
+		conds := conditions.DeduplicateConditions(allConds)
+		apiConds := conditions.ConvertConditions(conds, listenerSet.Source.GetGeneration(), transitionTime)
+
+		status := v1.ListenerSetStatus{
+			Conditions: apiConds,
+			Listeners:  listenerStatuses,
+		}
+
+		reqs = append(reqs, UpdateRequest{
+			NsName:       nsname,
+			ResourceType: listenerSet.Source,
+			Setter:       newListenerSetStatusSetter(status),
+		})
+	}
+
+	return reqs
+}
+
 // ControlPlaneUpdateResult describes the result of a control plane update.
 type ControlPlaneUpdateResult struct {
 	// Error is the error that occurred during the update.
