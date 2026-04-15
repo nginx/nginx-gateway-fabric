@@ -33,9 +33,12 @@ const (
 // This can be either the main policy bundle or a log bundle.
 type BundleSource struct {
 	BundleKey graph.WAFBundleKey
-	Request   fetch.Request
-	Type      BundleType
-	Interval  time.Duration
+	// Request contains the fetch configuration for this bundle.
+	Request fetch.Request
+	// Type indicates whether this is a policy bundle or a log profile bundle, which determines the fetch method used.
+	Type BundleType
+	// Interval is the polling interval for this source.
+	Interval time.Duration
 }
 
 // poller handles periodic re-fetching of WAF bundles for a single WAFGatewayBindingPolicy.

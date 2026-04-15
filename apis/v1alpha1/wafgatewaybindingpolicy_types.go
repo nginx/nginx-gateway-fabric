@@ -140,11 +140,14 @@ type PolicySource struct {
 	// +optional
 	Timeout *metav1.Duration `json:"timeout,omitempty"`
 
-	// RetryPolicy configures retry behavior for transient fetch failures during the
-	// initial bundle fetch.
+	// RetryAttempts is the maximum number of additional fetch attempts on transient failures
+	// (network errors, HTTP 5xx). Set to 0 to disable retries. Defaults to 3.
+	// Non-transient errors (HTTP 4xx, checksum mismatch) are never retried.
 	//
-	// +optional
-	RetryPolicy *BundleRetryPolicy `json:"retryPolicy,omitempty"`
+	// +kubebuilder:default=3
+	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Maximum=10
+	RetryAttempts *int32 `json:"retryAttempts,omitempty"`
 
 	// InsecureSkipVerify disables TLS certificate verification when fetching the bundle.
 	// Not recommended for production use.
@@ -162,6 +165,8 @@ type PolicySource struct {
 type BundleValidation struct {
 	// ExpectedChecksum is the expected SHA256 checksum of the bundle.
 	// If set, the downloaded bundle must match this checksum or it will be rejected.
+	// For N1C sources, the checksum reported by the N1C API is verified automatically;
+	// set this field only if you want to enforce an additional, independently known value.
 	//
 	// +optional
 	// +kubebuilder:validation:MinLength=64
@@ -173,6 +178,8 @@ type BundleValidation struct {
 	// checksum file at <url>.sha256 and comparing it against the downloaded bundle.
 	// Only supported when the policy source type is HTTP (policySource.httpSource or
 	// logSource.url); setting this for NIM or N1C sources is rejected at admission.
+	// Note: for N1C sources, bundle integrity is always verified automatically using
+	// the checksum returned by the N1C compile API — this field is not needed.
 	// Mutually exclusive with expectedChecksum.
 	//
 	// +optional
@@ -193,16 +200,6 @@ type BundlePolling struct {
 	//
 	// +optional
 	Enabled bool `json:"enabled,omitempty"`
-}
-
-// BundleRetryPolicy configures retry behavior on bundle fetch failures.
-type BundleRetryPolicy struct {
-	// Attempts is the maximum number of fetch attempts before giving up.
-	//
-	// +optional
-	// +kubebuilder:validation:Minimum=1
-	// +kubebuilder:validation:Maximum=10
-	Attempts *int32 `json:"attempts,omitempty"`
 }
 
 // HTTPBundleSource configures direct bundle fetching from an HTTP/HTTPS URL.
@@ -451,11 +448,15 @@ type LogSource struct {
 	// +optional
 	Timeout *metav1.Duration `json:"timeout,omitempty"`
 
-	// RetryPolicy configures retry behavior for transient fetch failures during the
-	// initial log bundle fetch. Only applicable when url is set.
+	// RetryAttempts is the maximum number of additional fetch attempts on transient failures
+	// (network errors, HTTP 5xx). Set to 0 to disable retries. Defaults to 3.
+	// Non-transient errors (HTTP 4xx, checksum mismatch) are never retried.
+	// Only applicable when url is set.
 	//
-	// +optional
-	RetryPolicy *BundleRetryPolicy `json:"retryPolicy,omitempty"`
+	// +kubebuilder:default=3
+	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Maximum=10
+	RetryAttempts *int32 `json:"retryAttempts,omitempty"`
 
 	// InsecureSkipVerify disables TLS certificate verification when fetching the bundle.
 	// Not recommended for production use.
