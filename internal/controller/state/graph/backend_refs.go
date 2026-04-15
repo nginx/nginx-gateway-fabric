@@ -45,6 +45,8 @@ type BackendRef struct {
 	Valid bool
 	// IsMirrorBackend indicates whether the BackendGroup is for a mirrored backend.
 	IsMirrorBackend bool
+	// IsExternalAuthBackend indicates whether this BackendRef is for an ExternalAuth filter backend.
+	IsExternalAuthBackend bool
 	// IsInferencePool indicates whether the BackendRef is for an InferencePool.
 	IsInferencePool bool
 }
@@ -116,6 +118,8 @@ func addBackendRefsToRules(
 			refPath := basePath.Child("backendRefs").Index(refIdx)
 			if ref.MirrorBackendIdx != nil {
 				refPath = basePath.Child("filters").Index(*ref.MirrorBackendIdx).Child("backendRef")
+			} else if ref.ExternalAuthBackendIdx != nil {
+				refPath = basePath.Child("filters").Index(*ref.ExternalAuthBackendIdx).Child("externalAuth").Child("backendRef")
 			}
 			routeNs := route.Source.GetNamespace()
 
@@ -210,12 +214,13 @@ func createBackendRef(
 
 	if !valid {
 		backendRef := BackendRef{
-			Weight:               weight,
-			Valid:                false,
-			IsMirrorBackend:      ref.MirrorBackendIdx != nil,
-			IsInferencePool:      ref.IsInferencePool,
-			InvalidForGateways:   make(map[types.NamespacedName]conditions.Condition),
-			EndpointPickerConfig: ref.EndpointPickerConfig,
+			Weight:                weight,
+			Valid:                 false,
+			IsMirrorBackend:       ref.MirrorBackendIdx != nil,
+			IsExternalAuthBackend: ref.ExternalAuthBackendIdx != nil,
+			IsInferencePool:       ref.IsInferencePool,
+			InvalidForGateways:    make(map[types.NamespacedName]conditions.Condition),
+			EndpointPickerConfig:  ref.EndpointPickerConfig,
 		}
 
 		return backendRef, []conditions.Condition{cond}
@@ -229,14 +234,15 @@ func createBackendRef(
 	svcPort, err := getPortFromRef(ref.BackendRef, svcNsName, services, refPath)
 	if err != nil {
 		backendRef := BackendRef{
-			Weight:               weight,
-			Valid:                false,
-			SvcNsName:            svcNsName,
-			ServicePort:          v1.ServicePort{},
-			IsMirrorBackend:      ref.MirrorBackendIdx != nil,
-			IsInferencePool:      ref.IsInferencePool,
-			InvalidForGateways:   make(map[types.NamespacedName]conditions.Condition),
-			EndpointPickerConfig: ref.EndpointPickerConfig,
+			Weight:                weight,
+			Valid:                 false,
+			SvcNsName:             svcNsName,
+			ServicePort:           v1.ServicePort{},
+			IsMirrorBackend:       ref.MirrorBackendIdx != nil,
+			IsExternalAuthBackend: ref.ExternalAuthBackendIdx != nil,
+			IsInferencePool:       ref.IsInferencePool,
+			InvalidForGateways:    make(map[types.NamespacedName]conditions.Condition),
+			EndpointPickerConfig:  ref.EndpointPickerConfig,
 		}
 
 		return backendRef, []conditions.Condition{conditions.NewRouteBackendRefRefBackendNotFound(err.Error())}
@@ -253,14 +259,15 @@ func createBackendRef(
 		// Check if externalName field is empty or whitespace-only
 		if strings.TrimSpace(svc.Spec.ExternalName) == "" {
 			backendRef := BackendRef{
-				SvcNsName:            svcNsName,
-				ServicePort:          svcPort,
-				Weight:               weight,
-				Valid:                false,
-				IsMirrorBackend:      ref.MirrorBackendIdx != nil,
-				IsInferencePool:      ref.IsInferencePool,
-				InvalidForGateways:   invalidForGateways,
-				EndpointPickerConfig: ref.EndpointPickerConfig,
+				SvcNsName:             svcNsName,
+				ServicePort:           svcPort,
+				Weight:                weight,
+				Valid:                 false,
+				IsMirrorBackend:       ref.MirrorBackendIdx != nil,
+				IsExternalAuthBackend: ref.ExternalAuthBackendIdx != nil,
+				IsInferencePool:       ref.IsInferencePool,
+				InvalidForGateways:    invalidForGateways,
+				EndpointPickerConfig:  ref.EndpointPickerConfig,
 			}
 
 			return backendRef, append(conds, conditions.NewRouteBackendRefUnsupportedValue(
@@ -278,14 +285,15 @@ func createBackendRef(
 	)
 	if err != nil {
 		backendRef := BackendRef{
-			SvcNsName:            svcNsName,
-			ServicePort:          svcPort,
-			Weight:               weight,
-			Valid:                false,
-			IsMirrorBackend:      ref.MirrorBackendIdx != nil,
-			IsInferencePool:      ref.IsInferencePool,
-			InvalidForGateways:   invalidForGateways,
-			EndpointPickerConfig: ref.EndpointPickerConfig,
+			SvcNsName:             svcNsName,
+			ServicePort:           svcPort,
+			Weight:                weight,
+			Valid:                 false,
+			IsMirrorBackend:       ref.MirrorBackendIdx != nil,
+			IsExternalAuthBackend: ref.ExternalAuthBackendIdx != nil,
+			IsInferencePool:       ref.IsInferencePool,
+			InvalidForGateways:    invalidForGateways,
+			EndpointPickerConfig:  ref.EndpointPickerConfig,
 		}
 
 		return backendRef, append(conds, conditions.NewRouteBackendRefUnsupportedValue(err.Error()))
@@ -295,15 +303,16 @@ func createBackendRef(
 		err = validateRouteBackendRefAppProtocol(route.RouteType, *svcPort.AppProtocol, backendTLSPolicy)
 		if err != nil {
 			backendRef := BackendRef{
-				SvcNsName:            svcNsName,
-				BackendTLSPolicy:     backendTLSPolicy,
-				ServicePort:          svcPort,
-				Weight:               weight,
-				Valid:                false,
-				IsMirrorBackend:      ref.MirrorBackendIdx != nil,
-				IsInferencePool:      ref.IsInferencePool,
-				InvalidForGateways:   invalidForGateways,
-				EndpointPickerConfig: ref.EndpointPickerConfig,
+				SvcNsName:             svcNsName,
+				BackendTLSPolicy:      backendTLSPolicy,
+				ServicePort:           svcPort,
+				Weight:                weight,
+				Valid:                 false,
+				IsMirrorBackend:       ref.MirrorBackendIdx != nil,
+				IsExternalAuthBackend: ref.ExternalAuthBackendIdx != nil,
+				IsInferencePool:       ref.IsInferencePool,
+				InvalidForGateways:    invalidForGateways,
+				EndpointPickerConfig:  ref.EndpointPickerConfig,
 			}
 
 			return backendRef, append(conds, conditions.NewRouteBackendRefUnsupportedProtocol(err.Error()))
@@ -311,16 +320,17 @@ func createBackendRef(
 	}
 
 	backendRef := BackendRef{
-		SvcNsName:            svcNsName,
-		BackendTLSPolicy:     backendTLSPolicy,
-		ServicePort:          svcPort,
-		Valid:                true,
-		Weight:               weight,
-		IsMirrorBackend:      ref.MirrorBackendIdx != nil,
-		IsInferencePool:      ref.IsInferencePool,
-		InvalidForGateways:   invalidForGateways,
-		EndpointPickerConfig: ref.EndpointPickerConfig,
-		SessionPersistence:   ref.SessionPersistence,
+		SvcNsName:             svcNsName,
+		BackendTLSPolicy:      backendTLSPolicy,
+		ServicePort:           svcPort,
+		Valid:                 true,
+		Weight:                weight,
+		IsMirrorBackend:       ref.MirrorBackendIdx != nil,
+		IsExternalAuthBackend: ref.ExternalAuthBackendIdx != nil,
+		IsInferencePool:       ref.IsInferencePool,
+		InvalidForGateways:    invalidForGateways,
+		EndpointPickerConfig:  ref.EndpointPickerConfig,
+		SessionPersistence:    ref.SessionPersistence,
 	}
 
 	return backendRef, conds
@@ -343,6 +353,9 @@ func validateBackendTLSPolicyMatchingAllBackends(backendRefs []BackendRef) *cond
 	}
 
 	for _, backendRef := range backendRefs {
+		if backendRef.IsMirrorBackend || backendRef.IsExternalAuthBackend {
+			continue
+		}
 		if backendRef.BackendTLSPolicy == nil {
 			if referencePolicy != nil {
 				// There was a reference before, so they do not all match

@@ -629,6 +629,200 @@ func TestValidateFilterRequestHeaderModifier(t *testing.T) {
 	}
 }
 
+func TestValidateFilterExternalAuth(t *testing.T) {
+	t.Parallel()
+
+	port := gatewayv1.PortNumber(80)
+
+	validator := &validationfakes.FakeHTTPFieldsValidator{}
+
+	tests := []struct {
+		filter         *gatewayv1.HTTPExternalAuthFilter
+		name           string
+		expectErrCount int
+	}{
+		{
+			name: "valid HTTP external auth filter with no httpAuthConfig",
+			filter: &gatewayv1.HTTPExternalAuthFilter{
+				ExternalAuthProtocol: gatewayv1.HTTPRouteExternalAuthHTTPProtocol,
+				BackendRef: gatewayv1.BackendObjectReference{
+					Name: "auth-svc",
+					Port: &port,
+				},
+			},
+			expectErrCount: 0,
+		},
+		{
+			name: "valid HTTP external auth filter with httpAuthConfig and allowedResponseHeaders",
+			filter: &gatewayv1.HTTPExternalAuthFilter{
+				ExternalAuthProtocol: gatewayv1.HTTPRouteExternalAuthHTTPProtocol,
+				BackendRef: gatewayv1.BackendObjectReference{
+					Name: "auth-svc",
+					Port: &port,
+				},
+				HTTPAuthConfig: &gatewayv1.HTTPAuthConfig{
+					AllowedResponseHeaders: []string{"X-Auth-Status", "X-Forwarded-Groups"},
+				},
+			},
+			expectErrCount: 0,
+		},
+		{
+			name:           "nil filter",
+			filter:         nil,
+			expectErrCount: 1,
+		},
+		{
+			name: "GRPC protocol is not supported",
+			filter: &gatewayv1.HTTPExternalAuthFilter{
+				ExternalAuthProtocol: gatewayv1.HTTPRouteExternalAuthGRPCProtocol,
+				BackendRef: gatewayv1.BackendObjectReference{
+					Name: "auth-svc",
+					Port: &port,
+				},
+			},
+			expectErrCount: 1,
+		},
+		{
+			name: "duplicate response headers are silently deduplicated",
+			filter: &gatewayv1.HTTPExternalAuthFilter{
+				ExternalAuthProtocol: gatewayv1.HTTPRouteExternalAuthHTTPProtocol,
+				BackendRef: gatewayv1.BackendObjectReference{
+					Name: "auth-svc",
+					Port: &port,
+				},
+				HTTPAuthConfig: &gatewayv1.HTTPAuthConfig{
+					AllowedResponseHeaders: []string{"X-Auth-Status", "x-auth-status"},
+				},
+			},
+			expectErrCount: 0,
+		},
+		{
+			name: "duplicate request headers are silently deduplicated",
+			filter: &gatewayv1.HTTPExternalAuthFilter{
+				ExternalAuthProtocol: gatewayv1.HTTPRouteExternalAuthHTTPProtocol,
+				BackendRef: gatewayv1.BackendObjectReference{
+					Name: "auth-svc",
+					Port: &port,
+				},
+				HTTPAuthConfig: &gatewayv1.HTTPAuthConfig{
+					AllowedRequestHeaders: []string{"X-Custom-Token", "X-Custom-Token"},
+				},
+			},
+			expectErrCount: 0,
+		},
+		{
+			name: "Headers specified in response headers are copied when explicitly specified",
+			filter: &gatewayv1.HTTPExternalAuthFilter{
+				ExternalAuthProtocol: gatewayv1.HTTPRouteExternalAuthHTTPProtocol,
+				BackendRef: gatewayv1.BackendObjectReference{
+					Name: "auth-svc",
+					Port: &port,
+				},
+				HTTPAuthConfig: &gatewayv1.HTTPAuthConfig{
+					AllowedResponseHeaders: []string{"X-Auth-Status", "Host"},
+				},
+			},
+			expectErrCount: 0,
+		},
+		{
+			name: "invalid header name in allowedResponseHeaders",
+			filter: &gatewayv1.HTTPExternalAuthFilter{
+				ExternalAuthProtocol: gatewayv1.HTTPRouteExternalAuthHTTPProtocol,
+				BackendRef: gatewayv1.BackendObjectReference{
+					Name: "auth-svc",
+					Port: &port,
+				},
+				HTTPAuthConfig: &gatewayv1.HTTPAuthConfig{
+					AllowedResponseHeaders: []string{"valid-header", "invalid header"},
+				},
+			},
+			expectErrCount: 1,
+		},
+	}
+
+	filterPath := field.NewPath("test")
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			g := NewWithT(t)
+
+			testValidator := validator
+			if test.name == "invalid header name in allowedResponseHeaders" {
+				fakeValidator := &validationfakes.FakeHTTPFieldsValidator{}
+				fakeValidator.ValidateFilterHeaderNameCalls(func(name string) error {
+					if name == "invalid header" {
+						return errors.New("invalid header name")
+					}
+					return nil
+				})
+				testValidator = fakeValidator
+			}
+
+			allErrs := validateFilterExternalAuth(testValidator, test.filter, filterPath)
+			g.Expect(allErrs).To(HaveLen(test.expectErrCount))
+		})
+	}
+}
+
+func TestProcessRouteRuleFiltersDuplicateExternalAuth(t *testing.T) {
+	t.Parallel()
+
+	port := gatewayv1.PortNumber(80)
+
+	validExternalAuthFilter := Filter{
+		FilterType: FilterExternalAuth,
+		ExternalAuth: &gatewayv1.HTTPExternalAuthFilter{
+			ExternalAuthProtocol: gatewayv1.HTTPRouteExternalAuthHTTPProtocol,
+			BackendRef: gatewayv1.BackendObjectReference{
+				Name: "auth-svc",
+				Port: &port,
+			},
+		},
+	}
+
+	tests := []struct {
+		name            string
+		filters         []Filter
+		expectValid     bool
+		expectWarnCount int
+	}{
+		{
+			name:            "single external auth filter is accepted with no warnings",
+			filters:         []Filter{validExternalAuthFilter},
+			expectValid:     true,
+			expectWarnCount: 0,
+		},
+		{
+			name:            "duplicate external auth filters produce a warning for the second filter",
+			filters:         []Filter{validExternalAuthFilter, validExternalAuthFilter},
+			expectValid:     true,
+			expectWarnCount: 1,
+		},
+		{
+			name:            "three external auth filters produce two warnings for the second and third filters",
+			filters:         []Filter{validExternalAuthFilter, validExternalAuthFilter, validExternalAuthFilter},
+			expectValid:     true,
+			expectWarnCount: 2,
+		},
+	}
+
+	path := field.NewPath("test")
+	validator := &validationfakes.FakeHTTPFieldsValidator{}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			result, errs := processRouteRuleFilters(test.filters, path, validator, nil)
+			g.Expect(result.Valid).To(Equal(test.expectValid))
+			g.Expect(errs.warn).To(HaveLen(test.expectWarnCount))
+		})
+	}
+}
+
 func TestConvertGRPCFilters(t *testing.T) {
 	t.Parallel()
 

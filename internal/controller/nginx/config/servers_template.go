@@ -194,6 +194,18 @@ server {
             return 200;
         }
         {{- end }}
+        
+        {{- if $l.ClientMaxBodySize }}
+        client_max_body_size {{ $l.ClientMaxBodySize }};
+        {{- end }}
+
+        {{- if and $l.AuthExternalRequest $l.AuthExternalRequest.InternalPath }}
+        auth_request {{ $l.AuthExternalRequest.InternalPath }};
+            {{- range $h := $l.AuthExternalRequest.AllowedResponseHeaders }}
+        auth_request_set {{ extAuthResponseVar $h }} {{ upstreamHTTPVar $h }};
+        proxy_set_header {{ $h }} {{ extAuthResponseVar $h }};
+            {{- end }}
+        {{- end }}
 
         {{ range $r := $l.Rewrites }}
         rewrite {{ $r }};
@@ -252,6 +264,12 @@ server {
         {{ $proxyOrGRPC }}_set_header {{ $h.Name }} "{{ $h.Value }}";
             {{- end }}
         {{ $proxyOrGRPC }}_pass {{ $l.ProxyPass }};
+            {{- if $l.ProxyPassRequestBody }}
+        proxy_pass_request_body {{ $l.ProxyPassRequestBody }};
+                {{- if eq $l.ProxyPassRequestBody "off" }}
+        proxy_set_header Content-Length "";
+                {{- end }}
+            {{- end }}
             {{ range $h := $l.ResponseHeaders.Add }}
         add_header {{ $h.Name }} "{{ $h.Value }}" always;
             {{- end }}

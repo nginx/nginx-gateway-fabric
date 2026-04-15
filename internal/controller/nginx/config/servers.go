@@ -24,13 +24,34 @@ var serversTemplate = gotemplate.Must(
 		"contains": func(str http.LocationType, substr string) bool {
 			return strings.Contains(string(str), substr)
 		},
+		"headerToNginxVar":   headerToNginxVar,
+		"extAuthResponseVar": func(h string) string { return extAuthResponseVarPrefix + headerToNginxVar(h) },
+		"upstreamHTTPVar":    func(h string) string { return upstreamHTTPVarPrefix + headerToNginxVar(h) },
 	}).Parse(serversTemplateText),
 )
+
+// headerToNginxVar converts an HTTP header name to its NGINX variable form.
+func headerToNginxVar(h string) string {
+	return strings.ToLower(strings.ReplaceAll(h, "-", "_"))
+}
 
 const (
 	// HeaderMatchSeparator is the separator for constructing header-based match for NJS.
 	HeaderMatchSeparator = ":"
 	rootPath             = "/"
+
+	// extAuthOriginalURIHeader is the header name used to pass the original request URI to the auth server.
+	extAuthOriginalURIHeader = "X-Original-URI"
+	// extAuthOriginalURIValue is the NGINX variable for the original request URI.
+	extAuthOriginalURIValue = "$request_uri"
+	// httpHeaderVarPrefix is the NGINX variable prefix for accessing request headers.
+	httpHeaderVarPrefix = "$http_"
+	// extAuthResponseVarPrefix is the NGINX variable prefix for storing auth response header values.
+	extAuthResponseVarPrefix = "$ext_auth_response_"
+	// upstreamHTTPVarPrefix is the NGINX variable prefix for accessing upstream response headers.
+	upstreamHTTPVarPrefix = "$upstream_http_"
+	// proxyPassRequestBodyOff disables forwarding the request body to the proxied server.
+	proxyPassRequestBodyOff = "off"
 
 	// misdirectedRequestSNIVarPrefix is the prefix for the per-port SNI listener ID variable.
 	misdirectedRequestSNIVarPrefix = "$sni_listener_id_"
@@ -550,6 +571,9 @@ func createLocations(
 
 	// Add internal JWKS locations for remote JWT authentication
 	locs = append(locs, extractUniqueJWKSLocations(locs)...)
+
+	// Add internal auth_request locations for ExternalAuth filters
+	locs = append(locs, extractExternalAuthInternalLocations(locs)...)
 
 	return locs, matchPairs, grpcServer
 }
@@ -1138,6 +1162,7 @@ func updateLocation(
 	location = updateLocationMirrorRoute(location, pathRule.Path, grpc)
 	location.Includes = append(location.Includes, createIncludesFromLocationSnippetsFilters(filters.SnippetsFilters)...)
 	location = updateLocationAuthenticationFilter(location, filters.AuthenticationFilter)
+	location = updateLocationExternalAuthFilter(location, filters.ExternalAuthFilter)
 	location = updateLocationCORSFilter(location, filters.CORSFilter, serverID, pathRuleIndex, matchRuleIndex)
 
 	if filters.RequestRedirect != nil {
@@ -1207,6 +1232,74 @@ func updateLocationAuthenticationFilter(
 	}
 
 	return location
+}
+
+func updateLocationExternalAuthFilter(
+	location http.Location,
+	f *dataplane.HTTPExternalAuthFilter,
+) http.Location {
+	if f == nil {
+		return location
+	}
+	location.AuthExternalRequest = &http.AuthExternalRequest{
+		InternalPath:           f.InternalPath,
+		UpstreamName:           f.UpstreamName,
+		PathPrefix:             f.PathPrefix,
+		AllowedRequestHeaders:  f.AllowedRequestHeaders,
+		AllowedResponseHeaders: f.AllowedResponseHeaders,
+		ForwardBody:            f.ForwardBody,
+		ProxySSLVerify:         createProxySSLVerify(f.VerifyTLS),
+	}
+	if f.MaxBodySize > 0 {
+		location.ClientMaxBodySize = f.MaxBodySize
+	}
+	return location
+}
+
+// extractExternalAuthInternalLocations extracts unique internal auth_request locations from a list of locations.
+func extractExternalAuthInternalLocations(locations []http.Location) []http.Location {
+	seen := make(map[string]struct{})
+	var result []http.Location
+
+	for _, loc := range locations {
+		if loc.AuthExternalRequest == nil {
+			continue
+		}
+		path := loc.AuthExternalRequest.InternalPath
+		if _, exists := seen[path]; exists {
+			continue
+		}
+		seen[path] = struct{}{}
+
+		ar := loc.AuthExternalRequest
+		proxyPass := generateProtocolString(ar.ProxySSLVerify, false) + "://" + ar.UpstreamName
+		if ar.PathPrefix != "" {
+			proxyPass += ar.PathPrefix
+		}
+
+		headers := []http.Header{
+			{Name: "Host", Value: "$host"},
+			{Name: extAuthOriginalURIHeader, Value: extAuthOriginalURIValue},
+		}
+		for _, h := range ar.AllowedRequestHeaders {
+			headers = append(headers, http.Header{Name: h, Value: httpHeaderVarPrefix + headerToNginxVar(h)})
+		}
+
+		var proxyPassBody string
+		if !ar.ForwardBody {
+			proxyPassBody = proxyPassRequestBodyOff
+		}
+		authLoc := http.Location{
+			Path:                 path,
+			Type:                 http.InternalLocationType,
+			ProxyPass:            proxyPass,
+			ProxySetHeaders:      headers,
+			ProxyPassRequestBody: proxyPassBody,
+			ProxySSLVerify:       ar.ProxySSLVerify,
+		}
+		result = append(result, authLoc)
+	}
+	return result
 }
 
 func updateLocationCORSFilter(
