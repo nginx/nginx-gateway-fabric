@@ -456,6 +456,42 @@ func setOIDCCRLCert(
 	}
 }
 
+func convertHTTPExternalAuthFilter(
+	filter *v1.HTTPExternalAuthFilter,
+	resolvedBackendRef graph.BackendRef,
+	routeNsName types.NamespacedName,
+	ruleIdx int,
+	gwNsName types.NamespacedName,
+) *HTTPExternalAuthFilter {
+	if filter == nil {
+		return nil
+	}
+
+	result := &HTTPExternalAuthFilter{
+		UpstreamName: resolvedBackendRef.ServicePortReference(),
+		InternalPath: generateExternalAuthInternalPath(routeNsName, ruleIdx),
+		VerifyTLS:    convertBackendTLS(resolvedBackendRef.BackendTLSPolicy, gwNsName),
+	}
+
+	if filter.HTTPAuthConfig != nil {
+		result.PathPrefix = filter.HTTPAuthConfig.Path
+		result.AllowedRequestHeaders = filter.HTTPAuthConfig.AllowedRequestHeaders
+		result.AllowedResponseHeaders = filter.HTTPAuthConfig.AllowedResponseHeaders
+	}
+
+	if filter.ForwardBody != nil && filter.ForwardBody.MaxSize > 0 {
+		result.ForwardBody = true
+		result.MaxBodySize = filter.ForwardBody.MaxSize
+	}
+
+	return result
+}
+
+func generateExternalAuthInternalPath(routeNsName types.NamespacedName, ruleIdx int) string {
+	return fmt.Sprintf("/_ngf-internal-ext-auth-%s_%s_rule%d",
+		routeNsName.Namespace, routeNsName.Name, ruleIdx)
+}
+
 func buildSortedExtraAuthArgs(extraAuthArgs map[string]string) string {
 	if len(extraAuthArgs) == 0 {
 		return ""

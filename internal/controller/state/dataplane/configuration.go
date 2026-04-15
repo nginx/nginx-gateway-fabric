@@ -615,7 +615,7 @@ func newBackendGroup(
 	var inferencePoolBackendExists bool
 
 	for _, ref := range refs {
-		if ref.IsMirrorBackend {
+		if ref.IsMirrorBackend || ref.IsExternalAuthBackend {
 			continue
 		}
 
@@ -841,7 +841,9 @@ func (hpr *hostPathRules) upsertRoute(
 
 		var filters HTTPFilters
 		if rule.Filters.Valid {
-			filters = createHTTPFilters(rule.Filters.Filters, idx, routeNsName, referencedSecrets)
+			filters = createHTTPFilters(
+				rule.Filters.Filters, idx, routeNsName, referencedSecrets, rule.BackendRefs, listener.GatewayName,
+			)
 		} else {
 			filters = HTTPFilters{
 				InvalidFilter: &InvalidHTTPFilter{},
@@ -1156,6 +1158,8 @@ func createHTTPFilters(
 	ruleIdx int,
 	routeNsName types.NamespacedName,
 	referencedSecrets map[types.NamespacedName]*secrets.Secret,
+	backendRefs []graph.BackendRef,
+	gwNsName types.NamespacedName,
 ) HTTPFilters {
 	var result HTTPFilters
 
@@ -1204,6 +1208,15 @@ func createHTTPFilters(
 		case graph.FilterCORS:
 			if result.CORSFilter == nil {
 				result.CORSFilter = convertHTTPCORSFilter(f.CORS)
+			}
+		case graph.FilterExternalAuth:
+			if result.ExternalAuthFilter == nil {
+				for _, br := range backendRefs {
+					if br.IsExternalAuthBackend && br.Valid {
+						result.ExternalAuthFilter = convertHTTPExternalAuthFilter(f.ExternalAuth, br, routeNsName, ruleIdx, gwNsName)
+						break
+					}
+				}
 			}
 		}
 	}

@@ -347,6 +347,7 @@ func BuildGraph(
 	}
 
 	g.attachPolicies(validators.PolicyValidator, controllerName, logger)
+	validateExternalAuthConflicts(routes)
 
 	return g
 }

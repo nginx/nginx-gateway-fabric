@@ -1888,6 +1888,34 @@ func TestValidateBackendTLSPolicyMatchingAllBackends(t *testing.T) {
 			backendRefs:       backendRefsOnePolicy,
 			expectedCondition: helpers.GetPointer(conditions.NewRouteBackendRefUnsupportedValue(msg)),
 		},
+		{
+			name: "external auth backend is skipped so no mismatch with traffic backend that has BTP",
+			backendRefs: []BackendRef{
+				{
+					SvcNsName:        types.NamespacedName{Namespace: "test", Name: "svc1"},
+					BackendTLSPolicy: getBtp("btp1", "ca1"),
+				},
+				{
+					SvcNsName:             types.NamespacedName{Namespace: "test", Name: "auth-svc"},
+					IsExternalAuthBackend: true,
+				},
+			},
+			expectedCondition: nil,
+		},
+		{
+			name: "mirror backend is skipped so no mismatch with traffic backend that has BTP",
+			backendRefs: []BackendRef{
+				{
+					SvcNsName:        types.NamespacedName{Namespace: "test", Name: "svc1"},
+					BackendTLSPolicy: getBtp("btp1", "ca1"),
+				},
+				{
+					SvcNsName:       types.NamespacedName{Namespace: "test", Name: "mirror-svc"},
+					IsMirrorBackend: true,
+				},
+			},
+			expectedCondition: nil,
+		},
 	}
 
 	for _, test := range tests {

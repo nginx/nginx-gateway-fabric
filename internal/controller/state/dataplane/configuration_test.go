@@ -3431,9 +3431,83 @@ func TestCreateFilters(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 			routeNsName := types.NamespacedName{Namespace: "test", Name: "route1"}
-			result := createHTTPFilters(test.filters, 0, routeNsName, nil)
+			result := createHTTPFilters(test.filters, 0, routeNsName, nil, nil, types.NamespacedName{})
 
 			g.Expect(helpers.Diff(test.expected, result)).To(BeEmpty())
+		})
+	}
+}
+
+func TestCreateFiltersExternalAuthSkipsInvalidBackendRef(t *testing.T) {
+	t.Parallel()
+
+	port := v1.PortNumber(80)
+
+	extAuthFilter := graph.Filter{
+		FilterType: graph.FilterExternalAuth,
+		ExternalAuth: &v1.HTTPExternalAuthFilter{
+			ExternalAuthProtocol: v1.HTTPRouteExternalAuthHTTPProtocol,
+			BackendRef: v1.BackendObjectReference{
+				Name: "auth-svc",
+				Port: &port,
+			},
+		},
+	}
+
+	validBackendRef := graph.BackendRef{
+		SvcNsName:             types.NamespacedName{Namespace: "default", Name: "auth-svc"},
+		ServicePort:           apiv1.ServicePort{Port: 80},
+		Valid:                 true,
+		IsExternalAuthBackend: true,
+	}
+
+	invalidBackendRef := graph.BackendRef{
+		SvcNsName:             types.NamespacedName{Namespace: "default", Name: "auth-svc"},
+		ServicePort:           apiv1.ServicePort{Port: 80},
+		Valid:                 false,
+		IsExternalAuthBackend: true,
+	}
+
+	routeNsName := types.NamespacedName{Namespace: "test", Name: "route1"}
+	gwNsName := types.NamespacedName{Namespace: "default", Name: "gw"}
+
+	tests := []struct {
+		msg         string
+		backendRefs []graph.BackendRef
+		expectNil   bool
+	}{
+		{
+			msg:         "valid external auth backend ref produces ExternalAuthFilter",
+			backendRefs: []graph.BackendRef{validBackendRef},
+			expectNil:   false,
+		},
+		{
+			msg:         "invalid external auth backend ref is skipped and ExternalAuthFilter is nil",
+			backendRefs: []graph.BackendRef{invalidBackendRef},
+			expectNil:   true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.msg, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			result := createHTTPFilters(
+				[]graph.Filter{extAuthFilter},
+				0,
+				routeNsName,
+				nil,
+				test.backendRefs,
+				gwNsName,
+			)
+
+			if test.expectNil {
+				g.Expect(result.ExternalAuthFilter).To(BeNil())
+			} else {
+				g.Expect(result.ExternalAuthFilter).ToNot(BeNil())
+				g.Expect(result.ExternalAuthFilter.UpstreamName).To(Equal("default_auth-svc_80"))
+			}
 		})
 	}
 }
