@@ -168,6 +168,7 @@ const (
 // PrometheusInstance represents a Prometheus instance in the cluster.
 type PrometheusInstance struct {
 	apiClient    v1.API
+	doneCh       chan struct{}
 	podIP        string
 	podName      string
 	podNamespace string
@@ -176,6 +177,8 @@ type PrometheusInstance struct {
 }
 
 // PortForward starts port forwarding to the Prometheus instance.
+// The caller must call WaitForPortForwardExit after closing stopCh to ensure the goroutine has exited
+// and the local port has been released.
 func (ins *PrometheusInstance) PortForward(config *rest.Config, stopCh <-chan struct{}) error {
 	GinkgoWriter.Printf("Starting port forwarding to Prometheus pod %q in namespace %q\n", ins.podName, ins.podNamespace)
 	if ins.portForward {
@@ -188,7 +191,20 @@ func (ins *PrometheusInstance) PortForward(config *rest.Config, stopCh <-chan st
 	ins.portForward = true
 
 	ports := []string{fmt.Sprintf("%d:%d", PrometheusPortForwardPort, prometheusAPIPort)}
-	return PortForward(config, ins.podNamespace, ins.podName, ports, stopCh)
+	doneCh, err := PortForward(config, ins.podNamespace, ins.podName, ports, stopCh)
+	if err != nil {
+		return err
+	}
+	ins.doneCh = doneCh
+	return nil
+}
+
+// WaitForPortForwardExit blocks until the port-forward goroutine has fully exited.
+// Call this after closing the stopCh passed to PortForward to ensure the port is released.
+func (ins *PrometheusInstance) WaitForPortForwardExit() {
+	if ins.doneCh != nil {
+		<-ins.doneCh
+	}
 }
 
 func (ins *PrometheusInstance) getAPIClient() (v1.API, error) {

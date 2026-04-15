@@ -40,7 +40,7 @@ var _ = Describe("Tracing", FlakeAttempts(2), Ordered, Label("functional", "trac
 		policySingleFile   = "tracing/policy-single.yaml"
 		policyMultipleFile = "tracing/policy-multiple.yaml"
 
-		namespace = "helloworld"
+		namespace string
 
 		collectorPodName, helloURL, worldURL, helloworldURL string
 	)
@@ -49,7 +49,7 @@ var _ = Describe("Tracing", FlakeAttempts(2), Ordered, Label("functional", "trac
 		ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.UpdateTimeout)
 		defer cancel()
 
-		key := types.NamespacedName{Name: "ngf-test-proxy-config", Namespace: "nginx-gateway"}
+		key := types.NamespacedName{Name: fmt.Sprintf("%s-proxy-config", releaseName), Namespace: ngfNamespace}
 		var nginxProxy ngfAPIv1alpha2.NginxProxy
 		Expect(resourceManager.Get(ctx, key, &nginxProxy)).To(Succeed())
 
@@ -75,6 +75,8 @@ var _ = Describe("Tracing", FlakeAttempts(2), Ordered, Label("functional", "trac
 
 	// BeforeEach is needed because FlakeAttempts do not re-run BeforeAll/AfterAll nodes
 	BeforeEach(func() {
+		namespace = fmt.Sprintf("helloworld-%d", GinkgoParallelProcess())
+
 		ns := &core.Namespace{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: namespace,
@@ -157,19 +159,19 @@ var _ = Describe("Tracing", FlakeAttempts(2), Ordered, Label("functional", "trac
 
 		logs, err := resourceManager.GetPodLogs(framework.CollectorNamespace, collectorPodName, &core.PodLogOptions{})
 		Expect(err).ToNot(HaveOccurred())
-		return strings.Contains(logs, "service.name: Str(ngf:helloworld:gateway:my-test-svc)")
+		return strings.Contains(logs, fmt.Sprintf("service.name: Str(ngf:%s:gateway:my-test-svc)", namespace))
 	}
 
 	checkStatusAndTraces := func() {
 		Eventually(
 			verifyGatewayClassResolvedRefs).
-			WithTimeout(timeoutConfig.GetTimeout).
+			WithTimeout(timeoutConfig.GetStatusTimeout).
 			WithPolling(500 * time.Millisecond).
 			Should(Succeed())
 
 		Eventually(
-			verifyPolicyStatus).
-			WithTimeout(timeoutConfig.GetTimeout).
+			func() error { return verifyPolicyStatus(namespace) }).
+			WithTimeout(timeoutConfig.GetStatusTimeout).
 			WithPolling(500 * time.Millisecond).
 			Should(Succeed())
 
@@ -183,7 +185,7 @@ var _ = Describe("Tracing", FlakeAttempts(2), Ordered, Label("functional", "trac
 		// verify that no traces exist yet
 		logs, err := resourceManager.GetPodLogs(framework.CollectorNamespace, collectorPodName, &core.PodLogOptions{})
 		Expect(err).ToNot(HaveOccurred())
-		Expect(logs).ToNot(ContainSubstring("service.name: Str(ngf:helloworld:gateway:my-test-svc)"))
+		Expect(logs).ToNot(ContainSubstring(fmt.Sprintf("service.name: Str(ngf:%s:gateway:my-test-svc)", namespace)))
 
 		// install tracing configuration
 		traceFiles := []string{
@@ -258,13 +260,13 @@ func verifyGatewayClassResolvedRefs() error {
 	return statusErr
 }
 
-func verifyPolicyStatus() error {
+func verifyPolicyStatus(namespace string) error {
 	GinkgoWriter.Println("Verifying ObservabilityPolicy status\n")
 	ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.GetTimeout)
 	defer cancel()
 
 	var pol ngfAPIv1alpha2.ObservabilityPolicy
-	key := types.NamespacedName{Name: "test-observability-policy", Namespace: "helloworld"}
+	key := types.NamespacedName{Name: "test-observability-policy", Namespace: namespace}
 	if err := resourceManager.Get(ctx, key, &pol); err != nil {
 		return err
 	}
