@@ -230,6 +230,21 @@ func (h *eventHandlerImpl) sendNginxConfig(ctx context.Context, logger logr.Logg
 			continue
 		}
 
+		if gatewayHasPendingWAFBundle(gr, gw) {
+			// Fail-closed: a WAF bundle for this Gateway has not yet been fetched.
+			// Withhold the config push rather than serve without WAF protection.
+			// Enqueue a status update so the pending condition is visible to the operator.
+			obj := &status.QueueObject{
+				UpdateType: status.UpdateAll,
+				Deployment: status.Deployment{
+					NamespacedName: gw.DeploymentName,
+					GatewayName:    gw.Source.GetName(),
+				},
+			}
+			h.cfg.statusQueue.Enqueue(obj)
+			continue
+		}
+
 		deployment := h.cfg.nginxDeployments.GetOrStore(ctx, gw.DeploymentName, gw.Source.GetName())
 		if deployment == nil {
 			panic("expected deployment, got nil")
@@ -362,6 +377,51 @@ func (h *eventHandlerImpl) reconcileWAFPollers(ctx context.Context, gr *graph.Gr
 
 	// Stop pollers for policies that are no longer in the graph.
 	h.cfg.wafPollerManager.StopPollersNotIn(activePolicies)
+}
+
+// gatewayHasPendingWAFBundle returns true if any WAFGatewayBindingPolicy that targets this Gateway
+// (directly or via an attached route) has BundlePending=true.
+// When true, the Gateway config push must be withheld to maintain fail-closed posture.
+func gatewayHasPendingWAFBundle(gr *graph.Graph, gw *graph.Gateway) bool {
+	gwNsName := types.NamespacedName{
+		Namespace: gw.Source.GetNamespace(),
+		Name:      gw.Source.GetName(),
+	}
+
+	for key, policy := range gr.NGFPolicies {
+		if key.GVK.Kind != kinds.WAFGatewayBindingPolicy {
+			continue
+		}
+		if policy.WAFState == nil || !policy.WAFState.BundlePending {
+			continue
+		}
+		if _, invalid := policy.InvalidForGateways[gwNsName]; invalid {
+			continue
+		}
+		for _, ref := range policy.TargetRefs {
+			switch ref.Kind {
+			case kinds.Gateway:
+				if ref.Nsname == gwNsName {
+					return true
+				}
+			case kinds.HTTPRoute, kinds.GRPCRoute:
+				routeKey := graph.RouteKey{
+					NamespacedName: ref.Nsname,
+					RouteType:      routeTypeForKind(ref.Kind),
+				}
+				route, exists := gr.Routes[routeKey]
+				if !exists || !route.Valid {
+					continue
+				}
+				for _, parentRef := range route.ParentRefs {
+					if parentRef.Gateway != nil && parentRef.Gateway.NamespacedName == gwNsName {
+						return true
+					}
+				}
+			}
+		}
+	}
+	return false
 }
 
 // collectPolicyTargetDeployments returns the unique set of deployment names that a policy targets.
@@ -688,6 +748,14 @@ func (h *eventHandlerImpl) parseAndCaptureEvent(ctx context.Context, logger logr
 		}
 
 		h.cfg.processor.CaptureDeleteChange(e.Type, e.NamespacedName)
+	case events.WAFBundleReconcileEvent:
+		logger.V(1).Info("WAF bundle now available, triggering re-reconcile", "policy", e.PolicyNsName)
+		// Mark the processor dirty so Process() performs a graph rebuild even if this is the
+		// only event in the batch. Without this, clusterStateChanged=false causes Process() to
+		// return nil and the pending Gateway is never unblocked.
+		// We do not call CaptureUpsertChange here because that would overwrite the real policy
+		// object in cluster state with a metadata-only stub, corrupting the next graph build.
+		h.cfg.processor.ForceRebuild()
 	default:
 		panic(fmt.Errorf("unknown event type %T", e))
 	}

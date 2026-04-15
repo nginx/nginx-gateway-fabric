@@ -195,7 +195,7 @@ func StartManager(cfg config.Config) error {
 		return err
 	}
 
-	wafPollerManager = createWAFPollerManager(cfg, wafFetcher, nginxUpdater, statusQueue)
+	wafPollerManager = createWAFPollerManager(ctx, cfg, wafFetcher, nginxUpdater, statusQueue, eventCh)
 
 	eventHandler := newEventHandlerImpl(eventHandlerConfig{
 		ctx:              ctx,
@@ -361,10 +361,12 @@ func createAndRegisterProvisioner(
 // createWAFPollerManager creates a WAF polling manager if Plus is enabled.
 // Returns nil when Plus is not enabled.
 func createWAFPollerManager(
+	ctx context.Context,
 	cfg config.Config,
 	wafFetcher fetch.Fetcher,
 	nginxUpdater *agent.NginxUpdaterImpl,
 	statusQueue *status.Queue,
+	eventCh chan<- any,
 ) wafpolling.PollerManager {
 	if !cfg.Plus {
 		return nil
@@ -374,6 +376,8 @@ func createWAFPollerManager(
 		Logger:      cfg.Logger.WithName("wafPollingManager"),
 		Fetcher:     wafFetcher,
 		Deployments: nginxUpdater.NginxDeployments,
+		EventCh:     eventCh,
+		Ctx:         ctx,
 		StatusCallback: func(targets []types.NamespacedName) {
 			for _, nsName := range targets {
 				dep := nginxUpdater.NginxDeployments.Get(nsName)

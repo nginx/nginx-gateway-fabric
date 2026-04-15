@@ -49,6 +49,10 @@ type ChangeProcessor interface {
 	Process(ctx context.Context) (graphCfg *graph.Graph)
 	// GetLatestGraph returns the latest Graph.
 	GetLatestGraph() *graph.Graph
+	// ForceRebuild forces the next Process() call to perform a full graph rebuild,
+	// without modifying the cluster state. Used when an external event (e.g. a WAF bundle
+	// becoming available) must trigger a rebuild without an accompanying resource change.
+	ForceRebuild()
 }
 
 // ChangeProcessorConfig holds configuration parameters for ChangeProcessorImpl.
@@ -93,6 +97,8 @@ type ChangeProcessorImpl struct {
 	updater Updater
 	// getAndResetClusterStateChanged tells if and how the cluster state has changed.
 	getAndResetClusterStateChanged func() bool
+	// forceClusterStateRebuild forces the changed flag to true without modifying cluster state.
+	forceClusterStateRebuild func()
 
 	cfg  ChangeProcessorConfig
 	lock sync.Mutex
@@ -283,6 +289,7 @@ func NewChangeProcessorImpl(cfg ChangeProcessorConfig) *ChangeProcessorImpl {
 	)
 
 	processor.getAndResetClusterStateChanged = trackingUpdater.getAndResetChangedStatus
+	processor.forceClusterStateRebuild = trackingUpdater.forceRebuild
 	processor.updater = trackingUpdater
 
 	return processor
@@ -315,6 +322,14 @@ func (c *ChangeProcessorImpl) CaptureDeleteChange(resourceType ngftypes.ObjectTy
 	defer c.lock.Unlock()
 
 	c.updater.Delete(resourceType, nsname)
+}
+
+// ForceRebuild forces the next Process() call to rebuild the graph without modifying cluster state.
+func (c *ChangeProcessorImpl) ForceRebuild() {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	c.forceClusterStateRebuild()
 }
 
 func (c *ChangeProcessorImpl) Process(ctx context.Context) *graph.Graph {

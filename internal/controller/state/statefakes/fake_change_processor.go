@@ -24,6 +24,10 @@ type FakeChangeProcessor struct {
 	captureUpsertChangeArgsForCall []struct {
 		arg1 client.Object
 	}
+	ForceRebuildStub        func()
+	forceRebuildMutex       sync.RWMutex
+	forceRebuildArgsForCall []struct {
+	}
 	GetLatestGraphStub        func() *graph.Graph
 	getLatestGraphMutex       sync.RWMutex
 	getLatestGraphArgsForCall []struct {
@@ -112,6 +116,30 @@ func (fake *FakeChangeProcessor) CaptureUpsertChangeArgsForCall(i int) client.Ob
 	defer fake.captureUpsertChangeMutex.RUnlock()
 	argsForCall := fake.captureUpsertChangeArgsForCall[i]
 	return argsForCall.arg1
+}
+
+func (fake *FakeChangeProcessor) ForceRebuild() {
+	fake.forceRebuildMutex.Lock()
+	fake.forceRebuildArgsForCall = append(fake.forceRebuildArgsForCall, struct {
+	}{})
+	stub := fake.ForceRebuildStub
+	fake.recordInvocation("ForceRebuild", []interface{}{})
+	fake.forceRebuildMutex.Unlock()
+	if stub != nil {
+		fake.ForceRebuildStub()
+	}
+}
+
+func (fake *FakeChangeProcessor) ForceRebuildCallCount() int {
+	fake.forceRebuildMutex.RLock()
+	defer fake.forceRebuildMutex.RUnlock()
+	return len(fake.forceRebuildArgsForCall)
+}
+
+func (fake *FakeChangeProcessor) ForceRebuildCalls(stub func()) {
+	fake.forceRebuildMutex.Lock()
+	defer fake.forceRebuildMutex.Unlock()
+	fake.ForceRebuildStub = stub
 }
 
 func (fake *FakeChangeProcessor) GetLatestGraph() *graph.Graph {
