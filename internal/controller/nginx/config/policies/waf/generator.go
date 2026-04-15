@@ -80,7 +80,7 @@ func generate(pols []policies.Policy) policies.GenerateResultFiles {
 				logEntry := map[string]string{}
 
 				switch {
-				case secLog.LogSource.HTTPSource != nil || secLog.LogSource.NIMSource != nil:
+				case secLog.LogSource.HTTPSource != nil || secLog.LogSource.NIMSource != nil || secLog.LogSource.N1CSource != nil:
 					bundleName := graph.LogBundleKey(
 						types.NamespacedName{Namespace: pol.GetNamespace(), Name: pol.GetName()},
 						&secLog.LogSource,
