@@ -254,6 +254,9 @@ spec:
               securityLogs:
                 description: SecurityLogs defines security logging configurations.
                 items:
+                  description: |-
+                    WAFSecurityLog defines security logging configuration for app_protect_security_log directives.
+                    Exactly one of logSource.defaultProfile, logSource.httpSource, logSource.nimSource, or logSource.n1cSource must be set.
                   properties:
                     destination:
                       description: Destination defines where security logs are sent.
@@ -336,7 +339,7 @@ spec:
                         defaultProfile:
                           description: |-
                             DefaultProfile selects one of the built-in WAF log profile bundles shipped with the WAF engine.
-                            Mutually exclusive with HTTPSource and NIMSource.
+                            Mutually exclusive with HTTPSource, NIMSource, and N1CSource.
                           enum:
                           - log_default
                           - log_all
@@ -349,7 +352,7 @@ spec:
                         httpSource:
                           description: |-
                             HTTPSource configures direct bundle fetching from an HTTP/HTTPS URL.
-                            Mutually exclusive with DefaultProfile and NIMSource.
+                            Mutually exclusive with DefaultProfile, NIMSource and N1CSource.
                           properties:
                             url:
                               description: |-
@@ -367,10 +370,50 @@ spec:
                             InsecureSkipVerify disables TLS certificate verification when fetching the bundle.
                             Not recommended for production use.
                           type: boolean
+                        n1cSource:
+                          description: |-
+                            N1CSource configures bundle fetching from F5 NGINX One Console.
+                            Mutually exclusive with DefaultProfile, HTTPSource, and NIMSource.
+                          properties:
+                            namespace:
+                              description: Namespace is the NGINX One Console namespace
+                                that owns the log profile.
+                              maxLength: 253
+                              minLength: 1
+                              type: string
+                            profileName:
+                              description: ProfileName is the name of the log profile
+                                in N1C that corresponds to the log profile bundle.
+                              maxLength: 253
+                              minLength: 1
+                              type: string
+                            profileObjectID:
+                              description: |-
+                                ProfileObjectID is the unique object identifier of the log profile in N1C
+                                (e.g. "lp_8s8uZxLpThWwEGF7LTn_rA") that corresponds to the log profile bundle.
+                              pattern: ^lp_[A-Za-z0-9_-]+$
+                              type: string
+                            url:
+                              description: |-
+                                URL is the base URL of the F5 NGINX One Console instance,
+                                e.g. "https://<tenant>.volterra.us".
+                              maxLength: 2083
+                              minLength: 1
+                              pattern: ^https?://
+                              type: string
+                          required:
+                          - namespace
+                          - url
+                          type: object
+                          x-kubernetes-validations:
+                          - message: exactly one of profileName or profileObjectID
+                              must be set
+                            rule: (has(self.profileName) && !has(self.profileObjectID))
+                              || (!has(self.profileName) && has(self.profileObjectID))
                         nimSource:
                           description: |-
                             NIMSource configures bundle fetching from NGINX Instance Manager.
-                            Mutually exclusive with DefaultProfile and HTTPSource.
+                            Mutually exclusive with DefaultProfile, HTTPSource and N1CSource.
                           properties:
                             profileName:
                               description: ProfileName is the name of the compiled
@@ -468,11 +511,13 @@ spec:
                       type: object
                       x-kubernetes-validations:
                       - message: exactly one of logSource.defaultProfile, logSource.httpSource,
-                          or logSource.nimSource must be set
+                          logSource.nimSource, or logSource.n1cSource must be set
                         rule: (has(self.defaultProfile) && !has(self.httpSource) &&
-                          !has(self.nimSource)) || (!has(self.defaultProfile) && has(self.httpSource)
-                          && !has(self.nimSource)) || (!has(self.defaultProfile) &&
-                          !has(self.httpSource) && has(self.nimSource))
+                          !has(self.nimSource) && !has(self.n1cSource)) || (!has(self.defaultProfile)
+                          && has(self.httpSource) && !has(self.nimSource) && !has(self.n1cSource))
+                          || (!has(self.defaultProfile) && !has(self.httpSource) &&
+                          has(self.nimSource) && !has(self.n1cSource)) || (!has(self.defaultProfile)
+                          && !has(self.httpSource) && !has(self.nimSource) && has(self.n1cSource))
                   required:
                   - destination
                   - logSource

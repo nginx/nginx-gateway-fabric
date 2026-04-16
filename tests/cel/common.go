@@ -89,14 +89,17 @@ const (
 	expectedWAFFileIfAndOnlyIfFileTypeError = "destination.file must be set if and only if type is file"
 	expectedWAFSyslogIfAndOnlyIfSyslogType  = "destination.syslog must be set if and only if type is syslog"
 	//nolint: lll
-	expectedWAFLogSourceMutualExclusionError  = "exactly one of logSource.defaultProfile, logSource.httpSource, or logSource.nimSource must be set"
-	expectedWAFValidationMutualExclusionError = "verifyChecksum and expectedChecksum are mutually exclusive"
-	expectedWAFVerifyChecksumHTTPOnlyError    = "policySource.validation.verifyChecksum is only supported for type HTTP"
-	expectedWAFNIMSourceIfAndOnlyIfNIMType    = "policySource.nimSource must be set if and only if type is NIM"
-	expectedWAFN1CSourceIfAndOnlyIfN1CType    = "policySource.n1cSource must be set if and only if type is N1C"
-	expectedWAFNIMPolicyUIDPatternError       = `^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`
-	expectedWAFN1CPolicyObjectIDPatternError  = `^pol_[A-Za-z0-9_-]+$`
-	expectedWAFN1CPolicyVersionIDPatternError = `^pv_[A-Za-z0-9_-]+$`
+	expectedWAFLogSourceMutualExclusionError = "exactly one of logSource.defaultProfile, logSource.httpSource, logSource.nimSource, or logSource.n1cSource must be set"
+
+	expectedWAFN1CLogProfileMutualExclusionError = "exactly one of profileName or profileObjectID must be set"
+	expectedWAFN1CLogProfileObjectIDPatternError = `^lp_[A-Za-z0-9_-]+$`
+	expectedWAFValidationMutualExclusionError    = "verifyChecksum and expectedChecksum are mutually exclusive"
+	expectedWAFVerifyChecksumHTTPOnlyError       = "policySource.validation.verifyChecksum is only supported for type HTTP"
+	expectedWAFNIMSourceIfAndOnlyIfNIMType       = "policySource.nimSource must be set if and only if type is NIM"
+	expectedWAFN1CSourceIfAndOnlyIfN1CType       = "policySource.n1cSource must be set if and only if type is N1C"
+	expectedWAFNIMPolicyUIDPatternError          = `^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`
+	expectedWAFN1CPolicyObjectIDPatternError     = `^pol_[A-Za-z0-9_-]+$`
+	expectedWAFN1CPolicyVersionIDPatternError    = `^pv_[A-Za-z0-9_-]+$`
 
 	// Namespace for tests.
 	defaultNamespace = "default"

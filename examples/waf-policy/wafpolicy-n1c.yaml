@@ -24,5 +24,11 @@ spec:
         syslog:
           server: syslog-svc.default.svc.cluster.local:514
       logSource:
-        # Use one of the built-in log profiles:
-        defaultProfile: log_illegal
+        n1cSource:
+          url: https://<tenant>.volterra.us
+          namespace: default  # N1C namespace the log profile belongs to
+          # profileName: "ngfExample"
+          profileObjectID: "lp_8s8uZxLpThWwEGF7LTn_rA"
+        auth:
+          secretRef:
+            name: n1c-credentials

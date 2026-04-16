@@ -405,8 +405,8 @@ func collectPolicyTargetDeployments(
 				continue
 			}
 			for _, parentRef := range route.ParentRefs {
-				if parentRef.Gateway != nil {
-					addGateway(parentRef.Gateway.NamespacedName)
+				if parentRef.Kind == kinds.Gateway {
+					addGateway(parentRef.NamespacedName)
 				}
 			}
 		}

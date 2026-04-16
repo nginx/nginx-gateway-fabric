@@ -681,6 +681,24 @@ func TestWAFGatewayBindingPolicyLogSourceMutualExclusion(t *testing.T) {
 			},
 		},
 		{
+			name: "n1cSource only is valid",
+			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
+				SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
+					{
+						LogSource: ngfAPIv1alpha1.LogSource{
+							N1CSource: &ngfAPIv1alpha1.N1CLogProfileBundleSource{
+								URL:         logURL,
+								Namespace:   "my-namespace",
+								ProfileName: &profileName,
+							},
+						},
+						Destination: ngfAPIv1alpha1.SecurityLogDestination{Type: ngfAPIv1alpha1.SecurityLogDestinationTypeStderr},
+					},
+				},
+			},
+		},
+		{
 			name:       "both httpSource and defaultProfile set is invalid",
 			wantErrors: []string{expectedWAFLogSourceMutualExclusionError},
 			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
@@ -722,6 +740,69 @@ func TestWAFGatewayBindingPolicyLogSourceMutualExclusion(t *testing.T) {
 						LogSource: ngfAPIv1alpha1.LogSource{
 							HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: logURL},
 							NIMSource:  &ngfAPIv1alpha1.NIMLogProfileBundleSource{URL: logURL, ProfileName: profileName},
+						},
+						Destination: ngfAPIv1alpha1.SecurityLogDestination{Type: ngfAPIv1alpha1.SecurityLogDestinationTypeStderr},
+					},
+				},
+			},
+		},
+		{
+			name:       "both n1cSource and defaultProfile set is invalid",
+			wantErrors: []string{expectedWAFLogSourceMutualExclusionError},
+			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
+				SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
+					{
+						LogSource: ngfAPIv1alpha1.LogSource{
+							N1CSource: &ngfAPIv1alpha1.N1CLogProfileBundleSource{
+								URL:         logURL,
+								Namespace:   "my-namespace",
+								ProfileName: &profileName,
+							},
+							DefaultProfile: &defaultProfile,
+						},
+						Destination: ngfAPIv1alpha1.SecurityLogDestination{Type: ngfAPIv1alpha1.SecurityLogDestinationTypeStderr},
+					},
+				},
+			},
+		},
+		{
+			name:       "both n1cSource and httpSource set is invalid",
+			wantErrors: []string{expectedWAFLogSourceMutualExclusionError},
+			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
+				SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
+					{
+						LogSource: ngfAPIv1alpha1.LogSource{
+							N1CSource: &ngfAPIv1alpha1.N1CLogProfileBundleSource{
+								URL:         logURL,
+								Namespace:   "my-namespace",
+								ProfileName: &profileName,
+							},
+							HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: logURL},
+						},
+						Destination: ngfAPIv1alpha1.SecurityLogDestination{Type: ngfAPIv1alpha1.SecurityLogDestinationTypeStderr},
+					},
+				},
+			},
+		},
+		{
+			name:       "both n1cSource and nimSource set is invalid",
+			wantErrors: []string{expectedWAFLogSourceMutualExclusionError},
+			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
+				SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
+					{
+						LogSource: ngfAPIv1alpha1.LogSource{
+							N1CSource: &ngfAPIv1alpha1.N1CLogProfileBundleSource{
+								URL:         logURL,
+								Namespace:   "my-namespace",
+								ProfileName: &profileName,
+							},
+							NIMSource: &ngfAPIv1alpha1.NIMLogProfileBundleSource{
+								URL:         logURL,
+								ProfileName: profileName,
+							},
 						},
 						Destination: ngfAPIv1alpha1.SecurityLogDestination{Type: ngfAPIv1alpha1.SecurityLogDestinationTypeStderr},
 					},
@@ -1253,6 +1334,168 @@ func TestWAFGatewayBindingPolicyN1CPolicyVersionID(t *testing.T) {
 						PolicyName:      helpers.GetPointer("my-policy"),
 						PolicyVersionID: helpers.GetPointer("pv_invalid!chars"),
 						Namespace:       namespace,
+					},
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			for i := range tt.spec.TargetRefs {
+				if tt.spec.TargetRefs[i].Name == "" {
+					tt.spec.TargetRefs[i].Name = gatewayv1.ObjectName(uniqueResourceName(testTargetRefName))
+				}
+			}
+			validateCrd(t, tt.wantErrors, newWAFGatewayBindingPolicy(t, tt.spec), k8sClient)
+		})
+	}
+}
+
+func TestWAFGatewayBindingPolicyN1CLogProfileObjectID(t *testing.T) {
+	t.Parallel()
+	k8sClient := getKubernetesClient(t)
+
+	n1cLogSource := func(profileObjectID string) ngfAPIv1alpha1.LogSource {
+		return ngfAPIv1alpha1.LogSource{
+			N1CSource: &ngfAPIv1alpha1.N1CLogProfileBundleSource{
+				URL:             "https://n1c.example.com",
+				Namespace:       "my-namespace",
+				ProfileObjectID: helpers.GetPointer(profileObjectID),
+			},
+		}
+	}
+
+	tests := []struct {
+		spec       ngfAPIv1alpha1.WAFGatewayBindingPolicySpec
+		name       string
+		wantErrors []string
+	}{
+		{
+			name: "valid lp_ ID is accepted",
+			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
+				SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
+					{
+						LogSource:   n1cLogSource("lp_8s8uZxLpThWwEGF7LTn_rA"),
+						Destination: ngfAPIv1alpha1.SecurityLogDestination{Type: ngfAPIv1alpha1.SecurityLogDestinationTypeStderr},
+					},
+				},
+			},
+		},
+		{
+			name:       "missing lp_ prefix is rejected",
+			wantErrors: []string{expectedWAFN1CLogProfileObjectIDPatternError},
+			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
+				SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
+					{
+						LogSource:   n1cLogSource("8s8uZxLpThWwEGF7LTn_rA"),
+						Destination: ngfAPIv1alpha1.SecurityLogDestination{Type: ngfAPIv1alpha1.SecurityLogDestinationTypeStderr},
+					},
+				},
+			},
+		},
+		{
+			name:       "invalid characters in lp_ ID are rejected",
+			wantErrors: []string{expectedWAFN1CLogProfileObjectIDPatternError},
+			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
+				SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
+					{
+						LogSource:   n1cLogSource("lp_invalid!chars"),
+						Destination: ngfAPIv1alpha1.SecurityLogDestination{Type: ngfAPIv1alpha1.SecurityLogDestinationTypeStderr},
+					},
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			for i := range tt.spec.TargetRefs {
+				if tt.spec.TargetRefs[i].Name == "" {
+					tt.spec.TargetRefs[i].Name = gatewayv1.ObjectName(uniqueResourceName(testTargetRefName))
+				}
+			}
+			validateCrd(t, tt.wantErrors, newWAFGatewayBindingPolicy(t, tt.spec), k8sClient)
+		})
+	}
+}
+
+func TestWAFGatewayBindingPolicyN1CLogProfileNameOrObjectID(t *testing.T) {
+	t.Parallel()
+	k8sClient := getKubernetesClient(t)
+
+	profileName := "my-log-profile"
+	profileObjectID := "lp_8s8uZxLpThWwEGF7LTn_rA"
+
+	n1cLogSource := func(src ngfAPIv1alpha1.N1CLogProfileBundleSource) ngfAPIv1alpha1.LogSource {
+		return ngfAPIv1alpha1.LogSource{N1CSource: &src}
+	}
+
+	tests := []struct {
+		spec       ngfAPIv1alpha1.WAFGatewayBindingPolicySpec
+		name       string
+		wantErrors []string
+	}{
+		{
+			name: "profileName only is valid",
+			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
+				SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
+					{
+						LogSource: n1cLogSource(ngfAPIv1alpha1.N1CLogProfileBundleSource{
+							URL: "https://n1c.example.com", Namespace: "my-namespace", ProfileName: &profileName,
+						}),
+						Destination: ngfAPIv1alpha1.SecurityLogDestination{Type: ngfAPIv1alpha1.SecurityLogDestinationTypeStderr},
+					},
+				},
+			},
+		},
+		{
+			name: "profileObjectID only is valid",
+			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
+				SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
+					{
+						LogSource: n1cLogSource(ngfAPIv1alpha1.N1CLogProfileBundleSource{
+							URL: "https://n1c.example.com", Namespace: "my-namespace", ProfileObjectID: &profileObjectID,
+						}),
+						Destination: ngfAPIv1alpha1.SecurityLogDestination{Type: ngfAPIv1alpha1.SecurityLogDestinationTypeStderr},
+					},
+				},
+			},
+		},
+		{
+			name:       "both profileName and profileObjectID set is invalid",
+			wantErrors: []string{expectedWAFN1CLogProfileMutualExclusionError},
+			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
+				SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
+					{
+						LogSource: n1cLogSource(ngfAPIv1alpha1.N1CLogProfileBundleSource{
+							URL: "https://n1c.example.com", Namespace: "my-namespace",
+							ProfileName: &profileName, ProfileObjectID: &profileObjectID,
+						}),
+						Destination: ngfAPIv1alpha1.SecurityLogDestination{Type: ngfAPIv1alpha1.SecurityLogDestinationTypeStderr},
+					},
+				},
+			},
+		},
+		{
+			name:       "neither profileName nor profileObjectID set is invalid",
+			wantErrors: []string{expectedWAFN1CLogProfileMutualExclusionError},
+			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
+				SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
+					{
+						LogSource: n1cLogSource(ngfAPIv1alpha1.N1CLogProfileBundleSource{
+							URL: "https://n1c.example.com", Namespace: "my-namespace",
+						}),
+						Destination: ngfAPIv1alpha1.SecurityLogDestination{Type: ngfAPIv1alpha1.SecurityLogDestinationTypeStderr},
 					},
 				},
 			},

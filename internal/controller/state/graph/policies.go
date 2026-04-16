@@ -98,7 +98,11 @@ func PolicyBundleKey(policyNsName types.NamespacedName) WAFBundleKey {
 }
 
 // LogBundleKey returns the WAFBundleKey for a SecurityLog entry's bundle.
-// The key embeds a truncated SHA-256 hash of the URL so that each log source URL is uniquely identified.
+// The key for NIM is formatted as "<namespace>_<policyName>_log_<nimUrlHash>_<nimProfileName>", where nimUrlHash is a truncated SHA-256 hex digest of the NIM instance URL.
+// The key for N1C is formatted as "<namespace>_<policyName>_log_<n1cUrlHash>_<n1cNamespace>_<n1cProfileIdentifier>", where n1cUrlHash is a truncated SHA-256 hex digest of the N1C instance URL, and n1cProfileIdentifier is either the ProfileObjectID or ProfileName (if ObjectID is not set).
+// The key for HTTP is formatted as "<namespace>_<policyName>_log_<httpUrlHash>", where httpUrlHash is a truncated SHA-256 hex digest of the HTTP URL.
+//
+//nolint:lll
 func LogBundleKey(policyNsName types.NamespacedName, logSource *ngfAPIv1alpha1.LogSource) WAFBundleKey {
 	if logSource.NIMSource != nil && logSource.NIMSource.URL != "" {
 		return WAFBundleKey(
@@ -107,6 +111,24 @@ func LogBundleKey(policyNsName types.NamespacedName, logSource *ngfAPIv1alpha1.L
 				policyNsName.Namespace, policyNsName.Name,
 				helpers.URLHash(logSource.NIMSource.URL),
 				logSource.NIMSource.ProfileName,
+			),
+		)
+	}
+
+	if logSource.N1CSource != nil {
+		profileIdentifier := ""
+		if logSource.N1CSource.ProfileObjectID != nil {
+			profileIdentifier = *logSource.N1CSource.ProfileObjectID
+		} else if logSource.N1CSource.ProfileName != nil {
+			profileIdentifier = *logSource.N1CSource.ProfileName
+		}
+		return WAFBundleKey(
+			fmt.Sprintf(
+				"%s_%s_log_%s_%s_%s",
+				policyNsName.Namespace, policyNsName.Name,
+				helpers.URLHash(logSource.N1CSource.URL),
+				logSource.N1CSource.Namespace,
+				profileIdentifier,
 			),
 		)
 	}
@@ -902,14 +924,29 @@ func BuildLogFetchRequest(
 		RetryAttempts:      retryAttempts(logSource.RetryAttempts),
 	}
 
-	if logSource.NIMSource != nil {
+	switch {
+	case logSource.NIMSource != nil:
 		if logSource.NIMSource.URL != "" {
 			req.URL = logSource.NIMSource.URL
 		}
 		if logSource.NIMSource.ProfileName != "" {
-			req.NIMProfileName = logSource.NIMSource.ProfileName
+			req.LogProfileName = logSource.NIMSource.ProfileName
 		}
-	} else if logSource.HTTPSource != nil {
+	case logSource.N1CSource != nil:
+		req.URL = logSource.N1CSource.URL
+		req.N1C.Namespace = logSource.N1CSource.Namespace
+		if logSource.N1CSource.ProfileObjectID != nil {
+			req.N1C.LogProfileObjectID = *logSource.N1CSource.ProfileObjectID
+		}
+		if logSource.N1CSource.ProfileName != nil {
+			req.LogProfileName = *logSource.N1CSource.ProfileName
+		}
+		// N1C uses the APIToken auth scheme rather than Bearer.
+		// Move the token value from BearerToken to APIToken.
+		if auth != nil && auth.BearerToken != "" {
+			req.Auth = &fetch.BundleAuth{APIToken: auth.BearerToken}
+		}
+	case logSource.HTTPSource != nil:
 		if logSource.HTTPSource.URL != "" {
 			req.URL = logSource.HTTPSource.URL
 		}
@@ -998,7 +1035,7 @@ func fetchSecurityLogBundles(
 	output *WAFProcessingOutput,
 ) {
 	for _, secLog := range wafPolicy.Spec.SecurityLogs {
-		if secLog.LogSource.HTTPSource == nil && secLog.LogSource.NIMSource == nil {
+		if secLog.LogSource.HTTPSource == nil && secLog.LogSource.NIMSource == nil && secLog.LogSource.N1CSource == nil {
 			// DefaultProfile is used; no bundle to fetch.
 			continue
 		}

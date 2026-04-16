@@ -1797,7 +1797,7 @@ func TestCollectPolicyTargetDeployments(t *testing.T) {
 				{NamespacedName: routeNsName, RouteType: graph.RouteTypeHTTP}: {
 					Valid: true,
 					ParentRefs: []graph.ParentRef{
-						{Gateway: &graph.ParentRefGateway{NamespacedName: gwNsName}},
+						{Kind: kinds.Gateway, NamespacedName: gwNsName},
 					},
 				},
 			},
@@ -1849,7 +1849,7 @@ func TestCollectPolicyTargetDeployments(t *testing.T) {
 				{NamespacedName: routeNsName, RouteType: graph.RouteTypeHTTP}: {
 					Valid: true,
 					ParentRefs: []graph.ParentRef{
-						{Gateway: &graph.ParentRefGateway{NamespacedName: gwNsName}},
+						{Kind: kinds.Gateway, NamespacedName: gwNsName},
 					},
 				},
 			},
