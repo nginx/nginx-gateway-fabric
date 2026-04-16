@@ -205,6 +205,7 @@ type SSL struct {
 	// Multiple IDs allow nginx to select the appropriate certificate via SNI.
 	KeyPairIDs []SSLKeyPairID
 	// RequireVerifiedCert specifies whether to require a any (valid or invalid) client certificate for the server.
+	// When true, NGINX will return 444 and close the connection for non-trusted clients.
 	RequireVerifiedCert bool
 	// PreferServerCiphers specifies whether server ciphers should be preferred over client ciphers.
 	PreferServerCiphers bool

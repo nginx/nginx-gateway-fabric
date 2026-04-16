@@ -1985,7 +1985,7 @@ func TestCreateFrontendTLSCaCertReferenceResolver(t *testing.T) {
 				g.Expect(test.listener.CACertificateRefs).To(HaveLen(len(test.expectedCACertRefNames)))
 				actualRefNames := make([]string, 0, len(test.listener.CACertificateRefs))
 				for _, ref := range test.listener.CACertificateRefs {
-					actualRefNames = append(actualRefNames, ref.Name)
+					actualRefNames = append(actualRefNames, string(ref.Name))
 				}
 				g.Expect(actualRefNames).To(Equal(test.expectedCACertRefNames))
 			}
@@ -2412,10 +2412,11 @@ func TestCreateFrontendTLSCaCertReferenceResolverConditions(t *testing.T) {
 				},
 			},
 			expectedListenerReasons: []string{
-				string(v1.GatewayReasonRefNotPermitted),
+				string(v1.ListenerReasonRefNotPermitted),
 				string(v1.ListenerReasonNoValidCACertificate),
 			},
-			expectedListenerValid: false,
+			expectedGatewayReasons: []string{string(v1.GatewayReasonRefNotPermitted)},
+			expectedListenerValid:  false,
 		},
 		{
 			name:         "Per-port cross-namespace Secret without ReferenceGrant",
@@ -2434,10 +2435,11 @@ func TestCreateFrontendTLSCaCertReferenceResolverConditions(t *testing.T) {
 				},
 			},
 			expectedListenerReasons: []string{
-				string(v1.GatewayReasonRefNotPermitted),
+				string(v1.ListenerReasonRefNotPermitted),
 				string(v1.ListenerReasonNoValidCACertificate),
 			},
-			expectedListenerValid: false,
+			expectedGatewayReasons: []string{string(v1.GatewayReasonRefNotPermitted)},
+			expectedListenerValid:  false,
 		},
 		{
 			name:         "Per-port precedence: valid Per-port secret ignores Default cross-namespace ConfigMap",
@@ -2494,7 +2496,8 @@ func TestCreateFrontendTLSCaCertReferenceResolverConditions(t *testing.T) {
 					},
 				},
 			},
-			expectedListenerReasons: []string{string(v1.GatewayReasonRefNotPermitted)},
+			expectedListenerReasons: []string{string(v1.ListenerReasonRefNotPermitted)},
+			expectedGatewayReasons:  []string{string(v1.GatewayReasonRefNotPermitted)},
 			expectedListenerValid:   true,
 		},
 		{

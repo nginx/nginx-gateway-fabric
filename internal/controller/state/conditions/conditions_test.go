@@ -254,39 +254,68 @@ func TestNewDefaultListenerConditions(t *testing.T) {
 func TestNewListenerCACertificateConditions(t *testing.T) {
 	t.Parallel()
 
-	t.Run("NewListenerInvalidCaCertificateRef", func(t *testing.T) {
-		t.Parallel()
-		g := NewWithT(t)
+	tests := []struct {
+		name     string
+		newConds func() []Condition
+		expected []Condition
+	}{
+		{
+			name: "NewListenerInvalidCaCertificateRef",
+			newConds: func() []Condition {
+				return []Condition{NewListenerInvalidCaCertificateRef("invalid CA cert ref")}
+			},
+			expected: []Condition{
+				{
+					Type:    string(v1.ListenerConditionResolvedRefs),
+					Status:  metav1.ConditionFalse,
+					Reason:  string(v1.ListenerReasonInvalidCACertificateRef),
+					Message: "invalid CA cert ref",
+				},
+			},
+		},
+		{
+			name: "NewListenerInvalidCaCertificateKind",
+			newConds: func() []Condition {
+				return []Condition{NewListenerInvalidCaCertificateKind("invalid CA cert kind")}
+			},
+			expected: []Condition{
+				{
+					Type:    string(v1.ListenerConditionResolvedRefs),
+					Status:  metav1.ConditionFalse,
+					Reason:  string(v1.ListenerReasonInvalidCACertificateKind),
+					Message: "invalid CA cert kind",
+				},
+			},
+		},
+		{
+			name: "NewListenerInvalidNoValidCACertificate",
+			newConds: func() []Condition {
+				return NewListenerInvalidNoValidCACertificate("all CA certs invalid")
+			},
+			expected: []Condition{
+				{
+					Type:    string(v1.ListenerConditionAccepted),
+					Status:  metav1.ConditionFalse,
+					Reason:  string(v1.ListenerReasonNoValidCACertificate),
+					Message: "all CA certs invalid",
+				},
+				{
+					Type:    string(v1.ListenerConditionProgrammed),
+					Status:  metav1.ConditionFalse,
+					Reason:  string(v1.ListenerReasonInvalid),
+					Message: "all CA certs invalid",
+				},
+			},
+		},
+	}
 
-		cond := NewListenerInvalidCaCertificateRef("invalid CA cert ref")
-		g.Expect(cond.Type).To(Equal(string(v1.ListenerConditionResolvedRefs)))
-		g.Expect(cond.Status).To(Equal(metav1.ConditionFalse))
-		g.Expect(cond.Reason).To(Equal(string(v1.ListenerReasonInvalidCACertificateRef)))
-		g.Expect(cond.Message).To(Equal("invalid CA cert ref"))
-	})
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
 
-	t.Run("NewListenerInvalidCaCertificateKind", func(t *testing.T) {
-		t.Parallel()
-		g := NewWithT(t)
-
-		cond := NewListenerInvalidCaCertificateKind("invalid CA cert kind")
-		g.Expect(cond.Type).To(Equal(string(v1.ListenerConditionResolvedRefs)))
-		g.Expect(cond.Status).To(Equal(metav1.ConditionFalse))
-		g.Expect(cond.Reason).To(Equal(string(v1.ListenerReasonInvalidCACertificateKind)))
-		g.Expect(cond.Message).To(Equal("invalid CA cert kind"))
-	})
-
-	t.Run("NewListenerInvalidNoValidCACertificate", func(t *testing.T) {
-		t.Parallel()
-		g := NewWithT(t)
-
-		conds := NewListenerInvalidNoValidCACertificate("all CA certs invalid")
-		g.Expect(conds).To(HaveLen(2))
-		g.Expect(conds[0].Type).To(Equal(string(v1.ListenerConditionAccepted)))
-		g.Expect(conds[0].Status).To(Equal(metav1.ConditionFalse))
-		g.Expect(conds[0].Reason).To(Equal(string(v1.ListenerReasonNoValidCACertificate)))
-		g.Expect(conds[0].Message).To(Equal("all CA certs invalid"))
-		g.Expect(conds[1].Type).To(Equal(string(v1.ListenerConditionProgrammed)))
-		g.Expect(conds[1].Status).To(Equal(metav1.ConditionFalse))
-	})
+			conds := test.newConds()
+			g.Expect(conds).To(Equal(test.expected))
+		})
+	}
 }

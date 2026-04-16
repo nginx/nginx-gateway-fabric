@@ -1,7 +1,6 @@
 package resolver_test
 
 import (
-	"fmt"
 	"testing"
 
 	. "github.com/onsi/gomega"
@@ -106,7 +105,7 @@ func TestResolve(t *testing.T) {
 			if test.expectedErrMsg == "" {
 				g.Expect(err).ToNot(HaveOccurred())
 			} else {
-				g.Expect(err).To(MatchError(test.expectedErrMsg), fmt.Sprintf("case %q", test.name))
+				g.Expect(err).To(MatchError(test.expectedErrMsg))
 			}
 		})
 	}

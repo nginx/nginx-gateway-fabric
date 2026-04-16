@@ -24,6 +24,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/secrets"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/resolver"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
 
 const (
@@ -468,29 +469,27 @@ func buildFrontendTLSCertBundles(
 		}
 
 		caRefBundleData := make([]CertBundle, 0)
-		if caRefs := listener.CACertificateRefs; len(caRefs) > 0 {
-			for _, ref := range caRefs {
-				bundleData := getFrontendTLSCertBundleData(ref, gateway, secretsMap, caCertConfigMaps)
-				if len(bundleData) > 0 {
-					caRefBundleData = append(caRefBundleData, bundleData)
-				}
+		for _, ref := range listener.CACertificateRefs {
+			bundleData := getFrontendTLSCertBundleData(ref, gateway, secretsMap, caCertConfigMaps)
+			if len(bundleData) > 0 {
+				caRefBundleData = append(caRefBundleData, bundleData)
 			}
-			if len(caRefBundleData) > 0 {
-				id := buildBundlesForSSLServers(caRefBundleData, bundles, listenerRef)
-				buildClientConfigForSSLServers(
-					id,
-					sslServers,
-					listener.Source.Port,
-					listener.ValidationMode,
-				)
-			}
+		}
+		if len(caRefBundleData) > 0 {
+			id := buildBundlesForSSLServers(caRefBundleData, bundles, listenerRef)
+			buildClientConfigForSSLServers(
+				id,
+				sslServers,
+				listener.Source.Port,
+				listener.ValidationMode,
+			)
 		}
 	}
 	return bundles
 }
 
 func getFrontendTLSCertBundleData(
-	ref *types.NamespacedName,
+	ref *v1.ObjectReference,
 	gateway *graph.Gateway,
 	secretsMap map[types.NamespacedName]*secrets.Secret,
 	caCertConfigMaps map[types.NamespacedName]*configmaps.CaCertConfigMap,
@@ -502,29 +501,34 @@ func getFrontendTLSCertBundleData(
 
 	nsName := types.NamespacedName{
 		Namespace: gateway.Source.Namespace,
-		Name:      ref.Name,
+		Name:      string(ref.Name),
 	}
 
-	if secret := secretsMap[nsName]; secret != nil && secret.Source != nil {
-		if secret.Source.Data[secrets.CAKey] != nil {
-			bundleData = secret.Source.Data[secrets.CAKey]
-		}
-	}
-
-	if cm := caCertConfigMaps[nsName]; cm != nil && cm.Source != nil {
-		if cm.Source.Data != nil && cm.Source.Data[secrets.CAKey] != "" {
-			// The cert could be base64 encoded or plaintext
-			raw := []byte(cm.Source.Data[secrets.CAKey])
-			decoded := make([]byte, base64.StdEncoding.DecodedLen(len(raw)))
-			n, err := base64.StdEncoding.Decode(decoded, raw)
-			if err != nil {
-				bundleData = raw
-			} else {
-				bundleData = decoded[:n]
+	switch ref.Kind {
+	case kinds.Secret:
+		if secret := secretsMap[nsName]; secret != nil && secret.Source != nil {
+			if secret.Source.Data[secrets.CAKey] != nil {
+				bundleData = secret.Source.Data[secrets.CAKey]
 			}
 		}
-		if cm.Source.BinaryData != nil {
-			bundleData = cm.Source.BinaryData[secrets.CAKey]
+	case kinds.ConfigMap:
+		if cm := caCertConfigMaps[nsName]; cm != nil && cm.Source != nil {
+			if cm.Source.Data != nil && cm.Source.Data[secrets.CAKey] != "" {
+				// the cert could be base64 encoded or plaintext
+				raw := []byte(cm.Source.Data[secrets.CAKey])
+				decoded := make([]byte, base64.StdEncoding.DecodedLen(len(raw)))
+				n, err := base64.StdEncoding.Decode(decoded, raw)
+				if err != nil {
+					bundleData = raw
+				} else {
+					bundleData = decoded[:n]
+				}
+			}
+			if cm.Source.BinaryData != nil {
+				if data, exists := cm.Source.BinaryData[secrets.CAKey]; exists {
+					bundleData = data
+				}
+			}
 		}
 	}
 

@@ -595,7 +595,7 @@ func NewDefaultListenerConditions(existingConditions []Condition) []Condition {
 // hasNotAcceptedListener checks if the Listener has an Accepted=False condition.
 func hasNotAcceptedListener(conditions []Condition) bool {
 	for _, cond := range conditions {
-		if cond.Type == string(v1.ListenerConditionAccepted) && cond.Status == metav1.ConditionFalse {
+		if cond.Type == string(v1.ListenerConditionAccepted) {
 			return true
 		}
 	}
@@ -605,7 +605,7 @@ func hasNotAcceptedListener(conditions []Condition) bool {
 // hasResolvedRefsConditions checks if the Listener has any ResolvedRefs=False conditions.
 func hasResolvedRefsConditions(conditions []Condition) bool {
 	for _, cond := range conditions {
-		if cond.Type == string(v1.ListenerConditionResolvedRefs) && cond.Status == metav1.ConditionFalse {
+		if cond.Type == string(v1.ListenerConditionResolvedRefs) {
 			return true
 		}
 	}

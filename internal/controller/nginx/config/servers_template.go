@@ -95,9 +95,6 @@ server {
           {{- end }}
           {{- if $s.SSL.RequireVerifiedCert }}
     error_page 495 496 = @frontend_tls_verify_failed;
-    if ($ssl_client_verify != SUCCESS) {
-        return 444;
-    }
           {{- end }}
 
           {{- if $s.MisdirectedRequestVars }}
@@ -132,6 +129,12 @@ server {
         {{- end}}
         {{- if $.RewriteClientIP.Recursive}}
     real_ip_recursive on;
+        {{- end }}
+
+         {{- if and $s.SSL $s.SSL.RequireVerifiedCert }}
+    location @frontend_tls_verify_failed {
+        return 444;
+    }
         {{- end }}
 
         {{ range $l := $s.Locations }}
@@ -253,12 +256,6 @@ server {
                 {{- end }}
             {{- end }}
         {{- end }}
-    }
-        {{- end }}
-
-        {{- if and $s.SSL $s.SSL.RequireVerifiedCert }}
-    location @frontend_tls_verify_failed {
-        return 444;
     }
         {{- end }}
 

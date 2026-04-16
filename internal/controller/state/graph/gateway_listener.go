@@ -55,7 +55,7 @@ type Listener struct {
 	// ValidationMode holds the TLS validation configuration for the listener.
 	ValidationMode v1.FrontendValidationModeType
 	// CACertificateRefs holds the resolved CA certificate references for the listener.
-	CACertificateRefs []*types.NamespacedName
+	CACertificateRefs []*v1.ObjectReference
 	// GatewayName is the name of the Gateway resource this Listener belongs to.
 	GatewayName types.NamespacedName
 	// Name is the name of the Listener.
@@ -796,49 +796,42 @@ func createFrontendTLSCaCertReferenceResolver(
 
 		frontend := gw.Source.Spec.TLS.Frontend
 
-		if len(frontend.PerPort) > 0 {
-			perPortFieldPath := field.NewPath("tls", "frontend", "perPort").Child("validation")
-			for _, port := range frontend.PerPort {
-				if port.TLS.Validation == nil || len(port.TLS.Validation.CACertificateRefs) == 0 {
-					continue
-				}
-				if port.Port == l.Source.Port {
-					portCertRefs := port.TLS.Validation.CACertificateRefs
-					portValidationMode := port.TLS.Validation.Mode
-					perPortConds, refs := getListenerFrontendTLSCaRefs(
-						gw.Source,
-						l,
-						perPortFieldPath,
-						resourceResolver,
-						refGrantResolver,
-						portCertRefs,
-					)
-					l.Conditions = append(l.Conditions, perPortConds...)
-					l.ValidationMode = portValidationMode
-					l.CACertificateRefs = refs
-					break
-				}
+		var caCertRefs []v1.ObjectReference
+		var validationMode v1.FrontendValidationModeType
+		var fieldPath *field.Path
+		perPortMatch := false
+
+		for _, port := range frontend.PerPort {
+			if port.TLS.Validation == nil || len(port.TLS.Validation.CACertificateRefs) == 0 {
+				continue
+			}
+			if port.Port == l.Source.Port {
+				caCertRefs = port.TLS.Validation.CACertificateRefs
+				validationMode = port.TLS.Validation.Mode
+				fieldPath = field.NewPath("tls", "frontend", "perPort", "validation")
+				perPortMatch = true
+				break
 			}
 		}
 
-		if frontend.Default.Validation != nil && len(frontend.Default.Validation.CACertificateRefs) > 0 {
-			if len(l.CACertificateRefs) == 0 {
-				defaultCertRefs := frontend.Default.Validation.CACertificateRefs
-				defaultValidationMode := frontend.Default.Validation.Mode
-				defaultFieldPath := field.NewPath("tls", "frontend", "default", "validation")
-				defaultConds, refs := getListenerFrontendTLSCaRefs(
-					gw.Source,
-					l,
-					defaultFieldPath,
-					resourceResolver,
-					refGrantResolver,
-					defaultCertRefs,
-				)
-				l.Conditions = append(l.Conditions, defaultConds...)
-				l.CACertificateRefs = refs
-				l.ValidationMode = defaultValidationMode
-			}
+		if !perPortMatch && frontend.Default.Validation != nil &&
+			len(frontend.Default.Validation.CACertificateRefs) > 0 {
+			caCertRefs = frontend.Default.Validation.CACertificateRefs
+			validationMode = frontend.Default.Validation.Mode
+			fieldPath = field.NewPath("tls", "frontend", "default", "validation")
 		}
+
+		conds, refs := getListenerFrontendTLSCaRefs(
+			gw,
+			l,
+			fieldPath,
+			resourceResolver,
+			refGrantResolver,
+			caCertRefs,
+		)
+		l.Conditions = append(l.Conditions, conds...)
+		l.ValidationMode = validationMode
+		l.CACertificateRefs = refs
 
 		if l.ValidationMode == v1.AllowInsecureFallback {
 			msg := fmt.Sprintf("Validation Mode: AllowInsecureFallback is set for listener %s.", l.Name)
@@ -949,58 +942,35 @@ func createOverlappingTLSConfigResolver() listenerConflictResolver {
 // getListenerFrontendTLSCaRefs validates and resolves the CA certificate references
 // for a listener configured with frontend TLS.
 // Returns conditions related to invalid CA certificate references and a list of valid CA certificate references.
-//
-//nolint:gocyclo
 func getListenerFrontendTLSCaRefs(
-	gw *v1.Gateway,
+	gw *Gateway,
 	listener *Listener,
 	path *field.Path,
 	resourceResolver resolver.Resolver,
 	refGrantResolver *referenceGrantResolver,
 	certRefs []v1.ObjectReference,
-) ([]conditions.Condition, []*types.NamespacedName) {
-	if gw.Spec.TLS == nil || gw.Spec.TLS.Frontend == nil {
+) ([]conditions.Condition, []*v1.ObjectReference) {
+	if gw.Source.Spec.TLS == nil || gw.Source.Spec.TLS.Frontend == nil {
 		return []conditions.Condition{}, nil
 	}
 
-	if len(certRefs) == 0 {
-		return []conditions.Condition{}, nil
-	}
-
-	var caRefs []*types.NamespacedName
+	var caRefs []*v1.ObjectReference
 	var conds []conditions.Condition
+	refNotPermittedCount := 0
 	allowedKinds := []string{kinds.Secret, kinds.ConfigMap}
 
 	for _, cert := range certRefs {
-		if !slices.Contains(allowedKinds, string(cert.Kind)) {
-			valErr := field.NotSupported(path, cert.Kind, allowedKinds)
-			msg := helpers.CapitalizeString(valErr.Error())
-			conds = append(conds, conditions.NewListenerInvalidCaCertificateKind(msg))
+		if kindOrGroupCond := validateObjectRefKindAndGroup(
+			cert,
+			path,
+			allowedKinds,
+		); kindOrGroupCond != (conditions.Condition{}) {
+			conds = append(conds, kindOrGroupCond)
 			continue
 		}
 
-		if cert.Group != "" && cert.Group != "core" {
-			valErr := field.NotSupported(
-				path,
-				cert.Group, []string{"core", ""},
-			)
-			msg := helpers.CapitalizeString(valErr.Error())
-			conds = append(conds, conditions.NewListenerInvalidCaCertificateKind(msg))
-			continue
-		}
-
-		certNsName, certNs := getFrontendTLSCertNsName(cert, gw)
-		if cert.Namespace != nil {
-			certNsName.Namespace = string(*cert.Namespace)
-		}
-
-		var resourceType resolver.ResourceType
-		switch cert.Kind {
-		case kinds.Secret:
-			resourceType = resolver.ResourceTypeSecret
-		case kinds.ConfigMap:
-			resourceType = resolver.ResourceTypeConfigMap
-		}
+		certObjRef, certNsName := getFrontendTLSCertReferences(cert, gw.Source)
+		resourceType := getFrontendTLSCertResourceType(cert.Kind)
 
 		if err := resourceResolver.Resolve(
 			resourceType,
@@ -1013,59 +983,119 @@ func getListenerFrontendTLSCaRefs(
 			continue
 		}
 
-		if certNs != gw.Namespace {
-			var cond conditions.Condition
-			switch cert.Kind {
-			case kinds.Secret:
-				msg := fmt.Sprintf("secret ref %s not permitted by any ReferenceGrant", certNsName)
-				cond = resolveResourceRefGrant(msg, gw.Namespace, toSecret(*certNsName), refGrantResolver)
-			case kinds.ConfigMap:
-				msg := fmt.Sprintf("configmap ref %s not permitted by any ReferenceGrant", certNsName)
-				cond = resolveResourceRefGrant(msg, gw.Namespace, toConfigMap(*certNsName), refGrantResolver)
-			}
-			if cond != (conditions.Condition{}) {
-				conds = append(conds, cond)
-				continue
-			}
+		if refNotPermittedCond := resolveCrossNamespaceRefGrant(
+			cert,
+			certNsName,
+			gw.Source.Namespace,
+			refGrantResolver,
+		); refNotPermittedCond != (conditions.Condition{}) {
+			gw.Conditions = append(gw.Conditions, refNotPermittedCond)
+			refNotPermittedCount++
+			continue
 		}
-		caRefs = append(caRefs, certNsName)
+		caRefs = append(caRefs, certObjRef)
 	}
 
-	if len(conds) > 0 && len(conds) == len(certRefs) {
+	totalConds := len(conds) + refNotPermittedCount
+	if refNotPermittedCount > 0 && len(conds) == 0 {
+		msg := "Frontend TLS CA certificate refs are not permitted by any ReferenceGrant"
+		conds = append(conds, conditions.NewListenerUnresolvedCertificateRef(
+			msg,
+			string(v1.ListenerReasonRefNotPermitted),
+		))
+	}
+
+	if totalConds > 0 && totalConds == len(certRefs) {
 		msg := "All frontend TLS CA certificate refs are invalid for this listener"
 		conds = append(conds, conditions.NewListenerInvalidNoValidCACertificate(msg)...)
 		listener.Valid = false
 		return conds, nil
 	}
 
-	if len(caRefs) == 0 {
-		return conds, nil
-	}
-
 	return conds, caRefs
 }
 
-// resolveResourceRefGrant checks if a reference grant allows the listener
-// to reference a resource in another namespace.
-func resolveResourceRefGrant(msg, gwNs string,
-	to toResource,
+// validateObjectRefKindAndGroup checks if the ObjectReference has an allowed Kind and Group.
+func validateObjectRefKindAndGroup(
+	ref v1.ObjectReference,
+	path *field.Path,
+	allowedKinds []string,
+) conditions.Condition {
+	if !slices.Contains(allowedKinds, string(ref.Kind)) {
+		valErr := field.NotSupported(path, ref.Kind, allowedKinds)
+		msg := helpers.CapitalizeString(valErr.Error())
+		return conditions.NewListenerInvalidCaCertificateKind(msg)
+	}
+
+	if ref.Group != "" && ref.Group != "core" {
+		valErr := field.NotSupported(path, ref.Group, []string{"core", ""})
+		msg := helpers.CapitalizeString(valErr.Error())
+		return conditions.NewListenerInvalidCaCertificateKind(msg)
+	}
+
+	return conditions.Condition{}
+}
+
+// getFrontendTLSCertResourceType returns the resource type for a given kind.
+func getFrontendTLSCertResourceType(kind v1.Kind) resolver.ResourceType {
+	switch kind {
+	case kinds.Secret:
+		return resolver.ResourceTypeSecret
+	case kinds.ConfigMap:
+		return resolver.ResourceTypeConfigMap
+	default:
+		return ""
+	}
+}
+
+// resolveCrossNamespaceRefGrant checks if a cross-namespace reference is allowed by any ReferenceGrant.
+// Checkes for both Secret and ConfigMap references.
+func resolveCrossNamespaceRefGrant(
+	ref v1.ObjectReference,
+	nsName *types.NamespacedName,
+	gwNs string,
 	refGrantResolver *referenceGrantResolver,
 ) conditions.Condition {
-	if !refGrantResolver.refAllowed(to, fromGateway(gwNs)) {
-		return conditions.NewGatewayRefNotPermitted(msg)
+	if nsName.Namespace == gwNs {
+		return conditions.Condition{}
+	}
+
+	switch ref.Kind {
+	case kinds.Secret:
+		if !refGrantResolver.refAllowed(toSecret(*nsName), fromGateway(gwNs)) {
+			msg := fmt.Sprintf("secret ref %s not permitted by any ReferenceGrant", nsName)
+			return conditions.NewGatewayRefNotPermitted(msg)
+		}
+	case kinds.ConfigMap:
+		if !refGrantResolver.refAllowed(toConfigMap(*nsName), fromGateway(gwNs)) {
+			msg := fmt.Sprintf("configmap ref %s not permitted by any ReferenceGrant", nsName)
+			return conditions.NewGatewayRefNotPermitted(msg)
+		}
 	}
 	return conditions.Condition{}
 }
 
-// getFrontendTLSCertNsName returns the NamespacedName of the Secret or ConfigMap
-// referenced by the Gateway for frontend TLS.
-func getFrontendTLSCertNsName(cert v1.ObjectReference, gw *v1.Gateway) (*types.NamespacedName, string) {
+// getFrontendTLSCertReferences returns an ObjectReference and a NamespacedName
+// of the Secret or ConfigMap referenced by the Gateway for frontend TLS.
+func getFrontendTLSCertReferences(
+	cert v1.ObjectReference,
+	gw *v1.Gateway,
+) (*v1.ObjectReference, *types.NamespacedName) {
+	var caCertObjRef *v1.ObjectReference
+	var caCertNsName *types.NamespacedName
+	caCertObjRef = &v1.ObjectReference{
+		Group:     "",
+		Kind:      cert.Kind,
+		Name:      cert.Name,
+		Namespace: cert.Namespace,
+	}
 	caRefNs := gw.Namespace
 	if cert.Namespace != nil {
 		caRefNs = string(*cert.Namespace)
 	}
-	return &types.NamespacedName{
+	caCertNsName = &types.NamespacedName{
 		Namespace: caRefNs,
 		Name:      string(cert.Name),
-	}, caRefNs
+	}
+	return caCertObjRef, caCertNsName
 }
