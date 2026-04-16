@@ -812,6 +812,42 @@
           "title": "autoscaling",
           "type": "object"
         },
+        "podDisruptionBudget": {
+          "description": "PodDisruptionBudget configuration for the NGINX Gateway Fabric control plane.",
+          "properties": {
+            "annotations": {
+              "description": "Set of custom annotations for the PDB object.",
+              "required": [],
+              "title": "annotations",
+              "type": "object"
+            },
+            "enable": {
+              "default": false,
+              "description": "Enable or disable PodDisruptionBudget for the control plane.",
+              "title": "enable",
+              "type": "boolean"
+            },
+            "maxUnavailable": {
+              "description": "The maximum number of pods that can be unavailable. Mutually exclusive with minAvailable.",
+              "title": "maxUnavailable",
+              "type": [
+                "string",
+                "integer"
+              ]
+            },
+            "minAvailable": {
+              "description": "The minimum number of pods that must be available. Mutually exclusive with maxUnavailable.",
+              "title": "minAvailable",
+              "type": [
+                "string",
+                "integer"
+              ]
+            }
+          },
+          "required": [],
+          "title": "podDisruptionBudget",
+          "type": "object"
+        },
         "config": {
           "description": "The dynamic configuration for the control plane that is contained in the NginxGateway resource.",
           "properties": {

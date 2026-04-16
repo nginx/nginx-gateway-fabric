@@ -201,6 +201,17 @@ nginxGateway:
     #     target:
     #       type: AverageValue
     #       averageValue: "400Mi"
+
+  # -- PodDisruptionBudget configuration for the NGINX Gateway Fabric control plane.
+  podDisruptionBudget:
+    # -- Enable or disable PodDisruptionBudget for the control plane.
+    enable: false
+    # -- Set of custom annotations for the PDB object.
+    annotations: {}
+    # -- The minimum number of pods that must be available. Mutually exclusive with maxUnavailable.
+    minAvailable: ""
+    # -- The maximum number of pods that can be unavailable. Mutually exclusive with minAvailable.
+    maxUnavailable: ""
   metrics:
     # -- Enable exposing metrics in the Prometheus format.
     enable: true
