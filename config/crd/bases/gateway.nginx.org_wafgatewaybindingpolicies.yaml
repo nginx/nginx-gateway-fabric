@@ -377,20 +377,19 @@ spec:
                           properties:
                             namespace:
                               description: Namespace is the NGINX One Console namespace
-                                that owns the security policy.
+                                that owns the log profile.
                               maxLength: 253
                               minLength: 1
                               type: string
                             profileName:
-                              description: ProfileName is the name of the security
-                                policy in N1C that corresponds to the log profile
-                                bundle.
+                              description: ProfileName is the name of the log profile
+                                in N1C that corresponds to the log profile bundle.
                               maxLength: 253
                               minLength: 1
                               type: string
                             profileObjectID:
                               description: |-
-                                ProfileObjectID is the unique object identifier of the security policy in N1C
+                                ProfileObjectID is the unique object identifier of the log profile in N1C
                                 (e.g. "lp_8s8uZxLpThWwEGF7LTn_rA") that corresponds to the log profile bundle.
                               pattern: ^lp_[A-Za-z0-9_-]+$
                               type: string

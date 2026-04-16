@@ -269,13 +269,13 @@ type NIMLogProfileBundleSource struct {
 //
 //nolint:lll
 type N1CLogProfileBundleSource struct {
-	// ProfileName is the name of the security policy in N1C that corresponds to the log profile bundle.
+	// ProfileName is the name of the log profile in N1C that corresponds to the log profile bundle.
 	//
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=253
 	ProfileName *string `json:"profileName,omitempty"`
 
-	// ProfileObjectID is the unique object identifier of the security policy in N1C
+	// ProfileObjectID is the unique object identifier of the log profile in N1C
 	// (e.g. "lp_8s8uZxLpThWwEGF7LTn_rA") that corresponds to the log profile bundle.
 	//
 	// +kubebuilder:validation:Pattern=`^lp_[A-Za-z0-9_-]+$`
@@ -289,7 +289,7 @@ type N1CLogProfileBundleSource struct {
 	// +kubebuilder:validation:Pattern=`^https?://`
 	URL string `json:"url"`
 
-	// Namespace is the NGINX One Console namespace that owns the security policy.
+	// Namespace is the NGINX One Console namespace that owns the log profile.
 	//
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=253

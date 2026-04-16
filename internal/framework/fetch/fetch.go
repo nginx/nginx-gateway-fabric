@@ -14,7 +14,6 @@ import (
 	"net/http"
 	"net/url"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
 
@@ -82,11 +81,11 @@ type Request struct {
 	URL     string
 	// LogProfileName is the human-readable name of the log profile.
 	// Used to look up the log profile by name when fetching from NIM or N1C.
-	// Mutually exclusive with LogProfileObjectID.
+	// Mutually exclusive with N1C.LogProfileObjectID.
 	LogProfileName string
 	// PolicyName is the human-readable name of the policy.
 	// Used to look up the policy by name when fetching from NIM or N1C.
-	// Mutually exclusive with NIMPolicyUID.
+	// Mutually exclusive with NIM.PolicyUID or N1C.PolicyObjectID.
 	PolicyName string
 	// NIM holds the NIM specific request details.
 	NIM NIMRequest
@@ -805,8 +804,8 @@ func findN1CPolicy(
 ) (polObjID, latestVersionID string, err error) {
 	const pageSize = 100
 
-	for startIndex := 1; ; startIndex += pageSize {
-		listURL, err := buildN1CPoliciesURL(baseURL, namespace, startIndex, pageSize)
+	for offset := 1; ; offset += pageSize {
+		listURL, err := buildN1CPoliciesURL(baseURL, namespace, offset, pageSize)
 		if err != nil {
 			return "", "", fmt.Errorf("failed to build N1C policies URL: %w", err)
 		}
@@ -827,7 +826,7 @@ func findN1CPolicy(
 			}
 		}
 
-		if startIndex+pageSize-1 >= resp.Total {
+		if offset+pageSize-1 >= resp.Total {
 			break
 		}
 	}
@@ -845,8 +844,8 @@ func findN1CLatestVersion(
 ) (string, error) {
 	const pageSize = 100
 
-	for startIndex := 1; ; startIndex += pageSize {
-		versionsURL, err := buildN1CVersionsURL(baseURL, namespace, polObjID, startIndex, pageSize)
+	for offset := 1; ; offset += pageSize {
+		versionsURL, err := buildN1CVersionsURL(baseURL, namespace, polObjID, offset, pageSize)
 		if err != nil {
 			return "", fmt.Errorf("failed to build N1C versions URL: %w", err)
 		}
@@ -867,7 +866,7 @@ func findN1CLatestVersion(
 			}
 		}
 
-		if startIndex+pageSize-1 >= resp.Total {
+		if offset+pageSize-1 >= resp.Total {
 			break
 		}
 	}
@@ -876,7 +875,7 @@ func findN1CLatestVersion(
 }
 
 // buildN1CPoliciesURL constructs the N1C list-policies API URL with pagination parameters.
-func buildN1CPoliciesURL(baseURL, namespace string, startIndex, pageSize int) (string, error) {
+func buildN1CPoliciesURL(baseURL, namespace string, offset, limit int) (string, error) {
 	base, err := url.Parse(baseURL)
 	if err != nil {
 		return "", fmt.Errorf("invalid N1C base URL %q: %w", baseURL, err)
@@ -885,14 +884,14 @@ func buildN1CPoliciesURL(baseURL, namespace string, startIndex, pageSize int) (s
 		"/api/nginx/one/namespaces/" + url.PathEscape(namespace) + "/app-protect/policies"
 	base.Fragment = ""
 	q := url.Values{}
-	q.Set("start_index", strconv.Itoa(startIndex))
-	q.Set("items_per_page", strconv.Itoa(pageSize))
+	q.Set("offset", fmt.Sprintf("%d", offset))
+	q.Set("limit", fmt.Sprintf("%d", limit))
 	base.RawQuery = q.Encode()
 	return base.String(), nil
 }
 
 // buildN1CVersionsURL constructs the N1C list-versions API URL with pagination parameters.
-func buildN1CVersionsURL(baseURL, namespace, polObjID string, startIndex, pageSize int) (string, error) {
+func buildN1CVersionsURL(baseURL, namespace, polObjID string, offset, limit int) (string, error) {
 	base, err := url.Parse(baseURL)
 	if err != nil {
 		return "", fmt.Errorf("invalid N1C base URL %q: %w", baseURL, err)
@@ -902,8 +901,8 @@ func buildN1CVersionsURL(baseURL, namespace, polObjID string, startIndex, pageSi
 		"/app-protect/policies/" + url.PathEscape(polObjID) + "/versions"
 	base.Fragment = ""
 	q := url.Values{}
-	q.Set("start_index", strconv.Itoa(startIndex))
-	q.Set("items_per_page", strconv.Itoa(pageSize))
+	q.Set("offset", fmt.Sprintf("%d", offset))
+	q.Set("limit", fmt.Sprintf("%d", limit))
 	base.RawQuery = q.Encode()
 	return base.String(), nil
 }

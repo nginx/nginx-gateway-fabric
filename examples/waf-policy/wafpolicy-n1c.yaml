@@ -26,7 +26,7 @@ spec:
       logSource:
         n1cSource:
           url: https://<tenant>.volterra.us
-          namespace: default  # N1C namespace the policy belongs to
+          namespace: default  # N1C namespace the log profile belongs to
           # profileName: "ngfExample"
           profileObjectID: "lp_8s8uZxLpThWwEGF7LTn_rA"
         auth:

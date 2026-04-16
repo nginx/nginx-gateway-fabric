@@ -116,11 +116,11 @@ func LogBundleKey(policyNsName types.NamespacedName, logSource *ngfAPIv1alpha1.L
 	}
 
 	if logSource.N1CSource != nil {
-		profileIdentifer := ""
+		profileIdentifier := ""
 		if logSource.N1CSource.ProfileObjectID != nil {
-			profileIdentifer = *logSource.N1CSource.ProfileObjectID
+			profileIdentifier = *logSource.N1CSource.ProfileObjectID
 		} else if logSource.N1CSource.ProfileName != nil {
-			profileIdentifer = *logSource.N1CSource.ProfileName
+			profileIdentifier = *logSource.N1CSource.ProfileName
 		}
 		return WAFBundleKey(
 			fmt.Sprintf(
@@ -128,7 +128,7 @@ func LogBundleKey(policyNsName types.NamespacedName, logSource *ngfAPIv1alpha1.L
 				policyNsName.Namespace, policyNsName.Name,
 				helpers.URLHash(logSource.N1CSource.URL),
 				logSource.N1CSource.Namespace,
-				profileIdentifer,
+				profileIdentifier,
 			),
 		)
 	}

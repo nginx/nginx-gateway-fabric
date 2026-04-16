@@ -32,6 +32,7 @@ const (
 // BundleSource represents a single bundle source that needs polling.
 // This can be either the main policy bundle or a log bundle.
 type BundleSource struct {
+	// BundleKey is the unique identifier for this bundle.
 	BundleKey graph.WAFBundleKey
 	// Request contains the fetch configuration for this bundle.
 	Request fetch.Request
