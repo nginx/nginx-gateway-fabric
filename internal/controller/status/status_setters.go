@@ -551,47 +551,24 @@ func listenerSetStatusEqual(status1, status2 gatewayv1.ListenerSetStatus) bool {
 		return false
 	}
 
-	// Compare listener statuses
-	if len(status1.Listeners) != len(status2.Listeners) {
+	return slices.EqualFunc(status1.Listeners, status2.Listeners, listenerStatusEqual)
+}
+
+func listenerStatusEqual(listener1, listener2 gatewayv1.ListenerEntryStatus) bool {
+	if listener1.Name != listener2.Name {
 		return false
 	}
-
-	for i, listener1 := range status1.Listeners {
-		listener2 := status2.Listeners[i]
-
-		if listener1.Name != listener2.Name {
-			return false
-		}
-
-		if listener1.AttachedRoutes != listener2.AttachedRoutes {
-			return false
-		}
-
-		if len(listener1.SupportedKinds) != len(listener2.SupportedKinds) {
-			return false
-		}
-
-		for j, kind1 := range listener1.SupportedKinds {
-			kind2 := listener2.SupportedKinds[j]
-			if kind1.Kind != kind2.Kind {
-				return false
-			}
-
-			if (kind1.Group == nil) != (kind2.Group == nil) {
-				return false
-			}
-
-			if kind1.Group != nil && kind2.Group != nil && *kind1.Group != *kind2.Group {
-				return false
-			}
-		}
-
-		if !ConditionsEqual(listener1.Conditions, listener2.Conditions) {
-			return false
-		}
+	if listener1.AttachedRoutes != listener2.AttachedRoutes {
+		return false
 	}
+	if !slices.EqualFunc(listener1.SupportedKinds, listener2.SupportedKinds, supportedKindEqual) {
+		return false
+	}
+	return ConditionsEqual(listener1.Conditions, listener2.Conditions)
+}
 
-	return true
+func supportedKindEqual(kind1, kind2 gatewayv1.RouteGroupKind) bool {
+	return kind1.Kind == kind2.Kind && helpers.EqualPointers(kind1.Group, kind2.Group)
 }
 
 func newInferencePoolStatusSetter(status inference.InferencePoolStatus) Setter {
