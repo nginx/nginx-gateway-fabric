@@ -262,6 +262,40 @@ type NIMLogProfileBundleSource struct {
 	URL string `json:"url"`
 }
 
+// N1CLogProfileBundleSource configures log profile bundle fetching from F5 NGINX One Console (N1C).
+// Exactly one of profileName or profileObjectID must be set.
+//
+// +kubebuilder:validation:XValidation:message="exactly one of profileName or profileObjectID must be set",rule="(has(self.profileName) && !has(self.profileObjectID)) || (!has(self.profileName) && has(self.profileObjectID))"
+//
+//nolint:lll
+type N1CLogProfileBundleSource struct {
+	// ProfileName is the name of the log profile in N1C that corresponds to the log profile bundle.
+	//
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=253
+	ProfileName *string `json:"profileName,omitempty"`
+
+	// ProfileObjectID is the unique object identifier of the log profile in N1C
+	// (e.g. "lp_8s8uZxLpThWwEGF7LTn_rA") that corresponds to the log profile bundle.
+	//
+	// +kubebuilder:validation:Pattern=`^lp_[A-Za-z0-9_-]+$`
+	ProfileObjectID *string `json:"profileObjectID,omitempty"`
+
+	// URL is the base URL of the F5 NGINX One Console instance,
+	// e.g. "https://<tenant>.volterra.us".
+	//
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=2083
+	// +kubebuilder:validation:Pattern=`^https?://`
+	URL string `json:"url"`
+
+	// Namespace is the NGINX One Console namespace that owns the log profile.
+	//
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=253
+	Namespace string `json:"namespace"`
+}
+
 // N1CBundleSource configures bundle fetching from F5 NGINX One Console (N1C).
 // Exactly one of policyName or policyObjectID must be set.
 //
@@ -341,9 +375,9 @@ const (
 )
 
 // WAFSecurityLog defines security logging configuration for app_protect_security_log directives.
-// Exactly one of logSource.defaultProfile, logSource.httpSource, or logSource.nimSource must be set.
+// Exactly one of logSource.defaultProfile, logSource.httpSource, logSource.nimSource, or logSource.n1cSource must be set.
 //
-
+//nolint:lll
 type WAFSecurityLog struct {
 	// LogSource configures the log profile bundle source for this log entry.
 	// Exactly one of url or defaultProfile must be set.
@@ -354,29 +388,35 @@ type WAFSecurityLog struct {
 }
 
 // LogSource holds all configuration for fetching a WAF log profile bundle.
-// Exactly one of DefaultProfile, HTTPSource, or NIMSource must be set.
+// Exactly one of DefaultProfile, HTTPSource, NIMSource, or N1CSource must be set.
 //
-// +kubebuilder:validation:XValidation:message="exactly one of logSource.defaultProfile, logSource.httpSource, or logSource.nimSource must be set",rule="(has(self.defaultProfile) && !has(self.httpSource) && !has(self.nimSource)) || (!has(self.defaultProfile) && has(self.httpSource) && !has(self.nimSource)) || (!has(self.defaultProfile) && !has(self.httpSource) && has(self.nimSource))"
+// +kubebuilder:validation:XValidation:message="exactly one of logSource.defaultProfile, logSource.httpSource, logSource.nimSource, or logSource.n1cSource must be set",rule="(has(self.defaultProfile) && !has(self.httpSource) && !has(self.nimSource) && !has(self.n1cSource)) || (!has(self.defaultProfile) && has(self.httpSource) && !has(self.nimSource) && !has(self.n1cSource)) || (!has(self.defaultProfile) && !has(self.httpSource) && has(self.nimSource) && !has(self.n1cSource)) || (!has(self.defaultProfile) && !has(self.httpSource) && !has(self.nimSource) && has(self.n1cSource))"
 //
 //nolint:lll
 type LogSource struct {
 	// DefaultProfile selects one of the built-in WAF log profile bundles shipped with the WAF engine.
-	// Mutually exclusive with HTTPSource and NIMSource.
+	// Mutually exclusive with HTTPSource, NIMSource, and N1CSource.
 	//
 	// +optional
 	DefaultProfile *DefaultLogProfile `json:"defaultProfile,omitempty"`
 
 	// HTTPSource configures direct bundle fetching from an HTTP/HTTPS URL.
-	// Mutually exclusive with DefaultProfile and NIMSource.
+	// Mutually exclusive with DefaultProfile, NIMSource and N1CSource.
 	//
 	// +optional
 	HTTPSource *HTTPBundleSource `json:"httpSource,omitempty"`
 
 	// NIMSource configures bundle fetching from NGINX Instance Manager.
-	// Mutually exclusive with DefaultProfile and HTTPSource.
+	// Mutually exclusive with DefaultProfile, HTTPSource and N1CSource.
 	//
 	// +optional
 	NIMSource *NIMLogProfileBundleSource `json:"nimSource,omitempty"`
+
+	// N1CSource configures bundle fetching from F5 NGINX One Console.
+	// Mutually exclusive with DefaultProfile, HTTPSource, and NIMSource.
+	//
+	// +optional
+	N1CSource *N1CLogProfileBundleSource `json:"n1cSource,omitempty"`
 
 	// Auth configures authentication credentials for fetching the log bundle.
 	// Only applicable when url is set.

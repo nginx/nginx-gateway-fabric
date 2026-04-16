@@ -1021,6 +1021,103 @@ func TestN1CFetchCompileFailed(t *testing.T) {
 	g.Expect(err.Error()).To(ContainSubstring("compilation failed"))
 }
 
+// TestN1CFetchPolicyByNamePagination verifies that findN1CPolicy correctly pages through
+// the N1C policies list using offset/limit query parameters when the target policy
+// is not on the first page.
+func TestN1CFetchPolicyByNamePagination(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	bundleContent := []byte("n1c-policy-bundle-paginated")
+	bundleHash := fetch.ComputeChecksum(bundleContent)
+	polObjID := "pol_PaginatedPolicy"
+	polVersionID := "pv_PaginatedVersion"
+	policyName := "my-policy"
+	namespace := "my-namespace"
+	auth := &fetch.BundleAuth{APIToken: "my-api-token"}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "APIToken "+auth.APIToken {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+
+		listPath := "/api/nginx/one/namespaces/" + namespace + "/app-protect/policies"
+		compilePath := "/api/nginx/one/namespaces/" + namespace + "/app-protect/policies/" + polObjID +
+			"/versions/" + polVersionID + "/compile"
+
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case listPath:
+			// Verify pagination query parameters are offset/limit
+			g.Expect(r.URL.Query().Has("offset")).To(BeTrue(), "should use 'offset' query param")
+			g.Expect(r.URL.Query().Has("limit")).To(BeTrue(), "should use 'limit' query param")
+
+			// Simulate pagination: target policy is on page 2
+			offset := r.URL.Query().Get("offset")
+			switch offset {
+			case "1":
+				// First page: return 100 other policies (simulating full page)
+				items := make([]map[string]any, 100)
+				for i := range 100 {
+					items[i] = map[string]any{
+						"name":      fmt.Sprintf("other-policy-%d", i+1),
+						"object_id": fmt.Sprintf("pol_other%d", i+1),
+						"latest":    map[string]any{"object_id": fmt.Sprintf("pv_other%d", i+1)},
+					}
+				}
+				json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck
+					"total": 101,
+					"items": items,
+				})
+			case "101":
+				// Second page: return the target policy
+				json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck
+					"total": 101,
+					"items": []map[string]any{
+						{"name": policyName, "object_id": polObjID, "latest": map[string]any{"object_id": polVersionID}},
+					},
+				})
+			default:
+				// Empty page or unexpected offset
+				json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck
+					"total": 101,
+					"items": []map[string]any{},
+				})
+			}
+		case compilePath:
+			if r.URL.Query().Get("download") == "true" {
+				w.Header().Set("Content-Type", "application/octet-stream")
+				w.Write(bundleContent) //nolint:errcheck
+			} else {
+				if err := json.NewEncoder(w).Encode(map[string]string{
+					"status": "succeeded",
+					"hash":   bundleHash,
+				}); err != nil {
+					http.Error(w, err.Error(), http.StatusInternalServerError)
+				}
+			}
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	f := fetch.NewHTTPFetcher(logr.Discard())
+	data, checksum, err := f.FetchPolicyBundle(context.Background(), fetch.Request{
+		URL:        srv.URL,
+		Auth:       auth,
+		PolicyName: policyName,
+		N1C: fetch.N1CRequest{
+			Namespace: namespace,
+		},
+	})
+
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(data).To(Equal(bundleContent))
+	g.Expect(checksum).To(Equal(fetch.ComputeChecksum(bundleContent)))
+}
+
 func TestHTTPFetcherFetchNIM(t *testing.T) {
 	t.Parallel()
 
@@ -1160,7 +1257,7 @@ func TestHTTPFetcherFetchLogProfileBundleNIM(t *testing.T) {
 		URL:            srv.URL,
 		Auth:           auth,
 		PolicyName:     "policy-selector",
-		NIMProfileName: profileName,
+		LogProfileName: profileName,
 	}
 	data, checksum, err := f.FetchLogProfileBundle(context.Background(), req)
 
@@ -1169,21 +1266,126 @@ func TestHTTPFetcherFetchLogProfileBundleNIM(t *testing.T) {
 	g.Expect(checksum).To(Equal(fetch.ComputeChecksum(bundleContent)))
 }
 
-func TestHTTPFetcherFetchLogProfileBundleN1CUnsupported(t *testing.T) {
+func TestHTTPFetcherFetchLogProfileBundleN1CByObjectID(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
+	bundleContent := []byte("n1c-log-profile-bundle")
+	lpObjID := "lp_8s8uZxLpThWwEGF7LTn_rA"
+	namespace := "my-namespace"
+	auth := &fetch.BundleAuth{APIToken: "my-api-token"}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "APIToken "+auth.APIToken {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		expectedPath := "/api/nginx/one/namespaces/" + namespace + "/app-protect/log-profiles/" + lpObjID + "/compile"
+		if r.URL.Path != expectedPath {
+			http.NotFound(w, r)
+			return
+		}
+		if r.URL.Query().Get("download") != "true" {
+			http.Error(w, "missing download param", http.StatusBadRequest)
+			return
+		}
+		w.Write(bundleContent) //nolint:errcheck
+	}))
+	defer srv.Close()
+
 	f := fetch.NewHTTPFetcher(logr.Discard())
-	_, _, err := f.FetchLogProfileBundle(context.Background(), fetch.Request{
-		URL: "https://example.com",
+	data, checksum, err := f.FetchLogProfileBundle(context.Background(), fetch.Request{
+		URL:  srv.URL,
+		Auth: auth,
 		N1C: fetch.N1CRequest{
-			Namespace: "my-ns",
+			Namespace:          namespace,
+			LogProfileObjectID: lpObjID,
 		},
-		PolicyName: "my-policy",
 	})
 
-	g.Expect(err).To(HaveOccurred())
-	g.Expect(err.Error()).To(Equal("fetching log profile bundles from N1C is not supported"))
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(data).To(Equal(bundleContent))
+	g.Expect(checksum).To(Equal(fetch.ComputeChecksum(bundleContent)))
+}
+
+func TestHTTPFetcherFetchLogProfileBundleN1CByName(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	bundleContent := []byte("n1c-log-profile-bundle-by-name")
+	lpObjID := "lp_XYxnZgVYQFKire4M1KcVVQ"
+	profileName := "my-log-profile"
+	namespace := "my-namespace"
+	auth := &fetch.BundleAuth{APIToken: "my-api-token"}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "APIToken "+auth.APIToken {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+
+		listPath := "/api/nginx/one/namespaces/" + namespace + "/app-protect/log-profiles"
+		compilePath := "/api/nginx/one/namespaces/" + namespace + "/app-protect/log-profiles/" + lpObjID + "/compile"
+
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case listPath:
+			// Simulate pagination: target profile is on page 2
+			offset := r.URL.Query().Get("offset")
+			switch offset {
+			case "1":
+				// First page: return 100 other profiles (simulating full page)
+				items := make([]map[string]any, 100)
+				for i := range 100 {
+					items[i] = map[string]any{
+						"name":      fmt.Sprintf("other-profile-%d", i+1),
+						"object_id": fmt.Sprintf("lp_other%d", i+1),
+					}
+				}
+				json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck
+					"total": 101,
+					"items": items,
+				})
+			case "101":
+				// Second page: return the target profile
+				json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck
+					"total": 101,
+					"items": []map[string]any{
+						{"name": profileName, "object_id": lpObjID},
+					},
+				})
+			default:
+				// Empty page or unexpected offset
+				json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck
+					"total": 101,
+					"items": []map[string]any{},
+				})
+			}
+		case compilePath:
+			if r.URL.Query().Get("download") != "true" {
+				http.Error(w, "missing download param", http.StatusBadRequest)
+				return
+			}
+			w.Write(bundleContent) //nolint:errcheck
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	f := fetch.NewHTTPFetcher(logr.Discard())
+	data, checksum, err := f.FetchLogProfileBundle(context.Background(), fetch.Request{
+		URL:            srv.URL,
+		Auth:           auth,
+		LogProfileName: profileName,
+		N1C: fetch.N1CRequest{
+			Namespace: namespace,
+		},
+	})
+
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(data).To(Equal(bundleContent))
+	g.Expect(checksum).To(Equal(fetch.ComputeChecksum(bundleContent)))
 }
 
 func TestHTTPFetcherRetryOnTransientError(t *testing.T) {

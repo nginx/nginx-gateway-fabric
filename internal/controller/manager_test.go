@@ -392,6 +392,7 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&ngfAPIv1alpha1.UpstreamSettingsPolicyList{},
 				&ngfAPIv1alpha1.AuthenticationFilterList{},
 				&ngfAPIv1alpha1.RateLimitPolicyList{},
+				&ngfAPIv1alpha1.WAFGatewayBindingPolicyList{},
 			},
 		},
 	}
