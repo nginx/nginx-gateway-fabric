@@ -463,5 +463,12 @@ func validateUnsupportedGatewayFields(gw *v1.Gateway) []conditions.Condition {
 		conds = append(conds, conditions.NewGatewayAcceptedUnsupportedField("TLS.Frontend"))
 	}
 
+	if gw.Spec.DefaultScope != "" {
+		conds = append(conds, conditions.NewGatewayAcceptedUnsupportedField(field.Forbidden(
+			field.NewPath("spec", "defaultScope"),
+			"DefaultScope",
+		).Error()))
+	}
+
 	return conds
 }

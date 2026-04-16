@@ -39,18 +39,15 @@ func buildListenerSets(
 
 	builtListenerSets := make(map[types.NamespacedName]*ListenerSet, len(ls))
 	for lsNsName, listenerSet := range ls {
-		// Check if this ListenerSet references any of our Gateways
 		parentRef := listenerSet.Spec.ParentRef
 		parentGatewayRef := types.NamespacedName{
-			Namespace: listenerSet.Namespace, // Default to same namespace as ListenerSet
+			Namespace: listenerSet.Namespace,
 			Name:      string(parentRef.Name),
 		}
-		// Override with explicit namespace if provided
 		if parentRef.Namespace != nil {
 			parentGatewayRef.Namespace = string(*parentRef.Namespace)
 		}
 
-		// Skip ListenerSets that don't reference any of our Gateways
 		parentGateway, exists := gateways[parentGatewayRef]
 		if !exists {
 			continue
@@ -87,7 +84,6 @@ func validateListenerSet(
 	resourceResolver resolver.Resolver,
 	refGrantResolver *referenceGrantResolver,
 ) ([]conditions.Condition, bool, []*Listener) {
-	// Check if parent Gateway is valid/accepted
 	if !parentGateway.Valid {
 		errMsg := fmt.Sprintf("Parent Gateway %s/%s is not accepted",
 			parentGateway.Source.Namespace,
@@ -96,7 +92,6 @@ func validateListenerSet(
 		return []conditions.Condition{conditions.NewListenerSetParentNotAccepted(errMsg)}, false, nil
 	}
 
-	// Validate Gateway's AllowedListeners configuration
 	if !isListenerSetAllowedByGateway(ls, parentGateway.Source, namespaces) {
 		errMsg := fmt.Sprintf("ListenerSet is not allowed by parent Gateway %s/%s AllowedListeners configuration",
 			parentGateway.Source.Namespace,
@@ -105,16 +100,13 @@ func validateListenerSet(
 		return []conditions.Condition{conditions.NewListenerSetNotAllowed(errMsg)}, false, nil
 	}
 
-	// Convert ListenerEntries to Gateway Listeners for validation
 	gatewayForValidation := createGatewayForListenerValidation(ls, parentGateway.Source)
 
-	// Get protected ports from parent gateway (reuse the same ports)
 	protectedPorts := buildProtectedPorts(parentGateway.EffectiveNginxProxy)
 
 	// Reuse existing listener validation from gateway_listener.go
 	validatedListeners := buildListeners(gatewayForValidation, resourceResolver, refGrantResolver, protectedPorts)
 
-	// Check if any listeners are invalid
 	validListenerCount := 0
 	for _, listener := range validatedListeners {
 		if listener.Valid {
@@ -122,25 +114,14 @@ func validateListenerSet(
 		}
 	}
 
-	// Collect all validation conditions
-	var conds []conditions.Condition
-	valid := true
-
-	if validListenerCount == 0 {
-		// All listeners are invalid
-		conds = append(conds, conditions.NewListenerSetListenersNotValid("All listeners are invalid"))
-		valid = false
-	}
-
 	// If some listeners are valid and some are invalid, we can consider the ListenerSet as accepted
 	// but with conditions in the ListenerEntryStatus indicating which listeners are invalid
-
-	// If any validation failed, return all collected conditions
-	if !valid {
-		return conds, false, validatedListeners
+	if validListenerCount == 0 {
+		return []conditions.Condition{conditions.NewListenerSetListenersNotValid("All listeners are invalid")},
+			false,
+			validatedListeners
 	}
 
-	// ListenerSet is valid
 	return []conditions.Condition{conditions.NewListenerSetAccepted()}, true, validatedListeners
 }
 
@@ -177,7 +158,6 @@ func isListenerSetAllowedByGateway(
 	gw *v1.Gateway,
 	namespaces map[types.NamespacedName]*corev1.Namespace,
 ) bool {
-	// If AllowedListeners or AllowedListeners.Namespaces is nil, ListenerSets are not allowed (default behavior)
 	if gw.Spec.AllowedListeners == nil || gw.Spec.AllowedListeners.Namespaces == nil {
 		return false
 	}
@@ -191,22 +171,17 @@ func isListenerSetAllowedByGateway(
 
 	switch *namespaceSelector.From {
 	case v1.NamespacesFromNone:
-		// No ListenerSets allowed
 		return false
 	case v1.NamespacesFromSame:
-		// Only ListenerSets in the same namespace as the Gateway are allowed
 		return ls.Namespace == gw.Namespace
 	case v1.NamespacesFromAll:
-		// ListenerSets from all namespaces are allowed
 		return true
 	case v1.NamespacesFromSelector:
-		// Only ListenerSets in namespaces matching the selector are allowed
 		if namespaceSelector.Selector == nil {
 			// Selector is required when From is "Selector"
 			return false
 		}
 
-		// Get the namespace resource for the ListenerSet
 		listenerSetNsName := types.NamespacedName{
 			Namespace: "", // Namespace resource names have empty namespace
 			Name:      ls.Namespace,
@@ -217,14 +192,11 @@ func isListenerSetAllowedByGateway(
 			return false
 		}
 
-		// Convert the label selector to a labels.Selector
 		selector, err := metav1.LabelSelectorAsSelector(namespaceSelector.Selector)
 		if err != nil {
-			// Invalid selector, not allowed
 			return false
 		}
 
-		// Check if the namespace labels match the selector
 		return selector.Matches(labels.Set(namespace.Labels))
 
 	default:

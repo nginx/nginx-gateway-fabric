@@ -1374,18 +1374,6 @@ func NewListenerSetAccepted() Condition {
 	}
 }
 
-// NewListenerSetInvalid returns a Condition that indicates that the ListenerSet is invalid.
-//
-// NOTE: Currently not being used, in the future iteration this may be used, else it will be removed.
-func NewListenerSetInvalid(msg string) Condition {
-	return Condition{
-		Type:    string(v1.ListenerSetConditionAccepted),
-		Status:  metav1.ConditionFalse,
-		Reason:  string(v1.ListenerSetReasonInvalid),
-		Message: msg,
-	}
-}
-
 // NewListenerSetNotAllowed returns a Condition that indicates that the ListenerSet is not allowed
 // by the parent Gateway.
 func NewListenerSetNotAllowed(msg string) Condition {

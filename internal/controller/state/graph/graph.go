@@ -157,9 +157,6 @@ func (g *Graph) IsReferenced(resourceType ngftypes.ObjectType, nsname types.Name
 	case *ngfAPIv1alpha2.NginxProxy:
 		_, exists := g.ReferencedNginxProxies[nsname]
 		return exists
-	case *gatewayv1.ListenerSet:
-		_, exists := g.ListenerSets[nsname]
-		return exists
 	default:
 		return false
 	}

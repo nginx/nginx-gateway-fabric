@@ -51,12 +51,13 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 		cfg                 config.Config
 	}{
 		{
-			name: "base case with BackendTLSPolicy v1",
+			name: "base case with BackendTLSPolicy v1 and ListenerSet",
 			cfg: config.Config{
 				GatewayClassName: gcName,
 			},
 			discoveredCRDs: map[string]bool{
 				"BackendTLSPolicy": true,
+				"ListenerSet":      true,
 				"ReferenceGrant":   true,
 			},
 			expectedObjects: []client.Object{
@@ -85,12 +86,13 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 			},
 		},
 		{
-			name: "base case without BackendTLSPolicy v1",
+			name: "base case without BackendTLSPolicy v1 and ListenerSet",
 			cfg: config.Config{
 				GatewayClassName: gcName,
 			},
 			discoveredCRDs: map[string]bool{
 				"BackendTLSPolicy": false,
+				"ListenerSet":      false,
 				"ReferenceGrant":   true,
 			},
 			expectedObjects: []client.Object{
@@ -114,11 +116,10 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&ngfAPIv1alpha1.RateLimitPolicyList{},
 				partialObjectMetadataList,
 				&gatewayv1.GatewayList{},
-				&gatewayv1.ListenerSetList{},
 			},
 		},
 		{
-			name: "experimental enabled with BackendTLSPolicy v1",
+			name: "experimental enabled with BackendTLSPolicy v1 and ListenerSet",
 			cfg: config.Config{
 				GatewayClassName:     gcName,
 				ExperimentalFeatures: true,
@@ -129,6 +130,7 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				"TLSRoute":         true,
 				"TCPRoute":         true,
 				"UDPRoute":         true,
+				"ListenerSet":      true,
 			},
 			expectedObjects: []client.Object{
 				&gatewayv1.GatewayClass{ObjectMeta: metav1.ObjectMeta{Name: "nginx"}},
@@ -159,13 +161,14 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 			},
 		},
 		{
-			name: "inference extension enabled with BackendTLSPolicy v1",
+			name: "inference extension enabled with BackendTLSPolicy v1 and ListenerSet",
 			cfg: config.Config{
 				GatewayClassName:   gcName,
 				InferenceExtension: true,
 			},
 			discoveredCRDs: map[string]bool{
 				"BackendTLSPolicy": true,
+				"ListenerSet":      true,
 				"ReferenceGrant":   true,
 				"InferencePool":    true,
 			},
@@ -196,13 +199,14 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 			},
 		},
 		{
-			name: "snippets filters enabled with BackendTLSPolicy v1",
+			name: "snippets filters enabled with BackendTLSPolicy v1 and ListenerSet",
 			cfg: config.Config{
 				GatewayClassName: gcName,
 				SnippetsFilters:  true,
 			},
 			discoveredCRDs: map[string]bool{
 				"BackendTLSPolicy": true,
+				"ListenerSet":      true,
 				"ReferenceGrant":   true,
 			},
 			expectedObjects: []client.Object{
@@ -240,6 +244,7 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 			discoveredCRDs: map[string]bool{
 				"BackendTLSPolicy": true,
 				"ReferenceGrant":   true,
+				"ListenerSet":      true,
 			},
 			expectedObjects: []client.Object{
 				&gatewayv1.GatewayClass{ObjectMeta: metav1.ObjectMeta{Name: "nginx"}},
@@ -269,7 +274,7 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 			},
 		},
 		{
-			name: "experimental, inference, and snippets filters enabled with BackendTLSPolicy v1",
+			name: "experimental, inference, and snippets filters enabled with BackendTLSPolicy v1 and ListenerSet",
 			cfg: config.Config{
 				GatewayClassName:     gcName,
 				ExperimentalFeatures: true,
@@ -278,6 +283,7 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 			},
 			discoveredCRDs: map[string]bool{
 				"BackendTLSPolicy": true,
+				"ListenerSet":      true,
 				"ReferenceGrant":   true,
 				"TLSRoute":         true,
 				"TCPRoute":         true,
@@ -324,6 +330,7 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 			},
 			discoveredCRDs: map[string]bool{
 				"BackendTLSPolicy": true,
+				"ListenerSet":      true,
 				"ReferenceGrant":   true,
 				"TLSRoute":         true,
 				"TCPRoute":         true,
@@ -368,6 +375,7 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 			},
 			discoveredCRDs: map[string]bool{
 				"BackendTLSPolicy": true,
+				"ListenerSet":      true,
 				"ReferenceGrant":   false,
 			},
 			expectedObjects: []client.Object{

@@ -388,6 +388,7 @@ func TestBuildGateway(t *testing.T) {
 		allowedListeners *v1.AllowedListeners
 		TLS              *v1.GatewayTLSConfig
 		name             string
+		defaultScope     v1.GatewayDefaultScope
 		listeners        []v1.Listener
 		addresses        []v1.GatewaySpecAddress
 	}
@@ -406,6 +407,7 @@ func TestBuildGateway(t *testing.T) {
 				Addresses:        cfg.addresses,
 				AllowedListeners: cfg.allowedListeners,
 				TLS:              cfg.TLS,
+				DefaultScope:     cfg.defaultScope,
 			},
 		}
 
@@ -1736,16 +1738,10 @@ func TestBuildGateway(t *testing.T) {
 		{
 			name: "One unsupported field + supported fields (valid)",
 			gateway: createGateway(gatewayCfg{
-				name:      "gateway-valid-np",
-				listeners: []v1.Listener{foo80Listener1},
-				ref:       validGwNpRef,
-				TLS: &v1.GatewayTLSConfig{
-					Frontend: &v1.FrontendTLSConfig{
-						Default: v1.TLSConfig{
-							Validation: &v1.FrontendTLSValidation{},
-						},
-					},
-				},
+				name:         "gateway-valid-np",
+				listeners:    []v1.Listener{foo80Listener1},
+				ref:          validGwNpRef,
+				defaultScope: v1.GatewayDefaultScopeAll,
 			}),
 			gatewayClass: validGCWithNp,
 			expected: map[types.NamespacedName]*Gateway{
@@ -1783,7 +1779,7 @@ func TestBuildGateway(t *testing.T) {
 						},
 					},
 					Conditions: []conditions.Condition{
-						conditions.NewGatewayAcceptedUnsupportedField("TLS.Frontend"),
+						conditions.NewGatewayAcceptedUnsupportedField("spec.defaultScope: Forbidden: DefaultScope"),
 						conditions.NewGatewayResolvedRefs(),
 					},
 				},
@@ -1798,13 +1794,7 @@ func TestBuildGateway(t *testing.T) {
 					Kind: "wrong-kind", // Invalid reference
 					Name: "invalid-ref",
 				},
-				TLS: &v1.GatewayTLSConfig{
-					Frontend: &v1.FrontendTLSConfig{
-						Default: v1.TLSConfig{
-							Validation: &v1.FrontendTLSValidation{},
-						},
-					},
-				},
+				defaultScope: v1.GatewayDefaultScopeAll,
 			}),
 			gatewayClass: validGCWithNp,
 			expected: map[types.NamespacedName]*Gateway{
@@ -1831,7 +1821,7 @@ func TestBuildGateway(t *testing.T) {
 						IPFamily: helpers.GetPointer(ngfAPIv1alpha2.Dual),
 					},
 					Conditions: []conditions.Condition{
-						conditions.NewGatewayAcceptedUnsupportedField("TLS.Frontend"),
+						conditions.NewGatewayAcceptedUnsupportedField("spec.defaultScope: Forbidden: DefaultScope"),
 						conditions.NewGatewayInvalidParameters(
 							"Spec.infrastructure.parametersRef.kind: Unsupported value: \"wrong-kind\": supported values: \"NginxProxy\"",
 						),

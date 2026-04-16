@@ -3001,27 +3001,6 @@ func TestBuildListenerSetStatuses(t *testing.T) {
 		},
 	}
 
-	lsGeneralInvalid := &v1.ListenerSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace:  "test",
-			Name:       "ls-general-invalid",
-			Generation: 3,
-		},
-		Spec: v1.ListenerSetSpec{
-			ParentRef: v1.ParentGatewayReference{
-				Name:      "gateway",
-				Namespace: helpers.GetPointer(v1.Namespace("test")),
-			},
-			Listeners: []v1.ListenerEntry{
-				{
-					Name:     "listener",
-					Port:     8080,
-					Protocol: v1.HTTPProtocolType,
-				},
-			},
-		},
-	}
-
 	listenerSets := map[types.NamespacedName]*graph.ListenerSet{
 		{Namespace: "test", Name: "ls-valid"}: {
 			Valid:  true,
@@ -3068,14 +3047,6 @@ func TestBuildListenerSetStatuses(t *testing.T) {
 			Listeners: []*graph.Listener{},
 			Conditions: []conditions.Condition{
 				conditions.NewListenerSetParentNotAccepted("Parent Gateway is not accepted"),
-			},
-		},
-		{Namespace: "test", Name: "ls-general-invalid"}: {
-			Valid:     false,
-			Source:    lsGeneralInvalid,
-			Listeners: []*graph.Listener{},
-			Conditions: []conditions.Condition{
-				conditions.NewListenerSetInvalid("ListenerSet is invalid"),
 			},
 		},
 		{Namespace: "test", Name: "ls-mixed"}: {
@@ -3357,27 +3328,6 @@ func TestBuildListenerSetStatuses(t *testing.T) {
 					LastTransitionTime: transitionTime,
 					Reason:             string(conditions.ListenerSetReasonParentNotProgrammed),
 					Message:            "Parent Gateway is not accepted",
-				},
-			},
-			Listeners: []v1.ListenerEntryStatus{},
-		},
-		{Namespace: "test", Name: "ls-general-invalid"}: {
-			Conditions: []metav1.Condition{
-				{
-					Type:               string(v1.ListenerSetConditionAccepted),
-					Status:             metav1.ConditionFalse,
-					ObservedGeneration: 3,
-					LastTransitionTime: transitionTime,
-					Reason:             string(v1.ListenerSetReasonInvalid),
-					Message:            "ListenerSet is invalid",
-				},
-				{
-					Type:               string(v1.ListenerSetConditionProgrammed),
-					Status:             metav1.ConditionFalse,
-					ObservedGeneration: 3,
-					LastTransitionTime: transitionTime,
-					Reason:             string(v1.ListenerSetReasonInvalid),
-					Message:            "ListenerSet is invalid",
 				},
 			},
 			Listeners: []v1.ListenerEntryStatus{},
