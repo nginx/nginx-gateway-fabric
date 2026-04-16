@@ -1120,9 +1120,8 @@ func (p *NginxProvisioner) buildNginxPodTemplateSpec(
 							Sources: []corev1.VolumeProjection{
 								{
 									ServiceAccountToken: &corev1.ServiceAccountTokenProjection{
-										Path:              "token",
-										Audience:          tokenAudience,
-										ExpirationSeconds: helpers.GetPointer[int64](600),
+										Path:     "token",
+										Audience: tokenAudience,
 									},
 								},
 							},
