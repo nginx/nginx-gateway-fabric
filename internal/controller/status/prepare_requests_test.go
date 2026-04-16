@@ -3305,7 +3305,7 @@ func TestBuildListenerSetStatuses(t *testing.T) {
 					ObservedGeneration: 3,
 					LastTransitionTime: transitionTime,
 					Reason:             string(v1.ListenerSetReasonNotAllowed),
-					Message:            "ListenerSet is not allowed to be accepted by its parent Gateway",
+					Message:            "ListenerSet is not allowed by parent Gateway AllowedListeners configuration",
 				},
 			},
 			Listeners: []v1.ListenerEntryStatus{},

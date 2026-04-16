@@ -578,15 +578,13 @@ func PrepareListenerSetRequests(
 			if cond.Type == string(v1.ListenerSetConditionAccepted) && cond.Status == metav1.ConditionFalse {
 				switch cond.Reason {
 				case string(v1.ListenerSetReasonInvalid):
-					allConds = append(allConds, conditions.NewListenerSetNotProgrammedInvalid("ListenerSet is invalid"))
+					allConds = append(allConds, conditions.NewListenerSetNotProgrammedInvalid(cond.Message))
 				case string(v1.ListenerSetReasonListenersNotValid):
-					allConds = append(allConds, conditions.NewListenerSetNotProgrammedListenersNotValid("All listeners are invalid"))
+					allConds = append(allConds, conditions.NewListenerSetNotProgrammedListenersNotValid(cond.Message))
 				case string(v1.ListenerSetReasonNotAllowed):
-					allConds = append(allConds, conditions.NewListenerSetNotProgrammedNotAllowed("ListenerSet is not allowed to be"+
-						" accepted by its parent Gateway"))
+					allConds = append(allConds, conditions.NewListenerSetNotProgrammedNotAllowed(cond.Message))
 				case string(v1.ListenerSetReasonParentNotAccepted):
-					allConds = append(allConds, conditions.NewListenerSetNotProgrammedParentNotAccepted("Parent Gateway is"+
-						" not accepted"))
+					allConds = append(allConds, conditions.NewListenerSetNotProgrammedParentNotAccepted(cond.Message))
 				}
 
 				break
@@ -597,7 +595,8 @@ func PrepareListenerSetRequests(
 		listenerStatuses := make([]v1.ListenerEntryStatus, 0, len(listenerSet.Listeners))
 
 		for _, l := range listenerSet.Listeners {
-			listenerConds := l.Conditions
+			listenerConds := make([]conditions.Condition, 0, len(l.Conditions)+2)
+			listenerConds = append(listenerConds, l.Conditions...)
 
 			if l.Valid {
 				listenerConds = append(listenerConds, conditions.NewDefaultListenerConditions(listenerConds)...)
