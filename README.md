@@ -4,6 +4,7 @@
 [![codecov](https://codecov.io/gh/nginx/nginx-gateway-fabric/graph/badge.svg?token=32ULC8F13Z)](https://codecov.io/gh/nginx/nginx-gateway-fabric)
 [![GitHub release (latest SemVer)](https://img.shields.io/github/v/release/nginx/nginx-gateway-fabric?logo=github&sort=semver)](https://github.com/nginx/nginx-gateway-fabric/releases/latest)
 [![Forum](https://img.shields.io/badge/nginx--community--forum-green)](https://community.nginx.org/c/projects/nginx-gateway-fabric/25)
+[![Contributor Covenant](https://img.shields.io/badge/Contributor%20Covenant-3.0-4baaaa.svg)](/CODE_OF_CONDUCT.md)
 [![Project Status: Active – The project has reached a stable, usable state and is being actively developed.](https://www.repostatus.org/badges/latest/active.svg)](https://www.repostatus.org/#active)
 
 # NGINX Gateway Fabric
