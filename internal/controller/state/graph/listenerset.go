@@ -126,11 +126,7 @@ func validateListenerSet(
 	var conds []conditions.Condition
 	valid := true
 
-	// Check if we have any listeners
-	if len(ls.Spec.Listeners) == 0 {
-		conds = append(conds, conditions.NewListenerSetListenersNotValid("At least one listener must be specified"))
-		valid = false
-	} else if validListenerCount == 0 {
+	if validListenerCount == 0 {
 		// All listeners are invalid
 		conds = append(conds, conditions.NewListenerSetListenersNotValid("All listeners are invalid"))
 		valid = false

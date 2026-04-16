@@ -162,19 +162,6 @@ func TestBuildListenerSets(t *testing.T) {
 		},
 	}
 
-	listenerSetNoListeners := &v1.ListenerSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace: "test",
-			Name:      "listenerset-no-listeners",
-		},
-		Spec: v1.ListenerSetSpec{
-			ParentRef: v1.ParentGatewayReference{
-				Name: "gateway",
-			},
-			Listeners: []v1.ListenerEntry{},
-		},
-	}
-
 	listenerSetNotAllowed := &v1.ListenerSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: "test",
@@ -326,27 +313,6 @@ func TestBuildListenerSets(t *testing.T) {
 					Conditions: []conditions.Condition{
 						conditions.NewListenerSetNotAllowed("ListenerSet is not allowed by parent Gateway" +
 							" test/no-allowed-listeners AllowedListeners configuration"),
-					},
-				},
-			},
-		},
-		{
-			name: "listenerset with no listeners",
-			inputListenerSets: map[types.NamespacedName]*v1.ListenerSet{
-				{Namespace: "test", Name: "listenerset-no-listeners"}: listenerSetNoListeners,
-			},
-			gateways: map[types.NamespacedName]*Gateway{
-				{Namespace: "test", Name: "gateway"}: validGateway,
-			},
-			namespaces: testNS,
-			expectedListenerSets: map[types.NamespacedName]*ListenerSet{
-				{Namespace: "test", Name: "listenerset-no-listeners"}: {
-					Source:    listenerSetNoListeners,
-					Gateway:   validGateway.Source,
-					Valid:     false,
-					Listeners: []*Listener{}, // Empty listeners slice when no listeners specified
-					Conditions: []conditions.Condition{
-						conditions.NewListenerSetListenersNotValid("At least one listener must be specified"),
 					},
 				},
 			},

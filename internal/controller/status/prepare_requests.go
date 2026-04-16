@@ -569,7 +569,7 @@ func PrepareListenerSetRequests(
 	for nsname, listenerSet := range listenerSets {
 		// Add default conditions first
 		defaultConds := conditions.NewDefaultListenerSetConditions()
-		allConds := make([]conditions.Condition, 0, len(listenerSet.Conditions)+len(defaultConds))
+		allConds := make([]conditions.Condition, 0, len(listenerSet.Conditions)+len(defaultConds)+1)
 		allConds = append(allConds, defaultConds...)
 		allConds = append(allConds, listenerSet.Conditions...)
 
