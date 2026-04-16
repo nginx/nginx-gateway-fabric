@@ -160,6 +160,13 @@ func TestBuildNginxResourceObjects(t *testing.T) {
 	validateLabelsAndAnnotations(cm)
 	g.Expect(cm.Data).To(HaveKey(configmaps.AgentConfKey))
 	g.Expect(cm.Data[configmaps.AgentConfKey]).To(ContainSubstring("command:"))
+	// Verify base agent features (metrics enabled by default)
+	g.Expect(cm.Data[configmaps.AgentConfKey]).To(ContainSubstring("- configuration"))
+	g.Expect(cm.Data[configmaps.AgentConfKey]).To(ContainSubstring("- certificates"))
+	g.Expect(cm.Data[configmaps.AgentConfKey]).To(ContainSubstring("- metrics"))
+	// Should not have WAF or Plus features
+	g.Expect(cm.Data[configmaps.AgentConfKey]).ToNot(ContainSubstring("- logs-nap"))
+	g.Expect(cm.Data[configmaps.AgentConfKey]).ToNot(ContainSubstring("- api-action"))
 
 	svcAcctObj := objects[3]
 	svcAcct, ok := svcAcctObj.(*corev1.ServiceAccount)
@@ -349,6 +356,10 @@ func TestBuildNginxResourceObjects_NginxProxyConfig(t *testing.T) {
 	g.Expect(ok).To(BeTrue())
 	g.Expect(cm.Data[configmaps.AgentConfKey]).To(ContainSubstring("level: debug"))
 	g.Expect(cm.Data[configmaps.AgentConfKey]).To(ContainSubstring("port: 8080"))
+	// Verify agent features - should have base + metrics
+	g.Expect(cm.Data[configmaps.AgentConfKey]).To(ContainSubstring("- configuration"))
+	g.Expect(cm.Data[configmaps.AgentConfKey]).To(ContainSubstring("- certificates"))
+	g.Expect(cm.Data[configmaps.AgentConfKey]).To(ContainSubstring("- metrics"))
 
 	svcObj := objects[4]
 	svc, ok := svcObj.(*corev1.Service)
@@ -829,7 +840,10 @@ func TestBuildNginxResourceObjects_Plus(t *testing.T) {
 	cm, ok = cmObj.(*corev1.ConfigMap)
 	g.Expect(ok).To(BeTrue())
 	g.Expect(cm.Data).To(HaveKey(configmaps.AgentConfKey))
-	g.Expect(cm.Data[configmaps.AgentConfKey]).To(ContainSubstring("api-action"))
+	// Verify agent features - should have base + api-action (Plus)
+	g.Expect(cm.Data[configmaps.AgentConfKey]).To(ContainSubstring("- configuration"))
+	g.Expect(cm.Data[configmaps.AgentConfKey]).To(ContainSubstring("- certificates"))
+	g.Expect(cm.Data[configmaps.AgentConfKey]).To(ContainSubstring("- api-action"))
 
 	depObj := objects[8]
 	dep, ok := depObj.(*appsv1.Deployment)
@@ -1047,6 +1061,15 @@ func TestBuildNginxResourceObjects_DaemonSet(t *testing.T) {
 		"gateway.networking.k8s.io/gateway-name": "gw",
 		"app.kubernetes.io/name":                 "gw-nginx",
 	}
+
+	// Verify agent ConfigMap contains WAF logs-nap feature
+	cmObj := objects[2]
+	cm, ok := cmObj.(*corev1.ConfigMap)
+	g.Expect(ok).To(BeTrue())
+	// Verify agent features - should have base + logs-nap (WAF)
+	g.Expect(cm.Data[configmaps.AgentConfKey]).To(ContainSubstring("- configuration"))
+	g.Expect(cm.Data[configmaps.AgentConfKey]).To(ContainSubstring("- certificates"))
+	g.Expect(cm.Data[configmaps.AgentConfKey]).To(ContainSubstring("- logs-nap"))
 
 	dsObj := objects[5]
 	ds, ok := dsObj.(*appsv1.DaemonSet)
@@ -1646,6 +1669,13 @@ func TestBuildNginxConfigMaps_AgentFields(t *testing.T) {
 	g.Expect(data).To(ContainSubstring("host: console.example.com"))
 	g.Expect(data).To(ContainSubstring("port: 443"))
 	g.Expect(data).To(ContainSubstring("skip_verify: false"))
+	// Verify base agent features are present (metrics enabled by default)
+	g.Expect(data).To(ContainSubstring("- configuration"))
+	g.Expect(data).To(ContainSubstring("- certificates"))
+	g.Expect(data).To(ContainSubstring("- metrics"))
+	// Should not have WAF or Plus features
+	g.Expect(data).ToNot(ContainSubstring("- logs-nap"))
+	g.Expect(data).ToNot(ContainSubstring("- api-action"))
 }
 
 func TestBuildReadinessProbe(t *testing.T) {
@@ -2502,6 +2532,15 @@ func TestBuildNginxResourceObjects_WAF(t *testing.T) {
 	g.Expect(err).ToNot(HaveOccurred())
 
 	g.Expect(objects).To(HaveLen(6))
+
+	// Verify agent ConfigMap contains WAF logs-nap feature
+	cmObj := objects[2]
+	cm, ok := cmObj.(*corev1.ConfigMap)
+	g.Expect(ok).To(BeTrue())
+	// Verify agent features - should have base + logs-nap (WAF)
+	g.Expect(cm.Data[configmaps.AgentConfKey]).To(ContainSubstring("- configuration"))
+	g.Expect(cm.Data[configmaps.AgentConfKey]).To(ContainSubstring("- certificates"))
+	g.Expect(cm.Data[configmaps.AgentConfKey]).To(ContainSubstring("- logs-nap"))
 
 	// WAF-specific validations on the deployment
 	depObj := objects[5]

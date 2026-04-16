@@ -55,6 +55,9 @@ features:
 {{- if .EnableMetrics }}
 - metrics
 {{- end }}
+{{- if eq true .WafEnabled }}
+- logs-nap
+{{- end }}
 {{- if eq true .Plus }}
 - api-action
 {{- end }}

@@ -577,8 +577,14 @@ func (p *NginxProvisioner) buildAgentConfigMap(
 		"AgentLabels":   agentLabels,
 	}
 
-	if nProxyCfg != nil && nProxyCfg.Logging != nil && nProxyCfg.Logging.AgentLevel != nil {
-		agentFields["LogLevel"] = *nProxyCfg.Logging.AgentLevel
+	if nProxyCfg != nil {
+		if nProxyCfg.WAF != nil && *nProxyCfg.WAF == ngfAPIv1alpha2.WAFEnabled {
+			agentFields["WafEnabled"] = true
+		}
+
+		if nProxyCfg.Logging != nil && nProxyCfg.Logging.AgentLevel != nil {
+			agentFields["LogLevel"] = *nProxyCfg.Logging.AgentLevel
+		}
 	}
 
 	if p.cfg.NginxOneConsoleTelemetryConfig.DataplaneKeySecretName != "" {
