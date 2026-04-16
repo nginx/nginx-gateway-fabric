@@ -18,13 +18,20 @@ import (
 )
 
 // PortForward starts a port-forward to the specified Pod.
-func PortForward(config *rest.Config, namespace, podName string, ports []string, stopCh <-chan struct{}) error {
+// The returned done channel is closed when the port-forward goroutine has fully exited,
+// meaning the local ports are guaranteed to be released.
+func PortForward(
+	config *rest.Config,
+	namespace, podName string,
+	ports []string,
+	stopCh <-chan struct{},
+) (chan struct{}, error) {
 	roundTripper, upgrader, err := spdy.RoundTripperFor(config)
 	if err != nil {
 		roundTripperErr := fmt.Errorf("error creating roundtripper: %w", err)
 		GinkgoWriter.Printf("%v\n", roundTripperErr)
 
-		return roundTripperErr
+		return nil, roundTripperErr
 	}
 
 	serverURL, err := url.Parse(config.Host)
@@ -32,7 +39,7 @@ func PortForward(config *rest.Config, namespace, podName string, ports []string,
 		parseConfigErr := fmt.Errorf("error parsing rest config host: %w", err)
 		GinkgoWriter.Printf("%v\n", parseConfigErr)
 
-		return parseConfigErr
+		return nil, parseConfigErr
 	}
 
 	serverURL.Path = path.Join(
@@ -65,7 +72,10 @@ func PortForward(config *rest.Config, namespace, podName string, ports []string,
 		return forwarder.ForwardPorts()
 	}
 
+	doneCh := make(chan struct{})
+
 	go func() {
+		defer close(doneCh)
 		for {
 			ctx := context.Background()
 			if err := forward(); err != nil {
@@ -82,7 +92,7 @@ func PortForward(config *rest.Config, namespace, podName string, ports []string,
 		}
 	}()
 
-	return nil
+	return doneCh, nil
 }
 
 // safeBuffer is a goroutine safe bytes.Buffer.

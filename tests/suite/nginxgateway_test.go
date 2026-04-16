@@ -19,13 +19,18 @@ var _ = Describe("NginxGateway", Ordered, Label("functional", "nginxGateway"), f
 	var (
 		ngfPodName string
 
-		namespace          = "nginx-gateway"
-		nginxGatewayNsname = types.NamespacedName{Name: releaseName + "-config", Namespace: namespace}
+		namespace          string
+		nginxGatewayNsname types.NamespacedName
 
 		files = []string{
 			"nginxgateway/nginx-gateway.yaml",
 		}
 	)
+
+	BeforeAll(func() {
+		namespace = ngfNamespace
+		nginxGatewayNsname = types.NamespacedName{Name: releaseName + "-config", Namespace: namespace}
+	})
 
 	getNginxGateway := func(nsname types.NamespacedName) (ngfAPI.NginxGateway, error) {
 		ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.GetTimeout)

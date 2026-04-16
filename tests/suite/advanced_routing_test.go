@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
-	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -72,10 +71,9 @@ var _ = Describe("AdvancedRouting", Ordered, Label("functional", "routing"), fun
 		DescribeTable("verify working traffic for HTTPRoute",
 			func(uri string, serverName string, headers map[string]string, queryParams map[string]string) {
 				url := baseURL + uri
-				Eventually(
-					func() error {
-						return expectRequestToRespondFromExpectedServer(url, address, serverName, headers, queryParams)
-					}).
+				Eventually(func(g Gomega) {
+					expectRequestToRespondFromExpectedServer(g, url, address, serverName, headers, queryParams)
+				}).
 					WithTimeout(timeoutConfig.GetTimeout).
 					WithPolling(500 * time.Millisecond).
 					Should(Succeed())
@@ -116,9 +114,10 @@ var _ = Describe("AdvancedRouting", Ordered, Label("functional", "routing"), fun
 })
 
 func expectRequestToRespondFromExpectedServer(
+	g Gomega,
 	appURL, address, expServerName string,
 	headers, queryParams map[string]string,
-) error {
+) {
 	GinkgoWriter.Printf("Expecting request to respond from the server %q\n", expServerName)
 
 	request := framework.Request{
@@ -130,29 +129,12 @@ func expectRequestToRespondFromExpectedServer(
 	}
 
 	resp, err := framework.Get(request)
-	if err != nil {
-		return err
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		statusErr := errors.New("http status was not 200")
-		GinkgoWriter.Printf("ERROR: %v\n", statusErr)
-
-		return statusErr
-	}
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(resp.StatusCode).To(Equal(http.StatusOK))
 
 	actualServerName, err := extractServerName(resp.Body)
-	if err != nil {
-		GinkgoWriter.Printf("ERROR extracting server name from response body: %v\n", err)
-
-		return err
-	}
-
-	if !strings.Contains(actualServerName, expServerName) {
-		return errors.New("expected response body to contain correct server name")
-	}
-
-	return nil
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(actualServerName).To(ContainSubstring(expServerName))
 }
 
 func extractServerName(responseBody string) (string, error) {
