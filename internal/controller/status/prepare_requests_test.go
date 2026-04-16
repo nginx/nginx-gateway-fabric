@@ -3040,9 +3040,16 @@ func TestBuildListenerSetStatuses(t *testing.T) {
 			Conditions: []conditions.Condition{},
 		},
 		{Namespace: "test", Name: "ls-invalid"}: {
-			Valid:     false,
-			Source:    lsInvalid,
-			Listeners: []*graph.Listener{},
+			Valid:  false,
+			Source: lsInvalid,
+			Listeners: []*graph.Listener{
+				{
+					Name:       "invalid-listener",
+					Valid:      false,
+					Routes:     map[graph.RouteKey]*graph.L7Route{},
+					Conditions: conditions.NewListenerUnsupportedValue("Unsupported listener configuration"),
+				},
+			},
 			Conditions: []conditions.Condition{
 				conditions.NewListenerSetListenersNotValid("All listeners are invalid"),
 			},
@@ -3202,7 +3209,30 @@ func TestBuildListenerSetStatuses(t *testing.T) {
 					Message:            "All listeners are invalid",
 				},
 			},
-			Listeners: []v1.ListenerEntryStatus{},
+			Listeners: []v1.ListenerEntryStatus{
+				{
+					Name:           "invalid-listener",
+					AttachedRoutes: 0,
+					Conditions: []metav1.Condition{
+						{
+							Type:               string(v1.ListenerConditionAccepted),
+							Status:             metav1.ConditionFalse,
+							ObservedGeneration: 3,
+							LastTransitionTime: transitionTime,
+							Reason:             string(conditions.ListenerReasonUnsupportedValue),
+							Message:            "Unsupported listener configuration",
+						},
+						{
+							Type:               string(v1.ListenerConditionProgrammed),
+							Status:             metav1.ConditionFalse,
+							ObservedGeneration: 3,
+							LastTransitionTime: transitionTime,
+							Reason:             string(v1.ListenerReasonInvalid),
+							Message:            "Unsupported listener configuration",
+						},
+					},
+				},
+			},
 		},
 		{Namespace: "test", Name: "ls-mixed"}: {
 			Conditions: []metav1.Condition{
