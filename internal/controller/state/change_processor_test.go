@@ -215,7 +215,7 @@ func createListenerSet(name string, gatewayName string, listeners ...v1.Listener
 		Spec: v1.ListenerSetSpec{
 			ParentRef: v1.ParentGatewayReference{
 				Name:      v1.ObjectName(gatewayName),
-				Namespace: (*v1.Namespace)(helpers.GetPointer("test")),
+				Namespace: helpers.GetPointer(v1.Namespace("test")),
 			},
 			Listeners: listeners,
 		},
