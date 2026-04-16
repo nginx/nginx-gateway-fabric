@@ -38,6 +38,12 @@ func (g GeneratorImpl) executeStreamServers(conf dataplane.Configuration) []exec
 	}
 }
 
+// portProtoKey uniquely identifies a port and protocol combination for deduplication.
+type portProtoKey struct {
+	protocol string
+	port     int32
+}
+
 func createStreamServers(logger logr.Logger, conf dataplane.Configuration) []stream.Server {
 	totalServers := len(conf.TLSPassthroughServers) + len(conf.TCPServers) + len(conf.UDPServers)
 	if totalServers == 0 {
@@ -45,7 +51,7 @@ func createStreamServers(logger logr.Logger, conf dataplane.Configuration) []str
 	}
 
 	streamServers := make([]stream.Server, 0, totalServers*2)
-	portSet := make(map[int32]struct{})
+	portSet := make(map[portProtoKey]struct{})
 	upstreams := make(map[string]dataplane.Upstream)
 
 	for _, u := range conf.StreamUpstreams {
@@ -70,11 +76,12 @@ func createStreamServers(logger logr.Logger, conf dataplane.Configuration) []str
 			}
 		}
 
-		if _, inPortSet := portSet[server.Port]; inPortSet {
+		key := portProtoKey{port: server.Port, protocol: string(v1.TCPProtocolType)}
+		if _, inPortSet := portSet[key]; inPortSet {
 			continue
 		}
 
-		portSet[server.Port] = struct{}{}
+		portSet[key] = struct{}{}
 
 		// we do not evaluate rewriteClientIP settings for non-socket stream servers
 		streamServer := stream.Server{
@@ -98,7 +105,7 @@ func processLayer4Servers(
 	logger logr.Logger,
 	servers []dataplane.Layer4VirtualServer,
 	upstreams map[string]dataplane.Upstream,
-	portSet map[int32]struct{},
+	portSet map[portProtoKey]struct{},
 	streamServers *[]stream.Server,
 	protocol string,
 ) {
@@ -108,7 +115,8 @@ func processLayer4Servers(
 	}
 
 	for i, server := range servers {
-		if _, inPortSet := portSet[server.Port]; inPortSet {
+		key := portProtoKey{port: server.Port, protocol: protocol}
+		if _, inPortSet := portSet[key]; inPortSet {
 			continue
 		}
 
@@ -160,7 +168,7 @@ func processLayer4Servers(
 			ProxyPass:  proxyPass,
 		}
 		*streamServers = append(*streamServers, streamServer)
-		portSet[server.Port] = struct{}{}
+		portSet[key] = struct{}{}
 	}
 }
 

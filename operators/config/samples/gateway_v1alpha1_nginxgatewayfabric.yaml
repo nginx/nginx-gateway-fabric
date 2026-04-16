@@ -5,6 +5,7 @@ metadata:
 spec:
   # Default values copied from <project_dir>/helm-charts/nginx-gateway-fabric/values.yaml
   certGenerator:
+    enable: true
     affinity: {}
     agentTLSSecretName: agent-tls
     annotations: {}
@@ -19,6 +20,13 @@ spec:
   nginx:
     autoscaling:
       enable: false
+      annotations: {}
+      minReplicas: 1
+      maxReplicas: 10
+      targetCPUUtilizationPercentage: 50
+      targetMemoryUtilizationPercentage: 50
+      behavior: {}
+      metrics: []
     config: {}
     container:
       hostPorts: []
@@ -30,7 +38,7 @@ spec:
     image:
       pullPolicy: IfNotPresent
       repository: ghcr.io/nginx/nginx-gateway-fabric/nginx
-      tag: "2.4.2-ubi"
+      tag: "2.5.1-ubi"
     imagePullSecret: ""
     imagePullSecrets: []
     kind: deployment
@@ -63,6 +71,13 @@ spec:
     affinity: {}
     autoscaling:
       enable: false
+      annotations: {}
+      minReplicas: 1
+      maxReplicas: 10
+      targetCPUUtilizationPercentage: 50
+      targetMemoryUtilizationPercentage: 50
+      behavior: {}
+      metrics: []
     config:
       logging:
         level: info
@@ -72,12 +87,18 @@ spec:
     gatewayClassAnnotations: {}
     gatewayClassName: nginx
     gatewayControllerName: gateway.nginx.org/nginx-gateway-controller
+    watchNamespaces: []
     gwAPIExperimentalFeatures:
       enable: false
+    gwAPIInferenceExtension:
+      enable: false
+      endpointPicker:
+        disableTLS: false
+        skipVerify: true
     image:
       pullPolicy: IfNotPresent
       repository: ghcr.io/nginx/nginx-gateway-fabric
-      tag: "2.4.2-ubi"
+      tag: "2.5.1-ubi"
     kind: deployment
     labels: {}
     leaderElection:
@@ -107,6 +128,9 @@ spec:
       imagePullSecret: ""
       imagePullSecrets: []
       name: ""
+    priorityClassName: ""
+    snippets:
+      enable: false
     snippetsFilters:
       enable: false
     terminationGracePeriodSeconds: 30

@@ -64,6 +64,20 @@ func validateEscapedStringNoVarExpansion(value string, examples []string) error 
 	return nil
 }
 
+// validateEscapedStringWithNginxVars validates that value is either a valid escaped string
+// (no '$') or a valid NGINX variable reference (e.g. $remote_addr or ${remote_addr}).
+func validateEscapedStringWithNginxVars(value string, examples []string) error {
+	if err := validateEscapedStringNoVarExpansion(value, examples); err != nil {
+		if varErr := (GenericValidator{}).ValidateNginxVariableName(value); varErr != nil {
+			if strings.HasPrefix(value, "$") {
+				return varErr
+			}
+			return err
+		}
+	}
+	return nil
+}
+
 const (
 	invalidHeadersErrMsg string = "unsupported header name configured, unsupported names are: "
 	maxHeaderLength      int    = 256

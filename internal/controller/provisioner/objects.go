@@ -8,6 +8,7 @@ import (
 	"maps"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	jsonpatch "gopkg.in/evanphx/json-patch.v4"
@@ -48,6 +49,12 @@ const (
 	defaultInitialDelaySeconds = int32(3)
 )
 
+// portProtoEntry represents a unique port and protocol combination.
+type portProtoEntry struct {
+	Protocol corev1.Protocol
+	Port     int32
+}
+
 var emptyDirVolumeSource = corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}
 
 // setOwnerReference is a helper to set owner reference on an object.
@@ -74,6 +81,9 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 	gateway *gatewayv1.Gateway,
 	nProxyCfg *graph.EffectiveNginxProxy,
 ) ([]client.Object, error) {
+	// NOTE: When adding new fields to the generated objects, please ensure to update the corresponding spec
+	// setter function in setter.go to set the new fields when updating the object.
+
 	var errs []error
 
 	// Need to ensure nginx resource objects are generated deterministically. Specifically when generating
@@ -134,7 +144,7 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 	var healthcheckPort int32
 	if isNginxReadinessProbeExposed(nProxyCfg) {
 		healthcheckPort = dataplane.GetNginxReadinessProbePort(nProxyCfg)
-		ports[healthcheckPort] = corev1.ProtocolTCP
+		ports = appendUniquePortProtoEntry(ports, portProtoEntry{Port: healthcheckPort, Protocol: corev1.ProtocolTCP})
 	}
 
 	service, err := buildNginxService(
@@ -284,18 +294,36 @@ func (p *NginxProvisioner) buildServiceAccount(
 	return serviceAccount, nil
 }
 
-// buildPortsFromListeners builds a map of ports to protocols from the Gateway listeners.
-func (p *NginxProvisioner) buildPortsFromListeners(listeners []gatewayv1.Listener) map[int32]corev1.Protocol {
-	ports := make(map[int32]corev1.Protocol, len(listeners))
+// buildPortsFromListeners builds a list of port/protocol entries from the Gateway listeners.
+// A port number can appear multiple times if it has different protocols (e.g., TCP and UDP on port 53).
+func (p *NginxProvisioner) buildPortsFromListeners(listeners []gatewayv1.Listener) []portProtoEntry {
+	seen := make(map[portProtoEntry]struct{}, len(listeners))
+	ports := make([]portProtoEntry, 0, len(listeners))
 	for _, listener := range listeners {
+		var protocol corev1.Protocol
 		switch listener.Protocol {
 		case gatewayv1.UDPProtocolType:
-			ports[listener.Port] = corev1.ProtocolUDP
+			protocol = corev1.ProtocolUDP
 		default:
-			ports[listener.Port] = corev1.ProtocolTCP
+			protocol = corev1.ProtocolTCP
+		}
+		entry := portProtoEntry{Port: listener.Port, Protocol: protocol}
+		if _, exists := seen[entry]; !exists {
+			seen[entry] = struct{}{}
+			ports = append(ports, entry)
 		}
 	}
 	return ports
+}
+
+// appendUniquePortProtoEntry appends the entry to ports only if an identical port+protocol does not already exist.
+func appendUniquePortProtoEntry(ports []portProtoEntry, entry portProtoEntry) []portProtoEntry {
+	for _, p := range ports {
+		if p.Port == entry.Port && p.Protocol == entry.Protocol {
+			return ports
+		}
+	}
+	return append(ports, entry)
 }
 
 // cloneObjectMeta clones the given ObjectMeta.
@@ -611,7 +639,7 @@ func (p *NginxProvisioner) buildOpenshiftObjects(
 func buildNginxService(
 	objectMeta metav1.ObjectMeta,
 	nProxyCfg *graph.EffectiveNginxProxy,
-	ports map[int32]corev1.Protocol,
+	ports []portProtoEntry,
 	healthcheckPort int32,
 	selectorLabels map[string]string,
 	addresses []gatewayv1.GatewaySpecAddress,
@@ -626,8 +654,15 @@ func buildNginxService(
 		serviceType = corev1.ServiceType(*serviceCfg.ServiceType)
 	}
 
+	var externalIPs []string
+	for _, addr := range addresses {
+		if addr.Type != nil && *addr.Type == gatewayv1.IPAddressType {
+			externalIPs = append(externalIPs, addr.Value)
+		}
+	}
+
 	var servicePolicy corev1.ServiceExternalTrafficPolicy
-	if serviceType != corev1.ServiceTypeClusterIP {
+	if serviceType != corev1.ServiceTypeClusterIP || len(externalIPs) > 0 {
 		servicePolicy = defaultServicePolicy
 		if serviceCfg.ExternalTrafficPolicy != nil {
 			servicePolicy = corev1.ServiceExternalTrafficPolicy(*serviceCfg.ExternalTrafficPolicy)
@@ -642,12 +677,11 @@ func buildNginxService(
 			Type:                  serviceType,
 			Ports:                 servicePorts,
 			ExternalTrafficPolicy: servicePolicy,
+			ExternalIPs:           externalIPs,
 			Selector:              selectorLabels,
 			IPFamilyPolicy:        helpers.GetPointer(corev1.IPFamilyPolicyPreferDualStack),
 		},
 	}
-
-	setSvcExternalIPs(svc, addresses)
 
 	setIPFamily(nProxyCfg, svc)
 
@@ -664,27 +698,36 @@ func buildNginxService(
 }
 
 func buildServicePorts(
-	ports map[int32]corev1.Protocol,
+	ports []portProtoEntry,
 	healthcheckPort int32,
 	serviceType corev1.ServiceType,
 	nodePorts []ngfAPIv1alpha2.NodePort,
 ) []corev1.ServicePort {
+	// Determine which port numbers have multiple protocols (e.g., TCP and UDP on the same port).
+	protocolsPerPort := make(map[int32]int)
+	for _, entry := range ports {
+		protocolsPerPort[entry.Port]++
+	}
+
 	servicePorts := make([]corev1.ServicePort, 0, len(ports))
-	for port, protocol := range ports {
-		name := fmt.Sprintf("port-%d", port)
-		if healthcheckPort > 0 && port == healthcheckPort {
+	for _, entry := range ports {
+		name := fmt.Sprintf("port-%d", entry.Port)
+		if protocolsPerPort[entry.Port] > 1 {
+			name = fmt.Sprintf("port-%d-%s", entry.Port, strings.ToLower(string(entry.Protocol)))
+		}
+		if healthcheckPort > 0 && entry.Port == healthcheckPort && entry.Protocol == corev1.ProtocolTCP {
 			name = "health"
 		}
 		servicePort := corev1.ServicePort{
 			Name:       name,
-			Port:       port,
-			TargetPort: intstr.FromInt32(port),
-			Protocol:   protocol,
+			Port:       entry.Port,
+			TargetPort: intstr.FromInt32(entry.Port),
+			Protocol:   entry.Protocol,
 		}
 
 		if serviceType != corev1.ServiceTypeClusterIP {
 			for _, nodePort := range nodePorts {
-				if nodePort.ListenerPort == port {
+				if nodePort.ListenerPort == entry.Port {
 					servicePort.NodePort = nodePort.Port
 				}
 			}
@@ -696,18 +739,13 @@ func buildServicePorts(
 	// need to sort ports so everytime buildNginxService is called it will generate the exact same
 	// array of ports. This is needed to satisfy deterministic results of the method.
 	sort.Slice(servicePorts, func(i, j int) bool {
-		return servicePorts[i].Port < servicePorts[j].Port
+		if servicePorts[i].Port != servicePorts[j].Port {
+			return servicePorts[i].Port < servicePorts[j].Port
+		}
+		return servicePorts[i].Protocol < servicePorts[j].Protocol
 	})
 
 	return servicePorts
-}
-
-func setSvcExternalIPs(svc *corev1.Service, addresses []gatewayv1.GatewaySpecAddress) {
-	for _, address := range addresses {
-		if address.Type != nil && *address.Type == gatewayv1.IPAddressType {
-			svc.Spec.ExternalIPs = append(svc.Spec.ExternalIPs, address.Value)
-		}
-	}
 }
 
 func setIPFamily(nProxyCfg *graph.EffectiveNginxProxy, svc *corev1.Service) {
@@ -736,7 +774,7 @@ func setSvcLoadBalancerSettings(svcCfg ngfAPIv1alpha2.ServiceSpec, svcSpec *core
 func (p *NginxProvisioner) buildNginxDeployment(
 	objectMeta metav1.ObjectMeta,
 	nProxyCfg *graph.EffectiveNginxProxy,
-	ports map[int32]corev1.Protocol,
+	ports []portProtoEntry,
 	selectorLabels map[string]string,
 	names resourceNames,
 ) (client.Object, error) {
@@ -912,15 +950,25 @@ func applyPatches(obj client.Object, patches []ngfAPIv1alpha2.Patch) error {
 func (p *NginxProvisioner) buildNginxPodTemplateSpec(
 	objectMeta metav1.ObjectMeta,
 	nProxyCfg *graph.EffectiveNginxProxy,
-	ports map[int32]corev1.Protocol,
+	ports []portProtoEntry,
 	names resourceNames,
 ) corev1.PodTemplateSpec {
+	// Determine which port numbers have multiple protocols for naming.
+	protocolsPerPort := make(map[int32]int)
+	for _, entry := range ports {
+		protocolsPerPort[entry.Port]++
+	}
+
 	containerPorts := make([]corev1.ContainerPort, 0, len(ports))
-	for port, protocol := range ports {
+	for _, entry := range ports {
+		name := fmt.Sprintf("port-%d", entry.Port)
+		if protocolsPerPort[entry.Port] > 1 {
+			name = fmt.Sprintf("port-%d-%s", entry.Port, strings.ToLower(string(entry.Protocol)))
+		}
 		containerPort := corev1.ContainerPort{
-			Name:          fmt.Sprintf("port-%d", port),
-			ContainerPort: port,
-			Protocol:      protocol,
+			Name:          name,
+			ContainerPort: entry.Port,
+			Protocol:      entry.Protocol,
 		}
 		containerPorts = append(containerPorts, containerPort)
 	}
@@ -946,7 +994,10 @@ func (p *NginxProvisioner) buildNginxPodTemplateSpec(
 	// need to sort ports so everytime buildNginxPodTemplateSpec is called it will generate the exact same
 	// array of ports. This is needed to satisfy deterministic results of the method.
 	sort.Slice(containerPorts, func(i, j int) bool {
-		return containerPorts[i].ContainerPort < containerPorts[j].ContainerPort
+		if containerPorts[i].ContainerPort != containerPorts[j].ContainerPort {
+			return containerPorts[i].ContainerPort < containerPorts[j].ContainerPort
+		}
+		return containerPorts[i].Protocol < containerPorts[j].Protocol
 	})
 
 	image, pullPolicy := p.buildImage(nProxyCfg)

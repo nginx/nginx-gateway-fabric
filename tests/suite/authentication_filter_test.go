@@ -696,9 +696,12 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 					Expect(kubeDNSIP).ToNot(BeEmpty(), "kube-dns ClusterIP should not be empty")
 
 					// Patch NginxProxy with DNS resolver pointing to kube-dns
-					proxyKey := types.NamespacedName{Name: "ngf-test-proxy-config", Namespace: "nginx-gateway"}
+					nginxProxyNsName := types.NamespacedName{
+						Name:      fmt.Sprintf("%s-proxy-config", releaseName),
+						Namespace: ngfNamespace,
+					}
 					var nginxProxy ngfAPIv1alpha2.NginxProxy
-					Expect(resourceManager.Get(ctx, proxyKey, &nginxProxy)).To(Succeed())
+					Expect(resourceManager.Get(ctx, nginxProxyNsName, &nginxProxy)).To(Succeed())
 
 					savedDNSResolver = nginxProxy.Spec.DNSResolver
 
@@ -717,9 +720,19 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 					Expect(resourceManager.WaitForAppsToBeReady(namespace)).To(Succeed())
 
 					// Look up the NGINX service ClusterIP for use with curl --resolve.
+					// The service name is {gateway-name}-{gatewayClassName} (e.g. auth-gateway-nginx-1),
+					// matching the naming convention used by NGF's provisioner.
+					// Use Eventually because NGF creates the service asynchronously after the Gateway is applied.
 					var nginxSvc core.Service
-					nginxSvcKey := types.NamespacedName{Name: "auth-gateway-nginx", Namespace: namespace}
-					Expect(resourceManager.Get(ctx, nginxSvcKey, &nginxSvc)).To(Succeed())
+					nginxSvcKey := types.NamespacedName{Name: fmt.Sprintf("auth-gateway-%s", gatewayClassName), Namespace: namespace}
+					Eventually(func() error {
+						svcCtx, svcCancel := context.WithTimeout(context.Background(), timeoutConfig.GetTimeout)
+						defer svcCancel()
+						return resourceManager.Get(svcCtx, nginxSvcKey, &nginxSvc)
+					}).WithTimeout(timeoutConfig.GetStatusTimeout).
+						WithPolling(500 * time.Millisecond).
+						Should(Succeed())
+
 					nginxServiceIP = nginxSvc.Spec.ClusterIP
 					Expect(nginxServiceIP).ToNot(BeEmpty(), "NGINX service ClusterIP should not be empty")
 					GinkgoWriter.Printf("NGINX service ClusterIP: %s\n", nginxServiceIP)
@@ -740,9 +753,13 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 					ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.UpdateTimeout)
 					defer cancel()
 
-					proxyKey := types.NamespacedName{Name: "ngf-test-proxy-config", Namespace: "nginx-gateway"}
+					nginxProxyNsName := types.NamespacedName{
+						Name:      fmt.Sprintf("%s-proxy-config", releaseName),
+						Namespace: ngfNamespace,
+					}
+
 					var nginxProxy ngfAPIv1alpha2.NginxProxy
-					Expect(resourceManager.Get(ctx, proxyKey, &nginxProxy)).To(Succeed())
+					Expect(resourceManager.Get(ctx, nginxProxyNsName, &nginxProxy)).To(Succeed())
 
 					nginxProxy.Spec.DNSResolver = savedDNSResolver
 
@@ -1189,6 +1206,8 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 			var (
 				keycloakToken             string
 				keycloakPortForwardStopCh chan struct{}
+				keycloakPortForwardDoneCh chan struct{}
+				keycloakLocalPort         int
 				jwtRemoteManifestFiles    = []string{
 					"authentication-filter/jwt-remote-auth.yaml",
 				}
@@ -1204,17 +1223,26 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 				Expect(pods).ToNot(BeEmpty())
 				keycloakPodName := pods[0].Name
 
-				// Set up port forwarding using framework for token retrieval
+				// Set up port forwarding using framework for token retrieval.
+				// Use the proc-allocated port range to avoid collisions when running in parallel.
+				keycloakLocalPort = ngfHTTPSForwardedPort + portCounter
+				portCounter++
 				keycloakPortForwardStopCh = make(chan struct{})
-				ports := []string{"9443:8443"}
-				err = framework.PortForward(resourceManager.K8sConfig, namespace, keycloakPodName, ports, keycloakPortForwardStopCh)
+				ports := []string{fmt.Sprintf("%d:8443", keycloakLocalPort)}
+				keycloakPortForwardDoneCh, err = framework.PortForward(
+					resourceManager.K8sConfig,
+					namespace,
+					keycloakPodName,
+					ports,
+					keycloakPortForwardStopCh,
+				)
 				Expect(err).ToNot(HaveOccurred())
 
 				// Get JWT token for test user (realm is imported via ConfigMap)
 				GinkgoWriter.Println("Obtaining JWT token from Keycloak...")
 				Eventually(func() error {
 					var err error
-					keycloakToken, err = getKeycloakUserToken(ca.CertPEM)
+					keycloakToken, err = getKeycloakUserToken(ca.CertPEM, keycloakLocalPort)
 					if err != nil {
 						GinkgoWriter.Printf("Token retrieval attempt failed: %v\n", err)
 						return err
@@ -1242,6 +1270,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 				if keycloakPortForwardStopCh != nil {
 					GinkgoWriter.Println("Cleaning up Keycloak port-forward...")
 					close(keycloakPortForwardStopCh)
+					<-keycloakPortForwardDoneCh
 				}
 
 				// Delete resources
@@ -1529,8 +1558,8 @@ func (h *JWTTestHelper) Cleanup() {
 // Keycloak helper functions for JWT remote authentication testing
 
 // getKeycloakUserToken obtains a JWT token for the test user.
-func getKeycloakUserToken(caCert []byte) (string, error) {
-	url := "https://localhost:9443/realms/nginx-gateway/protocol/openid-connect/token"
+func getKeycloakUserToken(caCert []byte, localPort int) (string, error) {
+	url := fmt.Sprintf("https://localhost:%d/realms/nginx-gateway/protocol/openid-connect/token", localPort)
 
 	data := "client_id=cafe-app&username=testuser&password=testpassword&grant_type=password"
 

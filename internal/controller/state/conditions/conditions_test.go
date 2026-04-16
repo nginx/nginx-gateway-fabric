@@ -5,6 +5,7 @@ import (
 
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	v1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
 func TestDeduplicateConditions(t *testing.T) {
@@ -142,6 +143,53 @@ func TestHasMatchingCondition(t *testing.T) {
 
 			result := HasMatchingCondition(test.conds, test.condition)
 			g.Expect(result).To(Equal(test.expected))
+		})
+	}
+}
+
+func TestNewDefaultListenerConditions(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name               string
+		existingConditions []Condition
+		expectResolvedRefs bool
+	}{
+		{
+			name:               "no existing conditions includes ResolvedRefs",
+			existingConditions: nil,
+			expectResolvedRefs: true,
+		},
+		{
+			name: "existing ResolvedRefs condition (InvalidCertificateRef) is preserved",
+			existingConditions: []Condition{
+				NewListenerUnresolvedCertificateRef("some cert ref error", string(v1.ListenerReasonInvalidCertificateRef)),
+			},
+			expectResolvedRefs: false,
+		},
+		{
+			name: "existing ResolvedRefs condition (RefNotPermitted) is preserved",
+			existingConditions: []Condition{
+				NewListenerUnresolvedCertificateRef("some ref not permitted error", string(v1.ListenerReasonRefNotPermitted)),
+			},
+			expectResolvedRefs: false,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			result := NewDefaultListenerConditions(test.existingConditions)
+
+			hasResolvedRefs := false
+			for _, c := range result {
+				if c.Type == string(v1.ListenerConditionResolvedRefs) {
+					hasResolvedRefs = true
+				}
+			}
+			g.Expect(hasResolvedRefs).To(Equal(test.expectResolvedRefs))
 		})
 	}
 }

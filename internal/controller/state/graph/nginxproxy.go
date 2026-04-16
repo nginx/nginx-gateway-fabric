@@ -80,7 +80,17 @@ func buildEffectiveNginxProxy(gatewayClassNp, gatewayNp *NginxProxy) *EffectiveN
 		)
 	}
 
-	// this json trick doesn't work for unsetting slices, so we need to do that manually.
+	// Clean up the effective configuration by handling slice unsetting and other cases
+	// that are not handled by JSON merging, such as mutual exclusivity between fields.
+	cleanupEffectiveNginxProxy(&local, &global)
+
+	return &global
+}
+
+// cleanupEffectiveNginxProxy handles post-JSON merge cleanup for the effective NginxProxy configuration.
+// This includes manually unsetting slices and handling mutual exclusion between certain fields.
+func cleanupEffectiveNginxProxy(local, global *EffectiveNginxProxy) {
+	// Handle slice unsetting, JSON unmarshaling doesn't clear slices when they're set to empty
 	if local.Telemetry != nil {
 		if local.Telemetry.DisabledFeatures != nil && len(local.Telemetry.DisabledFeatures) == 0 {
 			global.Telemetry.DisabledFeatures = []ngfAPIv1alpha2.DisableTelemetryFeature{}
@@ -97,7 +107,14 @@ func buildEffectiveNginxProxy(gatewayClassNp, gatewayNp *NginxProxy) *EffectiveN
 		}
 	}
 
-	return &global
+	// Handle mutual exclusion between DaemonSet and Deployment
+	if local.Kubernetes != nil && global.Kubernetes != nil {
+		if local.Kubernetes.DaemonSet != nil && global.Kubernetes.Deployment != nil {
+			global.Kubernetes.Deployment = nil
+		} else if local.Kubernetes.Deployment != nil && global.Kubernetes.DaemonSet != nil {
+			global.Kubernetes.DaemonSet = nil
+		}
+	}
 }
 
 func nginxProxyValid(np *NginxProxy) bool {

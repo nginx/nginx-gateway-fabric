@@ -181,13 +181,7 @@ func createSSLServer(
 			Listen:       listen,
 		}
 		if virtualServer.SSL != nil {
-			server.SSL = &http.SSL{
-				Certificate:         generatePEMFileName(virtualServer.SSL.KeyPairID),
-				CertificateKey:      generatePEMFileName(virtualServer.SSL.KeyPairID),
-				Protocols:           virtualServer.SSL.Protocols,
-				Ciphers:             virtualServer.SSL.Ciphers,
-				PreferServerCiphers: virtualServer.SSL.PreferServerCiphers,
-			}
+			server.SSL = buildHTTPSSL(virtualServer.SSL)
 		}
 
 		return server, nil
@@ -197,16 +191,10 @@ func createSSLServer(
 
 	server := http.Server{
 		ServerName: virtualServer.Hostname,
-		SSL: &http.SSL{
-			Certificate:         generatePEMFileName(virtualServer.SSL.KeyPairID),
-			CertificateKey:      generatePEMFileName(virtualServer.SSL.KeyPairID),
-			Protocols:           virtualServer.SSL.Protocols,
-			Ciphers:             virtualServer.SSL.Ciphers,
-			PreferServerCiphers: virtualServer.SSL.PreferServerCiphers,
-		},
-		Locations: locs,
-		GRPC:      grpc,
-		Listen:    listen,
+		SSL:        buildHTTPSSL(virtualServer.SSL),
+		Locations:  locs,
+		GRPC:       grpc,
+		Listen:     listen,
 	}
 
 	if !disableSNIHostValidation {
@@ -226,6 +214,27 @@ func createSSLServer(
 	server.Includes = append(server.Includes, snippetIncludes...)
 
 	return server, matchPairs
+}
+
+// buildHTTPSSL converts a dataplane SSL config into an http.SSL config,
+// generating the PEM file paths for each certificate/key pair.
+func buildHTTPSSL(ssl *dataplane.SSL) *http.SSL {
+	certs := make([]string, 0, len(ssl.KeyPairIDs))
+	keys := make([]string, 0, len(ssl.KeyPairIDs))
+
+	for _, id := range ssl.KeyPairIDs {
+		pemFile := generatePEMFileName(id)
+		certs = append(certs, pemFile)
+		keys = append(keys, pemFile)
+	}
+
+	return &http.SSL{
+		Certificates:        certs,
+		CertificateKeys:     keys,
+		Protocols:           ssl.Protocols,
+		Ciphers:             ssl.Ciphers,
+		PreferServerCiphers: ssl.PreferServerCiphers,
+	}
 }
 
 func createServer(
@@ -1516,8 +1525,13 @@ func createMainRewriteForFilters(pathModifier *dataplane.HTTPPathModifier, pathR
 			filterPrefix = "/"
 		}
 
+		// Escape $ in the path so it is treated as a literal character in the PCRE regex,
+		// not as an end-of-string anchor. This matters when the route path contains a $ sign
+		// (e.g. /$coffee), which is valid in a Gateway API path but has special meaning in PCRE.
+		escapedPath := strings.ReplaceAll(pathRule.Path, "$", `\$`)
+
 		// capture everything following the configured prefix up to the first ?, if present.
-		regex := fmt.Sprintf("^%s([^?]*)?", pathRule.Path)
+		regex := fmt.Sprintf("^%s([^?]*)?", escapedPath)
 		// replace the configured prefix with the filter prefix, append the captured segment,
 		// and include the request arguments stored in nginx variable $args.
 		// https://nginx.org/en/docs/http/ngx_http_core_module.html#var_args
@@ -1527,7 +1541,7 @@ func createMainRewriteForFilters(pathModifier *dataplane.HTTPPathModifier, pathR
 		// then make sure that we *require* but *don't capture* a trailing slash in the request,
 		// otherwise we'll get duplicate slashes in the full replacement
 		if strings.HasSuffix(filterPrefix, "/") && !strings.HasSuffix(pathRule.Path, "/") {
-			regex = fmt.Sprintf("^%s(?:/([^?]*))?", pathRule.Path)
+			regex = fmt.Sprintf("^%s(?:/([^?]*))?", escapedPath)
 		}
 
 		// if configured prefix ends in / we won't capture it for a request (since it's not in the regex),

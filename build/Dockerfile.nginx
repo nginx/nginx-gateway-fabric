@@ -1,13 +1,13 @@
-# syntax=docker/dockerfile:1.22
+# syntax=docker/dockerfile:1.23
 FROM scratch AS nginx-files
 
 # the following links can be replaced with local files if needed, i.e. ADD --chown=101:1001 <local_file> <container_file>
 ADD --link --chown=101:1001 https://cs.nginx.com/static/keys/nginx_signing.rsa.pub nginx_signing.rsa.pub
 
-FROM nginx:1.29.7-alpine-otel
+FROM nginx:1.29.8-alpine-otel
 
 # renovate: datasource=github-tags depName=nginx/agent
-ARG NGINX_AGENT_VERSION=v3.8.0
+ARG NGINX_AGENT_VERSION=v3.9.0
 ARG NGINX_AGENT_BRANCH=remove-requests-in-progress-check
 ARG NJS_DIR
 ARG NGINX_CONF_DIR

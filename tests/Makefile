@@ -5,9 +5,10 @@ CONFORMANCE_TAG = latest## Tag for the conformance test runner image
 GATEWAY_CLASS = nginx## Gateway class to use
 GINKGO_FLAGS =
 GINKGO_LABEL =
+GINKGO_PROCS ?= 4
 GITHUB_OUTPUT =
 GW_API_VERSION ?= $(shell sed -n 's/.*ref=v\(.*\)/\1/p' ../config/crd/gateway-api/standard/kustomization.yaml)## Supported Gateway API version from current NGF
-GW_API_PREV_VERSION ?= 1.4.1## Supported Gateway API version from previous NGF release
+GW_API_PREV_VERSION ?= 1.5.1## Supported Gateway API version from previous NGF release
 GW_SERVICE_TYPE = NodePort## Service type to use for the gateway
 NGF_VERSION ?= edge## NGF version to be tested
 PULL_POLICY ?= Never## Pull policy for the images
@@ -56,7 +57,7 @@ run-conformance-tests: ## Run conformance tests
 	kubectl run -i conformance \
 		--image=$(CONFORMANCE_PREFIX):$(CONFORMANCE_TAG) --image-pull-policy=Never \
 		--overrides='{ "spec": { "serviceAccountName": "conformance" }	}' \
-		--restart=Never -- sh -c "go test -v -run TestConformance . -tags conformance,experimental -args --gateway-class=$(GATEWAY_CLASS) \
+		--restart=Never -- sh -c "go test -v -timeout 15m -run TestConformance . -tags conformance,experimental -args --gateway-class=$(GATEWAY_CLASS) \
 						        --version=$(NGF_VERSION) --skip-tests=$(SKIP_TESTS) --conformance-profiles=$(CONFORMANCE_PROFILES) \
 								--report-output=output.txt; cat output.txt" | tee output.txt
 	./scripts/check-pod-exit-code.sh conformance
@@ -78,7 +79,7 @@ run-conformance-tests-openshift: ## Run conformance tests on OpenShift (skips te
 	kubectl run -i conformance \
 		--image=$(CONFORMANCE_PREFIX):$(CONFORMANCE_TAG) --image-pull-policy=Always \
 		--overrides='{ "spec": { "serviceAccountName": "conformance" }	}' \
-		--restart=Never -- sh -c "go test -v -run TestConformance . -tags conformance,experimental -args --gateway-class=$(GATEWAY_CLASS) \
+		--restart=Never -- sh -c "go test -v -timeout 15m -run TestConformance . -tags conformance,experimental -args --gateway-class=$(GATEWAY_CLASS) \
 						        --supported-features=$(SUPPORTED_EXTENDED_FEATURES_OPENSHIFT) --version=$(NGF_VERSION) --skip-tests=$(SKIP_TESTS_OPENSHIFT) --conformance-profiles=$(CONFORMANCE_PROFILES) \
 								--allow-crds-mismatch --report-output=output.txt; cat output.txt" | tee output.txt
 	./scripts/check-pod-exit-code.sh conformance
@@ -187,7 +188,7 @@ ipv6-tests: ## Example usage: make ipv6-tests TAG=release-X.Y-rc
 test: build-crossplane-image ## Runs the functional tests on your kind k8s cluster
 	kind load docker-image nginx-crossplane:latest --name $(CLUSTER_NAME)
 	go run github.com/onsi/ginkgo/v2/ginkgo --race --randomize-all --randomize-suites --keep-going --fail-on-pending \
-		--trace -r -v --buildvcs --force-newlines $(GITHUB_OUTPUT) \
+		--trace -r -v --buildvcs --force-newlines $(GITHUB_OUTPUT) --procs $(GINKGO_PROCS) \
 		--label-filter "functional" $(GINKGO_FLAGS) ./suite -- \
 		--gateway-api-version=$(GW_API_VERSION) --gateway-api-prev-version=$(GW_API_PREV_VERSION) \
 		--image-tag=$(TAG) --version-under-test=$(NGF_VERSION) \

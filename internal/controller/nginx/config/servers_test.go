@@ -128,14 +128,14 @@ func TestExecuteServers(t *testing.T) {
 			{
 				Hostname: "example.com",
 				SSL: &dataplane.SSL{
-					KeyPairID: "test-keypair",
+					KeyPairIDs: []dataplane.SSLKeyPairID{"test-keypair"},
 				},
 				Port: 8443,
 			},
 			{
 				Hostname: "cafe.example.com",
 				SSL: &dataplane.SSL{
-					KeyPairID:           "test-keypair",
+					KeyPairIDs:          []dataplane.SSLKeyPairID{"test-keypair"},
 					Protocols:           "TLSv1.2 TLSv1.3",
 					Ciphers:             "ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384:HIGH:!aNULL:!MD5",
 					PreferServerCiphers: true,
@@ -273,23 +273,23 @@ func TestExecuteServers_TLSOptions(t *testing.T) {
 			{
 				Hostname: "test-protocols-only.com",
 				SSL: &dataplane.SSL{
-					KeyPairID: "test-keypair-1",
-					Protocols: "TLSv1.3",
+					KeyPairIDs: []dataplane.SSLKeyPairID{"test-keypair-1"},
+					Protocols:  "TLSv1.3",
 				},
 				Port: 8443,
 			},
 			{
 				Hostname: "test-ciphers-only.com",
 				SSL: &dataplane.SSL{
-					KeyPairID: "test-keypair-2",
-					Ciphers:   "ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384",
+					KeyPairIDs: []dataplane.SSLKeyPairID{"test-keypair-2"},
+					Ciphers:    "ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384",
 				},
 				Port: 8443,
 			},
 			{
 				Hostname: "test-prefer-server-ciphers.com",
 				SSL: &dataplane.SSL{
-					KeyPairID:           "test-keypair-3",
+					KeyPairIDs:          []dataplane.SSLKeyPairID{"test-keypair-3"},
 					PreferServerCiphers: true,
 				},
 				Port: 8443,
@@ -297,7 +297,7 @@ func TestExecuteServers_TLSOptions(t *testing.T) {
 			{
 				Hostname: "test-all-options.com",
 				SSL: &dataplane.SSL{
-					KeyPairID:           "test-keypair-4",
+					KeyPairIDs:          []dataplane.SSLKeyPairID{"test-keypair-4"},
 					Protocols:           "TLSv1.2 TLSv1.3",
 					Ciphers:             "ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384:HIGH:!aNULL:!MD5",
 					PreferServerCiphers: true,
@@ -347,6 +347,51 @@ func TestExecuteServers_TLSOptions(t *testing.T) {
 	}
 }
 
+func TestExecuteServers_MultiCertSNI(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	conf := dataplane.Configuration{
+		SSLServers: []dataplane.VirtualServer{
+			{
+				Hostname: "multi-cert.example.com",
+				SSL: &dataplane.SSL{
+					KeyPairIDs: []dataplane.SSLKeyPairID{"keypair-rsa", "keypair-ecdsa"},
+				},
+				Port: 8443,
+			},
+		},
+	}
+
+	expSubStrings := map[string]int{
+		"ssl_certificate /etc/nginx/secrets/keypair-rsa.pem;":       1,
+		"ssl_certificate /etc/nginx/secrets/keypair-ecdsa.pem;":     1,
+		"ssl_certificate_key /etc/nginx/secrets/keypair-rsa.pem;":   1,
+		"ssl_certificate_key /etc/nginx/secrets/keypair-ecdsa.pem;": 1,
+	}
+
+	fakeGenerator := &policiesfakes.FakeGenerator{}
+	gen := GeneratorImpl{}
+	results := gen.executeServers(conf, fakeGenerator, alwaysFalseKeepAliveChecker)
+
+	var configData string
+	for _, res := range results {
+		if res.dest == httpConfigFile {
+			configData = string(res.data)
+			break
+		}
+	}
+
+	g.Expect(configData).NotTo(BeEmpty(), "expected http config file to be generated")
+
+	for expSubStr, expCount := range expSubStrings {
+		g.Expect(strings.Count(configData, expSubStr)).To(
+			Equal(expCount),
+			fmt.Sprintf("expected '%s' to appear %d time(s) in generated config", expSubStr, expCount),
+		)
+	}
+}
+
 func TestExecuteServers_IPFamily(t *testing.T) {
 	t.Parallel()
 	httpServers := []dataplane.VirtualServer{
@@ -367,7 +412,7 @@ func TestExecuteServers_IPFamily(t *testing.T) {
 		{
 			Hostname: "example.com",
 			SSL: &dataplane.SSL{
-				KeyPairID: "test-keypair",
+				KeyPairIDs: []dataplane.SSLKeyPairID{"test-keypair"},
 			},
 			Port: 8443,
 		},
@@ -380,7 +425,7 @@ func TestExecuteServers_IPFamily(t *testing.T) {
 		{
 			Hostname: "example.com",
 			SSL: &dataplane.SSL{
-				KeyPairID: "test-keypair",
+				KeyPairIDs: []dataplane.SSLKeyPairID{"test-keypair"},
 			},
 			Port: 443,
 		},
@@ -510,7 +555,7 @@ func TestExecuteServers_RewriteClientIP(t *testing.T) {
 		{
 			Hostname: "example.com",
 			SSL: &dataplane.SSL{
-				KeyPairID: "test-keypair",
+				KeyPairIDs: []dataplane.SSLKeyPairID{"test-keypair"},
 			},
 			Port: 8443,
 		},
@@ -622,7 +667,7 @@ func TestExecuteServers_Plus(t *testing.T) {
 			{
 				Hostname: "example.com",
 				SSL: &dataplane.SSL{
-					KeyPairID: "test-keypair",
+					KeyPairIDs: []dataplane.SSLKeyPairID{"test-keypair"},
 				},
 			},
 		},
@@ -1393,7 +1438,7 @@ func TestCreateServers(t *testing.T) {
 			},
 			{
 				Hostname:  "cafe.example.com",
-				SSL:       &dataplane.SSL{KeyPairID: sslKeyPairID},
+				SSL:       &dataplane.SSL{KeyPairIDs: []dataplane.SSLKeyPairID{sslKeyPairID}},
 				PathRules: cafePathRules,
 				Port:      8443,
 				Policies: []policies.Policy{
@@ -1981,8 +2026,8 @@ func TestCreateServers(t *testing.T) {
 		{
 			ServerName: "cafe.example.com",
 			SSL: &http.SSL{
-				Certificate:    expectedPEMPath,
-				CertificateKey: expectedPEMPath,
+				Certificates:    []string{expectedPEMPath},
+				CertificateKeys: []string{expectedPEMPath},
 			},
 			MisdirectedRequestVars: &http.MisdirectedRequestVars{
 				SNIVar:  "$sni_listener_id_8443",
@@ -2300,7 +2345,7 @@ func TestCreateServers_Includes(t *testing.T) {
 		},
 		{
 			Hostname:  "ssl.example.com",
-			SSL:       &dataplane.SSL{KeyPairID: "test-keypair"},
+			SSL:       &dataplane.SSL{KeyPairIDs: []dataplane.SSLKeyPairID{"test-keypair"}},
 			PathRules: pathRules,
 			Port:      8443,
 			Policies: []policies.Policy{
@@ -4003,6 +4048,23 @@ func TestCreateRewritesValForRewriteFilter(t *testing.T) {
 			},
 			msg: "prefix path both with trailing slashes",
 		},
+		{
+			pathRule: dataplane.PathRule{
+				Path:     "/$coffee",
+				PathType: dataplane.PathTypePrefix,
+			},
+			filter: &dataplane.HTTPURLRewriteFilter{
+				Path: &dataplane.HTTPPathModifier{
+					Type:        dataplane.ReplacePrefixMatch,
+					Replacement: "/",
+				},
+			},
+			expected: &rewriteConfig{
+				InternalRewrite: "^ $request_uri",
+				MainRewrite:     `^/\$coffee(?:/([^?]*))? /$1?$args? break`,
+			},
+			msg: "prefix path with dollar sign is escaped in regex",
+		},
 	}
 
 	for _, test := range tests {
@@ -5060,7 +5122,7 @@ func TestExecuteServers_DisableSNIHostValidation(t *testing.T) {
 	sslServer := dataplane.VirtualServer{
 		Hostname: "example.com",
 		SSL: &dataplane.SSL{
-			KeyPairID: "test-keypair",
+			KeyPairIDs: []dataplane.SSLKeyPairID{"test-keypair"},
 		},
 		Port: 8443,
 	}

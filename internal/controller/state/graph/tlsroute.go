@@ -54,7 +54,7 @@ func buildTLSRoute(
 		return r
 	}
 
-	br, conds := validateBackendRefTLSRoute(gtr, services, r.ParentRefs, refGrantResolver)
+	br, conds := validateBackendRefTLSRoute(gtr, services, refGrantResolver)
 
 	r.Spec.BackendRef = br
 	r.Valid = true
@@ -70,7 +70,6 @@ func buildTLSRoute(
 func validateBackendRefTLSRoute(
 	gtr *gatewayv1.TLSRoute,
 	services map[types.NamespacedName]*apiv1.Service,
-	parentRefs []ParentRef,
 	refGrantResolver func(resource toResource) bool,
 ) (BackendRef, []conditions.Condition) {
 	// Length of BackendRefs and Rules is guaranteed to be one due to earlier check in buildTLSRoute
@@ -102,7 +101,7 @@ func validateBackendRefTLSRoute(
 		Name:      string(gtr.Spec.Rules[0].BackendRefs[0].Name),
 	}
 
-	svcIPFamily, svcPort, err := getIPFamilyAndPortFromRef(
+	svcPort, err := getPortFromRef(
 		ref,
 		svcNsName,
 		services,
@@ -131,13 +130,5 @@ func validateBackendRefTLSRoute(
 		}
 	}
 
-	var conds []conditions.Condition
-	for _, parentRef := range parentRefs {
-		if err := verifyIPFamily(parentRef.Gateway.EffectiveNginxProxy, svcIPFamily); err != nil {
-			backendRef.Valid = backendRef.Valid || false
-			backendRef.InvalidForGateways[parentRef.Gateway.NamespacedName] = conditions.NewRouteInvalidIPFamily(err.Error())
-		}
-	}
-
-	return backendRef, conds
+	return backendRef, nil
 }

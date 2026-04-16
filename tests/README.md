@@ -276,6 +276,8 @@ To log in the tests, use the `GinkgoWriter` interface described here: https://on
 
 #### Run the functional tests locally
 
+Run the full functional suite. By default this uses 4 parallel processes:
+
 ```makefile
 make test TAG=$(whoami)
 ```
@@ -286,14 +288,22 @@ Or, to run the tests with NGINX Plus enabled:
 make test TAG=$(whoami) PLUS_ENABLED=true
 ```
 
-> The command above doesn't run the telemetry functional test, which requires a dedicated invocation because it uses a
-> specially built image (see above) and it needs to deploy NGF differently from the rest of functional tests.
+`GINKGO_PROCS` controls how many parallel processes Ginkgo uses. Each process is an independent OS process with its own NGF deployment, namespace, and port range. Specs are distributed across them and run concurrently, reducing overall time. Cluster-wide CRDs are installed once before the parallel processes begin, while each process still performs its own per-process NGF install/setup. Set `GINKGO_PROCS` to roughly match the number of specs you intend to run to avoid unnecessary per-process installs.
 
-To run the telemetry test:
+For the graceful recovery tests, use `GINKGO_PROCS=2`. The nginx container and NGF pod restart scenarios run in parallel across two processes, while the node restart scenarios are marked `Serial` and run exclusively one at a time:
 
 ```makefile
-make test TAG=$(whoami) GINKGO_LABEL=telemetry
+make test TAG=$(whoami) GINKGO_LABEL=graceful-recovery GINKGO_PROCS=2
 ```
+
+When running a single test with `GINKGO_LABEL`, use `GINKGO_PROCS=1` to avoid installing NGF on processes that receive no specs:
+
+```makefile
+make test TAG=$(whoami) GINKGO_LABEL=telemetry GINKGO_PROCS=1
+```
+
+> The command above doesn't run the telemetry functional test by default, which requires a dedicated invocation because it uses a
+> specially built image (see above) and it needs to deploy NGF differently from the rest of functional tests.
 
 #### Run the NFR tests on a GKE cluster from a GCP VM
 

@@ -116,6 +116,12 @@ type ClientKeepAlive struct {
     // Timeout defines the keep-alive timeouts for clients.
     // +optional
     Timeout *ClientKeepAliveTimeout `json:"timeout,omitempty"`
+
+    	// MinTimeout defines the timeout for which the keep-alive client connection
+	    // will not be closed on the server side for connection reuse or on
+	    // graceful shutdown of worker processes.
+	    // +optional
+	MinTimeout *Duration `json:"minTimeout,omitempty"`
 }
 
 // ClientKeepAliveTimeout defines the timeouts related to keep-alive client connections.
@@ -243,6 +249,7 @@ spec:
   keepAlive:
     requests: 100
     time: 5m
+    minTimeout: 10s
     timeout:
       server: 2m
       header: 1m

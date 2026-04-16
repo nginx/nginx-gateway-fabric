@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.22
+# syntax=docker/dockerfile:1.23
 FROM scratch AS nginx-files
 
 # the following links can be replaced with local files if needed, i.e. ADD --chown=101:1001 <local_file> <container_file>
@@ -8,7 +8,7 @@ FROM alpine:3.22
 
 ARG NGINX_PLUS_VERSION=R36
 # renovate: datasource=github-tags depName=nginx/agent
-ARG NGINX_AGENT_VERSION=v3.8.0
+ARG NGINX_AGENT_VERSION=v3.9.0
 ARG NGINX_AGENT_BRANCH=remove-requests-in-progress-check
 ARG NJS_DIR
 ARG NGINX_CONF_DIR

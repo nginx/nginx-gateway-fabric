@@ -297,6 +297,82 @@ func TestBuildEffectiveNginxProxy(t *testing.T) {
 				return np
 			}),
 		},
+		{
+			name: "gateway class has deployment, gateway has daemonset - daemonset should win",
+			gcNp: &NginxProxy{
+				Valid: true,
+				Source: &ngfAPIv1alpha2.NginxProxy{
+					Spec: ngfAPIv1alpha2.NginxProxySpec{
+						Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+							Deployment: &ngfAPIv1alpha2.DeploymentSpec{
+								Replicas: helpers.GetPointer[int32](3),
+							},
+						},
+					},
+				},
+			},
+			gwNp: &NginxProxy{
+				Valid: true,
+				Source: &ngfAPIv1alpha2.NginxProxy{
+					Spec: ngfAPIv1alpha2.NginxProxySpec{
+						Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+							DaemonSet: &ngfAPIv1alpha2.DaemonSetSpec{
+								Container: ngfAPIv1alpha2.ContainerSpec{
+									Debug: helpers.GetPointer(true),
+								},
+							},
+						},
+					},
+				},
+			},
+			exp: &EffectiveNginxProxy{
+				Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+					DaemonSet: &ngfAPIv1alpha2.DaemonSetSpec{
+						Container: ngfAPIv1alpha2.ContainerSpec{
+							Debug: helpers.GetPointer(true),
+						},
+					},
+					Deployment: nil,
+				},
+			},
+		},
+		{
+			name: "gateway class has daemonset, gateway has deployment - deployment should win",
+			gcNp: &NginxProxy{
+				Valid: true,
+				Source: &ngfAPIv1alpha2.NginxProxy{
+					Spec: ngfAPIv1alpha2.NginxProxySpec{
+						Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+							DaemonSet: &ngfAPIv1alpha2.DaemonSetSpec{
+								Container: ngfAPIv1alpha2.ContainerSpec{
+									Debug: helpers.GetPointer(false),
+								},
+							},
+						},
+					},
+				},
+			},
+			gwNp: &NginxProxy{
+				Valid: true,
+				Source: &ngfAPIv1alpha2.NginxProxy{
+					Spec: ngfAPIv1alpha2.NginxProxySpec{
+						Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+							Deployment: &ngfAPIv1alpha2.DeploymentSpec{
+								Replicas: helpers.GetPointer[int32](5),
+							},
+						},
+					},
+				},
+			},
+			exp: &EffectiveNginxProxy{
+				Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+					Deployment: &ngfAPIv1alpha2.DeploymentSpec{
+						Replicas: helpers.GetPointer[int32](5),
+					},
+					DaemonSet: nil,
+				},
+			},
+		},
 	}
 
 	for _, test := range tests {

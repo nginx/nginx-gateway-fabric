@@ -481,6 +481,7 @@ var _ = Describe("Reconfiguration Performance Testing", Ordered, Label("nfr", "r
 
 	AfterAll(func() {
 		close(promPortForwardStopCh)
+		promInstance.WaitForPortForwardExit()
 		Expect(framework.UninstallPrometheus(resourceManager)).Should(Succeed())
 		Expect(outFile.Close()).To(Succeed())
 

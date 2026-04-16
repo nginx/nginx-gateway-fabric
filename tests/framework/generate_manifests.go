@@ -17,9 +17,9 @@ kind: Gateway
 metadata:
   name: gateway
 spec:
-  gatewayClassName: nginx
+  gatewayClassName: {{ .GatewayClassName }}
   listeners:
-{{- range $l := . }}
+{{- range $l := .Listeners }}
   - name: {{ $l.Name }}
     hostname: "{{ $l.HostnamePrefix }}.example.com"{{ if ne $l.SecretName "" }}
     port: 443
@@ -105,6 +105,11 @@ var (
 	appTmpl    = template.Must(template.New("app").Parse(appTmplTxt))
 )
 
+type gatewayTmplData struct {
+	GatewayClassName string
+	Listeners        []listener
+}
+
 type listener struct {
 	Name           string
 	HostnamePrefix string
@@ -157,7 +162,7 @@ func decodeObjects(reader io.Reader) ([]client.Object, error) {
 // GenerateScaleListenerObjects generates objects for a given number of listeners for the scale test.
 // Secrets are created first in BaseObjects, then backend services/deployments and Gateway in GatewayAndServiceObjects,
 // and finally HTTPRoutes in ScaleIterationGroups.
-func GenerateScaleListenerObjects(numListeners int, tls bool) (ScaleObjects, error) {
+func GenerateScaleListenerObjects(numListeners int, tls bool, gwClassName string) (ScaleObjects, error) {
 	var result ScaleObjects
 
 	listeners := make([]listener, 0)
@@ -210,7 +215,7 @@ func GenerateScaleListenerObjects(numListeners int, tls bool) (ScaleObjects, err
 	result.GatewayAndServiceObjects = append(result.GatewayAndServiceObjects, backendObjects...)
 
 	// Generate Gateway object with all listeners and add to result.GatewayAndServiceObjects.
-	gatewayObjects, err := generateManifests(listeners, nil)
+	gatewayObjects, err := generateManifests(listeners, nil, gwClassName)
 	if err != nil {
 		return ScaleObjects{}, err
 	}
@@ -219,7 +224,7 @@ func GenerateScaleListenerObjects(numListeners int, tls bool) (ScaleObjects, err
 	// Add each HTTPRoute as its own scale iteration group to measure
 	// Time-to-Ready (ttr) for each route.
 	for _, r := range routes {
-		routeObjects, err := generateManifests(nil, []route{r})
+		routeObjects, err := generateManifests(nil, []route{r}, "")
 		if err != nil {
 			return ScaleObjects{}, err
 		}
@@ -251,7 +256,7 @@ func generateSecrets(secrets []string) ([]client.Object, error) {
 }
 
 // GenerateScaleHTTPRouteObjects generates objects for a given number of routes for the scale test.
-func GenerateScaleHTTPRouteObjects(numRoutes int) (ScaleObjects, error) {
+func GenerateScaleHTTPRouteObjects(numRoutes int, gwClassName string) (ScaleObjects, error) {
 	var result ScaleObjects
 
 	backendName := "backend"
@@ -269,7 +274,7 @@ func GenerateScaleHTTPRouteObjects(numRoutes int) (ScaleObjects, error) {
 	}
 
 	// Generate Gateway object and add to GatewayAndServiceObjects
-	gatewayObjects, err := generateManifests([]listener{l}, nil)
+	gatewayObjects, err := generateManifests([]listener{l}, nil, gwClassName)
 	if err != nil {
 		return ScaleObjects{}, err
 	}
@@ -285,7 +290,7 @@ func GenerateScaleHTTPRouteObjects(numRoutes int) (ScaleObjects, error) {
 		}
 
 		// Generate only the HTTPRoute (no listeners/gateway)
-		routeObjects, err := generateManifests(nil, []route{r})
+		routeObjects, err := generateManifests(nil, []route{r}, "")
 		if err != nil {
 			return ScaleObjects{}, err
 		}
@@ -296,11 +301,15 @@ func GenerateScaleHTTPRouteObjects(numRoutes int) (ScaleObjects, error) {
 	return result, nil
 }
 
-func generateManifests(listeners []listener, routes []route) ([]client.Object, error) {
+func generateManifests(listeners []listener, routes []route, gatewayClassName string) ([]client.Object, error) {
 	var buf bytes.Buffer
 
 	if len(listeners) > 0 {
-		if err := gwTmpl.Execute(&buf, listeners); err != nil {
+		data := gatewayTmplData{
+			GatewayClassName: gatewayClassName,
+			Listeners:        listeners,
+		}
+		if err := gwTmpl.Execute(&buf, data); err != nil {
 			return nil, err
 		}
 	}

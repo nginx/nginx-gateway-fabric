@@ -51,6 +51,9 @@ const (
 
 	// LicenseJWTKey is the key for the NGINX Plus license JWT.
 	LicenseJWTKey = "license.jwt"
+
+	// N1CDataplaneKey is the dataplane key for the NGINX One Console.
+	N1CDataplaneKey = "dataplane.key"
 )
 
 // CertificateBundle is used to submit certificate data to nginx that is kubernetes aware.
