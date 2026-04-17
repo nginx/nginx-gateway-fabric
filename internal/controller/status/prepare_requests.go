@@ -573,7 +573,7 @@ func PrepareListenerSetRequests(
 		allConds = append(allConds, defaultConds...)
 		allConds = append(allConds, listenerSet.Conditions...)
 
-		// Check if ListenerSet has a failure Accepted condition that indicate it should not be programmed
+		// Check if ListenerSet has an Accepted Condition set to False which indicates it should not be programmed
 		for _, cond := range listenerSet.Conditions {
 			if cond.Type == string(v1.ListenerSetConditionAccepted) && cond.Status == metav1.ConditionFalse {
 				switch cond.Reason {
