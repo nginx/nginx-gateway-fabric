@@ -388,6 +388,7 @@ func TestBuildGateway(t *testing.T) {
 		allowedListeners *v1.AllowedListeners
 		TLS              *v1.GatewayTLSConfig
 		name             string
+		defaultScope     v1.GatewayDefaultScope
 		listeners        []v1.Listener
 		addresses        []v1.GatewaySpecAddress
 	}
@@ -406,6 +407,7 @@ func TestBuildGateway(t *testing.T) {
 				Addresses:        cfg.addresses,
 				AllowedListeners: cfg.allowedListeners,
 				TLS:              cfg.TLS,
+				DefaultScope:     cfg.defaultScope,
 			},
 		}
 
@@ -1736,10 +1738,10 @@ func TestBuildGateway(t *testing.T) {
 		{
 			name: "One unsupported field + supported fields (valid)",
 			gateway: createGateway(gatewayCfg{
-				name:             "gateway-valid-np",
-				listeners:        []v1.Listener{foo80Listener1},
-				ref:              validGwNpRef,
-				allowedListeners: &v1.AllowedListeners{},
+				name:         "gateway-valid-np",
+				listeners:    []v1.Listener{foo80Listener1},
+				ref:          validGwNpRef,
+				defaultScope: v1.GatewayDefaultScopeAll,
 			}),
 			gatewayClass: validGCWithNp,
 			expected: map[types.NamespacedName]*Gateway{
@@ -1777,7 +1779,7 @@ func TestBuildGateway(t *testing.T) {
 						},
 					},
 					Conditions: []conditions.Condition{
-						conditions.NewGatewayAcceptedUnsupportedField("AllowedListeners"),
+						conditions.NewGatewayAcceptedUnsupportedField("spec.defaultScope: Forbidden: DefaultScope"),
 						conditions.NewGatewayResolvedRefs(),
 					},
 				},
@@ -1792,13 +1794,7 @@ func TestBuildGateway(t *testing.T) {
 					Kind: "wrong-kind", // Invalid reference
 					Name: "invalid-ref",
 				},
-				TLS: &v1.GatewayTLSConfig{
-					Frontend: &v1.FrontendTLSConfig{
-						Default: v1.TLSConfig{
-							Validation: &v1.FrontendTLSValidation{},
-						},
-					},
-				},
+				defaultScope: v1.GatewayDefaultScopeAll,
 			}),
 			gatewayClass: validGCWithNp,
 			expected: map[types.NamespacedName]*Gateway{
@@ -1825,7 +1821,7 @@ func TestBuildGateway(t *testing.T) {
 						IPFamily: helpers.GetPointer(ngfAPIv1alpha2.Dual),
 					},
 					Conditions: []conditions.Condition{
-						conditions.NewGatewayAcceptedUnsupportedField("TLS.Frontend"),
+						conditions.NewGatewayAcceptedUnsupportedField("spec.defaultScope: Forbidden: DefaultScope"),
 						conditions.NewGatewayInvalidParameters(
 							"Spec.infrastructure.parametersRef.kind: Unsupported value: \"wrong-kind\": supported values: \"NginxProxy\"",
 						),
@@ -1835,6 +1831,56 @@ func TestBuildGateway(t *testing.T) {
 					},
 				},
 			},
+		},
+		{
+			gateway: createGateway(
+				gatewayCfg{
+					name:      "gateway-with-allowed-listeners",
+					listeners: []v1.Listener{foo80Listener1},
+					allowedListeners: &v1.AllowedListeners{
+						Namespaces: &v1.ListenerNamespaces{
+							From: helpers.GetPointer(v1.NamespacesFromSelector),
+							Selector: &metav1.LabelSelector{
+								MatchLabels: map[string]string{
+									"listenersets": "allowed",
+								},
+							},
+						},
+					},
+				},
+			),
+			gatewayClass: validGC,
+			expected: map[types.NamespacedName]*Gateway{
+				{Namespace: "test", Name: "gateway-with-allowed-listeners"}: {
+					Source: getLastCreatedGateway(),
+					Listeners: []*Listener{
+						{
+							Name:           "foo-80-1",
+							GatewayName:    client.ObjectKeyFromObject(getLastCreatedGateway()),
+							Source:         foo80Listener1,
+							Valid:          true,
+							Attachable:     true,
+							Routes:         map[RouteKey]*L7Route{},
+							L4Routes:       map[L4RouteKey]*L4Route{},
+							SupportedKinds: supportedKindsForListeners,
+						},
+					},
+					DeploymentName: types.NamespacedName{
+						Namespace: "test",
+						Name:      controller.CreateNginxResourceName("gateway-with-allowed-listeners", gcName),
+					},
+					Valid: true,
+					ListenerNamespaces: &v1.ListenerNamespaces{
+						From: helpers.GetPointer(v1.NamespacesFromSelector),
+						Selector: &metav1.LabelSelector{
+							MatchLabels: map[string]string{
+								"listenersets": "allowed",
+							},
+						},
+					},
+				},
+			},
+			name: "gateway with allowed listeners configuration",
 		},
 	}
 
@@ -2482,28 +2528,15 @@ func TestValidateUnsupportedGatewayFields(t *testing.T) {
 			expectedConds: nil,
 		},
 		{
-			name: "One unsupported field: AllowedListeners",
+			name: "One unsupported field: Frontend TLS",
 			gateway: &v1.Gateway{
 				Spec: v1.GatewaySpec{
-					AllowedListeners: &v1.AllowedListeners{},
-				},
-			},
-			expectedConds: []conditions.Condition{
-				conditions.NewGatewayAcceptedUnsupportedField("AllowedListeners"),
-			},
-		},
-		{
-			name: "Multiple unsupported fields: AllowedListeners and Frontend TLS",
-			gateway: &v1.Gateway{
-				Spec: v1.GatewaySpec{
-					AllowedListeners: &v1.AllowedListeners{},
 					TLS: &v1.GatewayTLSConfig{
 						Frontend: &v1.FrontendTLSConfig{},
 					},
 				},
 			},
 			expectedConds: []conditions.Condition{
-				conditions.NewGatewayAcceptedUnsupportedField("AllowedListeners"),
 				conditions.NewGatewayAcceptedUnsupportedField("TLS.Frontend"),
 			},
 		},

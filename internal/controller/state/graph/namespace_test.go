@@ -8,6 +8,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
+
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
 
 func TestBuildReferencedNamespaces(t *testing.T) {
@@ -178,6 +181,111 @@ func TestBuildReferencedNamespaces(t *testing.T) {
 				{Name: "ns2"}: ns2,
 			},
 			name: "gateway has two listeners, one with a matching AllowedRouteLabelSelector and one without the field set",
+		},
+		{
+			gws: map[types.NamespacedName]*Gateway{
+				{}: {
+					Listeners: []*Listener{},
+					ListenerNamespaces: &gatewayv1.ListenerNamespaces{
+						From: helpers.GetPointer(gatewayv1.NamespacesFromSelector),
+						Selector: &metav1.LabelSelector{
+							MatchLabels: map[string]string{"apples": "oranges"},
+						},
+					},
+					Valid: true,
+				},
+			},
+			expectedRefNS: map[types.NamespacedName]*v1.Namespace{
+				{Name: "ns2"}: ns2,
+			},
+			name: "gateway with ListenerNamespaces selector matches namespace",
+		},
+		{
+			gws: map[types.NamespacedName]*Gateway{
+				{}: {
+					Listeners: []*Listener{},
+					ListenerNamespaces: &gatewayv1.ListenerNamespaces{
+						From: helpers.GetPointer(gatewayv1.NamespacesFromSelector),
+						Selector: &metav1.LabelSelector{
+							MatchLabels: map[string]string{"not": "matching"},
+						},
+					},
+					Valid: true,
+				},
+			},
+			expectedRefNS: nil,
+			name:          "gateway with ListenerNamespaces selector doesn't match any namespace",
+		},
+		{
+			gws: map[types.NamespacedName]*Gateway{
+				{}: {
+					Listeners: []*Listener{},
+					ListenerNamespaces: &gatewayv1.ListenerNamespaces{
+						From:     helpers.GetPointer(gatewayv1.NamespacesFromSelector),
+						Selector: nil, // No selector set
+					},
+					Valid: true,
+				},
+			},
+			expectedRefNS: nil,
+			name:          "gateway with ListenerNamespaces From=Selector but no selector set",
+		},
+		{
+			gws: map[types.NamespacedName]*Gateway{
+				{}: {
+					Listeners: []*Listener{},
+					ListenerNamespaces: &gatewayv1.ListenerNamespaces{
+						From: helpers.GetPointer(gatewayv1.NamespacesFromSame),
+						Selector: &metav1.LabelSelector{
+							MatchLabels: map[string]string{"apples": "oranges"},
+						},
+					},
+					Valid: true,
+				},
+			},
+			expectedRefNS: nil,
+			name:          "gateway with ListenerNamespaces From=Same (not Selector) ignores selector",
+		},
+		{
+			gws: map[types.NamespacedName]*Gateway{
+				{}: {
+					Listeners: []*Listener{},
+					ListenerNamespaces: &gatewayv1.ListenerNamespaces{
+						From: nil, // From not set
+						Selector: &metav1.LabelSelector{
+							MatchLabels: map[string]string{"apples": "oranges"},
+						},
+					},
+					Valid: true,
+				},
+			},
+			expectedRefNS: nil,
+			name:          "gateway with ListenerNamespaces From not set ignores selector",
+		},
+		{
+			gws: map[types.NamespacedName]*Gateway{
+				{}: {
+					Listeners: []*Listener{
+						{
+							Name:                      "listener-1",
+							Valid:                     true,
+							AllowedRouteLabelSelector: labels.SelectorFromSet(map[string]string{"apples": "oranges"}),
+						},
+					},
+					ListenerNamespaces: &gatewayv1.ListenerNamespaces{
+						From: helpers.GetPointer(gatewayv1.NamespacesFromSelector),
+						Selector: &metav1.LabelSelector{
+							MatchLabels: map[string]string{"peaches": "bananas"},
+						},
+					},
+					Valid: true,
+				},
+			},
+			expectedRefNS: map[types.NamespacedName]*v1.Namespace{
+				{Name: "ns2"}: ns2,
+				{Name: "ns3"}: ns3,
+			},
+			name: "gateway with both AllowedRouteLabelSelector and ListenerNamespaces selector matching different namespaces",
 		},
 	}
 
