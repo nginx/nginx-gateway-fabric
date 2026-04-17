@@ -24,7 +24,6 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/secrets"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/resolver"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
-	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
 
 const (
@@ -102,16 +101,17 @@ func BuildConfiguration(
 		nginxPlus = buildNginxPlus(gateway)
 	}
 
+	refCertbundles := buildRefCertificateBundles(g.ReferencedSecrets, g.ReferencedCaCertConfigMaps)
+
 	certBundles := buildCertBundles(
-		buildRefCertificateBundles(g.ReferencedSecrets, g.ReferencedCaCertConfigMaps),
+		refCertbundles,
 		backendGroups,
 		authCertBundles,
 	)
 	maps.Copy(certBundles, buildFrontendTLSCertBundles(
 		gateway,
 		sslServers,
-		g.ReferencedSecrets,
-		g.ReferencedCaCertConfigMaps,
+		refCertbundles,
 	))
 
 	config := Configuration{
@@ -447,8 +447,7 @@ func buildJWTRemoteTLSCABundles(
 func buildFrontendTLSCertBundles(
 	gateway *graph.Gateway,
 	sslServers []VirtualServer,
-	secretsMap map[types.NamespacedName]*secrets.Secret,
-	caCertConfigMaps map[types.NamespacedName]*configmaps.CaCertConfigMap,
+	refCertBundles []secrets.CertificateBundle,
 ) map[CertBundleID]CertBundle {
 	bundles := make(map[CertBundleID]CertBundle)
 
@@ -460,96 +459,60 @@ func buildFrontendTLSCertBundles(
 		if listener.Source.Protocol != v1.HTTPSProtocolType {
 			continue
 		}
-
 		// Create a unique cert bundle ID for this listener
 		// e.g. cert_bundle_443_https for a listener on port 443 named "https"
-		listenerRef := types.NamespacedName{
+		caCertRef := types.NamespacedName{
 			Namespace: fmt.Sprintf("%d", listener.Source.Port),
 			Name:      listener.Name,
 		}
-
-		caRefBundleData := make([]CertBundle, 0)
-		for _, ref := range listener.CACertificateRefs {
-			bundleData := getFrontendTLSCertBundleData(ref, gateway, secretsMap, caCertConfigMaps)
-			if len(bundleData) > 0 {
-				caRefBundleData = append(caRefBundleData, bundleData)
-			}
-		}
-		if len(caRefBundleData) > 0 {
-			id := buildBundlesForSSLServers(caRefBundleData, bundles, listenerRef)
-			buildClientConfigForSSLServers(
-				id,
-				sslServers,
-				listener.Source.Port,
-				listener.ValidationMode,
-			)
-		}
+		id := generateCertBundleID(caCertRef)
+		bundles = getFrontendTLSCertBundles(
+			id,
+			bundles,
+			refCertBundles,
+			listener.CACertificateRefs,
+		)
+		buildClientConfigForSSLServers(
+			id,
+			sslServers,
+			listener.Source.Port,
+			listener.ValidationMode,
+		)
 	}
 	return bundles
 }
 
-func getFrontendTLSCertBundleData(
-	ref *v1.ObjectReference,
-	gateway *graph.Gateway,
-	secretsMap map[types.NamespacedName]*secrets.Secret,
-	caCertConfigMaps map[types.NamespacedName]*configmaps.CaCertConfigMap,
-) []byte {
-	var bundleData []byte
-	if ref.Name == "" {
-		return nil
-	}
-
-	nsName := types.NamespacedName{
-		Namespace: gateway.Source.Namespace,
-		Name:      string(ref.Name),
-	}
-
-	switch ref.Kind {
-	case kinds.Secret:
-		if secret := secretsMap[nsName]; secret != nil && secret.Source != nil {
-			if secret.Source.Data[secrets.CAKey] != nil {
-				bundleData = secret.Source.Data[secrets.CAKey]
-			}
-		}
-	case kinds.ConfigMap:
-		if cm := caCertConfigMaps[nsName]; cm != nil && cm.Source != nil {
-			if cm.Source.Data != nil && cm.Source.Data[secrets.CAKey] != "" {
-				// the cert could be base64 encoded or plaintext
-				raw := []byte(cm.Source.Data[secrets.CAKey])
-				decoded := make([]byte, base64.StdEncoding.DecodedLen(len(raw)))
-				n, err := base64.StdEncoding.Decode(decoded, raw)
-				if err != nil {
-					bundleData = raw
-				} else {
-					bundleData = decoded[:n]
-				}
-			}
-			if cm.Source.BinaryData != nil {
-				if data, exists := cm.Source.BinaryData[secrets.CAKey]; exists {
-					bundleData = data
-				}
-			}
-		}
-	}
-
-	return bundleData
-}
-
-func buildBundlesForSSLServers(
-	bundleData []CertBundle,
+func getFrontendTLSCertBundles(
+	id CertBundleID,
 	bundles map[CertBundleID]CertBundle,
-	listenerRef types.NamespacedName,
-) CertBundleID {
-	// Generate the cert bundle ID for this listener
-	id := generateCertBundleID(listenerRef)
+	refCertBundles []secrets.CertificateBundle,
+	listenerCACertRefs []*v1.ObjectReference,
+) map[CertBundleID]CertBundle {
+	certBundles := make([]CertBundle, 0)
+	for _, ref := range listenerCACertRefs {
+		if ref.Name == "" {
+			continue
+		}
+		for _, bundle := range refCertBundles {
+			if bundle.Kind == ref.Kind && v1.ObjectName(bundle.Name.Name) == ref.Name {
+				certRefData := getCertRefBundleData(bundle)
+				certBundles = append(certBundles, certRefData)
+				break
+			}
+		}
+	}
 
-	// Create and populate the bundle if it doesn't exist
+	if len(certBundles) == 0 {
+		return bundles
+	}
+
 	if _, exists := bundles[id]; !exists {
-		for _, v := range bundleData {
+		for _, v := range certBundles {
 			bundles[id] = append(bundles[id], v...)
 		}
 	}
-	return id
+
+	return bundles
 }
 
 func buildClientConfigForSSLServers(
@@ -638,17 +601,22 @@ func buildCertBundles(
 	for _, bundle := range refCertBundles {
 		id := generateCertBundleID(bundle.Name)
 		if _, exists := referencedByBackendGroup[id]; exists {
-			// the cert could be base64 encoded or plaintext
-			data := make([]byte, base64.StdEncoding.DecodedLen(len(bundle.Cert.CACert)))
-			_, err := base64.StdEncoding.Decode(data, bundle.Cert.CACert)
-			if err != nil {
-				data = bundle.Cert.CACert
-			}
-			bundles[id] = data
+			bundles[id] = getCertRefBundleData(bundle)
 		}
 	}
-
 	return bundles
+}
+
+func getCertRefBundleData(bundle secrets.CertificateBundle) []byte {
+	// the cert could be base64 encoded or plaintext
+	data := make([]byte, base64.StdEncoding.DecodedLen(len(bundle.Cert.CACert)))
+	n, err := base64.StdEncoding.Decode(data, bundle.Cert.CACert)
+	if err != nil {
+		data = bundle.Cert.CACert
+	} else {
+		data = data[:n]
+	}
+	return data
 }
 
 func buildAuthSecrets(

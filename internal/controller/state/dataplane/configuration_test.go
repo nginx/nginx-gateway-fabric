@@ -8108,19 +8108,94 @@ func TestBuildJWTRemoteTLSCABundles(t *testing.T) {
 	}
 }
 
+func buildFrontendTLSRefCertBundles(
+	secretsMap map[types.NamespacedName]*secrets.Secret,
+	caCertConfigMaps map[types.NamespacedName]*configmaps.CaCertConfigMap,
+) []secrets.CertificateBundle {
+	bundles := make([]secrets.CertificateBundle, 0)
+
+	for nsName, secret := range secretsMap {
+		if secret == nil || secret.Source == nil {
+			continue
+		}
+
+		caData, exists := secret.Source.Data[secrets.CAKey]
+		if !exists {
+			continue
+		}
+
+		bundles = append(bundles, *secrets.NewCertificateBundle(
+			nsName,
+			kinds.Secret,
+			&secrets.Certificate{CACert: caData},
+		))
+	}
+
+	for nsName, cm := range caCertConfigMaps {
+		if cm == nil || cm.Source == nil {
+			continue
+		}
+
+		cert := &secrets.Certificate{}
+		hasData := false
+
+		if cm.Source.Data != nil {
+			if data, exists := cm.Source.Data[secrets.CAKey]; exists {
+				cert.CACert = []byte(data)
+				hasData = true
+			}
+		}
+
+		if cm.Source.BinaryData != nil {
+			if data, exists := cm.Source.BinaryData[secrets.CAKey]; exists {
+				cert.CACert = data
+				hasData = true
+			}
+		}
+
+		if !hasData {
+			continue
+		}
+
+		bundles = append(bundles, *secrets.NewCertificateBundle(
+			nsName,
+			kinds.ConfigMap,
+			cert,
+		))
+	}
+
+	return bundles
+}
+
+func buildFrontendTLSGateway(listener *graph.Listener) *graph.Gateway {
+	return &graph.Gateway{
+		Valid: true,
+		Source: &v1.Gateway{
+			ObjectMeta: metav1.ObjectMeta{Namespace: "gateway-ns"},
+			Spec: v1.GatewaySpec{
+				TLS: &v1.GatewayTLSConfig{
+					Frontend: &v1.FrontendTLSConfig{
+						Default: v1.TLSConfig{
+							Validation: &v1.FrontendTLSValidation{
+								CACertificateRefs: []v1.ObjectReference{
+									{Name: v1.ObjectName("default-ca")},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		Listeners: []*graph.Listener{listener},
+	}
+}
+
 func TestGetFrontendTLSCertBundleData(t *testing.T) {
 	t.Parallel()
 
 	gatewayNs := "gateway-ns"
 	secretKind := v1.Kind(kinds.Secret)
 	configMapKind := v1.Kind(kinds.ConfigMap)
-	gateway := &graph.Gateway{
-		Source: &v1.Gateway{
-			ObjectMeta: metav1.ObjectMeta{
-				Namespace: gatewayNs,
-			},
-		},
-	}
 
 	encodedCMData := base64.StdEncoding.EncodeToString([]byte("cm-base64-ca"))
 
@@ -8129,7 +8204,7 @@ func TestGetFrontendTLSCertBundleData(t *testing.T) {
 		secretsMap       map[types.NamespacedName]*secrets.Secret
 		caCertConfigMaps map[types.NamespacedName]*configmaps.CaCertConfigMap
 		name             string
-		expected         []byte
+		expected         CertBundle
 	}{
 		{
 			name:     "Empty ref name",
@@ -8249,10 +8324,14 @@ func TestGetFrontendTLSCertBundleData(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
+			bundles := make(map[CertBundleID]CertBundle)
+			refCertBundles := buildFrontendTLSRefCertBundles(test.secretsMap, test.caCertConfigMaps)
+			refs := []*v1.ObjectReference{test.ref}
+			bundleID := CertBundleID("cert_bundle_test_listener")
 
-			result := getFrontendTLSCertBundleData(test.ref, gateway, test.secretsMap, test.caCertConfigMaps)
+			result := getFrontendTLSCertBundles(bundleID, bundles, refCertBundles, refs)
 
-			g.Expect(result).To(Equal(test.expected))
+			g.Expect(result[bundleID]).To(Equal(test.expected))
 		})
 	}
 }
@@ -8268,29 +8347,6 @@ func TestBuildFrontendTLSCertBundles(t *testing.T) {
 	caRefName2 := "frontend-ca-2"
 	caRef2 := &v1.ObjectReference{Name: v1.ObjectName(caRefName2), Kind: secretKind}
 	caConfigMapRef := &v1.ObjectReference{Name: v1.ObjectName(caRefName), Kind: configMapKind}
-
-	buildGateway := func(listener *graph.Listener) *graph.Gateway {
-		return &graph.Gateway{
-			Valid: true,
-			Source: &v1.Gateway{
-				ObjectMeta: metav1.ObjectMeta{Namespace: gatewayNs},
-				Spec: v1.GatewaySpec{
-					TLS: &v1.GatewayTLSConfig{
-						Frontend: &v1.FrontendTLSConfig{
-							Default: v1.TLSConfig{
-								Validation: &v1.FrontendTLSValidation{
-									CACertificateRefs: []v1.ObjectReference{
-										{Name: v1.ObjectName("default-ca")},
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-			Listeners: []*graph.Listener{listener},
-		}
-	}
 
 	tests := []struct {
 		secretsMap             map[types.NamespacedName]*secrets.Secret
@@ -8311,7 +8367,7 @@ func TestBuildFrontendTLSCertBundles(t *testing.T) {
 	}{
 		{
 			name: "Listener-resolved frontend CA refs from secret configure ssl servers",
-			gateway: buildGateway(&graph.Listener{
+			gateway: buildFrontendTLSGateway(&graph.Listener{
 				Name:              "https-listener",
 				Valid:             true,
 				ValidationMode:    v1.AllowValidOnly,
@@ -8343,7 +8399,7 @@ func TestBuildFrontendTLSCertBundles(t *testing.T) {
 		},
 		{
 			name: "AllowInsecureFallback disables verified cert requirement",
-			gateway: buildGateway(&graph.Listener{
+			gateway: buildFrontendTLSGateway(&graph.Listener{
 				Name:              "https-listener",
 				Valid:             true,
 				ValidationMode:    v1.AllowInsecureFallback,
@@ -8368,7 +8424,7 @@ func TestBuildFrontendTLSCertBundles(t *testing.T) {
 		},
 		{
 			name: "HTTPS listener with no resolved CA refs produces no bundle and no SSL mutation",
-			gateway: buildGateway(&graph.Listener{
+			gateway: buildFrontendTLSGateway(&graph.Listener{
 				Name:           "https-listener",
 				Valid:          true,
 				ValidationMode: v1.AllowValidOnly,
@@ -8392,7 +8448,7 @@ func TestBuildFrontendTLSCertBundles(t *testing.T) {
 		},
 		{
 			name: "Resolved CA refs with missing secret/configmap data produce no bundle and no SSL mutation",
-			gateway: buildGateway(&graph.Listener{
+			gateway: buildFrontendTLSGateway(&graph.Listener{
 				Name:              "https-listener",
 				Valid:             true,
 				ValidationMode:    v1.AllowValidOnly,
@@ -8418,7 +8474,7 @@ func TestBuildFrontendTLSCertBundles(t *testing.T) {
 		},
 		{
 			name: "Multiple listener CA refs are concatenated in a single bundle",
-			gateway: buildGateway(&graph.Listener{
+			gateway: buildFrontendTLSGateway(&graph.Listener{
 				Name:              "https-listener",
 				Valid:             true,
 				ValidationMode:    v1.AllowValidOnly,
@@ -8446,7 +8502,7 @@ func TestBuildFrontendTLSCertBundles(t *testing.T) {
 		},
 		{
 			name: "ConfigMap CA ref produces bundle and SSL client config",
-			gateway: buildGateway(&graph.Listener{
+			gateway: buildFrontendTLSGateway(&graph.Listener{
 				Name:              "https-listener",
 				Valid:             true,
 				ValidationMode:    v1.AllowValidOnly,
@@ -8475,7 +8531,7 @@ func TestBuildFrontendTLSCertBundles(t *testing.T) {
 		},
 		{
 			name: "Non-HTTPS listener is ignored",
-			gateway: buildGateway(&graph.Listener{
+			gateway: buildFrontendTLSGateway(&graph.Listener{
 				Name:              "http-listener",
 				Valid:             true,
 				CACertificateRefs: []*v1.ObjectReference{caRef},
@@ -8501,8 +8557,13 @@ func TestBuildFrontendTLSCertBundles(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
+			refCertBundles := buildFrontendTLSRefCertBundles(test.secretsMap, test.caCertConfigMaps)
 
-			bundles := buildFrontendTLSCertBundles(test.gateway, test.sslServers, test.secretsMap, test.caCertConfigMaps)
+			bundles := buildFrontendTLSCertBundles(
+				test.gateway,
+				test.sslServers,
+				refCertBundles,
+			)
 
 			if test.expectBundle {
 				g.Expect(bundles).To(HaveKey(test.expectedBundleID))
