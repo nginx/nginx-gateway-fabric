@@ -169,6 +169,7 @@ rules:
   - grpcroutes
   - backendtlspolicies
   - tlsroutes
+  - listenersets
   - tcproutes
   - udproutes
   verbs:
@@ -184,6 +185,7 @@ rules:
   - grpcroutes/status
   - backendtlspolicies/status
   - tlsroutes/status
+  - listenersets/status
   - tcproutes/status
   - udproutes/status
   verbs:

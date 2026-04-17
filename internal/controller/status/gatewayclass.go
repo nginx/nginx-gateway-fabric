@@ -34,6 +34,7 @@ func supportedFeatures(experimental bool) []gatewayv1.SupportedFeature {
 		features.SupportGatewayHTTPSListenerDetectMisdirectedRequests,
 		features.SupportGatewayFrontendClientCertificateValidation,
 		features.SupportGatewayFrontendClientCertificateValidationInsecureFallback,
+		features.SupportListenerSet,
 
 		// HTTPRoute extended
 		features.SupportHTTPRouteBackendProtocolWebSocket,

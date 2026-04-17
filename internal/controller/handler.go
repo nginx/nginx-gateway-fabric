@@ -394,6 +394,10 @@ func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph, 
 		transitionTime,
 		h.cfg.gatewayCtlrName,
 	)
+	listenerSetReqs := status.PrepareListenerSetRequests(
+		gr.ListenerSets,
+		transitionTime,
+	)
 
 	// unfortunately, status is not on clusterState stored by the change processor, so we need to make a k8sAPI call here
 	ipList := &inference.InferencePoolList{}
@@ -424,7 +428,14 @@ func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph, 
 	reqs := make(
 		[]status.UpdateRequest,
 		0,
-		len(gcReqs)+len(routeReqs)+len(polReqs)+len(ngfPolReqs)+len(snippetsFilterReqs)+len(inferencePoolReqs),
+		len(gcReqs)+
+			len(routeReqs)+
+			len(polReqs)+
+			len(ngfPolReqs)+
+			len(snippetsFilterReqs)+
+			len(authenticationFilterReqs)+
+			len(listenerSetReqs)+
+			len(inferencePoolReqs),
 	)
 	reqs = append(reqs, gcReqs...)
 	reqs = append(reqs, routeReqs...)
@@ -432,6 +443,7 @@ func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph, 
 	reqs = append(reqs, ngfPolReqs...)
 	reqs = append(reqs, snippetsFilterReqs...)
 	reqs = append(reqs, authenticationFilterReqs...)
+	reqs = append(reqs, listenerSetReqs...)
 	reqs = append(reqs, inferencePoolReqs...)
 
 	h.cfg.statusUpdater.UpdateGroup(ctx, groupAllExceptGateways, reqs...)
