@@ -2553,14 +2553,27 @@ func TestNewListenerSetStatusSetter(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name              string
-		status, newStatus gatewayv1.ListenerSetStatus
-		expStatusSet      bool
+		name                         string
+		status, newStatus, expStatus gatewayv1.ListenerSetStatus
+		expStatusSet                 bool
 	}{
 		{
 			name:         "ListenerSet has no status",
 			expStatusSet: true,
 			newStatus: gatewayv1.ListenerSetStatus{
+				Conditions: []metav1.Condition{{Message: "new condition"}},
+				Listeners: []gatewayv1.ListenerEntryStatus{
+					{
+						Name:           "listener-1",
+						AttachedRoutes: 2,
+						SupportedKinds: []gatewayv1.RouteGroupKind{
+							{Kind: gatewayv1.Kind(kinds.HTTPRoute), Group: helpers.GetPointer[gatewayv1.Group](gatewayv1.GroupName)},
+						},
+						Conditions: []metav1.Condition{{Message: "listener condition"}},
+					},
+				},
+			},
+			expStatus: gatewayv1.ListenerSetStatus{
 				Conditions: []metav1.Condition{{Message: "new condition"}},
 				Listeners: []gatewayv1.ListenerEntryStatus{
 					{
@@ -2591,6 +2604,19 @@ func TestNewListenerSetStatusSetter(t *testing.T) {
 					},
 				},
 			},
+			expStatus: gatewayv1.ListenerSetStatus{
+				Conditions: []metav1.Condition{{Message: "new condition"}},
+				Listeners: []gatewayv1.ListenerEntryStatus{
+					{
+						Name:           "listener-1",
+						AttachedRoutes: 2,
+						SupportedKinds: []gatewayv1.RouteGroupKind{
+							{Kind: gatewayv1.Kind(kinds.HTTPRoute), Group: helpers.GetPointer[gatewayv1.Group](gatewayv1.GroupName)},
+						},
+						Conditions: []metav1.Condition{{Message: "listener condition"}},
+					},
+				},
+			},
 			status: gatewayv1.ListenerSetStatus{
 				Conditions: []metav1.Condition{{Message: "old condition"}},
 				Listeners: []gatewayv1.ListenerEntryStatus{
@@ -2606,9 +2632,89 @@ func TestNewListenerSetStatusSetter(t *testing.T) {
 			},
 		},
 		{
+			name:         "ListenerSet has multiple listeners, updates some while keeping others",
+			expStatusSet: true,
+			newStatus: gatewayv1.ListenerSetStatus{
+				Conditions: []metav1.Condition{{Message: "updated condition"}},
+				Listeners: []gatewayv1.ListenerEntryStatus{
+					{
+						Name:           "listener-1",
+						AttachedRoutes: 3,
+						SupportedKinds: []gatewayv1.RouteGroupKind{
+							{Kind: gatewayv1.Kind(kinds.HTTPRoute), Group: helpers.GetPointer[gatewayv1.Group](gatewayv1.GroupName)},
+						},
+						Conditions: []metav1.Condition{{Message: "updated listener-1 condition"}},
+					},
+					{
+						Name:           "listener-2",
+						AttachedRoutes: 1,
+						SupportedKinds: []gatewayv1.RouteGroupKind{
+							{Kind: gatewayv1.Kind(kinds.HTTPRoute), Group: helpers.GetPointer[gatewayv1.Group](gatewayv1.GroupName)},
+						},
+						Conditions: []metav1.Condition{{Message: "existing listener-2 condition"}},
+					},
+				},
+			},
+			expStatus: gatewayv1.ListenerSetStatus{
+				Conditions: []metav1.Condition{{Message: "updated condition"}},
+				Listeners: []gatewayv1.ListenerEntryStatus{
+					{
+						Name:           "listener-1",
+						AttachedRoutes: 3,
+						SupportedKinds: []gatewayv1.RouteGroupKind{
+							{Kind: gatewayv1.Kind(kinds.HTTPRoute), Group: helpers.GetPointer[gatewayv1.Group](gatewayv1.GroupName)},
+						},
+						Conditions: []metav1.Condition{{Message: "updated listener-1 condition"}},
+					},
+					{
+						Name:           "listener-2",
+						AttachedRoutes: 1,
+						SupportedKinds: []gatewayv1.RouteGroupKind{
+							{Kind: gatewayv1.Kind(kinds.HTTPRoute), Group: helpers.GetPointer[gatewayv1.Group](gatewayv1.GroupName)},
+						},
+						Conditions: []metav1.Condition{{Message: "existing listener-2 condition"}},
+					},
+				},
+			},
+			status: gatewayv1.ListenerSetStatus{
+				Conditions: []metav1.Condition{{Message: "old condition"}},
+				Listeners: []gatewayv1.ListenerEntryStatus{
+					{
+						Name:           "listener-1",
+						AttachedRoutes: 1,
+						SupportedKinds: []gatewayv1.RouteGroupKind{
+							{Kind: gatewayv1.Kind(kinds.HTTPRoute), Group: helpers.GetPointer[gatewayv1.Group](gatewayv1.GroupName)},
+						},
+						Conditions: []metav1.Condition{{Message: "old listener-1 condition"}},
+					},
+					{
+						Name:           "listener-2",
+						AttachedRoutes: 1,
+						SupportedKinds: []gatewayv1.RouteGroupKind{
+							{Kind: gatewayv1.Kind(kinds.HTTPRoute), Group: helpers.GetPointer[gatewayv1.Group](gatewayv1.GroupName)},
+						},
+						Conditions: []metav1.Condition{{Message: "existing listener-2 condition"}},
+					},
+				},
+			},
+		},
+		{
 			name:         "ListenerSet has same status",
 			expStatusSet: false,
 			newStatus: gatewayv1.ListenerSetStatus{
+				Conditions: []metav1.Condition{{Message: "same condition"}},
+				Listeners: []gatewayv1.ListenerEntryStatus{
+					{
+						Name:           "listener-1",
+						AttachedRoutes: 2,
+						SupportedKinds: []gatewayv1.RouteGroupKind{
+							{Kind: gatewayv1.Kind(kinds.HTTPRoute), Group: helpers.GetPointer[gatewayv1.Group](gatewayv1.GroupName)},
+						},
+						Conditions: []metav1.Condition{{Message: "listener condition"}},
+					},
+				},
+			},
+			expStatus: gatewayv1.ListenerSetStatus{
 				Conditions: []metav1.Condition{{Message: "same condition"}},
 				Listeners: []gatewayv1.ListenerEntryStatus{
 					{
@@ -2647,6 +2753,7 @@ func TestNewListenerSetStatusSetter(t *testing.T) {
 			setter := newListenerSetStatusSetter(test.newStatus)
 			wasSet := setter(ls)
 			g.Expect(wasSet).To(Equal(test.expStatusSet))
+			g.Expect(ls.Status).To(Equal(test.expStatus))
 		})
 	}
 }

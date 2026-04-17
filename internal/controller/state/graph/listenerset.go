@@ -60,16 +60,11 @@ func buildListenerSets(
 			refGrantResolver,
 		)
 
-		var referencedGateway *v1.Gateway
-		if parentGateway != nil {
-			referencedGateway = parentGateway.Source
-		}
-
 		builtListenerSets[lsNsName] = &ListenerSet{
 			Source:     listenerSet,
 			Conditions: conds,
 			Listeners:  listeners,
-			Gateway:    referencedGateway,
+			Gateway:    parentGateway.Source,
 			Valid:      valid,
 		}
 	}
