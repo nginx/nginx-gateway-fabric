@@ -30,6 +30,8 @@ type Gateway struct {
 	EffectiveNginxProxy *EffectiveNginxProxy
 	// SecretRef is the namespaced name of the secret referenced by the Gateway for backend TLS.
 	SecretRef *types.NamespacedName
+	// ListenerNamespaces holds the allowed listener namespaces for this Gateway, if specified.
+	ListenerNamespaces *v1.ListenerNamespaces
 	// DeploymentName is the name of the nginx Deployment associated with this Gateway.
 	DeploymentName types.NamespacedName
 	// Listeners include the listeners of the Gateway.
@@ -80,6 +82,7 @@ func buildGateways(
 	for gwNsName, gw := range gws {
 		var np *NginxProxy
 		var npNsName types.NamespacedName
+		var listenerNamespaces *v1.ListenerNamespaces
 		if gw.Spec.Infrastructure != nil && gw.Spec.Infrastructure.ParametersRef != nil {
 			npNsName = types.NamespacedName{Namespace: gw.Namespace, Name: gw.Spec.Infrastructure.ParametersRef.Name}
 			np = nps[npNsName]
@@ -94,18 +97,15 @@ func buildGateways(
 
 		conds, valid, secretRefNsName := validateGateway(gw, gc, np, resourceResolver, refGrantResolver)
 
-		protectedPorts := make(ProtectedPorts)
-		if port, enabled := MetricsEnabledForNginxProxy(effectiveNginxProxy); enabled {
-			metricsPort := config.DefaultNginxMetricsPort
-			if port != nil {
-				metricsPort = *port
-			}
-			protectedPorts[metricsPort] = "MetricsPort"
-		}
+		protectedPorts := buildProtectedPorts(effectiveNginxProxy)
 
 		deploymentName := types.NamespacedName{
 			Namespace: gw.GetNamespace(),
 			Name:      controller.CreateNginxResourceName(gw.GetName(), string(gw.Spec.GatewayClassName)),
+		}
+
+		if gw.Spec.AllowedListeners != nil && gw.Spec.AllowedListeners.Namespaces != nil {
+			listenerNamespaces = gw.Spec.AllowedListeners.Namespaces
 		}
 
 		if !valid {
@@ -117,6 +117,7 @@ func buildGateways(
 				Conditions:          conds,
 				DeploymentName:      deploymentName,
 				SecretRef:           secretRefNsName,
+				ListenerNamespaces:  listenerNamespaces,
 			}
 		} else {
 			gateway := &Gateway{
@@ -127,6 +128,7 @@ func buildGateways(
 				Conditions:          conds,
 				DeploymentName:      deploymentName,
 				SecretRef:           secretRefNsName,
+				ListenerNamespaces:  listenerNamespaces,
 			}
 			gateway.Listeners = buildListeners(gateway, resourceResolver, refGrantResolver, protectedPorts)
 			builtGateways[gwNsName] = gateway
@@ -442,11 +444,27 @@ func (g *Gateway) collectSnippetsFiltersFromRoute(
 	}
 }
 
+// buildProtectedPorts creates protected ports from an EffectiveNginxProxy configuration.
+func buildProtectedPorts(effectiveNginxProxy *EffectiveNginxProxy) ProtectedPorts {
+	protectedPorts := make(ProtectedPorts)
+	if port, enabled := MetricsEnabledForNginxProxy(effectiveNginxProxy); enabled {
+		metricsPort := config.DefaultNginxMetricsPort
+		if port != nil {
+			metricsPort = *port
+		}
+		protectedPorts[metricsPort] = "MetricsPort"
+	}
+	return protectedPorts
+}
+
 func validateUnsupportedGatewayFields(gw *v1.Gateway) []conditions.Condition {
 	var conds []conditions.Condition
 
-	if gw.Spec.AllowedListeners != nil {
-		conds = append(conds, conditions.NewGatewayAcceptedUnsupportedField("AllowedListeners"))
+	if gw.Spec.DefaultScope != "" {
+		conds = append(conds, conditions.NewGatewayAcceptedUnsupportedField(field.Forbidden(
+			field.NewPath("spec", "defaultScope"),
+			"DefaultScope",
+		).Error()))
 	}
 
 	return conds

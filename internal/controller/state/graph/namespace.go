@@ -2,8 +2,10 @@ package graph
 
 import (
 	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
 // buildReferencedNamespaces returns a map of all the Namespace resources from the current clusterNamespaces with
@@ -41,6 +43,16 @@ func isNamespaceReferenced(ns *v1.Namespace, gws map[types.NamespacedName]*Gatew
 				continue
 			}
 			if listener.AllowedRouteLabelSelector.Matches(nsLabels) {
+				return true
+			}
+		}
+
+		if gw.ListenerNamespaces != nil &&
+			gw.ListenerNamespaces.From != nil &&
+			*gw.ListenerNamespaces.From == gatewayv1.NamespacesFromSelector &&
+			gw.ListenerNamespaces.Selector != nil {
+			selector, err := metav1.LabelSelectorAsSelector(gw.ListenerNamespaces.Selector)
+			if err == nil && selector.Matches(nsLabels) {
 				return true
 			}
 		}

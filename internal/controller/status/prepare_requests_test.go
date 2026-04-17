@@ -3118,3 +3118,452 @@ func TestBuildUDPRouteStatuses(t *testing.T) {
 		g.Expect(expected.RouteStatus.Parents).To(ConsistOf(udpRoute.Status.Parents))
 	}
 }
+
+func TestBuildListenerSetStatuses(t *testing.T) {
+	t.Parallel()
+
+	lsValid := &v1.ListenerSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace:  "test",
+			Name:       "ls-valid",
+			Generation: 3,
+		},
+		Spec: v1.ListenerSetSpec{
+			ParentRef: v1.ParentGatewayReference{
+				Name:      "gateway",
+				Namespace: helpers.GetPointer(v1.Namespace("test")),
+			},
+			Listeners: []v1.ListenerEntry{
+				{
+					Name:     "http-listener",
+					Port:     8080,
+					Protocol: v1.HTTPProtocolType,
+				},
+			},
+		},
+	}
+
+	lsInvalid := &v1.ListenerSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace:  "test",
+			Name:       "ls-invalid",
+			Generation: 3,
+		},
+		Spec: v1.ListenerSetSpec{
+			ParentRef: v1.ParentGatewayReference{
+				Name:      "gateway",
+				Namespace: helpers.GetPointer(v1.Namespace("test")),
+			},
+			Listeners: []v1.ListenerEntry{
+				{
+					Name:     "invalid-listener",
+					Port:     9090,
+					Protocol: v1.HTTPProtocolType,
+				},
+			},
+		},
+	}
+
+	lsNotAllowed := &v1.ListenerSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace:  "test",
+			Name:       "ls-not-allowed",
+			Generation: 3,
+		},
+		Spec: v1.ListenerSetSpec{
+			ParentRef: v1.ParentGatewayReference{
+				Name:      "gateway",
+				Namespace: helpers.GetPointer(v1.Namespace("test")),
+			},
+			Listeners: []v1.ListenerEntry{
+				{
+					Name:     "listener",
+					Port:     8080,
+					Protocol: v1.HTTPProtocolType,
+				},
+			},
+		},
+	}
+
+	lsParentNotAccepted := &v1.ListenerSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace:  "test",
+			Name:       "ls-parent-not-accepted",
+			Generation: 3,
+		},
+		Spec: v1.ListenerSetSpec{
+			ParentRef: v1.ParentGatewayReference{
+				Name:      "gateway",
+				Namespace: helpers.GetPointer(v1.Namespace("test")),
+			},
+			Listeners: []v1.ListenerEntry{
+				{
+					Name:     "listener",
+					Port:     8080,
+					Protocol: v1.HTTPProtocolType,
+				},
+			},
+		},
+	}
+
+	listenerSets := map[types.NamespacedName]*graph.ListenerSet{
+		{Namespace: "test", Name: "ls-valid"}: {
+			Valid:  true,
+			Source: lsValid,
+			Listeners: []*graph.Listener{
+				{
+					Name:   "http-listener",
+					Valid:  true,
+					Routes: map[graph.RouteKey]*graph.L7Route{},
+					SupportedKinds: []v1.RouteGroupKind{
+						{Kind: v1.Kind(kinds.HTTPRoute), Group: helpers.GetPointer[v1.Group](v1.GroupName)},
+					},
+					Conditions: []conditions.Condition{},
+				},
+			},
+			Conditions: []conditions.Condition{},
+		},
+		{Namespace: "test", Name: "ls-invalid"}: {
+			Valid:  false,
+			Source: lsInvalid,
+			Listeners: []*graph.Listener{
+				{
+					Name:       "invalid-listener",
+					Valid:      false,
+					Routes:     map[graph.RouteKey]*graph.L7Route{},
+					Conditions: conditions.NewListenerUnsupportedValue("Unsupported listener configuration"),
+				},
+			},
+			Conditions: []conditions.Condition{
+				conditions.NewListenerSetListenersNotValid("All listeners are invalid"),
+			},
+		},
+		{Namespace: "test", Name: "ls-not-allowed"}: {
+			Valid:     false,
+			Source:    lsNotAllowed,
+			Listeners: []*graph.Listener{},
+			Conditions: []conditions.Condition{
+				conditions.NewListenerSetNotAllowed("ListenerSet is not allowed by parent Gateway AllowedListeners configuration"),
+			},
+		},
+		{Namespace: "test", Name: "ls-parent-not-accepted"}: {
+			Valid:     false,
+			Source:    lsParentNotAccepted,
+			Listeners: []*graph.Listener{},
+			Conditions: []conditions.Condition{
+				conditions.NewListenerSetParentNotAccepted("Parent Gateway is not accepted"),
+			},
+		},
+		{Namespace: "test", Name: "ls-mixed"}: {
+			Valid: true,
+			Source: &v1.ListenerSet{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "ls-mixed",
+					Namespace:  "test",
+					Generation: 3,
+				},
+				Spec: v1.ListenerSetSpec{
+					ParentRef: v1.ParentGatewayReference{
+						Name:      v1.ObjectName(gwNsName.Name),
+						Namespace: helpers.GetPointer(v1.Namespace("test")),
+					},
+					Listeners: []v1.ListenerEntry{
+						{
+							Name:     "valid-listener",
+							Port:     8080,
+							Protocol: v1.HTTPProtocolType,
+						},
+						{
+							Name:     "invalid-listener",
+							Port:     9090,
+							Protocol: v1.HTTPProtocolType,
+						},
+					},
+				},
+			},
+			Listeners: []*graph.Listener{
+				{
+					Name:   "valid-listener",
+					Valid:  true,
+					Routes: map[graph.RouteKey]*graph.L7Route{},
+					SupportedKinds: []v1.RouteGroupKind{
+						{Kind: v1.Kind(kinds.HTTPRoute), Group: helpers.GetPointer[v1.Group](v1.GroupName)},
+					},
+					Conditions: []conditions.Condition{},
+				},
+				{
+					Name:       "invalid-listener",
+					Valid:      false,
+					Routes:     map[graph.RouteKey]*graph.L7Route{},
+					Conditions: conditions.NewListenerUnsupportedValue("Unsupported listener configuration"),
+				},
+			},
+			Conditions: []conditions.Condition{},
+		},
+	}
+
+	expectedStatuses := map[types.NamespacedName]v1.ListenerSetStatus{
+		{Namespace: "test", Name: "ls-valid"}: {
+			Conditions: []metav1.Condition{
+				{
+					Type:               string(v1.ListenerSetConditionAccepted),
+					Status:             metav1.ConditionTrue,
+					ObservedGeneration: 3,
+					LastTransitionTime: transitionTime,
+					Reason:             string(v1.ListenerSetReasonAccepted),
+					Message:            "The ListenerSet is accepted",
+				},
+				{
+					Type:               string(v1.ListenerSetConditionProgrammed),
+					Status:             metav1.ConditionTrue,
+					ObservedGeneration: 3,
+					LastTransitionTime: transitionTime,
+					Reason:             string(v1.ListenerSetReasonProgrammed),
+					Message:            "The ListenerSet is programmed",
+				},
+			},
+			Listeners: []v1.ListenerEntryStatus{
+				{
+					Name:           "http-listener",
+					AttachedRoutes: 0,
+					SupportedKinds: []v1.RouteGroupKind{
+						{Kind: v1.Kind(kinds.HTTPRoute), Group: helpers.GetPointer[v1.Group](v1.GroupName)},
+					},
+					Conditions: []metav1.Condition{
+						{
+							Type:               string(v1.ListenerConditionAccepted),
+							Status:             metav1.ConditionTrue,
+							ObservedGeneration: 3,
+							LastTransitionTime: transitionTime,
+							Reason:             string(v1.ListenerReasonAccepted),
+							Message:            "The Listener is accepted",
+						},
+						{
+							Type:               string(v1.ListenerConditionProgrammed),
+							Status:             metav1.ConditionTrue,
+							ObservedGeneration: 3,
+							LastTransitionTime: transitionTime,
+							Reason:             string(v1.ListenerReasonProgrammed),
+							Message:            "The Listener is programmed",
+						},
+						{
+							Type:               string(v1.ListenerConditionResolvedRefs),
+							Status:             metav1.ConditionTrue,
+							ObservedGeneration: 3,
+							LastTransitionTime: transitionTime,
+							Reason:             string(v1.ListenerReasonResolvedRefs),
+							Message:            "All references are resolved",
+						},
+						{
+							Type:               string(v1.ListenerConditionConflicted),
+							Status:             metav1.ConditionFalse,
+							ObservedGeneration: 3,
+							LastTransitionTime: transitionTime,
+							Reason:             string(v1.ListenerReasonNoConflicts),
+							Message:            "No conflicts",
+						},
+					},
+				},
+			},
+		},
+		{Namespace: "test", Name: "ls-invalid"}: {
+			Conditions: []metav1.Condition{
+				{
+					Type:               string(v1.ListenerSetConditionAccepted),
+					Status:             metav1.ConditionFalse,
+					ObservedGeneration: 3,
+					LastTransitionTime: transitionTime,
+					Reason:             string(v1.ListenerSetReasonListenersNotValid),
+					Message:            "All listeners are invalid",
+				},
+				{
+					Type:               string(v1.ListenerSetConditionProgrammed),
+					Status:             metav1.ConditionFalse,
+					ObservedGeneration: 3,
+					LastTransitionTime: transitionTime,
+					Reason:             string(v1.ListenerSetReasonListenersNotValid),
+					Message:            "All listeners are invalid",
+				},
+			},
+			Listeners: []v1.ListenerEntryStatus{
+				{
+					Name:           "invalid-listener",
+					AttachedRoutes: 0,
+					Conditions: []metav1.Condition{
+						{
+							Type:               string(v1.ListenerConditionAccepted),
+							Status:             metav1.ConditionFalse,
+							ObservedGeneration: 3,
+							LastTransitionTime: transitionTime,
+							Reason:             string(conditions.ListenerReasonUnsupportedValue),
+							Message:            "Unsupported listener configuration",
+						},
+						{
+							Type:               string(v1.ListenerConditionProgrammed),
+							Status:             metav1.ConditionFalse,
+							ObservedGeneration: 3,
+							LastTransitionTime: transitionTime,
+							Reason:             string(v1.ListenerReasonInvalid),
+							Message:            "Unsupported listener configuration",
+						},
+					},
+				},
+			},
+		},
+		{Namespace: "test", Name: "ls-mixed"}: {
+			Conditions: []metav1.Condition{
+				{
+					Type:               string(v1.ListenerSetConditionAccepted),
+					Status:             metav1.ConditionTrue,
+					ObservedGeneration: 3,
+					LastTransitionTime: transitionTime,
+					Reason:             string(v1.ListenerSetReasonAccepted),
+					Message:            "The ListenerSet is accepted",
+				},
+				{
+					Type:               string(v1.ListenerSetConditionProgrammed),
+					Status:             metav1.ConditionTrue,
+					ObservedGeneration: 3,
+					LastTransitionTime: transitionTime,
+					Reason:             string(v1.ListenerSetReasonProgrammed),
+					Message:            "The ListenerSet is programmed",
+				},
+			},
+			Listeners: []v1.ListenerEntryStatus{
+				{
+					Name:           "valid-listener",
+					AttachedRoutes: 0,
+					SupportedKinds: []v1.RouteGroupKind{
+						{Kind: v1.Kind(kinds.HTTPRoute), Group: helpers.GetPointer[v1.Group](v1.GroupName)},
+					},
+					Conditions: []metav1.Condition{
+						{
+							Type:               string(v1.ListenerConditionAccepted),
+							Status:             metav1.ConditionTrue,
+							ObservedGeneration: 3,
+							LastTransitionTime: transitionTime,
+							Reason:             string(v1.ListenerReasonAccepted),
+							Message:            "The Listener is accepted",
+						},
+						{
+							Type:               string(v1.ListenerConditionProgrammed),
+							Status:             metav1.ConditionTrue,
+							ObservedGeneration: 3,
+							LastTransitionTime: transitionTime,
+							Reason:             string(v1.ListenerReasonProgrammed),
+							Message:            "The Listener is programmed",
+						},
+						{
+							Type:               string(v1.ListenerConditionResolvedRefs),
+							Status:             metav1.ConditionTrue,
+							ObservedGeneration: 3,
+							LastTransitionTime: transitionTime,
+							Reason:             string(v1.ListenerReasonResolvedRefs),
+							Message:            "All references are resolved",
+						},
+						{
+							Type:               string(v1.ListenerConditionConflicted),
+							Status:             metav1.ConditionFalse,
+							ObservedGeneration: 3,
+							LastTransitionTime: transitionTime,
+							Reason:             string(v1.ListenerReasonNoConflicts),
+							Message:            "No conflicts",
+						},
+					},
+				},
+				{
+					Name:           "invalid-listener",
+					AttachedRoutes: 0,
+					Conditions: []metav1.Condition{
+						{
+							Type:               string(v1.ListenerConditionAccepted),
+							Status:             metav1.ConditionFalse,
+							ObservedGeneration: 3,
+							LastTransitionTime: transitionTime,
+							Reason:             string(conditions.ListenerReasonUnsupportedValue),
+							Message:            "Unsupported listener configuration",
+						},
+						{
+							Type:               string(v1.ListenerConditionProgrammed),
+							Status:             metav1.ConditionFalse,
+							ObservedGeneration: 3,
+							LastTransitionTime: transitionTime,
+							Reason:             string(v1.ListenerReasonInvalid),
+							Message:            "Unsupported listener configuration",
+						},
+					},
+				},
+			},
+		},
+		{Namespace: "test", Name: "ls-not-allowed"}: {
+			Conditions: []metav1.Condition{
+				{
+					Type:               string(v1.ListenerSetConditionAccepted),
+					Status:             metav1.ConditionFalse,
+					ObservedGeneration: 3,
+					LastTransitionTime: transitionTime,
+					Reason:             string(v1.ListenerSetReasonNotAllowed),
+					Message:            "ListenerSet is not allowed by parent Gateway AllowedListeners configuration",
+				},
+				{
+					Type:               string(v1.ListenerSetConditionProgrammed),
+					Status:             metav1.ConditionFalse,
+					ObservedGeneration: 3,
+					LastTransitionTime: transitionTime,
+					Reason:             string(v1.ListenerSetReasonNotAllowed),
+					Message:            "ListenerSet is not allowed by parent Gateway AllowedListeners configuration",
+				},
+			},
+			Listeners: []v1.ListenerEntryStatus{},
+		},
+		{Namespace: "test", Name: "ls-parent-not-accepted"}: {
+			Conditions: []metav1.Condition{
+				{
+					Type:               string(v1.ListenerSetConditionAccepted),
+					Status:             metav1.ConditionFalse,
+					ObservedGeneration: 3,
+					LastTransitionTime: transitionTime,
+					Reason:             string(v1.ListenerSetReasonParentNotAccepted),
+					Message:            "Parent Gateway is not accepted",
+				},
+				{
+					Type:               string(v1.ListenerSetConditionProgrammed),
+					Status:             metav1.ConditionFalse,
+					ObservedGeneration: 3,
+					LastTransitionTime: transitionTime,
+					Reason:             string(conditions.ListenerSetReasonParentNotProgrammed),
+					Message:            "Parent Gateway is not accepted",
+				},
+			},
+			Listeners: []v1.ListenerEntryStatus{},
+		},
+	}
+
+	g := NewWithT(t)
+
+	k8sClient := createK8sClientFor(&v1.ListenerSet{})
+
+	for _, ls := range listenerSets {
+		err := k8sClient.Create(t.Context(), ls.Source)
+		g.Expect(err).ToNot(HaveOccurred())
+	}
+
+	updater := NewUpdater(k8sClient, logr.Discard())
+
+	reqs := PrepareListenerSetRequests(
+		listenerSets,
+		transitionTime,
+	)
+
+	updater.Update(t.Context(), reqs...)
+
+	g.Expect(reqs).To(HaveLen(len(expectedStatuses)))
+
+	for nsname, expected := range expectedStatuses {
+		var ls v1.ListenerSet
+		err := k8sClient.Get(t.Context(), nsname, &ls)
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(ls.Status.Conditions).To(ConsistOf(expected.Conditions))
+		g.Expect(ls.Status.Listeners).To(ConsistOf(expected.Listeners))
+	}
+}
