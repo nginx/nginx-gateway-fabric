@@ -1049,7 +1049,7 @@ func getFrontendTLSCertResourceType(kind v1.Kind) resolver.ResourceType {
 }
 
 // resolveCrossNamespaceRefGrant checks if a cross-namespace reference is allowed by any ReferenceGrant.
-// Checkes for both Secret and ConfigMap references.
+// Checks for both Secret and ConfigMap references.
 func resolveCrossNamespaceRefGrant(
 	ref v1.ObjectReference,
 	nsName *types.NamespacedName,

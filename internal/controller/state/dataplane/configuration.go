@@ -466,12 +466,16 @@ func buildFrontendTLSCertBundles(
 			Name:      listener.Name,
 		}
 		id := generateCertBundleID(caCertRef)
-		bundles = getFrontendTLSCertBundles(
-			id,
-			bundles,
-			refCertBundles,
-			listener.CACertificateRefs,
-		)
+		// If the validation mode is AllowInsecureFallback
+		// we do not want to configure any CA bundles for this listener.
+		if listener.ValidationMode != v1.AllowInsecureFallback {
+			bundles = getFrontendTLSCertBundles(
+				id,
+				bundles,
+				refCertBundles,
+				listener.CACertificateRefs,
+			)
+		}
 		buildClientConfigForSSLServers(
 			id,
 			sslServers,
