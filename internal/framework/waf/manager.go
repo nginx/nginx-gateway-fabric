@@ -10,6 +10,7 @@ import (
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/events"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/fetch"
 )
 
@@ -42,14 +43,23 @@ type PollerManager interface {
 // Manager manages the lifecycle of all WAF bundle pollers.
 // It creates, tracks, and stops pollers as WAFGatewayBindingPolicies are created, updated, or deleted.
 type Manager struct {
-	fetcher        fetch.Fetcher
-	deployments    agent.DeploymentStorer
-	pollers        map[types.NamespacedName]*pollerEntry
-	pollErrors     map[types.NamespacedName]*PollError
-	bundleCache    map[graph.WAFBundleKey]*graph.WAFBundleData
-	statusCallback func(targets []types.NamespacedName)
-	logger         logr.Logger
-	mu             sync.RWMutex
+	fetcher     fetch.Fetcher
+	deployments agent.DeploymentStorer
+	pollers     map[types.NamespacedName]*pollerEntry
+	pollErrors  map[types.NamespacedName]*PollError
+	bundleCache map[graph.WAFBundleKey]*graph.WAFBundleData
+	// bundleKeyToPolicy maps each bundle key to the policy that owns it.
+	// Used to look up the policy namespace/name when injecting a WAFBundleReconcileEvent.
+	bundleKeyToPolicy map[graph.WAFBundleKey]types.NamespacedName
+	statusCallback    func(targets []types.NamespacedName)
+	// eventCh is the send side of the main event loop channel.
+	// A WAFBundleReconcileEvent is sent when a previously-pending bundle is first fetched successfully,
+	// triggering an immediate re-reconcile so the Gateway config push can proceed.
+	eventCh chan<- any
+	// ctx is the root context for the manager, used to cancel goroutines on shutdown.
+	ctx    context.Context
+	logger logr.Logger
+	mu     sync.RWMutex
 }
 
 // pollerEntry holds a poller and its cancellation function.
@@ -63,19 +73,31 @@ type ManagerConfig struct {
 	Fetcher        fetch.Fetcher
 	Deployments    agent.DeploymentStorer
 	StatusCallback func(targets []types.NamespacedName)
-	Logger         logr.Logger
+	EventCh        chan<- any
+	// Ctx is the root context for the manager lifetime.
+	// It is used to cancel goroutines that inject events into the event loop on shutdown.
+	Ctx    context.Context
+	Logger logr.Logger
 }
 
 // NewManager creates a new Manager.
+// It panics if EventCh is set without Ctx, as the event-injection goroutine requires
+// a context to avoid leaking on shutdown.
 func NewManager(cfg ManagerConfig) *Manager {
+	if cfg.EventCh != nil && cfg.Ctx == nil {
+		panic("waf.ManagerConfig: Ctx must be set when EventCh is set")
+	}
 	return &Manager{
-		logger:         cfg.Logger,
-		fetcher:        cfg.Fetcher,
-		deployments:    cfg.Deployments,
-		pollers:        make(map[types.NamespacedName]*pollerEntry),
-		pollErrors:     make(map[types.NamespacedName]*PollError),
-		bundleCache:    make(map[graph.WAFBundleKey]*graph.WAFBundleData),
-		statusCallback: cfg.StatusCallback,
+		logger:            cfg.Logger,
+		fetcher:           cfg.Fetcher,
+		deployments:       cfg.Deployments,
+		pollers:           make(map[types.NamespacedName]*pollerEntry),
+		pollErrors:        make(map[types.NamespacedName]*PollError),
+		bundleCache:       make(map[graph.WAFBundleKey]*graph.WAFBundleData),
+		bundleKeyToPolicy: make(map[graph.WAFBundleKey]types.NamespacedName),
+		statusCallback:    cfg.StatusCallback,
+		eventCh:           cfg.EventCh,
+		ctx:               cfg.Ctx,
 	}
 }
 
@@ -124,6 +146,7 @@ func (m *Manager) startPoller(ctx context.Context, cfg PollerConfig) {
 		m.logger.V(1).Info("Stopping existing poller before starting new one", "policy", cfg.PolicyNsName)
 		entry.cancel()
 		delete(m.pollErrors, cfg.PolicyNsName)
+		m.clearBundleCacheLocked(entry.poller)
 	}
 
 	pollerCtx, cancel := context.WithCancel(ctx) //nolint:gosec // Cancel is handled externally to this function
@@ -137,6 +160,11 @@ func (m *Manager) startPoller(ctx context.Context, cfg PollerConfig) {
 		if m.statusCallback != nil {
 			m.statusCallback(poller.getTargetDeployments())
 		}
+	}
+
+	// Record which policy owns each bundle key so cacheBundleUpdate can inject the correct event.
+	for _, src := range cfg.Sources {
+		m.bundleKeyToPolicy[src.BundleKey] = cfg.PolicyNsName
 	}
 
 	poller = newPoller(pollerConfig{
@@ -193,13 +221,42 @@ func (m *Manager) recordPollResult(policyNsName types.NamespacedName, bundleKey 
 // cacheBundleUpdate stores the latest successfully polled bundle data in the manager's cache.
 // This is called by pollers when they detect a changed bundle, ensuring the freshest data
 // is available for graph rebuild stale-bundle fallback.
+// On the first time a bundle key appears in this manager's cache, a WAFBundleReconcileEvent
+// is injected into the event loop to trigger an immediate graph rebuild.
+// Note: this fires on any first-cache event, including after a poller restart that cleared the
+// cache — not only when the policy was previously in BundlePending state. A spurious reconcile
+// event in that case is harmless: it triggers an unnecessary graph rebuild but causes no
+// incorrect behavior.
 func (m *Manager) cacheBundleUpdate(bundleKey graph.WAFBundleKey, data []byte, checksum string) {
 	m.mu.Lock()
-	defer m.mu.Unlock()
+
+	_, alreadyCached := m.bundleCache[bundleKey]
 
 	m.bundleCache[bundleKey] = &graph.WAFBundleData{
 		Data:     data,
 		Checksum: checksum,
+	}
+
+	// Capture event details while holding the lock, then release before sending.
+	var event *events.WAFBundleReconcileEvent
+	if !alreadyCached {
+		if policyNsName, ok := m.bundleKeyToPolicy[bundleKey]; ok && m.eventCh != nil {
+			event = &events.WAFBundleReconcileEvent{PolicyNsName: policyNsName}
+		}
+	}
+
+	m.mu.Unlock()
+
+	// Send the reconcile event after releasing the lock so other manager operations are not
+	// blocked on the mutex while waiting for the event loop. The manager's root context is
+	// used as a cancellation escape hatch: on shutdown, the event loop exits before the
+	// manager's context is canceled, so without this the poller goroutine could block
+	// indefinitely trying to send to an already-drained channel.
+	if event != nil {
+		select {
+		case m.eventCh <- *event:
+		case <-m.ctx.Done():
+		}
 	}
 }
 
@@ -262,6 +319,7 @@ func (m *Manager) stopAll() {
 	m.pollers = make(map[types.NamespacedName]*pollerEntry)
 	m.pollErrors = make(map[types.NamespacedName]*PollError)
 	m.bundleCache = make(map[graph.WAFBundleKey]*graph.WAFBundleData)
+	m.bundleKeyToPolicy = make(map[graph.WAFBundleKey]types.NamespacedName)
 	m.mu.Unlock()
 
 	for _, entry := range entries {
@@ -271,11 +329,12 @@ func (m *Manager) stopAll() {
 	m.logger.Info("Stopped all WAF pollers", "count", len(entries))
 }
 
-// clearBundleCacheLocked removes cached bundle data for all bundle keys owned by the given poller.
-// Must be called while m.mu is held.
+// clearBundleCacheLocked removes cached bundle data and policy mappings for all bundle keys
+// owned by the given poller. Must be called while m.mu is held.
 func (m *Manager) clearBundleCacheLocked(p *poller) {
 	for _, src := range p.getSources() {
 		delete(m.bundleCache, src.BundleKey)
+		delete(m.bundleKeyToPolicy, src.BundleKey)
 	}
 }
 

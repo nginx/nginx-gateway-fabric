@@ -59,6 +59,10 @@ type PolicyWAFState struct {
 	ResolvedAuth *fetch.BundleAuth
 	// ResolvedTLSCA contains the resolved TLS CA certificate data for WAF bundle fetching.
 	ResolvedTLSCA []byte
+	// BundlePending is true when the policy's bundle has never been successfully fetched
+	// (cold-miss on startup or after all retries are exhausted with no previous bundle).
+	// The Gateway config push is withheld until this is resolved to maintain fail-closed posture.
+	BundlePending bool
 }
 
 // PolicyAncestor represents an ancestor of a Policy.
@@ -1015,9 +1019,9 @@ func fetchPolicyBundle(
 			policy.WAFState.Bundles[bundleKey] = prev
 			return
 		}
-		cond := conditions.NewPolicyNotProgrammedBundleFetchError(err.Error())
+		cond := conditions.NewPolicyNotProgrammedBundlePending(err.Error())
 		policy.Conditions = append(policy.Conditions, cond)
-		policy.Valid = false
+		policy.WAFState.BundlePending = true
 		return
 	}
 
@@ -1093,9 +1097,9 @@ func fetchSecurityLogBundles(
 				policy.WAFState.Bundles[bundleKey] = prev
 				continue
 			}
-			cond := conditions.NewPolicyNotProgrammedBundleFetchError(err.Error())
+			cond := conditions.NewPolicyNotProgrammedBundlePending(err.Error())
 			policy.Conditions = append(policy.Conditions, cond)
-			policy.Valid = false
+			policy.WAFState.BundlePending = true
 			continue
 		}
 

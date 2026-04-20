@@ -727,6 +727,60 @@ var _ = Describe("eventHandler", func() {
 		Expect(handler.GetLatestConfiguration()).To(BeEmpty())
 	})
 
+	It("should withhold config push and enqueue status update when WAF bundle is pending", func() {
+		gwNsName := types.NamespacedName{Namespace: "test", Name: "gateway"}
+		pendingGraph := &graph.Graph{
+			Gateways: map[types.NamespacedName]*graph.Gateway{
+				gwNsName: {
+					Valid: true,
+					Source: &gatewayv1.Gateway{
+						ObjectMeta: metav1.ObjectMeta{
+							Namespace: gwNsName.Namespace,
+							Name:      gwNsName.Name,
+						},
+					},
+					DeploymentName: types.NamespacedName{Namespace: "test", Name: "gateway-nginx"},
+				},
+			},
+			NGFPolicies: map[graph.PolicyKey]*graph.Policy{
+				wafPolicyKey("waf-policy"): {
+					Source: makeWAFPolicy(false),
+					WAFState: &graph.PolicyWAFState{
+						BundlePending: true,
+					},
+					TargetRefs: []graph.PolicyTargetRef{
+						{Kind: kinds.Gateway, Nsname: gwNsName},
+					},
+				},
+			},
+		}
+
+		fakeProcessor.ProcessReturns(pendingGraph)
+		fakeProcessor.GetLatestGraphReturns(pendingGraph)
+
+		e := &events.UpsertEvent{Resource: &gatewayv1.Gateway{}}
+		handler.HandleEventBatch(context.Background(), logr.Discard(), []any{e})
+
+		Expect(fakeNginxUpdater.UpdateConfigCallCount()).To(Equal(0))
+		// Status update is consumed by waitForStatusUpdates and triggers UpdateGroup.
+		// Use Eventually because waitForStatusUpdates runs in a separate goroutine.
+		Eventually(fakeStatusUpdater.UpdateGroupCallCount).Should(BeNumerically(">=", 1))
+	})
+
+	It("should handle WAFBundleReconcileEvent without panicking and mark processor dirty", func() {
+		e := events.WAFBundleReconcileEvent{
+			PolicyNsName: types.NamespacedName{Namespace: "default", Name: "my-waf-policy"},
+		}
+
+		handle := func() {
+			batch := []any{e}
+			handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
+		}
+
+		Expect(handle).ShouldNot(Panic())
+		Expect(fakeProcessor.ForceRebuildCallCount()).To(Equal(1))
+	})
+
 	It("should process events with volume mounts from Deployment", func() {
 		// Create a gateway with EffectiveNginxProxy containing Deployment VolumeMounts
 		gatewayWithVolumeMounts := &graph.Graph{
@@ -1897,6 +1951,157 @@ func TestCollectPolicyTargetDeployments(t *testing.T) {
 			} else {
 				g.Expect(result).To(ConsistOf(tt.expected))
 			}
+		})
+	}
+}
+
+func TestGatewayHasPendingWAFBundle(t *testing.T) {
+	t.Parallel()
+
+	gwNsName := types.NamespacedName{Namespace: "default", Name: "my-gateway"}
+	gw := &graph.Gateway{
+		Valid: true,
+		Source: &gatewayv1.Gateway{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: gwNsName.Namespace,
+				Name:      gwNsName.Name,
+			},
+		},
+		DeploymentName: types.NamespacedName{Namespace: "default", Name: "nginx-dep"},
+	}
+
+	makeWAFPolicy := func(
+		pending bool,
+		targetKind gatewayv1.Kind,
+		targetNsName types.NamespacedName,
+		invalidForGateways ...types.NamespacedName,
+	) *graph.Policy {
+		var wafState *graph.PolicyWAFState
+		if pending {
+			wafState = &graph.PolicyWAFState{BundlePending: true}
+		} else {
+			wafState = &graph.PolicyWAFState{BundlePending: false}
+		}
+		invalid := make(map[types.NamespacedName]struct{}, len(invalidForGateways))
+		for _, ns := range invalidForGateways {
+			invalid[ns] = struct{}{}
+		}
+		return &graph.Policy{
+			Source:             &ngfAPI.WAFGatewayBindingPolicy{},
+			WAFState:           wafState,
+			InvalidForGateways: invalid,
+			TargetRefs: []graph.PolicyTargetRef{
+				{Kind: targetKind, Nsname: targetNsName},
+			},
+		}
+	}
+
+	tests := []struct {
+		policies   map[graph.PolicyKey]*graph.Policy
+		routes     map[graph.RouteKey]*graph.L7Route
+		name       string
+		expPending bool
+	}{
+		{
+			name:       "no policies returns false",
+			policies:   map[graph.PolicyKey]*graph.Policy{},
+			expPending: false,
+		},
+		{
+			name: "pending policy targeting gateway directly returns true",
+			policies: map[graph.PolicyKey]*graph.Policy{
+				wafPolicyKey("waf"): makeWAFPolicy(true, kinds.Gateway, gwNsName),
+			},
+			expPending: true,
+		},
+		{
+			name: "non-pending policy targeting gateway returns false",
+			policies: map[graph.PolicyKey]*graph.Policy{
+				wafPolicyKey("waf"): makeWAFPolicy(false, kinds.Gateway, gwNsName),
+			},
+			expPending: false,
+		},
+		{
+			name: "pending policy targeting a different gateway returns false",
+			policies: map[graph.PolicyKey]*graph.Policy{
+				wafPolicyKey("waf"): makeWAFPolicy(
+					true, kinds.Gateway,
+					types.NamespacedName{Namespace: "default", Name: "other-gw"},
+				),
+			},
+			expPending: false,
+		},
+		{
+			name: "pending policy targeting HTTPRoute attached to gateway returns true",
+			policies: map[graph.PolicyKey]*graph.Policy{
+				wafPolicyKey("waf"): makeWAFPolicy(
+					true, kinds.HTTPRoute,
+					types.NamespacedName{Namespace: "default", Name: "my-route"},
+				),
+			},
+			routes: map[graph.RouteKey]*graph.L7Route{
+				{NamespacedName: types.NamespacedName{Namespace: "default", Name: "my-route"}, RouteType: graph.RouteTypeHTTP}: {
+					Valid: true,
+					ParentRefs: []graph.ParentRef{
+						{Gateway: &graph.ParentRefGateway{NamespacedName: gwNsName}},
+					},
+				},
+			},
+			expPending: true,
+		},
+		{
+			name: "nil WAFState returns false",
+			policies: map[graph.PolicyKey]*graph.Policy{
+				wafPolicyKey("waf"): {
+					Source:     &ngfAPI.WAFGatewayBindingPolicy{},
+					WAFState:   nil,
+					TargetRefs: []graph.PolicyTargetRef{{Kind: kinds.Gateway, Nsname: gwNsName}},
+				},
+			},
+			expPending: false,
+		},
+		{
+			name: "pending policy with gateway in InvalidForGateways returns false",
+			policies: map[graph.PolicyKey]*graph.Policy{
+				wafPolicyKey("waf"): makeWAFPolicy(true, kinds.Gateway, gwNsName, gwNsName),
+			},
+			expPending: false,
+		},
+		{
+			name: "pending policy via route with gateway in InvalidForGateways returns false",
+			policies: map[graph.PolicyKey]*graph.Policy{
+				wafPolicyKey("waf"): makeWAFPolicy(
+					true, kinds.HTTPRoute,
+					types.NamespacedName{Namespace: "default", Name: "my-route"},
+					gwNsName,
+				),
+			},
+			routes: map[graph.RouteKey]*graph.L7Route{
+				{
+					NamespacedName: types.NamespacedName{Namespace: "default", Name: "my-route"},
+					RouteType:      graph.RouteTypeHTTP,
+				}: {
+					Valid: true,
+					ParentRefs: []graph.ParentRef{
+						{Gateway: &graph.ParentRefGateway{NamespacedName: gwNsName}},
+					},
+				},
+			},
+			expPending: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			gr := &graph.Graph{
+				NGFPolicies: tt.policies,
+				Routes:      tt.routes,
+			}
+
+			g.Expect(gatewayHasPendingWAFBundle(gr, gw)).To(Equal(tt.expPending))
 		})
 	}
 }

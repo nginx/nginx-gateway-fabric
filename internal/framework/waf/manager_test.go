@@ -12,6 +12,7 @@ import (
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent/agentfakes"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/events"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/fetch"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/fetch/fetchfakes"
 )
@@ -670,6 +671,103 @@ func TestManager_GetLatestBundles(t *testing.T) {
 
 		mgr.stopAll()
 		g.Expect(mgr.GetLatestBundles()).To(BeNil())
+	})
+}
+
+func TestManager_cacheBundleUpdateInjectsReconcileEvent(t *testing.T) {
+	t.Parallel()
+
+	policyNsName := types.NamespacedName{Namespace: "default", Name: "my-policy"}
+	bundleKey := graph.WAFBundleKey("default_my-policy")
+
+	t.Run("injects WAFBundleReconcileEvent on first fetch for known bundle key", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+
+		eventCh := make(chan any, 1)
+		mgr := NewManager(ManagerConfig{
+			Logger:      logr.Discard(),
+			Fetcher:     &fetchfakes.FakeFetcher{},
+			Deployments: &agentfakes.FakeDeploymentStorer{},
+			EventCh:     eventCh,
+			Ctx:         context.Background(),
+		})
+
+		mgr.bundleKeyToPolicy[bundleKey] = policyNsName
+
+		mgr.cacheBundleUpdate(bundleKey, []byte("data"), "checksum")
+
+		g.Expect(eventCh).To(Receive(Equal(events.WAFBundleReconcileEvent{PolicyNsName: policyNsName})))
+	})
+
+	t.Run("does not inject event on subsequent fetches for the same key", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+
+		eventCh := make(chan any, 2)
+		mgr := NewManager(ManagerConfig{
+			Logger:      logr.Discard(),
+			Fetcher:     &fetchfakes.FakeFetcher{},
+			Deployments: &agentfakes.FakeDeploymentStorer{},
+			EventCh:     eventCh,
+			Ctx:         context.Background(),
+		})
+
+		mgr.bundleKeyToPolicy[bundleKey] = policyNsName
+
+		mgr.cacheBundleUpdate(bundleKey, []byte("data-v1"), "checksum-v1")
+		// Consume the first event, then verify no second event is sent.
+		g.Expect(eventCh).To(Receive())
+		mgr.cacheBundleUpdate(bundleKey, []byte("data-v2"), "checksum-v2")
+		g.Consistently(eventCh).ShouldNot(Receive())
+	})
+
+	t.Run("does not inject event when eventCh is nil", func(t *testing.T) {
+		t.Parallel()
+
+		mgr := NewManager(ManagerConfig{
+			Logger:      logr.Discard(),
+			Fetcher:     &fetchfakes.FakeFetcher{},
+			Deployments: &agentfakes.FakeDeploymentStorer{},
+		})
+
+		mgr.bundleKeyToPolicy[bundleKey] = policyNsName
+
+		// Must not panic.
+		mgr.cacheBundleUpdate(bundleKey, []byte("data"), "checksum")
+	})
+
+	t.Run("panics when EventCh is set without Ctx", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+
+		g.Expect(func() {
+			NewManager(ManagerConfig{
+				Logger:      logr.Discard(),
+				Fetcher:     &fetchfakes.FakeFetcher{},
+				Deployments: &agentfakes.FakeDeploymentStorer{},
+				EventCh:     make(chan any, 1),
+			})
+		}).To(Panic())
+	})
+
+	t.Run("does not inject event when bundle key has no policy mapping", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+
+		eventCh := make(chan any, 1)
+		mgr := NewManager(ManagerConfig{
+			Logger:      logr.Discard(),
+			Fetcher:     &fetchfakes.FakeFetcher{},
+			Deployments: &agentfakes.FakeDeploymentStorer{},
+			EventCh:     eventCh,
+			Ctx:         context.Background(),
+		})
+
+		// No entry in bundleKeyToPolicy.
+		mgr.cacheBundleUpdate(bundleKey, []byte("data"), "checksum")
+
+		g.Expect(eventCh).To(BeEmpty())
 	})
 }
 
