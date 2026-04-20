@@ -11,7 +11,7 @@
   },
   "devDependencies": {
     "@vitest/coverage-v8": "^4.1.4",
-    "prettier": "3.8.2",
+    "prettier": "3.8.3",
     "vitest": "^4.1.4"
   },
   "type": "module"
