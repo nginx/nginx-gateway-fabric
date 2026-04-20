@@ -2913,6 +2913,7 @@ func TestProcessWAFGatewayBindingPolicies(t *testing.T) {
 		expConditions     func(pol *Policy) []conditions.Condition
 		name              string
 		expValid          bool
+		expBundlePending  bool
 	}{
 		{
 			name: "nil wafInput returns nil",
@@ -2987,7 +2988,7 @@ func TestProcessWAFGatewayBindingPolicies(t *testing.T) {
 			expValid:   true,
 		},
 		{
-			name: "fetch error with no previous bundle marks policy invalid",
+			name: "fetch error with no previous bundle sets policy pending (fail-closed)",
 			processedPolicies: func() map[PolicyKey]*Policy {
 				wafPolicy := makeWAFPolicy(policyName, false, false, false)
 				key, pol := makePolicyEntry(wafPolicy, true)
@@ -3006,9 +3007,10 @@ func TestProcessWAFGatewayBindingPolicies(t *testing.T) {
 			expBundles: map[WAFBundleKey]*WAFBundleData{},
 			expSecrets: map[types.NamespacedName]*corev1.Secret{},
 			expConditions: func(_ *Policy) []conditions.Condition {
-				return []conditions.Condition{conditions.NewPolicyNotProgrammedBundleFetchError("fetch failed")}
+				return []conditions.Condition{conditions.NewPolicyNotProgrammedBundlePending("fetch failed")}
 			},
-			expValid: false,
+			expValid:         true,
+			expBundlePending: true,
 		},
 		{
 			name: "fetch error with previous bundle uses stale bundle and adds warning condition",
@@ -3220,7 +3222,7 @@ func TestProcessWAFGatewayBindingPolicies(t *testing.T) {
 			expValid:   true,
 		},
 		{
-			name: "security log fetch error with no previous bundle marks policy invalid",
+			name: "security log fetch error with no previous bundle sets policy pending (fail-closed)",
 			processedPolicies: func() map[PolicyKey]*Policy {
 				wafPolicy := makeWAFPolicy(policyName, false, false, true)
 				key, pol := makePolicyEntry(wafPolicy, true)
@@ -3242,9 +3244,10 @@ func TestProcessWAFGatewayBindingPolicies(t *testing.T) {
 			},
 			expSecrets: map[types.NamespacedName]*corev1.Secret{},
 			expConditions: func(_ *Policy) []conditions.Condition {
-				return []conditions.Condition{conditions.NewPolicyNotProgrammedBundleFetchError("log fetch failed")}
+				return []conditions.Condition{conditions.NewPolicyNotProgrammedBundlePending("log fetch failed")}
 			},
-			expValid: false,
+			expValid:         true,
+			expBundlePending: true,
 		},
 		{
 			name: "NIM managed source sets PolicyName on fetch request",
@@ -3606,6 +3609,9 @@ func TestProcessWAFGatewayBindingPolicies(t *testing.T) {
 					g.Expect(pol.Valid).To(BeTrue())
 				} else if pol.Conditions != nil {
 					g.Expect(pol.Valid).To(BeFalse())
+				}
+				if pol.WAFState != nil {
+					g.Expect(pol.WAFState.BundlePending).To(Equal(tc.expBundlePending))
 				}
 			}
 		})

@@ -1695,3 +1695,15 @@ func NewPolicyProgrammedStaleBundleWarning(errMsg string) Condition {
 		Message: fmt.Sprintf("Bundle fetch failed; using previously fetched bundle: %s", errMsg),
 	}
 }
+
+// NewPolicyNotProgrammedBundlePending returns a Condition that indicates the WAF bundle has not
+// yet been successfully fetched. The Gateway config push is withheld until the bundle is available,
+// maintaining a fail-closed posture.
+func NewPolicyNotProgrammedBundlePending(errMsg string) Condition {
+	return Condition{
+		Type:    string(WAFProgrammedConditionType),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(PolicyReasonPending),
+		Message: fmt.Sprintf("Waiting for WAF bundle; last fetch error: %s", errMsg),
+	}
+}
