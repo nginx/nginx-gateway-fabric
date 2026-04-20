@@ -2043,7 +2043,7 @@ func TestGatewayHasPendingWAFBundle(t *testing.T) {
 				{NamespacedName: types.NamespacedName{Namespace: "default", Name: "my-route"}, RouteType: graph.RouteTypeHTTP}: {
 					Valid: true,
 					ParentRefs: []graph.ParentRef{
-						{Gateway: &graph.ParentRefGateway{NamespacedName: gwNsName}},
+						{Kind: kinds.Gateway, NamespacedName: gwNsName},
 					},
 				},
 			},
@@ -2083,7 +2083,7 @@ func TestGatewayHasPendingWAFBundle(t *testing.T) {
 				}: {
 					Valid: true,
 					ParentRefs: []graph.ParentRef{
-						{Gateway: &graph.ParentRefGateway{NamespacedName: gwNsName}},
+						{Kind: kinds.Gateway, NamespacedName: gwNsName},
 					},
 				},
 			},

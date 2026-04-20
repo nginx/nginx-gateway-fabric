@@ -43,10 +43,11 @@ const (
 	defaultServiceType   = corev1.ServiceTypeLoadBalancer
 	defaultServicePolicy = corev1.ServiceExternalTrafficPolicyLocal
 
-	defaultNginxImagePath      = "ghcr.io/nginx/nginx-gateway-fabric/nginx"
-	defaultNginxPlusImagePath  = "private-registry.nginx.com/nginx-gateway-fabric/nginx-plus"
-	defaultImagePullPolicy     = corev1.PullIfNotPresent
-	defaultInitialDelaySeconds = int32(3)
+	defaultNginxImagePath        = "ghcr.io/nginx/nginx-gateway-fabric/nginx"
+	defaultNginxPlusImagePath    = "private-registry.nginx.com/nginx-gateway-fabric/nginx-plus"
+	defaultNginxPlusWAFImagePath = "private-registry.nginx.com/nginx-gateway-fabric/nginx-plus-f5waf"
+	defaultImagePullPolicy       = corev1.PullIfNotPresent
+	defaultInitialDelaySeconds   = int32(3)
 
 	// WAF container defaults.
 	defaultWAFEnforcerImagePath  = "private-registry.nginx.com/nap/waf-enforcer"
@@ -983,8 +984,8 @@ func (p *NginxProvisioner) buildNginxPodTemplateSpec(
 	// Build containers list
 	containers := []corev1.Container{nginxContainer}
 
-	// Configure WAF if enabled
-	if graph.WAFEnabledForNginxProxy(nProxyCfg) {
+	// Configure WAF if enabled (requires NGINX Plus)
+	if p.cfg.Plus && graph.WAFEnabledForNginxProxy(nProxyCfg) {
 		containers, volumes = p.configureWAF(containers, volumes, nProxyCfg)
 	}
 
@@ -1913,11 +1914,16 @@ func isNginxReadinessProbeExposed(nProxyCfg *graph.EffectiveNginxProxy) bool {
 
 func DetermineNginxImageName(
 	nProxyCfg *graph.EffectiveNginxProxy,
-	isPlus bool, version string,
+	isPlus bool,
+	version string,
 ) (string, corev1.PullPolicy) {
 	image := defaultNginxImagePath
 	if isPlus {
-		image = defaultNginxPlusImagePath
+		if graph.WAFEnabledForNginxProxy(nProxyCfg) {
+			image = defaultNginxPlusWAFImagePath
+		} else {
+			image = defaultNginxPlusImagePath
+		}
 	}
 	tag := version
 	pullPolicy := defaultImagePullPolicy

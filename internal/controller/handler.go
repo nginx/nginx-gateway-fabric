@@ -415,7 +415,7 @@ func gatewayHasPendingWAFBundle(gr *graph.Graph, gw *graph.Gateway) bool {
 					continue
 				}
 				for _, parentRef := range route.ParentRefs {
-					if parentRef.Gateway != nil && parentRef.Gateway.NamespacedName == gwNsName {
+					if parentRef.Kind == kinds.Gateway && parentRef.NamespacedName == gwNsName {
 						return true
 					}
 				}
