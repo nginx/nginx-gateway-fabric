@@ -1294,8 +1294,11 @@ func extractExternalAuthInternalLocations(locations []http.Location) []http.Loca
 			Type:                 http.InternalLocationType,
 			ProxyPass:            proxyPass,
 			ProxySetHeaders:      headers,
-			ProxyPassRequestBody: proxyPassBody,
 			ProxySSLVerify:       ar.ProxySSLVerify,
+			ProxyPassRequestBody: proxyPassBody,
+		}
+		if !ar.ForwardBody {
+			authLoc.ProxyPassRequestBody = proxyPassRequestBodyOff
 		}
 		result = append(result, authLoc)
 	}

@@ -683,34 +683,6 @@ func TestValidateFilterExternalAuth(t *testing.T) {
 			expectErrCount: 1,
 		},
 		{
-			name: "duplicate response headers are silently deduplicated",
-			filter: &gatewayv1.HTTPExternalAuthFilter{
-				ExternalAuthProtocol: gatewayv1.HTTPRouteExternalAuthHTTPProtocol,
-				BackendRef: gatewayv1.BackendObjectReference{
-					Name: "auth-svc",
-					Port: &port,
-				},
-				HTTPAuthConfig: &gatewayv1.HTTPAuthConfig{
-					AllowedResponseHeaders: []string{"X-Auth-Status", "x-auth-status"},
-				},
-			},
-			expectErrCount: 0,
-		},
-		{
-			name: "duplicate request headers are silently deduplicated",
-			filter: &gatewayv1.HTTPExternalAuthFilter{
-				ExternalAuthProtocol: gatewayv1.HTTPRouteExternalAuthHTTPProtocol,
-				BackendRef: gatewayv1.BackendObjectReference{
-					Name: "auth-svc",
-					Port: &port,
-				},
-				HTTPAuthConfig: &gatewayv1.HTTPAuthConfig{
-					AllowedRequestHeaders: []string{"X-Custom-Token", "X-Custom-Token"},
-				},
-			},
-			expectErrCount: 0,
-		},
-		{
 			name: "Headers specified in response headers are copied when explicitly specified",
 			filter: &gatewayv1.HTTPExternalAuthFilter{
 				ExternalAuthProtocol: gatewayv1.HTTPRouteExternalAuthHTTPProtocol,

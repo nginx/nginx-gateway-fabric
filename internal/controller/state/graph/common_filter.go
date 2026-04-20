@@ -314,15 +314,13 @@ func validateFilterExternalAuth(
 	return allErrs
 }
 
-// sanitizeExternalAuthHeaders validates header names, silently removes duplicates and Host/Authority,
-// and returns the deduplicated list along with any validation errors for invalid header names.
+// sanitizeExternalAuthHeaders validates header names and returns the list along with any validation errors.
 func sanitizeExternalAuthHeaders(
 	validator validation.HTTPFieldsValidator,
 	headers []string,
 	headerPath *field.Path,
 ) ([]string, field.ErrorList) {
 	var allErrs field.ErrorList
-	seen := make(map[string]struct{})
 	var result []string
 
 	for i, h := range headers {
@@ -330,12 +328,6 @@ func sanitizeExternalAuthHeaders(
 			allErrs = append(allErrs, field.Invalid(headerPath.Index(i), h, err.Error()))
 			continue
 		}
-
-		lower := strings.ToLower(h)
-		if _, exists := seen[lower]; exists {
-			continue
-		}
-		seen[lower] = struct{}{}
 		result = append(result, h)
 	}
 

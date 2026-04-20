@@ -504,8 +504,8 @@ func convertHTTPExternalAuthFilter(
 }
 
 func generateExternalAuthInternalPath(routeNsName types.NamespacedName, ruleIdx int) string {
-	return fmt.Sprintf("/_ngf-internal-ext-auth-%s_%s_rule%d",
-		routeNsName.Namespace, routeNsName.Name, ruleIdx)
+	return fmt.Sprintf("%s-ext-auth-%s_%s_rule%d",
+		http.InternalRoutePathPrefix, routeNsName.Namespace, routeNsName.Name, ruleIdx)
 }
 
 func buildSortedExtraAuthArgs(extraAuthArgs map[string]string) string {
