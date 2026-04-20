@@ -50,8 +50,6 @@ const (
 	extAuthResponseVarPrefix = "$ext_auth_response_"
 	// upstreamHTTPVarPrefix is the NGINX variable prefix for accessing upstream response headers.
 	upstreamHTTPVarPrefix = "$upstream_http_"
-	// proxyPassRequestBodyOn enables forwarding the request body to the proxied server.
-	proxyPassRequestBodyOn = "on"
 	// proxyPassRequestBodyOff disables forwarding the request body to the proxied server.
 	proxyPassRequestBodyOff = "off"
 
@@ -1269,23 +1267,22 @@ func extractExternalAuthInternalLocations(locations []http.Location) []http.Loca
 		}
 
 		headers := []http.Header{
+			{Name: "Host", Value: "$host"},
 			{Name: extAuthOriginalURIHeader, Value: extAuthOriginalURIValue},
 		}
 		for _, h := range ar.AllowedRequestHeaders {
 			headers = append(headers, http.Header{Name: h, Value: httpHeaderVarPrefix + headerToNginxVar(h)})
 		}
 
-		proxyPassBody := proxyPassRequestBodyOff
-		if ar.ForwardBody {
-			proxyPassBody = proxyPassRequestBodyOn
-		}
 		authLoc := http.Location{
-			Path:                 path,
-			Type:                 http.InternalLocationType,
-			ProxyPass:            proxyPass,
-			ProxySetHeaders:      headers,
-			ProxyPassRequestBody: proxyPassBody,
-			ProxySSLVerify:       ar.ProxySSLVerify,
+			Path:            path,
+			Type:            http.InternalLocationType,
+			ProxyPass:       proxyPass,
+			ProxySetHeaders: headers,
+			ProxySSLVerify:  ar.ProxySSLVerify,
+		}
+		if !ar.ForwardBody {
+			authLoc.ProxyPassRequestBody = proxyPassRequestBodyOff
 		}
 		result = append(result, authLoc)
 	}

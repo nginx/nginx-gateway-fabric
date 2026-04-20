@@ -6166,6 +6166,7 @@ func TestExecuteServers_ExternalAuth(t *testing.T) {
 				"location /_ngf-internal-ext-auth-test_route1_rule0 {",
 				"internal;",
 				"proxy_pass http://default_ext-auth_80/check;",
+				`proxy_set_header Host "$host";`,
 				`proxy_set_header X-Original-URI "$request_uri";`,
 				`proxy_set_header X-Custom-Token "$http_x_custom_token";`,
 				"proxy_pass_request_body off;",
@@ -6219,7 +6220,7 @@ func TestExecuteServers_ExternalAuth(t *testing.T) {
 			},
 		},
 		{
-			name: "external auth with forwardBody emits client_max_body_size and proxy_pass_request_body on",
+			name: "external auth with forwardBody emits client_max_body_size and no proxy_pass_request_body directive",
 			conf: dataplane.Configuration{
 				HTTPServers: []dataplane.VirtualServer{
 					{
@@ -6250,10 +6251,10 @@ func TestExecuteServers_ExternalAuth(t *testing.T) {
 			},
 			expPresent: []string{
 				"client_max_body_size 512;",
-				"proxy_pass_request_body on;",
 			},
 			expAbsent: []string{
 				`proxy_set_header Content-Length "";`,
+				"proxy_pass_request_body",
 			},
 		},
 		{
@@ -7196,6 +7197,7 @@ func TestExtractExternalAuthInternalLocations(t *testing.T) {
 					Type:      http.InternalLocationType,
 					ProxyPass: "http://default_ext-auth_80/check",
 					ProxySetHeaders: []http.Header{
+						{Name: "Host", Value: "$host"},
 						{Name: "X-Original-URI", Value: "$request_uri"},
 						{Name: "X-Custom-Token", Value: "$http_x_custom_token"},
 					},
@@ -7222,9 +7224,9 @@ func TestExtractExternalAuthInternalLocations(t *testing.T) {
 					Type:      http.InternalLocationType,
 					ProxyPass: "http://default_ext-auth_80",
 					ProxySetHeaders: []http.Header{
+						{Name: "Host", Value: "$host"},
 						{Name: "X-Original-URI", Value: "$request_uri"},
 					},
-					ProxyPassRequestBody: "on",
 				},
 			},
 		},
@@ -7250,6 +7252,7 @@ func TestExtractExternalAuthInternalLocations(t *testing.T) {
 					Type:      http.InternalLocationType,
 					ProxyPass: "https://default_ext-auth_443",
 					ProxySetHeaders: []http.Header{
+						{Name: "Host", Value: "$host"},
 						{Name: "X-Original-URI", Value: "$request_uri"},
 					},
 					ProxyPassRequestBody: "off",
@@ -7286,6 +7289,7 @@ func TestExtractExternalAuthInternalLocations(t *testing.T) {
 					Type:      http.InternalLocationType,
 					ProxyPass: "http://default_ext-auth_80",
 					ProxySetHeaders: []http.Header{
+						{Name: "Host", Value: "$host"},
 						{Name: "X-Original-URI", Value: "$request_uri"},
 					},
 					ProxyPassRequestBody: "off",
