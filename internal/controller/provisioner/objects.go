@@ -981,8 +981,8 @@ func (p *NginxProvisioner) buildNginxPodTemplateSpec(
 	// Build containers list
 	containers := []corev1.Container{nginxContainer}
 
-	// Configure WAF if enabled
-	if graph.WAFEnabledForNginxProxy(nProxyCfg) {
+	// Configure WAF if enabled (requires NGINX Plus)
+	if p.cfg.Plus && graph.WAFEnabledForNginxProxy(nProxyCfg) {
 		containers, volumes = p.configureWAF(containers, volumes, nProxyCfg)
 	}
 

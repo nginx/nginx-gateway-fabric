@@ -446,7 +446,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        build-os: ["", ubi]
+        # On PRs: only standard OS (1 job)
+        # On main/release: include ubi (2 jobs)
+        build-os: ${{ github.event_name == 'pull_request' && fromJSON('[""]') || fromJSON('["", "ubi"]') }}
     with:
       image: plus-nap-waf
       platforms: "linux/amd64"
