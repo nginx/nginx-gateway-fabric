@@ -294,16 +294,14 @@ func validateFilterExternalAuth(
 	var allErrs field.ErrorList
 
 	if filter.HTTPAuthConfig != nil {
-		var reqErrs field.ErrorList
-		filter.HTTPAuthConfig.AllowedRequestHeaders, reqErrs = sanitizeExternalAuthHeaders(
+		reqErrs := verifyExternalAuthHeaders(
 			validator,
 			filter.HTTPAuthConfig.AllowedRequestHeaders,
 			filterPath.Child("externalAuth", "http", "allowedRequestHeaders"),
 		)
 		allErrs = append(allErrs, reqErrs...)
 
-		var respErrs field.ErrorList
-		filter.HTTPAuthConfig.AllowedResponseHeaders, respErrs = sanitizeExternalAuthHeaders(
+		respErrs := verifyExternalAuthHeaders(
 			validator,
 			filter.HTTPAuthConfig.AllowedResponseHeaders,
 			filterPath.Child("externalAuth", "http", "allowedResponseHeaders"),
@@ -314,24 +312,21 @@ func validateFilterExternalAuth(
 	return allErrs
 }
 
-// sanitizeExternalAuthHeaders validates header names and returns the list along with any validation errors.
-func sanitizeExternalAuthHeaders(
+// verifyExternalAuthHeaders validates header names and returns any validation errors.
+func verifyExternalAuthHeaders(
 	validator validation.HTTPFieldsValidator,
 	headers []string,
 	headerPath *field.Path,
-) ([]string, field.ErrorList) {
+) field.ErrorList {
 	var allErrs field.ErrorList
-	var result []string
 
 	for i, h := range headers {
 		if err := validator.ValidateFilterHeaderName(h); err != nil {
 			allErrs = append(allErrs, field.Invalid(headerPath.Index(i), h, err.Error()))
-			continue
 		}
-		result = append(result, h)
 	}
 
-	return result, allErrs
+	return allErrs
 }
 
 func validateFilterMirror(mirror *v1.HTTPRequestMirrorFilter, filterPath *field.Path) field.ErrorList {

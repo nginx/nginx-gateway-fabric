@@ -9,6 +9,7 @@ import (
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/validation"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/validation/validationfakes"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
@@ -634,15 +635,23 @@ func TestValidateFilterExternalAuth(t *testing.T) {
 
 	port := gatewayv1.PortNumber(80)
 
-	validator := &validationfakes.FakeHTTPFieldsValidator{}
+	invalidHeaderValidator := &validationfakes.FakeHTTPFieldsValidator{}
+	invalidHeaderValidator.ValidateFilterHeaderNameCalls(func(name string) error {
+		if name == "invalid header" {
+			return errors.New("invalid header name")
+		}
+		return nil
+	})
 
 	tests := []struct {
+		validator      validation.HTTPFieldsValidator
 		filter         *gatewayv1.HTTPExternalAuthFilter
 		name           string
 		expectErrCount int
 	}{
 		{
-			name: "valid HTTP external auth filter with no httpAuthConfig",
+			name:      "valid HTTP external auth filter with no httpAuthConfig",
+			validator: &validationfakes.FakeHTTPFieldsValidator{},
 			filter: &gatewayv1.HTTPExternalAuthFilter{
 				ExternalAuthProtocol: gatewayv1.HTTPRouteExternalAuthHTTPProtocol,
 				BackendRef: gatewayv1.BackendObjectReference{
@@ -653,7 +662,8 @@ func TestValidateFilterExternalAuth(t *testing.T) {
 			expectErrCount: 0,
 		},
 		{
-			name: "valid HTTP external auth filter with httpAuthConfig and allowedResponseHeaders",
+			name:      "valid HTTP external auth filter with both request and response headers",
+			validator: &validationfakes.FakeHTTPFieldsValidator{},
 			filter: &gatewayv1.HTTPExternalAuthFilter{
 				ExternalAuthProtocol: gatewayv1.HTTPRouteExternalAuthHTTPProtocol,
 				BackendRef: gatewayv1.BackendObjectReference{
@@ -661,6 +671,7 @@ func TestValidateFilterExternalAuth(t *testing.T) {
 					Port: &port,
 				},
 				HTTPAuthConfig: &gatewayv1.HTTPAuthConfig{
+					AllowedRequestHeaders:  []string{"X-Custom-Token"},
 					AllowedResponseHeaders: []string{"X-Auth-Status", "X-Forwarded-Groups"},
 				},
 			},
@@ -668,11 +679,13 @@ func TestValidateFilterExternalAuth(t *testing.T) {
 		},
 		{
 			name:           "nil filter",
+			validator:      &validationfakes.FakeHTTPFieldsValidator{},
 			filter:         nil,
 			expectErrCount: 1,
 		},
 		{
-			name: "GRPC protocol is not supported",
+			name:      "GRPC protocol is not supported",
+			validator: &validationfakes.FakeHTTPFieldsValidator{},
 			filter: &gatewayv1.HTTPExternalAuthFilter{
 				ExternalAuthProtocol: gatewayv1.HTTPRouteExternalAuthGRPCProtocol,
 				BackendRef: gatewayv1.BackendObjectReference{
@@ -683,21 +696,8 @@ func TestValidateFilterExternalAuth(t *testing.T) {
 			expectErrCount: 1,
 		},
 		{
-			name: "Headers specified in response headers are copied when explicitly specified",
-			filter: &gatewayv1.HTTPExternalAuthFilter{
-				ExternalAuthProtocol: gatewayv1.HTTPRouteExternalAuthHTTPProtocol,
-				BackendRef: gatewayv1.BackendObjectReference{
-					Name: "auth-svc",
-					Port: &port,
-				},
-				HTTPAuthConfig: &gatewayv1.HTTPAuthConfig{
-					AllowedResponseHeaders: []string{"X-Auth-Status", "Host"},
-				},
-			},
-			expectErrCount: 0,
-		},
-		{
-			name: "invalid header name in allowedResponseHeaders",
+			name:      "invalid header name in allowedResponseHeaders",
+			validator: invalidHeaderValidator,
 			filter: &gatewayv1.HTTPExternalAuthFilter{
 				ExternalAuthProtocol: gatewayv1.HTTPRouteExternalAuthHTTPProtocol,
 				BackendRef: gatewayv1.BackendObjectReference{
@@ -710,6 +710,37 @@ func TestValidateFilterExternalAuth(t *testing.T) {
 			},
 			expectErrCount: 1,
 		},
+		{
+			name:      "invalid header name in allowedRequestHeaders",
+			validator: invalidHeaderValidator,
+			filter: &gatewayv1.HTTPExternalAuthFilter{
+				ExternalAuthProtocol: gatewayv1.HTTPRouteExternalAuthHTTPProtocol,
+				BackendRef: gatewayv1.BackendObjectReference{
+					Name: "auth-svc",
+					Port: &port,
+				},
+				HTTPAuthConfig: &gatewayv1.HTTPAuthConfig{
+					AllowedRequestHeaders: []string{"invalid header"},
+				},
+			},
+			expectErrCount: 1,
+		},
+		{
+			name:      "invalid headers in both request and response headers accumulate errors",
+			validator: invalidHeaderValidator,
+			filter: &gatewayv1.HTTPExternalAuthFilter{
+				ExternalAuthProtocol: gatewayv1.HTTPRouteExternalAuthHTTPProtocol,
+				BackendRef: gatewayv1.BackendObjectReference{
+					Name: "auth-svc",
+					Port: &port,
+				},
+				HTTPAuthConfig: &gatewayv1.HTTPAuthConfig{
+					AllowedRequestHeaders:  []string{"invalid header"},
+					AllowedResponseHeaders: []string{"invalid header"},
+				},
+			},
+			expectErrCount: 2,
+		},
 	}
 
 	filterPath := field.NewPath("test")
@@ -720,19 +751,7 @@ func TestValidateFilterExternalAuth(t *testing.T) {
 
 			g := NewWithT(t)
 
-			testValidator := validator
-			if test.name == "invalid header name in allowedResponseHeaders" {
-				fakeValidator := &validationfakes.FakeHTTPFieldsValidator{}
-				fakeValidator.ValidateFilterHeaderNameCalls(func(name string) error {
-					if name == "invalid header" {
-						return errors.New("invalid header name")
-					}
-					return nil
-				})
-				testValidator = fakeValidator
-			}
-
-			allErrs := validateFilterExternalAuth(testValidator, test.filter, filterPath)
+			allErrs := validateFilterExternalAuth(test.validator, test.filter, filterPath)
 			g.Expect(allErrs).To(HaveLen(test.expectErrCount))
 		})
 	}
