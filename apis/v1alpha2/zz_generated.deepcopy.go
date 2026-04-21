@@ -521,6 +521,11 @@ func (in *NginxProxySpec) DeepCopyInto(out *NginxProxySpec) {
 		*out = new(int32)
 		**out = **in
 	}
+	if in.WorkerRlimitNofile != nil {
+		in, out := &in.WorkerRlimitNofile, &out.WorkerRlimitNofile
+		*out = new(int32)
+		**out = **in
+	}
 	if in.DNSResolver != nil {
 		in, out := &in.DNSResolver, &out.DNSResolver
 		*out = new(DNSResolver)

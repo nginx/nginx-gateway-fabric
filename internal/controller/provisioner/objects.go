@@ -504,9 +504,16 @@ func (p *NginxProvisioner) buildBootstrapConfigMap(
 		workerConnections = *nProxyCfg.WorkerConnections
 	}
 
+	// Auto-calculate worker_rlimit_nofile as worker_connections * 2 when not explicitly set
+	workerRlimitNofile := workerConnections * 2
+	if nProxyCfg != nil && nProxyCfg.WorkerRlimitNofile != nil {
+		workerRlimitNofile = *nProxyCfg.WorkerRlimitNofile
+	}
+
 	mainFields := map[string]any{
-		"ErrorLevel":        logLevel,
-		"WorkerConnections": workerConnections,
+		"ErrorLevel":         logLevel,
+		"WorkerConnections":  workerConnections,
+		"WorkerRlimitNofile": workerRlimitNofile,
 	}
 
 	eventsFields := map[string]any{

@@ -76,6 +76,8 @@ type Configuration struct {
 	BaseHTTPConfig BaseHTTPConfig
 	// WorkerConnections specifies the maximum number of simultaneous connections that can be opened by a worker process.
 	WorkerConnections int32
+	// WorkerRlimitNofile specifies the maximum number of open files (RLIMIT_NOFILE) for worker processes.
+	WorkerRlimitNofile int32
 }
 
 // SSLKeyPairID is a unique identifier for a SSLKeyPair.

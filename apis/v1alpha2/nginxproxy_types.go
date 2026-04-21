@@ -88,12 +88,20 @@ type NginxProxySpec struct {
 	// +optional
 	Kubernetes *KubernetesSpec `json:"kubernetes,omitempty"`
 	// WorkerConnections specifies the maximum number of simultaneous connections that can be opened by a worker process.
-	// Default is 1024.
+	// Default is 8192.
 	//
 	// +optional
 	// +kubebuilder:validation:Minimum=1
 	// +kubebuilder:validation:Maximum=65535
 	WorkerConnections *int32 `json:"workerConnections,omitempty"`
+	// WorkerRlimitNofile specifies the maximum number of open files (RLIMIT_NOFILE) for worker processes.
+	// Sets the worker_rlimit_nofile NGINX directive. If not set, it is automatically calculated
+	// as worker_connections * 2.
+	//
+	// +optional
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=1048576
+	WorkerRlimitNofile *int32 `json:"workerRlimitNofile,omitempty"`
 	// DNSResolver specifies the DNS resolver configuration for external name resolution.
 	// This enables support for routing to ExternalName Services.
 	//

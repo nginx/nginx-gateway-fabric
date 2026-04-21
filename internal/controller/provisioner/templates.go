@@ -10,6 +10,7 @@ var (
 )
 
 const mainTemplateText = `
+worker_rlimit_nofile {{ .WorkerRlimitNofile }};
 error_log stderr {{ .ErrorLevel }};`
 
 const eventsTemplateText = `

@@ -199,7 +199,7 @@ func TestExecuteEventsConfig_WorkerConnections(t *testing.T) {
 			conf: dataplane.Configuration{
 				WorkerConnections: dataplane.DefaultWorkerConnections,
 			},
-			expWorkerConnections: "worker_connections 1024;",
+			expWorkerConnections: "worker_connections 8192;",
 		},
 	}
 
@@ -212,6 +212,43 @@ func TestExecuteEventsConfig_WorkerConnections(t *testing.T) {
 			g.Expect(res).To(HaveLen(1))
 			g.Expect(res[0].dest).To(Equal(eventsIncludesConfigFile))
 			g.Expect(string(res[0].data)).To(ContainSubstring(test.expWorkerConnections))
+		})
+	}
+}
+
+func TestExecuteMainConfig_WorkerRlimitNofile(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name                  string
+		expWorkerRlimitNofile string
+		conf                  dataplane.Configuration
+	}{
+		{
+			name: "custom worker_rlimit_nofile",
+			conf: dataplane.Configuration{
+				WorkerRlimitNofile: 65535,
+			},
+			expWorkerRlimitNofile: "worker_rlimit_nofile 65535;",
+		},
+		{
+			name: "default auto-calculated worker_rlimit_nofile",
+			conf: dataplane.Configuration{
+				WorkerRlimitNofile: dataplane.DefaultWorkerConnections * 2,
+			},
+			expWorkerRlimitNofile: "worker_rlimit_nofile 16384;",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			res := executeMainConfig(test.conf, &policiesfakes.FakeGenerator{})
+			g.Expect(res).To(HaveLen(1))
+			g.Expect(res[0].dest).To(Equal(mainIncludesConfigFile))
+			g.Expect(string(res[0].data)).To(ContainSubstring(test.expWorkerRlimitNofile))
 		})
 	}
 }

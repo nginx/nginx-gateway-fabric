@@ -9395,9 +9395,18 @@ spec:
               workerConnections:
                 description: |-
                   WorkerConnections specifies the maximum number of simultaneous connections that can be opened by a worker process.
-                  Default is 1024.
+                  Default is 8192.
                 format: int32
                 maximum: 65535
+                minimum: 1
+                type: integer
+              workerRlimitNofile:
+                description: |-
+                  WorkerRlimitNofile specifies the maximum number of open files (RLIMIT_NOFILE) for worker processes.
+                  Sets the worker_rlimit_nofile NGINX directive. If not set, it is automatically calculated
+                  as worker_connections * 2.
+                format: int32
+                maximum: 1048576
                 minimum: 1
                 type: integer
             type: object
@@ -11545,7 +11554,7 @@ spec:
                       Connections sets the maximum number of idle keep-alive connections to upstream servers that are preserved
                       in the cache of each nginx worker process. When this number is exceeded, the least recently used
                       connections are closed.
-                      The keepAlive directive for upstreams defaults to 16. To override this value, set the connections field.
+                      The keepAlive directive for upstreams defaults to 64. To override this value, set the connections field.
                       To disable the keepAlive directive, set connections to 0.
                       Directive: https://nginx.org/en/docs/http/ngx_http_upstream_module.html#keepalive
                     format: int32

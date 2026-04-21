@@ -6461,6 +6461,66 @@ func TestBuildWorkerConnections(t *testing.T) {
 	}
 }
 
+func TestBuildWorkerRlimitNofile(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		gw                    *graph.Gateway
+		msg                   string
+		expWorkerRlimitNofile int32
+	}{
+		{
+			msg:                   "NginxProxy is nil - auto-calculate as default worker_connections * 2",
+			gw:                    &graph.Gateway{},
+			expWorkerRlimitNofile: DefaultWorkerConnections * 2,
+		},
+		{
+			msg: "NginxProxy doesn't specify worker_rlimit_nofile - auto-calculate",
+			gw: &graph.Gateway{
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{},
+			},
+			expWorkerRlimitNofile: DefaultWorkerConnections * 2,
+		},
+		{
+			msg: "NginxProxy specifies custom worker_connections but not worker_rlimit_nofile",
+			gw: &graph.Gateway{
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+					WorkerConnections: helpers.GetPointer(int32(4096)),
+				},
+			},
+			expWorkerRlimitNofile: 4096 * 2,
+		},
+		{
+			msg: "NginxProxy specifies worker_rlimit_nofile explicitly",
+			gw: &graph.Gateway{
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+					WorkerRlimitNofile: helpers.GetPointer(int32(65535)),
+				},
+			},
+			expWorkerRlimitNofile: 65535,
+		},
+		{
+			msg: "NginxProxy specifies both worker_connections and worker_rlimit_nofile",
+			gw: &graph.Gateway{
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+					WorkerConnections:  helpers.GetPointer(int32(16384)),
+					WorkerRlimitNofile: helpers.GetPointer(int32(100000)),
+				},
+			},
+			expWorkerRlimitNofile: 100000,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.msg, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			g.Expect(buildWorkerRlimitNofile(tc.gw)).To(Equal(tc.expWorkerRlimitNofile))
+		})
+	}
+}
+
 func TestBuildBaseHTTPConfig_ReadinessProbe(t *testing.T) {
 	t.Parallel()
 

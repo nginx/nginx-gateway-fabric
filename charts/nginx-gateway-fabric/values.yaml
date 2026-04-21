@@ -520,11 +520,16 @@ nginx:
   #                 - IPAddress
   #             value:
   #               type: string
-  #   workerConnections:
-  #     type: integer
-  #     minimum: 1
-  #     maximum: 65535
-  #     description: The number of worker connections for NGINX. Default is 1024.
+#   workerConnections:
+#     type: integer
+#     minimum: 1
+#     maximum: 65535
+#     description: The number of worker connections for NGINX. Default is 8192.
+#   workerRlimitNofile:
+#     type: integer
+#     minimum: 1
+#     maximum: 1048576
+#     description: Maximum number of open files (RLIMIT_NOFILE) for worker processes. If not set, it is automatically calculated as workerConnections * 2.
   #   dnsResolver:
   #     type: object
   #     description: DNSResolver specifies the DNS resolver configuration for external name resolution. This enables support for routing to ExternalName Services.

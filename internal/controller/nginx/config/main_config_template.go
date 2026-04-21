@@ -5,6 +5,8 @@ const mainConfigTemplateText = `
 load_module modules/ngx_otel_module.so;
 {{ end -}}
 
+worker_rlimit_nofile {{ .Conf.WorkerRlimitNofile }};
+
 error_log stderr {{ .Conf.Logging.ErrorLevel }};
 
 {{ range $i := .Includes -}}

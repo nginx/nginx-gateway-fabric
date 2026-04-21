@@ -30,7 +30,7 @@ const (
 	wildcardHostname               = "~^"
 	defaultErrorLogLevel           = "info"
 	AlpineSSLRootCAPath            = "/etc/ssl/cert.pem"
-	DefaultWorkerConnections       = int32(1024)
+	DefaultWorkerConnections       = int32(8192)
 	DefaultNginxReadinessProbePort = int32(8081)
 	DefaultNginxReadinessProbePath = "/readyz"
 	// DefaultLogFormatName is used when user provides custom access_log format.
@@ -134,6 +134,7 @@ func BuildConfiguration(
 		Policies:             buildPolicies(gateway, gateway.Policies),
 		AuxiliarySecrets:     buildAuxiliarySecrets(g.PlusSecrets),
 		WorkerConnections:    buildWorkerConnections(gateway),
+		WorkerRlimitNofile:   buildWorkerRlimitNofile(gateway),
 		SSLListenerHostnames: sslListenerHostnames,
 		CertBundles:          certBundles,
 	}
@@ -1711,6 +1712,20 @@ func buildWorkerConnections(gateway *graph.Gateway) int32 {
 	return DefaultWorkerConnections
 }
 
+func buildWorkerRlimitNofile(gateway *graph.Gateway) int32 {
+	workerConnections := buildWorkerConnections(gateway)
+
+	if gateway != nil && gateway.EffectiveNginxProxy != nil {
+		ngfProxy := gateway.EffectiveNginxProxy
+		if ngfProxy.WorkerRlimitNofile != nil {
+			return *ngfProxy.WorkerRlimitNofile
+		}
+	}
+
+	// Auto-calculate as worker_connections * 2 when not explicitly set
+	return workerConnections * 2
+}
+
 func buildAuxiliarySecrets(
 	secretsMap map[types.NamespacedName][]graph.PlusSecretFile,
 ) map[graph.SecretFileType][]byte {
@@ -1749,10 +1764,11 @@ func buildNginxPlus(gateway *graph.Gateway) NginxPlus {
 
 func GetDefaultConfiguration(g *graph.Graph, gateway *graph.Gateway) Configuration {
 	return Configuration{
-		Logging:           buildLogging(gateway),
-		NginxPlus:         NginxPlus{},
-		AuxiliarySecrets:  buildAuxiliarySecrets(g.PlusSecrets),
-		WorkerConnections: buildWorkerConnections(gateway),
+		Logging:            buildLogging(gateway),
+		NginxPlus:          NginxPlus{},
+		AuxiliarySecrets:   buildAuxiliarySecrets(g.PlusSecrets),
+		WorkerConnections:  buildWorkerConnections(gateway),
+		WorkerRlimitNofile: buildWorkerRlimitNofile(gateway),
 	}
 }
 

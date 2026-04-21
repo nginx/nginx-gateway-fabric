@@ -9,7 +9,7 @@ const (
 	InternalRoutePathPrefix       = "/_ngf-internal"
 	InternalMirrorRoutePathPrefix = InternalRoutePathPrefix + "-mirror"
 	HTTPSScheme                   = "https"
-	KeepAliveConnectionDefault    = int32(16)
+	KeepAliveConnectionDefault    = int32(64)
 )
 
 // Server holds all configuration for an HTTP server.

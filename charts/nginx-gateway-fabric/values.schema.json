@@ -429,8 +429,14 @@
               "type": "object"
             },
             "workerConnections": {
-              "description": "The number of worker connections for NGINX. Default is 1024.",
+              "description": "The number of worker connections for NGINX. Default is 8192.",
               "maximum": 65535,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "workerRlimitNofile": {
+              "description": "Maximum number of open files (RLIMIT_NOFILE) for worker processes. If not set, it is automatically calculated as workerConnections * 2.",
+              "maximum": 1048576,
               "minimum": 1,
               "type": "integer"
             }

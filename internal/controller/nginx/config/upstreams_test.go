@@ -146,7 +146,7 @@ func TestExecuteUpstreams_NginxOSS(t *testing.T) {
 		"zone up6-usp-keepAlive-connections-zero 2m;": 1,
 
 		"random two least_conn;": 5,
-		"keepalive 16;":          4,
+		"keepalive 64;":          4,
 	}
 
 	upstreams := gen.createUpstreams(stateUpstreams, upstreamsettings.NewProcessor())
@@ -341,7 +341,7 @@ func TestExecuteUpstreams_NginxPlus(t *testing.T) {
 
 		"random two least_conn;": 9,
 		"ip_hash;":               1,
-		"keepalive 16;":          8,
+		"keepalive 64;":          8,
 
 		"zone up1 1m;":                                1,
 		"zone up2 1m;":                                1,

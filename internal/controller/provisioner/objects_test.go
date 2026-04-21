@@ -1547,7 +1547,7 @@ func TestBuildNginxConfigMaps_WorkerConnections(t *testing.T) {
 
 	bootstrapCM, ok := configMaps[0].(*corev1.ConfigMap)
 	g.Expect(ok).To(BeTrue())
-	g.Expect(bootstrapCM.Data[configmaps.EventsConfKey]).To(ContainSubstring("worker_connections 1024;"))
+	g.Expect(bootstrapCM.Data[configmaps.EventsConfKey]).To(ContainSubstring("worker_connections 8192;"))
 
 	// Test with default worker connections (empty NginxProxy config)
 	nProxyCfgEmpty := &graph.EffectiveNginxProxy{}
@@ -1562,7 +1562,7 @@ func TestBuildNginxConfigMaps_WorkerConnections(t *testing.T) {
 
 	bootstrapCM, ok = configMaps[0].(*corev1.ConfigMap)
 	g.Expect(ok).To(BeTrue())
-	g.Expect(bootstrapCM.Data[configmaps.EventsConfKey]).To(ContainSubstring("worker_connections 1024;"))
+	g.Expect(bootstrapCM.Data[configmaps.EventsConfKey]).To(ContainSubstring("worker_connections 8192;"))
 
 	// Test with custom worker connections
 	nProxyCfg := &graph.EffectiveNginxProxy{
@@ -1581,6 +1581,81 @@ func TestBuildNginxConfigMaps_WorkerConnections(t *testing.T) {
 	bootstrapCM, ok = configMaps[0].(*corev1.ConfigMap)
 	g.Expect(ok).To(BeTrue())
 	g.Expect(bootstrapCM.Data[configmaps.EventsConfKey]).To(ContainSubstring("worker_connections 2048;"))
+}
+
+func TestBuildNginxConfigMaps_WorkerRlimitNofile(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	provisioner := &NginxProvisioner{
+		k8sClient: createFakeClientWithScheme(),
+		cfg: Config{
+			GatewayPodConfig: &config.GatewayPodConfig{
+				Namespace:   "default",
+				ServiceName: "test-service",
+			},
+			AgentLabels: make(map[string]string),
+		},
+	}
+	objectMeta := metav1.ObjectMeta{Name: "test", Namespace: "default"}
+
+	gateway := &gatewayv1.Gateway{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "gw",
+			Namespace: "default",
+		},
+	}
+
+	resourceName := "gw-nginx"
+	names := provisioner.buildResourceNames(resourceName)
+
+	// Test with nil NginxProxy config - should auto-calculate as default * 2
+	configMaps, errs := provisioner.buildNginxConfigMaps(
+		objectMeta,
+		nil,
+		names,
+		gateway,
+	)
+	g.Expect(errs).To(BeNil())
+	g.Expect(configMaps).To(HaveLen(2))
+
+	bootstrapCM, ok := configMaps[0].(*corev1.ConfigMap)
+	g.Expect(ok).To(BeTrue())
+	g.Expect(bootstrapCM.Data[configmaps.MainConfKey]).To(ContainSubstring("worker_rlimit_nofile 16384;"))
+
+	// Test with custom worker_connections - should auto-calculate as connections * 2
+	nProxyCfgCustomConns := &graph.EffectiveNginxProxy{
+		WorkerConnections: helpers.GetPointer(int32(4096)),
+	}
+	configMaps, errs = provisioner.buildNginxConfigMaps(
+		objectMeta,
+		nProxyCfgCustomConns,
+		names,
+		gateway,
+	)
+	g.Expect(errs).To(BeNil())
+	g.Expect(configMaps).To(HaveLen(2))
+
+	bootstrapCM, ok = configMaps[0].(*corev1.ConfigMap)
+	g.Expect(ok).To(BeTrue())
+	g.Expect(bootstrapCM.Data[configmaps.MainConfKey]).To(ContainSubstring("worker_rlimit_nofile 8192;"))
+
+	// Test with explicit worker_rlimit_nofile
+	nProxyCfgExplicit := &graph.EffectiveNginxProxy{
+		WorkerRlimitNofile: helpers.GetPointer(int32(65535)),
+	}
+	configMaps, errs = provisioner.buildNginxConfigMaps(
+		objectMeta,
+		nProxyCfgExplicit,
+		names,
+		gateway,
+	)
+	g.Expect(errs).To(BeNil())
+	g.Expect(configMaps).To(HaveLen(2))
+
+	bootstrapCM, ok = configMaps[0].(*corev1.ConfigMap)
+	g.Expect(ok).To(BeTrue())
+	g.Expect(bootstrapCM.Data[configmaps.MainConfKey]).To(ContainSubstring("worker_rlimit_nofile 65535;"))
 }
 
 func TestBuildNginxConfigMaps_AgentFields(t *testing.T) {
