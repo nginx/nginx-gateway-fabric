@@ -18,7 +18,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
-	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/config"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
@@ -360,9 +359,7 @@ func collectGraphResourceCount(
 
 	ngfResourceCounts.WAFEnabledGatewayCount = int64(0)
 	for _, gateway := range g.Gateways {
-		if gateway.EffectiveNginxProxy != nil &&
-			gateway.EffectiveNginxProxy.WAF != nil &&
-			*gateway.EffectiveNginxProxy.WAF == ngfAPIv1alpha2.WAFEnabled {
+		if gateway.EffectiveNginxProxy != nil && gateway.EffectiveNginxProxy.WAFEnabled {
 			ngfResourceCounts.WAFEnabledGatewayCount++
 		}
 	}
