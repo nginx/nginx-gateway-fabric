@@ -9231,7 +9231,7 @@ func TestBuildWAF(t *testing.T) {
 			name: "WAF enabled, no bundles",
 			gateway: &graph.Gateway{
 				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
-					WAF: helpers.GetPointer(ngfAPIv1alpha2.WAFEnabled),
+					WAFEnabled: true,
 				},
 				Policies: []*graph.Policy{},
 			},
@@ -9244,7 +9244,7 @@ func TestBuildWAF(t *testing.T) {
 			name: "WAF disabled, with bundles on policy",
 			gateway: &graph.Gateway{
 				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
-					WAF: helpers.GetPointer(ngfAPIv1alpha2.WAFDisabled),
+					WAFEnabled: false,
 				},
 				Policies: []*graph.Policy{
 					{
@@ -9267,7 +9267,7 @@ func TestBuildWAF(t *testing.T) {
 			name: "WAF enabled, with bundles on gateway-targeted policy",
 			gateway: &graph.Gateway{
 				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
-					WAF: helpers.GetPointer(ngfAPIv1alpha2.WAFEnabled),
+					WAFEnabled: true,
 				},
 				Policies: []*graph.Policy{
 					{
@@ -9292,7 +9292,7 @@ func TestBuildWAF(t *testing.T) {
 			name: "WAF enabled, policy with nil WAFState",
 			gateway: &graph.Gateway{
 				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
-					WAF: helpers.GetPointer(ngfAPIv1alpha2.WAFEnabled),
+					WAFEnabled: true,
 				},
 				Policies: []*graph.Policy{
 					{
@@ -9309,7 +9309,7 @@ func TestBuildWAF(t *testing.T) {
 			name: "WAF enabled, multiple policies with bundles",
 			gateway: &graph.Gateway{
 				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
-					WAF: helpers.GetPointer(ngfAPIv1alpha2.WAFEnabled),
+					WAFEnabled: true,
 				},
 				Policies: []*graph.Policy{
 					{
@@ -9340,7 +9340,7 @@ func TestBuildWAF(t *testing.T) {
 			name: "WAF enabled, bundles on route-targeted policy",
 			gateway: &graph.Gateway{
 				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
-					WAF: helpers.GetPointer(ngfAPIv1alpha2.WAFEnabled),
+					WAFEnabled: true,
 				},
 				Policies: []*graph.Policy{},
 				Listeners: []*graph.Listener{
@@ -9372,7 +9372,7 @@ func TestBuildWAF(t *testing.T) {
 			name: "WAF enabled, bundles on both gateway and route policies",
 			gateway: &graph.Gateway{
 				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
-					WAF: helpers.GetPointer(ngfAPIv1alpha2.WAFEnabled),
+					WAFEnabled: true,
 				},
 				Policies: []*graph.Policy{
 					{

@@ -14,12 +14,12 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
 
-func createValidPolicy() *ngfAPI.WAFGatewayBindingPolicy {
-	return &ngfAPI.WAFGatewayBindingPolicy{
+func createValidPolicy() *ngfAPI.WAFPolicy {
+	return &ngfAPI.WAFPolicy{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: "default",
 		},
-		Spec: ngfAPI.WAFGatewayBindingPolicySpec{
+		Spec: ngfAPI.WAFPolicySpec{
 			TargetRefs: []v1.LocalPolicyTargetReference{
 				{
 					Group: v1.GroupName,
@@ -38,7 +38,7 @@ func TestValidator_Validate(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		name          string
-		policy        *ngfAPI.WAFGatewayBindingPolicy
+		policy        *ngfAPI.WAFPolicy
 		expConditions []conditions.Condition
 	}{
 		{
@@ -48,9 +48,9 @@ func TestValidator_Validate(t *testing.T) {
 		},
 		{
 			name: "invalid target ref",
-			policy: &ngfAPI.WAFGatewayBindingPolicy{
+			policy: &ngfAPI.WAFPolicy{
 				ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
-				Spec: ngfAPI.WAFGatewayBindingPolicySpec{
+				Spec: ngfAPI.WAFPolicySpec{
 					TargetRefs: []v1.LocalPolicyTargetReference{
 						{
 							Group: v1.GroupName,
@@ -131,6 +131,6 @@ func TestValidator_Conflicts(t *testing.T) {
 	pol1 := createValidPolicy()
 	pol2 := createValidPolicy()
 
-	// WAFGatewayBindingPolicy doesn't support merging
+	// WAFPolicy doesn't support merging
 	g.Expect(validator.Conflicts(pol1, pol2)).To(BeFalse())
 }

@@ -72,12 +72,12 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller/index"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller/predicate"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/events"
-	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/fetch"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/runnables"
 	ngftypes "github.com/nginx/nginx-gateway-fabric/v2/internal/framework/types"
-	wafpolling "github.com/nginx/nginx-gateway-fabric/v2/internal/framework/waf"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/waf/fetch"
+	wafpolling "github.com/nginx/nginx-gateway-fabric/v2/internal/framework/waf/poller"
 )
 
 const (
@@ -141,7 +141,7 @@ func StartManager(cfg config.Config) error {
 	}
 
 	wafFetcher := createWAFFetcher(cfg.Logger.WithName("wafFetcher"))
-	var wafPollerManager wafpolling.PollerManager
+	var wafPollerManager wafpolling.Manager
 
 	processor := state.NewChangeProcessorImpl(state.ChangeProcessorConfig{
 		GatewayCtlrName:  cfg.GatewayCtlrName,
@@ -367,7 +367,7 @@ func createWAFPollerManager(
 	nginxUpdater *agent.NginxUpdaterImpl,
 	statusQueue *status.Queue,
 	eventCh chan<- any,
-) wafpolling.PollerManager {
+) wafpolling.Manager {
 	if !cfg.Plus {
 		return nil
 	}
@@ -461,7 +461,7 @@ func createPolicyManager(
 			Validator: ratelimit.NewValidator(validator),
 		},
 		{
-			GVK:       mustExtractGVK(&ngfAPIv1alpha1.WAFGatewayBindingPolicy{}),
+			GVK:       mustExtractGVK(&ngfAPIv1alpha1.WAFPolicy{}),
 			Validator: waf.NewValidator(),
 		},
 	}
@@ -791,7 +791,7 @@ func registerControllers(
 			},
 		},
 		{
-			objectType: &ngfAPIv1alpha1.WAFGatewayBindingPolicy{},
+			objectType: &ngfAPIv1alpha1.WAFPolicy{},
 			options: []controller.Option{
 				controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
 			},
@@ -1159,7 +1159,7 @@ func prepareFirstEventBatchPreparerArgs(
 		&ngfAPIv1alpha1.UpstreamSettingsPolicyList{},
 		&ngfAPIv1alpha1.AuthenticationFilterList{},
 		&ngfAPIv1alpha1.RateLimitPolicyList{},
-		&ngfAPIv1alpha1.WAFGatewayBindingPolicyList{},
+		&ngfAPIv1alpha1.WAFPolicyList{},
 		partialObjectMetadataList,
 	}
 

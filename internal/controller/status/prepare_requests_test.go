@@ -2635,7 +2635,7 @@ func TestBuildNGFPolicyStatuses(t *testing.T) {
 	}
 }
 
-func TestBuildWAFGatewayBindingPolicyStatuses(t *testing.T) {
+func TestBuildWAFPolicyStatuses(t *testing.T) {
 	t.Parallel()
 	const gatewayCtlrName = "controller"
 
@@ -2647,9 +2647,9 @@ func TestBuildWAFGatewayBindingPolicyStatuses(t *testing.T) {
 		Conditions []conditions.Condition
 	}
 
-	getWAFGatewayBindingPolicy := func(cfg policyCfg) *graph.Policy {
+	getWAFPolicy := func(cfg policyCfg) *graph.Policy {
 		return &graph.Policy{
-			Source: &ngfAPI.WAFGatewayBindingPolicy{
+			Source: &ngfAPI.WAFPolicy{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:       cfg.Name,
 					Namespace:  "test",
@@ -2664,7 +2664,7 @@ func TestBuildWAFGatewayBindingPolicyStatuses(t *testing.T) {
 	wgbPolicyKey := func(name string) graph.PolicyKey {
 		return graph.PolicyKey{
 			NsName: types.NamespacedName{Namespace: "test", Name: name},
-			GVK:    schema.GroupVersionKind{Group: ngfAPI.GroupName, Kind: kinds.WAFGatewayBindingPolicy},
+			GVK:    schema.GroupVersionKind{Group: ngfAPI.GroupName, Kind: kinds.WAFPolicy},
 		}
 	}
 
@@ -2701,7 +2701,7 @@ func TestBuildWAFGatewayBindingPolicyStatuses(t *testing.T) {
 		{
 			name: "valid WAF policy gets all three default conditions",
 			policies: map[graph.PolicyKey]*graph.Policy{
-				wgbPolicyKey("valid-waf"): getWAFGatewayBindingPolicy(policyCfg{
+				wgbPolicyKey("valid-waf"): getWAFPolicy(policyCfg{
 					Name: "valid-waf",
 					Ancestors: []graph.PolicyAncestor{
 						{
@@ -2733,7 +2733,7 @@ func TestBuildWAFGatewayBindingPolicyStatuses(t *testing.T) {
 		{
 			name: "WAF policy with Programmed error overrides default",
 			policies: map[graph.PolicyKey]*graph.Policy{
-				wgbPolicyKey("fetch-err-waf"): getWAFGatewayBindingPolicy(policyCfg{
+				wgbPolicyKey("fetch-err-waf"): getWAFPolicy(policyCfg{
 					Name: "fetch-err-waf",
 					Conditions: []conditions.Condition{
 						conditions.NewPolicyNotProgrammedBundleFetchError("connection refused"),
@@ -2775,7 +2775,7 @@ func TestBuildWAFGatewayBindingPolicyStatuses(t *testing.T) {
 		{
 			name: "WAF policy with integrity error",
 			policies: map[graph.PolicyKey]*graph.Policy{
-				wgbPolicyKey("integrity-err-waf"): getWAFGatewayBindingPolicy(policyCfg{
+				wgbPolicyKey("integrity-err-waf"): getWAFPolicy(policyCfg{
 					Name: "integrity-err-waf",
 					Conditions: []conditions.Condition{
 						conditions.NewPolicyNotProgrammedIntegrityError("checksum mismatch"),
@@ -2817,7 +2817,7 @@ func TestBuildWAFGatewayBindingPolicyStatuses(t *testing.T) {
 		{
 			name: "WAF policy with Accepted error overrides default Accepted",
 			policies: map[graph.PolicyKey]*graph.Policy{
-				wgbPolicyKey("invalid-waf"): getWAFGatewayBindingPolicy(policyCfg{
+				wgbPolicyKey("invalid-waf"): getWAFPolicy(policyCfg{
 					Name: "invalid-waf",
 					Conditions: []conditions.Condition{
 						conditions.NewPolicyInvalid("spec is invalid"),
@@ -2863,7 +2863,7 @@ func TestBuildWAFGatewayBindingPolicyStatuses(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			k8sClient := createK8sClientFor(&ngfAPI.WAFGatewayBindingPolicy{})
+			k8sClient := createK8sClientFor(&ngfAPI.WAFPolicy{})
 
 			for _, pol := range test.policies {
 				err := k8sClient.Create(t.Context(), pol.Source)
@@ -2879,7 +2879,7 @@ func TestBuildWAFGatewayBindingPolicyStatuses(t *testing.T) {
 			updater.Update(t.Context(), reqs...)
 
 			for nsname, expected := range test.expected {
-				var pol ngfAPI.WAFGatewayBindingPolicy
+				var pol ngfAPI.WAFPolicy
 
 				err := k8sClient.Get(t.Context(), nsname, &pol)
 				g.Expect(err).ToNot(HaveOccurred())

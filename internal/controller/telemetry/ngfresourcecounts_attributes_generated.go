@@ -37,8 +37,8 @@ func (d *NGFResourceCounts) Attributes() []attribute.KeyValue {
 	attrs = append(attrs, attribute.Int64("InferencePoolCount", d.InferencePoolCount))
 	attrs = append(attrs, attribute.Int64("GatewayAttachedProxySettingsPolicyCount", d.GatewayAttachedProxySettingsPolicyCount))
 	attrs = append(attrs, attribute.Int64("RouteAttachedProxySettingsPolicyCount", d.RouteAttachedProxySettingsPolicyCount))
-	attrs = append(attrs, attribute.Int64("GatewayAttachedWAFGatewayBindingPolicyCount", d.GatewayAttachedWAFGatewayBindingPolicyCount))
-	attrs = append(attrs, attribute.Int64("RouteAttachedWAFGatewayBindingPolicyCount", d.RouteAttachedWAFGatewayBindingPolicyCount))
+	attrs = append(attrs, attribute.Int64("GatewayAttachedWAFPolicyCount", d.GatewayAttachedWAFPolicyCount))
+	attrs = append(attrs, attribute.Int64("RouteAttachedWAFPolicyCount", d.RouteAttachedWAFPolicyCount))
 	attrs = append(attrs, attribute.Int64("WAFEnabledGatewayCount", d.WAFEnabledGatewayCount))
 
 	return attrs

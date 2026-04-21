@@ -1,4 +1,4 @@
-package waf
+package poller
 
 import (
 	"context"
@@ -17,8 +17,8 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent/broadcast/broadcastfakes"
 	agentgrpc "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent/grpc"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
-	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/fetch"
-	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/fetch/fetchfakes"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/waf/fetch"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/waf/fetch/fetchfakes"
 )
 
 func Test_newPoller(t *testing.T) {
@@ -820,13 +820,13 @@ func TestBuildBundleSources(t *testing.T) {
 		auth            *fetch.BundleAuth
 		validateSources func(g Gomega, sources []BundleSource)
 		name            string
-		spec            ngfAPIv1alpha1.WAFGatewayBindingPolicySpec
+		spec            ngfAPIv1alpha1.WAFPolicySpec
 		tlsCA           []byte
 		expectedSources int
 	}{
 		{
 			name: "no polling enabled",
-			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
+			spec: ngfAPIv1alpha1.WAFPolicySpec{
 				Type: ngfAPIv1alpha1.PolicySourceTypeHTTP,
 				PolicySource: ngfAPIv1alpha1.PolicySource{
 					HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: "http://example.com/policy.tgz"},
@@ -837,7 +837,7 @@ func TestBuildBundleSources(t *testing.T) {
 		},
 		{
 			name: "polling disabled",
-			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
+			spec: ngfAPIv1alpha1.WAFPolicySpec{
 				Type: ngfAPIv1alpha1.PolicySourceTypeHTTP,
 				PolicySource: ngfAPIv1alpha1.PolicySource{
 					HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: "http://example.com/policy.tgz"},
@@ -850,7 +850,7 @@ func TestBuildBundleSources(t *testing.T) {
 		},
 		{
 			name: "policy source polling enabled with default interval",
-			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
+			spec: ngfAPIv1alpha1.WAFPolicySpec{
 				Type: ngfAPIv1alpha1.PolicySourceTypeHTTP,
 				PolicySource: ngfAPIv1alpha1.PolicySource{
 					HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: "http://example.com/policy.tgz"},
@@ -868,7 +868,7 @@ func TestBuildBundleSources(t *testing.T) {
 		},
 		{
 			name: "policy source polling enabled with custom interval",
-			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
+			spec: ngfAPIv1alpha1.WAFPolicySpec{
 				Type: ngfAPIv1alpha1.PolicySourceTypeHTTP,
 				PolicySource: ngfAPIv1alpha1.PolicySource{
 					HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: "http://example.com/policy.tgz"},
@@ -885,7 +885,7 @@ func TestBuildBundleSources(t *testing.T) {
 		},
 		{
 			name: "policy source with auth",
-			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
+			spec: ngfAPIv1alpha1.WAFPolicySpec{
 				Type: ngfAPIv1alpha1.PolicySourceTypeHTTP,
 				PolicySource: ngfAPIv1alpha1.PolicySource{
 					HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: "http://example.com/policy.tgz"},
@@ -903,7 +903,7 @@ func TestBuildBundleSources(t *testing.T) {
 		},
 		{
 			name: "policy source with TLS CA",
-			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
+			spec: ngfAPIv1alpha1.WAFPolicySpec{
 				Type: ngfAPIv1alpha1.PolicySourceTypeHTTP,
 				PolicySource: ngfAPIv1alpha1.PolicySource{
 					HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: "https://example.com/policy.tgz"},
@@ -920,7 +920,7 @@ func TestBuildBundleSources(t *testing.T) {
 		},
 		{
 			name: "log source polling enabled",
-			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
+			spec: ngfAPIv1alpha1.WAFPolicySpec{
 				Type: ngfAPIv1alpha1.PolicySourceTypeHTTP,
 				PolicySource: ngfAPIv1alpha1.PolicySource{
 					HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: "http://example.com/policy.tgz"},
@@ -944,7 +944,7 @@ func TestBuildBundleSources(t *testing.T) {
 		},
 		{
 			name: "log source with default profile (no URL)",
-			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
+			spec: ngfAPIv1alpha1.WAFPolicySpec{
 				Type: ngfAPIv1alpha1.PolicySourceTypeHTTP,
 				PolicySource: ngfAPIv1alpha1.PolicySource{
 					HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: "http://example.com/policy.tgz"},
@@ -967,7 +967,7 @@ func TestBuildBundleSources(t *testing.T) {
 		},
 		{
 			name: "multiple sources with polling",
-			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
+			spec: ngfAPIv1alpha1.WAFPolicySpec{
 				Type: ngfAPIv1alpha1.PolicySourceTypeHTTP,
 				PolicySource: ngfAPIv1alpha1.PolicySource{
 					HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: "http://example.com/policy.tgz"},
@@ -998,7 +998,7 @@ func TestBuildBundleSources(t *testing.T) {
 		},
 		{
 			name: "zero interval falls back to default",
-			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
+			spec: ngfAPIv1alpha1.WAFPolicySpec{
 				Type: ngfAPIv1alpha1.PolicySourceTypeHTTP,
 				PolicySource: ngfAPIv1alpha1.PolicySource{
 					HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: "http://example.com/policy.tgz"},
@@ -1015,7 +1015,7 @@ func TestBuildBundleSources(t *testing.T) {
 		},
 		{
 			name: "negative interval falls back to default",
-			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
+			spec: ngfAPIv1alpha1.WAFPolicySpec{
 				Type: ngfAPIv1alpha1.PolicySourceTypeHTTP,
 				PolicySource: ngfAPIv1alpha1.PolicySource{
 					HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: "http://example.com/policy.tgz"},
@@ -1032,7 +1032,7 @@ func TestBuildBundleSources(t *testing.T) {
 		},
 		{
 			name: "negative log source interval falls back to default",
-			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
+			spec: ngfAPIv1alpha1.WAFPolicySpec{
 				Type: ngfAPIv1alpha1.PolicySourceTypeHTTP,
 				PolicySource: ngfAPIv1alpha1.PolicySource{
 					HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: "http://example.com/policy.tgz"},

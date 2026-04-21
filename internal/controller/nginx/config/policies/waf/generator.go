@@ -58,7 +58,7 @@ func generate(pols []policies.Policy) policies.GenerateResultFiles {
 	files := make(policies.GenerateResultFiles, 0, len(pols))
 
 	for _, pol := range pols {
-		wp, ok := pol.(*ngfAPI.WAFGatewayBindingPolicy)
+		wp, ok := pol.(*ngfAPI.WAFPolicy)
 		if !ok {
 			continue
 		}
@@ -103,7 +103,7 @@ func generate(pols []policies.Policy) policies.GenerateResultFiles {
 		}
 
 		files = append(files, policies.File{
-			Name:    fmt.Sprintf("WAFGatewayBindingPolicy_%s_%s.conf", wp.Namespace, wp.Name),
+			Name:    fmt.Sprintf("WAFPolicy_%s_%s.conf", wp.Namespace, wp.Name),
 			Content: helpers.MustExecuteTemplate(tmpl, fields),
 		})
 	}

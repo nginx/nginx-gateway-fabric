@@ -10024,17 +10024,13 @@ spec:
                     - key
                     x-kubernetes-list-type: map
                 type: object
-              waf:
-                default: disabled
+              wafEnabled:
                 description: |-
-                  WAF enables NGINX App Protect WAF functionality.
+                  WAFEnabled enables NGINX App Protect WAF functionality.
                   When enabled, NGINX Gateway Fabric will deploy additional WAF containers
                   (waf-enforcer and waf-config-mgr) alongside the main NGINX container.
-                  Default is "disabled".
-                enum:
-                - enabled
-                - disabled
-                type: string
+                  Default is false.
+                type: boolean
               workerConnections:
                 description: |-
                   WorkerConnections specifies the maximum number of simultaneous connections that can be opened by a worker process.
@@ -12637,18 +12633,18 @@ metadata:
     controller-gen.kubebuilder.io/version: v0.20.1
   labels:
     gateway.networking.k8s.io/policy: inherited
-  name: wafgatewaybindingpolicies.gateway.nginx.org
+  name: wafpolicies.gateway.nginx.org
 spec:
   group: gateway.nginx.org
   names:
     categories:
     - nginx-gateway-fabric
-    kind: WAFGatewayBindingPolicy
-    listKind: WAFGatewayBindingPolicyList
-    plural: wafgatewaybindingpolicies
+    kind: WAFPolicy
+    listKind: WAFPolicyList
+    plural: wafpolicies
     shortNames:
     - wgbpolicy
-    singular: wafgatewaybindingpolicy
+    singular: wafpolicy
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
@@ -12659,7 +12655,7 @@ spec:
     schema:
       openAPIV3Schema:
         description: |-
-          WAFGatewayBindingPolicy is an Inherited Attached Policy. It provides a way to configure F5 WAF for NGINX
+          WAFPolicy is an Inherited Attached Policy. It provides a way to configure F5 WAF for NGINX
           for Gateways and Routes by referencing compiled WAF policy bundles. Bundles can be fetched directly from an
           HTTP/HTTPS URL (type: HTTP), from an NGINX Instance Manager instance (type: NIM), or from an F5 NGINX One
           Console instance (type: N1C).
@@ -12682,7 +12678,7 @@ spec:
           metadata:
             type: object
           spec:
-            description: Spec defines the desired state of the WAFGatewayBindingPolicy.
+            description: Spec defines the desired state of the WAFPolicy.
             properties:
               policySource:
                 description: PolicySource holds all policy bundle fetch configuration.
@@ -12693,7 +12689,7 @@ spec:
                     properties:
                       secretRef:
                         description: |-
-                          SecretRef references a Kubernetes Secret in the same namespace as the WAFGatewayBindingPolicy.
+                          SecretRef references a Kubernetes Secret in the same namespace as the WAFPolicy.
                           The Secret may contain:
                             - "username" and "password" fields for HTTP Basic Authentication
                             - "token" field for Bearer Token Authentication (NIM) or APIToken Authentication (N1C)
@@ -12953,7 +12949,7 @@ spec:
                           properties:
                             secretRef:
                               description: |-
-                                SecretRef references a Kubernetes Secret in the same namespace as the WAFGatewayBindingPolicy.
+                                SecretRef references a Kubernetes Secret in the same namespace as the WAFPolicy.
                                 The Secret may contain:
                                   - "username" and "password" fields for HTTP Basic Authentication
                                   - "token" field for Bearer Token Authentication (NIM) or APIToken Authentication (N1C)
@@ -13231,7 +13227,7 @@ spec:
               rule: '!(self.type != ''HTTP'' && has(self.policySource) && has(self.policySource.validation)
                 && has(self.policySource.validation.verifyChecksum) && self.policySource.validation.verifyChecksum)'
           status:
-            description: Status defines the state of the WAFGatewayBindingPolicy.
+            description: Status defines the state of the WAFPolicy.
             properties:
               ancestors:
                 description: |-

@@ -11,17 +11,19 @@ Four policy source types are supported, selected via the top-level `spec.type` f
 
 | Type   | Description                                                                                         |
 |--------|-----------------------------------------------------------------------------------------------------|
-| `NIM`  | NGINX Instance Manager — policy fetched by name via NIM API                                         |
-| `N1C`  | F5 NGINX One Console — policy fetched by name via N1C API                                           |
+| `NIM`  | NGINX Instance Manager — policy fetched by name or UID via NIM API                                  |
+| `N1C`  | F5 NGINX One Console — policy fetched by name or object ID via N1C API                              |
 | `PLM`  | Policy Lifecycle Management — APPolicy/APLogConf CRD references, fetched from in-cluster S3 storage |
 | `HTTP` | Direct HTTP/HTTPS URL to a compiled bundle file                                                     |
 
 The `NIM`, `N1C`, and `HTTP` source types use GitOps-friendly static policy references with automatic polling and change detection. The `PLM` source type integrates with F5's Policy Lifecycle Management system for fully Kubernetes-native policy lifecycle management with event-driven updates.
 
+> **Note:** `PLM` support is not yet implemented. The API design is included here for completeness and will be finalised as PLM matures.
+
 ## Goals
 
 - Extend NginxProxy resource to enable WAF for GatewayClass/Gateway with multi-container orchestration
-- Design WAFGatewayBindingPolicy custom resource using inherited policy attachment for hierarchical WAF configuration
+- Design WAFPolicy custom resource using inherited policy attachment for hierarchical WAF configuration
 - Define deployment workflows that accommodate NAP v5's external policy compilation requirements
 - Provide secure and automated policy distribution from external sources (HTTP/HTTPS, NIM, F5 NGINX One Console) and from PLM in-cluster storage
 - Support GitOps workflows with static policy file references and automatic change detection via polling (HTTP/NIM/N1C)
@@ -58,14 +60,16 @@ Containerized F5 WAF for NGINX imposes specific architectural requirements that 
 
 This proposal provides the best possible Kubernetes-native experience while respecting the above constraints, abstracting complexity from end users where possible while maintaining operational flexibility for enterprise environments. The design uses Gateway API's inherited policy attachment pattern to provide intuitive hierarchical security with the ability to override policies at more specific levels.
 
-### WAFGatewayBindingPolicy Structure
+### WAFPolicy Structure
 
-The `WAFGatewayBindingPolicy` spec is organised around a single `type` discriminator at the top level. All policy source configuration — whether a remote URL, a managed platform reference, or a PLM CRD reference — lives inside `policySource`. Similarly, all log source configuration lives inside `logSource` within each `securityLogs` entry. This follows the discriminated-union pattern familiar from Kubernetes volume sources.
+The `WAFPolicy` spec is organised around a single `type` discriminator at the top level. All policy source configuration — whether a remote URL, a managed platform reference, or a PLM CRD reference — lives inside `policySource`. Similarly, all log source configuration lives inside `logSource` within each `securityLogs` entry. This follows the discriminated-union pattern familiar from Kubernetes volume sources.
 
 ```shell
-spec.type                          → selects which sub-fields of policySource are relevant
-spec.policySource                  → all policy fetch configuration (url, auth, polling, apPolicyRef, etc.)
-spec.securityLogs[*].logSource     → all log fetch configuration (url, auth, defaultProfile, apLogConfRef, etc.)
+spec.type                          → selects which sub-field of policySource is relevant
+spec.policySource.httpSource       → direct URL fetch configuration (type: HTTP)
+spec.policySource.nimSource        → NIM fetch configuration (type: NIM)
+spec.policySource.n1cSource        → N1C fetch configuration (type: N1C)
+spec.securityLogs[*].logSource     → all log fetch configuration (defaultProfile, httpSource, nimSource, n1cSource)
 ```
 
 CEL validation rules enforce that the correct sub-fields are populated for the selected `type`, and that mutually exclusive fields are not set together.
@@ -77,17 +81,19 @@ CEL validation rules enforce that the correct sub-fields are populated for the s
 - NGF fetches compiled policy bundles directly from the configured URL or management platform API
 - Polling-based change detection: NGF periodically checks for policy changes using SHA-256 checksum comparison
 - Authentication via Kubernetes Secrets (HTTP Basic Auth or Bearer/APIToken)
-- `policySource.url` is required; `policySource.apPolicyRef` must not be set
+- The relevant `policySource.*Source` sub-field is required; others must not be set
 
 #### PLM Source
+
+> **Note:** PLM is not yet implemented.
 
 - Policies are defined as `APPolicy` and `APLogConf` CRDs and compiled automatically by the PLM Policy Controller
 - Compiled bundles are stored in PLM's in-cluster S3-compatible storage (SeaweedFS)
 - Bundle locations are written to the `status` of the respective CRDs by PLM
 - NGF watches `APPolicy` and `APLogConf` status and fetches bundles via S3 API when a new compilation is detected
 - No polling required — updates are event-driven via Kubernetes watch
-- PLM storage access is configured cluster-wide via CLI flags/Helm values (not per-WAFGatewayBindingPolicy)
-- `policySource.apPolicyRef` is required; `policySource.url` must not be set
+- PLM storage access is configured cluster-wide via CLI flags/Helm values (not per-WAFPolicy)
+- `policySource.apPolicyRef` is required; all `policySource.*Source` fields must not be set
 - Cross-namespace `APPolicy`/`APLogConf` references require a `ReferenceGrant`
 
 ### GitOps Integration
@@ -104,11 +110,11 @@ A key design principle for all sources is seamless GitOps workflow support throu
 
 #### GitOps Integration - Policy Polling Design (NIM/N1C/HTTP)
 
-When `polling.enabled: true` is set on a `policySource` or `logSource`, NGF runs a background goroutine per WAFGatewayBindingPolicy that periodically re-fetches the bundle and compares its SHA-256 checksum against the last successfully fetched value.
+When `polling.enabled: true` is set on a `policySource` or `logSource`, NGF runs a background goroutine per WAFPolicy that periodically re-fetches the bundle and compares its SHA-256 checksum against the last successfully fetched value.
 
 **Polling mechanism:**
 
-- NGF starts one polling goroutine per WAFGatewayBindingPolicy (covering the `policySource` and each `logSource` entry that has polling enabled)
+- NGF starts one polling goroutine per WAFPolicy (covering the `policySource` and each `logSource` entry that has polling enabled)
 - The default polling interval is 5 minutes; this applies when `polling.enabled: true` but no `interval` field is set
 - On each poll cycle:
   1. Fetch the bundle from the configured source
@@ -124,7 +130,7 @@ The checksum used for polling change detection is computed by NGF itself from th
 
 - If a poll attempt fails (network error, authentication failure, etc.), NGF logs the error and updates the status condition
 - The existing deployed policy remains active — no disruption to WAF protection
-- The goroutine retries on the next scheduled interval (not using `retryPolicy` — that field governs only the initial fetch)
+- The goroutine retries on the next scheduled interval (not using `retryAttempts` — that field governs only the initial fetch)
 
 **Polling scope:**
 Each control plane replica polls for WAF bundles associated with the NGINX pods currently connected to it. When an NGINX pod connects, the replica starts polling for that deployment's relevant bundles. When the pod disconnects, polling stops. No leader coordination is required since configuration delivery is replica-local — each replica maintains its own broadcaster and only pushes config to its connected agents.
@@ -144,7 +150,7 @@ Polling applies only to `type: HTTP`, `type: NIM`, and `type: N1C`. It is not ap
 
 The design uses **inherited policy attachment** following Gateway API best practices:
 
-- **Multiple targets per policy of the same type**: A WAFGatewayBindingPolicy can target multiple resources via `targetRefs`, but all refs in a single policy must be the same Kind
+- **Multiple targets per policy of the same type**: A WAFPolicy can target multiple resources via `targetRefs`, but all refs in a single policy must be the same Kind
 - **Gateway-level policies** provide default protection for all routes attached to the Gateway
 - **Route-level policies** can override Gateway-level policies for specific routes requiring different protection
 - **Policy precedence**: More specific policies (Route-level) override less specific policies (Gateway-level)
@@ -186,9 +192,9 @@ graph TB
             HTTPRoute[HTTPRoute]
             GRPCRoute[GRPCRoute]
             Application[Application<br/>Backend Service]
-            NginxProxy[NginxProxy<br/>waf.enabled=true]
-            GatewayWAFGatewayBindingPolicy[WAFGatewayBindingPolicy<br/>Gateway-level]
-            RouteWAFGatewayBindingPolicy[WAFGatewayBindingPolicy<br/>Route-level Override]
+            NginxProxy[NginxProxy<br/>wafEnabled=true]
+            GatewayWAFPolicy[WAFPolicy<br/>Gateway-level]
+            RouteWAFPolicy[WAFPolicy<br/>Route-level Override]
             Secret[Secret<br/>Auth credentials<br/>Optional]
             APPolicy[APPolicy CRD<br/>PLM Policy Definition]
             APLogConf[APLogConf CRD<br/>PLM Logging Config]
@@ -220,15 +226,15 @@ graph TB
     PLMController -->|Updates status with bundle location| APPolicy
     PLMController -->|Updates status with bundle location| APLogConf
 
-    GatewayWAFGatewayBindingPolicy -.->|Targets| Gateway
-    RouteWAFGatewayBindingPolicy -.->|Targets| HTTPRoute
+    GatewayWAFPolicy -.->|Targets| Gateway
+    RouteWAFPolicy -.->|Targets| HTTPRoute
     Gateway -->|Inherits Protection| HTTPRoute
     Gateway -->|Inherits Protection| GRPCRoute
     NginxProxy -.->|Enables WAF| Gateway
 
     NGFPod -->|Watches| NginxProxy
-    NGFPod -->|Watches| GatewayWAFGatewayBindingPolicy
-    NGFPod -->|Watches| RouteWAFGatewayBindingPolicy
+    NGFPod -->|Watches| GatewayWAFPolicy
+    NGFPod -->|Watches| RouteWAFPolicy
     NGFPod -->|HTTP: Fetches bundle| Store
     NGFPod -->|NIM: Fetches bundle via API| NIM
     NGFPod -->|N1C: Fetches bundle via API| N1C
@@ -270,7 +276,7 @@ graph TB
     class NGFPod control
     class Gateway,HTTPRoute,GRPCRoute gateway
     class WafEnforcer,WafConfigMgr,NginxProxy wafRequired
-    class GatewayWAFGatewayBindingPolicy,RouteWAFGatewayBindingPolicy policy
+    class GatewayWAFPolicy,RouteWAFPolicy policy
     class Application app
     class PolicyVol,ConfigVol volume
     class PublicEndpoint endpoint
@@ -304,18 +310,20 @@ For HTTP/NIM/N1C: deploy NIM or an HTTP server within cluster boundaries. For PL
 #### Option A — F5 NGINX One Console → type: N1C
 
 1. Author and compile a WAF policy in the N1C console or via N1C API
-2. Create `WAFGatewayBindingPolicy` with `type: N1C`, `policySource.url` set to the N1C tenant URL, and `policySource.managedSource.namespace` and `policySource.managedSource.policyName` set accordingly
+2. Create `WAFPolicy` with `type: N1C` and `policySource.n1cSource` set with the N1C tenant URL, namespace, and policy name or object ID
 
 #### Option B — NGINX Instance Manager → type: NIM
 
 1. Author and compile a WAF policy in the NIM console or via NIM API
-2. Create `WAFGatewayBindingPolicy` with `type: NIM`, `policySource.url` set to the NIM base URL, and `policySource.managedSource.policyName` set to the policy name
+2. Create `WAFPolicy` with `type: NIM` and `policySource.nimSource` set with the NIM base URL and policy name or UID
 
 #### Option C — Policy Lifecycle Management → type: PLM
 
+> **Note:** PLM is not yet implemented.
+
 1. Create an `APPolicy` CRD (and optionally `APLogConf` CRDs) in Kubernetes
 2. PLM Policy Controller watches the CRD, triggers compilation, stores the bundle in in-cluster S3 storage, and updates `APPolicy.status` with the bundle location and checksum
-3. Create `WAFGatewayBindingPolicy` with `type: PLM` and `policySource.apPolicyRef` pointing to the `APPolicy` by name and namespace
+3. Create `WAFPolicy` with `type: PLM` and `policySource.apPolicyRef` pointing to the `APPolicy` by name and namespace
 4. NGF watches `APPolicy.status`; when `status.bundle.state` becomes `ready`, NGF fetches the bundle from PLM storage via S3 API and deploys it
 5. Subsequent `APPolicy` spec changes trigger PLM recompilation, a status update, and a new NGF fetch — no polling required
 
@@ -323,7 +331,7 @@ For HTTP/NIM/N1C: deploy NIM or an HTTP server within cluster boundaries. For PL
 
 1. Write WAF policies using NAP v5 JSON schema and compile using CLI tools or CI-CD pipeline
 2. Publish compiled `.tgz` bundles to an accessible HTTP/HTTPS server
-3. Create `WAFGatewayBindingPolicy` with `type: HTTP` and `policySource.url` set to the bundle URL
+3. Create `WAFPolicy` with `type: HTTP` and `policySource.httpSource.url` set to the bundle URL
 
 ```mermaid
 sequenceDiagram
@@ -332,7 +340,7 @@ sequenceDiagram
     participant PLMController as PLM Policy Controller
     participant PLMCompiler as PLM Policy Compiler
     participant PLMStorage as PLM In-Cluster Storage
-    participant WAFGatewayBindingPolicy as WAFGatewayBindingPolicy CRD
+    participant WAFPolicy as WAFPolicy CRD
     participant NGF as NGF Control Plane
     participant DataPlane as NGINX Data Plane
 
@@ -342,8 +350,8 @@ sequenceDiagram
     PLMCompiler->>PLMStorage: Store compiled bundle
     PLMController->>APPolicy: Update status.bundle (location + sha256 + state=ready)
 
-    User->>WAFGatewayBindingPolicy: Create WAFGatewayBindingPolicy (type: PLM, policySource.apPolicyRef)
-    NGF->>WAFGatewayBindingPolicy: Watch WAFGatewayBindingPolicy
+    User->>WAFPolicy: Create WAFPolicy (type: PLM, policySource.apPolicyRef)
+    NGF->>WAFPolicy: Watch WAFPolicy
     NGF->>APPolicy: Watch referenced APPolicy status
     APPolicy-->>NGF: Status update: state=ready, location set
     NGF->>PLMStorage: Fetch bundle via S3 API
@@ -367,17 +375,19 @@ The `securityLogs` section supports multiple logging configurations, each genera
 
 Within each `securityLogs` entry, exactly one of the following must be set inside `logSource`:
 
-| Field                      | Description                                              | Applicable types |
-|----------------------------|----------------------------------------------------------|------------------|
-| `logSource.defaultProfile` | A built-in NAP log profile name                          | All              |
-| `logSource.url`            | URL to a compiled log profile bundle                     | All              |
-| `logSource.apLogConfRef`   | Reference to an `APLogConf` CRD compiled by PLM          | PLM only         |
+| Field                        | Description                                              | Applicable types |
+|------------------------------|----------------------------------------------------------|------------------|
+| `logSource.defaultProfile`   | A built-in NAP log profile name                          | All              |
+| `logSource.httpSource`       | Direct URL to a compiled log profile bundle              | HTTP             |
+| `logSource.nimSource`        | NIM log profile bundle configuration                     | NIM              |
+| `logSource.n1cSource`        | N1C log profile bundle configuration                     | N1C              |
+| `logSource.apLogConfRef`     | Reference to an `APLogConf` CRD compiled by PLM          | PLM only         |
 
-When `logSource.url` is set, the same `auth`, `tlsSecret`, `validation`, and `polling` fields apply as for `policySource`.
+When `logSource.httpSource`, `logSource.nimSource`, or `logSource.n1cSource` is set, the same `auth`, `tlsSecret`, `validation`, `polling`, `timeout`, `retryAttempts`, and `insecureSkipVerify` fields apply as for `policySource`.
 
 **Built-in Log Profiles (`logSource.defaultProfile`):**
 
-- `log_all`, `log_blocked`, `log_grpc_all`, `log_grpc_blocked`, `log_grpc_illegal`, `log_illegal`
+- `log_default`, `log_all`, `log_blocked`, `log_illegal`, `log_grpc_all`, `log_grpc_blocked`, `log_grpc_illegal`
 
 **Generated NGINX Configuration Examples:**
 
@@ -385,7 +395,7 @@ When `logSource.url` is set, the same `auth`, `tlsSecret`, `validation`, and `po
 # Built-in profile to stderr
 app_protect_security_log log_illegal stderr;
 
-# Remote log bundle to file (HTTP/NIM/N1C)
+# Remote log bundle to file (HTTP)
 app_protect_security_log "/etc/app_protect/bundles/applications_custom-log_0.tgz" /var/log/app_protect/security.log;
 
 # PLM-compiled log profile to stderr
@@ -408,20 +418,20 @@ app_protect_security_log log_blocked syslog:server=syslog-svc.default:514;
 - WAF protection continues with the last successfully deployed policy
 
 - **Referenced Policy Deleted from NIM/N1C:**
-- NGF has no mechanism to prevent a policy from being deleted directly in NIM or N1C after it has been referenced by a WAFGatewayBindingPolicy. There is no admission webhook or finalizer that can protect an external system resource. If the referenced policy is deleted:
+- NGF has no mechanism to prevent a policy from being deleted directly in NIM or N1C after it has been referenced by a WAFPolicy. There is no admission webhook or finalizer that can protect an external system resource. If the referenced policy is deleted:
   - The currently deployed bundle remains active — no disruption to WAF protection
   - On the next poll cycle, the fetch will fail with HTTP 404; NGF sets Programmed=False with reason FetchError and retains the existing deployed policy
-  - The WAFGatewayBindingPolicy status message will indicate the policy was not found at the configured source
-  - Operators should treat FetchError caused by 404 as a signal to either restore the policy in NIM/N1C or update the WAFGatewayBindingPolicy to reference a valid policy
+  - The WAFPolicy status message will indicate the policy was not found at the configured source
+  - Operators should treat FetchError caused by 404 as a signal to either restore the policy in NIM/N1C or update the WAFPolicy to reference a valid policy
 
 **Retry Behavior (HTTP/NIM/N1C — initial fetch only):**
 
-- **Default behavior** (no `retryPolicy` set): 1 attempt; fail immediately on error
-- **Transient errors** (network timeout, HTTP 5xx): retried up to `attempts` times
+- **Default behavior** (`retryAttempts` not set): 3 attempts (kubebuilder default)
+- **Transient errors** (network timeout, HTTP 5xx): retried up to `retryAttempts` times
 - **Non-transient errors** (HTTP 4xx, checksum mismatch): not retried; fail immediately
 - **Backoff**: exponential backoff with jitter; base delay 1s, max delay 30s
 - **Timeout constraint**: all attempts must complete within the `timeout` field duration
-- **Polling vs. initial fetch**: retry applies only to the initial fetch; during polling a single attempt is made per interval
+- **Polling vs. initial fetch**: `retryAttempts` applies only to the initial fetch; during polling a single attempt is made per interval
 
 **PLM Fetch Failures:**
 
@@ -432,12 +442,12 @@ app_protect_security_log log_blocked syslog:server=syslog-svc.default:514;
 
 **Inheritance Hierarchy:**
 
-- Gateway-level WAFGatewayBindingPolicy → HTTPRoute (inherited)
-- Gateway-level WAFGatewayBindingPolicy → GRPCRoute (inherited)
+- Gateway-level WAFPolicy → HTTPRoute (inherited)
+- Gateway-level WAFPolicy → GRPCRoute (inherited)
 
 **Override Precedence (most specific wins):**
 
-- Route-level WAFGatewayBindingPolicy > Gateway-level WAFGatewayBindingPolicy
+- Route-level WAFPolicy > Gateway-level WAFPolicy
 
 **Conflict Resolution:**
 
@@ -459,14 +469,14 @@ app_protect_security_log log_blocked syslog:server=syslog-svc.default:514;
 
 ### PLM Storage Configuration (for type: PLM)
 
-> **Note:** PLM is still under active development. The exact authentication and TLS requirements may evolve as PLM matures. This section will be updated as the PLM storage API is finalised.
+> **Note:** PLM is not yet implemented. The exact authentication and TLS requirements may evolve as PLM matures. This section will be updated as the PLM storage API is finalised.
 
-NGF requires cluster-wide configuration to communicate with PLM's in-cluster S3 storage service. This configuration is set once at install time and applies to all WAFGatewayBindingPolicy resources that use `type: PLM`.
+NGF requires cluster-wide configuration to communicate with PLM's in-cluster S3 storage service. This configuration is set once at install time and applies to all WAFPolicy resources that use `type: PLM`.
 
 #### CLI Arguments
 
 ```bash
-# PLM storage service URL (required when any WAFGatewayBindingPolicy uses type: PLM)
+# PLM storage service URL (required when any WAFPolicy uses type: PLM)
 --plm-storage-url=https://plm-storage-service.plm-system.svc.cluster.local
 
 # Secret containing S3 credentials (optional)
@@ -571,7 +581,7 @@ metadata:
   name: nginx-proxy-waf
   namespace: nginx-gateway
 spec:
-  waf: "enabled"  # "enabled" | "disabled"
+  wafEnabled: true
   # Optional container image overrides:
   # kubernetes:
   #   deployment:
@@ -590,39 +600,43 @@ spec:
   #           tag: "5.12.0"
 ```
 
-### WAFGatewayBindingPolicy Custom Resource
+### WAFPolicy Custom Resource
 
-The `WAFGatewayBindingPolicy` CRD is used for all source types. The top-level `type` field selects the source, and `policySource` holds all policy fetch configuration for that type.
+The `WAFPolicy` CRD is used for all source types. The top-level `type` field selects the source, and `policySource` holds all policy fetch configuration for that type.
 
 #### PolicySourceType Enum
 
-| Value  | Description                                                       |
-|--------|-------------------------------------------------------------------|
-| `HTTP` | Direct HTTP/HTTPS URL to a compiled bundle file                   |
-| `NIM`  | NGINX Instance Manager — policy fetched by name via NIM API       |
-| `N1C`  | F5 NGINX One Console — policy fetched by name via N1C API         |
-| `PLM`  | Policy Lifecycle Management — APPolicy/APLogConf CRD references   |
+| Value  | Description                                                                           |
+|--------|---------------------------------------------------------------------------------------|
+| `HTTP` | Direct HTTP/HTTPS URL to a compiled bundle file                                       |
+| `NIM`  | NGINX Instance Manager — policy fetched by name or UID via NIM API                    |
+| `N1C`  | F5 NGINX One Console — policy fetched by name or object ID via N1C API                |
+| `PLM`  | Policy Lifecycle Management — APPolicy/APLogConf CRD references (not yet implemented) |
 
 ```go
-// +kubebuilder:validation:Enum=HTTP;NIM;N1C;PLM
+// +kubebuilder:validation:Enum=HTTP;NIM;N1C
 type PolicySourceType string
 ```
+
+> **Note:** `PLM` will be added to the enum when implemented.
 
 #### CEL Validation Rules
 
 The following mutual exclusion rules are enforced at admission time:
 
-- When `type` is `HTTP`, `NIM`, or `N1C`: `policySource.url` must be set; `policySource.apPolicyRef` must not be set; `policySource.polling` is allowed
-- When `type` is `PLM`: `policySource.apPolicyRef` must be set; `policySource.url` must not be set; `policySource.polling` must not be set
-- Within `securityLogs[*].logSource`: exactly one of `defaultProfile`, `url`, or `apLogConfRef` must be set
+- When `type` is `HTTP`: `policySource.httpSource` must be set; `nimSource` and `n1cSource` must not be set
+- When `type` is `NIM`: `policySource.nimSource` must be set; `httpSource` and `n1cSource` must not be set
+- When `type` is `N1C`: `policySource.n1cSource` must be set; `httpSource` and `nimSource` must not be set
+- When `type` is `PLM` (future): `policySource.apPolicyRef` must be set; all `*Source` fields must not be set; `policySource.polling` must not be set
+- `validation.verifyChecksum` is only supported for `type: HTTP`
+- Within `securityLogs[*].logSource`: exactly one of `defaultProfile`, `httpSource`, `nimSource`, `n1cSource`, or `apLogConfRef` must be set
 - `logSource.apLogConfRef` may only be set when `spec.type` is `PLM`
-- `logSource.polling` may only be set when `logSource.url` is set
 
 #### type: HTTP Example
 
 ```yaml
 apiVersion: gateway.nginx.org/v1alpha1
-kind: WAFGatewayBindingPolicy
+kind: WAFPolicy
 metadata:
   name: gateway-protection-policy
   namespace: applications
@@ -633,7 +647,8 @@ spec:
     kind: Gateway
     name: secure-gateway
   policySource:
-    url: https://bundles.example.com/waf/gateway-policy-v1.2.3.tgz
+    httpSource:
+      url: https://bundles.example.com/waf/gateway-policy-v1.2.3.tgz
     auth:
       secretRef:
         name: bundle-credentials
@@ -642,8 +657,7 @@ spec:
     polling:
       enabled: true
       interval: 5m
-    retryPolicy:
-      attempts: 3
+    retryAttempts: 3
     timeout: 30s
   securityLogs:
   - destination:
@@ -655,7 +669,8 @@ spec:
       file:
         path: "/var/log/app_protect/security.log"
     logSource:
-      url: https://bundles.example.com/waf/custom-log-profile.tgz
+      httpSource:
+        url: https://bundles.example.com/waf/custom-log-profile.tgz
       auth:
         secretRef:
           name: bundle-credentials
@@ -673,7 +688,7 @@ spec:
 
 ```yaml
 apiVersion: gateway.nginx.org/v1alpha1
-kind: WAFGatewayBindingPolicy
+kind: WAFPolicy
 metadata:
   name: nim-gateway-policy
   namespace: applications
@@ -684,8 +699,8 @@ spec:
     kind: Gateway
     name: secure-gateway
   policySource:
-    url: https://nim.example.com
-    managedSource:
+    nimSource:
+      url: https://nim.example.com
       policyName: NginxStrictPolicy
     auth:
       secretRef:
@@ -703,13 +718,13 @@ When `type: NIM`, NGF calls:
 GET <url>/api/platform/v1/security/policies/bundles?includeBundleContent=true&policyName=<policyName>
 ```
 
-and base64-decodes `items[0].content` to obtain the bundle.
+and base64-decodes `items[0].content` to obtain the bundle. When `policyUID` is set instead of `policyName`, the `policyUID` query parameter is used.
 
 #### type: N1C Example
 
 ```yaml
 apiVersion: gateway.nginx.org/v1alpha1
-kind: WAFGatewayBindingPolicy
+kind: WAFPolicy
 metadata:
   name: n1c-gateway-policy
   namespace: applications
@@ -720,10 +735,10 @@ spec:
     kind: Gateway
     name: secure-gateway
   policySource:
-    url: https://my-tenant.console.ves.volterra.io
-    managedSource:
-      policyName: ProductionStrictPolicy
+    n1cSource:
+      url: https://my-tenant.console.ves.volterra.io
       namespace: default  # N1C namespace the policy belongs to
+      policyName: ProductionStrictPolicy
     auth:
       secretRef:
         name: n1c-api-credentials  # Secret with "token" key
@@ -734,27 +749,31 @@ spec:
       defaultProfile: log_blocked
 ```
 
-When `type: N1C`, NGF first fetches the policy object ID
+When `type: N1C`, NGF first fetches the policy object ID:
 
 ```text
 GET <url>/api/nginx/one/namespaces/{namespace}/app-protect/policies?filter_values={name}&filter_fields=name
 Authorization: APIToken <token>
 ```
 
-And then using the response.items[0].object_id:
+And then using the response `items[0].object_id`:
 
 ```text
 GET <url>/api/nginx/one/namespaces/{namespace}/app-protect/policies/{nap_policy_object_id}/bundle
 Authorization: APIToken <token>
 ```
 
+When `policyObjectID` is set instead of `policyName`, the name lookup step is skipped and the bundle is fetched directly. When `policyVersionID` is set, it is appended as a path segment to pin a specific version.
+
 #### type: PLM Example
 
-For `type: PLM`, `policySource.apPolicyRef` references an `APPolicy` CRD. `policySource.url` must not be set. Log sources use `logSource.apLogConfRef` to reference `APLogConf` CRDs.
+> **Note:** PLM is not yet implemented. This example documents the intended API.
+
+For `type: PLM`, `policySource.apPolicyRef` references an `APPolicy` CRD. No `*Source` fields may be set. Log sources use `logSource.apLogConfRef` to reference `APLogConf` CRDs.
 
 ```yaml
 apiVersion: gateway.nginx.org/v1alpha1
-kind: WAFGatewayBindingPolicy
+kind: WAFPolicy
 metadata:
   name: gateway-plm-policy
   namespace: applications
@@ -788,7 +807,7 @@ spec:
 ---
 # Route-level override using PLM
 apiVersion: gateway.nginx.org/v1alpha1
-kind: WAFGatewayBindingPolicy
+kind: WAFPolicy
 metadata:
   name: admin-strict-plm-policy
   namespace: applications
@@ -812,6 +831,8 @@ spec:
 ```
 
 ### APPolicy CRD (Managed by PLM)
+
+> **Note:** PLM is not yet implemented.
 
 This resource is created by users/security teams. PLM controllers handle compilation and status updates. NGF only reads this resource.
 
@@ -852,6 +873,8 @@ NGF reads `status.bundle.state`, `status.bundle.location`, and `status.bundle.sh
 
 ### APLogConf CRD (Managed by PLM)
 
+> **Note:** PLM is not yet implemented.
+
 ```yaml
 apiVersion: waf.f5.com/v1alpha1
 kind: APLogConf
@@ -879,18 +902,20 @@ status:
 
 ### Cross-Namespace Policy References (PLM)
 
+> **Note:** PLM is not yet implemented.
+
 When `policySource.apPolicyRef` or `logSource.apLogConfRef` references a resource in a different namespace, a `ReferenceGrant` is required in the target namespace:
 
 ```yaml
 apiVersion: gateway.networking.k8s.io/v1
 kind: ReferenceGrant
 metadata:
-  name: allow-WAFGatewayBindingPolicy-refs
+  name: allow-wafpolicy-refs
   namespace: security
 spec:
   from:
   - group: gateway.nginx.org
-    kind: WAFGatewayBindingPolicy
+    kind: WAFPolicy
     namespace: applications
   to:
   - group: waf.f5.com
@@ -903,7 +928,7 @@ Cross-namespace references are not applicable to `type: HTTP`, `type: NIM`, or `
 
 ### Authentication Methods (HTTP/NIM/N1C)
 
-The Secret referenced in `policySource.auth.secretRef` must be in the same namespace as the WAFGatewayBindingPolicy. NGF infers the authentication method from which keys are present — no `type` key is required:
+The Secret referenced in `policySource.auth.secretRef` must be in the same namespace as the WAFPolicy. NGF infers the authentication method from which keys are present — no `type` key is required:
 
 ```yaml
 # HTTP Basic Auth
@@ -934,7 +959,8 @@ data:
 
 ```yaml
 policySource:
-  url: https://internal-server.example.com/policy.tgz
+  httpSource:
+    url: https://internal-server.example.com/policy.tgz
   tlsSecret:
     name: custom-ca-secret  # Secret must have a "ca.crt" key; appended to system CA pool
   # insecureSkipVerify: true  # for testing only
@@ -961,8 +987,8 @@ Checksum verification uses `status.bundle.sha256` from the `APPolicy`/`APLogConf
 #### Download Failures
 
 - **HTTP 4xx**: non-transient; not retried; immediately sets `FetchError` or `AuthenticationError`
-- **HTTP 5xx**: transient; retried up to `retryPolicy.attempts` times with exponential backoff
-- **Network-level errors**: transient; retried up to `retryPolicy.attempts` times
+- **HTTP 5xx**: transient; retried up to `retryAttempts` times with exponential backoff
+- **Network-level errors**: transient; retried up to `retryAttempts` times
 
 #### Timeouts
 
@@ -971,10 +997,10 @@ The `timeout` field applies to the entire HTTP request lifecycle for a single at
 #### URI Handling
 
 - `type: HTTP`: URL used verbatim; operator is responsible for percent-encoding
-- `type: NIM`: `policyName` passed as a query parameter; encoded via `url.Values.Encode()`
+- `type: NIM`: `policyName` or `policyUID` passed as a query parameter; encoded via `url.Values.Encode()`
 - `type: N1C`: `namespace` and `policyName` are path segments; encoded via `url.PathEscape()`
 
-The `url` field must begin with `https://` or `http://` (enforced at admission) and is capped at 2083 characters. `managedSource.policyName` and `managedSource.namespace` are limited to 253 characters.
+The `url` field must begin with `https://` or `http://` (enforced at admission) and is capped at 2083 characters. `policyName`, `policyUID`, `policyObjectID`, and `namespace` are limited to 253 characters.
 
 #### HTTP Redirects
 
@@ -1011,7 +1037,7 @@ spec:
     hostname: "grpc.example.com"
 ```
 
-HTTPRoute and GRPCRoute resources are unchanged — they inherit WAF protection via the Gateway-level WAFGatewayBindingPolicy automatically, regardless of the policy source type.
+HTTPRoute and GRPCRoute resources are unchanged — they inherit WAF protection via the Gateway-level WAFPolicy automatically, regardless of the policy source type.
 
 ---
 
@@ -1019,20 +1045,20 @@ HTTPRoute and GRPCRoute resources are unchanged — they inherit WAF protection 
 
 ### CRD Label
 
-The `WAFGatewayBindingPolicy` CRD must have the `gateway.networking.k8s.io/policy: inherited` label (per GEP-713).
+The `WAFPolicy` CRD must have the `gateway.networking.k8s.io/policy: inherited` label (per GEP-713).
 
-### Conditions on WAFGatewayBindingPolicy
+### Conditions on WAFPolicy
 
-Three condition types are set on `WAFGatewayBindingPolicy`:
+Three condition types are set on `WAFPolicy`:
 
 #### `Accepted` (upstream Gateway API condition type)
 
-| Status  | Reason           | When                                                                                  |
-|---------|------------------|---------------------------------------------------------------------------------------|
-| `True`  | `Accepted`       | Policy is syntactically valid and targets a known resource                            |
-| `False` | `Invalid`        | Policy spec fails validation (e.g. `policySource.url` set when `type: PLM`)           |
-| `False` | `TargetNotFound` | The `targetRef` resource does not exist                                               |
-| `False` | `Conflicted`     | Another WAFGatewayBindingPolicy already targets the same resource at the same level   |
+| Status  | Reason           | When                                                                     |
+|---------|------------------|--------------------------------------------------------------------------|
+| `True`  | `Accepted`       | Policy is syntactically valid and targets a known resource               |
+| `False` | `Invalid`        | Policy spec fails validation (e.g. wrong `*Source` field for the `type`) |
+| `False` | `TargetNotFound` | The `targetRef` resource does not exist                                  |
+| `False` | `Conflicted`     | Another WAFPolicy already targets the same resource at the same level    |
 
 #### `ResolvedRefs` (NGF-specific)
 
@@ -1114,24 +1140,24 @@ Failure examples:
 
 ### Setting Status on Affected Objects
 
-NGF sets a `WAFGatewayBindingPolicyAffected` condition on all HTTPRoutes and Gateways affected by a WAFGatewayBindingPolicy:
+NGF sets a `WAFPolicyAffected` condition on all HTTPRoutes and Gateways affected by a WAFPolicy:
 
 ```go
 const (
-    WAFGatewayBindingPolicyAffected    v1.PolicyConditionType   = "gateway.nginx.org/WAFGatewayBindingPolicyAffected"
+    WAFPolicyAffected    v1.PolicyConditionType   = "gateway.nginx.org/WAFPolicyAffected"
     PolicyAffectedReason v1.PolicyConditionReason = "PolicyAffected"
 )
 ```
 
 ```yaml
-- type: gateway.nginx.org/WAFGatewayBindingPolicyAffected
+- type: gateway.nginx.org/WAFPolicyAffected
   status: "True"
   reason: PolicyAffected
-  message: "WAFGatewayBindingPolicy is applied to the resource"
+  message: "WAFPolicy is applied to the resource"
   observedGeneration: 1
 ```
 
-Rules: added when the object starts being affected; only one condition exists even if multiple WAFGatewayBindingPolicies apply; removed when the last affecting WAFGatewayBindingPolicy is removed; `observedGeneration` is the generation of the affected object, not the WAFGatewayBindingPolicy.
+Rules: added when the object starts being affected; only one condition exists even if multiple WAFPolicies apply; removed when the last affecting WAFPolicy is removed; `observedGeneration` is the generation of the affected object, not the WAFPolicy.
 
 ---
 
@@ -1141,23 +1167,23 @@ Rules: added when the object starts being affected; only one condition exists ev
 
 #### Watchers
 
-- WAFGatewayBindingPolicy controller
-- Watch `APPolicy` and `APLogConf` resources referenced by `policySource.apPolicyRef` / `logSource.apLogConfRef`
-- Enqueue WAFGatewayBindingPolicy reconcile when `APPolicy` or `APLogConf` `status.bundle.state` transitions to `ready` or `status.processing.datetime` changes
-- Watch PLM credential and TLS Secrets; rebuild S3 client on change
+- WAFPolicy controller
+- Watch `APPolicy` and `APLogConf` resources referenced by `policySource.apPolicyRef` / `logSource.apLogConfRef` (PLM — future)
+- Enqueue WAFPolicy reconcile when `APPolicy` or `APLogConf` `status.bundle.state` transitions to `ready` or `status.processing.datetime` changes (PLM — future)
+- Watch PLM credential and TLS Secrets; rebuild S3 client on change (PLM — future)
 
 #### HTTP Fetcher (HTTP/NIM/N1C)
 
 - Standard Go net/http client with configurable timeout (default 30 seconds) applied to the full request lifecycle per attempt
-- type: HTTP: issues an unconditional GET to `policySource.url`; fetches `<url>.sha256` as a sidecar when validation.verifyChecksum: true; authentication via HTTP Basic Auth (username/password keys) or Bearer Token (token key) inferred from Secret contents
-- type: NIM: constructs `GET <url>/api/platform/v1/security/policies/bundles?includeBundleContent=true&policyName=<policyName>` with policyName encoded via `url.Values.Encode()`; authenticates with `Authorization: Bearer <token>`; base64-decodes items[0].content from the response to obtain the bundle
-- type: N1C: issues two sequential requests — first a name lookup to resolve policyName to an object_id, then a bundle fetch using that ID; both path segments encoded via `url.PathEscape()`; authenticates with `Authorization: APIToken <token>`
-- Custom CA certificates loaded from policySource.tlsSecret (ca.crt key) and appended to the system CA pool; insecureSkipVerify supported for development only
-- Transient errors (HTTP 5xx, network-level failures) retried up to `retryPolicy.attempts` with exponential backoff and jitter (base 1s, max 30s); non-transient errors (HTTP 4xx, checksum mismatch) fail immediately
+- `type: HTTP`: issues an unconditional GET to `policySource.httpSource.url`; fetches `<url>.sha256` as a sidecar when `validation.verifyChecksum: true`; authentication via HTTP Basic Auth (username/password keys) or Bearer Token (token key) inferred from Secret contents
+- `type: NIM`: constructs `GET <nimSource.url>/api/platform/v1/security/policies/bundles?includeBundleContent=true&policyName=<policyName>` (or `policyUID=<policyUID>`) with the parameter encoded via `url.Values.Encode()`; authenticates with `Authorization: Bearer <token>`; base64-decodes `items[0].content` from the response to obtain the bundle
+- `type: N1C`: issues two sequential requests — first a name lookup to resolve `policyName` to an `object_id` (skipped when `policyObjectID` is set directly), then a bundle fetch using that ID; both path segments encoded via `url.PathEscape()`; authenticates with `Authorization: APIToken <token>`; `policyVersionID` pinned by appending it as a path segment when set
+- Custom CA certificates loaded from `policySource.tlsSecret` (`ca.crt` key) and appended to the system CA pool; `insecureSkipVerify` supported for development only
+- Transient errors (HTTP 5xx, network-level failures) retried up to `retryAttempts` with exponential backoff and jitter (base 1s, max 30s); non-transient errors (HTTP 4xx, checksum mismatch) fail immediately
 - Redirects followed up to 10 hops via Go's default redirect policy; Authorization header stripped on cross-host redirects
 - Polling goroutines reuse the same fetcher with an internal SHA-256 comparison to detect changes; no retry on poll cycle failures — the existing deployed bundle remains active and the error is surfaced in status
 
-#### S3 Fetcher (PLM)
+#### S3 Fetcher (PLM — future)
 
 - AWS SDK v2 (or compatible S3 client) for in-cluster SeaweedFS communication
 - S3 access key ID: `"admin"` (default); secret access key from `seaweedfs_admin_secret`
@@ -1166,7 +1192,7 @@ Rules: added when the object starts being affected; only one condition exists ev
 - Verify downloaded bytes against `status.bundle.sha256` before deploying
 - Rebuild S3 client when PLM secrets are updated
 
-#### ReferenceGrant Validation (PLM)
+#### ReferenceGrant Validation (PLM — future)
 
 - Validate cross-namespace `policySource.apPolicyRef` and `logSource.apLogConfRef` references
 - Check for `ReferenceGrant` in the target namespace
@@ -1199,21 +1225,21 @@ For all source types, NGF fetches compiled bundles, verifies integrity, writes t
 ### Unit Testing
 
 - NginxProxy WAF enablement configuration parsing and validation
-- WAFGatewayBindingPolicy controller CRUD, status management, and policy fetching logic
+- WAFPolicy controller CRUD, status management, and policy fetching logic
 - `targetRefs` validation and inheritance resolution
 - Multi-container orchestration: container startup sequences and ephemeral volume management
 - Authentication: Basic Auth and Bearer Token secret key detection and request construction
-- NIM source: API request construction and base64 response decoding
-- N1C source: API request construction, `url.PathEscape` encoding for namespace and policy name
+- NIM source: API request construction, policyName vs policyUID query parameter selection, base64 response decoding
+- N1C source: API request construction, `url.PathEscape` encoding, policyName vs policyObjectID selection, policyVersionID path segment
 - Polling goroutine: checksum comparison, change detection, no-op on unchanged, deploy on changed, graceful shutdown
 - Retry logic: exponential backoff, transient vs. non-transient classification, exhaustion behaviour
 - Checksum verification (HTTP): `.sha256` sidecar fetch, hex digest parsing, mismatch handling
-- PLM: APPolicy watcher — state transition detection, ignored non-ready states
-- PLM: APLogConf watcher — same as APPolicy, for log profiles
-- PLM: S3 fetcher — bundle location parsing, S3 request construction, credential injection, checksum verification
-- PLM: ReferenceGrant validation for `policySource.apPolicyRef` and `logSource.apLogConfRef`
-- PLM: TLS configuration — CA cert loading, client cert loading, dynamic secret rotation
-- CEL validation: `policySource.url` set when `type: PLM` → rejected; `policySource.apPolicyRef` set when `type: HTTP` → rejected; `logSource.apLogConfRef` set when `type: HTTP` → rejected; multiple `logSource` fields set simultaneously → rejected
+- PLM: APPolicy watcher — state transition detection, ignored non-ready states (future)
+- PLM: APLogConf watcher — same as APPolicy, for log profiles (future)
+- PLM: S3 fetcher — bundle location parsing, S3 request construction, credential injection, checksum verification (future)
+- PLM: ReferenceGrant validation for `policySource.apPolicyRef` and `logSource.apLogConfRef` (future)
+- PLM: TLS configuration — CA cert loading, client cert loading, dynamic secret rotation (future)
+- CEL validation: wrong `*Source` field for the selected `type` → rejected; `validation.verifyChecksum` set on non-HTTP type → rejected; multiple `logSource` fields set simultaneously → rejected
 
 ### Integration Testing
 
@@ -1221,26 +1247,26 @@ For all source types, NGF fetches compiled bundles, verifies integrity, writes t
 - Policy override: Route-level policies overriding Gateway-level policies
 - Authentication: Basic Auth and Bearer Token credential types and failure handling
 - Polling: bundle unchanged (no reload), bundle changed (reload triggered), poll failure (existing policy retained)
-- Retry: initial fetch failure retried up to configured attempts; non-transient error not retried; timeout respected
+- Retry: initial fetch failure retried up to configured `retryAttempts`; non-transient error not retried; timeout respected
 - Subsequent policy failure: if a policy fetch fails on an update for any reason, keep the last policy in force; ensure no break in firewall protection
 - Checksum verification (HTTP): matching digest allows deployment; mismatch sets `IntegrityError`
 - Polling scope: replica polls only for bundles relevant to its connected agents; agent reconnect to different replica triggers polling on new replica
-- PLM: full integration flow — APPolicy creation → PLM compilation → status update → NGF watch → S3 fetch → data plane enforcement
-- PLM: APLogConf integration — compilation → status update → NGF fetch → log profile deployment
-- PLM: cross-namespace references with and without ReferenceGrant
-- PLM: event-driven updates — APPolicy update → recompilation → status change → NGF re-fetch (no polling)
-- PLM: failure scenarios — APPolicy not found, state != ready, S3 fetch error, checksum mismatch, missing ReferenceGrant
-- PLM: S3 communication — plain HTTP, HTTPS with CA verification, mutual TLS
-- PLM: secret rotation — credential and TLS Secret updates applied without pod restart
-- PLM: multiple `logSource.apLogConfRef` entries per WAFGatewayBindingPolicy
+- PLM: full integration flow — APPolicy creation → PLM compilation → status update → NGF watch → S3 fetch → data plane enforcement (future)
+- PLM: APLogConf integration — compilation → status update → NGF fetch → log profile deployment (future)
+- PLM: cross-namespace references with and without ReferenceGrant (future)
+- PLM: event-driven updates — APPolicy update → recompilation → status change → NGF re-fetch (no polling) (future)
+- PLM: failure scenarios — APPolicy not found, state != ready, S3 fetch error, checksum mismatch, missing ReferenceGrant (future)
+- PLM: S3 communication — plain HTTP, HTTPS with CA verification, mutual TLS (future)
+- PLM: secret rotation — credential and TLS Secret updates applied without pod restart (future)
+- PLM: multiple `logSource.apLogConfRef` entries per WAFPolicy (future)
 
 ### Performance Testing
 
 - Latency and throughput impact with NAP v5 enabled for HTTP and gRPC traffic
 - Resource utilization of multi-container pods
-- Scale testing with multiple WAFGatewayBindingPolicy resources and policy updates under load
-- PLM: watch performance at scale with many APPolicy and APLogConf resources
-- PLM: S3 fetch latency and TLS handshake overhead
+- Scale testing with multiple WAFPolicy resources and policy updates under load
+- PLM: watch performance at scale with many APPolicy and APLogConf resources (future)
+- PLM: S3 fetch latency and TLS handshake overhead (future)
 
 ### Conformance Testing
 
@@ -1254,14 +1280,16 @@ For all source types, NGF fetches compiled bundles, verifies integrity, writes t
 
 ### Policy Security
 
-- **Integrity Verification (HTTP)**: `validation.verifyChecksum: true` fetches `<url>.sha256` sidecar and compares against downloaded bundle
-- **Integrity Verification (PLM)**: NGF verifies SHA-256 against `status.bundle.sha256` from APPolicy/APLogConf CRD
+- **Integrity Verification (HTTP)**: `validation.verifyChecksum: true` fetches a companion `<url>.sha256` file and compares it against the downloaded bundle. Mutually exclusive with `expectedChecksum`.
+- **Integrity Verification (N1C/ NIM)**: Bundle integrity is always verified automatically using the checksum returned by the NIM policy API or the N1C compile API. `verifyChecksum` is not supported for N1C or NIM sources (rejected at admission).
+- **Known-checksum enforcement**: `validation.expectedChecksum` (64-character hex SHA-256) rejects any bundle whose checksum does not match. Supported for all source types.
+- **Integrity Verification (PLM)**: NGF verifies SHA-256 against `status.bundle.sha256` from APPolicy/APLogConf CRD (future)
 - **Secure Transport**: TLS for HTTPS sources and PLM S3 storage (recommended in production)
-- **Access Control**: RBAC restrictions on WAFGatewayBindingPolicy, APPolicy, and APLogConf resource access
+- **Access Control**: RBAC restrictions on WAFPolicy, APPolicy, and APLogConf resource access
 
 ### Credential Management
 
-**HTTP/NIM/N1C:** HTTP Basic Auth or Bearer/APIToken in a Secret co-located with the WAFGatewayBindingPolicy. Secret rotation supported without NGF restart.
+**HTTP/NIM/N1C:** HTTP Basic Auth or Bearer/APIToken in a Secret co-located with the WAFPolicy. Secret rotation supported without NGF restart.
 
 **PLM:** S3 credentials and TLS certificates configured cluster-wide via CLI flags. All PLM secrets watched dynamically and rotated without pod restarts.
 
@@ -1284,43 +1312,23 @@ Cloud-native authentication (IRSA, Workload Identity) is not supported. Operator
 
 ### External Policy Lifecycle Management
 
-- Lifecycle coupling between WAFGatewayBindingPolicy and external NIM/N1C resources is the operator's responsibility.
+- Lifecycle coupling between WAFPolicy and external NIM/N1C resources is the operator's responsibility.
 - NGF cannot prevent a referenced policy from being deleted or renamed in NIM or N1C.
-- If this occurs, the existing deployed bundle remains active but subsequent fetches will fail until the WAFGatewayBindingPolicy is updated or the policy is restored.
+- If this occurs, the existing deployed bundle remains active but subsequent fetches will fail until the WAFPolicy is updated or the policy is restored.
 
 ---
 
 ## Alternatives
 
-### Alternative 1: `type` field inside `policySource` rather than at `spec` level
-
-**Rejected Reason**: Placing `type` at `spec` level makes it the top-level discriminator for the entire WAFGatewayBindingPolicy, which is clearer and avoids having to inspect a nested field to understand the source type. It also avoids the awkward case of `type: PLM` on a `policySource` block that contains `apPolicyRef` but no `url`.
-
-### Alternative 2: Separate CRD for PLM
-
-**Rejected Reason**: A unified `WAFGatewayBindingPolicy` CRD with a `type` discriminator is simpler for users to learn and avoids duplicating attachment and inheritance logic across two CRDs.
-
-### Alternative 3: Polling for PLM Updates
-
-**Rejected Reason**: PLM provides event-driven updates via CRD status watch. Watching `APPolicy`/`APLogConf` status provides near-immediate propagation and is consistent with Kubernetes controller patterns.
-
-### Alternative 4: ConfigMgr Direct S3 Fetch
-
-**Rejected Reason**: Would require distributing S3 credentials and TLS configuration to every data plane pod, significantly increasing credential management complexity and attack surface.
-
-### Alternative 5: PLM Storage Config in NginxGateway CRD
-
-**Consideration**: Would allow dynamic reconfiguration without pod restart. Deferred until there is a broader vision for what the `NginxGateway` CRD should contain.
-
-### Alternative 6: Filter-Based Attachment
+### Alternative 1: Filter-Based Attachment
 
 **Rejected Reason**: WAF is a cross-cutting security concern better suited to policy attachment; filters require explicit configuration on every route and lack inheritance.
 
-### Alternative 7: Persistent Volume Storage
+### Alternative 2: Persistent Volume Storage
 
 **Rejected Reason**: Conflicts with NGF's `ReadOnlyRootFilesystem` pattern.
 
-### Alternative 8: NGINX Direct Policy Fetching
+### Alternative 3: NGINX Direct Policy Fetching
 
 **Rejected Reason**: Creates distributed system complexity and violates NGF's centralized control plane pattern.
 
@@ -1343,11 +1351,10 @@ Cloud-native authentication (IRSA, Workload Identity) is not supported. Operator
 - **Policy signature verification**: Cryptographic validation of policy bundle authenticity
 - **Advanced policy inheritance**: Policy merging and composition rather than simple override
 - **Native cloud authentication**: IRSA, Azure Workload Identity, and GCP Workload Identity
-- **N1C implementation**: N1C API finalisation: The N1C bundle endpoint path and response format documented here are subject to change pending finalisation of the N1C security policies API.
 - **HTTP conditional fetching**: `ETag`/`If-None-Match` and `Last-Modified`/`If-Modified-Since` support during polling
+- **PLM integration**: Full implementation of `type: PLM` with APPolicy/APLogConf watch, S3 fetcher, and ReferenceGrant validation
 - **PLM NginxGateway CRD integration**: Move PLM storage configuration to the `NginxGateway` CRD
 - **NAP apreload support**: In-place policy reload to avoid full NGINX reloads
-- **Optional auto-compilation for NIM/N1C sources**: Support an opt-in `policySource.autoCompile: true` field on type: NIM and type: N1C WAFGatewayBindingPolicies. When enabled, if NGF fetches a policy bundle and finds the policy exists in NIM/N1C but has not yet been compiled, it would trigger compilation via the management platform API before retrying the fetch. This requires broader API permissions than the current read-only fetch credentials — the referenced Secret would need write/execute access to the NIM/N1C compilation API. Auto-compilation is intentionally opt-in to where compilation should be a deliberate, auditable step, and to avoid NGF making unsolicited write-side calls to external systems in environments where that is undesirable or non-compliant.
 
 ---
 
@@ -1381,7 +1388,7 @@ metadata:
   name: waf-enabled-proxy
   namespace: nginx-gateway
 spec:
-  waf: "enabled"
+  wafEnabled: true
 ---
 # 3. Gateway
 apiVersion: gateway.networking.k8s.io/v1
@@ -1401,9 +1408,9 @@ spec:
     port: 80
     protocol: HTTP
 ---
-# 4. Gateway-level WAFGatewayBindingPolicy (HTTP source)
+# 4. Gateway-level WAFPolicy (HTTP source)
 apiVersion: gateway.nginx.org/v1alpha1
-kind: WAFGatewayBindingPolicy
+kind: WAFPolicy
 metadata:
   name: gateway-base-protection
   namespace: applications
@@ -1414,7 +1421,8 @@ spec:
     kind: Gateway
     name: secure-gateway
   policySource:
-    url: https://bundles.example.com/waf/base-policy.tgz
+    httpSource:
+      url: https://bundles.example.com/waf/base-policy.tgz
     auth:
       secretRef:
         name: bundle-credentials
@@ -1429,9 +1437,9 @@ spec:
     logSource:
       defaultProfile: log_blocked
 ---
-# 5. Route-level WAFGatewayBindingPolicy override (HTTP source)
+# 5. Route-level WAFPolicy override (HTTP source)
 apiVersion: gateway.nginx.org/v1alpha1
-kind: WAFGatewayBindingPolicy
+kind: WAFPolicy
 metadata:
   name: admin-strict-protection
   namespace: applications
@@ -1442,7 +1450,8 @@ spec:
     kind: HTTPRoute
     name: admin-route
   policySource:
-    url: https://bundles.example.com/waf/admin-strict-policy.tgz
+    httpSource:
+      url: https://bundles.example.com/waf/admin-strict-policy.tgz
     auth:
       secretRef:
         name: bundle-credentials
@@ -1461,7 +1470,7 @@ spec:
 
 ```yaml
 apiVersion: gateway.nginx.org/v1alpha1
-kind: WAFGatewayBindingPolicy
+kind: WAFPolicy
 metadata:
   name: nim-gateway-protection
   namespace: applications
@@ -1472,8 +1481,8 @@ spec:
     kind: Gateway
     name: secure-gateway
   policySource:
-    url: https://nim.example.com
-    managedSource:
+    nimSource:
+      url: https://nim.example.com
       policyName: NginxStrictPolicy
     auth:
       secretRef:
@@ -1486,6 +1495,8 @@ spec:
 ```
 
 ### Example 3: PLM Source
+
+> **Note:** PLM is not yet implemented. This example documents the intended API.
 
 ```yaml
 # 1. NGF configured via Helm:
@@ -1500,7 +1511,7 @@ metadata:
   name: waf-enabled-proxy
   namespace: nginx-gateway
 spec:
-  waf: "enabled"
+  wafEnabled: true
 ---
 # 3. APPolicy CRD (managed by security team; compiled by PLM)
 apiVersion: waf.f5.com/v1alpha1
@@ -1530,17 +1541,17 @@ spec:
     request_type: "blocked"
 # status.bundle.state becomes "ready" after PLM compilation
 ---
-# 5. ReferenceGrant: allow WAFGatewayBindingPolicy in "applications" to reference
+# 5. ReferenceGrant: allow WAFPolicy in "applications" to reference
 #    APPolicy and APLogConf in "security"
 apiVersion: gateway.networking.k8s.io/v1
 kind: ReferenceGrant
 metadata:
-  name: allow-WAFGatewayBindingPolicy-plm-refs
+  name: allow-wafpolicy-plm-refs
   namespace: security
 spec:
   from:
   - group: gateway.nginx.org
-    kind: WAFGatewayBindingPolicy
+    kind: WAFPolicy
     namespace: applications
   to:
   - group: waf.f5.com
@@ -1566,9 +1577,9 @@ spec:
     port: 80
     protocol: HTTP
 ---
-# 7. Gateway-level WAFGatewayBindingPolicy (PLM source)
+# 7. Gateway-level WAFPolicy (PLM source)
 apiVersion: gateway.nginx.org/v1alpha1
-kind: WAFGatewayBindingPolicy
+kind: WAFPolicy
 metadata:
   name: gateway-plm-protection
   namespace: applications
@@ -1607,5 +1618,5 @@ spec:
     backendRefs:
     - name: api-service
       port: 8080
-  # Inherits gateway-plm-protection WAFGatewayBindingPolicy automatically
+  # Inherits gateway-plm-protection WAFPolicy automatically
 ```

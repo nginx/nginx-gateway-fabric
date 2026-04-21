@@ -1,5 +1,5 @@
 apiVersion: gateway.nginx.org/v1alpha1
-kind: WAFGatewayBindingPolicy
+kind: WAFPolicy
 metadata:
   name: gateway-base-protection
 spec:
@@ -12,9 +12,9 @@ spec:
     n1cSource:
       url: https://<tenant>.volterra.us
       namespace: default  # N1C namespace the policy belongs to
-      # policyName: "ngfExample"
-      policyObjectID: pol_-IUuEUN7ST63oRC7AlQPLw
-      policyVersionID: pv_UJ2gL5fOQ3Gnb3OVuVo1XA
+      # policyName: "ngfPolicy"
+      policyObjectID: pol_12345_WTHGmDEX9qnbVjQ
+      policyVersionID: pv_Tm__12345oWmJgwxiKlHAg
     auth:
       secretRef:
         name: n1c-credentials
@@ -27,7 +27,6 @@ spec:
         n1cSource:
           url: https://<tenant>.volterra.us
           namespace: default  # N1C namespace the log profile belongs to
-          # profileName: "ngfExample"
           profileObjectID: "lp_8s8uZxLpThWwEGF7LTn_rA"
         auth:
           secretRef:

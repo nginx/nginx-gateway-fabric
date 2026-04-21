@@ -5,7 +5,7 @@ import (
 	"context"
 	"sync"
 
-	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/fetch"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/waf/fetch"
 )
 
 type FakeFetcher struct {

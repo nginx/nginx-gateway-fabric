@@ -1,4 +1,4 @@
-package waf
+package poller
 
 import (
 	"context"
@@ -16,7 +16,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
-	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/fetch"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/waf/fetch"
 )
 
 // defaultPollingInterval is the default interval between poll cycles.
@@ -42,7 +42,7 @@ type BundleSource struct {
 	Interval time.Duration
 }
 
-// poller handles periodic re-fetching of WAF bundles for a single WAFGatewayBindingPolicy.
+// poller handles periodic re-fetching of WAF bundles for a single WAFPolicy.
 // It compares checksums to detect changes and pushes updated bundles to relevant deployments.
 type poller struct {
 	fetcher              fetch.Fetcher
@@ -71,7 +71,7 @@ type pollerConfig struct {
 	targetDeployments    []types.NamespacedName
 }
 
-// newPoller creates a new poller for the given WAFGatewayBindingPolicy.
+// newPoller creates a new poller for the given WAFPolicy.
 func newPoller(cfg pollerConfig) *poller {
 	targets := make(map[types.NamespacedName]struct{}, len(cfg.targetDeployments))
 	for _, t := range cfg.targetDeployments {
@@ -272,11 +272,11 @@ func (p *poller) pushBundleToDeployments(bundleKey graph.WAFBundleKey, data []by
 	}
 }
 
-// BuildBundleSources constructs BundleSource entries from a WAFGatewayBindingPolicy spec.
+// BuildBundleSources constructs BundleSource entries from a WAFPolicy spec.
 // It returns only sources that have polling enabled.
 func BuildBundleSources(
 	policyNsName types.NamespacedName,
-	spec ngfAPIv1alpha1.WAFGatewayBindingPolicySpec,
+	spec ngfAPIv1alpha1.WAFPolicySpec,
 	auth *fetch.BundleAuth,
 	tlsCA []byte,
 ) []BundleSource {
