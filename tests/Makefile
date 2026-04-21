@@ -261,7 +261,7 @@ test-cel-validation:
 		go test -v ./cel -run "$(CEL_TEST_TARGET)"; \
 	fi
 
-NAP_COMPILER_IMAGE = private-registry.nginx.com/nap/waf-compiler:5.11.2
+NAP_COMPILER_IMAGE = private-registry.nginx.com/nap/waf-compiler:5.12.1
 WAF_POLICY_DIR = $(SELF_DIR)tests/suite/manifests/waf-policy
 
 .PHONY: compile-waf-bundles
