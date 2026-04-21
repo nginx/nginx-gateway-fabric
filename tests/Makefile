@@ -268,18 +268,21 @@ WAF_POLICY_DIR = $(SELF_DIR)tests/suite/manifests/waf-policy
 compile-waf-bundles: check-for-docker ## Compile NAP WAF policy bundles for functional tests. Requires Docker and access to private-registry.nginx.com.
 	@echo "Compiling dataguard-blocking.tgz..."
 	docker run --rm \
+		--user $(shell id -u):$(shell id -g) \
 		-v $(SELF_DIR):$(SELF_DIR) \
 		$(NAP_COMPILER_IMAGE) \
 		-p $(WAF_POLICY_DIR)/dataguard-blocking.json \
 		-o $(WAF_POLICY_DIR)/dataguard-blocking.tgz
 	@echo "Compiling attack-signatures-blocking.tgz..."
 	docker run --rm \
+		--user $(shell id -u):$(shell id -g) \
 		-v $(SELF_DIR):$(SELF_DIR) \
 		$(NAP_COMPILER_IMAGE) \
 		-p $(WAF_POLICY_DIR)/attack-signatures-blocking.json \
 		-o $(WAF_POLICY_DIR)/attack-signatures-blocking.tgz
 	@echo "Compiling logconf.tgz..."
 	docker run --rm \
+		--user $(shell id -u):$(shell id -g) \
 		-v $(SELF_DIR):$(SELF_DIR) \
 		$(NAP_COMPILER_IMAGE) \
 		-l $(WAF_POLICY_DIR)/log-illegal.json \
