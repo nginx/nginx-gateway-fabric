@@ -521,11 +521,6 @@ func (in *NginxProxySpec) DeepCopyInto(out *NginxProxySpec) {
 		*out = new(bool)
 		**out = **in
 	}
-	if in.WAF != nil {
-		in, out := &in.WAF, &out.WAF
-		*out = new(WAFState)
-		**out = **in
-	}
 	if in.Kubernetes != nil {
 		in, out := &in.Kubernetes, &out.Kubernetes
 		*out = new(KubernetesSpec)

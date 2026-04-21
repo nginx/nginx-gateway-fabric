@@ -114,10 +114,10 @@ func fromUDPRoute(namespace string) fromResource {
 	}
 }
 
-func fromWAFGatewayBindingPolicy(namespace string) fromResource {
+func fromWAFPolicy(namespace string) fromResource {
 	return fromResource{
 		group:     ngfAPIv1alpha1.GroupName,
-		kind:      kinds.WAFGatewayBindingPolicy,
+		kind:      kinds.WAFPolicy,
 		namespace: namespace,
 	}
 }

@@ -23,9 +23,9 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/resolver"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/validation"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller/index"
-	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/fetch"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 	ngftypes "github.com/nginx/nginx-gateway-fabric/v2/internal/framework/types"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/waf/fetch"
 )
 
 // ClusterState includes cluster resources necessary to build the Graph.
@@ -85,10 +85,10 @@ type Graph struct {
 	BackendTLSPolicies map[types.NamespacedName]*BackendTLSPolicy
 	// NGFPolicies holds all NGF Policies.
 	NGFPolicies map[PolicyKey]*Policy
-	// ReferencedWAFBundles includes the WAFGatewayBindingPolicy Bundles that have been referenced by any Gateways
+	// ReferencedWAFBundles includes the WAFPolicy Bundles that have been referenced by any Gateways
 	// or Routes.
 	ReferencedWAFBundles map[WAFBundleKey]*WAFBundleData
-	// ReferencedWAFSecrets includes Secrets referenced by WAFGatewayBindingPolicy (auth and TLS CA).
+	// ReferencedWAFSecrets includes Secrets referenced by WAFPolicy (auth and TLS CA).
 	ReferencedWAFSecrets map[types.NamespacedName]*v1.Secret
 	// SnippetsFilters holds all the SnippetsFilters.
 	SnippetsFilters map[types.NamespacedName]*SnippetsFilter

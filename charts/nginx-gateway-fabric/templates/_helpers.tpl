@@ -232,7 +232,7 @@ Create namespaced RBAC rules.
   - authenticationfilters
   - proxysettingspolicies
   - ratelimitpolicies
-  - wafgatewaybindingpolicies
+  - wafpolicies
   {{- if or .Values.nginxGateway.snippetsFilters.enable .Values.nginxGateway.snippets.enable }}
   - snippetsfilters
   {{- end }}
@@ -252,7 +252,7 @@ Create namespaced RBAC rules.
   - authenticationfilters/status
   - proxysettingspolicies/status
   - ratelimitpolicies/status
-  - wafgatewaybindingpolicies/status
+  - wafpolicies/status
   {{- if or .Values.nginxGateway.snippetsFilters.enable .Values.nginxGateway.snippets.enable }}
   - snippetsfilters/status
   {{- end }}

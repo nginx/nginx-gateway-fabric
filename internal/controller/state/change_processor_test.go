@@ -2960,7 +2960,7 @@ var _ = Describe("ChangeProcessor", func() {
 				snip, snipUpdated                                       *ngfAPIv1alpha1.SnippetsPolicy
 				psp, pspUpdated                                         *ngfAPIv1alpha1.ProxySettingsPolicy
 				rlp, rlpUpdated                                         *ngfAPIv1alpha1.RateLimitPolicy
-				waf, wafUpdated                                         *ngfAPIv1alpha1.WAFGatewayBindingPolicy
+				waf, wafUpdated                                         *ngfAPIv1alpha1.WAFPolicy
 				cspKey, obsKey, uspKey, snipKey, pspKey, rlpKey, wafKey graph.PolicyKey
 			)
 
@@ -3188,12 +3188,12 @@ var _ = Describe("ChangeProcessor", func() {
 					},
 				}
 
-				waf = &ngfAPIv1alpha1.WAFGatewayBindingPolicy{
+				waf = &ngfAPIv1alpha1.WAFPolicy{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "waf",
 						Namespace: "test",
 					},
-					Spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
+					Spec: ngfAPIv1alpha1.WAFPolicySpec{
 						TargetRefs: []v1.LocalPolicyTargetReference{
 							{
 								Group: v1.GroupName,
@@ -3210,7 +3210,7 @@ var _ = Describe("ChangeProcessor", func() {
 					NsName: types.NamespacedName{Name: "waf", Namespace: "test"},
 					GVK: schema.GroupVersionKind{
 						Group:   ngfAPIv1alpha1.GroupName,
-						Kind:    kinds.WAFGatewayBindingPolicy,
+						Kind:    kinds.WAFPolicy,
 						Version: "v1alpha1",
 					},
 				}
@@ -3312,7 +3312,7 @@ var _ = Describe("ChangeProcessor", func() {
 					processor.CaptureDeleteChange(&ngfAPIv1alpha1.SnippetsPolicy{}, client.ObjectKeyFromObject(snip))
 					processor.CaptureDeleteChange(&ngfAPIv1alpha1.ProxySettingsPolicy{}, client.ObjectKeyFromObject(psp))
 					processor.CaptureDeleteChange(&ngfAPIv1alpha1.RateLimitPolicy{}, client.ObjectKeyFromObject(rlp))
-					processor.CaptureDeleteChange(&ngfAPIv1alpha1.WAFGatewayBindingPolicy{}, client.ObjectKeyFromObject(waf))
+					processor.CaptureDeleteChange(&ngfAPIv1alpha1.WAFPolicy{}, client.ObjectKeyFromObject(waf))
 
 					graph := processor.Process(context.Background())
 					Expect(graph).ToNot(BeNil())

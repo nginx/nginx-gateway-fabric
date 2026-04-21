@@ -24,9 +24,9 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/validation"
-	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/fetch"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 	ngftypes "github.com/nginx/nginx-gateway-fabric/v2/internal/framework/types"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/waf/fetch"
 )
 
 //go:generate go tool counterfeiter -generate
@@ -239,7 +239,7 @@ func NewChangeProcessorImpl(cfg ChangeProcessorConfig) *ChangeProcessorImpl {
 			predicate: funcPredicate{stateChanged: isNGFPolicyRelevant},
 		},
 		{
-			gvk:       cfg.MustExtractGVK(&ngfAPIv1alpha1.WAFGatewayBindingPolicy{}),
+			gvk:       cfg.MustExtractGVK(&ngfAPIv1alpha1.WAFPolicy{}),
 			store:     commonPolicyObjectStore,
 			predicate: funcPredicate{stateChanged: isNGFPolicyRelevant},
 		},

@@ -21,10 +21,10 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/secrets"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/validation"
-	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/fetch"
-	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/fetch/fetchfakes"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/waf/fetch"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/waf/fetch/fetchfakes"
 )
 
 var testNs = "test"
@@ -1889,7 +1889,7 @@ func TestAddPolicyAffectedStatusOnTargetRefs(t *testing.T) {
 	wafGVK := schema.GroupVersionKind{
 		Group:   "Group",
 		Version: "Version",
-		Kind:    "WAFGatewayBindingPolicy",
+		Kind:    "WAFPolicy",
 	}
 
 	gw1Ref := createTestRef(kinds.Gateway, v1.GroupName, "gw1")
@@ -1991,8 +1991,8 @@ func TestAddPolicyAffectedStatusOnTargetRefs(t *testing.T) {
 					Source:     createTestPolicy(snipGVK, "snippetsPolicy1", gwSnipRef),
 					TargetRefs: []PolicyTargetRef{gwSnipTargetRef},
 				},
-				createTestPolicyKey(wafGVK, "WAFGatewayBindingPolicy1"): {
-					Source:     createTestPolicy(wafGVK, "WAFGatewayBindingPolicy1", gw2Ref),
+				createTestPolicyKey(wafGVK, "WAFPolicy1"): {
+					Source:     createTestPolicy(wafGVK, "WAFPolicy1", gw2Ref),
 					TargetRefs: []PolicyTargetRef{gw2TargetRef},
 				},
 			},
@@ -2005,7 +2005,7 @@ func TestAddPolicyAffectedStatusOnTargetRefs(t *testing.T) {
 				{Namespace: testNs, Name: "gw2"}: {
 					conditions.NewClientSettingsPolicyAffected(),
 					conditions.NewObservabilityPolicyAffected(),
-					conditions.NewWAFGatewayBindingPolicyAffected(),
+					conditions.NewWAFPolicyAffected(),
 				},
 				{Namespace: testNs, Name: "gw-snip"}: {
 					conditions.NewSnippetsPolicyAffected(),
@@ -2066,8 +2066,8 @@ func TestAddPolicyAffectedStatusOnTargetRefs(t *testing.T) {
 					Source:     createTestPolicy(opGVK, "observabilityPolicy2", gw3Ref, gr2Ref),
 					TargetRefs: []PolicyTargetRef{gw3TargetRef, gr2TargetRef},
 				},
-				createTestPolicyKey(wafGVK, "WAFGatewayBindingPolicy1"): {
-					Source:     createTestPolicy(wafGVK, "WAFGatewayBindingPolicy1", gw3Ref, hr2Ref),
+				createTestPolicyKey(wafGVK, "WAFPolicy1"): {
+					Source:     createTestPolicy(wafGVK, "WAFPolicy1", gw3Ref, hr2Ref),
 					TargetRefs: []PolicyTargetRef{gw3TargetRef, hr2TargetRef},
 				},
 			},
@@ -2096,12 +2096,12 @@ func TestAddPolicyAffectedStatusOnTargetRefs(t *testing.T) {
 				{Namespace: testNs, Name: "gw3"}: {
 					conditions.NewClientSettingsPolicyAffected(),
 					conditions.NewObservabilityPolicyAffected(),
-					conditions.NewWAFGatewayBindingPolicyAffected(),
+					conditions.NewWAFPolicyAffected(),
 				},
 				{Namespace: testNs, Name: "hr2"}: {
 					conditions.NewObservabilityPolicyAffected(),
 					conditions.NewClientSettingsPolicyAffected(),
-					conditions.NewWAFGatewayBindingPolicyAffected(),
+					conditions.NewWAFPolicyAffected(),
 				},
 				{Namespace: testNs, Name: "gr2"}: {
 					conditions.NewObservabilityPolicyAffected(),
@@ -2810,13 +2810,13 @@ func TestSnippetsPolicyPropagation(t *testing.T) {
 	g.Expect(route3.Policies).To(Not(ContainElement(otherPolicy)), "Route3 should NOT have other policy")
 }
 
-func TestProcessWAFGatewayBindingPolicies(t *testing.T) {
+func TestProcessWAFPolicies(t *testing.T) {
 	t.Parallel()
 
 	wafGVK := schema.GroupVersionKind{
 		Group:   ngfAPIv1alpha1.GroupName,
 		Version: "v1alpha1",
-		Kind:    kinds.WAFGatewayBindingPolicy,
+		Kind:    kinds.WAFPolicy,
 	}
 	otherGVK := schema.GroupVersionKind{Group: "Group", Version: "Version", Kind: "OtherPolicy"}
 
@@ -2842,10 +2842,10 @@ func TestProcessWAFGatewayBindingPolicies(t *testing.T) {
 	fetchedData := []byte("bundle-data")
 	fetchedChecksum := "abc123"
 
-	makeWAFPolicy := func(name string, withAuth, withTLS, withLogURL bool) *ngfAPIv1alpha1.WAFGatewayBindingPolicy {
-		p := &ngfAPIv1alpha1.WAFGatewayBindingPolicy{
+	makeWAFPolicy := func(name string, withAuth, withTLS, withLogURL bool) *ngfAPIv1alpha1.WAFPolicy {
+		p := &ngfAPIv1alpha1.WAFPolicy{
 			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: policyNs},
-			Spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
+			Spec: ngfAPIv1alpha1.WAFPolicySpec{
 				Type: ngfAPIv1alpha1.PolicySourceTypeHTTP,
 				PolicySource: ngfAPIv1alpha1.PolicySource{
 					HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: bundleURL},
@@ -2879,7 +2879,7 @@ func TestProcessWAFGatewayBindingPolicies(t *testing.T) {
 		return p
 	}
 
-	makePolicyEntry := func(wafPolicy *ngfAPIv1alpha1.WAFGatewayBindingPolicy, valid bool) (PolicyKey, *Policy) {
+	makePolicyEntry := func(wafPolicy *ngfAPIv1alpha1.WAFPolicy, valid bool) (PolicyKey, *Policy) {
 		key := PolicyKey{
 			GVK:    wafGVK,
 			NsName: types.NamespacedName{Namespace: policyNs, Name: wafPolicy.Name},
@@ -2925,7 +2925,7 @@ func TestProcessWAFGatewayBindingPolicies(t *testing.T) {
 			wafInput: func() *WAFProcessingInput { return nil },
 		},
 		{
-			name: "non-WAFGatewayBindingPolicy kind is skipped",
+			name: "non-WAFPolicy kind is skipped",
 			processedPolicies: func() map[PolicyKey]*Policy {
 				return map[PolicyKey]*Policy{
 					{GVK: otherGVK, NsName: types.NamespacedName{Namespace: policyNs, Name: "other"}}: {
@@ -3582,7 +3582,7 @@ func TestProcessWAFGatewayBindingPolicies(t *testing.T) {
 			processedPolicies := tc.processedPolicies()
 			wafInput := tc.wafInput()
 
-			output := processWAFGatewayBindingPolicies(t.Context(), logr.Discard(), processedPolicies, wafInput)
+			output := processWAFPolicies(t.Context(), logr.Discard(), processedPolicies, wafInput)
 
 			if wafInput == nil {
 				g.Expect(output).To(BeNil())
@@ -3597,7 +3597,7 @@ func TestProcessWAFGatewayBindingPolicies(t *testing.T) {
 				if pol.Source == nil {
 					continue
 				}
-				if _, ok := pol.Source.(*ngfAPIv1alpha1.WAFGatewayBindingPolicy); !ok {
+				if _, ok := pol.Source.(*ngfAPIv1alpha1.WAFPolicy); !ok {
 					continue
 				}
 				if tc.expConditions != nil {

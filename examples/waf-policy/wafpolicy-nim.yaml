@@ -1,5 +1,5 @@
 apiVersion: gateway.nginx.org/v1alpha1
-kind: WAFGatewayBindingPolicy
+kind: WAFPolicy
 metadata:
   name: route-protection-http
 spec:

@@ -82,14 +82,6 @@ type NginxProxySpec struct {
 	//
 	// +optional
 	DisableSNIHostValidation *bool `json:"disableSNIHostValidation,omitempty"`
-	// WAF enables NGINX App Protect WAF functionality.
-	// When enabled, NGINX Gateway Fabric will deploy additional WAF containers
-	// (waf-enforcer and waf-config-mgr) alongside the main NGINX container.
-	// Default is "disabled".
-	//
-	// +optional
-	// +kubebuilder:default:=disabled
-	WAF *WAFState `json:"waf,omitempty"`
 	// Kubernetes contains the configuration for the NGINX Deployment and Service Kubernetes objects.
 	//
 	// +optional
@@ -125,22 +117,14 @@ type NginxProxySpec struct {
 	//
 	// +optional
 	ServerTokens *string `json:"serverTokens,omitempty"`
-}
-
-// WAFState defines the state of WAF functionality.
-//
-// +kubebuilder:validation:Enum=enabled;disabled
-type WAFState string
-
-const (
 	// WAFEnabled enables NGINX App Protect WAF functionality.
-	// This will deploy additional containers for WAF enforcement and configuration management.
-	WAFEnabled WAFState = "enabled"
-
-	// WAFDisabled disables NGINX App Protect WAF functionality.
-	// Only the standard NGINX container will be deployed.
-	WAFDisabled WAFState = "disabled"
-)
+	// When enabled, NGINX Gateway Fabric will deploy additional WAF containers
+	// (waf-enforcer and waf-config-mgr) alongside the main NGINX container.
+	// Default is false.
+	//
+	// +optional
+	WAFEnabled bool `json:"wafEnabled,omitempty"`
+}
 
 // Telemetry specifies the OpenTelemetry configuration.
 type Telemetry struct {

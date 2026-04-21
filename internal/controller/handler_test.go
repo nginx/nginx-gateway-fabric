@@ -41,11 +41,11 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/status/statusfakes"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/events"
-	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/fetch"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
-	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/waf"
-	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/waf/waffakes"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/waf/fetch"
+	wafPoller "github.com/nginx/nginx-gateway-fabric/v2/internal/framework/waf/poller"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/waf/poller/pollerfakes"
 )
 
 var _ = Describe("eventHandler", func() {
@@ -1242,7 +1242,7 @@ func (*badFakeClient) Update(context.Context, client.Object, ...client.UpdateOpt
 
 var wafGVK = schema.GroupVersionKind{
 	Group:   ngfAPI.GroupName,
-	Kind:    kinds.WAFGatewayBindingPolicy,
+	Kind:    kinds.WAFPolicy,
 	Version: "v1alpha1",
 }
 
@@ -1253,8 +1253,8 @@ func wafPolicyKey(name string) graph.PolicyKey {
 	}
 }
 
-func makeWAFPolicy(pollingEnabled bool) *ngfAPI.WAFGatewayBindingPolicy {
-	spec := ngfAPI.WAFGatewayBindingPolicySpec{
+func makeWAFPolicy(pollingEnabled bool) *ngfAPI.WAFPolicy {
+	spec := ngfAPI.WAFPolicySpec{
 		Type: ngfAPI.PolicySourceTypeHTTP,
 		TargetRefs: []gatewayv1.LocalPolicyTargetReference{
 			{
@@ -1273,7 +1273,7 @@ func makeWAFPolicy(pollingEnabled bool) *ngfAPI.WAFGatewayBindingPolicy {
 		}
 	}
 
-	return &ngfAPI.WAFGatewayBindingPolicy{
+	return &ngfAPI.WAFPolicy{
 		ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "waf-policy"},
 		Spec:       spec,
 	}
@@ -1475,10 +1475,10 @@ func TestReconcileWAFPollers(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			var fakeManager *waffakes.FakePollerManager
-			var mgr waf.PollerManager
+			var fakeManager *pollerfakes.FakePollerManager
+			var mgr wafPoller.Manager
 			if !tt.nilManager {
-				fakeManager = &waffakes.FakePollerManager{}
+				fakeManager = &pollerfakes.FakePollerManager{}
 				mgr = fakeManager
 			}
 
@@ -1532,7 +1532,7 @@ func TestMergeWAFPollErrors(t *testing.T) {
 	bundleKey := graph.PolicyBundleKey(policyNsName)
 
 	tests := []struct {
-		pollErrors      map[types.NamespacedName]waf.PollError
+		pollErrors      map[types.NamespacedName]wafPoller.PollError
 		policy          *graph.Policy
 		name            string
 		expectCondCount int
@@ -1541,7 +1541,7 @@ func TestMergeWAFPollErrors(t *testing.T) {
 	}{
 		{
 			name: "adds stale-bundle warning when bundle exists",
-			pollErrors: map[types.NamespacedName]waf.PollError{
+			pollErrors: map[types.NamespacedName]wafPoller.PollError{
 				policyNsName: {
 					BundleKey: bundleKey,
 					Err:       errors.New("fetch timeout"),
@@ -1560,7 +1560,7 @@ func TestMergeWAFPollErrors(t *testing.T) {
 		},
 		{
 			name: "skips warning when no bundle exists (initial fetch failed)",
-			pollErrors: map[types.NamespacedName]waf.PollError{
+			pollErrors: map[types.NamespacedName]wafPoller.PollError{
 				policyNsName: {
 					BundleKey: bundleKey,
 					Err:       errors.New("fetch timeout"),
@@ -1577,7 +1577,7 @@ func TestMergeWAFPollErrors(t *testing.T) {
 		},
 		{
 			name: "skips warning when WAFState is nil",
-			pollErrors: map[types.NamespacedName]waf.PollError{
+			pollErrors: map[types.NamespacedName]wafPoller.PollError{
 				policyNsName: {
 					BundleKey: bundleKey,
 					Err:       errors.New("fetch timeout"),
@@ -1592,7 +1592,7 @@ func TestMergeWAFPollErrors(t *testing.T) {
 		},
 		{
 			name: "skips warning for invalid policy",
-			pollErrors: map[types.NamespacedName]waf.PollError{
+			pollErrors: map[types.NamespacedName]wafPoller.PollError{
 				policyNsName: {
 					BundleKey: bundleKey,
 					Err:       errors.New("fetch timeout"),
@@ -1634,7 +1634,7 @@ func TestMergeWAFPollErrors(t *testing.T) {
 		{
 			name:          "skips when policy is not in graph",
 			useEmptyGraph: true,
-			pollErrors: map[types.NamespacedName]waf.PollError{
+			pollErrors: map[types.NamespacedName]wafPoller.PollError{
 				policyNsName: {
 					BundleKey: bundleKey,
 					Err:       errors.New("fetch timeout"),
@@ -1652,10 +1652,10 @@ func TestMergeWAFPollErrors(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			var fakeManager *waffakes.FakePollerManager
-			var mgr waf.PollerManager
+			var fakeManager *pollerfakes.FakePollerManager
+			var mgr wafPoller.Manager
 			if !tt.nilManager {
-				fakeManager = &waffakes.FakePollerManager{}
+				fakeManager = &pollerfakes.FakePollerManager{}
 				fakeManager.GetAllPollErrorsReturns(tt.pollErrors)
 				mgr = fakeManager
 			}
@@ -1699,8 +1699,8 @@ func TestMergeWAFPollErrors(t *testing.T) {
 		t.Parallel()
 		g := NewWithT(t)
 
-		fakeManager := &waffakes.FakePollerManager{}
-		fakeManager.GetAllPollErrorsReturns(map[types.NamespacedName]waf.PollError{
+		fakeManager := &pollerfakes.FakePollerManager{}
+		fakeManager.GetAllPollErrorsReturns(map[types.NamespacedName]wafPoller.PollError{
 			policyNsName: {BundleKey: bundleKey, Err: errors.New("fetch timeout")},
 		})
 
@@ -1736,7 +1736,7 @@ func TestMergeWAFPollErrors(t *testing.T) {
 		t.Parallel()
 		g := NewWithT(t)
 
-		fakeManager := &waffakes.FakePollerManager{}
+		fakeManager := &pollerfakes.FakePollerManager{}
 
 		handler := &eventHandlerImpl{
 			cfg: eventHandlerConfig{wafPollerManager: fakeManager},
@@ -1759,13 +1759,13 @@ func TestMergeWAFPollErrors(t *testing.T) {
 		}
 
 		// First call with one error message.
-		fakeManager.GetAllPollErrorsReturns(map[types.NamespacedName]waf.PollError{
+		fakeManager.GetAllPollErrorsReturns(map[types.NamespacedName]wafPoller.PollError{
 			policyNsName: {BundleKey: bundleKey, Err: errors.New("timeout")},
 		})
 		handler.mergeWAFPollErrors(gr)
 
 		// Second call with a different error message.
-		fakeManager.GetAllPollErrorsReturns(map[types.NamespacedName]waf.PollError{
+		fakeManager.GetAllPollErrorsReturns(map[types.NamespacedName]wafPoller.PollError{
 			policyNsName: {BundleKey: bundleKey, Err: errors.New("connection refused")},
 		})
 		handler.mergeWAFPollErrors(gr)
@@ -1987,7 +1987,7 @@ func TestGatewayHasPendingWAFBundle(t *testing.T) {
 			invalid[ns] = struct{}{}
 		}
 		return &graph.Policy{
-			Source:             &ngfAPI.WAFGatewayBindingPolicy{},
+			Source:             &ngfAPI.WAFPolicy{},
 			WAFState:           wafState,
 			InvalidForGateways: invalid,
 			TargetRefs: []graph.PolicyTargetRef{
@@ -2053,7 +2053,7 @@ func TestGatewayHasPendingWAFBundle(t *testing.T) {
 			name: "nil WAFState returns false",
 			policies: map[graph.PolicyKey]*graph.Policy{
 				wafPolicyKey("waf"): {
-					Source:     &ngfAPI.WAFGatewayBindingPolicy{},
+					Source:     &ngfAPI.WAFPolicy{},
 					WAFState:   nil,
 					TargetRefs: []graph.PolicyTargetRef{{Kind: kinds.Gateway, Nsname: gwNsName}},
 				},
@@ -2151,7 +2151,7 @@ func TestFindWAFPolicyKey(t *testing.T) {
 			name: "does not match WAF policy with different name",
 			ngfPolicies: map[graph.PolicyKey]*graph.Policy{
 				wafPolicyKey("other-policy"): {
-					Source: &ngfAPI.WAFGatewayBindingPolicy{
+					Source: &ngfAPI.WAFPolicy{
 						ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "other-policy"},
 					},
 				},
@@ -2175,7 +2175,7 @@ func TestFindWAFPolicyKey(t *testing.T) {
 			if tt.expectFound {
 				g.Expect(result).NotTo(BeNil())
 				g.Expect(result.NsName).To(Equal(tt.searchNsName))
-				g.Expect(result.GVK.Kind).To(Equal(kinds.WAFGatewayBindingPolicy))
+				g.Expect(result.GVK.Kind).To(Equal(kinds.WAFPolicy))
 			} else {
 				g.Expect(result).To(BeNil())
 			}
