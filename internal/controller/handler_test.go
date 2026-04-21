@@ -1242,7 +1242,7 @@ func (*badFakeClient) Update(context.Context, client.Object, ...client.UpdateOpt
 
 var wafGVK = schema.GroupVersionKind{
 	Group:   ngfAPI.GroupName,
-	Kind:    kinds.WAFGatewayBindingPolicy,
+	Kind:    kinds.WAFPolicy,
 	Version: "v1alpha1",
 }
 
@@ -1253,8 +1253,8 @@ func wafPolicyKey(name string) graph.PolicyKey {
 	}
 }
 
-func makeWAFPolicy(pollingEnabled bool) *ngfAPI.WAFGatewayBindingPolicy {
-	spec := ngfAPI.WAFGatewayBindingPolicySpec{
+func makeWAFPolicy(pollingEnabled bool) *ngfAPI.WAFPolicy {
+	spec := ngfAPI.WAFPolicySpec{
 		Type: ngfAPI.PolicySourceTypeHTTP,
 		TargetRefs: []gatewayv1.LocalPolicyTargetReference{
 			{
@@ -1273,7 +1273,7 @@ func makeWAFPolicy(pollingEnabled bool) *ngfAPI.WAFGatewayBindingPolicy {
 		}
 	}
 
-	return &ngfAPI.WAFGatewayBindingPolicy{
+	return &ngfAPI.WAFPolicy{
 		ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "waf-policy"},
 		Spec:       spec,
 	}
@@ -1987,7 +1987,7 @@ func TestGatewayHasPendingWAFBundle(t *testing.T) {
 			invalid[ns] = struct{}{}
 		}
 		return &graph.Policy{
-			Source:             &ngfAPI.WAFGatewayBindingPolicy{},
+			Source:             &ngfAPI.WAFPolicy{},
 			WAFState:           wafState,
 			InvalidForGateways: invalid,
 			TargetRefs: []graph.PolicyTargetRef{
@@ -2053,7 +2053,7 @@ func TestGatewayHasPendingWAFBundle(t *testing.T) {
 			name: "nil WAFState returns false",
 			policies: map[graph.PolicyKey]*graph.Policy{
 				wafPolicyKey("waf"): {
-					Source:     &ngfAPI.WAFGatewayBindingPolicy{},
+					Source:     &ngfAPI.WAFPolicy{},
 					WAFState:   nil,
 					TargetRefs: []graph.PolicyTargetRef{{Kind: kinds.Gateway, Nsname: gwNsName}},
 				},
@@ -2151,7 +2151,7 @@ func TestFindWAFPolicyKey(t *testing.T) {
 			name: "does not match WAF policy with different name",
 			ngfPolicies: map[graph.PolicyKey]*graph.Policy{
 				wafPolicyKey("other-policy"): {
-					Source: &ngfAPI.WAFGatewayBindingPolicy{
+					Source: &ngfAPI.WAFPolicy{
 						ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "other-policy"},
 					},
 				},
@@ -2175,7 +2175,7 @@ func TestFindWAFPolicyKey(t *testing.T) {
 			if tt.expectFound {
 				g.Expect(result).NotTo(BeNil())
 				g.Expect(result.NsName).To(Equal(tt.searchNsName))
-				g.Expect(result.GVK.Kind).To(Equal(kinds.WAFGatewayBindingPolicy))
+				g.Expect(result.GVK.Kind).To(Equal(kinds.WAFPolicy))
 			} else {
 				g.Expect(result).To(BeNil())
 			}

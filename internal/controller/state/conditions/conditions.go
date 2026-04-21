@@ -206,9 +206,9 @@ const (
 	// CACertificateRefs are invalid.
 	BackendTLSPolicyReasonNoValidCACertificate v1.PolicyConditionReason = "NoValidCACertificate"
 
-	// WAFGatewayBindingPolicyAffected is used with the "PolicyAffected" condition when a
-	// WAFGatewayBindingPolicy is applied to a Gateway, HTTPRoute, or GRPCRoute.
-	WAFGatewayBindingPolicyAffected v1.PolicyConditionType = "gateway.nginx.org/WAFGatewayBindingPolicyAffected"
+	// WAFPolicyAffected is used with the "PolicyAffected" condition when a
+	// WAFPolicy is applied to a Gateway, HTTPRoute, or GRPCRoute.
+	WAFPolicyAffected v1.PolicyConditionType = "gateway.nginx.org/WAFPolicyAffected"
 
 	// PolicyReasonPending is used with the "PolicyAccepted" condition when a Policy is pending
 	// external processing (e.g., PLM compilation for WAF policies).
@@ -1398,14 +1398,14 @@ func NewInferencePoolInvalidExtensionref(msg string) Condition {
 	}
 }
 
-// NewWAFGatewayBindingPolicyAffected returns a Condition that indicates that a WAFGatewayBindingPolicy
+// NewWAFPolicyAffected returns a Condition that indicates that a WAFPolicy
 // is applied to the resource.
-func NewWAFGatewayBindingPolicyAffected() Condition {
+func NewWAFPolicyAffected() Condition {
 	return Condition{
-		Type:    string(WAFGatewayBindingPolicyAffected),
+		Type:    string(WAFPolicyAffected),
 		Status:  metav1.ConditionTrue,
 		Reason:  string(PolicyAffectedReason),
-		Message: "WAFGatewayBindingPolicy is applied to the resource",
+		Message: "WAFPolicy is applied to the resource",
 	}
 }
 

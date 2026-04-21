@@ -85,7 +85,7 @@ const (
 	expectedHashKeyLoadBalancingTypeError = `hashMethodKey is required when loadBalancingMethod ` +
 		`is 'hash' or 'hash consistent'`
 
-	// WAFGatewayBindingPolicy errors.
+	// WAFPolicy errors.
 	expectedWAFFileIfAndOnlyIfFileTypeError = "destination.file must be set if and only if type is file"
 	expectedWAFSyslogIfAndOnlyIfSyslogType  = "destination.syslog must be set if and only if type is syslog"
 	//nolint: lll

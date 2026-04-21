@@ -29,12 +29,12 @@ func TestGenerate(t *testing.T) {
 	}{
 		{
 			name: "basic case with policy bundle URL",
-			policy: &ngfAPIv1alpha1.WAFGatewayBindingPolicy{
+			policy: &ngfAPIv1alpha1.WAFPolicy{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "my-name",
 					Namespace: "my-namespace",
 				},
-				Spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
+				Spec: ngfAPIv1alpha1.WAFPolicySpec{
 					PolicySource: ngfAPIv1alpha1.PolicySource{
 						HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: policyURL},
 					},
@@ -47,12 +47,12 @@ func TestGenerate(t *testing.T) {
 		},
 		{
 			name: "security log with log bundle URL and stderr destination",
-			policy: &ngfAPIv1alpha1.WAFGatewayBindingPolicy{
+			policy: &ngfAPIv1alpha1.WAFPolicy{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "waf-with-log",
 					Namespace: "test-ns",
 				},
-				Spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
+				Spec: ngfAPIv1alpha1.WAFPolicySpec{
 					PolicySource: ngfAPIv1alpha1.PolicySource{
 						HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: policyURL},
 					},
@@ -79,12 +79,12 @@ func TestGenerate(t *testing.T) {
 		},
 		{
 			name: "security log with file destination",
-			policy: &ngfAPIv1alpha1.WAFGatewayBindingPolicy{
+			policy: &ngfAPIv1alpha1.WAFPolicy{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "waf-file-log",
 					Namespace: "test-ns",
 				},
-				Spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
+				Spec: ngfAPIv1alpha1.WAFPolicySpec{
 					PolicySource: ngfAPIv1alpha1.PolicySource{
 						HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: policyURL},
 					},
@@ -111,12 +111,12 @@ func TestGenerate(t *testing.T) {
 		},
 		{
 			name: "security log with syslog destination",
-			policy: &ngfAPIv1alpha1.WAFGatewayBindingPolicy{
+			policy: &ngfAPIv1alpha1.WAFPolicy{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "waf-syslog",
 					Namespace: "test-ns",
 				},
-				Spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
+				Spec: ngfAPIv1alpha1.WAFPolicySpec{
 					SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
 						{
 							LogSource: ngfAPIv1alpha1.LogSource{
@@ -140,12 +140,12 @@ func TestGenerate(t *testing.T) {
 		},
 		{
 			name: "security log with NIM source and stderr destination",
-			policy: &ngfAPIv1alpha1.WAFGatewayBindingPolicy{
+			policy: &ngfAPIv1alpha1.WAFPolicy{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "waf-nim-log",
 					Namespace: "test-ns",
 				},
-				Spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
+				Spec: ngfAPIv1alpha1.WAFPolicySpec{
 					PolicySource: ngfAPIv1alpha1.PolicySource{
 						NIMSource: &ngfAPIv1alpha1.NIMBundleSource{
 							URL:        policyURL,
@@ -177,12 +177,12 @@ func TestGenerate(t *testing.T) {
 		},
 		{
 			name: "multiple security logs",
-			policy: &ngfAPIv1alpha1.WAFGatewayBindingPolicy{
+			policy: &ngfAPIv1alpha1.WAFPolicy{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "waf-multi-log",
 					Namespace: "app-ns",
 				},
-				Spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
+				Spec: ngfAPIv1alpha1.WAFPolicySpec{
 					PolicySource: ngfAPIv1alpha1.PolicySource{
 						HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: policyURL},
 					},
@@ -223,12 +223,12 @@ func TestGenerate(t *testing.T) {
 		},
 		{
 			name: "no policy bundle - no policy directives",
-			policy: &ngfAPIv1alpha1.WAFGatewayBindingPolicy{
+			policy: &ngfAPIv1alpha1.WAFPolicy{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "waf-no-bundle",
 					Namespace: "test-ns",
 				},
-				Spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{},
+				Spec: ngfAPIv1alpha1.WAFPolicySpec{},
 			},
 			expStrings: []string{},
 		},

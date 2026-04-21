@@ -137,12 +137,12 @@ type NGFResourceCounts struct {
 	// RouteAttachedProxySettingsPolicyCount is the number of relevant ProxySettingsPolicies
 	// attached at the Route level.
 	RouteAttachedProxySettingsPolicyCount int64
-	// GatewayAttachedWAFGatewayBindingPolicyCount is the number of WAFGatewayBindingPolicy resources
+	// GatewayAttachedWAFPolicyCount is the number of WAFPolicy resources
 	// attached at the Gateway level.
-	GatewayAttachedWAFGatewayBindingPolicyCount int64
-	// RouteAttachedWAFGatewayBindingPolicyCount is the number of WAFGatewayBindingPolicy resources
+	GatewayAttachedWAFPolicyCount int64
+	// RouteAttachedWAFPolicyCount is the number of WAFPolicy resources
 	// attached at the Route level.
-	RouteAttachedWAFGatewayBindingPolicyCount int64
+	RouteAttachedWAFPolicyCount int64
 	// WAFEnabledGatewayCount is the number of Gateways with WAF enabled on their effective NginxProxy.
 	WAFEnabledGatewayCount int64
 }
@@ -166,10 +166,10 @@ func (rc *NGFResourceCounts) CountPolicies(g *graph.Graph) {
 			rc.ObservabilityPolicyCount++
 		case kinds.UpstreamSettingsPolicy:
 			rc.UpstreamSettingsPolicyCount++
-		case kinds.WAFGatewayBindingPolicy:
+		case kinds.WAFPolicy:
 			gatewayCount, routeCount := countPolicyTargetRefs(policy)
-			rc.GatewayAttachedWAFGatewayBindingPolicyCount += gatewayCount
-			rc.RouteAttachedWAFGatewayBindingPolicyCount += routeCount
+			rc.GatewayAttachedWAFPolicyCount += gatewayCount
+			rc.RouteAttachedWAFPolicyCount += routeCount
 		case kinds.ProxySettingsPolicy:
 			gatewayCount, routeCount := countPolicyTargetRefs(policy)
 			rc.GatewayAttachedProxySettingsPolicyCount += gatewayCount

@@ -239,7 +239,7 @@ func NewChangeProcessorImpl(cfg ChangeProcessorConfig) *ChangeProcessorImpl {
 			predicate: funcPredicate{stateChanged: isNGFPolicyRelevant},
 		},
 		{
-			gvk:       cfg.MustExtractGVK(&ngfAPIv1alpha1.WAFGatewayBindingPolicy{}),
+			gvk:       cfg.MustExtractGVK(&ngfAPIv1alpha1.WAFPolicy{}),
 			store:     commonPolicyObjectStore,
 			predicate: funcPredicate{stateChanged: isNGFPolicyRelevant},
 		},

@@ -34,14 +34,14 @@ type Manager interface {
 	// These represent the freshest known bundle data and should take precedence over
 	// graph-cached bundles when constructing stale-bundle fallback state.
 	GetLatestBundles() map[graph.WAFBundleKey]*graph.WAFBundleData
-	// StopPoller stops the poller for a WAFGatewayBindingPolicy.
+	// StopPoller stops the poller for a WAFPolicy.
 	StopPoller(policyNsName types.NamespacedName)
 	// StopPollersNotIn stops all pollers whose policy namespace/name is not in the given set.
 	StopPollersNotIn(activePolicies map[types.NamespacedName]struct{})
 }
 
 // pollerManager manages the lifecycle of all WAF bundle pollers.
-// It creates, tracks, and stops pollers as WAFGatewayBindingPolicies are created, updated, or deleted.
+// It creates, tracks, and stops pollers as WAFPolicies are created, updated, or deleted.
 type pollerManager struct {
 	fetcher     fetch.Fetcher
 	deployments agent.DeploymentStorer
@@ -292,7 +292,7 @@ func (m *pollerManager) GetLatestBundles() map[graph.WAFBundleKey]*graph.WAFBund
 	return result
 }
 
-// StopPoller stops the poller for a WAFGatewayBindingPolicy.
+// StopPoller stops the poller for a WAFPolicy.
 func (m *pollerManager) StopPoller(policyNsName types.NamespacedName) {
 	m.mu.Lock()
 	entry, exists := m.pollers[policyNsName]

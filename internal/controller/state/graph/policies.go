@@ -34,7 +34,7 @@ type Policy struct {
 	// configurations may result in a policy not being valid for some Gateways, but not others.
 	// This includes gateways that cannot accept the policy due to ancestor status limits.
 	InvalidForGateways map[types.NamespacedName]struct{}
-	// WAFState holds WAF-specific state for this policy. Only populated for WAFGatewayBindingPolicy resources.
+	// WAFState holds WAF-specific state for this policy. Only populated for WAFPolicy resources.
 	WAFState *PolicyWAFState
 	// Ancestors is a list of ancestor objects of the Policy. Used in status.
 	Ancestors []PolicyAncestor
@@ -49,7 +49,7 @@ type Policy struct {
 }
 
 // PolicyWAFState holds WAF-specific state for a Policy.
-// This is only populated for WAFGatewayBindingPolicy resources.
+// This is only populated for WAFPolicy resources.
 type PolicyWAFState struct {
 	// Bundles contains the fetched WAF bundle data for this policy.
 	// This allows each gateway to receive only the bundles for policies that target it.
@@ -96,7 +96,7 @@ type PolicyKey struct {
 // where urlHash is a truncated SHA-256 hex digest of the log source URL.
 type WAFBundleKey string
 
-// PolicyBundleKey returns the WAFBundleKey for a WAFGatewayBindingPolicy's main policy bundle.
+// PolicyBundleKey returns the WAFBundleKey for a WAFPolicy's main policy bundle.
 func PolicyBundleKey(policyNsName types.NamespacedName) WAFBundleKey {
 	return WAFBundleKey(fmt.Sprintf("%s_%s", policyNsName.Namespace, policyNsName.Name))
 }
@@ -492,7 +492,7 @@ type WAFProcessingInput struct {
 type WAFProcessingOutput struct {
 	// Bundles contains the fetched WAF bundles keyed by bundle key.
 	Bundles map[WAFBundleKey]*WAFBundleData
-	// ReferencedWAFSecrets contains the Secrets referenced by WAFGatewayBindingPolicy (auth and TLS CA).
+	// ReferencedWAFSecrets contains the Secrets referenced by WAFPolicy (auth and TLS CA).
 	// These must be watched by the change tracker.
 	ReferencedWAFSecrets map[types.NamespacedName]*corev1.Secret
 }
@@ -570,7 +570,7 @@ func processPolicies(
 
 	markConflictedPolicies(processedPolicies, validator)
 
-	wafOutput := processWAFGatewayBindingPolicies(ctx, logger, processedPolicies, wafInput)
+	wafOutput := processWAFPolicies(ctx, logger, processedPolicies, wafInput)
 
 	return processedPolicies, wafOutput
 }
@@ -807,16 +807,16 @@ func addStatusToTargetRefs(policyKind string, conditionsList *[]conditions.Condi
 			return
 		}
 		*conditionsList = append(*conditionsList, conditions.NewRateLimitPolicyAffected())
-	case kinds.WAFGatewayBindingPolicy:
-		if conditions.HasMatchingCondition(*conditionsList, conditions.NewWAFGatewayBindingPolicyAffected()) {
+	case kinds.WAFPolicy:
+		if conditions.HasMatchingCondition(*conditionsList, conditions.NewWAFPolicyAffected()) {
 			return
 		}
-		*conditionsList = append(*conditionsList, conditions.NewWAFGatewayBindingPolicyAffected())
+		*conditionsList = append(*conditionsList, conditions.NewWAFPolicyAffected())
 	}
 }
 
-// processWAFGatewayBindingPolicies processes WAFGatewayBindingPolicy resources and fetches their bundles.
-func processWAFGatewayBindingPolicies(
+// processWAFPolicies processes WAFPolicy resources and fetches their bundles.
+func processWAFPolicies(
 	ctx context.Context,
 	logger logr.Logger,
 	processedPolicies map[PolicyKey]*Policy,
@@ -832,7 +832,7 @@ func processWAFGatewayBindingPolicies(
 	}
 
 	for key, policy := range processedPolicies {
-		if key.GVK.Kind != kinds.WAFGatewayBindingPolicy {
+		if key.GVK.Kind != kinds.WAFPolicy {
 			continue
 		}
 
@@ -840,7 +840,7 @@ func processWAFGatewayBindingPolicies(
 			continue
 		}
 
-		wgbPolicy, ok := policy.Source.(*ngfAPIv1alpha1.WAFGatewayBindingPolicy)
+		wgbPolicy, ok := policy.Source.(*ngfAPIv1alpha1.WAFPolicy)
 		if !ok {
 			continue
 		}
@@ -968,11 +968,11 @@ func retryAttempts(attempts *int32) int32 {
 	return *attempts
 }
 
-// fetchPolicyBundle fetches the policy bundle for a WAFGatewayBindingPolicy.
+// fetchPolicyBundle fetches the policy bundle for a WAFPolicy.
 func fetchPolicyBundle(
 	ctx context.Context,
 	logger logr.Logger,
-	wafPolicy *ngfAPIv1alpha1.WAFGatewayBindingPolicy,
+	wafPolicy *ngfAPIv1alpha1.WAFPolicy,
 	policy *Policy,
 	wafInput *WAFProcessingInput,
 	output *WAFProcessingOutput,
@@ -1034,7 +1034,7 @@ func fetchPolicyBundle(
 func fetchSecurityLogBundles(
 	ctx context.Context,
 	logger logr.Logger,
-	wafPolicy *ngfAPIv1alpha1.WAFGatewayBindingPolicy,
+	wafPolicy *ngfAPIv1alpha1.WAFPolicy,
 	policy *Policy,
 	wafInput *WAFProcessingInput,
 	output *WAFProcessingOutput,

@@ -11,7 +11,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
 
-// Validator validates a WAFGatewayBindingPolicy.
+// Validator validates a WAFPolicy.
 // Implements policies.Validator interface.
 type Validator struct{}
 
@@ -20,9 +20,9 @@ func NewValidator() *Validator {
 	return &Validator{}
 }
 
-// Validate validates the spec of a WAFGatewayBindingPolicy.
+// Validate validates the spec of a WAFPolicy.
 func (v *Validator) Validate(policy policies.Policy) []conditions.Condition {
-	wp := helpers.MustCastObject[*ngfAPI.WAFGatewayBindingPolicy](policy)
+	wp := helpers.MustCastObject[*ngfAPI.WAFPolicy](policy)
 
 	targetRefsPath := field.NewPath("spec").Child("targetRefs")
 	supportedKinds := []gatewayv1.Kind{kinds.Gateway, kinds.HTTPRoute, kinds.GRPCRoute}
@@ -42,7 +42,7 @@ func (v *Validator) Validate(policy policies.Policy) []conditions.Condition {
 	return nil
 }
 
-// ValidateGlobalSettings validates a WAFGatewayBindingPolicy with respect to the NginxProxy global settings.
+// ValidateGlobalSettings validates a WAFPolicy with respect to the NginxProxy global settings.
 func (v *Validator) ValidateGlobalSettings(
 	_ policies.Policy,
 	globalSettings *policies.GlobalSettings,
@@ -61,7 +61,7 @@ func (v *Validator) ValidateGlobalSettings(
 	return nil
 }
 
-// Conflicts returns false as we don't allow merging for WAFGatewayBindingPolicies.
+// Conflicts returns false as we don't allow merging for WAFPolicies.
 func (v Validator) Conflicts(_, _ policies.Policy) bool {
 	return false
 }

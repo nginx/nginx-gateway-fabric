@@ -12,31 +12,31 @@ import (
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 // +kubebuilder:metadata:labels="gateway.networking.k8s.io/policy=inherited"
 
-// WAFGatewayBindingPolicy is an Inherited Attached Policy. It provides a way to configure F5 WAF for NGINX
+// WAFPolicy is an Inherited Attached Policy. It provides a way to configure F5 WAF for NGINX
 // for Gateways and Routes by referencing compiled WAF policy bundles. Bundles can be fetched directly from an
 // HTTP/HTTPS URL (type: HTTP), from an NGINX Instance Manager instance (type: NIM), or from an F5 NGINX One
 // Console instance (type: N1C).
-type WAFGatewayBindingPolicy struct {
+type WAFPolicy struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	// Spec defines the desired state of the WAFGatewayBindingPolicy.
-	Spec WAFGatewayBindingPolicySpec `json:"spec"`
+	// Spec defines the desired state of the WAFPolicy.
+	Spec WAFPolicySpec `json:"spec"`
 
-	// Status defines the state of the WAFGatewayBindingPolicy.
+	// Status defines the state of the WAFPolicy.
 	Status gatewayv1.PolicyStatus `json:"status,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 
-// WAFGatewayBindingPolicyList contains a list of WAFGatewayBindingPolicies.
-type WAFGatewayBindingPolicyList struct {
+// WAFPolicyList contains a list of WAFPolicies.
+type WAFPolicyList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []WAFGatewayBindingPolicy `json:"items"`
+	Items           []WAFPolicy `json:"items"`
 }
 
-// WAFGatewayBindingPolicySpec defines the desired state of a WAFGatewayBindingPolicy.
+// WAFPolicySpec defines the desired state of a WAFPolicy.
 //
 // +kubebuilder:validation:XValidation:message="policySource.httpSource must be set if and only if type is HTTP",rule="(self.type == 'HTTP') == (has(self.policySource) && has(self.policySource.httpSource))"
 // +kubebuilder:validation:XValidation:message="policySource.nimSource must be set if and only if type is NIM",rule="(self.type == 'NIM') == (has(self.policySource) && has(self.policySource.nimSource))"
@@ -44,7 +44,7 @@ type WAFGatewayBindingPolicyList struct {
 // +kubebuilder:validation:XValidation:message="policySource.validation.verifyChecksum is only supported for type HTTP",rule="!(self.type != 'HTTP' && has(self.policySource) && has(self.policySource.validation) && has(self.policySource.validation.verifyChecksum) && self.policySource.validation.verifyChecksum)"
 //
 //nolint:lll
-type WAFGatewayBindingPolicySpec struct {
+type WAFPolicySpec struct {
 	// TargetRefs identifies API object(s) to apply the policy to.
 	// Objects must be in the same namespace as the policy.
 	// All targets must be of the same Kind (all Gateways OR all HTTPRoutes OR all GRPCRoutes).
@@ -343,7 +343,7 @@ type N1CBundleSource struct {
 
 // BundleAuth configures authentication for bundle fetching.
 type BundleAuth struct {
-	// SecretRef references a Kubernetes Secret in the same namespace as the WAFGatewayBindingPolicy.
+	// SecretRef references a Kubernetes Secret in the same namespace as the WAFPolicy.
 	// The Secret may contain:
 	//   - "username" and "password" fields for HTTP Basic Authentication
 	//   - "token" field for Bearer Token Authentication (NIM) or APIToken Authentication (N1C)

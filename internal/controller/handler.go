@@ -300,7 +300,7 @@ func (h *eventHandlerImpl) sendNginxConfig(ctx context.Context, logger logr.Logg
 }
 
 // reconcileWAFPollers starts, updates, or stops WAF bundle pollers based on the current graph state.
-// For each valid WAFGatewayBindingPolicy with polling enabled, a poller is started.
+// For each valid WAFPolicy with polling enabled, a poller is started.
 // For policies that are deleted or no longer have polling enabled, the poller is stopped.
 func (h *eventHandlerImpl) reconcileWAFPollers(ctx context.Context, gr *graph.Graph) {
 	if h.cfg.wafPollerManager == nil {
@@ -310,11 +310,11 @@ func (h *eventHandlerImpl) reconcileWAFPollers(ctx context.Context, gr *graph.Gr
 	activePolicies := make(map[types.NamespacedName]struct{})
 
 	for key, policy := range gr.NGFPolicies {
-		if key.GVK.Kind != kinds.WAFGatewayBindingPolicy {
+		if key.GVK.Kind != kinds.WAFPolicy {
 			continue
 		}
 
-		wafPolicy, ok := policy.Source.(*ngfAPI.WAFGatewayBindingPolicy)
+		wafPolicy, ok := policy.Source.(*ngfAPI.WAFPolicy)
 		if !ok {
 			continue
 		}
@@ -380,7 +380,7 @@ func (h *eventHandlerImpl) reconcileWAFPollers(ctx context.Context, gr *graph.Gr
 	h.cfg.wafPollerManager.StopPollersNotIn(activePolicies)
 }
 
-// gatewayHasPendingWAFBundle returns true if any WAFGatewayBindingPolicy that targets this Gateway
+// gatewayHasPendingWAFBundle returns true if any WAFPolicy that targets this Gateway
 // (directly or via an attached route) has BundlePending=true.
 // When true, the Gateway config push must be withheld to maintain fail-closed posture.
 func gatewayHasPendingWAFBundle(gr *graph.Graph, gw *graph.Gateway) bool {
@@ -390,7 +390,7 @@ func gatewayHasPendingWAFBundle(gr *graph.Graph, gw *graph.Gateway) bool {
 	}
 
 	for key, policy := range gr.NGFPolicies {
-		if key.GVK.Kind != kinds.WAFGatewayBindingPolicy {
+		if key.GVK.Kind != kinds.WAFPolicy {
 			continue
 		}
 		if policy.WAFState == nil || !policy.WAFState.BundlePending {
@@ -714,10 +714,10 @@ func (h *eventHandlerImpl) mergeWAFPollErrors(gr *graph.Graph) {
 	}
 }
 
-// findWAFPolicyKey finds the PolicyKey in the graph for a given WAFGatewayBindingPolicy namespace/name.
+// findWAFPolicyKey finds the PolicyKey in the graph for a given WAFPolicy namespace/name.
 func findWAFPolicyKey(gr *graph.Graph, nsName types.NamespacedName) *graph.PolicyKey {
 	for key := range gr.NGFPolicies {
-		if key.GVK.Kind == kinds.WAFGatewayBindingPolicy && key.NsName == nsName {
+		if key.GVK.Kind == kinds.WAFPolicy && key.NsName == nsName {
 			k := key
 			return &k
 		}

@@ -413,7 +413,7 @@ func PrepareNGFPolicyRequests(
 
 		for _, ancestor := range pol.Ancestors {
 			defaultCount := 1
-			if key.GVK.Kind == kinds.WAFGatewayBindingPolicy {
+			if key.GVK.Kind == kinds.WAFPolicy {
 				defaultCount = 3
 			}
 			allConds := make([]conditions.Condition, 0, len(pol.Conditions)+len(ancestor.Conditions)+defaultCount)
@@ -422,7 +422,7 @@ func PrepareNGFPolicyRequests(
 			// We add the default condition first, followed by the ancestor conditions, and finally the policy conditions.
 			// DeduplicateConditions will ensure the last condition wins.
 			allConds = append(allConds, conditions.NewPolicyAccepted())
-			if key.GVK.Kind == kinds.WAFGatewayBindingPolicy {
+			if key.GVK.Kind == kinds.WAFPolicy {
 				allConds = append(allConds, conditions.NewPolicyResolvedRefs())
 				allConds = append(allConds, conditions.NewPolicyProgrammed())
 			}

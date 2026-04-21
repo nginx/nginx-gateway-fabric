@@ -134,13 +134,13 @@ attached at the Gateway level. */
 attached at the Route level. */
 		long? RouteAttachedProxySettingsPolicyCount = null;
 		
-		/** GatewayAttachedWAFGatewayBindingPolicyCount is the number of WAFGatewayBindingPolicy resources
+		/** GatewayAttachedWAFPolicyCount is the number of WAFPolicy resources
 attached at the Gateway level. */
-		long? GatewayAttachedWAFGatewayBindingPolicyCount = null;
+		long? GatewayAttachedWAFPolicyCount = null;
 		
-		/** RouteAttachedWAFGatewayBindingPolicyCount is the number of WAFGatewayBindingPolicy resources
+		/** RouteAttachedWAFPolicyCount is the number of WAFPolicy resources
 attached at the Route level. */
-		long? RouteAttachedWAFGatewayBindingPolicyCount = null;
+		long? RouteAttachedWAFPolicyCount = null;
 		
 		/** WAFEnabledGatewayCount is the number of Gateways with WAF enabled on their effective NginxProxy. */
 		long? WAFEnabledGatewayCount = null;

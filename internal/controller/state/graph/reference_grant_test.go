@@ -271,13 +271,13 @@ func TestFromTLSRoute(t *testing.T) {
 	g.Expect(ref).To(Equal(exp))
 }
 
-func TestFromWAFGatewayBindingPolicy(t *testing.T) {
+func TestFromWAFPolicy(t *testing.T) {
 	t.Parallel()
-	ref := fromWAFGatewayBindingPolicy("ns")
+	ref := fromWAFPolicy("ns")
 
 	exp := fromResource{
 		group:     "gateway.nginx.org",
-		kind:      kinds.WAFGatewayBindingPolicy,
+		kind:      kinds.WAFPolicy,
 		namespace: "ns",
 	}
 

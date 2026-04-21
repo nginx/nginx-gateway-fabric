@@ -85,10 +85,10 @@ type Graph struct {
 	BackendTLSPolicies map[types.NamespacedName]*BackendTLSPolicy
 	// NGFPolicies holds all NGF Policies.
 	NGFPolicies map[PolicyKey]*Policy
-	// ReferencedWAFBundles includes the WAFGatewayBindingPolicy Bundles that have been referenced by any Gateways
+	// ReferencedWAFBundles includes the WAFPolicy Bundles that have been referenced by any Gateways
 	// or Routes.
 	ReferencedWAFBundles map[WAFBundleKey]*WAFBundleData
-	// ReferencedWAFSecrets includes Secrets referenced by WAFGatewayBindingPolicy (auth and TLS CA).
+	// ReferencedWAFSecrets includes Secrets referenced by WAFPolicy (auth and TLS CA).
 	ReferencedWAFSecrets map[types.NamespacedName]*v1.Secret
 	// SnippetsFilters holds all the SnippetsFilters.
 	SnippetsFilters map[types.NamespacedName]*SnippetsFilter

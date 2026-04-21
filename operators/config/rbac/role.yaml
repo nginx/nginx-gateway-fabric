@@ -160,7 +160,7 @@ rules:
   - snippetsfilters
   - authenticationfilters
   - snippetspolicies
-  - wafgatewaybindingpolicies
+  - wafpolicies
   verbs:
   - create
   - delete
@@ -180,7 +180,7 @@ rules:
   - snippetsfilters/status
   - authenticationfilters/status
   - snippetspolicies/status
-  - wafgatewaybindingpolicies/status
+  - wafpolicies/status
   verbs:
   - update
 - apiGroups:

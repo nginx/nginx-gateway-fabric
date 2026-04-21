@@ -461,7 +461,7 @@ func createPolicyManager(
 			Validator: ratelimit.NewValidator(validator),
 		},
 		{
-			GVK:       mustExtractGVK(&ngfAPIv1alpha1.WAFGatewayBindingPolicy{}),
+			GVK:       mustExtractGVK(&ngfAPIv1alpha1.WAFPolicy{}),
 			Validator: waf.NewValidator(),
 		},
 	}
@@ -791,7 +791,7 @@ func registerControllers(
 			},
 		},
 		{
-			objectType: &ngfAPIv1alpha1.WAFGatewayBindingPolicy{},
+			objectType: &ngfAPIv1alpha1.WAFPolicy{},
 			options: []controller.Option{
 				controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
 			},
@@ -1147,7 +1147,7 @@ func prepareFirstEventBatchPreparerArgs(
 		&ngfAPIv1alpha1.UpstreamSettingsPolicyList{},
 		&ngfAPIv1alpha1.AuthenticationFilterList{},
 		&ngfAPIv1alpha1.RateLimitPolicyList{},
-		&ngfAPIv1alpha1.WAFGatewayBindingPolicyList{},
+		&ngfAPIv1alpha1.WAFPolicyList{},
 		partialObjectMetadataList,
 	}
 

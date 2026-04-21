@@ -1855,7 +1855,7 @@ func buildWAF(gateway *graph.Gateway) WAFConfig {
 	return wc
 }
 
-// collectGatewayWAFBundles collects WAF bundles from all WAFGatewayBindingPolicies that target
+// collectGatewayWAFBundles collects WAF bundles from all WAFPolicies that target
 // this gateway directly or target routes attached to this gateway.
 func collectGatewayWAFBundles(gateway *graph.Gateway) map[graph.WAFBundleKey]*graph.WAFBundleData {
 	bundles := make(map[graph.WAFBundleKey]*graph.WAFBundleData)
