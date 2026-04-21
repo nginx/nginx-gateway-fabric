@@ -4,6 +4,7 @@
 [![codecov](https://codecov.io/gh/nginx/nginx-gateway-fabric/graph/badge.svg?token=32ULC8F13Z)](https://codecov.io/gh/nginx/nginx-gateway-fabric)
 [![GitHub release (latest SemVer)](https://img.shields.io/github/v/release/nginx/nginx-gateway-fabric?logo=github&sort=semver)](https://github.com/nginx/nginx-gateway-fabric/releases/latest)
 [![Forum](https://img.shields.io/badge/nginx--community--forum-green)](https://community.nginx.org/c/projects/nginx-gateway-fabric/25)
+[![Contributor Covenant](https://img.shields.io/badge/Contributor%20Covenant-3.0-4baaaa.svg)](/CODE_OF_CONDUCT.md)
 [![Project Status: Active – The project has reached a stable, usable state and is being actively developed.](https://www.repostatus.org/badges/latest/active.svg)](https://www.repostatus.org/#active)
 
 # NGINX Gateway Fabric
@@ -35,7 +36,7 @@ You can find the comprehensive NGINX Gateway Fabric user documentation on the [N
 We publish NGINX Gateway Fabric releases on GitHub. See
 our [releases page](https://github.com/nginx/nginx-gateway-fabric/releases).
 
-The latest release is [2.5.0](https://github.com/nginx/nginx-gateway-fabric/releases/tag/v2.5.0).
+The latest release is [2.5.1](https://github.com/nginx/nginx-gateway-fabric/releases/tag/v2.5.1).
 
 The edge version is useful for experimenting with new features that are not yet published in a release. To use, choose
 the _edge_ version built from the [latest commit](https://github.com/nginx/nginx-gateway-fabric/commits/main)
@@ -46,7 +47,7 @@ to the correct versions:
 
 | Version | Description | Installation Manifests | Documentation and Examples |
 | ------- | ----------- | ---------------------- | -------------------------- |
-| Latest release | For production use | [Manifests](https://github.com/nginx/nginx-gateway-fabric/tree/v2.5.0/deploy). | [Documentation](https://docs.nginx.com/nginx-gateway-fabric). [Examples](https://github.com/nginx/nginx-gateway-fabric/tree/v2.5.0/examples). |
+| Latest release | For production use | [Manifests](https://github.com/nginx/nginx-gateway-fabric/tree/v2.5.1/deploy). | [Documentation](https://docs.nginx.com/nginx-gateway-fabric). [Examples](https://github.com/nginx/nginx-gateway-fabric/tree/v2.5.1/examples). |
 | Edge | For experimental use and latest features | [Manifests](https://github.com/nginx/nginx-gateway-fabric/tree/main/deploy). | [Examples](https://github.com/nginx/nginx-gateway-fabric/tree/main/examples). |
 
 ### Versioning
@@ -63,32 +64,19 @@ the [Issue Lifecycle](ISSUE_LIFECYCLE.md) document for information on issue crea
 
 ## Technical Specifications
 
-The following table lists the software versions NGINX Gateway Fabric supports.
+The following table lists the software versions NGINX Gateway Fabric supports. Only the latest patch release for each minor version is shown.
 
 | NGINX Gateway Fabric | Gateway API | Kubernetes | NGINX OSS | NGINX Plus | NGINX Agent |
 |----------------------|-------------|------------|-----------|------------|-------------|
-| Edge                 | 1.5.1       | 1.31+      | 1.29.7    | R36        | v3.8.0      |
-| 2.5.0                | 1.5.1       | 1.31+      | 1.29.7    | R36        | v3.8.0      |
+| Edge                 | 1.5.1       | 1.31+      | 1.30.0    | R36        | v3.9.0      |
+| 2.5.1                | 1.5.1       | 1.31+      | 1.29.7    | R36        | v3.8.0      |
 | 2.4.2                | 1.4.1       | 1.25+      | 1.29.5    | R36        | v3.7.1      |
-| 2.4.1                | 1.4.1       | 1.25+      | 1.29.5    | R36        | v3.7.0      |
-| 2.4.0                | 1.4.1       | 1.25+      | 1.29.4    | R36        | v3.6.2      |
 | 2.3.0                | 1.4.1       | 1.25+      | 1.29.3    | R36        | v3.6.0      |
 | 2.2.2                | 1.3.0       | 1.25+      | 1.29.2    | R35        | v3.6.0      |
-| 2.2.1                | 1.3.0       | 1.25+      | 1.29.2    | R35        | v3.5.0      |
-| 2.2.0                | 1.3.0       | 1.25+      | 1.29.2    | R35        | v3.3.2      |
 | 2.1.4                | 1.3.0       | 1.25+      | 1.29.1    | R35        | v3.3.1      |
-| 2.1.3                | 1.3.0       | 1.25+      | 1.29.1    | R35        | v3.3.1      |
-| 2.1.2                | 1.3.0       | 1.25+      | 1.29.1    | R35        | v3.3.1      |
-| 2.1.1                | 1.3.0       | 1.25+      | 1.29.1    | R35        | v3.2.1      |
-| 2.1.0                | 1.3.0       | 1.25+      | 1.29.1    | R35        | v3.2.1      |
 | 2.0.2                | 1.3.0       | 1.25+      | 1.28.0    | R34        | v3.0.1      |
-| 2.0.1                | 1.3.0       | 1.25+      | 1.28.0    | R34        | v3.0.1      |
-| 2.0.0                | 1.3.0       | 1.25+      | 1.28.0    | R34        | v3.0.0      |
 | 1.6.2                | 1.2.1       | 1.25+      | 1.27.4    | R33        | ---         |
-| 1.6.1                | 1.2.1       | 1.25+      | 1.27.4    | R33        | ---         |
-| 1.6.0                | 1.2.1       | 1.25+      | 1.27.3    | R33        | ---         |
 | 1.5.1                | 1.2.0       | 1.25+      | 1.27.2    | R33        | ---         |
-| 1.5.0                | 1.2.0       | 1.25+      | 1.27.2    | R33        | ---         |
 | 1.4.0                | 1.1.0       | 1.25+      | 1.27.1    | R32        | ---         |
 | 1.3.0                | 1.1.0       | 1.25+      | 1.27.0    | R32        | ---         |
 | 1.2.0                | 1.0.0       | 1.23+      | 1.25.4    | R31        | ---         |

@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
-	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -24,10 +23,11 @@ var _ = Describe("Basic test example", Label("functional"), func() {
 			"hello-world/routes.yaml",
 		}
 
-		namespace = "helloworld"
+		namespace string
 	)
 
 	BeforeEach(func() {
+		namespace = fmt.Sprintf("helloworld-%d", GinkgoParallelProcess())
 		ns := &core.Namespace{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: namespace,
@@ -63,24 +63,16 @@ var _ = Describe("Basic test example", Label("functional"), func() {
 		}
 
 		Eventually(
-			func() error {
+			func(g Gomega) {
 				request := framework.Request{
 					URL:     url,
 					Address: address,
 					Timeout: timeoutConfig.RequestTimeout,
 				}
 				resp, err := framework.Get(request)
-				if err != nil {
-					return err
-				}
-				if resp.StatusCode != http.StatusOK {
-					return fmt.Errorf("status not 200; got %d", resp.StatusCode)
-				}
-				expBody := "URI: /hello"
-				if !strings.Contains(resp.Body, expBody) {
-					return fmt.Errorf("bad body: got %s; expected %s", resp.Body, expBody)
-				}
-				return nil
+				g.Expect(err).ToNot(HaveOccurred())
+				g.Expect(resp.StatusCode).To(Equal(http.StatusOK))
+				g.Expect(resp.Body).To(ContainSubstring("URI: /hello"))
 			}).
 			WithTimeout(timeoutConfig.RequestTimeout).
 			WithPolling(500 * time.Millisecond).

@@ -115,6 +115,7 @@ var _ = Describe("Upgrade testing", Label("nfr", "upgrade"), func() {
 			ServiceType:          *serviceType,
 			Plus:                 *plusEnabled,
 			PlusUsageEndpoint:    *plusUsageEndpoint,
+			GatewayClassName:     gatewayClassName,
 		}
 
 		type metricsResults struct {
@@ -219,7 +220,10 @@ var _ = Describe("Upgrade testing", Label("nfr", "upgrade"), func() {
 		defer leaseCancel()
 
 		var lease coordination.Lease
-		key := types.NamespacedName{Name: "ngf-test-nginx-gateway-fabric-leader-election", Namespace: ngfNamespace}
+		key := types.NamespacedName{
+			Name:      fmt.Sprintf("%s-nginx-gateway-fabric-leader-election", releaseName),
+			Namespace: ngfNamespace,
+		}
 		Expect(wait.PollUntilContextCancel(
 			leaseCtx,
 			500*time.Millisecond,

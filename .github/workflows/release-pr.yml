@@ -40,7 +40,7 @@ jobs:
 
       - name: Get Release Notes
         id: notes
-        uses: lucacome/draft-release@4fce6cb19a9f95acacf9730efa42f7b8140d6fb6 # v2.0.4
+        uses: lucacome/draft-release@58ee6655112ee9d8403cfd151eae9d8c126bf146 # v2.1.1
         with:
           config-path: .github/release-notes.yml
           dry-run: true
@@ -103,7 +103,7 @@ jobs:
           make generate-all
 
       - name: Create Pull Request
-        uses: peter-evans/create-pull-request@c0f553fe549906ede9cf27b5156039d195d2ece0 # v8.1.0
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           commit-message: Release ${{ inputs.version }}
