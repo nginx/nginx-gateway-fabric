@@ -1,4 +1,4 @@
-package waf
+package poller
 
 import (
 	"context"
@@ -13,9 +13,18 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent/agentfakes"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/events"
-	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/fetch"
-	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/fetch/fetchfakes"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/waf/fetch"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/waf/fetch/fetchfakes"
 )
+
+// newTestManager creates a pollerManager for white-box tests that need access to internal fields.
+func newTestManager(cfg ManagerConfig) *pollerManager {
+	m, ok := NewManager(cfg).(*pollerManager)
+	if !ok {
+		panic("NewManager did not return *pollerManager")
+	}
+	return m
+}
 
 func TestNewManager(t *testing.T) {
 	t.Parallel()
@@ -25,7 +34,7 @@ func TestNewManager(t *testing.T) {
 	deployments := &agentfakes.FakeDeploymentStorer{}
 	logger := logr.Discard()
 
-	mgr := NewManager(ManagerConfig{
+	mgr := newTestManager(ManagerConfig{
 		Logger:      logger,
 		Fetcher:     fetcher,
 		Deployments: deployments,
@@ -80,7 +89,7 @@ func TestManager_ReconcilePoller(t *testing.T) {
 			deployments := &agentfakes.FakeDeploymentStorer{}
 			logger := logr.Discard()
 
-			mgr := NewManager(ManagerConfig{
+			mgr := newTestManager(ManagerConfig{
 				Logger:      logger,
 				Fetcher:     fetcher,
 				Deployments: deployments,
@@ -91,7 +100,7 @@ func TestManager_ReconcilePoller(t *testing.T) {
 
 			policyNsName := types.NamespacedName{Namespace: "default", Name: "test-policy"}
 
-			mgr.ReconcilePoller(ctx, PollerConfig{
+			mgr.ReconcilePoller(ctx, Config{
 				PolicyNsName:      policyNsName,
 				Sources:           tc.sources,
 				TargetDeployments: []types.NamespacedName{{Namespace: "nginx-gateway", Name: "nginx"}},
@@ -113,7 +122,7 @@ func TestManager_ReconcilePollerUpdatesTargetsWhenSourcesUnchanged(t *testing.T)
 	deployments := &agentfakes.FakeDeploymentStorer{}
 	logger := logr.Discard()
 
-	mgr := NewManager(ManagerConfig{
+	mgr := newTestManager(ManagerConfig{
 		Logger:      logger,
 		Fetcher:     fetcher,
 		Deployments: deployments,
@@ -135,7 +144,7 @@ func TestManager_ReconcilePollerUpdatesTargetsWhenSourcesUnchanged(t *testing.T)
 	newTarget := types.NamespacedName{Namespace: "nginx-gateway", Name: "nginx-2"}
 
 	// Start first poller.
-	mgr.ReconcilePoller(ctx, PollerConfig{
+	mgr.ReconcilePoller(ctx, Config{
 		PolicyNsName:      policyNsName,
 		Sources:           sources,
 		TargetDeployments: []types.NamespacedName{initialTarget},
@@ -148,7 +157,7 @@ func TestManager_ReconcilePollerUpdatesTargetsWhenSourcesUnchanged(t *testing.T)
 
 	// Reconcile again with same sources but different targets.
 	// Should NOT restart (same poller instance), just update targets.
-	mgr.ReconcilePoller(ctx, PollerConfig{
+	mgr.ReconcilePoller(ctx, Config{
 		PolicyNsName:      policyNsName,
 		Sources:           sources,
 		TargetDeployments: []types.NamespacedName{newTarget},
@@ -174,7 +183,7 @@ func TestManager_ReconcilePollerRestartsWhenSourcesChanged(t *testing.T) {
 	deployments := &agentfakes.FakeDeploymentStorer{}
 	logger := logr.Discard()
 
-	mgr := NewManager(ManagerConfig{
+	mgr := newTestManager(ManagerConfig{
 		Logger:      logger,
 		Fetcher:     fetcher,
 		Deployments: deployments,
@@ -200,7 +209,7 @@ func TestManager_ReconcilePollerRestartsWhenSourcesChanged(t *testing.T) {
 	}
 
 	// Start first poller.
-	mgr.ReconcilePoller(ctx, PollerConfig{
+	mgr.ReconcilePoller(ctx, Config{
 		PolicyNsName:      policyNsName,
 		Sources:           initialSources,
 		TargetDeployments: []types.NamespacedName{{Namespace: "nginx-gateway", Name: "nginx"}},
@@ -212,7 +221,7 @@ func TestManager_ReconcilePollerRestartsWhenSourcesChanged(t *testing.T) {
 	initialPoller := mgr.pollers[policyNsName].poller
 
 	// Reconcile with different sources - should restart.
-	mgr.ReconcilePoller(ctx, PollerConfig{
+	mgr.ReconcilePoller(ctx, Config{
 		PolicyNsName:      policyNsName,
 		Sources:           newSources,
 		TargetDeployments: []types.NamespacedName{{Namespace: "nginx-gateway", Name: "nginx"}},
@@ -233,7 +242,7 @@ func TestManager_StopPoller(t *testing.T) {
 	deployments := &agentfakes.FakeDeploymentStorer{}
 	logger := logr.Discard()
 
-	mgr := NewManager(ManagerConfig{
+	mgr := newTestManager(ManagerConfig{
 		Logger:      logger,
 		Fetcher:     fetcher,
 		Deployments: deployments,
@@ -251,7 +260,7 @@ func TestManager_StopPoller(t *testing.T) {
 		},
 	}
 
-	mgr.ReconcilePoller(ctx, PollerConfig{
+	mgr.ReconcilePoller(ctx, Config{
 		PolicyNsName:      policyNsName,
 		Sources:           sources,
 		TargetDeployments: []types.NamespacedName{{Namespace: "nginx-gateway", Name: "nginx"}},
@@ -273,7 +282,7 @@ func TestManager_StopPollerNonExistent(t *testing.T) {
 	deployments := &agentfakes.FakeDeploymentStorer{}
 	logger := logr.Discard()
 
-	mgr := NewManager(ManagerConfig{
+	mgr := newTestManager(ManagerConfig{
 		Logger:      logger,
 		Fetcher:     fetcher,
 		Deployments: deployments,
@@ -293,7 +302,7 @@ func TestManager_stopAll(t *testing.T) {
 	deployments := &agentfakes.FakeDeploymentStorer{}
 	logger := logr.Discard()
 
-	mgr := NewManager(ManagerConfig{
+	mgr := newTestManager(ManagerConfig{
 		Logger:      logger,
 		Fetcher:     fetcher,
 		Deployments: deployments,
@@ -312,7 +321,7 @@ func TestManager_stopAll(t *testing.T) {
 
 	// Start multiple pollers.
 	for i := range 3 {
-		mgr.ReconcilePoller(ctx, PollerConfig{
+		mgr.ReconcilePoller(ctx, Config{
 			PolicyNsName:      types.NamespacedName{Namespace: "default", Name: "test-policy-" + string(rune('a'+i))},
 			Sources:           sources,
 			TargetDeployments: []types.NamespacedName{{Namespace: "nginx-gateway", Name: "nginx"}},
@@ -334,7 +343,7 @@ func TestManager_StopPollersNotIn(t *testing.T) {
 	deployments := &agentfakes.FakeDeploymentStorer{}
 	logger := logr.Discard()
 
-	mgr := NewManager(ManagerConfig{
+	mgr := newTestManager(ManagerConfig{
 		Logger:      logger,
 		Fetcher:     fetcher,
 		Deployments: deployments,
@@ -357,7 +366,7 @@ func TestManager_StopPollersNotIn(t *testing.T) {
 
 	// Start 3 pollers.
 	for _, p := range []types.NamespacedName{policy1, policy2, policy3} {
-		mgr.ReconcilePoller(ctx, PollerConfig{
+		mgr.ReconcilePoller(ctx, Config{
 			PolicyNsName:      p,
 			Sources:           sources,
 			TargetDeployments: []types.NamespacedName{{Namespace: "nginx-gateway", Name: "nginx"}},
@@ -389,7 +398,7 @@ func TestManager_StatusCallback(t *testing.T) {
 
 	var callbackTargets [][]types.NamespacedName
 
-	mgr := NewManager(ManagerConfig{
+	mgr := newTestManager(ManagerConfig{
 		Logger:      logger,
 		Fetcher:     fetcher,
 		Deployments: deployments,
@@ -410,7 +419,7 @@ func TestManager_pollErrors(t *testing.T) {
 	deployments := &agentfakes.FakeDeploymentStorer{}
 	logger := logr.Discard()
 
-	mgr := NewManager(ManagerConfig{
+	mgr := newTestManager(ManagerConfig{
 		Logger:      logger,
 		Fetcher:     fetcher,
 		Deployments: deployments,
@@ -449,7 +458,7 @@ func TestManager_stopPollerClearsPollError(t *testing.T) {
 	deployments := &agentfakes.FakeDeploymentStorer{}
 	logger := logr.Discard()
 
-	mgr := NewManager(ManagerConfig{
+	mgr := newTestManager(ManagerConfig{
 		Logger:      logger,
 		Fetcher:     fetcher,
 		Deployments: deployments,
@@ -467,7 +476,7 @@ func TestManager_stopPollerClearsPollError(t *testing.T) {
 		},
 	}
 
-	mgr.ReconcilePoller(ctx, PollerConfig{
+	mgr.ReconcilePoller(ctx, Config{
 		PolicyNsName:      policyNsName,
 		Sources:           sources,
 		TargetDeployments: []types.NamespacedName{{Namespace: "nginx-gateway", Name: "nginx"}},
@@ -490,7 +499,7 @@ func TestManager_stopPollerClearsBundleCache(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	mgr := NewManager(ManagerConfig{
+	mgr := newTestManager(ManagerConfig{
 		Logger:      logr.Discard(),
 		Fetcher:     &fetchfakes.FakeFetcher{},
 		Deployments: &agentfakes.FakeDeploymentStorer{},
@@ -509,7 +518,7 @@ func TestManager_stopPollerClearsBundleCache(t *testing.T) {
 		},
 	}
 
-	mgr.ReconcilePoller(ctx, PollerConfig{
+	mgr.ReconcilePoller(ctx, Config{
 		PolicyNsName:      policyNsName,
 		Sources:           sources,
 		TargetDeployments: []types.NamespacedName{{Namespace: "nginx-gateway", Name: "nginx"}},
@@ -529,7 +538,7 @@ func TestManager_stopPollersNotInClearsBundleCache(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	mgr := NewManager(ManagerConfig{
+	mgr := newTestManager(ManagerConfig{
 		Logger:      logr.Discard(),
 		Fetcher:     &fetchfakes.FakeFetcher{},
 		Deployments: &agentfakes.FakeDeploymentStorer{},
@@ -543,7 +552,7 @@ func TestManager_stopPollersNotInClearsBundleCache(t *testing.T) {
 	bundleKeyA := graph.WAFBundleKey("policy_a")
 	bundleKeyB := graph.WAFBundleKey("policy_b")
 
-	mgr.ReconcilePoller(ctx, PollerConfig{
+	mgr.ReconcilePoller(ctx, Config{
 		PolicyNsName: policyA,
 		Sources: []BundleSource{{
 			BundleKey: bundleKeyA,
@@ -552,7 +561,7 @@ func TestManager_stopPollersNotInClearsBundleCache(t *testing.T) {
 		}},
 		TargetDeployments: []types.NamespacedName{{Namespace: "nginx-gateway", Name: "nginx"}},
 	})
-	mgr.ReconcilePoller(ctx, PollerConfig{
+	mgr.ReconcilePoller(ctx, Config{
 		PolicyNsName: policyB,
 		Sources: []BundleSource{{
 			BundleKey: bundleKeyB,
@@ -582,7 +591,7 @@ func TestManager_GetLatestBundles(t *testing.T) {
 		t.Parallel()
 		g := NewWithT(t)
 
-		mgr := NewManager(ManagerConfig{
+		mgr := newTestManager(ManagerConfig{
 			Logger:      logr.Discard(),
 			Fetcher:     &fetchfakes.FakeFetcher{},
 			Deployments: &agentfakes.FakeDeploymentStorer{},
@@ -595,7 +604,7 @@ func TestManager_GetLatestBundles(t *testing.T) {
 		t.Parallel()
 		g := NewWithT(t)
 
-		mgr := NewManager(ManagerConfig{
+		mgr := newTestManager(ManagerConfig{
 			Logger:      logr.Discard(),
 			Fetcher:     &fetchfakes.FakeFetcher{},
 			Deployments: &agentfakes.FakeDeploymentStorer{},
@@ -619,7 +628,7 @@ func TestManager_GetLatestBundles(t *testing.T) {
 		t.Parallel()
 		g := NewWithT(t)
 
-		mgr := NewManager(ManagerConfig{
+		mgr := newTestManager(ManagerConfig{
 			Logger:      logr.Discard(),
 			Fetcher:     &fetchfakes.FakeFetcher{},
 			Deployments: &agentfakes.FakeDeploymentStorer{},
@@ -639,7 +648,7 @@ func TestManager_GetLatestBundles(t *testing.T) {
 		t.Parallel()
 		g := NewWithT(t)
 
-		mgr := NewManager(ManagerConfig{
+		mgr := newTestManager(ManagerConfig{
 			Logger:      logr.Discard(),
 			Fetcher:     &fetchfakes.FakeFetcher{},
 			Deployments: &agentfakes.FakeDeploymentStorer{},
@@ -660,7 +669,7 @@ func TestManager_GetLatestBundles(t *testing.T) {
 		t.Parallel()
 		g := NewWithT(t)
 
-		mgr := NewManager(ManagerConfig{
+		mgr := newTestManager(ManagerConfig{
 			Logger:      logr.Discard(),
 			Fetcher:     &fetchfakes.FakeFetcher{},
 			Deployments: &agentfakes.FakeDeploymentStorer{},
@@ -685,7 +694,7 @@ func TestManager_cacheBundleUpdateInjectsReconcileEvent(t *testing.T) {
 		g := NewWithT(t)
 
 		eventCh := make(chan any, 1)
-		mgr := NewManager(ManagerConfig{
+		mgr := newTestManager(ManagerConfig{
 			Logger:      logr.Discard(),
 			Fetcher:     &fetchfakes.FakeFetcher{},
 			Deployments: &agentfakes.FakeDeploymentStorer{},
@@ -705,7 +714,7 @@ func TestManager_cacheBundleUpdateInjectsReconcileEvent(t *testing.T) {
 		g := NewWithT(t)
 
 		eventCh := make(chan any, 2)
-		mgr := NewManager(ManagerConfig{
+		mgr := newTestManager(ManagerConfig{
 			Logger:      logr.Discard(),
 			Fetcher:     &fetchfakes.FakeFetcher{},
 			Deployments: &agentfakes.FakeDeploymentStorer{},
@@ -725,7 +734,7 @@ func TestManager_cacheBundleUpdateInjectsReconcileEvent(t *testing.T) {
 	t.Run("does not inject event when eventCh is nil", func(t *testing.T) {
 		t.Parallel()
 
-		mgr := NewManager(ManagerConfig{
+		mgr := newTestManager(ManagerConfig{
 			Logger:      logr.Discard(),
 			Fetcher:     &fetchfakes.FakeFetcher{},
 			Deployments: &agentfakes.FakeDeploymentStorer{},
@@ -756,7 +765,7 @@ func TestManager_cacheBundleUpdateInjectsReconcileEvent(t *testing.T) {
 		g := NewWithT(t)
 
 		eventCh := make(chan any, 1)
-		mgr := NewManager(ManagerConfig{
+		mgr := newTestManager(ManagerConfig{
 			Logger:      logr.Discard(),
 			Fetcher:     &fetchfakes.FakeFetcher{},
 			Deployments: &agentfakes.FakeDeploymentStorer{},
@@ -783,7 +792,7 @@ func TestManager_StatusCallbackViaConfig(t *testing.T) {
 	var callbackTargets []types.NamespacedName
 
 	// Create manager with callback provided via config.
-	mgr := NewManager(ManagerConfig{
+	mgr := newTestManager(ManagerConfig{
 		Logger:      logger,
 		Fetcher:     fetcher,
 		Deployments: deployments,

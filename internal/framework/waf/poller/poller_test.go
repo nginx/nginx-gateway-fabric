@@ -1,4 +1,4 @@
-package waf
+package poller
 
 import (
 	"context"
@@ -17,8 +17,8 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent/broadcast/broadcastfakes"
 	agentgrpc "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent/grpc"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
-	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/fetch"
-	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/fetch/fetchfakes"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/waf/fetch"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/waf/fetch/fetchfakes"
 )
 
 func Test_newPoller(t *testing.T) {

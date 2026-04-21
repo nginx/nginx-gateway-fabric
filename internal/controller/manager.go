@@ -72,12 +72,12 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller/index"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller/predicate"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/events"
-	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/fetch"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/runnables"
 	ngftypes "github.com/nginx/nginx-gateway-fabric/v2/internal/framework/types"
-	wafpolling "github.com/nginx/nginx-gateway-fabric/v2/internal/framework/waf"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/waf/fetch"
+	wafpolling "github.com/nginx/nginx-gateway-fabric/v2/internal/framework/waf/poller"
 )
 
 const (
@@ -141,7 +141,7 @@ func StartManager(cfg config.Config) error {
 	}
 
 	wafFetcher := createWAFFetcher(cfg.Logger.WithName("wafFetcher"))
-	var wafPollerManager wafpolling.PollerManager
+	var wafPollerManager wafpolling.Manager
 
 	processor := state.NewChangeProcessorImpl(state.ChangeProcessorConfig{
 		GatewayCtlrName:  cfg.GatewayCtlrName,
@@ -367,7 +367,7 @@ func createWAFPollerManager(
 	nginxUpdater *agent.NginxUpdaterImpl,
 	statusQueue *status.Queue,
 	eventCh chan<- any,
-) wafpolling.PollerManager {
+) wafpolling.Manager {
 	if !cfg.Plus {
 		return nil
 	}

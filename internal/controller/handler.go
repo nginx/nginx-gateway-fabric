@@ -34,10 +34,10 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/status"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/events"
-	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/fetch"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
-	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/waf"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/waf/fetch"
+	wafPoller "github.com/nginx/nginx-gateway-fabric/v2/internal/framework/waf/poller"
 )
 
 type handlerMetricsCollector interface {
@@ -76,7 +76,7 @@ type eventHandlerConfig struct {
 	// nginxDeployments contains a map of all nginx Deployments, and data about them.
 	nginxDeployments *agent.DeploymentStore
 	// wafPollerManager manages WAF bundle polling for policies with polling enabled.
-	wafPollerManager waf.PollerManager
+	wafPollerManager wafPoller.Manager
 	// logger is the logger for the event handler.
 	logger logr.Logger
 	// gatewayPodConfig contains information about this Pod.
@@ -333,7 +333,7 @@ func (h *eventHandlerImpl) reconcileWAFPollers(ctx context.Context, gr *graph.Gr
 			resolvedTLSCA = policy.WAFState.ResolvedTLSCA
 		}
 
-		sources := waf.BuildBundleSources(key.NsName, wafPolicy.Spec, resolvedAuth, resolvedTLSCA)
+		sources := wafPoller.BuildBundleSources(key.NsName, wafPolicy.Spec, resolvedAuth, resolvedTLSCA)
 		if len(sources) == 0 {
 			// No sources with polling enabled - stop any existing poller.
 			h.cfg.wafPollerManager.StopPoller(key.NsName)
@@ -368,7 +368,7 @@ func (h *eventHandlerImpl) reconcileWAFPollers(ctx context.Context, gr *graph.Gr
 		// Reconcile the poller: starts a new one if needed, updates targets if sources
 		// haven't changed, or restarts if sources changed. This avoids unnecessary churn
 		// when only unrelated resources in the graph changed.
-		h.cfg.wafPollerManager.ReconcilePoller(ctx, waf.PollerConfig{
+		h.cfg.wafPollerManager.ReconcilePoller(ctx, wafPoller.Config{
 			PolicyNsName:      key.NsName,
 			Sources:           sources,
 			TargetDeployments: targetDeployments,

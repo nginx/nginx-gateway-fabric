@@ -16,7 +16,7 @@ import (
 	"github.com/go-logr/logr"
 	. "github.com/onsi/gomega"
 
-	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/fetch"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/waf/fetch"
 )
 
 // newChecksumServer returns an httptest.Server that serves bundle and its .sha256 sidecar.

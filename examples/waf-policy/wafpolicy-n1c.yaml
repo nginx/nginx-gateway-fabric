@@ -10,11 +10,11 @@ spec:
   type: N1C
   policySource:
     n1cSource:
-      url: https://<tenant>.volterra.us
+      url: https://nginx-tenant9.staging.volterra.us
       namespace: default  # N1C namespace the policy belongs to
-      # policyName: "ngfExample"
-      policyObjectID: pol_-IUuEUN7ST63oRC7AlQPLw
-      policyVersionID: pv_UJ2gL5fOQ3Gnb3OVuVo1XA
+      # policyName: "ngfPolicy"
+      policyObjectID: pol_I65LrX_WTHGmDEX9qnbVjQ
+      policyVersionID: pv_Tm__Iqk5SoWmJgwxiKlHAg
     auth:
       secretRef:
         name: n1c-credentials
@@ -25,10 +25,10 @@ spec:
           server: syslog-svc.default.svc.cluster.local:514
       logSource:
         n1cSource:
-          url: https://<tenant>.volterra.us
+          url: https://nginx-tenant9.staging.volterra.us
           namespace: default  # N1C namespace the log profile belongs to
-          # profileName: "ngfExample"
-          profileObjectID: "lp_8s8uZxLpThWwEGF7LTn_rA"
+          profileName: "secops_dashboard"
+          # profileObjectID: "lp_8s8uZxLpThWwEGF7LTn_rA"
         auth:
           secretRef:
             name: n1c-credentials

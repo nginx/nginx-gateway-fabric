@@ -1,4 +1,4 @@
-package waf
+package poller
 
 import (
 	"context"
@@ -11,7 +11,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/events"
-	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/fetch"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/waf/fetch"
 )
 
 //go:generate go tool counterfeiter -generate
@@ -22,12 +22,12 @@ type PollError struct {
 	BundleKey graph.WAFBundleKey
 }
 
-// PollerManager is the interface for managing WAF bundle pollers.
+// Manager is the interface for managing WAF bundle pollers.
 //
-//counterfeiter:generate . PollerManager
-type PollerManager interface {
+//counterfeiter:generate . Manager
+type Manager interface {
 	// ReconcilePoller ensures a poller is running with the correct configuration.
-	ReconcilePoller(ctx context.Context, cfg PollerConfig)
+	ReconcilePoller(ctx context.Context, cfg Config)
 	// GetAllPollErrors returns a deep copy of all current poll errors.
 	GetAllPollErrors() map[types.NamespacedName]PollError
 	// GetLatestBundles returns a copy of all bundles that have been successfully fetched by pollers.
@@ -40,9 +40,9 @@ type PollerManager interface {
 	StopPollersNotIn(activePolicies map[types.NamespacedName]struct{})
 }
 
-// Manager manages the lifecycle of all WAF bundle pollers.
+// pollerManager manages the lifecycle of all WAF bundle pollers.
 // It creates, tracks, and stops pollers as WAFGatewayBindingPolicies are created, updated, or deleted.
-type Manager struct {
+type pollerManager struct {
 	fetcher     fetch.Fetcher
 	deployments agent.DeploymentStorer
 	pollers     map[types.NamespacedName]*pollerEntry
@@ -83,11 +83,11 @@ type ManagerConfig struct {
 // NewManager creates a new Manager.
 // It panics if EventCh is set without Ctx, as the event-injection goroutine requires
 // a context to avoid leaking on shutdown.
-func NewManager(cfg ManagerConfig) *Manager {
+func NewManager(cfg ManagerConfig) Manager {
 	if cfg.EventCh != nil && cfg.Ctx == nil {
 		panic("waf.ManagerConfig: Ctx must be set when EventCh is set")
 	}
-	return &Manager{
+	return &pollerManager{
 		logger:            cfg.Logger,
 		fetcher:           cfg.Fetcher,
 		deployments:       cfg.Deployments,
@@ -101,8 +101,8 @@ func NewManager(cfg ManagerConfig) *Manager {
 	}
 }
 
-// PollerConfig contains configuration for reconciling a poller.
-type PollerConfig struct {
+// Config contains configuration for reconciling a poller.
+type Config struct {
 	InitialChecksums  map[graph.WAFBundleKey]string
 	PolicyNsName      types.NamespacedName
 	Sources           []BundleSource
@@ -113,7 +113,7 @@ type PollerConfig struct {
 // If no poller exists, one is started. If a poller exists with the same sources,
 // only the target deployments are updated. If sources have changed, the poller is restarted.
 // This avoids unnecessary poller restarts when only targets change.
-func (m *Manager) ReconcilePoller(ctx context.Context, cfg PollerConfig) {
+func (m *pollerManager) ReconcilePoller(ctx context.Context, cfg Config) {
 	if len(cfg.Sources) == 0 {
 		m.logger.V(1).Info("No polling sources, not starting poller", "policy", cfg.PolicyNsName)
 		return
@@ -135,7 +135,7 @@ func (m *Manager) ReconcilePoller(ctx context.Context, cfg PollerConfig) {
 }
 
 // startPoller starts a new poller, stopping any existing one first.
-func (m *Manager) startPoller(ctx context.Context, cfg PollerConfig) {
+func (m *pollerManager) startPoller(ctx context.Context, cfg Config) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -202,7 +202,7 @@ func (m *Manager) startPoller(ctx context.Context, cfg PollerConfig) {
 // If err is nil, it clears any previous error only if it was for the same bundle key.
 // If err is non-nil, it stores the error for this bundle key.
 // This method is called by the internal status callback.
-func (m *Manager) recordPollResult(policyNsName types.NamespacedName, bundleKey graph.WAFBundleKey, err error) {
+func (m *pollerManager) recordPollResult(policyNsName types.NamespacedName, bundleKey graph.WAFBundleKey, err error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -227,7 +227,7 @@ func (m *Manager) recordPollResult(policyNsName types.NamespacedName, bundleKey 
 // cache — not only when the policy was previously in BundlePending state. A spurious reconcile
 // event in that case is harmless: it triggers an unnecessary graph rebuild but causes no
 // incorrect behavior.
-func (m *Manager) cacheBundleUpdate(bundleKey graph.WAFBundleKey, data []byte, checksum string) {
+func (m *pollerManager) cacheBundleUpdate(bundleKey graph.WAFBundleKey, data []byte, checksum string) {
 	m.mu.Lock()
 
 	_, alreadyCached := m.bundleCache[bundleKey]
@@ -261,7 +261,7 @@ func (m *Manager) cacheBundleUpdate(bundleKey graph.WAFBundleKey, data []byte, c
 }
 
 // GetAllPollErrors returns a deep copy of all current poll errors.
-func (m *Manager) GetAllPollErrors() map[types.NamespacedName]PollError {
+func (m *pollerManager) GetAllPollErrors() map[types.NamespacedName]PollError {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -279,7 +279,7 @@ func (m *Manager) GetAllPollErrors() map[types.NamespacedName]PollError {
 // GetLatestBundles returns a copy of all bundles that have been successfully fetched by pollers.
 // These represent the freshest known bundle data and should take precedence over
 // graph-cached bundles when constructing stale-bundle fallback state.
-func (m *Manager) GetLatestBundles() map[graph.WAFBundleKey]*graph.WAFBundleData {
+func (m *pollerManager) GetLatestBundles() map[graph.WAFBundleKey]*graph.WAFBundleData {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -293,7 +293,7 @@ func (m *Manager) GetLatestBundles() map[graph.WAFBundleKey]*graph.WAFBundleData
 }
 
 // StopPoller stops the poller for a WAFGatewayBindingPolicy.
-func (m *Manager) StopPoller(policyNsName types.NamespacedName) {
+func (m *pollerManager) StopPoller(policyNsName types.NamespacedName) {
 	m.mu.Lock()
 	entry, exists := m.pollers[policyNsName]
 	if !exists {
@@ -310,7 +310,7 @@ func (m *Manager) StopPoller(policyNsName types.NamespacedName) {
 }
 
 // stopAll stops all running pollers. Should be called during shutdown.
-func (m *Manager) stopAll() {
+func (m *pollerManager) stopAll() {
 	m.mu.Lock()
 	entries := make([]*pollerEntry, 0, len(m.pollers))
 	for _, entry := range m.pollers {
@@ -331,7 +331,7 @@ func (m *Manager) stopAll() {
 
 // clearBundleCacheLocked removes cached bundle data and policy mappings for all bundle keys
 // owned by the given poller. Must be called while m.mu is held.
-func (m *Manager) clearBundleCacheLocked(p *poller) {
+func (m *pollerManager) clearBundleCacheLocked(p *poller) {
 	for _, src := range p.getSources() {
 		delete(m.bundleCache, src.BundleKey)
 		delete(m.bundleKeyToPolicy, src.BundleKey)
@@ -340,7 +340,7 @@ func (m *Manager) clearBundleCacheLocked(p *poller) {
 
 // StopPollersNotIn stops all pollers whose policy namespace/name is not in the given set.
 // This is used to clean up pollers for policies that have been deleted or no longer need polling.
-func (m *Manager) StopPollersNotIn(activePolicies map[types.NamespacedName]struct{}) {
+func (m *pollerManager) StopPollersNotIn(activePolicies map[types.NamespacedName]struct{}) {
 	m.mu.Lock()
 	var toStop []types.NamespacedName
 	for nsName := range m.pollers {

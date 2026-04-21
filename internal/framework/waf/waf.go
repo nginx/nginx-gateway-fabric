@@ -2,8 +2,8 @@
 // F5 NGINX App Protect (NAP) v5.
 package waf
 
-import "github.com/nginx/nginx-gateway-fabric/v2/internal/framework/fetch"
-
 // Release is the NAP v5 release version deployed by NGINX Gateway Fabric.
-// Re-exported from the fetch package to avoid an import cycle.
-const Release = fetch.Release
+// It is used both as the default image tag for the waf-enforcer and waf-config-mgr
+// sidecar containers and as the nap_release query parameter when compiling
+// policy bundles via the F5 NGINX One Console API.
+const Release = "5.12.1"

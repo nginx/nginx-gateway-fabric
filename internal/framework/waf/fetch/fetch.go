@@ -20,6 +20,8 @@ import (
 	"github.com/go-logr/logr"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
+
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/waf"
 )
 
 //go:generate go tool counterfeiter -generate
@@ -34,12 +36,6 @@ const (
 	retryBaseDelay = 1 * time.Second
 	// retryMaxDelay is the maximum delay for retrying fetches on transient failures.
 	retryMaxDelay = 30 * time.Second
-
-	// Release is the NAP v5 release version deployed by NGINX Gateway Fabric.
-	// It is used both as the default image tag for the waf-enforcer and waf-config-mgr
-	// sidecar containers and as the nap_release query parameter when compiling
-	// policy bundles via the F5 NGINX One Console API.
-	Release = "5.12.1"
 )
 
 // unixEpochRFC3339 is the Unix epoch formatted as RFC3339, used as a startTime sentinel
@@ -750,7 +746,7 @@ func buildN1CLogProfileCompileURL(baseURL, namespace, lpObjID string) (string, e
 		"/app-protect/log-profiles/" + url.PathEscape(lpObjID) + "/compile"
 	base.Fragment = ""
 	q := url.Values{}
-	q.Set("nap_release", Release)
+	q.Set("nap_release", waf.Release)
 	q.Set("download", "true")
 	base.RawQuery = q.Encode()
 	return base.String(), nil
@@ -937,7 +933,7 @@ func buildN1CCompileBaseURL(baseURL, namespace, polObjID, polVersionID string, d
 		"/versions/" + url.PathEscape(polVersionID) + "/compile"
 	base.Fragment = ""
 	q := url.Values{}
-	q.Set("nap_release", Release)
+	q.Set("nap_release", waf.Release)
 	if download {
 		q.Set("download", "true")
 	}
