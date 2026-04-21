@@ -57,14 +57,14 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: 'npm'
-          cache-dependency-path: internal/controller/nginx/modules/package-lock.json
+          cache-dependency-path: internal/controller/nginx/modules/njs/package-lock.json
 
       - name: Run Prettier on NJS code
         id: prettier-run
         uses: rutajdash/prettier-cli-action@d42c4325a3b344f3bd4be482bc34de521998d557 # v1.0.2
         with:
-          config_path: ${{ github.workspace }}/internal/controller/nginx/modules/.prettierrc
-          file_pattern: ${{ github.workspace }}/internal/controller/nginx/modules/**/*.js
+          config_path: ${{ github.workspace }}/internal/controller/nginx/modules/njs/.prettierrc
+          file_pattern: ${{ github.workspace }}/internal/controller/nginx/modules/njs/**/*.js
           prettier_version: 3.3.3 # renovate: datasource=npm depName=prettier
 
       - name: Prettier Output
@@ -74,6 +74,20 @@ jobs:
           echo "The following files are not formatted:"
           echo "${{steps.prettier-run.outputs.prettier_output}}"
           echo "Run \"make njs-fmt\" locally to format the code"
+
+  rust-lint:
+    name: Rust Lint
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Check formatting
+        working-directory: internal/controller/nginx/modules/rust/ngf-inference
+        run: cargo fmt --check
+
+      - name: Run clippy
+        run: make rust-lint
 
   actionlint:
     name: Actionlint

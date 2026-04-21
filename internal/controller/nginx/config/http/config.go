@@ -45,15 +45,6 @@ const (
 	// RedirectLocationType defines an external location that redirects to an internal location
 	// based on HTTP matching conditions.
 	RedirectLocationType LocationType = "redirect"
-	// InferenceExternalLocationType defines an external location that is used for calling NJS
-	// to get the inference workload endpoint and redirects to the internal location that will proxy_pass
-	// to that endpoint.
-	InferenceExternalLocationType LocationType = "inference-external"
-	// InferenceInternalLocationType defines an internal location that is used for calling NJS
-	// to get the inference workload endpoint and redirects to the internal location that will proxy_pass
-	// to that endpoint. This is used when an HTTP redirect location is also defined that redirects
-	// to this internal inference location.
-	InferenceInternalLocationType LocationType = "inference-internal"
 )
 
 // Location holds all configuration for an HTTP location.
@@ -68,16 +59,14 @@ type Location struct {
 	AuthJWT *AuthJWT
 	// AuthBasic contains the configuration for basic authentication.
 	AuthBasic *AuthBasic
+	// Inference holds configuration for the Rust inference module (EPP directives).
+	Inference *InferenceConfig
 	// ProxyPassRequestBody renders proxy_pass_request_body ("on"/"off"); unset leaves the directive out.
 	ProxyPassRequestBody string
 	// ProxyPassRequestHeaders renders proxy_pass_request_headers ("on"/"off"); unset leaves the directive out.
 	ProxyPassRequestHeaders string
 	// MirrorSplitClientsVariableName is the variable name for split_clients, used in traffic mirroring scenarios.
 	MirrorSplitClientsVariableName string
-	// EPPInternalPath is the internal path for the inference NJS module to redirect to.
-	EPPInternalPath string
-	// EPPHost is the host for the EndpointPicker, used for inference routing.
-	EPPHost string
 	// Type indicates the type of location (external, internal, redirect, etc).
 	Type LocationType
 	// Path is the NGINX location path.
@@ -100,8 +89,6 @@ type Location struct {
 	Includes []shared.Include
 	// CORSHeaders are the CORS headers to be added for this location.
 	CORSHeaders []Header
-	// EPPPort is the port for the EndpointPicker, used for inference routing.
-	EPPPort int
 	// ClientMaxBodySize renders client_max_body_size in bytes; unset leaves the directive out.
 	ClientMaxBodySize uint16
 	// GRPC indicates if this location proxies gRPC traffic.
@@ -124,6 +111,20 @@ type AuthExternalRequest struct {
 	AllowedResponseHeaders []string
 	// ForwardBody, if true, enables proxy_pass_request_body in the internal location.
 	ForwardBody bool
+}
+
+// InferenceConfig holds configuration for the Rust inference dynamic module.
+// The Rust module runs in the NGINX access phase of the location and calls the EPP
+// server via gRPC to select an endpoint before proxy_pass executes.
+type InferenceConfig struct {
+	// EPPEndpoint is the host:port of the Endpoint Picker Protocol server.
+	EPPEndpoint string
+	// FailopenUpstream is the upstream name to use if the EPP call fails (optional).
+	FailopenUpstream string
+	// UseTLS indicates whether TLS should be used when connecting to the EPP server.
+	UseTLS bool
+	// TLSSkipVerify indicates whether to skip certificate verification when using TLS.
+	TLSSkipVerify bool
 }
 
 // Header defines an HTTP header to be passed to the proxied server.

@@ -200,15 +200,32 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: 'npm'
-          cache-dependency-path: internal/controller/nginx/modules/package-lock.json
+          cache-dependency-path: internal/controller/nginx/modules/njs/package-lock.json
 
       - name: Run tests
-        run: npm --prefix ${{ github.workspace }}/internal/controller/nginx/modules install-ci-test
+        run: npm --prefix ${{ github.workspace }}/internal/controller/nginx/modules/njs install-ci-test
 
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2 # v6.0.0
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
+
+  rust-unit-tests:
+    name: Rust Unit Tests
+    runs-on: ubuntu-24.04
+    needs: vars
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Run tests
+        run: make rust-unit-test
+
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2 # v6.0.0
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: internal/controller/nginx/modules/rust/ngf-inference/coverage/lcov.info
 
   binary:
     name: Build Binary

@@ -6,8 +6,6 @@ import (
 	"strings"
 	gotemplate "text/template"
 
-	"k8s.io/apimachinery/pkg/types"
-
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/http"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
@@ -168,36 +166,43 @@ func createBackendGroupSplitClientDistributions(group dataplane.BackendGroup) []
 
 		distributions = append(distributions, http.SplitClientDistribution{
 			Percent: fmt.Sprintf("%.2f", percentage),
-			Value:   getSplitClientValue(b, group.Source, group.RuleIdx, group.PathRuleIdx),
+			Value:   getSplitClientValue(b, group.PathRuleIdx, group.RuleIdx, i),
 		})
 	}
 
 	// The last backend gets the remaining percentage.
 	// This is done to guarantee that the sum of all percentages is 100.
-	lastBackend := backends[len(backends)-1]
+	lastBackendIdx := len(backends) - 1
+	lastBackend := backends[lastBackendIdx]
 
 	distributions = append(distributions, http.SplitClientDistribution{
 		Percent: fmt.Sprintf("%.2f", availablePercentage),
-		Value:   getSplitClientValue(lastBackend, group.Source, group.RuleIdx, group.PathRuleIdx),
+		Value:   getSplitClientValue(lastBackend, group.PathRuleIdx, group.RuleIdx, lastBackendIdx),
 	})
 
 	return distributions
 }
 
-func getSplitClientValue(b dataplane.Backend, source types.NamespacedName, ruleIdx, pathRuleIdx int) string {
+func getSplitClientValue(b dataplane.Backend, pathRuleIdx, ruleIdx, backendIdx int) string {
 	if b.Valid {
 		if b.EndpointPickerConfig != nil {
-			return generateInternalInferenceEPPLocationPath(
-				b.UpstreamName,
-				source,
-				ruleIdx,
-				pathRuleIdx,
-			)
+			return generateInternalInferenceLocationPath(pathRuleIdx, ruleIdx, backendIdx)
 		}
 
 		return b.UpstreamName
 	}
 	return invalidBackendRef
+}
+
+// generateInternalInferenceLocationPath generates the path for an internal inference location.
+func generateInternalInferenceLocationPath(pathRuleIdx, matchRuleIdx, backendIdx int) string {
+	return fmt.Sprintf(
+		"%s-rule%d-route%d-backend%d-inference",
+		http.InternalRoutePathPrefix,
+		pathRuleIdx,
+		matchRuleIdx,
+		backendIdx,
+	)
 }
 
 // percentOf returns the percentage of a weight out of a totalWeight.
