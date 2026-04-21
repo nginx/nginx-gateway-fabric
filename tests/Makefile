@@ -260,3 +260,60 @@ test-cel-validation:
 		echo "Running test: $(CEL_TEST_TARGET) in ./cel"; \
 		go test -v ./cel -run "$(CEL_TEST_TARGET)"; \
 	fi
+
+NAP_COMPILER_IMAGE = private-registry.nginx.com/nap/waf-compiler:5.11.2
+WAF_POLICY_DIR = $(SELF_DIR)tests/suite/manifests/waf-policy
+
+.PHONY: compile-waf-bundles
+compile-waf-bundles: check-for-docker ## Compile NAP WAF policy bundles for functional tests. Requires Docker and access to private-registry.nginx.com.
+	@echo "Compiling dataguard-blocking.tgz..."
+	docker run --rm \
+		-v $(SELF_DIR):$(SELF_DIR) \
+		$(NAP_COMPILER_IMAGE) \
+		-p $(WAF_POLICY_DIR)/dataguard-blocking.json \
+		-o $(WAF_POLICY_DIR)/dataguard-blocking.tgz
+	@echo "Compiling attack-signatures-blocking.tgz..."
+	docker run --rm \
+		-v $(SELF_DIR):$(SELF_DIR) \
+		$(NAP_COMPILER_IMAGE) \
+		-p $(WAF_POLICY_DIR)/attack-signatures-blocking.json \
+		-o $(WAF_POLICY_DIR)/attack-signatures-blocking.tgz
+	@echo "Compiling logconf.tgz..."
+	docker run --rm \
+		-v $(SELF_DIR):$(SELF_DIR) \
+		$(NAP_COMPILER_IMAGE) \
+		-l $(WAF_POLICY_DIR)/log-illegal.json \
+		-o $(WAF_POLICY_DIR)/logconf.tgz
+	@echo "WAF bundles compiled to $(WAF_POLICY_DIR)/"
+
+.PHONY: test-waf
+test-waf: PLUS_ENABLED=true
+test-waf: build-crossplane-image ## Runs the WAF tests on a kind cluster. Bundles must already be compiled (run compile-waf-bundles first).
+	kind load docker-image nginx-crossplane:latest --name $(CLUSTER_NAME)
+	go run github.com/onsi/ginkgo/v2/ginkgo --race --randomize-all --keep-going --fail-on-pending \
+		--trace -r -v --buildvcs --force-newlines $(GITHUB_OUTPUT) \
+		--label-filter "waf" $(GINKGO_FLAGS) ./suite -- \
+		--gateway-api-version=$(GW_API_VERSION) --gateway-api-prev-version=$(GW_API_PREV_VERSION) \
+		--image-tag=$(TAG) --version-under-test=$(NGF_VERSION) \
+		--ngf-image-repo=$(PREFIX) --nginx-image-repo=$(NGINX_PLUS_PREFIX) --nginx-plus-image-repo=$(NGINX_PLUS_PREFIX) \
+		--pull-policy=$(PULL_POLICY) --service-type=$(GW_SERVICE_TYPE) \
+		--cluster-name=$(CLUSTER_NAME) --plus-enabled=$(PLUS_ENABLED) \
+		--plus-license-file-name=$(PLUS_LICENSE_FILE) --plus-usage-endpoint=$(PLUS_USAGE_ENDPOINT) \
+		--waf-enabled=true --nginx-image-jwt-file-name=$(REGISTRY_JWT_FILE)
+
+.PHONY: test-waf-gke
+test-waf-gke: PLUS_ENABLED=true
+test-waf-gke: GOARCH=amd64
+test-waf-gke: compile-waf-bundles check-for-plus-usage-endpoint build-crossplane-image ## Runs the WAF tests on a GKE cluster (amd64 only).
+	./scripts/push-crossplane-image.sh
+	go run github.com/onsi/ginkgo/v2/ginkgo --race --randomize-all --keep-going --fail-on-pending \
+		--trace -r -v --buildvcs --force-newlines $(GITHUB_OUTPUT) \
+		--label-filter "waf" $(GINKGO_FLAGS) ./suite -- \
+		--gateway-api-version=$(GW_API_VERSION) --gateway-api-prev-version=$(GW_API_PREV_VERSION) \
+		--image-tag=$(TAG) --version-under-test=$(NGF_VERSION) \
+		--ngf-image-repo=$(PREFIX) --nginx-image-repo=$(NGINX_PLUS_PREFIX) --nginx-plus-image-repo=$(NGINX_PLUS_PREFIX) \
+		--pull-policy=Always --service-type=LoadBalancer \
+		--plus-enabled=$(PLUS_ENABLED) \
+		--plus-license-file-name=$(PLUS_LICENSE_FILE) --plus-usage-endpoint=$(PLUS_USAGE_ENDPOINT) \
+		--gke-project=$(GKE_PROJECT) \
+		--waf-enabled=true --nginx-image-jwt-file-name=$(REGISTRY_JWT_FILE)

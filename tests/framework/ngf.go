@@ -2,6 +2,8 @@ package framework
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -14,14 +16,16 @@ import (
 	apiext "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/secrets"
 )
 
 const (
-	gwInstallBasePath = "https://github.com/kubernetes-sigs/gateway-api/releases/download"
-	PlusSecretName    = "nplus-license"
-	NgfControllerName = "gateway.nginx.org/nginx-gateway-controller"
+	gwInstallBasePath       = "https://github.com/kubernetes-sigs/gateway-api/releases/download"
+	PlusSecretName          = "nplus-license"
+	PlusImagePullSecretName = "nginx-plus-registry-secret" //nolint:gosec // not hardcoded credentials
+	NgfControllerName       = "gateway.nginx.org/nginx-gateway-controller"
 )
 
 // InstallationConfig contains the configuration for the NGF installation.
@@ -37,6 +41,7 @@ type InstallationConfig struct {
 	ServiceType          string
 	PlusUsageEndpoint    string
 	GatewayClassName     string
+	NginxImagePullSecret string
 	Plus                 bool
 	Telemetry            bool
 	SkipCRDCleanup       bool
@@ -175,6 +180,71 @@ func CreateLicenseSecret(rm ResourceManager, namespace, filename string) error {
 	return nil
 }
 
+const nginxPlusRegistry = "private-registry.nginx.com"
+
+func CreateImagePullSecret(rm ResourceManager, namespace, filename string) error {
+	GinkgoWriter.Printf("Creating NGINX Plus Image Pull secret in namespace %q from file %q\n", namespace, filename)
+
+	jwtBytes, err := os.ReadFile(filename)
+	if err != nil {
+		readFileErr := fmt.Errorf("error reading file %q: %w", filename, err)
+		GinkgoWriter.Printf("%v\n", readFileErr)
+
+		return readFileErr
+	}
+
+	jwt := strings.TrimSpace(string(jwtBytes))
+	auth := base64.StdEncoding.EncodeToString([]byte(jwt + ":none"))
+
+	dockerConfig := map[string]interface{}{
+		"auths": map[string]interface{}{
+			nginxPlusRegistry: map[string]string{
+				"username": jwt,
+				"password": "none",
+				"auth":     auth,
+			},
+		},
+	}
+
+	dockerConfigJSON, err := json.Marshal(dockerConfig)
+	if err != nil {
+		return fmt.Errorf("error marshaling docker config: %w", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), DefaultTimeoutConfig().CreateTimeout)
+	defer cancel()
+
+	ns := &core.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: namespace,
+		},
+	}
+
+	if err := rm.Create(ctx, ns); err != nil && !apierrors.IsAlreadyExists(err) {
+		return fmt.Errorf("error creating namespace: %w", err)
+	}
+
+	secret := &core.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      PlusImagePullSecretName,
+			Namespace: namespace,
+		},
+		Type: core.SecretTypeDockerConfigJson,
+		Data: map[string][]byte{
+			core.DockerConfigJsonKey: dockerConfigJSON,
+		},
+	}
+
+	if err := rm.Apply([]client.Object{secret}); err != nil {
+		createSecretErr := fmt.Errorf("error applying secret: %w", err)
+		GinkgoWriter.Printf("%v\n", createSecretErr)
+
+		return createSecretErr
+	}
+
+	return nil
+}
+
 // UpgradeNGF upgrades NGF. CRD upgrades assume the chart is local.
 func UpgradeNGF(cfg InstallationConfig, extraArgs ...string) ([]byte, error) {
 	crdPath := filepath.Join(cfg.ChartPath, "crds") + "/"
@@ -305,6 +375,10 @@ func setImageArgs(cfg InstallationConfig) []string {
 
 	if cfg.ServiceType != "" {
 		args = append(args, formatValueSet("nginx.service.type", cfg.ServiceType)...)
+	}
+
+	if cfg.NginxImagePullSecret != "" {
+		args = append(args, formatValueSet("nginx.imagePullSecret", cfg.NginxImagePullSecret)...)
 	}
 
 	return args
