@@ -2317,26 +2317,6 @@ func TestIsReferenced(t *testing.T) {
 			expected: false,
 		},
 
-		// InferencePool tests
-		{
-			name:     "InferencePool is referenced",
-			resource: inferenceInGraph,
-			graph:    graph,
-			expected: true,
-		},
-		{
-			name:     "InferencePool is not referenced",
-			resource: inferenceNotInGraph,
-			graph:    graph,
-			expected: false,
-		},
-		{
-			name:     "Empty InferencePool",
-			resource: emptyInferencePool,
-			graph:    graph,
-			expected: false,
-		},
-
 		// EndpointSlice tests
 		{
 			name:     "EndpointSlice with Service owner in graph's ReferencedServices is referenced",
@@ -2373,6 +2353,26 @@ func TestIsReferenced(t *testing.T) {
 		{
 			name:     "ConfigMap not in ReferencedConfigMaps with different Namespace and same Name is not referenced",
 			resource: differentNamespaceSameNameConfigMap,
+			graph:    graph,
+			expected: false,
+		},
+
+		// InferencePool tests
+		{
+			name:     "InferencePool is referenced",
+			resource: inferenceInGraph,
+			graph:    graph,
+			expected: true,
+		},
+		{
+			name:     "InferencePool is not referenced",
+			resource: inferenceNotInGraph,
+			graph:    graph,
+			expected: false,
+		},
+		{
+			name:     "Empty InferencePool",
+			resource: emptyInferencePool,
 			graph:    graph,
 			expected: false,
 		},

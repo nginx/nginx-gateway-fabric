@@ -1310,40 +1310,6 @@ func (p *NginxProvisioner) buildNginxPodTemplateSpec(
 		spec.Spec.Containers[0].VolumeMounts = volumeMounts
 	}
 
-	if p.cfg.InferenceExtension {
-		command := []string{
-			"/usr/bin/gateway",
-			"endpoint-picker",
-		}
-
-		if p.cfg.EndpointPickerDisableTLS {
-			command = append(command, "--endpoint-picker-disable-tls")
-		}
-		if p.cfg.EndpointPickerTLSSkipVerify {
-			command = append(command, "--endpoint-picker-tls-skip-verify")
-		}
-
-		spec.Spec.Containers = append(spec.Spec.Containers, corev1.Container{
-			Name:            "endpoint-picker-shim",
-			Image:           p.cfg.GatewayPodConfig.Image,
-			ImagePullPolicy: pullPolicy,
-			Command:         command,
-			Resources:       containerResources,
-			SecurityContext: &corev1.SecurityContext{
-				AllowPrivilegeEscalation: helpers.GetPointer(false),
-				Capabilities: &corev1.Capabilities{
-					Drop: []corev1.Capability{"ALL"},
-				},
-				ReadOnlyRootFilesystem: helpers.GetPointer(true),
-				RunAsGroup:             helpers.GetPointer[int64](1001),
-				RunAsUser:              helpers.GetPointer[int64](101),
-				SeccompProfile: &corev1.SeccompProfile{
-					Type: corev1.SeccompProfileTypeRuntimeDefault,
-				},
-			},
-		})
-	}
-
 	return spec
 }
 

@@ -3,7 +3,8 @@ VERSION = edge
 SELF_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 CHART_DIR = $(SELF_DIR)charts/nginx-gateway-fabric
 NGINX_CONF_DIR = internal/controller/nginx/conf
-NJS_DIR = internal/controller/nginx/modules/src
+NJS_DIR = internal/controller/nginx/modules/njs/src
+RUST_DIR = internal/controller/nginx/modules/rust/ngf-inference
 KIND_CONFIG_FILE = $(SELF_DIR)config/cluster/kind-cluster.yaml
 NGINX_DOCKER_BUILD_PLUS_ARGS = --secret id=nginx-repo.crt,src=$(SELF_DIR)nginx-repo.crt --secret id=nginx-repo.key,src=$(SELF_DIR)nginx-repo.key
 BUILD_AGENT = local
@@ -39,6 +40,8 @@ NODE_VERSION = 24
 CHART_TESTING_VERSION = v3.14.0
 # renovate: datasource=github-tags depName=dadav/helm-schema
 HELM_SCHEMA_VERSION = 0.23.2
+# renovate: datasource=docker depName=rust
+RUST_VERSION = 1.94
 
 # variables that can be overridden by the user
 PREFIX ?= nginx-gateway-fabric## The name of the NGF image. For example, nginx-gateway-fabric
@@ -199,7 +202,7 @@ fmt: ## Run go fmt against code
 .PHONY: njs-fmt
 njs-fmt: ## Run prettier against the njs httpmatches module
 	docker run --rm -w /modules \
-		-v $(CURDIR)/internal/nginx/modules/:/modules/ \
+		-v $(CURDIR)/internal/controller/nginx/modules/njs/:/modules/ \
 		node:${NODE_VERSION} \
 		/bin/bash -c "npm ci && npm run format"
 
@@ -219,9 +222,31 @@ unit-test: ## Run unit tests for the go code
 .PHONY: njs-unit-test
 njs-unit-test: ## Run unit tests for the njs httpmatches module
 	docker run --rm -w /modules \
-		-v $(CURDIR)/internal/controller/nginx/modules:/modules/ \
+		-v $(CURDIR)/internal/controller/nginx/modules/njs:/modules/ \
 		node:${NODE_VERSION} \
 		/bin/bash -c "npm ci && npm test && npm run clean"
+
+.PHONY: rust-fmt
+rust-fmt: ## Run rustfmt against the inference Rust module
+	docker run --rm -w /modules \
+		-v $(CURDIR)/$(RUST_DIR):/modules/ \
+		rust:${RUST_VERSION} \
+		/bin/bash -c "rustup component add rustfmt && cargo fmt"
+
+.PHONY: rust-lint
+rust-lint: ## Run clippy against the inference Rust module
+	docker build -f $(RUST_DIR)/Dockerfile.testing \
+		--target run \
+		--build-arg COMMAND="clippy --lib --tests -- -D warnings" \
+		--build-arg CACHE_BUST="$(shell date +%s)" \
+		$(RUST_DIR)
+
+.PHONY: rust-unit-test
+rust-unit-test: ## Run unit tests with coverage for the inference Rust module
+	docker build -f $(RUST_DIR)/Dockerfile.testing \
+		--target coverage-output \
+		--output type=local,dest=$(RUST_DIR)/coverage \
+		$(RUST_DIR)
 
 .PHONY: lint-helm
 lint-helm: ## Run the helm chart linter
@@ -294,4 +319,4 @@ debug-install-local-build: debug-build-images debug-load-images helm-install-loc
 debug-install-local-build-with-plus: debug-build-images-with-plus debug-load-images-with-plus helm-install-local-with-plus ## Install NGF with NGINX Plus from local build using debug NGF binary on configured kind cluster.
 
 .PHONY: dev-all
-dev-all: deps fmt njs-fmt vet lint unit-test njs-unit-test ## Run all the development checks
+dev-all: deps fmt njs-fmt rust-fmt vet lint unit-test njs-unit-test rust-unit-test ## Run all the development checks

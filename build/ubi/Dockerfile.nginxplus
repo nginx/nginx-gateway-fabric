@@ -6,6 +6,40 @@ ADD --link --chown=101:1001 https://cs.nginx.com/static/files/plus-9.repo nginx-
 ADD --link --chown=101:1001 https://nginx.org/keys/nginx_signing.key nginx_signing.key
 ADD --link --chown=101:1001 build/ubi/repos/agent.repo agent.repo
 
+# Configure nginx source for bindgen to generate Rust FFI bindings.
+# Only --with-compat is required for the ngf-inference module; it sets NGX_COMPAT
+# which is needed for dynamic module binary compatibility.
+# NGINX Plus R36 is based on NGINX Open Source 1.29.3.
+FROM alpine:3.22 AS nginx-source
+
+ARG NGINX_VERSION=1.29.3
+
+RUN apk add --no-cache gcc musl-dev openssl-dev pcre2-dev zlib-dev linux-headers perl make
+
+RUN wget -q https://nginx.org/download/nginx-${NGINX_VERSION}.tar.gz \
+    && tar xzf nginx-${NGINX_VERSION}.tar.gz
+
+RUN cd nginx-${NGINX_VERSION} && ./configure --with-compat --with-http_ssl_module
+
+# Build the inference Rust module against the configured nginx source
+FROM rust:1.94-alpine AS inference-builder
+
+# Pin clang20-dev: clang21's libclang.so cannot be dlopen'd on Alpine musl.
+RUN apk add --no-cache musl-dev protobuf-dev openssl-dev perl make \
+    pcre2-dev zlib-dev linux-headers clang20-dev
+
+ARG NGINX_VERSION=1.29.3
+
+COPY --from=nginx-source /nginx-${NGINX_VERSION} /nginx-src
+
+ENV NGINX_SOURCE_DIR=/nginx-src
+ENV RUSTFLAGS="-C target-feature=-crt-static"
+
+WORKDIR /build
+COPY internal/controller/nginx/modules/rust/ngf-inference/ ./
+
+RUN cargo build --release
+
 FROM ghcr.io/nginx/dependencies/nginx-ubi:ubi9@sha256:d4c06dc698dc7b600795719e7d3089a87c05b3f6618d75631961b07b1e984673 AS ubi9-packages
 
 FROM registry.access.redhat.com/ubi9/ubi-minimal:9.7 AS ubi-nginx-plus
@@ -69,6 +103,7 @@ RUN chown -R 101:1001 /etc/nginx /var/cache/nginx
 # Copy configuration files and scripts
 COPY build/entrypoint.sh /agent/entrypoint.sh
 COPY ${NJS_DIR}/ /usr/lib64/nginx/modules/njs/
+COPY --from=inference-builder /build/target/release/libinference.so /usr/lib64/nginx/modules/libinference.so
 COPY ${NGINX_CONF_DIR}/nginx.conf /etc/nginx/nginx.conf
 COPY ${NGINX_CONF_DIR}/grpc-error-locations.conf /etc/nginx/grpc-error-locations.conf
 COPY ${NGINX_CONF_DIR}/grpc-error-pages.conf /etc/nginx/grpc-error-pages.conf

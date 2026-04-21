@@ -104,7 +104,7 @@ jobs:
           cache-from: type=gha,scope=${{ inputs.image }}${{ inputs.build-os != '' && format('-{0}', inputs.build-os) || '' }}
           pull: true
           build-args: |
-            NJS_DIR=internal/controller/nginx/modules/src
+            NJS_DIR=internal/controller/nginx/modules/njs/src
             NGINX_CONF_DIR=internal/controller/nginx/conf
             BUILD_AGENT=gha
           secrets: |

@@ -7,11 +7,11 @@ import (
 	"testing"
 
 	. "github.com/onsi/gomega"
-	"github.com/onsi/gomega/format"
 	"k8s.io/apimachinery/pkg/types"
 	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 
 	"github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
+	ngfConfig "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/config"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/http"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/policiesfakes"
@@ -2067,9 +2067,8 @@ func TestCreateServers(t *testing.T) {
 	}
 	keepAliveCheck := newKeepAliveChecker([]http.Upstream{keepAliveEnabledUpstream})
 
-	result, httpMatchPair := createServers(conf, fakeGenerator, keepAliveCheck)
+	result, httpMatchPair := createServers(conf, fakeGenerator, keepAliveCheck, ngfConfig.InferenceExtensionConfig{})
 
-	format.MaxLength = 10000
 	g.Expect(httpMatchPair).To(Equal(allExpMatchPair))
 	g.Expect(helpers.Diff(expectedServers, result)).To(BeEmpty())
 }
@@ -2291,6 +2290,7 @@ func TestCreateServersConflicts(t *testing.T) {
 				dataplane.Configuration{HTTPServers: httpServers},
 				&policiesfakes.FakeGenerator{},
 				alwaysFalseKeepAliveChecker,
+				ngfConfig.InferenceExtensionConfig{},
 			)
 			g.Expect(helpers.Diff(expectedServers, result)).To(BeEmpty())
 		})
@@ -2441,7 +2441,12 @@ func TestCreateServers_Includes(t *testing.T) {
 
 	conf := dataplane.Configuration{HTTPServers: httpServers, SSLServers: sslServers}
 
-	actualServers, matchPairs := createServers(conf, fakeGenerator, alwaysFalseKeepAliveChecker)
+	actualServers, matchPairs := createServers(
+		conf,
+		fakeGenerator,
+		alwaysFalseKeepAliveChecker,
+		ngfConfig.InferenceExtensionConfig{},
+	)
 	g.Expect(matchPairs).To(BeEmpty())
 	g.Expect(actualServers).To(HaveLen(len(expServers)))
 
@@ -2602,7 +2607,13 @@ func TestCreateLocations_Includes(t *testing.T) {
 		},
 	})
 
-	locations, matches, grpc := createLocations(&httpServer, "1", fakeGenerator, alwaysFalseKeepAliveChecker)
+	locations, matches, grpc := createLocations(
+		&httpServer,
+		"1",
+		fakeGenerator,
+		alwaysFalseKeepAliveChecker,
+		ngfConfig.InferenceExtensionConfig{},
+	)
 
 	g := NewWithT(t)
 	g.Expect(grpc).To(BeFalse())
@@ -2620,25 +2631,35 @@ func TestCreateLocations_InferenceBackends(t *testing.T) {
 
 	hrNsName := types.NamespacedName{Namespace: "testNS", Name: "routeName"}
 
-	createInferenceBackend := func(upstreamName string, weight int32, eppName string) dataplane.Backend {
+	createInferenceBackend := func(
+		upstreamName string,
+		weight int32,
+		eppName string,
+		failureMode inference.EndpointPickerFailureMode,
+	) dataplane.Backend {
 		return dataplane.Backend{
 			UpstreamName: upstreamName,
 			Valid:        true,
 			Weight:       weight,
 			EndpointPickerConfig: &dataplane.EndpointPickerConfig{
 				EndpointPickerRef: &inference.EndpointPickerRef{
-					Name: inference.ObjectName(eppName),
-					Port: &inference.Port{Number: 80},
+					Name:        inference.ObjectName(eppName),
+					Port:        &inference.Port{Number: 80},
+					FailureMode: failureMode,
 				},
 				NsName: hrNsName.Namespace,
 			},
 		}
 	}
 
-	singleInferenceBackend := createInferenceBackend("test_foo_80", 1, "test-epp")
+	singleInferenceBackend := createInferenceBackend("test_foo_80", 1, "test-epp", inference.EndpointPickerFailOpen)
 
-	multiInferencePrimaryBackend := createInferenceBackend("test_primary_pool_80", 70, "primary-pool")
-	multiInferenceSecondaryBackend := createInferenceBackend("test_secondary_pool_80", 30, "secondary-pool")
+	multiInferencePrimaryBackend := createInferenceBackend(
+		"test_primary_pool_80", 70, "primary-pool", inference.EndpointPickerFailOpen,
+	)
+	multiInferenceSecondaryBackend := createInferenceBackend(
+		"test_secondary_pool_80", 30, "secondary-pool", inference.EndpointPickerFailOpen,
+	)
 
 	createBackendGroup := func(backends []dataplane.Backend) dataplane.BackendGroup {
 		return dataplane.BackendGroup{
@@ -2647,7 +2668,12 @@ func TestCreateLocations_InferenceBackends(t *testing.T) {
 		}
 	}
 
+	singleInferenceBackendFailClose := createInferenceBackend(
+		"test_foo_80", 1, "test-epp", inference.EndpointPickerFailClose,
+	)
+
 	singleInferenceGroup := createBackendGroup([]dataplane.Backend{singleInferenceBackend})
+	singleInferenceGroupFailClose := createBackendGroup([]dataplane.Backend{singleInferenceBackendFailClose})
 	multipleInferenceGroup := createBackendGroup([]dataplane.Backend{
 		multiInferencePrimaryBackend,
 		multiInferenceSecondaryBackend,
@@ -2694,6 +2720,13 @@ func TestCreateLocations_InferenceBackends(t *testing.T) {
 				Method: helpers.GetPointer("POST"),
 			},
 			BackendGroup: singleInferenceGroup,
+		},
+	})
+
+	pathRuleInferenceFailClose := createPathRule("/inference-failclose", []dataplane.MatchRule{
+		{
+			Match:        dataplane.Match{},
+			BackendGroup: singleInferenceGroupFailClose,
 		},
 	})
 
@@ -2757,27 +2790,44 @@ func TestCreateLocations_InferenceBackends(t *testing.T) {
 		expLocs    []http.Location
 	}{
 		{
+			// Single backend, no HTTP match: external location has proxy_pass + EPP config directly.
+			// External locations don't need $request_uri - nginx uses the original URI.
 			name:      "inference only, no internal locations for matches",
 			pathRules: []dataplane.PathRule{pathRuleInferenceOnly},
 			expLocs: []http.Location{
 				{
-					Path:            "/_ngf-internal-proxy-pass-rule0-route0-backend0-inference",
-					Type:            http.InternalLocationType,
-					ProxyPass:       "http://$inference_backend_test_foo_80$request_uri",
-					ProxySetHeaders: proxySetHeaders,
-				},
-				{
 					Path:            "= /inference",
-					Type:            http.InferenceExternalLocationType,
-					EPPInternalPath: "/_ngf-internal-proxy-pass-rule0-route0-backend0-inference",
-					EPPHost:         "test-epp.testNS",
-					EPPPort:         80,
+					Type:            http.ExternalLocationType,
+					ProxyPass:       "http://$inference_endpoint",
+					ProxySetHeaders: proxySetHeaders,
+					Inference: &http.InferenceConfig{
+						EPPEndpoint: "test-epp.testNS:80", FailopenUpstream: "test_foo_80", UseTLS: true,
+					},
 				},
 				createDefaultRootLocation(),
 			},
 			expMatches: httpMatchPairs{},
 		},
 		{
+			// Single backend with FailClose mode: FailopenUpstream should be empty.
+			name:      "inference with FailClose, no failopen upstream",
+			pathRules: []dataplane.PathRule{pathRuleInferenceFailClose},
+			expLocs: []http.Location{
+				{
+					Path:            "= /inference-failclose",
+					Type:            http.ExternalLocationType,
+					ProxyPass:       "http://$inference_endpoint",
+					ProxySetHeaders: proxySetHeaders,
+					Inference: &http.InferenceConfig{
+						EPPEndpoint: "test-epp.testNS:80", UseTLS: true,
+					},
+				},
+				createDefaultRootLocation(),
+			},
+			expMatches: httpMatchPairs{},
+		},
+		{
+			// Single backend, with HTTP match: external redirects, internal location has proxy_pass + EPP config
 			name:      "inference with match, needs internal locations for matches",
 			pathRules: []dataplane.PathRule{pathRuleInferenceWithMatch},
 			expLocs: []http.Location{
@@ -2787,55 +2837,45 @@ func TestCreateLocations_InferenceBackends(t *testing.T) {
 					HTTPMatchKey: "1_0",
 				},
 				{
-					Path:            "/_ngf-internal-proxy-pass-rule0-route0-backend0-inference",
+					Path:            "/_ngf-internal-rule0-route0-backend0-inference",
 					Type:            http.InternalLocationType,
-					ProxyPass:       "http://$inference_backend_test_foo_80$request_uri",
+					ProxyPass:       "http://$inference_endpoint$request_uri",
 					ProxySetHeaders: proxySetHeaders,
-				},
-				{
-					Path:            "/_ngf-internal-test_foo_80-testNS-routeName-routeRule0-pathRule0",
-					Type:            http.InferenceInternalLocationType,
-					EPPInternalPath: "/_ngf-internal-proxy-pass-rule0-route0-backend0-inference",
-					EPPHost:         "test-epp.testNS",
-					EPPPort:         80,
+					Inference: &http.InferenceConfig{
+						EPPEndpoint: "test-epp.testNS:80", FailopenUpstream: "test_foo_80", UseTLS: true,
+					},
 				},
 				createDefaultRootLocation(),
 			},
 			expMatches: httpMatchPairs{
 				"1_0": {
-					{Method: "POST", RedirectPath: "/_ngf-internal-test_foo_80-testNS-routeName-routeRule0-pathRule0"},
+					{Method: "POST", RedirectPath: "/_ngf-internal-rule0-route0-backend0-inference"},
 				},
 			},
 		},
 		{
+			// Multiple backends, no HTTP match: external rewrites to split_clients,
+			// which redirects to internal inference locations (each with EPP config)
 			name:      "multiple weighted inference backends, no match conditions",
 			pathRules: []dataplane.PathRule{pathRuleMultipleInferenceBackends},
 			expLocs: []http.Location{
 				{
-					Path:            "/_ngf-internal-proxy-pass-rule0-route0-backend0-inference",
+					Path:            "/_ngf-internal-rule0-route0-backend0-inference",
 					Type:            http.InternalLocationType,
-					ProxyPass:       "http://$inference_backend_test_primary_pool_80$request_uri",
+					ProxyPass:       "http://$inference_endpoint$request_uri",
 					ProxySetHeaders: proxySetHeaders,
+					Inference: &http.InferenceConfig{
+						EPPEndpoint: "primary-pool.testNS:80", FailopenUpstream: "test_primary_pool_80", UseTLS: true,
+					},
 				},
 				{
-					Path:            "/_ngf-internal-test_primary_pool_80-testNS-routeName-routeRule0-pathRule0",
-					Type:            http.InferenceInternalLocationType,
-					EPPInternalPath: "/_ngf-internal-proxy-pass-rule0-route0-backend0-inference",
-					EPPHost:         "primary-pool.testNS",
-					EPPPort:         80,
-				},
-				{
-					Path:            "/_ngf-internal-proxy-pass-rule0-route0-backend1-inference",
+					Path:            "/_ngf-internal-rule0-route0-backend1-inference",
 					Type:            http.InternalLocationType,
-					ProxyPass:       "http://$inference_backend_test_secondary_pool_80$request_uri",
+					ProxyPass:       "http://$inference_endpoint$request_uri",
 					ProxySetHeaders: proxySetHeaders,
-				},
-				{
-					Path:            "/_ngf-internal-test_secondary_pool_80-testNS-routeName-routeRule0-pathRule0",
-					Type:            http.InferenceInternalLocationType,
-					EPPInternalPath: "/_ngf-internal-proxy-pass-rule0-route0-backend1-inference",
-					EPPHost:         "secondary-pool.testNS",
-					EPPPort:         80,
+					Inference: &http.InferenceConfig{
+						EPPEndpoint: "secondary-pool.testNS:80", FailopenUpstream: "test_secondary_pool_80", UseTLS: true,
+					},
 				},
 				{
 					Path:     "= /weighted-inference",
@@ -2847,6 +2887,10 @@ func TestCreateLocations_InferenceBackends(t *testing.T) {
 			expMatches: httpMatchPairs{},
 		},
 		{
+			// Multiple HTTP match rules with single backend: each match rule gets its own
+			// internal inference location. Note: duplicate match rules result in duplicate
+			// locations - this is expected until
+			// https://github.com/nginx/nginx-gateway-fabric/issues/662 is resolved.
 			name:      "single route multiple matches with single backend",
 			pathRules: []dataplane.PathRule{singleRouteMultipleMatchesSingleBackend},
 			expLocs: []http.Location{
@@ -2856,27 +2900,35 @@ func TestCreateLocations_InferenceBackends(t *testing.T) {
 					HTTPMatchKey: "1_0",
 				},
 				{
-					Path:            "/_ngf-internal-proxy-pass-rule0-route0-backend0-inference",
+					Path:            "/_ngf-internal-rule0-route0-backend0-inference",
 					Type:            http.InternalLocationType,
-					ProxyPass:       "http://$inference_backend_test_foo_80$request_uri",
+					ProxyPass:       "http://$inference_endpoint$request_uri",
 					ProxySetHeaders: proxySetHeaders,
+					Inference: &http.InferenceConfig{
+						EPPEndpoint: "test-epp.testNS:80", FailopenUpstream: "test_foo_80", UseTLS: true,
+					},
 				},
 				{
-					Path:            "/_ngf-internal-test_foo_80-testNS-routeName-routeRule0-pathRule0",
-					Type:            http.InferenceInternalLocationType,
-					EPPInternalPath: "/_ngf-internal-proxy-pass-rule0-route0-backend0-inference",
-					EPPHost:         "test-epp.testNS",
-					EPPPort:         80,
+					Path:            "/_ngf-internal-rule0-route1-backend0-inference",
+					Type:            http.InternalLocationType,
+					ProxyPass:       "http://$inference_endpoint$request_uri",
+					ProxySetHeaders: proxySetHeaders,
+					Inference: &http.InferenceConfig{
+						EPPEndpoint: "test-epp.testNS:80", FailopenUpstream: "test_foo_80", UseTLS: true,
+					},
 				},
 				createDefaultRootLocation(),
 			},
 			expMatches: httpMatchPairs{
 				"1_0": {
-					{Any: true, RedirectPath: "/_ngf-internal-test_foo_80-testNS-routeName-routeRule0-pathRule0"},
+					{Any: true, RedirectPath: "/_ngf-internal-rule0-route0-backend0-inference"},
+					{Any: true, RedirectPath: "/_ngf-internal-rule0-route1-backend0-inference"},
 				},
 			},
 		},
 		{
+			// Multiple HTTP match rules with multiple backends: each match rule gets its own
+			// internal split location and inference locations with EPP config
 			name:      "single route multiple matches with multiple backends",
 			pathRules: []dataplane.PathRule{singleRouteMultipleMatchesMultipleBackends},
 			expLocs: []http.Location{
@@ -2886,33 +2938,48 @@ func TestCreateLocations_InferenceBackends(t *testing.T) {
 					HTTPMatchKey: "1_0",
 				},
 				{
-					Path:            "/_ngf-internal-proxy-pass-rule0-route0-backend0-inference",
+					Path:            "/_ngf-internal-rule0-route0-backend0-inference",
 					Type:            http.InternalLocationType,
-					ProxyPass:       "http://$inference_backend_test_primary_pool_80$request_uri",
+					ProxyPass:       "http://$inference_endpoint$request_uri",
 					ProxySetHeaders: proxySetHeaders,
+					Inference: &http.InferenceConfig{
+						EPPEndpoint: "primary-pool.testNS:80", FailopenUpstream: "test_primary_pool_80", UseTLS: true,
+					},
 				},
 				{
-					Path:            "/_ngf-internal-test_primary_pool_80-testNS-routeName-routeRule0-pathRule0",
-					Type:            http.InferenceInternalLocationType,
-					EPPInternalPath: "/_ngf-internal-proxy-pass-rule0-route0-backend0-inference",
-					EPPHost:         "primary-pool.testNS",
-					EPPPort:         80,
-				},
-				{
-					Path:            "/_ngf-internal-proxy-pass-rule0-route0-backend1-inference",
+					Path:            "/_ngf-internal-rule0-route0-backend1-inference",
 					Type:            http.InternalLocationType,
-					ProxyPass:       "http://$inference_backend_test_secondary_pool_80$request_uri",
+					ProxyPass:       "http://$inference_endpoint$request_uri",
 					ProxySetHeaders: proxySetHeaders,
+					Inference: &http.InferenceConfig{
+						EPPEndpoint: "secondary-pool.testNS:80", FailopenUpstream: "test_secondary_pool_80", UseTLS: true,
+					},
 				},
 				{
-					Path:            "/_ngf-internal-test_secondary_pool_80-testNS-routeName-routeRule0-pathRule0",
-					Type:            http.InferenceInternalLocationType,
-					EPPInternalPath: "/_ngf-internal-proxy-pass-rule0-route0-backend1-inference",
-					EPPHost:         "secondary-pool.testNS",
-					EPPPort:         80,
+					Path:     "/_ngf-internal-rule0-route0-split-inference",
+					Type:     http.InternalLocationType,
+					Rewrites: []string{"^ $inference_backend_group_testNS__routeName_rule0_pathRule0 last"},
 				},
 				{
-					Path:     "/_ngf-internal-split-clients-rule0-route0-inference",
+					Path:            "/_ngf-internal-rule0-route1-backend0-inference",
+					Type:            http.InternalLocationType,
+					ProxyPass:       "http://$inference_endpoint$request_uri",
+					ProxySetHeaders: proxySetHeaders,
+					Inference: &http.InferenceConfig{
+						EPPEndpoint: "primary-pool.testNS:80", FailopenUpstream: "test_primary_pool_80", UseTLS: true,
+					},
+				},
+				{
+					Path:            "/_ngf-internal-rule0-route1-backend1-inference",
+					Type:            http.InternalLocationType,
+					ProxyPass:       "http://$inference_endpoint$request_uri",
+					ProxySetHeaders: proxySetHeaders,
+					Inference: &http.InferenceConfig{
+						EPPEndpoint: "secondary-pool.testNS:80", FailopenUpstream: "test_secondary_pool_80", UseTLS: true,
+					},
+				},
+				{
+					Path:     "/_ngf-internal-rule0-route1-split-inference",
 					Type:     http.InternalLocationType,
 					Rewrites: []string{"^ $inference_backend_group_testNS__routeName_rule0_pathRule0 last"},
 				},
@@ -2920,11 +2987,14 @@ func TestCreateLocations_InferenceBackends(t *testing.T) {
 			},
 			expMatches: httpMatchPairs{
 				"1_0": {
-					{Any: true, RedirectPath: "/_ngf-internal-split-clients-rule0-route0-inference"},
+					{Any: true, RedirectPath: "/_ngf-internal-rule0-route0-split-inference"},
+					{Any: true, RedirectPath: "/_ngf-internal-rule0-route1-split-inference"},
 				},
 			},
 		},
 		{
+			// Single HTTP match with multiple backends: external redirects,
+			// internal split location rewrites to inference locations with EPP config
 			name:      "multiple weighted inference backends with match conditions",
 			pathRules: []dataplane.PathRule{pathRuleMultipleInferenceWithMatch},
 			expLocs: []http.Location{
@@ -2934,33 +3004,25 @@ func TestCreateLocations_InferenceBackends(t *testing.T) {
 					HTTPMatchKey: "1_0",
 				},
 				{
-					Path:            "/_ngf-internal-proxy-pass-rule0-route0-backend0-inference",
+					Path:            "/_ngf-internal-rule0-route0-backend0-inference",
 					Type:            http.InternalLocationType,
-					ProxyPass:       "http://$inference_backend_test_primary_pool_80$request_uri",
+					ProxyPass:       "http://$inference_endpoint$request_uri",
 					ProxySetHeaders: proxySetHeaders,
+					Inference: &http.InferenceConfig{
+						EPPEndpoint: "primary-pool.testNS:80", FailopenUpstream: "test_primary_pool_80", UseTLS: true,
+					},
 				},
 				{
-					Path:            "/_ngf-internal-test_primary_pool_80-testNS-routeName-routeRule0-pathRule0",
-					Type:            http.InferenceInternalLocationType,
-					EPPInternalPath: "/_ngf-internal-proxy-pass-rule0-route0-backend0-inference",
-					EPPHost:         "primary-pool.testNS",
-					EPPPort:         80,
-				},
-				{
-					Path:            "/_ngf-internal-proxy-pass-rule0-route0-backend1-inference",
+					Path:            "/_ngf-internal-rule0-route0-backend1-inference",
 					Type:            http.InternalLocationType,
-					ProxyPass:       "http://$inference_backend_test_secondary_pool_80$request_uri",
+					ProxyPass:       "http://$inference_endpoint$request_uri",
 					ProxySetHeaders: proxySetHeaders,
+					Inference: &http.InferenceConfig{
+						EPPEndpoint: "secondary-pool.testNS:80", FailopenUpstream: "test_secondary_pool_80", UseTLS: true,
+					},
 				},
 				{
-					Path:            "/_ngf-internal-test_secondary_pool_80-testNS-routeName-routeRule0-pathRule0",
-					Type:            http.InferenceInternalLocationType,
-					EPPInternalPath: "/_ngf-internal-proxy-pass-rule0-route0-backend1-inference",
-					EPPHost:         "secondary-pool.testNS",
-					EPPPort:         80,
-				},
-				{
-					Path:     "/_ngf-internal-split-clients-rule0-route0-inference",
+					Path:     "/_ngf-internal-rule0-route0-split-inference",
 					Type:     http.InternalLocationType,
 					Rewrites: []string{"^ $inference_backend_group_testNS__routeName_rule0_pathRule0 last"},
 				},
@@ -2968,7 +3030,7 @@ func TestCreateLocations_InferenceBackends(t *testing.T) {
 			},
 			expMatches: httpMatchPairs{
 				"1_0": {
-					{Method: "GET", RedirectPath: "/_ngf-internal-split-clients-rule0-route0-inference"},
+					{Method: "GET", RedirectPath: "/_ngf-internal-rule0-route0-split-inference"},
 				},
 			},
 		},
@@ -2981,105 +3043,86 @@ func TestCreateLocations_InferenceBackends(t *testing.T) {
 				setBackendGroupIndices(pathRuleMultipleInferenceWithMatch, 3, 3),
 			},
 			expLocs: []http.Location{
-				// 1. Single inference pool locations (rule index 0)
-				{
-					Path:            "/_ngf-internal-proxy-pass-rule0-route0-backend0-inference",
-					Type:            http.InternalLocationType,
-					ProxyPass:       "http://$inference_backend_test_foo_80$request_uri",
-					ProxySetHeaders: proxySetHeaders,
-				},
+				// 1. Single inference pool, no match (rule index 0):
+				//    external location has proxy_pass + EPP config directly.
+				//    External locations don't need $request_uri - nginx uses the original URI.
 				{
 					Path:            "= /inference",
-					Type:            http.InferenceExternalLocationType,
-					EPPInternalPath: "/_ngf-internal-proxy-pass-rule0-route0-backend0-inference",
-					EPPHost:         "test-epp.testNS",
-					EPPPort:         80,
+					Type:            http.ExternalLocationType,
+					ProxyPass:       "http://$inference_endpoint",
+					ProxySetHeaders: proxySetHeaders,
+					Inference: &http.InferenceConfig{
+						EPPEndpoint: "test-epp.testNS:80", FailopenUpstream: "test_foo_80", UseTLS: true,
+					},
 				},
-				// 2. Single inference pool with match (rule index 1)
+				// 2. Single inference pool with match (rule index 1):
+				//    external redirects to internal inference location with EPP config
 				{
 					Path:         "= /inference-match",
 					Type:         http.RedirectLocationType,
 					HTTPMatchKey: "1_1",
 				},
 				{
-					Path:            "/_ngf-internal-proxy-pass-rule1-route0-backend0-inference",
+					Path:            "/_ngf-internal-rule1-route0-backend0-inference",
 					Type:            http.InternalLocationType,
-					ProxyPass:       "http://$inference_backend_test_foo_80$request_uri",
+					ProxyPass:       "http://$inference_endpoint$request_uri",
 					ProxySetHeaders: proxySetHeaders,
+					Inference: &http.InferenceConfig{
+						EPPEndpoint: "test-epp.testNS:80", FailopenUpstream: "test_foo_80", UseTLS: true,
+					},
 				},
+				// 3. Multiple inference pools, no match (rule index 2):
+				//    external rewrites to split_clients, inference locations have EPP config
 				{
-					Path:            "/_ngf-internal-test_foo_80-testNS-routeName-routeRule1-pathRule1",
-					Type:            http.InferenceInternalLocationType,
-					EPPInternalPath: "/_ngf-internal-proxy-pass-rule1-route0-backend0-inference",
-					EPPHost:         "test-epp.testNS",
-					EPPPort:         80,
-				},
-				// 3. Multiple inference pools, no match (rule index 2)
-				{
-					Path:            "/_ngf-internal-proxy-pass-rule2-route0-backend0-inference",
+					Path:            "/_ngf-internal-rule2-route0-backend0-inference",
 					Type:            http.InternalLocationType,
-					ProxyPass:       "http://$inference_backend_test_primary_pool_80$request_uri",
+					ProxyPass:       "http://$inference_endpoint$request_uri",
 					ProxySetHeaders: proxySetHeaders,
+					Inference: &http.InferenceConfig{
+						EPPEndpoint: "primary-pool.testNS:80", FailopenUpstream: "test_primary_pool_80", UseTLS: true,
+					},
 				},
 				{
-					Path:            "/_ngf-internal-test_primary_pool_80-testNS-routeName-routeRule2-pathRule2",
-					Type:            http.InferenceInternalLocationType,
-					EPPInternalPath: "/_ngf-internal-proxy-pass-rule2-route0-backend0-inference",
-					EPPHost:         "primary-pool.testNS",
-					EPPPort:         80,
-				},
-				{
-					Path:            "/_ngf-internal-proxy-pass-rule2-route0-backend1-inference",
+					Path:            "/_ngf-internal-rule2-route0-backend1-inference",
 					Type:            http.InternalLocationType,
-					ProxyPass:       "http://$inference_backend_test_secondary_pool_80$request_uri",
+					ProxyPass:       "http://$inference_endpoint$request_uri",
 					ProxySetHeaders: proxySetHeaders,
-				},
-				{
-					Path:            "/_ngf-internal-test_secondary_pool_80-testNS-routeName-routeRule2-pathRule2",
-					Type:            http.InferenceInternalLocationType,
-					EPPInternalPath: "/_ngf-internal-proxy-pass-rule2-route0-backend1-inference",
-					EPPHost:         "secondary-pool.testNS",
-					EPPPort:         80,
+					Inference: &http.InferenceConfig{
+						EPPEndpoint: "secondary-pool.testNS:80", FailopenUpstream: "test_secondary_pool_80", UseTLS: true,
+					},
 				},
 				{
 					Path:     "= /weighted-inference",
 					Type:     http.ExternalLocationType,
 					Rewrites: []string{"^ $inference_backend_group_testNS__routeName_rule2_pathRule2 last"},
 				},
-				// 4. Multiple inference pools with match (rule index 3)
+				// 4. Multiple inference pools with match (rule index 3):
+				//    external redirects, internal split location rewrites to inference locations
 				{
 					Path:         "= /weighted-inference-match",
 					Type:         http.RedirectLocationType,
 					HTTPMatchKey: "1_3",
 				},
 				{
-					Path:            "/_ngf-internal-proxy-pass-rule3-route0-backend0-inference",
+					Path:            "/_ngf-internal-rule3-route0-backend0-inference",
 					Type:            http.InternalLocationType,
-					ProxyPass:       "http://$inference_backend_test_primary_pool_80$request_uri",
+					ProxyPass:       "http://$inference_endpoint$request_uri",
 					ProxySetHeaders: proxySetHeaders,
+					Inference: &http.InferenceConfig{
+						EPPEndpoint: "primary-pool.testNS:80", FailopenUpstream: "test_primary_pool_80", UseTLS: true,
+					},
 				},
 				{
-					Path:            "/_ngf-internal-test_primary_pool_80-testNS-routeName-routeRule3-pathRule3",
-					Type:            http.InferenceInternalLocationType,
-					EPPInternalPath: "/_ngf-internal-proxy-pass-rule3-route0-backend0-inference",
-					EPPHost:         "primary-pool.testNS",
-					EPPPort:         80,
-				},
-				{
-					Path:            "/_ngf-internal-proxy-pass-rule3-route0-backend1-inference",
+					Path:            "/_ngf-internal-rule3-route0-backend1-inference",
 					Type:            http.InternalLocationType,
-					ProxyPass:       "http://$inference_backend_test_secondary_pool_80$request_uri",
+					ProxyPass:       "http://$inference_endpoint$request_uri",
 					ProxySetHeaders: proxySetHeaders,
+					Inference: &http.InferenceConfig{
+						EPPEndpoint: "secondary-pool.testNS:80", FailopenUpstream: "test_secondary_pool_80", UseTLS: true,
+					},
 				},
 				{
-					Path:            "/_ngf-internal-test_secondary_pool_80-testNS-routeName-routeRule3-pathRule3",
-					Type:            http.InferenceInternalLocationType,
-					EPPInternalPath: "/_ngf-internal-proxy-pass-rule3-route0-backend1-inference",
-					EPPHost:         "secondary-pool.testNS",
-					EPPPort:         80,
-				},
-				{
-					Path:     "/_ngf-internal-split-clients-rule3-route0-inference",
+					Path:     "/_ngf-internal-rule3-route0-split-inference",
 					Type:     http.InternalLocationType,
 					Rewrites: []string{"^ $inference_backend_group_testNS__routeName_rule3_pathRule3 last"},
 				},
@@ -3087,12 +3130,12 @@ func TestCreateLocations_InferenceBackends(t *testing.T) {
 			},
 			expMatches: httpMatchPairs{
 				"1_1": {
-					{Method: "POST", RedirectPath: "/_ngf-internal-test_foo_80-testNS-routeName-routeRule1-pathRule1"},
+					{Method: "POST", RedirectPath: "/_ngf-internal-rule1-route0-backend0-inference"},
 				},
 				"1_3": {
 					{
 						Method:       "GET",
-						RedirectPath: "/_ngf-internal-split-clients-rule3-route0-inference",
+						RedirectPath: "/_ngf-internal-rule3-route0-split-inference",
 					},
 				},
 			},
@@ -3113,6 +3156,7 @@ func TestCreateLocations_InferenceBackends(t *testing.T) {
 				"1",
 				&policiesfakes.FakeGenerator{},
 				alwaysFalseKeepAliveChecker,
+				ngfConfig.InferenceExtensionConfig{},
 			)
 
 			g.Expect(helpers.Diff(tc.expLocs, locs)).To(BeEmpty())
@@ -3305,6 +3349,7 @@ func TestCreateLocationsRootPath(t *testing.T) {
 				"1",
 				&policiesfakes.FakeGenerator{},
 				alwaysFalseKeepAliveChecker,
+				ngfConfig.InferenceExtensionConfig{},
 			)
 			g.Expect(locs).To(Equal(test.expLocations))
 			g.Expect(httpMatchPair).To(BeEmpty())
@@ -3436,6 +3481,7 @@ func TestCreateLocationsPath(t *testing.T) {
 				"1",
 				&policiesfakes.FakeGenerator{},
 				alwaysFalseKeepAliveChecker,
+				ngfConfig.InferenceExtensionConfig{},
 			)
 			g.Expect(locs).To(Equal(test.expLocations))
 			g.Expect(httpMatchPair).To(BeEmpty())
@@ -4416,9 +4462,9 @@ func TestCreateProxyPass(t *testing.T) {
 			},
 			locationType: http.InternalLocationType,
 		},
-		// Inference case
+		// Inference case - proxy_pass uses $inference_endpoint directly
 		{
-			expected: "http://$inference_backend_upstream_inference$request_uri",
+			expected: "http://$inference_endpoint$request_uri",
 			grp: dataplane.BackendGroup{
 				Backends: []dataplane.Backend{
 					{
@@ -5273,6 +5319,7 @@ func TestCreateLocations_RegexCatchAllShouldSuppressDefault404(t *testing.T) {
 		"1",
 		&policiesfakes.FakeGenerator{},
 		alwaysFalseKeepAliveChecker,
+		ngfConfig.InferenceExtensionConfig{},
 	)
 
 	for _, loc := range locs {
@@ -5323,6 +5370,7 @@ func TestCreateLocations_RegexNonRootShouldNotSuppressDefault404(t *testing.T) {
 		"1",
 		&policiesfakes.FakeGenerator{},
 		alwaysFalseKeepAliveChecker,
+		ngfConfig.InferenceExtensionConfig{},
 	)
 
 	var hasDefault404 bool
@@ -5657,10 +5705,10 @@ func TestUpdateLocationCORSFilter(t *testing.T) {
 
 	tests := []struct {
 		corsFilter   *dataplane.HTTPCORSFilter
-		name         string
-		pathRule     dataplane.PathRule
 		location     http.Location
 		expected     http.Location
+		name         string
+		pathRule     dataplane.PathRule
 		listenerPort int32
 	}{
 		{
@@ -6184,6 +6232,7 @@ func TestOIDCCallbackLocation(t *testing.T) {
 			"1",
 			&policiesfakes.FakeGenerator{},
 			alwaysFalseKeepAliveChecker,
+			ngfConfig.InferenceExtensionConfig{},
 		)
 		for i := range locs {
 			if locs[i].Path == "= "+oidcCallbackPath {
@@ -6300,6 +6349,7 @@ func TestOIDCCallbackLocation(t *testing.T) {
 					"1",
 					&policiesfakes.FakeGenerator{},
 					alwaysFalseKeepAliveChecker,
+					ngfConfig.InferenceExtensionConfig{},
 				)
 
 				var exactCoffeeSlashLocs []http.Location
@@ -6346,6 +6396,7 @@ func TestOIDCCallbackLocation(t *testing.T) {
 					"1",
 					&policiesfakes.FakeGenerator{},
 					alwaysFalseKeepAliveChecker,
+					ngfConfig.InferenceExtensionConfig{},
 				)
 
 				// The exact app route already occupies "= /my-callback", so no separate OIDC callback
@@ -6405,6 +6456,7 @@ func TestOIDCCallbackLocation(t *testing.T) {
 					"1",
 					&policiesfakes.FakeGenerator{},
 					alwaysFalseKeepAliveChecker,
+					ngfConfig.InferenceExtensionConfig{},
 				)
 
 				var callbackPaths []string
@@ -6457,6 +6509,7 @@ func TestOIDCCallbackLocation(t *testing.T) {
 					"1",
 					&policiesfakes.FakeGenerator{},
 					alwaysFalseKeepAliveChecker,
+					ngfConfig.InferenceExtensionConfig{},
 				)
 
 				var callbackLocs []http.Location
@@ -6529,6 +6582,7 @@ func TestOIDCURILocations(t *testing.T) {
 			"1",
 			&policiesfakes.FakeGenerator{},
 			alwaysFalseKeepAliveChecker,
+			ngfConfig.InferenceExtensionConfig{},
 		)
 		return locs
 	}

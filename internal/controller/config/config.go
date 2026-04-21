@@ -52,14 +52,20 @@ type Config struct {
 	ExperimentalFeatures bool
 	// InferenceExtension indicates if Gateway API Inference Extension support is enabled.
 	InferenceExtension bool
+	// InferenceExtensionConfig holds the configuration for the Gateway API Inference Extension.
+	InferenceExtensionConfig InferenceExtensionConfig
 	// SnippetsFilters indicates if SnippetsFilters are enabled.
 	SnippetsFilters bool
 	// Snippets indicates if Snippets are enabled. This will enable both SnippetsFilter and SnippetsPolicy APIs.
 	Snippets bool
-	// EndpointPickerDisableTLS indicates if TLS is disabled for EndpointPicker communication.
-	EndpointPickerDisableTLS bool
-	// EndpointPickerTLSSkipVerify indicates if secure verification is skipped for EndpointPicker communication.
-	EndpointPickerTLSSkipVerify bool
+}
+
+// InferenceExtensionConfig holds the configuration for the Gateway API Inference Extension.
+type InferenceExtensionConfig struct {
+	// DisableTLS disables TLS when connecting to the EndpointPicker.
+	DisableTLS bool
+	// TLSSkipVerify disables server certificate verification when connecting to the EndpointPicker.
+	TLSSkipVerify bool
 }
 
 // GatewayPodConfig contains information about this Pod.
