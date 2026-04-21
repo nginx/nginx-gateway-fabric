@@ -261,32 +261,50 @@ test-cel-validation:
 		go test -v ./cel -run "$(CEL_TEST_TARGET)"; \
 	fi
 
-NAP_COMPILER_IMAGE = private-registry.nginx.com/nap/waf-compiler:5.12.1
+NAP_VERSION = $(shell grep -oP 'Release\s*=\s*"\K[^"]+' $(SELF_DIR)internal/framework/waf/waf.go)
+NAP_COMPILER_IMAGE = private-registry.nginx.com/nap/waf-compiler:$(NAP_VERSION)
 WAF_POLICY_DIR = $(SELF_DIR)tests/suite/manifests/waf-policy
+
+NAP_COMPILE_RUN = docker run --rm -v $(SELF_DIR):$(SELF_DIR) $(NAP_COMPILER_IMAGE)
 
 .PHONY: compile-waf-bundles
 compile-waf-bundles: check-for-docker ## Compile NAP WAF policy bundles for functional tests. Requires Docker and access to private-registry.nginx.com.
 	@echo "Compiling dataguard-blocking.tgz..."
+	$(NAP_COMPILE_RUN) -p $(WAF_POLICY_DIR)/dataguard-blocking.json -o $(WAF_POLICY_DIR)/dataguard-blocking.tgz
+	@echo "Compiling attack-signatures-blocking.tgz..."
+	$(NAP_COMPILE_RUN) -p $(WAF_POLICY_DIR)/attack-signatures-blocking.json -o $(WAF_POLICY_DIR)/attack-signatures-blocking.tgz
+	@echo "Compiling logconf.tgz..."
+	$(NAP_COMPILE_RUN) -l $(WAF_POLICY_DIR)/log-illegal.json -o $(WAF_POLICY_DIR)/logconf.tgz
+	@echo "WAF bundles compiled to $(WAF_POLICY_DIR)/"
+
+.PHONY: compile-waf-bundles-ci
+compile-waf-bundles-ci: check-for-docker ## Compile NAP WAF policy bundles for CI (Linux only).
+	$(eval NAP_LOG_DIR := $(shell mktemp -d))
+	$(eval NAP_CACHE_DIR := $(shell mktemp -d))
+	chmod o+w $(WAF_POLICY_DIR) $(NAP_LOG_DIR) $(NAP_CACHE_DIR)
+	@echo "Compiling dataguard-blocking.tgz..."
 	docker run --rm \
-		--user $(shell id -u):$(shell id -g) \
 		-v $(SELF_DIR):$(SELF_DIR) \
+		-v $(NAP_LOG_DIR):/var/log/app_protect \
+		-v $(NAP_CACHE_DIR):/opt/app_protect/config \
 		$(NAP_COMPILER_IMAGE) \
-		-p $(WAF_POLICY_DIR)/dataguard-blocking.json \
-		-o $(WAF_POLICY_DIR)/dataguard-blocking.tgz
+		-p $(WAF_POLICY_DIR)/dataguard-blocking.json -o $(WAF_POLICY_DIR)/dataguard-blocking.tgz
 	@echo "Compiling attack-signatures-blocking.tgz..."
 	docker run --rm \
-		--user $(shell id -u):$(shell id -g) \
 		-v $(SELF_DIR):$(SELF_DIR) \
+		-v $(NAP_LOG_DIR):/var/log/app_protect \
+		-v $(NAP_CACHE_DIR):/opt/app_protect/config \
 		$(NAP_COMPILER_IMAGE) \
-		-p $(WAF_POLICY_DIR)/attack-signatures-blocking.json \
-		-o $(WAF_POLICY_DIR)/attack-signatures-blocking.tgz
+		-p $(WAF_POLICY_DIR)/attack-signatures-blocking.json -o $(WAF_POLICY_DIR)/attack-signatures-blocking.tgz
 	@echo "Compiling logconf.tgz..."
 	docker run --rm \
-		--user $(shell id -u):$(shell id -g) \
 		-v $(SELF_DIR):$(SELF_DIR) \
+		-v $(NAP_LOG_DIR):/var/log/app_protect \
+		-v $(NAP_CACHE_DIR):/opt/app_protect/config \
 		$(NAP_COMPILER_IMAGE) \
-		-l $(WAF_POLICY_DIR)/log-illegal.json \
-		-o $(WAF_POLICY_DIR)/logconf.tgz
+		-l $(WAF_POLICY_DIR)/log-illegal.json -o $(WAF_POLICY_DIR)/logconf.tgz
+	chmod o-w $(WAF_POLICY_DIR)
+	rm -rf $(NAP_LOG_DIR) $(NAP_CACHE_DIR)
 	@echo "WAF bundles compiled to $(WAF_POLICY_DIR)/"
 
 .PHONY: test-waf

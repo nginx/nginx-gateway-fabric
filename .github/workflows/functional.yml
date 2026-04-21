@@ -134,7 +134,7 @@ jobs:
 
       - name: Compile WAF policy bundles
         if: ${{ inputs.image == 'plus-waf' }}
-        run: make compile-waf-bundles
+        run: make compile-waf-bundles-ci
         working-directory: ./tests
 
       - name: Install cloud-provider-kind
