@@ -45,47 +45,36 @@ const (
 	// RedirectLocationType defines an external location that redirects to an internal location
 	// based on HTTP matching conditions.
 	RedirectLocationType LocationType = "redirect"
-	// InferenceExternalLocationType defines an external location that is used for calling NJS
-	// to get the inference workload endpoint and redirects to the internal location that will proxy_pass
-	// to that endpoint.
-	InferenceExternalLocationType LocationType = "inference-external"
-	// InferenceInternalLocationType defines an internal location that is used for calling NJS
-	// to get the inference workload endpoint and redirects to the internal location that will proxy_pass
-	// to that endpoint. This is used when an HTTP redirect location is also defined that redirects
-	// to this internal inference location.
-	InferenceInternalLocationType LocationType = "inference-internal"
 )
 
 // Location holds all configuration for an HTTP location.
 type Location struct {
-	// Return specifies a return directive (e.g., HTTP status or redirect) for this location block.
-	Return *Return
+	// AuthBasic contains the configuration for basic authentication.
+	AuthBasic *AuthBasic
 	// ProxySSLVerify controls SSL verification for upstreams when proxying requests.
 	ProxySSLVerify *ProxySSLVerify
-	// ProxyPass is the upstream backend (URL or name) to which requests are proxied.
-	ProxyPass string
-	// CORSHeaders are the CORS headers to be added for this location.
-	CORSHeaders []Header
+	// Inference holds configuration for the Rust inference module (EPP directives).
+	Inference *InferenceConfig
+	// AuthJWT contains the configuration for JWT authentication.
+	AuthJWT *AuthJWT
+	// Return specifies a return directive (e.g., HTTP status or redirect) for this location block.
+	Return *Return
 	// HTTPMatchKey is the key for associating HTTP match rules, used for routing and NJS module logic.
 	HTTPMatchKey string
-	// MirrorSplitClientsVariableName is the variable name for split_clients, used in traffic mirroring scenarios.
-	MirrorSplitClientsVariableName string
-	// EPPInternalPath is the internal path for the inference NJS module to redirect to.
-	EPPInternalPath string
-	// EPPHost is the host for the EndpointPicker, used for inference routing.
-	EPPHost string
 	// Type indicates the type of location (external, internal, redirect, etc).
 	Type LocationType
 	// Path is the NGINX location path.
 	Path string
-	// AuthBasic contains the configuration for basic authentication.
-	AuthBasic *AuthBasic
-	// AuthJWT contains the configuration for JWT authentication.
-	AuthJWT *AuthJWT
+	// MirrorSplitClientsVariableName is the variable name for split_clients, used in traffic mirroring scenarios.
+	MirrorSplitClientsVariableName string
 	// AuthOIDCProviderName is the name of the oidc_provider to be referenced in this location.
 	AuthOIDCProviderName string
+	// ProxyPass is the upstream backend (URL or name) to which requests are proxied.
+	ProxyPass string
 	// ResponseHeaders are custom response headers to be sent.
 	ResponseHeaders ResponseHeaders
+	// CORSHeaders are the CORS headers to be added for this location.
+	CORSHeaders []Header
 	// ProxySetHeaders are headers to set when proxying requests upstream.
 	ProxySetHeaders []Header
 	// Rewrites are rewrite rules for modifying request paths.
@@ -94,10 +83,22 @@ type Location struct {
 	MirrorPaths []string
 	// Includes are additional NGINX config snippets or policies to include in this location.
 	Includes []shared.Include
-	// EPPPort is the port for the EndpointPicker, used for inference routing.
-	EPPPort int
 	// GRPC indicates if this location proxies gRPC traffic.
 	GRPC bool
+}
+
+// InferenceConfig holds configuration for the Rust inference dynamic module.
+// The Rust module runs in the NGINX access phase of the location and calls the EPP
+// server via gRPC to select an endpoint before proxy_pass executes.
+type InferenceConfig struct {
+	// EPPEndpoint is the host:port of the Endpoint Picker Protocol server.
+	EPPEndpoint string
+	// FailopenUpstream is the upstream name to use if the EPP call fails (optional).
+	FailopenUpstream string
+	// UseTLS indicates whether TLS should be used when connecting to the EPP server.
+	UseTLS bool
+	// TLSSkipVerify indicates whether to skip certificate verification when using TLS.
+	TLSSkipVerify bool
 }
 
 // Header defines an HTTP header to be passed to the proxied server.

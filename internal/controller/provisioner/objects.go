@@ -1011,23 +1011,6 @@ func (p *NginxProvisioner) buildNginxPodTemplateSpec(
 		p.configureDataplaneKeySecret(&spec, names)
 	}
 
-	// Configure inference extension if enabled
-	if p.cfg.InferenceExtension {
-		var containerResources corev1.ResourceRequirements
-		if nProxyCfg != nil && nProxyCfg.Kubernetes != nil {
-			var containerSpec *ngfAPIv1alpha2.ContainerSpec
-			if nProxyCfg.Kubernetes.Deployment != nil {
-				containerSpec = &nProxyCfg.Kubernetes.Deployment.Container
-			} else if nProxyCfg.Kubernetes.DaemonSet != nil {
-				containerSpec = &nProxyCfg.Kubernetes.DaemonSet.Container
-			}
-			if containerSpec != nil && containerSpec.Resources != nil {
-				containerResources = *containerSpec.Resources
-			}
-		}
-		p.configureInferenceExtension(&spec, containerResources)
-	}
-
 	return spec
 }
 
@@ -1453,44 +1436,6 @@ func (p *NginxProvisioner) configureDataplaneKeySecret(
 	})
 
 	spec.Spec.Containers[0].VolumeMounts = volumeMounts
-}
-
-// configureInferenceExtension configures the inference extension endpoint-picker sidecar.
-func (p *NginxProvisioner) configureInferenceExtension(
-	spec *corev1.PodTemplateSpec,
-	containerResources corev1.ResourceRequirements,
-) {
-	command := []string{
-		"/usr/bin/gateway",
-		"endpoint-picker",
-	}
-
-	if p.cfg.EndpointPickerDisableTLS {
-		command = append(command, "--endpoint-picker-disable-tls")
-	}
-	if p.cfg.EndpointPickerTLSSkipVerify {
-		command = append(command, "--endpoint-picker-tls-skip-verify")
-	}
-
-	spec.Spec.Containers = append(spec.Spec.Containers, corev1.Container{
-		Name:            "endpoint-picker-shim",
-		Image:           p.cfg.GatewayPodConfig.Image,
-		ImagePullPolicy: defaultImagePullPolicy,
-		Command:         command,
-		Resources:       containerResources,
-		SecurityContext: &corev1.SecurityContext{
-			AllowPrivilegeEscalation: helpers.GetPointer(false),
-			Capabilities: &corev1.Capabilities{
-				Drop: []corev1.Capability{"ALL"},
-			},
-			ReadOnlyRootFilesystem: helpers.GetPointer(true),
-			RunAsGroup:             helpers.GetPointer[int64](1001),
-			RunAsUser:              helpers.GetPointer[int64](101),
-			SeccompProfile: &corev1.SeccompProfile{
-				Type: corev1.SeccompProfileTypeRuntimeDefault,
-			},
-		},
-	})
 }
 
 func (p *NginxProvisioner) buildImage(nProxyCfg *graph.EffectiveNginxProxy) (string, corev1.PullPolicy) {

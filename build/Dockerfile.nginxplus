@@ -4,6 +4,40 @@ FROM scratch AS nginx-files
 # the following links can be replaced with local files if needed, i.e. ADD --chown=101:1001 <local_file> <container_file>
 ADD --link --chown=101:1001 https://cs.nginx.com/static/keys/nginx_signing.rsa.pub nginx_signing.rsa.pub
 
+# Configure nginx source for bindgen to generate Rust FFI bindings.
+# Only --with-compat is required for the ngf-inference module; it sets NGX_COMPAT
+# which is needed for dynamic module binary compatibility.
+# NGINX Plus R36 is based on NGINX Open Source 1.29.3.
+FROM alpine:3.22 AS nginx-source
+
+ARG NGINX_VERSION=1.29.3
+
+RUN apk add --no-cache gcc musl-dev openssl-dev pcre2-dev zlib-dev linux-headers perl make
+
+RUN wget -q https://nginx.org/download/nginx-${NGINX_VERSION}.tar.gz \
+    && tar xzf nginx-${NGINX_VERSION}.tar.gz
+
+RUN cd nginx-${NGINX_VERSION} && ./configure --with-compat --with-http_ssl_module
+
+# Build the inference Rust module against the configured nginx source
+FROM rust:1.94-alpine AS inference-builder
+
+# Pin clang20-dev: clang21's libclang.so cannot be dlopen'd on Alpine musl.
+RUN apk add --no-cache musl-dev protobuf-dev openssl-dev perl make \
+    pcre2-dev zlib-dev linux-headers clang20-dev
+
+ARG NGINX_VERSION=1.29.3
+
+COPY --from=nginx-source /nginx-${NGINX_VERSION} /nginx-src
+
+ENV NGINX_SOURCE_DIR=/nginx-src
+ENV RUSTFLAGS="-C target-feature=-crt-static"
+
+WORKDIR /build
+COPY internal/controller/nginx/modules/rust/ngf-inference/ ./
+
+RUN cargo build --release
+
 FROM alpine:3.22
 
 RUN apk update && apk upgrade --no-cache musl musl-utils zlib libcap
@@ -38,6 +72,7 @@ RUN apk add --no-cache bash \
 
 COPY build/entrypoint.sh /agent/entrypoint.sh
 COPY ${NJS_DIR}/ /usr/lib/nginx/modules/njs/
+COPY --from=inference-builder /build/target/release/libinference.so /usr/lib/nginx/modules/libinference.so
 COPY ${NGINX_CONF_DIR}/nginx-plus.conf /etc/nginx/nginx.conf
 COPY ${NGINX_CONF_DIR}/grpc-error-locations.conf /etc/nginx/grpc-error-locations.conf
 COPY ${NGINX_CONF_DIR}/grpc-error-pages.conf /etc/nginx/grpc-error-pages.conf

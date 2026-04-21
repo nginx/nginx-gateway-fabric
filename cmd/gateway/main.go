@@ -25,7 +25,6 @@ func main() {
 		createGenerateCertsCommand(),
 		createInitializeCommand(),
 		createSleepCommand(),
-		createEndpointPickerCommand(),
 	)
 
 	if err := rootCmd.Execute(); err != nil {
