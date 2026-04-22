@@ -78,21 +78,29 @@ func (s *secretEntry) needsRevalidation(opts *resolveOptions) bool {
 	return opts.expectedSecretKey != "" && opts.expectedSecretKey != s.expectedKey
 }
 
-// revalidate checks are only done on Opaque secrets with an expected key.
+// revalidate re-validates the secret against new resolve options.
+// For TLS secrets, it re-runs the full validation logic to check for the new expectedKey.
+// For Opaque secrets, it validates the expected key exists.
 func (s *secretEntry) revalidate(opts *resolveOptions, obj client.Object) error {
 	secret, ok := obj.(*v1.Secret)
 	if !ok {
 		panic(fmt.Sprintf("expected Secret object, got %T", obj))
 	}
 
-	if secret.Type != v1.SecretTypeOpaque {
+	switch secret.Type {
+	case v1.SecretTypeTLS:
+		// Re-run full validation for TLS secrets with the new expectedKey
+		s.expectedKey = opts.expectedSecretKey
+		s.validate(obj)
+		return s.error()
+	case v1.SecretTypeOpaque:
+		err := validateOpaqueSecretKey(secret, opts.expectedSecretKey)
+		s.expectedKey = opts.expectedSecretKey
+		s.setError(err)
+		return err
+	default:
 		return fmt.Errorf("unsupported secret type %q", secret.Type)
 	}
-
-	err := validateOpaqueSecretKey(secret, opts.expectedSecretKey)
-	s.expectedKey = opts.expectedSecretKey
-	s.setError(err)
-	return err
 }
 
 func validateOpaqueSecretKey(secret *v1.Secret, key string) error {

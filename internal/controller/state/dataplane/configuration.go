@@ -449,7 +449,7 @@ func buildFrontendTLSCertBundles(
 	sslServers []VirtualServer,
 	refCertBundles []secrets.CertificateBundle,
 ) map[CertBundleID]CertBundle {
-	bundles := make(map[CertBundleID]CertBundle)
+	bundles := make(map[CertBundleID]CertBundle, len(refCertBundles))
 
 	if !gateway.Valid || gateway.Source.Spec.TLS == nil || gateway.Source.Spec.TLS.Frontend == nil {
 		return bundles
@@ -492,7 +492,7 @@ func getFrontendTLSCertBundles(
 	refCertBundles []secrets.CertificateBundle,
 	listenerCACertRefs []*v1.ObjectReference,
 ) map[CertBundleID]CertBundle {
-	certBundles := make([]CertBundle, 0)
+	certBundles := make([]CertBundle, 0, len(listenerCACertRefs))
 	for _, ref := range listenerCACertRefs {
 		if ref.Name == "" {
 			continue

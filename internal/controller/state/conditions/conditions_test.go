@@ -211,17 +211,6 @@ func TestNewDefaultListenerConditions(t *testing.T) {
 			expectResolvedRefs: true,
 			expectNoConflicts:  false,
 		},
-		{
-			name: "multiple existing failure conditions suppress corresponding defaults",
-			existingConditions: append(
-				NewListenerInvalidNoValidCACertificate("no valid CA certificate"),
-				NewListenerInvalidCaCertificateRef("invalid CA cert ref"),
-				NewListenerOverlappingTLSConfig(v1.ListenerReasonHostnameConflict, "overlapping TLS"),
-			),
-			expectAccepted:     false,
-			expectResolvedRefs: false,
-			expectNoConflicts:  false,
-		},
 	}
 
 	for _, test := range tests {

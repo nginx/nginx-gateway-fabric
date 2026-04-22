@@ -165,7 +165,7 @@ func newListenerConfiguratorFactory(
 			externalReferenceResolvers: []listenerExternalReferenceResolver{
 				createExternalReferencesForTLSSecretsResolver(gw.Namespace, resourceResolver, refGrantResolver),
 			},
-			frontendTLSCaCertreferenceResolvers: []listenerFrontendTLSCaCertReferenceResolver{
+			frontendTLSCaCertReferenceResolvers: []listenerFrontendTLSCaCertReferenceResolver{
 				createFrontendTLSCaCertReferenceResolver(resourceResolver, refGrantResolver),
 			},
 		},
@@ -181,7 +181,7 @@ func newListenerConfiguratorFactory(
 				sharedOverlappingTLSConfigResolver,
 			},
 			externalReferenceResolvers:          []listenerExternalReferenceResolver{},
-			frontendTLSCaCertreferenceResolvers: []listenerFrontendTLSCaCertReferenceResolver{},
+			frontendTLSCaCertReferenceResolvers: []listenerFrontendTLSCaCertReferenceResolver{},
 		},
 		tcp: &listenerConfigurator{
 			validators: []listenerValidator{
@@ -235,8 +235,8 @@ type listenerConfigurator struct {
 	conflictResolvers []listenerConflictResolver
 	// externalReferenceResolvers can depend on validators - they will only be executed if all validators pass.
 	externalReferenceResolvers []listenerExternalReferenceResolver
-	// frontendTLSCaCertreferenceResolvers can depend on validators - they will only be executed if all validators pass.
-	frontendTLSCaCertreferenceResolvers []listenerFrontendTLSCaCertReferenceResolver
+	// frontendTLSCaCertReferenceResolvers can depend on validators - they will only be executed if all validators pass.
+	frontendTLSCaCertReferenceResolvers []listenerFrontendTLSCaCertReferenceResolver
 }
 
 func (c *listenerConfigurator) configure(listener v1.Listener, gwNSName types.NamespacedName, gw *Gateway) *Listener {
@@ -294,7 +294,7 @@ func (c *listenerConfigurator) configure(listener v1.Listener, gwNSName types.Na
 		externalReferenceResolver(l)
 	}
 
-	for _, frontendTLSResolver := range c.frontendTLSCaCertreferenceResolvers {
+	for _, frontendTLSResolver := range c.frontendTLSCaCertReferenceResolvers {
 		frontendTLSResolver(l, gw)
 	}
 
@@ -972,6 +972,17 @@ func getListenerFrontendTLSCaRefs(
 		certObjRef, certNsName := getFrontendTLSCertReferences(cert, gw.Source)
 		resourceType := getFrontendTLSCertResourceType(cert.Kind)
 
+		if refNotPermittedCond := resolveCrossNamespaceRefGrant(
+			cert,
+			certNsName,
+			gw.Source.Namespace,
+			refGrantResolver,
+		); refNotPermittedCond != (conditions.Condition{}) {
+			gw.Conditions = append(gw.Conditions, refNotPermittedCond)
+			refNotPermittedCount++
+			continue
+		}
+
 		if err := resourceResolver.Resolve(
 			resourceType,
 			*certNsName,
@@ -983,16 +994,6 @@ func getListenerFrontendTLSCaRefs(
 			continue
 		}
 
-		if refNotPermittedCond := resolveCrossNamespaceRefGrant(
-			cert,
-			certNsName,
-			gw.Source.Namespace,
-			refGrantResolver,
-		); refNotPermittedCond != (conditions.Condition{}) {
-			gw.Conditions = append(gw.Conditions, refNotPermittedCond)
-			refNotPermittedCount++
-			continue
-		}
 		caRefs = append(caRefs, certObjRef)
 	}
 

@@ -573,6 +573,16 @@ func TestSecretResolver(t *testing.T) {
 			resolveOpts: []resolver.ResolveOption{resolver.WithExpectedSecretKey(secrets.CAKey)},
 		},
 		{
+			name:   "tls secret with ca certificate is valid when first resolved without expected key",
+			nsname: client.ObjectKeyFromObject(validSecret3),
+		},
+		{
+			name: "tls secret with ca certificate is valid when resolved again with ca.crt key " +
+				"after being cached without expected key",
+			nsname:      client.ObjectKeyFromObject(validSecret3),
+			resolveOpts: []resolver.ResolveOption{resolver.WithExpectedSecretKey(secrets.CAKey)},
+		},
+		{
 			name:           "tls secret with expected ca.crt key",
 			nsname:         client.ObjectKeyFromObject(tlsNoCa),
 			resolveOpts:    []resolver.ResolveOption{resolver.WithExpectedSecretKey(secrets.CAKey)},

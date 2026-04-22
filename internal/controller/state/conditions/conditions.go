@@ -572,11 +572,7 @@ func NewRouteResolvedRefsInvalidFilter(msg string) Condition {
 func NewDefaultListenerConditions(existingConditions []Condition) []Condition {
 	defaultConds := []Condition{
 		NewListenerProgrammed(),
-	}
-
-	// Only add Accepted=true if there are no existing Accepted=false conditions.
-	if !hasNotAcceptedListener(existingConditions) {
-		defaultConds = append(defaultConds, NewListenerAccepted())
+		NewListenerAccepted(),
 	}
 
 	// Only add ResolvedRefs=true if there are no existing ResolvedRefs conditions
@@ -590,16 +586,6 @@ func NewDefaultListenerConditions(existingConditions []Condition) []Condition {
 	}
 
 	return defaultConds
-}
-
-// hasNotAcceptedListener checks if the Listener has an Accepted=False condition.
-func hasNotAcceptedListener(conditions []Condition) bool {
-	for _, cond := range conditions {
-		if cond.Type == string(v1.ListenerConditionAccepted) {
-			return true
-		}
-	}
-	return false
 }
 
 // hasResolvedRefsConditions checks if the Listener has any ResolvedRefs=False conditions.
