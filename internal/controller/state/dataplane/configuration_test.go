@@ -8136,6 +8136,18 @@ func TestBuildCompressionConfig(t *testing.T) {
 			},
 		},
 		{
+			name: "compression with gzip but no http version defaults to 1.1",
+			compression: &ngfAPIv1alpha2.Compression{
+				Type:      ngfAPIv1alpha2.GzipCompressionType,
+				MimeTypes: []string{"text/css"},
+				Gzip:      &ngfAPIv1alpha2.GzipSettings{},
+			},
+			expected: &CompressionSettings{
+				MimeTypes:   []string{"text/css"},
+				HTTPVersion: "1.1",
+			},
+		},
+		{
 			name: "compression with all options",
 			compression: &ngfAPIv1alpha2.Compression{
 				Type:      ngfAPIv1alpha2.GzipCompressionType,

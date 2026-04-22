@@ -1874,6 +1874,8 @@ func buildCompressionConfig(compression *ngfAPIv1alpha2.Compression) *Compressio
 
 		if compression.Gzip.HTTPVersion != nil {
 			settings.HTTPVersion = string(*compression.Gzip.HTTPVersion)
+		} else {
+			settings.HTTPVersion = "1.1"
 		}
 
 		if len(compression.Gzip.Proxied) > 0 {
