@@ -129,6 +129,8 @@ var _ = Describe("WAFPolicy", Ordered, Label("waf"), func() {
 	Context("when a valid WAFPolicy targeting an existing Gateway is created", func() {
 		policyFiles := []string{"waf-policy/wafpolicy.yaml"}
 
+		var conf *framework.Payload
+
 		BeforeAll(func() {
 			Expect(resourceManager.ApplyFromFiles(policyFiles, namespace)).To(Succeed())
 		})
@@ -140,43 +142,40 @@ var _ = Describe("WAFPolicy", Ordered, Label("waf"), func() {
 		It("is accepted by the Gateway", func() {
 			nsname := types.NamespacedName{Name: "gateway-waf", Namespace: namespace}
 			Expect(waitForWAFPolicyAccepted(nsname)).To(Succeed())
-		})
 
-		It("produces the correct NGINX directives", func() {
-			conf, err := resourceManager.GetNginxConfig(nginxPodName, namespace, nginxCrossplanePath)
+			var err error
+			conf, err = resourceManager.GetNginxConfig(nginxPodName, namespace, nginxCrossplanePath)
 			Expect(err).ToNot(HaveOccurred())
-
-			// app_protect directives are set at the server level for gateway-targeted policies.
-			wafFile := fmt.Sprintf("WAFPolicy_%s_gateway-waf.conf", namespace)
-			expectedFields := []framework.ExpectedNginxField{
-				{
-					Directive: "app_protect_enable",
-					Value:     "on",
-					File:      wafFile,
-				},
-				{
-					Directive: "app_protect_policy_file",
-					Value:     fmt.Sprintf("/etc/app_protect/bundles/%s_gateway-waf.tgz", namespace),
-					File:      wafFile,
-				},
-				{
-					Directive: "app_protect_security_log_enable",
-					Value:     "on",
-					File:      wafFile,
-				},
-				{
-					// Use substring match: the log bundle filename contains a content-derived hash
-					// that may change across compiler versions.
-					Directive:             "app_protect_security_log",
-					Value:                 fmt.Sprintf("/etc/app_protect/bundles/%s_gateway-waf_log_", namespace),
-					File:                  wafFile,
-					ValueSubstringAllowed: true,
-				},
-			}
-			for _, field := range expectedFields {
-				Expect(framework.ValidateNginxFieldExists(conf, field)).To(Succeed())
-			}
 		})
+
+		// app_protect directives are set at the server level for gateway-targeted policies.
+		// The log bundle filename contains a content-derived hash that may change across compiler
+		// versions, so ValueSubstringAllowed is used for that assertion.
+		DescribeTable("produces the correct NGINX directives",
+			func(expFields []framework.ExpectedNginxField) {
+				for _, field := range expFields {
+					Expect(framework.ValidateNginxFieldExists(conf, field)).To(Succeed())
+				}
+			},
+			Entry("server-level WAF directives", func() []framework.ExpectedNginxField {
+				wafFile := fmt.Sprintf("WAFPolicy_%s_gateway-waf.conf", namespace)
+				return []framework.ExpectedNginxField{
+					{Directive: "app_protect_enable", Value: "on", File: wafFile},
+					{
+						Directive: "app_protect_policy_file",
+						Value:     fmt.Sprintf("/etc/app_protect/bundles/%s_gateway-waf.tgz", namespace),
+						File:      wafFile,
+					},
+					{Directive: "app_protect_security_log_enable", Value: "on", File: wafFile},
+					{
+						Directive:             "app_protect_security_log",
+						Value:                 fmt.Sprintf("/etc/app_protect/bundles/%s_gateway-waf_log_", namespace),
+						File:                  wafFile,
+						ValueSubstringAllowed: true,
+					},
+				}
+			}()),
+		)
 
 		It("blocks requests containing attack signatures", func() {
 			port := 80
@@ -230,6 +229,8 @@ var _ = Describe("WAFPolicy", Ordered, Label("waf"), func() {
 	Context("when a WAFPolicy targets an HTTPRoute", func() {
 		policyFiles := []string{"waf-policy/wafpolicy-route.yaml"}
 
+		var conf *framework.Payload
+
 		BeforeAll(func() {
 			Expect(resourceManager.ApplyFromFiles(policyFiles, namespace)).To(Succeed())
 		})
@@ -241,32 +242,32 @@ var _ = Describe("WAFPolicy", Ordered, Label("waf"), func() {
 		It("is accepted", func() {
 			nsname := types.NamespacedName{Name: "coffee-route-waf", Namespace: namespace}
 			Expect(waitForWAFPolicyAccepted(nsname)).To(Succeed())
-		})
 
-		It("produces WAF directives in the location block for the targeted route", func() {
-			conf, err := resourceManager.GetNginxConfig(nginxPodName, namespace, nginxCrossplanePath)
+			var err error
+			conf, err = resourceManager.GetNginxConfig(nginxPodName, namespace, nginxCrossplanePath)
 			Expect(err).ToNot(HaveOccurred())
-
-			// For an HTTPRoute-targeted policy, directives are in the location block.
-			wafFile := fmt.Sprintf("WAFPolicy_%s_coffee-route-waf.conf", namespace)
-			expectedFields := []framework.ExpectedNginxField{
-				{
-					Directive: "app_protect_enable",
-					Value:     "on",
-					File:      wafFile,
-					Location:  "/coffee",
-				},
-				{
-					Directive: "app_protect_policy_file",
-					Value:     fmt.Sprintf("/etc/app_protect/bundles/%s_coffee-route-waf.tgz", namespace),
-					File:      wafFile,
-					Location:  "/coffee",
-				},
-			}
-			for _, field := range expectedFields {
-				Expect(framework.ValidateNginxFieldExists(conf, field)).To(Succeed())
-			}
 		})
+
+		// For an HTTPRoute-targeted policy, directives appear in the location block.
+		DescribeTable("produces WAF directives in the location block",
+			func(expFields []framework.ExpectedNginxField) {
+				for _, field := range expFields {
+					Expect(framework.ValidateNginxFieldExists(conf, field)).To(Succeed())
+				}
+			},
+			Entry("location-level WAF directives", func() []framework.ExpectedNginxField {
+				wafFile := fmt.Sprintf("WAFPolicy_%s_coffee-route-waf.conf", namespace)
+				return []framework.ExpectedNginxField{
+					{Directive: "app_protect_enable", Value: "on", File: wafFile, Location: "/coffee"},
+					{
+						Directive: "app_protect_policy_file",
+						Value:     fmt.Sprintf("/etc/app_protect/bundles/%s_coffee-route-waf.tgz", namespace),
+						File:      wafFile,
+						Location:  "/coffee",
+					},
+				}
+			}()),
+		)
 
 		It("masks sensitive data in responses on the protected route", func() {
 			port := 80
