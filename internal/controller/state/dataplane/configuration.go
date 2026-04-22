@@ -455,6 +455,8 @@ func buildFrontendTLSCertBundles(
 		return bundles
 	}
 
+	refCertBundleIndex := inxedRefCertBundles(refCertBundles)
+
 	for _, listener := range gateway.Listeners {
 		if listener.Source.Protocol != v1.HTTPSProtocolType {
 			continue
@@ -472,7 +474,7 @@ func buildFrontendTLSCertBundles(
 			bundles = getFrontendTLSCertBundles(
 				id,
 				bundles,
-				refCertBundles,
+				refCertBundleIndex,
 				listener.CACertificateRefs,
 			)
 		}
@@ -486,10 +488,36 @@ func buildFrontendTLSCertBundles(
 	return bundles
 }
 
+// refCertBundleKey is used as the key for indexing referenced certificate bundles
+// when building frontend TLS cert bundles.
+// It consists of the kind, namespace, and name of the referenced certificate bundle.
+type refCertBundleKey struct {
+	kind      v1.Kind
+	namespace v1.Namespace
+	name      v1.ObjectName
+}
+
+// inxedRefCertBundles creates an index of the referenced certificate bundles
+// based on their kind, namespace, and name for faster lookup when building frontend TLS cert bundles.
+func inxedRefCertBundles(
+	refCertBundles []secrets.CertificateBundle,
+) map[refCertBundleKey]secrets.CertificateBundle {
+	index := make(map[refCertBundleKey]secrets.CertificateBundle, len(refCertBundles))
+	for _, bundle := range refCertBundles {
+		key := refCertBundleKey{
+			kind:      bundle.Kind,
+			namespace: v1.Namespace(bundle.Name.Namespace),
+			name:      v1.ObjectName(bundle.Name.Name),
+		}
+		index[key] = bundle
+	}
+	return index
+}
+
 func getFrontendTLSCertBundles(
 	id CertBundleID,
 	bundles map[CertBundleID]CertBundle,
-	refCertBundles []secrets.CertificateBundle,
+	refCertBundleIndex map[refCertBundleKey]secrets.CertificateBundle,
 	listenerCACertRefs []*v1.ObjectReference,
 ) map[CertBundleID]CertBundle {
 	certBundles := make([]CertBundle, 0, len(listenerCACertRefs))
@@ -497,17 +525,16 @@ func getFrontendTLSCertBundles(
 		if ref.Name == "" {
 			continue
 		}
-		for _, bundle := range refCertBundles {
-			if bundle.Kind == ref.Kind &&
-				v1.ObjectName(bundle.Name.Name) == ref.Name &&
-				v1.Namespace(bundle.Name.Namespace) == *ref.Namespace {
-				certRefData := getCertRefBundleData(bundle)
-				certBundles = append(certBundles, certRefData)
-				break
-			}
+		key := refCertBundleKey{
+			kind:      ref.Kind,
+			namespace: *ref.Namespace,
+			name:      ref.Name,
+		}
+		if bundle, exists := refCertBundleIndex[key]; exists {
+			certRefData := getCertRefBundleData(bundle)
+			certBundles = append(certBundles, certRefData)
 		}
 	}
-
 	if len(certBundles) == 0 {
 		return bundles
 	}

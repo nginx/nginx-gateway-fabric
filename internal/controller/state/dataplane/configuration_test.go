@@ -8349,10 +8349,11 @@ func TestGetFrontendTLSCertBundleData(t *testing.T) {
 			g := NewWithT(t)
 			bundles := make(map[CertBundleID]CertBundle)
 			refCertBundles := buildFrontendTLSRefCertBundles(test.secretsMap, test.caCertConfigMaps)
+			refCertBundleIndex := inxedRefCertBundles(refCertBundles)
 			refs := []*v1.ObjectReference{test.ref}
 			bundleID := CertBundleID("cert_bundle_test_listener")
 
-			result := getFrontendTLSCertBundles(bundleID, bundles, refCertBundles, refs)
+			result := getFrontendTLSCertBundles(bundleID, bundles, refCertBundleIndex, refs)
 
 			g.Expect(result[bundleID]).To(Equal(test.expected))
 		})
