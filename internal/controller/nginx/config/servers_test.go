@@ -6832,3 +6832,105 @@ func TestBuildHTTPSSLFrontendTLS(t *testing.T) {
 		})
 	}
 }
+
+func TestExecuteServers_FrontendTLS(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name            string
+		ssl             *dataplane.SSL
+		expectedPresent []string
+		expectedAbsent  []string
+	}{
+		{
+			name: "frontend TLS disabled",
+			ssl: &dataplane.SSL{
+				KeyPairIDs: []dataplane.SSLKeyPairID{"test-keypair"},
+			},
+			expectedPresent: []string{
+				"ssl_certificate /etc/nginx/secrets/test-keypair.pem;",
+				"ssl_certificate_key /etc/nginx/secrets/test-keypair.pem;",
+			},
+			expectedAbsent: []string{
+				"ssl_client_certificate ",
+				"ssl_verify_client ",
+				"error_page 495 496 = @frontend_tls_verify_failed;",
+				"location @frontend_tls_verify_failed {",
+				"return 444;",
+			},
+		},
+		{
+			name: "frontend TLS enabled",
+			ssl: &dataplane.SSL{
+				KeyPairIDs:          []dataplane.SSLKeyPairID{"test-keypair"},
+				ClientCertBundleID:  dataplane.CertBundleID("test-ca-bundle"),
+				VerifyClient:        dataplane.SSLVerifyClientOn,
+				RequireVerifiedCert: true,
+			},
+			expectedPresent: []string{
+				"ssl_certificate /etc/nginx/secrets/test-keypair.pem;",
+				"ssl_certificate_key /etc/nginx/secrets/test-keypair.pem;",
+				"ssl_client_certificate " + generateCertBundleFileName(dataplane.CertBundleID("test-ca-bundle")) + ";",
+				"ssl_verify_client on;",
+				"error_page 495 496 = @frontend_tls_verify_failed;",
+				"location @frontend_tls_verify_failed {",
+				"return 444;",
+			},
+		},
+		{
+			name: "frontend TLS enabled, with mode: AllowInsecureFallback",
+			ssl: &dataplane.SSL{
+				KeyPairIDs:   []dataplane.SSLKeyPairID{"test-keypair"},
+				VerifyClient: dataplane.SSLVerifyClientOptionalNoCA,
+			},
+			expectedPresent: []string{
+				"ssl_certificate /etc/nginx/secrets/test-keypair.pem;",
+				"ssl_certificate_key /etc/nginx/secrets/test-keypair.pem;",
+				"ssl_verify_client optional_no_ca;",
+			},
+			expectedAbsent: []string{
+				"ssl_client_certificate ",
+				"error_page 495 496 = @frontend_tls_verify_failed;",
+				"location @frontend_tls_verify_failed {",
+				"return 444;",
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			conf := dataplane.Configuration{
+				SSLServers: []dataplane.VirtualServer{
+					{
+						Hostname: "example.com",
+						Port:     8443,
+						SSL:      test.ssl,
+					},
+				},
+			}
+
+			gen := GeneratorImpl{}
+			results := gen.executeServers(conf, &policiesfakes.FakeGenerator{}, alwaysFalseKeepAliveChecker)
+
+			var httpData string
+			for _, res := range results {
+				if res.dest == httpConfigFile {
+					httpData = string(res.data)
+					break
+				}
+			}
+
+			g.Expect(httpData).NotTo(BeEmpty())
+
+			for _, sub := range test.expectedPresent {
+				g.Expect(httpData).To(ContainSubstring(sub))
+			}
+			for _, sub := range test.expectedAbsent {
+				g.Expect(httpData).NotTo(ContainSubstring(sub))
+			}
+		})
+	}
+}
