@@ -279,32 +279,20 @@ compile-waf-bundles: check-for-docker ## Compile NAP WAF policy bundles for func
 
 .PHONY: compile-waf-bundles-ci
 compile-waf-bundles-ci: check-for-docker ## Compile NAP WAF policy bundles for CI (Linux only).
-	$(eval NAP_LOG_DIR := $(shell mktemp -d))
-	$(eval NAP_CACHE_DIR := $(shell mktemp -d))
-	chmod o+w $(WAF_POLICY_DIR) $(NAP_LOG_DIR) $(NAP_CACHE_DIR)
+	chmod o+w $(WAF_POLICY_DIR)
 	@echo "Compiling dataguard-blocking.tgz..."
-	docker run --rm \
-		-v $(SELF_DIR):$(SELF_DIR) \
-		-v $(NAP_LOG_DIR):/var/log/app_protect \
-		-v $(NAP_CACHE_DIR):/opt/app_protect/config \
-		$(NAP_COMPILER_IMAGE) \
+	-docker run --rm -v $(SELF_DIR):$(SELF_DIR) $(NAP_COMPILER_IMAGE) \
 		-p $(WAF_POLICY_DIR)/dataguard-blocking.json -o $(WAF_POLICY_DIR)/dataguard-blocking.tgz
+	test -s $(WAF_POLICY_DIR)/dataguard-blocking.tgz
 	@echo "Compiling attack-signatures-blocking.tgz..."
-	docker run --rm \
-		-v $(SELF_DIR):$(SELF_DIR) \
-		-v $(NAP_LOG_DIR):/var/log/app_protect \
-		-v $(NAP_CACHE_DIR):/opt/app_protect/config \
-		$(NAP_COMPILER_IMAGE) \
+	-docker run --rm -v $(SELF_DIR):$(SELF_DIR) $(NAP_COMPILER_IMAGE) \
 		-p $(WAF_POLICY_DIR)/attack-signatures-blocking.json -o $(WAF_POLICY_DIR)/attack-signatures-blocking.tgz
+	test -s $(WAF_POLICY_DIR)/attack-signatures-blocking.tgz
 	@echo "Compiling logconf.tgz..."
-	docker run --rm \
-		-v $(SELF_DIR):$(SELF_DIR) \
-		-v $(NAP_LOG_DIR):/var/log/app_protect \
-		-v $(NAP_CACHE_DIR):/opt/app_protect/config \
-		$(NAP_COMPILER_IMAGE) \
+	-docker run --rm -v $(SELF_DIR):$(SELF_DIR) $(NAP_COMPILER_IMAGE) \
 		-l $(WAF_POLICY_DIR)/log-illegal.json -o $(WAF_POLICY_DIR)/logconf.tgz
+	test -s $(WAF_POLICY_DIR)/logconf.tgz
 	chmod o-w $(WAF_POLICY_DIR)
-	rm -rf $(NAP_LOG_DIR) $(NAP_CACHE_DIR)
 	@echo "WAF bundles compiled to $(WAF_POLICY_DIR)/"
 
 .PHONY: test-waf
