@@ -107,8 +107,8 @@ var _ = Describe("WAFPolicy", Ordered, Label("waf"), func() {
 		Expect(resourceManager.DeleteNamespace(namespace)).To(Succeed())
 	})
 
-	Context("WAF sidecar containers", func() {
-		It("are injected into the NGINX pod when NginxProxy has waf enabled", func() {
+	Context("when NginxProxy has WAF enabled", func() {
+		It("injects WAF sidecar containers into the NGINX pod", func() {
 			ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.GetStatusTimeout)
 			defer cancel()
 
@@ -146,30 +146,36 @@ var _ = Describe("WAFPolicy", Ordered, Label("waf"), func() {
 			conf, err := resourceManager.GetNginxConfig(nginxPodName, namespace, nginxCrossplanePath)
 			Expect(err).ToNot(HaveOccurred())
 
-			// app_protect_enable is set at the server level for gateway-targeted policies
-			Expect(framework.ValidateNginxFieldExists(conf, framework.ExpectedNginxField{
-				Directive: "app_protect_enable",
-				Value:     "on",
-				File:      fmt.Sprintf("WAFPolicy_%s_gateway-waf.conf", namespace),
-			})).To(Succeed())
-
-			Expect(framework.ValidateNginxFieldExists(conf, framework.ExpectedNginxField{
-				Directive: "app_protect_policy_file",
-				Value:     fmt.Sprintf("/etc/app_protect/bundles/%s_gateway-waf.tgz", namespace),
-				File:      fmt.Sprintf("WAFPolicy_%s_gateway-waf.conf", namespace),
-			})).To(Succeed())
-
-			Expect(framework.ValidateNginxFieldExists(conf, framework.ExpectedNginxField{
-				Directive: "app_protect_security_log_enable",
-				Value:     "on",
-				File:      fmt.Sprintf("WAFPolicy_%s_gateway-waf.conf", namespace),
-			})).To(Succeed())
-
-			Expect(framework.ValidateNginxFieldExists(conf, framework.ExpectedNginxField{
-				Directive: "app_protect_security_log",
-				Value:     fmt.Sprintf("/etc/app_protect/bundles/%s_gateway-waf_log_34f5fe1a8362f3e5.tgz stderr", namespace),
-				File:      fmt.Sprintf("WAFPolicy_%s_gateway-waf.conf", namespace),
-			})).To(Succeed())
+			// app_protect directives are set at the server level for gateway-targeted policies.
+			wafFile := fmt.Sprintf("WAFPolicy_%s_gateway-waf.conf", namespace)
+			expectedFields := []framework.ExpectedNginxField{
+				{
+					Directive: "app_protect_enable",
+					Value:     "on",
+					File:      wafFile,
+				},
+				{
+					Directive: "app_protect_policy_file",
+					Value:     fmt.Sprintf("/etc/app_protect/bundles/%s_gateway-waf.tgz", namespace),
+					File:      wafFile,
+				},
+				{
+					Directive: "app_protect_security_log_enable",
+					Value:     "on",
+					File:      wafFile,
+				},
+				{
+					// Use substring match: the log bundle filename contains a content-derived hash
+					// that may change across compiler versions.
+					Directive:             "app_protect_security_log",
+					Value:                 fmt.Sprintf("/etc/app_protect/bundles/%s_gateway-waf_log_", namespace),
+					File:                  wafFile,
+					ValueSubstringAllowed: true,
+				},
+			}
+			for _, field := range expectedFields {
+				Expect(framework.ValidateNginxFieldExists(conf, field)).To(Succeed())
+			}
 		})
 
 		It("blocks requests containing attack signatures", func() {
@@ -242,19 +248,24 @@ var _ = Describe("WAFPolicy", Ordered, Label("waf"), func() {
 			Expect(err).ToNot(HaveOccurred())
 
 			// For an HTTPRoute-targeted policy, directives are in the location block.
-			Expect(framework.ValidateNginxFieldExists(conf, framework.ExpectedNginxField{
-				Directive: "app_protect_enable",
-				Value:     "on",
-				File:      fmt.Sprintf("WAFPolicy_%s_coffee-route-waf.conf", namespace),
-				Location:  "/coffee",
-			})).To(Succeed())
-
-			Expect(framework.ValidateNginxFieldExists(conf, framework.ExpectedNginxField{
-				Directive: "app_protect_policy_file",
-				Value:     fmt.Sprintf("/etc/app_protect/bundles/%s_coffee-route-waf.tgz", namespace),
-				File:      fmt.Sprintf("WAFPolicy_%s_coffee-route-waf.conf", namespace),
-				Location:  "/coffee",
-			})).To(Succeed())
+			wafFile := fmt.Sprintf("WAFPolicy_%s_coffee-route-waf.conf", namespace)
+			expectedFields := []framework.ExpectedNginxField{
+				{
+					Directive: "app_protect_enable",
+					Value:     "on",
+					File:      wafFile,
+					Location:  "/coffee",
+				},
+				{
+					Directive: "app_protect_policy_file",
+					Value:     fmt.Sprintf("/etc/app_protect/bundles/%s_coffee-route-waf.tgz", namespace),
+					File:      wafFile,
+					Location:  "/coffee",
+				},
+			}
+			for _, field := range expectedFields {
+				Expect(framework.ValidateNginxFieldExists(conf, field)).To(Succeed())
+			}
 		})
 
 		It("masks sensitive data in responses on the protected route", func() {
@@ -282,7 +293,7 @@ var _ = Describe("WAFPolicy", Ordered, Label("waf"), func() {
 				Should(BeTrue(), "expected WAF dataguard to mask sensitive data on the coffee route")
 		})
 
-		It("does not mask sensitive data on the unprotected tea route", func() {
+		It("allows requests to the unprotected tea route", func() {
 			port := 80
 			if portFwdPort != 0 {
 				port = portFwdPort
@@ -419,23 +430,23 @@ var _ = Describe("WAFPolicy", Ordered, Label("waf"), func() {
 
 		It("transitions to Programmed=True/StaleBundleWarning after the bundle is removed and keeps WAF active", func() {
 			// Remove the bundle from the server so the next poll fetch returns 404.
-			rmCmd := exec.CommandContext(
-				context.Background(),
-				"kubectl", "exec",
-				"-n", namespace,
+			ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.RequestTimeout)
+			defer cancel()
+			_, err := resourceManager.ExecInPod(
+				ctx,
+				namespace,
 				bundleServerPodName,
-				"--",
-				"rm", "-f", "/usr/share/nginx/html/attack-signatures-blocking.tgz",
+				"",
+				[]string{"rm", "-f", "/usr/share/nginx/html/attack-signatures-blocking.tgz"},
 			)
-			rmOut, rmErr := rmCmd.CombinedOutput()
-			Expect(rmErr).ToNot(HaveOccurred(), "kubectl exec rm failed: %s", string(rmOut))
+			Expect(err).ToNot(HaveOccurred(), "failed to remove bundle from server")
 
-			// Wait for the poller to attempt re-fetch (interval is 30s) and set the stale warning.
-			// Allow up to 90s: one full interval plus generous processing time.
+			// Wait for the poller to attempt re-fetch (interval is 15s) and set the stale warning.
+			// Allow up to 45s: one full interval plus generous processing time.
 			nsname := types.NamespacedName{Name: "gateway-waf-polling", Namespace: namespace}
 			Expect(waitForWAFPolicyCondition(
 				nsname, "Programmed", metav1.ConditionTrue, "StaleBundleWarning",
-				90*time.Second,
+				45*time.Second,
 			)).To(Succeed())
 
 			// Confirm WAF is still enforcing with the stale bundle — XSS should still be blocked.

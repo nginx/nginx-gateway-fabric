@@ -261,7 +261,7 @@ test-cel-validation:
 		go test -v ./cel -run "$(CEL_TEST_TARGET)"; \
 	fi
 
-NAP_VERSION = $(shell grep -oP 'Release\s*=\s*"\K[^"]+' $(SELF_DIR)internal/framework/waf/waf.go)
+NAP_VERSION = $(shell sed -n 's/.*Release[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' $(SELF_DIR)internal/framework/waf/waf.go)
 NAP_COMPILER_IMAGE = private-registry.nginx.com/nap/waf-compiler:$(NAP_VERSION)
 WAF_POLICY_DIR = $(SELF_DIR)tests/suite/manifests/waf-policy
 

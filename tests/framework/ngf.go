@@ -26,6 +26,7 @@ const (
 	PlusSecretName          = "nplus-license"
 	PlusImagePullSecretName = "nginx-plus-registry-secret" //nolint:gosec // not hardcoded credentials
 	NgfControllerName       = "gateway.nginx.org/nginx-gateway-controller"
+	nginxPlusRegistry       = "private-registry.nginx.com"
 )
 
 // InstallationConfig contains the configuration for the NGF installation.
@@ -180,8 +181,6 @@ func CreateLicenseSecret(rm ResourceManager, namespace, filename string) error {
 	return nil
 }
 
-const nginxPlusRegistry = "private-registry.nginx.com"
-
 func CreateImagePullSecret(rm ResourceManager, namespace, filename string) error {
 	GinkgoWriter.Printf("Creating NGINX Plus Image Pull secret in namespace %q from file %q\n", namespace, filename)
 
@@ -196,8 +195,8 @@ func CreateImagePullSecret(rm ResourceManager, namespace, filename string) error
 	jwt := strings.TrimSpace(string(jwtBytes))
 	auth := base64.StdEncoding.EncodeToString([]byte(jwt + ":none"))
 
-	dockerConfig := map[string]interface{}{
-		"auths": map[string]interface{}{
+	dockerConfig := map[string]any{
+		"auths": map[string]any{
 			nginxPlusRegistry: map[string]string{
 				"username": jwt,
 				"password": "none",
