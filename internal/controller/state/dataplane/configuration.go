@@ -101,17 +101,17 @@ func BuildConfiguration(
 		nginxPlus = buildNginxPlus(gateway)
 	}
 
-	refCertbundles := buildRefCertificateBundles(g.ReferencedSecrets, g.ReferencedCaCertConfigMaps)
+	refCertBundles := buildRefCertificateBundles(g.ReferencedSecrets, g.ReferencedCaCertConfigMaps)
 
 	certBundles := buildCertBundles(
-		refCertbundles,
+		refCertBundles,
 		backendGroups,
 		authCertBundles,
 	)
 	maps.Copy(certBundles, buildFrontendTLSCertBundles(
 		gateway,
 		sslServers,
-		refCertbundles,
+		refCertBundles,
 	))
 
 	config := Configuration{
@@ -455,17 +455,22 @@ func buildFrontendTLSCertBundles(
 		return bundles
 	}
 
-	refCertBundleIndex := inxedRefCertBundles(refCertBundles)
+	refCertBundleIndex := indexRefCertBundles(refCertBundles)
 
 	for _, listener := range gateway.Listeners {
 		if listener.Source.Protocol != v1.HTTPSProtocolType {
 			continue
 		}
-		// Create a unique cert bundle ID for this listener
-		// e.g. cert_bundle_443_https for a listener on port 443 named "https"
+		// Create a unique cert bundle ID for this listener gateway combo.
+		// e.g. cert_bundle_default_gateway_443_https
+		// for a listener on port 443 named "https" on a gateway in the default namespace.
 		caCertRef := types.NamespacedName{
-			Namespace: fmt.Sprintf("%d", listener.Source.Port),
-			Name:      listener.Name,
+			Namespace: gateway.Source.Namespace,
+			Name: fmt.Sprintf("%s_%d_%s",
+				gateway.Source.Name,
+				listener.Source.Port,
+				listener.Name,
+			),
 		}
 		id := generateCertBundleID(caCertRef)
 		// If the validation mode is AllowInsecureFallback
@@ -497,9 +502,9 @@ type refCertBundleKey struct {
 	name      v1.ObjectName
 }
 
-// inxedRefCertBundles creates an index of the referenced certificate bundles
+// indexRefCertBundles creates an index of the referenced certificate bundles
 // based on their kind, namespace, and name for faster lookup when building frontend TLS cert bundles.
-func inxedRefCertBundles(
+func indexRefCertBundles(
 	refCertBundles []secrets.CertificateBundle,
 ) map[refCertBundleKey]secrets.CertificateBundle {
 	index := make(map[refCertBundleKey]secrets.CertificateBundle, len(refCertBundles))

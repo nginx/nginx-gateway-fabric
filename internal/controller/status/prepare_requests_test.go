@@ -1666,7 +1666,7 @@ func TestBuildGatewayStatuses(t *testing.T) {
 				Valid: true,
 				Conditions: []conditions.Condition{
 					conditions.NewGatewayInsecureFrontendValidationMode(
-						"frontendTLS validation mode is set to AllowInsecureFallback",
+						"Validation Mode: AllowInsecureFallback is set for listener listener-valid-1",
 					),
 				},
 			},
@@ -1696,7 +1696,7 @@ func TestBuildGatewayStatuses(t *testing.T) {
 							ObservedGeneration: 2,
 							LastTransitionTime: transitionTime,
 							Reason:             string(v1.GatewayReasonConfigurationChanged),
-							Message:            "frontendTLS validation mode is set to AllowInsecureFallback",
+							Message:            "Validation Mode: AllowInsecureFallback is set for listener listener-valid-1",
 						},
 					},
 					Listeners: []v1.ListenerStatus{
