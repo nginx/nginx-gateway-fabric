@@ -8635,6 +8635,8 @@ func TestBuildFrontendTLSCertBundlesValidationModes(t *testing.T) {
 
 	g := NewWithT(t)
 	gatewayNs := "gateway-ns"
+	gatewayName := "test-gateway"
+	caRefFormat := "%s_%d_%s"
 	secretKind := v1.Kind(kinds.Secret)
 
 	allowInsecureRef := &v1.ObjectReference{
@@ -8651,7 +8653,7 @@ func TestBuildFrontendTLSCertBundlesValidationModes(t *testing.T) {
 	gateway := &graph.Gateway{
 		Valid: true,
 		Source: &v1.Gateway{
-			ObjectMeta: metav1.ObjectMeta{Namespace: gatewayNs},
+			ObjectMeta: metav1.ObjectMeta{Namespace: gatewayNs, Name: gatewayName},
 			Spec: v1.GatewaySpec{
 				TLS: &v1.GatewayTLSConfig{
 					Frontend: &v1.FrontendTLSConfig{
@@ -8705,8 +8707,14 @@ func TestBuildFrontendTLSCertBundlesValidationModes(t *testing.T) {
 	refCertBundles := buildFrontendTLSRefCertBundles(secretsMap, nil)
 	bundles := buildFrontendTLSCertBundles(gateway, sslServers, refCertBundles)
 
-	insecureID := generateCertBundleID(types.NamespacedName{Namespace: "443", Name: "https-insecure"})
-	validID := generateCertBundleID(types.NamespacedName{Namespace: "8443", Name: "https-valid"})
+	insecureID := generateCertBundleID(types.NamespacedName{
+		Namespace: gatewayNs,
+		Name:      fmt.Sprintf(caRefFormat, gatewayName, 443, "https-insecure"),
+	})
+	validID := generateCertBundleID(types.NamespacedName{
+		Namespace: gatewayNs,
+		Name:      fmt.Sprintf(caRefFormat, gatewayName, 8443, "https-valid"),
+	})
 
 	g.Expect(bundles).NotTo(HaveKey(insecureID))
 	g.Expect(bundles).To(HaveKey(validID))
