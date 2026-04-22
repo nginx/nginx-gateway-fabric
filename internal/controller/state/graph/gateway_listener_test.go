@@ -2013,6 +2013,11 @@ func TestCreateFrontendTLSCaCertReferenceResolverConditions(t *testing.T) {
 		}
 	}
 
+	secretRefPtr := func(name string, ns *v1.Namespace) *v1.ObjectReference {
+		ref := secretRef(name, ns)
+		return &ref
+	}
+
 	configMapRef := func(name string, ns *v1.Namespace) v1.ObjectReference {
 		return v1.ObjectReference{
 			Name:      v1.ObjectName(name),
@@ -2032,6 +2037,7 @@ func TestCreateFrontendTLSCaCertReferenceResolverConditions(t *testing.T) {
 		resolveErrByNN          map[string]error
 		name                    string
 		frontendTLS             v1.FrontendTLSConfig
+		expectedCACertRefs      []*v1.ObjectReference
 		expectedListenerReasons []string
 		expectedGatewayReasons  []string
 		listenerPort            v1.PortNumber
@@ -2048,6 +2054,7 @@ func TestCreateFrontendTLSCaCertReferenceResolverConditions(t *testing.T) {
 					},
 				},
 			},
+			expectedCACertRefs:    []*v1.ObjectReference{secretRefPtr("default-secret", namespace("default"))},
 			expectedListenerValid: true,
 		},
 		{
@@ -2634,6 +2641,52 @@ func TestCreateFrontendTLSCaCertReferenceResolverConditions(t *testing.T) {
 			}
 
 			g.Expect(listener.Valid).To(Equal(test.expectedListenerValid))
+			if test.expectedCACertRefs != nil {
+				g.Expect(listener.CACertificateRefs).To(Equal(test.expectedCACertRefs))
+			}
+		})
+	}
+}
+
+func TestGetFrontendTLSCertReferences(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name             string
+		ref              v1.ObjectReference
+		expectedObjRefNS *v1.Namespace
+		expectedNsName   types.NamespacedName
+	}{
+		{
+			name:             "defaults empty namespace to gateway namespace",
+			ref:              v1.ObjectReference{Name: v1.ObjectName("ca-secret"), Kind: v1.Kind(kinds.Secret)},
+			expectedObjRefNS: helpers.GetPointer(v1.Namespace("gateway-ns")),
+			expectedNsName:   types.NamespacedName{Namespace: "gateway-ns", Name: "ca-secret"},
+		},
+		{
+			name: "preserves explicit namespace",
+			ref: v1.ObjectReference{
+				Name:      v1.ObjectName("ca-secret"),
+				Kind:      v1.Kind(kinds.Secret),
+				Namespace: helpers.GetPointer(v1.Namespace("other-ns")),
+			},
+			expectedObjRefNS: helpers.GetPointer(v1.Namespace("other-ns")),
+			expectedNsName:   types.NamespacedName{Namespace: "other-ns", Name: "ca-secret"},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			objRef, nsName := getFrontendTLSCertReferences(test.ref, &v1.Gateway{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "gateway-ns"},
+			})
+
+			g.Expect(objRef).NotTo(BeNil())
+			g.Expect(objRef.Namespace).To(Equal(test.expectedObjRefNS))
+			g.Expect(nsName).To(Equal(&test.expectedNsName))
 		})
 	}
 }

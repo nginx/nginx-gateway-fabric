@@ -8214,8 +8214,9 @@ func TestGetFrontendTLSCertBundleData(t *testing.T) {
 		{
 			name: "CA bundle from secret",
 			ref: &v1.ObjectReference{
-				Name: v1.ObjectName("frontend-ca-secret"),
-				Kind: secretKind,
+				Name:      v1.ObjectName("frontend-ca-secret"),
+				Kind:      secretKind,
+				Namespace: helpers.GetPointer(v1.Namespace(gatewayNs)),
 			},
 			secretsMap: map[types.NamespacedName]*secrets.Secret{
 				{Namespace: gatewayNs, Name: "frontend-ca-secret"}: {
@@ -8231,8 +8232,9 @@ func TestGetFrontendTLSCertBundleData(t *testing.T) {
 		{
 			name: "CA bundle from configmap plaintext",
 			ref: &v1.ObjectReference{
-				Name: v1.ObjectName("frontend-ca-cm-plain"),
-				Kind: configMapKind,
+				Name:      v1.ObjectName("frontend-ca-cm-plain"),
+				Kind:      configMapKind,
+				Namespace: helpers.GetPointer(v1.Namespace(gatewayNs)),
 			},
 			caCertConfigMaps: map[types.NamespacedName]*configmaps.CaCertConfigMap{
 				{Namespace: gatewayNs, Name: "frontend-ca-cm-plain"}: {
@@ -8248,8 +8250,9 @@ func TestGetFrontendTLSCertBundleData(t *testing.T) {
 		{
 			name: "CA bundle from configmap base64 data",
 			ref: &v1.ObjectReference{
-				Name: v1.ObjectName("frontend-ca-cm-b64"),
-				Kind: configMapKind,
+				Name:      v1.ObjectName("frontend-ca-cm-b64"),
+				Kind:      configMapKind,
+				Namespace: helpers.GetPointer(v1.Namespace(gatewayNs)),
 			},
 			caCertConfigMaps: map[types.NamespacedName]*configmaps.CaCertConfigMap{
 				{Namespace: gatewayNs, Name: "frontend-ca-cm-b64"}: {
@@ -8265,8 +8268,9 @@ func TestGetFrontendTLSCertBundleData(t *testing.T) {
 		{
 			name: "ConfigMap binary data takes precedence",
 			ref: &v1.ObjectReference{
-				Name: v1.ObjectName("frontend-ca-cm-bin"),
-				Kind: configMapKind,
+				Name:      v1.ObjectName("frontend-ca-cm-bin"),
+				Kind:      configMapKind,
+				Namespace: helpers.GetPointer(v1.Namespace(gatewayNs)),
 			},
 			caCertConfigMaps: map[types.NamespacedName]*configmaps.CaCertConfigMap{
 				{Namespace: gatewayNs, Name: "frontend-ca-cm-bin"}: {
@@ -8285,8 +8289,9 @@ func TestGetFrontendTLSCertBundleData(t *testing.T) {
 		{
 			name: "Secret kind chooses secret data when both resources exist",
 			ref: &v1.ObjectReference{
-				Name: v1.ObjectName("frontend-ca-shared"),
-				Kind: secretKind,
+				Name:      v1.ObjectName("frontend-ca-shared"),
+				Kind:      secretKind,
+				Namespace: helpers.GetPointer(v1.Namespace(gatewayNs)),
 			},
 			secretsMap: map[types.NamespacedName]*secrets.Secret{
 				{Namespace: gatewayNs, Name: "frontend-ca-shared"}: {
@@ -8303,8 +8308,9 @@ func TestGetFrontendTLSCertBundleData(t *testing.T) {
 		{
 			name: "ConfigMap kind chooses configmap data when both resources exist",
 			ref: &v1.ObjectReference{
-				Name: v1.ObjectName("frontend-ca-shared"),
-				Kind: configMapKind,
+				Name:      v1.ObjectName("frontend-ca-shared"),
+				Kind:      configMapKind,
+				Namespace: helpers.GetPointer(v1.Namespace(gatewayNs)),
 			},
 			secretsMap: map[types.NamespacedName]*secrets.Secret{
 				{Namespace: gatewayNs, Name: "frontend-ca-shared"}: {
@@ -8317,6 +8323,23 @@ func TestGetFrontendTLSCertBundleData(t *testing.T) {
 				},
 			},
 			expected: []byte("configmap-kind-data"),
+		},
+		{
+			name: "Refs with the same name in different namespaces; choose the one in the ref namespace",
+			ref: &v1.ObjectReference{
+				Name:      v1.ObjectName("frontend-ca-shared"),
+				Kind:      secretKind,
+				Namespace: helpers.GetPointer(v1.Namespace("other-ns")),
+			},
+			secretsMap: map[types.NamespacedName]*secrets.Secret{
+				{Namespace: gatewayNs, Name: "frontend-ca-shared"}: {
+					Source: &apiv1.Secret{Data: map[string][]byte{secrets.CAKey: []byte("gateway-ns-data")}},
+				},
+				{Namespace: "other-ns", Name: "frontend-ca-shared"}: {
+					Source: &apiv1.Secret{Data: map[string][]byte{secrets.CAKey: []byte("other-ns-data")}},
+				},
+			},
+			expected: []byte("other-ns-data"),
 		},
 	}
 
@@ -8343,10 +8366,22 @@ func TestBuildFrontendTLSCertBundles(t *testing.T) {
 	secretKind := v1.Kind(kinds.Secret)
 	configMapKind := v1.Kind(kinds.ConfigMap)
 	caRefName := "frontend-ca"
-	caRef := &v1.ObjectReference{Name: v1.ObjectName(caRefName), Kind: secretKind}
+	caRef := &v1.ObjectReference{
+		Name:      v1.ObjectName(caRefName),
+		Kind:      secretKind,
+		Namespace: helpers.GetPointer(v1.Namespace(gatewayNs)),
+	}
 	caRefName2 := "frontend-ca-2"
-	caRef2 := &v1.ObjectReference{Name: v1.ObjectName(caRefName2), Kind: secretKind}
-	caConfigMapRef := &v1.ObjectReference{Name: v1.ObjectName(caRefName), Kind: configMapKind}
+	caRef2 := &v1.ObjectReference{
+		Name:      v1.ObjectName(caRefName2),
+		Kind:      secretKind,
+		Namespace: helpers.GetPointer(v1.Namespace(gatewayNs)),
+	}
+	caConfigMapRef := &v1.ObjectReference{
+		Name:      v1.ObjectName(caRefName),
+		Kind:      configMapKind,
+		Namespace: helpers.GetPointer(v1.Namespace(gatewayNs)),
+	}
 
 	tests := []struct {
 		secretsMap            map[types.NamespacedName]*secrets.Secret
@@ -8382,9 +8417,15 @@ func TestBuildFrontendTLSCertBundles(t *testing.T) {
 					Source: &apiv1.Secret{Data: map[string][]byte{secrets.CAKey: []byte("frontend-ca-data")}},
 				},
 			},
-			expectedBundleID:      generateCertBundleID(types.NamespacedName{Namespace: "443", Name: "https-listener"}),
-			expectedBundleData:    []byte("frontend-ca-data"),
-			expectedServerBundle:  generateCertBundleID(types.NamespacedName{Namespace: "443", Name: "https-listener"}),
+			expectedBundleID: generateCertBundleID(types.NamespacedName{
+				Namespace: "443",
+				Name:      "https-listener",
+			}),
+			expectedBundleData: []byte("frontend-ca-data"),
+			expectedServerBundle: generateCertBundleID(types.NamespacedName{
+				Namespace: "443",
+				Name:      "https-listener",
+			}),
 			expectedVerifyClient:  SSLVerifyClientOn,
 			expectedRequireVerify: true,
 			expectBundle:          true,
@@ -8578,8 +8619,16 @@ func TestBuildFrontendTLSCertBundlesValidationModes(t *testing.T) {
 	gatewayNs := "gateway-ns"
 	secretKind := v1.Kind(kinds.Secret)
 
-	allowInsecureRef := &v1.ObjectReference{Name: v1.ObjectName("frontend-ca-insecure"), Kind: secretKind}
-	allowValidOnlyRef := &v1.ObjectReference{Name: v1.ObjectName("frontend-ca-valid"), Kind: secretKind}
+	allowInsecureRef := &v1.ObjectReference{
+		Name:      v1.ObjectName("frontend-ca-insecure"),
+		Kind:      secretKind,
+		Namespace: helpers.GetPointer(v1.Namespace(gatewayNs)),
+	}
+	allowValidOnlyRef := &v1.ObjectReference{
+		Name:      v1.ObjectName("frontend-ca-valid"),
+		Kind:      secretKind,
+		Namespace: helpers.GetPointer(v1.Namespace(gatewayNs)),
+	}
 
 	gateway := &graph.Gateway{
 		Valid: true,

@@ -498,7 +498,9 @@ func getFrontendTLSCertBundles(
 			continue
 		}
 		for _, bundle := range refCertBundles {
-			if bundle.Kind == ref.Kind && v1.ObjectName(bundle.Name.Name) == ref.Name {
+			if bundle.Kind == ref.Kind &&
+				v1.ObjectName(bundle.Name.Name) == ref.Name &&
+				v1.Namespace(bundle.Name.Namespace) == *ref.Namespace {
 				certRefData := getCertRefBundleData(bundle)
 				certBundles = append(certBundles, certRefData)
 				break

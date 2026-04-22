@@ -1082,17 +1082,18 @@ func getFrontendTLSCertReferences(
 	cert v1.ObjectReference,
 	gw *v1.Gateway,
 ) (*v1.ObjectReference, *types.NamespacedName) {
+	caRefNs := gw.Namespace
+	if cert.Namespace != nil {
+		caRefNs = string(*cert.Namespace)
+	}
+
 	var caCertObjRef *v1.ObjectReference
 	var caCertNsName *types.NamespacedName
 	caCertObjRef = &v1.ObjectReference{
 		Group:     "",
 		Kind:      cert.Kind,
 		Name:      cert.Name,
-		Namespace: cert.Namespace,
-	}
-	caRefNs := gw.Namespace
-	if cert.Namespace != nil {
-		caRefNs = string(*cert.Namespace)
+		Namespace: helpers.GetPointer(v1.Namespace(caRefNs)),
 	}
 	caCertNsName = &types.NamespacedName{
 		Namespace: caRefNs,

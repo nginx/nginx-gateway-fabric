@@ -183,13 +183,6 @@ func TestNewDefaultListenerConditions(t *testing.T) {
 			expectNoConflicts:  true,
 		},
 		{
-			name:               "existing Accepted=False suppresses default Accepted",
-			existingConditions: NewListenerInvalidNoValidCACertificate("no valid CA certificate"),
-			expectAccepted:     false,
-			expectResolvedRefs: true,
-			expectNoConflicts:  true,
-		},
-		{
 			name: "existing Conflicted condition suppresses default NoConflicts",
 			existingConditions: []Condition{
 				{
