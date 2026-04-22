@@ -51,7 +51,7 @@ server {
         {{- if $.RewriteClientIP.Recursive}}
     real_ip_recursive on;
         {{- end }}
-        {{- if $s.SSL.RequireVerifiedCert }}
+        {{- if and $s.SSL $s.SSL.RequireVerifiedCert }}
     location @frontend_tls_verify_failed {
         return 444;
     }
