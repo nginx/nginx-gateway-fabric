@@ -519,6 +519,89 @@ var _ = Describe("ProxySettingsPolicy", Ordered, Label("functional", "proxy-sett
 		})
 	})
 
+	When("valid ProxySettingsPolicies with timeout fields are created for Gateway", func() {
+		var (
+			policies = []string{
+				"proxy-settings-policy/gateway-timeout-proxy-settings.yaml",
+			}
+
+			baseURL string
+		)
+
+		BeforeAll(func() {
+			Expect(resourceManager.ApplyFromFiles(policies, namespace)).To(Succeed())
+
+			port := 80
+			if portFwdPort != 0 {
+				port = portFwdPort
+			}
+
+			baseURL = fmt.Sprintf("http://cafe.example.com:%d", port)
+		})
+
+		AfterAll(func() {
+			Expect(resourceManager.DeleteFromFiles(policies, namespace)).To(Succeed())
+		})
+
+		Specify("policy is Accepted", func() {
+			waitForPoliciesVerification([]policyStatusExpectation{
+				createPolicyExpectation(
+					"gateway-timeout-proxy-settings",
+					namespace,
+					metav1.ConditionTrue,
+					gatewayv1.PolicyReasonAccepted,
+				),
+			})
+		})
+
+		Context("verify working traffic", func() {
+			It("should return a 200 response for HTTPRoutes", func() {
+				verifyRequestSucceeds(baseURL+"/tea", address, "URI: /tea")
+			})
+		})
+
+		Context("nginx config", func() {
+			var conf *framework.Payload
+			filePrefix := fmt.Sprintf("/etc/nginx/includes/ProxySettingsPolicy_%s", namespace)
+
+			BeforeAll(func() {
+				var err error
+				conf, err = resourceManager.GetNginxConfig(nginxPodName, namespace, "")
+				Expect(err).ToNot(HaveOccurred())
+			})
+
+			DescribeTable("is set properly for",
+				func(expCfgs []framework.ExpectedNginxField) {
+					for _, expCfg := range expCfgs {
+						Expect(framework.ValidateNginxFieldExists(conf, expCfg)).To(Succeed())
+					}
+				},
+				Entry("gateway timeout policy", []framework.ExpectedNginxField{
+					{
+						Directive: "include",
+						Value:     fmt.Sprintf("%s_gateway-timeout-proxy-settings.conf", filePrefix),
+						File:      "http.conf",
+					},
+					{
+						Directive: "proxy_connect_timeout",
+						Value:     "5s",
+						File:      fmt.Sprintf("%s_gateway-timeout-proxy-settings.conf", filePrefix),
+					},
+					{
+						Directive: "proxy_read_timeout",
+						Value:     "60s",
+						File:      fmt.Sprintf("%s_gateway-timeout-proxy-settings.conf", filePrefix),
+					},
+					{
+						Directive: "proxy_send_timeout",
+						Value:     "30s",
+						File:      fmt.Sprintf("%s_gateway-timeout-proxy-settings.conf", filePrefix),
+					},
+				}),
+			)
+		})
+	})
+
 	When("invalid buffering Gateway and HTTPRoute ProxySettingsPolicies", func() {
 		policies := []string{
 			"proxy-settings-policy/gateway-and-coffee-invalid-buffers-proxy-settings.yaml",
