@@ -514,6 +514,11 @@ jobs:
         image: [nginx, plus]
         build-os: ${{ github.event_name == 'pull_request' && fromJSON('[""]') || fromJSON('["", "ubi"]') }}
         k8s-version: ${{ github.event_name == 'pull_request' && fromJSON(format('["{0}"]', needs.vars.outputs.k8s_latest)) || fromJSON(format('["{0}", "{1}"]', needs.vars.outputs.min_k8s_version, needs.vars.outputs.k8s_latest)) }}
+        include:
+          # plus-waf: always run once with latest k8s, no build-os suffix
+          - image: plus-waf
+            build-os: ''
+            k8s-version: ${{ needs.vars.outputs.k8s_latest }}
     uses: ./.github/workflows/functional.yml
     with:
       image: ${{ matrix.image }}

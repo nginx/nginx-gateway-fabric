@@ -1,0 +1,13 @@
+apiVersion: gateway.nginx.org/v1alpha1
+kind: WAFPolicy
+metadata:
+  name: gateway-waf-invalid
+spec:
+  targetRefs:
+  - group: gateway.networking.k8s.io
+    kind: Gateway
+    name: nonexistent-gateway
+  type: HTTP
+  policySource:
+    httpSource:
+      url: http://bundle-server.waf-policy.svc.cluster.local/dataguard-blocking.tgz

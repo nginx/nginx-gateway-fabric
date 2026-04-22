@@ -33,6 +33,7 @@ This directory contains the tests for NGINX Gateway Fabric. The tests are divide
     - [Run the functional tests locally](#run-the-functional-tests-locally)
     - [Run the NFR tests on a GKE cluster from a GCP VM](#run-the-nfr-tests-on-a-gke-cluster-from-a-gcp-vm)
       - [Longevity testing](#longevity-testing)
+    - [Run the WAF tests on a GKE cluster](#run-the-waf-tests-on-a-gke-cluster)
   - [Common test amendments](#common-test-amendments)
   - [Step 2 - Cleanup](#step-2---cleanup)
 
@@ -382,6 +383,20 @@ make stop-longevity-test
 <!--  -->
 
 > Note if running from your machine instead of the pipeline: If you want to re-run the longevity test, you need to clear out the `cafe.example.com` entry from the `/etc/hosts` file on your VM.
+
+#### Run the WAF tests on a GKE cluster
+
+WAF tests require NGINX Plus with NAP WAF images and run on GKE (amd64 only). Before running:
+
+1. Ensure you have access to `private-registry.nginx.com` and a `dockerconfig.jwt` file at the repo root (used to create the image pull secret).
+
+2. Run the WAF tests, passing the required variables directly:
+
+   ```makefile
+   make test-waf-gke TAG=$(whoami) PLUS_USAGE_ENDPOINT=<endpoint> GKE_PROJECT=<project>
+   ```
+
+   This will compile the WAF policy bundles from the JSON sources in `suite/manifests/waf-policy/`, create the image pull secret in the `nginx-gateway` namespace so the WAF sidecar images (`waf-enforcer`, `waf-config-mgr`) can be pulled from `private-registry.nginx.com`, and run the tests labelled `waf` against the GKE cluster.
 
 ### Common test amendments
 
