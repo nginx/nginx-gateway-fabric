@@ -1589,9 +1589,6 @@ func TestBuildGatewayStatuses(t *testing.T) {
 			},
 		},
 		{
-			// All frontendTLS CA cert refs on the listener failed to resolve.
-			// NewListenerInvalidNoValidCACertificate marks Accepted=False and Programmed=False.
-			// With zero valid listeners the gateway itself transitions to not accepted and not programmed.
 			name: "valid gateway; invalid listener with all invalid frontend tls ca cert refs",
 			gateway: &graph.Gateway{
 				Source: createGateway(),
@@ -1656,9 +1653,6 @@ func TestBuildGatewayStatuses(t *testing.T) {
 			},
 		},
 		{
-			// The gateway has frontendTLS validation mode set to AllowInsecureFallback.
-			// NewGatewayInsecureFrontendValidationMode adds the InsecureFrontendValidationMode condition
-			// to the gateway while Accepted and Programmed remain True.
 			name: "valid gateway; valid listener; frontend tls validation mode set to AllowInsecureFallback",
 			gateway: &graph.Gateway{
 				Source: createGateway(),
