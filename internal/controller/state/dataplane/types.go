@@ -25,14 +25,6 @@ const (
 	PathTypeRegularExpression PathType = "regularExpression"
 )
 
-const (
-	// SSLVerifyClientOn indicates that client certificates are required and must pass CA validation.
-	SSLVerifyClientOn = "on"
-	// SSLVerifyClientOptionalNoCA indicates that client certificates are requested but not required or validated.
-	// Any certificate or none is accepted without CA validation.
-	SSLVerifyClientOptionalNoCA = "optional_no_ca"
-)
-
 // Configuration is an intermediate representation of dataplane configuration.
 type Configuration struct {
 	// CertBundles holds all unique Certificate Bundles, including CA certs and CRL files.
@@ -190,6 +182,17 @@ const (
 	CookieBasedSessionPersistence SessionPersistenceType = "cookie"
 )
 
+type SSLVerifyClientMode string
+
+const (
+	// SSLVerifyClientOn requires a client certificate that is signed by a trusted CA.
+	// Clients that do not present a certificate, or present one that is not CA-verified, are rejected.
+	SSLVerifyClientOn SSLVerifyClientMode = "on"
+	// SSLVerifyClientOptionalNoCA indicates that client certificates are requested but not required or validated.
+	// Any certificate or none is accepted without CA validation.
+	SSLVerifyClientOptionalNoCA SSLVerifyClientMode = "optional_no_ca"
+)
+
 // SSL is the SSL configuration for a server.
 type SSL struct {
 	// Protocols specifies the SSL/TLS protocols to enable.
@@ -200,7 +203,7 @@ type SSL struct {
 	ClientCertBundleID CertBundleID
 	// VerifyClient specifies the client certificate verification mode.
 	// This can be "on" or "optional_no_ca".
-	VerifyClient string
+	VerifyClient SSLVerifyClientMode
 	// KeyPairIDs are the IDs of the corresponding SSLKeyPairs for the server.
 	// Multiple IDs allow nginx to select the appropriate certificate via SNI.
 	KeyPairIDs []SSLKeyPairID

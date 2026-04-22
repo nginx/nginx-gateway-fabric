@@ -8390,7 +8390,7 @@ func TestBuildFrontendTLSCertBundles(t *testing.T) {
 		name                  string
 		expectedBundleID      CertBundleID
 		expectedServerBundle  CertBundleID
-		expectedVerifyClient  string
+		expectedVerifyClient  SSLVerifyClientMode
 		expectedBundleData    CertBundle
 		sslServers            []VirtualServer
 		expectedRequireVerify bool
@@ -8709,7 +8709,7 @@ func TestBuildClientConfigForSSLServersFrontendValidationModes(t *testing.T) {
 	tests := []struct {
 		mode                    v1.FrontendValidationModeType
 		expectedBundle          CertBundleID
-		expectedVerifyClient    string
+		expectedVerifyClient    SSLVerifyClientMode
 		name                    string
 		expectedRequireVerified bool
 	}{
@@ -8746,7 +8746,7 @@ func TestBuildClientConfigForSSLServersFrontendValidationModes(t *testing.T) {
 				SSL:  &SSL{},
 			}}
 
-			buildClientConfigForSSLServers(
+			addClientValidationSettingsToSSLServers(
 				CertBundleID("cert_bundle_test_listener"),
 				servers,
 				443,

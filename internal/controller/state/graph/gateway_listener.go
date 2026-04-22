@@ -808,7 +808,7 @@ func createFrontendTLSCaCertReferenceResolver(
 			if port.Port == l.Source.Port {
 				caCertRefs = port.TLS.Validation.CACertificateRefs
 				validationMode = port.TLS.Validation.Mode
-				fieldPath = field.NewPath("tls", "frontend", "perPort", "validation")
+				fieldPath = field.NewPath("spec", "tls", "frontend", "perPort", "validation")
 				perPortMatch = true
 				break
 			}
@@ -818,7 +818,7 @@ func createFrontendTLSCaCertReferenceResolver(
 			len(frontend.Default.Validation.CACertificateRefs) > 0 {
 			caCertRefs = frontend.Default.Validation.CACertificateRefs
 			validationMode = frontend.Default.Validation.Mode
-			fieldPath = field.NewPath("tls", "frontend", "default", "validation")
+			fieldPath = field.NewPath("spec", "tls", "frontend", "default", "validation")
 		}
 
 		conds, refs := getListenerFrontendTLSCaRefs(

@@ -6837,13 +6837,15 @@ func TestExecuteServers_FrontendTLS(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name            string
 		ssl             *dataplane.SSL
+		name            string
 		expectedPresent []string
 		expectedAbsent  []string
+		isDefault       bool
 	}{
 		{
-			name: "frontend TLS disabled",
+			name:      "frontend TLS disabled",
+			isDefault: false,
 			ssl: &dataplane.SSL{
 				KeyPairIDs: []dataplane.SSLKeyPairID{"test-keypair"},
 			},
@@ -6854,13 +6856,15 @@ func TestExecuteServers_FrontendTLS(t *testing.T) {
 			expectedAbsent: []string{
 				"ssl_client_certificate ",
 				"ssl_verify_client ",
+				"ssl_verify_depth ",
 				"error_page 495 496 = @frontend_tls_verify_failed;",
 				"location @frontend_tls_verify_failed {",
 				"return 444;",
 			},
 		},
 		{
-			name: "frontend TLS enabled",
+			name:      "frontend TLS enabled",
+			isDefault: false,
 			ssl: &dataplane.SSL{
 				KeyPairIDs:          []dataplane.SSLKeyPairID{"test-keypair"},
 				ClientCertBundleID:  dataplane.CertBundleID("test-ca-bundle"),
@@ -6872,13 +6876,15 @@ func TestExecuteServers_FrontendTLS(t *testing.T) {
 				"ssl_certificate_key /etc/nginx/secrets/test-keypair.pem;",
 				"ssl_client_certificate " + generateCertBundleFileName(dataplane.CertBundleID("test-ca-bundle")) + ";",
 				"ssl_verify_client on;",
+				"ssl_verify_depth ",
 				"error_page 495 496 = @frontend_tls_verify_failed;",
 				"location @frontend_tls_verify_failed {",
 				"return 444;",
 			},
 		},
 		{
-			name: "frontend TLS enabled, with mode: AllowInsecureFallback",
+			name:      "frontend TLS enabled, with mode: AllowInsecureFallback",
+			isDefault: false,
 			ssl: &dataplane.SSL{
 				KeyPairIDs:   []dataplane.SSLKeyPairID{"test-keypair"},
 				VerifyClient: dataplane.SSLVerifyClientOptionalNoCA,
@@ -6889,7 +6895,71 @@ func TestExecuteServers_FrontendTLS(t *testing.T) {
 				"ssl_verify_client optional_no_ca;",
 			},
 			expectedAbsent: []string{
+				"ssl_verify_depth ",
 				"ssl_client_certificate ",
+				"error_page 495 496 = @frontend_tls_verify_failed;",
+				"location @frontend_tls_verify_failed {",
+				"return 444;",
+			},
+		},
+		{
+			name:      "default SSL server without frontend TLS",
+			isDefault: true,
+			ssl: &dataplane.SSL{
+				KeyPairIDs: []dataplane.SSLKeyPairID{"test-keypair"},
+			},
+			expectedPresent: []string{
+				"listen 8443 ssl default_server;",
+				"ssl_certificate /etc/nginx/secrets/test-keypair.pem;",
+				"ssl_certificate_key /etc/nginx/secrets/test-keypair.pem;",
+			},
+			expectedAbsent: []string{
+				"ssl_client_certificate ",
+				"ssl_verify_client ",
+				"ssl_verify_depth ",
+				"error_page 495 496 = @frontend_tls_verify_failed;",
+				"location @frontend_tls_verify_failed {",
+				"return 444;",
+			},
+		},
+		{
+			name:      "default SSL server with frontend TLS enabled",
+			isDefault: true,
+			ssl: &dataplane.SSL{
+				KeyPairIDs:          []dataplane.SSLKeyPairID{"test-keypair"},
+				ClientCertBundleID:  dataplane.CertBundleID("test-ca-bundle"),
+				VerifyClient:        dataplane.SSLVerifyClientOn,
+				RequireVerifiedCert: true,
+			},
+			expectedPresent: []string{
+				"listen 8443 ssl default_server;",
+				"ssl_certificate /etc/nginx/secrets/test-keypair.pem;",
+				"ssl_certificate_key /etc/nginx/secrets/test-keypair.pem;",
+				"ssl_client_certificate " + generateCertBundleFileName(dataplane.CertBundleID("test-ca-bundle")) + ";",
+				"ssl_verify_client on;",
+				"ssl_verify_depth ",
+				"error_page 495 496 = @frontend_tls_verify_failed;",
+				"location @frontend_tls_verify_failed {",
+				"return 444;",
+			},
+			expectedAbsent: []string{},
+		},
+		{
+			name:      "default SSL server with frontend TLS in AllowInsecureFallback mode",
+			isDefault: true,
+			ssl: &dataplane.SSL{
+				KeyPairIDs:   []dataplane.SSLKeyPairID{"test-keypair"},
+				VerifyClient: dataplane.SSLVerifyClientOptionalNoCA,
+			},
+			expectedPresent: []string{
+				"listen 8443 ssl default_server;",
+				"ssl_certificate /etc/nginx/secrets/test-keypair.pem;",
+				"ssl_certificate_key /etc/nginx/secrets/test-keypair.pem;",
+				"ssl_verify_client optional_no_ca;",
+			},
+			expectedAbsent: []string{
+				"ssl_client_certificate ",
+				"ssl_verify_depth ",
 				"error_page 495 496 = @frontend_tls_verify_failed;",
 				"location @frontend_tls_verify_failed {",
 				"return 444;",
@@ -6902,14 +6972,23 @@ func TestExecuteServers_FrontendTLS(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
+			var server dataplane.VirtualServer
+			if test.isDefault {
+				server = dataplane.VirtualServer{
+					IsDefault: true,
+					Port:      8443,
+					SSL:       test.ssl,
+				}
+			} else {
+				server = dataplane.VirtualServer{
+					Hostname: "example.com",
+					Port:     8443,
+					SSL:      test.ssl,
+				}
+			}
+
 			conf := dataplane.Configuration{
-				SSLServers: []dataplane.VirtualServer{
-					{
-						Hostname: "example.com",
-						Port:     8443,
-						SSL:      test.ssl,
-					},
-				},
+				SSLServers: []dataplane.VirtualServer{server},
 			}
 
 			gen := GeneratorImpl{}

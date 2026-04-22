@@ -476,7 +476,7 @@ func buildFrontendTLSCertBundles(
 				listener.CACertificateRefs,
 			)
 		}
-		buildClientConfigForSSLServers(
+		addClientValidationSettingsToSSLServers(
 			id,
 			sslServers,
 			listener.Source.Port,
@@ -521,7 +521,9 @@ func getFrontendTLSCertBundles(
 	return bundles
 }
 
-func buildClientConfigForSSLServers(
+// addClientValidationSettingsToSSLServers modifies existing SSL servers to assign
+// client certificate verification settings based on the listener's validation mode and CA cert refs.
+func addClientValidationSettingsToSSLServers(
 	id CertBundleID,
 	sslServers []VirtualServer,
 	listenerPort int32,

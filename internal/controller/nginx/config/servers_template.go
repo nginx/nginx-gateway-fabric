@@ -29,6 +29,16 @@ server {
         {{- if $s.SSL.PreferServerCiphers }}
     ssl_prefer_server_ciphers on;
         {{- end }}
+        {{- if $s.SSL.ClientCertificate }}
+    ssl_client_certificate {{ $s.SSL.ClientCertificate }};
+        {{- end }}
+        {{- if $s.SSL.VerifyClient }}
+    ssl_verify_client {{ $s.SSL.VerifyClient }};
+        {{- end }}
+        {{- if $s.SSL.RequireVerifiedCert }}
+    ssl_verify_depth 4;
+    error_page 495 496 = @frontend_tls_verify_failed;
+        {{- end }}
     {{- else }}
     ssl_reject_handshake on;
     {{- end }}
@@ -41,6 +51,11 @@ server {
         {{- if $.RewriteClientIP.Recursive}}
     real_ip_recursive on;
         {{- end }}
+        {{- if $s.SSL.RequireVerifiedCert }}
+    location @frontend_tls_verify_failed {
+        return 444;
+    }
+        {{- end}}
 }
     {{- else if $s.IsDefaultHTTP }}
 server {
@@ -94,6 +109,7 @@ server {
     ssl_verify_client {{ $s.SSL.VerifyClient }};
           {{- end }}
           {{- if $s.SSL.RequireVerifiedCert }}
+    ssl_verify_depth 4;
     error_page 495 496 = @frontend_tls_verify_failed;
           {{- end }}
 

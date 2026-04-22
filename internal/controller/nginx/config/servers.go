@@ -223,6 +223,7 @@ func buildHTTPSSL(ssl *dataplane.SSL) *http.SSL {
 	keys := make([]string, 0, len(ssl.KeyPairIDs))
 
 	var sslCertificateID string
+	var sslVerifyClient string
 
 	for _, id := range ssl.KeyPairIDs {
 		pemFile := generatePEMFileName(id)
@@ -236,6 +237,13 @@ func buildHTTPSSL(ssl *dataplane.SSL) *http.SSL {
 		sslCertificateID = generateCertBundleFileName(ssl.ClientCertBundleID)
 	}
 
+	switch ssl.VerifyClient {
+	case dataplane.SSLVerifyClientOn:
+		sslVerifyClient = "on"
+	case dataplane.SSLVerifyClientOptionalNoCA:
+		sslVerifyClient = "optional_no_ca"
+	}
+
 	return &http.SSL{
 		Certificates:        certs,
 		CertificateKeys:     keys,
@@ -243,7 +251,7 @@ func buildHTTPSSL(ssl *dataplane.SSL) *http.SSL {
 		Ciphers:             ssl.Ciphers,
 		PreferServerCiphers: ssl.PreferServerCiphers,
 		ClientCertificate:   sslCertificateID,
-		VerifyClient:        ssl.VerifyClient,
+		VerifyClient:        sslVerifyClient,
 		RequireVerifiedCert: ssl.RequireVerifiedCert,
 	}
 }
