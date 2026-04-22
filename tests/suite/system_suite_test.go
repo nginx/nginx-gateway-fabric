@@ -173,7 +173,9 @@ func setup(cfg setupConfig, extraInstallArgs ...string) {
 		version = "edge"
 	}
 
-	nginxCrossplanePath = "us-docker.pkg.dev/" + *gkeProject + "/nginx-gateway-fabric"
+	if *gkeProject != "" {
+		nginxCrossplanePath = "us-docker.pkg.dev/" + *gkeProject + "/nginx-gateway-fabric"
+	}
 
 	// Set text replacements for per-proc resource names so manifests reference the correct
 	// GatewayClass and NginxGateway config for this parallel process.
