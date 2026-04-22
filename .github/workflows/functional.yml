@@ -28,7 +28,7 @@ jobs:
   functional-tests:
     name: Run Tests
     runs-on: ubuntu-24.04
-    if: ${{ !github.event.pull_request.head.repo.fork || inputs.image != 'plus' }}
+    if: ${{ !github.event.pull_request.head.repo.fork || !contains(inputs.image, 'plus') }}
     env:
       DOCKER_BUILD_SUMMARY: false
     steps:
@@ -66,7 +66,7 @@ jobs:
         uses: docker/metadata-action@030e881283bb7a6894de51c315a6bfe6a94e05cf # v6.0.0
         with:
           images: |
-            name=ghcr.io/nginx/nginx-gateway-fabric/${{ inputs.image == 'plus' && 'nginx-plus' || inputs.image }}
+            name=ghcr.io/nginx/nginx-gateway-fabric/${{ contains(inputs.image, 'plus') && 'nginx-plus' || inputs.image }}
           tags: |
             type=semver,pattern={{version}},suffix=${{ inputs.build-os != '' && format('-{0}', inputs.build-os) || '' }}
             type=schedule,suffix=${{ inputs.build-os != '' && format('-{0}', inputs.build-os) || '' }}
@@ -97,7 +97,7 @@ jobs:
       - name: Build NGINX Docker Image
         uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
         with:
-          file: build${{ inputs.build-os != '' && format('/{0}', inputs.build-os) || '' }}/Dockerfile${{ inputs.image == 'nginx' && '.nginx' || '' }}${{ inputs.image == 'plus' && '.nginxplus' || '' }}
+          file: build${{ inputs.build-os != '' && format('/{0}', inputs.build-os) || '' }}/Dockerfile${{ inputs.image == 'nginx' && '.nginx' || '' }}${{ contains(inputs.image, 'plus') && '.nginxplus' || '' }}
           tags: ${{ steps.nginx-meta.outputs.tags }}
           context: "."
           load: true
@@ -107,15 +107,35 @@ jobs:
             NJS_DIR=internal/controller/nginx/modules/src
             NGINX_CONF_DIR=internal/controller/nginx/conf
             BUILD_AGENT=gha
+            ${{ inputs.image == 'plus-waf' && 'INCLUDE_NAP_WAF=true' || '' }}
           secrets: |
             ${{ contains(inputs.image, 'plus') && format('"nginx-repo.crt={0}"', secrets.NGINX_CRT) || '' }}
             ${{ contains(inputs.image, 'plus') && format('"nginx-repo.key={0}"', secrets.NGINX_KEY) || '' }}
 
       - name: Setup license file for plus
-        if: ${{ inputs.image == 'plus' }}
+        if: ${{ contains(inputs.image, 'plus') }}
         env:
           PLUS_LICENSE: ${{ secrets.JWT_PLUS_REPORTING }}
         run: echo "${PLUS_LICENSE}" > license.jwt
+
+      - name: Setup image pull secret for waf
+        if: ${{ inputs.image == 'plus-waf' }}
+        env:
+          IMAGE_PULL_SECRET: ${{ secrets.JWT_PLUS_REGISTRY }}
+        run: echo "${IMAGE_PULL_SECRET}" > dockerconfig.jwt
+
+      - name: Login to NGINX private registry
+        if: ${{ inputs.image == 'plus-waf' }}
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        with:
+          registry: private-registry.nginx.com
+          username: ${{ secrets.JWT_PLUS_REGISTRY }}
+          password: none
+
+      - name: Compile WAF policy bundles
+        if: ${{ inputs.image == 'plus-waf' }}
+        run: make compile-waf-bundles-ci
+        working-directory: ./tests
 
       - name: Install cloud-provider-kind
         run: |
@@ -132,6 +152,7 @@ jobs:
           kind load docker-image ${{ join(fromJSON(steps.ngf-meta.outputs.json).tags, ' ') }} ${{ join(fromJSON(steps.nginx-meta.outputs.json).tags, ' ') }} --name ${{ github.run_id }}
 
       - name: Run functional telemetry tests
+        if: ${{ inputs.image != 'plus-waf' }}
         run: |
           ngf_prefix=ghcr.io/nginx/nginx-gateway-fabric
           ngf_tag=${{ steps.ngf-meta.outputs.version }}
@@ -139,6 +160,7 @@ jobs:
         working-directory: ./tests
 
       - name: Run functional graceful-recovery tests
+        if: ${{ inputs.image != 'plus-waf' }}
         run: |
           ngf_prefix=ghcr.io/nginx/nginx-gateway-fabric
           ngf_tag=${{ steps.ngf-meta.outputs.version }}
@@ -146,8 +168,17 @@ jobs:
         working-directory: ./tests
 
       - name: Run functional tests
+        if: ${{ inputs.image != 'plus-waf' }}
         run: |
           ngf_prefix=ghcr.io/nginx/nginx-gateway-fabric
           ngf_tag=${{ steps.ngf-meta.outputs.version }}
           make test${{ inputs.image == 'plus' && '-with-plus' || ''}} PREFIX=${ngf_prefix} TAG=${ngf_tag} GW_SERVICE_TYPE=LoadBalancer CLUSTER_NAME=${{ github.run_id }} CI=true
+        working-directory: ./tests
+
+      - name: Run WAF tests
+        if: ${{ inputs.image == 'plus-waf' }}
+        run: |
+          ngf_prefix=ghcr.io/nginx/nginx-gateway-fabric
+          ngf_tag=${{ steps.ngf-meta.outputs.version }}
+          make test-waf PREFIX=${ngf_prefix} TAG=${ngf_tag} NGINX_PLUS_PREFIX=${ngf_prefix}/nginx-plus GW_SERVICE_TYPE=LoadBalancer CLUSTER_NAME=${{ github.run_id }} CI=true
         working-directory: ./tests
