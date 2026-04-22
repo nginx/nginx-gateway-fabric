@@ -283,7 +283,7 @@ func createNGFInstallConfig(cfg setupConfig, extraInstallArgs ...string) framewo
 
 	if *plusEnabled {
 		Expect(framework.CreateLicenseSecret(resourceManager, ngfNamespace, *plusLicenseFileName)).To(Succeed())
-		if nginxImageJWTFileName != nil {
+		if *nginxImageJWTFileName != "" {
 			Expect(framework.CreateImagePullSecret(resourceManager, ngfNamespace, *nginxImageJWTFileName)).To(Succeed())
 			extraInstallArgs = append(
 				extraInstallArgs,
