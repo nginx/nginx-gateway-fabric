@@ -280,7 +280,7 @@ func TestSecretResolver(t *testing.T) {
 				Name:      "valid-ca-cert",
 			},
 			Data: map[string][]byte{
-				secrets.CAKey: []byte("ca-cert-secret"),
+				secrets.CAKey: []byte(caBlock),
 			},
 			Type: v1.SecretTypeOpaque,
 		}
@@ -326,7 +326,7 @@ func TestSecretResolver(t *testing.T) {
 			},
 			Data: map[string][]byte{
 				secrets.ClientSecretKey: []byte("client-secret"),
-				secrets.CAKey:           []byte("ca-cert"),
+				secrets.CAKey:           []byte(caBlock),
 			},
 			Type: v1.SecretTypeOpaque,
 		}
@@ -352,7 +352,7 @@ func TestSecretResolver(t *testing.T) {
 				Name:      "opaque-ca-key-only",
 			},
 			Data: map[string][]byte{
-				secrets.CAKey: []byte("ca-cert"),
+				secrets.CAKey: []byte(caBlock),
 			},
 			Type: v1.SecretTypeOpaque,
 		}

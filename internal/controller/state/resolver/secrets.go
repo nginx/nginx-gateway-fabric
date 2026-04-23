@@ -104,7 +104,11 @@ func (s *secretEntry) revalidate(opts *resolveOptions, obj client.Object) error 
 }
 
 func validateOpaqueSecretKey(secret *v1.Secret, key string) error {
-	if data, exists := secret.Data[key]; !exists || len(data) == 0 {
+	if data, exists := secret.Data[key]; exists || len(data) > 0 {
+		if key == secrets.CAKey {
+			return secrets.ValidateCA(data)
+		}
+	} else {
 		return fmt.Errorf(
 			"opaque secret %s/%s does not contain the expected key %q",
 			secret.Namespace,

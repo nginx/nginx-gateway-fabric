@@ -8197,6 +8197,12 @@ func TestGetFrontendTLSCertBundleData(t *testing.T) {
 	secretKind := v1.Kind(kinds.Secret)
 	configMapKind := v1.Kind(kinds.ConfigMap)
 
+	gateway := &graph.Gateway{
+		Source: &v1.Gateway{
+			ObjectMeta: metav1.ObjectMeta{Namespace: gatewayNs},
+		},
+	}
+
 	encodedCMData := base64.StdEncoding.EncodeToString([]byte("cm-base64-ca"))
 
 	tests := []struct {
@@ -8341,6 +8347,24 @@ func TestGetFrontendTLSCertBundleData(t *testing.T) {
 			},
 			expected: []byte("other-ns-data"),
 		},
+		{
+			name: "Ref with nil namespace, gateway with non-nil namespace",
+			ref: &v1.ObjectReference{
+				Name:      v1.ObjectName("frontend-ca-secret"),
+				Kind:      secretKind,
+				Namespace: nil,
+			},
+			secretsMap: map[types.NamespacedName]*secrets.Secret{
+				{Namespace: gatewayNs, Name: "frontend-ca-secret"}: {
+					Source: &apiv1.Secret{
+						Data: map[string][]byte{
+							secrets.CAKey: []byte("secret-ca"),
+						},
+					},
+				},
+			},
+			expected: []byte("secret-ca"),
+		},
 	}
 
 	for _, test := range tests {
@@ -8353,7 +8377,7 @@ func TestGetFrontendTLSCertBundleData(t *testing.T) {
 			refs := []*v1.ObjectReference{test.ref}
 			bundleID := CertBundleID("cert_bundle_test_listener")
 
-			result := getFrontendTLSCertBundles(bundleID, bundles, refCertBundleIndex, refs)
+			result := getFrontendTLSCertBundles(bundleID, bundles, gateway, refCertBundleIndex, refs)
 
 			g.Expect(result[bundleID]).To(Equal(test.expected))
 		})

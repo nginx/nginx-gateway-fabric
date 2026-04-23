@@ -998,7 +998,7 @@ func getListenerFrontendTLSCaRefs(
 	}
 
 	totalConds := len(conds) + refNotPermittedCount
-	if refNotPermittedCount > 0 && len(conds) == 0 {
+	if refNotPermittedCount > 0 {
 		msg := "Frontend TLS CA certificate refs are not permitted by any ReferenceGrant"
 		conds = append(conds, conditions.NewListenerUnresolvedCertificateRef(
 			msg,

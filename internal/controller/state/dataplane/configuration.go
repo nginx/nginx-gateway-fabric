@@ -461,6 +461,10 @@ func buildFrontendTLSCertBundles(
 		if listener.Source.Protocol != v1.HTTPSProtocolType {
 			continue
 		}
+
+		if len(listener.CACertificateRefs) == 0 {
+			continue
+		}
 		// Create a unique cert bundle ID for this listener gateway combo.
 		// e.g. cert_bundle_default_gateway_443_https
 		// for a listener on port 443 named "https" on a gateway in the default namespace.
@@ -479,6 +483,7 @@ func buildFrontendTLSCertBundles(
 			bundles = getFrontendTLSCertBundles(
 				id,
 				bundles,
+				gateway,
 				refCertBundleIndex,
 				listener.CACertificateRefs,
 			)
@@ -522,6 +527,7 @@ func indexRefCertBundles(
 func getFrontendTLSCertBundles(
 	id CertBundleID,
 	bundles map[CertBundleID]CertBundle,
+	gateway *graph.Gateway,
 	refCertBundleIndex map[refCertBundleKey]secrets.CertificateBundle,
 	listenerCACertRefs []*v1.ObjectReference,
 ) map[CertBundleID]CertBundle {
@@ -530,9 +536,16 @@ func getFrontendTLSCertBundles(
 		if ref.Name == "" {
 			continue
 		}
+		var refNamespace v1.Namespace
+		if ref.Namespace == nil {
+			refNamespace = v1.Namespace(gateway.Source.Namespace)
+		} else {
+			refNamespace = *ref.Namespace
+		}
+
 		key := refCertBundleKey{
 			kind:      ref.Kind,
-			namespace: *ref.Namespace,
+			namespace: refNamespace,
 			name:      ref.Name,
 		}
 		if bundle, exists := refCertBundleIndex[key]; exists {

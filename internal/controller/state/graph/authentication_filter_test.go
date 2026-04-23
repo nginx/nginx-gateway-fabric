@@ -1353,7 +1353,7 @@ func createOpaqueCACertSecret(name string, withCAKey bool) *corev1.Secret {
 		Data:       map[string][]byte{},
 	}
 	if withCAKey {
-		sec.Data[secrets.CAKey] = []byte("ca-cert-value")
+		sec.Data[secrets.CAKey] = testCert
 	}
 	return sec
 }

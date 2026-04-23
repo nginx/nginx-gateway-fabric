@@ -1505,7 +1505,7 @@ func TestBuildGatewayStatuses(t *testing.T) {
 			},
 		},
 		{
-			name: "valid gateway; valid listeners; one invalid frontend tls ca cert ref",
+			name: "valid gateway; valid listeners; one unresolved frontend tls ca cert ref",
 			gateway: &graph.Gateway{
 				Source: createGateway(),
 				Listeners: []*graph.Listener{
@@ -1515,7 +1515,7 @@ func TestBuildGatewayStatuses(t *testing.T) {
 						Conditions: []conditions.Condition{
 							conditions.NewListenerUnresolvedCertificateRef(
 								`certificate ref "test/my-ca-cert" could not be resolved`,
-								string(v1.ListenerReasonInvalidCertificateRef),
+								string(v1.ListenerReasonInvalidCACertificateRef),
 							),
 						},
 						Routes: map[graph.RouteKey]*graph.L7Route{routeKey: {}},
@@ -1555,7 +1555,7 @@ func TestBuildGatewayStatuses(t *testing.T) {
 									Status:             metav1.ConditionFalse,
 									ObservedGeneration: 2,
 									LastTransitionTime: transitionTime,
-									Reason:             string(v1.ListenerReasonInvalidCertificateRef),
+									Reason:             string(v1.ListenerReasonInvalidCACertificateRef),
 									Message:            `certificate ref "test/my-ca-cert" could not be resolved`,
 								},
 								{
