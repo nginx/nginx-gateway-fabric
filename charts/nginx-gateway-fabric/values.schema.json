@@ -428,9 +428,20 @@
               "required": [],
               "type": "object"
             },
-            "wafEnabled": {
-              "description": "WAFEnabled enables NGINX App Protect WAF functionality.",
-              "type": "boolean"
+            "waf": {
+              "description": "WAF configures NGINX App Protect WAF.",
+              "properties": {
+                "disableCookieSeed": {
+                  "description": "DisableCookieSeed disables the app_protect_cookie_seed directive.",
+                  "type": "boolean"
+                },
+                "enabled": {
+                  "description": "Enabled enables NGINX App Protect WAF functionality.",
+                  "type": "boolean"
+                }
+              },
+              "required": [],
+              "type": "object"
             },
             "workerConnections": {
               "description": "The number of worker connections for NGINX. Default is 1024.",

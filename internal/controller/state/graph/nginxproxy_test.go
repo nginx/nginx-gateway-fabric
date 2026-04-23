@@ -557,7 +557,7 @@ func TestBuildEffectiveNginxProxy_WAF(t *testing.T) {
 				Valid: true,
 				Source: &ngfAPIv1alpha2.NginxProxy{
 					Spec: ngfAPIv1alpha2.NginxProxySpec{
-						WAFEnabled: false,
+						WAF: &ngfAPIv1alpha2.WAFSpec{Enabled: false},
 					},
 				},
 			},
@@ -565,12 +565,12 @@ func TestBuildEffectiveNginxProxy_WAF(t *testing.T) {
 				Valid: true,
 				Source: &ngfAPIv1alpha2.NginxProxy{
 					Spec: ngfAPIv1alpha2.NginxProxySpec{
-						WAFEnabled: true,
+						WAF: &ngfAPIv1alpha2.WAFSpec{Enabled: true},
 					},
 				},
 			},
 			exp: &EffectiveNginxProxy{
-				WAFEnabled: true,
+				WAF: &ngfAPIv1alpha2.WAFSpec{Enabled: true},
 			},
 		},
 		{
@@ -579,7 +579,7 @@ func TestBuildEffectiveNginxProxy_WAF(t *testing.T) {
 				Valid: true,
 				Source: &ngfAPIv1alpha2.NginxProxy{
 					Spec: ngfAPIv1alpha2.NginxProxySpec{
-						WAFEnabled: true,
+						WAF: &ngfAPIv1alpha2.WAFSpec{Enabled: true},
 					},
 				},
 			},
@@ -592,7 +592,7 @@ func TestBuildEffectiveNginxProxy_WAF(t *testing.T) {
 				},
 			},
 			exp: &EffectiveNginxProxy{
-				WAFEnabled: true,
+				WAF: &ngfAPIv1alpha2.WAFSpec{Enabled: true},
 			},
 		},
 		{
@@ -601,7 +601,7 @@ func TestBuildEffectiveNginxProxy_WAF(t *testing.T) {
 				Valid: true,
 				Source: &ngfAPIv1alpha2.NginxProxy{
 					Spec: ngfAPIv1alpha2.NginxProxySpec{
-						WAFEnabled: false,
+						WAF: &ngfAPIv1alpha2.WAFSpec{Enabled: false},
 					},
 				},
 			},
@@ -609,12 +609,12 @@ func TestBuildEffectiveNginxProxy_WAF(t *testing.T) {
 				Valid: true,
 				Source: &ngfAPIv1alpha2.NginxProxy{
 					Spec: ngfAPIv1alpha2.NginxProxySpec{
-						WAFEnabled: false,
+						WAF: &ngfAPIv1alpha2.WAFSpec{Enabled: false},
 					},
 				},
 			},
 			exp: &EffectiveNginxProxy{
-				WAFEnabled: false,
+				WAF: &ngfAPIv1alpha2.WAFSpec{Enabled: false},
 			},
 		},
 		{
@@ -642,7 +642,7 @@ func TestBuildEffectiveNginxProxy_WAF(t *testing.T) {
 
 			enp := buildEffectiveNginxProxy(test.gcNp, test.gwNp)
 			g.Expect(enp).ToNot(BeNil())
-			g.Expect(enp.WAFEnabled).To(Equal(test.exp.WAFEnabled))
+			g.Expect(enp.WAF).To(Equal(test.exp.WAF))
 		})
 	}
 }

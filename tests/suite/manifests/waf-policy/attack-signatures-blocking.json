@@ -12,6 +12,14 @@
         "block": true,
         "alarm": true
       }
+    ],
+    "cookies": [
+      {
+        "name": "*",
+        "attackSignaturesCheck": true,
+        "enforcementType": "enforce",
+        "maskValueInLogs": false
+      }
     ]
   }
 }

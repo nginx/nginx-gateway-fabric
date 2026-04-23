@@ -1062,7 +1062,7 @@ func TestBuildNginxResourceObjects_DaemonSet(t *testing.T) {
 	}
 
 	nProxyCfg := &graph.EffectiveNginxProxy{
-		WAFEnabled: true,
+		WAF: &ngfAPIv1alpha2.WAFSpec{Enabled: true},
 		Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
 			DaemonSet: &ngfAPIv1alpha2.DaemonSetSpec{
 				Pod: ngfAPIv1alpha2.PodSpec{
@@ -2516,7 +2516,7 @@ func TestBuildNginxResourceObjects_WAF(t *testing.T) {
 
 	resourceName := "gw-nginx"
 	nProxyCfg := &graph.EffectiveNginxProxy{
-		WAFEnabled: true,
+		WAF: &ngfAPIv1alpha2.WAFSpec{Enabled: true},
 		Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
 			Deployment: &ngfAPIv1alpha2.DeploymentSpec{
 				WAFContainers: &ngfAPIv1alpha2.WAFContainerSpec{

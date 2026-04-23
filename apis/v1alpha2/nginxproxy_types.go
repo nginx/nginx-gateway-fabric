@@ -117,13 +117,30 @@ type NginxProxySpec struct {
 	//
 	// +optional
 	ServerTokens *string `json:"serverTokens,omitempty"`
-	// WAFEnabled enables NGINX App Protect WAF functionality.
+	// WAF configures NGINX App Protect WAF functionality.
+	//
+	// +optional
+	WAF *WAFSpec `json:"waf,omitempty"`
+}
+
+// WAFSpec configures NGINX App Protect WAF.
+type WAFSpec struct {
+	// Enabled enables NGINX App Protect WAF functionality.
 	// When enabled, NGINX Gateway Fabric will deploy additional WAF containers
 	// (waf-enforcer and waf-config-mgr) alongside the main NGINX container.
 	// Default is false.
 	//
 	// +optional
-	WAFEnabled bool `json:"wafEnabled,omitempty"`
+	Enabled bool `json:"enabled,omitempty"`
+	// DisableCookieSeed disables the app_protect_cookie_seed directive.
+	// By default, NGF sets this directive to a stable value derived from the Gateway UID,
+	// ensuring WAF session cookies are consistent across multiple NGINX replicas.
+	// Set this to true if you have pre-compiled the cookie seed into your WAF policy bundles
+	// via the compiler global settings, to avoid conflicting with the compiled-in value.
+	// Default is false.
+	//
+	// +optional
+	DisableCookieSeed bool `json:"disableCookieSeed,omitempty"`
 }
 
 // Telemetry specifies the OpenTelemetry configuration.

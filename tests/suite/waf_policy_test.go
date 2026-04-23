@@ -474,6 +474,111 @@ var _ = Describe("WAFPolicy", Ordered, Label("waf"), func() {
 		})
 	})
 
+	Context("when the NGINX deployment is scaled to multiple replicas", Ordered, func() {
+		// This context verifies that WAF policy is enforced on every replica — each pod
+		// must receive the policy bundle and apply the app_protect directives independently.
+		policyFiles := []string{"waf-policy/wafpolicy.yaml"}
+		proxyFiles := []string{"waf-policy/nginx-proxy-2-replicas.yaml"}
+		var nginxPodNames []string
+
+		BeforeAll(func() {
+			Expect(resourceManager.ApplyFromFiles(policyFiles, namespace)).To(Succeed())
+			nsname := types.NamespacedName{Name: "gateway-waf", Namespace: namespace}
+			Expect(waitForWAFPolicyAccepted(nsname)).To(Succeed())
+
+			Expect(resourceManager.ApplyFromFiles(proxyFiles, namespace)).To(Succeed())
+
+			Eventually(func() ([]string, error) {
+				return resourceManager.GetReadyNginxPodNames(namespace, timeoutConfig.UpdateTimeout)
+			}).
+				WithTimeout(timeoutConfig.UpdateTimeout).
+				WithPolling(2*time.Second).
+				Should(HaveLen(2), "expected 2 ready NGINX pods after scale-up")
+
+			var err error
+			nginxPodNames, err = resourceManager.GetReadyNginxPodNames(namespace, timeoutConfig.UpdateTimeout)
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		AfterAll(func() {
+			Expect(resourceManager.DeleteFromFiles(policyFiles, namespace)).To(Succeed())
+			// Restore single-replica proxy so subsequent contexts see a single pod.
+			Expect(resourceManager.ApplyFromFiles(proxyFile, namespace)).To(Succeed())
+
+			Eventually(func() ([]string, error) {
+				return resourceManager.GetReadyNginxPodNames(namespace, timeoutConfig.UpdateTimeout)
+			}).
+				WithTimeout(timeoutConfig.UpdateTimeout).
+				WithPolling(2*time.Second).
+				Should(HaveLen(1), "expected 1 ready NGINX pod after scale-down")
+		})
+
+		It("has app_protect_cookie_seed set to the same value on all replicas", func() {
+			// app_protect_cookie_seed must be identical on every replica so WAF session cookies
+			// issued by one pod can be decrypted by any other pod in the deployment.
+			var sharedSeed string
+			for _, podName := range nginxPodNames {
+				conf, err := resourceManager.GetNginxConfig(podName, namespace, nginxCrossplanePath)
+				Expect(err).ToNot(HaveOccurred(), "failed to get NGINX config from pod %q", podName)
+
+				Expect(framework.ValidateNginxFieldExists(conf, framework.ExpectedNginxField{
+					Directive:             "app_protect_cookie_seed",
+					File:                  "http.conf",
+					ValueSubstringAllowed: true,
+				})).To(Succeed(), "pod %q missing app_protect_cookie_seed directive", podName)
+
+				seed, err := framework.GetNginxFieldValue(conf, framework.ExpectedNginxField{
+					Directive: "app_protect_cookie_seed",
+					File:      "http.conf",
+				})
+				Expect(err).ToNot(HaveOccurred(), "failed to get cookie seed from pod %q", podName)
+				Expect(seed).ToNot(BeEmpty(), "app_protect_cookie_seed should be non-empty on pod %q", podName)
+
+				if sharedSeed == "" {
+					sharedSeed = seed
+				} else {
+					Expect(seed).To(Equal(sharedSeed),
+						"app_protect_cookie_seed differs between replicas: pod %q has %q, expected %q",
+						podName, seed, sharedSeed)
+				}
+			}
+		})
+
+		It("enforces WAF policy on all replicas", func() {
+			port := 80
+			if portFwdPort != 0 {
+				port = portFwdPort
+			}
+			attackURL := fmt.Sprintf("http://cafe.example.com:%d/coffee?x=%%3C%%2Fscript%%3E", port)
+
+			for _, podName := range nginxPodNames {
+				conf, err := resourceManager.GetNginxConfig(podName, namespace, nginxCrossplanePath)
+				Expect(err).ToNot(HaveOccurred(), "failed to get NGINX config from pod %q", podName)
+
+				Expect(framework.ValidateNginxFieldExists(conf, framework.ExpectedNginxField{
+					Directive: "app_protect_enable",
+					Value:     "on",
+					File:      fmt.Sprintf("WAFPolicy_%s_gateway-waf.conf", namespace),
+				})).To(Succeed(), "pod %q missing app_protect_enable directive", podName)
+			}
+
+			Eventually(func() (bool, error) {
+				resp, err := framework.Get(framework.Request{
+					URL:     attackURL,
+					Address: address,
+					Timeout: timeoutConfig.RequestTimeout,
+				})
+				if err != nil {
+					return false, err
+				}
+				return strings.Contains(resp.Body, "Request Rejected"), nil
+			}).
+				WithTimeout(timeoutConfig.RequestTimeout).
+				WithPolling(500*time.Millisecond).
+				Should(BeTrue(), "expected WAF to block XSS attack signature across all replicas")
+		})
+	})
+
 	Context("when a WAFPolicy is deleted", Ordered, func() {
 		policyFiles := []string{"waf-policy/wafpolicy.yaml"}
 

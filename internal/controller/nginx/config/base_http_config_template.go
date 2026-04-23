@@ -13,6 +13,7 @@ resolver_timeout {{ .DNSResolver.Timeout }};
 {{- end }}
 {{ if .WAF -}}
 app_protect_enforcer_address 127.0.0.1:50000;
+app_protect_cookie_seed {{ .WAFCookieSeed }};
 {{ end -}}
 
 # Set $gw_api_compliant_host variable to the value of $http_host unless $http_host is empty, then set it to the value

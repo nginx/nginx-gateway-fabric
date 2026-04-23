@@ -192,6 +192,24 @@ func fieldExistsInLocation(locationDirective *Directive, expFieldCfg ExpectedNgi
 	return false
 }
 
+// GetNginxFieldValue returns the value of the first directive matching expFieldCfg.
+// Returns an error if no matching directive is found.
+func GetNginxFieldValue(conf *Payload, expFieldCfg ExpectedNginxField) (string, error) {
+	for _, config := range conf.Config {
+		if !strings.Contains(config.File, expFieldCfg.File) {
+			continue
+		}
+
+		for _, directive := range config.Parsed {
+			if directive.Directive == expFieldCfg.Directive {
+				return strings.Join(directive.Args, " "), nil
+			}
+		}
+	}
+
+	return "", fmt.Errorf("directive %q not found in file matching %q", expFieldCfg.Directive, expFieldCfg.File)
+}
+
 // injectCrossplaneContainer adds an ephemeral container that contains crossplane for parsing
 // nginx config. It attaches to the nginx container and shares volumes with it.
 func injectCrossplaneContainer(
