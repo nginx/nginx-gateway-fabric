@@ -488,16 +488,14 @@ var _ = Describe("WAFPolicy", Ordered, Label("waf"), func() {
 
 			Expect(resourceManager.ApplyFromFiles(proxyFiles, namespace)).To(Succeed())
 
-			Eventually(func() ([]string, error) {
-				return resourceManager.GetReadyNginxPodNames(namespace, timeoutConfig.UpdateTimeout)
+			Eventually(func() bool {
+				var err error
+				nginxPodNames, err = resourceManager.GetReadyNginxPodNames(namespace, timeoutConfig.GetStatusTimeout)
+				return len(nginxPodNames) == 2 && err == nil
 			}).
 				WithTimeout(timeoutConfig.UpdateTimeout).
 				WithPolling(2*time.Second).
-				Should(HaveLen(2), "expected 2 ready NGINX pods after scale-up")
-
-			var err error
-			nginxPodNames, err = resourceManager.GetReadyNginxPodNames(namespace, timeoutConfig.UpdateTimeout)
-			Expect(err).ToNot(HaveOccurred())
+				Should(BeTrue(), "expected 2 ready NGINX pods after scale-up")
 		})
 
 		AfterAll(func() {
@@ -505,12 +503,13 @@ var _ = Describe("WAFPolicy", Ordered, Label("waf"), func() {
 			// Restore single-replica proxy so subsequent contexts see a single pod.
 			Expect(resourceManager.ApplyFromFiles(proxyFile, namespace)).To(Succeed())
 
-			Eventually(func() ([]string, error) {
-				return resourceManager.GetReadyNginxPodNames(namespace, timeoutConfig.UpdateTimeout)
+			Eventually(func() bool {
+				names, err := resourceManager.GetReadyNginxPodNames(namespace, timeoutConfig.GetStatusTimeout)
+				return len(names) == 1 && err == nil
 			}).
 				WithTimeout(timeoutConfig.UpdateTimeout).
 				WithPolling(2*time.Second).
-				Should(HaveLen(1), "expected 1 ready NGINX pod after scale-down")
+				Should(BeTrue(), "expected 1 ready NGINX pod after scale-down")
 		})
 
 		It("has app_protect_cookie_seed set to the same value on all replicas", func() {

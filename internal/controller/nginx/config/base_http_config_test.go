@@ -204,6 +204,14 @@ func TestExecuteBaseHttp_WAF(t *testing.T) {
 			expEnforcerCount:     0,
 			expCookieSeedPresent: false,
 		},
+		{
+			name: "waf on, cookie seed disabled",
+			conf: dataplane.Configuration{
+				WAF: dataplane.WAFConfig{Enabled: true, CookieSeed: ""},
+			},
+			expEnforcerCount:     1,
+			expCookieSeedPresent: false,
+		},
 	}
 
 	for _, test := range tests {
