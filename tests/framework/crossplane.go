@@ -192,7 +192,10 @@ func fieldExistsInLocation(locationDirective *Directive, expFieldCfg ExpectedNgi
 	return false
 }
 
-// GetNginxFieldValue returns the value of the first directive matching expFieldCfg.
+// GetNginxFieldValue returns the value of the first top-level directive in the file matching
+// expFieldCfg.File and expFieldCfg.Directive. Only File and Directive are used for matching;
+// Server, Location, Upstream, and Block selectors are not evaluated. Use this function only for
+// directives that appear at the top level of their config file (e.g., http-context directives).
 // Returns an error if no matching directive is found.
 func GetNginxFieldValue(conf *Payload, expFieldCfg ExpectedNginxField) (string, error) {
 	for _, config := range conf.Config {

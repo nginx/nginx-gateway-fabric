@@ -756,7 +756,7 @@
           "type": "object"
         },
         "wafContainers": {
-          "description": "Configuration for NGINX App Protect WAF v5 containers.\nThese containers are only deployed when WAF is enabled via nginx.config.wafEnabled: true.\nAll settings are optional overrides - defaults are provided by NGF.",
+          "description": "Configuration for NGINX App Protect WAF v5 containers.\nThese containers are only deployed when WAF is enabled via nginx.config.waf.enabled: true.\nAll settings are optional overrides - defaults are provided by NGF.",
           "required": [],
           "title": "wafContainers",
           "type": "object"

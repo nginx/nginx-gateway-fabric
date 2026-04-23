@@ -8322,6 +8322,21 @@ func TestBuildWAF(t *testing.T) {
 				CookieSeed: "",
 			},
 		},
+		{
+			name: "WAF enabled, cookie seed disabled",
+			gateway: &graph.Gateway{
+				Source: &v1.Gateway{ObjectMeta: metav1.ObjectMeta{UID: "uid-disable-seed"}},
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+					WAF: &ngfAPIv1alpha2.WAFSpec{Enabled: true, DisableCookieSeed: true},
+				},
+				Policies: []*graph.Policy{},
+			},
+			expWAFConfig: WAFConfig{
+				Enabled:    true,
+				WAFBundles: map[WAFBundleID]WAFBundle{},
+				CookieSeed: "",
+			},
+		},
 	}
 
 	for _, test := range tests {
