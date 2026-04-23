@@ -104,7 +104,7 @@ func (s *secretEntry) revalidate(opts *resolveOptions, obj client.Object) error 
 }
 
 func validateOpaqueSecretKey(secret *v1.Secret, key string) error {
-	if data, exists := secret.Data[key]; exists || len(data) > 0 {
+	if data, exists := secret.Data[key]; exists && len(data) > 0 {
 		if key == secrets.CAKey {
 			return secrets.ValidateCA(data)
 		}
