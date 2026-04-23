@@ -233,6 +233,7 @@ server {
             {{- if $l.ProxySSLVerify }}
         {{ $proxyOrGRPC }}_ssl_server_name on;
         {{ $proxyOrGRPC }}_ssl_verify on;
+        {{ $proxyOrGRPC }}_ssl_verify_depth 4;
                 {{- if $l.ProxySSLVerify.Name}}
         {{ $proxyOrGRPC }}_ssl_name {{ $l.ProxySSLVerify.Name }};
                 {{- end }}

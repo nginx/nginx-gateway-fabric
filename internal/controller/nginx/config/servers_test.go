@@ -198,6 +198,8 @@ func TestExecuteServers(t *testing.T) {
 		"ssl_ciphers ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384:HIGH:!aNULL:!MD5;": 1,
 		"ssl_prefer_server_ciphers on;":                     1,
 		"proxy_ssl_server_name on;":                         1,
+		"proxy_ssl_verify on;":                              1,
+		"proxy_ssl_verify_depth 4;":                         1,
 		"status_zone":                                       0,
 		"include /etc/nginx/includes/location-snippet.conf": 1,
 		"include /etc/nginx/includes/server-snippet.conf":   1,
