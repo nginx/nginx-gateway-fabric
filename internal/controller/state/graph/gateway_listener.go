@@ -834,7 +834,7 @@ func createFrontendTLSCaCertReferenceResolver(
 		l.CACertificateRefs = refs
 
 		if l.ValidationMode == v1.AllowInsecureFallback {
-			msg := fmt.Sprintf("Validation Mode: AllowInsecureFallback is set for listener %s.", l.Name)
+			msg := "Validation Mode: AllowInsecureFallback is set for at least one listener"
 			gw.Conditions = append(gw.Conditions, conditions.NewGatewayInsecureFrontendValidationMode(msg))
 		}
 	}
