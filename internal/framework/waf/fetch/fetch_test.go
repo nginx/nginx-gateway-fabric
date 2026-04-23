@@ -408,6 +408,116 @@ func TestNIMFetchExpectedChecksumEnforced(t *testing.T) {
 		g.Expect(err).To(HaveOccurred())
 		g.Expect(err.Error()).To(ContainSubstring("checksum mismatch"))
 	})
+
+	t.Run("NIM api hash auto-verifies bundle without user-supplied checksum", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+
+		originalBundleContent := []byte("original-bundle")
+		corruptBundleContent := []byte("corrupted-bundle")
+		encodedCorruptBundle := base64.StdEncoding.EncodeToString(corruptBundleContent)
+		originalBundleHash := fetch.ComputeChecksum(originalBundleContent)
+
+		// Serve a bundle whose content differs from what the metadata reports as the hash.
+		corruptHandler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			// Return the hash of the original bundle but serve the corrupted content.
+			if err := json.NewEncoder(w).Encode(map[string]any{
+				"items": []map[string]any{{
+					"content": encodedCorruptBundle,
+					"metadata": map[string]any{
+						"hash": originalBundleHash,
+					},
+				}},
+			}); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
+		})
+
+		srv := httptest.NewServer(corruptHandler)
+		defer srv.Close()
+
+		f := fetch.NewHTTPFetcher(logr.Discard())
+		_, _, err := f.FetchPolicyBundle(t.Context(), fetch.Request{
+			URL:        srv.URL,
+			PolicyName: "my-policy",
+			// No ExpectedChecksum set — NIM API hash should be used automatically.
+		})
+		g.Expect(err).To(HaveOccurred())
+		g.Expect(err.Error()).To(ContainSubstring("NIM bundle integrity check failed"))
+	})
+
+	t.Run("NIM api hash verification succeeds when hash matches", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+
+		bundleContent := []byte("valid-nim-bundle")
+		encodedBundle := base64.StdEncoding.EncodeToString(bundleContent)
+		bundleHash := fetch.ComputeChecksum(bundleContent)
+
+		nimHandler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			if err := json.NewEncoder(w).Encode(map[string]any{
+				"items": []map[string]any{{
+					"content": encodedBundle,
+					"metadata": map[string]any{
+						"hash": bundleHash,
+					},
+				}},
+			}); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
+		})
+
+		srv := httptest.NewServer(nimHandler)
+		defer srv.Close()
+
+		f := fetch.NewHTTPFetcher(logr.Discard())
+		data, checksum, err := f.FetchPolicyBundle(t.Context(), fetch.Request{
+			URL:        srv.URL,
+			PolicyName: "my-policy",
+			// No ExpectedChecksum set — NIM API hash should be used automatically.
+		})
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(data).To(Equal(bundleContent))
+		g.Expect(checksum).To(Equal(bundleHash))
+	})
+
+	t.Run("user-supplied checksum takes precedence over NIM api hash", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+
+		bundleContent := []byte("user-verified-bundle")
+		encodedBundle := base64.StdEncoding.EncodeToString(bundleContent)
+		wrongHash := strings.Repeat("a", 64)
+
+		nimHandler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			// NIM returns a wrong hash, but user supplies correct one.
+			if err := json.NewEncoder(w).Encode(map[string]any{
+				"items": []map[string]any{{
+					"content": encodedBundle,
+					"metadata": map[string]any{
+						"hash": wrongHash,
+					},
+				}},
+			}); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
+		})
+
+		srv := httptest.NewServer(nimHandler)
+		defer srv.Close()
+
+		f := fetch.NewHTTPFetcher(logr.Discard())
+		data, _, err := f.FetchPolicyBundle(t.Context(), fetch.Request{
+			URL:              srv.URL,
+			PolicyName:       "my-policy",
+			ExpectedChecksum: fetch.ComputeChecksum(bundleContent),
+		})
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(data).To(Equal(bundleContent))
+	})
 }
 
 func TestN1CFetchExpectedChecksumEnforced(t *testing.T) {

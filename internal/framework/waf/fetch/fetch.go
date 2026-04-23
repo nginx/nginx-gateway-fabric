@@ -413,7 +413,10 @@ func fetchHTTP(ctx context.Context, client *http.Client, req Request) ([]byte, s
 // nimResponse is the JSON envelope returned by the NIM bundles API.
 type nimResponse struct {
 	Items []struct {
-		Content string `json:"content"`
+		Content  string `json:"content"`
+		Metadata struct {
+			Hash string `json:"hash"`
+		} `json:"metadata"`
 	} `json:"items"`
 }
 
@@ -447,7 +450,21 @@ func fetchNIM(ctx context.Context, client *http.Client, req Request) ([]byte, st
 		return nil, "", fmt.Errorf("failed to base64-decode NIM bundle content: %w", err)
 	}
 
-	return data, ComputeChecksum(data), nil
+	actualChecksum := ComputeChecksum(data)
+	bundleHash := resp.Items[0].Metadata.Hash
+
+	// Verify the downloaded bundle against the hash reported by the NIM API,
+	// unless the caller supplied their own ExpectedChecksum via BundleValidation
+	// (the outer Fetch loop will check that instead).
+	if bundleHash != "" && req.ExpectedChecksum == "" {
+		if actualChecksum != strings.ToLower(bundleHash) {
+			return nil, "", &nonTransientError{
+				err: fmt.Errorf("NIM bundle integrity check failed: expected %s, got %s", bundleHash, actualChecksum),
+			}
+		}
+	}
+
+	return data, actualChecksum, nil
 }
 
 func fetchNIMLogProfile(ctx context.Context, client *http.Client, req Request) ([]byte, string, error) {
