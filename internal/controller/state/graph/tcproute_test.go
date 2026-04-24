@@ -35,10 +35,11 @@ func createTCPRoute(
 func TestBuildTCPRoute(t *testing.T) {
 	t.Parallel()
 
-	parentRef := gatewayv1.ParentReference{
+	gatewayParentRef := gatewayv1.ParentReference{
 		Namespace:   helpers.GetPointer[gatewayv1.Namespace]("test"),
 		Name:        "gateway",
 		SectionName: helpers.GetPointer[gatewayv1.SectionName]("l1"),
+		Kind:        helpers.GetPointer[gatewayv1.Kind]("Gateway"),
 	}
 
 	createGateway := func() *Gateway {
@@ -53,7 +54,7 @@ func TestBuildTCPRoute(t *testing.T) {
 		}
 	}
 
-	parentRefGraph := ParentRef{
+	gatewayParentRefGraph := ParentRef{
 		SectionName: helpers.GetPointer[gatewayv1.SectionName]("l1"),
 		Gateway: &ParentRefGateway{
 			NamespacedName: types.NamespacedName{
@@ -61,14 +62,47 @@ func TestBuildTCPRoute(t *testing.T) {
 				Name:      "gateway",
 			},
 		},
+		Kind: gatewayv1.Kind("Gateway"),
+		NamespacedName: types.NamespacedName{
+			Namespace: "test",
+			Name:      "gateway",
+		},
+	}
+
+	listenerSetParentRef := gatewayv1.ParentReference{
+		Namespace:   helpers.GetPointer[gatewayv1.Namespace]("test"),
+		Name:        "listener-set",
+		SectionName: helpers.GetPointer[gatewayv1.SectionName]("ls-l1"),
+		Kind:        helpers.GetPointer[gatewayv1.Kind]("ListenerSet"),
+	}
+
+	listenerSets := map[types.NamespacedName]*ListenerSet{
+		{Namespace: "test", Name: "listener-set"}: {
+			Source: &gatewayv1.ListenerSet{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: "test",
+					Name:      "listener-set",
+				},
+			},
+			Valid: true,
+		},
+	}
+
+	listenerSetParentRefGraph := ParentRef{
+		SectionName: helpers.GetPointer[gatewayv1.SectionName]("ls-l1"),
+		Kind:        gatewayv1.Kind("ListenerSet"),
+		NamespacedName: types.NamespacedName{
+			Namespace: "test",
+			Name:      "listener-set",
+		},
 	}
 
 	// Test cases for invalid TCPRoutes
 	duplicateParentRefsTCPR := createTCPRoute(
 		nil,
 		[]gatewayv1.ParentReference{
-			parentRef,
-			parentRef,
+			gatewayParentRef,
+			gatewayParentRef,
 		},
 	)
 
@@ -80,7 +114,7 @@ func TestBuildTCPRoute(t *testing.T) {
 	noRulesTCPR := createTCPRoute(
 		nil,
 		[]gatewayv1.ParentReference{
-			parentRef,
+			gatewayParentRef,
 		},
 	)
 
@@ -98,7 +132,7 @@ func TestBuildTCPRoute(t *testing.T) {
 			},
 		},
 		[]gatewayv1.ParentReference{
-			parentRef,
+			gatewayParentRef,
 		},
 	)
 
@@ -117,7 +151,7 @@ func TestBuildTCPRoute(t *testing.T) {
 			},
 		},
 		[]gatewayv1.ParentReference{
-			parentRef,
+			gatewayParentRef,
 		},
 	)
 
@@ -136,7 +170,7 @@ func TestBuildTCPRoute(t *testing.T) {
 			},
 		},
 		[]gatewayv1.ParentReference{
-			parentRef,
+			gatewayParentRef,
 		},
 	)
 
@@ -155,7 +189,7 @@ func TestBuildTCPRoute(t *testing.T) {
 			},
 		},
 		[]gatewayv1.ParentReference{
-			parentRef,
+			gatewayParentRef,
 		},
 	)
 
@@ -172,7 +206,7 @@ func TestBuildTCPRoute(t *testing.T) {
 			},
 		},
 		[]gatewayv1.ParentReference{
-			parentRef,
+			gatewayParentRef,
 		},
 	)
 
@@ -191,7 +225,7 @@ func TestBuildTCPRoute(t *testing.T) {
 			},
 		},
 		[]gatewayv1.ParentReference{
-			parentRef,
+			gatewayParentRef,
 		},
 	)
 
@@ -218,7 +252,7 @@ func TestBuildTCPRoute(t *testing.T) {
 			},
 		},
 		[]gatewayv1.ParentReference{
-			parentRef,
+			gatewayParentRef,
 		},
 	)
 
@@ -247,7 +281,26 @@ func TestBuildTCPRoute(t *testing.T) {
 			},
 		},
 		[]gatewayv1.ParentReference{
-			parentRef,
+			gatewayParentRef,
+		},
+	)
+
+	// Valid TCPRoute with ListenerSet parent ref
+	validTCPRWithListenerSetParentRef := createTCPRoute(
+		[]v1alpha2.TCPRouteRule{
+			{
+				BackendRefs: []gatewayv1.BackendRef{
+					{
+						BackendObjectReference: gatewayv1.BackendObjectReference{
+							Name: "svc1",
+							Port: helpers.GetPointer[gatewayv1.PortNumber](80),
+						},
+					},
+				},
+			},
+		},
+		[]gatewayv1.ParentReference{
+			listenerSetParentRef,
 		},
 	)
 
@@ -310,7 +363,7 @@ func TestBuildTCPRoute(t *testing.T) {
 				RouteType:  RouteTypeTCP,
 				Valid:      false,
 				Attachable: false,
-				ParentRefs: []ParentRef{parentRefGraph},
+				ParentRefs: []ParentRef{gatewayParentRefGraph},
 				Conditions: []conditions.Condition{
 					conditions.NewRouteBackendRefUnsupportedValue("Must have at least one Rule"),
 				},
@@ -328,7 +381,7 @@ func TestBuildTCPRoute(t *testing.T) {
 				RouteType:  RouteTypeTCP,
 				Valid:      true,
 				Attachable: true,
-				ParentRefs: []ParentRef{parentRefGraph},
+				ParentRefs: []ParentRef{gatewayParentRefGraph},
 				Spec: L4RouteSpec{
 					BackendRefs: []BackendRef{
 						{
@@ -360,7 +413,7 @@ func TestBuildTCPRoute(t *testing.T) {
 				RouteType:  RouteTypeTCP,
 				Valid:      true,
 				Attachable: true,
-				ParentRefs: []ParentRef{parentRefGraph},
+				ParentRefs: []ParentRef{gatewayParentRefGraph},
 				Spec: L4RouteSpec{
 					BackendRefs: []BackendRef{
 						{
@@ -390,7 +443,7 @@ func TestBuildTCPRoute(t *testing.T) {
 				RouteType:  RouteTypeTCP,
 				Valid:      true,
 				Attachable: true,
-				ParentRefs: []ParentRef{parentRefGraph},
+				ParentRefs: []ParentRef{gatewayParentRefGraph},
 				Spec: L4RouteSpec{
 					BackendRefs: []BackendRef{
 						{
@@ -423,7 +476,7 @@ func TestBuildTCPRoute(t *testing.T) {
 				RouteType:  RouteTypeTCP,
 				Valid:      true,
 				Attachable: true,
-				ParentRefs: []ParentRef{parentRefGraph},
+				ParentRefs: []ParentRef{gatewayParentRefGraph},
 				Spec: L4RouteSpec{
 					BackendRefs: []BackendRef{
 						{
@@ -454,7 +507,7 @@ func TestBuildTCPRoute(t *testing.T) {
 				RouteType:  RouteTypeTCP,
 				Valid:      true,
 				Attachable: true,
-				ParentRefs: []ParentRef{parentRefGraph},
+				ParentRefs: []ParentRef{gatewayParentRefGraph},
 				Spec: L4RouteSpec{
 					BackendRefs: []BackendRef{
 						{
@@ -484,7 +537,7 @@ func TestBuildTCPRoute(t *testing.T) {
 				RouteType:  RouteTypeTCP,
 				Valid:      true,
 				Attachable: true,
-				ParentRefs: []ParentRef{parentRefGraph},
+				ParentRefs: []ParentRef{gatewayParentRefGraph},
 				Spec: L4RouteSpec{
 					BackendRefs: []BackendRef{
 						{
@@ -515,7 +568,7 @@ func TestBuildTCPRoute(t *testing.T) {
 				RouteType:  RouteTypeTCP,
 				Valid:      true,
 				Attachable: true,
-				ParentRefs: []ParentRef{parentRefGraph},
+				ParentRefs: []ParentRef{gatewayParentRefGraph},
 				Spec: L4RouteSpec{
 					BackendRefs: []BackendRef{
 						{
@@ -555,12 +608,42 @@ func TestBuildTCPRoute(t *testing.T) {
 				RouteType:  RouteTypeTCP,
 				Valid:      true,
 				Attachable: true,
-				ParentRefs: []ParentRef{parentRefGraph},
+				ParentRefs: []ParentRef{gatewayParentRefGraph},
 				Conditions: []conditions.Condition{
 					conditions.NewRouteAcceptedUnsupportedField(
 						"spec.rules[1..1]: Only the first rule is processed. 1 additional rule(s) are ignored",
 					),
 				},
+				Spec: L4RouteSpec{
+					BackendRefs: []BackendRef{
+						{
+							SvcNsName: types.NamespacedName{Namespace: "test", Name: "svc1"},
+							ServicePort: apiv1.ServicePort{
+								Port: 80,
+							},
+							Weight:             1,
+							Valid:              true,
+							InvalidForGateways: make(map[types.NamespacedName]conditions.Condition),
+						},
+					},
+				},
+			},
+		},
+		{
+			name:  "valid TCP route with ListenerSet parent ref",
+			route: validTCPRWithListenerSetParentRef,
+			gateways: map[types.NamespacedName]*Gateway{
+				{Namespace: "test", Name: "gateway"}: createGateway(),
+			},
+			services: map[types.NamespacedName]*apiv1.Service{
+				{Namespace: "test", Name: "svc1"}: createSvc("svc1"),
+			},
+			expected: &L4Route{
+				Source:     validTCPRWithListenerSetParentRef,
+				RouteType:  RouteTypeTCP,
+				Valid:      true,
+				Attachable: true,
+				ParentRefs: []ParentRef{listenerSetParentRefGraph},
 				Spec: L4RouteSpec{
 					BackendRefs: []BackendRef{
 						{
@@ -587,7 +670,7 @@ func TestBuildTCPRoute(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			result := buildTCPRoute(test.route, test.gateways, test.services, refGrantResolver)
+			result := buildTCPRoute(test.route, test.gateways, test.services, refGrantResolver, listenerSets)
 			g.Expect(helpers.Diff(test.expected, result)).To(BeEmpty())
 		})
 	}

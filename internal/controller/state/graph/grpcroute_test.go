@@ -77,6 +77,7 @@ func createGRPCRoute(
 	name string,
 	refName string,
 	hostname v1.Hostname,
+	parentRefKind v1.Kind,
 	rules []v1.GRPCRouteRule,
 ) *v1.GRPCRoute {
 	return &v1.GRPCRoute{
@@ -91,6 +92,7 @@ func createGRPCRoute(
 						Namespace:   helpers.GetPointer[v1.Namespace]("test"),
 						Name:        v1.ObjectName(refName),
 						SectionName: helpers.GetPointer[v1.SectionName](v1.SectionName(sectionNameOfCreateHTTPRoute)),
+						Kind:        helpers.GetPointer(parentRefKind),
 					},
 				},
 			},
@@ -116,6 +118,18 @@ func TestBuildGRPCRoutes(t *testing.T) {
 			EffectiveNginxProxy: &EffectiveNginxProxy{
 				DisableHTTP2: helpers.GetPointer(false),
 			},
+		},
+	}
+
+	listenerSets := map[types.NamespacedName]*ListenerSet{
+		{Namespace: "test", Name: "listener-set"}: {
+			Source: &v1.ListenerSet{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: "test",
+					Name:      "listener-set",
+				},
+			},
+			Valid: true,
 		},
 	}
 
@@ -167,13 +181,27 @@ func TestBuildGRPCRoutes(t *testing.T) {
 		BackendRefs:        []v1.GRPCBackendRef{grpcBackendRef},
 	}
 
-	gr := createGRPCRoute("gr-1", gwNsName.Name, "example.com", []v1.GRPCRouteRule{grRuleWithFiltersAndSessionPersistence})
+	gr := createGRPCRoute(
+		"gr-1",
+		gwNsName.Name,
+		"example.com",
+		v1.Kind("Gateway"),
+		[]v1.GRPCRouteRule{grRuleWithFiltersAndSessionPersistence},
+	)
+	grLSParentRef := createGRPCRoute(
+		"gr-ls-parent-ref",
+		"listener-set",
+		"example.com",
+		v1.Kind("ListenerSet"),
+		[]v1.GRPCRouteRule{grRuleWithFiltersAndSessionPersistence},
+	)
 
-	grWrongGateway := createGRPCRoute("gr-2", "some-gateway", "example.com", []v1.GRPCRouteRule{})
+	grWrongGateway := createGRPCRoute("gr-2", "some-gateway", "example.com", v1.Kind("Gateway"), []v1.GRPCRouteRule{})
 
 	grRoutes := map[types.NamespacedName]*v1.GRPCRoute{
 		client.ObjectKeyFromObject(gr):             gr,
 		client.ObjectKeyFromObject(grWrongGateway): grWrongGateway,
+		client.ObjectKeyFromObject(grLSParentRef):  grLSParentRef,
 	}
 
 	sf := &ngfAPIv1alpha1.SnippetsFilter{
@@ -219,9 +247,11 @@ func TestBuildGRPCRoutes(t *testing.T) {
 					Source:    gr,
 					ParentRefs: []ParentRef{
 						{
-							Idx:         0,
-							Gateway:     CreateParentRefGateway(gateways[gwNsName]),
-							SectionName: gr.Spec.ParentRefs[0].SectionName,
+							Idx:            0,
+							Gateway:        CreateParentRefGateway(gateways[gwNsName]),
+							SectionName:    gr.Spec.ParentRefs[0].SectionName,
+							Kind:           v1.Kind("Gateway"),
+							NamespacedName: gwNsName,
 						},
 					},
 					Valid:      true,
@@ -289,6 +319,85 @@ func TestBuildGRPCRoutes(t *testing.T) {
 						},
 					},
 				},
+				CreateRouteKey(grLSParentRef): {
+					RouteType: RouteTypeGRPC,
+					Source:    grLSParentRef,
+					ParentRefs: []ParentRef{
+						{
+							Idx:         0,
+							SectionName: grLSParentRef.Spec.ParentRefs[0].SectionName,
+							Kind:        v1.Kind("ListenerSet"),
+							NamespacedName: types.NamespacedName{
+								Namespace: "test",
+								Name:      "listener-set",
+							},
+						},
+					},
+					Valid:      true,
+					Attachable: true,
+					Spec: L7RouteSpec{
+						Hostnames: grLSParentRef.Spec.Hostnames,
+						Rules: []RouteRule{
+							{
+								Matches: ConvertGRPCMatches(grLSParentRef.Spec.Rules[0].Matches),
+								Filters: RouteRuleFilters{
+									Valid: true,
+									Filters: []Filter{
+										{
+											ExtensionRef: snippetsFilterRef.ExtensionRef,
+											ResolvedExtensionRef: &ExtensionRefFilter{
+												SnippetsFilter: &SnippetsFilter{
+													Source: sf,
+													Snippets: map[ngfAPIv1alpha1.NginxContext]string{
+														ngfAPIv1alpha1.NginxContextHTTP: "http snippet",
+													},
+													Valid:      true,
+													Referenced: true,
+												},
+												Valid: true,
+											},
+											RouteType:  RouteTypeGRPC,
+											FilterType: FilterExtensionRef,
+										},
+										{
+											ExtensionRef: authenticationFilterRef.ExtensionRef,
+											ResolvedExtensionRef: &ExtensionRefFilter{
+												AuthenticationFilter: &AuthenticationFilter{
+													Source:     af,
+													Valid:      true,
+													Referenced: true,
+												},
+												Valid: true,
+											},
+											RouteType:  RouteTypeGRPC,
+											FilterType: FilterExtensionRef,
+										},
+										{
+											RequestHeaderModifier: &v1.HTTPHeaderFilter{},
+											RouteType:             RouteTypeGRPC,
+											FilterType:            FilterRequestHeaderModifier,
+										},
+									},
+								},
+								ValidMatches: true,
+								RouteBackendRefs: []RouteBackendRef{
+									{
+										BackendRef: v1.BackendRef{
+											BackendObjectReference: grpcBackendRef.BackendObjectReference,
+										},
+										SessionPersistence: &SessionPersistenceConfig{
+											Valid:       true,
+											Name:        "sp_gr-ls-parent-ref_test_0",
+											SessionType: *unNamedSPConfig.Type,
+											Expiry:      "10m",
+											Idx:         "gr-ls-parent-ref_test_0",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
 			},
 			name: "normal case",
 		},
@@ -339,6 +448,7 @@ func TestBuildGRPCRoutes(t *testing.T) {
 					Plus:         true,
 					Experimental: true,
 				},
+				listenerSets,
 			)
 			g.Expect(helpers.Diff(test.expected, routes)).To(BeEmpty())
 		})
@@ -361,6 +471,25 @@ func TestBuildGRPCRoute(t *testing.T) {
 		},
 	}
 	gatewayNsName := client.ObjectKeyFromObject(gw.Source)
+
+	listenerSetParentRef := v1.ParentReference{
+		Namespace:   helpers.GetPointer[v1.Namespace]("test"),
+		Name:        "listener-set",
+		SectionName: helpers.GetPointer[v1.SectionName]("ls-l1"),
+		Kind:        helpers.GetPointer[v1.Kind]("ListenerSet"),
+	}
+
+	listenerSets := map[types.NamespacedName]*ListenerSet{
+		{Namespace: "test", Name: "listener-set"}: {
+			Source: &v1.ListenerSet{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: "test",
+					Name:      "listener-set",
+				},
+			},
+			Valid: true,
+		},
+	}
 	backendRef := v1.BackendRef{
 		BackendObjectReference: v1.BackendObjectReference{
 			Kind:      helpers.GetPointer[v1.Kind]("Service"),
@@ -414,6 +543,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 		"gr-1",
 		gatewayNsName.Name,
 		"example.com",
+		v1.Kind("Gateway"),
 		[]v1.GRPCRouteRule{methodMatchRule, headersMatchRule},
 	)
 
@@ -421,34 +551,51 @@ func TestBuildGRPCRoute(t *testing.T) {
 		"gr-1",
 		gatewayNsName.Name,
 		"example.com",
+		v1.Kind("Gateway"),
 		[]v1.GRPCRouteRule{{BackendRefs: []v1.GRPCBackendRef{grpcBackendRef}}},
 	)
 
-	grInvalidHostname := createGRPCRoute("gr-1", gatewayNsName.Name, "", []v1.GRPCRouteRule{methodMatchRule})
-	grNotNGF := createGRPCRoute("gr", "some-gateway", "example.com", []v1.GRPCRouteRule{methodMatchRule})
+	grInvalidHostname := createGRPCRoute(
+		"gr-1",
+		gatewayNsName.Name,
+		"",
+		v1.Kind("Gateway"),
+		[]v1.GRPCRouteRule{methodMatchRule},
+	)
+	grNotNGF := createGRPCRoute(
+		"gr",
+		"some-gateway",
+		"example.com",
+		v1.Kind("Gateway"),
+		[]v1.GRPCRouteRule{methodMatchRule},
+	)
 
 	grInvalidMatchesEmptyMethodFields := createGRPCRoute(
 		"gr-1",
 		gatewayNsName.Name,
 		"example.com",
+		v1.Kind("Gateway"),
 		[]v1.GRPCRouteRule{methodMatchEmptyFields},
 	)
 	grInvalidMatchesInvalidMethodFields := createGRPCRoute(
 		"gr-1",
 		gatewayNsName.Name,
 		"example.com",
+		v1.Kind("Gateway"),
 		[]v1.GRPCRouteRule{methodMatchInvalidFields},
 	)
 	grInvalidMatchesNilMethodType := createGRPCRoute(
 		"gr-1",
 		gatewayNsName.Name,
 		"example.com",
+		v1.Kind("Gateway"),
 		[]v1.GRPCRouteRule{methodMatchNilType},
 	)
 	grInvalidHeadersInvalidType := createGRPCRoute(
 		"gr-1",
 		gatewayNsName.Name,
 		"example.com",
+		v1.Kind("Gateway"),
 		[]v1.GRPCRouteRule{headersMatchInvalid},
 	)
 
@@ -456,12 +603,14 @@ func TestBuildGRPCRoute(t *testing.T) {
 		"gr-1",
 		gatewayNsName.Name,
 		"example.com",
+		v1.Kind("Gateway"),
 		[]v1.GRPCRouteRule{headersMatchEmptyType},
 	)
 	grOneInvalid := createGRPCRoute(
 		"gr-1",
 		gatewayNsName.Name,
 		"example.com",
+		v1.Kind("Gateway"),
 		[]v1.GRPCRouteRule{methodMatchRule, headersMatchInvalid},
 	)
 
@@ -469,6 +618,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 		"gr-valid-unsupported",
 		gatewayNsName.Name,
 		"example.com",
+		v1.Kind("Gateway"),
 		[]v1.GRPCRouteRule{
 			{
 				Name: helpers.GetPointer[v1.SectionName]("unsupported-name"),
@@ -489,6 +639,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 		"gr-invalid-unsupported",
 		gatewayNsName.Name,
 		"example.com",
+		v1.Kind("Gateway"),
 		[]v1.GRPCRouteRule{
 			{
 				Name: helpers.GetPointer[v1.SectionName]("unsupported-name"),
@@ -509,6 +660,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 		"gr",
 		gatewayNsName.Name,
 		"example.com",
+		v1.Kind("Gateway"),
 		[]v1.GRPCRouteRule{methodMatchRule},
 	)
 	grDuplicateSectionName.Spec.ParentRefs = append(
@@ -528,6 +680,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 		"gr",
 		gatewayNsName.Name,
 		"example.com",
+		v1.Kind("Gateway"),
 		[]v1.GRPCRouteRule{grInvalidFilterRule},
 	)
 
@@ -567,6 +720,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 		"gr",
 		gatewayNsName.Name,
 		"example.com",
+		v1.Kind("Gateway"),
 		[]v1.GRPCRouteRule{grValidFilterRule, grValidHeaderMatch},
 	)
 
@@ -586,6 +740,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 		"gr",
 		gatewayNsName.Name,
 		"example.com",
+		v1.Kind("Gateway"),
 		[]v1.GRPCRouteRule{grInvalidSnippetsFilterRule},
 	)
 
@@ -605,6 +760,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 		"gr",
 		gatewayNsName.Name,
 		"example.com",
+		v1.Kind("Gateway"),
 		[]v1.GRPCRouteRule{grUnresolvableSnippetsFilterRule},
 	)
 
@@ -632,6 +788,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 		"gr",
 		gatewayNsName.Name,
 		"example.com",
+		v1.Kind("Gateway"),
 		[]v1.GRPCRouteRule{grInvalidAndUnresolvableSnippetsFilterRule},
 	)
 
@@ -651,6 +808,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 		"gr",
 		gatewayNsName.Name,
 		"example.com",
+		v1.Kind("Gateway"),
 		[]v1.GRPCRouteRule{grInvalidAuthenticationFilterRule},
 	)
 
@@ -670,6 +828,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 		"gr",
 		gatewayNsName.Name,
 		"example.com",
+		v1.Kind("Gateway"),
 		[]v1.GRPCRouteRule{grUnresolvableAuthenticationFilterRule},
 	)
 
@@ -697,6 +856,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 		"gr",
 		gatewayNsName.Name,
 		"example.com",
+		v1.Kind("Gateway"),
 		[]v1.GRPCRouteRule{grInvalidAndUnresolvableAuthenticationFilterRule},
 	)
 
@@ -724,6 +884,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 		"gr",
 		gatewayNsName.Name,
 		"example.com",
+		v1.Kind("Gateway"),
 		[]v1.GRPCRouteRule{grInvalidAndValidAuthenticationFilterRule},
 	)
 
@@ -751,6 +912,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 		"gr",
 		gatewayNsName.Name,
 		"example.com",
+		v1.Kind("Gateway"),
 		[]v1.GRPCRouteRule{grUnresolvedAndValidAuthenticationFilterRule},
 	)
 
@@ -778,8 +940,19 @@ func TestBuildGRPCRoute(t *testing.T) {
 		"gr",
 		gatewayNsName.Name,
 		"example.com",
+		v1.Kind("Gateway"),
 		[]v1.GRPCRouteRule{grTwoValidAuthenticationFilterRule},
 	)
+
+	// Valid GRPCRoute with ListenerSet parent ref
+	grValidWithListenerSetParentRef := createGRPCRoute(
+		"gr",
+		"listener-set",
+		"example.com",
+		v1.Kind("ListenerSet"),
+		[]v1.GRPCRouteRule{methodMatchRule},
+	)
+	grValidWithListenerSetParentRef.Spec.ParentRefs[0] = listenerSetParentRef
 
 	createAllValidValidator := func() *validationfakes.FakeHTTPFieldsValidator {
 		v := &validationfakes.FakeHTTPFieldsValidator{}
@@ -845,9 +1018,11 @@ func TestBuildGRPCRoute(t *testing.T) {
 				Source:    grBoth,
 				ParentRefs: []ParentRef{
 					{
-						Idx:         0,
-						Gateway:     CreateParentRefGateway(gw),
-						SectionName: grBoth.Spec.ParentRefs[0].SectionName,
+						Idx:            0,
+						Gateway:        CreateParentRefGateway(gw),
+						SectionName:    grBoth.Spec.ParentRefs[0].SectionName,
+						Kind:           v1.Kind("Gateway"),
+						NamespacedName: gatewayNsName,
 					},
 				},
 				Valid:      true,
@@ -899,9 +1074,11 @@ func TestBuildGRPCRoute(t *testing.T) {
 				Source:    grEmptyMatch,
 				ParentRefs: []ParentRef{
 					{
-						Idx:         0,
-						Gateway:     CreateParentRefGateway(gw),
-						SectionName: grEmptyMatch.Spec.ParentRefs[0].SectionName,
+						Idx:            0,
+						Gateway:        CreateParentRefGateway(gw),
+						SectionName:    grEmptyMatch.Spec.ParentRefs[0].SectionName,
+						Kind:           v1.Kind("Gateway"),
+						NamespacedName: gatewayNsName,
 					},
 				},
 				Valid:      true,
@@ -931,9 +1108,11 @@ func TestBuildGRPCRoute(t *testing.T) {
 				Source:    grValidFilter,
 				ParentRefs: []ParentRef{
 					{
-						Idx:         0,
-						Gateway:     CreateParentRefGateway(gw),
-						SectionName: grValidFilter.Spec.ParentRefs[0].SectionName,
+						Idx:            0,
+						Gateway:        CreateParentRefGateway(gw),
+						SectionName:    grValidFilter.Spec.ParentRefs[0].SectionName,
+						Kind:           v1.Kind("Gateway"),
+						NamespacedName: gatewayNsName,
 					},
 				},
 				Valid:      true,
@@ -974,9 +1153,11 @@ func TestBuildGRPCRoute(t *testing.T) {
 				Attachable: true,
 				ParentRefs: []ParentRef{
 					{
-						Idx:         0,
-						Gateway:     CreateParentRefGateway(gw),
-						SectionName: grInvalidMatchesEmptyMethodFields.Spec.ParentRefs[0].SectionName,
+						Idx:            0,
+						Gateway:        CreateParentRefGateway(gw),
+						SectionName:    grInvalidMatchesEmptyMethodFields.Spec.ParentRefs[0].SectionName,
+						Kind:           v1.Kind("Gateway"),
+						NamespacedName: gatewayNsName,
 					},
 				},
 				Conditions: []conditions.Condition{
@@ -1018,9 +1199,11 @@ func TestBuildGRPCRoute(t *testing.T) {
 				Attachable: true,
 				ParentRefs: []ParentRef{
 					{
-						Idx:         0,
-						Gateway:     CreateParentRefGateway(gw),
-						SectionName: grInvalidMatchesInvalidMethodFields.Spec.ParentRefs[0].SectionName,
+						Idx:            0,
+						Gateway:        CreateParentRefGateway(gw),
+						SectionName:    grInvalidMatchesInvalidMethodFields.Spec.ParentRefs[0].SectionName,
+						Kind:           v1.Kind("Gateway"),
+						NamespacedName: gatewayNsName,
 					},
 				},
 				Conditions: []conditions.Condition{
@@ -1066,9 +1249,11 @@ func TestBuildGRPCRoute(t *testing.T) {
 				Attachable: true,
 				ParentRefs: []ParentRef{
 					{
-						Idx:         0,
-						Gateway:     CreateParentRefGateway(gw),
-						SectionName: grOneInvalid.Spec.ParentRefs[0].SectionName,
+						Idx:            0,
+						Gateway:        CreateParentRefGateway(gw),
+						SectionName:    grOneInvalid.Spec.ParentRefs[0].SectionName,
+						Kind:           v1.Kind("Gateway"),
+						NamespacedName: gatewayNsName,
 					},
 				},
 				Conditions: []conditions.Condition{
@@ -1125,9 +1310,11 @@ func TestBuildGRPCRoute(t *testing.T) {
 				Attachable: true,
 				ParentRefs: []ParentRef{
 					{
-						Idx:         0,
-						Gateway:     CreateParentRefGateway(gw),
-						SectionName: grInvalidHeadersInvalidType.Spec.ParentRefs[0].SectionName,
+						Idx:            0,
+						Gateway:        CreateParentRefGateway(gw),
+						SectionName:    grInvalidHeadersInvalidType.Spec.ParentRefs[0].SectionName,
+						Kind:           v1.Kind("Gateway"),
+						NamespacedName: gatewayNsName,
 					},
 				},
 				Conditions: []conditions.Condition{
@@ -1163,9 +1350,11 @@ func TestBuildGRPCRoute(t *testing.T) {
 				Attachable: true,
 				ParentRefs: []ParentRef{
 					{
-						Idx:         0,
-						Gateway:     CreateParentRefGateway(gw),
-						SectionName: grInvalidHeadersEmptyType.Spec.ParentRefs[0].SectionName,
+						Idx:            0,
+						Gateway:        CreateParentRefGateway(gw),
+						SectionName:    grInvalidHeadersEmptyType.Spec.ParentRefs[0].SectionName,
+						Kind:           v1.Kind("Gateway"),
+						NamespacedName: gatewayNsName,
 					},
 				},
 				Conditions: []conditions.Condition{
@@ -1201,9 +1390,11 @@ func TestBuildGRPCRoute(t *testing.T) {
 				Attachable: true,
 				ParentRefs: []ParentRef{
 					{
-						Idx:         0,
-						Gateway:     CreateParentRefGateway(gw),
-						SectionName: grInvalidMatchesNilMethodType.Spec.ParentRefs[0].SectionName,
+						Idx:            0,
+						Gateway:        CreateParentRefGateway(gw),
+						SectionName:    grInvalidMatchesNilMethodType.Spec.ParentRefs[0].SectionName,
+						Kind:           v1.Kind("Gateway"),
+						NamespacedName: gatewayNsName,
 					},
 				},
 				Conditions: []conditions.Condition{
@@ -1238,9 +1429,11 @@ func TestBuildGRPCRoute(t *testing.T) {
 				Attachable: true,
 				ParentRefs: []ParentRef{
 					{
-						Idx:         0,
-						Gateway:     CreateParentRefGateway(gw),
-						SectionName: grInvalidFilter.Spec.ParentRefs[0].SectionName,
+						Idx:            0,
+						Gateway:        CreateParentRefGateway(gw),
+						SectionName:    grInvalidFilter.Spec.ParentRefs[0].SectionName,
+						Kind:           v1.Kind("Gateway"),
+						NamespacedName: gatewayNsName,
 					},
 				},
 				Conditions: []conditions.Condition{
@@ -1283,9 +1476,11 @@ func TestBuildGRPCRoute(t *testing.T) {
 				Attachable: false,
 				ParentRefs: []ParentRef{
 					{
-						Idx:         0,
-						Gateway:     CreateParentRefGateway(gw),
-						SectionName: grInvalidHostname.Spec.ParentRefs[0].SectionName,
+						Idx:            0,
+						Gateway:        CreateParentRefGateway(gw),
+						SectionName:    grInvalidHostname.Spec.ParentRefs[0].SectionName,
+						Kind:           v1.Kind("Gateway"),
+						NamespacedName: gatewayNsName,
 					},
 				},
 				Conditions: []conditions.Condition{
@@ -1306,9 +1501,11 @@ func TestBuildGRPCRoute(t *testing.T) {
 				Attachable: true,
 				ParentRefs: []ParentRef{
 					{
-						Idx:         0,
-						Gateway:     CreateParentRefGateway(gw),
-						SectionName: grInvalidSnippetsFilter.Spec.ParentRefs[0].SectionName,
+						Idx:            0,
+						Gateway:        CreateParentRefGateway(gw),
+						SectionName:    grInvalidSnippetsFilter.Spec.ParentRefs[0].SectionName,
+						Kind:           v1.Kind("Gateway"),
+						NamespacedName: gatewayNsName,
 					},
 				},
 				Conditions: []conditions.Condition{
@@ -1344,9 +1541,11 @@ func TestBuildGRPCRoute(t *testing.T) {
 				Attachable: true,
 				ParentRefs: []ParentRef{
 					{
-						Idx:         0,
-						Gateway:     CreateParentRefGateway(gw),
-						SectionName: grUnresolvableSnippetsFilter.Spec.ParentRefs[0].SectionName,
+						Idx:            0,
+						Gateway:        CreateParentRefGateway(gw),
+						SectionName:    grUnresolvableSnippetsFilter.Spec.ParentRefs[0].SectionName,
+						Kind:           v1.Kind("Gateway"),
+						NamespacedName: gatewayNsName,
 					},
 				},
 				Conditions: []conditions.Condition{
@@ -1383,9 +1582,11 @@ func TestBuildGRPCRoute(t *testing.T) {
 				Attachable: true,
 				ParentRefs: []ParentRef{
 					{
-						Idx:         0,
-						Gateway:     CreateParentRefGateway(gw),
-						SectionName: grInvalidAndUnresolvableSnippetsFilter.Spec.ParentRefs[0].SectionName,
+						Idx:            0,
+						Gateway:        CreateParentRefGateway(gw),
+						SectionName:    grInvalidAndUnresolvableSnippetsFilter.Spec.ParentRefs[0].SectionName,
+						Kind:           v1.Kind("Gateway"),
+						NamespacedName: gatewayNsName,
 					},
 				},
 				Conditions: []conditions.Condition{
@@ -1426,9 +1627,11 @@ func TestBuildGRPCRoute(t *testing.T) {
 				Attachable: true,
 				ParentRefs: []ParentRef{
 					{
-						Idx:         0,
-						Gateway:     CreateParentRefGateway(gw),
-						SectionName: grInvalidAuthenticationFilter.Spec.ParentRefs[0].SectionName,
+						Idx:            0,
+						Gateway:        CreateParentRefGateway(gw),
+						SectionName:    grInvalidAuthenticationFilter.Spec.ParentRefs[0].SectionName,
+						Kind:           v1.Kind("Gateway"),
+						NamespacedName: gatewayNsName,
 					},
 				},
 				Conditions: []conditions.Condition{
@@ -1464,9 +1667,11 @@ func TestBuildGRPCRoute(t *testing.T) {
 				Attachable: true,
 				ParentRefs: []ParentRef{
 					{
-						Idx:         0,
-						Gateway:     CreateParentRefGateway(gw),
-						SectionName: grUnresolvableAuthenticationFilter.Spec.ParentRefs[0].SectionName,
+						Idx:            0,
+						Gateway:        CreateParentRefGateway(gw),
+						SectionName:    grUnresolvableAuthenticationFilter.Spec.ParentRefs[0].SectionName,
+						Kind:           v1.Kind("Gateway"),
+						NamespacedName: gatewayNsName,
 					},
 				},
 				Conditions: []conditions.Condition{
@@ -1503,9 +1708,11 @@ func TestBuildGRPCRoute(t *testing.T) {
 				Attachable: true,
 				ParentRefs: []ParentRef{
 					{
-						Idx:         0,
-						Gateway:     CreateParentRefGateway(gw),
-						SectionName: grInvalidAndUnresolvableAuthenticationFilter.Spec.ParentRefs[0].SectionName,
+						Idx:            0,
+						Gateway:        CreateParentRefGateway(gw),
+						SectionName:    grInvalidAndUnresolvableAuthenticationFilter.Spec.ParentRefs[0].SectionName,
+						Kind:           v1.Kind("Gateway"),
+						NamespacedName: gatewayNsName,
 					},
 				},
 				Conditions: []conditions.Condition{
@@ -1545,9 +1752,11 @@ func TestBuildGRPCRoute(t *testing.T) {
 				Attachable: true,
 				ParentRefs: []ParentRef{
 					{
-						Idx:         0,
-						Gateway:     CreateParentRefGateway(gw),
-						SectionName: grInvalidAndValidAuthenticationFilter.Spec.ParentRefs[0].SectionName,
+						Idx:            0,
+						Gateway:        CreateParentRefGateway(gw),
+						SectionName:    grInvalidAndValidAuthenticationFilter.Spec.ParentRefs[0].SectionName,
+						Kind:           v1.Kind("Gateway"),
+						NamespacedName: gatewayNsName,
 					},
 				},
 				Conditions: []conditions.Condition{
@@ -1587,9 +1796,11 @@ func TestBuildGRPCRoute(t *testing.T) {
 				Attachable: true,
 				ParentRefs: []ParentRef{
 					{
-						Idx:         0,
-						Gateway:     CreateParentRefGateway(gw),
-						SectionName: grUnresolvedAndValidAuthenticationFilter.Spec.ParentRefs[0].SectionName,
+						Idx:            0,
+						Gateway:        CreateParentRefGateway(gw),
+						SectionName:    grUnresolvedAndValidAuthenticationFilter.Spec.ParentRefs[0].SectionName,
+						Kind:           v1.Kind("Gateway"),
+						NamespacedName: gatewayNsName,
 					},
 				},
 				Conditions: []conditions.Condition{
@@ -1631,9 +1842,11 @@ func TestBuildGRPCRoute(t *testing.T) {
 				Attachable: true,
 				ParentRefs: []ParentRef{
 					{
-						Idx:         0,
-						Gateway:     CreateParentRefGateway(gw),
-						SectionName: grTwoValidAuthenticationFilter.Spec.ParentRefs[0].SectionName,
+						Idx:            0,
+						Gateway:        CreateParentRefGateway(gw),
+						SectionName:    grTwoValidAuthenticationFilter.Spec.ParentRefs[0].SectionName,
+						Kind:           v1.Kind("Gateway"),
+						NamespacedName: gatewayNsName,
 					},
 				},
 				Conditions: []conditions.Condition{
@@ -1685,9 +1898,11 @@ func TestBuildGRPCRoute(t *testing.T) {
 				Source:    grValidWithUnsupportedField,
 				ParentRefs: []ParentRef{
 					{
-						Idx:         0,
-						Gateway:     CreateParentRefGateway(gw),
-						SectionName: grValidWithUnsupportedField.Spec.ParentRefs[0].SectionName,
+						Idx:            0,
+						Gateway:        CreateParentRefGateway(gw),
+						SectionName:    grValidWithUnsupportedField.Spec.ParentRefs[0].SectionName,
+						Kind:           v1.Kind("Gateway"),
+						NamespacedName: gatewayNsName,
 					},
 				},
 				Valid:      true,
@@ -1720,9 +1935,11 @@ func TestBuildGRPCRoute(t *testing.T) {
 				Source:    grInvalidWithUnsupportedField,
 				ParentRefs: []ParentRef{
 					{
-						Idx:         0,
-						Gateway:     CreateParentRefGateway(gw),
-						SectionName: grInvalidWithUnsupportedField.Spec.ParentRefs[0].SectionName,
+						Idx:            0,
+						Gateway:        CreateParentRefGateway(gw),
+						SectionName:    grInvalidWithUnsupportedField.Spec.ParentRefs[0].SectionName,
+						Kind:           v1.Kind("Gateway"),
+						NamespacedName: gatewayNsName,
 					},
 				},
 				Valid:      false,
@@ -1751,6 +1968,55 @@ func TestBuildGRPCRoute(t *testing.T) {
 			},
 			name: "invalid route with unsupported field",
 		},
+		{
+			validator: createDurationValidator(&durationSP),
+			gr:        grValidWithListenerSetParentRef,
+			expected: &L7Route{
+				RouteType: RouteTypeGRPC,
+				Source:    grValidWithListenerSetParentRef,
+				ParentRefs: []ParentRef{
+					{
+						Idx:         0,
+						SectionName: grValidWithListenerSetParentRef.Spec.ParentRefs[0].SectionName,
+						Kind:        v1.Kind("ListenerSet"),
+						NamespacedName: types.NamespacedName{
+							Namespace: "test",
+							Name:      "listener-set",
+						},
+					},
+				},
+				Valid:      true,
+				Attachable: true,
+				Spec: L7RouteSpec{
+					Hostnames: grValidWithListenerSetParentRef.Spec.Hostnames,
+					Rules: []RouteRule{
+						{
+							ValidMatches: true,
+							Filters: RouteRuleFilters{
+								Valid:   true,
+								Filters: []Filter{},
+							},
+							Matches: ConvertGRPCMatches(grValidWithListenerSetParentRef.Spec.Rules[0].Matches),
+							RouteBackendRefs: []RouteBackendRef{
+								{
+									BackendRef: grpcBackendRef.BackendRef,
+									SessionPersistence: &SessionPersistenceConfig{
+										Valid:       true,
+										Name:        "grpc-method-session",
+										SessionType: v1.CookieBasedSessionPersistence,
+										Expiry:      "10h",
+										Idx:         "gr_test_0",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			plus:         true,
+			experimental: true,
+			name:         "valid GRPC route with ListenerSet parent ref",
+		},
 	}
 
 	gws := map[types.NamespacedName]*Gateway{
@@ -1778,6 +2044,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 					Plus:         test.plus,
 					Experimental: test.experimental,
 				},
+				listenerSets,
 			)
 			g.Expect(helpers.Diff(test.expected, route)).To(BeEmpty())
 		})
@@ -1804,6 +2071,18 @@ func TestBuildGRPCRouteWithMirrorRoutes(t *testing.T) {
 		},
 	}
 
+	listenerSets := map[types.NamespacedName]*ListenerSet{
+		{Namespace: "test", Name: "listener-set"}: {
+			Source: &v1.ListenerSet{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: "test",
+					Name:      "listener-set",
+				},
+			},
+			Valid: true,
+		},
+	}
+
 	// Create a route with a request mirror filter and another random filter
 	mirrorFilter := v1.GRPCRouteFilter{
 		Type: v1.GRPCRouteFilterRequestMirror,
@@ -1827,6 +2106,7 @@ func TestBuildGRPCRouteWithMirrorRoutes(t *testing.T) {
 		"gr",
 		gatewayNsName.Name,
 		"example.com",
+		v1.Kind("Gateway"),
 		[]v1.GRPCRouteRule{
 			{
 				Matches: []v1.GRPCRouteMatch{
@@ -1843,115 +2123,172 @@ func TestBuildGRPCRouteWithMirrorRoutes(t *testing.T) {
 		},
 	)
 
-	// Expected mirror route
-	expectedMirrorRoute := &L7Route{
-		RouteType: RouteTypeGRPC,
-		Source: &v1.GRPCRoute{
-			ObjectMeta: metav1.ObjectMeta{
-				Namespace: "test",
-				Name:      mirror.RouteName("gr", "mirror-backend", "test", 0),
-			},
-			Spec: v1.GRPCRouteSpec{
-				CommonRouteSpec: gr.Spec.CommonRouteSpec,
-				Hostnames:       gr.Spec.Hostnames,
-				Rules: []v1.GRPCRouteRule{
+	// Create a route with ListenerSet parent ref
+	grListenerSet := createGRPCRoute(
+		"gr-ls",
+		"listener-set",
+		"example.com",
+		v1.Kind("ListenerSet"),
+		[]v1.GRPCRouteRule{
+			{
+				Matches: []v1.GRPCRouteMatch{
 					{
-						Matches: []v1.GRPCRouteMatch{
-							{
-								Method: &v1.GRPCMethodMatch{
-									Type:    helpers.GetPointer(v1.GRPCMethodMatchExact),
-									Service: helpers.GetPointer("/_ngf-internal-mirror-mirror-backend-test/gr-0"),
-								},
-							},
+						Method: &v1.GRPCMethodMatch{
+							Type:    helpers.GetPointer(v1.GRPCMethodMatchExact),
+							Service: helpers.GetPointer("svc1"),
+							Method:  helpers.GetPointer("method"),
 						},
-						Filters: []v1.GRPCRouteFilter{headerFilter},
-						BackendRefs: []v1.GRPCBackendRef{
+					},
+				},
+				Filters: []v1.GRPCRouteFilter{mirrorFilter, headerFilter},
+			},
+		},
+	)
+
+	tests := []struct {
+		name           string
+		gr             *v1.GRPCRoute
+		gateways       map[types.NamespacedName]*Gateway
+		expectedParent ParentRef
+	}{
+		{
+			name:     "Gateway mirror route",
+			gr:       gr,
+			gateways: gateways,
+			expectedParent: ParentRef{
+				Idx:            0,
+				Gateway:        CreateParentRefGateway(gateways[gatewayNsName]),
+				SectionName:    gr.Spec.ParentRefs[0].SectionName,
+				Kind:           v1.Kind("Gateway"),
+				NamespacedName: gatewayNsName,
+			},
+		},
+		{
+			name:     "ListenerSet mirror route",
+			gr:       grListenerSet,
+			gateways: gateways,
+			expectedParent: ParentRef{
+				Idx:         0,
+				SectionName: grListenerSet.Spec.ParentRefs[0].SectionName,
+				Kind:        v1.Kind("ListenerSet"),
+				NamespacedName: types.NamespacedName{
+					Namespace: "test",
+					Name:      "listener-set",
+				},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			// Expected mirror route
+			expectedMirrorRoute := &L7Route{
+				RouteType: RouteTypeGRPC,
+				Source: &v1.GRPCRoute{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "test",
+						Name:      mirror.RouteName(test.gr.Name, "mirror-backend", "test", 0),
+					},
+					Spec: v1.GRPCRouteSpec{
+						CommonRouteSpec: test.gr.Spec.CommonRouteSpec,
+						Hostnames:       test.gr.Spec.Hostnames,
+						Rules: []v1.GRPCRouteRule{
 							{
-								BackendRef: v1.BackendRef{
-									BackendObjectReference: v1.BackendObjectReference{
-										Name: "mirror-backend",
+								Matches: []v1.GRPCRouteMatch{
+									{
+										Method: &v1.GRPCMethodMatch{
+											Type:    helpers.GetPointer(v1.GRPCMethodMatchExact),
+											Service: helpers.GetPointer("/_ngf-internal-mirror-mirror-backend-test/" + test.gr.Name + "-0"),
+										},
+									},
+								},
+								Filters: []v1.GRPCRouteFilter{headerFilter},
+								BackendRefs: []v1.GRPCBackendRef{
+									{
+										BackendRef: v1.BackendRef{
+											BackendObjectReference: v1.BackendObjectReference{
+												Name: "mirror-backend",
+											},
+										},
 									},
 								},
 							},
 						},
 					},
 				},
-			},
-		},
-		ParentRefs: []ParentRef{
-			{
-				Idx:         0,
-				Gateway:     CreateParentRefGateway(gateways[gatewayNsName]),
-				SectionName: gr.Spec.ParentRefs[0].SectionName,
-			},
-		},
-		Valid:      true,
-		Attachable: true,
-		Spec: L7RouteSpec{
-			Hostnames: gr.Spec.Hostnames,
-			Rules: []RouteRule{
-				{
-					ValidMatches: true,
-					Filters: RouteRuleFilters{
-						Valid: true,
-						Filters: []Filter{
-							{
-								RouteType:             RouteTypeGRPC,
-								FilterType:            FilterRequestHeaderModifier,
-								RequestHeaderModifier: headerFilter.RequestHeaderModifier,
-							},
-						},
-					},
-					Matches: []v1.HTTPRouteMatch{
+				ParentRefs: []ParentRef{test.expectedParent},
+				Valid:      true,
+				Attachable: true,
+				Spec: L7RouteSpec{
+					Hostnames: test.gr.Spec.Hostnames,
+					Rules: []RouteRule{
 						{
-							Path: &v1.HTTPPathMatch{
-								Type:  helpers.GetPointer(v1.PathMatchExact),
-								Value: helpers.GetPointer("/_ngf-internal-mirror-mirror-backend-test/gr-0"),
+							ValidMatches: true,
+							Filters: RouteRuleFilters{
+								Valid: true,
+								Filters: []Filter{
+									{
+										RouteType:             RouteTypeGRPC,
+										FilterType:            FilterRequestHeaderModifier,
+										RequestHeaderModifier: headerFilter.RequestHeaderModifier,
+									},
+								},
 							},
-							Headers: []v1.HTTPHeaderMatch{},
-						},
-					},
-					RouteBackendRefs: []RouteBackendRef{
-						{
-							BackendRef: v1.BackendRef{
-								BackendObjectReference: v1.BackendObjectReference{
-									Name: "mirror-backend",
+							Matches: []v1.HTTPRouteMatch{
+								{
+									Path: &v1.HTTPPathMatch{
+										Type:  helpers.GetPointer(v1.PathMatchExact),
+										Value: helpers.GetPointer("/_ngf-internal-mirror-mirror-backend-test/" + test.gr.Name + "-0"),
+									},
+									Headers: []v1.HTTPHeaderMatch{},
+								},
+							},
+							RouteBackendRefs: []RouteBackendRef{
+								{
+									BackendRef: v1.BackendRef{
+										BackendObjectReference: v1.BackendObjectReference{
+											Name: "mirror-backend",
+										},
+									},
 								},
 							},
 						},
 					},
 				},
-			},
-		},
+			}
+
+			validator := &validationfakes.FakeHTTPFieldsValidator{}
+			snippetsFilters := map[types.NamespacedName]*SnippetsFilter{}
+
+			g := NewWithT(t)
+
+			featureFlags := FeatureFlags{
+				Plus:         false,
+				Experimental: false,
+			}
+
+			routes := map[RouteKey]*L7Route{}
+			l7route := buildGRPCRoute(
+				validator,
+				test.gr,
+				test.gateways,
+				snippetsFilters,
+				nil,
+				featureFlags,
+				listenerSets,
+			)
+			g.Expect(l7route).NotTo(BeNil())
+			buildGRPCMirrorRoutes(routes, l7route, test.gr, test.gateways, snippetsFilters, featureFlags, listenerSets)
+
+			obj, ok := expectedMirrorRoute.Source.(*v1.GRPCRoute)
+			g.Expect(ok).To(BeTrue())
+			mirrorRouteKey := CreateRouteKey(obj)
+			g.Expect(routes).To(HaveKey(mirrorRouteKey))
+			g.Expect(helpers.Diff(expectedMirrorRoute, routes[mirrorRouteKey])).To(BeEmpty())
+		})
 	}
-
-	validator := &validationfakes.FakeHTTPFieldsValidator{}
-	snippetsFilters := map[types.NamespacedName]*SnippetsFilter{}
-
-	g := NewWithT(t)
-
-	featureFlags := FeatureFlags{
-		Plus:         false,
-		Experimental: false,
-	}
-
-	routes := map[RouteKey]*L7Route{}
-	l7route := buildGRPCRoute(
-		validator,
-		gr,
-		gateways,
-		snippetsFilters,
-		nil,
-		featureFlags,
-	)
-	g.Expect(l7route).NotTo(BeNil())
-	buildGRPCMirrorRoutes(routes, l7route, gr, gateways, snippetsFilters, featureFlags)
-
-	obj, ok := expectedMirrorRoute.Source.(*v1.GRPCRoute)
-	g.Expect(ok).To(BeTrue())
-	mirrorRouteKey := CreateRouteKey(obj)
-	g.Expect(routes).To(HaveKey(mirrorRouteKey))
-	g.Expect(helpers.Diff(expectedMirrorRoute, routes[mirrorRouteKey])).To(BeEmpty())
 }
 
 func TestConvertGRPCMatches(t *testing.T) {

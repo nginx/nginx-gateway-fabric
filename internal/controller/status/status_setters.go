@@ -56,6 +56,10 @@ func gwStatusEqual(prev, cur gatewayv1.GatewayStatus) bool {
 		return false
 	}
 
+	if !helpers.EqualPointers(prev.AttachedListenerSets, cur.AttachedListenerSets) {
+		return false
+	}
+
 	return slices.EqualFunc(prev.Listeners, cur.Listeners, func(s1, s2 gatewayv1.ListenerStatus) bool {
 		if s1.Name != s2.Name {
 			return false
