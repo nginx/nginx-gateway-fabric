@@ -512,34 +512,32 @@ var _ = Describe("WAFPolicy", Ordered, Label("waf"), func() {
 				Should(BeTrue(), "expected 1 ready NGINX pod after scale-down")
 		})
 
-		It("has app_protect_cookie_seed set to the same value on all replicas", func() {
-			// app_protect_cookie_seed must be identical on every replica so WAF session cookies
-			// issued by one pod can be decrypted by any other pod in the deployment.
-			var sharedSeed string
+		It("has app_protect_cookie_seed set to the Gateway UID on all replicas", func() {
+			// app_protect_cookie_seed must equal the Gateway UID on every replica so that WAF
+			// session cookies issued by one pod can be decrypted by any other pod in the deployment.
+			ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.GetStatusTimeout)
+			defer cancel()
+
+			var gw v1.Gateway
+			Expect(resourceManager.Get(
+				ctx,
+				types.NamespacedName{Name: "gateway", Namespace: namespace},
+				&gw,
+			)).To(Succeed())
+			expectedSeed := string(gw.UID)
+			Expect(expectedSeed).ToNot(BeEmpty(), "Gateway UID must be non-empty")
+
 			for _, podName := range nginxPodNames {
 				conf, err := resourceManager.GetNginxConfig(podName, namespace, nginxCrossplanePath)
 				Expect(err).ToNot(HaveOccurred(), "failed to get NGINX config from pod %q", podName)
-
-				Expect(framework.ValidateNginxFieldExists(conf, framework.ExpectedNginxField{
-					Directive:             "app_protect_cookie_seed",
-					File:                  "http.conf",
-					ValueSubstringAllowed: true,
-				})).To(Succeed(), "pod %q missing app_protect_cookie_seed directive", podName)
 
 				seed, err := framework.GetNginxFieldValue(conf, framework.ExpectedNginxField{
 					Directive: "app_protect_cookie_seed",
 					File:      "http.conf",
 				})
-				Expect(err).ToNot(HaveOccurred(), "failed to get cookie seed from pod %q", podName)
-				Expect(seed).ToNot(BeEmpty(), "app_protect_cookie_seed should be non-empty on pod %q", podName)
-
-				if sharedSeed == "" {
-					sharedSeed = seed
-				} else {
-					Expect(seed).To(Equal(sharedSeed),
-						"app_protect_cookie_seed differs between replicas: pod %q has %q, expected %q",
-						podName, seed, sharedSeed)
-				}
+				Expect(err).ToNot(HaveOccurred(), "pod %q missing app_protect_cookie_seed directive", podName)
+				Expect(seed).To(Equal(expectedSeed),
+					"app_protect_cookie_seed on pod %q should equal the Gateway UID", podName)
 			}
 		})
 
