@@ -529,17 +529,15 @@ func getFrontendTLSCertBundles(
 	bundles map[CertBundleID]CertBundle,
 	gateway *graph.Gateway,
 	refCertBundleIndex map[refCertBundleKey]secrets.CertificateBundle,
-	listenerCACertRefs []*v1.ObjectReference,
+	listenerCACertRefs []v1.ObjectReference,
 ) map[CertBundleID]CertBundle {
 	certBundles := make([]CertBundle, 0, len(listenerCACertRefs))
 	for _, ref := range listenerCACertRefs {
 		if ref.Name == "" {
 			continue
 		}
-		var refNamespace v1.Namespace
-		if ref.Namespace == nil {
-			refNamespace = v1.Namespace(gateway.Source.Namespace)
-		} else {
+		refNamespace := v1.Namespace(gateway.Source.Namespace)
+		if ref.Namespace != nil {
 			refNamespace = *ref.Namespace
 		}
 

@@ -8206,7 +8206,7 @@ func TestGetFrontendTLSCertBundleData(t *testing.T) {
 	encodedCMData := base64.StdEncoding.EncodeToString([]byte("cm-base64-ca"))
 
 	tests := []struct {
-		ref              *v1.ObjectReference
+		ref              v1.ObjectReference
 		secretsMap       map[types.NamespacedName]*secrets.Secret
 		caCertConfigMaps map[types.NamespacedName]*configmaps.CaCertConfigMap
 		name             string
@@ -8214,12 +8214,12 @@ func TestGetFrontendTLSCertBundleData(t *testing.T) {
 	}{
 		{
 			name:     "Empty ref name",
-			ref:      &v1.ObjectReference{},
+			ref:      v1.ObjectReference{},
 			expected: nil,
 		},
 		{
 			name: "CA bundle from secret",
-			ref: &v1.ObjectReference{
+			ref: v1.ObjectReference{
 				Name:      v1.ObjectName("frontend-ca-secret"),
 				Kind:      secretKind,
 				Namespace: helpers.GetPointer(v1.Namespace(gatewayNs)),
@@ -8237,7 +8237,7 @@ func TestGetFrontendTLSCertBundleData(t *testing.T) {
 		},
 		{
 			name: "CA bundle from configmap plaintext",
-			ref: &v1.ObjectReference{
+			ref: v1.ObjectReference{
 				Name:      v1.ObjectName("frontend-ca-cm-plain"),
 				Kind:      configMapKind,
 				Namespace: helpers.GetPointer(v1.Namespace(gatewayNs)),
@@ -8255,7 +8255,7 @@ func TestGetFrontendTLSCertBundleData(t *testing.T) {
 		},
 		{
 			name: "CA bundle from configmap base64 data",
-			ref: &v1.ObjectReference{
+			ref: v1.ObjectReference{
 				Name:      v1.ObjectName("frontend-ca-cm-b64"),
 				Kind:      configMapKind,
 				Namespace: helpers.GetPointer(v1.Namespace(gatewayNs)),
@@ -8273,7 +8273,7 @@ func TestGetFrontendTLSCertBundleData(t *testing.T) {
 		},
 		{
 			name: "ConfigMap binary data takes precedence",
-			ref: &v1.ObjectReference{
+			ref: v1.ObjectReference{
 				Name:      v1.ObjectName("frontend-ca-cm-bin"),
 				Kind:      configMapKind,
 				Namespace: helpers.GetPointer(v1.Namespace(gatewayNs)),
@@ -8294,7 +8294,7 @@ func TestGetFrontendTLSCertBundleData(t *testing.T) {
 		},
 		{
 			name: "Secret kind chooses secret data when both resources exist",
-			ref: &v1.ObjectReference{
+			ref: v1.ObjectReference{
 				Name:      v1.ObjectName("frontend-ca-shared"),
 				Kind:      secretKind,
 				Namespace: helpers.GetPointer(v1.Namespace(gatewayNs)),
@@ -8313,7 +8313,7 @@ func TestGetFrontendTLSCertBundleData(t *testing.T) {
 		},
 		{
 			name: "ConfigMap kind chooses configmap data when both resources exist",
-			ref: &v1.ObjectReference{
+			ref: v1.ObjectReference{
 				Name:      v1.ObjectName("frontend-ca-shared"),
 				Kind:      configMapKind,
 				Namespace: helpers.GetPointer(v1.Namespace(gatewayNs)),
@@ -8332,7 +8332,7 @@ func TestGetFrontendTLSCertBundleData(t *testing.T) {
 		},
 		{
 			name: "Refs with the same name in different namespaces; choose the one in the ref namespace",
-			ref: &v1.ObjectReference{
+			ref: v1.ObjectReference{
 				Name:      v1.ObjectName("frontend-ca-shared"),
 				Kind:      secretKind,
 				Namespace: helpers.GetPointer(v1.Namespace("other-ns")),
@@ -8349,7 +8349,7 @@ func TestGetFrontendTLSCertBundleData(t *testing.T) {
 		},
 		{
 			name: "Ref with nil namespace, gateway with non-nil namespace",
-			ref: &v1.ObjectReference{
+			ref: v1.ObjectReference{
 				Name:      v1.ObjectName("frontend-ca-secret"),
 				Kind:      secretKind,
 				Namespace: nil,
@@ -8374,7 +8374,7 @@ func TestGetFrontendTLSCertBundleData(t *testing.T) {
 			bundles := make(map[CertBundleID]CertBundle)
 			refCertBundles := buildFrontendTLSRefCertBundles(test.secretsMap, test.caCertConfigMaps)
 			refCertBundleIndex := indexRefCertBundles(refCertBundles)
-			refs := []*v1.ObjectReference{test.ref}
+			refs := []v1.ObjectReference{test.ref}
 			bundleID := CertBundleID("cert_bundle_test_listener")
 
 			result := getFrontendTLSCertBundles(bundleID, bundles, gateway, refCertBundleIndex, refs)
@@ -8393,18 +8393,18 @@ func TestBuildFrontendTLSCertBundles(t *testing.T) {
 	configMapKind := v1.Kind(kinds.ConfigMap)
 	caRefName := "frontend-ca"
 	caRefFormat := "%s_%d_%s"
-	caRef := &v1.ObjectReference{
+	caRef := v1.ObjectReference{
 		Name:      v1.ObjectName(caRefName),
 		Kind:      secretKind,
 		Namespace: helpers.GetPointer(v1.Namespace(gatewayNs)),
 	}
 	caRefName2 := "frontend-ca-2"
-	caRef2 := &v1.ObjectReference{
+	caRef2 := v1.ObjectReference{
 		Name:      v1.ObjectName(caRefName2),
 		Kind:      secretKind,
 		Namespace: helpers.GetPointer(v1.Namespace(gatewayNs)),
 	}
-	caConfigMapRef := &v1.ObjectReference{
+	caConfigMapRef := v1.ObjectReference{
 		Name:      v1.ObjectName(caRefName),
 		Kind:      configMapKind,
 		Namespace: helpers.GetPointer(v1.Namespace(gatewayNs)),
@@ -8429,7 +8429,7 @@ func TestBuildFrontendTLSCertBundles(t *testing.T) {
 				Name:              "https-listener",
 				Valid:             true,
 				ValidationMode:    v1.AllowValidOnly,
-				CACertificateRefs: []*v1.ObjectReference{caRef},
+				CACertificateRefs: []v1.ObjectReference{caRef},
 				Source: v1.Listener{
 					Protocol: v1.HTTPSProtocolType,
 					Port:     443,
@@ -8463,7 +8463,7 @@ func TestBuildFrontendTLSCertBundles(t *testing.T) {
 				Name:              "https-listener",
 				Valid:             true,
 				ValidationMode:    v1.AllowInsecureFallback,
-				CACertificateRefs: []*v1.ObjectReference{caRef},
+				CACertificateRefs: []v1.ObjectReference{caRef},
 				Source: v1.Listener{
 					Protocol: v1.HTTPSProtocolType,
 					Port:     443,
@@ -8515,7 +8515,7 @@ func TestBuildFrontendTLSCertBundles(t *testing.T) {
 				Name:              "https-listener",
 				Valid:             true,
 				ValidationMode:    v1.AllowValidOnly,
-				CACertificateRefs: []*v1.ObjectReference{caRef},
+				CACertificateRefs: []v1.ObjectReference{caRef},
 				Source: v1.Listener{
 					Protocol: v1.HTTPSProtocolType,
 					Port:     443,
@@ -8541,7 +8541,7 @@ func TestBuildFrontendTLSCertBundles(t *testing.T) {
 				Name:              "https-listener",
 				Valid:             true,
 				ValidationMode:    v1.AllowValidOnly,
-				CACertificateRefs: []*v1.ObjectReference{caRef, caRef2},
+				CACertificateRefs: []v1.ObjectReference{caRef, caRef2},
 				Source: v1.Listener{
 					Protocol: v1.HTTPSProtocolType,
 					Port:     443,
@@ -8575,7 +8575,7 @@ func TestBuildFrontendTLSCertBundles(t *testing.T) {
 				Name:              "https-listener",
 				Valid:             true,
 				ValidationMode:    v1.AllowValidOnly,
-				CACertificateRefs: []*v1.ObjectReference{caConfigMapRef},
+				CACertificateRefs: []v1.ObjectReference{caConfigMapRef},
 				Source: v1.Listener{
 					Protocol: v1.HTTPSProtocolType,
 					Port:     443,
@@ -8609,7 +8609,7 @@ func TestBuildFrontendTLSCertBundles(t *testing.T) {
 			gateway: buildFrontendTLSGateway(&graph.Listener{
 				Name:              "http-listener",
 				Valid:             true,
-				CACertificateRefs: []*v1.ObjectReference{caRef},
+				CACertificateRefs: []v1.ObjectReference{caRef},
 				Source: v1.Listener{
 					Protocol: v1.HTTPProtocolType,
 					Port:     80,
@@ -8663,12 +8663,12 @@ func TestBuildFrontendTLSCertBundlesValidationModes(t *testing.T) {
 	caRefFormat := "%s_%d_%s"
 	secretKind := v1.Kind(kinds.Secret)
 
-	allowInsecureRef := &v1.ObjectReference{
+	allowInsecureRef := v1.ObjectReference{
 		Name:      v1.ObjectName("frontend-ca-insecure"),
 		Kind:      secretKind,
 		Namespace: helpers.GetPointer(v1.Namespace(gatewayNs)),
 	}
-	allowValidOnlyRef := &v1.ObjectReference{
+	allowValidOnlyRef := v1.ObjectReference{
 		Name:      v1.ObjectName("frontend-ca-valid"),
 		Kind:      secretKind,
 		Namespace: helpers.GetPointer(v1.Namespace(gatewayNs)),
@@ -8695,7 +8695,7 @@ func TestBuildFrontendTLSCertBundlesValidationModes(t *testing.T) {
 				Name:              "https-insecure",
 				Valid:             true,
 				ValidationMode:    v1.AllowInsecureFallback,
-				CACertificateRefs: []*v1.ObjectReference{allowInsecureRef},
+				CACertificateRefs: []v1.ObjectReference{allowInsecureRef},
 				Source: v1.Listener{
 					Protocol: v1.HTTPSProtocolType,
 					Port:     443,
@@ -8705,7 +8705,7 @@ func TestBuildFrontendTLSCertBundlesValidationModes(t *testing.T) {
 				Name:              "https-valid",
 				Valid:             true,
 				ValidationMode:    v1.AllowValidOnly,
-				CACertificateRefs: []*v1.ObjectReference{allowValidOnlyRef},
+				CACertificateRefs: []v1.ObjectReference{allowValidOnlyRef},
 				Source: v1.Listener{
 					Protocol: v1.HTTPSProtocolType,
 					Port:     8443,

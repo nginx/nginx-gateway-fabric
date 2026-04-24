@@ -55,7 +55,7 @@ type Listener struct {
 	// ValidationMode holds the TLS validation configuration for the listener.
 	ValidationMode v1.FrontendValidationModeType
 	// CACertificateRefs holds the resolved CA certificate references for the listener.
-	CACertificateRefs []*v1.ObjectReference
+	CACertificateRefs []v1.ObjectReference
 	// GatewayName is the name of the Gateway resource this Listener belongs to.
 	GatewayName types.NamespacedName
 	// Name is the name of the Listener.
@@ -821,7 +821,7 @@ func createFrontendTLSCaCertReferenceResolver(
 			fieldPath = field.NewPath("spec", "tls", "frontend", "default", "validation")
 		}
 
-		conds, refs := getListenerFrontendTLSCaRefs(
+		conds := validateFrontendTLS(
 			gw,
 			l,
 			fieldPath,
@@ -831,7 +831,7 @@ func createFrontendTLSCaCertReferenceResolver(
 		)
 		l.Conditions = append(l.Conditions, conds...)
 		l.ValidationMode = validationMode
-		l.CACertificateRefs = refs
+		l.CACertificateRefs = caCertRefs
 
 		if l.ValidationMode == v1.AllowInsecureFallback {
 			msg := "Validation Mode: AllowInsecureFallback is set for at least one listener"
@@ -939,27 +939,26 @@ func createOverlappingTLSConfigResolver() listenerConflictResolver {
 	}
 }
 
-// getListenerFrontendTLSCaRefs validates and resolves the CA certificate references
+// validateFrontendTLS validates and resolves the CA certificate references
 // for a listener configured with frontend TLS.
 // Returns conditions related to invalid CA certificate references and a list of valid CA certificate references.
-func getListenerFrontendTLSCaRefs(
+func validateFrontendTLS(
 	gw *Gateway,
 	listener *Listener,
 	path *field.Path,
 	resourceResolver resolver.Resolver,
 	refGrantResolver *referenceGrantResolver,
-	certRefs []v1.ObjectReference,
-) ([]conditions.Condition, []*v1.ObjectReference) {
+	caCertRefs []v1.ObjectReference,
+) []conditions.Condition {
 	if gw.Source.Spec.TLS == nil || gw.Source.Spec.TLS.Frontend == nil {
-		return []conditions.Condition{}, nil
+		return []conditions.Condition{}
 	}
 
-	var caRefs []*v1.ObjectReference
 	var conds []conditions.Condition
 	refNotPermittedCount := 0
 	allowedKinds := []string{kinds.Secret, kinds.ConfigMap}
 
-	for _, cert := range certRefs {
+	for _, cert := range caCertRefs {
 		if kindOrGroupCond := validateObjectRefKindAndGroup(
 			cert,
 			path,
@@ -969,7 +968,7 @@ func getListenerFrontendTLSCaRefs(
 			continue
 		}
 
-		certObjRef, certNsName := getFrontendTLSCertReferences(cert, gw.Source)
+		certNsName := getFrontendTLSCertRefNsName(cert, gw.Source)
 		resourceType := getFrontendTLSCertResourceType(cert.Kind)
 
 		if refNotPermittedCond := resolveCrossNamespaceRefGrant(
@@ -993,8 +992,6 @@ func getListenerFrontendTLSCaRefs(
 			conds = append(conds, conditions.NewListenerInvalidCaCertificateRef(msg))
 			continue
 		}
-
-		caRefs = append(caRefs, certObjRef)
 	}
 
 	totalConds := len(conds) + refNotPermittedCount
@@ -1006,14 +1003,14 @@ func getListenerFrontendTLSCaRefs(
 		))
 	}
 
-	if totalConds > 0 && totalConds == len(certRefs) {
+	if totalConds > 0 && totalConds == len(caCertRefs) {
 		msg := "All frontend TLS CA certificate refs are invalid for this listener"
 		conds = append(conds, conditions.NewListenerInvalidNoValidCACertificate(msg)...)
 		listener.Valid = false
-		return conds, nil
+		return conds
 	}
 
-	return conds, caRefs
+	return conds
 }
 
 // validateObjectRefKindAndGroup checks if the ObjectReference has an allowed Kind and Group.
@@ -1076,28 +1073,19 @@ func resolveCrossNamespaceRefGrant(
 	return conditions.Condition{}
 }
 
-// getFrontendTLSCertReferences returns an ObjectReference and a NamespacedName
+// getFrontendTLSCertRefNsName returns a NamespacedName
 // of the Secret or ConfigMap referenced by the Gateway for frontend TLS.
-func getFrontendTLSCertReferences(
+func getFrontendTLSCertRefNsName(
 	cert v1.ObjectReference,
 	gw *v1.Gateway,
-) (*v1.ObjectReference, *types.NamespacedName) {
+) *types.NamespacedName {
 	caRefNs := gw.Namespace
 	if cert.Namespace != nil {
 		caRefNs = string(*cert.Namespace)
 	}
-
-	var caCertObjRef *v1.ObjectReference
-	var caCertNsName *types.NamespacedName
-	caCertObjRef = &v1.ObjectReference{
-		Group:     "",
-		Kind:      cert.Kind,
-		Name:      cert.Name,
-		Namespace: helpers.GetPointer(v1.Namespace(caRefNs)),
-	}
-	caCertNsName = &types.NamespacedName{
+	caCertNsName := &types.NamespacedName{
 		Namespace: caRefNs,
 		Name:      string(cert.Name),
 	}
-	return caCertObjRef, caCertNsName
+	return caCertNsName
 }
