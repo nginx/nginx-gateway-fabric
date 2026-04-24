@@ -550,7 +550,10 @@ var _ = Describe("WAFPolicy", Ordered, Label("waf"), func() {
 			}
 		})
 
-		It("enforces WAF policy on all replicas", func() {
+		It("propagates WAF config to all replicas and blocks an attack via the load balancer", func() {
+			// Verify config propagation: every pod must have the app_protect_enable directive.
+			// Attack blocking is verified with a single request via the shared address/port-forward —
+			// it does not prove each individual replica is enforcing, but confirms WAF is active.
 			port := 80
 			if portFwdPort != 0 {
 				port = portFwdPort
@@ -581,7 +584,7 @@ var _ = Describe("WAFPolicy", Ordered, Label("waf"), func() {
 			}).
 				WithTimeout(timeoutConfig.RequestTimeout).
 				WithPolling(500*time.Millisecond).
-				Should(BeTrue(), "expected WAF to block XSS attack signature across all replicas")
+				Should(BeTrue(), "expected WAF to block XSS attack signature")
 		})
 	})
 
