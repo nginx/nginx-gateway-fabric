@@ -90,8 +90,8 @@ func buildEffectiveNginxProxy(gatewayClassNp, gatewayNp *NginxProxy) *EffectiveN
 
 // cleanupEffectiveNginxProxy handles post-JSON merge cleanup for the effective NginxProxy configuration.
 // This includes manually unsetting slices and handling mutual exclusion between certain fields.
-// gcSpec is the pre-merge GatewayClass spec, used to restore fields that the JSON merge cannot preserve
-// when a Gateway overrides a struct only partially (e.g. sets disableCookieSeed but not enabled).
+// gcSpec is the pre-merge GatewayClass spec, used to restore sub-fields dropped when a Gateway
+// partially overrides a nested struct (e.g. sets waf.disableCookieSeed but not waf.enabled).
 func cleanupEffectiveNginxProxy(local, global, gcSpec *EffectiveNginxProxy) {
 	cleanupTelemetry(local, global)
 	cleanupRewriteClientIP(local, global)
@@ -135,9 +135,9 @@ func cleanupKubernetes(local, global *EffectiveNginxProxy) {
 }
 
 // cleanupWAF restores WAFSpec fields that the Gateway left nil so they inherit from the GatewayClass.
-// JSON unmarshal cannot distinguish "field explicitly set to false" from "field absent" for *bool,
-// so when the Gateway sets waf only partially (e.g. disableCookieSeed but not enabled), nil fields
-// in local.WAF must fall back to the GatewayClass value rather than being left as nil.
+// When a Gateway NginxProxy sets the waf object partially (e.g. only disableCookieSeed), the JSON
+// merge overwrites the entire waf struct in global with the Gateway's value, dropping any sub-fields
+// the Gateway did not specify. This restores those nil sub-fields from the pre-merge GatewayClass spec.
 func cleanupWAF(local, global, gcSpec *EffectiveNginxProxy) {
 	if local.WAF == nil || gcSpec.WAF == nil {
 		return
