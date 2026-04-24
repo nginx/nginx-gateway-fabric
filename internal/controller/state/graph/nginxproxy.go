@@ -148,12 +148,12 @@ func MetricsEnabledForNginxProxy(np *EffectiveNginxProxy) (*int32, bool) {
 
 // WAFEnabledForNginxProxy returns whether WAF is enabled for the given NginxProxy configuration.
 func WAFEnabledForNginxProxy(np *EffectiveNginxProxy) bool {
-	return np != nil && np.WAF != nil && np.WAF.Enabled
+	return np != nil && np.WAF != nil && np.WAF.Enabled != nil && *np.WAF.Enabled
 }
 
 // WAFCookieSeedDisabledForNginxProxy returns whether the app_protect_cookie_seed directive is disabled.
 func WAFCookieSeedDisabledForNginxProxy(np *EffectiveNginxProxy) bool {
-	return np != nil && np.WAF != nil && np.WAF.DisableCookieSeed
+	return np != nil && np.WAF != nil && np.WAF.DisableCookieSeed != nil && *np.WAF.DisableCookieSeed
 }
 
 func processNginxProxies(

@@ -332,7 +332,7 @@ var _ = Describe("Collector", Ordered, func() {
 						},
 						{Name: "WAFGateway"}: {
 							EffectiveNginxProxy: &graph.EffectiveNginxProxy{
-								WAF: &v1alpha2.WAFSpec{Enabled: true},
+								WAF: &v1alpha2.WAFSpec{Enabled: helpers.GetPointer(true)},
 							},
 						},
 					},
@@ -866,7 +866,7 @@ var _ = Describe("Collector", Ordered, func() {
 				GatewayClass: &graph.GatewayClass{NginxProxy: &graph.NginxProxy{Valid: true}},
 				Gateways: map[types.NamespacedName]*graph.Gateway{
 					{Name: "gateway1"}: {EffectiveNginxProxy: &graph.EffectiveNginxProxy{
-						WAF: &v1alpha2.WAFSpec{Enabled: true},
+						WAF: &v1alpha2.WAFSpec{Enabled: helpers.GetPointer(true)},
 					}},
 				},
 				Routes: map[graph.RouteKey]*graph.L7Route{

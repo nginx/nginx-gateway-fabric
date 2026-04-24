@@ -131,7 +131,7 @@ type WAFSpec struct {
 	// Default is false.
 	//
 	// +optional
-	Enabled bool `json:"enabled,omitempty"`
+	Enabled *bool `json:"enabled,omitempty"`
 	// DisableCookieSeed disables the app_protect_cookie_seed directive.
 	// By default, NGF sets this directive to a stable value derived from the Gateway UID,
 	// ensuring WAF session cookies are consistent across multiple NGINX replicas.
@@ -140,7 +140,7 @@ type WAFSpec struct {
 	// Default is false.
 	//
 	// +optional
-	DisableCookieSeed bool `json:"disableCookieSeed,omitempty"`
+	DisableCookieSeed *bool `json:"disableCookieSeed,omitempty"`
 }
 
 // Telemetry specifies the OpenTelemetry configuration.

@@ -557,7 +557,7 @@ func TestBuildEffectiveNginxProxy_WAF(t *testing.T) {
 				Valid: true,
 				Source: &ngfAPIv1alpha2.NginxProxy{
 					Spec: ngfAPIv1alpha2.NginxProxySpec{
-						WAF: &ngfAPIv1alpha2.WAFSpec{Enabled: false},
+						WAF: &ngfAPIv1alpha2.WAFSpec{Enabled: helpers.GetPointer(false)},
 					},
 				},
 			},
@@ -565,12 +565,12 @@ func TestBuildEffectiveNginxProxy_WAF(t *testing.T) {
 				Valid: true,
 				Source: &ngfAPIv1alpha2.NginxProxy{
 					Spec: ngfAPIv1alpha2.NginxProxySpec{
-						WAF: &ngfAPIv1alpha2.WAFSpec{Enabled: true},
+						WAF: &ngfAPIv1alpha2.WAFSpec{Enabled: helpers.GetPointer(true)},
 					},
 				},
 			},
 			exp: &EffectiveNginxProxy{
-				WAF: &ngfAPIv1alpha2.WAFSpec{Enabled: true},
+				WAF: &ngfAPIv1alpha2.WAFSpec{Enabled: helpers.GetPointer(true)},
 			},
 		},
 		{
@@ -579,7 +579,7 @@ func TestBuildEffectiveNginxProxy_WAF(t *testing.T) {
 				Valid: true,
 				Source: &ngfAPIv1alpha2.NginxProxy{
 					Spec: ngfAPIv1alpha2.NginxProxySpec{
-						WAF: &ngfAPIv1alpha2.WAFSpec{Enabled: true},
+						WAF: &ngfAPIv1alpha2.WAFSpec{Enabled: helpers.GetPointer(true)},
 					},
 				},
 			},
@@ -592,7 +592,7 @@ func TestBuildEffectiveNginxProxy_WAF(t *testing.T) {
 				},
 			},
 			exp: &EffectiveNginxProxy{
-				WAF: &ngfAPIv1alpha2.WAFSpec{Enabled: true},
+				WAF: &ngfAPIv1alpha2.WAFSpec{Enabled: helpers.GetPointer(true)},
 			},
 		},
 		{
@@ -601,7 +601,7 @@ func TestBuildEffectiveNginxProxy_WAF(t *testing.T) {
 				Valid: true,
 				Source: &ngfAPIv1alpha2.NginxProxy{
 					Spec: ngfAPIv1alpha2.NginxProxySpec{
-						WAF: &ngfAPIv1alpha2.WAFSpec{Enabled: false},
+						WAF: &ngfAPIv1alpha2.WAFSpec{Enabled: helpers.GetPointer(false)},
 					},
 				},
 			},
@@ -609,12 +609,12 @@ func TestBuildEffectiveNginxProxy_WAF(t *testing.T) {
 				Valid: true,
 				Source: &ngfAPIv1alpha2.NginxProxy{
 					Spec: ngfAPIv1alpha2.NginxProxySpec{
-						WAF: &ngfAPIv1alpha2.WAFSpec{Enabled: false},
+						WAF: &ngfAPIv1alpha2.WAFSpec{Enabled: helpers.GetPointer(false)},
 					},
 				},
 			},
 			exp: &EffectiveNginxProxy{
-				WAF: &ngfAPIv1alpha2.WAFSpec{Enabled: false},
+				WAF: &ngfAPIv1alpha2.WAFSpec{Enabled: helpers.GetPointer(false)},
 			},
 		},
 		{

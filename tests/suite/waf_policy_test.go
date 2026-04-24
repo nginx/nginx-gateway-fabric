@@ -510,6 +510,15 @@ var _ = Describe("WAFPolicy", Ordered, Label("waf"), func() {
 				WithTimeout(timeoutConfig.UpdateTimeout).
 				WithPolling(2*time.Second).
 				Should(BeTrue(), "expected 1 ready NGINX pod after scale-down")
+
+			// Update nginxPodName and restart the port-forward so subsequent contexts target the
+			// surviving pod rather than one that may have been deleted during scale-down.
+			remainingPods, err := resourceManager.GetReadyNginxPodNames(namespace, timeoutConfig.GetStatusTimeout)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(remainingPods).To(HaveLen(1))
+			cleanUpPortForward()
+			nginxPodName = remainingPods[0]
+			setUpPortForward(nginxPodName, namespace)
 		})
 
 		It("has app_protect_cookie_seed set to the Gateway UID on all replicas", func() {
