@@ -444,12 +444,20 @@ func buildJWTRemoteTLSCABundles(
 	return bundles
 }
 
+// listenerClientSettings captures the information about a listener
+// for configuring SSL servers with client verification settings.
+type listenerClientSettings struct {
+	CertBundleID   CertBundleID
+	validationMode v1.FrontendValidationModeType
+}
+
 func buildFrontendTLSCertBundles(
 	gateway *graph.Gateway,
 	sslServers []VirtualServer,
 	refCertBundles []secrets.CertificateBundle,
 ) map[CertBundleID]CertBundle {
 	bundles := make(map[CertBundleID]CertBundle, len(refCertBundles))
+	clientSettingsMap := make(map[int32]listenerClientSettings)
 
 	if !gateway.Valid || gateway.Source.Spec.TLS == nil || gateway.Source.Spec.TLS.Frontend == nil {
 		return bundles
@@ -477,6 +485,13 @@ func buildFrontendTLSCertBundles(
 			),
 		}
 		id := generateCertBundleID(caCertRef)
+		// We map listener port to the CertBundeID and ValidationMode of this listener
+		// to later configure the relevant SSL Servers with this data.
+		// This avoids iterating over each SSL Server for each Listener.
+		clientSettingsMap[listener.Source.Port] = listenerClientSettings{
+			CertBundleID:   id,
+			validationMode: listener.ValidationMode,
+		}
 		// If the validation mode is AllowInsecureFallback
 		// we do not want to configure any CA bundles for this listener.
 		if listener.ValidationMode != v1.AllowInsecureFallback {
@@ -488,13 +503,8 @@ func buildFrontendTLSCertBundles(
 				listener.CACertificateRefs,
 			)
 		}
-		addClientValidationSettingsToSSLServers(
-			id,
-			sslServers,
-			listener.Source.Port,
-			listener.ValidationMode,
-		)
 	}
+	addClientSettingsToSSLServers(sslServers, clientSettingsMap)
 	return bundles
 }
 
@@ -564,34 +574,27 @@ func getFrontendTLSCertBundles(
 	return bundles
 }
 
-// addClientValidationSettingsToSSLServers modifies existing SSL servers to assign
+// addClientSettingsToSSLServers modifies existing SSL servers to assign
 // client certificate verification settings based on the listener's validation mode and CA cert refs.
-func addClientValidationSettingsToSSLServers(
-	id CertBundleID,
+func addClientSettingsToSSLServers(
 	sslServers []VirtualServer,
-	listenerPort int32,
-	frontendValidationMode v1.FrontendValidationModeType,
+	clientSettingsMap map[int32]listenerClientSettings,
 ) {
-	// Assign client certificate verification settings to all SSL servers on this listener's port
 	for i := range sslServers {
 		if sslServers[i].SSL == nil {
 			continue
 		}
-		if sslServers[i].Port != listenerPort {
-			continue
-		}
-
-		switch frontendValidationMode {
-		case v1.AllowInsecureFallback:
-			// Request client certificate but allow any certificate (valid, invalid, or none)
-			// Do not configure CA bundle verification for this mode
-			sslServers[i].SSL.ClientCertBundleID = ""
-			sslServers[i].SSL.VerifyClient = SSLVerifyClientOptionalNoCA
-			sslServers[i].SSL.RequireVerifiedCert = false
-		default:
-			// AllowValidOnly is default when no validation mode is specified.
-			if sslServers[i].SSL.ClientCertBundleID == "" {
-				sslServers[i].SSL.ClientCertBundleID = id
+		if clientSettings, exists := clientSettingsMap[sslServers[i].Port]; exists {
+			switch clientSettings.validationMode {
+			case v1.AllowInsecureFallback:
+				// Request client certificate but allow any certificate (valid, invalid, or none)
+				// Do not configure CA bundle verification for this mode
+				sslServers[i].SSL.ClientCertBundleID = ""
+				sslServers[i].SSL.VerifyClient = SSLVerifyClientOptionalNoCA
+				sslServers[i].SSL.RequireVerifiedCert = false
+			default:
+				// AllowValidOnly is default when no validation mode is specified.
+				sslServers[i].SSL.ClientCertBundleID = clientSettings.CertBundleID
 				sslServers[i].SSL.VerifyClient = SSLVerifyClientOn
 				sslServers[i].SSL.RequireVerifiedCert = true
 			}
