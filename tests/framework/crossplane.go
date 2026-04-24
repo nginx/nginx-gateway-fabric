@@ -16,28 +16,15 @@ import (
 // ExpectedNginxField contains an nginx directive key and value,
 // and the expected file, server, and location block that it should exist in.
 type ExpectedNginxField struct {
-	// Directive is the directive name.
-	Directive string
-	// Value is the value for the directive. Can be the full value or a substring. If it's a substring,
-	// then ValueSubstringAllowed should be true.
-	Value string
-	// File is the file name that should contain the directive. Can be a full filename or a substring.
-	File string
-	// Location is the location name that the directive should exist in.
-	Location string
-	// Server is the server name that the directive should exist in.
-	Server string
-	// Upstream is the upstream name that the directive should exist in.
-	Upstream string
-	// Block is the name of a parent block directive (e.g., "oidc_provider") that contains
-	// the directive we are looking for. When set, BlockValue must also be set.
-	Block string
-	// BlockValue is the argument of the parent block directive that identifies which block
-	// instance to search within (e.g., the provider name for "oidc_provider").
-	BlockValue string
-	// ValueSubstringAllowed allows the expected value to be a substring of the real value.
-	// This makes it easier for cases when real values are complex file names or contain things we
-	// don't care about, and we just want to check if a substring exists.
+	CaptureValue          *string
+	Directive             string
+	Value                 string
+	File                  string
+	Location              string
+	Server                string
+	Upstream              string
+	Block                 string
+	BlockValue            string
 	ValueSubstringAllowed bool
 }
 
@@ -158,7 +145,9 @@ func (e ExpectedNginxField) fieldFound(directive *Directive, opts ...Option) boo
 	arg := strings.Join(directive.Args, " ")
 
 	valueMatch := arg == e.Value
-	if e.ValueSubstringAllowed {
+	if e.CaptureValue != nil && e.Value == "" {
+		valueMatch = true
+	} else if e.ValueSubstringAllowed {
 		valueMatch = strings.Contains(arg, e.Value)
 	}
 
@@ -171,6 +160,9 @@ func (e ExpectedNginxField) fieldFound(directive *Directive, opts ...Option) boo
 				directive.Directive,
 				arg,
 			)
+		}
+		if e.CaptureValue != nil {
+			*e.CaptureValue = arg
 		}
 		return true
 	}
@@ -190,27 +182,6 @@ func fieldExistsInLocation(locationDirective *Directive, expFieldCfg ExpectedNgi
 	}
 
 	return false
-}
-
-// GetNginxFieldValue returns the value of the first top-level directive in the file matching
-// expFieldCfg.File and expFieldCfg.Directive. Only File and Directive are used for matching;
-// Server, Location, Upstream, and Block selectors are not evaluated. Use this function only for
-// directives that appear at the top level of their config file (e.g., http-context directives).
-// Returns an error if no matching directive is found.
-func GetNginxFieldValue(conf *Payload, expFieldCfg ExpectedNginxField) (string, error) {
-	for _, config := range conf.Config {
-		if !strings.Contains(config.File, expFieldCfg.File) {
-			continue
-		}
-
-		for _, directive := range config.Parsed {
-			if directive.Directive == expFieldCfg.Directive {
-				return strings.Join(directive.Args, " "), nil
-			}
-		}
-	}
-
-	return "", fmt.Errorf("directive %q not found in file matching %q", expFieldCfg.Directive, expFieldCfg.File)
 }
 
 // injectCrossplaneContainer adds an ephemeral container that contains crossplane for parsing

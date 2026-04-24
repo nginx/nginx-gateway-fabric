@@ -537,16 +537,29 @@ var _ = Describe("WAFPolicy", Ordered, Label("waf"), func() {
 			Expect(expectedSeed).ToNot(BeEmpty(), "Gateway UID must be non-empty")
 
 			for _, podName := range nginxPodNames {
-				conf, err := resourceManager.GetNginxConfig(podName, namespace, nginxCrossplanePath)
-				Expect(err).ToNot(HaveOccurred(), "failed to get NGINX config from pod %q", podName)
+				Eventually(func() error {
+					conf, err := resourceManager.GetNginxConfig(podName, namespace, nginxCrossplanePath)
+					if err != nil {
+						return fmt.Errorf("failed to get NGINX config from pod %q: %w", podName, err)
+					}
 
-				seed, err := framework.GetNginxFieldValue(conf, framework.ExpectedNginxField{
-					Directive: "app_protect_cookie_seed",
-					File:      "http.conf",
-				})
-				Expect(err).ToNot(HaveOccurred(), "pod %q missing app_protect_cookie_seed directive", podName)
-				Expect(seed).To(Equal(expectedSeed),
-					"app_protect_cookie_seed on pod %q should equal the Gateway UID", podName)
+					var seed string
+					if err := framework.ValidateNginxFieldExists(conf, framework.ExpectedNginxField{
+						Directive:    "app_protect_cookie_seed",
+						File:         "http.conf",
+						CaptureValue: &seed,
+					}); err != nil {
+						return fmt.Errorf("pod %q missing app_protect_cookie_seed directive: %w", podName, err)
+					}
+					if seed != expectedSeed {
+						return fmt.Errorf(
+							"pod %q: app_protect_cookie_seed = %q, want %q (Gateway UID)",
+							podName, seed, expectedSeed,
+						)
+					}
+					return nil
+				}).WithTimeout(timeoutConfig.GetStatusTimeout).WithPolling(500*time.Millisecond).
+					Should(Succeed(), "pod %q never received correct app_protect_cookie_seed", podName)
 			}
 		})
 

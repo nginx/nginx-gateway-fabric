@@ -125,13 +125,13 @@ type NginxProxySpec struct {
 
 // WAFSpec configures NGINX App Protect WAF.
 type WAFSpec struct {
-	// Enabled enables NGINX App Protect WAF functionality.
+	// Enable enables NGINX App Protect WAF functionality.
 	// When enabled, NGINX Gateway Fabric will deploy additional WAF containers
 	// (waf-enforcer and waf-config-mgr) alongside the main NGINX container.
 	// Default is false.
 	//
 	// +optional
-	Enabled *bool `json:"enabled,omitempty"`
+	Enable *bool `json:"enable,omitempty"`
 	// DisableCookieSeed disables the app_protect_cookie_seed directive.
 	// By default, NGF sets this directive to a stable value derived from the Gateway UID,
 	// ensuring WAF session cookies are consistent across multiple NGINX replicas.

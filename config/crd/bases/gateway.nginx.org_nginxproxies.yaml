@@ -8987,9 +8987,9 @@ spec:
                       via the compiler global settings, to avoid conflicting with the compiled-in value.
                       Default is false.
                     type: boolean
-                  enabled:
+                  enable:
                     description: |-
-                      Enabled enables NGINX App Protect WAF functionality.
+                      Enable enables NGINX App Protect WAF functionality.
                       When enabled, NGINX Gateway Fabric will deploy additional WAF containers
                       (waf-enforcer and waf-config-mgr) alongside the main NGINX container.
                       Default is false.

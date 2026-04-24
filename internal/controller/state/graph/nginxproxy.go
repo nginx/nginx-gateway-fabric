@@ -142,8 +142,8 @@ func cleanupWAF(local, global, gcSpec *EffectiveNginxProxy) {
 	if local.WAF == nil || gcSpec.WAF == nil {
 		return
 	}
-	if local.WAF.Enabled == nil {
-		global.WAF.Enabled = gcSpec.WAF.Enabled
+	if local.WAF.Enable == nil {
+		global.WAF.Enable = gcSpec.WAF.Enable
 	}
 	if local.WAF.DisableCookieSeed == nil {
 		global.WAF.DisableCookieSeed = gcSpec.WAF.DisableCookieSeed
@@ -181,7 +181,7 @@ func MetricsEnabledForNginxProxy(np *EffectiveNginxProxy) (*int32, bool) {
 
 // WAFEnabledForNginxProxy returns whether WAF is enabled for the given NginxProxy configuration.
 func WAFEnabledForNginxProxy(np *EffectiveNginxProxy) bool {
-	return np != nil && np.WAF != nil && np.WAF.Enabled != nil && *np.WAF.Enabled
+	return np != nil && np.WAF != nil && np.WAF.Enable != nil && *np.WAF.Enable
 }
 
 // WAFCookieSeedDisabledForNginxProxy returns whether the app_protect_cookie_seed directive is disabled.
