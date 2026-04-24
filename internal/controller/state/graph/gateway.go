@@ -20,6 +20,8 @@ import (
 type Gateway struct {
 	// LatestReloadResult is the result of the last nginx reload attempt.
 	LatestReloadResult NginxReloadResult
+	// AttachedListenerSets contains the ListenerSets that are attached and accepted by this Gateway.
+	AttachedListenerSets map[types.NamespacedName]*ListenerSet
 	// Source is the corresponding Gateway resource.
 	Source *v1.Gateway
 	// NginxProxy is the NginxProxy referenced by this Gateway.
@@ -32,6 +34,9 @@ type Gateway struct {
 	SecretRef *types.NamespacedName
 	// ListenerNamespaces holds the allowed listener namespaces for this Gateway, if specified.
 	ListenerNamespaces *v1.ListenerNamespaces
+	// ListenerFactory is used to create listeners for this Gateway. This is used to validate
+	// listeners when they are created by the Gateway's Listeners, or merged via ListenerSets.
+	ListenerFactory *listenerConfiguratorFactory
 	// DeploymentName is the name of the nginx Deployment associated with this Gateway.
 	DeploymentName types.NamespacedName
 	// Listeners include the listeners of the Gateway.
@@ -120,9 +125,11 @@ func buildGateways(
 				ListenerNamespaces:  listenerNamespaces,
 			}
 		} else {
+			listenerFactory := newListenerConfiguratorFactory(gw, resourceResolver, refGrantResolver, protectedPorts)
+
 			builtGateways[gwNsName] = &Gateway{
 				Source:              gw,
-				Listeners:           buildListeners(gw, resourceResolver, refGrantResolver, protectedPorts),
+				Listeners:           buildListeners(gw.Spec.Listeners, gwNsName, listenerFactory, types.NamespacedName{}),
 				NginxProxy:          np,
 				EffectiveNginxProxy: effectiveNginxProxy,
 				Valid:               true,
@@ -130,6 +137,7 @@ func buildGateways(
 				DeploymentName:      deploymentName,
 				SecretRef:           secretRefNsName,
 				ListenerNamespaces:  listenerNamespaces,
+				ListenerFactory:     listenerFactory,
 			}
 		}
 	}

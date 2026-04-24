@@ -10,7 +10,6 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation/field"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
@@ -44,6 +43,9 @@ type Listener struct {
 	Name string
 	// GatewayName is the name of the Gateway resource this Listener belongs to.
 	GatewayName types.NamespacedName
+	// ListenerSetName is the name of the ListenerSet this listener comes from. Empty
+	// if the listener is from a Gateway.
+	ListenerSetName types.NamespacedName
 	// Source holds the source of the Listener from the Gateway resource.
 	Source v1.Listener
 	// Routes holds the GRPC/HTTPRoutes attached to the Listener.
@@ -69,18 +71,16 @@ type Listener struct {
 }
 
 func buildListeners(
-	gw *v1.Gateway,
-	resourceResolver resolver.Resolver,
-	refGrantResolver *referenceGrantResolver,
-	protectedPorts ProtectedPorts,
+	sourceListeners []v1.Listener,
+	gwNsName types.NamespacedName,
+	listenerFactory *listenerConfiguratorFactory,
+	listenerSetName types.NamespacedName,
 ) []*Listener {
-	listeners := make([]*Listener, 0, len(gw.Spec.Listeners))
+	listeners := make([]*Listener, 0, len(sourceListeners))
 
-	listenerFactory := newListenerConfiguratorFactory(gw, resourceResolver, refGrantResolver, protectedPorts)
-
-	for _, gl := range gw.Spec.Listeners {
-		configurator := listenerFactory.getConfiguratorForListener(gl)
-		listeners = append(listeners, configurator.configure(gl, client.ObjectKeyFromObject(gw)))
+	for _, l := range sourceListeners {
+		configurator := listenerFactory.getConfiguratorForListener(l)
+		listeners = append(listeners, configurator.configure(l, gwNsName, listenerSetName))
 	}
 
 	return listeners
@@ -115,6 +115,7 @@ func newListenerConfiguratorFactory(
 ) *listenerConfiguratorFactory {
 	sharedPortConflictResolver := createPortConflictResolver()
 	sharedOverlappingTLSConfigResolver := createOverlappingTLSConfigResolver()
+	sharedUniqueListenerConflictResolver := uniqueListenerConflictResolver()
 
 	return &listenerConfiguratorFactory{
 		unsupportedProtocol: &listenerConfigurator{
@@ -141,6 +142,7 @@ func newListenerConfiguratorFactory(
 			},
 			conflictResolvers: []listenerConflictResolver{
 				sharedPortConflictResolver,
+				sharedUniqueListenerConflictResolver,
 			},
 		},
 		https: &listenerConfigurator{
@@ -153,6 +155,7 @@ func newListenerConfiguratorFactory(
 			conflictResolvers: []listenerConflictResolver{
 				sharedPortConflictResolver,
 				sharedOverlappingTLSConfigResolver,
+				sharedUniqueListenerConflictResolver,
 			},
 			externalReferenceResolvers: []listenerExternalReferenceResolver{
 				createExternalReferencesForTLSSecretsResolver(gw.Namespace, resourceResolver, refGrantResolver),
@@ -168,6 +171,7 @@ func newListenerConfiguratorFactory(
 			conflictResolvers: []listenerConflictResolver{
 				sharedPortConflictResolver,
 				sharedOverlappingTLSConfigResolver,
+				sharedUniqueListenerConflictResolver,
 			},
 			externalReferenceResolvers: []listenerExternalReferenceResolver{},
 		},
@@ -179,6 +183,7 @@ func newListenerConfiguratorFactory(
 			},
 			conflictResolvers: []listenerConflictResolver{
 				sharedPortConflictResolver,
+				sharedUniqueListenerConflictResolver,
 			},
 		},
 		udp: &listenerConfigurator{
@@ -189,6 +194,7 @@ func newListenerConfiguratorFactory(
 			},
 			conflictResolvers: []listenerConflictResolver{
 				sharedPortConflictResolver,
+				sharedUniqueListenerConflictResolver,
 			},
 		},
 	}
@@ -220,7 +226,11 @@ type listenerConfigurator struct {
 	externalReferenceResolvers []listenerExternalReferenceResolver
 }
 
-func (c *listenerConfigurator) configure(listener v1.Listener, gwNSName types.NamespacedName) *Listener {
+func (c *listenerConfigurator) configure(
+	listener v1.Listener,
+	gwNSName,
+	listenerSetName types.NamespacedName,
+) *Listener {
 	var conds []conditions.Condition
 
 	attachable := true
@@ -259,6 +269,7 @@ func (c *listenerConfigurator) configure(listener v1.Listener, gwNSName types.Na
 		Valid:                     valid,
 		Attachable:                attachable,
 		SupportedKinds:            supportedKinds,
+		ListenerSetName:           listenerSetName,
 	}
 
 	if !l.Valid {
@@ -573,6 +584,7 @@ func isL4Protocol(protocol v1.ProtocolType) bool {
 	return protocol == v1.TCPProtocolType || protocol == v1.UDPProtocolType
 }
 
+//nolint:gocyclo // will refactor at some point
 func createPortConflictResolver() listenerConflictResolver {
 	const (
 		secureProtocolGroup   int = 0
@@ -620,15 +632,24 @@ func createPortConflictResolver() listenerConflictResolver {
 			return
 		}
 
-		// if protocol group owner doesn't match the listener's protocol group we mark the port as conflicted,
-		// and invalidate all listeners we've seen for this port.
+		// if protocol group owner doesn't match the listener's protocol group and the conflicting listener is from a Gateway
+		// (ListenerSetName is empty) we mark the port as conflicted, and invalidate all listeners we've seen for this port.
+		// This is just to satisfy a specific listener conflict case. However, if the conflicting listener
+		// is from a ListenerSet,
+		// this means we are currently merging listeners from a ListenerSet onto the Gateway, and we can only mark the current
+		// listener as invalid, allowing the existing listener(s) on the Gateway (native to the Gateway
+		// or already merged from a ListenerSet)
+		// to stay valid.
 		if protocolGroup != protocolGroups[l.Source.Protocol] {
-			conflictedPorts[port] = true
-			for _, listener := range listenersByPort[port] {
-				listener.Valid = false
-				conflictedConds := conditions.NewListenerProtocolConflict(fmt.Sprintf(format, port))
-				listener.Conditions = append(listener.Conditions, conflictedConds...)
+			if l.ListenerSetName.Name == "" {
+				conflictedPorts[port] = true
+				for _, listener := range listenersByPort[port] {
+					listener.Valid = false
+					conflictedConds := conditions.NewListenerProtocolConflict(fmt.Sprintf(format, port))
+					listener.Conditions = append(listener.Conditions, conflictedConds...)
+				}
 			}
+
 			l.Valid = false
 			conflictedConds := conditions.NewListenerProtocolConflict(fmt.Sprintf(format, port))
 			l.Conditions = append(l.Conditions, conflictedConds...)
@@ -637,18 +658,26 @@ func createPortConflictResolver() listenerConflictResolver {
 			for _, listener := range listenersByPort[port] {
 				if isL4Protocol(l.Source.Protocol) &&
 					listener.Source.Protocol == l.Source.Protocol {
-					listener.Valid = false
-					conflictedConds := conditions.NewListenerProtocolConflict(
-						fmt.Sprintf(formatL4SameProtocol, l.Source.Protocol, port))
-					listener.Conditions = append(listener.Conditions, conflictedConds...)
+					// Similar to the case above, if the conflicting listener is from a ListenerSet,
+					// we only mark the current listener as invalid.
+					if l.ListenerSetName.Name == "" {
+						listener.Valid = false
+						conflictedConds := conditions.NewListenerProtocolConflict(
+							fmt.Sprintf(formatL4SameProtocol, l.Source.Protocol, port))
+						listener.Conditions = append(listener.Conditions, conflictedConds...)
+					}
 					foundConflict = true
 				}
 				if listener.Source.Protocol != l.Source.Protocol &&
 					!isL4Protocol(listener.Source.Protocol) && !isL4Protocol(l.Source.Protocol) &&
 					haveOverlap(l.Source.Hostname, listener.Source.Hostname) {
-					listener.Valid = false
-					conflictedConds := conditions.NewListenerHostnameConflict(fmt.Sprintf(formatHostname, port))
-					listener.Conditions = append(listener.Conditions, conflictedConds...)
+					// Similar to the case above, if the conflicting listener is from a ListenerSet,
+					// we only mark the current listener as invalid.
+					if l.ListenerSetName.Name == "" {
+						listener.Valid = false
+						conflictedConds := conditions.NewListenerHostnameConflict(fmt.Sprintf(formatHostname, port))
+						listener.Conditions = append(listener.Conditions, conflictedConds...)
+					}
 					foundConflict = true
 				}
 			}
@@ -667,6 +696,46 @@ func createPortConflictResolver() listenerConflictResolver {
 		}
 
 		listenersByPort[port] = append(listenersByPort[port], l)
+	}
+}
+
+func uniqueListenerConflictResolver() listenerConflictResolver {
+	type listenerKey struct {
+		protocol v1.ProtocolType
+		hostname string
+		port     v1.PortNumber
+	}
+
+	existingKeys := make(map[listenerKey]struct{})
+
+	return func(l *Listener) {
+		// Just to satisfy some conformance test condition expectations, if the listener is already invalid we skip the check
+		// Otherwise, these conditions might overlap with the conditions generated by the port conflict resolver
+		if !l.Valid {
+			return
+		}
+
+		hostname := ""
+		if l.Source.Hostname != nil {
+			hostname = string(*l.Source.Hostname)
+		}
+
+		key := listenerKey{
+			port:     l.Source.Port,
+			protocol: l.Source.Protocol,
+			hostname: hostname,
+		}
+
+		if _, exists := existingKeys[key]; exists {
+			msg := fmt.Sprintf("Multiple listeners with the same port %d and protocol %s have overlapping hostnames",
+				key.port, key.protocol)
+			l.Valid = false
+			l.Conditions = append(l.Conditions, conditions.NewListenerHostnameConflict(msg)...)
+			return
+		}
+
+		// Only add valid listener to the map for future conflict detection
+		existingKeys[key] = struct{}{}
 	}
 }
 

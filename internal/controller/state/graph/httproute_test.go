@@ -32,6 +32,7 @@ func createHTTPRoute(
 	name string,
 	refName string,
 	hostname gatewayv1.Hostname,
+	parentRefKind gatewayv1.Kind,
 	paths ...string,
 ) *gatewayv1.HTTPRoute {
 	rules := make([]gatewayv1.HTTPRouteRule, 0, len(paths))
@@ -85,6 +86,7 @@ func createHTTPRoute(
 						Namespace:   helpers.GetPointer[gatewayv1.Namespace]("test"),
 						Name:        gatewayv1.ObjectName(refName),
 						SectionName: helpers.GetPointer[gatewayv1.SectionName](sectionNameOfCreateHTTPRoute),
+						Kind:        helpers.GetPointer(parentRefKind),
 					},
 				},
 			},
@@ -178,6 +180,7 @@ func TestBuildHTTPRoutes(t *testing.T) {
 	t.Parallel()
 
 	gwNsName := types.NamespacedName{Namespace: "test", Name: "gateway"}
+	lsNsName := types.NamespacedName{Namespace: "test", Name: "listener-set"}
 
 	gateways := map[types.NamespacedName]*Gateway{
 		gwNsName: {
@@ -191,7 +194,27 @@ func TestBuildHTTPRoutes(t *testing.T) {
 		},
 	}
 
-	hr := createHTTPRoute("hr-1", gwNsName.Name, "example.com", "/")
+	listenerSets := map[types.NamespacedName]*ListenerSet{
+		{Namespace: "test", Name: "listener-set"}: {
+			Source: &gatewayv1.ListenerSet{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: "test",
+					Name:      "listener-set",
+				},
+			},
+			Valid: true,
+		},
+	}
+
+	hr := createHTTPRoute("hr-1", gwNsName.Name, "example.com", gatewayv1.Kind("Gateway"), "/")
+	hrLSParentRef := createHTTPRoute(
+		"hr-ls-parent-ref",
+		"listener-set",
+		"example.com",
+		gatewayv1.Kind("ListenerSet"),
+		"/ls",
+	)
+
 	snippetsFilterRef := gatewayv1.HTTPRouteFilter{
 		Type: gatewayv1.HTTPRouteFilterExtensionRef,
 		ExtensionRef: &gatewayv1.LocalObjectReference{
@@ -225,11 +248,16 @@ func TestBuildHTTPRoutes(t *testing.T) {
 	addElementsToPath(hr, "/", requestRedirectFilter, nil)
 	addElementsToPath(hr, "/", authenticationFilterRef, nil)
 
-	hrWrongGateway := createHTTPRoute("hr-2", "some-gateway", "example.com", "/")
+	addElementsToPath(hrLSParentRef, "/ls", snippetsFilterRef, unNamedSPConfig)
+	addElementsToPath(hrLSParentRef, "/ls", requestRedirectFilter, nil)
+	addElementsToPath(hrLSParentRef, "/ls", authenticationFilterRef, nil)
+
+	hrWrongGateway := createHTTPRoute("hr-2", "some-gateway", "example.com", gatewayv1.Kind("Gateway"), "/")
 
 	hrRoutes := map[types.NamespacedName]*gatewayv1.HTTPRoute{
 		client.ObjectKeyFromObject(hr):             hr,
 		client.ObjectKeyFromObject(hrWrongGateway): hrWrongGateway,
+		client.ObjectKeyFromObject(hrLSParentRef):  hrLSParentRef,
 	}
 
 	sf := &ngfAPI.SnippetsFilter{
@@ -275,9 +303,11 @@ func TestBuildHTTPRoutes(t *testing.T) {
 					RouteType: RouteTypeHTTP,
 					ParentRefs: []ParentRef{
 						{
-							Idx:         0,
-							Gateway:     CreateParentRefGateway(gateways[gwNsName]),
-							SectionName: hr.Spec.ParentRefs[0].SectionName,
+							Idx:            0,
+							Gateway:        CreateParentRefGateway(gateways[gwNsName]),
+							SectionName:    hr.Spec.ParentRefs[0].SectionName,
+							Kind:           gatewayv1.Kind("Gateway"),
+							NamespacedName: gwNsName,
 						},
 					},
 					Valid:      true,
@@ -328,6 +358,69 @@ func TestBuildHTTPRoutes(t *testing.T) {
 								},
 								Matches:          hr.Spec.Rules[0].Matches,
 								RouteBackendRefs: []RouteBackendRef{getExpRouteBackendRefForPath("/", "hr-1_test_0", "")},
+							},
+						},
+					},
+				},
+				CreateRouteKey(hrLSParentRef): {
+					Source:    hrLSParentRef,
+					RouteType: RouteTypeHTTP,
+					ParentRefs: []ParentRef{
+						{
+							Idx:            0,
+							SectionName:    hrLSParentRef.Spec.ParentRefs[0].SectionName,
+							Kind:           gatewayv1.Kind("ListenerSet"),
+							NamespacedName: lsNsName,
+						},
+					},
+					Valid:      true,
+					Attachable: true,
+					Spec: L7RouteSpec{
+						Hostnames: hrLSParentRef.Spec.Hostnames,
+						Rules: []RouteRule{
+							{
+								ValidMatches: true,
+								Filters: RouteRuleFilters{
+									Valid: true,
+									Filters: []Filter{
+										{
+											ExtensionRef: snippetsFilterRef.ExtensionRef,
+											ResolvedExtensionRef: &ExtensionRefFilter{
+												SnippetsFilter: &SnippetsFilter{
+													Source: sf,
+													Snippets: map[ngfAPI.NginxContext]string{
+														ngfAPI.NginxContextHTTP: "http snippet",
+													},
+													Valid:      true,
+													Referenced: true,
+												},
+												Valid: true,
+											},
+											RouteType:  RouteTypeHTTP,
+											FilterType: FilterExtensionRef,
+										},
+										{
+											RequestRedirect: &gatewayv1.HTTPRequestRedirectFilter{},
+											RouteType:       RouteTypeHTTP,
+											FilterType:      FilterRequestRedirect,
+										},
+										{
+											ExtensionRef: authenticationFilterRef.ExtensionRef,
+											ResolvedExtensionRef: &ExtensionRefFilter{
+												AuthenticationFilter: &AuthenticationFilter{
+													Source:     af,
+													Valid:      true,
+													Referenced: true,
+												},
+												Valid: true,
+											},
+											RouteType:  RouteTypeHTTP,
+											FilterType: FilterExtensionRef,
+										},
+									},
+								},
+								Matches:          hrLSParentRef.Spec.Rules[0].Matches,
+								RouteBackendRefs: []RouteBackendRef{getExpRouteBackendRefForPath("/ls", "hr-ls-parent-ref_test_0", "")},
 							},
 						},
 					},
@@ -383,6 +476,7 @@ func TestBuildHTTPRoutes(t *testing.T) {
 					Plus:         true,
 					Experimental: true,
 				},
+				listenerSets,
 			)
 			g.Expect(helpers.Diff(test.expected, routes)).To(BeEmpty())
 		})
@@ -407,8 +501,33 @@ func TestBuildHTTPRoute(t *testing.T) {
 	}
 	gatewayNsName := client.ObjectKeyFromObject(gw.Source)
 
+	listenerSetParentRef := gatewayv1.ParentReference{
+		Namespace:   helpers.GetPointer[gatewayv1.Namespace]("test"),
+		Name:        "listener-set",
+		SectionName: helpers.GetPointer[gatewayv1.SectionName]("ls-l1"),
+		Kind:        helpers.GetPointer[gatewayv1.Kind]("ListenerSet"),
+	}
+
+	listenerSets := map[types.NamespacedName]*ListenerSet{
+		{Namespace: "test", Name: "listener-set"}: {
+			Source: &gatewayv1.ListenerSet{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: "test",
+					Name:      "listener-set",
+				},
+			},
+			Valid: true,
+		},
+	}
+
 	// Valid HTTPRoute with unsupported rule fields
-	hrValidWithUnsupportedField := createHTTPRoute("hr-valid-unsupported", gatewayNsName.Name, "example.com", "/")
+	hrValidWithUnsupportedField := createHTTPRoute(
+		"hr-valid-unsupported",
+		gatewayNsName.Name,
+		"example.com",
+		gatewayv1.Kind("Gateway"),
+		"/",
+	)
 	hrValidWithUnsupportedField.Spec.Rules[0].Name = helpers.GetPointer[gatewayv1.SectionName]("unsupported-name")
 
 	sp := &gatewayv1.SessionPersistence{
@@ -424,16 +543,35 @@ func TestBuildHTTPRoute(t *testing.T) {
 		Type:            gatewayv1.HTTPRouteFilterRequestRedirect,
 		RequestRedirect: &gatewayv1.HTTPRequestRedirectFilter{},
 	}
-	hr := createHTTPRoute("hr", gatewayNsName.Name, "example.com", "/", "/filter")
+	hr := createHTTPRoute("hr", gatewayNsName.Name, "example.com", gatewayv1.Kind("Gateway"), "/", "/filter")
 	addElementsToPath(hr, "/filter", validFilter, sp)
 
 	// invalid routes without filters
-	hrInvalidHostname := createHTTPRoute("hr", gatewayNsName.Name, "", "/")
-	hrNotNGF := createHTTPRoute("hr", "some-gateway", "example.com", "/")
-	hrInvalidMatches := createHTTPRoute("hr", gatewayNsName.Name, "example.com", invalidPath)
-	hrInvalidMatchesEmptyPathType := createHTTPRoute("hr", gatewayNsName.Name, "example.com", emptyPathType)
-	hrInvalidMatchesEmptyPathValue := createHTTPRoute("hr", gatewayNsName.Name, "example.com", emptyPathValue)
-	hrDroppedInvalidMatches := createHTTPRoute("hr", gatewayNsName.Name, "example.com", invalidPath, "/")
+	hrInvalidHostname := createHTTPRoute("hr", gatewayNsName.Name, "", gatewayv1.Kind("Gateway"), "/")
+	hrNotNGF := createHTTPRoute("hr", "some-gateway", "example.com", gatewayv1.Kind("Gateway"), "/")
+	hrInvalidMatches := createHTTPRoute("hr", gatewayNsName.Name, "example.com", gatewayv1.Kind("Gateway"), invalidPath)
+	hrInvalidMatchesEmptyPathType := createHTTPRoute(
+		"hr",
+		gatewayNsName.Name,
+		"example.com",
+		gatewayv1.Kind("Gateway"),
+		emptyPathType,
+	)
+	hrInvalidMatchesEmptyPathValue := createHTTPRoute(
+		"hr",
+		gatewayNsName.Name,
+		"example.com",
+		gatewayv1.Kind("Gateway"),
+		emptyPathValue,
+	)
+	hrDroppedInvalidMatches := createHTTPRoute(
+		"hr",
+		gatewayNsName.Name,
+		"example.com",
+		gatewayv1.Kind("Gateway"),
+		invalidPath,
+		"/",
+	)
 
 	// route with invalid filter
 	invalidFilter := gatewayv1.HTTPRouteFilter{
@@ -442,7 +580,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 			Hostname: helpers.GetPointer[gatewayv1.PreciseHostname](invalidRedirectHostname),
 		},
 	}
-	hrInvalidFilters := createHTTPRoute("hr", gatewayNsName.Name, "example.com", "/filter")
+	hrInvalidFilters := createHTTPRoute("hr", gatewayNsName.Name, "example.com", gatewayv1.Kind("Gateway"), "/filter")
 	addElementsToPath(hrInvalidFilters, "/filter", invalidFilter, nil)
 
 	// route with invalid matches and filters
@@ -450,6 +588,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 		"hr",
 		gatewayNsName.Name,
 		"example.com",
+		gatewayv1.Kind("Gateway"),
 		invalidPath,
 		"/filter",
 		"/",
@@ -457,19 +596,20 @@ func TestBuildHTTPRoute(t *testing.T) {
 	addElementsToPath(hrDroppedInvalidMatchesAndInvalidFilters, "/filter", invalidFilter, sp)
 
 	// route with both invalid and valid filters in the same rule
-	hrDroppedInvalidFilters := createHTTPRoute("hr", gatewayNsName.Name, "example.com", "/filter", "/")
+	hrDroppedInvalidFilters := createHTTPRoute(
+		"hr", gatewayNsName.Name, "example.com", gatewayv1.Kind("Gateway"), "/filter", "/")
 	addElementsToPath(hrDroppedInvalidFilters, "/filter", validFilter, sp)
 	addElementsToPath(hrDroppedInvalidFilters, "/", invalidFilter, sp)
 
 	// route with duplicate section names
-	hrDuplicateSectionName := createHTTPRoute("hr", gatewayNsName.Name, "example.com", "/")
+	hrDuplicateSectionName := createHTTPRoute("hr", gatewayNsName.Name, "example.com", gatewayv1.Kind("Gateway"), "/")
 	hrDuplicateSectionName.Spec.ParentRefs = append(
 		hrDuplicateSectionName.Spec.ParentRefs,
 		hrDuplicateSectionName.Spec.ParentRefs[0],
 	)
 
 	// route with valid snippets filter extension ref
-	hrValidSnippetsFilter := createHTTPRoute("hr", gatewayNsName.Name, "example.com", "/filter")
+	hrValidSnippetsFilter := createHTTPRoute("hr", gatewayNsName.Name, "example.com", gatewayv1.Kind("Gateway"), "/filter")
 	validSnippetsFilterExtRef := gatewayv1.HTTPRouteFilter{
 		Type: gatewayv1.HTTPRouteFilterExtensionRef,
 		ExtensionRef: &gatewayv1.LocalObjectReference{
@@ -481,7 +621,13 @@ func TestBuildHTTPRoute(t *testing.T) {
 	addElementsToPath(hrValidSnippetsFilter, "/filter", validSnippetsFilterExtRef, sp)
 
 	// route with invalid snippets filter extension ref
-	hrInvalidSnippetsFilter := createHTTPRoute("hr", gatewayNsName.Name, "example.com", "/filter")
+	hrInvalidSnippetsFilter := createHTTPRoute(
+		"hr",
+		gatewayNsName.Name,
+		"example.com",
+		gatewayv1.Kind("Gateway"),
+		"/filter",
+	)
 	invalidSnippetsFilterExtRef := gatewayv1.HTTPRouteFilter{
 		Type: gatewayv1.HTTPRouteFilterExtensionRef,
 		ExtensionRef: &gatewayv1.LocalObjectReference{
@@ -493,7 +639,13 @@ func TestBuildHTTPRoute(t *testing.T) {
 	addElementsToPath(hrInvalidSnippetsFilter, "/filter", invalidSnippetsFilterExtRef, nil)
 
 	// route with unresolvable snippets filter extension ref
-	hrUnresolvableSnippetsFilter := createHTTPRoute("hr", gatewayNsName.Name, "example.com", "/filter")
+	hrUnresolvableSnippetsFilter := createHTTPRoute(
+		"hr",
+		gatewayNsName.Name,
+		"example.com",
+		gatewayv1.Kind("Gateway"),
+		"/filter",
+	)
 	unresolvableSnippetsFilterExtRef := gatewayv1.HTTPRouteFilter{
 		Type: gatewayv1.HTTPRouteFilterExtensionRef,
 		ExtensionRef: &gatewayv1.LocalObjectReference{
@@ -505,12 +657,24 @@ func TestBuildHTTPRoute(t *testing.T) {
 	addElementsToPath(hrUnresolvableSnippetsFilter, "/filter", unresolvableSnippetsFilterExtRef, nil)
 
 	// route with two invalid snippets filter extensions refs: (1) invalid group (2) unresolvable
-	hrInvalidAndUnresolvableSnippetsFilter := createHTTPRoute("hr", gatewayNsName.Name, "example.com", "/filter")
+	hrInvalidAndUnresolvableSnippetsFilter := createHTTPRoute(
+		"hr",
+		gatewayNsName.Name,
+		"example.com",
+		gatewayv1.Kind("Gateway"),
+		"/filter",
+	)
 	addElementsToPath(hrInvalidAndUnresolvableSnippetsFilter, "/filter", invalidSnippetsFilterExtRef, nil)
 	addElementsToPath(hrInvalidAndUnresolvableSnippetsFilter, "/filter", unresolvableSnippetsFilterExtRef, nil)
 
 	// route with valid authentication filter extension ref
-	hrValidAuthenticationFilter := createHTTPRoute("hr", gatewayNsName.Name, "example.com", "/filter")
+	hrValidAuthenticationFilter := createHTTPRoute(
+		"hr",
+		gatewayNsName.Name,
+		"example.com",
+		gatewayv1.Kind("Gateway"),
+		"/filter",
+	)
 	validAuthenticationFilterExtRef := gatewayv1.HTTPRouteFilter{
 		Type: gatewayv1.HTTPRouteFilterExtensionRef,
 		ExtensionRef: &gatewayv1.LocalObjectReference{
@@ -522,7 +686,13 @@ func TestBuildHTTPRoute(t *testing.T) {
 	addElementsToPath(hrValidAuthenticationFilter, "/filter", validAuthenticationFilterExtRef, nil)
 
 	// route with invalid authentication filter extension ref
-	hrInvalidAuthenticationFilter := createHTTPRoute("hr", gatewayNsName.Name, "example.com", "/filter")
+	hrInvalidAuthenticationFilter := createHTTPRoute(
+		"hr",
+		gatewayNsName.Name,
+		"example.com",
+		gatewayv1.Kind("Gateway"),
+		"/filter",
+	)
 	invalidAuthenticationFilterExtRef := gatewayv1.HTTPRouteFilter{
 		Type: gatewayv1.HTTPRouteFilterExtensionRef,
 		ExtensionRef: &gatewayv1.LocalObjectReference{
@@ -534,7 +704,13 @@ func TestBuildHTTPRoute(t *testing.T) {
 	addElementsToPath(hrInvalidAuthenticationFilter, "/filter", invalidAuthenticationFilterExtRef, nil)
 
 	// route with unresolvable authentication filter extension ref
-	hrUnresolvableAuthenticationFilter := createHTTPRoute("hr", gatewayNsName.Name, "example.com", "/filter")
+	hrUnresolvableAuthenticationFilter := createHTTPRoute(
+		"hr",
+		gatewayNsName.Name,
+		"example.com",
+		gatewayv1.Kind("Gateway"),
+		"/filter",
+	)
 	unresolvableAuthenticationFilterExtRef := gatewayv1.HTTPRouteFilter{
 		Type: gatewayv1.HTTPRouteFilterExtensionRef,
 		ExtensionRef: &gatewayv1.LocalObjectReference{
@@ -546,17 +722,35 @@ func TestBuildHTTPRoute(t *testing.T) {
 	addElementsToPath(hrUnresolvableAuthenticationFilter, "/filter", unresolvableAuthenticationFilterExtRef, nil)
 
 	// route with two invalid authentication filter extensions refs: (1) invalid group (2) unresolvable
-	hrInvalidAndUnresolvableAuthenticationFilter := createHTTPRoute("hr", gatewayNsName.Name, "example.com", "/filter")
+	hrInvalidAndUnresolvableAuthenticationFilter := createHTTPRoute(
+		"hr",
+		gatewayNsName.Name,
+		"example.com",
+		gatewayv1.Kind("Gateway"),
+		"/filter",
+	)
 	addElementsToPath(hrInvalidAndUnresolvableAuthenticationFilter, "/filter", invalidAuthenticationFilterExtRef, nil)
 	addElementsToPath(hrInvalidAndUnresolvableAuthenticationFilter, "/filter", unresolvableAuthenticationFilterExtRef, nil)
 
 	// route with one valid and one unresolvable authentication filter extensions refs: (1) valid group (2) unresolvable
-	hrValidAndUnresolvableAuthenticationFilter := createHTTPRoute("hr", gatewayNsName.Name, "example.com", "/filter")
+	hrValidAndUnresolvableAuthenticationFilter := createHTTPRoute(
+		"hr",
+		gatewayNsName.Name,
+		"example.com",
+		gatewayv1.Kind("Gateway"),
+		"/filter",
+	)
 	addElementsToPath(hrValidAndUnresolvableAuthenticationFilter, "/filter", validAuthenticationFilterExtRef, nil)
 	addElementsToPath(hrValidAndUnresolvableAuthenticationFilter, "/filter", unresolvableAuthenticationFilterExtRef, nil)
 
 	// route with one valid and one invalid authentication filter extensions refs: (1) valid group (2) invalid group
-	hrValidAndInvalidAuthenticationFilter := createHTTPRoute("hr", gatewayNsName.Name, "example.com", "/filter")
+	hrValidAndInvalidAuthenticationFilter := createHTTPRoute(
+		"hr",
+		gatewayNsName.Name,
+		"example.com",
+		gatewayv1.Kind("Gateway"),
+		"/filter",
+	)
 	addElementsToPath(hrValidAndInvalidAuthenticationFilter, "/filter", validAuthenticationFilterExtRef, nil)
 	addElementsToPath(hrValidAndInvalidAuthenticationFilter, "/filter", invalidAuthenticationFilterExtRef, nil)
 
@@ -569,12 +763,24 @@ func TestBuildHTTPRoute(t *testing.T) {
 		},
 	}
 	// route with two valid authentication filter extensions refs
-	hrTwoValidAuthenticationFilters := createHTTPRoute("hr", gatewayNsName.Name, "example.com", "/filter")
+	hrTwoValidAuthenticationFilters := createHTTPRoute(
+		"hr",
+		gatewayNsName.Name,
+		"example.com",
+		gatewayv1.Kind("Gateway"),
+		"/filter",
+	)
 	addElementsToPath(hrTwoValidAuthenticationFilters, "/filter", validAuthenticationFilterExtRef, nil)
 	addElementsToPath(hrTwoValidAuthenticationFilters, "/filter", validAuthenticationFilterExtRef2, nil)
 
 	// routes with an inference pool backend
-	hrInferencePool := createHTTPRoute("hr", gatewayNsName.Name, "example.com", "/")
+	hrInferencePool := createHTTPRoute(
+		"hr",
+		gatewayNsName.Name,
+		"example.com",
+		gatewayv1.Kind("Gateway"),
+		"/",
+	)
 	hrInferencePool.Spec.Rules[0].BackendRefs = []gatewayv1.HTTPBackendRef{
 		{
 			BackendRef: createInferencePoolBackend("ipool", gatewayNsName.Namespace),
@@ -584,12 +790,28 @@ func TestBuildHTTPRoute(t *testing.T) {
 	// session persistence should not be added for inference pool backends
 	hrInferencePool.Spec.Rules[0].SessionPersistence = sp
 	// route with an inference pool backend that does not exist
-	hrInferencePoolDoesNotExist := createHTTPRoute("hr", gatewayNsName.Name, "example.com", "/")
+	hrInferencePoolDoesNotExist := createHTTPRoute(
+		"hr",
+		gatewayNsName.Name,
+		"example.com",
+		gatewayv1.Kind("Gateway"),
+		"/",
+	)
 	hrInferencePoolDoesNotExist.Spec.Rules[0].BackendRefs = []gatewayv1.HTTPBackendRef{
 		{
 			BackendRef: createInferencePoolBackend("ipool-does-not-exist", gatewayNsName.Namespace),
 		},
 	}
+
+	// Valid HTTPRoute with ListenerSet parent ref
+	hrValidWithListenerSetParentRef := createHTTPRoute(
+		"hr",
+		"listener-set",
+		"example.com",
+		gatewayv1.Kind("ListenerSet"),
+		"/",
+	)
+	hrValidWithListenerSetParentRef.Spec.ParentRefs[0] = listenerSetParentRef
 
 	validatorInvalidFieldsInRule := &validationfakes.FakeHTTPFieldsValidator{
 		ValidatePathInMatchStub: func(path string) error {
@@ -634,9 +856,11 @@ func TestBuildHTTPRoute(t *testing.T) {
 				Source:    hr,
 				ParentRefs: []ParentRef{
 					{
-						Idx:         0,
-						Gateway:     CreateParentRefGateway(gw),
-						SectionName: hr.Spec.ParentRefs[0].SectionName,
+						Idx:            0,
+						Gateway:        CreateParentRefGateway(gw),
+						SectionName:    hr.Spec.ParentRefs[0].SectionName,
+						Kind:           gatewayv1.Kind("Gateway"),
+						NamespacedName: gatewayNsName,
 					},
 				},
 				Valid:      true,
@@ -679,9 +903,11 @@ func TestBuildHTTPRoute(t *testing.T) {
 				Attachable: true,
 				ParentRefs: []ParentRef{
 					{
-						Idx:         0,
-						Gateway:     CreateParentRefGateway(gw),
-						SectionName: hrInvalidMatchesEmptyPathType.Spec.ParentRefs[0].SectionName,
+						Idx:            0,
+						Gateway:        CreateParentRefGateway(gw),
+						SectionName:    hrInvalidMatchesEmptyPathType.Spec.ParentRefs[0].SectionName,
+						Kind:           gatewayv1.Kind("Gateway"),
+						NamespacedName: gatewayNsName,
 					},
 				},
 				Conditions: []conditions.Condition{
@@ -725,9 +951,11 @@ func TestBuildHTTPRoute(t *testing.T) {
 				Attachable: true,
 				ParentRefs: []ParentRef{
 					{
-						Idx:         0,
-						Gateway:     CreateParentRefGateway(gw),
-						SectionName: hrInvalidMatchesEmptyPathValue.Spec.ParentRefs[0].SectionName,
+						Idx:            0,
+						Gateway:        CreateParentRefGateway(gw),
+						SectionName:    hrInvalidMatchesEmptyPathValue.Spec.ParentRefs[0].SectionName,
+						Kind:           gatewayv1.Kind("Gateway"),
+						NamespacedName: gatewayNsName,
 					},
 				},
 				Conditions: []conditions.Condition{
@@ -768,9 +996,11 @@ func TestBuildHTTPRoute(t *testing.T) {
 				Attachable: false,
 				ParentRefs: []ParentRef{
 					{
-						Idx:         0,
-						Gateway:     CreateParentRefGateway(gw),
-						SectionName: hrInvalidHostname.Spec.ParentRefs[0].SectionName,
+						Idx:            0,
+						Gateway:        CreateParentRefGateway(gw),
+						SectionName:    hrInvalidHostname.Spec.ParentRefs[0].SectionName,
+						Kind:           gatewayv1.Kind("Gateway"),
+						NamespacedName: gatewayNsName,
 					},
 				},
 				Conditions: []conditions.Condition{
@@ -791,9 +1021,11 @@ func TestBuildHTTPRoute(t *testing.T) {
 				Attachable: true,
 				ParentRefs: []ParentRef{
 					{
-						Idx:         0,
-						Gateway:     CreateParentRefGateway(gw),
-						SectionName: hrInvalidMatches.Spec.ParentRefs[0].SectionName,
+						Idx:            0,
+						Gateway:        CreateParentRefGateway(gw),
+						SectionName:    hrInvalidMatches.Spec.ParentRefs[0].SectionName,
+						Kind:           gatewayv1.Kind("Gateway"),
+						NamespacedName: gatewayNsName,
 					},
 				},
 				Conditions: []conditions.Condition{
@@ -828,9 +1060,11 @@ func TestBuildHTTPRoute(t *testing.T) {
 				Attachable: true,
 				ParentRefs: []ParentRef{
 					{
-						Idx:         0,
-						Gateway:     CreateParentRefGateway(gw),
-						SectionName: hrInvalidFilters.Spec.ParentRefs[0].SectionName,
+						Idx:            0,
+						Gateway:        CreateParentRefGateway(gw),
+						SectionName:    hrInvalidFilters.Spec.ParentRefs[0].SectionName,
+						Kind:           gatewayv1.Kind("Gateway"),
+						NamespacedName: gatewayNsName,
 					},
 				},
 				Conditions: []conditions.Condition{
@@ -866,9 +1100,11 @@ func TestBuildHTTPRoute(t *testing.T) {
 				Attachable: true,
 				ParentRefs: []ParentRef{
 					{
-						Idx:         0,
-						Gateway:     CreateParentRefGateway(gw),
-						SectionName: hrDroppedInvalidMatches.Spec.ParentRefs[0].SectionName,
+						Idx:            0,
+						Gateway:        CreateParentRefGateway(gw),
+						SectionName:    hrDroppedInvalidMatches.Spec.ParentRefs[0].SectionName,
+						Kind:           gatewayv1.Kind("Gateway"),
+						NamespacedName: gatewayNsName,
 					},
 				},
 				Conditions: []conditions.Condition{
@@ -912,9 +1148,11 @@ func TestBuildHTTPRoute(t *testing.T) {
 				Attachable: true,
 				ParentRefs: []ParentRef{
 					{
-						Idx:         0,
-						Gateway:     CreateParentRefGateway(gw),
-						SectionName: hrDroppedInvalidMatchesAndInvalidFilters.Spec.ParentRefs[0].SectionName,
+						Idx:            0,
+						Gateway:        CreateParentRefGateway(gw),
+						SectionName:    hrDroppedInvalidMatchesAndInvalidFilters.Spec.ParentRefs[0].SectionName,
+						Kind:           gatewayv1.Kind("Gateway"),
+						NamespacedName: gatewayNsName,
 					},
 				},
 				Conditions: []conditions.Condition{
@@ -973,9 +1211,11 @@ func TestBuildHTTPRoute(t *testing.T) {
 				Attachable: true,
 				ParentRefs: []ParentRef{
 					{
-						Idx:         0,
-						Gateway:     CreateParentRefGateway(gw),
-						SectionName: hrDroppedInvalidFilters.Spec.ParentRefs[0].SectionName,
+						Idx:            0,
+						Gateway:        CreateParentRefGateway(gw),
+						SectionName:    hrDroppedInvalidFilters.Spec.ParentRefs[0].SectionName,
+						Kind:           gatewayv1.Kind("Gateway"),
+						NamespacedName: gatewayNsName,
 					},
 				},
 				Conditions: []conditions.Condition{
@@ -1022,9 +1262,11 @@ func TestBuildHTTPRoute(t *testing.T) {
 				Attachable: true,
 				ParentRefs: []ParentRef{
 					{
-						Idx:         0,
-						Gateway:     CreateParentRefGateway(gw),
-						SectionName: hrValidSnippetsFilter.Spec.ParentRefs[0].SectionName,
+						Idx:            0,
+						Gateway:        CreateParentRefGateway(gw),
+						SectionName:    hrValidSnippetsFilter.Spec.ParentRefs[0].SectionName,
+						Kind:           gatewayv1.Kind("Gateway"),
+						NamespacedName: gatewayNsName,
 					},
 				},
 				Spec: L7RouteSpec{
@@ -1066,9 +1308,11 @@ func TestBuildHTTPRoute(t *testing.T) {
 				Attachable: true,
 				ParentRefs: []ParentRef{
 					{
-						Idx:         0,
-						Gateway:     CreateParentRefGateway(gw),
-						SectionName: hrValidAuthenticationFilter.Spec.ParentRefs[0].SectionName,
+						Idx:            0,
+						Gateway:        CreateParentRefGateway(gw),
+						SectionName:    hrValidAuthenticationFilter.Spec.ParentRefs[0].SectionName,
+						Kind:           gatewayv1.Kind("Gateway"),
+						NamespacedName: gatewayNsName,
 					},
 				},
 				Spec: L7RouteSpec{
@@ -1108,9 +1352,11 @@ func TestBuildHTTPRoute(t *testing.T) {
 				Attachable: true,
 				ParentRefs: []ParentRef{
 					{
-						Idx:         0,
-						Gateway:     CreateParentRefGateway(gw),
-						SectionName: hrInvalidSnippetsFilter.Spec.ParentRefs[0].SectionName,
+						Idx:            0,
+						Gateway:        CreateParentRefGateway(gw),
+						SectionName:    hrInvalidSnippetsFilter.Spec.ParentRefs[0].SectionName,
+						Kind:           gatewayv1.Kind("Gateway"),
+						NamespacedName: gatewayNsName,
 					},
 				},
 				Conditions: []conditions.Condition{
@@ -1146,9 +1392,11 @@ func TestBuildHTTPRoute(t *testing.T) {
 				Attachable: true,
 				ParentRefs: []ParentRef{
 					{
-						Idx:         0,
-						Gateway:     CreateParentRefGateway(gw),
-						SectionName: hrInvalidAuthenticationFilter.Spec.ParentRefs[0].SectionName,
+						Idx:            0,
+						Gateway:        CreateParentRefGateway(gw),
+						SectionName:    hrInvalidAuthenticationFilter.Spec.ParentRefs[0].SectionName,
+						Kind:           gatewayv1.Kind("Gateway"),
+						NamespacedName: gatewayNsName,
 					},
 				},
 				Conditions: []conditions.Condition{
@@ -1184,9 +1432,11 @@ func TestBuildHTTPRoute(t *testing.T) {
 				Attachable: true,
 				ParentRefs: []ParentRef{
 					{
-						Idx:         0,
-						Gateway:     CreateParentRefGateway(gw),
-						SectionName: hrUnresolvableSnippetsFilter.Spec.ParentRefs[0].SectionName,
+						Idx:            0,
+						Gateway:        CreateParentRefGateway(gw),
+						SectionName:    hrUnresolvableSnippetsFilter.Spec.ParentRefs[0].SectionName,
+						Kind:           gatewayv1.Kind("Gateway"),
+						NamespacedName: gatewayNsName,
 					},
 				},
 				Conditions: []conditions.Condition{
@@ -1223,9 +1473,11 @@ func TestBuildHTTPRoute(t *testing.T) {
 				Attachable: true,
 				ParentRefs: []ParentRef{
 					{
-						Idx:         0,
-						Gateway:     CreateParentRefGateway(gw),
-						SectionName: hrUnresolvableAuthenticationFilter.Spec.ParentRefs[0].SectionName,
+						Idx:            0,
+						Gateway:        CreateParentRefGateway(gw),
+						SectionName:    hrUnresolvableAuthenticationFilter.Spec.ParentRefs[0].SectionName,
+						Kind:           gatewayv1.Kind("Gateway"),
+						NamespacedName: gatewayNsName,
 					},
 				},
 				Conditions: []conditions.Condition{
@@ -1262,9 +1514,11 @@ func TestBuildHTTPRoute(t *testing.T) {
 				Attachable: true,
 				ParentRefs: []ParentRef{
 					{
-						Idx:         0,
-						Gateway:     CreateParentRefGateway(gw),
-						SectionName: hrInvalidAndUnresolvableSnippetsFilter.Spec.ParentRefs[0].SectionName,
+						Idx:            0,
+						Gateway:        CreateParentRefGateway(gw),
+						SectionName:    hrInvalidAndUnresolvableSnippetsFilter.Spec.ParentRefs[0].SectionName,
+						Kind:           gatewayv1.Kind("Gateway"),
+						NamespacedName: gatewayNsName,
 					},
 				},
 				Conditions: []conditions.Condition{
@@ -1307,9 +1561,11 @@ func TestBuildHTTPRoute(t *testing.T) {
 				Attachable: true,
 				ParentRefs: []ParentRef{
 					{
-						Idx:         0,
-						Gateway:     CreateParentRefGateway(gw),
-						SectionName: hrInvalidAndUnresolvableAuthenticationFilter.Spec.ParentRefs[0].SectionName,
+						Idx:            0,
+						Gateway:        CreateParentRefGateway(gw),
+						SectionName:    hrInvalidAndUnresolvableAuthenticationFilter.Spec.ParentRefs[0].SectionName,
+						Kind:           gatewayv1.Kind("Gateway"),
+						NamespacedName: gatewayNsName,
 					},
 				},
 				Conditions: []conditions.Condition{
@@ -1351,9 +1607,11 @@ func TestBuildHTTPRoute(t *testing.T) {
 				Attachable: true,
 				ParentRefs: []ParentRef{
 					{
-						Idx:         0,
-						Gateway:     CreateParentRefGateway(gw),
-						SectionName: hrValidAndUnresolvableAuthenticationFilter.Spec.ParentRefs[0].SectionName,
+						Idx:            0,
+						Gateway:        CreateParentRefGateway(gw),
+						SectionName:    hrValidAndUnresolvableAuthenticationFilter.Spec.ParentRefs[0].SectionName,
+						Kind:           gatewayv1.Kind("Gateway"),
+						NamespacedName: gatewayNsName,
 					},
 				},
 				Conditions: []conditions.Condition{
@@ -1406,9 +1664,11 @@ func TestBuildHTTPRoute(t *testing.T) {
 				Attachable: true,
 				ParentRefs: []ParentRef{
 					{
-						Idx:         0,
-						Gateway:     CreateParentRefGateway(gw),
-						SectionName: hrValidAndInvalidAuthenticationFilter.Spec.ParentRefs[0].SectionName,
+						Idx:            0,
+						Gateway:        CreateParentRefGateway(gw),
+						SectionName:    hrValidAndInvalidAuthenticationFilter.Spec.ParentRefs[0].SectionName,
+						Kind:           gatewayv1.Kind("Gateway"),
+						NamespacedName: gatewayNsName,
 					},
 				},
 				Conditions: []conditions.Condition{
@@ -1461,9 +1721,11 @@ func TestBuildHTTPRoute(t *testing.T) {
 				Attachable: true,
 				ParentRefs: []ParentRef{
 					{
-						Idx:         0,
-						Gateway:     CreateParentRefGateway(gw),
-						SectionName: hrTwoValidAuthenticationFilters.Spec.ParentRefs[0].SectionName,
+						Idx:            0,
+						Gateway:        CreateParentRefGateway(gw),
+						SectionName:    hrTwoValidAuthenticationFilters.Spec.ParentRefs[0].SectionName,
+						Kind:           gatewayv1.Kind("Gateway"),
+						NamespacedName: gatewayNsName,
 					},
 				},
 				Conditions: []conditions.Condition{
@@ -1515,9 +1777,11 @@ func TestBuildHTTPRoute(t *testing.T) {
 				Source:    hrValidWithUnsupportedField,
 				ParentRefs: []ParentRef{
 					{
-						Idx:         0,
-						Gateway:     CreateParentRefGateway(gw),
-						SectionName: hrValidWithUnsupportedField.Spec.ParentRefs[0].SectionName,
+						Idx:            0,
+						Gateway:        CreateParentRefGateway(gw),
+						SectionName:    hrValidWithUnsupportedField.Spec.ParentRefs[0].SectionName,
+						Kind:           gatewayv1.Kind("Gateway"),
+						NamespacedName: gatewayNsName,
 					},
 				},
 				Valid:      true,
@@ -1550,9 +1814,11 @@ func TestBuildHTTPRoute(t *testing.T) {
 				Source:    hrInferencePool,
 				ParentRefs: []ParentRef{
 					{
-						Idx:         0,
-						Gateway:     CreateParentRefGateway(gw),
-						SectionName: hrInferencePool.Spec.ParentRefs[0].SectionName,
+						Idx:            0,
+						Gateway:        CreateParentRefGateway(gw),
+						SectionName:    hrInferencePool.Spec.ParentRefs[0].SectionName,
+						Kind:           gatewayv1.Kind("Gateway"),
+						NamespacedName: gatewayNsName,
 					},
 				},
 				Valid:      true,
@@ -1597,9 +1863,11 @@ func TestBuildHTTPRoute(t *testing.T) {
 				Source:    hrInferencePoolDoesNotExist,
 				ParentRefs: []ParentRef{
 					{
-						Idx:         0,
-						Gateway:     CreateParentRefGateway(gw),
-						SectionName: hrInferencePoolDoesNotExist.Spec.ParentRefs[0].SectionName,
+						Idx:            0,
+						Gateway:        CreateParentRefGateway(gw),
+						SectionName:    hrInferencePoolDoesNotExist.Spec.ParentRefs[0].SectionName,
+						Kind:           gatewayv1.Kind("Gateway"),
+						NamespacedName: gatewayNsName,
 					},
 				},
 				Valid:      true,
@@ -1624,6 +1892,42 @@ func TestBuildHTTPRoute(t *testing.T) {
 				},
 			},
 			name: "route with an inference pool backend that doesn't exist",
+		},
+		{
+			validator: &validationfakes.FakeHTTPFieldsValidator{},
+			hr:        hrValidWithListenerSetParentRef,
+			expected: &L7Route{
+				RouteType: RouteTypeHTTP,
+				Source:    hrValidWithListenerSetParentRef,
+				ParentRefs: []ParentRef{
+					{
+						Idx:         0,
+						SectionName: hrValidWithListenerSetParentRef.Spec.ParentRefs[0].SectionName,
+						Kind:        gatewayv1.Kind("ListenerSet"),
+						NamespacedName: types.NamespacedName{
+							Namespace: "test",
+							Name:      "listener-set",
+						},
+					},
+				},
+				Valid:      true,
+				Attachable: true,
+				Spec: L7RouteSpec{
+					Hostnames: hrValidWithListenerSetParentRef.Spec.Hostnames,
+					Rules: []RouteRule{
+						{
+							ValidMatches: true,
+							Filters: RouteRuleFilters{
+								Valid:   true,
+								Filters: []Filter{},
+							},
+							Matches:          hrValidWithListenerSetParentRef.Spec.Rules[0].Matches,
+							RouteBackendRefs: []RouteBackendRef{expRouteBackendRef},
+						},
+					},
+				},
+			},
+			name: "valid HTTP route with ListenerSet parent ref",
 		},
 	}
 
@@ -1657,6 +1961,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 					Plus:         test.plus,
 					Experimental: test.experimental,
 				},
+				listenerSets,
 			)
 			g.Expect(helpers.Diff(test.expected, route)).To(BeEmpty())
 		})
@@ -1683,6 +1988,18 @@ func TestBuildHTTPRouteWithMirrorRoutes(t *testing.T) {
 		},
 	}
 
+	listenerSets := map[types.NamespacedName]*ListenerSet{
+		{Namespace: "test", Name: "listener-set"}: {
+			Source: &gatewayv1.ListenerSet{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: "test",
+					Name:      "listener-set",
+				},
+			},
+			Valid: true,
+		},
+	}
+
 	// Create a route with a request mirror filter and another random filter
 	mirrorFilter := gatewayv1.HTTPRouteFilter{
 		Type: gatewayv1.HTTPRouteFilterRequestMirror,
@@ -1698,86 +2015,44 @@ func TestBuildHTTPRouteWithMirrorRoutes(t *testing.T) {
 			Hostname: helpers.GetPointer[gatewayv1.PreciseHostname]("hostname"),
 		},
 	}
-	hr := createHTTPRoute("hr", gatewayNsName.Name, "example.com", "/mirror")
+	hr := createHTTPRoute("hr", gatewayNsName.Name, "example.com", gatewayv1.Kind("Gateway"), "/mirror")
 	addElementsToPath(hr, "/mirror", mirrorFilter, nil)
 	addElementsToPath(hr, "/mirror", urlRewriteFilter, nil)
 
-	// Expected mirror route
-	expectedMirrorRoute := &L7Route{
-		RouteType: RouteTypeHTTP,
-		Source: &gatewayv1.HTTPRoute{
-			ObjectMeta: metav1.ObjectMeta{
-				Namespace: "test",
-				Name:      mirror.RouteName("hr", "mirror-backend", "test", 0),
-			},
-			Spec: gatewayv1.HTTPRouteSpec{
-				CommonRouteSpec: hr.Spec.CommonRouteSpec,
-				Hostnames:       hr.Spec.Hostnames,
-				Rules: []gatewayv1.HTTPRouteRule{
-					{
-						Matches: []gatewayv1.HTTPRouteMatch{
-							{
-								Path: &gatewayv1.HTTPPathMatch{
-									Type:  helpers.GetPointer(gatewayv1.PathMatchExact),
-									Value: helpers.GetPointer("/_ngf-internal-mirror-mirror-backend-test/hr-0"),
-								},
-							},
-						},
-						Filters: []gatewayv1.HTTPRouteFilter{urlRewriteFilter},
-						BackendRefs: []gatewayv1.HTTPBackendRef{
-							{
-								BackendRef: gatewayv1.BackendRef{
-									BackendObjectReference: gatewayv1.BackendObjectReference{
-										Name: "mirror-backend",
-									},
-								},
-							},
-						},
-					},
-				},
+	// Create a route with ListenerSet parent ref
+	hrListenerSet := createHTTPRoute("hr-ls", "listener-set", "example.com", gatewayv1.Kind("ListenerSet"), "/mirror")
+	addElementsToPath(hrListenerSet, "/mirror", mirrorFilter, nil)
+	addElementsToPath(hrListenerSet, "/mirror", urlRewriteFilter, nil)
+
+	tests := []struct {
+		name           string
+		hr             *gatewayv1.HTTPRoute
+		gateways       map[types.NamespacedName]*Gateway
+		expectedParent ParentRef
+	}{
+		{
+			name:     "Gateway mirror route",
+			hr:       hr,
+			gateways: gateways,
+			expectedParent: ParentRef{
+				Idx:            0,
+				Gateway:        CreateParentRefGateway(gateways[gatewayNsName]),
+				SectionName:    hr.Spec.ParentRefs[0].SectionName,
+				Kind:           gatewayv1.Kind("Gateway"),
+				NamespacedName: gatewayNsName,
 			},
 		},
-		ParentRefs: []ParentRef{
-			{
+		{
+			name:     "ListenerSet mirror route",
+			hr:       hrListenerSet,
+			gateways: gateways,
+			expectedParent: ParentRef{
 				Idx:         0,
-				Gateway:     CreateParentRefGateway(gateways[gatewayNsName]),
-				SectionName: hr.Spec.ParentRefs[0].SectionName,
-			},
-		},
-		Valid:      true,
-		Attachable: true,
-		Spec: L7RouteSpec{
-			Hostnames: hr.Spec.Hostnames,
-			Rules: []RouteRule{
-				{
-					ValidMatches: true,
-					Filters: RouteRuleFilters{
-						Valid: true,
-						Filters: []Filter{
-							{
-								RouteType:  RouteTypeHTTP,
-								FilterType: FilterURLRewrite,
-								URLRewrite: urlRewriteFilter.URLRewrite,
-							},
-						},
-					},
-					Matches: []gatewayv1.HTTPRouteMatch{
-						{
-							Path: &gatewayv1.HTTPPathMatch{
-								Type:  helpers.GetPointer(gatewayv1.PathMatchExact),
-								Value: helpers.GetPointer("/_ngf-internal-mirror-mirror-backend-test/hr-0"),
-							},
-						},
-					},
-					RouteBackendRefs: []RouteBackendRef{
-						{
-							BackendRef: gatewayv1.BackendRef{
-								BackendObjectReference: gatewayv1.BackendObjectReference{
-									Name: "mirror-backend",
-								},
-							},
-						},
-					},
+				SectionName: hrListenerSet.Spec.ParentRefs[0].SectionName,
+				Kind:        gatewayv1.Kind("ListenerSet"),
+				NamespacedName: types.NamespacedName{
+					Namespace: "test",
+					Name:      "listener-set",
 				},
 			},
 		},
@@ -1793,25 +2068,106 @@ func TestBuildHTTPRouteWithMirrorRoutes(t *testing.T) {
 		Experimental: false,
 	}
 
-	routes := map[RouteKey]*L7Route{}
-	l7route := buildHTTPRoute(
-		validator,
-		hr,
-		gateways,
-		snippetsFilters,
-		nil,
-		nil,
-		featureFlags,
-	)
-	g.Expect(l7route).NotTo(BeNil())
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
 
-	buildHTTPMirrorRoutes(routes, l7route, hr, gateways, snippetsFilters, featureFlags)
+			expectedMirrorRoute := &L7Route{
+				RouteType: RouteTypeHTTP,
+				Source: &gatewayv1.HTTPRoute{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "test",
+						Name:      mirror.RouteName(test.hr.Name, "mirror-backend", "test", 0),
+					},
+					Spec: gatewayv1.HTTPRouteSpec{
+						CommonRouteSpec: test.hr.Spec.CommonRouteSpec,
+						Hostnames:       test.hr.Spec.Hostnames,
+						Rules: []gatewayv1.HTTPRouteRule{
+							{
+								Matches: []gatewayv1.HTTPRouteMatch{
+									{
+										Path: &gatewayv1.HTTPPathMatch{
+											Type:  helpers.GetPointer(gatewayv1.PathMatchExact),
+											Value: helpers.GetPointer("/_ngf-internal-mirror-mirror-backend-test/" + test.hr.Name + "-0"),
+										},
+									},
+								},
+								Filters: []gatewayv1.HTTPRouteFilter{urlRewriteFilter},
+								BackendRefs: []gatewayv1.HTTPBackendRef{
+									{
+										BackendRef: gatewayv1.BackendRef{
+											BackendObjectReference: gatewayv1.BackendObjectReference{
+												Name: "mirror-backend",
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+				ParentRefs: []ParentRef{test.expectedParent},
+				Valid:      true,
+				Attachable: true,
+				Spec: L7RouteSpec{
+					Hostnames: test.hr.Spec.Hostnames,
+					Rules: []RouteRule{
+						{
+							ValidMatches: true,
+							Filters: RouteRuleFilters{
+								Valid: true,
+								Filters: []Filter{
+									{
+										RouteType:  RouteTypeHTTP,
+										FilterType: FilterURLRewrite,
+										URLRewrite: urlRewriteFilter.URLRewrite,
+									},
+								},
+							},
+							Matches: []gatewayv1.HTTPRouteMatch{
+								{
+									Path: &gatewayv1.HTTPPathMatch{
+										Type:  helpers.GetPointer(gatewayv1.PathMatchExact),
+										Value: helpers.GetPointer("/_ngf-internal-mirror-mirror-backend-test/" + test.hr.Name + "-0"),
+									},
+								},
+							},
+							RouteBackendRefs: []RouteBackendRef{
+								{
+									BackendRef: gatewayv1.BackendRef{
+										BackendObjectReference: gatewayv1.BackendObjectReference{
+											Name: "mirror-backend",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			}
 
-	obj, ok := expectedMirrorRoute.Source.(*gatewayv1.HTTPRoute)
-	g.Expect(ok).To(BeTrue())
-	mirrorRouteKey := CreateRouteKey(obj)
-	g.Expect(routes).To(HaveKey(mirrorRouteKey))
-	g.Expect(helpers.Diff(expectedMirrorRoute, routes[mirrorRouteKey])).To(BeEmpty())
+			routes := map[RouteKey]*L7Route{}
+			l7route := buildHTTPRoute(
+				validator,
+				test.hr,
+				test.gateways,
+				snippetsFilters,
+				nil,
+				nil,
+				featureFlags,
+				listenerSets,
+			)
+			g.Expect(l7route).NotTo(BeNil())
+
+			buildHTTPMirrorRoutes(routes, l7route, test.hr, test.gateways, snippetsFilters, featureFlags, listenerSets)
+
+			obj, ok := expectedMirrorRoute.Source.(*gatewayv1.HTTPRoute)
+			g.Expect(ok).To(BeTrue())
+			mirrorRouteKey := CreateRouteKey(obj)
+			g.Expect(routes).To(HaveKey(mirrorRouteKey))
+			g.Expect(helpers.Diff(expectedMirrorRoute, routes[mirrorRouteKey])).To(BeEmpty())
+		})
+	}
 }
 
 func TestProcessHTTPRouteRule_InferencePoolWithMultipleBackendRefs(t *testing.T) {

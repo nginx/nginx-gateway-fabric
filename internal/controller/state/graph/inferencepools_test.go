@@ -41,7 +41,9 @@ func TestBuildReferencedInferencePools(t *testing.T) {
 			},
 			ParentRefs: []ParentRef{
 				{
-					Gateway: &ParentRefGateway{NamespacedName: gwNsName},
+					Kind:           "Gateway",
+					Gateway:        &ParentRefGateway{NamespacedName: gwNsName},
+					NamespacedName: gwNsName,
 				},
 			},
 			Valid: true,
@@ -138,17 +140,33 @@ func TestBuildReferencedInferencePools(t *testing.T) {
 		return route
 	})
 
+	lsNsName := types.NamespacedName{Namespace: "test", Name: "listener-set"}
+
+	listenerSetParentRefs := []ParentRef{
+		{
+			Kind:           "ListenerSet",
+			NamespacedName: lsNsName,
+		},
+	}
+
+	routeWithListenerSetParentRefs := getModifiedRoute(func(route *L7Route) *L7Route {
+		route.ParentRefs = listenerSetParentRefs
+		return route
+	})
+
 	tests := []struct {
 		routes         map[RouteKey]*L7Route
 		gws            map[types.NamespacedName]*Gateway
 		services       map[types.NamespacedName]*v1.Service
 		inferencePools map[types.NamespacedName]*inference.InferencePool
+		listenerSets   map[types.NamespacedName]*ListenerSet
 		expPools       map[types.NamespacedName]*ReferencedInferencePool
 		name           string
 	}{
 		{
-			name: "no gateways",
-			gws:  nil,
+			name:         "no gateways",
+			gws:          nil,
+			listenerSets: map[types.NamespacedName]*ListenerSet{},
 			routes: map[RouteKey]*L7Route{
 				CreateRouteKey(validRoute.Source): validRoute,
 			},
@@ -158,8 +176,9 @@ func TestBuildReferencedInferencePools(t *testing.T) {
 			expPools: nil,
 		},
 		{
-			name: "valid route with referenced inferencepool",
-			gws:  gws,
+			name:         "valid route with referenced inferencepool",
+			gws:          gws,
+			listenerSets: map[types.NamespacedName]*ListenerSet{},
 			routes: map[RouteKey]*L7Route{
 				CreateRouteKey(validRoute.Source): validRoute,
 			},
@@ -192,8 +211,9 @@ func TestBuildReferencedInferencePools(t *testing.T) {
 			},
 		},
 		{
-			name: "route with service backend",
-			gws:  gws,
+			name:         "route with service backend",
+			gws:          gws,
+			listenerSets: map[types.NamespacedName]*ListenerSet{},
 			routes: map[RouteKey]*L7Route{
 				CreateRouteKey(validRoute.Source): getModifiedRoute(func(route *L7Route) *L7Route {
 					route.Spec.Rules = []RouteRule{
@@ -218,8 +238,9 @@ func TestBuildReferencedInferencePools(t *testing.T) {
 			expPools: nil,
 		},
 		{
-			name: "route with both inferencepool and service backends",
-			gws:  gws,
+			name:         "route with both inferencepool and service backends",
+			gws:          gws,
+			listenerSets: map[types.NamespacedName]*ListenerSet{},
 			routes: map[RouteKey]*L7Route{
 				CreateRouteKey(validRoute.Source): modifiedRouteWithServiceBackend,
 			},
@@ -252,8 +273,9 @@ func TestBuildReferencedInferencePools(t *testing.T) {
 			},
 		},
 		{
-			name: "route with headless InferencePool Service backend",
-			gws:  gws,
+			name:         "route with headless InferencePool Service backend",
+			gws:          gws,
+			listenerSets: map[types.NamespacedName]*ListenerSet{},
 			routes: map[RouteKey]*L7Route{
 				CreateRouteKey(validRoute.Source): routeWithInferencePoolHeadlessSvcBackend,
 			},
@@ -286,8 +308,9 @@ func TestBuildReferencedInferencePools(t *testing.T) {
 			},
 		},
 		{
-			name: "inferencepool backend with no namespace uses route namespace",
-			gws:  gws,
+			name:         "inferencepool backend with no namespace uses route namespace",
+			gws:          gws,
+			listenerSets: map[types.NamespacedName]*ListenerSet{},
 			routes: map[RouteKey]*L7Route{
 				CreateRouteKey(validRoute.Source): routeWithNoNamespaceBackend,
 			},
@@ -320,8 +343,9 @@ func TestBuildReferencedInferencePools(t *testing.T) {
 			},
 		},
 		{
-			name: "referenced inferencepool does not exist",
-			gws:  gws,
+			name:         "referenced inferencepool does not exist",
+			gws:          gws,
+			listenerSets: map[types.NamespacedName]*ListenerSet{},
 			routes: map[RouteKey]*L7Route{
 				CreateRouteKey(validRoute.Source): validRoute,
 			},
@@ -338,9 +362,10 @@ func TestBuildReferencedInferencePools(t *testing.T) {
 			},
 		},
 		{
-			name:     "inferencepool references invalid extensionRef and has invalid route",
-			gws:      gws,
-			services: validSvcMap,
+			name:         "inferencepool references invalid extensionRef and has invalid route",
+			gws:          gws,
+			services:     validSvcMap,
+			listenerSets: map[types.NamespacedName]*ListenerSet{},
 			routes: map[RouteKey]*L7Route{
 				CreateRouteKey(invalidRoute.Source): invalidRoute,
 			},
@@ -383,6 +408,96 @@ func TestBuildReferencedInferencePools(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "route with ListenerSet parentRef references inferencepool",
+			gws:  gws,
+			listenerSets: map[types.NamespacedName]*ListenerSet{
+				lsNsName: {
+					Source: &gatewayv1.ListenerSet{
+						ObjectMeta: metav1.ObjectMeta{
+							Namespace: "test",
+							Name:      "listener-set",
+						},
+						Spec: gatewayv1.ListenerSetSpec{
+							ParentRef: gatewayv1.ParentGatewayReference{
+								Namespace: helpers.GetPointer(gatewayv1.Namespace(gwNsName.Namespace)),
+								Name:      gatewayv1.ObjectName(gwNsName.Name),
+							},
+						},
+					},
+					Gateway: &gatewayv1.Gateway{
+						ObjectMeta: metav1.ObjectMeta{
+							Namespace: gwNsName.Namespace,
+							Name:      gwNsName.Name,
+						},
+					},
+				},
+			},
+			routes: map[RouteKey]*L7Route{
+				CreateRouteKey(validRoute.Source): routeWithListenerSetParentRefs,
+			},
+			inferencePools: map[types.NamespacedName]*inference.InferencePool{
+				{Name: "pool", Namespace: "test"}: {
+					ObjectMeta: metav1.ObjectMeta{Name: "pool", Namespace: "test"},
+					Spec: inference.InferencePoolSpec{
+						EndpointPickerRef: endpointPickerConfig,
+					},
+				},
+			},
+			services: validSvcMap,
+			expPools: map[types.NamespacedName]*ReferencedInferencePool{
+				{Name: "pool", Namespace: "test"}: {
+					Source: &inference.InferencePool{
+						ObjectMeta: metav1.ObjectMeta{Name: "pool", Namespace: "test"},
+						Spec: inference.InferencePoolSpec{
+							EndpointPickerRef: endpointPickerConfig,
+						},
+					},
+					Gateways: []*gatewayv1.Gateway{
+						gws[gwNsName].Source,
+					},
+					HTTPRoutes: []*L7Route{
+						routeWithListenerSetParentRefs,
+					},
+					Conditions: []conditions.Condition{},
+					Valid:      true,
+				},
+			},
+		},
+		{
+			name: "route with ListenerSet parentRef referencing non-existent gateway",
+			gws:  gws,
+			listenerSets: map[types.NamespacedName]*ListenerSet{
+				lsNsName: {
+					Source: &gatewayv1.ListenerSet{
+						ObjectMeta: metav1.ObjectMeta{
+							Namespace: "test",
+							Name:      "listener-set",
+						},
+						Spec: gatewayv1.ListenerSetSpec{
+							ParentRef: gatewayv1.ParentGatewayReference{
+								Namespace: helpers.GetPointer(gatewayv1.Namespace("non-existent")),
+								Name:      gatewayv1.ObjectName("non-existent-gw"),
+							},
+						},
+					},
+					Gateway: nil,
+				},
+			},
+			routes: map[RouteKey]*L7Route{
+				CreateRouteKey(validRoute.Source): routeWithListenerSetParentRefs,
+			},
+			inferencePools: map[types.NamespacedName]*inference.InferencePool{
+				{Name: "pool", Namespace: "test"}: {
+					ObjectMeta: metav1.ObjectMeta{Name: "pool", Namespace: "test"},
+					Spec: inference.InferencePoolSpec{
+						EndpointPickerRef: endpointPickerConfig,
+					},
+				},
+			},
+			services: validSvcMap,
+			expPools: nil,
+		},
 	}
 
 	for _, test := range tests {
@@ -390,7 +505,7 @@ func TestBuildReferencedInferencePools(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			pools := buildReferencedInferencePools(test.routes, test.gws, test.inferencePools, test.services)
+			pools := buildReferencedInferencePools(test.routes, test.gws, test.inferencePools, test.services, test.listenerSets)
 
 			g.Expect(helpers.Diff(test.expPools, pools)).To(BeEmpty())
 		})

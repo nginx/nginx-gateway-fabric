@@ -1385,8 +1385,25 @@ func TestValidateOIDCHTTPSListeners(t *testing.T) {
 		}
 	}
 
+	makeGatewayWithListenerSet := func(
+		nsname types.NamespacedName,
+		protocol v1.ProtocolType,
+		listenerSetName types.NamespacedName,
+	) *Gateway {
+		return &Gateway{
+			Source: &v1.Gateway{ObjectMeta: metav1.ObjectMeta{Name: nsname.Name, Namespace: nsname.Namespace}},
+			Listeners: []*Listener{
+				{
+					Name:            "listener",
+					ListenerSetName: listenerSetName,
+					Source:          v1.Listener{Protocol: protocol},
+				},
+			},
+		}
+	}
+
 	makeRouteWithProtocol := func(af *AuthenticationFilter, gwNSName types.NamespacedName) *L7Route {
-		listenerKey := CreateGatewayListenerKey(gwNSName, "listener")
+		listenerKey := CreateParentRefListenerKey(gwNSName, "listener")
 		return &L7Route{
 			Valid: true,
 			Spec: L7RouteSpec{
@@ -1402,6 +1419,35 @@ func TestValidateOIDCHTTPSListeners(t *testing.T) {
 				}},
 			},
 			ParentRefs: []ParentRef{{
+				Kind:           "Gateway",
+				NamespacedName: gwNSName,
+				Attachment: &ParentRefAttachmentStatus{
+					AcceptedHostnames: map[string][]string{listenerKey: {"cafe.example.com"}},
+					Attached:          true,
+				},
+			}},
+		}
+	}
+
+	makeRouteWithListenerSetProtocol := func(af *AuthenticationFilter, listenerSetNsName types.NamespacedName) *L7Route {
+		listenerKey := CreateParentRefListenerKey(listenerSetNsName, "listener")
+		return &L7Route{
+			Valid: true,
+			Spec: L7RouteSpec{
+				Rules: []RouteRule{{
+					ValidMatches: true,
+					Filters: RouteRuleFilters{
+						Filters: []Filter{{
+							FilterType:           FilterExtensionRef,
+							ResolvedExtensionRef: &ExtensionRefFilter{AuthenticationFilter: af, Valid: af.Valid},
+						}},
+						Valid: true,
+					},
+				}},
+			},
+			ParentRefs: []ParentRef{{
+				Kind:           "ListenerSet",
+				NamespacedName: listenerSetNsName,
 				Attachment: &ParentRefAttachmentStatus{
 					AcceptedHostnames: map[string][]string{listenerKey: {"cafe.example.com"}},
 					Attached:          true,
@@ -1470,7 +1516,7 @@ func TestValidateOIDCHTTPSListeners(t *testing.T) {
 				r := makeRouteWithProtocol(af, gwNSName)
 				// Empty hostnames means the listener didn't accept the route.
 				r.ParentRefs[0].Attachment.AcceptedHostnames = map[string][]string{
-					CreateGatewayListenerKey(gwNSName, "listener"): {},
+					CreateParentRefListenerKey(gwNSName, "listener"): {},
 				}
 				return map[RouteKey]*L7Route{
 						{NamespacedName: types.NamespacedName{Namespace: "ns", Name: "route"}, RouteType: RouteTypeHTTP}: r,
@@ -1499,6 +1545,38 @@ func TestValidateOIDCHTTPSListeners(t *testing.T) {
 						}: httpsRoute,
 					},
 					map[types.NamespacedName]*Gateway{httpGWNSName: httpGW, httpsGWNSName: httpsGW}
+			},
+			expFilterValid: false,
+			expConditions: []conditions.Condition{
+				conditions.NewAuthenticationFilterInvalid("OIDC authentication requires an HTTPS listener"),
+			},
+		},
+		{
+			name: "OIDC filter on route attached to HTTPS ListenerSet listener - valid, no condition added",
+			buildRouteAndGateway: func() (map[RouteKey]*L7Route, map[types.NamespacedName]*Gateway) {
+				af := createAuthenticationFilterWithOIDC(filterNsName, &ngfAPI.OIDCAuth{}, true)
+				listenerSetNsName := types.NamespacedName{Namespace: "test", Name: "listener-set"}
+				gw := makeGatewayWithListenerSet(gwNSName, v1.HTTPSProtocolType, listenerSetNsName)
+				r := makeRouteWithListenerSetProtocol(af, listenerSetNsName)
+				return map[RouteKey]*L7Route{
+						{NamespacedName: types.NamespacedName{Namespace: "ns", Name: "route"}, RouteType: RouteTypeHTTP}: r,
+					},
+					map[types.NamespacedName]*Gateway{gwNSName: gw}
+			},
+			expFilterValid: true,
+		},
+		{
+			name: "OIDC filter on route attached to HTTP ListenerSet listener - " +
+				"filter marked invalid with HTTPS required condition",
+			buildRouteAndGateway: func() (map[RouteKey]*L7Route, map[types.NamespacedName]*Gateway) {
+				af := createAuthenticationFilterWithOIDC(filterNsName, &ngfAPI.OIDCAuth{}, true)
+				listenerSetNsName := types.NamespacedName{Namespace: "test", Name: "listener-set"}
+				gw := makeGatewayWithListenerSet(gwNSName, v1.HTTPProtocolType, listenerSetNsName)
+				r := makeRouteWithListenerSetProtocol(af, listenerSetNsName)
+				return map[RouteKey]*L7Route{
+						{NamespacedName: types.NamespacedName{Namespace: "ns", Name: "route"}, RouteType: RouteTypeHTTP}: r,
+					},
+					map[types.NamespacedName]*Gateway{gwNSName: gw}
 			},
 			expFilterValid: false,
 			expConditions: []conditions.Condition{
@@ -1572,6 +1650,54 @@ func TestValidateOIDCURIConflictsPerHostname(t *testing.T) {
 					Attachment: &ParentRefAttachmentStatus{
 						AcceptedHostnames: map[string][]string{
 							"gateway/listener": {string(hostname)},
+						},
+						Attached: true,
+					},
+				},
+			},
+		}
+		return key, route
+	}
+
+	makeRouteWithListenerSet := func(
+		nsname types.NamespacedName,
+		hostname v1.Hostname,
+		listenerSetNsName types.NamespacedName,
+		filters ...*AuthenticationFilter,
+	) (RouteKey, *L7Route) {
+		rules := make([]RouteRule, len(filters))
+		for i, af := range filters {
+			rules[i] = RouteRule{
+				ValidMatches: true,
+				Filters: RouteRuleFilters{
+					Filters: []Filter{
+						{
+							FilterType: FilterExtensionRef,
+							ResolvedExtensionRef: &ExtensionRefFilter{
+								AuthenticationFilter: af,
+								Valid:                af.Valid,
+							},
+						},
+					},
+					Valid: true,
+				},
+			}
+		}
+		key := RouteKey{NamespacedName: nsname, RouteType: RouteTypeHTTP}
+		listenerKey := CreateParentRefListenerKey(listenerSetNsName, "listener")
+		route := &L7Route{
+			Valid: true,
+			Spec: L7RouteSpec{
+				Hostnames: []v1.Hostname{hostname},
+				Rules:     rules,
+			},
+			ParentRefs: []ParentRef{
+				{
+					Kind:           "ListenerSet",
+					NamespacedName: listenerSetNsName,
+					Attachment: &ParentRefAttachmentStatus{
+						AcceptedHostnames: map[string][]string{
+							listenerKey: {string(hostname)},
 						},
 						Attached: true,
 					},
@@ -1837,6 +1963,68 @@ func TestValidateOIDCURIConflictsPerHostname(t *testing.T) {
 			},
 			expAValid: true,
 			expBValid: true,
+		},
+		{
+			name: "two valid OIDC filters on the same hostname with ListenerSet listeners " +
+				"each with a unique logout URI - no conflict",
+			buildRoutes: func() map[RouteKey]*L7Route {
+				listenerSetANsName := types.NamespacedName{Namespace: "test", Name: "listener-set-a"}
+				listenerSetBNsName := types.NamespacedName{Namespace: "test", Name: "listener-set-b"}
+				filterA := createAuthenticationFilterWithOIDC(filterANsName, &ngfAPI.OIDCAuth{
+					Logout: &ngfAPI.OIDCLogoutConfig{URI: helpers.GetPointer("/logout-a")},
+				}, true)
+				filterB := createAuthenticationFilterWithOIDC(filterBNsName, &ngfAPI.OIDCAuth{
+					Logout: &ngfAPI.OIDCLogoutConfig{URI: helpers.GetPointer("/logout-b")},
+				}, true)
+				kA, rA := makeRouteWithListenerSet(
+					types.NamespacedName{Namespace: "ns", Name: "route-a"},
+					cafe,
+					listenerSetANsName,
+					filterA,
+				)
+				kB, rB := makeRouteWithListenerSet(
+					types.NamespacedName{Namespace: "ns", Name: "route-b"},
+					cafe,
+					listenerSetBNsName,
+					filterB,
+				)
+				return map[RouteKey]*L7Route{kA: rA, kB: rB}
+			},
+			expAValid: true,
+			expBValid: true,
+		},
+		{
+			name: "two valid OIDC filters on the same hostname with ListenerSet listeners with the same logout URI /logout " +
+				"a-ns/filter-a wins because it sorts first by namespace, b-ns/filter-b is marked invalid",
+			buildRoutes: func() map[RouteKey]*L7Route {
+				listenerSetNsName := types.NamespacedName{Namespace: "test", Name: "listener-set"}
+				filterA := createAuthenticationFilterWithOIDC(filterANsName, &ngfAPI.OIDCAuth{
+					Logout: &ngfAPI.OIDCLogoutConfig{URI: helpers.GetPointer("/logout")},
+				}, true)
+				filterB := createAuthenticationFilterWithOIDC(filterBNsName, &ngfAPI.OIDCAuth{
+					Logout: &ngfAPI.OIDCLogoutConfig{URI: helpers.GetPointer("/logout")},
+				}, true)
+				kA, rA := makeRouteWithListenerSet(
+					types.NamespacedName{Namespace: "ns", Name: "route-a"},
+					cafe,
+					listenerSetNsName,
+					filterA,
+				)
+				kB, rB := makeRouteWithListenerSet(
+					types.NamespacedName{Namespace: "ns", Name: "route-b"},
+					cafe,
+					listenerSetNsName,
+					filterB,
+				)
+				return map[RouteKey]*L7Route{kA: rA, kB: rB}
+			},
+			expAValid: true,
+			expBValid: false,
+			expBConditions: []conditions.Condition{
+				conditions.NewAuthenticationFilterInvalid(
+					`logout URI "/logout" conflicts with logout URI of OIDC filter a-ns/filter-a on hostname "cafe.example.com"`,
+				),
+			},
 		},
 	}
 

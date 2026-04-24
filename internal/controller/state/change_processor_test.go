@@ -57,11 +57,13 @@ func createHTTPRoute(
 			CommonRouteSpec: v1.CommonRouteSpec{
 				ParentRefs: []v1.ParentReference{
 					{
+						Kind:        (*v1.Kind)(helpers.GetPointer("Gateway")),
 						Namespace:   (*v1.Namespace)(helpers.GetPointer("test")),
 						Name:        v1.ObjectName(gateway),
 						SectionName: (*v1.SectionName)(helpers.GetPointer(httpListenerName)),
 					},
 					{
+						Kind:        (*v1.Kind)(helpers.GetPointer("Gateway")),
 						Namespace:   (*v1.Namespace)(helpers.GetPointer("test")),
 						Name:        v1.ObjectName(gateway),
 						SectionName: (*v1.SectionName)(helpers.GetPointer(httpsListenerName)),
@@ -104,11 +106,13 @@ func createGRPCRoute(
 			CommonRouteSpec: v1.CommonRouteSpec{
 				ParentRefs: []v1.ParentReference{
 					{
+						Kind:        (*v1.Kind)(helpers.GetPointer("Gateway")),
 						Namespace:   (*v1.Namespace)(helpers.GetPointer("test")),
 						Name:        v1.ObjectName(gateway),
 						SectionName: (*v1.SectionName)(helpers.GetPointer(httpListenerName)),
 					},
 					{
+						Kind:        (*v1.Kind)(helpers.GetPointer("Gateway")),
 						Namespace:   (*v1.Namespace)(helpers.GetPointer("test")),
 						Name:        v1.ObjectName(gateway),
 						SectionName: (*v1.SectionName)(helpers.GetPointer(httpsListenerName)),
@@ -147,6 +151,7 @@ func createTLSRoute(name, gateway, hostname string, backendRefs ...v1.BackendRef
 			CommonRouteSpec: v1.CommonRouteSpec{
 				ParentRefs: []v1.ParentReference{
 					{
+						Kind:        (*v1.Kind)(helpers.GetPointer("Gateway")),
 						Namespace:   (*v1.Namespace)(helpers.GetPointer("test")),
 						Name:        v1.ObjectName(gateway),
 						SectionName: (*v1.SectionName)(helpers.GetPointer(tlsListenerName)),
@@ -479,6 +484,23 @@ var _ = Describe("ChangeProcessor", func() {
 
 			processAndValidateGraph := func(expGraph *graph.Graph) {
 				graphCfg := processor.Process()
+
+				// Handle ListenerFactory separately due to complex internal structure
+				for gwNsName, expectedGW := range expGraph.Gateways {
+					actualGW := graphCfg.Gateways[gwNsName]
+
+					// Verify ListenerFactory status matches expected validity
+					if expectedGW.Valid {
+						Expect(actualGW.ListenerFactory).ToNot(BeNil(), "Expected non-nil ListenerFactory for valid gateway")
+					} else {
+						Expect(actualGW.ListenerFactory).To(BeNil(), "Expected nil ListenerFactory for invalid gateway")
+					}
+
+					// Set both to nil for graph comparison to avoid complex factory structure diffs
+					expectedGW.ListenerFactory = nil
+					actualGW.ListenerFactory = nil
+				}
+
 				Expect(helpers.Diff(expGraph, graphCfg)).To(BeEmpty())
 				Expect(helpers.Diff(expGraph, processor.GetLatestGraph())).To(BeEmpty())
 			}
@@ -538,7 +560,11 @@ var _ = Describe("ChangeProcessor", func() {
 				tr2 = createTLSRoute("tr-2", "gateway-2", "bar.tls.com", tlsBackendRef)
 				trKey2 = graph.CreateRouteKeyL4(tr2)
 
-				ls1 = createListenerSet("listenerset-1", "gateway-1", createHTTPListenerEntry())
+				ls1 = createListenerSet("listenerset-1", "gateway-1", v1.ListenerEntry{
+					Name:     "listener-8080-1",
+					Port:     8080,
+					Protocol: v1.HTTPProtocolType,
+				})
 				ls1Updated = ls1.DeepCopy()
 				ls1Updated.Generation++
 
@@ -716,9 +742,11 @@ var _ = Describe("ChangeProcessor", func() {
 					RouteType: graph.RouteTypeHTTP,
 					ParentRefs: []graph.ParentRef{
 						{
+							Kind:           "Gateway",
+							NamespacedName: client.ObjectKeyFromObject(gw1),
 							Attachment: &graph.ParentRefAttachmentStatus{
 								AcceptedHostnames: map[string][]string{
-									graph.CreateGatewayListenerKey(
+									graph.CreateParentRefListenerKey(
 										client.ObjectKeyFromObject(gw1),
 										httpListenerName,
 									): {"foo.example.com"},
@@ -732,9 +760,11 @@ var _ = Describe("ChangeProcessor", func() {
 							SectionName: hr1.Spec.ParentRefs[0].SectionName,
 						},
 						{
+							Kind:           "Gateway",
+							NamespacedName: client.ObjectKeyFromObject(gw1),
 							Attachment: &graph.ParentRefAttachmentStatus{
 								AcceptedHostnames: map[string][]string{
-									graph.CreateGatewayListenerKey(
+									graph.CreateParentRefListenerKey(
 										client.ObjectKeyFromObject(gw1),
 										httpsListenerName,
 									): {"foo.example.com"},
@@ -784,9 +814,11 @@ var _ = Describe("ChangeProcessor", func() {
 					RouteType: graph.RouteTypeHTTP,
 					ParentRefs: []graph.ParentRef{
 						{
+							Kind:           "Gateway",
+							NamespacedName: client.ObjectKeyFromObject(gw2),
 							Attachment: &graph.ParentRefAttachmentStatus{
 								AcceptedHostnames: map[string][]string{
-									graph.CreateGatewayListenerKey(
+									graph.CreateParentRefListenerKey(
 										client.ObjectKeyFromObject(gw2),
 										httpListenerName,
 									): {"bar.example.com"},
@@ -800,9 +832,11 @@ var _ = Describe("ChangeProcessor", func() {
 							SectionName: hr2.Spec.ParentRefs[0].SectionName,
 						},
 						{
+							Kind:           "Gateway",
+							NamespacedName: client.ObjectKeyFromObject(gw2),
 							Attachment: &graph.ParentRefAttachmentStatus{
 								AcceptedHostnames: map[string][]string{
-									graph.CreateGatewayListenerKey(
+									graph.CreateParentRefListenerKey(
 										client.ObjectKeyFromObject(gw2),
 										httpsListenerName,
 									): {"bar.example.com"},
@@ -852,9 +886,11 @@ var _ = Describe("ChangeProcessor", func() {
 					RouteType: graph.RouteTypeGRPC,
 					ParentRefs: []graph.ParentRef{
 						{
+							Kind:           "Gateway",
+							NamespacedName: client.ObjectKeyFromObject(gw1),
 							Attachment: &graph.ParentRefAttachmentStatus{
 								AcceptedHostnames: map[string][]string{
-									graph.CreateGatewayListenerKey(
+									graph.CreateParentRefListenerKey(
 										client.ObjectKeyFromObject(gw1),
 										httpListenerName,
 									): {"foo.example.com"},
@@ -868,9 +904,11 @@ var _ = Describe("ChangeProcessor", func() {
 							SectionName: gr1.Spec.ParentRefs[0].SectionName,
 						},
 						{
+							Kind:           "Gateway",
+							NamespacedName: client.ObjectKeyFromObject(gw1),
 							Attachment: &graph.ParentRefAttachmentStatus{
 								AcceptedHostnames: map[string][]string{
-									graph.CreateGatewayListenerKey(
+									graph.CreateParentRefListenerKey(
 										client.ObjectKeyFromObject(gw1),
 										httpsListenerName,
 									): {"foo.example.com"},
@@ -920,9 +958,11 @@ var _ = Describe("ChangeProcessor", func() {
 					RouteType: graph.RouteTypeGRPC,
 					ParentRefs: []graph.ParentRef{
 						{
+							Kind:           "Gateway",
+							NamespacedName: client.ObjectKeyFromObject(gw2),
 							Attachment: &graph.ParentRefAttachmentStatus{
 								AcceptedHostnames: map[string][]string{
-									graph.CreateGatewayListenerKey(
+									graph.CreateParentRefListenerKey(
 										client.ObjectKeyFromObject(gw2),
 										httpListenerName,
 									): {"bar.example.com"},
@@ -936,9 +976,11 @@ var _ = Describe("ChangeProcessor", func() {
 							SectionName: gr2.Spec.ParentRefs[0].SectionName,
 						},
 						{
+							Kind:           "Gateway",
+							NamespacedName: client.ObjectKeyFromObject(gw2),
 							Attachment: &graph.ParentRefAttachmentStatus{
 								AcceptedHostnames: map[string][]string{
-									graph.CreateGatewayListenerKey(
+									graph.CreateParentRefListenerKey(
 										client.ObjectKeyFromObject(gw2),
 										httpsListenerName,
 									): {"bar.example.com"},
@@ -988,9 +1030,11 @@ var _ = Describe("ChangeProcessor", func() {
 					RouteType: graph.RouteTypeTLS,
 					ParentRefs: []graph.ParentRef{
 						{
+							Kind:           "Gateway",
+							NamespacedName: client.ObjectKeyFromObject(gw1),
 							Attachment: &graph.ParentRefAttachmentStatus{
 								AcceptedHostnames: map[string][]string{
-									graph.CreateGatewayListenerKey(
+									graph.CreateParentRefListenerKey(
 										client.ObjectKeyFromObject(gw1),
 										tlsListenerName,
 									): {"foo.tls.com"},
@@ -1025,9 +1069,11 @@ var _ = Describe("ChangeProcessor", func() {
 					RouteType: graph.RouteTypeTLS,
 					ParentRefs: []graph.ParentRef{
 						{
+							Kind:           "Gateway",
+							NamespacedName: client.ObjectKeyFromObject(gw2),
 							Attachment: &graph.ParentRefAttachmentStatus{
 								AcceptedHostnames: map[string][]string{
-									graph.CreateGatewayListenerKey(
+									graph.CreateParentRefListenerKey(
 										client.ObjectKeyFromObject(gw2),
 										tlsListenerName,
 									): {"bar.tls.com"},
@@ -1067,6 +1113,34 @@ var _ = Describe("ChangeProcessor", func() {
 					Gateways: map[types.NamespacedName]*graph.Gateway{
 						{Namespace: "test", Name: "gateway-1"}: {
 							Source: gw1,
+							AttachedListenerSets: map[types.NamespacedName]*graph.ListenerSet{
+								{Namespace: ls1.Namespace, Name: ls1.Name}: {
+									Source:  ls1,
+									Gateway: gw1,
+									Listeners: []*graph.Listener{
+										{
+											Name:            "listener-8080-1",
+											GatewayName:     types.NamespacedName{Namespace: "test", Name: "gateway-1"},
+											ListenerSetName: types.NamespacedName{Namespace: "test", Name: "listenerset-1"},
+											Source: v1.Listener{
+												Name:     "listener-8080-1",
+												Port:     8080,
+												Protocol: v1.HTTPProtocolType,
+											},
+											Valid:      true,
+											Attachable: true,
+											Routes:     map[graph.RouteKey]*graph.L7Route{},
+											L4Routes:   map[graph.L4RouteKey]*graph.L4Route{},
+											SupportedKinds: []v1.RouteGroupKind{
+												{Kind: v1.Kind(kinds.HTTPRoute), Group: helpers.GetPointer[v1.Group](v1.GroupName)},
+												{Kind: v1.Kind(kinds.GRPCRoute), Group: helpers.GetPointer[v1.Group](v1.GroupName)},
+											},
+										},
+									},
+									Conditions: []conditions.Condition{conditions.NewListenerSetAccepted()},
+									Valid:      true,
+								},
+							},
 							Listeners: []*graph.Listener{
 								{
 									Name:        httpListenerName,
@@ -1105,6 +1179,24 @@ var _ = Describe("ChangeProcessor", func() {
 									L4Routes:    map[graph.L4RouteKey]*graph.L4Route{trKey1: expRouteTR1},
 									SupportedKinds: []v1.RouteGroupKind{
 										{Kind: v1.Kind(kinds.TLSRoute), Group: helpers.GetPointer[v1.Group](v1.GroupName)},
+									},
+								},
+								{
+									Name:            "listener-8080-1",
+									GatewayName:     types.NamespacedName{Namespace: "test", Name: "gateway-1"},
+									ListenerSetName: types.NamespacedName{Namespace: "test", Name: "listenerset-1"},
+									Source: v1.Listener{
+										Name:     "listener-8080-1",
+										Port:     8080,
+										Protocol: v1.HTTPProtocolType,
+									},
+									Valid:      true,
+									Attachable: true,
+									Routes:     map[graph.RouteKey]*graph.L7Route{},
+									L4Routes:   map[graph.L4RouteKey]*graph.L4Route{},
+									SupportedKinds: []v1.RouteGroupKind{
+										{Kind: v1.Kind(kinds.HTTPRoute), Group: helpers.GetPointer[v1.Group](v1.GroupName)},
+										{Kind: v1.Kind(kinds.GRPCRoute), Group: helpers.GetPointer[v1.Group](v1.GroupName)},
 									},
 								},
 							},
@@ -1136,13 +1228,18 @@ var _ = Describe("ChangeProcessor", func() {
 							Gateway: gw1,
 							Listeners: []*graph.Listener{
 								{
-									Name:        httpListenerName,
-									GatewayName: types.NamespacedName{Namespace: ls1.Namespace, Name: ls1.Name + "-validate"},
-									Source:      createHTTPListener(),
-									Valid:       true,
-									Attachable:  true,
-									Routes:      map[graph.RouteKey]*graph.L7Route{},
-									L4Routes:    map[graph.L4RouteKey]*graph.L4Route{},
+									Name:            "listener-8080-1",
+									GatewayName:     types.NamespacedName{Namespace: "test", Name: "gateway-1"},
+									ListenerSetName: types.NamespacedName{Namespace: "test", Name: "listenerset-1"},
+									Source: v1.Listener{
+										Name:     "listener-8080-1",
+										Port:     8080,
+										Protocol: v1.HTTPProtocolType,
+									},
+									Valid:      true,
+									Attachable: true,
+									Routes:     map[graph.RouteKey]*graph.L7Route{},
+									L4Routes:   map[graph.L4RouteKey]*graph.L4Route{},
 									SupportedKinds: []v1.RouteGroupKind{
 										{Kind: v1.Kind(kinds.HTTPRoute), Group: helpers.GetPointer[v1.Group](v1.GroupName)},
 										{Kind: v1.Kind(kinds.GRPCRoute), Group: helpers.GetPointer[v1.Group](v1.GroupName)},
@@ -1163,6 +1260,34 @@ var _ = Describe("ChangeProcessor", func() {
 					Gateways: map[types.NamespacedName]*graph.Gateway{
 						{Namespace: "test", Name: "gateway-1"}: {
 							Source: gw1,
+							AttachedListenerSets: map[types.NamespacedName]*graph.ListenerSet{
+								{Namespace: ls1.Namespace, Name: ls1.Name}: {
+									Source:  ls1,
+									Gateway: gw1,
+									Listeners: []*graph.Listener{
+										{
+											Name:            "listener-8080-1",
+											GatewayName:     types.NamespacedName{Namespace: "test", Name: "gateway-1"},
+											ListenerSetName: types.NamespacedName{Namespace: "test", Name: "listenerset-1"},
+											Source: v1.Listener{
+												Name:     "listener-8080-1",
+												Port:     8080,
+												Protocol: v1.HTTPProtocolType,
+											},
+											Valid:      true,
+											Attachable: true,
+											Routes:     map[graph.RouteKey]*graph.L7Route{},
+											L4Routes:   map[graph.L4RouteKey]*graph.L4Route{},
+											SupportedKinds: []v1.RouteGroupKind{
+												{Kind: v1.Kind(kinds.HTTPRoute), Group: helpers.GetPointer[v1.Group](v1.GroupName)},
+												{Kind: v1.Kind(kinds.GRPCRoute), Group: helpers.GetPointer[v1.Group](v1.GroupName)},
+											},
+										},
+									},
+									Conditions: []conditions.Condition{conditions.NewListenerSetAccepted()},
+									Valid:      true,
+								},
+							},
 							Listeners: []*graph.Listener{
 								{
 									Name:        httpListenerName,
@@ -1201,6 +1326,24 @@ var _ = Describe("ChangeProcessor", func() {
 									L4Routes:    map[graph.L4RouteKey]*graph.L4Route{trKey1: expRouteTR1},
 									SupportedKinds: []v1.RouteGroupKind{
 										{Kind: v1.Kind(kinds.TLSRoute), Group: helpers.GetPointer[v1.Group](v1.GroupName)},
+									},
+								},
+								{
+									Name:            "listener-8080-1",
+									GatewayName:     types.NamespacedName{Namespace: "test", Name: "gateway-1"},
+									ListenerSetName: types.NamespacedName{Namespace: "test", Name: "listenerset-1"},
+									Source: v1.Listener{
+										Name:     "listener-8080-1",
+										Port:     8080,
+										Protocol: v1.HTTPProtocolType,
+									},
+									Valid:      true,
+									Attachable: true,
+									Routes:     map[graph.RouteKey]*graph.L7Route{},
+									L4Routes:   map[graph.L4RouteKey]*graph.L4Route{},
+									SupportedKinds: []v1.RouteGroupKind{
+										{Kind: v1.Kind(kinds.HTTPRoute), Group: helpers.GetPointer[v1.Group](v1.GroupName)},
+										{Kind: v1.Kind(kinds.GRPCRoute), Group: helpers.GetPointer[v1.Group](v1.GroupName)},
 									},
 								},
 							},
@@ -1290,13 +1433,18 @@ var _ = Describe("ChangeProcessor", func() {
 							Gateway: gw1,
 							Listeners: []*graph.Listener{
 								{
-									Name:        httpListenerName,
-									GatewayName: types.NamespacedName{Namespace: ls1.Namespace, Name: ls1.Name + "-validate"},
-									Source:      createHTTPListener(),
-									Valid:       true,
-									Attachable:  true,
-									Routes:      map[graph.RouteKey]*graph.L7Route{},
-									L4Routes:    map[graph.L4RouteKey]*graph.L4Route{},
+									Name:            "listener-8080-1",
+									GatewayName:     types.NamespacedName{Namespace: "test", Name: "gateway-1"},
+									ListenerSetName: types.NamespacedName{Namespace: "test", Name: "listenerset-1"},
+									Source: v1.Listener{
+										Name:     "listener-8080-1",
+										Port:     8080,
+										Protocol: v1.HTTPProtocolType,
+									},
+									Valid:      true,
+									Attachable: true,
+									Routes:     map[graph.RouteKey]*graph.L7Route{},
+									L4Routes:   map[graph.L4RouteKey]*graph.L4Route{},
 									SupportedKinds: []v1.RouteGroupKind{
 										{Kind: v1.Kind(kinds.HTTPRoute), Group: helpers.GetPointer[v1.Group](v1.GroupName)},
 										{Kind: v1.Kind(kinds.GRPCRoute), Group: helpers.GetPointer[v1.Group](v1.GroupName)},
@@ -1372,6 +1520,7 @@ var _ = Describe("ChangeProcessor", func() {
 							gw.Conditions = conditions.NewGatewayInvalid("The GatewayClass doesn't exist")
 							gw.Valid = false
 							gw.Listeners = nil
+							gw.AttachedListenerSets = nil
 							// no ref grant exists yet for the routes
 							expGraph.Routes[httpRouteKey1].Conditions = []conditions.Condition{
 								conditions.NewRouteBackendRefRefNotPermitted(
@@ -1451,10 +1600,9 @@ var _ = Describe("ChangeProcessor", func() {
 					listener443.Conditions = conditions.NewListenerRefNotPermitted(
 						"Certificate ref to secret cert-ns/different-ns-tls-secret not permitted by any ReferenceGrant",
 					)
-
 					expAttachment80 := &graph.ParentRefAttachmentStatus{
 						AcceptedHostnames: map[string][]string{
-							graph.CreateGatewayListenerKey(
+							graph.CreateParentRefListenerKey(
 								client.ObjectKeyFromObject(gw1),
 								httpListenerName,
 							): {"foo.example.com"},
@@ -1465,7 +1613,7 @@ var _ = Describe("ChangeProcessor", func() {
 
 					expAttachment443 := &graph.ParentRefAttachmentStatus{
 						AcceptedHostnames: map[string][]string{
-							graph.CreateGatewayListenerKey(
+							graph.CreateParentRefListenerKey(
 								client.ObjectKeyFromObject(gw1),
 								httpsListenerName,
 							): {"foo.example.com"},

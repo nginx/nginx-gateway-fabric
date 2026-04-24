@@ -402,7 +402,12 @@ func buildListenerProtocolMap(gws map[types.NamespacedName]*Gateway) map[string]
 	protocols := make(map[string]v1.ProtocolType)
 	for gwNSName, gw := range gws {
 		for _, l := range gw.Listeners {
-			key := CreateGatewayListenerKey(gwNSName, l.Name)
+			var key string
+			if l.ListenerSetName.Name != "" {
+				key = CreateParentRefListenerKey(l.ListenerSetName, l.Name)
+			} else {
+				key = CreateParentRefListenerKey(gwNSName, l.Name)
+			}
 			protocols[key] = l.Source.Protocol
 		}
 	}

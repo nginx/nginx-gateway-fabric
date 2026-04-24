@@ -6,6 +6,7 @@ import (
 
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
@@ -1118,8 +1119,19 @@ func TestOverlappingTLSConfigCondition(t *testing.T) {
 			// Create mock resolvers
 			refGrantResolver := newReferenceGrantResolver(nil)
 
+			listenerFactory := newListenerConfiguratorFactory(
+				test.gateway,
+				&resolverfakes.FakeResolver{},
+				refGrantResolver,
+				protectedPorts,
+			)
 			// Build listeners
-			listeners := buildListeners(test.gateway, &resolverfakes.FakeResolver{}, refGrantResolver, protectedPorts)
+			listeners := buildListeners(
+				test.gateway.Spec.Listeners,
+				types.NamespacedName{Namespace: test.gateway.Namespace, Name: test.gateway.Name},
+				listenerFactory,
+				types.NamespacedName{},
+			)
 
 			if test.expectedCondition {
 				// Check that the expected listeners have the OverlappingTLSConfig condition
