@@ -596,6 +596,31 @@ func TestBuildEffectiveNginxProxy_WAF(t *testing.T) {
 			},
 		},
 		{
+			name: "gateway class enables WAF, gateway overrides only disableCookieSeed",
+			gcNp: &NginxProxy{
+				Valid: true,
+				Source: &ngfAPIv1alpha2.NginxProxy{
+					Spec: ngfAPIv1alpha2.NginxProxySpec{
+						WAF: &ngfAPIv1alpha2.WAFSpec{Enabled: helpers.GetPointer(true)},
+					},
+				},
+			},
+			gwNp: &NginxProxy{
+				Valid: true,
+				Source: &ngfAPIv1alpha2.NginxProxy{
+					Spec: ngfAPIv1alpha2.NginxProxySpec{
+						WAF: &ngfAPIv1alpha2.WAFSpec{DisableCookieSeed: helpers.GetPointer(true)},
+					},
+				},
+			},
+			exp: &EffectiveNginxProxy{
+				WAF: &ngfAPIv1alpha2.WAFSpec{
+					Enabled:           helpers.GetPointer(true),
+					DisableCookieSeed: helpers.GetPointer(true),
+				},
+			},
+		},
+		{
 			name: "both have WAF disabled",
 			gcNp: &NginxProxy{
 				Valid: true,
