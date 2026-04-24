@@ -169,119 +169,124 @@ The integration uses ephemeral volumes (emptyDir) for NAP v5's required shared s
 
 ```mermaid
 graph TB
-    subgraph "External Policy Management"
-        SecTeam[Security Team]
-        Compiler[NAP v5 Compiler<br/>CLI / CI-CD]
-        Store[Policy Store<br/>HTTP/HTTPS server]
-        NIM[NGINX Instance Manager<br/>NIM — author, compile, serve]
-        N1C[F5 NGINX One Console<br/>N1C — author, compile, serve]
-    end
-
-    subgraph "Kubernetes Cluster — PLM Components"
-        PLMController[PLM Policy Controller<br/>Watches APPolicy & APLogConf CRDs]
-        PLMCompiler[PLM Policy Compiler<br/>Job-based Compilation]
-        PLMStorage[PLM In-Cluster Storage<br/>S3-Compatible SeaweedFS]
-    end
-
-    subgraph "Kubernetes Cluster — NGF Components"
-        subgraph "nginx-gateway namespace"
-            NGFPod[NGF Pod<br/>Controllers + Policy Fetcher]
+    subgraph PolicySources["Policy Sources"]
+        direction LR
+        subgraph ExtHTTP["External: HTTP"]
+            Compiler[NAP v5 Compiler<br/>CLI / CI-CD]
+            Store[Policy Store<br/>HTTP/HTTPS server]
+            Compiler -->|Publish bundle| Store
         end
-        subgraph "applications namespace"
-            Gateway[Gateway]
-            HTTPRoute[HTTPRoute]
-            GRPCRoute[GRPCRoute]
-            Application[Application<br/>Backend Service]
-            NginxProxy[NginxProxy<br/>wafEnabled=true]
-            GatewayWAFPolicy[WAFPolicy<br/>Gateway-level]
-            RouteWAFPolicy[WAFPolicy<br/>Route-level Override]
-            Secret[Secret<br/>Auth credentials<br/>Optional]
-            APPolicy[APPolicy CRD<br/>PLM Policy Definition]
-            APLogConf[APLogConf CRD<br/>PLM Logging Config]
-            subgraph "NGINX Pod (Multi-Container when WAF enabled)"
-                direction TB
-                NGINXContainer[NGINX Container<br/>+ NAP Module]
-                WafEnforcer[WAF Enforcer<br/>Container]
-                WafConfigMgr[WAF Config Manager<br/>Container]
-                subgraph "Shared Volumes (Ephemeral)"
-                    PolicyVol[Policy Volume<br/>emptyDir]
-                    ConfigVol[Config Volume<br/>emptyDir]
-                end
-            end
+        NIM[NGINX Instance Manager<br/>NIM — author / compile / serve]
+        N1C[F5 NGINX One Console<br/>N1C — author / compile / serve]
+        subgraph InCluster["In-Cluster: PLM"]
+            APCRDs[APPolicy / APLogConf<br/>CRDs]
+            PLMCtrl[PLM Controller]
+            PLMComp[PLM Compiler]
+            PLMStore[SeaweedFS<br/>S3-compatible storage]
+            APCRDs -->|Watched| PLMCtrl
+            PLMCtrl -->|Triggers| PLMComp
+            PLMComp -->|Stores bundle| PLMStore
+            PLMCtrl -->|Updates status| APCRDs
         end
     end
 
-    PublicEndpoint[Public Endpoint<br/>Load Balancer]
-    Client[Client Traffic]
+    subgraph AppNs["applications namespace"]
+        Gateway[Gateway]
+        HTTPRoute[HTTPRoute]
+        GRPCRoute[GRPCRoute]
+        NginxProxy[NginxProxy<br/>waf.enabled=true]
+        GwWAF[WAFPolicy<br/>Gateway-level]
+        RtWAF[WAFPolicy<br/>Route override]
+        Secret[Secret<br/>Optional auth credentials]
+    end
 
-    SecTeam -->|Develop & compile| Compiler
-    Compiler -->|Publish bundle| Store
-    SecTeam -->|Author & compile via UI/API| NIM
-    SecTeam -->|Author & compile via UI/API| N1C
+    subgraph NgfNs["nginx-gateway namespace"]
+        NGFPod[NGF Pod<br/>Controllers + Policy Fetcher]
+    end
 
-    APPolicy -->|Watched by| PLMController
-    APLogConf -->|Watched by| PLMController
-    PLMController -->|Triggers| PLMCompiler
-    PLMCompiler -->|Stores bundles| PLMStorage
-    PLMController -->|Updates status with bundle location| APPolicy
-    PLMController -->|Updates status with bundle location| APLogConf
+    Handoff[[To Data Plane<br/>gRPC config + policy bundle]]
 
-    GatewayWAFPolicy -.->|Targets| Gateway
-    RouteWAFPolicy -.->|Targets| HTTPRoute
-    Gateway -->|Inherits Protection| HTTPRoute
-    Gateway -->|Inherits Protection| GRPCRoute
+    GwWAF -.->|Targets| Gateway
+    RtWAF -.->|Targets| HTTPRoute
+    Gateway -->|Inherits protection| HTTPRoute
+    Gateway -->|Inherits protection| GRPCRoute
     NginxProxy -.->|Enables WAF| Gateway
 
     NGFPod -->|Watches| NginxProxy
-    NGFPod -->|Watches| GatewayWAFPolicy
-    NGFPod -->|Watches| RouteWAFPolicy
-    NGFPod -->|HTTP: Fetches bundle| Store
-    NGFPod -->|NIM: Fetches bundle via API| NIM
-    NGFPod -->|N1C: Fetches bundle via API| N1C
-    NGFPod -.->|HTTP/NIM/N1C: Optional credentials| Secret
-    NGFPod -->|PLM: Watches APPolicy status| APPolicy
-    NGFPod -->|PLM: Watches APLogConf status| APLogConf
-    NGFPod -->|PLM: Fetches bundle via S3 API| PLMStorage
-    NGFPod ===|gRPC Config| NGINXContainer
-    NGFPod -->|Deploy Policy| PolicyVol
+    NGFPod -->|Watches| GwWAF
+    NGFPod -->|Watches| RtWAF
+    NGFPod -.->|Reads if needed| Secret
 
-    NGINXContainer <-->|Shared FS| PolicyVol
-    WafEnforcer <-->|Shared FS| PolicyVol
-    WafConfigMgr <-->|Shared FS| PolicyVol
-    WafConfigMgr <-->|Shared FS| ConfigVol
-    NGINXContainer <-->|Shared FS| ConfigVol
+    Store -->|HTTP fetch| NGFPod
+    NIM -->|API fetch| NGFPod
+    N1C -->|API fetch| NGFPod
+    PLMStore -->|S3 API fetch| NGFPod
+    APCRDs -.->|Status watched| NGFPod
 
-    Client ==>|HTTP/HTTPS/gRPC| PublicEndpoint
-    PublicEndpoint ==>|WAF Protected| NGINXContainer
-    NGINXContainer ==>|Filtered Traffic| Application
-    HTTPRoute -->|Attached to| Gateway
-    GRPCRoute -->|Attached to| Gateway
+    NGFPod ==> Handoff
 
-    classDef external fill:#e1f5fe,stroke:#01579b,stroke-width:2px
+    classDef source fill:#e1f5fe,stroke:#01579b,stroke-width:2px
     classDef plm fill:#e3f2fd,stroke:#1565c0,stroke-width:2px
-    classDef control fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
-    classDef gateway fill:#66CDAA,stroke:#333,stroke-width:2px
-    classDef wafRequired fill:#ffebee,stroke:#c62828,stroke-width:3px
-    classDef app fill:#fce4ec,stroke:#880e4f,stroke-width:2px
-    classDef volume fill:#f1f8e9,stroke:#33691e,stroke-width:2px
-    classDef endpoint fill:#FFD700,stroke:#333,stroke-width:2px
-    classDef optional fill:#f0f8ff,stroke:#4169e1,stroke-width:2px,stroke-dasharray: 5 5
+    classDef gw fill:#66CDAA,stroke:#333,stroke-width:2px
     classDef policy fill:#fff0e6,stroke:#d2691e,stroke-width:2px
     classDef crd fill:#f0f4c3,stroke:#827717,stroke-width:2px
-    classDef storage fill:#fff3e0,stroke:#e65100,stroke-width:2px
+    classDef control fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
+    classDef optional fill:#f0f8ff,stroke:#4169e1,stroke-width:2px,stroke-dasharray: 5 5
+    classDef handoff fill:#FFD700,stroke:#333,stroke-width:2px
 
-    class SecTeam,Compiler,Store,NIM,N1C external
-    class PLMController,PLMCompiler plm
-    class PLMStorage storage
+    class Compiler,Store,NIM,N1C source
+    class PLMCtrl,PLMComp,PLMStore plm
+    class APCRDs crd
+    class Gateway,HTTPRoute,GRPCRoute gw
+    class GwWAF,RtWAF,NginxProxy policy
     class NGFPod control
-    class Gateway,HTTPRoute,GRPCRoute gateway
-    class WafEnforcer,WafConfigMgr,NginxProxy wafRequired
-    class GatewayWAFPolicy,RouteWAFPolicy policy
-    class Application app
-    class PolicyVol,ConfigVol volume
-    class PublicEndpoint endpoint
     class Secret optional
-    class APPolicy,APLogConf crd
+    class Handoff handoff
+```
+
+```mermaid
+graph TB
+    Handoff[[From Control Plane<br/>NGF Pod]]
+
+    subgraph NginxPod["NGINX Pod — multi-container when WAF enabled"]
+        direction TB
+        subgraph NGINXContainer["NGINX Container"]
+            Agent[NGINX Agent<br/>gRPC endpoint]
+            NGINX[NGINX + NAP Module]
+        end
+        WafEnforcer[WAF Enforcer]
+        WafConfigMgr[WAF Config Manager]
+        SharedStorage[(Shared Storage<br/>emptyDir)]
+    end
+
+    Client[Client Traffic]
+    LB[Public Endpoint<br/>Load Balancer]
+    App[Application<br/>Backend Service]
+
+    Handoff ==>|gRPC: config + policy bundle| Agent
+    Agent -->|writes bundle| SharedStorage
+    Agent -->|reloads| NGINX
+    NGINX --- SharedStorage
+    WafEnforcer --- SharedStorage
+    WafConfigMgr --- SharedStorage
+
+    Client ==> LB ==> NGINX ==> App
+
+    classDef handoff fill:#FFD700,stroke:#333,stroke-width:2px
+    classDef agent fill:#ffe0b2,stroke:#e65100,stroke-width:2px
+    classDef waf fill:#ffebee,stroke:#c62828,stroke-width:3px
+    classDef storage fill:#f1f8e9,stroke:#33691e,stroke-width:2px
+    classDef endpoint fill:#FFD700,stroke:#333,stroke-width:2px
+    classDef app fill:#fce4ec,stroke:#880e4f,stroke-width:2px
+    classDef client fill:#f5f5f5,stroke:#424242,stroke-width:2px
+
+    class Handoff handoff
+    class Agent agent
+    class NGINX,WafEnforcer,WafConfigMgr waf
+    class SharedStorage storage
+    class LB endpoint
+    class App app
+    class Client client
 ```
 
 ### Network Access Requirements
@@ -581,7 +586,9 @@ metadata:
   name: nginx-proxy-waf
   namespace: nginx-gateway
 spec:
-  wafEnabled: true
+  waf:
+    enabled: true
+    # disableCookieSeed: false  # See note below
   # Optional container image overrides:
   # kubernetes:
   #   deployment:
@@ -599,6 +606,12 @@ spec:
   #           repository: private-registry.nginx.com/nap/waf-config-mgr
   #           tag: "5.12.0"
 ```
+
+#### Cookie Seed
+
+When WAF is enabled, NGF automatically sets the `app_protect_cookie_seed` NGINX directive to a stable value derived from the Gateway's UID. This ensures that WAF session cookies issued by one NGINX replica can be decrypted by any other replica in the same deployment — without this, each replica generates its own random seed at startup, causing cross-replica cookie validation failures.
+
+Set `waf.disableCookieSeed: true` if you have pre-compiled the cookie seed into your WAF policy bundles via the [compiler global settings](https://docs.nginx.com/waf/configure/compiler/#global-settings), to avoid the runtime directive conflicting with the compiled-in value.
 
 ### WAFPolicy Custom Resource
 
@@ -1388,7 +1401,8 @@ metadata:
   name: waf-enabled-proxy
   namespace: nginx-gateway
 spec:
-  wafEnabled: true
+  waf:
+    enabled: true
 ---
 # 3. Gateway
 apiVersion: gateway.networking.k8s.io/v1
@@ -1511,7 +1525,8 @@ metadata:
   name: waf-enabled-proxy
   namespace: nginx-gateway
 spec:
-  wafEnabled: true
+  waf:
+    enabled: true
 ---
 # 3. APPolicy CRD (managed by security team; compiled by PLM)
 apiVersion: waf.f5.com/v1alpha1
