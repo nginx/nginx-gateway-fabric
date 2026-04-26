@@ -76,6 +76,12 @@ type Configuration struct {
 	BaseHTTPConfig BaseHTTPConfig
 	// WorkerConnections specifies the maximum number of simultaneous connections that can be opened by a worker process.
 	WorkerConnections int32
+	// GatewayName is the name of the Gateway resource.
+	GatewayName string
+	// GatewayNamespace is the namespace of the Gateway resource.
+	GatewayNamespace string
+	// GatewayClassName is the name of the GatewayClass resource.
+	GatewayClassName string
 }
 
 // SSLKeyPairID is a unique identifier for a SSLKeyPair.

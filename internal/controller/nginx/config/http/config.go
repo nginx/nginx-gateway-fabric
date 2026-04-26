@@ -24,6 +24,12 @@ type Server struct {
 	IsDefaultSSL           bool
 	GRPC                   bool
 	IsSocket               bool
+	// GatewayName is the name of the Gateway resource.
+	GatewayName string
+	// GatewayNamespace is the namespace of the Gateway resource.
+	GatewayNamespace string
+	// GatewayClassName is the name of the GatewayClass resource.
+	GatewayClassName string
 }
 
 // MisdirectedRequestVars holds the per-port NGINX variable names used
@@ -98,6 +104,12 @@ type Location struct {
 	EPPPort int
 	// GRPC indicates if this location proxies gRPC traffic.
 	GRPC bool
+	// RouteName is the name of the HTTPRoute or GRPCRoute that this location is associated with.
+	RouteName string
+	// RouteNamespace is the namespace of the HTTPRoute or GRPCRoute.
+	RouteNamespace string
+	// StatusZone is the status_zone name for NGINX Plus per-route metrics.
+	StatusZone string
 }
 
 // Header defines an HTTP header to be passed to the proxied server.
