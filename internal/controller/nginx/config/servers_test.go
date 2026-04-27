@@ -6113,6 +6113,289 @@ func TestExecuteServers_OIDCAuth(t *testing.T) {
 	}
 }
 
+func TestExecuteServers_ExternalAuth(t *testing.T) {
+	t.Parallel()
+
+	backend := dataplane.BackendGroup{
+		Source:  types.NamespacedName{Namespace: "test", Name: "route1"},
+		RuleIdx: 0,
+		Backends: []dataplane.Backend{
+			{UpstreamName: "test_foo_80", Valid: true, Weight: 1},
+		},
+	}
+
+	tests := []struct {
+		name       string
+		expPresent []string
+		expAbsent  []string
+		conf       dataplane.Configuration
+	}{
+		{
+			name: "regular location with external auth emits auth_request and internal location",
+			conf: dataplane.Configuration{
+				HTTPServers: []dataplane.VirtualServer{
+					{
+						Hostname: "example.com",
+						Port:     8080,
+						PathRules: []dataplane.PathRule{
+							{
+								Path:     "/coffee",
+								PathType: dataplane.PathTypePrefix,
+								MatchRules: []dataplane.MatchRule{
+									{
+										Match:        dataplane.Match{},
+										BackendGroup: backend,
+										Filters: dataplane.HTTPFilters{
+											ExternalAuthFilter: &dataplane.HTTPExternalAuthFilter{
+												UpstreamName:           "default_ext-auth_80",
+												InternalPath:           "/_ngf-internal-ext-auth-test_route1_rule0",
+												PathPrefix:             "/check",
+												AllowedRequestHeaders:  []string{"X-Custom-Token"},
+												AllowedResponseHeaders: []string{"X-Auth-Status"},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expPresent: []string{
+				"auth_request /_ngf-internal-ext-auth-test_route1_rule0;",
+				`auth_request_set $ext_auth_response_x_auth_status $upstream_http_x_auth_status;`,
+				`proxy_set_header X-Auth-Status $ext_auth_response_x_auth_status;`,
+				"location /_ngf-internal-ext-auth-test_route1_rule0 {",
+				"internal;",
+				"proxy_pass http://default_ext-auth_80/check;",
+				`proxy_set_header Host "$host";`,
+				`proxy_set_header X-Original-URI "$request_uri";`,
+				`proxy_set_header X-Custom-Token "$http_x_custom_token";`,
+				"proxy_pass_request_body off;",
+				`proxy_set_header Content-Length "";`,
+			},
+			expAbsent: []string{
+				"client_max_body_size",
+				"proxy_pass_request_body on;",
+			},
+		},
+		{
+			name: "external auth with BTP emits https proxy_pass and ssl directives on internal location",
+			conf: dataplane.Configuration{
+				HTTPServers: []dataplane.VirtualServer{
+					{
+						Hostname: "example.com",
+						Port:     8080,
+						PathRules: []dataplane.PathRule{
+							{
+								Path:     "/coffee",
+								PathType: dataplane.PathTypePrefix,
+								MatchRules: []dataplane.MatchRule{
+									{
+										Match:        dataplane.Match{},
+										BackendGroup: backend,
+										Filters: dataplane.HTTPFilters{
+											ExternalAuthFilter: &dataplane.HTTPExternalAuthFilter{
+												UpstreamName: "default_ext-auth_443",
+												InternalPath: "/_ngf-internal-ext-auth-test_route1_rule0",
+												VerifyTLS: &dataplane.VerifyTLS{
+													Hostname:   "auth.example.com",
+													RootCAPath: "/etc/ssl/certs/ca.crt",
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expPresent: []string{
+				"auth_request /_ngf-internal-ext-auth-test_route1_rule0;",
+				"location /_ngf-internal-ext-auth-test_route1_rule0 {",
+				"proxy_pass https://default_ext-auth_443;",
+				"proxy_ssl_server_name on;",
+				"proxy_ssl_verify on;",
+				"proxy_ssl_name auth.example.com;",
+				"proxy_ssl_trusted_certificate /etc/ssl/certs/ca.crt;",
+			},
+		},
+		{
+			name: "external auth with forwardBody emits client_max_body_size and no proxy_pass_request_body directive",
+			conf: dataplane.Configuration{
+				HTTPServers: []dataplane.VirtualServer{
+					{
+						Hostname: "example.com",
+						Port:     8080,
+						PathRules: []dataplane.PathRule{
+							{
+								Path:     "/coffee",
+								PathType: dataplane.PathTypePrefix,
+								MatchRules: []dataplane.MatchRule{
+									{
+										Match:        dataplane.Match{},
+										BackendGroup: backend,
+										Filters: dataplane.HTTPFilters{
+											ExternalAuthFilter: &dataplane.HTTPExternalAuthFilter{
+												UpstreamName: "default_ext-auth_80",
+												InternalPath: "/_ngf-internal-ext-auth-test_route1_rule0",
+												ForwardBody:  true,
+												MaxBodySize:  512,
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expPresent: []string{
+				"client_max_body_size 512;",
+			},
+			expAbsent: []string{
+				`proxy_set_header Content-Length "";`,
+				"proxy_pass_request_body",
+			},
+		},
+		{
+			name: "external auth coexists with mirror filter on the same location",
+			conf: dataplane.Configuration{
+				HTTPServers: []dataplane.VirtualServer{
+					{
+						Hostname: "example.com",
+						Port:     8080,
+						PathRules: []dataplane.PathRule{
+							{
+								Path:     "/coffee",
+								PathType: dataplane.PathTypePrefix,
+								MatchRules: []dataplane.MatchRule{
+									{
+										Match:        dataplane.Match{},
+										BackendGroup: backend,
+										Filters: dataplane.HTTPFilters{
+											ExternalAuthFilter: &dataplane.HTTPExternalAuthFilter{
+												UpstreamName: "default_ext-auth_80",
+												InternalPath: "/_ngf-internal-ext-auth-test_route1_rule0",
+											},
+											RequestMirrors: []*dataplane.HTTPRequestMirrorFilter{
+												{
+													Name:      helpers.GetPointer("mirror-backend"),
+													Namespace: helpers.GetPointer("test"),
+													Target:    helpers.GetPointer("/_ngf-internal-mirror-test/mirror-backend-test/route1-0"),
+													Percent:   helpers.GetPointer(float64(100)),
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expPresent: []string{
+				"auth_request /_ngf-internal-ext-auth-test_route1_rule0;",
+				"mirror /_ngf-internal-mirror-test/mirror-backend-test/route1-0;",
+			},
+		},
+		{
+			name: "nil external auth filter results in no auth_request in location",
+			conf: dataplane.Configuration{
+				HTTPServers: []dataplane.VirtualServer{
+					{
+						Hostname: "example.com",
+						Port:     8080,
+						PathRules: []dataplane.PathRule{
+							{
+								Path:     "/coffee",
+								PathType: dataplane.PathTypePrefix,
+								MatchRules: []dataplane.MatchRule{
+									{
+										Match:        dataplane.Match{},
+										BackendGroup: backend,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expAbsent: []string{"auth_request", "proxy_pass_request_body"},
+		},
+		{
+			name: "two path rules where one has external auth and the other does not",
+			conf: dataplane.Configuration{
+				HTTPServers: []dataplane.VirtualServer{
+					{
+						Hostname: "example.com",
+						Port:     8080,
+						PathRules: []dataplane.PathRule{
+							{
+								Path:     "/protected",
+								PathType: dataplane.PathTypePrefix,
+								MatchRules: []dataplane.MatchRule{
+									{
+										Match:        dataplane.Match{},
+										BackendGroup: backend,
+										Filters: dataplane.HTTPFilters{
+											ExternalAuthFilter: &dataplane.HTTPExternalAuthFilter{
+												UpstreamName: "default_ext-auth_80",
+												InternalPath: "/_ngf-internal-ext-auth-test_route1_rule0",
+											},
+										},
+									},
+								},
+							},
+							{
+								Path:     "/public",
+								PathType: dataplane.PathTypePrefix,
+								MatchRules: []dataplane.MatchRule{
+									{
+										Match:        dataplane.Match{},
+										BackendGroup: backend,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expPresent: []string{
+				"location /protected",
+				"auth_request /_ngf-internal-ext-auth-test_route1_rule0;",
+				"location /public",
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			gen := GeneratorImpl{}
+			results := gen.executeServers(test.conf, &policiesfakes.FakeGenerator{}, alwaysFalseKeepAliveChecker)
+
+			var httpData string
+			for _, res := range results {
+				if res.dest == httpConfigFile {
+					httpData = string(res.data)
+					break
+				}
+			}
+
+			for _, sub := range test.expPresent {
+				g.Expect(httpData).To(ContainSubstring(sub))
+			}
+			for _, absent := range test.expAbsent {
+				g.Expect(httpData).NotTo(ContainSubstring(absent))
+			}
+		})
+	}
+}
+
 func TestOIDCCallbackLocation(t *testing.T) {
 	t.Parallel()
 
@@ -6782,6 +7065,248 @@ func TestExistingExactPathSet(t *testing.T) {
 				keys = append(keys, k)
 			}
 			g.Expect(keys).To(ConsistOf(test.expPaths))
+		})
+	}
+}
+
+func TestUpdateLocationExternalAuthFilter(t *testing.T) {
+	t.Parallel()
+
+	baseLocation := http.Location{
+		Path: "/coffee",
+		Type: http.ExternalLocationType,
+	}
+
+	tests := []struct {
+		filter   *dataplane.HTTPExternalAuthFilter
+		name     string
+		expected http.Location
+	}{
+		{
+			name:     "nil external auth filter returns location unchanged",
+			filter:   nil,
+			expected: baseLocation,
+		},
+		{
+			name: "basic external auth filter without forwardBody",
+			filter: &dataplane.HTTPExternalAuthFilter{
+				UpstreamName:           "default_ext-auth_80",
+				InternalPath:           "/_ngf-internal-ext-auth-default_route_rule0",
+				PathPrefix:             "/auth",
+				AllowedRequestHeaders:  []string{"X-Custom-Token"},
+				AllowedResponseHeaders: []string{"X-Auth-Status"},
+			},
+			expected: http.Location{
+				Path: "/coffee",
+				Type: http.ExternalLocationType,
+				AuthExternalRequest: &http.AuthExternalRequest{
+					InternalPath:           "/_ngf-internal-ext-auth-default_route_rule0",
+					UpstreamName:           "default_ext-auth_80",
+					PathPrefix:             "/auth",
+					AllowedRequestHeaders:  []string{"X-Custom-Token"},
+					AllowedResponseHeaders: []string{"X-Auth-Status"},
+				},
+			},
+		},
+		{
+			name: "external auth filter with forwardBody sets ClientMaxBodySize",
+			filter: &dataplane.HTTPExternalAuthFilter{
+				UpstreamName: "default_ext-auth_80",
+				InternalPath: "/_ngf-internal-ext-auth-default_route_rule0",
+				ForwardBody:  true,
+				MaxBodySize:  512,
+			},
+			expected: http.Location{
+				Path: "/coffee",
+				Type: http.ExternalLocationType,
+				AuthExternalRequest: &http.AuthExternalRequest{
+					InternalPath: "/_ngf-internal-ext-auth-default_route_rule0",
+					UpstreamName: "default_ext-auth_80",
+					ForwardBody:  true,
+				},
+				ClientMaxBodySize: 512,
+			},
+		},
+		{
+			name: "external auth filter with BackendTLSPolicy sets ProxySSLVerify",
+			filter: &dataplane.HTTPExternalAuthFilter{
+				UpstreamName: "default_ext-auth_80",
+				InternalPath: "/_ngf-internal-ext-auth-default_route_rule0",
+				VerifyTLS: &dataplane.VerifyTLS{
+					Hostname:   "auth.example.com",
+					RootCAPath: "/etc/ssl/certs/ca-certificates.crt",
+				},
+			},
+			expected: http.Location{
+				Path: "/coffee",
+				Type: http.ExternalLocationType,
+				AuthExternalRequest: &http.AuthExternalRequest{
+					InternalPath: "/_ngf-internal-ext-auth-default_route_rule0",
+					UpstreamName: "default_ext-auth_80",
+					ProxySSLVerify: &http.ProxySSLVerify{
+						Name:               "auth.example.com",
+						TrustedCertificate: "/etc/ssl/certs/ca-certificates.crt",
+					},
+				},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			result := updateLocationExternalAuthFilter(baseLocation, test.filter)
+			g.Expect(result).To(Equal(test.expected))
+		})
+	}
+}
+
+//nolint:gosec
+func TestExtractExternalAuthInternalLocations(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		locations []http.Location
+		expected  []http.Location
+	}{
+		{
+			name: "no locations with external auth returns empty",
+			locations: []http.Location{
+				{Path: "/coffee", Type: http.ExternalLocationType},
+			},
+			expected: nil,
+		},
+		{
+			name: "generates internal location for external auth with body forwarding off",
+			locations: []http.Location{
+				{
+					Path: "/coffee",
+					Type: http.ExternalLocationType,
+					AuthExternalRequest: &http.AuthExternalRequest{
+						InternalPath:          "/_ngf-internal-ext-auth-default_route_rule0",
+						UpstreamName:          "default_ext-auth_80",
+						PathPrefix:            "/check",
+						AllowedRequestHeaders: []string{"X-Custom-Token"},
+					},
+				},
+			},
+			expected: []http.Location{
+				{
+					Path:      "/_ngf-internal-ext-auth-default_route_rule0",
+					Type:      http.InternalLocationType,
+					ProxyPass: "http://default_ext-auth_80/check",
+					ProxySetHeaders: []http.Header{
+						{Name: "Host", Value: "$host"},
+						{Name: "X-Original-URI", Value: "$request_uri"},
+						{Name: "X-Custom-Token", Value: "$http_x_custom_token"},
+					},
+					ProxyPassRequestBody: "off",
+				},
+			},
+		},
+		{
+			name: "generates internal location with body forwarding on",
+			locations: []http.Location{
+				{
+					Path: "/coffee",
+					Type: http.ExternalLocationType,
+					AuthExternalRequest: &http.AuthExternalRequest{
+						InternalPath: "/_ngf-internal-ext-auth-default_route_rule0",
+						UpstreamName: "default_ext-auth_80",
+						ForwardBody:  true,
+					},
+				},
+			},
+			expected: []http.Location{
+				{
+					Path:      "/_ngf-internal-ext-auth-default_route_rule0",
+					Type:      http.InternalLocationType,
+					ProxyPass: "http://default_ext-auth_80",
+					ProxySetHeaders: []http.Header{
+						{Name: "Host", Value: "$host"},
+						{Name: "X-Original-URI", Value: "$request_uri"},
+					},
+				},
+			},
+		},
+		{
+			name: "generates https internal location when ProxySSLVerify is set",
+			locations: []http.Location{
+				{
+					Path: "/coffee",
+					Type: http.ExternalLocationType,
+					AuthExternalRequest: &http.AuthExternalRequest{
+						InternalPath: "/_ngf-internal-ext-auth-default_route_rule0",
+						UpstreamName: "default_ext-auth_443",
+						ProxySSLVerify: &http.ProxySSLVerify{
+							Name:               "auth.example.com",
+							TrustedCertificate: "/etc/nginx/certs/ca.crt",
+						},
+					},
+				},
+			},
+			expected: []http.Location{
+				{
+					Path:      "/_ngf-internal-ext-auth-default_route_rule0",
+					Type:      http.InternalLocationType,
+					ProxyPass: "https://default_ext-auth_443",
+					ProxySetHeaders: []http.Header{
+						{Name: "Host", Value: "$host"},
+						{Name: "X-Original-URI", Value: "$request_uri"},
+					},
+					ProxyPassRequestBody: "off",
+					ProxySSLVerify: &http.ProxySSLVerify{
+						Name:               "auth.example.com",
+						TrustedCertificate: "/etc/nginx/certs/ca.crt",
+					},
+				},
+			},
+		},
+		{
+			name: "deduplicates internal locations with same path",
+			locations: []http.Location{
+				{
+					Path: "/coffee",
+					Type: http.ExternalLocationType,
+					AuthExternalRequest: &http.AuthExternalRequest{
+						InternalPath: "/_ngf-internal-ext-auth-default_route_rule0",
+						UpstreamName: "default_ext-auth_80",
+					},
+				},
+				{
+					Path: "/tea",
+					Type: http.ExternalLocationType,
+					AuthExternalRequest: &http.AuthExternalRequest{
+						InternalPath: "/_ngf-internal-ext-auth-default_route_rule0",
+						UpstreamName: "default_ext-auth_80",
+					},
+				},
+			},
+			expected: []http.Location{
+				{
+					Path:      "/_ngf-internal-ext-auth-default_route_rule0",
+					Type:      http.InternalLocationType,
+					ProxyPass: "http://default_ext-auth_80",
+					ProxySetHeaders: []http.Header{
+						{Name: "Host", Value: "$host"},
+						{Name: "X-Original-URI", Value: "$request_uri"},
+					},
+					ProxyPassRequestBody: "off",
+				},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			result := extractExternalAuthInternalLocations(test.locations)
+			g.Expect(result).To(Equal(test.expected))
 		})
 	}
 }

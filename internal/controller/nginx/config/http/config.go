@@ -62,12 +62,14 @@ type Location struct {
 	Return *Return
 	// ProxySSLVerify controls SSL verification for upstreams when proxying requests.
 	ProxySSLVerify *ProxySSLVerify
-	// ProxyPass is the upstream backend (URL or name) to which requests are proxied.
-	ProxyPass string
-	// CORSHeaders are the CORS headers to be added for this location.
-	CORSHeaders []Header
-	// HTTPMatchKey is the key for associating HTTP match rules, used for routing and NJS module logic.
-	HTTPMatchKey string
+	// AuthExternalRequest holds external auth (auth_request) configuration.
+	AuthExternalRequest *AuthExternalRequest
+	// AuthJWT contains the configuration for JWT authentication.
+	AuthJWT *AuthJWT
+	// AuthBasic contains the configuration for basic authentication.
+	AuthBasic *AuthBasic
+	// ProxyPassRequestBody is "on" or "off" for the proxy_pass_request_body directive. Empty means don't emit.
+	ProxyPassRequestBody string
 	// MirrorSplitClientsVariableName is the variable name for split_clients, used in traffic mirroring scenarios.
 	MirrorSplitClientsVariableName string
 	// EPPInternalPath is the internal path for the inference NJS module to redirect to.
@@ -78,10 +80,10 @@ type Location struct {
 	Type LocationType
 	// Path is the NGINX location path.
 	Path string
-	// AuthBasic contains the configuration for basic authentication.
-	AuthBasic *AuthBasic
-	// AuthJWT contains the configuration for JWT authentication.
-	AuthJWT *AuthJWT
+	// HTTPMatchKey is the key for associating HTTP match rules, used for routing and NJS module logic.
+	HTTPMatchKey string
+	// ProxyPass is the upstream backend (URL or name) to which requests are proxied.
+	ProxyPass string
 	// AuthOIDCProviderName is the name of the oidc_provider to be referenced in this location.
 	AuthOIDCProviderName string
 	// ResponseHeaders are custom response headers to be sent.
@@ -94,10 +96,33 @@ type Location struct {
 	MirrorPaths []string
 	// Includes are additional NGINX config snippets or policies to include in this location.
 	Includes []shared.Include
+	// CORSHeaders are the CORS headers to be added for this location.
+	CORSHeaders []Header
 	// EPPPort is the port for the EndpointPicker, used for inference routing.
 	EPPPort int
+	// ClientMaxBodySize, when non-zero, emits `client_max_body_size` for this location.
+	// This is used in external auth scenarios to limit the size of the request body that is sent to the auth server.
+	ClientMaxBodySize uint16
 	// GRPC indicates if this location proxies gRPC traffic.
 	GRPC bool
+}
+
+// AuthExternalRequest holds the auth_request configuration for a location.
+type AuthExternalRequest struct {
+	// ProxySSLVerify holds TLS verification config for the auth backend.
+	ProxySSLVerify *ProxySSLVerify
+	// InternalPath is the auth subrequest location path.
+	InternalPath string
+	// UpstreamName is the upstream to proxy_pass to in the internal location.
+	UpstreamName string
+	// PathPrefix is an optional path prefix forwarded to the auth server.
+	PathPrefix string
+	// AllowedRequestHeaders are extra headers to proxy_set_header to the auth server.
+	AllowedRequestHeaders []string
+	// AllowedResponseHeaders are headers to copy from auth response via auth_request_set.
+	AllowedResponseHeaders []string
+	// ForwardBody, if true, enables proxy_pass_request_body in the internal location.
+	ForwardBody bool
 }
 
 // Header defines an HTTP header to be passed to the proxied server.

@@ -10,6 +10,7 @@ import (
 	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
+	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/http"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/mirror"
@@ -248,17 +249,25 @@ func processHTTPRouteRule(
 
 	if routeFilters.Valid {
 		for i, filter := range routeFilters.Filters {
-			if filter.RequestMirror == nil {
-				continue
+			if filter.RequestMirror != nil {
+				rbr := RouteBackendRef{
+					BackendRef: v1.BackendRef{
+						BackendObjectReference: filter.RequestMirror.BackendRef,
+					},
+					MirrorBackendIdx: helpers.GetPointer(i),
+				}
+				backendRefs = append(backendRefs, rbr)
 			}
 
-			rbr := RouteBackendRef{
-				BackendRef: v1.BackendRef{
-					BackendObjectReference: filter.RequestMirror.BackendRef,
-				},
-				MirrorBackendIdx: helpers.GetPointer(i),
+			if filter.ExternalAuth != nil {
+				rbr := RouteBackendRef{
+					BackendRef: v1.BackendRef{
+						BackendObjectReference: filter.ExternalAuth.BackendRef,
+					},
+					ExternalAuthBackendIdx: helpers.GetPointer(i),
+				}
+				backendRefs = append(backendRefs, rbr)
 			}
-			backendRefs = append(backendRefs, rbr)
 		}
 	}
 
@@ -696,6 +705,17 @@ func checkForUnsupportedHTTPFields(
 		))
 	}
 
+	if !featureFlags.Experimental {
+		for i, filter := range rule.Filters {
+			if filter.Type == v1.HTTPRouteFilterExternalAuth {
+				ruleErrors = append(ruleErrors, field.Forbidden(
+					rulePath.Child("filters").Index(i),
+					"ExternalAuth filter requires experimental features to be enabled",
+				))
+			}
+		}
+	}
+
 	if len(ruleErrors) == 0 {
 		return nil
 	}
@@ -726,4 +746,46 @@ func checkForMixedBackendTypes(
 	}
 
 	return false
+}
+
+// validateExternalAuthConflicts checks all route rules for conflicts between an ExternalAuth filter
+// that has forwardBody.maxSize set and a ClientSettingsPolicy that also sets body.maxSize on the same route.
+// Both directives would emit client_max_body_size on the same location, so we invalidate the rule.
+func validateExternalAuthConflicts(routes map[RouteKey]*L7Route) {
+	for _, route := range routes {
+		for ruleIdx, rule := range route.Spec.Rules {
+			if !rule.Filters.Valid {
+				continue
+			}
+
+			hasExternalAuthWithBody := false
+			for _, f := range rule.Filters.Filters {
+				if f.FilterType == FilterExternalAuth &&
+					f.ExternalAuth != nil &&
+					f.ExternalAuth.ForwardBody != nil &&
+					f.ExternalAuth.ForwardBody.MaxSize > 0 {
+					hasExternalAuthWithBody = true
+					break
+				}
+			}
+			if !hasExternalAuthWithBody {
+				continue
+			}
+
+			for _, pol := range route.Policies {
+				csp, ok := pol.Source.(*ngfAPI.ClientSettingsPolicy)
+				if !pol.Valid || !ok || csp.Spec.Body == nil || csp.Spec.Body.MaxSize == nil {
+					continue
+				}
+
+				route.Spec.Rules[ruleIdx].Filters.Valid = false
+				msg := fmt.Sprintf(
+					"ExternalAuth forwardBody.maxSize conflicts with ClientSettingsPolicy %s/%s body.maxSize",
+					csp.Namespace, csp.Name,
+				)
+				mergeOrAppendRouteCondition(route, conditions.NewRouteResolvedRefsInvalidFilter(msg))
+				break
+			}
+		}
+	}
 }
