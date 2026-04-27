@@ -6810,11 +6810,11 @@ func TestBuildHTTPSSLFrontendTLS(t *testing.T) {
 			ssl: &dataplane.SSL{
 				KeyPairIDs:          []dataplane.SSLKeyPairID{"test-keypair"},
 				ClientCertBundleID:  dataplane.CertBundleID("test-ca-bundle"),
-				VerifyClient:        "optional_no_ca",
+				VerifyClient:        dataplane.SSLVerifyClientOn,
 				RequireVerifiedCert: true,
 			},
 			expectedClientCertificate: generateCertBundleFileName(dataplane.CertBundleID("test-ca-bundle")),
-			expectedVerifyClient:      "optional_no_ca",
+			expectedVerifyClient:      string(dataplane.SSLVerifyClientOn),
 			expectedRequireVerified:   true,
 		},
 	}
