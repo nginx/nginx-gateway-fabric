@@ -485,7 +485,7 @@ func buildFrontendTLSCertBundles(
 			),
 		}
 		id := generateCertBundleID(caCertRef)
-		// We map listener port to the CertBundeID and ValidationMode of this listener
+		// We map listener port to the CertBundleID and ValidationMode of this listener
 		// to later configure the relevant SSL Servers with this data.
 		// This avoids iterating over each SSL Server for each Listener.
 		clientSettingsMap[listener.Source.Port] = listenerClientSettings{

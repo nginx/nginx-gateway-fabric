@@ -801,14 +801,14 @@ func createFrontendTLSCaCertReferenceResolver(
 		var fieldPath *field.Path
 		perPortMatch := false
 
-		for _, port := range frontend.PerPort {
+		for i, port := range frontend.PerPort {
 			if port.TLS.Validation == nil || len(port.TLS.Validation.CACertificateRefs) == 0 {
 				continue
 			}
 			if port.Port == l.Source.Port {
 				caCertRefs = port.TLS.Validation.CACertificateRefs
 				validationMode = port.TLS.Validation.Mode
-				fieldPath = field.NewPath("spec", "tls", "frontend", "perPort", "validation")
+				fieldPath = field.NewPath("spec", "tls", "frontend", "perPort").Index(i).Child("tls", "validation")
 				perPortMatch = true
 				break
 			}
@@ -941,7 +941,7 @@ func createOverlappingTLSConfigResolver() listenerConflictResolver {
 
 // validateFrontendTLS validates and resolves the CA certificate references
 // for a listener configured with frontend TLS.
-// Returns conditions related to invalid CA certificate references and a list of valid CA certificate references.
+// Returns conditions related to invalid CA certificate references.
 func validateFrontendTLS(
 	gw *Gateway,
 	listener *Listener,
