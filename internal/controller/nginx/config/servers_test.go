@@ -7015,3 +7015,38 @@ func TestExecuteServers_FrontendTLS(t *testing.T) {
 		})
 	}
 }
+
+//nolint:gosec // Tests with mock SSL/TLS configuration data, not real credentials.
+func TestExecuteServers_CORSOptionsShortCircuitPrecedesRewrite(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	serverConfig := http.ServerConfig{
+		Servers: []http.Server{
+			{
+				ServerName: "cafe.example.com",
+				Listen:     "8080",
+				Locations: []http.Location{
+					{
+						Path:      "/api/",
+						Type:      http.ExternalLocationType,
+						ProxyPass: "http://test_coffee_80$request_uri",
+						Rewrites:  []string{"^/api(?:/([^?]*))? /$1?$args? break"},
+						CORSHeaders: []http.Header{
+							{Name: "Access-Control-Allow-Origin", Value: "$cors_allowed_origin_server0_path0_match0"},
+							{Name: "Access-Control-Allow-Methods", Value: "GET, POST"},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	rendered := string(helpers.MustExecuteTemplate(serversTemplate, serverConfig))
+
+	optionsIdx := strings.Index(rendered, "if ($request_method = OPTIONS)")
+	rewriteIdx := strings.Index(rendered, "rewrite ^/api")
+
+	g.Expect(optionsIdx).To(BeNumerically(">=", 0))
+	g.Expect(rewriteIdx).To(BeNumerically(">", optionsIdx))
+}
