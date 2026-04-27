@@ -49,7 +49,9 @@ func (s *secretEntry) validate(obj client.Object) {
 		// for optional root certificate authority
 		if _, exists := secret.Data[secrets.CAKey]; exists {
 			cert.CACert = secret.Data[secrets.CAKey]
-			validationErr = secrets.ValidateCA(cert.CACert)
+			if validationErr == nil {
+				validationErr = secrets.ValidateCA(cert.CACert)
+			}
 		} else if s.expectedKey == secrets.CAKey {
 			// For Frontend TLS, we need to ensure the ca.crt key exists
 			// as TLS secrets are considered valid by default without a CA certificate.
