@@ -26,7 +26,7 @@ The `NIM`, `N1C`, and `HTTP` source types use GitOps-friendly static policy refe
 - Design WAFPolicy custom resource using inherited policy attachment for hierarchical WAF configuration
 - Define deployment workflows that accommodate NAP v5's external policy compilation requirements
 - Provide secure and automated policy distribution from external sources (HTTP/HTTPS, NIM, F5 NGINX One Console) and from PLM in-cluster storage
-- Support GitOps workflows with static policy file references and automatic change detection via polling (HTTP/NIM/N1C)
+- Support GitOps workflows with static compiled bundle references and automatic change detection via polling (HTTP/NIM/N1C)
 - Support Kubernetes-native policy lifecycle management via PLM CRD references with event-driven updates (PLM)
 - Design a complete polling mechanism for periodic bundle change detection using checksum comparison
 - Design a retry policy for transient fetch failures during initial policy acquisition
@@ -42,7 +42,7 @@ The `NIM`, `N1C`, and `HTTP` source types use GitOps-friendly static policy refe
 - Supporting NGINX OSS (F5 WAF  does not require NGINX Plus, but OSS support is out of scope at this time)
 - Real-time policy editing interfaces
 - Policy version management system
-- Persistent storage management for policy files
+- Persistent storage management for compiled bundle files
 - Native cloud authentication (IRSA, Workload Identity, GCP WI) is out of scope at this time — only HTTP Basic Auth and Bearer Token are supported for HTTP/NIM/N1C
 - Managing PLM controller deployment and lifecycle (handled by PLM team)
 
@@ -60,6 +60,17 @@ Containerized F5 WAF for NGINX imposes specific architectural requirements that 
 
 This proposal provides the best possible Kubernetes-native experience while respecting the above constraints, abstracting complexity from end users where possible while maintaining operational flexibility for enterprise environments. The design uses Gateway API's inherited policy attachment pattern to provide intuitive hierarchical security with the ability to override policies at more specific levels.
 
+### Terminology
+
+The following terms are used consistently throughout this document:
+
+| Term              | Meaning                                                                                               |
+|-------------------|-------------------------------------------------------------------------------------------------------|
+| Policy definition | The JSON file authored by the user specifying the WAF security posture                                |
+| Compiled bundle   | The `.tgz` artifact produced by the NAP v5 compiler, consumable by the WAF engine                     |
+| Policy source     | Where NGF fetches compiled bundles from (HTTP server, NIM, N1C, or PLM storage)                       |
+| WAFPolicy         | The Kubernetes CRD that tells NGF where to fetch a compiled bundle and which Gateway/Route to protect |
+
 ### WAFPolicy Structure
 
 The `WAFPolicy` spec is organised around a single `type` discriminator at the top level. All policy source configuration — whether a remote URL, a managed platform reference, or a PLM CRD reference — lives inside `policySource`. Similarly, all log source configuration lives inside `logSource` within each `securityLogs` entry. This follows the discriminated-union pattern familiar from Kubernetes volume sources.
@@ -73,6 +84,26 @@ spec.securityLogs[*].logSource     → all log fetch configuration (defaultProfi
 ```
 
 CEL validation rules enforce that the correct sub-fields are populated for the selected `type`, and that mutually exclusive fields are not set together.
+
+### Policy Lifecycle Model
+
+A WAF security posture is defined as a JSON **policy definition** and must be **compiled** into a `.tgz` **compiled bundle** before it can be applied to the WAF engine. These are two distinct artifacts with different owners, lifecycles, and failure modes.
+
+**NGF's scope begins at "Fetch bundle."** Everything to the left of that step is external to NGF and handled by the operator, a management platform (NIM or N1C), or the PLM system:
+
+```text
+Author policy definition → Compile to bundle → Publish/store bundle → NGF fetches → Deploy to data plane
+```
+
+The table below shows who owns each step for each source type:
+
+| Step                     | HTTP                                   | NIM                                     | N1C                                                                                   | PLM                        |
+|--------------------------|----------------------------------------|-----------------------------------------|---------------------------------------------------------------------------------------|----------------------------|
+| Author policy definition | User (any editor / git)                | NIM UI or API                           | N1C console or API                                                                    | APPolicy CRD spec          |
+| Compile to bundle        | User (CLI / CI-CD)                     | User-triggered via NIM UI or API        | User-triggered via N1C UI or API; or NGF-triggered on first fetch if no bundle exists | PLM Controller (automatic) |
+| Store compiled bundle    | User (upload to HTTP server)           | NIM (internal)                          | N1C (internal)                                                                        | PLM (SeaweedFS)            |
+| Fetch bundle             | NGF (reconciliation; optional polling) | NGF (reconciliation; optional polling)  | NGF (reconciliation; optional polling)                                                | NGF (Kubernetes watch)     |
+| Deploy to data plane     | NGF → Agent gRPC                       | NGF → Agent gRPC                        | NGF → Agent gRPC                                                                      | NGF → Agent gRPC           |
 
 ### Policy Source Types Overview
 
@@ -129,7 +160,7 @@ The checksum used for polling change detection is computed by NGF itself from th
 **Poll failure handling:**
 
 - If a poll attempt fails (network error, authentication failure, etc.), NGF logs the error and updates the status condition
-- The existing deployed policy remains active — no disruption to WAF protection
+- The existing deployed compiled bundle remains active — no disruption to WAF protection
 - The goroutine retries on the next scheduled interval (not using `retryAttempts` — that field governs only the initial fetch)
 
 **Polling scope:**
@@ -145,6 +176,10 @@ All polling goroutines are started with the controller's context and are cancell
 - The polling interval timer restarts from the time of the last successful fetch
 
 Polling applies only to `type: HTTP`, `type: NIM`, and `type: N1C`. It is not applicable to `type: PLM`, which uses event-driven status watching instead.
+
+**When to enable polling:**
+
+Polling is effective when the compiled bundle at the configured source can change without a corresponding change to the `WAFPolicy` resource — for example, when the same URL or policy name always resolves to the latest compiled bundle. If a specific version is pinned (via `policySource.nimSource.policyUID` for NIM, or `policySource.n1cSource.policyVersionID` for N1C, or a version-specific URL for HTTP), the source will always return the same compiled bundle and every poll cycle will detect "unchanged" — no reload will ever be triggered. In that case, polling adds unnecessary network traffic and should be left disabled.
 
 ### Policy Attachment Strategy
 
@@ -314,13 +349,22 @@ For HTTP/NIM/N1C: deploy NIM or an HTTP server within cluster boundaries. For PL
 
 #### Option A — F5 NGINX One Console → type: N1C
 
-1. Author and compile a WAF policy in the N1C console or via N1C API
-2. Create `WAFPolicy` with `type: N1C` and `policySource.n1cSource` set with the N1C tenant URL, namespace, and policy name or object ID
+1. Author a policy definition in the N1C console or via the N1C API
+2. Trigger compilation manually in N1C via the console or API; if the compiled bundle does not yet exist, NGF will trigger compilation via the N1C API when it first reconciles the WAFPolicy and will wait for it to complete
+3. Create `WAFPolicy` with `type: N1C` and `policySource.n1cSource` set with the N1C tenant URL, namespace, and policy name or object ID
+4. On WAFPolicy create or update, NGF immediately fetches the compiled bundle from N1C and deploys it to the data plane — this fetch happens on reconciliation regardless of whether polling is enabled
+
+For subsequent policy definition updates, trigger recompilation in N1C (steps 1–2). If polling is enabled (`policySource.polling.enabled: true`), NGF automatically detects the new compiled bundle on the next poll cycle and redeploys without any change to the `WAFPolicy` resource. Without polling, update the WAFPolicy to trigger a new reconciliation and fetch.
 
 #### Option B — NGINX Instance Manager → type: NIM
 
-1. Author and compile a WAF policy in the NIM console or via NIM API
-2. Create `WAFPolicy` with `type: NIM` and `policySource.nimSource` set with the NIM base URL and policy name or UID
+1. Author a policy definition in the NIM console or via the NIM API
+2. Trigger compilation manually in NIM via the console or API; NIM stores the resulting compiled bundle internally
+3. Verify that compilation succeeded by checking the policy status in the NIM console or API — NGF is not notified of compilation success or failure
+4. Create `WAFPolicy` with `type: NIM` and `policySource.nimSource` set with the NIM base URL and policy name or UID
+5. On WAFPolicy create or update, NGF immediately fetches the compiled bundle from NIM and deploys it to the data plane — this fetch happens on reconciliation regardless of whether polling is enabled
+
+For subsequent policy definition updates, repeat steps 1–3 in NIM. If polling is enabled (`policySource.polling.enabled: true`), NGF automatically detects the new compiled bundle on the next poll cycle and redeploys without any change to the `WAFPolicy` resource. Without polling, update the WAFPolicy to trigger a new reconciliation and fetch.
 
 #### Option C — Policy Lifecycle Management → type: PLM
 
@@ -334,9 +378,55 @@ For HTTP/NIM/N1C: deploy NIM or an HTTP server within cluster boundaries. For PL
 
 #### Option D — NAP v5 Compiler (CLI/CI-CD) → type: HTTP
 
-1. Write WAF policies using NAP v5 JSON schema and compile using CLI tools or CI-CD pipeline
-2. Publish compiled `.tgz` bundles to an accessible HTTP/HTTPS server
-3. Create `WAFPolicy` with `type: HTTP` and `policySource.httpSource.url` set to the bundle URL
+1. Author a policy definition JSON file using the NAP v5 policy schema
+2. Compile the policy definition into a compiled bundle using the NAP v5 compiler CLI or a CI-CD pipeline - see [the F5 WAF on NGINX compiler documentation](https://docs.nginx.com/waf/configure/compiler/).
+3. Optionally generate a companion checksum file: `sha256sum policy.tgz > policy.tgz.sha256`
+4. Upload the compiled bundle (and optionally the `.sha256` file) to an accessible HTTP/HTTPS server
+5. Create `WAFPolicy` with `type: HTTP` and `policySource.httpSource.url` set to the bundle URL; on create or update, NGF immediately fetches the compiled bundle and deploys it — regardless of whether polling is enabled
+
+For subsequent policy definition updates, repeat steps 1–4. If polling is enabled (`policySource.polling.enabled: true`), NGF automatically detects the checksum change on the next poll cycle and redeploys without any change to the `WAFPolicy` resource. Without polling, update the WAFPolicy to trigger a new reconciliation and fetch.
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Compiler as NAP v5 Compiler<br/>(CLI / CI-CD)
+    participant HTTPServer as HTTP/HTTPS Server<br/>(Policy Store)
+    participant NGF as NGF Control Plane
+    participant DataPlane as NGINX Data Plane
+
+    User->>Compiler: docker run waf-compiler-<version-tag>:custom -p policy.json -o policy.tgz
+    Compiler->>User: policy.tgz (compiled bundle)
+    User->>User: sha256sum policy.tgz > policy.tgz.sha256
+    User->>HTTPServer: Upload policy.tgz and policy.tgz.sha256
+
+    Note over NGF: WAFPolicy reconciliation (create/update) or poll cycle
+    NGF->>HTTPServer: GET policy.tgz
+    NGF->>NGF: Compute SHA-256, compare to stored checksum (changed)
+    opt verifyChecksum: true
+        NGF->>HTTPServer: GET policy.tgz.sha256
+        NGF->>NGF: Verify checksum matches
+    end
+    NGF->>DataPlane: Deploy compiled bundle via Agent gRPC
+    DataPlane->>DataPlane: Apply policy
+```
+
+### Compilation Failure Visibility
+
+Policy compilation happens entirely outside NGF. When compilation fails, NGF's visibility into that failure depends on the source type:
+
+| Source type | Is compilation failure visible to NGF?                                                                      | User feedback mechanism                                                                          |
+|-------------|-------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------|
+| HTTP        | No — NGF only sees whatever compiled bundle was last uploaded                                               | Validate compilation in CI/CD before upload; gate uploads on successful `waf-compiler` exit code |
+| NIM         | No — compilation is triggered manually by the user; NGF only sees the fetch result                          | Check NIM UI or API for compilation status before creating the WAFPolicy                         |
+| N1C         | Yes — NGF triggers compilation if no bundle exists yet, and surfaces the N1C API error if compilation fails | NGF sets `Programmed=False/FetchError`; the N1C API error is included in the status message      |
+| PLM         | Yes — `status.bundle.state` is `invalid` on the APPolicy CRD                                                | NGF sets `ResolvedRefs=False/InvalidRef`; visible on both the WAFPolicy and APPolicy CRD status  |
+
+**Recommendations:**
+
+- **HTTP source**: CI/CD pipelines should gate bundle uploads on a successful `waf-compiler` exit code. If an invalid compiled bundle is uploaded, the only NGF signal is `DeploymentError` in the WAFPolicy status with no trace back to the specific policy definition change.
+- **NIM source**: Operators must trigger compilation manually in NIM and verify it succeeded before creating the WAFPolicy. NGF cannot distinguish "the policy definition has not changed" from "a policy definition change failed to compile in NIM" — both appear identical to NGF (no new compiled bundle detected on the next reconciliation or poll).
+- **N1C source**: If no compiled bundle exists for the referenced policy, NGF triggers compilation via the N1C API and waits for it to complete. A compilation failure in N1C is returned as an API error and surfaced in WAFPolicy status.
+- **PLM source**: Compilation failure is surfaced via `APPolicy.status.bundle.state: invalid`, which NGF reflects as `ResolvedRefs=False`.
 
 ```mermaid
 sequenceDiagram
@@ -361,7 +451,7 @@ sequenceDiagram
     APPolicy-->>NGF: Status update: state=ready, location set
     NGF->>PLMStorage: Fetch bundle via S3 API
     NGF->>NGF: Verify sha256 against status.bundle.sha256
-    NGF->>DataPlane: Deploy policy to ephemeral volume via gRPC
+    NGF->>DataPlane: Deploy compiled bundle to ephemeral volume via gRPC
     DataPlane->>DataPlane: Apply policy
 
     Note over User,DataPlane: Automatic Policy Update (PLM)
@@ -371,7 +461,7 @@ sequenceDiagram
     PLMController->>APPolicy: Update status (new location/sha256/datetime)
     APPolicy-->>NGF: Status watch fires
     NGF->>PLMStorage: Fetch updated bundle
-    NGF->>DataPlane: Deploy updated policy
+    NGF->>DataPlane: Deploy updated compiled bundle
 ```
 
 ### Security Logging Configuration
@@ -419,15 +509,15 @@ app_protect_security_log log_blocked syslog:server=syslog-svc.default:514;
 
 **Policy Update Failure:**
 
-- **Existing policy remains in effect** — no disruption to current protection
-- WAF protection continues with the last successfully deployed policy
+- **Existing compiled bundle remains in effect** — no disruption to current protection
+- WAF protection continues with the last successfully deployed compiled bundle
 
 - **Referenced Policy Deleted from NIM/N1C:**
-- NGF has no mechanism to prevent a policy from being deleted directly in NIM or N1C after it has been referenced by a WAFPolicy. There is no admission webhook or finalizer that can protect an external system resource. If the referenced policy is deleted:
-  - The currently deployed bundle remains active — no disruption to WAF protection
-  - On the next poll cycle, the fetch will fail with HTTP 404; NGF sets Programmed=False with reason FetchError and retains the existing deployed policy
-  - The WAFPolicy status message will indicate the policy was not found at the configured source
-  - Operators should treat FetchError caused by 404 as a signal to either restore the policy in NIM/N1C or update the WAFPolicy to reference a valid policy
+- NGF has no mechanism to prevent a compiled bundle from being deleted directly in NIM or N1C after it has been referenced by a WAFPolicy. There is no admission webhook or finalizer that can protect an external system resource. If the referenced compiled bundle is deleted:
+  - The currently deployed compiled bundle remains active — no disruption to WAF protection
+  - On the next poll cycle, the fetch will fail with HTTP 404; NGF sets Programmed=False with reason FetchError and retains the existing deployed compiled bundle
+  - The WAFPolicy status message will indicate the compiled bundle was not found at the configured source
+  - Operators should treat FetchError caused by 404 as a signal to either restore the compiled bundle in NIM/N1C or update the WAFPolicy to reference a valid policy source
 
 **Retry Behavior (HTTP/NIM/N1C — initial fetch only):**
 
@@ -1286,6 +1376,22 @@ For all source types, NGF fetches compiled bundles, verifies integrity, writes t
 - Gateway API compatibility and policy attachment compliance
 - CRD schema validation including CEL mutual exclusion rules
 - Security policy enforcement: verify attack blocking with known threat patterns for HTTP and gRPC
+
+---
+
+## Limitations and Operational Considerations
+
+- **NGF does not compile policies.** NGF is a compiled bundle distribution and enforcement system. Compilation is always the responsibility of an external system: the NAP v5 compiler CLI, NIM, N1C, or the PLM Controller. NGF cannot validate whether a compiled bundle corresponds to a specific policy definition.
+
+- **No feedback loop for HTTP source.** If a compiled bundle is malformed or a policy definition change fails to compile, the only NGF signal is `DeploymentError` in the WAFPolicy status. There is no mechanism to trace that error back to a specific policy definition change.
+
+- **NIM/N1C compilation is opaque to NGF.** NGF cannot distinguish "the policy definition has not changed" from "a policy definition change failed to compile inside NIM/N1C." Both appear identical to NGF — no new compiled bundle is available on the next poll. Operators must monitor compilation status in those platforms directly.
+
+- **Version rollback.** NIM and N1C maintain their own policy version history. To roll back, update the WAFPolicy to pin to a specific previous version: set `policySource.nimSource.policyUID` for NIM, or `policySource.n1cSource.policyVersionID` for N1C. For HTTP, the operator is responsible for version management — rolling back requires re-uploading the previous compiled bundle or updating the URL to point to a prior version. For PLM, the `APPolicy` spec must be reverted to trigger recompilation.
+
+- **No policy definition diff or preview.** There is no mechanism to preview the effect of a policy definition change before it is compiled and deployed to the data plane.
+
+- **No lifecycle coupling for NIM/N1C sources.** NGF cannot prevent a compiled bundle from being deleted or renamed directly in NIM or N1C. If this occurs, the existing deployed bundle remains active but subsequent fetches fail. See [Policy Fetch Failure Handling](#policy-fetch-failure-handling) for details.
 
 ---
 
