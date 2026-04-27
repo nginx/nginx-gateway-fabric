@@ -1792,13 +1792,7 @@ func TestBuildGateway(t *testing.T) {
 					Kind: "wrong-kind", // Invalid reference
 					Name: "invalid-ref",
 				},
-				TLS: &v1.GatewayTLSConfig{
-					Frontend: &v1.FrontendTLSConfig{
-						Default: v1.TLSConfig{
-							Validation: &v1.FrontendTLSValidation{},
-						},
-					},
-				},
+				allowedListeners: &v1.AllowedListeners{},
 			}),
 			gatewayClass: validGCWithNp,
 			expected: map[types.NamespacedName]*Gateway{
@@ -1825,7 +1819,7 @@ func TestBuildGateway(t *testing.T) {
 						IPFamily: helpers.GetPointer(ngfAPIv1alpha2.Dual),
 					},
 					Conditions: []conditions.Condition{
-						conditions.NewGatewayAcceptedUnsupportedField("TLS.Frontend"),
+						conditions.NewGatewayAcceptedUnsupportedField("AllowedListeners"),
 						conditions.NewGatewayInvalidParameters(
 							"Spec.infrastructure.parametersRef.kind: Unsupported value: \"wrong-kind\": supported values: \"NginxProxy\"",
 						),
@@ -2490,21 +2484,6 @@ func TestValidateUnsupportedGatewayFields(t *testing.T) {
 			},
 			expectedConds: []conditions.Condition{
 				conditions.NewGatewayAcceptedUnsupportedField("AllowedListeners"),
-			},
-		},
-		{
-			name: "Multiple unsupported fields: AllowedListeners and Frontend TLS",
-			gateway: &v1.Gateway{
-				Spec: v1.GatewaySpec{
-					AllowedListeners: &v1.AllowedListeners{},
-					TLS: &v1.GatewayTLSConfig{
-						Frontend: &v1.FrontendTLSConfig{},
-					},
-				},
-			},
-			expectedConds: []conditions.Condition{
-				conditions.NewGatewayAcceptedUnsupportedField("AllowedListeners"),
-				conditions.NewGatewayAcceptedUnsupportedField("TLS.Frontend"),
 			},
 		},
 	}

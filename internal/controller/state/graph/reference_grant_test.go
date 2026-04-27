@@ -184,6 +184,20 @@ func TestToSecret(t *testing.T) {
 	g.Expect(ref).To(Equal(exp))
 }
 
+func TestToConfigMap(t *testing.T) {
+	t.Parallel()
+	ref := toConfigMap(types.NamespacedName{Namespace: "ns", Name: "config-map"})
+
+	exp := toResource{
+		kind:      "ConfigMap",
+		namespace: "ns",
+		name:      "config-map",
+	}
+
+	g := NewWithT(t)
+	g.Expect(ref).To(Equal(exp))
+}
+
 func TestToService(t *testing.T) {
 	t.Parallel()
 	ref := toService(types.NamespacedName{Namespace: "ns", Name: "service"})

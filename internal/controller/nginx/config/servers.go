@@ -222,10 +222,18 @@ func buildHTTPSSL(ssl *dataplane.SSL) *http.SSL {
 	certs := make([]string, 0, len(ssl.KeyPairIDs))
 	keys := make([]string, 0, len(ssl.KeyPairIDs))
 
+	var sslCertificateID string
+
 	for _, id := range ssl.KeyPairIDs {
 		pemFile := generatePEMFileName(id)
 		certs = append(certs, pemFile)
 		keys = append(keys, pemFile)
+	}
+
+	// ClientCertBundleID can be empty for mode: AllowInsecureFallback
+	// In this case, we don't want to generate an ID.
+	if ssl.ClientCertBundleID != "" {
+		sslCertificateID = generateCertBundleFileName(ssl.ClientCertBundleID)
 	}
 
 	return &http.SSL{
@@ -234,6 +242,9 @@ func buildHTTPSSL(ssl *dataplane.SSL) *http.SSL {
 		Protocols:           ssl.Protocols,
 		Ciphers:             ssl.Ciphers,
 		PreferServerCiphers: ssl.PreferServerCiphers,
+		ClientCertificate:   sslCertificateID,
+		VerifyClient:        string(ssl.VerifyClient),
+		RequireVerifiedCert: ssl.RequireVerifiedCert,
 	}
 }
 

@@ -119,9 +119,8 @@ func buildGateways(
 				SecretRef:           secretRefNsName,
 			}
 		} else {
-			builtGateways[gwNsName] = &Gateway{
+			gateway := &Gateway{
 				Source:              gw,
-				Listeners:           buildListeners(gw, resourceResolver, refGrantResolver, protectedPorts),
 				NginxProxy:          np,
 				EffectiveNginxProxy: effectiveNginxProxy,
 				Valid:               true,
@@ -129,6 +128,8 @@ func buildGateways(
 				DeploymentName:      deploymentName,
 				SecretRef:           secretRefNsName,
 			}
+			gateway.Listeners = buildListeners(gateway, resourceResolver, refGrantResolver, protectedPorts)
+			builtGateways[gwNsName] = gateway
 		}
 	}
 
@@ -150,15 +151,15 @@ func validateGatewayRefs(
 	conds, parametersRefErrMsg := validateParametersRef(gw, npCfg)
 	paramsRefValid := len(conds) == 0
 
-	var secretNsName *types.NamespacedName
-	var tlsCond conditions.Condition
+	var backendSecretNsName *types.NamespacedName
+	var backendTLSCond conditions.Condition
 
 	if gw.Spec.TLS != nil {
 		path := field.NewPath("spec.tls")
 
 		if gw.Spec.TLS.Backend != nil {
 			backendPath := path.Child("backend")
-			tlsCond, secretNsName = validateGatewayTLSBackend(
+			backendTLSCond, backendSecretNsName = validateGatewayTLSBackend(
 				gw,
 				backendPath,
 				resourceResolver,
@@ -166,18 +167,18 @@ func validateGatewayRefs(
 			)
 		}
 	}
-	tlsValid := tlsCond == conditions.Condition{}
+	tlsValid := backendTLSCond == conditions.Condition{}
 
 	switch {
 	case paramsRefValid && tlsValid:
 		conds = append(conds, conditions.NewGatewayResolvedRefs())
 	case !tlsValid:
-		conds = append(conds, tlsCond)
+		conds = append(conds, backendTLSCond)
 	default:
 		conds = append(conds, conditions.NewGatewayRefInvalid(parametersRefErrMsg))
 	}
 
-	return conds, secretNsName
+	return conds, backendSecretNsName
 }
 
 // validateParametersRef validates the parametersRef field of the Gateway.
@@ -446,10 +447,6 @@ func validateUnsupportedGatewayFields(gw *v1.Gateway) []conditions.Condition {
 
 	if gw.Spec.AllowedListeners != nil {
 		conds = append(conds, conditions.NewGatewayAcceptedUnsupportedField("AllowedListeners"))
-	}
-
-	if gw.Spec.TLS != nil && gw.Spec.TLS.Frontend != nil {
-		conds = append(conds, conditions.NewGatewayAcceptedUnsupportedField("TLS.Frontend"))
 	}
 
 	return conds

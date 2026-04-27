@@ -123,8 +123,11 @@ type Return struct {
 type SSL struct {
 	Protocols           string
 	Ciphers             string
+	ClientCertificate   string
+	VerifyClient        string
 	Certificates        []string
 	CertificateKeys     []string
+	RequireVerifiedCert bool
 	PreferServerCiphers bool
 }
 

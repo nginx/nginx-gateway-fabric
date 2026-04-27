@@ -44,6 +44,8 @@ func TestSupportedFeatures(t *testing.T) {
 		gatewayv1.FeatureName(features.SupportTLSRoute),
 		gatewayv1.FeatureName(features.SupportHTTPRouteCORS),
 		gatewayv1.FeatureName(features.SupportGatewayHTTPSListenerDetectMisdirectedRequests),
+		gatewayv1.FeatureName(features.SupportGatewayFrontendClientCertificateValidation),
+		gatewayv1.FeatureName(features.SupportGatewayFrontendClientCertificateValidationInsecureFallback),
 	}
 
 	experimentalFeatures := []gatewayv1.FeatureName{

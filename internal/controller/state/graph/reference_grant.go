@@ -42,7 +42,15 @@ type fromResource struct {
 
 func toSecret(nsname types.NamespacedName) toResource {
 	return toResource{
-		kind:      "Secret",
+		kind:      kinds.Secret,
+		name:      nsname.Name,
+		namespace: nsname.Namespace,
+	}
+}
+
+func toConfigMap(nsname types.NamespacedName) toResource {
+	return toResource{
+		kind:      kinds.ConfigMap,
 		name:      nsname.Name,
 		namespace: nsname.Namespace,
 	}

@@ -886,20 +886,20 @@ func TestBuildGatewayStatuses(t *testing.T) {
 
 	validListenerConditions := []metav1.Condition{
 		{
-			Type:               string(v1.ListenerConditionAccepted),
-			Status:             metav1.ConditionTrue,
-			ObservedGeneration: 2,
-			LastTransitionTime: transitionTime,
-			Reason:             string(v1.ListenerReasonAccepted),
-			Message:            "The Listener is accepted",
-		},
-		{
 			Type:               string(v1.ListenerConditionProgrammed),
 			Status:             metav1.ConditionTrue,
 			ObservedGeneration: 2,
 			LastTransitionTime: transitionTime,
 			Reason:             string(v1.ListenerReasonProgrammed),
 			Message:            "The Listener is programmed",
+		},
+		{
+			Type:               string(v1.ListenerConditionAccepted),
+			Status:             metav1.ConditionTrue,
+			ObservedGeneration: 2,
+			LastTransitionTime: transitionTime,
+			Reason:             string(v1.ListenerReasonAccepted),
+			Message:            "The Listener is accepted",
 		},
 		{
 			Type:               string(v1.ListenerConditionResolvedRefs),
@@ -1492,6 +1492,211 @@ func TestBuildGatewayStatuses(t *testing.T) {
 							LastTransitionTime: transitionTime,
 							Reason:             string(v1.GatewayReasonAddressNotUsable),
 							Message:            "Invalid IP address",
+						},
+					},
+					Listeners: []v1.ListenerStatus{
+						{
+							Name:           "listener-valid-1",
+							AttachedRoutes: 1,
+							Conditions:     validListenerConditions,
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "valid gateway; valid listeners; one unresolved frontend tls ca cert ref",
+			gateway: &graph.Gateway{
+				Source: createGateway(),
+				Listeners: []*graph.Listener{
+					{
+						Name:  "listener-valid-1",
+						Valid: true,
+						Conditions: []conditions.Condition{
+							conditions.NewListenerUnresolvedCertificateRef(
+								`certificate ref "test/my-ca-cert" could not be resolved`,
+								string(v1.ListenerReasonInvalidCACertificateRef),
+							),
+						},
+						Routes: map[graph.RouteKey]*graph.L7Route{routeKey: {}},
+					},
+				},
+				Valid:      true,
+				Conditions: []conditions.Condition{},
+			},
+			expected: map[types.NamespacedName]v1.GatewayStatus{
+				{Namespace: "test", Name: "gateway"}: {
+					Addresses: addr,
+					Conditions: []metav1.Condition{
+						{
+							Type:               string(v1.GatewayConditionAccepted),
+							Status:             metav1.ConditionTrue,
+							ObservedGeneration: 2,
+							LastTransitionTime: transitionTime,
+							Reason:             string(v1.GatewayReasonAccepted),
+							Message:            "The Gateway is accepted",
+						},
+						{
+							Type:               string(v1.GatewayConditionProgrammed),
+							Status:             metav1.ConditionTrue,
+							ObservedGeneration: 2,
+							LastTransitionTime: transitionTime,
+							Reason:             string(v1.GatewayReasonProgrammed),
+							Message:            "The Gateway is programmed",
+						},
+					},
+					Listeners: []v1.ListenerStatus{
+						{
+							Name:           "listener-valid-1",
+							AttachedRoutes: 1,
+							Conditions: []metav1.Condition{
+								{
+									Type:               string(v1.ListenerConditionResolvedRefs),
+									Status:             metav1.ConditionFalse,
+									ObservedGeneration: 2,
+									LastTransitionTime: transitionTime,
+									Reason:             string(v1.ListenerReasonInvalidCACertificateRef),
+									Message:            `certificate ref "test/my-ca-cert" could not be resolved`,
+								},
+								{
+									Type:               string(v1.ListenerConditionProgrammed),
+									Status:             metav1.ConditionTrue,
+									ObservedGeneration: 2,
+									LastTransitionTime: transitionTime,
+									Reason:             string(v1.ListenerReasonProgrammed),
+									Message:            "The Listener is programmed",
+								},
+								{
+									Type:               string(v1.ListenerConditionAccepted),
+									Status:             metav1.ConditionTrue,
+									ObservedGeneration: 2,
+									LastTransitionTime: transitionTime,
+									Reason:             string(v1.ListenerReasonAccepted),
+									Message:            "The Listener is accepted",
+								},
+								{
+									Type:               string(v1.ListenerConditionConflicted),
+									Status:             metav1.ConditionFalse,
+									ObservedGeneration: 2,
+									LastTransitionTime: transitionTime,
+									Reason:             string(v1.ListenerReasonNoConflicts),
+									Message:            "No conflicts",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "valid gateway; invalid listener with all invalid frontend tls ca cert refs",
+			gateway: &graph.Gateway{
+				Source: createGateway(),
+				Listeners: []*graph.Listener{
+					{
+						Name:  "listener-invalid-ca-certs",
+						Valid: false,
+						Conditions: conditions.NewListenerInvalidNoValidCACertificate(
+							"all CA certificate refs are invalid",
+						),
+					},
+				},
+				Valid:      true,
+				Conditions: []conditions.Condition{},
+			},
+			expected: map[types.NamespacedName]v1.GatewayStatus{
+				{Namespace: "test", Name: "gateway"}: {
+					Addresses: addr,
+					Conditions: []metav1.Condition{
+						{
+							Type:               string(v1.GatewayConditionAccepted),
+							Status:             metav1.ConditionFalse,
+							ObservedGeneration: 2,
+							LastTransitionTime: transitionTime,
+							Reason:             string(v1.GatewayReasonListenersNotValid),
+							Message:            "The Gateway has no valid listeners",
+						},
+						{
+							Type:               string(v1.GatewayConditionProgrammed),
+							Status:             metav1.ConditionFalse,
+							ObservedGeneration: 2,
+							LastTransitionTime: transitionTime,
+							Reason:             string(v1.GatewayReasonInvalid),
+							Message:            "The Gateway has no valid listeners",
+						},
+					},
+					Listeners: []v1.ListenerStatus{
+						{
+							Name:           "listener-invalid-ca-certs",
+							AttachedRoutes: 0,
+							Conditions: []metav1.Condition{
+								{
+									Type:               string(v1.ListenerConditionAccepted),
+									Status:             metav1.ConditionFalse,
+									ObservedGeneration: 2,
+									LastTransitionTime: transitionTime,
+									Reason:             string(v1.ListenerReasonNoValidCACertificate),
+									Message:            "all CA certificate refs are invalid",
+								},
+								{
+									Type:               string(v1.ListenerConditionProgrammed),
+									Status:             metav1.ConditionFalse,
+									ObservedGeneration: 2,
+									LastTransitionTime: transitionTime,
+									Reason:             string(v1.ListenerReasonInvalid),
+									Message:            "all CA certificate refs are invalid",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "valid gateway; valid listener; frontend tls validation mode set to AllowInsecureFallback",
+			gateway: &graph.Gateway{
+				Source: createGateway(),
+				Listeners: []*graph.Listener{
+					{
+						Name:   "listener-valid-1",
+						Valid:  true,
+						Routes: map[graph.RouteKey]*graph.L7Route{routeKey: {}},
+					},
+				},
+				Valid: true,
+				Conditions: []conditions.Condition{
+					conditions.NewGatewayInsecureFrontendValidationMode(
+						"Validation Mode: AllowInsecureFallback is set for at least one listener",
+					),
+				},
+			},
+			expected: map[types.NamespacedName]v1.GatewayStatus{
+				{Namespace: "test", Name: "gateway"}: {
+					Addresses: addr,
+					Conditions: []metav1.Condition{
+						{
+							Type:               string(v1.GatewayConditionAccepted),
+							Status:             metav1.ConditionTrue,
+							ObservedGeneration: 2,
+							LastTransitionTime: transitionTime,
+							Reason:             string(v1.GatewayReasonAccepted),
+							Message:            "The Gateway is accepted",
+						},
+						{
+							Type:               string(v1.GatewayConditionProgrammed),
+							Status:             metav1.ConditionTrue,
+							ObservedGeneration: 2,
+							LastTransitionTime: transitionTime,
+							Reason:             string(v1.GatewayReasonProgrammed),
+							Message:            "The Gateway is programmed",
+						},
+						{
+							Type:               string(v1.GatewayConditionInsecureFrontendValidationMode),
+							Status:             metav1.ConditionTrue,
+							ObservedGeneration: 2,
+							LastTransitionTime: transitionTime,
+							Reason:             string(v1.GatewayReasonConfigurationChanged),
+							Message:            "Validation Mode: AllowInsecureFallback is set for at least one listener",
 						},
 					},
 					Listeners: []v1.ListenerStatus{
