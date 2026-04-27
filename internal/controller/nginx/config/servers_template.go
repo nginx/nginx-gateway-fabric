@@ -39,6 +39,11 @@ server {
     ssl_verify_depth 4;
     error_page 495 496 = @frontend_tls_verify_failed;
         {{- end }}
+        {{- if and $s.SSL $s.SSL.RequireVerifiedCert }}
+    location @frontend_tls_verify_failed {
+        return 444;
+    }
+        {{- end}}
     {{- else }}
     ssl_reject_handshake on;
     {{- end }}
@@ -51,11 +56,6 @@ server {
         {{- if $.RewriteClientIP.Recursive}}
     real_ip_recursive on;
         {{- end }}
-        {{- if and $s.SSL $s.SSL.RequireVerifiedCert }}
-    location @frontend_tls_verify_failed {
-        return 444;
-    }
-        {{- end}}
 }
     {{- else if $s.IsDefaultHTTP }}
 server {
@@ -112,6 +112,11 @@ server {
     ssl_verify_depth 4;
     error_page 495 496 = @frontend_tls_verify_failed;
           {{- end }}
+          {{- if and $s.SSL $s.SSL.RequireVerifiedCert }}
+    location @frontend_tls_verify_failed {
+        return 444;
+    }
+          {{- end }}
 
           {{- if $s.MisdirectedRequestVars }}
     if ({{ $s.MisdirectedRequestVars.SNIVar }} != {{ $s.MisdirectedRequestVars.HostVar }}) {
@@ -145,12 +150,6 @@ server {
         {{- end}}
         {{- if $.RewriteClientIP.Recursive}}
     real_ip_recursive on;
-        {{- end }}
-
-         {{- if and $s.SSL $s.SSL.RequireVerifiedCert }}
-    location @frontend_tls_verify_failed {
-        return 444;
-    }
         {{- end }}
 
         {{ range $l := $s.Locations }}
