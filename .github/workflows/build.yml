@@ -170,7 +170,7 @@ jobs:
           sbom: true
           provenance: mode=max
           build-args: |
-            NJS_DIR=internal/controller/nginx/modules/src
+            NJS_DIR=internal/controller/nginx/modules/njs/src
             NGINX_CONF_DIR=internal/controller/nginx/conf
             BUILD_AGENT=gha
           secrets: |

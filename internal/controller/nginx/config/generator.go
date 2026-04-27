@@ -88,21 +88,24 @@ type Generator interface {
 // It also expects that the main NGINX configuration file nginx.conf is located in configFolder and nginx.conf
 // includes (https://nginx.org/en/docs/ngx_core_module.html#include) the files from other folders.
 type GeneratorImpl struct {
-	usageReportConfig *ngfConfig.UsageReportConfig
-	logger            logr.Logger
-	plus              bool
+	usageReportConfig        *ngfConfig.UsageReportConfig
+	logger                   logr.Logger
+	inferenceExtensionConfig ngfConfig.InferenceExtensionConfig
+	plus                     bool
 }
 
 // NewGeneratorImpl creates a new GeneratorImpl.
 func NewGeneratorImpl(
 	plus bool,
 	usageReportConfig *ngfConfig.UsageReportConfig,
+	inferenceExtensionConfig ngfConfig.InferenceExtensionConfig,
 	logger logr.Logger,
 ) GeneratorImpl {
 	return GeneratorImpl{
-		plus:              plus,
-		usageReportConfig: usageReportConfig,
-		logger:            logger,
+		plus:                     plus,
+		usageReportConfig:        usageReportConfig,
+		inferenceExtensionConfig: inferenceExtensionConfig,
+		logger:                   logger,
 	}
 }
 

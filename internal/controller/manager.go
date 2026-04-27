@@ -234,8 +234,6 @@ func StartManager(cfg config.Config) error {
 			PlusUsageConfig:                &cfg.UsageReportConfig,
 			NginxOneConsoleTelemetryConfig: cfg.NginxOneConsoleTelemetryConfig,
 			InferenceExtension:             cfg.InferenceExtension,
-			EndpointPickerDisableTLS:       cfg.EndpointPickerDisableTLS,
-			EndpointPickerTLSSkipVerify:    cfg.EndpointPickerTLSSkipVerify,
 		},
 	)
 	if err != nil {
@@ -257,6 +255,7 @@ func StartManager(cfg config.Config) error {
 		generator: ngxcfg.NewGeneratorImpl(
 			cfg.Plus,
 			&cfg.UsageReportConfig,
+			cfg.InferenceExtensionConfig,
 			cfg.Logger.WithName("generator"),
 		),
 		k8sClient:               mgr.GetClient(),

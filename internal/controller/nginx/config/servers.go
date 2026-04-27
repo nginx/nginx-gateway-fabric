@@ -10,8 +10,9 @@ import (
 	gotemplate "text/template"
 
 	"github.com/dlclark/regexp2"
-	"k8s.io/apimachinery/pkg/types"
+	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 
+	ngfConfig "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/config"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/http"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/shared"
@@ -82,7 +83,7 @@ func (g GeneratorImpl) executeServers(
 	generator policies.Generator,
 	keepAliveCheck keepAliveChecker,
 ) []executeResult {
-	servers, httpMatchPairs := createServers(conf, generator, keepAliveCheck)
+	servers, httpMatchPairs := createServers(conf, generator, keepAliveCheck, g.inferenceExtensionConfig)
 
 	serverConfig := http.ServerConfig{
 		Servers:                  servers,
@@ -134,6 +135,7 @@ func createServers(
 	conf dataplane.Configuration,
 	generator policies.Generator,
 	keepAliveCheck keepAliveChecker,
+	inferenceConfig ngfConfig.InferenceExtensionConfig,
 ) ([]http.Server, httpMatchPairs) {
 	servers := make([]http.Server, 0, len(conf.HTTPServers)+len(conf.SSLServers))
 	finalMatchPairs := make(httpMatchPairs)
@@ -145,7 +147,7 @@ func createServers(
 
 	for idx, s := range conf.HTTPServers {
 		serverID := fmt.Sprintf("%d", idx)
-		httpServer, matchPairs := createServer(s, serverID, generator, keepAliveCheck)
+		httpServer, matchPairs := createServer(s, serverID, generator, keepAliveCheck, inferenceConfig)
 		servers = append(servers, httpServer)
 		maps.Copy(finalMatchPairs, matchPairs)
 	}
@@ -155,7 +157,7 @@ func createServers(
 	for idx, s := range conf.SSLServers {
 		serverID := fmt.Sprintf("SSL_%d", idx)
 
-		sslServer, matchPairs := createSSLServer(s, serverID, generator, keepAliveCheck, disableSNI)
+		sslServer, matchPairs := createSSLServer(s, serverID, generator, keepAliveCheck, disableSNI, inferenceConfig)
 		if _, portInUse := sharedTLSPorts[s.Port]; portInUse {
 			sslServer.Listen = getSocketNameHTTPS(s.Port)
 			sslServer.IsSocket = true
@@ -173,6 +175,7 @@ func createSSLServer(
 	generator policies.Generator,
 	keepAliveCheck keepAliveChecker,
 	disableSNIHostValidation bool,
+	inferenceConfig ngfConfig.InferenceExtensionConfig,
 ) (http.Server, httpMatchPairs) {
 	listen := fmt.Sprint(virtualServer.Port)
 	if virtualServer.IsDefault {
@@ -187,7 +190,7 @@ func createSSLServer(
 		return server, nil
 	}
 
-	locs, matchPairs, grpc := createLocations(&virtualServer, serverID, generator, keepAliveCheck)
+	locs, matchPairs, grpc := createLocations(&virtualServer, serverID, generator, keepAliveCheck, inferenceConfig)
 
 	server := http.Server{
 		ServerName: virtualServer.Hostname,
@@ -253,6 +256,7 @@ func createServer(
 	serverID string,
 	generator policies.Generator,
 	keepAliveCheck keepAliveChecker,
+	inferenceConfig ngfConfig.InferenceExtensionConfig,
 ) (http.Server, httpMatchPairs) {
 	listen := fmt.Sprint(virtualServer.Port)
 
@@ -263,7 +267,7 @@ func createServer(
 		}, nil
 	}
 
-	locs, matchPairs, grpc := createLocations(&virtualServer, serverID, generator, keepAliveCheck)
+	locs, matchPairs, grpc := createLocations(&virtualServer, serverID, generator, keepAliveCheck, inferenceConfig)
 
 	server := http.Server{
 		ServerName: virtualServer.Hostname,
@@ -320,7 +324,6 @@ func extractMirrorTargetsWithPercentages(pathRules []dataplane.PathRule) map[str
 	return mirrorTargets
 }
 
-//nolint:lll
 /*
 There are several different flows of location blocks, depending on the user configuration.
 The following describes them, with basic location examples.
@@ -352,114 +355,96 @@ location /_ngf-internal-rule1-route0 {
     proxy_pass http://backend2;
 }
 ---------------
-Inference extension, no HTTP matching conditions.
+Inference extension, single backend, no HTTP matching conditions.
 
-External location calls inference NJS module. The module gets the AI endpoint to proxy to,
-then redirects to the internal inference location that proxies to the backend.
+The Rust inference module runs in the access phase of the same location that has proxy_pass.
+It calls the EPP (Endpoint Picker Protocol) server via gRPC to get the correct endpoint for the
+request, then sets $inference_endpoint before proxy_pass executes.
+
+On EPP success, $inference_endpoint contains the EPP-selected endpoint.
+On EPP failure with failopen, $inference_endpoint contains the failopen upstream name.
 
 location /coffee {
-    set $epp_internal_path /_ngf-internal-proxy-pass-rule0-route0-backend0-inference;
-    js_content epp.getEndpoint; // gets endpoint and redirects to /_ngf-internal-proxy-pass-rule0-route0-backend0-inference
-}
-location /_ngf-internal-proxy-pass-rule0-route0-backend0-inference {
-    internal;
-    proxy_pass http://$inference_backend_test_foo_80;
+    inference_epp on;
+    inference_epp_endpoint "epp-host:80";
+    inference_failopen test_foo_80;
+    proxy_pass http://$inference_endpoint;
 }
 ---------------
-Inference extension with multiple inference backends.
+Inference extension with multiple inference backends, no HTTP matching conditions.
+
+External location rewrites to a split_clients variable that routes to the appropriate internal
+inference location. Each internal location has its own EPP config.
 
 location /coffee {
     rewrite ^ $inference_backend_group_routeNS__routeName_rule0_pathRule0 last;
 }
-
-location /_ngf-internal-proxy-pass-rule0-route0-backend0-inference {
+location /_ngf-internal-rule0-route0-backend0-inference {
     internal;
-    proxy_pass http://$inference_backend_test_primary_pool_80;
+    inference_epp on;
+    inference_epp_endpoint "primary-pool:80";
+    inference_failopen test_primary_pool_80;
+    proxy_pass http://$inference_endpoint;
 }
-
-location /_ngf-internal-test_primary_pool_80-routeNS-routeName-routeRule0-pathRule0 {
+location /_ngf-internal-rule0-route0-backend1-inference {
     internal;
-    set $epp_internal_path /_ngf-internal-proxy-pass-rule0-route0-backend0-inference;
-    js_content epp.getEndpoint; // gets endpoint and redirects to /_ngf-internal-proxy-pass-rule0-route0-backend0-inference
-}
-
-location /_ngf-internal-proxy-pass-rule0-route0-backend1-inference {
-    internal;
-    proxy_pass http://$inference_backend_test_secondary_pool_80;
-}
-
-location /_ngf-internal-test_secondary_pool_80-routeNS-routeName-routeRule0-pathRule0 {
-    internal;
-    set $epp_internal_path /_ngf-internal-proxy-pass-rule0-route0-backend1-inference;
-    js_content epp.getEndpoint; // gets endpoint and redirects to /_ngf-internal-proxy-pass-rule0-route0-backend1-inference
+    inference_epp on;
+    inference_epp_endpoint "secondary-pool:80";
+    inference_failopen test_secondary_pool_80;
+    proxy_pass http://$inference_endpoint;
 }
 
 split_clients $request_id $inference_backend_group_routeNS__routeName_rule0_pathRule0 {
-    70.00% /_ngf-internal-test_primary_pool_80-routeNS-routeName-routeRule0-pathRule0;
-    30.00% /_ngf-internal-test_secondary_pool_80-routeNS-routeName-routeRule0-pathRule0;
+    70.00% /_ngf-internal-rule0-route0-backend0-inference;
+    30.00% /_ngf-internal-rule0-route0-backend1-inference;
 }
 ---------------
-Inference extension with HTTP matching conditions.
+Inference extension with HTTP matching conditions, single backend.
 
-External location calls httpmatch NJS module. The module determines the HTTP request conditions that exist
-and which backend to use, then redirects to the internal inference location. The internal inference
-location calls the inference NJS module to get the AI endpoint to proxy to, then redirects to the
-internal location that proxies to the backend.
+External location calls httpmatch NJS module, which redirects to the internal inference location
+that has EPP config.
 
 location /coffee {
-    js_content httpmatches.match; // chooses backend and redirects to appropriate internal inference location
+    js_content httpmatches.match;
 }
-location /_ngf-internal-test_foo_80-routeNS-routeName-routeRule0-pathRule0 {
+location /_ngf-internal-rule0-route0-backend0-inference {
     internal;
-    set $epp_internal_path /_ngf-internal-proxy-pass-rule0-route0-backend0-inference;
-    js_content epp.getEndpoint; // redirects to /_ngf-internal-proxy-pass-rule0-route0-backend0-inference
-}
-location /_ngf-internal-proxy-pass-rule0-route0-backend0-inference {
-    internal;
-    proxy_pass http://$inference_backend_test_foo_80;
+    inference_epp on;
+    inference_epp_endpoint "epp-host:80";
+    inference_failopen test_foo_80;
+    proxy_pass http://$inference_endpoint;
 }
 ---------------
-Inference extension with multiple backends with HTTP matching conditions.
+Inference extension with multiple backends and HTTP matching conditions.
 
-External location calls httpmatch NJS module. The module determines the HTTP request conditions that exist
-and which backend to use, then redirects to an internal location which will rewrite to another internal inference
-location based on a split clients variable. That internal inference location calls the inference NJS module
-to get the AI endpoint to proxy to, then redirects to the internal location that proxies to the backend.
+External location calls httpmatch NJS module, which redirects to an internal split location
+that rewrites to the appropriate inference location (each with its own EPP config).
 
 location /coffee {
-    js_content httpmatches.match; // chooses backend and redirects to appropriate internal inference location
+    js_content httpmatches.match;
 }
-
-location /_ngf-internal-split-clients-rule0-route0-inference  {
+location /_ngf-internal-rule0-route0-split-inference {
     internal;
     rewrite ^ $inference_backend_group_routeNS__routeName_rule0_pathRule0 last;
 }
-
-location /_ngf-internal-proxy-pass-rule0-route0-backend0-inference {
+location /_ngf-internal-rule0-route0-backend0-inference {
     internal;
-    proxy_pass http://$inference_backend_test_primary_pool_80;
+    inference_epp on;
+    inference_epp_endpoint "primary-pool:80";
+    inference_failopen test_primary_pool_80;
+    proxy_pass http://$inference_endpoint;
 }
-
-location /_ngf-internal-test_primary_pool_80-routeNS-routeName-routeRule0-pathRule0 {
+location /_ngf-internal-rule0-route0-backend1-inference {
     internal;
-    set $epp_internal_path /_ngf-internal-proxy-pass-rule0-route0-backend0-inference;
-    js_content epp.getEndpoint; // gets endpoint and redirects to /_ngf-internal-proxy-pass-rule0-route0-backend0-inference
-}
-
-location /_ngf-internal-proxy-pass-rule0-route0-backend1-inference {
-    internal;
-    proxy_pass http://$inference_backend_test_secondary_pool_80;
-}
-
-location /_ngf-internal-test_secondary_pool_80-routeNS-routeName-routeRule0-pathRule0 {
-    internal;
-    set $epp_internal_path /_ngf-internal-proxy-pass-rule0-route0-backend1-inference;
-    js_content epp.getEndpoint; // gets endpoint and redirects to /_ngf-internal-proxy-pass-rule0-route0-backend1-inference
+    inference_epp on;
+    inference_epp_endpoint "secondary-pool:80";
+    inference_failopen test_secondary_pool_80;
+    proxy_pass http://$inference_endpoint;
 }
 
 split_clients $request_id $inference_backend_group_routeNS__routeName_rule0_pathRule0 {
-    70.00% /_ngf-internal-test_primary_pool_80-routeNS-routeName-routeRule0-pathRule0;
-    30.00% /_ngf-internal-test_secondary_pool_80-routeNS-routeName-routeRule0-pathRule0;
+    70.00% /_ngf-internal-rule0-route0-backend0-inference;
+    30.00% /_ngf-internal-rule0-route0-backend1-inference;
 }
 */
 
@@ -470,6 +455,7 @@ func createLocations(
 	serverID string,
 	generator policies.Generator,
 	keepAliveCheck keepAliveChecker,
+	inferenceConfig ngfConfig.InferenceExtensionConfig,
 ) ([]http.Location, httpMatchPairs, bool) {
 	maxLocs, pathsAndTypes := getMaxLocationCountAndPathMap(server.PathRules)
 	locs := make([]http.Location, 0, maxLocs)
@@ -517,6 +503,7 @@ func createLocations(
 				server.Port,
 				keepAliveCheck,
 				mirrorPercentage,
+				inferenceConfig,
 			)
 			httpMatchKey := serverID + "_" + strconv.Itoa(pathRuleIdx)
 			for i := range extLocations {
@@ -537,7 +524,8 @@ func createLocations(
 				generator,
 				server.Port,
 				keepAliveCheck,
-				mirrorPercentage)...,
+				mirrorPercentage,
+				inferenceConfig)...,
 			)
 		}
 	}
@@ -588,33 +576,34 @@ func createInternalLocationsForRule(
 	port int32,
 	keepAliveCheck keepAliveChecker,
 	mirrorPercentage *float64,
+	inferenceConfig ngfConfig.InferenceExtensionConfig,
 ) ([]http.Location, []routeMatch) {
-	// Calculate the exact capacity needed
+	// Calculate the exact capacity needed.
+	// For inference backends, EPP config is set on the proxy_pass location (no separate EPP location).
 	capacity := 0
 	for _, r := range rule.MatchRules {
 		if !rule.HasInferenceBackends {
 			capacity++ // intLocation (always created for non-inference)
 		} else {
-			// For inference backends with matches
+			// For inference backends with matches:
+			// - Multiple backends: 1 split_clients + N proxy_pass (with EPP) locations
+			// - Single backend: 1 proxy_pass (with EPP) location
 			if len(r.BackendGroup.Backends) > 1 {
-				capacity++ // intSplitClientsLocation (created for multiple backends)
+				capacity++ // intSplitClientsLocation
 			}
-
-			capacity += len(r.BackendGroup.Backends) * 2 // intEPPLocation and intProxyPassLocation per backend
+			capacity += len(r.BackendGroup.Backends) // intProxyPassLocation (with EPP) per backend
 		}
 	}
 
 	internalLocations := make([]http.Location, 0, capacity)
 	matches := make([]routeMatch, 0, len(rule.MatchRules))
 
-	// If there are multiple matches on a single route rule, they will share the same intEPPLocation and
-	// intProxyPassLocation. To avoid creating duplicates, we track the unique names here.
-	uniqueEPPNameMap := make(map[string]struct{})
+	// Track unique proxy_pass locations to avoid duplicates
+	uniqueProxyPassPaths := make(map[string]struct{})
 
 	for matchRuleIdx, r := range rule.MatchRules {
 		var intLocation http.Location
 		var match routeMatch
-		skipMatch := false
 
 		if !rule.HasInferenceBackends {
 			intLocation, match = initializeInternalMatchLocation(pathRuleIdx, matchRuleIdx, r.Match, rule.GRPC)
@@ -634,35 +623,28 @@ func createInternalLocationsForRule(
 			)
 			internalLocations = append(internalLocations, intLocation)
 		} else {
-			// If there are multiple inference backends, we need 4 locations:
-			// 1. (external location) external match location which redirects to split clients location
-			// 2. (intSplitClientsLocation) internal split clients location which rewrites to internal inference
-			// 	  location based on SC variable
-			// 3. (intEPPLocation) internal inference location which calls the EPP NJS module to get endpoint and
-			// 	  redirects to final internal location
-			// 4. (intProxyPassLocation) final internal inference location which proxy_passes to backend
-			//
-			// The match needs to point to the internal split clients location (intSplitClientsLocation)
-			//
-			// If there is only one inference backend, we need 3 locations:
-			// 1. (external location) external match location which redirects to internal inference location
-			// 2. (intEPPLocation) internal inference location which calls the EPP NJS module to get endpoint and
-			//    redirects to final internal location
-			// 3. (intProxyPassLocation) final internal inference location which proxy_passes to backend
-			//
-			// The match needs to point to the internal inference location which calls the EPP NJS module (intEPPLocation)
+			// With the Rust inference module, EPP runs in the access phase of proxy_pass locations.
+			// For multiple backends: match → split_clients location → internal proxy_pass (with EPP)
+			// For single backend: match → internal proxy_pass (with EPP)
 
-			var intEPPLocation http.Location
+			var firstProxyPassLocation http.Location
 			for backendIdx, b := range r.BackendGroup.Backends {
-				intProxyPassLocation := initializeInternalInferenceProxyPassLocation(pathRuleIdx, matchRuleIdx, backendIdx)
-				intProxyPassLocation.Includes = createIncludesFromPolicyGenerateResult(
+				intInferenceLocation := initializeInternalInferenceLocation(pathRuleIdx, matchRuleIdx, backendIdx)
+
+				if backendIdx == 0 {
+					firstProxyPassLocation = intInferenceLocation
+				}
+
+				// Skip creating if we've already created this location
+				if _, exists := uniqueProxyPassPaths[intInferenceLocation.Path]; exists {
+					continue
+				}
+				uniqueProxyPassPaths[intInferenceLocation.Path] = struct{}{}
+
+				intInferenceLocation.Includes = createIncludesFromPolicyGenerateResult(
 					generator.GenerateForInternalLocation(rule.Policies),
 				)
 
-				// Since we are creating a separate intProxyPassLocation per backend,
-				// we need to update the rule to only have that backend for the location.
-				// This ensures the correct name gets generated to correlate with the split clients generation.
-				// If there is only one backend, this is effectively a no-op.
 				tempRule := dataplane.MatchRule{
 					Source:  r.Source,
 					Match:   r.Match,
@@ -671,13 +653,13 @@ func createInternalLocationsForRule(
 						Source:      r.BackendGroup.Source,
 						RuleIdx:     r.BackendGroup.RuleIdx,
 						PathRuleIdx: r.BackendGroup.PathRuleIdx,
-						Backends:    []dataplane.Backend{b}, // Only include the current backend
+						Backends:    []dataplane.Backend{b},
 					},
 				}
-				intProxyPassLocation = updateLocation(
+				intInferenceLocation = updateLocation(
 					tempRule,
 					rule,
-					intProxyPassLocation,
+					intInferenceLocation,
 					port,
 					keepAliveCheck,
 					mirrorPercentage,
@@ -686,57 +668,48 @@ func createInternalLocationsForRule(
 					pathRuleIdx,
 				)
 
-				intEPPLocation = initializeInternalInferenceEPPLocation(
-					b,
-					r.BackendGroup.Source,
-					r.BackendGroup.RuleIdx,
-					r.BackendGroup.PathRuleIdx,
-				)
-				intEPPLocation.Includes = createIncludesFromPolicyGenerateResult(
-					generator.GenerateForInternalLocation(rule.Policies),
-				)
-
-				mapKey := intEPPLocation.Path // Use this as the key to detect duplicates
-
-				// The only time this happens is on a single route rule with multiple matches with the same path.
-				// In this case, we only need to create one set of internal locations, and can skip the duplicate matches.
-				if _, exists := uniqueEPPNameMap[mapKey]; exists {
-					skipMatch = true
-					break
-				}
-				uniqueEPPNameMap[mapKey] = struct{}{}
-				// we only append intEPPLocation and intProxyPassLocation once per unique intEPPLocation name
-				internalLocations = append(internalLocations, intProxyPassLocation)
-
+				// Set EPP config directly on the inference location
 				if b.EndpointPickerConfig != nil && b.EndpointPickerConfig.EndpointPickerRef != nil {
-					eppHost, portNum := extractEPPConfig(b)
-					intEPPLocation = setLocationEPPConfig(intEPPLocation, intProxyPassLocation.Path, eppHost, portNum)
-					internalLocations = append(internalLocations, intEPPLocation)
+					eppHost, portNum := extractEPPConfig(b, inferenceConfig.ClusterDomain)
+					intInferenceLocation = setLocationEPPConfig(
+						intInferenceLocation, eppHost, portNum, b.UpstreamName,
+						b.EndpointPickerConfig.EndpointPickerRef.FailureMode,
+						!inferenceConfig.DisableTLS,
+						inferenceConfig.TLSSkipVerify,
+					)
 				}
-			}
 
-			// skip adding match and creating split clients location if it's a duplicate intEPPLocation.Path
-			if skipMatch {
-				continue
+				if backendIdx == 0 {
+					firstProxyPassLocation = intInferenceLocation
+				}
+				internalLocations = append(internalLocations, intInferenceLocation)
 			}
 
 			if len(r.BackendGroup.Backends) > 1 {
-				intSplitClientsLocation := initializeInternalInferenceSplitClientsLocation(pathRuleIdx, matchRuleIdx)
-				intSplitClientsLocation.Includes = createIncludesFromPolicyGenerateResult(
-					generator.GenerateForInternalLocation(rule.Policies),
-				)
+				// For multiple backends, match → split location → backend-specific inference locations
+				intSplitLocation := initializeInternalInferenceSplitLocation(pathRuleIdx, matchRuleIdx)
 
-				splitClientsVariableName := createInferenceSplitClientsVariableName(
-					convertStringToSafeVariableName(r.BackendGroup.Name()),
-				)
-				intSplitClientsLocation.Rewrites = append(intSplitClientsLocation.Rewrites,
-					fmt.Sprintf("^ $%s last", splitClientsVariableName))
+				// Only create the split location if it's not a duplicate
+				if _, exists := uniqueProxyPassPaths[intSplitLocation.Path]; !exists {
+					uniqueProxyPassPaths[intSplitLocation.Path] = struct{}{}
 
-				internalLocations = append(internalLocations, intSplitClientsLocation)
+					intSplitLocation.Includes = createIncludesFromPolicyGenerateResult(
+						generator.GenerateForInternalLocation(rule.Policies),
+					)
 
-				match = createRouteMatch(r.Match, intSplitClientsLocation.Path)
+					splitClientsVariableName := createInferenceSplitClientsVariableName(
+						convertStringToSafeVariableName(r.BackendGroup.Name()),
+					)
+					intSplitLocation.Rewrites = append(intSplitLocation.Rewrites,
+						fmt.Sprintf("^ $%s last", splitClientsVariableName))
+
+					internalLocations = append(internalLocations, intSplitLocation)
+				}
+
+				match = createRouteMatch(r.Match, intSplitLocation.Path)
 			} else {
-				match = createRouteMatch(r.Match, intEPPLocation.Path)
+				// Single backend: match redirects directly to the proxy_pass location
+				match = createRouteMatch(r.Match, firstProxyPassLocation.Path)
 			}
 		}
 
@@ -755,74 +728,33 @@ func createInferenceLocationsForRule(
 	port int32,
 	keepAliveCheck keepAliveChecker,
 	mirrorPercentage *float64,
+	inferenceConfig ngfConfig.InferenceExtensionConfig,
 ) []http.Location {
-	capacity := len(extLocations)
-
-	for _, r := range rule.MatchRules {
-		for _, b := range r.BackendGroup.Backends {
-			capacity++ // intProxyPassLocation (always created)
-
-			// intEPPLocation (created only for multiple backends with EPP config)
-			if len(r.BackendGroup.Backends) > 1 &&
-				b.EndpointPickerConfig != nil &&
-				b.EndpointPickerConfig.EndpointPickerRef != nil {
-				capacity++ // intEPPLocation
-			}
-		}
-	}
-
-	locs := make([]http.Location, 0, capacity)
+	// With the Rust inference module, EPP runs in the access phase of each proxy_pass location.
+	// No separate EPP redirect locations are needed - the EPP directive runs in the same location
+	// that has proxy_pass, setting $inference_endpoint before proxy_pass executes.
+	//
+	// Single backend: external location has EPP config + proxy_pass directly.
+	// Multiple backends: external location rewrites via split_clients to internal locations,
+	//   each internal location has EPP config + proxy_pass.
 
 	// There will only be one rule.MatchRules, since if there are multiple, createInternalLocationsForRule
 	// would have been called instead.
-	for matchRuleIdx, r := range rule.MatchRules {
-		// If there are multiple inference backends, we need 3 locations:
-		// 1. (external location) external location which rewrites to the EPP internal location based on a
-		//    split clients variable
-		// 2. (intEPPLocation) internal inference location which calls the EPP NJS module to get endpoint
-		//    and redirects to final internal location
-		// 3. (intProxyPassLocation) final internal inference location which proxy_passes to backend
-		//
-		// If there is only one inference backend, we need 2 locations:
-		// 1. (external location) external location which calls the EPP NJS module to get endpoint and redirects
-		//    to internal inference location
-		// 2. (intProxyPassLocation) final internal inference location which proxy_passes to backend
+	if len(rule.MatchRules) == 0 {
+		return extLocations
+	}
 
-		if len(r.BackendGroup.Backends) > 1 {
-			splitClientsVariableName := createInferenceSplitClientsVariableName(
-				convertStringToSafeVariableName(r.BackendGroup.Name()),
-			)
-			for i := range extLocations {
-				extLocations[i].Rewrites = append(extLocations[i].Rewrites, fmt.Sprintf("^ $%s last", splitClientsVariableName))
-				extLocations[i].Type = http.ExternalLocationType
-			}
-		}
+	r := rule.MatchRules[0]
+	const matchRuleIdx = 0 // Only one match rule
 
-		for backendIdx, b := range r.BackendGroup.Backends {
-			intProxyPassLocation := initializeInternalInferenceProxyPassLocation(pathRuleIdx, matchRuleIdx, backendIdx)
-			intProxyPassLocation.Includes = createIncludesFromPolicyGenerateResult(
-				generator.GenerateForInternalLocation(rule.Policies),
-			)
-
-			// Since we are creating a separate intProxyPassLocation per backend,
-			// we need to update the rule to only have that backend for the location.
-			// This ensures the correct name gets generated to correlate with the split clients generation.
-			// If there is only one backend, this is effectively a no-op.
-			tempRule := dataplane.MatchRule{
-				Source:  r.Source,
-				Match:   r.Match,
-				Filters: r.Filters,
-				BackendGroup: dataplane.BackendGroup{
-					Source:      r.BackendGroup.Source,
-					RuleIdx:     r.BackendGroup.RuleIdx,
-					PathRuleIdx: r.BackendGroup.PathRuleIdx,
-					Backends:    []dataplane.Backend{b}, // Only include the current backend
-				},
-			}
-			intProxyPassLocation = updateLocation(
-				tempRule,
+	if len(r.BackendGroup.Backends) == 1 {
+		// Single backend: put proxy_pass and EPP config directly on the external location
+		b := r.BackendGroup.Backends[0]
+		for i := range extLocations {
+			extLocations[i] = updateLocation(
+				r,
 				rule,
-				intProxyPassLocation,
+				extLocations[i],
 				port,
 				keepAliveCheck,
 				mirrorPercentage,
@@ -830,44 +762,98 @@ func createInferenceLocationsForRule(
 				matchRuleIdx,
 				pathRuleIdx,
 			)
-			locs = append(locs, intProxyPassLocation)
-
 			if b.EndpointPickerConfig != nil && b.EndpointPickerConfig.EndpointPickerRef != nil {
-				eppHost, portNum := extractEPPConfig(b)
-
-				if len(r.BackendGroup.Backends) > 1 {
-					intEPPLocation := initializeInternalInferenceEPPLocation(
-						b,
-						r.BackendGroup.Source,
-						r.BackendGroup.RuleIdx,
-						r.BackendGroup.PathRuleIdx,
-					)
-					intEPPLocation.Includes = createIncludesFromPolicyGenerateResult(
-						generator.GenerateForInternalLocation(rule.Policies),
-					)
-					intEPPLocation = setLocationEPPConfig(intEPPLocation, intProxyPassLocation.Path, eppHost, portNum)
-					locs = append(locs, intEPPLocation)
-				} else {
-					for i := range extLocations {
-						extLocations[i] = setLocationEPPConfig(extLocations[i], intProxyPassLocation.Path, eppHost, portNum)
-					}
-				}
+				eppHost, portNum := extractEPPConfig(b, inferenceConfig.ClusterDomain)
+				extLocations[i] = setLocationEPPConfig(
+					extLocations[i], eppHost, portNum, b.UpstreamName,
+					b.EndpointPickerConfig.EndpointPickerRef.FailureMode,
+					!inferenceConfig.DisableTLS,
+					inferenceConfig.TLSSkipVerify,
+				)
 			}
 		}
+		return extLocations
+	}
+
+	// Multiple backends: external location rewrites via split_clients to internal locations
+	splitClientsVariableName := createInferenceSplitClientsVariableName(
+		convertStringToSafeVariableName(r.BackendGroup.Name()),
+	)
+	for i := range extLocations {
+		extLocations[i].Rewrites = append(extLocations[i].Rewrites, fmt.Sprintf("^ $%s last", splitClientsVariableName))
+		extLocations[i].Type = http.ExternalLocationType
+	}
+
+	locs := make([]http.Location, 0, len(extLocations)+len(r.BackendGroup.Backends))
+	for backendIdx, b := range r.BackendGroup.Backends {
+		intInferenceLocation := initializeInternalInferenceLocation(pathRuleIdx, matchRuleIdx, backendIdx)
+		intInferenceLocation.Includes = createIncludesFromPolicyGenerateResult(
+			generator.GenerateForInternalLocation(rule.Policies),
+		)
+
+		tempRule := dataplane.MatchRule{
+			Source:  r.Source,
+			Match:   r.Match,
+			Filters: r.Filters,
+			BackendGroup: dataplane.BackendGroup{
+				Source:      r.BackendGroup.Source,
+				RuleIdx:     r.BackendGroup.RuleIdx,
+				PathRuleIdx: r.BackendGroup.PathRuleIdx,
+				Backends:    []dataplane.Backend{b},
+			},
+		}
+		intInferenceLocation = updateLocation(
+			tempRule,
+			rule,
+			intInferenceLocation,
+			port,
+			keepAliveCheck,
+			mirrorPercentage,
+			serverID,
+			matchRuleIdx,
+			pathRuleIdx,
+		)
+
+		// Set EPP config directly on the inference location
+		if b.EndpointPickerConfig != nil && b.EndpointPickerConfig.EndpointPickerRef != nil {
+			eppHost, portNum := extractEPPConfig(b, inferenceConfig.ClusterDomain)
+			intInferenceLocation = setLocationEPPConfig(
+				intInferenceLocation, eppHost, portNum, b.UpstreamName,
+				b.EndpointPickerConfig.EndpointPickerRef.FailureMode,
+				!inferenceConfig.DisableTLS,
+				inferenceConfig.TLSSkipVerify,
+			)
+		}
+
+		locs = append(locs, intInferenceLocation)
 	}
 	locs = append(locs, extLocations...)
-
 	return locs
 }
 
-func setLocationEPPConfig(location http.Location, eppInternalPath, eppHost string, eppPort int) http.Location {
-	location.EPPInternalPath = eppInternalPath
-	location.EPPHost = eppHost
-	location.EPPPort = eppPort
+func setLocationEPPConfig(
+	location http.Location,
+	eppHost string,
+	eppPort int,
+	upstreamName string,
+	failureMode inference.EndpointPickerFailureMode,
+	useTLS bool,
+	tlsSkipVerify bool,
+) http.Location {
+	var failopenUpstream string
+	if failureMode == inference.EndpointPickerFailOpen {
+		failopenUpstream = upstreamName
+	}
+	location.Inference = &http.InferenceConfig{
+		EPPEndpoint:      fmt.Sprintf("%s:%d", eppHost, eppPort),
+		FailopenUpstream: failopenUpstream,
+		UseTLS:           useTLS,
+		TLSSkipVerify:    tlsSkipVerify,
+	}
 	return location
 }
 
-func extractEPPConfig(backend dataplane.Backend) (string, int) {
+func extractEPPConfig(backend dataplane.Backend, clusterDomain string) (string, int) {
 	var eppHost string
 	var eppPort int
 
@@ -878,6 +864,9 @@ func extractEPPConfig(backend dataplane.Backend) (string, int) {
 
 	if backend.EndpointPickerConfig.NsName != "" {
 		eppHost = string(eppRef.Name) + "." + backend.EndpointPickerConfig.NsName
+		if clusterDomain != "" {
+			eppHost += ".svc." + clusterDomain
+		}
 	} else {
 		eppHost = string(eppRef.Name)
 	}
@@ -902,11 +891,11 @@ func getMaxLocationCountAndPathMap(pathRules []dataplane.PathRule) (int, pathAnd
 	// 1. Each path rule will have at least one external location.
 	// 2. Each path rule may have an additional external location if it's a non-slashed prefix path.
 	// 3. There may be an additional location for the default root path.
-	// 4. For inference backends:
-	//    - Single backend without matches: 2 locations (external EPP + internal proxy pass)
-	//    - Single backend with matches: 3 locations (external redirect + internal EPP + internal proxy pass)
-	//    - Multiple backends without matches: 1 external + (2 * numBackends) internal locations
-	//    - Multiple backends with matches: 1 external + 1 split clients + (2 * numBackends) internal locations
+	// 4. For inference backends (EPP directives run in the same location as proxy_pass):
+	//    - Single backend without matches: 0 additional (EPP + proxy_pass on the external location)
+	//    - Single backend with matches: 1 internal proxy_pass location (with EPP)
+	//    - Multiple backends without matches: numBackends internal proxy_pass locations (each with EPP)
+	//    - Multiple backends with matches: 1 split_clients + numBackends internal proxy_pass locations
 	// 5. For non-inference backends with matches:
 	//    - Each match rule gets an internal location
 	// We also return a map of all paths and their types.
@@ -940,28 +929,28 @@ func getMaxLocationCountAndPathMap(pathRules []dataplane.PathRule) (int, pathAnd
 					maxLocs++ // Internal match location per match rule
 				}
 			} else {
-				// Inference backends calculation
+				// Inference backends calculation:
+				// EPP directives run in the same location as proxy_pass, so there's
+				// no separate EPP location — just proxy_pass locations with EPP config.
 				numBackends := len(matchRule.BackendGroup.Backends)
 
 				if needsInternalMatches {
 					// Has HTTP matching conditions
 					if numBackends > 1 {
-						// Multiple backends with matches: split clients + 2 locations per backend
-						maxLocs++                  // Internal split clients location
-						maxLocs += numBackends * 2 // EPP + proxy pass per backend
+						// Multiple backends with matches: split_clients + proxy_pass per backend
+						maxLocs++              // Internal split clients location
+						maxLocs += numBackends // proxy_pass (with EPP) per backend
 					} else {
-						// Single backend with matches: EPP + proxy pass
-						maxLocs += 2
+						// Single backend with matches: proxy_pass (with EPP)
+						maxLocs++
 					}
 				} else {
 					// No HTTP matching conditions
 					if numBackends > 1 {
-						// Multiple backends without matches: 2 locations per backend (no split clients for external)
-						maxLocs += numBackends * 2 // EPP + proxy pass per backend
-					} else {
-						// Single backend without matches: proxy pass only (external becomes EPP)
-						maxLocs++ // Just the internal proxy pass location
+						// Multiple backends without matches: proxy_pass (with EPP) per backend
+						maxLocs += numBackends
 					}
+					// Single backend without matches: EPP + proxy_pass on external location (no extra locs)
 				}
 			}
 		}
@@ -1028,10 +1017,6 @@ func getLocationTypeForPathRule(rule dataplane.PathRule) http.LocationType {
 		return http.RedirectLocationType
 	}
 
-	if rule.HasInferenceBackends {
-		return http.InferenceExternalLocationType
-	}
-
 	return http.ExternalLocationType
 }
 
@@ -1047,50 +1032,13 @@ func initializeInternalMatchLocation(
 	return createMatchLocation(path, grpc), createRouteMatch(match, path)
 }
 
-// initializeInternalInferenceEPPLocation initializes the internal inference EPP location. This location calls the
-// inference njs module to get the correct endpoint for the request and redirects to the final internal location
-// that does the proxy_pass to the backend.
-func initializeInternalInferenceEPPLocation(
-	b dataplane.Backend,
-	source types.NamespacedName,
-	ruleIdx,
-	pathruleIdx int,
-) http.Location {
-	return http.Location{
-		// This path needs to be recreated in the split_clients directive generation to match correctly.
-		Path: generateInternalInferenceEPPLocationPath(
-			b.UpstreamName,
-			source,
-			ruleIdx,
-			pathruleIdx,
-		),
-		Type: http.InferenceInternalLocationType,
-	}
-}
-
-func generateInternalInferenceEPPLocationPath(
-	upstreamName string,
-	source types.NamespacedName,
-	ruleIdx int,
-	pathRuleIdx int,
-) string {
-	return fmt.Sprintf(
-		"%s-%s-%s-%s-routeRule%d-pathRule%d",
-		http.InternalRoutePathPrefix,
-		upstreamName,
-		source.Namespace,
-		source.Name,
-		ruleIdx,
-		pathRuleIdx,
-	)
-}
-
-// initializeInternalInferenceProxyPassLocation initializes the internal inference location that does the final
-// proxy_pass to the inference backend.
-func initializeInternalInferenceProxyPassLocation(pathruleIdx, matchRuleIdx, backendIdx int) http.Location {
+// initializeInternalInferenceLocation initializes an internal inference location for a specific backend.
+// EPP config is set on this location so the Rust inference module can call the EPP in the access phase
+// before proxy_pass executes.
+func initializeInternalInferenceLocation(pathruleIdx, matchRuleIdx, backendIdx int) http.Location {
 	return http.Location{
 		Path: fmt.Sprintf(
-			"%s-proxy-pass-rule%d-route%d-backend%d-inference",
+			"%s-rule%d-route%d-backend%d-inference",
 			http.InternalRoutePathPrefix,
 			pathruleIdx,
 			matchRuleIdx,
@@ -1100,12 +1048,12 @@ func initializeInternalInferenceProxyPassLocation(pathruleIdx, matchRuleIdx, bac
 	}
 }
 
-// initializeInternalInferenceSplitClientsLocation initializes the internal inference location that rewrites
-// to a location determined by a split_clients variable.
-func initializeInternalInferenceSplitClientsLocation(pathruleIdx, matchRuleIdx int) http.Location {
+// initializeInternalInferenceSplitLocation initializes an internal inference location that rewrites
+// to a backend-specific location determined by a split_clients variable.
+func initializeInternalInferenceSplitLocation(pathruleIdx, matchRuleIdx int) http.Location {
 	return http.Location{
 		Path: fmt.Sprintf(
-			"%s-split-clients-rule%d-route%d-inference",
+			"%s-rule%d-route%d-split-inference",
 			http.InternalRoutePathPrefix,
 			pathruleIdx,
 			matchRuleIdx,
@@ -1696,8 +1644,7 @@ func createProxyPass(
 	backendName := backendGroupName(backendGroup)
 
 	if inferenceBackend && !strings.Contains(backendName, invalidBackendRef) {
-		backendVarName := strings.ReplaceAll(backendName, "-", "_")
-		return "http://$inference_backend_" + backendVarName + requestURI
+		return "http://$inference_endpoint" + requestURI
 	}
 
 	if backendGroupNeedsSplit(backendGroup) {

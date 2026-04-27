@@ -40,6 +40,12 @@ node_modules/
 # JS test coverage
 internal/controller/nginx/modules/coverage
 
+# Rust test coverage
+internal/controller/nginx/modules/rust/ngf-inference/coverage
+
+# Rust build artifacts
+**/target/
+
 # MacOS Finder
 .DS_Store
 

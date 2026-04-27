@@ -1,0 +1,55 @@
+# syntax=docker/dockerfile:1.23
+# Dockerfile for running Rust lint and tests.
+# nginx-sys needs a configured nginx source tree for bindgen.
+# Only --with-compat is required; it sets NGX_COMPAT for dynamic module compatibility.
+
+FROM alpine:3.23 AS nginx-source
+
+# renovate: datasource=github-tags depName=nginx/nginx extractVersion=^release-(?<version>.+)$
+ARG NGINX_VERSION=1.30.0
+
+RUN apk add --no-cache gcc musl-dev openssl-dev pcre2-dev zlib-dev linux-headers perl make
+
+RUN wget -q https://nginx.org/download/nginx-${NGINX_VERSION}.tar.gz \
+    && tar xzf nginx-${NGINX_VERSION}.tar.gz
+
+RUN cd nginx-${NGINX_VERSION} && ./configure --with-compat --with-http_ssl_module
+
+FROM rust:1.94-alpine AS base
+
+# Pin clang20-dev: clang21's libclang.so cannot be dlopen'd on Alpine musl.
+RUN apk add --no-cache musl-dev protobuf-dev openssl-dev perl make \
+    pcre2-dev zlib-dev linux-headers clang20-dev
+
+RUN rustup component add clippy
+
+# renovate: datasource=github-tags depName=nginx/nginx extractVersion=^release-(?<version>.+)$
+ARG NGINX_VERSION=1.30.0
+
+COPY --from=nginx-source /nginx-${NGINX_VERSION} /nginx-src
+
+ENV NGINX_SOURCE_DIR=/nginx-src
+# -crt-static: dynamic linking on musl (match the production Dockerfile).
+# --unresolved-symbols=ignore-all: the test binary links nginx-sys which
+# references nginx symbols (ngx_pnalloc, etc.). Those symbols are provided
+# by nginx at module-load time; they don't exist at test-link time.
+ENV RUSTFLAGS="-C target-feature=-crt-static -C link-arg=-Wl,--unresolved-symbols=ignore-all"
+
+WORKDIR /build
+COPY . .
+
+# Default target: run an arbitrary cargo command (test, clippy, etc.)
+FROM base AS run
+ARG COMMAND=test
+ARG CACHE_BUST
+RUN cargo ${COMMAND}
+
+# Coverage target: run tests with cargo-llvm-cov and produce lcov output.
+# Build with: docker build --target coverage --output type=local,dest=. ...
+FROM base AS coverage
+RUN cargo install cargo-llvm-cov
+RUN cargo llvm-cov --lcov --output-path /build/lcov.info
+
+# Final stage copies only the coverage file for --output extraction.
+FROM scratch AS coverage-output
+COPY --from=coverage /build/lcov.info /lcov.info
