@@ -25,11 +25,11 @@ use ngx::ffi::{
     ngx_buf_t, ngx_chain_t, ngx_connection_t, ngx_event_t, ngx_http_read_client_request_body,
     ngx_http_request_t, ngx_post_event, ngx_posted_events, ngx_posted_next_events,
 };
-use ngx::http::Request;
+use ngx::http::{HttpModuleLocationConf, NgxHttpCoreModule, Request};
 
 use crate::config::EPP_TIMEOUT_MS;
 use crate::grpc;
-use crate::grpc::EppStream;
+use crate::grpc::{EppStream, ResolverParams};
 use crate::net::ssl::NgxSsl;
 
 /// Errors that can occur during EPP processing.
@@ -38,7 +38,7 @@ use crate::net::ssl::NgxSsl;
 #[derive(Debug)]
 pub enum EppError {
     /// EPP failed but failopen is enabled.
-    FailOpen,
+    FailOpen(String),
     /// EPP returned an error.
     ProcessingFailed(String),
     /// Internal error.
@@ -48,7 +48,7 @@ pub enum EppError {
 impl std::fmt::Display for EppError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::FailOpen => write!(f, "EPP failed (failopen)"),
+            Self::FailOpen(msg) => write!(f, "EPP failed (failopen): {msg}"),
             Self::ProcessingFailed(msg) => write!(f, "EPP processing failed: {msg}"),
             Self::Internal(msg) => write!(f, "internal error: {msg}"),
         }
@@ -223,6 +223,11 @@ pub fn start_epp_stream(
 
     let endpoint = epp_endpoint.to_string();
 
+    // Extract resolver from the location configuration. When a `resolver`
+    // directive is configured, the async resolver avoids blocking the nginx
+    // event loop during DNS lookups. Without it, we fall back to getaddrinfo(3).
+    let resolver_params = extract_resolver_params(request);
+
     // Get a raw pointer to the context so the async task can write results.
     // SAFETY: The context is allocated from the request pool and lives for
     // the entire request lifetime. The async task runs on the same nginx
@@ -231,9 +236,19 @@ pub fn start_epp_stream(
 
     // Spawn async task on the nginx event loop
     // ssl is moved (owned) into the async block so it lives for 'static
+    // resolver_params is Copy — safe to move into the async block
     ngx::async_::spawn(async move {
-        match grpc::epp_request_phase(log, &endpoint, EPP_TIMEOUT_MS, headers, body, use_tls, ssl)
-            .await
+        match grpc::epp_request_phase(
+            log,
+            &endpoint,
+            EPP_TIMEOUT_MS,
+            headers,
+            body,
+            use_tls,
+            ssl,
+            resolver_params,
+        )
+        .await
         {
             Ok(result) => {
                 // SAFETY: single-threaded, ctx_ptr is valid for request lifetime
@@ -255,6 +270,62 @@ pub fn start_epp_stream(
     ctx.task_spawned = true;
 
     Ok(())
+}
+
+/// Extract nginx resolver parameters from the request's location configuration.
+///
+/// Returns a [`ResolverParams`] with the resolver pointer and timeout if a
+/// `resolver` directive is configured for this location, otherwise `resolver`
+/// is `None` and the caller should fall back to blocking DNS.
+fn extract_resolver_params(request: &Request) -> ResolverParams {
+    let clcf = NgxHttpCoreModule::location_conf(request);
+    match clcf {
+        Some(loc_conf) => ResolverParams {
+            resolver: valid_resolver_ptr(loc_conf.resolver),
+            timeout: loc_conf.resolver_timeout,
+        },
+        None => ResolverParams {
+            resolver: None,
+            timeout: 0,
+        },
+    }
+}
+
+/// Return a [`NonNull`] only when `ptr` is a usable resolver with nameservers.
+///
+/// nginx always creates a resolver during `merge_loc_conf`, but when no
+/// `resolver` directive is present, it creates a "dummy" resolver via
+/// `ngx_resolver_create(cf, NULL, 0)` — a valid `ngx_resolver_t*` with
+/// `connections.nelts == 0` (zero nameservers).
+///
+/// Attempting to use such a resolver causes nginx's `ngx_resolve_start` to
+/// return `NGX_NO_RESOLVER` (`(void*)-1`), and the ngx-rust `Resolver` wrapper
+/// doesn't detect this sentinel, leading to a crash when dereferenced.
+///
+/// This function returns `None` for:
+/// - null pointers (shouldn't happen after merge, but defensive)
+/// - `NGX_CONF_UNSET_PTR` sentinel (`(void*)-1`) from unmerged configs
+/// - resolvers with zero nameservers (dummy resolver)
+fn valid_resolver_ptr(
+    ptr: *mut nginx_sys::ngx_resolver_t,
+) -> Option<NonNull<nginx_sys::ngx_resolver_t>> {
+    // NGX_CONF_UNSET_PTR is `(void *) -1`, i.e. usize::MAX.
+    if ptr.is_null() || ptr as usize == usize::MAX {
+        return None;
+    }
+
+    // SAFETY: We've verified ptr is not null and not the unset sentinel.
+    // The resolver struct is owned by nginx and valid for the request lifetime.
+    let resolver = unsafe { &*ptr };
+
+    // A dummy resolver has connections.nelts == 0 (no nameservers configured).
+    // Using it would cause ngx_resolve_start to return NGX_NO_RESOLVER (-1),
+    // which the ngx-rust Resolver wrapper doesn't handle, leading to a crash.
+    if resolver.connections.nelts == 0 {
+        return None;
+    }
+
+    NonNull::new(ptr)
 }
 
 /// Send the EPP response-phase notification (fire-and-forget).
@@ -301,7 +372,7 @@ pub fn finalize_epp_result(ctx: &mut RequestCtx, failopen: bool) -> Result<(), E
             .take()
             .unwrap_or_else(|| "EPP gRPC call failed".to_string());
         if failopen {
-            return Err(EppError::FailOpen);
+            return Err(EppError::FailOpen(detail));
         }
         return Err(EppError::ProcessingFailed(detail));
     }
@@ -377,8 +448,11 @@ mod tests {
 
     #[test]
     fn epp_error_display_failopen() {
-        let err = EppError::FailOpen;
-        assert_eq!(format!("{err}"), "EPP failed (failopen)");
+        let err = EppError::FailOpen("connection refused".to_string());
+        assert_eq!(
+            format!("{err}"),
+            "EPP failed (failopen): connection refused"
+        );
     }
 
     #[test]
@@ -446,10 +520,16 @@ mod tests {
     fn finalize_epp_result_failure_with_failopen() {
         let mut ctx = make_ctx();
         ctx.epp_failed = true;
+        ctx.error_detail = Some("resolver timeout".to_string());
         ctx.done = true;
 
         let result = finalize_epp_result(&mut ctx, true);
-        assert!(matches!(result, Err(EppError::FailOpen)));
+        match result {
+            Err(EppError::FailOpen(msg)) => {
+                assert_eq!(msg, "resolver timeout");
+            }
+            other => panic!("expected FailOpen, got {:?}", other),
+        }
     }
 
     #[test]
@@ -516,9 +596,10 @@ mod tests {
 
     #[test]
     fn epp_error_failopen_debug() {
-        let err = EppError::FailOpen;
+        let err = EppError::FailOpen("timeout".to_string());
         let debug = format!("{err:?}");
         assert!(debug.contains("FailOpen"));
+        assert!(debug.contains("timeout"));
     }
 
     // --- finalize_epp_result edge cases ---
@@ -568,5 +649,44 @@ mod tests {
         assert!(!ctx.body_ready);
         ctx.body_ready = true;
         assert!(ctx.body_reading_started);
+    }
+
+    #[test]
+    fn valid_resolver_ptr_null_returns_none() {
+        let ptr: *mut nginx_sys::ngx_resolver_t = std::ptr::null_mut();
+        assert!(super::valid_resolver_ptr(ptr).is_none());
+    }
+
+    #[test]
+    fn valid_resolver_ptr_unset_sentinel_returns_none() {
+        // NGX_CONF_UNSET_PTR = (void *) -1 = usize::MAX
+        let ptr = usize::MAX as *mut nginx_sys::ngx_resolver_t;
+        assert!(super::valid_resolver_ptr(ptr).is_none());
+    }
+
+    #[test]
+    fn valid_resolver_ptr_dummy_resolver_returns_none() {
+        // Simulate nginx's dummy resolver: valid pointer but connections.nelts == 0.
+        // ngx_pcalloc zeroes the struct, so MaybeUninit::zeroed is equivalent.
+        let mut resolver: std::mem::MaybeUninit<nginx_sys::ngx_resolver_t> =
+            std::mem::MaybeUninit::zeroed();
+        let ptr = resolver.as_mut_ptr();
+        assert!(super::valid_resolver_ptr(ptr).is_none());
+    }
+
+    #[test]
+    fn valid_resolver_ptr_with_nameservers_returns_some() {
+        // Simulate a resolver with at least one nameserver configured.
+        let mut resolver: std::mem::MaybeUninit<nginx_sys::ngx_resolver_t> =
+            std::mem::MaybeUninit::zeroed();
+        // SAFETY: we only set connections.nelts on the zeroed struct; no other
+        // field is read before we call valid_resolver_ptr, which only reads
+        // connections.nelts.
+        unsafe {
+            let ptr = resolver.as_mut_ptr();
+            (*ptr).connections.nelts = 1;
+        }
+        let ptr = resolver.as_mut_ptr();
+        assert!(super::valid_resolver_ptr(ptr).is_some());
     }
 }

@@ -164,6 +164,7 @@ func TestControllerCmdFlagValidation(t *testing.T) {
 				"--nginx-one-tls-skip-verify",
 				"--endpoint-picker-disable-tls",
 				"--endpoint-picker-tls-skip-verify",
+				"--cluster-domain=cluster.local",
 				"--watch-namespaces=ns1,ns2",
 			},
 			wantErr: false,
@@ -528,6 +529,22 @@ func TestControllerCmdFlagValidation(t *testing.T) {
 			},
 			wantErr:           true,
 			expectedErrPrefix: `invalid argument "!@#$" for "--watch-namespaces" flag: invalid format: `,
+		},
+		{
+			name: "cluster-domain is set to empty string",
+			args: []string{
+				"--cluster-domain=",
+			},
+			wantErr:           true,
+			expectedErrPrefix: `invalid argument "" for "--cluster-domain" flag: must be set`,
+		},
+		{
+			name: "cluster-domain is invalid",
+			args: []string{
+				"--cluster-domain=!@#$",
+			},
+			wantErr:           true,
+			expectedErrPrefix: `invalid argument "!@#$" for "--cluster-domain" flag: invalid format`,
 		},
 	}
 

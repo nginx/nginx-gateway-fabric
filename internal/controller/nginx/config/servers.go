@@ -670,7 +670,7 @@ func createInternalLocationsForRule(
 
 				// Set EPP config directly on the inference location
 				if b.EndpointPickerConfig != nil && b.EndpointPickerConfig.EndpointPickerRef != nil {
-					eppHost, portNum := extractEPPConfig(b)
+					eppHost, portNum := extractEPPConfig(b, inferenceConfig.ClusterDomain)
 					intInferenceLocation = setLocationEPPConfig(
 						intInferenceLocation, eppHost, portNum, b.UpstreamName,
 						b.EndpointPickerConfig.EndpointPickerRef.FailureMode,
@@ -763,7 +763,7 @@ func createInferenceLocationsForRule(
 				pathRuleIdx,
 			)
 			if b.EndpointPickerConfig != nil && b.EndpointPickerConfig.EndpointPickerRef != nil {
-				eppHost, portNum := extractEPPConfig(b)
+				eppHost, portNum := extractEPPConfig(b, inferenceConfig.ClusterDomain)
 				extLocations[i] = setLocationEPPConfig(
 					extLocations[i], eppHost, portNum, b.UpstreamName,
 					b.EndpointPickerConfig.EndpointPickerRef.FailureMode,
@@ -816,7 +816,7 @@ func createInferenceLocationsForRule(
 
 		// Set EPP config directly on the inference location
 		if b.EndpointPickerConfig != nil && b.EndpointPickerConfig.EndpointPickerRef != nil {
-			eppHost, portNum := extractEPPConfig(b)
+			eppHost, portNum := extractEPPConfig(b, inferenceConfig.ClusterDomain)
 			intInferenceLocation = setLocationEPPConfig(
 				intInferenceLocation, eppHost, portNum, b.UpstreamName,
 				b.EndpointPickerConfig.EndpointPickerRef.FailureMode,
@@ -853,7 +853,7 @@ func setLocationEPPConfig(
 	return location
 }
 
-func extractEPPConfig(backend dataplane.Backend) (string, int) {
+func extractEPPConfig(backend dataplane.Backend, clusterDomain string) (string, int) {
 	var eppHost string
 	var eppPort int
 
@@ -864,6 +864,9 @@ func extractEPPConfig(backend dataplane.Backend) (string, int) {
 
 	if backend.EndpointPickerConfig.NsName != "" {
 		eppHost = string(eppRef.Name) + "." + backend.EndpointPickerConfig.NsName
+		if clusterDomain != "" {
+			eppHost += ".svc." + clusterDomain
+		}
 	} else {
 		eppHost = string(eppRef.Name)
 	}

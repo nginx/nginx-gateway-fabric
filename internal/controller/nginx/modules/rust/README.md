@@ -46,11 +46,12 @@ This module enables NGINX Gateway Fabric to route traffic to AI/ML inference end
 - EPP may return a comma-separated list of endpoints; the first one is selected
 - Failopen support: on EPP failure, falls back to a configured upstream instead of returning 502
 - TLS support via nginx's SSL subsystem (`--with-http_ssl_module`)
+- uses nginx's DNS resolver if configured, falls back to getaddrinfo to preserve backwards compatibility
 
 **NGINX directives:**
 
 - `inference_epp on|off` — Enable or disable EPP for this location
-- `inference_epp_endpoint <host:port>` — EPP gRPC server address (e.g., `inference_epp_endpoint dns:///epp-server:9002`)
+- `inference_epp_endpoint <host:port>` — EPP gRPC server address (e.g., `inference_epp_endpoint epp-server:9002`)
 - `inference_failopen <upstream_name>` — Enable failopen; on EPP failure, `$inference_endpoint` resolves to this upstream so `proxy_pass` falls back to it instead of returning 502
 - `inference_epp_tls on|off` — Enable TLS for the EPP gRPC connection
 - `inference_epp_tls_skip_verify on|off` — Skip server certificate verification when using TLS

@@ -35,7 +35,7 @@
 //! background task so it can continue to drive I/O for the fire-and-forget
 //! response phase.
 
-use crate::net::peer_conn::PeerConnection;
+use crate::net::peer_conn::{OwnedPool, PeerConnection};
 use crate::net::ssl::NgxSsl;
 use crate::protos::envoy;
 
@@ -43,6 +43,8 @@ use core::pin::Pin;
 use core::ptr::NonNull;
 use core::task::Poll;
 use core::{future, mem};
+
+use ngx::core::Pool;
 use std::collections::HashMap;
 use std::io;
 
@@ -50,8 +52,18 @@ use bytes::{Buf, BufMut, Bytes, BytesMut};
 use h2::client::{Connection, ResponseFuture, SendRequest};
 use h2::{RecvStream, SendStream};
 use http::header::CONTENT_TYPE;
-use nginx_sys::ngx_log_t;
+use nginx_sys::{NGX_LOG_DEBUG, ngx_log_t, ngx_msec_t, ngx_resolver_t};
+use ngx::ngx_log_error;
 use prost::Message;
+
+/// Optional nginx resolver parameters extracted from the request's location
+/// configuration. When `resolver` is `Some`, [`connect_peer`] will use the
+/// nginx async resolver instead of the blocking `getaddrinfo(3)` fallback.
+#[derive(Clone, Copy)]
+pub struct ResolverParams {
+    pub resolver: Option<NonNull<ngx_resolver_t>>,
+    pub timeout: ngx_msec_t,
+}
 
 type ProcessingRequest = envoy::service::ext_proc::v3::ProcessingRequest;
 type ProcessingResponse = envoy::service::ext_proc::v3::ProcessingResponse;
@@ -115,6 +127,7 @@ pub async fn epp_request_phase(
     body: Option<Vec<u8>>,
     use_tls: bool,
     ssl: Option<NgxSsl>,
+    resolver_params: ResolverParams,
 ) -> Result<EppRequestResult, String> {
     let uri_str = normalize_endpoint(endpoint, use_tls);
     let uri: http::Uri = uri_str
@@ -122,7 +135,7 @@ pub async fn epp_request_phase(
         .map_err(|e| format!("invalid endpoint URI: {e}"))?;
 
     // Connect via PeerConnection
-    let peer = connect_peer(log, &uri, use_tls, ssl.as_ref()).await?;
+    let peer = connect_peer(log, &uri, use_tls, ssl.as_ref(), resolver_params).await?;
 
     // HTTP/2 handshake — peer is Pin<Box<PeerConnection>> which is Unpin
     let (send_request, conn) = h2::client::handshake(peer)
@@ -439,29 +452,89 @@ pub fn epp_response_phase(mut stream: EppStream, served_endpoint: &str) -> Resul
 }
 
 /// Connect to a peer using PeerConnection with optional SSL.
+///
+/// When `resolver_params` contains a resolver, hostname resolution uses nginx's
+/// async resolver (non-blocking, integrated with the event loop). Otherwise,
+/// falls back to the blocking `getaddrinfo(3)` via [`resolve_address`].
 async fn connect_peer(
     log: NonNull<ngx_log_t>,
     uri: &http::Uri,
     use_tls: bool,
     ssl: Option<&NgxSsl>,
+    resolver_params: ResolverParams,
 ) -> Result<Pin<Box<PeerConnection>>, String> {
     let host = uri.host().ok_or("URI has no host")?;
     let port = uri.port_u16().unwrap_or(if use_tls { 443 } else { 80 });
-
-    // Resolve address — `resolved` must stay alive until `connect` copies the sockaddr.
-    let resolved =
-        resolve_address(host, port).map_err(|e| format!("address resolution failed: {e}"))?;
 
     let mut peer = Box::pin(
         PeerConnection::new(log).map_err(|e| format!("failed to create peer connection: {e}"))?,
     );
 
-    // TCP connect (copies sockaddr into the nginx pool; `resolved` can be dropped after)
-    peer.as_mut()
-        .connect(&resolved.addr)
-        .await
-        .map_err(|e| format!("TCP connect to {host}:{port} failed: {e}"))?;
-    drop(resolved);
+    if let Some(resolver_ptr) = resolver_params.resolver {
+        // Async resolution via nginx's resolver — non-blocking.
+        let resolver =
+            ngx::async_::resolver::Resolver::from_resolver(resolver_ptr, resolver_params.timeout);
+
+        // The resolver needs an ngx_str_t for the hostname and a Pool for
+        // allocating the result. We use an OwnedPool that is dropped after
+        // connect copies the sockaddr.
+        let pool = OwnedPool::with_default_size(log)
+            .map_err(|_| "failed to create pool for resolver".to_string())?;
+
+        let pool_ref: &Pool = pool.as_ref();
+        let name = unsafe { nginx_sys::ngx_str_t::from_bytes(pool_ref.as_ptr(), host.as_bytes()) }
+            .ok_or_else(|| "failed to allocate ngx_str_t for hostname".to_string())?;
+
+        match resolver.resolve_name(&name, pool_ref).await {
+            Ok(addrs) => {
+                let first = addrs
+                    .first()
+                    .ok_or("nginx resolver returned no addresses")?;
+
+                // The resolver returns addresses without the port set — patch it in.
+                set_sockaddr_port(first.sockaddr, first.socklen, port);
+
+                peer.as_mut()
+                    .connect(first)
+                    .await
+                    .map_err(|e| format!("TCP connect to {host}:{port} failed: {e}"))?;
+            }
+            Err(e) => {
+                // The async resolver does not use search domains from
+                // /etc/resolv.conf, so short Kubernetes names like
+                // "svc.namespace" will fail. Fall back to getaddrinfo(3)
+                // which applies search domains automatically.
+                ngx_log_error!(
+                    NGX_LOG_DEBUG,
+                    log.as_ptr(),
+                    "inference: async resolver failed for {}: {}, falling back to getaddrinfo",
+                    host,
+                    e
+                );
+
+                let resolved = resolve_address(host, port).map_err(|e2| {
+                    format!("address resolution failed: {e2} (resolver also failed: {e})")
+                })?;
+
+                peer.as_mut()
+                    .connect(&resolved.addr)
+                    .await
+                    .map_err(|e| format!("TCP connect to {host}:{port} failed: {e}"))?;
+                drop(resolved);
+            }
+        }
+    } else {
+        // Fallback: blocking getaddrinfo(3). Works without a `resolver` directive
+        // but blocks the nginx event loop during DNS lookups.
+        let resolved =
+            resolve_address(host, port).map_err(|e| format!("address resolution failed: {e}"))?;
+
+        peer.as_mut()
+            .connect(&resolved.addr)
+            .await
+            .map_err(|e| format!("TCP connect to {host}:{port} failed: {e}"))?;
+        drop(resolved);
+    }
 
     // SSL handshake if TLS is enabled
     if use_tls {
@@ -478,6 +551,26 @@ async fn connect_peer(
     }
 
     Ok(peer)
+}
+
+/// Set the port on a raw sockaddr pointer. This is needed because nginx's
+/// resolver returns addresses without a port — it resolves hostnames only.
+fn set_sockaddr_port(sockaddr: *mut nginx_sys::sockaddr, socklen: nginx_sys::socklen_t, port: u16) {
+    if sockaddr.is_null() || socklen == 0 {
+        return;
+    }
+    let family = unsafe { (*sockaddr).sa_family } as i32;
+    match family {
+        libc::AF_INET => {
+            let sin = sockaddr.cast::<libc::sockaddr_in>();
+            unsafe { (*sin).sin_port = port.to_be() };
+        }
+        libc::AF_INET6 => {
+            let sin6 = sockaddr.cast::<libc::sockaddr_in6>();
+            unsafe { (*sin6).sin6_port = port.to_be() };
+        }
+        _ => {} // unknown family — leave port as-is
+    }
 }
 
 /// Wrapper that pairs a resolved `ngx_addr_t` with the owned storage behind
@@ -1425,6 +1518,46 @@ mod tests {
         let resolved = resolve_address("::1", 80).expect("should resolve");
         assert!(!resolved.addr.sockaddr.is_null());
         drop(resolved);
+    }
+
+    // --- set_sockaddr_port ---
+
+    #[test]
+    fn set_sockaddr_port_v4() {
+        let mut sin: libc::sockaddr_in = unsafe { mem::zeroed() };
+        sin.sin_family = libc::AF_INET as libc::sa_family_t;
+        sin.sin_port = 0;
+        let ptr = &raw mut sin as *mut nginx_sys::sockaddr;
+        set_sockaddr_port(ptr, mem::size_of::<libc::sockaddr_in>() as _, 9999);
+        assert_eq!(u16::from_be(sin.sin_port), 9999);
+    }
+
+    #[test]
+    fn set_sockaddr_port_v6() {
+        let mut sin6: libc::sockaddr_in6 = unsafe { mem::zeroed() };
+        sin6.sin6_family = libc::AF_INET6 as libc::sa_family_t;
+        sin6.sin6_port = 0;
+        let ptr = &raw mut sin6 as *mut nginx_sys::sockaddr;
+        set_sockaddr_port(ptr, mem::size_of::<libc::sockaddr_in6>() as _, 8443);
+        assert_eq!(u16::from_be(sin6.sin6_port), 8443);
+    }
+
+    #[test]
+    fn set_sockaddr_port_null_is_noop() {
+        // Should not panic
+        set_sockaddr_port(core::ptr::null_mut(), 0, 80);
+    }
+
+    // --- ResolverParams ---
+
+    #[test]
+    fn resolver_params_none_is_copy() {
+        let params = ResolverParams {
+            resolver: None,
+            timeout: 0,
+        };
+        let copy = params;
+        assert!(copy.resolver.is_none());
     }
 
     // --- normalize_endpoint: additional edge cases ---

@@ -38,6 +38,7 @@ const (
 	serverTLSSecret               = "server-tls"
 	agentTLSSecret                = "agent-tls"
 	nginxOneTelemetryEndpointHost = "agent.connect.nginx.com"
+	clusterDomainFlag             = "cluster-domain"
 )
 
 // usageReportParams holds the parameters for building the usage report configuration for PLUS.
@@ -169,6 +170,11 @@ func createControllerCommand() *cobra.Command {
 		endpointPickerDisableTLS    bool
 		endpointPickerTLSSkipVerify = true
 
+		clusterDomain = stringValidatingValue{
+			validator: validateQualifiedName,
+			value:     "cluster.local",
+		}
+
 		watchNamespaces = stringSliceValidatingValue{
 			validator: validateResourceName,
 		}
@@ -284,6 +290,7 @@ func createControllerCommand() *cobra.Command {
 				ExperimentalFeatures: gwExperimentalFeatures,
 				InferenceExtension:   gwInferenceExtension,
 				InferenceExtensionConfig: config.InferenceExtensionConfig{
+					ClusterDomain: clusterDomain.value,
 					DisableTLS:    endpointPickerDisableTLS,
 					TLSSkipVerify: endpointPickerTLSSkipVerify,
 				},
@@ -474,6 +481,12 @@ func createControllerCommand() *cobra.Command {
 	)
 
 	cmd.Flags().Var(
+		&clusterDomain,
+		clusterDomainFlag,
+		`The DNS domain of your Kubernetes cluster.`,
+	)
+
+	cmd.Flags().Var(
 		&nginxDockerSecrets,
 		nginxDockerSecretFlag,
 		"The name of the NGINX docker registry Secret(s). Must exist in the same namespace "+
@@ -587,7 +600,6 @@ func createGenerateCertsCommand() *cobra.Command {
 		serverTLSSecretFlag = "server-tls-secret" //nolint:gosec // not credentials
 		agentTLSSecretFlag  = "agent-tls-secret"
 		serviceFlag         = "service"
-		clusterDomainFlag   = "cluster-domain"
 		overwriteFlag       = "overwrite"
 	)
 

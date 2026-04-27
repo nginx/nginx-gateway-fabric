@@ -478,11 +478,12 @@ http_request_handler!(inference_access_handler, |request: &mut http::Request| {
 
         match stream::start_epp_stream(request, ctx, &endpoint, conf.use_tls, ssl) {
             Ok(()) => return Status::NGX_AGAIN,
-            Err(stream::EppError::FailOpen) => {
+            Err(stream::EppError::FailOpen(ref detail)) => {
                 ngx_log_error!(
                     NGX_LOG_WARN,
                     request.log(),
-                    "inference: EPP connection failed, failing open"
+                    "inference: EPP connection failed, failing open: {}",
+                    detail
                 );
                 return Status::NGX_DECLINED;
             }
@@ -520,11 +521,12 @@ http_request_handler!(inference_access_handler, |request: &mut http::Request| {
             );
             Status::NGX_DECLINED
         }
-        Err(stream::EppError::FailOpen) => {
+        Err(stream::EppError::FailOpen(ref detail)) => {
             ngx_log_error!(
                 NGX_LOG_WARN,
                 request.log(),
-                "inference: EPP failed, failing open"
+                "inference: EPP failed, failing open: {}",
+                detail
             );
             Status::NGX_DECLINED
         }

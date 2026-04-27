@@ -38,6 +38,8 @@ type Config struct {
 	NginxDockerSecretNames []string
 	// WatchNamespaces is the list of namespaces to watch for resources. If empty, all namespaces are watched.
 	WatchNamespaces []string
+	// InferenceExtensionConfig holds the configuration for the Gateway API Inference Extension.
+	InferenceExtensionConfig InferenceExtensionConfig
 	// NginxOneConsoleTelemetryConfig contains the configuration for NGINX One Console telemetry.
 	NginxOneConsoleTelemetryConfig NginxOneConsoleTelemetryConfig
 	// ProductTelemetryConfig contains the configuration for collecting product telemetry.
@@ -52,8 +54,6 @@ type Config struct {
 	ExperimentalFeatures bool
 	// InferenceExtension indicates if Gateway API Inference Extension support is enabled.
 	InferenceExtension bool
-	// InferenceExtensionConfig holds the configuration for the Gateway API Inference Extension.
-	InferenceExtensionConfig InferenceExtensionConfig
 	// SnippetsFilters indicates if SnippetsFilters are enabled.
 	SnippetsFilters bool
 	// Snippets indicates if Snippets are enabled. This will enable both SnippetsFilter and SnippetsPolicy APIs.
@@ -62,6 +62,9 @@ type Config struct {
 
 // InferenceExtensionConfig holds the configuration for the Gateway API Inference Extension.
 type InferenceExtensionConfig struct {
+	// ClusterDomain is the DNS cluster domain (e.g. "cluster.local") used to build
+	// fully qualified Service hostnames for the EndpointPicker.
+	ClusterDomain string
 	// DisableTLS disables TLS when connecting to the EndpointPicker.
 	DisableTLS bool
 	// TLSSkipVerify disables server certificate verification when connecting to the EndpointPicker.
