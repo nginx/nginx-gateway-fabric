@@ -39,11 +39,14 @@ use crate::net::peer_conn::{OwnedPool, PeerConnection};
 use crate::net::ssl::NgxSsl;
 use crate::protos::envoy;
 
+use core::future::Future;
 use core::pin::Pin;
 use core::ptr::NonNull;
 use core::task::Poll;
+use core::time::Duration;
 use core::{future, mem};
 
+use ngx::async_::Sleep;
 use ngx::core::Pool;
 use std::collections::HashMap;
 use std::io;
@@ -103,6 +106,44 @@ pub struct EppStream {
     _ssl: Option<NgxSsl>,
 }
 
+/// Timeout error type for the EPP exchange.
+///
+/// Returned when the timeout future completes before the wrapped future.
+struct TimeoutError;
+
+/// Run a future with a timeout using nginx's async timer.
+///
+/// If the future completes before the timeout, returns `Ok(result)`.
+/// If the timeout expires first, returns `Err(TimeoutError)`.
+///
+/// This uses `ngx::async_::Sleep` which integrates with nginx's event loop,
+/// avoiding the need for a separate runtime (tokio, etc.).
+async fn with_timeout<F, T>(future: F, timeout: Duration, log: NonNull<ngx_log_t>) -> Result<T, TimeoutError>
+where
+    F: Future<Output = T>,
+{
+    use core::task::Context;
+    use std::pin::pin;
+
+    let mut future = pin!(future);
+    let mut sleep = pin!(Sleep::new(timeout, log));
+
+    future::poll_fn(|cx: &mut Context<'_>| {
+        // Poll the main future first
+        if let Poll::Ready(result) = future.as_mut().poll(cx) {
+            return Poll::Ready(Ok(result));
+        }
+
+        // Poll the timeout
+        if let Poll::Ready(()) = sleep.as_mut().poll(cx) {
+            return Poll::Ready(Err(TimeoutError));
+        }
+
+        Poll::Pending
+    })
+    .await
+}
+
 /// Run EPP request phase: connect, send headers+body, read endpoint selection.
 ///
 /// This is phase 1 of the two-phase EPP exchange. It:
@@ -111,6 +152,10 @@ pub struct EppStream {
 /// 3. Opens a gRPC bidirectional stream
 /// 4. Sends RequestHeaders and RequestBody as gRPC frames
 /// 5. Reads the endpoint selection response
+///
+/// The entire exchange is wrapped in a timeout (`timeout_ms`). If any step
+/// stalls (DNS, connect, handshake, send, read), the timeout will fire and
+/// the function returns an error so the caller can fail open/closed.
 ///
 /// The gRPC stream is kept open — the returned [`EppStream`] must be passed
 /// to [`epp_response_phase`] after the upstream responds.
@@ -122,7 +167,40 @@ pub struct EppStream {
 pub async fn epp_request_phase(
     log: NonNull<ngx_log_t>,
     endpoint: &str,
-    _timeout_ms: u64,
+    timeout_ms: u64,
+    headers: Vec<(String, String)>,
+    body: Option<Vec<u8>>,
+    use_tls: bool,
+    ssl: Option<NgxSsl>,
+    resolver_params: ResolverParams,
+) -> Result<EppRequestResult, String> {
+    let timeout = Duration::from_millis(timeout_ms);
+
+    // Wrap the entire EPP exchange in a timeout. This covers DNS resolution,
+    // TCP connect, TLS handshake, HTTP/2 handshake, request send, and response
+    // read. If any step stalls, the timeout fires and we return an error.
+    match with_timeout(
+        epp_request_phase_inner(log, endpoint, headers, body, use_tls, ssl, resolver_params),
+        timeout,
+        log,
+    )
+    .await
+    {
+        Ok(result) => result,
+        Err(TimeoutError) => Err(format!(
+            "EPP request timed out after {}ms (endpoint: {})",
+            timeout_ms, endpoint
+        )),
+    }
+}
+
+/// Inner implementation of epp_request_phase without timeout wrapper.
+///
+/// Separated so `with_timeout` can wrap the entire async operation cleanly.
+#[allow(clippy::too_many_arguments)]
+async fn epp_request_phase_inner(
+    log: NonNull<ngx_log_t>,
+    endpoint: &str,
     headers: Vec<(String, String)>,
     body: Option<Vec<u8>>,
     use_tls: bool,

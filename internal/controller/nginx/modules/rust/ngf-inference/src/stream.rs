@@ -18,8 +18,11 @@
 //! 9. Header filter sends ResponseHeaders (served endpoint) on the open stream
 //! 10. gRPC stream is closed; headers and body pass through to client immediately
 
+use std::cell::Cell;
 use std::ptr::NonNull;
+use std::rc::Rc;
 
+use ngx::async_::Task;
 use ngx::core::Status;
 use ngx::ffi::{
     ngx_buf_t, ngx_chain_t, ngx_connection_t, ngx_event_t, ngx_http_read_client_request_body,
@@ -86,6 +89,21 @@ pub struct RequestCtx {
     /// Flag indicating body reading is complete.
     pub body_ready: bool,
 
+    // --- Lifetime management ---
+    /// Handle to the spawned async EPP task.
+    ///
+    /// Dropping this cancels the task (prevents further polling of the
+    /// future), which is critical if the request is finalized early
+    /// (client disconnect, timeout). Without this, the detached task
+    /// could dereference `ctx_ptr` after the request pool is freed.
+    pub task: Option<Task<()>>,
+    /// Cancellation flag shared with the async closure.
+    ///
+    /// Set to `true` in [`Drop`] so that even if a final poll of the
+    /// future sneaks in, it will skip writing to the freed `ctx_ptr`.
+    /// Uses `Rc<Cell<bool>>` because nginx is single-threaded.
+    pub cancelled: Rc<Cell<bool>>,
+
     // --- Phase 2 (response) state ---
     /// Live gRPC stream from phase 1, consumed by phase 2.
     pub epp_stream: Option<EppStream>,
@@ -105,6 +123,9 @@ impl Default for RequestCtx {
             body_reading_started: false,
             body_ready: false,
 
+            task: None,
+            cancelled: Rc::new(Cell::new(false)),
+
             epp_stream: None,
             response_phase_spawned: false,
         }
@@ -113,6 +134,15 @@ impl Default for RequestCtx {
 
 impl Drop for RequestCtx {
     fn drop(&mut self) {
+        // Signal cancellation so any in-flight poll of the async closure
+        // will skip writing to the (soon-to-be-freed) ctx_ptr.
+        self.cancelled.set(true);
+
+        // Drop the task handle, which cancels the future (prevents further
+        // polling). This is the primary safety mechanism — the cancellation
+        // flag above is defense-in-depth.
+        self.task.take();
+
         // Remove from NGINX posted event queues if still queued
         if self.event.posted() != 0 {
             unsafe { ngx::ffi::ngx_delete_posted_event(&raw mut self.event) };
@@ -234,11 +264,25 @@ pub fn start_epp_stream(
     // worker thread (single-threaded), so there are no data races.
     let ctx_ptr = ctx as *mut RequestCtx;
 
+    // Clone the cancellation flag into the async closure. If the request is
+    // torn down (client disconnect, timeout) while the task is pending,
+    // RequestCtx::drop sets this to true, and the closure skips writing to
+    // the freed ctx_ptr. This is defense-in-depth — the primary mechanism
+    // is dropping the Task handle (which prevents further polling).
+    let cancelled = Rc::clone(&ctx.cancelled);
+
+    // Increment r->main->count to prevent nginx from finalizing the request
+    // while the async task is in flight. The task decrements it on completion.
+    let raw: *mut ngx_http_request_t = request.into();
+    let main = unsafe { (*raw).main };
+    let current = unsafe { (*main).count() };
+    unsafe { (*main).set_count(current + 1) };
+
     // Spawn async task on the nginx event loop
     // ssl is moved (owned) into the async block so it lives for 'static
     // resolver_params is Copy — safe to move into the async block
-    ngx::async_::spawn(async move {
-        match grpc::epp_request_phase(
+    let task = ngx::async_::spawn(async move {
+        let result = grpc::epp_request_phase(
             log,
             &endpoint,
             EPP_TIMEOUT_MS,
@@ -248,10 +292,20 @@ pub fn start_epp_stream(
             ssl,
             resolver_params,
         )
-        .await
-        {
+        .await;
+
+        // Check cancellation before writing to ctx_ptr. If the request was
+        // torn down, the pool (and RequestCtx) may already be freed.
+        if cancelled.get() {
+            // Balance the count++ even on cancellation.
+            let current = unsafe { (*main).count() };
+            unsafe { (*main).set_count(current - 1) };
+            return;
+        }
+
+        match result {
             Ok(result) => {
-                // SAFETY: single-threaded, ctx_ptr is valid for request lifetime
+                // SAFETY: single-threaded, ctx_ptr valid (not cancelled)
                 let ctx = unsafe { &mut *ctx_ptr };
                 ctx.selected_endpoint = result.selected_endpoint;
                 ctx.epp_stream = result.stream;
@@ -264,9 +318,14 @@ pub fn start_epp_stream(
         }
         let ctx = unsafe { &mut *ctx_ptr };
         ctx.done = true;
-    })
-    .detach();
 
+        // Balance the count++ from start_epp_stream. This allows nginx to
+        // finalize the request once the access handler returns NGX_DECLINED.
+        let current = unsafe { (*main).count() };
+        unsafe { (*main).set_count(current - 1) };
+    });
+
+    ctx.task = Some(task);
     ctx.task_spawned = true;
 
     Ok(())
@@ -554,8 +613,22 @@ mod tests {
         assert!(ctx.selected_endpoint.is_none());
         assert!(!ctx.body_reading_started);
         assert!(!ctx.body_ready);
+        assert!(ctx.task.is_none());
+        assert!(!ctx.cancelled.get());
         assert!(!ctx.response_phase_spawned);
         assert!(ctx.epp_stream.is_none());
+    }
+
+    #[test]
+    fn request_ctx_drop_sets_cancelled() {
+        let cancelled_flag;
+        {
+            let ctx = RequestCtx::default();
+            cancelled_flag = Rc::clone(&ctx.cancelled);
+            assert!(!cancelled_flag.get());
+            // ctx is dropped here
+        }
+        assert!(cancelled_flag.get());
     }
 
     // --- RequestCtx mutation and lifecycle ---
