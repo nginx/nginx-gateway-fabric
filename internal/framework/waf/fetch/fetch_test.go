@@ -83,121 +83,79 @@ func TestHTTPFetcherFetchPolicyBundle(t *testing.T) {
 				URL:  srv.URL + "/bundle.tgz",
 				Auth: tc.auth,
 			}
-			data, checksum, err := f.FetchPolicyBundle(context.Background(), req)
+			result, err := f.FetchPolicyBundle(context.Background(), req)
 
 			g.Expect(err).ToNot(HaveOccurred())
-			g.Expect(data).To(Equal(body))
-			g.Expect(checksum).To(Equal(fetch.ComputeChecksum(body)))
+			g.Expect(result.Data).To(Equal(body))
+			g.Expect(result.Checksum).To(Equal(fetch.ComputeChecksum(body)))
 		})
 	}
 }
 
-func TestHTTPFetcherFetchChecksumMismatch(t *testing.T) {
+func TestHTTPFetcherFetchChecksumSidecar(t *testing.T) {
 	t.Parallel()
-	g := NewWithT(t)
 
 	body := []byte("bundle-content")
-	// Server returns wrong checksum
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if len(r.URL.Path) > 7 && strings.HasSuffix(r.URL.Path, ".sha256") {
-			fmt.Fprint(w, "0000000000000000000000000000000000000000000000000000000000000000")
-			return
-		}
-		w.Write(body) //nolint:errcheck
-	}))
-	defer srv.Close()
 
-	f := fetch.NewHTTPFetcher(logr.Discard())
-	req := fetch.Request{URL: srv.URL + "/bundle.tgz", VerifyChecksum: true}
-	_, _, err := f.FetchPolicyBundle(context.Background(), req)
-	g.Expect(err).To(HaveOccurred())
-	g.Expect(err.Error()).To(ContainSubstring("checksum mismatch"))
-}
+	tests := []struct {
+		name          string
+		serveChecksum func(body []byte) string
+		expectErr     string
+	}{
+		{
+			name:          "mismatch",
+			serveChecksum: func(_ []byte) string { return strings.Repeat("0", 64) },
+			expectErr:     "checksum mismatch",
+		},
+		{
+			name:          "whitespace-only (empty)",
+			serveChecksum: func(_ []byte) string { return "   " },
+			expectErr:     "empty",
+		},
+		{
+			name:          "invalid format (short non-hex)",
+			serveChecksum: func(_ []byte) string { return "notahexchecksum" },
+			expectErr:     "invalid checksum",
+		},
+		{
+			name:          "64 chars but not hex",
+			serveChecksum: func(_ []byte) string { return strings.Repeat("z", 64) },
+			expectErr:     "invalid checksum",
+		},
+		{
+			name:          "uppercase hex accepted",
+			serveChecksum: func(b []byte) string { return strings.ToUpper(fetch.ComputeChecksum(b)) },
+		},
+	}
 
-func TestHTTPFetcherFetchChecksumEmpty(t *testing.T) {
-	t.Parallel()
-	g := NewWithT(t)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
 
-	body := []byte("bundle-content")
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if len(r.URL.Path) > 7 && strings.HasSuffix(r.URL.Path, ".sha256") {
-			fmt.Fprint(w, "   ") // whitespace-only
-			return
-		}
-		w.Write(body) //nolint:errcheck
-	}))
-	defer srv.Close()
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if strings.HasSuffix(r.URL.Path, ".sha256") {
+					fmt.Fprint(w, tc.serveChecksum(body))
+					return
+				}
+				w.Write(body) //nolint:errcheck
+			}))
+			defer srv.Close()
 
-	f := fetch.NewHTTPFetcher(logr.Discard())
-	req := fetch.Request{URL: srv.URL + "/bundle.tgz", VerifyChecksum: true}
-	_, _, err := f.FetchPolicyBundle(context.Background(), req)
-	g.Expect(err).To(HaveOccurred())
-	g.Expect(err.Error()).To(ContainSubstring("checksum file"))
-	g.Expect(err.Error()).To(ContainSubstring("empty"))
-}
+			f := fetch.NewHTTPFetcher(logr.Discard())
+			_, err := f.FetchPolicyBundle(context.Background(), fetch.Request{
+				URL:            srv.URL + "/bundle.tgz",
+				VerifyChecksum: true,
+			})
 
-func TestHTTPFetcherFetchChecksumInvalidFormat(t *testing.T) {
-	t.Parallel()
-	g := NewWithT(t)
-
-	body := []byte("bundle-content")
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if len(r.URL.Path) > 7 && strings.HasSuffix(r.URL.Path, ".sha256") {
-			fmt.Fprint(w, "notahexchecksum")
-			return
-		}
-		w.Write(body) //nolint:errcheck
-	}))
-	defer srv.Close()
-
-	f := fetch.NewHTTPFetcher(logr.Discard())
-	req := fetch.Request{URL: srv.URL + "/bundle.tgz", VerifyChecksum: true}
-	_, _, err := f.FetchPolicyBundle(context.Background(), req)
-	g.Expect(err).To(HaveOccurred())
-	g.Expect(err.Error()).To(ContainSubstring("invalid checksum"))
-}
-
-func TestHTTPFetcherFetchChecksumUppercase(t *testing.T) {
-	t.Parallel()
-	g := NewWithT(t)
-
-	body := []byte("bundle-content")
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasSuffix(r.URL.Path, ".sha256") {
-			// uppercase hex of the actual content checksum — should be accepted after normalisation
-			fmt.Fprintf(w, "%s", strings.ToUpper(fetch.ComputeChecksum(body)))
-			return
-		}
-		w.Write(body) //nolint:errcheck
-	}))
-	defer srv.Close()
-
-	f := fetch.NewHTTPFetcher(logr.Discard())
-	req := fetch.Request{URL: srv.URL + "/bundle.tgz", VerifyChecksum: true}
-	_, _, err := f.FetchPolicyBundle(context.Background(), req)
-	g.Expect(err).ToNot(HaveOccurred())
-}
-
-func TestHTTPFetcherFetchChecksumNonHex64Chars(t *testing.T) {
-	t.Parallel()
-	g := NewWithT(t)
-
-	body := []byte("bundle-content")
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasSuffix(r.URL.Path, ".sha256") {
-			// exactly 64 chars but not valid hex
-			fmt.Fprint(w, "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz")
-			return
-		}
-		w.Write(body) //nolint:errcheck
-	}))
-	defer srv.Close()
-
-	f := fetch.NewHTTPFetcher(logr.Discard())
-	req := fetch.Request{URL: srv.URL + "/bundle.tgz", VerifyChecksum: true}
-	_, _, err := f.FetchPolicyBundle(context.Background(), req)
-	g.Expect(err).To(HaveOccurred())
-	g.Expect(err.Error()).To(ContainSubstring("invalid checksum"))
+			if tc.expectErr != "" {
+				g.Expect(err).To(HaveOccurred())
+				g.Expect(err.Error()).To(ContainSubstring(tc.expectErr))
+			} else {
+				g.Expect(err).ToNot(HaveOccurred())
+			}
+		})
+	}
 }
 
 func TestHTTPFetcherFetchNon200(t *testing.T) {
@@ -211,7 +169,7 @@ func TestHTTPFetcherFetchNon200(t *testing.T) {
 
 	f := fetch.NewHTTPFetcher(logr.Discard())
 	req := fetch.Request{URL: srv.URL + "/bundle.tgz"}
-	_, _, err := f.FetchPolicyBundle(context.Background(), req)
+	_, err := f.FetchPolicyBundle(context.Background(), req)
 	g.Expect(err).To(HaveOccurred())
 	g.Expect(err.Error()).To(ContainSubstring("unexpected status 404"))
 }
@@ -222,7 +180,7 @@ func TestHTTPFetcherFetchNetworkError(t *testing.T) {
 
 	f := fetch.NewHTTPFetcher(logr.Discard())
 	req := fetch.Request{URL: "http://localhost:1/bundle.tgz"}
-	_, _, err := f.FetchPolicyBundle(context.Background(), req)
+	_, err := f.FetchPolicyBundle(context.Background(), req)
 	g.Expect(err).To(HaveOccurred())
 	g.Expect(err.Error()).To(ContainSubstring("failed to fetch"))
 }
@@ -240,11 +198,11 @@ func TestHTTPFetcherFetchExpectedChecksumMatch(t *testing.T) {
 		URL:              srv.URL + "/bundle.tgz",
 		ExpectedChecksum: fetch.ComputeChecksum(body),
 	}
-	data, checksum, err := f.FetchPolicyBundle(context.Background(), req)
+	result, err := f.FetchPolicyBundle(context.Background(), req)
 
 	g.Expect(err).ToNot(HaveOccurred())
-	g.Expect(data).To(Equal(body))
-	g.Expect(checksum).To(Equal(fetch.ComputeChecksum(body)))
+	g.Expect(result.Data).To(Equal(body))
+	g.Expect(result.Checksum).To(Equal(fetch.ComputeChecksum(body)))
 }
 
 func TestHTTPFetcherFetchExpectedChecksumMismatch(t *testing.T) {
@@ -260,7 +218,7 @@ func TestHTTPFetcherFetchExpectedChecksumMismatch(t *testing.T) {
 		URL:              srv.URL + "/bundle.tgz",
 		ExpectedChecksum: strings.Repeat("a", 64),
 	}
-	_, _, err := f.FetchPolicyBundle(context.Background(), req)
+	_, err := f.FetchPolicyBundle(context.Background(), req)
 
 	g.Expect(err).To(HaveOccurred())
 	g.Expect(err.Error()).To(ContainSubstring("bundle checksum mismatch"))
@@ -280,10 +238,10 @@ func TestHTTPFetcherFetchExpectedChecksumUppercase(t *testing.T) {
 		URL:              srv.URL + "/bundle.tgz",
 		ExpectedChecksum: strings.ToUpper(hex.EncodeToString(sum[:])),
 	}
-	data, _, err := f.FetchPolicyBundle(context.Background(), req)
+	result, err := f.FetchPolicyBundle(context.Background(), req)
 
 	g.Expect(err).ToNot(HaveOccurred())
-	g.Expect(data).To(Equal(body))
+	g.Expect(result.Data).To(Equal(body))
 }
 
 func TestHTTPFetcherFetchExpectedChecksumInvalid(t *testing.T) {
@@ -299,7 +257,7 @@ func TestHTTPFetcherFetchExpectedChecksumInvalid(t *testing.T) {
 		URL:              srv.URL + "/bundle.tgz",
 		ExpectedChecksum: "notahexchecksum",
 	}
-	_, _, err := f.FetchPolicyBundle(context.Background(), req)
+	_, err := f.FetchPolicyBundle(context.Background(), req)
 
 	g.Expect(err).To(HaveOccurred())
 	g.Expect(err.Error()).To(ContainSubstring("invalid expected checksum"))
@@ -349,7 +307,7 @@ func TestHTTPFetcherVerifyChecksumRejectedForNIMAndN1C(t *testing.T) {
 			g := NewWithT(t)
 
 			f := fetch.NewHTTPFetcher(logr.Discard())
-			_, _, err := f.FetchPolicyBundle(t.Context(), tc.req)
+			_, err := f.FetchPolicyBundle(t.Context(), tc.req)
 			g.Expect(err).To(HaveOccurred())
 			g.Expect(err.Error()).To(ContainSubstring("verifyChecksum is only supported for plain HTTP fetches"))
 		})
@@ -383,13 +341,13 @@ func TestNIMFetchExpectedChecksumEnforced(t *testing.T) {
 		defer srv.Close()
 
 		f := fetch.NewHTTPFetcher(logr.Discard())
-		data, _, err := f.FetchPolicyBundle(t.Context(), fetch.Request{
+		result, err := f.FetchPolicyBundle(t.Context(), fetch.Request{
 			URL:              srv.URL,
 			PolicyName:       "my-policy",
 			ExpectedChecksum: fetch.ComputeChecksum(bundleContent),
 		})
 		g.Expect(err).ToNot(HaveOccurred())
-		g.Expect(data).To(Equal(bundleContent))
+		g.Expect(result.Data).To(Equal(bundleContent))
 	})
 
 	t.Run("mismatched checksum fails", func(t *testing.T) {
@@ -400,7 +358,7 @@ func TestNIMFetchExpectedChecksumEnforced(t *testing.T) {
 		defer srv.Close()
 
 		f := fetch.NewHTTPFetcher(logr.Discard())
-		_, _, err := f.FetchPolicyBundle(t.Context(), fetch.Request{
+		_, err := f.FetchPolicyBundle(t.Context(), fetch.Request{
 			URL:              srv.URL,
 			PolicyName:       "my-policy",
 			ExpectedChecksum: strings.Repeat("a", 64),
@@ -438,7 +396,7 @@ func TestNIMFetchExpectedChecksumEnforced(t *testing.T) {
 		defer srv.Close()
 
 		f := fetch.NewHTTPFetcher(logr.Discard())
-		_, _, err := f.FetchPolicyBundle(t.Context(), fetch.Request{
+		_, err := f.FetchPolicyBundle(t.Context(), fetch.Request{
 			URL:        srv.URL,
 			PolicyName: "my-policy",
 			// No ExpectedChecksum set — NIM API hash should be used automatically.
@@ -473,14 +431,14 @@ func TestNIMFetchExpectedChecksumEnforced(t *testing.T) {
 		defer srv.Close()
 
 		f := fetch.NewHTTPFetcher(logr.Discard())
-		data, checksum, err := f.FetchPolicyBundle(t.Context(), fetch.Request{
+		result, err := f.FetchPolicyBundle(t.Context(), fetch.Request{
 			URL:        srv.URL,
 			PolicyName: "my-policy",
 			// No ExpectedChecksum set — NIM API hash should be used automatically.
 		})
 		g.Expect(err).ToNot(HaveOccurred())
-		g.Expect(data).To(Equal(bundleContent))
-		g.Expect(checksum).To(Equal(bundleHash))
+		g.Expect(result.Data).To(Equal(bundleContent))
+		g.Expect(result.Checksum).To(Equal(bundleHash))
 	})
 
 	t.Run("user-supplied checksum takes precedence over NIM api hash", func(t *testing.T) {
@@ -510,13 +468,13 @@ func TestNIMFetchExpectedChecksumEnforced(t *testing.T) {
 		defer srv.Close()
 
 		f := fetch.NewHTTPFetcher(logr.Discard())
-		data, _, err := f.FetchPolicyBundle(t.Context(), fetch.Request{
+		result, err := f.FetchPolicyBundle(t.Context(), fetch.Request{
 			URL:              srv.URL,
 			PolicyName:       "my-policy",
 			ExpectedChecksum: fetch.ComputeChecksum(bundleContent),
 		})
 		g.Expect(err).ToNot(HaveOccurred())
-		g.Expect(data).To(Equal(bundleContent))
+		g.Expect(result.Data).To(Equal(bundleContent))
 	})
 }
 
@@ -577,7 +535,7 @@ func TestN1CFetchExpectedChecksumEnforced(t *testing.T) {
 		defer srv.Close()
 
 		f := fetch.NewHTTPFetcher(logr.Discard())
-		data, _, err := f.FetchPolicyBundle(t.Context(), fetch.Request{
+		result, err := f.FetchPolicyBundle(t.Context(), fetch.Request{
 			URL: srv.URL,
 			N1C: fetch.N1CRequest{
 				Namespace: "my-ns",
@@ -586,7 +544,7 @@ func TestN1CFetchExpectedChecksumEnforced(t *testing.T) {
 			ExpectedChecksum: fetch.ComputeChecksum(bundleContent),
 		})
 		g.Expect(err).ToNot(HaveOccurred())
-		g.Expect(data).To(Equal(bundleContent))
+		g.Expect(result.Data).To(Equal(bundleContent))
 	})
 
 	t.Run("mismatched user-supplied checksum fails", func(t *testing.T) {
@@ -597,7 +555,7 @@ func TestN1CFetchExpectedChecksumEnforced(t *testing.T) {
 		defer srv.Close()
 
 		f := fetch.NewHTTPFetcher(logr.Discard())
-		_, _, err := f.FetchPolicyBundle(t.Context(), fetch.Request{
+		_, err := f.FetchPolicyBundle(t.Context(), fetch.Request{
 			URL: srv.URL,
 			N1C: fetch.N1CRequest{
 				Namespace: "my-ns",
@@ -647,7 +605,7 @@ func TestN1CFetchExpectedChecksumEnforced(t *testing.T) {
 		defer srv.Close()
 
 		f := fetch.NewHTTPFetcher(logr.Discard())
-		_, _, err := f.FetchPolicyBundle(t.Context(), fetch.Request{
+		_, err := f.FetchPolicyBundle(t.Context(), fetch.Request{
 			URL: srv.URL,
 			N1C: fetch.N1CRequest{
 				Namespace: "my-ns",
@@ -688,9 +646,9 @@ func TestBuildNIMURLStripsBaseQueryAndFragment(t *testing.T) {
 		URL:        srv.URL + "?extra=leftover#somefragment",
 		PolicyName: "my-policy",
 	}
-	data, _, err := f.FetchPolicyBundle(context.Background(), req)
+	result, err := f.FetchPolicyBundle(context.Background(), req)
 	g.Expect(err).ToNot(HaveOccurred())
-	g.Expect(data).To(Equal(bundleContent))
+	g.Expect(result.Data).To(Equal(bundleContent))
 }
 
 func TestHTTPFetcherFetchNIMByUID(t *testing.T) {
@@ -723,10 +681,10 @@ func TestHTTPFetcherFetchNIMByUID(t *testing.T) {
 			PolicyUID: policyUID,
 		},
 	}
-	data, checksum, err := f.FetchPolicyBundle(context.Background(), req)
+	result, err := f.FetchPolicyBundle(context.Background(), req)
 	g.Expect(err).ToNot(HaveOccurred())
-	g.Expect(data).To(Equal(bundleContent))
-	g.Expect(checksum).To(Equal(fetch.ComputeChecksum(bundleContent)))
+	g.Expect(result.Data).To(Equal(bundleContent))
+	g.Expect(result.Checksum).To(Equal(fetch.ComputeChecksum(bundleContent)))
 }
 
 func TestN1CFetchLatestVersion(t *testing.T) {
@@ -778,9 +736,9 @@ func TestN1CFetchLatestVersion(t *testing.T) {
 		},
 		PolicyName: "my-policy",
 	}
-	data, _, err := f.FetchPolicyBundle(t.Context(), req)
+	result, err := f.FetchPolicyBundle(t.Context(), req)
 	g.Expect(err).ToNot(HaveOccurred())
-	g.Expect(data).To(Equal(bundleContent))
+	g.Expect(result.Data).To(Equal(bundleContent))
 }
 
 func TestN1CFetchPinnedVersion(t *testing.T) {
@@ -832,9 +790,9 @@ func TestN1CFetchPinnedVersion(t *testing.T) {
 		},
 		PolicyName: "my-policy",
 	}
-	data, _, err := f.FetchPolicyBundle(t.Context(), req)
+	result, err := f.FetchPolicyBundle(t.Context(), req)
 	g.Expect(err).ToNot(HaveOccurred())
-	g.Expect(data).To(Equal(bundleContent))
+	g.Expect(result.Data).To(Equal(bundleContent))
 }
 
 func TestN1CFetchPolicyNotFound(t *testing.T) {
@@ -855,7 +813,7 @@ func TestN1CFetchPolicyNotFound(t *testing.T) {
 		},
 		PolicyName: "missing-policy",
 	}
-	_, _, err := f.FetchPolicyBundle(t.Context(), req)
+	_, err := f.FetchPolicyBundle(t.Context(), req)
 	g.Expect(err).To(HaveOccurred())
 	g.Expect(err.Error()).To(ContainSubstring(`"missing-policy" not found`))
 	// hostname must not appear in the error
@@ -895,7 +853,7 @@ func TestN1CFetchVersionNotFound(t *testing.T) {
 		},
 		PolicyName: "my-policy",
 	}
-	_, _, err := f.FetchPolicyBundle(t.Context(), req)
+	_, err := f.FetchPolicyBundle(t.Context(), req)
 	g.Expect(err).To(HaveOccurred())
 	g.Expect(err.Error()).To(ContainSubstring("404"))
 }
@@ -953,9 +911,9 @@ func TestN1CFetchByObjectIDLatestVersion(t *testing.T) {
 			// PolicyVersionID intentionally omitted — should trigger versions-list lookup
 		},
 	}
-	data, _, err := f.FetchPolicyBundle(t.Context(), req)
+	result, err := f.FetchPolicyBundle(t.Context(), req)
 	g.Expect(err).ToNot(HaveOccurred())
-	g.Expect(data).To(Equal(bundleContent))
+	g.Expect(result.Data).To(Equal(bundleContent))
 }
 
 // TestN1CFetchByObjectIDPinnedVersion exercises the branch where both N1C.PolicyObjectID and
@@ -1002,9 +960,9 @@ func TestN1CFetchByObjectIDPinnedVersion(t *testing.T) {
 			Namespace:       "my-ns",
 		},
 	}
-	data, _, err := f.FetchPolicyBundle(t.Context(), req)
+	result, err := f.FetchPolicyBundle(t.Context(), req)
 	g.Expect(err).ToNot(HaveOccurred())
-	g.Expect(data).To(Equal(bundleContent))
+	g.Expect(result.Data).To(Equal(bundleContent))
 }
 
 // TestN1CFetchCompilePending verifies that fetchN1C polls the compile status endpoint until the
@@ -1077,9 +1035,9 @@ func TestN1CFetchCompilePending(t *testing.T) {
 				},
 				PolicyName: "my-policy",
 			}
-			data, _, err := f.FetchPolicyBundle(t.Context(), req)
+			result, err := f.FetchPolicyBundle(t.Context(), req)
 			g.Expect(err).ToNot(HaveOccurred())
-			g.Expect(data).To(Equal(bundleContent))
+			g.Expect(result.Data).To(Equal(bundleContent))
 			g.Expect(int(callCount.Load())).To(Equal(tc.expectedCalls))
 		})
 	}
@@ -1126,7 +1084,7 @@ func TestN1CFetchCompileFailed(t *testing.T) {
 		},
 		PolicyName: "my-policy",
 	}
-	_, _, err := f.FetchPolicyBundle(t.Context(), req)
+	_, err := f.FetchPolicyBundle(t.Context(), req)
 	g.Expect(err).To(HaveOccurred())
 	g.Expect(err.Error()).To(ContainSubstring("compilation failed"))
 }
@@ -1214,7 +1172,7 @@ func TestN1CFetchPolicyByNamePagination(t *testing.T) {
 	defer srv.Close()
 
 	f := fetch.NewHTTPFetcher(logr.Discard())
-	data, checksum, err := f.FetchPolicyBundle(context.Background(), fetch.Request{
+	result, err := f.FetchPolicyBundle(context.Background(), fetch.Request{
 		URL:        srv.URL,
 		Auth:       auth,
 		PolicyName: policyName,
@@ -1224,8 +1182,8 @@ func TestN1CFetchPolicyByNamePagination(t *testing.T) {
 	})
 
 	g.Expect(err).ToNot(HaveOccurred())
-	g.Expect(data).To(Equal(bundleContent))
-	g.Expect(checksum).To(Equal(fetch.ComputeChecksum(bundleContent)))
+	g.Expect(result.Data).To(Equal(bundleContent))
+	g.Expect(result.Checksum).To(Equal(fetch.ComputeChecksum(bundleContent)))
 }
 
 func TestHTTPFetcherFetchNIM(t *testing.T) {
@@ -1300,15 +1258,15 @@ func TestHTTPFetcherFetchNIM(t *testing.T) {
 				PolicyName: tc.policyName,
 				Auth:       tc.auth,
 			}
-			data, checksum, err := f.FetchPolicyBundle(context.Background(), req)
+			result, err := f.FetchPolicyBundle(context.Background(), req)
 
 			if tc.expectErr != "" {
 				g.Expect(err).To(HaveOccurred())
 				g.Expect(err.Error()).To(ContainSubstring(tc.expectErr))
 			} else {
 				g.Expect(err).ToNot(HaveOccurred())
-				g.Expect(data).To(Equal(tc.expectData))
-				g.Expect(checksum).To(Equal(fetch.ComputeChecksum(tc.expectData)))
+				g.Expect(result.Data).To(Equal(tc.expectData))
+				g.Expect(result.Checksum).To(Equal(fetch.ComputeChecksum(tc.expectData)))
 			}
 		})
 	}
@@ -1324,11 +1282,11 @@ func TestHTTPFetcherFetchLogProfileBundleHTTP(t *testing.T) {
 
 	f := fetch.NewHTTPFetcher(logr.Discard())
 	req := fetch.Request{URL: srv.URL + "/bundle.tgz"}
-	data, checksum, err := f.FetchLogProfileBundle(context.Background(), req)
+	result, err := f.FetchLogProfileBundle(context.Background(), req)
 
 	g.Expect(err).ToNot(HaveOccurred())
-	g.Expect(data).To(Equal(body))
-	g.Expect(checksum).To(Equal(fetch.ComputeChecksum(body)))
+	g.Expect(result.Data).To(Equal(body))
+	g.Expect(result.Checksum).To(Equal(fetch.ComputeChecksum(body)))
 }
 
 func TestHTTPFetcherFetchLogProfileBundleNIM(t *testing.T) {
@@ -1369,11 +1327,11 @@ func TestHTTPFetcherFetchLogProfileBundleNIM(t *testing.T) {
 		PolicyName:     "policy-selector",
 		LogProfileName: profileName,
 	}
-	data, checksum, err := f.FetchLogProfileBundle(context.Background(), req)
+	result, err := f.FetchLogProfileBundle(context.Background(), req)
 
 	g.Expect(err).ToNot(HaveOccurred())
-	g.Expect(data).To(Equal(bundleContent))
-	g.Expect(checksum).To(Equal(fetch.ComputeChecksum(bundleContent)))
+	g.Expect(result.Data).To(Equal(bundleContent))
+	g.Expect(result.Checksum).To(Equal(fetch.ComputeChecksum(bundleContent)))
 }
 
 func TestHTTPFetcherFetchLogProfileBundleN1CByObjectID(t *testing.T) {
@@ -1404,7 +1362,7 @@ func TestHTTPFetcherFetchLogProfileBundleN1CByObjectID(t *testing.T) {
 	defer srv.Close()
 
 	f := fetch.NewHTTPFetcher(logr.Discard())
-	data, checksum, err := f.FetchLogProfileBundle(context.Background(), fetch.Request{
+	result, err := f.FetchLogProfileBundle(context.Background(), fetch.Request{
 		URL:  srv.URL,
 		Auth: auth,
 		N1C: fetch.N1CRequest{
@@ -1414,8 +1372,8 @@ func TestHTTPFetcherFetchLogProfileBundleN1CByObjectID(t *testing.T) {
 	})
 
 	g.Expect(err).ToNot(HaveOccurred())
-	g.Expect(data).To(Equal(bundleContent))
-	g.Expect(checksum).To(Equal(fetch.ComputeChecksum(bundleContent)))
+	g.Expect(result.Data).To(Equal(bundleContent))
+	g.Expect(result.Checksum).To(Equal(fetch.ComputeChecksum(bundleContent)))
 }
 
 func TestHTTPFetcherFetchLogProfileBundleN1CByName(t *testing.T) {
@@ -1484,7 +1442,7 @@ func TestHTTPFetcherFetchLogProfileBundleN1CByName(t *testing.T) {
 	defer srv.Close()
 
 	f := fetch.NewHTTPFetcher(logr.Discard())
-	data, checksum, err := f.FetchLogProfileBundle(context.Background(), fetch.Request{
+	result, err := f.FetchLogProfileBundle(context.Background(), fetch.Request{
 		URL:            srv.URL,
 		Auth:           auth,
 		LogProfileName: profileName,
@@ -1494,8 +1452,8 @@ func TestHTTPFetcherFetchLogProfileBundleN1CByName(t *testing.T) {
 	})
 
 	g.Expect(err).ToNot(HaveOccurred())
-	g.Expect(data).To(Equal(bundleContent))
-	g.Expect(checksum).To(Equal(fetch.ComputeChecksum(bundleContent)))
+	g.Expect(result.Data).To(Equal(bundleContent))
+	g.Expect(result.Checksum).To(Equal(fetch.ComputeChecksum(bundleContent)))
 }
 
 func TestHTTPFetcherRetryOnTransientError(t *testing.T) {
@@ -1520,85 +1478,348 @@ func TestHTTPFetcherRetryOnTransientError(t *testing.T) {
 		URL:           srv.URL + "/bundle.tgz",
 		RetryAttempts: 2,
 	}
-	data, _, err := f.FetchPolicyBundle(context.Background(), req)
+	result, err := f.FetchPolicyBundle(context.Background(), req)
 
 	g.Expect(err).ToNot(HaveOccurred())
-	g.Expect(data).To(Equal(body))
+	g.Expect(result.Data).To(Equal(body))
 	g.Expect(callCount.Load()).To(Equal(int32(3)))
 }
 
-func TestHTTPFetcherNoRetryOnNonTransientError(t *testing.T) {
+func TestHTTPFetcherRetryBehaviour(t *testing.T) {
 	t.Parallel()
-	g := NewWithT(t)
 
-	var callCount atomic.Int32
-
-	// 4xx — must not be retried.
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		callCount.Add(1)
-		http.Error(w, "forbidden", http.StatusForbidden)
-	}))
-	defer srv.Close()
-
-	f := fetch.NewHTTPFetcher(logr.Discard())
-	req := fetch.Request{
-		URL:           srv.URL + "/bundle.tgz",
-		RetryAttempts: 3,
+	tests := []struct {
+		name          string
+		handler       func(callCount *atomic.Int32) http.HandlerFunc
+		req           func(url string) fetch.Request
+		expectErr     string
+		expectedCalls int32
+	}{
+		{
+			name: "no retry on 4xx non-transient error",
+			handler: func(callCount *atomic.Int32) http.HandlerFunc {
+				return func(w http.ResponseWriter, _ *http.Request) {
+					callCount.Add(1)
+					http.Error(w, "forbidden", http.StatusForbidden)
+				}
+			},
+			req: func(url string) fetch.Request {
+				return fetch.Request{URL: url + "/bundle.tgz", RetryAttempts: 3}
+			},
+			expectErr:     "unexpected status 403",
+			expectedCalls: 1,
+		},
+		{
+			name: "no retry on checksum mismatch",
+			handler: func(callCount *atomic.Int32) http.HandlerFunc {
+				return func(w http.ResponseWriter, _ *http.Request) {
+					callCount.Add(1)
+					w.Write([]byte("bundle-content")) //nolint:errcheck
+				}
+			},
+			req: func(url string) fetch.Request {
+				return fetch.Request{
+					URL:              url + "/bundle.tgz",
+					ExpectedChecksum: strings.Repeat("a", 64),
+					RetryAttempts:    3,
+				}
+			},
+			expectErr:     "checksum mismatch",
+			expectedCalls: 1,
+		},
+		{
+			name: "retries exhausted on persistent 5xx",
+			handler: func(callCount *atomic.Int32) http.HandlerFunc {
+				return func(w http.ResponseWriter, _ *http.Request) {
+					callCount.Add(1)
+					http.Error(w, "server error", http.StatusInternalServerError)
+				}
+			},
+			req: func(url string) fetch.Request {
+				return fetch.Request{URL: url + "/bundle.tgz", RetryAttempts: 2}
+			},
+			expectErr:     "unexpected status 500",
+			expectedCalls: 3, // 1 initial + 2 retries
+		},
 	}
-	_, _, err := f.FetchPolicyBundle(context.Background(), req)
 
-	g.Expect(err).To(HaveOccurred())
-	g.Expect(err.Error()).To(ContainSubstring("unexpected status 403"))
-	g.Expect(callCount.Load()).To(Equal(int32(1)))
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			var callCount atomic.Int32
+			srv := httptest.NewServer(tc.handler(&callCount))
+			defer srv.Close()
+
+			f := fetch.NewHTTPFetcher(logr.Discard())
+			_, err := f.FetchPolicyBundle(context.Background(), tc.req(srv.URL))
+
+			g.Expect(err).To(HaveOccurred())
+			g.Expect(err.Error()).To(ContainSubstring(tc.expectErr))
+			g.Expect(callCount.Load()).To(Equal(tc.expectedCalls))
+		})
+	}
 }
 
-func TestHTTPFetcherNoRetryOnChecksumMismatch(t *testing.T) {
+func TestRequestSupportsChecksumOnlyFetch(t *testing.T) {
 	t.Parallel()
-	g := NewWithT(t)
 
-	var callCount atomic.Int32
-	body := []byte("bundle-content")
-
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		callCount.Add(1)
-		w.Write(body) //nolint:errcheck
-	}))
-	defer srv.Close()
-
-	f := fetch.NewHTTPFetcher(logr.Discard())
-	req := fetch.Request{
-		URL:              srv.URL + "/bundle.tgz",
-		ExpectedChecksum: strings.Repeat("a", 64),
-		RetryAttempts:    3,
+	tests := []struct {
+		name     string
+		req      fetch.Request
+		expected bool
+	}{
+		{
+			name:     "plain HTTP - no checksum-only support",
+			req:      fetch.Request{URL: "http://example.com/bundle.tgz"},
+			expected: false,
+		},
+		{
+			name:     "NIM by policy name",
+			req:      fetch.Request{URL: "https://nim.example.com", PolicyName: "my-policy"},
+			expected: true,
+		},
+		{
+			name:     "NIM by policy UID",
+			req:      fetch.Request{URL: "https://nim.example.com", NIM: fetch.NIMRequest{PolicyUID: "uid-123"}},
+			expected: true,
+		},
+		{
+			name:     "NIM log profile",
+			req:      fetch.Request{URL: "https://nim.example.com", LogProfileName: "default"},
+			expected: true,
+		},
+		{
+			name: "N1C policy",
+			req: fetch.Request{
+				URL:        "https://n1c.example.com",
+				N1C:        fetch.N1CRequest{Namespace: "my-ns"},
+				PolicyName: "my-policy",
+			},
+			expected: true,
+		},
+		{
+			name: "N1C log profile",
+			req: fetch.Request{
+				URL:            "https://n1c.example.com",
+				N1C:            fetch.N1CRequest{Namespace: "my-ns"},
+				LogProfileName: "default",
+			},
+			expected: true,
+		},
 	}
-	_, _, err := f.FetchPolicyBundle(context.Background(), req)
 
-	g.Expect(err).To(HaveOccurred())
-	g.Expect(err.Error()).To(ContainSubstring("checksum mismatch"))
-	g.Expect(callCount.Load()).To(Equal(int32(1)))
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+			g.Expect(tc.req.SupportsChecksumOnlyFetch()).To(Equal(tc.expected))
+		})
+	}
 }
 
-func TestHTTPFetcherRetryExhausted(t *testing.T) {
+func TestFetchPolicyBundleChecksumNIM(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	var callCount atomic.Int32
+	bundleContent := []byte("nim-bundle-data")
+	bundleHash := fetch.ComputeChecksum(bundleContent)
+	encoded := base64.StdEncoding.EncodeToString(bundleContent)
 
-	// Always 500.
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		callCount.Add(1)
-		http.Error(w, "server error", http.StatusInternalServerError)
+	var includeBundleContent string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		g.Expect(r.URL.Path).To(Equal("/api/platform/v1/security/policies/bundles"))
+		includeBundleContent = r.URL.Query().Get("includeBundleContent")
+		w.Header().Set("Content-Type", "application/json")
+		// Always return content so the handler is simple; the fetcher should not decode it for checksum-only.
+		json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck
+			"items": []map[string]any{{
+				"content":  encoded,
+				"metadata": map[string]any{"hash": bundleHash},
+			}},
+		})
+	}))
+	defer srv.Close()
+
+	f := fetch.NewHTTPFetcher(logr.Discard())
+	req := fetch.Request{URL: srv.URL, PolicyName: "my-policy"}
+	checksum, err := f.FetchPolicyBundleChecksum(context.Background(), req)
+
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(checksum).To(Equal(bundleHash))
+	g.Expect(includeBundleContent).To(Equal("false"))
+}
+
+func TestFetchBundleChecksumErrors(t *testing.T) {
+	t.Parallel()
+
+	f := fetch.NewHTTPFetcher(logr.Discard())
+
+	tests := []struct {
+		name      string
+		fetch     func(srv *httptest.Server) error
+		handler   http.HandlerFunc
+		expectErr string
+	}{
+		{
+			name:      "policy checksum: NIM no items",
+			expectErr: "no items",
+			handler: func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				json.NewEncoder(w).Encode(map[string]any{"items": []any{}}) //nolint:errcheck,errchkjson
+			},
+			fetch: func(srv *httptest.Server) error {
+				_, err := f.FetchPolicyBundleChecksum(context.Background(), fetch.Request{
+					URL: srv.URL, PolicyName: "missing-policy",
+				})
+				return err
+			},
+		},
+		{
+			name:      "policy checksum: NIM no hash",
+			expectErr: "no hash",
+			handler: func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck,errchkjson
+					"items": []map[string]any{{"metadata": map[string]any{"hash": ""}}},
+				})
+			},
+			fetch: func(srv *httptest.Server) error {
+				_, err := f.FetchPolicyBundleChecksum(context.Background(), fetch.Request{
+					URL: srv.URL, PolicyName: "my-policy",
+				})
+				return err
+			},
+		},
+		{
+			name:      "policy checksum: plain HTTP not supported",
+			expectErr: "not supported for plain HTTP",
+			fetch: func(_ *httptest.Server) error {
+				_, err := f.FetchPolicyBundleChecksum(context.Background(), fetch.Request{
+					URL: "http://example.com/bundle.tgz",
+				})
+				return err
+			},
+		},
+		{
+			name:      "log profile checksum: plain HTTP not supported",
+			expectErr: "not supported for plain HTTP",
+			fetch: func(_ *httptest.Server) error {
+				_, err := f.FetchLogProfileBundleChecksum(context.Background(), fetch.Request{
+					URL: "http://example.com/log.tgz",
+				})
+				return err
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			var srv *httptest.Server
+			if tc.handler != nil {
+				srv = httptest.NewServer(tc.handler)
+				defer srv.Close()
+			}
+
+			err := tc.fetch(srv)
+			g.Expect(err).To(HaveOccurred())
+			g.Expect(err.Error()).To(ContainSubstring(tc.expectErr))
+		})
+	}
+}
+
+func TestFetchPolicyBundleChecksumN1C(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	bundleContent := []byte("n1c-bundle-data")
+	bundleHash := fetch.ComputeChecksum(bundleContent)
+	polObjID := "pol_ChecksumTest"
+	polVersionID := "pv_ChecksumTest"
+
+	var downloadCalled bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/api/nginx/one/namespaces/my-ns/app-protect/policies":
+			json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck
+				"total": 1,
+				"items": []map[string]any{{
+					"name":      "my-policy",
+					"object_id": polObjID,
+					"latest":    map[string]any{"object_id": polVersionID},
+				}},
+			})
+		case "/api/nginx/one/namespaces/my-ns/app-protect/policies/" + polObjID +
+			"/versions/" + polVersionID + "/compile":
+			if r.URL.Query().Get("download") == "true" {
+				downloadCalled = true
+				w.Write(bundleContent) //nolint:errcheck
+			} else {
+				json.NewEncoder(w).Encode(map[string]string{"status": "succeeded", "hash": bundleHash}) //nolint:errcheck
+			}
+		default:
+			http.NotFound(w, r)
+		}
 	}))
 	defer srv.Close()
 
 	f := fetch.NewHTTPFetcher(logr.Discard())
 	req := fetch.Request{
-		URL:           srv.URL + "/bundle.tgz",
-		RetryAttempts: 2,
+		URL:        srv.URL,
+		N1C:        fetch.N1CRequest{Namespace: "my-ns"},
+		PolicyName: "my-policy",
 	}
-	_, _, err := f.FetchPolicyBundle(context.Background(), req)
+	checksum, err := f.FetchPolicyBundleChecksum(t.Context(), req)
 
-	g.Expect(err).To(HaveOccurred())
-	g.Expect(err.Error()).To(ContainSubstring("unexpected status 500"))
-	g.Expect(callCount.Load()).To(Equal(int32(3))) // 1 initial + 2 retries
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(checksum).To(Equal(bundleHash))
+	g.Expect(downloadCalled).To(BeFalse(), "full bundle should not be downloaded for checksum-only fetch")
+}
+
+func TestFetchLogProfileBundleChecksumN1C(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	bundleContent := []byte("n1c-log-bundle-data")
+	bundleHash := fetch.ComputeChecksum(bundleContent)
+	lpObjID := "lp_ChecksumTest"
+
+	var downloadCalled bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/api/nginx/one/namespaces/my-ns/app-protect/log-profiles":
+			json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck
+				"total": 1,
+				"items": []map[string]any{{"name": "default", "object_id": lpObjID}},
+			})
+		case "/api/nginx/one/namespaces/my-ns/app-protect/log-profiles/" + lpObjID + "/compile":
+			if r.URL.Query().Get("download") == "true" {
+				downloadCalled = true
+				w.Write(bundleContent) //nolint:errcheck
+			} else {
+				json.NewEncoder(w).Encode(map[string]string{"status": "succeeded", "hash": bundleHash}) //nolint:errcheck
+			}
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	f := fetch.NewHTTPFetcher(logr.Discard())
+	req := fetch.Request{
+		URL:            srv.URL,
+		N1C:            fetch.N1CRequest{Namespace: "my-ns"},
+		LogProfileName: "default",
+	}
+	checksum, err := f.FetchLogProfileBundleChecksum(t.Context(), req)
+
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(checksum).To(Equal(bundleHash))
+	g.Expect(downloadCalled).To(BeFalse(), "full bundle should not be downloaded for checksum-only fetch")
 }

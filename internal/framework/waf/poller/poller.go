@@ -3,7 +3,6 @@ package poller
 import (
 	"context"
 	"fmt"
-	"maps"
 	"reflect"
 	"sync"
 	"time"
@@ -42,20 +41,27 @@ type BundleSource struct {
 	Interval time.Duration
 }
 
+// bundleState tracks the last known state of a fetched bundle, including the checksum and any
+// conditional-request token (ETag or Last-Modified) for use on subsequent HTTP polls.
+type bundleState struct {
+	checksum         string
+	conditionalToken string // ETag or Last-Modified from the last successful HTTP fetch
+}
+
 // poller handles periodic re-fetching of WAF bundles for a single WAFPolicy.
 // It compares checksums to detect changes and pushes updated bundles to relevant deployments.
 type poller struct {
 	fetcher              fetch.Fetcher
 	deployments          agent.DeploymentStorer
 	targetDeployments    map[types.NamespacedName]struct{}
-	lastChecksums        map[graph.WAFBundleKey]string
+	bundleStates         map[graph.WAFBundleKey]bundleState
 	statusCallback       func(policyNsName types.NamespacedName, bundleKey graph.WAFBundleKey, err error)
 	bundleUpdateCallback func(bundleKey graph.WAFBundleKey, data []byte, checksum string)
 	policyNsName         types.NamespacedName
 	logger               logr.Logger
 	sources              []BundleSource
 	targetMu             sync.RWMutex
-	checksumMu           sync.RWMutex
+	stateMu              sync.RWMutex
 }
 
 // pollerConfig contains the configuration for creating a new poller.
@@ -78,8 +84,10 @@ func newPoller(cfg pollerConfig) *poller {
 		targets[t] = struct{}{}
 	}
 
-	checksums := make(map[graph.WAFBundleKey]string, len(cfg.initialChecksums))
-	maps.Copy(checksums, cfg.initialChecksums)
+	states := make(map[graph.WAFBundleKey]bundleState, len(cfg.initialChecksums))
+	for k, cs := range cfg.initialChecksums {
+		states[k] = bundleState{checksum: cs}
+	}
 
 	return &poller{
 		logger:               cfg.logger.WithValues("policy", cfg.policyNsName),
@@ -88,7 +96,7 @@ func newPoller(cfg pollerConfig) *poller {
 		fetcher:              cfg.fetcher,
 		deployments:          cfg.deployments,
 		targetDeployments:    targets,
-		lastChecksums:        checksums,
+		bundleStates:         states,
 		statusCallback:       cfg.statusCallback,
 		bundleUpdateCallback: cfg.bundleUpdateCallback,
 	}
@@ -183,59 +191,128 @@ func sourcesEqual(a, b []BundleSource) bool {
 }
 
 // pollSource fetches a single bundle source and pushes it to deployments if changed.
+//
+// For NIM and N1C sources a two-phase approach is used: first only the remote checksum is
+// retrieved, and the full bundle is downloaded only when the checksum differs from the last
+// known value.
+//
+// For plain HTTP sources a conditional GET is issued using any ETag or Last-Modified token
+// stored from the previous successful fetch. A 304 Not Modified response is treated as
+// unchanged without downloading the bundle.
 func (p *poller) pollSource(ctx context.Context, src BundleSource) {
 	p.logger.V(1).Info("Polling bundle source")
 
-	var data []byte
+	p.stateMu.RLock()
+	last := p.bundleStates[src.BundleKey]
+	p.stateMu.RUnlock()
+
+	if src.Request.SupportsChecksumOnlyFetch() {
+		if skip := p.skipIfChecksumUnchanged(ctx, src, last.checksum); skip {
+			return
+		}
+	}
+
+	result, err := p.downloadBundle(ctx, src, last)
+	if err != nil || result.Unchanged || result.Checksum == last.checksum {
+		p.reportStatus(src.BundleKey, err)
+		return
+	}
+
+	p.logger.Info("Bundle changed, pushing to deployments", "newChecksum", result.Checksum)
+	p.pushBundleToDeployments(src.BundleKey, result.Data)
+	p.saveBundleState(src.BundleKey, result)
+
+	if p.bundleUpdateCallback != nil {
+		p.bundleUpdateCallback(src.BundleKey, result.Data, result.Checksum)
+	}
+	p.reportStatus(src.BundleKey, nil)
+}
+
+// skipIfChecksumUnchanged fetches only the remote checksum for a NIM or N1C source.
+// It reports whether polling should skip the full download (true = skip). When skipping due to
+// an error or an unchanged checksum the appropriate status callback is fired.
+func (p *poller) skipIfChecksumUnchanged(ctx context.Context, src BundleSource, lastChecksum string) bool {
+	changed, checksum, err := p.checksumChanged(ctx, src, lastChecksum)
+	if err != nil {
+		p.logger.Error(err, "Failed to fetch bundle checksum during poll")
+		p.reportStatus(src.BundleKey, err)
+		return true
+	}
+	if !changed {
+		p.logger.V(1).Info("Bundle unchanged, skipping download")
+		p.reportStatus(src.BundleKey, nil)
+		return true
+	}
+	p.logger.Info("Bundle checksum changed, downloading full bundle", "newChecksum", checksum)
+	return false
+}
+
+// downloadBundle fetches the full bundle for src, attaching the stored conditional token so that
+// HTTP servers can respond with 304 Not Modified when nothing has changed.
+func (p *poller) downloadBundle(
+	ctx context.Context, src BundleSource, last bundleState,
+) (fetch.Result, error) {
+	req := src.Request
+	req.ConditionalToken = last.conditionalToken
+
+	result, err := p.fetchBundle(ctx, src, req)
+	if err != nil {
+		p.logger.Error(err, "Failed to fetch bundle during poll")
+		return fetch.Result{}, err
+	}
+	if result.Unchanged {
+		p.logger.V(1).Info("Bundle unchanged (304), skipping push")
+	} else if result.Checksum == last.checksum {
+		p.logger.V(1).Info("Bundle unchanged, skipping push")
+	}
+	return result, nil
+}
+
+// saveBundleState persists the new checksum and HTTP conditional token after a successful push.
+func (p *poller) saveBundleState(bundleKey graph.WAFBundleKey, result fetch.Result) {
+	newState := bundleState{checksum: result.Checksum}
+	if result.ETag != "" {
+		newState.conditionalToken = result.ETag
+	} else if result.LastModified != "" {
+		newState.conditionalToken = result.LastModified
+	}
+	p.stateMu.Lock()
+	p.bundleStates[bundleKey] = newState
+	p.stateMu.Unlock()
+}
+
+// reportStatus fires the status callback if one is registered.
+func (p *poller) reportStatus(bundleKey graph.WAFBundleKey, err error) {
+	if p.statusCallback != nil {
+		p.statusCallback(p.policyNsName, bundleKey, err)
+	}
+}
+
+// checksumChanged fetches only the remote checksum for a NIM or N1C source and reports whether
+// it differs from lastChecksum. Returns (changed, remoteChecksum, error).
+func (p *poller) checksumChanged(ctx context.Context, src BundleSource, lastChecksum string) (bool, string, error) {
 	var checksum string
 	var err error
 
 	if src.Type == LogProfileBundle {
-		data, checksum, err = p.fetcher.FetchLogProfileBundle(ctx, src.Request)
+		checksum, err = p.fetcher.FetchLogProfileBundleChecksum(ctx, src.Request)
 	} else {
-		data, checksum, err = p.fetcher.FetchPolicyBundle(ctx, src.Request)
+		checksum, err = p.fetcher.FetchPolicyBundleChecksum(ctx, src.Request)
 	}
-
 	if err != nil {
-		p.logger.Error(err, "Failed to fetch bundle during poll")
-		if p.statusCallback != nil {
-			p.statusCallback(p.policyNsName, src.BundleKey, err)
-		}
-		// Keep existing bundle active, retry on next interval.
-		return
+		return false, "", err
 	}
 
-	// Compare checksum to detect changes.
-	p.checksumMu.RLock()
-	lastChecksum := p.lastChecksums[src.BundleKey]
-	p.checksumMu.RUnlock()
+	return checksum != lastChecksum, checksum, nil
+}
 
-	if checksum == lastChecksum {
-		p.logger.V(1).Info("Bundle unchanged, skipping push")
-		if p.statusCallback != nil {
-			p.statusCallback(p.policyNsName, src.BundleKey, nil)
-		}
-		return
+// fetchBundle downloads the full bundle for the given source using req (which may carry a
+// conditional token for HTTP sources).
+func (p *poller) fetchBundle(ctx context.Context, src BundleSource, req fetch.Request) (fetch.Result, error) {
+	if src.Type == LogProfileBundle {
+		return p.fetcher.FetchLogProfileBundle(ctx, req)
 	}
-
-	p.logger.Info("Bundle changed, pushing to deployments", "newChecksum", checksum)
-
-	// Push to all target deployments.
-	p.pushBundleToDeployments(src.BundleKey, data)
-
-	// Update stored checksum.
-	p.checksumMu.Lock()
-	p.lastChecksums[src.BundleKey] = checksum
-	p.checksumMu.Unlock()
-
-	// Cache the new bundle so graph rebuilds can use it as stale-bundle fallback.
-	if p.bundleUpdateCallback != nil {
-		p.bundleUpdateCallback(src.BundleKey, data, checksum)
-	}
-
-	if p.statusCallback != nil {
-		p.statusCallback(p.policyNsName, src.BundleKey, nil)
-	}
+	return p.fetcher.FetchPolicyBundle(ctx, req)
 }
 
 // pushBundleToDeployments pushes the bundle to all target deployments.

@@ -1009,7 +1009,7 @@ func fetchPolicyBundle(
 
 	req := BuildPolicyFetchRequest(&policySource, wafPolicy.Spec.Type, auth, tlsCA)
 
-	data, checksum, err := wafInput.Fetcher.FetchPolicyBundle(ctx, req)
+	result, err := wafInput.Fetcher.FetchPolicyBundle(ctx, req)
 	if err != nil {
 		logger.Error(err, "Failed to fetch WAF policy bundle", "resource", wafPolicy.Name)
 		if prev, ok := wafInput.PreviousBundles[bundleKey]; ok {
@@ -1025,7 +1025,7 @@ func fetchPolicyBundle(
 		return
 	}
 
-	bundleData := &WAFBundleData{Data: data, Checksum: checksum}
+	bundleData := &WAFBundleData{Data: result.Data, Checksum: result.Checksum}
 	output.Bundles[bundleKey] = bundleData
 	policy.WAFState.Bundles[bundleKey] = bundleData
 }
@@ -1082,7 +1082,7 @@ func fetchSecurityLogBundles(
 
 		req := BuildLogFetchRequest(&secLog.LogSource, auth, tlsCA)
 
-		data, checksum, err := wafInput.Fetcher.FetchLogProfileBundle(ctx, req)
+		result, err := wafInput.Fetcher.FetchLogProfileBundle(ctx, req)
 		if err != nil {
 			logger.Error(
 				err,
@@ -1103,7 +1103,7 @@ func fetchSecurityLogBundles(
 			continue
 		}
 
-		bundleData := &WAFBundleData{Data: data, Checksum: checksum}
+		bundleData := &WAFBundleData{Data: result.Data, Checksum: result.Checksum}
 		output.Bundles[bundleKey] = bundleData
 		policy.WAFState.Bundles[bundleKey] = bundleData
 	}

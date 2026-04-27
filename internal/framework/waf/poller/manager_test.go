@@ -453,7 +453,7 @@ func TestManager_stopPollerClearsPollError(t *testing.T) {
 
 	fetcher := &fetchfakes.FakeFetcher{}
 	testErr := errors.New("test error")
-	fetcher.FetchPolicyBundleReturns(nil, "", testErr)
+	fetcher.FetchPolicyBundleReturns(fetch.Result{}, testErr)
 
 	deployments := &agentfakes.FakeDeploymentStorer{}
 	logger := logr.Discard()

@@ -147,12 +147,20 @@ When `polling.enabled: true` is set on a `policySource` or `logSource`, NGF runs
 
 - NGF starts one polling goroutine per WAFPolicy (covering the `policySource` and each `logSource` entry that has polling enabled)
 - The default polling interval is 5 minutes; this applies when `polling.enabled: true` but no `interval` field is set
-- On each poll cycle:
-  1. Fetch the bundle from the configured source
-  2. Compute the SHA-256 checksum of the downloaded bytes
-  3. Compare to the stored checksum from the last successful fetch
-  4. If **unchanged**: take no action — no push to the data plane, no NGINX reload
-  5. If **changed**: deploy the new bundle via Agent gRPC, then update the stored checksum
+- On each poll cycle, the mechanism differs by source type:
+
+  **NIM and N1C sources** (two-phase fetch):
+  1. Fetch only the checksum/metadata from the remote source (no bundle download)
+  2. Compare to the stored checksum from the last successful fetch
+  3. If **unchanged**: take no action — no push to the data plane, no NGINX reload
+  4. If **changed**: download the full bundle, then deploy via Agent gRPC and update the stored checksum
+
+  **HTTP sources** (conditional GET):
+  1. Send a conditional `GET` using the stored `ETag` (`If-None-Match`) or `Last-Modified` (`If-Modified-Since`) from the previous fetch, if available
+  2. If the server returns `304 Not Modified`: take no action — no push to the data plane, no NGINX reload
+  3. If the server returns `200 OK` with a new bundle: compute its SHA-256 checksum and compare to the stored value
+  4. If **unchanged** (same checksum): take no action
+  5. If **changed**: deploy the new bundle via Agent gRPC, then update the stored checksum and conditional token (ETag or Last-Modified)
 
 **Relationship to `validation.verifyChecksum`:**
 The checksum used for polling change detection is computed by NGF itself from the downloaded bundle bytes. It is independent of `validation.verifyChecksum`. Polling always performs its own internal checksum comparison regardless of whether the user has configured `.verifyChecksum`.
@@ -172,7 +180,8 @@ All polling goroutines are started with the controller's context and are cancell
 **State tracking:**
 
 - NGF stores the last-known checksum per bundle (one for `policySource` and one per `logSource` entry) in memory
-- Stored checksums do not survive process restarts; on startup or reconcile, NGF performs a fetch regardless of any prior checksum
+- For HTTP sources, NGF also stores the `ETag` or `Last-Modified` conditional token from the last successful fetch, used to issue conditional GETs on subsequent polls
+- Stored state (checksums and conditional tokens) does not survive process restarts; on startup or reconcile, NGF performs an unconditional fetch regardless of any prior state
 - The polling interval timer restarts from the time of the last successful fetch
 
 Polling applies only to `type: HTTP`, `type: NIM`, and `type: N1C`. It is not applicable to `type: PLM`, which uses event-driven status watching instead.
@@ -1119,7 +1128,9 @@ Go's `net/http` client follows up to 10 redirects automatically. `Authorization`
 
 #### HTTP Caching Headers
 
-NGF does not send or process `ETag`, `If-None-Match`, `If-Modified-Since`, or other HTTP caching headers. Every fetch is an unconditional `GET`. ETag-based conditional fetching is a planned future enhancement.
+For **plain HTTP sources**, NGF stores the `ETag` or `Last-Modified` response header from each successful fetch. On subsequent polls, NGF sends a conditional `GET` using `If-None-Match` (for ETags) or `If-Modified-Since` (for Last-Modified). A `304 Not Modified` response is treated as unchanged — the bundle is not downloaded and the deployed policy is not touched. ETag takes precedence over Last-Modified when both are present in a response.
+
+For **NIM and N1C sources**, conditional GET is not used. Instead, the two-phase checksum-only fetch is used to avoid downloading the full bundle unnecessarily (see polling mechanism below).
 
 ### Gateway and Route Resources
 
@@ -1292,7 +1303,7 @@ Rules: added when the object starts being affected; only one condition exists ev
 - Custom CA certificates loaded from `policySource.tlsSecret` (`ca.crt` key) and appended to the system CA pool; `insecureSkipVerify` supported for development only
 - Transient errors (HTTP 5xx, network-level failures) retried up to `retryAttempts` with exponential backoff and jitter (base 1s, max 30s); non-transient errors (HTTP 4xx, checksum mismatch) fail immediately
 - Redirects followed up to 10 hops via Go's default redirect policy; Authorization header stripped on cross-host redirects
-- Polling goroutines reuse the same fetcher with an internal SHA-256 comparison to detect changes; no retry on poll cycle failures — the existing deployed bundle remains active and the error is surfaced in status
+- Polling goroutines reuse the same fetcher; for HTTP sources a conditional GET is issued using the stored ETag or Last-Modified token; a `304 Not Modified` response is treated as unchanged; for NIM and N1C sources a checksum-only fetch is issued first and the full bundle is only downloaded when the checksum differs; no retry on poll cycle failures — the existing deployed bundle remains active and the error is surfaced in status
 
 #### S3 Fetcher (PLM — future)
 
@@ -1311,12 +1322,12 @@ Rules: added when the object starts being affected; only one condition exists ev
 
 #### Policy Update Detection
 
-| Source type | Update mechanism                                           | Polling |
-|-------------|------------------------------------------------------------|---------|
-| HTTP        | Periodic polling goroutine; SHA-256 of downloaded bytes    | Yes     |
-| NIM         | Periodic polling goroutine; SHA-256 of downloaded bytes    | Yes     |
-| N1C         | Periodic polling goroutine; SHA-256 of downloaded bytes    | Yes     |
-| PLM         | Kubernetes watch on `APPolicy`/`APLogConf` status changes  | No      |
+| Source type | Update mechanism                                                                                      | Polling |
+|-------------|-------------------------------------------------------------------------------------------------------|---------|
+| HTTP        | Conditional GET (`If-None-Match`/`If-Modified-Since`); SHA-256 comparison on `200 OK` responses       | Yes     |
+| NIM         | Two-phase: checksum-only fetch first; full bundle download only when checksum differs                 | Yes     |
+| N1C         | Two-phase: checksum-only fetch first; full bundle download only when checksum differs                 | Yes     |
+| PLM         | Kubernetes watch on `APPolicy`/`APLogConf` status changes                                             | No      |
 
 ### Data Plane Policy Deployment
 
@@ -1342,7 +1353,8 @@ For all source types, NGF fetches compiled bundles, verifies integrity, writes t
 - Authentication: Basic Auth and Bearer Token secret key detection and request construction
 - NIM source: API request construction, policyName vs policyUID query parameter selection, base64 response decoding
 - N1C source: API request construction, `url.PathEscape` encoding, policyName vs policyObjectID selection, policyVersionID path segment
-- Polling goroutine: checksum comparison, change detection, no-op on unchanged, deploy on changed, graceful shutdown
+- Polling goroutine (NIM/N1C): two-phase checksum-only fetch; full bundle download only on checksum change; no-op on unchanged; deploy on changed; graceful shutdown
+- Polling goroutine (HTTP): conditional GET with `If-None-Match`/`If-Modified-Since`; 304 Not Modified treated as unchanged; ETag/Last-Modified token stored and reused on next poll; SHA-256 comparison on 200 responses
 - Retry logic: exponential backoff, transient vs. non-transient classification, exhaustion behaviour
 - Checksum verification (HTTP): `.sha256` sidecar fetch, hex digest parsing, mismatch handling
 - PLM: APPolicy watcher — state transition detection, ignored non-ready states (future)
@@ -1357,7 +1369,8 @@ For all source types, NGF fetches compiled bundles, verifies integrity, writes t
 - Policy inheritance: Gateway-level policies applying to HTTPRoutes and GRPCRoutes
 - Policy override: Route-level policies overriding Gateway-level policies
 - Authentication: Basic Auth and Bearer Token credential types and failure handling
-- Polling: bundle unchanged (no reload), bundle changed (reload triggered), poll failure (existing policy retained)
+- Polling (NIM/N1C): checksum unchanged skips full bundle download and reload; checksum changed triggers download and reload; poll failure retains existing policy
+- Polling (HTTP): 304 Not Modified skips download and reload; ETag/Last-Modified stored and sent on next poll; 200 with same checksum skips push; 200 with new checksum triggers deploy; conditional token updated after successful fetch
 - Retry: initial fetch failure retried up to configured `retryAttempts`; non-transient error not retried; timeout respected
 - Subsequent policy failure: if a policy fetch fails on an update for any reason, keep the last policy in force; ensure no break in firewall protection
 - Checksum verification (HTTP): matching digest allows deployment; mismatch sets `IntegrityError`
@@ -1478,7 +1491,6 @@ Cloud-native authentication (IRSA, Workload Identity) is not supported. Operator
 - **Policy signature verification**: Cryptographic validation of policy bundle authenticity
 - **Advanced policy inheritance**: Policy merging and composition rather than simple override
 - **Native cloud authentication**: IRSA, Azure Workload Identity, and GCP Workload Identity
-- **HTTP conditional fetching**: `ETag`/`If-None-Match` and `Last-Modified`/`If-Modified-Since` support during polling
 - **PLM integration**: Full implementation of `type: PLM` with APPolicy/APLogConf watch, S3 fetcher, and ReferenceGrant validation
 - **PLM NginxGateway CRD integration**: Move PLM storage configuration to the `NginxGateway` CRD
 - **NAP apreload support**: In-place policy reload to avoid full NGINX reloads

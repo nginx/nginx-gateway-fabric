@@ -60,6 +60,15 @@ type LogProfileMetaData struct {
 	UID             string `json:"uid"`
 }
 
+// Result holds the outcome of a bundle fetch operation.
+type Result struct {
+	Checksum     string
+	ETag         string
+	LastModified string
+	Data         []byte
+	Unchanged    bool
+}
+
 // BundleAuth holds authentication credentials for bundle fetching.
 type BundleAuth struct {
 	Username    string
@@ -74,7 +83,8 @@ type BundleAuth struct {
 type Request struct {
 	Auth    *BundleAuth
 	Timeout *metav1.Duration
-	URL     string
+	// N1C holds the N1C specific request details.
+	N1C N1CRequest
 	// LogProfileName is the human-readable name of the log profile.
 	// Used to look up the log profile by name when fetching from NIM or N1C.
 	// Mutually exclusive with N1C.LogProfileObjectID.
@@ -85,26 +95,31 @@ type Request struct {
 	PolicyName string
 	// NIM holds the NIM specific request details.
 	NIM NIMRequest
-	// N1C holds the N1C specific request details.
-	N1C N1CRequest
+	// URL is the base URL of the bundle source.
+	URL string
 	// ExpectedChecksum is the hex-encoded SHA-256 checksum the downloaded bundle must match.
 	// When set, NGF verifies the bundle after download and rejects it if the checksum differs.
 	// Mutually exclusive with VerifyChecksum. Supported for all source types.
 	ExpectedChecksum string
+	// ConditionalToken is an ETag or Last-Modified value from a previous successful HTTP fetch.
+	// When set, it is sent as If-None-Match or If-Modified-Since on the next request so the
+	// server can respond with 304 Not Modified instead of retransmitting the bundle.
+	// Only used for plain HTTP sources; ignored for NIM and N1C.
+	ConditionalToken string
 	// TLSCAData is the PEM-encoded CA certificate used to verify the bundle server's TLS certificate.
 	// When nil, the system certificate pool is used.
 	TLSCAData []byte
+	// RetryAttempts is the maximum number of additional retries for transient errors
+	// (network failures, HTTP 5xx responses). Non-transient errors (HTTP 4xx,
+	// checksum mismatch) are never retried. When zero, the request is
+	// attempted exactly once with no retries.
+	RetryAttempts int32
 	// InsecureSkipVerify disables TLS certificate verification. Not recommended for production use.
 	InsecureSkipVerify bool
 	// VerifyChecksum enables checksum verification by fetching a companion <url>.sha256 file.
 	// Only supported for plain HTTP fetches (no PolicyName, NIMPolicyUID, or N1CNamespace set).
 	// Mutually exclusive with ExpectedChecksum.
 	VerifyChecksum bool
-	// RetryAttempts is the maximum number of additional retries for transient errors
-	// (network failures, HTTP 5xx responses). Non-transient errors (HTTP 4xx,
-	// checksum mismatch) are never retried. When zero, the request is
-	// attempted exactly once with no retries.
-	RetryAttempts int32
 }
 
 // N1CRequest carries all the N1C specific parameters to fetch a single bundle.
@@ -136,19 +151,26 @@ type NIMRequest struct {
 //
 //counterfeiter:generate . Fetcher
 type Fetcher interface {
-	// FetchPolicyBundle retrieves the bundle bytes described by req.
-	// For HTTP type: GETs req.URL. If req.VerifyChecksum is true, fetches req.URL+".sha256" to verify integrity.
-	// For NIM type: calls the NIM bundles API and base64-decodes items[0].content.
-	// For N1C type: resolves the policy via the N1C API and downloads the compiled bundle.
-	// VerifyChecksum is only supported for plain HTTP fetches; returns an error for NIM/N1C.
-	// Returns (data, checksum, error). checksum is hex-encoded SHA-256 of the returned data.
-	FetchPolicyBundle(ctx context.Context, req Request) (data []byte, checksum string, err error)
-	// FetchLogProfileBundle retrieves the log profile bundle bytes for the given request.
-	// For HTTP type: GETs req.URL. If req.VerifyChecksum is true, fetches req.URL+".sha256" to verify integrity.
-	// For NIM type: calls the NIM log profile bundles API and base64-decodes the compiledBundle field.
-	// For N1C type: resolves the log profile via the N1C API and downloads the compiled bundle.
-	// Returns (data, checksum, error). checksum is hex-encoded SHA-256 of the returned data.
-	FetchLogProfileBundle(ctx context.Context, req Request) (data []byte, checksum string, err error)
+	// FetchPolicyBundle retrieves the policy bundle described by req.
+	// For HTTP sources: GETs req.URL; sends conditional headers when req.ConditionalToken is set
+	// and returns Result.Unchanged=true on 304. If req.VerifyChecksum is true, fetches
+	// req.URL+".sha256" to verify integrity. VerifyChecksum is not supported for NIM/N1C.
+	// For NIM sources: calls the NIM bundles API and base64-decodes items[0].content.
+	// For N1C sources: resolves the policy via the N1C API and downloads the compiled bundle.
+	FetchPolicyBundle(ctx context.Context, req Request) (Result, error)
+	// FetchLogProfileBundle retrieves the log profile bundle described by req.
+	// For HTTP sources: same conditional-request behavior as FetchPolicyBundle.
+	// For NIM sources: calls the NIM log profile bundles API and base64-decodes the compiledBundle field.
+	// For N1C sources: resolves the log profile via the N1C API and downloads the compiled bundle.
+	FetchLogProfileBundle(ctx context.Context, req Request) (Result, error)
+	// FetchPolicyBundleChecksum retrieves only the checksum of the remote policy bundle without
+	// downloading the full bundle content. Only supported for NIM and N1C sources; returns an error
+	// for plain HTTP sources (use FetchPolicyBundle with ConditionalToken instead).
+	FetchPolicyBundleChecksum(ctx context.Context, req Request) (checksum string, err error)
+	// FetchLogProfileBundleChecksum retrieves only the checksum of the remote log profile bundle without
+	// downloading the full bundle content. Only supported for NIM and N1C sources; returns an error
+	// for plain HTTP sources (use FetchLogProfileBundle with ConditionalToken instead).
+	FetchLogProfileBundleChecksum(ctx context.Context, req Request) (checksum string, err error)
 }
 
 // HTTPFetcher implements Fetcher using HTTP/HTTPS.
@@ -206,33 +228,120 @@ type nonTransientError struct {
 func (e *nonTransientError) Error() string { return e.err.Error() }
 func (e *nonTransientError) Unwrap() error { return e.err }
 
-// Fetch retrieves the bundle bytes described by req, dispatching to the appropriate
-// fetch strategy (plain HTTP, NIM, or N1C) based on which fields are set.
-// FetchPolicyBundle retrieves bundle bytes.
-// When req.N1CNamespace is set, uses N1C fetch logic (APIToken auth, N1C API path).
-// When req.NIMPolicyName or req.NIMPolicyUID is set (and N1CNamespace is empty), uses NIM fetch logic.
-// Otherwise performs a plain GET to req.URL, optionally verifying the checksum.
-func (f *HTTPFetcher) FetchPolicyBundle(ctx context.Context, req Request) ([]byte, string, error) {
+func (f *HTTPFetcher) FetchPolicyBundle(ctx context.Context, req Request) (Result, error) {
 	return f.fetch(ctx, req, f.dispatch)
 }
 
-func (f *HTTPFetcher) FetchLogProfileBundle(ctx context.Context, req Request) ([]byte, string, error) {
+func (f *HTTPFetcher) FetchLogProfileBundle(ctx context.Context, req Request) (Result, error) {
 	return f.fetch(ctx, req, f.logProfileDispatch)
+}
+
+// FetchPolicyBundleChecksum returns only the checksum of the remote policy bundle for NIM and N1C
+// sources without downloading the full bundle content. Returns an error for plain HTTP sources.
+func (f *HTTPFetcher) FetchPolicyBundleChecksum(ctx context.Context, req Request) (string, error) {
+	return f.fetchChecksum(ctx, req, f.dispatchChecksum)
+}
+
+// FetchLogProfileBundleChecksum returns only the checksum of the remote log profile bundle for NIM
+// and N1C sources without downloading the full bundle content. Returns an error for plain HTTP sources.
+func (f *HTTPFetcher) FetchLogProfileBundleChecksum(ctx context.Context, req Request) (string, error) {
+	return f.fetchChecksum(ctx, req, f.logProfileDispatchChecksum)
+}
+
+func (f *HTTPFetcher) fetchChecksum(
+	ctx context.Context,
+	req Request,
+	dispatch func(ctx context.Context, client *http.Client, req Request) (string, error),
+) (string, error) {
+	var err error
+	if req, err = validateAndNormalizeRequest(req); err != nil {
+		return "", err
+	}
+
+	client, err := f.buildHTTPClient(req)
+	if err != nil {
+		return "", err
+	}
+	if len(req.TLSCAData) > 0 || req.InsecureSkipVerify {
+		defer client.CloseIdleConnections()
+	}
+
+	backoff := wait.Backoff{
+		Duration: retryBaseDelay,
+		Factor:   2.0,
+		Jitter:   1.0,
+		Cap:      retryMaxDelay,
+		Steps:    int(req.RetryAttempts) + 1,
+	}
+
+	var (
+		checksum string
+		lastErr  error
+	)
+	attempt := 0
+	err = wait.ExponentialBackoffWithContext(ctx, backoff, func(ctx context.Context) (bool, error) {
+		attempt++
+		cs, fetchErr := dispatch(ctx, client, req)
+		if fetchErr != nil {
+			var nte *nonTransientError
+			if errors.As(fetchErr, &nte) {
+				return false, fetchErr
+			}
+			lastErr = fetchErr
+			f.logger.V(1).Info("Transient checksum fetch error, retrying",
+				"attempt", attempt, "maxAttempts", backoff.Steps, "error", fetchErr)
+			return false, nil
+		}
+		checksum = cs
+		return true, nil
+	})
+	if err != nil {
+		if wait.Interrupted(err) {
+			return "", lastErr
+		}
+		return "", err
+	}
+
+	return checksum, nil
+}
+
+func (f *HTTPFetcher) dispatchChecksum(ctx context.Context, client *http.Client, req Request) (string, error) {
+	switch {
+	case req.N1C.Namespace != "":
+		return fetchN1CChecksum(ctx, client, req, f.n1cCompilePollDelay, f.logger)
+	case req.PolicyName != "" || req.NIM.PolicyUID != "":
+		return fetchNIMChecksum(ctx, client, req)
+	default:
+		return "", fmt.Errorf("FetchPolicyBundleChecksum is not supported for plain HTTP sources")
+	}
+}
+
+func (f *HTTPFetcher) logProfileDispatchChecksum(
+	ctx context.Context, client *http.Client, req Request,
+) (string, error) {
+	switch {
+	case req.N1C.Namespace != "":
+		return fetchN1CLogProfileChecksum(ctx, client, req, f.n1cCompilePollDelay, f.logger)
+	case req.LogProfileName != "":
+		return fetchNIMLogProfileChecksum(ctx, client, req)
+	default:
+		return "", fmt.Errorf("FetchLogProfileBundleChecksum is not supported for plain HTTP sources")
+	}
 }
 
 func (f *HTTPFetcher) fetch(
 	ctx context.Context,
 	req Request,
-	dispatch func(ctx context.Context, client *http.Client, req Request) ([]byte, string, error),
-) ([]byte, string, error) {
+	dispatch func(ctx context.Context, client *http.Client, req Request) (Result, error),
+) (Result, error) {
 	var err error
 	if req, err = validateAndNormalizeRequest(req); err != nil {
-		return nil, "", err
+		return Result{}, err
 	}
 
 	client, err := f.buildHTTPClient(req)
 	if err != nil {
-		return nil, "", err
+		return Result{}, err
 	}
 	// buildHTTPClient creates a custom transport when TLS or insecure settings are configured.
 	// Unlike the shared default transport, this transport is not managed globally, so we close
@@ -254,14 +363,13 @@ func (f *HTTPFetcher) fetch(
 	}
 
 	var (
-		result   []byte
-		checksum string
-		lastErr  error
+		result  Result
+		lastErr error
 	)
 	attempt := 0
 	err = wait.ExponentialBackoffWithContext(ctx, backoff, func(ctx context.Context) (bool, error) {
 		attempt++
-		data, cs, fetchErr := dispatch(ctx, client, req)
+		fr, fetchErr := dispatch(ctx, client, req)
 		if fetchErr != nil {
 			var nte *nonTransientError
 			if errors.As(fetchErr, &nte) {
@@ -272,27 +380,26 @@ func (f *HTTPFetcher) fetch(
 				"attempt", attempt, "maxAttempts", backoff.Steps, "error", fetchErr)
 			return false, nil
 		}
-		result = data
-		checksum = cs
+		result = fr
 		return true, nil
 	})
 	if err != nil {
 		if wait.Interrupted(err) {
-			return nil, "", lastErr
+			return Result{}, lastErr
 		}
-		return nil, "", err
+		return Result{}, err
 	}
 
-	if req.ExpectedChecksum != "" && checksum != req.ExpectedChecksum {
-		return nil, "", fmt.Errorf(
-			"bundle checksum mismatch: expected %s, got %s", req.ExpectedChecksum, checksum,
+	if !result.Unchanged && req.ExpectedChecksum != "" && result.Checksum != req.ExpectedChecksum {
+		return Result{}, fmt.Errorf(
+			"bundle checksum mismatch: expected %s, got %s", req.ExpectedChecksum, result.Checksum,
 		)
 	}
 
-	return result, checksum, nil
+	return result, nil
 }
 
-func (f *HTTPFetcher) dispatch(ctx context.Context, client *http.Client, req Request) ([]byte, string, error) {
+func (f *HTTPFetcher) dispatch(ctx context.Context, client *http.Client, req Request) (Result, error) {
 	switch {
 	case req.N1C.Namespace != "":
 		return fetchN1C(ctx, client, req, f.n1cCompilePollDelay, f.logger)
@@ -307,7 +414,7 @@ func (f *HTTPFetcher) logProfileDispatch(
 	ctx context.Context,
 	client *http.Client,
 	req Request,
-) ([]byte, string, error) {
+) (Result, error) {
 	switch {
 	case req.N1C.Namespace != "":
 		return fetchN1CLogProfile(ctx, client, req)
@@ -373,41 +480,61 @@ func buildClient(caData []byte, insecureSkipVerify bool, timeout time.Duration) 
 }
 
 // fetchHTTP performs a GET to req.URL.
+// When req.ConditionalToken is set it is sent as If-None-Match (ETag) or If-Modified-Since
+// (Last-Modified) and a 304 response is returned as Result{Unchanged: true}.
 // If req.VerifyChecksum is true, fetches req.URL+".sha256" and verifies integrity.
-// Returns the bundle bytes, the hex checksum, and any error.
-func fetchHTTP(ctx context.Context, client *http.Client, req Request) ([]byte, string, error) {
-	data, err := doGet(ctx, client, req.URL, req.Auth)
+func fetchHTTP(ctx context.Context, client *http.Client, req Request) (Result, error) {
+	var extraHeaders map[string]string
+	if req.ConditionalToken != "" {
+		if strings.HasPrefix(req.ConditionalToken, `"`) || strings.HasPrefix(req.ConditionalToken, "W/") {
+			extraHeaders = map[string]string{"If-None-Match": req.ConditionalToken}
+		} else {
+			extraHeaders = map[string]string{"If-Modified-Since": req.ConditionalToken}
+		}
+	}
+
+	data, respHeaders, statusCode, err := doGetWithHeaders(ctx, client, req.URL, req.Auth, extraHeaders,
+		http.StatusOK, http.StatusNotModified)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to fetch bundle: %w", err)
+		return Result{}, fmt.Errorf("failed to fetch bundle: %w", err)
+	}
+
+	if statusCode == http.StatusNotModified {
+		return Result{Unchanged: true}, nil
 	}
 
 	actualChecksum := ComputeChecksum(data)
 
 	if req.VerifyChecksum {
 		checksumURL := req.URL + ".sha256"
-		checksumData, err := doGet(ctx, client, checksumURL, req.Auth)
+		checksumData, _, _, err := doGetWithHeaders(ctx, client, checksumURL, req.Auth, nil, http.StatusOK)
 		if err != nil {
-			return nil, "", fmt.Errorf("failed to fetch bundle checksum from %s: %w", checksumURL, err)
+			return Result{}, fmt.Errorf("failed to fetch bundle checksum from %s: %w", checksumURL, err)
 		}
 		fields := strings.Fields(string(checksumData))
 		if len(fields) == 0 {
-			return nil, "", fmt.Errorf("checksum file at %s is empty", checksumURL)
+			return Result{}, fmt.Errorf("checksum file at %s is empty", checksumURL)
 		}
 		expectedChecksum := strings.ToLower(fields[0])
 		if _, err := hex.DecodeString(expectedChecksum); err != nil || len(expectedChecksum) != 64 {
-			return nil, "", fmt.Errorf(
+			return Result{}, fmt.Errorf(
 				"checksum file at %s contains invalid checksum %q: expected 64 hex characters",
 				checksumURL, fields[0],
 			)
 		}
 		if expectedChecksum != actualChecksum {
-			return nil, "", &nonTransientError{
+			return Result{}, &nonTransientError{
 				err: fmt.Errorf("bundle checksum mismatch: expected %s, got %s", expectedChecksum, actualChecksum),
 			}
 		}
 	}
 
-	return data, actualChecksum, nil
+	return Result{
+		Data:         data,
+		Checksum:     actualChecksum,
+		ETag:         respHeaders.Get("ETag"),
+		LastModified: respHeaders.Get("Last-Modified"),
+	}, nil
 }
 
 // nimResponse is the JSON envelope returned by the NIM bundles API.
@@ -421,20 +548,20 @@ type nimResponse struct {
 }
 
 // fetchNIM calls the NIM security policies bundles API and decodes the bundle from the response.
-func fetchNIM(ctx context.Context, client *http.Client, req Request) ([]byte, string, error) {
+func fetchNIM(ctx context.Context, client *http.Client, req Request) (Result, error) {
 	nimURL, err := buildNIMURL(req.URL, req.PolicyName, req.NIM.PolicyUID)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to build NIM URL: %w", err)
+		return Result{}, fmt.Errorf("failed to build NIM URL: %w", err)
 	}
 
 	body, err := doGet(ctx, client, nimURL, req.Auth)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to fetch bundle from NIM: %w", err)
+		return Result{}, fmt.Errorf("failed to fetch bundle from NIM: %w", err)
 	}
 
 	var resp nimResponse
 	if err := json.Unmarshal(body, &resp); err != nil {
-		return nil, "", fmt.Errorf("failed to parse NIM response: %w", err)
+		return Result{}, fmt.Errorf("failed to parse NIM response: %w", err)
 	}
 
 	policyRef := req.PolicyName
@@ -442,12 +569,12 @@ func fetchNIM(ctx context.Context, client *http.Client, req Request) ([]byte, st
 		policyRef = req.NIM.PolicyUID
 	}
 	if len(resp.Items) == 0 {
-		return nil, "", fmt.Errorf("NIM response contains no items for policy %q", policyRef)
+		return Result{}, fmt.Errorf("NIM response contains no items for policy %q", policyRef)
 	}
 
 	data, err := base64.StdEncoding.DecodeString(resp.Items[0].Content)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to base64-decode NIM bundle content: %w", err)
+		return Result{}, fmt.Errorf("failed to base64-decode NIM bundle content: %w", err)
 	}
 
 	actualChecksum := ComputeChecksum(data)
@@ -458,47 +585,45 @@ func fetchNIM(ctx context.Context, client *http.Client, req Request) ([]byte, st
 	// (the outer Fetch loop will check that instead).
 	if bundleHash != "" && req.ExpectedChecksum == "" {
 		if actualChecksum != strings.ToLower(bundleHash) {
-			return nil, "", &nonTransientError{
+			return Result{}, &nonTransientError{
 				err: fmt.Errorf("NIM bundle integrity check failed: expected %s, got %s", bundleHash, actualChecksum),
 			}
 		}
 	}
 
-	return data, actualChecksum, nil
+	return Result{Data: data, Checksum: actualChecksum}, nil
 }
 
-func fetchNIMLogProfile(ctx context.Context, client *http.Client, req Request) ([]byte, string, error) {
+func fetchNIMLogProfile(ctx context.Context, client *http.Client, req Request) (Result, error) {
 	compilerVersionURL := strings.TrimRight(req.URL, "/") + "/api/platform/v1/security/nap-compiler/versions/latest"
 	body, err := doGet(ctx, client, compilerVersionURL, req.Auth)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to fetch latest NIM NAP compiler version: %w", err)
+		return Result{}, fmt.Errorf("failed to fetch latest NIM NAP compiler version: %w", err)
 	}
 
 	var versionResp NAPCompilerVersionResponse
-	err = json.Unmarshal(body, &versionResp)
-	if err != nil {
-		return nil, "", fmt.Errorf("failed to parse NIM NAP compiler version response: %w", err)
+	if err = json.Unmarshal(body, &versionResp); err != nil {
+		return Result{}, fmt.Errorf("failed to parse NIM NAP compiler version response: %w", err)
 	}
 
 	logProfileBundleURL := strings.TrimRight(req.URL, "/") +
 		fmt.Sprintf("/api/platform/v1/security/logprofiles/%s/%s/bundle", req.LogProfileName, versionResp.Version)
 	body, err = doGet(ctx, client, logProfileBundleURL, req.Auth)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to fetch NIM log profile bundle: %w", err)
+		return Result{}, fmt.Errorf("failed to fetch NIM log profile bundle: %w", err)
 	}
 
 	var resp LogProfileBundleResponse
-	err = json.Unmarshal(body, &resp)
-	if err != nil {
-		return nil, "", fmt.Errorf("failed to parse NIM log profile bundle response: %w", err)
+	if err = json.Unmarshal(body, &resp); err != nil {
+		return Result{}, fmt.Errorf("failed to parse NIM log profile bundle response: %w", err)
 	}
 
 	data, err := base64.StdEncoding.DecodeString(resp.CompiledBundle)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to base64-decode NIM bundle content: %w", err)
+		return Result{}, fmt.Errorf("failed to base64-decode NIM bundle content: %w", err)
 	}
 
-	return data, ComputeChecksum(data), nil
+	return Result{Data: data, Checksum: ComputeChecksum(data)}, nil
 }
 
 // n1cLogProfilesResponse is the JSON envelope returned by the N1C list-log-profiles API.
@@ -564,15 +689,15 @@ func fetchN1C(
 	req Request,
 	pollDelay time.Duration,
 	logger logr.Logger,
-) ([]byte, string, error) {
+) (Result, error) {
 	polObjID, polVersionID, err := resolveN1CIDs(ctx, client, req)
 	if err != nil {
-		return nil, "", err
+		return Result{}, err
 	}
 
 	statusURL, err := buildN1CCompileStatusURL(req.URL, req.N1C.Namespace, polObjID, polVersionID)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to build N1C compile status URL: %w", err)
+		return Result{}, fmt.Errorf("failed to build N1C compile status URL: %w", err)
 	}
 
 	compileTimeout := defaultTimeout
@@ -584,17 +709,17 @@ func fetchN1C(
 
 	bundleHash, err := pollN1CCompileStatus(pollCtx, client, statusURL, req.Auth, pollDelay, logger)
 	if err != nil {
-		return nil, "", err
+		return Result{}, err
 	}
 
 	downloadURL, err := buildN1CCompileDownloadURL(req.URL, req.N1C.Namespace, polObjID, polVersionID)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to build N1C compile download URL: %w", err)
+		return Result{}, fmt.Errorf("failed to build N1C compile download URL: %w", err)
 	}
 
 	body, err := doGet(ctx, client, downloadURL, req.Auth)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to fetch N1C compiled bundle: %w", err)
+		return Result{}, fmt.Errorf("failed to fetch N1C compiled bundle: %w", err)
 	}
 
 	actualChecksum := ComputeChecksum(body)
@@ -604,13 +729,13 @@ func fetchN1C(
 	// (the outer Fetch loop will check that instead).
 	if bundleHash != "" && req.ExpectedChecksum == "" {
 		if actualChecksum != strings.ToLower(bundleHash) {
-			return nil, "", &nonTransientError{
+			return Result{}, &nonTransientError{
 				err: fmt.Errorf("N1C bundle integrity check failed: expected %s, got %s", bundleHash, actualChecksum),
 			}
 		}
 	}
 
-	return body, actualChecksum, nil
+	return Result{Data: body, Checksum: actualChecksum}, nil
 }
 
 // pollN1CCompileStatus polls the N1C compile status endpoint until the compilation job succeeds or
@@ -670,27 +795,27 @@ func pollN1CCompileStatus(
 //  1. If req.N1C.LogProfileObjectID is set, use it directly (skip the list call).
 //     Otherwise, GET .../app-protect/log-profiles — find the profile by req.LogProfileName.
 //  2. GET .../app-protect/log-profiles/<lp_obj_id>/compile?nap_release=<release>&download=true
-func fetchN1CLogProfile(ctx context.Context, client *http.Client, req Request) ([]byte, string, error) {
+func fetchN1CLogProfile(ctx context.Context, client *http.Client, req Request) (Result, error) {
 	lpObjID := req.N1C.LogProfileObjectID
 	if lpObjID == "" {
 		var err error
 		lpObjID, err = findN1CLogProfile(ctx, client, req.URL, req.N1C.Namespace, req.LogProfileName, req.Auth)
 		if err != nil {
-			return nil, "", err
+			return Result{}, err
 		}
 	}
 
 	compileURL, err := buildN1CLogProfileCompileURL(req.URL, req.N1C.Namespace, lpObjID)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to build N1C log profile compile URL: %w", err)
+		return Result{}, fmt.Errorf("failed to build N1C log profile compile URL: %w", err)
 	}
 
 	body, err := doGet(ctx, client, compileURL, req.Auth)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to fetch N1C compiled log profile bundle: %w", err)
+		return Result{}, fmt.Errorf("failed to fetch N1C compiled log profile bundle: %w", err)
 	}
 
-	return body, ComputeChecksum(body), nil
+	return Result{Data: body, Checksum: ComputeChecksum(body)}, nil
 }
 
 // findN1CLogProfile pages through the N1C log profiles list and returns the object_id
@@ -754,6 +879,21 @@ func buildN1CLogProfilesURL(baseURL, namespace string, offset, limit int) (strin
 //
 //	?nap_release=<release>&download=true
 func buildN1CLogProfileCompileURL(baseURL, namespace, lpObjID string) (string, error) {
+	return buildN1CLogProfileCompileBaseURL(baseURL, namespace, lpObjID, true)
+}
+
+// buildN1CLogProfileCompileStatusURL constructs the N1C log profile compile status endpoint URL
+// (no download param). Polling this endpoint returns a JSON status response.
+// Format: <baseURL>/api/nginx/one/namespaces/<ns>/app-protect/log-profiles/<lp_obj_id>/compile
+//
+//	?nap_release=<release>
+func buildN1CLogProfileCompileStatusURL(baseURL, namespace, lpObjID string) (string, error) {
+	return buildN1CLogProfileCompileBaseURL(baseURL, namespace, lpObjID, false)
+}
+
+// buildN1CLogProfileCompileBaseURL constructs the N1C log profile compile endpoint URL.
+// When download is true the response is the binary bundle; when false it is the JSON compile status.
+func buildN1CLogProfileCompileBaseURL(baseURL, namespace, lpObjID string, download bool) (string, error) {
 	base, err := url.Parse(baseURL)
 	if err != nil {
 		return "", fmt.Errorf("invalid N1C base URL %q: %w", baseURL, err)
@@ -764,9 +904,56 @@ func buildN1CLogProfileCompileURL(baseURL, namespace, lpObjID string) (string, e
 	base.Fragment = ""
 	q := url.Values{}
 	q.Set("nap_release", waf.Release)
-	q.Set("download", "true")
+	if download {
+		q.Set("download", "true")
+	}
 	base.RawQuery = q.Encode()
 	return base.String(), nil
+}
+
+// pollN1CLogProfileCompileStatus polls the N1C log profile compile status endpoint until the
+// compilation job succeeds or fails. It returns the bundle hash on success.
+func pollN1CLogProfileCompileStatus(
+	ctx context.Context,
+	client *http.Client,
+	statusURL string,
+	auth *BundleAuth,
+	pollDelay time.Duration,
+	logger logr.Logger,
+) (string, error) {
+	for {
+		body, err := doGet(ctx, client, statusURL, auth, http.StatusOK, http.StatusAccepted)
+		if err != nil {
+			var nte *nonTransientError
+			if errors.As(err, &nte) {
+				return "", fmt.Errorf("failed to check N1C log profile compile status: %w", err)
+			}
+			logger.V(1).Info("Transient error polling N1C log profile compile status, retrying", "error", err)
+		} else {
+			var status n1cCompileStatusResponse
+			if parseErr := json.Unmarshal(body, &status); parseErr != nil {
+				return "", fmt.Errorf("failed to parse N1C log profile compile status response: %w", parseErr)
+			}
+
+			switch status.Status {
+			case "succeeded":
+				logger.V(1).Info("N1C log profile bundle compilation succeeded", "hash", status.Hash)
+				return status.Hash, nil
+			case "failed":
+				return "", &nonTransientError{
+					err: fmt.Errorf("N1C log profile bundle compilation failed"),
+				}
+			default:
+				logger.V(1).Info("N1C log profile bundle compilation in progress", "status", status.Status)
+			}
+		}
+
+		select {
+		case <-ctx.Done():
+			return "", ctx.Err()
+		case <-time.After(pollDelay):
+		}
+	}
 }
 
 // resolveN1CIDs returns the policy object ID and version object ID for the given request.
@@ -958,9 +1145,154 @@ func buildN1CCompileBaseURL(baseURL, namespace, polObjID, polVersionID string, d
 	return base.String(), nil
 }
 
-// buildNIMURL constructs the NIM bundles API URL.
+// fetchNIMChecksum fetches only the metadata for a NIM policy bundle and returns the hash
+// without downloading the bundle content.
+func fetchNIMChecksum(ctx context.Context, client *http.Client, req Request) (string, error) {
+	nimURL, err := buildNIMMetadataURL(req.URL, req.PolicyName, req.NIM.PolicyUID)
+	if err != nil {
+		return "", fmt.Errorf("failed to build NIM metadata URL: %w", err)
+	}
+
+	body, err := doGet(ctx, client, nimURL, req.Auth)
+	if err != nil {
+		return "", fmt.Errorf("failed to fetch NIM bundle metadata: %w", err)
+	}
+
+	var resp nimResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return "", fmt.Errorf("failed to parse NIM metadata response: %w", err)
+	}
+
+	policyRef := req.PolicyName
+	if policyRef == "" {
+		policyRef = req.NIM.PolicyUID
+	}
+	if len(resp.Items) == 0 {
+		return "", fmt.Errorf("NIM response contains no items for policy %q", policyRef)
+	}
+
+	hash := strings.ToLower(resp.Items[0].Metadata.Hash)
+	if hash == "" {
+		return "", fmt.Errorf("NIM response contains no hash for policy %q", policyRef)
+	}
+
+	return hash, nil
+}
+
+// fetchNIMLogProfileChecksum fetches only the metadata for a NIM log profile bundle and returns
+// the checksum of the compiled bundle without downloading it.
+func fetchNIMLogProfileChecksum(ctx context.Context, client *http.Client, req Request) (string, error) {
+	compilerVersionURL := strings.TrimRight(req.URL, "/") + "/api/platform/v1/security/nap-compiler/versions/latest"
+	body, err := doGet(ctx, client, compilerVersionURL, req.Auth)
+	if err != nil {
+		return "", fmt.Errorf("failed to fetch latest NIM NAP compiler version: %w", err)
+	}
+
+	var versionResp NAPCompilerVersionResponse
+	if err = json.Unmarshal(body, &versionResp); err != nil {
+		return "", fmt.Errorf("failed to parse NIM NAP compiler version response: %w", err)
+	}
+
+	// The log profile bundle endpoint returns the full bundle including metadata; there is no
+	// metadata-only endpoint in NIM. We fetch the full response but discard the bundle bytes,
+	// using only the checksum computed from the decoded content.
+	logProfileBundleURL := strings.TrimRight(req.URL, "/") +
+		fmt.Sprintf("/api/platform/v1/security/logprofiles/%s/%s/bundle", req.LogProfileName, versionResp.Version)
+	body, err = doGet(ctx, client, logProfileBundleURL, req.Auth)
+	if err != nil {
+		return "", fmt.Errorf("failed to fetch NIM log profile bundle metadata: %w", err)
+	}
+
+	var resp LogProfileBundleResponse
+	if err = json.Unmarshal(body, &resp); err != nil {
+		return "", fmt.Errorf("failed to parse NIM log profile bundle response: %w", err)
+	}
+
+	data, err := base64.StdEncoding.DecodeString(resp.CompiledBundle)
+	if err != nil {
+		return "", fmt.Errorf("failed to base64-decode NIM log profile bundle content: %w", err)
+	}
+
+	return ComputeChecksum(data), nil
+}
+
+// fetchN1CChecksum resolves the N1C policy IDs and polls the compile status endpoint to obtain the
+// bundle hash without downloading the full bundle.
+func fetchN1CChecksum(
+	ctx context.Context,
+	client *http.Client,
+	req Request,
+	pollDelay time.Duration,
+	logger logr.Logger,
+) (string, error) {
+	polObjID, polVersionID, err := resolveN1CIDs(ctx, client, req)
+	if err != nil {
+		return "", err
+	}
+
+	statusURL, err := buildN1CCompileStatusURL(req.URL, req.N1C.Namespace, polObjID, polVersionID)
+	if err != nil {
+		return "", fmt.Errorf("failed to build N1C compile status URL: %w", err)
+	}
+
+	compileTimeout := defaultTimeout
+	if req.Timeout != nil {
+		compileTimeout = req.Timeout.Duration
+	}
+	pollCtx, cancel := context.WithTimeout(ctx, compileTimeout)
+	defer cancel()
+
+	return pollN1CCompileStatus(pollCtx, client, statusURL, req.Auth, pollDelay, logger)
+}
+
+// fetchN1CLogProfileChecksum resolves the N1C log profile object ID and polls the compile status
+// endpoint to obtain the bundle hash without downloading the full bundle.
+func fetchN1CLogProfileChecksum(
+	ctx context.Context,
+	client *http.Client,
+	req Request,
+	pollDelay time.Duration,
+	logger logr.Logger,
+) (string, error) {
+	lpObjID := req.N1C.LogProfileObjectID
+	if lpObjID == "" {
+		var err error
+		lpObjID, err = findN1CLogProfile(ctx, client, req.URL, req.N1C.Namespace, req.LogProfileName, req.Auth)
+		if err != nil {
+			return "", err
+		}
+	}
+
+	statusURL, err := buildN1CLogProfileCompileStatusURL(req.URL, req.N1C.Namespace, lpObjID)
+	if err != nil {
+		return "", fmt.Errorf("failed to build N1C log profile compile status URL: %w", err)
+	}
+
+	compileTimeout := defaultTimeout
+	if req.Timeout != nil {
+		compileTimeout = req.Timeout.Duration
+	}
+	pollCtx, cancel := context.WithTimeout(ctx, compileTimeout)
+	defer cancel()
+
+	return pollN1CLogProfileCompileStatus(pollCtx, client, statusURL, req.Auth, pollDelay, logger)
+}
+
+// buildNIMURL constructs the NIM bundles API URL with bundle content included.
 // Exactly one of policyName or policyUID must be non-empty.
 func buildNIMURL(baseURL, policyName, policyUID string) (string, error) {
+	return buildNIMBundlesURL(baseURL, policyName, policyUID, true)
+}
+
+// buildNIMMetadataURL constructs the NIM bundles API URL without bundle content (metadata only).
+// Exactly one of policyName or policyUID must be non-empty.
+func buildNIMMetadataURL(baseURL, policyName, policyUID string) (string, error) {
+	return buildNIMBundlesURL(baseURL, policyName, policyUID, false)
+}
+
+// buildNIMBundlesURL constructs the NIM bundles API URL. When includeBundleContent is true the
+// response includes the base64-encoded bundle; when false only metadata (including the hash) is returned.
+func buildNIMBundlesURL(baseURL, policyName, policyUID string, includeBundleContent bool) (string, error) {
 	base, err := url.Parse(baseURL)
 	if err != nil {
 		return "", fmt.Errorf("invalid NIM base URL %q: %w", baseURL, err)
@@ -968,7 +1300,11 @@ func buildNIMURL(baseURL, policyName, policyUID string) (string, error) {
 	base.Path = strings.TrimRight(base.Path, "/") + "/api/platform/v1/security/policies/bundles"
 	base.Fragment = ""
 	q := url.Values{}
-	q.Set("includeBundleContent", "true")
+	if includeBundleContent {
+		q.Set("includeBundleContent", "true")
+	} else {
+		q.Set("includeBundleContent", "false")
+	}
 	// NIM defaults startTime to now-24h when omitted, which silently excludes policies that
 	// haven't been recompiled in the last 24 hours. Set it to the Unix epoch to return all
 	// matching policies regardless of age.
@@ -982,13 +1318,36 @@ func buildNIMURL(baseURL, policyName, policyUID string) (string, error) {
 	return base.String(), nil
 }
 
-// doGet performs a GET request, optionally setting auth headers, and returns the response body.
+// SupportsChecksumOnlyFetch reports whether this request targets a NIM or N1C source, both of
+// which expose a metadata-only endpoint that returns the bundle hash without the full content.
+// Plain HTTP sources do not have such an endpoint and always require a full download.
+func (r Request) SupportsChecksumOnlyFetch() bool {
+	return r.N1C.Namespace != "" || r.PolicyName != "" || r.NIM.PolicyUID != "" || r.LogProfileName != ""
+}
+
+// doGet performs a GET request and returns the response body.
 // acceptedCodes lists the HTTP status codes treated as success; defaults to 200 OK when empty.
 func doGet(ctx context.Context, client *http.Client, rawURL string, auth *BundleAuth, acceptedCodes ...int,
 ) ([]byte, error) {
+	body, _, _, err := doGetWithHeaders(ctx, client, rawURL, auth, nil, acceptedCodes...)
+	return body, err
+}
+
+// doGetWithHeaders performs a GET request with optional extra request headers and returns the
+// response body, response headers, status code, and any error.
+// acceptedCodes lists the HTTP status codes treated as success; defaults to 200 OK when empty.
+// For accepted non-200 codes (e.g. 304) the body will be empty and no error is returned.
+func doGetWithHeaders(
+	ctx context.Context,
+	client *http.Client,
+	rawURL string,
+	auth *BundleAuth,
+	extraHeaders map[string]string,
+	acceptedCodes ...int,
+) ([]byte, http.Header, int, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request for %s: %w", rawURL, err)
+		return nil, nil, 0, fmt.Errorf("failed to create request for %s: %w", rawURL, err)
 	}
 
 	if auth != nil {
@@ -1002,9 +1361,13 @@ func doGet(ctx context.Context, client *http.Client, rawURL string, auth *Bundle
 		}
 	}
 
+	for k, v := range extraHeaders {
+		req.Header.Set(k, v)
+	}
+
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("request to %s failed: %w", rawURL, err)
+		return nil, nil, 0, fmt.Errorf("request to %s failed: %w", rawURL, err)
 	}
 	defer resp.Body.Close()
 
@@ -1015,16 +1378,21 @@ func doGet(ctx context.Context, client *http.Client, rawURL string, auth *Bundle
 	if !slices.Contains(accepted, resp.StatusCode) {
 		err := fmt.Errorf("unexpected status %d from %s", resp.StatusCode, rawURL)
 		if resp.StatusCode >= http.StatusBadRequest && resp.StatusCode < http.StatusInternalServerError {
-			return nil, &nonTransientError{err: err}
+			return nil, nil, resp.StatusCode, &nonTransientError{err: err}
 		}
-		return nil, err
+		return nil, nil, resp.StatusCode, err
+	}
+
+	// 304 has no body; return early with just the status.
+	if resp.StatusCode == http.StatusNotModified {
+		return nil, resp.Header, resp.StatusCode, nil
 	}
 
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read response from %s: %w", rawURL, err)
+		return nil, nil, resp.StatusCode, fmt.Errorf("failed to read response from %s: %w", rawURL, err)
 	}
-	return data, nil
+	return data, resp.Header, resp.StatusCode, nil
 }
 
 // ComputeChecksum returns the lowercase hex-encoded SHA-256 of data.
