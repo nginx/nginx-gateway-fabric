@@ -118,7 +118,11 @@ struct TimeoutError;
 ///
 /// This uses `ngx::async_::Sleep` which integrates with nginx's event loop,
 /// avoiding the need for a separate runtime (tokio, etc.).
-async fn with_timeout<F, T>(future: F, timeout: Duration, log: NonNull<ngx_log_t>) -> Result<T, TimeoutError>
+async fn with_timeout<F, T>(
+    future: F,
+    timeout: Duration,
+    log: NonNull<ngx_log_t>,
+) -> Result<T, TimeoutError>
 where
     F: Future<Output = T>,
 {
