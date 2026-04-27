@@ -1454,6 +1454,8 @@ func buildBaseHTTPConfig(
 
 	baseConfig.ServerTokens = buildServerTokens(gateway)
 
+	baseConfig.Compression = buildCompressionConfig(np.Compression)
+
 	return baseConfig
 }
 
@@ -1841,4 +1843,52 @@ func buildServerTokens(gateway *graph.Gateway) string {
 	}
 
 	return fmt.Sprintf(`"%s"`, serverToken)
+}
+
+func buildCompressionConfig(compression *ngfAPIv1alpha2.Compression) *CompressionSettings {
+	if compression == nil {
+		return nil
+	}
+
+	settings := &CompressionSettings{
+		MimeTypes: compression.MimeTypes,
+	}
+
+	if compression.Level != nil {
+		settings.Level = *compression.Level
+	}
+
+	if compression.MinLength != nil {
+		settings.MinLength = *compression.MinLength
+	}
+
+	if compression.Buffers != nil {
+		settings.BufferNumber = compression.Buffers.Number
+		settings.BufferSize = string(compression.Buffers.Size)
+	}
+
+	if compression.Gzip != nil {
+		if compression.Gzip.Vary != nil {
+			settings.Vary = *compression.Gzip.Vary
+		}
+
+		if compression.Gzip.HTTPVersion != nil {
+			settings.HTTPVersion = string(*compression.Gzip.HTTPVersion)
+		} else {
+			settings.HTTPVersion = "1.1"
+		}
+
+		if len(compression.Gzip.Proxied) > 0 {
+			settings.Proxied = make([]string, 0, len(compression.Gzip.Proxied))
+			for _, p := range compression.Gzip.Proxied {
+				settings.Proxied = append(settings.Proxied, string(p))
+			}
+		}
+
+		if len(compression.Gzip.Disable) > 0 {
+			settings.Disable = compression.Gzip.Disable
+		}
+	}
+
+	return settings
 }

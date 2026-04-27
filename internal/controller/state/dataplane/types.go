@@ -585,23 +585,25 @@ type SpanAttribute struct {
 type BaseHTTPConfig struct {
 	// DNSResolver defines the DNS resolver configuration for NGINX.
 	DNSResolver *DNSResolverConfig
+	// Compression defines the compression settings for NGINX.
+	Compression *CompressionSettings
 	// IPFamily specifies the IP family for all servers.
 	IPFamily IPFamilyType
-	// GatewaySecretID is the ID of the secret that contains the gateway backend TLS certificate.
+	// GatewaySecretID is the ID of the Gateway Secret.
 	GatewaySecretID SSLKeyPairID
-	// NginxReadinessProbePath is the path on which the health check endpoint for NGINX is exposed.
+	// NginxReadinessProbePath is the path on which the health check is served.
 	NginxReadinessProbePath string
-	// ServerTokens specifies the value for the server_tokens directive in NGINX configuration.
+	// ServerTokens specifies the value for the server_tokens directive.
 	ServerTokens string
 	// Policies holds the policies attached to the Gateway for the http context.
 	Policies []policies.Policy
 	// Snippets contain the snippets that apply to the http context.
 	Snippets []Snippet
-	// RewriteClientIPSettings defines configuration for rewriting the client IP to the original client's IP.
+	// RewriteClientIPSettings defines configuration for rewriting the client IP.
 	RewriteClientIPSettings RewriteClientIPSettings
-	// NginxReadinessProbePort is the port on which the health check endpoint for NGINX is exposed.
+	// NginxReadinessProbePort is the port on which the health check is served.
 	NginxReadinessProbePort int32
-	// HTTP2 specifies whether http2 should be enabled for all servers.
+	// HTTP2 specifies whether http2 should be enabled.
 	HTTP2 bool
 	// DisableSNIHostValidation specifies if the SNI host validation should be disabled.
 	DisableSNIHostValidation bool
@@ -633,6 +635,28 @@ type DNSResolverConfig struct {
 	Addresses []string
 	// DisableIPv6 specifies whether to disable DisableIPv6 lookups.
 	DisableIPv6 bool
+}
+
+// CompressionSettings defines the compression configuration for NGINX.
+type CompressionSettings struct {
+	// BufferSize is the size of each compression buffer.
+	BufferSize string
+	// HTTPVersion is the minimum HTTP version required for compression.
+	HTTPVersion string
+	// MimeTypes specifies the MIME types to compress.
+	MimeTypes []string
+	// Proxied specifies the proxied request conditions for compression.
+	Proxied []string
+	// Disable specifies User-Agent regex patterns to disable compression.
+	Disable []string
+	// Level is the compression level (1-9).
+	Level int32
+	// MinLength is the minimum response length to compress.
+	MinLength int32
+	// BufferNumber is the number of compression buffers.
+	BufferNumber int32
+	// Vary enables the "Vary: Accept-Encoding" response header.
+	Vary bool
 }
 
 // RewriteIPModeType specifies the mode for rewriting the client IP.

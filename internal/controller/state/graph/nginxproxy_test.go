@@ -1728,3 +1728,111 @@ func TestValidateServerTokens(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateCompression(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name            string
+		np              *ngfAPIv1alpha2.NginxProxy
+		validator       *validationfakes.FakeGenericValidator
+		expErrSubstring string
+		expectErrCount  int
+	}{
+		{
+			name:           "nil compression is valid",
+			validator:      createValidValidator(),
+			np:             &ngfAPIv1alpha2.NginxProxy{},
+			expectErrCount: 0,
+		},
+		{
+			name:      "valid compression with mimeTypes",
+			validator: createValidValidator(),
+			np: &ngfAPIv1alpha2.NginxProxy{
+				Spec: ngfAPIv1alpha2.NginxProxySpec{
+					Compression: &ngfAPIv1alpha2.Compression{
+						Type:      ngfAPIv1alpha2.GzipCompressionType,
+						MimeTypes: []string{"text/css", "application/json"},
+						Gzip:      &ngfAPIv1alpha2.GzipSettings{},
+					},
+				},
+			},
+			expectErrCount: 0,
+		},
+		{
+			name:      "invalid mimeType value",
+			validator: createInvalidValidator(),
+			np: &ngfAPIv1alpha2.NginxProxy{
+				Spec: ngfAPIv1alpha2.NginxProxySpec{
+					Compression: &ngfAPIv1alpha2.Compression{
+						Type:      ngfAPIv1alpha2.GzipCompressionType,
+						MimeTypes: []string{"text/css"},
+						Gzip:      &ngfAPIv1alpha2.GzipSettings{},
+					},
+				},
+			},
+			expErrSubstring: "compression.mimeTypes",
+			expectErrCount:  1,
+		},
+		{
+			name:      "invalid gzip disable value",
+			validator: createInvalidValidator(),
+			np: &ngfAPIv1alpha2.NginxProxy{
+				Spec: ngfAPIv1alpha2.NginxProxySpec{
+					Compression: &ngfAPIv1alpha2.Compression{
+						Type: ngfAPIv1alpha2.GzipCompressionType,
+						Gzip: &ngfAPIv1alpha2.GzipSettings{
+							Disable: []string{"msie6"},
+						},
+					},
+				},
+			},
+			expErrSubstring: "compression.gzip.disable",
+			expectErrCount:  1,
+		},
+		{
+			name:      "multiple invalid mimeTypes",
+			validator: createInvalidValidator(),
+			np: &ngfAPIv1alpha2.NginxProxy{
+				Spec: ngfAPIv1alpha2.NginxProxySpec{
+					Compression: &ngfAPIv1alpha2.Compression{
+						Type:      ngfAPIv1alpha2.GzipCompressionType,
+						MimeTypes: []string{"text/css", "application/json"},
+						Gzip:      &ngfAPIv1alpha2.GzipSettings{},
+					},
+				},
+			},
+			expErrSubstring: "compression.mimeTypes",
+			expectErrCount:  2,
+		},
+		{
+			name:      "valid compression with gzip disable",
+			validator: createValidValidator(),
+			np: &ngfAPIv1alpha2.NginxProxy{
+				Spec: ngfAPIv1alpha2.NginxProxySpec{
+					Compression: &ngfAPIv1alpha2.Compression{
+						Type:      ngfAPIv1alpha2.GzipCompressionType,
+						MimeTypes: []string{"text/css"},
+						Gzip: &ngfAPIv1alpha2.GzipSettings{
+							Disable: []string{"msie6", "Chrome"},
+						},
+					},
+				},
+			},
+			expectErrCount: 0,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			allErrs := validateCompression(test.validator, test.np)
+			g.Expect(allErrs).To(HaveLen(test.expectErrCount))
+			if len(allErrs) > 0 {
+				g.Expect(allErrs.ToAggregate().Error()).To(ContainSubstring(test.expErrSubstring))
+			}
+		})
+	}
+}

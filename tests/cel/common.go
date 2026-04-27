@@ -77,6 +77,10 @@ const (
 	// Strategy validation error.
 	expectedStrategyMustBeOfTypeRatio = "ratio can only be specified if strategy is of type ratio"
 
+	// Compression validation errors.
+	expectedCompressionMimeTypesRequiredError = "type Gzip requires mimeTypes to be set"
+	expectedCompressionGzipRequiredError      = "type Gzip requires gzip to be set"
+
 	// Snippets validation errors.
 	expectedSnippetsContextError = "Only one snippet allowed per context"
 

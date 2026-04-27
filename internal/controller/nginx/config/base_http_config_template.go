@@ -85,6 +85,34 @@ include {{ $i.Name }};
 
 server_tokens {{ .ServerTokens }};
 
+{{- if .Compression }}
+gzip on;
+{{- if .Compression.Level }}
+gzip_comp_level {{ .Compression.Level }};
+{{- end }}
+{{- if .Compression.MinLength }}
+gzip_min_length {{ .Compression.MinLength }};
+{{- end }}
+{{- if .Compression.BufferNumber }}
+gzip_buffers {{ .Compression.BufferNumber }} {{ .Compression.BufferSize }};
+{{- end }}
+{{- if .Compression.HTTPVersion }}
+gzip_http_version {{ .Compression.HTTPVersion }};
+{{- end }}
+{{- if .Compression.MimeTypes }}
+gzip_types{{ range .Compression.MimeTypes }} {{ . }}{{ end }};
+{{- end }}
+{{- if .Compression.Proxied }}
+gzip_proxied{{ range .Compression.Proxied }} {{ . }}{{ end }};
+{{- end }}
+{{- if .Compression.Disable }}
+gzip_disable{{ range .Compression.Disable }} "{{ . }}"{{ end }};
+{{- end }}
+{{- if .Compression.Vary }}
+gzip_vary on;
+{{- end }}
+{{- end }}
+
 
 {{- range .OIDCProviders }}
 oidc_provider {{ .Name }} {

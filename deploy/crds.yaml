@@ -1100,6 +1100,140 @@ spec:
           spec:
             description: Spec defines the desired state of the NginxProxy.
             properties:
+              compression:
+                description: |-
+                  Compression defines the configuration for HTTP response compression.
+                  When set, NGINX compresses responses for clients that support it,
+                  reducing bandwidth usage.
+                properties:
+                  buffers:
+                    description: |-
+                      Buffers sets the number and size of buffers used to compress a response.
+
+                      NGINX directive: https://nginx.org/en/docs/http/ngx_http_gzip_module.html#gzip_buffers
+                    properties:
+                      number:
+                        description: Number sets the number of buffers.
+                        format: int32
+                        maximum: 256
+                        minimum: 1
+                        type: integer
+                      size:
+                        description: Size sets the size of each buffer.
+                        pattern: ^\d{1,4}(k|m|g)?$
+                        type: string
+                    required:
+                    - number
+                    - size
+                    type: object
+                  gzip:
+                    description: Gzip defines gzip module-specific compression settings.
+                    properties:
+                      disable:
+                        description: |-
+                          Disable specifies regular expressions to match User-Agent headers of requests
+                          that should not be gzip-compressed.
+
+                          NGINX directive: https://nginx.org/en/docs/http/ngx_http_gzip_module.html#gzip_disable
+                        items:
+                          type: string
+                        maxItems: 16
+                        minItems: 1
+                        type: array
+                      httpVersion:
+                        allOf:
+                        - enum:
+                          - "1.0"
+                          - "1.1"
+                        - enum:
+                          - "1.0"
+                          - "1.1"
+                        description: |-
+                          HTTPVersion sets the minimum HTTP version of a request required to compress a response.
+
+                          NGINX directive: https://nginx.org/en/docs/http/ngx_http_gzip_module.html#gzip_http_version
+                        type: string
+                      proxied:
+                        description: |-
+                          Proxied enables or disables gzip compression for proxied requests depending on the request and response.
+                          Accepted values are: "off", "expired", "no-cache", "no-store", "private", "no_last_modified",
+                          "no_etag", "auth", "any".
+                          Multiple values can be specified.
+
+                          NGINX directive: https://nginx.org/en/docs/http/ngx_http_gzip_module.html#gzip_proxied
+                        items:
+                          description: GzipProxiedType defines the conditions under
+                            which responses from proxied requests are compressed.
+                          enum:
+                          - "off"
+                          - expired
+                          - no-cache
+                          - no-store
+                          - private
+                          - no_last_modified
+                          - no_etag
+                          - auth
+                          - any
+                          type: string
+                        maxItems: 9
+                        minItems: 1
+                        type: array
+                      vary:
+                        description: |-
+                          Vary enables or disables inserting the "Vary: Accept-Encoding" response header
+                          when gzip compression is active.
+
+                          NGINX directive: https://nginx.org/en/docs/http/ngx_http_gzip_module.html#gzip_vary
+                        type: boolean
+                    type: object
+                  level:
+                    description: |-
+                      Level sets the compression level.
+                      Higher values provide better compression but use more CPU.
+
+                      NGINX directive: https://nginx.org/en/docs/http/ngx_http_gzip_module.html#gzip_comp_level
+                    format: int32
+                    maximum: 9
+                    minimum: 1
+                    type: integer
+                  mimeTypes:
+                    description: |-
+                      MimeTypes specifies the MIME types to compress in addition to "text/html".
+                      "text/html" is always compressed when compression is enabled.
+                      Wildcards like "text/*" are not supported by NGINX.
+                      Example: ["application/json", "text/css", "application/javascript"]
+
+                      NGINX directive: https://nginx.org/en/docs/http/ngx_http_gzip_module.html#gzip_types
+                    items:
+                      type: string
+                    maxItems: 32
+                    minItems: 1
+                    type: array
+                  minLength:
+                    description: |-
+                      MinLength sets the minimum length of a response that will be compressed.
+                      The length is determined from the "Content-Length" response header field.
+
+                      NGINX directive: https://nginx.org/en/docs/http/ngx_http_gzip_module.html#gzip_min_length
+                    format: int32
+                    minimum: 0
+                    type: integer
+                  type:
+                    description: |-
+                      Type specifies the compression algorithm to use.
+                      Currently only gzip is supported.
+                    enum:
+                    - gzip
+                    type: string
+                required:
+                - type
+                type: object
+                x-kubernetes-validations:
+                - message: type Gzip requires mimeTypes to be set
+                  rule: "!(self.type == 'gzip' && (!has(self.mimeTypes) || size(self.mimeTypes)
+                    == 0))"
+                - message: type Gzip requires gzip to be set
+                  rule: "!(self.type == 'gzip' && !has(self.gzip))"
               disableHTTP2:
                 description: |-
                   DisableHTTP2 defines if http2 should be disabled for all servers.
