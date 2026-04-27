@@ -108,6 +108,12 @@ server {
     status_zone {{ $s.ServerName }};
         {{- end }}
 
+        {{- if $s.GatewayName }}
+    set $ngf_gateway_name {{ $s.GatewayName }};
+    set $ngf_gateway_namespace {{ $s.GatewayNamespace }};
+    set $ngf_gatewayclass_name {{ $s.GatewayClassName }};
+        {{- end }}
+
         {{- range $i := $s.Includes }}
     include {{ $i.Name }};
         {{- end }}
@@ -127,6 +133,15 @@ server {
         {{ if contains $l.Type "internal" -}}
         internal;
         {{ end }}
+
+        {{- if $l.RouteName }}
+        set $ngf_route_name {{ $l.RouteName }};
+        set $ngf_route_namespace {{ $l.RouteNamespace }};
+        {{- end }}
+
+        {{- if and $.Plus $l.StatusZone }}
+        status_zone {{ $l.StatusZone }};
+        {{- end }}
 
         {{ if ne $l.MirrorSplitClientsVariableName "" -}}
         if (${{ $l.MirrorSplitClientsVariableName }} = "") {

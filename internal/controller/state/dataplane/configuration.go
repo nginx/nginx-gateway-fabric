@@ -136,6 +136,9 @@ func BuildConfiguration(
 		WorkerConnections:    buildWorkerConnections(gateway),
 		SSLListenerHostnames: sslListenerHostnames,
 		CertBundles:          certBundles,
+		GatewayName:          gateway.Source.Name,
+		GatewayNamespace:     gateway.Source.Namespace,
+		GatewayClassName:     string(gateway.Source.Spec.GatewayClassName),
 	}
 
 	return config

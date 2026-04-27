@@ -143,9 +143,13 @@ func createServers(
 		sharedTLSPorts[passthroughServer.Port] = struct{}{}
 	}
 
+	gwName := conf.GatewayName
+	gwNs := conf.GatewayNamespace
+	gwClass := conf.GatewayClassName
+
 	for idx, s := range conf.HTTPServers {
 		serverID := fmt.Sprintf("%d", idx)
-		httpServer, matchPairs := createServer(s, serverID, generator, keepAliveCheck)
+		httpServer, matchPairs := createServer(s, serverID, generator, keepAliveCheck, gwName, gwNs, gwClass)
 		servers = append(servers, httpServer)
 		maps.Copy(finalMatchPairs, matchPairs)
 	}
@@ -155,7 +159,7 @@ func createServers(
 	for idx, s := range conf.SSLServers {
 		serverID := fmt.Sprintf("SSL_%d", idx)
 
-		sslServer, matchPairs := createSSLServer(s, serverID, generator, keepAliveCheck, disableSNI)
+		sslServer, matchPairs := createSSLServer(s, serverID, generator, keepAliveCheck, disableSNI, gwName, gwNs, gwClass)
 		if _, portInUse := sharedTLSPorts[s.Port]; portInUse {
 			sslServer.Listen = getSocketNameHTTPS(s.Port)
 			sslServer.IsSocket = true
@@ -173,6 +177,7 @@ func createSSLServer(
 	generator policies.Generator,
 	keepAliveCheck keepAliveChecker,
 	disableSNIHostValidation bool,
+	gwName, gwNs, gwClass string,
 ) (http.Server, httpMatchPairs) {
 	listen := fmt.Sprint(virtualServer.Port)
 	if virtualServer.IsDefault {
@@ -190,11 +195,14 @@ func createSSLServer(
 	locs, matchPairs, grpc := createLocations(&virtualServer, serverID, generator, keepAliveCheck)
 
 	server := http.Server{
-		ServerName: virtualServer.Hostname,
-		SSL:        buildHTTPSSL(virtualServer.SSL),
-		Locations:  locs,
-		GRPC:       grpc,
-		Listen:     listen,
+		ServerName:       virtualServer.Hostname,
+		SSL:              buildHTTPSSL(virtualServer.SSL),
+		Locations:        locs,
+		GRPC:             grpc,
+		Listen:           listen,
+		GatewayName:      gwName,
+		GatewayNamespace: gwNs,
+		GatewayClassName: gwClass,
 	}
 
 	if !disableSNIHostValidation {
@@ -242,6 +250,7 @@ func createServer(
 	serverID string,
 	generator policies.Generator,
 	keepAliveCheck keepAliveChecker,
+	gwName, gwNs, gwClass string,
 ) (http.Server, httpMatchPairs) {
 	listen := fmt.Sprint(virtualServer.Port)
 
@@ -255,10 +264,13 @@ func createServer(
 	locs, matchPairs, grpc := createLocations(&virtualServer, serverID, generator, keepAliveCheck)
 
 	server := http.Server{
-		ServerName: virtualServer.Hostname,
-		Locations:  locs,
-		Listen:     listen,
-		GRPC:       grpc,
+		ServerName:       virtualServer.Hostname,
+		Locations:        locs,
+		Listen:           listen,
+		GRPC:             grpc,
+		GatewayName:      gwName,
+		GatewayNamespace: gwNs,
+		GatewayClassName: gwClass,
 	}
 
 	policyIncludes := createIncludesFromPolicyGenerateResult(
@@ -515,6 +527,11 @@ func createLocations(
 				extLocations[i].HTTPMatchKey = httpMatchKey
 				matchPairs[extLocations[i].HTTPMatchKey] = matches
 			}
+			// Route identity is NOT set on redirect-type external locations.
+			// These locations immediately delegate to internal locations via the NJS
+			// httpmatches module. Each internal location has its own precise route
+			// identity set via setLocationRouteIdentity, which will overwrite any
+			// NGINX variables set in the external location context.
 			locs = append(locs, extLocations...)
 			locs = append(locs, internalLocations...)
 		case rule.HasInferenceBackends:
@@ -564,6 +581,16 @@ func updateExternalLocationsForRule(
 			keepAliveCheck,
 			mirrorPercentage,
 		)
+	}
+
+	if len(rule.MatchRules) > 0 {
+		// Route identity is set from the first MatchRule. When there are multiple MatchRules
+		// (e.g., different header-based matches on the same path), only the first route's
+		// identity is recorded on the shared external location. The NJS httpmatches module
+		// redirects to the correct internal location, which has the precise route identity.
+		for i := range extLocations {
+			setLocationRouteIdentity(&extLocations[i], rule.MatchRules[0])
+		}
 	}
 
 	return extLocations
@@ -621,6 +648,7 @@ func createInternalLocationsForRule(
 				matchRuleIdx,
 				pathRuleIdx,
 			)
+			setLocationRouteIdentity(&intLocation, r)
 			internalLocations = append(internalLocations, intLocation)
 		} else {
 			// If there are multiple inference backends, we need 4 locations:
@@ -777,6 +805,10 @@ func createInferenceLocationsForRule(
 		//    to internal inference location
 		// 2. (intProxyPassLocation) final internal inference location which proxy_passes to backend
 
+		for i := range extLocations {
+			setLocationRouteIdentity(&extLocations[i], r)
+		}
+
 		if len(r.BackendGroup.Backends) > 1 {
 			splitClientsVariableName := createInferenceSplitClientsVariableName(
 				convertStringToSafeVariableName(r.BackendGroup.Name()),
@@ -819,6 +851,7 @@ func createInferenceLocationsForRule(
 				matchRuleIdx,
 				pathRuleIdx,
 			)
+			setLocationRouteIdentity(&intProxyPassLocation, r)
 			locs = append(locs, intProxyPassLocation)
 
 			if b.EndpointPickerConfig != nil && b.EndpointPickerConfig.EndpointPickerRef != nil {
@@ -835,6 +868,7 @@ func createInferenceLocationsForRule(
 						generator.GenerateForInternalLocation(rule.Policies),
 					)
 					intEPPLocation = setLocationEPPConfig(intEPPLocation, intProxyPassLocation.Path, eppHost, portNum)
+					setLocationRouteIdentity(&intEPPLocation, r)
 					locs = append(locs, intEPPLocation)
 				} else {
 					for i := range extLocations {
@@ -880,6 +914,18 @@ func needsInternalLocationsForMatches(rule dataplane.PathRule) bool {
 	}
 
 	return len(rule.MatchRules) == 1 && !isPathOnlyMatch(rule.MatchRules[0].Match)
+}
+
+func setLocationRouteIdentity(loc *http.Location, matchRule dataplane.MatchRule) {
+	if matchRule.Source == nil {
+		return
+	}
+	loc.RouteName = matchRule.Source.Name
+	loc.RouteNamespace = matchRule.Source.Namespace
+	loc.StatusZone = fmt.Sprintf(
+		"ngf_route_%s__%s_rule%d",
+		matchRule.Source.Namespace, matchRule.Source.Name, matchRule.BackendGroup.RuleIdx,
+	)
 }
 
 // pathAndTypeMap contains a map of paths and any path types defined for that path

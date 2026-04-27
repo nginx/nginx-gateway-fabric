@@ -8,6 +8,7 @@ import (
 
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/format"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 
@@ -6784,4 +6785,116 @@ func TestExistingExactPathSet(t *testing.T) {
 			g.Expect(keys).To(ConsistOf(test.expPaths))
 		})
 	}
+}
+
+func TestSetLocationRouteIdentity(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name           string
+		matchRule      dataplane.MatchRule
+		expRouteName   string
+		expRouteNs     string
+		expStatusZone  string
+		expNoRouteName bool
+	}{
+		{
+			name: "nil Source sets nothing",
+			matchRule: dataplane.MatchRule{
+				Source: nil,
+			},
+			expNoRouteName: true,
+		},
+		{
+			name: "valid Source sets all fields",
+			matchRule: dataplane.MatchRule{
+				Source: &metav1.ObjectMeta{
+					Name:      "my-httproute",
+					Namespace: "my-ns",
+				},
+				BackendGroup: dataplane.BackendGroup{
+					RuleIdx: 2,
+				},
+			},
+			expRouteName:  "my-httproute",
+			expRouteNs:    "my-ns",
+			expStatusZone: "ngf_route_my-ns__my-httproute_rule2",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+			loc := &http.Location{}
+			setLocationRouteIdentity(loc, test.matchRule)
+			if test.expNoRouteName {
+				g.Expect(loc.RouteName).To(BeEmpty())
+				g.Expect(loc.RouteNamespace).To(BeEmpty())
+				g.Expect(loc.StatusZone).To(BeEmpty())
+			} else {
+				g.Expect(loc.RouteName).To(Equal(test.expRouteName))
+				g.Expect(loc.RouteNamespace).To(Equal(test.expRouteNs))
+				g.Expect(loc.StatusZone).To(Equal(test.expStatusZone))
+			}
+		})
+	}
+}
+
+func TestCreateServers_GatewayIdentity(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	conf := dataplane.Configuration{
+		GatewayName:      "my-gateway",
+		GatewayNamespace: "gateway-ns",
+		GatewayClassName: "my-gatewayclass",
+		HTTPServers: []dataplane.VirtualServer{
+			{
+				Hostname: "example.com",
+				Port:     80,
+				PathRules: []dataplane.PathRule{
+					{
+						Path:     "/",
+						PathType: dataplane.PathTypePrefix,
+						MatchRules: []dataplane.MatchRule{
+							{
+								Match: dataplane.Match{},
+								Source: &metav1.ObjectMeta{
+									Name:      "my-route",
+									Namespace: "route-ns",
+								},
+								BackendGroup: dataplane.BackendGroup{
+									Source:  types.NamespacedName{Namespace: "route-ns", Name: "my-route"},
+									RuleIdx: 0,
+									Backends: []dataplane.Backend{
+										{
+											UpstreamName: "test_up",
+											Valid:        true,
+											Weight:       1,
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	fakeGen := &policiesfakes.FakeGenerator{}
+	servers, _ := createServers(conf, fakeGen, alwaysFalseKeepAliveChecker)
+
+	g.Expect(servers).To(HaveLen(1))
+	g.Expect(servers[0].GatewayName).To(Equal("my-gateway"))
+	g.Expect(servers[0].GatewayNamespace).To(Equal("gateway-ns"))
+	g.Expect(servers[0].GatewayClassName).To(Equal("my-gatewayclass"))
+
+	// Verify route identity propagated to location
+	locations := servers[0].Locations
+	g.Expect(locations).To(HaveLen(1))
+	g.Expect(locations[0].RouteName).To(Equal("my-route"))
+	g.Expect(locations[0].RouteNamespace).To(Equal("route-ns"))
+	g.Expect(locations[0].StatusZone).To(Equal("ngf_route_route-ns__my-route_rule0"))
 }
