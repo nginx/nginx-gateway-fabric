@@ -125,8 +125,6 @@ func buildGateways(
 				ListenerNamespaces:  listenerNamespaces,
 			}
 		} else {
-			listenerFactory := newListenerConfiguratorFactory(gw, resourceResolver, refGrantResolver, protectedPorts)
-
 			gateway := &Gateway{
 				Source:              gw,
 				NginxProxy:          np,
@@ -136,7 +134,7 @@ func buildGateways(
 				DeploymentName:      deploymentName,
 				SecretRef:           secretRefNsName,
 				ListenerNamespaces:  listenerNamespaces,
-				ListenerFactory:     listenerFactory,
+				ListenerFactory:     newListenerConfiguratorFactory(gw, resourceResolver, refGrantResolver, protectedPorts),
 			}
 			gateway.Listeners = buildListeners(gateway, gw.Spec.Listeners, gwNsName, types.NamespacedName{})
 			builtGateways[gwNsName] = gateway

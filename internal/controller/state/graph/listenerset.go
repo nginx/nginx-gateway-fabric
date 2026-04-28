@@ -105,21 +105,19 @@ func validateListenerSet(
 
 	protectedPorts := buildProtectedPorts(parentGateway.EffectiveNginxProxy)
 
-	// using a newly created listener factory will ensure validation of ListenerSet ListenerEntries
-	// is contained to listeners on the ListenerSet. Re-using a listener factory from the gateway would
-	// cause listeners on the ListenerSet to be affected by the listeners on the gateway, which will happen later
-	listenerFactory := newListenerConfiguratorFactory(
-		gatewayForValidation,
-		resourceResolver,
-		refGrantResolver,
-		protectedPorts,
-	)
-
 	// Reuse existing listener validation from gateway_listener.go
 	validatedListeners := buildListeners(
 		&Gateway{
-			Source:          gatewayForValidation,
-			ListenerFactory: listenerFactory,
+			Source: gatewayForValidation,
+			// using a newly created listener factory will ensure validation of ListenerSet ListenerEntries
+			// is contained to listeners on the ListenerSet. Re-using a listener factory from the gateway would
+			// cause listeners on the ListenerSet to be affected by the listeners on the gateway, which will happen later
+			ListenerFactory: newListenerConfiguratorFactory(
+				gatewayForValidation,
+				resourceResolver,
+				refGrantResolver,
+				protectedPorts,
+			),
 		},
 		gatewayForValidation.Spec.Listeners,
 		types.NamespacedName{Namespace: gatewayForValidation.Namespace, Name: gatewayForValidation.Name},
