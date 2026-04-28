@@ -35,7 +35,7 @@ permissions:
 jobs:
   vars:
     name: Set up vars
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     outputs:
       version: ${{ inputs.version || 'edge' }}
       image_tag: ${{ inputs.image_tag || 'edge' }}
@@ -52,7 +52,7 @@ jobs:
 
   setup-and-run-tests:
     name: Setup and Start Longevity Tests
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     permissions:
       contents: read
       id-token: write # needed for authenticating to GCP

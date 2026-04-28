@@ -24,7 +24,7 @@ on:
       runner:
         required: false
         type: string
-        default: 'ubuntu-24.04'
+        default: 'ubuntu-26.04'
 
 defaults:
   run:
@@ -74,7 +74,7 @@ jobs:
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-        if: ${{ inputs.runner == 'ubuntu-24.04-amd64' }}
+        if: ${{ inputs.runner == 'ubuntu-26.04-amd64' }}
 
       - name: Login to GitHub Container Registry
         uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
