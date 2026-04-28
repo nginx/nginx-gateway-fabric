@@ -2165,12 +2165,6 @@ func TestGetReferencedSnippetsFilters(t *testing.T) {
 			{
 				Kind:           "Gateway",
 				NamespacedName: types.NamespacedName{Namespace: "gateway-ns", Name: "test-gateway"},
-				Gateway: &ParentRefGateway{
-					NamespacedName: types.NamespacedName{
-						Namespace: "gateway-ns",
-						Name:      "test-gateway",
-					},
-				},
 			},
 		},
 		Spec: L7RouteSpec{
@@ -2205,12 +2199,6 @@ func TestGetReferencedSnippetsFilters(t *testing.T) {
 			{
 				Kind:           "Gateway",
 				NamespacedName: types.NamespacedName{Namespace: "other-gateway-ns", Name: "other-gateway"},
-				Gateway: &ParentRefGateway{
-					NamespacedName: types.NamespacedName{
-						Namespace: "other-gateway-ns",
-						Name:      "other-gateway",
-					},
-				},
 			},
 		},
 		Spec: L7RouteSpec{
@@ -2245,12 +2233,6 @@ func TestGetReferencedSnippetsFilters(t *testing.T) {
 			{
 				Kind:           "Gateway",
 				NamespacedName: types.NamespacedName{Namespace: "gateway-ns", Name: "test-gateway"},
-				Gateway: &ParentRefGateway{
-					NamespacedName: types.NamespacedName{
-						Namespace: "gateway-ns",
-						Name:      "test-gateway",
-					},
-				},
 			},
 		},
 		Spec: L7RouteSpec{
@@ -2458,12 +2440,6 @@ func TestGetReferencedRateLimitPolicies(t *testing.T) {
 			{
 				Kind:           "Gateway",
 				NamespacedName: types.NamespacedName{Namespace: "gateway-ns", Name: "test-gateway"},
-				Gateway: &ParentRefGateway{
-					NamespacedName: types.NamespacedName{
-						Namespace: "gateway-ns",
-						Name:      "test-gateway",
-					},
-				},
 			},
 		},
 	}
@@ -2480,12 +2456,6 @@ func TestGetReferencedRateLimitPolicies(t *testing.T) {
 			{
 				Kind:           "Gateway",
 				NamespacedName: types.NamespacedName{Namespace: "gateway-ns", Name: "test-gateway"},
-				Gateway: &ParentRefGateway{
-					NamespacedName: types.NamespacedName{
-						Namespace: "gateway-ns",
-						Name:      "test-gateway",
-					},
-				},
 			},
 		},
 	}
@@ -2502,12 +2472,6 @@ func TestGetReferencedRateLimitPolicies(t *testing.T) {
 			{
 				Kind:           "Gateway",
 				NamespacedName: types.NamespacedName{Namespace: "secondary-gateway-ns", Name: "secondary-gateway"},
-				Gateway: &ParentRefGateway{
-					NamespacedName: types.NamespacedName{
-						Namespace: "secondary-gateway-ns",
-						Name:      "secondary-gateway",
-					},
-				},
 			},
 		},
 	}

@@ -78,13 +78,7 @@ func TestBuildTLSRoute(t *testing.T) {
 
 	gatewayParentRefGraph := ParentRef{
 		SectionName: helpers.GetPointer[gatewayv1.SectionName]("l1"),
-		Gateway: &ParentRefGateway{
-			NamespacedName: types.NamespacedName{
-				Namespace: "test",
-				Name:      "gateway",
-			},
-		},
-		Kind: gatewayv1.Kind("Gateway"),
+		Kind:        gatewayv1.Kind("Gateway"),
 		NamespacedName: types.NamespacedName{
 			Namespace: "test",
 			Name:      "gateway",
@@ -608,15 +602,9 @@ func TestBuildTLSRoute(t *testing.T) {
 				RouteType: RouteTypeTLS,
 				ParentRefs: []ParentRef{
 					{
-						SectionName: helpers.GetPointer[gatewayv1.SectionName]("l1"),
-						Gateway: &ParentRefGateway{
-							NamespacedName: types.NamespacedName{
-								Namespace: "test",
-								Name:      "gateway",
-							},
-							EffectiveNginxProxy: &EffectiveNginxProxy{IPFamily: helpers.GetPointer(ngfAPI.IPv6)},
-						},
-						Kind: gatewayv1.Kind("Gateway"),
+						SectionName:         helpers.GetPointer[gatewayv1.SectionName]("l1"),
+						EffectiveNginxProxy: &EffectiveNginxProxy{IPFamily: helpers.GetPointer(ngfAPI.IPv6)},
+						Kind:                gatewayv1.Kind("Gateway"),
 						NamespacedName: types.NamespacedName{
 							Namespace: "test",
 							Name:      "gateway",

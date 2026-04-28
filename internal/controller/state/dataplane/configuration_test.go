@@ -360,9 +360,6 @@ func createInternalRoute(
 			{
 				Kind:           "Gateway",
 				NamespacedName: gatewayNsName,
-				Gateway: &graph.ParentRefGateway{
-					NamespacedName: gatewayNsName,
-				},
 				Attachment: &graph.ParentRefAttachmentStatus{
 					AcceptedHostnames: map[string][]string{
 						graph.CreateParentRefListenerKey(gatewayNsName, listenerName): hostnames,
@@ -4853,10 +4850,7 @@ func TestCreatePassthroughServers(t *testing.T) {
 											},
 											SectionName: nil,
 											Port:        nil,
-											Gateway: &graph.ParentRefGateway{
-												NamespacedName: gatewayNsName,
-											},
-											Idx: 0,
+											Idx:         0,
 										},
 									},
 								},

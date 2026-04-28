@@ -56,13 +56,7 @@ func TestBuildTCPRoute(t *testing.T) {
 
 	gatewayParentRefGraph := ParentRef{
 		SectionName: helpers.GetPointer[gatewayv1.SectionName]("l1"),
-		Gateway: &ParentRefGateway{
-			NamespacedName: types.NamespacedName{
-				Namespace: "test",
-				Name:      "gateway",
-			},
-		},
-		Kind: gatewayv1.Kind("Gateway"),
+		Kind:        gatewayv1.Kind("Gateway"),
 		NamespacedName: types.NamespacedName{
 			Namespace: "test",
 			Name:      "gateway",

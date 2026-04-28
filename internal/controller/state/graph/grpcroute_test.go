@@ -247,11 +247,11 @@ func TestBuildGRPCRoutes(t *testing.T) {
 					Source:    gr,
 					ParentRefs: []ParentRef{
 						{
-							Idx:            0,
-							Gateway:        CreateParentRefGateway(gateways[gwNsName]),
-							SectionName:    gr.Spec.ParentRefs[0].SectionName,
-							Kind:           v1.Kind("Gateway"),
-							NamespacedName: gwNsName,
+							Idx:                 0,
+							EffectiveNginxProxy: gateways[gwNsName].EffectiveNginxProxy,
+							SectionName:         gr.Spec.ParentRefs[0].SectionName,
+							Kind:                v1.Kind("Gateway"),
+							NamespacedName:      gwNsName,
 						},
 					},
 					Valid:      true,
@@ -1018,11 +1018,11 @@ func TestBuildGRPCRoute(t *testing.T) {
 				Source:    grBoth,
 				ParentRefs: []ParentRef{
 					{
-						Idx:            0,
-						Gateway:        CreateParentRefGateway(gw),
-						SectionName:    grBoth.Spec.ParentRefs[0].SectionName,
-						Kind:           v1.Kind("Gateway"),
-						NamespacedName: gatewayNsName,
+						Idx:                 0,
+						EffectiveNginxProxy: gw.EffectiveNginxProxy,
+						SectionName:         grBoth.Spec.ParentRefs[0].SectionName,
+						Kind:                v1.Kind("Gateway"),
+						NamespacedName:      gatewayNsName,
 					},
 				},
 				Valid:      true,
@@ -1074,11 +1074,11 @@ func TestBuildGRPCRoute(t *testing.T) {
 				Source:    grEmptyMatch,
 				ParentRefs: []ParentRef{
 					{
-						Idx:            0,
-						Gateway:        CreateParentRefGateway(gw),
-						SectionName:    grEmptyMatch.Spec.ParentRefs[0].SectionName,
-						Kind:           v1.Kind("Gateway"),
-						NamespacedName: gatewayNsName,
+						Idx:                 0,
+						EffectiveNginxProxy: gw.EffectiveNginxProxy,
+						SectionName:         grEmptyMatch.Spec.ParentRefs[0].SectionName,
+						Kind:                v1.Kind("Gateway"),
+						NamespacedName:      gatewayNsName,
 					},
 				},
 				Valid:      true,
@@ -1108,11 +1108,11 @@ func TestBuildGRPCRoute(t *testing.T) {
 				Source:    grValidFilter,
 				ParentRefs: []ParentRef{
 					{
-						Idx:            0,
-						Gateway:        CreateParentRefGateway(gw),
-						SectionName:    grValidFilter.Spec.ParentRefs[0].SectionName,
-						Kind:           v1.Kind("Gateway"),
-						NamespacedName: gatewayNsName,
+						Idx:                 0,
+						EffectiveNginxProxy: gw.EffectiveNginxProxy,
+						SectionName:         grValidFilter.Spec.ParentRefs[0].SectionName,
+						Kind:                v1.Kind("Gateway"),
+						NamespacedName:      gatewayNsName,
 					},
 				},
 				Valid:      true,
@@ -1153,11 +1153,11 @@ func TestBuildGRPCRoute(t *testing.T) {
 				Attachable: true,
 				ParentRefs: []ParentRef{
 					{
-						Idx:            0,
-						Gateway:        CreateParentRefGateway(gw),
-						SectionName:    grInvalidMatchesEmptyMethodFields.Spec.ParentRefs[0].SectionName,
-						Kind:           v1.Kind("Gateway"),
-						NamespacedName: gatewayNsName,
+						Idx:                 0,
+						EffectiveNginxProxy: gw.EffectiveNginxProxy,
+						SectionName:         grInvalidMatchesEmptyMethodFields.Spec.ParentRefs[0].SectionName,
+						Kind:                v1.Kind("Gateway"),
+						NamespacedName:      gatewayNsName,
 					},
 				},
 				Conditions: []conditions.Condition{
@@ -1199,11 +1199,11 @@ func TestBuildGRPCRoute(t *testing.T) {
 				Attachable: true,
 				ParentRefs: []ParentRef{
 					{
-						Idx:            0,
-						Gateway:        CreateParentRefGateway(gw),
-						SectionName:    grInvalidMatchesInvalidMethodFields.Spec.ParentRefs[0].SectionName,
-						Kind:           v1.Kind("Gateway"),
-						NamespacedName: gatewayNsName,
+						Idx:                 0,
+						EffectiveNginxProxy: gw.EffectiveNginxProxy,
+						SectionName:         grInvalidMatchesInvalidMethodFields.Spec.ParentRefs[0].SectionName,
+						Kind:                v1.Kind("Gateway"),
+						NamespacedName:      gatewayNsName,
 					},
 				},
 				Conditions: []conditions.Condition{
@@ -1249,11 +1249,11 @@ func TestBuildGRPCRoute(t *testing.T) {
 				Attachable: true,
 				ParentRefs: []ParentRef{
 					{
-						Idx:            0,
-						Gateway:        CreateParentRefGateway(gw),
-						SectionName:    grOneInvalid.Spec.ParentRefs[0].SectionName,
-						Kind:           v1.Kind("Gateway"),
-						NamespacedName: gatewayNsName,
+						Idx:                 0,
+						EffectiveNginxProxy: gw.EffectiveNginxProxy,
+						SectionName:         grOneInvalid.Spec.ParentRefs[0].SectionName,
+						Kind:                v1.Kind("Gateway"),
+						NamespacedName:      gatewayNsName,
 					},
 				},
 				Conditions: []conditions.Condition{
@@ -1310,11 +1310,11 @@ func TestBuildGRPCRoute(t *testing.T) {
 				Attachable: true,
 				ParentRefs: []ParentRef{
 					{
-						Idx:            0,
-						Gateway:        CreateParentRefGateway(gw),
-						SectionName:    grInvalidHeadersInvalidType.Spec.ParentRefs[0].SectionName,
-						Kind:           v1.Kind("Gateway"),
-						NamespacedName: gatewayNsName,
+						Idx:                 0,
+						EffectiveNginxProxy: gw.EffectiveNginxProxy,
+						SectionName:         grInvalidHeadersInvalidType.Spec.ParentRefs[0].SectionName,
+						Kind:                v1.Kind("Gateway"),
+						NamespacedName:      gatewayNsName,
 					},
 				},
 				Conditions: []conditions.Condition{
@@ -1350,11 +1350,11 @@ func TestBuildGRPCRoute(t *testing.T) {
 				Attachable: true,
 				ParentRefs: []ParentRef{
 					{
-						Idx:            0,
-						Gateway:        CreateParentRefGateway(gw),
-						SectionName:    grInvalidHeadersEmptyType.Spec.ParentRefs[0].SectionName,
-						Kind:           v1.Kind("Gateway"),
-						NamespacedName: gatewayNsName,
+						Idx:                 0,
+						EffectiveNginxProxy: gw.EffectiveNginxProxy,
+						SectionName:         grInvalidHeadersEmptyType.Spec.ParentRefs[0].SectionName,
+						Kind:                v1.Kind("Gateway"),
+						NamespacedName:      gatewayNsName,
 					},
 				},
 				Conditions: []conditions.Condition{
@@ -1390,11 +1390,11 @@ func TestBuildGRPCRoute(t *testing.T) {
 				Attachable: true,
 				ParentRefs: []ParentRef{
 					{
-						Idx:            0,
-						Gateway:        CreateParentRefGateway(gw),
-						SectionName:    grInvalidMatchesNilMethodType.Spec.ParentRefs[0].SectionName,
-						Kind:           v1.Kind("Gateway"),
-						NamespacedName: gatewayNsName,
+						Idx:                 0,
+						EffectiveNginxProxy: gw.EffectiveNginxProxy,
+						SectionName:         grInvalidMatchesNilMethodType.Spec.ParentRefs[0].SectionName,
+						Kind:                v1.Kind("Gateway"),
+						NamespacedName:      gatewayNsName,
 					},
 				},
 				Conditions: []conditions.Condition{
@@ -1429,11 +1429,11 @@ func TestBuildGRPCRoute(t *testing.T) {
 				Attachable: true,
 				ParentRefs: []ParentRef{
 					{
-						Idx:            0,
-						Gateway:        CreateParentRefGateway(gw),
-						SectionName:    grInvalidFilter.Spec.ParentRefs[0].SectionName,
-						Kind:           v1.Kind("Gateway"),
-						NamespacedName: gatewayNsName,
+						Idx:                 0,
+						EffectiveNginxProxy: gw.EffectiveNginxProxy,
+						SectionName:         grInvalidFilter.Spec.ParentRefs[0].SectionName,
+						Kind:                v1.Kind("Gateway"),
+						NamespacedName:      gatewayNsName,
 					},
 				},
 				Conditions: []conditions.Condition{
@@ -1476,11 +1476,11 @@ func TestBuildGRPCRoute(t *testing.T) {
 				Attachable: false,
 				ParentRefs: []ParentRef{
 					{
-						Idx:            0,
-						Gateway:        CreateParentRefGateway(gw),
-						SectionName:    grInvalidHostname.Spec.ParentRefs[0].SectionName,
-						Kind:           v1.Kind("Gateway"),
-						NamespacedName: gatewayNsName,
+						Idx:                 0,
+						EffectiveNginxProxy: gw.EffectiveNginxProxy,
+						SectionName:         grInvalidHostname.Spec.ParentRefs[0].SectionName,
+						Kind:                v1.Kind("Gateway"),
+						NamespacedName:      gatewayNsName,
 					},
 				},
 				Conditions: []conditions.Condition{
@@ -1501,11 +1501,11 @@ func TestBuildGRPCRoute(t *testing.T) {
 				Attachable: true,
 				ParentRefs: []ParentRef{
 					{
-						Idx:            0,
-						Gateway:        CreateParentRefGateway(gw),
-						SectionName:    grInvalidSnippetsFilter.Spec.ParentRefs[0].SectionName,
-						Kind:           v1.Kind("Gateway"),
-						NamespacedName: gatewayNsName,
+						Idx:                 0,
+						EffectiveNginxProxy: gw.EffectiveNginxProxy,
+						SectionName:         grInvalidSnippetsFilter.Spec.ParentRefs[0].SectionName,
+						Kind:                v1.Kind("Gateway"),
+						NamespacedName:      gatewayNsName,
 					},
 				},
 				Conditions: []conditions.Condition{
@@ -1541,11 +1541,11 @@ func TestBuildGRPCRoute(t *testing.T) {
 				Attachable: true,
 				ParentRefs: []ParentRef{
 					{
-						Idx:            0,
-						Gateway:        CreateParentRefGateway(gw),
-						SectionName:    grUnresolvableSnippetsFilter.Spec.ParentRefs[0].SectionName,
-						Kind:           v1.Kind("Gateway"),
-						NamespacedName: gatewayNsName,
+						Idx:                 0,
+						EffectiveNginxProxy: gw.EffectiveNginxProxy,
+						SectionName:         grUnresolvableSnippetsFilter.Spec.ParentRefs[0].SectionName,
+						Kind:                v1.Kind("Gateway"),
+						NamespacedName:      gatewayNsName,
 					},
 				},
 				Conditions: []conditions.Condition{
@@ -1582,11 +1582,11 @@ func TestBuildGRPCRoute(t *testing.T) {
 				Attachable: true,
 				ParentRefs: []ParentRef{
 					{
-						Idx:            0,
-						Gateway:        CreateParentRefGateway(gw),
-						SectionName:    grInvalidAndUnresolvableSnippetsFilter.Spec.ParentRefs[0].SectionName,
-						Kind:           v1.Kind("Gateway"),
-						NamespacedName: gatewayNsName,
+						Idx:                 0,
+						EffectiveNginxProxy: gw.EffectiveNginxProxy,
+						SectionName:         grInvalidAndUnresolvableSnippetsFilter.Spec.ParentRefs[0].SectionName,
+						Kind:                v1.Kind("Gateway"),
+						NamespacedName:      gatewayNsName,
 					},
 				},
 				Conditions: []conditions.Condition{
@@ -1627,11 +1627,11 @@ func TestBuildGRPCRoute(t *testing.T) {
 				Attachable: true,
 				ParentRefs: []ParentRef{
 					{
-						Idx:            0,
-						Gateway:        CreateParentRefGateway(gw),
-						SectionName:    grInvalidAuthenticationFilter.Spec.ParentRefs[0].SectionName,
-						Kind:           v1.Kind("Gateway"),
-						NamespacedName: gatewayNsName,
+						Idx:                 0,
+						EffectiveNginxProxy: gw.EffectiveNginxProxy,
+						SectionName:         grInvalidAuthenticationFilter.Spec.ParentRefs[0].SectionName,
+						Kind:                v1.Kind("Gateway"),
+						NamespacedName:      gatewayNsName,
 					},
 				},
 				Conditions: []conditions.Condition{
@@ -1667,11 +1667,11 @@ func TestBuildGRPCRoute(t *testing.T) {
 				Attachable: true,
 				ParentRefs: []ParentRef{
 					{
-						Idx:            0,
-						Gateway:        CreateParentRefGateway(gw),
-						SectionName:    grUnresolvableAuthenticationFilter.Spec.ParentRefs[0].SectionName,
-						Kind:           v1.Kind("Gateway"),
-						NamespacedName: gatewayNsName,
+						Idx:                 0,
+						EffectiveNginxProxy: gw.EffectiveNginxProxy,
+						SectionName:         grUnresolvableAuthenticationFilter.Spec.ParentRefs[0].SectionName,
+						Kind:                v1.Kind("Gateway"),
+						NamespacedName:      gatewayNsName,
 					},
 				},
 				Conditions: []conditions.Condition{
@@ -1708,11 +1708,11 @@ func TestBuildGRPCRoute(t *testing.T) {
 				Attachable: true,
 				ParentRefs: []ParentRef{
 					{
-						Idx:            0,
-						Gateway:        CreateParentRefGateway(gw),
-						SectionName:    grInvalidAndUnresolvableAuthenticationFilter.Spec.ParentRefs[0].SectionName,
-						Kind:           v1.Kind("Gateway"),
-						NamespacedName: gatewayNsName,
+						Idx:                 0,
+						EffectiveNginxProxy: gw.EffectiveNginxProxy,
+						SectionName:         grInvalidAndUnresolvableAuthenticationFilter.Spec.ParentRefs[0].SectionName,
+						Kind:                v1.Kind("Gateway"),
+						NamespacedName:      gatewayNsName,
 					},
 				},
 				Conditions: []conditions.Condition{
@@ -1752,11 +1752,11 @@ func TestBuildGRPCRoute(t *testing.T) {
 				Attachable: true,
 				ParentRefs: []ParentRef{
 					{
-						Idx:            0,
-						Gateway:        CreateParentRefGateway(gw),
-						SectionName:    grInvalidAndValidAuthenticationFilter.Spec.ParentRefs[0].SectionName,
-						Kind:           v1.Kind("Gateway"),
-						NamespacedName: gatewayNsName,
+						Idx:                 0,
+						EffectiveNginxProxy: gw.EffectiveNginxProxy,
+						SectionName:         grInvalidAndValidAuthenticationFilter.Spec.ParentRefs[0].SectionName,
+						Kind:                v1.Kind("Gateway"),
+						NamespacedName:      gatewayNsName,
 					},
 				},
 				Conditions: []conditions.Condition{
@@ -1796,11 +1796,11 @@ func TestBuildGRPCRoute(t *testing.T) {
 				Attachable: true,
 				ParentRefs: []ParentRef{
 					{
-						Idx:            0,
-						Gateway:        CreateParentRefGateway(gw),
-						SectionName:    grUnresolvedAndValidAuthenticationFilter.Spec.ParentRefs[0].SectionName,
-						Kind:           v1.Kind("Gateway"),
-						NamespacedName: gatewayNsName,
+						Idx:                 0,
+						EffectiveNginxProxy: gw.EffectiveNginxProxy,
+						SectionName:         grUnresolvedAndValidAuthenticationFilter.Spec.ParentRefs[0].SectionName,
+						Kind:                v1.Kind("Gateway"),
+						NamespacedName:      gatewayNsName,
 					},
 				},
 				Conditions: []conditions.Condition{
@@ -1842,11 +1842,11 @@ func TestBuildGRPCRoute(t *testing.T) {
 				Attachable: true,
 				ParentRefs: []ParentRef{
 					{
-						Idx:            0,
-						Gateway:        CreateParentRefGateway(gw),
-						SectionName:    grTwoValidAuthenticationFilter.Spec.ParentRefs[0].SectionName,
-						Kind:           v1.Kind("Gateway"),
-						NamespacedName: gatewayNsName,
+						Idx:                 0,
+						EffectiveNginxProxy: gw.EffectiveNginxProxy,
+						SectionName:         grTwoValidAuthenticationFilter.Spec.ParentRefs[0].SectionName,
+						Kind:                v1.Kind("Gateway"),
+						NamespacedName:      gatewayNsName,
 					},
 				},
 				Conditions: []conditions.Condition{
@@ -1898,11 +1898,11 @@ func TestBuildGRPCRoute(t *testing.T) {
 				Source:    grValidWithUnsupportedField,
 				ParentRefs: []ParentRef{
 					{
-						Idx:            0,
-						Gateway:        CreateParentRefGateway(gw),
-						SectionName:    grValidWithUnsupportedField.Spec.ParentRefs[0].SectionName,
-						Kind:           v1.Kind("Gateway"),
-						NamespacedName: gatewayNsName,
+						Idx:                 0,
+						EffectiveNginxProxy: gw.EffectiveNginxProxy,
+						SectionName:         grValidWithUnsupportedField.Spec.ParentRefs[0].SectionName,
+						Kind:                v1.Kind("Gateway"),
+						NamespacedName:      gatewayNsName,
 					},
 				},
 				Valid:      true,
@@ -1935,11 +1935,11 @@ func TestBuildGRPCRoute(t *testing.T) {
 				Source:    grInvalidWithUnsupportedField,
 				ParentRefs: []ParentRef{
 					{
-						Idx:            0,
-						Gateway:        CreateParentRefGateway(gw),
-						SectionName:    grInvalidWithUnsupportedField.Spec.ParentRefs[0].SectionName,
-						Kind:           v1.Kind("Gateway"),
-						NamespacedName: gatewayNsName,
+						Idx:                 0,
+						EffectiveNginxProxy: gw.EffectiveNginxProxy,
+						SectionName:         grInvalidWithUnsupportedField.Spec.ParentRefs[0].SectionName,
+						Kind:                v1.Kind("Gateway"),
+						NamespacedName:      gatewayNsName,
 					},
 				},
 				Valid:      false,
@@ -2156,11 +2156,11 @@ func TestBuildGRPCRouteWithMirrorRoutes(t *testing.T) {
 			gr:       gr,
 			gateways: gateways,
 			expectedParent: ParentRef{
-				Idx:            0,
-				Gateway:        CreateParentRefGateway(gateways[gatewayNsName]),
-				SectionName:    gr.Spec.ParentRefs[0].SectionName,
-				Kind:           v1.Kind("Gateway"),
-				NamespacedName: gatewayNsName,
+				Idx:                 0,
+				EffectiveNginxProxy: gateways[gatewayNsName].EffectiveNginxProxy,
+				SectionName:         gr.Spec.ParentRefs[0].SectionName,
+				Kind:                v1.Kind("Gateway"),
+				NamespacedName:      gatewayNsName,
 			},
 		},
 		{

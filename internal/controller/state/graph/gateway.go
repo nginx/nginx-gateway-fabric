@@ -415,7 +415,7 @@ func (g *Gateway) GetReferencedRateLimitPolicies(
 // isRouteAttachedToGateway checks if the given route is attached to this gateway.
 func (g *Gateway) isRouteAttachedToGateway(route *L7Route, gatewayNsName types.NamespacedName) bool {
 	for _, parentRef := range route.ParentRefs {
-		if parentRef.Gateway != nil && parentRef.Gateway.NamespacedName == gatewayNsName {
+		if parentRef.Kind == kinds.Gateway && parentRef.NamespacedName == gatewayNsName {
 			return true
 		}
 	}

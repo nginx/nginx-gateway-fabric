@@ -754,9 +754,6 @@ var _ = Describe("ChangeProcessor", func() {
 								Attached:     true,
 								ListenerPort: 80,
 							},
-							Gateway: &graph.ParentRefGateway{
-								NamespacedName: client.ObjectKeyFromObject(gw1),
-							},
 							SectionName: hr1.Spec.ParentRefs[0].SectionName,
 						},
 						{
@@ -771,9 +768,6 @@ var _ = Describe("ChangeProcessor", func() {
 								},
 								Attached:     true,
 								ListenerPort: 443,
-							},
-							Gateway: &graph.ParentRefGateway{
-								NamespacedName: client.ObjectKeyFromObject(gw1),
 							},
 							Idx:         1,
 							SectionName: hr1.Spec.ParentRefs[1].SectionName,
@@ -826,9 +820,6 @@ var _ = Describe("ChangeProcessor", func() {
 								Attached:     true,
 								ListenerPort: 80,
 							},
-							Gateway: &graph.ParentRefGateway{
-								NamespacedName: client.ObjectKeyFromObject(gw2),
-							},
 							SectionName: hr2.Spec.ParentRefs[0].SectionName,
 						},
 						{
@@ -843,9 +834,6 @@ var _ = Describe("ChangeProcessor", func() {
 								},
 								Attached:     true,
 								ListenerPort: 443,
-							},
-							Gateway: &graph.ParentRefGateway{
-								NamespacedName: client.ObjectKeyFromObject(gw2),
 							},
 							Idx:         1,
 							SectionName: hr2.Spec.ParentRefs[1].SectionName,
@@ -898,9 +886,6 @@ var _ = Describe("ChangeProcessor", func() {
 								Attached:     true,
 								ListenerPort: 80,
 							},
-							Gateway: &graph.ParentRefGateway{
-								NamespacedName: client.ObjectKeyFromObject(gw1),
-							},
 							SectionName: gr1.Spec.ParentRefs[0].SectionName,
 						},
 						{
@@ -915,9 +900,6 @@ var _ = Describe("ChangeProcessor", func() {
 								},
 								Attached:     true,
 								ListenerPort: 443,
-							},
-							Gateway: &graph.ParentRefGateway{
-								NamespacedName: client.ObjectKeyFromObject(gw1),
 							},
 							Idx:         1,
 							SectionName: gr1.Spec.ParentRefs[1].SectionName,
@@ -970,9 +952,6 @@ var _ = Describe("ChangeProcessor", func() {
 								Attached:     true,
 								ListenerPort: 80,
 							},
-							Gateway: &graph.ParentRefGateway{
-								NamespacedName: client.ObjectKeyFromObject(gw2),
-							},
 							SectionName: gr2.Spec.ParentRefs[0].SectionName,
 						},
 						{
@@ -987,9 +966,6 @@ var _ = Describe("ChangeProcessor", func() {
 								},
 								Attached:     true,
 								ListenerPort: 443,
-							},
-							Gateway: &graph.ParentRefGateway{
-								NamespacedName: client.ObjectKeyFromObject(gw2),
 							},
 							Idx:         1,
 							SectionName: gr2.Spec.ParentRefs[1].SectionName,
@@ -1041,9 +1017,6 @@ var _ = Describe("ChangeProcessor", func() {
 								},
 								Attached: true,
 							},
-							Gateway: &graph.ParentRefGateway{
-								NamespacedName: client.ObjectKeyFromObject(gw1),
-							},
 							SectionName: tr1.Spec.ParentRefs[0].SectionName,
 						},
 					},
@@ -1079,9 +1052,6 @@ var _ = Describe("ChangeProcessor", func() {
 									): {"bar.tls.com"},
 								},
 								Attached: true,
-							},
-							Gateway: &graph.ParentRefGateway{
-								NamespacedName: client.ObjectKeyFromObject(gw2),
 							},
 							SectionName: tr2.Spec.ParentRefs[0].SectionName,
 						},

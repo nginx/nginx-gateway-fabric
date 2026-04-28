@@ -42,7 +42,6 @@ func TestBuildReferencedInferencePools(t *testing.T) {
 			ParentRefs: []ParentRef{
 				{
 					Kind:           "Gateway",
-					Gateway:        &ParentRefGateway{NamespacedName: gwNsName},
 					NamespacedName: gwNsName,
 				},
 			},

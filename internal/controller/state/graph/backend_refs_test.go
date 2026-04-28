@@ -592,7 +592,6 @@ func TestAddBackendRefsToRules(t *testing.T) {
 			Kind:           "Gateway",
 			NamespacedName: types.NamespacedName{Namespace: "test", Name: "gateway"},
 			Idx:            0,
-			Gateway:        &ParentRefGateway{NamespacedName: types.NamespacedName{Namespace: "test", Name: "gateway"}},
 			Attachment: &ParentRefAttachmentStatus{
 				Attached: true,
 			},
@@ -1701,15 +1700,9 @@ func TestCreateBackend(t *testing.T) {
 				},
 				ParentRefs: []ParentRef{
 					{
-						Kind:           "Gateway",
-						NamespacedName: types.NamespacedName{Namespace: "test", Name: "gateway"},
-						Gateway: &ParentRefGateway{
-							NamespacedName: types.NamespacedName{
-								Namespace: "test",
-								Name:      "gateway",
-							},
-							EffectiveNginxProxy: test.nginxProxySpec,
-						},
+						Kind:                "Gateway",
+						NamespacedName:      types.NamespacedName{Namespace: "test", Name: "gateway"},
+						EffectiveNginxProxy: test.nginxProxySpec,
 					},
 				},
 			}
@@ -1730,16 +1723,9 @@ func TestCreateBackend(t *testing.T) {
 				route.ParentRefs = append(route.ParentRefs, ParentRef{
 					Kind:           "Gateway",
 					NamespacedName: types.NamespacedName{Namespace: "test", Name: "gateway2"},
-					Gateway: &ParentRefGateway{
-						NamespacedName: types.NamespacedName{
-							Namespace: "test",
-							Name:      "gateway2",
-						},
-						EffectiveNginxProxy: nil, // No DNS resolver
-					},
 				})
 				// For this test, the first gateway should have DNS resolver
-				route.ParentRefs[0].Gateway.EffectiveNginxProxy = &EffectiveNginxProxy{
+				route.ParentRefs[0].EffectiveNginxProxy = &EffectiveNginxProxy{
 					DNSResolver: &ngfAPIv1alpha2.DNSResolver{
 						Addresses: []ngfAPIv1alpha2.DNSResolverAddress{
 							{Type: ngfAPIv1alpha2.DNSResolverIPAddressType, Value: "8.8.8.8"},
@@ -1785,12 +1771,6 @@ func TestCreateBackend(t *testing.T) {
 			{
 				Kind:           "Gateway",
 				NamespacedName: types.NamespacedName{Namespace: "test", Name: "gateway"},
-				Gateway: &ParentRefGateway{
-					NamespacedName: types.NamespacedName{
-						Namespace: "test",
-						Name:      "gateway",
-					},
-				},
 			},
 		},
 	}

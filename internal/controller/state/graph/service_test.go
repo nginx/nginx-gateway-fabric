@@ -48,12 +48,10 @@ func TestBuildReferencedServices(t *testing.T) {
 	parentRefs := []ParentRef{
 		{
 			Kind:           "Gateway",
-			Gateway:        &ParentRefGateway{NamespacedName: gwNsName},
 			NamespacedName: gwNsName,
 		},
 		{
 			Kind:           "Gateway",
-			Gateway:        &ParentRefGateway{NamespacedName: gw2NsName},
 			NamespacedName: gw2NsName,
 		},
 	}
@@ -182,7 +180,6 @@ func TestBuildReferencedServices(t *testing.T) {
 	mixedParentRefs := []ParentRef{
 		{
 			Kind:           "Gateway",
-			Gateway:        &ParentRefGateway{NamespacedName: gwNsName},
 			NamespacedName: gwNsName,
 		},
 		{

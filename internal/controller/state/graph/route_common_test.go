@@ -100,46 +100,46 @@ func TestBuildSectionNameRefs(t *testing.T) {
 
 	expected := []ParentRef{
 		{
-			Idx:            0,
-			Kind:           "Gateway",
-			Gateway:        CreateParentRefGateway(gws[gwNsName1]),
-			NamespacedName: types.NamespacedName{Namespace: "test", Name: "gateway-1"},
-			SectionName:    parentRefs[0].SectionName,
+			Idx:                 0,
+			Kind:                "Gateway",
+			EffectiveNginxProxy: gws[gwNsName1].EffectiveNginxProxy,
+			NamespacedName:      types.NamespacedName{Namespace: "test", Name: "gateway-1"},
+			SectionName:         parentRefs[0].SectionName,
 		},
 		{
-			Idx:            2,
-			Kind:           "Gateway",
-			Gateway:        CreateParentRefGateway(gws[gwNsName2]),
-			NamespacedName: types.NamespacedName{Namespace: "test", Name: "gateway-2"},
-			SectionName:    parentRefs[2].SectionName,
+			Idx:                 2,
+			Kind:                "Gateway",
+			EffectiveNginxProxy: gws[gwNsName2].EffectiveNginxProxy,
+			NamespacedName:      types.NamespacedName{Namespace: "test", Name: "gateway-2"},
+			SectionName:         parentRefs[2].SectionName,
 		},
 		{
-			Idx:            3,
-			Kind:           "Gateway",
-			Gateway:        CreateParentRefGateway(gws[gwNsName1]),
-			NamespacedName: types.NamespacedName{Namespace: "test", Name: "gateway-1"},
-			SectionName:    parentRefs[3].SectionName,
+			Idx:                 3,
+			Kind:                "Gateway",
+			EffectiveNginxProxy: gws[gwNsName1].EffectiveNginxProxy,
+			NamespacedName:      types.NamespacedName{Namespace: "test", Name: "gateway-1"},
+			SectionName:         parentRefs[3].SectionName,
 		},
 		{
-			Idx:            4,
-			Kind:           "Gateway",
-			Gateway:        CreateParentRefGateway(gws[gwNsName2]),
-			NamespacedName: types.NamespacedName{Namespace: "test", Name: "gateway-2"},
-			SectionName:    parentRefs[4].SectionName,
+			Idx:                 4,
+			Kind:                "Gateway",
+			EffectiveNginxProxy: gws[gwNsName2].EffectiveNginxProxy,
+			NamespacedName:      types.NamespacedName{Namespace: "test", Name: "gateway-2"},
+			SectionName:         parentRefs[4].SectionName,
 		},
 		{
-			Idx:            6,
-			Kind:           "Gateway",
-			Gateway:        CreateParentRefGateway(gws[gwNsName3]),
-			NamespacedName: types.NamespacedName{Namespace: "test", Name: "gateway-3"},
-			SectionName:    helpers.GetPointer[gatewayv1.SectionName]("http"),
+			Idx:                 6,
+			Kind:                "Gateway",
+			EffectiveNginxProxy: gws[gwNsName3].EffectiveNginxProxy,
+			NamespacedName:      types.NamespacedName{Namespace: "test", Name: "gateway-3"},
+			SectionName:         helpers.GetPointer[gatewayv1.SectionName]("http"),
 		},
 		{
-			Idx:            6,
-			Kind:           "Gateway",
-			Gateway:        CreateParentRefGateway(gws[gwNsName3]),
-			NamespacedName: types.NamespacedName{Namespace: "test", Name: "gateway-3"},
-			SectionName:    helpers.GetPointer[gatewayv1.SectionName]("https"),
+			Idx:                 6,
+			Kind:                "Gateway",
+			EffectiveNginxProxy: gws[gwNsName3].EffectiveNginxProxy,
+			NamespacedName:      types.NamespacedName{Namespace: "test", Name: "gateway-3"},
+			SectionName:         helpers.GetPointer[gatewayv1.SectionName]("https"),
 		},
 	}
 
@@ -271,11 +271,11 @@ func TestBuildSectionNameRefs(t *testing.T) {
 			},
 			expectedRefs: []ParentRef{
 				{
-					Idx:            0,
-					Kind:           "Gateway",
-					Gateway:        CreateParentRefGateway(gws[gwNsName1]),
-					NamespacedName: types.NamespacedName{Namespace: "test", Name: "gateway-1"},
-					SectionName:    helpers.GetPointer[gatewayv1.SectionName]("http"),
+					Idx:                 0,
+					Kind:                "Gateway",
+					EffectiveNginxProxy: gws[gwNsName1].EffectiveNginxProxy,
+					NamespacedName:      types.NamespacedName{Namespace: "test", Name: "gateway-1"},
+					SectionName:         helpers.GetPointer[gatewayv1.SectionName]("http"),
 				},
 				{
 					Idx:            1,
@@ -605,7 +605,6 @@ func TestBindRouteToListeners(t *testing.T) {
 				{
 					NamespacedName: client.ObjectKeyFromObject(gateway),
 					Idx:            0,
-					Gateway:        &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gateway)},
 					SectionName:    hr.Spec.ParentRefs[0].SectionName,
 				},
 			},
@@ -626,7 +625,6 @@ func TestBindRouteToListeners(t *testing.T) {
 			{
 				NamespacedName: client.ObjectKeyFromObject(gw),
 				Idx:            0,
-				Gateway:        &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
 				SectionName:    hr.Spec.ParentRefs[0].SectionName,
 			},
 		},
@@ -640,7 +638,6 @@ func TestBindRouteToListeners(t *testing.T) {
 			{
 				NamespacedName: client.ObjectKeyFromObject(gw),
 				Idx:            0,
-				Gateway:        &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
 				SectionName:    hr.Spec.ParentRefs[0].SectionName,
 			},
 		},
@@ -655,7 +652,6 @@ func TestBindRouteToListeners(t *testing.T) {
 			{
 				NamespacedName: client.ObjectKeyFromObject(gw),
 				Idx:            0,
-				Gateway:        &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
 				SectionName:    hrWithNilSectionName.Spec.ParentRefs[0].SectionName,
 			},
 		},
@@ -669,7 +665,6 @@ func TestBindRouteToListeners(t *testing.T) {
 			{
 				NamespacedName: client.ObjectKeyFromObject(gw),
 				Idx:            0,
-				Gateway:        &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
 				SectionName:    hrWithEmptySectionName.Spec.ParentRefs[0].SectionName,
 			},
 		},
@@ -683,7 +678,6 @@ func TestBindRouteToListeners(t *testing.T) {
 			{
 				NamespacedName: client.ObjectKeyFromObject(gw),
 				Idx:            0,
-				Gateway:        &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
 				SectionName:    hrWithNonExistingListener.Spec.ParentRefs[0].SectionName,
 			},
 		},
@@ -697,7 +691,6 @@ func TestBindRouteToListeners(t *testing.T) {
 			{
 				NamespacedName: client.ObjectKeyFromObject(gw),
 				Idx:            0,
-				Gateway:        &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
 				SectionName:    hrWithPort.Spec.ParentRefs[0].SectionName,
 				Port:           hrWithPort.Spec.ParentRefs[0].Port,
 			},
@@ -711,7 +704,6 @@ func TestBindRouteToListeners(t *testing.T) {
 			{
 				NamespacedName: client.ObjectKeyFromObject(gw),
 				Idx:            0,
-				Gateway:        &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
 				SectionName:    hr.Spec.ParentRefs[0].SectionName,
 			},
 		},
@@ -783,7 +775,6 @@ func TestBindRouteToListeners(t *testing.T) {
 				{
 					NamespacedName: client.ObjectKeyFromObject(gateway),
 					Idx:            0,
-					Gateway:        &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gateway)},
 					SectionName:    gr.Spec.ParentRefs[0].SectionName,
 				},
 			},
@@ -817,7 +808,6 @@ func TestBindRouteToListeners(t *testing.T) {
 				{
 					NamespacedName: client.ObjectKeyFromObject(gw),
 					Idx:            0,
-					Gateway:        &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
 					SectionName:    hr.Spec.ParentRefs[0].SectionName,
 					Attachment: &ParentRefAttachmentStatus{
 						Attached: true,
@@ -852,7 +842,6 @@ func TestBindRouteToListeners(t *testing.T) {
 				{
 					NamespacedName: client.ObjectKeyFromObject(gw),
 					Idx:            0,
-					Gateway:        &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
 					SectionName:    hrWithNilSectionName.Spec.ParentRefs[0].SectionName,
 					Attachment: &ParentRefAttachmentStatus{
 						Attached: true,
@@ -888,7 +877,6 @@ func TestBindRouteToListeners(t *testing.T) {
 				{
 					NamespacedName: client.ObjectKeyFromObject(gw),
 					Idx:            0,
-					Gateway:        &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
 					SectionName:    hrWithEmptySectionName.Spec.ParentRefs[0].SectionName,
 					Attachment: &ParentRefAttachmentStatus{
 						Attached: true,
@@ -932,7 +920,6 @@ func TestBindRouteToListeners(t *testing.T) {
 				{
 					NamespacedName: client.ObjectKeyFromObject(gw),
 					Idx:            0,
-					Gateway:        &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
 					SectionName:    hrWithEmptySectionName.Spec.ParentRefs[0].SectionName,
 					Attachment: &ParentRefAttachmentStatus{
 						Attached:          false,
@@ -961,7 +948,6 @@ func TestBindRouteToListeners(t *testing.T) {
 				{
 					NamespacedName: client.ObjectKeyFromObject(gw),
 					Idx:            0,
-					Gateway:        &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
 					SectionName:    hrWithPort.Spec.ParentRefs[0].SectionName,
 					Attachment: &ParentRefAttachmentStatus{
 						Attached:         true,
@@ -998,7 +984,6 @@ func TestBindRouteToListeners(t *testing.T) {
 				{
 					NamespacedName: client.ObjectKeyFromObject(gw),
 					Idx:            0,
-					Gateway:        &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
 					SectionName:    hrWithNonExistingListener.Spec.ParentRefs[0].SectionName,
 					Attachment: &ParentRefAttachmentStatus{
 						Attached:          false,
@@ -1025,7 +1010,6 @@ func TestBindRouteToListeners(t *testing.T) {
 				{
 					NamespacedName: client.ObjectKeyFromObject(gw),
 					Idx:            0,
-					Gateway:        &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
 					SectionName:    hr.Spec.ParentRefs[0].SectionName,
 					Attachment: &ParentRefAttachmentStatus{
 						Attached:          false,
@@ -1052,7 +1036,6 @@ func TestBindRouteToListeners(t *testing.T) {
 				{
 					NamespacedName: client.ObjectKeyFromObject(gw),
 					Idx:            0,
-					Gateway:        &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
 					SectionName:    hr.Spec.ParentRefs[0].SectionName,
 					Attachment: &ParentRefAttachmentStatus{
 						Attached:          false,
@@ -1079,7 +1062,6 @@ func TestBindRouteToListeners(t *testing.T) {
 				{
 					NamespacedName: client.ObjectKeyFromObject(gw),
 					Idx:            0,
-					Gateway:        &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
 					Attachment:     nil,
 					SectionName:    hr.Spec.ParentRefs[0].SectionName,
 				},
@@ -1102,7 +1084,6 @@ func TestBindRouteToListeners(t *testing.T) {
 				{
 					NamespacedName: client.ObjectKeyFromObject(gw),
 					Idx:            0,
-					Gateway:        &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
 					SectionName:    hr.Spec.ParentRefs[0].SectionName,
 					Attachment: &ParentRefAttachmentStatus{
 						Attached:          false,
@@ -1131,7 +1112,6 @@ func TestBindRouteToListeners(t *testing.T) {
 				{
 					NamespacedName: client.ObjectKeyFromObject(gw),
 					Idx:            0,
-					Gateway:        &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
 					SectionName:    hr.Spec.ParentRefs[0].SectionName,
 					Attachment: &ParentRefAttachmentStatus{
 						Attached: true,
@@ -1168,7 +1148,6 @@ func TestBindRouteToListeners(t *testing.T) {
 				{
 					NamespacedName: client.ObjectKeyFromObject(gw),
 					Idx:            0,
-					Gateway:        &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
 					SectionName:    hr.Spec.ParentRefs[0].SectionName,
 					Attachment: &ParentRefAttachmentStatus{
 						Attached: true,
@@ -1205,7 +1184,6 @@ func TestBindRouteToListeners(t *testing.T) {
 				{
 					NamespacedName: client.ObjectKeyFromObject(gw),
 					Idx:            0,
-					Gateway:        &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
 					SectionName:    hr.Spec.ParentRefs[0].SectionName,
 					Attachment: &ParentRefAttachmentStatus{
 						Attached: true,
@@ -1250,7 +1228,6 @@ func TestBindRouteToListeners(t *testing.T) {
 				{
 					NamespacedName: client.ObjectKeyFromObject(gw),
 					Idx:            0,
-					Gateway:        &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
 					SectionName:    hr.Spec.ParentRefs[0].SectionName,
 					Attachment: &ParentRefAttachmentStatus{
 						Attached:          false,
@@ -1293,7 +1270,6 @@ func TestBindRouteToListeners(t *testing.T) {
 				{
 					NamespacedName: client.ObjectKeyFromObject(gw),
 					Idx:            0,
-					Gateway:        &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
 					SectionName:    hr.Spec.ParentRefs[0].SectionName,
 					Attachment: &ParentRefAttachmentStatus{
 						Attached: true,
@@ -1341,7 +1317,6 @@ func TestBindRouteToListeners(t *testing.T) {
 				{
 					NamespacedName: client.ObjectKeyFromObject(gwDiffNamespace),
 					Idx:            0,
-					Gateway:        &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gwDiffNamespace)},
 					SectionName:    hr.Spec.ParentRefs[0].SectionName,
 					Attachment: &ParentRefAttachmentStatus{
 						Attached:          false,
@@ -1380,7 +1355,6 @@ func TestBindRouteToListeners(t *testing.T) {
 				{
 					NamespacedName: client.ObjectKeyFromObject(gw),
 					Idx:            0,
-					Gateway:        &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
 					SectionName:    hr.Spec.ParentRefs[0].SectionName,
 					Attachment: &ParentRefAttachmentStatus{
 						Attached: true,
@@ -1426,7 +1400,6 @@ func TestBindRouteToListeners(t *testing.T) {
 				{
 					NamespacedName: client.ObjectKeyFromObject(gwDiffNamespace),
 					Idx:            0,
-					Gateway:        &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gwDiffNamespace)},
 					SectionName:    hr.Spec.ParentRefs[0].SectionName,
 					Attachment: &ParentRefAttachmentStatus{
 						Attached: true,
@@ -1473,7 +1446,6 @@ func TestBindRouteToListeners(t *testing.T) {
 				{
 					NamespacedName: client.ObjectKeyFromObject(gw),
 					Idx:            0,
-					Gateway:        &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
 					SectionName:    gr.Spec.ParentRefs[0].SectionName,
 					Attachment: &ParentRefAttachmentStatus{
 						Attached:          false,
@@ -1517,10 +1489,7 @@ func TestBindRouteToListeners(t *testing.T) {
 				{
 					NamespacedName: client.ObjectKeyFromObject(gw),
 					Idx:            0,
-					Gateway: &ParentRefGateway{
-						NamespacedName: client.ObjectKeyFromObject(gw),
-					},
-					SectionName: gr.Spec.ParentRefs[0].SectionName,
+					SectionName:    gr.Spec.ParentRefs[0].SectionName,
 					Attachment: &ParentRefAttachmentStatus{
 						Attached: false,
 						FailedConditions: []conditions.Condition{
@@ -1566,7 +1535,6 @@ func TestBindRouteToListeners(t *testing.T) {
 				{
 					NamespacedName: client.ObjectKeyFromObject(gw),
 					Idx:            0,
-					Gateway:        &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
 					SectionName:    hr.Spec.ParentRefs[0].SectionName,
 					Attachment: &ParentRefAttachmentStatus{
 						Attached: true,
@@ -1606,7 +1574,6 @@ func TestBindRouteToListeners(t *testing.T) {
 				{
 					NamespacedName: client.ObjectKeyFromObject(gw),
 					Idx:            0,
-					Gateway:        &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
 					SectionName:    hr.Spec.ParentRefs[0].SectionName,
 					Attachment: &ParentRefAttachmentStatus{
 						Attached: true,
@@ -2197,7 +2164,6 @@ func TestBindL4RouteToListeners(t *testing.T) {
 				{
 					NamespacedName: client.ObjectKeyFromObject(gateway),
 					Idx:            0,
-					Gateway:        &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gateway)},
 					SectionName:    tr.Spec.ParentRefs[0].SectionName,
 				},
 			},
@@ -2229,7 +2195,6 @@ func TestBindL4RouteToListeners(t *testing.T) {
 			{
 				NamespacedName: client.ObjectKeyFromObject(gw),
 				Idx:            0,
-				Gateway:        &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
 				SectionName:    tr.Spec.ParentRefs[0].SectionName,
 			},
 		},
@@ -2244,7 +2209,6 @@ func TestBindL4RouteToListeners(t *testing.T) {
 			{
 				NamespacedName: client.ObjectKeyFromObject(gw),
 				Idx:            0,
-				Gateway:        &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
 				SectionName:    tr.Spec.ParentRefs[0].SectionName,
 				Port:           helpers.GetPointer[gatewayv1.PortNumber](80),
 			},
@@ -2285,7 +2249,6 @@ func TestBindL4RouteToListeners(t *testing.T) {
 				{
 					NamespacedName: client.ObjectKeyFromObject(gw),
 					Idx:            0,
-					Gateway:        &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
 					SectionName:    tr.Spec.ParentRefs[0].SectionName,
 					Attachment: &ParentRefAttachmentStatus{
 						Attached: true,
@@ -2324,7 +2287,6 @@ func TestBindL4RouteToListeners(t *testing.T) {
 				{
 					NamespacedName: client.ObjectKeyFromObject(gw),
 					Idx:            0,
-					Gateway:        &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
 					SectionName:    tr.Spec.ParentRefs[0].SectionName,
 				},
 			},
@@ -2351,7 +2313,6 @@ func TestBindL4RouteToListeners(t *testing.T) {
 					NamespacedName: client.ObjectKeyFromObject(gw),
 					Attachment:     &noMatchingParentAttachment,
 					SectionName:    tr.Spec.ParentRefs[0].SectionName,
-					Gateway:        &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
 					Idx:            0,
 				},
 			},
@@ -2386,7 +2347,6 @@ func TestBindL4RouteToListeners(t *testing.T) {
 						Attached: false,
 					},
 					SectionName: tr.Spec.ParentRefs[0].SectionName,
-					Gateway:     &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
 					Idx:         0,
 					Port:        helpers.GetPointer[gatewayv1.PortNumber](80),
 				},
@@ -2420,7 +2380,6 @@ func TestBindL4RouteToListeners(t *testing.T) {
 						Attached:          false,
 					},
 					SectionName: tr.Spec.ParentRefs[0].SectionName,
-					Gateway:     &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
 					Idx:         0,
 				},
 			},
@@ -2453,7 +2412,6 @@ func TestBindL4RouteToListeners(t *testing.T) {
 				{
 					NamespacedName: client.ObjectKeyFromObject(gwWrongNamespace),
 					Idx:            0,
-					Gateway:        &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gwWrongNamespace)},
 					SectionName:    tr.Spec.ParentRefs[0].SectionName,
 					Attachment: &ParentRefAttachmentStatus{
 						AcceptedHostnames: map[string][]string{},
@@ -2492,7 +2450,6 @@ func TestBindL4RouteToListeners(t *testing.T) {
 				{
 					NamespacedName: client.ObjectKeyFromObject(gw),
 					Idx:            0,
-					Gateway:        &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
 					SectionName:    tr.Spec.ParentRefs[0].SectionName,
 					Attachment: &ParentRefAttachmentStatus{
 						AcceptedHostnames: map[string][]string{
@@ -2514,7 +2471,6 @@ func TestBindL4RouteToListeners(t *testing.T) {
 						{
 							NamespacedName: client.ObjectKeyFromObject(gw),
 							Idx:            0,
-							Gateway:        &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
 							SectionName:    tr.Spec.ParentRefs[0].SectionName,
 							Attachment: &ParentRefAttachmentStatus{
 								AcceptedHostnames: map[string][]string{
@@ -2554,7 +2510,6 @@ func TestBindL4RouteToListeners(t *testing.T) {
 				{
 					NamespacedName: client.ObjectKeyFromObject(gw),
 					Idx:            0,
-					Gateway:        &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
 					SectionName:    tr.Spec.ParentRefs[0].SectionName,
 					Attachment: &ParentRefAttachmentStatus{
 						AcceptedHostnames: map[string][]string{},
@@ -2588,7 +2543,6 @@ func TestBindL4RouteToListeners(t *testing.T) {
 				{
 					NamespacedName: client.ObjectKeyFromObject(gw),
 					Idx:            0,
-					Gateway:        &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
 					Attachment: &ParentRefAttachmentStatus{
 						Attached: true,
 						AcceptedHostnames: map[string][]string{
@@ -2628,7 +2582,6 @@ func TestBindL4RouteToListeners(t *testing.T) {
 				{
 					NamespacedName: client.ObjectKeyFromObject(gw),
 					Idx:            0,
-					Gateway:        &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
 					Attachment: &ParentRefAttachmentStatus{
 						Attached: true,
 						AcceptedHostnames: map[string][]string{
@@ -2666,7 +2619,6 @@ func TestBindL4RouteToListeners(t *testing.T) {
 					NamespacedName: client.ObjectKeyFromObject(gw),
 					Attachment:     &noMatchingParentAttachment,
 					SectionName:    tr.Spec.ParentRefs[0].SectionName,
-					Gateway:        &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
 					Idx:            0,
 				},
 			},
@@ -2692,7 +2644,6 @@ func TestBindL4RouteToListeners(t *testing.T) {
 				{
 					NamespacedName: client.ObjectKeyFromObject(gw),
 					Idx:            0,
-					Gateway:        &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
 					Attachment: &ParentRefAttachmentStatus{
 						Attached: true,
 						AcceptedHostnames: map[string][]string{
@@ -2733,7 +2684,6 @@ func TestBindL4RouteToListeners(t *testing.T) {
 				{
 					NamespacedName: client.ObjectKeyFromObject(gw),
 					Idx:            0,
-					Gateway:        &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
 					Attachment: &ParentRefAttachmentStatus{
 						AcceptedHostnames: map[string][]string{},
 						FailedConditions:  []conditions.Condition{conditions.NewRouteNotAllowedByListeners()},
@@ -2765,7 +2715,6 @@ func TestBindL4RouteToListeners(t *testing.T) {
 				{
 					NamespacedName: client.ObjectKeyFromObject(gw),
 					Idx:            0,
-					Gateway:        &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
 					SectionName:    tr.Spec.ParentRefs[0].SectionName,
 					Attachment: &ParentRefAttachmentStatus{
 						Attached: true,
@@ -2819,7 +2768,6 @@ func TestBindL4RouteToListeners(t *testing.T) {
 						{
 							NamespacedName: client.ObjectKeyFromObject(gw),
 							Idx:            0,
-							Gateway:        &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
 							SectionName:    helpers.GetPointer[gatewayv1.SectionName]("tcp-listener"),
 						},
 					},
@@ -2874,7 +2822,6 @@ func TestBindL4RouteToListeners(t *testing.T) {
 				{
 					NamespacedName: client.ObjectKeyFromObject(gw),
 					Idx:            0,
-					Gateway:        &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
 					SectionName:    helpers.GetPointer[gatewayv1.SectionName]("tcp-listener"),
 					Attachment: &ParentRefAttachmentStatus{
 						Attached:          false,
@@ -3233,9 +3180,9 @@ func TestBindL4RouteToListeners_TCPAndUDPSamePortNoConflict(t *testing.T) {
 		Spec:       L4RouteSpec{Hostnames: []gatewayv1.Hostname{}},
 		ParentRefs: []ParentRef{
 			{
-				Idx:         0,
-				Gateway:     &ParentRefGateway{NamespacedName: gwNsName},
-				SectionName: helpers.GetPointer[gatewayv1.SectionName]("tcp-listener"),
+				Idx:            0,
+				SectionName:    helpers.GetPointer[gatewayv1.SectionName]("tcp-listener"),
+				NamespacedName: gwNsName,
 			},
 		},
 	}
@@ -3259,9 +3206,9 @@ func TestBindL4RouteToListeners_TCPAndUDPSamePortNoConflict(t *testing.T) {
 		Spec:       L4RouteSpec{Hostnames: []gatewayv1.Hostname{}},
 		ParentRefs: []ParentRef{
 			{
-				Idx:         0,
-				Gateway:     &ParentRefGateway{NamespacedName: gwNsName},
-				SectionName: helpers.GetPointer[gatewayv1.SectionName]("udp-listener"),
+				Idx:            0,
+				SectionName:    helpers.GetPointer[gatewayv1.SectionName]("udp-listener"),
+				NamespacedName: gwNsName,
 			},
 		},
 	}
@@ -3942,7 +3889,6 @@ func TestIsolateL4Listeners(t *testing.T) {
 				{
 					NamespacedName: client.ObjectKeyFromObject(gw),
 					Idx:            0,
-					Gateway:        &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
 					SectionName:    sectionName,
 					Attachment: &ParentRefAttachmentStatus{
 						AcceptedHostnames: acceptedHostnames,
@@ -4050,7 +3996,6 @@ func TestIsolateL4Listeners(t *testing.T) {
 			{
 				NamespacedName: client.ObjectKeyFromObject(gw),
 				Idx:            0,
-				Gateway:        &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
 				SectionName:    tr1.Spec.ParentRefs[0].SectionName,
 				Attachment: &ParentRefAttachmentStatus{
 					AcceptedHostnames: map[string][]string{
@@ -4065,7 +4010,6 @@ func TestIsolateL4Listeners(t *testing.T) {
 			{
 				NamespacedName: client.ObjectKeyFromObject(gw),
 				Idx:            0,
-				Gateway:        &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
 				SectionName:    tr2.Spec.ParentRefs[0].SectionName,
 				Attachment: &ParentRefAttachmentStatus{
 					AcceptedHostnames: map[string][]string{
@@ -4083,7 +4027,6 @@ func TestIsolateL4Listeners(t *testing.T) {
 			{
 				NamespacedName: client.ObjectKeyFromObject(gw),
 				Idx:            0,
-				Gateway:        &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
 				SectionName:    tr3.Spec.ParentRefs[0].SectionName,
 				Attachment: &ParentRefAttachmentStatus{
 					AcceptedHostnames: map[string][]string{
@@ -4101,7 +4044,6 @@ func TestIsolateL4Listeners(t *testing.T) {
 			{
 				NamespacedName: client.ObjectKeyFromObject(gw),
 				Idx:            0,
-				Gateway:        &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
 				SectionName:    tr4.Spec.ParentRefs[0].SectionName,
 				Attachment: &ParentRefAttachmentStatus{
 					AcceptedHostnames: map[string][]string{
@@ -4116,7 +4058,6 @@ func TestIsolateL4Listeners(t *testing.T) {
 			{
 				NamespacedName: client.ObjectKeyFromObject(gw),
 				Idx:            0,
-				Gateway:        &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
 				SectionName:    tr5.Spec.ParentRefs[0].SectionName,
 				Attachment: &ParentRefAttachmentStatus{
 					AcceptedHostnames: map[string][]string{
@@ -4241,7 +4182,6 @@ func TestIsolateL4Listeners(t *testing.T) {
 					{
 						NamespacedName: client.ObjectKeyFromObject(gw),
 						Idx:            0,
-						Gateway:        &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
 						Attachment: &ParentRefAttachmentStatus{
 							AcceptedHostnames: map[string][]string{
 								"tls_coffee": {"coffee.example.com"},
@@ -4257,7 +4197,6 @@ func TestIsolateL4Listeners(t *testing.T) {
 					{
 						NamespacedName: client.ObjectKeyFromObject(gw),
 						Idx:            0,
-						Gateway:        &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
 						Attachment: &ParentRefAttachmentStatus{
 							AcceptedHostnames: map[string][]string{
 								"tls_coffee": {"coffee.example.com"},
@@ -4273,7 +4212,6 @@ func TestIsolateL4Listeners(t *testing.T) {
 					{
 						NamespacedName: client.ObjectKeyFromObject(gw),
 						Idx:            0,
-						Gateway:        &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
 						Attachment: &ParentRefAttachmentStatus{
 							AcceptedHostnames: map[string][]string{
 								"tls_coffee": {"coffee.example.com"},
@@ -4299,7 +4237,6 @@ func TestIsolateL4Listeners(t *testing.T) {
 						{
 							NamespacedName: client.ObjectKeyFromObject(gw),
 							Idx:            0,
-							Gateway:        &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
 							SectionName:    helpers.GetPointer[gatewayv1.SectionName]("wildcard-example-com"),
 							Attachment: &ParentRefAttachmentStatus{
 								AcceptedHostnames: acceptedHostanamesMultipleGateways,
@@ -4310,7 +4247,6 @@ func TestIsolateL4Listeners(t *testing.T) {
 						{
 							NamespacedName: client.ObjectKeyFromObject(gw),
 							Idx:            0,
-							Gateway:        &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
 							SectionName:    helpers.GetPointer[gatewayv1.SectionName]("wildcard-example-com"),
 							Attachment: &ParentRefAttachmentStatus{
 								AcceptedHostnames: acceptedHostanamesMultipleGateways,
@@ -4329,7 +4265,6 @@ func TestIsolateL4Listeners(t *testing.T) {
 						{
 							NamespacedName: client.ObjectKeyFromObject(gw),
 							Idx:            0,
-							Gateway:        &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
 							SectionName:    helpers.GetPointer[gatewayv1.SectionName]("wildcard-example-com"),
 							Attachment: &ParentRefAttachmentStatus{
 								AcceptedHostnames: acceptedHostanamesMultipleGateways,
@@ -4340,7 +4275,6 @@ func TestIsolateL4Listeners(t *testing.T) {
 						{
 							NamespacedName: client.ObjectKeyFromObject(gw),
 							Idx:            0,
-							Gateway:        &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
 							SectionName:    helpers.GetPointer[gatewayv1.SectionName]("wildcard-example-com"),
 							Attachment: &ParentRefAttachmentStatus{
 								AcceptedHostnames: acceptedHostanamesMultipleGateways,
@@ -4368,7 +4302,6 @@ func TestIsolateL4Listeners(t *testing.T) {
 					{
 						NamespacedName: client.ObjectKeyFromObject(gw),
 						Idx:            0,
-						Gateway:        &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
 						SectionName:    tlsCoffeeRoute1.Spec.ParentRefs[0].SectionName,
 						Attachment: &ParentRefAttachmentStatus{
 							AcceptedHostnames: map[string][]string{
@@ -4382,7 +4315,6 @@ func TestIsolateL4Listeners(t *testing.T) {
 					{
 						NamespacedName: client.ObjectKeyFromObject(gw),
 						Idx:            0,
-						Gateway:        &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
 						SectionName:    tlsCoffeeRoute1.Spec.ParentRefs[0].SectionName,
 						Attachment: &ParentRefAttachmentStatus{
 							AcceptedHostnames: map[string][]string{
@@ -4398,7 +4330,6 @@ func TestIsolateL4Listeners(t *testing.T) {
 					{
 						NamespacedName: client.ObjectKeyFromObject(gw),
 						Idx:            0,
-						Gateway:        &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
 						SectionName:    tlsFlavorRoute1.Spec.ParentRefs[0].SectionName,
 						Attachment: &ParentRefAttachmentStatus{
 							AcceptedHostnames: map[string][]string{
@@ -4412,7 +4343,6 @@ func TestIsolateL4Listeners(t *testing.T) {
 					{
 						NamespacedName: client.ObjectKeyFromObject(gw),
 						Idx:            0,
-						Gateway:        &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
 						SectionName:    tlsCoffeeRoute1.Spec.ParentRefs[0].SectionName,
 						Attachment: &ParentRefAttachmentStatus{
 							AcceptedHostnames: map[string][]string{
@@ -4502,7 +4432,6 @@ func TestIsolateL7Listeners(t *testing.T) {
 				{
 					NamespacedName: client.ObjectKeyFromObject(gw),
 					Idx:            0,
-					Gateway:        &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
 					SectionName:    sectionName,
 					Attachment: &ParentRefAttachmentStatus{
 						AcceptedHostnames: acceptedHostnames,
@@ -4668,7 +4597,6 @@ func TestIsolateL7Listeners(t *testing.T) {
 			{
 				NamespacedName: client.ObjectKeyFromObject(gw),
 				Idx:            0,
-				Gateway:        &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
 				SectionName:    hr1.Spec.ParentRefs[0].SectionName,
 				Attachment: &ParentRefAttachmentStatus{
 					AcceptedHostnames: map[string][]string{
@@ -4683,7 +4611,6 @@ func TestIsolateL7Listeners(t *testing.T) {
 			{
 				NamespacedName: client.ObjectKeyFromObject(gw),
 				Idx:            0,
-				Gateway:        &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
 				SectionName:    hr2.Spec.ParentRefs[0].SectionName,
 				Attachment: &ParentRefAttachmentStatus{
 					AcceptedHostnames: map[string][]string{
@@ -4701,7 +4628,6 @@ func TestIsolateL7Listeners(t *testing.T) {
 			{
 				NamespacedName: client.ObjectKeyFromObject(gw),
 				Idx:            0,
-				Gateway:        &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
 				SectionName:    hr3.Spec.ParentRefs[0].SectionName,
 				Attachment: &ParentRefAttachmentStatus{
 					AcceptedHostnames: map[string][]string{
@@ -4719,7 +4645,6 @@ func TestIsolateL7Listeners(t *testing.T) {
 			{
 				NamespacedName: client.ObjectKeyFromObject(gw),
 				Idx:            0,
-				Gateway:        &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
 				SectionName:    hr4.Spec.ParentRefs[0].SectionName,
 				Attachment: &ParentRefAttachmentStatus{
 					AcceptedHostnames: map[string][]string{
@@ -4734,7 +4659,6 @@ func TestIsolateL7Listeners(t *testing.T) {
 			{
 				NamespacedName: client.ObjectKeyFromObject(gw),
 				Idx:            0,
-				Gateway:        &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
 				SectionName:    hr5.Spec.ParentRefs[0].SectionName,
 				Attachment: &ParentRefAttachmentStatus{
 					AcceptedHostnames: map[string][]string{
@@ -4865,7 +4789,6 @@ func TestIsolateL7Listeners(t *testing.T) {
 					{
 						NamespacedName: client.ObjectKeyFromObject(gw),
 						Idx:            0,
-						Gateway:        &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
 						SectionName:    httpListenerRoute.Spec.ParentRefs[0].SectionName,
 						Attachment: &ParentRefAttachmentStatus{
 							AcceptedHostnames: map[string][]string{
@@ -4913,7 +4836,6 @@ func TestIsolateL7Listeners(t *testing.T) {
 					{
 						NamespacedName: client.ObjectKeyFromObject(gw),
 						Idx:            0,
-						Gateway:        &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
 						Attachment: &ParentRefAttachmentStatus{
 							AcceptedHostnames: map[string][]string{
 								"hr_coffee": {"coffee.example.com"},
@@ -4929,7 +4851,6 @@ func TestIsolateL7Listeners(t *testing.T) {
 					{
 						NamespacedName: client.ObjectKeyFromObject(gw),
 						Idx:            0,
-						Gateway:        &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
 						Attachment: &ParentRefAttachmentStatus{
 							AcceptedHostnames: map[string][]string{
 								"hr_coffee": {"coffee.example.com"},
@@ -4945,7 +4866,6 @@ func TestIsolateL7Listeners(t *testing.T) {
 					{
 						NamespacedName: client.ObjectKeyFromObject(gw),
 						Idx:            0,
-						Gateway:        &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
 						Attachment: &ParentRefAttachmentStatus{
 							AcceptedHostnames: map[string][]string{
 								"hr_coffee": {"coffee.example.com"},
@@ -4971,7 +4891,6 @@ func TestIsolateL7Listeners(t *testing.T) {
 						{
 							NamespacedName: client.ObjectKeyFromObject(gw),
 							Idx:            0,
-							Gateway:        &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
 							SectionName:    helpers.GetPointer[gatewayv1.SectionName]("wildcard-example-com"),
 							Attachment: &ParentRefAttachmentStatus{
 								AcceptedHostnames: acceptedHostNamesMultipleGateway,
@@ -4982,7 +4901,6 @@ func TestIsolateL7Listeners(t *testing.T) {
 						{
 							NamespacedName: client.ObjectKeyFromObject(gw),
 							Idx:            0,
-							Gateway:        &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
 							SectionName:    helpers.GetPointer[gatewayv1.SectionName]("wildcard-example-com"),
 							Attachment: &ParentRefAttachmentStatus{
 								AcceptedHostnames: acceptedHostNamesMultipleGateway,
@@ -5001,7 +4919,6 @@ func TestIsolateL7Listeners(t *testing.T) {
 						{
 							NamespacedName: client.ObjectKeyFromObject(gw),
 							Idx:            0,
-							Gateway:        &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
 							SectionName:    helpers.GetPointer[gatewayv1.SectionName]("wildcard-example-com"),
 							Attachment: &ParentRefAttachmentStatus{
 								AcceptedHostnames: acceptedHostNamesMultipleGateway,
@@ -5012,7 +4929,6 @@ func TestIsolateL7Listeners(t *testing.T) {
 						{
 							NamespacedName: client.ObjectKeyFromObject(gw),
 							Idx:            0,
-							Gateway:        &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
 							SectionName:    helpers.GetPointer[gatewayv1.SectionName]("wildcard-example-com"),
 							Attachment: &ParentRefAttachmentStatus{
 								AcceptedHostnames: acceptedHostNamesMultipleGateway,
@@ -5040,7 +4956,6 @@ func TestIsolateL7Listeners(t *testing.T) {
 					{
 						NamespacedName: client.ObjectKeyFromObject(gw),
 						Idx:            0,
-						Gateway:        &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
 						SectionName:    hrCoffeeRoute1.Spec.ParentRefs[0].SectionName,
 						Attachment: &ParentRefAttachmentStatus{
 							AcceptedHostnames: map[string][]string{
@@ -5054,7 +4969,6 @@ func TestIsolateL7Listeners(t *testing.T) {
 					{
 						NamespacedName: client.ObjectKeyFromObject(gw),
 						Idx:            0,
-						Gateway:        &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
 						SectionName:    hrCoffeeRoute1.Spec.ParentRefs[1].SectionName,
 						Attachment: &ParentRefAttachmentStatus{
 							AcceptedHostnames: map[string][]string{
@@ -5070,7 +4984,6 @@ func TestIsolateL7Listeners(t *testing.T) {
 					{
 						NamespacedName: client.ObjectKeyFromObject(gw),
 						Idx:            0,
-						Gateway:        &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
 						SectionName:    hrFlavorRoute1.Spec.ParentRefs[0].SectionName,
 						Attachment: &ParentRefAttachmentStatus{
 							AcceptedHostnames: map[string][]string{
@@ -5084,7 +4997,6 @@ func TestIsolateL7Listeners(t *testing.T) {
 					{
 						NamespacedName: client.ObjectKeyFromObject(gw),
 						Idx:            0,
-						Gateway:        &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
 						SectionName:    hrFlavorRoute1.Spec.ParentRefs[0].SectionName,
 						Attachment: &ParentRefAttachmentStatus{
 							AcceptedHostnames: map[string][]string{

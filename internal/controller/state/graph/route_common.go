@@ -37,8 +37,9 @@ type ParentRef struct {
 	SectionName *v1.SectionName
 	// Port is the network port this Route targets.
 	Port *v1.PortNumber
-	// Gateway is the metadata about the parent Gateway.
-	Gateway *ParentRefGateway
+	// EffectiveNginxProxy is the effective NGINX Proxy configuration for this ParentRef.
+	// Will be nil if ParentRef is not of Kind Gateway.
+	EffectiveNginxProxy *EffectiveNginxProxy
 	// NamespacedName is the NamespacedName of the ParentRef
 	NamespacedName types.NamespacedName
 	// Kind is the Kind of the ParentRef, it can be either Gateway or ListenerSet.
@@ -62,20 +63,6 @@ type ParentRefAttachmentStatus struct {
 	ListenerPort v1.PortNumber
 	// Attached indicates if the ParentRef is attached to the Gateway.
 	Attached bool
-}
-
-// ParentRefGateway contains the NamespacedName and EffectiveNginxProxy of the parent Gateway.
-type ParentRefGateway struct {
-	EffectiveNginxProxy *EffectiveNginxProxy
-	NamespacedName      types.NamespacedName
-}
-
-// CreateParentRefGateway creates a new ParentRefGateway object using a graph.Gateway object.
-func CreateParentRefGateway(gateway *Gateway) *ParentRefGateway {
-	return &ParentRefGateway{
-		NamespacedName:      client.ObjectKeyFromObject(gateway.Source),
-		EffectiveNginxProxy: gateway.EffectiveNginxProxy,
-	}
 }
 
 type RouteType string
@@ -441,7 +428,7 @@ func buildSectionNameRefs(
 			if gw == nil {
 				continue
 			}
-			parentRef.Gateway = CreateParentRefGateway(gw)
+			parentRef.EffectiveNginxProxy = gw.EffectiveNginxProxy
 			parentRef.NamespacedName = client.ObjectKeyFromObject(gw.Source)
 		case kinds.ListenerSet:
 			ls = findListenerSetForParentRef(p, routeNamespace, listenerSets)

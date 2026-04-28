@@ -416,13 +416,10 @@ func TestAttachPolicyToRoute(t *testing.T) {
 					{
 						Kind:           "Gateway",
 						NamespacedName: types.NamespacedName{Name: "gateway1", Namespace: "test"},
-						Gateway: &ParentRefGateway{
-							NamespacedName: types.NamespacedName{Name: "gateway1", Namespace: "test"},
-							EffectiveNginxProxy: &EffectiveNginxProxy{
-								Telemetry: &ngfAPIv1alpha2.Telemetry{
-									Exporter: &ngfAPIv1alpha2.TelemetryExporter{
-										Endpoint: helpers.GetPointer("test-endpoint"),
-									},
+						EffectiveNginxProxy: &EffectiveNginxProxy{
+							Telemetry: &ngfAPIv1alpha2.Telemetry{
+								Exporter: &ngfAPIv1alpha2.TelemetryExporter{
+									Endpoint: helpers.GetPointer("test-endpoint"),
 								},
 							},
 						},
@@ -431,12 +428,9 @@ func TestAttachPolicyToRoute(t *testing.T) {
 						},
 					},
 					{
-						Kind:           "Gateway",
-						NamespacedName: types.NamespacedName{Name: "gateway2", Namespace: "test"},
-						Gateway: &ParentRefGateway{
-							NamespacedName:      types.NamespacedName{Name: "gateway2", Namespace: "test"},
-							EffectiveNginxProxy: &EffectiveNginxProxy{},
-						},
+						Kind:                "Gateway",
+						NamespacedName:      types.NamespacedName{Name: "gateway2", Namespace: "test"},
+						EffectiveNginxProxy: &EffectiveNginxProxy{},
 						Attachment: &ParentRefAttachmentStatus{
 							Attached: true,
 						},
@@ -472,12 +466,9 @@ func TestAttachPolicyToRoute(t *testing.T) {
 				RouteType:  RouteTypeHTTP,
 				ParentRefs: []ParentRef{
 					{
-						Kind:           "Gateway",
-						NamespacedName: types.NamespacedName{Name: "gateway1", Namespace: "test"},
-						Gateway: &ParentRefGateway{
-							NamespacedName:      types.NamespacedName{Name: "gateway1", Namespace: "test"},
-							EffectiveNginxProxy: &EffectiveNginxProxy{},
-						},
+						Kind:                "Gateway",
+						NamespacedName:      types.NamespacedName{Name: "gateway1", Namespace: "test"},
+						EffectiveNginxProxy: &EffectiveNginxProxy{},
 						Attachment: &ParentRefAttachmentStatus{
 							Attached: true,
 						},
@@ -1681,9 +1672,6 @@ func createTestRouteWithPaths(name string, paths ...string) *L7Route {
 			{
 				Kind:           "Gateway",
 				NamespacedName: types.NamespacedName{Namespace: testNs, Name: "gw"},
-				Gateway: &ParentRefGateway{
-					NamespacedName: types.NamespacedName{Namespace: testNs, Name: "gw"},
-				},
 				Attachment: &ParentRefAttachmentStatus{
 					AcceptedHostnames: map[string][]string{"listener-1": {"foo.example.com"}},
 					ListenerPort:      80,
@@ -1710,9 +1698,6 @@ func createTestRouteWithMultipleGateways(name string, gatewayNames []string, pat
 		parentRefs = append(parentRefs, ParentRef{
 			Kind:           "Gateway",
 			NamespacedName: types.NamespacedName{Namespace: testNs, Name: gwName},
-			Gateway: &ParentRefGateway{
-				NamespacedName: types.NamespacedName{Namespace: testNs, Name: gwName},
-			},
 			Attachment: &ParentRefAttachmentStatus{
 				AcceptedHostnames: map[string][]string{"listener-1": {"foo.example.com"}},
 				ListenerPort:      80,
@@ -2595,7 +2580,6 @@ func TestSnippetsPolicyPropagation(t *testing.T) {
 			{
 				Kind:           "Gateway",
 				NamespacedName: gwNsName,
-				Gateway:        &ParentRefGateway{NamespacedName: gwNsName},
 			},
 		},
 	}
@@ -2611,7 +2595,6 @@ func TestSnippetsPolicyPropagation(t *testing.T) {
 			{
 				Kind:           "Gateway",
 				NamespacedName: otherGwNsName,
-				Gateway:        &ParentRefGateway{NamespacedName: otherGwNsName},
 			},
 		},
 	}
@@ -2627,12 +2610,10 @@ func TestSnippetsPolicyPropagation(t *testing.T) {
 			{
 				Kind:           "Gateway",
 				NamespacedName: gwNsName,
-				Gateway:        &ParentRefGateway{NamespacedName: gwNsName},
 			},
 			{
 				Kind:           "Gateway",
 				NamespacedName: otherGwNsName,
-				Gateway:        &ParentRefGateway{NamespacedName: otherGwNsName},
 			},
 		},
 	}
