@@ -1150,9 +1150,12 @@ func Test_poller_pollSourceTwoPhaseAndConditional(t *testing.T) {
 			expectChecksum:  oldChecksum,
 		},
 		{
-			name: "NIM log profile: checksum unchanged — full download skipped",
+			// NIM log profiles have no metadata-only endpoint, so SupportsChecksumOnlyFetch
+			// returns false and pollSource falls through to a full FetchLogProfileBundle call.
+			// When the downloaded checksum is unchanged the bundle is not pushed.
+			name: "NIM log profile: checksum unchanged — full bundle downloaded, push skipped",
 			setup: func(f *fetchfakes.FakeFetcher, _ *agentfakes.FakeDeploymentStorer) {
-				f.FetchLogProfileBundleChecksumReturns(oldChecksum, nil)
+				f.FetchLogProfileBundleReturns(fetch.Result{Data: []byte("bundle"), Checksum: oldChecksum}, nil)
 			},
 			source: BundleSource{
 				BundleKey: "default_test_log",
@@ -1160,8 +1163,9 @@ func Test_poller_pollSourceTwoPhaseAndConditional(t *testing.T) {
 				Type:      LogProfileBundle,
 				Interval:  5 * time.Minute,
 			},
-			checksumCalls:  1,
-			expectChecksum: oldChecksum,
+			checksumCalls:   0,
+			fullBundleCalls: 1,
+			expectChecksum:  oldChecksum,
 		},
 	}
 
@@ -1253,6 +1257,9 @@ func Test_poller_pollSourceHTTPConditionalTokenPersisted(t *testing.T) {
 	g.Expect(req.ConditionalToken).To(Equal(etag))
 }
 
+// Test_poller_pollSourceLogProfileNIMChecksumUnchanged verifies that NIM log-profile bundles
+// use a full download on each poll cycle (no metadata-only endpoint), and that when the
+// downloaded checksum is unchanged the bundle is not pushed to deployments.
 func Test_poller_pollSourceLogProfileNIMChecksumUnchanged(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
@@ -1263,7 +1270,9 @@ func Test_poller_pollSourceLogProfileNIMChecksumUnchanged(t *testing.T) {
 	bundleKey := graph.WAFBundleKey("default_test_log")
 	checksum := "abc123"
 
-	fetcher.FetchLogProfileBundleChecksumReturns(checksum, nil)
+	// NIM log profiles always download the full bundle; return the same checksum to simulate
+	// an unchanged bundle.
+	fetcher.FetchLogProfileBundleReturns(fetch.Result{Data: []byte("bundle"), Checksum: checksum}, nil)
 
 	logProfileReq := fetch.Request{URL: "https://nim.example.com", LogProfileName: "default"}
 	poller := newPoller(pollerConfig{
@@ -1283,7 +1292,7 @@ func Test_poller_pollSourceLogProfileNIMChecksumUnchanged(t *testing.T) {
 
 	poller.pollSource(t.Context(), poller.sources[0])
 
-	g.Expect(fetcher.FetchLogProfileBundleChecksumCallCount()).To(Equal(1))
-	g.Expect(fetcher.FetchLogProfileBundleCallCount()).To(BeZero())
+	g.Expect(fetcher.FetchLogProfileBundleChecksumCallCount()).To(BeZero())
+	g.Expect(fetcher.FetchLogProfileBundleCallCount()).To(Equal(1))
 	g.Expect(deployments.GetCallCount()).To(BeZero())
 }

@@ -1588,7 +1588,7 @@ func TestRequestSupportsChecksumOnlyFetch(t *testing.T) {
 		{
 			name:     "NIM log profile",
 			req:      fetch.Request{URL: "https://nim.example.com", LogProfileName: "default"},
-			expected: true,
+			expected: false, // NIM log profiles have no metadata-only endpoint; full download required
 		},
 		{
 			name: "N1C policy",

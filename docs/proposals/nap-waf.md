@@ -149,11 +149,17 @@ When `polling.enabled: true` is set on a `policySource` or `logSource`, NGF runs
 - The default polling interval is 5 minutes; this applies when `polling.enabled: true` but no `interval` field is set
 - On each poll cycle, the mechanism differs by source type:
 
-  **NIM and N1C sources** (two-phase fetch):
+  **NIM policy bundles, N1C policy bundles, and N1C log-profile bundles** (two-phase fetch):
   1. Fetch only the checksum/metadata from the remote source (no bundle download)
   2. Compare to the stored checksum from the last successful fetch
   3. If **unchanged**: take no action — no push to the data plane, no NGINX reload
   4. If **changed**: download the full bundle, then deploy via Agent gRPC and update the stored checksum
+
+  **NIM log-profile bundles** (single-phase fetch with checksum comparison):
+  1. Download the full bundle (NIM does not expose a metadata-only hash for log profiles)
+  2. Compute the SHA-256 checksum of the downloaded content
+  3. If **unchanged** (matches stored checksum): take no action — no push to the data plane, no NGINX reload
+  4. If **changed**: deploy via Agent gRPC and update the stored checksum
 
   **HTTP sources** (conditional GET):
   1. Send a conditional `GET` using the stored `ETag` (`If-None-Match`) or `Last-Modified` (`If-Modified-Since`) from the previous fetch, if available
@@ -1324,12 +1330,14 @@ Rules: added when the object starts being affected; only one condition exists ev
 
 #### Policy Update Detection
 
-| Source type | Update mechanism                                                                                      | Polling |
-|-------------|-------------------------------------------------------------------------------------------------------|---------|
-| HTTP        | Conditional GET (`If-None-Match`/`If-Modified-Since`); SHA-256 comparison on `200 OK` responses       | Yes     |
-| NIM         | Two-phase: checksum-only fetch first; full bundle download only when checksum differs                 | Yes     |
-| N1C         | Two-phase: checksum-only fetch first; full bundle download only when checksum differs                 | Yes     |
-| PLM         | Kubernetes watch on `APPolicy`/`APLogConf` status changes                                             | No      |
+| Source type                | Update mechanism                                                                                                                         | Polling |
+|----------------------------|------------------------------------------------------------------------------------------------------------------------------------------|---------|
+| HTTP                       | Conditional GET (`If-None-Match`/`If-Modified-Since`); SHA-256 comparison on `200 OK` responses                                          | Yes     |
+| NIM (policy bundle)        | Two-phase: checksum-only metadata fetch first; full bundle download only when checksum differs                                           | Yes     |
+| NIM (log-profile bundle)   | Single-phase: full bundle downloaded each cycle; SHA-256 comparison (no metadata-only endpoint)                                          | Yes     |
+| N1C (policy bundle)        | Two-phase: checksum-only compile-status fetch first; full bundle download only when checksum differs                                     | Yes     |
+| N1C (log-profile bundle)   | Two-phase: checksum-only compile-status fetch first; full bundle download only when checksum differs                                     | Yes     |
+| PLM                        | Kubernetes watch on `APPolicy`/`APLogConf` status changes                                                                                | No      |
 
 ### Data Plane Policy Deployment
 

@@ -1130,8 +1130,9 @@ func fetchNIMChecksum(ctx context.Context, client *http.Client, req Request) (st
 	return hash, nil
 }
 
-// fetchNIMLogProfileChecksum fetches only the metadata for a NIM log profile bundle and returns
-// the checksum of the compiled bundle without downloading it.
+// fetchNIMLogProfileChecksum fetches the NIM log profile bundle and computes its SHA-256 checksum.
+// Unlike NIM policy bundles, NIM log profiles have no metadata-only endpoint, so the full bundle
+// must be downloaded and decoded to obtain the checksum.
 func fetchNIMLogProfileChecksum(ctx context.Context, client *http.Client, req Request) (string, error) {
 	compilerVersionURL := strings.TrimRight(req.URL, "/") + "/api/platform/v1/security/nap-compiler/versions/latest"
 	body, err := doGet(ctx, client, compilerVersionURL, req.Auth)
@@ -1269,11 +1270,18 @@ func buildNIMBundlesURL(baseURL, policyName, policyUID string, includeBundleCont
 	return base.String(), nil
 }
 
-// SupportsChecksumOnlyFetch reports whether this request targets a NIM or N1C source, both of
-// which expose a metadata-only endpoint that returns the bundle hash without the full content.
-// Plain HTTP sources do not have such an endpoint and always require a full download.
+// SupportsChecksumOnlyFetch reports whether this request targets a source that exposes a
+// metadata-only endpoint returning the bundle hash without a full download.
+//
+// This is true for:
+//   - NIM policy bundles (metadata hash endpoint)
+//   - N1C policy and log-profile bundles (compile-status hash endpoint)
+//
+// NIM log profile bundles have no metadata-only endpoint and require a full download to compute a
+// checksum, so they return false.
+// Plain HTTP sources also always require a full download.
 func (r Request) SupportsChecksumOnlyFetch() bool {
-	return r.N1C.Namespace != "" || r.PolicyName != "" || r.NIM.PolicyUID != "" || r.LogProfileName != ""
+	return r.N1C.Namespace != "" || r.PolicyName != "" || r.NIM.PolicyUID != ""
 }
 
 // doGet performs a GET request and returns the response body.

@@ -519,7 +519,11 @@ func (h *eventHandlerImpl) waitForStatusUpdates(ctx context.Context) {
 		case gw != nil && item.NginxConfigPushed:
 			h.cfg.logger.Info("NGINX configuration was successfully updated")
 		}
-		if gw != nil {
+		// Only update LatestReloadResult when a config push was actually attempted.
+		// Status-only queue items (e.g., WAF poll callbacks) have NginxConfigPushed=false
+		// and no error; updating LatestReloadResult for those would incorrectly clear a
+		// prior NGINX reload error without any config change having occurred.
+		if gw != nil && (item.NginxConfigPushed || item.Error != nil) {
 			gw.LatestReloadResult = nginxReloadRes
 		}
 
@@ -697,14 +701,14 @@ func (h *eventHandlerImpl) mergeWAFPollErrors(gr *graph.Graph) {
 		}
 
 		// Upsert a stale-bundle warning condition for the poll error.
-		// Replace any existing condition with the same Type+Reason so that repeated
-		// calls (e.g., multiple status updates reusing the same graph) don't accumulate
-		// duplicate conditions.
+		// Replace any existing condition with the same Type so that repeated calls (e.g.,
+		// multiple status updates reusing the same graph) don't accumulate same-Type conditions.
+		// Status preparation deduplicates by Type only, so matching on Type is sufficient.
 		cond := conditions.NewPolicyProgrammedStaleBundleWarning(pollError.Err.Error())
 
 		replaced := false
 		for i, existing := range policy.Conditions {
-			if existing.Type == cond.Type && existing.Reason == cond.Reason {
+			if existing.Type == cond.Type {
 				policy.Conditions[i] = cond
 				replaced = true
 				break
@@ -739,7 +743,7 @@ func (h *eventHandlerImpl) mergeWAFBundleUpdates(gr *graph.Graph) {
 
 		replaced := false
 		for i, existing := range policy.Conditions {
-			if existing.Type == cond.Type && existing.Reason == cond.Reason {
+			if existing.Type == cond.Type {
 				policy.Conditions[i] = cond
 				replaced = true
 				break
