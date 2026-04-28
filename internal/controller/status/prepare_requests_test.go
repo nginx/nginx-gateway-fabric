@@ -3331,20 +3331,20 @@ func TestBuildListenerSetStatuses(t *testing.T) {
 					},
 					Conditions: []metav1.Condition{
 						{
-							Type:               string(v1.ListenerConditionAccepted),
-							Status:             metav1.ConditionTrue,
-							ObservedGeneration: 3,
-							LastTransitionTime: transitionTime,
-							Reason:             string(v1.ListenerReasonAccepted),
-							Message:            "The Listener is accepted",
-						},
-						{
 							Type:               string(v1.ListenerConditionProgrammed),
 							Status:             metav1.ConditionTrue,
 							ObservedGeneration: 3,
 							LastTransitionTime: transitionTime,
 							Reason:             string(v1.ListenerReasonProgrammed),
 							Message:            "The Listener is programmed",
+						},
+						{
+							Type:               string(v1.ListenerConditionAccepted),
+							Status:             metav1.ConditionTrue,
+							ObservedGeneration: 3,
+							LastTransitionTime: transitionTime,
+							Reason:             string(v1.ListenerReasonAccepted),
+							Message:            "The Listener is accepted",
 						},
 						{
 							Type:               string(v1.ListenerConditionResolvedRefs),
@@ -3438,20 +3438,20 @@ func TestBuildListenerSetStatuses(t *testing.T) {
 					},
 					Conditions: []metav1.Condition{
 						{
-							Type:               string(v1.ListenerConditionAccepted),
-							Status:             metav1.ConditionTrue,
-							ObservedGeneration: 3,
-							LastTransitionTime: transitionTime,
-							Reason:             string(v1.ListenerReasonAccepted),
-							Message:            "The Listener is accepted",
-						},
-						{
 							Type:               string(v1.ListenerConditionProgrammed),
 							Status:             metav1.ConditionTrue,
 							ObservedGeneration: 3,
 							LastTransitionTime: transitionTime,
 							Reason:             string(v1.ListenerReasonProgrammed),
 							Message:            "The Listener is programmed",
+						},
+						{
+							Type:               string(v1.ListenerConditionAccepted),
+							Status:             metav1.ConditionTrue,
+							ObservedGeneration: 3,
+							LastTransitionTime: transitionTime,
+							Reason:             string(v1.ListenerReasonAccepted),
+							Message:            "The Listener is accepted",
 						},
 						{
 							Type:               string(v1.ListenerConditionResolvedRefs),

@@ -2536,7 +2536,7 @@ func TestValidateUnsupportedGatewayFields(t *testing.T) {
 				},
 			},
 			expectedConds: []conditions.Condition{
-				conditions.NewGatewayAcceptedUnsupportedField("DefaultScope"),
+				conditions.NewGatewayAcceptedUnsupportedField("spec.defaultScope: Forbidden: DefaultScope"),
 			},
 		},
 	}

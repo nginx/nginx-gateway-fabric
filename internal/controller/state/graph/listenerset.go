@@ -100,7 +100,12 @@ func validateListenerSet(
 	protectedPorts := buildProtectedPorts(parentGateway.EffectiveNginxProxy)
 
 	// Reuse existing listener validation from gateway_listener.go
-	validatedListeners := buildListeners(gatewayForValidation, resourceResolver, refGrantResolver, protectedPorts)
+	validatedListeners := buildListeners(
+		&Gateway{Source: gatewayForValidation},
+		resourceResolver,
+		refGrantResolver,
+		protectedPorts,
+	)
 
 	validListenerCount := 0
 	for _, listener := range validatedListeners {
