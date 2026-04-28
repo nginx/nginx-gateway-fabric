@@ -783,6 +783,7 @@ var _ = Describe("eventHandler", func() {
 					Listeners:      []*graph.Listener{{Valid: true}},
 					EffectiveNginxProxy: &graph.EffectiveNginxProxy{
 						WAF: &v1alpha2.WAFSpec{
+							Enable:         helpers.GetPointer(true),
 							BundleFailOpen: helpers.GetPointer(true),
 						},
 					},
@@ -791,6 +792,7 @@ var _ = Describe("eventHandler", func() {
 			NGFPolicies: map[graph.PolicyKey]*graph.Policy{
 				wafPolicyKey("waf-policy"): {
 					Source: makeWAFPolicy(false),
+					Valid:  true,
 					WAFState: &graph.PolicyWAFState{
 						BundlePending: true,
 					},
@@ -825,6 +827,7 @@ var _ = Describe("eventHandler", func() {
 					DeploymentName: types.NamespacedName{Namespace: "test", Name: "gateway-nginx"},
 					EffectiveNginxProxy: &graph.EffectiveNginxProxy{
 						WAF: &v1alpha2.WAFSpec{
+							Enable:         helpers.GetPointer(true),
 							BundleFailOpen: helpers.GetPointer(false),
 						},
 					},
@@ -834,6 +837,7 @@ var _ = Describe("eventHandler", func() {
 			NGFPolicies: map[graph.PolicyKey]*graph.Policy{
 				wafPolicyKey("waf-policy"): {
 					Source: makeWAFPolicy(false),
+					Valid:  true,
 					WAFState: &graph.PolicyWAFState{
 						BundlePending: true,
 					},

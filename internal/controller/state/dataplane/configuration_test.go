@@ -4589,7 +4589,7 @@ func TestBuildPolicies(t *testing.T) {
 			expPolicies: nil,
 		},
 		{
-			name: "WAF policy with pending bundle is excluded regardless of fail-open setting",
+			name: "WAF policy with pending bundle is excluded",
 			policies: []*graph.Policy{
 				{
 					Source:             getPolicy("WAFPolicy", "waf-pending"),
