@@ -815,7 +815,7 @@ func TestN1CFetchPolicyNotFound(t *testing.T) {
 	}
 	_, err := f.FetchPolicyBundle(t.Context(), req)
 	g.Expect(err).To(HaveOccurred())
-	g.Expect(err.Error()).To(ContainSubstring(`"missing-policy" not found`))
+	g.Expect(err.Error()).To(ContainSubstring("missing-policy"))
 	// hostname must not appear in the error
 	g.Expect(err.Error()).NotTo(ContainSubstring("127.0.0.1"))
 }

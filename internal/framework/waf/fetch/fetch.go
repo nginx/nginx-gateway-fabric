@@ -266,13 +266,7 @@ func (f *HTTPFetcher) fetchChecksum(
 		defer client.CloseIdleConnections()
 	}
 
-	backoff := wait.Backoff{
-		Duration: retryBaseDelay,
-		Factor:   2.0,
-		Jitter:   1.0,
-		Cap:      retryMaxDelay,
-		Steps:    int(req.RetryAttempts) + 1,
-	}
+	backoff := newRetryBackoff(req.RetryAttempts)
 
 	var (
 		checksum string
@@ -354,13 +348,7 @@ func (f *HTTPFetcher) fetch(
 	// inside Process(), which blocks the event handler and delays all config pushes to NGINX until
 	// retries complete. We should investigate making this async as retry
 	// counts or server latency could grow large enough to cause meaningful delays.
-	backoff := wait.Backoff{
-		Duration: retryBaseDelay,
-		Factor:   2.0,
-		Jitter:   1.0,
-		Cap:      retryMaxDelay,
-		Steps:    int(req.RetryAttempts) + 1,
-	}
+	backoff := newRetryBackoff(req.RetryAttempts)
 
 	var (
 		result  Result
@@ -422,6 +410,19 @@ func (f *HTTPFetcher) logProfileDispatch(
 		return fetchNIMLogProfile(ctx, client, req)
 	default:
 		return fetchHTTP(ctx, client, req)
+	}
+}
+
+// newRetryBackoff returns a Backoff configured with the project-wide retry defaults.
+// Steps is set to retryAttempts+1 so that the initial attempt is always made even
+// when retryAttempts is zero.
+func newRetryBackoff(retryAttempts int32) wait.Backoff {
+	return wait.Backoff{
+		Duration: retryBaseDelay,
+		Factor:   2.0,
+		Jitter:   1.0,
+		Cap:      retryMaxDelay,
+		Steps:    int(retryAttempts) + 1,
 	}
 }
 
@@ -627,22 +628,12 @@ func fetchNIMLogProfile(ctx context.Context, client *http.Client, req Request) (
 }
 
 // n1cLogProfilesResponse is the JSON envelope returned by the N1C list-log-profiles API.
-type n1cLogProfilesResponse struct {
-	Items []n1cLogProfileItem `json:"items"`
-	Total int                 `json:"total"`
-}
-
 type n1cLogProfileItem struct {
 	Name     string `json:"name"`
 	ObjectID string `json:"object_id"`
 }
 
-// n1cPoliciesResponse is the JSON envelope returned by the N1C list-policies API.
-type n1cPoliciesResponse struct {
-	Items []n1cPolicyItem `json:"items"`
-	Total int             `json:"total"`
-}
-
+// n1cPolicyItem is a single entry in the N1C list-policies API response.
 type n1cPolicyItem struct {
 	Name     string `json:"name"`
 	ObjectID string `json:"object_id"`
@@ -651,12 +642,7 @@ type n1cPolicyItem struct {
 	} `json:"latest"`
 }
 
-// n1cVersionsResponse is the JSON envelope returned by the N1C list-versions API.
-type n1cVersionsResponse struct {
-	Items []n1cVersionItem `json:"items"`
-	Total int              `json:"total"`
-}
-
+// n1cVersionItem is a single entry in the N1C list-versions API response.
 type n1cVersionItem struct {
 	ObjectID string `json:"object_id"`
 	Latest   bool   `json:"latest"`
@@ -707,7 +693,7 @@ func fetchN1C(
 	pollCtx, cancel := context.WithTimeout(ctx, compileTimeout)
 	defer cancel()
 
-	bundleHash, err := pollN1CCompileStatus(pollCtx, client, statusURL, req.Auth, pollDelay, logger)
+	bundleHash, err := pollN1CCompileStatus(pollCtx, client, statusURL, req.Auth, pollDelay, logger, "policy")
 	if err != nil {
 		return Result{}, err
 	}
@@ -742,6 +728,7 @@ func fetchN1C(
 // fails. It returns the bundle hash on success.
 // Transient errors (5xx, network failures) are treated as "still pending" and retried after
 // pollDelay. Non-transient errors (4xx) are returned immediately.
+// kind is a short human-readable label used in log messages (e.g. "policy", "log profile").
 func pollN1CCompileStatus(
 	ctx context.Context,
 	client *http.Client,
@@ -749,32 +736,34 @@ func pollN1CCompileStatus(
 	auth *BundleAuth,
 	pollDelay time.Duration,
 	logger logr.Logger,
+	kind string,
 ) (string, error) {
 	for {
 		body, err := doGet(ctx, client, statusURL, auth, http.StatusOK, http.StatusAccepted)
 		if err != nil {
 			var nte *nonTransientError
 			if errors.As(err, &nte) {
-				return "", fmt.Errorf("failed to check N1C compile status: %w", err)
+				return "", fmt.Errorf("failed to check N1C %s compile status: %w", kind, err)
 			}
 			// Transient error (5xx, network) — log and retry.
-			logger.V(1).Info("Transient error polling N1C compile status, retrying", "error", err)
+			logger.V(1).Info("Transient error polling N1C compile status, retrying",
+				"kind", kind, "error", err)
 		} else {
 			var status n1cCompileStatusResponse
 			if parseErr := json.Unmarshal(body, &status); parseErr != nil {
-				return "", fmt.Errorf("failed to parse N1C compile status response: %w", parseErr)
+				return "", fmt.Errorf("failed to parse N1C %s compile status response: %w", kind, parseErr)
 			}
 
 			switch status.Status {
 			case "succeeded":
-				logger.V(1).Info("N1C bundle compilation succeeded", "hash", status.Hash)
+				logger.V(1).Info("N1C bundle compilation succeeded", "kind", kind, "hash", status.Hash)
 				return status.Hash, nil
 			case "failed":
 				return "", &nonTransientError{
-					err: fmt.Errorf("N1C bundle compilation failed"),
+					err: fmt.Errorf("N1C %s bundle compilation failed", kind),
 				}
 			default:
-				logger.V(1).Info("N1C bundle compilation in progress", "status", status.Status)
+				logger.V(1).Info("N1C bundle compilation in progress", "kind", kind, "status", status.Status)
 			}
 			// Any other status (e.g. "pending") — fall through to wait and retry.
 		}
@@ -818,35 +807,49 @@ func fetchN1CLogProfile(ctx context.Context, client *http.Client, req Request) (
 	return Result{Data: body, Checksum: ComputeChecksum(body)}, nil
 }
 
-// findN1CLogProfile pages through the N1C log profiles list and returns the object_id
-// for the log profile matching profileName.
-func findN1CLogProfile(
+// n1cPagedResult is the common JSON envelope shape shared by the N1C list APIs.
+// The generic parameter T is the item type in the page.
+type n1cPagedResult[T any] struct {
+	Items []T `json:"items"`
+	Total int `json:"total"`
+}
+
+// paginatedSearch iterates through pages of N1C list API results until pred returns true for an
+// item or all pages are exhausted. buildURL receives the current (1-based) offset and page size
+// and must return the URL to fetch. pred is called for each item; when it returns (result, true),
+// iteration stops and result is returned. errMsg is used in error context strings.
+func paginatedSearch[T any](
 	ctx context.Context,
 	client *http.Client,
-	baseURL, namespace, profileName string,
 	auth *BundleAuth,
-) (string, error) {
+	buildURL func(offset, limit int) (string, error),
+	pred func(item T) (result T, found bool),
+	errMsg string,
+) (T, error) {
 	const pageSize = 100
 
 	for offset := 1; ; offset += pageSize {
-		listURL, err := buildN1CLogProfilesURL(baseURL, namespace, offset, pageSize)
+		listURL, err := buildURL(offset, pageSize)
 		if err != nil {
-			return "", fmt.Errorf("failed to build N1C log profiles URL: %w", err)
+			var zero T
+			return zero, fmt.Errorf("failed to build %s URL: %w", errMsg, err)
 		}
 
 		body, err := doGet(ctx, client, listURL, auth)
 		if err != nil {
-			return "", fmt.Errorf("failed to list N1C log profiles: %w", err)
+			var zero T
+			return zero, fmt.Errorf("failed to list %s: %w", errMsg, err)
 		}
 
-		var resp n1cLogProfilesResponse
+		var resp n1cPagedResult[T]
 		if err := json.Unmarshal(body, &resp); err != nil {
-			return "", fmt.Errorf("failed to parse N1C log profiles response: %w", err)
+			var zero T
+			return zero, fmt.Errorf("failed to parse %s response: %w", errMsg, err)
 		}
 
 		for _, item := range resp.Items {
-			if item.Name == profileName {
-				return item.ObjectID, nil
+			if result, found := pred(item); found {
+				return result, nil
 			}
 		}
 
@@ -855,7 +858,32 @@ func findN1CLogProfile(
 		}
 	}
 
-	return "", fmt.Errorf("N1C log profile %q not found in namespace %q", profileName, namespace)
+	var zero T
+	return zero, fmt.Errorf("%s not found", errMsg)
+}
+
+// findN1CLogProfile pages through the N1C log profiles list and returns the object_id
+// for the log profile matching profileName.
+func findN1CLogProfile(
+	ctx context.Context,
+	client *http.Client,
+	baseURL, namespace, profileName string,
+	auth *BundleAuth,
+) (string, error) {
+	result, err := paginatedSearch(
+		ctx, client, auth,
+		func(offset, limit int) (string, error) {
+			return buildN1CLogProfilesURL(baseURL, namespace, offset, limit)
+		},
+		func(item n1cLogProfileItem) (n1cLogProfileItem, bool) {
+			return item, item.Name == profileName
+		},
+		fmt.Sprintf("N1C log profiles (namespace=%q, name=%q)", namespace, profileName),
+	)
+	if err != nil {
+		return "", err
+	}
+	return result.ObjectID, nil
 }
 
 // buildN1CLogProfilesURL constructs the N1C list-log-profiles API URL with pagination parameters.
@@ -911,51 +939,6 @@ func buildN1CLogProfileCompileBaseURL(baseURL, namespace, lpObjID string, downlo
 	return base.String(), nil
 }
 
-// pollN1CLogProfileCompileStatus polls the N1C log profile compile status endpoint until the
-// compilation job succeeds or fails. It returns the bundle hash on success.
-func pollN1CLogProfileCompileStatus(
-	ctx context.Context,
-	client *http.Client,
-	statusURL string,
-	auth *BundleAuth,
-	pollDelay time.Duration,
-	logger logr.Logger,
-) (string, error) {
-	for {
-		body, err := doGet(ctx, client, statusURL, auth, http.StatusOK, http.StatusAccepted)
-		if err != nil {
-			var nte *nonTransientError
-			if errors.As(err, &nte) {
-				return "", fmt.Errorf("failed to check N1C log profile compile status: %w", err)
-			}
-			logger.V(1).Info("Transient error polling N1C log profile compile status, retrying", "error", err)
-		} else {
-			var status n1cCompileStatusResponse
-			if parseErr := json.Unmarshal(body, &status); parseErr != nil {
-				return "", fmt.Errorf("failed to parse N1C log profile compile status response: %w", parseErr)
-			}
-
-			switch status.Status {
-			case "succeeded":
-				logger.V(1).Info("N1C log profile bundle compilation succeeded", "hash", status.Hash)
-				return status.Hash, nil
-			case "failed":
-				return "", &nonTransientError{
-					err: fmt.Errorf("N1C log profile bundle compilation failed"),
-				}
-			default:
-				logger.V(1).Info("N1C log profile bundle compilation in progress", "status", status.Status)
-			}
-		}
-
-		select {
-		case <-ctx.Done():
-			return "", ctx.Err()
-		case <-time.After(pollDelay):
-		}
-	}
-}
-
 // resolveN1CIDs returns the policy object ID and version object ID for the given request.
 // If req.N1CPolicyObjectID is set, it is used directly and the policies list call is skipped.
 // Otherwise, it pages through the policies list to resolve req.PolicyName to an object ID.
@@ -1002,36 +985,20 @@ func findN1CPolicy(
 	baseURL, namespace, policyName string,
 	auth *BundleAuth,
 ) (polObjID, latestVersionID string, err error) {
-	const pageSize = 100
-
-	for offset := 1; ; offset += pageSize {
-		listURL, err := buildN1CPoliciesURL(baseURL, namespace, offset, pageSize)
-		if err != nil {
-			return "", "", fmt.Errorf("failed to build N1C policies URL: %w", err)
-		}
-
-		body, err := doGet(ctx, client, listURL, auth)
-		if err != nil {
-			return "", "", fmt.Errorf("failed to list N1C policies: %w", err)
-		}
-
-		var resp n1cPoliciesResponse
-		if err := json.Unmarshal(body, &resp); err != nil {
-			return "", "", fmt.Errorf("failed to parse N1C policies response: %w", err)
-		}
-
-		for _, item := range resp.Items {
-			if item.Name == policyName {
-				return item.ObjectID, item.Latest.ObjectID, nil
-			}
-		}
-
-		if offset+pageSize-1 >= resp.Total {
-			break
-		}
+	result, err := paginatedSearch(
+		ctx, client, auth,
+		func(offset, limit int) (string, error) {
+			return buildN1CPoliciesURL(baseURL, namespace, offset, limit)
+		},
+		func(item n1cPolicyItem) (n1cPolicyItem, bool) {
+			return item, item.Name == policyName
+		},
+		fmt.Sprintf("N1C policies (namespace=%q, name=%q)", namespace, policyName),
+	)
+	if err != nil {
+		return "", "", err
 	}
-
-	return "", "", fmt.Errorf("N1C policy %q not found in namespace %q", policyName, namespace)
+	return result.ObjectID, result.Latest.ObjectID, nil
 }
 
 // findN1CLatestVersion pages through the N1C versions list and returns the object_id of the
@@ -1042,36 +1009,20 @@ func findN1CLatestVersion(
 	baseURL, namespace, polObjID string,
 	auth *BundleAuth,
 ) (string, error) {
-	const pageSize = 100
-
-	for offset := 1; ; offset += pageSize {
-		versionsURL, err := buildN1CVersionsURL(baseURL, namespace, polObjID, offset, pageSize)
-		if err != nil {
-			return "", fmt.Errorf("failed to build N1C versions URL: %w", err)
-		}
-
-		body, err := doGet(ctx, client, versionsURL, auth)
-		if err != nil {
-			return "", fmt.Errorf("failed to list N1C policy versions: %w", err)
-		}
-
-		var resp n1cVersionsResponse
-		if err := json.Unmarshal(body, &resp); err != nil {
-			return "", fmt.Errorf("failed to parse N1C versions response: %w", err)
-		}
-
-		for _, item := range resp.Items {
-			if item.Latest {
-				return item.ObjectID, nil
-			}
-		}
-
-		if offset+pageSize-1 >= resp.Total {
-			break
-		}
+	result, err := paginatedSearch(
+		ctx, client, auth,
+		func(offset, limit int) (string, error) {
+			return buildN1CVersionsURL(baseURL, namespace, polObjID, offset, limit)
+		},
+		func(item n1cVersionItem) (n1cVersionItem, bool) {
+			return item, item.Latest
+		},
+		fmt.Sprintf("N1C policy versions (namespace=%q, policy=%q)", namespace, polObjID),
+	)
+	if err != nil {
+		return "", err
 	}
-
-	return "", fmt.Errorf("no latest version found for N1C policy %q in namespace %q", polObjID, namespace)
+	return result.ObjectID, nil
 }
 
 // buildN1CPoliciesURL constructs the N1C list-policies API URL with pagination parameters.
@@ -1242,7 +1193,7 @@ func fetchN1CChecksum(
 	pollCtx, cancel := context.WithTimeout(ctx, compileTimeout)
 	defer cancel()
 
-	return pollN1CCompileStatus(pollCtx, client, statusURL, req.Auth, pollDelay, logger)
+	return pollN1CCompileStatus(pollCtx, client, statusURL, req.Auth, pollDelay, logger, "policy")
 }
 
 // fetchN1CLogProfileChecksum resolves the N1C log profile object ID and polls the compile status
@@ -1275,7 +1226,7 @@ func fetchN1CLogProfileChecksum(
 	pollCtx, cancel := context.WithTimeout(ctx, compileTimeout)
 	defer cancel()
 
-	return pollN1CLogProfileCompileStatus(pollCtx, client, statusURL, req.Auth, pollDelay, logger)
+	return pollN1CCompileStatus(pollCtx, client, statusURL, req.Auth, pollDelay, logger, "log profile")
 }
 
 // buildNIMURL constructs the NIM bundles API URL with bundle content included.
