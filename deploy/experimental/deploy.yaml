@@ -352,11 +352,14 @@ spec:
         - containerPort: 8081
           name: health
         readinessProbe:
+          failureThreshold: 3
           httpGet:
             path: /readyz
             port: health
           initialDelaySeconds: 3
           periodSeconds: 1
+          successThreshold: 1
+          timeoutSeconds: 1
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:

@@ -178,7 +178,10 @@ spec:
             path: /readyz
             port: health
           initialDelaySeconds: {{ .Values.nginxGateway.readinessProbe.initialDelaySeconds }}
-          periodSeconds: 1
+          periodSeconds: {{ .Values.nginxGateway.readinessProbe.periodSeconds }}
+          failureThreshold: {{ .Values.nginxGateway.readinessProbe.failureThreshold }}
+          timeoutSeconds: {{ .Values.nginxGateway.readinessProbe.timeoutSeconds }}
+          successThreshold: {{ .Values.nginxGateway.readinessProbe.successThreshold }}
         {{- end }}
         securityContext:
           seccompProfile:
@@ -196,7 +199,7 @@ spec:
         {{- with .Values.nginxGateway.extraVolumeMounts -}}
         {{ toYaml . | nindent 8 }}
         {{- end }}
-      {{- if.Values.nginxGateway.priorityClassName }}
+      {{- if .Values.nginxGateway.priorityClassName }}
       priorityClassName: {{ .Values.nginxGateway.priorityClassName }}
       {{- end }}
       {{- if .Values.nginxGateway.topologySpreadConstraints }}
