@@ -231,19 +231,22 @@ func (h *eventHandlerImpl) sendNginxConfig(ctx context.Context, logger logr.Logg
 		}
 
 		if gatewayHasPendingWAFBundle(gr, gw) {
-			// Fail-closed: a WAF bundle for this Gateway has not yet been fetched.
-			// Withhold the config push rather than serve without WAF protection.
-			// Enqueue a status update so the pending condition is visible to the operator.
-			obj := &status.QueueObject{
-				UpdateType: status.UpdateAll,
-				Deployment: status.Deployment{
-					NamespacedName: gw.DeploymentName,
-					GatewayName:    gw.Source.GetName(),
-				},
-				Error: errors.New("NGINX configuration update withheld: WAF bundle for Gateway is still pending"),
+			if !graph.WAFBundleFailOpenForNginxProxy(gw.EffectiveNginxProxy) {
+				// Fail-closed (default): withhold the config push until the bundle is available.
+				// Enqueue a status update so the pending condition is visible to the operator.
+				obj := &status.QueueObject{
+					UpdateType: status.UpdateAll,
+					Deployment: status.Deployment{
+						NamespacedName: gw.DeploymentName,
+						GatewayName:    gw.Source.GetName(),
+					},
+					Error: errors.New("NGINX configuration update withheld: WAF bundle for Gateway is still pending"),
+				}
+				h.cfg.statusQueue.Enqueue(obj)
+				continue
 			}
-			h.cfg.statusQueue.Enqueue(obj)
-			continue
+			// Fail-open: push config and serve traffic without WAF protection until the bundle is fetched.
+			// The WAFPolicy status conditions already surface the pending state to the operator.
 		}
 
 		deployment := h.cfg.nginxDeployments.GetOrStore(ctx, gw.DeploymentName, gw.Source.GetName())

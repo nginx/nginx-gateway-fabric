@@ -658,6 +658,77 @@ func TestBuildEffectiveNginxProxy_WAF(t *testing.T) {
 			},
 			exp: &EffectiveNginxProxy{},
 		},
+		{
+			name: "gateway class sets bundleFailOpen, gateway has no WAF config",
+			gcNp: &NginxProxy{
+				Valid: true,
+				Source: &ngfAPIv1alpha2.NginxProxy{
+					Spec: ngfAPIv1alpha2.NginxProxySpec{
+						WAF: &ngfAPIv1alpha2.WAFSpec{BundleFailOpen: helpers.GetPointer(true)},
+					},
+				},
+			},
+			gwNp: &NginxProxy{
+				Valid: true,
+				Source: &ngfAPIv1alpha2.NginxProxy{
+					Spec: ngfAPIv1alpha2.NginxProxySpec{},
+				},
+			},
+			exp: &EffectiveNginxProxy{
+				WAF: &ngfAPIv1alpha2.WAFSpec{BundleFailOpen: helpers.GetPointer(true)},
+			},
+		},
+		{
+			name: "gateway overrides bundleFailOpen set by gateway class",
+			gcNp: &NginxProxy{
+				Valid: true,
+				Source: &ngfAPIv1alpha2.NginxProxy{
+					Spec: ngfAPIv1alpha2.NginxProxySpec{
+						WAF: &ngfAPIv1alpha2.WAFSpec{BundleFailOpen: helpers.GetPointer(true)},
+					},
+				},
+			},
+			gwNp: &NginxProxy{
+				Valid: true,
+				Source: &ngfAPIv1alpha2.NginxProxy{
+					Spec: ngfAPIv1alpha2.NginxProxySpec{
+						WAF: &ngfAPIv1alpha2.WAFSpec{BundleFailOpen: helpers.GetPointer(false)},
+					},
+				},
+			},
+			exp: &EffectiveNginxProxy{
+				WAF: &ngfAPIv1alpha2.WAFSpec{BundleFailOpen: helpers.GetPointer(false)},
+			},
+		},
+		{
+			name: "gateway class enables WAF and sets bundleFailOpen, gateway overrides only disableCookieSeed",
+			gcNp: &NginxProxy{
+				Valid: true,
+				Source: &ngfAPIv1alpha2.NginxProxy{
+					Spec: ngfAPIv1alpha2.NginxProxySpec{
+						WAF: &ngfAPIv1alpha2.WAFSpec{
+							Enable:         helpers.GetPointer(true),
+							BundleFailOpen: helpers.GetPointer(true),
+						},
+					},
+				},
+			},
+			gwNp: &NginxProxy{
+				Valid: true,
+				Source: &ngfAPIv1alpha2.NginxProxy{
+					Spec: ngfAPIv1alpha2.NginxProxySpec{
+						WAF: &ngfAPIv1alpha2.WAFSpec{DisableCookieSeed: helpers.GetPointer(true)},
+					},
+				},
+			},
+			exp: &EffectiveNginxProxy{
+				WAF: &ngfAPIv1alpha2.WAFSpec{
+					Enable:            helpers.GetPointer(true),
+					DisableCookieSeed: helpers.GetPointer(true),
+					BundleFailOpen:    helpers.GetPointer(true),
+				},
+			},
+		},
 	}
 
 	for _, test := range tests {
