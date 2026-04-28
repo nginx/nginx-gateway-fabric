@@ -1121,7 +1121,7 @@
           "type": "integer"
         },
         "resources": {
-          "description": "Example:\n  preStop:\n    exec:\n      command:\n        - /bin/sh\n        - -c\n        - sleep 10\n  postStart:\n    exec:\n      command:\n        - /bin/sh\n        - -c\n        - echo \"Started\"\nThe resource requests and/or limits of the nginx-gateway container.",
+          "description": "The resource requests and/or limits of the nginx-gateway container.",
           "required": [],
           "title": "resources",
           "type": "object"

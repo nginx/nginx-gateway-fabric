@@ -184,6 +184,7 @@ nginxGateway:
   #         - /bin/sh
   #         - -c
   #         - echo "Started"
+
   # -- The resource requests and/or limits of the nginx-gateway container.
   resources: {}
 
