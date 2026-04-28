@@ -189,6 +189,12 @@ server {
             {{- end }}
         {{- end }}
 
+        {{- if $l.CORSHeaders }}
+        if ($request_method = OPTIONS) {
+            return 200;
+        }
+        {{- end }}
+
         {{ range $r := $l.Rewrites }}
         rewrite {{ $r }};
         {{- end }}
@@ -219,10 +225,6 @@ server {
         add_header {{ $h.Name }} "{{ $h.Value }}" always;
                 {{- end }}
             {{- end }}
-
-        if ($request_method = OPTIONS) {
-            return 200;
-        }
         {{- end }}
 
         {{- if eq $l.Type "redirect" -}}
