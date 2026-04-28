@@ -6,7 +6,7 @@ ADD --link --chown=101:1001 https://cs.nginx.com/static/files/plus-9.repo nginx-
 ADD --link --chown=101:1001 https://nginx.org/keys/nginx_signing.key nginx_signing.key
 ADD --link --chown=101:1001 build/ubi/repos/agent.repo agent.repo
 
-FROM ghcr.io/nginx/dependencies/nginx-ubi:ubi9@sha256:d4c06dc698dc7b600795719e7d3089a87c05b3f6618d75631961b07b1e984673 AS ubi9-packages
+FROM ghcr.io/nginx/dependencies/nginx-ubi:ubi9@sha256:8b11185aef388a55bc09a43e3c9db5c009370769715db85c7a480aa025355a1a AS ubi9-packages
 
 FROM registry.access.redhat.com/ubi9/ubi-minimal:9.7 AS ubi-nginx-plus
 
