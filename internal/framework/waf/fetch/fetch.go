@@ -306,7 +306,9 @@ func (f *HTTPFetcher) dispatchChecksum(ctx context.Context, client *http.Client,
 	case req.PolicyName != "" || req.NIM.PolicyUID != "":
 		return fetchNIMChecksum(ctx, client, req)
 	default:
-		return "", fmt.Errorf("FetchPolicyBundleChecksum is not supported for plain HTTP sources")
+		return "", &nonTransientError{
+			err: fmt.Errorf("FetchPolicyBundleChecksum is not supported for plain HTTP sources"),
+		}
 	}
 }
 
@@ -319,7 +321,9 @@ func (f *HTTPFetcher) logProfileDispatchChecksum(
 	case req.LogProfileName != "":
 		return fetchNIMLogProfileChecksum(ctx, client, req)
 	default:
-		return "", fmt.Errorf("FetchLogProfileBundleChecksum is not supported for plain HTTP sources")
+		return "", &nonTransientError{
+			err: fmt.Errorf("FetchLogProfileBundleChecksum is not supported for plain HTTP sources"),
+		}
 	}
 }
 
