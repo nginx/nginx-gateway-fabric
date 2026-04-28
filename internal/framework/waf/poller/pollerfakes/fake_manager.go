@@ -11,6 +11,16 @@ import (
 )
 
 type FakeManager struct {
+	GetAllBundleUpdatesStub        func() map[types.NamespacedName]poller.BundleUpdate
+	getAllBundleUpdatesMutex       sync.RWMutex
+	getAllBundleUpdatesArgsForCall []struct {
+	}
+	getAllBundleUpdatesReturns struct {
+		result1 map[types.NamespacedName]poller.BundleUpdate
+	}
+	getAllBundleUpdatesReturnsOnCall map[int]struct {
+		result1 map[types.NamespacedName]poller.BundleUpdate
+	}
 	GetAllPollErrorsStub        func() map[types.NamespacedName]poller.PollError
 	getAllPollErrorsMutex       sync.RWMutex
 	getAllPollErrorsArgsForCall []struct {
@@ -49,6 +59,59 @@ type FakeManager struct {
 	}
 	invocations      map[string][][]interface{}
 	invocationsMutex sync.RWMutex
+}
+
+func (fake *FakeManager) GetAllBundleUpdates() map[types.NamespacedName]poller.BundleUpdate {
+	fake.getAllBundleUpdatesMutex.Lock()
+	ret, specificReturn := fake.getAllBundleUpdatesReturnsOnCall[len(fake.getAllBundleUpdatesArgsForCall)]
+	fake.getAllBundleUpdatesArgsForCall = append(fake.getAllBundleUpdatesArgsForCall, struct {
+	}{})
+	stub := fake.GetAllBundleUpdatesStub
+	fakeReturns := fake.getAllBundleUpdatesReturns
+	fake.recordInvocation("GetAllBundleUpdates", []interface{}{})
+	fake.getAllBundleUpdatesMutex.Unlock()
+	if stub != nil {
+		return stub()
+	}
+	if specificReturn {
+		return ret.result1
+	}
+	return fakeReturns.result1
+}
+
+func (fake *FakeManager) GetAllBundleUpdatesCallCount() int {
+	fake.getAllBundleUpdatesMutex.RLock()
+	defer fake.getAllBundleUpdatesMutex.RUnlock()
+	return len(fake.getAllBundleUpdatesArgsForCall)
+}
+
+func (fake *FakeManager) GetAllBundleUpdatesCalls(stub func() map[types.NamespacedName]poller.BundleUpdate) {
+	fake.getAllBundleUpdatesMutex.Lock()
+	defer fake.getAllBundleUpdatesMutex.Unlock()
+	fake.GetAllBundleUpdatesStub = stub
+}
+
+func (fake *FakeManager) GetAllBundleUpdatesReturns(result1 map[types.NamespacedName]poller.BundleUpdate) {
+	fake.getAllBundleUpdatesMutex.Lock()
+	defer fake.getAllBundleUpdatesMutex.Unlock()
+	fake.GetAllBundleUpdatesStub = nil
+	fake.getAllBundleUpdatesReturns = struct {
+		result1 map[types.NamespacedName]poller.BundleUpdate
+	}{result1}
+}
+
+func (fake *FakeManager) GetAllBundleUpdatesReturnsOnCall(i int, result1 map[types.NamespacedName]poller.BundleUpdate) {
+	fake.getAllBundleUpdatesMutex.Lock()
+	defer fake.getAllBundleUpdatesMutex.Unlock()
+	fake.GetAllBundleUpdatesStub = nil
+	if fake.getAllBundleUpdatesReturnsOnCall == nil {
+		fake.getAllBundleUpdatesReturnsOnCall = make(map[int]struct {
+			result1 map[types.NamespacedName]poller.BundleUpdate
+		})
+	}
+	fake.getAllBundleUpdatesReturnsOnCall[i] = struct {
+		result1 map[types.NamespacedName]poller.BundleUpdate
+	}{result1}
 }
 
 func (fake *FakeManager) GetAllPollErrors() map[types.NamespacedName]poller.PollError {

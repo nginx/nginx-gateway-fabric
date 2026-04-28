@@ -433,7 +433,7 @@ func TestManager_pollErrors(t *testing.T) {
 
 	// Record an error.
 	testErr := errors.New("network timeout")
-	mgr.recordPollResult(policyNsName, bundleKey, testErr)
+	mgr.recordPollResult(policyNsName, bundleKey, "", testErr)
 
 	allErrors := mgr.GetAllPollErrors()
 	g.Expect(allErrors).To(HaveLen(1))
@@ -442,7 +442,7 @@ func TestManager_pollErrors(t *testing.T) {
 	g.Expect(allErrors[policyNsName].Err).To(Equal(testErr))
 
 	// Clear error on success.
-	mgr.recordPollResult(policyNsName, bundleKey, nil)
+	mgr.recordPollResult(policyNsName, bundleKey, "", nil)
 
 	g.Expect(mgr.GetAllPollErrors()).To(BeNil())
 }

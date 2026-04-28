@@ -290,7 +290,7 @@ func Test_poller_pollSourceFetchError(t *testing.T) {
 		deployments:       deployments,
 		targetDeployments: []types.NamespacedName{{Namespace: "nginx-gateway", Name: "nginx"}},
 		initialChecksums:  map[graph.WAFBundleKey]string{bundleKey: oldChecksum},
-		statusCallback: func(_ types.NamespacedName, _ graph.WAFBundleKey, err error) {
+		statusCallback: func(_ types.NamespacedName, _ graph.WAFBundleKey, _ string, err error) {
 			callbackErr = err
 		},
 	})
@@ -383,7 +383,7 @@ func Test_poller_pollSourceSuccessWithCallback(t *testing.T) {
 		deployments:       fakeDeployments,
 		targetDeployments: []types.NamespacedName{depNsName},
 		initialChecksums:  map[graph.WAFBundleKey]string{bundleKey: oldChecksum},
-		statusCallback: func(_ types.NamespacedName, _ graph.WAFBundleKey, err error) {
+		statusCallback: func(_ types.NamespacedName, _ graph.WAFBundleKey, _ string, err error) {
 			callbackCalled = true
 			callbackErr = err
 		},
@@ -1183,7 +1183,7 @@ func Test_poller_pollSourceTwoPhaseAndConditional(t *testing.T) {
 				deployments:       deployments,
 				targetDeployments: []types.NamespacedName{{Namespace: "nginx-gateway", Name: "nginx"}},
 				initialChecksums:  map[graph.WAFBundleKey]string{tc.source.BundleKey: oldChecksum},
-				statusCallback: func(_ types.NamespacedName, _ graph.WAFBundleKey, err error) {
+				statusCallback: func(_ types.NamespacedName, _ graph.WAFBundleKey, _ string, err error) {
 					callbackErr = err
 				},
 			})

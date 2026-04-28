@@ -288,8 +288,9 @@ func (h *eventHandlerImpl) sendNginxConfig(ctx context.Context, logger logr.Logg
 		err := errors.Join(configErr, upstreamErr)
 
 		obj := &status.QueueObject{
-			UpdateType: status.UpdateAll,
-			Error:      err,
+			UpdateType:    status.UpdateAll,
+			Error:         err,
+			NginxReloaded: true,
 			Deployment: status.Deployment{
 				NamespacedName: gw.DeploymentName,
 				GatewayName:    gw.Source.GetName(),
@@ -515,7 +516,7 @@ func (h *eventHandlerImpl) waitForStatusUpdates(ctx context.Context) {
 		case item.Error != nil:
 			h.cfg.logger.Error(item.Error, "Failed to update NGINX configuration")
 			nginxReloadRes.Error = item.Error
-		case gw != nil:
+		case gw != nil && item.NginxReloaded:
 			h.cfg.logger.Info("NGINX configuration was successfully updated")
 		}
 		if gw != nil {
@@ -599,8 +600,9 @@ func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph, 
 
 	polReqs := status.PrepareBackendTLSPolicyRequests(gr.BackendTLSPolicies, transitionTime, h.cfg.gatewayCtlrName)
 
-	// Merge any WAF poll errors into policy conditions before preparing status requests.
+	// Merge WAF poll results into policy conditions before preparing status requests.
 	h.mergeWAFPollErrors(gr)
+	h.mergeWAFBundleUpdates(gr)
 
 	ngfPolReqs := status.PrepareNGFPolicyRequests(gr.NGFPolicies, transitionTime, h.cfg.gatewayCtlrName)
 	snippetsFilterReqs := status.PrepareSnippetsFilterRequests(
@@ -696,9 +698,41 @@ func (h *eventHandlerImpl) mergeWAFPollErrors(gr *graph.Graph) {
 		// Replace any existing condition with the same Type+Reason so that repeated
 		// calls (e.g., multiple status updates reusing the same graph) don't accumulate
 		// duplicate conditions.
-		cond := conditions.NewPolicyProgrammedStaleBundleWarning(
-			fmt.Sprintf("polling %s: %s", pollError.BundleKey, pollError.Err.Error()),
-		)
+		cond := conditions.NewPolicyProgrammedStaleBundleWarning(pollError.Err.Error())
+
+		replaced := false
+		for i, existing := range policy.Conditions {
+			if existing.Type == cond.Type && existing.Reason == cond.Reason {
+				policy.Conditions[i] = cond
+				replaced = true
+				break
+			}
+		}
+		if !replaced {
+			policy.Conditions = append(policy.Conditions, cond)
+		}
+	}
+}
+
+// mergeWAFBundleUpdates adds a BundleUpdated condition to policies whose bundle was successfully
+// refreshed by the poller since the last status update.
+func (h *eventHandlerImpl) mergeWAFBundleUpdates(gr *graph.Graph) {
+	if h.cfg.wafPollerManager == nil {
+		return
+	}
+
+	for policyNsName, update := range h.cfg.wafPollerManager.GetAllBundleUpdates() {
+		policyKey := findWAFPolicyKey(gr, policyNsName)
+		if policyKey == nil {
+			continue
+		}
+
+		policy := gr.NGFPolicies[*policyKey]
+		if policy == nil || !policy.Valid {
+			continue
+		}
+
+		cond := conditions.NewPolicyProgrammedBundleUpdated(update.Checksum, update.UpdatedAt)
 
 		replaced := false
 		for i, existing := range policy.Conditions {

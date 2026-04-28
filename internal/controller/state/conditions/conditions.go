@@ -2,6 +2,7 @@ package conditions
 
 import (
 	"fmt"
+	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
@@ -143,6 +144,10 @@ const (
 
 	// PolicyReasonStaleBundleWarning is used when a bundle fetch fails but a previously fetched bundle is used.
 	PolicyReasonStaleBundleWarning v1.PolicyConditionReason = "StaleBundleWarning"
+
+	// PolicyReasonBundleUpdated is used when polling detects a changed bundle and successfully
+	// pushes the new bundle to the data plane.
+	PolicyReasonBundleUpdated v1.PolicyConditionReason = "BundleUpdated"
 
 	// ClientSettingsPolicyAffected is used with the "PolicyAffected" condition when a
 	// ClientSettingsPolicy is applied to a Gateway, HTTPRoute, or GRPCRoute.
@@ -1488,6 +1493,17 @@ func NewPolicyNotProgrammedIntegrityError(errMsg string) Condition {
 		Status:  metav1.ConditionFalse,
 		Reason:  string(PolicyReasonIntegrityError),
 		Message: fmt.Sprintf("Bundle integrity check failed: %s", errMsg),
+	}
+}
+
+// NewPolicyProgrammedBundleUpdated returns a Condition that indicates polling detected a changed
+// bundle and successfully pushed it to the data plane.
+func NewPolicyProgrammedBundleUpdated(checksum string, updatedAt metav1.Time) Condition {
+	return Condition{
+		Type:    string(WAFProgrammedConditionType),
+		Status:  metav1.ConditionTrue,
+		Reason:  string(PolicyReasonBundleUpdated),
+		Message: fmt.Sprintf("Bundle updated at %s (checksum: %s)", updatedAt.UTC().Format(time.RFC3339), checksum),
 	}
 }
 

@@ -276,4 +276,8 @@ func (fake *FakePollerManager) recordInvocation(key string, args []interface{}) 
 	fake.invocations[key] = append(fake.invocations[key], args)
 }
 
+func (fake *FakePollerManager) GetAllBundleUpdates() map[types.NamespacedName]poller.BundleUpdate {
+	return nil
+}
+
 var _ poller.Manager = new(FakePollerManager)

@@ -51,11 +51,16 @@ type bundleState struct {
 // poller handles periodic re-fetching of WAF bundles for a single WAFPolicy.
 // It compares checksums to detect changes and pushes updated bundles to relevant deployments.
 type poller struct {
-	fetcher              fetch.Fetcher
-	deployments          agent.DeploymentStorer
-	targetDeployments    map[types.NamespacedName]struct{}
-	bundleStates         map[graph.WAFBundleKey]bundleState
-	statusCallback       func(policyNsName types.NamespacedName, bundleKey graph.WAFBundleKey, err error)
+	fetcher           fetch.Fetcher
+	deployments       agent.DeploymentStorer
+	targetDeployments map[types.NamespacedName]struct{}
+	bundleStates      map[graph.WAFBundleKey]bundleState
+	statusCallback    func(
+		policyNsName types.NamespacedName,
+		bundleKey graph.WAFBundleKey,
+		newChecksum string,
+		err error,
+	)
 	bundleUpdateCallback func(bundleKey graph.WAFBundleKey, data []byte, checksum string)
 	policyNsName         types.NamespacedName
 	logger               logr.Logger
@@ -66,10 +71,15 @@ type poller struct {
 
 // pollerConfig contains the configuration for creating a new poller.
 type pollerConfig struct {
-	fetcher              fetch.Fetcher
-	deployments          agent.DeploymentStorer
-	initialChecksums     map[graph.WAFBundleKey]string
-	statusCallback       func(policyNsName types.NamespacedName, bundleKey graph.WAFBundleKey, err error)
+	fetcher          fetch.Fetcher
+	deployments      agent.DeploymentStorer
+	initialChecksums map[graph.WAFBundleKey]string
+	statusCallback   func(
+		policyNsName types.NamespacedName,
+		bundleKey graph.WAFBundleKey,
+		newChecksum string,
+		err error,
+	)
 	bundleUpdateCallback func(bundleKey graph.WAFBundleKey, data []byte, checksum string)
 	policyNsName         types.NamespacedName
 	logger               logr.Logger
@@ -214,7 +224,7 @@ func (p *poller) pollSource(ctx context.Context, src BundleSource) {
 
 	result, err := p.downloadBundle(ctx, src, last)
 	if err != nil || result.Unchanged || result.Checksum == last.checksum {
-		p.reportStatus(src.BundleKey, err)
+		p.reportStatus(src.BundleKey, "", err)
 		return
 	}
 
@@ -225,7 +235,7 @@ func (p *poller) pollSource(ctx context.Context, src BundleSource) {
 	if p.bundleUpdateCallback != nil {
 		p.bundleUpdateCallback(src.BundleKey, result.Data, result.Checksum)
 	}
-	p.reportStatus(src.BundleKey, nil)
+	p.reportStatus(src.BundleKey, result.Checksum, nil)
 }
 
 // skipIfChecksumUnchanged fetches only the remote checksum for a NIM or N1C source.
@@ -235,12 +245,12 @@ func (p *poller) skipIfChecksumUnchanged(ctx context.Context, src BundleSource, 
 	changed, checksum, err := p.checksumChanged(ctx, src, lastChecksum)
 	if err != nil {
 		p.logger.Error(err, "Failed to fetch bundle checksum during poll")
-		p.reportStatus(src.BundleKey, err)
+		p.reportStatus(src.BundleKey, "", err)
 		return true
 	}
 	if !changed {
 		p.logger.V(1).Info("Bundle unchanged, skipping download")
-		p.reportStatus(src.BundleKey, nil)
+		p.reportStatus(src.BundleKey, "", nil)
 		return true
 	}
 	p.logger.Info("Bundle checksum changed, downloading full bundle", "newChecksum", checksum)
@@ -282,9 +292,10 @@ func (p *poller) saveBundleState(bundleKey graph.WAFBundleKey, result fetch.Resu
 }
 
 // reportStatus fires the status callback if one is registered.
-func (p *poller) reportStatus(bundleKey graph.WAFBundleKey, err error) {
+// newChecksum is non-empty when the bundle was successfully updated; empty for unchanged or error cases.
+func (p *poller) reportStatus(bundleKey graph.WAFBundleKey, newChecksum string, err error) {
 	if p.statusCallback != nil {
-		p.statusCallback(p.policyNsName, bundleKey, err)
+		p.statusCallback(p.policyNsName, bundleKey, newChecksum, err)
 	}
 }
 

@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/go-logr/logr"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent"
@@ -22,6 +23,13 @@ type PollError struct {
 	BundleKey graph.WAFBundleKey
 }
 
+// BundleUpdate records the most recent successful bundle push for a bundle key.
+type BundleUpdate struct {
+	UpdatedAt metav1.Time
+	BundleKey graph.WAFBundleKey
+	Checksum  string
+}
+
 // Manager is the interface for managing WAF bundle pollers.
 //
 //counterfeiter:generate . Manager
@@ -30,6 +38,8 @@ type Manager interface {
 	ReconcilePoller(ctx context.Context, cfg Config)
 	// GetAllPollErrors returns a deep copy of all current poll errors.
 	GetAllPollErrors() map[types.NamespacedName]PollError
+	// GetAllBundleUpdates returns a copy of the most recent successful bundle update per policy.
+	GetAllBundleUpdates() map[types.NamespacedName]BundleUpdate
 	// GetLatestBundles returns a copy of all bundles that have been successfully fetched by pollers.
 	// These represent the freshest known bundle data and should take precedence over
 	// graph-cached bundles when constructing stale-bundle fallback state.
@@ -43,11 +53,12 @@ type Manager interface {
 // pollerManager manages the lifecycle of all WAF bundle pollers.
 // It creates, tracks, and stops pollers as WAFPolicies are created, updated, or deleted.
 type pollerManager struct {
-	fetcher     fetch.Fetcher
-	deployments agent.DeploymentStorer
-	pollers     map[types.NamespacedName]*pollerEntry
-	pollErrors  map[types.NamespacedName]*PollError
-	bundleCache map[graph.WAFBundleKey]*graph.WAFBundleData
+	fetcher       fetch.Fetcher
+	deployments   agent.DeploymentStorer
+	pollers       map[types.NamespacedName]*pollerEntry
+	pollErrors    map[types.NamespacedName]*PollError
+	bundleUpdates map[types.NamespacedName]BundleUpdate
+	bundleCache   map[graph.WAFBundleKey]*graph.WAFBundleData
 	// bundleKeyToPolicy maps each bundle key to the policy that owns it.
 	// Used to look up the policy namespace/name when injecting a WAFBundleReconcileEvent.
 	bundleKeyToPolicy map[graph.WAFBundleKey]types.NamespacedName
@@ -93,6 +104,7 @@ func NewManager(cfg ManagerConfig) Manager {
 		deployments:       cfg.Deployments,
 		pollers:           make(map[types.NamespacedName]*pollerEntry),
 		pollErrors:        make(map[types.NamespacedName]*PollError),
+		bundleUpdates:     make(map[types.NamespacedName]BundleUpdate),
 		bundleCache:       make(map[graph.WAFBundleKey]*graph.WAFBundleData),
 		bundleKeyToPolicy: make(map[graph.WAFBundleKey]types.NamespacedName),
 		statusCallback:    cfg.StatusCallback,
@@ -155,8 +167,13 @@ func (m *pollerManager) startPoller(ctx context.Context, cfg Config) {
 
 	// Create a wrapped callback that records poll results and triggers a status update
 	// scoped to just the poller's target deployments.
-	wrappedCallback := func(policyNsName types.NamespacedName, bundleKey graph.WAFBundleKey, err error) {
-		m.recordPollResult(policyNsName, bundleKey, err)
+	wrappedCallback := func(
+		policyNsName types.NamespacedName,
+		bundleKey graph.WAFBundleKey,
+		newChecksum string,
+		err error,
+	) {
+		m.recordPollResult(policyNsName, bundleKey, newChecksum, err)
 		if m.statusCallback != nil {
 			m.statusCallback(poller.getTargetDeployments())
 		}
@@ -199,10 +216,16 @@ func (m *pollerManager) startPoller(ctx context.Context, cfg Config) {
 }
 
 // recordPollResult records the result of a poll attempt for a policy.
-// If err is nil, it clears any previous error only if it was for the same bundle key.
+// If err is nil, it clears any previous error for the same bundle key.
+// If newChecksum is non-empty, the bundle was successfully updated and the update is recorded.
 // If err is non-nil, it stores the error for this bundle key.
 // This method is called by the internal status callback.
-func (m *pollerManager) recordPollResult(policyNsName types.NamespacedName, bundleKey graph.WAFBundleKey, err error) {
+func (m *pollerManager) recordPollResult(
+	policyNsName types.NamespacedName,
+	bundleKey graph.WAFBundleKey,
+	newChecksum string,
+	err error,
+) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -210,12 +233,33 @@ func (m *pollerManager) recordPollResult(policyNsName types.NamespacedName, bund
 		if existing := m.pollErrors[policyNsName]; existing != nil && existing.BundleKey == bundleKey {
 			delete(m.pollErrors, policyNsName)
 		}
+		if newChecksum != "" {
+			m.bundleUpdates[policyNsName] = BundleUpdate{
+				BundleKey: bundleKey,
+				Checksum:  newChecksum,
+				UpdatedAt: metav1.Now(),
+			}
+		}
 	} else {
 		m.pollErrors[policyNsName] = &PollError{
 			BundleKey: bundleKey,
 			Err:       err,
 		}
 	}
+}
+
+// GetAllBundleUpdates returns a copy of the most recent successful bundle update per policy.
+func (m *pollerManager) GetAllBundleUpdates() map[types.NamespacedName]BundleUpdate {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	if len(m.bundleUpdates) == 0 {
+		return nil
+	}
+
+	result := make(map[types.NamespacedName]BundleUpdate, len(m.bundleUpdates))
+	maps.Copy(result, m.bundleUpdates)
+	return result
 }
 
 // cacheBundleUpdate stores the latest successfully polled bundle data in the manager's cache.
@@ -301,7 +345,8 @@ func (m *pollerManager) StopPoller(policyNsName types.NamespacedName) {
 		return
 	}
 	delete(m.pollers, policyNsName)
-	delete(m.pollErrors, policyNsName) // Clear any poll error when stopping.
+	delete(m.pollErrors, policyNsName)
+	delete(m.bundleUpdates, policyNsName)
 	m.clearBundleCacheLocked(entry.poller)
 	m.mu.Unlock()
 
@@ -318,6 +363,7 @@ func (m *pollerManager) stopAll() {
 	}
 	m.pollers = make(map[types.NamespacedName]*pollerEntry)
 	m.pollErrors = make(map[types.NamespacedName]*PollError)
+	m.bundleUpdates = make(map[types.NamespacedName]BundleUpdate)
 	m.bundleCache = make(map[graph.WAFBundleKey]*graph.WAFBundleData)
 	m.bundleKeyToPolicy = make(map[graph.WAFBundleKey]types.NamespacedName)
 	m.mu.Unlock()
@@ -354,7 +400,8 @@ func (m *pollerManager) StopPollersNotIn(activePolicies map[types.NamespacedName
 		if entry, exists := m.pollers[nsName]; exists {
 			entriesToCancel = append(entriesToCancel, entry)
 			delete(m.pollers, nsName)
-			delete(m.pollErrors, nsName) // Clear any poll error when stopping.
+			delete(m.pollErrors, nsName)
+			delete(m.bundleUpdates, nsName)
 			m.clearBundleCacheLocked(entry.poller)
 		}
 	}
