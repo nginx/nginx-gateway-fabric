@@ -11,7 +11,7 @@ spec:
         kubernetes.io/hostname: "to be replaced by the test"
       containers:
         - name: node-debugger-container
-          image: ubuntu:24.04
+          image: ubuntu:26.04
           command: ["/bin/bash", "-c"]
           args: ["pkill -x \"nginx-agent\""]
           securityContext:
