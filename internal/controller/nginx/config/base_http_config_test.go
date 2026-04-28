@@ -170,9 +170,13 @@ func TestExecuteBaseHttp_HTTP2(t *testing.T) {
 
 func TestExecuteBaseHttp_WAF(t *testing.T) {
 	t.Parallel()
+
+	const cookieSeed = "test-gateway-uid-1234"
+
 	confOn := dataplane.Configuration{
 		WAF: dataplane.WAFConfig{
-			Enabled: true,
+			Enabled:    true,
+			CookieSeed: cookieSeed,
 		},
 	}
 
@@ -182,22 +186,31 @@ func TestExecuteBaseHttp_WAF(t *testing.T) {
 		},
 	}
 
-	expSubStr := "app_protect_enforcer_address 127.0.0.1:50000;"
-
 	tests := []struct {
-		name     string
-		conf     dataplane.Configuration
-		expCount int
+		name                 string
+		conf                 dataplane.Configuration
+		expEnforcerCount     int
+		expCookieSeedPresent bool
 	}{
 		{
-			name:     "waf on",
-			conf:     confOn,
-			expCount: 1,
+			name:                 "waf on",
+			conf:                 confOn,
+			expEnforcerCount:     1,
+			expCookieSeedPresent: true,
 		},
 		{
-			name:     "waf off",
-			expCount: 0,
-			conf:     confOff,
+			name:                 "waf off",
+			conf:                 confOff,
+			expEnforcerCount:     0,
+			expCookieSeedPresent: false,
+		},
+		{
+			name: "waf on, cookie seed disabled",
+			conf: dataplane.Configuration{
+				WAF: dataplane.WAFConfig{Enabled: true, CookieSeed: ""},
+			},
+			expEnforcerCount:     1,
+			expCookieSeedPresent: false,
 		},
 	}
 
@@ -208,7 +221,16 @@ func TestExecuteBaseHttp_WAF(t *testing.T) {
 
 			res := executeBaseHTTPConfig(test.conf, &policiesfakes.FakeGenerator{})
 			g.Expect(res).To(HaveLen(1))
-			g.Expect(test.expCount).To(Equal(strings.Count(string(res[0].data), expSubStr)))
+
+			data := string(res[0].data)
+			g.Expect(strings.Count(data, "app_protect_enforcer_address 127.0.0.1:50000;")).
+				To(Equal(test.expEnforcerCount))
+
+			if test.expCookieSeedPresent {
+				g.Expect(data).To(ContainSubstring("app_protect_cookie_seed " + cookieSeed + ";"))
+			} else {
+				g.Expect(data).NotTo(ContainSubstring("app_protect_cookie_seed"))
+			}
 		})
 	}
 }

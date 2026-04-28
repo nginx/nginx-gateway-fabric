@@ -5,3 +5,6 @@ metadata:
 spec:
   waf:
     enabled: true
+  kubernetes:
+    deployment:
+      replicas: 2

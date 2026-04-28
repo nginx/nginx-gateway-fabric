@@ -557,7 +557,7 @@ func TestBuildEffectiveNginxProxy_WAF(t *testing.T) {
 				Valid: true,
 				Source: &ngfAPIv1alpha2.NginxProxy{
 					Spec: ngfAPIv1alpha2.NginxProxySpec{
-						WAFEnabled: false,
+						WAF: &ngfAPIv1alpha2.WAFSpec{Enable: helpers.GetPointer(false)},
 					},
 				},
 			},
@@ -565,12 +565,12 @@ func TestBuildEffectiveNginxProxy_WAF(t *testing.T) {
 				Valid: true,
 				Source: &ngfAPIv1alpha2.NginxProxy{
 					Spec: ngfAPIv1alpha2.NginxProxySpec{
-						WAFEnabled: true,
+						WAF: &ngfAPIv1alpha2.WAFSpec{Enable: helpers.GetPointer(true)},
 					},
 				},
 			},
 			exp: &EffectiveNginxProxy{
-				WAFEnabled: true,
+				WAF: &ngfAPIv1alpha2.WAFSpec{Enable: helpers.GetPointer(true)},
 			},
 		},
 		{
@@ -579,7 +579,7 @@ func TestBuildEffectiveNginxProxy_WAF(t *testing.T) {
 				Valid: true,
 				Source: &ngfAPIv1alpha2.NginxProxy{
 					Spec: ngfAPIv1alpha2.NginxProxySpec{
-						WAFEnabled: true,
+						WAF: &ngfAPIv1alpha2.WAFSpec{Enable: helpers.GetPointer(true)},
 					},
 				},
 			},
@@ -592,7 +592,32 @@ func TestBuildEffectiveNginxProxy_WAF(t *testing.T) {
 				},
 			},
 			exp: &EffectiveNginxProxy{
-				WAFEnabled: true,
+				WAF: &ngfAPIv1alpha2.WAFSpec{Enable: helpers.GetPointer(true)},
+			},
+		},
+		{
+			name: "gateway class enables WAF, gateway overrides only disableCookieSeed",
+			gcNp: &NginxProxy{
+				Valid: true,
+				Source: &ngfAPIv1alpha2.NginxProxy{
+					Spec: ngfAPIv1alpha2.NginxProxySpec{
+						WAF: &ngfAPIv1alpha2.WAFSpec{Enable: helpers.GetPointer(true)},
+					},
+				},
+			},
+			gwNp: &NginxProxy{
+				Valid: true,
+				Source: &ngfAPIv1alpha2.NginxProxy{
+					Spec: ngfAPIv1alpha2.NginxProxySpec{
+						WAF: &ngfAPIv1alpha2.WAFSpec{DisableCookieSeed: helpers.GetPointer(true)},
+					},
+				},
+			},
+			exp: &EffectiveNginxProxy{
+				WAF: &ngfAPIv1alpha2.WAFSpec{
+					Enable:            helpers.GetPointer(true),
+					DisableCookieSeed: helpers.GetPointer(true),
+				},
 			},
 		},
 		{
@@ -601,7 +626,7 @@ func TestBuildEffectiveNginxProxy_WAF(t *testing.T) {
 				Valid: true,
 				Source: &ngfAPIv1alpha2.NginxProxy{
 					Spec: ngfAPIv1alpha2.NginxProxySpec{
-						WAFEnabled: false,
+						WAF: &ngfAPIv1alpha2.WAFSpec{Enable: helpers.GetPointer(false)},
 					},
 				},
 			},
@@ -609,12 +634,12 @@ func TestBuildEffectiveNginxProxy_WAF(t *testing.T) {
 				Valid: true,
 				Source: &ngfAPIv1alpha2.NginxProxy{
 					Spec: ngfAPIv1alpha2.NginxProxySpec{
-						WAFEnabled: false,
+						WAF: &ngfAPIv1alpha2.WAFSpec{Enable: helpers.GetPointer(false)},
 					},
 				},
 			},
 			exp: &EffectiveNginxProxy{
-				WAFEnabled: false,
+				WAF: &ngfAPIv1alpha2.WAFSpec{Enable: helpers.GetPointer(false)},
 			},
 		},
 		{
@@ -642,7 +667,7 @@ func TestBuildEffectiveNginxProxy_WAF(t *testing.T) {
 
 			enp := buildEffectiveNginxProxy(test.gcNp, test.gwNp)
 			g.Expect(enp).ToNot(BeNil())
-			g.Expect(enp.WAFEnabled).To(Equal(test.exp.WAFEnabled))
+			g.Expect(enp.WAF).To(Equal(test.exp.WAF))
 		})
 	}
 }

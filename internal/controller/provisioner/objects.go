@@ -579,7 +579,7 @@ func (p *NginxProvisioner) buildAgentConfigMap(
 	}
 
 	if nProxyCfg != nil {
-		if nProxyCfg.WAFEnabled {
+		if graph.WAFEnabledForNginxProxy(nProxyCfg) {
 			agentFields["WafEnabled"] = true
 		}
 

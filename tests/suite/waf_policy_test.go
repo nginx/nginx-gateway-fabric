@@ -474,6 +474,133 @@ var _ = Describe("WAFPolicy", Ordered, Label("waf"), func() {
 		})
 	})
 
+	Context("when the NGINX deployment is scaled to multiple replicas", Ordered, func() {
+		// This context verifies that WAF policy is enforced on every replica — each pod
+		// must receive the policy bundle and apply the app_protect directives independently.
+		policyFiles := []string{"waf-policy/wafpolicy.yaml"}
+		proxyFiles := []string{"waf-policy/nginx-proxy-2-replicas.yaml"}
+		var nginxPodNames []string
+
+		BeforeAll(func() {
+			Expect(resourceManager.ApplyFromFiles(policyFiles, namespace)).To(Succeed())
+			nsname := types.NamespacedName{Name: "gateway-waf", Namespace: namespace}
+			Expect(waitForWAFPolicyAccepted(nsname)).To(Succeed())
+
+			Expect(resourceManager.ApplyFromFiles(proxyFiles, namespace)).To(Succeed())
+
+			Eventually(func() bool {
+				var err error
+				nginxPodNames, err = resourceManager.GetReadyNginxPodNames(namespace, timeoutConfig.GetStatusTimeout)
+				return len(nginxPodNames) == 2 && err == nil
+			}).
+				WithTimeout(timeoutConfig.UpdateTimeout).
+				WithPolling(2*time.Second).
+				Should(BeTrue(), "expected 2 ready NGINX pods after scale-up")
+		})
+
+		AfterAll(func() {
+			Expect(resourceManager.DeleteFromFiles(policyFiles, namespace)).To(Succeed())
+			// Restore single-replica proxy so subsequent contexts see a single pod.
+			Expect(resourceManager.ApplyFromFiles(proxyFile, namespace)).To(Succeed())
+
+			Eventually(func() bool {
+				names, err := resourceManager.GetReadyNginxPodNames(namespace, timeoutConfig.GetStatusTimeout)
+				return len(names) == 1 && err == nil
+			}).
+				WithTimeout(timeoutConfig.UpdateTimeout).
+				WithPolling(2*time.Second).
+				Should(BeTrue(), "expected 1 ready NGINX pod after scale-down")
+
+			// Update nginxPodName and restart the port-forward so subsequent contexts target the
+			// surviving pod rather than one that may have been deleted during scale-down.
+			remainingPods, err := resourceManager.GetReadyNginxPodNames(namespace, timeoutConfig.GetStatusTimeout)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(remainingPods).To(HaveLen(1))
+			cleanUpPortForward()
+			nginxPodName = remainingPods[0]
+			setUpPortForward(nginxPodName, namespace)
+		})
+
+		It("has app_protect_cookie_seed set to the Gateway UID on all replicas", func() {
+			// app_protect_cookie_seed must equal the Gateway UID on every replica so that WAF
+			// session cookies issued by one pod can be decrypted by any other pod in the deployment.
+			ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.GetStatusTimeout)
+			defer cancel()
+
+			var gw v1.Gateway
+			Expect(resourceManager.Get(
+				ctx,
+				types.NamespacedName{Name: "gateway", Namespace: namespace},
+				&gw,
+			)).To(Succeed())
+			expectedSeed := string(gw.UID)
+			Expect(expectedSeed).ToNot(BeEmpty(), "Gateway UID must be non-empty")
+
+			for _, podName := range nginxPodNames {
+				Eventually(func() error {
+					conf, err := resourceManager.GetNginxConfig(podName, namespace, nginxCrossplanePath)
+					if err != nil {
+						return fmt.Errorf("failed to get NGINX config from pod %q: %w", podName, err)
+					}
+
+					var seed string
+					if err := framework.ValidateNginxFieldExists(conf, framework.ExpectedNginxField{
+						Directive:    "app_protect_cookie_seed",
+						File:         "http.conf",
+						CaptureValue: &seed,
+					}); err != nil {
+						return fmt.Errorf("pod %q missing app_protect_cookie_seed directive: %w", podName, err)
+					}
+					if seed != expectedSeed {
+						return fmt.Errorf(
+							"pod %q: app_protect_cookie_seed = %q, want %q (Gateway UID)",
+							podName, seed, expectedSeed,
+						)
+					}
+					return nil
+				}).WithTimeout(timeoutConfig.GetStatusTimeout).WithPolling(500*time.Millisecond).
+					Should(Succeed(), "pod %q never received correct app_protect_cookie_seed", podName)
+			}
+		})
+
+		It("propagates WAF config to all replicas and blocks an attack via the load balancer", func() {
+			// Verify config propagation: every pod must have the app_protect_enable directive.
+			// Attack blocking is verified with a single request via the shared address/port-forward —
+			// it does not prove each individual replica is enforcing, but confirms WAF is active.
+			port := 80
+			if portFwdPort != 0 {
+				port = portFwdPort
+			}
+			attackURL := fmt.Sprintf("http://cafe.example.com:%d/coffee?x=%%3C%%2Fscript%%3E", port)
+
+			for _, podName := range nginxPodNames {
+				conf, err := resourceManager.GetNginxConfig(podName, namespace, nginxCrossplanePath)
+				Expect(err).ToNot(HaveOccurred(), "failed to get NGINX config from pod %q", podName)
+
+				Expect(framework.ValidateNginxFieldExists(conf, framework.ExpectedNginxField{
+					Directive: "app_protect_enable",
+					Value:     "on",
+					File:      fmt.Sprintf("WAFPolicy_%s_gateway-waf.conf", namespace),
+				})).To(Succeed(), "pod %q missing app_protect_enable directive", podName)
+			}
+
+			Eventually(func() (bool, error) {
+				resp, err := framework.Get(framework.Request{
+					URL:     attackURL,
+					Address: address,
+					Timeout: timeoutConfig.RequestTimeout,
+				})
+				if err != nil {
+					return false, err
+				}
+				return strings.Contains(resp.Body, "Request Rejected"), nil
+			}).
+				WithTimeout(timeoutConfig.RequestTimeout).
+				WithPolling(500*time.Millisecond).
+				Should(BeTrue(), "expected WAF to block XSS attack signature")
+		})
+	})
+
 	Context("when a WAFPolicy is deleted", Ordered, func() {
 		policyFiles := []string{"waf-policy/wafpolicy.yaml"}
 
