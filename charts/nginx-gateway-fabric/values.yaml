@@ -125,7 +125,7 @@ nginxGateway:
     # minimum: 1
     # @schema
     # -- How often (in seconds) to perform the readiness probe.
-    periodSeconds: 1
+    periodSeconds: 10
 
     # @schema
     # type: integer
@@ -167,7 +167,7 @@ nginxGateway:
 
   # @schema
   # type: object
-  # description: The lifecycle hooks for the nginx-gateway container. See https://kubernetes.io/docs/tasks/configure-pod-container/define-lifecycle-hook/q
+  # description: The lifecycle hooks for the nginx-gateway container. See https://kubernetes.io/docs/tasks/configure-pod-container/define-lifecycle-hook/
   # @schema
   # -- The lifecycle of the nginx-gateway container.
   lifecycle: {}

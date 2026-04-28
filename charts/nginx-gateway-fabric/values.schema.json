@@ -988,7 +988,7 @@
           "type": "object"
         },
         "lifecycle": {
-          "description": "The lifecycle hooks for the nginx-gateway container. See https://kubernetes.io/docs/tasks/configure-pod-container/define-lifecycle-hook/q",
+          "description": "The lifecycle hooks for the nginx-gateway container. See https://kubernetes.io/docs/tasks/configure-pod-container/define-lifecycle-hook/",
           "required": [],
           "title": "lifecycle",
           "type": "object"
@@ -1081,7 +1081,7 @@
               "type": "integer"
             },
             "periodSeconds": {
-              "default": 1,
+              "default": 10,
               "description": "How often (in seconds) to perform the readiness probe.",
               "minimum": 1,
               "title": "periodSeconds",
