@@ -1802,9 +1802,7 @@ func TestMergeWAFPollErrors(t *testing.T) {
 
 			if tt.expectCondCount > 0 {
 				cond := tt.policy.Conditions[0]
-				expectedCond := conditions.NewPolicyProgrammedStaleBundleWarning(
-					"polling " + string(bundleKey) + ": fetch timeout",
-				)
+				expectedCond := conditions.NewPolicyProgrammedStaleBundleWarning("fetch timeout")
 				g.Expect(cond).To(Equal(expectedCond))
 			}
 		})
@@ -1886,9 +1884,7 @@ func TestMergeWAFPollErrors(t *testing.T) {
 		handler.mergeWAFPollErrors(gr)
 
 		g.Expect(policy.Conditions).To(HaveLen(1))
-		expectedCond := conditions.NewPolicyProgrammedStaleBundleWarning(
-			"polling " + string(bundleKey) + ": connection refused",
-		)
+		expectedCond := conditions.NewPolicyProgrammedStaleBundleWarning("connection refused")
 		g.Expect(policy.Conditions[0]).To(Equal(expectedCond))
 	})
 }
