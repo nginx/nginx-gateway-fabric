@@ -589,7 +589,7 @@ func TestAddBackendRefsToRules(t *testing.T) {
 
 	sectionNameRefs := []ParentRef{
 		{
-			Kind:           "Gateway",
+			Kind:           kinds.Gateway,
 			NamespacedName: types.NamespacedName{Namespace: "test", Name: "gateway"},
 			Idx:            0,
 			Attachment: &ParentRefAttachmentStatus{
@@ -1641,7 +1641,7 @@ func TestCreateBackend(t *testing.T) {
 					return backend
 				}),
 			},
-			parentRefKind: "ListenerSet", // Special case for ListenerSet
+			parentRefKind: kinds.ListenerSet, // Special case for ListenerSet
 			expectedBackend: BackendRef{
 				SvcNsName:          types.NamespacedName{Namespace: "test", Name: "external-service"},
 				ServicePort:        v1.ServicePort{Port: 80},
@@ -1700,7 +1700,7 @@ func TestCreateBackend(t *testing.T) {
 				},
 				ParentRefs: []ParentRef{
 					{
-						Kind:                "Gateway",
+						Kind:                kinds.Gateway,
 						NamespacedName:      types.NamespacedName{Namespace: "test", Name: "gateway"},
 						EffectiveNginxProxy: test.nginxProxySpec,
 					},
@@ -1709,10 +1709,10 @@ func TestCreateBackend(t *testing.T) {
 
 			// Handle ListenerSet parentRef case by not setting Gateway settings
 			// in ParentRef, which will cause createBackendRef to skip DNS resolver validation
-			if test.parentRefKind == "ListenerSet" {
+			if test.parentRefKind == kinds.ListenerSet {
 				route.ParentRefs = []ParentRef{
 					{
-						Kind:           "ListenerSet",
+						Kind:           kinds.ListenerSet,
 						NamespacedName: types.NamespacedName{Namespace: "test", Name: "listener-set"},
 					},
 				}
@@ -1721,7 +1721,7 @@ func TestCreateBackend(t *testing.T) {
 			// Special case: for the multiple gateways test, add a second gateway
 			if test.name == "ExternalName service with multiple gateways - mixed DNS resolver config" {
 				route.ParentRefs = append(route.ParentRefs, ParentRef{
-					Kind:           "Gateway",
+					Kind:           kinds.Gateway,
 					NamespacedName: types.NamespacedName{Namespace: "test", Name: "gateway2"},
 				})
 				// For this test, the first gateway should have DNS resolver
@@ -1769,7 +1769,7 @@ func TestCreateBackend(t *testing.T) {
 		},
 		ParentRefs: []ParentRef{
 			{
-				Kind:           "Gateway",
+				Kind:           kinds.Gateway,
 				NamespacedName: types.NamespacedName{Namespace: "test", Name: "gateway"},
 			},
 		},

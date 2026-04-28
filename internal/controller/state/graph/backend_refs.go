@@ -465,7 +465,7 @@ func checkExternalNameValidForGateways(
 	invalidForGateways map[types.NamespacedName]conditions.Condition,
 ) map[types.NamespacedName]conditions.Condition {
 	for _, parentRef := range parentRefs {
-		if parentRef.Kind == "Gateway" &&
+		if parentRef.Kind == kinds.Gateway &&
 			(parentRef.EffectiveNginxProxy == nil ||
 				parentRef.EffectiveNginxProxy.DNSResolver == nil) {
 			invalidForGateways[parentRef.NamespacedName] = conditions.NewRouteBackendRefUnsupportedValue(

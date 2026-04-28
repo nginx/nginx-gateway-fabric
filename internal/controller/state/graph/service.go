@@ -4,6 +4,8 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
 
 // A ReferencedService represents a Kubernetes Service that is referenced by a Route and the Gateways it belongs to.
@@ -96,11 +98,11 @@ func routeBelongsToGateway(
 ) bool {
 	for _, ref := range refs {
 		switch ref.Kind {
-		case "Gateway":
+		case kinds.Gateway:
 			if ref.NamespacedName == gwKey {
 				return true
 			}
-		case "ListenerSet":
+		case kinds.ListenerSet:
 			if listenerSets[ref.NamespacedName] != nil &&
 				listenerSets[ref.NamespacedName].Gateway != nil &&
 				client.ObjectKeyFromObject(listenerSets[ref.NamespacedName].Gateway) == gwKey {

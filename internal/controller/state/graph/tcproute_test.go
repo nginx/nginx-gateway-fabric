@@ -12,6 +12,7 @@ import (
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
 
 func createTCPRoute(
@@ -39,7 +40,7 @@ func TestBuildTCPRoute(t *testing.T) {
 		Namespace:   helpers.GetPointer[gatewayv1.Namespace]("test"),
 		Name:        "gateway",
 		SectionName: helpers.GetPointer[gatewayv1.SectionName]("l1"),
-		Kind:        helpers.GetPointer[gatewayv1.Kind]("Gateway"),
+		Kind:        helpers.GetPointer[gatewayv1.Kind](kinds.Gateway),
 	}
 
 	createGateway := func() *Gateway {
@@ -56,7 +57,7 @@ func TestBuildTCPRoute(t *testing.T) {
 
 	gatewayParentRefGraph := ParentRef{
 		SectionName: helpers.GetPointer[gatewayv1.SectionName]("l1"),
-		Kind:        gatewayv1.Kind("Gateway"),
+		Kind:        gatewayv1.Kind(kinds.Gateway),
 		NamespacedName: types.NamespacedName{
 			Namespace: "test",
 			Name:      "gateway",
@@ -67,7 +68,7 @@ func TestBuildTCPRoute(t *testing.T) {
 		Namespace:   helpers.GetPointer[gatewayv1.Namespace]("test"),
 		Name:        "listener-set",
 		SectionName: helpers.GetPointer[gatewayv1.SectionName]("ls-l1"),
-		Kind:        helpers.GetPointer[gatewayv1.Kind]("ListenerSet"),
+		Kind:        helpers.GetPointer[gatewayv1.Kind](kinds.ListenerSet),
 	}
 
 	listenerSets := map[types.NamespacedName]*ListenerSet{
@@ -84,7 +85,7 @@ func TestBuildTCPRoute(t *testing.T) {
 
 	listenerSetParentRefGraph := ParentRef{
 		SectionName: helpers.GetPointer[gatewayv1.SectionName]("ls-l1"),
-		Kind:        gatewayv1.Kind("ListenerSet"),
+		Kind:        gatewayv1.Kind(kinds.ListenerSet),
 		NamespacedName: types.NamespacedName{
 			Namespace: "test",
 			Name:      "listener-set",

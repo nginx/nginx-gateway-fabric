@@ -10,6 +10,7 @@ import (
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
 
 func TestBuildReferencedServices(t *testing.T) {
@@ -47,11 +48,11 @@ func TestBuildReferencedServices(t *testing.T) {
 
 	parentRefs := []ParentRef{
 		{
-			Kind:           "Gateway",
+			Kind:           kinds.Gateway,
 			NamespacedName: gwNsName,
 		},
 		{
-			Kind:           "Gateway",
+			Kind:           kinds.Gateway,
 			NamespacedName: gw2NsName,
 		},
 	}
@@ -168,22 +169,22 @@ func TestBuildReferencedServices(t *testing.T) {
 
 	listenerSetParentRefs := []ParentRef{
 		{
-			Kind:           "ListenerSet",
+			Kind:           kinds.ListenerSet,
 			NamespacedName: lsNsName,
 		},
 		{
-			Kind:           "ListenerSet",
+			Kind:           kinds.ListenerSet,
 			NamespacedName: ls2NsName,
 		},
 	}
 
 	mixedParentRefs := []ParentRef{
 		{
-			Kind:           "Gateway",
+			Kind:           kinds.Gateway,
 			NamespacedName: gwNsName,
 		},
 		{
-			Kind:           "ListenerSet",
+			Kind:           kinds.ListenerSet,
 			NamespacedName: lsNsName,
 		},
 	}
@@ -206,7 +207,7 @@ func TestBuildReferencedServices(t *testing.T) {
 	routeWithNonExistentListenerSet := getModifiedL7Route(func(route *L7Route) *L7Route {
 		route.ParentRefs = []ParentRef{
 			{
-				Kind:           "ListenerSet",
+				Kind:           kinds.ListenerSet,
 				NamespacedName: types.NamespacedName{Namespace: "test", Name: "non-existent-ls"},
 			},
 		}

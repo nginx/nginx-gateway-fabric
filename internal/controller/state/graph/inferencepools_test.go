@@ -41,7 +41,7 @@ func TestBuildReferencedInferencePools(t *testing.T) {
 			},
 			ParentRefs: []ParentRef{
 				{
-					Kind:           "Gateway",
+					Kind:           kinds.Gateway,
 					NamespacedName: gwNsName,
 				},
 			},
@@ -143,7 +143,7 @@ func TestBuildReferencedInferencePools(t *testing.T) {
 
 	listenerSetParentRefs := []ParentRef{
 		{
-			Kind:           "ListenerSet",
+			Kind:           kinds.ListenerSet,
 			NamespacedName: lsNsName,
 		},
 	}

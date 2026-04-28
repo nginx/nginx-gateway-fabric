@@ -13,6 +13,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/resolver/resolverfakes"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
 
 func TestBuildListenerSets(t *testing.T) {
@@ -54,7 +55,7 @@ func TestBuildListenerSets(t *testing.T) {
 		Spec: v1.ListenerSetSpec{
 			ParentRef: v1.ParentGatewayReference{
 				Name: "gateway",
-				Kind: helpers.GetPointer(v1.Kind("Gateway")),
+				Kind: helpers.GetPointer(v1.Kind(kinds.Gateway)),
 			},
 			Listeners: []v1.ListenerEntry{
 				{
@@ -74,7 +75,7 @@ func TestBuildListenerSets(t *testing.T) {
 		Spec: v1.ListenerSetSpec{
 			ParentRef: v1.ParentGatewayReference{
 				Name: "invalid-gateway",
-				Kind: helpers.GetPointer(v1.Kind("Gateway")),
+				Kind: helpers.GetPointer(v1.Kind(kinds.Gateway)),
 			},
 			Listeners: []v1.ListenerEntry{
 				{
@@ -94,7 +95,7 @@ func TestBuildListenerSets(t *testing.T) {
 		Spec: v1.ListenerSetSpec{
 			ParentRef: v1.ParentGatewayReference{
 				Name: "unrelated-gateway",
-				Kind: helpers.GetPointer(v1.Kind("Gateway")),
+				Kind: helpers.GetPointer(v1.Kind(kinds.Gateway)),
 			},
 			Listeners: []v1.ListenerEntry{
 				{
@@ -155,7 +156,7 @@ func TestBuildListenerSets(t *testing.T) {
 			ParentRef: v1.ParentGatewayReference{
 				Namespace: helpers.GetPointer(v1.Namespace("test")),
 				Name:      "gateway-allowed-listeners-same-ns",
-				Kind:      helpers.GetPointer(v1.Kind("Gateway")),
+				Kind:      helpers.GetPointer(v1.Kind(kinds.Gateway)),
 			},
 			Listeners: []v1.ListenerEntry{
 				{
@@ -175,7 +176,7 @@ func TestBuildListenerSets(t *testing.T) {
 		Spec: v1.ListenerSetSpec{
 			ParentRef: v1.ParentGatewayReference{
 				Name: "no-allowed-listeners",
-				Kind: helpers.GetPointer(v1.Kind("Gateway")),
+				Kind: helpers.GetPointer(v1.Kind(kinds.Gateway)),
 			},
 			Listeners: []v1.ListenerEntry{
 				{
@@ -691,7 +692,7 @@ func TestAttachListenerSetsToGateways(t *testing.T) {
 				Spec: v1.ListenerSetSpec{
 					ParentRef: v1.ParentGatewayReference{
 						Name: v1.ObjectName(gatewayName),
-						Kind: helpers.GetPointer(v1.Kind("Gateway")),
+						Kind: helpers.GetPointer(v1.Kind(kinds.Gateway)),
 					},
 					Listeners: listenerEntries,
 				},
@@ -815,7 +816,7 @@ func TestAttachListenerSetsToGateways(t *testing.T) {
 				Spec: v1.ListenerSetSpec{
 					ParentRef: v1.ParentGatewayReference{
 						Name: v1.ObjectName(gatewayName),
-						Kind: helpers.GetPointer(v1.Kind("Gateway")),
+						Kind: helpers.GetPointer(v1.Kind(kinds.Gateway)),
 					},
 					Listeners: listeners,
 				},

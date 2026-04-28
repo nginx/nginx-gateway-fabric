@@ -117,7 +117,7 @@ var (
 			Attachment: &graph.ParentRefAttachmentStatus{
 				Attached: true,
 			},
-			Kind:           "Gateway",
+			Kind:           kinds.Gateway,
 			NamespacedName: gwNsName,
 		},
 		{
@@ -127,7 +127,7 @@ var (
 				Attached:         false,
 				FailedConditions: []conditions.Condition{invalidAttachmentCondition},
 			},
-			Kind:           "Gateway",
+			Kind:           kinds.Gateway,
 			NamespacedName: gwNsName,
 		},
 		{
@@ -137,7 +137,7 @@ var (
 				Attached:         true,
 				FailedConditions: []conditions.Condition{invalidAttachmentCondition},
 			},
-			Kind:           "Gateway",
+			Kind:           kinds.Gateway,
 			NamespacedName: gwNsName,
 		},
 		{
@@ -147,7 +147,7 @@ var (
 				Attached:         false,
 				FailedConditions: []conditions.Condition{invalidAttachmentCondition},
 			},
-			Kind:           "Gateway",
+			Kind:           kinds.Gateway,
 			NamespacedName: gwNsName,
 		},
 		{
@@ -156,7 +156,7 @@ var (
 			Attachment: &graph.ParentRefAttachmentStatus{
 				Attached: true,
 			},
-			Kind:           "Gateway",
+			Kind:           kinds.Gateway,
 			NamespacedName: gwNsName,
 		},
 		{
@@ -166,7 +166,7 @@ var (
 				Attached:         true, // this wouldn't usually happen, but its a conditional check
 				FailedConditions: []conditions.Condition{invalidAttachmentCondition},
 			},
-			Kind:           "Gateway",
+			Kind:           kinds.Gateway,
 			NamespacedName: gwNsName,
 		},
 		{
@@ -176,7 +176,7 @@ var (
 				Attached:         false,
 				FailedConditions: []conditions.Condition{invalidAttachmentCondition},
 			},
-			Kind:           "Gateway",
+			Kind:           kinds.Gateway,
 			NamespacedName: gwNsName,
 		},
 		{
@@ -186,7 +186,7 @@ var (
 				Attached:         false,
 				FailedConditions: []conditions.Condition{invalidAttachmentCondition},
 			},
-			Kind:           "Gateway",
+			Kind:           kinds.Gateway,
 			NamespacedName: gwNsName,
 		},
 		{
@@ -196,7 +196,7 @@ var (
 				Attached:         true,
 				FailedConditions: []conditions.Condition{},
 			},
-			Kind:           "ListenerSet",
+			Kind:           kinds.ListenerSet,
 			NamespacedName: lsNsName,
 		},
 		{
@@ -206,7 +206,7 @@ var (
 				Attached:         true,
 				FailedConditions: []conditions.Condition{},
 			},
-			Kind:           "ListenerSet",
+			Kind:           kinds.ListenerSet,
 			NamespacedName: lsNsName,
 		},
 		{
@@ -216,7 +216,7 @@ var (
 				Attached:         false,
 				FailedConditions: []conditions.Condition{invalidAttachmentCondition},
 			},
-			Kind:           "ListenerSet",
+			Kind:           kinds.ListenerSet,
 			NamespacedName: lsNsName,
 		},
 		{
@@ -226,7 +226,7 @@ var (
 				Attached:         false,
 				FailedConditions: []conditions.Condition{invalidAttachmentCondition},
 			},
-			Kind:           "ListenerSet",
+			Kind:           kinds.ListenerSet,
 			NamespacedName: lsNsName,
 		},
 	}
@@ -236,7 +236,7 @@ var (
 			Idx:            0,
 			Attachment:     nil,
 			SectionName:    commonRouteSpecInvalid.ParentRefs[0].SectionName,
-			Kind:           "Gateway",
+			Kind:           kinds.Gateway,
 			NamespacedName: gwNsName,
 		},
 	}
@@ -248,7 +248,7 @@ var (
 					Namespace:   helpers.GetPointer(v1.Namespace(gwNsName.Namespace)),
 					Name:        v1.ObjectName(gwNsName.Name),
 					SectionName: helpers.GetPointer[v1.SectionName]("listener-80-1"),
-					Kind:        helpers.GetPointer(v1.Kind("Gateway")),
+					Kind:        helpers.GetPointer(v1.Kind(kinds.Gateway)),
 				},
 				ControllerName: gatewayCtlrName,
 				Conditions: []metav1.Condition{
@@ -275,7 +275,7 @@ var (
 					Namespace:   helpers.GetPointer(v1.Namespace(gwNsName.Namespace)),
 					Name:        v1.ObjectName(gwNsName.Name),
 					SectionName: helpers.GetPointer[v1.SectionName]("listener-80-2"),
-					Kind:        helpers.GetPointer(v1.Kind("Gateway")),
+					Kind:        helpers.GetPointer(v1.Kind(kinds.Gateway)),
 				},
 				ControllerName: gatewayCtlrName,
 				Conditions: []metav1.Condition{
@@ -308,7 +308,7 @@ var (
 					Namespace:   helpers.GetPointer(v1.Namespace(gwNsName.Namespace)),
 					Name:        v1.ObjectName(gwNsName.Name),
 					SectionName: helpers.GetPointer[v1.SectionName]("listener-80-3"),
-					Kind:        helpers.GetPointer(v1.Kind("Gateway")),
+					Kind:        helpers.GetPointer(v1.Kind(kinds.Gateway)),
 				},
 				ControllerName: gatewayCtlrName,
 				Conditions: []metav1.Condition{
@@ -340,7 +340,7 @@ var (
 				ParentRef: v1.ParentReference{
 					Namespace: helpers.GetPointer(v1.Namespace(gwNsName.Namespace)),
 					Name:      v1.ObjectName(gwNsName.Name),
-					Kind:      helpers.GetPointer(v1.Kind("Gateway")),
+					Kind:      helpers.GetPointer(v1.Kind(kinds.Gateway)),
 				},
 				ControllerName: gatewayCtlrName,
 				Conditions: []metav1.Condition{
@@ -366,7 +366,7 @@ var (
 				ParentRef: v1.ParentReference{
 					Namespace: helpers.GetPointer(v1.Namespace(gwNsName.Namespace)),
 					Name:      v1.ObjectName(gwNsName.Name),
-					Kind:      helpers.GetPointer(v1.Kind("Gateway")),
+					Kind:      helpers.GetPointer(v1.Kind(kinds.Gateway)),
 				},
 				ControllerName: gatewayCtlrName,
 				Conditions: []metav1.Condition{
@@ -399,7 +399,7 @@ var (
 					Namespace:   helpers.GetPointer(v1.Namespace(lsNsName.Namespace)),
 					Name:        v1.ObjectName(lsNsName.Name),
 					SectionName: helpers.GetPointer[v1.SectionName]("ls-listener-80-1"),
-					Kind:        helpers.GetPointer(v1.Kind("ListenerSet")),
+					Kind:        helpers.GetPointer(v1.Kind(kinds.ListenerSet)),
 				},
 				ControllerName: gatewayCtlrName,
 				Conditions: []metav1.Condition{
@@ -425,7 +425,7 @@ var (
 				ParentRef: v1.ParentReference{
 					Namespace: helpers.GetPointer(v1.Namespace(lsNsName.Namespace)),
 					Name:      v1.ObjectName(lsNsName.Name),
-					Kind:      helpers.GetPointer(v1.Kind("ListenerSet")),
+					Kind:      helpers.GetPointer(v1.Kind(kinds.ListenerSet)),
 				},
 				ControllerName: gatewayCtlrName,
 				Conditions: []metav1.Condition{
@@ -451,7 +451,7 @@ var (
 				ParentRef: v1.ParentReference{
 					Namespace:   helpers.GetPointer(v1.Namespace(lsNsName.Namespace)),
 					Name:        v1.ObjectName(lsNsName.Name),
-					Kind:        helpers.GetPointer(v1.Kind("ListenerSet")),
+					Kind:        helpers.GetPointer(v1.Kind(kinds.ListenerSet)),
 					SectionName: helpers.GetPointer[v1.SectionName]("ls-listener-80-4"),
 				},
 				ControllerName: gatewayCtlrName,
@@ -490,7 +490,7 @@ var (
 					Namespace:   helpers.GetPointer(v1.Namespace(gwNsName.Namespace)),
 					Name:        v1.ObjectName(gwNsName.Name),
 					SectionName: helpers.GetPointer[v1.SectionName]("listener-80-1"),
-					Kind:        helpers.GetPointer(v1.Kind("Gateway")),
+					Kind:        helpers.GetPointer(v1.Kind(kinds.Gateway)),
 				},
 				ControllerName: gatewayCtlrName,
 				Conditions: []metav1.Condition{

@@ -57,13 +57,13 @@ func createHTTPRoute(
 			CommonRouteSpec: v1.CommonRouteSpec{
 				ParentRefs: []v1.ParentReference{
 					{
-						Kind:        (*v1.Kind)(helpers.GetPointer("Gateway")),
+						Kind:        (*v1.Kind)(helpers.GetPointer(kinds.Gateway)),
 						Namespace:   (*v1.Namespace)(helpers.GetPointer("test")),
 						Name:        v1.ObjectName(gateway),
 						SectionName: (*v1.SectionName)(helpers.GetPointer(httpListenerName)),
 					},
 					{
-						Kind:        (*v1.Kind)(helpers.GetPointer("Gateway")),
+						Kind:        (*v1.Kind)(helpers.GetPointer(kinds.Gateway)),
 						Namespace:   (*v1.Namespace)(helpers.GetPointer("test")),
 						Name:        v1.ObjectName(gateway),
 						SectionName: (*v1.SectionName)(helpers.GetPointer(httpsListenerName)),
@@ -106,13 +106,13 @@ func createGRPCRoute(
 			CommonRouteSpec: v1.CommonRouteSpec{
 				ParentRefs: []v1.ParentReference{
 					{
-						Kind:        (*v1.Kind)(helpers.GetPointer("Gateway")),
+						Kind:        (*v1.Kind)(helpers.GetPointer(kinds.Gateway)),
 						Namespace:   (*v1.Namespace)(helpers.GetPointer("test")),
 						Name:        v1.ObjectName(gateway),
 						SectionName: (*v1.SectionName)(helpers.GetPointer(httpListenerName)),
 					},
 					{
-						Kind:        (*v1.Kind)(helpers.GetPointer("Gateway")),
+						Kind:        (*v1.Kind)(helpers.GetPointer(kinds.Gateway)),
 						Namespace:   (*v1.Namespace)(helpers.GetPointer("test")),
 						Name:        v1.ObjectName(gateway),
 						SectionName: (*v1.SectionName)(helpers.GetPointer(httpsListenerName)),
@@ -151,7 +151,7 @@ func createTLSRoute(name, gateway, hostname string, backendRefs ...v1.BackendRef
 			CommonRouteSpec: v1.CommonRouteSpec{
 				ParentRefs: []v1.ParentReference{
 					{
-						Kind:        (*v1.Kind)(helpers.GetPointer("Gateway")),
+						Kind:        (*v1.Kind)(helpers.GetPointer(kinds.Gateway)),
 						Namespace:   (*v1.Namespace)(helpers.GetPointer("test")),
 						Name:        v1.ObjectName(gateway),
 						SectionName: (*v1.SectionName)(helpers.GetPointer(tlsListenerName)),
@@ -742,7 +742,7 @@ var _ = Describe("ChangeProcessor", func() {
 					RouteType: graph.RouteTypeHTTP,
 					ParentRefs: []graph.ParentRef{
 						{
-							Kind:           "Gateway",
+							Kind:           kinds.Gateway,
 							NamespacedName: client.ObjectKeyFromObject(gw1),
 							Attachment: &graph.ParentRefAttachmentStatus{
 								AcceptedHostnames: map[string][]string{
@@ -757,7 +757,7 @@ var _ = Describe("ChangeProcessor", func() {
 							SectionName: hr1.Spec.ParentRefs[0].SectionName,
 						},
 						{
-							Kind:           "Gateway",
+							Kind:           kinds.Gateway,
 							NamespacedName: client.ObjectKeyFromObject(gw1),
 							Attachment: &graph.ParentRefAttachmentStatus{
 								AcceptedHostnames: map[string][]string{
@@ -808,7 +808,7 @@ var _ = Describe("ChangeProcessor", func() {
 					RouteType: graph.RouteTypeHTTP,
 					ParentRefs: []graph.ParentRef{
 						{
-							Kind:           "Gateway",
+							Kind:           kinds.Gateway,
 							NamespacedName: client.ObjectKeyFromObject(gw2),
 							Attachment: &graph.ParentRefAttachmentStatus{
 								AcceptedHostnames: map[string][]string{
@@ -823,7 +823,7 @@ var _ = Describe("ChangeProcessor", func() {
 							SectionName: hr2.Spec.ParentRefs[0].SectionName,
 						},
 						{
-							Kind:           "Gateway",
+							Kind:           kinds.Gateway,
 							NamespacedName: client.ObjectKeyFromObject(gw2),
 							Attachment: &graph.ParentRefAttachmentStatus{
 								AcceptedHostnames: map[string][]string{
@@ -874,7 +874,7 @@ var _ = Describe("ChangeProcessor", func() {
 					RouteType: graph.RouteTypeGRPC,
 					ParentRefs: []graph.ParentRef{
 						{
-							Kind:           "Gateway",
+							Kind:           kinds.Gateway,
 							NamespacedName: client.ObjectKeyFromObject(gw1),
 							Attachment: &graph.ParentRefAttachmentStatus{
 								AcceptedHostnames: map[string][]string{
@@ -889,7 +889,7 @@ var _ = Describe("ChangeProcessor", func() {
 							SectionName: gr1.Spec.ParentRefs[0].SectionName,
 						},
 						{
-							Kind:           "Gateway",
+							Kind:           kinds.Gateway,
 							NamespacedName: client.ObjectKeyFromObject(gw1),
 							Attachment: &graph.ParentRefAttachmentStatus{
 								AcceptedHostnames: map[string][]string{
@@ -940,7 +940,7 @@ var _ = Describe("ChangeProcessor", func() {
 					RouteType: graph.RouteTypeGRPC,
 					ParentRefs: []graph.ParentRef{
 						{
-							Kind:           "Gateway",
+							Kind:           kinds.Gateway,
 							NamespacedName: client.ObjectKeyFromObject(gw2),
 							Attachment: &graph.ParentRefAttachmentStatus{
 								AcceptedHostnames: map[string][]string{
@@ -955,7 +955,7 @@ var _ = Describe("ChangeProcessor", func() {
 							SectionName: gr2.Spec.ParentRefs[0].SectionName,
 						},
 						{
-							Kind:           "Gateway",
+							Kind:           kinds.Gateway,
 							NamespacedName: client.ObjectKeyFromObject(gw2),
 							Attachment: &graph.ParentRefAttachmentStatus{
 								AcceptedHostnames: map[string][]string{
@@ -1006,7 +1006,7 @@ var _ = Describe("ChangeProcessor", func() {
 					RouteType: graph.RouteTypeTLS,
 					ParentRefs: []graph.ParentRef{
 						{
-							Kind:           "Gateway",
+							Kind:           kinds.Gateway,
 							NamespacedName: client.ObjectKeyFromObject(gw1),
 							Attachment: &graph.ParentRefAttachmentStatus{
 								AcceptedHostnames: map[string][]string{
@@ -1042,7 +1042,7 @@ var _ = Describe("ChangeProcessor", func() {
 					RouteType: graph.RouteTypeTLS,
 					ParentRefs: []graph.ParentRef{
 						{
-							Kind:           "Gateway",
+							Kind:           kinds.Gateway,
 							NamespacedName: client.ObjectKeyFromObject(gw2),
 							Attachment: &graph.ParentRefAttachmentStatus{
 								AcceptedHostnames: map[string][]string{

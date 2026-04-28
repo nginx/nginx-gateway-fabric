@@ -185,18 +185,18 @@ func TestBuildGRPCRoutes(t *testing.T) {
 		"gr-1",
 		gwNsName.Name,
 		"example.com",
-		v1.Kind("Gateway"),
+		v1.Kind(kinds.Gateway),
 		[]v1.GRPCRouteRule{grRuleWithFiltersAndSessionPersistence},
 	)
 	grLSParentRef := createGRPCRoute(
 		"gr-ls-parent-ref",
 		"listener-set",
 		"example.com",
-		v1.Kind("ListenerSet"),
+		v1.Kind(kinds.ListenerSet),
 		[]v1.GRPCRouteRule{grRuleWithFiltersAndSessionPersistence},
 	)
 
-	grWrongGateway := createGRPCRoute("gr-2", "some-gateway", "example.com", v1.Kind("Gateway"), []v1.GRPCRouteRule{})
+	grWrongGateway := createGRPCRoute("gr-2", "some-gateway", "example.com", v1.Kind(kinds.Gateway), []v1.GRPCRouteRule{})
 
 	grRoutes := map[types.NamespacedName]*v1.GRPCRoute{
 		client.ObjectKeyFromObject(gr):             gr,
@@ -250,7 +250,7 @@ func TestBuildGRPCRoutes(t *testing.T) {
 							Idx:                 0,
 							EffectiveNginxProxy: gateways[gwNsName].EffectiveNginxProxy,
 							SectionName:         gr.Spec.ParentRefs[0].SectionName,
-							Kind:                v1.Kind("Gateway"),
+							Kind:                v1.Kind(kinds.Gateway),
 							NamespacedName:      gwNsName,
 						},
 					},
@@ -326,7 +326,7 @@ func TestBuildGRPCRoutes(t *testing.T) {
 						{
 							Idx:         0,
 							SectionName: grLSParentRef.Spec.ParentRefs[0].SectionName,
-							Kind:        v1.Kind("ListenerSet"),
+							Kind:        v1.Kind(kinds.ListenerSet),
 							NamespacedName: types.NamespacedName{
 								Namespace: "test",
 								Name:      "listener-set",
@@ -476,7 +476,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 		Namespace:   helpers.GetPointer[v1.Namespace]("test"),
 		Name:        "listener-set",
 		SectionName: helpers.GetPointer[v1.SectionName]("ls-l1"),
-		Kind:        helpers.GetPointer[v1.Kind]("ListenerSet"),
+		Kind:        helpers.GetPointer[v1.Kind](kinds.ListenerSet),
 	}
 
 	listenerSets := map[types.NamespacedName]*ListenerSet{
@@ -543,7 +543,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 		"gr-1",
 		gatewayNsName.Name,
 		"example.com",
-		v1.Kind("Gateway"),
+		v1.Kind(kinds.Gateway),
 		[]v1.GRPCRouteRule{methodMatchRule, headersMatchRule},
 	)
 
@@ -551,7 +551,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 		"gr-1",
 		gatewayNsName.Name,
 		"example.com",
-		v1.Kind("Gateway"),
+		v1.Kind(kinds.Gateway),
 		[]v1.GRPCRouteRule{{BackendRefs: []v1.GRPCBackendRef{grpcBackendRef}}},
 	)
 
@@ -559,14 +559,14 @@ func TestBuildGRPCRoute(t *testing.T) {
 		"gr-1",
 		gatewayNsName.Name,
 		"",
-		v1.Kind("Gateway"),
+		v1.Kind(kinds.Gateway),
 		[]v1.GRPCRouteRule{methodMatchRule},
 	)
 	grNotNGF := createGRPCRoute(
 		"gr",
 		"some-gateway",
 		"example.com",
-		v1.Kind("Gateway"),
+		v1.Kind(kinds.Gateway),
 		[]v1.GRPCRouteRule{methodMatchRule},
 	)
 
@@ -574,28 +574,28 @@ func TestBuildGRPCRoute(t *testing.T) {
 		"gr-1",
 		gatewayNsName.Name,
 		"example.com",
-		v1.Kind("Gateway"),
+		v1.Kind(kinds.Gateway),
 		[]v1.GRPCRouteRule{methodMatchEmptyFields},
 	)
 	grInvalidMatchesInvalidMethodFields := createGRPCRoute(
 		"gr-1",
 		gatewayNsName.Name,
 		"example.com",
-		v1.Kind("Gateway"),
+		v1.Kind(kinds.Gateway),
 		[]v1.GRPCRouteRule{methodMatchInvalidFields},
 	)
 	grInvalidMatchesNilMethodType := createGRPCRoute(
 		"gr-1",
 		gatewayNsName.Name,
 		"example.com",
-		v1.Kind("Gateway"),
+		v1.Kind(kinds.Gateway),
 		[]v1.GRPCRouteRule{methodMatchNilType},
 	)
 	grInvalidHeadersInvalidType := createGRPCRoute(
 		"gr-1",
 		gatewayNsName.Name,
 		"example.com",
-		v1.Kind("Gateway"),
+		v1.Kind(kinds.Gateway),
 		[]v1.GRPCRouteRule{headersMatchInvalid},
 	)
 
@@ -603,14 +603,14 @@ func TestBuildGRPCRoute(t *testing.T) {
 		"gr-1",
 		gatewayNsName.Name,
 		"example.com",
-		v1.Kind("Gateway"),
+		v1.Kind(kinds.Gateway),
 		[]v1.GRPCRouteRule{headersMatchEmptyType},
 	)
 	grOneInvalid := createGRPCRoute(
 		"gr-1",
 		gatewayNsName.Name,
 		"example.com",
-		v1.Kind("Gateway"),
+		v1.Kind(kinds.Gateway),
 		[]v1.GRPCRouteRule{methodMatchRule, headersMatchInvalid},
 	)
 
@@ -618,7 +618,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 		"gr-valid-unsupported",
 		gatewayNsName.Name,
 		"example.com",
-		v1.Kind("Gateway"),
+		v1.Kind(kinds.Gateway),
 		[]v1.GRPCRouteRule{
 			{
 				Name: helpers.GetPointer[v1.SectionName]("unsupported-name"),
@@ -639,7 +639,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 		"gr-invalid-unsupported",
 		gatewayNsName.Name,
 		"example.com",
-		v1.Kind("Gateway"),
+		v1.Kind(kinds.Gateway),
 		[]v1.GRPCRouteRule{
 			{
 				Name: helpers.GetPointer[v1.SectionName]("unsupported-name"),
@@ -660,7 +660,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 		"gr",
 		gatewayNsName.Name,
 		"example.com",
-		v1.Kind("Gateway"),
+		v1.Kind(kinds.Gateway),
 		[]v1.GRPCRouteRule{methodMatchRule},
 	)
 	grDuplicateSectionName.Spec.ParentRefs = append(
@@ -680,7 +680,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 		"gr",
 		gatewayNsName.Name,
 		"example.com",
-		v1.Kind("Gateway"),
+		v1.Kind(kinds.Gateway),
 		[]v1.GRPCRouteRule{grInvalidFilterRule},
 	)
 
@@ -720,7 +720,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 		"gr",
 		gatewayNsName.Name,
 		"example.com",
-		v1.Kind("Gateway"),
+		v1.Kind(kinds.Gateway),
 		[]v1.GRPCRouteRule{grValidFilterRule, grValidHeaderMatch},
 	)
 
@@ -740,7 +740,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 		"gr",
 		gatewayNsName.Name,
 		"example.com",
-		v1.Kind("Gateway"),
+		v1.Kind(kinds.Gateway),
 		[]v1.GRPCRouteRule{grInvalidSnippetsFilterRule},
 	)
 
@@ -760,7 +760,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 		"gr",
 		gatewayNsName.Name,
 		"example.com",
-		v1.Kind("Gateway"),
+		v1.Kind(kinds.Gateway),
 		[]v1.GRPCRouteRule{grUnresolvableSnippetsFilterRule},
 	)
 
@@ -788,7 +788,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 		"gr",
 		gatewayNsName.Name,
 		"example.com",
-		v1.Kind("Gateway"),
+		v1.Kind(kinds.Gateway),
 		[]v1.GRPCRouteRule{grInvalidAndUnresolvableSnippetsFilterRule},
 	)
 
@@ -808,7 +808,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 		"gr",
 		gatewayNsName.Name,
 		"example.com",
-		v1.Kind("Gateway"),
+		v1.Kind(kinds.Gateway),
 		[]v1.GRPCRouteRule{grInvalidAuthenticationFilterRule},
 	)
 
@@ -828,7 +828,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 		"gr",
 		gatewayNsName.Name,
 		"example.com",
-		v1.Kind("Gateway"),
+		v1.Kind(kinds.Gateway),
 		[]v1.GRPCRouteRule{grUnresolvableAuthenticationFilterRule},
 	)
 
@@ -856,7 +856,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 		"gr",
 		gatewayNsName.Name,
 		"example.com",
-		v1.Kind("Gateway"),
+		v1.Kind(kinds.Gateway),
 		[]v1.GRPCRouteRule{grInvalidAndUnresolvableAuthenticationFilterRule},
 	)
 
@@ -884,7 +884,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 		"gr",
 		gatewayNsName.Name,
 		"example.com",
-		v1.Kind("Gateway"),
+		v1.Kind(kinds.Gateway),
 		[]v1.GRPCRouteRule{grInvalidAndValidAuthenticationFilterRule},
 	)
 
@@ -912,7 +912,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 		"gr",
 		gatewayNsName.Name,
 		"example.com",
-		v1.Kind("Gateway"),
+		v1.Kind(kinds.Gateway),
 		[]v1.GRPCRouteRule{grUnresolvedAndValidAuthenticationFilterRule},
 	)
 
@@ -940,7 +940,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 		"gr",
 		gatewayNsName.Name,
 		"example.com",
-		v1.Kind("Gateway"),
+		v1.Kind(kinds.Gateway),
 		[]v1.GRPCRouteRule{grTwoValidAuthenticationFilterRule},
 	)
 
@@ -949,7 +949,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 		"gr",
 		"listener-set",
 		"example.com",
-		v1.Kind("ListenerSet"),
+		v1.Kind(kinds.ListenerSet),
 		[]v1.GRPCRouteRule{methodMatchRule},
 	)
 	grValidWithListenerSetParentRef.Spec.ParentRefs[0] = listenerSetParentRef
@@ -1021,7 +1021,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 						Idx:                 0,
 						EffectiveNginxProxy: gw.EffectiveNginxProxy,
 						SectionName:         grBoth.Spec.ParentRefs[0].SectionName,
-						Kind:                v1.Kind("Gateway"),
+						Kind:                v1.Kind(kinds.Gateway),
 						NamespacedName:      gatewayNsName,
 					},
 				},
@@ -1077,7 +1077,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 						Idx:                 0,
 						EffectiveNginxProxy: gw.EffectiveNginxProxy,
 						SectionName:         grEmptyMatch.Spec.ParentRefs[0].SectionName,
-						Kind:                v1.Kind("Gateway"),
+						Kind:                v1.Kind(kinds.Gateway),
 						NamespacedName:      gatewayNsName,
 					},
 				},
@@ -1111,7 +1111,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 						Idx:                 0,
 						EffectiveNginxProxy: gw.EffectiveNginxProxy,
 						SectionName:         grValidFilter.Spec.ParentRefs[0].SectionName,
-						Kind:                v1.Kind("Gateway"),
+						Kind:                v1.Kind(kinds.Gateway),
 						NamespacedName:      gatewayNsName,
 					},
 				},
@@ -1156,7 +1156,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 						Idx:                 0,
 						EffectiveNginxProxy: gw.EffectiveNginxProxy,
 						SectionName:         grInvalidMatchesEmptyMethodFields.Spec.ParentRefs[0].SectionName,
-						Kind:                v1.Kind("Gateway"),
+						Kind:                v1.Kind(kinds.Gateway),
 						NamespacedName:      gatewayNsName,
 					},
 				},
@@ -1202,7 +1202,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 						Idx:                 0,
 						EffectiveNginxProxy: gw.EffectiveNginxProxy,
 						SectionName:         grInvalidMatchesInvalidMethodFields.Spec.ParentRefs[0].SectionName,
-						Kind:                v1.Kind("Gateway"),
+						Kind:                v1.Kind(kinds.Gateway),
 						NamespacedName:      gatewayNsName,
 					},
 				},
@@ -1252,7 +1252,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 						Idx:                 0,
 						EffectiveNginxProxy: gw.EffectiveNginxProxy,
 						SectionName:         grOneInvalid.Spec.ParentRefs[0].SectionName,
-						Kind:                v1.Kind("Gateway"),
+						Kind:                v1.Kind(kinds.Gateway),
 						NamespacedName:      gatewayNsName,
 					},
 				},
@@ -1313,7 +1313,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 						Idx:                 0,
 						EffectiveNginxProxy: gw.EffectiveNginxProxy,
 						SectionName:         grInvalidHeadersInvalidType.Spec.ParentRefs[0].SectionName,
-						Kind:                v1.Kind("Gateway"),
+						Kind:                v1.Kind(kinds.Gateway),
 						NamespacedName:      gatewayNsName,
 					},
 				},
@@ -1353,7 +1353,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 						Idx:                 0,
 						EffectiveNginxProxy: gw.EffectiveNginxProxy,
 						SectionName:         grInvalidHeadersEmptyType.Spec.ParentRefs[0].SectionName,
-						Kind:                v1.Kind("Gateway"),
+						Kind:                v1.Kind(kinds.Gateway),
 						NamespacedName:      gatewayNsName,
 					},
 				},
@@ -1393,7 +1393,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 						Idx:                 0,
 						EffectiveNginxProxy: gw.EffectiveNginxProxy,
 						SectionName:         grInvalidMatchesNilMethodType.Spec.ParentRefs[0].SectionName,
-						Kind:                v1.Kind("Gateway"),
+						Kind:                v1.Kind(kinds.Gateway),
 						NamespacedName:      gatewayNsName,
 					},
 				},
@@ -1432,7 +1432,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 						Idx:                 0,
 						EffectiveNginxProxy: gw.EffectiveNginxProxy,
 						SectionName:         grInvalidFilter.Spec.ParentRefs[0].SectionName,
-						Kind:                v1.Kind("Gateway"),
+						Kind:                v1.Kind(kinds.Gateway),
 						NamespacedName:      gatewayNsName,
 					},
 				},
@@ -1479,7 +1479,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 						Idx:                 0,
 						EffectiveNginxProxy: gw.EffectiveNginxProxy,
 						SectionName:         grInvalidHostname.Spec.ParentRefs[0].SectionName,
-						Kind:                v1.Kind("Gateway"),
+						Kind:                v1.Kind(kinds.Gateway),
 						NamespacedName:      gatewayNsName,
 					},
 				},
@@ -1504,7 +1504,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 						Idx:                 0,
 						EffectiveNginxProxy: gw.EffectiveNginxProxy,
 						SectionName:         grInvalidSnippetsFilter.Spec.ParentRefs[0].SectionName,
-						Kind:                v1.Kind("Gateway"),
+						Kind:                v1.Kind(kinds.Gateway),
 						NamespacedName:      gatewayNsName,
 					},
 				},
@@ -1544,7 +1544,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 						Idx:                 0,
 						EffectiveNginxProxy: gw.EffectiveNginxProxy,
 						SectionName:         grUnresolvableSnippetsFilter.Spec.ParentRefs[0].SectionName,
-						Kind:                v1.Kind("Gateway"),
+						Kind:                v1.Kind(kinds.Gateway),
 						NamespacedName:      gatewayNsName,
 					},
 				},
@@ -1585,7 +1585,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 						Idx:                 0,
 						EffectiveNginxProxy: gw.EffectiveNginxProxy,
 						SectionName:         grInvalidAndUnresolvableSnippetsFilter.Spec.ParentRefs[0].SectionName,
-						Kind:                v1.Kind("Gateway"),
+						Kind:                v1.Kind(kinds.Gateway),
 						NamespacedName:      gatewayNsName,
 					},
 				},
@@ -1630,7 +1630,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 						Idx:                 0,
 						EffectiveNginxProxy: gw.EffectiveNginxProxy,
 						SectionName:         grInvalidAuthenticationFilter.Spec.ParentRefs[0].SectionName,
-						Kind:                v1.Kind("Gateway"),
+						Kind:                v1.Kind(kinds.Gateway),
 						NamespacedName:      gatewayNsName,
 					},
 				},
@@ -1670,7 +1670,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 						Idx:                 0,
 						EffectiveNginxProxy: gw.EffectiveNginxProxy,
 						SectionName:         grUnresolvableAuthenticationFilter.Spec.ParentRefs[0].SectionName,
-						Kind:                v1.Kind("Gateway"),
+						Kind:                v1.Kind(kinds.Gateway),
 						NamespacedName:      gatewayNsName,
 					},
 				},
@@ -1711,7 +1711,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 						Idx:                 0,
 						EffectiveNginxProxy: gw.EffectiveNginxProxy,
 						SectionName:         grInvalidAndUnresolvableAuthenticationFilter.Spec.ParentRefs[0].SectionName,
-						Kind:                v1.Kind("Gateway"),
+						Kind:                v1.Kind(kinds.Gateway),
 						NamespacedName:      gatewayNsName,
 					},
 				},
@@ -1755,7 +1755,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 						Idx:                 0,
 						EffectiveNginxProxy: gw.EffectiveNginxProxy,
 						SectionName:         grInvalidAndValidAuthenticationFilter.Spec.ParentRefs[0].SectionName,
-						Kind:                v1.Kind("Gateway"),
+						Kind:                v1.Kind(kinds.Gateway),
 						NamespacedName:      gatewayNsName,
 					},
 				},
@@ -1799,7 +1799,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 						Idx:                 0,
 						EffectiveNginxProxy: gw.EffectiveNginxProxy,
 						SectionName:         grUnresolvedAndValidAuthenticationFilter.Spec.ParentRefs[0].SectionName,
-						Kind:                v1.Kind("Gateway"),
+						Kind:                v1.Kind(kinds.Gateway),
 						NamespacedName:      gatewayNsName,
 					},
 				},
@@ -1845,7 +1845,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 						Idx:                 0,
 						EffectiveNginxProxy: gw.EffectiveNginxProxy,
 						SectionName:         grTwoValidAuthenticationFilter.Spec.ParentRefs[0].SectionName,
-						Kind:                v1.Kind("Gateway"),
+						Kind:                v1.Kind(kinds.Gateway),
 						NamespacedName:      gatewayNsName,
 					},
 				},
@@ -1901,7 +1901,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 						Idx:                 0,
 						EffectiveNginxProxy: gw.EffectiveNginxProxy,
 						SectionName:         grValidWithUnsupportedField.Spec.ParentRefs[0].SectionName,
-						Kind:                v1.Kind("Gateway"),
+						Kind:                v1.Kind(kinds.Gateway),
 						NamespacedName:      gatewayNsName,
 					},
 				},
@@ -1938,7 +1938,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 						Idx:                 0,
 						EffectiveNginxProxy: gw.EffectiveNginxProxy,
 						SectionName:         grInvalidWithUnsupportedField.Spec.ParentRefs[0].SectionName,
-						Kind:                v1.Kind("Gateway"),
+						Kind:                v1.Kind(kinds.Gateway),
 						NamespacedName:      gatewayNsName,
 					},
 				},
@@ -1978,7 +1978,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 					{
 						Idx:         0,
 						SectionName: grValidWithListenerSetParentRef.Spec.ParentRefs[0].SectionName,
-						Kind:        v1.Kind("ListenerSet"),
+						Kind:        v1.Kind(kinds.ListenerSet),
 						NamespacedName: types.NamespacedName{
 							Namespace: "test",
 							Name:      "listener-set",
@@ -2106,7 +2106,7 @@ func TestBuildGRPCRouteWithMirrorRoutes(t *testing.T) {
 		"gr",
 		gatewayNsName.Name,
 		"example.com",
-		v1.Kind("Gateway"),
+		v1.Kind(kinds.Gateway),
 		[]v1.GRPCRouteRule{
 			{
 				Matches: []v1.GRPCRouteMatch{
@@ -2128,7 +2128,7 @@ func TestBuildGRPCRouteWithMirrorRoutes(t *testing.T) {
 		"gr-ls",
 		"listener-set",
 		"example.com",
-		v1.Kind("ListenerSet"),
+		v1.Kind(kinds.ListenerSet),
 		[]v1.GRPCRouteRule{
 			{
 				Matches: []v1.GRPCRouteMatch{
@@ -2159,7 +2159,7 @@ func TestBuildGRPCRouteWithMirrorRoutes(t *testing.T) {
 				Idx:                 0,
 				EffectiveNginxProxy: gateways[gatewayNsName].EffectiveNginxProxy,
 				SectionName:         gr.Spec.ParentRefs[0].SectionName,
-				Kind:                v1.Kind("Gateway"),
+				Kind:                v1.Kind(kinds.Gateway),
 				NamespacedName:      gatewayNsName,
 			},
 		},
@@ -2170,7 +2170,7 @@ func TestBuildGRPCRouteWithMirrorRoutes(t *testing.T) {
 			expectedParent: ParentRef{
 				Idx:         0,
 				SectionName: grListenerSet.Spec.ParentRefs[0].SectionName,
-				Kind:        v1.Kind("ListenerSet"),
+				Kind:        v1.Kind(kinds.ListenerSet),
 				NamespacedName: types.NamespacedName{
 					Namespace: "test",
 					Name:      "listener-set",

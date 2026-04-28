@@ -2163,7 +2163,7 @@ func TestGetReferencedSnippetsFilters(t *testing.T) {
 		Valid: true,
 		ParentRefs: []ParentRef{
 			{
-				Kind:           "Gateway",
+				Kind:           kinds.Gateway,
 				NamespacedName: types.NamespacedName{Namespace: "gateway-ns", Name: "test-gateway"},
 			},
 		},
@@ -2197,7 +2197,7 @@ func TestGetReferencedSnippetsFilters(t *testing.T) {
 		Valid: true,
 		ParentRefs: []ParentRef{
 			{
-				Kind:           "Gateway",
+				Kind:           kinds.Gateway,
 				NamespacedName: types.NamespacedName{Namespace: "other-gateway-ns", Name: "other-gateway"},
 			},
 		},
@@ -2231,7 +2231,7 @@ func TestGetReferencedSnippetsFilters(t *testing.T) {
 		Valid: true,
 		ParentRefs: []ParentRef{
 			{
-				Kind:           "Gateway",
+				Kind:           kinds.Gateway,
 				NamespacedName: types.NamespacedName{Namespace: "gateway-ns", Name: "test-gateway"},
 			},
 		},
@@ -2438,7 +2438,7 @@ func TestGetReferencedRateLimitPolicies(t *testing.T) {
 		Valid: true,
 		ParentRefs: []ParentRef{
 			{
-				Kind:           "Gateway",
+				Kind:           kinds.Gateway,
 				NamespacedName: types.NamespacedName{Namespace: "gateway-ns", Name: "test-gateway"},
 			},
 		},
@@ -2454,7 +2454,7 @@ func TestGetReferencedRateLimitPolicies(t *testing.T) {
 		Valid: true,
 		ParentRefs: []ParentRef{
 			{
-				Kind:           "Gateway",
+				Kind:           kinds.Gateway,
 				NamespacedName: types.NamespacedName{Namespace: "gateway-ns", Name: "test-gateway"},
 			},
 		},
@@ -2470,7 +2470,7 @@ func TestGetReferencedRateLimitPolicies(t *testing.T) {
 		Valid: true,
 		ParentRefs: []ParentRef{
 			{
-				Kind:           "Gateway",
+				Kind:           kinds.Gateway,
 				NamespacedName: types.NamespacedName{Namespace: "secondary-gateway-ns", Name: "secondary-gateway"},
 			},
 		},

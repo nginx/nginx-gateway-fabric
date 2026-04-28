@@ -101,42 +101,42 @@ func TestBuildSectionNameRefs(t *testing.T) {
 	expected := []ParentRef{
 		{
 			Idx:                 0,
-			Kind:                "Gateway",
+			Kind:                kinds.Gateway,
 			EffectiveNginxProxy: gws[gwNsName1].EffectiveNginxProxy,
 			NamespacedName:      types.NamespacedName{Namespace: "test", Name: "gateway-1"},
 			SectionName:         parentRefs[0].SectionName,
 		},
 		{
 			Idx:                 2,
-			Kind:                "Gateway",
+			Kind:                kinds.Gateway,
 			EffectiveNginxProxy: gws[gwNsName2].EffectiveNginxProxy,
 			NamespacedName:      types.NamespacedName{Namespace: "test", Name: "gateway-2"},
 			SectionName:         parentRefs[2].SectionName,
 		},
 		{
 			Idx:                 3,
-			Kind:                "Gateway",
+			Kind:                kinds.Gateway,
 			EffectiveNginxProxy: gws[gwNsName1].EffectiveNginxProxy,
 			NamespacedName:      types.NamespacedName{Namespace: "test", Name: "gateway-1"},
 			SectionName:         parentRefs[3].SectionName,
 		},
 		{
 			Idx:                 4,
-			Kind:                "Gateway",
+			Kind:                kinds.Gateway,
 			EffectiveNginxProxy: gws[gwNsName2].EffectiveNginxProxy,
 			NamespacedName:      types.NamespacedName{Namespace: "test", Name: "gateway-2"},
 			SectionName:         parentRefs[4].SectionName,
 		},
 		{
 			Idx:                 6,
-			Kind:                "Gateway",
+			Kind:                kinds.Gateway,
 			EffectiveNginxProxy: gws[gwNsName3].EffectiveNginxProxy,
 			NamespacedName:      types.NamespacedName{Namespace: "test", Name: "gateway-3"},
 			SectionName:         helpers.GetPointer[gatewayv1.SectionName]("http"),
 		},
 		{
 			Idx:                 6,
-			Kind:                "Gateway",
+			Kind:                kinds.Gateway,
 			EffectiveNginxProxy: gws[gwNsName3].EffectiveNginxProxy,
 			NamespacedName:      types.NamespacedName{Namespace: "test", Name: "gateway-3"},
 			SectionName:         helpers.GetPointer[gatewayv1.SectionName]("https"),
@@ -228,13 +228,13 @@ func TestBuildSectionNameRefs(t *testing.T) {
 			parentRefs: []gatewayv1.ParentReference{
 				{
 					Group:       helpers.GetPointer[gatewayv1.Group](gatewayv1.GroupName),
-					Kind:        helpers.GetPointer[gatewayv1.Kind]("ListenerSet"),
+					Kind:        helpers.GetPointer[gatewayv1.Kind](kinds.ListenerSet),
 					Name:        gatewayv1.ObjectName(lsNsName1.Name),
 					SectionName: helpers.GetPointer[gatewayv1.SectionName]("ls-http"),
 				},
 				{
 					Group:       helpers.GetPointer[gatewayv1.Group](gatewayv1.GroupName),
-					Kind:        helpers.GetPointer[gatewayv1.Kind]("ListenerSet"),
+					Kind:        helpers.GetPointer[gatewayv1.Kind](kinds.ListenerSet),
 					Name:        gatewayv1.ObjectName(lsNsName2.Name),
 					SectionName: helpers.GetPointer[gatewayv1.SectionName]("ls-tcp"),
 				},
@@ -242,13 +242,13 @@ func TestBuildSectionNameRefs(t *testing.T) {
 			expectedRefs: []ParentRef{
 				{
 					Idx:            0,
-					Kind:           "ListenerSet",
+					Kind:           kinds.ListenerSet,
 					NamespacedName: lsNsName1,
 					SectionName:    helpers.GetPointer[gatewayv1.SectionName]("ls-http"),
 				},
 				{
 					Idx:            1,
-					Kind:           "ListenerSet",
+					Kind:           kinds.ListenerSet,
 					NamespacedName: lsNsName2,
 					SectionName:    helpers.GetPointer[gatewayv1.SectionName]("ls-tcp"),
 				},
@@ -264,7 +264,7 @@ func TestBuildSectionNameRefs(t *testing.T) {
 				},
 				{
 					Group:       helpers.GetPointer[gatewayv1.Group](gatewayv1.GroupName),
-					Kind:        helpers.GetPointer[gatewayv1.Kind]("ListenerSet"),
+					Kind:        helpers.GetPointer[gatewayv1.Kind](kinds.ListenerSet),
 					Name:        gatewayv1.ObjectName(lsNsName1.Name),
 					SectionName: helpers.GetPointer[gatewayv1.SectionName]("ls-https"),
 				},
@@ -272,14 +272,14 @@ func TestBuildSectionNameRefs(t *testing.T) {
 			expectedRefs: []ParentRef{
 				{
 					Idx:                 0,
-					Kind:                "Gateway",
+					Kind:                kinds.Gateway,
 					EffectiveNginxProxy: gws[gwNsName1].EffectiveNginxProxy,
 					NamespacedName:      types.NamespacedName{Namespace: "test", Name: "gateway-1"},
 					SectionName:         helpers.GetPointer[gatewayv1.SectionName]("http"),
 				},
 				{
 					Idx:            1,
-					Kind:           "ListenerSet",
+					Kind:           kinds.ListenerSet,
 					NamespacedName: lsNsName1,
 					SectionName:    helpers.GetPointer[gatewayv1.SectionName]("ls-https"),
 				},
@@ -429,7 +429,7 @@ func TestFindListenerSetForParentRef(t *testing.T) {
 		{
 			ref: gatewayv1.ParentReference{
 				Group:     helpers.GetPointer[gatewayv1.Group](gatewayv1.GroupName),
-				Kind:      helpers.GetPointer[gatewayv1.Kind]("ListenerSet"),
+				Kind:      helpers.GetPointer[gatewayv1.Kind](kinds.ListenerSet),
 				Namespace: helpers.GetPointer(gatewayv1.Namespace(lsNsName1.Namespace)),
 				Name:      gatewayv1.ObjectName(lsNsName1.Name),
 			},
@@ -1614,7 +1614,7 @@ func TestBindRouteToListeners(t *testing.T) {
 							ParentRefs: []gatewayv1.ParentReference{
 								{
 									Group:       helpers.GetPointer[gatewayv1.Group](gatewayv1.GroupName),
-									Kind:        helpers.GetPointer[gatewayv1.Kind]("ListenerSet"),
+									Kind:        helpers.GetPointer[gatewayv1.Kind](kinds.ListenerSet),
 									Name:        gatewayv1.ObjectName("test-listenerset"),
 									SectionName: helpers.GetPointer[gatewayv1.SectionName]("ls-http"),
 								},
@@ -1633,7 +1633,7 @@ func TestBindRouteToListeners(t *testing.T) {
 				ParentRefs: []ParentRef{
 					{
 						Idx:            0,
-						Kind:           "ListenerSet",
+						Kind:           kinds.ListenerSet,
 						NamespacedName: types.NamespacedName{Namespace: "test", Name: "test-listenerset"},
 						SectionName:    helpers.GetPointer[gatewayv1.SectionName]("ls-http"),
 					},
@@ -1649,7 +1649,7 @@ func TestBindRouteToListeners(t *testing.T) {
 			expectedSectionNameRefs: []ParentRef{
 				{
 					Idx:            0,
-					Kind:           "ListenerSet",
+					Kind:           kinds.ListenerSet,
 					NamespacedName: types.NamespacedName{Namespace: "test", Name: "test-listenerset"},
 					SectionName:    helpers.GetPointer[gatewayv1.SectionName]("ls-http"),
 					Attachment: &ParentRefAttachmentStatus{
@@ -1717,7 +1717,7 @@ func TestBindRouteToListeners(t *testing.T) {
 							ParentRefs: []gatewayv1.ParentReference{
 								{
 									Group:       helpers.GetPointer[gatewayv1.Group](gatewayv1.GroupName),
-									Kind:        helpers.GetPointer[gatewayv1.Kind]("ListenerSet"),
+									Kind:        helpers.GetPointer[gatewayv1.Kind](kinds.ListenerSet),
 									Name:        gatewayv1.ObjectName("invalid-listenerset"),
 									SectionName: helpers.GetPointer[gatewayv1.SectionName]("ls-http"),
 								},
@@ -1736,7 +1736,7 @@ func TestBindRouteToListeners(t *testing.T) {
 				ParentRefs: []ParentRef{
 					{
 						Idx:            0,
-						Kind:           "ListenerSet",
+						Kind:           kinds.ListenerSet,
 						NamespacedName: types.NamespacedName{Namespace: "test", Name: "invalid-listenerset"},
 						SectionName:    helpers.GetPointer[gatewayv1.SectionName]("ls-http"),
 					},
@@ -1752,7 +1752,7 @@ func TestBindRouteToListeners(t *testing.T) {
 			expectedSectionNameRefs: []ParentRef{
 				{
 					Idx:            0,
-					Kind:           "ListenerSet",
+					Kind:           kinds.ListenerSet,
 					NamespacedName: types.NamespacedName{Namespace: "test", Name: "invalid-listenerset"},
 					SectionName:    helpers.GetPointer[gatewayv1.SectionName]("ls-http"),
 					Attachment: &ParentRefAttachmentStatus{
@@ -2885,7 +2885,7 @@ func TestBindL4RouteToListeners(t *testing.T) {
 							ParentRefs: []gatewayv1.ParentReference{
 								{
 									Group:       helpers.GetPointer[gatewayv1.Group](gatewayv1.GroupName),
-									Kind:        helpers.GetPointer[gatewayv1.Kind]("ListenerSet"),
+									Kind:        helpers.GetPointer[gatewayv1.Kind](kinds.ListenerSet),
 									Name:        gatewayv1.ObjectName("test-listenerset"),
 									SectionName: helpers.GetPointer[gatewayv1.SectionName]("ls-tcp"),
 								},
@@ -2902,7 +2902,7 @@ func TestBindL4RouteToListeners(t *testing.T) {
 					{
 						NamespacedName: types.NamespacedName{Namespace: "test", Name: "test-listenerset"},
 						Idx:            0,
-						Kind:           "ListenerSet",
+						Kind:           kinds.ListenerSet,
 						SectionName:    helpers.GetPointer[gatewayv1.SectionName]("ls-tcp"),
 					},
 				},
@@ -2922,7 +2922,7 @@ func TestBindL4RouteToListeners(t *testing.T) {
 				{
 					NamespacedName: types.NamespacedName{Namespace: "test", Name: "test-listenerset"},
 					Idx:            0,
-					Kind:           "ListenerSet",
+					Kind:           kinds.ListenerSet,
 					SectionName:    helpers.GetPointer[gatewayv1.SectionName]("ls-tcp"),
 					Attachment: &ParentRefAttachmentStatus{
 						Attached: true,
@@ -2990,7 +2990,7 @@ func TestBindL4RouteToListeners(t *testing.T) {
 							ParentRefs: []gatewayv1.ParentReference{
 								{
 									Group:       helpers.GetPointer[gatewayv1.Group](gatewayv1.GroupName),
-									Kind:        helpers.GetPointer[gatewayv1.Kind]("ListenerSet"),
+									Kind:        helpers.GetPointer[gatewayv1.Kind](kinds.ListenerSet),
 									Name:        gatewayv1.ObjectName("invalid-listenerset"),
 									SectionName: helpers.GetPointer[gatewayv1.SectionName]("ls-tcp"),
 								},
@@ -3007,7 +3007,7 @@ func TestBindL4RouteToListeners(t *testing.T) {
 					{
 						NamespacedName: types.NamespacedName{Namespace: "test", Name: "invalid-listenerset"},
 						Idx:            0,
-						Kind:           "ListenerSet",
+						Kind:           kinds.ListenerSet,
 						SectionName:    helpers.GetPointer[gatewayv1.SectionName]("ls-tcp"),
 					},
 				},
@@ -3027,7 +3027,7 @@ func TestBindL4RouteToListeners(t *testing.T) {
 				{
 					NamespacedName: types.NamespacedName{Namespace: "test", Name: "invalid-listenerset"},
 					Idx:            0,
-					Kind:           "ListenerSet",
+					Kind:           kinds.ListenerSet,
 					SectionName:    helpers.GetPointer[gatewayv1.SectionName]("ls-tcp"),
 					Attachment: &ParentRefAttachmentStatus{
 						Attached:          false,

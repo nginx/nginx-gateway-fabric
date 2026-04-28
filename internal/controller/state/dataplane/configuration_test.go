@@ -358,7 +358,7 @@ func createInternalRoute(
 		Valid: true,
 		ParentRefs: []graph.ParentRef{
 			{
-				Kind:           "Gateway",
+				Kind:           kinds.Gateway,
 				NamespacedName: gatewayNsName,
 				Attachment: &graph.ParentRefAttachmentStatus{
 					AcceptedHostnames: map[string][]string{
@@ -796,7 +796,7 @@ func TestBuildConfiguration(t *testing.T) {
 		},
 		ParentRefs: []graph.ParentRef{
 			{
-				Kind:           "Gateway",
+				Kind:           kinds.Gateway,
 				NamespacedName: gatewayNsName,
 				Attachment: &graph.ParentRefAttachmentStatus{
 					AcceptedHostnames: map[string][]string{
@@ -805,7 +805,7 @@ func TestBuildConfiguration(t *testing.T) {
 				},
 			},
 			{
-				Kind:           "Gateway",
+				Kind:           kinds.Gateway,
 				NamespacedName: gatewayNsName,
 				Attachment: &graph.ParentRefAttachmentStatus{
 					AcceptedHostnames: map[string][]string{
@@ -2557,7 +2557,7 @@ func TestBuildConfiguration(t *testing.T) {
 							TargetRefs: []v1.LocalPolicyTargetReference{
 								{
 									Group: "gateway.networking.k8s.io",
-									Kind:  "Gateway",
+									Kind:  kinds.Gateway,
 									Name:  "gateway",
 								},
 							},
@@ -2567,7 +2567,7 @@ func TestBuildConfiguration(t *testing.T) {
 					TargetRefs: []graph.PolicyTargetRef{
 						{
 							Group: "gateway.networking.k8s.io",
-							Kind:  "Gateway",
+							Kind:  kinds.Gateway,
 							Nsname: types.NamespacedName{
 								Namespace: "test",
 								Name:      "gateway",
@@ -2738,7 +2738,7 @@ func TestBuildConfiguration(t *testing.T) {
 						TargetRefs: []v1.LocalPolicyTargetReference{
 							{
 								Group: "gateway.networking.k8s.io",
-								Kind:  "Gateway",
+								Kind:  kinds.Gateway,
 								Name:  "gateway",
 							},
 						},
@@ -2847,7 +2847,7 @@ func TestBuildConfiguration(t *testing.T) {
 				modifiedRouteHR1 := *routeHR1
 				modifiedRouteHR1.ParentRefs = []graph.ParentRef{
 					{
-						Kind:           "ListenerSet",
+						Kind:           kinds.ListenerSet,
 						NamespacedName: listenerSetNsName,
 						Attachment: &graph.ParentRefAttachmentStatus{
 							AcceptedHostnames: map[string][]string{
@@ -2948,7 +2948,7 @@ func TestBuildConfiguration(t *testing.T) {
 					},
 					ParentRefs: []graph.ParentRef{
 						{
-							Kind:           "ListenerSet",
+							Kind:           kinds.ListenerSet,
 							NamespacedName: listenerSetNsName,
 							Attachment: &graph.ParentRefAttachmentStatus{
 								AcceptedHostnames: map[string][]string{
@@ -4838,7 +4838,7 @@ func TestCreatePassthroughServers(t *testing.T) {
 									},
 									ParentRefs: []graph.ParentRef{
 										{
-											Kind:           "Gateway",
+											Kind:           kinds.Gateway,
 											NamespacedName: gatewayNsName,
 											Attachment: &graph.ParentRefAttachmentStatus{
 												AcceptedHostnames: map[string][]string{
@@ -4972,7 +4972,7 @@ func TestCreatePassthroughServers(t *testing.T) {
 									},
 									ParentRefs: []graph.ParentRef{
 										{
-											Kind:           "ListenerSet",
+											Kind:           kinds.ListenerSet,
 											NamespacedName: listenerSetNsName,
 											Attachment: &graph.ParentRefAttachmentStatus{
 												AcceptedHostnames: map[string][]string{

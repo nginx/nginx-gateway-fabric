@@ -1419,7 +1419,7 @@ func TestValidateOIDCHTTPSListeners(t *testing.T) {
 				}},
 			},
 			ParentRefs: []ParentRef{{
-				Kind:           "Gateway",
+				Kind:           kinds.Gateway,
 				NamespacedName: gwNSName,
 				Attachment: &ParentRefAttachmentStatus{
 					AcceptedHostnames: map[string][]string{listenerKey: {"cafe.example.com"}},
@@ -1446,7 +1446,7 @@ func TestValidateOIDCHTTPSListeners(t *testing.T) {
 				}},
 			},
 			ParentRefs: []ParentRef{{
-				Kind:           "ListenerSet",
+				Kind:           kinds.ListenerSet,
 				NamespacedName: listenerSetNsName,
 				Attachment: &ParentRefAttachmentStatus{
 					AcceptedHostnames: map[string][]string{listenerKey: {"cafe.example.com"}},
@@ -1693,7 +1693,7 @@ func TestValidateOIDCURIConflictsPerHostname(t *testing.T) {
 			},
 			ParentRefs: []ParentRef{
 				{
-					Kind:           "ListenerSet",
+					Kind:           kinds.ListenerSet,
 					NamespacedName: listenerSetNsName,
 					Attachment: &ParentRefAttachmentStatus{
 						AcceptedHostnames: map[string][]string{
