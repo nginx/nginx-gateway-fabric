@@ -11,6 +11,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/ngfsort"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/resolver"
 )
@@ -263,29 +264,14 @@ func attachListenerSetsToGateways(
 		// Sort ListenerSets by precedence (creation time, then alphabetically by namespace/name).
 		// This follows listener precedence rules defined in GEP-1713 to ensure deterministic behavior when multiple
 		// ListenerSets reference the same Gateway with potential conflicts.
-		sortListenerSetsByPrecedence(lsArray)
+		sort.Slice(
+			lsArray, func(i, j int) bool {
+				return ngfsort.LessClientObject(lsArray[i].Source, lsArray[j].Source)
+			},
+		)
 
 		mergeGatewayAndListenerSetListeners(gateways[gwNsName], lsArray)
 	}
-}
-
-// sortListenerSetsByPrecedence sorts ListenerSets by creation time (oldest first) and then
-// alphabetically by namespace/name.
-func sortListenerSetsByPrecedence(lsArray []*ListenerSet) {
-	sort.Slice(lsArray, func(i, j int) bool {
-		lsI := lsArray[i].Source
-		lsJ := lsArray[j].Source
-
-		// First: creation time (oldest first)
-		if !lsI.CreationTimestamp.Equal(&lsJ.CreationTimestamp) {
-			return lsI.CreationTimestamp.Before(&lsJ.CreationTimestamp)
-		}
-
-		// Second: alphabetically by namespace/name
-		nameI := fmt.Sprintf("%s/%s", lsI.Namespace, lsI.Name)
-		nameJ := fmt.Sprintf("%s/%s", lsJ.Namespace, lsJ.Name)
-		return nameI < nameJ
-	})
 }
 
 // mergeGatewayAndListenerSetListeners merges the listeners from the ListenerSets into the Gateway's listeners.
