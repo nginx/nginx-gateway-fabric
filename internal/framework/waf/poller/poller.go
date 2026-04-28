@@ -223,8 +223,22 @@ func (p *poller) pollSource(ctx context.Context, src BundleSource) {
 	}
 
 	result, err := p.downloadBundle(ctx, src, last)
-	if err != nil || result.Unchanged || result.Checksum == last.checksum {
+	if err != nil {
 		p.reportStatus(src.BundleKey, "", err)
+		return
+	}
+
+	if result.Unchanged {
+		p.reportStatus(src.BundleKey, "", nil)
+		return
+	}
+
+	if result.Checksum == last.checksum {
+		// Content is identical but the server may have rotated its conditional token (ETag /
+		// Last-Modified). Save the new token so the next poll can use it, avoiding a full
+		// re-download every interval when the validator changes while content stays the same.
+		p.saveBundleState(src.BundleKey, result)
+		p.reportStatus(src.BundleKey, "", nil)
 		return
 	}
 

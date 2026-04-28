@@ -288,9 +288,9 @@ func (h *eventHandlerImpl) sendNginxConfig(ctx context.Context, logger logr.Logg
 		err := errors.Join(configErr, upstreamErr)
 
 		obj := &status.QueueObject{
-			UpdateType:    status.UpdateAll,
-			Error:         err,
-			NginxReloaded: true,
+			UpdateType:        status.UpdateAll,
+			Error:             err,
+			NginxConfigPushed: true,
 			Deployment: status.Deployment{
 				NamespacedName: gw.DeploymentName,
 				GatewayName:    gw.Source.GetName(),
@@ -516,7 +516,7 @@ func (h *eventHandlerImpl) waitForStatusUpdates(ctx context.Context) {
 		case item.Error != nil:
 			h.cfg.logger.Error(item.Error, "Failed to update NGINX configuration")
 			nginxReloadRes.Error = item.Error
-		case gw != nil && item.NginxReloaded:
+		case gw != nil && item.NginxConfigPushed:
 			h.cfg.logger.Info("NGINX configuration was successfully updated")
 		}
 		if gw != nil {
@@ -601,8 +601,10 @@ func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph, 
 	polReqs := status.PrepareBackendTLSPolicyRequests(gr.BackendTLSPolicies, transitionTime, h.cfg.gatewayCtlrName)
 
 	// Merge WAF poll results into policy conditions before preparing status requests.
-	h.mergeWAFPollErrors(gr)
+	// Bundle updates are applied first so that active poll errors can overwrite them
+	// during deduplication (conditions are deduplicated by Type, last-write wins).
 	h.mergeWAFBundleUpdates(gr)
+	h.mergeWAFPollErrors(gr)
 
 	ngfPolReqs := status.PrepareNGFPolicyRequests(gr.NGFPolicies, transitionTime, h.cfg.gatewayCtlrName)
 	snippetsFilterReqs := status.PrepareSnippetsFilterRequests(
@@ -714,8 +716,9 @@ func (h *eventHandlerImpl) mergeWAFPollErrors(gr *graph.Graph) {
 	}
 }
 
-// mergeWAFBundleUpdates adds a BundleUpdated condition to policies whose bundle was successfully
-// refreshed by the poller since the last status update.
+// mergeWAFBundleUpdates adds a BundleUpdated condition to policies whose bundle has a latest
+// successful refresh recorded by the poller. The condition reflects the most recent known bundle
+// update time and is not cleared after a status update.
 func (h *eventHandlerImpl) mergeWAFBundleUpdates(gr *graph.Graph) {
 	if h.cfg.wafPollerManager == nil {
 		return

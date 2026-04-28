@@ -31,10 +31,10 @@ type QueueObject struct {
 	Error          error
 	Deployment     Deployment
 	UpdateType     UpdateType
-	// NginxReloaded indicates that an NGINX configuration push was attempted for this update.
+	// NginxConfigPushed indicates that an NGINX configuration push was attempted for this update.
 	// When false the update is a status-only change (e.g. a WAF poll result) and the
 	// "NGINX configuration was successfully updated" log should be suppressed.
-	NginxReloaded bool
+	NginxConfigPushed bool
 }
 
 // Queue represents a queue with unlimited size.

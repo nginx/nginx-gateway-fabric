@@ -159,7 +159,7 @@ When `polling.enabled: true` is set on a `policySource` or `logSource`, NGF runs
   1. Send a conditional `GET` using the stored `ETag` (`If-None-Match`) or `Last-Modified` (`If-Modified-Since`) from the previous fetch, if available
   2. If the server returns `304 Not Modified`: take no action — no push to the data plane, no NGINX reload
   3. If the server returns `200 OK` with a new bundle: compute its SHA-256 checksum and compare to the stored value
-  4. If **unchanged** (same checksum): take no action
+  4. If **unchanged** (same checksum): update the stored conditional token (ETag or Last-Modified) in case the server has rotated its validator, but do not push to the data plane or trigger an NGINX reload
   5. If **changed**: deploy the new bundle via Agent gRPC, then update the stored checksum and conditional token (ETag or Last-Modified)
 
 **Relationship to `validation.verifyChecksum`:**
@@ -180,7 +180,7 @@ All polling goroutines are started with the controller's context and are cancell
 **State tracking:**
 
 - NGF stores the last-known checksum per bundle (one for `policySource` and one per `logSource` entry) in memory
-- For HTTP sources, NGF also stores the `ETag` or `Last-Modified` conditional token from the last successful fetch, used to issue conditional GETs on subsequent polls
+- For HTTP sources, NGF also stores the `ETag` or `Last-Modified` conditional token from the last successful `200 OK` fetch, used to issue conditional GETs on subsequent polls; this token is also updated when a `200 OK` response is received but the checksum is unchanged, so that server-side validator rotation does not cause unnecessary full re-downloads
 - Stored state (checksums and conditional tokens) does not survive process restarts; on startup or reconcile, NGF performs an unconditional fetch regardless of any prior state
 - The polling interval timer restarts from the time of the last successful fetch
 
@@ -1194,12 +1194,14 @@ Three condition types are set on `WAFPolicy`:
 
 #### `Programmed` (NGF-specific)
 
-| Status  | Reason            | When                                                                                      |
-|---------|-------------------|-------------------------------------------------------------------------------------------|
-| `True`  | `Programmed`      | Bundle fetched and deployed to the NGINX data plane                                       |
-| `False` | `FetchError`      | Bundle could not be fetched (network error, HTTP error, S3 error, auth failure, timeout)  |
-| `False` | `IntegrityError`  | Bundle checksum verification failed                                                       |
-| `False` | `DeploymentError` | Data plane failed to apply the policy                                                     |
+| Status  | Reason               | When                                                                                                                                                  |
+|---------|----------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `True`  | `Programmed`         | Bundle fetched and deployed to the NGINX data plane                                                                                                   |
+| `True`  | `BundleUpdated`      | A poll cycle detected a changed bundle and pushed the update to the data plane; reflects the most recent known update time and checksum               |
+| `True`  | `StaleBundleWarning` | A poll cycle failed to re-fetch the bundle; the previously deployed bundle remains active                                                             |
+| `False` | `FetchError`         | Bundle could not be fetched (network error, HTTP error, S3 error, auth failure, timeout)                                                              |
+| `False` | `IntegrityError`     | Bundle checksum verification failed                                                                                                                   |
+| `False` | `DeploymentError`    | Data plane failed to apply the policy                                                                                                                 |
 
 ### Example Status
 
