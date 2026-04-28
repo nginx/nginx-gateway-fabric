@@ -828,6 +828,7 @@ var _ = Describe("eventHandler", func() {
 							BundleFailOpen: helpers.GetPointer(false),
 						},
 					},
+					Listeners: []*graph.Listener{{Valid: true}},
 				},
 			},
 			NGFPolicies: map[graph.PolicyKey]*graph.Policy{

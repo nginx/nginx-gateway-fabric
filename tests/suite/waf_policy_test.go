@@ -349,7 +349,7 @@ var _ = Describe("WAFPolicy", Ordered, Label("waf"), func() {
 
 		It("withholds config updates — a new route added after the policy is not reachable", func() {
 			// Apply a new route. If the config push is correctly withheld, NGINX never learns
-			// about /soda and requests to it return a non-200 status.
+			// about /soda and requests to it return 404 Not Found.
 			Expect(resourceManager.ApplyFromFiles(sodaFiles, namespace)).To(Succeed())
 
 			port := 80

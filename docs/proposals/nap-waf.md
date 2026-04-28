@@ -504,7 +504,7 @@ app_protect_security_log log_blocked syslog:server=syslog-svc.default:514;
 
 **First-Time Policy Fetch Failure:**
 
-The behaviour when a WAFPolicy bundle has never been successfully fetched is controlled by then`waf.bundleFailOpen` field on the `NginxProxy` resource (default: `false`).
+The behaviour when a WAFPolicy bundle has never been successfully fetched is controlled by the `waf.bundleFailOpen` field on the `NginxProxy` resource (default: `false`).
 
 - **Fail-closed (default, `bundleFailOpen: false`):** The NGINX configuration push is withheld entirely until the bundle is available. No config changes — including unrelated route additions — are applied to the data plane while any pending bundle exists for the Gateway. The WAFPolicy directive is **not** emitted, and the Gateway status reflects the withheld push. This is the safe default: the operator must resolve the bundle fetch before traffic is served.
 
