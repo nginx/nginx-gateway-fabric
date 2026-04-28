@@ -742,6 +742,9 @@ var serverTokensKeywords = map[string]struct{}{
 type WAFConfig struct {
 	// WAFBundles are the WAF Policy Bundles to be stored in the app_protect bundles directory.
 	WAFBundles map[WAFBundleID]WAFBundle
+	// CookieSeed is a stable value used as the app_protect_cookie_seed directive, ensuring WAF session
+	// cookies are consistent across multiple NGINX replicas.
+	CookieSeed string
 	// Enabled indicates whether WAF is enabled.
 	Enabled bool
 }

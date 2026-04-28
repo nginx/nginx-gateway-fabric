@@ -229,7 +229,7 @@ graph TB
         Gateway[Gateway]
         HTTPRoute[HTTPRoute]
         GRPCRoute[GRPCRoute]
-        NginxProxy[NginxProxy<br/>waf.enabled=true]
+        NginxProxy[NginxProxy<br/>waf.enable=true]
         GwWAF[WAFPolicy<br/>Gateway-level]
         RtWAF[WAFPolicy<br/>Route override]
         Secret[Secret<br/>Optional auth credentials]
@@ -677,7 +677,7 @@ metadata:
   namespace: nginx-gateway
 spec:
   waf:
-    enabled: true
+    enable: true
     # disableCookieSeed: false  # See note below
   # Optional container image overrides:
   # kubernetes:
@@ -1508,7 +1508,7 @@ metadata:
   namespace: nginx-gateway
 spec:
   waf:
-    enabled: true
+    enable: true
 ---
 # 3. Gateway
 apiVersion: gateway.networking.k8s.io/v1
@@ -1632,7 +1632,7 @@ metadata:
   namespace: nginx-gateway
 spec:
   waf:
-    enabled: true
+    enable: true
 ---
 # 3. APPolicy CRD (managed by security team; compiled by PLM)
 apiVersion: waf.f5.com/v1alpha1

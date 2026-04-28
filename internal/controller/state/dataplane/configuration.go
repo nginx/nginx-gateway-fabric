@@ -2014,9 +2014,15 @@ func buildWAF(gateway *graph.Gateway) WAFConfig {
 	gatewayBundles := collectGatewayWAFBundles(gateway)
 	wb := convertWAFBundles(gatewayBundles)
 
+	var cookieSeed string
+	if gateway.Source != nil && !graph.WAFCookieSeedDisabledForNginxProxy(gateway.EffectiveNginxProxy) {
+		cookieSeed = string(gateway.Source.UID)
+	}
+
 	wc := WAFConfig{
 		Enabled:    graph.WAFEnabledForNginxProxy(gateway.EffectiveNginxProxy),
 		WAFBundles: wb,
+		CookieSeed: cookieSeed,
 	}
 	return wc
 }

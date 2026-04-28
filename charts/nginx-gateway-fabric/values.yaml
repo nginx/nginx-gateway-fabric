@@ -613,9 +613,16 @@ nginx:
   #   serverTokens:
   #     type: string
   #     description: Sets the `server_tokens` directive. Accepts 'off', 'on', or 'build' for NGINX OSS, and any string or variable for NGINX Plus.
-  #   wafEnabled:
-  #     description: WAFEnabled enables NGINX App Protect WAF functionality.
-  #     type: boolean
+  #   waf:
+  #     description: WAF configures NGINX App Protect WAF.
+  #     type: object
+  #     properties:
+  #       enabled:
+  #         description: Enabled enables NGINX App Protect WAF functionality.
+  #         type: boolean
+  #       disableCookieSeed:
+  #         description: DisableCookieSeed disables the app_protect_cookie_seed directive.
+  #         type: boolean
   # @schema
   # -- The configuration for the data plane that is contained in the NginxProxy resource. This is applied globally to all Gateways
   # managed by this instance of NGINX Gateway Fabric.
@@ -711,7 +718,7 @@ nginx:
       # -- The number of seconds after the Pod has started before the readiness probes are initiated.
       # initialDelaySeconds: 3
   # -- Configuration for NGINX App Protect WAF v5 containers.
-  # These containers are only deployed when WAF is enabled via nginx.config.wafEnabled: true.
+  # These containers are only deployed when WAF is enabled via nginx.config.waf.enabled: true.
   # All settings are optional overrides - defaults are provided by NGF.
   wafContainers: {}
     # -- WAF Enforcer container configuration.

@@ -48,6 +48,7 @@ type httpConfig struct {
 	GatewaySecretID         dataplane.SSLKeyPairID
 	NginxReadinessProbePath string
 	ServerTokens            string
+	WAFCookieSeed           string
 	Includes                []shared.Include
 	NginxReadinessProbePort int32
 	IPFamily                shared.IPFamily
@@ -79,6 +80,7 @@ func executeBaseHTTPConfig(conf dataplane.Configuration, generator policies.Gene
 		ServerTokens:            conf.BaseHTTPConfig.ServerTokens,
 		OIDCProviders:           buildOIDCProviders(conf.OIDCProviders),
 		WAF:                     conf.WAF.Enabled,
+		WAFCookieSeed:           conf.WAF.CookieSeed,
 	}
 
 	results := make([]executeResult, 0, len(includes)+1)

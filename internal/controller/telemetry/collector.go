@@ -359,7 +359,7 @@ func collectGraphResourceCount(
 
 	ngfResourceCounts.WAFEnabledGatewayCount = int64(0)
 	for _, gateway := range g.Gateways {
-		if gateway.EffectiveNginxProxy != nil && gateway.EffectiveNginxProxy.WAFEnabled {
+		if graph.WAFEnabledForNginxProxy(gateway.EffectiveNginxProxy) {
 			ngfResourceCounts.WAFEnabledGatewayCount++
 		}
 	}

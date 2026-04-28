@@ -3,4 +3,5 @@ kind: NginxProxy
 metadata:
   name: waf-enabled-proxy
 spec:
-  wafEnabled: true
+  waf:
+    enabled: true

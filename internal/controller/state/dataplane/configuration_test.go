@@ -9219,33 +9219,34 @@ func TestBuildWAF(t *testing.T) {
 		{
 			name: "WAF disabled, no bundles",
 			gateway: &graph.Gateway{
+				Source:              &v1.Gateway{ObjectMeta: metav1.ObjectMeta{UID: "uid-disabled"}},
 				EffectiveNginxProxy: nil,
 				Policies:            []*graph.Policy{},
 			},
 			expWAFConfig: WAFConfig{
 				Enabled:    false,
 				WAFBundles: map[WAFBundleID]WAFBundle{},
+				CookieSeed: "uid-disabled",
 			},
 		},
 		{
 			name: "WAF enabled, no bundles",
 			gateway: &graph.Gateway{
-				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
-					WAFEnabled: true,
-				},
-				Policies: []*graph.Policy{},
+				Source:              &v1.Gateway{ObjectMeta: metav1.ObjectMeta{UID: "uid-enabled"}},
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{WAF: &ngfAPIv1alpha2.WAFSpec{Enable: helpers.GetPointer(true)}},
+				Policies:            []*graph.Policy{},
 			},
 			expWAFConfig: WAFConfig{
 				Enabled:    true,
 				WAFBundles: map[WAFBundleID]WAFBundle{},
+				CookieSeed: "uid-enabled",
 			},
 		},
 		{
 			name: "WAF disabled, with bundles on policy",
 			gateway: &graph.Gateway{
-				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
-					WAFEnabled: false,
-				},
+				Source:              &v1.Gateway{ObjectMeta: metav1.ObjectMeta{UID: "uid-disabled-bundles"}},
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{WAF: &ngfAPIv1alpha2.WAFSpec{Enable: helpers.GetPointer(false)}},
 				Policies: []*graph.Policy{
 					{
 						WAFState: &graph.PolicyWAFState{
@@ -9257,7 +9258,8 @@ func TestBuildWAF(t *testing.T) {
 				},
 			},
 			expWAFConfig: WAFConfig{
-				Enabled: false,
+				Enabled:    false,
+				CookieSeed: "uid-disabled-bundles",
 				WAFBundles: map[WAFBundleID]WAFBundle{
 					"bundle1.tgz": WAFBundle([]byte("bundle data")),
 				},
@@ -9266,9 +9268,8 @@ func TestBuildWAF(t *testing.T) {
 		{
 			name: "WAF enabled, with bundles on gateway-targeted policy",
 			gateway: &graph.Gateway{
-				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
-					WAFEnabled: true,
-				},
+				Source:              &v1.Gateway{ObjectMeta: metav1.ObjectMeta{UID: "uid-gw-policy"}},
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{WAF: &ngfAPIv1alpha2.WAFSpec{Enable: helpers.GetPointer(true)}},
 				Policies: []*graph.Policy{
 					{
 						WAFState: &graph.PolicyWAFState{
@@ -9281,7 +9282,8 @@ func TestBuildWAF(t *testing.T) {
 				},
 			},
 			expWAFConfig: WAFConfig{
-				Enabled: true,
+				Enabled:    true,
+				CookieSeed: "uid-gw-policy",
 				WAFBundles: map[WAFBundleID]WAFBundle{
 					"bundle1.tgz": WAFBundle([]byte("first bundle")),
 					"bundle2.tgz": WAFBundle(nil),
@@ -9291,9 +9293,8 @@ func TestBuildWAF(t *testing.T) {
 		{
 			name: "WAF enabled, policy with nil WAFState",
 			gateway: &graph.Gateway{
-				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
-					WAFEnabled: true,
-				},
+				Source:              &v1.Gateway{ObjectMeta: metav1.ObjectMeta{UID: "uid-nil-state"}},
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{WAF: &ngfAPIv1alpha2.WAFSpec{Enable: helpers.GetPointer(true)}},
 				Policies: []*graph.Policy{
 					{
 						WAFState: nil, // Non-WAF policy.
@@ -9303,14 +9304,14 @@ func TestBuildWAF(t *testing.T) {
 			expWAFConfig: WAFConfig{
 				Enabled:    true,
 				WAFBundles: map[WAFBundleID]WAFBundle{},
+				CookieSeed: "uid-nil-state",
 			},
 		},
 		{
 			name: "WAF enabled, multiple policies with bundles",
 			gateway: &graph.Gateway{
-				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
-					WAFEnabled: true,
-				},
+				Source:              &v1.Gateway{ObjectMeta: metav1.ObjectMeta{UID: "uid-multi-policy"}},
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{WAF: &ngfAPIv1alpha2.WAFSpec{Enable: helpers.GetPointer(true)}},
 				Policies: []*graph.Policy{
 					{
 						WAFState: &graph.PolicyWAFState{
@@ -9329,7 +9330,8 @@ func TestBuildWAF(t *testing.T) {
 				},
 			},
 			expWAFConfig: WAFConfig{
-				Enabled: true,
+				Enabled:    true,
+				CookieSeed: "uid-multi-policy",
 				WAFBundles: map[WAFBundleID]WAFBundle{
 					"policy1_bundle": WAFBundle([]byte("bundle 1")),
 					"policy2_bundle": WAFBundle([]byte("bundle 2")),
@@ -9339,10 +9341,9 @@ func TestBuildWAF(t *testing.T) {
 		{
 			name: "WAF enabled, bundles on route-targeted policy",
 			gateway: &graph.Gateway{
-				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
-					WAFEnabled: true,
-				},
-				Policies: []*graph.Policy{},
+				Source:              &v1.Gateway{ObjectMeta: metav1.ObjectMeta{UID: "uid-route-policy"}},
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{WAF: &ngfAPIv1alpha2.WAFSpec{Enable: helpers.GetPointer(true)}},
+				Policies:            []*graph.Policy{},
 				Listeners: []*graph.Listener{
 					{
 						Routes: map[graph.RouteKey]*graph.L7Route{
@@ -9362,7 +9363,8 @@ func TestBuildWAF(t *testing.T) {
 				},
 			},
 			expWAFConfig: WAFConfig{
-				Enabled: true,
+				Enabled:    true,
+				CookieSeed: "uid-route-policy",
 				WAFBundles: map[WAFBundleID]WAFBundle{
 					"route_bundle": WAFBundle([]byte("route bundle data")),
 				},
@@ -9371,9 +9373,8 @@ func TestBuildWAF(t *testing.T) {
 		{
 			name: "WAF enabled, bundles on both gateway and route policies",
 			gateway: &graph.Gateway{
-				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
-					WAFEnabled: true,
-				},
+				Source:              &v1.Gateway{ObjectMeta: metav1.ObjectMeta{UID: "uid-gw-route"}},
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{WAF: &ngfAPIv1alpha2.WAFSpec{Enable: helpers.GetPointer(true)}},
 				Policies: []*graph.Policy{
 					{
 						WAFState: &graph.PolicyWAFState{
@@ -9402,11 +9403,40 @@ func TestBuildWAF(t *testing.T) {
 				},
 			},
 			expWAFConfig: WAFConfig{
-				Enabled: true,
+				Enabled:    true,
+				CookieSeed: "uid-gw-route",
 				WAFBundles: map[WAFBundleID]WAFBundle{
 					"gw_bundle":    WAFBundle([]byte("gateway bundle")),
 					"route_bundle": WAFBundle([]byte("route bundle")),
 				},
+			},
+		},
+		{
+			name: "nil gateway source",
+			gateway: &graph.Gateway{
+				Source:              nil,
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{WAF: &ngfAPIv1alpha2.WAFSpec{Enable: helpers.GetPointer(true)}},
+				Policies:            []*graph.Policy{},
+			},
+			expWAFConfig: WAFConfig{
+				Enabled:    true,
+				WAFBundles: map[WAFBundleID]WAFBundle{},
+				CookieSeed: "",
+			},
+		},
+		{
+			name: "WAF enabled, cookie seed disabled",
+			gateway: &graph.Gateway{
+				Source: &v1.Gateway{ObjectMeta: metav1.ObjectMeta{UID: "uid-disable-seed"}},
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+					WAF: &ngfAPIv1alpha2.WAFSpec{Enable: helpers.GetPointer(true), DisableCookieSeed: helpers.GetPointer(true)},
+				},
+				Policies: []*graph.Policy{},
+			},
+			expWAFConfig: WAFConfig{
+				Enabled:    true,
+				WAFBundles: map[WAFBundleID]WAFBundle{},
+				CookieSeed: "",
 			},
 		},
 	}

@@ -10024,13 +10024,26 @@ spec:
                     - key
                     x-kubernetes-list-type: map
                 type: object
-              wafEnabled:
-                description: |-
-                  WAFEnabled enables NGINX App Protect WAF functionality.
-                  When enabled, NGINX Gateway Fabric will deploy additional WAF containers
-                  (waf-enforcer and waf-config-mgr) alongside the main NGINX container.
-                  Default is false.
-                type: boolean
+              waf:
+                description: WAF configures NGINX App Protect WAF functionality.
+                properties:
+                  disableCookieSeed:
+                    description: |-
+                      DisableCookieSeed disables the app_protect_cookie_seed directive.
+                      By default, NGF sets this directive to a stable value derived from the Gateway UID,
+                      ensuring WAF session cookies are consistent across multiple NGINX replicas.
+                      Set this to true if you have pre-compiled the cookie seed into your WAF policy bundles
+                      via the compiler global settings, to avoid conflicting with the compiled-in value.
+                      Default is false.
+                    type: boolean
+                  enable:
+                    description: |-
+                      Enable enables NGINX App Protect WAF functionality.
+                      When enabled, NGINX Gateway Fabric will deploy additional WAF containers
+                      (waf-enforcer and waf-config-mgr) alongside the main NGINX container.
+                      Default is false.
+                    type: boolean
+                type: object
               workerConnections:
                 description: |-
                   WorkerConnections specifies the maximum number of simultaneous connections that can be opened by a worker process.
