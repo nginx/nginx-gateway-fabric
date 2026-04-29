@@ -117,7 +117,8 @@ type Request struct {
 	// InsecureSkipVerify disables TLS certificate verification. Not recommended for production use.
 	InsecureSkipVerify bool
 	// VerifyChecksum enables checksum verification by fetching a companion <url>.sha256 file.
-	// Only supported for plain HTTP fetches (no PolicyName, NIMPolicyUID, or N1CNamespace set).
+	// Only supported for plain HTTP fetches; not supported for NIM or N1C policy or log-profile
+	// sources (PolicyName, NIM.PolicyUID, N1C.Namespace, or LogProfileName set).
 	// Mutually exclusive with ExpectedChecksum.
 	VerifyChecksum bool
 }
@@ -201,7 +202,8 @@ func (f *HTTPFetcher) WithN1CCompilePollDelay(d time.Duration) *HTTPFetcher {
 // validateAndNormalizeRequest checks mutual-exclusion rules and normalises
 // ExpectedChecksum to lowercase. It returns the updated Request or an error.
 func validateAndNormalizeRequest(req Request) (Request, error) {
-	if req.VerifyChecksum && (req.N1C.Namespace != "" || req.PolicyName != "" || req.NIM.PolicyUID != "") {
+	if req.VerifyChecksum &&
+		(req.N1C.Namespace != "" || req.PolicyName != "" || req.NIM.PolicyUID != "" || req.LogProfileName != "") {
 		return Request{}, fmt.Errorf(
 			"verifyChecksum is only supported for plain HTTP fetches; use expectedChecksum for NIM/N1C sources",
 		)

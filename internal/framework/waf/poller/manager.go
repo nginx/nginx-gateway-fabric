@@ -198,7 +198,11 @@ func (m *pollerManager) startPoller(ctx context.Context, cfg Config) {
 	// Record which policy owns each bundle key and its human-readable description.
 	for _, src := range cfg.Sources {
 		m.bundleKeyToPolicy[src.BundleKey] = cfg.PolicyNsName
-		m.bundleKeyToDescription[src.BundleKey] = src.Description
+		desc := src.Description
+		if desc == "" {
+			desc = "WAF bundle"
+		}
+		m.bundleKeyToDescription[src.BundleKey] = desc
 	}
 
 	poller = newPoller(pollerConfig{
@@ -386,6 +390,7 @@ func (m *pollerManager) stopAll() {
 	m.bundleUpdates = make(map[types.NamespacedName]BundleUpdate)
 	m.bundleCache = make(map[graph.WAFBundleKey]*graph.WAFBundleData)
 	m.bundleKeyToPolicy = make(map[graph.WAFBundleKey]types.NamespacedName)
+	m.bundleKeyToDescription = make(map[graph.WAFBundleKey]string)
 	m.mu.Unlock()
 
 	for _, entry := range entries {
@@ -395,12 +400,13 @@ func (m *pollerManager) stopAll() {
 	m.logger.Info("Stopped all WAF pollers", "count", len(entries))
 }
 
-// clearBundleCacheLocked removes cached bundle data and policy mappings for all bundle keys
+// clearBundleCacheLocked removes cached bundle data and all per-key mappings for all bundle keys
 // owned by the given poller. Must be called while m.mu is held.
 func (m *pollerManager) clearBundleCacheLocked(p *poller) {
 	for _, src := range p.getSources() {
 		delete(m.bundleCache, src.BundleKey)
 		delete(m.bundleKeyToPolicy, src.BundleKey)
+		delete(m.bundleKeyToDescription, src.BundleKey)
 	}
 }
 
