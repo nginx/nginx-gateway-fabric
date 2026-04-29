@@ -133,6 +133,27 @@ func TestBuildReferencedInferencePools(t *testing.T) {
 		return route
 	})
 
+	// Simulates a route after the InferencePool was deleted and re-created:
+	// IsInferencePool is false and InferencePoolName is empty because the pool didn't exist
+	// when the route was last processed, but the original Kind and Name from the HTTPRoute
+	// spec are preserved.
+	routeWithDeletedPoolBackend := getModifiedRoute(func(route *L7Route) *L7Route {
+		route.Spec.Rules[0].RouteBackendRefs = []RouteBackendRef{
+			{
+				IsInferencePool:   false,
+				InferencePoolName: "",
+				BackendRef: gatewayv1.BackendRef{
+					BackendObjectReference: gatewayv1.BackendObjectReference{
+						Kind:      helpers.GetPointer[gatewayv1.Kind](kinds.InferencePool),
+						Name:      "pool",
+						Namespace: helpers.GetPointer[gatewayv1.Namespace]("test"),
+					},
+				},
+			},
+		}
+		return route
+	})
+
 	invalidRoute := getModifiedRoute(func(route *L7Route) *L7Route {
 		route.Valid = false
 		return route
@@ -334,6 +355,23 @@ func TestBuildReferencedInferencePools(t *testing.T) {
 					Conditions: []conditions.Condition{},
 					// validity of InferencePool depends on condition counts only
 					Valid: true,
+				},
+			},
+		},
+		{
+			name: "non-existent inference pool backend ref referenced in route is still tracked",
+			gws:  gws,
+			routes: map[RouteKey]*L7Route{
+				CreateRouteKey(validRoute.Source): routeWithDeletedPoolBackend,
+			},
+			inferencePools: map[types.NamespacedName]*inference.InferencePool{},
+			expPools: map[types.NamespacedName]*ReferencedInferencePool{
+				{Name: "pool", Namespace: "test"}: {
+					Source:     nil,
+					Gateways:   []*gatewayv1.Gateway{},
+					HTTPRoutes: []*L7Route{},
+					Conditions: []conditions.Condition{},
+					Valid:      true,
 				},
 			},
 		},
