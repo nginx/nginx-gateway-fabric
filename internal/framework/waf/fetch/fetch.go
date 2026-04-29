@@ -315,7 +315,9 @@ func (f *HTTPFetcher) dispatchChecksum(ctx context.Context, client *http.Client,
 }
 
 func (f *HTTPFetcher) logProfileDispatchChecksum(
-	ctx context.Context, client *http.Client, req Request,
+	ctx context.Context,
+	client *http.Client,
+	req Request,
 ) (string, error) {
 	switch {
 	case req.N1C.Namespace != "":

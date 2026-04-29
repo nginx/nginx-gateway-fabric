@@ -652,7 +652,7 @@ nginx:
       # -- The number of seconds after the Pod has started before the readiness probes are initiated.
       # initialDelaySeconds: 3
   # -- Configuration for NGINX App Protect WAF v5 containers.
-  # These containers are only deployed when WAF is enabled via nginx.config.waf.enabled: true.
+  # These containers are only deployed when WAF is enabled via nginx.config.waf.enable: true.
   # All settings are optional overrides - defaults are provided by NGF.
   wafContainers: {}
     # -- WAF Enforcer container configuration.
