@@ -1951,6 +1951,34 @@ func TestMergeWAFBundleUpdates(t *testing.T) {
 		g.Expect(policy.Conditions[0]).To(Equal(pendingCond))
 	})
 
+	t.Run("does not overwrite StaleBundleWarning condition", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+
+		fakeManager := &pollerfakes.FakePollerManager{}
+		fakeManager.GetAllBundleUpdatesReturns(map[types.NamespacedName]wafPoller.BundleUpdate{
+			policyNsName: {Checksum: checksum, UpdatedAt: updatedAt},
+		})
+
+		handler := &eventHandlerImpl{cfg: eventHandlerConfig{wafPollerManager: fakeManager}}
+
+		staleCond := conditions.NewPolicyProgrammedStaleBundleWarning("previous fetch failed")
+		policy := &graph.Policy{
+			Source:     makeWAFPolicy(true),
+			Valid:      true,
+			Conditions: []conditions.Condition{staleCond},
+		}
+		gr := &graph.Graph{
+			NGFPolicies: map[graph.PolicyKey]*graph.Policy{wafPolicyKey("waf-policy"): policy},
+		}
+
+		handler.mergeWAFBundleUpdates(gr)
+
+		// StaleBundleWarning (Programmed=True warning) must not be overwritten by BundleUpdated.
+		g.Expect(policy.Conditions).To(HaveLen(1))
+		g.Expect(policy.Conditions[0]).To(Equal(staleCond))
+	})
+
 	t.Run("poll errors take precedence over bundle updates", func(t *testing.T) {
 		t.Parallel()
 		g := NewWithT(t)

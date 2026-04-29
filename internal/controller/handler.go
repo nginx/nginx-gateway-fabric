@@ -747,11 +747,14 @@ func (h *eventHandlerImpl) mergeWAFBundleUpdates(gr *graph.Graph) {
 				continue
 			}
 			found = true
-			// Only overwrite an existing Programmed condition when it is already Status=True.
-			// A Programmed=False condition (e.g. BundlePending, FetchError, IntegrityError)
-			// signals that the policy is not yet operational; a poller-side bundle update
-			// should not clear that state.
-			if existing.Status == metav1.ConditionTrue {
+			// Only overwrite "healthy" Programmed=True conditions (Programmed or BundleUpdated).
+			// Do not overwrite Programmed=False states (e.g. BundlePending, FetchError) or
+			// Programmed=True warning states (e.g. StaleBundleWarning) — those reflect active
+			// error/warning signals that must not be silenced by a historical bundle update.
+			healthy := existing.Status == metav1.ConditionTrue &&
+				(existing.Reason == string(conditions.PolicyReasonProgrammed) ||
+					existing.Reason == string(conditions.PolicyReasonBundleUpdated))
+			if healthy {
 				policy.Conditions[i] = cond
 			}
 			break

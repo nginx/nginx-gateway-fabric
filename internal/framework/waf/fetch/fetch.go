@@ -1285,6 +1285,10 @@ func buildNIMBundlesURL(baseURL, policyName, policyUID string, includeBundleCont
 // checksum, so they return false.
 // Plain HTTP sources also always require a full download.
 func (r Request) SupportsChecksumOnlyFetch() bool {
+	// NIM log-profile requests have no metadata-only endpoint regardless of other fields.
+	if r.LogProfileName != "" && r.N1C.Namespace == "" {
+		return false
+	}
 	return r.N1C.Namespace != "" || r.PolicyName != "" || r.NIM.PolicyUID != ""
 }
 

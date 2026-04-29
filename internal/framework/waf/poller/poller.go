@@ -292,7 +292,8 @@ func (p *poller) downloadBundle(
 	return result, nil
 }
 
-// saveBundleState persists the new checksum and HTTP conditional token after a successful push.
+// saveBundleState persists the checksum and HTTP conditional token after a successful fetch,
+// including when no push occurs because the content is unchanged but the conditional token rotated.
 func (p *poller) saveBundleState(bundleKey graph.WAFBundleKey, result fetch.Result) {
 	newState := bundleState{checksum: result.Checksum}
 	if result.ETag != "" {
