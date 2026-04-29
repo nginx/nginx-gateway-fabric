@@ -13,7 +13,6 @@ import (
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/ngfsort"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
-	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/resolver"
 )
 
 type ListenerSet struct {
@@ -36,8 +35,6 @@ func buildListenerSets(
 	ls map[types.NamespacedName]*v1.ListenerSet,
 	gateways map[types.NamespacedName]*Gateway,
 	namespaces map[types.NamespacedName]*corev1.Namespace,
-	resourceResolver resolver.Resolver,
-	refGrantResolver *referenceGrantResolver,
 ) map[types.NamespacedName]*ListenerSet {
 	if len(ls) == 0 || len(gateways) == 0 {
 		return nil
@@ -59,17 +56,14 @@ func buildListenerSets(
 			continue
 		}
 
-		conds, valid, listeners := validateListenerSet(listenerSet,
+		conds, valid := validateListenerSet(listenerSet,
 			parentGateway,
 			namespaces,
-			resourceResolver,
-			refGrantResolver,
 		)
 
 		builtListenerSets[lsNsName] = &ListenerSet{
 			Source:     listenerSet,
 			Conditions: conds,
-			Listeners:  listeners,
 			Gateway:    parentGateway.Source,
 			Valid:      valid,
 		}
@@ -82,15 +76,13 @@ func validateListenerSet(
 	ls *v1.ListenerSet,
 	parentGateway *Gateway,
 	namespaces map[types.NamespacedName]*corev1.Namespace,
-	resourceResolver resolver.Resolver,
-	refGrantResolver *referenceGrantResolver,
-) ([]conditions.Condition, bool, []*Listener) {
+) ([]conditions.Condition, bool) {
 	if !parentGateway.Valid {
 		errMsg := fmt.Sprintf("Parent Gateway %s/%s is not accepted",
 			parentGateway.Source.Namespace,
 			parentGateway.Source.Name,
 		)
-		return []conditions.Condition{conditions.NewListenerSetParentNotAccepted(errMsg)}, false, nil
+		return []conditions.Condition{conditions.NewListenerSetParentNotAccepted(errMsg)}, false
 	}
 
 	if !isListenerSetAllowedByGateway(ls, parentGateway.Source, namespaces) {
@@ -98,74 +90,10 @@ func validateListenerSet(
 			parentGateway.Source.Namespace,
 			parentGateway.Source.Name,
 		)
-		return []conditions.Condition{conditions.NewListenerSetNotAllowed(errMsg)}, false, nil
+		return []conditions.Condition{conditions.NewListenerSetNotAllowed(errMsg)}, false
 	}
 
-	gatewayForValidation := createGatewayForListenerValidation(ls, parentGateway.Source)
-
-	protectedPorts := buildProtectedPorts(parentGateway.EffectiveNginxProxy)
-
-	// Reuse existing listener validation from gateway_listener.go
-	validatedListeners := buildListeners(
-		&Gateway{
-			Source: gatewayForValidation,
-			// using a newly created listener factory will ensure validation of ListenerSet ListenerEntries
-			// is contained to listeners on the ListenerSet. Re-using a listener factory from the gateway would
-			// cause listeners on the ListenerSet to be affected by the listeners on the gateway, which will happen later
-			ListenerFactory: newListenerConfiguratorFactory(
-				gatewayForValidation,
-				resourceResolver,
-				refGrantResolver,
-				protectedPorts,
-			),
-		},
-		gatewayForValidation.Spec.Listeners,
-		types.NamespacedName{Namespace: gatewayForValidation.Namespace, Name: gatewayForValidation.Name},
-		types.NamespacedName{Namespace: ls.Namespace, Name: ls.Name},
-	)
-
-	validListenerCount := 0
-	for _, listener := range validatedListeners {
-		if listener.Valid {
-			validListenerCount++
-		}
-	}
-
-	// If some listeners are valid and some are invalid, we can consider the ListenerSet as accepted
-	// but with conditions in the ListenerEntryStatus indicating which listeners are invalid
-	if validListenerCount == 0 {
-		return []conditions.Condition{conditions.NewListenerSetListenersNotValid("All listeners are invalid")},
-			false,
-			validatedListeners
-	}
-
-	return []conditions.Condition{conditions.NewListenerSetAccepted()}, true, validatedListeners
-}
-
-// createGatewayForListenerValidation creates a temporary Gateway resource that contains
-// the ListenerSet's listeners, so we can reuse the existing listener validation logic.
-//
-// NOTE: This will most likely change in the future when we actually attach ListenerSet Listeners
-// onto the Gateway and this function may be removed.
-func createGatewayForListenerValidation(ls *v1.ListenerSet, parentGateway *v1.Gateway) *v1.Gateway {
-	// Convert ListenerEntries to v1.Listeners (they should be the same type)
-	gwListeners := make([]v1.Listener, len(ls.Spec.Listeners))
-	for i, listenerEntry := range ls.Spec.Listeners {
-		// ListenerEntry should be identical to v1.Listener
-		gwListeners[i] = v1.Listener(listenerEntry)
-	}
-
-	// Create a temporary gateway for validation with the same metadata context as the parent
-	return &v1.Gateway{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      ls.Name + "-validate", // Unique name for validation
-			Namespace: ls.Namespace,
-		},
-		Spec: v1.GatewaySpec{
-			GatewayClassName: parentGateway.Spec.GatewayClassName,
-			Listeners:        gwListeners,
-		},
-	}
+	return []conditions.Condition{conditions.NewListenerSetAccepted()}, true
 }
 
 // isListenerSetAllowedByGateway checks if the ListenerSet is allowed to attach to the Gateway

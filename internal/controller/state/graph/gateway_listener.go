@@ -766,6 +766,7 @@ type certRefError struct {
 	refNotPermitted bool
 }
 
+//nolint:gocyclo // will refactor at some point
 func createExternalReferencesForTLSSecretsResolver(
 	gwNs string,
 	resourceResolver resolver.Resolver,
@@ -779,7 +780,13 @@ func createExternalReferencesForTLSSecretsResolver(
 		var certRefErrors []certRefError
 
 		for i, certRef := range l.Source.TLS.CertificateRefs {
-			certRefNs := gwNs
+			var certRefNs string
+			if l.ListenerSetName.Name != "" {
+				certRefNs = l.ListenerSetName.Namespace
+			} else {
+				certRefNs = gwNs
+			}
+
 			if certRef.Namespace != nil {
 				certRefNs = string(*certRef.Namespace)
 			}
@@ -789,9 +796,14 @@ func createExternalReferencesForTLSSecretsResolver(
 				Name:      string(certRef.Name),
 			}
 
-			if certRefNs != gwNs {
+			msg := fmt.Sprintf("Certificate ref to secret %s not permitted by any ReferenceGrant", certRefNsName)
+			if l.ListenerSetName.Name != "" && certRefNs != l.ListenerSetName.Namespace {
+				if !refGrantResolver.refAllowed(toSecret(certRefNsName), fromListenerSet(l.ListenerSetName.Namespace)) {
+					certRefErrors = append(certRefErrors, certRefError{msg: msg, refNotPermitted: true})
+					continue
+				}
+			} else if certRefNs != gwNs {
 				if !refGrantResolver.refAllowed(toSecret(certRefNsName), fromGateway(gwNs)) {
-					msg := fmt.Sprintf("Certificate ref to secret %s not permitted by any ReferenceGrant", certRefNsName)
 					certRefErrors = append(certRefErrors, certRefError{msg: msg, refNotPermitted: true})
 					continue
 				}

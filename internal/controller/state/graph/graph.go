@@ -262,7 +262,7 @@ func BuildGraph(
 		processedNginxProxies,
 	)
 
-	listenerSets := buildListenerSets(state.ListenerSets, gws, state.Namespaces, resourceResolver, refGrantResolver)
+	listenerSets := buildListenerSets(state.ListenerSets, gws, state.Namespaces)
 
 	attachListenerSetsToGateways(gws, listenerSets)
 
