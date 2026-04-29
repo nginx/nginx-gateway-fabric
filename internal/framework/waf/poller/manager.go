@@ -186,7 +186,9 @@ func (m *pollerManager) startPoller(ctx context.Context, cfg Config) {
 		newChecksum string,
 		err error,
 	) {
+		m.mu.RLock()
 		desc := m.bundleKeyToDescription[bundleKey]
+		m.mu.RUnlock()
 		m.recordPollResult(policyNsName, bundleKey, desc, newChecksum, err)
 		if m.statusCallback != nil {
 			m.statusCallback(poller.getTargetDeployments())

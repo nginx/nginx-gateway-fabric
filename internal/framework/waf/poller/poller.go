@@ -291,16 +291,21 @@ func (p *poller) downloadBundle(
 
 // saveBundleState persists the checksum and HTTP conditional token after a successful fetch,
 // including when no push occurs because the content is unchanged but the conditional token rotated.
+// A previously stored conditional token is preserved when the response does not supply a new one,
+// so that servers omitting validators on some responses do not force unconditional GETs.
 func (p *poller) saveBundleState(bundleKey graph.WAFBundleKey, result fetch.Result) {
-	newState := bundleState{checksum: result.Checksum}
-	if result.ETag != "" {
-		newState.conditionalToken = result.ETag
-	} else if result.LastModified != "" {
-		newState.conditionalToken = result.LastModified
-	}
 	p.stateMu.Lock()
-	p.bundleStates[bundleKey] = newState
-	p.stateMu.Unlock()
+	defer p.stateMu.Unlock()
+
+	state := p.bundleStates[bundleKey]
+	state.checksum = result.Checksum
+	if result.ETag != "" {
+		state.conditionalToken = result.ETag
+	} else if result.LastModified != "" {
+		state.conditionalToken = result.LastModified
+	}
+	// If neither ETag nor Last-Modified is present, preserve the previously stored token.
+	p.bundleStates[bundleKey] = state
 }
 
 // reportStatus fires the status callback if one is registered.

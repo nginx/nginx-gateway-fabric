@@ -1200,14 +1200,14 @@ Three condition types are set on `WAFPolicy`:
 
 #### `Programmed` (NGF-specific)
 
-| Status  | Reason               | When                                                                                                                                                  |
-|---------|----------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `True`  | `Programmed`         | Bundle fetched and deployed to the NGINX data plane                                                                                                   |
-| `True`  | `BundleUpdated`      | A poll cycle detected a changed bundle and pushed the update to the data plane; reflects the most recent known update time and checksum               |
-| `True`  | `StaleBundleWarning` | A poll cycle failed to re-fetch the bundle; the previously deployed bundle remains active                                                             |
-| `False` | `FetchError`         | Bundle could not be fetched (network error, HTTP error, S3 error, auth failure, timeout)                                                              |
-| `False` | `IntegrityError`     | Bundle checksum verification failed                                                                                                                   |
-| `False` | `DeploymentError`    | Data plane failed to apply the policy                                                                                                                 |
+| Status  | Reason               | When                                                                                                                                                                                                                              |
+|---------|----------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `True`  | `Programmed`         | Bundle fetched and deployed to the NGINX data plane                                                                                                                                                                               |
+| `True`  | `BundleUpdated`      | A poll cycle detected a changed bundle and pushed the update to the data plane; message includes the bundle description, update time, and checksum, e.g. `"policy bundle updated at <time> (checksum: <sha>)"`                    |
+| `True`  | `StaleBundleWarning` | A poll cycle failed to re-fetch the bundle; the previously deployed bundle remains active; message includes the bundle description and error, e.g. `"policy bundle fetch failed; using previously fetched bundle: <error>"`       |
+| `False` | `FetchError`         | Bundle could not be fetched (network error, HTTP error, S3 error, auth failure, timeout)                                                                                                                                          |
+| `False` | `IntegrityError`     | Bundle checksum verification failed                                                                                                                                                                                               |
+| `False` | `DeploymentError`    | Data plane failed to apply the policy                                                                                                                                                                                             |
 
 ### Example Status
 
@@ -1266,6 +1266,30 @@ Failure examples:
   status: "False"
   reason: IntegrityError
   message: "Bundle integrity check failed: expected abc123..., got def456..."
+
+# Poll detected a changed bundle (policy bundle)
+- type: Programmed
+  status: "True"
+  reason: BundleUpdated
+  message: "policy bundle updated at 2025-04-29T12:00:00Z (checksum: abc123)"
+
+# Poll detected a changed bundle (security log bundle)
+- type: Programmed
+  status: "True"
+  reason: BundleUpdated
+  message: "security log bundle (profile: default) updated at 2025-04-29T12:00:00Z (checksum: def456)"
+
+# Poll failed but previous bundle still active (policy bundle)
+- type: Programmed
+  status: "True"
+  reason: StaleBundleWarning
+  message: "policy bundle fetch failed; using previously fetched bundle: connection timeout"
+
+# Poll failed but previous bundle still active (security log bundle)
+- type: Programmed
+  status: "True"
+  reason: StaleBundleWarning
+  message: "security log bundle (URL: https://bundles.example.com/log.tgz) fetch failed; using previously fetched bundle: 403 Forbidden"
 ```
 
 ### Setting Status on Affected Objects
