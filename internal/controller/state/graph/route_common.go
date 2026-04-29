@@ -253,6 +253,18 @@ func CreateRouteKeyL4(obj client.Object) L4RouteKey {
 	}
 }
 
+// CreateParentRefListenerKeyFromListener creates a key using the Listener's ParentRef and name depending
+// on whether the Listener is from a Gateway or a ListenerSet.
+func CreateParentRefListenerKeyFromListener(listener *Listener) string {
+	// Listeners from a ListenerSet must have ListenerSetName set, while Listeners from a Gateway
+	// will have an empty ListenerSetName and will instead set GatewayName.
+	if listener.ListenerSetName.Name != "" {
+		return CreateParentRefListenerKey(listener.ListenerSetName, listener.Name)
+	}
+
+	return CreateParentRefListenerKey(listener.GatewayName, listener.Name)
+}
+
 // CreateParentRefListenerKey creates a key using the ParentRef NamespacedName and Listener name.
 // ParentRef will either be a Gateway or ListenerSet.
 func CreateParentRefListenerKey(parentRefNsName types.NamespacedName, listenerName string) string {
@@ -608,13 +620,7 @@ func getListenerHostPortMap(listeners []*Listener) map[string]hostPort {
 	listenerHostPortMap := make(map[string]hostPort, len(listeners))
 
 	for _, l := range listeners {
-		var key string
-		if l.ListenerSetName.Name != "" {
-			key = CreateParentRefListenerKey(l.ListenerSetName, l.Name)
-		} else {
-			key = CreateParentRefListenerKey(l.GatewayName, l.Name)
-		}
-		listenerHostPortMap[key] = hostPort{
+		listenerHostPortMap[CreateParentRefListenerKeyFromListener(l)] = hostPort{
 			hostname: getHostname(l.Source.Hostname),
 			port:     l.Source.Port,
 			gwNsName: l.GatewayName,
@@ -958,11 +964,7 @@ func bindToListenerL4(
 		return true, false, true, false
 	}
 
-	if l.ListenerSetName.Name != "" {
-		refStatus.AcceptedHostnames[CreateParentRefListenerKey(l.ListenerSetName, l.Name)] = hostnames
-	} else {
-		refStatus.AcceptedHostnames[CreateParentRefListenerKey(l.GatewayName, l.Name)] = hostnames
-	}
+	refStatus.AcceptedHostnames[CreateParentRefListenerKeyFromListener(l)] = hostnames
 
 	l.L4Routes[CreateRouteKeyL4(route.Source)] = route
 
@@ -1086,11 +1088,7 @@ func tryToAttachL7RouteToListeners(
 			return true, false
 		}
 
-		if l.ListenerSetName.Name != "" {
-			refStatus.AcceptedHostnames[CreateParentRefListenerKey(l.ListenerSetName, l.Name)] = hostnames
-		} else {
-			refStatus.AcceptedHostnames[CreateParentRefListenerKey(l.GatewayName, l.Name)] = hostnames
-		}
+		refStatus.AcceptedHostnames[CreateParentRefListenerKeyFromListener(l)] = hostnames
 		refStatus.ListenerPort = l.Source.Port
 
 		l.Routes[rk] = route

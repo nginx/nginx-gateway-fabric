@@ -1378,8 +1378,9 @@ func TestValidateOIDCHTTPSListeners(t *testing.T) {
 			Source: &v1.Gateway{ObjectMeta: metav1.ObjectMeta{Name: nsname.Name, Namespace: nsname.Namespace}},
 			Listeners: []*Listener{
 				{
-					Name:   "listener",
-					Source: v1.Listener{Protocol: protocol},
+					GatewayName: nsname,
+					Name:        "listener",
+					Source:      v1.Listener{Protocol: protocol},
 				},
 			},
 		}

@@ -149,8 +149,6 @@ func BuildConfiguration(
 }
 
 // buildPassthroughServers builds TLSPassthroughServers from TLSRoutes attaches to listeners.
-//
-//nolint:gocyclo // will refactor at some point
 func buildPassthroughServers(gateway *graph.Gateway) []Layer4VirtualServer {
 	passthroughServersMap := make(map[graph.L4RouteKey][]Layer4VirtualServer)
 	listenerPassthroughServers := make([]Layer4VirtualServer, 0)
@@ -170,17 +168,7 @@ func buildPassthroughServers(gateway *graph.Gateway) []Layer4VirtualServer {
 			var hostnames []string
 
 			for _, p := range r.ParentRefs {
-				var key string
-				// if the listener is from a ListenerSet, we need to use the ListenerSet name
-				// since merging a listener from a ListenerSet onto a Gateway with a listener of the
-				// same name is a valid scenario
-				if l.ListenerSetName.Name != "" {
-					key = graph.CreateParentRefListenerKey(l.ListenerSetName, l.Name)
-				} else {
-					key = graph.CreateParentRefListenerKey(l.GatewayName, l.Name)
-				}
-
-				if val, exist := p.Attachment.AcceptedHostnames[key]; exist {
+				if val, exist := p.Attachment.AcceptedHostnames[graph.CreateParentRefListenerKeyFromListener(l)]; exist {
 					hostnames = val
 					break
 				}
@@ -971,7 +959,6 @@ func (hpr *hostPathRules) upsertListener(
 	}
 }
 
-//nolint:gocyclo // will refactor at some point
 func (hpr *hostPathRules) upsertRoute(
 	route *graph.L7Route,
 	listener *graph.Listener,
@@ -993,17 +980,7 @@ func (hpr *hostPathRules) upsertRoute(
 	}
 
 	for _, p := range route.ParentRefs {
-		var key string
-		// if the listener is from a ListenerSet, we need to use the ListenerSet name
-		// since merging a listener from a ListenerSet onto a Gateway with a listener of the
-		// same name is a valid scenario
-		if listener.ListenerSetName.Name != "" {
-			key = graph.CreateParentRefListenerKey(listener.ListenerSetName, listener.Name)
-		} else {
-			key = graph.CreateParentRefListenerKey(listener.GatewayName, listener.Name)
-		}
-
-		if val, exist := p.Attachment.AcceptedHostnames[key]; exist {
+		if val, exist := p.Attachment.AcceptedHostnames[graph.CreateParentRefListenerKeyFromListener(listener)]; exist {
 			hostnames = val
 			break
 		}
