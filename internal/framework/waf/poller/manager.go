@@ -190,6 +190,9 @@ func (m *pollerManager) startPoller(ctx context.Context, cfg Config) {
 		m.mu.RLock()
 		desc := m.bundleKeyToDescription[bundleKey]
 		m.mu.RUnlock()
+		if desc == "" {
+			desc = "WAF bundle"
+		}
 		m.recordPollResult(policyNsName, bundleKey, desc, newChecksum, err)
 		if m.statusCallback != nil {
 			m.statusCallback(poller.getTargetDeployments())
