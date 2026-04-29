@@ -31,14 +31,11 @@ const (
 // BundleSource represents a single bundle source that needs polling.
 // This can be either the main policy bundle or a log bundle.
 type BundleSource struct {
-	// BundleKey is the unique identifier for this bundle.
-	BundleKey graph.WAFBundleKey
-	// Request contains the fetch configuration for this bundle.
-	Request fetch.Request
-	// Type indicates whether this is a policy bundle or a log profile bundle, which determines the fetch method used.
-	Type BundleType
-	// Interval is the polling interval for this source.
-	Interval time.Duration
+	BundleKey   graph.WAFBundleKey
+	Description string
+	Request     fetch.Request
+	Type        BundleType
+	Interval    time.Duration
 }
 
 // bundleState tracks the last known state of a fetched bundle, including the checksum and any
@@ -393,10 +390,11 @@ func BuildBundleSources(
 		}
 
 		sources = append(sources, BundleSource{
-			Type:      PolicyBundle,
-			BundleKey: graph.PolicyBundleKey(policyNsName),
-			Request:   graph.BuildPolicyFetchRequest(&spec.PolicySource, spec.Type, auth, tlsCA),
-			Interval:  interval,
+			Type:        PolicyBundle,
+			BundleKey:   graph.PolicyBundleKey(policyNsName),
+			Request:     graph.BuildPolicyFetchRequest(&spec.PolicySource, spec.Type, auth, tlsCA),
+			Description: "policy bundle",
+			Interval:    interval,
 		})
 	}
 
@@ -415,10 +413,11 @@ func BuildBundleSources(
 		}
 
 		sources = append(sources, BundleSource{
-			Type:      LogProfileBundle,
-			BundleKey: graph.LogBundleKey(policyNsName, &secLog.LogSource),
-			Request:   graph.BuildLogFetchRequest(&secLog.LogSource, auth, tlsCA),
-			Interval:  interval,
+			Type:        LogProfileBundle,
+			BundleKey:   graph.LogBundleKey(policyNsName, &secLog.LogSource),
+			Request:     graph.BuildLogFetchRequest(&secLog.LogSource, auth, tlsCA),
+			Description: graph.LogBundleDescription(&secLog.LogSource),
+			Interval:    interval,
 		})
 	}
 

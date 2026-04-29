@@ -142,6 +142,24 @@ func LogBundleKey(policyNsName types.NamespacedName, logSource *ngfAPIv1alpha1.L
 	)
 }
 
+// LogBundleDescription returns a human-readable label for a log profile bundle source.
+// Used in status condition messages to identify which bundle is being reported on.
+func LogBundleDescription(src *ngfAPIv1alpha1.LogSource) string {
+	switch {
+	case src.NIMSource != nil:
+		return fmt.Sprintf("security log bundle (profile: %s)", src.NIMSource.ProfileName)
+	case src.N1CSource != nil:
+		if src.N1CSource.ProfileName != nil {
+			return fmt.Sprintf("security log bundle (profile: %s)", *src.N1CSource.ProfileName)
+		}
+		return fmt.Sprintf("security log bundle (profile: %s)", *src.N1CSource.ProfileObjectID)
+	case src.HTTPSource != nil:
+		return fmt.Sprintf("security log bundle (URL: %s)", src.HTTPSource.URL)
+	default:
+		return "security log bundle"
+	}
+}
+
 // WAFBundleData contains the fetched WAF bundle content.
 type WAFBundleData struct {
 	Checksum string
@@ -1013,7 +1031,7 @@ func fetchPolicyBundle(
 	if err != nil {
 		logger.Error(err, "Failed to fetch WAF policy bundle", "resource", wafPolicy.Name)
 		if prev, ok := wafInput.PreviousBundles[bundleKey]; ok {
-			cond := conditions.NewPolicyProgrammedStaleBundleWarning(err.Error())
+			cond := conditions.NewPolicyProgrammedStaleBundleWarning("policy bundle", err.Error())
 			policy.Conditions = append(policy.Conditions, cond)
 			output.Bundles[bundleKey] = prev
 			policy.WAFState.Bundles[bundleKey] = prev
@@ -1091,7 +1109,7 @@ func fetchSecurityLogBundles(
 				wafPolicy.Name,
 			)
 			if prev, ok := wafInput.PreviousBundles[bundleKey]; ok {
-				cond := conditions.NewPolicyProgrammedStaleBundleWarning(err.Error())
+				cond := conditions.NewPolicyProgrammedStaleBundleWarning(LogBundleDescription(&secLog.LogSource), err.Error())
 				policy.Conditions = append(policy.Conditions, cond)
 				output.Bundles[bundleKey] = prev
 				policy.WAFState.Bundles[bundleKey] = prev

@@ -19,15 +19,23 @@ import (
 
 // PollError represents a polling error for a specific bundle.
 type PollError struct {
-	Err       error
+	Err error
+	// BundleKey is the internal identifier of the bundle that failed.
 	BundleKey graph.WAFBundleKey
+	// BundleDescription is a human-readable label for the bundle,
+	// e.g. "policy bundle" or "security log bundle (profile: default)".
+	BundleDescription string
 }
 
 // BundleUpdate records the most recent successful bundle push for a bundle key.
 type BundleUpdate struct {
 	UpdatedAt metav1.Time
+	// BundleKey is the internal identifier of the bundle that was updated.
 	BundleKey graph.WAFBundleKey
-	Checksum  string
+	// BundleDescription is a human-readable label for the bundle,
+	// e.g. "policy bundle" or "security log bundle (profile: default)".
+	BundleDescription string
+	Checksum          string
 }
 
 // Manager is the interface for managing WAF bundle pollers.
@@ -62,7 +70,11 @@ type pollerManager struct {
 	// bundleKeyToPolicy maps each bundle key to the policy that owns it.
 	// Used to look up the policy namespace/name when injecting a WAFBundleReconcileEvent.
 	bundleKeyToPolicy map[graph.WAFBundleKey]types.NamespacedName
-	statusCallback    func(targets []types.NamespacedName)
+	// bundleKeyToDescription maps each bundle key to a human-readable description of the bundle,
+	// e.g. "policy bundle" or "security log bundle (profile: default)".
+	// Used to produce user-visible condition messages without exposing internal key formats.
+	bundleKeyToDescription map[graph.WAFBundleKey]string
+	statusCallback         func(targets []types.NamespacedName)
 	// eventCh is the send side of the main event loop channel.
 	// A WAFBundleReconcileEvent is sent when a previously-pending bundle is first fetched successfully,
 	// triggering an immediate re-reconcile so the Gateway config push can proceed.
@@ -99,17 +111,18 @@ func NewManager(cfg ManagerConfig) Manager {
 		panic("waf.ManagerConfig: Ctx must be set when EventCh is set")
 	}
 	return &pollerManager{
-		logger:            cfg.Logger,
-		fetcher:           cfg.Fetcher,
-		deployments:       cfg.Deployments,
-		pollers:           make(map[types.NamespacedName]*pollerEntry),
-		pollErrors:        make(map[types.NamespacedName]*PollError),
-		bundleUpdates:     make(map[types.NamespacedName]BundleUpdate),
-		bundleCache:       make(map[graph.WAFBundleKey]*graph.WAFBundleData),
-		bundleKeyToPolicy: make(map[graph.WAFBundleKey]types.NamespacedName),
-		statusCallback:    cfg.StatusCallback,
-		eventCh:           cfg.EventCh,
-		ctx:               cfg.Ctx,
+		logger:                 cfg.Logger,
+		fetcher:                cfg.Fetcher,
+		deployments:            cfg.Deployments,
+		pollers:                make(map[types.NamespacedName]*pollerEntry),
+		pollErrors:             make(map[types.NamespacedName]*PollError),
+		bundleUpdates:          make(map[types.NamespacedName]BundleUpdate),
+		bundleCache:            make(map[graph.WAFBundleKey]*graph.WAFBundleData),
+		bundleKeyToPolicy:      make(map[graph.WAFBundleKey]types.NamespacedName),
+		bundleKeyToDescription: make(map[graph.WAFBundleKey]string),
+		statusCallback:         cfg.StatusCallback,
+		eventCh:                cfg.EventCh,
+		ctx:                    cfg.Ctx,
 	}
 }
 
@@ -173,15 +186,17 @@ func (m *pollerManager) startPoller(ctx context.Context, cfg Config) {
 		newChecksum string,
 		err error,
 	) {
-		m.recordPollResult(policyNsName, bundleKey, newChecksum, err)
+		desc := m.bundleKeyToDescription[bundleKey]
+		m.recordPollResult(policyNsName, bundleKey, desc, newChecksum, err)
 		if m.statusCallback != nil {
 			m.statusCallback(poller.getTargetDeployments())
 		}
 	}
 
-	// Record which policy owns each bundle key so cacheBundleUpdate can inject the correct event.
+	// Record which policy owns each bundle key and its human-readable description.
 	for _, src := range cfg.Sources {
 		m.bundleKeyToPolicy[src.BundleKey] = cfg.PolicyNsName
+		m.bundleKeyToDescription[src.BundleKey] = src.Description
 	}
 
 	poller = newPoller(pollerConfig{
@@ -223,6 +238,7 @@ func (m *pollerManager) startPoller(ctx context.Context, cfg Config) {
 func (m *pollerManager) recordPollResult(
 	policyNsName types.NamespacedName,
 	bundleKey graph.WAFBundleKey,
+	bundleDescription string,
 	newChecksum string,
 	err error,
 ) {
@@ -235,15 +251,17 @@ func (m *pollerManager) recordPollResult(
 		}
 		if newChecksum != "" {
 			m.bundleUpdates[policyNsName] = BundleUpdate{
-				BundleKey: bundleKey,
-				Checksum:  newChecksum,
-				UpdatedAt: metav1.Now(),
+				BundleKey:         bundleKey,
+				BundleDescription: bundleDescription,
+				Checksum:          newChecksum,
+				UpdatedAt:         metav1.Now(),
 			}
 		}
 	} else {
 		m.pollErrors[policyNsName] = &PollError{
-			BundleKey: bundleKey,
-			Err:       err,
+			BundleKey:         bundleKey,
+			BundleDescription: bundleDescription,
+			Err:               err,
 		}
 	}
 }

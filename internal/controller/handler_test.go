@@ -1658,8 +1658,9 @@ func TestMergeWAFPollErrors(t *testing.T) {
 			name: "adds stale-bundle warning when bundle exists",
 			pollErrors: map[types.NamespacedName]wafPoller.PollError{
 				policyNsName: {
-					BundleKey: bundleKey,
-					Err:       errors.New("fetch timeout"),
+					BundleKey:         bundleKey,
+					BundleDescription: "policy bundle",
+					Err:               errors.New("fetch timeout"),
 				},
 			},
 			policy: &graph.Policy{
@@ -1802,7 +1803,7 @@ func TestMergeWAFPollErrors(t *testing.T) {
 
 			if tt.expectCondCount > 0 {
 				cond := tt.policy.Conditions[0]
-				expectedCond := conditions.NewPolicyProgrammedStaleBundleWarning("fetch timeout")
+				expectedCond := conditions.NewPolicyProgrammedStaleBundleWarning("policy bundle", "fetch timeout")
 				g.Expect(cond).To(Equal(expectedCond))
 			}
 		})
@@ -1814,7 +1815,7 @@ func TestMergeWAFPollErrors(t *testing.T) {
 
 		fakeManager := &pollerfakes.FakePollerManager{}
 		fakeManager.GetAllPollErrorsReturns(map[types.NamespacedName]wafPoller.PollError{
-			policyNsName: {BundleKey: bundleKey, Err: errors.New("fetch timeout")},
+			policyNsName: {BundleKey: bundleKey, BundleDescription: "policy bundle", Err: errors.New("fetch timeout")},
 		})
 
 		handler := &eventHandlerImpl{
@@ -1873,18 +1874,18 @@ func TestMergeWAFPollErrors(t *testing.T) {
 
 		// First call with one error message.
 		fakeManager.GetAllPollErrorsReturns(map[types.NamespacedName]wafPoller.PollError{
-			policyNsName: {BundleKey: bundleKey, Err: errors.New("timeout")},
+			policyNsName: {BundleKey: bundleKey, BundleDescription: "policy bundle", Err: errors.New("timeout")},
 		})
 		handler.mergeWAFPollErrors(gr)
 
 		// Second call with a different error message.
 		fakeManager.GetAllPollErrorsReturns(map[types.NamespacedName]wafPoller.PollError{
-			policyNsName: {BundleKey: bundleKey, Err: errors.New("connection refused")},
+			policyNsName: {BundleKey: bundleKey, BundleDescription: "policy bundle", Err: errors.New("connection refused")},
 		})
 		handler.mergeWAFPollErrors(gr)
 
 		g.Expect(policy.Conditions).To(HaveLen(1))
-		expectedCond := conditions.NewPolicyProgrammedStaleBundleWarning("connection refused")
+		expectedCond := conditions.NewPolicyProgrammedStaleBundleWarning("policy bundle", "connection refused")
 		g.Expect(policy.Conditions[0]).To(Equal(expectedCond))
 	})
 }
@@ -1903,7 +1904,7 @@ func TestMergeWAFBundleUpdates(t *testing.T) {
 
 		fakeManager := &pollerfakes.FakePollerManager{}
 		fakeManager.GetAllBundleUpdatesReturns(map[types.NamespacedName]wafPoller.BundleUpdate{
-			policyNsName: {Checksum: checksum, UpdatedAt: updatedAt},
+			policyNsName: {BundleDescription: "policy bundle", Checksum: checksum, UpdatedAt: updatedAt},
 		})
 
 		handler := &eventHandlerImpl{cfg: eventHandlerConfig{wafPollerManager: fakeManager}}
@@ -1919,7 +1920,7 @@ func TestMergeWAFBundleUpdates(t *testing.T) {
 		handler.mergeWAFBundleUpdates(gr)
 
 		g.Expect(policy.Conditions).To(HaveLen(1))
-		expectedCond := conditions.NewPolicyProgrammedBundleUpdated(checksum, updatedAt)
+		expectedCond := conditions.NewPolicyProgrammedBundleUpdated("policy bundle", checksum, updatedAt)
 		g.Expect(policy.Conditions[0]).To(Equal(expectedCond))
 	})
 
@@ -1962,7 +1963,7 @@ func TestMergeWAFBundleUpdates(t *testing.T) {
 
 		handler := &eventHandlerImpl{cfg: eventHandlerConfig{wafPollerManager: fakeManager}}
 
-		staleCond := conditions.NewPolicyProgrammedStaleBundleWarning("previous fetch failed")
+		staleCond := conditions.NewPolicyProgrammedStaleBundleWarning("policy bundle", "previous fetch failed")
 		policy := &graph.Policy{
 			Source:     makeWAFPolicy(true),
 			Valid:      true,
@@ -1985,10 +1986,10 @@ func TestMergeWAFBundleUpdates(t *testing.T) {
 
 		fakeManager := &pollerfakes.FakePollerManager{}
 		fakeManager.GetAllBundleUpdatesReturns(map[types.NamespacedName]wafPoller.BundleUpdate{
-			policyNsName: {Checksum: checksum, UpdatedAt: updatedAt},
+			policyNsName: {BundleDescription: "policy bundle", Checksum: checksum, UpdatedAt: updatedAt},
 		})
 		fakeManager.GetAllPollErrorsReturns(map[types.NamespacedName]wafPoller.PollError{
-			policyNsName: {BundleKey: bundleKey, Err: errors.New("fetch timeout")},
+			policyNsName: {BundleKey: bundleKey, BundleDescription: "policy bundle", Err: errors.New("fetch timeout")},
 		})
 
 		handler := &eventHandlerImpl{cfg: eventHandlerConfig{wafPollerManager: fakeManager}}
@@ -2012,7 +2013,7 @@ func TestMergeWAFBundleUpdates(t *testing.T) {
 
 		// Poll error must win; exactly one Programmed condition remains.
 		g.Expect(policy.Conditions).To(HaveLen(1))
-		expectedCond := conditions.NewPolicyProgrammedStaleBundleWarning("fetch timeout")
+		expectedCond := conditions.NewPolicyProgrammedStaleBundleWarning("policy bundle", "fetch timeout")
 		g.Expect(policy.Conditions[0]).To(Equal(expectedCond))
 	})
 

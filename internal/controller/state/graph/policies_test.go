@@ -3037,7 +3037,7 @@ func TestProcessWAFPolicies(t *testing.T) {
 			},
 			expSecrets: map[types.NamespacedName]*corev1.Secret{},
 			expConditions: func(_ *Policy) []conditions.Condition {
-				return []conditions.Condition{conditions.NewPolicyProgrammedStaleBundleWarning("fetch failed")}
+				return []conditions.Condition{conditions.NewPolicyProgrammedStaleBundleWarning("policy bundle", "fetch failed")}
 			},
 			expValid: true,
 		},
@@ -3420,7 +3420,12 @@ func TestProcessWAFPolicies(t *testing.T) {
 			},
 			expSecrets: map[types.NamespacedName]*corev1.Secret{},
 			expConditions: func(_ *Policy) []conditions.Condition {
-				return []conditions.Condition{conditions.NewPolicyProgrammedStaleBundleWarning("log fetch failed")}
+				return []conditions.Condition{
+					conditions.NewPolicyProgrammedStaleBundleWarning(
+						"security log bundle (URL: "+logBundleURL+")",
+						"log fetch failed",
+					),
+				}
 			},
 			expValid: true,
 		},

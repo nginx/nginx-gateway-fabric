@@ -704,7 +704,7 @@ func (h *eventHandlerImpl) mergeWAFPollErrors(gr *graph.Graph) {
 		// Replace any existing condition with the same Type so that repeated calls (e.g.,
 		// multiple status updates reusing the same graph) don't accumulate same-Type conditions.
 		// Status preparation deduplicates by Type only, so matching on Type is sufficient.
-		cond := conditions.NewPolicyProgrammedStaleBundleWarning(pollError.Err.Error())
+		cond := conditions.NewPolicyProgrammedStaleBundleWarning(pollError.BundleDescription, pollError.Err.Error())
 
 		replaced := false
 		for i, existing := range policy.Conditions {
@@ -739,7 +739,7 @@ func (h *eventHandlerImpl) mergeWAFBundleUpdates(gr *graph.Graph) {
 			continue
 		}
 
-		cond := conditions.NewPolicyProgrammedBundleUpdated(update.Checksum, update.UpdatedAt)
+		cond := conditions.NewPolicyProgrammedBundleUpdated(update.BundleDescription, update.Checksum, update.UpdatedAt)
 
 		found := false
 		for i, existing := range policy.Conditions {

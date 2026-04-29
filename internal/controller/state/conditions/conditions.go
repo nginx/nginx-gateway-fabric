@@ -1498,23 +1498,28 @@ func NewPolicyNotProgrammedIntegrityError(errMsg string) Condition {
 
 // NewPolicyProgrammedBundleUpdated returns a Condition that indicates polling detected a changed
 // bundle and successfully pushed it to the data plane.
-func NewPolicyProgrammedBundleUpdated(checksum string, updatedAt metav1.Time) Condition {
+// bundleDescription is a human-readable label, e.g. "policy bundle" or "security log bundle (profile: default)".
+func NewPolicyProgrammedBundleUpdated(bundleDescription, checksum string, updatedAt metav1.Time) Condition {
 	return Condition{
-		Type:    string(WAFProgrammedConditionType),
-		Status:  metav1.ConditionTrue,
-		Reason:  string(PolicyReasonBundleUpdated),
-		Message: fmt.Sprintf("Bundle updated at %s (checksum: %s)", updatedAt.UTC().Format(time.RFC3339), checksum),
+		Type:   string(WAFProgrammedConditionType),
+		Status: metav1.ConditionTrue,
+		Reason: string(PolicyReasonBundleUpdated),
+		Message: fmt.Sprintf(
+			"%s updated at %s (checksum: %s)",
+			bundleDescription, updatedAt.UTC().Format(time.RFC3339), checksum,
+		),
 	}
 }
 
 // NewPolicyProgrammedStaleBundleWarning returns a Condition that indicates a bundle fetch failed
 // but the previously fetched bundle is being used to keep the policy active on the data plane.
-func NewPolicyProgrammedStaleBundleWarning(errMsg string) Condition {
+// bundleDescription is a human-readable label, e.g. "policy bundle" or "security log bundle (profile: default)".
+func NewPolicyProgrammedStaleBundleWarning(bundleDescription, errMsg string) Condition {
 	return Condition{
 		Type:    string(WAFProgrammedConditionType),
 		Status:  metav1.ConditionTrue,
 		Reason:  string(PolicyReasonStaleBundleWarning),
-		Message: fmt.Sprintf("Bundle fetch failed; using previously fetched bundle: %s", errMsg),
+		Message: fmt.Sprintf("%s fetch failed; using previously fetched bundle: %s", bundleDescription, errMsg),
 	}
 }
 
