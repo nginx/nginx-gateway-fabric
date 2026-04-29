@@ -639,7 +639,7 @@ func fetchNIMLogProfile(ctx context.Context, client *http.Client, req Request) (
 	return Result{Data: data, Checksum: ComputeChecksum(data)}, nil
 }
 
-// n1cLogProfilesResponse is the JSON envelope returned by the N1C list-log-profiles API.
+// n1cLogProfileItem is a single entry in the N1C list-log-profiles API response.
 type n1cLogProfileItem struct {
 	Name     string `json:"name"`
 	ObjectID string `json:"object_id"`
