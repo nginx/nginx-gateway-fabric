@@ -504,8 +504,16 @@ app_protect_security_log log_blocked syslog:server=syslog-svc.default:514;
 
 **First-Time Policy Fetch Failure:**
 
-- Route configuration is **not applied** — no WAF protection enabled
-- Route remains unprotected until policy becomes available
+The behaviour when a WAFPolicy bundle (policy or log profile) has never been successfully fetched is controlled by the `waf.bundleFailOpen` field on the `NginxProxy` resource (default: `false`).
+
+- **Fail-closed (default, `bundleFailOpen: false`):** The NGINX configuration push is withheld entirely until the bundle is available. No config changes — including unrelated route additions — are applied to the data plane while any pending bundle exists for the Gateway. The WAFPolicy directive is **not** emitted, and the Gateway status reflects the withheld push. This is the safe default: the operator must resolve the bundle fetch before traffic is served.
+
+- **Fail-open (`bundleFailOpen: true`):** NGINX configuration is pushed normally. The pending WAFPolicy is omitted from the generated config (no `app_protect_policy_file` directive is emitted), so NGINX loads successfully without WAF protection. Traffic flows unprotected until the bundle becomes available, at which point the policy is included in the next config push. The WAFPolicy status continues to show `Programmed=False/Pending` so the operator is aware the bundle has not yet arrived.
+
+In both cases the WAFPolicy status condition is set to `Programmed=False` with reason `Pending`
+until the bundle is successfully fetched.
+
+> **Note — upgrades and control plane restarts:** The first-time fetch rules apply whenever NGF starts without an already-fetched bundle on disk. This includes NGF upgrades, control plane pod restarts, and new Gateway deployments. Bundles are not persisted across pod restarts, so after a restart NGF re-fetches every bundle before it can include the corresponding WAFPolicy directives in the generated config. With the default fail-closed setting, this means config pushes are withheld until all bundles have been re-fetched after each restart. Operators who need traffic to flow immediately after a restart (accepting a window without WAF protection) should set `bundleFailOpen: true`.
 
 **Policy Update Failure:**
 
