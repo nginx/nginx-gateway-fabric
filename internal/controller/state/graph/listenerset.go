@@ -30,7 +30,7 @@ type ListenerSet struct {
 
 // buildListenerSets builds the internal ListenerSet representations from the v1.ListenerSet resources.
 // Validation is done for the ListenerSets before they are attached to the Gateways, which involves
-// validating individual ListenerSet ListenerEntries and validating the ListenerSet ParentRef.
+// validation on the ListenerSet's ParentRef.
 func buildListenerSets(
 	ls map[types.NamespacedName]*v1.ListenerSet,
 	gateways map[types.NamespacedName]*Gateway,
@@ -226,7 +226,6 @@ func mergeGatewayAndListenerSetListeners(gw *Gateway, ls []*ListenerSet) {
 			types.NamespacedName{Namespace: listenerSet.Source.Namespace, Name: listenerSet.Source.Name},
 		)
 
-		// Check for name conflicts and rename if necessary
 		validListenerCount := 0
 		for _, listener := range validatedListeners {
 			if listener.Valid {
