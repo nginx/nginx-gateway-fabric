@@ -141,10 +141,10 @@ type WAFSpec struct {
 	//
 	// +optional
 	DisableCookieSeed *bool `json:"disableCookieSeed,omitempty"`
-	// BundleFailOpen controls the behavior when a WAF policy bundle has not yet been
-	// successfully fetched. When set to true, NGINX configuration is pushed and traffic
-	// is served without WAF protection until the bundle becomes available. When false
-	// (the default), the configuration push is withheld until the bundle is fetched,
+	// BundleFailOpen controls the behavior when a WAF policy bundle (policy or log profile)
+	// has not yet been successfully fetched. When set to true, NGINX configuration is pushed
+	// and traffic is served without WAF protection until the bundle becomes available. When
+	// false (the default), the configuration push is withheld until the bundle is fetched,
 	// maintaining a fail-closed posture.
 	//
 	// +optional
