@@ -741,23 +741,22 @@ func (h *eventHandlerImpl) mergeWAFBundleUpdates(gr *graph.Graph) {
 
 		cond := conditions.NewPolicyProgrammedBundleUpdated(update.Checksum, update.UpdatedAt)
 
-		replaced := false
+		found := false
 		for i, existing := range policy.Conditions {
 			if existing.Type != cond.Type {
 				continue
 			}
+			found = true
 			// Only overwrite an existing Programmed condition when it is already Status=True.
 			// A Programmed=False condition (e.g. BundlePending, FetchError, IntegrityError)
 			// signals that the policy is not yet operational; a poller-side bundle update
 			// should not clear that state.
-			if existing.Status != metav1.ConditionTrue {
-				break
+			if existing.Status == metav1.ConditionTrue {
+				policy.Conditions[i] = cond
 			}
-			policy.Conditions[i] = cond
-			replaced = true
 			break
 		}
-		if !replaced {
+		if !found {
 			policy.Conditions = append(policy.Conditions, cond)
 		}
 	}
