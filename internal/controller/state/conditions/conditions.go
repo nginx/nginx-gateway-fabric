@@ -46,8 +46,8 @@ const (
 	// references is invalid.
 	RouteReasonInvalidGateway v1.RouteConditionReason = "InvalidGateway"
 
-	// RouteReasonInvalidListenerSet is used with the "Accepted" (false) condition when the ListenerSet the Route
-	// references is invalid.
+	// RouteReasonInvalidListenerSet is used with the "Accepted" (False) condition
+	// when the Route references an invalid ListenerSet.
 	RouteReasonInvalidListenerSet v1.RouteConditionReason = "InvalidListenerSet"
 
 	// RouteReasonInvalidListener is used with the "Accepted" condition when the Route references an invalid listener.

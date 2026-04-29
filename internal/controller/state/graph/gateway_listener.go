@@ -606,6 +606,8 @@ func isL4Protocol(protocol v1.ProtocolType) bool {
 	return protocol == v1.TCPProtocolType || protocol == v1.UDPProtocolType
 }
 
+// FIXME(bjee19): Refactor before release 2.7
+//
 //nolint:gocyclo // will refactor at some point
 func createPortConflictResolver() listenerConflictResolver {
 	const (
@@ -765,6 +767,8 @@ type certRefError struct {
 	refNotPermitted bool
 }
 
+// FIXME(bjee19): Refactor before release 2.7
+//
 //nolint:gocyclo // will refactor at some point
 func createExternalReferencesForTLSSecretsResolver(
 	gwNs string,
