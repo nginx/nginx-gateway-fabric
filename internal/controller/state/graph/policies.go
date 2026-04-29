@@ -152,7 +152,10 @@ func LogBundleDescription(src *ngfAPIv1alpha1.LogSource) string {
 		if src.N1CSource.ProfileName != nil {
 			return fmt.Sprintf("security log bundle (profile: %s)", *src.N1CSource.ProfileName)
 		}
-		return fmt.Sprintf("security log bundle (profile: %s)", *src.N1CSource.ProfileObjectID)
+		if src.N1CSource.ProfileObjectID != nil {
+			return fmt.Sprintf("security log bundle (profile: %s)", *src.N1CSource.ProfileObjectID)
+		}
+		return "security log bundle"
 	case src.HTTPSource != nil:
 		return fmt.Sprintf("security log bundle (URL: %s)", src.HTTPSource.URL)
 	default:
