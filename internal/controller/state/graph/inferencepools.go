@@ -99,8 +99,13 @@ func processInferencePoolsForGateway(
 					namespace = string(*ref.Namespace)
 				}
 
+				name := ref.InferencePoolName
+				if name == "" {
+					name = string(ref.Name)
+				}
+
 				poolName := types.NamespacedName{
-					Name:      ref.InferencePoolName,
+					Name:      name,
 					Namespace: namespace,
 				}
 
