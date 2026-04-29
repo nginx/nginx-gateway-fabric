@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os/exec"
 	"runtime"
 	"strings"
@@ -312,14 +313,20 @@ var _ = Describe("WAFPolicy", Ordered, Label("waf"), func() {
 		})
 	})
 
-	Context("when a WAFPolicy references a nonexistent bundle", func() {
+	Context("when a WAFPolicy references a nonexistent bundle", Ordered, func() {
+		// This context verifies fail-closed behavior (the default): once a WAFPolicy with a
+		// pending bundle is applied, subsequent config changes must be withheld until the bundle
+		// is available. We prove this by adding a new route *after* applying the bad policy and
+		// confirming it never becomes reachable.
 		policyFiles := []string{"waf-policy/wafpolicy-missing-bundle.yaml"}
+		sodaFiles := []string{"waf-policy/soda-route.yaml"}
 
 		BeforeAll(func() {
 			Expect(resourceManager.ApplyFromFiles(policyFiles, namespace)).To(Succeed())
 		})
 
 		AfterAll(func() {
+			Expect(resourceManager.DeleteFromFiles(sodaFiles, namespace)).To(Succeed())
 			Expect(resourceManager.DeleteFromFiles(policyFiles, namespace)).To(Succeed())
 		})
 
@@ -338,6 +345,82 @@ var _ = Describe("WAFPolicy", Ordered, Label("waf"), func() {
 				File:      fmt.Sprintf("WAFPolicy_%s_gateway-waf-missing-bundle.conf", namespace),
 			})
 			Expect(err).To(HaveOccurred(), "expected no WAF policy directive for missing bundle")
+		})
+
+		It("withholds config updates — a new route added after the policy is not reachable", func() {
+			// Apply a new route. If the config push is correctly withheld, NGINX never learns
+			// about /soda and requests to it return 404 Not Found.
+			Expect(resourceManager.ApplyFromFiles(sodaFiles, namespace)).To(Succeed())
+
+			port := 80
+			if portFwdPort != 0 {
+				port = portFwdPort
+			}
+			sodaURL := fmt.Sprintf("http://cafe.example.com:%d/soda", port)
+
+			// Allow a brief window for any (incorrect) config push to propagate, then assert
+			// that the route is still unreachable.
+			Consistently(func() bool {
+				resp, err := framework.Get(framework.Request{
+					URL:     sodaURL,
+					Address: address,
+					Timeout: timeoutConfig.RequestTimeout,
+				})
+				// A 404 from NGINX means no route — the config push was correctly withheld.
+				return err == nil && resp.StatusCode == http.StatusNotFound
+			}).
+				WithTimeout(5*time.Second).
+				WithPolling(500*time.Millisecond).
+				Should(BeTrue(), "expected /soda to be unreachable while config push is withheld (fail-closed)")
+		})
+	})
+
+	Context("when a WAFPolicy references a nonexistent bundle and fail-open is enabled", Ordered, func() {
+		// With bundleFailOpen=true the config push must NOT be withheld. We prove this by
+		// applying the bad policy then adding a new route and confirming it becomes reachable,
+		// while the WAFPolicy still surfaces Programmed=False/Pending.
+		policyFiles := []string{"waf-policy/wafpolicy-missing-bundle.yaml"}
+		proxyFailOpenFiles := []string{"waf-policy/nginx-proxy-fail-open.yaml"}
+		sodaFiles := []string{"waf-policy/soda-route.yaml"}
+
+		BeforeAll(func() {
+			// Switch to the fail-open proxy. The Gateway references waf-enabled-proxy by name,
+			// so applying to the same object is enough — no Gateway update needed.
+			Expect(resourceManager.ApplyFromFiles(proxyFailOpenFiles, namespace)).To(Succeed())
+			Expect(resourceManager.ApplyFromFiles(policyFiles, namespace)).To(Succeed())
+		})
+
+		AfterAll(func() {
+			Expect(resourceManager.DeleteFromFiles(sodaFiles, namespace)).To(Succeed())
+			Expect(resourceManager.DeleteFromFiles(policyFiles, namespace)).To(Succeed())
+			// Restore the original proxy so subsequent contexts see the default (fail-closed) behavior.
+			Expect(resourceManager.ApplyFromFiles(proxyFile, namespace)).To(Succeed())
+		})
+
+		It("has a Programmed=False/Pending condition on the WAFPolicy", func() {
+			nsname := types.NamespacedName{Name: "gateway-waf-missing-bundle", Namespace: namespace}
+			Expect(waitForWAFPolicyCondition(nsname, "Programmed", metav1.ConditionFalse, "Pending")).To(Succeed())
+		})
+
+		It("still pushes config updates: new route becomes reachable with pending bundle in fail-open mode", func() {
+			// Apply the same new route. With fail-open the config push proceeds, so NGINX
+			// learns about /soda and requests to it must succeed.
+			Expect(resourceManager.ApplyFromFiles(sodaFiles, namespace)).To(Succeed())
+
+			port := 80
+			if portFwdPort != 0 {
+				port = portFwdPort
+			}
+			sodaURL := fmt.Sprintf("http://cafe.example.com:%d/soda", port)
+
+			Eventually(func() error {
+				return framework.ExpectRequestToSucceed(
+					timeoutConfig.RequestTimeout, sodaURL, address, "soda",
+				)
+			}).
+				WithTimeout(timeoutConfig.GetStatusTimeout).
+				WithPolling(500*time.Millisecond).
+				Should(Succeed(), "expected /soda to be reachable while bundle is pending (fail-open)")
 		})
 	})
 

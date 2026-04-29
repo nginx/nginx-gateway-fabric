@@ -5,3 +5,4 @@ metadata:
 spec:
   waf:
     enable: true
+    bundleFailOpen: true

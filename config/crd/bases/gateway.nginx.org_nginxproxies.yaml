@@ -8978,6 +8978,14 @@ spec:
               waf:
                 description: WAF configures NGINX App Protect WAF functionality.
                 properties:
+                  bundleFailOpen:
+                    description: |-
+                      BundleFailOpen controls the behavior when a WAF policy bundle (policy or log profile)
+                      has not yet been successfully fetched. When set to true, NGINX configuration is pushed
+                      and traffic is served without WAF protection until the bundle becomes available. When
+                      false (the default), the configuration push is withheld until the bundle is fetched,
+                      maintaining a fail-closed posture.
+                    type: boolean
                   disableCookieSeed:
                     description: |-
                       DisableCookieSeed disables the app_protect_cookie_seed directive.

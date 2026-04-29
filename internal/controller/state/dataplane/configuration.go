@@ -1639,6 +1639,9 @@ func buildPolicies(gateway *graph.Gateway, graphPolicies []*graph.Policy) []poli
 		if _, exists := policy.InvalidForGateways[client.ObjectKeyFromObject(gateway.Source)]; exists {
 			continue
 		}
+		if policy.WAFState != nil && policy.WAFState.BundlePending {
+			continue
+		}
 
 		finalPolicies = append(finalPolicies, policy.Source)
 	}

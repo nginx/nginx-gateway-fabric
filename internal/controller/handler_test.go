@@ -767,6 +767,121 @@ var _ = Describe("eventHandler", func() {
 		Eventually(fakeStatusUpdater.UpdateGroupCallCount).Should(BeNumerically(">=", 1))
 	})
 
+	It("should push config when WAF bundle is pending and fail-open is enabled", func() {
+		gwNsName := types.NamespacedName{Namespace: "test", Name: "gateway"}
+		pendingGraph := &graph.Graph{
+			Gateways: map[types.NamespacedName]*graph.Gateway{
+				gwNsName: {
+					Valid: true,
+					Source: &gatewayv1.Gateway{
+						ObjectMeta: metav1.ObjectMeta{
+							Namespace: gwNsName.Namespace,
+							Name:      gwNsName.Name,
+						},
+					},
+					DeploymentName: types.NamespacedName{Namespace: "test", Name: "gateway-nginx"},
+					Listeners: []*graph.Listener{
+						{
+							Name:        "http",
+							GatewayName: gwNsName,
+							Source: gatewayv1.Listener{
+								Name:     "http",
+								Protocol: gatewayv1.HTTPProtocolType,
+								Port:     80,
+							},
+							Routes: map[graph.RouteKey]*graph.L7Route{},
+							Valid:  true,
+						},
+					},
+					EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+						WAF: &v1alpha2.WAFSpec{
+							Enable:         helpers.GetPointer(true),
+							BundleFailOpen: helpers.GetPointer(true),
+						},
+					},
+				},
+			},
+			NGFPolicies: map[graph.PolicyKey]*graph.Policy{
+				wafPolicyKey("waf-policy"): {
+					Source: makeWAFPolicy(false),
+					Valid:  true,
+					WAFState: &graph.PolicyWAFState{
+						BundlePending: true,
+					},
+					TargetRefs: []graph.PolicyTargetRef{
+						{Kind: kinds.Gateway, Nsname: gwNsName},
+					},
+				},
+			},
+		}
+
+		fakeProcessor.ProcessReturns(pendingGraph)
+		fakeProcessor.GetLatestGraphReturns(pendingGraph)
+
+		e := &events.UpsertEvent{Resource: &gatewayv1.Gateway{}}
+		handler.HandleEventBatch(context.Background(), logr.Discard(), []any{e})
+
+		Expect(fakeNginxUpdater.UpdateConfigCallCount()).To(Equal(1))
+	})
+
+	It("should withhold config push when WAF bundle is pending and fail-open is explicitly false", func() {
+		gwNsName := types.NamespacedName{Namespace: "test", Name: "gateway"}
+		pendingGraph := &graph.Graph{
+			Gateways: map[types.NamespacedName]*graph.Gateway{
+				gwNsName: {
+					Valid: true,
+					Source: &gatewayv1.Gateway{
+						ObjectMeta: metav1.ObjectMeta{
+							Namespace: gwNsName.Namespace,
+							Name:      gwNsName.Name,
+						},
+					},
+					DeploymentName: types.NamespacedName{Namespace: "test", Name: "gateway-nginx"},
+					EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+						WAF: &v1alpha2.WAFSpec{
+							Enable:         helpers.GetPointer(true),
+							BundleFailOpen: helpers.GetPointer(false),
+						},
+					},
+					Listeners: []*graph.Listener{
+						{
+							Name:        "http",
+							GatewayName: gwNsName,
+							Source: gatewayv1.Listener{
+								Name:     "http",
+								Protocol: gatewayv1.HTTPProtocolType,
+								Port:     80,
+							},
+							Routes: map[graph.RouteKey]*graph.L7Route{},
+							Valid:  true,
+						},
+					},
+				},
+			},
+			NGFPolicies: map[graph.PolicyKey]*graph.Policy{
+				wafPolicyKey("waf-policy"): {
+					Source: makeWAFPolicy(false),
+					Valid:  true,
+					WAFState: &graph.PolicyWAFState{
+						BundlePending: true,
+					},
+					TargetRefs: []graph.PolicyTargetRef{
+						{Kind: kinds.Gateway, Nsname: gwNsName},
+					},
+				},
+			},
+		}
+
+		fakeProcessor.ProcessReturns(pendingGraph)
+		fakeProcessor.GetLatestGraphReturns(pendingGraph)
+
+		e := &events.UpsertEvent{Resource: &gatewayv1.Gateway{}}
+		handler.HandleEventBatch(context.Background(), logr.Discard(), []any{e})
+
+		Expect(fakeNginxUpdater.UpdateConfigCallCount()).To(Equal(0))
+		Eventually(fakeStatusUpdater.UpdateGroupCallCount).Should(BeNumerically(">=", 1))
+	})
+
 	It("should handle WAFBundleReconcileEvent without panicking and mark processor dirty", func() {
 		e := events.WAFBundleReconcileEvent{
 			PolicyNsName: types.NamespacedName{Namespace: "default", Name: "my-waf-policy"},

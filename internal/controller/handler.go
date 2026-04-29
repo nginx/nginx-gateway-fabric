@@ -230,10 +230,10 @@ func (h *eventHandlerImpl) sendNginxConfig(ctx context.Context, logger logr.Logg
 			continue
 		}
 
-		if gatewayHasPendingWAFBundle(gr, gw) {
-			// Fail-closed: a WAF bundle for this Gateway has not yet been fetched.
-			// Withhold the config push rather than serve without WAF protection.
-			// Enqueue a status update so the pending condition is visible to the operator.
+		if gatewayHasPendingWAFBundle(gr, gw) && !graph.WAFBundleFailOpenForNginxProxy(gw.EffectiveNginxProxy) {
+			// Fail-closed (default): a pending bundle blocks the config push until the bundle is available.
+			// Enqueue a status update because the config is being withheld in this fail-closed case,
+			// making the pending condition visible to the operator.
 			obj := &status.QueueObject{
 				UpdateType: status.UpdateAll,
 				Deployment: status.Deployment{

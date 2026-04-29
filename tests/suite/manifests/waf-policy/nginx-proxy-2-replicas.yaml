@@ -4,7 +4,7 @@ metadata:
   name: waf-enabled-proxy
 spec:
   waf:
-    enabled: true
+    enable: true
   kubernetes:
     deployment:
       replicas: 2

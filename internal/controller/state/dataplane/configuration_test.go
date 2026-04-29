@@ -4588,6 +4588,31 @@ func TestBuildPolicies(t *testing.T) {
 			},
 			expPolicies: nil,
 		},
+		{
+			name: "WAF policy with pending bundle is excluded",
+			policies: []*graph.Policy{
+				{
+					Source:             getPolicy("WAFPolicy", "waf-pending"),
+					Valid:              true,
+					InvalidForGateways: map[types.NamespacedName]struct{}{},
+					WAFState:           &graph.PolicyWAFState{BundlePending: true},
+				},
+				{
+					Source:             getPolicy("Kind1", "other-valid"),
+					Valid:              true,
+					InvalidForGateways: map[types.NamespacedName]struct{}{},
+				},
+			},
+			gateway: &graph.Gateway{
+				Source: &v1.Gateway{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "gateway",
+						Namespace: "test",
+					},
+				},
+			},
+			expPolicies: []string{"other-valid"},
+		},
 	}
 
 	for _, test := range tests {

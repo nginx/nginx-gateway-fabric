@@ -148,6 +148,9 @@ func cleanupWAF(local, global, gcSpec *EffectiveNginxProxy) {
 	if local.WAF.DisableCookieSeed == nil {
 		global.WAF.DisableCookieSeed = gcSpec.WAF.DisableCookieSeed
 	}
+	if local.WAF.BundleFailOpen == nil {
+		global.WAF.BundleFailOpen = gcSpec.WAF.BundleFailOpen
+	}
 }
 
 func nginxProxyValid(np *NginxProxy) bool {
@@ -187,6 +190,11 @@ func WAFEnabledForNginxProxy(np *EffectiveNginxProxy) bool {
 // WAFCookieSeedDisabledForNginxProxy returns whether the app_protect_cookie_seed directive is disabled.
 func WAFCookieSeedDisabledForNginxProxy(np *EffectiveNginxProxy) bool {
 	return np != nil && np.WAF != nil && np.WAF.DisableCookieSeed != nil && *np.WAF.DisableCookieSeed
+}
+
+// WAFBundleFailOpenForNginxProxy returns whether fail-open is enabled for WAF bundle fetching.
+func WAFBundleFailOpenForNginxProxy(np *EffectiveNginxProxy) bool {
+	return np != nil && np.WAF != nil && np.WAF.BundleFailOpen != nil && *np.WAF.BundleFailOpen
 }
 
 func processNginxProxies(
