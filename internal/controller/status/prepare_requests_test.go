@@ -49,6 +49,7 @@ const gatewayCtlrName = "controller"
 
 var (
 	gwNsName       = types.NamespacedName{Namespace: "test", Name: "gateway"}
+	lsNsName       = types.NamespacedName{Namespace: "test", Name: "ls-1"}
 	transitionTime = helpers.PrepareTimeForFakeClient(metav1.Now())
 
 	invalidRouteCondition = conditions.Condition{
@@ -86,6 +87,18 @@ var (
 			{
 				SectionName: helpers.GetPointer[v1.SectionName]("listener-8080-2"),
 			},
+			{
+				SectionName: helpers.GetPointer[v1.SectionName]("ls-listener-80-1"),
+			},
+			{
+				SectionName: helpers.GetPointer[v1.SectionName]("ls-listener-80-2"),
+			},
+			{
+				SectionName: helpers.GetPointer[v1.SectionName]("ls-listener-80-3"),
+			},
+			{
+				SectionName: helpers.GetPointer[v1.SectionName]("ls-listener-80-4"),
+			},
 		},
 	}
 
@@ -100,82 +113,131 @@ var (
 	parentRefsValid = []graph.ParentRef{
 		{
 			Idx:         0,
-			Gateway:     &graph.ParentRefGateway{NamespacedName: gwNsName},
 			SectionName: commonRouteSpecValid.ParentRefs[0].SectionName,
 			Attachment: &graph.ParentRefAttachmentStatus{
 				Attached: true,
 			},
+			Kind:           kinds.Gateway,
+			NamespacedName: gwNsName,
 		},
 		{
 			Idx:         1,
-			Gateway:     &graph.ParentRefGateway{NamespacedName: gwNsName},
 			SectionName: commonRouteSpecValid.ParentRefs[1].SectionName,
 			Attachment: &graph.ParentRefAttachmentStatus{
 				Attached:         false,
 				FailedConditions: []conditions.Condition{invalidAttachmentCondition},
 			},
+			Kind:           kinds.Gateway,
+			NamespacedName: gwNsName,
 		},
 		{
 			Idx:         2,
-			Gateway:     &graph.ParentRefGateway{NamespacedName: gwNsName},
 			SectionName: commonRouteSpecValid.ParentRefs[2].SectionName,
 			Attachment: &graph.ParentRefAttachmentStatus{
 				Attached:         true,
 				FailedConditions: []conditions.Condition{invalidAttachmentCondition},
 			},
+			Kind:           kinds.Gateway,
+			NamespacedName: gwNsName,
 		},
 		{
 			Idx:         3,
-			Gateway:     &graph.ParentRefGateway{NamespacedName: gwNsName},
 			SectionName: commonRouteSpecValid.ParentRefs[3].SectionName,
 			Attachment: &graph.ParentRefAttachmentStatus{
 				Attached:         false,
 				FailedConditions: []conditions.Condition{invalidAttachmentCondition},
 			},
+			Kind:           kinds.Gateway,
+			NamespacedName: gwNsName,
 		},
 		{
 			Idx:         3,
-			Gateway:     &graph.ParentRefGateway{NamespacedName: gwNsName},
 			SectionName: commonRouteSpecValid.ParentRefs[4].SectionName,
 			Attachment: &graph.ParentRefAttachmentStatus{
 				Attached: true,
 			},
+			Kind:           kinds.Gateway,
+			NamespacedName: gwNsName,
 		},
 		{
 			Idx:         3,
-			Gateway:     &graph.ParentRefGateway{NamespacedName: gwNsName},
 			SectionName: commonRouteSpecValid.ParentRefs[5].SectionName,
 			Attachment: &graph.ParentRefAttachmentStatus{
-				Attached:         true,
+				Attached:         true, // this wouldn't usually happen, but it's a conditional check
 				FailedConditions: []conditions.Condition{invalidAttachmentCondition},
 			},
+			Kind:           kinds.Gateway,
+			NamespacedName: gwNsName,
 		},
 		{
 			Idx:         4,
-			Gateway:     &graph.ParentRefGateway{NamespacedName: gwNsName},
 			SectionName: commonRouteSpecValid.ParentRefs[6].SectionName,
 			Attachment: &graph.ParentRefAttachmentStatus{
 				Attached:         false,
 				FailedConditions: []conditions.Condition{invalidAttachmentCondition},
 			},
+			Kind:           kinds.Gateway,
+			NamespacedName: gwNsName,
 		},
 		{
 			Idx:         4,
-			Gateway:     &graph.ParentRefGateway{NamespacedName: gwNsName},
 			SectionName: commonRouteSpecValid.ParentRefs[7].SectionName,
 			Attachment: &graph.ParentRefAttachmentStatus{
 				Attached:         false,
 				FailedConditions: []conditions.Condition{invalidAttachmentCondition},
 			},
+			Kind:           kinds.Gateway,
+			NamespacedName: gwNsName,
+		},
+		{
+			Idx:         5,
+			SectionName: commonRouteSpecValid.ParentRefs[8].SectionName,
+			Attachment: &graph.ParentRefAttachmentStatus{
+				Attached:         true,
+				FailedConditions: []conditions.Condition{},
+			},
+			Kind:           kinds.ListenerSet,
+			NamespacedName: lsNsName,
+		},
+		{
+			Idx:         6,
+			SectionName: commonRouteSpecValid.ParentRefs[9].SectionName,
+			Attachment: &graph.ParentRefAttachmentStatus{
+				Attached:         true,
+				FailedConditions: []conditions.Condition{},
+			},
+			Kind:           kinds.ListenerSet,
+			NamespacedName: lsNsName,
+		},
+		{
+			Idx:         6,
+			SectionName: commonRouteSpecValid.ParentRefs[10].SectionName,
+			Attachment: &graph.ParentRefAttachmentStatus{
+				Attached:         false,
+				FailedConditions: []conditions.Condition{invalidAttachmentCondition},
+			},
+			Kind:           kinds.ListenerSet,
+			NamespacedName: lsNsName,
+		},
+		{
+			Idx:         7,
+			SectionName: commonRouteSpecValid.ParentRefs[11].SectionName,
+			Attachment: &graph.ParentRefAttachmentStatus{
+				Attached:         false,
+				FailedConditions: []conditions.Condition{invalidAttachmentCondition},
+			},
+			Kind:           kinds.ListenerSet,
+			NamespacedName: lsNsName,
 		},
 	}
 
 	parentRefsInvalid = []graph.ParentRef{
 		{
-			Idx:         0,
-			Gateway:     &graph.ParentRefGateway{NamespacedName: gwNsName},
-			Attachment:  nil,
-			SectionName: commonRouteSpecInvalid.ParentRefs[0].SectionName,
+			Idx:            0,
+			Attachment:     nil,
+			SectionName:    commonRouteSpecInvalid.ParentRefs[0].SectionName,
+			Kind:           kinds.Gateway,
+			NamespacedName: gwNsName,
 		},
 	}
 
@@ -186,6 +248,7 @@ var (
 					Namespace:   helpers.GetPointer(v1.Namespace(gwNsName.Namespace)),
 					Name:        v1.ObjectName(gwNsName.Name),
 					SectionName: helpers.GetPointer[v1.SectionName]("listener-80-1"),
+					Kind:        helpers.GetPointer(v1.Kind(kinds.Gateway)),
 				},
 				ControllerName: gatewayCtlrName,
 				Conditions: []metav1.Condition{
@@ -212,6 +275,7 @@ var (
 					Namespace:   helpers.GetPointer(v1.Namespace(gwNsName.Namespace)),
 					Name:        v1.ObjectName(gwNsName.Name),
 					SectionName: helpers.GetPointer[v1.SectionName]("listener-80-2"),
+					Kind:        helpers.GetPointer(v1.Kind(kinds.Gateway)),
 				},
 				ControllerName: gatewayCtlrName,
 				Conditions: []metav1.Condition{
@@ -244,6 +308,7 @@ var (
 					Namespace:   helpers.GetPointer(v1.Namespace(gwNsName.Namespace)),
 					Name:        v1.ObjectName(gwNsName.Name),
 					SectionName: helpers.GetPointer[v1.SectionName]("listener-80-3"),
+					Kind:        helpers.GetPointer(v1.Kind(kinds.Gateway)),
 				},
 				ControllerName: gatewayCtlrName,
 				Conditions: []metav1.Condition{
@@ -275,6 +340,7 @@ var (
 				ParentRef: v1.ParentReference{
 					Namespace: helpers.GetPointer(v1.Namespace(gwNsName.Namespace)),
 					Name:      v1.ObjectName(gwNsName.Name),
+					Kind:      helpers.GetPointer(v1.Kind(kinds.Gateway)),
 				},
 				ControllerName: gatewayCtlrName,
 				Conditions: []metav1.Condition{
@@ -300,6 +366,93 @@ var (
 				ParentRef: v1.ParentReference{
 					Namespace: helpers.GetPointer(v1.Namespace(gwNsName.Namespace)),
 					Name:      v1.ObjectName(gwNsName.Name),
+					Kind:      helpers.GetPointer(v1.Kind(kinds.Gateway)),
+				},
+				ControllerName: gatewayCtlrName,
+				Conditions: []metav1.Condition{
+					{
+						Type:               string(v1.RouteConditionAccepted),
+						Status:             metav1.ConditionTrue,
+						ObservedGeneration: 3,
+						LastTransitionTime: transitionTime,
+						Reason:             string(v1.RouteReasonAccepted),
+						Message:            "The Route is accepted",
+					},
+					{
+						Type:               string(v1.RouteConditionResolvedRefs),
+						Status:             metav1.ConditionTrue,
+						ObservedGeneration: 3,
+						LastTransitionTime: transitionTime,
+						Reason:             string(v1.RouteReasonResolvedRefs),
+						Message:            "All references are resolved",
+					},
+					{
+						Type:               invalidAttachmentCondition.Type,
+						Status:             metav1.ConditionTrue,
+						ObservedGeneration: 3,
+						LastTransitionTime: transitionTime,
+					},
+				},
+			},
+			{
+				ParentRef: v1.ParentReference{
+					Namespace:   helpers.GetPointer(v1.Namespace(lsNsName.Namespace)),
+					Name:        v1.ObjectName(lsNsName.Name),
+					SectionName: helpers.GetPointer[v1.SectionName]("ls-listener-80-1"),
+					Kind:        helpers.GetPointer(v1.Kind(kinds.ListenerSet)),
+				},
+				ControllerName: gatewayCtlrName,
+				Conditions: []metav1.Condition{
+					{
+						Type:               string(v1.RouteConditionAccepted),
+						Status:             metav1.ConditionTrue,
+						ObservedGeneration: 3,
+						LastTransitionTime: transitionTime,
+						Reason:             string(v1.RouteReasonAccepted),
+						Message:            "The Route is accepted",
+					},
+					{
+						Type:               string(v1.RouteConditionResolvedRefs),
+						Status:             metav1.ConditionTrue,
+						ObservedGeneration: 3,
+						LastTransitionTime: transitionTime,
+						Reason:             string(v1.RouteReasonResolvedRefs),
+						Message:            "All references are resolved",
+					},
+				},
+			},
+			{
+				ParentRef: v1.ParentReference{
+					Namespace: helpers.GetPointer(v1.Namespace(lsNsName.Namespace)),
+					Name:      v1.ObjectName(lsNsName.Name),
+					Kind:      helpers.GetPointer(v1.Kind(kinds.ListenerSet)),
+				},
+				ControllerName: gatewayCtlrName,
+				Conditions: []metav1.Condition{
+					{
+						Type:               string(v1.RouteConditionAccepted),
+						Status:             metav1.ConditionTrue,
+						ObservedGeneration: 3,
+						LastTransitionTime: transitionTime,
+						Reason:             string(v1.RouteReasonAccepted),
+						Message:            "The Route is accepted",
+					},
+					{
+						Type:               string(v1.RouteConditionResolvedRefs),
+						Status:             metav1.ConditionTrue,
+						ObservedGeneration: 3,
+						LastTransitionTime: transitionTime,
+						Reason:             string(v1.RouteReasonResolvedRefs),
+						Message:            "All references are resolved",
+					},
+				},
+			},
+			{
+				ParentRef: v1.ParentReference{
+					Namespace:   helpers.GetPointer(v1.Namespace(lsNsName.Namespace)),
+					Name:        v1.ObjectName(lsNsName.Name),
+					Kind:        helpers.GetPointer(v1.Kind(kinds.ListenerSet)),
+					SectionName: helpers.GetPointer[v1.SectionName]("ls-listener-80-4"),
 				},
 				ControllerName: gatewayCtlrName,
 				Conditions: []metav1.Condition{
@@ -337,6 +490,7 @@ var (
 					Namespace:   helpers.GetPointer(v1.Namespace(gwNsName.Namespace)),
 					Name:        v1.ObjectName(gwNsName.Name),
 					SectionName: helpers.GetPointer[v1.SectionName]("listener-80-1"),
+					Kind:        helpers.GetPointer(v1.Kind(kinds.Gateway)),
 				},
 				ControllerName: gatewayCtlrName,
 				Conditions: []metav1.Condition{
@@ -966,7 +1120,8 @@ func TestBuildGatewayStatuses(t *testing.T) {
 							Message:            "The Gateway is programmed",
 						},
 					},
-					Listeners: nil,
+					Listeners:            nil,
+					AttachedListenerSets: helpers.GetPointer(int32(0)),
 				},
 			},
 		},
@@ -1021,6 +1176,78 @@ func TestBuildGatewayStatuses(t *testing.T) {
 							Conditions:     validListenerConditions,
 						},
 					},
+					AttachedListenerSets: helpers.GetPointer(int32(0)),
+				},
+			},
+		},
+		{
+			name: "valid gateway; all valid listeners with some from ListenerSets",
+			gateway: &graph.Gateway{
+				Source: createGateway(),
+				Listeners: []*graph.Listener{
+					{
+						Name:   "listener-valid-1",
+						Valid:  true,
+						Routes: map[graph.RouteKey]*graph.L7Route{routeKey: {}},
+					},
+					{
+						Name:   "listener-valid-2",
+						Valid:  true,
+						Routes: map[graph.RouteKey]*graph.L7Route{routeKey: {}},
+					},
+					{
+						Name:            "listenerSet-listener-valid-1",
+						Valid:           true,
+						Routes:          map[graph.RouteKey]*graph.L7Route{routeKey: {}},
+						ListenerSetName: types.NamespacedName{Namespace: "test", Name: "ls-1"},
+					},
+					{
+						Name:            "listenerSet-listener-valid-2",
+						Valid:           true,
+						Routes:          map[graph.RouteKey]*graph.L7Route{routeKey: {}},
+						ListenerSetName: types.NamespacedName{Namespace: "test", Name: "ls-2"},
+					},
+				},
+				Valid: true,
+				AttachedListenerSets: map[types.NamespacedName]*graph.ListenerSet{
+					{Namespace: "test", Name: "ls-1"}: {},
+					{Namespace: "test", Name: "ls-2"}: {},
+				},
+			},
+			expected: map[types.NamespacedName]v1.GatewayStatus{
+				{Namespace: "test", Name: "gateway"}: {
+					Addresses: addr,
+					Conditions: []metav1.Condition{
+						{
+							Type:               string(v1.GatewayConditionAccepted),
+							Status:             metav1.ConditionTrue,
+							ObservedGeneration: 2,
+							LastTransitionTime: transitionTime,
+							Reason:             string(v1.GatewayReasonAccepted),
+							Message:            "The Gateway is accepted",
+						},
+						{
+							Type:               string(v1.GatewayConditionProgrammed),
+							Status:             metav1.ConditionTrue,
+							ObservedGeneration: 2,
+							LastTransitionTime: transitionTime,
+							Reason:             string(v1.GatewayReasonProgrammed),
+							Message:            "The Gateway is programmed",
+						},
+					},
+					Listeners: []v1.ListenerStatus{
+						{
+							Name:           "listener-valid-1",
+							AttachedRoutes: 1,
+							Conditions:     validListenerConditions,
+						},
+						{
+							Name:           "listener-valid-2",
+							AttachedRoutes: 1,
+							Conditions:     validListenerConditions,
+						},
+					},
+					AttachedListenerSets: helpers.GetPointer(int32(2)),
 				},
 			},
 		},
@@ -1093,6 +1320,7 @@ func TestBuildGatewayStatuses(t *testing.T) {
 							},
 						},
 					},
+					AttachedListenerSets: helpers.GetPointer(int32(0)),
 				},
 			},
 		},
@@ -1181,6 +1409,7 @@ func TestBuildGatewayStatuses(t *testing.T) {
 							},
 						},
 					},
+					AttachedListenerSets: helpers.GetPointer(int32(0)),
 				},
 			},
 		},
@@ -1211,6 +1440,7 @@ func TestBuildGatewayStatuses(t *testing.T) {
 							Message:            "No GatewayClass",
 						},
 					},
+					AttachedListenerSets: nil, // invalid gateway skips reporting a few fields
 				},
 			},
 		},
@@ -1289,6 +1519,7 @@ func TestBuildGatewayStatuses(t *testing.T) {
 							},
 						},
 					},
+					AttachedListenerSets: helpers.GetPointer(int32(0)),
 				},
 			},
 			nginxReloadRes: graph.NginxReloadResult{Error: errors.New("test error")},
@@ -1345,6 +1576,7 @@ func TestBuildGatewayStatuses(t *testing.T) {
 							Conditions:     validListenerConditions,
 						},
 					},
+					AttachedListenerSets: helpers.GetPointer(int32(0)),
 				},
 			},
 		},
@@ -1402,6 +1634,7 @@ func TestBuildGatewayStatuses(t *testing.T) {
 							Conditions:     validListenerConditions,
 						},
 					},
+					AttachedListenerSets: helpers.GetPointer(int32(0)),
 				},
 			},
 		},
@@ -1452,6 +1685,7 @@ func TestBuildGatewayStatuses(t *testing.T) {
 							Conditions:     validListenerConditions,
 						},
 					},
+					AttachedListenerSets: helpers.GetPointer(int32(0)),
 				},
 			},
 		},
@@ -1501,6 +1735,7 @@ func TestBuildGatewayStatuses(t *testing.T) {
 							Conditions:     validListenerConditions,
 						},
 					},
+					AttachedListenerSets: helpers.GetPointer(int32(0)),
 				},
 			},
 		},
@@ -1585,6 +1820,7 @@ func TestBuildGatewayStatuses(t *testing.T) {
 							},
 						},
 					},
+					AttachedListenerSets: helpers.GetPointer(int32(0)),
 				},
 			},
 		},
@@ -1649,6 +1885,7 @@ func TestBuildGatewayStatuses(t *testing.T) {
 							},
 						},
 					},
+					AttachedListenerSets: helpers.GetPointer(int32(0)),
 				},
 			},
 		},
@@ -1706,6 +1943,7 @@ func TestBuildGatewayStatuses(t *testing.T) {
 							Conditions:     validListenerConditions,
 						},
 					},
+					AttachedListenerSets: helpers.GetPointer(int32(0)),
 				},
 			},
 		},
@@ -3212,9 +3450,30 @@ func TestBuildListenerSetStatuses(t *testing.T) {
 			Source: lsValid,
 			Listeners: []*graph.Listener{
 				{
-					Name:   "http-listener",
-					Valid:  true,
-					Routes: map[graph.RouteKey]*graph.L7Route{},
+					Name:  "http-listener",
+					Valid: true,
+					Routes: map[graph.RouteKey]*graph.L7Route{
+						{
+							NamespacedName: types.NamespacedName{Namespace: "test", Name: "test-http-route"},
+							RouteType:      graph.RouteTypeHTTP,
+						}: {
+							Source: &v1.HTTPRoute{
+								ObjectMeta: metav1.ObjectMeta{Name: "test-http-route", Namespace: "test"},
+							},
+							Valid: true,
+						},
+					},
+					L4Routes: map[graph.L4RouteKey]*graph.L4Route{
+						{
+							NamespacedName: types.NamespacedName{Namespace: "test", Name: "test-tls-route"},
+							RouteType:      graph.RouteTypeTLS,
+						}: {
+							Source: &v1.TLSRoute{
+								ObjectMeta: metav1.ObjectMeta{Name: "test-tls-route", Namespace: "test"},
+							},
+							Valid: true,
+						},
+					},
 					SupportedKinds: []v1.RouteGroupKind{
 						{Kind: v1.Kind(kinds.HTTPRoute), Group: helpers.GetPointer[v1.Group](v1.GroupName)},
 					},
@@ -3325,7 +3584,7 @@ func TestBuildListenerSetStatuses(t *testing.T) {
 			Listeners: []v1.ListenerEntryStatus{
 				{
 					Name:           "http-listener",
-					AttachedRoutes: 0,
+					AttachedRoutes: 2,
 					SupportedKinds: []v1.RouteGroupKind{
 						{Kind: v1.Kind(kinds.HTTPRoute), Group: helpers.GetPointer[v1.Group](v1.GroupName)},
 					},

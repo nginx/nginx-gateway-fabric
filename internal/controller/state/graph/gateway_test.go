@@ -1883,6 +1883,74 @@ func TestBuildGateway(t *testing.T) {
 			},
 			name: "gateway with allowed listeners configuration",
 		},
+		{
+			gateway: createGateway(gatewayCfg{
+				name: "gateway-unique-listener-conflicts",
+				listeners: []v1.Listener{
+					{
+						Name:     "http-80-1",
+						Port:     80,
+						Protocol: v1.HTTPProtocolType,
+						Hostname: helpers.GetPointer[v1.Hostname]("example.com"),
+					},
+					{
+						Name:     "http-80-2",
+						Port:     80,
+						Protocol: v1.HTTPProtocolType,
+						Hostname: helpers.GetPointer[v1.Hostname]("example.com"),
+					},
+				},
+			}),
+			gatewayClass: validGC,
+			expected: map[types.NamespacedName]*Gateway{
+				{Namespace: "test", Name: "gateway-unique-listener-conflicts"}: {
+					Source: getLastCreatedGateway(),
+					Listeners: []*Listener{
+						{
+							Name:            "http-80-1",
+							GatewayName:     client.ObjectKeyFromObject(getLastCreatedGateway()),
+							ListenerSetName: types.NamespacedName{},
+							Source: v1.Listener{
+								Name:     "http-80-1",
+								Port:     80,
+								Protocol: v1.HTTPProtocolType,
+								Hostname: helpers.GetPointer[v1.Hostname]("example.com"),
+							},
+							Valid:          true, // First listener stays valid
+							Attachable:     true,
+							Routes:         map[RouteKey]*L7Route{},
+							L4Routes:       map[L4RouteKey]*L4Route{},
+							SupportedKinds: supportedKindsForListeners,
+						},
+						{
+							Name:            "http-80-2",
+							GatewayName:     client.ObjectKeyFromObject(getLastCreatedGateway()),
+							ListenerSetName: types.NamespacedName{},
+							Source: v1.Listener{
+								Name:     "http-80-2",
+								Port:     80,
+								Protocol: v1.HTTPProtocolType,
+								Hostname: helpers.GetPointer[v1.Hostname]("example.com"),
+							},
+							Valid:      false, // Second listener becomes invalid
+							Attachable: true,
+							Routes:     map[RouteKey]*L7Route{},
+							L4Routes:   map[L4RouteKey]*L4Route{},
+							Conditions: conditions.NewListenerHostnameConflict(
+								"Multiple listeners with the same port 80 and protocol HTTP " +
+									"have overlapping hostnames"),
+							SupportedKinds: supportedKindsForListeners,
+						},
+					},
+					DeploymentName: types.NamespacedName{
+						Namespace: "test",
+						Name:      controller.CreateNginxResourceName("gateway-unique-listener-conflicts", gcName),
+					},
+					Valid: true,
+				},
+			},
+			name: "duplicate listeners test uniqueListenerConflictResolver behavior",
+		},
 	}
 
 	resourceResolver := resolver.NewResourceResolver(
@@ -1912,6 +1980,24 @@ func TestBuildGateway(t *testing.T) {
 			g := NewWithT(t)
 			resolver := newReferenceGrantResolver(test.refGrants)
 			result := buildGateways(test.gateway, resourceResolver, test.gatewayClass, resolver, nginxProxies)
+
+			// Verify ListenerFactory field separately since it's a complex internal struct
+			// Directly comparing the ListenerFactory internal fields is unnecessary as it is tested
+			// in the test file of where the ListenerFactory is defined.
+			for gwKey, expectedGw := range test.expected {
+				actualGw, exists := result[gwKey]
+				g.Expect(exists).To(BeTrue())
+
+				if expectedGw.Valid {
+					g.Expect(actualGw.ListenerFactory).ToNot(BeNil())
+				} else {
+					g.Expect(actualGw.ListenerFactory).To(BeNil())
+				}
+
+				// Clear ListenerFactory from actual result for struct comparison
+				actualGw.ListenerFactory = nil
+			}
+
 			g.Expect(helpers.Diff(test.expected, result)).To(BeEmpty())
 		})
 	}
@@ -2077,12 +2163,8 @@ func TestGetReferencedSnippetsFilters(t *testing.T) {
 		Valid: true,
 		ParentRefs: []ParentRef{
 			{
-				Gateway: &ParentRefGateway{
-					NamespacedName: types.NamespacedName{
-						Namespace: "gateway-ns",
-						Name:      "test-gateway",
-					},
-				},
+				Kind:           kinds.Gateway,
+				NamespacedName: types.NamespacedName{Namespace: "gateway-ns", Name: "test-gateway"},
 			},
 		},
 		Spec: L7RouteSpec{
@@ -2115,12 +2197,8 @@ func TestGetReferencedSnippetsFilters(t *testing.T) {
 		Valid: true,
 		ParentRefs: []ParentRef{
 			{
-				Gateway: &ParentRefGateway{
-					NamespacedName: types.NamespacedName{
-						Namespace: "other-gateway-ns",
-						Name:      "other-gateway",
-					},
-				},
+				Kind:           kinds.Gateway,
+				NamespacedName: types.NamespacedName{Namespace: "other-gateway-ns", Name: "other-gateway"},
 			},
 		},
 		Spec: L7RouteSpec{
@@ -2153,12 +2231,8 @@ func TestGetReferencedSnippetsFilters(t *testing.T) {
 		Valid: true,
 		ParentRefs: []ParentRef{
 			{
-				Gateway: &ParentRefGateway{
-					NamespacedName: types.NamespacedName{
-						Namespace: "gateway-ns",
-						Name:      "test-gateway",
-					},
-				},
+				Kind:           kinds.Gateway,
+				NamespacedName: types.NamespacedName{Namespace: "gateway-ns", Name: "test-gateway"},
 			},
 		},
 		Spec: L7RouteSpec{
@@ -2364,12 +2438,8 @@ func TestGetReferencedRateLimitPolicies(t *testing.T) {
 		Valid: true,
 		ParentRefs: []ParentRef{
 			{
-				Gateway: &ParentRefGateway{
-					NamespacedName: types.NamespacedName{
-						Namespace: "gateway-ns",
-						Name:      "test-gateway",
-					},
-				},
+				Kind:           kinds.Gateway,
+				NamespacedName: types.NamespacedName{Namespace: "gateway-ns", Name: "test-gateway"},
 			},
 		},
 	}
@@ -2384,12 +2454,8 @@ func TestGetReferencedRateLimitPolicies(t *testing.T) {
 		Valid: true,
 		ParentRefs: []ParentRef{
 			{
-				Gateway: &ParentRefGateway{
-					NamespacedName: types.NamespacedName{
-						Namespace: "gateway-ns",
-						Name:      "test-gateway",
-					},
-				},
+				Kind:           kinds.Gateway,
+				NamespacedName: types.NamespacedName{Namespace: "gateway-ns", Name: "test-gateway"},
 			},
 		},
 	}
@@ -2404,12 +2470,8 @@ func TestGetReferencedRateLimitPolicies(t *testing.T) {
 		Valid: true,
 		ParentRefs: []ParentRef{
 			{
-				Gateway: &ParentRefGateway{
-					NamespacedName: types.NamespacedName{
-						Namespace: "secondary-gateway-ns",
-						Name:      "secondary-gateway",
-					},
-				},
+				Kind:           kinds.Gateway,
+				NamespacedName: types.NamespacedName{Namespace: "secondary-gateway-ns", Name: "secondary-gateway"},
 			},
 		},
 	}
@@ -2804,6 +2866,24 @@ func TestGateway_BackendTLSConfig(t *testing.T) {
 
 			refGrantResolver := newReferenceGrantResolver(test.refGrants)
 			gateways := buildGateways(test.gw, resourceResolver, validGC, refGrantResolver, nil)
+
+			// Verify ListenerFactory field separately since it's a complex internal struct
+			// Directly comparing the ListenerFactory internal fields is unnecessary as it is tested
+			// in the test file of where the ListenerFactory is defined.
+			for gwKey, expectedGw := range test.expected {
+				actualGw, exists := gateways[gwKey]
+				g.Expect(exists).To(BeTrue())
+
+				if expectedGw.Valid {
+					g.Expect(actualGw.ListenerFactory).ToNot(BeNil())
+				} else {
+					g.Expect(actualGw.ListenerFactory).To(BeNil())
+				}
+
+				// Clear ListenerFactory from actual result for struct comparison
+				actualGw.ListenerFactory = nil
+			}
+
 			g.Expect(helpers.Diff(test.expected, gateways)).To(BeEmpty())
 		})
 	}

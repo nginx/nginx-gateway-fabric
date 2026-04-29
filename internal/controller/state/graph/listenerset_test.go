@@ -2,6 +2,7 @@ package graph
 
 import (
 	"testing"
+	"time"
 
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
@@ -12,6 +13,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/resolver/resolverfakes"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
 
 func TestBuildListenerSets(t *testing.T) {
@@ -53,6 +55,7 @@ func TestBuildListenerSets(t *testing.T) {
 		Spec: v1.ListenerSetSpec{
 			ParentRef: v1.ParentGatewayReference{
 				Name: "gateway",
+				Kind: helpers.GetPointer(v1.Kind(kinds.Gateway)),
 			},
 			Listeners: []v1.ListenerEntry{
 				{
@@ -72,6 +75,7 @@ func TestBuildListenerSets(t *testing.T) {
 		Spec: v1.ListenerSetSpec{
 			ParentRef: v1.ParentGatewayReference{
 				Name: "invalid-gateway",
+				Kind: helpers.GetPointer(v1.Kind(kinds.Gateway)),
 			},
 			Listeners: []v1.ListenerEntry{
 				{
@@ -91,6 +95,7 @@ func TestBuildListenerSets(t *testing.T) {
 		Spec: v1.ListenerSetSpec{
 			ParentRef: v1.ParentGatewayReference{
 				Name: "unrelated-gateway",
+				Kind: helpers.GetPointer(v1.Kind(kinds.Gateway)),
 			},
 			Listeners: []v1.ListenerEntry{
 				{
@@ -151,6 +156,7 @@ func TestBuildListenerSets(t *testing.T) {
 			ParentRef: v1.ParentGatewayReference{
 				Namespace: helpers.GetPointer(v1.Namespace("test")),
 				Name:      "gateway-allowed-listeners-same-ns",
+				Kind:      helpers.GetPointer(v1.Kind(kinds.Gateway)),
 			},
 			Listeners: []v1.ListenerEntry{
 				{
@@ -170,6 +176,7 @@ func TestBuildListenerSets(t *testing.T) {
 		Spec: v1.ListenerSetSpec{
 			ParentRef: v1.ParentGatewayReference{
 				Name: "no-allowed-listeners",
+				Kind: helpers.GetPointer(v1.Kind(kinds.Gateway)),
 			},
 			Listeners: []v1.ListenerEntry{
 				{
@@ -218,25 +225,6 @@ func TestBuildListenerSets(t *testing.T) {
 					Source:  listenerSet1,
 					Gateway: validGateway.Source,
 					Valid:   true,
-					Listeners: []*Listener{
-						{
-							Name:        "http-80",
-							GatewayName: types.NamespacedName{Namespace: "test", Name: "listenerset-1-validate"},
-							Source: v1.Listener{
-								Name:     "http-80",
-								Port:     80,
-								Protocol: v1.HTTPProtocolType,
-							},
-							Routes:   map[RouteKey]*L7Route{},
-							L4Routes: map[L4RouteKey]*L4Route{},
-							SupportedKinds: []v1.RouteGroupKind{
-								{Group: helpers.GetPointer(v1.Group("gateway.networking.k8s.io")), Kind: "HTTPRoute"},
-								{Group: helpers.GetPointer(v1.Group("gateway.networking.k8s.io")), Kind: "GRPCRoute"},
-							},
-							Valid:      true,
-							Attachable: true,
-						},
-					},
 					Conditions: []conditions.Condition{
 						conditions.NewListenerSetAccepted(),
 					},
@@ -253,10 +241,9 @@ func TestBuildListenerSets(t *testing.T) {
 			namespaces: testNS,
 			expectedListenerSets: map[types.NamespacedName]*ListenerSet{
 				{Namespace: "test", Name: "listenerset-2"}: {
-					Source:    listenerSet2,
-					Gateway:   invalidGateway.Source,
-					Valid:     false,
-					Listeners: nil, // No listeners when parent gateway is invalid
+					Source:  listenerSet2,
+					Gateway: invalidGateway.Source,
+					Valid:   false,
 					Conditions: []conditions.Condition{
 						conditions.NewListenerSetParentNotAccepted("Parent Gateway test/invalid-gateway is not accepted"),
 					},
@@ -284,10 +271,9 @@ func TestBuildListenerSets(t *testing.T) {
 			namespaces: differentNS,
 			expectedListenerSets: map[types.NamespacedName]*ListenerSet{
 				{Namespace: "different-ns", Name: "listenerset-different-ns"}: {
-					Source:    listenerSetDifferentNs,
-					Gateway:   sameNamespaceAllowedListenersGW.Source,
-					Valid:     false,
-					Listeners: nil, // No listeners when not allowed by gateway
+					Source:  listenerSetDifferentNs,
+					Gateway: sameNamespaceAllowedListenersGW.Source,
+					Valid:   false,
 					Conditions: []conditions.Condition{
 						conditions.NewListenerSetNotAllowed("ListenerSet is not allowed by parent Gateway" +
 							" test/gateway-allowed-listeners-same-ns AllowedListeners configuration"),
@@ -306,10 +292,9 @@ func TestBuildListenerSets(t *testing.T) {
 			namespaces: testNS,
 			expectedListenerSets: map[types.NamespacedName]*ListenerSet{
 				{Namespace: "test", Name: "listenerset-not-allowed"}: {
-					Source:    listenerSetNotAllowed,
-					Gateway:   noAllowedListenersGateway.Source,
-					Valid:     false,
-					Listeners: nil, // No listeners when not allowed by gateway
+					Source:  listenerSetNotAllowed,
+					Gateway: noAllowedListenersGateway.Source,
+					Valid:   false,
 					Conditions: []conditions.Condition{
 						conditions.NewListenerSetNotAllowed("ListenerSet is not allowed by parent Gateway" +
 							" test/no-allowed-listeners AllowedListeners configuration"),
@@ -333,25 +318,6 @@ func TestBuildListenerSets(t *testing.T) {
 					Source:  listenerSet1,
 					Gateway: validGateway.Source,
 					Valid:   true,
-					Listeners: []*Listener{
-						{
-							Name:        "http-80",
-							GatewayName: types.NamespacedName{Namespace: "test", Name: "listenerset-1-validate"},
-							Source: v1.Listener{
-								Name:     "http-80",
-								Port:     80,
-								Protocol: v1.HTTPProtocolType,
-							},
-							Routes:   map[RouteKey]*L7Route{},
-							L4Routes: map[L4RouteKey]*L4Route{},
-							SupportedKinds: []v1.RouteGroupKind{
-								{Group: helpers.GetPointer(v1.Group("gateway.networking.k8s.io")), Kind: "HTTPRoute"},
-								{Group: helpers.GetPointer(v1.Group("gateway.networking.k8s.io")), Kind: "GRPCRoute"},
-							},
-							Valid:      true,
-							Attachable: true,
-						},
-					},
 					Conditions: []conditions.Condition{
 						conditions.NewListenerSetAccepted(),
 					},
@@ -374,14 +340,9 @@ func TestBuildListenerSets(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			resourceResolver := &resolverfakes.FakeResolver{}
-			refGrantResolver := &referenceGrantResolver{}
-
 			result := buildListenerSets(test.inputListenerSets,
 				test.gateways,
 				test.namespaces,
-				resourceResolver,
-				refGrantResolver,
 			)
 
 			if test.expectedListenerSets == nil {
@@ -609,33 +570,1484 @@ func TestIsListenerSetAllowedByGateway(t *testing.T) {
 	}
 }
 
-func TestCreateGatewayForListenerValidation(t *testing.T) {
-	// Note this test function may be removed as the function it is testing
-	// may be removed in the future when we attach ListenerSet listeners
-	// on the Gateway
-
+func TestAttachListenerSetsToGateways(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		listenerSet     *v1.ListenerSet
-		parentGateway   *v1.Gateway
-		expectedGateway *v1.Gateway
-		name            string
-	}{
-		{
-			name: "create validation gateway with multiple listeners",
-			listenerSet: &v1.ListenerSet{
+	// Create test timestamps for precedence sorting
+	time1 := metav1.NewTime(metav1.Now().Add(-2 * time.Hour))
+	time2 := metav1.NewTime(metav1.Now().Add(-1 * time.Hour))
+	time3 := metav1.NewTime(metav1.Now().Time)
+
+	resourceResolver := &resolverfakes.FakeResolver{}
+	refGrantResolver := &referenceGrantResolver{}
+
+	gwNsName := types.NamespacedName{Namespace: "test", Name: "gateway"}
+
+	// Helper to create a listener object
+	createListener := func(
+		name string,
+		port int32,
+		protocol v1.ProtocolType,
+		valid bool,
+		gwNsName,
+		lsNsName types.NamespacedName,
+		tls *v1.ListenerTLSConfig,
+		listenerConditions []conditions.Condition,
+		hostname *v1.Hostname,
+		resolvedSecrets []types.NamespacedName,
+	) *Listener {
+		source := v1.Listener{
+			Name:     v1.SectionName(name),
+			Port:     port,
+			Protocol: protocol,
+			Hostname: hostname,
+		}
+		if tls != nil {
+			source.TLS = tls
+		}
+
+		supportedKinds := []v1.RouteGroupKind{
+			{Group: helpers.GetPointer(v1.Group("gateway.networking.k8s.io")), Kind: "HTTPRoute"},
+		}
+		if protocol == v1.HTTPProtocolType || protocol == v1.HTTPSProtocolType {
+			supportedKinds = append(supportedKinds, v1.RouteGroupKind{
+				Group: helpers.GetPointer(v1.Group("gateway.networking.k8s.io")), Kind: "GRPCRoute",
+			})
+		}
+
+		if protocol == v1.TCPProtocolType {
+			supportedKinds = []v1.RouteGroupKind{
+				{Group: helpers.GetPointer(v1.Group("gateway.networking.k8s.io")), Kind: "TCPRoute"},
+			}
+		}
+
+		if protocol == v1.TLSProtocolType {
+			supportedKinds = []v1.RouteGroupKind{
+				{Group: helpers.GetPointer(v1.Group("gateway.networking.k8s.io")), Kind: "TLSRoute"},
+			}
+		}
+
+		return &Listener{
+			Name:            name,
+			GatewayName:     gwNsName,
+			Source:          source,
+			Routes:          map[RouteKey]*L7Route{},
+			L4Routes:        map[L4RouteKey]*L4Route{},
+			SupportedKinds:  supportedKinds,
+			Valid:           valid,
+			Attachable:      true,
+			ListenerSetName: lsNsName,
+			Conditions:      listenerConditions,
+			ResolvedSecrets: resolvedSecrets,
+		}
+	}
+
+	createGateway := func(name, namespace string, listeners ...v1.Listener) *Gateway {
+		defaultListener := v1.Listener{
+			Name:     "default-http",
+			Port:     80,
+			Protocol: v1.HTTPProtocolType,
+		}
+
+		gw := &v1.Gateway{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: namespace,
+				Name:      name,
+			},
+			Spec: v1.GatewaySpec{
+				GatewayClassName: "nginx",
+				AllowedListeners: &v1.AllowedListeners{
+					Namespaces: &v1.ListenerNamespaces{
+						From: helpers.GetPointer(v1.NamespacesFromAll),
+					},
+				},
+				Listeners: append(([]v1.Listener{defaultListener}), listeners...),
+			},
+		}
+
+		listenerFactory := newListenerConfiguratorFactory(gw, resourceResolver, refGrantResolver, make(ProtectedPorts))
+
+		// Build the listeners using the factory (this will populate conflict resolver state)
+		builtListeners := buildListeners(
+			&Gateway{
+				Source:          gw,
+				ListenerFactory: listenerFactory,
+			},
+			gw.Spec.Listeners,
+			types.NamespacedName{Namespace: namespace, Name: name},
+			types.NamespacedName{}, // Empty for gateway listeners
+		)
+
+		return &Gateway{
+			Source:              gw,
+			Valid:               true,
+			EffectiveNginxProxy: &EffectiveNginxProxy{},
+			Listeners:           builtListeners,
+			ListenerFactory:     listenerFactory,
+		}
+	}
+
+	// Helper to build expected gateway with specified listeners and attached ListenerSets
+	buildExpectedGateway := func(
+		name,
+		namespace string,
+		attachedListenerSets map[types.NamespacedName]*ListenerSet,
+		listeners []*Listener,
+	) *Gateway {
+		defaultListener := v1.Listener{
+			Name:     "default-http",
+			Port:     80,
+			Protocol: v1.HTTPProtocolType,
+		}
+
+		gw := &v1.Gateway{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: namespace,
+				Name:      name,
+			},
+			Spec: v1.GatewaySpec{
+				GatewayClassName: "nginx",
+				AllowedListeners: &v1.AllowedListeners{
+					Namespaces: &v1.ListenerNamespaces{
+						From: helpers.GetPointer(v1.NamespacesFromAll),
+					},
+				},
+				Listeners: []v1.Listener{defaultListener},
+			},
+		}
+
+		listenerFactory := newListenerConfiguratorFactory(gw, resourceResolver, refGrantResolver, make(ProtectedPorts))
+
+		return &Gateway{
+			Source:               gw,
+			Valid:                true,
+			EffectiveNginxProxy:  &EffectiveNginxProxy{},
+			Listeners:            listeners,
+			ListenerFactory:      listenerFactory,
+			AttachedListenerSets: attachedListenerSets,
+		}
+	}
+
+	createListenerSet := func(
+		name,
+		namespace,
+		gatewayName,
+		gatewayNamespace string,
+		valid bool,
+		creationTime metav1.Time,
+		listeners []v1.ListenerEntry,
+	) *ListenerSet {
+		ls := &ListenerSet{
+			Source: &v1.ListenerSet{
 				ObjectMeta: metav1.ObjectMeta{
-					Namespace: "test",
-					Name:      "multi-listener-set",
+					Namespace:         namespace,
+					Name:              name,
+					CreationTimestamp: creationTime,
 				},
 				Spec: v1.ListenerSetSpec{
-					Listeners: []v1.ListenerEntry{
+					ParentRef: v1.ParentGatewayReference{
+						Name: v1.ObjectName(gatewayName),
+						Kind: helpers.GetPointer(v1.Kind(kinds.Gateway)),
+					},
+					Listeners: listeners,
+				},
+			},
+			Valid:      valid,
+			Conditions: []conditions.Condition{},
+		}
+
+		// Set cross-namespace reference if different namespace
+		if gatewayNamespace != namespace {
+			ls.Source.Spec.ParentRef.Namespace = helpers.GetPointer(v1.Namespace(gatewayNamespace))
+		}
+
+		return ls
+	}
+
+	buildExpectedListenerSet := func(
+		name,
+		namespace,
+		gatewayName,
+		gatewayNamespace string,
+		valid bool,
+		creationTime metav1.Time,
+		listenerEntries []v1.ListenerEntry,
+		listeners []*Listener,
+		lsConditions []conditions.Condition,
+	) *ListenerSet {
+		ls := createListenerSet(
+			name,
+			namespace,
+			gatewayName,
+			gatewayNamespace,
+			valid,
+			creationTime,
+			listenerEntries,
+		)
+		ls.Listeners = listeners
+		ls.Conditions = lsConditions
+
+		return ls
+	}
+
+	tests := []struct {
+		gateways             map[types.NamespacedName]*Gateway
+		listenerSets         map[types.NamespacedName]*ListenerSet
+		expectedGateways     map[types.NamespacedName]*Gateway
+		expectedListenerSets map[types.NamespacedName]*ListenerSet
+		name                 string
+	}{
+		{
+			name: "no listener sets",
+			gateways: map[types.NamespacedName]*Gateway{
+				gwNsName: createGateway("gateway", "test"),
+			},
+			listenerSets: nil,
+			expectedGateways: map[types.NamespacedName]*Gateway{
+				gwNsName: buildExpectedGateway("gateway", "test", nil, []*Listener{
+					createListener(
+						"default-http",
+						80,
+						v1.HTTPProtocolType,
+						true,
+						gwNsName,
+						types.NamespacedName{},
+						nil,
+						nil,
+						nil,
+						nil,
+					),
+				}),
+			},
+		},
+		{
+			name:     "no gateways",
+			gateways: nil,
+			listenerSets: map[types.NamespacedName]*ListenerSet{
+				{Namespace: "test", Name: "ls1"}: createListenerSet(
+					"ls1",
+					"test",
+					"gateway",
+					"test",
+					false,
+					time1,
+					[]v1.ListenerEntry{
+						{Name: "http-80", Port: 80, Protocol: v1.HTTPProtocolType},
+					},
+				),
+			},
+			expectedListenerSets: map[types.NamespacedName]*ListenerSet{
+				{Namespace: "test", Name: "ls1"}: buildExpectedListenerSet(
+					"ls1",
+					"test",
+					"gateway",
+					"test",
+					false,
+					time1,
+					[]v1.ListenerEntry{
+						{Name: "http-80", Port: 80, Protocol: v1.HTTPProtocolType},
+					},
+					nil,
+					[]conditions.Condition{},
+				),
+			},
+		},
+		{
+			name: "single valid listener set",
+			gateways: map[types.NamespacedName]*Gateway{
+				{Namespace: "test", Name: "gateway"}: createGateway("gateway", "test"),
+			},
+			listenerSets: map[types.NamespacedName]*ListenerSet{
+				{Namespace: "test", Name: "ls1"}: createListenerSet(
+					"ls1",
+					"test",
+					"gateway",
+					"test",
+					true,
+					time1,
+					[]v1.ListenerEntry{
+						{Name: "http-8080", Port: 8080, Protocol: v1.HTTPProtocolType}, // no conflict with default port 80
+					},
+				),
+			},
+			expectedGateways: map[types.NamespacedName]*Gateway{
+				{Namespace: "test", Name: "gateway"}: buildExpectedGateway(
+					"gateway",
+					"test",
+					map[types.NamespacedName]*ListenerSet{
+						{Namespace: "test", Name: "ls1"}: buildExpectedListenerSet(
+							"ls1",
+							"test",
+							"gateway",
+							"test",
+							true,
+							time1,
+							[]v1.ListenerEntry{
+								{Name: "http-8080", Port: 8080, Protocol: v1.HTTPProtocolType},
+							},
+							[]*Listener{
+								createListener(
+									"http-8080",
+									8080,
+									v1.HTTPProtocolType,
+									true,
+									types.NamespacedName{Namespace: "test", Name: "gateway"},
+									types.NamespacedName{Namespace: "test", Name: "ls1"},
+									nil,
+									nil,
+									nil,
+									nil,
+								),
+							},
+							[]conditions.Condition{},
+						),
+					},
+					[]*Listener{
+						createListener(
+							"default-http",
+							80,
+							v1.HTTPProtocolType,
+							true,
+							types.NamespacedName{Namespace: "test", Name: "gateway"},
+							types.NamespacedName{},
+							nil,
+							nil,
+							nil,
+							nil,
+						),
+						createListener(
+							"http-8080",
+							8080,
+							v1.HTTPProtocolType,
+							true,
+							types.NamespacedName{Namespace: "test", Name: "gateway"},
+							types.NamespacedName{Namespace: "test", Name: "ls1"},
+							nil,
+							nil,
+							nil,
+							nil,
+						),
+					}),
+			},
+			expectedListenerSets: map[types.NamespacedName]*ListenerSet{
+				{Namespace: "test", Name: "ls1"}: buildExpectedListenerSet(
+					"ls1",
+					"test",
+					"gateway",
+					"test",
+					true,
+					time1,
+					[]v1.ListenerEntry{
+						{Name: "http-8080", Port: 8080, Protocol: v1.HTTPProtocolType},
+					},
+					[]*Listener{
+						createListener(
+							"http-8080",
+							8080,
+							v1.HTTPProtocolType,
+							true,
+							types.NamespacedName{Namespace: "test", Name: "gateway"},
+							types.NamespacedName{Namespace: "test", Name: "ls1"},
+							nil,
+							nil,
+							nil,
+							nil,
+						),
+					},
+					[]conditions.Condition{},
+				),
+			},
+		},
+		{
+			name: "listener set conflicts with default port 80",
+			gateways: map[types.NamespacedName]*Gateway{
+				{Namespace: "test", Name: "gateway"}: createGateway("gateway", "test"),
+			},
+			listenerSets: map[types.NamespacedName]*ListenerSet{
+				{Namespace: "test", Name: "ls1"}: createListenerSet(
+					"ls1",
+					"test",
+					"gateway",
+					"test",
+					true,
+					time1,
+					[]v1.ListenerEntry{
+						{Name: "http-80", Port: 80, Protocol: v1.HTTPProtocolType}, // conflicts with default
+					},
+				),
+			},
+			expectedGateways: map[types.NamespacedName]*Gateway{
+				{Namespace: "test", Name: "gateway"}: buildExpectedGateway("gateway", "test", nil, []*Listener{
+					createListener(
+						"default-http",
+						80,
+						v1.HTTPProtocolType,
+						true,
+						types.NamespacedName{Namespace: "test", Name: "gateway"},
+						types.NamespacedName{},
+						nil,
+						nil,
+						nil,
+						nil,
+					),
+				}),
+			},
+			expectedListenerSets: map[types.NamespacedName]*ListenerSet{
+				{Namespace: "test", Name: "ls1"}: buildExpectedListenerSet(
+					"ls1",
+					"test",
+					"gateway",
+					"test",
+					false,
+					time1,
+					[]v1.ListenerEntry{
+						{Name: "http-80", Port: 80, Protocol: v1.HTTPProtocolType},
+					},
+					[]*Listener{
+						createListener(
+							"http-80",
+							80,
+							v1.HTTPProtocolType,
+							false,
+							types.NamespacedName{Namespace: "test", Name: "gateway"},
+							types.NamespacedName{Namespace: "test", Name: "ls1"},
+							nil,
+							conditions.NewListenerHostnameConflict("Multiple listeners with the same port 80 and "+
+								"protocol HTTP have overlapping hostnames"),
+							nil,
+							nil,
+						),
+					},
+					[]conditions.Condition{
+						conditions.NewListenerSetListenersNotValid("All listeners are invalid"),
+					},
+				),
+			},
+		},
+		{
+			name: "invalid listener set should be skipped",
+			gateways: map[types.NamespacedName]*Gateway{
+				{Namespace: "test", Name: "gateway"}: createGateway("gateway", "test"),
+			},
+			listenerSets: map[types.NamespacedName]*ListenerSet{
+				{Namespace: "test", Name: "ls1"}: createListenerSet(
+					"ls1",
+					"test",
+					"gateway",
+					"test",
+					false, // ListenerSet is marked as invalid so should be skipped entirely
+					time1,
+					[]v1.ListenerEntry{
+						{Name: "http-80", Port: 80, Protocol: v1.HTTPProtocolType}, // conflicts with default
+					},
+				),
+				{Namespace: "test", Name: "ls2"}: createListenerSet(
+					"ls2",
+					"test",
+					"gateway",
+					"test",
+					true,
+					time2,
+					[]v1.ListenerEntry{
+						{Name: "http-8080", Port: 8080, Protocol: v1.HTTPProtocolType}, // no conflict
+					},
+				),
+			},
+			expectedGateways: map[types.NamespacedName]*Gateway{
+				{Namespace: "test", Name: "gateway"}: buildExpectedGateway("gateway", "test",
+					map[types.NamespacedName]*ListenerSet{
+						{Namespace: "test", Name: "ls2"}: buildExpectedListenerSet(
+							"ls2",
+							"test",
+							"gateway",
+							"test",
+							true,
+							time2,
+							[]v1.ListenerEntry{
+								{Name: "http-8080", Port: 8080, Protocol: v1.HTTPProtocolType},
+							},
+							[]*Listener{
+								createListener(
+									"http-8080",
+									8080,
+									v1.HTTPProtocolType,
+									true,
+									types.NamespacedName{Namespace: "test", Name: "gateway"},
+									types.NamespacedName{Namespace: "test", Name: "ls2"},
+									nil,
+									nil,
+									nil,
+									nil,
+								),
+							},
+							[]conditions.Condition{},
+						),
+					},
+					[]*Listener{
+						createListener(
+							"default-http",
+							80,
+							v1.HTTPProtocolType,
+							true,
+							types.NamespacedName{Namespace: "test", Name: "gateway"},
+							types.NamespacedName{},
+							nil,
+							nil,
+							nil,
+							nil,
+						),
+						createListener(
+							"http-8080",
+							8080,
+							v1.HTTPProtocolType,
+							true,
+							types.NamespacedName{Namespace: "test", Name: "gateway"},
+							types.NamespacedName{Namespace: "test", Name: "ls2"},
+							nil,
+							nil,
+							nil,
+							nil,
+						),
+					}),
+			},
+			expectedListenerSets: map[types.NamespacedName]*ListenerSet{
+				// ls1 is invalid so not processed, ls2 should have its listener
+				{Namespace: "test", Name: "ls1"}: buildExpectedListenerSet(
+					"ls1",
+					"test",
+					"gateway",
+					"test",
+					false,
+					time1,
+					[]v1.ListenerEntry{
+						{Name: "http-80", Port: 80, Protocol: v1.HTTPProtocolType},
+					},
+					nil,
+					[]conditions.Condition{},
+				), // stays invalid, no listeners processed
+				{Namespace: "test", Name: "ls2"}: buildExpectedListenerSet(
+					"ls2",
+					"test",
+					"gateway",
+					"test",
+					true,
+					time2,
+					[]v1.ListenerEntry{
+						{Name: "http-8080", Port: 8080, Protocol: v1.HTTPProtocolType},
+					},
+					[]*Listener{
+						createListener(
+							"http-8080",
+							8080,
+							v1.HTTPProtocolType,
+							true,
+							types.NamespacedName{Namespace: "test", Name: "gateway"},
+							types.NamespacedName{Namespace: "test", Name: "ls2"},
+							nil,
+							nil,
+							nil,
+							nil,
+						),
+					},
+					[]conditions.Condition{},
+				),
+			},
+		},
+		{
+			name: "listener set with nil source should be skipped",
+			gateways: map[types.NamespacedName]*Gateway{
+				{Namespace: "test", Name: "gateway"}: createGateway("gateway", "test"),
+			},
+			listenerSets: map[types.NamespacedName]*ListenerSet{
+				{Namespace: "test", Name: "ls1"}: {Source: nil, Valid: true}, // nil source
+				{Namespace: "test", Name: "ls2"}: createListenerSet(
+					"ls2",
+					"test",
+					"gateway",
+					"test",
+					true,
+					time2,
+					[]v1.ListenerEntry{
+						{Name: "http-8080", Port: 8080, Protocol: v1.HTTPProtocolType}, // no conflict with default port 80
+					},
+				),
+			},
+			expectedGateways: map[types.NamespacedName]*Gateway{
+				{Namespace: "test", Name: "gateway"}: buildExpectedGateway("gateway", "test",
+					map[types.NamespacedName]*ListenerSet{
+						{Namespace: "test", Name: "ls2"}: buildExpectedListenerSet(
+							"ls2",
+							"test",
+							"gateway",
+							"test",
+							true,
+							time2,
+							[]v1.ListenerEntry{
+								{Name: "http-8080", Port: 8080, Protocol: v1.HTTPProtocolType},
+							}, []*Listener{
+								createListener(
+									"http-8080",
+									8080,
+									v1.HTTPProtocolType,
+									true,
+									types.NamespacedName{Namespace: "test", Name: "gateway"},
+									types.NamespacedName{Namespace: "test", Name: "ls2"},
+									nil,
+									nil,
+									nil,
+									nil,
+								),
+							}, []conditions.Condition{}),
+					},
+					[]*Listener{
+						createListener(
+							"default-http",
+							80,
+							v1.HTTPProtocolType,
+							true,
+							types.NamespacedName{Namespace: "test", Name: "gateway"},
+							types.NamespacedName{},
+							nil,
+							nil,
+							nil,
+							nil,
+						),
+						createListener(
+							"http-8080",
+							8080,
+							v1.HTTPProtocolType,
+							true,
+							types.NamespacedName{Namespace: "test", Name: "gateway"},
+							types.NamespacedName{Namespace: "test", Name: "ls2"},
+							nil,
+							nil,
+							nil,
+							nil,
+						),
+					}),
+			},
+			expectedListenerSets: map[types.NamespacedName]*ListenerSet{
+				{Namespace: "test", Name: "ls1"}: {Source: nil, Valid: true},
+				// stays as originally set (nil source skipped)
+				{Namespace: "test", Name: "ls2"}: buildExpectedListenerSet(
+					"ls2",
+					"test",
+					"gateway",
+					"test",
+					true,
+					time2,
+					[]v1.ListenerEntry{
+						{Name: "http-8080", Port: 8080, Protocol: v1.HTTPProtocolType},
+					},
+					[]*Listener{
+						createListener(
+							"http-8080",
+							8080,
+							v1.HTTPProtocolType,
+							true,
+							types.NamespacedName{Namespace: "test", Name: "gateway"},
+							types.NamespacedName{Namespace: "test", Name: "ls2"},
+							nil,
+							nil,
+							nil,
+							nil,
+						),
+					},
+					[]conditions.Condition{},
+				),
+			},
+		},
+		{
+			name: "cross-namespace listener set reference",
+			gateways: map[types.NamespacedName]*Gateway{
+				{Namespace: "gateway-ns", Name: "gateway"}: createGateway("gateway", "gateway-ns"),
+			},
+			listenerSets: map[types.NamespacedName]*ListenerSet{
+				{Namespace: "ls-ns", Name: "ls1"}: createListenerSet(
+					"ls1",
+					"ls-ns",
+					"gateway",
+					"gateway-ns",
+					true,
+					time1,
+					[]v1.ListenerEntry{
+						{Name: "http-8080", Port: 8080, Protocol: v1.HTTPProtocolType}, // no conflict with default port 80
+					},
+				),
+			},
+			expectedGateways: map[types.NamespacedName]*Gateway{
+				{Namespace: "gateway-ns", Name: "gateway"}: buildExpectedGateway("gateway", "gateway-ns",
+					map[types.NamespacedName]*ListenerSet{
+						{Namespace: "ls-ns", Name: "ls1"}: buildExpectedListenerSet(
+							"ls1",
+							"ls-ns",
+							"gateway",
+							"gateway-ns",
+							true,
+							time1,
+							[]v1.ListenerEntry{
+								{Name: "http-8080", Port: 8080, Protocol: v1.HTTPProtocolType},
+							},
+							[]*Listener{
+								createListener(
+									"http-8080",
+									8080,
+									v1.HTTPProtocolType,
+									true,
+									types.NamespacedName{Namespace: "gateway-ns", Name: "gateway"},
+									types.NamespacedName{Namespace: "ls-ns", Name: "ls1"},
+									nil,
+									nil,
+									nil,
+									nil,
+								),
+							},
+							[]conditions.Condition{},
+						),
+					},
+					[]*Listener{
+						createListener(
+							"default-http",
+							80,
+							v1.HTTPProtocolType,
+							true,
+							types.NamespacedName{Namespace: "gateway-ns", Name: "gateway"},
+							types.NamespacedName{},
+							nil,
+							nil,
+							nil,
+							nil,
+						),
+						createListener(
+							"http-8080",
+							8080,
+							v1.HTTPProtocolType,
+							true,
+							types.NamespacedName{Namespace: "gateway-ns", Name: "gateway"},
+							types.NamespacedName{Namespace: "ls-ns", Name: "ls1"},
+							nil,
+							nil,
+							nil,
+							nil,
+						),
+					}),
+			},
+			expectedListenerSets: map[types.NamespacedName]*ListenerSet{
+				{Namespace: "ls-ns", Name: "ls1"}: buildExpectedListenerSet(
+					"ls1",
+					"ls-ns",
+					"gateway",
+					"gateway-ns",
+					true,
+					time1,
+					[]v1.ListenerEntry{
+						{Name: "http-8080", Port: 8080, Protocol: v1.HTTPProtocolType},
+					},
+					[]*Listener{
+						createListener(
+							"http-8080",
+							8080,
+							v1.HTTPProtocolType,
+							true,
+							types.NamespacedName{Namespace: "gateway-ns", Name: "gateway"},
+							types.NamespacedName{Namespace: "ls-ns", Name: "ls1"},
+							nil,
+							nil,
+							nil,
+							nil,
+						),
+					},
+					[]conditions.Condition{},
+				),
+			},
+		},
+		{
+			name: "multiple gateways with different listener sets",
+			gateways: map[types.NamespacedName]*Gateway{
+				{Namespace: "test", Name: "gateway1"}: createGateway("gateway1", "test"),
+				{Namespace: "test", Name: "gateway2"}: createGateway("gateway2", "test"),
+			},
+			listenerSets: map[types.NamespacedName]*ListenerSet{
+				{Namespace: "test", Name: "ls1"}: createListenerSet(
+					"ls1",
+					"test",
+					"gateway1",
+					"test",
+					true,
+					time1,
+					[]v1.ListenerEntry{
+						{Name: "http-8080", Port: 8080, Protocol: v1.HTTPProtocolType}, // no conflict with default port 80
+					},
+				),
+				{Namespace: "test", Name: "ls2"}: createListenerSet(
+					"ls2",
+					"test",
+					"gateway2",
+					"test",
+					true,
+					time2,
+					[]v1.ListenerEntry{
+						{Name: "http-8081", Port: 8081, Protocol: v1.HTTPProtocolType}, // no conflict
+					},
+				),
+				{Namespace: "test", Name: "ls3"}: createListenerSet(
+					"ls3",
+					"test",
+					"gateway1",
+					"test",
+					true,
+					time3,
+					[]v1.ListenerEntry{
+						{Name: "http-9090", Port: 9090, Protocol: v1.HTTPProtocolType}, // no conflict
+					},
+				),
+			},
+			expectedGateways: map[types.NamespacedName]*Gateway{
+				{Namespace: "test", Name: "gateway1"}: buildExpectedGateway("gateway1", "test",
+					map[types.NamespacedName]*ListenerSet{
+						{Namespace: "test", Name: "ls1"}: buildExpectedListenerSet(
+							"ls1",
+							"test",
+							"gateway1",
+							"test",
+							true,
+							time1,
+							[]v1.ListenerEntry{
+								{Name: "http-8080", Port: 8080, Protocol: v1.HTTPProtocolType},
+							},
+							[]*Listener{
+								createListener(
+									"http-8080",
+									8080,
+									v1.HTTPProtocolType,
+									true,
+									types.NamespacedName{Namespace: "test", Name: "gateway1"},
+									types.NamespacedName{Namespace: "test", Name: "ls1"},
+									nil,
+									nil,
+									nil,
+									nil,
+								),
+							},
+							[]conditions.Condition{},
+						),
+						{Namespace: "test", Name: "ls3"}: buildExpectedListenerSet(
+							"ls3",
+							"test",
+							"gateway1",
+							"test",
+							true,
+							time3,
+							[]v1.ListenerEntry{
+								{Name: "http-9090", Port: 9090, Protocol: v1.HTTPProtocolType},
+							},
+							[]*Listener{
+								createListener(
+									"http-9090",
+									9090,
+									v1.HTTPProtocolType,
+									true,
+									types.NamespacedName{Namespace: "test", Name: "gateway1"},
+									types.NamespacedName{Namespace: "test", Name: "ls3"},
+									nil,
+									nil,
+									nil,
+									nil,
+								),
+							},
+							[]conditions.Condition{},
+						),
+					},
+					[]*Listener{
+						createListener(
+							"default-http",
+							80,
+							v1.HTTPProtocolType,
+							true,
+							types.NamespacedName{Namespace: "test", Name: "gateway1"},
+							types.NamespacedName{},
+							nil,
+							nil,
+							nil,
+							nil,
+						),
+						createListener(
+							"http-8080",
+							8080,
+							v1.HTTPProtocolType,
+							true,
+							types.NamespacedName{Namespace: "test", Name: "gateway1"},
+							types.NamespacedName{Namespace: "test", Name: "ls1"},
+							nil,
+							nil,
+							nil,
+							nil,
+						),
+						createListener(
+							"http-9090",
+							9090,
+							v1.HTTPProtocolType,
+							true,
+							types.NamespacedName{Namespace: "test", Name: "gateway1"},
+							types.NamespacedName{Namespace: "test", Name: "ls3"},
+							nil,
+							nil,
+							nil,
+							nil,
+						),
+					}),
+				{Namespace: "test", Name: "gateway2"}: buildExpectedGateway("gateway2", "test",
+					map[types.NamespacedName]*ListenerSet{
+						{Namespace: "test", Name: "ls2"}: buildExpectedListenerSet(
+							"ls2",
+							"test",
+							"gateway2",
+							"test",
+							true,
+							time2,
+							[]v1.ListenerEntry{
+								{Name: "http-8081", Port: 8081, Protocol: v1.HTTPProtocolType},
+							},
+							[]*Listener{
+								createListener(
+									"http-8081",
+									8081,
+									v1.HTTPProtocolType,
+									true,
+									types.NamespacedName{Namespace: "test", Name: "gateway2"},
+									types.NamespacedName{Namespace: "test", Name: "ls2"},
+									nil,
+									nil,
+									nil,
+									nil,
+								),
+							},
+							[]conditions.Condition{},
+						),
+					},
+					[]*Listener{
+						createListener(
+							"default-http",
+							80,
+							v1.HTTPProtocolType,
+							true,
+							types.NamespacedName{Namespace: "test", Name: "gateway2"},
+							types.NamespacedName{},
+							nil,
+							nil,
+							nil,
+							nil,
+						),
+						createListener(
+							"http-8081",
+							8081,
+							v1.HTTPProtocolType,
+							true,
+							types.NamespacedName{Namespace: "test", Name: "gateway2"},
+							types.NamespacedName{Namespace: "test", Name: "ls2"},
+							nil,
+							nil,
+							nil,
+							nil,
+						),
+					}),
+			},
+			expectedListenerSets: map[types.NamespacedName]*ListenerSet{
+				{Namespace: "test", Name: "ls1"}: buildExpectedListenerSet(
+					"ls1",
+					"test",
+					"gateway1",
+					"test",
+					true,
+					time1,
+					[]v1.ListenerEntry{
+						{Name: "http-8080", Port: 8080, Protocol: v1.HTTPProtocolType},
+					},
+					[]*Listener{
+						createListener(
+							"http-8080",
+							8080,
+							v1.HTTPProtocolType,
+							true,
+							types.NamespacedName{Namespace: "test", Name: "gateway1"},
+							types.NamespacedName{Namespace: "test", Name: "ls1"},
+							nil,
+							nil,
+							nil,
+							nil,
+						),
+					},
+					[]conditions.Condition{},
+				),
+				{Namespace: "test", Name: "ls2"}: buildExpectedListenerSet(
+					"ls2",
+					"test",
+					"gateway2",
+					"test",
+					true,
+					time2,
+					[]v1.ListenerEntry{
+						{Name: "http-8081", Port: 8081, Protocol: v1.HTTPProtocolType},
+					},
+					[]*Listener{
+						createListener(
+							"http-8081",
+							8081,
+							v1.HTTPProtocolType,
+							true,
+							types.NamespacedName{Namespace: "test", Name: "gateway2"},
+							types.NamespacedName{Namespace: "test", Name: "ls2"},
+							nil,
+							nil,
+							nil,
+							nil,
+						),
+					},
+					[]conditions.Condition{},
+				),
+				{Namespace: "test", Name: "ls3"}: buildExpectedListenerSet(
+					"ls3",
+					"test",
+					"gateway1",
+					"test",
+					true,
+					time3,
+					[]v1.ListenerEntry{
+						{Name: "http-9090", Port: 9090, Protocol: v1.HTTPProtocolType},
+					},
+					[]*Listener{
+						createListener(
+							"http-9090",
+							9090,
+							v1.HTTPProtocolType,
+							true,
+							types.NamespacedName{Namespace: "test", Name: "gateway1"},
+							types.NamespacedName{Namespace: "test", Name: "ls3"},
+							nil,
+							nil,
+							nil,
+							nil,
+						),
+					},
+					[]conditions.Condition{},
+				),
+			},
+		},
+		{
+			name: "listener set with multiple listeners",
+			gateways: map[types.NamespacedName]*Gateway{
+				{Namespace: "test", Name: "gateway"}: createGateway("gateway", "test"),
+			},
+			listenerSets: map[types.NamespacedName]*ListenerSet{
+				{Namespace: "test", Name: "ls-multi"}: createListenerSet(
+					"ls-multi",
+					"test",
+					"gateway",
+					"test",
+					true,
+					time1,
+					[]v1.ListenerEntry{
+						{Name: "http-80", Port: 80, Protocol: v1.HTTPProtocolType}, // conflicts with default
+						{Name: "http-8080", Port: 8080, Protocol: v1.HTTPProtocolType},
 						{
-							Name:     "http-80",
-							Port:     80,
-							Protocol: v1.HTTPProtocolType,
+							Name:     "https-443",
+							Port:     443,
+							Protocol: v1.HTTPSProtocolType,
+							TLS: &v1.ListenerTLSConfig{
+								Mode: helpers.GetPointer(v1.TLSModeTerminate),
+							},
 						},
+					},
+				),
+			},
+			expectedGateways: map[types.NamespacedName]*Gateway{
+				{Namespace: "test", Name: "gateway"}: buildExpectedGateway("gateway", "test",
+					map[types.NamespacedName]*ListenerSet{
+						{Namespace: "test", Name: "ls-multi"}: buildExpectedListenerSet(
+							"ls-multi",
+							"test",
+							"gateway",
+							"test",
+							true,
+							time1,
+							[]v1.ListenerEntry{
+								{Name: "http-80", Port: 80, Protocol: v1.HTTPProtocolType},
+								{Name: "http-8080", Port: 8080, Protocol: v1.HTTPProtocolType},
+								{Name: "https-443", Port: 443, Protocol: v1.HTTPSProtocolType, TLS: &v1.ListenerTLSConfig{
+									Mode: helpers.GetPointer(v1.TLSModeTerminate),
+								}},
+							},
+							[]*Listener{
+								createListener(
+									"http-80",
+									80,
+									v1.HTTPProtocolType,
+									false,
+									types.NamespacedName{Namespace: "test", Name: "gateway"},
+									types.NamespacedName{Namespace: "test", Name: "ls-multi"},
+									nil,
+									conditions.NewListenerHostnameConflict("Multiple listeners with the same port 80 and "+
+										"protocol HTTP have overlapping hostnames"),
+									nil,
+									nil,
+								), // conflict with default
+								createListener(
+									"http-8080",
+									8080,
+									v1.HTTPProtocolType,
+									true,
+									types.NamespacedName{Namespace: "test", Name: "gateway"},
+									types.NamespacedName{Namespace: "test", Name: "ls-multi"},
+									nil,
+									nil,
+									nil,
+									nil,
+								),
+								createListener(
+									"https-443",
+									443,
+									v1.HTTPSProtocolType,
+									false,
+									types.NamespacedName{Namespace: "test", Name: "gateway"},
+									types.NamespacedName{Namespace: "test", Name: "ls-multi"},
+									&v1.ListenerTLSConfig{Mode: helpers.GetPointer(v1.TLSModeTerminate)},
+									conditions.NewListenerAllInvalidCertificateRefs("tls.certificateRefs: Required value: "+
+										"certificateRefs must be defined for TLS mode terminate", string(v1.ListenerReasonInvalidCertificateRef)),
+									nil,
+									nil,
+								),
+							},
+							[]conditions.Condition{},
+						),
+					},
+					[]*Listener{
+						createListener(
+							"default-http",
+							80,
+							v1.HTTPProtocolType,
+							true,
+							types.NamespacedName{Namespace: "test", Name: "gateway"},
+							types.NamespacedName{},
+							nil,
+							nil,
+							nil,
+							nil,
+						),
+						createListener(
+							"http-8080",
+							8080,
+							v1.HTTPProtocolType,
+							true,
+							types.NamespacedName{Namespace: "test", Name: "gateway"},
+							types.NamespacedName{Namespace: "test", Name: "ls-multi"},
+							nil,
+							nil,
+							nil,
+							nil,
+						),
+					}),
+			},
+			expectedListenerSets: map[types.NamespacedName]*ListenerSet{
+				{Namespace: "test", Name: "ls-multi"}: buildExpectedListenerSet(
+					"ls-multi",
+					"test",
+					"gateway",
+					"test",
+					true,
+					time1,
+					[]v1.ListenerEntry{
+						{Name: "http-80", Port: 80, Protocol: v1.HTTPProtocolType},
+						{Name: "http-8080", Port: 8080, Protocol: v1.HTTPProtocolType},
+						{Name: "https-443", Port: 443, Protocol: v1.HTTPSProtocolType, TLS: &v1.ListenerTLSConfig{
+							Mode: helpers.GetPointer(v1.TLSModeTerminate),
+						}},
+					},
+					[]*Listener{
+						createListener(
+							"http-80",
+							80,
+							v1.HTTPProtocolType,
+							false,
+							types.NamespacedName{Namespace: "test", Name: "gateway"},
+							types.NamespacedName{Namespace: "test", Name: "ls-multi"},
+							nil,
+							conditions.NewListenerHostnameConflict("Multiple listeners with the same port 80 and "+
+								"protocol HTTP have overlapping hostnames"),
+							nil,
+							nil,
+						),
+						createListener(
+							"http-8080",
+							8080,
+							v1.HTTPProtocolType,
+							true,
+							types.NamespacedName{Namespace: "test", Name: "gateway"},
+							types.NamespacedName{Namespace: "test", Name: "ls-multi"},
+							nil,
+							nil,
+							nil,
+							nil,
+						),
+						createListener(
+							"https-443",
+							443,
+							v1.HTTPSProtocolType,
+							false,
+							types.NamespacedName{Namespace: "test", Name: "gateway"},
+							types.NamespacedName{Namespace: "test", Name: "ls-multi"},
+							&v1.ListenerTLSConfig{Mode: helpers.GetPointer(v1.TLSModeTerminate)},
+							conditions.NewListenerAllInvalidCertificateRefs("tls.certificateRefs: Required value: "+
+								"certificateRefs must be defined for TLS mode terminate", string(v1.ListenerReasonInvalidCertificateRef)),
+							nil,
+							nil,
+						),
+					},
+					[]conditions.Condition{},
+				),
+			},
+		},
+		{
+			name: "ListenerSet TCP vs Gateway TCP conflict - only ListenerSet invalidated",
+			gateways: map[types.NamespacedName]*Gateway{
+				{Namespace: "test", Name: "gateway"}: createGateway("gateway", "test", v1.Listener{
+					Name:     "gateway-tcp-8080",
+					Port:     8080,
+					Protocol: v1.TCPProtocolType,
+				}),
+			},
+			listenerSets: map[types.NamespacedName]*ListenerSet{
+				{Namespace: "test", Name: "ls-tcp-conflict"}: createListenerSet(
+					"ls-tcp-conflict",
+					"test",
+					"gateway",
+					"test",
+					true,
+					time1,
+					[]v1.ListenerEntry{
+						{Name: "ls-tcp-8080", Port: 8080, Protocol: v1.TCPProtocolType}, // TCP L4 conflicts with Gateway TCP listener
+					},
+				),
+			},
+			expectedGateways: map[types.NamespacedName]*Gateway{
+				{Namespace: "test", Name: "gateway"}: buildExpectedGateway("gateway", "test", nil, []*Listener{
+					createListener(
+						"default-http",
+						80,
+						v1.HTTPProtocolType,
+						true,
+						types.NamespacedName{Namespace: "test", Name: "gateway"},
+						types.NamespacedName{},
+						nil,
+						nil,
+						nil,
+						nil,
+					),
+					createListener(
+						"gateway-tcp-8080",
+						8080,
+						v1.TCPProtocolType,
+						true,
+						types.NamespacedName{Namespace: "test", Name: "gateway"},
+						types.NamespacedName{},
+						nil,
+						nil,
+						nil,
+						nil,
+					), // Gateway TCP listener stays valid
+				}),
+			},
+			expectedListenerSets: map[types.NamespacedName]*ListenerSet{
+				{Namespace: "test", Name: "ls-tcp-conflict"}: buildExpectedListenerSet(
+					"ls-tcp-conflict",
+					"test",
+					"gateway",
+					"test",
+					false,
+					time1,
+					[]v1.ListenerEntry{
+						{Name: "ls-tcp-8080", Port: 8080, Protocol: v1.TCPProtocolType},
+					},
+					[]*Listener{
+						createListener(
+							"ls-tcp-8080",
+							8080,
+							v1.TCPProtocolType,
+							false,
+							types.NamespacedName{Namespace: "test", Name: "gateway"},
+							types.NamespacedName{Namespace: "test", Name: "ls-tcp-conflict"},
+							nil,
+							conditions.NewListenerProtocolConflict("Multiple TCP listeners cannot share the same port 8080"),
+							nil,
+							nil,
+						), // Only ListenerSet TCP listener is invalid
+					},
+					[]conditions.Condition{
+						conditions.NewListenerSetListenersNotValid("All listeners are invalid"),
+					},
+				),
+			},
+		},
+		{
+			name: "ListenerSet vs Gateway hostname overlap - only ListenerSet invalidated",
+			gateways: map[types.NamespacedName]*Gateway{
+				{Namespace: "test", Name: "gateway"}: createGateway("gateway", "test", v1.Listener{
+					Name:     "gateway-https-8443",
+					Port:     8443,
+					Protocol: v1.HTTPSProtocolType,
+					Hostname: helpers.GetPointer[v1.Hostname]("tea.leaves.com"),
+					TLS: &v1.ListenerTLSConfig{
+						Mode: helpers.GetPointer(v1.TLSModeTerminate),
+						CertificateRefs: []v1.SecretObjectReference{
+							{
+								Kind: (*v1.Kind)(helpers.GetPointer("Secret")),
+								Name: "tls-secret",
+							},
+						},
+					},
+				}),
+			},
+			listenerSets: map[types.NamespacedName]*ListenerSet{
+				{Namespace: "test", Name: "ls-hostname-conflict"}: createListenerSet(
+					"ls-hostname-conflict",
+					"test",
+					"gateway",
+					"test",
+					true,
+					time1,
+					[]v1.ListenerEntry{
+						{
+							Name:     "ls-tls-8443",
+							Port:     8443,
+							Protocol: v1.TLSProtocolType,
+							Hostname: helpers.GetPointer[v1.Hostname]("*.leaves.com"),
+							TLS: &v1.ListenerTLSConfig{
+								Mode: helpers.GetPointer(v1.TLSModePassthrough),
+								CertificateRefs: []v1.SecretObjectReference{
+									{
+										Kind: (*v1.Kind)(helpers.GetPointer("Secret")),
+										Name: "tls-secret",
+									},
+								},
+							},
+						},
+					},
+				),
+			},
+			expectedGateways: map[types.NamespacedName]*Gateway{
+				{Namespace: "test", Name: "gateway"}: buildExpectedGateway("gateway", "test",
+					nil,
+					[]*Listener{
+						createListener(
+							"default-http",
+							80,
+							v1.HTTPProtocolType,
+							true,
+							types.NamespacedName{Namespace: "test", Name: "gateway"},
+							types.NamespacedName{},
+							nil,
+							nil,
+							nil,
+							nil,
+						),
+						createListener(
+							"gateway-https-8443",
+							8443,
+							v1.HTTPSProtocolType,
+							true,
+							types.NamespacedName{Namespace: "test", Name: "gateway"},
+							types.NamespacedName{},
+							&v1.ListenerTLSConfig{
+								Mode: helpers.GetPointer(v1.TLSModeTerminate),
+								CertificateRefs: []v1.SecretObjectReference{
+									{
+										Kind: (*v1.Kind)(helpers.GetPointer("Secret")),
+										Name: "tls-secret",
+									},
+								},
+							},
+							[]conditions.Condition{conditions.NewListenerOverlappingTLSConfig(
+								v1.ListenerReasonOverlappingHostnames,
+								"Listener hostname overlaps with hostname(s) of other Listener(s) on the same port",
+							)},
+							helpers.GetPointer[v1.Hostname]("tea.leaves.com"),
+							[]types.NamespacedName{{Namespace: "test", Name: "tls-secret"}},
+						),
+					}),
+			},
+			expectedListenerSets: map[types.NamespacedName]*ListenerSet{
+				{Namespace: "test", Name: "ls-hostname-conflict"}: buildExpectedListenerSet(
+					"ls-hostname-conflict",
+					"test",
+					"gateway",
+					"test",
+					false,
+					time1,
+					[]v1.ListenerEntry{
+						{
+							Name:     "ls-tls-8443",
+							Port:     8443,
+							Protocol: v1.TLSProtocolType,
+							Hostname: helpers.GetPointer[v1.Hostname]("*.leaves.com"),
+							TLS: &v1.ListenerTLSConfig{
+								Mode: helpers.GetPointer(v1.TLSModePassthrough),
+								CertificateRefs: []v1.SecretObjectReference{
+									{
+										Kind: (*v1.Kind)(helpers.GetPointer("Secret")),
+										Name: "tls-secret",
+									},
+								},
+							},
+						},
+					},
+					[]*Listener{
+						createListener(
+							"ls-tls-8443",
+							8443,
+							v1.TLSProtocolType,
+							false,
+							types.NamespacedName{Namespace: "test", Name: "gateway"},
+							types.NamespacedName{Namespace: "test", Name: "ls-hostname-conflict"},
+							&v1.ListenerTLSConfig{
+								Mode: helpers.GetPointer(v1.TLSModePassthrough),
+								CertificateRefs: []v1.SecretObjectReference{
+									{
+										Kind: (*v1.Kind)(helpers.GetPointer("Secret")),
+										Name: "tls-secret",
+									},
+								},
+							},
+							append(
+								conditions.NewListenerHostnameConflict("HTTPS and TLS listeners for the same port 8443 specify overlapping"+
+									" hostnames; ensure no overlapping hostnames for HTTPS and TLS listeners for the same port"),
+								conditions.NewListenerOverlappingTLSConfig(
+									v1.ListenerReasonOverlappingHostnames,
+									"Listener hostname overlaps with hostname(s) of other Listener(s) on the same port",
+								),
+							),
+							helpers.GetPointer[v1.Hostname]("*.leaves.com"),
+							nil,
+						),
+					},
+					[]conditions.Condition{
+						conditions.NewListenerSetListenersNotValid("All listeners are invalid"),
+					},
+				),
+			},
+		},
+		{
+			name: "listener set with TLS certificate ref lacking ReferenceGrant",
+			gateways: map[types.NamespacedName]*Gateway{
+				{Namespace: "gateway-ns", Name: "gateway"}: createGateway("gateway", "gateway-ns"),
+			},
+			listenerSets: map[types.NamespacedName]*ListenerSet{
+				{Namespace: "ls-ns", Name: "ls-tls"}: createListenerSet(
+					"ls-tls",
+					"ls-ns",
+					"gateway",
+					"gateway-ns",
+					true,
+					time1,
+					[]v1.ListenerEntry{
 						{
 							Name:     "https-443",
 							Port:     443,
@@ -643,35 +2055,45 @@ func TestCreateGatewayForListenerValidation(t *testing.T) {
 							TLS: &v1.ListenerTLSConfig{
 								Mode: helpers.GetPointer(v1.TLSModeTerminate),
 								CertificateRefs: []v1.SecretObjectReference{
-									{Name: "secret"},
+									{
+										Kind:      (*v1.Kind)(helpers.GetPointer("Secret")),
+										Name:      "tls-secret",
+										Namespace: (*v1.Namespace)(helpers.GetPointer("secret-ns")), // Cross-namespace reference
+									},
 								},
 							},
 						},
 					},
-				},
+				),
 			},
-			parentGateway: &v1.Gateway{
-				ObjectMeta: metav1.ObjectMeta{
-					Namespace: "gateway-ns",
-					Name:      "gateway",
-				},
-				Spec: v1.GatewaySpec{
-					GatewayClassName: "nginx",
-				},
+			expectedGateways: map[types.NamespacedName]*Gateway{
+				{Namespace: "gateway-ns", Name: "gateway"}: buildExpectedGateway("gateway", "gateway-ns",
+					nil,
+					[]*Listener{
+						createListener(
+							"default-http",
+							80,
+							v1.HTTPProtocolType,
+							true,
+							types.NamespacedName{Namespace: "gateway-ns", Name: "gateway"},
+							types.NamespacedName{},
+							nil,
+							nil,
+							nil,
+							nil,
+						),
+					},
+				),
 			},
-			expectedGateway: &v1.Gateway{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "multi-listener-set-validate",
-					Namespace: "test",
-				},
-				Spec: v1.GatewaySpec{
-					GatewayClassName: "nginx",
-					Listeners: []v1.Listener{
-						{
-							Name:     "http-80",
-							Port:     80,
-							Protocol: v1.HTTPProtocolType,
-						},
+			expectedListenerSets: map[types.NamespacedName]*ListenerSet{
+				{Namespace: "ls-ns", Name: "ls-tls"}: buildExpectedListenerSet(
+					"ls-tls",
+					"ls-ns",
+					"gateway",
+					"gateway-ns",
+					false,
+					time1,
+					[]v1.ListenerEntry{
 						{
 							Name:     "https-443",
 							Port:     443,
@@ -679,12 +2101,45 @@ func TestCreateGatewayForListenerValidation(t *testing.T) {
 							TLS: &v1.ListenerTLSConfig{
 								Mode: helpers.GetPointer(v1.TLSModeTerminate),
 								CertificateRefs: []v1.SecretObjectReference{
-									{Name: "secret"},
+									{
+										Kind:      (*v1.Kind)(helpers.GetPointer("Secret")),
+										Name:      "tls-secret",
+										Namespace: (*v1.Namespace)(helpers.GetPointer("secret-ns")),
+									},
 								},
 							},
 						},
 					},
-				},
+					[]*Listener{
+						createListener(
+							"https-443",
+							443,
+							v1.HTTPSProtocolType,
+							false, // Invalid due to missing ReferenceGrant
+							types.NamespacedName{Namespace: "gateway-ns", Name: "gateway"},
+							types.NamespacedName{Namespace: "ls-ns", Name: "ls-tls"},
+							&v1.ListenerTLSConfig{
+								Mode: helpers.GetPointer(v1.TLSModeTerminate),
+								CertificateRefs: []v1.SecretObjectReference{
+									{
+										Kind:      (*v1.Kind)(helpers.GetPointer("Secret")),
+										Name:      "tls-secret",
+										Namespace: (*v1.Namespace)(helpers.GetPointer("secret-ns")),
+									},
+								},
+							},
+							conditions.NewListenerAllInvalidCertificateRefs(
+								"Certificate ref to secret secret-ns/tls-secret not permitted by any ReferenceGrant",
+								"RefNotPermitted",
+							),
+							nil,
+							nil,
+						),
+					},
+					[]conditions.Condition{
+						conditions.NewListenerSetListenersNotValid("All listeners are invalid"),
+					},
+				),
 			},
 		},
 	}
@@ -694,12 +2149,37 @@ func TestCreateGatewayForListenerValidation(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			result := createGatewayForListenerValidation(test.listenerSet, test.parentGateway)
+			attachListenerSetsToGateways(test.gateways, test.listenerSets)
 
-			g.Expect(result.ObjectMeta.Name).To(Equal(test.expectedGateway.Name))
-			g.Expect(result.ObjectMeta.Namespace).To(Equal(test.expectedGateway.Namespace))
-			g.Expect(result.Spec.GatewayClassName).To(Equal(test.expectedGateway.Spec.GatewayClassName))
-			g.Expect(result.Spec.Listeners).To(Equal(test.expectedGateway.Spec.Listeners))
+			// Verify expected gateways
+			for gwNsName, expectedGW := range test.expectedGateways {
+				actualGW := test.gateways[gwNsName]
+				g.Expect(actualGW).ToNot(BeNil())
+
+				// Verify listeners
+				g.Expect(actualGW.Listeners).To(HaveLen(len(expectedGW.Listeners)))
+				for i, expectedListener := range expectedGW.Listeners {
+					g.Expect(actualGW.Listeners[i]).To(Equal(expectedListener))
+				}
+
+				// Verify attached ListenerSets
+				if expectedGW.AttachedListenerSets == nil {
+					g.Expect(actualGW.AttachedListenerSets).To(BeEmpty())
+				} else {
+					g.Expect(actualGW.AttachedListenerSets).To(HaveLen(len(expectedGW.AttachedListenerSets)),
+						"Gateway %s should have expected number of attached ListenerSets", gwNsName)
+					for nsName := range expectedGW.AttachedListenerSets {
+						g.Expect(actualGW.AttachedListenerSets[nsName]).To(Equal(expectedGW.AttachedListenerSets[nsName]))
+					}
+				}
+			}
+
+			// Verify expected ListenerSets
+			for lsNsName, expectedLS := range test.expectedListenerSets {
+				actualLS := test.listenerSets[lsNsName]
+				g.Expect(actualLS).ToNot(BeNil())
+				g.Expect(actualLS).To(Equal(expectedLS))
+			}
 		})
 	}
 }

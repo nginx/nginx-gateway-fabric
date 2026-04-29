@@ -2,15 +2,17 @@ package graph
 
 import (
 	"fmt"
+	"sort"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/ngfsort"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
-	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/resolver"
 )
 
 type ListenerSet struct {
@@ -26,12 +28,13 @@ type ListenerSet struct {
 	Valid bool
 }
 
+// buildListenerSets builds the internal ListenerSet representations from the v1.ListenerSet resources.
+// Validation is done for the ListenerSets before they are attached to the Gateways, which involves
+// validation on the ListenerSet's ParentRef.
 func buildListenerSets(
 	ls map[types.NamespacedName]*v1.ListenerSet,
 	gateways map[types.NamespacedName]*Gateway,
 	namespaces map[types.NamespacedName]*corev1.Namespace,
-	resourceResolver resolver.Resolver,
-	refGrantResolver *referenceGrantResolver,
 ) map[types.NamespacedName]*ListenerSet {
 	if len(ls) == 0 || len(gateways) == 0 {
 		return nil
@@ -53,17 +56,14 @@ func buildListenerSets(
 			continue
 		}
 
-		conds, valid, listeners := validateListenerSet(listenerSet,
+		conds, valid := validateListenerSet(listenerSet,
 			parentGateway,
 			namespaces,
-			resourceResolver,
-			refGrantResolver,
 		)
 
 		builtListenerSets[lsNsName] = &ListenerSet{
 			Source:     listenerSet,
 			Conditions: conds,
-			Listeners:  listeners,
 			Gateway:    parentGateway.Source,
 			Valid:      valid,
 		}
@@ -76,15 +76,13 @@ func validateListenerSet(
 	ls *v1.ListenerSet,
 	parentGateway *Gateway,
 	namespaces map[types.NamespacedName]*corev1.Namespace,
-	resourceResolver resolver.Resolver,
-	refGrantResolver *referenceGrantResolver,
-) ([]conditions.Condition, bool, []*Listener) {
+) ([]conditions.Condition, bool) {
 	if !parentGateway.Valid {
 		errMsg := fmt.Sprintf("Parent Gateway %s/%s is not accepted",
 			parentGateway.Source.Namespace,
 			parentGateway.Source.Name,
 		)
-		return []conditions.Condition{conditions.NewListenerSetParentNotAccepted(errMsg)}, false, nil
+		return []conditions.Condition{conditions.NewListenerSetParentNotAccepted(errMsg)}, false
 	}
 
 	if !isListenerSetAllowedByGateway(ls, parentGateway.Source, namespaces) {
@@ -92,63 +90,10 @@ func validateListenerSet(
 			parentGateway.Source.Namespace,
 			parentGateway.Source.Name,
 		)
-		return []conditions.Condition{conditions.NewListenerSetNotAllowed(errMsg)}, false, nil
+		return []conditions.Condition{conditions.NewListenerSetNotAllowed(errMsg)}, false
 	}
 
-	gatewayForValidation := createGatewayForListenerValidation(ls, parentGateway.Source)
-
-	protectedPorts := buildProtectedPorts(parentGateway.EffectiveNginxProxy)
-
-	// Reuse existing listener validation from gateway_listener.go
-	validatedListeners := buildListeners(
-		&Gateway{Source: gatewayForValidation},
-		resourceResolver,
-		refGrantResolver,
-		protectedPorts,
-	)
-
-	validListenerCount := 0
-	for _, listener := range validatedListeners {
-		if listener.Valid {
-			validListenerCount++
-		}
-	}
-
-	// If some listeners are valid and some are invalid, we can consider the ListenerSet as accepted
-	// but with conditions in the ListenerEntryStatus indicating which listeners are invalid
-	if validListenerCount == 0 {
-		return []conditions.Condition{conditions.NewListenerSetListenersNotValid("All listeners are invalid")},
-			false,
-			validatedListeners
-	}
-
-	return []conditions.Condition{conditions.NewListenerSetAccepted()}, true, validatedListeners
-}
-
-// createGatewayForListenerValidation creates a temporary Gateway resource that contains
-// the ListenerSet's listeners, so we can reuse the existing listener validation logic.
-//
-// NOTE: This will most likely change in the future when we actually attach ListenerSet Listeners
-// onto the Gateway and this function may be removed.
-func createGatewayForListenerValidation(ls *v1.ListenerSet, parentGateway *v1.Gateway) *v1.Gateway {
-	// Convert ListenerEntries to v1.Listeners (they should be the same type)
-	gwListeners := make([]v1.Listener, len(ls.Spec.Listeners))
-	for i, listenerEntry := range ls.Spec.Listeners {
-		// ListenerEntry should be identical to v1.Listener
-		gwListeners[i] = v1.Listener(listenerEntry)
-	}
-
-	// Create a temporary gateway for validation with the same metadata context as the parent
-	return &v1.Gateway{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      ls.Name + "-validate", // Unique name for validation
-			Namespace: ls.Namespace,
-		},
-		Spec: v1.GatewaySpec{
-			GatewayClassName: parentGateway.Spec.GatewayClassName,
-			Listeners:        gwListeners,
-		},
-	}
+	return []conditions.Condition{conditions.NewListenerSetAccepted()}, true
 }
 
 // isListenerSetAllowedByGateway checks if the ListenerSet is allowed to attach to the Gateway
@@ -202,5 +147,105 @@ func isListenerSetAllowedByGateway(
 	default:
 		// Unknown From value, not allowed
 		return false
+	}
+}
+
+func attachListenerSetsToGateways(
+	gateways map[types.NamespacedName]*Gateway,
+	listenerSets map[types.NamespacedName]*ListenerSet,
+) {
+	gwToReferencedListenerSets := make(map[types.NamespacedName][]types.NamespacedName)
+	for _, ls := range listenerSets {
+		// Guarantees that invalid ListenerSets won't attempt to attach to Gateway.
+		if !ls.Valid || ls.Source == nil {
+			continue
+		}
+
+		parentRef := ls.Source.Spec.ParentRef
+		parentGatewayRef := types.NamespacedName{
+			Namespace: ls.Source.Namespace,
+			Name:      string(parentRef.Name),
+		}
+		if parentRef.Namespace != nil {
+			parentGatewayRef.Namespace = string(*parentRef.Namespace)
+		}
+
+		// guaranteed to have valid parent gateway reference due to
+		// initial building and validating of ListenerSets
+		gwToReferencedListenerSets[parentGatewayRef] = append(
+			gwToReferencedListenerSets[parentGatewayRef],
+			types.NamespacedName{
+				Namespace: ls.Source.Namespace,
+				Name:      ls.Source.Name,
+			},
+		)
+	}
+
+	for gwNsName, lsNsNames := range gwToReferencedListenerSets {
+		lsArray := make([]*ListenerSet, 0, len(lsNsNames))
+		for _, lsNsName := range lsNsNames {
+			lsArray = append(lsArray, listenerSets[lsNsName])
+		}
+
+		// Sort ListenerSets by precedence (creation time, then alphabetically by namespace/name).
+		// This follows listener precedence rules defined in GEP-1713 to ensure deterministic behavior when multiple
+		// ListenerSets reference the same Gateway with potential conflicts.
+		sort.Slice(
+			lsArray, func(i, j int) bool {
+				return ngfsort.LessClientObject(lsArray[i].Source, lsArray[j].Source)
+			},
+		)
+
+		mergeGatewayAndListenerSetListeners(gateways[gwNsName], lsArray)
+	}
+}
+
+// mergeGatewayAndListenerSetListeners merges the listeners from the ListenerSets into the Gateway's listeners.
+func mergeGatewayAndListenerSetListeners(gw *Gateway, ls []*ListenerSet) {
+	if len(ls) == 0 {
+		return
+	}
+
+	gw.AttachedListenerSets = make(map[types.NamespacedName]*ListenerSet)
+
+	for _, listenerSet := range ls {
+		// Convert ListenerEntries to v1.Listeners (they should be the same type)
+		lsListeners := make([]v1.Listener, len(listenerSet.Source.Spec.Listeners))
+		for i, listenerEntry := range listenerSet.Source.Spec.Listeners {
+			// ListenerEntry should be identical to v1.Listener
+			lsListeners[i] = v1.Listener(listenerEntry)
+		}
+
+		validatedListeners := buildListeners(
+			// by re-using the gateway's listener factory, we can ensure that listeners from the ListenerSet are validated
+			// in the context of the gateway's existing listeners, meaning conflict resolution state persists
+			// and the ListenerSet listeners will be marked as invalid if they conflict with existing Gateway listeners
+			gw,
+			lsListeners,
+			client.ObjectKeyFromObject(gw.Source),
+			types.NamespacedName{Namespace: listenerSet.Source.Namespace, Name: listenerSet.Source.Name},
+		)
+
+		validListenerCount := 0
+		for _, listener := range validatedListeners {
+			if listener.Valid {
+				gw.Listeners = append(gw.Listeners, listener)
+				validListenerCount++
+			}
+		}
+
+		// this will set the full list of listeners (including invalid ones) on the ListenerSet,
+		// so that we can report conditions for each listener in the status
+		listenerSet.Listeners = validatedListeners
+
+		if validListenerCount == 0 {
+			listenerSet.Conditions = append(
+				listenerSet.Conditions,
+				conditions.NewListenerSetListenersNotValid("All listeners are invalid"),
+			)
+			listenerSet.Valid = false
+		} else {
+			gw.AttachedListenerSets[client.ObjectKeyFromObject(listenerSet.Source)] = listenerSet
+		}
 	}
 }

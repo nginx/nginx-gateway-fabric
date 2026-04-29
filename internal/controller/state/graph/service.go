@@ -4,6 +4,8 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
 
 // A ReferencedService represents a Kubernetes Service that is referenced by a Route and the Gateways it belongs to.
@@ -25,6 +27,7 @@ func buildReferencedServices(
 	l4Routes map[L4RouteKey]*L4Route,
 	gws map[types.NamespacedName]*Gateway,
 	services map[types.NamespacedName]*v1.Service,
+	listenerSets map[types.NamespacedName]*ListenerSet,
 ) map[types.NamespacedName]*ReferencedService {
 	referencedServices := make(map[types.NamespacedName]*ReferencedService)
 
@@ -33,8 +36,8 @@ func buildReferencedServices(
 			continue
 		}
 
-		processL7RoutesForGateway(l7routes, gw, gwNsName, referencedServices, services)
-		processL4RoutesForGateway(l4Routes, gw, gwNsName, referencedServices, services)
+		processL7RoutesForGateway(l7routes, gw, gwNsName, referencedServices, services, listenerSets)
+		processL4RoutesForGateway(l4Routes, gw, gwNsName, referencedServices, services, listenerSets)
 	}
 
 	if len(referencedServices) == 0 {
@@ -51,11 +54,12 @@ func processL7RoutesForGateway(
 	gwNsName types.NamespacedName,
 	referencedServices map[types.NamespacedName]*ReferencedService,
 	services map[types.NamespacedName]*v1.Service,
+	listenerSets map[types.NamespacedName]*ListenerSet,
 ) {
 	gwKey := client.ObjectKeyFromObject(gw.Source)
 
 	for _, route := range l7routes {
-		if !route.Valid || !routeBelongsToGateway(route.ParentRefs, gwKey) {
+		if !route.Valid || !routeBelongsToGateway(route.ParentRefs, gwKey, listenerSets) {
 			continue
 		}
 
@@ -72,11 +76,12 @@ func processL4RoutesForGateway(
 	gwNsName types.NamespacedName,
 	referencedServices map[types.NamespacedName]*ReferencedService,
 	services map[types.NamespacedName]*v1.Service,
+	listenerSets map[types.NamespacedName]*ListenerSet,
 ) {
 	gwKey := client.ObjectKeyFromObject(gw.Source)
 
 	for _, route := range l4Routes {
-		if !route.Valid || !routeBelongsToGateway(route.ParentRefs, gwKey) {
+		if !route.Valid || !routeBelongsToGateway(route.ParentRefs, gwKey, listenerSets) {
 			continue
 		}
 
@@ -85,12 +90,27 @@ func processL4RoutesForGateway(
 }
 
 // routeBelongsToGateway checks if a route belongs to the specified gateway.
-func routeBelongsToGateway(refs []ParentRef, gwKey types.NamespacedName) bool {
+// This includes checking if the route has a ListenerSet parentRef that belongs to the gateway.
+func routeBelongsToGateway(
+	refs []ParentRef,
+	gwKey types.NamespacedName,
+	listenerSets map[types.NamespacedName]*ListenerSet,
+) bool {
 	for _, ref := range refs {
-		if ref.Gateway.NamespacedName == gwKey {
-			return true
+		switch ref.Kind {
+		case kinds.Gateway:
+			if ref.NamespacedName == gwKey {
+				return true
+			}
+		case kinds.ListenerSet:
+			if listenerSets[ref.NamespacedName] != nil &&
+				listenerSets[ref.NamespacedName].Gateway != nil &&
+				client.ObjectKeyFromObject(listenerSets[ref.NamespacedName].Gateway) == gwKey {
+				return true
+			}
 		}
 	}
+
 	return false
 }
 

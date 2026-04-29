@@ -142,9 +142,11 @@ func removeDuplicateIndexParentRefs(parentRefs []graph.ParentRef) []graph.Parent
 		}
 
 		winningParentRef := graph.ParentRef{
-			Idx:        idx,
-			Gateway:    refs[0].Gateway,
-			Attachment: refs[0].Attachment,
+			Idx:            idx,
+			Attachment:     refs[0].Attachment,
+			NamespacedName: refs[0].NamespacedName,
+			// Kind should be the same for all refs with the same Idx, so we can take it from any of them
+			Kind: refs[0].Kind,
 		}
 
 		for _, ref := range refs {
@@ -195,11 +197,17 @@ func prepareRouteStatus(
 		conds := conditions.DeduplicateConditions(allConds)
 		apiConds := conditions.ConvertConditions(conds, srcGeneration, transitionTime)
 
+		// need to create variable for golang pointer/address semantics
+		// otherwise using &ref.Kind directly in ParentReference would cause all ParentStatuses to have
+		// the same Kind, which is the Kind of the last ref in the loop
+		refKind := ref.Kind
+
 		ps := v1.RouteParentStatus{
 			ParentRef: v1.ParentReference{
-				Namespace:   helpers.GetPointer(v1.Namespace(ref.Gateway.NamespacedName.Namespace)),
-				Name:        v1.ObjectName(ref.Gateway.NamespacedName.Name),
 				SectionName: ref.SectionName,
+				Kind:        &refKind,
+				Name:        v1.ObjectName(ref.NamespacedName.Name),
+				Namespace:   helpers.GetPointer(v1.Namespace(ref.NamespacedName.Namespace)),
 			},
 			ControllerName: v1.GatewayController(gatewayCtlrName),
 			Conditions:     apiConds,
@@ -319,7 +327,13 @@ func prepareGatewayRequest(
 	listenerStatuses := make([]v1.ListenerStatus, 0, len(gateway.Listeners))
 
 	validListenerCount := 0
+	listenerSetListenerCount := 0
 	for _, l := range gateway.Listeners {
+		// don't report statuses for listenerset listeners
+		if l.ListenerSetName.Name != "" {
+			listenerSetListenerCount++
+			continue
+		}
 		conds := l.Conditions
 
 		if l.Valid {
@@ -354,7 +368,7 @@ func prepareGatewayRequest(
 
 	if validListenerCount == 0 && len(gateway.Listeners) > 0 {
 		gwConds = append(gwConds, conditions.NewGatewayNotAcceptedListenersNotValid()...)
-	} else if validListenerCount < len(gateway.Listeners) {
+	} else if validListenerCount < (len(gateway.Listeners) - listenerSetListenerCount) {
 		gwConds = append(gwConds, conditions.NewGatewayAcceptedListenersNotValid())
 	}
 
@@ -393,6 +407,8 @@ func prepareGatewayRequest(
 			Listeners:  listenerStatuses,
 			Conditions: apiGwConds,
 			Addresses:  gwAddresses,
+			//nolint:gosec // AttachedListenerSets will not overflow
+			AttachedListenerSets: helpers.GetPointer(int32(len(gateway.AttachedListenerSets))),
 		}),
 	}
 }
@@ -611,7 +627,7 @@ func PrepareListenerSetRequests(
 			listenerStatuses = append(listenerStatuses, v1.ListenerEntryStatus{
 				Name:           v1.SectionName(l.Name),
 				SupportedKinds: l.SupportedKinds,
-				AttachedRoutes: 0, // NOTE: Support for this field will be added later
+				AttachedRoutes: int32(len(l.Routes)) + int32(len(l.L4Routes)), //nolint:gosec // num routes will not overflow
 				Conditions:     listenerAPIConds,
 			})
 		}

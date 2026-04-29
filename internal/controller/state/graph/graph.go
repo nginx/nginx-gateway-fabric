@@ -262,6 +262,10 @@ func BuildGraph(
 		processedNginxProxies,
 	)
 
+	listenerSets := buildListenerSets(state.ListenerSets, gws, state.Namespaces)
+
+	attachListenerSetsToGateways(gws, listenerSets)
+
 	processedBackendTLSPolicies := processBackendTLSPolicies(
 		state.BackendTLSPolicies,
 		resourceResolver,
@@ -277,10 +281,6 @@ func BuildGraph(
 		validators.GenericValidator,
 		featureFlags.Plus,
 	)
-
-	// Build ListenerSets after gateways are built but before routes
-	listenerSets := buildListenerSets(state.ListenerSets, gws, state.Namespaces, resourceResolver, refGrantResolver)
-
 	routes := buildRoutesForGateways(
 		validators.HTTPFieldsValidator,
 		state.HTTPRoutes,
@@ -290,9 +290,16 @@ func BuildGraph(
 		processedAuthenticationFilters,
 		state.InferencePools,
 		featureFlags,
+		listenerSets,
 	)
 
-	referencedInferencePools := buildReferencedInferencePools(routes, gws, state.InferencePools, state.Services)
+	referencedInferencePools := buildReferencedInferencePools(
+		routes,
+		gws,
+		state.InferencePools,
+		state.Services,
+		listenerSets,
+	)
 
 	l4routes := buildL4RoutesForGateways(
 		state.TLSRoutes,
@@ -301,6 +308,7 @@ func BuildGraph(
 		state.Services,
 		gws,
 		refGrantResolver,
+		listenerSets,
 	)
 
 	addBackendRefsToRouteRules(
@@ -310,12 +318,12 @@ func BuildGraph(
 		referencedInferencePools,
 		processedBackendTLSPolicies,
 	)
-	bindRoutesToListeners(routes, l4routes, gws, state.Namespaces)
+	bindRoutesToListeners(routes, l4routes, gws, state.Namespaces, listenerSets)
 	validateOIDCFilters(routes, gws)
 
 	referencedNamespaces := buildReferencedNamespaces(state.Namespaces, gws)
 
-	referencedServices := buildReferencedServices(routes, l4routes, gws, state.Services)
+	referencedServices := buildReferencedServices(routes, l4routes, gws, state.Services, listenerSets)
 
 	addGatewaysForBackendTLSPolicies(processedBackendTLSPolicies, referencedServices, controllerName, gws, logger)
 

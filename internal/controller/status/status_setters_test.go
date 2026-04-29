@@ -1100,6 +1100,7 @@ func TestGWStatusEqual(t *testing.T) {
 					},
 				},
 			},
+			AttachedListenerSets: helpers.GetPointer(int32(1)),
 		}
 	}
 
@@ -1208,6 +1209,15 @@ func TestGWStatusEqual(t *testing.T) {
 			prevStatus: getDefaultStatus(),
 			curStatus: getModifiedStatus(func(status gatewayv1.GatewayStatus) gatewayv1.GatewayStatus {
 				status.Listeners[1].SupportedKinds[0].Group = helpers.GetPointer[gatewayv1.Group]("different")
+				return status
+			}),
+			expEqual: false,
+		},
+		{
+			name:       "different attached listener sets count",
+			prevStatus: getDefaultStatus(),
+			curStatus: getModifiedStatus(func(status gatewayv1.GatewayStatus) gatewayv1.GatewayStatus {
+				status.AttachedListenerSets = helpers.GetPointer(int32(3))
 				return status
 			}),
 			expEqual: false,
