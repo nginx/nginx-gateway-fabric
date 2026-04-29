@@ -464,7 +464,7 @@
               "type": "array"
             },
             "lifecycle": {
-              "description": "The lifecycle of the NGINX container.",
+              "description": "The lifecycle hooks for the NGINX container. See https://kubernetes.io/docs/tasks/configure-pod-container/define-lifecycle-hook/",
               "required": [],
               "title": "lifecycle",
               "type": "object"
@@ -988,7 +988,7 @@
           "type": "object"
         },
         "lifecycle": {
-          "description": "The lifecycle of the nginx-gateway container.",
+          "description": "The lifecycle hooks for the nginx-gateway container. See https://kubernetes.io/docs/tasks/configure-pod-container/define-lifecycle-hook/",
           "required": [],
           "title": "lifecycle",
           "type": "object"
@@ -1066,10 +1066,25 @@
               "title": "enable",
               "type": "boolean"
             },
+            "failureThreshold": {
+              "default": 3,
+              "description": "The number of retries after a failed probe before marking the container as Unready.",
+              "minimum": 1,
+              "title": "failureThreshold",
+              "type": "integer"
+            },
             "initialDelaySeconds": {
               "default": 3,
               "description": "The number of seconds after the Pod has started before the readiness probes are initiated.",
+              "minimum": 0,
               "title": "initialDelaySeconds",
+              "type": "integer"
+            },
+            "periodSeconds": {
+              "default": 10,
+              "description": "How often (in seconds) to perform the readiness probe.",
+              "minimum": 1,
+              "title": "periodSeconds",
               "type": "integer"
             },
             "port": {
@@ -1078,6 +1093,20 @@
               "maximum": 65535,
               "minimum": 1,
               "title": "port",
+              "type": "integer"
+            },
+            "successThreshold": {
+              "default": 1,
+              "description": "Minimum consecutive successes for the probe to be considered successful after having failed.",
+              "minimum": 1,
+              "title": "successThreshold",
+              "type": "integer"
+            },
+            "timeoutSeconds": {
+              "default": 1,
+              "description": "Number of seconds after which the probe times out.",
+              "minimum": 1,
+              "title": "timeoutSeconds",
               "type": "integer"
             }
           },
