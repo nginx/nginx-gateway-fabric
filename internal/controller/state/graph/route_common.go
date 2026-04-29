@@ -611,20 +611,27 @@ func bindRoutesToListeners(
 }
 
 type hostPort struct {
-	gwNsName types.NamespacedName
-	hostname string
-	port     v1.PortNumber
+	parentRefNsName types.NamespacedName
+	hostname        string
+	port            v1.PortNumber
 }
 
 func getListenerHostPortMap(listeners []*Listener) map[string]hostPort {
 	listenerHostPortMap := make(map[string]hostPort, len(listeners))
 
 	for _, l := range listeners {
-		listenerHostPortMap[CreateParentRefListenerKeyFromListener(l)] = hostPort{
+		hostport := hostPort{
 			hostname: getHostname(l.Source.Hostname),
 			port:     l.Source.Port,
-			gwNsName: l.GatewayName,
 		}
+
+		if l.ListenerSetName.Name != "" {
+			hostport.parentRefNsName = l.ListenerSetName
+		} else {
+			hostport.parentRefNsName = l.GatewayName
+		}
+
+		listenerHostPortMap[CreateParentRefListenerKeyFromListener(l)] = hostport
 	}
 
 	return listenerHostPortMap
@@ -668,7 +675,10 @@ func isolateHostnamesForParentRefs(parentRef []ParentRef, listenerHostnameMap ma
 			}
 			for _, h := range hostnames {
 				for lName, lHostPort := range listenerHostnameMap {
-					if ref.NamespacedName != lHostPort.gwNsName {
+					// we only want to compare the hostnames of listeners that belong to the same parentRef,
+					// because it is valid for listeners of different parentRefs to have the same hostname,
+					// even if they are on the same port.
+					if ref.NamespacedName != lHostPort.parentRefNsName {
 						continue
 					}
 
