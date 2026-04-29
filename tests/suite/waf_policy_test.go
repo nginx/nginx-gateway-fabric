@@ -402,7 +402,7 @@ var _ = Describe("WAFPolicy", Ordered, Label("waf"), func() {
 			Expect(waitForWAFPolicyCondition(nsname, "Programmed", metav1.ConditionFalse, "Pending")).To(Succeed())
 		})
 
-		It("still pushes config updates — a new route added after the policy becomes reachable", func() {
+		It("still pushes config updates: new route becomes reachable with pending bundle in fail-open mode", func() {
 			// Apply the same new route. With fail-open the config push proceeds, so NGINX
 			// learns about /soda and requests to it must succeed.
 			Expect(resourceManager.ApplyFromFiles(sodaFiles, namespace)).To(Succeed())

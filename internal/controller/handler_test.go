@@ -780,7 +780,19 @@ var _ = Describe("eventHandler", func() {
 						},
 					},
 					DeploymentName: types.NamespacedName{Namespace: "test", Name: "gateway-nginx"},
-					Listeners:      []*graph.Listener{{Valid: true}},
+					Listeners: []*graph.Listener{
+						{
+							Name:        "http",
+							GatewayName: gwNsName,
+							Source: gatewayv1.Listener{
+								Name:     "http",
+								Protocol: gatewayv1.HTTPProtocolType,
+								Port:     80,
+							},
+							Routes: map[graph.RouteKey]*graph.L7Route{},
+							Valid:  true,
+						},
+					},
 					EffectiveNginxProxy: &graph.EffectiveNginxProxy{
 						WAF: &v1alpha2.WAFSpec{
 							Enable:         helpers.GetPointer(true),
@@ -831,7 +843,19 @@ var _ = Describe("eventHandler", func() {
 							BundleFailOpen: helpers.GetPointer(false),
 						},
 					},
-					Listeners: []*graph.Listener{{Valid: true}},
+					Listeners: []*graph.Listener{
+						{
+							Name:        "http",
+							GatewayName: gwNsName,
+							Source: gatewayv1.Listener{
+								Name:     "http",
+								Protocol: gatewayv1.HTTPProtocolType,
+								Port:     80,
+							},
+							Routes: map[graph.RouteKey]*graph.L7Route{},
+							Valid:  true,
+						},
+					},
 				},
 			},
 			NGFPolicies: map[graph.PolicyKey]*graph.Policy{
