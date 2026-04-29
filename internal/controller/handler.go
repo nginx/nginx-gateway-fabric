@@ -720,9 +720,9 @@ func (h *eventHandlerImpl) mergeWAFPollErrors(gr *graph.Graph) {
 	}
 }
 
-// mergeWAFBundleUpdates adds a BundleUpdated condition to policies whose bundle has a latest
-// successful refresh recorded by the poller. The condition reflects the most recent known bundle
-// update time and is not cleared after a status update.
+// mergeWAFBundleUpdates adds a BundleUpdated condition to policies where the poller detected a
+// changed bundle and dispatched it to target deployments. The condition reflects the most recent
+// detected bundle change and is not cleared after a status update.
 func (h *eventHandlerImpl) mergeWAFBundleUpdates(gr *graph.Graph) {
 	if h.cfg.wafPollerManager == nil {
 		return

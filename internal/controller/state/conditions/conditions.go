@@ -1497,7 +1497,7 @@ func NewPolicyNotProgrammedIntegrityError(errMsg string) Condition {
 }
 
 // NewPolicyProgrammedBundleUpdated returns a Condition that indicates polling detected a changed
-// bundle and successfully pushed it to the data plane.
+// bundle and dispatched it to target deployments.
 // bundleDescription is a human-readable label, e.g. "policy bundle" or "security log bundle (profile: default)".
 func NewPolicyProgrammedBundleUpdated(bundleDescription, checksum string, updatedAt metav1.Time) Condition {
 	return Condition{

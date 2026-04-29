@@ -27,7 +27,8 @@ type PollError struct {
 	BundleDescription string
 }
 
-// BundleUpdate records the most recent successful bundle push for a bundle key.
+// BundleUpdate records the most recent poll cycle in which a changed bundle was detected and
+// dispatched to target deployments. It does not confirm that any deployment applied the update.
 type BundleUpdate struct {
 	UpdatedAt metav1.Time
 	// BundleKey is the internal identifier of the bundle that was updated.
@@ -46,7 +47,7 @@ type Manager interface {
 	ReconcilePoller(ctx context.Context, cfg Config)
 	// GetAllPollErrors returns a deep copy of all current poll errors.
 	GetAllPollErrors() map[types.NamespacedName]PollError
-	// GetAllBundleUpdates returns a copy of the most recent successful bundle update per policy.
+	// GetAllBundleUpdates returns a copy of the most recent bundle change detected per policy.
 	GetAllBundleUpdates() map[types.NamespacedName]BundleUpdate
 	// GetLatestBundles returns a copy of all bundles that have been successfully fetched by pollers.
 	// These represent the freshest known bundle data and should take precedence over
