@@ -163,7 +163,7 @@ var (
 			Idx:         3,
 			SectionName: commonRouteSpecValid.ParentRefs[5].SectionName,
 			Attachment: &graph.ParentRefAttachmentStatus{
-				Attached:         true, // this wouldn't usually happen, but its a conditional check
+				Attached:         true, // this wouldn't usually happen, but it's a conditional check
 				FailedConditions: []conditions.Condition{invalidAttachmentCondition},
 			},
 			Kind:           kinds.Gateway,
