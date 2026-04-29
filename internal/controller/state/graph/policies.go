@@ -144,6 +144,8 @@ func LogBundleKey(policyNsName types.NamespacedName, logSource *ngfAPIv1alpha1.L
 
 // LogBundleDescription returns a human-readable label for a log profile bundle source.
 // Used in status condition messages to identify which bundle is being reported on.
+// The switch uses boolean conditions rather than a type switch because LogSource carries
+// optional pointer fields — only one of NIMSource, N1CSource, or HTTPSource will be set.
 func LogBundleDescription(src *ngfAPIv1alpha1.LogSource) string {
 	switch {
 	case src.NIMSource != nil:

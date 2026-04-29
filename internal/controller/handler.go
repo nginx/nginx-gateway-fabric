@@ -801,6 +801,17 @@ func (h *eventHandlerImpl) parseAndCaptureEvent(ctx context.Context, logger logr
 
 		h.cfg.processor.CaptureDeleteChange(e.Type, e.NamespacedName)
 	case events.WAFBundleReconcileEvent:
+		// Guard against stale events: the poller may have been stopped (policy deleted) between
+		// when the event was queued and when it is processed here. Skip the rebuild if the poller
+		// is no longer registered — its bundle cache has already been cleared and a subsequent
+		// delete event will drive the correct config update.
+		if h.cfg.wafPollerManager != nil && !h.cfg.wafPollerManager.HasPoller(e.PolicyNsName) {
+			logger.V(1).Info(
+				"WAF bundle reconcile event for policy with no active poller, skipping rebuild",
+				"policy", e.PolicyNsName,
+			)
+			return
+		}
 		logger.V(1).Info("WAF bundle now available, triggering re-reconcile", "policy", e.PolicyNsName)
 		// Mark the processor dirty so Process() performs a graph rebuild even if this is the
 		// only event in the batch. Without this, clusterStateChanged=false causes Process() to

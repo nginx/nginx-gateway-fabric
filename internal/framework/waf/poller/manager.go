@@ -57,6 +57,8 @@ type Manager interface {
 	StopPoller(policyNsName types.NamespacedName)
 	// StopPollersNotIn stops all pollers whose policy namespace/name is not in the given set.
 	StopPollersNotIn(activePolicies map[types.NamespacedName]struct{})
+	// HasPoller reports whether a poller is currently registered for the given policy.
+	HasPoller(policyNsName types.NamespacedName) bool
 }
 
 // pollerManager manages the lifecycle of all WAF bundle pollers.
@@ -413,6 +415,14 @@ func (m *pollerManager) clearBundleCacheLocked(p *poller) {
 		delete(m.bundleKeyToPolicy, src.BundleKey)
 		delete(m.bundleKeyToDescription, src.BundleKey)
 	}
+}
+
+// HasPoller reports whether a poller is currently registered for the given policy.
+func (m *pollerManager) HasPoller(policyNsName types.NamespacedName) bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	_, exists := m.pollers[policyNsName]
+	return exists
 }
 
 // StopPollersNotIn stops all pollers whose policy namespace/name is not in the given set.

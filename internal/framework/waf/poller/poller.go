@@ -212,7 +212,7 @@ func sourcesEqual(a, b []BundleSource) bool {
 // stored from the previous successful fetch. A 304 Not Modified response is treated as
 // unchanged without downloading the bundle.
 func (p *poller) pollSource(ctx context.Context, src BundleSource) {
-	p.logger.V(1).Info("Polling bundle source")
+	p.logger.V(1).Info("Polling bundle source", "bundle", src.BundleKey)
 
 	p.stateMu.RLock()
 	last := p.bundleStates[src.BundleKey]
@@ -248,7 +248,7 @@ func (p *poller) pollSource(ctx context.Context, src BundleSource) {
 		return
 	}
 
-	p.logger.Info("Bundle changed, pushing to deployments", "newChecksum", result.Checksum)
+	p.logger.Info("Bundle changed, pushing to deployments", "bundle", src.BundleKey, "newChecksum", result.Checksum)
 	p.pushBundleToDeployments(src.BundleKey, result.Data)
 	p.saveBundleState(src.BundleKey, result)
 
@@ -264,16 +264,16 @@ func (p *poller) pollSource(ctx context.Context, src BundleSource) {
 func (p *poller) skipIfChecksumUnchanged(ctx context.Context, src BundleSource, lastChecksum string) bool {
 	changed, checksum, err := p.checksumChanged(ctx, src, lastChecksum)
 	if err != nil {
-		p.logger.Error(err, "Failed to fetch bundle checksum during poll")
+		p.logger.Error(err, "Failed to fetch bundle checksum during poll", "bundle", src.BundleKey)
 		p.reportStatus(src.BundleKey, "", err)
 		return true
 	}
 	if !changed {
-		p.logger.V(1).Info("Bundle unchanged, skipping download")
+		p.logger.V(1).Info("Bundle unchanged, skipping download", "bundle", src.BundleKey)
 		p.reportStatus(src.BundleKey, "", nil)
 		return true
 	}
-	p.logger.Info("Bundle checksum changed, downloading full bundle", "newChecksum", checksum)
+	p.logger.Info("Bundle checksum changed, downloading full bundle", "bundle", src.BundleKey, "newChecksum", checksum)
 	return false
 }
 
@@ -287,13 +287,13 @@ func (p *poller) downloadBundle(
 
 	result, err := p.fetchBundle(ctx, src, req)
 	if err != nil {
-		p.logger.Error(err, "Failed to fetch bundle during poll")
+		p.logger.Error(err, "Failed to fetch bundle during poll", "bundle", src.BundleKey)
 		return fetch.Result{}, err
 	}
 	if result.Unchanged {
-		p.logger.V(1).Info("Bundle unchanged (304), skipping push")
+		p.logger.V(1).Info("Bundle unchanged (304), skipping push", "bundle", src.BundleKey)
 	} else if result.Checksum == last.checksum {
-		p.logger.V(1).Info("Bundle unchanged, skipping push")
+		p.logger.V(1).Info("Bundle unchanged, skipping push", "bundle", src.BundleKey)
 	}
 	return result, nil
 }

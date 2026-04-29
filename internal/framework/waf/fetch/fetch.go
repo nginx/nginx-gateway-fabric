@@ -36,6 +36,13 @@ const (
 	retryBaseDelay = 1 * time.Second
 	// retryMaxDelay is the maximum delay for retrying fetches on transient failures.
 	retryMaxDelay = 30 * time.Second
+
+	// headerIfNoneMatch and headerIfModifiedSince are the conditional-GET request headers.
+	headerIfNoneMatch     = "If-None-Match"
+	headerIfModifiedSince = "If-Modified-Since"
+	// headerETag and headerLastModified are the validator response headers.
+	headerETag         = "ETag"
+	headerLastModified = "Last-Modified"
 )
 
 // unixEpochRFC3339 is the Unix epoch formatted as RFC3339, used as a startTime sentinel
@@ -230,10 +237,20 @@ type nonTransientError struct {
 func (e *nonTransientError) Error() string { return e.err.Error() }
 func (e *nonTransientError) Unwrap() error { return e.err }
 
+// FetchPolicyBundle retrieves policy bundle bytes.
+// When req.N1C.Namespace is set, uses N1C fetch logic (APIToken auth, N1C API path).
+// When req.PolicyName or req.NIM.PolicyUID is set (and N1C.Namespace is empty), uses NIM fetch logic.
+// Otherwise performs a plain GET to req.URL, optionally verifying the checksum.
+// For plain HTTP sources, a conditional GET is issued when req.ConditionalToken is set.
 func (f *HTTPFetcher) FetchPolicyBundle(ctx context.Context, req Request) (Result, error) {
 	return f.fetch(ctx, req, f.dispatch)
 }
 
+// FetchLogProfileBundle retrieves log profile bundle bytes.
+// When req.N1C.Namespace is set, uses N1C fetch logic (APIToken auth, N1C API path).
+// When req.LogProfileName is set (and N1C.Namespace is empty), uses NIM fetch logic.
+// Otherwise performs a plain GET to req.URL.
+// For plain HTTP sources, a conditional GET is issued when req.ConditionalToken is set.
 func (f *HTTPFetcher) FetchLogProfileBundle(ctx context.Context, req Request) (Result, error) {
 	return f.fetch(ctx, req, f.logProfileDispatch)
 }
@@ -301,7 +318,11 @@ func (f *HTTPFetcher) fetchChecksum(
 	return checksum, nil
 }
 
-func (f *HTTPFetcher) dispatchChecksum(ctx context.Context, client *http.Client, req Request) (string, error) {
+func (f *HTTPFetcher) dispatchChecksum(
+	ctx context.Context,
+	client *http.Client,
+	req Request,
+) (string, error) {
 	switch {
 	case req.N1C.Namespace != "":
 		return fetchN1CChecksum(ctx, client, req, f.n1cCompilePollDelay, f.logger)
@@ -496,9 +517,9 @@ func fetchHTTP(ctx context.Context, client *http.Client, req Request) (Result, e
 	var extraHeaders map[string]string
 	if req.ConditionalToken != "" {
 		if strings.HasPrefix(req.ConditionalToken, `"`) || strings.HasPrefix(req.ConditionalToken, "W/") {
-			extraHeaders = map[string]string{"If-None-Match": req.ConditionalToken}
+			extraHeaders = map[string]string{headerIfNoneMatch: req.ConditionalToken}
 		} else {
-			extraHeaders = map[string]string{"If-Modified-Since": req.ConditionalToken}
+			extraHeaders = map[string]string{headerIfModifiedSince: req.ConditionalToken}
 		}
 	}
 
@@ -513,8 +534,8 @@ func fetchHTTP(ctx context.Context, client *http.Client, req Request) (Result, e
 		// rotated ETag or Last-Modified without treating the bundle as changed.
 		return Result{
 			Unchanged:    true,
-			ETag:         respHeaders.Get("ETag"),
-			LastModified: respHeaders.Get("Last-Modified"),
+			ETag:         respHeaders.Get(headerETag),
+			LastModified: respHeaders.Get(headerLastModified),
 		}, nil
 	}
 
@@ -547,8 +568,8 @@ func fetchHTTP(ctx context.Context, client *http.Client, req Request) (Result, e
 	return Result{
 		Data:         data,
 		Checksum:     actualChecksum,
-		ETag:         respHeaders.Get("ETag"),
-		LastModified: respHeaders.Get("Last-Modified"),
+		ETag:         respHeaders.Get(headerETag),
+		LastModified: respHeaders.Get(headerLastModified),
 	}, nil
 }
 
