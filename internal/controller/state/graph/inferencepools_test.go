@@ -359,7 +359,7 @@ func TestBuildReferencedInferencePools(t *testing.T) {
 			},
 		},
 		{
-			name: "deleted inferencepool backend ref still uses original name from route spec",
+			name: "non-existent inference pool backend ref referenced in route is still tracked",
 			gws:  gws,
 			routes: map[RouteKey]*L7Route{
 				CreateRouteKey(validRoute.Source): routeWithDeletedPoolBackend,
