@@ -197,10 +197,15 @@ func prepareRouteStatus(
 		conds := conditions.DeduplicateConditions(allConds)
 		apiConds := conditions.ConvertConditions(conds, srcGeneration, transitionTime)
 
+		// need to create variable for golang pointer/address semantics
+		// otherwise using &ref.Kind directly in ParentReference would cause all ParentStatuses to have
+		// the same Kind, which is the Kind of the last ref in the loop
+		refKind := ref.Kind
+
 		ps := v1.RouteParentStatus{
 			ParentRef: v1.ParentReference{
 				SectionName: ref.SectionName,
-				Kind:        &ref.Kind,
+				Kind:        &refKind,
 				Name:        v1.ObjectName(ref.NamespacedName.Name),
 				Namespace:   helpers.GetPointer(v1.Namespace(ref.NamespacedName.Namespace)),
 			},

@@ -1013,7 +1013,7 @@ func TestAttachListenerSetsToGateways(t *testing.T) {
 							types.NamespacedName{Namespace: "test", Name: "ls1"},
 							nil,
 							conditions.NewListenerHostnameConflict("Multiple listeners with the same port 80 and "+
-								" protocol HTTP have overlapping hostnames"),
+								"protocol HTTP have overlapping hostnames"),
 							nil,
 							nil,
 						),

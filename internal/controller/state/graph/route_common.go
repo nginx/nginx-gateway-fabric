@@ -777,7 +777,8 @@ func bindL4RouteToListeners(
 		var lsNsName types.NamespacedName
 		switch ref.Kind {
 		case kinds.ListenerSet:
-			if listenerSets[ref.NamespacedName] == nil {
+			if listenerSets[ref.NamespacedName] == nil &&
+				client.ObjectKeyFromObject(listenerSets[ref.NamespacedName].Gateway) != gwNsName {
 				continue
 			}
 			lsNsName = ref.NamespacedName
@@ -971,6 +972,7 @@ func bindToListenerL4(
 	return true, true, true, false
 }
 
+//nolint:gocyclo // will refactor in future
 func bindL7RouteToListeners(
 	route *L7Route,
 	gw *Gateway,
@@ -992,7 +994,8 @@ func bindL7RouteToListeners(
 		var lsNsName types.NamespacedName
 		switch ref.Kind {
 		case kinds.ListenerSet:
-			if listenerSets[ref.NamespacedName] == nil {
+			if listenerSets[ref.NamespacedName] == nil &&
+				client.ObjectKeyFromObject(listenerSets[ref.NamespacedName].Gateway) != gwNsName {
 				continue
 			}
 			lsNsName = ref.NamespacedName
