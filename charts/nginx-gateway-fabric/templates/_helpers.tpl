@@ -191,6 +191,7 @@ Create namespaced RBAC rules.
   - grpcroutes
   - backendtlspolicies
   - tlsroutes
+  - listenersets
   {{- if .Values.nginxGateway.gwAPIExperimentalFeatures.enable }}
   - tcproutes
   - udproutes
@@ -208,6 +209,7 @@ Create namespaced RBAC rules.
   - grpcroutes/status
   - backendtlspolicies/status
   - tlsroutes/status
+  - listenersets/status
   {{- if .Values.nginxGateway.gwAPIExperimentalFeatures.enable }}
   - tcproutes/status
   - udproutes/status

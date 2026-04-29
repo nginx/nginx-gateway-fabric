@@ -23,19 +23,20 @@ func buildGRPCRoute(
 	snippetsFilters map[types.NamespacedName]*SnippetsFilter,
 	authenticationFilters map[types.NamespacedName]*AuthenticationFilter,
 	featureFlags FeatureFlags,
+	listenerSets map[types.NamespacedName]*ListenerSet,
 ) *L7Route {
 	r := &L7Route{
 		Source:    ghr,
 		RouteType: RouteTypeGRPC,
 	}
 
-	sectionNameRefs, err := buildSectionNameRefs(ghr.Spec.ParentRefs, ghr.Namespace, gws)
+	sectionNameRefs, err := buildSectionNameRefs(ghr.Spec.ParentRefs, ghr.Namespace, gws, listenerSets)
 	if err != nil {
 		r.Valid = false
 
 		return r
 	}
-	// route doesn't belong to any of the Gateways
+	// route doesn't belong to any of the Gateways or ListenerSets
 	if len(sectionNameRefs) == 0 {
 		return nil
 	}
@@ -87,6 +88,7 @@ func buildGRPCMirrorRoutes(
 	gateways map[types.NamespacedName]*Gateway,
 	snippetsFilters map[types.NamespacedName]*SnippetsFilter,
 	featureFlags FeatureFlags,
+	listenerSets map[types.NamespacedName]*ListenerSet,
 ) {
 	for idx, rule := range l7route.Spec.Rules {
 		if rule.Filters.Valid {
@@ -125,6 +127,7 @@ func buildGRPCMirrorRoutes(
 					snippetsFilters,
 					nil,
 					featureFlags,
+					listenerSets,
 				)
 
 				if mirrorRoute != nil {

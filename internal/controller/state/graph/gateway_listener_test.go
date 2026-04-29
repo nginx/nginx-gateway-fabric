@@ -1121,12 +1121,21 @@ func TestOverlappingTLSConfigCondition(t *testing.T) {
 			// Create mock resolvers
 			refGrantResolver := newReferenceGrantResolver(nil)
 
-			// Build listeners
-			listeners := buildListeners(
-				&Gateway{Source: test.gateway},
+			listenerFactory := newListenerConfiguratorFactory(
+				test.gateway,
 				&resolverfakes.FakeResolver{},
 				refGrantResolver,
 				protectedPorts,
+			)
+			// Build listeners
+			listeners := buildListeners(
+				&Gateway{
+					Source:          test.gateway,
+					ListenerFactory: listenerFactory,
+				},
+				test.gateway.Spec.Listeners,
+				types.NamespacedName{Namespace: test.gateway.Namespace, Name: test.gateway.Name},
+				types.NamespacedName{},
 			)
 
 			if test.expectedCondition {

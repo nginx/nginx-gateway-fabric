@@ -589,8 +589,9 @@ func TestAddBackendRefsToRules(t *testing.T) {
 
 	sectionNameRefs := []ParentRef{
 		{
-			Idx:     0,
-			Gateway: &ParentRefGateway{NamespacedName: types.NamespacedName{Namespace: "test", Name: "gateway"}},
+			Kind:           kinds.Gateway,
+			NamespacedName: types.NamespacedName{Namespace: "test", Name: "gateway"},
+			Idx:            0,
 			Attachment: &ParentRefAttachmentStatus{
 				Attached: true,
 			},
@@ -1359,6 +1360,7 @@ func TestCreateBackend(t *testing.T) {
 
 	tests := []struct {
 		nginxProxySpec               *EffectiveNginxProxy
+		parentRefKind                string
 		name                         string
 		expectedServicePortReference string
 		ref                          gatewayv1.HTTPBackendRef
@@ -1632,6 +1634,26 @@ func TestCreateBackend(t *testing.T) {
 			},
 			name: "ExternalName service with whitespace-only externalName field",
 		},
+		{
+			ref: gatewayv1.HTTPBackendRef{
+				BackendRef: getModifiedRef(func(backend gatewayv1.BackendRef) gatewayv1.BackendRef {
+					backend.Name = "external-service"
+					return backend
+				}),
+			},
+			parentRefKind: kinds.ListenerSet, // Special case for ListenerSet
+			expectedBackend: BackendRef{
+				SvcNsName:          types.NamespacedName{Namespace: "test", Name: "external-service"},
+				ServicePort:        v1.ServicePort{Port: 80},
+				Weight:             5,
+				Valid:              true,
+				InvalidForGateways: map[types.NamespacedName]conditions.Condition{}, // No DNS resolver validation for ListenerSet
+				SessionPersistence: &expectedSPConfig,
+			},
+			expectedServicePortReference: "test_external-service_80_test-persistence-idx",
+			expectedConditions:           nil,
+			name:                         "ExternalName service with ListenerSet parentRef - DNS resolver validation skipped",
+		},
 	}
 
 	services := map[types.NamespacedName]*v1.Service{
@@ -1678,30 +1700,32 @@ func TestCreateBackend(t *testing.T) {
 				},
 				ParentRefs: []ParentRef{
 					{
-						Gateway: &ParentRefGateway{
-							NamespacedName: types.NamespacedName{
-								Namespace: "test",
-								Name:      "gateway",
-							},
-							EffectiveNginxProxy: test.nginxProxySpec,
-						},
+						Kind:                kinds.Gateway,
+						NamespacedName:      types.NamespacedName{Namespace: "test", Name: "gateway"},
+						EffectiveNginxProxy: test.nginxProxySpec,
 					},
 				},
+			}
+
+			// Handle ListenerSet parentRef case by not setting Gateway settings
+			// in ParentRef, which will cause createBackendRef to skip DNS resolver validation
+			if test.parentRefKind == kinds.ListenerSet {
+				route.ParentRefs = []ParentRef{
+					{
+						Kind:           kinds.ListenerSet,
+						NamespacedName: types.NamespacedName{Namespace: "test", Name: "listener-set"},
+					},
+				}
 			}
 
 			// Special case: for the multiple gateways test, add a second gateway
 			if test.name == "ExternalName service with multiple gateways - mixed DNS resolver config" {
 				route.ParentRefs = append(route.ParentRefs, ParentRef{
-					Gateway: &ParentRefGateway{
-						NamespacedName: types.NamespacedName{
-							Namespace: "test",
-							Name:      "gateway2",
-						},
-						EffectiveNginxProxy: nil, // No DNS resolver
-					},
+					Kind:           kinds.Gateway,
+					NamespacedName: types.NamespacedName{Namespace: "test", Name: "gateway2"},
 				})
 				// For this test, the first gateway should have DNS resolver
-				route.ParentRefs[0].Gateway.EffectiveNginxProxy = &EffectiveNginxProxy{
+				route.ParentRefs[0].EffectiveNginxProxy = &EffectiveNginxProxy{
 					DNSResolver: &ngfAPIv1alpha2.DNSResolver{
 						Addresses: []ngfAPIv1alpha2.DNSResolverAddress{
 							{Type: ngfAPIv1alpha2.DNSResolverIPAddressType, Value: "8.8.8.8"},
@@ -1745,12 +1769,8 @@ func TestCreateBackend(t *testing.T) {
 		},
 		ParentRefs: []ParentRef{
 			{
-				Gateway: &ParentRefGateway{
-					NamespacedName: types.NamespacedName{
-						Namespace: "test",
-						Name:      "gateway",
-					},
-				},
+				Kind:           kinds.Gateway,
+				NamespacedName: types.NamespacedName{Namespace: "test", Name: "gateway"},
 			},
 		},
 	}

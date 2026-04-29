@@ -121,6 +121,14 @@ func fromUDPRoute(namespace string) fromResource {
 	}
 }
 
+func fromListenerSet(namespace string) fromResource {
+	return fromResource{
+		group:     v1.GroupName,
+		kind:      kinds.ListenerSet,
+		namespace: namespace,
+	}
+}
+
 // newReferenceGrantResolver creates a new referenceGrantResolver.
 func newReferenceGrantResolver(refGrants map[types.NamespacedName]*v1.ReferenceGrant) *referenceGrantResolver {
 	allowed := make(map[allowedReference]struct{})

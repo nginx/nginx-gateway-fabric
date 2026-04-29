@@ -33,19 +33,20 @@ func buildHTTPRoute(
 	authenticationFilters map[types.NamespacedName]*AuthenticationFilter,
 	inferencePools map[types.NamespacedName]*inference.InferencePool,
 	featureFlags FeatureFlags,
+	listenerSets map[types.NamespacedName]*ListenerSet,
 ) *L7Route {
 	r := &L7Route{
 		Source:    ghr,
 		RouteType: RouteTypeHTTP,
 	}
 
-	sectionNameRefs, err := buildSectionNameRefs(ghr.Spec.ParentRefs, ghr.Namespace, gws)
+	sectionNameRefs, err := buildSectionNameRefs(ghr.Spec.ParentRefs, ghr.Namespace, gws, listenerSets)
 	if err != nil {
 		r.Valid = false
 
 		return r
 	}
-	// route doesn't belong to any of the Gateways
+	// route doesn't belong to any of the Gateways or ListenerSets
 	if len(sectionNameRefs) == 0 {
 		return nil
 	}
@@ -99,6 +100,7 @@ func buildHTTPMirrorRoutes(
 	gateways map[types.NamespacedName]*Gateway,
 	snippetsFilters map[types.NamespacedName]*SnippetsFilter,
 	featureFlags FeatureFlags,
+	listenerSets map[types.NamespacedName]*ListenerSet,
 ) {
 	for idx, rule := range l7route.Spec.Rules {
 		if rule.Filters.Valid {
@@ -138,6 +140,7 @@ func buildHTTPMirrorRoutes(
 					nil, // Mirror routes can't use NGINX auth directives.
 					nil,
 					featureFlags,
+					listenerSets,
 				)
 
 				if mirrorRoute != nil {
