@@ -258,78 +258,31 @@ func (f *HTTPFetcher) FetchLogProfileBundle(ctx context.Context, req Request) (R
 // FetchPolicyBundleChecksum returns only the checksum of the remote policy bundle for NIM and N1C
 // sources without downloading the full bundle content. Returns an error for plain HTTP sources.
 func (f *HTTPFetcher) FetchPolicyBundleChecksum(ctx context.Context, req Request) (string, error) {
-	return f.fetchChecksum(ctx, req, f.dispatchChecksum)
+	result, err := f.fetch(ctx, req, f.dispatchChecksum)
+	return result.Checksum, err
 }
 
 // FetchLogProfileBundleChecksum returns only the checksum of the remote log profile bundle for NIM
 // and N1C sources without downloading the full bundle content. Returns an error for plain HTTP sources.
 func (f *HTTPFetcher) FetchLogProfileBundleChecksum(ctx context.Context, req Request) (string, error) {
-	return f.fetchChecksum(ctx, req, f.logProfileDispatchChecksum)
-}
-
-func (f *HTTPFetcher) fetchChecksum(
-	ctx context.Context,
-	req Request,
-	dispatch func(ctx context.Context, client *http.Client, req Request) (string, error),
-) (string, error) {
-	var err error
-	if req, err = validateAndNormalizeRequest(req); err != nil {
-		return "", err
-	}
-
-	client, err := f.buildHTTPClient(req)
-	if err != nil {
-		return "", err
-	}
-	if len(req.TLSCAData) > 0 || req.InsecureSkipVerify {
-		defer client.CloseIdleConnections()
-	}
-
-	backoff := newRetryBackoff(req.RetryAttempts)
-
-	var (
-		checksum string
-		lastErr  error
-	)
-	attempt := 0
-	err = wait.ExponentialBackoffWithContext(ctx, backoff, func(ctx context.Context) (bool, error) {
-		attempt++
-		cs, fetchErr := dispatch(ctx, client, req)
-		if fetchErr != nil {
-			var nte *nonTransientError
-			if errors.As(fetchErr, &nte) {
-				return false, fetchErr
-			}
-			lastErr = fetchErr
-			f.logger.V(1).Info("Transient checksum fetch error, retrying",
-				"attempt", attempt, "maxAttempts", backoff.Steps, "error", fetchErr)
-			return false, nil
-		}
-		checksum = cs
-		return true, nil
-	})
-	if err != nil {
-		if wait.Interrupted(err) {
-			return "", lastErr
-		}
-		return "", err
-	}
-
-	return checksum, nil
+	result, err := f.fetch(ctx, req, f.logProfileDispatchChecksum)
+	return result.Checksum, err
 }
 
 func (f *HTTPFetcher) dispatchChecksum(
 	ctx context.Context,
 	client *http.Client,
 	req Request,
-) (string, error) {
+) (Result, error) {
 	switch {
 	case req.N1C.Namespace != "":
-		return fetchN1CChecksum(ctx, client, req, f.n1cCompilePollDelay, f.logger)
+		checksum, err := fetchN1CChecksum(ctx, client, req, f.n1cCompilePollDelay, f.logger)
+		return Result{Checksum: checksum}, err
 	case req.PolicyName != "" || req.NIM.PolicyUID != "":
-		return fetchNIMChecksum(ctx, client, req)
+		checksum, err := fetchNIMChecksum(ctx, client, req)
+		return Result{Checksum: checksum}, err
 	default:
-		return "", &nonTransientError{
+		return Result{}, &nonTransientError{
 			err: fmt.Errorf("FetchPolicyBundleChecksum is not supported for plain HTTP sources"),
 		}
 	}
@@ -339,14 +292,16 @@ func (f *HTTPFetcher) logProfileDispatchChecksum(
 	ctx context.Context,
 	client *http.Client,
 	req Request,
-) (string, error) {
+) (Result, error) {
 	switch {
 	case req.N1C.Namespace != "":
-		return fetchN1CLogProfileChecksum(ctx, client, req, f.n1cCompilePollDelay, f.logger)
+		checksum, err := fetchN1CLogProfileChecksum(ctx, client, req, f.n1cCompilePollDelay, f.logger)
+		return Result{Checksum: checksum}, err
 	case req.LogProfileName != "":
-		return fetchNIMLogProfileChecksum(ctx, client, req)
+		checksum, err := fetchNIMLogProfileChecksum(ctx, client, req)
+		return Result{Checksum: checksum}, err
 	default:
-		return "", &nonTransientError{
+		return Result{}, &nonTransientError{
 			err: fmt.Errorf("FetchLogProfileBundleChecksum is not supported for plain HTTP sources"),
 		}
 	}
