@@ -170,8 +170,8 @@ func attachListenerSetsToGateways(
 			parentGatewayRef.Namespace = string(*parentRef.Namespace)
 		}
 
-		// guaranteed to have valid parent gateway reference due to initial building and validating of
-		// ListenerSets
+		// guaranteed to have valid parent gateway reference due to
+		// initial building and validating of ListenerSets
 		gwToReferencedListenerSets[parentGatewayRef] = append(
 			gwToReferencedListenerSets[parentGatewayRef],
 			types.NamespacedName{

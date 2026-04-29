@@ -89,8 +89,8 @@ func processL4RoutesForGateway(
 	}
 }
 
-// routeBelongsToGateway checks if a route belongs to the specified gateway. This includes checking
-// if the route has a ListenerSet parentRef that belongs to the gateway.
+// routeBelongsToGateway checks if a route belongs to the specified gateway.
+// This includes checking if the route has a ListenerSet parentRef that belongs to the gateway.
 func routeBelongsToGateway(
 	refs []ParentRef,
 	gwKey types.NamespacedName,

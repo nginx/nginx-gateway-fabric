@@ -280,7 +280,7 @@ func TestBuildUDPRoute(t *testing.T) {
 		},
 	)
 
-	// Valid UDPRoute with single backend
+	// Valid UDPRoute with ListenerSet parent ref
 	validUDPRWithListenerSetParentRef := createUDPRoute(
 		[]v1alpha2.UDPRouteRule{
 			{

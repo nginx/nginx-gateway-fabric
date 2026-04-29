@@ -715,10 +715,10 @@ func validateParentRef(
 	attachment := &ParentRefAttachmentStatus{
 		AcceptedHostnames: make(map[string][]string),
 	}
-	// need to make sure listeners are either only the gateway listeners or listenerset listeners
 
 	ref.Attachment = attachment
 
+	// need to make sure listeners are either only the gateway listeners or ListenerSet listeners
 	var listeners []*Listener
 	if listenerSet != nil {
 		listeners = listenerSet.Listeners
@@ -777,7 +777,8 @@ func bindL4RouteToListeners(
 		var lsNsName types.NamespacedName
 		switch ref.Kind {
 		case kinds.ListenerSet:
-			if listenerSets[ref.NamespacedName] == nil &&
+			if listenerSets[ref.NamespacedName] == nil ||
+				listenerSets[ref.NamespacedName].Gateway == nil ||
 				client.ObjectKeyFromObject(listenerSets[ref.NamespacedName].Gateway) != gwNsName {
 				continue
 			}
@@ -994,7 +995,8 @@ func bindL7RouteToListeners(
 		var lsNsName types.NamespacedName
 		switch ref.Kind {
 		case kinds.ListenerSet:
-			if listenerSets[ref.NamespacedName] == nil &&
+			if listenerSets[ref.NamespacedName] == nil ||
+				listenerSets[ref.NamespacedName].Gateway == nil ||
 				client.ObjectKeyFromObject(listenerSets[ref.NamespacedName].Gateway) != gwNsName {
 				continue
 			}

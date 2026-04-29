@@ -1698,6 +1698,7 @@ func TestBindRouteToListeners(t *testing.T) {
 							l.ListenerSetName = types.NamespacedName{Namespace: "test", Name: "test-listenerset"}
 						}),
 					},
+					Gateway: gw,
 				},
 			},
 		},
@@ -1796,6 +1797,7 @@ func TestBindRouteToListeners(t *testing.T) {
 							l.ListenerSetName = types.NamespacedName{Namespace: "test", Name: "invalid-listenerset"}
 						}),
 					},
+					Gateway: gw,
 				},
 			},
 		},
@@ -2972,6 +2974,7 @@ func TestBindL4RouteToListeners(t *testing.T) {
 							}
 						}),
 					},
+					Gateway: gw,
 				},
 			},
 		},
@@ -3072,6 +3075,7 @@ func TestBindL4RouteToListeners(t *testing.T) {
 							}
 						}),
 					},
+					Gateway: gw,
 				},
 			},
 		},
