@@ -478,10 +478,9 @@ func buildFrontendTLSCertBundles(
 		// for a listener on port 443 named "https" on a gateway in the default namespace.
 		caCertRef := types.NamespacedName{
 			Namespace: gateway.Source.Namespace,
-			Name: fmt.Sprintf("%s_%d_%s",
+			Name: fmt.Sprintf("%s_%d",
 				gateway.Source.Name,
 				listener.Source.Port,
-				listener.Name,
 			),
 		}
 		id := generateCertBundleID(caCertRef)
