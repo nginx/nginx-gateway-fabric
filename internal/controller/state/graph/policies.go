@@ -142,6 +142,29 @@ func LogBundleKey(policyNsName types.NamespacedName, logSource *ngfAPIv1alpha1.L
 	)
 }
 
+// LogBundleDescription returns a human-readable label for a log profile bundle source.
+// Used in status condition messages to identify which bundle is being reported on.
+// The switch uses boolean conditions rather than a type switch because LogSource carries
+// optional pointer fields — only one of NIMSource, N1CSource, or HTTPSource will be set.
+func LogBundleDescription(src *ngfAPIv1alpha1.LogSource) string {
+	switch {
+	case src.NIMSource != nil:
+		return fmt.Sprintf("security log bundle (profile: %s)", src.NIMSource.ProfileName)
+	case src.N1CSource != nil:
+		if src.N1CSource.ProfileName != nil {
+			return fmt.Sprintf("security log bundle (profile: %s)", *src.N1CSource.ProfileName)
+		}
+		if src.N1CSource.ProfileObjectID != nil {
+			return fmt.Sprintf("security log bundle (profile: %s)", *src.N1CSource.ProfileObjectID)
+		}
+		return "security log bundle"
+	case src.HTTPSource != nil:
+		return fmt.Sprintf("security log bundle (URL: %s)", src.HTTPSource.URL)
+	default:
+		return "security log bundle"
+	}
+}
+
 // WAFBundleData contains the fetched WAF bundle content.
 type WAFBundleData struct {
 	Checksum string
@@ -1009,11 +1032,11 @@ func fetchPolicyBundle(
 
 	req := BuildPolicyFetchRequest(&policySource, wafPolicy.Spec.Type, auth, tlsCA)
 
-	data, checksum, err := wafInput.Fetcher.FetchPolicyBundle(ctx, req)
+	result, err := wafInput.Fetcher.FetchPolicyBundle(ctx, req)
 	if err != nil {
 		logger.Error(err, "Failed to fetch WAF policy bundle", "resource", wafPolicy.Name)
 		if prev, ok := wafInput.PreviousBundles[bundleKey]; ok {
-			cond := conditions.NewPolicyProgrammedStaleBundleWarning(err.Error())
+			cond := conditions.NewPolicyProgrammedStaleBundleWarning("policy bundle", err.Error())
 			policy.Conditions = append(policy.Conditions, cond)
 			output.Bundles[bundleKey] = prev
 			policy.WAFState.Bundles[bundleKey] = prev
@@ -1025,7 +1048,7 @@ func fetchPolicyBundle(
 		return
 	}
 
-	bundleData := &WAFBundleData{Data: data, Checksum: checksum}
+	bundleData := &WAFBundleData{Data: result.Data, Checksum: result.Checksum}
 	output.Bundles[bundleKey] = bundleData
 	policy.WAFState.Bundles[bundleKey] = bundleData
 }
@@ -1082,7 +1105,7 @@ func fetchSecurityLogBundles(
 
 		req := BuildLogFetchRequest(&secLog.LogSource, auth, tlsCA)
 
-		data, checksum, err := wafInput.Fetcher.FetchLogProfileBundle(ctx, req)
+		result, err := wafInput.Fetcher.FetchLogProfileBundle(ctx, req)
 		if err != nil {
 			logger.Error(
 				err,
@@ -1091,7 +1114,7 @@ func fetchSecurityLogBundles(
 				wafPolicy.Name,
 			)
 			if prev, ok := wafInput.PreviousBundles[bundleKey]; ok {
-				cond := conditions.NewPolicyProgrammedStaleBundleWarning(err.Error())
+				cond := conditions.NewPolicyProgrammedStaleBundleWarning(LogBundleDescription(&secLog.LogSource), err.Error())
 				policy.Conditions = append(policy.Conditions, cond)
 				output.Bundles[bundleKey] = prev
 				policy.WAFState.Bundles[bundleKey] = prev
@@ -1103,7 +1126,7 @@ func fetchSecurityLogBundles(
 			continue
 		}
 
-		bundleData := &WAFBundleData{Data: data, Checksum: checksum}
+		bundleData := &WAFBundleData{Data: result.Data, Checksum: result.Checksum}
 		output.Bundles[bundleKey] = bundleData
 		policy.WAFState.Bundles[bundleKey] = bundleData
 	}

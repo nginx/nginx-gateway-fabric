@@ -4,4 +4,4 @@ metadata:
   name: waf-enabled-proxy
 spec:
   waf:
-    enabled: true
+    enable: true

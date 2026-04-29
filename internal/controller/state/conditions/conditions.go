@@ -2,6 +2,7 @@ package conditions
 
 import (
 	"fmt"
+	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
@@ -143,6 +144,10 @@ const (
 
 	// PolicyReasonStaleBundleWarning is used when a bundle fetch fails but a previously fetched bundle is used.
 	PolicyReasonStaleBundleWarning v1.PolicyConditionReason = "StaleBundleWarning"
+
+	// PolicyReasonBundleUpdated is used when polling detects a changed bundle and successfully
+	// pushes the new bundle to the data plane.
+	PolicyReasonBundleUpdated v1.PolicyConditionReason = "BundleUpdated"
 
 	// ClientSettingsPolicyAffected is used with the "PolicyAffected" condition when a
 	// ClientSettingsPolicy is applied to a Gateway, HTTPRoute, or GRPCRoute.
@@ -1491,14 +1496,30 @@ func NewPolicyNotProgrammedIntegrityError(errMsg string) Condition {
 	}
 }
 
+// NewPolicyProgrammedBundleUpdated returns a Condition that indicates polling detected a changed
+// bundle and dispatched it to target deployments.
+// bundleDescription is a human-readable label, e.g. "policy bundle" or "security log bundle (profile: default)".
+func NewPolicyProgrammedBundleUpdated(bundleDescription, checksum string, updatedAt metav1.Time) Condition {
+	return Condition{
+		Type:   string(WAFProgrammedConditionType),
+		Status: metav1.ConditionTrue,
+		Reason: string(PolicyReasonBundleUpdated),
+		Message: fmt.Sprintf(
+			"%s updated at %s (checksum: %s)",
+			bundleDescription, updatedAt.UTC().Format(time.RFC3339), checksum,
+		),
+	}
+}
+
 // NewPolicyProgrammedStaleBundleWarning returns a Condition that indicates a bundle fetch failed
 // but the previously fetched bundle is being used to keep the policy active on the data plane.
-func NewPolicyProgrammedStaleBundleWarning(errMsg string) Condition {
+// bundleDescription is a human-readable label, e.g. "policy bundle" or "security log bundle (profile: default)".
+func NewPolicyProgrammedStaleBundleWarning(bundleDescription, errMsg string) Condition {
 	return Condition{
 		Type:    string(WAFProgrammedConditionType),
 		Status:  metav1.ConditionTrue,
 		Reason:  string(PolicyReasonStaleBundleWarning),
-		Message: fmt.Sprintf("Bundle fetch failed; using previously fetched bundle: %s", errMsg),
+		Message: fmt.Sprintf("%s fetch failed; using previously fetched bundle: %s", bundleDescription, errMsg),
 	}
 }
 

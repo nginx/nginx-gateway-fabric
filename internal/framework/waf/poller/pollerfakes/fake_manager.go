@@ -11,6 +11,16 @@ import (
 )
 
 type FakeManager struct {
+	GetAllBundleUpdatesStub        func() map[types.NamespacedName]poller.BundleUpdate
+	getAllBundleUpdatesMutex       sync.RWMutex
+	getAllBundleUpdatesArgsForCall []struct {
+	}
+	getAllBundleUpdatesReturns struct {
+		result1 map[types.NamespacedName]poller.BundleUpdate
+	}
+	getAllBundleUpdatesReturnsOnCall map[int]struct {
+		result1 map[types.NamespacedName]poller.BundleUpdate
+	}
 	GetAllPollErrorsStub        func() map[types.NamespacedName]poller.PollError
 	getAllPollErrorsMutex       sync.RWMutex
 	getAllPollErrorsArgsForCall []struct {
@@ -31,6 +41,17 @@ type FakeManager struct {
 	getLatestBundlesReturnsOnCall map[int]struct {
 		result1 map[graph.WAFBundleKey]*graph.WAFBundleData
 	}
+	HasPollerStub        func(types.NamespacedName) bool
+	hasPollerMutex       sync.RWMutex
+	hasPollerArgsForCall []struct {
+		arg1 types.NamespacedName
+	}
+	hasPollerReturns struct {
+		result1 bool
+	}
+	hasPollerReturnsOnCall map[int]struct {
+		result1 bool
+	}
 	ReconcilePollerStub        func(context.Context, poller.Config)
 	reconcilePollerMutex       sync.RWMutex
 	reconcilePollerArgsForCall []struct {
@@ -49,6 +70,59 @@ type FakeManager struct {
 	}
 	invocations      map[string][][]interface{}
 	invocationsMutex sync.RWMutex
+}
+
+func (fake *FakeManager) GetAllBundleUpdates() map[types.NamespacedName]poller.BundleUpdate {
+	fake.getAllBundleUpdatesMutex.Lock()
+	ret, specificReturn := fake.getAllBundleUpdatesReturnsOnCall[len(fake.getAllBundleUpdatesArgsForCall)]
+	fake.getAllBundleUpdatesArgsForCall = append(fake.getAllBundleUpdatesArgsForCall, struct {
+	}{})
+	stub := fake.GetAllBundleUpdatesStub
+	fakeReturns := fake.getAllBundleUpdatesReturns
+	fake.recordInvocation("GetAllBundleUpdates", []interface{}{})
+	fake.getAllBundleUpdatesMutex.Unlock()
+	if stub != nil {
+		return stub()
+	}
+	if specificReturn {
+		return ret.result1
+	}
+	return fakeReturns.result1
+}
+
+func (fake *FakeManager) GetAllBundleUpdatesCallCount() int {
+	fake.getAllBundleUpdatesMutex.RLock()
+	defer fake.getAllBundleUpdatesMutex.RUnlock()
+	return len(fake.getAllBundleUpdatesArgsForCall)
+}
+
+func (fake *FakeManager) GetAllBundleUpdatesCalls(stub func() map[types.NamespacedName]poller.BundleUpdate) {
+	fake.getAllBundleUpdatesMutex.Lock()
+	defer fake.getAllBundleUpdatesMutex.Unlock()
+	fake.GetAllBundleUpdatesStub = stub
+}
+
+func (fake *FakeManager) GetAllBundleUpdatesReturns(result1 map[types.NamespacedName]poller.BundleUpdate) {
+	fake.getAllBundleUpdatesMutex.Lock()
+	defer fake.getAllBundleUpdatesMutex.Unlock()
+	fake.GetAllBundleUpdatesStub = nil
+	fake.getAllBundleUpdatesReturns = struct {
+		result1 map[types.NamespacedName]poller.BundleUpdate
+	}{result1}
+}
+
+func (fake *FakeManager) GetAllBundleUpdatesReturnsOnCall(i int, result1 map[types.NamespacedName]poller.BundleUpdate) {
+	fake.getAllBundleUpdatesMutex.Lock()
+	defer fake.getAllBundleUpdatesMutex.Unlock()
+	fake.GetAllBundleUpdatesStub = nil
+	if fake.getAllBundleUpdatesReturnsOnCall == nil {
+		fake.getAllBundleUpdatesReturnsOnCall = make(map[int]struct {
+			result1 map[types.NamespacedName]poller.BundleUpdate
+		})
+	}
+	fake.getAllBundleUpdatesReturnsOnCall[i] = struct {
+		result1 map[types.NamespacedName]poller.BundleUpdate
+	}{result1}
 }
 
 func (fake *FakeManager) GetAllPollErrors() map[types.NamespacedName]poller.PollError {
@@ -154,6 +228,67 @@ func (fake *FakeManager) GetLatestBundlesReturnsOnCall(i int, result1 map[graph.
 	}
 	fake.getLatestBundlesReturnsOnCall[i] = struct {
 		result1 map[graph.WAFBundleKey]*graph.WAFBundleData
+	}{result1}
+}
+
+func (fake *FakeManager) HasPoller(arg1 types.NamespacedName) bool {
+	fake.hasPollerMutex.Lock()
+	ret, specificReturn := fake.hasPollerReturnsOnCall[len(fake.hasPollerArgsForCall)]
+	fake.hasPollerArgsForCall = append(fake.hasPollerArgsForCall, struct {
+		arg1 types.NamespacedName
+	}{arg1})
+	stub := fake.HasPollerStub
+	fakeReturns := fake.hasPollerReturns
+	fake.recordInvocation("HasPoller", []interface{}{arg1})
+	fake.hasPollerMutex.Unlock()
+	if stub != nil {
+		return stub(arg1)
+	}
+	if specificReturn {
+		return ret.result1
+	}
+	return fakeReturns.result1
+}
+
+func (fake *FakeManager) HasPollerCallCount() int {
+	fake.hasPollerMutex.RLock()
+	defer fake.hasPollerMutex.RUnlock()
+	return len(fake.hasPollerArgsForCall)
+}
+
+func (fake *FakeManager) HasPollerCalls(stub func(types.NamespacedName) bool) {
+	fake.hasPollerMutex.Lock()
+	defer fake.hasPollerMutex.Unlock()
+	fake.HasPollerStub = stub
+}
+
+func (fake *FakeManager) HasPollerArgsForCall(i int) types.NamespacedName {
+	fake.hasPollerMutex.RLock()
+	defer fake.hasPollerMutex.RUnlock()
+	argsForCall := fake.hasPollerArgsForCall[i]
+	return argsForCall.arg1
+}
+
+func (fake *FakeManager) HasPollerReturns(result1 bool) {
+	fake.hasPollerMutex.Lock()
+	defer fake.hasPollerMutex.Unlock()
+	fake.HasPollerStub = nil
+	fake.hasPollerReturns = struct {
+		result1 bool
+	}{result1}
+}
+
+func (fake *FakeManager) HasPollerReturnsOnCall(i int, result1 bool) {
+	fake.hasPollerMutex.Lock()
+	defer fake.hasPollerMutex.Unlock()
+	fake.HasPollerStub = nil
+	if fake.hasPollerReturnsOnCall == nil {
+		fake.hasPollerReturnsOnCall = make(map[int]struct {
+			result1 bool
+		})
+	}
+	fake.hasPollerReturnsOnCall[i] = struct {
+		result1 bool
 	}{result1}
 }
 

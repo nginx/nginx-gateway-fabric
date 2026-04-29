@@ -288,8 +288,9 @@ func (h *eventHandlerImpl) sendNginxConfig(ctx context.Context, logger logr.Logg
 		err := errors.Join(configErr, upstreamErr)
 
 		obj := &status.QueueObject{
-			UpdateType: status.UpdateAll,
-			Error:      err,
+			UpdateType:        status.UpdateAll,
+			Error:             err,
+			NginxConfigPushed: true,
 			Deployment: status.Deployment{
 				NamespacedName: gw.DeploymentName,
 				GatewayName:    gw.Source.GetName(),
@@ -515,10 +516,14 @@ func (h *eventHandlerImpl) waitForStatusUpdates(ctx context.Context) {
 		case item.Error != nil:
 			h.cfg.logger.Error(item.Error, "Failed to update NGINX configuration")
 			nginxReloadRes.Error = item.Error
-		case gw != nil:
+		case gw != nil && item.NginxConfigPushed:
 			h.cfg.logger.Info("NGINX configuration was successfully updated")
 		}
-		if gw != nil {
+		// Only update LatestReloadResult when a config push was actually attempted.
+		// Status-only queue items (e.g., WAF poll callbacks) have NginxConfigPushed=false
+		// and no error; updating LatestReloadResult for those would incorrectly clear a
+		// prior NGINX reload error without any config change having occurred.
+		if gw != nil && (item.NginxConfigPushed || item.Error != nil) {
 			gw.LatestReloadResult = nginxReloadRes
 		}
 
@@ -599,7 +604,10 @@ func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph, 
 
 	polReqs := status.PrepareBackendTLSPolicyRequests(gr.BackendTLSPolicies, transitionTime, h.cfg.gatewayCtlrName)
 
-	// Merge any WAF poll errors into policy conditions before preparing status requests.
+	// Merge WAF poll results into policy conditions before preparing status requests.
+	// Bundle updates are applied first so that active poll errors can overwrite them
+	// during deduplication (conditions are deduplicated by Type, last-write wins).
+	h.mergeWAFBundleUpdates(gr)
 	h.mergeWAFPollErrors(gr)
 
 	ngfPolReqs := status.PrepareNGFPolicyRequests(gr.NGFPolicies, transitionTime, h.cfg.gatewayCtlrName)
@@ -693,22 +701,65 @@ func (h *eventHandlerImpl) mergeWAFPollErrors(gr *graph.Graph) {
 		}
 
 		// Upsert a stale-bundle warning condition for the poll error.
-		// Replace any existing condition with the same Type+Reason so that repeated
-		// calls (e.g., multiple status updates reusing the same graph) don't accumulate
-		// duplicate conditions.
-		cond := conditions.NewPolicyProgrammedStaleBundleWarning(
-			fmt.Sprintf("polling %s: %s", pollError.BundleKey, pollError.Err.Error()),
-		)
+		// Replace any existing condition with the same Type so that repeated calls (e.g.,
+		// multiple status updates reusing the same graph) don't accumulate same-Type conditions.
+		// Status preparation deduplicates by Type only, so matching on Type is sufficient.
+		cond := conditions.NewPolicyProgrammedStaleBundleWarning(pollError.BundleDescription, pollError.Err.Error())
 
 		replaced := false
 		for i, existing := range policy.Conditions {
-			if existing.Type == cond.Type && existing.Reason == cond.Reason {
+			if existing.Type == cond.Type {
 				policy.Conditions[i] = cond
 				replaced = true
 				break
 			}
 		}
 		if !replaced {
+			policy.Conditions = append(policy.Conditions, cond)
+		}
+	}
+}
+
+// mergeWAFBundleUpdates adds a BundleUpdated condition to policies where the poller detected a
+// changed bundle and dispatched it to target deployments. The condition reflects the most recent
+// detected bundle change and is not cleared after a status update.
+func (h *eventHandlerImpl) mergeWAFBundleUpdates(gr *graph.Graph) {
+	if h.cfg.wafPollerManager == nil {
+		return
+	}
+
+	for policyNsName, update := range h.cfg.wafPollerManager.GetAllBundleUpdates() {
+		policyKey := findWAFPolicyKey(gr, policyNsName)
+		if policyKey == nil {
+			continue
+		}
+
+		policy := gr.NGFPolicies[*policyKey]
+		if policy == nil || !policy.Valid {
+			continue
+		}
+
+		cond := conditions.NewPolicyProgrammedBundleUpdated(update.BundleDescription, update.Checksum, update.UpdatedAt)
+
+		found := false
+		for i, existing := range policy.Conditions {
+			if existing.Type != cond.Type {
+				continue
+			}
+			found = true
+			// Only overwrite "healthy" Programmed=True conditions (Programmed or BundleUpdated).
+			// Do not overwrite Programmed=False states (e.g. BundlePending, FetchError) or
+			// Programmed=True warning states (e.g. StaleBundleWarning) — those reflect active
+			// error/warning signals that must not be silenced by a historical bundle update.
+			healthy := existing.Status == metav1.ConditionTrue &&
+				(existing.Reason == string(conditions.PolicyReasonProgrammed) ||
+					existing.Reason == string(conditions.PolicyReasonBundleUpdated))
+			if healthy {
+				policy.Conditions[i] = cond
+			}
+			break
+		}
+		if !found {
 			policy.Conditions = append(policy.Conditions, cond)
 		}
 	}
@@ -750,6 +801,17 @@ func (h *eventHandlerImpl) parseAndCaptureEvent(ctx context.Context, logger logr
 
 		h.cfg.processor.CaptureDeleteChange(e.Type, e.NamespacedName)
 	case events.WAFBundleReconcileEvent:
+		// Guard against stale events: the poller may have been stopped (policy deleted) between
+		// when the event was queued and when it is processed here. Skip the rebuild if the poller
+		// is no longer registered — its bundle cache has already been cleared and a subsequent
+		// delete event will drive the correct config update.
+		if h.cfg.wafPollerManager != nil && !h.cfg.wafPollerManager.HasPoller(e.PolicyNsName) {
+			logger.V(1).Info(
+				"WAF bundle reconcile event for policy with no active poller, skipping rebuild",
+				"policy", e.PolicyNsName,
+			)
+			return
+		}
 		logger.V(1).Info("WAF bundle now available, triggering re-reconcile", "policy", e.PolicyNsName)
 		// Mark the processor dirty so Process() performs a graph rebuild even if this is the
 		// only event in the batch. Without this, clusterStateChanged=false causes Process() to
