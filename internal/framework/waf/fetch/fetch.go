@@ -507,7 +507,13 @@ func fetchHTTP(ctx context.Context, client *http.Client, req Request) (Result, e
 	}
 
 	if statusCode == http.StatusNotModified {
-		return Result{Unchanged: true}, nil
+		// Return any updated validators from the 304 response so the caller can persist a
+		// rotated ETag or Last-Modified without treating the bundle as changed.
+		return Result{
+			Unchanged:    true,
+			ETag:         respHeaders.Get("ETag"),
+			LastModified: respHeaders.Get("Last-Modified"),
+		}, nil
 	}
 
 	actualChecksum := ComputeChecksum(data)

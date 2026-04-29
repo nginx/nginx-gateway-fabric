@@ -171,6 +171,7 @@ func (m *pollerManager) startPoller(ctx context.Context, cfg Config) {
 		m.logger.V(1).Info("Stopping existing poller before starting new one", "policy", cfg.PolicyNsName)
 		entry.cancel()
 		delete(m.pollErrors, cfg.PolicyNsName)
+		delete(m.bundleUpdates, cfg.PolicyNsName)
 		m.clearBundleCacheLocked(entry.poller)
 	}
 

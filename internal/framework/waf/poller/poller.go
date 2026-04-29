@@ -226,6 +226,10 @@ func (p *poller) pollSource(ctx context.Context, src BundleSource) {
 	}
 
 	if result.Unchanged {
+		// 304 Not Modified: content is the same. Preserve the existing checksum and persist
+		// any rotated ETag/Last-Modified the server sent back so future polls can use it.
+		result.Checksum = last.checksum
+		p.saveBundleState(src.BundleKey, result)
 		p.reportStatus(src.BundleKey, "", nil)
 		return
 	}
