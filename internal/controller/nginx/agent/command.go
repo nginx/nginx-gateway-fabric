@@ -320,7 +320,7 @@ func (cs *commandService) setInitialConfig(
 		return grpcStatus.Errorf(codes.FailedPrecondition, "nginx image version validation failed: %s", err.Error())
 	}
 
-	fileOverviews, configVersion := deployment.GetFileOverviews()
+	fileOverviews, configVersion := deployment.GetInitialFileOverviews()
 
 	cs.logger.Info(
 		"Sending initial configuration to agent",

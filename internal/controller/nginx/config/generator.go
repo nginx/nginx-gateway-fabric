@@ -77,6 +77,8 @@ const (
 type Generator interface {
 	// Generate generates NGINX configuration files from internal representation.
 	Generate(configuration dataplane.Configuration) []agent.File
+	// GenerateStateFiles generates NGINX Plus upstream state files. Returns nil for OSS.
+	GenerateStateFiles(configuration dataplane.Configuration) []agent.File
 	// GenerateDeploymentContext generates the deployment context used for N+ licensing.
 	GenerateDeploymentContext(depCtx dataplane.DeploymentContext) (agent.File, error)
 }
@@ -147,6 +149,12 @@ func (g GeneratorImpl) Generate(conf dataplane.Configuration) []agent.File {
 		files = append(files, generateAuthFile(id, data))
 	}
 	return files
+}
+
+// GenerateStateFiles generates NGINX Plus upstream state files for fresh pod cold-start.
+// Returns nil for OSS.
+func (g GeneratorImpl) GenerateStateFiles(conf dataplane.Configuration) []agent.File {
+	return g.generateStateFiles(conf)
 }
 
 // GenerateDeploymentContext generates the deployment_ctx.json file needed for N+ licensing.
