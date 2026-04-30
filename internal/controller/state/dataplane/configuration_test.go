@@ -8643,7 +8643,7 @@ func TestBuildFrontendTLSCertBundles(t *testing.T) {
 
 	gatewayNs := "gateway-ns"
 	gatewayName := "test-gateway"
-	caRefFormat := "%s_%d_%s"
+	caRefFormat := "%s_%d"
 	caRefName1 := "frontend-ca"
 	caRefSecret1 := v1.ObjectReference{
 		Name:      v1.ObjectName(caRefName1),
@@ -8702,19 +8702,19 @@ func TestBuildFrontendTLSCertBundles(t *testing.T) {
 			},
 			expectedBundleID: generateCertBundleID(types.NamespacedName{
 				Namespace: gatewayNs,
-				Name:      fmt.Sprintf(caRefFormat, gatewayName, 443, "https-listener"),
+				Name:      fmt.Sprintf(caRefFormat, gatewayName, 443),
 			}),
 			expectedBundleData: []byte("frontend-ca-data"),
 			expectedServerBundle: generateCertBundleID(types.NamespacedName{
 				Namespace: gatewayNs,
-				Name:      fmt.Sprintf(caRefFormat, gatewayName, 443, "https-listener"),
+				Name:      fmt.Sprintf(caRefFormat, gatewayName, 443),
 			}),
 			expectBundle: true,
 			expectedSSLServerConfigs: map[int32]expectedServerConfig{
 				443: {
 					expectedBundleID: generateCertBundleID(types.NamespacedName{
 						Namespace: gatewayNs,
-						Name:      fmt.Sprintf(caRefFormat, gatewayName, 443, "https-listener"),
+						Name:      fmt.Sprintf(caRefFormat, gatewayName, 443),
 					}),
 					expectedVerifyClientMode:    SSLVerifyClientOn,
 					expectedRequireVerifiedCert: true,
@@ -8741,7 +8741,7 @@ func TestBuildFrontendTLSCertBundles(t *testing.T) {
 			},
 			expectedBundleID: generateCertBundleID(types.NamespacedName{
 				Namespace: gatewayNs,
-				Name:      fmt.Sprintf(caRefFormat, gatewayName, 443, "https-listener"),
+				Name:      fmt.Sprintf(caRefFormat, gatewayName, 443),
 			}),
 			expectedBundleData:   []byte("frontend-ca-data"),
 			expectedServerBundle: "",
@@ -8806,19 +8806,19 @@ func TestBuildFrontendTLSCertBundles(t *testing.T) {
 			},
 			expectedBundleID: generateCertBundleID(types.NamespacedName{
 				Namespace: gatewayNs,
-				Name:      fmt.Sprintf(caRefFormat, gatewayName, 443, "https-listener"),
+				Name:      fmt.Sprintf(caRefFormat, gatewayName, 443),
 			}),
 			expectedBundleData: []byte("frontend-ca-datafrontend-ca-data-2"),
 			expectedServerBundle: generateCertBundleID(types.NamespacedName{
 				Namespace: gatewayNs,
-				Name:      fmt.Sprintf(caRefFormat, gatewayName, 443, "https-listener"),
+				Name:      fmt.Sprintf(caRefFormat, gatewayName, 443),
 			}),
 			expectBundle: true,
 			expectedSSLServerConfigs: map[int32]expectedServerConfig{
 				443: {
 					expectedBundleID: generateCertBundleID(types.NamespacedName{
 						Namespace: gatewayNs,
-						Name:      fmt.Sprintf(caRefFormat, gatewayName, 443, "https-listener"),
+						Name:      fmt.Sprintf(caRefFormat, gatewayName, 443),
 					}),
 					expectedVerifyClientMode:    SSLVerifyClientOn,
 					expectedRequireVerifiedCert: true,
@@ -8849,19 +8849,19 @@ func TestBuildFrontendTLSCertBundles(t *testing.T) {
 			},
 			expectedBundleID: generateCertBundleID(types.NamespacedName{
 				Namespace: gatewayNs,
-				Name:      fmt.Sprintf(caRefFormat, gatewayName, 443, "https-listener"),
+				Name:      fmt.Sprintf(caRefFormat, gatewayName, 443),
 			}),
 			expectedBundleData: []byte("configmap-ca-data"),
 			expectedServerBundle: generateCertBundleID(types.NamespacedName{
 				Namespace: gatewayNs,
-				Name:      fmt.Sprintf(caRefFormat, gatewayName, 443, "https-listener"),
+				Name:      fmt.Sprintf(caRefFormat, gatewayName, 443),
 			}),
 			expectBundle: true,
 			expectedSSLServerConfigs: map[int32]expectedServerConfig{
 				443: {
 					expectedBundleID: generateCertBundleID(types.NamespacedName{
 						Namespace: gatewayNs,
-						Name:      fmt.Sprintf(caRefFormat, gatewayName, 443, "https-listener"),
+						Name:      fmt.Sprintf(caRefFormat, gatewayName, 443),
 					}),
 					expectedVerifyClientMode:    SSLVerifyClientOn,
 					expectedRequireVerifiedCert: true,
@@ -8906,19 +8906,19 @@ func TestBuildFrontendTLSCertBundles(t *testing.T) {
 			},
 			expectedBundleID: generateCertBundleID(types.NamespacedName{
 				Namespace: gatewayNs,
-				Name:      fmt.Sprintf(caRefFormat, gatewayName, 443, "https-listener"),
+				Name:      fmt.Sprintf(caRefFormat, gatewayName, 443),
 			}),
 			expectedBundleData: []byte("frontend-ca-data"),
 			expectedServerBundle: generateCertBundleID(types.NamespacedName{
 				Namespace: gatewayNs,
-				Name:      fmt.Sprintf(caRefFormat, gatewayName, 443, "https-listener"),
+				Name:      fmt.Sprintf(caRefFormat, gatewayName, 443),
 			}),
 			expectBundle: true,
 			expectedSSLServerConfigs: map[int32]expectedServerConfig{
 				443: {
 					expectedBundleID: generateCertBundleID(types.NamespacedName{
 						Namespace: gatewayNs,
-						Name:      fmt.Sprintf(caRefFormat, gatewayName, 443, "https-listener"),
+						Name:      fmt.Sprintf(caRefFormat, gatewayName, 443),
 					}),
 					expectedVerifyClientMode:    SSLVerifyClientOn,
 					expectedRequireVerifiedCert: true,
@@ -8926,7 +8926,7 @@ func TestBuildFrontendTLSCertBundles(t *testing.T) {
 				8443: {
 					expectedBundleID: generateCertBundleID(types.NamespacedName{
 						Namespace: gatewayNs,
-						Name:      fmt.Sprintf(caRefFormat, gatewayName, 8443, "https-listener-2"),
+						Name:      fmt.Sprintf(caRefFormat, gatewayName, 8443),
 					}),
 					expectedVerifyClientMode:    SSLVerifyClientOn,
 					expectedRequireVerifiedCert: true,
@@ -8971,19 +8971,19 @@ func TestBuildFrontendTLSCertBundles(t *testing.T) {
 			},
 			expectedBundleID: generateCertBundleID(types.NamespacedName{
 				Namespace: gatewayNs,
-				Name:      fmt.Sprintf(caRefFormat, gatewayName, 443, "https-listener"),
+				Name:      fmt.Sprintf(caRefFormat, gatewayName, 443),
 			}),
 			expectedBundleData: []byte("frontend-ca-data"),
 			expectedServerBundle: generateCertBundleID(types.NamespacedName{
 				Namespace: gatewayNs,
-				Name:      fmt.Sprintf(caRefFormat, gatewayName, 443, "https-listener"),
+				Name:      fmt.Sprintf(caRefFormat, gatewayName, 443),
 			}),
 			expectBundle: true,
 			expectedSSLServerConfigs: map[int32]expectedServerConfig{
 				443: {
 					expectedBundleID: generateCertBundleID(types.NamespacedName{
 						Namespace: gatewayNs,
-						Name:      fmt.Sprintf(caRefFormat, gatewayName, 443, "https-listener"),
+						Name:      fmt.Sprintf(caRefFormat, gatewayName, 443),
 					}),
 					expectedVerifyClientMode:    SSLVerifyClientOn,
 					expectedRequireVerifiedCert: true,
@@ -9059,7 +9059,7 @@ func TestBuildFrontendTLSCertBundlesValidationModes(t *testing.T) {
 	g := NewWithT(t)
 	gatewayNs := "gateway-ns"
 	gatewayName := "test-gateway"
-	caRefFormat := "%s_%d_%s"
+	caRefFormat := "%s_%d"
 
 	allowInsecureRef := v1.ObjectReference{
 		Name:      v1.ObjectName("frontend-ca-insecure"),
@@ -9131,11 +9131,11 @@ func TestBuildFrontendTLSCertBundlesValidationModes(t *testing.T) {
 
 	insecureID := generateCertBundleID(types.NamespacedName{
 		Namespace: gatewayNs,
-		Name:      fmt.Sprintf(caRefFormat, gatewayName, 443, "https-insecure"),
+		Name:      fmt.Sprintf(caRefFormat, gatewayName, 443),
 	})
 	validID := generateCertBundleID(types.NamespacedName{
 		Namespace: gatewayNs,
-		Name:      fmt.Sprintf(caRefFormat, gatewayName, 8443, "https-valid"),
+		Name:      fmt.Sprintf(caRefFormat, gatewayName, 8443),
 	})
 
 	g.Expect(bundles).NotTo(HaveKey(insecureID))
