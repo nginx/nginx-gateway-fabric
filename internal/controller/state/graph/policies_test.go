@@ -2973,8 +2973,8 @@ func TestProcessWAFPolicies(t *testing.T) {
 			},
 			wafInput: func() *WAFProcessingInput {
 				fetcher := &fetchfakes.FakeFetcher{}
-				fetcher.FetchPolicyBundleReturns(fetchedData, fetchedChecksum, nil)
-				fetcher.FetchLogProfileBundleReturns(fetchedData, fetchedChecksum, nil)
+				fetcher.FetchPolicyBundleReturns(fetch.Result{Data: fetchedData, Checksum: fetchedChecksum}, nil)
+				fetcher.FetchLogProfileBundleReturns(fetch.Result{Data: fetchedData, Checksum: fetchedChecksum}, nil)
 				return &WAFProcessingInput{
 					Fetcher:         fetcher,
 					Secrets:         map[types.NamespacedName]*corev1.Secret{},
@@ -2996,8 +2996,8 @@ func TestProcessWAFPolicies(t *testing.T) {
 			},
 			wafInput: func() *WAFProcessingInput {
 				fetcher := &fetchfakes.FakeFetcher{}
-				fetcher.FetchPolicyBundleReturns(nil, "", fmt.Errorf("fetch failed"))
-				fetcher.FetchLogProfileBundleReturns(nil, "", fmt.Errorf("fetch failed"))
+				fetcher.FetchPolicyBundleReturns(fetch.Result{}, fmt.Errorf("fetch failed"))
+				fetcher.FetchLogProfileBundleReturns(fetch.Result{}, fmt.Errorf("fetch failed"))
 				return &WAFProcessingInput{
 					Fetcher:         fetcher,
 					Secrets:         map[types.NamespacedName]*corev1.Secret{},
@@ -3021,8 +3021,8 @@ func TestProcessWAFPolicies(t *testing.T) {
 			},
 			wafInput: func() *WAFProcessingInput {
 				fetcher := &fetchfakes.FakeFetcher{}
-				fetcher.FetchPolicyBundleReturns(nil, "", fmt.Errorf("fetch failed"))
-				fetcher.FetchLogProfileBundleReturns(nil, "", fmt.Errorf("fetch failed"))
+				fetcher.FetchPolicyBundleReturns(fetch.Result{}, fmt.Errorf("fetch failed"))
+				fetcher.FetchLogProfileBundleReturns(fetch.Result{}, fmt.Errorf("fetch failed"))
 				prevData := &WAFBundleData{Data: []byte("old-data"), Checksum: "old-checksum"}
 				return &WAFProcessingInput{
 					Fetcher: fetcher,
@@ -3037,7 +3037,7 @@ func TestProcessWAFPolicies(t *testing.T) {
 			},
 			expSecrets: map[types.NamespacedName]*corev1.Secret{},
 			expConditions: func(_ *Policy) []conditions.Condition {
-				return []conditions.Condition{conditions.NewPolicyProgrammedStaleBundleWarning("fetch failed")}
+				return []conditions.Condition{conditions.NewPolicyProgrammedStaleBundleWarning("policy bundle", "fetch failed")}
 			},
 			expValid: true,
 		},
@@ -3076,8 +3076,8 @@ func TestProcessWAFPolicies(t *testing.T) {
 			},
 			wafInput: func() *WAFProcessingInput {
 				fetcher := &fetchfakes.FakeFetcher{}
-				fetcher.FetchPolicyBundleReturns(fetchedData, fetchedChecksum, nil)
-				fetcher.FetchLogProfileBundleReturns(fetchedData, fetchedChecksum, nil)
+				fetcher.FetchPolicyBundleReturns(fetch.Result{Data: fetchedData, Checksum: fetchedChecksum}, nil)
+				fetcher.FetchLogProfileBundleReturns(fetch.Result{Data: fetchedData, Checksum: fetchedChecksum}, nil)
 				return &WAFProcessingInput{
 					Fetcher:         fetcher,
 					Secrets:         map[types.NamespacedName]*corev1.Secret{authSecretNsName: tokenSecret},
@@ -3183,8 +3183,8 @@ func TestProcessWAFPolicies(t *testing.T) {
 			},
 			wafInput: func() *WAFProcessingInput {
 				fetcher := &fetchfakes.FakeFetcher{}
-				fetcher.FetchPolicyBundleReturns(fetchedData, fetchedChecksum, nil)
-				fetcher.FetchLogProfileBundleReturns(fetchedData, fetchedChecksum, nil)
+				fetcher.FetchPolicyBundleReturns(fetch.Result{Data: fetchedData, Checksum: fetchedChecksum}, nil)
+				fetcher.FetchLogProfileBundleReturns(fetch.Result{Data: fetchedData, Checksum: fetchedChecksum}, nil)
 				return &WAFProcessingInput{
 					Fetcher:         fetcher,
 					Secrets:         map[types.NamespacedName]*corev1.Secret{tlsSecretNsName: tlsSecret},
@@ -3206,8 +3206,8 @@ func TestProcessWAFPolicies(t *testing.T) {
 			},
 			wafInput: func() *WAFProcessingInput {
 				fetcher := &fetchfakes.FakeFetcher{}
-				fetcher.FetchPolicyBundleReturns(fetchedData, fetchedChecksum, nil)
-				fetcher.FetchLogProfileBundleReturns(fetchedData, fetchedChecksum, nil)
+				fetcher.FetchPolicyBundleReturns(fetch.Result{Data: fetchedData, Checksum: fetchedChecksum}, nil)
+				fetcher.FetchLogProfileBundleReturns(fetch.Result{Data: fetchedData, Checksum: fetchedChecksum}, nil)
 				return &WAFProcessingInput{
 					Fetcher:         fetcher,
 					Secrets:         map[types.NamespacedName]*corev1.Secret{},
@@ -3231,8 +3231,8 @@ func TestProcessWAFPolicies(t *testing.T) {
 			wafInput: func() *WAFProcessingInput {
 				fetcher := &fetchfakes.FakeFetcher{}
 				// first call (policy bundle) succeeds; second call (log bundle) fails
-				fetcher.FetchPolicyBundleReturns(fetchedData, fetchedChecksum, nil)
-				fetcher.FetchLogProfileBundleReturns(nil, "", fmt.Errorf("log fetch failed"))
+				fetcher.FetchPolicyBundleReturns(fetch.Result{Data: fetchedData, Checksum: fetchedChecksum}, nil)
+				fetcher.FetchLogProfileBundleReturns(fetch.Result{}, fmt.Errorf("log fetch failed"))
 				return &WAFProcessingInput{
 					Fetcher:         fetcher,
 					Secrets:         map[types.NamespacedName]*corev1.Secret{},
@@ -3264,8 +3264,8 @@ func TestProcessWAFPolicies(t *testing.T) {
 			},
 			wafInput: func() *WAFProcessingInput {
 				fetcher := &fetchfakes.FakeFetcher{}
-				fetcher.FetchPolicyBundleReturns(fetchedData, fetchedChecksum, nil)
-				fetcher.FetchLogProfileBundleReturns(fetchedData, fetchedChecksum, nil)
+				fetcher.FetchPolicyBundleReturns(fetch.Result{Data: fetchedData, Checksum: fetchedChecksum}, nil)
+				fetcher.FetchLogProfileBundleReturns(fetch.Result{Data: fetchedData, Checksum: fetchedChecksum}, nil)
 				return &WAFProcessingInput{
 					Fetcher:         fetcher,
 					Secrets:         map[types.NamespacedName]*corev1.Secret{},
@@ -3295,8 +3295,8 @@ func TestProcessWAFPolicies(t *testing.T) {
 			},
 			wafInput: func() *WAFProcessingInput {
 				fetcher := &fetchfakes.FakeFetcher{}
-				fetcher.FetchPolicyBundleReturns(fetchedData, fetchedChecksum, nil)
-				fetcher.FetchLogProfileBundleReturns(fetchedData, fetchedChecksum, nil)
+				fetcher.FetchPolicyBundleReturns(fetch.Result{Data: fetchedData, Checksum: fetchedChecksum}, nil)
+				fetcher.FetchLogProfileBundleReturns(fetch.Result{Data: fetchedData, Checksum: fetchedChecksum}, nil)
 				return &WAFProcessingInput{
 					Fetcher:         fetcher,
 					Secrets:         map[types.NamespacedName]*corev1.Secret{authSecretNsName: tokenSecret},
@@ -3332,8 +3332,8 @@ func TestProcessWAFPolicies(t *testing.T) {
 			wafInput: func() *WAFProcessingInput {
 				fetcher := &fetchfakes.FakeFetcher{}
 				// policy bundle fetch succeeds; log auth secret is missing so log fetch never runs
-				fetcher.FetchPolicyBundleReturns(fetchedData, fetchedChecksum, nil)
-				fetcher.FetchLogProfileBundleReturns(fetchedData, fetchedChecksum, nil)
+				fetcher.FetchPolicyBundleReturns(fetch.Result{Data: fetchedData, Checksum: fetchedChecksum}, nil)
+				fetcher.FetchLogProfileBundleReturns(fetch.Result{Data: fetchedData, Checksum: fetchedChecksum}, nil)
 				return &WAFProcessingInput{
 					Fetcher:         fetcher,
 					Secrets:         map[types.NamespacedName]*corev1.Secret{},
@@ -3373,8 +3373,8 @@ func TestProcessWAFPolicies(t *testing.T) {
 			},
 			wafInput: func() *WAFProcessingInput {
 				fetcher := &fetchfakes.FakeFetcher{}
-				fetcher.FetchPolicyBundleReturns(fetchedData, fetchedChecksum, nil)
-				fetcher.FetchLogProfileBundleReturns(fetchedData, fetchedChecksum, nil)
+				fetcher.FetchPolicyBundleReturns(fetch.Result{Data: fetchedData, Checksum: fetchedChecksum}, nil)
+				fetcher.FetchLogProfileBundleReturns(fetch.Result{Data: fetchedData, Checksum: fetchedChecksum}, nil)
 				return &WAFProcessingInput{
 					Fetcher:         fetcher,
 					Secrets:         map[types.NamespacedName]*corev1.Secret{},
@@ -3403,8 +3403,8 @@ func TestProcessWAFPolicies(t *testing.T) {
 			},
 			wafInput: func() *WAFProcessingInput {
 				fetcher := &fetchfakes.FakeFetcher{}
-				fetcher.FetchPolicyBundleReturns(fetchedData, fetchedChecksum, nil)
-				fetcher.FetchLogProfileBundleReturns(nil, "", fmt.Errorf("log fetch failed"))
+				fetcher.FetchPolicyBundleReturns(fetch.Result{Data: fetchedData, Checksum: fetchedChecksum}, nil)
+				fetcher.FetchLogProfileBundleReturns(fetch.Result{}, fmt.Errorf("log fetch failed"))
 				prevLogBundle := &WAFBundleData{Data: []byte("old-log-data"), Checksum: "old-log-checksum"}
 				return &WAFProcessingInput{
 					Fetcher: fetcher,
@@ -3420,7 +3420,12 @@ func TestProcessWAFPolicies(t *testing.T) {
 			},
 			expSecrets: map[types.NamespacedName]*corev1.Secret{},
 			expConditions: func(_ *Policy) []conditions.Condition {
-				return []conditions.Condition{conditions.NewPolicyProgrammedStaleBundleWarning("log fetch failed")}
+				return []conditions.Condition{
+					conditions.NewPolicyProgrammedStaleBundleWarning(
+						"security log bundle (URL: "+logBundleURL+")",
+						"log fetch failed",
+					),
+				}
 			},
 			expValid: true,
 		},
@@ -3457,8 +3462,8 @@ func TestProcessWAFPolicies(t *testing.T) {
 			wafInput: func() *WAFProcessingInput {
 				fetcher := &fetchfakes.FakeFetcher{}
 				// call 0: policy bundle; call 1: log[1] bundle (log[0] skipped due to auth error)
-				fetcher.FetchPolicyBundleReturns(fetchedData, fetchedChecksum, nil)
-				fetcher.FetchLogProfileBundleReturns(fetchedData, fetchedChecksum, nil)
+				fetcher.FetchPolicyBundleReturns(fetch.Result{Data: fetchedData, Checksum: fetchedChecksum}, nil)
+				fetcher.FetchLogProfileBundleReturns(fetch.Result{Data: fetchedData, Checksum: fetchedChecksum}, nil)
 				return &WAFProcessingInput{
 					Fetcher:         fetcher,
 					Secrets:         map[types.NamespacedName]*corev1.Secret{},
@@ -3518,9 +3523,11 @@ func TestProcessWAFPolicies(t *testing.T) {
 			wafInput: func() *WAFProcessingInput {
 				fetcher := &fetchfakes.FakeFetcher{}
 				// call 0: policy bundle; call 1: log bundle (second log entry must not cause call 2)
-				fetcher.FetchPolicyBundleReturnsOnCall(0, fetchedData, fetchedChecksum, nil)
-				fetcher.FetchLogProfileBundleReturnsOnCall(0, fetchedData, fetchedChecksum, nil)
-				fetcher.FetchLogProfileBundleReturnsOnCall(1, nil, "", fmt.Errorf("unexpected fetch call for duplicate log URL"))
+				fetcher.FetchPolicyBundleReturnsOnCall(0, fetch.Result{Data: fetchedData, Checksum: fetchedChecksum}, nil)
+				fetcher.FetchLogProfileBundleReturnsOnCall(0, fetch.Result{Data: fetchedData, Checksum: fetchedChecksum}, nil)
+				fetcher.FetchLogProfileBundleReturnsOnCall(
+					1, fetch.Result{}, fmt.Errorf("unexpected fetch call for duplicate log URL"),
+				)
 				return &WAFProcessingInput{
 					Fetcher:         fetcher,
 					Secrets:         map[types.NamespacedName]*corev1.Secret{},
@@ -3557,8 +3564,8 @@ func TestProcessWAFPolicies(t *testing.T) {
 			},
 			wafInput: func() *WAFProcessingInput {
 				fetcher := &fetchfakes.FakeFetcher{}
-				fetcher.FetchPolicyBundleReturns(fetchedData, fetchedChecksum, nil)
-				fetcher.FetchLogProfileBundleReturns(fetchedData, fetchedChecksum, nil)
+				fetcher.FetchPolicyBundleReturns(fetch.Result{Data: fetchedData, Checksum: fetchedChecksum}, nil)
+				fetcher.FetchLogProfileBundleReturns(fetch.Result{Data: fetchedData, Checksum: fetchedChecksum}, nil)
 				return &WAFProcessingInput{
 					Fetcher:         fetcher,
 					Secrets:         map[types.NamespacedName]*corev1.Secret{},
@@ -3751,10 +3758,10 @@ func TestBuildPolicyFetchRequest(t *testing.T) {
 	caData := []byte("ca-cert-data")
 
 	tests := []struct {
+		auth         *fetch.BundleAuth
+		policySource ngfAPIv1alpha1.PolicySource
 		name         string
 		policyType   ngfAPIv1alpha1.PolicySourceType
-		policySource ngfAPIv1alpha1.PolicySource
-		auth         *fetch.BundleAuth
 		tlsCA        []byte
 		expRequest   fetch.Request
 	}{
@@ -4049,9 +4056,9 @@ func TestBuildLogFetchRequest(t *testing.T) {
 	caData := []byte("ca-cert-data")
 
 	tests := []struct {
-		name       string
-		logSource  ngfAPIv1alpha1.LogSource
 		auth       *fetch.BundleAuth
+		logSource  ngfAPIv1alpha1.LogSource
+		name       string
 		tlsCA      []byte
 		expRequest fetch.Request
 	}{

@@ -1658,8 +1658,9 @@ func TestMergeWAFPollErrors(t *testing.T) {
 			name: "adds stale-bundle warning when bundle exists",
 			pollErrors: map[types.NamespacedName]wafPoller.PollError{
 				policyNsName: {
-					BundleKey: bundleKey,
-					Err:       errors.New("fetch timeout"),
+					BundleKey:         bundleKey,
+					BundleDescription: "policy bundle",
+					Err:               errors.New("fetch timeout"),
 				},
 			},
 			policy: &graph.Policy{
@@ -1802,9 +1803,7 @@ func TestMergeWAFPollErrors(t *testing.T) {
 
 			if tt.expectCondCount > 0 {
 				cond := tt.policy.Conditions[0]
-				expectedCond := conditions.NewPolicyProgrammedStaleBundleWarning(
-					"polling " + string(bundleKey) + ": fetch timeout",
-				)
+				expectedCond := conditions.NewPolicyProgrammedStaleBundleWarning("policy bundle", "fetch timeout")
 				g.Expect(cond).To(Equal(expectedCond))
 			}
 		})
@@ -1816,7 +1815,7 @@ func TestMergeWAFPollErrors(t *testing.T) {
 
 		fakeManager := &pollerfakes.FakePollerManager{}
 		fakeManager.GetAllPollErrorsReturns(map[types.NamespacedName]wafPoller.PollError{
-			policyNsName: {BundleKey: bundleKey, Err: errors.New("fetch timeout")},
+			policyNsName: {BundleKey: bundleKey, BundleDescription: "policy bundle", Err: errors.New("fetch timeout")},
 		})
 
 		handler := &eventHandlerImpl{
@@ -1875,22 +1874,160 @@ func TestMergeWAFPollErrors(t *testing.T) {
 
 		// First call with one error message.
 		fakeManager.GetAllPollErrorsReturns(map[types.NamespacedName]wafPoller.PollError{
-			policyNsName: {BundleKey: bundleKey, Err: errors.New("timeout")},
+			policyNsName: {BundleKey: bundleKey, BundleDescription: "policy bundle", Err: errors.New("timeout")},
 		})
 		handler.mergeWAFPollErrors(gr)
 
 		// Second call with a different error message.
 		fakeManager.GetAllPollErrorsReturns(map[types.NamespacedName]wafPoller.PollError{
-			policyNsName: {BundleKey: bundleKey, Err: errors.New("connection refused")},
+			policyNsName: {BundleKey: bundleKey, BundleDescription: "policy bundle", Err: errors.New("connection refused")},
 		})
 		handler.mergeWAFPollErrors(gr)
 
 		g.Expect(policy.Conditions).To(HaveLen(1))
-		expectedCond := conditions.NewPolicyProgrammedStaleBundleWarning(
-			"polling " + string(bundleKey) + ": connection refused",
-		)
+		expectedCond := conditions.NewPolicyProgrammedStaleBundleWarning("policy bundle", "connection refused")
 		g.Expect(policy.Conditions[0]).To(Equal(expectedCond))
 	})
+}
+
+func TestMergeWAFBundleUpdates(t *testing.T) {
+	t.Parallel()
+
+	policyNsName := types.NamespacedName{Namespace: "default", Name: "waf-policy"}
+	bundleKey := graph.PolicyBundleKey(policyNsName)
+	checksum := "abc123"
+	updatedAt := metav1.Now()
+
+	pendingCond := conditions.NewPolicyNotProgrammedBundlePending("waiting for bundle")
+	staleCond := conditions.NewPolicyProgrammedStaleBundleWarning("policy bundle", "previous fetch failed")
+
+	tests := []struct {
+		bundleUpdates     map[types.NamespacedName]wafPoller.BundleUpdate
+		pollErrors        map[types.NamespacedName]wafPoller.PollError
+		policy            *graph.Policy
+		expectCond        *conditions.Condition
+		name              string
+		initialConditions []conditions.Condition
+		expectCondCount   int
+		repeatCalls       int
+		nilManager        bool
+	}{
+		{
+			name: "adds BundleUpdated condition when update is present",
+			bundleUpdates: map[types.NamespacedName]wafPoller.BundleUpdate{
+				policyNsName: {BundleDescription: "policy bundle", Checksum: checksum, UpdatedAt: updatedAt},
+			},
+			policy:          &graph.Policy{Source: makeWAFPolicy(true), Valid: true},
+			expectCondCount: 1,
+			expectCond: helpers.GetPointer(
+				conditions.NewPolicyProgrammedBundleUpdated("policy bundle", checksum, updatedAt),
+			),
+		},
+		{
+			name: "does not overwrite Programmed=False condition",
+			bundleUpdates: map[types.NamespacedName]wafPoller.BundleUpdate{
+				policyNsName: {Checksum: checksum, UpdatedAt: updatedAt},
+			},
+			policy: &graph.Policy{
+				Source:     makeWAFPolicy(true),
+				Valid:      true,
+				Conditions: []conditions.Condition{pendingCond},
+			},
+			expectCondCount: 1,
+			expectCond:      &pendingCond,
+		},
+		{
+			name: "does not overwrite StaleBundleWarning condition",
+			bundleUpdates: map[types.NamespacedName]wafPoller.BundleUpdate{
+				policyNsName: {Checksum: checksum, UpdatedAt: updatedAt},
+			},
+			policy: &graph.Policy{
+				Source:     makeWAFPolicy(true),
+				Valid:      true,
+				Conditions: []conditions.Condition{staleCond},
+			},
+			expectCondCount: 1,
+			expectCond:      &staleCond,
+		},
+		{
+			name: "poll errors take precedence over bundle updates",
+			bundleUpdates: map[types.NamespacedName]wafPoller.BundleUpdate{
+				policyNsName: {BundleDescription: "policy bundle", Checksum: checksum, UpdatedAt: updatedAt},
+			},
+			pollErrors: map[types.NamespacedName]wafPoller.PollError{
+				policyNsName: {BundleKey: bundleKey, BundleDescription: "policy bundle", Err: errors.New("fetch timeout")},
+			},
+			policy: &graph.Policy{
+				Source: makeWAFPolicy(true),
+				Valid:  true,
+				WAFState: &graph.PolicyWAFState{
+					Bundles: map[graph.WAFBundleKey]*graph.WAFBundleData{bundleKey: {Checksum: checksum}},
+				},
+			},
+			expectCondCount: 1,
+			expectCond: helpers.GetPointer(
+				conditions.NewPolicyProgrammedStaleBundleWarning("policy bundle", "fetch timeout"),
+			),
+		},
+		{
+			name: "idempotent on repeated calls",
+			bundleUpdates: map[types.NamespacedName]wafPoller.BundleUpdate{
+				policyNsName: {Checksum: checksum, UpdatedAt: updatedAt},
+			},
+			policy:          &graph.Policy{Source: makeWAFPolicy(true), Valid: true},
+			expectCondCount: 1,
+			repeatCalls:     3,
+		},
+		{
+			name:            "nil manager is a no-op",
+			nilManager:      true,
+			policy:          &graph.Policy{Source: makeWAFPolicy(true), Valid: true},
+			expectCondCount: 0,
+		},
+		{
+			name: "skips invalid policy",
+			bundleUpdates: map[types.NamespacedName]wafPoller.BundleUpdate{
+				policyNsName: {Checksum: checksum, UpdatedAt: updatedAt},
+			},
+			policy:          &graph.Policy{Source: makeWAFPolicy(true), Valid: false},
+			expectCondCount: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			var mgr wafPoller.Manager
+			if !tt.nilManager {
+				fakeManager := &pollerfakes.FakePollerManager{}
+				fakeManager.GetAllBundleUpdatesReturns(tt.bundleUpdates)
+				fakeManager.GetAllPollErrorsReturns(tt.pollErrors)
+				mgr = fakeManager
+			}
+
+			handler := &eventHandlerImpl{cfg: eventHandlerConfig{wafPollerManager: mgr}}
+
+			gr := &graph.Graph{
+				NGFPolicies: map[graph.PolicyKey]*graph.Policy{wafPolicyKey("waf-policy"): tt.policy},
+			}
+
+			calls := max(tt.repeatCalls, 1)
+			for range calls {
+				// Apply in the same order as waitForStatusUpdates: bundle updates first, errors second.
+				handler.mergeWAFBundleUpdates(gr)
+				if len(tt.pollErrors) > 0 {
+					handler.mergeWAFPollErrors(gr)
+				}
+			}
+
+			g.Expect(tt.policy.Conditions).To(HaveLen(tt.expectCondCount))
+			if tt.expectCond != nil {
+				g.Expect(tt.policy.Conditions[0]).To(Equal(*tt.expectCond))
+			}
+		})
+	}
 }
 
 func TestCollectPolicyTargetDeployments(t *testing.T) {

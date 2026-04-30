@@ -433,16 +433,17 @@ func TestManager_pollErrors(t *testing.T) {
 
 	// Record an error.
 	testErr := errors.New("network timeout")
-	mgr.recordPollResult(policyNsName, bundleKey, testErr)
+	mgr.recordPollResult(policyNsName, bundleKey, "policy bundle", "", testErr)
 
 	allErrors := mgr.GetAllPollErrors()
 	g.Expect(allErrors).To(HaveLen(1))
 	g.Expect(allErrors).To(HaveKey(policyNsName))
 	g.Expect(allErrors[policyNsName].BundleKey).To(Equal(bundleKey))
+	g.Expect(allErrors[policyNsName].BundleDescription).To(Equal("policy bundle"))
 	g.Expect(allErrors[policyNsName].Err).To(Equal(testErr))
 
 	// Clear error on success.
-	mgr.recordPollResult(policyNsName, bundleKey, nil)
+	mgr.recordPollResult(policyNsName, bundleKey, "policy bundle", "", nil)
 
 	g.Expect(mgr.GetAllPollErrors()).To(BeNil())
 }
@@ -453,7 +454,7 @@ func TestManager_stopPollerClearsPollError(t *testing.T) {
 
 	fetcher := &fetchfakes.FakeFetcher{}
 	testErr := errors.New("test error")
-	fetcher.FetchPolicyBundleReturns(nil, "", testErr)
+	fetcher.FetchPolicyBundleReturns(fetch.Result{}, testErr)
 
 	deployments := &agentfakes.FakeDeploymentStorer{}
 	logger := logr.Discard()
