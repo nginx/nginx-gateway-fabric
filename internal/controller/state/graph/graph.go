@@ -47,6 +47,7 @@ type ClusterState struct {
 	SnippetsFilters       map[types.NamespacedName]*ngfAPIv1alpha1.SnippetsFilter
 	AuthenticationFilters map[types.NamespacedName]*ngfAPIv1alpha1.AuthenticationFilter
 	InferencePools        map[types.NamespacedName]*inference.InferencePool
+	ListenerSets          map[types.NamespacedName]*gatewayv1.ListenerSet
 }
 
 // Graph is a Graph-like representation of Gateway API resources.
@@ -87,6 +88,8 @@ type Graph struct {
 	SnippetsFilters map[types.NamespacedName]*SnippetsFilter
 	// AuthenticationFilters holds all the AuthenticationFilters.
 	AuthenticationFilters map[types.NamespacedName]*AuthenticationFilter
+	// ListenerSets holds all the ListenerSets.
+	ListenerSets map[types.NamespacedName]*ListenerSet
 	// PlusSecrets holds the secrets related to NGINX Plus licensing.
 	PlusSecrets map[types.NamespacedName][]PlusSecretFile
 }
@@ -259,6 +262,10 @@ func BuildGraph(
 		processedNginxProxies,
 	)
 
+	listenerSets := buildListenerSets(state.ListenerSets, gws, state.Namespaces)
+
+	attachListenerSetsToGateways(gws, listenerSets)
+
 	processedBackendTLSPolicies := processBackendTLSPolicies(
 		state.BackendTLSPolicies,
 		resourceResolver,
@@ -274,7 +281,6 @@ func BuildGraph(
 		validators.GenericValidator,
 		featureFlags.Plus,
 	)
-
 	routes := buildRoutesForGateways(
 		validators.HTTPFieldsValidator,
 		state.HTTPRoutes,
@@ -284,9 +290,16 @@ func BuildGraph(
 		processedAuthenticationFilters,
 		state.InferencePools,
 		featureFlags,
+		listenerSets,
 	)
 
-	referencedInferencePools := buildReferencedInferencePools(routes, gws, state.InferencePools, state.Services)
+	referencedInferencePools := buildReferencedInferencePools(
+		routes,
+		gws,
+		state.InferencePools,
+		state.Services,
+		listenerSets,
+	)
 
 	l4routes := buildL4RoutesForGateways(
 		state.TLSRoutes,
@@ -295,6 +308,7 @@ func BuildGraph(
 		state.Services,
 		gws,
 		refGrantResolver,
+		listenerSets,
 	)
 
 	addBackendRefsToRouteRules(
@@ -304,12 +318,12 @@ func BuildGraph(
 		referencedInferencePools,
 		processedBackendTLSPolicies,
 	)
-	bindRoutesToListeners(routes, l4routes, gws, state.Namespaces)
+	bindRoutesToListeners(routes, l4routes, gws, state.Namespaces, listenerSets)
 	validateOIDCFilters(routes, gws)
 
 	referencedNamespaces := buildReferencedNamespaces(state.Namespaces, gws)
 
-	referencedServices := buildReferencedServices(routes, l4routes, gws, state.Services)
+	referencedServices := buildReferencedServices(routes, l4routes, gws, state.Services, listenerSets)
 
 	addGatewaysForBackendTLSPolicies(processedBackendTLSPolicies, referencedServices, controllerName, gws, logger)
 
@@ -343,6 +357,7 @@ func BuildGraph(
 		NGFPolicies:                processedPolicies,
 		SnippetsFilters:            processedSnippetsFilters,
 		AuthenticationFilters:      processedAuthenticationFilters,
+		ListenerSets:               listenerSets,
 		PlusSecrets:                plusSecrets,
 	}
 

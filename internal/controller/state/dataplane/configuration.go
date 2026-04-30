@@ -168,8 +168,7 @@ func buildPassthroughServers(gateway *graph.Gateway) []Layer4VirtualServer {
 			var hostnames []string
 
 			for _, p := range r.ParentRefs {
-				key := graph.CreateGatewayListenerKey(l.GatewayName, l.Name)
-				if val, exist := p.Attachment.AcceptedHostnames[key]; exist {
+				if val, exist := p.Attachment.AcceptedHostnames[graph.CreateParentRefListenerKeyFromListener(l)]; exist {
 					hostnames = val
 					break
 				}
@@ -980,9 +979,7 @@ func (hpr *hostPathRules) upsertRoute(
 	}
 
 	for _, p := range route.ParentRefs {
-		key := graph.CreateGatewayListenerKey(listener.GatewayName, listener.Name)
-
-		if val, exist := p.Attachment.AcceptedHostnames[key]; exist {
+		if val, exist := p.Attachment.AcceptedHostnames[graph.CreateParentRefListenerKeyFromListener(listener)]; exist {
 			hostnames = val
 			break
 		}

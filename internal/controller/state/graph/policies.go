@@ -265,18 +265,17 @@ func attachPolicyToRoute(
 
 	// as of now, ObservabilityPolicy is the only policy that needs this check, and it only attaches to Routes
 	for _, parentRef := range route.ParentRefs {
-		if parentRef.Gateway != nil && parentRef.Gateway.EffectiveNginxProxy != nil {
-			gw := parentRef.Gateway
+		if parentRef.Kind == kinds.Gateway && parentRef.EffectiveNginxProxy != nil {
 			globalSettings := &policies.GlobalSettings{
-				TelemetryEnabled: telemetryEnabledForNginxProxy(gw.EffectiveNginxProxy),
+				TelemetryEnabled: telemetryEnabledForNginxProxy(parentRef.EffectiveNginxProxy),
 			}
 
 			if conds := validator.ValidateGlobalSettings(policy.Source, globalSettings); len(conds) > 0 {
-				policy.InvalidForGateways[gw.NamespacedName] = struct{}{}
+				policy.InvalidForGateways[parentRef.NamespacedName] = struct{}{}
 				ancestor.Conditions = append(ancestor.Conditions, conds...)
 			} else {
 				// Policy is effective for this gateway (not adding to InvalidForGateways)
-				effectiveGateways = append(effectiveGateways, gw.NamespacedName)
+				effectiveGateways = append(effectiveGateways, parentRef.NamespacedName)
 			}
 		}
 	}
@@ -371,7 +370,7 @@ func propagateSnippetsPolicyToRoutes(
 	for _, route := range routes {
 		for _, parentRef := range route.ParentRefs {
 			// Check if the route is attached to this specific gateway
-			if parentRef.Gateway != nil && parentRef.Gateway.NamespacedName == gwNsName {
+			if parentRef.Kind == kinds.Gateway && parentRef.NamespacedName == gwNsName {
 				// Avoid duplicate attachment if logic runs multiple times (though graph build is single pass)
 				// or if policy targets both.
 				alreadyAttached := slices.Contains(route.Policies, policy)
@@ -488,7 +487,7 @@ func checkForRouteOverlap(route *L7Route, gatewayHostPortPaths map[string]string
 	currentRouteName := fmt.Sprintf("%s/%s", route.Source.GetNamespace(), route.Source.GetName())
 
 	for _, parentRef := range route.ParentRefs {
-		if parentRef.Attachment != nil && parentRef.Gateway != nil {
+		if parentRef.Attachment != nil && parentRef.Kind == kinds.Gateway {
 			port := parentRef.Attachment.ListenerPort
 			// FIXME(sarthyparty): https://github.com/nginx/nginx-gateway-fabric/issues/3811
 			// Need to merge listener hostnames with route hostnames so wildcards are handled correctly
@@ -497,7 +496,7 @@ func checkForRouteOverlap(route *L7Route, gatewayHostPortPaths map[string]string
 				for _, rule := range route.Spec.Rules {
 					for _, match := range rule.Matches {
 						if match.Path != nil && match.Path.Value != nil {
-							key := fmt.Sprintf("%s:%s:%d%s", parentRef.Gateway.NamespacedName.String(), hostname, port, *match.Path.Value)
+							key := fmt.Sprintf("%s:%s:%d%s", parentRef.NamespacedName.String(), hostname, port, *match.Path.Value)
 							if val, ok := gatewayHostPortPaths[key]; !ok {
 								gatewayHostPortPaths[key] = currentRouteName
 							} else if val != currentRouteName {

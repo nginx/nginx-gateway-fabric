@@ -712,6 +712,18 @@ func registerControllers(
 				Kind:    "TLSRoute",
 			},
 		},
+		ctlrCfg{
+			objectType: &gatewayv1.ListenerSet{},
+			options: []controller.Option{
+				controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
+			},
+			requireCRDCheck: true,
+			crdGVK: &schema.GroupVersionKind{
+				Group:   "gateway.networking.k8s.io",
+				Version: "v1",
+				Kind:    "ListenerSet",
+			},
+		},
 	)
 
 	if cfg.ExperimentalFeatures {
@@ -1043,6 +1055,10 @@ func prepareFirstEventBatchPreparerArgs(
 	// Add object lists for CRDs that were discovered
 	if discoveredCRDs["BackendTLSPolicy"] {
 		objectLists = append(objectLists, &gatewayv1.BackendTLSPolicyList{})
+	}
+
+	if discoveredCRDs["ListenerSet"] {
+		objectLists = append(objectLists, &gatewayv1.ListenerSetList{})
 	}
 
 	if cfg.ExperimentalFeatures {
