@@ -1533,7 +1533,7 @@ Cloud-native authentication (IRSA, Workload Identity) is not supported. Operator
 
 ## References
 
-- [NGINX App Protect WAF v5 Documentation](https://docs.nginx.com/nginx-app-protect-waf/v5/)
+- [F5 WAF for NGINX Documentation](https://docs.nginx.com/waf)
 - [Gateway API Policy Attachment](https://gateway-api.sigs.k8s.io/reference/policy-attachment/)
 - [GEP-713: Policy and Metaresources](https://gateway-api.sigs.k8s.io/geps/gep-713/)
 

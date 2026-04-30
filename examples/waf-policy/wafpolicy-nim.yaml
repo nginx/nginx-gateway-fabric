@@ -10,7 +10,7 @@ spec:
   type: NIM
   policySource:
     nimSource:
-      url: <NIM URL>
+      url: https://nim.example.com
       policyName: example-policy
     auth:
       secretRef:
@@ -25,7 +25,7 @@ spec:
         # Use one of the built-in log profiles:
         # defaultProfile: log_illegal
         nimSource:
-          url: <NIM URL>
+          url: https://nim.example.com
           profileName: example-log-profile
         auth:
           secretRef:
