@@ -110,6 +110,7 @@ func NewChangeProcessorImpl(cfg ChangeProcessorConfig) *ChangeProcessorImpl {
 		SnippetsFilters:       make(map[types.NamespacedName]*ngfAPIv1alpha1.SnippetsFilter),
 		AuthenticationFilters: make(map[types.NamespacedName]*ngfAPIv1alpha1.AuthenticationFilter),
 		InferencePools:        make(map[types.NamespacedName]*inference.InferencePool),
+		ListenerSets:          make(map[types.NamespacedName]*v1.ListenerSet),
 	}
 
 	processor := &ChangeProcessorImpl{
@@ -251,6 +252,11 @@ func NewChangeProcessorImpl(cfg ChangeProcessorConfig) *ChangeProcessorImpl {
 			gvk:       cfg.MustExtractGVK(&ngfAPIv1alpha1.RateLimitPolicy{}),
 			store:     commonPolicyObjectStore,
 			predicate: funcPredicate{stateChanged: isNGFPolicyRelevant},
+		},
+		{
+			gvk:       cfg.MustExtractGVK(&v1.ListenerSet{}),
+			store:     newObjectStoreMapAdapter(clusterStore.ListenerSets),
+			predicate: nil,
 		},
 	}
 

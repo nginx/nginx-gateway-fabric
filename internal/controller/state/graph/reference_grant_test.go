@@ -285,6 +285,21 @@ func TestFromTLSRoute(t *testing.T) {
 	g.Expect(ref).To(Equal(exp))
 }
 
+func TestFromListenerSet(t *testing.T) {
+	t.Parallel()
+
+	ref := fromListenerSet("ns")
+
+	exp := fromResource{
+		group:     gatewayv1.GroupName,
+		kind:      kinds.ListenerSet,
+		namespace: "ns",
+	}
+
+	g := NewWithT(t)
+	g.Expect(ref).To(Equal(exp))
+}
+
 func TestRefAllowedFrom(t *testing.T) {
 	t.Parallel()
 
@@ -294,6 +309,7 @@ func TestRefAllowedFrom(t *testing.T) {
 	trNs := "tr-ns"
 	tcrNs := "tcr-ns"
 	urNs := "ur-ns"
+	lsNs := "ls-ns"
 
 	allowedHTTPRouteNs := "hr-allowed-ns"
 	allowedHTTPRouteNsName := types.NamespacedName{Namespace: allowedHTTPRouteNs, Name: "all-allowed-in-ns"}
@@ -313,6 +329,9 @@ func TestRefAllowedFrom(t *testing.T) {
 	allowedGatewayNs := "gw-allowed-ns"
 	allowedGatewayNsName := types.NamespacedName{Namespace: allowedGatewayNs, Name: "all-allowed-in-ns"}
 
+	allowedListenerSetNs := "ls-allowed-ns"
+	allowedListenerSetNsName := types.NamespacedName{Namespace: allowedListenerSetNs, Name: "all-allowed-in-ns"}
+
 	notAllowedNsName := types.NamespacedName{Namespace: "not-allowed-ns", Name: "not-allowed-in-ns"}
 
 	refGrants := map[types.NamespacedName]*gatewayv1.ReferenceGrant{
@@ -323,6 +342,22 @@ func TestRefAllowedFrom(t *testing.T) {
 						Group:     gatewayv1.GroupName,
 						Kind:      kinds.Gateway,
 						Namespace: gatewayv1.Namespace(gwNs),
+					},
+				},
+				To: []gatewayv1.ReferenceGrantTo{
+					{
+						Kind: "Secret",
+					},
+				},
+			},
+		},
+		{Namespace: allowedListenerSetNs, Name: "ls-2-secret"}: {
+			Spec: gatewayv1.ReferenceGrantSpec{
+				From: []gatewayv1.ReferenceGrantFrom{
+					{
+						Group:     gatewayv1.GroupName,
+						Kind:      kinds.ListenerSet,
+						Namespace: gatewayv1.Namespace(lsNs),
 					},
 				},
 				To: []gatewayv1.ReferenceGrantTo{
@@ -446,6 +481,18 @@ func TestRefAllowedFrom(t *testing.T) {
 		{
 			name:           "ref not allowed from gateway to secret",
 			refAllowedFrom: fromGateway(gwNs),
+			toResource:     toSecret(notAllowedNsName),
+			expAllowed:     false,
+		},
+		{
+			name:           "ref allowed from listener set to secret",
+			refAllowedFrom: fromListenerSet(lsNs),
+			toResource:     toSecret(allowedListenerSetNsName),
+			expAllowed:     true,
+		},
+		{
+			name:           "ref not allowed from listener set to secret",
+			refAllowedFrom: fromListenerSet(lsNs),
 			toResource:     toSecret(notAllowedNsName),
 			expAllowed:     false,
 		},

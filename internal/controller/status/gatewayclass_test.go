@@ -46,6 +46,7 @@ func TestSupportedFeatures(t *testing.T) {
 		gatewayv1.FeatureName(features.SupportGatewayHTTPSListenerDetectMisdirectedRequests),
 		gatewayv1.FeatureName(features.SupportGatewayFrontendClientCertificateValidation),
 		gatewayv1.FeatureName(features.SupportGatewayFrontendClientCertificateValidationInsecureFallback),
+		gatewayv1.FeatureName(features.SupportListenerSet),
 	}
 
 	experimentalFeatures := []gatewayv1.FeatureName{

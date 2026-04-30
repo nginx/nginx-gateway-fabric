@@ -651,7 +651,7 @@ func TestAddGatewaysForBackendTLSPolicies(t *testing.T) {
 				TargetRefs: []gatewayv1.LocalPolicyTargetReferenceWithSectionName{
 					{
 						LocalPolicyTargetReference: gatewayv1.LocalPolicyTargetReference{
-							Kind: "Gateway",
+							Kind: kinds.Gateway,
 							Name: "gateway",
 						},
 					},
