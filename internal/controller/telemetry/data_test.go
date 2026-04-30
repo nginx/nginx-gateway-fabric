@@ -53,6 +53,7 @@ func TestDataAttributes(t *testing.T) {
 			GatewayAttachedWAFPolicyCount:            25,
 			RouteAttachedWAFPolicyCount:              26,
 			WAFEnabledGatewayCount:                   27,
+			ListenerSetCount:                         28,
 		},
 		SnippetsFiltersDirectives:       []string{"main-three-count", "http-two-count", "server-one-count"},
 		SnippetsFiltersDirectivesCount:  []int64{3, 2, 1},
@@ -114,6 +115,7 @@ func TestDataAttributes(t *testing.T) {
 		attribute.Int64("GatewayAttachedWAFPolicyCount", 25),
 		attribute.Int64("RouteAttachedWAFPolicyCount", 26),
 		attribute.Int64("WAFEnabledGatewayCount", 27),
+		attribute.Int64("ListenerSetCount", 28),
 
 		// Top level attributes
 		attribute.Int64("NginxPodCount", 3),
@@ -185,6 +187,7 @@ func TestDataAttributesWithEmptyData(t *testing.T) {
 		attribute.Int64("GatewayAttachedWAFPolicyCount", 0),
 		attribute.Int64("RouteAttachedWAFPolicyCount", 0),
 		attribute.Int64("WAFEnabledGatewayCount", 0),
+		attribute.Int64("ListenerSetCount", 0),
 
 		// Top level attributes
 		attribute.Int64("NginxPodCount", 0),

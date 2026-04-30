@@ -145,6 +145,8 @@ type NGFResourceCounts struct {
 	RouteAttachedWAFPolicyCount int64
 	// WAFEnabledGatewayCount is the number of Gateways with WAF enabled on their effective NginxProxy.
 	WAFEnabledGatewayCount int64
+	// ListenerSetCount is the number of relevant ListenerSets.
+	ListenerSetCount int64
 }
 
 func (rc *NGFResourceCounts) CountPolicies(g *graph.Graph) {
@@ -354,6 +356,7 @@ func collectGraphResourceCount(
 	}
 
 	ngfResourceCounts.GatewayAttachedNpCount = gatewayAttachedNPCount
+	ngfResourceCounts.ListenerSetCount = int64(len(g.ListenerSets))
 
 	ngfResourceCounts.InferencePoolCount = int64(len(g.ReferencedInferencePools))
 

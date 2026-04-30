@@ -105,6 +105,7 @@ var _ = Describe("Telemetry test with OTel collector", Label("telemetry"), func(
 				"GatewayAttachedWAFPolicyCount: Int(0)",
 				"RouteAttachedWAFPolicyCount: Int(0)",
 				"WAFEnabledGatewayCount: Int(0)",
+				"ListenerSetCount: Int(0)",
 				"NginxPodCount: Int(0)",
 				"ControlPlanePodCount: Int(1)",
 				"NginxOneConnectionEnabled: Bool(false)",
