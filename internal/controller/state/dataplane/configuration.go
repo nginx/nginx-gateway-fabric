@@ -474,8 +474,8 @@ func buildFrontendTLSCertBundles(
 			continue
 		}
 		// Create a unique cert bundle ID for this listener gateway combo.
-		// e.g. cert_bundle_default_gateway_443_https
-		// for a listener on port 443 named "https" on a gateway in the default namespace.
+		// e.g. cert_bundle_default_gateway_443 for a HTTPS listener on port 443
+		// for a gateway in the default namespace.
 		caCertRef := types.NamespacedName{
 			Namespace: gateway.Source.Namespace,
 			Name: fmt.Sprintf("%s_%d",
