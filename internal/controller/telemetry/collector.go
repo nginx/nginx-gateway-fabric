@@ -137,6 +137,8 @@ type NGFResourceCounts struct {
 	TCPRouteCount int64
 	// UDPRouteCount is the number of relevant UDPRoutes.
 	UDPRouteCount int64
+	// ListenerSetCount is the number of relevant ListenerSets.
+	ListenerSetCount int64
 }
 
 func (rc *NGFResourceCounts) CountPolicies(g *graph.Graph) {
@@ -366,6 +368,7 @@ func collectGraphResourceCount(
 	}
 
 	ngfResourceCounts.GatewayAttachedNpCount = gatewayAttachedNPCount
+	ngfResourceCounts.ListenerSetCount = int64(len(g.ListenerSets))
 
 	return ngfResourceCounts
 }

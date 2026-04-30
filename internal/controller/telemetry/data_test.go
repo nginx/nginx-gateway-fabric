@@ -47,6 +47,7 @@ func TestDataAttributes(t *testing.T) {
 			SnippetsPolicyCount:                      22,
 			TCPRouteCount:                            23,
 			UDPRouteCount:                            24,
+			ListenerSetCount:                         25,
 		},
 		SnippetsFiltersDirectives:               []string{"main-three-count", "http-two-count", "server-one-count"},
 		SnippetsFiltersDirectivesCount:          []int64{3, 2, 1},
@@ -105,6 +106,7 @@ func TestDataAttributes(t *testing.T) {
 		attribute.Int64("SnippetsPolicyCount", 22),
 		attribute.Int64("TCPRouteCount", 23),
 		attribute.Int64("UDPRouteCount", 24),
+		attribute.Int64("ListenerSetCount", 25),
 
 		// Top level attributes
 		attribute.Int64("NginxPodCount", 3),
@@ -173,6 +175,7 @@ func TestDataAttributesWithEmptyData(t *testing.T) {
 		attribute.Int64("SnippetsPolicyCount", 0),
 		attribute.Int64("TCPRouteCount", 0),
 		attribute.Int64("UDPRouteCount", 0),
+		attribute.Int64("ListenerSetCount", 0),
 
 		// Top level attributes
 		attribute.Int64("NginxPodCount", 0),
