@@ -29,6 +29,21 @@ server {
         {{- if $s.SSL.PreferServerCiphers }}
     ssl_prefer_server_ciphers on;
         {{- end }}
+        {{- if $s.SSL.ClientCertificate }}
+    ssl_client_certificate {{ $s.SSL.ClientCertificate }};
+        {{- end }}
+        {{- if $s.SSL.VerifyClient }}
+    ssl_verify_client {{ $s.SSL.VerifyClient }};
+        {{- end }}
+        {{- if $s.SSL.RequireVerifiedCert }}
+    ssl_verify_depth 4;
+    error_page 495 496 = @frontend_tls_verify_failed;
+        {{- end }}
+        {{- if and $s.SSL $s.SSL.RequireVerifiedCert }}
+    location @frontend_tls_verify_failed {
+        return 444;
+    }
+        {{- end}}
     {{- else }}
     ssl_reject_handshake on;
     {{- end }}
@@ -86,6 +101,21 @@ server {
           {{- end }}
           {{- if $s.SSL.PreferServerCiphers }}
     ssl_prefer_server_ciphers on;
+          {{- end }}
+          {{- if $s.SSL.ClientCertificate }}
+    ssl_client_certificate {{ $s.SSL.ClientCertificate }};
+          {{- end }}
+          {{- if $s.SSL.VerifyClient }}
+    ssl_verify_client {{ $s.SSL.VerifyClient }};
+          {{- end }}
+          {{- if $s.SSL.RequireVerifiedCert }}
+    ssl_verify_depth 4;
+    error_page 495 496 = @frontend_tls_verify_failed;
+          {{- end }}
+          {{- if and $s.SSL $s.SSL.RequireVerifiedCert }}
+    location @frontend_tls_verify_failed {
+        return 444;
+    }
           {{- end }}
 
           {{- if $s.MisdirectedRequestVars }}
@@ -159,6 +189,12 @@ server {
             {{- end }}
         {{- end }}
 
+        {{- if $l.CORSHeaders }}
+        if ($request_method = OPTIONS) {
+            return 200;
+        }
+        {{- end }}
+
         {{ range $r := $l.Rewrites }}
         rewrite {{ $r }};
         {{- end }}
@@ -189,10 +225,6 @@ server {
         add_header {{ $h.Name }} "{{ $h.Value }}" always;
                 {{- end }}
             {{- end }}
-
-        if ($request_method = OPTIONS) {
-            return 200;
-        }
         {{- end }}
 
         {{- if eq $l.Type "redirect" -}}
@@ -233,6 +265,7 @@ server {
             {{- if $l.ProxySSLVerify }}
         {{ $proxyOrGRPC }}_ssl_server_name on;
         {{ $proxyOrGRPC }}_ssl_verify on;
+        {{ $proxyOrGRPC }}_ssl_verify_depth 4;
                 {{- if $l.ProxySSLVerify.Name}}
         {{ $proxyOrGRPC }}_ssl_name {{ $l.ProxySSLVerify.Name }};
                 {{- end }}

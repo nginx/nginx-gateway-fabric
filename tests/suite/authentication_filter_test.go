@@ -1418,6 +1418,13 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 							Location:  internalLocation,
 						},
 						{
+							Directive: "proxy_ssl_verify_depth",
+							Value:     "4",
+							File:      "http.conf",
+							Server:    "*.example.com",
+							Location:  internalLocation,
+						},
+						{
 							Directive: "proxy_ssl_server_name",
 							Value:     "on",
 							File:      "http.conf",

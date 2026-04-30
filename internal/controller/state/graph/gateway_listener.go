@@ -4,16 +4,17 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation/field"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/secrets"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/resolver"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
@@ -44,15 +45,22 @@ type Listener struct {
 	Name string
 	// GatewayName is the name of the Gateway resource this Listener belongs to.
 	GatewayName types.NamespacedName
+	// ListenerSetName is the name of the ListenerSet this listener comes from. Empty
+	// if the listener is from a Gateway.
+	ListenerSetName types.NamespacedName
 	// Source holds the source of the Listener from the Gateway resource.
 	Source v1.Listener
+	// AllowedRouteLabelSelector is the label selector for this Listener's allowed routes, if defined.
+	AllowedRouteLabelSelector labels.Selector
 	// Routes holds the GRPC/HTTPRoutes attached to the Listener.
 	// Only valid routes are attached.
 	Routes map[RouteKey]*L7Route
 	// L4Routes holds the TLSRoutes attached to the Listener.
 	L4Routes map[L4RouteKey]*L4Route
-	// AllowedRouteLabelSelector is the label selector for this Listener's allowed routes, if defined.
-	AllowedRouteLabelSelector labels.Selector
+	// ValidationMode holds the TLS validation configuration for the listener.
+	ValidationMode v1.FrontendValidationModeType
+	// CACertificateRefs holds the resolved CA certificate references for the listener.
+	CACertificateRefs []v1.ObjectReference
 	// ResolvedSecrets is the list of namespaced names of the Secrets resolved for this listener.
 	// Only applicable for HTTPS listeners. Supports multiple certificates for SNI-based selection.
 	ResolvedSecrets []types.NamespacedName
@@ -69,18 +77,16 @@ type Listener struct {
 }
 
 func buildListeners(
-	gw *v1.Gateway,
-	resourceResolver resolver.Resolver,
-	refGrantResolver *referenceGrantResolver,
-	protectedPorts ProtectedPorts,
+	gateway *Gateway,
+	sourceListeners []v1.Listener,
+	gwNsName types.NamespacedName,
+	listenerSetNsName types.NamespacedName,
 ) []*Listener {
-	listeners := make([]*Listener, 0, len(gw.Spec.Listeners))
+	listeners := make([]*Listener, 0, len(sourceListeners))
 
-	listenerFactory := newListenerConfiguratorFactory(gw, resourceResolver, refGrantResolver, protectedPorts)
-
-	for _, gl := range gw.Spec.Listeners {
-		configurator := listenerFactory.getConfiguratorForListener(gl)
-		listeners = append(listeners, configurator.configure(gl, client.ObjectKeyFromObject(gw)))
+	for _, l := range sourceListeners {
+		configurator := gateway.ListenerFactory.getConfiguratorForListener(l)
+		listeners = append(listeners, configurator.configure(l, gwNsName, listenerSetNsName, gateway))
 	}
 
 	return listeners
@@ -115,6 +121,7 @@ func newListenerConfiguratorFactory(
 ) *listenerConfiguratorFactory {
 	sharedPortConflictResolver := createPortConflictResolver()
 	sharedOverlappingTLSConfigResolver := createOverlappingTLSConfigResolver()
+	sharedUniqueListenerConflictResolver := uniqueListenerConflictResolver()
 
 	return &listenerConfiguratorFactory{
 		unsupportedProtocol: &listenerConfigurator{
@@ -141,6 +148,7 @@ func newListenerConfiguratorFactory(
 			},
 			conflictResolvers: []listenerConflictResolver{
 				sharedPortConflictResolver,
+				sharedUniqueListenerConflictResolver,
 			},
 		},
 		https: &listenerConfigurator{
@@ -153,9 +161,13 @@ func newListenerConfiguratorFactory(
 			conflictResolvers: []listenerConflictResolver{
 				sharedPortConflictResolver,
 				sharedOverlappingTLSConfigResolver,
+				sharedUniqueListenerConflictResolver,
 			},
 			externalReferenceResolvers: []listenerExternalReferenceResolver{
 				createExternalReferencesForTLSSecretsResolver(gw.Namespace, resourceResolver, refGrantResolver),
+			},
+			frontendTLSCaCertReferenceResolvers: []listenerFrontendTLSCaCertReferenceResolver{
+				createFrontendTLSCaCertReferenceResolver(resourceResolver, refGrantResolver),
 			},
 		},
 		tls: &listenerConfigurator{
@@ -168,8 +180,10 @@ func newListenerConfiguratorFactory(
 			conflictResolvers: []listenerConflictResolver{
 				sharedPortConflictResolver,
 				sharedOverlappingTLSConfigResolver,
+				sharedUniqueListenerConflictResolver,
 			},
-			externalReferenceResolvers: []listenerExternalReferenceResolver{},
+			externalReferenceResolvers:          []listenerExternalReferenceResolver{},
+			frontendTLSCaCertReferenceResolvers: []listenerFrontendTLSCaCertReferenceResolver{},
 		},
 		tcp: &listenerConfigurator{
 			validators: []listenerValidator{
@@ -179,6 +193,7 @@ func newListenerConfiguratorFactory(
 			},
 			conflictResolvers: []listenerConflictResolver{
 				sharedPortConflictResolver,
+				sharedUniqueListenerConflictResolver,
 			},
 		},
 		udp: &listenerConfigurator{
@@ -189,6 +204,7 @@ func newListenerConfiguratorFactory(
 			},
 			conflictResolvers: []listenerConflictResolver{
 				sharedPortConflictResolver,
+				sharedUniqueListenerConflictResolver,
 			},
 		},
 	}
@@ -207,6 +223,11 @@ type listenerConflictResolver func(listener *Listener)
 // the resolver will make the listener invalid and add appropriate conditions.
 type listenerExternalReferenceResolver func(listener *Listener)
 
+// listenerFrontendTLSCaCertReferenceResolver resolves the CA certificate references
+// for HTTPS listeners configured for frontend TLS.
+// If the reference is not resolvable, the resolver will make the listener invalid and add appropriate conditions.
+type listenerFrontendTLSCaCertReferenceResolver func(listener *Listener, gw *Gateway)
+
 // listenerConfigurator is responsible for configuring a listener.
 // validators, conflictResolvers, externalReferenceResolvers generate conditions for invalid fields of the listener.
 // Because the Gateway status includes a status field for each listener, the messages in those conditions
@@ -218,9 +239,16 @@ type listenerConfigurator struct {
 	conflictResolvers []listenerConflictResolver
 	// externalReferenceResolvers can depend on validators - they will only be executed if all validators pass.
 	externalReferenceResolvers []listenerExternalReferenceResolver
+	// frontendTLSCaCertReferenceResolvers can depend on validators - they will only be executed if all validators pass.
+	frontendTLSCaCertReferenceResolvers []listenerFrontendTLSCaCertReferenceResolver
 }
 
-func (c *listenerConfigurator) configure(listener v1.Listener, gwNSName types.NamespacedName) *Listener {
+func (c *listenerConfigurator) configure(
+	listener v1.Listener,
+	gwNSName,
+	listenerSetName types.NamespacedName,
+	gw *Gateway,
+) *Listener {
 	var conds []conditions.Condition
 
 	attachable := true
@@ -259,6 +287,7 @@ func (c *listenerConfigurator) configure(listener v1.Listener, gwNSName types.Na
 		Valid:                     valid,
 		Attachable:                attachable,
 		SupportedKinds:            supportedKinds,
+		ListenerSetName:           listenerSetName,
 	}
 
 	if !l.Valid {
@@ -273,6 +302,10 @@ func (c *listenerConfigurator) configure(listener v1.Listener, gwNSName types.Na
 
 	for _, externalReferenceResolver := range c.externalReferenceResolvers {
 		externalReferenceResolver(l)
+	}
+
+	for _, frontendTLSResolver := range c.frontendTLSCaCertReferenceResolvers {
+		frontendTLSResolver(l, gw)
 	}
 
 	return l
@@ -573,6 +606,9 @@ func isL4Protocol(protocol v1.ProtocolType) bool {
 	return protocol == v1.TCPProtocolType || protocol == v1.UDPProtocolType
 }
 
+// FIXME(bjee19): Refactor before release 2.7
+//
+//nolint:gocyclo // will refactor at some point
 func createPortConflictResolver() listenerConflictResolver {
 	const (
 		secureProtocolGroup   int = 0
@@ -620,15 +656,24 @@ func createPortConflictResolver() listenerConflictResolver {
 			return
 		}
 
-		// if protocol group owner doesn't match the listener's protocol group we mark the port as conflicted,
-		// and invalidate all listeners we've seen for this port.
+		// if protocol group owner doesn't match the listener's protocol group and the conflicting listener is from a Gateway
+		// (ListenerSetName is empty) we mark the port as conflicted, and invalidate all listeners we've seen for this port.
+		// This is just to satisfy a specific listener conflict case. However, if the conflicting listener
+		// is from a ListenerSet,
+		// this means we are currently merging listeners from a ListenerSet onto the Gateway, and we can only mark the current
+		// listener as invalid, allowing the existing listener(s) on the Gateway (native to the Gateway
+		// or already merged from a ListenerSet)
+		// to stay valid.
 		if protocolGroup != protocolGroups[l.Source.Protocol] {
-			conflictedPorts[port] = true
-			for _, listener := range listenersByPort[port] {
-				listener.Valid = false
-				conflictedConds := conditions.NewListenerProtocolConflict(fmt.Sprintf(format, port))
-				listener.Conditions = append(listener.Conditions, conflictedConds...)
+			if l.ListenerSetName.Name == "" {
+				conflictedPorts[port] = true
+				for _, listener := range listenersByPort[port] {
+					listener.Valid = false
+					conflictedConds := conditions.NewListenerProtocolConflict(fmt.Sprintf(format, port))
+					listener.Conditions = append(listener.Conditions, conflictedConds...)
+				}
 			}
+
 			l.Valid = false
 			conflictedConds := conditions.NewListenerProtocolConflict(fmt.Sprintf(format, port))
 			l.Conditions = append(l.Conditions, conflictedConds...)
@@ -637,18 +682,26 @@ func createPortConflictResolver() listenerConflictResolver {
 			for _, listener := range listenersByPort[port] {
 				if isL4Protocol(l.Source.Protocol) &&
 					listener.Source.Protocol == l.Source.Protocol {
-					listener.Valid = false
-					conflictedConds := conditions.NewListenerProtocolConflict(
-						fmt.Sprintf(formatL4SameProtocol, l.Source.Protocol, port))
-					listener.Conditions = append(listener.Conditions, conflictedConds...)
+					// Similar to the case above, if the conflicting listener is from a ListenerSet,
+					// we only mark the current listener as invalid.
+					if l.ListenerSetName.Name == "" {
+						listener.Valid = false
+						conflictedConds := conditions.NewListenerProtocolConflict(
+							fmt.Sprintf(formatL4SameProtocol, l.Source.Protocol, port))
+						listener.Conditions = append(listener.Conditions, conflictedConds...)
+					}
 					foundConflict = true
 				}
 				if listener.Source.Protocol != l.Source.Protocol &&
 					!isL4Protocol(listener.Source.Protocol) && !isL4Protocol(l.Source.Protocol) &&
 					haveOverlap(l.Source.Hostname, listener.Source.Hostname) {
-					listener.Valid = false
-					conflictedConds := conditions.NewListenerHostnameConflict(fmt.Sprintf(formatHostname, port))
-					listener.Conditions = append(listener.Conditions, conflictedConds...)
+					// Similar to the case above, if the conflicting listener is from a ListenerSet,
+					// we only mark the current listener as invalid.
+					if l.ListenerSetName.Name == "" {
+						listener.Valid = false
+						conflictedConds := conditions.NewListenerHostnameConflict(fmt.Sprintf(formatHostname, port))
+						listener.Conditions = append(listener.Conditions, conflictedConds...)
+					}
 					foundConflict = true
 				}
 			}
@@ -670,11 +723,53 @@ func createPortConflictResolver() listenerConflictResolver {
 	}
 }
 
+func uniqueListenerConflictResolver() listenerConflictResolver {
+	type listenerKey struct {
+		protocol v1.ProtocolType
+		hostname string
+		port     v1.PortNumber
+	}
+
+	existingKeys := make(map[listenerKey]struct{})
+
+	return func(l *Listener) {
+		// listener may be invalidated by other conflict resolvers, and we can skip in these cases
+		if !l.Valid {
+			return
+		}
+
+		var hostname string
+		if l.Source.Hostname != nil {
+			hostname = string(*l.Source.Hostname)
+		}
+
+		key := listenerKey{
+			port:     l.Source.Port,
+			protocol: l.Source.Protocol,
+			hostname: hostname,
+		}
+
+		if _, exists := existingKeys[key]; exists {
+			msg := fmt.Sprintf("Multiple listeners with the same port %d and protocol %s have overlapping hostnames",
+				key.port, key.protocol)
+			l.Valid = false
+			l.Conditions = append(l.Conditions, conditions.NewListenerHostnameConflict(msg)...)
+			return
+		}
+
+		// Only add valid listener to the map for future conflict detection
+		existingKeys[key] = struct{}{}
+	}
+}
+
 type certRefError struct {
 	msg             string
 	refNotPermitted bool
 }
 
+// FIXME(bjee19): Refactor before release 2.7
+//
+//nolint:gocyclo // will refactor at some point
 func createExternalReferencesForTLSSecretsResolver(
 	gwNs string,
 	resourceResolver resolver.Resolver,
@@ -688,7 +783,13 @@ func createExternalReferencesForTLSSecretsResolver(
 		var certRefErrors []certRefError
 
 		for i, certRef := range l.Source.TLS.CertificateRefs {
-			certRefNs := gwNs
+			var certRefNs string
+			if l.ListenerSetName.Name != "" {
+				certRefNs = l.ListenerSetName.Namespace
+			} else {
+				certRefNs = gwNs
+			}
+
 			if certRef.Namespace != nil {
 				certRefNs = string(*certRef.Namespace)
 			}
@@ -698,9 +799,16 @@ func createExternalReferencesForTLSSecretsResolver(
 				Name:      string(certRef.Name),
 			}
 
-			if certRefNs != gwNs {
-				if !refGrantResolver.refAllowed(toSecret(certRefNsName), fromGateway(gwNs)) {
-					msg := fmt.Sprintf("Certificate ref to secret %s not permitted by any ReferenceGrant", certRefNsName)
+			msg := fmt.Sprintf("Certificate ref to secret %s not permitted by any ReferenceGrant", certRefNsName)
+			if l.ListenerSetName.Name != "" {
+				if certRefNs != l.ListenerSetName.Namespace &&
+					!refGrantResolver.refAllowed(toSecret(certRefNsName), fromListenerSet(l.ListenerSetName.Namespace)) {
+					certRefErrors = append(certRefErrors, certRefError{msg: msg, refNotPermitted: true})
+					continue
+				}
+			} else {
+				if certRefNs != gwNs &&
+					!refGrantResolver.refAllowed(toSecret(certRefNsName), fromGateway(gwNs)) {
 					certRefErrors = append(certRefErrors, certRefError{msg: msg, refNotPermitted: true})
 					continue
 				}
@@ -754,6 +862,65 @@ func createExternalReferencesForTLSSecretsResolver(
 					conditions.NewListenerUnresolvedCertificateRef(msg, reason),
 				)
 			}
+		}
+	}
+}
+
+func createFrontendTLSCaCertReferenceResolver(
+	resourceResolver resolver.Resolver,
+	refGrantResolver *referenceGrantResolver,
+) listenerFrontendTLSCaCertReferenceResolver {
+	return func(l *Listener, gw *Gateway) {
+		if gw.Source.Spec.TLS == nil || gw.Source.Spec.TLS.Frontend == nil {
+			return
+		}
+
+		if l.Source.TLS == nil || (l.Source.TLS.Mode != nil && *l.Source.TLS.Mode != v1.TLSModeTerminate) {
+			return
+		}
+
+		frontend := gw.Source.Spec.TLS.Frontend
+
+		var caCertRefs []v1.ObjectReference
+		var validationMode v1.FrontendValidationModeType
+		var fieldPath *field.Path
+		perPortMatch := false
+
+		for i, port := range frontend.PerPort {
+			if port.TLS.Validation == nil || len(port.TLS.Validation.CACertificateRefs) == 0 {
+				continue
+			}
+			if port.Port == l.Source.Port {
+				caCertRefs = port.TLS.Validation.CACertificateRefs
+				validationMode = port.TLS.Validation.Mode
+				fieldPath = field.NewPath("spec", "tls", "frontend", "perPort").Index(i).Child("tls", "validation")
+				perPortMatch = true
+				break
+			}
+		}
+
+		if !perPortMatch && frontend.Default.Validation != nil &&
+			len(frontend.Default.Validation.CACertificateRefs) > 0 {
+			caCertRefs = frontend.Default.Validation.CACertificateRefs
+			validationMode = frontend.Default.Validation.Mode
+			fieldPath = field.NewPath("spec", "tls", "frontend", "default", "validation")
+		}
+
+		conds := validateFrontendTLS(
+			gw,
+			l,
+			fieldPath,
+			resourceResolver,
+			refGrantResolver,
+			caCertRefs,
+		)
+		l.Conditions = append(l.Conditions, conds...)
+		l.ValidationMode = validationMode
+		l.CACertificateRefs = caCertRefs
+
+		if l.ValidationMode == v1.AllowInsecureFallback {
+			msg := "Validation Mode: AllowInsecureFallback is set for at least one listener"
+			gw.Conditions = append(gw.Conditions, conditions.NewGatewayInsecureFrontendValidationMode(msg))
 		}
 	}
 }
@@ -855,4 +1022,155 @@ func createOverlappingTLSConfigResolver() listenerConflictResolver {
 
 		listenersByPort[port] = append(listenersByPort[port], l)
 	}
+}
+
+// validateFrontendTLS validates and resolves the CA certificate references
+// for a listener configured with frontend TLS.
+// Returns conditions related to invalid CA certificate references.
+func validateFrontendTLS(
+	gw *Gateway,
+	listener *Listener,
+	path *field.Path,
+	resourceResolver resolver.Resolver,
+	refGrantResolver *referenceGrantResolver,
+	caCertRefs []v1.ObjectReference,
+) []conditions.Condition {
+	if gw.Source.Spec.TLS == nil || gw.Source.Spec.TLS.Frontend == nil {
+		return []conditions.Condition{}
+	}
+
+	var conds []conditions.Condition
+	refNotPermittedCount := 0
+	allowedKinds := []string{kinds.Secret, kinds.ConfigMap}
+
+	for _, cert := range caCertRefs {
+		if kindOrGroupCond := validateObjectRefKindAndGroup(
+			cert,
+			path,
+			allowedKinds,
+		); kindOrGroupCond != (conditions.Condition{}) {
+			conds = append(conds, kindOrGroupCond)
+			continue
+		}
+
+		certNsName := getFrontendTLSCertRefNsName(cert, gw.Source)
+		resourceType := getFrontendTLSCertResourceType(cert.Kind)
+
+		if refNotPermittedCond := resolveCrossNamespaceRefGrant(
+			cert,
+			certNsName,
+			gw.Source.Namespace,
+			refGrantResolver,
+		); refNotPermittedCond != (conditions.Condition{}) {
+			gw.Conditions = append(gw.Conditions, refNotPermittedCond)
+			refNotPermittedCount++
+			continue
+		}
+
+		if err := resourceResolver.Resolve(
+			resourceType,
+			*certNsName,
+			resolver.WithExpectedSecretKey(secrets.CAKey),
+		); err != nil {
+			valErr := field.Invalid(path.Child("caCertificateRefs"), certNsName, err.Error())
+			msg := helpers.CapitalizeString(valErr.Error())
+			conds = append(conds, conditions.NewListenerInvalidCaCertificateRef(msg))
+			continue
+		}
+	}
+
+	totalConds := len(conds) + refNotPermittedCount
+	if refNotPermittedCount > 0 {
+		msg := "Frontend TLS CA certificate refs are not permitted by any ReferenceGrant"
+		conds = append(conds, conditions.NewListenerUnresolvedCertificateRef(
+			msg,
+			string(v1.ListenerReasonRefNotPermitted),
+		))
+	}
+
+	if totalConds > 0 && totalConds == len(caCertRefs) {
+		msg := "All frontend TLS CA certificate refs are invalid for this listener"
+		conds = append(conds, conditions.NewListenerInvalidNoValidCACertificate(msg)...)
+		listener.Valid = false
+		return conds
+	}
+
+	return conds
+}
+
+// validateObjectRefKindAndGroup checks if the ObjectReference has an allowed Kind and Group.
+func validateObjectRefKindAndGroup(
+	ref v1.ObjectReference,
+	path *field.Path,
+	allowedKinds []string,
+) conditions.Condition {
+	if !slices.Contains(allowedKinds, string(ref.Kind)) {
+		valErr := field.NotSupported(path, ref.Kind, allowedKinds)
+		msg := helpers.CapitalizeString(valErr.Error())
+		return conditions.NewListenerInvalidCaCertificateKind(msg)
+	}
+
+	if ref.Group != "" && ref.Group != "core" {
+		valErr := field.NotSupported(path, ref.Group, []string{"core", ""})
+		msg := helpers.CapitalizeString(valErr.Error())
+		return conditions.NewListenerInvalidCaCertificateKind(msg)
+	}
+
+	return conditions.Condition{}
+}
+
+// getFrontendTLSCertResourceType returns the resource type for a given kind.
+func getFrontendTLSCertResourceType(kind v1.Kind) resolver.ResourceType {
+	switch kind {
+	case kinds.Secret:
+		return resolver.ResourceTypeSecret
+	case kinds.ConfigMap:
+		return resolver.ResourceTypeConfigMap
+	default:
+		return ""
+	}
+}
+
+// resolveCrossNamespaceRefGrant checks if a cross-namespace reference is allowed by any ReferenceGrant.
+// Checks for both Secret and ConfigMap references.
+func resolveCrossNamespaceRefGrant(
+	ref v1.ObjectReference,
+	nsName *types.NamespacedName,
+	gwNs string,
+	refGrantResolver *referenceGrantResolver,
+) conditions.Condition {
+	if nsName.Namespace == gwNs {
+		return conditions.Condition{}
+	}
+
+	switch ref.Kind {
+	case kinds.Secret:
+		if !refGrantResolver.refAllowed(toSecret(*nsName), fromGateway(gwNs)) {
+			msg := fmt.Sprintf("secret ref %s not permitted by any ReferenceGrant", nsName)
+			return conditions.NewGatewayRefNotPermitted(msg)
+		}
+	case kinds.ConfigMap:
+		if !refGrantResolver.refAllowed(toConfigMap(*nsName), fromGateway(gwNs)) {
+			msg := fmt.Sprintf("configmap ref %s not permitted by any ReferenceGrant", nsName)
+			return conditions.NewGatewayRefNotPermitted(msg)
+		}
+	}
+	return conditions.Condition{}
+}
+
+// getFrontendTLSCertRefNsName returns a NamespacedName
+// of the Secret or ConfigMap referenced by the Gateway for frontend TLS.
+func getFrontendTLSCertRefNsName(
+	cert v1.ObjectReference,
+	gw *v1.Gateway,
+) *types.NamespacedName {
+	caRefNs := gw.Namespace
+	if cert.Namespace != nil {
+		caRefNs = string(*cert.Namespace)
+	}
+	caCertNsName := &types.NamespacedName{
+		Namespace: caRefNs,
+		Name:      string(cert.Name),
+	}
+	return caCertNsName
 }

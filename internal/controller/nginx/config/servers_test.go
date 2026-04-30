@@ -198,6 +198,8 @@ func TestExecuteServers(t *testing.T) {
 		"ssl_ciphers ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384:HIGH:!aNULL:!MD5;": 1,
 		"ssl_prefer_server_ciphers on;":                     1,
 		"proxy_ssl_server_name on;":                         1,
+		"proxy_ssl_verify on;":                              1,
+		"proxy_ssl_verify_depth 4;":                         1,
 		"status_zone":                                       0,
 		"include /etc/nginx/includes/location-snippet.conf": 1,
 		"include /etc/nginx/includes/server-snippet.conf":   1,
@@ -6782,4 +6784,269 @@ func TestExistingExactPathSet(t *testing.T) {
 			g.Expect(keys).To(ConsistOf(test.expPaths))
 		})
 	}
+}
+
+func TestBuildHTTPSSLFrontendTLS(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name                      string
+		ssl                       *dataplane.SSL
+		expectedClientCertificate string
+		expectedVerifyClient      string
+		expectedRequireVerified   bool
+	}{
+		{
+			name: "frontend TLS disabled by default",
+			ssl: &dataplane.SSL{
+				KeyPairIDs: []dataplane.SSLKeyPairID{"test-keypair"},
+			},
+			expectedClientCertificate: "",
+			expectedVerifyClient:      "",
+			expectedRequireVerified:   false,
+		},
+		{
+			name: "frontend TLS client certificate verification enabled",
+			ssl: &dataplane.SSL{
+				KeyPairIDs:          []dataplane.SSLKeyPairID{"test-keypair"},
+				ClientCertBundleID:  dataplane.CertBundleID("test-ca-bundle"),
+				VerifyClient:        dataplane.SSLVerifyClientOn,
+				RequireVerifiedCert: true,
+			},
+			expectedClientCertificate: generateCertBundleFileName(dataplane.CertBundleID("test-ca-bundle")),
+			expectedVerifyClient:      string(dataplane.SSLVerifyClientOn),
+			expectedRequireVerified:   true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			result := buildHTTPSSL(test.ssl)
+
+			g.Expect(result.ClientCertificate).To(Equal(test.expectedClientCertificate))
+			g.Expect(result.VerifyClient).To(Equal(test.expectedVerifyClient))
+			g.Expect(result.RequireVerifiedCert).To(Equal(test.expectedRequireVerified))
+			g.Expect(result.Certificates).To(Equal([]string{generatePEMFileName(dataplane.SSLKeyPairID("test-keypair"))}))
+			g.Expect(result.CertificateKeys).To(Equal([]string{generatePEMFileName(dataplane.SSLKeyPairID("test-keypair"))}))
+		})
+	}
+}
+
+func TestExecuteServers_FrontendTLS(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		ssl             *dataplane.SSL
+		name            string
+		expectedPresent []string
+		expectedAbsent  []string
+		isDefault       bool
+	}{
+		{
+			name:      "frontend TLS disabled",
+			isDefault: false,
+			ssl: &dataplane.SSL{
+				KeyPairIDs: []dataplane.SSLKeyPairID{"test-keypair"},
+			},
+			expectedPresent: []string{
+				"ssl_certificate /etc/nginx/secrets/test-keypair.pem;",
+				"ssl_certificate_key /etc/nginx/secrets/test-keypair.pem;",
+			},
+			expectedAbsent: []string{
+				"ssl_client_certificate ",
+				"ssl_verify_client ",
+				"ssl_verify_depth ",
+				"error_page 495 496 = @frontend_tls_verify_failed;",
+				"location @frontend_tls_verify_failed {",
+				"return 444;",
+			},
+		},
+		{
+			name:      "frontend TLS enabled",
+			isDefault: false,
+			ssl: &dataplane.SSL{
+				KeyPairIDs:          []dataplane.SSLKeyPairID{"test-keypair"},
+				ClientCertBundleID:  dataplane.CertBundleID("test-ca-bundle"),
+				VerifyClient:        dataplane.SSLVerifyClientOn,
+				RequireVerifiedCert: true,
+			},
+			expectedPresent: []string{
+				"ssl_certificate /etc/nginx/secrets/test-keypair.pem;",
+				"ssl_certificate_key /etc/nginx/secrets/test-keypair.pem;",
+				"ssl_client_certificate " + generateCertBundleFileName(dataplane.CertBundleID("test-ca-bundle")) + ";",
+				"ssl_verify_client on;",
+				"ssl_verify_depth ",
+				"error_page 495 496 = @frontend_tls_verify_failed;",
+				"location @frontend_tls_verify_failed {",
+				"return 444;",
+			},
+		},
+		{
+			name:      "frontend TLS enabled, with mode: AllowInsecureFallback",
+			isDefault: false,
+			ssl: &dataplane.SSL{
+				KeyPairIDs:   []dataplane.SSLKeyPairID{"test-keypair"},
+				VerifyClient: dataplane.SSLVerifyClientOptionalNoCA,
+			},
+			expectedPresent: []string{
+				"ssl_certificate /etc/nginx/secrets/test-keypair.pem;",
+				"ssl_certificate_key /etc/nginx/secrets/test-keypair.pem;",
+				"ssl_verify_client optional_no_ca;",
+			},
+			expectedAbsent: []string{
+				"ssl_verify_depth ",
+				"ssl_client_certificate ",
+				"error_page 495 496 = @frontend_tls_verify_failed;",
+				"location @frontend_tls_verify_failed {",
+				"return 444;",
+			},
+		},
+		{
+			name:      "default SSL server without frontend TLS",
+			isDefault: true,
+			ssl: &dataplane.SSL{
+				KeyPairIDs: []dataplane.SSLKeyPairID{"test-keypair"},
+			},
+			expectedPresent: []string{
+				"listen 8443 ssl default_server;",
+				"ssl_certificate /etc/nginx/secrets/test-keypair.pem;",
+				"ssl_certificate_key /etc/nginx/secrets/test-keypair.pem;",
+			},
+			expectedAbsent: []string{
+				"ssl_client_certificate ",
+				"ssl_verify_client ",
+				"ssl_verify_depth ",
+				"error_page 495 496 = @frontend_tls_verify_failed;",
+				"location @frontend_tls_verify_failed {",
+				"return 444;",
+			},
+		},
+		{
+			name:      "default SSL server with frontend TLS enabled",
+			isDefault: true,
+			ssl: &dataplane.SSL{
+				KeyPairIDs:          []dataplane.SSLKeyPairID{"test-keypair"},
+				ClientCertBundleID:  dataplane.CertBundleID("test-ca-bundle"),
+				VerifyClient:        dataplane.SSLVerifyClientOn,
+				RequireVerifiedCert: true,
+			},
+			expectedPresent: []string{
+				"listen 8443 ssl default_server;",
+				"ssl_certificate /etc/nginx/secrets/test-keypair.pem;",
+				"ssl_certificate_key /etc/nginx/secrets/test-keypair.pem;",
+				"ssl_client_certificate " + generateCertBundleFileName(dataplane.CertBundleID("test-ca-bundle")) + ";",
+				"ssl_verify_client on;",
+				"ssl_verify_depth ",
+				"error_page 495 496 = @frontend_tls_verify_failed;",
+				"location @frontend_tls_verify_failed {",
+				"return 444;",
+			},
+			expectedAbsent: []string{},
+		},
+		{
+			name:      "default SSL server with frontend TLS in AllowInsecureFallback mode",
+			isDefault: true,
+			ssl: &dataplane.SSL{
+				KeyPairIDs:   []dataplane.SSLKeyPairID{"test-keypair"},
+				VerifyClient: dataplane.SSLVerifyClientOptionalNoCA,
+			},
+			expectedPresent: []string{
+				"listen 8443 ssl default_server;",
+				"ssl_certificate /etc/nginx/secrets/test-keypair.pem;",
+				"ssl_certificate_key /etc/nginx/secrets/test-keypair.pem;",
+				"ssl_verify_client optional_no_ca;",
+			},
+			expectedAbsent: []string{
+				"ssl_client_certificate ",
+				"ssl_verify_depth ",
+				"error_page 495 496 = @frontend_tls_verify_failed;",
+				"location @frontend_tls_verify_failed {",
+				"return 444;",
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			var server dataplane.VirtualServer
+			if test.isDefault {
+				server = dataplane.VirtualServer{
+					IsDefault: true,
+					Port:      8443,
+					SSL:       test.ssl,
+				}
+			} else {
+				server = dataplane.VirtualServer{
+					Hostname: "example.com",
+					Port:     8443,
+					SSL:      test.ssl,
+				}
+			}
+
+			conf := dataplane.Configuration{
+				SSLServers: []dataplane.VirtualServer{server},
+			}
+
+			gen := GeneratorImpl{}
+			results := gen.executeServers(conf, &policiesfakes.FakeGenerator{}, alwaysFalseKeepAliveChecker)
+
+			var httpData string
+			for _, res := range results {
+				if res.dest == httpConfigFile {
+					httpData = string(res.data)
+					break
+				}
+			}
+
+			g.Expect(httpData).NotTo(BeEmpty())
+
+			for _, sub := range test.expectedPresent {
+				g.Expect(httpData).To(ContainSubstring(sub))
+			}
+			for _, sub := range test.expectedAbsent {
+				g.Expect(httpData).NotTo(ContainSubstring(sub))
+			}
+		})
+	}
+}
+
+//nolint:gosec // Tests with mock SSL/TLS configuration data, not real credentials.
+func TestExecuteServers_CORSOptionsShortCircuitPrecedesRewrite(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	serverConfig := http.ServerConfig{
+		Servers: []http.Server{
+			{
+				ServerName: "cafe.example.com",
+				Listen:     "8080",
+				Locations: []http.Location{
+					{
+						Path:      "/api/",
+						Type:      http.ExternalLocationType,
+						ProxyPass: "http://test_coffee_80$request_uri",
+						Rewrites:  []string{"^/api(?:/([^?]*))? /$1?$args? break"},
+						CORSHeaders: []http.Header{
+							{Name: "Access-Control-Allow-Origin", Value: "$cors_allowed_origin_server0_path0_match0"},
+							{Name: "Access-Control-Allow-Methods", Value: "GET, POST"},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	rendered := string(helpers.MustExecuteTemplate(serversTemplate, serverConfig))
+
+	optionsIdx := strings.Index(rendered, "if ($request_method = OPTIONS)")
+	rewriteIdx := strings.Index(rendered, "rewrite ^/api")
+
+	g.Expect(optionsIdx).To(BeNumerically(">=", 0))
+	g.Expect(rewriteIdx).To(BeNumerically(">", optionsIdx))
 }

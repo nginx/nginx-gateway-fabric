@@ -25,6 +25,15 @@ proxy_buffers {{ .ProxyBuffers }};
 {{- if .ProxyBusyBuffersSize }}
 proxy_busy_buffers_size {{ .ProxyBusyBuffersSize }};
 {{- end }}
+{{- if .ProxyConnectTimeout }}
+proxy_connect_timeout {{ .ProxyConnectTimeout }};
+{{- end }}
+{{- if .ProxyReadTimeout }}
+proxy_read_timeout {{ .ProxyReadTimeout }};
+{{- end }}
+{{- if .ProxySendTimeout }}
+proxy_send_timeout {{ .ProxySendTimeout }};
+{{- end }}
 `
 
 type proxySettings struct {
@@ -32,6 +41,9 @@ type proxySettings struct {
 	ProxyBufferSize         string
 	ProxyBuffers            string
 	ProxyBusyBuffersSize    string
+	ProxyConnectTimeout     string
+	ProxyReadTimeout        string
+	ProxySendTimeout        string
 }
 
 func getProxySettings(spec ngfAPI.ProxySettingsPolicySpec) proxySettings {
@@ -56,6 +68,20 @@ func getProxySettings(spec ngfAPI.ProxySettingsPolicySpec) proxySettings {
 
 		if spec.Buffering.BusyBuffersSize != nil {
 			settings.ProxyBusyBuffersSize = string(*spec.Buffering.BusyBuffersSize)
+		}
+	}
+
+	if spec.Timeout != nil {
+		if spec.Timeout.Connect != nil {
+			settings.ProxyConnectTimeout = string(*spec.Timeout.Connect)
+		}
+
+		if spec.Timeout.Read != nil {
+			settings.ProxyReadTimeout = string(*spec.Timeout.Read)
+		}
+
+		if spec.Timeout.Send != nil {
+			settings.ProxySendTimeout = string(*spec.Timeout.Send)
 		}
 	}
 

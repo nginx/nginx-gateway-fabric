@@ -113,8 +113,40 @@ nginxGateway:
     # -- Port in which the readiness endpoint is exposed.
     port: 8081
 
+    # @schema
+    # type: integer
+    # minimum: 0
+    # @schema
     # -- The number of seconds after the Pod has started before the readiness probes are initiated.
     initialDelaySeconds: 3
+
+    # @schema
+    # type: integer
+    # minimum: 1
+    # @schema
+    # -- How often (in seconds) to perform the readiness probe.
+    periodSeconds: 10
+
+    # @schema
+    # type: integer
+    # minimum: 1
+    # @schema
+    # -- The number of retries after a failed probe before marking the container as Unready.
+    failureThreshold: 3
+
+    # @schema
+    # type: integer
+    # minimum: 1
+    # @schema
+    # -- Number of seconds after which the probe times out.
+    timeoutSeconds: 1
+
+    # @schema
+    # type: integer
+    # minimum: 1
+    # @schema
+    # -- Minimum consecutive successes for the probe to be considered successful after having failed.
+    successThreshold: 1
 
   # -- The image configuration for the NGINX Gateway Fabric control plane.
   image:
@@ -133,8 +165,25 @@ nginxGateway:
     # -- Enable the collection of product telemetry.
     enable: true
 
+  # @schema
+  # type: object
+  # description: The lifecycle hooks for the nginx-gateway container. See https://kubernetes.io/docs/tasks/configure-pod-container/define-lifecycle-hook/
+  # @schema
   # -- The lifecycle of the nginx-gateway container.
   lifecycle: {}
+  # -- Example:
+  #   preStop:
+  #     exec:
+  #       command:
+  #         - /bin/sh
+  #         - -c
+  #         - sleep 10
+  #   postStart:
+  #     exec:
+  #       command:
+  #         - /bin/sh
+  #         - -c
+  #         - echo "Started"
 
   # -- The resource requests and/or limits of the nginx-gateway container.
   resources: {}
@@ -623,8 +672,25 @@ nginx:
     # -- The resource requirements of the NGINX container. You should set this value if you want to use dataplane Autoscaling(HPA).
     resources: {}
 
+    # @schema
+    # type: object
+    # description: The lifecycle hooks for the NGINX container. See https://kubernetes.io/docs/tasks/configure-pod-container/define-lifecycle-hook/
+    # @schema
     # -- The lifecycle of the NGINX container.
     lifecycle: {}
+    # -- Example:
+    #   preStop:
+    #     exec:
+    #       command:
+    #         - /bin/sh
+    #         - -c
+    #         - sleep 10
+    #   postStart:
+    #     exec:
+    #       command:
+    #         - /bin/sh
+    #         - -c
+    #         - echo "Started"
 
     # -- volumeMounts are the additional volume mounts for the NGINX container.
     volumeMounts: []

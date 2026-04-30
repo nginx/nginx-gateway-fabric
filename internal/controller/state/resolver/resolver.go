@@ -351,7 +351,11 @@ func (r *ResourceResolver) Resolve(resType ResourceType, nsname types.Namespaced
 	defer r.lock.Unlock()
 
 	if !exist {
-		resource.setError(fmt.Errorf("%s %s does not exist", resType, nsname.String()))
+		errMsg := fmt.Sprintf("%s %s does not exist", resType, nsname.String())
+		if resType == ResourceTypeConfigMap {
+			errMsg += ", or is missing an expected key"
+		}
+		resource.setError(fmt.Errorf("%s", errMsg))
 		r.resolvedResources[key] = resource
 		return resource.error()
 	}

@@ -20,6 +20,8 @@ import (
 type Gateway struct {
 	// LatestReloadResult is the result of the last nginx reload attempt.
 	LatestReloadResult NginxReloadResult
+	// AttachedListenerSets contains the ListenerSets that are attached and accepted by this Gateway.
+	AttachedListenerSets map[types.NamespacedName]*ListenerSet
 	// Source is the corresponding Gateway resource.
 	Source *v1.Gateway
 	// NginxProxy is the NginxProxy referenced by this Gateway.
@@ -30,6 +32,11 @@ type Gateway struct {
 	EffectiveNginxProxy *EffectiveNginxProxy
 	// SecretRef is the namespaced name of the secret referenced by the Gateway for backend TLS.
 	SecretRef *types.NamespacedName
+	// ListenerNamespaces holds the allowed listener namespaces for this Gateway, if specified.
+	ListenerNamespaces *v1.ListenerNamespaces
+	// ListenerFactory is used to create listeners for this Gateway. This is used to validate
+	// listeners when they are created by the Gateway's Listeners, or merged via ListenerSets.
+	ListenerFactory *listenerConfiguratorFactory
 	// DeploymentName is the name of the nginx Deployment associated with this Gateway.
 	DeploymentName types.NamespacedName
 	// Listeners include the listeners of the Gateway.
@@ -80,6 +87,7 @@ func buildGateways(
 	for gwNsName, gw := range gws {
 		var np *NginxProxy
 		var npNsName types.NamespacedName
+		var listenerNamespaces *v1.ListenerNamespaces
 		if gw.Spec.Infrastructure != nil && gw.Spec.Infrastructure.ParametersRef != nil {
 			npNsName = types.NamespacedName{Namespace: gw.Namespace, Name: gw.Spec.Infrastructure.ParametersRef.Name}
 			np = nps[npNsName]
@@ -94,18 +102,15 @@ func buildGateways(
 
 		conds, valid, secretRefNsName := validateGateway(gw, gc, np, resourceResolver, refGrantResolver)
 
-		protectedPorts := make(ProtectedPorts)
-		if port, enabled := MetricsEnabledForNginxProxy(effectiveNginxProxy); enabled {
-			metricsPort := config.DefaultNginxMetricsPort
-			if port != nil {
-				metricsPort = *port
-			}
-			protectedPorts[metricsPort] = "MetricsPort"
-		}
+		protectedPorts := buildProtectedPorts(effectiveNginxProxy)
 
 		deploymentName := types.NamespacedName{
 			Namespace: gw.GetNamespace(),
 			Name:      controller.CreateNginxResourceName(gw.GetName(), string(gw.Spec.GatewayClassName)),
+		}
+
+		if gw.Spec.AllowedListeners != nil && gw.Spec.AllowedListeners.Namespaces != nil {
+			listenerNamespaces = gw.Spec.AllowedListeners.Namespaces
 		}
 
 		if !valid {
@@ -117,18 +122,22 @@ func buildGateways(
 				Conditions:          conds,
 				DeploymentName:      deploymentName,
 				SecretRef:           secretRefNsName,
+				ListenerNamespaces:  listenerNamespaces,
 			}
 		} else {
-			builtGateways[gwNsName] = &Gateway{
+			gateway := &Gateway{
 				Source:              gw,
-				Listeners:           buildListeners(gw, resourceResolver, refGrantResolver, protectedPorts),
 				NginxProxy:          np,
 				EffectiveNginxProxy: effectiveNginxProxy,
 				Valid:               true,
 				Conditions:          conds,
 				DeploymentName:      deploymentName,
 				SecretRef:           secretRefNsName,
+				ListenerNamespaces:  listenerNamespaces,
+				ListenerFactory:     newListenerConfiguratorFactory(gw, resourceResolver, refGrantResolver, protectedPorts),
 			}
+			gateway.Listeners = buildListeners(gateway, gw.Spec.Listeners, gwNsName, types.NamespacedName{})
+			builtGateways[gwNsName] = gateway
 		}
 	}
 
@@ -150,15 +159,15 @@ func validateGatewayRefs(
 	conds, parametersRefErrMsg := validateParametersRef(gw, npCfg)
 	paramsRefValid := len(conds) == 0
 
-	var secretNsName *types.NamespacedName
-	var tlsCond conditions.Condition
+	var backendSecretNsName *types.NamespacedName
+	var backendTLSCond conditions.Condition
 
 	if gw.Spec.TLS != nil {
 		path := field.NewPath("spec.tls")
 
 		if gw.Spec.TLS.Backend != nil {
 			backendPath := path.Child("backend")
-			tlsCond, secretNsName = validateGatewayTLSBackend(
+			backendTLSCond, backendSecretNsName = validateGatewayTLSBackend(
 				gw,
 				backendPath,
 				resourceResolver,
@@ -166,18 +175,18 @@ func validateGatewayRefs(
 			)
 		}
 	}
-	tlsValid := tlsCond == conditions.Condition{}
+	tlsValid := backendTLSCond == conditions.Condition{}
 
 	switch {
 	case paramsRefValid && tlsValid:
 		conds = append(conds, conditions.NewGatewayResolvedRefs())
 	case !tlsValid:
-		conds = append(conds, tlsCond)
+		conds = append(conds, backendTLSCond)
 	default:
 		conds = append(conds, conditions.NewGatewayRefInvalid(parametersRefErrMsg))
 	}
 
-	return conds, secretNsName
+	return conds, backendSecretNsName
 }
 
 // validateParametersRef validates the parametersRef field of the Gateway.
@@ -404,7 +413,7 @@ func (g *Gateway) GetReferencedRateLimitPolicies(
 // isRouteAttachedToGateway checks if the given route is attached to this gateway.
 func (g *Gateway) isRouteAttachedToGateway(route *L7Route, gatewayNsName types.NamespacedName) bool {
 	for _, parentRef := range route.ParentRefs {
-		if parentRef.Gateway != nil && parentRef.Gateway.NamespacedName == gatewayNsName {
+		if parentRef.Kind == kinds.Gateway && parentRef.NamespacedName == gatewayNsName {
 			return true
 		}
 	}
@@ -441,15 +450,27 @@ func (g *Gateway) collectSnippetsFiltersFromRoute(
 	}
 }
 
+// buildProtectedPorts creates protected ports from an EffectiveNginxProxy configuration.
+func buildProtectedPorts(effectiveNginxProxy *EffectiveNginxProxy) ProtectedPorts {
+	protectedPorts := make(ProtectedPorts)
+	if port, enabled := MetricsEnabledForNginxProxy(effectiveNginxProxy); enabled {
+		metricsPort := config.DefaultNginxMetricsPort
+		if port != nil {
+			metricsPort = *port
+		}
+		protectedPorts[metricsPort] = "MetricsPort"
+	}
+	return protectedPorts
+}
+
 func validateUnsupportedGatewayFields(gw *v1.Gateway) []conditions.Condition {
 	var conds []conditions.Condition
 
-	if gw.Spec.AllowedListeners != nil {
-		conds = append(conds, conditions.NewGatewayAcceptedUnsupportedField("AllowedListeners"))
-	}
-
-	if gw.Spec.TLS != nil && gw.Spec.TLS.Frontend != nil {
-		conds = append(conds, conditions.NewGatewayAcceptedUnsupportedField("TLS.Frontend"))
+	if gw.Spec.DefaultScope != "" {
+		conds = append(conds, conditions.NewGatewayAcceptedUnsupportedField(field.Forbidden(
+			field.NewPath("spec", "defaultScope"),
+			"DefaultScope",
+		).Error()))
 	}
 
 	return conds

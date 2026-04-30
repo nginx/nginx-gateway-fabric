@@ -46,6 +46,10 @@ const (
 	// references is invalid.
 	RouteReasonInvalidGateway v1.RouteConditionReason = "InvalidGateway"
 
+	// RouteReasonInvalidListenerSet is used with the "Accepted" (False) condition
+	// when the Route references an invalid ListenerSet.
+	RouteReasonInvalidListenerSet v1.RouteConditionReason = "InvalidListenerSet"
+
 	// RouteReasonInvalidListener is used with the "Accepted" condition when the Route references an invalid listener.
 	RouteReasonInvalidListener v1.RouteConditionReason = "InvalidListener"
 
@@ -167,6 +171,10 @@ const (
 	// when a policy cannot be applied due to the ancestor limit being reached.
 	PolicyMessageAncestorLimitReached = "Policies cannot be applied because the ancestor status list " +
 		"has reached the maximum size. The following policies have been ignored:"
+
+	// ListenerSetReasonParentNotProgrammed is used with the "Programmed" condition when the parent
+	// Gateway of a ListenerSet is not programmed.
+	ListenerSetReasonParentNotProgrammed v1.ListenerSetConditionReason = "ParentNotProgrammed"
 )
 
 // Condition defines a condition to be reported in the status of resources.
@@ -533,6 +541,17 @@ func NewRouteInvalidGateway() Condition {
 	}
 }
 
+// NewRouteInvalidListenerSet returns a Condition that indicates that the Route is not Accepted because
+// the ListenerSet it references is invalid.
+func NewRouteInvalidListenerSet() Condition {
+	return Condition{
+		Type:    string(v1.RouteConditionAccepted),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(RouteReasonInvalidListenerSet),
+		Message: "The ListenerSet is invalid",
+	}
+}
+
 // NewRouteNoMatchingParent returns a Condition that indicates that the Route is not Accepted because
 // it specifies a Port and/or SectionName that does not match any Listeners in the Gateway.
 func NewRouteNoMatchingParent() Condition {
@@ -571,8 +590,8 @@ func NewRouteResolvedRefsInvalidFilter(msg string) Condition {
 // the NoConflicts condition is excluded to avoid conflicting condition states.
 func NewDefaultListenerConditions(existingConditions []Condition) []Condition {
 	defaultConds := []Condition{
-		NewListenerAccepted(),
 		NewListenerProgrammed(),
+		NewListenerAccepted(),
 	}
 
 	// Only add ResolvedRefs=true if there are no existing ResolvedRefs conditions
@@ -588,7 +607,7 @@ func NewDefaultListenerConditions(existingConditions []Condition) []Condition {
 	return defaultConds
 }
 
-// hasResolvedRefsConditions checks if there are any existing ResolvedRefs conditions.
+// hasResolvedRefsConditions checks if the Listener has any ResolvedRefs=False conditions.
 func hasResolvedRefsConditions(conditions []Condition) bool {
 	for _, cond := range conditions {
 		if cond.Type == string(v1.ListenerConditionResolvedRefs) {
@@ -656,6 +675,28 @@ func NewListenerNotProgrammedInvalid(msg string) Condition {
 		Type:    string(v1.ListenerConditionProgrammed),
 		Status:  metav1.ConditionFalse,
 		Reason:  string(v1.ListenerReasonInvalid),
+		Message: msg,
+	}
+}
+
+// NewListenerNotProgrammedHostnameConflict returns a Condition that indicates the Listener is not programmed because
+// it has a hostname conflict. The provided message contains the details of the conflict.
+func NewListenerNotProgrammedHostnameConflict(msg string) Condition {
+	return Condition{
+		Type:    string(v1.ListenerConditionProgrammed),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(v1.ListenerReasonHostnameConflict),
+		Message: msg,
+	}
+}
+
+// NewListenerNotProgrammedProtocolConflict returns a Condition that indicates the Listener is not programmed because
+// it has a protocol conflict. The provided message contains the details of the conflict.
+func NewListenerNotProgrammedProtocolConflict(msg string) Condition {
+	return Condition{
+		Type:    string(v1.ListenerConditionProgrammed),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(v1.ListenerReasonProtocolConflict),
 		Message: msg,
 	}
 }
@@ -760,7 +801,7 @@ func NewListenerProtocolConflict(msg string) []Condition {
 			Reason:  string(v1.ListenerReasonProtocolConflict),
 			Message: msg,
 		},
-		NewListenerNotProgrammedInvalid(msg),
+		NewListenerNotProgrammedProtocolConflict(msg),
 	}
 }
 
@@ -780,7 +821,7 @@ func NewListenerHostnameConflict(msg string) []Condition {
 			Reason:  string(v1.ListenerReasonHostnameConflict),
 			Message: msg,
 		},
-		NewListenerNotProgrammedInvalid(msg),
+		NewListenerNotProgrammedHostnameConflict(msg),
 	}
 }
 
@@ -1002,6 +1043,54 @@ func NewGatewayNotProgrammedInvalid(msg string) Condition {
 		Status:  metav1.ConditionFalse,
 		Reason:  string(v1.GatewayReasonInvalid),
 		Message: msg,
+	}
+}
+
+// NewGatewayInsecureFrontendValidationMode returns a Condition that indicates
+// the Gateway is accepted, but is using an insecure frontend validation mode.
+func NewGatewayInsecureFrontendValidationMode(msg string) Condition {
+	return Condition{
+		Type:    string(v1.GatewayConditionInsecureFrontendValidationMode),
+		Status:  metav1.ConditionTrue,
+		Reason:  string(v1.GatewayReasonConfigurationChanged),
+		Message: msg,
+	}
+}
+
+// NewListenerInvalidCaCertificateRef returns a Condition indicating
+// that a CA CertificateRef for a Listener is invalid.
+func NewListenerInvalidCaCertificateRef(msg string) Condition {
+	return Condition{
+		Type:    string(v1.ListenerConditionResolvedRefs),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(v1.ListenerReasonInvalidCACertificateRef),
+		Message: msg,
+	}
+}
+
+// NewListenerInvalidCaCertificateKind returns a Condition indicating
+// that a CA CertificateRef Kind for a Listener is invalid.
+func NewListenerInvalidCaCertificateKind(msg string) Condition {
+	return Condition{
+		Type:    string(v1.ListenerConditionResolvedRefs),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(v1.ListenerReasonInvalidCACertificateKind),
+		Message: msg,
+	}
+}
+
+// NewListenerInvalidNoValidCACertificate returns Conditions indicating
+// that all CA Certificates for a Listener are invalid.
+// It marks the listener as not Accepted and not Programmed.
+func NewListenerInvalidNoValidCACertificate(msg string) []Condition {
+	return []Condition{
+		{
+			Type:    string(v1.ListenerConditionAccepted),
+			Status:  metav1.ConditionFalse,
+			Reason:  string(v1.ListenerReasonNoValidCACertificate),
+			Message: msg,
+		},
+		NewListenerNotProgrammedInvalid(msg),
 	}
 }
 
@@ -1348,6 +1437,111 @@ func NewInferencePoolInvalidExtensionref(msg string) Condition {
 		Type:    string(inference.InferencePoolConditionResolvedRefs),
 		Status:  metav1.ConditionFalse,
 		Reason:  string(inference.InferencePoolReasonInvalidExtensionRef),
+		Message: msg,
+	}
+}
+
+// NewDefaultListenerSetConditions returns the default conditions that must be present in the status of a ListenerSet.
+func NewDefaultListenerSetConditions() []Condition {
+	return []Condition{
+		NewListenerSetAccepted(),
+		NewListenerSetProgrammed(),
+	}
+}
+
+// NewListenerSetAccepted returns a Condition that indicates that the ListenerSet is accepted.
+func NewListenerSetAccepted() Condition {
+	return Condition{
+		Type:    string(v1.ListenerSetConditionAccepted),
+		Status:  metav1.ConditionTrue,
+		Reason:  string(v1.ListenerSetReasonAccepted),
+		Message: "The ListenerSet is accepted",
+	}
+}
+
+// NewListenerSetNotAllowed returns a Condition that indicates that the ListenerSet is not allowed
+// by the parent Gateway.
+func NewListenerSetNotAllowed(msg string) Condition {
+	return Condition{
+		Type:    string(v1.ListenerSetConditionAccepted),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(v1.ListenerSetReasonNotAllowed),
+		Message: msg,
+	}
+}
+
+// NewListenerSetParentNotAccepted returns a Condition that indicates that the ListenerSet is not accepted
+// because the parent Gateway is not accepted.
+func NewListenerSetParentNotAccepted(msg string) Condition {
+	return Condition{
+		Type:    string(v1.ListenerSetConditionAccepted),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(v1.ListenerSetReasonParentNotAccepted),
+		Message: msg,
+	}
+}
+
+// NewListenerSetListenersNotValid returns a Condition that indicates that the ListenerSet has
+// invalid listeners.
+func NewListenerSetListenersNotValid(msg string) Condition {
+	return Condition{
+		Type:    string(v1.ListenerSetConditionAccepted),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(v1.ListenerSetReasonListenersNotValid),
+		Message: msg,
+	}
+}
+
+// NewListenerSetProgrammed returns a Condition that indicates that the ListenerSet is programmed.
+func NewListenerSetProgrammed() Condition {
+	return Condition{
+		Type:    string(v1.ListenerSetConditionProgrammed),
+		Status:  metav1.ConditionTrue,
+		Reason:  string(v1.ListenerSetReasonProgrammed),
+		Message: "The ListenerSet is programmed",
+	}
+}
+
+// NewListenerSetNotProgrammedInvalid returns a Condition that indicates that the ListenerSet is
+// not programmed due to invalid configuration.
+func NewListenerSetNotProgrammedInvalid(msg string) Condition {
+	return Condition{
+		Type:    string(v1.ListenerSetConditionProgrammed),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(v1.ListenerSetReasonInvalid),
+		Message: msg,
+	}
+}
+
+// NewListenerSetNotProgrammedListenersNotValid returns a Condition that indicates that the
+// ListenerSet is not programmed due to invalid listeners.
+func NewListenerSetNotProgrammedListenersNotValid(msg string) Condition {
+	return Condition{
+		Type:    string(v1.ListenerSetConditionProgrammed),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(v1.ListenerSetReasonListenersNotValid),
+		Message: msg,
+	}
+}
+
+// NewListenerSetNotProgrammedNotAllowed returns a Condition that indicates that the ListenerSet
+// is not programmed due to it not being allowed by the parent Gateway.
+func NewListenerSetNotProgrammedNotAllowed(msg string) Condition {
+	return Condition{
+		Type:    string(v1.ListenerSetConditionProgrammed),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(v1.ListenerSetReasonNotAllowed),
+		Message: msg,
+	}
+}
+
+// NewListenerSetNotProgrammedParentNotAccepted returns a Condition that indicates that the ListenerSet
+// is not programmed due to the parent Gateway not being accepted.
+func NewListenerSetNotProgrammedParentNotAccepted(msg string) Condition {
+	return Condition{
+		Type:    string(v1.ListenerSetConditionProgrammed),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(ListenerSetReasonParentNotProgrammed),
 		Message: msg,
 	}
 }

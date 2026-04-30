@@ -90,6 +90,62 @@ func TestGenerate(t *testing.T) {
 			},
 		},
 		{
+			name: "connect timeout populated",
+			policy: &ngfAPIv1alpha1.ProxySettingsPolicy{
+				Spec: ngfAPIv1alpha1.ProxySettingsPolicySpec{
+					Timeout: &ngfAPIv1alpha1.ProxyTimeout{
+						Connect: helpers.GetPointer[ngfAPIv1alpha1.Duration]("5s"),
+					},
+				},
+			},
+			expStrings: []string{
+				"proxy_connect_timeout 5s;",
+			},
+		},
+		{
+			name: "read timeout populated",
+			policy: &ngfAPIv1alpha1.ProxySettingsPolicy{
+				Spec: ngfAPIv1alpha1.ProxySettingsPolicySpec{
+					Timeout: &ngfAPIv1alpha1.ProxyTimeout{
+						Read: helpers.GetPointer[ngfAPIv1alpha1.Duration]("60s"),
+					},
+				},
+			},
+			expStrings: []string{
+				"proxy_read_timeout 60s;",
+			},
+		},
+		{
+			name: "send timeout populated",
+			policy: &ngfAPIv1alpha1.ProxySettingsPolicy{
+				Spec: ngfAPIv1alpha1.ProxySettingsPolicySpec{
+					Timeout: &ngfAPIv1alpha1.ProxyTimeout{
+						Send: helpers.GetPointer[ngfAPIv1alpha1.Duration]("30s"),
+					},
+				},
+			},
+			expStrings: []string{
+				"proxy_send_timeout 30s;",
+			},
+		},
+		{
+			name: "all timeout fields populated",
+			policy: &ngfAPIv1alpha1.ProxySettingsPolicy{
+				Spec: ngfAPIv1alpha1.ProxySettingsPolicySpec{
+					Timeout: &ngfAPIv1alpha1.ProxyTimeout{
+						Connect: helpers.GetPointer[ngfAPIv1alpha1.Duration]("5s"),
+						Read:    helpers.GetPointer[ngfAPIv1alpha1.Duration]("60s"),
+						Send:    helpers.GetPointer[ngfAPIv1alpha1.Duration]("30s"),
+					},
+				},
+			},
+			expStrings: []string{
+				"proxy_connect_timeout 5s;",
+				"proxy_read_timeout 60s;",
+				"proxy_send_timeout 30s;",
+			},
+		},
+		{
 			name: "all buffering fields populated",
 			policy: &ngfAPIv1alpha1.ProxySettingsPolicy{
 				Spec: ngfAPIv1alpha1.ProxySettingsPolicySpec{

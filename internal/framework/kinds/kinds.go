@@ -29,6 +29,8 @@ const (
 	BackendTLSPolicy = "BackendTLSPolicy"
 	// ReferenceGrant is the ReferenceGrant kind.
 	ReferenceGrant = "ReferenceGrant"
+	// ListenerSet is the ListenerSet kind.
+	ListenerSet = "ListenerSet"
 )
 
 // Gateway API Inference Extension kinds.

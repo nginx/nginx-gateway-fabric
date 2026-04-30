@@ -280,7 +280,7 @@ func TestSecretResolver(t *testing.T) {
 				Name:      "valid-ca-cert",
 			},
 			Data: map[string][]byte{
-				secrets.CAKey: []byte("ca-cert-secret"),
+				secrets.CAKey: []byte(caBlock),
 			},
 			Type: v1.SecretTypeOpaque,
 		}
@@ -326,7 +326,7 @@ func TestSecretResolver(t *testing.T) {
 			},
 			Data: map[string][]byte{
 				secrets.ClientSecretKey: []byte("client-secret"),
-				secrets.CAKey:           []byte("ca-cert"),
+				secrets.CAKey:           []byte(caBlock),
 			},
 			Type: v1.SecretTypeOpaque,
 		}
@@ -352,9 +352,23 @@ func TestSecretResolver(t *testing.T) {
 				Name:      "opaque-ca-key-only",
 			},
 			Data: map[string][]byte{
-				secrets.CAKey: []byte("ca-cert"),
+				secrets.CAKey: []byte(caBlock),
 			},
 			Type: v1.SecretTypeOpaque,
+		}
+
+		// tlsNoCa is a TLS secret without a CA certificate.
+		// used to verify that the presence of a CA certificate is required for FrontendTLS Secrets.
+		tlsNoCa = &v1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: "test",
+				Name:      "tls-no-ca",
+			},
+			Data: map[string][]byte{
+				v1.TLSCertKey:       cert,
+				v1.TLSPrivateKeyKey: key,
+			},
+			Type: v1.SecretTypeTLS,
 		}
 	)
 
@@ -428,6 +442,10 @@ func TestSecretResolver(t *testing.T) {
 				NamespacedName: client.ObjectKeyFromObject(opaqueCAKeyOnly),
 				ResourceType:   resolver.ResourceTypeSecret,
 			}: opaqueCAKeyOnly,
+			{
+				NamespacedName: client.ObjectKeyFromObject(tlsNoCa),
+				ResourceType:   resolver.ResourceTypeSecret,
+			}: tlsNoCa,
 		})
 
 	tests := []struct {
@@ -554,6 +572,22 @@ func TestSecretResolver(t *testing.T) {
 			nsname:      client.ObjectKeyFromObject(opaqueCAKeyOnly),
 			resolveOpts: []resolver.ResolveOption{resolver.WithExpectedSecretKey(secrets.CAKey)},
 		},
+		{
+			name:   "tls secret with ca certificate is valid when first resolved without expected key",
+			nsname: client.ObjectKeyFromObject(validSecret3),
+		},
+		{
+			name: "tls secret with ca certificate is valid when resolved again with ca.crt key " +
+				"after being cached without expected key",
+			nsname:      client.ObjectKeyFromObject(validSecret3),
+			resolveOpts: []resolver.ResolveOption{resolver.WithExpectedSecretKey(secrets.CAKey)},
+		},
+		{
+			name:           "tls secret with expected ca.crt key",
+			nsname:         client.ObjectKeyFromObject(tlsNoCa),
+			resolveOpts:    []resolver.ResolveOption{resolver.WithExpectedSecretKey(secrets.CAKey)},
+			expectedErrMsg: "missing expected key \"ca.crt\" in secret test/tls-no-ca",
+		},
 	}
 
 	// Not running tests with t.Run(...) because the last one (getResolvedSecrets) depends on the execution of
@@ -658,6 +692,16 @@ func TestSecretResolver(t *testing.T) {
 		},
 		client.ObjectKeyFromObject(opaqueCAKeyOnly): {
 			Source: opaqueCAKeyOnly,
+		},
+		client.ObjectKeyFromObject(tlsNoCa): {
+			Source: tlsNoCa,
+			CertBundle: secrets.NewCertificateBundle(
+				client.ObjectKeyFromObject(tlsNoCa),
+				"Secret",
+				&secrets.Certificate{
+					TLSCert:       cert,
+					TLSPrivateKey: key,
+				}),
 		},
 	}
 
