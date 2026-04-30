@@ -1245,16 +1245,16 @@ func Test_poller_pollSourceHTTPConditionalTokenPersisted(t *testing.T) {
 
 	poller.pollSource(t.Context(), poller.sources[0])
 
-	// ETag must be saved as the conditional token.
-	g.Expect(poller.bundleStates[bundleKey].conditionalToken).To(Equal(etag))
+	// ETag must be saved in the bundle state.
+	g.Expect(poller.bundleStates[bundleKey].eTag).To(Equal(etag))
 	g.Expect(poller.bundleStates[bundleKey].checksum).To(Equal(newChecksum))
 
-	// Second fetch: verify the stored ETag is forwarded as ConditionalToken.
+	// Second fetch: verify the stored ETag is forwarded as req.ETag.
 	fetcher.FetchPolicyBundleReturns(fetch.Result{Unchanged: true}, nil)
 	poller.pollSource(t.Context(), poller.sources[0])
 
 	_, req := fetcher.FetchPolicyBundleArgsForCall(1)
-	g.Expect(req.ConditionalToken).To(Equal(etag))
+	g.Expect(req.ETag).To(Equal(etag))
 }
 
 // Test_poller_pollSourceLogProfileNIMChecksumUnchanged verifies that NIM log-profile bundles

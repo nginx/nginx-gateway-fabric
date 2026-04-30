@@ -44,10 +44,11 @@ type BundleSource struct {
 }
 
 // bundleState tracks the last known state of a fetched bundle, including the checksum and any
-// conditional-request token (ETag or Last-Modified) for use on subsequent HTTP polls.
+// conditional-request validators (ETag or Last-Modified) for use on subsequent HTTP polls.
 type bundleState struct {
-	checksum         string
-	conditionalToken string // ETag or Last-Modified from the last successful HTTP fetch
+	checksum     string
+	eTag         string
+	lastModified string
 }
 
 // poller handles periodic re-fetching of WAF bundles for a single WAFPolicy.
@@ -283,7 +284,8 @@ func (p *poller) downloadBundle(
 	ctx context.Context, src BundleSource, last bundleState,
 ) (fetch.Result, error) {
 	req := src.Request
-	req.ConditionalToken = last.conditionalToken
+	req.ETag = last.eTag
+	req.LastModified = last.lastModified
 
 	result, err := p.fetchBundle(ctx, src, req)
 	if err != nil {
@@ -309,11 +311,13 @@ func (p *poller) saveBundleState(bundleKey graph.WAFBundleKey, result fetch.Resu
 	state := p.bundleStates[bundleKey]
 	state.checksum = result.Checksum
 	if result.ETag != "" {
-		state.conditionalToken = result.ETag
-	} else if result.LastModified != "" {
-		state.conditionalToken = result.LastModified
+		state.eTag = result.ETag
 	}
-	// If neither ETag nor Last-Modified is present, preserve the previously stored token.
+	if result.LastModified != "" {
+		state.lastModified = result.LastModified
+	}
+	// If ETag or Last-Modified is absent in the response, the previously stored value is preserved
+	// so that servers omitting validators on some responses do not force unconditional GETs.
 	p.bundleStates[bundleKey] = state
 }
 

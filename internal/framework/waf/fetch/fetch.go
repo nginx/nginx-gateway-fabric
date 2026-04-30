@@ -108,11 +108,16 @@ type Request struct {
 	// When set, NGF verifies the bundle after download and rejects it if the checksum differs.
 	// Mutually exclusive with VerifyChecksum. Supported for all source types.
 	ExpectedChecksum string
-	// ConditionalToken is an ETag or Last-Modified value from a previous successful HTTP fetch.
-	// When set, it is sent as If-None-Match or If-Modified-Since on the next request so the
-	// server can respond with 304 Not Modified instead of retransmitting the bundle.
+	// ETag is the value of the ETag response header from the previous successful HTTP fetch.
+	// When set, it is sent as If-None-Match on the next request so the server can respond
+	// with 304 Not Modified instead of retransmitting the bundle. Takes precedence over LastModified.
 	// Only used for plain HTTP sources; ignored for NIM and N1C.
-	ConditionalToken string
+	ETag string
+	// LastModified is the value of the Last-Modified response header from the previous successful
+	// HTTP fetch. When set, it is sent as If-Modified-Since on the next request. Only used when
+	// ETag is empty, since ETag is the preferred validator. Only used for plain HTTP sources; ignored
+	// for NIM and N1C.
+	LastModified string
 	// TLSCAData is the PEM-encoded CA certificate used to verify the bundle server's TLS certificate.
 	// When nil, the system certificate pool is used.
 	TLSCAData []byte
@@ -160,7 +165,8 @@ type NIMRequest struct {
 //counterfeiter:generate . Fetcher
 type Fetcher interface {
 	// FetchPolicyBundle retrieves the policy bundle described by req.
-	// For HTTP sources: GETs req.URL; sends conditional headers when req.ConditionalToken is set
+	// For HTTP sources: GETs req.URL; sends If-None-Match when req.ETag is set, or If-Modified-Since
+	// when req.LastModified is set;
 	// and returns Result.Unchanged=true on 304. If req.VerifyChecksum is true, fetches
 	// req.URL+".sha256" to verify integrity. VerifyChecksum is not supported for NIM/N1C.
 	// For NIM sources: calls the NIM bundles API and base64-decodes items[0].content.
@@ -173,7 +179,7 @@ type Fetcher interface {
 	FetchLogProfileBundle(ctx context.Context, req Request) (Result, error)
 	// FetchPolicyBundleChecksum retrieves only the checksum of the remote policy bundle without
 	// downloading the full bundle content. Only supported for NIM and N1C sources; returns an error
-	// for plain HTTP sources (use FetchPolicyBundle with ConditionalToken instead).
+	// for plain HTTP sources (use FetchPolicyBundle with ETag/LastModified instead).
 	FetchPolicyBundleChecksum(ctx context.Context, req Request) (checksum string, err error)
 	// FetchLogProfileBundleChecksum retrieves only the checksum of the remote log profile bundle without
 	// downloading the full bundle content. Only supported for NIM and N1C sources; returns an error
@@ -241,7 +247,7 @@ func (e *nonTransientError) Unwrap() error { return e.err }
 // When req.N1C.Namespace is set, uses N1C fetch logic (APIToken auth, N1C API path).
 // When req.PolicyName or req.NIM.PolicyUID is set (and N1C.Namespace is empty), uses NIM fetch logic.
 // Otherwise performs a plain GET to req.URL, optionally verifying the checksum.
-// For plain HTTP sources, a conditional GET is issued when req.ConditionalToken is set.
+// For plain HTTP sources, a conditional GET is issued when req.ETag or req.LastModified is set.
 func (f *HTTPFetcher) FetchPolicyBundle(ctx context.Context, req Request) (Result, error) {
 	return f.fetch(ctx, req, f.dispatch)
 }
@@ -250,7 +256,7 @@ func (f *HTTPFetcher) FetchPolicyBundle(ctx context.Context, req Request) (Resul
 // When req.N1C.Namespace is set, uses N1C fetch logic (APIToken auth, N1C API path).
 // When req.LogProfileName is set (and N1C.Namespace is empty), uses NIM fetch logic.
 // Otherwise performs a plain GET to req.URL.
-// For plain HTTP sources, a conditional GET is issued when req.ConditionalToken is set.
+// For plain HTTP sources, a conditional GET is issued when req.ETag or req.LastModified is set.
 func (f *HTTPFetcher) FetchLogProfileBundle(ctx context.Context, req Request) (Result, error) {
 	return f.fetch(ctx, req, f.logProfileDispatch)
 }
@@ -465,17 +471,16 @@ func buildClient(caData []byte, insecureSkipVerify bool, timeout time.Duration) 
 }
 
 // fetchHTTP performs a GET to req.URL.
-// When req.ConditionalToken is set it is sent as If-None-Match (ETag) or If-Modified-Since
-// (Last-Modified) and a 304 response is returned as Result{Unchanged: true}.
+// When req.ETag is set it is sent as If-None-Match; when req.LastModified is set (and ETag is empty)
+// it is sent as If-Modified-Since. A 304 response is returned as Result{Unchanged: true}.
 // If req.VerifyChecksum is true, fetches req.URL+".sha256" and verifies integrity.
 func fetchHTTP(ctx context.Context, client *http.Client, req Request) (Result, error) {
 	var extraHeaders map[string]string
-	if req.ConditionalToken != "" {
-		if strings.HasPrefix(req.ConditionalToken, `"`) || strings.HasPrefix(req.ConditionalToken, "W/") {
-			extraHeaders = map[string]string{headerIfNoneMatch: req.ConditionalToken}
-		} else {
-			extraHeaders = map[string]string{headerIfModifiedSince: req.ConditionalToken}
-		}
+	switch {
+	case req.ETag != "":
+		extraHeaders = map[string]string{headerIfNoneMatch: req.ETag}
+	case req.LastModified != "":
+		extraHeaders = map[string]string{headerIfModifiedSince: req.LastModified}
 	}
 
 	data, respHeaders, statusCode, err := doGetWithHeaders(ctx, client, req.URL, req.Auth, extraHeaders,
