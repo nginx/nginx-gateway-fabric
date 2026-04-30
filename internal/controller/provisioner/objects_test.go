@@ -27,6 +27,35 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
 
+func findDaemonSet(objects []client.Object) *appsv1.DaemonSet {
+	for _, obj := range objects {
+		if ds, ok := obj.(*appsv1.DaemonSet); ok {
+			return ds
+		}
+	}
+	return nil
+}
+
+func findDeployment(objects []client.Object) *appsv1.Deployment {
+	for _, obj := range objects {
+		if dep, ok := obj.(*appsv1.Deployment); ok {
+			return dep
+		}
+	}
+	return nil
+}
+
+func findAgentConfigMap(objects []client.Object) *corev1.ConfigMap {
+	for _, obj := range objects {
+		if cm, ok := obj.(*corev1.ConfigMap); ok {
+			if _, hasAgentKey := cm.Data[configmaps.AgentConfKey]; hasAgentKey {
+				return cm
+			}
+		}
+	}
+	return nil
+}
+
 func TestBuildNginxResourceObjects(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
@@ -160,6 +189,13 @@ func TestBuildNginxResourceObjects(t *testing.T) {
 	validateLabelsAndAnnotations(cm)
 	g.Expect(cm.Data).To(HaveKey(configmaps.AgentConfKey))
 	g.Expect(cm.Data[configmaps.AgentConfKey]).To(ContainSubstring("command:"))
+	// Verify base agent features (metrics enabled by default)
+	g.Expect(cm.Data[configmaps.AgentConfKey]).To(ContainSubstring("- configuration"))
+	g.Expect(cm.Data[configmaps.AgentConfKey]).To(ContainSubstring("- certificates"))
+	g.Expect(cm.Data[configmaps.AgentConfKey]).To(ContainSubstring("- metrics"))
+	// Should not have WAF or Plus features
+	g.Expect(cm.Data[configmaps.AgentConfKey]).ToNot(ContainSubstring("- logs-nap"))
+	g.Expect(cm.Data[configmaps.AgentConfKey]).ToNot(ContainSubstring("- api-action"))
 
 	svcAcctObj := objects[3]
 	svcAcct, ok := svcAcctObj.(*corev1.ServiceAccount)
@@ -349,6 +385,10 @@ func TestBuildNginxResourceObjects_NginxProxyConfig(t *testing.T) {
 	g.Expect(ok).To(BeTrue())
 	g.Expect(cm.Data[configmaps.AgentConfKey]).To(ContainSubstring("level: debug"))
 	g.Expect(cm.Data[configmaps.AgentConfKey]).To(ContainSubstring("port: 8080"))
+	// Verify agent features - should have base + metrics
+	g.Expect(cm.Data[configmaps.AgentConfKey]).To(ContainSubstring("- configuration"))
+	g.Expect(cm.Data[configmaps.AgentConfKey]).To(ContainSubstring("- certificates"))
+	g.Expect(cm.Data[configmaps.AgentConfKey]).To(ContainSubstring("- metrics"))
 
 	svcObj := objects[4]
 	svc, ok := svcObj.(*corev1.Service)
@@ -674,13 +714,7 @@ func TestBuildNginxResourceObjects_DeploymentReplicasFromHPA(t *testing.T) {
 			g.Expect(err).ToNot(HaveOccurred())
 
 			// Find the deployment object
-			var deployment *appsv1.Deployment
-			for _, obj := range objects {
-				if d, ok := obj.(*appsv1.Deployment); ok {
-					deployment = d
-					break
-				}
-			}
+			deployment := findDeployment(objects)
 			g.Expect(deployment).ToNot(BeNil())
 
 			if tc.expectedNil {
@@ -829,7 +863,10 @@ func TestBuildNginxResourceObjects_Plus(t *testing.T) {
 	cm, ok = cmObj.(*corev1.ConfigMap)
 	g.Expect(ok).To(BeTrue())
 	g.Expect(cm.Data).To(HaveKey(configmaps.AgentConfKey))
-	g.Expect(cm.Data[configmaps.AgentConfKey]).To(ContainSubstring("api-action"))
+	// Verify agent features - should have base + api-action (Plus)
+	g.Expect(cm.Data[configmaps.AgentConfKey]).To(ContainSubstring("- configuration"))
+	g.Expect(cm.Data[configmaps.AgentConfKey]).To(ContainSubstring("- certificates"))
+	g.Expect(cm.Data[configmaps.AgentConfKey]).To(ContainSubstring("- api-action"))
 
 	depObj := objects[8]
 	dep, ok := depObj.(*appsv1.Deployment)
@@ -985,10 +1022,21 @@ func TestBuildNginxResourceObjects_DaemonSet(t *testing.T) {
 		},
 		Data: map[string][]byte{secrets.TLSCertKey: []byte("tls")},
 	}
-	fakeClient := createFakeClientWithScheme(agentTLSSecret)
+	jwtSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      jwtTestSecretName,
+			Namespace: ngfNamespace,
+		},
+		Data: map[string][]byte{secrets.LicenseJWTKey: []byte("jwt")},
+	}
+	fakeClient := createFakeClientWithScheme(agentTLSSecret, jwtSecret)
 
 	provisioner := &NginxProvisioner{
 		cfg: Config{
+			Plus: true,
+			PlusUsageConfig: &config.UsageReportConfig{
+				SecretName: jwtTestSecretName,
+			},
 			GatewayPodConfig: &config.GatewayPodConfig{
 				Namespace: ngfNamespace,
 			},
@@ -1014,6 +1062,7 @@ func TestBuildNginxResourceObjects_DaemonSet(t *testing.T) {
 	}
 
 	nProxyCfg := &graph.EffectiveNginxProxy{
+		WAF: &ngfAPIv1alpha2.WAFSpec{Enable: helpers.GetPointer(true)},
 		Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
 			DaemonSet: &ngfAPIv1alpha2.DaemonSetSpec{
 				Pod: ngfAPIv1alpha2.PodSpec{
@@ -1039,7 +1088,8 @@ func TestBuildNginxResourceObjects_DaemonSet(t *testing.T) {
 	objects, err := provisioner.buildNginxResourceObjects(resourceName, gateway, nProxyCfg)
 	g.Expect(err).ToNot(HaveOccurred())
 
-	g.Expect(objects).To(HaveLen(6))
+	// 2 secrets (agentTLS, JWT) + 2 configmaps (includes, agent) + serviceaccount + service + daemonset
+	g.Expect(objects).To(HaveLen(7))
 
 	expLabels := map[string]string{
 		"app":                                    "nginx",
@@ -1047,9 +1097,16 @@ func TestBuildNginxResourceObjects_DaemonSet(t *testing.T) {
 		"app.kubernetes.io/name":                 "gw-nginx",
 	}
 
-	dsObj := objects[5]
-	ds, ok := dsObj.(*appsv1.DaemonSet)
-	g.Expect(ok).To(BeTrue())
+	// Verify agent ConfigMap contains WAF logs-nap feature
+	agentCM := findAgentConfigMap(objects)
+	g.Expect(agentCM).ToNot(BeNil())
+	// Verify agent features - should have base + logs-nap (WAF)
+	g.Expect(agentCM.Data[configmaps.AgentConfKey]).To(ContainSubstring("- configuration"))
+	g.Expect(agentCM.Data[configmaps.AgentConfKey]).To(ContainSubstring("- certificates"))
+	g.Expect(agentCM.Data[configmaps.AgentConfKey]).To(ContainSubstring("- logs-nap"))
+
+	ds := findDaemonSet(objects)
+	g.Expect(ds).ToNot(BeNil())
 	g.Expect(ds.GetLabels()).To(Equal(expLabels))
 
 	template := ds.Spec.Template
@@ -1061,6 +1118,11 @@ func TestBuildNginxResourceObjects_DaemonSet(t *testing.T) {
 	g.Expect(container.ImagePullPolicy).To(Equal(corev1.PullAlways))
 	g.Expect(container.Resources.Limits).To(HaveKey(corev1.ResourceCPU))
 	g.Expect(container.Resources.Limits[corev1.ResourceCPU].Format).To(Equal(resource.Format("100m")))
+
+	// verify WAF container is present - we can assume the rest of the WAF configuration is correct
+	// as it is tested elsewhere
+	wafContainer := template.Spec.Containers[1]
+	g.Expect(wafContainer.Image).To(ContainSubstring("private-registry.nginx.com/nap/waf-enforcer"))
 }
 
 func TestBuildNginxResourceObjects_OpenShift(t *testing.T) {
@@ -1640,6 +1702,13 @@ func TestBuildNginxConfigMaps_AgentFields(t *testing.T) {
 	g.Expect(data).To(ContainSubstring("host: console.example.com"))
 	g.Expect(data).To(ContainSubstring("port: 443"))
 	g.Expect(data).To(ContainSubstring("skip_verify: false"))
+	// Verify base agent features are present (metrics enabled by default)
+	g.Expect(data).To(ContainSubstring("- configuration"))
+	g.Expect(data).To(ContainSubstring("- certificates"))
+	g.Expect(data).To(ContainSubstring("- metrics"))
+	// Should not have WAF or Plus features
+	g.Expect(data).ToNot(ContainSubstring("- logs-nap"))
+	g.Expect(data).ToNot(ContainSubstring("- api-action"))
 }
 
 func TestBuildReadinessProbe(t *testing.T) {
@@ -1823,7 +1892,12 @@ func TestBuildNginxResourceObjects_Patches(t *testing.T) {
 		},
 		Spec: gatewayv1.GatewaySpec{
 			Listeners: []gatewayv1.Listener{
-				{Port: 80},
+				{
+					Port: 80,
+				},
+				{
+					Port: 8888,
+				},
 			},
 		},
 	}
@@ -1884,13 +1958,7 @@ func TestBuildNginxResourceObjects_Patches(t *testing.T) {
 	g.Expect(svc.Labels).To(HaveKeyWithValue("svc-json", "true"))
 
 	// Find and validate deployment
-	var dep *appsv1.Deployment
-	for _, obj := range objects {
-		if d, ok := obj.(*appsv1.Deployment); ok {
-			dep = d
-			break
-		}
-	}
+	dep := findDeployment(objects)
 	g.Expect(dep).ToNot(BeNil())
 	g.Expect(dep.Labels).To(HaveKeyWithValue("dep-patched", "true"))
 	g.Expect(dep.Spec.Replicas).To(Equal(helpers.GetPointer(int32(3))))
@@ -2093,13 +2161,7 @@ func TestBuildNginxResourceObjects_Patches(t *testing.T) {
 	g.Expect(svc.Labels).ToNot(HaveKey("deployment-only"))
 
 	// Find and validate deployment - should only have deployment-specific labels
-	dep = nil
-	for _, obj := range objects {
-		if d, ok := obj.(*appsv1.Deployment); ok {
-			dep = d
-			break
-		}
-	}
+	dep = findDeployment(objects)
 	g.Expect(dep).ToNot(BeNil())
 	g.Expect(dep.Labels).To(HaveKeyWithValue("deployment-only", "true"))
 	g.Expect(dep.Labels).ToNot(HaveKey("service-only"))
@@ -2166,13 +2228,7 @@ func TestBuildNginxResourceObjects_InferenceExtension(t *testing.T) {
 	g.Expect(err).ToNot(HaveOccurred())
 
 	// Find the deployment object
-	var deployment *appsv1.Deployment
-	for _, obj := range objects {
-		if d, ok := obj.(*appsv1.Deployment); ok {
-			deployment = d
-			break
-		}
-	}
+	deployment := findDeployment(objects)
 
 	expectedCommands := []string{
 		"/usr/bin/gateway",
@@ -2406,5 +2462,215 @@ func TestBuildNginxResourceObjects_ClusterIPWithExternalIPs(t *testing.T) {
 			g.Expect(svc.Spec.ExternalIPs).To(Equal(test.expectedExternalIPs))
 			g.Expect(svc.Spec.ExternalTrafficPolicy).To(Equal(test.expectedExternalTrafficPolicy))
 		})
+	}
+}
+
+func TestBuildNginxResourceObjects_WAF(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	agentTLSSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      agentTLSTestSecretName,
+			Namespace: ngfNamespace,
+		},
+		Data: map[string][]byte{secrets.TLSCertKey: []byte("tls")},
+	}
+	jwtSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      jwtTestSecretName,
+			Namespace: ngfNamespace,
+		},
+		Data: map[string][]byte{secrets.LicenseJWTKey: []byte("jwt")},
+	}
+	fakeClient := createFakeClientWithScheme(agentTLSSecret, jwtSecret)
+
+	provisioner := &NginxProvisioner{
+		cfg: Config{
+			Plus: true,
+			PlusUsageConfig: &config.UsageReportConfig{
+				SecretName: jwtTestSecretName,
+			},
+			GatewayPodConfig: &config.GatewayPodConfig{
+				Namespace: ngfNamespace,
+				Version:   "1.0.0",
+			},
+			AgentTLSSecretName: agentTLSTestSecretName,
+			AgentLabels:        make(map[string]string),
+		},
+		k8sClient: fakeClient,
+		baseLabelSelector: metav1.LabelSelector{
+			MatchLabels: map[string]string{"app": "nginx"},
+		},
+	}
+
+	gateway := &gatewayv1.Gateway{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "gw",
+			Namespace: "default",
+		},
+		Spec: gatewayv1.GatewaySpec{
+			Listeners: []gatewayv1.Listener{{Port: 80}},
+		},
+	}
+
+	resourceName := "gw-nginx"
+	nProxyCfg := &graph.EffectiveNginxProxy{
+		WAF: &ngfAPIv1alpha2.WAFSpec{Enable: helpers.GetPointer(true)},
+		Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+			Deployment: &ngfAPIv1alpha2.DeploymentSpec{
+				WAFContainers: &ngfAPIv1alpha2.WAFContainerSpec{
+					Enforcer: &ngfAPIv1alpha2.WAFContainerConfig{
+						Image: &ngfAPIv1alpha2.Image{
+							Repository: helpers.GetPointer("custom-registry/waf-enforcer"),
+							Tag:        helpers.GetPointer("custom-tag"),
+						},
+						Resources: &corev1.ResourceRequirements{
+							Requests: corev1.ResourceList{
+								corev1.ResourceMemory: resource.MustParse("512Mi"),
+								corev1.ResourceCPU:    resource.MustParse("200m"),
+							},
+						},
+						VolumeMounts: []corev1.VolumeMount{
+							{
+								Name:      "waf-logs",
+								MountPath: "/var/log/waf",
+							},
+						},
+					},
+					ConfigManager: &ngfAPIv1alpha2.WAFContainerConfig{
+						Image: &ngfAPIv1alpha2.Image{
+							Repository: helpers.GetPointer("custom-registry/waf-config-mgr"),
+							Tag:        helpers.GetPointer("config-tag"),
+						},
+						Resources: &corev1.ResourceRequirements{
+							Limits: corev1.ResourceList{
+								corev1.ResourceCPU: resource.MustParse("300m"),
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	objects, err := provisioner.buildNginxResourceObjects(resourceName, gateway, nProxyCfg)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// 2 secrets (agentTLS, JWT) + 2 configmaps (includes, agent) + serviceaccount + service + deployment
+	g.Expect(objects).To(HaveLen(7))
+
+	dep := findDeployment(objects)
+	agentCM := findAgentConfigMap(objects)
+	g.Expect(dep).ToNot(BeNil())
+	g.Expect(agentCM).ToNot(BeNil())
+
+	// Verify agent ConfigMap contains WAF logs-nap feature
+	g.Expect(agentCM.Data[configmaps.AgentConfKey]).To(ContainSubstring("- configuration"))
+	g.Expect(agentCM.Data[configmaps.AgentConfKey]).To(ContainSubstring("- certificates"))
+	g.Expect(agentCM.Data[configmaps.AgentConfKey]).To(ContainSubstring("- logs-nap"))
+
+	template := dep.Spec.Template
+
+	// Should have 3 containers: nginx + waf-enforcer + waf-config-mgr
+	g.Expect(template.Spec.Containers).To(HaveLen(3))
+
+	// Validate NGINX container (first container)
+	nginxContainer := template.Spec.Containers[0]
+	g.Expect(nginxContainer.Name).To(Equal("nginx"))
+	g.Expect(nginxContainer.Image).To(Equal(fmt.Sprintf("%s:1.0.0", defaultNginxPlusWAFImagePath)))
+
+	// Check NGINX container has WAF volume mounts
+	wafVolumeMountNames := []string{
+		"app-protect-bundles",
+		"app-protect-config",
+		"app-protect-bd-config",
+	}
+
+	expectedNginxWAFMounts := map[string]string{
+		"app-protect-bundles":   "/etc/app_protect/bundles",
+		"app-protect-config":    "/opt/app_protect/config",
+		"app-protect-bd-config": "/opt/app_protect/bd_config",
+	}
+
+	for _, expectedMount := range wafVolumeMountNames {
+		found := false
+		for _, mount := range nginxContainer.VolumeMounts {
+			if mount.Name == expectedMount {
+				found = true
+				g.Expect(mount.MountPath).To(Equal(expectedNginxWAFMounts[expectedMount]))
+				break
+			}
+		}
+		g.Expect(found).To(BeTrue(), "NGINX container missing WAF volume mount: %s", expectedMount)
+	}
+
+	// Validate WAF Enforcer container (second container)
+	enforcerContainer := template.Spec.Containers[1]
+	g.Expect(enforcerContainer.Name).To(Equal("waf-enforcer"))
+	g.Expect(enforcerContainer.Image).To(Equal("custom-registry/waf-enforcer:custom-tag"))
+	g.Expect(enforcerContainer.ImagePullPolicy).To(Equal(defaultImagePullPolicy))
+
+	// Check enforcer resources
+	g.Expect(enforcerContainer.Resources.Requests).To(HaveKey(corev1.ResourceMemory))
+	g.Expect(enforcerContainer.Resources.Requests[corev1.ResourceMemory]).To(Equal(resource.MustParse("512Mi")))
+	g.Expect(enforcerContainer.Resources.Requests[corev1.ResourceCPU]).To(Equal(resource.MustParse("200m")))
+
+	// Check enforcer volume mounts (should have default + custom)
+	g.Expect(enforcerContainer.VolumeMounts).To(HaveLen(2))
+
+	// Default mount
+	defaultMount := false
+	customMount := false
+	for _, mount := range enforcerContainer.VolumeMounts {
+		if mount.Name == "app-protect-bd-config" && mount.MountPath == "/opt/app_protect/bd_config" {
+			defaultMount = true
+		}
+		if mount.Name == "waf-logs" && mount.MountPath == "/var/log/waf" {
+			customMount = true
+		}
+	}
+	g.Expect(defaultMount).To(BeTrue())
+	g.Expect(customMount).To(BeTrue())
+
+	// Validate WAF Config Manager container (third container)
+	configMgrContainer := template.Spec.Containers[2]
+	g.Expect(configMgrContainer.Name).To(Equal("waf-config-mgr"))
+	g.Expect(configMgrContainer.Image).To(Equal("custom-registry/waf-config-mgr:config-tag"))
+
+	// Check config manager security context
+	g.Expect(configMgrContainer.SecurityContext).ToNot(BeNil())
+	g.Expect(configMgrContainer.SecurityContext.AllowPrivilegeEscalation).To(Equal(helpers.GetPointer(false)))
+	g.Expect(configMgrContainer.SecurityContext.RunAsNonRoot).To(Equal(helpers.GetPointer(false)))
+	g.Expect(configMgrContainer.SecurityContext.RunAsUser).To(Equal(helpers.GetPointer[int64](101)))
+	g.Expect(configMgrContainer.SecurityContext.Capabilities.Drop).To(ContainElement(corev1.Capability("all")))
+
+	// Check config manager resources
+	g.Expect(configMgrContainer.Resources.Limits).To(HaveKey(corev1.ResourceCPU))
+	g.Expect(configMgrContainer.Resources.Limits[corev1.ResourceCPU]).To(Equal(resource.MustParse("300m")))
+
+	// Check config manager volume mounts (should have all 3 WAF volumes)
+	g.Expect(configMgrContainer.VolumeMounts).To(HaveLen(3))
+
+	expectedConfigMgrMounts := map[string]string{
+		"app-protect-bd-config": "/opt/app_protect/bd_config",
+		"app-protect-config":    "/opt/app_protect/config",
+		"app-protect-bundles":   "/etc/app_protect/bundles",
+	}
+
+	for _, mount := range configMgrContainer.VolumeMounts {
+		expectedPath, exists := expectedConfigMgrMounts[mount.Name]
+		g.Expect(exists).To(BeTrue(), "Unexpected volume mount in config manager: %s", mount.Name)
+		g.Expect(mount.MountPath).To(Equal(expectedPath))
+	}
+
+	// Validate WAF volumes are present in pod spec
+	volumeNames := make([]string, len(template.Spec.Volumes))
+	for i, volume := range template.Spec.Volumes {
+		volumeNames[i] = volume.Name
+	}
+
+	for _, expectedVolume := range wafVolumeMountNames {
+		g.Expect(volumeNames).To(ContainElement(expectedVolume))
 	}
 }

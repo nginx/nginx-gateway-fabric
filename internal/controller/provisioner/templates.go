@@ -48,11 +48,15 @@ allowed_directories:
 - /etc/nginx
 - /usr/share/nginx
 - /var/run/nginx
+- /etc/app_protect/bundles/
 features:
 - configuration
 - certificates
 {{- if .EnableMetrics }}
 - metrics
+{{- end }}
+{{- if eq true .WafEnabled }}
+- logs-nap
 {{- end }}
 {{- if eq true .Plus }}
 - api-action

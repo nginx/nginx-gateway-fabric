@@ -1,6 +1,8 @@
 package state
 
 import (
+	"context"
+	"maps"
 	"sync"
 
 	"github.com/go-logr/logr"
@@ -24,6 +26,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/validation"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 	ngftypes "github.com/nginx/nginx-gateway-fabric/v2/internal/framework/types"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/waf/fetch"
 )
 
 //go:generate go tool counterfeiter -generate
@@ -43,9 +46,13 @@ type ChangeProcessor interface {
 	CaptureDeleteChange(resourceType ngftypes.ObjectType, nsname types.NamespacedName)
 	// Process produces a graph-like representation of GatewayAPI resources.
 	// If no changes were captured, the graph will be empty.
-	Process() (graphCfg *graph.Graph)
+	Process(ctx context.Context) (graphCfg *graph.Graph)
 	// GetLatestGraph returns the latest Graph.
 	GetLatestGraph() *graph.Graph
+	// ForceRebuild forces the next Process() call to perform a full graph rebuild,
+	// without modifying the cluster state. Used when an external event (e.g. a WAF bundle
+	// becoming available) must trigger a rebuild without an accompanying resource change.
+	ForceRebuild()
 }
 
 // ChangeProcessorConfig holds configuration parameters for ChangeProcessorImpl.
@@ -54,6 +61,8 @@ type ChangeProcessorConfig struct {
 	Validators validation.Validators
 	// EventRecorder records events for Kubernetes resources.
 	EventRecorder events.EventRecorder
+	// WAFFetcher fetches WAF policy bundles from HTTP/HTTPS URLs.
+	WAFFetcher fetch.Fetcher
 	// MustExtractGVK is a function that extracts schema.GroupVersionKind from a client.Object.
 	MustExtractGVK kinds.MustExtractGVK
 	// PlusSecrets is a list of secret files used for NGINX Plus reporting (JWT, client SSL, CA).
@@ -61,16 +70,21 @@ type ChangeProcessorConfig struct {
 	// DiscoveredCRDs is a map of discovered CRDs in the cluster,
 	// where the key is the CRD name and the value indicates if the CRD exists.
 	DiscoveredCRDs map[string]bool
+	// PolledWAFBundles returns the latest bundles fetched by WAF pollers.
+	// These take precedence over graph-cached bundles during stale-bundle fallback,
+	// preventing a graph rebuild from overwriting newer polled data with older cached data.
+	// May be nil if WAF polling is not enabled.
+	PolledWAFBundles func() map[graph.WAFBundleKey]*graph.WAFBundleData
 	// Logger is the logger for this Change Processor.
 	Logger logr.Logger
 	// GatewayCtlrName is the name of the Gateway controller.
 	GatewayCtlrName string
 	// GatewayClassName is the name of the GatewayClass resource.
 	GatewayClassName string
+	// FeatureFlags holds the feature flags for building the Graph.
+	FeatureFlags graph.FeatureFlags
 	// Snippets indicates if Snippets are enabled. This will enable both SnippetsFilter and SnippetsPolicy APIs.
 	Snippets bool
-	// FeaturesFlags holds the feature flags for building the Graph.
-	FeatureFlags graph.FeatureFlags
 }
 
 // ChangeProcessorImpl is an implementation of ChangeProcessor.
@@ -83,6 +97,8 @@ type ChangeProcessorImpl struct {
 	updater Updater
 	// getAndResetClusterStateChanged tells if and how the cluster state has changed.
 	getAndResetClusterStateChanged func() bool
+	// forceClusterStateRebuild forces the changed flag to true without modifying cluster state.
+	forceClusterStateRebuild func()
 
 	cfg  ChangeProcessorConfig
 	lock sync.Mutex
@@ -224,6 +240,11 @@ func NewChangeProcessorImpl(cfg ChangeProcessorConfig) *ChangeProcessorImpl {
 			predicate: funcPredicate{stateChanged: isNGFPolicyRelevant},
 		},
 		{
+			gvk:       cfg.MustExtractGVK(&ngfAPIv1alpha1.WAFPolicy{}),
+			store:     commonPolicyObjectStore,
+			predicate: funcPredicate{stateChanged: isNGFPolicyRelevant},
+		},
+		{
 			gvk:       cfg.MustExtractGVK(&v1.TLSRoute{}),
 			store:     newObjectStoreMapAdapter(clusterStore.TLSRoutes),
 			predicate: nil,
@@ -274,6 +295,7 @@ func NewChangeProcessorImpl(cfg ChangeProcessorConfig) *ChangeProcessorImpl {
 	)
 
 	processor.getAndResetClusterStateChanged = trackingUpdater.getAndResetChangedStatus
+	processor.forceClusterStateRebuild = trackingUpdater.forceRebuild
 	processor.updater = trackingUpdater
 
 	return processor
@@ -308,7 +330,15 @@ func (c *ChangeProcessorImpl) CaptureDeleteChange(resourceType ngftypes.ObjectTy
 	c.updater.Delete(resourceType, nsname)
 }
 
-func (c *ChangeProcessorImpl) Process() *graph.Graph {
+// ForceRebuild forces the next Process() call to rebuild the graph without modifying cluster state.
+func (c *ChangeProcessorImpl) ForceRebuild() {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	c.forceClusterStateRebuild()
+}
+
+func (c *ChangeProcessorImpl) Process(ctx context.Context) *graph.Graph {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
@@ -316,17 +346,52 @@ func (c *ChangeProcessorImpl) Process() *graph.Graph {
 		return nil
 	}
 
+	previousWAFBundles := c.mergedWAFBundles()
+
 	c.latestGraph = graph.BuildGraph(
+		ctx,
 		c.clusterState,
 		c.cfg.GatewayCtlrName,
 		c.cfg.GatewayClassName,
 		c.cfg.PlusSecrets,
+		c.cfg.WAFFetcher,
+		previousWAFBundles,
 		c.cfg.Validators,
 		c.cfg.Logger,
 		c.cfg.FeatureFlags,
 	)
 
 	return c.latestGraph
+}
+
+// mergedWAFBundles combines graph-cached bundles with any fresher bundles from WAF pollers.
+// Polled bundles take precedence because they may be newer than what the graph last stored.
+// This prevents a graph rebuild from overwriting polled data with stale cached data
+// when a re-fetch fails.
+func (c *ChangeProcessorImpl) mergedWAFBundles() map[graph.WAFBundleKey]*graph.WAFBundleData {
+	var graphBundles map[graph.WAFBundleKey]*graph.WAFBundleData
+	if c.latestGraph != nil {
+		graphBundles = c.latestGraph.ReferencedWAFBundles
+	}
+
+	var polledBundles map[graph.WAFBundleKey]*graph.WAFBundleData
+	if c.cfg.PolledWAFBundles != nil {
+		polledBundles = c.cfg.PolledWAFBundles()
+	}
+
+	if len(graphBundles) == 0 && len(polledBundles) == 0 {
+		return nil
+	}
+
+	merged := make(map[graph.WAFBundleKey]*graph.WAFBundleData, len(graphBundles)+len(polledBundles))
+
+	// Start with graph-cached bundles.
+	maps.Copy(merged, graphBundles)
+
+	// Overlay polled bundles — these are newer and take precedence.
+	maps.Copy(merged, polledBundles)
+
+	return merged
 }
 
 func (c *ChangeProcessorImpl) GetLatestGraph() *graph.Graph {

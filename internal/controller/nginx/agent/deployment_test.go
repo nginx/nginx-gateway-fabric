@@ -210,6 +210,176 @@ func TestSetLatestUpstreamError(t *testing.T) {
 	g.Expect(deployment.GetLatestUpstreamError()).To(MatchError(err))
 }
 
+func TestUpdateWAFBundle(t *testing.T) {
+	t.Parallel()
+
+	const bundlePath = "/etc/app_protect/bundles/my-policy.tgz"
+
+	tests := []struct {
+		name           string
+		setup          func(d *Deployment)
+		data           []byte
+		expectNil      bool
+		expectNumFiles int
+	}{
+		{
+			name:           "inserts new bundle into empty file list",
+			data:           []byte("bundle-v1"),
+			expectNumFiles: 1,
+		},
+		{
+			name: "inserts new bundle alongside existing config files",
+			setup: func(d *Deployment) {
+				d.SetFiles([]File{
+					{Meta: &pb.FileMeta{Name: "test.conf", Hash: "abc"}, Contents: []byte("conf")},
+				}, nil)
+			},
+			data:           []byte("bundle-v1"),
+			expectNumFiles: 2,
+		},
+		{
+			name: "replaces existing bundle with new contents",
+			setup: func(d *Deployment) {
+				d.UpdateWAFBundle(bundlePath, []byte("bundle-v1"))
+			},
+			data:           []byte("bundle-v2"),
+			expectNumFiles: 1,
+		},
+		{
+			name: "returns nil when bundle contents are unchanged",
+			setup: func(d *Deployment) {
+				d.UpdateWAFBundle(bundlePath, []byte("bundle-v1"))
+			},
+			data:      []byte("bundle-v1"),
+			expectNil: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			deployment := newDeployment(&broadcastfakes.FakeBroadcaster{}, "gw")
+			if tt.setup != nil {
+				tt.setup(deployment)
+			}
+
+			msg := deployment.UpdateWAFBundle(bundlePath, tt.data)
+
+			if tt.expectNil {
+				g.Expect(msg).To(BeNil())
+				return
+			}
+
+			g.Expect(msg).ToNot(BeNil())
+			g.Expect(msg.Type).To(Equal(broadcast.ConfigApplyRequest))
+			g.Expect(msg.ConfigVersion).ToNot(BeEmpty())
+
+			// GetFile requires the correct hash; find it from the file overviews.
+			overviews, _ := deployment.GetFileOverviews()
+			var bundleHash string
+			managedCount := 0
+			for _, o := range overviews {
+				if !o.Unmanaged {
+					managedCount++
+				}
+				if o.FileMeta.GetName() == bundlePath {
+					bundleHash = o.FileMeta.GetHash()
+				}
+			}
+			g.Expect(managedCount).To(Equal(tt.expectNumFiles))
+			g.Expect(bundleHash).ToNot(BeEmpty())
+
+			contents, hash := deployment.GetFile(bundlePath, bundleHash)
+			g.Expect(hash).To(Equal(bundleHash))
+			g.Expect(contents).To(Equal(tt.data))
+		})
+	}
+}
+
+func TestRemoveWAFBundle(t *testing.T) {
+	t.Parallel()
+
+	const bundlePath = "/etc/app_protect/bundles/my-policy.tgz"
+
+	tests := []struct {
+		setup          func(d *Deployment)
+		name           string
+		expectNumFiles int
+		expectNil      bool
+	}{
+		{
+			name:      "returns nil when bundle does not exist",
+			expectNil: true,
+		},
+		{
+			name: "returns nil when file list has other files but not the target",
+			setup: func(d *Deployment) {
+				d.SetFiles([]File{
+					{Meta: &pb.FileMeta{Name: "test.conf", Hash: "abc"}, Contents: []byte("conf")},
+				}, nil)
+			},
+			expectNil: true,
+		},
+		{
+			name: "removes bundle and changes config version",
+			setup: func(d *Deployment) {
+				d.UpdateWAFBundle(bundlePath, []byte("bundle-data"))
+			},
+			expectNumFiles: 0,
+		},
+		{
+			name: "removes bundle but preserves other files",
+			setup: func(d *Deployment) {
+				d.SetFiles([]File{
+					{Meta: &pb.FileMeta{Name: "test.conf", Hash: "abc"}, Contents: []byte("conf")},
+				}, nil)
+				d.UpdateWAFBundle(bundlePath, []byte("bundle-data"))
+			},
+			expectNumFiles: 1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			deployment := newDeployment(&broadcastfakes.FakeBroadcaster{}, "gw")
+			if tt.setup != nil {
+				tt.setup(deployment)
+			}
+
+			msg := deployment.RemoveWAFBundle(bundlePath)
+
+			if tt.expectNil {
+				g.Expect(msg).To(BeNil())
+				return
+			}
+
+			g.Expect(msg).ToNot(BeNil())
+			g.Expect(msg.Type).To(Equal(broadcast.ConfigApplyRequest))
+			g.Expect(msg.ConfigVersion).ToNot(BeEmpty())
+
+			// Verify the bundle is gone.
+			contents, hash := deployment.GetFile(bundlePath, "any")
+			g.Expect(contents).To(BeNil())
+			g.Expect(hash).To(BeEmpty())
+
+			// Verify remaining managed file count.
+			overviews, _ := deployment.GetFileOverviews()
+			managedCount := 0
+			for _, o := range overviews {
+				if !o.Unmanaged {
+					managedCount++
+				}
+			}
+			g.Expect(managedCount).To(Equal(tt.expectNumFiles))
+		})
+	}
+}
+
 func TestDeploymentStore(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)

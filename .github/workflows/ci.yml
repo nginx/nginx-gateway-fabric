@@ -439,6 +439,30 @@ jobs:
       id-token: write # for docker/login to login to NGINX registry
     secrets: inherit
 
+  build-plus-nap-waf:
+    name: Build Plus NAP WAF images
+    needs: [vars, binary]
+    uses: ./.github/workflows/build.yml
+    strategy:
+      fail-fast: false
+      matrix:
+        # On PRs: only standard OS (1 job)
+        # On main/release: include ubi (2 jobs)
+        build-os: ${{ github.event_name == 'pull_request' && fromJSON('[""]') || fromJSON('["", "ubi"]') }}
+    with:
+      image: plus-nap-waf
+      platforms: "linux/amd64"
+      build-os: ${{ matrix.build-os }}
+      tag: ${{ inputs.release_version || '' }}
+      dry_run: ${{ inputs.dry_run || false }}
+      runner: ${{ github.repository_owner == 'nginx' && (inputs.is_production_release || ((github.event_name == 'push' || github.event_name == 'schedule') && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release-')))) && 'ubuntu-24.04-amd64' || 'ubuntu-24.04' }}
+    permissions:
+      contents: read # for docker/build-push-action to read repo content
+      security-events: write # for github/codeql-action/upload-sarif to upload SARIF results
+      packages: write # for docker/build-push-action to push to GHCR
+      id-token: write # for docker/login to login to NGINX registry
+    secrets: inherit
+
   build-operator:
     name: Build Operator images
     needs: [vars, binary]
@@ -490,6 +514,11 @@ jobs:
         image: [nginx, plus]
         build-os: ${{ github.event_name == 'pull_request' && fromJSON('[""]') || fromJSON('["", "ubi"]') }}
         k8s-version: ${{ github.event_name == 'pull_request' && fromJSON(format('["{0}"]', needs.vars.outputs.k8s_latest)) || fromJSON(format('["{0}", "{1}"]', needs.vars.outputs.min_k8s_version, needs.vars.outputs.k8s_latest)) }}
+        include:
+          # plus-waf: always run once with latest k8s, no build-os suffix
+          - image: plus-waf
+            build-os: ''
+            k8s-version: ${{ needs.vars.outputs.k8s_latest }}
     uses: ./.github/workflows/functional.yml
     with:
       image: ${{ matrix.image }}

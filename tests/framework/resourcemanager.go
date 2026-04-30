@@ -1258,7 +1258,7 @@ func (rm *ResourceManager) GetNginxConfig(
 
 	crossplaneCmd := []string{"./crossplane", "/etc/nginx/nginx.conf"}
 
-	var result execResult
+	var result ExecResult
 	if err := wait.PollUntilContextCancel(
 		ctx,
 		500*time.Millisecond,

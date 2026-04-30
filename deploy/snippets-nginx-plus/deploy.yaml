@@ -204,6 +204,7 @@ rules:
   - authenticationfilters
   - proxysettingspolicies
   - ratelimitpolicies
+  - wafpolicies
   - snippetsfilters
   - snippetspolicies
   verbs:
@@ -219,6 +220,7 @@ rules:
   - authenticationfilters/status
   - proxysettingspolicies/status
   - ratelimitpolicies/status
+  - wafpolicies/status
   - snippetsfilters/status
   - snippetspolicies/status
   verbs:

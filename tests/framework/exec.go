@@ -13,10 +13,20 @@ import (
 	"k8s.io/client-go/tools/remotecommand"
 )
 
-// execResult holds the output of an exec command.
-type execResult struct {
+// ExecResult holds the output of an exec command.
+type ExecResult struct {
 	Stdout string
 	Stderr string
+}
+
+// ExecInPod executes a command inside a container of a Kubernetes pod.
+// If container is empty, the first container in the pod is used.
+func (rm *ResourceManager) ExecInPod(
+	ctx context.Context,
+	namespace, podName, container string,
+	command []string,
+) (ExecResult, error) {
+	return execInPod(ctx, rm.ClientGoClient, rm.K8sConfig, namespace, podName, container, command)
 }
 
 // execInPod executes a command inside a container of a Kubernetes pod.
@@ -27,7 +37,7 @@ func execInPod(
 	k8sConfig *rest.Config,
 	namespace, podName, container string,
 	command []string,
-) (execResult, error) {
+) (ExecResult, error) {
 	opts := &core.PodExecOptions{
 		Command:   command,
 		Container: container,
@@ -44,7 +54,7 @@ func execInPod(
 
 	exec, err := remotecommand.NewSPDYExecutor(k8sConfig, http.MethodPost, req.URL())
 	if err != nil {
-		return execResult{}, fmt.Errorf("failed to create executor: %w", err)
+		return ExecResult{}, fmt.Errorf("failed to create executor: %w", err)
 	}
 
 	var stdout, stderr bytes.Buffer
@@ -53,13 +63,13 @@ func execInPod(
 		Stdout: &stdout,
 		Stderr: &stderr,
 	}); err != nil {
-		return execResult{
+		return ExecResult{
 			Stdout: stdout.String(),
 			Stderr: stderr.String(),
 		}, fmt.Errorf("exec failed: %w (stderr: %s)", err, stderr.String())
 	}
 
-	return execResult{
+	return ExecResult{
 		Stdout: stdout.String(),
 		Stderr: stderr.String(),
 	}, nil
