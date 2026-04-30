@@ -52,7 +52,7 @@ permissions:
 jobs:
   vars:
     name: Set up vars
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     outputs:
       test_label: ${{ github.event.inputs.test_label || 'all' }}
       version: ${{ github.event.inputs.version || 'edge' }}
@@ -70,7 +70,7 @@ jobs:
 
   setup-and-run-tests:
     name: Setup and Run NFR Tests
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     permissions:
       contents: read
       id-token: write # needed for authenticating to GCP
@@ -174,7 +174,7 @@ jobs:
 
   pr-results:
     name: Open PR with results
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     permissions:
       contents: write # needed for opening PR with the results files
       pull-requests: write # needed for opening PR with the results files

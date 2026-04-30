@@ -27,7 +27,7 @@ permissions:
 jobs:
   certify:
     name: Submit ${{ inputs.image }} image for certification
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
       - name: Set image reference
         id: image

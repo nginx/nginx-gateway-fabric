@@ -24,7 +24,7 @@ permissions:
 jobs:
   variables:
     name: Get versions of base images
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     outputs:
       ngf_tag: ${{ steps.ngf.outputs.tag }}
       nginx_version: ${{ steps.nginx.outputs.nginx_version }}
@@ -53,7 +53,7 @@ jobs:
 
   check:
     name: Check if updates are needed
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     needs: variables
     outputs:
       needs-updating: ${{ steps.update.outputs.needs-updating }}
