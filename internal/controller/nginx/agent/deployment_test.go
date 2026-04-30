@@ -45,7 +45,7 @@ func TestSetAndGetFiles(t *testing.T) {
 		},
 	}
 
-	msg := deployment.SetFiles(files, []v1.VolumeMount{})
+	msg := deployment.SetFiles(files, nil, []v1.VolumeMount{})
 	fileOverviews, configVersion := deployment.GetFileOverviews()
 
 	g.Expect(msg.Type).To(Equal(broadcast.ConfigApplyRequest))
@@ -62,7 +62,7 @@ func TestSetAndGetFiles(t *testing.T) {
 	g.Expect(wrongHashFile).To(BeNil())
 
 	// Set the same files again
-	msg = deployment.SetFiles(files, []v1.VolumeMount{})
+	msg = deployment.SetFiles(files, nil, []v1.VolumeMount{})
 	g.Expect(msg).To(BeNil())
 
 	newFileOverviews, _ := deployment.GetFileOverviews()
@@ -106,7 +106,7 @@ func TestSetAndGetFiles_VolumeIgnoreFiles(t *testing.T) {
 		},
 	}
 
-	msg := deployment.SetFiles(files, volumeMounts)
+	msg := deployment.SetFiles(files, nil, volumeMounts)
 	fileOverviews, configVersion := deployment.GetFileOverviews()
 
 	g.Expect(msg.Type).To(Equal(broadcast.ConfigApplyRequest))
@@ -144,11 +144,83 @@ func TestSetAndGetFiles_VolumeIgnoreFiles(t *testing.T) {
 	g.Expect(wrongHashFile).To(BeNil())
 
 	// Set the same files again
-	msg = deployment.SetFiles(files, volumeMounts)
+	msg = deployment.SetFiles(files, nil, volumeMounts)
 	g.Expect(msg).To(BeNil())
 
 	newFileOverviews, _ := deployment.GetFileOverviews()
 	g.Expect(newFileOverviews).To(Equal(fileOverviews))
+}
+
+func TestSetFiles_StateFilesAreUnmanagedInBroadcastButManagedForFreshSubscriber(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	deployment := newDeployment(&broadcastfakes.FakeBroadcaster{}, "")
+
+	mainFile := File{
+		Meta:     &pb.FileMeta{Name: "/etc/nginx/conf.d/http.conf", Hash: "main"},
+		Contents: []byte("http config"),
+	}
+	stateFile := File{
+		Meta:     &pb.FileMeta{Name: "/var/lib/nginx/state/coffee.conf", Hash: "state-hash"},
+		Contents: []byte("server 10.0.0.1:8080;\n"),
+	}
+
+	deployment.SetFiles([]File{mainFile}, []File{stateFile}, nil)
+
+	broadcastOverviews, _ := deployment.GetFileOverviews()
+	var stateInBroadcast *pb.File
+	for _, fo := range broadcastOverviews {
+		if fo.GetFileMeta().GetName() == stateFile.Meta.Name {
+			stateInBroadcast = fo
+		}
+	}
+	g.Expect(stateInBroadcast).ToNot(BeNil())
+	g.Expect(stateInBroadcast.GetUnmanaged()).To(BeTrue())
+	g.Expect(stateInBroadcast.GetFileMeta().GetHash()).To(BeEmpty())
+
+	initialOverviews, _ := deployment.GetInitialFileOverviews()
+	var stateInInitial *pb.File
+	for _, fo := range initialOverviews {
+		if fo.GetFileMeta().GetName() == stateFile.Meta.Name {
+			stateInInitial = fo
+		}
+	}
+	g.Expect(stateInInitial).ToNot(BeNil())
+	g.Expect(stateInInitial.GetUnmanaged()).To(BeFalse())
+	g.Expect(stateInInitial.GetFileMeta().GetHash()).To(Equal("state-hash"))
+
+	contents, _ := deployment.GetFile(stateFile.Meta.Name, stateFile.Meta.Hash)
+	g.Expect(contents).To(Equal(stateFile.Contents))
+}
+
+func TestSetFiles_EndpointOnlyChangeDoesNotShiftConfigVersion(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	deployment := newDeployment(&broadcastfakes.FakeBroadcaster{}, "")
+
+	mainFile := File{
+		Meta:     &pb.FileMeta{Name: "/etc/nginx/conf.d/http.conf", Hash: "main"},
+		Contents: []byte("http config"),
+	}
+	state1 := File{
+		Meta:     &pb.FileMeta{Name: "/var/lib/nginx/state/coffee.conf", Hash: "h1"},
+		Contents: []byte("server 10.0.0.1:8080;\n"),
+	}
+
+	g.Expect(deployment.SetFiles([]File{mainFile}, []File{state1}, nil)).ToNot(BeNil())
+
+	state2 := File{
+		Meta:     &pb.FileMeta{Name: "/var/lib/nginx/state/coffee.conf", Hash: "h2"},
+		Contents: []byte("server 10.0.0.99:8080;\n"),
+	}
+	g.Expect(deployment.SetFiles([]File{mainFile}, []File{state2}, nil)).To(BeNil(),
+		"endpoint-only change must not bump configVersion or trigger a broadcast")
+
+	// New state contents are still served to fresh subscribers via GetFile.
+	contents, _ := deployment.GetFile(state2.Meta.Name, state2.Meta.Hash)
+	g.Expect(contents).To(Equal(state2.Contents))
 }
 
 func TestSetNGINXPlusActions(t *testing.T) {

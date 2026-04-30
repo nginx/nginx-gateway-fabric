@@ -62,6 +62,11 @@ type Deployment struct {
 	nginxPlusActions []*pb.NGINXPlusAction
 	fileOverviews    []*pb.File
 	files            []File
+	// stateFiles holds NGINX Plus upstream state files. They're stored separately so endpoint
+	// changes don't shift configVersion (and trigger reloads on existing pods); fresh subscribers
+	// receive them as managed entries via GetInitialFileOverviews to avoid the cold-start gap
+	// where empty upstreams 502 incoming requests.
+	stateFiles []File
 
 	latestFileNames []string
 
@@ -190,15 +195,58 @@ func (d *Deployment) GetFile(name, hash string) ([]byte, string) {
 		}
 	}
 
+	for _, file := range d.stateFiles {
+		if name == file.Meta.GetName() {
+			fileFoundHash = file.Meta.GetHash()
+			if hash == file.Meta.GetHash() {
+				return file.Contents, file.Meta.GetHash()
+			}
+		}
+	}
+
 	return nil, fileFoundHash
 }
 
-// SetFiles updates the nginx files and fileOverviews for the deployment and returns the message to send.
+// GetInitialFileOverviews returns fileOverviews for a freshly-connecting subscriber: identical to
+// the broadcast overview except that NGINX Plus state-file entries are promoted from unmanaged
+// stubs to managed entries with real metadata. This makes the agent fetch and write state files
+// on disk before nginx starts, closing the cold-start window where empty upstreams returned 502.
 // The deployment FileLock MUST already be locked before calling this function.
-func (d *Deployment) SetFiles(files []File, volumeMounts []v1.VolumeMount) *broadcast.NginxAgentMessage {
-	d.files = files
+func (d *Deployment) GetInitialFileOverviews() ([]*pb.File, string) {
+	if len(d.stateFiles) == 0 {
+		return d.fileOverviews, d.configVersion
+	}
 
-	fileOverviews := make([]*pb.File, 0, len(files))
+	stateMeta := make(map[string]*pb.FileMeta, len(d.stateFiles))
+	for _, sf := range d.stateFiles {
+		stateMeta[sf.Meta.GetName()] = sf.Meta
+	}
+
+	overviews := make([]*pb.File, 0, len(d.fileOverviews))
+	for _, fo := range d.fileOverviews {
+		if meta, ok := stateMeta[fo.GetFileMeta().GetName()]; ok && fo.GetUnmanaged() {
+			overviews = append(overviews, &pb.File{FileMeta: meta})
+			continue
+		}
+		overviews = append(overviews, fo)
+	}
+	return overviews, d.configVersion
+}
+
+// SetFiles updates the nginx files and fileOverviews for the deployment and returns the message to send.
+// stateFiles are NGINX Plus upstream state files (nil for OSS); their content is cached so fresh subscribers
+// can fetch it via GetFile, but they're listed as Unmanaged stubs in the broadcast overview so endpoint
+// changes don't shift configVersion or trigger reloads on existing pods.
+// The deployment FileLock MUST already be locked before calling this function.
+func (d *Deployment) SetFiles(
+	files []File,
+	stateFiles []File,
+	volumeMounts []v1.VolumeMount,
+) *broadcast.NginxAgentMessage {
+	d.files = files
+	d.stateFiles = stateFiles
+
+	fileOverviews := make([]*pb.File, 0, len(files)+len(stateFiles))
 	for _, file := range files {
 		fileOverviews = append(fileOverviews, &pb.File{FileMeta: file.Meta})
 	}
@@ -211,6 +259,12 @@ func (d *Deployment) SetFiles(files []File, volumeMounts []v1.VolumeMount) *broa
 				volumeIgnoreSet[f] = struct{}{}
 			}
 		}
+	}
+
+	// State file paths are also volume-mounted (/var/lib/nginx/state) and managed by the Plus
+	// API at runtime, so list them as unmanaged stubs alongside the rest.
+	for _, sf := range stateFiles {
+		volumeIgnoreSet[sf.Meta.GetName()] = struct{}{}
 	}
 
 	volumeIgnoreFiles := make([]string, 0, len(volumeIgnoreSet))

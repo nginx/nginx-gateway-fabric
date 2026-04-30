@@ -353,7 +353,7 @@ func TestSubscribe(t *testing.T) {
 			Contents: []byte("file contents"),
 		},
 	}
-	deployment.SetFiles(files, []v1.VolumeMount{})
+	deployment.SetFiles(files, nil, []v1.VolumeMount{})
 	deployment.SetImageVersion("nginx:v1.0.0")
 
 	initialAction := &pb.NGINXPlusAction{
@@ -499,7 +499,7 @@ func TestSubscribe_Reset(t *testing.T) {
 			Contents: []byte("file contents"),
 		},
 	}
-	deployment.SetFiles(files, []v1.VolumeMount{})
+	deployment.SetFiles(files, nil, []v1.VolumeMount{})
 	deployment.SetImageVersion("nginx:v1.0.0")
 
 	ctx, cancel := createGrpcContextWithCancel(t)
