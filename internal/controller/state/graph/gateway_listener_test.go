@@ -464,6 +464,12 @@ func TestGetAndValidateListenerSupportedKinds(t *testing.T) {
 			},
 		},
 		{
+			protocol:  v1.ProtocolType("INVALID"),
+			expectErr: false,
+			name:      "unsupported protocol returns empty slice",
+			expected:  []v1.RouteGroupKind{},
+		},
+		{
 			protocol: v1.HTTPProtocolType,
 			kind: []v1.RouteGroupKind{
 				{
