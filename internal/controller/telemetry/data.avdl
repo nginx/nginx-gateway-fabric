@@ -145,6 +145,9 @@ attached at the Route level. */
 		/** WAFEnabledGatewayCount is the number of Gateways with WAF enabled on their effective NginxProxy. */
 		long? WAFEnabledGatewayCount = null;
 		
+		/** ListenerSetCount is the number of relevant ListenerSets. */
+		long? ListenerSetCount = null;
+		
 		/** NginxPodCount is the total number of Nginx data plane Pods. */
 		long? NginxPodCount = null;
 		
