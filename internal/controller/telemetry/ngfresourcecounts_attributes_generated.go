@@ -34,6 +34,7 @@ func (d *NGFResourceCounts) Attributes() []attribute.KeyValue {
 	attrs = append(attrs, attribute.Int64("SnippetsPolicyCount", d.SnippetsPolicyCount))
 	attrs = append(attrs, attribute.Int64("TCPRouteCount", d.TCPRouteCount))
 	attrs = append(attrs, attribute.Int64("UDPRouteCount", d.UDPRouteCount))
+	attrs = append(attrs, attribute.Int64("ListenerSetCount", d.ListenerSetCount))
 
 	return attrs
 }

@@ -123,6 +123,9 @@ attached at the Gateway level. */
 		/** UDPRouteCount is the number of relevant UDPRoutes. */
 		long? UDPRouteCount = null;
 		
+		/** ListenerSetCount is the number of relevant ListenerSets. */
+		long? ListenerSetCount = null;
+		
 		/** NginxPodCount is the total number of Nginx data plane Pods. */
 		long? NginxPodCount = null;
 		
