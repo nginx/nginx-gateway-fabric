@@ -103,6 +103,9 @@ func (g *Server) Start(ctx context.Context) error {
 		grpc.ChainStreamInterceptor(g.interceptor.Stream(g.logger)),
 		grpc.ChainUnaryInterceptor(g.interceptor.Unary(g.logger)),
 		grpc.Creds(tlsCredentials),
+		// Set max message size to 4MB to match the agent side.
+		grpc.MaxSendMsgSize(1024*1024*4), // 4MB
+		grpc.MaxRecvMsgSize(1024*1024*4), // 4MB
 	)
 
 	for _, registerSvc := range g.registerServices {
