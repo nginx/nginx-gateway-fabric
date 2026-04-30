@@ -63,7 +63,7 @@ spec:
                       in the same namespace.
                     properties:
                       name:
-                        description: Name is the referenced object.
+                        description: Name is the name of the referenced object.
                         type: string
                     required:
                     - name
@@ -85,7 +85,7 @@ spec:
                           JWKS.
                         properties:
                           name:
-                            description: Name is the referenced object.
+                            description: Name is the name of the referenced object.
                             type: string
                         required:
                         - name
@@ -126,7 +126,7 @@ spec:
                             object.
                           properties:
                             name:
-                              description: Name is the referenced object.
+                              description: Name is the name of the referenced object.
                               type: string
                           required:
                           - name
@@ -179,7 +179,7 @@ spec:
                         object.
                       properties:
                         name:
-                          description: Name is the referenced object.
+                          description: Name is the name of the referenced object.
                           type: string
                       required:
                       - name
@@ -200,7 +200,7 @@ spec:
                       Directive: https://nginx.org/en/docs/http/ngx_http_oidc_module.html#client_secret
                     properties:
                       name:
-                        description: Name is the referenced object.
+                        description: Name is the name of the referenced object.
                         type: string
                     required:
                     - name
@@ -219,7 +219,7 @@ spec:
                       This is used to verify that certificates presented by the OpenID Provider endpoints have not been revoked.
                     properties:
                       name:
-                        description: Name is the referenced object.
+                        description: Name is the name of the referenced object.
                         type: string
                     required:
                     - name
@@ -12716,7 +12716,7 @@ spec:
                             - "token" field for Bearer Token Authentication (NIM) or APIToken Authentication (N1C)
                         properties:
                           name:
-                            description: Name is the referenced object.
+                            description: Name is the name of the referenced object.
                             type: string
                         required:
                         - name
@@ -12864,7 +12864,7 @@ spec:
                       verifying the bundle server's TLS certificate.
                     properties:
                       name:
-                        description: Name is the referenced object.
+                        description: Name is the name of the referenced object.
                         type: string
                     required:
                     - name
@@ -12976,7 +12976,8 @@ spec:
                                   - "token" field for Bearer Token Authentication (NIM) or APIToken Authentication (N1C)
                               properties:
                                 name:
-                                  description: Name is the referenced object.
+                                  description: Name is the name of the referenced
+                                    object.
                                   type: string
                               required:
                               - name
@@ -13120,7 +13121,7 @@ spec:
                             Only applicable when url is set.
                           properties:
                             name:
-                              description: Name is the referenced object.
+                              description: Name is the name of the referenced object.
                               type: string
                           required:
                           - name

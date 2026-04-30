@@ -623,6 +623,9 @@ nginx:
   #       disableCookieSeed:
   #         description: DisableCookieSeed disables the app_protect_cookie_seed directive.
   #         type: boolean
+  #       bundleFailOpen:
+  #         description: BundleFailOpen controls the behavior when a WAF policy bundle has not yet been successfully fetched. When true, traffic is served without WAF protection until the bundle is available. When false (default), configuration is withheld until the bundle is fetched.
+  #         type: boolean
   # @schema
   # -- The configuration for the data plane that is contained in the NginxProxy resource. This is applied globally to all Gateways
   # managed by this instance of NGINX Gateway Fabric.

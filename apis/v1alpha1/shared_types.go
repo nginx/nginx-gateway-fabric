@@ -2,7 +2,7 @@ package v1alpha1
 
 // LocalObjectReference specifies a local Kubernetes object.
 type LocalObjectReference struct {
-	// Name is the referenced object.
+	// Name is the name of the referenced object.
 	Name string `json:"name"`
 }
 

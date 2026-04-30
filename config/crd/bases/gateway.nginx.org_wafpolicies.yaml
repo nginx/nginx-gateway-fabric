@@ -68,7 +68,7 @@ spec:
                             - "token" field for Bearer Token Authentication (NIM) or APIToken Authentication (N1C)
                         properties:
                           name:
-                            description: Name is the referenced object.
+                            description: Name is the name of the referenced object.
                             type: string
                         required:
                         - name
@@ -216,7 +216,7 @@ spec:
                       verifying the bundle server's TLS certificate.
                     properties:
                       name:
-                        description: Name is the referenced object.
+                        description: Name is the name of the referenced object.
                         type: string
                     required:
                     - name
@@ -328,7 +328,8 @@ spec:
                                   - "token" field for Bearer Token Authentication (NIM) or APIToken Authentication (N1C)
                               properties:
                                 name:
-                                  description: Name is the referenced object.
+                                  description: Name is the name of the referenced
+                                    object.
                                   type: string
                               required:
                               - name
@@ -472,7 +473,7 @@ spec:
                             Only applicable when url is set.
                           properties:
                             name:
-                              description: Name is the referenced object.
+                              description: Name is the name of the referenced object.
                               type: string
                           required:
                           - name
