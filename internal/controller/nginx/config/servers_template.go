@@ -232,12 +232,18 @@ server {
         js_content httpmatches.redirect;
         {{- end }}
 
-        {{- if contains $l.Type "inference" -}}
-        js_var $inference_workload_endpoint;
-        set $epp_internal_path {{ $l.EPPInternalPath }};
-        set $epp_host {{ $l.EPPHost }};
-        set $epp_port {{ $l.EPPPort }};
-        js_content epp.getEndpoint;
+        {{- if $l.Inference -}}
+        inference_epp on;
+        inference_epp_endpoint "{{ $l.Inference.EPPEndpoint }}";
+        {{- if $l.Inference.FailopenUpstream }}
+        inference_failopen {{ $l.Inference.FailopenUpstream }};
+        {{- end }}
+        {{- if $l.Inference.UseTLS }}
+        inference_epp_tls on;
+        {{- if $l.Inference.TLSSkipVerify }}
+        inference_epp_tls_skip_verify on;
+        {{- end }}
+        {{- end }}
         {{- end }}
 
         {{ $proxyOrGRPC := "proxy" }}{{ if $l.GRPC }}{{ $proxyOrGRPC = "grpc" }}{{ end }}

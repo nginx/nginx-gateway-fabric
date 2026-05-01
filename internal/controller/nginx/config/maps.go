@@ -8,8 +8,6 @@ import (
 	"strings"
 	gotemplate "text/template"
 
-	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
-
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/shared"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
@@ -36,7 +34,6 @@ func executeMaps(conf dataplane.Configuration) []executeResult {
 	httpAndSSLServers = append(httpAndSSLServers, conf.SSLServers...)
 
 	maps := buildAddHeaderMaps(httpAndSSLServers)
-	maps = append(maps, buildInferenceMaps(conf.BackendGroups)...)
 	maps = append(maps, buildCorsMaps(conf.HTTPServers, conf.SSLServers)...)
 
 	if !conf.BaseHTTPConfig.DisableSNIHostValidation {
@@ -342,82 +339,4 @@ func createAddHeadersMap(name string) shared.Map {
 		Variable:   "$" + mapVarName,
 		Parameters: params,
 	}
-}
-
-// buildInferenceMaps creates maps for InferencePool Backends.
-func buildInferenceMaps(groups []dataplane.BackendGroup) []shared.Map {
-	uniqueMaps := make(map[string]shared.Map)
-
-	for _, group := range groups {
-		for _, backend := range group.Backends {
-			if backend.EndpointPickerConfig == nil || backend.EndpointPickerConfig.EndpointPickerRef == nil {
-				continue
-			}
-
-			backendVarName := strings.ReplaceAll(backend.UpstreamName, "-", "_")
-			mapKey := backendVarName // Use this as the key to detect duplicates
-
-			// Skip if we've already processed this upstream
-			if _, exists := uniqueMaps[mapKey]; exists {
-				continue
-			}
-			// Decide what the map must return when the picker didn’t set a value.
-			var defaultResult string
-			switch backend.EndpointPickerConfig.EndpointPickerRef.FailureMode {
-			// in FailClose mode, if the EPP is unavailable or returns an error,
-			// we return an invalid backend to ensure the request fails
-			case inference.EndpointPickerFailClose:
-				defaultResult = invalidBackendRef
-
-			// in FailOpen mode, if the EPP is unavailable or returns an error,
-			// we fall back to the upstream
-			case inference.EndpointPickerFailOpen:
-				defaultResult = backend.UpstreamName
-			}
-
-			// Build the ordered parameter list.
-			params := make([]shared.MapParameter, 0, 3)
-
-			// no endpoint picked by EPP go to inference pool directly
-			params = append(params, shared.MapParameter{
-				Value:  `""`,
-				Result: backend.UpstreamName,
-			})
-
-			// endpoint picked by the EPP is stored in $inference_workload_endpoint.
-			params = append(params, shared.MapParameter{
-				Value:  `~.+`,
-				Result: `$inference_workload_endpoint`,
-			})
-
-			// this is set based on EPP failure mode,
-			// if EPP is failOpen, we set the default to the inference pool upstream,
-			// if EPP is failClose, we set the default to invalidBackendRef.
-			params = append(params, shared.MapParameter{
-				Value:  "default",
-				Result: defaultResult,
-			})
-
-			uniqueMaps[mapKey] = shared.Map{
-				Source:     `$inference_workload_endpoint`,
-				Variable:   fmt.Sprintf("$inference_backend_%s", backendVarName),
-				Parameters: params,
-			}
-		}
-	}
-
-	// Sort the map keys to ensure deterministic ordering
-	mapKeys := make([]string, 0, len(uniqueMaps))
-	for key := range uniqueMaps {
-		mapKeys = append(mapKeys, key)
-	}
-	sort.Strings(mapKeys)
-
-	// Build the result slice in sorted order
-	inferenceMaps := make([]shared.Map, 0, len(uniqueMaps))
-	for _, key := range mapKeys {
-		inferenceMaps = append(inferenceMaps, uniqueMaps[key])
-	}
-
-	return inferenceMaps
 }
