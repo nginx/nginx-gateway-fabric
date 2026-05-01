@@ -623,7 +623,7 @@ func (rm *ResourceManager) waitForGRPCRoutesToBeReady(ctx context.Context, names
 // GetLBIPAddress gets the IP or Hostname from the Loadbalancer service.
 func (rm *ResourceManager) GetLBIPAddress(namespace string) (string, error) {
 	GinkgoWriter.Printf("Getting LoadBalancer IP/Hostname in namespace %q\n", namespace)
-	ctx, cancel := context.WithTimeout(context.Background(), rm.TimeoutConfig.CreateTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), rm.TimeoutConfig.LoadBalancerReadyTimeout)
 	defer cancel()
 
 	var nsName types.NamespacedName
