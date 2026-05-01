@@ -408,7 +408,7 @@ func getValidKindsForProtocol(listener v1.Listener) []v1.RouteGroupKind {
 			{Kind: v1.Kind(kinds.UDPRoute), Group: helpers.GetPointer[v1.Group](v1.GroupName)},
 		}
 	default:
-		return nil
+		return []v1.RouteGroupKind{}
 	}
 }
 
