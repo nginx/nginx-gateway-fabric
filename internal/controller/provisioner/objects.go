@@ -1918,13 +1918,6 @@ func DetermineNginxImageName(
 	version string,
 ) (string, corev1.PullPolicy) {
 	image := defaultNginxImagePath
-	if isPlus {
-		if graph.WAFEnabledForNginxProxy(nProxyCfg) {
-			image = defaultNginxPlusWAFImagePath
-		} else {
-			image = defaultNginxPlusImagePath
-		}
-	}
 	tag := version
 	pullPolicy := defaultImagePullPolicy
 
@@ -1949,6 +1942,17 @@ func DetermineNginxImageName(
 			image, tag, pullPolicy = getImageAndPullPolicy(nProxyCfg.Kubernetes.Deployment.Container)
 		} else if nProxyCfg.Kubernetes.DaemonSet != nil {
 			image, tag, pullPolicy = getImageAndPullPolicy(nProxyCfg.Kubernetes.DaemonSet.Container)
+		}
+	}
+
+	// If Plus is enabled and the resolved image is still the OSS default (either because
+	// no override was specified, or because the Helm chart unconditionally injects the OSS
+	// default into the NginxProxy), correct it to the appropriate Plus image.
+	if isPlus && image == defaultNginxImagePath {
+		if graph.WAFEnabledForNginxProxy(nProxyCfg) {
+			image = defaultNginxPlusWAFImagePath
+		} else {
+			image = defaultNginxPlusImagePath
 		}
 	}
 

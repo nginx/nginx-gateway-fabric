@@ -2674,3 +2674,199 @@ func TestBuildNginxResourceObjects_WAF(t *testing.T) {
 		g.Expect(volumeNames).To(ContainElement(expectedVolume))
 	}
 }
+
+func TestDetermineNginxImageName(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		nProxyCfg      *graph.EffectiveNginxProxy
+		name           string
+		version        string
+		expectedImage  string
+		expectedPolicy corev1.PullPolicy
+		isPlus         bool
+	}{
+		{
+			name:           "OSS default, no NginxProxy",
+			nProxyCfg:      nil,
+			isPlus:         false,
+			version:        "1.0.0",
+			expectedImage:  defaultNginxImagePath + ":1.0.0",
+			expectedPolicy: defaultImagePullPolicy,
+		},
+		{
+			name:           "Plus default, no NginxProxy",
+			nProxyCfg:      nil,
+			isPlus:         true,
+			version:        "1.0.0",
+			expectedImage:  defaultNginxPlusImagePath + ":1.0.0",
+			expectedPolicy: defaultImagePullPolicy,
+		},
+		{
+			name: "Plus WAF default, no container image override",
+			nProxyCfg: &graph.EffectiveNginxProxy{
+				WAF: &ngfAPIv1alpha2.WAFSpec{Enable: helpers.GetPointer(true)},
+			},
+			isPlus:         true,
+			version:        "1.0.0",
+			expectedImage:  defaultNginxPlusWAFImagePath + ":1.0.0",
+			expectedPolicy: defaultImagePullPolicy,
+		},
+		{
+			name: "Plus WAF with Helm-injected OSS default image should still use WAF image",
+			nProxyCfg: &graph.EffectiveNginxProxy{
+				WAF: &ngfAPIv1alpha2.WAFSpec{Enable: helpers.GetPointer(true)},
+				Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+					Deployment: &ngfAPIv1alpha2.DeploymentSpec{
+						Container: ngfAPIv1alpha2.ContainerSpec{
+							Image: &ngfAPIv1alpha2.Image{
+								Repository: helpers.GetPointer(defaultNginxImagePath),
+								Tag:        helpers.GetPointer("edge"),
+								PullPolicy: helpers.GetPointer(ngfAPIv1alpha2.PullAlways),
+							},
+						},
+					},
+				},
+			},
+			isPlus:         true,
+			version:        "1.0.0",
+			expectedImage:  defaultNginxPlusWAFImagePath + ":edge",
+			expectedPolicy: corev1.PullAlways,
+		},
+		{
+			name: "Plus WAF with explicit Plus image should preserve user choice",
+			nProxyCfg: &graph.EffectiveNginxProxy{
+				WAF: &ngfAPIv1alpha2.WAFSpec{Enable: helpers.GetPointer(true)},
+				Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+					Deployment: &ngfAPIv1alpha2.DeploymentSpec{
+						Container: ngfAPIv1alpha2.ContainerSpec{
+							Image: &ngfAPIv1alpha2.Image{
+								Repository: helpers.GetPointer(defaultNginxPlusImagePath),
+							},
+						},
+					},
+				},
+			},
+			isPlus:         true,
+			version:        "2.0.0",
+			expectedImage:  defaultNginxPlusImagePath + ":2.0.0",
+			expectedPolicy: defaultImagePullPolicy,
+		},
+		{
+			name: "Plus WAF with custom image should preserve user choice",
+			nProxyCfg: &graph.EffectiveNginxProxy{
+				WAF: &ngfAPIv1alpha2.WAFSpec{Enable: helpers.GetPointer(true)},
+				Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+					Deployment: &ngfAPIv1alpha2.DeploymentSpec{
+						Container: ngfAPIv1alpha2.ContainerSpec{
+							Image: &ngfAPIv1alpha2.Image{
+								Repository: helpers.GetPointer("my-registry.example.com/custom-nginx"),
+								Tag:        helpers.GetPointer("custom-tag"),
+							},
+						},
+					},
+				},
+			},
+			isPlus:         true,
+			version:        "1.0.0",
+			expectedImage:  "my-registry.example.com/custom-nginx:custom-tag",
+			expectedPolicy: defaultImagePullPolicy,
+		},
+		{
+			name: "Plus WAF with DaemonSet and Helm-injected OSS default should still use WAF image",
+			nProxyCfg: &graph.EffectiveNginxProxy{
+				WAF: &ngfAPIv1alpha2.WAFSpec{Enable: helpers.GetPointer(true)},
+				Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+					DaemonSet: &ngfAPIv1alpha2.DaemonSetSpec{
+						Container: ngfAPIv1alpha2.ContainerSpec{
+							Image: &ngfAPIv1alpha2.Image{
+								Repository: helpers.GetPointer(defaultNginxImagePath),
+							},
+						},
+					},
+				},
+			},
+			isPlus:         true,
+			version:        "1.0.0",
+			expectedImage:  defaultNginxPlusWAFImagePath + ":1.0.0",
+			expectedPolicy: defaultImagePullPolicy,
+		},
+		{
+			name: "Plus without WAF and Helm-injected OSS default should use Plus image",
+			nProxyCfg: &graph.EffectiveNginxProxy{
+				Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+					Deployment: &ngfAPIv1alpha2.DeploymentSpec{
+						Container: ngfAPIv1alpha2.ContainerSpec{
+							Image: &ngfAPIv1alpha2.Image{
+								Repository: helpers.GetPointer(defaultNginxImagePath),
+							},
+						},
+					},
+				},
+			},
+			isPlus:         true,
+			version:        "1.0.0",
+			expectedImage:  defaultNginxPlusImagePath + ":1.0.0",
+			expectedPolicy: defaultImagePullPolicy,
+		},
+		{
+			name: "Plus without WAF and custom image should preserve user choice",
+			nProxyCfg: &graph.EffectiveNginxProxy{
+				Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+					Deployment: &ngfAPIv1alpha2.DeploymentSpec{
+						Container: ngfAPIv1alpha2.ContainerSpec{
+							Image: &ngfAPIv1alpha2.Image{
+								Repository: helpers.GetPointer("my-registry.example.com/my-nginx-plus"),
+								Tag:        helpers.GetPointer("v2"),
+							},
+						},
+					},
+				},
+			},
+			isPlus:         true,
+			version:        "1.0.0",
+			expectedImage:  "my-registry.example.com/my-nginx-plus:v2",
+			expectedPolicy: defaultImagePullPolicy,
+		},
+		{
+			name: "Plus WAF with explicit Plus image via DaemonSet should preserve user choice",
+			nProxyCfg: &graph.EffectiveNginxProxy{
+				WAF: &ngfAPIv1alpha2.WAFSpec{Enable: helpers.GetPointer(true)},
+				Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+					DaemonSet: &ngfAPIv1alpha2.DaemonSetSpec{
+						Container: ngfAPIv1alpha2.ContainerSpec{
+							Image: &ngfAPIv1alpha2.Image{
+								Repository: helpers.GetPointer(defaultNginxPlusImagePath),
+							},
+						},
+					},
+				},
+			},
+			isPlus:         true,
+			version:        "3.0.0",
+			expectedImage:  defaultNginxPlusImagePath + ":3.0.0",
+			expectedPolicy: defaultImagePullPolicy,
+		},
+		{
+			name: "OSS with WAF enabled should not switch to WAF image",
+			nProxyCfg: &graph.EffectiveNginxProxy{
+				WAF: &ngfAPIv1alpha2.WAFSpec{Enable: helpers.GetPointer(true)},
+			},
+			isPlus:         false,
+			version:        "1.0.0",
+			expectedImage:  defaultNginxImagePath + ":1.0.0",
+			expectedPolicy: defaultImagePullPolicy,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			image, pullPolicy := DetermineNginxImageName(test.nProxyCfg, test.isPlus, test.version)
+			g.Expect(image).To(Equal(test.expectedImage))
+			g.Expect(pullPolicy).To(Equal(test.expectedPolicy))
+		})
+	}
+}
