@@ -1,3 +1,43 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: waf-policy-definitions
+data:
+  attack-signatures-blocking.json: |
+    {
+      "policy": {
+        "name": "attack-signatures-blocking",
+        "template": {
+          "name": "POLICY_TEMPLATE_NGINX_BASE"
+        },
+        "applicationLanguage": "utf-8",
+        "enforcementMode": "blocking",
+        "signature-sets": [
+          {
+            "name": "All Signatures",
+            "block": true,
+            "alarm": true
+          }
+        ]
+      }
+    }
+  dataguard-blocking.json: |
+    {
+      "policy": {
+        "name": "dataguard-blocking",
+        "template": {
+          "name": "POLICY_TEMPLATE_NGINX_BASE"
+        },
+        "applicationLanguage": "utf-8",
+        "enforcementMode": "blocking",
+        "data-guard": {
+          "enabled": true,
+          "creditCardNumbers": true,
+          "usSocialSecurityNumbers": true
+        }
+      }
+    }
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -12,6 +52,34 @@ spec:
       labels:
         app: bundle-server
     spec:
+      # Replace with the name of your imagePullSecret for private-registry.nginx.com
+      imagePullSecrets:
+      - name: gateway-nginx-nginx-registry-secret
+      initContainers:
+      - name: compile-attack-signatures
+        image: private-registry.nginx.com/nap/waf-compiler:5.12.1
+        args:
+        - -p
+        - /policies/attack-signatures-blocking.json
+        - -o
+        - /bundles/attack-signatures-blocking.tgz
+        volumeMounts:
+        - name: policies
+          mountPath: /policies
+        - name: bundles
+          mountPath: /bundles
+      - name: compile-dataguard
+        image: private-registry.nginx.com/nap/waf-compiler:5.12.1
+        args:
+        - -p
+        - /policies/dataguard-blocking.json
+        - -o
+        - /bundles/dataguard-blocking.tgz
+        volumeMounts:
+        - name: policies
+          mountPath: /policies
+        - name: bundles
+          mountPath: /bundles
       containers:
       - name: bundle-server
         image: nginx:alpine
@@ -21,6 +89,9 @@ spec:
         - name: bundles
           mountPath: /usr/share/nginx/html
       volumes:
+      - name: policies
+        configMap:
+          name: waf-policy-definitions
       - name: bundles
         emptyDir: {}
 ---

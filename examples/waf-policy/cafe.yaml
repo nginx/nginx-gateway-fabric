@@ -1,19 +1,19 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: coffee
+  name: customers
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: coffee
+      app: customers
   template:
     metadata:
       labels:
-        app: coffee
+        app: customers
     spec:
       containers:
-      - name: coffee
+      - name: customers
         image: hashicorp/http-echo:latest
         args:
         - "-listen=:8080"
@@ -24,7 +24,7 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: coffee
+  name: customers
 spec:
   ports:
   - port: 80
@@ -32,7 +32,7 @@ spec:
     protocol: TCP
     name: http
   selector:
-    app: coffee
+    app: customers
 ---
 apiVersion: apps/v1
 kind: Deployment
