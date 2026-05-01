@@ -29,6 +29,7 @@ func (m *mockInterceptor) Unary(_ logr.Logger) grpc.UnaryServerInterceptor {
 }
 
 func TestCreateServer(t *testing.T) {
+	t.Parallel()
 	g := NewWithT(t)
 
 	// Create a Server instance with a mock interceptor
