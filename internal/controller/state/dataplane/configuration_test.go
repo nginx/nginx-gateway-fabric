@@ -4756,6 +4756,31 @@ func TestBuildPolicies(t *testing.T) {
 			},
 			expPolicies: nil,
 		},
+		{
+			name: "WAF policy with pending bundle is excluded",
+			policies: []*graph.Policy{
+				{
+					Source:             getPolicy("WAFPolicy", "waf-pending"),
+					Valid:              true,
+					InvalidForGateways: map[types.NamespacedName]struct{}{},
+					WAFState:           &graph.PolicyWAFState{BundlePending: true},
+				},
+				{
+					Source:             getPolicy("Kind1", "other-valid"),
+					Valid:              true,
+					InvalidForGateways: map[types.NamespacedName]struct{}{},
+				},
+			},
+			gateway: &graph.Gateway{
+				Source: &v1.Gateway{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "gateway",
+						Namespace: "test",
+					},
+				},
+			},
+			expPolicies: []string{"other-valid"},
+		},
 	}
 
 	for _, test := range tests {
@@ -6965,7 +6990,6 @@ func TestBuildDNSResolverConfig(t *testing.T) {
 			},
 		},
 	}
-
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
@@ -9205,6 +9229,250 @@ func TestBuildClientConfigForSSLServersFrontendValidationModes(t *testing.T) {
 			g.Expect(servers[0].SSL.ClientCertBundleID).To(Equal(test.expectedBundle))
 			g.Expect(servers[0].SSL.VerifyClient).To(Equal(test.expectedVerifyClient))
 			g.Expect(servers[0].SSL.RequireVerifiedCert).To(Equal(test.expectedRequireVerified))
+		})
+	}
+}
+
+func TestBuildWAF(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		gateway      *graph.Gateway
+		expWAFConfig WAFConfig
+	}{
+		{
+			name: "WAF disabled, no bundles",
+			gateway: &graph.Gateway{
+				Source:              &v1.Gateway{ObjectMeta: metav1.ObjectMeta{UID: "uid-disabled"}},
+				EffectiveNginxProxy: nil,
+				Policies:            []*graph.Policy{},
+			},
+			expWAFConfig: WAFConfig{
+				Enabled:    false,
+				WAFBundles: map[WAFBundleID]WAFBundle{},
+				CookieSeed: "uid-disabled",
+			},
+		},
+		{
+			name: "WAF enabled, no bundles",
+			gateway: &graph.Gateway{
+				Source:              &v1.Gateway{ObjectMeta: metav1.ObjectMeta{UID: "uid-enabled"}},
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{WAF: &ngfAPIv1alpha2.WAFSpec{Enable: helpers.GetPointer(true)}},
+				Policies:            []*graph.Policy{},
+			},
+			expWAFConfig: WAFConfig{
+				Enabled:    true,
+				WAFBundles: map[WAFBundleID]WAFBundle{},
+				CookieSeed: "uid-enabled",
+			},
+		},
+		{
+			name: "WAF disabled, with bundles on policy",
+			gateway: &graph.Gateway{
+				Source:              &v1.Gateway{ObjectMeta: metav1.ObjectMeta{UID: "uid-disabled-bundles"}},
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{WAF: &ngfAPIv1alpha2.WAFSpec{Enable: helpers.GetPointer(false)}},
+				Policies: []*graph.Policy{
+					{
+						WAFState: &graph.PolicyWAFState{
+							Bundles: map[graph.WAFBundleKey]*graph.WAFBundleData{
+								"bundle1.tgz": {Data: []byte("bundle data")},
+							},
+						},
+					},
+				},
+			},
+			expWAFConfig: WAFConfig{
+				Enabled:    false,
+				CookieSeed: "uid-disabled-bundles",
+				WAFBundles: map[WAFBundleID]WAFBundle{
+					"bundle1.tgz": WAFBundle([]byte("bundle data")),
+				},
+			},
+		},
+		{
+			name: "WAF enabled, with bundles on gateway-targeted policy",
+			gateway: &graph.Gateway{
+				Source:              &v1.Gateway{ObjectMeta: metav1.ObjectMeta{UID: "uid-gw-policy"}},
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{WAF: &ngfAPIv1alpha2.WAFSpec{Enable: helpers.GetPointer(true)}},
+				Policies: []*graph.Policy{
+					{
+						WAFState: &graph.PolicyWAFState{
+							Bundles: map[graph.WAFBundleKey]*graph.WAFBundleData{
+								"bundle1.tgz": {Data: []byte("first bundle")},
+								"bundle2.tgz": nil,
+							},
+						},
+					},
+				},
+			},
+			expWAFConfig: WAFConfig{
+				Enabled:    true,
+				CookieSeed: "uid-gw-policy",
+				WAFBundles: map[WAFBundleID]WAFBundle{
+					"bundle1.tgz": WAFBundle([]byte("first bundle")),
+					"bundle2.tgz": WAFBundle(nil),
+				},
+			},
+		},
+		{
+			name: "WAF enabled, policy with nil WAFState",
+			gateway: &graph.Gateway{
+				Source:              &v1.Gateway{ObjectMeta: metav1.ObjectMeta{UID: "uid-nil-state"}},
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{WAF: &ngfAPIv1alpha2.WAFSpec{Enable: helpers.GetPointer(true)}},
+				Policies: []*graph.Policy{
+					{
+						WAFState: nil, // Non-WAF policy.
+					},
+				},
+			},
+			expWAFConfig: WAFConfig{
+				Enabled:    true,
+				WAFBundles: map[WAFBundleID]WAFBundle{},
+				CookieSeed: "uid-nil-state",
+			},
+		},
+		{
+			name: "WAF enabled, multiple policies with bundles",
+			gateway: &graph.Gateway{
+				Source:              &v1.Gateway{ObjectMeta: metav1.ObjectMeta{UID: "uid-multi-policy"}},
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{WAF: &ngfAPIv1alpha2.WAFSpec{Enable: helpers.GetPointer(true)}},
+				Policies: []*graph.Policy{
+					{
+						WAFState: &graph.PolicyWAFState{
+							Bundles: map[graph.WAFBundleKey]*graph.WAFBundleData{
+								"policy1_bundle": {Data: []byte("bundle 1")},
+							},
+						},
+					},
+					{
+						WAFState: &graph.PolicyWAFState{
+							Bundles: map[graph.WAFBundleKey]*graph.WAFBundleData{
+								"policy2_bundle": {Data: []byte("bundle 2")},
+							},
+						},
+					},
+				},
+			},
+			expWAFConfig: WAFConfig{
+				Enabled:    true,
+				CookieSeed: "uid-multi-policy",
+				WAFBundles: map[WAFBundleID]WAFBundle{
+					"policy1_bundle": WAFBundle([]byte("bundle 1")),
+					"policy2_bundle": WAFBundle([]byte("bundle 2")),
+				},
+			},
+		},
+		{
+			name: "WAF enabled, bundles on route-targeted policy",
+			gateway: &graph.Gateway{
+				Source:              &v1.Gateway{ObjectMeta: metav1.ObjectMeta{UID: "uid-route-policy"}},
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{WAF: &ngfAPIv1alpha2.WAFSpec{Enable: helpers.GetPointer(true)}},
+				Policies:            []*graph.Policy{},
+				Listeners: []*graph.Listener{
+					{
+						Routes: map[graph.RouteKey]*graph.L7Route{
+							{NamespacedName: types.NamespacedName{Namespace: "ns", Name: "route1"}}: {
+								Policies: []*graph.Policy{
+									{
+										WAFState: &graph.PolicyWAFState{
+											Bundles: map[graph.WAFBundleKey]*graph.WAFBundleData{
+												"route_bundle": {Data: []byte("route bundle data")},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expWAFConfig: WAFConfig{
+				Enabled:    true,
+				CookieSeed: "uid-route-policy",
+				WAFBundles: map[WAFBundleID]WAFBundle{
+					"route_bundle": WAFBundle([]byte("route bundle data")),
+				},
+			},
+		},
+		{
+			name: "WAF enabled, bundles on both gateway and route policies",
+			gateway: &graph.Gateway{
+				Source:              &v1.Gateway{ObjectMeta: metav1.ObjectMeta{UID: "uid-gw-route"}},
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{WAF: &ngfAPIv1alpha2.WAFSpec{Enable: helpers.GetPointer(true)}},
+				Policies: []*graph.Policy{
+					{
+						WAFState: &graph.PolicyWAFState{
+							Bundles: map[graph.WAFBundleKey]*graph.WAFBundleData{
+								"gw_bundle": {Data: []byte("gateway bundle")},
+							},
+						},
+					},
+				},
+				Listeners: []*graph.Listener{
+					{
+						Routes: map[graph.RouteKey]*graph.L7Route{
+							{NamespacedName: types.NamespacedName{Namespace: "ns", Name: "route1"}}: {
+								Policies: []*graph.Policy{
+									{
+										WAFState: &graph.PolicyWAFState{
+											Bundles: map[graph.WAFBundleKey]*graph.WAFBundleData{
+												"route_bundle": {Data: []byte("route bundle")},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expWAFConfig: WAFConfig{
+				Enabled:    true,
+				CookieSeed: "uid-gw-route",
+				WAFBundles: map[WAFBundleID]WAFBundle{
+					"gw_bundle":    WAFBundle([]byte("gateway bundle")),
+					"route_bundle": WAFBundle([]byte("route bundle")),
+				},
+			},
+		},
+		{
+			name: "nil gateway source",
+			gateway: &graph.Gateway{
+				Source:              nil,
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{WAF: &ngfAPIv1alpha2.WAFSpec{Enable: helpers.GetPointer(true)}},
+				Policies:            []*graph.Policy{},
+			},
+			expWAFConfig: WAFConfig{
+				Enabled:    true,
+				WAFBundles: map[WAFBundleID]WAFBundle{},
+				CookieSeed: "",
+			},
+		},
+		{
+			name: "WAF enabled, cookie seed disabled",
+			gateway: &graph.Gateway{
+				Source: &v1.Gateway{ObjectMeta: metav1.ObjectMeta{UID: "uid-disable-seed"}},
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+					WAF: &ngfAPIv1alpha2.WAFSpec{Enable: helpers.GetPointer(true), DisableCookieSeed: helpers.GetPointer(true)},
+				},
+				Policies: []*graph.Policy{},
+			},
+			expWAFConfig: WAFConfig{
+				Enabled:    true,
+				WAFBundles: map[WAFBundleID]WAFBundle{},
+				CookieSeed: "",
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			result := buildWAF(test.gateway)
+			g.Expect(result).To(Equal(test.expWAFConfig))
 		})
 	}
 }

@@ -1,0 +1,10 @@
+{
+  "filter": {
+    "request_type": "illegal"
+  },
+  "content": {
+    "format": "default",
+    "max_request_size": "any",
+    "max_message_size": "15k"
+  }
+}

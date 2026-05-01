@@ -2,6 +2,7 @@
 package statefakes
 
 import (
+	"context"
 	"sync"
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state"
@@ -23,6 +24,10 @@ type FakeChangeProcessor struct {
 	captureUpsertChangeArgsForCall []struct {
 		arg1 client.Object
 	}
+	ForceRebuildStub        func()
+	forceRebuildMutex       sync.RWMutex
+	forceRebuildArgsForCall []struct {
+	}
 	GetLatestGraphStub        func() *graph.Graph
 	getLatestGraphMutex       sync.RWMutex
 	getLatestGraphArgsForCall []struct {
@@ -33,9 +38,10 @@ type FakeChangeProcessor struct {
 	getLatestGraphReturnsOnCall map[int]struct {
 		result1 *graph.Graph
 	}
-	ProcessStub        func() *graph.Graph
+	ProcessStub        func(context.Context) *graph.Graph
 	processMutex       sync.RWMutex
 	processArgsForCall []struct {
+		arg1 context.Context
 	}
 	processReturns struct {
 		result1 *graph.Graph
@@ -112,6 +118,30 @@ func (fake *FakeChangeProcessor) CaptureUpsertChangeArgsForCall(i int) client.Ob
 	return argsForCall.arg1
 }
 
+func (fake *FakeChangeProcessor) ForceRebuild() {
+	fake.forceRebuildMutex.Lock()
+	fake.forceRebuildArgsForCall = append(fake.forceRebuildArgsForCall, struct {
+	}{})
+	stub := fake.ForceRebuildStub
+	fake.recordInvocation("ForceRebuild", []interface{}{})
+	fake.forceRebuildMutex.Unlock()
+	if stub != nil {
+		fake.ForceRebuildStub()
+	}
+}
+
+func (fake *FakeChangeProcessor) ForceRebuildCallCount() int {
+	fake.forceRebuildMutex.RLock()
+	defer fake.forceRebuildMutex.RUnlock()
+	return len(fake.forceRebuildArgsForCall)
+}
+
+func (fake *FakeChangeProcessor) ForceRebuildCalls(stub func()) {
+	fake.forceRebuildMutex.Lock()
+	defer fake.forceRebuildMutex.Unlock()
+	fake.ForceRebuildStub = stub
+}
+
 func (fake *FakeChangeProcessor) GetLatestGraph() *graph.Graph {
 	fake.getLatestGraphMutex.Lock()
 	ret, specificReturn := fake.getLatestGraphReturnsOnCall[len(fake.getLatestGraphArgsForCall)]
@@ -165,17 +195,18 @@ func (fake *FakeChangeProcessor) GetLatestGraphReturnsOnCall(i int, result1 *gra
 	}{result1}
 }
 
-func (fake *FakeChangeProcessor) Process() *graph.Graph {
+func (fake *FakeChangeProcessor) Process(arg1 context.Context) *graph.Graph {
 	fake.processMutex.Lock()
 	ret, specificReturn := fake.processReturnsOnCall[len(fake.processArgsForCall)]
 	fake.processArgsForCall = append(fake.processArgsForCall, struct {
-	}{})
+		arg1 context.Context
+	}{arg1})
 	stub := fake.ProcessStub
 	fakeReturns := fake.processReturns
-	fake.recordInvocation("Process", []interface{}{})
+	fake.recordInvocation("Process", []interface{}{arg1})
 	fake.processMutex.Unlock()
 	if stub != nil {
-		return stub()
+		return stub(arg1)
 	}
 	if specificReturn {
 		return ret.result1
@@ -189,10 +220,17 @@ func (fake *FakeChangeProcessor) ProcessCallCount() int {
 	return len(fake.processArgsForCall)
 }
 
-func (fake *FakeChangeProcessor) ProcessCalls(stub func() *graph.Graph) {
+func (fake *FakeChangeProcessor) ProcessCalls(stub func(context.Context) *graph.Graph) {
 	fake.processMutex.Lock()
 	defer fake.processMutex.Unlock()
 	fake.ProcessStub = stub
+}
+
+func (fake *FakeChangeProcessor) ProcessArgsForCall(i int) context.Context {
+	fake.processMutex.RLock()
+	defer fake.processMutex.RUnlock()
+	argsForCall := fake.processArgsForCall[i]
+	return argsForCall.arg1
 }
 
 func (fake *FakeChangeProcessor) ProcessReturns(result1 *graph.Graph) {

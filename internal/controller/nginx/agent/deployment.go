@@ -64,6 +64,7 @@ type Deployment struct {
 	files            []File
 
 	latestFileNames []string
+	volumeMounts    []v1.VolumeMount
 
 	FileLock sync.RWMutex
 	errLock  sync.RWMutex
@@ -76,6 +77,11 @@ func newDeployment(broadcaster broadcast.Broadcaster, gatewayName string) *Deplo
 		podStatuses: make(map[string]error),
 		gatewayName: gatewayName,
 	}
+}
+
+// GetGatewayName returns the name of the Gateway associated with this deployment.
+func (d *Deployment) GetGatewayName() string {
+	return d.gatewayName
 }
 
 // GetBroadcaster returns the deployment's broadcaster.
@@ -197,36 +203,99 @@ func (d *Deployment) GetFile(name, hash string) ([]byte, string) {
 // The deployment FileLock MUST already be locked before calling this function.
 func (d *Deployment) SetFiles(files []File, volumeMounts []v1.VolumeMount) *broadcast.NginxAgentMessage {
 	d.files = files
+	d.volumeMounts = volumeMounts
 
-	fileOverviews := make([]*pb.File, 0, len(files))
-	for _, file := range files {
-		fileOverviews = append(fileOverviews, &pb.File{FileMeta: file.Meta})
+	return d.rebuildFileOverviews()
+}
+
+// SetNGINXPlusActions updates the deployment's latest NGINX Plus Actions to perform if using NGINX Plus.
+// Used by a Subscriber when it first connects.
+// The deployment FileLock MUST already be locked before calling this function.
+func (d *Deployment) SetNGINXPlusActions(actions []*pb.NGINXPlusAction) {
+	d.nginxPlusActions = actions
+}
+
+// UpdateWAFBundle replaces or inserts a WAF bundle file in the deployment's file list.
+// It finds an existing file by its full path and replaces its contents and metadata,
+// or appends a new file entry if the bundle does not yet exist.
+// Returns a broadcast message if the config version changed (i.e. the bundle contents differ
+// from what was previously stored), or nil if nothing changed.
+// The deployment FileLock MUST already be locked before calling this function.
+func (d *Deployment) UpdateWAFBundle(bundlePath string, data []byte) *broadcast.NginxAgentMessage {
+	newHash := filesHelper.GenerateHash(data)
+	newMeta := &pb.FileMeta{
+		Name:        bundlePath,
+		Hash:        newHash,
+		Permissions: fileMode,
+		Size:        int64(len(data)),
 	}
 
-	// To avoid duplicates, use a set for volume ignore files
-	volumeIgnoreSet := make(map[string]struct{}, len(d.latestFileNames))
-	for _, vm := range volumeMounts {
+	found := false
+	for i, f := range d.files {
+		if f.Meta.GetName() == bundlePath {
+			d.files[i] = File{
+				Meta:     newMeta,
+				Contents: data,
+			}
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		d.files = append(d.files, File{
+			Meta:     newMeta,
+			Contents: data,
+		})
+	}
+
+	return d.rebuildFileOverviews()
+}
+
+// RemoveWAFBundle removes a WAF bundle file from the deployment's file list.
+// Returns a broadcast message if the config version changed, or nil if the bundle
+// was not found or nothing changed.
+// The deployment FileLock MUST already be locked before calling this function.
+func (d *Deployment) RemoveWAFBundle(bundlePath string) *broadcast.NginxAgentMessage {
+	for i, f := range d.files {
+		if f.Meta.GetName() == bundlePath {
+			d.files = append(d.files[:i], d.files[i+1:]...)
+			return d.rebuildFileOverviews()
+		}
+	}
+	return nil
+}
+
+// rebuildFileOverviews regenerates the file overviews and config version from the current
+// file list. Returns a broadcast message if the config version changed.
+// The deployment FileLock MUST already be locked before calling this function.
+func (d *Deployment) rebuildFileOverviews() *broadcast.NginxAgentMessage {
+	fileOverviews := make([]*pb.File, 0, len(d.files))
+	for _, f := range d.files {
+		fileOverviews = append(fileOverviews, &pb.File{FileMeta: f.Meta})
+	}
+
+	// Build the set of unmanaged files from volume mounts.
+	fileIgnoreSet := make(map[string]struct{})
+	for _, vm := range d.volumeMounts {
 		for _, f := range d.latestFileNames {
 			if strings.HasPrefix(f, vm.MountPath) {
-				volumeIgnoreSet[f] = struct{}{}
+				fileIgnoreSet[f] = struct{}{}
 			}
 		}
 	}
 
-	volumeIgnoreFiles := make([]string, 0, len(volumeIgnoreSet))
-	for f := range volumeIgnoreSet {
-		volumeIgnoreFiles = append(volumeIgnoreFiles, f)
+	// Add static and volume-mount ignored files as 'unmanaged' so agent doesn't touch them.
+	for _, f := range ignoreFiles {
+		fileIgnoreSet[f] = struct{}{}
 	}
 
-	// add ignored files to the overview as 'unmanaged' so agent doesn't touch them
-	for _, f := range append(ignoreFiles, volumeIgnoreFiles...) {
-		meta := &pb.FileMeta{
-			Name:        f,
-			Permissions: fileMode,
-		}
-
+	for f := range fileIgnoreSet {
 		fileOverviews = append(fileOverviews, &pb.File{
-			FileMeta:  meta,
+			FileMeta: &pb.FileMeta{
+				Name:        f,
+				Permissions: fileMode,
+			},
 			Unmanaged: true,
 		})
 	}
@@ -245,13 +314,6 @@ func (d *Deployment) SetFiles(files []File, volumeMounts []v1.VolumeMount) *broa
 		FileOverviews: fileOverviews,
 		ConfigVersion: d.configVersion,
 	}
-}
-
-// SetNGINXPlusActions updates the deployment's latest NGINX Plus Actions to perform if using NGINX Plus.
-// Used by a Subscriber when it first connects.
-// The deployment FileLock MUST already be locked before calling this function.
-func (d *Deployment) SetNGINXPlusActions(actions []*pb.NGINXPlusAction) {
-	d.nginxPlusActions = actions
 }
 
 //counterfeiter:generate . DeploymentStorer

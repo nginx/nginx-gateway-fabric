@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bundle-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: bundle-server
+  template:
+    metadata:
+      labels:
+        app: bundle-server
+    spec:
+      containers:
+      - name: bundle-server
+        image: nginx:alpine
+        ports:
+        - containerPort: 80
+        volumeMounts:
+        - name: bundles
+          mountPath: /usr/share/nginx/html
+      volumes:
+      - name: bundles
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: bundle-server
+spec:
+  ports:
+  - port: 80
+    targetPort: 80
+    protocol: TCP
+    name: http
+  selector:
+    app: bundle-server

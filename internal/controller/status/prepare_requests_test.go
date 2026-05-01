@@ -2635,6 +2635,260 @@ func TestBuildNGFPolicyStatuses(t *testing.T) {
 	}
 }
 
+func TestBuildWAFPolicyStatuses(t *testing.T) {
+	t.Parallel()
+	const gatewayCtlrName = "controller"
+
+	transitionTime := helpers.PrepareTimeForFakeClient(metav1.Now())
+
+	type policyCfg struct {
+		Ancestors  []graph.PolicyAncestor
+		Name       string
+		Conditions []conditions.Condition
+	}
+
+	getWAFPolicy := func(cfg policyCfg) *graph.Policy {
+		return &graph.Policy{
+			Source: &ngfAPI.WAFPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       cfg.Name,
+					Namespace:  "test",
+					Generation: 1,
+				},
+			},
+			Conditions: cfg.Conditions,
+			Ancestors:  cfg.Ancestors,
+		}
+	}
+
+	wgbPolicyKey := func(name string) graph.PolicyKey {
+		return graph.PolicyKey{
+			NsName: types.NamespacedName{Namespace: "test", Name: name},
+			GVK:    schema.GroupVersionKind{Group: ngfAPI.GroupName, Kind: kinds.WAFPolicy},
+		}
+	}
+
+	acceptedCond := metav1.Condition{
+		Type:               string(v1.PolicyConditionAccepted),
+		Status:             metav1.ConditionTrue,
+		ObservedGeneration: 1,
+		LastTransitionTime: transitionTime,
+		Reason:             string(v1.PolicyReasonAccepted),
+		Message:            "The Policy is accepted",
+	}
+	resolvedRefsCond := metav1.Condition{
+		Type:               string(conditions.WAFResolvedRefsConditionType),
+		Status:             metav1.ConditionTrue,
+		ObservedGeneration: 1,
+		LastTransitionTime: transitionTime,
+		Reason:             string(conditions.PolicyReasonResolvedRefs),
+		Message:            "All references are resolved",
+	}
+	programmedCond := metav1.Condition{
+		Type:               string(conditions.WAFProgrammedConditionType),
+		Status:             metav1.ConditionTrue,
+		ObservedGeneration: 1,
+		LastTransitionTime: transitionTime,
+		Reason:             string(conditions.PolicyReasonProgrammed),
+		Message:            "Policy is programmed in the data plane",
+	}
+
+	tests := []struct {
+		policies map[graph.PolicyKey]*graph.Policy
+		expected map[types.NamespacedName]v1.PolicyStatus
+		name     string
+	}{
+		{
+			name: "valid WAF policy gets all three default conditions",
+			policies: map[graph.PolicyKey]*graph.Policy{
+				wgbPolicyKey("valid-waf"): getWAFPolicy(policyCfg{
+					Name: "valid-waf",
+					Ancestors: []graph.PolicyAncestor{
+						{
+							Ancestor: v1.ParentReference{
+								Name: "ancestor1",
+							},
+						},
+					},
+				}),
+			},
+			expected: map[types.NamespacedName]v1.PolicyStatus{
+				{Namespace: "test", Name: "valid-waf"}: {
+					Ancestors: []v1.PolicyAncestorStatus{
+						{
+							AncestorRef: v1.ParentReference{
+								Name: "ancestor1",
+							},
+							ControllerName: gatewayCtlrName,
+							Conditions: []metav1.Condition{
+								acceptedCond,
+								resolvedRefsCond,
+								programmedCond,
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "WAF policy with Programmed error overrides default",
+			policies: map[graph.PolicyKey]*graph.Policy{
+				wgbPolicyKey("fetch-err-waf"): getWAFPolicy(policyCfg{
+					Name: "fetch-err-waf",
+					Conditions: []conditions.Condition{
+						conditions.NewPolicyNotProgrammedBundleFetchError("connection refused"),
+					},
+					Ancestors: []graph.PolicyAncestor{
+						{
+							Ancestor: v1.ParentReference{
+								Name: "ancestor1",
+							},
+						},
+					},
+				}),
+			},
+			expected: map[types.NamespacedName]v1.PolicyStatus{
+				{Namespace: "test", Name: "fetch-err-waf"}: {
+					Ancestors: []v1.PolicyAncestorStatus{
+						{
+							AncestorRef: v1.ParentReference{
+								Name: "ancestor1",
+							},
+							ControllerName: gatewayCtlrName,
+							Conditions: []metav1.Condition{
+								acceptedCond,
+								resolvedRefsCond,
+								{
+									Type:               string(conditions.WAFProgrammedConditionType),
+									Status:             metav1.ConditionFalse,
+									ObservedGeneration: 1,
+									LastTransitionTime: transitionTime,
+									Reason:             string(conditions.PolicyReasonFetchError),
+									Message:            "Failed to fetch bundle: connection refused",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "WAF policy with integrity error",
+			policies: map[graph.PolicyKey]*graph.Policy{
+				wgbPolicyKey("integrity-err-waf"): getWAFPolicy(policyCfg{
+					Name: "integrity-err-waf",
+					Conditions: []conditions.Condition{
+						conditions.NewPolicyNotProgrammedIntegrityError("checksum mismatch"),
+					},
+					Ancestors: []graph.PolicyAncestor{
+						{
+							Ancestor: v1.ParentReference{
+								Name: "ancestor1",
+							},
+						},
+					},
+				}),
+			},
+			expected: map[types.NamespacedName]v1.PolicyStatus{
+				{Namespace: "test", Name: "integrity-err-waf"}: {
+					Ancestors: []v1.PolicyAncestorStatus{
+						{
+							AncestorRef: v1.ParentReference{
+								Name: "ancestor1",
+							},
+							ControllerName: gatewayCtlrName,
+							Conditions: []metav1.Condition{
+								acceptedCond,
+								resolvedRefsCond,
+								{
+									Type:               string(conditions.WAFProgrammedConditionType),
+									Status:             metav1.ConditionFalse,
+									ObservedGeneration: 1,
+									LastTransitionTime: transitionTime,
+									Reason:             string(conditions.PolicyReasonIntegrityError),
+									Message:            "Bundle integrity check failed: checksum mismatch",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "WAF policy with Accepted error overrides default Accepted",
+			policies: map[graph.PolicyKey]*graph.Policy{
+				wgbPolicyKey("invalid-waf"): getWAFPolicy(policyCfg{
+					Name: "invalid-waf",
+					Conditions: []conditions.Condition{
+						conditions.NewPolicyInvalid("spec is invalid"),
+					},
+					Ancestors: []graph.PolicyAncestor{
+						{
+							Ancestor: v1.ParentReference{
+								Name: "ancestor1",
+							},
+						},
+					},
+				}),
+			},
+			expected: map[types.NamespacedName]v1.PolicyStatus{
+				{Namespace: "test", Name: "invalid-waf"}: {
+					Ancestors: []v1.PolicyAncestorStatus{
+						{
+							AncestorRef: v1.ParentReference{
+								Name: "ancestor1",
+							},
+							ControllerName: gatewayCtlrName,
+							Conditions: []metav1.Condition{
+								resolvedRefsCond,
+								programmedCond,
+								{
+									Type:               string(v1.PolicyConditionAccepted),
+									Status:             metav1.ConditionFalse,
+									ObservedGeneration: 1,
+									LastTransitionTime: transitionTime,
+									Reason:             string(v1.PolicyReasonInvalid),
+									Message:            "spec is invalid",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			k8sClient := createK8sClientFor(&ngfAPI.WAFPolicy{})
+
+			for _, pol := range test.policies {
+				err := k8sClient.Create(t.Context(), pol.Source)
+				g.Expect(err).ToNot(HaveOccurred())
+			}
+
+			updater := NewUpdater(k8sClient, logr.Discard())
+
+			reqs := PrepareNGFPolicyRequests(test.policies, transitionTime, gatewayCtlrName)
+
+			g.Expect(reqs).To(HaveLen(len(test.expected)))
+
+			updater.Update(t.Context(), reqs...)
+
+			for nsname, expected := range test.expected {
+				var pol ngfAPI.WAFPolicy
+
+				err := k8sClient.Get(t.Context(), nsname, &pol)
+				g.Expect(err).ToNot(HaveOccurred())
+				g.Expect(helpers.Diff(expected, pol.Status)).To(BeEmpty())
+			}
+		})
+	}
+}
+
 func TestBuildSnippetsFilterStatuses(t *testing.T) {
 	t.Parallel()
 	transitionTime := helpers.PrepareTimeForFakeClient(metav1.Now())

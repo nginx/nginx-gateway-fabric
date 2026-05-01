@@ -23,3 +23,11 @@ type DeleteEvent struct {
 	// NamespacedName is the namespace & name of the deleted resource.
 	NamespacedName types.NamespacedName
 }
+
+// WAFBundleReconcileEvent is injected by the WAF poller manager when a bundle that was previously
+// unavailable has been successfully fetched for the first time.
+// It signals the event handler to re-reconcile the affected policy so the Gateway config push proceeds.
+type WAFBundleReconcileEvent struct {
+	// PolicyNsName is the namespace/name of the WAFPolicy whose bundle is now available.
+	PolicyNsName types.NamespacedName
+}

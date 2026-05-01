@@ -83,6 +83,7 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&ngfAPIv1alpha1.AuthenticationFilterList{},
 				&ngfAPIv1alpha1.RateLimitPolicyList{},
 				&gatewayv1.ListenerSetList{},
+				&ngfAPIv1alpha1.WAFPolicyList{},
 			},
 		},
 		{
@@ -116,6 +117,7 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&ngfAPIv1alpha1.RateLimitPolicyList{},
 				partialObjectMetadataList,
 				&gatewayv1.GatewayList{},
+				&ngfAPIv1alpha1.WAFPolicyList{},
 			},
 		},
 		{
@@ -158,6 +160,7 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&ngfAPIv1alpha1.AuthenticationFilterList{},
 				&ngfAPIv1alpha1.RateLimitPolicyList{},
 				&gatewayv1.ListenerSetList{},
+				&ngfAPIv1alpha1.WAFPolicyList{},
 			},
 		},
 		{
@@ -196,6 +199,7 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&gatewayv1.GatewayList{},
 				&ngfAPIv1alpha1.AuthenticationFilterList{},
 				&gatewayv1.ListenerSetList{},
+				&ngfAPIv1alpha1.WAFPolicyList{},
 			},
 		},
 		{
@@ -233,6 +237,7 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&ngfAPIv1alpha1.AuthenticationFilterList{},
 				&ngfAPIv1alpha1.RateLimitPolicyList{},
 				&gatewayv1.ListenerSetList{},
+				&ngfAPIv1alpha1.WAFPolicyList{},
 			},
 		},
 		{
@@ -271,6 +276,7 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&ngfAPIv1alpha1.AuthenticationFilterList{},
 				&ngfAPIv1alpha1.RateLimitPolicyList{},
 				&gatewayv1.ListenerSetList{},
+				&ngfAPIv1alpha1.WAFPolicyList{},
 			},
 		},
 		{
@@ -318,6 +324,7 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&ngfAPIv1alpha1.AuthenticationFilterList{},
 				&ngfAPIv1alpha1.RateLimitPolicyList{},
 				&gatewayv1.ListenerSetList{},
+				&ngfAPIv1alpha1.WAFPolicyList{},
 			},
 		},
 		{
@@ -366,6 +373,7 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&ngfAPIv1alpha1.AuthenticationFilterList{},
 				&ngfAPIv1alpha1.RateLimitPolicyList{},
 				&gatewayv1.ListenerSetList{},
+				&ngfAPIv1alpha1.WAFPolicyList{},
 			},
 		},
 		{
@@ -401,6 +409,7 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&ngfAPIv1alpha1.AuthenticationFilterList{},
 				&ngfAPIv1alpha1.RateLimitPolicyList{},
 				&gatewayv1.ListenerSetList{},
+				&ngfAPIv1alpha1.WAFPolicyList{},
 			},
 		},
 	}
@@ -471,83 +480,106 @@ func TestGetMetricsOptions(t *testing.T) {
 func TestCreatePlusSecretMetadata(t *testing.T) {
 	t.Parallel()
 
-	jwtSecret := &apiv1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace: "ngf",
-			Name:      "nplus-license",
-		},
-		Data: map[string][]byte{
-			secrets.LicenseJWTKey: []byte("data"),
-		},
+	// Constants for secret metadata
+	const (
+		namespace        = "ngf"
+		jwtSecretName    = "nplus-license"
+		caSecretName     = "ca"
+		clientSecretName = "client"
+	)
+
+	// Helper functions to create fresh secret copies for each test to avoid race conditions
+	newJWTSecret := func() *apiv1.Secret {
+		return &apiv1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: namespace,
+				Name:      jwtSecretName,
+			},
+			Data: map[string][]byte{
+				secrets.LicenseJWTKey: []byte("data"),
+			},
+		}
 	}
 
-	jwtSecretWrongField := &apiv1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace: "ngf",
-			Name:      "nplus-license",
-		},
-		Data: map[string][]byte{
-			"wrong": []byte("data"),
-		},
+	newJWTSecretWrongField := func() *apiv1.Secret {
+		return &apiv1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: namespace,
+				Name:      jwtSecretName,
+			},
+			Data: map[string][]byte{
+				"wrong": []byte("data"),
+			},
+		}
 	}
 
-	caSecret := &apiv1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace: "ngf",
-			Name:      "ca",
-		},
-		Data: map[string][]byte{
-			secrets.CAKey: []byte("data"),
-		},
+	newCASecret := func() *apiv1.Secret {
+		return &apiv1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: namespace,
+				Name:      caSecretName,
+			},
+			Data: map[string][]byte{
+				secrets.CAKey: []byte("data"),
+			},
+		}
 	}
 
-	caSecretWrongField := &apiv1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace: "ngf",
-			Name:      "ca",
-		},
-		Data: map[string][]byte{
-			"wrong": []byte("data"),
-		},
+	newCASecretWrongField := func() *apiv1.Secret {
+		return &apiv1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: namespace,
+				Name:      caSecretName,
+			},
+			Data: map[string][]byte{
+				"wrong": []byte("data"),
+			},
+		}
 	}
 
-	clientSecret := &apiv1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace: "ngf",
-			Name:      "client",
-		},
-		Data: map[string][]byte{
-			secrets.TLSCertKey: []byte("data"),
-			secrets.TLSKeyKey:  []byte("data"),
-		},
+	newClientSecret := func() *apiv1.Secret {
+		return &apiv1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: namespace,
+				Name:      clientSecretName,
+			},
+			Data: map[string][]byte{
+				secrets.TLSCertKey: []byte("data"),
+				secrets.TLSKeyKey:  []byte("data"),
+			},
+		}
 	}
 
-	clientSecretWrongCert := &apiv1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace: "ngf",
-			Name:      "client",
-		},
-		Data: map[string][]byte{
-			"wrong":            []byte("data"),
-			secrets.TLSCertKey: []byte("data"),
-		},
+	newClientSecretWrongCert := func() *apiv1.Secret {
+		return &apiv1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: namespace,
+				Name:      clientSecretName,
+			},
+			Data: map[string][]byte{
+				"wrong":            []byte("data"),
+				secrets.TLSCertKey: []byte("data"),
+			},
+		}
 	}
 
-	clientSecretWrongKey := &apiv1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace: "ngf",
-			Name:      "client",
-		},
-		Data: map[string][]byte{
-			secrets.TLSCertKey: []byte("data"),
-			"wrong":            []byte("data"),
-		},
+	newClientSecretWrongKey := func() *apiv1.Secret {
+		return &apiv1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: namespace,
+				Name:      clientSecretName,
+			},
+			Data: map[string][]byte{
+				secrets.TLSCertKey: []byte("data"),
+				"wrong":            []byte("data"),
+			},
+		}
 	}
 
 	tests := []struct {
 		expSecrets map[types.NamespacedName][]graph.PlusSecretFile
 		name       string
-		secrets    []runtime.Object
+		getSecrets func() []runtime.Object
 		cfg        config.Config
 		expErr     bool
 	}{
@@ -556,20 +588,21 @@ func TestCreatePlusSecretMetadata(t *testing.T) {
 			cfg: config.Config{
 				Plus: false,
 			},
+			getSecrets: func() []runtime.Object { return nil },
 			expSecrets: map[types.NamespacedName][]graph.PlusSecretFile{},
 		},
 		{
-			name:    "only JWT token specified",
-			secrets: []runtime.Object{jwtSecret},
+			name:       "only JWT token specified",
+			getSecrets: func() []runtime.Object { return []runtime.Object{newJWTSecret()} },
 			cfg: config.Config{
 				Plus:             true,
-				GatewayPodConfig: config.GatewayPodConfig{Namespace: jwtSecret.Namespace},
+				GatewayPodConfig: config.GatewayPodConfig{Namespace: namespace},
 				UsageReportConfig: config.UsageReportConfig{
-					SecretName: jwtSecret.Name,
+					SecretName: jwtSecretName,
 				},
 			},
 			expSecrets: map[types.NamespacedName][]graph.PlusSecretFile{
-				{Name: jwtSecret.Name, Namespace: jwtSecret.Namespace}: {
+				{Name: jwtSecretName, Namespace: namespace}: {
 					{
 						FieldName: secrets.LicenseJWTKey,
 						Type:      graph.PlusReportJWTToken,
@@ -578,24 +611,24 @@ func TestCreatePlusSecretMetadata(t *testing.T) {
 			},
 		},
 		{
-			name:    "JWT and CA specified",
-			secrets: []runtime.Object{jwtSecret, caSecret},
+			name:       "JWT and CA specified",
+			getSecrets: func() []runtime.Object { return []runtime.Object{newJWTSecret(), newCASecret()} },
 			cfg: config.Config{
 				Plus:             true,
-				GatewayPodConfig: config.GatewayPodConfig{Namespace: jwtSecret.Namespace},
+				GatewayPodConfig: config.GatewayPodConfig{Namespace: namespace},
 				UsageReportConfig: config.UsageReportConfig{
-					SecretName:   jwtSecret.Name,
-					CASecretName: caSecret.Name,
+					SecretName:   jwtSecretName,
+					CASecretName: caSecretName,
 				},
 			},
 			expSecrets: map[types.NamespacedName][]graph.PlusSecretFile{
-				{Name: jwtSecret.Name, Namespace: jwtSecret.Namespace}: {
+				{Name: jwtSecretName, Namespace: namespace}: {
 					{
 						FieldName: secrets.LicenseJWTKey,
 						Type:      graph.PlusReportJWTToken,
 					},
 				},
-				{Name: caSecret.Name, Namespace: jwtSecret.Namespace}: {
+				{Name: caSecretName, Namespace: namespace}: {
 					{
 						FieldName: secrets.CAKey,
 						Type:      graph.PlusReportCACertificate,
@@ -604,31 +637,33 @@ func TestCreatePlusSecretMetadata(t *testing.T) {
 			},
 		},
 		{
-			name:    "all Secrets specified",
-			secrets: []runtime.Object{jwtSecret, caSecret, clientSecret},
+			name: "all Secrets specified",
+			getSecrets: func() []runtime.Object {
+				return []runtime.Object{newJWTSecret(), newCASecret(), newClientSecret()}
+			},
 			cfg: config.Config{
 				Plus:             true,
-				GatewayPodConfig: config.GatewayPodConfig{Namespace: jwtSecret.Namespace},
+				GatewayPodConfig: config.GatewayPodConfig{Namespace: namespace},
 				UsageReportConfig: config.UsageReportConfig{
-					SecretName:          jwtSecret.Name,
-					CASecretName:        caSecret.Name,
-					ClientSSLSecretName: clientSecret.Name,
+					SecretName:          jwtSecretName,
+					CASecretName:        caSecretName,
+					ClientSSLSecretName: clientSecretName,
 				},
 			},
 			expSecrets: map[types.NamespacedName][]graph.PlusSecretFile{
-				{Name: jwtSecret.Name, Namespace: jwtSecret.Namespace}: {
+				{Name: jwtSecretName, Namespace: namespace}: {
 					{
 						FieldName: secrets.LicenseJWTKey,
 						Type:      graph.PlusReportJWTToken,
 					},
 				},
-				{Name: caSecret.Name, Namespace: jwtSecret.Namespace}: {
+				{Name: caSecretName, Namespace: namespace}: {
 					{
 						FieldName: secrets.CAKey,
 						Type:      graph.PlusReportCACertificate,
 					},
 				},
-				{Name: clientSecret.Name, Namespace: jwtSecret.Namespace}: {
+				{Name: clientSecretName, Namespace: namespace}: {
 					{
 						FieldName: secrets.TLSCertKey,
 						Type:      graph.PlusReportClientSSLCertificate,
@@ -641,98 +676,105 @@ func TestCreatePlusSecretMetadata(t *testing.T) {
 			},
 		},
 		{
-			name: "JWT Secret doesn't exist",
+			name:       "JWT Secret doesn't exist",
+			getSecrets: func() []runtime.Object { return nil },
 			cfg: config.Config{
 				Plus:             true,
-				GatewayPodConfig: config.GatewayPodConfig{Namespace: jwtSecret.Namespace},
+				GatewayPodConfig: config.GatewayPodConfig{Namespace: namespace},
 				UsageReportConfig: config.UsageReportConfig{
-					SecretName: jwtSecret.Name,
+					SecretName: jwtSecretName,
 				},
 			},
 			expSecrets: nil,
 			expErr:     true,
 		},
 		{
-			name:    "JWT Secret doesn't have correct field",
-			secrets: []runtime.Object{jwtSecretWrongField},
+			name:       "JWT Secret doesn't have correct field",
+			getSecrets: func() []runtime.Object { return []runtime.Object{newJWTSecretWrongField()} },
 			cfg: config.Config{
 				Plus:             true,
-				GatewayPodConfig: config.GatewayPodConfig{Namespace: jwtSecret.Namespace},
+				GatewayPodConfig: config.GatewayPodConfig{Namespace: namespace},
 				UsageReportConfig: config.UsageReportConfig{
-					SecretName: jwtSecret.Name,
+					SecretName: jwtSecretName,
 				},
 			},
 			expSecrets: nil,
 			expErr:     true,
 		},
 		{
-			name:    "CA Secret doesn't exist",
-			secrets: []runtime.Object{jwtSecret},
+			name:       "CA Secret doesn't exist",
+			getSecrets: func() []runtime.Object { return []runtime.Object{newJWTSecret()} },
 			cfg: config.Config{
 				Plus:             true,
-				GatewayPodConfig: config.GatewayPodConfig{Namespace: jwtSecret.Namespace},
+				GatewayPodConfig: config.GatewayPodConfig{Namespace: namespace},
 				UsageReportConfig: config.UsageReportConfig{
-					SecretName:   jwtSecret.Name,
-					CASecretName: caSecret.Name,
+					SecretName:   jwtSecretName,
+					CASecretName: caSecretName,
 				},
 			},
 			expSecrets: nil,
 			expErr:     true,
 		},
 		{
-			name:    "CA Secret doesn't have correct field",
-			secrets: []runtime.Object{jwtSecretWrongField, caSecretWrongField},
+			name: "CA Secret doesn't have correct field",
+			getSecrets: func() []runtime.Object {
+				return []runtime.Object{newJWTSecretWrongField(), newCASecretWrongField()}
+			},
 			cfg: config.Config{
 				Plus:             true,
-				GatewayPodConfig: config.GatewayPodConfig{Namespace: jwtSecret.Namespace},
+				GatewayPodConfig: config.GatewayPodConfig{Namespace: namespace},
 				UsageReportConfig: config.UsageReportConfig{
-					SecretName:   jwtSecret.Name,
-					CASecretName: caSecret.Name,
+					SecretName:   jwtSecretName,
+					CASecretName: caSecretName,
 				},
 			},
 			expSecrets: nil,
 			expErr:     true,
 		},
 		{
-			name:    "Client Secret doesn't exist",
-			secrets: []runtime.Object{jwtSecret, caSecret},
+			name:       "Client Secret doesn't exist",
+			getSecrets: func() []runtime.Object { return []runtime.Object{newJWTSecret(), newCASecret()} },
 			cfg: config.Config{
 				Plus:             true,
-				GatewayPodConfig: config.GatewayPodConfig{Namespace: jwtSecret.Namespace},
+				GatewayPodConfig: config.GatewayPodConfig{Namespace: namespace},
 				UsageReportConfig: config.UsageReportConfig{
-					SecretName:          jwtSecret.Name,
-					CASecretName:        caSecret.Name,
-					ClientSSLSecretName: clientSecret.Name,
+					SecretName:          jwtSecretName,
+					CASecretName:        caSecretName,
+					ClientSSLSecretName: clientSecretName,
 				},
 			},
 			expSecrets: nil,
 			expErr:     true,
 		},
 		{
-			name:    "Client Secret doesn't have correct cert",
-			secrets: []runtime.Object{jwtSecret, caSecret, clientSecretWrongCert},
+			name: "Client Secret doesn't have correct cert",
+			getSecrets: func() []runtime.Object {
+				return []runtime.Object{newJWTSecret(), newCASecret(), newClientSecretWrongCert()}
+			},
 			cfg: config.Config{
 				Plus:             true,
-				GatewayPodConfig: config.GatewayPodConfig{Namespace: jwtSecret.Namespace},
+				GatewayPodConfig: config.GatewayPodConfig{Namespace: namespace},
 				UsageReportConfig: config.UsageReportConfig{
-					SecretName:          jwtSecret.Name,
-					CASecretName:        caSecret.Name,
-					ClientSSLSecretName: clientSecret.Name,
+					SecretName:          jwtSecretName,
+					CASecretName:        caSecretName,
+					ClientSSLSecretName: clientSecretName,
 				},
 			},
 			expSecrets: nil,
 			expErr:     true,
 		},
 		{
-			name:    "Client Secret doesn't have correct key",
-			secrets: []runtime.Object{jwtSecret, caSecret, clientSecretWrongKey},
+			name: "Client Secret doesn't have correct key",
+			getSecrets: func() []runtime.Object {
+				return []runtime.Object{newJWTSecret(), newCASecret(), newClientSecretWrongKey()}
+			},
 			cfg: config.Config{
 				Plus:             true,
-				GatewayPodConfig: config.GatewayPodConfig{Namespace: jwtSecret.Namespace},
+				GatewayPodConfig: config.GatewayPodConfig{Namespace: namespace},
 				UsageReportConfig: config.UsageReportConfig{
-					SecretName:          jwtSecret.Name,
-					CASecretName:        caSecret.Name,
-					ClientSSLSecretName: clientSecret.Name,
+					SecretName:          jwtSecretName,
+					CASecretName:        caSecretName,
+					ClientSSLSecretName: clientSecretName,
 				},
 			},
 			expSecrets: nil,
@@ -741,11 +783,12 @@ func TestCreatePlusSecretMetadata(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		fakeClient := fake.NewFakeClient(test.secrets...)
-
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
+			test := test // capture range variable
 			g := NewWithT(t)
+
+			fakeClient := fake.NewFakeClient(test.getSecrets()...)
 
 			plusSecrets, err := createPlusSecretMetadata(test.cfg, fakeClient)
 			if test.expErr {

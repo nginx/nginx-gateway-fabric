@@ -1,0 +1,33 @@
+apiVersion: gateway.nginx.org/v1alpha1
+kind: WAFPolicy
+metadata:
+  name: gateway-base-protection
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: gateway
+  type: N1C
+  policySource:
+    n1cSource:
+      url: https://<tenant>.volterra.us
+      namespace: default  # N1C namespace the policy belongs to
+      # policyName: "ngfPolicy"
+      policyObjectID: pol_12345_WTHGmDEX9qnbVjQ
+      policyVersionID: pv_Tm__12345oWmJgwxiKlHAg
+    auth:
+      secretRef:
+        name: n1c-credentials
+  securityLogs:
+    - destination:
+        type: syslog
+        syslog:
+          server: syslog-svc.default.svc.cluster.local:514
+      logSource:
+        n1cSource:
+          url: https://<tenant>.volterra.us
+          namespace: default  # N1C namespace the log profile belongs to
+          profileObjectID: "lp_8s8uZxLpThWwEGF7LTn_rA"
+        auth:
+          secretRef:
+            name: n1c-credentials

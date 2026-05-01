@@ -21,6 +21,10 @@ var (
 		secrets.N1CDataplaneKey,
 		corev1.DockerConfigJsonKey,
 		corev1.DockerConfigKey,
+		// WAF bundle auth credentials
+		secrets.BundleUsernameKey,
+		secrets.BundlePasswordKey,
+		secrets.BundleTokenKey,
 	}
 
 	configMapKeys = []string{

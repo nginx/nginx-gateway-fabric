@@ -1,6 +1,7 @@
 package graph
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/go-logr/logr"
@@ -24,6 +25,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller/index"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 	ngftypes "github.com/nginx/nginx-gateway-fabric/v2/internal/framework/types"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/waf/fetch"
 )
 
 // ClusterState includes cluster resources necessary to build the Graph.
@@ -84,6 +86,11 @@ type Graph struct {
 	BackendTLSPolicies map[types.NamespacedName]*BackendTLSPolicy
 	// NGFPolicies holds all NGF Policies.
 	NGFPolicies map[PolicyKey]*Policy
+	// ReferencedWAFBundles includes the WAFPolicy Bundles that have been referenced by any Gateways
+	// or Routes.
+	ReferencedWAFBundles map[WAFBundleKey]*WAFBundleData
+	// ReferencedWAFSecrets includes Secrets referenced by WAFPolicy (auth and TLS CA).
+	ReferencedWAFSecrets map[types.NamespacedName]*v1.Secret
 	// SnippetsFilters holds all the SnippetsFilters.
 	SnippetsFilters map[types.NamespacedName]*SnippetsFilter
 	// AuthenticationFilters holds all the AuthenticationFilters.
@@ -115,10 +122,12 @@ type FeatureFlags struct {
 func (g *Graph) IsReferenced(resourceType ngftypes.ObjectType, nsname types.NamespacedName) bool {
 	switch obj := resourceType.(type) {
 	case *v1.Secret:
-		// Check if secret is a Gateway-referenced Secret, or if it's a Secret used for NGINX Plus reporting.
+		// Check if secret is a Gateway-referenced Secret, or if it's a Secret used for
+		// NGINX Plus reporting or WAF bundle auth.
 		_, exists := g.ReferencedSecrets[nsname]
 		_, plusSecretExists := g.PlusSecrets[nsname]
-		return exists || plusSecretExists
+		_, wafAuthSecretExists := g.ReferencedWAFSecrets[nsname]
+		return exists || plusSecretExists || wafAuthSecretExists
 	case *v1.ConfigMap:
 		_, exists := g.ReferencedCaCertConfigMaps[nsname]
 		return exists
@@ -221,10 +230,13 @@ func (g *Graph) gatewayAPIResourceExist(ref gatewayv1.LocalPolicyTargetReference
 
 // BuildGraph builds a Graph from a state.
 func BuildGraph(
+	ctx context.Context,
 	state ClusterState,
 	controllerName string,
 	gcName string,
 	plusSecrets map[types.NamespacedName][]PlusSecretFile,
+	wafFetcher fetch.Fetcher,
+	previousWAFBundles map[WAFBundleKey]*WAFBundleData,
 	validators validation.Validators,
 	logger logr.Logger,
 	featureFlags FeatureFlags,
@@ -327,19 +339,38 @@ func BuildGraph(
 
 	addGatewaysForBackendTLSPolicies(processedBackendTLSPolicies, referencedServices, controllerName, gws, logger)
 
+	var wafInput *WAFProcessingInput
+	if wafFetcher != nil {
+		wafInput = &WAFProcessingInput{
+			Fetcher:         wafFetcher,
+			Secrets:         state.Secrets,
+			PreviousBundles: previousWAFBundles,
+		}
+	}
+
 	// policies must be processed last because they rely on the state of the other resources in the graph
-	processedPolicies := processPolicies(
+	processedPolicies, wafOutput := processPolicies(
+		ctx,
+		logger,
 		state.NGFPolicies,
 		validators.PolicyValidator,
 		routes,
 		referencedServices,
 		gws,
+		wafInput,
 	)
 
 	// add status conditions to each targetRef based on the policies that affect them.
 	addPolicyAffectedStatusToTargetRefs(processedPolicies, routes, gws)
 
 	setPlusSecretContent(state.Secrets, plusSecrets)
+
+	var referencedWAFBundles map[WAFBundleKey]*WAFBundleData
+	var referencedWAFAuthSecrets map[types.NamespacedName]*v1.Secret
+	if wafOutput != nil {
+		referencedWAFBundles = wafOutput.Bundles
+		referencedWAFAuthSecrets = wafOutput.ReferencedWAFSecrets
+	}
 
 	g := &Graph{
 		GatewayClass:               gc,
@@ -359,6 +390,8 @@ func BuildGraph(
 		AuthenticationFilters:      processedAuthenticationFilters,
 		ListenerSets:               listenerSets,
 		PlusSecrets:                plusSecrets,
+		ReferencedWAFBundles:       referencedWAFBundles,
+		ReferencedWAFSecrets:       referencedWAFAuthSecrets,
 	}
 
 	g.attachPolicies(validators.PolicyValidator, controllerName, logger)

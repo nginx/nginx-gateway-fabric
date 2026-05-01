@@ -1,0 +1,25 @@
+{
+  "policy": {
+    "name": "attack-signatures-blocking",
+    "template": {
+      "name": "POLICY_TEMPLATE_NGINX_BASE"
+    },
+    "applicationLanguage": "utf-8",
+    "enforcementMode": "blocking",
+    "signature-sets": [
+      {
+        "name": "All Signatures",
+        "block": true,
+        "alarm": true
+      }
+    ],
+    "cookies": [
+      {
+        "name": "*",
+        "attackSignaturesCheck": true,
+        "enforcementType": "enforce",
+        "maskValueInLogs": false
+      }
+    ]
+  }
+}
