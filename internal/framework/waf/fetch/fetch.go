@@ -568,13 +568,17 @@ func fetchNIM(ctx context.Context, client *http.Client, req Request) (Result, er
 		return Result{}, fmt.Errorf("NIM response contains no items for policy %q", policyRef)
 	}
 
-	data, err := base64.StdEncoding.DecodeString(resp.Items[0].Content)
+	// NIM returns items in chronological order (oldest first). When a policy is recompiled,
+	// multiple items exist for the same policy name. Use the last item to get the latest bundle.
+	latest := resp.Items[len(resp.Items)-1]
+
+	data, err := base64.StdEncoding.DecodeString(latest.Content)
 	if err != nil {
 		return Result{}, fmt.Errorf("failed to base64-decode NIM bundle content: %w", err)
 	}
 
 	actualChecksum := ComputeChecksum(data)
-	bundleHash := resp.Items[0].Metadata.Hash
+	bundleHash := latest.Metadata.Hash
 
 	// Verify the downloaded bundle against the hash reported by the NIM API,
 	// unless the caller supplied their own ExpectedChecksum via BundleValidation
@@ -1117,7 +1121,9 @@ func fetchNIMChecksum(ctx context.Context, client *http.Client, req Request) (st
 		return "", fmt.Errorf("NIM response contains no items for policy %q", policyRef)
 	}
 
-	hash := strings.ToLower(resp.Items[0].Metadata.Hash)
+	// NIM returns items in chronological order (oldest first). When a policy is recompiled,
+	// multiple items exist for the same policy name. Use the last item to get the latest bundle.
+	hash := strings.ToLower(resp.Items[len(resp.Items)-1].Metadata.Hash)
 	if hash == "" {
 		return "", fmt.Errorf("NIM response contains no hash for policy %q", policyRef)
 	}

@@ -1227,6 +1227,20 @@ func TestHTTPFetcherFetchNIM(t *testing.T) {
 			},
 			expectData: bundleContent,
 		},
+		{
+			// When a policy is recompiled in NIM, the API returns all compilations in
+			// chronological order (oldest first). The fetcher must select the last item to
+			// get the most recently compiled bundle, not the original version.
+			name:       "NIM response with multiple items returns latest (last) bundle",
+			policyName: "updated-policy",
+			serverBody: map[string]any{
+				"items": []map[string]any{
+					{"content": base64.StdEncoding.EncodeToString([]byte("old-bundle-v1"))},
+					{"content": encoded},
+				},
+			},
+			expectData: bundleContent,
+		},
 	}
 
 	for _, tc := range tests {
@@ -1655,6 +1669,42 @@ func TestFetchPolicyBundleChecksumNIM(t *testing.T) {
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(checksum).To(Equal(bundleHash))
 	g.Expect(includeBundleContent).To(Equal("false"))
+}
+
+func TestFetchPolicyBundleChecksumNIMMultipleItems(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	oldContent := []byte("old-bundle-v1")
+	oldHash := fetch.ComputeChecksum(oldContent)
+
+	newContent := []byte("new-bundle-v2")
+	newHash := fetch.ComputeChecksum(newContent)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		// NIM returns items in chronological order: old first, latest last.
+		json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck
+			"items": []map[string]any{
+				{
+					"content":  base64.StdEncoding.EncodeToString(oldContent),
+					"metadata": map[string]any{"hash": oldHash},
+				},
+				{
+					"content":  base64.StdEncoding.EncodeToString(newContent),
+					"metadata": map[string]any{"hash": newHash},
+				},
+			},
+		})
+	}))
+	defer srv.Close()
+
+	f := fetch.NewHTTPFetcher(logr.Discard())
+	req := fetch.Request{URL: srv.URL, PolicyName: "updated-policy"}
+	checksum, err := f.FetchPolicyBundleChecksum(context.Background(), req)
+
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(checksum).To(Equal(newHash), "should return the hash of the latest (last) item, not the oldest")
 }
 
 func TestFetchBundleChecksumErrors(t *testing.T) {
