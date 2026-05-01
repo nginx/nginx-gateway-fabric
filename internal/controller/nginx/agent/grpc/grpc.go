@@ -87,23 +87,7 @@ func (g *Server) Start(ctx context.Context) error {
 		return err
 	}
 
-	server := grpc.NewServer(
-		grpc.KeepaliveParams(
-			keepalive.ServerParameters{
-				Time:    keepAliveTime,
-				Timeout: keepAliveTimeout,
-			},
-		),
-		grpc.KeepaliveEnforcementPolicy(
-			keepalive.EnforcementPolicy{
-				MinTime:             keepAliveTime,
-				PermitWithoutStream: true,
-			},
-		),
-		grpc.ChainStreamInterceptor(g.interceptor.Stream(g.logger)),
-		grpc.ChainUnaryInterceptor(g.interceptor.Unary(g.logger)),
-		grpc.Creds(tlsCredentials),
-	)
+	server := g.createServer(tlsCredentials)
 
 	for _, registerSvc := range g.registerServices {
 		registerSvc(server)
@@ -125,6 +109,31 @@ func (g *Server) Start(ctx context.Context) error {
 	}()
 
 	return server.Serve(listener)
+}
+
+func (g *Server) createServer(tlsCredentials credentials.TransportCredentials) *grpc.Server {
+	server := grpc.NewServer(
+		grpc.KeepaliveParams(
+			keepalive.ServerParameters{
+				Time:    keepAliveTime,
+				Timeout: keepAliveTimeout,
+			},
+		),
+		grpc.KeepaliveEnforcementPolicy(
+			keepalive.EnforcementPolicy{
+				MinTime:             keepAliveTime,
+				PermitWithoutStream: true,
+			},
+		),
+		grpc.ChainStreamInterceptor(g.interceptor.Stream(g.logger)),
+		grpc.ChainUnaryInterceptor(g.interceptor.Unary(g.logger)),
+		grpc.Creds(tlsCredentials),
+		// Set max message size to 4MB to match the agent side.
+		grpc.MaxSendMsgSize(1024*1024*4), // 4MB
+		grpc.MaxRecvMsgSize(1024*1024*4), // 4MB
+	)
+
+	return server
 }
 
 func getTLSConfig() (credentials.TransportCredentials, error) {
