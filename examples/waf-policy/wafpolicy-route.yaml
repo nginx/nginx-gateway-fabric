@@ -1,0 +1,26 @@
+apiVersion: gateway.nginx.org/v1alpha1
+kind: WAFPolicy
+metadata:
+  name: route-protection-http
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: customers
+  type: NIM
+  policySource:
+    nimSource:
+      url: https://apigw.nim.svc.cluster.local
+      policyName: ngfDataguard
+    auth:
+      secretRef:
+        name: nim-credentials
+    insecureSkipVerify: true # testing only - do not use in production
+  securityLogs:
+    - destination:
+        type: syslog
+        syslog:
+          server: syslog-svc.default.svc.cluster.local:514
+      logSource:
+        # Use one of the built-in log profiles:
+        defaultProfile: log_illegal

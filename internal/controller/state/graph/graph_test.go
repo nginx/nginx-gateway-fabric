@@ -2455,6 +2455,7 @@ func TestBuildGraph(t *testing.T) {
 			}
 
 			result := BuildGraph(
+				t.Context(),
 				test.store,
 				controllerName,
 				gcName,
@@ -2466,6 +2467,8 @@ func TestBuildGraph(t *testing.T) {
 						},
 					},
 				},
+				nil, // wafFetcher
+				nil, // previousWAFBundles
 				validation.Validators{
 					HTTPFieldsValidator: createAllValidValidator(),
 					GenericValidator:    &validationfakes.FakeGenericValidator{},

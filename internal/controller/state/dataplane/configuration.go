@@ -143,6 +143,7 @@ func BuildConfiguration(
 		WorkerConnections:    buildWorkerConnections(gateway),
 		SSLListenerHostnames: sslListenerHostnames,
 		CertBundles:          certBundles,
+		WAF:                  buildWAF(gateway),
 	}
 
 	return config
@@ -1804,6 +1805,9 @@ func buildPolicies(gateway *graph.Gateway, graphPolicies []*graph.Policy) []poli
 		if _, exists := policy.InvalidForGateways[client.ObjectKeyFromObject(gateway.Source)]; exists {
 			continue
 		}
+		if policy.WAFState != nil && policy.WAFState.BundlePending {
+			continue
+		}
 
 		finalPolicies = append(finalPolicies, policy.Source)
 	}
@@ -2007,4 +2011,51 @@ func buildServerTokens(gateway *graph.Gateway) string {
 	}
 
 	return fmt.Sprintf(`"%s"`, serverToken)
+}
+
+func buildWAF(gateway *graph.Gateway) WAFConfig {
+	gatewayBundles := collectGatewayWAFBundles(gateway)
+	wb := convertWAFBundles(gatewayBundles)
+
+	var cookieSeed string
+	if gateway.Source != nil && !graph.WAFCookieSeedDisabledForNginxProxy(gateway.EffectiveNginxProxy) {
+		cookieSeed = string(gateway.Source.UID)
+	}
+
+	wc := WAFConfig{
+		Enabled:    graph.WAFEnabledForNginxProxy(gateway.EffectiveNginxProxy),
+		WAFBundles: wb,
+		CookieSeed: cookieSeed,
+	}
+	return wc
+}
+
+// collectGatewayWAFBundles collects WAF bundles from all WAFPolicies that target
+// this gateway directly or target routes attached to this gateway.
+func collectGatewayWAFBundles(gateway *graph.Gateway) map[graph.WAFBundleKey]*graph.WAFBundleData {
+	bundles := make(map[graph.WAFBundleKey]*graph.WAFBundleData)
+
+	// Collect bundles from policies targeting the gateway directly.
+	for _, policy := range gateway.Policies {
+		if policy.WAFState == nil {
+			continue
+		}
+
+		maps.Copy(bundles, policy.WAFState.Bundles)
+	}
+
+	// Collect bundles from policies targeting routes attached to this gateway.
+	for _, listener := range gateway.Listeners {
+		for _, route := range listener.Routes {
+			for _, policy := range route.Policies {
+				if policy.WAFState == nil {
+					continue
+				}
+
+				maps.Copy(bundles, policy.WAFState.Bundles)
+			}
+		}
+	}
+
+	return bundles
 }

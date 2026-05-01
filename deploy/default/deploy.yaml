@@ -204,6 +204,7 @@ rules:
   - authenticationfilters
   - proxysettingspolicies
   - ratelimitpolicies
+  - wafpolicies
   verbs:
   - list
   - watch
@@ -217,6 +218,7 @@ rules:
   - authenticationfilters/status
   - proxysettingspolicies/status
   - ratelimitpolicies/status
+  - wafpolicies/status
   verbs:
   - update
 - apiGroups:

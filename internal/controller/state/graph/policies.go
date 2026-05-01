@@ -1,21 +1,29 @@
 package graph
 
 import (
+	"bytes"
+	"context"
 	"fmt"
 	"slices"
 	"sort"
+	"strings"
 
 	"github.com/go-logr/logr"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
+	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/ngfsort"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/secrets"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/validation"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/waf/fetch"
 )
 
 // Policy represents an NGF Policy.
@@ -26,6 +34,8 @@ type Policy struct {
 	// configurations may result in a policy not being valid for some Gateways, but not others.
 	// This includes gateways that cannot accept the policy due to ancestor status limits.
 	InvalidForGateways map[types.NamespacedName]struct{}
+	// WAFState holds WAF-specific state for this policy. Only populated for WAFPolicy resources.
+	WAFState *PolicyWAFState
 	// Ancestors is a list of ancestor objects of the Policy. Used in status.
 	Ancestors []PolicyAncestor
 	// TargetRefs are the resources that the Policy targets.
@@ -36,6 +46,23 @@ type Policy struct {
 	Conditions []conditions.Condition
 	// Valid indicates whether the Policy is valid.
 	Valid bool
+}
+
+// PolicyWAFState holds WAF-specific state for a Policy.
+// This is only populated for WAFPolicy resources.
+type PolicyWAFState struct {
+	// Bundles contains the fetched WAF bundle data for this policy.
+	// This allows each gateway to receive only the bundles for policies that target it.
+	Bundles map[WAFBundleKey]*WAFBundleData
+	// ResolvedAuth contains the resolved authentication credentials for WAF bundle fetching.
+	// Stored so that the WAF polling manager can re-use them without re-resolving secrets.
+	ResolvedAuth *fetch.BundleAuth
+	// ResolvedTLSCA contains the resolved TLS CA certificate data for WAF bundle fetching.
+	ResolvedTLSCA []byte
+	// BundlePending is true when the policy's bundle has never been successfully fetched
+	// (cold-miss on startup or after all retries are exhausted with no previous bundle).
+	// The Gateway config push is withheld until this is resolved to maintain fail-closed posture.
+	BundlePending bool
 }
 
 // PolicyAncestor represents an ancestor of a Policy.
@@ -62,6 +89,86 @@ type PolicyKey struct {
 	NsName types.NamespacedName
 	// GVK is the GroupVersionKind of the Policy.
 	GVK schema.GroupVersionKind
+}
+
+// WAFBundleKey uniquely identifies a WAF bundle on disk.
+// Format: "<namespace>_<policyName>" for policy bundles, or "<namespace>_<policyName>_log_<urlHash>" for log bundles,
+// where urlHash is a truncated SHA-256 hex digest of the log source URL.
+type WAFBundleKey string
+
+// PolicyBundleKey returns the WAFBundleKey for a WAFPolicy's main policy bundle.
+func PolicyBundleKey(policyNsName types.NamespacedName) WAFBundleKey {
+	return WAFBundleKey(fmt.Sprintf("%s_%s", policyNsName.Namespace, policyNsName.Name))
+}
+
+// LogBundleKey returns the WAFBundleKey for a SecurityLog entry's bundle.
+// The key for NIM is formatted as "<namespace>_<policyName>_log_<nimUrlHash>_<nimProfileName>", where nimUrlHash is a truncated SHA-256 hex digest of the NIM instance URL.
+// The key for N1C is formatted as "<namespace>_<policyName>_log_<n1cUrlHash>_<n1cNamespace>_<n1cProfileIdentifier>", where n1cUrlHash is a truncated SHA-256 hex digest of the N1C instance URL, and n1cProfileIdentifier is either the ProfileObjectID or ProfileName (if ObjectID is not set).
+// The key for HTTP is formatted as "<namespace>_<policyName>_log_<httpUrlHash>", where httpUrlHash is a truncated SHA-256 hex digest of the HTTP URL.
+//
+//nolint:lll
+func LogBundleKey(policyNsName types.NamespacedName, logSource *ngfAPIv1alpha1.LogSource) WAFBundleKey {
+	if logSource.NIMSource != nil && logSource.NIMSource.URL != "" {
+		return WAFBundleKey(
+			fmt.Sprintf(
+				"%s_%s_log_%s_%s",
+				policyNsName.Namespace, policyNsName.Name,
+				helpers.URLHash(logSource.NIMSource.URL),
+				logSource.NIMSource.ProfileName,
+			),
+		)
+	}
+
+	if logSource.N1CSource != nil {
+		profileIdentifier := ""
+		if logSource.N1CSource.ProfileObjectID != nil {
+			profileIdentifier = *logSource.N1CSource.ProfileObjectID
+		} else if logSource.N1CSource.ProfileName != nil {
+			profileIdentifier = *logSource.N1CSource.ProfileName
+		}
+		return WAFBundleKey(
+			fmt.Sprintf(
+				"%s_%s_log_%s_%s_%s",
+				policyNsName.Namespace, policyNsName.Name,
+				helpers.URLHash(logSource.N1CSource.URL),
+				logSource.N1CSource.Namespace,
+				profileIdentifier,
+			),
+		)
+	}
+
+	return WAFBundleKey(
+		fmt.Sprintf("%s_%s_log_%s", policyNsName.Namespace, policyNsName.Name, helpers.URLHash(logSource.HTTPSource.URL)),
+	)
+}
+
+// LogBundleDescription returns a human-readable label for a log profile bundle source.
+// Used in status condition messages to identify which bundle is being reported on.
+// The switch uses boolean conditions rather than a type switch because LogSource carries
+// optional pointer fields — only one of NIMSource, N1CSource, or HTTPSource will be set.
+func LogBundleDescription(src *ngfAPIv1alpha1.LogSource) string {
+	switch {
+	case src.NIMSource != nil:
+		return fmt.Sprintf("security log bundle (profile: %s)", src.NIMSource.ProfileName)
+	case src.N1CSource != nil:
+		if src.N1CSource.ProfileName != nil {
+			return fmt.Sprintf("security log bundle (profile: %s)", *src.N1CSource.ProfileName)
+		}
+		if src.N1CSource.ProfileObjectID != nil {
+			return fmt.Sprintf("security log bundle (profile: %s)", *src.N1CSource.ProfileObjectID)
+		}
+		return "security log bundle"
+	case src.HTTPSource != nil:
+		return fmt.Sprintf("security log bundle (URL: %s)", src.HTTPSource.URL)
+	default:
+		return "security log bundle"
+	}
+}
+
+// WAFBundleData contains the fetched WAF bundle content.
+type WAFBundleData struct {
+	Checksum string
+	Data     []byte
 }
 
 const (
@@ -126,7 +233,7 @@ func (g *Graph) attachPolicies(validator validation.PolicyValidator, ctlrName st
 		for _, ref := range policy.TargetRefs {
 			switch ref.Kind {
 			case kinds.Gateway:
-				attachPolicyToGateway(policy, ref, g.Gateways, g.Routes, ctlrName, logger)
+				attachPolicyToGateway(policy, ref, g.Gateways, g.Routes, ctlrName, logger, validator)
 			case kinds.HTTPRoute, kinds.GRPCRoute:
 				route, exists := g.Routes[routeKeyForKind(ref.Kind, ref.Nsname)]
 				if !exists {
@@ -229,6 +336,8 @@ func attachPolicyToRoute(
 	ctlrName string,
 	logger logr.Logger,
 ) {
+	var effectiveGateways []types.NamespacedName
+
 	kind := v1.Kind(kinds.HTTPRoute)
 	if route.RouteType == RouteTypeGRPC {
 		kind = kinds.GRPCRoute
@@ -260,14 +369,11 @@ func attachPolicyToRoute(
 		return
 	}
 
-	// Track which gateways the policy is effective for
-	var effectiveGateways []types.NamespacedName
-
-	// as of now, ObservabilityPolicy is the only policy that needs this check, and it only attaches to Routes
 	for _, parentRef := range route.ParentRefs {
 		if parentRef.Kind == kinds.Gateway && parentRef.EffectiveNginxProxy != nil {
 			globalSettings := &policies.GlobalSettings{
 				TelemetryEnabled: telemetryEnabledForNginxProxy(parentRef.EffectiveNginxProxy),
+				WAFEnabled:       WAFEnabledForNginxProxy(parentRef.EffectiveNginxProxy),
 			}
 
 			if conds := validator.ValidateGlobalSettings(policy.Source, globalSettings); len(conds) > 0 {
@@ -295,6 +401,7 @@ func attachPolicyToGateway(
 	routes map[RouteKey]*L7Route,
 	ctlrName string,
 	logger logr.Logger,
+	validator validation.PolicyValidator,
 ) {
 	ancestorRef := createParentReference(v1.GroupName, kinds.Gateway, ref.Nsname)
 	gw, exists := gateways[ref.Nsname]
@@ -348,7 +455,17 @@ func attachPolicyToGateway(
 		return
 	}
 
+	globalSettings := &policies.GlobalSettings{
+		TelemetryEnabled: telemetryEnabledForNginxProxy(gw.EffectiveNginxProxy),
+		WAFEnabled:       WAFEnabledForNginxProxy(gw.EffectiveNginxProxy),
+	}
+
 	// Policy is effective for this gateway (not adding to InvalidForGateways)
+	if conds := validator.ValidateGlobalSettings(policy.Source, globalSettings); len(conds) > 0 {
+		ancestor.Conditions = conds
+		policy.Ancestors = append(policy.Ancestors, ancestor)
+		return
+	}
 
 	policy.Ancestors = append(policy.Ancestors, ancestor)
 	gw.Policies = append(gw.Policies, policy)
@@ -382,15 +499,38 @@ func propagateSnippetsPolicyToRoutes(
 	}
 }
 
+// WAFProcessingInput contains the input needed for WAF policy processing.
+type WAFProcessingInput struct {
+	// Fetcher fetches bundle files from HTTP/HTTPS URLs.
+	Fetcher fetch.Fetcher
+	// Secrets contains the Secrets from the cluster, used to resolve bundle auth credentials.
+	Secrets map[types.NamespacedName]*corev1.Secret
+	// PreviousBundles contains the bundles successfully fetched in the previous processing cycle.
+	// Used to keep the last-known-good bundle active when a re-fetch fails.
+	PreviousBundles map[WAFBundleKey]*WAFBundleData
+}
+
+// WAFProcessingOutput contains the output from WAF policy processing.
+type WAFProcessingOutput struct {
+	// Bundles contains the fetched WAF bundles keyed by bundle key.
+	Bundles map[WAFBundleKey]*WAFBundleData
+	// ReferencedWAFSecrets contains the Secrets referenced by WAFPolicy (auth and TLS CA).
+	// These must be watched by the change tracker.
+	ReferencedWAFSecrets map[types.NamespacedName]*corev1.Secret
+}
+
 func processPolicies(
+	ctx context.Context,
+	logger logr.Logger,
 	pols map[PolicyKey]policies.Policy,
 	validator validation.PolicyValidator,
 	routes map[RouteKey]*L7Route,
 	services map[types.NamespacedName]*ReferencedService,
 	gws map[types.NamespacedName]*Gateway,
-) map[PolicyKey]*Policy {
+	wafInput *WAFProcessingInput,
+) (map[PolicyKey]*Policy, *WAFProcessingOutput) {
 	if len(pols) == 0 || len(gws) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	processedPolicies := make(map[PolicyKey]*Policy)
@@ -452,7 +592,9 @@ func processPolicies(
 
 	markConflictedPolicies(processedPolicies, validator)
 
-	return processedPolicies
+	wafOutput := processWAFPolicies(ctx, logger, processedPolicies, wafInput)
+
+	return processedPolicies, wafOutput
 }
 
 func checkTargetRoutesForOverlap(
@@ -687,5 +829,406 @@ func addStatusToTargetRefs(policyKind string, conditionsList *[]conditions.Condi
 			return
 		}
 		*conditionsList = append(*conditionsList, conditions.NewRateLimitPolicyAffected())
+	case kinds.WAFPolicy:
+		if conditions.HasMatchingCondition(*conditionsList, conditions.NewWAFPolicyAffected()) {
+			return
+		}
+		*conditionsList = append(*conditionsList, conditions.NewWAFPolicyAffected())
 	}
+}
+
+// processWAFPolicies processes WAFPolicy resources and fetches their bundles.
+func processWAFPolicies(
+	ctx context.Context,
+	logger logr.Logger,
+	processedPolicies map[PolicyKey]*Policy,
+	wafInput *WAFProcessingInput,
+) *WAFProcessingOutput {
+	if wafInput == nil {
+		return nil
+	}
+
+	output := &WAFProcessingOutput{
+		Bundles:              make(map[WAFBundleKey]*WAFBundleData),
+		ReferencedWAFSecrets: make(map[types.NamespacedName]*corev1.Secret),
+	}
+
+	for key, policy := range processedPolicies {
+		if key.GVK.Kind != kinds.WAFPolicy {
+			continue
+		}
+
+		if !policy.Valid {
+			continue
+		}
+
+		wgbPolicy, ok := policy.Source.(*ngfAPIv1alpha1.WAFPolicy)
+		if !ok {
+			continue
+		}
+
+		// Initialize the WAFBundles map on the policy to store fetched bundles.
+		// This allows each gateway to receive only the bundles for policies that target it.
+		policy.WAFState = &PolicyWAFState{
+			Bundles: make(map[WAFBundleKey]*WAFBundleData),
+		}
+
+		fetchPolicyBundle(ctx, logger, wgbPolicy, policy, wafInput, output)
+		fetchSecurityLogBundles(ctx, logger, wgbPolicy, policy, wafInput, output)
+	}
+
+	return output
+}
+
+// BuildPolicyFetchRequest constructs a fetch.Request from a PolicySource, resolved auth, and TLS CA data.
+func BuildPolicyFetchRequest(
+	policySource *ngfAPIv1alpha1.PolicySource,
+	policyType ngfAPIv1alpha1.PolicySourceType,
+	auth *fetch.BundleAuth,
+	tlsCA []byte,
+) fetch.Request {
+	req := fetch.Request{
+		Auth:               auth,
+		TLSCAData:          tlsCA,
+		InsecureSkipVerify: policySource.InsecureSkipVerify,
+		VerifyChecksum:     policySource.Validation != nil && policySource.Validation.VerifyChecksum,
+		ExpectedChecksum:   expectedChecksum(policySource.Validation),
+		Timeout:            policySource.Timeout,
+		RetryAttempts:      retryAttempts(policySource.RetryAttempts),
+	}
+
+	switch policyType {
+	case ngfAPIv1alpha1.PolicySourceTypeHTTP:
+		if policySource.HTTPSource != nil {
+			req.URL = policySource.HTTPSource.URL
+		}
+	case ngfAPIv1alpha1.PolicySourceTypeNIM:
+		if policySource.NIMSource != nil {
+			req.URL = policySource.NIMSource.URL
+			if policySource.NIMSource.PolicyUID != nil {
+				req.NIM.PolicyUID = *policySource.NIMSource.PolicyUID
+			} else if policySource.NIMSource.PolicyName != nil {
+				req.PolicyName = *policySource.NIMSource.PolicyName
+			}
+		}
+	case ngfAPIv1alpha1.PolicySourceTypeN1C:
+		if policySource.N1CSource != nil {
+			req.URL = policySource.N1CSource.URL
+			req.N1C.Namespace = policySource.N1CSource.Namespace
+			if policySource.N1CSource.PolicyObjectID != nil {
+				req.N1C.PolicyObjectID = *policySource.N1CSource.PolicyObjectID
+			}
+			if policySource.N1CSource.PolicyName != nil {
+				req.PolicyName = *policySource.N1CSource.PolicyName
+			}
+			if policySource.N1CSource.PolicyVersionID != nil {
+				req.N1C.PolicyVersionID = *policySource.N1CSource.PolicyVersionID
+			}
+			// N1C uses the APIToken auth scheme rather than Bearer.
+			// Move the token value from BearerToken to APIToken.
+			if auth != nil && auth.BearerToken != "" {
+				req.Auth = &fetch.BundleAuth{APIToken: auth.BearerToken}
+			}
+		}
+	}
+
+	return req
+}
+
+// BuildLogFetchRequest constructs a fetch.Request from a LogSource, resolved auth, and TLS CA data.
+func BuildLogFetchRequest(
+	logSource *ngfAPIv1alpha1.LogSource,
+	auth *fetch.BundleAuth,
+	tlsCA []byte,
+) fetch.Request {
+	req := fetch.Request{
+		Auth:               auth,
+		TLSCAData:          tlsCA,
+		InsecureSkipVerify: logSource.InsecureSkipVerify,
+		VerifyChecksum:     logSource.Validation != nil && logSource.Validation.VerifyChecksum,
+		ExpectedChecksum:   expectedChecksum(logSource.Validation),
+		Timeout:            logSource.Timeout,
+		RetryAttempts:      retryAttempts(logSource.RetryAttempts),
+	}
+
+	switch {
+	case logSource.NIMSource != nil:
+		if logSource.NIMSource.URL != "" {
+			req.URL = logSource.NIMSource.URL
+		}
+		if logSource.NIMSource.ProfileName != "" {
+			req.LogProfileName = logSource.NIMSource.ProfileName
+		}
+	case logSource.N1CSource != nil:
+		req.URL = logSource.N1CSource.URL
+		req.N1C.Namespace = logSource.N1CSource.Namespace
+		if logSource.N1CSource.ProfileObjectID != nil {
+			req.N1C.LogProfileObjectID = *logSource.N1CSource.ProfileObjectID
+		}
+		if logSource.N1CSource.ProfileName != nil {
+			req.LogProfileName = *logSource.N1CSource.ProfileName
+		}
+		// N1C uses the APIToken auth scheme rather than Bearer.
+		// Move the token value from BearerToken to APIToken.
+		if auth != nil && auth.BearerToken != "" {
+			req.Auth = &fetch.BundleAuth{APIToken: auth.BearerToken}
+		}
+	case logSource.HTTPSource != nil:
+		if logSource.HTTPSource.URL != "" {
+			req.URL = logSource.HTTPSource.URL
+		}
+	}
+
+	return req
+}
+
+// retryAttempts dereferences a retry attempts pointer, returning the default of 3 when nil.
+func retryAttempts(attempts *int32) int32 {
+	if attempts == nil {
+		return 3
+	}
+	return *attempts
+}
+
+// fetchPolicyBundle fetches the policy bundle for a WAFPolicy.
+func fetchPolicyBundle(
+	ctx context.Context,
+	logger logr.Logger,
+	wafPolicy *ngfAPIv1alpha1.WAFPolicy,
+	policy *Policy,
+	wafInput *WAFProcessingInput,
+	output *WAFProcessingOutput,
+) {
+	policySource := wafPolicy.Spec.PolicySource
+
+	var auth *fetch.BundleAuth
+	if policySource.Auth != nil {
+		var cond *conditions.Condition
+		auth, cond = resolveBundleAuth(policySource.Auth, wafPolicy.Namespace, wafInput, output)
+		if cond != nil {
+			policy.Conditions = append(policy.Conditions, *cond)
+			policy.Valid = false
+			return
+		}
+	}
+
+	var tlsCA []byte
+	if policySource.TLSSecretRef != nil {
+		var cond *conditions.Condition
+		tlsCA, cond = resolveTLSCA(policySource.TLSSecretRef, wafPolicy.Namespace, wafInput, output)
+		if cond != nil {
+			policy.Conditions = append(policy.Conditions, *cond)
+			policy.Valid = false
+			return
+		}
+	}
+
+	// Store resolved auth/TLS for use by the WAF polling manager.
+	policy.WAFState.ResolvedAuth = auth
+	policy.WAFState.ResolvedTLSCA = tlsCA
+
+	bundleKey := PolicyBundleKey(types.NamespacedName{Namespace: wafPolicy.Namespace, Name: wafPolicy.Name})
+
+	req := BuildPolicyFetchRequest(&policySource, wafPolicy.Spec.Type, auth, tlsCA)
+
+	result, err := wafInput.Fetcher.FetchPolicyBundle(ctx, req)
+	if err != nil {
+		logger.Error(err, "Failed to fetch WAF policy bundle", "resource", wafPolicy.Name)
+		if prev, ok := wafInput.PreviousBundles[bundleKey]; ok {
+			cond := conditions.NewPolicyProgrammedStaleBundleWarning("policy bundle", err.Error())
+			policy.Conditions = append(policy.Conditions, cond)
+			output.Bundles[bundleKey] = prev
+			policy.WAFState.Bundles[bundleKey] = prev
+			return
+		}
+		cond := conditions.NewPolicyNotProgrammedBundlePending(err.Error())
+		policy.Conditions = append(policy.Conditions, cond)
+		policy.WAFState.BundlePending = true
+		return
+	}
+
+	bundleData := &WAFBundleData{Data: result.Data, Checksum: result.Checksum}
+	output.Bundles[bundleKey] = bundleData
+	policy.WAFState.Bundles[bundleKey] = bundleData
+}
+
+// fetchSecurityLogBundles fetches log profile bundles for each SecurityLog entry.
+func fetchSecurityLogBundles(
+	ctx context.Context,
+	logger logr.Logger,
+	wafPolicy *ngfAPIv1alpha1.WAFPolicy,
+	policy *Policy,
+	wafInput *WAFProcessingInput,
+	output *WAFProcessingOutput,
+) {
+	for _, secLog := range wafPolicy.Spec.SecurityLogs {
+		if secLog.LogSource.HTTPSource == nil && secLog.LogSource.NIMSource == nil && secLog.LogSource.N1CSource == nil {
+			// DefaultProfile is used; no bundle to fetch.
+			continue
+		}
+
+		var auth *fetch.BundleAuth
+		if secLog.LogSource.Auth != nil {
+			var cond *conditions.Condition
+			auth, cond = resolveBundleAuth(secLog.LogSource.Auth, wafPolicy.Namespace, wafInput, output)
+			if cond != nil {
+				policy.Conditions = append(policy.Conditions, *cond)
+				policy.Valid = false
+				continue
+			}
+		}
+
+		var tlsCA []byte
+		if secLog.LogSource.TLSSecretRef != nil {
+			var cond *conditions.Condition
+			tlsCA, cond = resolveTLSCA(secLog.LogSource.TLSSecretRef, wafPolicy.Namespace, wafInput, output)
+			if cond != nil {
+				policy.Conditions = append(policy.Conditions, *cond)
+				policy.Valid = false
+				continue
+			}
+		}
+
+		bundleKey := LogBundleKey(
+			types.NamespacedName{Namespace: wafPolicy.Namespace, Name: wafPolicy.Name},
+			&secLog.LogSource,
+		)
+
+		// Multiple SecurityLog entries may reference the same URL and therefore produce the same
+		// bundleKey. Once the bundle has been fetched, skip subsequent entries with the same key
+		// to avoid redundant network calls and to prevent a failed fetch (e.g. due to different
+		// auth settings on the duplicate entry) from invalidating the policy.
+		if _, alreadyFetched := output.Bundles[bundleKey]; alreadyFetched {
+			continue
+		}
+
+		req := BuildLogFetchRequest(&secLog.LogSource, auth, tlsCA)
+
+		result, err := wafInput.Fetcher.FetchLogProfileBundle(ctx, req)
+		if err != nil {
+			logger.Error(
+				err,
+				"Failed to fetch WAF security log bundle",
+				"resource",
+				wafPolicy.Name,
+			)
+			if prev, ok := wafInput.PreviousBundles[bundleKey]; ok {
+				cond := conditions.NewPolicyProgrammedStaleBundleWarning(LogBundleDescription(&secLog.LogSource), err.Error())
+				policy.Conditions = append(policy.Conditions, cond)
+				output.Bundles[bundleKey] = prev
+				policy.WAFState.Bundles[bundleKey] = prev
+				continue
+			}
+			cond := conditions.NewPolicyNotProgrammedBundlePending(err.Error())
+			policy.Conditions = append(policy.Conditions, cond)
+			policy.WAFState.BundlePending = true
+			continue
+		}
+
+		bundleData := &WAFBundleData{Data: result.Data, Checksum: result.Checksum}
+		output.Bundles[bundleKey] = bundleData
+		policy.WAFState.Bundles[bundleKey] = bundleData
+	}
+}
+
+// expectedChecksum returns the ExpectedChecksum value from a BundleValidation, or empty string if nil.
+func expectedChecksum(v *ngfAPIv1alpha1.BundleValidation) string {
+	if v == nil || v.ExpectedChecksum == nil {
+		return ""
+	}
+	return *v.ExpectedChecksum
+}
+
+// resolveBundleAuth resolves a BundleAuth reference into fetch.BundleAuth credentials.
+// It looks up the referenced Secret from wafInput.Secrets and adds it to output.ReferencedWAFSecrets.
+// bundleAuth must not be nil.
+// Returns a non-nil *conditions.Condition on failure so callers can append it directly;
+// uses NotFound for a missing Secret and Invalid for wrong/empty credential keys.
+func resolveBundleAuth(
+	bundleAuth *ngfAPIv1alpha1.BundleAuth,
+	policyNamespace string,
+	wafInput *WAFProcessingInput,
+	output *WAFProcessingOutput,
+) (*fetch.BundleAuth, *conditions.Condition) {
+	secretNsName := types.NamespacedName{
+		Namespace: policyNamespace,
+		Name:      bundleAuth.SecretRef.Name,
+	}
+
+	secret, exists := wafInput.Secrets[secretNsName]
+	if !exists {
+		cond := conditions.NewPolicyRefsNotResolvedBundleAuthSecretNotFound(
+			fmt.Sprintf("auth secret %q not found", secretNsName),
+		)
+		return nil, &cond
+	}
+
+	output.ReferencedWAFSecrets[secretNsName] = secret
+
+	auth := &fetch.BundleAuth{}
+	if token, ok := secret.Data[secrets.BundleTokenKey]; ok {
+		auth.BearerToken = strings.TrimSpace(string(token))
+		if auth.BearerToken == "" {
+			cond := conditions.NewPolicyRefsNotResolvedBundleAuthSecretInvalid(
+				fmt.Sprintf("auth secret %q has empty %q key", secretNsName, secrets.BundleTokenKey),
+			)
+			return nil, &cond
+		}
+	} else {
+		auth.Username = strings.TrimSpace(string(secret.Data[secrets.BundleUsernameKey]))
+		auth.Password = strings.TrimSpace(string(secret.Data[secrets.BundlePasswordKey]))
+		if auth.Username == "" || auth.Password == "" {
+			cond := conditions.NewPolicyRefsNotResolvedBundleAuthSecretInvalid(fmt.Sprintf(
+				"auth secret %q must contain either %q or both %q and %q",
+				secretNsName, secrets.BundleTokenKey, secrets.BundleUsernameKey, secrets.BundlePasswordKey,
+			))
+			return nil, &cond
+		}
+	}
+
+	return auth, nil
+}
+
+// resolveTLSCA resolves a TLS CA secret reference into a PEM-encoded CA certificate byte slice.
+// It looks up the referenced Secret from wafInput.Secrets and adds it to output.ReferencedWAFSecrets.
+// tlsSecret must not be nil.
+// Returns a non-nil *conditions.Condition on failure so callers can append it directly;
+// uses NotFound for a missing Secret and Invalid for a missing ca.crt key.
+func resolveTLSCA(
+	tlsSecret *ngfAPIv1alpha1.LocalObjectReference,
+	policyNamespace string,
+	wafInput *WAFProcessingInput,
+	output *WAFProcessingOutput,
+) ([]byte, *conditions.Condition) {
+	secretNsName := types.NamespacedName{
+		Namespace: policyNamespace,
+		Name:      tlsSecret.Name,
+	}
+
+	secret, exists := wafInput.Secrets[secretNsName]
+	if !exists {
+		cond := conditions.NewPolicyRefsNotResolvedTLSSecretNotFound(
+			fmt.Sprintf("TLS CA secret %q not found", secretNsName),
+		)
+		return nil, &cond
+	}
+
+	caData, ok := secret.Data[secrets.CAKey]
+	if !ok {
+		cond := conditions.NewPolicyRefsNotResolvedTLSSecretInvalid(
+			fmt.Sprintf("TLS CA secret %q missing %q key", secretNsName, secrets.CAKey),
+		)
+		return nil, &cond
+	}
+
+	if len(bytes.TrimSpace(caData)) == 0 {
+		cond := conditions.NewPolicyRefsNotResolvedTLSSecretInvalid(
+			fmt.Sprintf("TLS CA secret %q has empty %q key", secretNsName, secrets.CAKey),
+		)
+		return nil, &cond
+	}
+
+	output.ReferencedWAFSecrets[secretNsName] = secret
+
+	return caData, nil
 }

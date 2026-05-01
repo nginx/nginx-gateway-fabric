@@ -460,8 +460,9 @@ func (cs *commandService) logAndSendErrorStatus(
 			NamespacedName: conn.ParentName,
 			GatewayName:    deployment.gatewayName,
 		},
-		Error:      deployment.GetConfigurationStatus(),
-		UpdateType: status.UpdateAll,
+		Error:             deployment.GetConfigurationStatus(),
+		UpdateType:        status.UpdateAll,
+		NginxConfigPushed: true,
 	}
 	cs.statusQueue.Enqueue(queueObj)
 }

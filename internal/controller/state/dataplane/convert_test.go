@@ -1393,7 +1393,6 @@ func TestConvertAuthenticationFilter(t *testing.T) {
 			},
 		},
 	}
-
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -1513,6 +1512,69 @@ func TestConvertHTTPCORSFilter(t *testing.T) {
 			g := NewWithT(t)
 
 			result := convertHTTPCORSFilter(test.filter)
+			g.Expect(result).To(Equal(test.expected))
+		})
+	}
+}
+
+func TestConvertWAFBundles(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		input    map[graph.WAFBundleKey]*graph.WAFBundleData
+		expected map[WAFBundleID]WAFBundle
+		name     string
+	}{
+		{
+			name:     "empty input",
+			input:    map[graph.WAFBundleKey]*graph.WAFBundleData{},
+			expected: map[WAFBundleID]WAFBundle{},
+		},
+		{
+			name: "single bundle with data",
+			input: map[graph.WAFBundleKey]*graph.WAFBundleData{
+				"bundle1.tgz": {
+					Data: []byte("bundle data"),
+				},
+			},
+			expected: map[WAFBundleID]WAFBundle{
+				"bundle1.tgz": WAFBundle([]byte("bundle data")),
+			},
+		},
+		{
+			name: "single bundle with nil data",
+			input: map[graph.WAFBundleKey]*graph.WAFBundleData{
+				"bundle2.tgz": nil,
+			},
+			expected: map[WAFBundleID]WAFBundle{
+				"bundle2.tgz": WAFBundle(nil),
+			},
+		},
+		{
+			name: "multiple bundles with mixed data",
+			input: map[graph.WAFBundleKey]*graph.WAFBundleData{
+				"bundle1.tgz": {
+					Data: []byte("first bundle"),
+				},
+				"bundle2.tgz": nil,
+				"bundle3.tgz": {
+					Data: []byte("third bundle"),
+				},
+			},
+			expected: map[WAFBundleID]WAFBundle{
+				"bundle1.tgz": WAFBundle([]byte("first bundle")),
+				"bundle2.tgz": WAFBundle(nil),
+				"bundle3.tgz": WAFBundle([]byte("third bundle")),
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			result := convertWAFBundles(test.input)
 			g.Expect(result).To(Equal(test.expected))
 		})
 	}

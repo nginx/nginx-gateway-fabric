@@ -55,6 +55,7 @@ func buildEffectiveNginxProxy(gatewayClassNp, gatewayNp *NginxProxy) *EffectiveN
 		return &enp
 	}
 
+	gcSpec := EffectiveNginxProxy(*gatewayClassNp.Source.Spec.DeepCopy())
 	global := EffectiveNginxProxy(*gatewayClassNp.Source.Spec.DeepCopy())
 	local := EffectiveNginxProxy(*gatewayNp.Source.Spec.DeepCopy())
 
@@ -82,38 +83,73 @@ func buildEffectiveNginxProxy(gatewayClassNp, gatewayNp *NginxProxy) *EffectiveN
 
 	// Clean up the effective configuration by handling slice unsetting and other cases
 	// that are not handled by JSON merging, such as mutual exclusivity between fields.
-	cleanupEffectiveNginxProxy(&local, &global)
+	cleanupEffectiveNginxProxy(&local, &global, &gcSpec)
 
 	return &global
 }
 
 // cleanupEffectiveNginxProxy handles post-JSON merge cleanup for the effective NginxProxy configuration.
 // This includes manually unsetting slices and handling mutual exclusion between certain fields.
-func cleanupEffectiveNginxProxy(local, global *EffectiveNginxProxy) {
-	// Handle slice unsetting, JSON unmarshaling doesn't clear slices when they're set to empty
-	if local.Telemetry != nil {
-		if local.Telemetry.DisabledFeatures != nil && len(local.Telemetry.DisabledFeatures) == 0 {
-			global.Telemetry.DisabledFeatures = []ngfAPIv1alpha2.DisableTelemetryFeature{}
-		}
+// gcSpec is the pre-merge GatewayClass spec, used to restore sub-fields dropped when a Gateway
+// partially overrides a nested struct (e.g. sets waf.disableCookieSeed but not waf.enabled).
+func cleanupEffectiveNginxProxy(local, global, gcSpec *EffectiveNginxProxy) {
+	cleanupTelemetry(local, global)
+	cleanupRewriteClientIP(local, global)
+	cleanupKubernetes(local, global)
+	cleanupWAF(local, global, gcSpec)
+}
 
-		if local.Telemetry.SpanAttributes != nil && len(local.Telemetry.SpanAttributes) == 0 {
-			global.Telemetry.SpanAttributes = []ngfAPIv1alpha1.SpanAttribute{}
-		}
+// cleanupTelemetry resets empty slices that JSON unmarshal cannot clear.
+func cleanupTelemetry(local, global *EffectiveNginxProxy) {
+	if local.Telemetry == nil {
+		return
 	}
-
-	if local.RewriteClientIP != nil {
-		if local.RewriteClientIP.TrustedAddresses != nil && len(local.RewriteClientIP.TrustedAddresses) == 0 {
-			global.RewriteClientIP.TrustedAddresses = []ngfAPIv1alpha2.RewriteClientIPAddress{}
-		}
+	if len(local.Telemetry.DisabledFeatures) == 0 && local.Telemetry.DisabledFeatures != nil {
+		global.Telemetry.DisabledFeatures = []ngfAPIv1alpha2.DisableTelemetryFeature{}
 	}
+	if len(local.Telemetry.SpanAttributes) == 0 && local.Telemetry.SpanAttributes != nil {
+		global.Telemetry.SpanAttributes = []ngfAPIv1alpha1.SpanAttribute{}
+	}
+}
 
-	// Handle mutual exclusion between DaemonSet and Deployment
-	if local.Kubernetes != nil && global.Kubernetes != nil {
-		if local.Kubernetes.DaemonSet != nil && global.Kubernetes.Deployment != nil {
-			global.Kubernetes.Deployment = nil
-		} else if local.Kubernetes.Deployment != nil && global.Kubernetes.DaemonSet != nil {
-			global.Kubernetes.DaemonSet = nil
-		}
+// cleanupRewriteClientIP resets empty slices that JSON unmarshal cannot clear.
+func cleanupRewriteClientIP(local, global *EffectiveNginxProxy) {
+	if local.RewriteClientIP == nil {
+		return
+	}
+	if len(local.RewriteClientIP.TrustedAddresses) == 0 && local.RewriteClientIP.TrustedAddresses != nil {
+		global.RewriteClientIP.TrustedAddresses = []ngfAPIv1alpha2.RewriteClientIPAddress{}
+	}
+}
+
+// cleanupKubernetes enforces mutual exclusion between DaemonSet and Deployment.
+func cleanupKubernetes(local, global *EffectiveNginxProxy) {
+	if local.Kubernetes == nil || global.Kubernetes == nil {
+		return
+	}
+	if local.Kubernetes.DaemonSet != nil && global.Kubernetes.Deployment != nil {
+		global.Kubernetes.Deployment = nil
+	} else if local.Kubernetes.Deployment != nil && global.Kubernetes.DaemonSet != nil {
+		global.Kubernetes.DaemonSet = nil
+	}
+}
+
+// cleanupWAF restores WAFSpec fields that the Gateway left nil so they inherit from the GatewayClass.
+// When a Gateway NginxProxy sets the waf object partially (e.g. only disableCookieSeed), the JSON
+// merge overwrites the entire waf struct in global with the Gateway's value, dropping any sub-fields
+// the Gateway did not specify. This restores those nil sub-fields from the pre-merge GatewayClass spec.
+func cleanupWAF(local, global, gcSpec *EffectiveNginxProxy) {
+	if local.WAF == nil || gcSpec.WAF == nil {
+		return
+	}
+	if local.WAF.Enable == nil {
+		global.WAF.Enable = gcSpec.WAF.Enable
+	}
+	if local.WAF.DisableCookieSeed == nil {
+		global.WAF.DisableCookieSeed = gcSpec.WAF.DisableCookieSeed
+	}
+	if local.WAF.BundleFailOpen == nil {
+		global.WAF.BundleFailOpen = gcSpec.WAF.BundleFailOpen
 	}
 }
 
@@ -122,7 +158,7 @@ func nginxProxyValid(np *NginxProxy) bool {
 }
 
 func telemetryEnabledForNginxProxy(np *EffectiveNginxProxy) bool {
-	if np.Telemetry == nil || np.Telemetry.Exporter == nil || np.Telemetry.Exporter.Endpoint == nil {
+	if np == nil || np.Telemetry == nil || np.Telemetry.Exporter == nil || np.Telemetry.Exporter.Endpoint == nil {
 		return false
 	}
 
@@ -144,6 +180,21 @@ func MetricsEnabledForNginxProxy(np *EffectiveNginxProxy) (*int32, bool) {
 	}
 
 	return nil, true
+}
+
+// WAFEnabledForNginxProxy returns whether WAF is enabled for the given NginxProxy configuration.
+func WAFEnabledForNginxProxy(np *EffectiveNginxProxy) bool {
+	return np != nil && np.WAF != nil && np.WAF.Enable != nil && *np.WAF.Enable
+}
+
+// WAFCookieSeedDisabledForNginxProxy returns whether the app_protect_cookie_seed directive is disabled.
+func WAFCookieSeedDisabledForNginxProxy(np *EffectiveNginxProxy) bool {
+	return np != nil && np.WAF != nil && np.WAF.DisableCookieSeed != nil && *np.WAF.DisableCookieSeed
+}
+
+// WAFBundleFailOpenForNginxProxy returns whether fail-open is enabled for WAF bundle fetching.
+func WAFBundleFailOpenForNginxProxy(np *EffectiveNginxProxy) bool {
+	return np != nil && np.WAF != nil && np.WAF.BundleFailOpen != nil && *np.WAF.BundleFailOpen
 }
 
 func processNginxProxies(
