@@ -843,7 +843,8 @@ func (h *eventHandlerImpl) updateNginxConf(
 	volumeMounts []v1.VolumeMount,
 ) {
 	files := h.cfg.generator.Generate(conf)
-	h.cfg.nginxUpdater.UpdateConfig(deployment, files, volumeMounts)
+	stateFiles := h.cfg.generator.GenerateStateFiles(conf)
+	h.cfg.nginxUpdater.UpdateConfig(deployment, files, stateFiles, volumeMounts)
 
 	// If using NGINX Plus, update upstream servers using the API.
 	if h.cfg.plus {

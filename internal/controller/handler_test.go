@@ -74,7 +74,7 @@ var _ = Describe("eventHandler", func() {
 		Expect(fakeGenerator.GenerateArgsForCall(0)).Should(Equal(expectedConf))
 
 		Expect(fakeNginxUpdater.UpdateConfigCallCount()).Should(Equal(1))
-		_, files, _ := fakeNginxUpdater.UpdateConfigArgsForCall(0)
+		_, files, _, _ := fakeNginxUpdater.UpdateConfigArgsForCall(0)
 		Expect(expectedFiles).To(Equal(files))
 
 		Eventually(
@@ -942,7 +942,7 @@ var _ = Describe("eventHandler", func() {
 
 		// Verify that UpdateConfig was called with the volume mounts
 		Expect(fakeNginxUpdater.UpdateConfigCallCount()).Should(Equal(1))
-		_, _, volumeMounts := fakeNginxUpdater.UpdateConfigArgsForCall(0)
+		_, _, _, volumeMounts := fakeNginxUpdater.UpdateConfigArgsForCall(0)
 		Expect(volumeMounts).To(HaveLen(1))
 		Expect(volumeMounts[0].Name).To(Equal("test-volume"))
 		Expect(volumeMounts[0].MountPath).To(Equal("/etc/test"))
@@ -994,7 +994,7 @@ var _ = Describe("eventHandler", func() {
 
 		// Verify that UpdateConfig was called with the volume mounts
 		Expect(fakeNginxUpdater.UpdateConfigCallCount()).Should(Equal(1))
-		_, _, volumeMounts := fakeNginxUpdater.UpdateConfigArgsForCall(0)
+		_, _, _, volumeMounts := fakeNginxUpdater.UpdateConfigArgsForCall(0)
 		Expect(volumeMounts).To(HaveLen(1))
 		Expect(volumeMounts[0].Name).To(Equal("daemon-volume"))
 		Expect(volumeMounts[0].MountPath).To(Equal("/var/daemon"))

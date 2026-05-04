@@ -64,7 +64,7 @@ func TestUpdateConfig(t *testing.T) {
 				deployment.SetPodErrorStatus("pod1", testErr)
 			}
 
-			updater.UpdateConfig(deployment, []File{file}, []v1.VolumeMount{})
+			updater.UpdateConfig(deployment, []File{file}, nil, []v1.VolumeMount{})
 
 			g.Expect(fakeBroadcaster.SendCallCount()).To(Equal(1))
 			fileContents, _ := deployment.GetFile(file.Meta.Name, file.Meta.Hash)
@@ -75,11 +75,112 @@ func TestUpdateConfig(t *testing.T) {
 				// ensure that the error is cleared after the next config is applied
 				deployment.SetPodErrorStatus("pod1", nil)
 				file.Meta.Hash = "5678"
-				updater.UpdateConfig(deployment, []File{file}, []v1.VolumeMount{})
+				updater.UpdateConfig(deployment, []File{file}, nil, []v1.VolumeMount{})
 				g.Expect(deployment.GetLatestConfigError()).ToNot(HaveOccurred())
 			} else {
 				g.Expect(deployment.GetLatestConfigError()).ToNot(HaveOccurred())
 			}
+		})
+	}
+}
+
+func TestUpdateConfigWithStateFiles(t *testing.T) {
+	t.Parallel()
+
+	mainFile := File{
+		Meta:     &pb.FileMeta{Name: "/etc/nginx/conf.d/http.conf", Hash: "main-hash"},
+		Contents: []byte("http config"),
+	}
+
+	tests := []struct {
+		run func(
+			g Gomega,
+			updater *NginxUpdaterImpl,
+			deployment *Deployment,
+			fakeBroadcaster *broadcastfakes.FakeBroadcaster,
+		)
+		name string
+	}{
+		{
+			name: "UpdateConfig with state files stores them on the deployment as managed entries " +
+				"(real hash, Unmanaged=false) in the broadcast overview and serves them via GetFile, " +
+				"so a fresh subscriber's agent fetches and writes them on initial config",
+			run: func(
+				g Gomega,
+				updater *NginxUpdaterImpl,
+				deployment *Deployment,
+				fakeBroadcaster *broadcastfakes.FakeBroadcaster,
+			) {
+				stateFile := File{
+					Meta:     &pb.FileMeta{Name: "/var/lib/nginx/state/coffee.conf", Hash: "state-hash"},
+					Contents: []byte("server 10.0.0.1:8080;\n"),
+				}
+
+				updater.UpdateConfig(deployment, []File{mainFile}, []File{stateFile}, []v1.VolumeMount{})
+				g.Expect(fakeBroadcaster.SendCallCount()).To(Equal(1))
+
+				stateContents, _ := deployment.GetFile(stateFile.Meta.Name, stateFile.Meta.Hash)
+				g.Expect(stateContents).To(Equal(stateFile.Contents))
+
+				overviews, _ := deployment.GetFileOverviews()
+				var stateInOverview *pb.File
+				for _, fo := range overviews {
+					if fo.GetFileMeta().GetName() == stateFile.Meta.Name {
+						stateInOverview = fo
+					}
+				}
+				g.Expect(stateInOverview).ToNot(BeNil())
+				g.Expect(stateInOverview.GetUnmanaged()).To(BeFalse())
+				g.Expect(stateInOverview.GetFileMeta().GetHash()).To(Equal("state-hash"))
+			},
+		},
+		{
+			name: "UpdateConfig called twice with same main config but different state-file content " +
+				"sends only one broadcast endpoint-only changes must not trigger a reload on existing " +
+				"pods and GetFile still serves the latest state-file content for fresh subscribers",
+			run: func(
+				g Gomega,
+				updater *NginxUpdaterImpl,
+				deployment *Deployment,
+				fakeBroadcaster *broadcastfakes.FakeBroadcaster,
+			) {
+				stateV1 := File{
+					Meta:     &pb.FileMeta{Name: "/var/lib/nginx/state/coffee.conf", Hash: "v1"},
+					Contents: []byte("server 10.0.0.1:8080;\n"),
+				}
+				updater.UpdateConfig(deployment, []File{mainFile}, []File{stateV1}, []v1.VolumeMount{})
+				g.Expect(fakeBroadcaster.SendCallCount()).To(Equal(1))
+
+				stateV2 := File{
+					Meta:     &pb.FileMeta{Name: "/var/lib/nginx/state/coffee.conf", Hash: "v2"},
+					Contents: []byte("server 10.0.0.99:8080;\n"),
+				}
+				updater.UpdateConfig(deployment, []File{mainFile}, []File{stateV2}, []v1.VolumeMount{})
+
+				g.Expect(fakeBroadcaster.SendCallCount()).To(Equal(1),
+					"endpoint-only state-file change must not trigger an additional broadcast or reload")
+
+				contents, _ := deployment.GetFile(stateV2.Meta.Name, stateV2.Meta.Hash)
+				g.Expect(contents).To(Equal(stateV2.Contents))
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			fakeBroadcaster := &broadcastfakes.FakeBroadcaster{}
+			fakeBroadcaster.SendReturns(true)
+
+			updater := NewNginxUpdater(logr.Discard(), fake.NewFakeClient(), &status.Queue{}, nil, true)
+			deployment := &Deployment{
+				broadcaster: fakeBroadcaster,
+				podStatuses: make(map[string]error),
+			}
+
+			tt.run(g, updater, deployment, fakeBroadcaster)
 		})
 	}
 }
@@ -106,10 +207,10 @@ func TestUpdateConfig_NoChange(t *testing.T) {
 	}
 
 	// Set the initial files on the deployment
-	deployment.SetFiles([]File{file}, []v1.VolumeMount{})
+	deployment.SetFiles([]File{file}, nil, []v1.VolumeMount{})
 
 	// Call UpdateConfig with the same files
-	updater.UpdateConfig(deployment, []File{file}, []v1.VolumeMount{})
+	updater.UpdateConfig(deployment, []File{file}, nil, []v1.VolumeMount{})
 
 	// Verify that no new configuration was sent
 	g.Expect(fakeBroadcaster.SendCallCount()).To(Equal(0))

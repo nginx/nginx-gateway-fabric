@@ -49,6 +49,7 @@ allowed_directories:
 - /usr/share/nginx
 - /var/run/nginx
 - /etc/app_protect/bundles/
+- /var/lib/nginx/state
 features:
 - configuration
 - certificates

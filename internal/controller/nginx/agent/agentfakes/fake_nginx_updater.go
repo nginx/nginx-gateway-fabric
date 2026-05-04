@@ -10,12 +10,13 @@ import (
 )
 
 type FakeNginxUpdater struct {
-	UpdateConfigStub        func(*agent.Deployment, []agent.File, []v1.VolumeMount)
+	UpdateConfigStub        func(*agent.Deployment, []agent.File, []agent.File, []v1.VolumeMount)
 	updateConfigMutex       sync.RWMutex
 	updateConfigArgsForCall []struct {
 		arg1 *agent.Deployment
 		arg2 []agent.File
-		arg3 []v1.VolumeMount
+		arg3 []agent.File
+		arg4 []v1.VolumeMount
 	}
 	UpdateUpstreamServersStub        func(*agent.Deployment, dataplane.Configuration)
 	updateUpstreamServersMutex       sync.RWMutex
@@ -27,28 +28,34 @@ type FakeNginxUpdater struct {
 	invocationsMutex sync.RWMutex
 }
 
-func (fake *FakeNginxUpdater) UpdateConfig(arg1 *agent.Deployment, arg2 []agent.File, arg3 []v1.VolumeMount) {
+func (fake *FakeNginxUpdater) UpdateConfig(arg1 *agent.Deployment, arg2 []agent.File, arg3 []agent.File, arg4 []v1.VolumeMount) {
 	var arg2Copy []agent.File
 	if arg2 != nil {
 		arg2Copy = make([]agent.File, len(arg2))
 		copy(arg2Copy, arg2)
 	}
-	var arg3Copy []v1.VolumeMount
+	var arg3Copy []agent.File
 	if arg3 != nil {
-		arg3Copy = make([]v1.VolumeMount, len(arg3))
+		arg3Copy = make([]agent.File, len(arg3))
 		copy(arg3Copy, arg3)
+	}
+	var arg4Copy []v1.VolumeMount
+	if arg4 != nil {
+		arg4Copy = make([]v1.VolumeMount, len(arg4))
+		copy(arg4Copy, arg4)
 	}
 	fake.updateConfigMutex.Lock()
 	fake.updateConfigArgsForCall = append(fake.updateConfigArgsForCall, struct {
 		arg1 *agent.Deployment
 		arg2 []agent.File
-		arg3 []v1.VolumeMount
-	}{arg1, arg2Copy, arg3Copy})
+		arg3 []agent.File
+		arg4 []v1.VolumeMount
+	}{arg1, arg2Copy, arg3Copy, arg4Copy})
 	stub := fake.UpdateConfigStub
-	fake.recordInvocation("UpdateConfig", []interface{}{arg1, arg2Copy, arg3Copy})
+	fake.recordInvocation("UpdateConfig", []interface{}{arg1, arg2Copy, arg3Copy, arg4Copy})
 	fake.updateConfigMutex.Unlock()
 	if stub != nil {
-		fake.UpdateConfigStub(arg1, arg2, arg3)
+		fake.UpdateConfigStub(arg1, arg2, arg3, arg4)
 	}
 }
 
@@ -58,17 +65,17 @@ func (fake *FakeNginxUpdater) UpdateConfigCallCount() int {
 	return len(fake.updateConfigArgsForCall)
 }
 
-func (fake *FakeNginxUpdater) UpdateConfigCalls(stub func(*agent.Deployment, []agent.File, []v1.VolumeMount)) {
+func (fake *FakeNginxUpdater) UpdateConfigCalls(stub func(*agent.Deployment, []agent.File, []agent.File, []v1.VolumeMount)) {
 	fake.updateConfigMutex.Lock()
 	defer fake.updateConfigMutex.Unlock()
 	fake.UpdateConfigStub = stub
 }
 
-func (fake *FakeNginxUpdater) UpdateConfigArgsForCall(i int) (*agent.Deployment, []agent.File, []v1.VolumeMount) {
+func (fake *FakeNginxUpdater) UpdateConfigArgsForCall(i int) (*agent.Deployment, []agent.File, []agent.File, []v1.VolumeMount) {
 	fake.updateConfigMutex.RLock()
 	defer fake.updateConfigMutex.RUnlock()
 	argsForCall := fake.updateConfigArgsForCall[i]
-	return argsForCall.arg1, argsForCall.arg2, argsForCall.arg3
+	return argsForCall.arg1, argsForCall.arg2, argsForCall.arg3, argsForCall.arg4
 }
 
 func (fake *FakeNginxUpdater) UpdateUpstreamServers(arg1 *agent.Deployment, arg2 dataplane.Configuration) {

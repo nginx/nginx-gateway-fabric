@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 
@@ -62,6 +63,8 @@ type Deployment struct {
 	nginxPlusActions []*pb.NGINXPlusAction
 	fileOverviews    []*pb.File
 	files            []File
+	// stateFiles holds NGINX Plus upstream state files.
+	stateFiles []File
 
 	latestFileNames []string
 	volumeMounts    []v1.VolumeMount
@@ -196,13 +199,32 @@ func (d *Deployment) GetFile(name, hash string) ([]byte, string) {
 		}
 	}
 
+	for _, file := range d.stateFiles {
+		if name == file.Meta.GetName() {
+			fileFoundHash = file.Meta.GetHash()
+			if hash == file.Meta.GetHash() {
+				return file.Contents, file.Meta.GetHash()
+			}
+		}
+	}
+
 	return nil, fileFoundHash
 }
 
 // SetFiles updates the nginx files and fileOverviews for the deployment and returns the message to send.
+// stateFiles are NGINX Plus upstream state files . They appear as managed entries in the
+// overview so a fresh subscriber's agent fetches and writes them on initial config closing the cold-start
+// gap where empty upstreams 502 incoming traffic. configVersion is computed from non-state-file overviews
+// only, so endpoint-only changes don't bump the version and therefore
+// don't trigger a broadcast or reload on existing pods; the Plus API call handles those updates instead.
 // The deployment FileLock MUST already be locked before calling this function.
-func (d *Deployment) SetFiles(files []File, volumeMounts []v1.VolumeMount) *broadcast.NginxAgentMessage {
+func (d *Deployment) SetFiles(
+	files []File,
+	stateFiles []File,
+	volumeMounts []v1.VolumeMount,
+) *broadcast.NginxAgentMessage {
 	d.files = files
+	d.stateFiles = stateFiles
 	d.volumeMounts = volumeMounts
 
 	return d.rebuildFileOverviews()
@@ -275,10 +297,18 @@ func (d *Deployment) rebuildFileOverviews() *broadcast.NginxAgentMessage {
 		fileOverviews = append(fileOverviews, &pb.File{FileMeta: f.Meta})
 	}
 
+	stateFilePaths := make(map[string]struct{}, len(d.stateFiles))
+	for _, sf := range d.stateFiles {
+		stateFilePaths[sf.Meta.GetName()] = struct{}{}
+	}
+
 	// Build the set of unmanaged files from volume mounts.
 	fileIgnoreSet := make(map[string]struct{})
 	for _, vm := range d.volumeMounts {
 		for _, f := range d.latestFileNames {
+			if _, isStateFile := stateFilePaths[f]; isStateFile {
+				continue
+			}
 			if strings.HasPrefix(f, vm.MountPath) {
 				fileIgnoreSet[f] = struct{}{}
 			}
@@ -290,7 +320,16 @@ func (d *Deployment) rebuildFileOverviews() *broadcast.NginxAgentMessage {
 		fileIgnoreSet[f] = struct{}{}
 	}
 
+	// Sort for deterministic overview order across rebuilds; map iteration is randomized in Go,
+	// which would otherwise produce a different fileOverviews slice each call even when the
+	// underlying content is unchanged.
+	sortedIgnoreFiles := make([]string, 0, len(fileIgnoreSet))
 	for f := range fileIgnoreSet {
+		sortedIgnoreFiles = append(sortedIgnoreFiles, f)
+	}
+	sort.Strings(sortedIgnoreFiles)
+
+	for _, f := range sortedIgnoreFiles {
 		fileOverviews = append(fileOverviews, &pb.File{
 			FileMeta: &pb.FileMeta{
 				Name:        f,
@@ -301,13 +340,18 @@ func (d *Deployment) rebuildFileOverviews() *broadcast.NginxAgentMessage {
 	}
 
 	newConfigVersion := filesHelper.GenerateConfigVersion(fileOverviews)
+
+	for _, sf := range d.stateFiles {
+		fileOverviews = append(fileOverviews, &pb.File{FileMeta: sf.Meta})
+	}
+
+	d.fileOverviews = fileOverviews
+
 	if d.configVersion == newConfigVersion {
-		// files have not changed, nothing to send
 		return nil
 	}
 
 	d.configVersion = newConfigVersion
-	d.fileOverviews = fileOverviews
 
 	return &broadcast.NginxAgentMessage{
 		Type:          broadcast.ConfigApplyRequest,

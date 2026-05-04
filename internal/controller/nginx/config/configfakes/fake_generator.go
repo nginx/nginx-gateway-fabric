@@ -34,6 +34,17 @@ type FakeGenerator struct {
 		result1 agent.File
 		result2 error
 	}
+	GenerateStateFilesStub        func(dataplane.Configuration) []agent.File
+	generateStateFilesMutex       sync.RWMutex
+	generateStateFilesArgsForCall []struct {
+		arg1 dataplane.Configuration
+	}
+	generateStateFilesReturns struct {
+		result1 []agent.File
+	}
+	generateStateFilesReturnsOnCall map[int]struct {
+		result1 []agent.File
+	}
 	invocations      map[string][][]interface{}
 	invocationsMutex sync.RWMutex
 }
@@ -161,6 +172,67 @@ func (fake *FakeGenerator) GenerateDeploymentContextReturnsOnCall(i int, result1
 		result1 agent.File
 		result2 error
 	}{result1, result2}
+}
+
+func (fake *FakeGenerator) GenerateStateFiles(arg1 dataplane.Configuration) []agent.File {
+	fake.generateStateFilesMutex.Lock()
+	ret, specificReturn := fake.generateStateFilesReturnsOnCall[len(fake.generateStateFilesArgsForCall)]
+	fake.generateStateFilesArgsForCall = append(fake.generateStateFilesArgsForCall, struct {
+		arg1 dataplane.Configuration
+	}{arg1})
+	stub := fake.GenerateStateFilesStub
+	fakeReturns := fake.generateStateFilesReturns
+	fake.recordInvocation("GenerateStateFiles", []interface{}{arg1})
+	fake.generateStateFilesMutex.Unlock()
+	if stub != nil {
+		return stub(arg1)
+	}
+	if specificReturn {
+		return ret.result1
+	}
+	return fakeReturns.result1
+}
+
+func (fake *FakeGenerator) GenerateStateFilesCallCount() int {
+	fake.generateStateFilesMutex.RLock()
+	defer fake.generateStateFilesMutex.RUnlock()
+	return len(fake.generateStateFilesArgsForCall)
+}
+
+func (fake *FakeGenerator) GenerateStateFilesCalls(stub func(dataplane.Configuration) []agent.File) {
+	fake.generateStateFilesMutex.Lock()
+	defer fake.generateStateFilesMutex.Unlock()
+	fake.GenerateStateFilesStub = stub
+}
+
+func (fake *FakeGenerator) GenerateStateFilesArgsForCall(i int) dataplane.Configuration {
+	fake.generateStateFilesMutex.RLock()
+	defer fake.generateStateFilesMutex.RUnlock()
+	argsForCall := fake.generateStateFilesArgsForCall[i]
+	return argsForCall.arg1
+}
+
+func (fake *FakeGenerator) GenerateStateFilesReturns(result1 []agent.File) {
+	fake.generateStateFilesMutex.Lock()
+	defer fake.generateStateFilesMutex.Unlock()
+	fake.GenerateStateFilesStub = nil
+	fake.generateStateFilesReturns = struct {
+		result1 []agent.File
+	}{result1}
+}
+
+func (fake *FakeGenerator) GenerateStateFilesReturnsOnCall(i int, result1 []agent.File) {
+	fake.generateStateFilesMutex.Lock()
+	defer fake.generateStateFilesMutex.Unlock()
+	fake.GenerateStateFilesStub = nil
+	if fake.generateStateFilesReturnsOnCall == nil {
+		fake.generateStateFilesReturnsOnCall = make(map[int]struct {
+			result1 []agent.File
+		})
+	}
+	fake.generateStateFilesReturnsOnCall[i] = struct {
+		result1 []agent.File
+	}{result1}
 }
 
 func (fake *FakeGenerator) Invocations() map[string][][]interface{} {

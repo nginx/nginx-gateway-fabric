@@ -45,7 +45,7 @@ func TestSetAndGetFiles(t *testing.T) {
 		},
 	}
 
-	msg := deployment.SetFiles(files, []v1.VolumeMount{})
+	msg := deployment.SetFiles(files, nil, []v1.VolumeMount{})
 	fileOverviews, configVersion := deployment.GetFileOverviews()
 
 	g.Expect(msg.Type).To(Equal(broadcast.ConfigApplyRequest))
@@ -62,7 +62,7 @@ func TestSetAndGetFiles(t *testing.T) {
 	g.Expect(wrongHashFile).To(BeNil())
 
 	// Set the same files again
-	msg = deployment.SetFiles(files, []v1.VolumeMount{})
+	msg = deployment.SetFiles(files, nil, []v1.VolumeMount{})
 	g.Expect(msg).To(BeNil())
 
 	newFileOverviews, _ := deployment.GetFileOverviews()
@@ -106,7 +106,7 @@ func TestSetAndGetFiles_VolumeIgnoreFiles(t *testing.T) {
 		},
 	}
 
-	msg := deployment.SetFiles(files, volumeMounts)
+	msg := deployment.SetFiles(files, nil, volumeMounts)
 	fileOverviews, configVersion := deployment.GetFileOverviews()
 
 	g.Expect(msg.Type).To(Equal(broadcast.ConfigApplyRequest))
@@ -144,11 +144,121 @@ func TestSetAndGetFiles_VolumeIgnoreFiles(t *testing.T) {
 	g.Expect(wrongHashFile).To(BeNil())
 
 	// Set the same files again
-	msg = deployment.SetFiles(files, volumeMounts)
+	msg = deployment.SetFiles(files, nil, volumeMounts)
 	g.Expect(msg).To(BeNil())
 
 	newFileOverviews, _ := deployment.GetFileOverviews()
 	g.Expect(newFileOverviews).To(Equal(fileOverviews))
+}
+
+func TestStateFiles(t *testing.T) {
+	t.Parallel()
+
+	mainFile := File{
+		Meta:     &pb.FileMeta{Name: "/etc/nginx/conf.d/http.conf", Hash: "main"},
+		Contents: []byte("http config"),
+	}
+
+	tests := []struct {
+		run  func(g Gomega)
+		name string
+	}{
+		{
+			name: "state files are appended to the overview as managed entries (real hash, " +
+				"Unmanaged=false) so a fresh subscriber's agent fetches and writes them on initial config",
+			run: func(g Gomega) {
+				deployment := newDeployment(&broadcastfakes.FakeBroadcaster{}, "")
+
+				stateFile := File{
+					Meta:     &pb.FileMeta{Name: "/var/lib/nginx/state/coffee.conf", Hash: "state-hash"},
+					Contents: []byte("server 10.0.0.1:8080;\n"),
+				}
+
+				deployment.SetFiles([]File{mainFile}, []File{stateFile}, nil)
+
+				overviews, _ := deployment.GetFileOverviews()
+				var stateInOverview *pb.File
+				for _, fo := range overviews {
+					if fo.GetFileMeta().GetName() == stateFile.Meta.Name {
+						stateInOverview = fo
+					}
+				}
+				g.Expect(stateInOverview).ToNot(BeNil())
+				g.Expect(stateInOverview.GetUnmanaged()).To(BeFalse())
+				g.Expect(stateInOverview.GetFileMeta().GetHash()).To(Equal("state-hash"))
+
+				contents, _ := deployment.GetFile(stateFile.Meta.Name, stateFile.Meta.Hash)
+				g.Expect(contents).To(Equal(stateFile.Contents))
+			},
+		},
+		{
+			name: "endpoint-only state-file changes do not shift configVersion" +
+				", but d.fileOverviews still reflects the latest state-file content for " +
+				"fresh subscribers connecting after the change",
+			run: func(g Gomega) {
+				deployment := newDeployment(&broadcastfakes.FakeBroadcaster{}, "")
+
+				state1 := File{
+					Meta:     &pb.FileMeta{Name: "/var/lib/nginx/state/coffee.conf", Hash: "h1"},
+					Contents: []byte("server 10.0.0.1:8080;\n"),
+				}
+				g.Expect(deployment.SetFiles([]File{mainFile}, []File{state1}, nil)).ToNot(BeNil())
+
+				state2 := File{
+					Meta:     &pb.FileMeta{Name: "/var/lib/nginx/state/coffee.conf", Hash: "h2"},
+					Contents: []byte("server 10.0.0.99:8080;\n"),
+				}
+				g.Expect(deployment.SetFiles([]File{mainFile}, []File{state2}, nil)).To(BeNil(),
+					"endpoint-only change must not bump configVersion or trigger a broadcast")
+
+				overviews, _ := deployment.GetFileOverviews()
+				var stateInOverview *pb.File
+				for _, fo := range overviews {
+					if fo.GetFileMeta().GetName() == state2.Meta.Name {
+						stateInOverview = fo
+					}
+				}
+				g.Expect(stateInOverview).ToNot(BeNil())
+				g.Expect(stateInOverview.GetFileMeta().GetHash()).To(Equal("h2"))
+
+				contents, _ := deployment.GetFile(state2.Meta.Name, state2.Meta.Hash)
+				g.Expect(contents).To(Equal(state2.Contents))
+			},
+		},
+		{
+			name: "state-file paths reported by the agent via UpdateOverview are not duplicated as " +
+				"Unmanaged stubs alongside their managed entries; the path appears exactly once and as managed",
+			run: func(g Gomega) {
+				deployment := newDeployment(&broadcastfakes.FakeBroadcaster{}, "")
+
+				stateFile := File{
+					Meta:     &pb.FileMeta{Name: "/var/lib/nginx/state/coffee.conf", Hash: "state-hash"},
+					Contents: []byte("server 10.0.0.1:8080;\n"),
+				}
+				deployment.latestFileNames = []string{stateFile.Meta.Name}
+
+				volumeMounts := []v1.VolumeMount{{Name: "nginx-lib", MountPath: "/var/lib/nginx/state"}}
+				deployment.SetFiles([]File{mainFile}, []File{stateFile}, volumeMounts)
+
+				overviews, _ := deployment.GetFileOverviews()
+				var matches []*pb.File
+				for _, fo := range overviews {
+					if fo.GetFileMeta().GetName() == stateFile.Meta.Name {
+						matches = append(matches, fo)
+					}
+				}
+				g.Expect(matches).To(HaveLen(1), "state file path must appear exactly once in the overview")
+				g.Expect(matches[0].GetUnmanaged()).To(BeFalse())
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			tt.run(NewWithT(t))
+		})
+	}
 }
 
 func TestSetNGINXPlusActions(t *testing.T) {
@@ -232,7 +342,7 @@ func TestUpdateWAFBundle(t *testing.T) {
 			setup: func(d *Deployment) {
 				d.SetFiles([]File{
 					{Meta: &pb.FileMeta{Name: "test.conf", Hash: "abc"}, Contents: []byte("conf")},
-				}, nil)
+				}, nil, nil)
 			},
 			data:           []byte("bundle-v1"),
 			expectNumFiles: 2,
@@ -318,7 +428,7 @@ func TestRemoveWAFBundle(t *testing.T) {
 			setup: func(d *Deployment) {
 				d.SetFiles([]File{
 					{Meta: &pb.FileMeta{Name: "test.conf", Hash: "abc"}, Contents: []byte("conf")},
-				}, nil)
+				}, nil, nil)
 			},
 			expectNil: true,
 		},
@@ -334,7 +444,7 @@ func TestRemoveWAFBundle(t *testing.T) {
 			setup: func(d *Deployment) {
 				d.SetFiles([]File{
 					{Meta: &pb.FileMeta{Name: "test.conf", Hash: "abc"}, Contents: []byte("conf")},
-				}, nil)
+				}, nil, nil)
 				d.UpdateWAFBundle(bundlePath, []byte("bundle-data"))
 			},
 			expectNumFiles: 1,
