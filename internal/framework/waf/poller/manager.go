@@ -178,7 +178,7 @@ func (m *pollerManager) startPoller(ctx context.Context, cfg Config) {
 		m.clearBundleCacheLocked(entry.poller)
 	}
 
-	pollerCtx, cancel := context.WithCancel(ctx) //nolint:gosec // Cancel is handled externally to this function
+	pollerCtx, cancel := context.WithCancel(ctx)
 
 	var poller *poller
 

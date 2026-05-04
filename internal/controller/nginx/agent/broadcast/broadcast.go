@@ -87,7 +87,7 @@ func (b *DeploymentBroadcaster) Subscribe() SubscriberChannels {
 	responseCh := make(chan struct{})
 	id := string(uuid.NewUUID())
 	// Create listener context as child of broadcaster context
-	//nolint:gosec // G118: cancel is called when unsubscribing in subscriber()
+
 	listenerCtx, cancel := context.WithCancel(b.broadcasterCtx)
 
 	subscriberChans := SubscriberChannels{
