@@ -357,7 +357,7 @@ func (cs *commandService) setInitialConfig(
 	errs := []error{applyErr}
 	for _, action := range deployment.GetNGINXPlusActions() {
 		// retry the API update request because sometimes nginx isn't quite ready after the config apply reload
-		timeoutCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		timeoutCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		var overallUpstreamApplyErr error
 
 		if err := wait.PollUntilContextCancel(

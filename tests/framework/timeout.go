@@ -41,6 +41,10 @@ type TimeoutConfig struct {
 
 	// GatewayListenerUpdateTimeout represents the maximum time for Gateway Listener count to be updated.
 	GatewayListenerUpdateTimeout time.Duration
+
+	// LoadBalancerReadyTimeout represents the maximum time for a Service of type LoadBalancer to be assigned
+	// an external IP/hostname by the cloud provider.
+	LoadBalancerReadyTimeout time.Duration
 }
 
 // DefaultTimeoutConfig populates a TimeoutConfig with the default values.
@@ -49,7 +53,7 @@ func DefaultTimeoutConfig() TimeoutConfig {
 		CreateTimeout:                60 * time.Second,
 		UpdateTimeout:                60 * time.Second,
 		DeleteTimeout:                10 * time.Second,
-		DeleteNamespaceTimeout:       150 * time.Second,
+		DeleteNamespaceTimeout:       300 * time.Second,
 		GetTimeout:                   10 * time.Second,
 		ManifestFetchTimeout:         10 * time.Second,
 		RequestTimeout:               30 * time.Second,
@@ -59,5 +63,6 @@ func DefaultTimeoutConfig() TimeoutConfig {
 		TestForTrafficTimeout:        60 * time.Second,
 		KubernetesClientTimeout:      10 * time.Second,
 		GatewayListenerUpdateTimeout: 60 * time.Second,
+		LoadBalancerReadyTimeout:     180 * time.Second,
 	}
 }
