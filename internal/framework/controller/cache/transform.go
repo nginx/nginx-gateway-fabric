@@ -39,15 +39,19 @@ var (
 // TransformGatewayClass filters GatewayClass objects to only include those
 // that match the specified controller name. It also removes managed fields
 // to reduce memory usage.
+// Non-matching GatewayClasses are returned with their spec stripped to minimize memory
+// while preserving cache key integrity.
 func TransformGatewayClass(controllerName string) cache.TransformFunc {
 	return func(obj any) (any, error) {
 		gc, ok := obj.(*gatewayv1.GatewayClass)
 		if !ok {
-			return nil, nil
+			return obj, nil
 		}
 
 		if gc.Spec.ControllerName != gatewayv1.GatewayController(controllerName) {
-			return nil, nil
+			gc.Spec = gatewayv1.GatewayClassSpec{}
+			gc.SetManagedFields(nil)
+			return gc, nil
 		}
 
 		gc.SetManagedFields(nil)
@@ -56,13 +60,14 @@ func TransformGatewayClass(controllerName string) cache.TransformFunc {
 }
 
 // TransformSecret filters Secret objects to only include specific keys.
-// If the keys are not present, the Secret is ignored.
+// If the keys are not present, the Secret is returned with its data stripped to minimize memory
+// while preserving cache key integrity.
 // All other keys are dropped, and managed fields are removed to reduce memory usage.
 func TransformSecret() cache.TransformFunc {
 	return func(obj any) (any, error) {
 		secret, ok := obj.(*corev1.Secret)
 		if !ok {
-			return nil, nil
+			return obj, nil
 		}
 
 		newData := make(map[string][]byte)
@@ -75,7 +80,9 @@ func TransformSecret() cache.TransformFunc {
 		}
 
 		if !found {
-			return nil, nil
+			secret.Data = nil
+			secret.SetManagedFields(nil)
+			return secret, nil
 		}
 
 		secret.Data = newData
@@ -85,13 +92,14 @@ func TransformSecret() cache.TransformFunc {
 }
 
 // TransformConfigMap filters ConfigMap objects to only include specific keys.
-// If the keys are not present, the ConfigMap is ignored.
+// If the keys are not present, the ConfigMap is returned with its data stripped to minimize memory
+// while preserving cache key integrity.
 // All other keys are dropped, and managed fields are removed to reduce memory usage.
 func TransformConfigMap() cache.TransformFunc {
 	return func(obj any) (any, error) {
 		cm, ok := obj.(*corev1.ConfigMap)
 		if !ok {
-			return nil, nil
+			return obj, nil
 		}
 
 		newData := make(map[string]string)
@@ -110,7 +118,10 @@ func TransformConfigMap() cache.TransformFunc {
 		}
 
 		if !dataFound && !binaryDataFound {
-			return nil, nil
+			cm.Data = nil
+			cm.BinaryData = nil
+			cm.SetManagedFields(nil)
+			return cm, nil
 		}
 
 		if dataFound {
