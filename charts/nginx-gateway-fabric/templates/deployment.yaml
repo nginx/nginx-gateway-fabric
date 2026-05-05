@@ -37,7 +37,7 @@ spec:
         {{- end }}
       {{- end }}
     spec:
-      automountServiceAccountToken: true
+      automountServiceAccountToken: {{ .Values.nginxGateway.serviceAccount.automountServiceAccountToken }}
       containers:
       - args:
         - controller

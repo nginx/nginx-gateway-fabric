@@ -67,6 +67,28 @@
           "description": "How long to wait after the cert generator job has finished before it is removed by the job controller.",
           "title": "ttlSecondsAfterFinished",
           "type": "integer"
+        },
+        "automountServiceAccountToken": {
+          "default": true,
+          "description": "automountServiceAccountToken controls whether the Kubernetes service account token is automatically mounted into the cert-generator pod. Set to false to disable automatic token mounting.",
+          "title": "automountServiceAccountToken",
+          "type": "boolean"
+        },
+        "extraVolumes": {
+          "description": "extraVolumes for the cert-generator pod. Use in conjunction with certGenerator.extraVolumeMounts to mount additional volumes into the container.",
+          "items": {
+            "required": []
+          },
+          "title": "extraVolumes",
+          "type": "array"
+        },
+        "extraVolumeMounts": {
+          "description": "extraVolumeMounts are the additional volume mounts for the cert-generator container.",
+          "items": {
+            "required": []
+          },
+          "title": "extraVolumeMounts",
+          "type": "array"
         }
       },
       "required": [],
@@ -1199,6 +1221,12 @@
               "description": "The name of the service account of the NGINX Gateway Fabric control plane pods. Used for RBAC.",
               "title": "name",
               "type": "string"
+            },
+            "automountServiceAccountToken": {
+              "default": true,
+              "description": "automountServiceAccountToken controls whether the Kubernetes service account token is automatically mounted into the control plane pod. Set to false to disable automatic token mounting.",
+              "title": "automountServiceAccountToken",
+              "type": "boolean"
             }
           },
           "required": [],
