@@ -22,11 +22,33 @@
           "title": "annotations",
           "type": "object"
         },
+        "automountServiceAccountToken": {
+          "default": true,
+          "description": "automountServiceAccountToken controls whether the Kubernetes service account token is automatically\nmounted into the cert-generator pod. Set to false to disable automatic token mounting.\nWhen disabled, use certGenerator.extraVolumes to mount a projected token if required.",
+          "title": "automountServiceAccountToken",
+          "type": "boolean"
+        },
         "enable": {
           "default": true,
           "description": "Enable the cert-generator Job. If this is disabled, then cert-manager or some other method must be used to create the required Secrets.",
           "title": "enable",
           "type": "boolean"
+        },
+        "extraVolumeMounts": {
+          "description": "extraVolumeMounts are the additional volume mounts for the cert-generator container.",
+          "items": {
+            "required": []
+          },
+          "title": "extraVolumeMounts",
+          "type": "array"
+        },
+        "extraVolumes": {
+          "description": "extraVolumes for the cert-generator pod. Use in conjunction with certGenerator.extraVolumeMounts\nto mount additional volumes into the container (e.g. a projected service account token).",
+          "items": {
+            "required": []
+          },
+          "title": "extraVolumes",
+          "type": "array"
         },
         "nodeSelector": {
           "description": "The nodeSelector of the cert-generator pod.",
@@ -67,28 +89,6 @@
           "description": "How long to wait after the cert generator job has finished before it is removed by the job controller.",
           "title": "ttlSecondsAfterFinished",
           "type": "integer"
-        },
-        "automountServiceAccountToken": {
-          "default": true,
-          "description": "automountServiceAccountToken controls whether the Kubernetes service account token is automatically mounted into the cert-generator pod. Set to false to disable automatic token mounting.",
-          "title": "automountServiceAccountToken",
-          "type": "boolean"
-        },
-        "extraVolumes": {
-          "description": "extraVolumes for the cert-generator pod. Use in conjunction with certGenerator.extraVolumeMounts to mount additional volumes into the container.",
-          "items": {
-            "required": []
-          },
-          "title": "extraVolumes",
-          "type": "array"
-        },
-        "extraVolumeMounts": {
-          "description": "extraVolumeMounts are the additional volume mounts for the cert-generator container.",
-          "items": {
-            "required": []
-          },
-          "title": "extraVolumeMounts",
-          "type": "array"
         }
       },
       "required": [],
@@ -1202,6 +1202,12 @@
               "title": "annotations",
               "type": "object"
             },
+            "automountServiceAccountToken": {
+              "default": true,
+              "description": "automountServiceAccountToken controls whether the Kubernetes service account token is automatically\nmounted into the control plane pod. Set to false to disable automatic token mounting (e.g. for\ncompliance environments). When disabled, use nginxGateway.extraVolumes to mount a projected token\nwith a custom audience or expiration if required.",
+              "title": "automountServiceAccountToken",
+              "type": "boolean"
+            },
             "imagePullSecret": {
               "default": "",
               "description": "The name of the secret containing docker registry credentials for the control plane.\nSecret must exist in the same namespace as the helm release.",
@@ -1221,12 +1227,6 @@
               "description": "The name of the service account of the NGINX Gateway Fabric control plane pods. Used for RBAC.",
               "title": "name",
               "type": "string"
-            },
-            "automountServiceAccountToken": {
-              "default": true,
-              "description": "automountServiceAccountToken controls whether the Kubernetes service account token is automatically mounted into the control plane pod. Set to false to disable automatic token mounting.",
-              "title": "automountServiceAccountToken",
-              "type": "boolean"
             }
           },
           "required": [],
