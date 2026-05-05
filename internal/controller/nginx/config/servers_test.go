@@ -7108,6 +7108,7 @@ func TestExecuteServers_ExternalAuth(t *testing.T) {
 				"proxy_pass http://default_ext-auth_80/check;",
 				`proxy_set_header Host "$host";`,
 				`proxy_set_header X-Original-URI "$request_uri";`,
+				`proxy_set_header X-Original-Method "$request_method";`,
 				`proxy_set_header X-Custom-Token "$http_x_custom_token";`,
 				"proxy_pass_request_body off;",
 				`proxy_set_header Content-Length "";`,
@@ -7466,6 +7467,7 @@ func TestExtractExternalAuthInternalLocations(t *testing.T) {
 					ProxySetHeaders: []http.Header{
 						{Name: "Host", Value: "$host"},
 						{Name: "X-Original-URI", Value: "$request_uri"},
+						{Name: "X-Original-Method", Value: "$request_method"},
 						{Name: "X-Custom-Token", Value: "$http_x_custom_token"},
 					},
 					ProxyPassRequestBody: "off",
@@ -7493,6 +7495,7 @@ func TestExtractExternalAuthInternalLocations(t *testing.T) {
 					ProxySetHeaders: []http.Header{
 						{Name: "Host", Value: "$host"},
 						{Name: "X-Original-URI", Value: "$request_uri"},
+						{Name: "X-Original-Method", Value: "$request_method"},
 					},
 				},
 			},
@@ -7521,6 +7524,7 @@ func TestExtractExternalAuthInternalLocations(t *testing.T) {
 					ProxySetHeaders: []http.Header{
 						{Name: "Host", Value: "$host"},
 						{Name: "X-Original-URI", Value: "$request_uri"},
+						{Name: "X-Original-Method", Value: "$request_method"},
 					},
 					ProxyPassRequestBody: "off",
 					ProxySSLVerify: &http.ProxySSLVerify{
@@ -7558,6 +7562,7 @@ func TestExtractExternalAuthInternalLocations(t *testing.T) {
 					ProxySetHeaders: []http.Header{
 						{Name: "Host", Value: "$host"},
 						{Name: "X-Original-URI", Value: "$request_uri"},
+						{Name: "X-Original-Method", Value: "$request_method"},
 					},
 					ProxyPassRequestBody: "off",
 				},

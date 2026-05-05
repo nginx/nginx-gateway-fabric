@@ -353,9 +353,6 @@ func validateBackendTLSPolicyMatchingAllBackends(backendRefs []BackendRef) *cond
 	}
 
 	for _, backendRef := range backendRefs {
-		if backendRef.IsExternalAuthBackend {
-			continue
-		}
 		if backendRef.BackendTLSPolicy == nil {
 			if referencePolicy != nil {
 				// There was a reference before, so they do not all match

@@ -44,6 +44,10 @@ const (
 	extAuthOriginalURIHeader = "X-Original-URI"
 	// extAuthOriginalURIValue is the NGINX variable for the original request URI.
 	extAuthOriginalURIValue = "$request_uri"
+	// extAuthOriginalMethodHeader is the header name used to pass the original request method to the auth server.
+	extAuthOriginalMethodHeader = "X-Original-Method"
+	// extAuthOriginalMethodValue is the NGINX variable for the original request method.
+	extAuthOriginalMethodValue = "$request_method"
 	// httpHeaderVarPrefix is the NGINX variable prefix for accessing request headers.
 	httpHeaderVarPrefix = "$http_"
 	// extAuthResponseVarPrefix is the NGINX variable prefix for storing auth response header values.
@@ -1280,6 +1284,7 @@ func extractExternalAuthInternalLocations(locations []http.Location) []http.Loca
 		headers := []http.Header{
 			{Name: "Host", Value: "$host"},
 			{Name: extAuthOriginalURIHeader, Value: extAuthOriginalURIValue},
+			{Name: extAuthOriginalMethodHeader, Value: extAuthOriginalMethodValue},
 		}
 		for _, h := range ar.AllowedRequestHeaders {
 			headers = append(headers, http.Header{Name: h, Value: httpHeaderVarPrefix + headerToNginxVar(h)})
@@ -1296,9 +1301,6 @@ func extractExternalAuthInternalLocations(locations []http.Location) []http.Loca
 			ProxySetHeaders:      headers,
 			ProxySSLVerify:       ar.ProxySSLVerify,
 			ProxyPassRequestBody: proxyPassBody,
-		}
-		if !ar.ForwardBody {
-			authLoc.ProxyPassRequestBody = proxyPassRequestBodyOff
 		}
 		result = append(result, authLoc)
 	}
