@@ -285,7 +285,7 @@ func (f *HTTPFetcher) dispatchChecksum(
 		checksum, err := fetchN1CChecksum(ctx, client, req, f.n1cCompilePollDelay, f.logger)
 		return Result{Checksum: checksum}, err
 	case req.PolicyName != "" || req.NIM.PolicyUID != "":
-		checksum, err := fetchNIMChecksum(ctx, client, req)
+		checksum, err := fetchNIMChecksum(ctx, client, req, f.logger)
 		return Result{Checksum: checksum}, err
 	default:
 		return Result{}, &nonTransientError{
@@ -382,7 +382,7 @@ func (f *HTTPFetcher) dispatch(ctx context.Context, client *http.Client, req Req
 	case req.N1C.Namespace != "":
 		return fetchN1C(ctx, client, req, f.n1cCompilePollDelay, f.logger)
 	case req.PolicyName != "" || req.NIM.PolicyUID != "":
-		return fetchNIM(ctx, client, req)
+		return fetchNIM(ctx, client, req, f.logger)
 	default:
 		return fetchHTTP(ctx, client, req)
 	}
@@ -533,19 +533,119 @@ func fetchHTTP(ctx context.Context, client *http.Client, req Request) (Result, e
 	}, nil
 }
 
+// nimBundleItem is a single entry in the NIM bundles API response.
+type nimBundleItem struct {
+	Content  string `json:"content"`
+	Metadata struct {
+		Hash      string `json:"hash"`
+		Created   string `json:"created"`
+		PolicyUID string `json:"policyUID"`
+	} `json:"metadata"`
+}
+
 // nimResponse is the JSON envelope returned by the NIM bundles API.
 type nimResponse struct {
-	Items []struct {
-		Content  string `json:"content"`
-		Metadata struct {
-			Hash string `json:"hash"`
-		} `json:"metadata"`
-	} `json:"items"`
+	Items []nimBundleItem `json:"items"`
+}
+
+// latestNIMItem returns the item with the most recent metadata.created timestamp.
+// The NIM bundles API may return multiple compiled bundles for the same policy name
+// (one per compilation) in an undefined order. This function selects the most recently
+// compiled bundle by comparing RFC 3339 timestamps.
+// Falls back to the last item if no timestamps are parseable.
+func latestNIMItem(items []nimBundleItem) nimBundleItem {
+	best := len(items) - 1
+	var bestTime time.Time
+
+	for i, item := range items {
+		t, err := time.Parse(time.RFC3339Nano, item.Metadata.Created)
+		if err != nil {
+			continue
+		}
+		if t.After(bestTime) {
+			bestTime = t
+			best = i
+		}
+	}
+
+	return items[best]
 }
 
 // fetchNIM calls the NIM security policies bundles API and decodes the bundle from the response.
-func fetchNIM(ctx context.Context, client *http.Client, req Request) (Result, error) {
-	nimURL, err := buildNIMURL(req.URL, req.PolicyName, req.NIM.PolicyUID)
+//
+// When the request targets a specific compilation by policyUID, the bundle is fetched directly.
+// When the request targets a policy by name, NIM may return multiple compilations. To avoid
+// downloading the (potentially large) content of every historical compilation, a lightweight
+// metadata-only request is issued first to identify the most recently compiled bundle via its
+// created timestamp, then only that single bundle is fetched by its policyUID.
+func fetchNIM(ctx context.Context, client *http.Client, req Request, logger logr.Logger) (Result, error) {
+	policyUID := req.NIM.PolicyUID
+
+	// When fetching by policyName, resolve to the latest compilation's policyUID first.
+	if policyUID == "" {
+		var err error
+		policyUID, err = resolveLatestNIMPolicyUID(ctx, client, req, logger)
+		if err != nil {
+			return Result{}, err
+		}
+	}
+
+	logger.V(1).Info("Fetching NIM bundle by policyUID", "policyUID", policyUID)
+
+	return fetchNIMByUID(ctx, client, req, policyUID)
+}
+
+// resolveLatestNIMPolicyUID performs a metadata-only NIM request to find all compilations for the
+// given policy name, then returns the policyUID of the most recently compiled bundle.
+func resolveLatestNIMPolicyUID(
+	ctx context.Context,
+	client *http.Client,
+	req Request,
+	logger logr.Logger,
+) (string, error) {
+	metadataURL, err := buildNIMMetadataURL(req.URL, req.PolicyName, "")
+	if err != nil {
+		return "", fmt.Errorf("failed to build NIM metadata URL: %w", err)
+	}
+
+	body, err := doGet(ctx, client, metadataURL, req.Auth)
+	if err != nil {
+		return "", fmt.Errorf("failed to fetch NIM bundle metadata: %w", err)
+	}
+
+	var resp nimResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return "", fmt.Errorf("failed to parse NIM metadata response: %w", err)
+	}
+
+	if len(resp.Items) == 0 {
+		return "", fmt.Errorf("NIM metadata response contains no items for policy %q", req.PolicyName)
+	}
+
+	logger.V(1).Info(
+		"Resolved NIM policy compilations",
+		"policyName", req.PolicyName,
+		"compilationCount", len(resp.Items),
+	)
+
+	latest := latestNIMItem(resp.Items)
+	if latest.Metadata.PolicyUID == "" {
+		return "", fmt.Errorf("NIM metadata response contains no policyUID for policy %q", req.PolicyName)
+	}
+
+	logger.V(1).Info(
+		"Selected latest NIM compilation",
+		"policyName", req.PolicyName,
+		"policyUID", latest.Metadata.PolicyUID,
+		"created", latest.Metadata.Created,
+	)
+
+	return latest.Metadata.PolicyUID, nil
+}
+
+// fetchNIMByUID fetches a single NIM bundle by its policyUID.
+func fetchNIMByUID(ctx context.Context, client *http.Client, req Request, policyUID string) (Result, error) {
+	nimURL, err := buildNIMURL(req.URL, "", policyUID)
 	if err != nil {
 		return Result{}, fmt.Errorf("failed to build NIM URL: %w", err)
 	}
@@ -560,25 +660,20 @@ func fetchNIM(ctx context.Context, client *http.Client, req Request) (Result, er
 		return Result{}, fmt.Errorf("failed to parse NIM response: %w", err)
 	}
 
-	policyRef := req.PolicyName
-	if policyRef == "" {
-		policyRef = req.NIM.PolicyUID
-	}
 	if len(resp.Items) == 0 {
-		return Result{}, fmt.Errorf("NIM response contains no items for policy %q", policyRef)
+		return Result{}, fmt.Errorf("NIM response contains no items for policy UID %q", policyUID)
 	}
 
-	// NIM returns items in chronological order (oldest first). When a policy is recompiled,
-	// multiple items exist for the same policy name. Use the last item to get the latest bundle.
-	latest := resp.Items[len(resp.Items)-1]
+	// A policyUID-targeted request returns exactly one item.
+	item := resp.Items[0]
 
-	data, err := base64.StdEncoding.DecodeString(latest.Content)
+	data, err := base64.StdEncoding.DecodeString(item.Content)
 	if err != nil {
 		return Result{}, fmt.Errorf("failed to base64-decode NIM bundle content: %w", err)
 	}
 
 	actualChecksum := ComputeChecksum(data)
-	bundleHash := latest.Metadata.Hash
+	bundleHash := item.Metadata.Hash
 
 	// Verify the downloaded bundle against the hash reported by the NIM API,
 	// unless the caller supplied their own ExpectedChecksum via BundleValidation
@@ -1097,7 +1192,9 @@ func buildN1CCompileBaseURL(baseURL, namespace, polObjID, polVersionID string, d
 
 // fetchNIMChecksum fetches only the metadata for a NIM policy bundle and returns the hash
 // without downloading the bundle content.
-func fetchNIMChecksum(ctx context.Context, client *http.Client, req Request) (string, error) {
+// When the response contains multiple compilations, the hash of the most recently compiled
+// bundle (by metadata.created timestamp) is returned.
+func fetchNIMChecksum(ctx context.Context, client *http.Client, req Request, logger logr.Logger) (string, error) {
 	nimURL, err := buildNIMMetadataURL(req.URL, req.PolicyName, req.NIM.PolicyUID)
 	if err != nil {
 		return "", fmt.Errorf("failed to build NIM metadata URL: %w", err)
@@ -1121,12 +1218,19 @@ func fetchNIMChecksum(ctx context.Context, client *http.Client, req Request) (st
 		return "", fmt.Errorf("NIM response contains no items for policy %q", policyRef)
 	}
 
-	// NIM returns items in chronological order (oldest first). When a policy is recompiled,
-	// multiple items exist for the same policy name. Use the last item to get the latest bundle.
-	hash := strings.ToLower(resp.Items[len(resp.Items)-1].Metadata.Hash)
+	latest := latestNIMItem(resp.Items)
+	hash := strings.ToLower(latest.Metadata.Hash)
 	if hash == "" {
 		return "", fmt.Errorf("NIM response contains no hash for policy %q", policyRef)
 	}
+
+	logger.V(1).Info(
+		"Fetched NIM policy checksum",
+		"policyRef", policyRef,
+		"policyUID", latest.Metadata.PolicyUID,
+		"created", latest.Metadata.Created,
+		"hash", hash,
+	)
 
 	return hash, nil
 }
