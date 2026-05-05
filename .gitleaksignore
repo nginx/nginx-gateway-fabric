@@ -18,3 +18,13 @@ tests/suite/manifests/authentication-filter/basic-invalid-auth.yaml:generic-api-
 tests/suite/manifests/authentication-filter/basic-invalid-auth.yaml:generic-api-key:144
 examples/oidc-authentication/client-secret.yaml:generic-api-key:7
 examples/oidc-authentication/client-secret.yaml:generic-api-key:45
+examples/client-validation/nginx-secret-per-port.yaml:kubernetes-secret-yaml:2
+examples/client-validation/nginx-secret-per-port.yaml:private-key:8
+examples/client-validation/nginx-secret-default.yaml:kubernetes-secret-yaml:2
+examples/client-validation/nginx-secret-default.yaml:private-key:8
+examples/client-validation/cafe-secret.yaml:kubernetes-secret-yaml:2
+examples/client-validation/cafe-secret.yaml:private-key:8
+examples/client-validation/default-validation-ca-secret.yaml:kubernetes-secret-yaml:2
+examples/client-validation/default-validation-ca-secret.yaml:private-key:9
+examples/client-validation/per-port-validation-ca-secret.yaml:kubernetes-secret-yaml:2
+examples/client-validation/per-port-validation-ca-secret.yaml:private-key:9
