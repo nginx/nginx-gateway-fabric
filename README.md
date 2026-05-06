@@ -82,6 +82,19 @@ The following table lists the software versions NGINX Gateway Fabric supports. O
 | 1.3.0                | 1.1.0       | 1.25+      | 1.27.0    | R32        | ---         | ---              |
 | 1.2.0                | 1.0.0       | 1.23+      | 1.25.4    | R31        | ---         | ---              |
 
+### OpenShift Compatibility
+
+The following table lists the OpenShift versions and Operator versions compatible with NGINX Gateway Fabric.
+
+| NGINX Gateway Fabric | Operator | Preferred Gateway API | Compatible Gateway API | OCP with Preferred GWAPI | Supported OCP Versions |
+|----------------------|----------|-----------------------|------------------------|--------------------------|------------------------|
+| 2.6.0                | v1.3.x   | v1.5.x                | v1.2.1-v1.5.x          | ---                      | 4.19 - 4.21            |
+| 2.5.x                | v1.3.x   | v1.5.x                | v1.2.1-v1.5.x          | ---                      | 4.19 - 4.21            |
+| 2.4.x                | v1.2.x   | v1.4.x                | v1.2.1-v1.4.x          | 4.20 & 4.21              | 4.19 - 4.21            |
+| 2.2.x                | v1.0.x   | v1.3.0                | v1.2.1                 | ---                      | 4.19                   |
+
+NGINX Gateway Fabric is conformant with the Gateway API version installed on supported OCP versions. The "OCP with Preferred GWAPI" column shows which OCP versions ship with the preferred Gateway API version. On OCP versions with an older Gateway API installed, NGF remains fully conformant with that installed version, but features from newer Gateway API versions that NGF supports will be unavailable.
+
 ## SBOM (Software Bill of Materials)
 
 We generate SBOMs for the binaries and the Docker image.
