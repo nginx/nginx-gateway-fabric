@@ -573,11 +573,11 @@ func latestNIMItem(items []nimBundleItem) nimBundleItem {
 
 // fetchNIM calls the NIM security policies bundles API and decodes the bundle from the response.
 //
-// When the request targets a specific compilation by policyUID, the bundle is fetched directly.
-// When the request targets a policy by name, NIM may return multiple compilations. To avoid
-// downloading the (potentially large) content of every historical compilation, a lightweight
-// metadata-only request is issued first to identify the most recently compiled bundle via its
-// created timestamp, then only that single bundle is fetched by its policyUID.
+// When a request targets a policy by name, and not by PolicyUID, NIM may return multiple compilations.
+// This results in downloading the content multiple past compilations.
+// To avoid this, a lightweight metadata-only request is issued first to identify the most recently
+// compiled bundle via its created timestamp.
+// This ensures a single bundle is fetched by its policyUID.
 func fetchNIM(ctx context.Context, client *http.Client, req Request, logger logr.Logger) (Result, error) {
 	policyUID := req.NIM.PolicyUID
 

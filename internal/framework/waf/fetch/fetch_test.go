@@ -1177,101 +1177,98 @@ func TestHTTPFetcherFetchNIM(t *testing.T) {
 	t.Parallel()
 
 	bundleContent := []byte("nim-bundle-data")
+	oldContent := []byte("old-bundle-v1")
+	newContent := []byte("new-bundle-v2")
 
-	t.Run("successful NIM fetch", func(t *testing.T) {
-		t.Parallel()
-		g := NewWithT(t)
-
-		srv := newNIMBundleServer([]nimBundleServerItem{{
-			content:   bundleContent,
-			hash:      fetch.ComputeChecksum(bundleContent),
-			policyUID: "uid-1",
-			created:   "2026-01-01T00:00:00Z",
-		}}, nil)
-		defer srv.Close()
-
-		f := fetch.NewHTTPFetcher(logr.Discard())
-		result, err := f.FetchPolicyBundle(context.Background(), fetch.Request{
-			URL:        srv.URL,
-			PolicyName: "my-policy",
-		})
-		g.Expect(err).ToNot(HaveOccurred())
-		g.Expect(result.Data).To(Equal(bundleContent))
-		g.Expect(result.Checksum).To(Equal(fetch.ComputeChecksum(bundleContent)))
-	})
-
-	t.Run("NIM response with no items", func(t *testing.T) {
-		t.Parallel()
-		g := NewWithT(t)
-
-		srv := newNIMBundleServer(nil, nil)
-		defer srv.Close()
-
-		f := fetch.NewHTTPFetcher(logr.Discard())
-		_, err := f.FetchPolicyBundle(context.Background(), fetch.Request{
-			URL:        srv.URL,
-			PolicyName: "missing-policy",
-		})
-		g.Expect(err).To(HaveOccurred())
-		g.Expect(err.Error()).To(ContainSubstring("NIM metadata response contains no items"))
-	})
-
-	t.Run("NIM fetch with bearer auth", func(t *testing.T) {
-		t.Parallel()
-		g := NewWithT(t)
-
-		auth := &fetch.BundleAuth{BearerToken: "nimtoken"}
-		srv := newNIMBundleServer([]nimBundleServerItem{{
-			content:   bundleContent,
-			hash:      fetch.ComputeChecksum(bundleContent),
-			policyUID: "uid-auth",
-			created:   "2026-01-01T00:00:00Z",
-		}}, auth)
-		defer srv.Close()
-
-		f := fetch.NewHTTPFetcher(logr.Discard())
-		result, err := f.FetchPolicyBundle(context.Background(), fetch.Request{
-			URL:        srv.URL,
-			PolicyName: "secured-policy",
-			Auth:       auth,
-		})
-		g.Expect(err).ToNot(HaveOccurred())
-		g.Expect(result.Data).To(Equal(bundleContent))
-	})
-
-	t.Run("NIM response with multiple items selects latest by created timestamp", func(t *testing.T) {
-		t.Parallel()
-		g := NewWithT(t)
-
-		oldContent := []byte("old-bundle-v1")
-		newContent := []byte("new-bundle-v2")
-
-		// Items deliberately NOT in chronological order to verify timestamp-based selection.
-		srv := newNIMBundleServer([]nimBundleServerItem{
-			{
-				content:   newContent,
-				hash:      fetch.ComputeChecksum(newContent),
-				policyUID: "uid-v2",
-				created:   "2026-05-05T08:55:25.078Z",
+	tests := []struct {
+		auth             *fetch.BundleAuth
+		name             string
+		policyName       string
+		expectErr        string
+		expectedChecksum string
+		items            []nimBundleServerItem
+		expectedData     []byte
+	}{
+		{
+			name: "successful NIM fetch",
+			items: []nimBundleServerItem{{
+				content:   bundleContent,
+				hash:      fetch.ComputeChecksum(bundleContent),
+				policyUID: "uid-1",
+				created:   "2026-01-01T00:00:00Z",
+			}},
+			policyName:       "my-policy",
+			expectedData:     bundleContent,
+			expectedChecksum: fetch.ComputeChecksum(bundleContent),
+		},
+		{
+			name:       "NIM response with no items",
+			policyName: "missing-policy",
+			expectErr:  "NIM metadata response contains no items",
+		},
+		{
+			name: "NIM fetch with bearer auth",
+			items: []nimBundleServerItem{{
+				content:   bundleContent,
+				hash:      fetch.ComputeChecksum(bundleContent),
+				policyUID: "uid-auth",
+				created:   "2026-01-01T00:00:00Z",
+			}},
+			auth:         &fetch.BundleAuth{BearerToken: "nimtoken"},
+			policyName:   "secured-policy",
+			expectedData: bundleContent,
+		},
+		{
+			name: "NIM response with multiple items selects latest by created timestamp",
+			// Items deliberately NOT in chronological order to verify timestamp-based selection.
+			items: []nimBundleServerItem{
+				{
+					content:   newContent,
+					hash:      fetch.ComputeChecksum(newContent),
+					policyUID: "uid-v2",
+					created:   "2026-05-05T08:55:25.078Z",
+				},
+				{
+					content:   oldContent,
+					hash:      fetch.ComputeChecksum(oldContent),
+					policyUID: "uid-v1",
+					created:   "2026-05-05T08:40:31.213Z",
+				},
 			},
-			{
-				content:   oldContent,
-				hash:      fetch.ComputeChecksum(oldContent),
-				policyUID: "uid-v1",
-				created:   "2026-05-05T08:40:31.213Z",
-			},
-		}, nil)
-		defer srv.Close()
+			policyName:       "updated-policy",
+			expectedData:     newContent,
+			expectedChecksum: fetch.ComputeChecksum(newContent),
+		},
+	}
 
-		f := fetch.NewHTTPFetcher(logr.Discard())
-		result, err := f.FetchPolicyBundle(context.Background(), fetch.Request{
-			URL:        srv.URL,
-			PolicyName: "updated-policy",
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			srv := newNIMBundleServer(tc.items, tc.auth)
+			defer srv.Close()
+
+			f := fetch.NewHTTPFetcher(logr.Discard())
+			result, err := f.FetchPolicyBundle(context.Background(), fetch.Request{
+				URL:        srv.URL,
+				PolicyName: tc.policyName,
+				Auth:       tc.auth,
+			})
+
+			if tc.expectErr != "" {
+				g.Expect(err).To(HaveOccurred())
+				g.Expect(err.Error()).To(ContainSubstring(tc.expectErr))
+				return
+			}
+
+			g.Expect(err).ToNot(HaveOccurred())
+			g.Expect(result.Data).To(Equal(tc.expectedData))
+			if tc.expectedChecksum != "" {
+				g.Expect(result.Checksum).To(Equal(tc.expectedChecksum))
+			}
 		})
-		g.Expect(err).ToNot(HaveOccurred())
-		g.Expect(result.Data).To(Equal(newContent))
-		g.Expect(result.Checksum).To(Equal(fetch.ComputeChecksum(newContent)))
-	})
+	}
 }
 
 func TestHTTPFetcherFetchLogProfileBundleHTTP(t *testing.T) {
