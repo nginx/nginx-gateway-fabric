@@ -51,7 +51,8 @@ const (
 	// extAuthAuthorizationHeader forward the client's Authorization header to the
 	// auth server.
 	extAuthAuthorizationHeader = "Authorization"
-	extAuthAuthorizationValue  = "$http_authorization"
+	// extAuthAuthorizationValue is the NGINX variable for the original request Authorization header.
+	extAuthAuthorizationValue = "$http_authorization"
 	// proxyPassRequestHeadersOff disables forwarding of all client request headers to the proxied server.
 	proxyPassRequestHeadersOff = "off"
 	// httpHeaderVarPrefix is the NGINX variable prefix for accessing request headers.
