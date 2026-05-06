@@ -4,6 +4,75 @@ This document includes a curated changelog for each release. We also publish a c
 a [GitHub release](https://github.com/nginx/nginx-gateway-fabric/releases), which, by contrast, is auto-generated
 and includes links to all PRs that went into the release.
 
+## Release 2.6.0
+
+* Move gateway define rate-limit-policy directives from HTTP to Server context by @salonichf5 in https://github.com/nginx/nginx-gateway-fabric/pull/4993
+* helm: add extraObjects support to nginx-gateway-fabric chart by @sinux-l5d in https://github.com/nginx/nginx-gateway-fabric/pull/5011
+* Increase http hash bucket sizes by @sjberman in https://github.com/nginx/nginx-gateway-fabric/pull/5034
+* Fix broadcaster loop by @bjee19 in https://github.com/nginx/nginx-gateway-fabric/pull/4978
+* Allow NGINX variables in request and response modifier filters and fix colon and dollar sign restrictions in regex header and query param match by @salonichf5 in https://github.com/nginx/nginx-gateway-fabric/pull/5008
+* Add keepAlive.MinTimeout field to ClientSettingsPolicy by @salonichf5 in https://github.com/nginx/nginx-gateway-fabric/pull/5040
+* fix: allow TCPRoute and UDPRoute on same gateway port by @oyiz-michael in https://github.com/nginx/nginx-gateway-fabric/pull/5016
+* Support multiple TLS certs per HTTPS Listener by @sjberman in https://github.com/nginx/nginx-gateway-fabric/pull/5037
+* Add fix for effective NginxProxy when different Kubernetes types are specified by @bjee19 in https://github.com/nginx/nginx-gateway-fabric/pull/5058
+* Update validation check for IPFamily between BackendRefs and NginxProxy by @salonichf5 in https://github.com/nginx/nginx-gateway-fabric/pull/5052
+* Fix bug where N1C dataplane key is ignored by @ciarams87 in https://github.com/nginx/nginx-gateway-fabric/pull/5072
+* Fix CORS failure when attached to HTTPS Listener by @sjberman in https://github.com/nginx/nginx-gateway-fabric/pull/5071
+* Allow externalTrafficPolicy on ClusterIP services with externalIPs by @salonichf5 in https://github.com/nginx/nginx-gateway-fabric/pull/5075
+* Escape $ in rewrites by @sjberman in https://github.com/nginx/nginx-gateway-fabric/pull/5122
+* Proxy settings timeouts by @ciarams87 in https://github.com/nginx/nginx-gateway-fabric/pull/5165
+* Set the default SSL verify depth to 4 by @dhurley in https://github.com/nginx/nginx-gateway-fabric/pull/5174
+* Support for Gateway FrontendTLS by @shaun-nx in https://github.com/nginx/nginx-gateway-fabric/pull/5127
+* Fix CORS preflight bypass when used with URLRewrite by @salonichf5 in https://github.com/nginx/nginx-gateway-fabric/pull/5194
+* Add additional configuration options to  by @shaun-nx in https://github.com/nginx/nginx-gateway-fabric/pull/5200
+* Fix InferencePool tracking by @sjberman in https://github.com/nginx/nginx-gateway-fabric/pull/5207
+* Support ListenerSets by @bjee19 in https://github.com/nginx/nginx-gateway-fabric/pull/5208
+* Integrate with F5 WAF for NGINX by @ciarams87 in https://github.com/nginx/nginx-gateway-fabric/pull/5215
+* Return empty list instead of nil for listener supported kinds when listener protocol is invalid. by @dhurley in https://github.com/nginx/nginx-gateway-fabric/pull/5216
+* Set max message size for gRPC messages sent and received from agent by @dhurley in https://github.com/nginx/nginx-gateway-fabric/pull/5161
+
+
+%%DATE%%
+
+FEATURES:
+
+-
+
+BUG FIXES:
+
+-
+
+DOCUMENTATION:
+
+-
+
+HELM CHART:
+
+- The version of the Helm chart is now 2.6.0
+
+UPGRADE:
+
+-
+
+KNOWN ISSUES:
+
+-
+
+COMPATIBILITY:
+
+- Gateway API version: ``
+- Gateway API Inference Extension version: ``
+- NGINX version: ``
+- NGINX Plus version: ``
+- NGINX Agent version: ``
+- Kubernetes version: ``
+
+CONTAINER IMAGES:
+
+- Control plane: `ghcr.io/nginx/nginx-gateway-fabric:2.6.0`
+- Data plane: `ghcr.io/nginx/nginx-gateway-fabric/nginx:2.6.0`
+- Data plane with NGINX Plus: `private-registry.nginx.com/nginx-gateway-fabric/nginx-plus:2.6.0`
+- Operator: `ghcr.io/nginx/nginx-gateway-fabric/operator:1.4.0`
 ## Release 2.5.1
 
 _April 8, 2026_
