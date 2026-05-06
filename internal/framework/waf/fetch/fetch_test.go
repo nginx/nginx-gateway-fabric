@@ -1220,19 +1220,21 @@ func TestHTTPFetcherFetchNIM(t *testing.T) {
 		},
 		{
 			name: "NIM response with multiple items selects latest by created timestamp",
-			// Items deliberately NOT in chronological order to verify timestamp-based selection.
+			// The OLDER item is listed first so that if the content-fetch request
+			// accidentally omits the policyUID filter, resp.Items[0] returns the
+			// wrong (old) bundle and the test fails.
 			items: []nimBundleServerItem{
-				{
-					content:   newContent,
-					hash:      fetch.ComputeChecksum(newContent),
-					policyUID: "uid-v2",
-					created:   "2026-05-05T08:55:25.078Z",
-				},
 				{
 					content:   oldContent,
 					hash:      fetch.ComputeChecksum(oldContent),
 					policyUID: "uid-v1",
 					created:   "2026-05-05T08:40:31.213Z",
+				},
+				{
+					content:   newContent,
+					hash:      fetch.ComputeChecksum(newContent),
+					policyUID: "uid-v2",
+					created:   "2026-05-05T08:55:25.078Z",
 				},
 			},
 			policyName:       "updated-policy",
