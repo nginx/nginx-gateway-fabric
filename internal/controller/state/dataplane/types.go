@@ -244,25 +244,25 @@ type InvalidHTTPFilter struct{}
 
 // HTTPFilters hold the filters for a MatchRule.
 type HTTPFilters struct {
-	// InvalidFilter is a special filter that indicates whether the filters are invalid. If this is the case,
-	// the data plane must return 500 error, and all other filters are nil.
+	// InvalidFilter is a special filter for handling the case when configured filters are invalid.
 	InvalidFilter *InvalidHTTPFilter
-	// RequestRedirect holds the HTTPRequestRedirectFilter.
+	// RequestRedirect holds an HTTP request redirect filter.
 	RequestRedirect *HTTPRequestRedirectFilter
-	// RequestURLRewrite holds the HTTPURLRewriteFilter.
+	// RequestURLRewrite holds an HTTP URL rewrite filter.
 	RequestURLRewrite *HTTPURLRewriteFilter
-	// RequestHeaderModifiers holds the HTTPHeaderFilter.
+	// RequestHeaderModifiers holds an HTTP header modifier filter for requests.
 	RequestHeaderModifiers *HTTPHeaderFilter
-	// ResponseHeaderModifiers holds the HTTPHeaderFilter.
+	// ResponseHeaderModifiers holds an HTTP header modifier filter for responses.
 	ResponseHeaderModifiers *HTTPHeaderFilter
-	// AuthenticationFilter holds the AuthenticationFilter for the MatchRule.
+	// AuthenticationFilter holds the authentication filter configuration.
 	AuthenticationFilter *AuthenticationFilter
-	// CORSFilter holds the HTTPCORSFilter for the MatchRule.
+	// CORSFilter holds the CORS filter configuration.
 	CORSFilter *HTTPCORSFilter
-	// RequestMirrors holds the HTTPRequestMirrorFilters. There could be more than one specified.
+	// ExternalAuthFilter holds external auth filter configuration.
+	ExternalAuthFilter *HTTPExternalAuthFilter
+	// RequestMirrors holds HTTP request mirror filters.
 	RequestMirrors []*HTTPRequestMirrorFilter
-	// SnippetsFilters holds all the SnippetsFilters for the MatchRule.
-	// Unlike the core and extended filters, there can be more than one SnippetsFilters defined on a routing rule.
+	// SnippetsFilters holds snippets filter configurations.
 	SnippetsFilters []SnippetsFilter
 }
 
@@ -297,6 +297,29 @@ type HTTPCORSFilter struct {
 	AllowCredentials bool
 	// MaxAge specifies preflight request cache duration.
 	MaxAge int32
+}
+
+// HTTPExternalAuthFilter represents configuration for external authorization filter.
+type HTTPExternalAuthFilter struct {
+	// VerifyTLS holds TLS verification config when the auth backend has a BackendTLSPolicy.
+	VerifyTLS *VerifyTLS
+	// UpstreamName is the NGINX upstream name for the auth backend service.
+	UpstreamName string
+	// InternalPath is the NGINX internal location path for the auth subrequest.
+	InternalPath string
+	// PathPrefix is an optional path prefix added to the request path when forwarding to the auth server.
+	PathPrefix string
+	// AllowedRequestHeaders are extra headers to forward from the client request to the auth server,
+	// beyond the mandatory set (Host, Method, Path, Content-Length, Authorization).
+	AllowedRequestHeaders []string
+	// AllowedResponseHeaders are headers from the auth response to copy into the proxied backend request.
+	AllowedResponseHeaders []string
+	// ForwardBody indicates whether the client request body should be forwarded to the auth server.
+	ForwardBody bool
+	// MaxBodySize sets the maximum size of the request body that the client is allowed to send.
+	// It is only applicable when ForwardBody is true. Requests with body larger than the specified size
+	// will be rejected with 413 Payload Too Large error.
+	MaxBodySize uint16
 }
 
 // AuthenticationFilter holds the top level spec for each kind of authentication (e.g. Basic, JWT, etc...).
