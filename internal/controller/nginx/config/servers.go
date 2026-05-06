@@ -40,14 +40,14 @@ const (
 	HeaderMatchSeparator = ":"
 	rootPath             = "/"
 
-	// extAuthOriginalURIHeader is the header name used to pass the original request URI to the auth server.
-	extAuthOriginalURIHeader = "X-Original-URI"
-	// extAuthOriginalURIValue is the NGINX variable for the original request URI.
-	extAuthOriginalURIValue = "$request_uri"
-	// extAuthOriginalMethodHeader is the header name used to pass the original request method to the auth server.
-	extAuthOriginalMethodHeader = "X-Original-Method"
-	// extAuthOriginalMethodValue is the NGINX variable for the original request method.
-	extAuthOriginalMethodValue = "$request_method"
+	// extAuthPathHeader is the header name used to pass the original request path to the auth server.
+	extAuthPathHeader = "Path"
+	// extAuthPathValue is the NGINX variable for the original request URI.
+	extAuthPathValue = "$request_uri"
+	// extAuthMethodHeader is the header name used to pass the original request method to the auth server.
+	extAuthMethodHeader = "Method"
+	// extAuthMethodValue is the NGINX variable for the original request method.
+	extAuthMethodValue = "$request_method"
 	// extAuthAuthorizationHeader forward the client's Authorization header to the
 	// auth server.
 	extAuthAuthorizationHeader = "Authorization"
@@ -1288,9 +1288,9 @@ func extractExternalAuthInternalLocations(locations []http.Location) []http.Loca
 		}
 
 		headers := []http.Header{
-			{Name: "Host", Value: "$host"},
-			{Name: extAuthOriginalURIHeader, Value: extAuthOriginalURIValue},
-			{Name: extAuthOriginalMethodHeader, Value: extAuthOriginalMethodValue},
+			{Name: "Host", Value: "$gw_api_compliant_host"},
+			{Name: extAuthPathHeader, Value: extAuthPathValue},
+			{Name: extAuthMethodHeader, Value: extAuthMethodValue},
 			{Name: extAuthAuthorizationHeader, Value: extAuthAuthorizationValue},
 		}
 		for _, h := range ar.AllowedRequestHeaders {

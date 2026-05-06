@@ -68,11 +68,9 @@ type Location struct {
 	AuthJWT *AuthJWT
 	// AuthBasic contains the configuration for basic authentication.
 	AuthBasic *AuthBasic
-	// ProxyPassRequestBody is "on" or "off" for the proxy_pass_request_body directive. Empty means don't emit.
+	// ProxyPassRequestBody renders proxy_pass_request_body ("on"/"off"); unset leaves the directive out.
 	ProxyPassRequestBody string
-	// ProxyPassRequestHeaders is "on" or "off" for the proxy_pass_request_headers directive. Empty means don't emit.
-	// Used by the external-auth internal location to suppress NGINX's default behavior of forwarding every
-	// client header to the auth server, so only the spec-mandated and explicitly allowed headers go through.
+	// ProxyPassRequestHeaders renders proxy_pass_request_headers ("on"/"off"); unset leaves the directive out.
 	ProxyPassRequestHeaders string
 	// MirrorSplitClientsVariableName is the variable name for split_clients, used in traffic mirroring scenarios.
 	MirrorSplitClientsVariableName string
@@ -104,8 +102,7 @@ type Location struct {
 	CORSHeaders []Header
 	// EPPPort is the port for the EndpointPicker, used for inference routing.
 	EPPPort int
-	// ClientMaxBodySize, when non-zero, emits `client_max_body_size` for this location.
-	// This is used in external auth scenarios to limit the size of the request body that is sent to the auth server.
+	// ClientMaxBodySize renders client_max_body_size in bytes; unset leaves the directive out.
 	ClientMaxBodySize uint16
 	// GRPC indicates if this location proxies gRPC traffic.
 	GRPC bool
