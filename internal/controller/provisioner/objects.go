@@ -57,6 +57,7 @@ const (
 	appProtectBundlesVolumeName  = "app-protect-bundles"
 	appProtectConfigVolumeName   = "app-protect-config"
 	appProtectBdConfigVolumeName = "app-protect-bd-config"
+	appProtectLockVolumeName     = "app-protect-lock"
 )
 
 // portProtoEntry represents a unique port and protocol combination.
@@ -1102,7 +1103,6 @@ func (p *NginxProvisioner) buildNginxContainer(
 		ReadinessProbe:  p.buildReadinessProbe(nProxyCfg),
 		SecurityContext: &corev1.SecurityContext{
 			Capabilities: &corev1.Capabilities{
-				Add:  []corev1.Capability{"NET_BIND_SERVICE"},
 				Drop: []corev1.Capability{"ALL"},
 			},
 			ReadOnlyRootFilesystem: helpers.GetPointer(true),
@@ -1595,6 +1595,10 @@ func buildWAFSharedVolumes() []corev1.Volume {
 			Name:         appProtectBdConfigVolumeName,
 			VolumeSource: emptyDirVolumeSource,
 		},
+		{
+			Name:         appProtectLockVolumeName,
+			VolumeSource: emptyDirVolumeSource,
+		},
 	}
 }
 
@@ -1612,6 +1616,10 @@ func buildNginxWAFVolumeMounts() []corev1.VolumeMount {
 		{
 			Name:      appProtectBdConfigVolumeName,
 			MountPath: "/opt/app_protect/bd_config",
+		},
+		{
+			Name:      appProtectLockVolumeName,
+			MountPath: "/opt/app_protect/lock",
 		},
 	}
 }
@@ -1726,6 +1734,10 @@ func (p *NginxProvisioner) buildWAFConfigManagerContainer(
 			{
 				Name:      appProtectBundlesVolumeName,
 				MountPath: "/etc/app_protect/bundles",
+			},
+			{
+				Name:      appProtectLockVolumeName,
+				MountPath: "/opt/app_protect/lock",
 			},
 		},
 	}
