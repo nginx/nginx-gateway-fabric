@@ -2585,12 +2585,14 @@ func TestBuildNginxResourceObjects_WAF(t *testing.T) {
 		"app-protect-bundles",
 		"app-protect-config",
 		"app-protect-bd-config",
+		"app-protect-lock",
 	}
 
 	expectedNginxWAFMounts := map[string]string{
 		"app-protect-bundles":   "/etc/app_protect/bundles",
 		"app-protect-config":    "/opt/app_protect/config",
 		"app-protect-bd-config": "/opt/app_protect/bd_config",
+		"app-protect-lock":      "/opt/app_protect/lock",
 	}
 
 	for _, expectedMount := range wafVolumeMountNames {
@@ -2649,13 +2651,14 @@ func TestBuildNginxResourceObjects_WAF(t *testing.T) {
 	g.Expect(configMgrContainer.Resources.Limits).To(HaveKey(corev1.ResourceCPU))
 	g.Expect(configMgrContainer.Resources.Limits[corev1.ResourceCPU]).To(Equal(resource.MustParse("300m")))
 
-	// Check config manager volume mounts (should have all 3 WAF volumes)
-	g.Expect(configMgrContainer.VolumeMounts).To(HaveLen(3))
+	// Check config manager volume mounts (should have all 4 WAF volumes)
+	g.Expect(configMgrContainer.VolumeMounts).To(HaveLen(4))
 
 	expectedConfigMgrMounts := map[string]string{
 		"app-protect-bd-config": "/opt/app_protect/bd_config",
 		"app-protect-config":    "/opt/app_protect/config",
 		"app-protect-bundles":   "/etc/app_protect/bundles",
+		"app-protect-lock":      "/opt/app_protect/lock",
 	}
 
 	for _, mount := range configMgrContainer.VolumeMounts {
