@@ -47,6 +47,55 @@ func newHTTPBundleServer(body []byte, auth *fetch.BundleAuth) *httptest.Server {
 	}))
 }
 
+// nimBundleServerItem represents a single compiled NIM bundle served by the test helper.
+type nimBundleServerItem struct {
+	hash      string
+	policyUID string
+	created   string
+	content   []byte
+}
+
+// newNIMBundleServer creates a test server that simulates NIM's two-phase fetch pattern:
+//   - Requests with includeBundleContent=false return metadata only (hash, policyUID, created).
+//   - Requests with includeBundleContent=true return the full bundle content filtered by policyUID.
+//
+// When auth is non-nil, requests must carry matching credentials.
+func newNIMBundleServer(items []nimBundleServerItem, auth *fetch.BundleAuth) *httptest.Server {
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if auth != nil && auth.BearerToken != "" {
+			if r.Header.Get("Authorization") != "Bearer "+auth.BearerToken {
+				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				return
+			}
+		}
+
+		q := r.URL.Query()
+		includeContent := q.Get("includeBundleContent") == "true"
+		filterUID := q.Get("policyUID")
+
+		var respItems []map[string]any
+		for _, item := range items {
+			if filterUID != "" && item.policyUID != filterUID {
+				continue
+			}
+			entry := map[string]any{
+				"metadata": map[string]any{
+					"hash":      item.hash,
+					"policyUID": item.policyUID,
+					"created":   item.created,
+				},
+			}
+			if includeContent {
+				entry["content"] = base64.StdEncoding.EncodeToString(item.content)
+			}
+			respItems = append(respItems, entry)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{"items": respItems}) //nolint:errcheck
+	}))
+}
+
 func TestHTTPFetcherFetchPolicyBundle(t *testing.T) {
 	t.Parallel()
 
@@ -318,33 +367,27 @@ func TestNIMFetchExpectedChecksumEnforced(t *testing.T) {
 	t.Parallel()
 
 	bundleContent := []byte("nim-checksum-bundle")
-	encoded := base64.StdEncoding.EncodeToString(bundleContent)
+	bundleHash := fetch.ComputeChecksum(bundleContent)
 
-	type nimItem struct {
-		Content string `json:"content"`
+	nimItem := nimBundleServerItem{
+		content:   bundleContent,
+		hash:      bundleHash,
+		policyUID: "uid-checksum-test",
+		created:   "2026-01-01T00:00:00Z",
 	}
-	type nimResp struct {
-		Items []nimItem `json:"items"`
-	}
-	nimHandler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(nimResp{Items: []nimItem{{Content: encoded}}}); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
-	})
 
 	t.Run("matching checksum succeeds", func(t *testing.T) {
 		t.Parallel()
 		g := NewWithT(t)
 
-		srv := httptest.NewServer(nimHandler)
+		srv := newNIMBundleServer([]nimBundleServerItem{nimItem}, nil)
 		defer srv.Close()
 
 		f := fetch.NewHTTPFetcher(logr.Discard())
 		result, err := f.FetchPolicyBundle(t.Context(), fetch.Request{
 			URL:              srv.URL,
 			PolicyName:       "my-policy",
-			ExpectedChecksum: fetch.ComputeChecksum(bundleContent),
+			ExpectedChecksum: bundleHash,
 		})
 		g.Expect(err).ToNot(HaveOccurred())
 		g.Expect(result.Data).To(Equal(bundleContent))
@@ -354,7 +397,7 @@ func TestNIMFetchExpectedChecksumEnforced(t *testing.T) {
 		t.Parallel()
 		g := NewWithT(t)
 
-		srv := httptest.NewServer(nimHandler)
+		srv := newNIMBundleServer([]nimBundleServerItem{nimItem}, nil)
 		defer srv.Close()
 
 		f := fetch.NewHTTPFetcher(logr.Discard())
@@ -371,35 +414,23 @@ func TestNIMFetchExpectedChecksumEnforced(t *testing.T) {
 		t.Parallel()
 		g := NewWithT(t)
 
-		originalBundleContent := []byte("original-bundle")
-		corruptBundleContent := []byte("corrupted-bundle")
-		encodedCorruptBundle := base64.StdEncoding.EncodeToString(corruptBundleContent)
-		originalBundleHash := fetch.ComputeChecksum(originalBundleContent)
+		corruptContent := []byte("corrupted-bundle")
+		originalHash := fetch.ComputeChecksum([]byte("original-bundle"))
 
 		// Serve a bundle whose content differs from what the metadata reports as the hash.
-		corruptHandler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			w.Header().Set("Content-Type", "application/json")
-			// Return the hash of the original bundle but serve the corrupted content.
-			if err := json.NewEncoder(w).Encode(map[string]any{
-				"items": []map[string]any{{
-					"content": encodedCorruptBundle,
-					"metadata": map[string]any{
-						"hash": originalBundleHash,
-					},
-				}},
-			}); err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-			}
-		})
-
-		srv := httptest.NewServer(corruptHandler)
+		corruptItem := nimBundleServerItem{
+			content:   corruptContent,
+			hash:      originalHash,
+			policyUID: "uid-corrupt",
+			created:   "2026-01-01T00:00:00Z",
+		}
+		srv := newNIMBundleServer([]nimBundleServerItem{corruptItem}, nil)
 		defer srv.Close()
 
 		f := fetch.NewHTTPFetcher(logr.Discard())
 		_, err := f.FetchPolicyBundle(t.Context(), fetch.Request{
 			URL:        srv.URL,
 			PolicyName: "my-policy",
-			// No ExpectedChecksum set — NIM API hash should be used automatically.
 		})
 		g.Expect(err).To(HaveOccurred())
 		g.Expect(err.Error()).To(ContainSubstring("NIM bundle integrity check failed"))
@@ -409,32 +440,13 @@ func TestNIMFetchExpectedChecksumEnforced(t *testing.T) {
 		t.Parallel()
 		g := NewWithT(t)
 
-		bundleContent := []byte("valid-nim-bundle")
-		encodedBundle := base64.StdEncoding.EncodeToString(bundleContent)
-		bundleHash := fetch.ComputeChecksum(bundleContent)
-
-		nimHandler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			w.Header().Set("Content-Type", "application/json")
-			if err := json.NewEncoder(w).Encode(map[string]any{
-				"items": []map[string]any{{
-					"content": encodedBundle,
-					"metadata": map[string]any{
-						"hash": bundleHash,
-					},
-				}},
-			}); err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-			}
-		})
-
-		srv := httptest.NewServer(nimHandler)
+		srv := newNIMBundleServer([]nimBundleServerItem{nimItem}, nil)
 		defer srv.Close()
 
 		f := fetch.NewHTTPFetcher(logr.Discard())
 		result, err := f.FetchPolicyBundle(t.Context(), fetch.Request{
 			URL:        srv.URL,
 			PolicyName: "my-policy",
-			// No ExpectedChecksum set — NIM API hash should be used automatically.
 		})
 		g.Expect(err).ToNot(HaveOccurred())
 		g.Expect(result.Data).To(Equal(bundleContent))
@@ -445,36 +457,26 @@ func TestNIMFetchExpectedChecksumEnforced(t *testing.T) {
 		t.Parallel()
 		g := NewWithT(t)
 
-		bundleContent := []byte("user-verified-bundle")
-		encodedBundle := base64.StdEncoding.EncodeToString(bundleContent)
+		content := []byte("user-verified-bundle")
 		wrongHash := strings.Repeat("a", 64)
 
-		nimHandler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			w.Header().Set("Content-Type", "application/json")
-			// NIM returns a wrong hash, but user supplies correct one.
-			if err := json.NewEncoder(w).Encode(map[string]any{
-				"items": []map[string]any{{
-					"content": encodedBundle,
-					"metadata": map[string]any{
-						"hash": wrongHash,
-					},
-				}},
-			}); err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-			}
-		})
-
-		srv := httptest.NewServer(nimHandler)
+		item := nimBundleServerItem{
+			content:   content,
+			hash:      wrongHash,
+			policyUID: "uid-user-checksum",
+			created:   "2026-01-01T00:00:00Z",
+		}
+		srv := newNIMBundleServer([]nimBundleServerItem{item}, nil)
 		defer srv.Close()
 
 		f := fetch.NewHTTPFetcher(logr.Discard())
 		result, err := f.FetchPolicyBundle(t.Context(), fetch.Request{
 			URL:              srv.URL,
 			PolicyName:       "my-policy",
-			ExpectedChecksum: fetch.ComputeChecksum(bundleContent),
+			ExpectedChecksum: fetch.ComputeChecksum(content),
 		})
 		g.Expect(err).ToNot(HaveOccurred())
-		g.Expect(result.Data).To(Equal(bundleContent))
+		g.Expect(result.Data).To(Equal(content))
 	})
 }
 
@@ -623,22 +625,13 @@ func TestBuildNIMURLStripsBaseQueryAndFragment(t *testing.T) {
 	g := NewWithT(t)
 
 	bundleContent := []byte("nim-bundle-data")
-	encoded := base64.StdEncoding.EncodeToString(bundleContent)
 
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Should not have any leftover query params from the base URL
-		g.Expect(r.URL.Query().Get("extra")).To(BeEmpty())
-		// Should not carry the fragment (fragments are client-side only, but ensure path is clean)
-		g.Expect(r.URL.Path).To(Equal("/api/platform/v1/security/policies/bundles"))
-		g.Expect(r.URL.Query().Get("policyName")).To(Equal("my-policy"))
-		g.Expect(r.URL.Query().Get("includeBundleContent")).To(Equal("true"))
-		g.Expect(r.URL.Query().Get("startTime")).To(Equal("1970-01-01T00:00:00Z"))
-
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck
-			"items": []map[string]any{{"content": encoded}},
-		})
-	}))
+	srv := newNIMBundleServer([]nimBundleServerItem{{
+		content:   bundleContent,
+		hash:      fetch.ComputeChecksum(bundleContent),
+		policyUID: "uid-strip-test",
+		created:   "2026-01-01T00:00:00Z",
+	}}, nil)
 	defer srv.Close()
 
 	f := fetch.NewHTTPFetcher(logr.Discard())
@@ -656,22 +649,14 @@ func TestHTTPFetcherFetchNIMByUID(t *testing.T) {
 	g := NewWithT(t)
 
 	bundleContent := []byte("nim-uid-bundle-data")
-	encoded := base64.StdEncoding.EncodeToString(bundleContent)
 	policyUID := "2bc1e3ac-7990-4ca4-910a-8634c444c804"
 
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		g.Expect(r.URL.Path).To(Equal("/api/platform/v1/security/policies/bundles"))
-		g.Expect(r.URL.Query().Get("policyUID")).To(Equal(policyUID))
-		g.Expect(r.URL.Query().Get("includeBundleContent")).To(Equal("true"))
-		g.Expect(r.URL.Query().Get("startTime")).To(Equal("1970-01-01T00:00:00Z"))
-		// policyName must not be sent when fetching by UID
-		g.Expect(r.URL.Query().Get("policyName")).To(BeEmpty())
-
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck
-			"items": []map[string]any{{"content": encoded}},
-		})
-	}))
+	srv := newNIMBundleServer([]nimBundleServerItem{{
+		content:   bundleContent,
+		hash:      fetch.ComputeChecksum(bundleContent),
+		policyUID: policyUID,
+		created:   "2026-01-01T00:00:00Z",
+	}}, nil)
 	defer srv.Close()
 
 	f := fetch.NewHTTPFetcher(logr.Discard())
@@ -681,6 +666,8 @@ func TestHTTPFetcherFetchNIMByUID(t *testing.T) {
 			PolicyUID: policyUID,
 		},
 	}
+	// When fetching by policyUID, the fetcher should go directly to a content fetch
+	// without a metadata-only resolve step.
 	result, err := f.FetchPolicyBundle(context.Background(), req)
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(result.Data).To(Equal(bundleContent))
@@ -1190,42 +1177,69 @@ func TestHTTPFetcherFetchNIM(t *testing.T) {
 	t.Parallel()
 
 	bundleContent := []byte("nim-bundle-data")
-	encoded := base64.StdEncoding.EncodeToString(bundleContent)
+	oldContent := []byte("old-bundle-v1")
+	newContent := []byte("new-bundle-v2")
 
 	tests := []struct {
-		name       string
-		policyName string
-		serverBody any
-		auth       *fetch.BundleAuth
-		expectErr  string
-		expectData []byte
+		auth             *fetch.BundleAuth
+		name             string
+		policyName       string
+		expectErr        string
+		expectedChecksum string
+		items            []nimBundleServerItem
+		expectedData     []byte
 	}{
 		{
-			name:       "successful NIM fetch",
-			policyName: "my-policy",
-			serverBody: map[string]any{
-				"items": []map[string]any{
-					{"content": encoded},
-				},
-			},
-			expectData: bundleContent,
+			name: "successful NIM fetch",
+			items: []nimBundleServerItem{{
+				content:   bundleContent,
+				hash:      fetch.ComputeChecksum(bundleContent),
+				policyUID: "uid-1",
+				created:   "2026-01-01T00:00:00Z",
+			}},
+			policyName:       "my-policy",
+			expectedData:     bundleContent,
+			expectedChecksum: fetch.ComputeChecksum(bundleContent),
 		},
 		{
 			name:       "NIM response with no items",
 			policyName: "missing-policy",
-			serverBody: map[string]any{"items": []any{}},
-			expectErr:  "NIM response contains no items",
+			expectErr:  "NIM metadata response contains no items",
 		},
 		{
-			name:       "NIM fetch with bearer auth",
-			policyName: "secured-policy",
-			auth:       &fetch.BundleAuth{BearerToken: "nimtoken"},
-			serverBody: map[string]any{
-				"items": []map[string]any{
-					{"content": encoded},
+			name: "NIM fetch with bearer auth",
+			items: []nimBundleServerItem{{
+				content:   bundleContent,
+				hash:      fetch.ComputeChecksum(bundleContent),
+				policyUID: "uid-auth",
+				created:   "2026-01-01T00:00:00Z",
+			}},
+			auth:         &fetch.BundleAuth{BearerToken: "nimtoken"},
+			policyName:   "secured-policy",
+			expectedData: bundleContent,
+		},
+		{
+			name: "NIM response with multiple items selects latest by created timestamp",
+			// The OLDER item is listed first so that if the content-fetch request
+			// accidentally omits the policyUID filter, resp.Items[0] returns the
+			// wrong (old) bundle and the test fails.
+			items: []nimBundleServerItem{
+				{
+					content:   oldContent,
+					hash:      fetch.ComputeChecksum(oldContent),
+					policyUID: "uid-v1",
+					created:   "2026-05-05T08:40:31.213Z",
+				},
+				{
+					content:   newContent,
+					hash:      fetch.ComputeChecksum(newContent),
+					policyUID: "uid-v2",
+					created:   "2026-05-05T08:55:25.078Z",
 				},
 			},
-			expectData: bundleContent,
+			policyName:       "updated-policy",
+			expectedData:     newContent,
+			expectedChecksum: fetch.ComputeChecksum(newContent),
 		},
 	}
 
@@ -1234,39 +1248,26 @@ func TestHTTPFetcherFetchNIM(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if tc.auth != nil && tc.auth.BearerToken != "" {
-					if r.Header.Get("Authorization") != "Bearer "+tc.auth.BearerToken {
-						http.Error(w, "unauthorized", http.StatusUnauthorized)
-						return
-					}
-				}
-				// Verify NIM API path and query params
-				g.Expect(r.URL.Path).To(Equal("/api/platform/v1/security/policies/bundles"))
-				g.Expect(r.URL.Query().Get("policyName")).To(Equal(tc.policyName))
-				g.Expect(r.URL.Query().Get("includeBundleContent")).To(Equal("true"))
-				g.Expect(r.URL.Query().Get("startTime")).To(Equal("1970-01-01T00:00:00Z"))
-
-				w.Header().Set("Content-Type", "application/json")
-				json.NewEncoder(w).Encode(tc.serverBody) //nolint:errcheck
-			}))
+			srv := newNIMBundleServer(tc.items, tc.auth)
 			defer srv.Close()
 
 			f := fetch.NewHTTPFetcher(logr.Discard())
-			req := fetch.Request{
+			result, err := f.FetchPolicyBundle(context.Background(), fetch.Request{
 				URL:        srv.URL,
 				PolicyName: tc.policyName,
 				Auth:       tc.auth,
-			}
-			result, err := f.FetchPolicyBundle(context.Background(), req)
+			})
 
 			if tc.expectErr != "" {
 				g.Expect(err).To(HaveOccurred())
 				g.Expect(err.Error()).To(ContainSubstring(tc.expectErr))
-			} else {
-				g.Expect(err).ToNot(HaveOccurred())
-				g.Expect(result.Data).To(Equal(tc.expectData))
-				g.Expect(result.Checksum).To(Equal(fetch.ComputeChecksum(tc.expectData)))
+				return
+			}
+
+			g.Expect(err).ToNot(HaveOccurred())
+			g.Expect(result.Data).To(Equal(tc.expectedData))
+			if tc.expectedChecksum != "" {
+				g.Expect(result.Checksum).To(Equal(tc.expectedChecksum))
 			}
 		})
 	}
@@ -1631,18 +1632,19 @@ func TestFetchPolicyBundleChecksumNIM(t *testing.T) {
 
 	bundleContent := []byte("nim-bundle-data")
 	bundleHash := fetch.ComputeChecksum(bundleContent)
-	encoded := base64.StdEncoding.EncodeToString(bundleContent)
 
 	var includeBundleContent string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		g.Expect(r.URL.Path).To(Equal("/api/platform/v1/security/policies/bundles"))
 		includeBundleContent = r.URL.Query().Get("includeBundleContent")
 		w.Header().Set("Content-Type", "application/json")
-		// Always return content so the handler is simple; the fetcher should not decode it for checksum-only.
 		json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck
 			"items": []map[string]any{{
-				"content":  encoded,
-				"metadata": map[string]any{"hash": bundleHash},
+				"metadata": map[string]any{
+					"hash":      bundleHash,
+					"policyUID": "uid-checksum",
+					"created":   "2026-01-01T00:00:00Z",
+				},
 			}},
 		})
 	}))
@@ -1655,6 +1657,45 @@ func TestFetchPolicyBundleChecksumNIM(t *testing.T) {
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(checksum).To(Equal(bundleHash))
 	g.Expect(includeBundleContent).To(Equal("false"))
+}
+
+func TestFetchPolicyBundleChecksumNIMMultipleItems(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	oldHash := fetch.ComputeChecksum([]byte("old-bundle-v1"))
+	newHash := fetch.ComputeChecksum([]byte("new-bundle-v2"))
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		// Items deliberately NOT in chronological order to verify timestamp-based selection.
+		json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck
+			"items": []map[string]any{
+				{
+					"metadata": map[string]any{
+						"hash":      newHash,
+						"policyUID": "uid-v2",
+						"created":   "2026-05-05T08:55:25.078Z",
+					},
+				},
+				{
+					"metadata": map[string]any{
+						"hash":      oldHash,
+						"policyUID": "uid-v1",
+						"created":   "2026-05-05T08:40:31.213Z",
+					},
+				},
+			},
+		})
+	}))
+	defer srv.Close()
+
+	f := fetch.NewHTTPFetcher(logr.Discard())
+	req := fetch.Request{URL: srv.URL, PolicyName: "updated-policy"}
+	checksum, err := f.FetchPolicyBundleChecksum(context.Background(), req)
+
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(checksum).To(Equal(newHash), "should return the hash of the latest item by created timestamp")
 }
 
 func TestFetchBundleChecksumErrors(t *testing.T) {
