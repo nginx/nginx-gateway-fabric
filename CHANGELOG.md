@@ -6,73 +6,51 @@ and includes links to all PRs that went into the release.
 
 ## Release 2.6.0
 
-* Move gateway define rate-limit-policy directives from HTTP to Server context by @salonichf5 in https://github.com/nginx/nginx-gateway-fabric/pull/4993
-* helm: add extraObjects support to nginx-gateway-fabric chart by @sinux-l5d in https://github.com/nginx/nginx-gateway-fabric/pull/5011
-* Increase http hash bucket sizes by @sjberman in https://github.com/nginx/nginx-gateway-fabric/pull/5034
-* Fix broadcaster loop by @bjee19 in https://github.com/nginx/nginx-gateway-fabric/pull/4978
-* Allow NGINX variables in request and response modifier filters and fix colon and dollar sign restrictions in regex header and query param match by @salonichf5 in https://github.com/nginx/nginx-gateway-fabric/pull/5008
-* Add keepAlive.MinTimeout field to ClientSettingsPolicy by @salonichf5 in https://github.com/nginx/nginx-gateway-fabric/pull/5040
-* fix: allow TCPRoute and UDPRoute on same gateway port by @oyiz-michael in https://github.com/nginx/nginx-gateway-fabric/pull/5016
-* Support multiple TLS certs per HTTPS Listener by @sjberman in https://github.com/nginx/nginx-gateway-fabric/pull/5037
-* Add fix for effective NginxProxy when different Kubernetes types are specified by @bjee19 in https://github.com/nginx/nginx-gateway-fabric/pull/5058
-* Update validation check for IPFamily between BackendRefs and NginxProxy by @salonichf5 in https://github.com/nginx/nginx-gateway-fabric/pull/5052
-* Fix bug where N1C dataplane key is ignored by @ciarams87 in https://github.com/nginx/nginx-gateway-fabric/pull/5072
-* Fix CORS failure when attached to HTTPS Listener by @sjberman in https://github.com/nginx/nginx-gateway-fabric/pull/5071
-* Allow externalTrafficPolicy on ClusterIP services with externalIPs by @salonichf5 in https://github.com/nginx/nginx-gateway-fabric/pull/5075
-* Escape $ in rewrites by @sjberman in https://github.com/nginx/nginx-gateway-fabric/pull/5122
-* Proxy settings timeouts by @ciarams87 in https://github.com/nginx/nginx-gateway-fabric/pull/5165
-* Set the default SSL verify depth to 4 by @dhurley in https://github.com/nginx/nginx-gateway-fabric/pull/5174
-* Support for Gateway FrontendTLS by @shaun-nx in https://github.com/nginx/nginx-gateway-fabric/pull/5127
-* Fix CORS preflight bypass when used with URLRewrite by @salonichf5 in https://github.com/nginx/nginx-gateway-fabric/pull/5194
-* Add additional configuration options to  by @shaun-nx in https://github.com/nginx/nginx-gateway-fabric/pull/5200
-* Fix InferencePool tracking by @sjberman in https://github.com/nginx/nginx-gateway-fabric/pull/5207
-* Support ListenerSets by @bjee19 in https://github.com/nginx/nginx-gateway-fabric/pull/5208
-* Integrate with F5 WAF for NGINX by @ciarams87 in https://github.com/nginx/nginx-gateway-fabric/pull/5215
-* Return empty list instead of nil for listener supported kinds when listener protocol is invalid. by @dhurley in https://github.com/nginx/nginx-gateway-fabric/pull/5216
-* Set max message size for gRPC messages sent and received from agent by @dhurley in https://github.com/nginx/nginx-gateway-fabric/pull/5161
-
-
-%%DATE%%
+_May 7, 2026_
 
 FEATURES:
 
--
+- Integrate with F5 WAF for NGINX. [5215](https://github.com/nginx/nginx-gateway-fabric/pull/5215)
+- Support ListenerSets. [5208](https://github.com/nginx/nginx-gateway-fabric/pull/5208)
+- Support for Gateway FrontendTLS. [5127](https://github.com/nginx/nginx-gateway-fabric/pull/5127)
+- Support multiple TLS certificates per HTTPS Listener. [5037](https://github.com/nginx/nginx-gateway-fabric/pull/5037)
+- Add `keepAlive.minTimeout` field to ClientSettingsPolicy. [5040](https://github.com/nginx/nginx-gateway-fabric/pull/5040)
+- Add timeout configuration options to ProxySettingsPolicy. [5165](https://github.com/nginx/nginx-gateway-fabric/pull/5165)
+- Allow NGINX variables in request and response modifier filters. [5008](https://github.com/nginx/nginx-gateway-fabric/pull/5008)
 
 BUG FIXES:
 
--
-
-DOCUMENTATION:
-
--
+- Fix CORS preflight bypass when used with URLRewrite. [5194](https://github.com/nginx/nginx-gateway-fabric/pull/5194)
+- Fix InferencePool tracking. [5207](https://github.com/nginx/nginx-gateway-fabric/pull/5207)
+- Escape `$` in URL rewrites. [5122](https://github.com/nginx/nginx-gateway-fabric/pull/5122)
+- Fix colon and dollar sign restrictions in regex header and query param match. [5008](https://github.com/nginx/nginx-gateway-fabric/pull/5008)
+- Set the default SSL verify depth to 4. [5174](https://github.com/nginx/nginx-gateway-fabric/pull/5174)
+- Set max message size for gRPC messages sent and received from agent. [5161](https://github.com/nginx/nginx-gateway-fabric/pull/5161)
+- Return empty list instead of nil for listener supported kinds when listener protocol is invalid. [5216](https://github.com/nginx/nginx-gateway-fabric/pull/5216)
 
 HELM CHART:
 
 - The version of the Helm chart is now 2.6.0
-
-UPGRADE:
-
--
-
-KNOWN ISSUES:
-
--
+- Add `extraObjects` support to the nginx-gateway-fabric chart. [5011](https://github.com/nginx/nginx-gateway-fabric/pull/5011). Thanks to [sinux-l5d](https://github.com/sinux-l5d).
+- Add additional configuration options to `nginxGateway.readinessProbe`. [5200](https://github.com/nginx/nginx-gateway-fabric/pull/5200)
 
 COMPATIBILITY:
 
-- Gateway API version: ``
-- Gateway API Inference Extension version: ``
-- NGINX version: ``
-- NGINX Plus version: ``
-- NGINX Agent version: ``
-- Kubernetes version: ``
+- Gateway API version: `1.5.1`
+- Gateway API Inference Extension version: `1.5.0`
+- NGINX version: `1.30.0`
+- NGINX Plus version: `R36`
+- NGINX Agent version: `v3.9.1`
+- Kubernetes version: `1.31+`
 
 CONTAINER IMAGES:
 
 - Control plane: `ghcr.io/nginx/nginx-gateway-fabric:2.6.0`
 - Data plane: `ghcr.io/nginx/nginx-gateway-fabric/nginx:2.6.0`
 - Data plane with NGINX Plus: `private-registry.nginx.com/nginx-gateway-fabric/nginx-plus:2.6.0`
+- Data plane with NGINX Plus and F5 WAF: `private-registry.nginx.com/nginx-gateway-fabric/nginx-plus-f5waf:2.6.0`
 - Operator: `ghcr.io/nginx/nginx-gateway-fabric/operator:1.4.0`
+
 ## Release 2.5.1
 
 _April 8, 2026_
