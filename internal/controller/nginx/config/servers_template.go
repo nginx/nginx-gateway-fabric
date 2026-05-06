@@ -194,7 +194,7 @@ server {
             return 200;
         }
         {{- end }}
-        
+
         {{- if $l.ClientMaxBodySize }}
         client_max_body_size {{ $l.ClientMaxBodySize }};
         {{- end }}
@@ -269,6 +269,9 @@ server {
                 {{- if eq $l.ProxyPassRequestBody "off" }}
         proxy_set_header Content-Length "";
                 {{- end }}
+            {{- end }}
+            {{- if $l.ProxyPassRequestHeaders }}
+        proxy_pass_request_headers {{ $l.ProxyPassRequestHeaders }};
             {{- end }}
             {{ range $h := $l.ResponseHeaders.Add }}
         add_header {{ $h.Name }} "{{ $h.Value }}" always;

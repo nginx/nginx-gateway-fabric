@@ -643,6 +643,28 @@ func TestValidateFilterExternalAuth(t *testing.T) {
 		return nil
 	})
 
+	invalidPathValidator := &validationfakes.FakeHTTPFieldsValidator{}
+	invalidPathValidator.ValidatePathCalls(func(path string) error {
+		if path == "/bad path" {
+			return errors.New("invalid path")
+		}
+		return nil
+	})
+
+	invalidHeaderAndPathValidator := &validationfakes.FakeHTTPFieldsValidator{}
+	invalidHeaderAndPathValidator.ValidateFilterHeaderNameCalls(func(name string) error {
+		if name == "invalid header" {
+			return errors.New("invalid header name")
+		}
+		return nil
+	})
+	invalidHeaderAndPathValidator.ValidatePathCalls(func(path string) error {
+		if path == "/bad path" {
+			return errors.New("invalid path")
+		}
+		return nil
+	})
+
 	tests := []struct {
 		validator      validation.HTTPFieldsValidator
 		filter         *gatewayv1.HTTPExternalAuthFilter
@@ -726,8 +748,8 @@ func TestValidateFilterExternalAuth(t *testing.T) {
 			expectErrCount: 1,
 		},
 		{
-			name:      "invalid headers in both request and response headers accumulate errors",
-			validator: invalidHeaderValidator,
+			name:      "valid non-empty path in httpAuthConfig passes validation",
+			validator: invalidPathValidator,
 			filter: &gatewayv1.HTTPExternalAuthFilter{
 				ExternalAuthProtocol: gatewayv1.HTTPRouteExternalAuthHTTPProtocol,
 				BackendRef: gatewayv1.BackendObjectReference{
@@ -735,11 +757,42 @@ func TestValidateFilterExternalAuth(t *testing.T) {
 					Port: &port,
 				},
 				HTTPAuthConfig: &gatewayv1.HTTPAuthConfig{
+					Path: "/check",
+				},
+			},
+			expectErrCount: 0,
+		},
+		{
+			name:      "invalid path in httpAuthConfig returns one error",
+			validator: invalidPathValidator,
+			filter: &gatewayv1.HTTPExternalAuthFilter{
+				ExternalAuthProtocol: gatewayv1.HTTPRouteExternalAuthHTTPProtocol,
+				BackendRef: gatewayv1.BackendObjectReference{
+					Name: "auth-svc",
+					Port: &port,
+				},
+				HTTPAuthConfig: &gatewayv1.HTTPAuthConfig{
+					Path: "/bad path",
+				},
+			},
+			expectErrCount: 1,
+		},
+		{
+			name:      "invalid path and invalid request and response headers accumulate three errors",
+			validator: invalidHeaderAndPathValidator,
+			filter: &gatewayv1.HTTPExternalAuthFilter{
+				ExternalAuthProtocol: gatewayv1.HTTPRouteExternalAuthHTTPProtocol,
+				BackendRef: gatewayv1.BackendObjectReference{
+					Name: "auth-svc",
+					Port: &port,
+				},
+				HTTPAuthConfig: &gatewayv1.HTTPAuthConfig{
+					Path:                   "/bad path",
 					AllowedRequestHeaders:  []string{"invalid header"},
 					AllowedResponseHeaders: []string{"invalid header"},
 				},
 			},
-			expectErrCount: 2,
+			expectErrCount: 3,
 		},
 	}
 

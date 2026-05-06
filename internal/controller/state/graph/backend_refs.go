@@ -180,7 +180,45 @@ func addBackendRefsToRules(
 			}
 		}
 		route.Spec.Rules[idx].BackendRefs = backendRefs
+		if cond := invalidateRuleIfExternalAuthBackendUnresolved(route, idx); cond != nil {
+			route.Conditions = append(route.Conditions, *cond)
+		}
 	}
+}
+
+// invalidateRuleIfExternalAuthBackendUnresolved marks a rule's filters invalid when it carries an
+// ExternalAuth filter but no resolved/valid ExternalAuth backend. Without this, the rule would still
+// proxy to the primary backend with no auth check (fail-open). Returns the condition to append, or
+// nil if no invalidation was needed.
+func invalidateRuleIfExternalAuthBackendUnresolved(route *L7Route, ruleIdx int) *conditions.Condition {
+	rule := &route.Spec.Rules[ruleIdx]
+	if !rule.Filters.Valid {
+		return nil
+	}
+
+	hasExternalAuth := false
+	for _, f := range rule.Filters.Filters {
+		if f.FilterType == FilterExternalAuth && f.ExternalAuth != nil {
+			hasExternalAuth = true
+			break
+		}
+	}
+	if !hasExternalAuth {
+		return nil
+	}
+
+	for _, br := range rule.BackendRefs {
+		if br.IsExternalAuthBackend && br.Valid {
+			return nil
+		}
+	}
+
+	rule.Filters.Valid = false
+	cond := conditions.NewRouteResolvedRefsInvalidFilter(
+		"ExternalAuth filter references a backend that could not be resolved; " +
+			"the rule is rejected to avoid proxying without authentication",
+	)
+	return &cond
 }
 
 func createBackendRef(

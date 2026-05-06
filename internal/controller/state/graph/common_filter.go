@@ -307,6 +307,15 @@ func validateFilterExternalAuth(
 			filterPath.Child("externalAuth", "http", "allowedResponseHeaders"),
 		)
 		allErrs = append(allErrs, respErrs...)
+
+		if filter.HTTPAuthConfig.Path != "" {
+			if err := validator.ValidatePath(filter.HTTPAuthConfig.Path); err != nil {
+				allErrs = append(
+					allErrs,
+					field.Invalid(filterPath.Child("externalAuth", "http", "path"), filter.HTTPAuthConfig.Path, err.Error()),
+				)
+			}
+		}
 	}
 
 	return allErrs

@@ -70,6 +70,10 @@ type Location struct {
 	AuthBasic *AuthBasic
 	// ProxyPassRequestBody is "on" or "off" for the proxy_pass_request_body directive. Empty means don't emit.
 	ProxyPassRequestBody string
+	// ProxyPassRequestHeaders is "on" or "off" for the proxy_pass_request_headers directive. Empty means don't emit.
+	// Used by the external-auth internal location to suppress NGINX's default behavior of forwarding every
+	// client header to the auth server, so only the spec-mandated and explicitly allowed headers go through.
+	ProxyPassRequestHeaders string
 	// MirrorSplitClientsVariableName is the variable name for split_clients, used in traffic mirroring scenarios.
 	MirrorSplitClientsVariableName string
 	// EPPInternalPath is the internal path for the inference NJS module to redirect to.

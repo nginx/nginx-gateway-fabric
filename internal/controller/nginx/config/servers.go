@@ -48,6 +48,12 @@ const (
 	extAuthOriginalMethodHeader = "X-Original-Method"
 	// extAuthOriginalMethodValue is the NGINX variable for the original request method.
 	extAuthOriginalMethodValue = "$request_method"
+	// extAuthAuthorizationHeader forward the client's Authorization header to the
+	// auth server.
+	extAuthAuthorizationHeader = "Authorization"
+	extAuthAuthorizationValue  = "$http_authorization"
+	// proxyPassRequestHeadersOff disables forwarding of all client request headers to the proxied server.
+	proxyPassRequestHeadersOff = "off"
 	// httpHeaderVarPrefix is the NGINX variable prefix for accessing request headers.
 	httpHeaderVarPrefix = "$http_"
 	// extAuthResponseVarPrefix is the NGINX variable prefix for storing auth response header values.
@@ -1285,6 +1291,7 @@ func extractExternalAuthInternalLocations(locations []http.Location) []http.Loca
 			{Name: "Host", Value: "$host"},
 			{Name: extAuthOriginalURIHeader, Value: extAuthOriginalURIValue},
 			{Name: extAuthOriginalMethodHeader, Value: extAuthOriginalMethodValue},
+			{Name: extAuthAuthorizationHeader, Value: extAuthAuthorizationValue},
 		}
 		for _, h := range ar.AllowedRequestHeaders {
 			headers = append(headers, http.Header{Name: h, Value: httpHeaderVarPrefix + headerToNginxVar(h)})
@@ -1295,12 +1302,13 @@ func extractExternalAuthInternalLocations(locations []http.Location) []http.Loca
 			proxyPassBody = proxyPassRequestBodyOff
 		}
 		authLoc := http.Location{
-			Path:                 path,
-			Type:                 http.InternalLocationType,
-			ProxyPass:            proxyPass,
-			ProxySetHeaders:      headers,
-			ProxySSLVerify:       ar.ProxySSLVerify,
-			ProxyPassRequestBody: proxyPassBody,
+			Path:                    path,
+			Type:                    http.InternalLocationType,
+			ProxyPass:               proxyPass,
+			ProxySetHeaders:         headers,
+			ProxySSLVerify:          ar.ProxySSLVerify,
+			ProxyPassRequestBody:    proxyPassBody,
+			ProxyPassRequestHeaders: proxyPassRequestHeadersOff,
 		}
 		result = append(result, authLoc)
 	}
