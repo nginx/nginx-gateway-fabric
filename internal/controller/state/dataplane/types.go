@@ -589,21 +589,21 @@ type BaseHTTPConfig struct {
 	Compression *CompressionSettings
 	// IPFamily specifies the IP family for all servers.
 	IPFamily IPFamilyType
-	// GatewaySecretID is the ID of the Gateway Secret.
+	// GatewaySecretID is the ID of the secret that contains the gateway backend TLS certificate.
 	GatewaySecretID SSLKeyPairID
-	// NginxReadinessProbePath is the path on which the health check is served.
+	// NginxReadinessProbePath is the path on which the health check endpoint for NGINX is exposed.
 	NginxReadinessProbePath string
-	// ServerTokens specifies the value for the server_tokens directive.
+	// ServerTokens specifies the value for the server_tokens directive in NGINX configuration.
 	ServerTokens string
 	// Policies holds the policies attached to the Gateway for the http context.
 	Policies []policies.Policy
 	// Snippets contain the snippets that apply to the http context.
 	Snippets []Snippet
-	// RewriteClientIPSettings defines configuration for rewriting the client IP.
+	// RewriteClientIPSettings defines configuration for rewriting the client IP to the original client's IP.
 	RewriteClientIPSettings RewriteClientIPSettings
-	// NginxReadinessProbePort is the port on which the health check is served.
+	// NginxReadinessProbePort is the port on which the health check endpoint for NGINX is exposed.
 	NginxReadinessProbePort int32
-	// HTTP2 specifies whether http2 should be enabled.
+	// HTTP2 specifies whether http2 should be enabled for all servers.
 	HTTP2 bool
 	// DisableSNIHostValidation specifies if the SNI host validation should be disabled.
 	DisableSNIHostValidation bool

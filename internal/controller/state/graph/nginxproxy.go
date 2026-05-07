@@ -616,6 +616,15 @@ func validateCompression(
 				)
 			}
 		}
+
+		for i, p := range npCfg.Spec.Compression.Gzip.Proxied {
+			if err := validator.ValidateEscapedStringNoVarExpansion(string(p)); err != nil {
+				allErrs = append(
+					allErrs,
+					field.Invalid(gzipPath.Child("proxied").Index(i), p, err.Error()),
+				)
+			}
+		}
 	}
 
 	return allErrs

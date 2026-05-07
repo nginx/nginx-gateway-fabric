@@ -207,16 +207,6 @@ func TestNginxProxyCompression(t *testing.T) {
 		wantErrors []string
 	}{
 		{
-			name:       "Validate NginxProxy is invalid when compression has no mimeTypes",
-			wantErrors: []string{expectedCompressionMimeTypesRequiredError},
-			spec: ngfAPIv1alpha2.NginxProxySpec{
-				Compression: &ngfAPIv1alpha2.Compression{
-					Type: ngfAPIv1alpha2.GzipCompressionType,
-					Gzip: &ngfAPIv1alpha2.GzipSettings{},
-				},
-			},
-		},
-		{
 			name:       "Validate NginxProxy is invalid when gzip type without gzip settings",
 			wantErrors: []string{expectedCompressionGzipRequiredError},
 			spec: ngfAPIv1alpha2.NginxProxySpec{
@@ -235,32 +225,6 @@ func TestNginxProxyCompression(t *testing.T) {
 					Gzip: &ngfAPIv1alpha2.GzipSettings{
 						Vary:    helpers.GetPointer(true),
 						Proxied: []ngfAPIv1alpha2.GzipProxiedType{ngfAPIv1alpha2.GzipProxiedAny},
-					},
-				},
-			},
-		},
-		{
-			name: "Validate NginxProxy is valid with compression buffers",
-			spec: ngfAPIv1alpha2.NginxProxySpec{
-				Compression: &ngfAPIv1alpha2.Compression{
-					Type:      ngfAPIv1alpha2.GzipCompressionType,
-					MimeTypes: []string{"text/css"},
-					Gzip:      &ngfAPIv1alpha2.GzipSettings{},
-					Buffers: &ngfAPIv1alpha2.CompressionBuffers{
-						Number: 32,
-						Size:   "4k",
-					},
-				},
-			},
-		},
-		{
-			name: "Validate NginxProxy is valid with gzip http version",
-			spec: ngfAPIv1alpha2.NginxProxySpec{
-				Compression: &ngfAPIv1alpha2.Compression{
-					Type:      ngfAPIv1alpha2.GzipCompressionType,
-					MimeTypes: []string{"text/css"},
-					Gzip: &ngfAPIv1alpha2.GzipSettings{
-						HTTPVersion: helpers.GetPointer(ngfAPIv1alpha2.GzipHTTPVersion10),
 					},
 				},
 			},

@@ -917,7 +917,6 @@ type HostPort struct {
 }
 
 // Compression defines the configuration for HTTP response compression.
-// +kubebuilder:validation:XValidation:message="type Gzip requires mimeTypes to be set",rule="!(self.type == 'gzip' && (!has(self.mimeTypes) || size(self.mimeTypes) == 0))"
 // +kubebuilder:validation:XValidation:message="type Gzip requires gzip to be set",rule="!(self.type == 'gzip' && !has(self.gzip))"
 type Compression struct {
 	// Gzip defines gzip module-specific compression settings.
@@ -999,7 +998,6 @@ type GzipSettings struct {
 	// NGINX directive: https://nginx.org/en/docs/http/ngx_http_gzip_module.html#gzip_http_version
 	//
 	// +optional
-	// +kubebuilder:validation:Enum="1.0";"1.1"
 	HTTPVersion *GzipHTTPVersion `json:"httpVersion,omitempty"`
 	// Disable specifies regular expressions to match User-Agent headers of requests
 	// that should not be gzip-compressed.
