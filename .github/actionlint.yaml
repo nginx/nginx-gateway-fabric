@@ -1,0 +1,4 @@
+# Configuration related to self-hosted runner.
+self-hosted-runner:
+  labels:
+    - ubuntu-24.04-amd64
