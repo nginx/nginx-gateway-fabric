@@ -262,6 +262,7 @@ jobs:
         with:
           minor-label: "enhancement"
           major-label: "change"
+          context: git
           publish: ${{ inputs.is_production_release && (inputs.dry_run == false || inputs.dry_run == null) && true || false }}
           collapse-after: 20
           notes-header: |
