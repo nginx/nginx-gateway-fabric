@@ -75,8 +75,8 @@ This portion also contains:
     - Generated NGINX configuration
     - JWT claims
       - Understanding JWT claims
-      - Understanding nested claim
-      - Understand claim enforcement
+      - Understanding nested claims
+      - Understanding claim enforcement
       - Processing claims
       - Processing nested claims
     - JWT Authentication Capabilities
@@ -103,7 +103,7 @@ import (
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 
 // AuthenticationFilter configures request authentication and is
-// attached using as a filter via ExtensionRef.
+// attached as a filter via ExtensionRef.
 type AuthenticationFilter struct {
   metav1.TypeMeta   `json:",inline"`
   metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -235,7 +235,7 @@ type JWTAuth struct {
   Require *JWTRequiredClaims `json:"require,omitempty"`
 
   // Leeway is the acceptable clock skew for exp & nbf claims.
-  // If exp & nbf claims are not defined, this directive takes no affect.
+  // If exp & nbf claims are not defined, this directive takes no effect.
   // Configures `auth_jwt_leeway` directive.
   // https://nginx.org/en/docs/http/ngx_http_auth_jwt_module.html#auth_jwt_leeway
   // Example: "auth_jwt_leeway 60s".
@@ -374,7 +374,7 @@ In the case of Basic Auth, the deployed Secret and HTTPRoute may look like this:
 For Basic Auth, we will process a custom secret type of `nginx.org/htpasswd`.
 This will allow us to be more confident that the user is providing us with the appropriate kind of secret for this use case.
 
-To create this kind of secret for Basic Auth first run this command:
+To create this kind of secret for Basic Auth, first run this command:
 
 ```bash
 htpasswd -c auth user
@@ -506,7 +506,7 @@ spec:
     source: File
     file:
       secretRef:
-        name: jwt-keys-securey
+        name: jwt-keys-secure
 ```
 
 #### Spec for remote JWKS
@@ -745,7 +745,7 @@ http {
 
 ### Resolving remote IdP JWKS URI
 
-For JWT Remote authentication, NGINX will require a [resolver](https://nginx.org/en/docs/http/ngx_http_core_module.html#resolver) to be defined with one more resolver addresses.
+For JWT Remote authentication, NGINX will require a [resolver](https://nginx.org/en/docs/http/ngx_http_core_module.html#resolver) to be defined with one or more resolver addresses.
 
 Currently, the `NginxProxy` resource is the only way to define resolvers.
 This will set the resolvers at the `http` context, which will affect all configurations that require a resolver to function.
@@ -771,7 +771,7 @@ We will need to document this aspect of the JWT Remote use case.
 
 JWT key caching will be `disabled` by default.
 This is to ensure that, by default, users don't encounter scenarios where stale keys are served.
-To enable caching, users can set `keyCache` with the duration they wish the JWKS to be cached form:
+To enable caching, users can set `keyCache` with the duration they wish the JWKS to be cached for:
 
 ```yaml
 kind: AuthenticationFilter
@@ -815,7 +815,7 @@ Here is an example of a JWT payload containing the standard registered claims ou
 The Subject (`sub`) claim typically contains details on the user such as their username.
 The Audience (`aud`) claim identifies what access the claim is intended for. For example, this JWT is claiming to have API and CLI access.
 The Issuer (`iss`) claim identifies who issued this token.
-The Expiration Time (`exp`), Not Before (`nbf`) and Issued At (`iat`) claims help with the lifecycle of a token. They ensure requests using tokens outside these time constrains are rejected. The [auth_jwt_leeway](https://nginx.org/en/docs/http/ngx_http_auth_jwt_module.html#auth_jwt_leeway) directive interacts with the `exp` and `nbf` claims. When these two claims are verified, this directive will set a maximum allowable leeway to compensate for [clock skew](https://en.wikipedia.org/wiki/Clock_skew).
+The Expiration Time (`exp`), Not Before (`nbf`) and Issued At (`iat`) claims help with the lifecycle of a token. They ensure requests using tokens outside these time constraints are rejected. The [auth_jwt_leeway](https://nginx.org/en/docs/http/ngx_http_auth_jwt_module.html#auth_jwt_leeway) directive interacts with the `exp` and `nbf` claims. When these two claims are verified, this directive will set a maximum allowable leeway to compensate for [clock skew](https://en.wikipedia.org/wiki/Clock_skew).
 The JWT ID (`jti`) claim is a unique identifier for the token.
 
 NOTE: Both the Audience (`aud`) and Issuer (`iss`) claims in a JWT payload can be either a single string or an array. They will only ever be an array if it contains more than one value.
@@ -840,13 +840,13 @@ Users may also choose to set custom claims. Common ones are `email` and `name`.
 }
 ```
 
-User defined variables can each be accessed through the `$jwt_claim_` variable, where the name the of the claim is appended to the end of the variable name.
-For example, the `user` claim will be `$jwt_claim_used` with the value of `john doe`.
+User defined variables can each be accessed through the `$jwt_claim_` variable, where the name of the claim is appended to the end of the variable name.
+For example, the `name` claim will be `$jwt_claim_name` with the value of `john doe`.
 
 #### Understanding nested claims
 
-It's possible that JWT payloads can contain nested claims. This is there certain, non-standard claims, like `roles` or `user`, are nested under other top-level claims.
-Here is an example where the `roles`, claims is nested under the new `realm_access` claim, and the `user` claim now contains the `tenant` claim as a nested claim:
+It's possible that JWT payloads can contain nested claims. This is where certain, non-standard claims, like `roles` or `user`, are nested under other top-level claims.
+Here is an example where the `roles` claim is nested under the new `realm_access` claim, and the `user` claim now contains the `tenant` claim as a nested claim:
 
 ```json
 {
@@ -864,7 +864,7 @@ Claims provide a means to enhance the security of JWT authentication and improve
 #### Understand claim enforcement
 
 NGINX defines the `auth_jwt_require` directive to handle JWT claim enforcement.
-The two most common claims to enforce as issuer `iss`, and audience `aud`.
+The two most common claims to enforce are issuer `iss`, and audience `aud`.
 
 When NGINX successfully validates a token, the `iss`, `aud` and `sub` claims are automatically exposed as variables. `$jwt_claim_iss`, `$jwt_claim_aud` and `$jwt_claim_sub`.
 
@@ -877,7 +877,7 @@ If the claim is absent, NGINX throws an error. It will not validate the value of
 
 - Validate claim values.
 
-This approach is provides a more secure and robust experience.
+This approach provides a more secure and robust experience.
 
 Let's say a user wants to enforce a token to contain one of two issuers, `https://issuer.example.com` or `https://issuer.example1.com`. Let's also say the value of audience can be either `api` or `cli`.
 
@@ -977,7 +977,7 @@ This spec is configured to process a JWT payload with these claims:
 #### Processing nested claims
 
 The overall spec for nested claims will be similar to how standard claims are processed.
-The main difference will be how NGINX expected them to be defined and processed.
+The main difference will be how NGINX expects them to be defined and processed.
 
 Let's start with the JWT payload this time.
 These are the claims we will process. This time `roles` is nested under `realm_access`:
@@ -1018,7 +1018,7 @@ spec:
           value: "user@example.com"
 ```
 
-To process the nested claim, the names of bot the top-level and nested claim are specified as one string separate by a slash `/`.
+To process the nested claim, the names of both the top-level and nested claim are specified as one string separated by a slash `/`.
 It's important to note that [RFC 7519](https://www.rfc-editor.org/rfc/rfc7519) does not explicitly define prohibited characters for JWT claim names.
 Instead, it's advised to avoid characters that are reserved in URI such as slash `/`.
 Given this, it feels safe to assume that we can separate these by the slash character when parsing the claim.
@@ -1075,7 +1075,7 @@ This example shows a single HTTPRoute, with a single `filter` defined in a `rule
 
 Only one `AuthenticationFilter` may be specified per route rule, ensuring each route rule defines only one authentication method.
 
-In a scenario where a route rule references multiple `AuthenticationFilter` resources, that route rule will set to `Invalid`.
+In a scenario where a route rule references multiple `AuthenticationFilter` resources, that route rule will be set to `Invalid`.
 The route resource will display the `UnresolvedRefs` message to inform the user that the rule has been `Rejected`.
 
 Here is an example of an HTTPRoute that references multiple `AuthenticationFilter` resources in a single rule.
@@ -1144,7 +1144,7 @@ When an `AuthenticationFilter` is described as invalid, it could be for these re
 - An `AuthenticationFilter` referencing a secret in a different namespace
 - An `AuthenticationFilter` referencing a secret with an incorrect type (e.g., Opaque)
 - An `AuthenticationFilter` referencing a secret with an incorrect key
-- An `AuthenticationFilter` set to `type: JWT` where there NGINX dataplane is using NGINX OSS, and not NGINX Plus
+- An `AuthenticationFilter` set to `type: JWT` where the NGINX dataplane is using NGINX OSS, and not NGINX Plus
 
 ### Valid Scenarios
 
@@ -1213,7 +1213,7 @@ Two or more route rules each with two or more paths in an HTTPRoute/GRPCRoute re
 
 Two or more route rules each with a single path in an HTTPRoute/GRPCRoute, where one rule references a valid `AuthenticationFilter`, and the other references an invalid `AuthenticationFilter`
 - Expected outcomes:
-  The route rule referencing the invalid `AuthentiationFilter` is marked as invalid.
+  The route rule referencing the invalid `AuthenticationFilter` is marked as invalid.
   Requests to the path in the invalid route rule will return a 500 error.
   The route rule referencing the valid `AuthenticationFilter` is marked as valid.
   Requests to the path in the valid route rule will return a 200 response when correctly authenticated.
@@ -1222,9 +1222,9 @@ Two or more route rules each with a single path in an HTTPRoute/GRPCRoute, where
 
 Two or more route rules each with two or more paths in an HTTPRoute/GRPCRoute where one rule references a valid `AuthenticationFilter`, and the other references an invalid `AuthenticationFilter`
 - Expected outcomes:
-  The route rules referencing the invalid `AuthentiationFilter` is marked as invalid.
+  The route rules referencing the invalid `AuthenticationFilter` are marked as invalid.
   Requests to any path in the invalid route rule will return a 500 error.
-  The route rules referencing the valid `AuthenticationFilter` is marked as valid.
+  The route rules referencing the valid `AuthenticationFilter` are marked as valid.
   Requests to any path in the valid route rule will return a 200 response when correctly authenticated.
   Requests to any path in the valid route rule will return a 401 response when incorrectly authenticated.
 
@@ -1464,7 +1464,7 @@ spec:
 ### JWT auth types
 
 NGINX provides a directive called `auth_jwt_type`, which can be set to `signed` (default), `encrypted` or `nested`
-This document proposes initially supporting only `signed`, as both `encrypted` and `nested` types requires the Gateway to have access to private keys to decrypt the JWKS.
+This document proposes initially supporting only `signed`, as both `encrypted` and `nested` types require the Gateway to have access to private keys to decrypt the JWKS.
 
 #### Use case for encrypted and nested
 
