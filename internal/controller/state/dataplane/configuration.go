@@ -75,7 +75,11 @@ func BuildConfiguration(
 	baseHTTPConfig := buildBaseHTTPConfig(gateway, gatewaySnippetsFilters, gatewayRateLimitPolicies)
 	baseStreamConfig := buildBaseStreamConfig(gateway)
 
-	httpServers, sslServers, sslListenerHostnames := buildServers(gateway, g.ReferencedServices, g.ReferencedSecrets)
+	httpServers, sslServers, sslListenerHostnames, extAuthCertBundleIDs := buildServers(
+		gateway,
+		g.ReferencedServices,
+		g.ReferencedSecrets,
+	)
 
 	authCertBundles := make(map[CertBundleID]CertBundle)
 
@@ -106,6 +110,7 @@ func BuildConfiguration(
 	certBundles := buildCertBundles(
 		refCertBundles,
 		backendGroups,
+		extAuthCertBundleIDs,
 		authCertBundles,
 	)
 	maps.Copy(certBundles, buildFrontendTLSCertBundles(
@@ -625,6 +630,7 @@ func buildRefCertificateBundles(
 func buildCertBundles(
 	refCertBundles []secrets.CertificateBundle,
 	backendGroups []BackendGroup,
+	extAuthCertBundleIDs map[CertBundleID]struct{},
 	authCertBundles map[CertBundleID]CertBundle,
 ) map[CertBundleID]CertBundle {
 	bundles := make(map[CertBundleID]CertBundle)
@@ -633,27 +639,26 @@ func buildCertBundles(
 		bundles[id] = cert
 	}
 
-	// We only need to build the cert bundles if there are valid backend groups that reference them.
-	if len(backendGroups) == 0 {
-		return bundles
+	referenced := make(map[CertBundleID]struct{}, len(extAuthCertBundleIDs))
+	for id := range extAuthCertBundleIDs {
+		referenced[id] = struct{}{}
 	}
-
-	referencedByBackendGroup := make(map[CertBundleID]struct{})
 	for _, bg := range backendGroups {
-		if bg.Backends == nil {
-			continue
-		}
 		for _, b := range bg.Backends {
 			if !b.Valid || b.VerifyTLS == nil {
 				continue
 			}
-			referencedByBackendGroup[b.VerifyTLS.CertBundleID] = struct{}{}
+			referenced[b.VerifyTLS.CertBundleID] = struct{}{}
 		}
+	}
+
+	if len(referenced) == 0 {
+		return bundles
 	}
 
 	for _, bundle := range refCertBundles {
 		id := generateCertBundleID(bundle.Name)
-		if _, exists := referencedByBackendGroup[id]; exists {
+		if _, exists := referenced[id]; exists {
 			bundles[id] = getCertRefBundleData(bundle)
 		}
 	}
@@ -784,7 +789,7 @@ func newBackendGroup(
 	var inferencePoolBackendExists bool
 
 	for _, ref := range refs {
-		if ref.IsMirrorBackend {
+		if ref.IsMirrorBackend || ref.IsExternalAuthBackend {
 			continue
 		}
 
@@ -846,11 +851,12 @@ func buildServers(
 	gateway *graph.Gateway,
 	referencedServices map[types.NamespacedName]*graph.ReferencedService,
 	referencedSecrets map[types.NamespacedName]*secrets.Secret,
-) (http, ssl []VirtualServer, sslListenerHostnames map[int32][]string) {
+) (http, ssl []VirtualServer, sslListenerHostnames map[int32][]string, extAuthCertBundleIDs map[CertBundleID]struct{}) {
 	rulesForProtocol := map[v1.ProtocolType]portPathRules{
 		v1.HTTPProtocolType:  make(portPathRules),
 		v1.HTTPSProtocolType: make(portPathRules),
 	}
+	extAuthCertBundleIDs = make(map[CertBundleID]struct{})
 
 	for _, l := range gateway.Listeners {
 		if l.Source.Protocol == v1.TLSProtocolType ||
@@ -865,7 +871,7 @@ func buildServers(
 				rulesForProtocol[l.Source.Protocol][l.Source.Port] = rules
 			}
 
-			rules.upsertListener(l, gateway, referencedServices, referencedSecrets)
+			rules.upsertListener(l, gateway, referencedServices, referencedSecrets, extAuthCertBundleIDs)
 
 			if l.Source.Protocol == v1.HTTPSProtocolType {
 				hostname := ""
@@ -895,7 +901,7 @@ func buildServers(
 		sslServers[i].Policies = pols
 	}
 
-	return httpServers, sslServers, sslListenerHostnames
+	return httpServers, sslServers, sslListenerHostnames, extAuthCertBundleIDs
 }
 
 // portPathRules keeps track of hostPathRules per port.
@@ -942,6 +948,7 @@ func (hpr *hostPathRules) upsertListener(
 	gateway *graph.Gateway,
 	referencedServices map[types.NamespacedName]*graph.ReferencedService,
 	referencedSecrets map[types.NamespacedName]*secrets.Secret,
+	extAuthCertBundleIDs map[CertBundleID]struct{},
 ) {
 	hpr.listenersExist = true
 	hpr.port = l.Source.Port
@@ -955,7 +962,7 @@ func (hpr *hostPathRules) upsertListener(
 			continue
 		}
 
-		hpr.upsertRoute(r, l, gateway, referencedServices, referencedSecrets)
+		hpr.upsertRoute(r, l, gateway, referencedServices, referencedSecrets, extAuthCertBundleIDs)
 	}
 }
 
@@ -965,6 +972,7 @@ func (hpr *hostPathRules) upsertRoute(
 	gateway *graph.Gateway,
 	referencedServices map[types.NamespacedName]*graph.ReferencedService,
 	referencedSecrets map[types.NamespacedName]*secrets.Secret,
+	extAuthCertBundleIDs map[CertBundleID]struct{},
 ) {
 	var hostnames []string
 	GRPC := route.RouteType == graph.RouteTypeGRPC
@@ -1008,7 +1016,15 @@ func (hpr *hostPathRules) upsertRoute(
 
 		var filters HTTPFilters
 		if rule.Filters.Valid {
-			filters = createHTTPFilters(rule.Filters.Filters, idx, routeNsName, referencedSecrets)
+			filters = createHTTPFilters(
+				rule.Filters.Filters,
+				idx,
+				routeNsName,
+				referencedSecrets,
+				rule.BackendRefs,
+				listener.GatewayName,
+				extAuthCertBundleIDs,
+			)
 		} else {
 			filters = HTTPFilters{
 				InvalidFilter: &InvalidHTTPFilter{},
@@ -1323,6 +1339,9 @@ func createHTTPFilters(
 	ruleIdx int,
 	routeNsName types.NamespacedName,
 	referencedSecrets map[types.NamespacedName]*secrets.Secret,
+	backendRefs []graph.BackendRef,
+	gwNsName types.NamespacedName,
+	extAuthCertBundleIDs map[CertBundleID]struct{},
 ) HTTPFilters {
 	var result HTTPFilters
 
@@ -1371,6 +1390,18 @@ func createHTTPFilters(
 		case graph.FilterCORS:
 			if result.CORSFilter == nil {
 				result.CORSFilter = convertHTTPCORSFilter(f.CORS)
+			}
+		case graph.FilterExternalAuth:
+			if result.ExternalAuthFilter == nil {
+				for _, br := range backendRefs {
+					if br.IsExternalAuthBackend && br.Valid {
+						result.ExternalAuthFilter = convertHTTPExternalAuthFilter(f.ExternalAuth, br, routeNsName, ruleIdx, gwNsName)
+						if result.ExternalAuthFilter.VerifyTLS != nil && extAuthCertBundleIDs != nil {
+							extAuthCertBundleIDs[result.ExternalAuthFilter.VerifyTLS.CertBundleID] = struct{}{}
+						}
+						break
+					}
+				}
 			}
 		}
 	}

@@ -3214,7 +3214,7 @@ func TestUpsertRoute_PathRuleHasInferenceBackend(t *testing.T) {
 	}
 
 	hpr := newHostPathRules()
-	hpr.upsertRoute(route, listener, gateway, nil, nil)
+	hpr.upsertRoute(route, listener, gateway, nil, nil, nil)
 
 	// Find the PathRule for "/infer"
 	found := false
@@ -3599,7 +3599,7 @@ func TestCreateFilters(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 			routeNsName := types.NamespacedName{Namespace: "test", Name: "route1"}
-			result := createHTTPFilters(test.filters, 0, routeNsName, nil)
+			result := createHTTPFilters(test.filters, 0, routeNsName, nil, nil, types.NamespacedName{}, nil)
 
 			g.Expect(helpers.Diff(test.expected, result)).To(BeEmpty())
 		})
@@ -9473,6 +9473,162 @@ func TestBuildWAF(t *testing.T) {
 
 			result := buildWAF(test.gateway)
 			g.Expect(result).To(Equal(test.expWAFConfig))
+		})
+	}
+}
+
+func TestCreateFiltersExternalAuthSkipsInvalidBackendRef(t *testing.T) {
+	t.Parallel()
+
+	port := v1.PortNumber(80)
+
+	extAuthFilter := graph.Filter{
+		FilterType: graph.FilterExternalAuth,
+		ExternalAuth: &v1.HTTPExternalAuthFilter{
+			ExternalAuthProtocol: v1.HTTPRouteExternalAuthHTTPProtocol,
+			BackendRef: v1.BackendObjectReference{
+				Name: "auth-svc",
+				Port: &port,
+			},
+		},
+	}
+
+	validBackendRef := graph.BackendRef{
+		SvcNsName:             types.NamespacedName{Namespace: "default", Name: "auth-svc"},
+		ServicePort:           apiv1.ServicePort{Port: 80},
+		Valid:                 true,
+		IsExternalAuthBackend: true,
+	}
+
+	invalidBackendRef := graph.BackendRef{
+		SvcNsName:             types.NamespacedName{Namespace: "default", Name: "auth-svc"},
+		ServicePort:           apiv1.ServicePort{Port: 80},
+		Valid:                 false,
+		IsExternalAuthBackend: true,
+	}
+
+	routeNsName := types.NamespacedName{Namespace: "test", Name: "route1"}
+	gwNsName := types.NamespacedName{Namespace: "default", Name: "gw"}
+
+	tests := []struct {
+		msg         string
+		backendRefs []graph.BackendRef
+		expectNil   bool
+	}{
+		{
+			msg:         "valid external auth backend ref produces ExternalAuthFilter",
+			backendRefs: []graph.BackendRef{validBackendRef},
+			expectNil:   false,
+		},
+		{
+			msg:         "invalid external auth backend ref is skipped and ExternalAuthFilter is nil",
+			backendRefs: []graph.BackendRef{invalidBackendRef},
+			expectNil:   true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.msg, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			result := createHTTPFilters(
+				[]graph.Filter{extAuthFilter},
+				0,
+				routeNsName,
+				nil,
+				test.backendRefs,
+				gwNsName,
+				nil,
+			)
+
+			if test.expectNil {
+				g.Expect(result.ExternalAuthFilter).To(BeNil())
+			} else {
+				g.Expect(result.ExternalAuthFilter).ToNot(BeNil())
+				g.Expect(result.ExternalAuthFilter.UpstreamName).To(Equal("default_auth-svc_80"))
+			}
+		})
+	}
+}
+
+func TestBuildCertBundles(t *testing.T) {
+	t.Parallel()
+
+	backendBundle := secrets.CertificateBundle{
+		Name: types.NamespacedName{Namespace: "default", Name: "backend-ca"},
+		Cert: &secrets.Certificate{CACert: []byte("backend-ca-data")},
+	}
+	extAuthBundle := secrets.CertificateBundle{
+		Name: types.NamespacedName{Namespace: "default", Name: "ext-auth-ca"},
+		Cert: &secrets.Certificate{CACert: []byte("ext-auth-ca-data")},
+	}
+
+	backendGroupWithTLS := []BackendGroup{
+		{
+			Backends: []Backend{
+				{Valid: true, VerifyTLS: &VerifyTLS{CertBundleID: generateCertBundleID(backendBundle.Name)}},
+			},
+		},
+	}
+
+	extAuthIDs := map[CertBundleID]struct{}{
+		generateCertBundleID(extAuthBundle.Name): {},
+	}
+
+	tests := []struct {
+		authBundles          map[CertBundleID]CertBundle
+		expected             map[CertBundleID]CertBundle
+		extAuthCertBundleIDs map[CertBundleID]struct{}
+		name                 string
+		refCertBundles       []secrets.CertificateBundle
+		backendGroups        []BackendGroup
+	}{
+		{
+			name:                 "external auth filter BTP cert bundle is written even when no backend group references it",
+			refCertBundles:       []secrets.CertificateBundle{extAuthBundle},
+			backendGroups:        nil,
+			extAuthCertBundleIDs: extAuthIDs,
+			expected: map[CertBundleID]CertBundle{
+				generateCertBundleID(extAuthBundle.Name): CertBundle("ext-auth-ca-data"),
+			},
+		},
+		{
+			name:                 "both backend group BTP and external auth filter BTP cert bundles are written together",
+			refCertBundles:       []secrets.CertificateBundle{backendBundle, extAuthBundle},
+			backendGroups:        backendGroupWithTLS,
+			extAuthCertBundleIDs: extAuthIDs,
+			expected: map[CertBundleID]CertBundle{
+				generateCertBundleID(backendBundle.Name): CertBundle("backend-ca-data"),
+				generateCertBundleID(extAuthBundle.Name): CertBundle("ext-auth-ca-data"),
+			},
+		},
+		{
+			name:                 "no external auth cert bundle IDs and no backend groups results in empty bundle map",
+			refCertBundles:       []secrets.CertificateBundle{extAuthBundle},
+			extAuthCertBundleIDs: nil,
+			expected:             map[CertBundleID]CertBundle{},
+		},
+		{
+			name:        "auth cert bundles are always included regardless of backend or external auth references",
+			authBundles: map[CertBundleID]CertBundle{"auth-oidc-1": CertBundle("oidc-ca")},
+			expected:    map[CertBundleID]CertBundle{"auth-oidc-1": CertBundle("oidc-ca")},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			result := buildCertBundles(
+				test.refCertBundles,
+				test.backendGroups,
+				test.extAuthCertBundleIDs,
+				test.authBundles,
+			)
+
+			g.Expect(result).To(Equal(test.expected))
 		})
 	}
 }

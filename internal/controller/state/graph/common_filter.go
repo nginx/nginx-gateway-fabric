@@ -46,6 +46,10 @@ type Filter struct {
 	// Will be non-nil if FilterType is FilterRequestMirror.
 	// Can be set on GRPCRoutes and HTTPRoutes.
 	RequestMirror *v1.HTTPRequestMirrorFilter
+	// ExternalAuth holds an HTTP External Auth filter.
+	// Will be non-nil if FilterType is FilterExternalAuth.
+	// Can be set on HTTPRoutes only.
+	ExternalAuth *v1.HTTPExternalAuthFilter
 	// ExtensionRef holds an Extension Ref filter.
 	// Will be non-nil if FilterType is FilterExtensionRef.
 	// Can be set on GRPCRoutes and HTTPRoutes.
@@ -76,6 +80,7 @@ const (
 const (
 	FilterRequestRedirect = FilterType(v1.HTTPRouteFilterRequestRedirect)
 	FilterURLRewrite      = FilterType(v1.HTTPRouteFilterURLRewrite)
+	FilterExternalAuth    = FilterType(v1.HTTPRouteFilterExternalAuth)
 )
 
 func convertHTTPRouteFilters(filters []v1.HTTPRouteFilter) []Filter {
@@ -90,6 +95,7 @@ func convertHTTPRouteFilters(filters []v1.HTTPRouteFilter) []Filter {
 			RequestRedirect:        filter.RequestRedirect,
 			URLRewrite:             filter.URLRewrite,
 			RequestMirror:          filter.RequestMirror,
+			ExternalAuth:           filter.ExternalAuth,
 			ExtensionRef:           filter.ExtensionRef,
 			CORS:                   filter.CORS,
 		})
@@ -124,11 +130,24 @@ func processRouteRuleFilters(
 	errors := routeRuleErrors{}
 	valid := true
 	seenAuth := false
+	seenExternalAuth := false
 
 	for i, f := range filters {
 		filterPath := path.Index(i)
 
 		isExtRef := f.FilterType == FilterExtensionRef && f.ExtensionRef != nil
+
+		if f.FilterType == FilterExternalAuth {
+			if seenExternalAuth {
+				errors.warn = append(errors.warn, field.Invalid(
+					filterPath,
+					f.FilterType,
+					"only one HTTPExternalAuthFilter is allowed per Route rule; subsequent filters are ignored",
+				))
+				continue
+			}
+			seenExternalAuth = true
+		}
 
 		if isExtRef && f.ExtensionRef.Kind == kinds.AuthenticationFilter {
 			if seenAuth {
@@ -197,6 +216,7 @@ var supportedHTTPFilterTypes = []FilterType{
 	FilterURLRewrite,
 	FilterRequestMirror,
 	FilterCORS,
+	FilterExternalAuth,
 }
 
 func validateFilterType(filter Filter, filterPath *field.Path) *field.Error {
@@ -246,9 +266,76 @@ func validateFilter(
 		return validateExtensionRefFilter(filter.ExtensionRef, filterPath)
 	case FilterCORS:
 		return validateFilterCORS(filter.CORS, filterPath)
+	case FilterExternalAuth:
+		return validateFilterExternalAuth(validator, filter.ExternalAuth, filterPath)
 	default:
 		panic(fmt.Sprintf("unexpected filter type %v", filter.FilterType))
 	}
+}
+
+func validateFilterExternalAuth(
+	validator validation.HTTPFieldsValidator,
+	filter *v1.HTTPExternalAuthFilter,
+	filterPath *field.Path,
+) field.ErrorList {
+	if filter == nil {
+		return field.ErrorList{field.Required(filterPath.Child("externalAuth"), "cannot be nil")}
+	}
+	if filter.ExternalAuthProtocol != v1.HTTPRouteExternalAuthHTTPProtocol {
+		return field.ErrorList{
+			field.NotSupported(
+				filterPath.Child("externalAuth", "protocol"),
+				filter.ExternalAuthProtocol,
+				[]string{string(v1.HTTPRouteExternalAuthHTTPProtocol)},
+			),
+		}
+	}
+
+	var allErrs field.ErrorList
+
+	if filter.HTTPAuthConfig != nil {
+		reqErrs := verifyExternalAuthHeaders(
+			validator,
+			filter.HTTPAuthConfig.AllowedRequestHeaders,
+			filterPath.Child("externalAuth", "http", "allowedRequestHeaders"),
+		)
+		allErrs = append(allErrs, reqErrs...)
+
+		respErrs := verifyExternalAuthHeaders(
+			validator,
+			filter.HTTPAuthConfig.AllowedResponseHeaders,
+			filterPath.Child("externalAuth", "http", "allowedResponseHeaders"),
+		)
+		allErrs = append(allErrs, respErrs...)
+
+		if filter.HTTPAuthConfig.Path != "" {
+			if err := validator.ValidatePath(filter.HTTPAuthConfig.Path); err != nil {
+				allErrs = append(
+					allErrs,
+					field.Invalid(filterPath.Child("externalAuth", "http", "path"), filter.HTTPAuthConfig.Path, err.Error()),
+				)
+			}
+		}
+	}
+
+	return allErrs
+}
+
+// verifyExternalAuthHeaders validates header names and returns any validation errors.
+func verifyExternalAuthHeaders(
+	validator validation.HTTPFieldsValidator,
+	headers []string,
+	headerPath *field.Path,
+) field.ErrorList {
+	var allErrs field.ErrorList
+
+	for i, h := range headers {
+		if err := validator.ValidateFilterHeaderName(h); err != nil {
+			allErrs = append(allErrs, field.Invalid(headerPath.Index(i), h, err.Error()))
+		}
+	}
+
+	return allErrs
 }
 
 func validateFilterMirror(mirror *v1.HTTPRequestMirrorFilter, filterPath *field.Path) field.ErrorList {
