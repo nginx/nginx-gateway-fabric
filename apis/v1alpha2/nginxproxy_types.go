@@ -996,6 +996,8 @@ type HostPort struct {
 
 // Compression defines the configuration for HTTP response compression.
 // +kubebuilder:validation:XValidation:message="type Gzip requires gzip to be set",rule="!(self.type == 'gzip' && !has(self.gzip))"
+//
+//nolint:lll
 type Compression struct {
 	// Gzip defines gzip module-specific compression settings.
 	//
