@@ -2,9 +2,9 @@
 ---
 title: API reference
 weight: 100
-nd-content-type: reference
-nd-product: FABRIC
-nd-docs: DOCS-1855
+f5-content-type: reference
+f5-product: FABRIC
+f5-docs: DOCS-1855
 ---
 
 ## Overview
