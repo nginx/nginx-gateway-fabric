@@ -191,7 +191,7 @@ metadata:
     operatorframework.io/suggested-namespace: nginx-gateway
     repository: https://github.com/nginx/nginx-gateway-fabric
     support: NGINX Inc.
-    com.redhat.openshift.versions: v4.19
+    com.redhat.openshift.versions: v4.19-v4.21
   name: nginx-gateway-fabric.v1.4.0
   namespace: placeholder
   labels:
