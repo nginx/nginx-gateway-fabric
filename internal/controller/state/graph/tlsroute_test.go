@@ -13,6 +13,7 @@ import (
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
 
 func createTLSRoute(
@@ -38,10 +39,30 @@ func createTLSRoute(
 func TestBuildTLSRoute(t *testing.T) {
 	t.Parallel()
 
-	parentRef := gatewayv1.ParentReference{
+	gatewayParentRef := gatewayv1.ParentReference{
 		Namespace:   helpers.GetPointer[gatewayv1.Namespace]("test"),
 		Name:        "gateway",
 		SectionName: helpers.GetPointer[gatewayv1.SectionName]("l1"),
+		Kind:        helpers.GetPointer[gatewayv1.Kind](kinds.Gateway),
+	}
+
+	listenerSetParentRef := gatewayv1.ParentReference{
+		Namespace:   helpers.GetPointer[gatewayv1.Namespace]("test"),
+		Name:        "listener-set",
+		SectionName: helpers.GetPointer[gatewayv1.SectionName]("ls-l1"),
+		Kind:        helpers.GetPointer[gatewayv1.Kind](kinds.ListenerSet),
+	}
+
+	listenerSets := map[types.NamespacedName]*ListenerSet{
+		{Namespace: "test", Name: "listener-set"}: {
+			Source: &gatewayv1.ListenerSet{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: "test",
+					Name:      "listener-set",
+				},
+			},
+			Valid: true,
+		},
 	}
 
 	createGateway := func() *Gateway {
@@ -56,21 +77,29 @@ func TestBuildTLSRoute(t *testing.T) {
 		}
 	}
 
-	parentRefGraph := ParentRef{
+	gatewayParentRefGraph := ParentRef{
 		SectionName: helpers.GetPointer[gatewayv1.SectionName]("l1"),
-		Gateway: &ParentRefGateway{
-			NamespacedName: types.NamespacedName{
-				Namespace: "test",
-				Name:      "gateway",
-			},
+		Kind:        gatewayv1.Kind(kinds.Gateway),
+		NamespacedName: types.NamespacedName{
+			Namespace: "test",
+			Name:      "gateway",
+		},
+	}
+
+	listenerSetParentRefGraph := ParentRef{
+		SectionName: helpers.GetPointer[gatewayv1.SectionName]("ls-l1"),
+		Kind:        gatewayv1.Kind(kinds.ListenerSet),
+		NamespacedName: types.NamespacedName{
+			Namespace: "test",
+			Name:      "listener-set",
 		},
 	}
 	duplicateParentRefsGtr := createTLSRoute(
 		"hi.example.com",
 		nil,
 		[]gatewayv1.ParentReference{
-			parentRef,
-			parentRef,
+			gatewayParentRef,
+			gatewayParentRef,
 		},
 	)
 	noParentRefsGtr := createTLSRoute(
@@ -82,14 +111,14 @@ func TestBuildTLSRoute(t *testing.T) {
 		"hi....com",
 		nil,
 		[]gatewayv1.ParentReference{
-			parentRef,
+			gatewayParentRef,
 		},
 	)
 	noRulesGtr := createTLSRoute(
 		"app.example.com",
 		nil,
 		[]gatewayv1.ParentReference{
-			parentRef,
+			gatewayParentRef,
 		},
 	)
 	backedRefDNEGtr := createTLSRoute(
@@ -107,7 +136,7 @@ func TestBuildTLSRoute(t *testing.T) {
 			},
 		},
 		[]gatewayv1.ParentReference{
-			parentRef,
+			gatewayParentRef,
 		},
 	)
 
@@ -127,7 +156,7 @@ func TestBuildTLSRoute(t *testing.T) {
 			},
 		},
 		[]gatewayv1.ParentReference{
-			parentRef,
+			gatewayParentRef,
 		},
 	)
 
@@ -147,7 +176,7 @@ func TestBuildTLSRoute(t *testing.T) {
 			},
 		},
 		[]gatewayv1.ParentReference{
-			parentRef,
+			gatewayParentRef,
 		},
 	)
 
@@ -166,7 +195,7 @@ func TestBuildTLSRoute(t *testing.T) {
 			},
 		},
 		[]gatewayv1.ParentReference{
-			parentRef,
+			gatewayParentRef,
 		},
 	)
 
@@ -183,7 +212,7 @@ func TestBuildTLSRoute(t *testing.T) {
 			},
 		},
 		[]gatewayv1.ParentReference{
-			parentRef,
+			gatewayParentRef,
 		},
 	)
 
@@ -202,7 +231,26 @@ func TestBuildTLSRoute(t *testing.T) {
 			},
 		},
 		[]gatewayv1.ParentReference{
-			parentRef,
+			gatewayParentRef,
+		},
+	)
+
+	// Valid TLSRoute with ListenerSet parent reference
+	validTLSRWithListenerSetParentRef := createTLSRoute("app.example.com",
+		[]gatewayv1.TLSRouteRule{
+			{
+				BackendRefs: []gatewayv1.BackendRef{
+					{
+						BackendObjectReference: gatewayv1.BackendObjectReference{
+							Name: "hi",
+							Port: helpers.GetPointer[gatewayv1.PortNumber](80),
+						},
+					},
+				},
+			},
+		},
+		[]gatewayv1.ParentReference{
+			listenerSetParentRef,
 		},
 	)
 
@@ -307,7 +355,7 @@ func TestBuildTLSRoute(t *testing.T) {
 			expected: &L4Route{
 				Source:     invalidHostnameGtr,
 				RouteType:  RouteTypeTLS,
-				ParentRefs: []ParentRef{parentRefGraph},
+				ParentRefs: []ParentRef{gatewayParentRefGraph},
 				Conditions: []conditions.Condition{conditions.NewRouteUnsupportedValue(
 					"Spec.hostnames[0]: Invalid value: \"hi....com\": a lowercase RFC 1" +
 						"123 subdomain must consist of lower case alphanumeric characters" +
@@ -327,7 +375,7 @@ func TestBuildTLSRoute(t *testing.T) {
 			expected: &L4Route{
 				Source:     noRulesGtr,
 				RouteType:  RouteTypeTLS,
-				ParentRefs: []ParentRef{parentRefGraph},
+				ParentRefs: []ParentRef{gatewayParentRefGraph},
 				Spec: L4RouteSpec{
 					Hostnames: []gatewayv1.Hostname{
 						"app.example.com",
@@ -348,7 +396,7 @@ func TestBuildTLSRoute(t *testing.T) {
 			expected: &L4Route{
 				Source:     validRefSameNs,
 				RouteType:  RouteTypeTLS,
-				ParentRefs: []ParentRef{parentRefGraph},
+				ParentRefs: []ParentRef{gatewayParentRefGraph},
 				Spec: L4RouteSpec{
 					Hostnames: []gatewayv1.Hostname{
 						"app.example.com",
@@ -378,7 +426,7 @@ func TestBuildTLSRoute(t *testing.T) {
 			expected: &L4Route{
 				Source:     validRefSameNs,
 				RouteType:  RouteTypeTLS,
-				ParentRefs: []ParentRef{parentRefGraph},
+				ParentRefs: []ParentRef{gatewayParentRefGraph},
 				Spec: L4RouteSpec{
 					Hostnames: []gatewayv1.Hostname{
 						"app.example.com",
@@ -408,7 +456,7 @@ func TestBuildTLSRoute(t *testing.T) {
 			expected: &L4Route{
 				Source:     backedRefDNEGtr,
 				RouteType:  RouteTypeTLS,
-				ParentRefs: []ParentRef{parentRefGraph},
+				ParentRefs: []ParentRef{gatewayParentRefGraph},
 				Spec: L4RouteSpec{
 					Hostnames: []gatewayv1.Hostname{
 						"app.example.com",
@@ -438,7 +486,7 @@ func TestBuildTLSRoute(t *testing.T) {
 			expected: &L4Route{
 				Source:     wrongBackendRefGroupGtr,
 				RouteType:  RouteTypeTLS,
-				ParentRefs: []ParentRef{parentRefGraph},
+				ParentRefs: []ParentRef{gatewayParentRefGraph},
 				Spec: L4RouteSpec{
 					Hostnames: []gatewayv1.Hostname{
 						"app.example.com",
@@ -467,7 +515,7 @@ func TestBuildTLSRoute(t *testing.T) {
 			expected: &L4Route{
 				Source:     wrongBackendRefKindGtr,
 				RouteType:  RouteTypeTLS,
-				ParentRefs: []ParentRef{parentRefGraph},
+				ParentRefs: []ParentRef{gatewayParentRefGraph},
 				Spec: L4RouteSpec{
 					Hostnames: []gatewayv1.Hostname{
 						"app.example.com",
@@ -496,7 +544,7 @@ func TestBuildTLSRoute(t *testing.T) {
 			expected: &L4Route{
 				Source:     diffNsBackendRef,
 				RouteType:  RouteTypeTLS,
-				ParentRefs: []ParentRef{parentRefGraph},
+				ParentRefs: []ParentRef{gatewayParentRefGraph},
 				Spec: L4RouteSpec{
 					Hostnames: []gatewayv1.Hostname{
 						"app.example.com",
@@ -525,7 +573,7 @@ func TestBuildTLSRoute(t *testing.T) {
 			expected: &L4Route{
 				Source:     portNilBackendRefGtr,
 				RouteType:  RouteTypeTLS,
-				ParentRefs: []ParentRef{parentRefGraph},
+				ParentRefs: []ParentRef{gatewayParentRefGraph},
 				Spec: L4RouteSpec{
 					Hostnames: []gatewayv1.Hostname{
 						"app.example.com",
@@ -555,13 +603,12 @@ func TestBuildTLSRoute(t *testing.T) {
 				RouteType: RouteTypeTLS,
 				ParentRefs: []ParentRef{
 					{
-						SectionName: helpers.GetPointer[gatewayv1.SectionName]("l1"),
-						Gateway: &ParentRefGateway{
-							NamespacedName: types.NamespacedName{
-								Namespace: "test",
-								Name:      "gateway",
-							},
-							EffectiveNginxProxy: &EffectiveNginxProxy{IPFamily: helpers.GetPointer(ngfAPI.IPv6)},
+						SectionName:         helpers.GetPointer[gatewayv1.SectionName]("l1"),
+						EffectiveNginxProxy: &EffectiveNginxProxy{IPFamily: helpers.GetPointer(ngfAPI.IPv6)},
+						Kind:                gatewayv1.Kind(kinds.Gateway),
+						NamespacedName: types.NamespacedName{
+							Namespace: "test",
+							Name:      "gateway",
 						},
 					},
 				},
@@ -594,7 +641,7 @@ func TestBuildTLSRoute(t *testing.T) {
 			expected: &L4Route{
 				Source:     diffNsBackendRef,
 				RouteType:  RouteTypeTLS,
-				ParentRefs: []ParentRef{parentRefGraph},
+				ParentRefs: []ParentRef{gatewayParentRefGraph},
 				Spec: L4RouteSpec{
 					Hostnames: []gatewayv1.Hostname{
 						"app.example.com",
@@ -621,7 +668,7 @@ func TestBuildTLSRoute(t *testing.T) {
 			expected: &L4Route{
 				Source:     validRefSameNs,
 				RouteType:  RouteTypeTLS,
-				ParentRefs: []ParentRef{parentRefGraph},
+				ParentRefs: []ParentRef{gatewayParentRefGraph},
 				Spec: L4RouteSpec{
 					Hostnames: []gatewayv1.Hostname{
 						"app.example.com",
@@ -648,7 +695,7 @@ func TestBuildTLSRoute(t *testing.T) {
 			expected: &L4Route{
 				Source:     validRefSameNs,
 				RouteType:  RouteTypeTLS,
-				ParentRefs: []ParentRef{parentRefGraph},
+				ParentRefs: []ParentRef{gatewayParentRefGraph},
 				Spec: L4RouteSpec{
 					Hostnames: []gatewayv1.Hostname{
 						"app.example.com",
@@ -670,6 +717,33 @@ func TestBuildTLSRoute(t *testing.T) {
 			resolver: alwaysTrueRefGrantResolver,
 			name:     "valid; same namespace, valid appProtocol",
 		},
+		{
+			gtr: validTLSRWithListenerSetParentRef,
+			expected: &L4Route{
+				Source:     validTLSRWithListenerSetParentRef,
+				RouteType:  RouteTypeTLS,
+				ParentRefs: []ParentRef{listenerSetParentRefGraph},
+				Spec: L4RouteSpec{
+					Hostnames: []gatewayv1.Hostname{
+						"app.example.com",
+					},
+					BackendRef: BackendRef{
+						SvcNsName:          svcNsName,
+						ServicePort:        apiv1.ServicePort{Port: 80},
+						Valid:              true,
+						InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
+					},
+				},
+				Attachable: true,
+				Valid:      true,
+			},
+			gateway: createGateway(),
+			services: map[types.NamespacedName]*apiv1.Service{
+				svcNsName: createSvc("hi", 80),
+			},
+			resolver: alwaysTrueRefGrantResolver,
+			name:     "valid TLS route with ListenerSet parent ref",
+		},
 	}
 
 	for _, test := range tests {
@@ -682,6 +756,7 @@ func TestBuildTLSRoute(t *testing.T) {
 				map[types.NamespacedName]*Gateway{client.ObjectKeyFromObject(test.gateway.Source): test.gateway},
 				test.services,
 				test.resolver,
+				listenerSets,
 			)
 			g.Expect(helpers.Diff(test.expected, r)).To(BeEmpty())
 		})

@@ -52,25 +52,32 @@ func (v *Validator) Conflicts(polA, polB policies.Policy) bool {
 }
 
 func conflicts(a, b ngfAPI.ProxySettingsPolicySpec) bool {
-	if a.Buffering != nil && b.Buffering != nil {
-		if a.Buffering.Disable != nil && b.Buffering.Disable != nil {
-			return true
-		}
+	return bufferingConflicts(a.Buffering, b.Buffering) || timeoutConflicts(a.Timeout, b.Timeout)
+}
 
-		if a.Buffering.BufferSize != nil && b.Buffering.BufferSize != nil {
-			return true
-		}
-
-		if a.Buffering.Buffers != nil && b.Buffering.Buffers != nil {
-			return true
-		}
-
-		if a.Buffering.BusyBuffersSize != nil && b.Buffering.BusyBuffersSize != nil {
-			return true
-		}
+func bufferingConflicts(a, b *ngfAPI.ProxyBuffering) bool {
+	if a == nil || b == nil {
+		return false
 	}
 
-	return false
+	return bothSet(a.Disable, b.Disable) ||
+		bothSet(a.BufferSize, b.BufferSize) ||
+		bothSet(a.Buffers, b.Buffers) ||
+		bothSet(a.BusyBuffersSize, b.BusyBuffersSize)
+}
+
+func timeoutConflicts(a, b *ngfAPI.ProxyTimeout) bool {
+	if a == nil || b == nil {
+		return false
+	}
+
+	return bothSet(a.Connect, b.Connect) ||
+		bothSet(a.Read, b.Read) ||
+		bothSet(a.Send, b.Send)
+}
+
+func bothSet[T any](a, b *T) bool {
+	return a != nil && b != nil
 }
 
 // validateSettings performs validation on fields in the spec that are vulnerable to code injection.
@@ -84,7 +91,35 @@ func (v *Validator) validateSettings(spec ngfAPI.ProxySettingsPolicySpec) error 
 		allErrs = append(allErrs, validateBusyBufferSizeRelationships(*spec.Buffering, fieldPath.Child("buffering"))...)
 	}
 
+	if spec.Timeout != nil {
+		allErrs = append(allErrs, v.validateTimeouts(*spec.Timeout, fieldPath.Child("timeout"))...)
+	}
+
 	return allErrs.ToAggregate()
+}
+
+func (v *Validator) validateTimeouts(timeout ngfAPI.ProxyTimeout, fieldPath *field.Path) field.ErrorList {
+	var allErrs field.ErrorList
+
+	if timeout.Connect != nil {
+		if err := v.genericValidator.ValidateNginxDuration(string(*timeout.Connect)); err != nil {
+			allErrs = append(allErrs, field.Invalid(fieldPath.Child("connect"), timeout.Connect, err.Error()))
+		}
+	}
+
+	if timeout.Read != nil {
+		if err := v.genericValidator.ValidateNginxDuration(string(*timeout.Read)); err != nil {
+			allErrs = append(allErrs, field.Invalid(fieldPath.Child("read"), timeout.Read, err.Error()))
+		}
+	}
+
+	if timeout.Send != nil {
+		if err := v.genericValidator.ValidateNginxDuration(string(*timeout.Send)); err != nil {
+			allErrs = append(allErrs, field.Invalid(fieldPath.Child("send"), timeout.Send, err.Error()))
+		}
+	}
+
+	return allErrs
 }
 
 func (v *Validator) validateBufferSizes(buffering ngfAPI.ProxyBuffering, fieldPath *field.Path) field.ErrorList {

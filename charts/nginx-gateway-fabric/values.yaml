@@ -113,8 +113,40 @@ nginxGateway:
     # -- Port in which the readiness endpoint is exposed.
     port: 8081
 
+    # @schema
+    # type: integer
+    # minimum: 0
+    # @schema
     # -- The number of seconds after the Pod has started before the readiness probes are initiated.
     initialDelaySeconds: 3
+
+    # @schema
+    # type: integer
+    # minimum: 1
+    # @schema
+    # -- How often (in seconds) to perform the readiness probe.
+    periodSeconds: 10
+
+    # @schema
+    # type: integer
+    # minimum: 1
+    # @schema
+    # -- The number of retries after a failed probe before marking the container as Unready.
+    failureThreshold: 3
+
+    # @schema
+    # type: integer
+    # minimum: 1
+    # @schema
+    # -- Number of seconds after which the probe times out.
+    timeoutSeconds: 1
+
+    # @schema
+    # type: integer
+    # minimum: 1
+    # @schema
+    # -- Minimum consecutive successes for the probe to be considered successful after having failed.
+    successThreshold: 1
 
   # -- The image configuration for the NGINX Gateway Fabric control plane.
   image:
@@ -133,8 +165,25 @@ nginxGateway:
     # -- Enable the collection of product telemetry.
     enable: true
 
+  # @schema
+  # type: object
+  # description: The lifecycle hooks for the nginx-gateway container. See https://kubernetes.io/docs/tasks/configure-pod-container/define-lifecycle-hook/
+  # @schema
   # -- The lifecycle of the nginx-gateway container.
   lifecycle: {}
+  # -- Example:
+  #   preStop:
+  #     exec:
+  #       command:
+  #         - /bin/sh
+  #         - -c
+  #         - sleep 10
+  #   postStart:
+  #     exec:
+  #       command:
+  #         - /bin/sh
+  #         - -c
+  #         - echo "Started"
 
   # -- The resource requests and/or limits of the nginx-gateway container.
   resources: {}
@@ -564,6 +613,19 @@ nginx:
   #   serverTokens:
   #     type: string
   #     description: Sets the `server_tokens` directive. Accepts 'off', 'on', or 'build' for NGINX OSS, and any string or variable for NGINX Plus.
+  #   waf:
+  #     description: WAF configures NGINX App Protect WAF.
+  #     type: object
+  #     properties:
+  #       enabled:
+  #         description: Enabled enables NGINX App Protect WAF functionality.
+  #         type: boolean
+  #       disableCookieSeed:
+  #         description: DisableCookieSeed disables the app_protect_cookie_seed directive.
+  #         type: boolean
+  #       bundleFailOpen:
+  #         description: BundleFailOpen controls the behavior when a WAF policy bundle has not yet been successfully fetched. When true, traffic is served without WAF protection until the bundle is available. When false (default), configuration is withheld until the bundle is fetched.
+  #         type: boolean
   # @schema
   # -- The configuration for the data plane that is contained in the NginxProxy resource. This is applied globally to all Gateways
   # managed by this instance of NGINX Gateway Fabric.
@@ -623,8 +685,25 @@ nginx:
     # -- The resource requirements of the NGINX container. You should set this value if you want to use dataplane Autoscaling(HPA).
     resources: {}
 
+    # @schema
+    # type: object
+    # description: The lifecycle hooks for the NGINX container. See https://kubernetes.io/docs/tasks/configure-pod-container/define-lifecycle-hook/
+    # @schema
     # -- The lifecycle of the NGINX container.
     lifecycle: {}
+    # -- Example:
+    #   preStop:
+    #     exec:
+    #       command:
+    #         - /bin/sh
+    #         - -c
+    #         - sleep 10
+    #   postStart:
+    #     exec:
+    #       command:
+    #         - /bin/sh
+    #         - -c
+    #         - echo "Started"
 
     # -- volumeMounts are the additional volume mounts for the NGINX container.
     volumeMounts: []
@@ -641,6 +720,32 @@ nginx:
 
       # -- The number of seconds after the Pod has started before the readiness probes are initiated.
       # initialDelaySeconds: 3
+  # -- Configuration for NGINX App Protect WAF v5 containers.
+  # These containers are only deployed when WAF is enabled via nginx.config.waf.enable: true.
+  # All settings are optional overrides - defaults are provided by NGF.
+  wafContainers: {}
+    # -- WAF Enforcer container configuration.
+    # enforcer:
+    #   image: {}
+
+    # -- The resource requirements of the WAF Enforcer container.
+    #   resources: {}
+    #
+    #   # -- Additional volume mounts for the WAF enforcer container.
+    #   # NAP v5 shared volumes are automatically configured by NGF.
+    #   volumeMounts: []
+
+    # -- WAF Configuration Manager container configuration.
+    # configManager:
+    #   # -- Container image configuration
+    #   image: {}
+    #
+    #   # -- The resource requirements of the WAF config manager container.
+    #   resources: {}
+
+    #   # -- Additional volume mounts for the WAF config manager container.
+    #   # NAP v5 shared volumes are automatically configured by NGF.
+    #   volumeMounts: []
 
   # -- The service configuration for the NGINX data plane. This is applied globally to all Gateways managed by this
   # instance of NGINX Gateway Fabric.

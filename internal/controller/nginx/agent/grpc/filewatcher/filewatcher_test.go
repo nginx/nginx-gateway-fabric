@@ -20,10 +20,9 @@ func TestFileWatcher_Watch(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
-	file := path.Join(os.TempDir(), "test-file")
+	file := path.Join(t.TempDir(), "test-file")
 	_, err := os.Create(file)
 	g.Expect(err).ToNot(HaveOccurred())
-	defer os.Remove(file)
 
 	w, err := NewFileWatcher(logr.Discard(), []string{file}, notifyCh)
 	g.Expect(err).ToNot(HaveOccurred())
@@ -31,8 +30,10 @@ func TestFileWatcher_Watch(t *testing.T) {
 
 	go w.Watch(ctx)
 
-	w.watcher.Events <- fsnotify.Event{Name: file, Op: fsnotify.Write}
 	g.Eventually(func() bool {
+		if err := os.WriteFile(file, []byte("data"), 0o600); err != nil {
+			return false
+		}
 		return w.filesChanged.Load()
 	}).Should(BeTrue())
 

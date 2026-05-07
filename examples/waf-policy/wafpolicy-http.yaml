@@ -1,0 +1,26 @@
+apiVersion: gateway.nginx.org/v1alpha1
+kind: WAFPolicy
+metadata:
+  name: gateway-base-protection
+spec:
+  targetRefs:
+  - group: gateway.networking.k8s.io
+    kind: Gateway
+    name: gateway
+  type: HTTP
+  policySource:
+    httpSource:
+      url: http://bundle-server.default.svc.cluster.local/attack-signatures-blocking.tgz
+      # Optional - add authentication if your bundle server requires it
+      # auth:
+      #   secretRef:
+      #     name: bundle-credentials
+      # Optional - enable automatic polling for bundle updates
+      # polling:
+      #   enabled: true
+      #   interval: 5m
+  securityLogs:
+  - destination:
+      type: stderr
+    logSource:
+      defaultProfile: log_blocked

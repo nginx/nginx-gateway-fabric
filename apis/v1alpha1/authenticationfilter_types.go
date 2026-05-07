@@ -241,12 +241,6 @@ type OIDCLogoutConfig struct {
 	TokenHint *bool `json:"tokenHint,omitempty"`
 }
 
-// LocalObjectReference specifies a local Kubernetes object.
-type LocalObjectReference struct {
-	// Name is the name of the referenced object.
-	Name string `json:"name"`
-}
-
 // JWTKeySource specifies the source of the keys used to verify JWT signatures.
 // +kubebuilder:validation:Enum=File;Remote
 type JWTKeySource string

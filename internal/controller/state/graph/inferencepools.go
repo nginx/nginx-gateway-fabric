@@ -43,6 +43,7 @@ func buildReferencedInferencePools(
 	gws map[types.NamespacedName]*Gateway,
 	inferencePools map[types.NamespacedName]*inference.InferencePool,
 	services map[types.NamespacedName]*v1.Service,
+	listenerSets map[types.NamespacedName]*ListenerSet,
 ) map[types.NamespacedName]*ReferencedInferencePool {
 	referencedInferencePools := make(map[types.NamespacedName]*ReferencedInferencePool, len(inferencePools))
 
@@ -51,7 +52,7 @@ func buildReferencedInferencePools(
 			continue
 		}
 
-		processInferencePoolsForGateway(routes, gw, referencedInferencePools, inferencePools)
+		processInferencePoolsForGateway(routes, gw, referencedInferencePools, inferencePools, listenerSets)
 	}
 
 	if len(referencedInferencePools) == 0 {
@@ -80,11 +81,12 @@ func processInferencePoolsForGateway(
 	gw *Gateway,
 	referencedInferencePools map[types.NamespacedName]*ReferencedInferencePool,
 	inferencePools map[types.NamespacedName]*inference.InferencePool,
+	listenerSets map[types.NamespacedName]*ListenerSet,
 ) {
 	gwKey := client.ObjectKeyFromObject(gw.Source)
 
 	for _, route := range routes {
-		if !routeBelongsToGateway(route.ParentRefs, gwKey) {
+		if !routeBelongsToGateway(route.ParentRefs, gwKey, listenerSets) {
 			continue
 		}
 
@@ -99,8 +101,13 @@ func processInferencePoolsForGateway(
 					namespace = string(*ref.Namespace)
 				}
 
+				name := ref.InferencePoolName
+				if name == "" {
+					name = string(ref.Name)
+				}
+
 				poolName := types.NamespacedName{
-					Name:      ref.InferencePoolName,
+					Name:      name,
 					Namespace: namespace,
 				}
 

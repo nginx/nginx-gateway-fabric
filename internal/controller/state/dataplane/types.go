@@ -44,6 +44,8 @@ type Configuration struct {
 	DeploymentContext DeploymentContext
 	// Logging defines logging related settings for NGINX.
 	Logging Logging
+	// WAF defines the WAF configuration.
+	WAF WAFConfig
 	// BackendGroups holds all unique BackendGroups.
 	BackendGroups []BackendGroup
 	// TCPServers holds all TCPServers
@@ -96,6 +98,13 @@ type CertBundle []byte
 
 // AuthFileData is the data for a basic auth user file.
 type AuthFileData []byte
+
+// WAFBundleID is a unique identifier for a WAF bundle.
+// The ID is safe to use as a file name.
+type WAFBundleID string
+
+// WAFBundle is a WAF bundle.
+type WAFBundle []byte
 
 // SSLKeyPair is an SSL private/public key pair.
 type SSLKeyPair struct {
@@ -182,15 +191,34 @@ const (
 	CookieBasedSessionPersistence SessionPersistenceType = "cookie"
 )
 
+type SSLVerifyClientMode string
+
+const (
+	// SSLVerifyClientOn requires a client certificate that is signed by a trusted CA.
+	// Clients that do not present a certificate, or present one that is not CA-verified, are rejected.
+	SSLVerifyClientOn SSLVerifyClientMode = "on"
+	// SSLVerifyClientOptionalNoCA indicates that client certificates are requested but not required or validated.
+	// Any certificate or none is accepted without CA validation.
+	SSLVerifyClientOptionalNoCA SSLVerifyClientMode = "optional_no_ca"
+)
+
 // SSL is the SSL configuration for a server.
 type SSL struct {
 	// Protocols specifies the SSL/TLS protocols to enable.
 	Protocols string
 	// Ciphers specifies the SSL/TLS ciphers to use.
 	Ciphers string
+	// ClientCertBundleID is the ID of the client certificate bundle for client verification.
+	ClientCertBundleID CertBundleID
+	// VerifyClient specifies the client certificate verification mode.
+	// This can be "on" or "optional_no_ca".
+	VerifyClient SSLVerifyClientMode
 	// KeyPairIDs are the IDs of the corresponding SSLKeyPairs for the server.
 	// Multiple IDs allow nginx to select the appropriate certificate via SNI.
 	KeyPairIDs []SSLKeyPairID
+	// RequireVerifiedCert specifies whether to require a verified client certificate for the server.
+	// When true, NGINX will return 444 and close the connection for clients without a trusted certificate.
+	RequireVerifiedCert bool
 	// PreferServerCiphers specifies whether server ciphers should be preferred over client ciphers.
 	PreferServerCiphers bool
 }
@@ -216,25 +244,25 @@ type InvalidHTTPFilter struct{}
 
 // HTTPFilters hold the filters for a MatchRule.
 type HTTPFilters struct {
-	// InvalidFilter is a special filter that indicates whether the filters are invalid. If this is the case,
-	// the data plane must return 500 error, and all other filters are nil.
+	// InvalidFilter is a special filter for handling the case when configured filters are invalid.
 	InvalidFilter *InvalidHTTPFilter
-	// RequestRedirect holds the HTTPRequestRedirectFilter.
+	// RequestRedirect holds an HTTP request redirect filter.
 	RequestRedirect *HTTPRequestRedirectFilter
-	// RequestURLRewrite holds the HTTPURLRewriteFilter.
+	// RequestURLRewrite holds an HTTP URL rewrite filter.
 	RequestURLRewrite *HTTPURLRewriteFilter
-	// RequestHeaderModifiers holds the HTTPHeaderFilter.
+	// RequestHeaderModifiers holds an HTTP header modifier filter for requests.
 	RequestHeaderModifiers *HTTPHeaderFilter
-	// ResponseHeaderModifiers holds the HTTPHeaderFilter.
+	// ResponseHeaderModifiers holds an HTTP header modifier filter for responses.
 	ResponseHeaderModifiers *HTTPHeaderFilter
-	// AuthenticationFilter holds the AuthenticationFilter for the MatchRule.
+	// AuthenticationFilter holds the authentication filter configuration.
 	AuthenticationFilter *AuthenticationFilter
-	// CORSFilter holds the HTTPCORSFilter for the MatchRule.
+	// CORSFilter holds the CORS filter configuration.
 	CORSFilter *HTTPCORSFilter
-	// RequestMirrors holds the HTTPRequestMirrorFilters. There could be more than one specified.
+	// ExternalAuthFilter holds external auth filter configuration.
+	ExternalAuthFilter *HTTPExternalAuthFilter
+	// RequestMirrors holds HTTP request mirror filters.
 	RequestMirrors []*HTTPRequestMirrorFilter
-	// SnippetsFilters holds all the SnippetsFilters for the MatchRule.
-	// Unlike the core and extended filters, there can be more than one SnippetsFilters defined on a routing rule.
+	// SnippetsFilters holds snippets filter configurations.
 	SnippetsFilters []SnippetsFilter
 }
 
@@ -269,6 +297,29 @@ type HTTPCORSFilter struct {
 	AllowCredentials bool
 	// MaxAge specifies preflight request cache duration.
 	MaxAge int32
+}
+
+// HTTPExternalAuthFilter represents configuration for external authorization filter.
+type HTTPExternalAuthFilter struct {
+	// VerifyTLS holds TLS verification config when the auth backend has a BackendTLSPolicy.
+	VerifyTLS *VerifyTLS
+	// UpstreamName is the NGINX upstream name for the auth backend service.
+	UpstreamName string
+	// InternalPath is the NGINX internal location path for the auth subrequest.
+	InternalPath string
+	// PathPrefix is an optional path prefix added to the request path when forwarding to the auth server.
+	PathPrefix string
+	// AllowedRequestHeaders are extra headers to forward from the client request to the auth server,
+	// beyond the mandatory set (Host, Method, Path, Content-Length, Authorization).
+	AllowedRequestHeaders []string
+	// AllowedResponseHeaders are headers from the auth response to copy into the proxied backend request.
+	AllowedResponseHeaders []string
+	// ForwardBody indicates whether the client request body should be forwarded to the auth server.
+	ForwardBody bool
+	// MaxBodySize sets the maximum size of the request body that the client is allowed to send.
+	// It is only applicable when ForwardBody is true. Requests with body larger than the specified size
+	// will be rejected with 413 Payload Too Large error.
+	MaxBodySize uint16
 }
 
 // AuthenticationFilter holds the top level spec for each kind of authentication (e.g. Basic, JWT, etc...).
@@ -731,4 +782,16 @@ var serverTokensKeywords = map[string]struct{}{
 	graph.ServerTokenBuild: {},
 	graph.ServerTokenOff:   {},
 	graph.ServerTokenOn:    {},
+}
+
+// WAFConfig holds the WAF configuration for the dataplane.
+// It is used to determine whether WAF is enabled and to load the WAF module, as well as storing the WAFBundles.
+type WAFConfig struct {
+	// WAFBundles are the WAF Policy Bundles to be stored in the app_protect bundles directory.
+	WAFBundles map[WAFBundleID]WAFBundle
+	// CookieSeed is a stable value used as the app_protect_cookie_seed directive, ensuring WAF session
+	// cookies are consistent across multiple NGINX replicas.
+	CookieSeed string
+	// Enabled indicates whether WAF is enabled.
+	Enabled bool
 }

@@ -25,6 +25,8 @@ type Policy interface {
 type GlobalSettings struct {
 	// TelemetryEnabled is whether telemetry is enabled in the NginxProxy resource.
 	TelemetryEnabled bool
+	// WAFEnabled is whether WAF is enabled in the NginxProxy resource.
+	WAFEnabled bool
 }
 
 // ValidateTargetRef validates a policy's targetRef for the proper group and kind.

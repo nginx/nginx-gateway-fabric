@@ -68,34 +68,32 @@ func TestResolve(t *testing.T) {
 	resourceResolver := resolver.NewResourceResolver(resources)
 
 	tests := []struct {
-		name          string
-		nsname        types.NamespacedName
-		errorExpected bool
+		name           string
+		nsname         types.NamespacedName
+		expectedErrMsg string
 	}{
 		{
-			name:          "valid configmap1",
-			nsname:        types.NamespacedName{Namespace: "test", Name: "configmap1"},
-			errorExpected: false,
+			name:   "valid configmap1",
+			nsname: types.NamespacedName{Namespace: "test", Name: "configmap1"},
 		},
 		{
-			name:          "valid configmap2",
-			nsname:        types.NamespacedName{Namespace: "test", Name: "configmap2"},
-			errorExpected: false,
+			name:   "valid configmap2",
+			nsname: types.NamespacedName{Namespace: "test", Name: "configmap2"},
 		},
 		{
-			name:          "invalid configmap",
-			nsname:        types.NamespacedName{Namespace: "test", Name: "invalid"},
-			errorExpected: true,
+			name:           "invalid configmap",
+			nsname:         types.NamespacedName{Namespace: "test", Name: "invalid"},
+			expectedErrMsg: "the data field \"ca.crt\" must hold a valid CERTIFICATE PEM block",
 		},
 		{
-			name:          "non-existent configmap",
-			nsname:        types.NamespacedName{Namespace: "test", Name: "non-existent"},
-			errorExpected: true,
+			name:           "non-existent configmap",
+			nsname:         types.NamespacedName{Namespace: "test", Name: "non-existent"},
+			expectedErrMsg: "ConfigMap test/non-existent does not exist, or is missing an expected key",
 		},
 		{
-			name:          "configmap missing ca entry",
-			nsname:        types.NamespacedName{Namespace: "test", Name: "nocaentry"},
-			errorExpected: true,
+			name:           "configmap missing ca entry",
+			nsname:         types.NamespacedName{Namespace: "test", Name: "nocaentry"},
+			expectedErrMsg: "ConfigMap does not have the data or binaryData field ca.crt",
 		},
 	}
 
@@ -104,10 +102,10 @@ func TestResolve(t *testing.T) {
 			g := NewWithT(t)
 
 			err := resourceResolver.Resolve(resolver.ResourceTypeConfigMap, test.nsname)
-			if test.errorExpected {
-				g.Expect(err).To(HaveOccurred())
-			} else {
+			if test.expectedErrMsg == "" {
 				g.Expect(err).ToNot(HaveOccurred())
+			} else {
+				g.Expect(err).To(MatchError(test.expectedErrMsg))
 			}
 		})
 	}

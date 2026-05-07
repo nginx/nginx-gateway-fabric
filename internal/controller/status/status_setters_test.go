@@ -1100,6 +1100,7 @@ func TestGWStatusEqual(t *testing.T) {
 					},
 				},
 			},
+			AttachedListenerSets: helpers.GetPointer(int32(1)),
 		}
 	}
 
@@ -1208,6 +1209,15 @@ func TestGWStatusEqual(t *testing.T) {
 			prevStatus: getDefaultStatus(),
 			curStatus: getModifiedStatus(func(status gatewayv1.GatewayStatus) gatewayv1.GatewayStatus {
 				status.Listeners[1].SupportedKinds[0].Group = helpers.GetPointer[gatewayv1.Group]("different")
+				return status
+			}),
+			expEqual: false,
+		},
+		{
+			name:       "different attached listener sets count",
+			prevStatus: getDefaultStatus(),
+			curStatus: getModifiedStatus(func(status gatewayv1.GatewayStatus) gatewayv1.GatewayStatus {
+				status.AttachedListenerSets = helpers.GetPointer(int32(3))
 				return status
 			}),
 			expEqual: false,
@@ -2545,6 +2555,346 @@ func TestNewUDPRouteStatusSetter(t *testing.T) {
 
 			g.Expect(statusSet).To(Equal(test.expStatusSet))
 			g.Expect(obj.Status).To(Equal(test.expStatus))
+		})
+	}
+}
+
+func TestNewListenerSetStatusSetter(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name                         string
+		status, newStatus, expStatus gatewayv1.ListenerSetStatus
+		expStatusSet                 bool
+	}{
+		{
+			name:         "ListenerSet has no status",
+			expStatusSet: true,
+			newStatus: gatewayv1.ListenerSetStatus{
+				Conditions: []metav1.Condition{{Message: "new condition"}},
+				Listeners: []gatewayv1.ListenerEntryStatus{
+					{
+						Name:           "listener-1",
+						AttachedRoutes: 2,
+						SupportedKinds: []gatewayv1.RouteGroupKind{
+							{Kind: gatewayv1.Kind(kinds.HTTPRoute), Group: helpers.GetPointer[gatewayv1.Group](gatewayv1.GroupName)},
+						},
+						Conditions: []metav1.Condition{{Message: "listener condition"}},
+					},
+				},
+			},
+			expStatus: gatewayv1.ListenerSetStatus{
+				Conditions: []metav1.Condition{{Message: "new condition"}},
+				Listeners: []gatewayv1.ListenerEntryStatus{
+					{
+						Name:           "listener-1",
+						AttachedRoutes: 2,
+						SupportedKinds: []gatewayv1.RouteGroupKind{
+							{Kind: gatewayv1.Kind(kinds.HTTPRoute), Group: helpers.GetPointer[gatewayv1.Group](gatewayv1.GroupName)},
+						},
+						Conditions: []metav1.Condition{{Message: "listener condition"}},
+					},
+				},
+			},
+			status: gatewayv1.ListenerSetStatus{},
+		},
+		{
+			name:         "ListenerSet has old status",
+			expStatusSet: true,
+			newStatus: gatewayv1.ListenerSetStatus{
+				Conditions: []metav1.Condition{{Message: "new condition"}},
+				Listeners: []gatewayv1.ListenerEntryStatus{
+					{
+						Name:           "listener-1",
+						AttachedRoutes: 2,
+						SupportedKinds: []gatewayv1.RouteGroupKind{
+							{Kind: gatewayv1.Kind(kinds.HTTPRoute), Group: helpers.GetPointer[gatewayv1.Group](gatewayv1.GroupName)},
+						},
+						Conditions: []metav1.Condition{{Message: "listener condition"}},
+					},
+				},
+			},
+			expStatus: gatewayv1.ListenerSetStatus{
+				Conditions: []metav1.Condition{{Message: "new condition"}},
+				Listeners: []gatewayv1.ListenerEntryStatus{
+					{
+						Name:           "listener-1",
+						AttachedRoutes: 2,
+						SupportedKinds: []gatewayv1.RouteGroupKind{
+							{Kind: gatewayv1.Kind(kinds.HTTPRoute), Group: helpers.GetPointer[gatewayv1.Group](gatewayv1.GroupName)},
+						},
+						Conditions: []metav1.Condition{{Message: "listener condition"}},
+					},
+				},
+			},
+			status: gatewayv1.ListenerSetStatus{
+				Conditions: []metav1.Condition{{Message: "old condition"}},
+				Listeners: []gatewayv1.ListenerEntryStatus{
+					{
+						Name:           "listener-1",
+						AttachedRoutes: 1,
+						SupportedKinds: []gatewayv1.RouteGroupKind{
+							{Kind: gatewayv1.Kind(kinds.HTTPRoute), Group: helpers.GetPointer[gatewayv1.Group](gatewayv1.GroupName)},
+						},
+						Conditions: []metav1.Condition{{Message: "old listener condition"}},
+					},
+				},
+			},
+		},
+		{
+			name:         "ListenerSet has multiple listeners, updates some while keeping others",
+			expStatusSet: true,
+			newStatus: gatewayv1.ListenerSetStatus{
+				Conditions: []metav1.Condition{{Message: "updated condition"}},
+				Listeners: []gatewayv1.ListenerEntryStatus{
+					{
+						Name:           "listener-1",
+						AttachedRoutes: 3,
+						SupportedKinds: []gatewayv1.RouteGroupKind{
+							{Kind: gatewayv1.Kind(kinds.HTTPRoute), Group: helpers.GetPointer[gatewayv1.Group](gatewayv1.GroupName)},
+						},
+						Conditions: []metav1.Condition{{Message: "updated listener-1 condition"}},
+					},
+					{
+						Name:           "listener-2",
+						AttachedRoutes: 1,
+						SupportedKinds: []gatewayv1.RouteGroupKind{
+							{Kind: gatewayv1.Kind(kinds.HTTPRoute), Group: helpers.GetPointer[gatewayv1.Group](gatewayv1.GroupName)},
+						},
+						Conditions: []metav1.Condition{{Message: "existing listener-2 condition"}},
+					},
+				},
+			},
+			expStatus: gatewayv1.ListenerSetStatus{
+				Conditions: []metav1.Condition{{Message: "updated condition"}},
+				Listeners: []gatewayv1.ListenerEntryStatus{
+					{
+						Name:           "listener-1",
+						AttachedRoutes: 3,
+						SupportedKinds: []gatewayv1.RouteGroupKind{
+							{Kind: gatewayv1.Kind(kinds.HTTPRoute), Group: helpers.GetPointer[gatewayv1.Group](gatewayv1.GroupName)},
+						},
+						Conditions: []metav1.Condition{{Message: "updated listener-1 condition"}},
+					},
+					{
+						Name:           "listener-2",
+						AttachedRoutes: 1,
+						SupportedKinds: []gatewayv1.RouteGroupKind{
+							{Kind: gatewayv1.Kind(kinds.HTTPRoute), Group: helpers.GetPointer[gatewayv1.Group](gatewayv1.GroupName)},
+						},
+						Conditions: []metav1.Condition{{Message: "existing listener-2 condition"}},
+					},
+				},
+			},
+			status: gatewayv1.ListenerSetStatus{
+				Conditions: []metav1.Condition{{Message: "old condition"}},
+				Listeners: []gatewayv1.ListenerEntryStatus{
+					{
+						Name:           "listener-1",
+						AttachedRoutes: 1,
+						SupportedKinds: []gatewayv1.RouteGroupKind{
+							{Kind: gatewayv1.Kind(kinds.HTTPRoute), Group: helpers.GetPointer[gatewayv1.Group](gatewayv1.GroupName)},
+						},
+						Conditions: []metav1.Condition{{Message: "old listener-1 condition"}},
+					},
+					{
+						Name:           "listener-2",
+						AttachedRoutes: 1,
+						SupportedKinds: []gatewayv1.RouteGroupKind{
+							{Kind: gatewayv1.Kind(kinds.HTTPRoute), Group: helpers.GetPointer[gatewayv1.Group](gatewayv1.GroupName)},
+						},
+						Conditions: []metav1.Condition{{Message: "existing listener-2 condition"}},
+					},
+				},
+			},
+		},
+		{
+			name:         "ListenerSet has same status",
+			expStatusSet: false,
+			newStatus: gatewayv1.ListenerSetStatus{
+				Conditions: []metav1.Condition{{Message: "same condition"}},
+				Listeners: []gatewayv1.ListenerEntryStatus{
+					{
+						Name:           "listener-1",
+						AttachedRoutes: 2,
+						SupportedKinds: []gatewayv1.RouteGroupKind{
+							{Kind: gatewayv1.Kind(kinds.HTTPRoute), Group: helpers.GetPointer[gatewayv1.Group](gatewayv1.GroupName)},
+						},
+						Conditions: []metav1.Condition{{Message: "listener condition"}},
+					},
+				},
+			},
+			expStatus: gatewayv1.ListenerSetStatus{
+				Conditions: []metav1.Condition{{Message: "same condition"}},
+				Listeners: []gatewayv1.ListenerEntryStatus{
+					{
+						Name:           "listener-1",
+						AttachedRoutes: 2,
+						SupportedKinds: []gatewayv1.RouteGroupKind{
+							{Kind: gatewayv1.Kind(kinds.HTTPRoute), Group: helpers.GetPointer[gatewayv1.Group](gatewayv1.GroupName)},
+						},
+						Conditions: []metav1.Condition{{Message: "listener condition"}},
+					},
+				},
+			},
+			status: gatewayv1.ListenerSetStatus{
+				Conditions: []metav1.Condition{{Message: "same condition"}},
+				Listeners: []gatewayv1.ListenerEntryStatus{
+					{
+						Name:           "listener-1",
+						AttachedRoutes: 2,
+						SupportedKinds: []gatewayv1.RouteGroupKind{
+							{Kind: gatewayv1.Kind(kinds.HTTPRoute), Group: helpers.GetPointer[gatewayv1.Group](gatewayv1.GroupName)},
+						},
+						Conditions: []metav1.Condition{{Message: "listener condition"}},
+					},
+				},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+			ls := &gatewayv1.ListenerSet{
+				Status: test.status,
+			}
+			setter := newListenerSetStatusSetter(test.newStatus)
+			wasSet := setter(ls)
+			g.Expect(wasSet).To(Equal(test.expStatusSet))
+			g.Expect(ls.Status).To(Equal(test.expStatus))
+		})
+	}
+}
+
+func TestListenerSetStatusEqual(t *testing.T) {
+	t.Parallel()
+
+	getDefaultStatus := func() gatewayv1.ListenerSetStatus {
+		return gatewayv1.ListenerSetStatus{
+			Conditions: []metav1.Condition{{Message: "default condition"}},
+			Listeners: []gatewayv1.ListenerEntryStatus{
+				{
+					Name:           "listener-1",
+					AttachedRoutes: 2,
+					SupportedKinds: []gatewayv1.RouteGroupKind{
+						{Kind: gatewayv1.Kind(kinds.HTTPRoute), Group: helpers.GetPointer[gatewayv1.Group](gatewayv1.GroupName)},
+						{Kind: gatewayv1.Kind(kinds.GRPCRoute), Group: helpers.GetPointer[gatewayv1.Group](gatewayv1.GroupName)},
+					},
+					Conditions: []metav1.Condition{{Message: "listener condition"}},
+				},
+				{
+					Name:           "listener-2",
+					AttachedRoutes: 1,
+					SupportedKinds: []gatewayv1.RouteGroupKind{
+						{Kind: gatewayv1.Kind(kinds.HTTPRoute), Group: helpers.GetPointer[gatewayv1.Group](gatewayv1.GroupName)},
+					},
+					Conditions: []metav1.Condition{{Message: "listener2 condition"}},
+				},
+			},
+		}
+	}
+
+	getModifiedStatus := func(mod func(
+		gatewayv1.ListenerSetStatus,
+	) gatewayv1.ListenerSetStatus,
+	) gatewayv1.ListenerSetStatus {
+		return mod(getDefaultStatus())
+	}
+
+	tests := []struct {
+		name       string
+		prevStatus gatewayv1.ListenerSetStatus
+		curStatus  gatewayv1.ListenerSetStatus
+		expEqual   bool
+	}{
+		{
+			name:       "different conditions",
+			prevStatus: getDefaultStatus(),
+			curStatus: getModifiedStatus(func(status gatewayv1.ListenerSetStatus) gatewayv1.ListenerSetStatus {
+				status.Conditions = []metav1.Condition{{Message: "different condition"}}
+				return status
+			}),
+			expEqual: false,
+		},
+		{
+			name:       "different number of listeners",
+			prevStatus: getDefaultStatus(),
+			curStatus: getModifiedStatus(func(status gatewayv1.ListenerSetStatus) gatewayv1.ListenerSetStatus {
+				status.Listeners = status.Listeners[:1] // remove one listener
+				return status
+			}),
+			expEqual: false,
+		},
+		{
+			name:       "different listener name",
+			prevStatus: getDefaultStatus(),
+			curStatus: getModifiedStatus(func(status gatewayv1.ListenerSetStatus) gatewayv1.ListenerSetStatus {
+				status.Listeners[0].Name = "different-name"
+				return status
+			}),
+			expEqual: false,
+		},
+		{
+			name:       "different listener attached routes",
+			prevStatus: getDefaultStatus(),
+			curStatus: getModifiedStatus(func(status gatewayv1.ListenerSetStatus) gatewayv1.ListenerSetStatus {
+				status.Listeners[0].AttachedRoutes = 5
+				return status
+			}),
+			expEqual: false,
+		},
+		{
+			name:       "different number of supported kinds",
+			prevStatus: getDefaultStatus(),
+			curStatus: getModifiedStatus(func(status gatewayv1.ListenerSetStatus) gatewayv1.ListenerSetStatus {
+				status.Listeners[0].SupportedKinds = status.Listeners[0].SupportedKinds[:1]
+				return status
+			}),
+			expEqual: false,
+		},
+		{
+			name:       "different supported kind",
+			prevStatus: getDefaultStatus(),
+			curStatus: getModifiedStatus(func(status gatewayv1.ListenerSetStatus) gatewayv1.ListenerSetStatus {
+				status.Listeners[0].SupportedKinds[0].Kind = gatewayv1.Kind(kinds.TLSRoute)
+				return status
+			}),
+			expEqual: false,
+		},
+		{
+			name:       "different supported kind group",
+			prevStatus: getDefaultStatus(),
+			curStatus: getModifiedStatus(func(status gatewayv1.ListenerSetStatus) gatewayv1.ListenerSetStatus {
+				status.Listeners[0].SupportedKinds[0].Group = helpers.GetPointer[gatewayv1.Group]("different.group")
+				return status
+			}),
+			expEqual: false,
+		},
+		{
+			name:       "different listener conditions",
+			prevStatus: getDefaultStatus(),
+			curStatus: getModifiedStatus(func(status gatewayv1.ListenerSetStatus) gatewayv1.ListenerSetStatus {
+				status.Listeners[0].Conditions = []metav1.Condition{{Message: "different listener condition"}}
+				return status
+			}),
+			expEqual: false,
+		},
+		{
+			name:       "equal",
+			prevStatus: getDefaultStatus(),
+			curStatus:  getDefaultStatus(),
+			expEqual:   true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+			equal := listenerSetStatusEqual(test.prevStatus, test.curStatus)
+			g.Expect(equal).To(Equal(test.expEqual))
 		})
 	}
 }

@@ -1,0 +1,7 @@
+[app-protect-x-plus]
+name=nginx-app-protect repo
+baseurl=https://pkgs.nginx.com/app-protect-x-plus/centos/9/$basearch/
+sslclientcert=/etc/ssl/nginx/nginx-repo.crt
+sslclientkey=/etc/ssl/nginx/nginx-repo.key
+gpgcheck=0
+enabled=0

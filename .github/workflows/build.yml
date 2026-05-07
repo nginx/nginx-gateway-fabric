@@ -35,7 +35,7 @@ permissions:
 
 jobs:
   build:
-    if: ${{ ! (github.event.pull_request.head.repo.fork && inputs.image == 'plus' && inputs.build-os == 'ubi') }}
+    if: ${{ ! (github.event.pull_request.head.repo.fork && (inputs.image == 'plus' || inputs.image == 'plus-nap-waf') && inputs.build-os == 'ubi') }}
     permissions:
       contents: read # for docker/build-push-action to read repo content
       security-events: write # for github/codeql-action/upload-sarif to upload SARIF results
@@ -78,7 +78,7 @@ jobs:
 
       - name: Login to GitHub Container Registry
         uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
-        if: ${{ github.event_name != 'pull_request' && ! contains(inputs.image, 'plus') }}
+        if: ${{ github.event_name != 'pull_request' && inputs.image != 'plus' && inputs.image != 'plus-nap-waf' }}
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
@@ -91,7 +91,7 @@ jobs:
           script: |
             let id_token = await core.getIDToken()
             core.setOutput('id_token', id_token)
-        if: ${{ github.event_name != 'pull_request' && contains(inputs.image, 'plus')}}
+        if: ${{ github.event_name != 'pull_request' && (inputs.image == 'plus' || inputs.image == 'plus-nap-waf') }}
 
       - name: Login to NGINX Registry
         uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
@@ -99,7 +99,7 @@ jobs:
           registry: docker-mgmt.nginx.com
           username: ${{ steps.idtoken.outputs.id_token }}
           password: ${{ github.actor }}
-        if: ${{ github.event_name != 'pull_request' && contains(inputs.image, 'plus') }}
+        if: ${{ github.event_name != 'pull_request' && (inputs.image == 'plus' || inputs.image == 'plus-nap-waf') }}
 
       - name: Authenticate to Google Cloud
         id: auth
@@ -108,7 +108,7 @@ jobs:
           token_format: access_token
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
-        if: ${{ github.event_name != 'pull_request' && contains(inputs.image, 'plus') }}
+        if: ${{ github.event_name != 'pull_request' && (inputs.image == 'plus' || inputs.image == 'plus-nap-waf') }}
 
       - name: Login to GAR
         uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
@@ -116,7 +116,7 @@ jobs:
           registry: us-docker.pkg.dev
           username: oauth2accesstoken
           password: ${{ steps.auth.outputs.access_token }}
-        if: ${{ github.event_name != 'pull_request' && contains(inputs.image, 'plus') }}
+        if: ${{ github.event_name != 'pull_request' && (inputs.image == 'plus' || inputs.image == 'plus-nap-waf') }}
 
       - name: Docker meta
         id: meta
@@ -128,6 +128,8 @@ jobs:
             name=ghcr.io/${{ github.repository_owner }}/nginx-gateway-fabric/nginx,enable=${{ inputs.image == 'nginx' && github.event_name != 'pull_request' }}
             name=docker-mgmt.nginx.com/nginx-gateway-fabric/nginx-plus,enable=${{ inputs.image == 'plus' && github.event_name != 'pull_request' }}
             name=us-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/nginx-gateway-fabric/nginx-plus,enable=${{ inputs.image == 'plus' && github.event_name != 'pull_request' }}
+            name=docker-mgmt.nginx.com/nginx-gateway-fabric/nginx-plus-f5waf,enable=${{ inputs.image == 'plus-nap-waf' && github.event_name != 'pull_request' }}
+            name=us-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/nginx-gateway-fabric/nginx-plus-f5waf,enable=${{ inputs.image == 'plus-nap-waf' && github.event_name != 'pull_request' }}
             name=ghcr.io/${{ github.repository_owner }}/nginx-gateway-fabric/operator,enable=${{ inputs.image == 'operator' && github.event_name != 'pull_request' }}
             name=localhost:5000/nginx-gateway-fabric/${{ inputs.image }}
           flavor: |
@@ -155,7 +157,7 @@ jobs:
       - name: Build Docker Image
         uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
         with:
-          file: ${{ inputs.image == 'operator' && 'operators/Dockerfile' || (inputs.build-os != '' && format('build/{0}/Dockerfile{1}', inputs.build-os, inputs.image == 'nginx' && '.nginx' || inputs.image == 'plus' && '.nginxplus' || '') || format('build/Dockerfile{0}', inputs.image == 'nginx' && '.nginx' || inputs.image == 'plus' && '.nginxplus' || '')) }}
+          file: ${{ inputs.image == 'operator' && 'operators/Dockerfile' || (inputs.build-os != '' && format('build/{0}/Dockerfile{1}', inputs.build-os, inputs.image == 'nginx' && '.nginx' || (inputs.image == 'plus' || inputs.image == 'plus-nap-waf') && '.nginxplus' || '') || format('build/Dockerfile{0}', inputs.image == 'nginx' && '.nginx' || (inputs.image == 'plus' || inputs.image == 'plus-nap-waf') && '.nginxplus' || '')) }}
           context: "."
           target: ${{ inputs.image == 'ngf' && 'goreleaser' || '' }}
           tags: ${{ steps.meta.outputs.tags }}
@@ -173,9 +175,10 @@ jobs:
             NJS_DIR=internal/controller/nginx/modules/src
             NGINX_CONF_DIR=internal/controller/nginx/conf
             BUILD_AGENT=gha
+            INCLUDE_NAP_WAF=${{ inputs.image == 'plus-nap-waf' && 'true' || 'false' }}
           secrets: |
-            ${{ contains(inputs.image, 'plus') && format('"nginx-repo.crt={0}"', secrets.NGINX_CRT) || '' }}
-            ${{ contains(inputs.image, 'plus') && format('"nginx-repo.key={0}"', secrets.NGINX_KEY) || '' }}
+            ${{ (inputs.image == 'plus' || inputs.image == 'plus-nap-waf') && format('"nginx-repo.crt={0}"', secrets.NGINX_CRT) || '' }}
+            ${{ (inputs.image == 'plus' || inputs.image == 'plus-nap-waf') && format('"nginx-repo.key={0}"', secrets.NGINX_KEY) || '' }}
 
       - name: Inspect SBOM and output manifest
         if: ${{ !inputs.dry_run }}

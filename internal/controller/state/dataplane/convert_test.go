@@ -1393,7 +1393,6 @@ func TestConvertAuthenticationFilter(t *testing.T) {
 			},
 		},
 	}
-
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -1513,6 +1512,219 @@ func TestConvertHTTPCORSFilter(t *testing.T) {
 			g := NewWithT(t)
 
 			result := convertHTTPCORSFilter(test.filter)
+			g.Expect(result).To(Equal(test.expected))
+		})
+	}
+}
+
+func TestConvertHTTPExternalAuthFilter(t *testing.T) {
+	t.Parallel()
+
+	port := v1.PortNumber(80)
+	gwNsName := types.NamespacedName{Namespace: "gw-ns", Name: "gw"}
+	routeNsName := types.NamespacedName{Namespace: "default", Name: "coffee-route"}
+
+	validBackendRef := graph.BackendRef{
+		SvcNsName:   types.NamespacedName{Namespace: "default", Name: "ext-auth-server"},
+		ServicePort: apiv1.ServicePort{Port: 80},
+		Valid:       true,
+	}
+
+	backendRefWithBTP := graph.BackendRef{
+		SvcNsName:   types.NamespacedName{Namespace: "default", Name: "ext-auth-server"},
+		ServicePort: apiv1.ServicePort{Port: 80},
+		Valid:       true,
+		BackendTLSPolicy: &graph.BackendTLSPolicy{
+			Source: &v1.BackendTLSPolicy{
+				Spec: v1.BackendTLSPolicySpec{
+					Validation: v1.BackendTLSPolicyValidation{
+						Hostname: "ext-auth-server.default.svc.cluster.local",
+					},
+				},
+			},
+			Valid:    true,
+			Gateways: []types.NamespacedName{gwNsName},
+		},
+	}
+
+	tests := []struct {
+		filter     *v1.HTTPExternalAuthFilter
+		expected   *HTTPExternalAuthFilter
+		name       string
+		backendRef graph.BackendRef
+	}{
+		{
+			name:       "nil filter returns nil",
+			filter:     nil,
+			backendRef: validBackendRef,
+			expected:   nil,
+		},
+		{
+			name: "basic HTTP external auth filter with no httpAuthConfig or forwardBody",
+			filter: &v1.HTTPExternalAuthFilter{
+				ExternalAuthProtocol: v1.HTTPRouteExternalAuthHTTPProtocol,
+				BackendRef: v1.BackendObjectReference{
+					Name: "ext-auth-server",
+					Port: &port,
+				},
+			},
+			backendRef: validBackendRef,
+			expected: &HTTPExternalAuthFilter{
+				UpstreamName: "default_ext-auth-server_80",
+				InternalPath: "/_ngf-internal-ext-auth-default_coffee-route_rule0",
+			},
+		},
+		{
+			name: "HTTP external auth filter with httpAuthConfig populated",
+			filter: &v1.HTTPExternalAuthFilter{
+				ExternalAuthProtocol: v1.HTTPRouteExternalAuthHTTPProtocol,
+				BackendRef: v1.BackendObjectReference{
+					Name: "ext-auth-server",
+					Port: &port,
+				},
+				HTTPAuthConfig: &v1.HTTPAuthConfig{
+					Path:                   "/auth/check",
+					AllowedRequestHeaders:  []string{"X-Api-Key"},
+					AllowedResponseHeaders: []string{"X-User-Id"},
+				},
+			},
+			backendRef: validBackendRef,
+			expected: &HTTPExternalAuthFilter{
+				UpstreamName:           "default_ext-auth-server_80",
+				InternalPath:           "/_ngf-internal-ext-auth-default_coffee-route_rule0",
+				PathPrefix:             "/auth/check",
+				AllowedRequestHeaders:  []string{"X-Api-Key"},
+				AllowedResponseHeaders: []string{"X-User-Id"},
+			},
+		},
+		{
+			name: "HTTP external auth filter with forwardBody",
+			filter: &v1.HTTPExternalAuthFilter{
+				ExternalAuthProtocol: v1.HTTPRouteExternalAuthHTTPProtocol,
+				BackendRef: v1.BackendObjectReference{
+					Name: "ext-auth-server",
+					Port: &port,
+				},
+				ForwardBody: &v1.ForwardBodyConfig{
+					MaxSize: 1024,
+				},
+			},
+			backendRef: validBackendRef,
+			expected: &HTTPExternalAuthFilter{
+				UpstreamName: "default_ext-auth-server_80",
+				InternalPath: "/_ngf-internal-ext-auth-default_coffee-route_rule0",
+				ForwardBody:  true,
+				MaxBodySize:  1024,
+			},
+		},
+		{
+			name: "forwardBody with maxSize zero does not enable body forwarding",
+			filter: &v1.HTTPExternalAuthFilter{
+				ExternalAuthProtocol: v1.HTTPRouteExternalAuthHTTPProtocol,
+				BackendRef: v1.BackendObjectReference{
+					Name: "ext-auth-server",
+					Port: &port,
+				},
+				ForwardBody: &v1.ForwardBodyConfig{
+					MaxSize: 0,
+				},
+			},
+			backendRef: validBackendRef,
+			expected: &HTTPExternalAuthFilter{
+				UpstreamName: "default_ext-auth-server_80",
+				InternalPath: "/_ngf-internal-ext-auth-default_coffee-route_rule0",
+			},
+		},
+		{
+			name: "HTTP external auth filter with BackendTLSPolicy populates VerifyTLS",
+			filter: &v1.HTTPExternalAuthFilter{
+				ExternalAuthProtocol: v1.HTTPRouteExternalAuthHTTPProtocol,
+				BackendRef: v1.BackendObjectReference{
+					Name: "ext-auth-server",
+					Port: &port,
+				},
+			},
+			backendRef: backendRefWithBTP,
+			expected: &HTTPExternalAuthFilter{
+				UpstreamName: "default_ext-auth-server_80",
+				InternalPath: "/_ngf-internal-ext-auth-default_coffee-route_rule0",
+				VerifyTLS: &VerifyTLS{
+					Hostname:   "ext-auth-server.default.svc.cluster.local",
+					RootCAPath: AlpineSSLRootCAPath,
+				},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			result := convertHTTPExternalAuthFilter(test.filter, test.backendRef, routeNsName, 0, gwNsName)
+			g.Expect(result).To(Equal(test.expected))
+		})
+	}
+}
+
+func TestConvertWAFBundles(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		input    map[graph.WAFBundleKey]*graph.WAFBundleData
+		expected map[WAFBundleID]WAFBundle
+		name     string
+	}{
+		{
+			name:     "empty input",
+			input:    map[graph.WAFBundleKey]*graph.WAFBundleData{},
+			expected: map[WAFBundleID]WAFBundle{},
+		},
+		{
+			name: "single bundle with data",
+			input: map[graph.WAFBundleKey]*graph.WAFBundleData{
+				"bundle1.tgz": {
+					Data: []byte("bundle data"),
+				},
+			},
+			expected: map[WAFBundleID]WAFBundle{
+				"bundle1.tgz": WAFBundle([]byte("bundle data")),
+			},
+		},
+		{
+			name: "single bundle with nil data",
+			input: map[graph.WAFBundleKey]*graph.WAFBundleData{
+				"bundle2.tgz": nil,
+			},
+			expected: map[WAFBundleID]WAFBundle{
+				"bundle2.tgz": WAFBundle(nil),
+			},
+		},
+		{
+			name: "multiple bundles with mixed data",
+			input: map[graph.WAFBundleKey]*graph.WAFBundleData{
+				"bundle1.tgz": {
+					Data: []byte("first bundle"),
+				},
+				"bundle2.tgz": nil,
+				"bundle3.tgz": {
+					Data: []byte("third bundle"),
+				},
+			},
+			expected: map[WAFBundleID]WAFBundle{
+				"bundle1.tgz": WAFBundle([]byte("first bundle")),
+				"bundle2.tgz": WAFBundle(nil),
+				"bundle3.tgz": WAFBundle([]byte("third bundle")),
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			result := convertWAFBundles(test.input)
 			g.Expect(result).To(Equal(test.expected))
 		})
 	}

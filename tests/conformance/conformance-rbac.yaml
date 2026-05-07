@@ -47,6 +47,7 @@ rules:
   - tlsroutes
   - backendtlspolicies
   - udproutes
+  - listenersets
   verbs:
   - create
   - delete

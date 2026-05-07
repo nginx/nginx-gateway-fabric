@@ -147,6 +147,29 @@ spec:
                     in targetRefs
                   rule: '!(self.exists(t, t.kind == ''Gateway'') && self.exists(t,
                     t.kind == ''HTTPRoute'' || t.kind == ''GRPCRoute''))'
+              timeout:
+                description: Timeout configures timeouts for the connection to the
+                  proxied server.
+                properties:
+                  connect:
+                    description: |-
+                      Connect sets the timeout for establishing a connection with the proxied server.
+                      Directive: https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_connect_timeout
+                    pattern: ^[0-9]{1,4}(ms|s|m|h)?$
+                    type: string
+                  read:
+                    description: |-
+                      Read sets the timeout for reading a response from the proxied server.
+                      Directive: https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_read_timeout
+                    pattern: ^[0-9]{1,4}(ms|s|m|h)?$
+                    type: string
+                  send:
+                    description: |-
+                      Send sets the timeout for transmitting a request to the proxied server.
+                      Directive: https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_send_timeout
+                    pattern: ^[0-9]{1,4}(ms|s|m|h)?$
+                    type: string
+                type: object
             required:
             - targetRefs
             type: object

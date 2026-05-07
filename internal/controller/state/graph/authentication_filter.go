@@ -400,10 +400,9 @@ func validateOIDCFilters(routes map[RouteKey]*L7Route, gws map[types.NamespacedN
 // buildListenerProtocolMap returns a map from listener key to protocol for all listeners across all gateways.
 func buildListenerProtocolMap(gws map[types.NamespacedName]*Gateway) map[string]v1.ProtocolType {
 	protocols := make(map[string]v1.ProtocolType)
-	for gwNSName, gw := range gws {
+	for _, gw := range gws {
 		for _, l := range gw.Listeners {
-			key := CreateGatewayListenerKey(gwNSName, l.Name)
-			protocols[key] = l.Source.Protocol
+			protocols[CreateParentRefListenerKeyFromListener(l)] = l.Source.Protocol
 		}
 	}
 	return protocols

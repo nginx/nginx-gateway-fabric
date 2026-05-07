@@ -1,0 +1,19 @@
+apiVersion: gateway.nginx.org/v1alpha1
+kind: WAFPolicy
+metadata:
+  name: gateway-waf
+spec:
+  targetRefs:
+  - group: gateway.networking.k8s.io
+    kind: Gateway
+    name: gateway
+  type: HTTP
+  policySource:
+    httpSource:
+      url: http://bundle-server.waf-policy.svc.cluster.local/attack-signatures-blocking.tgz
+  securityLogs:
+  - logSource:
+      httpSource:
+        url: http://bundle-server.waf-policy.svc.cluster.local/logconf.tgz
+    destination:
+      type: stderr

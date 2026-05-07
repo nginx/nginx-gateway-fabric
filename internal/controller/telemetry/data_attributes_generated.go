@@ -23,10 +23,7 @@ func (d *Data) Attributes() []attribute.KeyValue {
 	attrs = append(attrs, attribute.Int64("NginxPodCount", d.NginxPodCount))
 	attrs = append(attrs, attribute.Int64("ControlPlanePodCount", d.ControlPlanePodCount))
 	attrs = append(attrs, attribute.Bool("NginxOneConnectionEnabled", d.NginxOneConnectionEnabled))
-	attrs = append(attrs, attribute.Int64("InferencePoolCount", d.InferencePoolCount))
 	attrs = append(attrs, attribute.String("BuildOS", d.BuildOS))
-	attrs = append(attrs, attribute.Int64("GatewayAttachedProxySettingsPolicyCount", d.GatewayAttachedProxySettingsPolicyCount))
-	attrs = append(attrs, attribute.Int64("RouteAttachedProxySettingsPolicyCount", d.RouteAttachedProxySettingsPolicyCount))
 	attrs = append(attrs, attribute.StringSlice("SnippetsPoliciesDirectives", d.SnippetsPoliciesDirectives))
 	attrs = append(attrs, attribute.Int64Slice("SnippetsPoliciesDirectivesCount", d.SnippetsPoliciesDirectivesCount))
 

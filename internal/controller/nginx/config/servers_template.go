@@ -29,6 +29,21 @@ server {
         {{- if $s.SSL.PreferServerCiphers }}
     ssl_prefer_server_ciphers on;
         {{- end }}
+        {{- if $s.SSL.ClientCertificate }}
+    ssl_client_certificate {{ $s.SSL.ClientCertificate }};
+        {{- end }}
+        {{- if $s.SSL.VerifyClient }}
+    ssl_verify_client {{ $s.SSL.VerifyClient }};
+        {{- end }}
+        {{- if $s.SSL.RequireVerifiedCert }}
+    ssl_verify_depth 4;
+    error_page 495 496 = @frontend_tls_verify_failed;
+        {{- end }}
+        {{- if and $s.SSL $s.SSL.RequireVerifiedCert }}
+    location @frontend_tls_verify_failed {
+        return 444;
+    }
+        {{- end}}
     {{- else }}
     ssl_reject_handshake on;
     {{- end }}
@@ -86,6 +101,21 @@ server {
           {{- end }}
           {{- if $s.SSL.PreferServerCiphers }}
     ssl_prefer_server_ciphers on;
+          {{- end }}
+          {{- if $s.SSL.ClientCertificate }}
+    ssl_client_certificate {{ $s.SSL.ClientCertificate }};
+          {{- end }}
+          {{- if $s.SSL.VerifyClient }}
+    ssl_verify_client {{ $s.SSL.VerifyClient }};
+          {{- end }}
+          {{- if $s.SSL.RequireVerifiedCert }}
+    ssl_verify_depth 4;
+    error_page 495 496 = @frontend_tls_verify_failed;
+          {{- end }}
+          {{- if and $s.SSL $s.SSL.RequireVerifiedCert }}
+    location @frontend_tls_verify_failed {
+        return 444;
+    }
           {{- end }}
 
           {{- if $s.MisdirectedRequestVars }}
@@ -159,6 +189,24 @@ server {
             {{- end }}
         {{- end }}
 
+        {{- if $l.CORSHeaders }}
+        if ($request_method = OPTIONS) {
+            return 200;
+        }
+        {{- end }}
+
+        {{- if $l.ClientMaxBodySize }}
+        client_max_body_size {{ $l.ClientMaxBodySize }};
+        {{- end }}
+
+        {{- if and $l.AuthExternalRequest $l.AuthExternalRequest.InternalPath }}
+        auth_request {{ $l.AuthExternalRequest.InternalPath }};
+            {{- range $h := $l.AuthExternalRequest.AllowedResponseHeaders }}
+        auth_request_set {{ extAuthResponseVar $h }} {{ upstreamHTTPVar $h }};
+        proxy_set_header {{ $h }} {{ extAuthResponseVar $h }};
+            {{- end }}
+        {{- end }}
+
         {{ range $r := $l.Rewrites }}
         rewrite {{ $r }};
         {{- end }}
@@ -189,10 +237,6 @@ server {
         add_header {{ $h.Name }} "{{ $h.Value }}" always;
                 {{- end }}
             {{- end }}
-
-        if ($request_method = OPTIONS) {
-            return 200;
-        }
         {{- end }}
 
         {{- if eq $l.Type "redirect" -}}
@@ -220,6 +264,15 @@ server {
         {{ $proxyOrGRPC }}_set_header {{ $h.Name }} "{{ $h.Value }}";
             {{- end }}
         {{ $proxyOrGRPC }}_pass {{ $l.ProxyPass }};
+            {{- if $l.ProxyPassRequestBody }}
+        proxy_pass_request_body {{ $l.ProxyPassRequestBody }};
+                {{- if eq $l.ProxyPassRequestBody "off" }}
+        proxy_set_header Content-Length "";
+                {{- end }}
+            {{- end }}
+            {{- if $l.ProxyPassRequestHeaders }}
+        proxy_pass_request_headers {{ $l.ProxyPassRequestHeaders }};
+            {{- end }}
             {{ range $h := $l.ResponseHeaders.Add }}
         add_header {{ $h.Name }} "{{ $h.Value }}" always;
             {{- end }}
@@ -233,6 +286,7 @@ server {
             {{- if $l.ProxySSLVerify }}
         {{ $proxyOrGRPC }}_ssl_server_name on;
         {{ $proxyOrGRPC }}_ssl_verify on;
+        {{ $proxyOrGRPC }}_ssl_verify_depth 4;
                 {{- if $l.ProxySSLVerify.Name}}
         {{ $proxyOrGRPC }}_ssl_name {{ $l.ProxySSLVerify.Name }};
                 {{- end }}

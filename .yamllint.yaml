@@ -30,6 +30,7 @@ rules:
       operators/**/*
       .github/workflows/redhat-certification.yml
       examples/proxy-settings-policy/app.yaml
+      examples/waf-policy/bundle-server.yaml
       tests/suite/manifests/proxy-settings-policy/app.yaml
       tests/suite/manifests/longevity
       tests/suite/manifests/authentication-filter/keycloak.yaml

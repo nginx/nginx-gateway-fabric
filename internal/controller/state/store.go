@@ -342,3 +342,10 @@ func (s *changeTrackingUpdater) getAndResetChangedStatus() bool {
 	s.changed = false
 	return changed
 }
+
+// forceRebuild forces the changed status to true without modifying any cluster state.
+// This is used when an external event (e.g., a WAF bundle becoming available) must trigger
+// a graph rebuild without touching the object stores.
+func (s *changeTrackingUpdater) forceRebuild() {
+	s.changed = true
+}

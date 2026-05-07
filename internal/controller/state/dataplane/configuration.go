@@ -75,7 +75,11 @@ func BuildConfiguration(
 	baseHTTPConfig := buildBaseHTTPConfig(gateway, gatewaySnippetsFilters, gatewayRateLimitPolicies)
 	baseStreamConfig := buildBaseStreamConfig(gateway)
 
-	httpServers, sslServers, sslListenerHostnames := buildServers(gateway, g.ReferencedServices, g.ReferencedSecrets)
+	httpServers, sslServers, sslListenerHostnames, extAuthCertBundleIDs := buildServers(
+		gateway,
+		g.ReferencedServices,
+		g.ReferencedSecrets,
+	)
 
 	authCertBundles := make(map[CertBundleID]CertBundle)
 
@@ -101,11 +105,19 @@ func BuildConfiguration(
 		nginxPlus = buildNginxPlus(gateway)
 	}
 
+	refCertBundles := buildRefCertificateBundles(g.ReferencedSecrets, g.ReferencedCaCertConfigMaps)
+
 	certBundles := buildCertBundles(
-		buildRefCertificateBundles(g.ReferencedSecrets, g.ReferencedCaCertConfigMaps),
+		refCertBundles,
 		backendGroups,
+		extAuthCertBundleIDs,
 		authCertBundles,
 	)
+	maps.Copy(certBundles, buildFrontendTLSCertBundles(
+		gateway,
+		sslServers,
+		refCertBundles,
+	))
 
 	config := Configuration{
 		HTTPServers:           httpServers,
@@ -136,6 +148,7 @@ func BuildConfiguration(
 		WorkerConnections:    buildWorkerConnections(gateway),
 		SSLListenerHostnames: sslListenerHostnames,
 		CertBundles:          certBundles,
+		WAF:                  buildWAF(gateway),
 	}
 
 	return config
@@ -161,8 +174,7 @@ func buildPassthroughServers(gateway *graph.Gateway) []Layer4VirtualServer {
 			var hostnames []string
 
 			for _, p := range r.ParentRefs {
-				key := graph.CreateGatewayListenerKey(l.GatewayName, l.Name)
-				if val, exist := p.Attachment.AcceptedHostnames[key]; exist {
+				if val, exist := p.Attachment.AcceptedHostnames[graph.CreateParentRefListenerKeyFromListener(l)]; exist {
 					hostnames = val
 					break
 				}
@@ -437,6 +449,163 @@ func buildJWTRemoteTLSCABundles(
 	return bundles
 }
 
+// listenerClientSettings captures the information about a listener
+// for configuring SSL servers with client verification settings.
+type listenerClientSettings struct {
+	CertBundleID   CertBundleID
+	validationMode v1.FrontendValidationModeType
+}
+
+func buildFrontendTLSCertBundles(
+	gateway *graph.Gateway,
+	sslServers []VirtualServer,
+	refCertBundles []secrets.CertificateBundle,
+) map[CertBundleID]CertBundle {
+	bundles := make(map[CertBundleID]CertBundle, len(refCertBundles))
+	clientSettingsMap := make(map[int32]listenerClientSettings)
+
+	if !gateway.Valid || gateway.Source.Spec.TLS == nil || gateway.Source.Spec.TLS.Frontend == nil {
+		return bundles
+	}
+
+	refCertBundleIndex := indexRefCertBundles(refCertBundles)
+
+	for _, listener := range gateway.Listeners {
+		if listener.Source.Protocol != v1.HTTPSProtocolType {
+			continue
+		}
+
+		if len(listener.CACertificateRefs) == 0 {
+			continue
+		}
+		// Create a unique cert bundle ID for this listener gateway combo.
+		// e.g. cert_bundle_default_gateway_443 for a HTTPS listener on port 443
+		// for a gateway in the default namespace.
+		caCertRef := types.NamespacedName{
+			Namespace: gateway.Source.Namespace,
+			Name: fmt.Sprintf("%s_%d",
+				gateway.Source.Name,
+				listener.Source.Port,
+			),
+		}
+		id := generateCertBundleID(caCertRef)
+		// We map listener port to the CertBundleID and ValidationMode of this listener
+		// to later configure the relevant SSL Servers with this data.
+		// This avoids iterating over each SSL Server for each Listener.
+		clientSettingsMap[listener.Source.Port] = listenerClientSettings{
+			CertBundleID:   id,
+			validationMode: listener.ValidationMode,
+		}
+		// If the validation mode is AllowInsecureFallback
+		// we do not want to configure any CA bundles for this listener.
+		if listener.ValidationMode != v1.AllowInsecureFallback {
+			bundles = getFrontendTLSCertBundles(
+				id,
+				bundles,
+				gateway,
+				refCertBundleIndex,
+				listener.CACertificateRefs,
+			)
+		}
+	}
+	addClientSettingsToSSLServers(sslServers, clientSettingsMap)
+	return bundles
+}
+
+// refCertBundleKey is used as the key for indexing referenced certificate bundles
+// when building frontend TLS cert bundles.
+// It consists of the kind, namespace, and name of the referenced certificate bundle.
+type refCertBundleKey struct {
+	kind      v1.Kind
+	namespace v1.Namespace
+	name      v1.ObjectName
+}
+
+// indexRefCertBundles creates an index of the referenced certificate bundles
+// based on their kind, namespace, and name for faster lookup when building frontend TLS cert bundles.
+func indexRefCertBundles(
+	refCertBundles []secrets.CertificateBundle,
+) map[refCertBundleKey]secrets.CertificateBundle {
+	index := make(map[refCertBundleKey]secrets.CertificateBundle, len(refCertBundles))
+	for _, bundle := range refCertBundles {
+		key := refCertBundleKey{
+			kind:      bundle.Kind,
+			namespace: v1.Namespace(bundle.Name.Namespace),
+			name:      v1.ObjectName(bundle.Name.Name),
+		}
+		index[key] = bundle
+	}
+	return index
+}
+
+func getFrontendTLSCertBundles(
+	id CertBundleID,
+	bundles map[CertBundleID]CertBundle,
+	gateway *graph.Gateway,
+	refCertBundleIndex map[refCertBundleKey]secrets.CertificateBundle,
+	listenerCACertRefs []v1.ObjectReference,
+) map[CertBundleID]CertBundle {
+	certBundles := make([]CertBundle, 0, len(listenerCACertRefs))
+	for _, ref := range listenerCACertRefs {
+		if ref.Name == "" {
+			continue
+		}
+		refNamespace := v1.Namespace(gateway.Source.Namespace)
+		if ref.Namespace != nil {
+			refNamespace = *ref.Namespace
+		}
+
+		key := refCertBundleKey{
+			kind:      ref.Kind,
+			namespace: refNamespace,
+			name:      ref.Name,
+		}
+		if bundle, exists := refCertBundleIndex[key]; exists {
+			certRefData := getCertRefBundleData(bundle)
+			certBundles = append(certBundles, certRefData)
+		}
+	}
+	if len(certBundles) == 0 {
+		return bundles
+	}
+
+	if _, exists := bundles[id]; !exists {
+		for _, v := range certBundles {
+			bundles[id] = append(bundles[id], v...)
+		}
+	}
+
+	return bundles
+}
+
+// addClientSettingsToSSLServers modifies existing SSL servers to assign
+// client certificate verification settings based on the listener's validation mode and CA cert refs.
+func addClientSettingsToSSLServers(
+	sslServers []VirtualServer,
+	clientSettingsMap map[int32]listenerClientSettings,
+) {
+	for i := range sslServers {
+		if sslServers[i].SSL == nil {
+			continue
+		}
+		if clientSettings, exists := clientSettingsMap[sslServers[i].Port]; exists {
+			switch clientSettings.validationMode {
+			case v1.AllowInsecureFallback:
+				// Request client certificate but allow any certificate (valid, invalid, or none)
+				// Do not configure CA bundle verification for this mode
+				sslServers[i].SSL.ClientCertBundleID = ""
+				sslServers[i].SSL.VerifyClient = SSLVerifyClientOptionalNoCA
+				sslServers[i].SSL.RequireVerifiedCert = false
+			default:
+				// AllowValidOnly is default when no validation mode is specified.
+				sslServers[i].SSL.ClientCertBundleID = clientSettings.CertBundleID
+				sslServers[i].SSL.VerifyClient = SSLVerifyClientOn
+				sslServers[i].SSL.RequireVerifiedCert = true
+			}
+		}
+	}
+}
+
 func buildRefCertificateBundles(
 	secretsMap map[types.NamespacedName]*secrets.Secret,
 	configMaps map[types.NamespacedName]*configmaps.CaCertConfigMap,
@@ -461,6 +630,7 @@ func buildRefCertificateBundles(
 func buildCertBundles(
 	refCertBundles []secrets.CertificateBundle,
 	backendGroups []BackendGroup,
+	extAuthCertBundleIDs map[CertBundleID]struct{},
 	authCertBundles map[CertBundleID]CertBundle,
 ) map[CertBundleID]CertBundle {
 	bundles := make(map[CertBundleID]CertBundle)
@@ -469,38 +639,42 @@ func buildCertBundles(
 		bundles[id] = cert
 	}
 
-	// We only need to build the cert bundles if there are valid backend groups that reference them.
-	if len(backendGroups) == 0 {
-		return bundles
+	referenced := make(map[CertBundleID]struct{}, len(extAuthCertBundleIDs))
+	for id := range extAuthCertBundleIDs {
+		referenced[id] = struct{}{}
 	}
-
-	referencedByBackendGroup := make(map[CertBundleID]struct{})
 	for _, bg := range backendGroups {
-		if bg.Backends == nil {
-			continue
-		}
 		for _, b := range bg.Backends {
 			if !b.Valid || b.VerifyTLS == nil {
 				continue
 			}
-			referencedByBackendGroup[b.VerifyTLS.CertBundleID] = struct{}{}
+			referenced[b.VerifyTLS.CertBundleID] = struct{}{}
 		}
+	}
+
+	if len(referenced) == 0 {
+		return bundles
 	}
 
 	for _, bundle := range refCertBundles {
 		id := generateCertBundleID(bundle.Name)
-		if _, exists := referencedByBackendGroup[id]; exists {
-			// the cert could be base64 encoded or plaintext
-			data := make([]byte, base64.StdEncoding.DecodedLen(len(bundle.Cert.CACert)))
-			_, err := base64.StdEncoding.Decode(data, bundle.Cert.CACert)
-			if err != nil {
-				data = bundle.Cert.CACert
-			}
-			bundles[id] = data
+		if _, exists := referenced[id]; exists {
+			bundles[id] = getCertRefBundleData(bundle)
 		}
 	}
-
 	return bundles
+}
+
+func getCertRefBundleData(bundle secrets.CertificateBundle) []byte {
+	// the cert could be base64 encoded or plaintext
+	data := make([]byte, base64.StdEncoding.DecodedLen(len(bundle.Cert.CACert)))
+	n, err := base64.StdEncoding.Decode(data, bundle.Cert.CACert)
+	if err != nil {
+		data = bundle.Cert.CACert
+	} else {
+		data = data[:n]
+	}
+	return data
 }
 
 func buildAuthSecrets(
@@ -615,7 +789,7 @@ func newBackendGroup(
 	var inferencePoolBackendExists bool
 
 	for _, ref := range refs {
-		if ref.IsMirrorBackend {
+		if ref.IsMirrorBackend || ref.IsExternalAuthBackend {
 			continue
 		}
 
@@ -677,11 +851,12 @@ func buildServers(
 	gateway *graph.Gateway,
 	referencedServices map[types.NamespacedName]*graph.ReferencedService,
 	referencedSecrets map[types.NamespacedName]*secrets.Secret,
-) (http, ssl []VirtualServer, sslListenerHostnames map[int32][]string) {
+) (http, ssl []VirtualServer, sslListenerHostnames map[int32][]string, extAuthCertBundleIDs map[CertBundleID]struct{}) {
 	rulesForProtocol := map[v1.ProtocolType]portPathRules{
 		v1.HTTPProtocolType:  make(portPathRules),
 		v1.HTTPSProtocolType: make(portPathRules),
 	}
+	extAuthCertBundleIDs = make(map[CertBundleID]struct{})
 
 	for _, l := range gateway.Listeners {
 		if l.Source.Protocol == v1.TLSProtocolType ||
@@ -696,7 +871,7 @@ func buildServers(
 				rulesForProtocol[l.Source.Protocol][l.Source.Port] = rules
 			}
 
-			rules.upsertListener(l, gateway, referencedServices, referencedSecrets)
+			rules.upsertListener(l, gateway, referencedServices, referencedSecrets, extAuthCertBundleIDs)
 
 			if l.Source.Protocol == v1.HTTPSProtocolType {
 				hostname := ""
@@ -726,7 +901,7 @@ func buildServers(
 		sslServers[i].Policies = pols
 	}
 
-	return httpServers, sslServers, sslListenerHostnames
+	return httpServers, sslServers, sslListenerHostnames, extAuthCertBundleIDs
 }
 
 // portPathRules keeps track of hostPathRules per port.
@@ -773,6 +948,7 @@ func (hpr *hostPathRules) upsertListener(
 	gateway *graph.Gateway,
 	referencedServices map[types.NamespacedName]*graph.ReferencedService,
 	referencedSecrets map[types.NamespacedName]*secrets.Secret,
+	extAuthCertBundleIDs map[CertBundleID]struct{},
 ) {
 	hpr.listenersExist = true
 	hpr.port = l.Source.Port
@@ -786,7 +962,7 @@ func (hpr *hostPathRules) upsertListener(
 			continue
 		}
 
-		hpr.upsertRoute(r, l, gateway, referencedServices, referencedSecrets)
+		hpr.upsertRoute(r, l, gateway, referencedServices, referencedSecrets, extAuthCertBundleIDs)
 	}
 }
 
@@ -796,6 +972,7 @@ func (hpr *hostPathRules) upsertRoute(
 	gateway *graph.Gateway,
 	referencedServices map[types.NamespacedName]*graph.ReferencedService,
 	referencedSecrets map[types.NamespacedName]*secrets.Secret,
+	extAuthCertBundleIDs map[CertBundleID]struct{},
 ) {
 	var hostnames []string
 	GRPC := route.RouteType == graph.RouteTypeGRPC
@@ -811,9 +988,7 @@ func (hpr *hostPathRules) upsertRoute(
 	}
 
 	for _, p := range route.ParentRefs {
-		key := graph.CreateGatewayListenerKey(listener.GatewayName, listener.Name)
-
-		if val, exist := p.Attachment.AcceptedHostnames[key]; exist {
+		if val, exist := p.Attachment.AcceptedHostnames[graph.CreateParentRefListenerKeyFromListener(listener)]; exist {
 			hostnames = val
 			break
 		}
@@ -841,7 +1016,15 @@ func (hpr *hostPathRules) upsertRoute(
 
 		var filters HTTPFilters
 		if rule.Filters.Valid {
-			filters = createHTTPFilters(rule.Filters.Filters, idx, routeNsName, referencedSecrets)
+			filters = createHTTPFilters(
+				rule.Filters.Filters,
+				idx,
+				routeNsName,
+				referencedSecrets,
+				rule.BackendRefs,
+				listener.GatewayName,
+				extAuthCertBundleIDs,
+			)
 		} else {
 			filters = HTTPFilters{
 				InvalidFilter: &InvalidHTTPFilter{},
@@ -1156,6 +1339,9 @@ func createHTTPFilters(
 	ruleIdx int,
 	routeNsName types.NamespacedName,
 	referencedSecrets map[types.NamespacedName]*secrets.Secret,
+	backendRefs []graph.BackendRef,
+	gwNsName types.NamespacedName,
+	extAuthCertBundleIDs map[CertBundleID]struct{},
 ) HTTPFilters {
 	var result HTTPFilters
 
@@ -1204,6 +1390,18 @@ func createHTTPFilters(
 		case graph.FilterCORS:
 			if result.CORSFilter == nil {
 				result.CORSFilter = convertHTTPCORSFilter(f.CORS)
+			}
+		case graph.FilterExternalAuth:
+			if result.ExternalAuthFilter == nil {
+				for _, br := range backendRefs {
+					if br.IsExternalAuthBackend && br.Valid {
+						result.ExternalAuthFilter = convertHTTPExternalAuthFilter(f.ExternalAuth, br, routeNsName, ruleIdx, gwNsName)
+						if result.ExternalAuthFilter.VerifyTLS != nil && extAuthCertBundleIDs != nil {
+							extAuthCertBundleIDs[result.ExternalAuthFilter.VerifyTLS.CertBundleID] = struct{}{}
+						}
+						break
+					}
+				}
 			}
 		}
 	}
@@ -1640,6 +1838,9 @@ func buildPolicies(gateway *graph.Gateway, graphPolicies []*graph.Policy) []poli
 		if _, exists := policy.InvalidForGateways[client.ObjectKeyFromObject(gateway.Source)]; exists {
 			continue
 		}
+		if policy.WAFState != nil && policy.WAFState.BundlePending {
+			continue
+		}
 
 		finalPolicies = append(finalPolicies, policy.Source)
 	}
@@ -1891,4 +2092,51 @@ func buildCompressionConfig(compression *ngfAPIv1alpha2.Compression) *Compressio
 	}
 
 	return settings
+}
+
+func buildWAF(gateway *graph.Gateway) WAFConfig {
+	gatewayBundles := collectGatewayWAFBundles(gateway)
+	wb := convertWAFBundles(gatewayBundles)
+
+	var cookieSeed string
+	if gateway.Source != nil && !graph.WAFCookieSeedDisabledForNginxProxy(gateway.EffectiveNginxProxy) {
+		cookieSeed = string(gateway.Source.UID)
+	}
+
+	wc := WAFConfig{
+		Enabled:    graph.WAFEnabledForNginxProxy(gateway.EffectiveNginxProxy),
+		WAFBundles: wb,
+		CookieSeed: cookieSeed,
+	}
+	return wc
+}
+
+// collectGatewayWAFBundles collects WAF bundles from all WAFPolicies that target
+// this gateway directly or target routes attached to this gateway.
+func collectGatewayWAFBundles(gateway *graph.Gateway) map[graph.WAFBundleKey]*graph.WAFBundleData {
+	bundles := make(map[graph.WAFBundleKey]*graph.WAFBundleData)
+
+	// Collect bundles from policies targeting the gateway directly.
+	for _, policy := range gateway.Policies {
+		if policy.WAFState == nil {
+			continue
+		}
+
+		maps.Copy(bundles, policy.WAFState.Bundles)
+	}
+
+	// Collect bundles from policies targeting routes attached to this gateway.
+	for _, listener := range gateway.Listeners {
+		for _, route := range listener.Routes {
+			for _, policy := range route.Policies {
+				if policy.WAFState == nil {
+					continue
+				}
+
+				maps.Copy(bundles, policy.WAFState.Bundles)
+			}
+		}
+	}
+
+	return bundles
 }

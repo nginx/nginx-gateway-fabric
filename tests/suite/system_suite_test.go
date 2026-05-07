@@ -59,6 +59,8 @@ var (
 	imageTag                 = flag.String("image-tag", "", "Image tag for NGF images")
 	versionUnderTest         = flag.String("version-under-test", "", "Version of NGF that is being tested")
 	imagePullPolicy          = flag.String("pull-policy", "", "Image pull policy for NGF images")
+	nginxImageJWTFileName    = flag.String("nginx-image-jwt-file-name", "", "Name of JWT file name for N+ images")
+	wafEnabled               = flag.Bool("waf-enabled", false, "Is NAP WAF enabled (NGINX Plus with WAF images)")
 	serviceType              = flag.String("service-type", "NodePort", "Type of service fronting NGF to be deployed")
 	plusEnabled              = flag.Bool("plus-enabled", false, "Is NGINX Plus enabled")
 	plusLicenseFileName      = flag.String("plus-license-file-name", "", "File name containing the NGINX Plus JWT")
@@ -171,7 +173,9 @@ func setup(cfg setupConfig, extraInstallArgs ...string) {
 		version = "edge"
 	}
 
-	nginxCrossplanePath = "us-docker.pkg.dev/" + *gkeProject + "/nginx-gateway-fabric"
+	if *gkeProject != "" {
+		nginxCrossplanePath = "us-docker.pkg.dev/" + *gkeProject + "/nginx-gateway-fabric"
+	}
 
 	// Set text replacements for per-proc resource names so manifests reference the correct
 	// GatewayClass and NginxGateway config for this parallel process.
@@ -243,14 +247,15 @@ func cleanUpPortForward() {
 func createNGFInstallConfig(cfg setupConfig, extraInstallArgs ...string) framework.InstallationConfig {
 	GinkgoWriter.Printf("Creating NGF installation config\n")
 	installCfg := framework.InstallationConfig{
-		ReleaseName:       cfg.releaseName,
-		Namespace:         ngfNamespace,
-		ChartPath:         cfg.chartPath,
-		ServiceType:       *serviceType,
-		Plus:              *plusEnabled,
-		PlusUsageEndpoint: *plusUsageEndpoint,
-		Telemetry:         cfg.telemetry,
-		GatewayClassName:  gatewayClassName,
+		ReleaseName:          cfg.releaseName,
+		Namespace:            ngfNamespace,
+		ChartPath:            cfg.chartPath,
+		ServiceType:          *serviceType,
+		Plus:                 *plusEnabled,
+		PlusUsageEndpoint:    *plusUsageEndpoint,
+		Telemetry:            cfg.telemetry,
+		GatewayClassName:     gatewayClassName,
+		NginxImagePullSecret: *nginxImageJWTFileName,
 	}
 
 	switch {
@@ -278,6 +283,13 @@ func createNGFInstallConfig(cfg setupConfig, extraInstallArgs ...string) framewo
 
 	if *plusEnabled {
 		Expect(framework.CreateLicenseSecret(resourceManager, ngfNamespace, *plusLicenseFileName)).To(Succeed())
+		if *nginxImageJWTFileName != "" {
+			Expect(framework.CreateImagePullSecret(resourceManager, ngfNamespace, *nginxImageJWTFileName)).To(Succeed())
+			extraInstallArgs = append(
+				extraInstallArgs,
+				"--set", "nginx.imagePullSecret="+framework.PlusImagePullSecretName,
+			)
+		}
 	}
 
 	output, err := framework.InstallNGF(installCfg, extraInstallArgs...)

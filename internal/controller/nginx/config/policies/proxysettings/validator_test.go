@@ -169,6 +169,60 @@ func TestValidator_Validate(t *testing.T) {
 			expConditions: nil,
 		},
 		{
+			name: "invalid connect timeout",
+			policy: createModifiedPolicy(func(p *ngfAPI.ProxySettingsPolicy) *ngfAPI.ProxySettingsPolicy {
+				p.Spec.Timeout = &ngfAPI.ProxyTimeout{
+					Connect: helpers.GetPointer[ngfAPI.Duration]("invalid"),
+				}
+				return p
+			}),
+			expConditions: []conditions.Condition{
+				conditions.NewPolicyInvalid(`spec.timeout.connect: Invalid value: "invalid": ` +
+					`^[0-9]{1,4}(ms|s|m|h)? (e.g. '5ms',  or '10s',  or '500m',  or '1000h', ` +
+					`regex used for validation is 'must contain an, at most, four digit number followed by 'ms', 's', 'm', or 'h'')`),
+			},
+		},
+		{
+			name: "invalid read timeout",
+			policy: createModifiedPolicy(func(p *ngfAPI.ProxySettingsPolicy) *ngfAPI.ProxySettingsPolicy {
+				p.Spec.Timeout = &ngfAPI.ProxyTimeout{
+					Read: helpers.GetPointer[ngfAPI.Duration]("invalid"),
+				}
+				return p
+			}),
+			expConditions: []conditions.Condition{
+				conditions.NewPolicyInvalid(`spec.timeout.read: Invalid value: "invalid": ` +
+					`^[0-9]{1,4}(ms|s|m|h)? (e.g. '5ms',  or '10s',  or '500m',  or '1000h', ` +
+					`regex used for validation is 'must contain an, at most, four digit number followed by 'ms', 's', 'm', or 'h'')`),
+			},
+		},
+		{
+			name: "invalid send timeout",
+			policy: createModifiedPolicy(func(p *ngfAPI.ProxySettingsPolicy) *ngfAPI.ProxySettingsPolicy {
+				p.Spec.Timeout = &ngfAPI.ProxyTimeout{
+					Send: helpers.GetPointer[ngfAPI.Duration]("invalid"),
+				}
+				return p
+			}),
+			expConditions: []conditions.Condition{
+				conditions.NewPolicyInvalid(`spec.timeout.send: Invalid value: "invalid": ` +
+					`^[0-9]{1,4}(ms|s|m|h)? (e.g. '5ms',  or '10s',  or '500m',  or '1000h', ` +
+					`regex used for validation is 'must contain an, at most, four digit number followed by 'ms', 's', 'm', or 'h'')`),
+			},
+		},
+		{
+			name: "valid timeouts",
+			policy: createModifiedPolicy(func(p *ngfAPI.ProxySettingsPolicy) *ngfAPI.ProxySettingsPolicy {
+				p.Spec.Timeout = &ngfAPI.ProxyTimeout{
+					Connect: helpers.GetPointer[ngfAPI.Duration]("5s"),
+					Read:    helpers.GetPointer[ngfAPI.Duration]("60s"),
+					Send:    helpers.GetPointer[ngfAPI.Duration]("30s"),
+				}
+				return p
+			}),
+			expConditions: nil,
+		},
+		{
 			name:          "valid",
 			policy:        createValidPolicy(),
 			expConditions: nil,
@@ -283,6 +337,78 @@ func TestValidator_Conflicts(t *testing.T) {
 				},
 			},
 			conflicts: true,
+		},
+		{
+			name: "connect timeout conflicts",
+			polA: &ngfAPI.ProxySettingsPolicy{
+				Spec: ngfAPI.ProxySettingsPolicySpec{
+					Timeout: &ngfAPI.ProxyTimeout{
+						Connect: helpers.GetPointer[ngfAPI.Duration]("5s"),
+					},
+				},
+			},
+			polB: &ngfAPI.ProxySettingsPolicy{
+				Spec: ngfAPI.ProxySettingsPolicySpec{
+					Timeout: &ngfAPI.ProxyTimeout{
+						Connect: helpers.GetPointer[ngfAPI.Duration]("10s"),
+					},
+				},
+			},
+			conflicts: true,
+		},
+		{
+			name: "read timeout conflicts",
+			polA: &ngfAPI.ProxySettingsPolicy{
+				Spec: ngfAPI.ProxySettingsPolicySpec{
+					Timeout: &ngfAPI.ProxyTimeout{
+						Read: helpers.GetPointer[ngfAPI.Duration]("60s"),
+					},
+				},
+			},
+			polB: &ngfAPI.ProxySettingsPolicy{
+				Spec: ngfAPI.ProxySettingsPolicySpec{
+					Timeout: &ngfAPI.ProxyTimeout{
+						Read: helpers.GetPointer[ngfAPI.Duration]("30s"),
+					},
+				},
+			},
+			conflicts: true,
+		},
+		{
+			name: "send timeout conflicts",
+			polA: &ngfAPI.ProxySettingsPolicy{
+				Spec: ngfAPI.ProxySettingsPolicySpec{
+					Timeout: &ngfAPI.ProxyTimeout{
+						Send: helpers.GetPointer[ngfAPI.Duration]("30s"),
+					},
+				},
+			},
+			polB: &ngfAPI.ProxySettingsPolicy{
+				Spec: ngfAPI.ProxySettingsPolicySpec{
+					Timeout: &ngfAPI.ProxyTimeout{
+						Send: helpers.GetPointer[ngfAPI.Duration]("15s"),
+					},
+				},
+			},
+			conflicts: true,
+		},
+		{
+			name: "different timeout fields do not conflict",
+			polA: &ngfAPI.ProxySettingsPolicy{
+				Spec: ngfAPI.ProxySettingsPolicySpec{
+					Timeout: &ngfAPI.ProxyTimeout{
+						Connect: helpers.GetPointer[ngfAPI.Duration]("5s"),
+					},
+				},
+			},
+			polB: &ngfAPI.ProxySettingsPolicy{
+				Spec: ngfAPI.ProxySettingsPolicySpec{
+					Timeout: &ngfAPI.ProxyTimeout{
+						Read: helpers.GetPointer[ngfAPI.Duration]("60s"),
+					},
+				},
+			},
+			conflicts: false,
 		},
 	}
 

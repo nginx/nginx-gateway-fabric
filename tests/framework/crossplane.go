@@ -16,6 +16,10 @@ import (
 // ExpectedNginxField contains an nginx directive key and value,
 // and the expected file, server, and location block that it should exist in.
 type ExpectedNginxField struct {
+	// CaptureValue, when non-nil, is populated with the actual directive value when the field is found.
+	// This allows callers to retrieve the matched value without a separate lookup.
+	// When CaptureValue is non-nil and Value is "", any directive value matches (wildcard).
+	CaptureValue *string
 	// Directive is the directive name.
 	Directive string
 	// Value is the value for the directive. Can be the full value or a substring. If it's a substring,
@@ -158,7 +162,9 @@ func (e ExpectedNginxField) fieldFound(directive *Directive, opts ...Option) boo
 	arg := strings.Join(directive.Args, " ")
 
 	valueMatch := arg == e.Value
-	if e.ValueSubstringAllowed {
+	if e.CaptureValue != nil && e.Value == "" {
+		valueMatch = true
+	} else if e.ValueSubstringAllowed {
 		valueMatch = strings.Contains(arg, e.Value)
 	}
 
@@ -171,6 +177,9 @@ func (e ExpectedNginxField) fieldFound(directive *Directive, opts ...Option) boo
 				directive.Directive,
 				arg,
 			)
+		}
+		if e.CaptureValue != nil {
+			*e.CaptureValue = arg
 		}
 		return true
 	}

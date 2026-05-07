@@ -3,6 +3,7 @@
 # Generate deployment files using Helm. This script uses the Helm chart examples in examples/helm
 
 charts=$(find examples/helm -maxdepth 1 -mindepth 1 -type d -exec basename {} \;)
+kube_version=$(grep 'kubeVersion' charts/nginx-gateway-fabric/Chart.yaml | grep -Eo '[0-9]+\.[0-9]+\.[0-9]+')
 
 generate_manifests() {
     chart=$1
@@ -15,7 +16,7 @@ generate_manifests() {
         helm_parameters="${helm_parameters} --api-versions security.openshift.io/v1/SecurityContextConstraints"
     fi
 
-    helm template nginx-gateway ${helm_parameters} --values examples/helm/${chart}/values.yaml charts/nginx-gateway-fabric >${manifest} 2>/dev/null
+    helm template nginx-gateway ${helm_parameters} --kube-version "${kube_version}" --values examples/helm/${chart}/values.yaml charts/nginx-gateway-fabric >${manifest} 2>/dev/null
     sed -i.bak '/app.kubernetes.io\/managed-by: Helm/d' ${manifest}
     sed -i.bak '/helm.sh/d' ${manifest}
     cp ${manifest} config/base

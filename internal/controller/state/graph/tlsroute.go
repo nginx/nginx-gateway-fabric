@@ -15,19 +15,20 @@ func buildTLSRoute(
 	gws map[types.NamespacedName]*Gateway,
 	services map[types.NamespacedName]*apiv1.Service,
 	refGrantResolver func(resource toResource) bool,
+	listenerSets map[types.NamespacedName]*ListenerSet,
 ) *L4Route {
 	r := &L4Route{
 		Source:    gtr,
 		RouteType: RouteTypeTLS,
 	}
 
-	sectionNameRefs, err := buildSectionNameRefs(gtr.Spec.ParentRefs, gtr.Namespace, gws)
+	sectionNameRefs, err := buildSectionNameRefs(gtr.Spec.ParentRefs, gtr.Namespace, gws, listenerSets)
 	if err != nil {
 		r.Valid = false
 
 		return r
 	}
-	// route doesn't belong to any of the Gateways
+	// route doesn't belong to any of the Gateways or ListenerSets
 	if len(sectionNameRefs) == 0 {
 		return nil
 	}

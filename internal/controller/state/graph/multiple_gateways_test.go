@@ -464,6 +464,7 @@ func Test_MultipleGateways_WithNginxProxy(t *testing.T) {
 			fakePolicyValidator := &validationfakes.FakePolicyValidator{}
 
 			result := BuildGraph(
+				t.Context(),
 				test.clusterState,
 				controllerName,
 				gcName,
@@ -475,6 +476,8 @@ func Test_MultipleGateways_WithNginxProxy(t *testing.T) {
 						},
 					},
 				},
+				nil, // wafFetcher
+				nil, // previousWAFBundles
 				validation.Validators{
 					HTTPFieldsValidator: &validationfakes.FakeHTTPFieldsValidator{},
 					GenericValidator:    &validationfakes.FakeGenericValidator{},
@@ -485,6 +488,23 @@ func Test_MultipleGateways_WithNginxProxy(t *testing.T) {
 					Experimental: experimentalFeaturesEnabled,
 				},
 			)
+
+			// Verify ListenerFactory field separately since it's a complex internal struct
+			// Directly comparing the ListenerFactory internal fields is unnecessary as it is tested
+			// in the test file of where the ListenerFactory is defined.
+			for gwKey, expectedGw := range test.expGraph.Gateways {
+				actualGw, exists := result.Gateways[gwKey]
+				g.Expect(exists).To(BeTrue())
+
+				if expectedGw.Valid {
+					g.Expect(actualGw.ListenerFactory).ToNot(BeNil())
+				} else {
+					g.Expect(actualGw.ListenerFactory).To(BeNil())
+				}
+
+				// Clear ListenerFactory from actual result for struct comparison
+				actualGw.ListenerFactory = nil
+			}
 
 			g.Expect(helpers.Diff(test.expGraph, result)).To(BeEmpty())
 		})
@@ -965,6 +985,7 @@ func Test_MultipleGateways_WithListeners(t *testing.T) {
 			fakePolicyValidator := &validationfakes.FakePolicyValidator{}
 
 			result := BuildGraph(
+				t.Context(),
 				test.clusterState,
 				controllerName,
 				gcName,
@@ -976,6 +997,8 @@ func Test_MultipleGateways_WithListeners(t *testing.T) {
 						},
 					},
 				},
+				nil, // wafFetcher
+				nil, // previousWAFBundles
 				validation.Validators{
 					HTTPFieldsValidator: &validationfakes.FakeHTTPFieldsValidator{},
 					GenericValidator:    &validationfakes.FakeGenericValidator{},
@@ -986,6 +1009,23 @@ func Test_MultipleGateways_WithListeners(t *testing.T) {
 					Experimental: experimentalFeaturesEnabled,
 				},
 			)
+
+			// Verify ListenerFactory field separately since it's a complex internal struct
+			// Directly comparing the ListenerFactory internal fields is unnecessary as it is tested
+			// in the test file of where the ListenerFactory is defined.
+			for gwKey, expectedGw := range test.expGraph.Gateways {
+				actualGw, exists := result.Gateways[gwKey]
+				g.Expect(exists).To(BeTrue())
+
+				if expectedGw.Valid {
+					g.Expect(actualGw.ListenerFactory).ToNot(BeNil())
+				} else {
+					g.Expect(actualGw.ListenerFactory).To(BeNil())
+				}
+
+				// Clear ListenerFactory from actual result for struct comparison
+				actualGw.ListenerFactory = nil
+			}
 
 			g.Expect(helpers.Diff(test.expGraph, result)).To(BeEmpty())
 		})

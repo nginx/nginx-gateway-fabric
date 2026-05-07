@@ -42,6 +42,11 @@ type ProxySettingsPolicySpec struct {
 	// +optional
 	Buffering *ProxyBuffering `json:"buffering,omitempty"`
 
+	// Timeout configures timeouts for the connection to the proxied server.
+	//
+	// +optional
+	Timeout *ProxyTimeout `json:"timeout,omitempty"`
+
 	// TargetRefs identifies the API object(s) to apply the policy to.
 	// Objects must be in the same namespace as the policy.
 	// Support: Gateway, HTTPRoute, GRPCRoute
@@ -97,4 +102,25 @@ type ProxyBuffers struct {
 	// +kubebuilder:validation:Minimum=2
 	// +kubebuilder:validation:Maximum=256
 	Number int32 `json:"number"`
+}
+
+// ProxyTimeout defines timeout settings for the connection to the proxied server.
+type ProxyTimeout struct {
+	// Connect sets the timeout for establishing a connection with the proxied server.
+	// Directive: https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_connect_timeout
+	//
+	// +optional
+	Connect *Duration `json:"connect,omitempty"`
+
+	// Read sets the timeout for reading a response from the proxied server.
+	// Directive: https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_read_timeout
+	//
+	// +optional
+	Read *Duration `json:"read,omitempty"`
+
+	// Send sets the timeout for transmitting a request to the proxied server.
+	// Directive: https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_send_timeout
+	//
+	// +optional
+	Send *Duration `json:"send,omitempty"`
 }

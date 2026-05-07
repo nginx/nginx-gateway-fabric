@@ -11,6 +11,7 @@ func buildTCPRoute(
 	gws map[types.NamespacedName]*Gateway,
 	services map[types.NamespacedName]*apiv1.Service,
 	refGrantResolver func(resource toResource) bool,
+	listenerSets map[types.NamespacedName]*ListenerSet,
 ) *L4Route {
 	// Convert TCPRoute rules to generic l4RouteRule format
 	rules := make([]l4RouteRule, len(tcpRoute.Spec.Rules))
@@ -30,5 +31,5 @@ func buildTCPRoute(
 		refGrantResolver: refGrantResolver,
 	}
 
-	return buildGenericL4Route(config, gws, services)
+	return buildGenericL4Route(config, gws, services, listenerSets)
 }

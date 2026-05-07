@@ -7,6 +7,7 @@ import (
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -69,6 +70,13 @@ func (r *Reconciler) mustCreateNewObject(objectType ngftypes.ObjectType) ngftype
 	if !ok {
 		panic("failed to create a new object")
 	}
+
+	// reflect.New creates a zero-valued instance, which loses the GVK for unstructured objects
+	// since they store GVK at runtime rather than in their struct definition.
+	if _, isUnstructured := obj.(*unstructured.Unstructured); isUnstructured {
+		obj.GetObjectKind().SetGroupVersionKind(objectType.GetObjectKind().GroupVersionKind())
+	}
+
 	return obj
 }
 

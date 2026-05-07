@@ -395,6 +395,11 @@ func TestTelemetryEnabledForNginxProxy(t *testing.T) {
 		enabled bool
 	}{
 		{
+			name:    "effective nginx proxy is nil",
+			ep:      nil,
+			enabled: false,
+		},
+		{
 			name: "telemetry struct is nil",
 			ep: &EffectiveNginxProxy{
 				Telemetry: nil,
@@ -532,6 +537,208 @@ func TestMetricsEnabledForNginxProxy(t *testing.T) {
 			port, enabled := MetricsEnabledForNginxProxy(test.ep)
 			g.Expect(port).To(Equal(test.port))
 			g.Expect(enabled).To(Equal(test.enabled))
+		})
+	}
+}
+
+// Add test cases for WAF merging in TestBuildEffectiveNginxProxy.
+func TestBuildEffectiveNginxProxy_WAF(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		gcNp *NginxProxy
+		gwNp *NginxProxy
+		exp  *EffectiveNginxProxy
+		name string
+	}{
+		{
+			name: "gateway nginx proxy overrides WAF setting",
+			gcNp: &NginxProxy{
+				Valid: true,
+				Source: &ngfAPIv1alpha2.NginxProxy{
+					Spec: ngfAPIv1alpha2.NginxProxySpec{
+						WAF: &ngfAPIv1alpha2.WAFSpec{Enable: helpers.GetPointer(false)},
+					},
+				},
+			},
+			gwNp: &NginxProxy{
+				Valid: true,
+				Source: &ngfAPIv1alpha2.NginxProxy{
+					Spec: ngfAPIv1alpha2.NginxProxySpec{
+						WAF: &ngfAPIv1alpha2.WAFSpec{Enable: helpers.GetPointer(true)},
+					},
+				},
+			},
+			exp: &EffectiveNginxProxy{
+				WAF: &ngfAPIv1alpha2.WAFSpec{Enable: helpers.GetPointer(true)},
+			},
+		},
+		{
+			name: "gateway class WAF setting when gateway has no WAF config",
+			gcNp: &NginxProxy{
+				Valid: true,
+				Source: &ngfAPIv1alpha2.NginxProxy{
+					Spec: ngfAPIv1alpha2.NginxProxySpec{
+						WAF: &ngfAPIv1alpha2.WAFSpec{Enable: helpers.GetPointer(true)},
+					},
+				},
+			},
+			gwNp: &NginxProxy{
+				Valid: true,
+				Source: &ngfAPIv1alpha2.NginxProxy{
+					Spec: ngfAPIv1alpha2.NginxProxySpec{
+						// No WAF field set
+					},
+				},
+			},
+			exp: &EffectiveNginxProxy{
+				WAF: &ngfAPIv1alpha2.WAFSpec{Enable: helpers.GetPointer(true)},
+			},
+		},
+		{
+			name: "gateway class enables WAF, gateway overrides only disableCookieSeed",
+			gcNp: &NginxProxy{
+				Valid: true,
+				Source: &ngfAPIv1alpha2.NginxProxy{
+					Spec: ngfAPIv1alpha2.NginxProxySpec{
+						WAF: &ngfAPIv1alpha2.WAFSpec{Enable: helpers.GetPointer(true)},
+					},
+				},
+			},
+			gwNp: &NginxProxy{
+				Valid: true,
+				Source: &ngfAPIv1alpha2.NginxProxy{
+					Spec: ngfAPIv1alpha2.NginxProxySpec{
+						WAF: &ngfAPIv1alpha2.WAFSpec{DisableCookieSeed: helpers.GetPointer(true)},
+					},
+				},
+			},
+			exp: &EffectiveNginxProxy{
+				WAF: &ngfAPIv1alpha2.WAFSpec{
+					Enable:            helpers.GetPointer(true),
+					DisableCookieSeed: helpers.GetPointer(true),
+				},
+			},
+		},
+		{
+			name: "both have WAF disabled",
+			gcNp: &NginxProxy{
+				Valid: true,
+				Source: &ngfAPIv1alpha2.NginxProxy{
+					Spec: ngfAPIv1alpha2.NginxProxySpec{
+						WAF: &ngfAPIv1alpha2.WAFSpec{Enable: helpers.GetPointer(false)},
+					},
+				},
+			},
+			gwNp: &NginxProxy{
+				Valid: true,
+				Source: &ngfAPIv1alpha2.NginxProxy{
+					Spec: ngfAPIv1alpha2.NginxProxySpec{
+						WAF: &ngfAPIv1alpha2.WAFSpec{Enable: helpers.GetPointer(false)},
+					},
+				},
+			},
+			exp: &EffectiveNginxProxy{
+				WAF: &ngfAPIv1alpha2.WAFSpec{Enable: helpers.GetPointer(false)},
+			},
+		},
+		{
+			name: "both have WAF unset",
+			gcNp: &NginxProxy{
+				Valid: true,
+				Source: &ngfAPIv1alpha2.NginxProxy{
+					Spec: ngfAPIv1alpha2.NginxProxySpec{},
+				},
+			},
+			gwNp: &NginxProxy{
+				Valid: true,
+				Source: &ngfAPIv1alpha2.NginxProxy{
+					Spec: ngfAPIv1alpha2.NginxProxySpec{},
+				},
+			},
+			exp: &EffectiveNginxProxy{},
+		},
+		{
+			name: "gateway class sets bundleFailOpen, gateway has no WAF config",
+			gcNp: &NginxProxy{
+				Valid: true,
+				Source: &ngfAPIv1alpha2.NginxProxy{
+					Spec: ngfAPIv1alpha2.NginxProxySpec{
+						WAF: &ngfAPIv1alpha2.WAFSpec{BundleFailOpen: helpers.GetPointer(true)},
+					},
+				},
+			},
+			gwNp: &NginxProxy{
+				Valid: true,
+				Source: &ngfAPIv1alpha2.NginxProxy{
+					Spec: ngfAPIv1alpha2.NginxProxySpec{},
+				},
+			},
+			exp: &EffectiveNginxProxy{
+				WAF: &ngfAPIv1alpha2.WAFSpec{BundleFailOpen: helpers.GetPointer(true)},
+			},
+		},
+		{
+			name: "gateway overrides bundleFailOpen set by gateway class",
+			gcNp: &NginxProxy{
+				Valid: true,
+				Source: &ngfAPIv1alpha2.NginxProxy{
+					Spec: ngfAPIv1alpha2.NginxProxySpec{
+						WAF: &ngfAPIv1alpha2.WAFSpec{BundleFailOpen: helpers.GetPointer(true)},
+					},
+				},
+			},
+			gwNp: &NginxProxy{
+				Valid: true,
+				Source: &ngfAPIv1alpha2.NginxProxy{
+					Spec: ngfAPIv1alpha2.NginxProxySpec{
+						WAF: &ngfAPIv1alpha2.WAFSpec{BundleFailOpen: helpers.GetPointer(false)},
+					},
+				},
+			},
+			exp: &EffectiveNginxProxy{
+				WAF: &ngfAPIv1alpha2.WAFSpec{BundleFailOpen: helpers.GetPointer(false)},
+			},
+		},
+		{
+			name: "gateway class enables WAF and sets bundleFailOpen, gateway overrides only disableCookieSeed",
+			gcNp: &NginxProxy{
+				Valid: true,
+				Source: &ngfAPIv1alpha2.NginxProxy{
+					Spec: ngfAPIv1alpha2.NginxProxySpec{
+						WAF: &ngfAPIv1alpha2.WAFSpec{
+							Enable:         helpers.GetPointer(true),
+							BundleFailOpen: helpers.GetPointer(true),
+						},
+					},
+				},
+			},
+			gwNp: &NginxProxy{
+				Valid: true,
+				Source: &ngfAPIv1alpha2.NginxProxy{
+					Spec: ngfAPIv1alpha2.NginxProxySpec{
+						WAF: &ngfAPIv1alpha2.WAFSpec{DisableCookieSeed: helpers.GetPointer(true)},
+					},
+				},
+			},
+			exp: &EffectiveNginxProxy{
+				WAF: &ngfAPIv1alpha2.WAFSpec{
+					Enable:            helpers.GetPointer(true),
+					DisableCookieSeed: helpers.GetPointer(true),
+					BundleFailOpen:    helpers.GetPointer(true),
+				},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			enp := buildEffectiveNginxProxy(test.gcNp, test.gwNp)
+			g.Expect(enp).ToNot(BeNil())
+			g.Expect(enp.WAF).To(Equal(test.exp.WAF))
 		})
 	}
 }

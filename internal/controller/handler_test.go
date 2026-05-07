@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"errors"
+	"testing"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -14,6 +15,7 @@ import (
 	discoveryV1 "k8s.io/api/discovery/v1"
 	apiErrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	k8sEvents "k8s.io/client-go/tools/events"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -31,6 +33,7 @@ import (
 	agentgrpcfakes "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent/grpc/grpcfakes"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/configfakes"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/provisioner/provisionerfakes"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/statefakes"
@@ -39,6 +42,10 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/events"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/waf/fetch"
+	wafPoller "github.com/nginx/nginx-gateway-fabric/v2/internal/framework/waf/poller"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/waf/poller/pollerfakes"
 )
 
 var _ = Describe("eventHandler", func() {
@@ -720,6 +727,175 @@ var _ = Describe("eventHandler", func() {
 		Expect(handler.GetLatestConfiguration()).To(BeEmpty())
 	})
 
+	It("should withhold config push and enqueue status update when WAF bundle is pending", func() {
+		gwNsName := types.NamespacedName{Namespace: "test", Name: "gateway"}
+		pendingGraph := &graph.Graph{
+			Gateways: map[types.NamespacedName]*graph.Gateway{
+				gwNsName: {
+					Valid: true,
+					Source: &gatewayv1.Gateway{
+						ObjectMeta: metav1.ObjectMeta{
+							Namespace: gwNsName.Namespace,
+							Name:      gwNsName.Name,
+						},
+					},
+					DeploymentName: types.NamespacedName{Namespace: "test", Name: "gateway-nginx"},
+				},
+			},
+			NGFPolicies: map[graph.PolicyKey]*graph.Policy{
+				wafPolicyKey("waf-policy"): {
+					Source: makeWAFPolicy(false),
+					WAFState: &graph.PolicyWAFState{
+						BundlePending: true,
+					},
+					TargetRefs: []graph.PolicyTargetRef{
+						{Kind: kinds.Gateway, Nsname: gwNsName},
+					},
+				},
+			},
+		}
+
+		fakeProcessor.ProcessReturns(pendingGraph)
+		fakeProcessor.GetLatestGraphReturns(pendingGraph)
+
+		e := &events.UpsertEvent{Resource: &gatewayv1.Gateway{}}
+		handler.HandleEventBatch(context.Background(), logr.Discard(), []any{e})
+
+		Expect(fakeNginxUpdater.UpdateConfigCallCount()).To(Equal(0))
+		// Status update is consumed by waitForStatusUpdates and triggers UpdateGroup.
+		// Use Eventually because waitForStatusUpdates runs in a separate goroutine.
+		Eventually(fakeStatusUpdater.UpdateGroupCallCount).Should(BeNumerically(">=", 1))
+	})
+
+	It("should push config when WAF bundle is pending and fail-open is enabled", func() {
+		gwNsName := types.NamespacedName{Namespace: "test", Name: "gateway"}
+		pendingGraph := &graph.Graph{
+			Gateways: map[types.NamespacedName]*graph.Gateway{
+				gwNsName: {
+					Valid: true,
+					Source: &gatewayv1.Gateway{
+						ObjectMeta: metav1.ObjectMeta{
+							Namespace: gwNsName.Namespace,
+							Name:      gwNsName.Name,
+						},
+					},
+					DeploymentName: types.NamespacedName{Namespace: "test", Name: "gateway-nginx"},
+					Listeners: []*graph.Listener{
+						{
+							Name:        "http",
+							GatewayName: gwNsName,
+							Source: gatewayv1.Listener{
+								Name:     "http",
+								Protocol: gatewayv1.HTTPProtocolType,
+								Port:     80,
+							},
+							Routes: map[graph.RouteKey]*graph.L7Route{},
+							Valid:  true,
+						},
+					},
+					EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+						WAF: &v1alpha2.WAFSpec{
+							Enable:         helpers.GetPointer(true),
+							BundleFailOpen: helpers.GetPointer(true),
+						},
+					},
+				},
+			},
+			NGFPolicies: map[graph.PolicyKey]*graph.Policy{
+				wafPolicyKey("waf-policy"): {
+					Source: makeWAFPolicy(false),
+					Valid:  true,
+					WAFState: &graph.PolicyWAFState{
+						BundlePending: true,
+					},
+					TargetRefs: []graph.PolicyTargetRef{
+						{Kind: kinds.Gateway, Nsname: gwNsName},
+					},
+				},
+			},
+		}
+
+		fakeProcessor.ProcessReturns(pendingGraph)
+		fakeProcessor.GetLatestGraphReturns(pendingGraph)
+
+		e := &events.UpsertEvent{Resource: &gatewayv1.Gateway{}}
+		handler.HandleEventBatch(context.Background(), logr.Discard(), []any{e})
+
+		Expect(fakeNginxUpdater.UpdateConfigCallCount()).To(Equal(1))
+	})
+
+	It("should withhold config push when WAF bundle is pending and fail-open is explicitly false", func() {
+		gwNsName := types.NamespacedName{Namespace: "test", Name: "gateway"}
+		pendingGraph := &graph.Graph{
+			Gateways: map[types.NamespacedName]*graph.Gateway{
+				gwNsName: {
+					Valid: true,
+					Source: &gatewayv1.Gateway{
+						ObjectMeta: metav1.ObjectMeta{
+							Namespace: gwNsName.Namespace,
+							Name:      gwNsName.Name,
+						},
+					},
+					DeploymentName: types.NamespacedName{Namespace: "test", Name: "gateway-nginx"},
+					EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+						WAF: &v1alpha2.WAFSpec{
+							Enable:         helpers.GetPointer(true),
+							BundleFailOpen: helpers.GetPointer(false),
+						},
+					},
+					Listeners: []*graph.Listener{
+						{
+							Name:        "http",
+							GatewayName: gwNsName,
+							Source: gatewayv1.Listener{
+								Name:     "http",
+								Protocol: gatewayv1.HTTPProtocolType,
+								Port:     80,
+							},
+							Routes: map[graph.RouteKey]*graph.L7Route{},
+							Valid:  true,
+						},
+					},
+				},
+			},
+			NGFPolicies: map[graph.PolicyKey]*graph.Policy{
+				wafPolicyKey("waf-policy"): {
+					Source: makeWAFPolicy(false),
+					Valid:  true,
+					WAFState: &graph.PolicyWAFState{
+						BundlePending: true,
+					},
+					TargetRefs: []graph.PolicyTargetRef{
+						{Kind: kinds.Gateway, Nsname: gwNsName},
+					},
+				},
+			},
+		}
+
+		fakeProcessor.ProcessReturns(pendingGraph)
+		fakeProcessor.GetLatestGraphReturns(pendingGraph)
+
+		e := &events.UpsertEvent{Resource: &gatewayv1.Gateway{}}
+		handler.HandleEventBatch(context.Background(), logr.Discard(), []any{e})
+
+		Expect(fakeNginxUpdater.UpdateConfigCallCount()).To(Equal(0))
+		Eventually(fakeStatusUpdater.UpdateGroupCallCount).Should(BeNumerically(">=", 1))
+	})
+
+	It("should handle WAFBundleReconcileEvent without panicking and mark processor dirty", func() {
+		e := events.WAFBundleReconcileEvent{
+			PolicyNsName: types.NamespacedName{Namespace: "default", Name: "my-waf-policy"},
+		}
+
+		handle := func() {
+			batch := []any{e}
+			handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
+		}
+
+		Expect(handle).ShouldNot(Panic())
+		Expect(fakeProcessor.ForceRebuildCallCount()).To(Equal(1))
+	})
+
 	It("should process events with volume mounts from Deployment", func() {
 		// Create a gateway with EffectiveNginxProxy containing Deployment VolumeMounts
 		gatewayWithVolumeMounts := &graph.Graph{
@@ -1177,4 +1353,1084 @@ func (*badFakeClient) Create(context.Context, client.Object, ...client.CreateOpt
 
 func (*badFakeClient) Update(context.Context, client.Object, ...client.UpdateOption) error {
 	return errors.New("update error")
+}
+
+var wafGVK = schema.GroupVersionKind{
+	Group:   ngfAPI.GroupName,
+	Kind:    kinds.WAFPolicy,
+	Version: "v1alpha1",
+}
+
+func wafPolicyKey(name string) graph.PolicyKey {
+	return graph.PolicyKey{
+		NsName: types.NamespacedName{Namespace: "default", Name: name},
+		GVK:    wafGVK,
+	}
+}
+
+func makeWAFPolicy(pollingEnabled bool) *ngfAPI.WAFPolicy {
+	spec := ngfAPI.WAFPolicySpec{
+		Type: ngfAPI.PolicySourceTypeHTTP,
+		TargetRefs: []gatewayv1.LocalPolicyTargetReference{
+			{
+				Group: gatewayv1.Group(gatewayv1.GroupName),
+				Kind:  gatewayv1.Kind(kinds.Gateway),
+				Name:  "my-gateway",
+			},
+		},
+		PolicySource: ngfAPI.PolicySource{
+			HTTPSource: &ngfAPI.HTTPBundleSource{URL: "http://example.com/policy.tgz"},
+		},
+	}
+	if pollingEnabled {
+		spec.PolicySource.Polling = &ngfAPI.BundlePolling{
+			Enabled: true,
+		}
+	}
+
+	return &ngfAPI.WAFPolicy{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "waf-policy"},
+		Spec:       spec,
+	}
+}
+
+func TestReconcileWAFPollers(t *testing.T) {
+	t.Parallel()
+
+	gwNsName := types.NamespacedName{Namespace: "default", Name: "my-gateway"}
+	depName := types.NamespacedName{Namespace: "nginx-gateway", Name: "nginx"}
+
+	validGateway := &graph.Gateway{
+		Source: &gatewayv1.Gateway{
+			ObjectMeta: metav1.ObjectMeta{Namespace: gwNsName.Namespace, Name: gwNsName.Name},
+		},
+		DeploymentName: depName,
+		Valid:          true,
+	}
+
+	policyNsName := types.NamespacedName{Namespace: "default", Name: "waf-policy"}
+
+	tests := []struct {
+		ngfPolicies             map[graph.PolicyKey]*graph.Policy
+		gateways                map[types.NamespacedName]*graph.Gateway
+		expectInitialChecksums  map[graph.WAFBundleKey]string
+		expectSourceAuth        *fetch.BundleAuth
+		name                    string
+		expectReconcileCount    int
+		expectStopPollerCount   int
+		expectStopNotInCount    int
+		expectActivePolicyCount int
+		nilManager              bool
+	}{
+		{
+			name: "valid policy with polling enabled starts poller",
+			ngfPolicies: map[graph.PolicyKey]*graph.Policy{
+				wafPolicyKey("waf-policy"): {
+					Source: makeWAFPolicy(true),
+					Valid:  true,
+					TargetRefs: []graph.PolicyTargetRef{
+						{Kind: kinds.Gateway, Nsname: gwNsName},
+					},
+					WAFState: &graph.PolicyWAFState{
+						Bundles: map[graph.WAFBundleKey]*graph.WAFBundleData{
+							graph.PolicyBundleKey(policyNsName): {Checksum: "abc123"},
+						},
+					},
+				},
+			},
+			gateways:                map[types.NamespacedName]*graph.Gateway{gwNsName: validGateway},
+			expectReconcileCount:    1,
+			expectStopPollerCount:   0,
+			expectStopNotInCount:    1,
+			expectActivePolicyCount: 1,
+		},
+		{
+			name: "invalid policy stops poller",
+			ngfPolicies: map[graph.PolicyKey]*graph.Policy{
+				wafPolicyKey("waf-policy"): {
+					Source: makeWAFPolicy(true),
+					Valid:  false,
+				},
+			},
+			gateways:                map[types.NamespacedName]*graph.Gateway{gwNsName: validGateway},
+			expectReconcileCount:    0,
+			expectStopPollerCount:   1,
+			expectStopNotInCount:    1,
+			expectActivePolicyCount: 0,
+		},
+		{
+			name: "policy with polling disabled stops poller",
+			ngfPolicies: map[graph.PolicyKey]*graph.Policy{
+				wafPolicyKey("waf-policy"): {
+					Source: makeWAFPolicy(false),
+					Valid:  true,
+					TargetRefs: []graph.PolicyTargetRef{
+						{Kind: kinds.Gateway, Nsname: gwNsName},
+					},
+				},
+			},
+			gateways:                map[types.NamespacedName]*graph.Gateway{gwNsName: validGateway},
+			expectReconcileCount:    0,
+			expectStopPollerCount:   1,
+			expectStopNotInCount:    1,
+			expectActivePolicyCount: 0,
+		},
+		{
+			name: "policy with no target deployments stops poller",
+			ngfPolicies: map[graph.PolicyKey]*graph.Policy{
+				wafPolicyKey("waf-policy"): {
+					Source: makeWAFPolicy(true),
+					Valid:  true,
+					TargetRefs: []graph.PolicyTargetRef{
+						{Kind: kinds.Gateway, Nsname: gwNsName},
+					},
+				},
+			},
+			gateways:                map[types.NamespacedName]*graph.Gateway{}, // no gateways
+			expectReconcileCount:    0,
+			expectStopPollerCount:   1,
+			expectStopNotInCount:    1,
+			expectActivePolicyCount: 0,
+		},
+		{
+			name:                    "empty graph stops all pollers",
+			ngfPolicies:             map[graph.PolicyKey]*graph.Policy{},
+			gateways:                map[types.NamespacedName]*graph.Gateway{},
+			expectReconcileCount:    0,
+			expectStopPollerCount:   0,
+			expectStopNotInCount:    1,
+			expectActivePolicyCount: 0,
+		},
+		{
+			name: "non-WAF policy is ignored",
+			ngfPolicies: map[graph.PolicyKey]*graph.Policy{
+				{
+					NsName: types.NamespacedName{Namespace: "default", Name: "csp"},
+					GVK: schema.GroupVersionKind{
+						Group:   ngfAPI.GroupName,
+						Kind:    "ClientSettingsPolicy",
+						Version: "v1alpha1",
+					},
+				}: {
+					Source: &ngfAPI.ClientSettingsPolicy{},
+					Valid:  true,
+				},
+			},
+			gateways:                map[types.NamespacedName]*graph.Gateway{gwNsName: validGateway},
+			expectReconcileCount:    0,
+			expectStopPollerCount:   0,
+			expectStopNotInCount:    1,
+			expectActivePolicyCount: 0,
+		},
+		{
+			name:       "nil wafPollerManager is a no-op",
+			nilManager: true,
+			ngfPolicies: map[graph.PolicyKey]*graph.Policy{
+				wafPolicyKey("waf-policy"): {
+					Source: makeWAFPolicy(true),
+					Valid:  true,
+				},
+			},
+		},
+		{
+			name: "passes initial checksums to poller config",
+			ngfPolicies: map[graph.PolicyKey]*graph.Policy{
+				wafPolicyKey("waf-policy"): {
+					Source: makeWAFPolicy(true),
+					Valid:  true,
+					TargetRefs: []graph.PolicyTargetRef{
+						{Kind: kinds.Gateway, Nsname: gwNsName},
+					},
+					WAFState: &graph.PolicyWAFState{
+						Bundles: map[graph.WAFBundleKey]*graph.WAFBundleData{
+							graph.PolicyBundleKey(policyNsName): {Checksum: "sha256-abc"},
+						},
+					},
+				},
+			},
+			gateways:                map[types.NamespacedName]*graph.Gateway{gwNsName: validGateway},
+			expectReconcileCount:    1,
+			expectStopNotInCount:    1,
+			expectActivePolicyCount: 1,
+			expectInitialChecksums:  map[graph.WAFBundleKey]string{graph.PolicyBundleKey(policyNsName): "sha256-abc"},
+		},
+		{
+			name: "passes resolved auth to poller config",
+			ngfPolicies: func() map[graph.PolicyKey]*graph.Policy {
+				p := makeWAFPolicy(true)
+				p.Spec.PolicySource.Auth = &ngfAPI.BundleAuth{
+					SecretRef: ngfAPI.LocalObjectReference{Name: "my-secret"},
+				}
+				return map[graph.PolicyKey]*graph.Policy{
+					wafPolicyKey("waf-policy"): {
+						Source: p,
+						Valid:  true,
+						TargetRefs: []graph.PolicyTargetRef{
+							{Kind: kinds.Gateway, Nsname: gwNsName},
+						},
+						WAFState: &graph.PolicyWAFState{
+							ResolvedAuth: &fetch.BundleAuth{
+								Username: "user",
+								Password: "pass",
+							},
+						},
+					},
+				}
+			}(),
+			gateways:                map[types.NamespacedName]*graph.Gateway{gwNsName: validGateway},
+			expectReconcileCount:    1,
+			expectStopNotInCount:    1,
+			expectActivePolicyCount: 1,
+			expectSourceAuth:        &fetch.BundleAuth{Username: "user", Password: "pass"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			var fakeManager *pollerfakes.FakePollerManager
+			var mgr wafPoller.Manager
+			if !tt.nilManager {
+				fakeManager = &pollerfakes.FakePollerManager{}
+				mgr = fakeManager
+			}
+
+			handler := &eventHandlerImpl{
+				cfg: eventHandlerConfig{
+					wafPollerManager: mgr,
+				},
+			}
+
+			gr := &graph.Graph{
+				NGFPolicies: tt.ngfPolicies,
+				Gateways:    tt.gateways,
+			}
+
+			handler.reconcileWAFPollers(context.Background(), gr)
+
+			if tt.nilManager {
+				return
+			}
+
+			g.Expect(fakeManager.ReconcilePollerCallCount()).To(Equal(tt.expectReconcileCount))
+			g.Expect(fakeManager.StopPollerCallCount()).To(Equal(tt.expectStopPollerCount))
+			g.Expect(fakeManager.StopPollersNotInCallCount()).To(Equal(tt.expectStopNotInCount))
+
+			if tt.expectStopNotInCount > 0 {
+				activePolicies := fakeManager.StopPollersNotInArgsForCall(0)
+				g.Expect(activePolicies).To(HaveLen(tt.expectActivePolicyCount))
+			}
+
+			if tt.expectReconcileCount > 0 {
+				_, cfg := fakeManager.ReconcilePollerArgsForCall(0)
+				g.Expect(cfg.PolicyNsName).To(Equal(policyNsName))
+				g.Expect(cfg.Sources).NotTo(BeEmpty())
+				g.Expect(cfg.TargetDeployments).To(ConsistOf(depName))
+
+				for k, v := range tt.expectInitialChecksums {
+					g.Expect(cfg.InitialChecksums).To(HaveKeyWithValue(k, v))
+				}
+				if tt.expectSourceAuth != nil {
+					g.Expect(cfg.Sources[0].Request.Auth).To(Equal(tt.expectSourceAuth))
+				}
+			}
+		})
+	}
+}
+
+func TestMergeWAFPollErrors(t *testing.T) {
+	t.Parallel()
+
+	policyNsName := types.NamespacedName{Namespace: "default", Name: "waf-policy"}
+	bundleKey := graph.PolicyBundleKey(policyNsName)
+
+	tests := []struct {
+		pollErrors      map[types.NamespacedName]wafPoller.PollError
+		policy          *graph.Policy
+		name            string
+		expectCondCount int
+		nilManager      bool
+		useEmptyGraph   bool
+	}{
+		{
+			name: "adds stale-bundle warning when bundle exists",
+			pollErrors: map[types.NamespacedName]wafPoller.PollError{
+				policyNsName: {
+					BundleKey:         bundleKey,
+					BundleDescription: "policy bundle",
+					Err:               errors.New("fetch timeout"),
+				},
+			},
+			policy: &graph.Policy{
+				Source: makeWAFPolicy(true),
+				Valid:  true,
+				WAFState: &graph.PolicyWAFState{
+					Bundles: map[graph.WAFBundleKey]*graph.WAFBundleData{
+						bundleKey: {Checksum: "abc123"},
+					},
+				},
+			},
+			expectCondCount: 1,
+		},
+		{
+			name: "skips warning when no bundle exists (initial fetch failed)",
+			pollErrors: map[types.NamespacedName]wafPoller.PollError{
+				policyNsName: {
+					BundleKey: bundleKey,
+					Err:       errors.New("fetch timeout"),
+				},
+			},
+			policy: &graph.Policy{
+				Source: makeWAFPolicy(true),
+				Valid:  true,
+				WAFState: &graph.PolicyWAFState{
+					Bundles: map[graph.WAFBundleKey]*graph.WAFBundleData{}, // no bundle for this key
+				},
+			},
+			expectCondCount: 0,
+		},
+		{
+			name: "skips warning when WAFState is nil",
+			pollErrors: map[types.NamespacedName]wafPoller.PollError{
+				policyNsName: {
+					BundleKey: bundleKey,
+					Err:       errors.New("fetch timeout"),
+				},
+			},
+			policy: &graph.Policy{
+				Source:   makeWAFPolicy(true),
+				Valid:    true,
+				WAFState: nil,
+			},
+			expectCondCount: 0,
+		},
+		{
+			name: "skips warning for invalid policy",
+			pollErrors: map[types.NamespacedName]wafPoller.PollError{
+				policyNsName: {
+					BundleKey: bundleKey,
+					Err:       errors.New("fetch timeout"),
+				},
+			},
+			policy: &graph.Policy{
+				Source: makeWAFPolicy(true),
+				Valid:  false,
+				WAFState: &graph.PolicyWAFState{
+					Bundles: map[graph.WAFBundleKey]*graph.WAFBundleData{
+						bundleKey: {Checksum: "abc123"},
+					},
+				},
+			},
+			expectCondCount: 0,
+		},
+		{
+			name:       "no errors means no conditions added",
+			pollErrors: nil,
+			policy: &graph.Policy{
+				Source: makeWAFPolicy(true),
+				Valid:  true,
+				WAFState: &graph.PolicyWAFState{
+					Bundles: map[graph.WAFBundleKey]*graph.WAFBundleData{
+						bundleKey: {Checksum: "abc123"},
+					},
+				},
+			},
+			expectCondCount: 0,
+		},
+		{
+			name:       "nil wafPollerManager is a no-op",
+			nilManager: true,
+			policy: &graph.Policy{
+				Source: makeWAFPolicy(true),
+				Valid:  true,
+			},
+		},
+		{
+			name:          "skips when policy is not in graph",
+			useEmptyGraph: true,
+			pollErrors: map[types.NamespacedName]wafPoller.PollError{
+				policyNsName: {
+					BundleKey: bundleKey,
+					Err:       errors.New("fetch timeout"),
+				},
+			},
+			policy: &graph.Policy{
+				Source: makeWAFPolicy(true),
+				Valid:  true,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			var fakeManager *pollerfakes.FakePollerManager
+			var mgr wafPoller.Manager
+			if !tt.nilManager {
+				fakeManager = &pollerfakes.FakePollerManager{}
+				fakeManager.GetAllPollErrorsReturns(tt.pollErrors)
+				mgr = fakeManager
+			}
+
+			handler := &eventHandlerImpl{
+				cfg: eventHandlerConfig{
+					wafPollerManager: mgr,
+				},
+			}
+
+			ngfPolicies := map[graph.PolicyKey]*graph.Policy{
+				wafPolicyKey("waf-policy"): tt.policy,
+			}
+			if tt.useEmptyGraph {
+				ngfPolicies = map[graph.PolicyKey]*graph.Policy{}
+			}
+
+			gr := &graph.Graph{
+				NGFPolicies: ngfPolicies,
+			}
+
+			handler.mergeWAFPollErrors(gr)
+
+			if tt.nilManager || tt.useEmptyGraph {
+				return
+			}
+
+			g.Expect(tt.policy.Conditions).To(HaveLen(tt.expectCondCount))
+
+			if tt.expectCondCount > 0 {
+				cond := tt.policy.Conditions[0]
+				expectedCond := conditions.NewPolicyProgrammedStaleBundleWarning("policy bundle", "fetch timeout")
+				g.Expect(cond).To(Equal(expectedCond))
+			}
+		})
+	}
+
+	t.Run("idempotent on repeated calls", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+
+		fakeManager := &pollerfakes.FakePollerManager{}
+		fakeManager.GetAllPollErrorsReturns(map[types.NamespacedName]wafPoller.PollError{
+			policyNsName: {BundleKey: bundleKey, BundleDescription: "policy bundle", Err: errors.New("fetch timeout")},
+		})
+
+		handler := &eventHandlerImpl{
+			cfg: eventHandlerConfig{wafPollerManager: fakeManager},
+		}
+
+		policy := &graph.Policy{
+			Source: makeWAFPolicy(true),
+			Valid:  true,
+			WAFState: &graph.PolicyWAFState{
+				Bundles: map[graph.WAFBundleKey]*graph.WAFBundleData{
+					bundleKey: {Checksum: "abc123"},
+				},
+			},
+		}
+
+		gr := &graph.Graph{
+			NGFPolicies: map[graph.PolicyKey]*graph.Policy{
+				wafPolicyKey("waf-policy"): policy,
+			},
+		}
+
+		// Call three times to simulate repeated status updates on the same graph.
+		handler.mergeWAFPollErrors(gr)
+		handler.mergeWAFPollErrors(gr)
+		handler.mergeWAFPollErrors(gr)
+
+		g.Expect(policy.Conditions).To(HaveLen(1))
+	})
+
+	t.Run("upserts condition with updated message", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+
+		fakeManager := &pollerfakes.FakePollerManager{}
+
+		handler := &eventHandlerImpl{
+			cfg: eventHandlerConfig{wafPollerManager: fakeManager},
+		}
+
+		policy := &graph.Policy{
+			Source: makeWAFPolicy(true),
+			Valid:  true,
+			WAFState: &graph.PolicyWAFState{
+				Bundles: map[graph.WAFBundleKey]*graph.WAFBundleData{
+					bundleKey: {Checksum: "abc123"},
+				},
+			},
+		}
+
+		gr := &graph.Graph{
+			NGFPolicies: map[graph.PolicyKey]*graph.Policy{
+				wafPolicyKey("waf-policy"): policy,
+			},
+		}
+
+		// First call with one error message.
+		fakeManager.GetAllPollErrorsReturns(map[types.NamespacedName]wafPoller.PollError{
+			policyNsName: {BundleKey: bundleKey, BundleDescription: "policy bundle", Err: errors.New("timeout")},
+		})
+		handler.mergeWAFPollErrors(gr)
+
+		// Second call with a different error message.
+		fakeManager.GetAllPollErrorsReturns(map[types.NamespacedName]wafPoller.PollError{
+			policyNsName: {BundleKey: bundleKey, BundleDescription: "policy bundle", Err: errors.New("connection refused")},
+		})
+		handler.mergeWAFPollErrors(gr)
+
+		g.Expect(policy.Conditions).To(HaveLen(1))
+		expectedCond := conditions.NewPolicyProgrammedStaleBundleWarning("policy bundle", "connection refused")
+		g.Expect(policy.Conditions[0]).To(Equal(expectedCond))
+	})
+}
+
+func TestMergeWAFBundleUpdates(t *testing.T) {
+	t.Parallel()
+
+	policyNsName := types.NamespacedName{Namespace: "default", Name: "waf-policy"}
+	bundleKey := graph.PolicyBundleKey(policyNsName)
+	checksum := "abc123"
+	updatedAt := metav1.Now()
+
+	pendingCond := conditions.NewPolicyNotProgrammedBundlePending("waiting for bundle")
+	staleCond := conditions.NewPolicyProgrammedStaleBundleWarning("policy bundle", "previous fetch failed")
+
+	tests := []struct {
+		bundleUpdates     map[types.NamespacedName]wafPoller.BundleUpdate
+		pollErrors        map[types.NamespacedName]wafPoller.PollError
+		policy            *graph.Policy
+		expectCond        *conditions.Condition
+		name              string
+		initialConditions []conditions.Condition
+		expectCondCount   int
+		repeatCalls       int
+		nilManager        bool
+	}{
+		{
+			name: "adds BundleUpdated condition when update is present",
+			bundleUpdates: map[types.NamespacedName]wafPoller.BundleUpdate{
+				policyNsName: {BundleDescription: "policy bundle", Checksum: checksum, UpdatedAt: updatedAt},
+			},
+			policy:          &graph.Policy{Source: makeWAFPolicy(true), Valid: true},
+			expectCondCount: 1,
+			expectCond: helpers.GetPointer(
+				conditions.NewPolicyProgrammedBundleUpdated("policy bundle", checksum, updatedAt),
+			),
+		},
+		{
+			name: "does not overwrite Programmed=False condition",
+			bundleUpdates: map[types.NamespacedName]wafPoller.BundleUpdate{
+				policyNsName: {Checksum: checksum, UpdatedAt: updatedAt},
+			},
+			policy: &graph.Policy{
+				Source:     makeWAFPolicy(true),
+				Valid:      true,
+				Conditions: []conditions.Condition{pendingCond},
+			},
+			expectCondCount: 1,
+			expectCond:      &pendingCond,
+		},
+		{
+			name: "does not overwrite StaleBundleWarning condition",
+			bundleUpdates: map[types.NamespacedName]wafPoller.BundleUpdate{
+				policyNsName: {Checksum: checksum, UpdatedAt: updatedAt},
+			},
+			policy: &graph.Policy{
+				Source:     makeWAFPolicy(true),
+				Valid:      true,
+				Conditions: []conditions.Condition{staleCond},
+			},
+			expectCondCount: 1,
+			expectCond:      &staleCond,
+		},
+		{
+			name: "poll errors take precedence over bundle updates",
+			bundleUpdates: map[types.NamespacedName]wafPoller.BundleUpdate{
+				policyNsName: {BundleDescription: "policy bundle", Checksum: checksum, UpdatedAt: updatedAt},
+			},
+			pollErrors: map[types.NamespacedName]wafPoller.PollError{
+				policyNsName: {BundleKey: bundleKey, BundleDescription: "policy bundle", Err: errors.New("fetch timeout")},
+			},
+			policy: &graph.Policy{
+				Source: makeWAFPolicy(true),
+				Valid:  true,
+				WAFState: &graph.PolicyWAFState{
+					Bundles: map[graph.WAFBundleKey]*graph.WAFBundleData{bundleKey: {Checksum: checksum}},
+				},
+			},
+			expectCondCount: 1,
+			expectCond: helpers.GetPointer(
+				conditions.NewPolicyProgrammedStaleBundleWarning("policy bundle", "fetch timeout"),
+			),
+		},
+		{
+			name: "idempotent on repeated calls",
+			bundleUpdates: map[types.NamespacedName]wafPoller.BundleUpdate{
+				policyNsName: {Checksum: checksum, UpdatedAt: updatedAt},
+			},
+			policy:          &graph.Policy{Source: makeWAFPolicy(true), Valid: true},
+			expectCondCount: 1,
+			repeatCalls:     3,
+		},
+		{
+			name:            "nil manager is a no-op",
+			nilManager:      true,
+			policy:          &graph.Policy{Source: makeWAFPolicy(true), Valid: true},
+			expectCondCount: 0,
+		},
+		{
+			name: "skips invalid policy",
+			bundleUpdates: map[types.NamespacedName]wafPoller.BundleUpdate{
+				policyNsName: {Checksum: checksum, UpdatedAt: updatedAt},
+			},
+			policy:          &graph.Policy{Source: makeWAFPolicy(true), Valid: false},
+			expectCondCount: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			var mgr wafPoller.Manager
+			if !tt.nilManager {
+				fakeManager := &pollerfakes.FakePollerManager{}
+				fakeManager.GetAllBundleUpdatesReturns(tt.bundleUpdates)
+				fakeManager.GetAllPollErrorsReturns(tt.pollErrors)
+				mgr = fakeManager
+			}
+
+			handler := &eventHandlerImpl{cfg: eventHandlerConfig{wafPollerManager: mgr}}
+
+			gr := &graph.Graph{
+				NGFPolicies: map[graph.PolicyKey]*graph.Policy{wafPolicyKey("waf-policy"): tt.policy},
+			}
+
+			calls := max(tt.repeatCalls, 1)
+			for range calls {
+				// Apply in the same order as waitForStatusUpdates: bundle updates first, errors second.
+				handler.mergeWAFBundleUpdates(gr)
+				if len(tt.pollErrors) > 0 {
+					handler.mergeWAFPollErrors(gr)
+				}
+			}
+
+			g.Expect(tt.policy.Conditions).To(HaveLen(tt.expectCondCount))
+			if tt.expectCond != nil {
+				g.Expect(tt.policy.Conditions[0]).To(Equal(*tt.expectCond))
+			}
+		})
+	}
+}
+
+func TestCollectPolicyTargetDeployments(t *testing.T) {
+	t.Parallel()
+
+	gwNsName := types.NamespacedName{Namespace: "default", Name: "my-gateway"}
+	gw2NsName := types.NamespacedName{Namespace: "default", Name: "my-gateway-2"}
+	depName := types.NamespacedName{Namespace: "nginx-gateway", Name: "nginx"}
+	dep2Name := types.NamespacedName{Namespace: "nginx-gateway", Name: "nginx-2"}
+	routeNsName := types.NamespacedName{Namespace: "default", Name: "my-route"}
+
+	validGateway := &graph.Gateway{
+		Source: &gatewayv1.Gateway{
+			ObjectMeta: metav1.ObjectMeta{Namespace: gwNsName.Namespace, Name: gwNsName.Name},
+		},
+		DeploymentName: depName,
+		Valid:          true,
+	}
+	validGateway2 := &graph.Gateway{
+		Source: &gatewayv1.Gateway{
+			ObjectMeta: metav1.ObjectMeta{Namespace: gw2NsName.Namespace, Name: gw2NsName.Name},
+		},
+		DeploymentName: dep2Name,
+		Valid:          true,
+	}
+	invalidGateway := &graph.Gateway{
+		Source: &gatewayv1.Gateway{
+			ObjectMeta: metav1.ObjectMeta{Namespace: gwNsName.Namespace, Name: gwNsName.Name},
+		},
+		DeploymentName: depName,
+		Valid:          false,
+	}
+
+	tests := []struct {
+		name               string
+		gateways           map[types.NamespacedName]*graph.Gateway
+		routes             map[graph.RouteKey]*graph.L7Route
+		targetRefs         []graph.PolicyTargetRef
+		invalidForGateways map[types.NamespacedName]struct{}
+		expected           []types.NamespacedName
+	}{
+		{
+			name: "direct gateway target",
+			targetRefs: []graph.PolicyTargetRef{
+				{Kind: kinds.Gateway, Nsname: gwNsName},
+			},
+			gateways: map[types.NamespacedName]*graph.Gateway{gwNsName: validGateway},
+			expected: []types.NamespacedName{depName},
+		},
+		{
+			name: "invalid gateway returns no deployments",
+			targetRefs: []graph.PolicyTargetRef{
+				{Kind: kinds.Gateway, Nsname: gwNsName},
+			},
+			gateways: map[types.NamespacedName]*graph.Gateway{gwNsName: invalidGateway},
+			expected: nil,
+		},
+		{
+			name: "missing gateway returns no deployments",
+			targetRefs: []graph.PolicyTargetRef{
+				{Kind: kinds.Gateway, Nsname: gwNsName},
+			},
+			gateways: map[types.NamespacedName]*graph.Gateway{},
+			expected: nil,
+		},
+		{
+			name: "HTTPRoute target follows parentRef to gateway",
+			targetRefs: []graph.PolicyTargetRef{
+				{Kind: kinds.HTTPRoute, Nsname: routeNsName},
+			},
+			gateways: map[types.NamespacedName]*graph.Gateway{gwNsName: validGateway},
+			routes: map[graph.RouteKey]*graph.L7Route{
+				{NamespacedName: routeNsName, RouteType: graph.RouteTypeHTTP}: {
+					Valid: true,
+					ParentRefs: []graph.ParentRef{
+						{Kind: kinds.Gateway, NamespacedName: gwNsName},
+					},
+				},
+			},
+			expected: []types.NamespacedName{depName},
+		},
+		{
+			name: "deduplicates deployments",
+			targetRefs: []graph.PolicyTargetRef{
+				{Kind: kinds.Gateway, Nsname: gwNsName},
+				{Kind: kinds.Gateway, Nsname: gwNsName}, // same gateway twice
+			},
+			gateways: map[types.NamespacedName]*graph.Gateway{gwNsName: validGateway},
+			expected: []types.NamespacedName{depName},
+		},
+		{
+			name: "multiple gateways return multiple deployments",
+			targetRefs: []graph.PolicyTargetRef{
+				{Kind: kinds.Gateway, Nsname: gwNsName},
+				{Kind: kinds.Gateway, Nsname: gw2NsName},
+			},
+			gateways: map[types.NamespacedName]*graph.Gateway{
+				gwNsName:  validGateway,
+				gw2NsName: validGateway2,
+			},
+			expected: []types.NamespacedName{depName, dep2Name},
+		},
+		{
+			name:       "no target refs returns nil",
+			targetRefs: nil,
+			gateways:   map[types.NamespacedName]*graph.Gateway{gwNsName: validGateway},
+			expected:   nil,
+		},
+		{
+			name: "skips direct gateway target in invalidForGateways",
+			targetRefs: []graph.PolicyTargetRef{
+				{Kind: kinds.Gateway, Nsname: gwNsName},
+			},
+			gateways:           map[types.NamespacedName]*graph.Gateway{gwNsName: validGateway},
+			invalidForGateways: map[types.NamespacedName]struct{}{gwNsName: {}},
+			expected:           nil,
+		},
+		{
+			name: "skips route-derived gateway in invalidForGateways",
+			targetRefs: []graph.PolicyTargetRef{
+				{Kind: kinds.HTTPRoute, Nsname: routeNsName},
+			},
+			gateways: map[types.NamespacedName]*graph.Gateway{gwNsName: validGateway},
+			routes: map[graph.RouteKey]*graph.L7Route{
+				{NamespacedName: routeNsName, RouteType: graph.RouteTypeHTTP}: {
+					Valid: true,
+					ParentRefs: []graph.ParentRef{
+						{Kind: kinds.Gateway, NamespacedName: gwNsName},
+					},
+				},
+			},
+			invalidForGateways: map[types.NamespacedName]struct{}{gwNsName: {}},
+			expected:           nil,
+		},
+		{
+			name: "filters only the invalid gateway from multiple targets",
+			targetRefs: []graph.PolicyTargetRef{
+				{Kind: kinds.Gateway, Nsname: gwNsName},
+				{Kind: kinds.Gateway, Nsname: gw2NsName},
+			},
+			gateways: map[types.NamespacedName]*graph.Gateway{
+				gwNsName:  validGateway,
+				gw2NsName: validGateway2,
+			},
+			invalidForGateways: map[types.NamespacedName]struct{}{gwNsName: {}},
+			expected:           []types.NamespacedName{dep2Name},
+		},
+		{
+			name: "nil invalidForGateways does not filter anything",
+			targetRefs: []graph.PolicyTargetRef{
+				{Kind: kinds.Gateway, Nsname: gwNsName},
+			},
+			gateways:           map[types.NamespacedName]*graph.Gateway{gwNsName: validGateway},
+			invalidForGateways: nil,
+			expected:           []types.NamespacedName{depName},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			gr := &graph.Graph{
+				Gateways: tt.gateways,
+				Routes:   tt.routes,
+			}
+
+			result := collectPolicyTargetDeployments(gr, tt.targetRefs, tt.invalidForGateways)
+
+			if tt.expected == nil {
+				g.Expect(result).To(BeNil())
+			} else {
+				g.Expect(result).To(ConsistOf(tt.expected))
+			}
+		})
+	}
+}
+
+func TestGatewayHasPendingWAFBundle(t *testing.T) {
+	t.Parallel()
+
+	gwNsName := types.NamespacedName{Namespace: "default", Name: "my-gateway"}
+	gw := &graph.Gateway{
+		Valid: true,
+		Source: &gatewayv1.Gateway{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: gwNsName.Namespace,
+				Name:      gwNsName.Name,
+			},
+		},
+		DeploymentName: types.NamespacedName{Namespace: "default", Name: "nginx-dep"},
+	}
+
+	makeWAFPolicy := func(
+		pending bool,
+		targetKind gatewayv1.Kind,
+		targetNsName types.NamespacedName,
+		invalidForGateways ...types.NamespacedName,
+	) *graph.Policy {
+		var wafState *graph.PolicyWAFState
+		if pending {
+			wafState = &graph.PolicyWAFState{BundlePending: true}
+		} else {
+			wafState = &graph.PolicyWAFState{BundlePending: false}
+		}
+		invalid := make(map[types.NamespacedName]struct{}, len(invalidForGateways))
+		for _, ns := range invalidForGateways {
+			invalid[ns] = struct{}{}
+		}
+		return &graph.Policy{
+			Source:             &ngfAPI.WAFPolicy{},
+			WAFState:           wafState,
+			InvalidForGateways: invalid,
+			TargetRefs: []graph.PolicyTargetRef{
+				{Kind: targetKind, Nsname: targetNsName},
+			},
+		}
+	}
+
+	tests := []struct {
+		policies   map[graph.PolicyKey]*graph.Policy
+		routes     map[graph.RouteKey]*graph.L7Route
+		name       string
+		expPending bool
+	}{
+		{
+			name:       "no policies returns false",
+			policies:   map[graph.PolicyKey]*graph.Policy{},
+			expPending: false,
+		},
+		{
+			name: "pending policy targeting gateway directly returns true",
+			policies: map[graph.PolicyKey]*graph.Policy{
+				wafPolicyKey("waf"): makeWAFPolicy(true, kinds.Gateway, gwNsName),
+			},
+			expPending: true,
+		},
+		{
+			name: "non-pending policy targeting gateway returns false",
+			policies: map[graph.PolicyKey]*graph.Policy{
+				wafPolicyKey("waf"): makeWAFPolicy(false, kinds.Gateway, gwNsName),
+			},
+			expPending: false,
+		},
+		{
+			name: "pending policy targeting a different gateway returns false",
+			policies: map[graph.PolicyKey]*graph.Policy{
+				wafPolicyKey("waf"): makeWAFPolicy(
+					true, kinds.Gateway,
+					types.NamespacedName{Namespace: "default", Name: "other-gw"},
+				),
+			},
+			expPending: false,
+		},
+		{
+			name: "pending policy targeting HTTPRoute attached to gateway returns true",
+			policies: map[graph.PolicyKey]*graph.Policy{
+				wafPolicyKey("waf"): makeWAFPolicy(
+					true, kinds.HTTPRoute,
+					types.NamespacedName{Namespace: "default", Name: "my-route"},
+				),
+			},
+			routes: map[graph.RouteKey]*graph.L7Route{
+				{NamespacedName: types.NamespacedName{Namespace: "default", Name: "my-route"}, RouteType: graph.RouteTypeHTTP}: {
+					Valid: true,
+					ParentRefs: []graph.ParentRef{
+						{Kind: kinds.Gateway, NamespacedName: gwNsName},
+					},
+				},
+			},
+			expPending: true,
+		},
+		{
+			name: "nil WAFState returns false",
+			policies: map[graph.PolicyKey]*graph.Policy{
+				wafPolicyKey("waf"): {
+					Source:     &ngfAPI.WAFPolicy{},
+					WAFState:   nil,
+					TargetRefs: []graph.PolicyTargetRef{{Kind: kinds.Gateway, Nsname: gwNsName}},
+				},
+			},
+			expPending: false,
+		},
+		{
+			name: "pending policy with gateway in InvalidForGateways returns false",
+			policies: map[graph.PolicyKey]*graph.Policy{
+				wafPolicyKey("waf"): makeWAFPolicy(true, kinds.Gateway, gwNsName, gwNsName),
+			},
+			expPending: false,
+		},
+		{
+			name: "pending policy via route with gateway in InvalidForGateways returns false",
+			policies: map[graph.PolicyKey]*graph.Policy{
+				wafPolicyKey("waf"): makeWAFPolicy(
+					true, kinds.HTTPRoute,
+					types.NamespacedName{Namespace: "default", Name: "my-route"},
+					gwNsName,
+				),
+			},
+			routes: map[graph.RouteKey]*graph.L7Route{
+				{
+					NamespacedName: types.NamespacedName{Namespace: "default", Name: "my-route"},
+					RouteType:      graph.RouteTypeHTTP,
+				}: {
+					Valid: true,
+					ParentRefs: []graph.ParentRef{
+						{Kind: kinds.Gateway, NamespacedName: gwNsName},
+					},
+				},
+			},
+			expPending: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			gr := &graph.Graph{
+				NGFPolicies: tt.policies,
+				Routes:      tt.routes,
+			}
+
+			g.Expect(gatewayHasPendingWAFBundle(gr, gw)).To(Equal(tt.expPending))
+		})
+	}
+}
+
+func TestFindWAFPolicyKey(t *testing.T) {
+	t.Parallel()
+
+	nsName := types.NamespacedName{Namespace: "default", Name: "waf-policy"}
+	key := wafPolicyKey("waf-policy")
+
+	tests := []struct {
+		name         string
+		ngfPolicies  map[graph.PolicyKey]*graph.Policy
+		searchNsName types.NamespacedName
+		expectFound  bool
+	}{
+		{
+			name: "finds existing WAF policy",
+			ngfPolicies: map[graph.PolicyKey]*graph.Policy{
+				key: {Source: makeWAFPolicy(true)},
+			},
+			searchNsName: nsName,
+			expectFound:  true,
+		},
+		{
+			name:         "returns nil for empty graph",
+			ngfPolicies:  map[graph.PolicyKey]*graph.Policy{},
+			searchNsName: nsName,
+			expectFound:  false,
+		},
+		{
+			name: "does not match non-WAF policy with same name",
+			ngfPolicies: map[graph.PolicyKey]*graph.Policy{
+				{
+					NsName: nsName,
+					GVK: schema.GroupVersionKind{
+						Group:   ngfAPI.GroupName,
+						Kind:    "ClientSettingsPolicy",
+						Version: "v1alpha1",
+					},
+				}: {Source: &ngfAPI.ClientSettingsPolicy{}},
+			},
+			searchNsName: nsName,
+			expectFound:  false,
+		},
+		{
+			name: "does not match WAF policy with different name",
+			ngfPolicies: map[graph.PolicyKey]*graph.Policy{
+				wafPolicyKey("other-policy"): {
+					Source: &ngfAPI.WAFPolicy{
+						ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "other-policy"},
+					},
+				},
+			},
+			searchNsName: nsName,
+			expectFound:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			gr := &graph.Graph{
+				NGFPolicies: tt.ngfPolicies,
+			}
+
+			result := findWAFPolicyKey(gr, tt.searchNsName)
+
+			if tt.expectFound {
+				g.Expect(result).NotTo(BeNil())
+				g.Expect(result.NsName).To(Equal(tt.searchNsName))
+				g.Expect(result.GVK.Kind).To(Equal(kinds.WAFPolicy))
+			} else {
+				g.Expect(result).To(BeNil())
+			}
+		})
+	}
 }

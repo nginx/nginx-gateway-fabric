@@ -66,3 +66,6 @@ config/base/deploy.yaml.bak
 # Temporary API documentation file, which should be committed
 # to the main documentation repository instead
 docs/api/content.md
+
+# Test tgz files for WAF bundles
+tests/**/*.tgz
