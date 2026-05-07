@@ -325,7 +325,7 @@ jobs:
     permissions:
       contents: read
       id-token: write # for compliance-rules action to sign assertion doc
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-24.04-amd64
     strategy:
       fail-fast: false
       matrix:
