@@ -83,7 +83,7 @@ jobs:
         if: ${{ inputs.submit-to-redhat }}
         working-directory: certified-operators/operators/nginx-gateway-fabric-operator
         run: |
-          mkdir v${{ inputs.operator-version }}
+          mkdir ${{ inputs.operator-version }}
           cp -R ${{ github.workspace }}/operators/bundle/manifests ${{ inputs.operator-version }}/
           cp -R ${{ github.workspace }}/operators/bundle/metadata ${{ inputs.operator-version }}/
 
