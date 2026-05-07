@@ -53,7 +53,7 @@ if ! grep -q "# OpenShift annotations." "$ANNOTATIONS_FILE"; then
     cat >>"$ANNOTATIONS_FILE" <<'EOF'
 
   # OpenShift annotations.
-  com.redhat.openshift.versions: v4.19
+  com.redhat.openshift.versions: "v4.19-v4.21"
 EOF
     echo "Added OpenShift annotation with comment to $ANNOTATIONS_FILE"
 else
@@ -84,7 +84,7 @@ yq eval --inplace '
 .metadata.annotations."operatorframework.io/suggested-namespace" = "nginx-gateway" |
 .metadata.annotations.repository = "https://github.com/nginx/nginx-gateway-fabric" |
 .metadata.annotations.support = "NGINX Inc." |
-.metadata.annotations."com.redhat.openshift.versions" = "v4.19" |
+.metadata.annotations."com.redhat.openshift.versions" = "v4.19-v4.21" |
 .metadata.labels."operatorframework.io/arch.amd64" = "supported" |
 .metadata.labels."operatorframework.io/arch.arm64" = "supported" |
 .spec.links[0].url = "https://github.com/nginx/nginx-gateway-fabric" |

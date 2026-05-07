@@ -15,4 +15,4 @@ annotations:
   operators.operatorframework.io.test.config.v1: tests/scorecard/
 
   # OpenShift annotations.
-  com.redhat.openshift.versions: v4.19
+  com.redhat.openshift.versions: "v4.19-v4.21"
