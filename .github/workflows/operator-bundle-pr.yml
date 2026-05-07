@@ -83,27 +83,27 @@ jobs:
         if: ${{ inputs.submit-to-redhat }}
         working-directory: certified-operators/operators/nginx-gateway-fabric-operator
         run: |
-          mkdir v${{ inputs.operator-version }}
-          cp -R ${{ github.workspace }}/operators/bundle/manifests v${{ inputs.operator-version }}/
-          cp -R ${{ github.workspace }}/operators/bundle/metadata v${{ inputs.operator-version }}/
+          mkdir ${{ inputs.operator-version }}
+          cp -R ${{ github.workspace }}/operators/bundle/manifests ${{ inputs.operator-version }}/
+          cp -R ${{ github.workspace }}/operators/bundle/metadata ${{ inputs.operator-version }}/
 
       - name: Commit and push to certified-operators
         if: ${{ inputs.submit-to-redhat }}
         uses: stefanzweifel/git-auto-commit-action@04702edda442b2e678b25b537cec683a1493fcb9 # v7.1.0
         with:
-          commit_message: operator nginx-gateway-fabric-operator (v${{ inputs.operator-version }})
+          commit_message: operator nginx-gateway-fabric-operator (${{ inputs.operator-version }})
           commit_author: nginx-bot <integrations@nginx.com>
           commit_user_name: nginx-bot
           commit_user_email: integrations@nginx.com
           create_branch: true
-          branch: update-nginx-gateway-fabric-operator-to-v${{ inputs.operator-version }}
+          branch: update-nginx-gateway-fabric-operator-to-${{ inputs.operator-version }}
           repository: certified-operators
 
       - name: Create PR to RedHat certified-operators
         if: ${{ inputs.submit-to-redhat }}
         working-directory: certified-operators
         run: |
-          gh pr create --title "operator nginx-gateway-fabric-operator (v${{ inputs.operator-version }})" --body "Update nginx-gateway-fabric-operator to v${{ inputs.operator-version }}" --head nginx-bot:update-nginx-gateway-fabric-operator-to-v${{ inputs.operator-version }} --base main --repo redhat-openshift-ecosystem/certified-operators
+          gh pr create --title "operator nginx-gateway-fabric-operator (${{ inputs.operator-version }})" --body "Update nginx-gateway-fabric-operator to ${{ inputs.operator-version }}" --head nginx-bot:update-nginx-gateway-fabric-operator-to-${{ inputs.operator-version }} --base main --repo redhat-openshift-ecosystem/certified-operators
         env:
           GITHUB_TOKEN: ${{ secrets.NGINX_PAT }}
 
