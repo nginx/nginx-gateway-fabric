@@ -1968,12 +1968,12 @@ func TestValidateCompression(t *testing.T) {
 		},
 		{
 			name:      "invalid mimeType value",
-			validator: createInvalidValidator(),
+			validator: createValidValidator(),
 			np: &ngfAPIv1alpha2.NginxProxy{
 				Spec: ngfAPIv1alpha2.NginxProxySpec{
 					Compression: &ngfAPIv1alpha2.Compression{
 						Type:      ngfAPIv1alpha2.GzipCompressionType,
-						MimeTypes: []string{"text/css"},
+						MimeTypes: []string{"text/css; add_header X-Test injected;"},
 						Gzip:      &ngfAPIv1alpha2.GzipSettings{},
 					},
 				},
@@ -1999,12 +1999,12 @@ func TestValidateCompression(t *testing.T) {
 		},
 		{
 			name:      "multiple invalid mimeTypes",
-			validator: createInvalidValidator(),
+			validator: createValidValidator(),
 			np: &ngfAPIv1alpha2.NginxProxy{
 				Spec: ngfAPIv1alpha2.NginxProxySpec{
 					Compression: &ngfAPIv1alpha2.Compression{
 						Type:      ngfAPIv1alpha2.GzipCompressionType,
-						MimeTypes: []string{"text/css", "application/json"},
+						MimeTypes: []string{"text/css; foo=bar", "application/json\nadd_header X-Test injected;"},
 						Gzip:      &ngfAPIv1alpha2.GzipSettings{},
 					},
 				},

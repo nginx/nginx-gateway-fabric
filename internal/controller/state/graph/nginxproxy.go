@@ -3,6 +3,7 @@ package graph
 import (
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"slices"
 
 	"k8s.io/apimachinery/pkg/types"
@@ -21,6 +22,7 @@ var (
 	ServerTokenOff   = "off"
 	ServerTokenOn    = "on"
 	ServerTokenBuild = "build"
+	mimeTypePattern  = regexp.MustCompile(`^[A-Za-z0-9!#$%&'*+.^_` + "`" + `|~-]+/[A-Za-z0-9!#$%&'*+.^_` + "`" + `|~-]+$`)
 )
 
 // NginxProxy represents the NginxProxy resource.
@@ -643,11 +645,15 @@ func validateCompression(
 	var allErrs field.ErrorList
 	compressionPath := field.NewPath("spec").Child("compression")
 
-	for i, t := range npCfg.Spec.Compression.MimeTypes {
-		if err := validator.ValidateEscapedStringNoVarExpansion(t); err != nil {
+	for i, mimeType := range npCfg.Spec.Compression.MimeTypes {
+		if !mimeTypePattern.MatchString(mimeType) {
 			allErrs = append(
 				allErrs,
-				field.Invalid(compressionPath.Child("mimeTypes").Index(i), t, err.Error()),
+				field.Invalid(
+					compressionPath.Child("mimeTypes").Index(i),
+					mimeType,
+					"must be a valid MIME type with the form type/subtype",
+				),
 			)
 		}
 	}
