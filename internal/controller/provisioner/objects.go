@@ -1105,9 +1105,10 @@ func (p *NginxProvisioner) buildNginxContainer(
 			Capabilities: &corev1.Capabilities{
 				Drop: []corev1.Capability{"ALL"},
 			},
-			ReadOnlyRootFilesystem: helpers.GetPointer(true),
-			RunAsGroup:             helpers.GetPointer[int64](1001),
-			RunAsUser:              helpers.GetPointer[int64](101),
+			AllowPrivilegeEscalation: helpers.GetPointer(false),
+			ReadOnlyRootFilesystem:   helpers.GetPointer(true),
+			RunAsGroup:               helpers.GetPointer[int64](1001),
+			RunAsUser:                helpers.GetPointer[int64](101),
 			SeccompProfile: &corev1.SeccompProfile{
 				Type: corev1.SeccompProfileTypeRuntimeDefault,
 			},
@@ -1241,9 +1242,10 @@ func (p *NginxProvisioner) buildInitContainers(nProxyCfg *graph.EffectiveNginxPr
 				Capabilities: &corev1.Capabilities{
 					Drop: []corev1.Capability{"ALL"},
 				},
-				ReadOnlyRootFilesystem: helpers.GetPointer(true),
-				RunAsGroup:             helpers.GetPointer[int64](1001),
-				RunAsUser:              helpers.GetPointer[int64](101),
+				AllowPrivilegeEscalation: helpers.GetPointer(false),
+				ReadOnlyRootFilesystem:   helpers.GetPointer(true),
+				RunAsGroup:               helpers.GetPointer[int64](1001),
+				RunAsUser:                helpers.GetPointer[int64](101),
 				SeccompProfile: &corev1.SeccompProfile{
 					Type: corev1.SeccompProfileTypeRuntimeDefault,
 				},

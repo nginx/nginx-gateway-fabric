@@ -2678,6 +2678,61 @@ func TestBuildNginxResourceObjects_WAF(t *testing.T) {
 	}
 }
 
+func TestNginxContainerSecurityContext(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	provisioner := &NginxProvisioner{
+		cfg: Config{
+			GatewayPodConfig: &config.GatewayPodConfig{Version: "1.0.0"},
+		},
+	}
+
+	container := provisioner.buildNginxContainer(nil, nil)
+	g.Expect(container.SecurityContext).To(Equal(&corev1.SecurityContext{
+		Capabilities: &corev1.Capabilities{
+			Drop: []corev1.Capability{"ALL"},
+		},
+		AllowPrivilegeEscalation: helpers.GetPointer(false),
+		ReadOnlyRootFilesystem:   helpers.GetPointer(true),
+		RunAsGroup:               helpers.GetPointer[int64](1001),
+		RunAsUser:                helpers.GetPointer[int64](101),
+		SeccompProfile: &corev1.SeccompProfile{
+			Type: corev1.SeccompProfileTypeRuntimeDefault,
+		},
+	}))
+}
+
+func TestInitContainerSecurityContext(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	provisioner := &NginxProvisioner{
+		cfg: Config{
+			GatewayPodConfig: &config.GatewayPodConfig{
+				Version: "1.0.0",
+				Image:   "ngf-image",
+			},
+			AgentLabels: make(map[string]string),
+		},
+	}
+
+	initContainers := provisioner.buildInitContainers(nil)
+	g.Expect(initContainers).To(HaveLen(1))
+	g.Expect(initContainers[0].SecurityContext).To(Equal(&corev1.SecurityContext{
+		Capabilities: &corev1.Capabilities{
+			Drop: []corev1.Capability{"ALL"},
+		},
+		AllowPrivilegeEscalation: helpers.GetPointer(false),
+		ReadOnlyRootFilesystem:   helpers.GetPointer(true),
+		RunAsGroup:               helpers.GetPointer[int64](1001),
+		RunAsUser:                helpers.GetPointer[int64](101),
+		SeccompProfile: &corev1.SeccompProfile{
+			Type: corev1.SeccompProfileTypeRuntimeDefault,
+		},
+	}))
+}
+
 func TestDetermineNginxImageName(t *testing.T) {
 	t.Parallel()
 
