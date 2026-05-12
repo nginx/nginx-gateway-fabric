@@ -30,6 +30,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/configmaps"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/secrets"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/waf"
@@ -1392,8 +1393,8 @@ func (p *NginxProvisioner) configureNginxPlus(
 	if names.jwt != "" {
 		volumeMounts = append(volumeMounts, corev1.VolumeMount{
 			Name:      "nginx-plus-license",
-			MountPath: "/etc/nginx/license.jwt",
-			SubPath:   "license.jwt",
+			MountPath: "/etc/nginx/" + secrets.LicenseJWTKey,
+			SubPath:   secrets.LicenseJWTKey,
 		})
 		spec.Spec.Volumes = append(spec.Spec.Volumes, corev1.Volume{
 			Name:         "nginx-plus-license",
