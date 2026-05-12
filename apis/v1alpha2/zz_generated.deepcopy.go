@@ -6,10 +6,10 @@ package v1alpha2
 
 import (
 	"github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
-	"k8s.io/api/autoscaling/v2"
+	v2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
-	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	apisv1 "sigs.k8s.io/gateway-api/apis/v1"
