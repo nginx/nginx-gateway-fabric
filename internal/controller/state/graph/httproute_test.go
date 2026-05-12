@@ -22,6 +22,173 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
 
+func TestValidateExternalAuthConflicts(t *testing.T) {
+	t.Parallel()
+
+	maxSize := ngfAPI.Size("1024")
+	port := gatewayv1.PortNumber(80)
+
+	createRoute := func(filters []Filter, filtersValid bool, policies []*Policy) map[RouteKey]*L7Route {
+		return map[RouteKey]*L7Route{
+			{NamespacedName: types.NamespacedName{Namespace: "default", Name: "route1"}}: {
+				Spec: L7RouteSpec{
+					Rules: []RouteRule{
+						{
+							Filters: RouteRuleFilters{
+								Valid:   filtersValid,
+								Filters: filters,
+							},
+						},
+					},
+				},
+				Policies: policies,
+			},
+		}
+	}
+
+	extAuthFilterWithBody := Filter{
+		FilterType: FilterExternalAuth,
+		ExternalAuth: &gatewayv1.HTTPExternalAuthFilter{
+			ExternalAuthProtocol: gatewayv1.HTTPRouteExternalAuthHTTPProtocol,
+			BackendRef: gatewayv1.BackendObjectReference{
+				Name: "auth-svc",
+				Port: &port,
+			},
+			ForwardBody: &gatewayv1.ForwardBodyConfig{
+				MaxSize: 1024,
+			},
+		},
+	}
+
+	extAuthFilterWithoutBody := Filter{
+		FilterType: FilterExternalAuth,
+		ExternalAuth: &gatewayv1.HTTPExternalAuthFilter{
+			ExternalAuthProtocol: gatewayv1.HTTPRouteExternalAuthHTTPProtocol,
+			BackendRef: gatewayv1.BackendObjectReference{
+				Name: "auth-svc",
+				Port: &port,
+			},
+		},
+	}
+
+	cspWithBodyMaxSize := &Policy{
+		Source: &ngfAPI.ClientSettingsPolicy{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: "default",
+				Name:      "csp1",
+			},
+			Spec: ngfAPI.ClientSettingsPolicySpec{
+				Body: &ngfAPI.ClientBody{
+					MaxSize: &maxSize,
+				},
+			},
+		},
+		Valid: true,
+	}
+
+	cspWithoutBodyMaxSize := &Policy{
+		Source: &ngfAPI.ClientSettingsPolicy{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: "default",
+				Name:      "csp2",
+			},
+			Spec: ngfAPI.ClientSettingsPolicySpec{},
+		},
+		Valid: true,
+	}
+
+	tests := []struct {
+		routes               map[RouteKey]*L7Route
+		name                 string
+		expectConditionCount int
+		expectFiltersValid   bool
+	}{
+		{
+			name: "no conflict when ExternalAuth has forwardBody but no ClientSettingsPolicy with body.maxSize",
+			routes: createRoute(
+				[]Filter{extAuthFilterWithBody},
+				true,
+				[]*Policy{cspWithoutBodyMaxSize},
+			),
+			expectFiltersValid:   true,
+			expectConditionCount: 0,
+		},
+		{
+			name: "no conflict when ExternalAuth has no forwardBody and ClientSettingsPolicy has body.maxSize",
+			routes: createRoute(
+				[]Filter{extAuthFilterWithoutBody},
+				true,
+				[]*Policy{cspWithBodyMaxSize},
+			),
+			expectFiltersValid:   true,
+			expectConditionCount: 0,
+		},
+		{
+			name: "conflict when ExternalAuth has forwardBody.maxSize and ClientSettingsPolicy has body.maxSize",
+			routes: createRoute(
+				[]Filter{extAuthFilterWithBody},
+				true,
+				[]*Policy{cspWithBodyMaxSize},
+			),
+			expectFiltersValid:   false,
+			expectConditionCount: 1,
+		},
+		{
+			name: "skips rules with already invalid filters",
+			routes: createRoute(
+				[]Filter{extAuthFilterWithBody},
+				false,
+				[]*Policy{cspWithBodyMaxSize},
+			),
+			expectFiltersValid:   false,
+			expectConditionCount: 0,
+		},
+		{
+			name: "invalid ClientSettingsPolicy does not trigger conflict even with forwardBody.maxSize",
+			routes: createRoute(
+				[]Filter{extAuthFilterWithBody},
+				true,
+				[]*Policy{
+					{
+						Source: &ngfAPI.ClientSettingsPolicy{
+							ObjectMeta: metav1.ObjectMeta{
+								Namespace: "default",
+								Name:      "invalid-csp",
+							},
+							Spec: ngfAPI.ClientSettingsPolicySpec{
+								Body: &ngfAPI.ClientBody{
+									MaxSize: &maxSize,
+								},
+							},
+						},
+						Valid: false,
+					},
+				},
+			),
+			expectFiltersValid:   true,
+			expectConditionCount: 0,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			g := NewWithT(t)
+			validateExternalAuthConflicts(test.routes)
+
+			if len(test.routes) == 0 {
+				return
+			}
+
+			for _, route := range test.routes {
+				g.Expect(route.Spec.Rules[0].Filters.Valid).To(Equal(test.expectFiltersValid))
+				g.Expect(route.Conditions).To(HaveLen(test.expectConditionCount))
+			}
+		})
+	}
+}
+
 const (
 	sectionNameOfCreateHTTPRoute = "test-section"
 	emptyPathType                = "/empty-type"

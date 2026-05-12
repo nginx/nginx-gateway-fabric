@@ -1,0 +1,52 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: coffee
+spec:
+  parentRefs:
+  - name: gateway
+    sectionName: http
+  hostnames:
+  - "cafe.example.com"
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /coffee
+    filters:
+    - type: ExternalAuth
+      externalAuth:
+        protocol: HTTP
+        backendRef:
+          name: ext-auth-server
+          port: 80
+        http:
+          path: /
+          allowedHeaders:
+          - X-Api-Key
+          allowedResponseHeaders:
+          - X-User-Id
+        forwardBody:
+          maxSize: 1024
+    backendRefs:
+    - name: coffee
+      port: 80
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: tea
+spec:
+  parentRefs:
+  - name: gateway
+    sectionName: http
+  hostnames:
+  - "cafe.example.com"
+  rules:
+  - matches:
+    - path:
+        type: Exact
+        value: /tea
+    backendRefs:
+    - name: tea
+      port: 80

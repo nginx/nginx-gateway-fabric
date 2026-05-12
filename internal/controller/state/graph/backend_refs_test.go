@@ -2057,3 +2057,124 @@ func TestGetRefGrantFromResourceForRoute_Panics(t *testing.T) {
 
 	g.Expect(get).To(Panic())
 }
+
+func TestInvalidateRuleIfExternalAuthBackendUnresolved(t *testing.T) {
+	t.Parallel()
+
+	port := gatewayv1.PortNumber(80)
+
+	makeRoute := func(filters []Filter, filtersValid bool, backendRefs []BackendRef) *L7Route {
+		return &L7Route{
+			Spec: L7RouteSpec{
+				Rules: []RouteRule{
+					{
+						Filters: RouteRuleFilters{
+							Valid:   filtersValid,
+							Filters: filters,
+						},
+						BackendRefs: backendRefs,
+					},
+				},
+			},
+		}
+	}
+
+	extAuthFilter := Filter{
+		FilterType: FilterExternalAuth,
+		ExternalAuth: &gatewayv1.HTTPExternalAuthFilter{
+			ExternalAuthProtocol: gatewayv1.HTTPRouteExternalAuthHTTPProtocol,
+			BackendRef: gatewayv1.BackendObjectReference{
+				Name: "auth-svc",
+				Port: &port,
+			},
+		},
+	}
+
+	mirrorFilter := Filter{FilterType: FilterRequestMirror}
+
+	tests := []struct {
+		route              *L7Route
+		name               string
+		expectFiltersValid bool
+		expectCondition    bool
+	}{
+		{
+			name: "valid auth backend keeps the rule valid and returns no condition",
+			route: makeRoute(
+				[]Filter{extAuthFilter},
+				true,
+				[]BackendRef{{IsExternalAuthBackend: true, Valid: true}},
+			),
+			expectFiltersValid: true,
+			expectCondition:    false,
+		},
+		{
+			name: "invalid auth backend marks the rule invalid and returns a condition",
+			route: makeRoute(
+				[]Filter{extAuthFilter},
+				true,
+				[]BackendRef{{IsExternalAuthBackend: true, Valid: false}},
+			),
+			expectFiltersValid: false,
+			expectCondition:    true,
+		},
+		{
+			name: "missing auth backend ref entirely marks the rule invalid",
+			route: makeRoute(
+				[]Filter{extAuthFilter},
+				true,
+				[]BackendRef{{IsExternalAuthBackend: false, Valid: true}},
+			),
+			expectFiltersValid: false,
+			expectCondition:    true,
+		},
+		{
+			name: "rule without an ExternalAuth filter is left untouched even if a backend is invalid",
+			route: makeRoute(
+				[]Filter{mirrorFilter},
+				true,
+				[]BackendRef{{IsExternalAuthBackend: false, Valid: false}},
+			),
+			expectFiltersValid: true,
+			expectCondition:    false,
+		},
+		{
+			name: "already invalid filters are skipped without returning another condition",
+			route: makeRoute(
+				[]Filter{extAuthFilter},
+				false,
+				[]BackendRef{{IsExternalAuthBackend: true, Valid: false}},
+			),
+			expectFiltersValid: false,
+			expectCondition:    false,
+		},
+		{
+			name: "any one valid auth backend among multiple keeps the rule valid",
+			route: makeRoute(
+				[]Filter{extAuthFilter},
+				true,
+				[]BackendRef{
+					{IsExternalAuthBackend: true, Valid: false},
+					{IsExternalAuthBackend: true, Valid: true},
+				},
+			),
+			expectFiltersValid: true,
+			expectCondition:    false,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			g := NewWithT(t)
+			cond := invalidateRuleIfExternalAuthBackendUnresolved(test.route, 0)
+			g.Expect(test.route.Spec.Rules[0].Filters.Valid).To(Equal(test.expectFiltersValid))
+			if test.expectCondition {
+				g.Expect(cond).NotTo(BeNil())
+			} else {
+				g.Expect(cond).To(BeNil())
+			}
+		})
+	}
+}

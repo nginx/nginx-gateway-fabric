@@ -4,8 +4,10 @@ set datafile separator ","
 set output outputfile . ""
 
 # X-axis settings
-set xrange [0:70]
-set xtics 10
+stats inputfile using 1 nooutput
+xmax = (STATS_max > 0 ? STATS_max : 1)
+set xrange [0:xmax]
+set xtics autofreq
 set xlabel "# Resources"
 set grid xtics
 
