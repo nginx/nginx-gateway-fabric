@@ -10283,3 +10283,84 @@ func TestBuildCertBundles(t *testing.T) {
 		})
 	}
 }
+
+func TestBuildUpstreamsWithClusterIP(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	clusterIP := "10.96.0.1"
+	svcKey := types.NamespacedName{Namespace: "default", Name: "my-svc"}
+
+	usp := &ngfAPIv1alpha1.UpstreamSettingsPolicy{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "usp"},
+		Spec:       ngfAPIv1alpha1.UpstreamSettingsPolicySpec{UseClusterIP: helpers.GetPointer(true)},
+	}
+
+	gateway := &graph.Gateway{
+		Source: &v1.Gateway{ObjectMeta: metav1.ObjectMeta{Name: "gw", Namespace: "default"}},
+		Listeners: []*graph.Listener{
+			{
+				Valid: true,
+				Source: v1.Listener{
+					Protocol: v1.HTTPProtocolType,
+					Port:     80,
+				},
+				Routes: map[graph.RouteKey]*graph.L7Route{
+					{NamespacedName: types.NamespacedName{Namespace: "default", Name: "route"}}: {
+						Valid: true,
+						Spec: graph.L7RouteSpec{
+							Rules: []graph.RouteRule{
+								{
+									ValidMatches: true,
+									Filters:      graph.RouteRuleFilters{Valid: true},
+									BackendRefs: []graph.BackendRef{
+										{
+											Valid:       true,
+											SvcNsName:   svcKey,
+											ServicePort: apiv1.ServicePort{Port: 80},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	referencedServices := map[types.NamespacedName]*graph.ReferencedService{
+		svcKey: {
+			ClusterIP: clusterIP,
+			Policies: []*graph.Policy{
+				{
+					Source: usp,
+					Valid:  true,
+				},
+			},
+			GatewayNsNames: map[types.NamespacedName]struct{}{
+				{Name: "gw", Namespace: "default"}: {},
+			},
+		},
+	}
+
+	// Resolver should NOT be called when UseClusterIP is true
+	fakeResolver := &resolverfakes.FakeServiceResolver{}
+	fakeResolver.ResolveStub = func(
+		_ context.Context,
+		_ logr.Logger,
+		_ types.NamespacedName,
+		_ apiv1.ServicePort,
+		_ []discoveryV1.AddressType,
+	) ([]resolver.Endpoint, error) {
+		t.Fatal("resolver should not be called when UseClusterIP is true")
+		return nil, nil
+	}
+
+	upstreams := buildUpstreams(t.Context(), logr.Discard(), gateway, fakeResolver, referencedServices)
+
+	g.Expect(upstreams).To(HaveLen(1))
+	g.Expect(upstreams[0].Endpoints).To(Equal([]resolver.Endpoint{
+		{Address: clusterIP, Port: 80},
+	}))
+}
