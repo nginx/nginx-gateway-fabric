@@ -12321,6 +12321,14 @@ spec:
                   rule: self.exists(t, t.group=='') || self.exists(t, t.group=='core')
                 - message: TargetRef Name must be unique
                   rule: self.all(p1, self.exists_one(p2, p1.name == p2.name))
+              useClusterIP:
+                description: |-
+                  UseClusterIP configures NGINX to route to the Service ClusterIP and port instead of individual
+                  Pod IPs. When enabled, NGINX will target a single upstream server corresponding to the Service's
+                  ClusterIP, which is useful for service mesh compatibility (e.g. Linkerd, Istio) and F5 BIG-IP/CIS
+                  integration patterns that require traffic to traverse the Service VIP.
+                  Defaults to false.
+                type: boolean
               zoneSize:
                 description: |-
                   ZoneSize is the size of the shared memory zone used by the upstream. This memory zone is used to share
