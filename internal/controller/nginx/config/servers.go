@@ -9,7 +9,7 @@ import (
 	"strings"
 	gotemplate "text/template"
 
-	"github.com/dlclark/regexp2"
+	"github.com/dlclark/regexp2/v2"
 	"k8s.io/apimachinery/pkg/types"
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/http"
