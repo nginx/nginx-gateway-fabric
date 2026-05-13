@@ -432,7 +432,7 @@ func TestExecuteServers_IPFamily(t *testing.T) {
 			Port: 443,
 		},
 	}
-	passThroughServers := []dataplane.Layer4VirtualServer{
+	tlsServers := []dataplane.Layer4VirtualServer{
 		{
 			IsDefault: true,
 			Hostname:  "*.example.com",
@@ -472,7 +472,7 @@ func TestExecuteServers_IPFamily(t *testing.T) {
 				BaseHTTPConfig: dataplane.BaseHTTPConfig{
 					IPFamily: dataplane.IPv6,
 				},
-				TLSPassthroughServers: passThroughServers,
+				TLSServers: tlsServers,
 			},
 			expectedHTTPConfig: map[string]int{
 				"listen [::]:8080 default_server;":                              1,
@@ -1449,7 +1449,7 @@ func TestCreateServers(t *testing.T) {
 				},
 			},
 		},
-		TLSPassthroughServers: []dataplane.Layer4VirtualServer{
+		TLSServers: []dataplane.Layer4VirtualServer{
 			{
 				Hostname: "app.example.com",
 				Port:     8443,

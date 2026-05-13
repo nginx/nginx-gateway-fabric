@@ -7,6 +7,7 @@ import (
 
 // Server holds all configuration for a stream server.
 type Server struct {
+	SSL             *SSL
 	Listen          string
 	StatusZone      string
 	ProxyPass       string
@@ -14,6 +15,16 @@ type Server struct {
 	RewriteClientIP shared.RewriteClientIPSettings
 	SSLPreread      bool
 	IsSocket        bool
+}
+
+// SSL holds SSL configuration for a stream server performing TLS termination.
+type SSL struct {
+	Protocols           string
+	Ciphers             string
+	Certificates        []string
+	CertificateKeys     []string
+	PreferServerCiphers bool
+	RejectHandshake     bool
 }
 
 // Upstream holds all configuration for a stream upstream.

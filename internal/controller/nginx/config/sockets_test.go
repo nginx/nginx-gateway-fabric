@@ -8,10 +8,20 @@ import (
 
 func TestGetSocketNameTLS(t *testing.T) {
 	t.Parallel()
-	res := getSocketNameTLS(800, "*.cafe.example.com")
-
 	g := NewGomegaWithT(t)
-	g.Expect(res).To(Equal("unix:/var/run/nginx/*.cafe.example.com-800.sock"))
+
+	g.Expect(getSocketNameTLS(800, "*.cafe.example.com")).To(Equal("unix:/var/run/nginx/*.cafe.example.com-800.sock"))
+	g.Expect(getSocketNameTLS(8443, "")).To(Equal("unix:/var/run/nginx/8443.sock"))
+}
+
+func TestGetSocketNameTLSTerminate(t *testing.T) {
+	t.Parallel()
+	g := NewGomegaWithT(t)
+
+	g.Expect(getSocketNameTLSTerminate(800, "*.cafe.example.com")).To(
+		Equal("unix:/var/run/nginx/*.cafe.example.com-800-terminate.sock"),
+	)
+	g.Expect(getSocketNameTLSTerminate(8443, "")).To(Equal("unix:/var/run/nginx/8443-terminate.sock"))
 }
 
 func TestGetSocketNameHTTPS(t *testing.T) {

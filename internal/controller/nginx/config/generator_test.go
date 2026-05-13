@@ -55,7 +55,7 @@ func TestGenerate(t *testing.T) {
 				Port: 443,
 			},
 		},
-		TLSPassthroughServers: []dataplane.Layer4VirtualServer{
+		TLSServers: []dataplane.Layer4VirtualServer{
 			{
 				Hostname: "app.example.com",
 				Port:     443,

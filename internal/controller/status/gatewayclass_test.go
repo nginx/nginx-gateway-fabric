@@ -42,6 +42,8 @@ func TestSupportedFeatures(t *testing.T) {
 		gatewayv1.FeatureName(features.SupportHTTPRoute308RedirectStatusCode),
 		gatewayv1.FeatureName(features.SupportReferenceGrant),
 		gatewayv1.FeatureName(features.SupportTLSRoute),
+		gatewayv1.FeatureName(features.SupportTLSRouteModeTerminate),
+		gatewayv1.FeatureName(features.SupportTLSRouteModeMixed),
 		gatewayv1.FeatureName(features.SupportHTTPRouteCORS),
 		gatewayv1.FeatureName(features.SupportGatewayHTTPSListenerDetectMisdirectedRequests),
 		gatewayv1.FeatureName(features.SupportGatewayFrontendClientCertificateValidation),

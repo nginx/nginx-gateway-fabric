@@ -24,10 +24,10 @@ split_clients $connection ${{ $sc.VariableName }} {
 {{- range $s := .Servers }}
 server {
 	{{- if or ($.IPFamily.IPv4) ($s.IsSocket) }}
-    listen {{ $s.Listen }}{{ $s.RewriteClientIP.ProxyProtocol }};
+    listen {{ $s.Listen }}{{ if $s.SSL }} ssl{{ end }}{{ $s.RewriteClientIP.ProxyProtocol }};
 	{{- end }}
 	{{- if and ($.IPFamily.IPv6) (not $s.IsSocket) }}
-    listen [::]:{{ $s.Listen }};
+    listen [::]:{{ $s.Listen }}{{ if $s.SSL }} ssl{{ end }};
 	{{- end }}
 
     {{- range $address := $s.RewriteClientIP.RealIPFrom }}
@@ -36,6 +36,28 @@ server {
 	{{- if and $.Plus $s.StatusZone }}
     status_zone {{ $s.StatusZone }};
     {{- end }}
+
+	{{- if $s.SSL }}
+	{{- if $s.SSL.RejectHandshake }}
+    ssl_reject_handshake on;
+	{{- else }}
+	{{- range $cert := $s.SSL.Certificates }}
+    ssl_certificate {{ $cert }};
+	{{- end }}
+	{{- range $key := $s.SSL.CertificateKeys }}
+    ssl_certificate_key {{ $key }};
+	{{- end }}
+	{{- if $s.SSL.Protocols }}
+    ssl_protocols {{ $s.SSL.Protocols }};
+	{{- end }}
+	{{- if $s.SSL.Ciphers }}
+    ssl_ciphers {{ $s.SSL.Ciphers }};
+	{{- end }}
+	{{- if $s.SSL.PreferServerCiphers }}
+    ssl_prefer_server_ciphers on;
+	{{- end }}
+	{{- end }}
+	{{- end }}
 
 	{{- if $s.ProxyPass }}
     proxy_pass {{ $s.ProxyPass }};

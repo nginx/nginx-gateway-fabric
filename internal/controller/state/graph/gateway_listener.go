@@ -157,6 +157,7 @@ func newListenerConfiguratorFactory(
 				validateListenerLabelSelector,
 				validateListenerHostname,
 				createHTTPSListenerValidator(protectedPorts),
+				validateListenerTLSTerminateFields,
 			},
 			conflictResolvers: []listenerConflictResolver{
 				sharedPortConflictResolver,
@@ -176,13 +177,16 @@ func newListenerConfiguratorFactory(
 				validateListenerLabelSelector,
 				validateListenerHostname,
 				validateTLSFieldOnTLSListener,
+				validateListenerTLSTerminateFields,
 			},
 			conflictResolvers: []listenerConflictResolver{
 				sharedPortConflictResolver,
 				sharedOverlappingTLSConfigResolver,
 				sharedUniqueListenerConflictResolver,
 			},
-			externalReferenceResolvers:          []listenerExternalReferenceResolver{},
+			externalReferenceResolvers: []listenerExternalReferenceResolver{
+				createExternalReferencesForTLSSecretsResolver(gw.Namespace, resourceResolver, refGrantResolver),
+			},
 			frontendTLSCaCertReferenceResolvers: []listenerFrontendTLSCaCertReferenceResolver{},
 		},
 		tcp: &listenerConfigurator{
@@ -393,7 +397,8 @@ func getValidKindsForProtocol(listener v1.Listener) []v1.RouteGroupKind {
 			{Kind: v1.Kind(kinds.GRPCRoute), Group: helpers.GetPointer[v1.Group](v1.GroupName)},
 		}
 	case v1.TLSProtocolType:
-		if listener.TLS != nil && listener.TLS.Mode != nil && *listener.TLS.Mode == v1.TLSModePassthrough {
+		if listener.TLS != nil && listener.TLS.Mode != nil &&
+			(*listener.TLS.Mode == v1.TLSModePassthrough || *listener.TLS.Mode == v1.TLSModeTerminate) {
 			return []v1.RouteGroupKind{
 				{Kind: v1.Kind(kinds.TLSRoute), Group: helpers.GetPointer[v1.Group](v1.GroupName)},
 			}
@@ -466,16 +471,27 @@ func validateListenerPort(port v1.PortNumber, protectedPorts ProtectedPorts) err
 }
 
 func validateTLSFieldOnTLSListener(listener v1.Listener) (conds []conditions.Condition, attachable bool) {
-	tlspath := field.NewPath("TLS")
+	tlsPath := field.NewPath("tls")
 	if listener.TLS == nil {
-		valErr := field.Required(tlspath, "tls must be defined for TLS listener")
+		valErr := field.Required(tlsPath, "tls must be defined for TLS listener")
 		return conditions.NewListenerUnsupportedValue(valErr.Error()), false
 	}
-	if listener.TLS.Mode == nil || *listener.TLS.Mode != v1.TLSModePassthrough {
-		valErr := field.Required(tlspath.Child("Mode"), "Mode must be passthrough for TLS listener")
+	if listener.TLS.Mode == nil {
+		valErr := field.Required(tlsPath.Child("mode"), "mode must be set for TLS listener")
 		return conditions.NewListenerUnsupportedValue(valErr.Error()), false
 	}
-	return nil, true
+
+	switch *listener.TLS.Mode {
+	case v1.TLSModePassthrough, v1.TLSModeTerminate:
+		return nil, true
+	default:
+		valErr := field.NotSupported(
+			tlsPath.Child("mode"),
+			*listener.TLS.Mode,
+			[]string{string(v1.TLSModePassthrough), string(v1.TLSModeTerminate)},
+		)
+		return conditions.NewListenerUnsupportedValue(valErr.Error()), false
+	}
 }
 
 func createHTTPSListenerValidator(protectedPorts ProtectedPorts) listenerValidator {
@@ -494,7 +510,7 @@ func createHTTPSListenerValidator(protectedPorts ProtectedPorts) listenerValidat
 
 		tlsPath := field.NewPath("tls")
 
-		if *listener.TLS.Mode != v1.TLSModeTerminate {
+		if listener.TLS.Mode != nil && *listener.TLS.Mode != v1.TLSModeTerminate {
 			valErr := field.NotSupported(
 				tlsPath.Child("mode"),
 				*listener.TLS.Mode,
@@ -503,36 +519,72 @@ func createHTTPSListenerValidator(protectedPorts ProtectedPorts) listenerValidat
 			conds = append(conds, conditions.NewListenerUnsupportedValue(valErr.Error())...)
 		}
 
-		if len(listener.TLS.Options) > 0 {
-			conds = append(conds, validateListenerTLSOptions(listener, tlsPath)...)
-		}
-
-		if len(listener.TLS.CertificateRefs) == 0 {
-			msg := "certificateRefs must be defined for TLS mode terminate"
-			valErr := field.Required(tlsPath.Child("certificateRefs"), msg)
-			conds = append(conds, conditions.NewListenerInvalidCertificateRefNotAccepted(valErr.Error())...)
-			return conds, true
-		}
-
-		for i, certRef := range listener.TLS.CertificateRefs {
-			certRefPath := tlsPath.Child("certificateRefs").Index(i)
-
-			if certRef.Kind != nil && *certRef.Kind != "Secret" {
-				path := certRefPath.Child("kind")
-				valErr := field.NotSupported(path, *certRef.Kind, []string{"Secret"})
-				conds = append(conds, conditions.NewListenerInvalidCertificateRefNotAccepted(valErr.Error())...)
-			}
-
-			// for Kind Secret, certRef.Group must be nil or empty
-			if certRef.Group != nil && *certRef.Group != "" {
-				path := certRefPath.Child("group")
-				valErr := field.NotSupported(path, *certRef.Group, []string{""})
-				conds = append(conds, conditions.NewListenerInvalidCertificateRefNotAccepted(valErr.Error())...)
-			}
-		}
-
 		return conds, true
 	}
+}
+
+// validateListenerTLSTerminateFields is a shared validator for both HTTPS and TLS listeners
+// that validates TLS terminate config: options, certificateRefs, and certificate ref kind/group.
+// For HTTPS listeners, nil Mode defaults to Terminate per Gateway API spec, so validation runs even when Mode is nil.
+// For TLS listeners, nil Mode is already rejected by validateTLSFieldOnTLSListener, so validation
+// only runs when Mode is explicitly Terminate.
+func validateListenerTLSTerminateFields(listener v1.Listener) (conds []conditions.Condition, attachable bool) {
+	if listener.TLS == nil {
+		return nil, true
+	}
+
+	var isTLSTerminate bool
+	if listener.Protocol == v1.HTTPSProtocolType {
+		// nil Mode defaults to Terminate for HTTPS.
+		isTLSTerminate = listener.TLS.Mode == nil || *listener.TLS.Mode == v1.TLSModeTerminate
+	} else {
+		// For TLS listeners, only validate when Mode is explicitly Terminate.
+		isTLSTerminate = listener.TLS.Mode != nil && *listener.TLS.Mode == v1.TLSModeTerminate
+	}
+
+	if !isTLSTerminate {
+		return nil, true
+	}
+
+	tlsPath := field.NewPath("tls")
+
+	return validateTLSTerminateConfig(listener, tlsPath), true
+}
+
+// validateTLSTerminateConfig validates the TLS options, certificateRefs, and certificate ref kind/group
+// for a listener in TLS Terminate mode.
+func validateTLSTerminateConfig(listener v1.Listener, tlsPath *field.Path) []conditions.Condition {
+	var conds []conditions.Condition
+
+	if len(listener.TLS.Options) > 0 {
+		conds = append(conds, validateListenerTLSOptions(listener, tlsPath)...)
+	}
+
+	if len(listener.TLS.CertificateRefs) == 0 {
+		msg := "certificateRefs must be defined for TLS mode terminate"
+		valErr := field.Required(tlsPath.Child("certificateRefs"), msg)
+		conds = append(conds, conditions.NewListenerInvalidCertificateRefNotAccepted(valErr.Error())...)
+		return conds
+	}
+
+	for i, certRef := range listener.TLS.CertificateRefs {
+		certRefPath := tlsPath.Child("certificateRefs").Index(i)
+
+		if certRef.Kind != nil && *certRef.Kind != "Secret" {
+			path := certRefPath.Child("kind")
+			valErr := field.NotSupported(path, *certRef.Kind, []string{"Secret"})
+			conds = append(conds, conditions.NewListenerInvalidCertificateRefNotAccepted(valErr.Error())...)
+		}
+
+		// for Kind Secret, certRef.Group must be nil or empty
+		if certRef.Group != nil && *certRef.Group != "" {
+			path := certRefPath.Child("group")
+			valErr := field.NotSupported(path, *certRef.Group, []string{""})
+			conds = append(conds, conditions.NewListenerInvalidCertificateRefNotAccepted(valErr.Error())...)
+		}
+	}
+
+	return conds
 }
 
 func validateListenerTLSOptions(listener v1.Listener, tlsPath *field.Path) (conds []conditions.Condition) {
