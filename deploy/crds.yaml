@@ -1100,16 +1100,18 @@ spec:
           spec:
             description: Spec defines the desired state of the NginxProxy.
             properties:
-              disableBaseProxySetHeaders:
+              disableBaseXForwardedProxySetHeaders:
                 description: |-
-                  DisableBaseProxySetHeaders specifies which default proxy_set_header entries should be omitted.
+                  DisableBaseXForwardedProxySetHeaders specifies which default X-Forwarded-* base headers should be omitted
+                  from being added to the base proxy_set_header directives in the NGINX configuration.
                   This allows users to set these headers themselves without NGF overriding them.
 
                   Supported values are limited to X-Forwarded-* base headers and "*".
                   A value of "*" disables all X-Forwarded-* base headers.
                 items:
-                  description: ProxySetHeaderName is the name of a base proxy_set_header
-                    that can be disabled.
+                  description: |-
+                    XForwardedProxySetHeaderName is the name of a base X-Forwarded-* header that can be disabled
+                    from being added to the base proxy_set_header directives in the NGINX configuration.
                   enum:
                   - '*'
                   - X-Forwarded-For
