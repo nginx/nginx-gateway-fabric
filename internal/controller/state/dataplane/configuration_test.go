@@ -7027,7 +7027,10 @@ func TestBuildDisableBaseProxySetHeaders(t *testing.T) {
 					ngfAPIv1alpha2.ProxySetHeaderXForwardedProto,
 				},
 			},
-			expected: []string{"X-Forwarded-For", "X-Forwarded-Proto"},
+			expected: []string{
+				string(ngfAPIv1alpha2.ProxySetHeaderXForwardedFor),
+				string(ngfAPIv1alpha2.ProxySetHeaderXForwardedProto),
+			},
 		},
 		{
 			name: "wildcard disabled headers configured",

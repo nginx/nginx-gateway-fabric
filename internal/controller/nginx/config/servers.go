@@ -12,6 +12,7 @@ import (
 	"github.com/dlclark/regexp2"
 	"k8s.io/apimachinery/pkg/types"
 
+	"github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/http"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/shared"
@@ -2120,7 +2121,7 @@ func createBaseProxySetHeaders(externalHostname string, extraHeaders ...http.Hea
 			Value: hostValue,
 		},
 		{
-			Name:  "X-Forwarded-For",
+			Name:  string(v1alpha2.ProxySetHeaderXForwardedFor),
 			Value: "$proxy_add_x_forwarded_for",
 		},
 		{
@@ -2128,15 +2129,15 @@ func createBaseProxySetHeaders(externalHostname string, extraHeaders ...http.Hea
 			Value: "$remote_addr",
 		},
 		{
-			Name:  "X-Forwarded-Proto",
+			Name:  string(v1alpha2.ProxySetHeaderXForwardedProto),
 			Value: "$scheme",
 		},
 		{
-			Name:  "X-Forwarded-Host",
+			Name:  string(v1alpha2.ProxySetHeaderXForwardedHost),
 			Value: "$host",
 		},
 		{
-			Name:  "X-Forwarded-Port",
+			Name:  string(v1alpha2.ProxySetHeaderXForwardedPort),
 			Value: "$server_port",
 		},
 	}
@@ -2154,10 +2155,10 @@ func filterBaseProxySetHeaders(baseHeaders []http.Header, disableBaseProxySetHea
 	disabledHeaders := make(map[string]struct{}, len(disableBaseProxySetHeaders))
 	for _, header := range disableBaseProxySetHeaders {
 		if header == "*" {
-			disabledHeaders["X-Forwarded-For"] = struct{}{}
-			disabledHeaders["X-Forwarded-Proto"] = struct{}{}
-			disabledHeaders["X-Forwarded-Host"] = struct{}{}
-			disabledHeaders["X-Forwarded-Port"] = struct{}{}
+			disabledHeaders[string(v1alpha2.ProxySetHeaderXForwardedFor)] = struct{}{}
+			disabledHeaders[string(v1alpha2.ProxySetHeaderXForwardedProto)] = struct{}{}
+			disabledHeaders[string(v1alpha2.ProxySetHeaderXForwardedHost)] = struct{}{}
+			disabledHeaders[string(v1alpha2.ProxySetHeaderXForwardedPort)] = struct{}{}
 			continue
 		}
 		disabledHeaders[header] = struct{}{}

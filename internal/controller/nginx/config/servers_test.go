@@ -12,6 +12,7 @@ import (
 	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 
 	"github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
+	"github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/http"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/policiesfakes"
@@ -1517,7 +1518,7 @@ func TestCreateServers(t *testing.T) {
 			Value: "new.example.com",
 		},
 		{
-			Name:  "X-Forwarded-For",
+			Name:  string(v1alpha2.ProxySetHeaderXForwardedFor),
 			Value: "$proxy_add_x_forwarded_for",
 		},
 		{
@@ -1525,15 +1526,15 @@ func TestCreateServers(t *testing.T) {
 			Value: "$remote_addr",
 		},
 		{
-			Name:  "X-Forwarded-Proto",
+			Name:  string(v1alpha2.ProxySetHeaderXForwardedProto),
 			Value: "$scheme",
 		},
 		{
-			Name:  "X-Forwarded-Host",
+			Name:  string(v1alpha2.ProxySetHeaderXForwardedHost),
 			Value: "$host",
 		},
 		{
-			Name:  "X-Forwarded-Port",
+			Name:  string(v1alpha2.ProxySetHeaderXForwardedPort),
 			Value: "$server_port",
 		},
 		{
@@ -2741,11 +2742,11 @@ func TestCreateLocations_InferenceBackends(t *testing.T) {
 
 	proxySetHeaders := []http.Header{
 		{Name: "Host", Value: "$gw_api_compliant_host"},
-		{Name: "X-Forwarded-For", Value: "$proxy_add_x_forwarded_for"},
+		{Name: string(v1alpha2.ProxySetHeaderXForwardedFor), Value: "$proxy_add_x_forwarded_for"},
 		{Name: "X-Real-IP", Value: "$remote_addr"},
-		{Name: "X-Forwarded-Proto", Value: "$scheme"},
-		{Name: "X-Forwarded-Host", Value: "$host"},
-		{Name: "X-Forwarded-Port", Value: "$server_port"},
+		{Name: string(v1alpha2.ProxySetHeaderXForwardedProto), Value: "$scheme"},
+		{Name: string(v1alpha2.ProxySetHeaderXForwardedHost), Value: "$host"},
+		{Name: string(v1alpha2.ProxySetHeaderXForwardedPort), Value: "$server_port"},
 		{Name: "Upgrade", Value: "$http_upgrade"},
 		{Name: "Connection", Value: "$connection_upgrade"},
 	}
@@ -4583,7 +4584,7 @@ func TestGenerateProxySetHeaders(t *testing.T) {
 			},
 			expectedHeaders: []http.Header{
 				{
-					Name:  "X-Forwarded-Proto",
+					Name:  string(v1alpha2.ProxySetHeaderXForwardedProto),
 					Value: "new-proto",
 				},
 				{
@@ -4591,7 +4592,7 @@ func TestGenerateProxySetHeaders(t *testing.T) {
 					Value: "$gw_api_compliant_host",
 				},
 				{
-					Name:  "X-Forwarded-For",
+					Name:  string(v1alpha2.ProxySetHeaderXForwardedFor),
 					Value: "$proxy_add_x_forwarded_for",
 				},
 				{
@@ -4599,11 +4600,11 @@ func TestGenerateProxySetHeaders(t *testing.T) {
 					Value: "$remote_addr",
 				},
 				{
-					Name:  "X-Forwarded-Host",
+					Name:  string(v1alpha2.ProxySetHeaderXForwardedHost),
 					Value: "$host",
 				},
 				{
-					Name:  "X-Forwarded-Port",
+					Name:  string(v1alpha2.ProxySetHeaderXForwardedPort),
 					Value: "$server_port",
 				},
 				{
@@ -4642,7 +4643,7 @@ func TestGenerateProxySetHeaders(t *testing.T) {
 					Value: "rewrite-hostname",
 				},
 				{
-					Name:  "X-Forwarded-For",
+					Name:  string(v1alpha2.ProxySetHeaderXForwardedFor),
 					Value: "$proxy_add_x_forwarded_for",
 				},
 				{
@@ -4650,15 +4651,15 @@ func TestGenerateProxySetHeaders(t *testing.T) {
 					Value: "$remote_addr",
 				},
 				{
-					Name:  "X-Forwarded-Proto",
+					Name:  string(v1alpha2.ProxySetHeaderXForwardedProto),
 					Value: "$scheme",
 				},
 				{
-					Name:  "X-Forwarded-Host",
+					Name:  string(v1alpha2.ProxySetHeaderXForwardedHost),
 					Value: "$host",
 				},
 				{
-					Name:  "X-Forwarded-Port",
+					Name:  string(v1alpha2.ProxySetHeaderXForwardedPort),
 					Value: "$server_port",
 				},
 				{
@@ -4729,7 +4730,7 @@ func TestCreateBaseProxySetHeaders(t *testing.T) {
 			Value: "$gw_api_compliant_host",
 		},
 		{
-			Name:  "X-Forwarded-For",
+			Name:  string(v1alpha2.ProxySetHeaderXForwardedFor),
 			Value: "$proxy_add_x_forwarded_for",
 		},
 		{
@@ -4737,15 +4738,15 @@ func TestCreateBaseProxySetHeaders(t *testing.T) {
 			Value: "$remote_addr",
 		},
 		{
-			Name:  "X-Forwarded-Proto",
+			Name:  string(v1alpha2.ProxySetHeaderXForwardedProto),
 			Value: "$scheme",
 		},
 		{
-			Name:  "X-Forwarded-Host",
+			Name:  string(v1alpha2.ProxySetHeaderXForwardedHost),
 			Value: "$host",
 		},
 		{
-			Name:  "X-Forwarded-Port",
+			Name:  string(v1alpha2.ProxySetHeaderXForwardedPort),
 			Value: "$server_port",
 		},
 	}
@@ -4801,11 +4802,11 @@ func TestFilterBaseProxySetHeaders(t *testing.T) {
 
 	baseHeaders := []http.Header{
 		{Name: "Host", Value: "$gw_api_compliant_host"},
-		{Name: "X-Forwarded-For", Value: "$proxy_add_x_forwarded_for"},
+		{Name: string(v1alpha2.ProxySetHeaderXForwardedFor), Value: "$proxy_add_x_forwarded_for"},
 		{Name: "X-Real-IP", Value: "$remote_addr"},
-		{Name: "X-Forwarded-Proto", Value: "$scheme"},
-		{Name: "X-Forwarded-Host", Value: "$host"},
-		{Name: "X-Forwarded-Port", Value: "$server_port"},
+		{Name: string(v1alpha2.ProxySetHeaderXForwardedProto), Value: "$scheme"},
+		{Name: string(v1alpha2.ProxySetHeaderXForwardedHost), Value: "$host"},
+		{Name: string(v1alpha2.ProxySetHeaderXForwardedPort), Value: "$server_port"},
 		{Name: "Upgrade", Value: "$http_upgrade"},
 	}
 
@@ -4821,24 +4822,27 @@ func TestFilterBaseProxySetHeaders(t *testing.T) {
 		},
 		{
 			msg:                     "disable single supported header",
-			disableBaseProxyHeaders: []string{"X-Forwarded-For"},
+			disableBaseProxyHeaders: []string{string(v1alpha2.ProxySetHeaderXForwardedFor)},
 			expected: []http.Header{
 				{Name: "Host", Value: "$gw_api_compliant_host"},
 				{Name: "X-Real-IP", Value: "$remote_addr"},
-				{Name: "X-Forwarded-Proto", Value: "$scheme"},
-				{Name: "X-Forwarded-Host", Value: "$host"},
-				{Name: "X-Forwarded-Port", Value: "$server_port"},
+				{Name: string(v1alpha2.ProxySetHeaderXForwardedProto), Value: "$scheme"},
+				{Name: string(v1alpha2.ProxySetHeaderXForwardedHost), Value: "$host"},
+				{Name: string(v1alpha2.ProxySetHeaderXForwardedPort), Value: "$server_port"},
 				{Name: "Upgrade", Value: "$http_upgrade"},
 			},
 		},
 		{
-			msg:                     "disable multiple supported headers",
-			disableBaseProxyHeaders: []string{"X-Forwarded-Proto", "X-Forwarded-Port"},
+			msg: "disable multiple supported headers",
+			disableBaseProxyHeaders: []string{
+				string(v1alpha2.ProxySetHeaderXForwardedProto),
+				string(v1alpha2.ProxySetHeaderXForwardedPort),
+			},
 			expected: []http.Header{
 				{Name: "Host", Value: "$gw_api_compliant_host"},
-				{Name: "X-Forwarded-For", Value: "$proxy_add_x_forwarded_for"},
+				{Name: string(v1alpha2.ProxySetHeaderXForwardedFor), Value: "$proxy_add_x_forwarded_for"},
 				{Name: "X-Real-IP", Value: "$remote_addr"},
-				{Name: "X-Forwarded-Host", Value: "$host"},
+				{Name: string(v1alpha2.ProxySetHeaderXForwardedHost), Value: "$host"},
 				{Name: "Upgrade", Value: "$http_upgrade"},
 			},
 		},
@@ -4853,7 +4857,7 @@ func TestFilterBaseProxySetHeaders(t *testing.T) {
 		},
 		{
 			msg:                     "wildcard plus explicit X-Forwarded header disables all X-Forwarded headers",
-			disableBaseProxyHeaders: []string{"*", "X-Forwarded-Proto"},
+			disableBaseProxyHeaders: []string{"*", string(v1alpha2.ProxySetHeaderXForwardedProto)},
 			expected: []http.Header{
 				{Name: "Host", Value: "$gw_api_compliant_host"},
 				{Name: "X-Real-IP", Value: "$remote_addr"},
