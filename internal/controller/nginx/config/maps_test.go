@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -266,10 +267,10 @@ func TestExecuteStreamMaps(t *testing.T) {
 	}
 
 	expSubStrings := map[string]int{
-		"example.com unix:/var/run/nginx/example.com-8081.sock;":           1,
-		"example.com unix:/var/run/nginx/example.com-8080.sock;":           1,
-		"cafe.example.com unix:/var/run/nginx/cafe.example.com-8080.sock;": 1,
-		"app.example.com unix:/var/run/nginx/https8080.sock;":              1,
+		fmt.Sprintf("example.com %sexample.com-8081.sock;", SocketBasePath):           1,
+		fmt.Sprintf("example.com %sexample.com-8080.sock;", SocketBasePath):           1,
+		fmt.Sprintf("cafe.example.com %scafe.example.com-8080.sock;", SocketBasePath): 1,
+		fmt.Sprintf("app.example.com %shttps8080.sock;", SocketBasePath):              1,
 		"hostnames": 2,
 		"default":   2,
 	}

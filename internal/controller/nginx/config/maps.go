@@ -27,7 +27,7 @@ const (
 
 	// connectionClosedStreamServerSocket is used when we want to listen on a port but have no service configured,
 	// so we pass to this server that just returns an empty string to tell users that we are listening.
-	connectionClosedStreamServerSocket = "unix:/var/run/nginx/connection-closed-server.sock"
+	connectionClosedStreamServerSocket = SocketBasePath + "connection-closed-server.sock"
 )
 
 func executeMaps(conf dataplane.Configuration) []executeResult {

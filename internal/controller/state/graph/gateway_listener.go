@@ -477,8 +477,8 @@ func validateTLSFieldOnTLSListener(listener v1.Listener) (conds []conditions.Con
 		return conditions.NewListenerUnsupportedValue(valErr.Error()), false
 	}
 	if listener.TLS.Mode == nil {
-		valErr := field.Required(tlsPath.Child("mode"), "mode must be set for TLS listener")
-		return conditions.NewListenerUnsupportedValue(valErr.Error()), false
+		// tls.mode is optional for TLS listeners; nil defaults to Terminate.
+		return nil, true
 	}
 
 	switch *listener.TLS.Mode {
@@ -525,22 +525,13 @@ func createHTTPSListenerValidator(protectedPorts ProtectedPorts) listenerValidat
 
 // validateListenerTLSTerminateFields is a shared validator for both HTTPS and TLS listeners
 // that validates TLS terminate config: options, certificateRefs, and certificate ref kind/group.
-// For HTTPS listeners, nil Mode defaults to Terminate per Gateway API spec, so validation runs even when Mode is nil.
-// For TLS listeners, nil Mode is already rejected by validateTLSFieldOnTLSListener, so validation
-// only runs when Mode is explicitly Terminate.
+// Nil Mode defaults to Terminate, so validation runs when Mode is nil or explicitly Terminate.
 func validateListenerTLSTerminateFields(listener v1.Listener) (conds []conditions.Condition, attachable bool) {
 	if listener.TLS == nil {
 		return nil, true
 	}
 
-	var isTLSTerminate bool
-	if listener.Protocol == v1.HTTPSProtocolType {
-		// nil Mode defaults to Terminate for HTTPS.
-		isTLSTerminate = listener.TLS.Mode == nil || *listener.TLS.Mode == v1.TLSModeTerminate
-	} else {
-		// For TLS listeners, only validate when Mode is explicitly Terminate.
-		isTLSTerminate = listener.TLS.Mode != nil && *listener.TLS.Mode == v1.TLSModeTerminate
-	}
+	isTLSTerminate := listener.TLS.Mode == nil || *listener.TLS.Mode == v1.TLSModeTerminate
 
 	if !isTLSTerminate {
 		return nil, true

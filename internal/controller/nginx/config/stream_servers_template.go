@@ -72,7 +72,7 @@ server {
 {{- end }}
 
 server {
-    listen unix:/var/run/nginx/connection-closed-server.sock;
+    listen ` + SocketBasePath + `connection-closed-server.sock;
     return "";
 }
 `

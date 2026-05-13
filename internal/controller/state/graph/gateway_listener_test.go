@@ -629,12 +629,9 @@ func TestValidateTLSFieldOnTLSListener(t *testing.T) {
 			msg:         "TLS listener with TLS mode terminate (cert validation handled by shared validator)",
 		},
 		{
-			listener: v1.Listener{TLS: &v1.ListenerTLSConfig{}},
-			expectedCond: conditions.NewListenerUnsupportedValue(
-				"tls.mode: Required value: mode must be set for TLS listener",
-			),
-			expectValid: false,
-			msg:         "TLS listener with nil TLS mode",
+			listener:    v1.Listener{TLS: &v1.ListenerTLSConfig{}},
+			expectValid: true,
+			msg:         "TLS listener with nil TLS mode defaults to terminate",
 		},
 		{
 			listener:    v1.Listener{TLS: &v1.ListenerTLSConfig{Mode: helpers.GetPointer(v1.TLSModePassthrough)}},
@@ -877,11 +874,13 @@ func TestValidateListenerTLSTerminateFields(t *testing.T) {
 			listener: v1.Listener{
 				Protocol: v1.TLSProtocolType,
 				TLS: &v1.ListenerTLSConfig{
-					Mode: nil, // nil mode on TLS listener is rejected earlier; terminate fields skipped here
+					Mode: nil, // nil mode defaults to Terminate
 				},
 			},
-			expected: nil,
-			name:     "TLS nil mode skips terminate field validation",
+			expected: conditions.NewListenerInvalidCertificateRefNotAccepted(
+				"tls.certificateRefs: Required value: certificateRefs must be defined for TLS mode terminate",
+			),
+			name: "TLS nil mode defaults to terminate missing cert refs",
 		},
 	}
 

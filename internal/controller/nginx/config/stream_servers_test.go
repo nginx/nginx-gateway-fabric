@@ -362,7 +362,7 @@ func TestExecuteStreamServersForIPFamily(t *testing.T) {
 			},
 			expectedServerConfig: map[string]int{
 				"listen 8443;": 1,
-				"listen unix:/var/run/nginx/cafe.example.com-8443.sock;": 1,
+				fmt.Sprintf("listen %scafe.example.com-8443.sock;", SocketBasePath): 1,
 			},
 		},
 		{
@@ -376,7 +376,7 @@ func TestExecuteStreamServersForIPFamily(t *testing.T) {
 			},
 			expectedServerConfig: map[string]int{
 				"listen [::]:8443;": 1,
-				"listen unix:/var/run/nginx/cafe.example.com-8443.sock;": 1,
+				fmt.Sprintf("listen %scafe.example.com-8443.sock;", SocketBasePath): 1,
 			},
 		},
 		{
@@ -391,7 +391,7 @@ func TestExecuteStreamServersForIPFamily(t *testing.T) {
 			expectedServerConfig: map[string]int{
 				"listen 8443;":      1,
 				"listen [::]:8443;": 1,
-				"listen unix:/var/run/nginx/cafe.example.com-8443.sock;": 1,
+				fmt.Sprintf("listen %scafe.example.com-8443.sock;", SocketBasePath): 1,
 			},
 		},
 	}
@@ -448,7 +448,7 @@ func TestExecuteStreamServers_RewriteClientIP(t *testing.T) {
 			expectedStreamConfig: map[string]int{
 				"listen 8443;":      1,
 				"listen [::]:8443;": 1,
-				"listen unix:/var/run/nginx/cafe.example.com-8443.sock;": 1,
+				fmt.Sprintf("listen %scafe.example.com-8443.sock;", SocketBasePath): 1,
 			},
 		},
 		{
@@ -467,11 +467,11 @@ func TestExecuteStreamServers_RewriteClientIP(t *testing.T) {
 			expectedStreamConfig: map[string]int{
 				"listen 8443;":      1,
 				"listen [::]:8443;": 1,
-				"listen unix:/var/run/nginx/cafe.example.com-8443.sock proxy_protocol;": 1,
-				"set_real_ip_from 10.1.1.22/32;":                                        1,
-				"set_real_ip_from ::1/128;":                                             1,
-				"set_real_ip_from 3.4.5.6;":                                             1,
-				"real_ip_recursive on;":                                                 0,
+				fmt.Sprintf("listen %scafe.example.com-8443.sock proxy_protocol;", SocketBasePath): 1,
+				"set_real_ip_from 10.1.1.22/32;": 1,
+				"set_real_ip_from ::1/128;":      1,
+				"set_real_ip_from 3.4.5.6;":      1,
+				"real_ip_recursive on;":          0,
 			},
 		},
 		{
@@ -490,7 +490,7 @@ func TestExecuteStreamServers_RewriteClientIP(t *testing.T) {
 			expectedStreamConfig: map[string]int{
 				"listen 8443;":      1,
 				"listen [::]:8443;": 1,
-				"listen unix:/var/run/nginx/cafe.example.com-8443.sock;": 1,
+				fmt.Sprintf("listen %scafe.example.com-8443.sock;", SocketBasePath): 1,
 			},
 		},
 	}
@@ -892,7 +892,7 @@ resolver 8.8.8.8 8.8.4.4 valid=60s ipv6=off;
 resolver_timeout 10s;
 
 server {
-    listen unix:/var/run/nginx/connection-closed-server.sock;
+    listen ` + SocketBasePath + `connection-closed-server.sock;
     return "";
 }
 `,
@@ -907,7 +907,7 @@ server {
 			expectedConfig: `
 
 server {
-    listen unix:/var/run/nginx/connection-closed-server.sock;
+    listen ` + SocketBasePath + `connection-closed-server.sock;
     return "";
 }
 `,
@@ -930,7 +930,7 @@ resolver [2001:4860:4860::8888] valid=30s;
 resolver_timeout 5s;
 
 server {
-    listen unix:/var/run/nginx/connection-closed-server.sock;
+    listen ` + SocketBasePath + `connection-closed-server.sock;
     return "";
 }
 `,
