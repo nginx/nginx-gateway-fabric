@@ -84,6 +84,12 @@ nginxGateway:
     # Secrets must exist in the same namespace as the helm release.
     imagePullSecrets: []
 
+    # -- automountServiceAccountToken controls whether the Kubernetes service account token is automatically
+    # mounted into the control plane pod. Set to false to disable automatic token mounting (e.g. for
+    # compliance environments). When disabled, use nginxGateway.extraVolumes to mount a projected token
+    # with a custom audience or expiration if required.
+    automountServiceAccountToken: true
+
   # -- The number of replicas of the NGINX Gateway Fabric Deployment. This value is ignored if autoscaling.enable is true.
   replicas: 1
 
@@ -845,6 +851,18 @@ certGenerator:
 
   # -- The topology spread constraints for the cert-generator pod.
   topologySpreadConstraints: []
+
+  # -- automountServiceAccountToken controls whether the Kubernetes service account token is automatically
+  # mounted into the cert-generator pod. Set to false to disable automatic token mounting.
+  # When disabled, use certGenerator.extraVolumes to mount a projected token if required.
+  automountServiceAccountToken: true
+
+  # -- extraVolumes for the cert-generator pod. Use in conjunction with certGenerator.extraVolumeMounts
+  # to mount additional volumes into the container (e.g. a projected service account token).
+  extraVolumes: []
+
+  # -- extraVolumeMounts are the additional volume mounts for the cert-generator container.
+  extraVolumeMounts: []
 
 # -- A list of Gateway objects. View https://gateway-api.sigs.k8s.io/reference/spec/#gateway for full Gateway reference.
 gateways: []
