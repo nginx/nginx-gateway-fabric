@@ -7022,7 +7022,7 @@ func TestBuildDisableBaseProxySetHeaders(t *testing.T) {
 		{
 			name: "disabled headers configured",
 			np: &graph.EffectiveNginxProxy{
-				DisableBaseXForwardedProxySetHeaders: []ngfAPIv1alpha2.XForwardedProxySetHeaderName{
+				DisableBaseXProxySetHeaders: []ngfAPIv1alpha2.XBaseProxySetHeaderName{
 					ngfAPIv1alpha2.ProxySetHeaderXForwardedFor,
 					ngfAPIv1alpha2.ProxySetHeaderXForwardedProto,
 				},
@@ -7035,7 +7035,7 @@ func TestBuildDisableBaseProxySetHeaders(t *testing.T) {
 		{
 			name: "wildcard disabled headers configured",
 			np: &graph.EffectiveNginxProxy{
-				DisableBaseXForwardedProxySetHeaders: []ngfAPIv1alpha2.XForwardedProxySetHeaderName{
+				DisableBaseXProxySetHeaders: []ngfAPIv1alpha2.XBaseProxySetHeaderName{
 					ngfAPIv1alpha2.ProxySetHeaderAll,
 				},
 			},

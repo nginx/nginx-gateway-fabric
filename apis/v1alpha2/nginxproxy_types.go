@@ -122,38 +122,38 @@ type NginxProxySpec struct {
 	//
 	// +optional
 	WAF *WAFSpec `json:"waf,omitempty"`
-	// DisableBaseXForwardedProxySetHeaders specifies which default X-Forwarded-* base headers should be omitted
+	// DisableBaseXProxySetHeaders specifies which default X-* base headers should be omitted
 	// from being added to the base proxy_set_header directives in the NGINX configuration.
 	// This allows users to set these headers themselves without NGF overriding them.
 	//
-	// Supported values are limited to X-Forwarded-* base headers and "*".
-	// A value of "*" disables all X-Forwarded-* base headers.
+	// Supported values are limited to X-* base headers and "*".
+	// A value of "*" disables all X-* base headers.
 	//
 	// +optional
 	// +listType=set
-	// +kubebuilder:validation:MaxItems=5
-	//
-	//nolint:lll
-	DisableBaseXForwardedProxySetHeaders []XForwardedProxySetHeaderName `json:"disableBaseXForwardedProxySetHeaders,omitempty"`
+	// +kubebuilder:validation:MaxItems=6
+	DisableBaseXProxySetHeaders []XBaseProxySetHeaderName `json:"disableBaseXProxySetHeaders,omitempty"`
 }
 
-// XForwardedProxySetHeaderName is the name of a base X-Forwarded-* header that can be disabled
+// XBaseProxySetHeaderName is the name of a base X-* header that can be disabled
 // from being added to the base proxy_set_header directives in the NGINX configuration.
 //
-// +kubebuilder:validation:Enum=*;X-Forwarded-For;X-Forwarded-Proto;X-Forwarded-Host;X-Forwarded-Port
-type XForwardedProxySetHeaderName string
+// +kubebuilder:validation:Enum=*;X-Forwarded-For;X-Forwarded-Proto;X-Forwarded-Host;X-Forwarded-Port;X-Real-IP
+type XBaseProxySetHeaderName string
 
 const (
-	// ProxySetHeaderAll disables all X-Forwarded-* base headers.
-	ProxySetHeaderAll XForwardedProxySetHeaderName = "*"
+	// ProxySetHeaderAll disables all X-* base headers.
+	ProxySetHeaderAll XBaseProxySetHeaderName = "*"
 	// ProxySetHeaderXForwardedFor is the X-Forwarded-For header.
-	ProxySetHeaderXForwardedFor XForwardedProxySetHeaderName = "X-Forwarded-For"
+	ProxySetHeaderXForwardedFor XBaseProxySetHeaderName = "X-Forwarded-For"
 	// ProxySetHeaderXForwardedProto is the X-Forwarded-Proto header.
-	ProxySetHeaderXForwardedProto XForwardedProxySetHeaderName = "X-Forwarded-Proto"
+	ProxySetHeaderXForwardedProto XBaseProxySetHeaderName = "X-Forwarded-Proto"
 	// ProxySetHeaderXForwardedHost is the X-Forwarded-Host header.
-	ProxySetHeaderXForwardedHost XForwardedProxySetHeaderName = "X-Forwarded-Host"
+	ProxySetHeaderXForwardedHost XBaseProxySetHeaderName = "X-Forwarded-Host"
 	// ProxySetHeaderXForwardedPort is the X-Forwarded-Port header.
-	ProxySetHeaderXForwardedPort XForwardedProxySetHeaderName = "X-Forwarded-Port"
+	ProxySetHeaderXForwardedPort XBaseProxySetHeaderName = "X-Forwarded-Port"
+	// ProxySetHeaderXRealIP is the X-Real-IP header.
+	ProxySetHeaderXRealIP XBaseProxySetHeaderName = "X-Real-IP"
 )
 
 // WAFSpec configures NGINX App Protect WAF.

@@ -546,9 +546,9 @@ func (in *NginxProxySpec) DeepCopyInto(out *NginxProxySpec) {
 		*out = new(WAFSpec)
 		(*in).DeepCopyInto(*out)
 	}
-	if in.DisableBaseXForwardedProxySetHeaders != nil {
-		in, out := &in.DisableBaseXForwardedProxySetHeaders, &out.DisableBaseXForwardedProxySetHeaders
-		*out = make([]XForwardedProxySetHeaderName, len(*in))
+	if in.DisableBaseXProxySetHeaders != nil {
+		in, out := &in.DisableBaseXProxySetHeaders, &out.DisableBaseXProxySetHeaders
+		*out = make([]XBaseProxySetHeaderName, len(*in))
 		copy(*out, *in)
 	}
 }

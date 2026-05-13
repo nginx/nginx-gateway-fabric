@@ -1657,12 +1657,12 @@ func buildBaseHTTPConfig(
 }
 
 func buildDisableBaseProxySetHeaders(np *graph.EffectiveNginxProxy) []string {
-	if np == nil || len(np.DisableBaseXForwardedProxySetHeaders) == 0 {
+	if np == nil || len(np.DisableBaseXProxySetHeaders) == 0 {
 		return nil
 	}
 
-	disabledHeaders := make([]string, 0, len(np.DisableBaseXForwardedProxySetHeaders))
-	for _, header := range np.DisableBaseXForwardedProxySetHeaders {
+	disabledHeaders := make([]string, 0, len(np.DisableBaseXProxySetHeaders))
+	for _, header := range np.DisableBaseXProxySetHeaders {
 		disabledHeaders = append(disabledHeaders, string(header))
 	}
 

@@ -2125,7 +2125,7 @@ func createBaseProxySetHeaders(externalHostname string, extraHeaders ...http.Hea
 			Value: "$proxy_add_x_forwarded_for",
 		},
 		{
-			Name:  "X-Real-IP",
+			Name:  string(v1alpha2.ProxySetHeaderXRealIP),
 			Value: "$remote_addr",
 		},
 		{
@@ -2159,6 +2159,7 @@ func filterBaseProxySetHeaders(baseHeaders []http.Header, disableBaseProxySetHea
 			disabledHeaders[string(v1alpha2.ProxySetHeaderXForwardedProto)] = struct{}{}
 			disabledHeaders[string(v1alpha2.ProxySetHeaderXForwardedHost)] = struct{}{}
 			disabledHeaders[string(v1alpha2.ProxySetHeaderXForwardedPort)] = struct{}{}
+			disabledHeaders[string(v1alpha2.ProxySetHeaderXRealIP)] = struct{}{}
 			continue
 		}
 		disabledHeaders[header] = struct{}{}
