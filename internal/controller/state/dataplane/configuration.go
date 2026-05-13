@@ -1651,8 +1651,22 @@ func buildBaseHTTPConfig(
 	baseConfig.DNSResolver = buildDNSResolverConfig(np.DNSResolver)
 
 	baseConfig.ServerTokens = buildServerTokens(gateway)
+	baseConfig.DisableBaseProxySetHeaders = buildDisableBaseProxySetHeaders(np)
 
 	return baseConfig
+}
+
+func buildDisableBaseProxySetHeaders(np *graph.EffectiveNginxProxy) []string {
+	if np == nil || len(np.DisableBaseProxySetHeaders) == 0 {
+		return nil
+	}
+
+	disabledHeaders := make([]string, 0, len(np.DisableBaseProxySetHeaders))
+	for _, header := range np.DisableBaseProxySetHeaders {
+		disabledHeaders = append(disabledHeaders, string(header))
+	}
+
+	return disabledHeaders
 }
 
 // buildHTTPContextRateLimitPolicies creates HTTP context versions of RateLimitPolicies that target routes.

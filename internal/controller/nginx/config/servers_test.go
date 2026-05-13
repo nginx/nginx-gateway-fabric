@@ -2602,7 +2602,7 @@ func TestCreateLocations_Includes(t *testing.T) {
 		},
 	})
 
-	locations, matches, grpc := createLocations(&httpServer, "1", fakeGenerator, alwaysFalseKeepAliveChecker)
+	locations, matches, grpc := createLocations(&httpServer, "1", fakeGenerator, alwaysFalseKeepAliveChecker, nil)
 
 	g := NewWithT(t)
 	g.Expect(grpc).To(BeFalse())
@@ -3113,6 +3113,7 @@ func TestCreateLocations_InferenceBackends(t *testing.T) {
 				"1",
 				&policiesfakes.FakeGenerator{},
 				alwaysFalseKeepAliveChecker,
+				nil,
 			)
 
 			g.Expect(helpers.Diff(tc.expLocs, locs)).To(BeEmpty())
@@ -3305,6 +3306,7 @@ func TestCreateLocationsRootPath(t *testing.T) {
 				"1",
 				&policiesfakes.FakeGenerator{},
 				alwaysFalseKeepAliveChecker,
+				nil,
 			)
 			g.Expect(locs).To(Equal(test.expLocations))
 			g.Expect(httpMatchPair).To(BeEmpty())
@@ -3436,6 +3438,7 @@ func TestCreateLocationsPath(t *testing.T) {
 				"1",
 				&policiesfakes.FakeGenerator{},
 				alwaysFalseKeepAliveChecker,
+				nil,
 			)
 			g.Expect(locs).To(Equal(test.expLocations))
 			g.Expect(httpMatchPair).To(BeEmpty())
@@ -4793,6 +4796,88 @@ func TestCreateBaseProxySetHeaders(t *testing.T) {
 	}
 }
 
+func TestFilterBaseProxySetHeaders(t *testing.T) {
+	t.Parallel()
+
+	baseHeaders := []http.Header{
+		{Name: "Host", Value: "$gw_api_compliant_host"},
+		{Name: "X-Forwarded-For", Value: "$proxy_add_x_forwarded_for"},
+		{Name: "X-Real-IP", Value: "$remote_addr"},
+		{Name: "X-Forwarded-Proto", Value: "$scheme"},
+		{Name: "X-Forwarded-Host", Value: "$host"},
+		{Name: "X-Forwarded-Port", Value: "$server_port"},
+		{Name: "Upgrade", Value: "$http_upgrade"},
+	}
+
+	tests := []struct {
+		msg                     string
+		disableBaseProxyHeaders []string
+		expected                []http.Header
+	}{
+		{
+			msg:                     "no headers disabled",
+			disableBaseProxyHeaders: nil,
+			expected:                baseHeaders,
+		},
+		{
+			msg:                     "disable single supported header",
+			disableBaseProxyHeaders: []string{"X-Forwarded-For"},
+			expected: []http.Header{
+				{Name: "Host", Value: "$gw_api_compliant_host"},
+				{Name: "X-Real-IP", Value: "$remote_addr"},
+				{Name: "X-Forwarded-Proto", Value: "$scheme"},
+				{Name: "X-Forwarded-Host", Value: "$host"},
+				{Name: "X-Forwarded-Port", Value: "$server_port"},
+				{Name: "Upgrade", Value: "$http_upgrade"},
+			},
+		},
+		{
+			msg:                     "disable multiple supported headers",
+			disableBaseProxyHeaders: []string{"X-Forwarded-Proto", "X-Forwarded-Port"},
+			expected: []http.Header{
+				{Name: "Host", Value: "$gw_api_compliant_host"},
+				{Name: "X-Forwarded-For", Value: "$proxy_add_x_forwarded_for"},
+				{Name: "X-Real-IP", Value: "$remote_addr"},
+				{Name: "X-Forwarded-Host", Value: "$host"},
+				{Name: "Upgrade", Value: "$http_upgrade"},
+			},
+		},
+		{
+			msg:                     "disable all x-forwarded headers with wildcard",
+			disableBaseProxyHeaders: []string{"*"},
+			expected: []http.Header{
+				{Name: "Host", Value: "$gw_api_compliant_host"},
+				{Name: "X-Real-IP", Value: "$remote_addr"},
+				{Name: "Upgrade", Value: "$http_upgrade"},
+			},
+		},
+		{
+			msg:                     "wildcard plus explicit X-Forwarded header disables all X-Forwarded headers",
+			disableBaseProxyHeaders: []string{"*", "X-Forwarded-Proto"},
+			expected: []http.Header{
+				{Name: "Host", Value: "$gw_api_compliant_host"},
+				{Name: "X-Real-IP", Value: "$remote_addr"},
+				{Name: "Upgrade", Value: "$http_upgrade"},
+			},
+		},
+		{
+			msg:                     "unknown header in disable list is ignored",
+			disableBaseProxyHeaders: []string{"X-Not-A-Header"},
+			expected:                baseHeaders,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.msg, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			result := filterBaseProxySetHeaders(baseHeaders, tc.disableBaseProxyHeaders)
+			g.Expect(result).To(Equal(tc.expected))
+		})
+	}
+}
+
 func TestGetConnectionHeader(t *testing.T) {
 	t.Parallel()
 
@@ -5273,6 +5358,7 @@ func TestCreateLocations_RegexCatchAllShouldSuppressDefault404(t *testing.T) {
 		"1",
 		&policiesfakes.FakeGenerator{},
 		alwaysFalseKeepAliveChecker,
+		nil,
 	)
 
 	for _, loc := range locs {
@@ -5323,6 +5409,7 @@ func TestCreateLocations_RegexNonRootShouldNotSuppressDefault404(t *testing.T) {
 		"1",
 		&policiesfakes.FakeGenerator{},
 		alwaysFalseKeepAliveChecker,
+		nil,
 	)
 
 	var hasDefault404 bool
@@ -6184,6 +6271,7 @@ func TestOIDCCallbackLocation(t *testing.T) {
 			"1",
 			&policiesfakes.FakeGenerator{},
 			alwaysFalseKeepAliveChecker,
+			nil,
 		)
 		for i := range locs {
 			if locs[i].Path == "= "+oidcCallbackPath {
@@ -6300,6 +6388,7 @@ func TestOIDCCallbackLocation(t *testing.T) {
 					"1",
 					&policiesfakes.FakeGenerator{},
 					alwaysFalseKeepAliveChecker,
+					nil,
 				)
 
 				var exactCoffeeSlashLocs []http.Location
@@ -6346,6 +6435,7 @@ func TestOIDCCallbackLocation(t *testing.T) {
 					"1",
 					&policiesfakes.FakeGenerator{},
 					alwaysFalseKeepAliveChecker,
+					nil,
 				)
 
 				// The exact app route already occupies "= /my-callback", so no separate OIDC callback
@@ -6405,6 +6495,7 @@ func TestOIDCCallbackLocation(t *testing.T) {
 					"1",
 					&policiesfakes.FakeGenerator{},
 					alwaysFalseKeepAliveChecker,
+					nil,
 				)
 
 				var callbackPaths []string
@@ -6457,6 +6548,7 @@ func TestOIDCCallbackLocation(t *testing.T) {
 					"1",
 					&policiesfakes.FakeGenerator{},
 					alwaysFalseKeepAliveChecker,
+					nil,
 				)
 
 				var callbackLocs []http.Location
@@ -6529,6 +6621,7 @@ func TestOIDCURILocations(t *testing.T) {
 			"1",
 			&policiesfakes.FakeGenerator{},
 			alwaysFalseKeepAliveChecker,
+			nil,
 		)
 		return locs
 	}

@@ -21,7 +21,7 @@ import (
 // If referenced from a Gateway, the settings apply to that Gateway alone. If both a Gateway and its GatewayClass
 // reference an NginxProxy, the settings are merged. Settings specified on the Gateway NginxProxy override those
 // set on the GatewayClass NginxProxy.
-type NginxProxy struct { //nolint:govet // standard field alignment, don't change it
+type NginxProxy struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
@@ -122,7 +122,35 @@ type NginxProxySpec struct {
 	//
 	// +optional
 	WAF *WAFSpec `json:"waf,omitempty"`
+	// DisableBaseProxySetHeaders specifies which default proxy_set_header entries should be omitted.
+	// This allows users to set these headers themselves without NGF overriding them.
+	//
+	// Supported values are limited to X-Forwarded-* base headers and "*".
+	// A value of "*" disables all X-Forwarded-* base headers.
+	//
+	// +optional
+	// +listType=set
+	// +kubebuilder:validation:MaxItems=5
+	DisableBaseProxySetHeaders []ProxySetHeaderName `json:"disableBaseProxySetHeaders,omitempty"`
 }
+
+// ProxySetHeaderName is the name of a base proxy_set_header that can be disabled.
+//
+// +kubebuilder:validation:Enum=*;X-Forwarded-For;X-Forwarded-Proto;X-Forwarded-Host;X-Forwarded-Port
+type ProxySetHeaderName string
+
+const (
+	// ProxySetHeaderAll disables all X-Forwarded-* base headers.
+	ProxySetHeaderAll ProxySetHeaderName = "*"
+	// ProxySetHeaderXForwardedFor is the X-Forwarded-For header.
+	ProxySetHeaderXForwardedFor ProxySetHeaderName = "X-Forwarded-For"
+	// ProxySetHeaderXForwardedProto is the X-Forwarded-Proto header.
+	ProxySetHeaderXForwardedProto ProxySetHeaderName = "X-Forwarded-Proto"
+	// ProxySetHeaderXForwardedHost is the X-Forwarded-Host header.
+	ProxySetHeaderXForwardedHost ProxySetHeaderName = "X-Forwarded-Host"
+	// ProxySetHeaderXForwardedPort is the X-Forwarded-Port header.
+	ProxySetHeaderXForwardedPort ProxySetHeaderName = "X-Forwarded-Port"
+)
 
 // WAFSpec configures NGINX App Protect WAF.
 type WAFSpec struct {

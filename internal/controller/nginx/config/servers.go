@@ -177,7 +177,13 @@ func createServers(
 
 	for idx, s := range conf.HTTPServers {
 		serverID := fmt.Sprintf("%d", idx)
-		httpServer, matchPairs := createServer(s, serverID, generator, keepAliveCheck)
+		httpServer, matchPairs := createServer(
+			s,
+			serverID,
+			generator,
+			keepAliveCheck,
+			conf.BaseHTTPConfig.DisableBaseProxySetHeaders,
+		)
 		servers = append(servers, httpServer)
 		maps.Copy(finalMatchPairs, matchPairs)
 	}
@@ -187,7 +193,14 @@ func createServers(
 	for idx, s := range conf.SSLServers {
 		serverID := fmt.Sprintf("SSL_%d", idx)
 
-		sslServer, matchPairs := createSSLServer(s, serverID, generator, keepAliveCheck, disableSNI)
+		sslServer, matchPairs := createSSLServer(
+			s,
+			serverID,
+			generator,
+			keepAliveCheck,
+			disableSNI,
+			conf.BaseHTTPConfig.DisableBaseProxySetHeaders,
+		)
 		if _, portInUse := sharedTLSPorts[s.Port]; portInUse {
 			sslServer.Listen = getSocketNameHTTPS(s.Port)
 			sslServer.IsSocket = true
@@ -205,6 +218,7 @@ func createSSLServer(
 	generator policies.Generator,
 	keepAliveCheck keepAliveChecker,
 	disableSNIHostValidation bool,
+	disableBaseProxySetHeaders []string,
 ) (http.Server, httpMatchPairs) {
 	listen := fmt.Sprint(virtualServer.Port)
 	if virtualServer.IsDefault {
@@ -219,7 +233,13 @@ func createSSLServer(
 		return server, nil
 	}
 
-	locs, matchPairs, grpc := createLocations(&virtualServer, serverID, generator, keepAliveCheck)
+	locs, matchPairs, grpc := createLocations(
+		&virtualServer,
+		serverID,
+		generator,
+		keepAliveCheck,
+		disableBaseProxySetHeaders,
+	)
 
 	server := http.Server{
 		ServerName: virtualServer.Hostname,
@@ -285,6 +305,7 @@ func createServer(
 	serverID string,
 	generator policies.Generator,
 	keepAliveCheck keepAliveChecker,
+	disableBaseProxySetHeaders []string,
 ) (http.Server, httpMatchPairs) {
 	listen := fmt.Sprint(virtualServer.Port)
 
@@ -295,7 +316,13 @@ func createServer(
 		}, nil
 	}
 
-	locs, matchPairs, grpc := createLocations(&virtualServer, serverID, generator, keepAliveCheck)
+	locs, matchPairs, grpc := createLocations(
+		&virtualServer,
+		serverID,
+		generator,
+		keepAliveCheck,
+		disableBaseProxySetHeaders,
+	)
 
 	server := http.Server{
 		ServerName: virtualServer.Hostname,
@@ -502,6 +529,7 @@ func createLocations(
 	serverID string,
 	generator policies.Generator,
 	keepAliveCheck keepAliveChecker,
+	disableBaseProxySetHeaders []string,
 ) ([]http.Location, httpMatchPairs, bool) {
 	maxLocs, pathsAndTypes := getMaxLocationCountAndPathMap(server.PathRules)
 	locs := make([]http.Location, 0, maxLocs)
@@ -538,6 +566,7 @@ func createLocations(
 				extLocations,
 				server.Port,
 				keepAliveCheck,
+				disableBaseProxySetHeaders,
 				mirrorPercentage)...,
 			)
 		case needsInternalLocationsForMatches(rule):
@@ -548,6 +577,7 @@ func createLocations(
 				generator,
 				server.Port,
 				keepAliveCheck,
+				disableBaseProxySetHeaders,
 				mirrorPercentage,
 			)
 			httpMatchKey := serverID + "_" + strconv.Itoa(pathRuleIdx)
@@ -569,6 +599,7 @@ func createLocations(
 				generator,
 				server.Port,
 				keepAliveCheck,
+				disableBaseProxySetHeaders,
 				mirrorPercentage)...,
 			)
 		}
@@ -596,6 +627,7 @@ func updateExternalLocationsForRule(
 	extLocations []http.Location,
 	port int32,
 	keepAliveCheck keepAliveChecker,
+	disableBaseProxySetHeaders []string,
 	mirrorPercentage *float64,
 ) []http.Location {
 	for matchRuleIndex, r := range rule.MatchRules {
@@ -608,6 +640,7 @@ func updateExternalLocationsForRule(
 			extLocations,
 			port,
 			keepAliveCheck,
+			disableBaseProxySetHeaders,
 			mirrorPercentage,
 		)
 	}
@@ -622,6 +655,7 @@ func createInternalLocationsForRule(
 	generator policies.Generator,
 	port int32,
 	keepAliveCheck keepAliveChecker,
+	disableBaseProxySetHeaders []string,
 	mirrorPercentage *float64,
 ) ([]http.Location, []routeMatch) {
 	// Calculate the exact capacity needed
@@ -662,6 +696,7 @@ func createInternalLocationsForRule(
 				intLocation,
 				port,
 				keepAliveCheck,
+				disableBaseProxySetHeaders,
 				mirrorPercentage,
 				serverID,
 				matchRuleIdx,
@@ -715,6 +750,7 @@ func createInternalLocationsForRule(
 					intProxyPassLocation,
 					port,
 					keepAliveCheck,
+					disableBaseProxySetHeaders,
 					mirrorPercentage,
 					serverID,
 					matchRuleIdx,
@@ -789,6 +825,7 @@ func createInferenceLocationsForRule(
 	generator policies.Generator,
 	port int32,
 	keepAliveCheck keepAliveChecker,
+	disableBaseProxySetHeaders []string,
 	mirrorPercentage *float64,
 ) []http.Location {
 	capacity := len(extLocations)
@@ -860,6 +897,7 @@ func createInferenceLocationsForRule(
 				intProxyPassLocation,
 				port,
 				keepAliveCheck,
+				disableBaseProxySetHeaders,
 				mirrorPercentage,
 				serverID,
 				matchRuleIdx,
@@ -1156,6 +1194,7 @@ func updateLocation(
 	location http.Location,
 	listenerPort int32,
 	keepAliveCheck keepAliveChecker,
+	disableBaseProxySetHeaders []string,
 	mirrorPercentage *float64,
 	serverID string,
 	matchRuleIndex int,
@@ -1182,7 +1221,14 @@ func updateLocation(
 
 	location = updateLocationRewriteFilter(location, filters.RequestURLRewrite, pathRule)
 	location = updateLocationMirrorFilters(location, filters.RequestMirrors, pathRule.Path, mirrorPercentage)
-	location = updateLocationProxySettings(location, matchRule, grpc, inferenceBackend, keepAliveCheck)
+	location = updateLocationProxySettings(
+		location,
+		matchRule,
+		grpc,
+		inferenceBackend,
+		keepAliveCheck,
+		disableBaseProxySetHeaders,
+	)
 
 	return location
 }
@@ -1444,6 +1490,7 @@ func updateLocationProxySettings(
 	grpc bool,
 	inferenceBackend bool,
 	keepAliveCheck keepAliveChecker,
+	disableBaseProxySetHeaders []string,
 ) http.Location {
 	extraHeaders := make([]http.Header, 0, 3)
 	if grpc {
@@ -1462,9 +1509,12 @@ func updateLocationProxySettings(
 		}
 	}
 
+	baseProxySetHeaders := createBaseProxySetHeaders(externalHostname, extraHeaders...)
+	baseProxySetHeaders = filterBaseProxySetHeaders(baseProxySetHeaders, disableBaseProxySetHeaders)
+
 	proxySetHeaders := generateProxySetHeaders(
 		&matchRule.Filters,
-		createBaseProxySetHeaders(externalHostname, extraHeaders...),
+		baseProxySetHeaders,
 	)
 	responseHeaders := generateResponseHeaders(&matchRule.Filters)
 
@@ -1497,6 +1547,7 @@ func updateLocations(
 	buildLocations []http.Location,
 	listenerPort int32,
 	keepAliveCheck keepAliveChecker,
+	disableBaseProxySetHeaders []string,
 	mirrorPercentage *float64,
 ) []http.Location {
 	updatedLocations := make([]http.Location, len(buildLocations))
@@ -1508,6 +1559,7 @@ func updateLocations(
 			loc,
 			listenerPort,
 			keepAliveCheck,
+			disableBaseProxySetHeaders,
 			mirrorPercentage,
 			serverID,
 			matchRuleIdx,
@@ -2092,6 +2144,34 @@ func createBaseProxySetHeaders(externalHostname string, extraHeaders ...http.Hea
 	baseHeaders = append(baseHeaders, extraHeaders...)
 
 	return baseHeaders
+}
+
+func filterBaseProxySetHeaders(baseHeaders []http.Header, disableBaseProxySetHeaders []string) []http.Header {
+	if len(disableBaseProxySetHeaders) == 0 {
+		return baseHeaders
+	}
+
+	disabledHeaders := make(map[string]struct{}, len(disableBaseProxySetHeaders))
+	for _, header := range disableBaseProxySetHeaders {
+		if header == "*" {
+			disabledHeaders["X-Forwarded-For"] = struct{}{}
+			disabledHeaders["X-Forwarded-Proto"] = struct{}{}
+			disabledHeaders["X-Forwarded-Host"] = struct{}{}
+			disabledHeaders["X-Forwarded-Port"] = struct{}{}
+			continue
+		}
+		disabledHeaders[header] = struct{}{}
+	}
+
+	filteredHeaders := make([]http.Header, 0, len(baseHeaders))
+	for _, header := range baseHeaders {
+		if _, disabled := disabledHeaders[header.Name]; disabled {
+			continue
+		}
+		filteredHeaders = append(filteredHeaders, header)
+	}
+
+	return filteredHeaders
 }
 
 func getConnectionHeader(keepAliveCheck keepAliveChecker, backends []dataplane.Backend) http.Header {
