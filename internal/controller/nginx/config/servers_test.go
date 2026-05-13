@@ -4882,6 +4882,152 @@ func TestFilterBaseProxySetHeaders(t *testing.T) {
 	}
 }
 
+// TestExecuteServers_DisableBaseProxySetHeaders verifies that DisableBaseProxySetHeaders is tested end-to-end
+// through createServers → createServer/createSSLServer → createLocations → updateLocations →
+// updateLocation → updateLocationProxySettings, so that the rendered NGINX config omits the
+// disabled proxy_set_header entries while keeping the rest.
+func TestExecuteServers_DisableBaseProxySetHeaders(t *testing.T) {
+	t.Parallel()
+
+	backend := dataplane.BackendGroup{
+		Source:  types.NamespacedName{Namespace: "test", Name: "route1"},
+		RuleIdx: 0,
+		Backends: []dataplane.Backend{
+			{UpstreamName: "test_foo_80", Valid: true, Weight: 1},
+		},
+	}
+
+	pathRule := dataplane.PathRule{
+		Path:     "/coffee",
+		PathType: dataplane.PathTypePrefix,
+		MatchRules: []dataplane.MatchRule{
+			{
+				Match:        dataplane.Match{},
+				BackendGroup: backend,
+			},
+		},
+	}
+
+	tests := []struct {
+		name                       string
+		disableBaseProxySetHeaders []string
+		expPresent                 []string
+		expAbsent                  []string
+	}{
+		{
+			name:                       "no headers disabled – all base headers rendered",
+			disableBaseProxySetHeaders: nil,
+			expPresent: []string{
+				`proxy_set_header Host "$gw_api_compliant_host";`,
+				`proxy_set_header X-Forwarded-For "$proxy_add_x_forwarded_for";`,
+				`proxy_set_header X-Real-IP "$remote_addr";`,
+				`proxy_set_header X-Forwarded-Proto "$scheme";`,
+				`proxy_set_header X-Forwarded-Host "$host";`,
+				`proxy_set_header X-Forwarded-Port "$server_port";`,
+			},
+			expAbsent: nil,
+		},
+		{
+			name: "disable X-Forwarded-For – omitted from proxy_set_header",
+			disableBaseProxySetHeaders: []string{
+				string(v1alpha2.ProxySetHeaderXForwardedFor),
+			},
+			expPresent: []string{
+				`proxy_set_header Host "$gw_api_compliant_host";`,
+				`proxy_set_header X-Real-IP "$remote_addr";`,
+				`proxy_set_header X-Forwarded-Proto "$scheme";`,
+				`proxy_set_header X-Forwarded-Host "$host";`,
+				`proxy_set_header X-Forwarded-Port "$server_port";`,
+			},
+			expAbsent: []string{
+				`proxy_set_header X-Forwarded-For`,
+			},
+		},
+		{
+			name: "disable X-Forwarded-For and X-Forwarded-Proto",
+			disableBaseProxySetHeaders: []string{
+				string(v1alpha2.ProxySetHeaderXForwardedFor),
+				string(v1alpha2.ProxySetHeaderXForwardedProto),
+			},
+			expPresent: []string{
+				`proxy_set_header Host "$gw_api_compliant_host";`,
+				`proxy_set_header X-Real-IP "$remote_addr";`,
+				`proxy_set_header X-Forwarded-Host "$host";`,
+				`proxy_set_header X-Forwarded-Port "$server_port";`,
+			},
+			expAbsent: []string{
+				`proxy_set_header X-Forwarded-For`,
+				`proxy_set_header X-Forwarded-Proto`,
+			},
+		},
+		{
+			name: "wildcard disables all X-Forwarded-* headers",
+			disableBaseProxySetHeaders: []string{
+				string(v1alpha2.ProxySetHeaderAll),
+			},
+			expPresent: []string{
+				`proxy_set_header Host "$gw_api_compliant_host";`,
+				`proxy_set_header X-Real-IP "$remote_addr";`,
+			},
+			expAbsent: []string{
+				`proxy_set_header X-Forwarded-For`,
+				`proxy_set_header X-Forwarded-Proto`,
+				`proxy_set_header X-Forwarded-Host`,
+				`proxy_set_header X-Forwarded-Port`,
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			conf := dataplane.Configuration{
+				HTTPServers: []dataplane.VirtualServer{
+					{
+						Hostname:  "http.example.com",
+						Port:      8080,
+						PathRules: []dataplane.PathRule{pathRule},
+					},
+				},
+				SSLServers: []dataplane.VirtualServer{
+					{
+						Hostname: "ssl.example.com",
+						Port:     8443,
+						SSL: &dataplane.SSL{
+							KeyPairIDs: []dataplane.SSLKeyPairID{"test-keypair"},
+						},
+						PathRules: []dataplane.PathRule{pathRule},
+					},
+				},
+				BaseHTTPConfig: dataplane.BaseHTTPConfig{
+					DisableBaseProxySetHeaders: tc.disableBaseProxySetHeaders,
+				},
+			}
+
+			gen := GeneratorImpl{}
+			results := gen.executeServers(conf, &policiesfakes.FakeGenerator{}, alwaysFalseKeepAliveChecker)
+
+			var serverConf string
+			for _, res := range results {
+				if res.dest == httpConfigFile {
+					serverConf = string(res.data)
+					break
+				}
+			}
+			g.Expect(serverConf).NotTo(BeEmpty())
+
+			for _, s := range tc.expPresent {
+				g.Expect(serverConf).To(ContainSubstring(s), "expected %q to be present", s)
+			}
+			for _, s := range tc.expAbsent {
+				g.Expect(serverConf).NotTo(ContainSubstring(s), "expected %q to be absent", s)
+			}
+		})
+	}
+}
+
 func TestGetConnectionHeader(t *testing.T) {
 	t.Parallel()
 
