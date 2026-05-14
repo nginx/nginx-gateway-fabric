@@ -91,6 +91,7 @@ func BuildConfiguration(
 	maps.Copy(authCertBundles, buildJWTRemoteTLSCABundles(g.AuthenticationFilters, g.ReferencedSecrets))
 
 	backendGroups := buildBackendGroups(append(httpServers, sslServers...))
+	tlsServers := buildTLSServers(gateway)
 
 	upstreams := buildUpstreams(
 		ctx,
@@ -110,6 +111,7 @@ func BuildConfiguration(
 	certBundles := buildCertBundles(
 		refCertBundles,
 		backendGroups,
+		tlsServers,
 		extAuthCertBundleIDs,
 		authCertBundles,
 	)
@@ -123,7 +125,7 @@ func BuildConfiguration(
 		HTTPServers:   httpServers,
 		SSLServers:    sslServers,
 		OIDCProviders: oidcProvider,
-		TLSServers:    buildTLSServers(gateway),
+		TLSServers:    tlsServers,
 		TCPServers:    buildL4Servers(logger, gateway, v1.TCPProtocolType),
 		UDPServers:    buildL4Servers(logger, gateway, v1.UDPProtocolType),
 		Upstreams:     upstreams,
@@ -163,6 +165,10 @@ func isTLSTerminateListener(l *graph.Listener) bool {
 // Both Passthrough and Terminate mode listeners are processed. Terminate mode servers
 // include SSL configuration for TLS termination in the stream block.
 func buildTLSServers(gateway *graph.Gateway) []Layer4VirtualServer {
+	var gatewayNsName types.NamespacedName
+	if gateway.Source != nil {
+		gatewayNsName = types.NamespacedName{Namespace: gateway.Source.Namespace, Name: gateway.Source.Name}
+	}
 	tlsServersMap := make(map[graph.L4RouteKey][]Layer4VirtualServer)
 	listenerDefaultServers := make([]Layer4VirtualServer, 0)
 
@@ -178,7 +184,7 @@ func buildTLSServers(gateway *graph.Gateway) []Layer4VirtualServer {
 			ssl = buildSSL(l)
 		}
 
-		count, matched := buildTLSServersForListener(l, ssl, tlsServersMap)
+		count, matched := buildTLSServersForListener(l, ssl, gatewayNsName, tlsServersMap)
 		tlsServerCount += count
 
 		if !matched {
@@ -226,6 +232,7 @@ func buildTLSServers(gateway *graph.Gateway) []Layer4VirtualServer {
 func buildTLSServersForListener(
 	l *graph.Listener,
 	ssl *SSL,
+	gatewayNsName types.NamespacedName,
 	tlsServersMap map[graph.L4RouteKey][]Layer4VirtualServer,
 ) (int, bool) {
 	count := 0
@@ -263,8 +270,9 @@ func buildTLSServersForListener(
 						Weight: 0, // TLSRoute doesn't support weights
 					},
 				},
-				Port: l.Source.Port,
-				SSL:  ssl,
+				Port:      l.Source.Port,
+				SSL:       ssl,
+				VerifyTLS: convertBackendTLS(r.Spec.BackendRef.BackendTLSPolicy, gatewayNsName),
 			})
 		}
 	}
@@ -688,14 +696,13 @@ func buildRefCertificateBundles(
 func buildCertBundles(
 	refCertBundles []secrets.CertificateBundle,
 	backendGroups []BackendGroup,
+	tlsServers []Layer4VirtualServer,
 	extAuthCertBundleIDs map[CertBundleID]struct{},
 	authCertBundles map[CertBundleID]CertBundle,
 ) map[CertBundleID]CertBundle {
 	bundles := make(map[CertBundleID]CertBundle)
 
-	for id, cert := range authCertBundles {
-		bundles[id] = cert
-	}
+	maps.Copy(bundles, authCertBundles)
 
 	referenced := make(map[CertBundleID]struct{}, len(extAuthCertBundleIDs))
 	for id := range extAuthCertBundleIDs {
@@ -708,6 +715,12 @@ func buildCertBundles(
 			}
 			referenced[b.VerifyTLS.CertBundleID] = struct{}{}
 		}
+	}
+	for _, s := range tlsServers {
+		if s.VerifyTLS == nil {
+			continue
+		}
+		referenced[s.VerifyTLS.CertBundleID] = struct{}{}
 	}
 
 	if len(referenced) == 0 {

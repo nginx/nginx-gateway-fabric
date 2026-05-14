@@ -21,11 +21,12 @@ func (g GeneratorImpl) executeStreamServers(conf dataplane.Configuration) []exec
 	splitClients := createStreamSplitClients(conf)
 
 	streamServerConfig := stream.ServerConfig{
-		Servers:      streamServers,
-		SplitClients: splitClients,
-		IPFamily:     getIPFamily(conf.BaseHTTPConfig),
-		Plus:         g.plus,
-		DNSResolver:  buildDNSResolver(conf.BaseStreamConfig.DNSResolver),
+		Servers:         streamServers,
+		SplitClients:    splitClients,
+		IPFamily:        getIPFamily(conf.BaseHTTPConfig),
+		Plus:            g.plus,
+		DNSResolver:     buildDNSResolver(conf.BaseStreamConfig.DNSResolver),
+		GatewaySecretID: conf.BaseHTTPConfig.GatewaySecretID,
 	}
 
 	streamServerResult := executeResult{
@@ -298,17 +299,34 @@ func createTLSTerminateSocketServer(
 	}
 
 	streamServer := stream.Server{
-		Listen:     getSocketNameTLSTerminate(server.Port, server.Hostname),
-		StatusZone: server.Hostname,
-		ProxyPass:  upstreamName,
-		IsSocket:   true,
-		SSL:        buildStreamSSL(server.SSL),
+		Listen:         getSocketNameTLSTerminate(server.Port, server.Hostname),
+		StatusZone:     server.Hostname,
+		ProxyPass:      upstreamName,
+		IsSocket:       true,
+		SSL:            buildStreamSSL(server.SSL),
+		ProxySSLVerify: buildStreamProxySSLVerify(server.VerifyTLS),
 	}
 	streamServer.RewriteClientIP = getRewriteClientIPSettingsForStream(
 		conf.BaseHTTPConfig.RewriteClientIPSettings,
 	)
 
 	return []stream.Server{streamServer}
+}
+
+func buildStreamProxySSLVerify(v *dataplane.VerifyTLS) *stream.ProxySSLVerify {
+	if v == nil {
+		return nil
+	}
+
+	trustedCert := v.RootCAPath
+	if v.CertBundleID != "" {
+		trustedCert = generateCertBundleFileName(v.CertBundleID)
+	}
+
+	return &stream.ProxySSLVerify{
+		TrustedCertificate: trustedCert,
+		Name:               v.Hostname,
+	}
 }
 
 // buildStreamSSL converts a dataplane SSL config into a stream.SSL config,

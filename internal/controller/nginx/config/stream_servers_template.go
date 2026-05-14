@@ -10,6 +10,11 @@ resolver_timeout {{ .DNSResolver.Timeout }};
 {{- end }}
 {{- end }}
 
+{{- if .GatewaySecretID }}
+proxy_ssl_certificate /etc/nginx/secrets/{{ .GatewaySecretID }}.pem;
+proxy_ssl_certificate_key /etc/nginx/secrets/{{ .GatewaySecretID }}.pem;
+{{- end }}
+
 {{- if .SplitClients }}
 # Split clients configuration for weighted load balancing
 {{- range $sc := .SplitClients }}
@@ -61,6 +66,18 @@ server {
 
 	{{- if $s.ProxyPass }}
     proxy_pass {{ $s.ProxyPass }};
+	{{- if $s.ProxySSLVerify }}
+    proxy_ssl on;
+    proxy_ssl_server_name on;
+    proxy_ssl_verify on;
+	proxy_ssl_verify_depth 4;
+	{{- if $s.ProxySSLVerify.Name }}
+    proxy_ssl_name {{ $s.ProxySSLVerify.Name }};
+	{{- end }}
+	{{- if $s.ProxySSLVerify.TrustedCertificate }}
+    proxy_ssl_trusted_certificate {{ $s.ProxySSLVerify.TrustedCertificate }};
+	{{- end }}
+	{{- end }}
 	{{- end }}
 	{{- if $s.Target }}
     pass {{ $s.Target }};

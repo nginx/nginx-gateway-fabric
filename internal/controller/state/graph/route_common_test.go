@@ -3398,6 +3398,7 @@ func TestBuildL4RoutesForGatewaysNoGateways(t *testing.T) {
 		nil, // tcpRoutes
 		nil, // udpRoutes
 		services,
+		nil, // backendTLSPolicies
 		nil, // gateways
 		refGrantResolver,
 		nil,
@@ -3489,6 +3490,7 @@ func TestBuildL4RoutesForGatewaysTCPAndUDP(t *testing.T) {
 				tt.tcpRoutes,
 				tt.udpRoutes,
 				services,
+				nil,
 				gateways,
 				refGrantResolver,
 				nil,

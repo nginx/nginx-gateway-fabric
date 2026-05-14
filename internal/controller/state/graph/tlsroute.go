@@ -14,6 +14,7 @@ func buildTLSRoute(
 	gtr *gatewayv1.TLSRoute,
 	gws map[types.NamespacedName]*Gateway,
 	services map[types.NamespacedName]*apiv1.Service,
+	backendTLSPolicies map[types.NamespacedName]*BackendTLSPolicy,
 	refGrantResolver func(resource toResource) bool,
 	listenerSets map[types.NamespacedName]*ListenerSet,
 ) *L4Route {
@@ -55,7 +56,7 @@ func buildTLSRoute(
 		return r
 	}
 
-	br, conds := validateBackendRefTLSRoute(gtr, services, refGrantResolver)
+	br, conds := validateBackendRefTLSRoute(gtr, services, backendTLSPolicies, refGrantResolver)
 
 	r.Spec.BackendRef = br
 	r.Valid = true
@@ -71,6 +72,7 @@ func buildTLSRoute(
 func validateBackendRefTLSRoute(
 	gtr *gatewayv1.TLSRoute,
 	services map[types.NamespacedName]*apiv1.Service,
+	backendTLSPolicies map[types.NamespacedName]*BackendTLSPolicy,
 	refGrantResolver func(resource toResource) bool,
 ) (BackendRef, []conditions.Condition) {
 	// Length of BackendRefs and Rules is guaranteed to be one due to earlier check in buildTLSRoute
@@ -122,8 +124,23 @@ func validateBackendRefTLSRoute(
 		return backendRef, []conditions.Condition{conditions.NewRouteBackendRefRefBackendNotFound(err.Error())}
 	}
 
+	backendTLSPolicy, err := findBackendTLSPolicyForService(
+		backendTLSPolicies,
+		ref.Namespace,
+		string(ref.Name),
+		gtr.Namespace,
+		svcPort,
+	)
+	if err != nil {
+		backendRef.Valid = false
+		backendRef.BackendTLSPolicy = backendTLSPolicy
+
+		return backendRef, []conditions.Condition{conditions.NewRouteBackendRefUnsupportedValue(err.Error())}
+	}
+	backendRef.BackendTLSPolicy = backendTLSPolicy
+
 	if svcPort.AppProtocol != nil {
-		err = validateRouteBackendRefAppProtocol(RouteTypeTLS, *svcPort.AppProtocol, nil)
+		err = validateRouteBackendRefAppProtocol(RouteTypeTLS, *svcPort.AppProtocol, backendTLSPolicy)
 		if err != nil {
 			backendRef.Valid = false
 

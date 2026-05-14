@@ -14,6 +14,8 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/resolver"
 )
 
+const testGatewayClientCertID = dataplane.SSLKeyPairID("ssl_keypair_default_gateway-client-cert")
+
 func TestExecuteStreamServers(t *testing.T) {
 	t.Parallel()
 	conf := dataplane.Configuration{
@@ -132,6 +134,9 @@ func TestExecuteStreamServersWithTLSTerminate(t *testing.T) {
 	g := NewWithT(t)
 
 	conf := dataplane.Configuration{
+		BaseHTTPConfig: dataplane.BaseHTTPConfig{
+			GatewaySecretID: testGatewayClientCertID,
+		},
 		TLSServers: []dataplane.Layer4VirtualServer{
 			{
 				// Passthrough server
@@ -186,8 +191,11 @@ func TestExecuteStreamServersWithTLSTerminate(t *testing.T) {
 	g.Expect(results).To(HaveLen(1))
 
 	serverConf := string(results[0].data)
+	testGatewayClientCertPath := fmt.Sprintf("/etc/nginx/secrets/%s.pem", testGatewayClientCertID)
 
 	expSubStrings := map[string]int{
+		fmt.Sprintf("proxy_ssl_certificate %s;", testGatewayClientCertPath):     1,
+		fmt.Sprintf("proxy_ssl_certificate_key %s;", testGatewayClientCertPath): 1,
 		// Passthrough socket server
 		"ssl_preread on;": 1,
 		// TLS Terminate socket server SSL directives
@@ -775,6 +783,39 @@ func TestCreateTLSTerminateSocketServer(t *testing.T) {
 						Certificates:    []string{generatePEMFileName("keypair1"), generatePEMFileName("keypair2")},
 						CertificateKeys: []string{generatePEMFileName("keypair1"), generatePEMFileName("keypair2")},
 						Protocols:       "TLSv1.3",
+					},
+				},
+			},
+		},
+		{
+			name: "terminate server with backend tls verification",
+			server: dataplane.Layer4VirtualServer{
+				Hostname: "secure.example.com",
+				Port:     8443,
+				SSL: &dataplane.SSL{
+					KeyPairIDs: []dataplane.SSLKeyPairID{"keypair1"},
+				},
+				VerifyTLS: &dataplane.VerifyTLS{
+					CertBundleID: dataplane.CertBundleID("cert_bundle_default_ca"),
+					Hostname:     "backend.example.com",
+				},
+				Upstreams: []dataplane.Layer4Upstream{
+					{Name: "backend1", Weight: 0},
+				},
+			},
+			expected: []stream.Server{
+				{
+					Listen:     getSocketNameTLSTerminate(8443, "secure.example.com"),
+					StatusZone: "secure.example.com",
+					ProxyPass:  "backend1",
+					IsSocket:   true,
+					SSL: &stream.SSL{
+						Certificates:    []string{generatePEMFileName("keypair1")},
+						CertificateKeys: []string{generatePEMFileName("keypair1")},
+					},
+					ProxySSLVerify: &stream.ProxySSLVerify{
+						TrustedCertificate: generateCertBundleFileName(dataplane.CertBundleID("cert_bundle_default_ca")),
+						Name:               "backend.example.com",
 					},
 				},
 			},

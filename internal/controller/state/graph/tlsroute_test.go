@@ -755,10 +755,98 @@ func TestBuildTLSRoute(t *testing.T) {
 				test.gtr,
 				map[types.NamespacedName]*Gateway{client.ObjectKeyFromObject(test.gateway.Source): test.gateway},
 				test.services,
+				nil,
 				test.resolver,
 				listenerSets,
 			)
 			g.Expect(helpers.Diff(test.expected, r)).To(BeEmpty())
 		})
 	}
+}
+
+func TestBuildTLSRouteBackendTLSPolicyAttached(t *testing.T) {
+	t.Parallel()
+
+	g := NewWithT(t)
+
+	gtr := &gatewayv1.TLSRoute{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "tr"},
+		Spec: gatewayv1.TLSRouteSpec{
+			CommonRouteSpec: gatewayv1.CommonRouteSpec{
+				ParentRefs: []gatewayv1.ParentReference{{
+					Namespace:   helpers.GetPointer[gatewayv1.Namespace]("test"),
+					Name:        "gateway",
+					SectionName: helpers.GetPointer[gatewayv1.SectionName]("l1"),
+					Kind:        helpers.GetPointer[gatewayv1.Kind](kinds.Gateway),
+				}},
+			},
+			Hostnames: []gatewayv1.Hostname{"app.example.com"},
+			Rules: []gatewayv1.TLSRouteRule{{
+				BackendRefs: []gatewayv1.BackendRef{{
+					BackendObjectReference: gatewayv1.BackendObjectReference{
+						Name: "backend-svc",
+						Port: helpers.GetPointer[gatewayv1.PortNumber](443),
+					},
+				}},
+			}},
+		},
+	}
+
+	gateway := &Gateway{
+		Source: &gatewayv1.Gateway{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: "test", Name: "gateway",
+			},
+		},
+		Valid: true,
+	}
+
+	svcNsName := types.NamespacedName{Namespace: "test", Name: "backend-svc"}
+	services := map[types.NamespacedName]*apiv1.Service{
+		svcNsName: {
+			ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "backend-svc"},
+			Spec:       apiv1.ServiceSpec{Ports: []apiv1.ServicePort{{Name: "https", Port: 443}}},
+		},
+	}
+
+	policyNsName := types.NamespacedName{Namespace: "test", Name: "backend-tls"}
+	backendTLSPolicies := map[types.NamespacedName]*BackendTLSPolicy{
+		policyNsName: {
+			Source: &gatewayv1.BackendTLSPolicy{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "backend-tls"},
+				Spec: gatewayv1.BackendTLSPolicySpec{
+					TargetRefs: []gatewayv1.LocalPolicyTargetReferenceWithSectionName{{
+						LocalPolicyTargetReference: gatewayv1.LocalPolicyTargetReference{
+							Group: "",
+							Kind:  "Service",
+							Name:  "backend-svc",
+						},
+						SectionName: helpers.GetPointer[gatewayv1.SectionName]("https"),
+					}},
+					Validation: gatewayv1.BackendTLSPolicyValidation{
+						Hostname:                "backend.example.com",
+						WellKnownCACertificates: helpers.GetPointer(gatewayv1.WellKnownCACertificatesSystem),
+					},
+				},
+			},
+			Valid: true,
+		},
+	}
+
+	listenerSets := map[types.NamespacedName]*ListenerSet{}
+
+	r := buildTLSRoute(
+		gtr,
+		map[types.NamespacedName]*Gateway{client.ObjectKeyFromObject(gateway.Source): gateway},
+		services,
+		backendTLSPolicies,
+		func(_ toResource) bool { return true },
+		listenerSets,
+	)
+
+	g.Expect(r).ToNot(BeNil())
+	g.Expect(r.Spec.BackendRef.Valid).To(BeTrue())
+	g.Expect(r.Spec.BackendRef.BackendTLSPolicy).ToNot(BeNil())
+	g.Expect(r.Spec.BackendRef.BackendTLSPolicy.Source.Name).To(Equal("backend-tls"))
+	g.Expect(r.Spec.BackendRef.BackendTLSPolicy.IsReferenced).To(BeTrue())
 }

@@ -9917,6 +9917,12 @@ func TestBuildCertBundles(t *testing.T) {
 		},
 	}
 
+	tlsServersWithTLS := []Layer4VirtualServer{
+		{
+			VerifyTLS: &VerifyTLS{CertBundleID: generateCertBundleID(backendBundle.Name)},
+		},
+	}
+
 	extAuthIDs := map[CertBundleID]struct{}{
 		generateCertBundleID(extAuthBundle.Name): {},
 	}
@@ -9928,6 +9934,7 @@ func TestBuildCertBundles(t *testing.T) {
 		name                 string
 		refCertBundles       []secrets.CertificateBundle
 		backendGroups        []BackendGroup
+		tlsServers           []Layer4VirtualServer
 	}{
 		{
 			name:                 "external auth filter BTP cert bundle is written even when no backend group references it",
@@ -9936,6 +9943,16 @@ func TestBuildCertBundles(t *testing.T) {
 			extAuthCertBundleIDs: extAuthIDs,
 			expected: map[CertBundleID]CertBundle{
 				generateCertBundleID(extAuthBundle.Name): CertBundle("ext-auth-ca-data"),
+			},
+		},
+		{
+			name:                 "TLSRoute terminate verify cert bundle is written when only TLS servers reference it",
+			refCertBundles:       []secrets.CertificateBundle{backendBundle},
+			backendGroups:        nil,
+			tlsServers:           tlsServersWithTLS,
+			extAuthCertBundleIDs: nil,
+			expected: map[CertBundleID]CertBundle{
+				generateCertBundleID(backendBundle.Name): CertBundle("backend-ca-data"),
 			},
 		},
 		{
@@ -9969,6 +9986,7 @@ func TestBuildCertBundles(t *testing.T) {
 			result := buildCertBundles(
 				test.refCertBundles,
 				test.backendGroups,
+				test.tlsServers,
 				test.extAuthCertBundleIDs,
 				test.authBundles,
 			)
