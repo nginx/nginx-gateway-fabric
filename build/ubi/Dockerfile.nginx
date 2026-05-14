@@ -45,7 +45,7 @@ RUN --mount=type=bind,from=nginx-files,src=nginx_signing.key,target=/tmp/nginx_s
     && groupadd -g 1001 nginx \
     && useradd -r -u 101 -g nginx -s /sbin/nologin -d /var/cache/nginx nginx \
     # Install NGINX and modules including OTEL
-    && microdnf --nodocs install -y nginx-${NGINX_VERSION,,} nginx-module-njs-${NGINX_VERSION}* nginx-module-otel-${NGINX_VERSION}* \
+    && microdnf --nodocs install -y nginx-${NGINX_VERSION} nginx-module-njs-${NGINX_VERSION}* nginx-module-otel-${NGINX_VERSION}* \
     # Install nginx-agent
     && microdnf --nodocs install -y nginx-agent-${NGINX_AGENT_VERSION#v}* \
     # Clean up
