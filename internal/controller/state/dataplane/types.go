@@ -638,6 +638,8 @@ type BaseHTTPConfig struct {
 	DNSResolver *DNSResolverConfig
 	// Compression defines the compression settings for NGINX.
 	Compression *CompressionSettings
+	// DisableBaseProxySetHeaders specifies which default proxy_set_header entries should be omitted.
+	DisableBaseProxySetHeaders []string
 	// IPFamily specifies the IP family for all servers.
 	IPFamily IPFamilyType
 	// GatewaySecretID is the ID of the secret that contains the gateway backend TLS certificate.
