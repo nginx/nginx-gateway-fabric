@@ -2121,23 +2121,23 @@ func createBaseProxySetHeaders(externalHostname string, extraHeaders ...http.Hea
 			Value: hostValue,
 		},
 		{
-			Name:  string(v1alpha2.ProxySetHeaderXForwardedFor),
+			Name:  string(v1alpha2.HeaderXForwardedFor),
 			Value: "$proxy_add_x_forwarded_for",
 		},
 		{
-			Name:  string(v1alpha2.ProxySetHeaderXRealIP),
+			Name:  string(v1alpha2.HeaderXRealIP),
 			Value: "$remote_addr",
 		},
 		{
-			Name:  string(v1alpha2.ProxySetHeaderXForwardedProto),
+			Name:  string(v1alpha2.HeaderXForwardedProto),
 			Value: "$scheme",
 		},
 		{
-			Name:  string(v1alpha2.ProxySetHeaderXForwardedHost),
+			Name:  string(v1alpha2.HeaderXForwardedHost),
 			Value: "$host",
 		},
 		{
-			Name:  string(v1alpha2.ProxySetHeaderXForwardedPort),
+			Name:  string(v1alpha2.HeaderXForwardedPort),
 			Value: "$server_port",
 		},
 	}
@@ -2147,6 +2147,8 @@ func createBaseProxySetHeaders(externalHostname string, extraHeaders ...http.Hea
 	return baseHeaders
 }
 
+// filterBaseProxySetHeaders removes any headers from the base proxy set headers that are
+// specified in the disableBaseProxySetHeaders list.
 func filterBaseProxySetHeaders(baseHeaders []http.Header, disableBaseProxySetHeaders []string) []http.Header {
 	if len(disableBaseProxySetHeaders) == 0 {
 		return baseHeaders
@@ -2155,11 +2157,11 @@ func filterBaseProxySetHeaders(baseHeaders []http.Header, disableBaseProxySetHea
 	disabledHeaders := make(map[string]struct{}, len(disableBaseProxySetHeaders))
 	for _, header := range disableBaseProxySetHeaders {
 		if header == "*" {
-			disabledHeaders[string(v1alpha2.ProxySetHeaderXForwardedFor)] = struct{}{}
-			disabledHeaders[string(v1alpha2.ProxySetHeaderXForwardedProto)] = struct{}{}
-			disabledHeaders[string(v1alpha2.ProxySetHeaderXForwardedHost)] = struct{}{}
-			disabledHeaders[string(v1alpha2.ProxySetHeaderXForwardedPort)] = struct{}{}
-			disabledHeaders[string(v1alpha2.ProxySetHeaderXRealIP)] = struct{}{}
+			disabledHeaders[string(v1alpha2.HeaderXForwardedFor)] = struct{}{}
+			disabledHeaders[string(v1alpha2.HeaderXForwardedProto)] = struct{}{}
+			disabledHeaders[string(v1alpha2.HeaderXForwardedHost)] = struct{}{}
+			disabledHeaders[string(v1alpha2.HeaderXForwardedPort)] = struct{}{}
+			disabledHeaders[string(v1alpha2.HeaderXRealIP)] = struct{}{}
 			continue
 		}
 		disabledHeaders[header] = struct{}{}

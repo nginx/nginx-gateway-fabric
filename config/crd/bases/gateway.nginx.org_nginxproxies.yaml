@@ -51,9 +51,9 @@ spec:
           spec:
             description: Spec defines the desired state of the NginxProxy.
             properties:
-              disableBaseXProxySetHeaders:
+              disableBaseHeaders:
                 description: |-
-                  DisableBaseXProxySetHeaders specifies which default X-* base headers should be omitted
+                  DisableBaseHeaders specifies which default X-* base headers should be omitted
                   from being added to the base proxy_set_header directives in the NGINX configuration.
                   This allows users to set these headers themselves without NGF overriding them.
 
@@ -61,7 +61,7 @@ spec:
                   A value of "*" disables all X-* base headers.
                 items:
                   description: |-
-                    XBaseProxySetHeaderName is the name of a base X-* header that can be disabled
+                    BaseHeaderName is the name of a base X-* header that can be disabled
                     from being added to the base proxy_set_header directives in the NGINX configuration.
                   enum:
                   - '*'
