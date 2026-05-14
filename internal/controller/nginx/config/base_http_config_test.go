@@ -916,7 +916,7 @@ func TestExecuteBaseHttp_Compression(t *testing.T) {
 			},
 			expSubStrings: []string{
 				"gzip on;",
-				"gzip_types text/css application/json;",
+				`gzip_types "text/css" "application/json";`,
 			},
 			expAbsent: []string{
 				"gzip_vary", "gzip_proxied", "gzip_comp_level",
@@ -947,7 +947,7 @@ func TestExecuteBaseHttp_Compression(t *testing.T) {
 				"gzip_min_length 256;",
 				"gzip_buffers 32 4k;",
 				"gzip_http_version 1.0;",
-				"gzip_types text/css application/json application/javascript;",
+				`gzip_types "text/css" "application/json" "application/javascript";`,
 				"gzip_proxied any;",
 				`gzip_disable "msie6";`,
 				"gzip_vary on;",

@@ -106,7 +106,7 @@ gzip_buffers {{ .Compression.BufferNumber }} {{ .Compression.BufferSize }};
 gzip_http_version {{ .Compression.HTTPVersion }};
 {{- end }}
 {{- if .Compression.MimeTypes }}
-gzip_types{{ range .Compression.MimeTypes }} {{ . }}{{ end }};
+gzip_types{{ range .Compression.MimeTypes }} "{{ . }}"{{ end }};
 {{- end }}
 {{- if .Compression.Proxied }}
 gzip_proxied{{ range .Compression.Proxied }} {{ . }}{{ end }};
