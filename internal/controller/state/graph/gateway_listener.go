@@ -397,8 +397,9 @@ func getValidKindsForProtocol(listener v1.Listener) []v1.RouteGroupKind {
 			{Kind: v1.Kind(kinds.GRPCRoute), Group: helpers.GetPointer[v1.Group](v1.GroupName)},
 		}
 	case v1.TLSProtocolType:
-		if listener.TLS != nil && listener.TLS.Mode != nil &&
-			(*listener.TLS.Mode == v1.TLSModePassthrough || *listener.TLS.Mode == v1.TLSModeTerminate) {
+		if listener.TLS != nil &&
+			(listener.TLS.Mode == nil || *listener.TLS.Mode == v1.TLSModePassthrough ||
+				*listener.TLS.Mode == v1.TLSModeTerminate) {
 			return []v1.RouteGroupKind{
 				{Kind: v1.Kind(kinds.TLSRoute), Group: helpers.GetPointer[v1.Group](v1.GroupName)},
 			}

@@ -410,6 +410,16 @@ func TestGetAndValidateListenerSupportedKinds(t *testing.T) {
 			kind: []v1.RouteGroupKind{
 				TLSRouteGroupKind,
 			},
+			tls:       &v1.ListenerTLSConfig{},
+			expectErr: false,
+			name:      "valid kinds for TLS protocol with nil mode defaults to terminate",
+			expected:  []v1.RouteGroupKind{TLSRouteGroupKind},
+		},
+		{
+			protocol: v1.TLSProtocolType,
+			kind: []v1.RouteGroupKind{
+				TLSRouteGroupKind,
+			},
 			tls: &v1.ListenerTLSConfig{
 				Mode: helpers.GetPointer(v1.TLSModePassthrough),
 			},

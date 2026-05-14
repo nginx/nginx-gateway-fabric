@@ -158,7 +158,7 @@ func BuildConfiguration(
 
 // isTLSTerminateListener returns true if the listener is a TLS listener in Terminate mode.
 func isTLSTerminateListener(l *graph.Listener) bool {
-	return l.Source.TLS != nil && l.Source.TLS.Mode != nil && *l.Source.TLS.Mode == v1.TLSModeTerminate
+	return l.Source.TLS != nil && (l.Source.TLS.Mode == nil || *l.Source.TLS.Mode == v1.TLSModeTerminate)
 }
 
 // buildTLSServers builds TLSServers from TLSRoutes attached to TLS listeners.

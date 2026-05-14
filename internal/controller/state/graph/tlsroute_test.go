@@ -850,3 +850,105 @@ func TestBuildTLSRouteBackendTLSPolicyAttached(t *testing.T) {
 	g.Expect(r.Spec.BackendRef.BackendTLSPolicy.Source.Name).To(Equal("backend-tls"))
 	g.Expect(r.Spec.BackendRef.BackendTLSPolicy.IsReferenced).To(BeTrue())
 }
+
+func TestHasTLSTerminateParent_NilModeDefaultsToTerminate(t *testing.T) {
+	t.Parallel()
+
+	g := NewWithT(t)
+
+	sectionName := gatewayv1.SectionName("tls-listener")
+	parentRefs := []ParentRef{{
+		Kind:           gatewayv1.Kind(kinds.Gateway),
+		NamespacedName: types.NamespacedName{Namespace: "test", Name: "gateway"},
+		SectionName:    &sectionName,
+	}}
+
+	gws := map[types.NamespacedName]*Gateway{
+		{Namespace: "test", Name: "gateway"}: {
+			Listeners: []*Listener{{
+				Name: "tls-listener",
+				Source: gatewayv1.Listener{
+					Name:     "tls-listener",
+					Protocol: gatewayv1.TLSProtocolType,
+					TLS:      &gatewayv1.ListenerTLSConfig{},
+				},
+			}},
+		},
+	}
+
+	g.Expect(hasTLSTerminateParent(parentRefs, gws, nil)).To(BeTrue())
+}
+
+func TestBuildTLSRoute_WSSAppProtocolOnTerminateRequiresBackendTLSPolicy(t *testing.T) {
+	t.Parallel()
+
+	g := NewWithT(t)
+
+	gtr := &gatewayv1.TLSRoute{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "tr"},
+		Spec: gatewayv1.TLSRouteSpec{
+			CommonRouteSpec: gatewayv1.CommonRouteSpec{
+				ParentRefs: []gatewayv1.ParentReference{
+					createParentRef(gatewayv1.Kind(kinds.Gateway), "gateway", "l1"),
+				},
+			},
+			Hostnames: []gatewayv1.Hostname{"app.example.com"},
+			Rules: []gatewayv1.TLSRouteRule{{
+				BackendRefs: []gatewayv1.BackendRef{{
+					BackendObjectReference: gatewayv1.BackendObjectReference{
+						Name: "backend-svc",
+						Port: helpers.GetPointer[gatewayv1.PortNumber](443),
+					},
+				}},
+			}},
+		},
+	}
+
+	gateway := &Gateway{
+		Source: &gatewayv1.Gateway{ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "gateway"}},
+		Valid:  true,
+		Listeners: []*Listener{{
+			Name: "l1",
+			Source: gatewayv1.Listener{
+				Name:     "l1",
+				Protocol: gatewayv1.TLSProtocolType,
+				TLS:      &gatewayv1.ListenerTLSConfig{Mode: helpers.GetPointer(gatewayv1.TLSModeTerminate)},
+			},
+		}},
+	}
+
+	svcNsName := types.NamespacedName{Namespace: "test", Name: "backend-svc"}
+	services := map[types.NamespacedName]*apiv1.Service{
+		svcNsName: {
+			ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "backend-svc"},
+			Spec: apiv1.ServiceSpec{
+				Ports: []apiv1.ServicePort{{Port: 443, AppProtocol: helpers.GetPointer(AppProtocolTypeWSS)}},
+			},
+		},
+	}
+
+	r := buildTLSRoute(
+		gtr,
+		map[types.NamespacedName]*Gateway{client.ObjectKeyFromObject(gateway.Source): gateway},
+		services,
+		nil,
+		func(_ toResource) bool { return true },
+		map[types.NamespacedName]*ListenerSet{},
+	)
+
+	g.Expect(r).ToNot(BeNil())
+	g.Expect(r.Spec.BackendRef.Valid).To(BeFalse())
+	g.Expect(r.Conditions).To(ContainElement(conditions.NewRouteBackendRefUnsupportedProtocol(
+		"The Route type tls does not support service port appProtocol kubernetes.io/wss; " +
+			"missing corresponding BackendTLSPolicy",
+	)))
+}
+
+func createParentRef(kind gatewayv1.Kind, name, sectionName string) gatewayv1.ParentReference {
+	return gatewayv1.ParentReference{
+		Namespace:   helpers.GetPointer[gatewayv1.Namespace]("test"),
+		Name:        gatewayv1.ObjectName(name),
+		SectionName: new(gatewayv1.SectionName(sectionName)),
+		Kind:        new(kind),
+	}
+}
