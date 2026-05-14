@@ -39,7 +39,7 @@ COMPATIBILITY:
 - Gateway API Inference Extension version: `1.5.0`
 - NGINX version: `1.30.0`
 - NGINX Plus version: `R36`
-- F5 WAF on NGINX version: `5.12.1`
+- F5 WAF on NGINX version: `5.13.0`
 - NGINX Agent version: `v3.9.1`
 - Kubernetes version: `1.31+`
 
