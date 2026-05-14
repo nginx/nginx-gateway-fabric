@@ -541,6 +541,7 @@ func (h *eventHandlerImpl) waitForStatusUpdates(ctx context.Context) {
 				item.GatewayService,
 				gw,
 				h.cfg.gatewayClassName,
+				h.cfg.gatewayCtlrName,
 			)
 			if err != nil {
 				msg := "error getting Gateway Service IP address"
@@ -580,7 +581,7 @@ func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph, 
 		return
 	}
 
-	gwAddresses, err := getGatewayAddresses(ctx, h.cfg.k8sClient, nil, gw, h.cfg.gatewayClassName)
+	gwAddresses, err := getGatewayAddresses(ctx, h.cfg.k8sClient, nil, gw, h.cfg.gatewayClassName, h.cfg.gatewayCtlrName)
 	if err != nil {
 		msg := "error getting Gateway Service IP address"
 		h.cfg.logger.Error(err, msg)
@@ -900,6 +901,7 @@ func getGatewayAddresses(
 	svc *v1.Service,
 	gateway *graph.Gateway,
 	gatewayClassName string,
+	gatewayCtlrName string,
 ) ([]gatewayv1.GatewayStatusAddress, error) {
 	if gateway == nil || len(gateway.Listeners) == 0 {
 		return nil, nil
@@ -931,32 +933,51 @@ func getGatewayAddresses(
 		gwSvc = *svc
 	}
 
-	return getGatewayAddressesForStatus(&gwSvc, gateway), nil
+	return getGatewayAddressesForStatus(&gwSvc, gateway, gatewayCtlrName), nil
 }
 
 func getGatewayAddressesForStatus(
 	svc *v1.Service,
 	gateway *graph.Gateway,
+	gatewayCtlrName string,
 ) (gwAddresses []gatewayv1.GatewayStatusAddress) {
+	// Preserve order but deduplicate addresses and hostnames so the Gateway status
+	// does not contain duplicates coming from Service status and Gateway spec.addresses.
+	addrSeen := make(map[string]struct{})
+	hostSeen := make(map[string]struct{})
+
 	var addresses, hostnames []string
+
 	switch svc.Spec.Type {
 	case v1.ServiceTypeLoadBalancer:
 		for _, ingress := range svc.Status.LoadBalancer.Ingress {
 			if ingress.IP != "" {
-				addresses = append(addresses, ingress.IP)
+				if _, ok := addrSeen[ingress.IP]; !ok {
+					addrSeen[ingress.IP] = struct{}{}
+					addresses = append(addresses, ingress.IP)
+				}
 			} else if ingress.Hostname != "" {
-				hostnames = append(hostnames, ingress.Hostname)
+				if _, ok := hostSeen[ingress.Hostname]; !ok {
+					hostSeen[ingress.Hostname] = struct{}{}
+					hostnames = append(hostnames, ingress.Hostname)
+				}
 			}
 		}
 	default:
-		addresses = append(addresses, svc.Spec.ClusterIP)
+		if svc.Spec.ClusterIP != "" {
+			addr := svc.Spec.ClusterIP
+			addrSeen[addr] = struct{}{}
+			addresses = append(addresses, addr)
+		}
 	}
 
+	// Append Gateway.Spec.Addresses (only valid IP addresses) if not already present.
 	for _, address := range gateway.Source.Spec.Addresses {
-		if address.Type != nil &&
-			*address.Type == gatewayv1.IPAddressType &&
-			net.ParseIP(address.Value) != nil {
-			addresses = append(addresses, address.Value)
+		if address.Type != nil && *address.Type == gatewayv1.IPAddressType && net.ParseIP(address.Value) != nil {
+			if _, ok := addrSeen[address.Value]; !ok {
+				addrSeen[address.Value] = struct{}{}
+				addresses = append(addresses, address.Value)
+			}
 		}
 	}
 
@@ -976,7 +997,35 @@ func getGatewayAddressesForStatus(
 		}
 		gwAddresses = append(gwAddresses, statusAddr)
 	}
+
+	updateGatewayConditions(gateway, svc, gatewayCtlrName)
+
 	return gwAddresses
+}
+
+func updateGatewayConditions(gateway *graph.Gateway, svc *v1.Service, gatewayCtlrName string) {
+	// If the Gateway declares addresses but the backing Service is not a LoadBalancer,
+	// report an unprogrammed condition indicating those addresses cannot be used.
+	if len(gateway.Source.Spec.Addresses) > 0 && svc.Spec.Type != v1.ServiceTypeLoadBalancer {
+		msg := "Gateway.Spec.Addresses is set but the backing Service is not a LoadBalancer; addresses will not be applied"
+		gateway.Conditions = append(gateway.Conditions, conditions.NewGatewayUnusableAddress(msg))
+	}
+
+	// If Gateway declares addresses and the Service is a LoadBalancer but the Service
+	// has a user-provided LoadBalancerClass (i.e. not the one NGF sets itself), surface
+	// an unprogrammed condition so users know NGF did not override the class and
+	// addresses may not be applied.
+	if len(gateway.Source.Spec.Addresses) > 0 && svc.Spec.Type == v1.ServiceTypeLoadBalancer {
+		if svc.Spec.LoadBalancerClass != nil &&
+			*svc.Spec.LoadBalancerClass != "" &&
+			*svc.Spec.LoadBalancerClass != gatewayCtlrName {
+			msg := fmt.Sprintf("Gateway.Spec.Addresses present "+
+				"but Service has user-provided LoadBalancerClass %q; NGF will not override it",
+				*svc.Spec.LoadBalancerClass,
+			)
+			gateway.Conditions = append(gateway.Conditions, conditions.NewGatewayUnusableAddress(msg))
+		}
+	}
 }
 
 // getDeploymentContext gets the deployment context metadata for N+ reporting.

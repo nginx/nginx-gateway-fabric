@@ -1033,7 +1033,7 @@ var _ = Describe("getGatewayAddresses", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 		defer cancel()
 
-		addrs, err := getGatewayAddresses(ctx, fakeClient, nil, gateway, "nginx")
+		addrs, err := getGatewayAddresses(ctx, fakeClient, nil, gateway, "nginx", "")
 		Expect(err).To(HaveOccurred())
 		Expect(addrs).To(BeNil())
 
@@ -1062,7 +1062,7 @@ var _ = Describe("getGatewayAddresses", func() {
 
 		Expect(fakeClient.Create(context.Background(), &svc)).To(Succeed())
 
-		addrs, err = getGatewayAddresses(context.Background(), fakeClient, &svc, gateway, "nginx")
+		addrs, err = getGatewayAddresses(context.Background(), fakeClient, &svc, gateway, "nginx", "")
 		Expect(err).ToNot(HaveOccurred())
 		Expect(addrs).To(HaveLen(4))
 		Expect(addrs[0].Value).To(Equal("34.35.36.37"))
@@ -1085,7 +1085,7 @@ var _ = Describe("getGatewayAddresses", func() {
 
 		Expect(fakeClient.Create(context.Background(), &svc)).To(Succeed())
 
-		addrs, err = getGatewayAddresses(context.Background(), fakeClient, &svc, gateway, "nginx")
+		addrs, err = getGatewayAddresses(context.Background(), fakeClient, &svc, gateway, "nginx", "")
 		Expect(err).ToNot(HaveOccurred())
 		Expect(addrs).To(HaveLen(3))
 		Expect(addrs[0].Value).To(Equal("12.13.14.15"))
@@ -2433,4 +2433,115 @@ func TestFindWAFPolicyKey(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestGetGatewayAddressesForStatus(t *testing.T) {
+	t.Parallel()
+
+	lbClass := "custom-class"
+	ngfCtlrName := "gateway.nginx.org/nginx-gateway-controller"
+
+	tests := []struct {
+		svc                    *v1.Service
+		expectedProgrammed     *metav1.ConditionStatus
+		expectedReason         *string
+		name                   string
+		gwAddresses            []gatewayv1.GatewaySpecAddress
+		expectedAddrs          []string
+		expectedConditionCount int
+	}{
+		{
+			name: "deduplicates LB ingress IP and gateway spec address",
+			svc: &v1.Service{
+				Spec:   v1.ServiceSpec{Type: v1.ServiceTypeLoadBalancer},
+				Status: v1.ServiceStatus{LoadBalancer: v1.LoadBalancerStatus{Ingress: []v1.LoadBalancerIngress{{IP: "1.2.3.4"}}}},
+			},
+			gwAddresses: []gatewayv1.GatewaySpecAddress{
+				{Type: helpers.GetPointer(gatewayv1.IPAddressType), Value: "1.2.3.4"},
+			},
+			expectedAddrs:          []string{"1.2.3.4"},
+			expectedConditionCount: 0,
+		},
+		{
+			name: "non-LB service adds Programmed=false condition",
+			svc: &v1.Service{
+				Spec: v1.ServiceSpec{Type: v1.ServiceTypeClusterIP, ClusterIP: "10.0.0.1"},
+			},
+			gwAddresses: []gatewayv1.GatewaySpecAddress{
+				{Type: helpers.GetPointer(gatewayv1.IPAddressType), Value: "1.2.3.4"},
+			},
+			expectedAddrs:          []string{"10.0.0.1", "1.2.3.4"},
+			expectedConditionCount: 1,
+			expectedProgrammed:     conditionStatusPtr(metav1.ConditionFalse),
+			expectedReason:         helpers.GetPointer(string(gatewayv1.GatewayReasonAddressNotUsable)),
+		},
+		{
+			name: "LB service with user-provided class adds Programmed=false condition",
+			svc: &v1.Service{
+				Spec:   v1.ServiceSpec{Type: v1.ServiceTypeLoadBalancer, LoadBalancerClass: &lbClass},
+				Status: v1.ServiceStatus{LoadBalancer: v1.LoadBalancerStatus{Ingress: []v1.LoadBalancerIngress{}}},
+			},
+			gwAddresses: []gatewayv1.GatewaySpecAddress{
+				{Type: helpers.GetPointer(gatewayv1.IPAddressType), Value: "1.2.3.5"},
+			},
+			expectedAddrs:          []string{"1.2.3.5"},
+			expectedConditionCount: 1,
+			expectedProgrammed:     conditionStatusPtr(metav1.ConditionFalse),
+		},
+		{
+			name: "LB service with NGF-set class does not add condition",
+			svc: &v1.Service{
+				Spec:   v1.ServiceSpec{Type: v1.ServiceTypeLoadBalancer, LoadBalancerClass: &ngfCtlrName},
+				Status: v1.ServiceStatus{LoadBalancer: v1.LoadBalancerStatus{Ingress: []v1.LoadBalancerIngress{}}},
+			},
+			gwAddresses: []gatewayv1.GatewaySpecAddress{
+				{Type: helpers.GetPointer(gatewayv1.IPAddressType), Value: "1.2.3.5"},
+			},
+			expectedAddrs:          []string{"1.2.3.5"},
+			expectedConditionCount: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			gw := &graph.Gateway{
+				Source: &gatewayv1.Gateway{
+					ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "gw"},
+					Spec:       gatewayv1.GatewaySpec{Addresses: tt.gwAddresses},
+				},
+				Conditions: []conditions.Condition{},
+			}
+
+			addrs := getGatewayAddressesForStatus(tt.svc, gw, ngfCtlrName)
+
+			g.Expect(addrs).ToNot(BeNil())
+			g.Expect(addrs).To(HaveLen(len(tt.expectedAddrs)))
+			for i, v := range tt.expectedAddrs {
+				g.Expect(addrs[i].Value).To(Equal(v))
+			}
+
+			g.Expect(gw.Conditions).To(HaveLen(tt.expectedConditionCount))
+
+			if tt.expectedProgrammed != nil {
+				found := false
+				for _, c := range gw.Conditions {
+					if c.Type == string(gatewayv1.GatewayConditionProgrammed) {
+						found = true
+						g.Expect(c.Status).To(Equal(*tt.expectedProgrammed))
+						if tt.expectedReason != nil {
+							g.Expect(c.Reason).To(Equal(*tt.expectedReason))
+						}
+					}
+				}
+				g.Expect(found).To(BeTrue())
+			}
+		})
+	}
+}
+
+func conditionStatusPtr(s metav1.ConditionStatus) *metav1.ConditionStatus {
+	return &s
 }

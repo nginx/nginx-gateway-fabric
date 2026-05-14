@@ -336,6 +336,7 @@ func createAndRegisterProvisioner(
 			EventRecorder:                  recorder,
 			GatewayPodConfig:               &cfg.GatewayPodConfig,
 			GCName:                         cfg.GatewayClassName,
+			GatewayCtlrName:                cfg.GatewayCtlrName,
 			AgentTLSSecretName:             cfg.AgentTLSSecretName,
 			NGINXSCCName:                   cfg.NGINXSCCName,
 			Plus:                           cfg.Plus,

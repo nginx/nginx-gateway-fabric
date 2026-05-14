@@ -174,6 +174,8 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 		errs = append(errs, fmt.Errorf("failed to set owner reference on Service %s: %w", service.GetName(), err))
 	}
 
+	p.updateLoadBalancerClass(service, gateway, nProxyCfg)
+
 	// build deployment/daemonset
 	deployment, err := p.buildNginxDeployment(
 		cloneObjectMeta(objectMeta),
@@ -221,6 +223,43 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 	}
 
 	return objects, errors.Join(errs...)
+}
+
+// updateLoadBalancerClass updates the Service's LoadBalancerClass to this controller
+// if the Gateway declares IP addresses and the Service is a LoadBalancer,
+// but only if the user has not already provided a LoadBalancerClass in the EffectiveNginxProxy config.
+func (p *NginxProvisioner) updateLoadBalancerClass(
+	service *corev1.Service,
+	gateway *gatewayv1.Gateway,
+	nProxyCfg *graph.EffectiveNginxProxy,
+) {
+	if service != nil {
+		// collect IP addresses from Gateway spec.addresses
+		var gwExternalIPs []string
+		for _, addr := range gateway.Spec.Addresses {
+			if addr.Type != nil && *addr.Type == gatewayv1.IPAddressType {
+				gwExternalIPs = append(gwExternalIPs, addr.Value)
+			}
+		}
+		if service.Spec.Type == corev1.ServiceTypeLoadBalancer && len(gwExternalIPs) > 0 {
+			// If user did not set a LoadBalancerClass in the NginxProxy ServiceSpec, set ours.
+			if nProxyCfg == nil ||
+				nProxyCfg.Kubernetes == nil ||
+				nProxyCfg.Kubernetes.Service == nil ||
+				nProxyCfg.Kubernetes.Service.LoadBalancerClass == nil {
+				if p.cfg.GatewayCtlrName != "" {
+					ctlr := p.cfg.GatewayCtlrName
+					service.Spec.LoadBalancerClass = &ctlr
+				}
+			} else {
+				p.cfg.Logger.Info(
+					"gateway has spec.addresses but Service LoadBalancerClass is user-provided; not overriding",
+					"gateway", fmt.Sprintf("%s/%s", gateway.GetNamespace(), gateway.GetName()),
+					"loadBalancerClass", *nProxyCfg.Kubernetes.Service.LoadBalancerClass,
+				)
+			}
+		}
+	}
 }
 
 // buildResourceNames builds all the resource names for a given gateway resource name.
@@ -675,15 +714,16 @@ func buildNginxService(
 		serviceType = corev1.ServiceType(*serviceCfg.ServiceType)
 	}
 
-	var externalIPs []string
+	// collect IP addresses from Gateway spec.addresses (but do not assign to Service.Spec.ExternalIPs)
+	var gwExternalIPs []string
 	for _, addr := range addresses {
 		if addr.Type != nil && *addr.Type == gatewayv1.IPAddressType {
-			externalIPs = append(externalIPs, addr.Value)
+			gwExternalIPs = append(gwExternalIPs, addr.Value)
 		}
 	}
 
 	var servicePolicy corev1.ServiceExternalTrafficPolicy
-	if serviceType != corev1.ServiceTypeClusterIP || len(externalIPs) > 0 {
+	if serviceType != corev1.ServiceTypeClusterIP || len(gwExternalIPs) > 0 {
 		servicePolicy = defaultServicePolicy
 		if serviceCfg.ExternalTrafficPolicy != nil {
 			servicePolicy = corev1.ServiceExternalTrafficPolicy(*serviceCfg.ExternalTrafficPolicy)
@@ -698,7 +738,6 @@ func buildNginxService(
 			Type:                  serviceType,
 			Ports:                 servicePorts,
 			ExternalTrafficPolicy: servicePolicy,
-			ExternalIPs:           externalIPs,
 			Selector:              selectorLabels,
 			IPFamilyPolicy:        helpers.GetPointer(corev1.IPFamilyPolicyPreferDualStack),
 		},

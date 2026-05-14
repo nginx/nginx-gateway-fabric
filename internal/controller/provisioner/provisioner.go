@@ -48,15 +48,17 @@ type Provisioner interface {
 
 // Config is the configuration for the Provisioner.
 type Config struct {
-	DeploymentStore                agent.DeploymentStorer
-	EventRecorder                  k8sEvents.EventRecorder
-	PlusUsageConfig                *config.UsageReportConfig
-	StatusQueue                    *status.Queue
-	GatewayPodConfig               *config.GatewayPodConfig
-	AgentLabels                    map[string]string
-	Logger                         logr.Logger
-	NGINXSCCName                   string
-	GCName                         string
+	DeploymentStore  agent.DeploymentStorer
+	EventRecorder    k8sEvents.EventRecorder
+	PlusUsageConfig  *config.UsageReportConfig
+	StatusQueue      *status.Queue
+	GatewayPodConfig *config.GatewayPodConfig
+	AgentLabels      map[string]string
+	Logger           logr.Logger
+	NGINXSCCName     string
+	GCName           string
+	// GatewayCtlrName is the controller name string (from main config)
+	GatewayCtlrName                string
 	AgentTLSSecretName             string
 	NginxDockerSecretNames         []string
 	NginxOneConsoleTelemetryConfig config.NginxOneConsoleTelemetryConfig
@@ -221,6 +223,82 @@ func (p *NginxProvisioner) setResourceToDelete(gatewayNSName types.NamespacedNam
 	p.resourcesToDeleteOnStartup = append(p.resourcesToDeleteOnStartup, gatewayNSName)
 }
 
+// patchServiceStatus updates the Service.status.loadBalancer.ingress with the provided IPs.
+func (p *NginxProvisioner) patchServiceStatus(ctx context.Context, namespace, name string, ips []string) error {
+	if len(ips) == 0 {
+		return nil
+	}
+
+	svc := &corev1.Service{}
+	key := types.NamespacedName{Namespace: namespace, Name: name}
+	if err := p.k8sClient.Get(ctx, key, svc); err != nil {
+		return fmt.Errorf("failed to get Service for status patch: %w", err)
+	}
+
+	// Ensure this Service appears to belong to NGF by checking managed-by and instance labels.
+	// If it doesn't, avoid modifying status of unrelated Services.
+	managedBy := svc.Labels[controller.AppManagedByLabel]
+	instance := svc.Labels[controller.AppInstanceLabel]
+	expectedManagedBy := controller.CreateNginxResourceName(p.cfg.GatewayPodConfig.InstanceName, p.cfg.GCName)
+	if instance != p.cfg.GatewayPodConfig.InstanceName || managedBy != expectedManagedBy {
+		p.cfg.Logger.V(1).Info(
+			"skipping status patch for Service that is not managed by NGF",
+			"service", fmt.Sprintf("%s/%s", namespace, name),
+		)
+		return nil
+	}
+
+	// Build unique ingress list preserving order
+	seen := make(map[string]struct{})
+	ingress := make([]corev1.LoadBalancerIngress, 0, len(ips))
+	for _, ip := range ips {
+		if ip == "" {
+			continue
+		}
+		if _, ok := seen[ip]; ok {
+			continue
+		}
+		seen[ip] = struct{}{}
+		ingress = append(ingress, corev1.LoadBalancerIngress{IP: ip})
+	}
+
+	// If the status already matches, nothing to do
+	if reflect.DeepEqual(svc.Status.LoadBalancer.Ingress, ingress) {
+		return nil
+	}
+
+	// Patch the status subresource using MergeFrom to avoid clobbering concurrent updates.
+	original := svc.DeepCopy()
+	svc.Status.LoadBalancer.Ingress = ingress
+
+	backoff := wait.Backoff{Steps: 5, Duration: 100 * time.Millisecond, Factor: 2.0, Jitter: 0.1}
+	var lastErr error
+	err := wait.ExponentialBackoff(backoff, func() (bool, error) {
+		if err := p.k8sClient.Status().Patch(ctx, svc, client.MergeFrom(original)); err != nil {
+			if apierrors.IsConflict(err) {
+				// Refresh original and svc and retry
+				if getErr := p.k8sClient.Get(ctx, key, original); getErr != nil {
+					lastErr = fmt.Errorf("failed to refresh Service for retry: %w", getErr)
+					return false, nil
+				}
+				// apply desired ingress onto a fresh copy
+				svc = original.DeepCopy()
+				svc.Status.LoadBalancer.Ingress = ingress
+				lastErr = err
+				return false, nil
+			}
+			lastErr = err
+			return false, nil
+		}
+		return true, nil
+	})
+	if err != nil {
+		return fmt.Errorf("failed to patch Service status: %w; lastErr: %w", err, lastErr)
+	}
+
+	return nil
+}
+
 // minimalObjectFactory is a map of constructors for creating minimal objects with only name and namespace set.
 var minimalObjectFactory = map[reflect.Type]func(name, namespace string) client.Object{
 	reflect.TypeOf(&appsv1.Deployment{}): func(name, namespace string) client.Object {
@@ -311,6 +389,25 @@ func (p *NginxProvisioner) provisionNginx(
 
 				if upsertErr != nil {
 					if apierrors.IsInvalid(upsertErr) { // log this error at the error level
+						// spec.loadBalancerClass is immutable in Kubernetes; it cannot be changed after
+						// a Service is created. Delete the Service so the next retry creates it fresh
+						// with the correct value.
+						if _, ok := obj.(*corev1.Service); ok && isLoadBalancerClassImmutabilityErr(upsertErr) {
+							p.cfg.Logger.Info(
+								"Deleting Service to apply LoadBalancerClass change (immutable field requires recreate)",
+								"namespace", gateway.GetNamespace(),
+								"name", resourceName,
+							)
+							if deleteErr := p.k8sClient.Delete(ctx, minimalObj); deleteErr != nil && !apierrors.IsNotFound(deleteErr) {
+								p.cfg.Logger.Error(
+									deleteErr,
+									"Failed to delete Service for LoadBalancerClass recreate",
+									"namespace", gateway.GetNamespace(),
+									"name", resourceName,
+								)
+							}
+							return false, nil
+						}
 						p.cfg.Logger.Error(
 							upsertErr,
 							"Retrying CreateOrUpdate for nginx resource after error",
@@ -386,6 +483,27 @@ func (p *NginxProvisioner) provisionNginx(
 			"name", resourceName,
 		)
 		p.store.registerResourceInGatewayConfig(client.ObjectKeyFromObject(gateway), minimalObj)
+
+		// If this is a Service and the Gateway has IP-type addresses, patch its status.loadBalancer.ingress
+		if svc, ok := minimalObj.(*corev1.Service); ok {
+			if svc.Spec.Type == corev1.ServiceTypeLoadBalancer {
+				var ips []string
+				for _, addr := range gateway.Spec.Addresses {
+					if addr.Type != nil && *addr.Type == gatewayv1.IPAddressType {
+						ips = append(ips, addr.Value)
+					}
+				}
+				if len(ips) > 0 {
+					if err := p.patchServiceStatus(ctx, svc.GetNamespace(), svc.GetName(), ips); err != nil {
+						p.cfg.Logger.Error(
+							err,
+							"failed to patch Service status with gateway external IPs",
+							"service", fmt.Sprintf("%s/%s", svc.GetNamespace(), svc.GetName()),
+						)
+					}
+				}
+			}
+		}
 	}
 
 	// if agent configmap was updated, then we'll need to restart the deployment/daemonset
@@ -657,6 +775,24 @@ func needToDeleteDaemonSet(cfg *NginxResources) bool {
 		}
 	}
 
+	return false
+}
+
+// isLoadBalancerClassImmutabilityErr returns true when the error is a Kubernetes validation
+// error for the spec.loadBalancerClass field, which is immutable once a Service is created.
+func isLoadBalancerClassImmutabilityErr(err error) bool {
+	var statusErr *apierrors.StatusError
+	if !errors.As(err, &statusErr) {
+		return false
+	}
+	if statusErr.ErrStatus.Details == nil {
+		return false
+	}
+	for _, cause := range statusErr.ErrStatus.Details.Causes {
+		if cause.Field == "spec.loadBalancerClass" {
+			return true
+		}
+	}
 	return false
 }
 
