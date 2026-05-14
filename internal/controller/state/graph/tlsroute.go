@@ -136,13 +136,12 @@ func validateBackendRefTLSRoute(
 		gtr.Namespace,
 		svcPort,
 	)
+	backendRef.BackendTLSPolicy = backendTLSPolicy
 	if err != nil {
 		backendRef.Valid = false
-		backendRef.BackendTLSPolicy = backendTLSPolicy
 
 		return backendRef, []conditions.Condition{conditions.NewRouteBackendRefUnsupportedValue(err.Error())}
 	}
-	backendRef.BackendTLSPolicy = backendTLSPolicy
 
 	if svcPort.AppProtocol != nil {
 		err = validateRouteBackendRefAppProtocol(RouteTypeTLS, *svcPort.AppProtocol, backendTLSPolicy)
