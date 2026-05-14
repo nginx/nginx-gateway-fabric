@@ -705,7 +705,7 @@ type CompressionSettings struct {
 	// Level is the compression level (1-9).
 	Level int32
 	// MinLength is the minimum response length to compress.
-	MinLength int32
+	MinLength *int32
 	// BufferNumber is the number of compression buffers.
 	BufferNumber int32
 	// Vary enables the "Vary: Accept-Encoding" response header.

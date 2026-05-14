@@ -22,7 +22,7 @@ var (
 	ServerTokenOff   = "off"
 	ServerTokenOn    = "on"
 	ServerTokenBuild = "build"
-	mimeTypePattern  = regexp.MustCompile(`^[A-Za-z0-9!#$%&'*+.^_` + "`" + `|~-]+/[A-Za-z0-9!#$%&'*+.^_` + "`" + `|~-]+$`)
+	mimeTypePattern  = regexp.MustCompile(`^[A-Za-z0-9!#$%&'+.^_` + "`" + `|~-]+/[A-Za-z0-9!#$%&'+.^_` + "`" + `|~-]+$`)
 )
 
 // NginxProxy represents the NginxProxy resource.

@@ -96,7 +96,7 @@ gzip on;
 {{- if .Compression.Level }}
 gzip_comp_level {{ .Compression.Level }};
 {{- end }}
-{{- if .Compression.MinLength }}
+{{- if ne .Compression.MinLength nil }}
 gzip_min_length {{ .Compression.MinLength }};
 {{- end }}
 {{- if .Compression.BufferNumber }}

@@ -9346,7 +9346,7 @@ func TestBuildCompressionConfig(t *testing.T) {
 			},
 			expected: &CompressionSettings{
 				Level:        6,
-				MinLength:    256,
+				MinLength:    helpers.GetPointer[int32](256),
 				BufferNumber: 32,
 				BufferSize:   "4k",
 				MimeTypes:    []string{"text/css"},

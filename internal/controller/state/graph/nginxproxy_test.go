@@ -2013,6 +2013,21 @@ func TestValidateCompression(t *testing.T) {
 			expectErrCount:  2,
 		},
 		{
+			name:      "wildcard mimeType rejected",
+			validator: createValidValidator(),
+			np: &ngfAPIv1alpha2.NginxProxy{
+				Spec: ngfAPIv1alpha2.NginxProxySpec{
+					Compression: &ngfAPIv1alpha2.Compression{
+						Type:      ngfAPIv1alpha2.GzipCompressionType,
+						MimeTypes: []string{"text/*"},
+						Gzip:      &ngfAPIv1alpha2.GzipSettings{},
+					},
+				},
+			},
+			expErrSubstring: "compression.mimeTypes",
+			expectErrCount:  1,
+		},
+		{
 			name:      "valid compression with gzip disable",
 			validator: createValidValidator(),
 			np: &ngfAPIv1alpha2.NginxProxy{

@@ -2074,7 +2074,7 @@ func buildCompressionConfig(compression *ngfAPIv1alpha2.Compression) *Compressio
 	}
 
 	if compression.MinLength != nil {
-		settings.MinLength = *compression.MinLength
+		settings.MinLength = compression.MinLength
 	}
 
 	if compression.Buffers != nil {

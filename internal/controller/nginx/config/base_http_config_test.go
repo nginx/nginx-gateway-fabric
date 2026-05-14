@@ -930,7 +930,7 @@ func TestExecuteBaseHttp_Compression(t *testing.T) {
 				BaseHTTPConfig: dataplane.BaseHTTPConfig{
 					Compression: &dataplane.CompressionSettings{
 						Level:        6,
-						MinLength:    256,
+							MinLength:    helpers.GetPointer[int32](256),
 						BufferNumber: 32,
 						BufferSize:   "4k",
 						MimeTypes:    []string{"text/css", "application/json", "application/javascript"},
