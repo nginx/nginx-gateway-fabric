@@ -7001,6 +7001,59 @@ func TestBuildDNSResolverConfig(t *testing.T) {
 	}
 }
 
+func TestBuildDisableBaseProxySetHeaders(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		np       *graph.EffectiveNginxProxy
+		name     string
+		expected []string
+	}{
+		{
+			name:     "nil nginx proxy",
+			np:       nil,
+			expected: nil,
+		},
+		{
+			name:     "empty disabled headers",
+			np:       &graph.EffectiveNginxProxy{},
+			expected: nil,
+		},
+		{
+			name: "disabled headers configured",
+			np: &graph.EffectiveNginxProxy{
+				DisableBaseHeaders: []ngfAPIv1alpha2.BaseHeaderName{
+					ngfAPIv1alpha2.HeaderXForwardedFor,
+					ngfAPIv1alpha2.HeaderXForwardedProto,
+				},
+			},
+			expected: []string{
+				string(ngfAPIv1alpha2.HeaderXForwardedFor),
+				string(ngfAPIv1alpha2.HeaderXForwardedProto),
+			},
+		},
+		{
+			name: "wildcard disabled headers configured",
+			np: &graph.EffectiveNginxProxy{
+				DisableBaseHeaders: []ngfAPIv1alpha2.BaseHeaderName{
+					ngfAPIv1alpha2.AllXBaseHeaders,
+				},
+			},
+			expected: []string{"*"},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			result := buildDisableBaseProxySetHeaders(tc.np)
+			g.Expect(result).To(Equal(tc.expected))
+		})
+	}
+}
+
 //nolint:gosec // Tests with mock SSL/TLS configuration data, not real credentials.
 func TestBuildConfiguration_GatewaysAndListeners(t *testing.T) {
 	t.Parallel()

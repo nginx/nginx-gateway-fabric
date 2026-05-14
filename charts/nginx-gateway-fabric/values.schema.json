@@ -22,11 +22,33 @@
           "title": "annotations",
           "type": "object"
         },
+        "automountServiceAccountToken": {
+          "default": true,
+          "description": "automountServiceAccountToken controls whether the Kubernetes service account token is automatically\nmounted into the cert-generator pod. Set to false to disable automatic token mounting.\nWhen disabled, use certGenerator.extraVolumes to mount a projected token if required.",
+          "title": "automountServiceAccountToken",
+          "type": "boolean"
+        },
         "enable": {
           "default": true,
           "description": "Enable the cert-generator Job. If this is disabled, then cert-manager or some other method must be used to create the required Secrets.",
           "title": "enable",
           "type": "boolean"
+        },
+        "extraVolumeMounts": {
+          "description": "extraVolumeMounts are the additional volume mounts for the cert-generator container.",
+          "items": {
+            "required": []
+          },
+          "title": "extraVolumeMounts",
+          "type": "array"
+        },
+        "extraVolumes": {
+          "description": "extraVolumes for the cert-generator pod. Use in conjunction with certGenerator.extraVolumeMounts\nto mount additional volumes into the container (e.g. a projected service account token).",
+          "items": {
+            "required": []
+          },
+          "title": "extraVolumes",
+          "type": "array"
         },
         "nodeSelector": {
           "description": "The nodeSelector of the cert-generator pod.",
@@ -1179,6 +1201,12 @@
               "required": [],
               "title": "annotations",
               "type": "object"
+            },
+            "automountServiceAccountToken": {
+              "default": true,
+              "description": "automountServiceAccountToken controls whether the Kubernetes service account token is automatically\nmounted into the control plane pod. Set to false to disable automatic token mounting (e.g. for\ncompliance environments). When disabled, use nginxGateway.extraVolumes to mount a projected token\nwith a custom audience or expiration if required.",
+              "title": "automountServiceAccountToken",
+              "type": "boolean"
             },
             "imagePullSecret": {
               "default": "",
