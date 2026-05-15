@@ -1048,13 +1048,13 @@ spec:
     remote:
       uri: https://issuer.example.com/.well-known/jwks.json
     require:
-    - claims:
-        - name: "realm_access/roles" # Nested claim.
-          values: # User defined list of roles.
-          - "reader"
-          - "admin"
-        - name: "email"
-          value: "user@example.com"
+      claims:
+      - name: "realm_access/roles" # Nested claim.
+        values: # User defined list of roles.
+        - "reader"
+        - "admin"
+      - name: "email"
+        value: "user@example.com"
 ```
 
 To process the nested claim, the names of both the top-level and nested claim are specified as one string separated by a slash `/`.
