@@ -72,6 +72,9 @@ const (
 
 	expectedIfModeSetTrustedAddressesError = "if mode is set, trustedAddresses is a required field"
 
+	// Logging validation error.
+	expectedJSONNotSupportedWithDebugError = "JSON-formatted error logs are not supported when errorLevel is debug"
+
 	// Replicas validation error.
 	expectedMinReplicasLessThanOrEqualError = "minReplicas must be less than or equal to maxReplicas"
 

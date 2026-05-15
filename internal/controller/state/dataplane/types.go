@@ -754,6 +754,8 @@ type Logging struct {
 	AccessLog *AccessLog
 	// ErrorLevel defines the error log level.
 	ErrorLevel string
+	// JSON enables JSON-formatted error logs. Requires NGINX Plus.
+	JSON bool
 }
 
 // NginxPlus specifies NGINX Plus additional settings.

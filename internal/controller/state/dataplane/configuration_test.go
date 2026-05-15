@@ -6462,9 +6462,9 @@ func TestBuildLogging(t *testing.T) {
 
 	t.Parallel()
 	tests := []struct {
-		expLoggingSettings Logging
 		gw                 *graph.Gateway
 		msg                string
+		expLoggingSettings Logging
 	}{
 		{
 			msg:                "Gateway is nil",
@@ -6574,6 +6574,93 @@ func TestBuildLogging(t *testing.T) {
 				},
 			},
 			expLoggingSettings: Logging{ErrorLevel: "emerg"},
+		},
+		{
+			msg: "JSON true emits JSON access log template when user has not supplied a custom format",
+			gw: &graph.Gateway{
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+					Logging: &ngfAPIv1alpha2.NginxLogging{
+						ErrorLevel: helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelInfo),
+						JSON:       helpers.GetPointer(true),
+					},
+				},
+			},
+			expLoggingSettings: Logging{
+				ErrorLevel: "info",
+				JSON:       true,
+				AccessLog: &AccessLog{
+					Format: JSONAccessLogFormat,
+					Escape: "json",
+				},
+			},
+		},
+		{
+			msg: "JSON true preserves user-supplied access log format and does not override with JSON access log template",
+			gw: &graph.Gateway{
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+					Logging: &ngfAPIv1alpha2.NginxLogging{
+						ErrorLevel: helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelInfo),
+						JSON:       helpers.GetPointer(true),
+						AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
+							Format: helpers.GetPointer(logFormat),
+						},
+					},
+				},
+			},
+			expLoggingSettings: Logging{
+				ErrorLevel: "info",
+				JSON:       true,
+				AccessLog: &AccessLog{
+					Format: logFormat,
+				},
+			},
+		},
+		{
+			msg: "JSON true with access log explicitly disabled leaves access log off",
+			gw: &graph.Gateway{
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+					Logging: &ngfAPIv1alpha2.NginxLogging{
+						ErrorLevel: helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelInfo),
+						JSON:       helpers.GetPointer(true),
+						AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
+							Disable: helpers.GetPointer(true),
+						},
+					},
+				},
+			},
+			expLoggingSettings: Logging{
+				ErrorLevel: "info",
+				JSON:       true,
+				AccessLog: &AccessLog{
+					Disable: true,
+				},
+			},
+		},
+		{
+			msg: "JSON false is propagated to dataplane logging",
+			gw: &graph.Gateway{
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+					Logging: &ngfAPIv1alpha2.NginxLogging{
+						ErrorLevel: helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelInfo),
+						JSON:       helpers.GetPointer(false),
+					},
+				},
+			},
+			expLoggingSettings: Logging{
+				ErrorLevel: "info",
+				JSON:       false,
+			},
+		},
+		{
+			msg: "JSON unset leaves dataplane Logging.JSON at zero value",
+			gw: &graph.Gateway{
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+					Logging: &ngfAPIv1alpha2.NginxLogging{
+						ErrorLevel: helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelInfo),
+					},
+				},
+			},
+			expLoggingSettings: Logging{ErrorLevel: "info"},
 		},
 		{
 			msg: "AccessLog configured",

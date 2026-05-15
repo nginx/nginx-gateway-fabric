@@ -1628,6 +1628,7 @@ func TestValidateLogging(t *testing.T) {
 		name           string
 		errorString    string
 		expectErrCount int
+		plus           bool
 	}{
 		{
 			np: &ngfAPIv1alpha2.NginxProxy{
@@ -1748,6 +1749,46 @@ func TestValidateLogging(t *testing.T) {
 			errorString:    "",
 			expectErrCount: 0,
 		},
+		{
+			np: &ngfAPIv1alpha2.NginxProxy{
+				Spec: ngfAPIv1alpha2.NginxProxySpec{
+					Logging: &ngfAPIv1alpha2.NginxLogging{
+						JSON: helpers.GetPointer(true),
+					},
+				},
+			},
+			name:           "json true is accepted on NGINX Plus",
+			plus:           true,
+			errorString:    "",
+			expectErrCount: 0,
+		},
+		{
+			np: &ngfAPIv1alpha2.NginxProxy{
+				Spec: ngfAPIv1alpha2.NginxProxySpec{
+					Logging: &ngfAPIv1alpha2.NginxLogging{
+						JSON: helpers.GetPointer(false),
+					},
+				},
+			},
+			name:           "json false is accepted on OSS",
+			plus:           false,
+			errorString:    "",
+			expectErrCount: 0,
+		},
+		{
+			np: &ngfAPIv1alpha2.NginxProxy{
+				Spec: ngfAPIv1alpha2.NginxProxySpec{
+					Logging: &ngfAPIv1alpha2.NginxLogging{
+						JSON: helpers.GetPointer(true),
+					},
+				},
+			},
+			name: "json true is rejected on OSS because JSON logs require NGINX Plus",
+			plus: false,
+			errorString: "spec.logging.json: Invalid value: true:" +
+				" JSON-formatted error logs are only supported with NGINX Plus",
+			expectErrCount: 1,
+		},
 	}
 
 	for _, test := range tests {
@@ -1755,7 +1796,7 @@ func TestValidateLogging(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			allErrs := validateLogging(test.np)
+			allErrs := validateLogging(test.np, test.plus)
 			g.Expect(allErrs).To(HaveLen(test.expectErrCount))
 			if len(allErrs) > 0 {
 				g.Expect(allErrs.ToAggregate().Error()).To(Equal(test.errorString))
