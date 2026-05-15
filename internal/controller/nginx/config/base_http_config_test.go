@@ -930,7 +930,7 @@ func TestExecuteBaseHttp_Compression(t *testing.T) {
 				BaseHTTPConfig: dataplane.BaseHTTPConfig{
 					Compression: &dataplane.CompressionSettings{
 						Level:        6,
-							MinLength:    helpers.GetPointer[int32](256),
+						MinLength:    helpers.GetPointer[int32](256),
 						BufferNumber: 32,
 						BufferSize:   "4k",
 						MimeTypes:    []string{"text/css", "application/json", "application/javascript"},
@@ -969,6 +969,33 @@ func TestExecuteBaseHttp_Compression(t *testing.T) {
 				"gzip_proxied no-cache no-store expired;",
 			},
 			expAbsent: []string{"gzip_vary"},
+		},
+		{
+			name: "compression with minLength zero renders gzip_min_length 0",
+			conf: dataplane.Configuration{
+				BaseHTTPConfig: dataplane.BaseHTTPConfig{
+					Compression: &dataplane.CompressionSettings{
+						Level:     1,
+						MinLength: helpers.GetPointer[int32](0),
+					},
+				},
+			},
+			expSubStrings: []string{
+				"gzip on;",
+				"gzip_min_length 0;",
+			},
+		},
+		{
+			name: "compression without minLength omits gzip_min_length",
+			conf: dataplane.Configuration{
+				BaseHTTPConfig: dataplane.BaseHTTPConfig{
+					Compression: &dataplane.CompressionSettings{
+						Level: 1,
+					},
+				},
+			},
+			expSubStrings: []string{"gzip on;"},
+			expAbsent:     []string{"gzip_min_length"},
 		},
 	}
 

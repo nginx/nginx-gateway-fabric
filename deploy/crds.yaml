@@ -1225,7 +1225,7 @@ spec:
                 - type
                 type: object
                 x-kubernetes-validations:
-                - message: type Gzip requires gzip to be set
+                - message: type 'gzip' requires spec.compression.gzip to be set
                   rule: '!(self.type == ''gzip'' && !has(self.gzip))'
               disableBaseHeaders:
                 description: |-

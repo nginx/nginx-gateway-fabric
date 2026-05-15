@@ -669,11 +669,26 @@ func validateCompression(
 			}
 		}
 
+		validGzipProxied := []ngfAPIv1alpha2.GzipProxiedType{
+			ngfAPIv1alpha2.GzipProxiedOff,
+			ngfAPIv1alpha2.GzipProxiedExpired,
+			ngfAPIv1alpha2.GzipProxiedNoCache,
+			ngfAPIv1alpha2.GzipProxiedNoStore,
+			ngfAPIv1alpha2.GzipProxiedPrivate,
+			ngfAPIv1alpha2.GzipProxiedNoLastModified,
+			ngfAPIv1alpha2.GzipProxiedNoETag,
+			ngfAPIv1alpha2.GzipProxiedAuth,
+			ngfAPIv1alpha2.GzipProxiedAny,
+		}
 		for i, p := range npCfg.Spec.Compression.Gzip.Proxied {
-			if err := validator.ValidateEscapedStringNoVarExpansion(string(p)); err != nil {
+			if !slices.Contains(validGzipProxied, p) {
 				allErrs = append(
 					allErrs,
-					field.Invalid(gzipPath.Child("proxied").Index(i), p, err.Error()),
+					field.Invalid(
+						gzipPath.Child("proxied").Index(i),
+						p,
+						"invalid value; must be one of: off, expired, no-cache, no-store, private, no_last_modified, no_etag, auth, any",
+					),
 				)
 			}
 		}
