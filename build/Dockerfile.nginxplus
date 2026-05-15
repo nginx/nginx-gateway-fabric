@@ -6,12 +6,12 @@ ADD --link --chown=101:1001 https://cs.nginx.com/static/keys/nginx_signing.rsa.p
 
 FROM alpine:3.22
 
-RUN apk update && apk upgrade --no-cache musl musl-utils zlib libcap
+RUN apk update && apk upgrade --no-cache grpc-cpp protobuf
 
-ARG NGINX_PLUS_VERSION=R36
+ARG NGINX_PLUS_VERSION=R37.0
 # renovate: datasource=github-tags depName=nginx/agent
-ARG NGINX_AGENT_VERSION=v3.9.1
-ARG APP_PROTECT_VERSION=36.5.607
+ARG NGINX_AGENT_VERSION=v3.10.1
+ARG APP_PROTECT_VERSION=37.0.5.635
 ARG INCLUDE_NAP_WAF=false
 ARG NJS_DIR
 ARG NGINX_CONF_DIR
