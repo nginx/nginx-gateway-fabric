@@ -11,7 +11,7 @@ _May 15, 2026_
 BUG FIXES:
 
 - Fix an issue where "AllowPrivilegeEscalation: false" was inadvertently removed from the NGINX and init containers' security contexts. [5277](https://github.com/nginx/nginx-gateway-fabric/pull/5277)
-- Updates the NGINX Agent version to v3.10.1, NGINX to v1.31.0, NGINX Plus to R37.0 and F5 WAF to 5.13.0. [5289](https://github.com/nginx/nginx-gateway-fabric/pull/5289)
+- Update the NGINX Agent version to v3.10.1, NGINX to v1.31.0, NGINX Plus to R37.0 and F5 WAF to 5.13.0. [5289](https://github.com/nginx/nginx-gateway-fabric/pull/5289)
 
 HELM CHART:
 
