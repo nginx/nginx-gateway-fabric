@@ -18,8 +18,8 @@ func TestProcess(t *testing.T) {
 
 	tests := []struct {
 		name                string
-		expUpstreamSettings UpstreamSettings
 		policies            []policies.Policy
+		expUpstreamSettings UpstreamSettings
 	}{
 		{
 			name: "all fields populated",
