@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"maps"
+	"net"
 	"slices"
 	"sort"
 	"strings"
@@ -2161,9 +2162,11 @@ func resolveUpstreamEndpoints(
 	// When UseClusterIP is enabled, route to the Service ClusterIP instead of Pod IPs.
 	if useClusterIP {
 		if clusterIP := getClusterIP(br.SvcNsName, referencedServices); clusterIP != "" {
+			isIPv6 := net.ParseIP(clusterIP) != nil && net.ParseIP(clusterIP).To4() == nil
 			endpoint := resolver.Endpoint{
 				Address: clusterIP,
 				Port:    br.ServicePort.Port,
+				IPv6:    isIPv6,
 			}
 
 			logger.V(1).Info("routing to Service ClusterIP",

@@ -191,7 +191,8 @@ func getServiceExternalNameInfo(
 	return true, svc.Spec.ExternalName
 }
 
-// getServiceClusterIP returns the ClusterIP of a Service, or empty string if not found or headless.
+// getServiceClusterIP returns the ClusterIP of a Service, or empty string if the
+// Service is not found, is headless (ClusterIP: None), or does not have a ClusterIP set (e.g. ExternalName Services).
 func getServiceClusterIP(
 	svcNsName types.NamespacedName,
 	services map[types.NamespacedName]*v1.Service,
