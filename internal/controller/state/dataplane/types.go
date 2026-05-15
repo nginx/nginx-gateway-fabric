@@ -64,8 +64,8 @@ type Configuration struct {
 	Policies []policies.Policy
 	// UDPServers holds all UDPServers
 	UDPServers []Layer4VirtualServer
-	// TLSPassthroughServers hold all TLSPassthroughServers
-	TLSPassthroughServers []Layer4VirtualServer
+	// TLSServers holds all TLS servers (both Passthrough and Terminate mode).
+	TLSServers []Layer4VirtualServer
 	// SSLListenerHostnames maps each HTTPS port to its list of raw listener hostnames.
 	// An empty string represents a listener with no hostname (catch-all).
 	// Used to build NGINX maps for misdirected request detection.
@@ -140,6 +140,11 @@ type Layer4Upstream struct {
 
 // Layer4VirtualServer is a virtual server for Layer 4 traffic.
 type Layer4VirtualServer struct {
+	// SSL holds the SSL configuration for TLS Terminate mode.
+	// When nil, the server operates in passthrough mode.
+	SSL *SSL
+	// VerifyTLS holds the backend TLS verification config for TLS terminate upstream proxying.
+	VerifyTLS *VerifyTLS
 	// Hostname is the hostname of the server.
 	Hostname string
 	// Upstreams holds upstreams with weights. For single backend cases, the list contains one entry.

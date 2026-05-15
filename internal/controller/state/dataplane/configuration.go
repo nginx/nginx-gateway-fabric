@@ -91,6 +91,7 @@ func BuildConfiguration(
 	maps.Copy(authCertBundles, buildJWTRemoteTLSCABundles(g.AuthenticationFilters, g.ReferencedSecrets))
 
 	backendGroups := buildBackendGroups(append(httpServers, sslServers...))
+	tlsServers := buildTLSServers(gateway)
 
 	upstreams := buildUpstreams(
 		ctx,
@@ -110,6 +111,7 @@ func BuildConfiguration(
 	certBundles := buildCertBundles(
 		refCertBundles,
 		backendGroups,
+		tlsServers,
 		extAuthCertBundleIDs,
 		authCertBundles,
 	)
@@ -120,13 +122,13 @@ func BuildConfiguration(
 	))
 
 	config := Configuration{
-		HTTPServers:           httpServers,
-		SSLServers:            sslServers,
-		OIDCProviders:         oidcProvider,
-		TLSPassthroughServers: buildPassthroughServers(gateway),
-		TCPServers:            buildL4Servers(logger, gateway, v1.TCPProtocolType),
-		UDPServers:            buildL4Servers(logger, gateway, v1.UDPProtocolType),
-		Upstreams:             upstreams,
+		HTTPServers:   httpServers,
+		SSLServers:    sslServers,
+		OIDCProviders: oidcProvider,
+		TLSServers:    tlsServers,
+		TCPServers:    buildL4Servers(logger, gateway, v1.TCPProtocolType),
+		UDPServers:    buildL4Servers(logger, gateway, v1.UDPProtocolType),
+		Upstreams:     upstreams,
 		StreamUpstreams: buildStreamUpstreams(
 			ctx,
 			logger,
@@ -154,80 +156,144 @@ func BuildConfiguration(
 	return config
 }
 
-// buildPassthroughServers builds TLSPassthroughServers from TLSRoutes attaches to listeners.
-func buildPassthroughServers(gateway *graph.Gateway) []Layer4VirtualServer {
-	passthroughServersMap := make(map[graph.L4RouteKey][]Layer4VirtualServer)
-	listenerPassthroughServers := make([]Layer4VirtualServer, 0)
+// isTLSTerminateListener returns true if the listener is a TLS listener in Terminate mode.
+func isTLSTerminateListener(l *graph.Listener) bool {
+	return l.Source.TLS != nil && (l.Source.TLS.Mode == nil || *l.Source.TLS.Mode == v1.TLSModeTerminate)
+}
 
-	passthroughServerCount := 0
+// buildTLSServers builds TLSServers from TLSRoutes attached to TLS listeners.
+// Both Passthrough and Terminate mode listeners are processed. Terminate mode servers
+// include SSL configuration for TLS termination in the stream block.
+func buildTLSServers(gateway *graph.Gateway) []Layer4VirtualServer {
+	var gatewayNsName types.NamespacedName
+	if gateway.Source != nil {
+		gatewayNsName = types.NamespacedName{Namespace: gateway.Source.Namespace, Name: gateway.Source.Name}
+	}
+	tlsServersMap := make(map[graph.L4RouteKey][]Layer4VirtualServer)
+	listenerDefaultServers := make([]Layer4VirtualServer, 0)
+
+	tlsServerCount := 0
 
 	for _, l := range gateway.Listeners {
 		if !l.Valid || l.Source.Protocol != v1.TLSProtocolType {
 			continue
 		}
-		foundRouteMatchingListenerHostname := false
-		for key, r := range l.L4Routes {
-			if !r.Valid {
-				continue
+
+		var ssl *SSL
+		if isTLSTerminateListener(l) {
+			ssl = buildSSL(l)
+		}
+
+		count, matched := buildTLSServersForListener(l, ssl, gatewayNsName, tlsServersMap)
+		tlsServerCount += count
+
+		if !matched {
+			if ds := buildTLSDefaultServer(l, ssl); ds != nil {
+				listenerDefaultServers = append(listenerDefaultServers, *ds)
 			}
+		}
+	}
+	tlsServers := make([]Layer4VirtualServer, 0, tlsServerCount+len(listenerDefaultServers))
 
-			var hostnames []string
+	// Collect route keys in sorted order for deterministic output.
+	routeKeys := make([]graph.L4RouteKey, 0, len(tlsServersMap))
+	for key := range tlsServersMap {
+		routeKeys = append(routeKeys, key)
+	}
+	sort.Slice(routeKeys, func(i, j int) bool {
+		if routeKeys[i].NamespacedName.Namespace != routeKeys[j].NamespacedName.Namespace {
+			return routeKeys[i].NamespacedName.Namespace < routeKeys[j].NamespacedName.Namespace
+		}
+		return routeKeys[i].NamespacedName.Name < routeKeys[j].NamespacedName.Name
+	})
 
-			for _, p := range r.ParentRefs {
-				if val, exist := p.Attachment.AcceptedHostnames[graph.CreateParentRefListenerKeyFromListener(l)]; exist {
-					hostnames = val
-					break
-				}
+	for _, key := range routeKeys {
+		tlsServers = append(tlsServers, tlsServersMap[key]...)
+	}
+
+	tlsServers = append(tlsServers, listenerDefaultServers...)
+
+	// Sort for deterministic output: by port, then hostname, then defaults last.
+	sort.Slice(tlsServers, func(i, j int) bool {
+		if tlsServers[i].Port != tlsServers[j].Port {
+			return tlsServers[i].Port < tlsServers[j].Port
+		}
+		if tlsServers[i].IsDefault != tlsServers[j].IsDefault {
+			return !tlsServers[i].IsDefault // non-defaults first
+		}
+		return tlsServers[i].Hostname < tlsServers[j].Hostname
+	})
+
+	return tlsServers
+}
+
+// buildTLSServersForListener processes routes on a TLS listener, adding servers to tlsServersMap.
+// Returns the number of servers added and whether any route hostname matched the listener hostname.
+func buildTLSServersForListener(
+	l *graph.Listener,
+	ssl *SSL,
+	gatewayNsName types.NamespacedName,
+	tlsServersMap map[graph.L4RouteKey][]Layer4VirtualServer,
+) (int, bool) {
+	count := 0
+	foundRouteMatchingListenerHostname := false
+
+	for key, r := range l.L4Routes {
+		if !r.Valid {
+			continue
+		}
+
+		var hostnames []string
+
+		for _, p := range r.ParentRefs {
+			if val, exist := p.Attachment.AcceptedHostnames[graph.CreateParentRefListenerKeyFromListener(l)]; exist {
+				hostnames = val
+				break
 			}
+		}
 
-			if _, ok := passthroughServersMap[key]; !ok {
-				passthroughServersMap[key] = make([]Layer4VirtualServer, 0)
+		if _, ok := tlsServersMap[key]; !ok {
+			tlsServersMap[key] = make([]Layer4VirtualServer, 0)
+		}
+
+		count += len(hostnames)
+
+		for _, h := range hostnames {
+			if l.Source.Hostname != nil && h == string(*l.Source.Hostname) {
+				foundRouteMatchingListenerHostname = true
 			}
-
-			passthroughServerCount += len(hostnames)
-
-			for _, h := range hostnames {
-				if l.Source.Hostname != nil && h == string(*l.Source.Hostname) {
-					foundRouteMatchingListenerHostname = true
-				}
-				passthroughServersMap[key] = append(passthroughServersMap[key], Layer4VirtualServer{
-					Hostname: h,
-					Upstreams: []Layer4Upstream{
-						{
-							Name:   r.Spec.BackendRef.ServicePortReference(),
-							Weight: 0, // TLSRoute doesn't support weights
-						},
+			tlsServersMap[key] = append(tlsServersMap[key], Layer4VirtualServer{
+				Hostname: h,
+				Upstreams: []Layer4Upstream{
+					{
+						Name:   r.Spec.BackendRef.ServicePortReference(),
+						Weight: 0, // TLSRoute doesn't support weights
 					},
-					Port: l.Source.Port,
-				})
-			}
-		}
-		if !foundRouteMatchingListenerHostname {
-			if l.Source.Hostname != nil {
-				listenerPassthroughServers = append(listenerPassthroughServers, Layer4VirtualServer{
-					Hostname:  string(*l.Source.Hostname),
-					IsDefault: true,
-					Port:      l.Source.Port,
-					Upstreams: []Layer4Upstream{},
-				})
-			} else {
-				listenerPassthroughServers = append(listenerPassthroughServers, Layer4VirtualServer{
-					Hostname:  "",
-					Port:      l.Source.Port,
-					Upstreams: []Layer4Upstream{},
-				})
-			}
+				},
+				Port:      l.Source.Port,
+				SSL:       ssl,
+				VerifyTLS: convertBackendTLS(r.Spec.BackendRef.BackendTLSPolicy, gatewayNsName),
+			})
 		}
 	}
-	passthroughServers := make([]Layer4VirtualServer, 0, passthroughServerCount+len(listenerPassthroughServers))
 
-	for _, r := range passthroughServersMap {
-		passthroughServers = append(passthroughServers, r...)
+	return count, foundRouteMatchingListenerHostname
+}
+
+// buildTLSDefaultServer creates a default server for a TLS listener if needed.
+func buildTLSDefaultServer(l *graph.Listener, ssl *SSL) *Layer4VirtualServer {
+	hostname := ""
+	if l.Source.Hostname != nil {
+		hostname = string(*l.Source.Hostname)
 	}
 
-	passthroughServers = append(passthroughServers, listenerPassthroughServers...)
-
-	return passthroughServers
+	return &Layer4VirtualServer{
+		Hostname:  hostname,
+		IsDefault: true,
+		Port:      l.Source.Port,
+		Upstreams: []Layer4Upstream{},
+		SSL:       ssl,
+	}
 }
 
 // buildL4Servers builds Layer4 servers (TCP or UDP) from routes attached to listeners.
@@ -630,14 +696,13 @@ func buildRefCertificateBundles(
 func buildCertBundles(
 	refCertBundles []secrets.CertificateBundle,
 	backendGroups []BackendGroup,
+	tlsServers []Layer4VirtualServer,
 	extAuthCertBundleIDs map[CertBundleID]struct{},
 	authCertBundles map[CertBundleID]CertBundle,
 ) map[CertBundleID]CertBundle {
 	bundles := make(map[CertBundleID]CertBundle)
 
-	for id, cert := range authCertBundles {
-		bundles[id] = cert
-	}
+	maps.Copy(bundles, authCertBundles)
 
 	referenced := make(map[CertBundleID]struct{}, len(extAuthCertBundleIDs))
 	for id := range extAuthCertBundleIDs {
@@ -650,6 +715,12 @@ func buildCertBundles(
 			}
 			referenced[b.VerifyTLS.CertBundleID] = struct{}{}
 		}
+	}
+	for _, s := range tlsServers {
+		if s.VerifyTLS == nil {
+			continue
+		}
+		referenced[s.VerifyTLS.CertBundleID] = struct{}{}
 	}
 
 	if len(referenced) == 0 {

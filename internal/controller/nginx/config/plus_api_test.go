@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -17,7 +18,7 @@ func TestExecutePlusAPI(t *testing.T) {
 
 	g := NewWithT(t)
 	expSubStrings := map[string]int{
-		"listen unix:/var/run/nginx/nginx-plus-api.sock;": 1,
+		fmt.Sprintf("listen %snginx-plus-api.sock;", SocketBasePath): 1,
 		"access_log off;":               2,
 		"api write=on;":                 1,
 		"listen 8765;":                  1,

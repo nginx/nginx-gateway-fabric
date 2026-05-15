@@ -305,14 +305,14 @@ server {
     {{- end }}
 {{ end }}
 server {
-    listen unix:/var/run/nginx/nginx-503-server.sock;
+    listen ` + SocketBasePath + `nginx-503-server.sock;
     access_log off;
 
     return 503;
 }
 
 server {
-    listen unix:/var/run/nginx/nginx-500-server.sock;
+    listen ` + SocketBasePath + `nginx-500-server.sock;
     access_log off;
 
     return 500;

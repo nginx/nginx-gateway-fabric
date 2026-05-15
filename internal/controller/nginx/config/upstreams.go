@@ -20,7 +20,7 @@ var (
 
 const (
 	// nginx500Server is used as a server for the invalid backend ref upstream.
-	nginx500Server = "unix:/var/run/nginx/nginx-500-server.sock"
+	nginx500Server = SocketBasePath + "nginx-500-server.sock"
 	// invalidBackendRef is used as an upstream name for invalid backend references.
 	invalidBackendRef = "invalid-backend-ref"
 	// ossZoneSize is the upstream zone size for nginx open source.
