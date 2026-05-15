@@ -3,6 +3,7 @@ package graph
 import (
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"slices"
 
 	"k8s.io/apimachinery/pkg/types"
@@ -21,6 +22,7 @@ var (
 	ServerTokenOff   = "off"
 	ServerTokenOn    = "on"
 	ServerTokenBuild = "build"
+	mimeTypePattern  = regexp.MustCompile(`^[A-Za-z0-9!#$%&'+.^_` + "`" + `|~-]+/[A-Za-z0-9!#$%&'+.^_` + "`" + `|~-]+$`)
 )
 
 // NginxProxy represents the NginxProxy resource.
@@ -97,6 +99,7 @@ func cleanupEffectiveNginxProxy(local, global, gcSpec *EffectiveNginxProxy) {
 	cleanupRewriteClientIP(local, global)
 	cleanupKubernetes(local, global)
 	cleanupWAF(local, global, gcSpec)
+	cleanupCompression(local, global)
 }
 
 // cleanupTelemetry resets empty slices that JSON unmarshal cannot clear.
@@ -150,6 +153,27 @@ func cleanupWAF(local, global, gcSpec *EffectiveNginxProxy) {
 	}
 	if local.WAF.BundleFailOpen == nil {
 		global.WAF.BundleFailOpen = gcSpec.WAF.BundleFailOpen
+	}
+}
+
+// cleanupCompression resets empty slices in the compression config that JSON unmarshal cannot clear.
+func cleanupCompression(local, global *EffectiveNginxProxy) {
+	if local.Compression == nil {
+		return
+	}
+	if local.Compression.MimeTypes != nil && len(local.Compression.MimeTypes) == 0 {
+		global.Compression.MimeTypes = []string{}
+	}
+	if local.Compression.Gzip != nil {
+		if global.Compression.Gzip == nil {
+			global.Compression.Gzip = &ngfAPIv1alpha2.GzipSettings{}
+		}
+		if local.Compression.Gzip.Proxied != nil && len(local.Compression.Gzip.Proxied) == 0 {
+			global.Compression.Gzip.Proxied = []ngfAPIv1alpha2.GzipProxiedType{}
+		}
+		if local.Compression.Gzip.Disable != nil && len(local.Compression.Gzip.Disable) == 0 {
+			global.Compression.Gzip.Disable = []string{}
+		}
 	}
 }
 
@@ -356,6 +380,8 @@ func validateNginxProxy(
 	allErrs = append(allErrs, validateNginxPlus(npCfg)...)
 
 	allErrs = append(allErrs, validateServerTokens(npCfg, plus)...)
+
+	allErrs = append(allErrs, validateCompression(validator, npCfg)...)
 
 	return allErrs
 }
@@ -605,5 +631,68 @@ func validateServerTokens(npCfg *ngfAPIv1alpha2.NginxProxy, plus bool) field.Err
 			)
 		}
 	}
+	return allErrs
+}
+
+func validateCompression(
+	validator validation.GenericValidator,
+	npCfg *ngfAPIv1alpha2.NginxProxy,
+) field.ErrorList {
+	if npCfg.Spec.Compression == nil {
+		return nil
+	}
+
+	var allErrs field.ErrorList
+	compressionPath := field.NewPath("spec").Child("compression")
+
+	for i, mimeType := range npCfg.Spec.Compression.MimeTypes {
+		if !mimeTypePattern.MatchString(mimeType) {
+			allErrs = append(
+				allErrs,
+				field.Invalid(
+					compressionPath.Child("mimeTypes").Index(i),
+					mimeType,
+					"must be a valid MIME type with the form type/subtype",
+				),
+			)
+		}
+	}
+
+	if npCfg.Spec.Compression.Gzip != nil {
+		gzipPath := compressionPath.Child("gzip")
+		for i, d := range npCfg.Spec.Compression.Gzip.Disable {
+			if err := validator.ValidateEscapedStringNoVarExpansion(d); err != nil {
+				allErrs = append(
+					allErrs,
+					field.Invalid(gzipPath.Child("disable").Index(i), d, err.Error()),
+				)
+			}
+		}
+
+		validGzipProxied := []ngfAPIv1alpha2.GzipProxiedType{
+			ngfAPIv1alpha2.GzipProxiedOff,
+			ngfAPIv1alpha2.GzipProxiedExpired,
+			ngfAPIv1alpha2.GzipProxiedNoCache,
+			ngfAPIv1alpha2.GzipProxiedNoStore,
+			ngfAPIv1alpha2.GzipProxiedPrivate,
+			ngfAPIv1alpha2.GzipProxiedNoLastModified,
+			ngfAPIv1alpha2.GzipProxiedNoETag,
+			ngfAPIv1alpha2.GzipProxiedAuth,
+			ngfAPIv1alpha2.GzipProxiedAny,
+		}
+		for i, p := range npCfg.Spec.Compression.Gzip.Proxied {
+			if !slices.Contains(validGzipProxied, p) {
+				allErrs = append(
+					allErrs,
+					field.Invalid(
+						gzipPath.Child("proxied").Index(i),
+						p,
+						"invalid value; must be one of: off, expired, no-cache, no-store, private, no_last_modified, no_etag, auth, any",
+					),
+				)
+			}
+		}
+	}
+
 	return allErrs
 }
