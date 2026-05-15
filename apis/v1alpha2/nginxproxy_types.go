@@ -21,7 +21,7 @@ import (
 // If referenced from a Gateway, the settings apply to that Gateway alone. If both a Gateway and its GatewayClass
 // reference an NginxProxy, the settings are merged. Settings specified on the Gateway NginxProxy override those
 // set on the GatewayClass NginxProxy.
-type NginxProxy struct { //nolint:govet // standard field alignment, don't change it
+type NginxProxy struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
@@ -122,7 +122,39 @@ type NginxProxySpec struct {
 	//
 	// +optional
 	WAF *WAFSpec `json:"waf,omitempty"`
+	// DisableBaseHeaders specifies which default X-* base headers should be omitted
+	// from being added to the base proxy_set_header directives in the NGINX configuration.
+	// This allows users to set these headers themselves without NGF overriding them.
+	//
+	// Supported values are limited to X-* base headers and "*".
+	// A value of "*" disables all X-* base headers.
+	//
+	// +optional
+	// +listType=set
+	// +kubebuilder:validation:MaxItems=6
+	DisableBaseHeaders []BaseHeaderName `json:"disableBaseHeaders,omitempty"`
 }
+
+// BaseHeaderName is the name of a base X-* header that can be disabled
+// from being added to the base proxy_set_header directives in the NGINX configuration.
+//
+// +kubebuilder:validation:Enum=*;X-Forwarded-For;X-Forwarded-Proto;X-Forwarded-Host;X-Forwarded-Port;X-Real-IP
+type BaseHeaderName string
+
+const (
+	// AllXBaseHeaders disables all X-* base headers.
+	AllXBaseHeaders BaseHeaderName = "*"
+	// HeaderXForwardedFor is the X-Forwarded-For header.
+	HeaderXForwardedFor BaseHeaderName = "X-Forwarded-For"
+	// HeaderXForwardedProto is the X-Forwarded-Proto header.
+	HeaderXForwardedProto BaseHeaderName = "X-Forwarded-Proto"
+	// HeaderXForwardedHost is the X-Forwarded-Host header.
+	HeaderXForwardedHost BaseHeaderName = "X-Forwarded-Host"
+	// HeaderXForwardedPort is the X-Forwarded-Port header.
+	HeaderXForwardedPort BaseHeaderName = "X-Forwarded-Port"
+	// HeaderXRealIP is the X-Real-IP header.
+	HeaderXRealIP BaseHeaderName = "X-Real-IP"
+)
 
 // WAFSpec configures NGINX App Protect WAF.
 type WAFSpec struct {
