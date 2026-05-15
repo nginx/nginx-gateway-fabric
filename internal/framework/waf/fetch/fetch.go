@@ -1025,7 +1025,7 @@ func buildN1CLogProfileCompileBaseURL(baseURL, namespace, lpObjID string, downlo
 		"/app-protect/log-profiles/" + url.PathEscape(lpObjID) + "/compile"
 	base.Fragment = ""
 	q := url.Values{}
-	q.Set("nap_release", waf.N1CRelease)
+	q.Set("nap_release", waf.Release)
 	if download {
 		q.Set("download", "true")
 	}
@@ -1182,7 +1182,7 @@ func buildN1CCompileBaseURL(baseURL, namespace, polObjID, polVersionID string, d
 		"/versions/" + url.PathEscape(polVersionID) + "/compile"
 	base.Fragment = ""
 	q := url.Values{}
-	q.Set("nap_release", waf.N1CRelease)
+	q.Set("nap_release", waf.Release)
 	if download {
 		q.Set("download", "true")
 	}

@@ -7,6 +7,3 @@ package waf
 // sidecar containers and as the nap_release query parameter when compiling
 // policy bundles via the F5 NGINX One Console API.
 const Release = "5.13.0"
-
-// N1CRelease is the NAP release version compatible with NGINX One.
-const N1CRelease = "5.12.1"
