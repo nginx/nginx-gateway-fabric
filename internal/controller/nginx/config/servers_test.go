@@ -12,6 +12,7 @@ import (
 	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 
 	"github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
+	"github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/http"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/policiesfakes"
@@ -1517,23 +1518,23 @@ func TestCreateServers(t *testing.T) {
 			Value: "new.example.com",
 		},
 		{
-			Name:  "X-Forwarded-For",
+			Name:  string(v1alpha2.HeaderXForwardedFor),
 			Value: "$proxy_add_x_forwarded_for",
 		},
 		{
-			Name:  "X-Real-IP",
+			Name:  string(v1alpha2.HeaderXRealIP),
 			Value: "$remote_addr",
 		},
 		{
-			Name:  "X-Forwarded-Proto",
+			Name:  string(v1alpha2.HeaderXForwardedProto),
 			Value: "$scheme",
 		},
 		{
-			Name:  "X-Forwarded-Host",
+			Name:  string(v1alpha2.HeaderXForwardedHost),
 			Value: "$host",
 		},
 		{
-			Name:  "X-Forwarded-Port",
+			Name:  string(v1alpha2.HeaderXForwardedPort),
 			Value: "$server_port",
 		},
 		{
@@ -2602,7 +2603,7 @@ func TestCreateLocations_Includes(t *testing.T) {
 		},
 	})
 
-	locations, matches, grpc := createLocations(&httpServer, "1", fakeGenerator, alwaysFalseKeepAliveChecker)
+	locations, matches, grpc := createLocations(&httpServer, "1", fakeGenerator, alwaysFalseKeepAliveChecker, nil)
 
 	g := NewWithT(t)
 	g.Expect(grpc).To(BeFalse())
@@ -2741,11 +2742,11 @@ func TestCreateLocations_InferenceBackends(t *testing.T) {
 
 	proxySetHeaders := []http.Header{
 		{Name: "Host", Value: "$gw_api_compliant_host"},
-		{Name: "X-Forwarded-For", Value: "$proxy_add_x_forwarded_for"},
-		{Name: "X-Real-IP", Value: "$remote_addr"},
-		{Name: "X-Forwarded-Proto", Value: "$scheme"},
-		{Name: "X-Forwarded-Host", Value: "$host"},
-		{Name: "X-Forwarded-Port", Value: "$server_port"},
+		{Name: string(v1alpha2.HeaderXForwardedFor), Value: "$proxy_add_x_forwarded_for"},
+		{Name: string(v1alpha2.HeaderXRealIP), Value: "$remote_addr"},
+		{Name: string(v1alpha2.HeaderXForwardedProto), Value: "$scheme"},
+		{Name: string(v1alpha2.HeaderXForwardedHost), Value: "$host"},
+		{Name: string(v1alpha2.HeaderXForwardedPort), Value: "$server_port"},
 		{Name: "Upgrade", Value: "$http_upgrade"},
 		{Name: "Connection", Value: "$connection_upgrade"},
 	}
@@ -3113,6 +3114,7 @@ func TestCreateLocations_InferenceBackends(t *testing.T) {
 				"1",
 				&policiesfakes.FakeGenerator{},
 				alwaysFalseKeepAliveChecker,
+				nil,
 			)
 
 			g.Expect(helpers.Diff(tc.expLocs, locs)).To(BeEmpty())
@@ -3305,6 +3307,7 @@ func TestCreateLocationsRootPath(t *testing.T) {
 				"1",
 				&policiesfakes.FakeGenerator{},
 				alwaysFalseKeepAliveChecker,
+				nil,
 			)
 			g.Expect(locs).To(Equal(test.expLocations))
 			g.Expect(httpMatchPair).To(BeEmpty())
@@ -3436,6 +3439,7 @@ func TestCreateLocationsPath(t *testing.T) {
 				"1",
 				&policiesfakes.FakeGenerator{},
 				alwaysFalseKeepAliveChecker,
+				nil,
 			)
 			g.Expect(locs).To(Equal(test.expLocations))
 			g.Expect(httpMatchPair).To(BeEmpty())
@@ -4580,7 +4584,7 @@ func TestGenerateProxySetHeaders(t *testing.T) {
 			},
 			expectedHeaders: []http.Header{
 				{
-					Name:  "X-Forwarded-Proto",
+					Name:  string(v1alpha2.HeaderXForwardedProto),
 					Value: "new-proto",
 				},
 				{
@@ -4588,19 +4592,19 @@ func TestGenerateProxySetHeaders(t *testing.T) {
 					Value: "$gw_api_compliant_host",
 				},
 				{
-					Name:  "X-Forwarded-For",
+					Name:  string(v1alpha2.HeaderXForwardedFor),
 					Value: "$proxy_add_x_forwarded_for",
 				},
 				{
-					Name:  "X-Real-IP",
+					Name:  string(v1alpha2.HeaderXRealIP),
 					Value: "$remote_addr",
 				},
 				{
-					Name:  "X-Forwarded-Host",
+					Name:  string(v1alpha2.HeaderXForwardedHost),
 					Value: "$host",
 				},
 				{
-					Name:  "X-Forwarded-Port",
+					Name:  string(v1alpha2.HeaderXForwardedPort),
 					Value: "$server_port",
 				},
 				{
@@ -4639,23 +4643,23 @@ func TestGenerateProxySetHeaders(t *testing.T) {
 					Value: "rewrite-hostname",
 				},
 				{
-					Name:  "X-Forwarded-For",
+					Name:  string(v1alpha2.HeaderXForwardedFor),
 					Value: "$proxy_add_x_forwarded_for",
 				},
 				{
-					Name:  "X-Real-IP",
+					Name:  string(v1alpha2.HeaderXRealIP),
 					Value: "$remote_addr",
 				},
 				{
-					Name:  "X-Forwarded-Proto",
+					Name:  string(v1alpha2.HeaderXForwardedProto),
 					Value: "$scheme",
 				},
 				{
-					Name:  "X-Forwarded-Host",
+					Name:  string(v1alpha2.HeaderXForwardedHost),
 					Value: "$host",
 				},
 				{
-					Name:  "X-Forwarded-Port",
+					Name:  string(v1alpha2.HeaderXForwardedPort),
 					Value: "$server_port",
 				},
 				{
@@ -4726,23 +4730,23 @@ func TestCreateBaseProxySetHeaders(t *testing.T) {
 			Value: "$gw_api_compliant_host",
 		},
 		{
-			Name:  "X-Forwarded-For",
+			Name:  string(v1alpha2.HeaderXForwardedFor),
 			Value: "$proxy_add_x_forwarded_for",
 		},
 		{
-			Name:  "X-Real-IP",
+			Name:  string(v1alpha2.HeaderXRealIP),
 			Value: "$remote_addr",
 		},
 		{
-			Name:  "X-Forwarded-Proto",
+			Name:  string(v1alpha2.HeaderXForwardedProto),
 			Value: "$scheme",
 		},
 		{
-			Name:  "X-Forwarded-Host",
+			Name:  string(v1alpha2.HeaderXForwardedHost),
 			Value: "$host",
 		},
 		{
-			Name:  "X-Forwarded-Port",
+			Name:  string(v1alpha2.HeaderXForwardedPort),
 			Value: "$server_port",
 		},
 	}
@@ -4789,6 +4793,235 @@ func TestCreateBaseProxySetHeaders(t *testing.T) {
 
 			result := createBaseProxySetHeaders("", test.additionalHeaders...)
 			g.Expect(result).To(Equal(test.expBaseHeaders))
+		})
+	}
+}
+
+func TestFilterBaseProxySetHeaders(t *testing.T) {
+	t.Parallel()
+
+	baseHeaders := []http.Header{
+		{Name: "Host", Value: "$gw_api_compliant_host"},
+		{Name: string(v1alpha2.HeaderXForwardedFor), Value: "$proxy_add_x_forwarded_for"},
+		{Name: string(v1alpha2.HeaderXRealIP), Value: "$remote_addr"},
+		{Name: string(v1alpha2.HeaderXForwardedProto), Value: "$scheme"},
+		{Name: string(v1alpha2.HeaderXForwardedHost), Value: "$host"},
+		{Name: string(v1alpha2.HeaderXForwardedPort), Value: "$server_port"},
+		{Name: "Upgrade", Value: "$http_upgrade"},
+	}
+
+	tests := []struct {
+		msg                     string
+		disableBaseProxyHeaders []string
+		expected                []http.Header
+	}{
+		{
+			msg:                     "no headers disabled",
+			disableBaseProxyHeaders: nil,
+			expected:                baseHeaders,
+		},
+		{
+			msg:                     "disable single supported header",
+			disableBaseProxyHeaders: []string{string(v1alpha2.HeaderXForwardedFor)},
+			expected: []http.Header{
+				{Name: "Host", Value: "$gw_api_compliant_host"},
+				{Name: string(v1alpha2.HeaderXRealIP), Value: "$remote_addr"},
+				{Name: string(v1alpha2.HeaderXForwardedProto), Value: "$scheme"},
+				{Name: string(v1alpha2.HeaderXForwardedHost), Value: "$host"},
+				{Name: string(v1alpha2.HeaderXForwardedPort), Value: "$server_port"},
+				{Name: "Upgrade", Value: "$http_upgrade"},
+			},
+		},
+		{
+			msg: "disable multiple supported headers",
+			disableBaseProxyHeaders: []string{
+				string(v1alpha2.HeaderXForwardedProto),
+				string(v1alpha2.HeaderXForwardedPort),
+			},
+			expected: []http.Header{
+				{Name: "Host", Value: "$gw_api_compliant_host"},
+				{Name: string(v1alpha2.HeaderXForwardedFor), Value: "$proxy_add_x_forwarded_for"},
+				{Name: string(v1alpha2.HeaderXRealIP), Value: "$remote_addr"},
+				{Name: string(v1alpha2.HeaderXForwardedHost), Value: "$host"},
+				{Name: "Upgrade", Value: "$http_upgrade"},
+			},
+		},
+		{
+			msg:                     "disable all x-* headers with wildcard",
+			disableBaseProxyHeaders: []string{"*"},
+			expected: []http.Header{
+				{Name: "Host", Value: "$gw_api_compliant_host"},
+				{Name: "Upgrade", Value: "$http_upgrade"},
+			},
+		},
+		{
+			msg:                     "wildcard plus explicit X-* header disables all X-* headers",
+			disableBaseProxyHeaders: []string{"*", string(v1alpha2.HeaderXForwardedProto)},
+			expected: []http.Header{
+				{Name: "Host", Value: "$gw_api_compliant_host"},
+				{Name: "Upgrade", Value: "$http_upgrade"},
+			},
+		},
+		{
+			msg:                     "unknown header in disable list is ignored",
+			disableBaseProxyHeaders: []string{"X-Not-A-Header"},
+			expected:                baseHeaders,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.msg, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			result := filterBaseProxySetHeaders(baseHeaders, tc.disableBaseProxyHeaders)
+			g.Expect(result).To(Equal(tc.expected))
+		})
+	}
+}
+
+// TestExecuteServers_DisableBaseProxySetHeaders verifies that DisableBaseProxySetHeaders is tested end-to-end
+// through createServers → createServer/createSSLServer → createLocations → updateLocations →
+// updateLocation → updateLocationProxySettings, so that the rendered NGINX config omits the
+// disabled proxy_set_header entries while keeping the rest.
+func TestExecuteServers_DisableBaseProxySetHeaders(t *testing.T) {
+	t.Parallel()
+
+	backend := dataplane.BackendGroup{
+		Source:  types.NamespacedName{Namespace: "test", Name: "route1"},
+		RuleIdx: 0,
+		Backends: []dataplane.Backend{
+			{UpstreamName: "test_foo_80", Valid: true, Weight: 1},
+		},
+	}
+
+	pathRule := dataplane.PathRule{
+		Path:     "/coffee",
+		PathType: dataplane.PathTypePrefix,
+		MatchRules: []dataplane.MatchRule{
+			{
+				Match:        dataplane.Match{},
+				BackendGroup: backend,
+			},
+		},
+	}
+
+	tests := []struct {
+		name                       string
+		disableBaseProxySetHeaders []string
+		expPresent                 []string
+		expAbsent                  []string
+	}{
+		{
+			name:                       "no headers disabled – all base headers rendered",
+			disableBaseProxySetHeaders: nil,
+			expPresent: []string{
+				`proxy_set_header Host "$gw_api_compliant_host";`,
+				`proxy_set_header X-Forwarded-For "$proxy_add_x_forwarded_for";`,
+				`proxy_set_header X-Real-IP "$remote_addr";`,
+				`proxy_set_header X-Forwarded-Proto "$scheme";`,
+				`proxy_set_header X-Forwarded-Host "$host";`,
+				`proxy_set_header X-Forwarded-Port "$server_port";`,
+			},
+			expAbsent: nil,
+		},
+		{
+			name: "disable X-Forwarded-For – omitted from proxy_set_header",
+			disableBaseProxySetHeaders: []string{
+				string(v1alpha2.HeaderXForwardedFor),
+			},
+			expPresent: []string{
+				`proxy_set_header Host "$gw_api_compliant_host";`,
+				`proxy_set_header X-Real-IP "$remote_addr";`,
+				`proxy_set_header X-Forwarded-Proto "$scheme";`,
+				`proxy_set_header X-Forwarded-Host "$host";`,
+				`proxy_set_header X-Forwarded-Port "$server_port";`,
+			},
+			expAbsent: []string{
+				`proxy_set_header X-Forwarded-For`,
+			},
+		},
+		{
+			name: "disable X-Forwarded-For and X-Forwarded-Proto",
+			disableBaseProxySetHeaders: []string{
+				string(v1alpha2.HeaderXForwardedFor),
+				string(v1alpha2.HeaderXForwardedProto),
+			},
+			expPresent: []string{
+				`proxy_set_header Host "$gw_api_compliant_host";`,
+				`proxy_set_header X-Real-IP "$remote_addr";`,
+				`proxy_set_header X-Forwarded-Host "$host";`,
+				`proxy_set_header X-Forwarded-Port "$server_port";`,
+			},
+			expAbsent: []string{
+				`proxy_set_header X-Forwarded-For`,
+				`proxy_set_header X-Forwarded-Proto`,
+			},
+		},
+		{
+			name: "wildcard disables all X-* headers",
+			disableBaseProxySetHeaders: []string{
+				string(v1alpha2.AllXBaseHeaders),
+			},
+			expPresent: []string{
+				`proxy_set_header Host "$gw_api_compliant_host";`,
+			},
+			expAbsent: []string{
+				`proxy_set_header X-Forwarded-For`,
+				`proxy_set_header X-Forwarded-Proto`,
+				`proxy_set_header X-Forwarded-Host`,
+				`proxy_set_header X-Forwarded-Port`,
+				`proxy_set_header X-Real-IP`,
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			conf := dataplane.Configuration{
+				HTTPServers: []dataplane.VirtualServer{
+					{
+						Hostname:  "http.example.com",
+						Port:      8080,
+						PathRules: []dataplane.PathRule{pathRule},
+					},
+				},
+				SSLServers: []dataplane.VirtualServer{
+					{
+						Hostname: "ssl.example.com",
+						Port:     8443,
+						SSL: &dataplane.SSL{
+							KeyPairIDs: []dataplane.SSLKeyPairID{"test-keypair"},
+						},
+						PathRules: []dataplane.PathRule{pathRule},
+					},
+				},
+				BaseHTTPConfig: dataplane.BaseHTTPConfig{
+					DisableBaseProxySetHeaders: tc.disableBaseProxySetHeaders,
+				},
+			}
+
+			gen := GeneratorImpl{}
+			results := gen.executeServers(conf, &policiesfakes.FakeGenerator{}, alwaysFalseKeepAliveChecker)
+
+			var serverConf string
+			for _, res := range results {
+				if res.dest == httpConfigFile {
+					serverConf = string(res.data)
+					break
+				}
+			}
+			g.Expect(serverConf).NotTo(BeEmpty())
+
+			for _, s := range tc.expPresent {
+				g.Expect(serverConf).To(ContainSubstring(s), "expected %q to be present", s)
+			}
+			for _, s := range tc.expAbsent {
+				g.Expect(serverConf).NotTo(ContainSubstring(s), "expected %q to be absent", s)
+			}
 		})
 	}
 }
@@ -5273,6 +5506,7 @@ func TestCreateLocations_RegexCatchAllShouldSuppressDefault404(t *testing.T) {
 		"1",
 		&policiesfakes.FakeGenerator{},
 		alwaysFalseKeepAliveChecker,
+		nil,
 	)
 
 	for _, loc := range locs {
@@ -5323,6 +5557,7 @@ func TestCreateLocations_RegexNonRootShouldNotSuppressDefault404(t *testing.T) {
 		"1",
 		&policiesfakes.FakeGenerator{},
 		alwaysFalseKeepAliveChecker,
+		nil,
 	)
 
 	var hasDefault404 bool
@@ -6184,6 +6419,7 @@ func TestOIDCCallbackLocation(t *testing.T) {
 			"1",
 			&policiesfakes.FakeGenerator{},
 			alwaysFalseKeepAliveChecker,
+			nil,
 		)
 		for i := range locs {
 			if locs[i].Path == "= "+oidcCallbackPath {
@@ -6300,6 +6536,7 @@ func TestOIDCCallbackLocation(t *testing.T) {
 					"1",
 					&policiesfakes.FakeGenerator{},
 					alwaysFalseKeepAliveChecker,
+					nil,
 				)
 
 				var exactCoffeeSlashLocs []http.Location
@@ -6346,6 +6583,7 @@ func TestOIDCCallbackLocation(t *testing.T) {
 					"1",
 					&policiesfakes.FakeGenerator{},
 					alwaysFalseKeepAliveChecker,
+					nil,
 				)
 
 				// The exact app route already occupies "= /my-callback", so no separate OIDC callback
@@ -6405,6 +6643,7 @@ func TestOIDCCallbackLocation(t *testing.T) {
 					"1",
 					&policiesfakes.FakeGenerator{},
 					alwaysFalseKeepAliveChecker,
+					nil,
 				)
 
 				var callbackPaths []string
@@ -6457,6 +6696,7 @@ func TestOIDCCallbackLocation(t *testing.T) {
 					"1",
 					&policiesfakes.FakeGenerator{},
 					alwaysFalseKeepAliveChecker,
+					nil,
 				)
 
 				var callbackLocs []http.Location
@@ -6529,6 +6769,7 @@ func TestOIDCURILocations(t *testing.T) {
 			"1",
 			&policiesfakes.FakeGenerator{},
 			alwaysFalseKeepAliveChecker,
+			nil,
 		)
 		return locs
 	}

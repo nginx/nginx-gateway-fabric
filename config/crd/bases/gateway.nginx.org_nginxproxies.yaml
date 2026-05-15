@@ -51,6 +51,29 @@ spec:
           spec:
             description: Spec defines the desired state of the NginxProxy.
             properties:
+              disableBaseHeaders:
+                description: |-
+                  DisableBaseHeaders specifies which default X-* base headers should be omitted
+                  from being added to the base proxy_set_header directives in the NGINX configuration.
+                  This allows users to set these headers themselves without NGF overriding them.
+
+                  Supported values are limited to X-* base headers and "*".
+                  A value of "*" disables all X-* base headers.
+                items:
+                  description: |-
+                    BaseHeaderName is the name of a base X-* header that can be disabled
+                    from being added to the base proxy_set_header directives in the NGINX configuration.
+                  enum:
+                  - '*'
+                  - X-Forwarded-For
+                  - X-Forwarded-Proto
+                  - X-Forwarded-Host
+                  - X-Forwarded-Port
+                  - X-Real-IP
+                  type: string
+                maxItems: 6
+                type: array
+                x-kubernetes-list-type: set
               disableHTTP2:
                 description: |-
                   DisableHTTP2 defines if http2 should be disabled for all servers.

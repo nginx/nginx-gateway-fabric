@@ -636,6 +636,8 @@ type SpanAttribute struct {
 type BaseHTTPConfig struct {
 	// DNSResolver defines the DNS resolver configuration for NGINX.
 	DNSResolver *DNSResolverConfig
+	// DisableBaseProxySetHeaders specifies which default proxy_set_header entries should be omitted.
+	DisableBaseProxySetHeaders []string
 	// IPFamily specifies the IP family for all servers.
 	IPFamily IPFamilyType
 	// GatewaySecretID is the ID of the secret that contains the gateway backend TLS certificate.
