@@ -235,7 +235,6 @@ type JWTAuth struct {
   //  auth_jwt_require $valid_jwt_combination_0_1;
   //
   // +optional
-  // +kubebuilder:validation:MaxItems=16
   Require []JWTRequiredClaims `json:"require,omitempty"`
 
   // Leeway is the acceptable clock skew for exp & nbf claims.
@@ -295,7 +294,6 @@ type JWTRequiredClaims struct {
   // All values in the array must match in the exact order.
   //
   // +optional
-  // +kubebuilder:validation:MaxItems=8
   Aud []string `json:"aud,omitempty"`
 
   // Subject contains the value that must match the `sub` claim.
@@ -306,7 +304,6 @@ type JWTRequiredClaims struct {
   // Claims defines user-defined custom claims that must also match.
   //
   // +optional
-  // +kubebuilder:validation:MaxItems=16
   Claims []JWTCustomClaim `json:"claims,omitempty"`
 }
 
@@ -320,7 +317,6 @@ type JWTCustomClaim struct {
   // +optional
   Value  *string  `json:"value,omitempty"`
   // +optional
-  // +kubebuilder:validation:MaxItems=8
   Values []string `json:"values,omitempty"`
 }
 
