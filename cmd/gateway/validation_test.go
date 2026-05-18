@@ -131,6 +131,76 @@ func TestValidateResourceName(t *testing.T) {
 	}
 }
 
+func TestValidateNamespacedResourceName(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name   string
+		value  string
+		expErr bool
+	}{
+		{
+			name:   "valid - plain name",
+			value:  "my-secret",
+			expErr: false,
+		},
+		{
+			name:   "valid - namespaced name",
+			value:  "nginx-gateway/my-secret",
+			expErr: false,
+		},
+		{
+			name:   "valid - namespaced with dots",
+			value:  "my.namespace/my.secret",
+			expErr: false,
+		},
+		{
+			name:   "invalid - empty",
+			value:  "",
+			expErr: true,
+		},
+		{
+			name:   "invalid - namespace part has underscore",
+			value:  "my_namespace/my-secret",
+			expErr: true,
+		},
+		{
+			name:   "invalid - name part has underscore",
+			value:  "my-namespace/my_secret",
+			expErr: true,
+		},
+		{
+			name:   "invalid - empty namespace",
+			value:  "/my-secret",
+			expErr: true,
+		},
+		{
+			name:   "invalid - empty name",
+			value:  "my-namespace/",
+			expErr: true,
+		},
+		{
+			name:   "invalid - multiple slashes",
+			value:  "a/b/c",
+			expErr: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			err := validateNamespacedResourceName(test.value)
+
+			if test.expErr {
+				g.Expect(err).To(HaveOccurred())
+			} else {
+				g.Expect(err).ToNot(HaveOccurred())
+			}
+		})
+	}
+}
+
 func TestValidateQualifiedName(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -358,6 +428,66 @@ func TestValidateEndpointOptionalPort(t *testing.T) {
 			endp:   "loc@lhost:8080",
 			expErr: true,
 		},
+		{
+			name:   "valid endpoint with http scheme",
+			endp:   "http://localhost:8080",
+			expErr: false,
+		},
+		{
+			name:   "valid endpoint with https scheme",
+			endp:   "https://localhost:9333",
+			expErr: false,
+		},
+		{
+			name:   "valid endpoint with https scheme, no port",
+			endp:   "https://localhost",
+			expErr: false,
+		},
+		{
+			name:   "valid endpoint with https scheme and hostname",
+			endp:   "https://my-service.my-namespace.svc.cluster.local:9333",
+			expErr: false,
+		},
+		{
+			name:   "invalid scheme",
+			endp:   "ftp://localhost:8080",
+			expErr: true,
+		},
+		{
+			name:   "valid endpoint with https scheme and IPv6 with port",
+			endp:   "https://[::1]:8333",
+			expErr: false,
+		},
+		{
+			name:   "valid endpoint with https scheme and IPv6, no port",
+			endp:   "https://[::1]",
+			expErr: false,
+		},
+		{
+			name:   "invalid endpoint with https scheme and bare IPv6",
+			endp:   "https://::1",
+			expErr: true,
+		},
+		{
+			name:   "endpoint with scheme and path is rejected",
+			endp:   "https://example.com:8080/foo",
+			expErr: true,
+		},
+		{
+			name:   "endpoint with scheme and query is rejected",
+			endp:   "https://example.com?x=1",
+			expErr: true,
+		},
+		{
+			name:   "endpoint with scheme and fragment is rejected",
+			endp:   "https://example.com#frag",
+			expErr: true,
+		},
+		{
+			name:   "endpoint with scheme and trailing slash path is allowed",
+			endp:   "https://example.com/",
+			expErr: false,
+		},
 	}
 
 	for _, tc := range tests {
@@ -410,6 +540,52 @@ func TestValidatePort(t *testing.T) {
 			} else {
 				g.Expect(err).To(HaveOccurred())
 			}
+		})
+	}
+}
+
+func TestValidateURL(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		url    string
+		expErr bool
+	}{
+		{
+			name:   "valid https URL",
+			url:    "https://plm.example.com",
+			expErr: false,
+		},
+		{
+			name:   "valid http URL with path",
+			url:    "http://plm.example.com/storage",
+			expErr: false,
+		},
+		{
+			name:   "missing scheme",
+			url:    "plm.example.com",
+			expErr: true,
+		},
+		{
+			name:   "unsupported scheme",
+			url:    "s3://bucket/path",
+			expErr: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			err := validateURL(tc.url)
+			if tc.expErr {
+				g.Expect(err).To(HaveOccurred())
+				return
+			}
+
+			g.Expect(err).ToNot(HaveOccurred())
 		})
 	}
 }

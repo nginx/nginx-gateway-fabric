@@ -1728,3 +1728,102 @@ func NewPolicyNotProgrammedBundlePending(errMsg string) Condition {
 		Message: fmt.Sprintf("Waiting for WAF bundle; last fetch error: %s", errMsg),
 	}
 }
+
+// NewPolicyRefsNotPermittedAPPolicy returns a Condition that indicates a cross-namespace APPolicy
+// reference is not permitted by a ReferenceGrant.
+func NewPolicyRefsNotPermittedAPPolicy(msg string) Condition {
+	return Condition{
+		Type:    string(WAFResolvedRefsConditionType),
+		Status:  metav1.ConditionFalse,
+		Reason:  "RefNotPermitted",
+		Message: msg,
+	}
+}
+
+// NewPolicyRefsNotPermittedAPLogConf returns a Condition that indicates a cross-namespace APLogConf
+// reference is not permitted by a ReferenceGrant.
+func NewPolicyRefsNotPermittedAPLogConf(msg string) Condition {
+	return Condition{
+		Type:    string(WAFResolvedRefsConditionType),
+		Status:  metav1.ConditionFalse,
+		Reason:  "RefNotPermitted",
+		Message: msg,
+	}
+}
+
+// NewPolicyRefsNotResolvedAPPolicyNotFound returns a Condition that indicates the referenced
+// APPolicy was not found in the cluster.
+func NewPolicyRefsNotResolvedAPPolicyNotFound(msg string) Condition {
+	return Condition{
+		Type:    string(WAFResolvedRefsConditionType),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(PolicyReasonInvalidRef),
+		Message: msg,
+	}
+}
+
+// NewPolicyRefsNotResolvedAPPolicyNotReady returns a Condition that indicates the referenced
+// APPolicy exists but its bundle is not in the ready state.
+func NewPolicyRefsNotResolvedAPPolicyNotReady(msg string) Condition {
+	return Condition{
+		Type:    string(WAFResolvedRefsConditionType),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(PolicyReasonInvalidRef),
+		Message: msg,
+	}
+}
+
+// NewPolicyRefsNotResolvedAPPolicyInvalid returns a Condition that indicates the referenced
+// APPolicy exists but is in a terminal invalid state.
+func NewPolicyRefsNotResolvedAPPolicyInvalid(msg string) Condition {
+	return Condition{
+		Type:    string(WAFResolvedRefsConditionType),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(PolicyReasonInvalidRef),
+		Message: msg,
+	}
+}
+
+// NewPolicyRefsNotResolvedAPLogConfNotFound returns a Condition that indicates the referenced
+// APLogConf was not found in the cluster.
+func NewPolicyRefsNotResolvedAPLogConfNotFound(msg string) Condition {
+	return Condition{
+		Type:    string(WAFResolvedRefsConditionType),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(PolicyReasonInvalidRef),
+		Message: msg,
+	}
+}
+
+// NewPolicyRefsNotResolvedAPLogConfNotReady returns a Condition that indicates the referenced
+// APLogConf exists but its bundle is not in the ready state.
+func NewPolicyRefsNotResolvedAPLogConfNotReady(msg string) Condition {
+	return Condition{
+		Type:    string(WAFResolvedRefsConditionType),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(PolicyReasonInvalidRef),
+		Message: msg,
+	}
+}
+
+// NewPolicyRefsNotResolvedAPLogConfInvalid returns a Condition that indicates the referenced
+// APLogConf exists but is in a terminal invalid state.
+func NewPolicyRefsNotResolvedAPLogConfInvalid(msg string) Condition {
+	return Condition{
+		Type:    string(WAFResolvedRefsConditionType),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(PolicyReasonInvalidRef),
+		Message: msg,
+	}
+}
+
+// NewPolicyNotAcceptedPLMNotConfigured returns a Condition that indicates a PLM WAFPolicy was
+// created but PLM storage is not configured via CLI flags.
+func NewPolicyNotAcceptedPLMNotConfigured() Condition {
+	return Condition{
+		Type:    string(v1.PolicyConditionAccepted),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(v1.PolicyReasonInvalid),
+		Message: "PLM storage not configured; set --plm-storage-url on the controller",
+	}
+}

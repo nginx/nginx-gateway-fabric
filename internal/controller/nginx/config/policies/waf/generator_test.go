@@ -251,6 +251,36 @@ func TestGenerate(t *testing.T) {
 			},
 		},
 		{
+			name: "PLM policy and log bundle paths are generated",
+			policy: &ngfAPIv1alpha1.WAFPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "waf-plm",
+					Namespace: "app-ns",
+				},
+				Spec: ngfAPIv1alpha1.WAFPolicySpec{
+					PolicyRef: &ngfAPIv1alpha1.PolicyRef{
+						APPolicyRef: &ngfAPIv1alpha1.APPolicyReference{Name: "ap-policy"},
+					},
+					SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
+						{
+							LogRef: &ngfAPIv1alpha1.LogRef{
+								APLogConfRef: &ngfAPIv1alpha1.APLogConfReference{Name: "ap-logconf"},
+							},
+							Destination: ngfAPIv1alpha1.SecurityLogDestination{
+								Type: ngfAPIv1alpha1.SecurityLogDestinationTypeStderr,
+							},
+						},
+					},
+				},
+			},
+			expStrings: []string{
+				"app_protect_enable on;",
+				"app_protect_policy_file \"/etc/app_protect/bundles/app-ns_waf-plm.tgz\";",
+				"app_protect_security_log_enable on;",
+				"app_protect_security_log \"/etc/app_protect/bundles/app-ns_waf-plm_log_app-ns_ap-logconf.tgz\" stderr;",
+			},
+		},
+		{
 			name: "no policy bundle - no policy directives",
 			policy: &ngfAPIv1alpha1.WAFPolicy{
 				ObjectMeta: metav1.ObjectMeta{
