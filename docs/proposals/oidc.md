@@ -28,7 +28,7 @@ This design extends the [AuthenticationFilter CRD](https://github.com/nginx/ngin
 - The client (NGINX) redirects the user to the Authorization Server.
 - The user authenticates and consents to the requested scopes.
 - The Authorization Server returns an Authorization Code to the client (NGINX).
-- The client (NGINX)  exchanges the code for an ID Token and Access Token via a back-channel request.
+- The client (NGINX) exchanges the code for an ID Token and Access Token via a back-channel request.
 - The Authorization Server may authenticate the client (NGINX, using a Client Secret) before issuing tokens.
 
 The following diagram illustrates the Authorization Code Flow:
@@ -88,7 +88,7 @@ The initial design will support the following directives from [`ngx_http_oidc_mo
 
 - [`post_logout_uri`](https://nginx.org/en/docs/http/ngx_http_oidc_module.html#post_logout_uri) - Defines the path or absolute URI where users are redirected after logout completes.
 
-- [`logout_token_hint`](https://nginx.org/en/docs/http/ngx_http_oidc_module.html#logout_token_hint) -  Includes the `id_token_hint` argument in the logout request sent to the OpenID Provider's logout endpoint.
+- [`logout_token_hint`](https://nginx.org/en/docs/http/ngx_http_oidc_module.html#logout_token_hint) - Includes the `id_token_hint` argument in the logout request sent to the OpenID Provider's logout endpoint.
 
 - [`scope`](https://nginx.org/en/docs/http/ngx_http_oidc_module.html#scope) - Sets the requested scopes. The default scope is `openid`.
 
@@ -204,6 +204,14 @@ type OIDCAuth struct {
 	// +optional
 	// +kubebuilder:validation:MaxItems=8
 	CACertificateRefs []LocalObjectReference `json:"caCertificateRefs,omitempty"`
+
+  // Require defines a list of required claim sets for JWT claim validation.
+  // The token is authorized if it satisfies all claims in at least one entry.
+  // Claims within each entry are concatenated and validated together using NGINX maps.
+  //
+  // +optional
+  // +kubebuilder:validation:MinItems=1
+  Require []RequiredClaims `json:"require,omitempty"`
 }
 
 // OIDCSessionConfig configures session management for OIDC authentication.
@@ -260,6 +268,38 @@ type OIDCLogoutConfig struct {
 	TokenHint *bool `json:"tokenHint,omitempty"`
 }
 
+// RequiredClaims specifies a set of required claims that a token's claim must match to be authorized.
+type RequiredClaims struct {
+  // Issuer contains the value that must match the `iss` claim.
+  //
+  // +optional
+  Iss string `json:"iss,omitempty"`
+
+  // Audience contains the values that must match the `aud` claim.
+  // When the `aud` claim is an array, NGINX exposes it as a comma-separated string via `auth_jwt_claim_set`.
+  // All values in the array must match in the exact order.
+  //
+  // +optional
+  Aud []string `json:"aud,omitempty"`
+
+  // Subject contains the value that must match the `sub` claim.
+  //
+  // +optional
+  Sub string `json:"sub,omitempty"`
+
+  // Claims defines user-defined custom claims that must also match.
+  //
+  // +optional
+  // +kubebuilder:validation:MinItems=1
+  Claims []CustomClaim `json:"claims,omitempty"`
+}
+
+// CustomClaim specifies custom user claims and values.
+type CustomClaim struct {
+  Name   string   `json:"name"`
+  // +kubebuilder:validation:MinItems=1
+  Values []string `json:"values,omitempty"`
+}
 ```
 
 We will be supporting multiple OIDC providers. To set up authentication with an OpenID Provider, you must specify the issuer URL, client ID, and client secret.
@@ -271,7 +311,7 @@ TLS is required in two places:
 
 Each Secret reference expects a specific key to be present. For OIDC authentication, the required keys are `client-secret`, `ca.crt`, and `ca.crl`. Users have flexibility in how they organize these: either consolidate all three keys in a single Secret, or use separate Secrets for each key.
 
-An authenticationFilter with complete OIDC configuration would look like:
+An AuthenticationFilter with complete OIDC configuration would look like this:
 
 ```yaml
 apiVersion: gateway.nginx.org/v1alpha1
@@ -311,6 +351,17 @@ spec:
       postLogoutURI: "/logged-out"
       frontChannelLogoutURI: "/frontchannel-logout"
       tokenHint: true
+
+    # Optional: configure claim validation.
+    require:
+    - sub: "bed7e82b-8143-476c-adf8-4c561260b60e"
+      claims:
+      - name: "email_verified"
+        values:
+        - "true"
+      - name: "email"
+        values:
+         - "testuser@example.com"
 ---
 # clientSecret references a Kubernetes Secret containing the OIDC client secret
 # The OpenID Provider uses this to verify that token requests come from a legitimate client
@@ -448,16 +499,121 @@ http {
 }
 ```
 
+### Claim validation
+
+This section covers the specifics of how claim validation works for OIDC auth in NGINX.
+It's recommended to read the [JWT claims](authentication-filter.md#jwt-claims) section of the AuthenticationFilter proposal to help understand how this process works.
+Unlike the JWT auth module, the OIDC auth module for NGINX does not have an explicit directive to enforce claim validation.
+To show how this works for OIDC, we'll start with an example NGINX configuration, and then break down each component and explain why they are necessary.
+
+```nginx
+http {
+
+    # OIDC Provider
+    oidc_provider keycloak {
+      # ...
+    }
+
+    # Map to evaluate user authorization
+    map $oidc_claim_sub $oidc_valid_combination {
+        ~^bed7e82b-8143-476c-adf8-4c561260b60e$ 1;
+        default 0;
+    }
+
+    server {
+      listen 443 ssl;
+      listen [::]:443 ssl;
+
+      ssl_certificate /etc/nginx/secrets/ssl_keypair_certificate_cafe-secret.pem;
+      ssl_certificate_key /etc/nginx/secrets/ssl_keypair_certificate_cafe-secret.pem;
+
+      server_name cafe.example.com;
+
+      location ^~ /coffee/ {
+        auth_oidc keycloak; # Enable OIDC auth module
+        auth_jwt "" token=$oidc_id_token; # Enable JWT auth module
+        auth_jwt_key_request /_jwks_keycloak; # Internal request to IdP JWKS
+
+        # Authorize based on response from map.
+        auth_jwt_require $oidc_valid_combination;
+
+        proxy_pass http://default_coffee_80$request_uri;
+      }
+
+      # Internal location for IdP JWKS
+      location = /_jwks_keycloak {
+          internal;
+          proxy_pass https://keycloak.example.com/realms/my-realm/protocol/openid-connect/certs;
+      }
+
+      location = /coffee {
+          auth_oidc keycloak;
+
+          proxy_pass http://default_coffee_80$request_uri;
+      }
+    }
+}
+```
+
+How it works:
+
+1. Similar to JWT auth, we have a `map` that will evaluate a claim. In this case it's `$oidc_claim_sub` to validate the subject (`sub`) claim.
+2. The location `/oidc_auth` has both `auth_oidc` and `auth_jwt` directives. Both are needed as the NGINX OIDC module itself can not evaluate JWT token claims.
+3. The `auth_jwt` directive is set up like this: `auth_jwt "" token=$oidc_id_token;`. This allows the module to obtain the user's JWT through the `$oidc_id_token` variable, which is populated by the OIDC module. This avoids the user needing to pass a bearer token through the `Authorization` header. Also, the realm can be any value. In this case it's an empty string.
+4. The `auth_jwt_key_request` directive is used to call an internal location `/_jwks_keycloak`. This works the same as `JWT` auth in `Remote` mode, where we fetch the public JWKS from the identity provider (IdP).
+5. Lastly, the `auth_jwt_require` directive evaluates the result from the map, informing the user if they are authorized or not.
+
+If we wanted to view the claims for a specific client, we can access this with the `userinfo` endpoint.
+This is an example of a claim this endpoint might return:
+
+```json
+{
+  "sub":"bed7e82b-8143-476c-adf8-4c561260b60e",
+  "email_verified":true,
+  "name":"Test User",
+  "preferred_username":"testuser",
+  "given_name":"Test",
+  "family_name":"User",
+  "email":"testuser@example.com"
+}
+```
+
+This configuration will enforce some of these claims to be required for a user to be authorized:
+
+```yaml
+apiVersion: gateway.nginx.org/v1alpha1
+kind: AuthenticationFilter
+metadata:
+  name: oidc-coffee
+spec:
+  type: OIDC
+  oidc:
+    issuer: "https://keycloak.example.com/realms/my-realm"
+    clientID: nginx-gateway
+    clientSecret:
+      name: oidc-client-secret
+    caCertificateRefs:
+      - name: oidc-ca-cert
+    require:
+    - sub: "bed7e82b-8143-476c-adf8-4c561260b60e"
+      claims:
+      - name: "email_verified"
+        values:
+        - "true"
+      - name: "email"
+        values:
+         - "testuser@example.com"
+```
+
 ### Understanding Certificate Revocation List
 
 A Certificate Revocation List (CRL) is a list of certificate serial numbers that a Certificate Authority (CA) has revoked before their expiration. When NGINX connects to the OpenID Provider over TLS, it checks the provider's certificate serial number against the CRL — if found, the connection is rejected. The CRL must be stored in a Secret with the key ca.crl in PEM format. Unlike CA certificates which rarely change, CRLs are updated frequently as certificates get revoked, which is why `certificateRevocationList` is a separate field from `caCertificateRefs` which allows users to update the CRL independently. Users are responsible for keeping the CRL Secret current. Stale CRLs may fail to detect recently revoked certificates. An alternative approach is OCSP (Online Certificate Status Protocol) stapling, which verifies revocation status in real-time rather than relying on periodically updated lists. This is noted as future work.
 
-
 ### Error Handling
 
-1. The OpenID Provider is down - When the OpenID provider is unreachable during initial authentication, NGINX returns a 302 redirect to the OpenID provider's authorization endpoint. The connection failure occurs client-side when the browser attempts to reach the OpenID provider, resulting in a "connection refused" error. NGINX does not validate OpenID providers availability before issuing the redirect.
+1. The OpenID Provider is down - When the OpenID provider is unreachable during initial authentication, NGINX returns a 302 redirect to the OpenID provider's authorization endpoint. The connection failure occurs client-side when the browser attempts to reach the OpenID provider, resulting in a "connection refused" error. NGINX does not validate OpenID provider's availability before issuing the redirect.
 2. If the referenced `clientSecret` or `caCertificateRefs` resources don't exist, the AuthenticationFilter should not report an error condition and the route should not be programmed.
-3. If the `client-secret` is incorrect for OpenID provider, the redirect to the provider succeeds but the redirect back to NGINX fails and the error is reflected in logs as `token error: unauthorized_client: Invalid client or Invalid client credentials while sending to client`
+3. If the `client-secret` is incorrect for the OpenID provider, the redirect to the provider succeeds but the redirect back to NGINX fails and the error is reflected in logs as `token error: unauthorized_client: Invalid client or Invalid client credentials while sending to client`
 4. If the OIDC authentication filter is attached to a Route with a non-HTTPS listener, it should not be `Accepted`.
 
 ## Use Cases

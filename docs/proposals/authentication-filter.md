@@ -79,7 +79,6 @@ This portion also contains:
       - Understanding claim enforcement
       - Processing claims
       - Processing nested claims
-      - Claim validation for OIDC
     - JWT Authentication Capabilities
 - Route Attachment
 - Resource status
@@ -217,23 +216,6 @@ type JWTAuth struct {
   // Require defines a list of required claim sets for JWT claim validation.
   // The token is authorized if it satisfies all claims in at least one entry.
   // Claims within each entry are concatenated and validated together using NGINX maps.
-  //
-  // Example: given two entries, NGF generates a combined map per entry:
-  //
-  //
-  //  map $jwt_claim_iss+$jwt_aud+$jwt_claim_sub $valid_jwt_combination_0_0 {
-  //      ~^https://issuer\.example\.com\+api\+user-12345$ 1;
-  //      default 0;
-  //  }
-  //  map $jwt_claim_iss+$jwt_aud+$jwt_claim_sub $valid_jwt_combination_0_1 {
-  //      ~^https://issuer\.example-2\.com\+cli\+user-678910$ 1;
-  //      default 0;
-  //  }
-  //
-  //  auth_jwt_claim_set $jwt_aud aud;
-  //
-  //  auth_jwt_require $valid_jwt_combination_0_0;
-  //  auth_jwt_require $valid_jwt_combination_0_1;
   //
   // +optional
   // +kubebuilder:validation:MinItems=1
@@ -898,8 +880,7 @@ In this case, we use `auth_jwt_require $valid_jwt_iss` to validate the value ret
 
 This section covers the proposed specification for JWT claim processing, as well as for processing user defined claims.
 Claims can be defined for both `JWT` and `OIDC` auth types.
-Most of the example NGINX config will demonstrate how this works for `JWT` auth.
-There will be a section covering the specific NGINX configuration for claim validation with `OIDC`.
+To understand how claim validation works for OIDC auth in NGINX, see the [Claim validation](oidc.md#claim-validation) section of the OIDC auth proposal.
 
 ```yaml
 apiVersion: gateway.nginx.org/v1alpha1
@@ -920,7 +901,8 @@ spec:
       sub: "user-12345"
       claims: # User defined claim.
       - name: "tenant"
-        value: "acme-co"
+        values:
+        - "acme-co"
     - iss: "https://issuer.example-2.com"
       aud: "cli|ops" # Match either or.
       sub: "user-678910"
@@ -1049,7 +1031,8 @@ spec:
         - "reader"
         - "admin"
       - name: "email"
-        value: "user@example.com"
+        values:
+        - "user@example.com"
 ```
 
 To process the nested claim, the names of both the top-level and nested claim are specified as one string separated by a slash `/`.
@@ -1070,109 +1053,6 @@ auth_jwt_claim_set $email email;
 This will set the value of `$roles` to `["reader", "admin"]`, and the value of `$email` to `user@example.com`.
 Since the email contains a dot, this needs to be processed the same way.
 
-#### Claim validation for OIDC
-
-The NGINX OIDC module does not have a directive similar to `auth_jwt_require`, to allow it to enforce claim validation.
-We'll start with an example NGINX configuration, and then break down each component and example why they are necessary.
-
-```nginx
-http {
-
-  # OIDC Provider
-  oidc_provider default_oidc-coffee {
-    issuer https://keycloak.default.svc.cluster.local:8443/realms/nginx-gateway;
-    client_id nginx-gateway-coffee;
-    client_secret oidc-coffee-client-secret;
-    redirect_uri /oidc_callback_default_oidc-coffee;
-    ssl_trusted_certificate /etc/nginx/secrets/cert_bundle_default_keycloak-secret.crt;
-  }
-
-  # Map to evaluate user authorization
-  map $oidc_claim_sub $oidc_valid_combination {
-      ~^bed7e82b-8143-476c-adf8-4c561260b60e$ 1;
-      default 0;
-  }
-
-  server {
-    listen 443 ssl;
-    server_name cafe.example.com;
-    ssl_certificate /etc/nginx/secrets/tls.crt;
-    ssl_certificate_key /etc/nginx/secrets/tls.key;
-
-    location /oidc_auth {
-        auth_oidc default_oidc-coffee; # Enable OIDC auth
-        auth_jwt "" token=$oidc_id_token; # Enable JWT auth module
-        auth_jwt_key_request /_jwks_keycloak; # Internal request to IdP JWKS
-
-        # Authorize based on response from map.
-        auth_jwt_require $oidc_valid_combination;
-
-        proxy_pass http://nginx-hello-backend;
-    }
-
-    # Internal location for IdP JWKS
-    location = /_jwks_keycloak {
-        internal;
-        proxy_pass https://keycloak.default.svc.cluster.local:8443/realms/nginx-gateway/protocol/openid-connect/certs;
-    }
-  }
-}
-```
-
-To make things easier to understand, I won't be explaining the specifics of OIDC. We'll focus on the components necessary for claim validation to work.
-
-1. Similar to JWT auth, we have a `map` that will evaluate a claim. In this case it's `$oidc_claim_sub` to validate the subject (`sub`) claim.
-2. The location `/oidc_auth` has both `auth_oidc` and `auth_jwt` directives. Both are needed as the NGINX OIDC module itself can not evaluate JWT token claims.
-3. The `auth_jwt` directive is set up like this: `auth_jwt "" token=$oidc_id_token;`. This allows the module to obtain the user's JWT through the `$oidc_id_token` variable, which is populated by the OIDC module. This avoids the user needing to pass a bearer token through the `Authorization` header like we've done previously. Also, the realm can be any value. In this case it's an empty string.
-4. The `auth_jwt_key_request` directive is used to call an internal location `/_jwks_keycloak`. This works the same as `JWT` auth in `Remote` mode, where we fetch the public JWKS from the identity provider (IdP).
-5. Lastly, the `auth_jwt_require` directive evaluates the result from the map, informing the user if they are authorized or not.
-
-Using Keycloak as our example, if we wanted to view the claims for a specific client, we can access the `userinfo` endpoint.
-This is an example of what a user's claim might look like:
-
-```json
-{
-  "sub":"bed7e82b-8143-476c-adf8-4c561260b60e",
-  "email_verified":true,
-  "name":"Test User",
-  "preferred_username":"testuser",
-  "given_name":"Test",
-  "family_name":"User",
-  "email":"testuser@example.com"
-}
-```
-
-NOTE: While this document shows the `RequiredClaims` struct in the context of `JWTAuth` in the GoLang API. This same struct will need to be referenced by `OIDCAuth` struct.
-
-Below is an example spec for `RequiredClaims` for `OIDCAuth`:
-
-```yaml
-apiVersion: gateway.nginx.org/v1alpha1
-kind: AuthenticationFilter
-metadata:
-  name: oidc-coffee
-spec:
-  type: OIDC
-  oidc:
-    clientSecretRef:
-      name: keycloak-secret
-    clientID: nginx-gateway-coffee
-    issuer: https://keycloak.default.svc.cluster.local:8443/realms/nginx-gateway
-    caCertificateRefs:
-      - name: keycloak-secret
-    require:
-    - sub: "bed7e82b-8143-476c-adf8-4c561260b60e"
-      claims:
-      - name: "email_verified"
-        values:
-        - "true"
-      - name: "email"
-        values:
-         - "testuser@example.com"
-```
-
-This setup uses our [OIDC configuration document](https://docs.nginx.com/nginx-gateway-fabric/traffic-security/oidc-authentication/) for the configuration examples.
-
 ### JWT Authentication Capabilities
 
 The table below summarizes the capabilities enabled by the current JWT Authentication proposal.
@@ -1189,7 +1069,7 @@ The table below summarizes the capabilities enabled by the current JWT Authentic
 | Require exact-match issuer (`iss`) value | `spec.jwt.require[].iss: string` | Included in combined NGINX map per require entry | Single issuer value per require entry; validated as part of the combined claim map |
 | Require exact-match audience (`aud`) values | `spec.jwt.require[].aud[]: []string` | `auth_jwt_claim_set $jwt_aud aud`; included in combined NGINX map | When defined as an array of claims, NGINX parses them as a comma-separated string; all values must match in exact order |
 | Require exact-match subject (`sub`) value | `spec.jwt.require[].sub: string` | Included in combined NGINX map per require entry | Single subject value per require entry; validated as part of the combined claim map |
-| Require exact-match custom claim values | `spec.jwt.require.claims[]`: `{ name, value \| values }` | For flat claims: `map $jwt_claim_<name> $valid_<name> { ... }`; `auth_jwt_require $valid_<name>` | Exactly one of `value` or `values` must be set and non-empty; enforces presence and allowed values. When defined, these values are also added to the combined NGINX map |
+| Require exact-match custom claim values | `spec.jwt.require.claims[]`: `{ name, values }` | For flat claims: `map $jwt_claim_<name> $valid_<name> { ... }`; `auth_jwt_require $valid_<name>` | `values` must be set and non-empty. When defined, these values are also added to the combined NGINX map |
 | Require exact-match nested/dotted custom claims | `spec.jwt.require.claims[].name` accepts path like `parent/child` | `auth_jwt_claim_set $var parent child`; `map $var $valid_var { ... }`; `auth_jwt_require $valid_var` | Use `auth_jwt_claim_set` for nested or dotted claims; slash-separated path identifies nested segments |
 
 
