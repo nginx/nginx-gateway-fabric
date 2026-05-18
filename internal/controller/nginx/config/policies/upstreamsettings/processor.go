@@ -77,8 +77,8 @@ func processPolicies(pols []policies.Policy) UpstreamSettings {
 			upstreamSettings.HashMethodKey = string(*usp.Spec.HashMethodKey)
 		}
 
-		if usp.Spec.UseClusterIP != nil && *usp.Spec.UseClusterIP {
-			upstreamSettings.UseClusterIP = true
+		if usp.Spec.UseClusterIP != nil {
+			upstreamSettings.UseClusterIP = *usp.Spec.UseClusterIP
 		}
 	}
 
