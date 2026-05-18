@@ -262,6 +262,34 @@ nginxGateway:
     #     target:
     #       type: AverageValue
     #       averageValue: "400Mi"
+
+  # -- PodDisruptionBudget configuration for the NGINX Gateway Fabric control plane.
+  podDisruptionBudget:
+    # -- Enable or disable PodDisruptionBudget for the control plane.
+    enable: false
+    # @schema
+    # anyOf:
+    #   - type: integer
+    #   - type: string
+    # @schema
+    # -- Minimum number of pods that must be available after an eviction. Value can be an absolute number (e.g. 1) or a percentage (e.g. 50%). Mutually exclusive with maxUnavailable.
+    minAvailable: ""
+    # @schema
+    # anyOf:
+    #   - type: integer
+    #   - type: string
+    # @schema
+    # -- Maximum number of pods that can be unavailable after an eviction. Value can be an absolute number (e.g. 1) or a percentage (e.g. 50%). Mutually exclusive with minAvailable.
+    maxUnavailable: ""
+    # @schema
+    # enum:
+    #   - ""
+    #   - IfHealthyBudget
+    #   - AlwaysAllow
+    # @schema
+    # -- Defines when unhealthy pods should be considered for eviction. Valid values are IfHealthyBudget and AlwaysAllow.
+    unhealthyPodEvictionPolicy: ""
+
   metrics:
     # -- Enable exposing metrics in the Prometheus format.
     enable: true

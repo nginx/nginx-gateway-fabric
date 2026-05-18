@@ -1,0 +1,27 @@
+{{- if and (eq .Values.nginxGateway.kind "deployment") .Values.nginxGateway.podDisruptionBudget.enable -}}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  labels:
+    {{- include "nginx-gateway.labels" . | nindent 4 }}
+    {{- with .Values.nginxGateway.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  name: {{ include "nginx-gateway.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "nginx-gateway.selectorLabels" . | nindent 6 }}
+  {{- with .Values.nginxGateway.podDisruptionBudget }}
+  {{- if .minAvailable }}
+  minAvailable: {{ .minAvailable }}
+  {{- end }}
+  {{- if .maxUnavailable }}
+  maxUnavailable: {{ .maxUnavailable }}
+  {{- end }}
+  {{- if .unhealthyPodEvictionPolicy }}
+  unhealthyPodEvictionPolicy: {{ .unhealthyPodEvictionPolicy }}
+  {{- end }}
+  {{- end }}
+{{- end }}

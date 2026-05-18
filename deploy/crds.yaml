@@ -9488,6 +9488,37 @@ spec:
                               type: object
                             type: array
                         type: object
+                      podDisruptionBudget:
+                        description: |-
+                          PodDisruptionBudget is the configuration for a PodDisruptionBudget.
+                          A PodDisruptionBudget is created when this field is set.
+                        properties:
+                          maxUnavailable:
+                            anyOf:
+                            - type: integer
+                            - type: string
+                            description: |-
+                              MaxUnavailable is the maximum number of pods that can be unavailable after an eviction.
+                              Value can be an absolute number (e.g. 1) or a percentage of desired pods (e.g. 50%).
+                            x-kubernetes-int-or-string: true
+                          minAvailable:
+                            anyOf:
+                            - type: integer
+                            - type: string
+                            description: |-
+                              MinAvailable is the minimum number of pods that must be available after an eviction.
+                              Value can be an absolute number (e.g. 1) or a percentage of desired pods (e.g. 50%).
+                            x-kubernetes-int-or-string: true
+                          unhealthyPodEvictionPolicy:
+                            description: |-
+                              UnhealthyPodEvictionPolicy defines when unhealthy pods should be considered for eviction.
+                              Valid values are IfHealthyBudget and AlwaysAllow.
+                              Defaults to IfHealthyBudget if not set.
+                            enum:
+                            - IfHealthyBudget
+                            - AlwaysAllow
+                            type: string
+                        type: object
                       replicas:
                         description: Number of desired Pods.
                         format: int32
