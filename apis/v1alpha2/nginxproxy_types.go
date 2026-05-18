@@ -888,12 +888,8 @@ type ServiceSpec struct {
 	ServiceType *ServiceType `json:"type,omitempty"`
 
 	// ExternalTrafficPolicy describes how nodes distribute service traffic they
-	// receive on one of the Service's "externally-facing" addresses (NodePorts and LoadBalancer IPs).
-	// Note: Kubernetes is deprecating Service.spec.externalIPs. NGF does not set
-	// Service.spec.externalIPs; when a Gateway contains IP addresses in `spec.addresses`
-	// and the backing Service is a LoadBalancer, NGF will prefer setting
-	// `service.spec.loadBalancerClass` (if unset by the user) and will patch
-	// `service.status.loadBalancer.ingress` with the Gateway addresses instead.
+	// receive on one of the Service's "externally-facing" addresses (NodePorts, ExternalIPs,
+	// and LoadBalancer IPs).
 	//
 	// +optional
 	// +kubebuilder:default=Local
@@ -949,12 +945,8 @@ const (
 )
 
 // ExternalTrafficPolicy describes how nodes distribute service traffic they
-// receive on one of the Service's "externally-facing" addresses (NodePorts and LoadBalancer IPs).
-// Note: Kubernetes is deprecating Service.spec.externalIPs. NGF does not set
-// Service.spec.externalIPs; when a Gateway contains IP addresses in `spec.addresses`
-// and the backing Service is a LoadBalancer, NGF will prefer setting
-// `service.spec.loadBalancerClass` (if unset by the user) and will patch
-// `service.status.loadBalancer.ingress` with the Gateway addresses instead.
+// receive on one of the Service's "externally-facing" addresses (NodePorts, ExternalIPs,
+// and LoadBalancer IPs).
 // +kubebuilder:validation:Enum=Cluster;Local
 type ExternalTrafficPolicy corev1.ServiceExternalTrafficPolicy
 

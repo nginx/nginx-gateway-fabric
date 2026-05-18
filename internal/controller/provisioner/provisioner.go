@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"reflect"
 	"slices"
 	"strings"
@@ -248,22 +249,19 @@ func (p *NginxProvisioner) patchServiceStatus(ctx context.Context, namespace, na
 		return nil
 	}
 
-	// Build unique ingress list preserving order
-	seen := make(map[string]struct{})
-	ingress := make([]corev1.LoadBalancerIngress, 0, len(ips))
-	for _, ip := range ips {
-		if ip == "" {
-			continue
-		}
-		if _, ok := seen[ip]; ok {
-			continue
-		}
-		seen[ip] = struct{}{}
-		ingress = append(ingress, corev1.LoadBalancerIngress{IP: ip})
-	}
+	// Build a map of existing ingress entries
+	ingress := createUniqueIngressList(svc, ips)
 
-	// If the status already matches, nothing to do
-	if reflect.DeepEqual(svc.Status.LoadBalancer.Ingress, ingress) {
+	// If the desired IPs already match the existing IPs (order-sensitive), nothing to do.
+	existingIPs := make([]string, 0, len(svc.Status.LoadBalancer.Ingress))
+	for _, ing := range svc.Status.LoadBalancer.Ingress {
+		existingIPs = append(existingIPs, ing.IP)
+	}
+	desiredIPs := make([]string, 0, len(ingress))
+	for _, ing := range ingress {
+		desiredIPs = append(desiredIPs, ing.IP)
+	}
+	if slices.Equal(existingIPs, desiredIPs) {
 		return nil
 	}
 
@@ -297,6 +295,34 @@ func (p *NginxProvisioner) patchServiceStatus(ctx context.Context, namespace, na
 	}
 
 	return nil
+}
+
+// createUniqueIngressList takes the existing Service and the desired list of IPs,
+// and returns a list of LoadBalancerIngress.
+func createUniqueIngressList(svc *corev1.Service, ips []string) []corev1.LoadBalancerIngress {
+	existingByIP := make(map[string]corev1.LoadBalancerIngress, len(svc.Status.LoadBalancer.Ingress))
+	for _, ing := range svc.Status.LoadBalancer.Ingress {
+		existingByIP[ing.IP] = ing
+	}
+
+	// Build unique ingress list preserving order and any existing fields.
+	seen := make(map[string]struct{})
+	ingress := make([]corev1.LoadBalancerIngress, 0, len(ips))
+	for _, ip := range ips {
+		if ip == "" || net.ParseIP(ip) == nil {
+			continue
+		}
+		if _, ok := seen[ip]; ok {
+			continue
+		}
+		seen[ip] = struct{}{}
+		if existing, ok := existingByIP[ip]; ok {
+			ingress = append(ingress, existing)
+		} else {
+			ingress = append(ingress, corev1.LoadBalancerIngress{IP: ip})
+		}
+	}
+	return ingress
 }
 
 // minimalObjectFactory is a map of constructors for creating minimal objects with only name and namespace set.
@@ -390,23 +416,11 @@ func (p *NginxProvisioner) provisionNginx(
 				if upsertErr != nil {
 					if apierrors.IsInvalid(upsertErr) { // log this error at the error level
 						// spec.loadBalancerClass is immutable in Kubernetes; it cannot be changed after
-						// a Service is created. Delete the Service so the next retry creates it fresh
-						// with the correct value.
+						// a Service is created. We cannot delete and recreate the Service because that
+						// would release and re-allocate the external IP, breaking DNS for users.
+						// Return the error to stop retrying; the outer handler will log and surface it.
 						if _, ok := obj.(*corev1.Service); ok && isLoadBalancerClassImmutabilityErr(upsertErr) {
-							p.cfg.Logger.Info(
-								"Deleting Service to apply LoadBalancerClass change (immutable field requires recreate)",
-								"namespace", gateway.GetNamespace(),
-								"name", resourceName,
-							)
-							if deleteErr := p.k8sClient.Delete(ctx, minimalObj); deleteErr != nil && !apierrors.IsNotFound(deleteErr) {
-								p.cfg.Logger.Error(
-									deleteErr,
-									"Failed to delete Service for LoadBalancerClass recreate",
-									"namespace", gateway.GetNamespace(),
-									"name", resourceName,
-								)
-							}
-							return false, nil
+							return false, upsertErr
 						}
 						p.cfg.Logger.Error(
 							upsertErr,
@@ -467,23 +481,6 @@ func (p *NginxProvisioner) provisionNginx(
 			}
 		}
 
-		if res != controllerutil.OperationResultCreated && res != controllerutil.OperationResultUpdated {
-			p.cfg.Logger.V(1).Info(
-				"nginx resource already up to date with this result: "+string(res),
-				"namespace", gateway.GetNamespace(),
-				"name", fmt.Sprintf("%s (%s)", resourceName, reflect.TypeOf(minimalObj).Elem().Name()),
-			)
-			continue
-		}
-
-		result := cases.Title(language.English, cases.Compact).String(string(res))
-		p.cfg.Logger.V(1).Info(
-			fmt.Sprintf("%s nginx %s", result, reflect.TypeOf(minimalObj).Elem().Name()),
-			"namespace", gateway.GetNamespace(),
-			"name", resourceName,
-		)
-		p.store.registerResourceInGatewayConfig(client.ObjectKeyFromObject(gateway), minimalObj)
-
 		// If this is a Service and the Gateway has IP-type addresses, patch its status.loadBalancer.ingress
 		if svc, ok := minimalObj.(*corev1.Service); ok {
 			if svc.Spec.Type == corev1.ServiceTypeLoadBalancer {
@@ -504,6 +501,23 @@ func (p *NginxProvisioner) provisionNginx(
 				}
 			}
 		}
+
+		if res != controllerutil.OperationResultCreated && res != controllerutil.OperationResultUpdated {
+			p.cfg.Logger.V(1).Info(
+				"nginx resource already up to date with this result: "+string(res),
+				"namespace", gateway.GetNamespace(),
+				"name", fmt.Sprintf("%s (%s)", resourceName, reflect.TypeOf(minimalObj).Elem().Name()),
+			)
+			continue
+		}
+
+		result := cases.Title(language.English, cases.Compact).String(string(res))
+		p.cfg.Logger.V(1).Info(
+			fmt.Sprintf("%s nginx %s", result, reflect.TypeOf(minimalObj).Elem().Name()),
+			"namespace", gateway.GetNamespace(),
+			"name", resourceName,
+		)
+		p.store.registerResourceInGatewayConfig(client.ObjectKeyFromObject(gateway), minimalObj)
 	}
 
 	// if agent configmap was updated, then we'll need to restart the deployment/daemonset

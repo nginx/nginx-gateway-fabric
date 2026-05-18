@@ -682,7 +682,7 @@ func TestNonLeaderProvisioner(t *testing.T) {
 	g.Expect(deploymentStore.RemoveCallCount()).To(Equal(1))
 }
 
-func TestProvisionNginxRecreatesServiceOnLBClassImmutabilityError(t *testing.T) {
+func TestProvisionNginxOnLBClassImmutabilityError(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
@@ -726,19 +726,8 @@ func TestProvisionNginxRecreatesServiceOnLBClassImmutabilityError(t *testing.T) 
 	}
 
 	err := provisioner.provisionNginx(t.Context(), "gw-nginx", gateway, []client.Object{desiredSvc})
-	g.Expect(err).ToNot(HaveOccurred())
-
-	// The Service should have been deleted and recreated with the correct LoadBalancerClass.
-	got := &corev1.Service{}
-	g.Expect(fakeClient.Get(
-		t.Context(),
-		types.NamespacedName{Name: "gw-nginx", Namespace: "default"},
-		got,
-	)).To(Succeed())
-	g.Expect(got.Spec.LoadBalancerClass).ToNot(BeNil())
-	g.Expect(*got.Spec.LoadBalancerClass).To(Equal(lbClass))
-
-	// One failed Update attempt should have occurred before the delete+recreate.
+	g.Expect(err).To(HaveOccurred())
+	// Should not retry when its a LBClass immutability error
 	g.Expect(wrappedClient.svcUpdateAttempts).To(Equal(1))
 }
 

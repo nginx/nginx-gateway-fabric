@@ -159,13 +159,13 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 		ports = appendUniquePortProtoEntry(ports, portProtoEntry{Port: healthcheckPort, Protocol: corev1.ProtocolTCP})
 	}
 
-	service, err := buildNginxService(
+	service, err := p.buildNginxService(
 		cloneObjectMeta(objectMeta),
 		nProxyCfg,
 		ports,
 		healthcheckPort,
 		selectorLabels,
-		gateway.Spec.Addresses,
+		gateway,
 	)
 	if err != nil {
 		errs = append(errs, err)
@@ -173,8 +173,6 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 	if err := p.setOwnerReference(service, gateway); err != nil {
 		errs = append(errs, fmt.Errorf("failed to set owner reference on Service %s: %w", service.GetName(), err))
 	}
-
-	p.updateLoadBalancerClass(service, gateway, nProxyCfg)
 
 	// build deployment/daemonset
 	deployment, err := p.buildNginxDeployment(
@@ -223,43 +221,6 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 	}
 
 	return objects, errors.Join(errs...)
-}
-
-// updateLoadBalancerClass updates the Service's LoadBalancerClass to this controller
-// if the Gateway declares IP addresses and the Service is a LoadBalancer,
-// but only if the user has not already provided a LoadBalancerClass in the EffectiveNginxProxy config.
-func (p *NginxProvisioner) updateLoadBalancerClass(
-	service *corev1.Service,
-	gateway *gatewayv1.Gateway,
-	nProxyCfg *graph.EffectiveNginxProxy,
-) {
-	if service != nil {
-		// collect IP addresses from Gateway spec.addresses
-		var gwExternalIPs []string
-		for _, addr := range gateway.Spec.Addresses {
-			if addr.Type != nil && *addr.Type == gatewayv1.IPAddressType {
-				gwExternalIPs = append(gwExternalIPs, addr.Value)
-			}
-		}
-		if service.Spec.Type == corev1.ServiceTypeLoadBalancer && len(gwExternalIPs) > 0 {
-			// If user did not set a LoadBalancerClass in the NginxProxy ServiceSpec, set ours.
-			if nProxyCfg == nil ||
-				nProxyCfg.Kubernetes == nil ||
-				nProxyCfg.Kubernetes.Service == nil ||
-				nProxyCfg.Kubernetes.Service.LoadBalancerClass == nil {
-				if p.cfg.GatewayCtlrName != "" {
-					ctlr := p.cfg.GatewayCtlrName
-					service.Spec.LoadBalancerClass = &ctlr
-				}
-			} else {
-				p.cfg.Logger.Info(
-					"gateway has spec.addresses but Service LoadBalancerClass is user-provided; not overriding",
-					"gateway", fmt.Sprintf("%s/%s", gateway.GetNamespace(), gateway.GetName()),
-					"loadBalancerClass", *nProxyCfg.Kubernetes.Service.LoadBalancerClass,
-				)
-			}
-		}
-	}
 }
 
 // buildResourceNames builds all the resource names for a given gateway resource name.
@@ -696,13 +657,13 @@ func (p *NginxProvisioner) buildOpenshiftObjects(
 	return []client.Object{role, roleBinding}, errs
 }
 
-func buildNginxService(
+func (p *NginxProvisioner) buildNginxService(
 	objectMeta metav1.ObjectMeta,
 	nProxyCfg *graph.EffectiveNginxProxy,
 	ports []portProtoEntry,
 	healthcheckPort int32,
 	selectorLabels map[string]string,
-	addresses []gatewayv1.GatewaySpecAddress,
+	gateway *gatewayv1.Gateway,
 ) (*corev1.Service, error) {
 	var serviceCfg ngfAPIv1alpha2.ServiceSpec
 	if nProxyCfg != nil && nProxyCfg.Kubernetes != nil && nProxyCfg.Kubernetes.Service != nil {
@@ -714,9 +675,8 @@ func buildNginxService(
 		serviceType = corev1.ServiceType(*serviceCfg.ServiceType)
 	}
 
-	// collect IP addresses from Gateway spec.addresses (but do not assign to Service.Spec.ExternalIPs)
 	var gwExternalIPs []string
-	for _, addr := range addresses {
+	for _, addr := range gateway.Spec.Addresses {
 		if addr.Type != nil && *addr.Type == gatewayv1.IPAddressType {
 			gwExternalIPs = append(gwExternalIPs, addr.Value)
 		}
@@ -747,14 +707,41 @@ func buildNginxService(
 
 	setSvcLoadBalancerSettings(serviceCfg, &svc.Spec)
 
-	// Apply service patches
+	// Apply service patches before the LoadBalancerClass check so that a patch-provided
+	// class is visible when we decide whether to set our own.
 	if nProxyCfg != nil && nProxyCfg.Kubernetes != nil && nProxyCfg.Kubernetes.Service != nil {
 		if err := applyPatches(svc, nProxyCfg.Kubernetes.Service.Patches); err != nil {
 			return svc, fmt.Errorf("failed to apply service patches: %w", err)
 		}
 	}
 
+	p.updateLoadBalancerClass(svc, gwExternalIPs, gateway)
+
 	return svc, nil
+}
+
+// updateLoadBalancerClass sets the Service's LoadBalancerClass to this controller
+// if the Gateway has IP addresses and the Service is a LoadBalancer,
+// but only if the LoadBalancerClass isn't already set by the user.
+func (p *NginxProvisioner) updateLoadBalancerClass(
+	svc *corev1.Service,
+	gwExternalIPs []string,
+	gateway *gatewayv1.Gateway,
+) {
+	if svc.Spec.Type == corev1.ServiceTypeLoadBalancer && len(gwExternalIPs) > 0 {
+		if svc.Spec.LoadBalancerClass == nil {
+			if p.cfg.GatewayCtlrName != "" {
+				ctlr := p.cfg.GatewayCtlrName
+				svc.Spec.LoadBalancerClass = &ctlr
+			}
+		} else {
+			p.cfg.Logger.Info(
+				"gateway has spec.addresses but Service LoadBalancerClass is user-provided; not overriding",
+				"gateway", fmt.Sprintf("%s/%s", gateway.GetNamespace(), gateway.GetName()),
+				"loadBalancerClass", *svc.Spec.LoadBalancerClass,
+			)
+		}
+	}
 }
 
 func buildServicePorts(

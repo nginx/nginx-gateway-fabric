@@ -541,7 +541,6 @@ func (h *eventHandlerImpl) waitForStatusUpdates(ctx context.Context) {
 				item.GatewayService,
 				gw,
 				h.cfg.gatewayClassName,
-				h.cfg.gatewayCtlrName,
 			)
 			if err != nil {
 				msg := "error getting Gateway Service IP address"
@@ -581,7 +580,7 @@ func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph, 
 		return
 	}
 
-	gwAddresses, err := getGatewayAddresses(ctx, h.cfg.k8sClient, nil, gw, h.cfg.gatewayClassName, h.cfg.gatewayCtlrName)
+	gwAddresses, err := getGatewayAddresses(ctx, h.cfg.k8sClient, nil, gw, h.cfg.gatewayClassName)
 	if err != nil {
 		msg := "error getting Gateway Service IP address"
 		h.cfg.logger.Error(err, msg)
@@ -901,7 +900,6 @@ func getGatewayAddresses(
 	svc *v1.Service,
 	gateway *graph.Gateway,
 	gatewayClassName string,
-	gatewayCtlrName string,
 ) ([]gatewayv1.GatewayStatusAddress, error) {
 	if gateway == nil || len(gateway.Listeners) == 0 {
 		return nil, nil
@@ -933,13 +931,12 @@ func getGatewayAddresses(
 		gwSvc = *svc
 	}
 
-	return getGatewayAddressesForStatus(&gwSvc, gateway, gatewayCtlrName), nil
+	return getGatewayAddressesForStatus(&gwSvc, gateway), nil
 }
 
 func getGatewayAddressesForStatus(
 	svc *v1.Service,
 	gateway *graph.Gateway,
-	gatewayCtlrName string,
 ) (gwAddresses []gatewayv1.GatewayStatusAddress) {
 	// Preserve order but deduplicate addresses and hostnames so the Gateway status
 	// does not contain duplicates coming from Service status and Gateway spec.addresses.
@@ -998,34 +995,37 @@ func getGatewayAddressesForStatus(
 		gwAddresses = append(gwAddresses, statusAddr)
 	}
 
-	updateGatewayConditions(gateway, svc, gatewayCtlrName)
+	updateGatewayConditions(gateway, svc)
 
 	return gwAddresses
 }
 
-func updateGatewayConditions(gateway *graph.Gateway, svc *v1.Service, gatewayCtlrName string) {
+func updateGatewayConditions(gateway *graph.Gateway, svc *v1.Service) {
+	var cond *conditions.Condition
+
 	// If the Gateway declares addresses but the backing Service is not a LoadBalancer,
 	// report an unprogrammed condition indicating those addresses cannot be used.
 	if len(gateway.Source.Spec.Addresses) > 0 && svc.Spec.Type != v1.ServiceTypeLoadBalancer {
-		msg := "Gateway.Spec.Addresses is set but the backing Service is not a LoadBalancer; addresses will not be applied"
-		gateway.Conditions = append(gateway.Conditions, conditions.NewGatewayUnusableAddress(msg))
+		msg := "Gateway.Spec.Addresses is set but the backing Service is not a LoadBalancer. " +
+			"Load balancer ingress IPs will not be set."
+		c := conditions.NewGatewayUnusableAddress(msg)
+		cond = &c
 	}
 
-	// If Gateway declares addresses and the Service is a LoadBalancer but the Service
-	// has a user-provided LoadBalancerClass (i.e. not the one NGF sets itself), surface
-	// an unprogrammed condition so users know NGF did not override the class and
-	// addresses may not be applied.
-	if len(gateway.Source.Spec.Addresses) > 0 && svc.Spec.Type == v1.ServiceTypeLoadBalancer {
-		if svc.Spec.LoadBalancerClass != nil &&
-			*svc.Spec.LoadBalancerClass != "" &&
-			*svc.Spec.LoadBalancerClass != gatewayCtlrName {
-			msg := fmt.Sprintf("Gateway.Spec.Addresses present "+
-				"but Service has user-provided LoadBalancerClass %q; NGF will not override it",
-				*svc.Spec.LoadBalancerClass,
-			)
-			gateway.Conditions = append(gateway.Conditions, conditions.NewGatewayUnusableAddress(msg))
+	if cond == nil {
+		return
+	}
+
+	// Upsert the condition by type to avoid duplicate accumulation when the same cached
+	// graph is reused across multiple status updates between graph rebuilds.
+	for i, existing := range gateway.Conditions {
+		if existing.Type == cond.Type {
+			gateway.Conditions[i] = *cond
+			return
 		}
 	}
+
+	gateway.Conditions = append(gateway.Conditions, *cond)
 }
 
 // getDeploymentContext gets the deployment context metadata for N+ reporting.

@@ -1033,7 +1033,7 @@ var _ = Describe("getGatewayAddresses", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 		defer cancel()
 
-		addrs, err := getGatewayAddresses(ctx, fakeClient, nil, gateway, "nginx", "")
+		addrs, err := getGatewayAddresses(ctx, fakeClient, nil, gateway, "nginx")
 		Expect(err).To(HaveOccurred())
 		Expect(addrs).To(BeNil())
 
@@ -1062,7 +1062,7 @@ var _ = Describe("getGatewayAddresses", func() {
 
 		Expect(fakeClient.Create(context.Background(), &svc)).To(Succeed())
 
-		addrs, err = getGatewayAddresses(context.Background(), fakeClient, &svc, gateway, "nginx", "")
+		addrs, err = getGatewayAddresses(context.Background(), fakeClient, &svc, gateway, "nginx")
 		Expect(err).ToNot(HaveOccurred())
 		Expect(addrs).To(HaveLen(4))
 		Expect(addrs[0].Value).To(Equal("34.35.36.37"))
@@ -1085,7 +1085,7 @@ var _ = Describe("getGatewayAddresses", func() {
 
 		Expect(fakeClient.Create(context.Background(), &svc)).To(Succeed())
 
-		addrs, err = getGatewayAddresses(context.Background(), fakeClient, &svc, gateway, "nginx", "")
+		addrs, err = getGatewayAddresses(context.Background(), fakeClient, &svc, gateway, "nginx")
 		Expect(err).ToNot(HaveOccurred())
 		Expect(addrs).To(HaveLen(3))
 		Expect(addrs[0].Value).To(Equal("12.13.14.15"))
@@ -2438,7 +2438,6 @@ func TestFindWAFPolicyKey(t *testing.T) {
 func TestGetGatewayAddressesForStatus(t *testing.T) {
 	t.Parallel()
 
-	lbClass := "custom-class"
 	ngfCtlrName := "gateway.nginx.org/nginx-gateway-controller"
 
 	tests := []struct {
@@ -2476,19 +2475,6 @@ func TestGetGatewayAddressesForStatus(t *testing.T) {
 			expectedReason:         helpers.GetPointer(string(gatewayv1.GatewayReasonAddressNotUsable)),
 		},
 		{
-			name: "LB service with user-provided class adds Programmed=false condition",
-			svc: &v1.Service{
-				Spec:   v1.ServiceSpec{Type: v1.ServiceTypeLoadBalancer, LoadBalancerClass: &lbClass},
-				Status: v1.ServiceStatus{LoadBalancer: v1.LoadBalancerStatus{Ingress: []v1.LoadBalancerIngress{}}},
-			},
-			gwAddresses: []gatewayv1.GatewaySpecAddress{
-				{Type: helpers.GetPointer(gatewayv1.IPAddressType), Value: "1.2.3.5"},
-			},
-			expectedAddrs:          []string{"1.2.3.5"},
-			expectedConditionCount: 1,
-			expectedProgrammed:     conditionStatusPtr(metav1.ConditionFalse),
-		},
-		{
 			name: "LB service with NGF-set class does not add condition",
 			svc: &v1.Service{
 				Spec:   v1.ServiceSpec{Type: v1.ServiceTypeLoadBalancer, LoadBalancerClass: &ngfCtlrName},
@@ -2515,7 +2501,7 @@ func TestGetGatewayAddressesForStatus(t *testing.T) {
 				Conditions: []conditions.Condition{},
 			}
 
-			addrs := getGatewayAddressesForStatus(tt.svc, gw, ngfCtlrName)
+			addrs := getGatewayAddressesForStatus(tt.svc, gw)
 
 			g.Expect(addrs).ToNot(BeNil())
 			g.Expect(addrs).To(HaveLen(len(tt.expectedAddrs)))
