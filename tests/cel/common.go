@@ -99,6 +99,7 @@ const (
 	expectedWAFValidationMutualExclusionError    = "verifyChecksum and expectedChecksum are mutually exclusive"
 	expectedWAFVerifyChecksumHTTPOnlyError       = "policySource.validation.verifyChecksum is only supported for type HTTP"
 	expectedWAFAPPolicyRefIfAndOnlyIfPLMType     = "policySource.apPolicyRef must be set if and only if type is PLM"
+	expectedWAFAPResourceNamePatternError        = `^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$`
 	expectedWAFNIMSourceIfAndOnlyIfNIMType       = "policySource.nimSource must be set if and only if type is NIM"
 	expectedWAFN1CSourceIfAndOnlyIfN1CType       = "policySource.n1cSource must be set if and only if type is N1C"
 	expectedWAFPLMPolicySourceAuthError          = "policySource.auth must not be set when type is PLM"

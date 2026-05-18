@@ -12862,6 +12862,7 @@ spec:
                         description: Name is the name of the APPolicy resource.
                         maxLength: 253
                         minLength: 1
+                        pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
                         type: string
                       namespace:
                         description: |-
@@ -13146,6 +13147,7 @@ spec:
                               description: Name is the name of the APLogConf resource.
                               maxLength: 253
                               minLength: 1
+                              pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
                               type: string
                             namespace:
                               description: |-
