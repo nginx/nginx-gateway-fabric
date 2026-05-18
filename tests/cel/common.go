@@ -109,6 +109,7 @@ const (
 	expectedWAFPLMPolicySourceRetryAttemptsError = "policySource.retryAttempts must not be set to a non-default " +
 		"value when type is PLM"
 	expectedWAFPLMPolicySourceSkipVerifyError = "policySource.insecureSkipVerify must not be true when type is PLM"
+	expectedWAFPLMLogSourceTypeError          = "logSource.apLogConfRef is only allowed when type is PLM"
 	expectedWAFPLMLogSourceAuthError          = "logSource.auth must not be set when logSource.apLogConfRef is used"
 	expectedWAFPLMLogSourceTLSSecretError     = "logSource.tlsSecret must not be set when logSource.apLogConfRef " +
 		"is used"

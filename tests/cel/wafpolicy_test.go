@@ -719,6 +719,25 @@ func TestWAFPolicyLogSourceMutualExclusion(t *testing.T) {
 			},
 		},
 		{
+			name:       "apLogConfRef with non-PLM type is invalid",
+			wantErrors: []string{expectedWAFPLMLogSourceTypeError},
+			spec: ngfAPIv1alpha1.WAFPolicySpec{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
+				Type:       ngfAPIv1alpha1.PolicySourceTypeHTTP,
+				PolicySource: ngfAPIv1alpha1.PolicySource{
+					HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: "https://example.com/policy.tgz"},
+				},
+				SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
+					{
+						LogSource: ngfAPIv1alpha1.LogSource{
+							APLogConfRef: &ngfAPIv1alpha1.APLogConfReference{Name: "my-log-conf"},
+						},
+						Destination: ngfAPIv1alpha1.SecurityLogDestination{Type: ngfAPIv1alpha1.SecurityLogDestinationTypeStderr},
+					},
+				},
+			},
+		},
+		{
 			name:       "both httpSource and defaultProfile set is invalid",
 			wantErrors: []string{expectedWAFLogSourceMutualExclusionError},
 			spec: ngfAPIv1alpha1.WAFPolicySpec{
@@ -931,6 +950,18 @@ func TestWAFPolicyPolicySource(t *testing.T) {
 				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
 				Type:       ngfAPIv1alpha1.PolicySourceTypePLM,
 				PolicySource: ngfAPIv1alpha1.PolicySource{
+					APPolicyRef: &ngfAPIv1alpha1.APPolicyReference{Name: "my-ap-policy"},
+				},
+			},
+		},
+		{
+			name:       "apPolicyRef set with HTTP type is invalid",
+			wantErrors: []string{expectedWAFAPPolicyRefIfAndOnlyIfPLMType},
+			spec: ngfAPIv1alpha1.WAFPolicySpec{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
+				Type:       ngfAPIv1alpha1.PolicySourceTypeHTTP,
+				PolicySource: ngfAPIv1alpha1.PolicySource{
+					HTTPSource:  &ngfAPIv1alpha1.HTTPBundleSource{URL: "https://example.com/policy.tgz"},
 					APPolicyRef: &ngfAPIv1alpha1.APPolicyReference{Name: "my-ap-policy"},
 				},
 			},

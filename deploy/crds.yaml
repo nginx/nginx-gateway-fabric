@@ -13132,7 +13132,7 @@ spec:
                     logSource:
                       description: |-
                         LogSource configures the log profile bundle source for this log entry.
-                        Exactly one of url or defaultProfile must be set.
+                        Exactly one of defaultProfile, httpSource, nimSource, n1cSource, or apLogConfRef must be set.
                       properties:
                         apLogConfRef:
                           description: |-
@@ -13447,7 +13447,8 @@ spec:
                 description: |-
                   Type identifies the source type for the policy bundle.
                   HTTP fetches directly from a URL; NIM uses the NGINX Instance Manager bundles API;
-                  N1C uses the F5 NGINX One Console security policies API.
+                  N1C uses the F5 NGINX One Console security policies API; PLM references an APPolicy
+                  CRD managed by the Policy Lifecycle Manager.
                 enum:
                 - HTTP
                 - NIM

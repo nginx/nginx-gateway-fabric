@@ -10,19 +10,9 @@ import (
 // ParseAPPolicyStatus extracts a typed APPolicyStatus from an unstructured APPolicy object.
 // Returns an error if the status cannot be parsed.
 func ParseAPPolicyStatus(obj *unstructured.Unstructured) (*APPolicyStatus, error) {
-	statusRaw, ok := obj.Object["status"]
-	if !ok {
-		return nil, fmt.Errorf("APPolicy %s/%s has no status", obj.GetNamespace(), obj.GetName())
-	}
-
-	data, err := json.Marshal(statusRaw)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal APPolicy status: %w", err)
-	}
-
 	var status APPolicyStatus
-	if err := json.Unmarshal(data, &status); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal APPolicy status: %w", err)
+	if err := parseStatus(obj, "APPolicy", &status); err != nil {
+		return nil, err
 	}
 
 	return &status, nil
@@ -31,20 +21,32 @@ func ParseAPPolicyStatus(obj *unstructured.Unstructured) (*APPolicyStatus, error
 // ParseAPLogConfStatus extracts a typed APLogConfStatus from an unstructured APLogConf object.
 // Returns an error if the status cannot be parsed.
 func ParseAPLogConfStatus(obj *unstructured.Unstructured) (*APLogConfStatus, error) {
+	var status APLogConfStatus
+	if err := parseStatus(obj, "APLogConf", &status); err != nil {
+		return nil, err
+	}
+
+	return &status, nil
+}
+
+func parseStatus(
+	obj *unstructured.Unstructured,
+	resourceName string,
+	out any,
+) error {
 	statusRaw, ok := obj.Object["status"]
 	if !ok {
-		return nil, fmt.Errorf("APLogConf %s/%s has no status", obj.GetNamespace(), obj.GetName())
+		return fmt.Errorf("%s %s/%s has no status", resourceName, obj.GetNamespace(), obj.GetName())
 	}
 
 	data, err := json.Marshal(statusRaw)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal APLogConf status: %w", err)
+		return fmt.Errorf("failed to marshal %s status: %w", resourceName, err)
 	}
 
-	var status APLogConfStatus
-	if err := json.Unmarshal(data, &status); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal APLogConf status: %w", err)
+	if err := json.Unmarshal(data, out); err != nil {
+		return fmt.Errorf("failed to unmarshal %s status: %w", resourceName, err)
 	}
 
-	return &status, nil
+	return nil
 }

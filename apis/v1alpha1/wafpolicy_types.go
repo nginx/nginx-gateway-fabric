@@ -71,7 +71,8 @@ type WAFPolicySpec struct {
 
 	// Type identifies the source type for the policy bundle.
 	// HTTP fetches directly from a URL; NIM uses the NGINX Instance Manager bundles API;
-	// N1C uses the F5 NGINX One Console security policies API.
+	// N1C uses the F5 NGINX One Console security policies API; PLM references an APPolicy
+	// CRD managed by the Policy Lifecycle Manager.
 	Type PolicySourceType `json:"type"`
 
 	// PolicySource holds all policy bundle fetch configuration.
@@ -437,7 +438,7 @@ const (
 // logSource.n1cSource, or logSource.apLogConfRef must be set.
 type WAFSecurityLog struct {
 	// LogSource configures the log profile bundle source for this log entry.
-	// Exactly one of url or defaultProfile must be set.
+	// Exactly one of defaultProfile, httpSource, nimSource, n1cSource, or apLogConfRef must be set.
 	LogSource LogSource `json:"logSource"`
 
 	// Destination defines where security logs are sent.
