@@ -1,4 +1,4 @@
-package v1alpha1
+package v1
 
 import (
 	"encoding/json"
@@ -34,6 +34,10 @@ func parseStatus(
 	resourceName string,
 	out any,
 ) error {
+	if err := validateTypeMeta(obj, resourceName); err != nil {
+		return err
+	}
+
 	statusRaw, ok := obj.Object["status"]
 	if !ok {
 		return fmt.Errorf("%s %s/%s has no status", resourceName, obj.GetNamespace(), obj.GetName())
@@ -46,6 +50,21 @@ func parseStatus(
 
 	if err := json.Unmarshal(data, out); err != nil {
 		return fmt.Errorf("failed to unmarshal %s status: %w", resourceName, err)
+	}
+
+	return nil
+}
+
+func validateTypeMeta(obj *unstructured.Unstructured, resourceName string) error {
+	expectedAPIVersion := fmt.Sprintf("%s/%s", Group, Version)
+	if obj.GetAPIVersion() != expectedAPIVersion || obj.GetKind() != resourceName {
+		return fmt.Errorf(
+			"expected %s %s, got %s %s",
+			expectedAPIVersion,
+			resourceName,
+			obj.GetAPIVersion(),
+			obj.GetKind(),
+		)
 	}
 
 	return nil

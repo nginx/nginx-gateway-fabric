@@ -1,7 +1,7 @@
-// Package v1alpha1 contains lightweight Go structs for type-safe parsing of PLM-managed
+// Package v1 contains lightweight Go structs for type-safe parsing of PLM-managed
 // APPolicy and APLogConf status sub-resources. These are NOT controller-gen managed CRD types;
 // they exist only for JSON deserialization from unstructured objects.
-package v1alpha1
+package v1
 
 const (
 	// Group is the API group for PLM CRDs.

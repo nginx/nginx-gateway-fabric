@@ -12868,8 +12868,9 @@ spec:
                           Namespace is the namespace of the APPolicy resource.
                           If not set, the namespace of the WAFPolicy is used.
                           Cross-namespace references require a ReferenceGrant.
-                        maxLength: 253
+                        maxLength: 63
                         minLength: 1
+                        pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
                         type: string
                     required:
                     - name
@@ -13151,8 +13152,9 @@ spec:
                                 Namespace is the namespace of the APLogConf resource.
                                 If not set, the namespace of the WAFPolicy is used.
                                 Cross-namespace references require a ReferenceGrant.
-                              maxLength: 253
+                              maxLength: 63
                               minLength: 1
+                              pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
                               type: string
                           required:
                           - name

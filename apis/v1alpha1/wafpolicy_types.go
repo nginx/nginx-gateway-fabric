@@ -372,7 +372,8 @@ type APPolicyReference struct {
 	//
 	// +optional
 	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:MaxLength=253
+	// +kubebuilder:validation:MaxLength=63
+	// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`
 	Namespace *string `json:"namespace,omitempty"`
 
 	// Name is the name of the APPolicy resource.
@@ -390,7 +391,8 @@ type APLogConfReference struct {
 	//
 	// +optional
 	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:MaxLength=253
+	// +kubebuilder:validation:MaxLength=63
+	// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`
 	Namespace *string `json:"namespace,omitempty"`
 
 	// Name is the name of the APLogConf resource.

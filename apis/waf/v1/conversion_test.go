@@ -1,4 +1,4 @@
-package v1alpha1_test
+package v1_test
 
 import (
 	"testing"
@@ -6,23 +6,23 @@ import (
 	. "github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
-	wafv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/waf/v1alpha1"
+	wafv1 "github.com/nginx/nginx-gateway-fabric/v2/apis/waf/v1"
 )
 
 // parseBundleStatusFunc is the common signature for ParseAPPolicyStatus and ParseAPLogConfStatus,
 // projected to only the Bundle field we care about.
-type parseBundleStatusFunc func(obj *unstructured.Unstructured) (*wafv1alpha1.BundleStatus, error)
+type parseBundleStatusFunc func(obj *unstructured.Unstructured) (*wafv1.BundleStatus, error)
 
-func wrapParseAPPolicyStatus(obj *unstructured.Unstructured) (*wafv1alpha1.BundleStatus, error) {
-	s, err := wafv1alpha1.ParseAPPolicyStatus(obj)
+func wrapParseAPPolicyStatus(obj *unstructured.Unstructured) (*wafv1.BundleStatus, error) {
+	s, err := wafv1.ParseAPPolicyStatus(obj)
 	if err != nil {
 		return nil, err
 	}
 	return s.Bundle, nil
 }
 
-func wrapParseAPLogConfStatus(obj *unstructured.Unstructured) (*wafv1alpha1.BundleStatus, error) {
-	s, err := wafv1alpha1.ParseAPLogConfStatus(obj)
+func wrapParseAPLogConfStatus(obj *unstructured.Unstructured) (*wafv1.BundleStatus, error) {
+	s, err := wafv1.ParseAPLogConfStatus(obj)
 	if err != nil {
 		return nil, err
 	}
@@ -62,7 +62,7 @@ func runParseBundleStatusTests(t *testing.T, kind string, parse parseBundleStatu
 
 	tests := []struct {
 		obj       *unstructured.Unstructured
-		expBundle *wafv1alpha1.BundleStatus
+		expBundle *wafv1.BundleStatus
 		name      string
 		expErrMsg string
 		expectErr bool
@@ -78,7 +78,7 @@ func runParseBundleStatusTests(t *testing.T, kind string, parse parseBundleStatu
 					"observedGeneration": int64(3),
 				},
 			}),
-			expBundle: &wafv1alpha1.BundleStatus{
+			expBundle: &wafv1.BundleStatus{
 				State:              "ready",
 				Location:           "s3://bundles/test.tgz",
 				SHA256:             "abc123",
@@ -93,7 +93,7 @@ func runParseBundleStatusTests(t *testing.T, kind string, parse parseBundleStatu
 					"state": "pending",
 				},
 			}),
-			expBundle: &wafv1alpha1.BundleStatus{
+			expBundle: &wafv1.BundleStatus{
 				State: "pending",
 			},
 		},
@@ -109,6 +109,30 @@ func runParseBundleStatusTests(t *testing.T, kind string, parse parseBundleStatu
 			expErrMsg: "has no status",
 		},
 		{
+			name: "wrong kind returns error",
+			obj: makeAPObject(otherKind(kind), map[string]any{
+				"bundle": map[string]any{"state": "ready"},
+			}),
+			expectErr: true,
+			expErrMsg: "expected appprotect.f5.com/v1",
+		},
+		{
+			name: "wrong apiVersion returns error",
+			obj: &unstructured.Unstructured{Object: map[string]any{
+				"apiVersion": "appprotect.f5.com/v1alpha1",
+				"kind":       kind,
+				"metadata": map[string]any{
+					"name":      "test-resource",
+					"namespace": "default",
+				},
+				"status": map[string]any{
+					"bundle": map[string]any{"state": "ready"},
+				},
+			}},
+			expectErr: true,
+			expErrMsg: "expected appprotect.f5.com/v1",
+		},
+		{
 			name: "unknown fields are ignored",
 			obj: makeAPObject(kind, map[string]any{
 				"bundle": map[string]any{
@@ -117,7 +141,7 @@ func runParseBundleStatusTests(t *testing.T, kind string, parse parseBundleStatu
 				},
 				"anotherField": "also-ignored",
 			}),
-			expBundle: &wafv1alpha1.BundleStatus{
+			expBundle: &wafv1.BundleStatus{
 				State: "ready",
 			},
 		},
@@ -138,4 +162,12 @@ func runParseBundleStatusTests(t *testing.T, kind string, parse parseBundleStatu
 			g.Expect(bundle).To(Equal(tt.expBundle))
 		})
 	}
+}
+
+func otherKind(kind string) string {
+	if kind == "APPolicy" {
+		return "APLogConf"
+	}
+
+	return "APPolicy"
 }
