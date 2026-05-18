@@ -1355,11 +1355,10 @@ func buildUpstream(
 	var errMsg string
 
 	var upstreamPolicies []policies.Policy
-	var useClusterIP bool
+	var uspSettings upstreamsettings.UpstreamSettings
 	if graphSvc, exists := referencedServices[br.SvcNsName]; exists {
 		upstreamPolicies = buildPolicies(gateway, graphSvc.Policies)
-		uspSettings := upstreamsettings.Processor{}.Process(upstreamPolicies)
-		useClusterIP = uspSettings.UseClusterIP
+		uspSettings = upstreamsettings.Processor{}.Process(upstreamPolicies)
 	}
 
 	eps, err := resolveUpstreamEndpoints(
@@ -1368,7 +1367,7 @@ func buildUpstream(
 		br,
 		svcResolver,
 		referencedServices,
-		useClusterIP,
+		uspSettings.UseClusterIP,
 	)
 	if err != nil {
 		errMsg = err.Error()
@@ -1392,6 +1391,7 @@ func buildUpstream(
 		Endpoints:          eps,
 		ErrorMsg:           errMsg,
 		Policies:           upstreamPolicies,
+		UpstreamSettings:   uspSettings,
 		SessionPersistence: sp,
 		StateFileKey:       br.BaseServicePortKey(),
 	}
@@ -2132,18 +2132,13 @@ func resolveUpstreamEndpoints(
 	// When UseClusterIP is enabled, route to the Service ClusterIP instead of Pod IPs.
 	if useClusterIP {
 		if clusterIP := getClusterIP(br.SvcNsName, referencedServices); clusterIP != "" {
-			isIPv6 := net.ParseIP(clusterIP) != nil && net.ParseIP(clusterIP).To4() == nil
+			ip := net.ParseIP(clusterIP)
+			isIPv6 := ip != nil && ip.To4() == nil
 			endpoint := resolver.Endpoint{
 				Address: clusterIP,
 				Port:    br.ServicePort.Port,
 				IPv6:    isIPv6,
 			}
-
-			logger.V(1).Info("routing to Service ClusterIP",
-				"service", br.SvcNsName,
-				"clusterIP", clusterIP,
-				"port", br.ServicePort.Port)
-
 			return []resolver.Endpoint{endpoint}, nil
 		}
 	}

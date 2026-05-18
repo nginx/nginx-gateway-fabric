@@ -9,6 +9,7 @@ import (
 
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/upstreamsettings"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/resolver"
 )
@@ -164,6 +165,8 @@ func (l4vs Layer4VirtualServer) NeedsWeightDistribution() bool {
 type Upstream struct {
 	// SessionPersistence holds the session persistence configuration for the upstream.
 	SessionPersistence SessionPersistenceConfig
+	// UpstreamSettings holds the processed settings from UpstreamSettingsPolicy for this upstream.
+	UpstreamSettings upstreamsettings.UpstreamSettings
 	// Name is the name of the Upstream. Will be unique for each service/port combination.
 	Name string
 	// ErrorMsg contains the error message if the Upstream is invalid.
