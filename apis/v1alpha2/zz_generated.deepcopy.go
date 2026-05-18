@@ -453,9 +453,9 @@ func (in *NginxLogging) DeepCopyInto(out *NginxLogging) {
 		*out = new(NginxErrorLogLevel)
 		**out = **in
 	}
-	if in.JSON != nil {
-		in, out := &in.JSON, &out.JSON
-		*out = new(bool)
+	if in.ErrorLogFormat != nil {
+		in, out := &in.ErrorLogFormat, &out.ErrorLogFormat
+		*out = new(NginxErrorLogFormat)
 		**out = **in
 	}
 	if in.AgentLevel != nil {

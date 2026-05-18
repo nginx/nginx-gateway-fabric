@@ -419,12 +419,12 @@ func validateLogging(npCfg *ngfAPIv1alpha2.NginxProxy, plus bool) field.ErrorLis
 			}
 		}
 
-		if logging.JSON != nil && *logging.JSON && !plus {
+		if logging.ErrorLogFormat != nil && *logging.ErrorLogFormat == ngfAPIv1alpha2.NginxErrorLogFormatJSON && !plus {
 			allErrs = append(
 				allErrs,
 				field.Invalid(
-					loggingPath.Child("json"),
-					*logging.JSON,
+					loggingPath.Child("errorLogFormat"),
+					*logging.ErrorLogFormat,
 					"JSON-formatted error logs are only supported with NGINX Plus",
 				),
 			)

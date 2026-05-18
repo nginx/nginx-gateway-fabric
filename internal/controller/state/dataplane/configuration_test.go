@@ -6576,18 +6576,18 @@ func TestBuildLogging(t *testing.T) {
 			expLoggingSettings: Logging{ErrorLevel: "emerg"},
 		},
 		{
-			msg: "JSON true emits JSON access log template when user has not supplied a custom format",
+			msg: "errorLogFormat json emits JSON access log template when user has not supplied a custom format",
 			gw: &graph.Gateway{
 				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
 					Logging: &ngfAPIv1alpha2.NginxLogging{
-						ErrorLevel: helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelInfo),
-						JSON:       helpers.GetPointer(true),
+						ErrorLevel:     helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelInfo),
+						ErrorLogFormat: helpers.GetPointer(ngfAPIv1alpha2.NginxErrorLogFormatJSON),
 					},
 				},
 			},
 			expLoggingSettings: Logging{
-				ErrorLevel: "info",
-				JSON:       true,
+				ErrorLevel:     "info",
+				ErrorLogFormat: "json",
 				AccessLog: &AccessLog{
 					Format: JSONAccessLogFormat,
 					Escape: "json",
@@ -6595,12 +6595,13 @@ func TestBuildLogging(t *testing.T) {
 			},
 		},
 		{
-			msg: "JSON true preserves user-supplied access log format and does not override with JSON access log template",
+			msg: "errorLogFormat json preserves user-supplied access log format and " +
+				"does not override with JSON access log template",
 			gw: &graph.Gateway{
 				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
 					Logging: &ngfAPIv1alpha2.NginxLogging{
-						ErrorLevel: helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelInfo),
-						JSON:       helpers.GetPointer(true),
+						ErrorLevel:     helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelInfo),
+						ErrorLogFormat: helpers.GetPointer(ngfAPIv1alpha2.NginxErrorLogFormatJSON),
 						AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
 							Format: helpers.GetPointer(logFormat),
 						},
@@ -6608,20 +6609,20 @@ func TestBuildLogging(t *testing.T) {
 				},
 			},
 			expLoggingSettings: Logging{
-				ErrorLevel: "info",
-				JSON:       true,
+				ErrorLevel:     "info",
+				ErrorLogFormat: "json",
 				AccessLog: &AccessLog{
 					Format: logFormat,
 				},
 			},
 		},
 		{
-			msg: "JSON true with access log explicitly disabled leaves access log off",
+			msg: "errorLogFormat json with access log explicitly disabled leaves access log off",
 			gw: &graph.Gateway{
 				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
 					Logging: &ngfAPIv1alpha2.NginxLogging{
-						ErrorLevel: helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelInfo),
-						JSON:       helpers.GetPointer(true),
+						ErrorLevel:     helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelInfo),
+						ErrorLogFormat: helpers.GetPointer(ngfAPIv1alpha2.NginxErrorLogFormatJSON),
 						AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
 							Disable: helpers.GetPointer(true),
 						},
@@ -6629,30 +6630,30 @@ func TestBuildLogging(t *testing.T) {
 				},
 			},
 			expLoggingSettings: Logging{
-				ErrorLevel: "info",
-				JSON:       true,
+				ErrorLevel:     "info",
+				ErrorLogFormat: "json",
 				AccessLog: &AccessLog{
 					Disable: true,
 				},
 			},
 		},
 		{
-			msg: "JSON false is propagated to dataplane logging",
+			msg: "errorLogFormat default is propagated to dataplane logging",
 			gw: &graph.Gateway{
 				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
 					Logging: &ngfAPIv1alpha2.NginxLogging{
-						ErrorLevel: helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelInfo),
-						JSON:       helpers.GetPointer(false),
+						ErrorLevel:     helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelInfo),
+						ErrorLogFormat: helpers.GetPointer(ngfAPIv1alpha2.NginxErrorLogFormatDefault),
 					},
 				},
 			},
 			expLoggingSettings: Logging{
-				ErrorLevel: "info",
-				JSON:       false,
+				ErrorLevel:     "info",
+				ErrorLogFormat: "default",
 			},
 		},
 		{
-			msg: "JSON unset leaves dataplane Logging.JSON at zero value",
+			msg: "errorLogFormat unset leaves dataplane Logging.ErrorLogFormat at zero value",
 			gw: &graph.Gateway{
 				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
 					Logging: &ngfAPIv1alpha2.NginxLogging{

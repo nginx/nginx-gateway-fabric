@@ -1753,11 +1753,11 @@ func TestValidateLogging(t *testing.T) {
 			np: &ngfAPIv1alpha2.NginxProxy{
 				Spec: ngfAPIv1alpha2.NginxProxySpec{
 					Logging: &ngfAPIv1alpha2.NginxLogging{
-						JSON: helpers.GetPointer(true),
+						ErrorLogFormat: helpers.GetPointer(ngfAPIv1alpha2.NginxErrorLogFormatJSON),
 					},
 				},
 			},
-			name:           "json true is accepted on NGINX Plus",
+			name:           "errorLogFormat json is accepted on NGINX Plus",
 			plus:           true,
 			errorString:    "",
 			expectErrCount: 0,
@@ -1766,11 +1766,11 @@ func TestValidateLogging(t *testing.T) {
 			np: &ngfAPIv1alpha2.NginxProxy{
 				Spec: ngfAPIv1alpha2.NginxProxySpec{
 					Logging: &ngfAPIv1alpha2.NginxLogging{
-						JSON: helpers.GetPointer(false),
+						ErrorLogFormat: helpers.GetPointer(ngfAPIv1alpha2.NginxErrorLogFormatDefault),
 					},
 				},
 			},
-			name:           "json false is accepted on OSS",
+			name:           "errorLogFormat default is accepted on OSS",
 			plus:           false,
 			errorString:    "",
 			expectErrCount: 0,
@@ -1779,13 +1779,13 @@ func TestValidateLogging(t *testing.T) {
 			np: &ngfAPIv1alpha2.NginxProxy{
 				Spec: ngfAPIv1alpha2.NginxProxySpec{
 					Logging: &ngfAPIv1alpha2.NginxLogging{
-						JSON: helpers.GetPointer(true),
+						ErrorLogFormat: helpers.GetPointer(ngfAPIv1alpha2.NginxErrorLogFormatJSON),
 					},
 				},
 			},
-			name: "json true is rejected on OSS because JSON logs require NGINX Plus",
+			name: "errorLogFormat json is rejected on OSS because JSON logs require NGINX Plus",
 			plus: false,
-			errorString: "spec.logging.json: Invalid value: true:" +
+			errorString: "spec.logging.errorLogFormat: Invalid value: \"json\":" +
 				" JSON-formatted error logs are only supported with NGINX Plus",
 			expectErrCount: 1,
 		},

@@ -122,8 +122,8 @@ func TestExecuteMainConfig_Logging(t *testing.T) {
 			expectJSON:   false,
 		},
 		{
-			name:         "error log appends json keyword when JSON is true",
-			logging:      dataplane.Logging{ErrorLevel: "info", JSON: true},
+			name:         "error log appends json keyword when ErrorLogFormat is json",
+			logging:      dataplane.Logging{ErrorLevel: "info", ErrorLogFormat: "json"},
 			expDirective: "error_log stderr info json;",
 			expectJSON:   true,
 		},

@@ -1969,8 +1969,8 @@ func buildLogging(gateway *graph.Gateway) Logging {
 			logSettings.ErrorLevel = string(*ngfProxy.Logging.ErrorLevel)
 		}
 
-		if ngfProxy.Logging.JSON != nil {
-			logSettings.JSON = *ngfProxy.Logging.JSON
+		if ngfProxy.Logging.ErrorLogFormat != nil {
+			logSettings.ErrorLogFormat = string(*ngfProxy.Logging.ErrorLogFormat)
 		}
 
 		srcLogSettings := ngfProxy.Logging
@@ -2000,7 +2000,7 @@ func buildAccessLog(srcLogSettings *ngfAPIv1alpha2.NginxLogging) *AccessLog {
 		}
 	}
 
-	if srcLogSettings.JSON != nil && *srcLogSettings.JSON {
+	if srcLogSettings.ErrorLogFormat != nil && *srcLogSettings.ErrorLogFormat == ngfAPIv1alpha2.NginxErrorLogFormatJSON {
 		return &AccessLog{
 			Format: JSONAccessLogFormat,
 			Escape: string(ngfAPIv1alpha2.NginxAccessLogEscapeJSON),

@@ -259,35 +259,35 @@ func TestNginxProxyLoggingJSON(t *testing.T) {
 		wantErrors []string
 	}{
 		{
-			name: "Validate NginxProxy is invalid when json is true and errorLevel is debug",
+			name: "Validate NginxProxy is invalid when errorLogFormat is json and errorLevel is debug",
 			spec: ngfAPIv1alpha2.NginxProxySpec{
 				Logging: &ngfAPIv1alpha2.NginxLogging{
-					ErrorLevel: helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelDebug),
-					JSON:       helpers.GetPointer(true),
+					ErrorLevel:     helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelDebug),
+					ErrorLogFormat: helpers.GetPointer(ngfAPIv1alpha2.NginxErrorLogFormatJSON),
 				},
 			},
 			wantErrors: []string{expectedJSONNotSupportedWithDebugError},
 		},
 		{
-			name: "Validate NginxProxy is valid when json is true and errorLevel is info",
+			name: "Validate NginxProxy is valid when errorLogFormat is json and errorLevel is info",
 			spec: ngfAPIv1alpha2.NginxProxySpec{
 				Logging: &ngfAPIv1alpha2.NginxLogging{
-					ErrorLevel: helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelInfo),
-					JSON:       helpers.GetPointer(true),
+					ErrorLevel:     helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelInfo),
+					ErrorLogFormat: helpers.GetPointer(ngfAPIv1alpha2.NginxErrorLogFormatJSON),
 				},
 			},
 		},
 		{
-			name: "Validate NginxProxy is valid when json is false and errorLevel is debug",
+			name: "Validate NginxProxy is valid when errorLogFormat is default and errorLevel is debug",
 			spec: ngfAPIv1alpha2.NginxProxySpec{
 				Logging: &ngfAPIv1alpha2.NginxLogging{
-					ErrorLevel: helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelDebug),
-					JSON:       helpers.GetPointer(false),
+					ErrorLevel:     helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelDebug),
+					ErrorLogFormat: helpers.GetPointer(ngfAPIv1alpha2.NginxErrorLogFormatDefault),
 				},
 			},
 		},
 		{
-			name: "Validate NginxProxy is valid when errorLevel is debug and json is unset",
+			name: "Validate NginxProxy is valid when errorLevel is debug and errorLogFormat is unset",
 			spec: ngfAPIv1alpha2.NginxProxySpec{
 				Logging: &ngfAPIv1alpha2.NginxLogging{
 					ErrorLevel: helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelDebug),
