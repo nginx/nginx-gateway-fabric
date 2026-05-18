@@ -267,6 +267,7 @@ type JWTRemoteKeySource struct {
 }
 
 // RequiredClaims specifies a set of required claims that a token's claim must match to be authorized.
+// +kubebuilder:validation:XValidation:message="at least one of iss, aud, sub, or claims must be set",rule="has(self.iss) || has(self.aud) || has(self.sub) || has(self.claims)"
 type RequiredClaims struct {
   // Issuer contains the value that must match the `iss` claim.
   //

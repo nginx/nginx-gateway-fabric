@@ -269,6 +269,7 @@ type OIDCLogoutConfig struct {
 }
 
 // RequiredClaims specifies a set of required claims that a token's claim must match to be authorized.
+// +kubebuilder:validation:XValidation:message="at least one of iss, aud, sub, or claims must be set",rule="has(self.iss) || has(self.aud) || has(self.sub) || has(self.claims)"
 type RequiredClaims struct {
   // Issuer contains the value that must match the `iss` claim.
   //
@@ -558,7 +559,7 @@ http {
 How it works:
 
 1. Similar to JWT auth, we have a `map` that will evaluate a claim. In this case it's `$oidc_claim_sub` to validate the subject (`sub`) claim.
-2. The location `/oidc_auth` has both `auth_oidc` and `auth_jwt` directives. Both are needed as the NGINX OIDC module itself can not evaluate JWT token claims.
+2. The location `/coffee/` has both `auth_oidc` and `auth_jwt` directives. Both are needed as the NGINX OIDC module itself can not evaluate JWT token claims.
 3. The `auth_jwt` directive is set up like this: `auth_jwt "" token=$oidc_id_token;`. This allows the module to obtain the user's JWT through the `$oidc_id_token` variable, which is populated by the OIDC module. This avoids the user needing to pass a bearer token through the `Authorization` header. Also, the realm can be any value. In this case it's an empty string.
 4. The `auth_jwt_key_request` directive is used to call an internal location `/_jwks_keycloak`. This works the same as `JWT` auth in `Remote` mode, where we fetch the public JWKS from the identity provider (IdP).
 5. Lastly, the `auth_jwt_require` directive evaluates the result from the map, informing the user if they are authorized or not.
