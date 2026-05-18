@@ -963,7 +963,7 @@ spec:
 This resource is created by users/security teams. PLM controllers handle compilation and status updates. NGF only reads this resource.
 
 ```yaml
-apiVersion: waf.f5.com/v1alpha1
+apiVersion: appprotect.f5.com/v1
 kind: APPolicy
 metadata:
   name: production-web-policy
@@ -1002,7 +1002,7 @@ NGF reads `status.bundle.state`, `status.bundle.location`, and `status.bundle.sh
 > **Note:** PLM is not yet implemented.
 
 ```yaml
-apiVersion: waf.f5.com/v1alpha1
+apiVersion: appprotect.f5.com/v1
 kind: APLogConf
 metadata:
   name: log-blocked-profile
@@ -1044,9 +1044,9 @@ spec:
     kind: WAFPolicy
     namespace: applications
   to:
-  - group: waf.f5.com
+  - group: appprotect.f5.com
     kind: APPolicy
-  - group: waf.f5.com
+  - group: appprotect.f5.com
     kind: APLogConf
 ```
 
@@ -1689,7 +1689,7 @@ spec:
     enable: true
 ---
 # 3. APPolicy CRD (managed by security team; compiled by PLM)
-apiVersion: waf.f5.com/v1alpha1
+apiVersion: appprotect.f5.com/v1
 kind: APPolicy
 metadata:
   name: production-web-policy
@@ -1703,7 +1703,7 @@ spec:
 # status.bundle.state becomes "ready" after PLM compilation
 ---
 # 4. APLogConf CRD (managed by security team; compiled by PLM)
-apiVersion: waf.f5.com/v1alpha1
+apiVersion: appprotect.f5.com/v1
 kind: APLogConf
 metadata:
   name: log-blocked-profile
@@ -1729,9 +1729,9 @@ spec:
     kind: WAFPolicy
     namespace: applications
   to:
-  - group: waf.f5.com
+  - group: appprotect.f5.com
     kind: APPolicy
-  - group: waf.f5.com
+  - group: appprotect.f5.com
     kind: APLogConf
 ---
 # 6. Gateway

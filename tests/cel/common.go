@@ -92,17 +92,37 @@ const (
 	expectedWAFFileIfAndOnlyIfFileTypeError = "destination.file must be set if and only if type is file"
 	expectedWAFSyslogIfAndOnlyIfSyslogType  = "destination.syslog must be set if and only if type is syslog"
 	//nolint: lll
-	expectedWAFLogSourceMutualExclusionError = "exactly one of logSource.defaultProfile, logSource.httpSource, logSource.nimSource, or logSource.n1cSource must be set"
+	expectedWAFLogSourceMutualExclusionError = "exactly one of logSource.defaultProfile, logSource.httpSource, logSource.nimSource, logSource.n1cSource, or logSource.apLogConfRef must be set"
 
 	expectedWAFN1CLogProfileMutualExclusionError = "exactly one of profileName or profileObjectID must be set"
 	expectedWAFN1CLogProfileObjectIDPatternError = `^lp_[A-Za-z0-9_-]+$`
 	expectedWAFValidationMutualExclusionError    = "verifyChecksum and expectedChecksum are mutually exclusive"
 	expectedWAFVerifyChecksumHTTPOnlyError       = "policySource.validation.verifyChecksum is only supported for type HTTP"
+	expectedWAFAPPolicyRefIfAndOnlyIfPLMType     = "policySource.apPolicyRef must be set if and only if type is PLM"
 	expectedWAFNIMSourceIfAndOnlyIfNIMType       = "policySource.nimSource must be set if and only if type is NIM"
 	expectedWAFN1CSourceIfAndOnlyIfN1CType       = "policySource.n1cSource must be set if and only if type is N1C"
-	expectedWAFNIMPolicyUIDPatternError          = `^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`
-	expectedWAFN1CPolicyObjectIDPatternError     = `^pol_[A-Za-z0-9_-]+$`
-	expectedWAFN1CPolicyVersionIDPatternError    = `^pv_[A-Za-z0-9_-]+$`
+	expectedWAFPLMPolicySourceAuthError          = "policySource.auth must not be set when type is PLM"
+	expectedWAFPLMPolicySourceTLSSecretError     = "policySource.tlsSecret must not be set when type is PLM" //nolint:gosec
+	expectedWAFPLMPolicySourceValidationError    = "policySource.validation must not be set when type is PLM"
+	expectedWAFPLMPolicySourcePollingError       = "policySource.polling must not be set when type is PLM"
+	expectedWAFPLMPolicySourceTimeoutError       = "policySource.timeout must not be set when type is PLM"
+	expectedWAFPLMPolicySourceRetryAttemptsError = "policySource.retryAttempts must not be set to a non-default " +
+		"value when type is PLM"
+	expectedWAFPLMPolicySourceSkipVerifyError = "policySource.insecureSkipVerify must not be true when type is PLM"
+	expectedWAFPLMLogSourceAuthError          = "logSource.auth must not be set when logSource.apLogConfRef is used"
+	expectedWAFPLMLogSourceTLSSecretError     = "logSource.tlsSecret must not be set when logSource.apLogConfRef " +
+		"is used"
+	expectedWAFPLMLogSourceValidationError = "logSource.validation must not be set " +
+		"when logSource.apLogConfRef is used"
+	expectedWAFPLMLogSourcePollingError       = "logSource.polling must not be set when logSource.apLogConfRef is used"
+	expectedWAFPLMLogSourceTimeoutError       = "logSource.timeout must not be set when logSource.apLogConfRef is used"
+	expectedWAFPLMLogSourceRetryAttemptsError = "logSource.retryAttempts must not be set to a non-default value " +
+		"when logSource.apLogConfRef is used"
+	expectedWAFPLMLogSourceSkipVerifyError = "logSource.insecureSkipVerify must not be true " +
+		"when logSource.apLogConfRef is used"
+	expectedWAFNIMPolicyUIDPatternError       = `^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`
+	expectedWAFN1CPolicyObjectIDPatternError  = `^pol_[A-Za-z0-9_-]+$`
+	expectedWAFN1CPolicyVersionIDPatternError = `^pv_[A-Za-z0-9_-]+$`
 
 	// Namespace for tests.
 	defaultNamespace = "default"

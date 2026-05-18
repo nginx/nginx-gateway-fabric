@@ -2,7 +2,9 @@ package cel
 
 import (
 	"testing"
+	"time"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	controllerruntime "sigs.k8s.io/controller-runtime"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
@@ -699,6 +701,24 @@ func TestWAFPolicyLogSourceMutualExclusion(t *testing.T) {
 			},
 		},
 		{
+			name: "apLogConfRef only is valid for PLM",
+			spec: ngfAPIv1alpha1.WAFPolicySpec{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
+				Type:       ngfAPIv1alpha1.PolicySourceTypePLM,
+				PolicySource: ngfAPIv1alpha1.PolicySource{
+					APPolicyRef: &ngfAPIv1alpha1.APPolicyReference{Name: "my-ap-policy"},
+				},
+				SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
+					{
+						LogSource: ngfAPIv1alpha1.LogSource{
+							APLogConfRef: &ngfAPIv1alpha1.APLogConfReference{Name: "my-log-conf"},
+						},
+						Destination: ngfAPIv1alpha1.SecurityLogDestination{Type: ngfAPIv1alpha1.SecurityLogDestinationTypeStderr},
+					},
+				},
+			},
+		},
+		{
 			name:       "both httpSource and defaultProfile set is invalid",
 			wantErrors: []string{expectedWAFLogSourceMutualExclusionError},
 			spec: ngfAPIv1alpha1.WAFPolicySpec{
@@ -780,6 +800,26 @@ func TestWAFPolicyLogSourceMutualExclusion(t *testing.T) {
 								ProfileName: &profileName,
 							},
 							HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: logURL},
+						},
+						Destination: ngfAPIv1alpha1.SecurityLogDestination{Type: ngfAPIv1alpha1.SecurityLogDestinationTypeStderr},
+					},
+				},
+			},
+		},
+		{
+			name:       "both httpSource and apLogConfRef set is invalid",
+			wantErrors: []string{expectedWAFLogSourceMutualExclusionError},
+			spec: ngfAPIv1alpha1.WAFPolicySpec{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
+				Type:       ngfAPIv1alpha1.PolicySourceTypePLM,
+				PolicySource: ngfAPIv1alpha1.PolicySource{
+					APPolicyRef: &ngfAPIv1alpha1.APPolicyReference{Name: "my-ap-policy"},
+				},
+				SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
+					{
+						LogSource: ngfAPIv1alpha1.LogSource{
+							HTTPSource:   &ngfAPIv1alpha1.HTTPBundleSource{URL: logURL},
+							APLogConfRef: &ngfAPIv1alpha1.APLogConfReference{Name: "my-log-conf"},
 						},
 						Destination: ngfAPIv1alpha1.SecurityLogDestination{Type: ngfAPIv1alpha1.SecurityLogDestinationTypeStderr},
 					},
@@ -886,6 +926,16 @@ func TestWAFPolicyPolicySource(t *testing.T) {
 			},
 		},
 		{
+			name: "PLM type with apPolicyRef is valid",
+			spec: ngfAPIv1alpha1.WAFPolicySpec{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
+				Type:       ngfAPIv1alpha1.PolicySourceTypePLM,
+				PolicySource: ngfAPIv1alpha1.PolicySource{
+					APPolicyRef: &ngfAPIv1alpha1.APPolicyReference{Name: "my-ap-policy"},
+				},
+			},
+		},
+		{
 			name:       "NIM type without nimSource is invalid",
 			wantErrors: []string{expectedWAFNIMSourceIfAndOnlyIfNIMType},
 			spec: ngfAPIv1alpha1.WAFPolicySpec{
@@ -900,6 +950,15 @@ func TestWAFPolicyPolicySource(t *testing.T) {
 			spec: ngfAPIv1alpha1.WAFPolicySpec{
 				TargetRefs:   []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
 				Type:         ngfAPIv1alpha1.PolicySourceTypeN1C,
+				PolicySource: ngfAPIv1alpha1.PolicySource{},
+			},
+		},
+		{
+			name:       "PLM type without apPolicyRef is invalid",
+			wantErrors: []string{expectedWAFAPPolicyRefIfAndOnlyIfPLMType},
+			spec: ngfAPIv1alpha1.WAFPolicySpec{
+				TargetRefs:   []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
+				Type:         ngfAPIv1alpha1.PolicySourceTypePLM,
 				PolicySource: ngfAPIv1alpha1.PolicySource{},
 			},
 		},
@@ -983,6 +1042,180 @@ func TestWAFPolicyPolicySource(t *testing.T) {
 				}
 			}
 			validateCrd(t, tt.wantErrors, newWAFPolicy(t, tt.spec), k8sClient)
+		})
+	}
+}
+
+func TestWAFPolicyPLMPolicySourceUnsupportedFields(t *testing.T) {
+	t.Parallel()
+	k8sClient := getKubernetesClient(t)
+
+	newBaseSpec := func() ngfAPIv1alpha1.WAFPolicySpec {
+		return ngfAPIv1alpha1.WAFPolicySpec{
+			TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
+			Type:       ngfAPIv1alpha1.PolicySourceTypePLM,
+			PolicySource: ngfAPIv1alpha1.PolicySource{
+				APPolicyRef: &ngfAPIv1alpha1.APPolicyReference{Name: "my-ap-policy"},
+			},
+		}
+	}
+
+	tests := []struct {
+		name       string
+		mutate     func(*ngfAPIv1alpha1.PolicySource)
+		wantErrors []string
+	}{
+		{
+			name: "auth is rejected for PLM",
+			mutate: func(source *ngfAPIv1alpha1.PolicySource) {
+				source.Auth = &ngfAPIv1alpha1.BundleAuth{SecretRef: ngfAPIv1alpha1.LocalObjectReference{Name: "auth-secret"}}
+			},
+			wantErrors: []string{expectedWAFPLMPolicySourceAuthError},
+		},
+		{
+			name: "tlsSecret is rejected for PLM",
+			mutate: func(source *ngfAPIv1alpha1.PolicySource) {
+				source.TLSSecretRef = &ngfAPIv1alpha1.LocalObjectReference{Name: "ca-secret"}
+			},
+			wantErrors: []string{expectedWAFPLMPolicySourceTLSSecretError},
+		},
+		{
+			name: "validation is rejected for PLM",
+			mutate: func(source *ngfAPIv1alpha1.PolicySource) {
+				source.Validation = &ngfAPIv1alpha1.BundleValidation{
+					ExpectedChecksum: helpers.GetPointer(
+						"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+					),
+				}
+			},
+			wantErrors: []string{expectedWAFPLMPolicySourceValidationError},
+		},
+		{
+			name: "polling is rejected for PLM",
+			mutate: func(source *ngfAPIv1alpha1.PolicySource) {
+				source.Polling = &ngfAPIv1alpha1.BundlePolling{Enabled: true}
+			},
+			wantErrors: []string{expectedWAFPLMPolicySourcePollingError},
+		},
+		{
+			name: "timeout is rejected for PLM",
+			mutate: func(source *ngfAPIv1alpha1.PolicySource) {
+				source.Timeout = &metav1.Duration{Duration: time.Second}
+			},
+			wantErrors: []string{expectedWAFPLMPolicySourceTimeoutError},
+		},
+		{
+			name: "retryAttempts is rejected for PLM",
+			mutate: func(source *ngfAPIv1alpha1.PolicySource) {
+				source.RetryAttempts = helpers.GetPointer(int32(1))
+			},
+			wantErrors: []string{expectedWAFPLMPolicySourceRetryAttemptsError},
+		},
+		{
+			name: "insecureSkipVerify is rejected for PLM",
+			mutate: func(source *ngfAPIv1alpha1.PolicySource) {
+				source.InsecureSkipVerify = true
+			},
+			wantErrors: []string{expectedWAFPLMPolicySourceSkipVerifyError},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			spec := newBaseSpec()
+			tt.mutate(&spec.PolicySource)
+			validateCrd(t, tt.wantErrors, newWAFPolicy(t, spec), k8sClient)
+		})
+	}
+}
+
+func TestWAFPolicyPLMLogSourceUnsupportedFields(t *testing.T) {
+	t.Parallel()
+	k8sClient := getKubernetesClient(t)
+
+	newBaseSpec := func() ngfAPIv1alpha1.WAFPolicySpec {
+		return ngfAPIv1alpha1.WAFPolicySpec{
+			TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
+			Type:       ngfAPIv1alpha1.PolicySourceTypePLM,
+			PolicySource: ngfAPIv1alpha1.PolicySource{
+				APPolicyRef: &ngfAPIv1alpha1.APPolicyReference{Name: "my-ap-policy"},
+			},
+			SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{{
+				LogSource: ngfAPIv1alpha1.LogSource{
+					APLogConfRef: &ngfAPIv1alpha1.APLogConfReference{Name: "my-log-conf"},
+				},
+				Destination: ngfAPIv1alpha1.SecurityLogDestination{Type: ngfAPIv1alpha1.SecurityLogDestinationTypeStderr},
+			}},
+		}
+	}
+
+	tests := []struct {
+		name       string
+		mutate     func(*ngfAPIv1alpha1.LogSource)
+		wantErrors []string
+	}{
+		{
+			name: "auth is rejected with APLogConfRef",
+			mutate: func(source *ngfAPIv1alpha1.LogSource) {
+				source.Auth = &ngfAPIv1alpha1.BundleAuth{SecretRef: ngfAPIv1alpha1.LocalObjectReference{Name: "auth-secret"}}
+			},
+			wantErrors: []string{expectedWAFPLMLogSourceAuthError},
+		},
+		{
+			name: "tlsSecret is rejected with APLogConfRef",
+			mutate: func(source *ngfAPIv1alpha1.LogSource) {
+				source.TLSSecretRef = &ngfAPIv1alpha1.LocalObjectReference{Name: "ca-secret"}
+			},
+			wantErrors: []string{expectedWAFPLMLogSourceTLSSecretError},
+		},
+		{
+			name: "validation is rejected with APLogConfRef",
+			mutate: func(source *ngfAPIv1alpha1.LogSource) {
+				source.Validation = &ngfAPIv1alpha1.BundleValidation{
+					ExpectedChecksum: helpers.GetPointer(
+						"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+					),
+				}
+			},
+			wantErrors: []string{expectedWAFPLMLogSourceValidationError},
+		},
+		{
+			name: "polling is rejected with APLogConfRef",
+			mutate: func(source *ngfAPIv1alpha1.LogSource) {
+				source.Polling = &ngfAPIv1alpha1.BundlePolling{Enabled: true}
+			},
+			wantErrors: []string{expectedWAFPLMLogSourcePollingError},
+		},
+		{
+			name: "timeout is rejected with APLogConfRef",
+			mutate: func(source *ngfAPIv1alpha1.LogSource) {
+				source.Timeout = &metav1.Duration{Duration: time.Second}
+			},
+			wantErrors: []string{expectedWAFPLMLogSourceTimeoutError},
+		},
+		{
+			name: "retryAttempts is rejected with APLogConfRef",
+			mutate: func(source *ngfAPIv1alpha1.LogSource) {
+				source.RetryAttempts = helpers.GetPointer(int32(1))
+			},
+			wantErrors: []string{expectedWAFPLMLogSourceRetryAttemptsError},
+		},
+		{
+			name: "insecureSkipVerify is rejected with APLogConfRef",
+			mutate: func(source *ngfAPIv1alpha1.LogSource) {
+				source.InsecureSkipVerify = true
+			},
+			wantErrors: []string{expectedWAFPLMLogSourceSkipVerifyError},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			spec := newBaseSpec()
+			tt.mutate(&spec.SecurityLogs[0].LogSource)
+			validateCrd(t, tt.wantErrors, newWAFPolicy(t, spec), k8sClient)
 		})
 	}
 }
