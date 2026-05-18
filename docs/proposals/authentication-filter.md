@@ -79,6 +79,7 @@ This portion also contains:
       - Understanding claim enforcement
       - Processing claims
       - Processing nested claims
+      - Claim validation for OIDC
     - JWT Authentication Capabilities
 - Route Attachment
 - Resource status
@@ -213,7 +214,7 @@ type JWTAuth struct {
   // +optional
   Remote *JWTRemoteKeySource `json:"remote,omitempty"`
 
-  // Require defines a list of required claim sets for JWT validation.
+  // Require defines a list of required claim sets for JWT claim validation.
   // The token is authorized if it satisfies all claims in at least one entry.
   // Claims within each entry are concatenated and validated together using NGINX maps.
   //
@@ -235,7 +236,8 @@ type JWTAuth struct {
   //  auth_jwt_require $valid_jwt_combination_0_1;
   //
   // +optional
-  Require []JWTRequiredClaims `json:"require,omitempty"`
+  // +kubebuilder:validation:MinItems=1
+  Require []RequiredClaims `json:"require,omitempty"`
 
   // Leeway is the acceptable clock skew for exp & nbf claims.
   // If exp & nbf claims are not defined, this directive takes no effect.
@@ -282,8 +284,8 @@ type JWTRemoteKeySource struct {
   CACertificateRefs []LocalObjectReference `json:"caCertificateRefs,omitempty"`
 }
 
-// JWTRequiredClaims specifies a set of required claims that a token's claim must match to be authorized.
-type JWTRequiredClaims struct {
+// RequiredClaims specifies a set of required claims that a token's claim must match to be authorized.
+type RequiredClaims struct {
   // Issuer contains the value that must match the `iss` claim.
   //
   // +optional
@@ -304,19 +306,14 @@ type JWTRequiredClaims struct {
   // Claims defines user-defined custom claims that must also match.
   //
   // +optional
-  Claims []JWTCustomClaim `json:"claims,omitempty"`
+  // +kubebuilder:validation:MinItems=1
+  Claims []CustomClaim `json:"claims,omitempty"`
 }
 
-// JWTCustomClaim specifies custom user claims and values.
-// +kubebuilder:validation:XValidation:message="exactly one of value or values must be set",rule="has(self.value) != has(self.values)"
-// +kubebuilder:validation:XValidation:message="value must be non-empty when set",rule="!has(self.value) || size(self.value) > 0"
-// +kubebuilder:validation:XValidation:message="values must be non-empty when set",rule="!has(self.values) || size(self.values) > 0"
-type JWTCustomClaim struct {
+// CustomClaim specifies custom user claims and values.
+type CustomClaim struct {
   Name   string   `json:"name"`
-  // Exactly one of Value or Values must be set.
-  // +optional
-  Value  *string  `json:"value,omitempty"`
-  // +optional
+  // +kubebuilder:validation:MinItems=1
   Values []string `json:"values,omitempty"`
 }
 
@@ -899,8 +896,10 @@ In this case, we use `auth_jwt_require $valid_jwt_iss` to validate the value ret
 
 #### Processing claims
 
-This section shows the proposed specification for JWT claim processing, as well as for processing user defined claims.
-Claims can be defined for both `File` and `Remote` modes.
+This section covers the proposed specification for JWT claim processing, as well as for processing user defined claims.
+Claims can be defined for both `JWT` and `OIDC` auth types.
+Most of the example NGINX config will demonstrate how this works for `JWT` auth.
+There will be a section covering the specific NGINX configuration for claim validation with `OIDC`.
 
 ```yaml
 apiVersion: gateway.nginx.org/v1alpha1
@@ -1070,6 +1069,109 @@ auth_jwt_claim_set $email email;
 
 This will set the value of `$roles` to `["reader", "admin"]`, and the value of `$email` to `user@example.com`.
 Since the email contains a dot, this needs to be processed the same way.
+
+#### Claim validation for OIDC
+
+The NGINX OIDC module does not have a directive similar to `auth_jwt_require`, to allow it to enforce claim validation.
+We'll start with an example NGINX configuration, and then break down each component and example why they are necessary.
+
+```nginx
+http {
+
+  # OIDC Provider
+  oidc_provider default_oidc-coffee {
+    issuer https://keycloak.default.svc.cluster.local:8443/realms/nginx-gateway;
+    client_id nginx-gateway-coffee;
+    client_secret oidc-coffee-client-secret;
+    redirect_uri /oidc_callback_default_oidc-coffee;
+    ssl_trusted_certificate /etc/nginx/secrets/cert_bundle_default_keycloak-secret.crt;
+  }
+
+  # Map to evaluate user authorization
+  map $oidc_claim_sub $oidc_valid_combination {
+      ~^bed7e82b-8143-476c-adf8-4c561260b60e$ 1;
+      default 0;
+  }
+
+  server {
+    listen 443 ssl;
+    server_name cafe.example.com;
+    ssl_certificate /etc/nginx/secrets/tls.crt;
+    ssl_certificate_key /etc/nginx/secrets/tls.key;
+
+    location /oidc_auth {
+        auth_oidc default_oidc-coffee; # Enable OIDC auth
+        auth_jwt "" token=$oidc_id_token; # Enable JWT auth module
+        auth_jwt_key_request /_jwks_keycloak; # Internal request to IdP JWKS
+
+        # Authorize based on response from map.
+        auth_jwt_require $oidc_valid_combination;
+
+        proxy_pass http://nginx-hello-backend;
+    }
+
+    # Internal location for IdP JWKS
+    location = /_jwks_keycloak {
+        internal;
+        proxy_pass https://keycloak.default.svc.cluster.local:8443/realms/nginx-gateway/protocol/openid-connect/certs;
+    }
+  }
+}
+```
+
+To make things easier to understand, I won't be explaining the specifics of OIDC. We'll focus on the components necessary for claim validation to work.
+
+1. Similar to JWT auth, we have a `map` that will evaluate a claim. In this case it's `$oidc_claim_sub` to validate the subject (`sub`) claim.
+2. The location `/oidc_auth` has both `auth_oidc` and `auth_jwt` directives. Both are needed as the NGINX OIDC module itself can not evaluate JWT token claims.
+3. The `auth_jwt` directive is set up like this: `auth_jwt "" token=$oidc_id_token;`. This allows the module to obtain the user's JWT through the `$oidc_id_token` variable, which is populated by the OIDC module. This avoids the user needing to pass a bearer token through the `Authorization` header like we've done previously. Also, the realm can be any value. In this case it's an empty string.
+4. The `auth_jwt_key_request` directive is used to call an internal location `/_jwks_keycloak`. This works the same as `JWT` auth in `Remote` mode, where we fetch the public JWKS from the identity provider (IdP).
+5. Lastly, the `auth_jwt_require` directive evaluates the result from the map, informing the user if they are authorized or not.
+
+Using Keycloak as our example, if we wanted to view the claims for a specific client, we can access the `userinfo` endpoint.
+This is an example of what a user's claim might look like:
+
+```json
+{
+  "sub":"bed7e82b-8143-476c-adf8-4c561260b60e",
+  "email_verified":true,
+  "name":"Test User",
+  "preferred_username":"testuser",
+  "given_name":"Test",
+  "family_name":"User",
+  "email":"testuser@example.com"
+}
+```
+
+NOTE: While this document shows the `RequiredClaims` struct in the context of `JWTAuth` in the GoLang API. This same struct will need to be referenced by `OIDCAuth` struct.
+
+Below is an example spec for `RequiredClaims` for `OIDCAuth`:
+
+```yaml
+apiVersion: gateway.nginx.org/v1alpha1
+kind: AuthenticationFilter
+metadata:
+  name: oidc-coffee
+spec:
+  type: OIDC
+  oidc:
+    clientSecretRef:
+      name: keycloak-secret
+    clientID: nginx-gateway-coffee
+    issuer: https://keycloak.default.svc.cluster.local:8443/realms/nginx-gateway
+    caCertificateRefs:
+      - name: keycloak-secret
+    require:
+    - sub: "bed7e82b-8143-476c-adf8-4c561260b60e"
+      claims:
+      - name: "email_verified"
+        values:
+        - "true"
+      - name: "email"
+        values:
+         - "testuser@example.com"
+```
+
+This setup uses our [OIDC configuration document](https://docs.nginx.com/nginx-gateway-fabric/traffic-security/oidc-authentication/) for the configuration examples.
 
 ### JWT Authentication Capabilities
 
@@ -1377,7 +1479,7 @@ Users should be advised to regularly rotate their JWKS keys in cases where they 
 
 ### Optional Headers
 
-Below are a list of optional defensive headers that users may choose to include.
+Below is a list of optional defensive headers that users may choose to include.
 In certain scenarios, these headers may be deployed to improve overall security from client responses.
 
 ```nginx
