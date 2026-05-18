@@ -405,7 +405,7 @@ func assertBuildConfiguration(g *WithT, result, expected Configuration) {
 	g.Expect(result.Upstreams).To(ConsistOf(expected.Upstreams))
 	g.Expect(result.HTTPServers).To(ConsistOf(expected.HTTPServers))
 	g.Expect(result.SSLServers).To(ConsistOf(expected.SSLServers))
-	g.Expect(result.TLSPassthroughServers).To(ConsistOf(expected.TLSPassthroughServers))
+	g.Expect(result.TLSServers).To(ConsistOf(expected.TLSServers))
 	g.Expect(result.SSLKeyPairs).To(Equal(expected.SSLKeyPairs))
 	g.Expect(result.CertBundles).To(Equal(expected.CertBundles))
 	g.Expect(result.Telemetry).To(Equal(expected.Telemetry))
@@ -2009,13 +2009,19 @@ func TestBuildConfiguration(t *testing.T) {
 						Name:      "default_secure-app_8443",
 					},
 				}
-				conf.TLSPassthroughServers = []Layer4VirtualServer{
+				conf.TLSServers = []Layer4VirtualServer{
 					{
 						Hostname: "app.example.com",
 						Upstreams: []Layer4Upstream{
 							{Name: "default_secure-app_8443", Weight: 0},
 						},
 						Port: 443,
+					},
+					{
+						Hostname:  "",
+						Upstreams: []Layer4Upstream{},
+						Port:      443,
+						IsDefault: true,
 					},
 					{
 						Hostname:  "*.example.com",
@@ -2029,12 +2035,6 @@ func TestBuildConfiguration(t *testing.T) {
 							{Name: "default_secure-app_8443", Weight: 0},
 						},
 						Port:      444,
-						IsDefault: false,
-					},
-					{
-						Hostname:  "",
-						Upstreams: []Layer4Upstream{},
-						Port:      443,
 						IsDefault: false,
 					},
 				}
@@ -2981,7 +2981,7 @@ func TestBuildConfiguration(t *testing.T) {
 				return g
 			}),
 			expConf: getModifiedExpectedConfiguration(func(conf Configuration) Configuration {
-				conf.TLSPassthroughServers = []Layer4VirtualServer{
+				conf.TLSServers = []Layer4VirtualServer{
 					{
 						Hostname: "app.example.com",
 						Port:     443,
@@ -3130,7 +3130,7 @@ func TestBuildConfiguration_Plus(t *testing.T) {
 			g.Expect(result.Upstreams).To(ConsistOf(test.expConf.Upstreams))
 			g.Expect(result.HTTPServers).To(ConsistOf(test.expConf.HTTPServers))
 			g.Expect(result.SSLServers).To(ConsistOf(test.expConf.SSLServers))
-			g.Expect(result.TLSPassthroughServers).To(ConsistOf(test.expConf.TLSPassthroughServers))
+			g.Expect(result.TLSServers).To(ConsistOf(test.expConf.TLSServers))
 			g.Expect(result.SSLKeyPairs).To(Equal(test.expConf.SSLKeyPairs))
 			g.Expect(result.CertBundles).To(Equal(test.expConf.CertBundles))
 			g.Expect(result.Telemetry).To(Equal(test.expConf.Telemetry))
@@ -4803,7 +4803,7 @@ func TestCreateRatioVarName(t *testing.T) {
 	g.Expect(CreateRatioVarName(25)).To(Equal("$otel_ratio_25"))
 }
 
-func TestCreatePassthroughServers(t *testing.T) {
+func TestBuildTLSServers(t *testing.T) {
 	t.Parallel()
 
 	getL4RouteKey := func(name string) graph.L4RouteKey {
@@ -5030,6 +5030,351 @@ func TestCreatePassthroughServers(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "TLS Terminate listener with route",
+			gateway: func() *graph.Gateway {
+				terminateKey := getL4RouteKey("terminate-app")
+				gatewayNsName := types.NamespacedName{Namespace: "test", Name: "gateway"}
+
+				return &graph.Gateway{
+					Listeners: []*graph.Listener{
+						{
+							Name:        "terminateListener",
+							GatewayName: gatewayNsName,
+							Valid:       true,
+							Source: v1.Listener{
+								Protocol: v1.TLSProtocolType,
+								Port:     443,
+								Hostname: helpers.GetPointer[v1.Hostname]("secure.example.com"),
+								TLS: &v1.ListenerTLSConfig{
+									Mode: helpers.GetPointer(v1.TLSModeTerminate),
+									CertificateRefs: []v1.SecretObjectReference{
+										{Name: "tls-secret"},
+									},
+								},
+							},
+							ResolvedSecrets: []types.NamespacedName{
+								{Namespace: "test", Name: "tls-secret"},
+							},
+							Routes: make(map[graph.RouteKey]*graph.L7Route),
+							L4Routes: map[graph.L4RouteKey]*graph.L4Route{
+								terminateKey: {
+									Valid: true,
+									Spec: graph.L4RouteSpec{
+										Hostnames: []v1.Hostname{"secure.example.com"},
+										BackendRef: graph.BackendRef{
+											Valid:     true,
+											SvcNsName: terminateKey.NamespacedName,
+											ServicePort: apiv1.ServicePort{
+												Name:     "https",
+												Protocol: "TCP",
+												Port:     8443,
+												TargetPort: intstr.IntOrString{
+													Type:   intstr.Int,
+													IntVal: 8443,
+												},
+											},
+										},
+									},
+									ParentRefs: []graph.ParentRef{
+										{
+											Kind:           kinds.Gateway,
+											NamespacedName: gatewayNsName,
+											Attachment: &graph.ParentRefAttachmentStatus{
+												AcceptedHostnames: map[string][]string{
+													graph.CreateParentRefListenerKey(
+														gatewayNsName,
+														"terminateListener",
+													): {"secure.example.com"},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				}
+			}(),
+			expected: []Layer4VirtualServer{
+				{
+					Hostname: "secure.example.com",
+					Upstreams: []Layer4Upstream{
+						{Name: "default_terminate-app_8443", Weight: 0},
+					},
+					Port: 443,
+					SSL: &SSL{
+						KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_tls-secret"},
+					},
+				},
+			},
+		},
+		{
+			name: "TLS Terminate listener with no matching route creates default server with SSL",
+			gateway: func() *graph.Gateway {
+				gatewayNsName := types.NamespacedName{Namespace: "test", Name: "gateway"}
+
+				return &graph.Gateway{
+					Listeners: []*graph.Listener{
+						{
+							Name:        "terminateListener",
+							GatewayName: gatewayNsName,
+							Valid:       true,
+							Source: v1.Listener{
+								Protocol: v1.TLSProtocolType,
+								Port:     443,
+								Hostname: helpers.GetPointer[v1.Hostname]("secure.example.com"),
+								TLS: &v1.ListenerTLSConfig{
+									Mode: helpers.GetPointer(v1.TLSModeTerminate),
+									CertificateRefs: []v1.SecretObjectReference{
+										{Name: "tls-secret"},
+									},
+								},
+							},
+							ResolvedSecrets: []types.NamespacedName{
+								{Namespace: "test", Name: "tls-secret"},
+							},
+							Routes:   make(map[graph.RouteKey]*graph.L7Route),
+							L4Routes: make(map[graph.L4RouteKey]*graph.L4Route),
+						},
+					},
+				}
+			}(),
+			expected: []Layer4VirtualServer{
+				{
+					Hostname:  "secure.example.com",
+					IsDefault: true,
+					Port:      443,
+					Upstreams: []Layer4Upstream{},
+					SSL: &SSL{
+						KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_tls-secret"},
+					},
+				},
+			},
+		},
+		{
+			name: "mixed Passthrough and Terminate listeners on same port",
+			gateway: func() *graph.Gateway {
+				passthroughKey := getL4RouteKey("passthrough-app")
+				terminateKey := getL4RouteKey("terminate-app")
+				gatewayNsName := types.NamespacedName{Namespace: "test", Name: "gateway"}
+
+				return &graph.Gateway{
+					Listeners: []*graph.Listener{
+						{
+							Name:        "passthroughListener",
+							GatewayName: gatewayNsName,
+							Valid:       true,
+							Source: v1.Listener{
+								Protocol: v1.TLSProtocolType,
+								Port:     443,
+								Hostname: helpers.GetPointer[v1.Hostname]("passthrough.example.com"),
+								TLS: &v1.ListenerTLSConfig{
+									Mode: helpers.GetPointer(v1.TLSModePassthrough),
+								},
+							},
+							Routes: make(map[graph.RouteKey]*graph.L7Route),
+							L4Routes: map[graph.L4RouteKey]*graph.L4Route{
+								passthroughKey: {
+									Valid: true,
+									Spec: graph.L4RouteSpec{
+										Hostnames: []v1.Hostname{"passthrough.example.com"},
+										BackendRef: graph.BackendRef{
+											Valid:     true,
+											SvcNsName: passthroughKey.NamespacedName,
+											ServicePort: apiv1.ServicePort{
+												Name:     "https",
+												Protocol: "TCP",
+												Port:     8443,
+												TargetPort: intstr.IntOrString{
+													Type:   intstr.Int,
+													IntVal: 8443,
+												},
+											},
+										},
+									},
+									ParentRefs: []graph.ParentRef{
+										{
+											Kind:           kinds.Gateway,
+											NamespacedName: gatewayNsName,
+											Attachment: &graph.ParentRefAttachmentStatus{
+												AcceptedHostnames: map[string][]string{
+													graph.CreateParentRefListenerKey(
+														gatewayNsName,
+														"passthroughListener",
+													): {"passthrough.example.com"},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+						{
+							Name:        "terminateListener",
+							GatewayName: gatewayNsName,
+							Valid:       true,
+							Source: v1.Listener{
+								Protocol: v1.TLSProtocolType,
+								Port:     443,
+								Hostname: helpers.GetPointer[v1.Hostname]("terminate.example.com"),
+								TLS: &v1.ListenerTLSConfig{
+									Mode: helpers.GetPointer(v1.TLSModeTerminate),
+									CertificateRefs: []v1.SecretObjectReference{
+										{Name: "tls-secret"},
+									},
+								},
+							},
+							ResolvedSecrets: []types.NamespacedName{
+								{Namespace: "test", Name: "tls-secret"},
+							},
+							Routes: make(map[graph.RouteKey]*graph.L7Route),
+							L4Routes: map[graph.L4RouteKey]*graph.L4Route{
+								terminateKey: {
+									Valid: true,
+									Spec: graph.L4RouteSpec{
+										Hostnames: []v1.Hostname{"terminate.example.com"},
+										BackendRef: graph.BackendRef{
+											Valid:     true,
+											SvcNsName: terminateKey.NamespacedName,
+											ServicePort: apiv1.ServicePort{
+												Name:     "https",
+												Protocol: "TCP",
+												Port:     8443,
+												TargetPort: intstr.IntOrString{
+													Type:   intstr.Int,
+													IntVal: 8443,
+												},
+											},
+										},
+									},
+									ParentRefs: []graph.ParentRef{
+										{
+											Kind:           kinds.Gateway,
+											NamespacedName: gatewayNsName,
+											Attachment: &graph.ParentRefAttachmentStatus{
+												AcceptedHostnames: map[string][]string{
+													graph.CreateParentRefListenerKey(
+														gatewayNsName,
+														"terminateListener",
+													): {"terminate.example.com"},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				}
+			}(),
+			expected: []Layer4VirtualServer{
+				{
+					Hostname: "passthrough.example.com",
+					Upstreams: []Layer4Upstream{
+						{Name: "default_passthrough-app_8443", Weight: 0},
+					},
+					Port: 443,
+				},
+				{
+					Hostname: "terminate.example.com",
+					Upstreams: []Layer4Upstream{
+						{Name: "default_terminate-app_8443", Weight: 0},
+					},
+					Port: 443,
+					SSL: &SSL{
+						KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_tls-secret"},
+					},
+				},
+			},
+		},
+		{
+			name: "TLS Terminate listener with TLS options",
+			gateway: func() *graph.Gateway {
+				terminateKey := getL4RouteKey("terminate-app")
+				gatewayNsName := types.NamespacedName{Namespace: "test", Name: "gateway"}
+
+				return &graph.Gateway{
+					Listeners: []*graph.Listener{
+						{
+							Name:        "terminateListener",
+							GatewayName: gatewayNsName,
+							Valid:       true,
+							Source: v1.Listener{
+								Protocol: v1.TLSProtocolType,
+								Port:     443,
+								Hostname: helpers.GetPointer[v1.Hostname]("secure.example.com"),
+								TLS: &v1.ListenerTLSConfig{
+									Mode: helpers.GetPointer(v1.TLSModeTerminate),
+									CertificateRefs: []v1.SecretObjectReference{
+										{Name: "tls-secret"},
+									},
+									Options: map[v1.AnnotationKey]v1.AnnotationValue{
+										graph.SSLProtocolsKey:           "TLSv1.2 TLSv1.3",
+										graph.SSLCiphersKey:             "HIGH:!aNULL",
+										graph.SSLPreferServerCiphersKey: "on",
+									},
+								},
+							},
+							ResolvedSecrets: []types.NamespacedName{
+								{Namespace: "test", Name: "tls-secret"},
+							},
+							Routes: make(map[graph.RouteKey]*graph.L7Route),
+							L4Routes: map[graph.L4RouteKey]*graph.L4Route{
+								terminateKey: {
+									Valid: true,
+									Spec: graph.L4RouteSpec{
+										Hostnames: []v1.Hostname{"secure.example.com"},
+										BackendRef: graph.BackendRef{
+											Valid:     true,
+											SvcNsName: terminateKey.NamespacedName,
+											ServicePort: apiv1.ServicePort{
+												Name:     "https",
+												Protocol: "TCP",
+												Port:     8443,
+												TargetPort: intstr.IntOrString{
+													Type:   intstr.Int,
+													IntVal: 8443,
+												},
+											},
+										},
+									},
+									ParentRefs: []graph.ParentRef{
+										{
+											Kind:           kinds.Gateway,
+											NamespacedName: gatewayNsName,
+											Attachment: &graph.ParentRefAttachmentStatus{
+												AcceptedHostnames: map[string][]string{
+													graph.CreateParentRefListenerKey(
+														gatewayNsName,
+														"terminateListener",
+													): {"secure.example.com"},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				}
+			}(),
+			expected: []Layer4VirtualServer{
+				{
+					Hostname: "secure.example.com",
+					Upstreams: []Layer4Upstream{
+						{Name: "default_terminate-app_8443", Weight: 0},
+					},
+					Port: 443,
+					SSL: &SSL{
+						KeyPairIDs:          []SSLKeyPairID{"ssl_keypair_test_tls-secret"},
+						Protocols:           "TLSv1.2 TLSv1.3",
+						Ciphers:             "HIGH:!aNULL",
+						PreferServerCiphers: true,
+					},
+				},
+			},
+		},
 	}
 
 	for _, test := range tests {
@@ -5037,7 +5382,7 @@ func TestCreatePassthroughServers(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			result := buildPassthroughServers(test.gateway)
+			result := buildTLSServers(test.gateway)
 			g.Expect(result).To(Equal(test.expected))
 		})
 	}
@@ -9286,6 +9631,89 @@ func TestBuildClientConfigForSSLServersFrontendValidationModes(t *testing.T) {
 	}
 }
 
+func TestBuildCompressionConfig(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		compression *ngfAPIv1alpha2.Compression
+		expected    *CompressionSettings
+		name        string
+	}{
+		{
+			name:        "nil compression",
+			compression: nil,
+			expected:    nil,
+		},
+		{
+			name:        "empty compression struct",
+			compression: &ngfAPIv1alpha2.Compression{},
+			expected:    &CompressionSettings{},
+		},
+		{
+			name: "compression with mime types only",
+			compression: &ngfAPIv1alpha2.Compression{
+				Type:      ngfAPIv1alpha2.GzipCompressionType,
+				MimeTypes: []string{"text/css", "application/json"},
+			},
+			expected: &CompressionSettings{
+				MimeTypes: []string{"text/css", "application/json"},
+			},
+		},
+		{
+			name: "compression with gzip but no http version defaults to 1.1",
+			compression: &ngfAPIv1alpha2.Compression{
+				Type:      ngfAPIv1alpha2.GzipCompressionType,
+				MimeTypes: []string{"text/css"},
+				Gzip:      &ngfAPIv1alpha2.GzipSettings{},
+			},
+			expected: &CompressionSettings{
+				MimeTypes:   []string{"text/css"},
+				HTTPVersion: "1.1",
+			},
+		},
+		{
+			name: "compression with all options",
+			compression: &ngfAPIv1alpha2.Compression{
+				Type:      ngfAPIv1alpha2.GzipCompressionType,
+				MimeTypes: []string{"text/css"},
+				Level:     helpers.GetPointer[int32](6),
+				MinLength: helpers.GetPointer[int32](256),
+				Buffers: &ngfAPIv1alpha2.CompressionBuffers{
+					Number: 32,
+					Size:   "4k",
+				},
+				Gzip: &ngfAPIv1alpha2.GzipSettings{
+					Proxied:     []ngfAPIv1alpha2.GzipProxiedType{ngfAPIv1alpha2.GzipProxiedAny},
+					Vary:        helpers.GetPointer(true),
+					Disable:     []string{"msie6"},
+					HTTPVersion: helpers.GetPointer(ngfAPIv1alpha2.GzipHTTPVersion10),
+				},
+			},
+			expected: &CompressionSettings{
+				Level:        6,
+				MinLength:    helpers.GetPointer[int32](256),
+				BufferNumber: 32,
+				BufferSize:   "4k",
+				MimeTypes:    []string{"text/css"},
+				Vary:         true,
+				Proxied:      []string{"any"},
+				Disable:      []string{"msie6"},
+				HTTPVersion:  "1.0",
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			result := buildCompressionConfig(test.compression)
+			g.Expect(result).To(Equal(test.expected))
+		})
+	}
+}
+
 func TestBuildWAF(t *testing.T) {
 	t.Parallel()
 
@@ -9625,6 +10053,12 @@ func TestBuildCertBundles(t *testing.T) {
 		},
 	}
 
+	tlsServersWithTLS := []Layer4VirtualServer{
+		{
+			VerifyTLS: &VerifyTLS{CertBundleID: generateCertBundleID(backendBundle.Name)},
+		},
+	}
+
 	extAuthIDs := map[CertBundleID]struct{}{
 		generateCertBundleID(extAuthBundle.Name): {},
 	}
@@ -9636,6 +10070,7 @@ func TestBuildCertBundles(t *testing.T) {
 		name                 string
 		refCertBundles       []secrets.CertificateBundle
 		backendGroups        []BackendGroup
+		tlsServers           []Layer4VirtualServer
 	}{
 		{
 			name:                 "external auth filter BTP cert bundle is written even when no backend group references it",
@@ -9644,6 +10079,16 @@ func TestBuildCertBundles(t *testing.T) {
 			extAuthCertBundleIDs: extAuthIDs,
 			expected: map[CertBundleID]CertBundle{
 				generateCertBundleID(extAuthBundle.Name): CertBundle("ext-auth-ca-data"),
+			},
+		},
+		{
+			name:                 "TLSRoute terminate verify cert bundle is written when only TLS servers reference it",
+			refCertBundles:       []secrets.CertificateBundle{backendBundle},
+			backendGroups:        nil,
+			tlsServers:           tlsServersWithTLS,
+			extAuthCertBundleIDs: nil,
+			expected: map[CertBundleID]CertBundle{
+				generateCertBundleID(backendBundle.Name): CertBundle("backend-ca-data"),
 			},
 		},
 		{
@@ -9677,6 +10122,7 @@ func TestBuildCertBundles(t *testing.T) {
 			result := buildCertBundles(
 				test.refCertBundles,
 				test.backendGroups,
+				test.tlsServers,
 				test.extAuthCertBundleIDs,
 				test.authBundles,
 			)

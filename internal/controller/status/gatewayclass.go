@@ -23,6 +23,8 @@ func supportedFeatures(experimental bool) []gatewayv1.SupportedFeature {
 
 		// TLSRoute
 		features.SupportTLSRoute,
+		features.SupportTLSRouteModeTerminate,
+		features.SupportTLSRouteModeMixed,
 
 		// Gateway extended
 		features.SupportGatewayAddressEmpty,

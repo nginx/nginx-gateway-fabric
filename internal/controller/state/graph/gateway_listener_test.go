@@ -87,19 +87,6 @@ func TestValidateHTTPSListener(t *testing.T) {
 		Namespace: (*v1.Namespace)(helpers.GetPointer(secretNs)),
 	}
 
-	invalidSecretRefGroup := v1.SecretObjectReference{
-		Group:     (*v1.Group)(helpers.GetPointer("some-group")),
-		Kind:      (*v1.Kind)(helpers.GetPointer("Secret")),
-		Name:      "secret",
-		Namespace: (*v1.Namespace)(helpers.GetPointer(secretNs)),
-	}
-
-	invalidSecretRefKind := v1.SecretObjectReference{
-		Kind:      (*v1.Kind)(helpers.GetPointer("ConfigMap")),
-		Name:      "secret",
-		Namespace: (*v1.Namespace)(helpers.GetPointer(secretNs)),
-	}
-
 	protectedPorts := ProtectedPorts{9113: "MetricsPort"}
 
 	tests := []struct {
@@ -146,135 +133,6 @@ func TestValidateHTTPSListener(t *testing.T) {
 			l: v1.Listener{
 				Port: 443,
 				TLS: &v1.ListenerTLSConfig{
-					Mode:            helpers.GetPointer(v1.TLSModeTerminate),
-					CertificateRefs: []v1.SecretObjectReference{validSecretRef},
-					Options:         map[v1.AnnotationKey]v1.AnnotationValue{"unsupported-key": "val"},
-				},
-			},
-			expected: conditions.NewListenerUnsupportedValue(
-				`tls.options[unsupported-key]: Unsupported value: "unsupported-key": ` +
-					`supported values: "nginx.org/ssl-protocols", "nginx.org/ssl-ciphers", "nginx.org/ssl-prefer-server-ciphers"`,
-			),
-			name: "unsupported options",
-		},
-		{
-			l: v1.Listener{
-				Port: 443,
-				TLS: &v1.ListenerTLSConfig{
-					Mode:            helpers.GetPointer(v1.TLSModeTerminate),
-					CertificateRefs: []v1.SecretObjectReference{validSecretRef},
-					Options: map[v1.AnnotationKey]v1.AnnotationValue{
-						"nginx.org/ssl-protocols":             "TLSv1.2 TLSv1.3",
-						"nginx.org/ssl-ciphers":               "HIGH:!aNULL:!MD5",
-						"nginx.org/ssl-prefer-server-ciphers": "on",
-					},
-				},
-			},
-			expected: nil,
-			name:     "valid supported options",
-		},
-		{
-			l: v1.Listener{
-				Port: 443,
-				TLS: &v1.ListenerTLSConfig{
-					Mode:            helpers.GetPointer(v1.TLSModeTerminate),
-					CertificateRefs: []v1.SecretObjectReference{validSecretRef},
-					Options: map[v1.AnnotationKey]v1.AnnotationValue{
-						"nginx.org/ssl-protocols": "unknown",
-					},
-				},
-			},
-			expected: conditions.NewListenerUnsupportedValue(
-				`tls.options[nginx.org/ssl-protocols]: Unsupported value: "unknown": ` +
-					`supported values: "SSLv2", "SSLv3", "TLSv1", "TLSv1.1", "TLSv1.2", "TLSv1.3"`,
-			),
-			name: "invalid nginx.org/ssl-protocols value",
-		},
-		{
-			l: v1.Listener{
-				Port: 443,
-				TLS: &v1.ListenerTLSConfig{
-					Mode:            helpers.GetPointer(v1.TLSModeTerminate),
-					CertificateRefs: []v1.SecretObjectReference{validSecretRef},
-					Options: map[v1.AnnotationKey]v1.AnnotationValue{
-						"nginx.org/ssl-protocols": "",
-					},
-				},
-			},
-			expected: conditions.NewListenerUnsupportedValue(
-				`tls.options[nginx.org/ssl-protocols]: Unsupported value: "": ` +
-					`supported values: "SSLv2", "SSLv3", "TLSv1", "TLSv1.1", "TLSv1.2", "TLSv1.3"`,
-			),
-			name: "invalid nginx.org/ssl-protocols empty value",
-		},
-		{
-			l: v1.Listener{
-				Port: 443,
-				TLS: &v1.ListenerTLSConfig{
-					Mode:            helpers.GetPointer(v1.TLSModeTerminate),
-					CertificateRefs: []v1.SecretObjectReference{validSecretRef},
-					Options: map[v1.AnnotationKey]v1.AnnotationValue{
-						"nginx.org/ssl-ciphers": "unknown!",
-					},
-				},
-			},
-			expected: conditions.NewListenerUnsupportedValue(
-				`tls.options[nginx.org/ssl-ciphers]: Invalid value: "unknown!": invalid ssl ciphers`,
-			),
-			name: "invalid nginx.org/ssl-ciphers value",
-		},
-		{
-			l: v1.Listener{
-				Port: 443,
-				TLS: &v1.ListenerTLSConfig{
-					Mode:            helpers.GetPointer(v1.TLSModeTerminate),
-					CertificateRefs: []v1.SecretObjectReference{validSecretRef},
-					Options: map[v1.AnnotationKey]v1.AnnotationValue{
-						"nginx.org/ssl-ciphers": "",
-					},
-				},
-			},
-			expected: conditions.NewListenerUnsupportedValue(
-				`tls.options[nginx.org/ssl-ciphers]: Invalid value: "": invalid ssl ciphers`,
-			),
-			name: "invalid nginx.org/ssl-ciphers empty value",
-		},
-		{
-			l: v1.Listener{
-				Port: 443,
-				TLS: &v1.ListenerTLSConfig{
-					Mode:            helpers.GetPointer(v1.TLSModeTerminate),
-					CertificateRefs: []v1.SecretObjectReference{validSecretRef},
-					Options: map[v1.AnnotationKey]v1.AnnotationValue{
-						"nginx.org/ssl-prefer-server-ciphers": "unknown",
-					},
-				},
-			},
-			expected: conditions.NewListenerUnsupportedValue(
-				`tls.options[nginx.org/ssl-prefer-server-ciphers]: Unsupported value: "unknown": supported values: "on", "off"`,
-			),
-			name: "invalid nginx.org/ssl-prefer-server-ciphers value",
-		},
-		{
-			l: v1.Listener{
-				Port: 443,
-				TLS: &v1.ListenerTLSConfig{
-					Mode:            helpers.GetPointer(v1.TLSModeTerminate),
-					CertificateRefs: []v1.SecretObjectReference{validSecretRef},
-					Options: map[v1.AnnotationKey]v1.AnnotationValue{
-						"nginx.org/ssl-prefer-server-ciphers": "",
-					},
-				},
-			},
-			expected: conditions.NewListenerUnsupportedValue(
-				`tls.options[nginx.org/ssl-prefer-server-ciphers]: Unsupported value: "": supported values: "on", "off"`,
-			),
-			name: "invalid nginx.org/ssl-prefer-server-ciphers empty value",
-		},
-		{
-			l: v1.Listener{
-				Port: 443,
-				TLS: &v1.ListenerTLSConfig{
 					Mode:            helpers.GetPointer(v1.TLSModePassthrough),
 					CertificateRefs: []v1.SecretObjectReference{validSecretRef},
 				},
@@ -287,62 +145,23 @@ func TestValidateHTTPSListener(t *testing.T) {
 		{
 			l: v1.Listener{
 				Port: 443,
+				TLS: &v1.ListenerTLSConfig{
+					Mode:            nil,
+					CertificateRefs: []v1.SecretObjectReference{validSecretRef},
+				},
+			},
+			expected: nil,
+			name:     "nil tls mode defaults to terminate",
+		},
+		{
+			l: v1.Listener{
+				Port: 443,
 				TLS:  nil,
 			},
 			expected: conditions.NewListenerUnsupportedValue(
 				`TLS: Required value: tls must be defined for HTTPS listener`,
 			),
 			name: "nil tls",
-		},
-		{
-			l: v1.Listener{
-				Port: 443,
-				TLS: &v1.ListenerTLSConfig{
-					Mode:            helpers.GetPointer(v1.TLSModeTerminate),
-					CertificateRefs: []v1.SecretObjectReference{invalidSecretRefGroup},
-				},
-			},
-			expected: conditions.NewListenerInvalidCertificateRefNotAccepted(
-				`tls.certificateRefs[0].group: Unsupported value: "some-group": supported values: ""`,
-			),
-			name: "invalid cert ref group",
-		},
-		{
-			l: v1.Listener{
-				Port: 443,
-				TLS: &v1.ListenerTLSConfig{
-					Mode:            helpers.GetPointer(v1.TLSModeTerminate),
-					CertificateRefs: []v1.SecretObjectReference{},
-				},
-			},
-			expected: conditions.NewListenerInvalidCertificateRefNotAccepted(
-				`tls.certificateRefs: Required value: certificateRefs must be defined for TLS mode terminate`,
-			),
-			name: "zero cert refs",
-		},
-		{
-			l: v1.Listener{
-				Port: 443,
-				TLS: &v1.ListenerTLSConfig{
-					Mode:            helpers.GetPointer(v1.TLSModeTerminate),
-					CertificateRefs: []v1.SecretObjectReference{invalidSecretRefKind},
-				},
-			},
-			expected: conditions.NewListenerInvalidCertificateRefNotAccepted(
-				`tls.certificateRefs[0].kind: Unsupported value: "ConfigMap": supported values: "Secret"`,
-			),
-			name: "invalid cert ref kind",
-		},
-		{
-			l: v1.Listener{
-				Port: 443,
-				TLS: &v1.ListenerTLSConfig{
-					Mode:            helpers.GetPointer(v1.TLSModeTerminate),
-					CertificateRefs: []v1.SecretObjectReference{validSecretRef, validSecretRef},
-				},
-			},
-			expected: nil,
-			name:     "multiple cert refs",
 		},
 	}
 
@@ -582,9 +401,19 @@ func TestGetAndValidateListenerSupportedKinds(t *testing.T) {
 			tls: &v1.ListenerTLSConfig{
 				Mode: helpers.GetPointer(v1.TLSModeTerminate),
 			},
-			expectErr: true,
-			name:      "invalid mode for TLS protocol",
-			expected:  []v1.RouteGroupKind{},
+			expectErr: false,
+			name:      "valid kinds for TLS protocol with terminate mode",
+			expected:  []v1.RouteGroupKind{TLSRouteGroupKind},
+		},
+		{
+			protocol: v1.TLSProtocolType,
+			kind: []v1.RouteGroupKind{
+				TLSRouteGroupKind,
+			},
+			tls:       &v1.ListenerTLSConfig{},
+			expectErr: false,
+			name:      "valid kinds for TLS protocol with nil mode defaults to terminate",
+			expected:  []v1.RouteGroupKind{TLSRouteGroupKind},
 		},
 		{
 			protocol: v1.TLSProtocolType,
@@ -787,7 +616,7 @@ func TestValidateTLSFieldOnTLSListener(t *testing.T) {
 		{
 			listener: v1.Listener{},
 			expectedCond: conditions.NewListenerUnsupportedValue(
-				"TLS: Required value: tls must be defined for TLS listener",
+				"tls: Required value: tls must be defined for TLS listener",
 			),
 			expectValid: false,
 			msg:         "TLS listener without tls field",
@@ -795,23 +624,41 @@ func TestValidateTLSFieldOnTLSListener(t *testing.T) {
 		{
 			listener: v1.Listener{TLS: nil},
 			expectedCond: conditions.NewListenerUnsupportedValue(
-				"TLS: Required value: tls must be defined for TLS listener",
+				"tls: Required value: tls must be defined for TLS listener",
 			),
 			expectValid: false,
 			msg:         "TLS listener with TLS field nil",
 		},
 		{
-			listener: v1.Listener{TLS: &v1.ListenerTLSConfig{Mode: helpers.GetPointer(v1.TLSModeTerminate)}},
-			expectedCond: conditions.NewListenerUnsupportedValue(
-				"TLS.Mode: Required value: Mode must be passthrough for TLS listener",
-			),
-			expectValid: false,
-			msg:         "TLS listener with TLS mode terminate",
+			listener: v1.Listener{
+				TLS: &v1.ListenerTLSConfig{
+					Mode: helpers.GetPointer(v1.TLSModeTerminate),
+				},
+			},
+			expectValid: true,
+			msg:         "TLS listener with TLS mode terminate (cert validation handled by shared validator)",
+		},
+		{
+			listener:    v1.Listener{TLS: &v1.ListenerTLSConfig{}},
+			expectValid: true,
+			msg:         "TLS listener with nil TLS mode defaults to terminate",
 		},
 		{
 			listener:    v1.Listener{TLS: &v1.ListenerTLSConfig{Mode: helpers.GetPointer(v1.TLSModePassthrough)}},
 			expectValid: true,
 			msg:         "TLS listener with TLS mode passthrough",
+		},
+		{
+			listener: v1.Listener{
+				TLS: &v1.ListenerTLSConfig{
+					Mode: helpers.GetPointer(v1.TLSModeType("SomeUnsupportedMode")),
+				},
+			},
+			expectedCond: conditions.NewListenerUnsupportedValue(
+				`tls.mode: Unsupported value: "SomeUnsupportedMode": supported values: "Passthrough", "Terminate"`,
+			),
+			expectValid: false,
+			msg:         "TLS listener with unsupported TLS mode",
 		},
 	}
 	for _, test := range tests {
@@ -822,6 +669,239 @@ func TestValidateTLSFieldOnTLSListener(t *testing.T) {
 
 			g.Expect(cond).To(BeEquivalentTo(test.expectedCond))
 			g.Expect(valid).To(BeEquivalentTo(test.expectValid))
+		})
+	}
+}
+
+func TestValidateListenerTLSTerminateFields(t *testing.T) {
+	t.Parallel()
+
+	validSecretRef := v1.SecretObjectReference{
+		Kind:      (*v1.Kind)(helpers.GetPointer("Secret")),
+		Name:      "secret",
+		Namespace: (*v1.Namespace)(helpers.GetPointer("secret-ns")),
+	}
+
+	tests := []struct {
+		listener v1.Listener
+		name     string
+		expected []conditions.Condition
+	}{
+		{
+			listener: v1.Listener{
+				TLS: &v1.ListenerTLSConfig{
+					Mode:            helpers.GetPointer(v1.TLSModeTerminate),
+					CertificateRefs: []v1.SecretObjectReference{validSecretRef},
+				},
+			},
+			expected: nil,
+			name:     "valid terminate with cert ref",
+		},
+		{
+			listener: v1.Listener{
+				TLS: &v1.ListenerTLSConfig{
+					Mode:            helpers.GetPointer(v1.TLSModePassthrough),
+					CertificateRefs: []v1.SecretObjectReference{validSecretRef},
+				},
+			},
+			expected: nil,
+			name:     "passthrough mode is skipped",
+		},
+		{
+			listener: v1.Listener{
+				TLS: nil,
+			},
+			expected: nil,
+			name:     "nil TLS is skipped",
+		},
+		{
+			listener: v1.Listener{
+				TLS: &v1.ListenerTLSConfig{
+					Mode: helpers.GetPointer(v1.TLSModeTerminate),
+				},
+			},
+			expected: conditions.NewListenerInvalidCertificateRefNotAccepted(
+				"tls.certificateRefs: Required value: certificateRefs must be defined for TLS mode terminate",
+			),
+			name: "zero cert refs",
+		},
+		{
+			listener: v1.Listener{
+				TLS: &v1.ListenerTLSConfig{
+					Mode:            helpers.GetPointer(v1.TLSModeTerminate),
+					CertificateRefs: []v1.SecretObjectReference{},
+				},
+			},
+			expected: conditions.NewListenerInvalidCertificateRefNotAccepted(
+				"tls.certificateRefs: Required value: certificateRefs must be defined for TLS mode terminate",
+			),
+			name: "empty cert refs",
+		},
+		{
+			listener: v1.Listener{
+				TLS: &v1.ListenerTLSConfig{
+					Mode: helpers.GetPointer(v1.TLSModeTerminate),
+					CertificateRefs: []v1.SecretObjectReference{
+						{
+							Name:  "secret",
+							Kind:  helpers.GetPointer[v1.Kind]("ConfigMap"),
+							Group: helpers.GetPointer[v1.Group](""),
+						},
+					},
+				},
+			},
+			expected: conditions.NewListenerInvalidCertificateRefNotAccepted(
+				`tls.certificateRefs[0].kind: Unsupported value: "ConfigMap": supported values: "Secret"`,
+			),
+			name: "invalid cert ref kind",
+		},
+		{
+			listener: v1.Listener{
+				TLS: &v1.ListenerTLSConfig{
+					Mode: helpers.GetPointer(v1.TLSModeTerminate),
+					CertificateRefs: []v1.SecretObjectReference{
+						{
+							Name:  "secret",
+							Group: helpers.GetPointer[v1.Group]("some-group"),
+						},
+					},
+				},
+			},
+			expected: conditions.NewListenerInvalidCertificateRefNotAccepted(
+				`tls.certificateRefs[0].group: Unsupported value: "some-group": supported values: ""`,
+			),
+			name: "invalid cert ref group",
+		},
+		{
+			listener: v1.Listener{
+				TLS: &v1.ListenerTLSConfig{
+					Mode:            helpers.GetPointer(v1.TLSModeTerminate),
+					CertificateRefs: []v1.SecretObjectReference{validSecretRef, validSecretRef},
+				},
+			},
+			expected: nil,
+			name:     "multiple cert refs",
+		},
+		{
+			listener: v1.Listener{
+				TLS: &v1.ListenerTLSConfig{
+					Mode:            helpers.GetPointer(v1.TLSModeTerminate),
+					CertificateRefs: []v1.SecretObjectReference{validSecretRef},
+					Options:         map[v1.AnnotationKey]v1.AnnotationValue{"unsupported-key": "val"},
+				},
+			},
+			expected: conditions.NewListenerUnsupportedValue(
+				`tls.options[unsupported-key]: Unsupported value: "unsupported-key": ` +
+					`supported values: "nginx.org/ssl-protocols", "nginx.org/ssl-ciphers", "nginx.org/ssl-prefer-server-ciphers"`,
+			),
+			name: "unsupported options",
+		},
+		{
+			listener: v1.Listener{
+				TLS: &v1.ListenerTLSConfig{
+					Mode:            helpers.GetPointer(v1.TLSModeTerminate),
+					CertificateRefs: []v1.SecretObjectReference{validSecretRef},
+					Options: map[v1.AnnotationKey]v1.AnnotationValue{
+						"nginx.org/ssl-protocols":             "TLSv1.2 TLSv1.3",
+						"nginx.org/ssl-ciphers":               "HIGH:!aNULL:!MD5",
+						"nginx.org/ssl-prefer-server-ciphers": "on",
+					},
+				},
+			},
+			expected: nil,
+			name:     "valid supported options",
+		},
+		{
+			listener: v1.Listener{
+				TLS: &v1.ListenerTLSConfig{
+					Mode:            helpers.GetPointer(v1.TLSModeTerminate),
+					CertificateRefs: []v1.SecretObjectReference{validSecretRef},
+					Options: map[v1.AnnotationKey]v1.AnnotationValue{
+						"nginx.org/ssl-protocols": "unknown",
+					},
+				},
+			},
+			expected: conditions.NewListenerUnsupportedValue(
+				`tls.options[nginx.org/ssl-protocols]: Unsupported value: "unknown": ` +
+					`supported values: "SSLv2", "SSLv3", "TLSv1", "TLSv1.1", "TLSv1.2", "TLSv1.3"`,
+			),
+			name: "invalid nginx.org/ssl-protocols value",
+		},
+		{
+			listener: v1.Listener{
+				TLS: &v1.ListenerTLSConfig{
+					Mode:            helpers.GetPointer(v1.TLSModeTerminate),
+					CertificateRefs: []v1.SecretObjectReference{validSecretRef},
+					Options: map[v1.AnnotationKey]v1.AnnotationValue{
+						"nginx.org/ssl-ciphers": "unknown!",
+					},
+				},
+			},
+			expected: conditions.NewListenerUnsupportedValue(
+				`tls.options[nginx.org/ssl-ciphers]: Invalid value: "unknown!": invalid ssl ciphers`,
+			),
+			name: "invalid nginx.org/ssl-ciphers value",
+		},
+		{
+			listener: v1.Listener{
+				TLS: &v1.ListenerTLSConfig{
+					Mode:            helpers.GetPointer(v1.TLSModeTerminate),
+					CertificateRefs: []v1.SecretObjectReference{validSecretRef},
+					Options: map[v1.AnnotationKey]v1.AnnotationValue{
+						"nginx.org/ssl-prefer-server-ciphers": "unknown",
+					},
+				},
+			},
+			expected: conditions.NewListenerUnsupportedValue(
+				`tls.options[nginx.org/ssl-prefer-server-ciphers]: Unsupported value: "unknown": supported values: "on", "off"`,
+			),
+			name: "invalid nginx.org/ssl-prefer-server-ciphers value",
+		},
+		{
+			listener: v1.Listener{
+				Protocol: v1.HTTPSProtocolType,
+				TLS: &v1.ListenerTLSConfig{
+					Mode:            nil, // defaults to Terminate for HTTPS
+					CertificateRefs: []v1.SecretObjectReference{validSecretRef},
+				},
+			},
+			expected: nil,
+			name:     "HTTPS nil mode defaults to terminate with valid cert refs",
+		},
+		{
+			listener: v1.Listener{
+				Protocol: v1.HTTPSProtocolType,
+				TLS: &v1.ListenerTLSConfig{
+					Mode: nil, // defaults to Terminate for HTTPS
+				},
+			},
+			expected: conditions.NewListenerInvalidCertificateRefNotAccepted(
+				"tls.certificateRefs: Required value: certificateRefs must be defined for TLS mode terminate",
+			),
+			name: "HTTPS nil mode defaults to terminate missing cert refs",
+		},
+		{
+			listener: v1.Listener{
+				Protocol: v1.TLSProtocolType,
+				TLS: &v1.ListenerTLSConfig{
+					Mode: nil, // nil mode defaults to Terminate
+				},
+			},
+			expected: conditions.NewListenerInvalidCertificateRefNotAccepted(
+				"tls.certificateRefs: Required value: certificateRefs must be defined for TLS mode terminate",
+			),
+			name: "TLS nil mode defaults to terminate missing cert refs",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			result, attachable := validateListenerTLSTerminateFields(test.listener)
+			g.Expect(result).To(Equal(test.expected))
+			g.Expect(attachable).To(BeTrue())
 		})
 	}
 }

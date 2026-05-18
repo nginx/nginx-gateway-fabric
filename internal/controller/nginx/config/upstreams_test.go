@@ -125,12 +125,12 @@ func TestExecuteUpstreams_NginxOSS(t *testing.T) {
 		"upstream up6-usp-keepAlive-connections-zero": 1,
 		"upstream invalid-backend-ref":                1,
 
-		"server 10.0.0.0:80;":                               1,
-		"server 11.0.0.0:80;":                               1,
-		"server [2001:db8::1]:80":                           1,
-		"server 12.0.0.0:80;":                               1,
-		"server 12.0.0.6:80;":                               1,
-		"server unix:/var/run/nginx/nginx-503-server.sock;": 1,
+		"server 10.0.0.0:80;":     1,
+		"server 11.0.0.0:80;":     1,
+		"server [2001:db8::1]:80": 1,
+		"server 12.0.0.0:80;":     1,
+		"server 12.0.0.6:80;":     1,
+		fmt.Sprintf("server %snginx-503-server.sock;", SocketBasePath): 1,
 
 		"keepalive 1;":           1,
 		"keepalive_requests 1;":  2,
@@ -372,7 +372,7 @@ func TestExecuteUpstreams_NginxPlus(t *testing.T) {
 		"state /var/lib/nginx/state/up7-with-sp.conf;":                        1,
 		"state /var/lib/nginx/state/up8-with-sp-expiry-and-path-empty.conf;":  1,
 		"state /var/lib/nginx/state/up9-usp-keepAlive-connections-zero.conf;": 1,
-		"server unix:/var/run/nginx/nginx-500-server.sock;":                   1,
+		fmt.Sprintf("server %snginx-500-server.sock;", SocketBasePath):        1,
 	}
 
 	upstreams := gen.createUpstreams(stateUpstreams, upstreamsettings.NewProcessor())
