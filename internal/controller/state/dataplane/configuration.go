@@ -882,6 +882,11 @@ func newBackendGroup(
 		// Check if this backend is an ExternalName service
 		externalHostname := getExternalHostname(ref.SvcNsName, referencedServices)
 
+		var appProtocol string
+		if ref.ServicePort.AppProtocol != nil {
+			appProtocol = *ref.ServicePort.AppProtocol
+		}
+
 		backends = append(backends, Backend{
 			UpstreamName:         ref.ServicePortReference(),
 			Weight:               ref.Weight,
@@ -889,6 +894,7 @@ func newBackendGroup(
 			VerifyTLS:            convertBackendTLS(ref.BackendTLSPolicy, gatewayName),
 			EndpointPickerConfig: eppRef,
 			ExternalHostname:     externalHostname,
+			AppProtocol:          appProtocol,
 		})
 	}
 

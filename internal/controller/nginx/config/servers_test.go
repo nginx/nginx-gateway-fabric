@@ -18,6 +18,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/policiesfakes"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/shared"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
 
@@ -7828,6 +7829,281 @@ func TestExtractExternalAuthInternalLocations(t *testing.T) {
 
 			result := extractExternalAuthInternalLocations(test.locations)
 			g.Expect(result).To(Equal(test.expected))
+		})
+	}
+}
+
+func TestAllValidBackendsAreH2C(t *testing.T) {
+	t.Parallel()
+
+	h2c := graph.AppProtocolTypeH2C
+
+	tests := []struct {
+		name     string
+		backends []dataplane.Backend
+		expected bool
+	}{
+		{
+			name:     "empty list – returns false",
+			backends: []dataplane.Backend{},
+			expected: false,
+		},
+		{
+			name: "no valid backends – returns false",
+			backends: []dataplane.Backend{
+				{Valid: false, AppProtocol: h2c},
+			},
+			expected: false,
+		},
+		{
+			name: "single h2c valid backend – returns true",
+			backends: []dataplane.Backend{
+				{Valid: true, AppProtocol: h2c},
+			},
+			expected: true,
+		},
+		{
+			name: "all valid backends h2c – returns true",
+			backends: []dataplane.Backend{
+				{Valid: true, AppProtocol: h2c},
+				{Valid: true, AppProtocol: h2c},
+			},
+			expected: true,
+		},
+		{
+			name: "mixed h2c and non-h2c valid backends – returns false",
+			backends: []dataplane.Backend{
+				{Valid: true, AppProtocol: h2c},
+				{Valid: true, AppProtocol: ""},
+			},
+			expected: false,
+		},
+		{
+			name: "h2c valid + non-h2c invalid – still true (invalid ignored)",
+			backends: []dataplane.Backend{
+				{Valid: true, AppProtocol: h2c},
+				{Valid: false, AppProtocol: ""},
+			},
+			expected: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+			g.Expect(allValidBackendsAreH2C(tc.backends)).To(Equal(tc.expected))
+		})
+	}
+}
+
+func TestExtractPolicyHTTPVersion(t *testing.T) {
+	t.Parallel()
+
+	v11 := v1alpha1.ProxyHTTPVersion1_1
+	v2 := v1alpha1.ProxyHTTPVersion2
+
+	tests := []struct {
+		expected *string
+		name     string
+		pols     []policies.Policy
+	}{
+		{
+			name:     "no policies – returns nil",
+			pols:     []policies.Policy{},
+			expected: nil,
+		},
+		{
+			name: "non-ProxySettingsPolicy – returns nil",
+			pols: []policies.Policy{
+				&v1alpha1.ClientSettingsPolicy{},
+			},
+			expected: nil,
+		},
+		{
+			name: "ProxySettingsPolicy without ProxyHTTPVersion – returns nil",
+			pols: []policies.Policy{
+				&v1alpha1.ProxySettingsPolicy{},
+			},
+			expected: nil,
+		},
+		{
+			name: "ProxySettingsPolicy with version 1.1 – returns '1.1'",
+			pols: []policies.Policy{
+				&v1alpha1.ProxySettingsPolicy{
+					Spec: v1alpha1.ProxySettingsPolicySpec{ProxyHTTPVersion: &v11},
+				},
+			},
+			expected: helpers.GetPointer("1.1"),
+		},
+		{
+			name: "ProxySettingsPolicy with version 2 – returns '2'",
+			pols: []policies.Policy{
+				&v1alpha1.ProxySettingsPolicy{
+					Spec: v1alpha1.ProxySettingsPolicySpec{ProxyHTTPVersion: &v2},
+				},
+			},
+			expected: helpers.GetPointer("2"),
+		},
+		{
+			name: "first policy wins",
+			pols: []policies.Policy{
+				&v1alpha1.ProxySettingsPolicy{
+					Spec: v1alpha1.ProxySettingsPolicySpec{ProxyHTTPVersion: &v2},
+				},
+				&v1alpha1.ProxySettingsPolicy{
+					Spec: v1alpha1.ProxySettingsPolicySpec{ProxyHTTPVersion: &v11},
+				},
+			},
+			expected: helpers.GetPointer("2"),
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+			g.Expect(extractPolicyHTTPVersion(tc.pols)).To(Equal(tc.expected))
+		})
+	}
+}
+
+// TestExecuteServers_ProxyHTTPVersion verifies end-to-end that proxy_http_version is
+// rendered correctly in the generated NGINX config based on h2c auto-detection and explicit
+// ProxySettingsPolicy overrides.
+func TestExecuteServers_ProxyHTTPVersion(t *testing.T) {
+	t.Parallel()
+
+	makeBackend := func(appProtocol string, valid bool) dataplane.Backend {
+		return dataplane.Backend{
+			UpstreamName: "test_backend_80",
+			Valid:        valid,
+			Weight:       1,
+			AppProtocol:  appProtocol,
+		}
+	}
+
+	makeConf := func(pathRules []dataplane.PathRule, disableBaseProxySetHeaders []string) dataplane.Configuration {
+		return dataplane.Configuration{
+			HTTPServers: []dataplane.VirtualServer{
+				{
+					Hostname:  "http.example.com",
+					Port:      8080,
+					PathRules: pathRules,
+				},
+			},
+			BaseHTTPConfig: dataplane.BaseHTTPConfig{
+				DisableBaseProxySetHeaders: disableBaseProxySetHeaders,
+			},
+		}
+	}
+
+	makePathRule := func(backends []dataplane.Backend, pols []policies.Policy) dataplane.PathRule {
+		return dataplane.PathRule{
+			Path:     "/app",
+			PathType: dataplane.PathTypePrefix,
+			MatchRules: []dataplane.MatchRule{
+				{
+					Match: dataplane.Match{},
+					BackendGroup: dataplane.BackendGroup{
+						Source:   types.NamespacedName{Namespace: "default", Name: "route1"},
+						RuleIdx:  0,
+						Backends: backends,
+					},
+				},
+			},
+			Policies: pols,
+		}
+	}
+
+	v2 := v1alpha1.ProxyHTTPVersion2
+	v11 := v1alpha1.ProxyHTTPVersion1_1
+
+	tests := []struct {
+		name       string
+		expPresent string
+		expAbsent  string
+		pathRule   dataplane.PathRule
+	}{
+		{
+			// NGINX's own default is 1.1 – the directive must be omitted entirely.
+			name:      "no h2c backends – directive omitted (NGINX default)",
+			pathRule:  makePathRule([]dataplane.Backend{makeBackend("", true)}, nil),
+			expAbsent: "proxy_http_version",
+		},
+		{
+			name:       "all backends h2c – auto-detect emits version 2",
+			pathRule:   makePathRule([]dataplane.Backend{makeBackend(graph.AppProtocolTypeH2C, true)}, nil),
+			expPresent: "proxy_http_version 2;",
+		},
+		{
+			// Mixed h2c/non-h2c falls back to NGINX default – directive omitted.
+			name: "mixed backends – directive omitted (fallback to NGINX default)",
+			pathRule: makePathRule([]dataplane.Backend{
+				makeBackend(graph.AppProtocolTypeH2C, true),
+				makeBackend("", true),
+			}, nil),
+			expAbsent: "proxy_http_version",
+		},
+		{
+			// Policy says 1.1 on an h2c backend: overrides auto-detect, NGINX default handles it, directive omitted.
+			name: "h2c auto-detect overridden by policy 1.1 – directive omitted",
+			pathRule: makePathRule(
+				[]dataplane.Backend{makeBackend(graph.AppProtocolTypeH2C, true)},
+				[]policies.Policy{
+					&v1alpha1.ProxySettingsPolicy{
+						Spec: v1alpha1.ProxySettingsPolicySpec{ProxyHTTPVersion: &v11},
+					},
+				},
+			),
+			expAbsent: "proxy_http_version",
+		},
+		{
+			name: "non-h2c backend forced to 2 via policy – emits version 2",
+			pathRule: makePathRule(
+				[]dataplane.Backend{makeBackend("", true)},
+				[]policies.Policy{
+					&v1alpha1.ProxySettingsPolicy{
+						Spec: v1alpha1.ProxySettingsPolicySpec{ProxyHTTPVersion: &v2},
+					},
+				},
+			),
+			expPresent: "proxy_http_version 2;",
+		},
+		{
+			// No valid h2c backends → no auto-detect → directive omitted.
+			name: "all invalid h2c backends – directive omitted (no valid backends)",
+			pathRule: makePathRule([]dataplane.Backend{
+				makeBackend(graph.AppProtocolTypeH2C, false),
+			}, nil),
+			expAbsent: "proxy_http_version",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			conf := makeConf([]dataplane.PathRule{tc.pathRule}, nil)
+			gen := GeneratorImpl{}
+			results := gen.executeServers(conf, &policiesfakes.FakeGenerator{}, alwaysFalseKeepAliveChecker)
+
+			var serverConf string
+			for _, res := range results {
+				if res.dest == httpConfigFile {
+					serverConf = string(res.data)
+					break
+				}
+			}
+
+			g.Expect(serverConf).NotTo(BeEmpty())
+			if tc.expPresent != "" {
+				g.Expect(serverConf).To(ContainSubstring(tc.expPresent))
+			}
+			if tc.expAbsent != "" {
+				g.Expect(serverConf).NotTo(ContainSubstring(tc.expAbsent))
+			}
 		})
 	}
 }

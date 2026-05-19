@@ -3245,6 +3245,59 @@ func TestNewBackendGroup_Mirror(t *testing.T) {
 	g.Expect(group.Backends).To(BeEmpty())
 }
 
+func TestNewBackendGroup_AppProtocol(t *testing.T) {
+	t.Parallel()
+
+	h2c := helpers.GetPointer("kubernetes.io/h2c")
+
+	tests := []struct {
+		name        string
+		appProtocol *string
+		expected    string
+	}{
+		{
+			name:        "nil appProtocol – empty string",
+			appProtocol: nil,
+			expected:    "",
+		},
+		{
+			name:        "h2c appProtocol – propagated",
+			appProtocol: h2c,
+			expected:    "kubernetes.io/h2c",
+		},
+		{
+			name:        "arbitrary appProtocol – propagated",
+			appProtocol: helpers.GetPointer("example.com/custom"),
+			expected:    "example.com/custom",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			backendRef := graph.BackendRef{
+				SvcNsName:   types.NamespacedName{Name: "svc", Namespace: "default"},
+				ServicePort: apiv1.ServicePort{Port: 80, AppProtocol: tc.appProtocol},
+				Valid:       true,
+				Weight:      1,
+			}
+
+			group, _ := newBackendGroup(
+				[]graph.BackendRef{backendRef},
+				types.NamespacedName{Name: "gateway", Namespace: "default"},
+				types.NamespacedName{Name: "gateway", Namespace: "default"},
+				0,
+				nil,
+			)
+
+			g.Expect(group.Backends).To(HaveLen(1))
+			g.Expect(group.Backends[0].AppProtocol).To(Equal(tc.expected))
+		})
+	}
+}
+
 func TestGetPath(t *testing.T) {
 	t.Parallel()
 	tests := []struct {

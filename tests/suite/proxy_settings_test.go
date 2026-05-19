@@ -633,6 +633,117 @@ var _ = Describe("ProxySettingsPolicy", Ordered, Label("functional", "proxy-sett
 			waitForPoliciesVerification(policyExpectations)
 		})
 	})
+
+	When("an HTTPRoute backend Service has appProtocol kubernetes.io/h2c (auto-detection)", func() {
+		extraFiles := []string{
+			"proxy-settings-policy/h2c-backend.yaml",
+		}
+
+		BeforeAll(func() {
+			Expect(resourceManager.ApplyFromFiles(extraFiles, namespace)).To(Succeed())
+		})
+
+		AfterAll(func() {
+			Expect(resourceManager.DeleteFromFiles(extraFiles, namespace)).To(Succeed())
+		})
+
+		Context("nginx config", func() {
+			var conf *framework.Payload
+
+			BeforeAll(func() {
+				var err error
+				conf, err = resourceManager.GetNginxConfig(nginxPodName, namespace, "")
+				Expect(err).ToNot(HaveOccurred())
+			})
+
+			It("sets proxy_http_version 2 for the h2c location", func() {
+				Expect(framework.ValidateNginxFieldExists(conf, framework.ExpectedNginxField{
+					Directive: "proxy_http_version",
+					Value:     "2",
+					File:      "http.conf",
+					Server:    "cafe.example.com",
+					Location:  "/tea-h2c",
+				})).To(Succeed())
+			})
+
+			It("does not emit proxy_http_version for a non-h2c location (NGINX default)", func() {
+				// NGINX defaults to 1.1, so NGF omits the directive entirely.
+				Expect(framework.ValidateNginxFieldExists(conf, framework.ExpectedNginxField{
+					Directive: "proxy_http_version",
+					File:      "http.conf",
+					Server:    "cafe.example.com",
+					Location:  "/tea",
+				})).NotTo(Succeed())
+			})
+		})
+	})
+
+	When("proxyHTTPVersion is set explicitly via ProxySettingsPolicy", func() {
+		extraFiles := []string{
+			"proxy-settings-policy/h2c-backend.yaml",
+		}
+		policies := []string{
+			"proxy-settings-policy/http-version-proxy-settings.yaml",
+		}
+
+		BeforeAll(func() {
+			Expect(resourceManager.ApplyFromFiles(extraFiles, namespace)).To(Succeed())
+			Expect(resourceManager.ApplyFromFiles(policies, namespace)).To(Succeed())
+		})
+
+		AfterAll(func() {
+			Expect(resourceManager.DeleteFromFiles(policies, namespace)).To(Succeed())
+			Expect(resourceManager.DeleteFromFiles(extraFiles, namespace)).To(Succeed())
+		})
+
+		Specify("policies are Accepted", func() {
+			waitForPoliciesVerification([]policyStatusExpectation{
+				createPolicyExpectation(
+					"coffee-h2-proxy-settings",
+					namespace,
+					metav1.ConditionTrue,
+					gatewayv1.PolicyReasonAccepted,
+				),
+				createPolicyExpectation(
+					"tea-h2c-override-proxy-settings",
+					namespace,
+					metav1.ConditionTrue,
+					gatewayv1.PolicyReasonAccepted,
+				),
+			})
+		})
+
+		Context("nginx config", func() {
+			var conf *framework.Payload
+
+			BeforeAll(func() {
+				var err error
+				conf, err = resourceManager.GetNginxConfig(nginxPodName, namespace, "")
+				Expect(err).ToNot(HaveOccurred())
+			})
+
+			It("sets proxy_http_version 2 when policy forces version 2 (non-h2c backend)", func() {
+				Expect(framework.ValidateNginxFieldExists(conf, framework.ExpectedNginxField{
+					Directive: "proxy_http_version",
+					Value:     "2",
+					File:      "http.conf",
+					Server:    "cafe.example.com",
+					Location:  "/coffee",
+				})).To(Succeed())
+			})
+
+			It("overrides h2c auto-detect to 1.1 when policy forces version 1.1 – directive omitted", func() {
+				// Policy sets 1.1, which is NGINX's own default, so the directive is not emitted at all.
+				Expect(framework.ValidateNginxFieldExists(conf, framework.ExpectedNginxField{
+					Directive: "proxy_http_version",
+					Value:     "2",
+					File:      "http.conf",
+					Server:    "cafe.example.com",
+					Location:  "/tea-h2c",
+				})).NotTo(Succeed())
+			})
+		})
+	})
 })
 
 func waitForPSPolicyStatus(

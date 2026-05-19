@@ -917,19 +917,14 @@ func TestAddBackendRefsToRules(t *testing.T) {
 				{
 					SvcNsName:          svcH2cNsName,
 					ServicePort:        svcH2c.Spec.Ports[0],
-					Valid:              false,
+					Valid:              true,
 					Weight:             1,
 					InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
 				},
 			},
-			expectedConditions: []conditions.Condition{
-				conditions.NewRouteBackendRefUnsupportedProtocol(
-					"The Route type http does not support service port appProtocol kubernetes.io/h2c;" +
-						" nginx does not support proxying to upstreams with http2 or h2c",
-				),
-			},
-			policies: emptyPolicies,
-			name:     "invalid backendRef with service port appProtocol h2c and Route type http",
+			expectedConditions: nil,
+			policies:           emptyPolicies,
+			name:               "valid backendRef with service port appProtocol h2c and Route type http",
 		},
 		{
 			route: createRoute("hr1", RouteTypeHTTP, "Service", 1, "svcWS"),

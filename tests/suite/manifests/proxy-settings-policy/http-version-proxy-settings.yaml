@@ -1,0 +1,27 @@
+---
+# Forces proxy_http_version 2 for the coffee HTTPRoute via an explicit policy override.
+# This tests that the proxyHTTPVersion field is respected regardless of backend appProtocol.
+apiVersion: gateway.nginx.org/v1alpha1
+kind: ProxySettingsPolicy
+metadata:
+  name: coffee-h2-proxy-settings
+spec:
+  targetRefs:
+  - group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: coffee
+  proxyHTTPVersion: "2"
+---
+# Forces proxy_http_version 1.1 for the tea-h2c HTTPRoute, overriding the h2c auto-detection.
+# The tea-h2c Service has appProtocol: kubernetes.io/h2c, so without this policy NGF would
+# auto-select version 2. This policy explicitly resets it to 1.1.
+apiVersion: gateway.nginx.org/v1alpha1
+kind: ProxySettingsPolicy
+metadata:
+  name: tea-h2c-override-proxy-settings
+spec:
+  targetRefs:
+  - group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: tea-h2c-route
+  proxyHTTPVersion: "1.1"

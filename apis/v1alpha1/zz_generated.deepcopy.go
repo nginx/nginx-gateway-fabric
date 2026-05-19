@@ -1084,6 +1084,11 @@ func (in *ProxySettingsPolicySpec) DeepCopyInto(out *ProxySettingsPolicySpec) {
 		*out = new(ProxyTimeout)
 		(*in).DeepCopyInto(*out)
 	}
+	if in.ProxyHTTPVersion != nil {
+		in, out := &in.ProxyHTTPVersion, &out.ProxyHTTPVersion
+		*out = new(ProxyHTTPVersionType)
+		**out = **in
+	}
 	if in.TargetRefs != nil {
 		in, out := &in.TargetRefs, &out.TargetRefs
 		*out = make([]apisv1.LocalPolicyTargetReference, len(*in))

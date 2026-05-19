@@ -35,6 +35,21 @@ type ProxySettingsPolicyList struct {
 	Items           []ProxySettingsPolicy `json:"items"`
 }
 
+// ProxyHTTPVersionType is the HTTP protocol version used when proxying to upstream servers.
+// +kubebuilder:validation:Enum="1.1";"2"
+type ProxyHTTPVersionType string
+
+const (
+	// ProxyHTTPVersion1_1 configures NGINX to use HTTP/1.1 when proxying to upstream servers.
+	// This is the default behavior.
+	ProxyHTTPVersion1_1 ProxyHTTPVersionType = "1.1"
+	// ProxyHTTPVersion2 configures NGINX to use HTTP/2 when proxying to upstream servers.
+	// Requires the upstream to support HTTP/2. Use with backends that have
+	// appProtocol: kubernetes.io/h2c or explicit HTTP/2 support.
+	// Note: the current http2 -> backend implementation in NGINX does not yet support multiplexing.
+	ProxyHTTPVersion2 ProxyHTTPVersionType = "2"
+)
+
 // ProxySettingsPolicySpec defines the desired state of the ProxySettingsPolicy.
 type ProxySettingsPolicySpec struct {
 	// Buffering configures the buffering of responses from the proxied server.
@@ -46,6 +61,17 @@ type ProxySettingsPolicySpec struct {
 	//
 	// +optional
 	Timeout *ProxyTimeout `json:"timeout,omitempty"`
+
+	// ProxyHTTPVersion sets the HTTP protocol version to use when proxying requests to upstream servers.
+	// When set to "2", NGINX uses HTTP/2 (proxy_http_version 2).
+	// When set to "1.1" or unset, NGINX uses HTTP/1.1 (the default).
+	// If not set, NGF will automatically use HTTP/2 for backends whose Service port has
+	// appProtocol: kubernetes.io/h2c.
+	// Note: the current http2 -> backend implementation in NGINX does not yet support multiplexing.
+	// Directive: https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_http_version
+	//
+	// +optional
+	ProxyHTTPVersion *ProxyHTTPVersionType `json:"proxyHTTPVersion,omitempty"`
 
 	// TargetRefs identifies the API object(s) to apply the policy to.
 	// Objects must be in the same namespace as the policy.

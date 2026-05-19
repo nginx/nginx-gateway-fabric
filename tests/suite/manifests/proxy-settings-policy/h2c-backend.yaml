@@ -1,0 +1,38 @@
+---
+# Service for the tea app with appProtocol: kubernetes.io/h2c so that NGF auto-detects
+# HTTP/2 and emits `proxy_http_version 2` for the matching location.
+# NOTE: The tea backend only speaks HTTP/1.1; this manifest is used to verify that NGF
+# correctly generates `proxy_http_version 2` in the NGINX config when h2c is declared
+# on the Service port. Actual h2c traffic is not tested here.
+apiVersion: v1
+kind: Service
+metadata:
+  name: tea-h2c-svc
+spec:
+  ports:
+  - port: 80
+    targetPort: 8080
+    protocol: TCP
+    name: http
+    appProtocol: kubernetes.io/h2c
+  selector:
+    app: tea
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: tea-h2c-route
+spec:
+  parentRefs:
+  - name: gateway
+    sectionName: http
+  hostnames:
+  - "cafe.example.com"
+  rules:
+  - matches:
+    - path:
+        type: Exact
+        value: /tea-h2c
+    backendRefs:
+    - name: tea-h2c
+      port: 80

@@ -588,6 +588,17 @@ type Backend struct {
 	// Note: The upstream address is also set to this hostname (see resolveUpstreamEndpoints).
 	// Both the Host header and upstream address use the same external hostname to ensure consistency.
 	ExternalHostname string
+	// AppProtocol is the appProtocol of the backing Service port (e.g., "kubernetes.io/h2c").
+	// When set to AppProtocolH2C and no policy override is present, NGF will emit
+	// proxy_http_version 2 for the corresponding NGINX location.
+	//
+	// Because proxy_http_version is a location-level directive (not per-upstream), NGF applies
+	// an all-or-nothing rule: proxy_http_version 2 is only emitted when every valid backend in
+	// the BackendGroup carries AppProtocolH2C. If even one valid backend does not, NGF falls back
+	// to the NGINX default (1.1) so that all possible upstream targets in a split_clients or
+	// inference-endpoint variable remain reachable. A ProxySettingsPolicy with
+	// proxyHTTPVersion: "2" overrides this heuristic entirely, giving the operator explicit control.
+	AppProtocol string
 	// Weight is the weight of the BackendRef.
 	// The possible values of weight are 0-1,000,000.
 	// If weight is 0, no traffic should be forwarded for this entry.
