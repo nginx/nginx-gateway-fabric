@@ -393,6 +393,32 @@ func TestValidator_Conflicts(t *testing.T) {
 			conflicts: true,
 		},
 		{
+			name: "proxyHTTPVersion conflicts",
+			polA: &ngfAPI.ProxySettingsPolicy{
+				Spec: ngfAPI.ProxySettingsPolicySpec{
+					ProxyHTTPVersion: helpers.GetPointer(ngfAPI.ProxyHTTPVersion2),
+				},
+			},
+			polB: &ngfAPI.ProxySettingsPolicy{
+				Spec: ngfAPI.ProxySettingsPolicySpec{
+					ProxyHTTPVersion: helpers.GetPointer(ngfAPI.ProxyHTTPVersion1_1),
+				},
+			},
+			conflicts: true,
+		},
+		{
+			name: "proxyHTTPVersion does not conflict when only one policy sets it",
+			polA: &ngfAPI.ProxySettingsPolicy{
+				Spec: ngfAPI.ProxySettingsPolicySpec{
+					ProxyHTTPVersion: helpers.GetPointer(ngfAPI.ProxyHTTPVersion2),
+				},
+			},
+			polB: &ngfAPI.ProxySettingsPolicy{
+				Spec: ngfAPI.ProxySettingsPolicySpec{},
+			},
+			conflicts: false,
+		},
+		{
 			name: "different timeout fields do not conflict",
 			polA: &ngfAPI.ProxySettingsPolicy{
 				Spec: ngfAPI.ProxySettingsPolicySpec{
