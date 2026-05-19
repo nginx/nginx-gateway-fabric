@@ -69,3 +69,8 @@ docs/api/content.md
 
 # Test tgz files for WAF bundles
 tests/**/*.tgz
+
+# AI agent files
+.opencode/
+AGENTS.md
+opencode.json

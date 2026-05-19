@@ -35,7 +35,7 @@ func TestGenerate(t *testing.T) {
 					Namespace: "my-namespace",
 				},
 				Spec: ngfAPIv1alpha1.WAFPolicySpec{
-					PolicySource: ngfAPIv1alpha1.PolicySource{
+					PolicySource: &ngfAPIv1alpha1.PolicySource{
 						HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: policyURL},
 					},
 				},
@@ -53,12 +53,12 @@ func TestGenerate(t *testing.T) {
 					Namespace: "test-ns",
 				},
 				Spec: ngfAPIv1alpha1.WAFPolicySpec{
-					PolicySource: ngfAPIv1alpha1.PolicySource{
+					PolicySource: &ngfAPIv1alpha1.PolicySource{
 						HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: policyURL},
 					},
 					SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
 						{
-							LogSource: ngfAPIv1alpha1.LogSource{
+							LogSource: &ngfAPIv1alpha1.LogSource{
 								HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{
 									URL: logURL,
 								},
@@ -85,12 +85,12 @@ func TestGenerate(t *testing.T) {
 					Namespace: "test-ns",
 				},
 				Spec: ngfAPIv1alpha1.WAFPolicySpec{
-					PolicySource: ngfAPIv1alpha1.PolicySource{
+					PolicySource: &ngfAPIv1alpha1.PolicySource{
 						HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: policyURL},
 					},
 					SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
 						{
-							LogSource: ngfAPIv1alpha1.LogSource{
+							LogSource: &ngfAPIv1alpha1.LogSource{
 								HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: logURL},
 							},
 							Destination: ngfAPIv1alpha1.SecurityLogDestination{
@@ -119,7 +119,7 @@ func TestGenerate(t *testing.T) {
 				Spec: ngfAPIv1alpha1.WAFPolicySpec{
 					SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
 						{
-							LogSource: ngfAPIv1alpha1.LogSource{
+							LogSource: &ngfAPIv1alpha1.LogSource{
 								HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: logURL},
 							},
 							Destination: ngfAPIv1alpha1.SecurityLogDestination{
@@ -146,7 +146,7 @@ func TestGenerate(t *testing.T) {
 					Namespace: "test-ns",
 				},
 				Spec: ngfAPIv1alpha1.WAFPolicySpec{
-					PolicySource: ngfAPIv1alpha1.PolicySource{
+					PolicySource: &ngfAPIv1alpha1.PolicySource{
 						NIMSource: &ngfAPIv1alpha1.NIMBundleSource{
 							URL:        policyURL,
 							PolicyName: &nimPolicyName,
@@ -154,7 +154,7 @@ func TestGenerate(t *testing.T) {
 					},
 					SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
 						{
-							LogSource: ngfAPIv1alpha1.LogSource{
+							LogSource: &ngfAPIv1alpha1.LogSource{
 								NIMSource: &ngfAPIv1alpha1.NIMLogProfileBundleSource{
 									URL:         logURL,
 									ProfileName: nimLogProfileName,
@@ -183,12 +183,12 @@ func TestGenerate(t *testing.T) {
 					Namespace: "app-ns",
 				},
 				Spec: ngfAPIv1alpha1.WAFPolicySpec{
-					PolicySource: ngfAPIv1alpha1.PolicySource{
+					PolicySource: &ngfAPIv1alpha1.PolicySource{
 						HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: policyURL},
 					},
 					SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
 						{
-							LogSource: ngfAPIv1alpha1.LogSource{
+							LogSource: &ngfAPIv1alpha1.LogSource{
 								HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: logURL},
 							},
 							Destination: ngfAPIv1alpha1.SecurityLogDestination{
@@ -196,7 +196,7 @@ func TestGenerate(t *testing.T) {
 							},
 						},
 						{
-							LogSource: ngfAPIv1alpha1.LogSource{
+							LogSource: &ngfAPIv1alpha1.LogSource{
 								NIMSource: &ngfAPIv1alpha1.NIMLogProfileBundleSource{
 									URL:         logURL2,
 									ProfileName: nimLogProfileName,

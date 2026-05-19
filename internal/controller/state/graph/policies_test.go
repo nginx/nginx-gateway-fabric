@@ -2847,7 +2847,7 @@ func TestProcessWAFPolicies(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: policyNs},
 			Spec: ngfAPIv1alpha1.WAFPolicySpec{
 				Type: ngfAPIv1alpha1.PolicySourceTypeHTTP,
-				PolicySource: ngfAPIv1alpha1.PolicySource{
+				PolicySource: &ngfAPIv1alpha1.PolicySource{
 					HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: bundleURL},
 				},
 			},
@@ -2866,7 +2866,7 @@ func TestProcessWAFPolicies(t *testing.T) {
 		if withLogURL {
 			p.Spec.SecurityLogs = []ngfAPIv1alpha1.WAFSecurityLog{
 				{
-					LogSource: ngfAPIv1alpha1.LogSource{
+					LogSource: &ngfAPIv1alpha1.LogSource{
 						HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: logBundleURL},
 					},
 					Destination: ngfAPIv1alpha1.SecurityLogDestination{
@@ -3315,7 +3315,7 @@ func TestProcessWAFPolicies(t *testing.T) {
 				wafPolicy := makeWAFPolicy(policyName, false, false, false)
 				wafPolicy.Spec.SecurityLogs = []ngfAPIv1alpha1.WAFSecurityLog{
 					{
-						LogSource: ngfAPIv1alpha1.LogSource{
+						LogSource: &ngfAPIv1alpha1.LogSource{
 							HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: logBundleURL},
 							Auth: &ngfAPIv1alpha1.BundleAuth{
 								SecretRef: ngfAPIv1alpha1.LocalObjectReference{Name: authSecretName},
@@ -3359,7 +3359,7 @@ func TestProcessWAFPolicies(t *testing.T) {
 				wafPolicy := makeWAFPolicy(policyName, false, false, false)
 				wafPolicy.Spec.SecurityLogs = []ngfAPIv1alpha1.WAFSecurityLog{
 					{
-						LogSource: ngfAPIv1alpha1.LogSource{
+						LogSource: &ngfAPIv1alpha1.LogSource{
 							HTTPSource:   &ngfAPIv1alpha1.HTTPBundleSource{URL: logBundleURL},
 							TLSSecretRef: &ngfAPIv1alpha1.LocalObjectReference{Name: tlsSecretName},
 						},
@@ -3437,7 +3437,7 @@ func TestProcessWAFPolicies(t *testing.T) {
 				logURL1 := multiLogURL1
 				wafPolicy.Spec.SecurityLogs = []ngfAPIv1alpha1.WAFSecurityLog{
 					{
-						LogSource: ngfAPIv1alpha1.LogSource{
+						LogSource: &ngfAPIv1alpha1.LogSource{
 							HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: logURL0},
 							Auth: &ngfAPIv1alpha1.BundleAuth{
 								SecretRef: ngfAPIv1alpha1.LocalObjectReference{Name: authSecretName},
@@ -3448,7 +3448,7 @@ func TestProcessWAFPolicies(t *testing.T) {
 						},
 					},
 					{
-						LogSource: ngfAPIv1alpha1.LogSource{
+						LogSource: &ngfAPIv1alpha1.LogSource{
 							HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: logURL1},
 						},
 						Destination: ngfAPIv1alpha1.SecurityLogDestination{
@@ -3496,7 +3496,7 @@ func TestProcessWAFPolicies(t *testing.T) {
 				wafPolicy := makeWAFPolicy(policyName, false, false, false)
 				wafPolicy.Spec.SecurityLogs = []ngfAPIv1alpha1.WAFSecurityLog{
 					{
-						LogSource: ngfAPIv1alpha1.LogSource{
+						LogSource: &ngfAPIv1alpha1.LogSource{
 							HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{
 								URL: logURL,
 							},
@@ -3507,7 +3507,7 @@ func TestProcessWAFPolicies(t *testing.T) {
 					},
 					{
 						// Same URL as above — must not trigger a second fetch.
-						LogSource: ngfAPIv1alpha1.LogSource{
+						LogSource: &ngfAPIv1alpha1.LogSource{
 							HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{
 								URL: logURL,
 							},
@@ -3551,7 +3551,7 @@ func TestProcessWAFPolicies(t *testing.T) {
 				wafPolicy := makeWAFPolicy(policyName, false, false, false)
 				wafPolicy.Spec.SecurityLogs = []ngfAPIv1alpha1.WAFSecurityLog{
 					{
-						LogSource: ngfAPIv1alpha1.LogSource{
+						LogSource: &ngfAPIv1alpha1.LogSource{
 							DefaultProfile: &defaultProfile,
 						},
 						Destination: ngfAPIv1alpha1.SecurityLogDestination{

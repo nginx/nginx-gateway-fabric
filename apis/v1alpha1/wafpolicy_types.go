@@ -39,9 +39,11 @@ type WAFPolicyList struct {
 
 // WAFPolicySpec defines the desired state of a WAFPolicy.
 //
-// +kubebuilder:validation:XValidation:message="exactly one of policySource.httpSource, policySource.nimSource, policySource.n1cSource, or policyRef.apPolicyRef must be set",rule="[has(self.policySource.httpSource), has(self.policySource.nimSource), has(self.policySource.n1cSource), has(self.policyRef) && has(self.policyRef.apPolicyRef)].filter(x, x).size() == 1"
-// +kubebuilder:validation:XValidation:message="type must match the configured policy source or policy ref",rule="(self.type == 'HTTP' && has(self.policySource.httpSource)) || (self.type == 'NIM' && has(self.policySource.nimSource)) || (self.type == 'N1C' && has(self.policySource.n1cSource)) || (self.type == 'PLM' && has(self.policyRef) && has(self.policyRef.apPolicyRef))"
-// +kubebuilder:validation:XValidation:message="policySource.validation.verifyChecksum is only supported for type HTTP",rule="!(self.type != 'HTTP' && has(self.policySource) && has(self.policySource.validation) && has(self.policySource.validation.verifyChecksum) && self.policySource.validation.verifyChecksum)"
+// +kubebuilder:validation:XValidation:message="policySource must not be set when type is PLM",rule="!(self.type == 'PLM' && has(self.policySource))"
+// +kubebuilder:validation:XValidation:message="policyRef must not be set when type is not PLM",rule="!(self.type != 'PLM' && has(self.policyRef))"
+// +kubebuilder:validation:XValidation:message="type must match the configured policy source",rule="self.type == 'PLM' || (has(self.policySource) && ((self.type == 'HTTP' && has(self.policySource.httpSource)) || (self.type == 'NIM' && has(self.policySource.nimSource)) || (self.type == 'N1C' && has(self.policySource.n1cSource))))"
+// +kubebuilder:validation:XValidation:message="policyRef.apPolicyRef is required when type is PLM",rule="self.type != 'PLM' || (has(self.policyRef) && has(self.policyRef.apPolicyRef))"
+// +kubebuilder:validation:XValidation:message="policySource.validation.verifyChecksum is only supported for type HTTP",rule="!has(self.policySource) || !(self.type != 'HTTP' && has(self.policySource.validation) && has(self.policySource.validation.verifyChecksum) && self.policySource.validation.verifyChecksum)"
 // +kubebuilder:validation:XValidation:message="securityLogs[*].logRef.apLogConfRef is only allowed when type is PLM",rule="self.type == 'PLM' || !has(self.securityLogs) || self.securityLogs.all(sl, !has(sl.logRef) || !has(sl.logRef.apLogConfRef))"
 //
 //nolint:lll
@@ -68,8 +70,9 @@ type WAFPolicySpec struct {
 
 	// PolicySource holds all non-CRD bundle fetch configuration.
 	// Used for HTTP, NIM, and N1C policy types.
+	// Must not be set when type is PLM.
 	// +optional
-	PolicySource PolicySource `json:"policySource,omitempty"`
+	PolicySource *PolicySource `json:"policySource,omitempty"`
 
 	// PolicyRef holds all CRD-backed policy references.
 	// Used for the PLM policy type.
@@ -108,6 +111,10 @@ const (
 )
 
 // PolicySource holds all non-CRD configuration for fetching a WAF policy bundle.
+//
+// +kubebuilder:validation:XValidation:message="exactly one of httpSource, nimSource, or n1cSource must be set",rule="[has(self.httpSource), has(self.nimSource), has(self.n1cSource)].filter(x, x).size() == 1"
+//
+//nolint:lll
 type PolicySource struct {
 	// HTTPSource configures direct bundle fetching from an HTTP/HTTPS URL.
 	// Required when type is HTTP; must not be set for other types.
@@ -438,18 +445,18 @@ const (
 )
 
 // WAFSecurityLog defines security logging configuration for app_protect_security_log directives.
-// Exactly one of logSource.defaultProfile, logSource.httpSource, logSource.nimSource,
-// logSource.n1cSource, or logRef.apLogConfRef must be set.
+// Exactly one of logSource or logRef must be set.
 //
-// +kubebuilder:validation:XValidation:message="exactly one of logSource.defaultProfile, logSource.httpSource, logSource.nimSource, logSource.n1cSource, or logRef.apLogConfRef must be set",rule="[has(self.logSource.defaultProfile), has(self.logSource.httpSource), has(self.logSource.nimSource), has(self.logSource.n1cSource), has(self.logRef) && has(self.logRef.apLogConfRef)].filter(x, x).size() == 1"
+// +kubebuilder:validation:XValidation:message="exactly one of logSource or logRef must be set",rule="[has(self.logSource), has(self.logRef) && has(self.logRef.apLogConfRef)].filter(x, x).size() == 1"
 //
 //nolint:lll
 type WAFSecurityLog struct {
 	// LogSource configures all non-CRD log profile bundle sources for this log entry.
 	// Used for defaultProfile, httpSource, nimSource, and n1cSource.
+	// Must not be set when logRef is used.
 	//
 	// +optional
-	LogSource LogSource `json:"logSource,omitempty"`
+	LogSource *LogSource `json:"logSource,omitempty"`
 
 	// LogRef configures all CRD-backed log profile references for this log entry.
 	// Used for PLM-backed APLogConf references.
@@ -462,9 +469,9 @@ type WAFSecurityLog struct {
 }
 
 // LogSource holds all non-CRD configuration for fetching a WAF log profile bundle.
-// Exactly one of DefaultProfile, HTTPSource, NIMSource, or N1CSource must be set when using LogSource.
+// Exactly one of DefaultProfile, HTTPSource, NIMSource, or N1CSource must be set.
 //
-// +kubebuilder:validation:XValidation:message="at most one of logSource.defaultProfile, logSource.httpSource, logSource.nimSource, or logSource.n1cSource may be set",rule="[has(self.defaultProfile), has(self.httpSource), has(self.nimSource), has(self.n1cSource)].filter(x, x).size() <= 1"
+// +kubebuilder:validation:XValidation:message="exactly one of defaultProfile, httpSource, nimSource, or n1cSource must be set",rule="[has(self.defaultProfile), has(self.httpSource), has(self.nimSource), has(self.n1cSource)].filter(x, x).size() == 1"
 //
 //nolint:lll
 type LogSource struct {

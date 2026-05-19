@@ -11,7 +11,7 @@ import (
 // Returns an error if the status cannot be parsed.
 func ParseAPPolicyStatus(obj *unstructured.Unstructured) (*APPolicyStatus, error) {
 	var status APPolicyStatus
-	if err := parseStatus(obj, "APPolicy", &status); err != nil {
+	if err := parseStatus(obj, APPolicyKind, &status); err != nil {
 		return nil, err
 	}
 
@@ -22,7 +22,7 @@ func ParseAPPolicyStatus(obj *unstructured.Unstructured) (*APPolicyStatus, error
 // Returns an error if the status cannot be parsed.
 func ParseAPLogConfStatus(obj *unstructured.Unstructured) (*APLogConfStatus, error) {
 	var status APLogConfStatus
-	if err := parseStatus(obj, "APLogConf", &status); err != nil {
+	if err := parseStatus(obj, APLogConfKind, &status); err != nil {
 		return nil, err
 	}
 

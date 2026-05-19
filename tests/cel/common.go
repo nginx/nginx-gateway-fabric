@@ -91,11 +91,15 @@ const (
 	// WAFPolicy errors.
 	expectedWAFFileIfAndOnlyIfFileTypeError     = "destination.file must be set if and only if type is file"
 	expectedWAFSyslogIfAndOnlyIfSyslogType      = "destination.syslog must be set if and only if type is syslog"
-	expectedWAFPolicySourceMutualExclusionError = "exactly one of policySource.httpSource, policySource.nimSource, " +
-		"policySource.n1cSource, or policyRef.apPolicyRef must be set"
-	expectedWAFPolicySourceTypeMatchError = "type must match the configured policy source or policy ref"
-	//nolint: lll
-	expectedWAFLogSourceMutualExclusionError = "exactly one of logSource.defaultProfile, logSource.httpSource, logSource.nimSource, logSource.n1cSource, or logRef.apLogConfRef must be set"
+	expectedWAFPolicySourceNotSetForPLMError    = "policySource must not be set when type is PLM"
+	expectedWAFPolicyRefNotSetForNonPLMError    = "policyRef must not be set when type is not PLM"
+	expectedWAFPolicySourceTypeMatchError       = "type must match the configured policy source"
+	expectedWAFPolicyRefRequiredForPLMError     = "policyRef.apPolicyRef is required when type is PLM"
+	expectedWAFPolicySourceMutualExclusionError = "exactly one of httpSource, nimSource, " +
+		"or n1cSource must be set"
+	expectedWAFLogSourceOrLogRefError        = "exactly one of logSource or logRef must be set"
+	expectedWAFLogSourceMutualExclusionError = "exactly one of defaultProfile, httpSource, " +
+		"nimSource, or n1cSource must be set"
 
 	expectedWAFN1CLogProfileMutualExclusionError = "exactly one of profileName or profileObjectID must be set"
 	expectedWAFN1CLogProfileObjectIDPatternError = `^lp_[A-Za-z0-9_-]+$`

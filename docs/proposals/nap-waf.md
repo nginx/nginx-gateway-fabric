@@ -85,7 +85,7 @@ spec.securityLogs[*].logSource         → non-CRD log fetch config (defaultProf
 spec.securityLogs[*].logRef.apLogConfRef → APLogConf CRD reference (type: PLM)
 ```
 
-CEL validation rules enforce that exactly one of the `policySource.*Source` fields or `policyRef.apPolicyRef` is set, that it matches the declared `type`, and that mutually exclusive fields are not set together.
+`policySource` and `logSource` are optional pointer fields — they are omitted entirely for `type: PLM`, which uses `policyRef` and `logRef` instead. CEL validation rules enforce that `policySource` is not set for PLM (and vice versa), that the correct source sub-field is set for the declared `type`, and that mutually exclusive sub-fields are not set together.
 
 ### Policy Lifecycle Model
 
@@ -486,7 +486,7 @@ sequenceDiagram
 
 The `securityLogs` section supports multiple logging configurations, each generating an `app_protect_security_log` directive. All log source configuration lives inside `logSource` within each entry.
 
-Within each `securityLogs` entry, exactly one of the following must be set across `logSource` and `logRef`:
+Within each `securityLogs` entry, exactly one of `logSource` or `logRef` must be set. `logSource` is an optional pointer field — it is omitted for PLM-backed log profiles. When `logSource` is set, exactly one of the following must be set:
 
 | Field                        | Description                                              | Applicable types |
 |------------------------------|----------------------------------------------------------|------------------|
@@ -749,12 +749,14 @@ type PolicySourceType string
 
 #### CEL Validation Rules
 
-The following mutual exclusion rules are enforced at admission time:
+The following rules are enforced at admission time:
 
-- Exactly one of `policySource.httpSource`, `policySource.nimSource`, `policySource.n1cSource`, or `policyRef.apPolicyRef` must be set
-- The set field must match `type`: HTTP↔httpSource, NIM↔nimSource, N1C↔n1cSource, PLM↔policyRef.apPolicyRef
+- `policySource` must not be set when `type` is `PLM`; `policyRef` must not be set when `type` is not `PLM`
+- When `policySource` is set, exactly one of `httpSource`, `nimSource`, or `n1cSource` must be set, and it must match the declared `type`
+- When `type` is `PLM`, `policyRef.apPolicyRef` is required
 - `policySource.validation.verifyChecksum` is only supported for `type: HTTP`
-- Within each `securityLogs` entry: exactly one of `logSource.defaultProfile`, `logSource.httpSource`, `logSource.nimSource`, `logSource.n1cSource`, or `logRef.apLogConfRef` must be set
+- Within each `securityLogs` entry, exactly one of `logSource` or `logRef` must be set
+- When `logSource` is set, exactly one of `defaultProfile`, `httpSource`, `nimSource`, or `n1cSource` must be set
 - `logRef.apLogConfRef` may only be set when `spec.type` is `PLM`
 
 #### type: HTTP Example
