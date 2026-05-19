@@ -10,8 +10,6 @@ FROM ghcr.io/nginx/dependencies/nginx-ubi:ubi9@sha256:8b11185aef388a55bc09a43e3c
 
 FROM registry.access.redhat.com/ubi9/ubi-minimal:9.7 AS ubi-nginx
 
-RUN microdnf -y update glib2 && microdnf clean all
-
 # renovate: datasource=github-tags depName=nginx/nginx
 ARG NGINX_VERSION=1.31.0
 
