@@ -898,14 +898,16 @@ spec:
         name: jwks-secret
     require:
     - iss: "https://issuer.example.com"
-      aud: "api"
+      aud:
+      - "api"
       sub: "user-12345"
       claims: # User defined claim.
       - name: "tenant"
         values:
         - "acme-co"
     - iss: "https://issuer.example-2.com"
-      aud: "cli|ops" # Match either or.
+      aud:
+      - "cli|ops" # Match either or.
       sub: "user-678910"
       claims:
         - name: "roles"
@@ -951,7 +953,7 @@ http {
     # Map for `require[0]`.
     # Note: $jwt_claim_tenant is a user defined claim.
     map $jwt_claim_iss+$jwt_aud+$jwt_claim_sub+$jwt_claim_tenant $valid_jwt_combination_0_0 {
-        ~^https://issuer\.example\.com\+api\+user-12345+acme-co$ 1;
+        ~^https://issuer\.example\.com\+api\+user-12345\+acme-co$ 1;
         default 0;
     }
 
@@ -973,8 +975,8 @@ http {
       auth_jwt_key_file /etc/nginx/secrets/jwt_auth_default_jwks-secret;
 
       # Process values returned from maps.
-      auth_jwt_require $valid_jwt_combination_0_0;
-      auth_jwt_require $valid_jwt_combination_0_1;
+      # Authorize request as long as at least one map returns `1`.
+      auth_jwt_require $valid_jwt_combination_0_0 || $valid_jwt_combination_0_1;
 
       proxy_pass http://nginx-hello-backend;
     }
@@ -1026,7 +1028,7 @@ spec:
     remote:
       uri: https://issuer.example.com/.well-known/jwks.json
     require:
-      claims:
+    - claims:
       - name: "realm_access/roles" # Nested claim.
         values: # User defined list of roles.
         - "reader"
@@ -1070,8 +1072,8 @@ The table below summarizes the capabilities enabled by the current JWT Authentic
 | Require exact-match issuer (`iss`) value | `spec.jwt.require[].iss: string` | Included in combined NGINX map per require entry | Single issuer value per require entry; validated as part of the combined claim map |
 | Require exact-match audience (`aud`) values | `spec.jwt.require[].aud[]: []string` | `auth_jwt_claim_set $jwt_aud aud`; included in combined NGINX map | When defined as an array of claims, NGINX parses them as a comma-separated string; all values must match in exact order |
 | Require exact-match subject (`sub`) value | `spec.jwt.require[].sub: string` | Included in combined NGINX map per require entry | Single subject value per require entry; validated as part of the combined claim map |
-| Require exact-match custom claim values | `spec.jwt.require.claims[]`: `{ name, values }` | For flat claims: `map $jwt_claim_<name> $valid_<name> { ... }`; `auth_jwt_require $valid_<name>` | `values` must be set and non-empty. When defined, these values are also added to the combined NGINX map |
-| Require exact-match nested/dotted custom claims | `spec.jwt.require.claims[].name` accepts path like `parent/child` | `auth_jwt_claim_set $var parent child`; `map $var $valid_var { ... }`; `auth_jwt_require $valid_var` | Use `auth_jwt_claim_set` for nested or dotted claims; slash-separated path identifies nested segments |
+| Require exact-match custom claim values | `spec.jwt.require[].claims[]`: `{ name, values }` | For flat claims: `map $jwt_claim_<name> $valid_<name> { ... }`; `auth_jwt_require $valid_<name>` | `values` must be set and non-empty. When defined, these values are also added to the combined NGINX map |
+| Require exact-match nested/dotted custom claims | `spec.jwt.require[].claims[].name` accepts path like `parent/child` | `auth_jwt_claim_set $var parent child`; `map $var $valid_var { ... }`; `auth_jwt_require $valid_var` | Use `auth_jwt_claim_set` for nested or dotted claims; slash-separated path identifies nested segments |
 
 
 ### Route Attachment

@@ -532,19 +532,12 @@ http {
 
       location ^~ /coffee/ {
         auth_oidc keycloak; # Enable OIDC auth module
-        auth_jwt "" token=$oidc_id_token; # Enable JWT auth module
-        auth_jwt_key_request /_jwks_keycloak; # Internal request to IdP JWKS
+        auth_jwt "" token=$oidc_id_token; # Populates `$oidc_claim_*` variables.
 
         # Authorize based on response from map.
         auth_jwt_require $oidc_valid_combination;
 
         proxy_pass http://default_coffee_80$request_uri;
-      }
-
-      # Internal location for IdP JWKS
-      location = /_jwks_keycloak {
-          internal;
-          proxy_pass https://keycloak.example.com/realms/my-realm/protocol/openid-connect/certs;
       }
 
       location = /coffee {
@@ -561,8 +554,7 @@ How it works:
 1. Similar to JWT auth, we have a `map` that will evaluate a claim. In this case it's `$oidc_claim_sub` to validate the subject (`sub`) claim.
 2. The location `/coffee/` has both `auth_oidc` and `auth_jwt` directives. Both are needed as the NGINX OIDC module itself can not evaluate JWT token claims.
 3. The `auth_jwt` directive is set up like this: `auth_jwt "" token=$oidc_id_token;`. This allows the module to obtain the user's JWT through the `$oidc_id_token` variable, which is populated by the OIDC module. This avoids the user needing to pass a bearer token through the `Authorization` header. Also, the realm can be any value. In this case it's an empty string.
-4. The `auth_jwt_key_request` directive is used to call an internal location `/_jwks_keycloak`. This works the same as `JWT` auth in `Remote` mode, where we fetch the public JWKS from the identity provider (IdP).
-5. Lastly, the `auth_jwt_require` directive evaluates the result from the map, informing the user if they are authorized or not.
+4. Lastly, the `auth_jwt_require` directive evaluates the result from the map, informing the user if they are authorized or not.
 
 If we wanted to view the claims for a specific client, we can access this with the `userinfo` endpoint.
 This is an example of a claim this endpoint might return:
