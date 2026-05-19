@@ -2,6 +2,7 @@ package provisioner
 
 import (
 	"context"
+	"errors"
 	"reflect"
 	"testing"
 	"time"
@@ -23,6 +24,7 @@ import (
 	k8sEvents "k8s.io/client-go/tools/events"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
@@ -1365,12 +1367,13 @@ func TestPatchServiceStatus(t *testing.T) {
 	}
 
 	tests := []struct {
-		svc            *corev1.Service
-		name           string
-		ips            []string
-		expectIngress  []corev1.LoadBalancerIngress
-		expectErr      bool
-		expectNoChange bool
+		svc              *corev1.Service
+		interceptorFuncs *interceptor.Funcs
+		name             string
+		ips              []string
+		expectIngress    []corev1.LoadBalancerIngress
+		expectErr        bool
+		expectNoChange   bool
 	}{
 		{
 			name:          "empty IPs list is a no-op",
@@ -1442,6 +1445,54 @@ func TestPatchServiceStatus(t *testing.T) {
 			expectErr:     false,
 			expectIngress: []corev1.LoadBalancerIngress{{IP: "10.0.0.1"}},
 		},
+		{
+			name: "patch returns non-retryable error",
+			svc:  makeSvc(ngfLabels, nil),
+			ips:  []string{"10.0.0.1"},
+			interceptorFuncs: &interceptor.Funcs{
+				SubResourcePatch: func(
+					_ context.Context,
+					_ client.Client,
+					_ string,
+					_ client.Object,
+					_ client.Patch,
+					_ ...client.SubResourcePatchOption,
+				) error {
+					return errors.New("patch failed")
+				},
+			},
+			expectErr: true,
+		},
+		{
+			name: "patch returns conflict then succeeds",
+			svc:  makeSvc(ngfLabels, nil),
+			ips:  []string{"10.0.0.1"},
+			interceptorFuncs: func() *interceptor.Funcs {
+				calls := 0
+				return &interceptor.Funcs{
+					SubResourcePatch: func(
+						ctx context.Context,
+						c client.Client,
+						subResource string,
+						obj client.Object,
+						patch client.Patch,
+						opts ...client.SubResourcePatchOption,
+					) error {
+						calls++
+						if calls == 1 {
+							return apierrors.NewConflict(
+								schema.GroupResource{Resource: "services"},
+								svcName,
+								errors.New("conflict"),
+							)
+						}
+						return c.SubResource(subResource).Patch(ctx, obj, patch, opts...)
+					},
+				}
+			}(),
+			expectErr:     false,
+			expectIngress: []corev1.LoadBalancerIngress{{IP: "10.0.0.1"}},
+		},
 	}
 
 	for _, test := range tests {
@@ -1450,15 +1501,14 @@ func TestPatchServiceStatus(t *testing.T) {
 			g := NewWithT(t)
 
 			var k8sClient client.Client
+			builder := fake.NewClientBuilder().WithScheme(createScheme())
 			if test.svc != nil {
-				k8sClient = fake.NewClientBuilder().
-					WithScheme(createScheme()).
-					WithObjects(test.svc).
-					WithStatusSubresource(test.svc).
-					Build()
-			} else {
-				k8sClient = fake.NewClientBuilder().WithScheme(createScheme()).Build()
+				builder = builder.WithObjects(test.svc).WithStatusSubresource(test.svc)
 			}
+			if test.interceptorFuncs != nil {
+				builder = builder.WithInterceptorFuncs(*test.interceptorFuncs)
+			}
+			k8sClient = builder.Build()
 
 			provisioner := makeProvisioner(k8sClient)
 			err := provisioner.patchServiceStatus(t.Context(), svcNamespace, svcName, test.ips)

@@ -165,7 +165,7 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 		ports,
 		healthcheckPort,
 		selectorLabels,
-		gateway,
+		gateway.Spec.Addresses,
 	)
 	if err != nil {
 		errs = append(errs, err)
@@ -663,7 +663,7 @@ func (p *NginxProvisioner) buildNginxService(
 	ports []portProtoEntry,
 	healthcheckPort int32,
 	selectorLabels map[string]string,
-	gateway *gatewayv1.Gateway,
+	addresses []gatewayv1.GatewaySpecAddress,
 ) (*corev1.Service, error) {
 	var serviceCfg ngfAPIv1alpha2.ServiceSpec
 	if nProxyCfg != nil && nProxyCfg.Kubernetes != nil && nProxyCfg.Kubernetes.Service != nil {
@@ -675,15 +675,15 @@ func (p *NginxProvisioner) buildNginxService(
 		serviceType = corev1.ServiceType(*serviceCfg.ServiceType)
 	}
 
-	var gwExternalIPs []string
-	for _, addr := range gateway.Spec.Addresses {
+	var externalIPs []string
+	for _, addr := range addresses {
 		if addr.Type != nil && *addr.Type == gatewayv1.IPAddressType {
-			gwExternalIPs = append(gwExternalIPs, addr.Value)
+			externalIPs = append(externalIPs, addr.Value)
 		}
 	}
 
 	var servicePolicy corev1.ServiceExternalTrafficPolicy
-	if serviceType != corev1.ServiceTypeClusterIP || len(gwExternalIPs) > 0 {
+	if serviceType != corev1.ServiceTypeClusterIP && len(externalIPs) > 0 {
 		servicePolicy = defaultServicePolicy
 		if serviceCfg.ExternalTrafficPolicy != nil {
 			servicePolicy = corev1.ServiceExternalTrafficPolicy(*serviceCfg.ExternalTrafficPolicy)
@@ -715,7 +715,7 @@ func (p *NginxProvisioner) buildNginxService(
 		}
 	}
 
-	p.updateLoadBalancerClass(svc, gwExternalIPs, gateway)
+	p.updateLoadBalancerClass(svc, externalIPs)
 
 	return svc, nil
 }
@@ -726,7 +726,6 @@ func (p *NginxProvisioner) buildNginxService(
 func (p *NginxProvisioner) updateLoadBalancerClass(
 	svc *corev1.Service,
 	gwExternalIPs []string,
-	gateway *gatewayv1.Gateway,
 ) {
 	if svc.Spec.Type == corev1.ServiceTypeLoadBalancer && len(gwExternalIPs) > 0 {
 		if svc.Spec.LoadBalancerClass == nil {
@@ -737,7 +736,6 @@ func (p *NginxProvisioner) updateLoadBalancerClass(
 		} else {
 			p.cfg.Logger.Info(
 				"gateway has spec.addresses but Service LoadBalancerClass is user-provided; not overriding",
-				"gateway", fmt.Sprintf("%s/%s", gateway.GetNamespace(), gateway.GetName()),
 				"loadBalancerClass", *svc.Spec.LoadBalancerClass,
 			)
 		}
