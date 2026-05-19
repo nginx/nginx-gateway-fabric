@@ -34,5 +34,5 @@ spec:
         type: Exact
         value: /tea-h2c
     backendRefs:
-    - name: tea-h2c
+    - name: tea-h2c-svc
       port: 80
