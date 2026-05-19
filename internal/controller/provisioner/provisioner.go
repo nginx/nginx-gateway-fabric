@@ -254,12 +254,12 @@ func (p *NginxProvisioner) patchServiceStatus(ctx context.Context, namespace, na
 
 	// If the desired IPs already match the existing IPs (order-sensitive), nothing to do.
 	existingIPs := make([]string, 0, len(svc.Status.LoadBalancer.Ingress))
-	for _, ing := range svc.Status.LoadBalancer.Ingress {
-		existingIPs = append(existingIPs, ing.IP)
+	for _, ingress := range svc.Status.LoadBalancer.Ingress {
+		existingIPs = append(existingIPs, ingress.IP)
 	}
 	desiredIPs := make([]string, 0, len(ingress))
-	for _, ing := range ingress {
-		desiredIPs = append(desiredIPs, ing.IP)
+	for _, ingress := range ingress {
+		desiredIPs = append(desiredIPs, ingress.IP)
 	}
 	if slices.Equal(existingIPs, desiredIPs) {
 		return nil
@@ -301,8 +301,8 @@ func (p *NginxProvisioner) patchServiceStatus(ctx context.Context, namespace, na
 // and returns a list of LoadBalancerIngress.
 func createUniqueIngressList(svc *corev1.Service, ips []string) []corev1.LoadBalancerIngress {
 	existingByIP := make(map[string]corev1.LoadBalancerIngress, len(svc.Status.LoadBalancer.Ingress))
-	for _, ing := range svc.Status.LoadBalancer.Ingress {
-		existingByIP[ing.IP] = ing
+	for _, ingress := range svc.Status.LoadBalancer.Ingress {
+		existingByIP[ingress.IP] = ingress
 	}
 
 	// Build unique ingress list preserving order and any existing fields.
@@ -481,7 +481,8 @@ func (p *NginxProvisioner) provisionNginx(
 			}
 		}
 
-		// If this is a Service and the Gateway has IP-type addresses, patch its status.loadBalancer.ingress
+		// If the Service is a LoadBalancer and the Gateway declares IP-type addresses,
+		// patch the Service status with those IPs.
 		if svc, ok := minimalObj.(*corev1.Service); ok {
 			if svc.Spec.Type == corev1.ServiceTypeLoadBalancer {
 				var ips []string
@@ -490,7 +491,7 @@ func (p *NginxProvisioner) provisionNginx(
 						ips = append(ips, addr.Value)
 					}
 				}
-				if len(ips) > 0 {
+				if svc.Spec.LoadBalancerClass != nil && *svc.Spec.LoadBalancerClass == p.cfg.GatewayCtlrName && len(ips) > 0 {
 					if err := p.patchServiceStatus(ctx, svc.GetNamespace(), svc.GetName(), ips); err != nil {
 						p.cfg.Logger.Error(
 							err,

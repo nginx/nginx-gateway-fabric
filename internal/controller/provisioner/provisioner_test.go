@@ -1194,6 +1194,134 @@ func TestCreateMinimalClone_CreatesSeparateInstances(t *testing.T) {
 	g.Expect(exists).To(BeTrue(), "Factory should contain entry for Deployment type")
 }
 
+func TestProvisionNginxPatchesServiceStatus(t *testing.T) {
+	t.Parallel()
+
+	const (
+		ctlrName     = "gateway.nginx.org/nginx-gateway-controller"
+		instanceName = "test-instance"
+		gcName       = "nginx"
+		svcName      = "gw-nginx"
+		svcNamespace = "default"
+	)
+
+	ngfLabels := map[string]string{
+		controller.AppInstanceLabel:  instanceName,
+		controller.AppManagedByLabel: controller.CreateNginxResourceName(instanceName, gcName),
+	}
+
+	tests := []struct {
+		name          string
+		svcLBClass    *string
+		svcType       corev1.ServiceType
+		gatewayIPs    []string
+		expectIngress []corev1.LoadBalancerIngress
+	}{
+		{
+			name:          "patches status when LBClass matches controller name and IPs present",
+			svcLBClass:    helpers.GetPointer(ctlrName),
+			svcType:       corev1.ServiceTypeLoadBalancer,
+			gatewayIPs:    []string{"10.0.0.1"},
+			expectIngress: []corev1.LoadBalancerIngress{{IP: "10.0.0.1"}},
+		},
+		{
+			name:          "patches status with multiple IPs",
+			svcLBClass:    helpers.GetPointer(ctlrName),
+			svcType:       corev1.ServiceTypeLoadBalancer,
+			gatewayIPs:    []string{"10.0.0.1", "10.0.0.2"},
+			expectIngress: []corev1.LoadBalancerIngress{{IP: "10.0.0.1"}, {IP: "10.0.0.2"}},
+		},
+		{
+			name:          "does not patch when LoadBalancerClass is nil",
+			svcLBClass:    nil,
+			svcType:       corev1.ServiceTypeLoadBalancer,
+			gatewayIPs:    []string{"10.0.0.1"},
+			expectIngress: nil,
+		},
+		{
+			name:          "does not patch when LoadBalancerClass does not match controller name",
+			svcLBClass:    helpers.GetPointer("other.controller/name"),
+			svcType:       corev1.ServiceTypeLoadBalancer,
+			gatewayIPs:    []string{"10.0.0.1"},
+			expectIngress: nil,
+		},
+		{
+			name:          "does not patch when gateway has no IP-type addresses",
+			svcLBClass:    helpers.GetPointer(ctlrName),
+			svcType:       corev1.ServiceTypeLoadBalancer,
+			gatewayIPs:    []string{},
+			expectIngress: nil,
+		},
+		{
+			name:          "does not patch when service is not of LoadBalancer type",
+			svcLBClass:    helpers.GetPointer(ctlrName),
+			svcType:       corev1.ServiceTypeClusterIP,
+			gatewayIPs:    []string{"10.0.0.1"},
+			expectIngress: nil,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(createScheme()).
+				WithStatusSubresource(&corev1.Service{}).
+				Build()
+
+			provisioner := &NginxProvisioner{
+				leader: true,
+				store:  newStore(nil, "", "", "", "", ""),
+				cfg: Config{
+					Logger:        logr.Discard(),
+					EventRecorder: &k8sEvents.FakeRecorder{},
+					GatewayPodConfig: &config.GatewayPodConfig{
+						InstanceName: instanceName,
+					},
+					GCName:          gcName,
+					GatewayCtlrName: ctlrName,
+				},
+				k8sClient: fakeClient,
+			}
+
+			desiredSvc := &corev1.Service{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      svcName,
+					Namespace: svcNamespace,
+					Labels:    ngfLabels,
+				},
+				Spec: corev1.ServiceSpec{
+					Type:              test.svcType,
+					LoadBalancerClass: test.svcLBClass,
+				},
+			}
+
+			addrType := gatewayv1.IPAddressType
+			gateway := &gatewayv1.Gateway{
+				ObjectMeta: metav1.ObjectMeta{Name: "gw", Namespace: svcNamespace},
+			}
+			for _, ip := range test.gatewayIPs {
+				gateway.Spec.Addresses = append(gateway.Spec.Addresses, gatewayv1.GatewaySpecAddress{
+					Type:  &addrType,
+					Value: ip,
+				})
+			}
+
+			g.Expect(provisioner.provisionNginx(t.Context(), svcName, gateway, []client.Object{desiredSvc})).To(Succeed())
+
+			got := &corev1.Service{}
+			g.Expect(fakeClient.Get(
+				t.Context(),
+				types.NamespacedName{Name: svcName, Namespace: svcNamespace},
+				got,
+			)).To(Succeed())
+			g.Expect(got.Status.LoadBalancer.Ingress).To(Equal(test.expectIngress))
+		})
+	}
+}
+
 func TestPatchServiceStatus(t *testing.T) {
 	t.Parallel()
 

@@ -995,37 +995,7 @@ func getGatewayAddressesForStatus(
 		gwAddresses = append(gwAddresses, statusAddr)
 	}
 
-	updateGatewayConditions(gateway, svc)
-
 	return gwAddresses
-}
-
-func updateGatewayConditions(gateway *graph.Gateway, svc *v1.Service) {
-	var cond *conditions.Condition
-
-	// If the Gateway declares addresses but the backing Service is not a LoadBalancer,
-	// report an unprogrammed condition indicating those addresses cannot be used.
-	if len(gateway.Source.Spec.Addresses) > 0 && svc.Spec.Type != v1.ServiceTypeLoadBalancer {
-		msg := "Gateway.Spec.Addresses is set but the backing Service is not a LoadBalancer. " +
-			"Load balancer ingress IPs will not be set."
-		c := conditions.NewGatewayUnusableAddress(msg)
-		cond = &c
-	}
-
-	if cond == nil {
-		return
-	}
-
-	// Upsert the condition by type to avoid duplicate accumulation when the same cached
-	// graph is reused across multiple status updates between graph rebuilds.
-	for i, existing := range gateway.Conditions {
-		if existing.Type == cond.Type {
-			gateway.Conditions[i] = *cond
-			return
-		}
-	}
-
-	gateway.Conditions = append(gateway.Conditions, *cond)
 }
 
 // getDeploymentContext gets the deployment context metadata for N+ reporting.
