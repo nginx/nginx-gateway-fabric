@@ -7,6 +7,8 @@ import (
 
 // Server holds all configuration for a stream server.
 type Server struct {
+	SSL             *SSL
+	ProxySSLVerify  *ProxySSLVerify
 	Listen          string
 	StatusZone      string
 	ProxyPass       string
@@ -14,6 +16,22 @@ type Server struct {
 	RewriteClientIP shared.RewriteClientIPSettings
 	SSLPreread      bool
 	IsSocket        bool
+}
+
+// ProxySSLVerify holds backend TLS verification settings for stream proxying.
+type ProxySSLVerify struct {
+	TrustedCertificate string
+	Name               string
+}
+
+// SSL holds SSL configuration for a stream server performing TLS termination.
+type SSL struct {
+	Protocols           string
+	Ciphers             string
+	Certificates        []string
+	CertificateKeys     []string
+	PreferServerCiphers bool
+	RejectHandshake     bool
 }
 
 // Upstream holds all configuration for a stream upstream.
@@ -45,9 +63,10 @@ type SplitClientDistribution struct {
 
 // ServerConfig holds configuration for a stream server and IP family to be used by NGINX.
 type ServerConfig struct {
-	DNSResolver  *dataplane.DNSResolverConfig
-	Servers      []Server
-	SplitClients []SplitClient
-	IPFamily     shared.IPFamily
-	Plus         bool
+	DNSResolver     *dataplane.DNSResolverConfig
+	GatewaySecretID dataplane.SSLKeyPairID
+	Servers         []Server
+	SplitClients    []SplitClient
+	IPFamily        shared.IPFamily
+	Plus            bool
 }

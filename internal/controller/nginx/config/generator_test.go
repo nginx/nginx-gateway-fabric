@@ -1,6 +1,7 @@
 package config_test
 
 import (
+	"fmt"
 	"sort"
 	"testing"
 
@@ -55,7 +56,7 @@ func TestGenerate(t *testing.T) {
 				Port: 443,
 			},
 		},
-		TLSPassthroughServers: []dataplane.Layer4VirtualServer{
+		TLSServers: []dataplane.Layer4VirtualServer{
 			{
 				Hostname: "app.example.com",
 				Port:     443,
@@ -192,7 +193,7 @@ func TestGenerate(t *testing.T) {
 	// Note: this only verifies that Generate() returns a byte array with upstream, server, and split_client blocks.
 	// It does not test the correctness of those blocks. That functionality is covered by other tests in this package.
 	g.Expect(httpCfg).To(ContainSubstring("listen 80"))
-	g.Expect(httpCfg).To(ContainSubstring("listen unix:/var/run/nginx/https443.sock"))
+	g.Expect(httpCfg).To(ContainSubstring(fmt.Sprintf("listen %shttps443.sock", config.SocketBasePath)))
 	g.Expect(httpCfg).To(ContainSubstring("upstream"))
 	g.Expect(httpCfg).To(ContainSubstring("split_clients"))
 
@@ -213,7 +214,7 @@ func TestGenerate(t *testing.T) {
 	g.Expect(files[2].Meta.Name).To(Equal("/etc/nginx/conf.d/plus-api.conf"))
 	g.Expect(files[2].Meta.Permissions).To(Equal(file.RegularFileMode))
 	httpCfg = string(files[2].Contents)
-	g.Expect(httpCfg).To(ContainSubstring("listen unix:/var/run/nginx/nginx-plus-api.sock;"))
+	g.Expect(httpCfg).To(ContainSubstring(fmt.Sprintf("listen %snginx-plus-api.sock;", config.SocketBasePath)))
 	g.Expect(httpCfg).To(ContainSubstring("access_log off;"))
 	g.Expect(httpCfg).To(ContainSubstring("listen 8765;"))
 	g.Expect(httpCfg).To(ContainSubstring("root /usr/share/nginx/html;"))
@@ -294,8 +295,10 @@ func TestGenerate(t *testing.T) {
 	g.Expect(files[20].Meta.Name).To(Equal("/etc/nginx/stream-conf.d/stream.conf"))
 	g.Expect(files[20].Meta.Permissions).To(Equal(file.RegularFileMode))
 	streamCfg := string(files[20].Contents)
-	g.Expect(streamCfg).To(ContainSubstring("listen unix:/var/run/nginx/app.example.com-443.sock"))
+	g.Expect(streamCfg).To(ContainSubstring(fmt.Sprintf("listen %sapp.example.com-443.sock", config.SocketBasePath)))
 	g.Expect(streamCfg).To(ContainSubstring("listen 443"))
-	g.Expect(streamCfg).To(ContainSubstring("app.example.com unix:/var/run/nginx/app.example.com-443.sock"))
-	g.Expect(streamCfg).To(ContainSubstring("example.com unix:/var/run/nginx/https443.sock"))
+	g.Expect(streamCfg).To(ContainSubstring(
+		fmt.Sprintf("app.example.com %sapp.example.com-443.sock", config.SocketBasePath),
+	))
+	g.Expect(streamCfg).To(ContainSubstring(fmt.Sprintf("example.com %shttps443.sock", config.SocketBasePath)))
 }

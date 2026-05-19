@@ -27,7 +27,7 @@ const (
 
 	// connectionClosedStreamServerSocket is used when we want to listen on a port but have no service configured,
 	// so we pass to this server that just returns an empty string to tell users that we are listening.
-	connectionClosedStreamServerSocket = "unix:/var/run/nginx/connection-closed-server.sock"
+	connectionClosedStreamServerSocket = SocketBasePath + "connection-closed-server.sock"
 )
 
 func executeMaps(conf dataplane.Configuration) []executeResult {
@@ -139,7 +139,7 @@ func executeStreamMaps(conf dataplane.Configuration) []executeResult {
 }
 
 func createStreamMaps(conf dataplane.Configuration) []shared.Map {
-	if len(conf.TLSPassthroughServers) == 0 {
+	if len(conf.TLSServers) == 0 {
 		return nil
 	}
 	portsToMap := make(map[int32]shared.Map)
@@ -150,44 +150,8 @@ func createStreamMaps(conf dataplane.Configuration) []shared.Map {
 		upstreams[u.Name] = u
 	}
 
-	for _, server := range conf.TLSPassthroughServers {
-		streamMap, portInUse := portsToMap[server.Port]
-
-		socket := emptyStringSocket
-
-		// TLSPassthroughServers currently only support a single backend,
-		// so we use the first (and only) upstream
-		if len(server.Upstreams) > 0 {
-			upstreamName := server.Upstreams[0].Name
-			if u, ok := upstreams[upstreamName]; ok && len(u.Endpoints) > 0 {
-				socket = getSocketNameTLS(server.Port, server.Hostname)
-			}
-		}
-
-		if server.IsDefault {
-			socket = connectionClosedStreamServerSocket
-		}
-
-		if !portInUse {
-			streamMap = shared.Map{
-				Source:       "$ssl_preread_server_name",
-				Variable:     getTLSPassthroughVarName(server.Port),
-				Parameters:   make([]shared.MapParameter, 0),
-				UseHostnames: true,
-			}
-			portsToMap[server.Port] = streamMap
-		}
-
-		// If the hostname is empty, we don't want to add an entry to the map. This case occurs when
-		// the gateway listener hostname is not specified
-		if server.Hostname != "" {
-			mapParam := shared.MapParameter{
-				Value:  server.Hostname,
-				Result: socket,
-			}
-			streamMap.Parameters = append(streamMap.Parameters, mapParam)
-			portsToMap[server.Port] = streamMap
-		}
+	for _, server := range conf.TLSServers {
+		addTLSServerToStreamMap(server, upstreams, portsToMap, portHasDefault)
 	}
 
 	for _, server := range conf.SSLServers {
@@ -222,6 +186,76 @@ func createStreamMaps(conf dataplane.Configuration) []shared.Map {
 	}
 
 	return maps
+}
+
+// addTLSServerToStreamMap adds a TLS server entry to the stream map for its port,
+// resolving the appropriate socket name based on mode (passthrough vs terminate) and state.
+func addTLSServerToStreamMap(
+	server dataplane.Layer4VirtualServer,
+	upstreams map[string]dataplane.Upstream,
+	portsToMap map[int32]shared.Map,
+	portHasDefault map[int32]struct{},
+) {
+	streamMap, portInUse := portsToMap[server.Port]
+
+	socket := resolveTLSServerSocket(server, upstreams)
+
+	if !portInUse {
+		streamMap = shared.Map{
+			Source:       "$ssl_preread_server_name",
+			Variable:     getTLSPassthroughVarName(server.Port),
+			Parameters:   make([]shared.MapParameter, 0),
+			UseHostnames: true,
+		}
+	}
+
+	if server.IsDefault && server.SSL != nil && server.Hostname == "" {
+		if _, hasDefault := portHasDefault[server.Port]; !hasDefault {
+			// Only an unnamed TLS Terminate default server should claim the map's
+			// port-level default entry. This preserves the catch-all behavior for
+			// requests without SNI while avoiding multiple "default" parameters for
+			// the same port when another listener type also provides a default.
+			streamMap.Parameters = append(streamMap.Parameters, shared.MapParameter{
+				Value:  "default",
+				Result: socket,
+			})
+			portHasDefault[server.Port] = struct{}{}
+		}
+	}
+
+	if server.Hostname != "" {
+		streamMap.Parameters = append(streamMap.Parameters, shared.MapParameter{
+			Value:  server.Hostname,
+			Result: socket,
+		})
+	}
+
+	portsToMap[server.Port] = streamMap
+}
+
+// resolveTLSServerSocket determines the socket path for a TLS server entry in the stream map.
+func resolveTLSServerSocket(
+	server dataplane.Layer4VirtualServer,
+	upstreams map[string]dataplane.Upstream,
+) string {
+	if server.IsDefault {
+		if server.SSL != nil {
+			return getSocketNameTLSTerminate(server.Port, server.Hostname)
+		}
+		return connectionClosedStreamServerSocket
+	}
+
+	if len(server.Upstreams) > 0 {
+		upstreamName := server.Upstreams[0].Name
+		if u, ok := upstreams[upstreamName]; ok && len(u.Endpoints) > 0 {
+			if server.SSL != nil {
+				return getSocketNameTLSTerminate(server.Port, server.Hostname)
+			}
+			return getSocketNameTLS(server.Port, server.Hostname)
+		}
+	}
+
+	return emptyStringSocket
 }
 
 // buildMisdirectedRequestMaps creates per-port maps that resolve both $ssl_server_name and $host

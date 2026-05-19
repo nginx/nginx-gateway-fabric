@@ -12,8 +12,11 @@ FROM registry.access.redhat.com/ubi9/ubi-minimal:9.7 AS ubi-nginx
 
 RUN microdnf -y update glib2 && microdnf clean all
 
+# renovate: datasource=github-tags depName=nginx/nginx
+ARG NGINX_VERSION=1.31.0
+
 # renovate: datasource=github-tags depName=nginx/agent
-ARG NGINX_AGENT_VERSION=v3.9.1
+ARG NGINX_AGENT_VERSION=v3.10.1
 ARG NJS_DIR
 ARG NGINX_CONF_DIR
 ARG BUILD_AGENT
@@ -42,7 +45,7 @@ RUN --mount=type=bind,from=nginx-files,src=nginx_signing.key,target=/tmp/nginx_s
     && groupadd -g 1001 nginx \
     && useradd -r -u 101 -g nginx -s /sbin/nologin -d /var/cache/nginx nginx \
     # Install NGINX and modules including OTEL
-    && microdnf --nodocs install -y nginx nginx-module-njs nginx-module-otel \
+    && microdnf --nodocs install -y nginx-${NGINX_VERSION} nginx-module-njs-${NGINX_VERSION}* nginx-module-otel-${NGINX_VERSION}* \
     # Install nginx-agent
     && microdnf --nodocs install -y nginx-agent-${NGINX_AGENT_VERSION#v}* \
     # Clean up
