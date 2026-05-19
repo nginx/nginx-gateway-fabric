@@ -23,9 +23,10 @@ func TestGenerate(t *testing.T) {
 	nimLogProfileName := "nim-log-profile"
 
 	tests := []struct {
-		name       string
-		policy     policies.Policy
-		expStrings []string
+		name          string
+		policy        policies.Policy
+		expStrings    []string
+		notExpStrings []string
 	}{
 		{
 			name: "basic case with policy bundle URL",
@@ -222,6 +223,34 @@ func TestGenerate(t *testing.T) {
 			},
 		},
 		{
+			name: "security log with nil LogSource is skipped",
+			policy: &ngfAPIv1alpha1.WAFPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "waf-nil-log",
+					Namespace: "app-ns",
+				},
+				Spec: ngfAPIv1alpha1.WAFPolicySpec{
+					PolicySource: &ngfAPIv1alpha1.PolicySource{
+						HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: "https://example.com/policy.tgz"},
+					},
+					SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
+						{
+							// LogSource is nil — should be skipped.
+							Destination: ngfAPIv1alpha1.SecurityLogDestination{
+								Type: ngfAPIv1alpha1.SecurityLogDestinationTypeStderr,
+							},
+						},
+					},
+				},
+			},
+			expStrings: []string{
+				"app_protect_enable on;",
+			},
+			notExpStrings: []string{
+				"app_protect_security_log",
+			},
+		},
+		{
 			name: "no policy bundle - no policy directives",
 			policy: &ngfAPIv1alpha1.WAFPolicy{
 				ObjectMeta: metav1.ObjectMeta{
@@ -234,13 +263,21 @@ func TestGenerate(t *testing.T) {
 		},
 	}
 
-	checkResults := func(t *testing.T, resFiles policies.GenerateResultFiles, expStrings []string) {
+	checkResults := func(
+		t *testing.T,
+		resFiles policies.GenerateResultFiles,
+		expStrings []string,
+		notExpStrings []string,
+	) {
 		t.Helper()
 		g := NewWithT(t)
 		g.Expect(resFiles).To(HaveLen(1))
 
 		for _, str := range expStrings {
 			g.Expect(string(resFiles[0].Content)).To(ContainSubstring(str))
+		}
+		for _, str := range notExpStrings {
+			g.Expect(string(resFiles[0].Content)).ToNot(ContainSubstring(str))
 		}
 	}
 
@@ -250,10 +287,10 @@ func TestGenerate(t *testing.T) {
 			generator := waf.NewGenerator()
 
 			resFiles := generator.GenerateForServer([]policies.Policy{test.policy}, http.Server{})
-			checkResults(t, resFiles, test.expStrings)
+			checkResults(t, resFiles, test.expStrings, test.notExpStrings)
 
 			resFiles = generator.GenerateForLocation([]policies.Policy{test.policy}, http.Location{})
-			checkResults(t, resFiles, test.expStrings)
+			checkResults(t, resFiles, test.expStrings, test.notExpStrings)
 		})
 	}
 }

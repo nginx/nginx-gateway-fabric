@@ -1032,6 +1032,50 @@ func TestBuildBundleSources(t *testing.T) {
 			},
 		},
 		{
+			name: "nil PolicySource with polling-enabled security logs",
+			spec: ngfAPIv1alpha1.WAFPolicySpec{
+				Type:         ngfAPIv1alpha1.PolicySourceTypeHTTP,
+				PolicySource: nil, // nil PolicySource — should not produce a policy bundle source.
+				SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
+					{
+						LogSource: &ngfAPIv1alpha1.LogSource{
+							HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: "http://example.com/log.tgz"},
+							Polling: &ngfAPIv1alpha1.BundlePolling{
+								Enabled: true,
+							},
+						},
+					},
+				},
+			},
+			expectedSources: 1, // Only log source, no policy source.
+			validateSources: func(g Gomega, sources []BundleSource) {
+				g.Expect(sources[0].Type).To(Equal(LogProfileBundle))
+				g.Expect(sources[0].Request.URL).To(Equal("http://example.com/log.tgz"))
+			},
+		},
+		{
+			name: "nil LogSource in SecurityLogs is skipped",
+			spec: ngfAPIv1alpha1.WAFPolicySpec{
+				Type: ngfAPIv1alpha1.PolicySourceTypeHTTP,
+				PolicySource: &ngfAPIv1alpha1.PolicySource{
+					HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: "http://example.com/policy.tgz"},
+					Polling: &ngfAPIv1alpha1.BundlePolling{
+						Enabled: true,
+					},
+				},
+				SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
+					{
+						LogSource: nil, // nil LogSource — should be skipped.
+					},
+				},
+			},
+			expectedSources: 1, // Only policy source, nil log entry skipped.
+			validateSources: func(g Gomega, sources []BundleSource) {
+				g.Expect(sources[0].Type).To(Equal(PolicyBundle))
+				g.Expect(sources[0].Request.URL).To(Equal("http://example.com/policy.tgz"))
+			},
+		},
+		{
 			name: "negative log source interval falls back to default",
 			spec: ngfAPIv1alpha1.WAFPolicySpec{
 				Type: ngfAPIv1alpha1.PolicySourceTypeHTTP,
