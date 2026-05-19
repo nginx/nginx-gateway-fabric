@@ -964,6 +964,12 @@ http {
         default 0;
     }
 
+    # Token is authorized if any require entry matches.
+    map $valid_jwt_combination_0_0$valid_jwt_combination_0_1 $jwt_authorized_0 {
+        ~1  1; # Authorize if at least one variable is 1.
+        default 0;
+    }
+
     # Required, as for arrays, the variable keeps a list of array elements separated by commas.
     # Must be in http context.
     auth_jwt_claim_set $jwt_aud aud;
@@ -974,9 +980,8 @@ http {
       auth_jwt "ngf";
       auth_jwt_key_file /etc/nginx/secrets/jwt_auth_default_jwks-secret;
 
-      # Process values returned from maps.
-      # Authorize request as long as at least one map returns `1`.
-      auth_jwt_require $valid_jwt_combination_0_0 || $valid_jwt_combination_0_1;
+      # Authorize requests from at least one of the maps.
+      auth_jwt_require $jwt_authorized_0;
 
       proxy_pass http://nginx-hello-backend;
     }
@@ -984,10 +989,10 @@ http {
 ```
 
 There are a few key details in this config to note:
-1. The `map` validates multiple claims together in a single string, separated by a plus (`+`) symbol. This ensures requests are authorized only when matching all required claims.
-2. A separate map is created for each `require` item specified.
+1. The first two `map` directives validate multiple claims together in a single string, separated by a plus (`+`) symbol. This ensures requests are authorized only when matching all required claims. These two maps store their results in `$valid_jwt_combination_0_0` and `$valid_jwt_combination_0_1`.
+2. The third map evaluates the values of `$valid_jwt_combination_0_0` and `$valid_jwt_combination_0_1`, to check if either one of these maps returned `1`. This is required to ensure users sending requests to a specific endpoint are authorized as long as they are validated by at least one of the `require` entries. The value returned from this map is then evaluated by the `auth_jwt_require` directive.
 3. Each key in the map is treated as a regular expression, even if none of the required claims used a regex. The `require[1]` items example uses `(cli|ops)` which allows the `aud` claim to contain either of these values.
-4. Since a route can only have one `AuthenticationFilter`, we need to ensure that the variables produced by the maps, e.g. `$valid_jwt_combination_0_0`, are unique for each set of required claims. This example uses `$valid_jwt_combination_0_0` and `$valid_jwt_combination_0_1` as an example of using the index of the route to uniquely identify them. It may be more robust to use a combination of the `AuthenticationFilter` name and namespace, `HTTPRoute` name and namespace, index and maybe the route's path. This is something that can likely be decided during implementation.
+4. Since a route can only have one `AuthenticationFilter`, we need to ensure that the variables produced by the maps, e.g. `$valid_jwt_combination_0_0`, are unique for each set of required claims. This example uses `$valid_jwt_combination_0_0`, `$valid_jwt_combination_0_1` and `$jwt_authorized_0` as an example of using the index of the route to uniquely identify them. It may be more robust to use a combination of the `AuthenticationFilter` name and namespace, `HTTPRoute` name and namespace, index and maybe the route's path. This is something that can likely be decided during implementation.
 
 #### Processing nested claims
 
@@ -1200,9 +1205,9 @@ A route rule with a single path in an HTTPRoute/GRPCRoute referencing a valid `A
   Requests to any path in the valid route rule will return a 200 response with the JSON web key set (JWKS) to validate the original JWT signature from the authentication request.
   This behavior is documented in the [auth_jwt_key_request](https://nginx.org/en/docs/http/ngx_http_auth_jwt_module.html#auth_jwt_key_request) directive documentation.
 
-A route rule referencing multiple `AuthenticationFilters` where each `AuthenticationFilters` is of a unique `Type`. (e.g. one with `Type: Basic` and one with `Type: JWT`)
+A route rule referencing multiple `AuthenticationFilters` where each `AuthenticationFilter` is of a unique `Type`. (e.g. one with `Type: Basic` and one with `Type: JWT`)
 - Expected outcomes:
-  The route rule referencing multiple `AuthenticationFilters` where each `AuthenticationFilters` is of a unique `Type` is marked as valid.
+  The route rule referencing multiple `AuthenticationFilters` where each `AuthenticationFilter` is of a unique `Type` is marked as valid.
   Requests to any path in the valid route rule return a 200 response when correctly authenticated.
   Requests to any path in the valid route rule return a 401 response when incorrectly authenticated.
 
@@ -1324,12 +1329,12 @@ Multiple `require` entries. JWT claim presented with `iss`, `aud`, and `sub` cla
   Request is not authorized.
   NGINX returns a 401 response code.
 
-`require` entry/entries with a custom claim defined as a nested claim (e.g. `"require[].claims[].name: realm_access/roles"`, with values `"reader", "admin"`). A JWT presented with the expected nested claim keys, and array in the expected order (e.g. `"realm_access": "roles": ["reader", "admin"]`).
+`require` entry/entries with a custom claim defined as a nested claim (e.g. `"require[].claims[].name: realm_access/roles"`, with values `"reader", "admin"`). A JWT presented with the expected nested claim keys, and the array in the expected order (e.g. `"realm_access": "roles": ["reader", "admin"]`).
 - Expected outcome:
   Request is authorized.
   NGINX returns a 200 response code.
 
-`require` entry/entries with a custom claim defined as a nested claim (e.g. `"require[].claims[].name: realm_access/roles"`, with values `"reader", "admin"`). A JWT presented with the expected nested claim keys, and array is **not** in the expected order (e.g. `"realm_access": "roles": ["admin", "reader"]`).
+`require` entry/entries with a custom claim defined as a nested claim (e.g. `"require[].claims[].name: realm_access/roles"`, with values `"reader", "admin"`). A JWT presented with the expected nested claim keys, and the array is **not** in the expected order (e.g. `"realm_access": "roles": ["admin", "reader"]`).
 - Expected outcome:
   Request is not authorized.
   NGINX returns a 401 response code.
