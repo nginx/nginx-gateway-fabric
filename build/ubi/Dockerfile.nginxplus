@@ -11,8 +11,6 @@ FROM ghcr.io/nginx/dependencies/nginx-ubi:ubi9@sha256:edefd779f98fd3ba4bb92a795d
 
 FROM registry.access.redhat.com/ubi9/ubi-minimal:9.7 AS ubi-nginx-plus
 
-RUN microdnf -y update glib2 && microdnf clean all
-
 ARG NGINX_PLUS_VERSION=R37.0
 ARG APP_PROTECT_VERSION=37.0+5.635
 ARG INCLUDE_NAP_WAF=false
