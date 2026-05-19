@@ -371,7 +371,7 @@ func validateNginxProxy(
 		}
 	}
 
-	allErrs = append(allErrs, validateLogging(npCfg)...)
+	allErrs = append(allErrs, validateLogging(npCfg, plus)...)
 
 	allErrs = append(allErrs, validateDNSResolver(validator, npCfg)...)
 
@@ -386,7 +386,7 @@ func validateNginxProxy(
 	return allErrs
 }
 
-func validateLogging(npCfg *ngfAPIv1alpha2.NginxProxy) field.ErrorList {
+func validateLogging(npCfg *ngfAPIv1alpha2.NginxProxy, plus bool) field.ErrorList {
 	var allErrs field.ErrorList
 	spec := field.NewPath("spec")
 
@@ -417,6 +417,17 @@ func validateLogging(npCfg *ngfAPIv1alpha2.NginxProxy) field.ErrorList {
 						validLogLevels,
 					))
 			}
+		}
+
+		if logging.ErrorLogFormat != nil && *logging.ErrorLogFormat == ngfAPIv1alpha2.NginxErrorLogFormatJSON && !plus {
+			allErrs = append(
+				allErrs,
+				field.Invalid(
+					loggingPath.Child("errorLogFormat"),
+					*logging.ErrorLogFormat,
+					"JSON-formatted error logs are only supported with NGINX Plus",
+				),
+			)
 		}
 	}
 

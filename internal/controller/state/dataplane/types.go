@@ -754,6 +754,9 @@ type Logging struct {
 	AccessLog *AccessLog
 	// ErrorLevel defines the error log level.
 	ErrorLevel string
+	// ErrorLogFormat defines the error log format.
+	// If not specified, the default NGINX error log format is used.
+	ErrorLogFormat string
 }
 
 // NginxPlus specifies NGINX Plus additional settings.

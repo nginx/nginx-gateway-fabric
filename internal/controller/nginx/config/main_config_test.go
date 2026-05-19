@@ -109,19 +109,40 @@ func TestExecuteMainConfig_Waf(t *testing.T) {
 func TestExecuteMainConfig_Logging(t *testing.T) {
 	t.Parallel()
 
-	conf := dataplane.Configuration{
-		Logging: dataplane.Logging{
-			ErrorLevel: "info",
+	tests := []struct {
+		name         string
+		expDirective string
+		logging      dataplane.Logging
+		expectJSON   bool
+	}{
+		{
+			name:         "error log uses default text format when JSON is false",
+			logging:      dataplane.Logging{ErrorLevel: "info"},
+			expDirective: "error_log stderr info;",
+			expectJSON:   false,
+		},
+		{
+			name:         "error log appends json keyword when ErrorLogFormat is json",
+			logging:      dataplane.Logging{ErrorLevel: "info", ErrorLogFormat: "json"},
+			expDirective: "error_log stderr info json;",
+			expectJSON:   true,
 		},
 	}
 
-	g := NewWithT(t)
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
 
-	res := executeMainConfig(conf, &policiesfakes.FakeGenerator{})
-	g.Expect(res).To(HaveLen(1))
-	g.Expect(res[0].dest).To(Equal(mainIncludesConfigFile))
-
-	g.Expect(string(res[0].data)).To(ContainSubstring("error_log stderr info"))
+			res := executeMainConfig(dataplane.Configuration{Logging: test.logging}, &policiesfakes.FakeGenerator{})
+			g.Expect(res).To(HaveLen(1))
+			g.Expect(res[0].dest).To(Equal(mainIncludesConfigFile))
+			g.Expect(string(res[0].data)).To(ContainSubstring(test.expDirective))
+			if !test.expectJSON {
+				g.Expect(string(res[0].data)).ToNot(ContainSubstring("error_log stderr info json"))
+			}
+		})
+	}
 }
 
 func TestExecuteMainConfig_Snippets(t *testing.T) {

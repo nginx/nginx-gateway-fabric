@@ -8917,7 +8917,24 @@ spec:
                     - alert
                     - emerg
                     type: string
+                  errorLogFormat:
+                    description: |-
+                      ErrorLogFormat controls the output format of the NGINX error_log directive.
+                      Set to 'json' to enable JSON-formatted error logs for NGINX Plus only and
+                      cannot be combined with errorLevel: debug.
+                      When set to 'json', NGINX Gateway Fabric also emits a JSON-formatted access log
+                      if the user has not supplied a custom access log format.
+                      See https://nginx.org/en/docs/ngx_core_module.html#error_log
+                    enum:
+                    - default
+                    - json
+                    type: string
                 type: object
+                x-kubernetes-validations:
+                - message: JSON-formatted error logs are not supported when errorLevel
+                    is debug
+                  rule: '!(has(self.errorLogFormat) && self.errorLogFormat == ''json''
+                    && has(self.errorLevel) && self.errorLevel == ''debug'')'
               metrics:
                 description: |-
                   Metrics defines the configuration for Prometheus scraping metrics. Changing this value results in a

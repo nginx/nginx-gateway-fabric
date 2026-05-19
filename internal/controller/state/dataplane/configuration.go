@@ -37,6 +37,19 @@ const (
 	DefaultLogFormatName = "ngf_user_defined_log_format"
 	// DefaultAccessLogPath is the default path for the access log.
 	DefaultAccessLogPath = "/dev/stdout"
+	// JSONAccessLogFormat is the JSON access log template emitted when JSON logging
+	// is enabled and the user has not supplied their own access log format. Fields mirror
+	// nginx's implicit 'combined' format.
+	JSONAccessLogFormat = `{` +
+		`"time_local":"$time_local",` +
+		`"remote_addr":"$remote_addr",` +
+		`"remote_user":"$remote_user",` +
+		`"request":"$request",` +
+		`"status":"$status",` +
+		`"body_bytes_sent":"$body_bytes_sent",` +
+		`"http_referer":"$http_referer",` +
+		`"http_user_agent":"$http_user_agent"` +
+		`}`
 	// InternalRLPAnnotationKey is the annotation key used to mark internally generated
 	// RateLimitPolicies. These policies are created when a RateLimitPolicy targets a route and not
 	// the Gateway itself; in this situation we need an additional policy to generate the http context
@@ -1956,6 +1969,10 @@ func buildLogging(gateway *graph.Gateway) Logging {
 			logSettings.ErrorLevel = string(*ngfProxy.Logging.ErrorLevel)
 		}
 
+		if ngfProxy.Logging.ErrorLogFormat != nil {
+			logSettings.ErrorLogFormat = string(*ngfProxy.Logging.ErrorLogFormat)
+		}
+
 		srcLogSettings := ngfProxy.Logging
 
 		if accessLog := buildAccessLog(srcLogSettings); accessLog != nil {
@@ -1980,6 +1997,13 @@ func buildAccessLog(srcLogSettings *ngfAPIv1alpha2.NginxLogging) *AccessLog {
 				accessLog.Escape = string(*srcLogSettings.AccessLog.Escape)
 			}
 			return accessLog
+		}
+	}
+
+	if srcLogSettings.ErrorLogFormat != nil && *srcLogSettings.ErrorLogFormat == ngfAPIv1alpha2.NginxErrorLogFormatJSON {
+		return &AccessLog{
+			Format: JSONAccessLogFormat,
+			Escape: string(ngfAPIv1alpha2.NginxAccessLogEscapeJSON),
 		}
 	}
 
