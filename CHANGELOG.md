@@ -6,7 +6,7 @@ and includes links to all PRs that went into the release.
 
 ## Release 2.6.1
 
-_May 19, 2026_
+_May 20, 2026_
 
 BUG FIXES:
 
