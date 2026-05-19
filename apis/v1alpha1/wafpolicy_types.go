@@ -39,19 +39,10 @@ type WAFPolicyList struct {
 
 // WAFPolicySpec defines the desired state of a WAFPolicy.
 //
-// +kubebuilder:validation:XValidation:message="policySource.httpSource must be set if and only if type is HTTP",rule="(self.type == 'HTTP') == (has(self.policySource) && has(self.policySource.httpSource))"
-// +kubebuilder:validation:XValidation:message="policySource.nimSource must be set if and only if type is NIM",rule="(self.type == 'NIM') == (has(self.policySource) && has(self.policySource.nimSource))"
-// +kubebuilder:validation:XValidation:message="policySource.n1cSource must be set if and only if type is N1C",rule="(self.type == 'N1C') == (has(self.policySource) && has(self.policySource.n1cSource))"
-// +kubebuilder:validation:XValidation:message="policySource.apPolicyRef must be set if and only if type is PLM",rule="(self.type == 'PLM') == (has(self.policySource) && has(self.policySource.apPolicyRef))"
+// +kubebuilder:validation:XValidation:message="exactly one of policySource.httpSource, policySource.nimSource, policySource.n1cSource, or policyRef.apPolicyRef must be set",rule="[has(self.policySource.httpSource), has(self.policySource.nimSource), has(self.policySource.n1cSource), has(self.policyRef) && has(self.policyRef.apPolicyRef)].filter(x, x).size() == 1"
+// +kubebuilder:validation:XValidation:message="type must match the configured policy source or policy ref",rule="(self.type == 'HTTP' && has(self.policySource.httpSource)) || (self.type == 'NIM' && has(self.policySource.nimSource)) || (self.type == 'N1C' && has(self.policySource.n1cSource)) || (self.type == 'PLM' && has(self.policyRef) && has(self.policyRef.apPolicyRef))"
 // +kubebuilder:validation:XValidation:message="policySource.validation.verifyChecksum is only supported for type HTTP",rule="!(self.type != 'HTTP' && has(self.policySource) && has(self.policySource.validation) && has(self.policySource.validation.verifyChecksum) && self.policySource.validation.verifyChecksum)"
-// +kubebuilder:validation:XValidation:message="policySource.polling must not be set when type is PLM",rule="!(self.type == 'PLM' && has(self.policySource) && has(self.policySource.polling))"
-// +kubebuilder:validation:XValidation:message="policySource.auth must not be set when type is PLM",rule="!(self.type == 'PLM' && has(self.policySource) && has(self.policySource.auth))"
-// +kubebuilder:validation:XValidation:message="policySource.tlsSecret must not be set when type is PLM",rule="!(self.type == 'PLM' && has(self.policySource) && has(self.policySource.tlsSecret))"
-// +kubebuilder:validation:XValidation:message="policySource.validation must not be set when type is PLM",rule="!(self.type == 'PLM' && has(self.policySource) && has(self.policySource.validation))"
-// +kubebuilder:validation:XValidation:message="policySource.timeout must not be set when type is PLM",rule="!(self.type == 'PLM' && has(self.policySource) && has(self.policySource.timeout))"
-// +kubebuilder:validation:XValidation:message="policySource.retryAttempts must not be set to a non-default value when type is PLM",rule="!(self.type == 'PLM' && has(self.policySource) && has(self.policySource.retryAttempts) && self.policySource.retryAttempts != 3)"
-// +kubebuilder:validation:XValidation:message="policySource.insecureSkipVerify must not be true when type is PLM",rule="!(self.type == 'PLM' && has(self.policySource) && has(self.policySource.insecureSkipVerify) && self.policySource.insecureSkipVerify)"
-// +kubebuilder:validation:XValidation:message="logSource.apLogConfRef is only allowed when type is PLM",rule="self.type == 'PLM' || !has(self.securityLogs) || self.securityLogs.all(sl, !has(sl.logSource) || !has(sl.logSource.apLogConfRef))"
+// +kubebuilder:validation:XValidation:message="securityLogs[*].logRef.apLogConfRef is only allowed when type is PLM",rule="self.type == 'PLM' || !has(self.securityLogs) || self.securityLogs.all(sl, !has(sl.logRef) || !has(sl.logRef.apLogConfRef))"
 //
 //nolint:lll
 type WAFPolicySpec struct {
@@ -75,8 +66,15 @@ type WAFPolicySpec struct {
 	// CRD managed by the Policy Lifecycle Manager.
 	Type PolicySourceType `json:"type"`
 
-	// PolicySource holds all policy bundle fetch configuration.
-	PolicySource PolicySource `json:"policySource"`
+	// PolicySource holds all non-CRD bundle fetch configuration.
+	// Used for HTTP, NIM, and N1C policy types.
+	// +optional
+	PolicySource PolicySource `json:"policySource,omitempty"`
+
+	// PolicyRef holds all CRD-backed policy references.
+	// Used for the PLM policy type.
+	// +optional
+	PolicyRef *PolicyRef `json:"policyRef,omitempty"`
 
 	// SecurityLogs defines security logging configurations.
 	//
@@ -109,7 +107,7 @@ const (
 	PolicySourceTypePLM PolicySourceType = "PLM"
 )
 
-// PolicySource holds all configuration for fetching a WAF policy bundle.
+// PolicySource holds all non-CRD configuration for fetching a WAF policy bundle.
 type PolicySource struct {
 	// HTTPSource configures direct bundle fetching from an HTTP/HTTPS URL.
 	// Required when type is HTTP; must not be set for other types.
@@ -128,13 +126,6 @@ type PolicySource struct {
 	//
 	// +optional
 	N1CSource *N1CBundleSource `json:"n1cSource,omitempty"`
-
-	// APPolicyRef references an APPolicy CRD compiled by PLM.
-	// Required when type is PLM; must not be set for other types.
-	// Cross-namespace references require a ReferenceGrant.
-	//
-	// +optional
-	APPolicyRef *APPolicyReference `json:"apPolicyRef,omitempty"`
 
 	// Auth configures authentication credentials for fetching the bundle.
 	//
@@ -177,6 +168,15 @@ type PolicySource struct {
 	//
 	// +optional
 	InsecureSkipVerify bool `json:"insecureSkipVerify,omitempty"`
+}
+
+// PolicyRef holds all CRD-backed policy references.
+type PolicyRef struct {
+	// APPolicyRef references an APPolicy CRD compiled by PLM.
+	// Cross-namespace references require a ReferenceGrant.
+	//
+	// +optional
+	APPolicyRef *APPolicyReference `json:"apPolicyRef,omitempty"`
 }
 
 // BundleValidation configures integrity verification for a bundle.
@@ -439,27 +439,32 @@ const (
 
 // WAFSecurityLog defines security logging configuration for app_protect_security_log directives.
 // Exactly one of logSource.defaultProfile, logSource.httpSource, logSource.nimSource,
-// logSource.n1cSource, or logSource.apLogConfRef must be set.
+// logSource.n1cSource, or logRef.apLogConfRef must be set.
+//
+// +kubebuilder:validation:XValidation:message="exactly one of logSource.defaultProfile, logSource.httpSource, logSource.nimSource, logSource.n1cSource, or logRef.apLogConfRef must be set",rule="[has(self.logSource.defaultProfile), has(self.logSource.httpSource), has(self.logSource.nimSource), has(self.logSource.n1cSource), has(self.logRef) && has(self.logRef.apLogConfRef)].filter(x, x).size() == 1"
+//
+//nolint:lll
 type WAFSecurityLog struct {
-	// LogSource configures the log profile bundle source for this log entry.
-	// Exactly one of defaultProfile, httpSource, nimSource, n1cSource, or apLogConfRef must be set.
-	LogSource LogSource `json:"logSource"`
+	// LogSource configures all non-CRD log profile bundle sources for this log entry.
+	// Used for defaultProfile, httpSource, nimSource, and n1cSource.
+	//
+	// +optional
+	LogSource LogSource `json:"logSource,omitempty"`
+
+	// LogRef configures all CRD-backed log profile references for this log entry.
+	// Used for PLM-backed APLogConf references.
+	//
+	// +optional
+	LogRef *LogRef `json:"logRef,omitempty"`
 
 	// Destination defines where security logs are sent.
 	Destination SecurityLogDestination `json:"destination"`
 }
 
-// LogSource holds all configuration for fetching a WAF log profile bundle.
-// Exactly one of DefaultProfile, HTTPSource, NIMSource, N1CSource, or APLogConfRef must be set.
+// LogSource holds all non-CRD configuration for fetching a WAF log profile bundle.
+// Exactly one of DefaultProfile, HTTPSource, NIMSource, or N1CSource must be set when using LogSource.
 //
-// +kubebuilder:validation:XValidation:message="exactly one of logSource.defaultProfile, logSource.httpSource, logSource.nimSource, logSource.n1cSource, or logSource.apLogConfRef must be set",rule="(has(self.defaultProfile) && !has(self.httpSource) && !has(self.nimSource) && !has(self.n1cSource) && !has(self.apLogConfRef)) || (!has(self.defaultProfile) && has(self.httpSource) && !has(self.nimSource) && !has(self.n1cSource) && !has(self.apLogConfRef)) || (!has(self.defaultProfile) && !has(self.httpSource) && has(self.nimSource) && !has(self.n1cSource) && !has(self.apLogConfRef)) || (!has(self.defaultProfile) && !has(self.httpSource) && !has(self.nimSource) && has(self.n1cSource) && !has(self.apLogConfRef)) || (!has(self.defaultProfile) && !has(self.httpSource) && !has(self.nimSource) && !has(self.n1cSource) && has(self.apLogConfRef))"
-// +kubebuilder:validation:XValidation:message="logSource.auth must not be set when logSource.apLogConfRef is used",rule="!(has(self.apLogConfRef) && has(self.auth))"
-// +kubebuilder:validation:XValidation:message="logSource.tlsSecret must not be set when logSource.apLogConfRef is used",rule="!(has(self.apLogConfRef) && has(self.tlsSecret))"
-// +kubebuilder:validation:XValidation:message="logSource.validation must not be set when logSource.apLogConfRef is used",rule="!(has(self.apLogConfRef) && has(self.validation))"
-// +kubebuilder:validation:XValidation:message="logSource.polling must not be set when logSource.apLogConfRef is used",rule="!(has(self.apLogConfRef) && has(self.polling))"
-// +kubebuilder:validation:XValidation:message="logSource.timeout must not be set when logSource.apLogConfRef is used",rule="!(has(self.apLogConfRef) && has(self.timeout))"
-// +kubebuilder:validation:XValidation:message="logSource.retryAttempts must not be set to a non-default value when logSource.apLogConfRef is used",rule="!(has(self.apLogConfRef) && has(self.retryAttempts) && self.retryAttempts != 3)"
-// +kubebuilder:validation:XValidation:message="logSource.insecureSkipVerify must not be true when logSource.apLogConfRef is used",rule="!(has(self.apLogConfRef) && has(self.insecureSkipVerify) && self.insecureSkipVerify)"
+// +kubebuilder:validation:XValidation:message="at most one of logSource.defaultProfile, logSource.httpSource, logSource.nimSource, or logSource.n1cSource may be set",rule="[has(self.defaultProfile), has(self.httpSource), has(self.nimSource), has(self.n1cSource)].filter(x, x).size() <= 1"
 //
 //nolint:lll
 type LogSource struct {
@@ -486,14 +491,6 @@ type LogSource struct {
 	//
 	// +optional
 	N1CSource *N1CLogProfileBundleSource `json:"n1cSource,omitempty"`
-
-	// APLogConfRef references an APLogConf CRD compiled by PLM.
-	// Only allowed when spec.type is PLM.
-	// Cross-namespace references require a ReferenceGrant.
-	// Mutually exclusive with DefaultProfile, HTTPSource, NIMSource, and N1CSource.
-	//
-	// +optional
-	APLogConfRef *APLogConfReference `json:"apLogConfRef,omitempty"`
 
 	// Auth configures authentication credentials for fetching the log bundle.
 	// Only applicable when url is set.
@@ -540,6 +537,15 @@ type LogSource struct {
 	//
 	// +optional
 	InsecureSkipVerify bool `json:"insecureSkipVerify,omitempty"`
+}
+
+// LogRef holds all CRD-backed log profile references.
+type LogRef struct {
+	// APLogConfRef references an APLogConf CRD compiled by PLM.
+	// Cross-namespace references require a ReferenceGrant.
+	//
+	// +optional
+	APLogConfRef *APLogConfReference `json:"apLogConfRef,omitempty"`
 }
 
 // SecurityLogDestination defines the destination for security logs.
