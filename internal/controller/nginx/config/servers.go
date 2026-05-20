@@ -542,6 +542,7 @@ func createLocations(
 	var grpcServer bool
 
 	mirrorPathToPercentage := extractMirrorTargetsWithPercentages(server.PathRules)
+	serverPolicyHTTPVersion := extractPolicyHTTPVersion(server.Policies)
 
 	for pathRuleIdx, rule := range server.PathRules {
 		if !rootPathExists && matchesRootPath(rule) {
@@ -570,7 +571,8 @@ func createLocations(
 				server.Port,
 				keepAliveCheck,
 				disableBaseProxySetHeaders,
-				mirrorPercentage)...,
+				mirrorPercentage,
+				serverPolicyHTTPVersion)...,
 			)
 		case needsInternalLocationsForMatches(rule):
 			internalLocations, matches := createInternalLocationsForRule(
@@ -582,6 +584,7 @@ func createLocations(
 				keepAliveCheck,
 				disableBaseProxySetHeaders,
 				mirrorPercentage,
+				serverPolicyHTTPVersion,
 			)
 			httpMatchKey := serverID + "_" + strconv.Itoa(pathRuleIdx)
 			for i := range extLocations {
@@ -603,7 +606,8 @@ func createLocations(
 				server.Port,
 				keepAliveCheck,
 				disableBaseProxySetHeaders,
-				mirrorPercentage)...,
+				mirrorPercentage,
+				serverPolicyHTTPVersion)...,
 			)
 		}
 	}
@@ -632,6 +636,7 @@ func updateExternalLocationsForRule(
 	keepAliveCheck keepAliveChecker,
 	disableBaseProxySetHeaders []string,
 	mirrorPercentage *float64,
+	serverPolicyHTTPVersion *string,
 ) []http.Location {
 	for matchRuleIndex, r := range rule.MatchRules {
 		extLocations = updateLocations(
@@ -645,6 +650,7 @@ func updateExternalLocationsForRule(
 			keepAliveCheck,
 			disableBaseProxySetHeaders,
 			mirrorPercentage,
+			serverPolicyHTTPVersion,
 		)
 	}
 
@@ -660,6 +666,7 @@ func createInternalLocationsForRule(
 	keepAliveCheck keepAliveChecker,
 	disableBaseProxySetHeaders []string,
 	mirrorPercentage *float64,
+	serverPolicyHTTPVersion *string,
 ) ([]http.Location, []routeMatch) {
 	// Calculate the exact capacity needed
 	capacity := 0
@@ -704,6 +711,7 @@ func createInternalLocationsForRule(
 				serverID,
 				matchRuleIdx,
 				pathRuleIdx,
+				serverPolicyHTTPVersion,
 			)
 			internalLocations = append(internalLocations, intLocation)
 		} else {
@@ -758,6 +766,7 @@ func createInternalLocationsForRule(
 					serverID,
 					matchRuleIdx,
 					pathRuleIdx,
+					serverPolicyHTTPVersion,
 				)
 
 				intEPPLocation = initializeInternalInferenceEPPLocation(
@@ -830,6 +839,7 @@ func createInferenceLocationsForRule(
 	keepAliveCheck keepAliveChecker,
 	disableBaseProxySetHeaders []string,
 	mirrorPercentage *float64,
+	serverPolicyHTTPVersion *string,
 ) []http.Location {
 	capacity := len(extLocations)
 
@@ -905,6 +915,7 @@ func createInferenceLocationsForRule(
 				serverID,
 				matchRuleIdx,
 				pathRuleIdx,
+				serverPolicyHTTPVersion,
 			)
 			locs = append(locs, intProxyPassLocation)
 
@@ -1206,6 +1217,15 @@ func extractPolicyHTTPVersion(pols []policies.Policy) *string {
 	return nil
 }
 
+// effectivePolicyHTTPVersion resolves the active proxy_http_version override for a location.
+// Route-level (pathRule) policies take precedence; the server-level (Gateway) policy is used as a fallback.
+func effectivePolicyHTTPVersion(routePolicies []policies.Policy, serverFallback *string) *string {
+	if v := extractPolicyHTTPVersion(routePolicies); v != nil {
+		return v
+	}
+	return serverFallback
+}
+
 // updateLocation updates a location with any relevant configurations, like proxy_pass, filters, tls settings, etc.
 func updateLocation(
 	matchRule dataplane.MatchRule,
@@ -1218,6 +1238,7 @@ func updateLocation(
 	serverID string,
 	matchRuleIndex int,
 	pathRuleIndex int,
+	serverPolicyHTTPVersion *string,
 ) http.Location {
 	filters := matchRule.Filters
 	grpc := pathRule.GRPC
@@ -1247,7 +1268,7 @@ func updateLocation(
 		inferenceBackend,
 		keepAliveCheck,
 		disableBaseProxySetHeaders,
-		extractPolicyHTTPVersion(pathRule.Policies),
+		effectivePolicyHTTPVersion(pathRule.Policies, serverPolicyHTTPVersion),
 	)
 
 	return location
@@ -1613,6 +1634,7 @@ func updateLocations(
 	keepAliveCheck keepAliveChecker,
 	disableBaseProxySetHeaders []string,
 	mirrorPercentage *float64,
+	serverPolicyHTTPVersion *string,
 ) []http.Location {
 	updatedLocations := make([]http.Location, len(buildLocations))
 
@@ -1628,6 +1650,7 @@ func updateLocations(
 			serverID,
 			matchRuleIdx,
 			pathRuleIdx,
+			serverPolicyHTTPVersion,
 		)
 	}
 

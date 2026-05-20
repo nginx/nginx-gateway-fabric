@@ -46,7 +46,6 @@ const (
 	// ProxyHTTPVersion2 configures NGINX to use HTTP/2 when proxying to upstream servers.
 	// Requires the upstream to support HTTP/2. Use with backends that have
 	// appProtocol: kubernetes.io/h2c or explicit HTTP/2 support.
-	// Note: the current http2 -> backend implementation in NGINX does not yet support multiplexing.
 	ProxyHTTPVersion2 ProxyHTTPVersionType = "2"
 )
 
@@ -65,9 +64,9 @@ type ProxySettingsPolicySpec struct {
 	// ProxyHTTPVersion sets the HTTP protocol version to use when proxying requests to upstream servers.
 	// When set to "2", NGINX uses HTTP/2 (proxy_http_version 2).
 	// When set to "1.1" or unset, NGINX uses HTTP/1.1 (the default).
-	// If not set, NGF will automatically use HTTP/2 for backends whose Service port has
-	// appProtocol: kubernetes.io/h2c.
-	// Note: the current http2 -> backend implementation in NGINX does not yet support multiplexing.
+	// If not set, NGF will automatically use HTTP/2 only when all valid backends for the
+	// generated location have a Service port with appProtocol: kubernetes.io/h2c.
+	// Mixed backend groups do not partially use HTTP/2; they continue to use HTTP/1.1.
 	// Directive: https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_http_version
 	//
 	// +optional

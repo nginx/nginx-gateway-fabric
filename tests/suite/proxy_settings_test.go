@@ -734,13 +734,119 @@ var _ = Describe("ProxySettingsPolicy", Ordered, Label("functional", "proxy-sett
 
 			It("overrides h2c auto-detect to 1.1 when policy forces version 1.1 – directive omitted", func() {
 				// Policy sets 1.1, which is NGINX's own default, so the directive is not emitted at all.
+				// No Value set: asserts the directive is entirely absent, not just that "1.1" isn't present.
+				Expect(framework.ValidateNginxFieldExists(conf, framework.ExpectedNginxField{
+					Directive: "proxy_http_version",
+					File:      "http.conf",
+					Server:    "cafe.example.com",
+					Location:  "/tea-h2c",
+				})).NotTo(Succeed())
+			})
+		})
+	})
+
+	When("proxyHTTPVersion is set on a Gateway-targeted ProxySettingsPolicy", func() {
+		gatewayPolicy := []string{
+			"proxy-settings-policy/gateway-http-version-proxy-settings.yaml",
+		}
+
+		BeforeAll(func() {
+			Expect(resourceManager.ApplyFromFiles(gatewayPolicy, namespace)).To(Succeed())
+		})
+
+		AfterAll(func() {
+			Expect(resourceManager.DeleteFromFiles(gatewayPolicy, namespace)).To(Succeed())
+		})
+
+		Specify("policy is Accepted", func() {
+			waitForPoliciesVerification([]policyStatusExpectation{
+				createPolicyExpectation(
+					"gateway-http-version-proxy-settings",
+					namespace,
+					metav1.ConditionTrue,
+					gatewayv1.PolicyReasonAccepted,
+				),
+			})
+		})
+
+		Context("nginx config", func() {
+			var conf *framework.Payload
+
+			BeforeAll(func() {
+				var err error
+				conf, err = resourceManager.GetNginxConfig(nginxPodName, namespace, "")
+				Expect(err).ToNot(HaveOccurred())
+			})
+
+			It("emits proxy_http_version 2 for a non-h2c location due to Gateway policy", func() {
+				// /coffee has a regular (non-h2c) backend; without the Gateway policy the directive
+				// would be absent. The Gateway policy forces version 2 for the whole server.
 				Expect(framework.ValidateNginxFieldExists(conf, framework.ExpectedNginxField{
 					Directive: "proxy_http_version",
 					Value:     "2",
 					File:      "http.conf",
 					Server:    "cafe.example.com",
+					Location:  "/coffee",
+				})).To(Succeed())
+			})
+		})
+
+		Context("route-level policy overrides gateway-level policy", func() {
+			routeOverrideFiles := []string{
+				"proxy-settings-policy/h2c-backend.yaml",
+				"proxy-settings-policy/http-version-proxy-settings.yaml",
+			}
+
+			BeforeAll(func() {
+				Expect(resourceManager.ApplyFromFiles(routeOverrideFiles, namespace)).To(Succeed())
+			})
+
+			AfterAll(func() {
+				Expect(resourceManager.DeleteFromFiles(routeOverrideFiles, namespace)).To(Succeed())
+			})
+
+			Specify("route-level policies are Accepted", func() {
+				waitForPoliciesVerification([]policyStatusExpectation{
+					createPolicyExpectation(
+						"coffee-h2-proxy-settings",
+						namespace,
+						metav1.ConditionTrue,
+						gatewayv1.PolicyReasonAccepted,
+					),
+					createPolicyExpectation(
+						"tea-h2c-override-proxy-settings",
+						namespace,
+						metav1.ConditionTrue,
+						gatewayv1.PolicyReasonAccepted,
+					),
+				})
+			})
+
+			It("omits proxy_http_version for /tea-h2c when route policy 1.1 overrides Gateway policy 2", func() {
+				var conf *framework.Payload
+				var err error
+				conf, err = resourceManager.GetNginxConfig(nginxPodName, namespace, "")
+				Expect(err).ToNot(HaveOccurred())
+
+				// tea-h2c-override-proxy-settings sets proxyHTTPVersion: "1.1" on the tea-h2c route,
+				// overriding the Gateway-level "2". 1.1 is NGINX's default so the directive is omitted.
+				// No Value set: asserts the directive is entirely absent.
+				Expect(framework.ValidateNginxFieldExists(conf, framework.ExpectedNginxField{
+					Directive: "proxy_http_version",
+					File:      "http.conf",
+					Server:    "cafe.example.com",
 					Location:  "/tea-h2c",
 				})).NotTo(Succeed())
+
+				// coffee-h2-proxy-settings sets proxyHTTPVersion: "2" on the coffee route (agrees with
+				// Gateway policy), so proxy_http_version 2 is still emitted for /coffee.
+				Expect(framework.ValidateNginxFieldExists(conf, framework.ExpectedNginxField{
+					Directive: "proxy_http_version",
+					Value:     "2",
+					File:      "http.conf",
+					Server:    "cafe.example.com",
+					Location:  "/coffee",
+				})).To(Succeed())
 			})
 		})
 	})

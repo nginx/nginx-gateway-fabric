@@ -7983,21 +7983,6 @@ func TestExecuteServers_ProxyHTTPVersion(t *testing.T) {
 		}
 	}
 
-	makeConf := func(pathRules []dataplane.PathRule, disableBaseProxySetHeaders []string) dataplane.Configuration {
-		return dataplane.Configuration{
-			HTTPServers: []dataplane.VirtualServer{
-				{
-					Hostname:  "http.example.com",
-					Port:      8080,
-					PathRules: pathRules,
-				},
-			},
-			BaseHTTPConfig: dataplane.BaseHTTPConfig{
-				DisableBaseProxySetHeaders: disableBaseProxySetHeaders,
-			},
-		}
-	}
-
 	makePathRule := func(backends []dataplane.Backend, pols []policies.Policy) dataplane.PathRule {
 		return dataplane.PathRule{
 			Path:     "/app",
@@ -8020,10 +8005,11 @@ func TestExecuteServers_ProxyHTTPVersion(t *testing.T) {
 	v11 := v1alpha1.ProxyHTTPVersion1_1
 
 	tests := []struct {
-		name       string
-		expPresent string
-		expAbsent  string
-		pathRule   dataplane.PathRule
+		name           string
+		expPresent     string
+		expAbsent      string
+		serverPolicies []policies.Policy
+		pathRule       dataplane.PathRule
 	}{
 		{
 			// NGINX's own default is 1.1 – the directive must be omitted entirely.
@@ -8071,11 +8057,51 @@ func TestExecuteServers_ProxyHTTPVersion(t *testing.T) {
 			expPresent: "proxy_http_version 2;",
 		},
 		{
-			// No valid h2c backends → no auto-detect → directive omitted.
+			// All invalid h2c backends → no auto-detect → directive omitted.
 			name: "all invalid h2c backends – directive omitted (no valid backends)",
 			pathRule: makePathRule([]dataplane.Backend{
 				makeBackend(graph.AppProtocolTypeH2C, false),
 			}, nil),
+			expAbsent: "proxy_http_version",
+		},
+		{
+			// Gateway policy sets version 2; no route-level policy present.
+			name:     "gateway policy version 2, no route policy – emits version 2",
+			pathRule: makePathRule([]dataplane.Backend{makeBackend("", true)}, nil),
+			serverPolicies: []policies.Policy{
+				&v1alpha1.ProxySettingsPolicy{
+					Spec: v1alpha1.ProxySettingsPolicySpec{ProxyHTTPVersion: &v2},
+				},
+			},
+			expPresent: "proxy_http_version 2;",
+		},
+		{
+			// Route-level policy 1.1 is more specific than the Gateway policy 2 – route wins.
+			name: "route policy 1.1 overrides gateway policy 2 – directive omitted",
+			pathRule: makePathRule(
+				[]dataplane.Backend{makeBackend("", true)},
+				[]policies.Policy{
+					&v1alpha1.ProxySettingsPolicy{
+						Spec: v1alpha1.ProxySettingsPolicySpec{ProxyHTTPVersion: &v11},
+					},
+				},
+			),
+			serverPolicies: []policies.Policy{
+				&v1alpha1.ProxySettingsPolicy{
+					Spec: v1alpha1.ProxySettingsPolicySpec{ProxyHTTPVersion: &v2},
+				},
+			},
+			expAbsent: "proxy_http_version",
+		},
+		{
+			// Gateway policy 1.1 suppresses h2c auto-detection; directive omitted (NGINX default).
+			name:     "gateway policy 1.1 suppresses h2c auto-detection – directive omitted",
+			pathRule: makePathRule([]dataplane.Backend{makeBackend(graph.AppProtocolTypeH2C, true)}, nil),
+			serverPolicies: []policies.Policy{
+				&v1alpha1.ProxySettingsPolicy{
+					Spec: v1alpha1.ProxySettingsPolicySpec{ProxyHTTPVersion: &v11},
+				},
+			},
 			expAbsent: "proxy_http_version",
 		},
 	}
@@ -8085,7 +8111,17 @@ func TestExecuteServers_ProxyHTTPVersion(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			conf := makeConf([]dataplane.PathRule{tc.pathRule}, nil)
+			conf := dataplane.Configuration{
+				HTTPServers: []dataplane.VirtualServer{
+					{
+						Hostname:  "http.example.com",
+						Port:      8080,
+						PathRules: []dataplane.PathRule{tc.pathRule},
+						Policies:  tc.serverPolicies,
+					},
+				},
+				BaseHTTPConfig: dataplane.BaseHTTPConfig{},
+			}
 			gen := GeneratorImpl{}
 			results := gen.executeServers(conf, &policiesfakes.FakeGenerator{}, alwaysFalseKeepAliveChecker)
 
