@@ -683,7 +683,7 @@ func (p *NginxProvisioner) buildNginxService(
 	}
 
 	var servicePolicy corev1.ServiceExternalTrafficPolicy
-	if serviceType != corev1.ServiceTypeClusterIP && len(externalIPs) > 0 {
+	if serviceType != corev1.ServiceTypeClusterIP || len(externalIPs) > 0 {
 		servicePolicy = defaultServicePolicy
 		if serviceCfg.ExternalTrafficPolicy != nil {
 			servicePolicy = corev1.ServiceExternalTrafficPolicy(*serviceCfg.ExternalTrafficPolicy)
@@ -716,6 +716,8 @@ func (p *NginxProvisioner) buildNginxService(
 	}
 
 	p.updateLoadBalancerClass(svc, externalIPs)
+
+	p.cfg.Logger.Info("Building Service for Gateway", "service_spec", svc.Spec, "externalIPs", externalIPs)
 
 	return svc, nil
 }

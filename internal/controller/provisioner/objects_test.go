@@ -396,7 +396,7 @@ func TestBuildNginxResourceObjects_NginxProxyConfig(t *testing.T) {
 	svc, ok := svcObj.(*corev1.Service)
 	g.Expect(ok).To(BeTrue())
 	g.Expect(svc.Spec.Type).To(Equal(corev1.ServiceTypeNodePort))
-	g.Expect(svc.Spec.ExternalTrafficPolicy).To(BeEmpty())
+	g.Expect(svc.Spec.ExternalTrafficPolicy).To(Equal(corev1.ServiceExternalTrafficPolicyCluster))
 	g.Expect(svc.Spec.LoadBalancerIP).To(Equal("1.2.3.4"))
 	g.Expect(*svc.Spec.LoadBalancerClass).To(Equal("myLoadBalancerClass"))
 	g.Expect(svc.Spec.LoadBalancerSourceRanges).To(Equal([]string{"5.6.7.8"}))
