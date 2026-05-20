@@ -1,10 +1,10 @@
 package v1
 
 import (
-	"encoding/json"
 	"fmt"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 // ParseAPPolicyStatus extracts a typed APPolicyStatus from an unstructured APPolicy object.
@@ -43,13 +43,13 @@ func parseStatus(
 		return fmt.Errorf("%s %s/%s has no status", resourceName, obj.GetNamespace(), obj.GetName())
 	}
 
-	data, err := json.Marshal(statusRaw)
-	if err != nil {
-		return fmt.Errorf("failed to marshal %s status: %w", resourceName, err)
+	statusMap, ok := statusRaw.(map[string]any)
+	if !ok {
+		return fmt.Errorf("%s %s/%s status is not a map", resourceName, obj.GetNamespace(), obj.GetName())
 	}
 
-	if err := json.Unmarshal(data, out); err != nil {
-		return fmt.Errorf("failed to unmarshal %s status: %w", resourceName, err)
+	if err := runtime.DefaultUnstructuredConverter.FromUnstructured(statusMap, out); err != nil {
+		return fmt.Errorf("failed to convert %s status: %w", resourceName, err)
 	}
 
 	return nil

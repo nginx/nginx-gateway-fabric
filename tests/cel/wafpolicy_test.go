@@ -1023,13 +1023,16 @@ func TestWAFPolicyPolicySource(t *testing.T) {
 			},
 		},
 		{
-			name:       "apPolicyRef with invalid name is rejected",
-			wantErrors: []string{expectedWAFAPResourceNamePatternError},
+			name:       "apPolicyRef with invalid namespace is rejected",
+			wantErrors: []string{expectedWAFAPResourceNamespacePatternError},
 			spec: ngfAPIv1alpha1.WAFPolicySpec{
 				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
 				Type:       ngfAPIv1alpha1.PolicySourceTypePLM,
 				PolicyRef: &ngfAPIv1alpha1.PolicyRef{
-					APPolicyRef: &ngfAPIv1alpha1.APPolicyReference{Name: "Invalid/Name"},
+					APPolicyRef: &ngfAPIv1alpha1.APPolicyReference{
+						Name:      "valid-policy",
+						Namespace: helpers.GetPointer("Invalid_Namespace"),
+					},
 				},
 			},
 		},

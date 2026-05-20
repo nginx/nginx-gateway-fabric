@@ -106,6 +106,7 @@ const (
 	expectedWAFValidationMutualExclusionError    = "verifyChecksum and expectedChecksum are mutually exclusive"
 	expectedWAFVerifyChecksumHTTPOnlyError       = "policySource.validation.verifyChecksum is only supported for type HTTP"
 	expectedWAFAPResourceNamePatternError        = `^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$`
+	expectedWAFAPResourceNamespacePatternError   = `^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`
 	expectedWAFPLMLogSourceTypeError             = "securityLogs[*].logRef.apLogConfRef is only allowed when type is PLM"
 	expectedWAFNIMPolicyUIDPatternError          = `^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`
 	expectedWAFN1CPolicyObjectIDPatternError     = `^pol_[A-Za-z0-9_-]+$`
