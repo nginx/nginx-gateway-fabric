@@ -108,6 +108,9 @@ func PolicyBundleKey(policyNsName types.NamespacedName) WAFBundleKey {
 //
 //nolint:lll
 func LogBundleKey(policyNsName types.NamespacedName, logSource *ngfAPIv1alpha1.LogSource) WAFBundleKey {
+	if logSource == nil {
+		return ""
+	}
 	if logSource.NIMSource != nil && logSource.NIMSource.URL != "" {
 		return WAFBundleKey(
 			fmt.Sprintf(
@@ -137,6 +140,9 @@ func LogBundleKey(policyNsName types.NamespacedName, logSource *ngfAPIv1alpha1.L
 		)
 	}
 
+	if logSource.HTTPSource == nil {
+		return ""
+	}
 	return WAFBundleKey(
 		fmt.Sprintf("%s_%s_log_%s", policyNsName.Namespace, policyNsName.Name, helpers.URLHash(logSource.HTTPSource.URL)),
 	)
@@ -147,6 +153,9 @@ func LogBundleKey(policyNsName types.NamespacedName, logSource *ngfAPIv1alpha1.L
 // The switch uses boolean conditions rather than a type switch because LogSource carries
 // optional pointer fields — only one of NIMSource, N1CSource, or HTTPSource will be set.
 func LogBundleDescription(src *ngfAPIv1alpha1.LogSource) string {
+	if src == nil {
+		return "security log bundle"
+	}
 	switch {
 	case src.NIMSource != nil:
 		return fmt.Sprintf("security log bundle (profile: %s)", src.NIMSource.ProfileName)
@@ -881,12 +890,17 @@ func processWAFPolicies(
 }
 
 // BuildPolicyFetchRequest constructs a fetch.Request from a PolicySource, resolved auth, and TLS CA data.
+//
+//nolint:gocyclo // complexity is inherent to handling HTTP/NIM/N1C source types with different field structures
 func BuildPolicyFetchRequest(
 	policySource *ngfAPIv1alpha1.PolicySource,
 	policyType ngfAPIv1alpha1.PolicySourceType,
 	auth *fetch.BundleAuth,
 	tlsCA []byte,
 ) fetch.Request {
+	if policySource == nil {
+		return fetch.Request{}
+	}
 	req := fetch.Request{
 		Auth:               auth,
 		TLSCAData:          tlsCA,
@@ -941,6 +955,9 @@ func BuildLogFetchRequest(
 	auth *fetch.BundleAuth,
 	tlsCA []byte,
 ) fetch.Request {
+	if logSource == nil {
+		return fetch.Request{}
+	}
 	req := fetch.Request{
 		Auth:               auth,
 		TLSCAData:          tlsCA,
@@ -1000,6 +1017,9 @@ func fetchPolicyBundle(
 	output *WAFProcessingOutput,
 ) {
 	policySource := wafPolicy.Spec.PolicySource
+	if policySource == nil {
+		return
+	}
 
 	var auth *fetch.BundleAuth
 	if policySource.Auth != nil {
@@ -1029,7 +1049,7 @@ func fetchPolicyBundle(
 
 	bundleKey := PolicyBundleKey(types.NamespacedName{Namespace: wafPolicy.Namespace, Name: wafPolicy.Name})
 
-	req := BuildPolicyFetchRequest(&policySource, wafPolicy.Spec.Type, auth, tlsCA)
+	req := BuildPolicyFetchRequest(policySource, wafPolicy.Spec.Type, auth, tlsCA)
 
 	result, err := wafInput.Fetcher.FetchPolicyBundle(ctx, req)
 	if err != nil {
@@ -1062,6 +1082,10 @@ func fetchSecurityLogBundles(
 	output *WAFProcessingOutput,
 ) {
 	for _, secLog := range wafPolicy.Spec.SecurityLogs {
+		if secLog.LogSource == nil {
+			continue
+		}
+
 		if secLog.LogSource.HTTPSource == nil && secLog.LogSource.NIMSource == nil && secLog.LogSource.N1CSource == nil {
 			// DefaultProfile is used; no bundle to fetch.
 			continue
@@ -1091,7 +1115,7 @@ func fetchSecurityLogBundles(
 
 		bundleKey := LogBundleKey(
 			types.NamespacedName{Namespace: wafPolicy.Namespace, Name: wafPolicy.Name},
-			&secLog.LogSource,
+			secLog.LogSource,
 		)
 
 		// Multiple SecurityLog entries may reference the same URL and therefore produce the same
@@ -1102,7 +1126,7 @@ func fetchSecurityLogBundles(
 			continue
 		}
 
-		req := BuildLogFetchRequest(&secLog.LogSource, auth, tlsCA)
+		req := BuildLogFetchRequest(secLog.LogSource, auth, tlsCA)
 
 		result, err := wafInput.Fetcher.FetchLogProfileBundle(ctx, req)
 		if err != nil {
@@ -1113,7 +1137,7 @@ func fetchSecurityLogBundles(
 				wafPolicy.Name,
 			)
 			if prev, ok := wafInput.PreviousBundles[bundleKey]; ok {
-				cond := conditions.NewPolicyProgrammedStaleBundleWarning(LogBundleDescription(&secLog.LogSource), err.Error())
+				cond := conditions.NewPolicyProgrammedStaleBundleWarning(LogBundleDescription(secLog.LogSource), err.Error())
 				policy.Conditions = append(policy.Conditions, cond)
 				output.Bundles[bundleKey] = prev
 				policy.WAFState.Bundles[bundleKey] = prev
