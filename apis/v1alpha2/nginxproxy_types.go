@@ -370,6 +370,10 @@ const (
 )
 
 // NginxLogging defines logging related settings for NGINX.
+//
+// +kubebuilder:validation:XValidation:message="JSON-formatted error logs are not supported when errorLevel is debug",rule="!(has(self.errorLogFormat) && self.errorLogFormat == 'json' && has(self.errorLevel) && self.errorLevel == 'debug')"
+//
+//nolint:lll
 type NginxLogging struct {
 	// ErrorLevel defines the error log level. Possible log levels listed in order of increasing severity are
 	// debug, info, notice, warn, error, crit, alert, and emerg. Setting a certain log level will cause all messages
@@ -379,6 +383,16 @@ type NginxLogging struct {
 	// +optional
 	// +kubebuilder:default=info
 	ErrorLevel *NginxErrorLogLevel `json:"errorLevel,omitempty"`
+
+	// ErrorLogFormat controls the output format of the NGINX error_log directive.
+	// Set to 'json' to enable JSON-formatted error logs for NGINX Plus only and
+	// cannot be combined with errorLevel: debug.
+	// When set to 'json', NGINX Gateway Fabric also emits a JSON-formatted access log
+	// if the user has not supplied a custom access log format.
+	// See https://nginx.org/en/docs/ngx_core_module.html#error_log
+	//
+	// +optional
+	ErrorLogFormat *NginxErrorLogFormat `json:"errorLogFormat,omitempty"`
 
 	// AgentLevel defines the log level of the NGINX agent process. Changing this value results in a
 	// re-roll of the NGINX deployment.
@@ -393,6 +407,19 @@ type NginxLogging struct {
 	// +optional
 	AccessLog *NginxAccessLog `json:"accessLog,omitempty"`
 }
+
+// NginxErrorLogFormat defines the output format for NGINX error logs.
+//
+// +kubebuilder:validation:Enum=default;json
+type NginxErrorLogFormat string
+
+const (
+	// NginxErrorLogFormatDefault uses NGINX's standard error log format.
+	NginxErrorLogFormatDefault NginxErrorLogFormat = "default"
+
+	// NginxErrorLogFormatJSON enables JSON-formatted error logs. Requires NGINX Plus.
+	NginxErrorLogFormatJSON NginxErrorLogFormat = "json"
+)
 
 // NginxErrorLogLevel type defines the log level of error logs for NGINX.
 //

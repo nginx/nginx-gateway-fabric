@@ -48,7 +48,7 @@ metadata:
               "image": {
                 "pullPolicy": "IfNotPresent",
                 "repository": "ghcr.io/nginx/nginx-gateway-fabric/nginx",
-                "tag": "2.6.0-ubi"
+                "tag": "2.6.1-ubi"
               },
               "imagePullSecret": "",
               "imagePullSecrets": [],
@@ -118,7 +118,7 @@ metadata:
               "image": {
                 "pullPolicy": "IfNotPresent",
                 "repository": "ghcr.io/nginx/nginx-gateway-fabric",
-                "tag": "2.6.0-ubi"
+                "tag": "2.6.1-ubi"
               },
               "kind": "deployment",
               "labels": {},
@@ -171,12 +171,12 @@ metadata:
         }
       ]
     capabilities: Basic Install
-    createdAt: "2026-05-07T15:09:02Z"
+    createdAt: "2026-05-20T20:58:02Z"
     operators.operatorframework.io/builder: operator-sdk-v1.42.0
     operators.operatorframework.io/project_layout: helm.sdk.operatorframework.io/v1
     categories: Networking
     certified: "true"
-    containerImage: ghcr.io/nginx/nginx-gateway-fabric/operator@sha256:4bfe9ee03e3aa5775e370c0f215acb45a7ca7d5558d1e0f13b96d368ec804c98
+    containerImage: ghcr.io/nginx/nginx-gateway-fabric/operator@sha256:eb906c007f14d4074c03899ddecb671d45aa1c3a89938e78957d8b0d436742ff
     description: The NGINX Gateway Fabric is a Kubernetes Gateway API implementation that provides application traffic management for modern cloud-native applications
     features.operators.openshift.io/cnf: "false"
     features.operators.openshift.io/cni: "false"
@@ -192,7 +192,7 @@ metadata:
     repository: https://github.com/nginx/nginx-gateway-fabric
     support: NGINX Inc.
     com.redhat.openshift.versions: v4.19-v4.21
-  name: nginx-gateway-fabric.v1.4.0
+  name: nginx-gateway-fabric.v1.4.1
   namespace: placeholder
   labels:
     operatorframework.io/arch.amd64: supported
@@ -519,7 +519,7 @@ spec:
                       - --leader-elect
                       - --leader-election-id=nginx-gateway-fabric
                       - --health-probe-bind-address=:8081
-                    image: ghcr.io/nginx/nginx-gateway-fabric/operator@sha256:4bfe9ee03e3aa5775e370c0f215acb45a7ca7d5558d1e0f13b96d368ec804c98
+                    image: ghcr.io/nginx/nginx-gateway-fabric/operator@sha256:eb906c007f14d4074c03899ddecb671d45aa1c3a89938e78957d8b0d436742ff
                     livenessProbe:
                       httpGet:
                         path: /healthz
@@ -612,6 +612,6 @@ spec:
     name: F5 NGINX
     url: https://www.f5.com/go/product/welcome-to-nginx
   relatedImages:
-    - image: ghcr.io/nginx/nginx-gateway-fabric/operator@sha256:4bfe9ee03e3aa5775e370c0f215acb45a7ca7d5558d1e0f13b96d368ec804c98
+    - image: ghcr.io/nginx/nginx-gateway-fabric/operator@sha256:eb906c007f14d4074c03899ddecb671d45aa1c3a89938e78957d8b0d436742ff
       name: manager
-  version: 1.4.0
+  version: 1.4.1

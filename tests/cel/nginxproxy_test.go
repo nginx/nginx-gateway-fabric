@@ -248,3 +248,68 @@ func TestNginxProxyCompression(t *testing.T) {
 		})
 	}
 }
+
+func TestNginxProxyLoggingJSON(t *testing.T) {
+	t.Parallel()
+	k8sClient := getKubernetesClient(t)
+
+	tests := []struct {
+		spec       ngfAPIv1alpha2.NginxProxySpec
+		name       string
+		wantErrors []string
+	}{
+		{
+			name: "Validate NginxProxy is invalid when errorLogFormat is json and errorLevel is debug",
+			spec: ngfAPIv1alpha2.NginxProxySpec{
+				Logging: &ngfAPIv1alpha2.NginxLogging{
+					ErrorLevel:     helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelDebug),
+					ErrorLogFormat: helpers.GetPointer(ngfAPIv1alpha2.NginxErrorLogFormatJSON),
+				},
+			},
+			wantErrors: []string{expectedJSONNotSupportedWithDebugError},
+		},
+		{
+			name: "Validate NginxProxy is valid when errorLogFormat is json and errorLevel is info",
+			spec: ngfAPIv1alpha2.NginxProxySpec{
+				Logging: &ngfAPIv1alpha2.NginxLogging{
+					ErrorLevel:     helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelInfo),
+					ErrorLogFormat: helpers.GetPointer(ngfAPIv1alpha2.NginxErrorLogFormatJSON),
+				},
+			},
+		},
+		{
+			name: "Validate NginxProxy is valid when errorLogFormat is default and errorLevel is debug",
+			spec: ngfAPIv1alpha2.NginxProxySpec{
+				Logging: &ngfAPIv1alpha2.NginxLogging{
+					ErrorLevel:     helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelDebug),
+					ErrorLogFormat: helpers.GetPointer(ngfAPIv1alpha2.NginxErrorLogFormatDefault),
+				},
+			},
+		},
+		{
+			name: "Validate NginxProxy is valid when errorLevel is debug and errorLogFormat is unset",
+			spec: ngfAPIv1alpha2.NginxProxySpec{
+				Logging: &ngfAPIv1alpha2.NginxLogging{
+					ErrorLevel: helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelDebug),
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			spec := tt.spec
+			resourceName := uniqueResourceName(testResourceName)
+
+			nginxProxy := &ngfAPIv1alpha2.NginxProxy{
+				ObjectMeta: controllerruntime.ObjectMeta{
+					Name:      resourceName,
+					Namespace: defaultNamespace,
+				},
+				Spec: spec,
+			}
+			validateCrd(t, tt.wantErrors, nginxProxy, k8sClient)
+		})
+	}
+}
