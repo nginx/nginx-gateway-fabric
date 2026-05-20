@@ -17,9 +17,6 @@ ARG NJS_DIR
 ARG NGINX_CONF_DIR
 ARG BUILD_AGENT
 
-ENV GOMEMLIMIT=150MiB
-ENV GOGC=75
-
 RUN --mount=type=secret,id=nginx-repo.crt,dst=/etc/apk/cert.pem,mode=0644 \
     --mount=type=secret,id=nginx-repo.key,dst=/etc/apk/cert.key,mode=0644 \
     --mount=type=bind,from=nginx-files,src=nginx_signing.rsa.pub,target=/etc/apk/keys/nginx_signing.rsa.pub \
