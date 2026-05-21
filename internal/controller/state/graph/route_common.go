@@ -293,6 +293,7 @@ func buildL4RoutesForGateways(
 	tcpRoutes map[types.NamespacedName]*v1alpha.TCPRoute,
 	udpRoutes map[types.NamespacedName]*v1alpha.UDPRoute,
 	services map[types.NamespacedName]*apiv1.Service,
+	backendTLSPolicies map[types.NamespacedName]*BackendTLSPolicy,
 	gws map[types.NamespacedName]*Gateway,
 	resolver *referenceGrantResolver,
 	listenerSets map[types.NamespacedName]*ListenerSet,
@@ -307,6 +308,7 @@ func buildL4RoutesForGateways(
 			route,
 			gws,
 			services,
+			backendTLSPolicies,
 			resolver.refAllowedFrom(fromTLSRoute(route.Namespace)),
 			listenerSets,
 		)

@@ -44,10 +44,11 @@ type oidcConfiguration struct {
 type httpConfig struct {
 	DNSResolver             *dataplane.DNSResolverConfig
 	AccessLog               *AccessLog
-	OIDCProviders           []*oidcConfiguration
+	Compression             *dataplane.CompressionSettings
 	GatewaySecretID         dataplane.SSLKeyPairID
 	NginxReadinessProbePath string
 	ServerTokens            string
+	OIDCProviders           []*oidcConfiguration
 	WAFCookieSeed           string
 	Includes                []shared.Include
 	NginxReadinessProbePort int32
@@ -79,6 +80,7 @@ func executeBaseHTTPConfig(conf dataplane.Configuration, generator policies.Gene
 		GatewaySecretID:         conf.BaseHTTPConfig.GatewaySecretID,
 		ServerTokens:            conf.BaseHTTPConfig.ServerTokens,
 		OIDCProviders:           buildOIDCProviders(conf.OIDCProviders),
+		Compression:             conf.BaseHTTPConfig.Compression,
 		WAF:                     conf.WAF.Enabled,
 		WAFCookieSeed:           conf.WAF.CookieSeed,
 	}

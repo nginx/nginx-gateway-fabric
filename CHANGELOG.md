@@ -4,6 +4,37 @@ This document includes a curated changelog for each release. We also publish a c
 a [GitHub release](https://github.com/nginx/nginx-gateway-fabric/releases), which, by contrast, is auto-generated
 and includes links to all PRs that went into the release.
 
+## Release 2.6.1
+
+_May 20, 2026_
+
+BUG FIXES:
+
+- Fix an issue where "AllowPrivilegeEscalation: false" was inadvertently removed from the NGINX and init containers' security contexts. [5277](https://github.com/nginx/nginx-gateway-fabric/pull/5277)
+- Update the NGINX Agent version to v3.10.1, NGINX to v1.31.0, NGINX Plus to R37.0 and F5 WAF to 5.13.0. [5289](https://github.com/nginx/nginx-gateway-fabric/pull/5289)
+
+HELM CHART:
+
+- The version of the Helm chart is now 2.6.1
+
+COMPATIBILITY:
+
+- Gateway API version: `1.5.1`
+- Gateway API Inference Extension version: `1.5.0`
+- NGINX version: `1.31.0`
+- NGINX Plus version: `R37.0`
+- F5 WAF on NGINX version: `5.13.0`
+- NGINX Agent version: `v3.10.1`
+- Kubernetes version: `1.31+`
+
+CONTAINER IMAGES:
+
+- Control plane: `ghcr.io/nginx/nginx-gateway-fabric:2.6.1`
+- Data plane: `ghcr.io/nginx/nginx-gateway-fabric/nginx:2.6.1`
+- Data plane with NGINX Plus: `private-registry.nginx.com/nginx-gateway-fabric/nginx-plus:2.6.1`
+- Data plane with NGINX Plus and F5 WAF: `private-registry.nginx.com/nginx-gateway-fabric/nginx-plus-f5waf:2.6.1`
+- Operator: `ghcr.io/nginx/nginx-gateway-fabric/operator:1.4.1`
+
 ## Release 2.6.0
 
 _May 7, 2026_

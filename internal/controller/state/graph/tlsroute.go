@@ -1,6 +1,8 @@
 package graph
 
 import (
+	"fmt"
+
 	apiv1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation/field"
@@ -8,12 +10,14 @@ import (
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
 
 func buildTLSRoute(
 	gtr *gatewayv1.TLSRoute,
 	gws map[types.NamespacedName]*Gateway,
 	services map[types.NamespacedName]*apiv1.Service,
+	backendTLSPolicies map[types.NamespacedName]*BackendTLSPolicy,
 	refGrantResolver func(resource toResource) bool,
 	listenerSets map[types.NamespacedName]*ListenerSet,
 ) *L4Route {
@@ -55,7 +59,8 @@ func buildTLSRoute(
 		return r
 	}
 
-	br, conds := validateBackendRefTLSRoute(gtr, services, refGrantResolver)
+	tlsTerminateMode := hasTLSTerminateParent(sectionNameRefs, gws, listenerSets)
+	br, conds := validateBackendRefTLSRoute(gtr, services, backendTLSPolicies, tlsTerminateMode, refGrantResolver)
 
 	r.Spec.BackendRef = br
 	r.Valid = true
@@ -71,6 +76,8 @@ func buildTLSRoute(
 func validateBackendRefTLSRoute(
 	gtr *gatewayv1.TLSRoute,
 	services map[types.NamespacedName]*apiv1.Service,
+	backendTLSPolicies map[types.NamespacedName]*BackendTLSPolicy,
+	tlsTerminateMode bool,
 	refGrantResolver func(resource toResource) bool,
 ) (BackendRef, []conditions.Condition) {
 	// Length of BackendRefs and Rules is guaranteed to be one due to earlier check in buildTLSRoute
@@ -122,8 +129,33 @@ func validateBackendRefTLSRoute(
 		return backendRef, []conditions.Condition{conditions.NewRouteBackendRefRefBackendNotFound(err.Error())}
 	}
 
+	backendTLSPolicy, err := findBackendTLSPolicyForService(
+		backendTLSPolicies,
+		ref.Namespace,
+		string(ref.Name),
+		gtr.Namespace,
+		svcPort,
+	)
+	backendRef.BackendTLSPolicy = backendTLSPolicy
+	if err != nil {
+		backendRef.Valid = false
+
+		return backendRef, []conditions.Condition{conditions.NewRouteBackendRefUnsupportedValue(err.Error())}
+	}
+
 	if svcPort.AppProtocol != nil {
-		err = validateRouteBackendRefAppProtocol(RouteTypeTLS, *svcPort.AppProtocol, nil)
+		err = validateRouteBackendRefAppProtocol(RouteTypeTLS, *svcPort.AppProtocol, backendTLSPolicy)
+		if err == nil &&
+			tlsTerminateMode &&
+			*svcPort.AppProtocol == AppProtocolTypeWSS &&
+			backendTLSPolicy == nil {
+			//nolint: staticcheck // used in status condition which is normally capitalized
+			err = fmt.Errorf(
+				"The Route type %s does not support service port appProtocol %s; missing corresponding BackendTLSPolicy",
+				RouteTypeTLS,
+				*svcPort.AppProtocol,
+			)
+		}
 		if err != nil {
 			backendRef.Valid = false
 
@@ -132,4 +164,52 @@ func validateBackendRefTLSRoute(
 	}
 
 	return backendRef, nil
+}
+
+func hasTLSTerminateParent(
+	parentRefs []ParentRef,
+	gws map[types.NamespacedName]*Gateway,
+	listenerSets map[types.NamespacedName]*ListenerSet,
+) bool {
+	for _, parentRef := range parentRefs {
+		switch parentRef.Kind {
+		case kinds.Gateway:
+			gw, exists := gws[parentRef.NamespacedName]
+			if !exists || gw == nil {
+				continue
+			}
+			if hasTLSTerminateListener(gw.Listeners, parentRef.SectionName) {
+				return true
+			}
+		case kinds.ListenerSet:
+			ls, exists := listenerSets[parentRef.NamespacedName]
+			if !exists || ls == nil {
+				continue
+			}
+			if hasTLSTerminateListener(ls.Listeners, parentRef.SectionName) {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+func hasTLSTerminateListener(listeners []*Listener, sectionName *gatewayv1.SectionName) bool {
+	for _, listener := range listeners {
+		if listener == nil || listener.Source.Protocol != gatewayv1.TLSProtocolType {
+			continue
+		}
+
+		if sectionName != nil && listener.Name != string(*sectionName) {
+			continue
+		}
+
+		if listener.Source.TLS != nil &&
+			(listener.Source.TLS.Mode == nil || *listener.Source.TLS.Mode == gatewayv1.TLSModeTerminate) {
+			return true
+		}
+	}
+
+	return false
 }

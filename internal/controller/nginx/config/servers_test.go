@@ -433,7 +433,7 @@ func TestExecuteServers_IPFamily(t *testing.T) {
 			Port: 443,
 		},
 	}
-	passThroughServers := []dataplane.Layer4VirtualServer{
+	tlsServers := []dataplane.Layer4VirtualServer{
 		{
 			IsDefault: true,
 			Hostname:  "*.example.com",
@@ -473,19 +473,19 @@ func TestExecuteServers_IPFamily(t *testing.T) {
 				BaseHTTPConfig: dataplane.BaseHTTPConfig{
 					IPFamily: dataplane.IPv6,
 				},
-				TLSPassthroughServers: passThroughServers,
+				TLSServers: tlsServers,
 			},
 			expectedHTTPConfig: map[string]int{
-				"listen [::]:8080 default_server;":                              1,
-				"listen [::]:8080;":                                             1,
-				"listen [::]:443 ssl default_server;":                           1,
-				"listen [::]:443 ssl;":                                          1,
-				"listen unix:/var/run/nginx/https8443.sock ssl;":                1,
-				"listen unix:/var/run/nginx/https8443.sock ssl default_server;": 1,
-				"server_name example.com;":                                      3,
-				"ssl_certificate /etc/nginx/secrets/test-keypair.pem;":          2,
-				"ssl_certificate_key /etc/nginx/secrets/test-keypair.pem;":      2,
-				"ssl_reject_handshake on;":                                      2,
+				"listen [::]:8080 default_server;":                                         1,
+				"listen [::]:8080;":                                                        1,
+				"listen [::]:443 ssl default_server;":                                      1,
+				"listen [::]:443 ssl;":                                                     1,
+				fmt.Sprintf("listen %shttps8443.sock ssl;", SocketBasePath):                1,
+				fmt.Sprintf("listen %shttps8443.sock ssl default_server;", SocketBasePath): 1,
+				"server_name example.com;":                                                 3,
+				"ssl_certificate /etc/nginx/secrets/test-keypair.pem;":                     2,
+				"ssl_certificate_key /etc/nginx/secrets/test-keypair.pem;":                 2,
+				"ssl_reject_handshake on;":                                                 2,
 			},
 		},
 		{
@@ -1450,7 +1450,7 @@ func TestCreateServers(t *testing.T) {
 				},
 			},
 		},
-		TLSPassthroughServers: []dataplane.Layer4VirtualServer{
+		TLSServers: []dataplane.Layer4VirtualServer{
 			{
 				Hostname: "app.example.com",
 				Port:     8443,

@@ -9,7 +9,7 @@ load_module modules/ngx_otel_module.so;
 load_module modules/ngx_http_app_protect_module.so;
 {{ end -}}
 
-error_log stderr {{ .Conf.Logging.ErrorLevel }};
+error_log stderr {{ .Conf.Logging.ErrorLevel }}{{ if eq .Conf.Logging.ErrorLogFormat "json" }} json{{ end }};
 
 {{ range $i := .Includes -}}
 include {{ $i.Name }};

@@ -318,6 +318,7 @@ func BuildGraph(
 		state.TCPRoutes,
 		state.UDPRoutes,
 		state.Services,
+		processedBackendTLSPolicies,
 		gws,
 		refGrantResolver,
 		listenerSets,

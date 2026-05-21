@@ -72,11 +72,17 @@ const (
 
 	expectedIfModeSetTrustedAddressesError = "if mode is set, trustedAddresses is a required field"
 
+	// Logging validation error.
+	expectedJSONNotSupportedWithDebugError = "JSON-formatted error logs are not supported when errorLevel is debug"
+
 	// Replicas validation error.
 	expectedMinReplicasLessThanOrEqualError = "minReplicas must be less than or equal to maxReplicas"
 
 	// Strategy validation error.
 	expectedStrategyMustBeOfTypeRatio = "ratio can only be specified if strategy is of type ratio"
+
+	// Compression validation errors.
+	expectedCompressionGzipRequiredError = "type 'gzip' requires spec.compression.gzip to be set"
 
 	// Snippets validation errors.
 	expectedSnippetsContextError = "Only one snippet allowed per context"

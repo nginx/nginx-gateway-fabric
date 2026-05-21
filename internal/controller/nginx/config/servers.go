@@ -172,8 +172,8 @@ func createServers(
 	finalMatchPairs := make(httpMatchPairs)
 	sharedTLSPorts := make(map[int32]struct{})
 
-	for _, passthroughServer := range conf.TLSPassthroughServers {
-		sharedTLSPorts[passthroughServer.Port] = struct{}{}
+	for _, tlsServer := range conf.TLSServers {
+		sharedTLSPorts[tlsServer.Port] = struct{}{}
 	}
 
 	for idx, s := range conf.HTTPServers {
