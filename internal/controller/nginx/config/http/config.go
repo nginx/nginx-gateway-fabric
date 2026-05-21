@@ -86,6 +86,9 @@ type Location struct {
 	HTTPMatchKey string
 	// ProxyPass is the upstream backend (URL or name) to which requests are proxied.
 	ProxyPass string
+	// ProxyHTTPVersion is the HTTP protocol version for proxying (e.g. "1.1" or "2").
+	// When empty, NGINX defaults to "1.1".
+	ProxyHTTPVersion string
 	// AuthOIDCProviderName is the name of the oidc_provider to be referenced in this location.
 	AuthOIDCProviderName string
 	// ResponseHeaders are custom response headers to be sent.
