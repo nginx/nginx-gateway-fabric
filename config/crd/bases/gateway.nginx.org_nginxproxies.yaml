@@ -8767,8 +8767,7 @@ spec:
                         default: Local
                         description: |-
                           ExternalTrafficPolicy describes how nodes distribute service traffic they
-                          receive on one of the Service's "externally-facing" addresses (NodePorts, ExternalIPs,
-                          and LoadBalancer IPs).
+                          receive on one of the Service's "externally-facing" addresses (NodePorts and LoadBalancer IPs).
                         enum:
                         - Cluster
                         - Local

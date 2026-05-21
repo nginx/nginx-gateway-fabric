@@ -2,6 +2,7 @@ package provisioner
 
 import (
 	"context"
+	"errors"
 	"reflect"
 	"testing"
 	"time"
@@ -23,6 +24,7 @@ import (
 	k8sEvents "k8s.io/client-go/tools/events"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
@@ -265,6 +267,42 @@ func (f *failingClient) Patch(
 		})
 	}
 	return f.Client.Patch(ctx, obj, patch, opts...)
+}
+
+// lbClassImmutableClient wraps a client.Client and returns a LoadBalancerClass immutability
+// error on the first Service Update call, simulating the immutable-field behavior of the real
+// Kubernetes API. Subsequent Service Updates are delegated to the underlying client unchanged.
+type lbClassImmutableClient struct {
+	client.Client
+	svcUpdateAttempts int
+}
+
+func (c *lbClassImmutableClient) Update(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
+	if _, ok := obj.(*corev1.Service); ok {
+		c.svcUpdateAttempts++
+		if c.svcUpdateAttempts == 1 {
+			return apierrors.NewInvalid(
+				schema.GroupKind{Group: "", Kind: "Service"},
+				obj.GetName(),
+				field.ErrorList{
+					field.Invalid(
+						field.NewPath("spec").Child("loadBalancerClass"),
+						"gateway.nginx.org/nginx-gateway-controller",
+						"may not change once set",
+					),
+				},
+			)
+		}
+	}
+	return c.Client.Update(ctx, obj, opts...)
+}
+
+// Delete delegates to the underlying client and clears the ResourceVersion on obj so that
+// a subsequent CreateOrUpdate can Create the object fresh without a stale ResourceVersion.
+func (c *lbClassImmutableClient) Delete(ctx context.Context, obj client.Object, opts ...client.DeleteOption) error {
+	err := c.Client.Delete(ctx, obj, opts...)
+	obj.SetResourceVersion("")
+	return err
 }
 
 func TestNewNginxProvisioner(t *testing.T) {
@@ -644,6 +682,55 @@ func TestNonLeaderProvisioner(t *testing.T) {
 	g.Expect(provisioner.deprovisionNginxForInvalidGateway(t.Context(), nsName)).To(Succeed())
 	expectResourcesToNotExist(t, g, fakeClient, nsName)
 	g.Expect(deploymentStore.RemoveCallCount()).To(Equal(1))
+}
+
+func TestProvisionNginxOnLBClassImmutabilityError(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	// Simulate a Service that was previously provisioned without LoadBalancerClass.
+	existingSvc := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{Name: "gw-nginx", Namespace: "default"},
+		Spec:       corev1.ServiceSpec{Type: corev1.ServiceTypeLoadBalancer},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(createScheme()).
+		WithObjects(existingSvc).
+		Build()
+
+	// Wrap the client so the first Service Update returns an LBClass immutability error.
+	wrappedClient := &lbClassImmutableClient{Client: fakeClient}
+
+	provisioner := &NginxProvisioner{
+		leader: true,
+		store:  newStore(nil, "", "", "", "", ""),
+		cfg: Config{
+			Logger:           logr.Discard(),
+			EventRecorder:    &k8sEvents.FakeRecorder{},
+			GatewayPodConfig: &config.GatewayPodConfig{},
+		},
+		k8sClient: wrappedClient,
+	}
+
+	lbClass := "gateway.nginx.org/nginx-gateway-controller"
+	desiredSvc := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{Name: "gw-nginx", Namespace: "default"},
+		Spec: corev1.ServiceSpec{
+			Type:              corev1.ServiceTypeLoadBalancer,
+			LoadBalancerClass: &lbClass,
+		},
+	}
+
+	// Gateway has no addresses so patchServiceStatus is not triggered.
+	gateway := &gatewayv1.Gateway{
+		ObjectMeta: metav1.ObjectMeta{Name: "gw", Namespace: "default"},
+	}
+
+	err := provisioner.provisionNginx(t.Context(), "gw-nginx", gateway, []client.Object{desiredSvc})
+	g.Expect(err).To(HaveOccurred())
+	// Should not retry when its a LBClass immutability error
+	g.Expect(wrappedClient.svcUpdateAttempts).To(Equal(1))
 }
 
 func TestProvisionerRestartsDeployment(t *testing.T) {
@@ -1107,4 +1194,421 @@ func TestCreateMinimalClone_CreatesSeparateInstances(t *testing.T) {
 	deploymentType := reflect.TypeOf(deployment)
 	_, exists := minimalObjectFactory[deploymentType]
 	g.Expect(exists).To(BeTrue(), "Factory should contain entry for Deployment type")
+}
+
+func TestProvisionNginxPatchesServiceStatus(t *testing.T) {
+	t.Parallel()
+
+	const (
+		ctlrName     = "gateway.nginx.org/nginx-gateway-controller"
+		instanceName = "test-instance"
+		gcName       = "nginx"
+		svcName      = "gw-nginx"
+		svcNamespace = "default"
+	)
+
+	ngfLabels := map[string]string{
+		controller.AppInstanceLabel:  instanceName,
+		controller.AppManagedByLabel: controller.CreateNginxResourceName(instanceName, gcName),
+	}
+
+	tests := []struct {
+		name          string
+		svcLBClass    *string
+		svcType       corev1.ServiceType
+		gatewayIPs    []string
+		expectIngress []corev1.LoadBalancerIngress
+	}{
+		{
+			name:          "patches status when LBClass matches controller name and IPs present",
+			svcLBClass:    helpers.GetPointer(ctlrName),
+			svcType:       corev1.ServiceTypeLoadBalancer,
+			gatewayIPs:    []string{"10.0.0.1"},
+			expectIngress: []corev1.LoadBalancerIngress{{IP: "10.0.0.1"}},
+		},
+		{
+			name:          "patches status with multiple IPs",
+			svcLBClass:    helpers.GetPointer(ctlrName),
+			svcType:       corev1.ServiceTypeLoadBalancer,
+			gatewayIPs:    []string{"10.0.0.1", "10.0.0.2"},
+			expectIngress: []corev1.LoadBalancerIngress{{IP: "10.0.0.1"}, {IP: "10.0.0.2"}},
+		},
+		{
+			name:          "does not patch when LoadBalancerClass is nil",
+			svcLBClass:    nil,
+			svcType:       corev1.ServiceTypeLoadBalancer,
+			gatewayIPs:    []string{"10.0.0.1"},
+			expectIngress: nil,
+		},
+		{
+			name:          "does not patch when LoadBalancerClass does not match controller name",
+			svcLBClass:    helpers.GetPointer("other.controller/name"),
+			svcType:       corev1.ServiceTypeLoadBalancer,
+			gatewayIPs:    []string{"10.0.0.1"},
+			expectIngress: nil,
+		},
+		{
+			name:          "does not patch when gateway has no IP-type addresses",
+			svcLBClass:    helpers.GetPointer(ctlrName),
+			svcType:       corev1.ServiceTypeLoadBalancer,
+			gatewayIPs:    []string{},
+			expectIngress: nil,
+		},
+		{
+			name:          "does not patch when service is not of LoadBalancer type",
+			svcLBClass:    helpers.GetPointer(ctlrName),
+			svcType:       corev1.ServiceTypeClusterIP,
+			gatewayIPs:    []string{"10.0.0.1"},
+			expectIngress: nil,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(createScheme()).
+				WithStatusSubresource(&corev1.Service{}).
+				Build()
+
+			provisioner := &NginxProvisioner{
+				leader: true,
+				store:  newStore(nil, "", "", "", "", ""),
+				cfg: Config{
+					Logger:        logr.Discard(),
+					EventRecorder: &k8sEvents.FakeRecorder{},
+					GatewayPodConfig: &config.GatewayPodConfig{
+						InstanceName: instanceName,
+					},
+					GCName:          gcName,
+					GatewayCtlrName: ctlrName,
+				},
+				k8sClient: fakeClient,
+			}
+
+			desiredSvc := &corev1.Service{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      svcName,
+					Namespace: svcNamespace,
+					Labels:    ngfLabels,
+				},
+				Spec: corev1.ServiceSpec{
+					Type:              test.svcType,
+					LoadBalancerClass: test.svcLBClass,
+				},
+			}
+
+			addrType := gatewayv1.IPAddressType
+			gateway := &gatewayv1.Gateway{
+				ObjectMeta: metav1.ObjectMeta{Name: "gw", Namespace: svcNamespace},
+			}
+			for _, ip := range test.gatewayIPs {
+				gateway.Spec.Addresses = append(gateway.Spec.Addresses, gatewayv1.GatewaySpecAddress{
+					Type:  &addrType,
+					Value: ip,
+				})
+			}
+
+			g.Expect(provisioner.provisionNginx(t.Context(), svcName, gateway, []client.Object{desiredSvc})).To(Succeed())
+
+			got := &corev1.Service{}
+			g.Expect(fakeClient.Get(
+				t.Context(),
+				types.NamespacedName{Name: svcName, Namespace: svcNamespace},
+				got,
+			)).To(Succeed())
+			g.Expect(got.Status.LoadBalancer.Ingress).To(Equal(test.expectIngress))
+		})
+	}
+}
+
+func TestPatchServiceStatus(t *testing.T) {
+	t.Parallel()
+
+	const (
+		instanceName = "test-instance"
+		gcName       = "nginx"
+		svcName      = "gw-nginx"
+		svcNamespace = "default"
+	)
+
+	ngfLabels := map[string]string{
+		controller.AppInstanceLabel:  instanceName,
+		controller.AppManagedByLabel: controller.CreateNginxResourceName(instanceName, gcName),
+	}
+
+	makeProvisioner := func(k8sClient client.Client) *NginxProvisioner {
+		return &NginxProvisioner{
+			cfg: Config{
+				GatewayPodConfig: &config.GatewayPodConfig{
+					InstanceName: instanceName,
+					Namespace:    ngfNamespace,
+				},
+				Logger: logr.Discard(),
+				GCName: gcName,
+			},
+			k8sClient: k8sClient,
+		}
+	}
+
+	makeSvc := func(labels map[string]string, existingIngress []corev1.LoadBalancerIngress) *corev1.Service {
+		svc := &corev1.Service{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      svcName,
+				Namespace: svcNamespace,
+				Labels:    labels,
+			},
+			Spec: corev1.ServiceSpec{Type: corev1.ServiceTypeLoadBalancer},
+		}
+		svc.Status.LoadBalancer.Ingress = existingIngress
+		return svc
+	}
+
+	tests := []struct {
+		svc              *corev1.Service
+		interceptorFuncs *interceptor.Funcs
+		name             string
+		ips              []string
+		expectIngress    []corev1.LoadBalancerIngress
+		expectErr        bool
+		expectNoChange   bool
+	}{
+		{
+			name:          "empty IPs list is a no-op",
+			svc:           makeSvc(ngfLabels, nil),
+			ips:           []string{},
+			expectErr:     false,
+			expectIngress: nil,
+		},
+		{
+			name:      "service not found returns error",
+			svc:       nil,
+			ips:       []string{"10.0.0.1"},
+			expectErr: true,
+		},
+		{
+			name: "service with wrong instance label is skipped",
+			svc: makeSvc(map[string]string{
+				controller.AppInstanceLabel:  "other-instance",
+				controller.AppManagedByLabel: controller.CreateNginxResourceName(instanceName, gcName),
+			}, nil),
+			ips:            []string{"10.0.0.1"},
+			expectErr:      false,
+			expectNoChange: true,
+		},
+		{
+			name: "service with wrong managed-by label is skipped",
+			svc: makeSvc(map[string]string{
+				controller.AppInstanceLabel:  instanceName,
+				controller.AppManagedByLabel: "some-other-controller",
+			}, nil),
+			ips:            []string{"10.0.0.1"},
+			expectErr:      false,
+			expectNoChange: true,
+		},
+		{
+			name: "status already matches is a no-op",
+			svc: makeSvc(ngfLabels, []corev1.LoadBalancerIngress{
+				{IP: "10.0.0.1"},
+			}),
+			ips:           []string{"10.0.0.1"},
+			expectErr:     false,
+			expectIngress: []corev1.LoadBalancerIngress{{IP: "10.0.0.1"}},
+		},
+		{
+			name:          "sets ingress for single IP",
+			svc:           makeSvc(ngfLabels, nil),
+			ips:           []string{"10.0.0.1"},
+			expectErr:     false,
+			expectIngress: []corev1.LoadBalancerIngress{{IP: "10.0.0.1"}},
+		},
+		{
+			name:          "sets ingress for multiple IPs",
+			svc:           makeSvc(ngfLabels, nil),
+			ips:           []string{"10.0.0.1", "10.0.0.2"},
+			expectErr:     false,
+			expectIngress: []corev1.LoadBalancerIngress{{IP: "10.0.0.1"}, {IP: "10.0.0.2"}},
+		},
+		{
+			name:          "deduplicates duplicate IPs",
+			svc:           makeSvc(ngfLabels, nil),
+			ips:           []string{"10.0.0.1", "10.0.0.1", "10.0.0.2"},
+			expectErr:     false,
+			expectIngress: []corev1.LoadBalancerIngress{{IP: "10.0.0.1"}, {IP: "10.0.0.2"}},
+		},
+		{
+			name:          "filters out empty string IPs",
+			svc:           makeSvc(ngfLabels, nil),
+			ips:           []string{"", "10.0.0.1", ""},
+			expectErr:     false,
+			expectIngress: []corev1.LoadBalancerIngress{{IP: "10.0.0.1"}},
+		},
+		{
+			name: "patch returns non-retryable error",
+			svc:  makeSvc(ngfLabels, nil),
+			ips:  []string{"10.0.0.1"},
+			interceptorFuncs: &interceptor.Funcs{
+				SubResourcePatch: func(
+					_ context.Context,
+					_ client.Client,
+					_ string,
+					_ client.Object,
+					_ client.Patch,
+					_ ...client.SubResourcePatchOption,
+				) error {
+					return errors.New("patch failed")
+				},
+			},
+			expectErr: true,
+		},
+		{
+			name: "patch returns conflict then succeeds",
+			svc:  makeSvc(ngfLabels, nil),
+			ips:  []string{"10.0.0.1"},
+			interceptorFuncs: func() *interceptor.Funcs {
+				calls := 0
+				return &interceptor.Funcs{
+					SubResourcePatch: func(
+						ctx context.Context,
+						c client.Client,
+						subResource string,
+						obj client.Object,
+						patch client.Patch,
+						opts ...client.SubResourcePatchOption,
+					) error {
+						calls++
+						if calls == 1 {
+							return apierrors.NewConflict(
+								schema.GroupResource{Resource: "services"},
+								svcName,
+								errors.New("conflict"),
+							)
+						}
+						return c.SubResource(subResource).Patch(ctx, obj, patch, opts...)
+					},
+				}
+			}(),
+			expectErr:     false,
+			expectIngress: []corev1.LoadBalancerIngress{{IP: "10.0.0.1"}},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			var k8sClient client.Client
+			builder := fake.NewClientBuilder().WithScheme(createScheme())
+			if test.svc != nil {
+				builder = builder.WithObjects(test.svc).WithStatusSubresource(test.svc)
+			}
+			if test.interceptorFuncs != nil {
+				builder = builder.WithInterceptorFuncs(*test.interceptorFuncs)
+			}
+			k8sClient = builder.Build()
+
+			provisioner := makeProvisioner(k8sClient)
+			err := provisioner.patchServiceStatus(t.Context(), svcNamespace, svcName, test.ips)
+
+			if test.expectErr {
+				g.Expect(err).To(HaveOccurred())
+				return
+			}
+			g.Expect(err).ToNot(HaveOccurred())
+
+			if test.expectNoChange {
+				// Verify the status was not touched (still empty)
+				got := &corev1.Service{}
+				g.Expect(k8sClient.Get(
+					t.Context(),
+					types.NamespacedName{Name: svcName, Namespace: svcNamespace},
+					got,
+				)).To(Succeed())
+				g.Expect(got.Status.LoadBalancer.Ingress).To(BeNil())
+				return
+			}
+
+			got := &corev1.Service{}
+			g.Expect(k8sClient.Get(
+				t.Context(),
+				types.NamespacedName{Name: svcName, Namespace: svcNamespace},
+				got,
+			)).To(Succeed())
+			g.Expect(got.Status.LoadBalancer.Ingress).To(Equal(test.expectIngress))
+		})
+	}
+}
+
+func TestIsLoadBalancerClassImmutabilityErr(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		err    error
+		name   string
+		expect bool
+	}{
+		{
+			name:   "nil error",
+			err:    nil,
+			expect: false,
+		},
+		{
+			name:   "non-invalid API error has no loadBalancerClass cause",
+			err:    apierrors.NewNotFound(schema.GroupResource{Resource: "services"}, "test-svc"),
+			expect: false,
+		},
+		{
+			name: "invalid error for a different field",
+			err: apierrors.NewInvalid(
+				schema.GroupKind{Group: "", Kind: "Service"},
+				"test-svc",
+				field.ErrorList{
+					field.Invalid(field.NewPath("spec").Child("type"), "ClusterIP", "cannot change type"),
+				},
+			),
+			expect: false,
+		},
+		{
+			name: "invalid error for spec.loadBalancerClass",
+			err: apierrors.NewInvalid(
+				schema.GroupKind{Group: "", Kind: "Service"},
+				"test-svc",
+				field.ErrorList{
+					field.Invalid(
+						field.NewPath("spec").Child("loadBalancerClass"),
+						"gateway.nginx.org/nginx-gateway-controller",
+						"may not change once set",
+					),
+				},
+			),
+			expect: true,
+		},
+		{
+			name: "invalid error with multiple causes including spec.loadBalancerClass",
+			err: apierrors.NewInvalid(
+				schema.GroupKind{Group: "", Kind: "Service"},
+				"test-svc",
+				field.ErrorList{
+					field.Invalid(field.NewPath("spec").Child("type"), "ClusterIP", "cannot change type"),
+					field.Invalid(
+						field.NewPath("spec").Child("loadBalancerClass"),
+						"gateway.nginx.org/nginx-gateway-controller",
+						"may not change once set",
+					),
+				},
+			),
+			expect: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+			g.Expect(isLoadBalancerClassImmutabilityErr(test.err)).To(Equal(test.expect))
+		})
+	}
 }

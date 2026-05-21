@@ -132,6 +132,12 @@ Create namespaced RBAC rules.
 - apiGroups:
   - ""
   resources:
+  - services/status
+  verbs:
+  - patch
+- apiGroups:
+  - ""
+  resources:
   - pods
   verbs:
   - get

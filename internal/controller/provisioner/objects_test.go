@@ -232,7 +232,9 @@ func TestBuildNginxResourceObjects(t *testing.T) {
 			TargetPort: intstr.FromInt(9999),
 		},
 	}))
-	g.Expect(svc.Spec.ExternalIPs).To(Equal([]string{"192.0.0.2"}))
+	g.Expect(svc.Spec.ExternalIPs).To(BeNil())
+	// GatewayCtlrName is empty in this provisioner, so LoadBalancerClass must not be set.
+	g.Expect(svc.Spec.LoadBalancerClass).To(BeNil())
 
 	depObj := objects[5]
 	dep, ok := depObj.(*appsv1.Deployment)
@@ -394,7 +396,7 @@ func TestBuildNginxResourceObjects_NginxProxyConfig(t *testing.T) {
 	svc, ok := svcObj.(*corev1.Service)
 	g.Expect(ok).To(BeTrue())
 	g.Expect(svc.Spec.Type).To(Equal(corev1.ServiceTypeNodePort))
-	g.Expect(svc.Spec.ExternalTrafficPolicy).To(Equal(corev1.ServiceExternalTrafficPolicyTypeCluster))
+	g.Expect(svc.Spec.ExternalTrafficPolicy).To(Equal(corev1.ServiceExternalTrafficPolicyCluster))
 	g.Expect(svc.Spec.LoadBalancerIP).To(Equal("1.2.3.4"))
 	g.Expect(*svc.Spec.LoadBalancerClass).To(Equal("myLoadBalancerClass"))
 	g.Expect(svc.Spec.LoadBalancerSourceRanges).To(Equal([]string{"5.6.7.8"}))
@@ -2367,37 +2369,88 @@ func TestOwnerReferencesAreSet(t *testing.T) {
 	}
 }
 
-func TestBuildNginxResourceObjects_ClusterIPWithExternalIPs(t *testing.T) {
+func TestBuildNginxResourceObjects_LoadBalancerClass(t *testing.T) {
 	t.Parallel()
 
+	const ctlrName = "gateway.nginx.org/test-controller"
+
+	makeProvisioner := func(gatewayCtlrName string) *NginxProvisioner {
+		// Create a fresh secret per call so parallel subtests don't share a mutable object.
+		// The fake client builder writes ResourceVersion on the objects passed to it, which
+		// causes a data race when the same object pointer is used concurrently.
+		agentTLSSecret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      agentTLSTestSecretName,
+				Namespace: ngfNamespace,
+			},
+			Data: map[string][]byte{secrets.TLSCertKey: []byte("tls")},
+		}
+		return &NginxProvisioner{
+			cfg: Config{
+				GatewayPodConfig: &config.GatewayPodConfig{
+					Namespace: ngfNamespace,
+					Version:   "1.0.0",
+				},
+				AgentTLSSecretName: agentTLSTestSecretName,
+				AgentLabels:        make(map[string]string),
+				GatewayCtlrName:    gatewayCtlrName,
+			},
+			baseLabelSelector: metav1.LabelSelector{
+				MatchLabels: map[string]string{"app": "nginx"},
+			},
+			k8sClient: createFakeClientWithScheme(agentTLSSecret),
+		}
+	}
+
+	ipAddresses := []gatewayv1.GatewaySpecAddress{
+		{Type: helpers.GetPointer(gatewayv1.IPAddressType), Value: "10.0.0.1"},
+	}
+
 	tests := []struct {
-		nProxyCfg                     *graph.EffectiveNginxProxy
-		name                          string
-		expectedExternalTrafficPolicy corev1.ServiceExternalTrafficPolicy
-		gatewayAddresses              []gatewayv1.GatewaySpecAddress
-		expectedExternalIPs           []string
+		nProxyCfg        *graph.EffectiveNginxProxy
+		expectedLBClass  *string
+		name             string
+		gatewayCtlrName  string
+		gatewayAddresses []gatewayv1.GatewaySpecAddress
 	}{
 		{
-			name: "ClusterIP service with an IP-type Gateway address sets externalTrafficPolicy to Local",
-			gatewayAddresses: []gatewayv1.GatewaySpecAddress{
-				{
-					Type:  helpers.GetPointer(gatewayv1.IPAddressType),
-					Value: "10.0.0.1",
-				},
-			},
+			name:             "LB service + IP addresses + no user LBClass + GatewayCtlrName set → sets LoadBalancerClass",
+			gatewayCtlrName:  ctlrName,
+			gatewayAddresses: ipAddresses,
+			nProxyCfg:        nil,
+			expectedLBClass:  helpers.GetPointer(ctlrName),
+		},
+		{
+			name:             "LB service + IP addresses + user LBClass in nProxyCfg → does not override",
+			gatewayCtlrName:  ctlrName,
+			gatewayAddresses: ipAddresses,
 			nProxyCfg: &graph.EffectiveNginxProxy{
 				Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
 					Service: &ngfAPIv1alpha2.ServiceSpec{
-						ServiceType:           helpers.GetPointer(ngfAPIv1alpha2.ServiceTypeClusterIP),
-						ExternalTrafficPolicy: helpers.GetPointer(ngfAPIv1alpha2.ExternalTrafficPolicyLocal),
+						LoadBalancerClass: helpers.GetPointer("custom-lb-class"),
 					},
 				},
 			},
-			expectedExternalIPs:           []string{"10.0.0.1"},
-			expectedExternalTrafficPolicy: corev1.ServiceExternalTrafficPolicyLocal,
+			expectedLBClass: helpers.GetPointer("custom-lb-class"),
 		},
 		{
-			name: "ClusterIP service with no Gateway addresses leaves externalTrafficPolicy unset",
+			name:             "LB service + no IP addresses → LoadBalancerClass nil",
+			gatewayCtlrName:  ctlrName,
+			gatewayAddresses: nil,
+			nProxyCfg:        nil,
+			expectedLBClass:  nil,
+		},
+		{
+			name:             "LB service + IP addresses + empty GatewayCtlrName → LoadBalancerClass nil",
+			gatewayCtlrName:  "",
+			gatewayAddresses: ipAddresses,
+			nProxyCfg:        nil,
+			expectedLBClass:  nil,
+		},
+		{
+			name:             "ClusterIP service + IP addresses → LoadBalancerClass nil",
+			gatewayCtlrName:  ctlrName,
+			gatewayAddresses: ipAddresses,
 			nProxyCfg: &graph.EffectiveNginxProxy{
 				Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
 					Service: &ngfAPIv1alpha2.ServiceSpec{
@@ -2405,8 +2458,7 @@ func TestBuildNginxResourceObjects_ClusterIPWithExternalIPs(t *testing.T) {
 					},
 				},
 			},
-			expectedExternalIPs:           nil,
-			expectedExternalTrafficPolicy: "",
+			expectedLBClass: nil,
 		},
 	}
 
@@ -2415,29 +2467,7 @@ func TestBuildNginxResourceObjects_ClusterIPWithExternalIPs(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			agentTLSSecret := &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      agentTLSTestSecretName,
-					Namespace: ngfNamespace,
-				},
-				Data: map[string][]byte{secrets.TLSCertKey: []byte("tls")},
-			}
-			fakeClient := createFakeClientWithScheme(agentTLSSecret)
-
-			provisioner := &NginxProvisioner{
-				cfg: Config{
-					GatewayPodConfig: &config.GatewayPodConfig{
-						Namespace: ngfNamespace,
-						Version:   "1.0.0",
-					},
-					AgentTLSSecretName: agentTLSTestSecretName,
-					AgentLabels:        make(map[string]string),
-				},
-				baseLabelSelector: metav1.LabelSelector{
-					MatchLabels: map[string]string{"app": "nginx"},
-				},
-				k8sClient: fakeClient,
-			}
+			provisioner := makeProvisioner(test.gatewayCtlrName)
 
 			gateway := &gatewayv1.Gateway{
 				ObjectMeta: metav1.ObjectMeta{Name: "gw", Namespace: "default"},
@@ -2458,9 +2488,13 @@ func TestBuildNginxResourceObjects_ClusterIPWithExternalIPs(t *testing.T) {
 				}
 			}
 			g.Expect(svc).ToNot(BeNil())
-			g.Expect(svc.Spec.Type).To(Equal(corev1.ServiceTypeClusterIP))
-			g.Expect(svc.Spec.ExternalIPs).To(Equal(test.expectedExternalIPs))
-			g.Expect(svc.Spec.ExternalTrafficPolicy).To(Equal(test.expectedExternalTrafficPolicy))
+			g.Expect(svc.Spec.ExternalIPs).To(BeNil())
+			if test.expectedLBClass == nil {
+				g.Expect(svc.Spec.LoadBalancerClass).To(BeNil())
+			} else {
+				g.Expect(svc.Spec.LoadBalancerClass).ToNot(BeNil())
+				g.Expect(*svc.Spec.LoadBalancerClass).To(Equal(*test.expectedLBClass))
+			}
 		})
 	}
 }
