@@ -217,7 +217,7 @@ type JWTAuth struct {
   // Enables configuration of token claim validation.
   //
   // +optional
-  Authorization *Authorization
+  Authorization *Authorization `json:"authorization,omitempty"`
 
   // Leeway is the acceptable clock skew for exp & nbf claims.
   // If exp & nbf claims are not defined, this directive takes no effect.
@@ -269,10 +269,10 @@ type JWTRemoteKeySource struct {
 type RequireType string
 
 const (
-  // RequireTypeAllOf authorizes requires that satisfy all requirements.
+  // RequireTypeAll authorizes requires that satisfy all requirements.
   RequireTypeAll  RequireType  = "All"
-  // RequireTypeAnyOf authorizes claims that satisfy any requirement.
-  RequireTypeAnf  RequireType  = "Any"
+  // RequireTypeAny authorizes claims that satisfy any requirement.
+  RequireTypeAny  RequireType  = "Any"
 )
 
 // ClaimMatchType defines how claim values are parsed.
@@ -953,8 +953,8 @@ spec:
             values:
             - "acme-co"
             match: Exact # Default. Match values exactly.
-            # Send value of $jwt_claim_tenant in X-Tenant header to upstream.
-            proxySetHeader: X-Tenant # Set `proxy_set_header X-Tenant $claim_tenant;`
+            # Send value of $claim_tenant in X-Tenant header to upstream.
+            proxySetHeader: X-Tenant
       # rule[1] requires any claim to match.
       - require: Any
         claims:
@@ -1006,7 +1006,7 @@ http {
     #####      Maps for `rules[1].claims[]`     #####
     #################################################
     map $claim_iss $iss_rule_1 {
-        ~(?:^|,)?(https://issuer.example-2.com|https://issuer.example-3.com)(?:,|$) 1;
+        ~(?:^|,)?(https://issuer\.example-2\.com|https://issuer\.example-3\.com)(?:,|$) 1;
         default 0;
     }
 
@@ -1032,7 +1032,7 @@ http {
     #################################################
     # When `authorization.require` is set to `Any`
     # This map configuration is used.
-    map $rule_0_all$rule_1_any$rule_2_any $require_any {
+    map $rule_0_all$rule_1_any $require_any {
         ~1 1;
         default 0;
     }
@@ -1044,8 +1044,8 @@ http {
     #################################################
     # When `authorization.require` is set to `All`
     # This map configuration is used.
-    map $rule_0_all$rule_1_any$rule_2_any $require_all {
-        111 1;
+    map $rule_0_all$rule_1_any $require_all {
+        11 1;
         default 0;
     }
     #################################################
@@ -1100,7 +1100,7 @@ Here is break a down each component of this configuration, and why they are nece
 
 ```nginx
     # Returns `1` if either `rules[0].claims[].require: All` OR `rules[1].claims[].require: Any` was satisfied.
-    map $rule_0_all$rule_1_any$require_any {
+    map $rule_0_all$rule_1_any $require_any {
         ~1 1;
         default 0;
     }
@@ -1144,7 +1144,7 @@ spec:
     source: Remote
     remote:
       uri: https://issuer.example.com/.well-known/jwks.json
-    authroization:
+    authorization:
      rules:
      - claims:
       - name: "realm_access/roles" # Nested claim.
@@ -1360,7 +1360,7 @@ A route rule with a single path in an HTTPRoute/GRPCRoute referencing a valid `A
 This section assumes that the `AuthenticationFilter` attached to the route is valid.
 It explicitly covers the expected outcomes for required claims.
 
-`spec.authorize.require` set to `Any`
+`spec.jwt.authorize.require` set to `Any`
 - Input:
   A JWT claim(s) that matches any combination of claim requirements defined in `spec.authorize.rule[].claims[]`.
 
@@ -1368,7 +1368,7 @@ It explicitly covers the expected outcomes for required claims.
   Request is authorized.
   NGINX returns a 200 response code.
 
-`spec.authorize.require` set to `All`
+`spec.jwt.authorize.require` set to `All`
 - Input:
   A JWT claim(s) that match all claim requirements defined in `spec.authorize.rule[].claims[]`.
 
@@ -1376,7 +1376,7 @@ It explicitly covers the expected outcomes for required claims.
   Request is authorized.
   NGINX returns a 200 response code.
 
-`spec.authorize.require` set to `Any`
+`spec.jwt.authorize.require` set to `Any`
 - Input:
   A JWT claim(s) that match none of claim requirements defined in `spec.authorize.rule[].claims[]`.
 
@@ -1384,7 +1384,7 @@ It explicitly covers the expected outcomes for required claims.
   Request is not authorized.
   NGINX returns a 401 response code.
 
-`spec.authorize.require` set to `All`
+`spec.jwt.authorize.require` set to `All`
 - Input:
   A JWT claim(s) that match none of claim requirements defined in `spec.authorize.rule[].claims[]`.
 
@@ -1392,7 +1392,7 @@ It explicitly covers the expected outcomes for required claims.
   Request is not authorized.
   NGINX returns a 401 response code.
 
-`spec.authorize.require` set to `All`
+`spec.jwt.authorize.require` set to `All`
 - Input:
   A JWT claim(s) that match one or more, but not all, of the claim requirements defined in `spec.authorize.rule[].claims[]`.
 

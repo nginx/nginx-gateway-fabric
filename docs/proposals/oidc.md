@@ -205,13 +205,11 @@ type OIDCAuth struct {
 	// +kubebuilder:validation:MaxItems=8
 	CACertificateRefs []LocalObjectReference `json:"caCertificateRefs,omitempty"`
 
-  // Require defines a list of required claim sets for JWT claim validation.
-  // The token is authorized if it satisfies all claims in at least one entry.
-  // Claims within each entry are concatenated and validated together using NGINX maps.
+  // Authorization defines the authorization (authz) specification.
+  // Enables configuration of token claim validation.
   //
   // +optional
-  // +kubebuilder:validation:MinItems=1
-  Require []RequiredClaims `json:"require,omitempty"`
+  Authorization *Authorization `json:"authorization,omitempty"`
 }
 
 // OIDCSessionConfig configures session management for OIDC authentication.
@@ -268,38 +266,79 @@ type OIDCLogoutConfig struct {
 	TokenHint *bool `json:"tokenHint,omitempty"`
 }
 
-// RequiredClaims specifies a set of required claims that a token's claim must match to be authorized.
-// +kubebuilder:validation:XValidation:message="at least one of iss, aud, sub, or claims must be set",rule="has(self.iss) || has(self.aud) || has(self.sub) || has(self.claims)"
-type RequiredClaims struct {
-  // Issuer contains the value that must match the `iss` claim.
-  //
-  // +optional
-  Iss string `json:"iss,omitempty"`
+// RequireType defines how JWT Claims are validated.
+// +kubebuilder:validation:Enum=All,Any
+type RequireType string
 
-  // Audience contains the values that must match the `aud` claim.
-  // When the `aud` claim is an array, NGINX exposes it as a comma-separated string via `auth_jwt_claim_set`.
-  // All values in the array must match in the exact order.
-  //
-  // +optional
-  Aud []string `json:"aud,omitempty"`
+const (
+  // RequireTypeAll authorizes requires that satisfy all requirements.
+  RequireTypeAll  RequireType  = "All"
+  // RequireTypeAny authorizes claims that satisfy any requirement.
+  RequireTypeAny  RequireType  = "Any"
+)
 
-  // Subject contains the value that must match the `sub` claim.
-  //
-  // +optional
-  Sub string `json:"sub,omitempty"`
+// ClaimMatchType defines how claim values are parsed.
+// +kubebuilder:validation:Enum=Exact,Regex
+type ClaimMatchType string
 
-  // Claims defines user-defined custom claims that must also match.
+const (
+  // ClaimMatchTypeExact treats claim values as their exact value.
+  ClaimMatchTypeExact ClaimMatchType = "Exact"
+  // ClaimMatchTypeRegex treats claim values as a regex value.
+  ClaimMatchTypeRegex ClaimMatchType = "Regex"
+)
+
+// Authorization specifies a set of required claim rules
+// that a token's claim must match to be authorized, given the require type defined.
+type Authorization struct {
+  // Rules defines a list of claims and their specific authorization requirements.
+  Rules []Rule `json:"rules,omitempty"`
+
+  // Require sets the authorization mode for all claims in a rule.
+  // When set to All, the requirements for all claims in a rule must be met.
+  // When set to Any, the requirements for any one claim in a rule must be met.
   //
   // +optional
-  // +kubebuilder:validation:MinItems=1
-  Claims []CustomClaim `json:"claims,omitempty"`
+  // +kubebuilder:default=Any
+  Require *RequireType `json:"require,omitempty"`
 }
 
-// CustomClaim specifies custom user claims and values.
-type CustomClaim struct {
-  Name   string   `json:"name"`
+// Rule defines a list of claims, and authorization rules for those claims.
+type Rule struct {
+  // Claims defines a list of claims required by users.
   // +kubebuilder:validation:MinItems=1
-  Values []string `json:"values,omitempty"`
+  Claims []Claim `json:"claims,omitempty"`
+
+  // Require sets the authorization mode a specific claim within a rule.
+  // When set to All, a token's claim must match all values within that claim.
+  // When set to Any, a token's claim must match at least one value with that claim.
+  //
+  // +optional
+  // +kubebuilder:default=Any
+  Require *RequireType `json:"require,omitempty"`
+}
+
+// Claim describes the exact name/value pair of claims that must be matched.
+type Claim struct {
+  // Name is the name of the claim within the token.
+  // +kubebuilder:validation:Pattern=`^[a-zA-Z0-9_/-]+$`
+  Name   string   `json:"name"`
+
+  // Values are the values within the claim.
+  // When more than one value is set, the claim must match any of these values.
+  // +kubebuilder:validation:Pattern=`^[^\\n\\r;#\\$\\{\\}\\|&><'\"]+$`
+  // +kubebuilder:validation:MinItems=1
+  Values []string `json:"values"`
+
+  // ProxySetHeader sets both the name and variable for `proxy_set_header`
+  // Example: For claim name `sub` for JWT auth
+  //
+  // proxy_set_header X-JWT-Claim-Sub $jwt_claim_sub;
+  ProxySetHeader *string `json:"proxySetHeader,omitempty"`
+
+  // Match sets the match type for the claim.
+  // +kubebuilder:default=Exact
+  Match ClaimMatchType `json:"match,omitempty"`
 }
 ```
 
@@ -516,8 +555,8 @@ http {
     }
 
     # Map to evaluate user authorization
-    map $oidc_claim_sub $oidc_valid_combination {
-        ~^bed7e82b-8143-476c-adf8-4c561260b60e$ 1;
+    map $oidc_claim_email_verified $oid_valid_0_any {
+        ~(?:^|,)true(?:,|$) 1;
         default 0;
     }
 
@@ -587,16 +626,13 @@ spec:
       name: oidc-client-secret
     caCertificateRefs:
       - name: oidc-ca-cert
-    require:
-    - sub: "bed7e82b-8143-476c-adf8-4c561260b60e"
-      claims:
-      - name: "email_verified"
-        values:
-        - "true"
-      - name: "email"
-        values:
-         - "testuser@example.com"
-```
+    authorization:
+      rules:
+      - claims:
+        - name: "email_verified"
+          values:
+          - "true"
+  ```
 
 ### Understanding Certificate Revocation List
 
