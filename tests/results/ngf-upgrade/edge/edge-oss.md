@@ -6,48 +6,48 @@ NGINX Plus: false
 
 NGINX Gateway Fabric:
 
-- Commit: 17c42c8bbbb004ba9c0e9b867396c5f8937207cd
-- Date: 2026-04-01T18:33:47Z
+- Commit: cd422a074b2f5d3ac6db374b6bc9bb4bf1c67e59
+- Date: 2026-05-15T14:36:06Z
 - Dirty: false
 
 GKE Cluster:
 
 - Node count: 12
-- k8s version: v1.35.1-gke.1396002
+- k8s version: v1.35.3-gke.1389000
 - vCPUs per node: 16
-- RAM per node: 64305Mi
+- RAM per node: 65848296Ki
 - Max pods per node: 110
 - Zone: us-west1-b
 - Instance Type: n2d-standard-16
 
-## Test: Send http /coffee traffic
-
-```text
-Requests      [total, rate, throughput]         6000, 100.01, 99.78
-Duration      [total, attack, wait]             59.994s, 59.992s, 1.851ms
-Latencies     [min, mean, 50, 90, 95, 99, max]  623.703µs, 351.873ms, 1.036ms, 553.208ms, 3.485s, 5.825s, 6.385s
-Bytes In      [total, mean]                     963746, 160.62
-Bytes Out     [total, mean]                     0, 0.00
-Success       [ratio]                           99.77%
-Status Codes  [code:count]                      0:14  200:5986  
-Error Set:
-Get "http://cafe.example.com/coffee": dial tcp 0.0.0.0:0->10.138.0.17:80: connect: connection refused
-```
-
-![http-oss.png](http-oss.png)
-
 ## Test: Send https /tea traffic
 
 ```text
-Requests      [total, rate, throughput]         6000, 100.01, 99.78
-Duration      [total, attack, wait]             59.994s, 59.993s, 1.59ms
-Latencies     [min, mean, 50, 90, 95, 99, max]  687.224µs, 356.759ms, 1.124ms, 595.976ms, 3.541s, 5.835s, 6.383s
-Bytes In      [total, mean]                     927830, 154.64
+Requests      [total, rate, throughput]         6000, 100.01, 99.74
+Duration      [total, attack, wait]             59.993s, 59.991s, 1.744ms
+Latencies     [min, mean, 50, 90, 95, 99, max]  729.146µs, 65.593ms, 1.307ms, 1.796ms, 15.978ms, 2.15s, 2.712s
+Bytes In      [total, mean]                     915552, 152.59
 Bytes Out     [total, mean]                     0, 0.00
-Success       [ratio]                           99.77%
-Status Codes  [code:count]                      0:14  200:5986  
+Success       [ratio]                           99.73%
+Status Codes  [code:count]                      0:16  200:5984  
 Error Set:
-Get "https://cafe.example.com/tea": dial tcp 0.0.0.0:0->10.138.0.17:443: connect: connection refused
+Get "https://cafe.example.com/tea": dial tcp 0.0.0.0:0->10.138.0.113:443: connect: connection refused
 ```
 
 ![https-oss.png](https-oss.png)
+
+## Test: Send http /coffee traffic
+
+```text
+Requests      [total, rate, throughput]         6000, 100.01, 99.75
+Duration      [total, attack, wait]             59.993s, 59.991s, 1.454ms
+Latencies     [min, mean, 50, 90, 95, 99, max]  652.061µs, 66.049ms, 1.149ms, 1.606ms, 12.026ms, 2.153s, 2.709s
+Bytes In      [total, mean]                     953462, 158.91
+Bytes Out     [total, mean]                     0, 0.00
+Success       [ratio]                           99.73%
+Status Codes  [code:count]                      0:16  200:5984  
+Error Set:
+Get "http://cafe.example.com/coffee": dial tcp 0.0.0.0:0->10.138.0.113:80: connect: connection refused
+```
+
+![http-oss.png](http-oss.png)

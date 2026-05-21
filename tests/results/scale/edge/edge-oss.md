@@ -6,16 +6,16 @@ NGINX Plus: false
 
 NGINX Gateway Fabric:
 
-- Commit: 17c42c8bbbb004ba9c0e9b867396c5f8937207cd
-- Date: 2026-04-01T18:33:47Z
+- Commit: cd422a074b2f5d3ac6db374b6bc9bb4bf1c67e59
+- Date: 2026-05-15T14:36:06Z
 - Dirty: false
 
 GKE Cluster:
 
 - Node count: 12
-- k8s version: v1.35.1-gke.1396002
+- k8s version: v1.35.3-gke.1389000
 - vCPUs per node: 16
-- RAM per node: 64305Mi
+- RAM per node: 65848296Ki
 - Max pods per node: 110
 - Zone: us-west1-b
 - Instance Type: n2d-standard-16
@@ -24,19 +24,19 @@ GKE Cluster:
 
 ### Event Batch Processing
 
-- Total: 264
-- Average Time: 49ms
+- Total: 1282
+- Average Time: 7ms
 - Event Batch Processing distribution:
-	- 500.0ms: 254
-	- 1000.0ms: 264
-	- 5000.0ms: 264
-	- 10000.0ms: 264
-	- 30000.0ms: 264
-	- +Infms: 264
+	- 500.0ms: 1274
+	- 1000.0ms: 1282
+	- 5000.0ms: 1282
+	- 10000.0ms: 1282
+	- 30000.0ms: 1282
+	- +Infms: 1282
 
 ### Errors
 
-- NGF errors: 6
+- NGF errors: 8
 - NGF container restarts: 0
 - NGINX errors: 0
 - NGINX container restarts: 0
@@ -50,19 +50,19 @@ The logs are attached only if there are errors.
 
 ### Event Batch Processing
 
-- Total: 330
-- Average Time: 40ms
+- Total: 1352
+- Average Time: 7ms
 - Event Batch Processing distribution:
-	- 500.0ms: 319
-	- 1000.0ms: 330
-	- 5000.0ms: 330
-	- 10000.0ms: 330
-	- 30000.0ms: 330
-	- +Infms: 330
+	- 500.0ms: 1349
+	- 1000.0ms: 1352
+	- 5000.0ms: 1352
+	- 10000.0ms: 1352
+	- 30000.0ms: 1352
+	- +Infms: 1352
 
 ### Errors
 
-- NGF errors: 12
+- NGF errors: 9
 - NGF container restarts: 0
 - NGINX errors: 0
 - NGINX container restarts: 0
@@ -76,15 +76,15 @@ The logs are attached only if there are errors.
 
 ### Event Batch Processing
 
-- Total: 1013
-- Average Time: 154ms
+- Total: 2084
+- Average Time: 72ms
 - Event Batch Processing distribution:
-	- 500.0ms: 954
-	- 1000.0ms: 1013
-	- 5000.0ms: 1013
-	- 10000.0ms: 1013
-	- 30000.0ms: 1013
-	- +Infms: 1013
+	- 500.0ms: 2055
+	- 1000.0ms: 2084
+	- 5000.0ms: 2084
+	- 10000.0ms: 2084
+	- 30000.0ms: 2084
+	- +Infms: 2084
 
 ### Errors
 
@@ -102,15 +102,15 @@ The logs are attached only if there are errors.
 
 ### Event Batch Processing
 
-- Total: 91
-- Average Time: 167ms
+- Total: 130
+- Average Time: 129ms
 - Event Batch Processing distribution:
-	- 500.0ms: 83
-	- 1000.0ms: 91
-	- 5000.0ms: 91
-	- 10000.0ms: 91
-	- 30000.0ms: 91
-	- +Infms: 91
+	- 500.0ms: 118
+	- 1000.0ms: 130
+	- 5000.0ms: 130
+	- 10000.0ms: 130
+	- 30000.0ms: 130
+	- +Infms: 130
 
 ### Errors
 
@@ -127,9 +127,9 @@ The logs are attached only if there are errors.
 ## Test TestScale_HTTPMatches
 
 ```text
-Requests      [total, rate, throughput]         30000, 1000.04, 1000.01
-Duration      [total, attack, wait]             30s, 29.999s, 741.932µs
-Latencies     [min, mean, 50, 90, 95, 99, max]  612.885µs, 799.729µs, 777.706µs, 887.424µs, 937.249µs, 1.095ms, 12.351ms
+Requests      [total, rate, throughput]         30000, 1000.01, 999.98
+Duration      [total, attack, wait]             30.001s, 30s, 923.069µs
+Latencies     [min, mean, 50, 90, 95, 99, max]  668.248µs, 1.015ms, 967.935µs, 1.218ms, 1.303ms, 1.545ms, 35.592ms
 Bytes In      [total, mean]                     4830000, 161.00
 Bytes Out     [total, mean]                     0, 0.00
 Success       [ratio]                           100.00%
@@ -137,9 +137,9 @@ Status Codes  [code:count]                      200:30000
 Error Set:
 ```
 ```text
-Requests      [total, rate, throughput]         30000, 1000.02, 999.99
-Duration      [total, attack, wait]             30s, 29.999s, 905.48µs
-Latencies     [min, mean, 50, 90, 95, 99, max]  690.698µs, 909.184µs, 885.855µs, 1.009ms, 1.068ms, 1.251ms, 13.947ms
+Requests      [total, rate, throughput]         30000, 1000.04, 1000.00
+Duration      [total, attack, wait]             30s, 29.999s, 1.039ms
+Latencies     [min, mean, 50, 90, 95, 99, max]  772.512µs, 1.129ms, 1.073ms, 1.348ms, 1.444ms, 1.703ms, 27.878ms
 Bytes In      [total, mean]                     4830000, 161.00
 Bytes Out     [total, mean]                     0, 0.00
 Success       [ratio]                           100.00%
