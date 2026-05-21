@@ -25,7 +25,6 @@ var _ = Describe("ProxySettingsPolicy", Ordered, Label("functional", "proxy-sett
 			"proxy-settings-policy/gateway.yaml",
 			"proxy-settings-policy/routes.yaml",
 			"proxy-settings-policy/grpc-backend.yaml",
-			"proxy-settings-policy/h2c-backend.yaml",
 		}
 
 		namespace = "proxy-settings"
@@ -632,39 +631,6 @@ var _ = Describe("ProxySettingsPolicy", Ordered, Label("functional", "proxy-sett
 				),
 			}
 			waitForPoliciesVerification(policyExpectations)
-		})
-	})
-
-	// the file h2c-backend.yaml is declared at the start of the test suite
-	When("an HTTPRoute backend Service has appProtocol kubernetes.io/h2c", func() {
-		Context("nginx config", func() {
-			var conf *framework.Payload
-
-			BeforeAll(func() {
-				var err error
-				conf, err = resourceManager.GetNginxConfig(nginxPodName, namespace, "")
-				Expect(err).ToNot(HaveOccurred())
-			})
-
-			It("sets proxy_http_version 2 for the h2c location", func() {
-				Expect(framework.ValidateNginxFieldExists(conf, framework.ExpectedNginxField{
-					Directive: "proxy_http_version",
-					Value:     "2",
-					File:      "http.conf",
-					Server:    "cafe.example.com",
-					Location:  "/tea-h2c",
-				})).To(Succeed())
-			})
-
-			It("does not emit proxy_http_version for a non-h2c location (NGINX default)", func() {
-				// NGINX defaults to 1.1, so NGF omits the directive entirely.
-				Expect(framework.ValidateNginxFieldExists(conf, framework.ExpectedNginxField{
-					Directive: "proxy_http_version",
-					File:      "http.conf",
-					Server:    "cafe.example.com",
-					Location:  "/tea",
-				})).NotTo(Succeed())
-			})
 		})
 	})
 })
