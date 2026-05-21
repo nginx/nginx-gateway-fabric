@@ -79,7 +79,6 @@ This portion also contains:
       - Understanding claim enforcement
       - Processing claims
       - Processing nested claims
-      - Sanitizing claims
     - JWT Authentication Capabilities
 - Route Attachment
 - Resource status
@@ -1172,17 +1171,6 @@ auth_jwt_claim_set $claim_email email;
 This will set the value of `$roles` to `["reader", "admin"]`, and the value of `$email` to `user@example.com`.
 Since the email contains a dot, this needs to be processed the same way.
 
-#### Sanitizing claims
-
-Since the `name` and `values` fields for `authorization.rules[].claims[]` are used directly in the NGINX config, we need to ensure potentially malicious NGINX configuration cannot be injected.
-
-We can do this at the API level, by ensuring `claims[].name` and `claims[].values[]` contain a regex allow pattern.
-
-For `claims[].name`, we use `^[a-zA-Z0-9_\/-]+$`. This allows uppercase and lowercase letters (A-Z, a-z), Digits (0-9), underscores (`_`), hyphens (`-`), and slashes (`/`) for nested claims. This will prevent special NGINX characters like curly brackets, semicolons, and escape characters from being entered. i.e. block anything that does **not** match the pattern.
-
-For `claims[].values[]`, we use `^[^\n\r;#\$\\{\\}\\|&><'"]+$`. This regex is designed to match any character **not** in found in the pattern. Blocks multi-line values and config injection (`\n`, `\r`), semicolons (`;`), hashes (`#`), dollar sign (`$`), curly braces (`{`, `}`), pipes (`|`), ampersands (`&`), angle brackets (`>`, `<`), single and double quotes (`'` & `"`).
-
-
 ### Route Attachment
 
 Filters must be attached to a route resource (HTTPRoute, GRPCRoute, etc...) at the `rules.matches` level.
@@ -1466,6 +1454,14 @@ We should also include [CEL](https://kubernetes.io/docs/tasks/extend-kubernetes/
 We should validate that only one `AuthenticationFilter` is referenced per-rule. Multiple references to an `AuthenticationFilter` in a single rule should result in an `Invalid` HTTPRoute/GRPCRoute, and the rule should be `Rejected`.
 
 This scenario can use the status `RouteConditionPartiallyInvalid` defined in the Gateway API here: https://github.com/nginx/nginx-gateway-fabric/blob/3934c5c8c60b5aea91be4337d63d4e1d8640baa8/internal/controller/state/conditions/conditions.go#L402
+
+When defining `name` and `values` fields for `spec.jwt.authorization.rules[].claims[]`, we need to ensure potentially malicious NGINX configuration cannot be injected, since these fields are used directly in the NGINX config,
+
+We can do this at the API level, by ensuring `claims[].name` and `claims[].values[]` contain a regex allow pattern.
+
+For `claims[].name`, we use `^[a-zA-Z0-9_\/-]+$`. This allows uppercase and lowercase letters (A-Z, a-z), Digits (0-9), underscores (`_`), hyphens (`-`), and slashes (`/`) for nested claims. This will prevent special NGINX characters like curly brackets, semicolons, and escape characters from being entered. i.e. block anything that does **not** match the pattern.
+
+For `claims[].values[]`, we use `^[^\n\r;#\$\\{\\}\\|&><'"]+$`. This regex is designed to match any character **not** in found in the pattern. Blocks multi-line values and config injection (`\n`, `\r`), semicolons (`;`), hashes (`#`), dollar sign (`$`), curly braces (`{`, `}`), pipes (`|`), ampersands (`&`), angle brackets (`>`, `<`), single and double quotes (`'` & `"`).
 
 ## Alternatives
 
