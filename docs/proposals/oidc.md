@@ -393,15 +393,12 @@ spec:
       tokenHint: true
 
     # Optional: configure claim validation.
-    require:
-    - sub: "bed7e82b-8143-476c-adf8-4c561260b60e"
-      claims:
-      - name: "email_verified"
-        values:
-        - "true"
-      - name: "email"
-        values:
-         - "testuser@example.com"
+    authorization:
+      rules:
+      - claims:
+        - name: "email_verified"
+          values:
+          - "true"
 ---
 # clientSecret references a Kubernetes Secret containing the OIDC client secret
 # The OpenID Provider uses this to verify that token requests come from a legitimate client
@@ -574,7 +571,7 @@ http {
         auth_jwt "" token=$oidc_id_token; # Populates `$oidc_claim_*` variables.
 
         # Authorize based on response from map.
-        auth_jwt_require $oidc_valid_combination;
+        auth_jwt_require  $oid_valid_0_any;
 
         proxy_pass http://default_coffee_80$request_uri;
       }

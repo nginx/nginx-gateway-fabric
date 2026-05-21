@@ -977,7 +977,7 @@ Here is break a down each component of this specification:
 3. `spec.jwt.authorization.rules[]`: This defines the list of rules that a JWT claim must satisfy, depending on the `require` modes set.
 4. `spec.jwt.authorization.rules[].claims[]`: This defines a list of `name/value(s)` pair, that relate to the key/value(s) pair of a JWT claim. If the `claims` array contains `name: "aud"` and `values: ["cloud"]`, NGINX will expect this claim `name/value(s)` to be present in the JWT claim presented.
 5. `spec.jwt.authorization.rules[].claims[].match`: Defaults to `Exact`. Can be set to `Exact` or `Regex` This defines how NGINX will attempt to match the value(s) in a JWT claim. When set to `Exact`, NGINX will match to claim value(s) provided against the exact expected string defined in `claims[].values`. When set to `Regex`, the value in a `claims[].values` array may contain regex patterns. e.g. `name: "aud" values: ["a(.*)pi"]`.
-6. `spec.jwt.authorization.rules[].claims[].proxySetHeader`: This configuration relates to a specific `name/values` within `claims`. When set, a `proxy_set_header` directive will be set for that claim within the route the `AuthenticationFilter` is referenced by. e.g. If we define `proxySetHeader: X-Tenant` for `name: "tenant": values: ["acme-co"]`, we get `proxy_set_header X-Tenant $jwt_claim_tenant`.
+6. `spec.jwt.authorization.rules[].claims[].proxySetHeader`: This configuration relates to a specific `name/values` within `claims`. When set, a `proxy_set_header` directive will be set for that claim within the route the `AuthenticationFilter` is referenced by. e.g. If we define `proxySetHeader: X-Tenant` for `name: "tenant": values: ["acme-co"]`, we get `proxy_set_header X-Tenant $claim_tenant`.
 
 The `authorization` spec above will generate this NGINX configuration.
 To help make this more digestible, the NGINX configuration contain multiple comment blocks for the fields they relate to.
@@ -1146,11 +1146,11 @@ spec:
       uri: https://issuer.example.com/.well-known/jwks.json
     authorization:
      rules:
-     - claims:
-      - name: "realm_access/roles" # Nested claim.
-        values: # User defined list of roles.
-        - "reader"
-        - "admin"
+      - claims:
+        - name: "realm_access/roles" # Nested claim.
+          values: # User defined list of roles.
+          - "reader"
+          - "admin"
 ```
 
 To process the nested claim, the names of both the top-level and nested claim are specified as one string separated by a slash `/`.
@@ -1362,7 +1362,7 @@ It explicitly covers the expected outcomes for required claims.
 
 `spec.jwt.authorize.require` set to `Any`
 - Input:
-  A JWT claim(s) that matches any combination of claim requirements defined in `spec.authorize.rule[].claims[]`.
+  A JWT claim(s) that matches any combination of claim requirements defined in `spec.jwt.authorize.rule[].claims[]`.
 
 - Expected outcome:
   Request is authorized.
@@ -1370,7 +1370,7 @@ It explicitly covers the expected outcomes for required claims.
 
 `spec.jwt.authorize.require` set to `All`
 - Input:
-  A JWT claim(s) that match all claim requirements defined in `spec.authorize.rule[].claims[]`.
+  A JWT claim(s) that match all claim requirements defined in `spec.jwt.authorize.rule[].claims[]`.
 
 - Expected outcome:
   Request is authorized.
@@ -1378,7 +1378,7 @@ It explicitly covers the expected outcomes for required claims.
 
 `spec.jwt.authorize.require` set to `Any`
 - Input:
-  A JWT claim(s) that match none of claim requirements defined in `spec.authorize.rule[].claims[]`.
+  A JWT claim(s) that match none of claim requirements defined in `spec.jwt.authorize.rule[].claims[]`.
 
 - Expected outcome:
   Request is not authorized.
@@ -1386,7 +1386,7 @@ It explicitly covers the expected outcomes for required claims.
 
 `spec.jwt.authorize.require` set to `All`
 - Input:
-  A JWT claim(s) that match none of claim requirements defined in `spec.authorize.rule[].claims[]`.
+  A JWT claim(s) that match none of claim requirements defined in `spec.jwt.authorize.rule[].claims[]`.
 
 - Expected outcome:
   Request is not authorized.
@@ -1394,7 +1394,7 @@ It explicitly covers the expected outcomes for required claims.
 
 `spec.jwt.authorize.require` set to `All`
 - Input:
-  A JWT claim(s) that match one or more, but not all, of the claim requirements defined in `spec.authorize.rule[].claims[]`.
+  A JWT claim(s) that match one or more, but not all, of the claim requirements defined in `spec.jwt.authorize.rule[].claims[]`.
 
 - Expected outcome:
   Request is not authorized.
