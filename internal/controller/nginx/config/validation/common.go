@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dlclark/regexp2"
+	"github.com/dlclark/regexp2/v2"
 	k8svalidation "k8s.io/apimachinery/pkg/util/validation"
 )
 
