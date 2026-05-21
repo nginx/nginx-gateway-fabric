@@ -10797,16 +10797,6 @@ spec:
                       Directive: https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_buffering
                     type: boolean
                 type: object
-              proxyHTTPVersion:
-                description: |-
-                  ProxyHTTPVersion sets the HTTP protocol version to use when proxying requests to upstream servers.
-                  When set to "2", NGINX uses HTTP/2 (proxy_http_version 2).
-                  When set to "1.1" or unset, NGINX uses HTTP/1.1 (the default).
-                  Directive: https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_http_version
-                enum:
-                - "1.1"
-                - "2"
-                type: string
               targetRefs:
                 description: |-
                   TargetRefs identifies the API object(s) to apply the policy to.

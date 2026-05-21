@@ -7897,77 +7897,6 @@ func TestAllValidBackendsAreH2C(t *testing.T) {
 	}
 }
 
-func TestExtractPolicyHTTPVersion(t *testing.T) {
-	t.Parallel()
-
-	v11 := v1alpha1.ProxyHTTPVersion1_1
-	v2 := v1alpha1.ProxyHTTPVersion2
-
-	tests := []struct {
-		expected *string
-		name     string
-		pols     []policies.Policy
-	}{
-		{
-			name:     "no policies – returns nil",
-			pols:     []policies.Policy{},
-			expected: nil,
-		},
-		{
-			name: "non-ProxySettingsPolicy – returns nil",
-			pols: []policies.Policy{
-				&v1alpha1.ClientSettingsPolicy{},
-			},
-			expected: nil,
-		},
-		{
-			name: "ProxySettingsPolicy without ProxyHTTPVersion – returns nil",
-			pols: []policies.Policy{
-				&v1alpha1.ProxySettingsPolicy{},
-			},
-			expected: nil,
-		},
-		{
-			name: "ProxySettingsPolicy with version 1.1 – returns '1.1'",
-			pols: []policies.Policy{
-				&v1alpha1.ProxySettingsPolicy{
-					Spec: v1alpha1.ProxySettingsPolicySpec{ProxyHTTPVersion: &v11},
-				},
-			},
-			expected: helpers.GetPointer("1.1"),
-		},
-		{
-			name: "ProxySettingsPolicy with version 2 – returns '2'",
-			pols: []policies.Policy{
-				&v1alpha1.ProxySettingsPolicy{
-					Spec: v1alpha1.ProxySettingsPolicySpec{ProxyHTTPVersion: &v2},
-				},
-			},
-			expected: helpers.GetPointer("2"),
-		},
-		{
-			name: "first policy wins",
-			pols: []policies.Policy{
-				&v1alpha1.ProxySettingsPolicy{
-					Spec: v1alpha1.ProxySettingsPolicySpec{ProxyHTTPVersion: &v2},
-				},
-				&v1alpha1.ProxySettingsPolicy{
-					Spec: v1alpha1.ProxySettingsPolicySpec{ProxyHTTPVersion: &v11},
-				},
-			},
-			expected: helpers.GetPointer("2"),
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			g := NewWithT(t)
-			g.Expect(extractPolicyHTTPVersion(tc.pols)).To(Equal(tc.expected))
-		})
-	}
-}
-
 // TestExecuteServers_ProxyHTTPVersion verifies end-to-end that proxy_http_version is
 // rendered correctly in the generated NGINX config.
 func TestExecuteServers_ProxyHTTPVersion(t *testing.T) {
@@ -8000,9 +7929,6 @@ func TestExecuteServers_ProxyHTTPVersion(t *testing.T) {
 		}
 	}
 
-	v2 := v1alpha1.ProxyHTTPVersion2
-	v11 := v1alpha1.ProxyHTTPVersion1_1
-
 	tests := []struct {
 		name           string
 		expPresent     string
@@ -8028,79 +7954,6 @@ func TestExecuteServers_ProxyHTTPVersion(t *testing.T) {
 				makeBackend(graph.AppProtocolTypeH2C, true),
 				makeBackend("", true),
 			}, nil),
-			expAbsent: "proxy_http_version",
-		},
-		{
-			// Policy says 1.1 on an h2c backend: overrides backend, NGINX default handles it, directive omitted.
-			name: "h2c backend overridden by policy 1.1 – directive omitted",
-			pathRule: makePathRule(
-				[]dataplane.Backend{makeBackend(graph.AppProtocolTypeH2C, true)},
-				[]policies.Policy{
-					&v1alpha1.ProxySettingsPolicy{
-						Spec: v1alpha1.ProxySettingsPolicySpec{ProxyHTTPVersion: &v11},
-					},
-				},
-			),
-			expAbsent: "proxy_http_version",
-		},
-		{
-			name: "non-h2c backend forced to 2 via policy – emits version 2",
-			pathRule: makePathRule(
-				[]dataplane.Backend{makeBackend("", true)},
-				[]policies.Policy{
-					&v1alpha1.ProxySettingsPolicy{
-						Spec: v1alpha1.ProxySettingsPolicySpec{ProxyHTTPVersion: &v2},
-					},
-				},
-			),
-			expPresent: "proxy_http_version 2;",
-		},
-		{
-			// All invalid h2c backends → directive omitted.
-			name: "all invalid h2c backends – directive omitted (no valid backends)",
-			pathRule: makePathRule([]dataplane.Backend{
-				makeBackend(graph.AppProtocolTypeH2C, false),
-			}, nil),
-			expAbsent: "proxy_http_version",
-		},
-		{
-			// Gateway policy sets version 2; no route-level policy present.
-			name:     "gateway policy version 2, no route policy – emits version 2",
-			pathRule: makePathRule([]dataplane.Backend{makeBackend("", true)}, nil),
-			serverPolicies: []policies.Policy{
-				&v1alpha1.ProxySettingsPolicy{
-					Spec: v1alpha1.ProxySettingsPolicySpec{ProxyHTTPVersion: &v2},
-				},
-			},
-			expPresent: "proxy_http_version 2;",
-		},
-		{
-			// Route-level policy 1.1 is more specific than the Gateway policy 2 – route wins.
-			name: "route policy 1.1 overrides gateway policy 2 – directive omitted",
-			pathRule: makePathRule(
-				[]dataplane.Backend{makeBackend("", true)},
-				[]policies.Policy{
-					&v1alpha1.ProxySettingsPolicy{
-						Spec: v1alpha1.ProxySettingsPolicySpec{ProxyHTTPVersion: &v11},
-					},
-				},
-			),
-			serverPolicies: []policies.Policy{
-				&v1alpha1.ProxySettingsPolicy{
-					Spec: v1alpha1.ProxySettingsPolicySpec{ProxyHTTPVersion: &v2},
-				},
-			},
-			expAbsent: "proxy_http_version",
-		},
-		{
-			// Gateway policy 1.1 suppresses backend h2c; directive omitted (NGINX default).
-			name:     "gateway policy 1.1 suppresses backend h2c – directive omitted",
-			pathRule: makePathRule([]dataplane.Backend{makeBackend(graph.AppProtocolTypeH2C, true)}, nil),
-			serverPolicies: []policies.Policy{
-				&v1alpha1.ProxySettingsPolicy{
-					Spec: v1alpha1.ProxySettingsPolicySpec{ProxyHTTPVersion: &v11},
-				},
-			},
 			expAbsent: "proxy_http_version",
 		},
 	}

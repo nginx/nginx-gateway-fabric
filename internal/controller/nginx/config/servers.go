@@ -12,7 +12,6 @@ import (
 	"github.com/dlclark/regexp2"
 	"k8s.io/apimachinery/pkg/types"
 
-	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	"github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/http"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
@@ -542,7 +541,6 @@ func createLocations(
 	var grpcServer bool
 
 	mirrorPathToPercentage := extractMirrorTargetsWithPercentages(server.PathRules)
-	serverPolicyHTTPVersion := extractPolicyHTTPVersion(server.Policies)
 
 	for pathRuleIdx, rule := range server.PathRules {
 		if !rootPathExists && matchesRootPath(rule) {
@@ -571,8 +569,7 @@ func createLocations(
 				server.Port,
 				keepAliveCheck,
 				disableBaseProxySetHeaders,
-				mirrorPercentage,
-				serverPolicyHTTPVersion)...,
+				mirrorPercentage)...,
 			)
 		case needsInternalLocationsForMatches(rule):
 			internalLocations, matches := createInternalLocationsForRule(
@@ -584,7 +581,6 @@ func createLocations(
 				keepAliveCheck,
 				disableBaseProxySetHeaders,
 				mirrorPercentage,
-				serverPolicyHTTPVersion,
 			)
 			httpMatchKey := serverID + "_" + strconv.Itoa(pathRuleIdx)
 			for i := range extLocations {
@@ -606,8 +602,7 @@ func createLocations(
 				server.Port,
 				keepAliveCheck,
 				disableBaseProxySetHeaders,
-				mirrorPercentage,
-				serverPolicyHTTPVersion)...,
+				mirrorPercentage)...,
 			)
 		}
 	}
@@ -636,7 +631,6 @@ func updateExternalLocationsForRule(
 	keepAliveCheck keepAliveChecker,
 	disableBaseProxySetHeaders []string,
 	mirrorPercentage *float64,
-	serverPolicyHTTPVersion *string,
 ) []http.Location {
 	for matchRuleIndex, r := range rule.MatchRules {
 		extLocations = updateLocations(
@@ -650,7 +644,6 @@ func updateExternalLocationsForRule(
 			keepAliveCheck,
 			disableBaseProxySetHeaders,
 			mirrorPercentage,
-			serverPolicyHTTPVersion,
 		)
 	}
 
@@ -666,7 +659,6 @@ func createInternalLocationsForRule(
 	keepAliveCheck keepAliveChecker,
 	disableBaseProxySetHeaders []string,
 	mirrorPercentage *float64,
-	serverPolicyHTTPVersion *string,
 ) ([]http.Location, []routeMatch) {
 	// Calculate the exact capacity needed
 	capacity := 0
@@ -711,7 +703,6 @@ func createInternalLocationsForRule(
 				serverID,
 				matchRuleIdx,
 				pathRuleIdx,
-				serverPolicyHTTPVersion,
 			)
 			internalLocations = append(internalLocations, intLocation)
 		} else {
@@ -766,7 +757,6 @@ func createInternalLocationsForRule(
 					serverID,
 					matchRuleIdx,
 					pathRuleIdx,
-					serverPolicyHTTPVersion,
 				)
 
 				intEPPLocation = initializeInternalInferenceEPPLocation(
@@ -839,7 +829,6 @@ func createInferenceLocationsForRule(
 	keepAliveCheck keepAliveChecker,
 	disableBaseProxySetHeaders []string,
 	mirrorPercentage *float64,
-	serverPolicyHTTPVersion *string,
 ) []http.Location {
 	capacity := len(extLocations)
 
@@ -915,7 +904,6 @@ func createInferenceLocationsForRule(
 				serverID,
 				matchRuleIdx,
 				pathRuleIdx,
-				serverPolicyHTTPVersion,
 			)
 			locs = append(locs, intProxyPassLocation)
 
@@ -1201,31 +1189,6 @@ func initializeInternalInferenceSplitClientsLocation(pathruleIdx, matchRuleIdx i
 	}
 }
 
-// extractPolicyHTTPVersion returns the proxy_http_version override from the first ProxySettingsPolicy
-// in pols that has Spec.ProxyHTTPVersion set, or nil if none is found.
-func extractPolicyHTTPVersion(pols []policies.Policy) *string {
-	for _, pol := range pols {
-		psp, ok := pol.(*ngfAPI.ProxySettingsPolicy)
-		if !ok {
-			continue
-		}
-		if psp.Spec.ProxyHTTPVersion != nil {
-			v := string(*psp.Spec.ProxyHTTPVersion)
-			return &v
-		}
-	}
-	return nil
-}
-
-// effectivePolicyHTTPVersion resolves the active proxy_http_version override for a location.
-// Route-level (pathRule) policies take precedence; the server-level (Gateway) policy is used as a fallback.
-func effectivePolicyHTTPVersion(routePolicies []policies.Policy, serverFallback *string) *string {
-	if v := extractPolicyHTTPVersion(routePolicies); v != nil {
-		return v
-	}
-	return serverFallback
-}
-
 // updateLocation updates a location with any relevant configurations, like proxy_pass, filters, tls settings, etc.
 func updateLocation(
 	matchRule dataplane.MatchRule,
@@ -1238,7 +1201,6 @@ func updateLocation(
 	serverID string,
 	matchRuleIndex int,
 	pathRuleIndex int,
-	serverPolicyHTTPVersion *string,
 ) http.Location {
 	filters := matchRule.Filters
 	grpc := pathRule.GRPC
@@ -1268,7 +1230,6 @@ func updateLocation(
 		inferenceBackend,
 		keepAliveCheck,
 		disableBaseProxySetHeaders,
-		effectivePolicyHTTPVersion(pathRule.Policies, serverPolicyHTTPVersion),
 	)
 
 	return location
@@ -1532,7 +1493,6 @@ func updateLocationProxySettings(
 	inferenceBackend bool,
 	keepAliveCheck keepAliveChecker,
 	disableBaseProxySetHeaders []string,
-	policyHTTPVersion *string,
 ) http.Location {
 	extraHeaders := make([]http.Header, 0, 3)
 	if grpc {
@@ -1574,7 +1534,7 @@ func updateLocationProxySettings(
 	location.ResponseHeaders = responseHeaders
 	location.ProxyPass = proxyPass
 	location.GRPC = grpc
-	location.ProxyHTTPVersion = resolveProxyHTTPVersion(matchRule.BackendGroup.Backends, grpc, policyHTTPVersion)
+	location.ProxyHTTPVersion = resolveProxyHTTPVersion(matchRule.BackendGroup.Backends, grpc)
 
 	return location
 }
@@ -1583,23 +1543,13 @@ func updateLocationProxySettings(
 // The directive is only written when the value differs from NGINX's default (1.1).
 //
 // Priority (highest to lowest):
-//  1. Explicit policy override of "2" → return "2" (emit directive).
-//  2. Explicit policy override of "1.1" → return "" (NGINX default; omit directive).
 //  3. All valid backends carry appProtocol kubernetes.io/h2c → return "2".
 //  4. Otherwise → return "" (omit directive; NGINX default of 1.1 applies).
 //
 // h2c detection is skipped for gRPC locations because grpc_pass handles HTTP/2 internally.
-func resolveProxyHTTPVersion(backends []dataplane.Backend, grpc bool, policyHTTPVersion *string) string {
-	if policyHTTPVersion != nil {
-		// Only emit the directive when upgrading to version 2; 1.1 is NGINX's default so we omit it.
-		if *policyHTTPVersion == string(ngfAPI.ProxyHTTPVersion2) {
-			return string(ngfAPI.ProxyHTTPVersion2)
-		}
-		return ""
-	}
-
+func resolveProxyHTTPVersion(backends []dataplane.Backend, grpc bool) string {
 	if !grpc && allValidBackendsAreH2C(backends) {
-		return string(ngfAPI.ProxyHTTPVersion2)
+		return "2"
 	}
 
 	return ""
@@ -1634,7 +1584,6 @@ func updateLocations(
 	keepAliveCheck keepAliveChecker,
 	disableBaseProxySetHeaders []string,
 	mirrorPercentage *float64,
-	serverPolicyHTTPVersion *string,
 ) []http.Location {
 	updatedLocations := make([]http.Location, len(buildLocations))
 
@@ -1650,7 +1599,6 @@ func updateLocations(
 			serverID,
 			matchRuleIdx,
 			pathRuleIdx,
-			serverPolicyHTTPVersion,
 		)
 	}
 

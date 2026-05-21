@@ -52,9 +52,7 @@ func (v *Validator) Conflicts(polA, polB policies.Policy) bool {
 }
 
 func conflicts(a, b ngfAPI.ProxySettingsPolicySpec) bool {
-	return bufferingConflicts(a.Buffering, b.Buffering) ||
-		timeoutConflicts(a.Timeout, b.Timeout) ||
-		bothSet(a.ProxyHTTPVersion, b.ProxyHTTPVersion)
+	return bufferingConflicts(a.Buffering, b.Buffering) || timeoutConflicts(a.Timeout, b.Timeout)
 }
 
 func bufferingConflicts(a, b *ngfAPI.ProxyBuffering) bool {
