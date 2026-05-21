@@ -107,6 +107,10 @@ func checkConflictsForLoadBalancingFields(a, b ngfAPI.UpstreamSettingsPolicySpec
 		return true
 	}
 
+	if a.UseClusterIP != nil && b.UseClusterIP != nil {
+		return true
+	}
+
 	return false
 }
 
