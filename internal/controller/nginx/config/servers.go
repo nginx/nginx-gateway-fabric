@@ -1546,9 +1546,9 @@ func updateLocationProxySettings(
 // resolveProxyHTTPVersion decides whether to emit a proxy_http_version directive for a location.
 // The directive is only written when the value differs from NGINX's default (1.1).
 //
-// Priority (highest to lowest):
-//  3. All valid backends carry appProtocol kubernetes.io/h2c → return "2".
-//  4. Otherwise → return "" (omit directive; NGINX default of 1.1 applies).
+// Priority:
+//  1. All valid backends carry appProtocol kubernetes.io/h2c → return "2".
+//  2. Otherwise → return "" (omit directive; NGINX default of 1.1 applies).
 //
 // h2c detection is skipped for gRPC locations because grpc_pass handles HTTP/2 internally.
 func resolveProxyHTTPVersion(backends []dataplane.Backend, grpc bool) string {
