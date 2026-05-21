@@ -7995,3 +7995,102 @@ func TestExecuteServers_ProxyHTTPVersion(t *testing.T) {
 		})
 	}
 }
+
+// TestUpdateLocationProxySettings_Headers verifies that the correct proxy_set_header directives
+// are included or omitted depending on the backend protocol:
+//   - h2c backends (proxy_http_version 2): Upgrade and Connection headers must be omitted
+//   - plain HTTP backends: Upgrade and Connection headers must be present
+//   - gRPC backends: Authority header present; Upgrade and Connection omitted
+func TestUpdateLocationProxySettings_Headers(t *testing.T) {
+	t.Parallel()
+
+	h2cBackend := dataplane.Backend{
+		UpstreamName: "test_h2c_80",
+		Valid:        true,
+		Weight:       1,
+		AppProtocol:  graph.AppProtocolTypeH2C,
+	}
+	normalBackend := dataplane.Backend{
+		UpstreamName: "test_normal_80",
+		Valid:        true,
+		Weight:       1,
+	}
+
+	makeMatchRule := func(backends ...dataplane.Backend) dataplane.MatchRule {
+		return dataplane.MatchRule{
+			Match: dataplane.Match{},
+			BackendGroup: dataplane.BackendGroup{
+				Source:   types.NamespacedName{Namespace: "default", Name: "route1"},
+				RuleIdx:  0,
+				Backends: backends,
+			},
+		}
+	}
+
+	tests := []struct {
+		name       string
+		expHeaders []http.Header
+		expAbsent  []string
+		matchRule  dataplane.MatchRule
+		grpc       bool
+	}{
+		{
+			name:      "h2c backend – Upgrade and Connection headers omitted",
+			matchRule: makeMatchRule(h2cBackend),
+			expAbsent: []string{"Upgrade", "Connection"},
+		},
+		{
+			name:      "non-h2c backend – Upgrade and Connection headers present",
+			matchRule: makeMatchRule(normalBackend),
+			expHeaders: []http.Header{
+				{Name: "Upgrade", Value: "$http_upgrade"},
+				{Name: "Connection", Value: "$connection_upgrade"},
+			},
+		},
+		{
+			name:      "gRPC backend – Authority header present, Upgrade and Connection omitted",
+			matchRule: makeMatchRule(normalBackend),
+			grpc:      true,
+			expHeaders: []http.Header{
+				{Name: "Authority", Value: "$gw_api_compliant_host"},
+			},
+			expAbsent: []string{"Upgrade", "Connection"},
+		},
+		{
+			name:      "mixed h2c and non-h2c – falls back to HTTP/1.1, Upgrade and Connection present",
+			matchRule: makeMatchRule(h2cBackend, normalBackend),
+			expHeaders: []http.Header{
+				{Name: "Upgrade", Value: "$http_upgrade"},
+				{Name: "Connection", Value: "$connection_upgrade"},
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			loc := updateLocationProxySettings(
+				http.Location{},
+				tc.matchRule,
+				tc.grpc,
+				false, // inferenceBackend
+				alwaysFalseKeepAliveChecker,
+				nil, // disableBaseProxySetHeaders
+			)
+
+			headersByName := make(map[string]string, len(loc.ProxySetHeaders))
+			for _, h := range loc.ProxySetHeaders {
+				headersByName[h.Name] = h.Value
+			}
+
+			for _, h := range tc.expHeaders {
+				g.Expect(headersByName).To(HaveKeyWithValue(h.Name, h.Value))
+			}
+			for _, name := range tc.expAbsent {
+				g.Expect(headersByName).NotTo(HaveKey(name))
+			}
+		})
+	}
+}

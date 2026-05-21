@@ -1494,10 +1494,15 @@ func updateLocationProxySettings(
 	keepAliveCheck keepAliveChecker,
 	disableBaseProxySetHeaders []string,
 ) http.Location {
+	location.ProxyHTTPVersion = resolveProxyHTTPVersion(matchRule.BackendGroup.Backends, grpc)
+
 	extraHeaders := make([]http.Header, 0, 3)
-	if grpc {
+
+	switch {
+	case location.ProxyHTTPVersion == "2":
+	case grpc:
 		extraHeaders = append(extraHeaders, grpcAuthorityHeader)
-	} else {
+	default:
 		extraHeaders = append(extraHeaders, httpUpgradeHeader)
 		extraHeaders = append(extraHeaders, getConnectionHeader(keepAliveCheck, matchRule.BackendGroup.Backends))
 	}
@@ -1534,7 +1539,6 @@ func updateLocationProxySettings(
 	location.ResponseHeaders = responseHeaders
 	location.ProxyPass = proxyPass
 	location.GRPC = grpc
-	location.ProxyHTTPVersion = resolveProxyHTTPVersion(matchRule.BackendGroup.Backends, grpc)
 
 	return location
 }
