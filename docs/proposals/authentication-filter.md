@@ -325,7 +325,7 @@ type Claim struct {
 
   // Values are the values within the claim.
   // When more than one value is set, the claim must match any of these values.
-  // +kubebuilder:validation:Pattern=`^[^\\n\\r;#\\$\\{\\}\\|&><'\"]+$$`
+  // +kubebuilder:validation:Pattern=`^[^\\n\\r;#\\$\\{\\}\\|&><'\"]+$`
   // +kubebuilder:validation:MinItems=1
   Values []string `json:"values"`
 
