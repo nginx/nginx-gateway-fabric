@@ -7969,8 +7969,7 @@ func TestExtractPolicyHTTPVersion(t *testing.T) {
 }
 
 // TestExecuteServers_ProxyHTTPVersion verifies end-to-end that proxy_http_version is
-// rendered correctly in the generated NGINX config based on h2c auto-detection and explicit
-// ProxySettingsPolicy overrides.
+// rendered correctly in the generated NGINX config.
 func TestExecuteServers_ProxyHTTPVersion(t *testing.T) {
 	t.Parallel()
 
@@ -8018,7 +8017,7 @@ func TestExecuteServers_ProxyHTTPVersion(t *testing.T) {
 			expAbsent: "proxy_http_version",
 		},
 		{
-			name:       "all backends h2c – auto-detect emits version 2",
+			name:       "all backends h2c – emits version 2",
 			pathRule:   makePathRule([]dataplane.Backend{makeBackend(graph.AppProtocolTypeH2C, true)}, nil),
 			expPresent: "proxy_http_version 2;",
 		},
@@ -8032,8 +8031,8 @@ func TestExecuteServers_ProxyHTTPVersion(t *testing.T) {
 			expAbsent: "proxy_http_version",
 		},
 		{
-			// Policy says 1.1 on an h2c backend: overrides auto-detect, NGINX default handles it, directive omitted.
-			name: "h2c auto-detect overridden by policy 1.1 – directive omitted",
+			// Policy says 1.1 on an h2c backend: overrides backend, NGINX default handles it, directive omitted.
+			name: "h2c backend overridden by policy 1.1 – directive omitted",
 			pathRule: makePathRule(
 				[]dataplane.Backend{makeBackend(graph.AppProtocolTypeH2C, true)},
 				[]policies.Policy{
@@ -8057,7 +8056,7 @@ func TestExecuteServers_ProxyHTTPVersion(t *testing.T) {
 			expPresent: "proxy_http_version 2;",
 		},
 		{
-			// All invalid h2c backends → no auto-detect → directive omitted.
+			// All invalid h2c backends → directive omitted.
 			name: "all invalid h2c backends – directive omitted (no valid backends)",
 			pathRule: makePathRule([]dataplane.Backend{
 				makeBackend(graph.AppProtocolTypeH2C, false),
@@ -8094,8 +8093,8 @@ func TestExecuteServers_ProxyHTTPVersion(t *testing.T) {
 			expAbsent: "proxy_http_version",
 		},
 		{
-			// Gateway policy 1.1 suppresses h2c auto-detection; directive omitted (NGINX default).
-			name:     "gateway policy 1.1 suppresses h2c auto-detection – directive omitted",
+			// Gateway policy 1.1 suppresses backend h2c; directive omitted (NGINX default).
+			name:     "gateway policy 1.1 suppresses backend h2c – directive omitted",
 			pathRule: makePathRule([]dataplane.Backend{makeBackend(graph.AppProtocolTypeH2C, true)}, nil),
 			serverPolicies: []policies.Policy{
 				&v1alpha1.ProxySettingsPolicy{

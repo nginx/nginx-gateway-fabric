@@ -635,6 +635,7 @@ var _ = Describe("ProxySettingsPolicy", Ordered, Label("functional", "proxy-sett
 		})
 	})
 
+	// the file h2c-backend.yaml is declared at the start of the test suite
 	When("an HTTPRoute backend Service has appProtocol kubernetes.io/h2c", func() {
 		Context("nginx config", func() {
 			var conf *framework.Payload
@@ -706,7 +707,7 @@ var _ = Describe("ProxySettingsPolicy", Ordered, Label("functional", "proxy-sett
 				Expect(err).ToNot(HaveOccurred())
 			})
 
-			It("sets proxy_http_version 2 when policy forces version 2 (non-h2c backend)", func() {
+			It("sets proxy_http_version 2 when policy forces version 2", func() {
 				Expect(framework.ValidateNginxFieldExists(conf, framework.ExpectedNginxField{
 					Directive: "proxy_http_version",
 					Value:     "2",
@@ -716,9 +717,7 @@ var _ = Describe("ProxySettingsPolicy", Ordered, Label("functional", "proxy-sett
 				})).To(Succeed())
 			})
 
-			It("overrides h2c auto-detect to 1.1 when policy forces version 1.1 – directive omitted", func() {
-				// Policy sets 1.1, which is NGINX's own default, so the directive is not emitted at all.
-				// No Value set: asserts the directive is entirely absent, not just that "1.1" isn't present.
+			It("overrides service appProtocol h2c when policy forces version 1.1 – directive omitted", func() {
 				Expect(framework.ValidateNginxFieldExists(conf, framework.ExpectedNginxField{
 					Directive: "proxy_http_version",
 					File:      "http.conf",
@@ -763,8 +762,6 @@ var _ = Describe("ProxySettingsPolicy", Ordered, Label("functional", "proxy-sett
 			})
 
 			It("emits proxy_http_version 2 for a non-h2c location due to Gateway policy", func() {
-				// /coffee has a regular (non-h2c) backend; without the Gateway policy the directive
-				// would be absent. The Gateway policy forces version 2 for the whole server.
 				Expect(framework.ValidateNginxFieldExists(conf, framework.ExpectedNginxField{
 					Directive: "proxy_http_version",
 					Value:     "2",
@@ -812,8 +809,7 @@ var _ = Describe("ProxySettingsPolicy", Ordered, Label("functional", "proxy-sett
 				Expect(err).ToNot(HaveOccurred())
 
 				// tea-h2c-override-proxy-settings sets proxyHTTPVersion: "1.1" on the tea-h2c route,
-				// overriding the Gateway-level "2". 1.1 is NGINX's default so the directive is omitted.
-				// No Value set: asserts the directive is entirely absent.
+				// overriding the Gateway-level "2".
 				Expect(framework.ValidateNginxFieldExists(conf, framework.ExpectedNginxField{
 					Directive: "proxy_http_version",
 					File:      "http.conf",
