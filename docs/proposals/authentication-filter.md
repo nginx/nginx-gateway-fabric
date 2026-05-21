@@ -79,6 +79,7 @@ This portion also contains:
       - Understanding claim enforcement
       - Processing claims
       - Processing nested claims
+      - Sanitizing claims
     - JWT Authentication Capabilities
 - Route Attachment
 - Resource status
@@ -213,13 +214,11 @@ type JWTAuth struct {
   // +optional
   Remote *JWTRemoteKeySource `json:"remote,omitempty"`
 
-  // Require defines a list of required claim sets for JWT claim validation.
-  // The token is authorized if it satisfies all claims in at least one entry.
-  // Claims within each entry are concatenated and validated together using NGINX maps.
+  // Authorization defines the authorization (authz) specification.
+  // Enables configuration of token claim validation.
   //
   // +optional
-  // +kubebuilder:validation:MinItems=1
-  Require []RequiredClaims `json:"require,omitempty"`
+  Authorization *Authorization
 
   // Leeway is the acceptable clock skew for exp & nbf claims.
   // If exp & nbf claims are not defined, this directive takes no effect.
@@ -266,38 +265,79 @@ type JWTRemoteKeySource struct {
   CACertificateRefs []LocalObjectReference `json:"caCertificateRefs,omitempty"`
 }
 
-// RequiredClaims specifies a set of required claims that a token's claim must match to be authorized.
-// +kubebuilder:validation:XValidation:message="at least one of iss, aud, sub, or claims must be set",rule="has(self.iss) || has(self.aud) || has(self.sub) || has(self.claims)"
-type RequiredClaims struct {
-  // Issuer contains the value that must match the `iss` claim.
-  //
-  // +optional
-  Iss string `json:"iss,omitempty"`
+// RequireType defines how JWT Claims are validated.
+// +kubebuilder:validation:Enum=All,Any
+type RequireType string
 
-  // Audience contains the values that must match the `aud` claim.
-  // When the `aud` claim is an array, NGINX exposes it as a comma-separated string via `auth_jwt_claim_set`.
-  // All values in the array must match in the exact order.
-  //
-  // +optional
-  Aud []string `json:"aud,omitempty"`
+const (
+  // RequireTypeAllOf authorizes requires that satisfy all requirements.
+  RequireTypeAll  RequireType  = "All"
+  // RequireTypeAnyOf authorizes claims that satisfy any requirement.
+  RequireTypeAnf  RequireType  = "Any"
+)
 
-  // Subject contains the value that must match the `sub` claim.
-  //
-  // +optional
-  Sub string `json:"sub,omitempty"`
+// ClaimMatchType defines how claim values are parsed.
+// +kubebuilder:validation:Enum=Exact,Regex
+type ClaimMatchType string
 
-  // Claims defines user-defined custom claims that must also match.
+const (
+  // ClaimMatchTypeExact treats claim values as their exact value.
+  ClaimMatchTypeExact ClaimMatchType = "Exact"
+  // ClaimMatchTypeRegex treats claim values as a regex value.
+  ClaimMatchTypeRegex ClaimMatchType = "Regex"
+)
+
+// Authorization specifies a set of required claim rules
+// that a token's claim must match to be authorized, given the require type defined.
+type Authorization struct {
+  // Rules defines a list of claims and their specific authorization requirements.
+  Rules []Rule `json:"rules,omitempty"`
+
+  // Require sets the authorization mode for all claims in a rule.
+  // When set to All, the requirements for all claims in a rule must be met.
+  // When set to Any, the requirements for any one claim in a rule must be met.
   //
   // +optional
-  // +kubebuilder:validation:MinItems=1
-  Claims []CustomClaim `json:"claims,omitempty"`
+  // +kubebuilder:default=Any
+  Require *RequireType `json:"require,omitempty"`
 }
 
-// CustomClaim specifies custom user claims and values.
-type CustomClaim struct {
-  Name   string   `json:"name"`
+// Rule defines a list of claims, and authorization rules for those claims.
+type Rule struct {
+  // Claims defines a list of claims required by users.
   // +kubebuilder:validation:MinItems=1
-  Values []string `json:"values,omitempty"`
+  Claims []Claim `json:"claims,omitempty"`
+
+  // Require sets the authorization mode a specific claim within a rule.
+  // When set to All, a token's claim must match all values within that claim.
+  // When set to Any, a token's claim must match at least one value with that claim.
+  //
+  // +optional
+  // +kubebuilder:default=Any
+  Require *RequireType `json:"require,omitempty"`
+}
+
+// Claim describes the exact name/value pair of claims that must be matched.
+type Claim struct {
+  // Name is the name of the claim within the token.
+  // +kubebuilder:validation:Pattern=`^[a-zA-Z0-9_/-]+$`
+  Name   string   `json:"name"`
+
+  // Values are the values within the claim.
+  // When more than one value is set, the claim must match any of these values.
+  // +kubebuilder:validation:Pattern=`^[^\\n\\r;#\\$\\{\\}\\|&><'\"]+$$`
+  // +kubebuilder:validation:MinItems=1
+  Values []string `json:"values"`
+
+  // ProxySetHeader sets both the name and variable for `proxy_set_header`
+  // Example: For claim name `sub` for JWT auth
+  //
+  // proxy_set_header X-JWT-Claim-Sub $jwt_claim_sub;
+  ProxySetHeader *string `json:"proxySetHeader,omitempty"`
+
+  // Match sets the match type for the claim.
+  // +kubebuilder:default=Exact
+  Match ClaimMatchType `json:"match,omitempty"`
 }
 
 // AuthenticationFilterStatus defines the state of AuthenticationFilter.
@@ -879,9 +919,9 @@ In this case, we use `auth_jwt_require $valid_jwt_iss` to validate the value ret
 
 #### Processing claims
 
-This section covers the proposed specification for JWT claim processing, as well as for processing user defined claims.
-Claims can be defined for both `JWT` and `OIDC` auth types.
-To understand how claim validation works for OIDC auth in NGINX, see the [Claim validation](oidc.md#claim-validation) section of the OIDC auth proposal.
+Claim validation can be defined for both `JWT` and `OIDC` auth types.
+This section covers the proposed specification for `JWT` auth claim validation.
+To understand the specifics of how claim validation works for `OIDC` auth in NGINX, see the [Claim validation](oidc.md#claim-validation) section of the OIDC auth proposal.
 
 ```yaml
 apiVersion: gateway.nginx.org/v1alpha1
@@ -896,103 +936,176 @@ spec:
     file:
       secretRef:
         name: jwks-secret
-    require:
-    - iss: "https://issuer.example.com"
-      aud:
-      - "api"
-      sub: "user-12345"
-      claims: # User defined claim.
-      - name: "tenant"
-        values:
-        - "acme-co"
-    - iss: "https://issuer.example-2.com"
-      aud:
-      - "cli|ops" # Match either or.
-      sub: "user-678910"
-      claims:
-        - name: "roles"
-          values: # User defined list of roles.
-          - "reader"
-          - "admin"
+    # Top level authorization spec.
+    authorization:
+      require: Any # Top level requirement for all rules. Default: Any
+      rules:
+      # rule[0] requires all claims to match.
+      - require: All
+        claims:
+          - name: "iss"
+            values:
+            - "https://issuer.example-1.com"
+          - name: "aud"
+            values:
+            - "cloud"
+            - "admin"
+          - name: "tenant"
+            values:
+            - "acme-co"
+            match: Exact # Default. Match values exactly.
+            # Send value of $jwt_claim_tenant in X-Tenant header to upstream.
+            proxySetHeader: X-Tenant # Set `proxy_set_header X-Tenant $claim_tenant;`
+      # rule[1] requires any claim to match.
+      - require: Any
+        claims:
+          - name: "iss"
+            values:
+            - "https://issuer.example-2.com"
+            - "https://issuer.example-3.com"
+          - name: "aud"
+            values:
+            - "cli"
+          - name: "tenant"
+            values:
+            - "a(.*)ws"
+            match: Regex # Allow values to contain regex patterns.
 ```
 
-This specification is designed to authorize claims that exactly match all required claims from at least one of the listed claims.
-Below is an example of three claims, where the first claim will be authorized by `require[0]` and the second and third claims will be authorized by `require[1]`.
+Here is break a down each component of this specification:
+1. `spec.jwt.authorization`: This is the top level spec for the claim validation
+2. `spec.jwt.authorization.require`: Defaults to `Any`. Can be set to `Any` or `All`. This defines the top level rule requirement for all claims. When set to `All`, all claims within `rules` must be satisfied for a request to be authorized. When set to `Any`, one or more claims may be satisfied within `rules` for the request to be authorized.
+3. `spec.jwt.authorization.rules[]`: This defines the list of rules that a JWT claim must satisfy, depending on the `require` modes set.
+4. `spec.jwt.authorization.rules[].claims[]`: This defines a list of `name/value(s)` pair, that relate to the key/value(s) pair of a JWT claim. If the `claims` array contains `name: "aud"` and `values: ["cloud"]`, NGINX will expect this claim `name/value(s)` to be present in the JWT claim presented.
+5. `spec.jwt.authorization.rules[].claims[].match`: Defaults to `Exact`. Can be set to `Exact` or `Regex` This defines how NGINX will attempt to match the value(s) in a JWT claim. When set to `Exact`, NGINX will match to claim value(s) provided against the exact expected string defined in `claims[].values`. When set to `Regex`, the value in a `claims[].values` array may contain regex patterns. e.g. `name: "aud" values: ["a(.*)pi"]`.
+6. `spec.jwt.authorization.rules[].claims[].proxySetHeader`: This configuration relates to a specific `name/values` within `claims`. When set, a `proxy_set_header` directive will be set for that claim within the route the `AuthenticationFilter` is referenced by. e.g. If we define `proxySetHeader: X-Tenant` for `name: "tenant": values: ["acme-co"]`, we get `proxy_set_header X-Tenant $jwt_claim_tenant`.
 
-```json
-// Matches require[0]
-{
-  "iss": "https://issuer.example.com",
-  "sub": "user-12345",
-  "aud": "api",
-  "tenant": "acme-co",
-}
-
-// Matches require[1]
-{
-  "iss": "https://issuer.example-2.com",
-  "sub": "user-678910",
-  "aud": "cli",
-  "roles": ["reader", "admin"],
-}
-
-// Matches require[1]
-{
-  "iss": "https://issuer.example-2.com",
-  "sub": "user-678910",
-  "aud": "ops",
-  "roles": ["reader", "admin"],
-}
-```
-
-To ensure claims are authorized only when they match exactly all required claims, we need a `map` that will combine all of these claims together.
-For this example, we'll construct the `map` to process both of the required claims listed in the `AuthenticationFilter` spec.
+The `authorization` spec above will generate this NGINX configuration.
+To help make this more digestible, the NGINX configuration contain multiple comment blocks for the fields they relate to.
 
 ```nginx
 http {
-    # Map for `require[0]`.
-    # Note: $jwt_claim_tenant is a user defined claim.
-    map $jwt_claim_iss+$jwt_aud+$jwt_claim_sub+$jwt_claim_tenant $valid_jwt_combination_0_0 {
-        ~^https://issuer\.example\.com\+api\+user-12345\+acme-co$ 1;
+    # For every `rule[].claim[].name` we define an `auth_jwt_claim_set` directive.
+    # This is required by NGINX to parse array-type claims.
+    # It's safer and more consistent to treat every `rule[].claim[].values`
+    # as an array in NGINX, even if it contains a single value.
+    auth_jwt_claim_set $claim_aud aud;
+    auth_jwt_claim_set $claim_iss iss;
+    auth_jwt_claim_set $claim_tenant tenant;
+
+    #################################################
+    #####       Map for `rules[0].claims[]`     #####
+    #################################################
+    map $claim_iss+$claim_aud+$claim_tenant $rule_0_all {
+        ~^(?:.*,)?https://issuer\.example-1\.com(?:,.*)?\+(?:.*,)?(cloud|admin)(?:,.*)?\+(?:.*,)?acme-co(?:,.*)?$ 1;
+        default 0;
+    }
+    #################################################
+
+
+    #################################################
+    #####      Maps for `rules[1].claims[]`     #####
+    #################################################
+    map $claim_iss $iss_rule_1 {
+        ~(?:^|,)?(https://issuer.example-2.com|https://issuer.example-3.com)(?:,|$) 1;
         default 0;
     }
 
-    # Map for `require[1]`.
-    # Note: $jwt_roles is parsed and set by the `auth_jwt_claim_set` directive.
-    map $jwt_claim_iss+$jwt_aud+$jwt_claim_sub+$jwt_roles $valid_jwt_combination_0_1 {
-        ~^https://issuer\.example-2\.com\+(cli|ops)\+user-678910\+reader,admin$ 1;
+    map $claim_aud $aud_rule_1 {
+        ~(?:^|,)cli(?:,|$) 1;
         default 0;
     }
 
-    # Token is authorized if any require entry matches.
-    map $valid_jwt_combination_0_0$valid_jwt_combination_0_1 $jwt_authorized_0 {
-        ~1  1; # Authorize if at least one variable is 1.
+    map $claim_tenant $tenant_rule_1 {
+        ~(?:^|,)a(.*)ws(?:,|$) 1;
         default 0;
     }
 
-    # Required, as for arrays, the variable keeps a list of array elements separated by commas.
-    # Must be in http context.
-    auth_jwt_claim_set $jwt_aud aud;
-    auth_jwt_claim_set $jwt_roles roles;
+    map $iss_rule_1$aud_rule_1$tenant_rule_1 $rule_1_any{
+        ~1 1;
+        default 0;
+    }
+    #################################################
 
 
-    location /auth {
-      auth_jwt "ngf";
-      auth_jwt_key_file /etc/nginx/secrets/jwt_auth_default_jwks-secret;
+    #################################################
+    #####  Map for `authorization.require: Any` #####
+    #################################################
+    # When `authorization.require` is set to `Any`
+    # This map configuration is used.
+    map $rule_0_all$rule_1_any$rule_2_any $require_any {
+        ~1 1;
+        default 0;
+    }
+    #################################################
 
-      # Authorize requests from at least one of the maps.
-      auth_jwt_require $jwt_authorized_0;
 
-      proxy_pass http://nginx-hello-backend;
+    #################################################
+    #####  Map for `authorization.require: All` #####
+    #################################################
+    # When `authorization.require` is set to `All`
+    # This map configuration is used.
+    map $rule_0_all$rule_1_any$rule_2_any $require_all {
+        111 1;
+        default 0;
+    }
+    #################################################
+
+
+    server {
+        listen 80;
+
+        # Requests to /require_all must match all rules.
+        location /require_all {
+            auth_jwt "ngf";
+            auth_jwt_key_file /etc/nginx/secrets/jwt_auth_default_jwt-keys-secure;
+
+            auth_jwt_require $require_all;
+
+            proxy_set_header X-Tenant $claim_tenant;
+
+            proxy_pass http://nginx-hello-backend;
+        }
+
+        # Requests to /require_any may match any one rule.
+        location /require_any {
+            auth_jwt "ngf";
+            auth_jwt_key_file /etc/nginx/secrets/jwt_auth_default_jwt-keys-secure;
+
+            auth_jwt_require $require_any;
+
+            proxy_pass http://nginx-hello-backend;
+        }
+    }
+
+    upstream nginx-hello-backend {
+        server nginx-hello-service:8080;
     }
 }
 ```
 
-There are a few key details in this config to note:
-1. The first two `map` directives validate multiple claims together in a single string, separated by a plus (`+`) symbol. This ensures requests are authorized only when matching all required claims. These two maps store their results in `$valid_jwt_combination_0_0` and `$valid_jwt_combination_0_1`.
-2. The third map evaluates the values of `$valid_jwt_combination_0_0` and `$valid_jwt_combination_0_1`, to check if either one of these maps returned `1`. This is required to ensure users sending requests to a specific endpoint are authorized as long as they are validated by at least one of the `require` entries. The value returned from this map is then evaluated by the `auth_jwt_require` directive.
-3. Each key in the map is treated as a regular expression, even if none of the required claims used a regex. The `require[1]` items example uses `(cli|ops)` which allows the `aud` claim to contain either of these values.
-4. Since a route can only have one `AuthenticationFilter`, we need to ensure that the variables produced by the maps, e.g. `$valid_jwt_combination_0_0`, are unique for each set of required claims. This example uses `$valid_jwt_combination_0_0`, `$valid_jwt_combination_0_1` and `$jwt_authorized_0` as an example of using the index of the route to uniquely identify them. It may be more robust to use a combination of the `AuthenticationFilter` name and namespace, `HTTPRoute` name and namespace, index and maybe the route's path. This is something that can likely be decided during implementation.
+Here is break a down each component of this configuration, and why they are necessary:
+1. `auth_jwt_claim_set $claim_aud aud`: NGINX requires this directive to parse a list of claims. This uses the `aud` claim as an example. If `aud` is configured as to have multiple `values`, NGINX will represent them as a comma separated string. e.g. `name: "aud": values: ["api", "cli"]`, becomes `"api,cli"`. Since we don't know if a user will set one or more `value`, it's safer and more consistent to use `auth_jwt_claim_set`, even if only a single value is present.
+1. Map for `rules[0].claims[]`: This section represents the map required for these claims, and is configured with `require: All`. For this to work, all required values are represented as a single string in the map, separated by a plus (`+`) symbol. If a claim presented contains all required values, this map will return `1`.
+**Note**: The symbol combining each claim can be any symbol. The plus (`+`) symbol was chosen, as it seemed to clearly delineate between claim values. It's important though that this symbol is escaped using `\+` to ensure it's treated as the exact symbol, and not used as part of a regular expression.
+1. Maps for `rules[1].claims[]`: This section represents the map required for these claims, and is configured with `require: Any`. For this to work, each claim requires its own `map`, which will return `1` if a token's claim matches that value. The values returned from each of these maps are then evaluated together, to confirm if any one of these maps returned `1`.
+
+```nginx
+    map $iss_rule_1$aud_rule_1$tenant_rule_1 $rule_1_any {
+        ~1 1;
+        default 0;
+    }
+```
+
+1. Map for `authorization.require: Any`: By default, `authorization.require` is set to `Any`. When set, the final results of each `rules[].claims[]` are evaluated together to see if any result contains a `1`
+
+```nginx
+    # Returns `1` if either `rules[0].claims[].require: All` OR `rules[1].claims[].require: Any` was satisfied.
+    map $rule_0_all$rule_1_any$require_any {
+        ~1 1;
+        default 0;
+    }
+```
 
 #### Processing nested claims
 
@@ -1032,15 +1145,13 @@ spec:
     source: Remote
     remote:
       uri: https://issuer.example.com/.well-known/jwks.json
-    require:
-    - claims:
+    authroization:
+     rules:
+     - claims:
       - name: "realm_access/roles" # Nested claim.
         values: # User defined list of roles.
         - "reader"
         - "admin"
-      - name: "email"
-        values:
-        - "user@example.com"
 ```
 
 To process the nested claim, the names of both the top-level and nested claim are specified as one string separated by a slash `/`.
@@ -1054,31 +1165,22 @@ To handle these, the [`auth_jwt_claim_set`](https://nginx.org/en/docs/http/ngx_h
 In the case of the nested claim `realm_access/roles` and `email`, this should be defined like this:
 
 ```nginx
-auth_jwt_claim_set $roles realm_access roles;
-auth_jwt_claim_set $email email;
+auth_jwt_claim_set $claim_roles realm_access roles;
+auth_jwt_claim_set $claim_email email;
 ```
 
 This will set the value of `$roles` to `["reader", "admin"]`, and the value of `$email` to `user@example.com`.
 Since the email contains a dot, this needs to be processed the same way.
 
-### JWT Authentication Capabilities
+#### Sanitizing claims
 
-The table below summarizes the capabilities enabled by the current JWT Authentication proposal.
+Since the `name` and `values` fields for `authorization.rules[].claims[]` are used directly in the NGINX config, we need to ensure potentially malicious NGINX configuration cannot be injected.
 
-| Capability | API fields | NGINX directive | Notes |
-| --- | --- | --- | --- |
-| Enable JWT authentication and set realm | `spec.type = "JWT"`; `spec.jwt.realm` | `auth_jwt "<realm>"` | Currently does not expose defining `token` |
-| Provide JWT keys from local JWKS (Secret) | `spec.jwt.source = "File"`; `spec.jwt.file.secretRef.name`; Secret type `nginx.org/jwt`; data key `auth` | `auth_jwt_key_file /etc/nginx/secrets/jwt_auth_<namespace>_<secret-name>` | Secret must exist in same namespace and must be of type `nginx.org/jwt` |
-| Secret handling/validation for local JWKS | Secret type `nginx.org/jwt`; data key `auth`; `LocalObjectReference` | Validates presence/type/key; NGF loads JWKS into key file | Cross-namespace secrets not supported initially; future work may add `ReferenceGrant`-based access |
-| Provide JWT keys from remote JWKS | `spec.jwt.source = "Remote"`; `spec.jwt.remote.uri` (HTTPS only); `spec.jwt.remote.caCertificateRefs[]` (optional; Secret with key `ca.crt`; max 1) | `auth_jwt_key_request /_ngf-internal-<namespace>_<filter-name>_jwks_uri`; internal location `proxy_pass` to remote JWKS; `proxy_ssl_trusted_certificate` set when CA ref provided. | Requires DNS resolver via `NginxProxy.spec.dnsResolver`; URI must be HTTPS; if `caCertificateRefs` is omitted, system CA bundle is used; key caching optional |
-| Configure DNS resolver for remote JWKS | `NginxProxy.spec.dnsResolver.addresses` (separate resource) | `resolver` set at `http` context for name resolution used by `auth_jwt_key_request` | Required for remote JWKS URIs; managed outside the filter |
-| Configure JWT key cache duration | `spec.jwt.keyCache` (Duration) | `auth_jwt_key_cache <duration>` | Disabled by default to avoid stale keys |
-| Configure acceptable clock skew for `exp`/`nbf` | `spec.jwt.leeway` (Duration) | `auth_jwt_leeway <duration>` | Applies only if `exp`/`nbf` claims are present; default `0s` |
-| Require exact-match issuer (`iss`) value | `spec.jwt.require[].iss: string` | Included in combined NGINX map per require entry | Single issuer value per require entry; validated as part of the combined claim map |
-| Require exact-match audience (`aud`) values | `spec.jwt.require[].aud[]: []string` | `auth_jwt_claim_set $jwt_aud aud`; included in combined NGINX map | When defined as an array of claims, NGINX parses them as a comma-separated string; all values must match in exact order |
-| Require exact-match subject (`sub`) value | `spec.jwt.require[].sub: string` | Included in combined NGINX map per require entry | Single subject value per require entry; validated as part of the combined claim map |
-| Require exact-match custom claim values | `spec.jwt.require[].claims[]`: `{ name, values }` | For flat claims: `map $jwt_claim_<name> $valid_<name> { ... }`; `auth_jwt_require $valid_<name>` | `values` must be set and non-empty. When defined, these values are also added to the combined NGINX map |
-| Require exact-match nested/dotted custom claims | `spec.jwt.require[].claims[].name` accepts path like `parent/child` | `auth_jwt_claim_set $var parent child`; `map $var $valid_var { ... }`; `auth_jwt_require $valid_var` | Use `auth_jwt_claim_set` for nested or dotted claims; slash-separated path identifies nested segments |
+We can do this at the API level, by ensuring `claims[].name` and `claims[].values[]` contain a regex allow pattern.
+
+For `claims[].name`, we use `^[a-zA-Z0-9_\/-]+$`. This allows uppercase and lowercase letters (A-Z, a-z), Digits (0-9), underscores (`_`), hyphens (`-`), and slashes (`/`) for nested claims. This will prevent special NGINX characters like curly brackets, semicolons, and escape characters from being entered. i.e. block anything that does **not** match the pattern.
+
+For `claims[].values[]`, we use `^[^\n\r;#\$\\{\\}\\|&><'"]+$`. This regex is designed to match any character **not** in found in the pattern. Blocks multi-line values and config injection (`\n`, `\r`), semicolons (`;`), hashes (`#`), dollar sign (`$`), curly braces (`{`, `}`), pipes (`|`), ampersands (`&`), angle brackets (`>`, `<`), single and double quotes (`'` & `"`).
 
 
 ### Route Attachment
@@ -1270,76 +1372,42 @@ A route rule with a single path in an HTTPRoute/GRPCRoute referencing a valid `A
 This section assumes that the `AuthenticationFilter` attached to the route is valid.
 It explicitly covers the expected outcomes for required claims.
 
-### Standard claims
+`spec.authorize.require` set to `Any`
+- Input:
+  A JWT claim(s) that matches any combination of claim requirements defined in `spec.authorize.rule[].claims[]`.
 
-Single `require` entry. JWT claim presented with `iss`, `aud`, and `sub` claims. All match the `require` entry.
 - Expected outcome:
   Request is authorized.
   NGINX returns a 200 response code.
 
-Single `require` entry. JWT claim presented with `iss`, `aud`, and `sub` claims, where not all claims match. (e.g. `iss` and `aud` match, but `sub` does not).
+`spec.authorize.require` set to `All`
+- Input:
+  A JWT claim(s) that match all claim requirements defined in `spec.authorize.rule[].claims[]`.
+
+- Expected outcome:
+  Request is authorized.
+  NGINX returns a 200 response code.
+
+`spec.authorize.require` set to `Any`
+- Input:
+  A JWT claim(s) that match none of claim requirements defined in `spec.authorize.rule[].claims[]`.
+
 - Expected outcome:
   Request is not authorized.
   NGINX returns a 401 response code.
 
-Multiple `require` entries. JWT claim presented with `iss`, `aud`, and `sub` claims. Matches all claims in at least one `require` entry.
-- Expected outcome:
-  Request is authorized.
-  NGINX returns a 200 response code.
+`spec.authorize.require` set to `All`
+- Input:
+  A JWT claim(s) that match none of claim requirements defined in `spec.authorize.rule[].claims[]`.
 
-Multiple `require` entries. JWT claim presented with `iss`, `aud`, and `sub` claims. Matches none of the `require` entries.
 - Expected outcome:
   Request is not authorized.
   NGINX returns a 401 response code.
 
-`require` entry/entries with `aud` defined as a list containing `api` and `cli` as values. JWT claim presented with `aud` claim as an array, matching the expected order: `"aud": ["api", "cli"]`.
-- Expected outcome:
-  Request is authorized.
-  NGINX returns a 200 response code.
+`spec.authorize.require` set to `All`
+- Input:
+  A JWT claim(s) that match one or more, but not all, of the claim requirements defined in `spec.authorize.rule[].claims[]`.
 
-`require` entry/entries with `aud` defined as a list containing `api` and `cli` as values. JWT claim presented with `aud` claim as an array, **not** matching the expected order: `"aud": ["cli", "api"]`.
-- Expected outcome:
-  Request is not authorized.
-  NGINX returns a 401 response code.
-
-`require` entry/entries with `aud` defined as a regex (e.g. `aud: "cli|ops"`). One or more JWT claims presented, containing the `aud` claim with either `cli`, or `ops` as the value.
-- Expected outcome:
-  Request is authorized.
-  NGINX returns a 200 response code.
-
-`require` entry/entries with `aud` defined as a regex (e.g. `aud: "cli|ops"`). One or more JWT claims presented, containing the `aud` claim with neither `cli` nor `ops` as the value.
-- Expected outcome:
-  Request is not authorized.
-  NGINX returns a 401 response code.
-
-### User defined claims
-
-`require` entry/entries with a custom claim (e.g. `require[].claims[].name: "tenant"`, with value `"acme-co"`). A JWT presented with the expected custom claim.
-- Expected outcome:
-  Request is authorized.
-  NGINX returns a 200 response code.
-
-`require` entry/entries with a custom claim defined as a list (e.g. `require[].claims[].name: "roles"`, with values `"reader", "admin"`). A JWT presented with the expected custom claim in the expected order (e.g. `"roles": ["reader", "admin"]`).
-- Expected outcome:
-  Request is authorized.
-  NGINX returns a 200 response code.
-
-`require` entry/entries with a custom claim defined as a list (e.g. `require[].claims[].name: "roles"`, with values `"reader", "admin"`). A JWT presented with the expected custom claim **not** in the expected order (e.g. `"roles": ["admin", "reader"]`).
-- Expected outcome:
-  Request is not authorized.
-  NGINX returns a 401 response code.
-
-`require` entry/entries with a custom claim defined as a nested claim (e.g. `"require[].claims[].name: realm_access/roles"`, with values `"reader", "admin"`). A JWT presented with the expected nested claim keys, and the array in the expected order (e.g. `"realm_access": "roles": ["reader", "admin"]`).
-- Expected outcome:
-  Request is authorized.
-  NGINX returns a 200 response code.
-
-`require` entry/entries with a custom claim defined as a nested claim (e.g. `"require[].claims[].name: realm_access/roles"`, with values `"reader", "admin"`). A JWT presented with the expected nested claim keys, and the array is **not** in the expected order (e.g. `"realm_access": "roles": ["admin", "reader"]`).
-- Expected outcome:
-  Request is not authorized.
-  NGINX returns a 401 response code.
-
-`require` entry/entries with a custom claim defined as a nested claim (e.g. `"require[].claims[].name: realm_access/roles"`, with values `"reader", "admin"`). A JWT presented without the expected nested claim keys (e.g. `"realm_roles": "access": ["reader", "admin"]`).
 - Expected outcome:
   Request is not authorized.
   NGINX returns a 401 response code.
