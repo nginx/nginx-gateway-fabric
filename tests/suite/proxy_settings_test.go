@@ -25,6 +25,7 @@ var _ = Describe("ProxySettingsPolicy", Ordered, Label("functional", "proxy-sett
 			"proxy-settings-policy/gateway.yaml",
 			"proxy-settings-policy/routes.yaml",
 			"proxy-settings-policy/grpc-backend.yaml",
+			"proxy-settings-policy/h2c-backend.yaml",
 		}
 
 		namespace = "proxy-settings"
@@ -634,19 +635,7 @@ var _ = Describe("ProxySettingsPolicy", Ordered, Label("functional", "proxy-sett
 		})
 	})
 
-	When("an HTTPRoute backend Service has appProtocol kubernetes.io/h2c (auto-detection)", func() {
-		extraFiles := []string{
-			"proxy-settings-policy/h2c-backend.yaml",
-		}
-
-		BeforeAll(func() {
-			Expect(resourceManager.ApplyFromFiles(extraFiles, namespace)).To(Succeed())
-		})
-
-		AfterAll(func() {
-			Expect(resourceManager.DeleteFromFiles(extraFiles, namespace)).To(Succeed())
-		})
-
+	When("an HTTPRoute backend Service has appProtocol kubernetes.io/h2c", func() {
 		Context("nginx config", func() {
 			var conf *framework.Payload
 
@@ -679,21 +668,16 @@ var _ = Describe("ProxySettingsPolicy", Ordered, Label("functional", "proxy-sett
 	})
 
 	When("proxyHTTPVersion is set explicitly via ProxySettingsPolicy", func() {
-		extraFiles := []string{
-			"proxy-settings-policy/h2c-backend.yaml",
-		}
 		policies := []string{
 			"proxy-settings-policy/http-version-proxy-settings.yaml",
 		}
 
 		BeforeAll(func() {
-			Expect(resourceManager.ApplyFromFiles(extraFiles, namespace)).To(Succeed())
 			Expect(resourceManager.ApplyFromFiles(policies, namespace)).To(Succeed())
 		})
 
 		AfterAll(func() {
 			Expect(resourceManager.DeleteFromFiles(policies, namespace)).To(Succeed())
-			Expect(resourceManager.DeleteFromFiles(extraFiles, namespace)).To(Succeed())
 		})
 
 		Specify("policies are Accepted", func() {
@@ -793,7 +777,6 @@ var _ = Describe("ProxySettingsPolicy", Ordered, Label("functional", "proxy-sett
 
 		Context("route-level policy overrides gateway-level policy", func() {
 			routeOverrideFiles := []string{
-				"proxy-settings-policy/h2c-backend.yaml",
 				"proxy-settings-policy/http-version-proxy-settings.yaml",
 			}
 
