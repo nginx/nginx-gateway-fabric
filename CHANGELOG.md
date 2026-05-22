@@ -6,44 +6,25 @@ and includes links to all PRs that went into the release.
 
 ## Release 2.6.2
 
-* Update F5 WAF to 5.13.1 and NGINX OSS to 1.31.1 by @nginx-bot in https://github.com/nginx/nginx-gateway-fabric/pull/5320
-
-
-%%DATE%%
-
-FEATURES:
-
--
+_May 22, 2026_
 
 BUG FIXES:
 
--
-
-DOCUMENTATION:
-
--
+- Fix CVE-2026-9256 by updating NGINX to v1.31.1, NGINX Plus to R37.0.1 and F5 WAF to 5.13.1. [5318](https://github.com/nginx/nginx-gateway-fabric/pull/5318)
 
 HELM CHART:
 
 - The version of the Helm chart is now 2.6.2
 
-UPGRADE:
-
--
-
-KNOWN ISSUES:
-
--
-
 COMPATIBILITY:
 
-- Gateway API version: ``
-- Gateway API Inference Extension version: ``
-- NGINX version: ``
-- NGINX Plus version: ``
-- F5 WAF on NGINX version: ``
-- NGINX Agent version: ``
-- Kubernetes version: ``
+- Gateway API version: `1.5.1`
+- Gateway API Inference Extension version: `1.5.0`
+- NGINX version: `1.31.1`
+- NGINX Plus version: `R37.0`
+- F5 WAF on NGINX version: `5.13.1`
+- NGINX Agent version: `v3.10.1`
+- Kubernetes version: `1.31+`
 
 CONTAINER IMAGES:
 
@@ -52,6 +33,7 @@ CONTAINER IMAGES:
 - Data plane with NGINX Plus: `private-registry.nginx.com/nginx-gateway-fabric/nginx-plus:2.6.2`
 - Data plane with NGINX Plus and F5 WAF: `private-registry.nginx.com/nginx-gateway-fabric/nginx-plus-f5waf:2.6.2`
 - Operator: `ghcr.io/nginx/nginx-gateway-fabric/operator:1.4.2`
+
 ## Release 2.6.1
 
 _May 20, 2026_
