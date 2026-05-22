@@ -993,7 +993,7 @@ http {
     auth_jwt_claim_set $claim_tenant tenant;
 
     #################################################
-    #####       Map for `rules[0].claims[]`     #####
+    #####       Map for `rules[0].claims`     #####
     #################################################
     map $claim_iss+$claim_aud+$claim_tenant $rule_0_all {
         ~^(?:.*,)?https://issuer\.example-1\.com(?:,.*)?\+(?:.*,)?(cloud|admin)(?:,.*)?\+(?:.*,)?acme-co(?:,.*)?$ 1;
@@ -1003,7 +1003,7 @@ http {
 
 
     #################################################
-    #####      Maps for `rules[1].claims[]`     #####
+    #####      Maps for `rules[1].claims`     #####
     #################################################
     map $claim_iss $iss_rule_1 {
         ~(?:^|,)?(https://issuer\.example-2\.com|https://issuer\.example-3\.com)(?:,|$) 1;
@@ -1105,6 +1105,38 @@ Here is break a down each component of this configuration, and why they are nece
         default 0;
     }
 ```
+
+**Note**: There are several regex patterns surrounding each value in each map. These all server a very specific function. To make it easier to undertand, we'll look at each pattern based on the map they are used in.
+
+Regex patterns for `rules[0].claims`:
+
+```regex
+~(?:^|,)cli(?:,|$) 1;
+```
+
+The starting pattern `(?:^|,)` validates that the value "cli", is either at the start `^` of the string, or has a comma `,` at the start.
+The ending pattern `(?:,|$)` does the opposite, and validates that the value "cli" has a comma `,` at the end, or is at the end of a string `$`.
+This would match any one of these patterns:
+- `api,cli,ops`
+- `cli,api,ops`
+- `api,ops,cli`
+
+Regex patterns for `rules[1].claims`.
+
+```regex
+~^(?:.*,)?https://issuer\.example-1\.com(?:,.*)?\+(?:.*,)?(cloud|admin)(?:,.*)?\+(?:.*,)?acme-co(?:,.*)?$
+```
+
+The starting pattern for all values is `(?:.*,)?`:
+- This is a non-capture group `?:`, meaning we don't store the results.
+- We then match any character, and then a comma `.*,`. This captures the value within a comma separated list.
+- Lastly, the question mark `?` outside the brackets will match the pattern in the brackets "zero or one times, as many times as possible". This allows the captured value to be both within a comma separated list, and at the start and end of that list.
+
+The ending pattern for all vales is `(?:,.*)?`:
+- This operates almost the same as the starting pattern. Instead of `.*,`, which matches any value **before** a comma, we use `,.*`. This allows us to match a comma first, and then any value **after** that comma.
+
+The goal of these patterns is to allow these values to be found anywhere within a comma separated list, while also allowing them to be matched as a full string. This is why the regex symbols hat `^` and dollar sign `$`, to capture the start and end, are not part of the start and end patterns, like they are for the regex patterns for `rules[0].claims`.
+
 
 #### Processing nested claims
 
