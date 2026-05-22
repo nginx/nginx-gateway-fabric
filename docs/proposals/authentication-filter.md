@@ -324,7 +324,7 @@ type Claim struct {
 
   // Values are the values within the claim.
   // When more than one value is set, the claim must match any of these values.
-  // +kubebuilder:validation:Pattern=`^[^\\n\\r;#\\$\\{\\}\\|&><'\"]+$`
+  // +kubebuilder:validation:items:Pattern=`^[^\\n\\r;#\\$\\{\\}\\|&><'\"]+$`
   // +kubebuilder:validation:MinItems=1
   Values []string `json:"values"`
 
@@ -332,6 +332,7 @@ type Claim struct {
   // Example: For claim name `sub` for JWT auth
   //
   // proxy_set_header X-JWT-Claim-Sub $jwt_claim_sub;
+  // +kubebuilder:validation:Pattern=`^[a-zA-Z0-9_/-]+$`
   ProxySetHeader *string `json:"proxySetHeader,omitempty"`
 
   // Match sets the match type for the claim.
