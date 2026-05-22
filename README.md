@@ -36,7 +36,7 @@ You can find the comprehensive NGINX Gateway Fabric user documentation on the [N
 We publish NGINX Gateway Fabric releases on GitHub. See
 our [releases page](https://github.com/nginx/nginx-gateway-fabric/releases).
 
-The latest release is [2.6.1](https://github.com/nginx/nginx-gateway-fabric/releases/tag/v2.6.1).
+The latest release is [2.6.2](https://github.com/nginx/nginx-gateway-fabric/releases/tag/v2.6.2).
 
 The edge version is useful for experimenting with new features that are not yet published in a release. To use, choose
 the _edge_ version built from the [latest commit](https://github.com/nginx/nginx-gateway-fabric/commits/main)
@@ -47,7 +47,7 @@ to the correct versions:
 
 | Version | Description | Installation Manifests | Documentation and Examples |
 | ------- | ----------- | ---------------------- | -------------------------- |
-| Latest release | For production use | [Manifests](https://github.com/nginx/nginx-gateway-fabric/tree/v2.6.1/deploy). | [Documentation](https://docs.nginx.com/nginx-gateway-fabric). [Examples](https://github.com/nginx/nginx-gateway-fabric/tree/v2.6.1/examples). |
+| Latest release | For production use | [Manifests](https://github.com/nginx/nginx-gateway-fabric/tree/v2.6.2/deploy). | [Documentation](https://docs.nginx.com/nginx-gateway-fabric). [Examples](https://github.com/nginx/nginx-gateway-fabric/tree/v2.6.2/examples). |
 | Edge | For experimental use and latest features | [Manifests](https://github.com/nginx/nginx-gateway-fabric/tree/main/deploy). | [Examples](https://github.com/nginx/nginx-gateway-fabric/tree/main/examples). |
 
 ### Versioning
@@ -69,7 +69,7 @@ The following table lists the software versions NGINX Gateway Fabric supports. O
 | NGINX Gateway Fabric | Gateway API | Kubernetes | NGINX OSS | NGINX Plus | NGINX Agent | F5 WAF for NGINX |
 |----------------------|-------------|------------|-----------|------------|-------------|------------------|
 | Edge                 | 1.5.1       | 1.31+      | 1.31.1    | R37.0      | v3.10.1     | 5.13.1           |
-| 2.6.1                | 1.5.1       | 1.31+      | 1.31.0    | R37.0      | v3.10.1     | 5.13.0           |
+| 2.6.2                | 1.5.1       | 1.31+      | 1.31.1    | R37.0      | v3.10.1     | 5.13.1           |
 | 2.5.1                | 1.5.1       | 1.31+      | 1.29.7    | R36        | v3.8.0      | ---              |
 | 2.4.2                | 1.4.1       | 1.25+      | 1.29.5    | R36        | v3.7.1      | ---              |
 | 2.3.0                | 1.4.1       | 1.25+      | 1.29.3    | R36        | v3.6.0      | ---              |
