@@ -829,7 +829,7 @@ func TestBuildBundleSources(t *testing.T) {
 			name: "no polling enabled",
 			spec: ngfAPIv1alpha1.WAFPolicySpec{
 				Type: ngfAPIv1alpha1.PolicySourceTypeHTTP,
-				PolicySource: ngfAPIv1alpha1.PolicySource{
+				PolicySource: &ngfAPIv1alpha1.PolicySource{
 					HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: "http://example.com/policy.tgz"},
 					Polling:    nil,
 				},
@@ -840,7 +840,7 @@ func TestBuildBundleSources(t *testing.T) {
 			name: "polling disabled",
 			spec: ngfAPIv1alpha1.WAFPolicySpec{
 				Type: ngfAPIv1alpha1.PolicySourceTypeHTTP,
-				PolicySource: ngfAPIv1alpha1.PolicySource{
+				PolicySource: &ngfAPIv1alpha1.PolicySource{
 					HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: "http://example.com/policy.tgz"},
 					Polling: &ngfAPIv1alpha1.BundlePolling{
 						Enabled: false,
@@ -853,7 +853,7 @@ func TestBuildBundleSources(t *testing.T) {
 			name: "policy source polling enabled with default interval",
 			spec: ngfAPIv1alpha1.WAFPolicySpec{
 				Type: ngfAPIv1alpha1.PolicySourceTypeHTTP,
-				PolicySource: ngfAPIv1alpha1.PolicySource{
+				PolicySource: &ngfAPIv1alpha1.PolicySource{
 					HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: "http://example.com/policy.tgz"},
 					Polling: &ngfAPIv1alpha1.BundlePolling{
 						Enabled: true,
@@ -871,7 +871,7 @@ func TestBuildBundleSources(t *testing.T) {
 			name: "policy source polling enabled with custom interval",
 			spec: ngfAPIv1alpha1.WAFPolicySpec{
 				Type: ngfAPIv1alpha1.PolicySourceTypeHTTP,
-				PolicySource: ngfAPIv1alpha1.PolicySource{
+				PolicySource: &ngfAPIv1alpha1.PolicySource{
 					HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: "http://example.com/policy.tgz"},
 					Polling: &ngfAPIv1alpha1.BundlePolling{
 						Enabled:  true,
@@ -888,7 +888,7 @@ func TestBuildBundleSources(t *testing.T) {
 			name: "policy source with auth",
 			spec: ngfAPIv1alpha1.WAFPolicySpec{
 				Type: ngfAPIv1alpha1.PolicySourceTypeHTTP,
-				PolicySource: ngfAPIv1alpha1.PolicySource{
+				PolicySource: &ngfAPIv1alpha1.PolicySource{
 					HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: "http://example.com/policy.tgz"},
 					Polling: &ngfAPIv1alpha1.BundlePolling{
 						Enabled: true,
@@ -906,7 +906,7 @@ func TestBuildBundleSources(t *testing.T) {
 			name: "policy source with TLS CA",
 			spec: ngfAPIv1alpha1.WAFPolicySpec{
 				Type: ngfAPIv1alpha1.PolicySourceTypeHTTP,
-				PolicySource: ngfAPIv1alpha1.PolicySource{
+				PolicySource: &ngfAPIv1alpha1.PolicySource{
 					HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: "https://example.com/policy.tgz"},
 					Polling: &ngfAPIv1alpha1.BundlePolling{
 						Enabled: true,
@@ -923,12 +923,12 @@ func TestBuildBundleSources(t *testing.T) {
 			name: "log source polling enabled",
 			spec: ngfAPIv1alpha1.WAFPolicySpec{
 				Type: ngfAPIv1alpha1.PolicySourceTypeHTTP,
-				PolicySource: ngfAPIv1alpha1.PolicySource{
+				PolicySource: &ngfAPIv1alpha1.PolicySource{
 					HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: "http://example.com/policy.tgz"},
 				},
 				SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
 					{
-						LogSource: ngfAPIv1alpha1.LogSource{
+						LogSource: &ngfAPIv1alpha1.LogSource{
 							HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: "http://example.com/log-profile.tgz"},
 							Polling: &ngfAPIv1alpha1.BundlePolling{
 								Enabled: true,
@@ -947,7 +947,7 @@ func TestBuildBundleSources(t *testing.T) {
 			name: "log source with default profile (no URL)",
 			spec: ngfAPIv1alpha1.WAFPolicySpec{
 				Type: ngfAPIv1alpha1.PolicySourceTypeHTTP,
-				PolicySource: ngfAPIv1alpha1.PolicySource{
+				PolicySource: &ngfAPIv1alpha1.PolicySource{
 					HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: "http://example.com/policy.tgz"},
 					Polling: &ngfAPIv1alpha1.BundlePolling{
 						Enabled: true,
@@ -955,7 +955,7 @@ func TestBuildBundleSources(t *testing.T) {
 				},
 				SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
 					{
-						LogSource: ngfAPIv1alpha1.LogSource{
+						LogSource: &ngfAPIv1alpha1.LogSource{
 							HTTPSource: nil, // DefaultProfile.
 							Polling: &ngfAPIv1alpha1.BundlePolling{
 								Enabled: true, // Should be ignored for default profile.
@@ -970,7 +970,7 @@ func TestBuildBundleSources(t *testing.T) {
 			name: "multiple sources with polling",
 			spec: ngfAPIv1alpha1.WAFPolicySpec{
 				Type: ngfAPIv1alpha1.PolicySourceTypeHTTP,
-				PolicySource: ngfAPIv1alpha1.PolicySource{
+				PolicySource: &ngfAPIv1alpha1.PolicySource{
 					HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: "http://example.com/policy.tgz"},
 					Polling: &ngfAPIv1alpha1.BundlePolling{
 						Enabled: true,
@@ -978,7 +978,7 @@ func TestBuildBundleSources(t *testing.T) {
 				},
 				SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
 					{
-						LogSource: ngfAPIv1alpha1.LogSource{
+						LogSource: &ngfAPIv1alpha1.LogSource{
 							HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: "http://example.com/log1.tgz"},
 							Polling: &ngfAPIv1alpha1.BundlePolling{
 								Enabled: true,
@@ -986,7 +986,7 @@ func TestBuildBundleSources(t *testing.T) {
 						},
 					},
 					{
-						LogSource: ngfAPIv1alpha1.LogSource{
+						LogSource: &ngfAPIv1alpha1.LogSource{
 							HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: "http://example.com/log2.tgz"},
 							Polling: &ngfAPIv1alpha1.BundlePolling{
 								Enabled: true,
@@ -1001,7 +1001,7 @@ func TestBuildBundleSources(t *testing.T) {
 			name: "zero interval falls back to default",
 			spec: ngfAPIv1alpha1.WAFPolicySpec{
 				Type: ngfAPIv1alpha1.PolicySourceTypeHTTP,
-				PolicySource: ngfAPIv1alpha1.PolicySource{
+				PolicySource: &ngfAPIv1alpha1.PolicySource{
 					HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: "http://example.com/policy.tgz"},
 					Polling: &ngfAPIv1alpha1.BundlePolling{
 						Enabled:  true,
@@ -1018,7 +1018,7 @@ func TestBuildBundleSources(t *testing.T) {
 			name: "negative interval falls back to default",
 			spec: ngfAPIv1alpha1.WAFPolicySpec{
 				Type: ngfAPIv1alpha1.PolicySourceTypeHTTP,
-				PolicySource: ngfAPIv1alpha1.PolicySource{
+				PolicySource: &ngfAPIv1alpha1.PolicySource{
 					HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: "http://example.com/policy.tgz"},
 					Polling: &ngfAPIv1alpha1.BundlePolling{
 						Enabled:  true,
@@ -1032,15 +1032,59 @@ func TestBuildBundleSources(t *testing.T) {
 			},
 		},
 		{
+			name: "nil PolicySource with polling-enabled security logs",
+			spec: ngfAPIv1alpha1.WAFPolicySpec{
+				Type:         ngfAPIv1alpha1.PolicySourceTypeHTTP,
+				PolicySource: nil, // nil PolicySource — should not produce a policy bundle source.
+				SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
+					{
+						LogSource: &ngfAPIv1alpha1.LogSource{
+							HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: "http://example.com/log.tgz"},
+							Polling: &ngfAPIv1alpha1.BundlePolling{
+								Enabled: true,
+							},
+						},
+					},
+				},
+			},
+			expectedSources: 1, // Only log source, no policy source.
+			validateSources: func(g Gomega, sources []BundleSource) {
+				g.Expect(sources[0].Type).To(Equal(LogProfileBundle))
+				g.Expect(sources[0].Request.URL).To(Equal("http://example.com/log.tgz"))
+			},
+		},
+		{
+			name: "nil LogSource in SecurityLogs is skipped",
+			spec: ngfAPIv1alpha1.WAFPolicySpec{
+				Type: ngfAPIv1alpha1.PolicySourceTypeHTTP,
+				PolicySource: &ngfAPIv1alpha1.PolicySource{
+					HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: "http://example.com/policy.tgz"},
+					Polling: &ngfAPIv1alpha1.BundlePolling{
+						Enabled: true,
+					},
+				},
+				SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
+					{
+						LogSource: nil, // nil LogSource — should be skipped.
+					},
+				},
+			},
+			expectedSources: 1, // Only policy source, nil log entry skipped.
+			validateSources: func(g Gomega, sources []BundleSource) {
+				g.Expect(sources[0].Type).To(Equal(PolicyBundle))
+				g.Expect(sources[0].Request.URL).To(Equal("http://example.com/policy.tgz"))
+			},
+		},
+		{
 			name: "negative log source interval falls back to default",
 			spec: ngfAPIv1alpha1.WAFPolicySpec{
 				Type: ngfAPIv1alpha1.PolicySourceTypeHTTP,
-				PolicySource: ngfAPIv1alpha1.PolicySource{
+				PolicySource: &ngfAPIv1alpha1.PolicySource{
 					HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: "http://example.com/policy.tgz"},
 				},
 				SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
 					{
-						LogSource: ngfAPIv1alpha1.LogSource{
+						LogSource: &ngfAPIv1alpha1.LogSource{
 							HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: "http://example.com/log.tgz"},
 							Polling: &ngfAPIv1alpha1.BundlePolling{
 								Enabled:  true,
