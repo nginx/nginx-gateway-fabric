@@ -10,7 +10,7 @@ _May 22, 2026_
 
 BUG FIXES:
 
-- Fix CVE-2026-9256 by updating NGINX to v1.31.1, NGINX Plus to R37.0.1 and F5 WAF to 5.13.1. [5318](https://github.com/nginx/nginx-gateway-fabric/pull/5318)
+- Fix CVE-2026-9256 by updating NGINX to v1.31.1 and NGINX Plus to R37.0.1. Additionally, updates F5 WAF to 5.13.1. [5318](https://github.com/nginx/nginx-gateway-fabric/pull/5318)
 
 HELM CHART:
 
