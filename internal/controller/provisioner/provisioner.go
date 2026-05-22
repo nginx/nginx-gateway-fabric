@@ -62,8 +62,6 @@ type Config struct {
 	NginxOneConsoleTelemetryConfig config.NginxOneConsoleTelemetryConfig
 	Plus                           bool
 	InferenceExtension             bool
-	EndpointPickerDisableTLS       bool
-	EndpointPickerTLSSkipVerify    bool
 }
 
 // NginxProvisioner handles provisioning nginx kubernetes resources.

@@ -834,15 +834,14 @@ func TestCreateBackendGroupSplitClientDistributions(t *testing.T) {
 
 func TestGetSplitClientValue(t *testing.T) {
 	t.Parallel()
-	hrNsName := types.NamespacedName{Namespace: "test", Name: "hr"}
 
 	tests := []struct {
-		source      types.NamespacedName
 		msg         string
 		expValue    string
 		backend     dataplane.Backend
-		ruleIdx     int
 		pathRuleIdx int
+		ruleIdx     int
+		backendIdx  int
 	}{
 		{
 			msg: "valid backend",
@@ -850,9 +849,10 @@ func TestGetSplitClientValue(t *testing.T) {
 				UpstreamName: "valid",
 				Valid:        true,
 			},
-			source:   hrNsName,
-			ruleIdx:  0,
-			expValue: "valid",
+			pathRuleIdx: 0,
+			ruleIdx:     0,
+			backendIdx:  0,
+			expValue:    "valid",
 		},
 		{
 			msg: "invalid backend",
@@ -860,9 +860,10 @@ func TestGetSplitClientValue(t *testing.T) {
 				UpstreamName: "invalid",
 				Valid:        false,
 			},
-			source:   hrNsName,
-			ruleIdx:  0,
-			expValue: invalidBackendRef,
+			pathRuleIdx: 0,
+			ruleIdx:     0,
+			backendIdx:  0,
+			expValue:    invalidBackendRef,
 		},
 		{
 			msg: "valid backend with endpoint picker config",
@@ -873,10 +874,11 @@ func TestGetSplitClientValue(t *testing.T) {
 					NsName: "test-namespace",
 				},
 			},
-			source:      hrNsName,
-			ruleIdx:     2,
 			pathRuleIdx: 1,
-			expValue:    "/_ngf-internal-inference-backend-test-hr-routeRule2-pathRule1",
+			ruleIdx:     2,
+			backendIdx:  3,
+			// split_clients redirects to internal inference location directly
+			expValue: "/_ngf-internal-rule1-route2-backend3-inference",
 		},
 		{
 			msg: "invalid backend with endpoint picker config",
@@ -887,9 +889,10 @@ func TestGetSplitClientValue(t *testing.T) {
 					NsName: "test-namespace",
 				},
 			},
-			source:   hrNsName,
-			ruleIdx:  1,
-			expValue: invalidBackendRef,
+			pathRuleIdx: 0,
+			ruleIdx:     1,
+			backendIdx:  0,
+			expValue:    invalidBackendRef,
 		},
 	}
 
@@ -897,7 +900,7 @@ func TestGetSplitClientValue(t *testing.T) {
 		t.Run(test.msg, func(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
-			result := getSplitClientValue(test.backend, test.source, test.ruleIdx, test.pathRuleIdx)
+			result := getSplitClientValue(test.backend, test.pathRuleIdx, test.ruleIdx, test.backendIdx)
 			g.Expect(result).To(Equal(test.expValue))
 		})
 	}

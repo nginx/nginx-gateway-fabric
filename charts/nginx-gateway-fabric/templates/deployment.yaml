@@ -111,6 +111,7 @@ spec:
         - --endpoint-picker-disable-tls
         {{- end }}
         - --endpoint-picker-tls-skip-verify={{ .Values.nginxGateway.gwAPIInferenceExtension.endpointPicker.skipVerify }}
+        - --cluster-domain={{ .Values.clusterDomain }}
         {{- end }}
         {{- if .Values.nginxGateway.snippetsFilters.enable }}
         - --snippets-filters
