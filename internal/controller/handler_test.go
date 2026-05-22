@@ -1379,7 +1379,7 @@ func makeWAFPolicy(pollingEnabled bool) *ngfAPI.WAFPolicy {
 				Name:  "my-gateway",
 			},
 		},
-		PolicySource: ngfAPI.PolicySource{
+		PolicySource: &ngfAPI.PolicySource{
 			HTTPSource: &ngfAPI.HTTPBundleSource{URL: "http://example.com/policy.tgz"},
 		},
 	}

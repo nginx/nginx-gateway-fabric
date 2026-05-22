@@ -20,7 +20,7 @@ func newWAFPolicy(
 	t.Helper()
 	if spec.Type == "" {
 		spec.Type = ngfAPIv1alpha1.PolicySourceTypeHTTP
-		spec.PolicySource = ngfAPIv1alpha1.PolicySource{
+		spec.PolicySource = &ngfAPIv1alpha1.PolicySource{
 			HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: "https://example.com/policy.tgz"},
 		}
 	}
@@ -34,8 +34,8 @@ func newWAFPolicy(
 }
 
 // baseLogSource returns a minimal valid LogSource with an HTTPSource for use in tests.
-func baseLogSource() ngfAPIv1alpha1.LogSource {
-	return ngfAPIv1alpha1.LogSource{
+func baseLogSource() *ngfAPIv1alpha1.LogSource {
+	return &ngfAPIv1alpha1.LogSource{
 		HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: "https://example.com/log.tgz"},
 	}
 }
@@ -645,7 +645,7 @@ func TestWAFPolicyLogSourceMutualExclusion(t *testing.T) {
 				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
 				SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
 					{
-						LogSource:   ngfAPIv1alpha1.LogSource{HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: logURL}},
+						LogSource:   &ngfAPIv1alpha1.LogSource{HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: logURL}},
 						Destination: ngfAPIv1alpha1.SecurityLogDestination{Type: ngfAPIv1alpha1.SecurityLogDestinationTypeStderr},
 					},
 				},
@@ -657,7 +657,7 @@ func TestWAFPolicyLogSourceMutualExclusion(t *testing.T) {
 				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
 				SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
 					{
-						LogSource: ngfAPIv1alpha1.LogSource{
+						LogSource: &ngfAPIv1alpha1.LogSource{
 							NIMSource: &ngfAPIv1alpha1.NIMLogProfileBundleSource{
 								URL:         logURL,
 								ProfileName: profileName,
@@ -674,7 +674,7 @@ func TestWAFPolicyLogSourceMutualExclusion(t *testing.T) {
 				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
 				SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
 					{
-						LogSource:   ngfAPIv1alpha1.LogSource{DefaultProfile: &defaultProfile},
+						LogSource:   &ngfAPIv1alpha1.LogSource{DefaultProfile: &defaultProfile},
 						Destination: ngfAPIv1alpha1.SecurityLogDestination{Type: ngfAPIv1alpha1.SecurityLogDestinationTypeStderr},
 					},
 				},
@@ -686,12 +686,68 @@ func TestWAFPolicyLogSourceMutualExclusion(t *testing.T) {
 				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
 				SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
 					{
-						LogSource: ngfAPIv1alpha1.LogSource{
+						LogSource: &ngfAPIv1alpha1.LogSource{
 							N1CSource: &ngfAPIv1alpha1.N1CLogProfileBundleSource{
 								URL:         logURL,
 								Namespace:   "my-namespace",
 								ProfileName: &profileName,
 							},
+						},
+						Destination: ngfAPIv1alpha1.SecurityLogDestination{Type: ngfAPIv1alpha1.SecurityLogDestinationTypeStderr},
+					},
+				},
+			},
+		},
+		{
+			name: "apLogConfRef only is valid for PLM",
+			spec: ngfAPIv1alpha1.WAFPolicySpec{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
+				Type:       ngfAPIv1alpha1.PolicySourceTypePLM,
+				PolicyRef: &ngfAPIv1alpha1.PolicyRef{
+					APPolicyRef: &ngfAPIv1alpha1.APPolicyReference{Name: "my-ap-policy"},
+				},
+				SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
+					{
+						LogRef: &ngfAPIv1alpha1.LogRef{
+							APLogConfRef: &ngfAPIv1alpha1.APLogConfReference{Name: "my-log-conf"},
+						},
+						Destination: ngfAPIv1alpha1.SecurityLogDestination{Type: ngfAPIv1alpha1.SecurityLogDestinationTypeStderr},
+					},
+				},
+			},
+		},
+		{
+			name:       "apLogConfRef with non-PLM type is invalid",
+			wantErrors: []string{expectedWAFPLMLogSourceTypeError},
+			spec: ngfAPIv1alpha1.WAFPolicySpec{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
+				Type:       ngfAPIv1alpha1.PolicySourceTypeHTTP,
+				PolicySource: &ngfAPIv1alpha1.PolicySource{
+					HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: "https://example.com/policy.tgz"},
+				},
+				SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
+					{
+						LogRef: &ngfAPIv1alpha1.LogRef{
+							APLogConfRef: &ngfAPIv1alpha1.APLogConfReference{Name: "my-log-conf"},
+						},
+						Destination: ngfAPIv1alpha1.SecurityLogDestination{Type: ngfAPIv1alpha1.SecurityLogDestinationTypeStderr},
+					},
+				},
+			},
+		},
+		{
+			name:       "apLogConfRef with invalid name is rejected",
+			wantErrors: []string{expectedWAFAPResourceNamePatternError},
+			spec: ngfAPIv1alpha1.WAFPolicySpec{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
+				Type:       ngfAPIv1alpha1.PolicySourceTypePLM,
+				PolicyRef: &ngfAPIv1alpha1.PolicyRef{
+					APPolicyRef: &ngfAPIv1alpha1.APPolicyReference{Name: "my-ap-policy"},
+				},
+				SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
+					{
+						LogRef: &ngfAPIv1alpha1.LogRef{
+							APLogConfRef: &ngfAPIv1alpha1.APLogConfReference{Name: "Invalid/Name"},
 						},
 						Destination: ngfAPIv1alpha1.SecurityLogDestination{Type: ngfAPIv1alpha1.SecurityLogDestinationTypeStderr},
 					},
@@ -705,7 +761,7 @@ func TestWAFPolicyLogSourceMutualExclusion(t *testing.T) {
 				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
 				SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
 					{
-						LogSource: ngfAPIv1alpha1.LogSource{
+						LogSource: &ngfAPIv1alpha1.LogSource{
 							HTTPSource:     &ngfAPIv1alpha1.HTTPBundleSource{URL: logURL},
 							DefaultProfile: &defaultProfile,
 						},
@@ -721,7 +777,7 @@ func TestWAFPolicyLogSourceMutualExclusion(t *testing.T) {
 				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
 				SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
 					{
-						LogSource: ngfAPIv1alpha1.LogSource{
+						LogSource: &ngfAPIv1alpha1.LogSource{
 							NIMSource:      &ngfAPIv1alpha1.NIMLogProfileBundleSource{URL: logURL, ProfileName: profileName},
 							DefaultProfile: &defaultProfile,
 						},
@@ -737,7 +793,7 @@ func TestWAFPolicyLogSourceMutualExclusion(t *testing.T) {
 				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
 				SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
 					{
-						LogSource: ngfAPIv1alpha1.LogSource{
+						LogSource: &ngfAPIv1alpha1.LogSource{
 							HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: logURL},
 							NIMSource:  &ngfAPIv1alpha1.NIMLogProfileBundleSource{URL: logURL, ProfileName: profileName},
 						},
@@ -753,7 +809,7 @@ func TestWAFPolicyLogSourceMutualExclusion(t *testing.T) {
 				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
 				SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
 					{
-						LogSource: ngfAPIv1alpha1.LogSource{
+						LogSource: &ngfAPIv1alpha1.LogSource{
 							N1CSource: &ngfAPIv1alpha1.N1CLogProfileBundleSource{
 								URL:         logURL,
 								Namespace:   "my-namespace",
@@ -773,7 +829,7 @@ func TestWAFPolicyLogSourceMutualExclusion(t *testing.T) {
 				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
 				SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
 					{
-						LogSource: ngfAPIv1alpha1.LogSource{
+						LogSource: &ngfAPIv1alpha1.LogSource{
 							N1CSource: &ngfAPIv1alpha1.N1CLogProfileBundleSource{
 								URL:         logURL,
 								Namespace:   "my-namespace",
@@ -787,13 +843,35 @@ func TestWAFPolicyLogSourceMutualExclusion(t *testing.T) {
 			},
 		},
 		{
+			name:       "both httpSource and apLogConfRef set is invalid",
+			wantErrors: []string{expectedWAFLogSourceOrLogRefError},
+			spec: ngfAPIv1alpha1.WAFPolicySpec{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
+				Type:       ngfAPIv1alpha1.PolicySourceTypePLM,
+				PolicyRef: &ngfAPIv1alpha1.PolicyRef{
+					APPolicyRef: &ngfAPIv1alpha1.APPolicyReference{Name: "my-ap-policy"},
+				},
+				SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
+					{
+						LogSource: &ngfAPIv1alpha1.LogSource{
+							HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: logURL},
+						},
+						LogRef: &ngfAPIv1alpha1.LogRef{
+							APLogConfRef: &ngfAPIv1alpha1.APLogConfReference{Name: "my-log-conf"},
+						},
+						Destination: ngfAPIv1alpha1.SecurityLogDestination{Type: ngfAPIv1alpha1.SecurityLogDestinationTypeStderr},
+					},
+				},
+			},
+		},
+		{
 			name:       "both n1cSource and nimSource set is invalid",
 			wantErrors: []string{expectedWAFLogSourceMutualExclusionError},
 			spec: ngfAPIv1alpha1.WAFPolicySpec{
 				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
 				SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
 					{
-						LogSource: ngfAPIv1alpha1.LogSource{
+						LogSource: &ngfAPIv1alpha1.LogSource{
 							N1CSource: &ngfAPIv1alpha1.N1CLogProfileBundleSource{
 								URL:         logURL,
 								Namespace:   "my-namespace",
@@ -816,7 +894,7 @@ func TestWAFPolicyLogSourceMutualExclusion(t *testing.T) {
 				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
 				SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
 					{
-						LogSource:   ngfAPIv1alpha1.LogSource{},
+						LogSource:   &ngfAPIv1alpha1.LogSource{},
 						Destination: ngfAPIv1alpha1.SecurityLogDestination{Type: ngfAPIv1alpha1.SecurityLogDestinationTypeStderr},
 					},
 				},
@@ -853,7 +931,7 @@ func TestWAFPolicyPolicySource(t *testing.T) {
 			spec: ngfAPIv1alpha1.WAFPolicySpec{
 				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
 				Type:       ngfAPIv1alpha1.PolicySourceTypeHTTP,
-				PolicySource: ngfAPIv1alpha1.PolicySource{
+				PolicySource: &ngfAPIv1alpha1.PolicySource{
 					HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: "https://example.com/policy.tgz"},
 				},
 			},
@@ -863,7 +941,7 @@ func TestWAFPolicyPolicySource(t *testing.T) {
 			spec: ngfAPIv1alpha1.WAFPolicySpec{
 				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
 				Type:       ngfAPIv1alpha1.PolicySourceTypeNIM,
-				PolicySource: ngfAPIv1alpha1.PolicySource{
+				PolicySource: &ngfAPIv1alpha1.PolicySource{
 					NIMSource: &ngfAPIv1alpha1.NIMBundleSource{
 						URL:        "https://nim.example.com",
 						PolicyName: helpers.GetPointer("my-policy"),
@@ -876,7 +954,7 @@ func TestWAFPolicyPolicySource(t *testing.T) {
 			spec: ngfAPIv1alpha1.WAFPolicySpec{
 				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
 				Type:       ngfAPIv1alpha1.PolicySourceTypeN1C,
-				PolicySource: ngfAPIv1alpha1.PolicySource{
+				PolicySource: &ngfAPIv1alpha1.PolicySource{
 					N1CSource: &ngfAPIv1alpha1.N1CBundleSource{
 						URL:        "https://n1c.example.com",
 						PolicyName: helpers.GetPointer("my-policy"),
@@ -886,30 +964,85 @@ func TestWAFPolicyPolicySource(t *testing.T) {
 			},
 		},
 		{
-			name:       "NIM type without nimSource is invalid",
-			wantErrors: []string{expectedWAFNIMSourceIfAndOnlyIfNIMType},
+			name: "PLM type with apPolicyRef is valid",
 			spec: ngfAPIv1alpha1.WAFPolicySpec{
-				TargetRefs:   []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
-				Type:         ngfAPIv1alpha1.PolicySourceTypeNIM,
-				PolicySource: ngfAPIv1alpha1.PolicySource{},
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
+				Type:       ngfAPIv1alpha1.PolicySourceTypePLM,
+				PolicyRef: &ngfAPIv1alpha1.PolicyRef{
+					APPolicyRef: &ngfAPIv1alpha1.APPolicyReference{Name: "my-ap-policy"},
+				},
+			},
+		},
+		{
+			name:       "apPolicyRef set with HTTP type is invalid",
+			wantErrors: []string{expectedWAFPolicyRefNotSetForNonPLMError},
+			spec: ngfAPIv1alpha1.WAFPolicySpec{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
+				Type:       ngfAPIv1alpha1.PolicySourceTypeHTTP,
+				PolicySource: &ngfAPIv1alpha1.PolicySource{
+					HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: "https://example.com/policy.tgz"},
+				},
+				PolicyRef: &ngfAPIv1alpha1.PolicyRef{
+					APPolicyRef: &ngfAPIv1alpha1.APPolicyReference{Name: "my-ap-policy"},
+				},
+			},
+		},
+		{
+			name:       "apPolicyRef with invalid name is rejected",
+			wantErrors: []string{expectedWAFAPResourceNamePatternError},
+			spec: ngfAPIv1alpha1.WAFPolicySpec{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
+				Type:       ngfAPIv1alpha1.PolicySourceTypePLM,
+				PolicyRef: &ngfAPIv1alpha1.PolicyRef{
+					APPolicyRef: &ngfAPIv1alpha1.APPolicyReference{Name: "Invalid/Name"},
+				},
+			},
+		},
+		{
+			name:       "NIM type without nimSource is invalid",
+			wantErrors: []string{expectedWAFPolicySourceTypeMatchError},
+			spec: ngfAPIv1alpha1.WAFPolicySpec{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
+				Type:       ngfAPIv1alpha1.PolicySourceTypeNIM,
 			},
 		},
 		{
 			name:       "N1C type without n1cSource is invalid",
-			wantErrors: []string{expectedWAFN1CSourceIfAndOnlyIfN1CType},
+			wantErrors: []string{expectedWAFPolicySourceTypeMatchError},
 			spec: ngfAPIv1alpha1.WAFPolicySpec{
-				TargetRefs:   []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
-				Type:         ngfAPIv1alpha1.PolicySourceTypeN1C,
-				PolicySource: ngfAPIv1alpha1.PolicySource{},
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
+				Type:       ngfAPIv1alpha1.PolicySourceTypeN1C,
+			},
+		},
+		{
+			name:       "PLM type without apPolicyRef is invalid",
+			wantErrors: []string{expectedWAFPolicyRefRequiredForPLMError},
+			spec: ngfAPIv1alpha1.WAFPolicySpec{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
+				Type:       ngfAPIv1alpha1.PolicySourceTypePLM,
+			},
+		},
+		{
+			name:       "apPolicyRef with invalid namespace is rejected",
+			wantErrors: []string{expectedWAFAPResourceNamespacePatternError},
+			spec: ngfAPIv1alpha1.WAFPolicySpec{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
+				Type:       ngfAPIv1alpha1.PolicySourceTypePLM,
+				PolicyRef: &ngfAPIv1alpha1.PolicyRef{
+					APPolicyRef: &ngfAPIv1alpha1.APPolicyReference{
+						Name:      "valid-policy",
+						Namespace: helpers.GetPointer("Invalid_Namespace"),
+					},
+				},
 			},
 		},
 		{
 			name:       "nimSource set with HTTP type is invalid",
-			wantErrors: []string{expectedWAFNIMSourceIfAndOnlyIfNIMType},
+			wantErrors: []string{expectedWAFPolicySourceMutualExclusionError},
 			spec: ngfAPIv1alpha1.WAFPolicySpec{
 				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
 				Type:       ngfAPIv1alpha1.PolicySourceTypeHTTP,
-				PolicySource: ngfAPIv1alpha1.PolicySource{
+				PolicySource: &ngfAPIv1alpha1.PolicySource{
 					HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: "https://example.com/policy.tgz"},
 					NIMSource: &ngfAPIv1alpha1.NIMBundleSource{
 						URL:        "https://nim.example.com",
@@ -920,11 +1053,11 @@ func TestWAFPolicyPolicySource(t *testing.T) {
 		},
 		{
 			name:       "n1cSource set with HTTP type is invalid",
-			wantErrors: []string{expectedWAFN1CSourceIfAndOnlyIfN1CType},
+			wantErrors: []string{expectedWAFPolicySourceMutualExclusionError},
 			spec: ngfAPIv1alpha1.WAFPolicySpec{
 				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
 				Type:       ngfAPIv1alpha1.PolicySourceTypeHTTP,
-				PolicySource: ngfAPIv1alpha1.PolicySource{
+				PolicySource: &ngfAPIv1alpha1.PolicySource{
 					HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: "https://example.com/policy.tgz"},
 					N1CSource: &ngfAPIv1alpha1.N1CBundleSource{
 						URL:        "https://n1c.example.com",
@@ -936,11 +1069,11 @@ func TestWAFPolicyPolicySource(t *testing.T) {
 		},
 		{
 			name:       "nimSource set with N1C type is invalid",
-			wantErrors: []string{expectedWAFNIMSourceIfAndOnlyIfNIMType},
+			wantErrors: []string{expectedWAFPolicySourceMutualExclusionError},
 			spec: ngfAPIv1alpha1.WAFPolicySpec{
 				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
 				Type:       ngfAPIv1alpha1.PolicySourceTypeN1C,
-				PolicySource: ngfAPIv1alpha1.PolicySource{
+				PolicySource: &ngfAPIv1alpha1.PolicySource{
 					N1CSource: &ngfAPIv1alpha1.N1CBundleSource{
 						URL:        "https://n1c.example.com",
 						PolicyName: helpers.GetPointer("my-policy"),
@@ -955,11 +1088,11 @@ func TestWAFPolicyPolicySource(t *testing.T) {
 		},
 		{
 			name:       "n1cSource set with NIM type is invalid",
-			wantErrors: []string{expectedWAFN1CSourceIfAndOnlyIfN1CType},
+			wantErrors: []string{expectedWAFPolicySourceMutualExclusionError},
 			spec: ngfAPIv1alpha1.WAFPolicySpec{
 				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
 				Type:       ngfAPIv1alpha1.PolicySourceTypeNIM,
-				PolicySource: ngfAPIv1alpha1.PolicySource{
+				PolicySource: &ngfAPIv1alpha1.PolicySource{
 					NIMSource: &ngfAPIv1alpha1.NIMBundleSource{
 						URL:        "https://nim.example.com",
 						PolicyName: helpers.GetPointer("my-policy"),
@@ -1003,7 +1136,7 @@ func TestWAFPolicyBundleValidation(t *testing.T) {
 			spec: ngfAPIv1alpha1.WAFPolicySpec{
 				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
 				Type:       ngfAPIv1alpha1.PolicySourceTypeHTTP,
-				PolicySource: ngfAPIv1alpha1.PolicySource{
+				PolicySource: &ngfAPIv1alpha1.PolicySource{
 					HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: "https://example.com/policy.tgz"},
 					Validation: &ngfAPIv1alpha1.BundleValidation{
 						VerifyChecksum: true,
@@ -1016,7 +1149,7 @@ func TestWAFPolicyBundleValidation(t *testing.T) {
 			spec: ngfAPIv1alpha1.WAFPolicySpec{
 				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
 				Type:       ngfAPIv1alpha1.PolicySourceTypeHTTP,
-				PolicySource: ngfAPIv1alpha1.PolicySource{
+				PolicySource: &ngfAPIv1alpha1.PolicySource{
 					HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: "https://example.com/policy.tgz"},
 					Validation: &ngfAPIv1alpha1.BundleValidation{
 						ExpectedChecksum: &validChecksum,
@@ -1030,7 +1163,7 @@ func TestWAFPolicyBundleValidation(t *testing.T) {
 			spec: ngfAPIv1alpha1.WAFPolicySpec{
 				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
 				Type:       ngfAPIv1alpha1.PolicySourceTypeHTTP,
-				PolicySource: ngfAPIv1alpha1.PolicySource{
+				PolicySource: &ngfAPIv1alpha1.PolicySource{
 					HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: "https://example.com/policy.tgz"},
 					Validation: &ngfAPIv1alpha1.BundleValidation{
 						VerifyChecksum:   true,
@@ -1078,7 +1211,7 @@ func TestWAFPolicyVerifyChecksumHTTPOnly(t *testing.T) {
 			spec: ngfAPIv1alpha1.WAFPolicySpec{
 				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
 				Type:       ngfAPIv1alpha1.PolicySourceTypeHTTP,
-				PolicySource: ngfAPIv1alpha1.PolicySource{
+				PolicySource: &ngfAPIv1alpha1.PolicySource{
 					HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: "https://example.com/policy.tgz"},
 					Validation: &ngfAPIv1alpha1.BundleValidation{VerifyChecksum: true},
 				},
@@ -1090,7 +1223,7 @@ func TestWAFPolicyVerifyChecksumHTTPOnly(t *testing.T) {
 			spec: ngfAPIv1alpha1.WAFPolicySpec{
 				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
 				Type:       ngfAPIv1alpha1.PolicySourceTypeNIM,
-				PolicySource: ngfAPIv1alpha1.PolicySource{
+				PolicySource: &ngfAPIv1alpha1.PolicySource{
 					NIMSource:  nimSource,
 					Validation: &ngfAPIv1alpha1.BundleValidation{VerifyChecksum: true},
 				},
@@ -1102,7 +1235,7 @@ func TestWAFPolicyVerifyChecksumHTTPOnly(t *testing.T) {
 			spec: ngfAPIv1alpha1.WAFPolicySpec{
 				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
 				Type:       ngfAPIv1alpha1.PolicySourceTypeN1C,
-				PolicySource: ngfAPIv1alpha1.PolicySource{
+				PolicySource: &ngfAPIv1alpha1.PolicySource{
 					N1CSource:  n1cSource,
 					Validation: &ngfAPIv1alpha1.BundleValidation{VerifyChecksum: true},
 				},
@@ -1113,7 +1246,7 @@ func TestWAFPolicyVerifyChecksumHTTPOnly(t *testing.T) {
 			spec: ngfAPIv1alpha1.WAFPolicySpec{
 				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
 				Type:       ngfAPIv1alpha1.PolicySourceTypeNIM,
-				PolicySource: ngfAPIv1alpha1.PolicySource{
+				PolicySource: &ngfAPIv1alpha1.PolicySource{
 					NIMSource:  nimSource,
 					Validation: &ngfAPIv1alpha1.BundleValidation{VerifyChecksum: false},
 				},
@@ -1124,7 +1257,7 @@ func TestWAFPolicyVerifyChecksumHTTPOnly(t *testing.T) {
 			spec: ngfAPIv1alpha1.WAFPolicySpec{
 				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
 				Type:       ngfAPIv1alpha1.PolicySourceTypeN1C,
-				PolicySource: ngfAPIv1alpha1.PolicySource{
+				PolicySource: &ngfAPIv1alpha1.PolicySource{
 					N1CSource:  n1cSource,
 					Validation: &ngfAPIv1alpha1.BundleValidation{VerifyChecksum: false},
 				},
@@ -1159,7 +1292,7 @@ func TestWAFPolicyNIMPolicyUID(t *testing.T) {
 			spec: ngfAPIv1alpha1.WAFPolicySpec{
 				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
 				Type:       ngfAPIv1alpha1.PolicySourceTypeNIM,
-				PolicySource: ngfAPIv1alpha1.PolicySource{
+				PolicySource: &ngfAPIv1alpha1.PolicySource{
 					NIMSource: &ngfAPIv1alpha1.NIMBundleSource{
 						URL:       "https://nim.example.com",
 						PolicyUID: helpers.GetPointer("2bc1e3ac-7990-4ca4-910a-8634c444c804"),
@@ -1173,7 +1306,7 @@ func TestWAFPolicyNIMPolicyUID(t *testing.T) {
 			spec: ngfAPIv1alpha1.WAFPolicySpec{
 				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
 				Type:       ngfAPIv1alpha1.PolicySourceTypeNIM,
-				PolicySource: ngfAPIv1alpha1.PolicySource{
+				PolicySource: &ngfAPIv1alpha1.PolicySource{
 					NIMSource: &ngfAPIv1alpha1.NIMBundleSource{
 						URL:       "https://nim.example.com",
 						PolicyUID: helpers.GetPointer("not-a-uuid"),
@@ -1187,7 +1320,7 @@ func TestWAFPolicyNIMPolicyUID(t *testing.T) {
 			spec: ngfAPIv1alpha1.WAFPolicySpec{
 				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
 				Type:       ngfAPIv1alpha1.PolicySourceTypeNIM,
-				PolicySource: ngfAPIv1alpha1.PolicySource{
+				PolicySource: &ngfAPIv1alpha1.PolicySource{
 					NIMSource: &ngfAPIv1alpha1.NIMBundleSource{
 						URL:       "https://nim.example.com",
 						PolicyUID: helpers.GetPointer("2BC1E3AC-7990-4CA4-910A-8634C444C804"),
@@ -1226,7 +1359,7 @@ func TestWAFPolicyN1CPolicyObjectID(t *testing.T) {
 			spec: ngfAPIv1alpha1.WAFPolicySpec{
 				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
 				Type:       ngfAPIv1alpha1.PolicySourceTypeN1C,
-				PolicySource: ngfAPIv1alpha1.PolicySource{
+				PolicySource: &ngfAPIv1alpha1.PolicySource{
 					N1CSource: &ngfAPIv1alpha1.N1CBundleSource{
 						URL:            "https://n1c.example.com",
 						PolicyObjectID: helpers.GetPointer("pol_-IUuEUN7ST63oRC7AlQPLw"),
@@ -1241,7 +1374,7 @@ func TestWAFPolicyN1CPolicyObjectID(t *testing.T) {
 			spec: ngfAPIv1alpha1.WAFPolicySpec{
 				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
 				Type:       ngfAPIv1alpha1.PolicySourceTypeN1C,
-				PolicySource: ngfAPIv1alpha1.PolicySource{
+				PolicySource: &ngfAPIv1alpha1.PolicySource{
 					N1CSource: &ngfAPIv1alpha1.N1CBundleSource{
 						URL:            "https://n1c.example.com",
 						PolicyObjectID: helpers.GetPointer("IUuEUN7ST63oRC7AlQPLw"),
@@ -1256,7 +1389,7 @@ func TestWAFPolicyN1CPolicyObjectID(t *testing.T) {
 			spec: ngfAPIv1alpha1.WAFPolicySpec{
 				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
 				Type:       ngfAPIv1alpha1.PolicySourceTypeN1C,
-				PolicySource: ngfAPIv1alpha1.PolicySource{
+				PolicySource: &ngfAPIv1alpha1.PolicySource{
 					N1CSource: &ngfAPIv1alpha1.N1CBundleSource{
 						URL:            "https://n1c.example.com",
 						PolicyObjectID: helpers.GetPointer("pol_invalid!chars"),
@@ -1296,7 +1429,7 @@ func TestWAFPolicyN1CPolicyVersionID(t *testing.T) {
 			spec: ngfAPIv1alpha1.WAFPolicySpec{
 				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
 				Type:       ngfAPIv1alpha1.PolicySourceTypeN1C,
-				PolicySource: ngfAPIv1alpha1.PolicySource{
+				PolicySource: &ngfAPIv1alpha1.PolicySource{
 					N1CSource: &ngfAPIv1alpha1.N1CBundleSource{
 						URL:             "https://n1c.example.com",
 						PolicyName:      helpers.GetPointer("my-policy"),
@@ -1312,7 +1445,7 @@ func TestWAFPolicyN1CPolicyVersionID(t *testing.T) {
 			spec: ngfAPIv1alpha1.WAFPolicySpec{
 				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
 				Type:       ngfAPIv1alpha1.PolicySourceTypeN1C,
-				PolicySource: ngfAPIv1alpha1.PolicySource{
+				PolicySource: &ngfAPIv1alpha1.PolicySource{
 					N1CSource: &ngfAPIv1alpha1.N1CBundleSource{
 						URL:             "https://n1c.example.com",
 						PolicyName:      helpers.GetPointer("my-policy"),
@@ -1328,7 +1461,7 @@ func TestWAFPolicyN1CPolicyVersionID(t *testing.T) {
 			spec: ngfAPIv1alpha1.WAFPolicySpec{
 				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
 				Type:       ngfAPIv1alpha1.PolicySourceTypeN1C,
-				PolicySource: ngfAPIv1alpha1.PolicySource{
+				PolicySource: &ngfAPIv1alpha1.PolicySource{
 					N1CSource: &ngfAPIv1alpha1.N1CBundleSource{
 						URL:             "https://n1c.example.com",
 						PolicyName:      helpers.GetPointer("my-policy"),
@@ -1357,8 +1490,8 @@ func TestWAFPolicyN1CLogProfileObjectID(t *testing.T) {
 	t.Parallel()
 	k8sClient := getKubernetesClient(t)
 
-	n1cLogSource := func(profileObjectID string) ngfAPIv1alpha1.LogSource {
-		return ngfAPIv1alpha1.LogSource{
+	n1cLogSource := func(profileObjectID string) *ngfAPIv1alpha1.LogSource {
+		return &ngfAPIv1alpha1.LogSource{
 			N1CSource: &ngfAPIv1alpha1.N1CLogProfileBundleSource{
 				URL:             "https://n1c.example.com",
 				Namespace:       "my-namespace",
@@ -1432,8 +1565,8 @@ func TestWAFPolicyN1CLogProfileNameOrObjectID(t *testing.T) {
 	profileName := "my-log-profile"
 	profileObjectID := "lp_8s8uZxLpThWwEGF7LTn_rA"
 
-	n1cLogSource := func(src ngfAPIv1alpha1.N1CLogProfileBundleSource) ngfAPIv1alpha1.LogSource {
-		return ngfAPIv1alpha1.LogSource{N1CSource: &src}
+	n1cLogSource := func(src ngfAPIv1alpha1.N1CLogProfileBundleSource) *ngfAPIv1alpha1.LogSource {
+		return &ngfAPIv1alpha1.LogSource{N1CSource: &src}
 	}
 
 	tests := []struct {
