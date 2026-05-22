@@ -7,9 +7,9 @@ ADD --link --chown=101:1001 https://nginx.org/keys/nginx_signing.key nginx_signi
 ADD --link --chown=101:1001 build/ubi/repos/agent.repo agent.repo
 ADD --link --chown=101:1001 build/ubi/repos/app-protect.repo app-protect.repo
 
-FROM ghcr.io/nginx/dependencies/nginx-ubi:ubi9@sha256:edefd779f98fd3ba4bb92a795dde41be345664e6e531840b5682e947b0674307 AS ubi9-packages
+FROM ghcr.io/nginx/dependencies/nginx-ubi:ubi10@sha256:5a06bf4021a0a2068f8e3412568be52cf68c12569ab7da109b5ad6c375ae62ed AS ubi10-packages
 
-FROM registry.access.redhat.com/ubi9/ubi-minimal:9.7 AS ubi-nginx-plus
+FROM registry.access.redhat.com/ubi10/ubi-minimal:10.2 AS ubi-nginx-plus
 
 ARG NGINX_PLUS_VERSION=R37.0
 ARG APP_PROTECT_VERSION=37.0+5.635
@@ -37,7 +37,7 @@ RUN --mount=type=bind,from=nginx-files,src=nginx-plus.repo,target=/etc/yum.repos
     --mount=type=bind,from=nginx-files,src=agent.repo,target=/etc/yum.repos.d/agent.repo \
     --mount=type=bind,from=nginx-files,src=app-protect.repo,target=/etc/yum.repos.d/app-protect.repo \
     --mount=type=bind,from=nginx-files,src=nginx_signing.key,target=/tmp/nginx_signing.key \
-    --mount=type=bind,from=ubi9-packages,src=/,target=/ubi-bin/ \
+    --mount=type=bind,from=ubi10-packages,src=/,target=/ubi-bin/ \
     --mount=type=secret,id=nginx-repo.crt,dst=/etc/ssl/nginx/nginx-repo.crt,mode=0644 \
 	--mount=type=secret,id=nginx-repo.key,dst=/etc/ssl/nginx/nginx-repo.key,mode=0644 \
     # Import NGINX signing key
@@ -45,6 +45,7 @@ RUN --mount=type=bind,from=nginx-files,src=nginx-plus.repo,target=/etc/yum.repos
     # Install c-ares from the dependencies image (contains required libs)
     && rpm -Uvh /ubi-bin/c-ares-*.rpm \
     # Create nginx user with consistent UID/GID
+    && microdnf --nodocs install -y shadow-utils \
     && groupadd -g 1001 nginx \
     && useradd -r -u 101 -g nginx -s /sbin/nologin -d /var/cache/nginx nginx \
     # Install NGINX Plus and modules (njs, otel)
