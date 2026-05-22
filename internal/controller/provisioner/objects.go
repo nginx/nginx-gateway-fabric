@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"net"
 	"sort"
 	"strconv"
 	"strings"
@@ -677,13 +678,13 @@ func (p *NginxProvisioner) buildNginxService(
 
 	var externalIPs []string
 	for _, addr := range addresses {
-		if addr.Type != nil && *addr.Type == gatewayv1.IPAddressType {
+		if addr.Type != nil && *addr.Type == gatewayv1.IPAddressType && net.ParseIP(addr.Value) != nil {
 			externalIPs = append(externalIPs, addr.Value)
 		}
 	}
 
 	var servicePolicy corev1.ServiceExternalTrafficPolicy
-	if serviceType != corev1.ServiceTypeClusterIP || len(externalIPs) > 0 {
+	if serviceType != corev1.ServiceTypeClusterIP {
 		servicePolicy = defaultServicePolicy
 		if serviceCfg.ExternalTrafficPolicy != nil {
 			servicePolicy = corev1.ServiceExternalTrafficPolicy(*serviceCfg.ExternalTrafficPolicy)
@@ -717,30 +718,20 @@ func (p *NginxProvisioner) buildNginxService(
 
 	p.updateLoadBalancerClass(svc, externalIPs)
 
-	p.cfg.Logger.Info("Building Service for Gateway", "service_spec", svc.Spec, "externalIPs", externalIPs)
+	p.cfg.Logger.V(1).Info("Building Service for Gateway", "service_spec", svc.Spec)
 
 	return svc, nil
 }
 
 // updateLoadBalancerClass sets the Service's LoadBalancerClass to this controller
-// if the Gateway has IP addresses and the Service is a LoadBalancer,
-// but only if the LoadBalancerClass isn't already set by the user.
+// if the Gateway has IP addresses and the Service is a LoadBalancer.
 func (p *NginxProvisioner) updateLoadBalancerClass(
 	svc *corev1.Service,
 	gwExternalIPs []string,
 ) {
 	if svc.Spec.Type == corev1.ServiceTypeLoadBalancer && len(gwExternalIPs) > 0 {
-		if svc.Spec.LoadBalancerClass == nil {
-			if p.cfg.GatewayCtlrName != "" {
-				ctlr := p.cfg.GatewayCtlrName
-				svc.Spec.LoadBalancerClass = &ctlr
-			}
-		} else {
-			p.cfg.Logger.Info(
-				"gateway has spec.addresses but Service LoadBalancerClass is user-provided; not overriding",
-				"loadBalancerClass", *svc.Spec.LoadBalancerClass,
-			)
-		}
+		ctlr := p.cfg.GatewayCtlrName
+		svc.Spec.LoadBalancerClass = &ctlr
 	}
 }
 

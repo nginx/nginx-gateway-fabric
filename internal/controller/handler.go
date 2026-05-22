@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net"
 	"sync"
 	"time"
 
@@ -931,13 +930,10 @@ func getGatewayAddresses(
 		gwSvc = *svc
 	}
 
-	return getGatewayAddressesForStatus(&gwSvc, gateway), nil
+	return getGatewayAddressesForStatus(&gwSvc), nil
 }
 
-func getGatewayAddressesForStatus(
-	svc *v1.Service,
-	gateway *graph.Gateway,
-) (gwAddresses []gatewayv1.GatewayStatusAddress) {
+func getGatewayAddressesForStatus(svc *v1.Service) (gwAddresses []gatewayv1.GatewayStatusAddress) {
 	// Preserve order but deduplicate addresses and hostnames so the Gateway status
 	// does not contain duplicates coming from Service status and Gateway spec.addresses.
 	addrSeen := make(map[string]struct{})
@@ -965,16 +961,6 @@ func getGatewayAddressesForStatus(
 			addr := svc.Spec.ClusterIP
 			addrSeen[addr] = struct{}{}
 			addresses = append(addresses, addr)
-		}
-	}
-
-	// Append Gateway.Spec.Addresses (only valid IP addresses) if not already present.
-	for _, address := range gateway.Source.Spec.Addresses {
-		if address.Type != nil && *address.Type == gatewayv1.IPAddressType && net.ParseIP(address.Value) != nil {
-			if _, ok := addrSeen[address.Value]; !ok {
-				addrSeen[address.Value] = struct{}{}
-				addresses = append(addresses, address.Value)
-			}
 		}
 	}
 

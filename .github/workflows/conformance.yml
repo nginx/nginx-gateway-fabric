@@ -164,11 +164,12 @@ jobs:
           ngf_prefix=ghcr.io/nginx/nginx-gateway-fabric
           ngf_tag=${{ steps.ngf-meta.outputs.version }}
           if [ ${{ github.event_name }} == "schedule" ]; then export GW_API_VERSION=main; fi
-          make helm-install-local${{ inputs.image == 'plus' && '-with-plus' || ''}} PREFIX=${ngf_prefix} TAG=${ngf_tag}
+          GW_SERVICE_TYPE=LoadBalancer make helm-install-local${{ inputs.image == 'plus' && '-with-plus' || ''}} PREFIX=${ngf_prefix} TAG=${ngf_tag}
         working-directory: ./tests
 
       - name: Run conformance tests
         run: |
+          make deploy-metallb
           make run-conformance-tests CONFORMANCE_TAG=${{ github.sha }} NGF_VERSION=${{ github.ref_name }} CLUSTER_NAME=${{ github.run_id }}
           core_result=$(cat conformance-profile.yaml | yq '.profiles[0].core.result')
           extended_result=$(cat conformance-profile.yaml | yq '.profiles[0].extended.result')

@@ -78,6 +78,7 @@ func TestBuildNginxResourceObjects(t *testing.T) {
 			},
 			AgentTLSSecretName: agentTLSTestSecretName,
 			AgentLabels:        make(map[string]string),
+			GatewayCtlrName:    "nginx-gateway-controller",
 		},
 		baseLabelSelector: metav1.LabelSelector{
 			MatchLabels: map[string]string{
@@ -233,8 +234,7 @@ func TestBuildNginxResourceObjects(t *testing.T) {
 		},
 	}))
 	g.Expect(svc.Spec.ExternalIPs).To(BeNil())
-	// GatewayCtlrName is empty in this provisioner, so LoadBalancerClass must not be set.
-	g.Expect(svc.Spec.LoadBalancerClass).To(BeNil())
+	g.Expect(*svc.Spec.LoadBalancerClass).To(Equal("nginx-gateway-controller"))
 
 	depObj := objects[5]
 	dep, ok := depObj.(*appsv1.Deployment)
@@ -2421,7 +2421,7 @@ func TestBuildNginxResourceObjects_LoadBalancerClass(t *testing.T) {
 			expectedLBClass:  helpers.GetPointer(ctlrName),
 		},
 		{
-			name:             "LB service + IP addresses + user LBClass in nProxyCfg → does not override",
+			name:             "LB service + IP addresses + user LBClass in nProxyCfg → sets LoadBalancerClass",
 			gatewayCtlrName:  ctlrName,
 			gatewayAddresses: ipAddresses,
 			nProxyCfg: &graph.EffectiveNginxProxy{
@@ -2431,19 +2431,12 @@ func TestBuildNginxResourceObjects_LoadBalancerClass(t *testing.T) {
 					},
 				},
 			},
-			expectedLBClass: helpers.GetPointer("custom-lb-class"),
+			expectedLBClass: helpers.GetPointer(string(ctlrName)),
 		},
 		{
 			name:             "LB service + no IP addresses → LoadBalancerClass nil",
 			gatewayCtlrName:  ctlrName,
 			gatewayAddresses: nil,
-			nProxyCfg:        nil,
-			expectedLBClass:  nil,
-		},
-		{
-			name:             "LB service + IP addresses + empty GatewayCtlrName → LoadBalancerClass nil",
-			gatewayCtlrName:  "",
-			gatewayAddresses: ipAddresses,
 			nProxyCfg:        nil,
 			expectedLBClass:  nil,
 		},

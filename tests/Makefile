@@ -9,7 +9,7 @@ GINKGO_PROCS ?= 4
 GITHUB_OUTPUT =
 GW_API_VERSION ?= $(shell sed -n 's/.*ref=v\(.*\)/\1/p' ../config/crd/gateway-api/standard/kustomization.yaml)## Supported Gateway API version from current NGF
 GW_API_PREV_VERSION ?= 1.5.1## Supported Gateway API version from previous NGF release
-GW_SERVICE_TYPE = NodePort## Service type to use for the gateway
+GW_SERVICE_TYPE = LoadBalancer## Service type to use for the gateway
 NGF_VERSION ?= edge## NGF version to be tested
 PULL_POLICY ?= Never## Pull policy for the images
 NGINX_CONF_DIR = internal/controller/nginx/conf
@@ -49,6 +49,12 @@ build-test-runner-image: ## Build conformance test runner image
 .PHONY: build-crossplane-image
 build-crossplane-image: ## Build the crossplane image
 	docker build --platform $(GOOS)/$(GOARCH) --build-arg NGINX_CONF_DIR=$(NGINX_CONF_DIR) -t nginx-crossplane:latest -f framework/crossplane/Dockerfile ..
+
+.PHONY: deploy-metallb
+deploy-metallb: ## Deploy MetalLB to the cluster (required for LoadBalancer service type in the conformance tests)
+	kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.15.3/config/manifests/metallb-native.yaml
+	kubectl wait --namespace metallb-system --for=condition=ready pod --selector=app=metallb --timeout=90s
+	kubectl apply -f conformance/metallb-pool.yaml
 
 .PHONY: run-conformance-tests
 run-conformance-tests: ## Run conformance tests
