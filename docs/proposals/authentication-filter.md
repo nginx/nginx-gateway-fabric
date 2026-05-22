@@ -269,7 +269,7 @@ type JWTRemoteKeySource struct {
 type RequireType string
 
 const (
-  // RequireTypeAll authorizes requests that satisfy all requirements.
+  // RequireTypeAll authorizes claims that satisfy all requirements.
   RequireTypeAll  RequireType  = "All"
   // RequireTypeAny authorizes claims that satisfy any requirement.
   RequireTypeAny  RequireType  = "Any"
@@ -292,7 +292,7 @@ type Authorization struct {
   // Rules defines a list of claims and their specific authorization requirements.
   Rules []Rule `json:"rules,omitempty"`
 
-  // Require sets the authorization mode for all claims in a rule.
+  // Require sets top level authorization requirement.
   // When set to All, the requirements for all claims in a rule must be met.
   // When set to Any, the requirements for any one claim in a rule must be met.
   //
@@ -307,7 +307,7 @@ type Rule struct {
   // +kubebuilder:validation:MinItems=1
   Claims []Claim `json:"claims,omitempty"`
 
-  // Require sets the authorization mode a specific claim within a rule.
+  // Require sets the authorization mode for a specific claim within a rule.
   // When set to All, a token's claim must match all values within that claim.
   // When set to Any, a token's claim must match at least one value with that claim.
   //
@@ -971,7 +971,7 @@ spec:
             match: Regex # Allow values to contain regex patterns.
 ```
 
-Here is break a down each component of this specification:
+Here is a breakdown each component of this specification:
 1. `spec.jwt.authorization`: This is the top level spec for the claim validation
 2. `spec.jwt.authorization.require`: Defaults to `Any`. Can be set to `Any` or `All`. This defines the top level rule requirement for all claims. When set to `All`, all claims within `rules` must be satisfied for a request to be authorized. When set to `Any`, one or more claims may be satisfied within `rules` for the request to be authorized.
 3. `spec.jwt.authorization.rules[]`: This defines the list of rules that a JWT claim must satisfy, depending on the `require` modes set.
@@ -984,7 +984,7 @@ To help make this more digestible, the NGINX configuration contain multiple comm
 
 ```nginx
 http {
-    # For every `rule[].claim[].name` we define an `auth_jwt_claim_set` directive.
+    # For every `rules[].claims[].name` we define an `auth_jwt_claim_set` directive.
     # This is required by NGINX to parse array-type claims.
     # It's safer and more consistent to treat every `rule[].claim[].values`
     # as an array in NGINX, even if it contains a single value.
@@ -1020,7 +1020,7 @@ http {
         default 0;
     }
 
-    map $iss_rule_1$aud_rule_1$tenant_rule_1 $rule_1_any{
+    map $iss_rule_1$aud_rule_1$tenant_rule_1 $rule_1_any {
         ~1 1;
         default 0;
     }
@@ -1200,7 +1200,7 @@ auth_jwt_claim_set $claim_roles realm_access roles;
 auth_jwt_claim_set $claim_email email;
 ```
 
-This will set the value of `$roles` to `["reader", "admin"]`, and the value of `$email` to `user@example.com`.
+This will set the value of `$claim_roles` to `["reader", "admin"]`, and the value of `$claim_email` to `user@example.com`.
 Since the email contains a dot, this needs to be processed the same way.
 
 ### Route Attachment
@@ -1392,7 +1392,7 @@ A route rule with a single path in an HTTPRoute/GRPCRoute referencing a valid `A
 This section assumes that the `AuthenticationFilter` attached to the route is valid.
 It explicitly covers the expected outcomes for required claims.
 
-`spec.jwt.authorize.require` set to `Any`
+`spec.jwt.authorization.require` set to `Any`
 - Input:
   A JWT claim(s) that matches any combination of claim requirements defined in `spec.jwt.authorize.rule[].claims[]`.
 
@@ -1400,7 +1400,7 @@ It explicitly covers the expected outcomes for required claims.
   Request is authorized.
   NGINX returns a 200 response code.
 
-`spec.jwt.authorize.require` set to `All`
+`spec.jwt.authorization.require` set to `All`
 - Input:
   A JWT claim(s) that match all claim requirements defined in `spec.jwt.authorize.rule[].claims[]`.
 
@@ -1408,7 +1408,7 @@ It explicitly covers the expected outcomes for required claims.
   Request is authorized.
   NGINX returns a 200 response code.
 
-`spec.jwt.authorize.require` set to `Any`
+`spec.jwt.authorization.require` set to `Any`
 - Input:
   A JWT claim(s) that match none of claim requirements defined in `spec.jwt.authorize.rule[].claims[]`.
 
@@ -1416,7 +1416,7 @@ It explicitly covers the expected outcomes for required claims.
   Request is not authorized.
   NGINX returns a 401 response code.
 
-`spec.jwt.authorize.require` set to `All`
+`spec.jwt.authorization.require` set to `All`
 - Input:
   A JWT claim(s) that match none of claim requirements defined in `spec.jwt.authorize.rule[].claims[]`.
 
@@ -1424,7 +1424,7 @@ It explicitly covers the expected outcomes for required claims.
   Request is not authorized.
   NGINX returns a 401 response code.
 
-`spec.jwt.authorize.require` set to `All`
+`spec.jwt.authorization.require` set to `All`
 - Input:
   A JWT claim(s) that match one or more, but not all, of the claim requirements defined in `spec.jwt.authorize.rule[].claims[]`.
 
