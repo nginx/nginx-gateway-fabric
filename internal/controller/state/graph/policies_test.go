@@ -2929,7 +2929,7 @@ func TestProcessWAFPolicies(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: policyNs},
 			Spec: ngfAPIv1alpha1.WAFPolicySpec{
 				Type: ngfAPIv1alpha1.PolicySourceTypeHTTP,
-				PolicySource: ngfAPIv1alpha1.PolicySource{
+				PolicySource: &ngfAPIv1alpha1.PolicySource{
 					HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: bundleURL},
 				},
 			},
@@ -2948,7 +2948,7 @@ func TestProcessWAFPolicies(t *testing.T) {
 		if withLogURL {
 			p.Spec.SecurityLogs = []ngfAPIv1alpha1.WAFSecurityLog{
 				{
-					LogSource: ngfAPIv1alpha1.LogSource{
+					LogSource: &ngfAPIv1alpha1.LogSource{
 						HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: logBundleURL},
 					},
 					Destination: ngfAPIv1alpha1.SecurityLogDestination{
@@ -3397,7 +3397,7 @@ func TestProcessWAFPolicies(t *testing.T) {
 				wafPolicy := makeWAFPolicy(policyName, false, false, false)
 				wafPolicy.Spec.SecurityLogs = []ngfAPIv1alpha1.WAFSecurityLog{
 					{
-						LogSource: ngfAPIv1alpha1.LogSource{
+						LogSource: &ngfAPIv1alpha1.LogSource{
 							HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: logBundleURL},
 							Auth: &ngfAPIv1alpha1.BundleAuth{
 								SecretRef: ngfAPIv1alpha1.LocalObjectReference{Name: authSecretName},
@@ -3441,7 +3441,7 @@ func TestProcessWAFPolicies(t *testing.T) {
 				wafPolicy := makeWAFPolicy(policyName, false, false, false)
 				wafPolicy.Spec.SecurityLogs = []ngfAPIv1alpha1.WAFSecurityLog{
 					{
-						LogSource: ngfAPIv1alpha1.LogSource{
+						LogSource: &ngfAPIv1alpha1.LogSource{
 							HTTPSource:   &ngfAPIv1alpha1.HTTPBundleSource{URL: logBundleURL},
 							TLSSecretRef: &ngfAPIv1alpha1.LocalObjectReference{Name: tlsSecretName},
 						},
@@ -3519,7 +3519,7 @@ func TestProcessWAFPolicies(t *testing.T) {
 				logURL1 := multiLogURL1
 				wafPolicy.Spec.SecurityLogs = []ngfAPIv1alpha1.WAFSecurityLog{
 					{
-						LogSource: ngfAPIv1alpha1.LogSource{
+						LogSource: &ngfAPIv1alpha1.LogSource{
 							HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: logURL0},
 							Auth: &ngfAPIv1alpha1.BundleAuth{
 								SecretRef: ngfAPIv1alpha1.LocalObjectReference{Name: authSecretName},
@@ -3530,7 +3530,7 @@ func TestProcessWAFPolicies(t *testing.T) {
 						},
 					},
 					{
-						LogSource: ngfAPIv1alpha1.LogSource{
+						LogSource: &ngfAPIv1alpha1.LogSource{
 							HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: logURL1},
 						},
 						Destination: ngfAPIv1alpha1.SecurityLogDestination{
@@ -3578,7 +3578,7 @@ func TestProcessWAFPolicies(t *testing.T) {
 				wafPolicy := makeWAFPolicy(policyName, false, false, false)
 				wafPolicy.Spec.SecurityLogs = []ngfAPIv1alpha1.WAFSecurityLog{
 					{
-						LogSource: ngfAPIv1alpha1.LogSource{
+						LogSource: &ngfAPIv1alpha1.LogSource{
 							HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{
 								URL: logURL,
 							},
@@ -3589,7 +3589,7 @@ func TestProcessWAFPolicies(t *testing.T) {
 					},
 					{
 						// Same URL as above — must not trigger a second fetch.
-						LogSource: ngfAPIv1alpha1.LogSource{
+						LogSource: &ngfAPIv1alpha1.LogSource{
 							HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{
 								URL: logURL,
 							},
@@ -3633,7 +3633,7 @@ func TestProcessWAFPolicies(t *testing.T) {
 				wafPolicy := makeWAFPolicy(policyName, false, false, false)
 				wafPolicy.Spec.SecurityLogs = []ngfAPIv1alpha1.WAFSecurityLog{
 					{
-						LogSource: ngfAPIv1alpha1.LogSource{
+						LogSource: &ngfAPIv1alpha1.LogSource{
 							DefaultProfile: &defaultProfile,
 						},
 						Destination: ngfAPIv1alpha1.SecurityLogDestination{
@@ -3841,16 +3841,22 @@ func TestBuildPolicyFetchRequest(t *testing.T) {
 
 	tests := []struct {
 		auth         *fetch.BundleAuth
-		policySource ngfAPIv1alpha1.PolicySource
+		policySource *ngfAPIv1alpha1.PolicySource
 		name         string
 		policyType   ngfAPIv1alpha1.PolicySourceType
 		tlsCA        []byte
 		expRequest   fetch.Request
 	}{
 		{
+			name:         "nil policySource returns empty request",
+			policySource: nil,
+			policyType:   ngfAPIv1alpha1.PolicySourceTypeHTTP,
+			expRequest:   fetch.Request{},
+		},
+		{
 			name:       "HTTP type",
 			policyType: ngfAPIv1alpha1.PolicySourceTypeHTTP,
-			policySource: ngfAPIv1alpha1.PolicySource{
+			policySource: &ngfAPIv1alpha1.PolicySource{
 				HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: baseURL},
 			},
 			expRequest: fetch.Request{
@@ -3861,7 +3867,7 @@ func TestBuildPolicyFetchRequest(t *testing.T) {
 		{
 			name:       "HTTP type with checksum verification enabled",
 			policyType: ngfAPIv1alpha1.PolicySourceTypeHTTP,
-			policySource: ngfAPIv1alpha1.PolicySource{
+			policySource: &ngfAPIv1alpha1.PolicySource{
 				HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: baseURL},
 				Validation: &ngfAPIv1alpha1.BundleValidation{VerifyChecksum: true},
 			},
@@ -3874,7 +3880,7 @@ func TestBuildPolicyFetchRequest(t *testing.T) {
 		{
 			name:       "NIM type with expected checksum",
 			policyType: ngfAPIv1alpha1.PolicySourceTypeNIM,
-			policySource: ngfAPIv1alpha1.PolicySource{
+			policySource: &ngfAPIv1alpha1.PolicySource{
 				NIMSource: &ngfAPIv1alpha1.NIMBundleSource{
 					URL:        baseURL,
 					PolicyName: helpers.GetPointer(nimPolicyName),
@@ -3893,7 +3899,7 @@ func TestBuildPolicyFetchRequest(t *testing.T) {
 		{
 			name:       "HTTP type with TLS CA data",
 			policyType: ngfAPIv1alpha1.PolicySourceTypeHTTP,
-			policySource: ngfAPIv1alpha1.PolicySource{
+			policySource: &ngfAPIv1alpha1.PolicySource{
 				HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: baseURL},
 			},
 			tlsCA: caData,
@@ -3906,7 +3912,7 @@ func TestBuildPolicyFetchRequest(t *testing.T) {
 		{
 			name:       "NIM type sets PolicyName",
 			policyType: ngfAPIv1alpha1.PolicySourceTypeNIM,
-			policySource: ngfAPIv1alpha1.PolicySource{
+			policySource: &ngfAPIv1alpha1.PolicySource{
 				NIMSource: &ngfAPIv1alpha1.NIMBundleSource{
 					URL:        baseURL,
 					PolicyName: helpers.GetPointer(nimPolicyName),
@@ -3921,7 +3927,7 @@ func TestBuildPolicyFetchRequest(t *testing.T) {
 		{
 			name:       "N1C type sets PolicyName and N1CNamespace",
 			policyType: ngfAPIv1alpha1.PolicySourceTypeN1C,
-			policySource: ngfAPIv1alpha1.PolicySource{
+			policySource: &ngfAPIv1alpha1.PolicySource{
 				N1CSource: &ngfAPIv1alpha1.N1CBundleSource{
 					URL:        baseURL,
 					PolicyName: helpers.GetPointer(nimPolicyName),
@@ -3940,7 +3946,7 @@ func TestBuildPolicyFetchRequest(t *testing.T) {
 		{
 			name:       "N1C type swaps BearerToken to APIToken",
 			policyType: ngfAPIv1alpha1.PolicySourceTypeN1C,
-			policySource: ngfAPIv1alpha1.PolicySource{
+			policySource: &ngfAPIv1alpha1.PolicySource{
 				N1CSource: &ngfAPIv1alpha1.N1CBundleSource{
 					URL:        baseURL,
 					PolicyName: helpers.GetPointer(nimPolicyName),
@@ -3961,7 +3967,7 @@ func TestBuildPolicyFetchRequest(t *testing.T) {
 		{
 			name:       "N1C type with no BearerToken does not set APIToken",
 			policyType: ngfAPIv1alpha1.PolicySourceTypeN1C,
-			policySource: ngfAPIv1alpha1.PolicySource{
+			policySource: &ngfAPIv1alpha1.PolicySource{
 				N1CSource: &ngfAPIv1alpha1.N1CBundleSource{
 					URL:        baseURL,
 					PolicyName: helpers.GetPointer(nimPolicyName),
@@ -3982,7 +3988,7 @@ func TestBuildPolicyFetchRequest(t *testing.T) {
 		{
 			name:       "N1C type with nil auth does not panic",
 			policyType: ngfAPIv1alpha1.PolicySourceTypeN1C,
-			policySource: ngfAPIv1alpha1.PolicySource{
+			policySource: &ngfAPIv1alpha1.PolicySource{
 				N1CSource: &ngfAPIv1alpha1.N1CBundleSource{
 					URL:        baseURL,
 					PolicyName: helpers.GetPointer(nimPolicyName),
@@ -4001,7 +4007,7 @@ func TestBuildPolicyFetchRequest(t *testing.T) {
 		{
 			name:       "NIM type does not set N1CNamespace",
 			policyType: ngfAPIv1alpha1.PolicySourceTypeNIM,
-			policySource: ngfAPIv1alpha1.PolicySource{
+			policySource: &ngfAPIv1alpha1.PolicySource{
 				NIMSource: &ngfAPIv1alpha1.NIMBundleSource{
 					URL:        baseURL,
 					PolicyName: helpers.GetPointer(nimPolicyName),
@@ -4016,7 +4022,7 @@ func TestBuildPolicyFetchRequest(t *testing.T) {
 		{
 			name:       "HTTP type with retry attempts",
 			policyType: ngfAPIv1alpha1.PolicySourceTypeHTTP,
-			policySource: ngfAPIv1alpha1.PolicySource{
+			policySource: &ngfAPIv1alpha1.PolicySource{
 				HTTPSource:    &ngfAPIv1alpha1.HTTPBundleSource{URL: baseURL},
 				RetryAttempts: helpers.GetPointer[int32](2),
 			},
@@ -4028,7 +4034,7 @@ func TestBuildPolicyFetchRequest(t *testing.T) {
 		{
 			name:       "HTTP type with zero retry attempts disables retries",
 			policyType: ngfAPIv1alpha1.PolicySourceTypeHTTP,
-			policySource: ngfAPIv1alpha1.PolicySource{
+			policySource: &ngfAPIv1alpha1.PolicySource{
 				HTTPSource:    &ngfAPIv1alpha1.HTTPBundleSource{URL: baseURL},
 				RetryAttempts: helpers.GetPointer[int32](0),
 			},
@@ -4044,7 +4050,7 @@ func TestBuildPolicyFetchRequest(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			got := BuildPolicyFetchRequest(&tc.policySource, tc.policyType, tc.auth, tc.tlsCA)
+			got := BuildPolicyFetchRequest(tc.policySource, tc.policyType, tc.auth, tc.tlsCA)
 			g.Expect(got).To(Equal(tc.expRequest))
 		})
 	}
@@ -4064,12 +4070,22 @@ func TestLogBundleKey(t *testing.T) {
 
 	tests := []struct {
 		name      string
-		logSource ngfAPIv1alpha1.LogSource
+		logSource *ngfAPIv1alpha1.LogSource
 		expKey    WAFBundleKey
 	}{
 		{
+			name:      "nil logSource returns empty key",
+			logSource: nil,
+			expKey:    WAFBundleKey(""),
+		},
+		{
+			name:      "logSource with all sub-sources nil returns empty key",
+			logSource: &ngfAPIv1alpha1.LogSource{},
+			expKey:    WAFBundleKey(""),
+		},
+		{
 			name: "NIM source",
-			logSource: ngfAPIv1alpha1.LogSource{
+			logSource: &ngfAPIv1alpha1.LogSource{
 				NIMSource: &ngfAPIv1alpha1.NIMLogProfileBundleSource{
 					URL:         nimURL,
 					ProfileName: profileName,
@@ -4079,7 +4095,7 @@ func TestLogBundleKey(t *testing.T) {
 		},
 		{
 			name: "N1C source with ProfileObjectID",
-			logSource: ngfAPIv1alpha1.LogSource{
+			logSource: &ngfAPIv1alpha1.LogSource{
 				N1CSource: &ngfAPIv1alpha1.N1CLogProfileBundleSource{
 					URL:             n1cURL,
 					Namespace:       "n1c-ns",
@@ -4090,7 +4106,7 @@ func TestLogBundleKey(t *testing.T) {
 		},
 		{
 			name: "N1C source with ProfileName (no ObjectID)",
-			logSource: ngfAPIv1alpha1.LogSource{
+			logSource: &ngfAPIv1alpha1.LogSource{
 				N1CSource: &ngfAPIv1alpha1.N1CLogProfileBundleSource{
 					URL:         n1cURL,
 					Namespace:   "n1c-ns",
@@ -4101,7 +4117,7 @@ func TestLogBundleKey(t *testing.T) {
 		},
 		{
 			name: "N1C source with neither ProfileObjectID nor ProfileName",
-			logSource: ngfAPIv1alpha1.LogSource{
+			logSource: &ngfAPIv1alpha1.LogSource{
 				N1CSource: &ngfAPIv1alpha1.N1CLogProfileBundleSource{
 					URL:       n1cURL,
 					Namespace: "n1c-ns",
@@ -4111,7 +4127,7 @@ func TestLogBundleKey(t *testing.T) {
 		},
 		{
 			name: "HTTP source",
-			logSource: ngfAPIv1alpha1.LogSource{
+			logSource: &ngfAPIv1alpha1.LogSource{
 				HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{
 					URL: httpURL,
 				},
@@ -4125,7 +4141,7 @@ func TestLogBundleKey(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			got := LogBundleKey(policyNsName, &tc.logSource)
+			got := LogBundleKey(policyNsName, tc.logSource)
 			g.Expect(got).To(Equal(tc.expKey))
 		})
 	}
@@ -4139,14 +4155,19 @@ func TestBuildLogFetchRequest(t *testing.T) {
 
 	tests := []struct {
 		auth       *fetch.BundleAuth
-		logSource  ngfAPIv1alpha1.LogSource
+		logSource  *ngfAPIv1alpha1.LogSource
 		name       string
 		tlsCA      []byte
 		expRequest fetch.Request
 	}{
 		{
+			name:       "nil logSource returns empty request",
+			logSource:  nil,
+			expRequest: fetch.Request{},
+		},
+		{
 			name: "basic log fetch",
-			logSource: ngfAPIv1alpha1.LogSource{
+			logSource: &ngfAPIv1alpha1.LogSource{
 				HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: baseURL},
 			},
 			expRequest: fetch.Request{
@@ -4156,7 +4177,7 @@ func TestBuildLogFetchRequest(t *testing.T) {
 		},
 		{
 			name: "log fetch with 0 retry attempts",
-			logSource: ngfAPIv1alpha1.LogSource{
+			logSource: &ngfAPIv1alpha1.LogSource{
 				HTTPSource:    &ngfAPIv1alpha1.HTTPBundleSource{URL: baseURL},
 				RetryAttempts: helpers.GetPointer[int32](0),
 			},
@@ -4167,7 +4188,7 @@ func TestBuildLogFetchRequest(t *testing.T) {
 		},
 		{
 			name: "log fetch with TLS CA",
-			logSource: ngfAPIv1alpha1.LogSource{
+			logSource: &ngfAPIv1alpha1.LogSource{
 				HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: baseURL},
 			},
 			tlsCA: caData,
@@ -4184,8 +4205,82 @@ func TestBuildLogFetchRequest(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			got := BuildLogFetchRequest(&tc.logSource, tc.auth, tc.tlsCA)
+			got := BuildLogFetchRequest(tc.logSource, tc.auth, tc.tlsCA)
 			g.Expect(got).To(Equal(tc.expRequest))
+		})
+	}
+}
+
+func TestLogBundleDescription(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		src    *ngfAPIv1alpha1.LogSource
+		expStr string
+	}{
+		{
+			name:   "nil src returns default description",
+			src:    nil,
+			expStr: "security log bundle",
+		},
+		{
+			name: "NIMSource set",
+			src: &ngfAPIv1alpha1.LogSource{
+				NIMSource: &ngfAPIv1alpha1.NIMLogProfileBundleSource{
+					ProfileName: "my-nim-profile",
+				},
+			},
+			expStr: "security log bundle (profile: my-nim-profile)",
+		},
+		{
+			name: "N1CSource with ProfileName",
+			src: &ngfAPIv1alpha1.LogSource{
+				N1CSource: &ngfAPIv1alpha1.N1CLogProfileBundleSource{
+					ProfileName: helpers.GetPointer("my-n1c-profile"),
+				},
+			},
+			expStr: "security log bundle (profile: my-n1c-profile)",
+		},
+		{
+			name: "N1CSource with ProfileObjectID",
+			src: &ngfAPIv1alpha1.LogSource{
+				N1CSource: &ngfAPIv1alpha1.N1CLogProfileBundleSource{
+					ProfileObjectID: helpers.GetPointer("lp_abc123"),
+				},
+			},
+			expStr: "security log bundle (profile: lp_abc123)",
+		},
+		{
+			name: "N1CSource with neither name nor ID",
+			src: &ngfAPIv1alpha1.LogSource{
+				N1CSource: &ngfAPIv1alpha1.N1CLogProfileBundleSource{},
+			},
+			expStr: "security log bundle",
+		},
+		{
+			name: "HTTPSource set",
+			src: &ngfAPIv1alpha1.LogSource{
+				HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{
+					URL: "https://logs.example.com/bundle.tgz",
+				},
+			},
+			expStr: "security log bundle (URL: https://logs.example.com/bundle.tgz)",
+		},
+		{
+			name:   "all sub-sources nil returns default description",
+			src:    &ngfAPIv1alpha1.LogSource{},
+			expStr: "security log bundle",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			got := LogBundleDescription(tc.src)
+			g.Expect(got).To(Equal(tc.expStr))
 		})
 	}
 }

@@ -65,9 +65,9 @@ func generate(pols []policies.Policy) policies.GenerateResultFiles {
 
 		fields := map[string]any{}
 
-		if wp.Spec.PolicySource.HTTPSource != nil ||
+		if wp.Spec.PolicySource != nil && (wp.Spec.PolicySource.HTTPSource != nil ||
 			wp.Spec.PolicySource.NIMSource != nil ||
-			wp.Spec.PolicySource.N1CSource != nil {
+			wp.Spec.PolicySource.N1CSource != nil) {
 			bundleName := fmt.Sprintf("%s_%s", wp.Namespace, wp.Name)
 			bundlePath := fmt.Sprintf("%s/%s.tgz", appProtectBundleFolder, bundleName)
 			fields["BundlePath"] = bundlePath
@@ -80,10 +80,12 @@ func generate(pols []policies.Policy) policies.GenerateResultFiles {
 				logEntry := map[string]string{}
 
 				switch {
+				case secLog.LogSource == nil:
+					continue
 				case secLog.LogSource.HTTPSource != nil || secLog.LogSource.NIMSource != nil || secLog.LogSource.N1CSource != nil:
 					bundleName := graph.LogBundleKey(
 						types.NamespacedName{Namespace: pol.GetNamespace(), Name: pol.GetName()},
-						&secLog.LogSource,
+						secLog.LogSource,
 					)
 					bundlePath := fmt.Sprintf("%s/%s.tgz", appProtectBundleFolder, bundleName)
 					logEntry["LogProfileBundlePath"] = bundlePath
