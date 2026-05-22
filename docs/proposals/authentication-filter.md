@@ -269,7 +269,7 @@ type JWTRemoteKeySource struct {
 type RequireType string
 
 const (
-  // RequireTypeAll authorizes requires that satisfy all requirements.
+  // RequireTypeAll authorizes requests that satisfy all requirements.
   RequireTypeAll  RequireType  = "All"
   // RequireTypeAny authorizes claims that satisfy any requirement.
   RequireTypeAny  RequireType  = "Any"
