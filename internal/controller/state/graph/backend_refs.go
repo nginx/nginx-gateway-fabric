@@ -723,12 +723,8 @@ func validateRouteBackendRefAppProtocol(
 	// Currently we only support recognition of the Kubernetes Standard Application Protocols defined in KEP-3726.
 	switch appProtocol {
 	case AppProtocolTypeH2C:
-		if routeType == RouteTypeGRPC {
+		if routeType == RouteTypeGRPC || routeType == RouteTypeHTTP {
 			return nil
-		}
-
-		if routeType == RouteTypeHTTP {
-			return fmt.Errorf("%w; nginx does not support proxying to upstreams with http2 or h2c", err)
 		}
 
 		return err

@@ -24,6 +24,7 @@ func TestSupportedFeatures(t *testing.T) {
 		gatewayv1.FeatureName(features.SupportGatewayBackendClientCertificate),
 		gatewayv1.FeatureName(features.SupportHTTPRoute),
 		gatewayv1.FeatureName(features.SupportHTTPRouteBackendProtocolWebSocket),
+		gatewayv1.FeatureName(features.SupportHTTPRouteBackendProtocolH2C),
 		gatewayv1.FeatureName(features.SupportHTTPRouteDestinationPortMatching),
 		gatewayv1.FeatureName(features.SupportHTTPRouteHostRewrite),
 		gatewayv1.FeatureName(features.SupportHTTPRouteMethodMatching),

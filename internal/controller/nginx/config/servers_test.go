@@ -18,6 +18,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/policiesfakes"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/shared"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
 
@@ -7828,6 +7829,268 @@ func TestExtractExternalAuthInternalLocations(t *testing.T) {
 
 			result := extractExternalAuthInternalLocations(test.locations)
 			g.Expect(result).To(Equal(test.expected))
+		})
+	}
+}
+
+func TestAllValidBackendsAreH2C(t *testing.T) {
+	t.Parallel()
+
+	h2c := graph.AppProtocolTypeH2C
+
+	tests := []struct {
+		name     string
+		backends []dataplane.Backend
+		expected bool
+	}{
+		{
+			name:     "empty list – returns false",
+			backends: []dataplane.Backend{},
+			expected: false,
+		},
+		{
+			name: "no valid backends – returns false",
+			backends: []dataplane.Backend{
+				{Valid: false, AppProtocol: h2c},
+			},
+			expected: false,
+		},
+		{
+			name: "single h2c valid backend – returns true",
+			backends: []dataplane.Backend{
+				{Valid: true, AppProtocol: h2c},
+			},
+			expected: true,
+		},
+		{
+			name: "all valid backends h2c – returns true",
+			backends: []dataplane.Backend{
+				{Valid: true, AppProtocol: h2c},
+				{Valid: true, AppProtocol: h2c},
+			},
+			expected: true,
+		},
+		{
+			name: "mixed h2c and non-h2c valid backends – returns false",
+			backends: []dataplane.Backend{
+				{Valid: true, AppProtocol: h2c},
+				{Valid: true, AppProtocol: ""},
+			},
+			expected: false,
+		},
+		{
+			name: "h2c valid + non-h2c invalid – still true (invalid ignored)",
+			backends: []dataplane.Backend{
+				{Valid: true, AppProtocol: h2c},
+				{Valid: false, AppProtocol: ""},
+			},
+			expected: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+			g.Expect(allValidBackendsAreH2C(tc.backends)).To(Equal(tc.expected))
+		})
+	}
+}
+
+// TestExecuteServers_ProxyHTTPVersion verifies end-to-end that proxy_http_version is
+// rendered correctly in the generated NGINX config.
+func TestExecuteServers_ProxyHTTPVersion(t *testing.T) {
+	t.Parallel()
+
+	makeBackend := func(appProtocol string, valid bool) dataplane.Backend {
+		return dataplane.Backend{
+			UpstreamName: "test_backend_80",
+			Valid:        valid,
+			Weight:       1,
+			AppProtocol:  appProtocol,
+		}
+	}
+
+	makePathRule := func(backends []dataplane.Backend, pols []policies.Policy) dataplane.PathRule {
+		return dataplane.PathRule{
+			Path:     "/app",
+			PathType: dataplane.PathTypePrefix,
+			MatchRules: []dataplane.MatchRule{
+				{
+					Match: dataplane.Match{},
+					BackendGroup: dataplane.BackendGroup{
+						Source:   types.NamespacedName{Namespace: "default", Name: "route1"},
+						RuleIdx:  0,
+						Backends: backends,
+					},
+				},
+			},
+			Policies: pols,
+		}
+	}
+
+	tests := []struct {
+		name           string
+		expPresent     string
+		expAbsent      string
+		serverPolicies []policies.Policy
+		pathRule       dataplane.PathRule
+	}{
+		{
+			// NGINX's own default is 1.1 – the directive must be omitted entirely.
+			name:      "no h2c backends – directive omitted (NGINX default)",
+			pathRule:  makePathRule([]dataplane.Backend{makeBackend("", true)}, nil),
+			expAbsent: "proxy_http_version",
+		},
+		{
+			name:       "all backends h2c – emits version 2",
+			pathRule:   makePathRule([]dataplane.Backend{makeBackend(graph.AppProtocolTypeH2C, true)}, nil),
+			expPresent: "proxy_http_version 2;",
+		},
+		{
+			// Mixed h2c/non-h2c falls back to NGINX default – directive omitted.
+			name: "mixed backends – directive omitted (fallback to NGINX default)",
+			pathRule: makePathRule([]dataplane.Backend{
+				makeBackend(graph.AppProtocolTypeH2C, true),
+				makeBackend("", true),
+			}, nil),
+			expAbsent: "proxy_http_version",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			conf := dataplane.Configuration{
+				HTTPServers: []dataplane.VirtualServer{
+					{
+						Hostname:  "http.example.com",
+						Port:      8080,
+						PathRules: []dataplane.PathRule{tc.pathRule},
+						Policies:  tc.serverPolicies,
+					},
+				},
+				BaseHTTPConfig: dataplane.BaseHTTPConfig{},
+			}
+			gen := GeneratorImpl{}
+			results := gen.executeServers(conf, &policiesfakes.FakeGenerator{}, alwaysFalseKeepAliveChecker)
+
+			var serverConf string
+			for _, res := range results {
+				if res.dest == httpConfigFile {
+					serverConf = string(res.data)
+					break
+				}
+			}
+
+			g.Expect(serverConf).NotTo(BeEmpty())
+			if tc.expPresent != "" {
+				g.Expect(serverConf).To(ContainSubstring(tc.expPresent))
+			}
+			if tc.expAbsent != "" {
+				g.Expect(serverConf).NotTo(ContainSubstring(tc.expAbsent))
+			}
+		})
+	}
+}
+
+// TestUpdateLocationProxySettings_Headers verifies that the correct proxy_set_header directives
+// are included or omitted depending on the backend protocol:
+//   - h2c backends (proxy_http_version 2): Upgrade and Connection headers must be omitted
+//   - plain HTTP backends: Upgrade and Connection headers must be present
+//   - gRPC backends: Authority header present; Upgrade and Connection omitted
+func TestUpdateLocationProxySettings_Headers(t *testing.T) {
+	t.Parallel()
+
+	h2cBackend := dataplane.Backend{
+		UpstreamName: "test_h2c_80",
+		Valid:        true,
+		Weight:       1,
+		AppProtocol:  graph.AppProtocolTypeH2C,
+	}
+	normalBackend := dataplane.Backend{
+		UpstreamName: "test_normal_80",
+		Valid:        true,
+		Weight:       1,
+	}
+
+	makeMatchRule := func(backends ...dataplane.Backend) dataplane.MatchRule {
+		return dataplane.MatchRule{
+			Match: dataplane.Match{},
+			BackendGroup: dataplane.BackendGroup{
+				Source:   types.NamespacedName{Namespace: "default", Name: "route1"},
+				RuleIdx:  0,
+				Backends: backends,
+			},
+		}
+	}
+
+	tests := []struct {
+		name       string
+		expHeaders []http.Header
+		expAbsent  []string
+		matchRule  dataplane.MatchRule
+		grpc       bool
+	}{
+		{
+			name:      "h2c backend – Upgrade and Connection headers omitted",
+			matchRule: makeMatchRule(h2cBackend),
+			expAbsent: []string{"Upgrade", "Connection"},
+		},
+		{
+			name:      "non-h2c backend – Upgrade and Connection headers present",
+			matchRule: makeMatchRule(normalBackend),
+			expHeaders: []http.Header{
+				{Name: "Upgrade", Value: "$http_upgrade"},
+				{Name: "Connection", Value: "$connection_upgrade"},
+			},
+		},
+		{
+			name:      "gRPC backend – Authority header present, Upgrade and Connection omitted",
+			matchRule: makeMatchRule(normalBackend),
+			grpc:      true,
+			expHeaders: []http.Header{
+				{Name: "Authority", Value: "$gw_api_compliant_host"},
+			},
+			expAbsent: []string{"Upgrade", "Connection"},
+		},
+		{
+			name:      "mixed h2c and non-h2c – falls back to HTTP/1.1, Upgrade and Connection present",
+			matchRule: makeMatchRule(h2cBackend, normalBackend),
+			expHeaders: []http.Header{
+				{Name: "Upgrade", Value: "$http_upgrade"},
+				{Name: "Connection", Value: "$connection_upgrade"},
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			loc := updateLocationProxySettings(
+				http.Location{},
+				tc.matchRule,
+				tc.grpc,
+				false, // inferenceBackend
+				alwaysFalseKeepAliveChecker,
+				nil, // disableBaseProxySetHeaders
+			)
+
+			headersByName := make(map[string]string, len(loc.ProxySetHeaders))
+			for _, h := range loc.ProxySetHeaders {
+				headersByName[h.Name] = h.Value
+			}
+
+			for _, h := range tc.expHeaders {
+				g.Expect(headersByName).To(HaveKeyWithValue(h.Name, h.Value))
+			}
+			for _, name := range tc.expAbsent {
+				g.Expect(headersByName).NotTo(HaveKey(name))
+			}
 		})
 	}
 }
