@@ -718,8 +718,6 @@ func (p *NginxProvisioner) buildNginxService(
 
 	p.updateLoadBalancerClass(svc, externalIPs)
 
-	p.cfg.Logger.V(1).Info("Building Service for Gateway", "service_spec", svc.Spec)
-
 	return svc, nil
 }
 

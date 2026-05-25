@@ -270,28 +270,37 @@ func (p *NginxProvisioner) patchServiceStatus(ctx context.Context, namespace, na
 	svc.Status.LoadBalancer.Ingress = ingress
 
 	backoff := wait.Backoff{Steps: 5, Duration: 100 * time.Millisecond, Factor: 2.0, Jitter: 0.1}
-	var lastErr error
 	err := wait.ExponentialBackoff(backoff, func() (bool, error) {
 		if err := p.k8sClient.Status().Patch(ctx, svc, client.MergeFrom(original)); err != nil {
+			p.cfg.Logger.V(1).Info(
+				"Encountered error patching service status",
+				"error", err,
+				"namespace", svc.Namespace,
+				"name", svc.Name,
+				"kind", svc.GetObjectKind().GroupVersionKind().Kind,
+			)
+
 			if apierrors.IsConflict(err) {
 				// Refresh original and svc and retry
 				if getErr := p.k8sClient.Get(ctx, key, original); getErr != nil {
-					lastErr = fmt.Errorf("failed to refresh Service for retry: %w", getErr)
+					if apierrors.IsNotFound(getErr) {
+						return true, getErr
+					}
 					return false, nil
 				}
 				// apply desired ingress onto a fresh copy
 				svc = original.DeepCopy()
 				svc.Status.LoadBalancer.Ingress = ingress
-				lastErr = err
 				return false, nil
 			}
-			lastErr = err
+
 			return false, nil
 		}
+
 		return true, nil
 	})
 	if err != nil {
-		return fmt.Errorf("failed to patch Service status: %w; lastErr: %w", err, lastErr)
+		return fmt.Errorf("failed to patch Service status: %w", err)
 	}
 
 	return nil
