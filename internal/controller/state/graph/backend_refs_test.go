@@ -591,6 +591,7 @@ func TestAddBackendRefsToRules(t *testing.T) {
 		{
 			Kind:           kinds.Gateway,
 			NamespacedName: types.NamespacedName{Namespace: "test", Name: "gateway"},
+			GatewayNsName:  types.NamespacedName{Namespace: "test", Name: "gateway"},
 			Idx:            0,
 			Attachment: &ParentRefAttachmentStatus{
 				Attached: true,
@@ -1638,16 +1639,21 @@ func TestCreateBackend(t *testing.T) {
 			},
 			parentRefKind: kinds.ListenerSet, // Special case for ListenerSet
 			expectedBackend: BackendRef{
-				SvcNsName:          types.NamespacedName{Namespace: "test", Name: "external-service"},
-				ServicePort:        v1.ServicePort{Port: 80},
-				Weight:             5,
-				Valid:              true,
-				InvalidForGateways: map[types.NamespacedName]conditions.Condition{}, // No DNS resolver validation for ListenerSet
+				SvcNsName:   types.NamespacedName{Namespace: "test", Name: "external-service"},
+				ServicePort: v1.ServicePort{Port: 80},
+				Weight:      5,
+				Valid:       true,
+				InvalidForGateways: map[types.NamespacedName]conditions.Condition{
+					{Namespace: "test", Name: "gateway"}: conditions.NewRouteBackendRefUnsupportedValue(
+						"ExternalName service requires DNS resolver configuration in Gateway's NginxProxy",
+					),
+				},
 				SessionPersistence: &expectedSPConfig,
 			},
 			expectedServicePortReference: "test_external-service_80_test-persistence-idx",
 			expectedConditions:           nil,
-			name:                         "ExternalName service with ListenerSet parentRef - DNS resolver validation skipped",
+			name: "ExternalName service with ListenerSet parentRef" +
+				" - DNS resolver validation via parent Gateway",
 		},
 	}
 
@@ -1697,18 +1703,19 @@ func TestCreateBackend(t *testing.T) {
 					{
 						Kind:                kinds.Gateway,
 						NamespacedName:      types.NamespacedName{Namespace: "test", Name: "gateway"},
+						GatewayNsName:       types.NamespacedName{Namespace: "test", Name: "gateway"},
 						EffectiveNginxProxy: test.nginxProxySpec,
 					},
 				},
 			}
 
-			// Handle ListenerSet parentRef case by not setting Gateway settings
-			// in ParentRef, which will cause createBackendRef to skip DNS resolver validation
+			// Handle ListenerSet parentRef case
 			if test.parentRefKind == kinds.ListenerSet {
 				route.ParentRefs = []ParentRef{
 					{
 						Kind:           kinds.ListenerSet,
 						NamespacedName: types.NamespacedName{Namespace: "test", Name: "listener-set"},
+						GatewayNsName:  types.NamespacedName{Namespace: "test", Name: "gateway"},
 					},
 				}
 			}
@@ -1718,6 +1725,7 @@ func TestCreateBackend(t *testing.T) {
 				route.ParentRefs = append(route.ParentRefs, ParentRef{
 					Kind:           kinds.Gateway,
 					NamespacedName: types.NamespacedName{Namespace: "test", Name: "gateway2"},
+					GatewayNsName:  types.NamespacedName{Namespace: "test", Name: "gateway2"},
 				})
 				// For this test, the first gateway should have DNS resolver
 				route.ParentRefs[0].EffectiveNginxProxy = &EffectiveNginxProxy{
@@ -1766,6 +1774,7 @@ func TestCreateBackend(t *testing.T) {
 			{
 				Kind:           kinds.Gateway,
 				NamespacedName: types.NamespacedName{Namespace: "test", Name: "gateway"},
+				GatewayNsName:  types.NamespacedName{Namespace: "test", Name: "gateway"},
 			},
 		},
 	}
