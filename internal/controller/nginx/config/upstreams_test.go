@@ -149,7 +149,6 @@ func TestExecuteUpstreams_NginxOSS(t *testing.T) {
 		"keepalive 32;":          4,
 	}
 
-
 	upstreams := gen.createUpstreams(stateUpstreams, upstreamsettings.NewProcessor())
 
 	upstreamResults := executeUpstreams(upstreams)
