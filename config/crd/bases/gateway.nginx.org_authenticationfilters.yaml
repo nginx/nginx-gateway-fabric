@@ -151,8 +151,12 @@ spec:
                               - All
                               - Any
                               type: string
+                          required:
+                          - claims
                           type: object
                         type: array
+                    required:
+                    - rules
                     type: object
                   file:
                     description: |-
