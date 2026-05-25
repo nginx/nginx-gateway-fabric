@@ -203,7 +203,7 @@ type Telemetry struct {
 	Exporter *TelemetryExporter `json:"exporter,omitempty"`
 
 	// ServiceName is the "service.name" attribute of the OpenTelemetry resource.
-	// Default is 'ngf:<gateway-namespace>:<gateway-name>'. If a value is provided by the user,
+	// Default is 'ngf:gateway-namespace:gateway-name'. If a value is provided by the user,
 	// then the default becomes a prefix to that value.
 	//
 	// +optional

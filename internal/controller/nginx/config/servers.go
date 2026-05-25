@@ -17,6 +17,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/shared"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
 
@@ -1493,10 +1494,15 @@ func updateLocationProxySettings(
 	keepAliveCheck keepAliveChecker,
 	disableBaseProxySetHeaders []string,
 ) http.Location {
+	location.ProxyHTTPVersion = resolveProxyHTTPVersion(matchRule.BackendGroup.Backends, grpc)
+
 	extraHeaders := make([]http.Header, 0, 3)
-	if grpc {
+
+	switch {
+	case location.ProxyHTTPVersion == "2":
+	case grpc:
 		extraHeaders = append(extraHeaders, grpcAuthorityHeader)
-	} else {
+	default:
 		extraHeaders = append(extraHeaders, httpUpgradeHeader)
 		extraHeaders = append(extraHeaders, getConnectionHeader(keepAliveCheck, matchRule.BackendGroup.Backends))
 	}
@@ -1535,6 +1541,38 @@ func updateLocationProxySettings(
 	location.GRPC = grpc
 
 	return location
+}
+
+// resolveProxyHTTPVersion decides whether to emit a proxy_http_version directive for a location.
+// The directive is only written when the value differs from NGINX's default (1.1).
+//
+// Priority:
+//  1. All valid backends carry appProtocol kubernetes.io/h2c → return "2".
+//  2. Otherwise → return "" (omit directive; NGINX default of 1.1 applies).
+//
+// h2c detection is skipped for gRPC locations because grpc_pass handles HTTP/2 internally.
+func resolveProxyHTTPVersion(backends []dataplane.Backend, grpc bool) string {
+	if !grpc && allValidBackendsAreH2C(backends) {
+		return "2"
+	}
+
+	return ""
+}
+
+// allValidBackendsAreH2C returns true when at least one valid backend exists and every
+// valid backend has AppProtocol kubernetes.io/h2c.
+func allValidBackendsAreH2C(backends []dataplane.Backend) bool {
+	hasValid := false
+	for _, b := range backends {
+		if !b.Valid {
+			continue
+		}
+		if b.AppProtocol != graph.AppProtocolTypeH2C {
+			return false
+		}
+		hasValid = true
+	}
+	return hasValid
 }
 
 // updateLocations updates the existing locations with any relevant configurations, like proxy_pass,
