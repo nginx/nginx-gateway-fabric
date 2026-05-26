@@ -1107,9 +1107,9 @@ Here is break a down each component of this configuration, and why they are nece
     }
 ```
 
-**Note**: There are several regex patterns surrounding each value in each map. These all server a very specific function. To make it easier to undertand, we'll look at each pattern based on the map they are used in.
+**Note**: There are several regex patterns surrounding each value in each map. These all server a very specific function. To make it easier to understand, we'll look at each pattern based on the map they are used in.
 
-Regex patterns for `rules[0].claims`:
+Regex patterns for `rules[1].claims`:
 
 ```regex
 ~(?:^|,)cli(?:,|$) 1;
@@ -1122,7 +1122,7 @@ This would match any one of these patterns:
 - `cli,api,ops`
 - `api,ops,cli`
 
-Regex patterns for `rules[1].claims`.
+Regex patterns for `rules[0].claims`.
 
 ```regex
 ~^(?:.*,)?https://issuer\.example-1\.com(?:,.*)?\+(?:.*,)?(cloud|admin)(?:,.*)?\+(?:.*,)?acme-co(?:,.*)?$
