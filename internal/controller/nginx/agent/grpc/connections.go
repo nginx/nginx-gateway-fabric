@@ -48,9 +48,18 @@ func NewConnectionsTracker() ConnectionsTracker {
 }
 
 // Track adds a connection to the tracking map.
+// If a connection already exists for the given key and has a valid InstanceID,
+// and the new connection does not, the existing InstanceID is preserved.
+// This prevents a reconnecting agent (which may not yet have rediscovered
+// its nginx instance) from temporarily invalidating in-flight config apply
+// operations on the existing Subscribe stream.
 func (c *AgentConnectionsTracker) Track(key string, conn Connection) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
+
+	if existing, ok := c.connections[key]; ok && conn.InstanceID == "" && existing.InstanceID != "" {
+		conn.InstanceID = existing.InstanceID
+	}
 
 	c.connections[key] = conn
 }

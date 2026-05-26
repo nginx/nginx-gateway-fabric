@@ -266,6 +266,15 @@ func (d *Deployment) RemoveWAFBundle(bundlePath string) *broadcast.NginxAgentMes
 	return nil
 }
 
+// InvalidateConfigVersion clears the stored config version so that the next call to
+// SetFiles will always trigger a resend to the agent, regardless of whether the file
+// contents changed. This must be called after a failed config apply to allow automatic
+// retry on the next event.
+// The deployment FileLock MUST already be locked before calling this function.
+func (d *Deployment) InvalidateConfigVersion() {
+	d.configVersion = ""
+}
+
 // rebuildFileOverviews regenerates the file overviews and config version from the current
 // file list. Returns a broadcast message if the config version changed.
 // The deployment FileLock MUST already be locked before calling this function.

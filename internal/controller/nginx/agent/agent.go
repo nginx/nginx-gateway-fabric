@@ -101,7 +101,16 @@ func (n *NginxUpdaterImpl) UpdateConfig(
 		n.logger.Info("Sent nginx configuration to agent")
 	}
 
-	deployment.SetLatestConfigError(deployment.GetConfigurationStatus())
+	err := deployment.GetConfigurationStatus()
+	deployment.SetLatestConfigError(err)
+
+	if err != nil {
+		// Invalidate the stored config version so that the next event triggers a resend,
+		// even if the file contents have not changed. This ensures that a transient config
+		// apply failure (e.g. a brief agent reconnection during a rolling deployment) does
+		// not permanently prevent NGINX from receiving updated upstream endpoints.
+		deployment.InvalidateConfigVersion()
+	}
 }
 
 // UpdateUpstreamServers sends an APIRequest to the agent to update upstream servers using the NGINX Plus API.

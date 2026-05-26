@@ -71,6 +71,60 @@ func TestSetInstanceID(t *testing.T) {
 	g.Expect(trackedConn.InstanceID).To(Equal("instance1"))
 }
 
+func TestTrackPreservesInstanceID(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	tracker := agentgrpc.NewConnectionsTracker()
+
+	// Track a fully-ready connection.
+	original := agentgrpc.Connection{
+		InstanceID: "instance1",
+		ParentType: "Deployment",
+		ParentName: types.NamespacedName{Namespace: "default", Name: "parent1"},
+	}
+	tracker.Track("key1", original)
+
+	// Simulate the agent reconnecting with the same UUID but before it
+	// has rediscovered its nginx instance (InstanceID is empty).
+	reconnected := agentgrpc.Connection{
+		ParentType: "Deployment",
+		ParentName: types.NamespacedName{Namespace: "default", Name: "parent1"},
+	}
+	tracker.Track("key1", reconnected)
+
+	// The existing InstanceID must be preserved so that in-flight
+	// GetFile calls from the prior Subscribe stream succeed.
+	trackedConn := tracker.GetConnection("key1")
+	g.Expect(trackedConn.Ready()).To(BeTrue())
+	g.Expect(trackedConn.InstanceID).To(Equal("instance1"))
+	g.Expect(trackedConn.ParentName).To(Equal(reconnected.ParentName))
+}
+
+func TestTrackOverwritesInstanceID(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	tracker := agentgrpc.NewConnectionsTracker()
+
+	original := agentgrpc.Connection{
+		InstanceID: "instance1",
+		ParentName: types.NamespacedName{Namespace: "default", Name: "parent1"},
+	}
+	tracker.Track("key1", original)
+
+	// When the new connection supplies a non-empty InstanceID, the
+	// value must be updated (e.g. the agent restarted on a new nginx).
+	updated := agentgrpc.Connection{
+		InstanceID: "instance2",
+		ParentName: types.NamespacedName{Namespace: "default", Name: "parent1"},
+	}
+	tracker.Track("key1", updated)
+
+	trackedConn := tracker.GetConnection("key1")
+	g.Expect(trackedConn.InstanceID).To(Equal("instance2"))
+}
+
 func TestRemoveConnection(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)

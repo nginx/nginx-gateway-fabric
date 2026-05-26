@@ -69,6 +69,38 @@ func TestSetAndGetFiles(t *testing.T) {
 	g.Expect(newFileOverviews).To(Equal(fileOverviews))
 }
 
+func TestInvalidateConfigVersion(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	deployment := newDeployment(&broadcastfakes.FakeBroadcaster{}, "")
+
+	files := []File{
+		{
+			Meta: &pb.FileMeta{
+				Name: "test.conf",
+				Hash: "12345",
+			},
+			Contents: []byte("test content"),
+		},
+	}
+
+	// Initial SetFiles should produce a message (new config version).
+	msg := deployment.SetFiles(files, []v1.VolumeMount{})
+	g.Expect(msg).ToNot(BeNil())
+
+	// Setting the same files again should not produce a message (dedup).
+	msg = deployment.SetFiles(files, []v1.VolumeMount{})
+	g.Expect(msg).To(BeNil())
+
+	// After invalidating the config version, the same files should
+	// produce a new message (forces retry after a failed apply).
+	deployment.InvalidateConfigVersion()
+	msg = deployment.SetFiles(files, []v1.VolumeMount{})
+	g.Expect(msg).ToNot(BeNil())
+	g.Expect(msg.Type).To(Equal(broadcast.ConfigApplyRequest))
+}
+
 func TestSetAndGetFiles_VolumeIgnoreFiles(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)

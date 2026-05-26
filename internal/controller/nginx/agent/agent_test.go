@@ -115,6 +115,45 @@ func TestUpdateConfig_NoChange(t *testing.T) {
 	g.Expect(fakeBroadcaster.SendCallCount()).To(Equal(0))
 }
 
+func TestUpdateConfig_RetriesAfterFailure(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	fakeBroadcaster := &broadcastfakes.FakeBroadcaster{}
+	fakeBroadcaster.SendReturns(true)
+
+	updater := NewNginxUpdater(logr.Discard(), fake.NewFakeClient(), &status.Queue{}, nil, false)
+
+	deployment := &Deployment{
+		broadcaster: fakeBroadcaster,
+		podStatuses: make(map[string]error),
+	}
+
+	file := File{
+		Meta: &pb.FileMeta{
+			Name: "test.conf",
+			Hash: "12345",
+		},
+		Contents: []byte("test content"),
+	}
+
+	// Simulate a config apply failure: set an error on the pod status before sending.
+	deployment.SetPodErrorStatus("pod1", errors.New("connection not found"))
+
+	// First call: sends the config, but there is a pod error.
+	updater.UpdateConfig(deployment, []File{file}, []v1.VolumeMount{})
+	g.Expect(fakeBroadcaster.SendCallCount()).To(Equal(1))
+	g.Expect(deployment.GetLatestConfigError()).To(HaveOccurred())
+
+	// The config version should have been invalidated because of the error,
+	// so calling UpdateConfig again with the SAME files should still trigger
+	// a resend (this is the retry path after a transient failure).
+	deployment.SetPodErrorStatus("pod1", nil) // clear the error for the retry
+	updater.UpdateConfig(deployment, []File{file}, []v1.VolumeMount{})
+	g.Expect(fakeBroadcaster.SendCallCount()).To(Equal(2))
+	g.Expect(deployment.GetLatestConfigError()).ToNot(HaveOccurred())
+}
+
 func TestUpdateUpstreamServers(t *testing.T) {
 	t.Parallel()
 
