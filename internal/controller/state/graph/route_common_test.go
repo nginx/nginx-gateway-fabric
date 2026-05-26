@@ -104,6 +104,7 @@ func TestBuildSectionNameRefs(t *testing.T) {
 			Kind:                kinds.Gateway,
 			EffectiveNginxProxy: gws[gwNsName1].EffectiveNginxProxy,
 			NamespacedName:      types.NamespacedName{Namespace: "test", Name: "gateway-1"},
+			GatewayNsName:       types.NamespacedName{Namespace: "test", Name: "gateway-1"},
 			SectionName:         parentRefs[0].SectionName,
 		},
 		{
@@ -111,6 +112,7 @@ func TestBuildSectionNameRefs(t *testing.T) {
 			Kind:                kinds.Gateway,
 			EffectiveNginxProxy: gws[gwNsName2].EffectiveNginxProxy,
 			NamespacedName:      types.NamespacedName{Namespace: "test", Name: "gateway-2"},
+			GatewayNsName:       types.NamespacedName{Namespace: "test", Name: "gateway-2"},
 			SectionName:         parentRefs[2].SectionName,
 		},
 		{
@@ -118,6 +120,7 @@ func TestBuildSectionNameRefs(t *testing.T) {
 			Kind:                kinds.Gateway,
 			EffectiveNginxProxy: gws[gwNsName1].EffectiveNginxProxy,
 			NamespacedName:      types.NamespacedName{Namespace: "test", Name: "gateway-1"},
+			GatewayNsName:       types.NamespacedName{Namespace: "test", Name: "gateway-1"},
 			SectionName:         parentRefs[3].SectionName,
 		},
 		{
@@ -125,6 +128,7 @@ func TestBuildSectionNameRefs(t *testing.T) {
 			Kind:                kinds.Gateway,
 			EffectiveNginxProxy: gws[gwNsName2].EffectiveNginxProxy,
 			NamespacedName:      types.NamespacedName{Namespace: "test", Name: "gateway-2"},
+			GatewayNsName:       types.NamespacedName{Namespace: "test", Name: "gateway-2"},
 			SectionName:         parentRefs[4].SectionName,
 		},
 		{
@@ -132,6 +136,7 @@ func TestBuildSectionNameRefs(t *testing.T) {
 			Kind:                kinds.Gateway,
 			EffectiveNginxProxy: gws[gwNsName3].EffectiveNginxProxy,
 			NamespacedName:      types.NamespacedName{Namespace: "test", Name: "gateway-3"},
+			GatewayNsName:       types.NamespacedName{Namespace: "test", Name: "gateway-3"},
 			SectionName:         helpers.GetPointer[gatewayv1.SectionName]("http"),
 		},
 		{
@@ -139,6 +144,7 @@ func TestBuildSectionNameRefs(t *testing.T) {
 			Kind:                kinds.Gateway,
 			EffectiveNginxProxy: gws[gwNsName3].EffectiveNginxProxy,
 			NamespacedName:      types.NamespacedName{Namespace: "test", Name: "gateway-3"},
+			GatewayNsName:       types.NamespacedName{Namespace: "test", Name: "gateway-3"},
 			SectionName:         helpers.GetPointer[gatewayv1.SectionName]("https"),
 		},
 	}
@@ -275,6 +281,7 @@ func TestBuildSectionNameRefs(t *testing.T) {
 					Kind:                kinds.Gateway,
 					EffectiveNginxProxy: gws[gwNsName1].EffectiveNginxProxy,
 					NamespacedName:      types.NamespacedName{Namespace: "test", Name: "gateway-1"},
+					GatewayNsName:       types.NamespacedName{Namespace: "test", Name: "gateway-1"},
 					SectionName:         helpers.GetPointer[gatewayv1.SectionName]("http"),
 				},
 				{
