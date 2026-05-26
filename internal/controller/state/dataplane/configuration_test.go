@@ -360,6 +360,7 @@ func createInternalRoute(
 			{
 				Kind:           kinds.Gateway,
 				NamespacedName: gatewayNsName,
+				GatewayNsName:  gatewayNsName,
 				Attachment: &graph.ParentRefAttachmentStatus{
 					AcceptedHostnames: map[string][]string{
 						graph.CreateParentRefListenerKey(gatewayNsName, listenerName): hostnames,
@@ -798,6 +799,7 @@ func TestBuildConfiguration(t *testing.T) {
 			{
 				Kind:           kinds.Gateway,
 				NamespacedName: gatewayNsName,
+				GatewayNsName:  gatewayNsName,
 				Attachment: &graph.ParentRefAttachmentStatus{
 					AcceptedHostnames: map[string][]string{
 						graph.CreateParentRefListenerKey(gatewayNsName, "listener-443-2"): {"app.example.com"},
@@ -807,6 +809,7 @@ func TestBuildConfiguration(t *testing.T) {
 			{
 				Kind:           kinds.Gateway,
 				NamespacedName: gatewayNsName,
+				GatewayNsName:  gatewayNsName,
 				Attachment: &graph.ParentRefAttachmentStatus{
 					AcceptedHostnames: map[string][]string{
 						graph.CreateParentRefListenerKey(gatewayNsName, "listener-444-3"): {"app.example.com"},
@@ -2849,6 +2852,7 @@ func TestBuildConfiguration(t *testing.T) {
 					{
 						Kind:           kinds.ListenerSet,
 						NamespacedName: listenerSetNsName,
+						GatewayNsName:  gatewayNsName,
 						Attachment: &graph.ParentRefAttachmentStatus{
 							AcceptedHostnames: map[string][]string{
 								// Key uses ListenerSet name instead of Gateway name
@@ -2950,6 +2954,7 @@ func TestBuildConfiguration(t *testing.T) {
 						{
 							Kind:           kinds.ListenerSet,
 							NamespacedName: listenerSetNsName,
+							GatewayNsName:  gatewayNsName,
 							Attachment: &graph.ParentRefAttachmentStatus{
 								AcceptedHostnames: map[string][]string{
 									// Key uses ListenerSet name instead of Gateway name
@@ -4865,6 +4870,7 @@ func TestCreatePassthroughServers(t *testing.T) {
 										{
 											Kind:           kinds.Gateway,
 											NamespacedName: gatewayNsName,
+											GatewayNsName:  gatewayNsName,
 											Attachment: &graph.ParentRefAttachmentStatus{
 												AcceptedHostnames: map[string][]string{
 													graph.CreateParentRefListenerKey(
@@ -4999,6 +5005,7 @@ func TestCreatePassthroughServers(t *testing.T) {
 										{
 											Kind:           kinds.ListenerSet,
 											NamespacedName: listenerSetNsName,
+											GatewayNsName:  types.NamespacedName{Namespace: "test", Name: "gateway"},
 											Attachment: &graph.ParentRefAttachmentStatus{
 												AcceptedHostnames: map[string][]string{
 													// Key uses ListenerSet name instead of Gateway name
@@ -5027,6 +5034,355 @@ func TestCreatePassthroughServers(t *testing.T) {
 					},
 					Port:      443,
 					IsDefault: false,
+				},
+			},
+		},
+		{
+			name: "TLS Terminate listener with route",
+			gateway: func() *graph.Gateway {
+				terminateKey := getL4RouteKey("terminate-app")
+				gatewayNsName := types.NamespacedName{Namespace: "test", Name: "gateway"}
+
+				return &graph.Gateway{
+					Listeners: []*graph.Listener{
+						{
+							Name:        "terminateListener",
+							GatewayName: gatewayNsName,
+							Valid:       true,
+							Source: v1.Listener{
+								Protocol: v1.TLSProtocolType,
+								Port:     443,
+								Hostname: helpers.GetPointer[v1.Hostname]("secure.example.com"),
+								TLS: &v1.ListenerTLSConfig{
+									Mode: helpers.GetPointer(v1.TLSModeTerminate),
+									CertificateRefs: []v1.SecretObjectReference{
+										{Name: "tls-secret"},
+									},
+								},
+							},
+							ResolvedSecrets: []types.NamespacedName{
+								{Namespace: "test", Name: "tls-secret"},
+							},
+							Routes: make(map[graph.RouteKey]*graph.L7Route),
+							L4Routes: map[graph.L4RouteKey]*graph.L4Route{
+								terminateKey: {
+									Valid: true,
+									Spec: graph.L4RouteSpec{
+										Hostnames: []v1.Hostname{"secure.example.com"},
+										BackendRef: graph.BackendRef{
+											Valid:     true,
+											SvcNsName: terminateKey.NamespacedName,
+											ServicePort: apiv1.ServicePort{
+												Name:     "https",
+												Protocol: "TCP",
+												Port:     8443,
+												TargetPort: intstr.IntOrString{
+													Type:   intstr.Int,
+													IntVal: 8443,
+												},
+											},
+										},
+									},
+									ParentRefs: []graph.ParentRef{
+										{
+											Kind:           kinds.Gateway,
+											NamespacedName: gatewayNsName,
+											GatewayNsName:  gatewayNsName,
+											Attachment: &graph.ParentRefAttachmentStatus{
+												AcceptedHostnames: map[string][]string{
+													graph.CreateParentRefListenerKey(
+														gatewayNsName,
+														"terminateListener",
+													): {"secure.example.com"},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				}
+			}(),
+			expected: []Layer4VirtualServer{
+				{
+					Hostname: "secure.example.com",
+					Upstreams: []Layer4Upstream{
+						{Name: "default_terminate-app_8443", Weight: 0},
+					},
+					Port: 443,
+					SSL: &SSL{
+						KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_tls-secret"},
+					},
+				},
+			},
+		},
+		{
+			name: "TLS Terminate listener with no matching route creates default server with SSL",
+			gateway: func() *graph.Gateway {
+				gatewayNsName := types.NamespacedName{Namespace: "test", Name: "gateway"}
+
+				return &graph.Gateway{
+					Listeners: []*graph.Listener{
+						{
+							Name:        "terminateListener",
+							GatewayName: gatewayNsName,
+							Valid:       true,
+							Source: v1.Listener{
+								Protocol: v1.TLSProtocolType,
+								Port:     443,
+								Hostname: helpers.GetPointer[v1.Hostname]("secure.example.com"),
+								TLS: &v1.ListenerTLSConfig{
+									Mode: helpers.GetPointer(v1.TLSModeTerminate),
+									CertificateRefs: []v1.SecretObjectReference{
+										{Name: "tls-secret"},
+									},
+								},
+							},
+							ResolvedSecrets: []types.NamespacedName{
+								{Namespace: "test", Name: "tls-secret"},
+							},
+							Routes:   make(map[graph.RouteKey]*graph.L7Route),
+							L4Routes: make(map[graph.L4RouteKey]*graph.L4Route),
+						},
+					},
+				}
+			}(),
+			expected: []Layer4VirtualServer{
+				{
+					Hostname:  "secure.example.com",
+					IsDefault: true,
+					Port:      443,
+					Upstreams: []Layer4Upstream{},
+					SSL: &SSL{
+						KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_tls-secret"},
+					},
+				},
+			},
+		},
+		{
+			name: "mixed Passthrough and Terminate listeners on same port",
+			gateway: func() *graph.Gateway {
+				passthroughKey := getL4RouteKey("passthrough-app")
+				terminateKey := getL4RouteKey("terminate-app")
+				gatewayNsName := types.NamespacedName{Namespace: "test", Name: "gateway"}
+
+				return &graph.Gateway{
+					Listeners: []*graph.Listener{
+						{
+							Name:        "passthroughListener",
+							GatewayName: gatewayNsName,
+							Valid:       true,
+							Source: v1.Listener{
+								Protocol: v1.TLSProtocolType,
+								Port:     443,
+								Hostname: helpers.GetPointer[v1.Hostname]("passthrough.example.com"),
+								TLS: &v1.ListenerTLSConfig{
+									Mode: helpers.GetPointer(v1.TLSModePassthrough),
+								},
+							},
+							Routes: make(map[graph.RouteKey]*graph.L7Route),
+							L4Routes: map[graph.L4RouteKey]*graph.L4Route{
+								passthroughKey: {
+									Valid: true,
+									Spec: graph.L4RouteSpec{
+										Hostnames: []v1.Hostname{"passthrough.example.com"},
+										BackendRef: graph.BackendRef{
+											Valid:     true,
+											SvcNsName: passthroughKey.NamespacedName,
+											ServicePort: apiv1.ServicePort{
+												Name:     "https",
+												Protocol: "TCP",
+												Port:     8443,
+												TargetPort: intstr.IntOrString{
+													Type:   intstr.Int,
+													IntVal: 8443,
+												},
+											},
+										},
+									},
+									ParentRefs: []graph.ParentRef{
+										{
+											Kind:           kinds.Gateway,
+											NamespacedName: gatewayNsName,
+											GatewayNsName:  gatewayNsName,
+											Attachment: &graph.ParentRefAttachmentStatus{
+												AcceptedHostnames: map[string][]string{
+													graph.CreateParentRefListenerKey(
+														gatewayNsName,
+														"passthroughListener",
+													): {"passthrough.example.com"},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+						{
+							Name:        "terminateListener",
+							GatewayName: gatewayNsName,
+							Valid:       true,
+							Source: v1.Listener{
+								Protocol: v1.TLSProtocolType,
+								Port:     443,
+								Hostname: helpers.GetPointer[v1.Hostname]("terminate.example.com"),
+								TLS: &v1.ListenerTLSConfig{
+									Mode: helpers.GetPointer(v1.TLSModeTerminate),
+									CertificateRefs: []v1.SecretObjectReference{
+										{Name: "tls-secret"},
+									},
+								},
+							},
+							ResolvedSecrets: []types.NamespacedName{
+								{Namespace: "test", Name: "tls-secret"},
+							},
+							Routes: make(map[graph.RouteKey]*graph.L7Route),
+							L4Routes: map[graph.L4RouteKey]*graph.L4Route{
+								terminateKey: {
+									Valid: true,
+									Spec: graph.L4RouteSpec{
+										Hostnames: []v1.Hostname{"terminate.example.com"},
+										BackendRef: graph.BackendRef{
+											Valid:     true,
+											SvcNsName: terminateKey.NamespacedName,
+											ServicePort: apiv1.ServicePort{
+												Name:     "https",
+												Protocol: "TCP",
+												Port:     8443,
+												TargetPort: intstr.IntOrString{
+													Type:   intstr.Int,
+													IntVal: 8443,
+												},
+											},
+										},
+									},
+									ParentRefs: []graph.ParentRef{
+										{
+											Kind:           kinds.Gateway,
+											NamespacedName: gatewayNsName,
+											GatewayNsName:  gatewayNsName,
+											Attachment: &graph.ParentRefAttachmentStatus{
+												AcceptedHostnames: map[string][]string{
+													graph.CreateParentRefListenerKey(
+														gatewayNsName,
+														"terminateListener",
+													): {"terminate.example.com"},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				}
+			}(),
+			expected: []Layer4VirtualServer{
+				{
+					Hostname: "passthrough.example.com",
+					Upstreams: []Layer4Upstream{
+						{Name: "default_passthrough-app_8443", Weight: 0},
+					},
+					Port: 443,
+				},
+				{
+					Hostname: "terminate.example.com",
+					Upstreams: []Layer4Upstream{
+						{Name: "default_terminate-app_8443", Weight: 0},
+					},
+					Port: 443,
+					SSL: &SSL{
+						KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_tls-secret"},
+					},
+				},
+			},
+		},
+		{
+			name: "TLS Terminate listener with TLS options",
+			gateway: func() *graph.Gateway {
+				terminateKey := getL4RouteKey("terminate-app")
+				gatewayNsName := types.NamespacedName{Namespace: "test", Name: "gateway"}
+
+				return &graph.Gateway{
+					Listeners: []*graph.Listener{
+						{
+							Name:        "terminateListener",
+							GatewayName: gatewayNsName,
+							Valid:       true,
+							Source: v1.Listener{
+								Protocol: v1.TLSProtocolType,
+								Port:     443,
+								Hostname: helpers.GetPointer[v1.Hostname]("secure.example.com"),
+								TLS: &v1.ListenerTLSConfig{
+									Mode: helpers.GetPointer(v1.TLSModeTerminate),
+									CertificateRefs: []v1.SecretObjectReference{
+										{Name: "tls-secret"},
+									},
+									Options: map[v1.AnnotationKey]v1.AnnotationValue{
+										graph.SSLProtocolsKey:           "TLSv1.2 TLSv1.3",
+										graph.SSLCiphersKey:             "HIGH:!aNULL",
+										graph.SSLPreferServerCiphersKey: "on",
+									},
+								},
+							},
+							ResolvedSecrets: []types.NamespacedName{
+								{Namespace: "test", Name: "tls-secret"},
+							},
+							Routes: make(map[graph.RouteKey]*graph.L7Route),
+							L4Routes: map[graph.L4RouteKey]*graph.L4Route{
+								terminateKey: {
+									Valid: true,
+									Spec: graph.L4RouteSpec{
+										Hostnames: []v1.Hostname{"secure.example.com"},
+										BackendRef: graph.BackendRef{
+											Valid:     true,
+											SvcNsName: terminateKey.NamespacedName,
+											ServicePort: apiv1.ServicePort{
+												Name:     "https",
+												Protocol: "TCP",
+												Port:     8443,
+												TargetPort: intstr.IntOrString{
+													Type:   intstr.Int,
+													IntVal: 8443,
+												},
+											},
+										},
+									},
+									ParentRefs: []graph.ParentRef{
+										{
+											Kind:           kinds.Gateway,
+											NamespacedName: gatewayNsName,
+											GatewayNsName:  gatewayNsName,
+											Attachment: &graph.ParentRefAttachmentStatus{
+												AcceptedHostnames: map[string][]string{
+													graph.CreateParentRefListenerKey(
+														gatewayNsName,
+														"terminateListener",
+													): {"secure.example.com"},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				}
+			}(),
+			expected: []Layer4VirtualServer{
+				{
+					Hostname: "secure.example.com",
+					Upstreams: []Layer4Upstream{
+						{Name: "default_terminate-app_8443", Weight: 0},
+					},
+					Port: 443,
+					SSL: &SSL{
+						KeyPairIDs:          []SSLKeyPairID{"ssl_keypair_test_tls-secret"},
+						Protocols:           "TLSv1.2 TLSv1.3",
+						Ciphers:             "HIGH:!aNULL",
+						PreferServerCiphers: true,
+					},
 				},
 			},
 		},

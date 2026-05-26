@@ -746,6 +746,7 @@ var _ = Describe("ChangeProcessor", func() {
 						{
 							Kind:           kinds.Gateway,
 							NamespacedName: client.ObjectKeyFromObject(gw1),
+							GatewayNsName:  client.ObjectKeyFromObject(gw1),
 							Attachment: &graph.ParentRefAttachmentStatus{
 								AcceptedHostnames: map[string][]string{
 									graph.CreateParentRefListenerKey(
@@ -761,6 +762,7 @@ var _ = Describe("ChangeProcessor", func() {
 						{
 							Kind:           kinds.Gateway,
 							NamespacedName: client.ObjectKeyFromObject(gw1),
+							GatewayNsName:  client.ObjectKeyFromObject(gw1),
 							Attachment: &graph.ParentRefAttachmentStatus{
 								AcceptedHostnames: map[string][]string{
 									graph.CreateParentRefListenerKey(
@@ -812,6 +814,7 @@ var _ = Describe("ChangeProcessor", func() {
 						{
 							Kind:           kinds.Gateway,
 							NamespacedName: client.ObjectKeyFromObject(gw2),
+							GatewayNsName:  client.ObjectKeyFromObject(gw2),
 							Attachment: &graph.ParentRefAttachmentStatus{
 								AcceptedHostnames: map[string][]string{
 									graph.CreateParentRefListenerKey(
@@ -827,6 +830,7 @@ var _ = Describe("ChangeProcessor", func() {
 						{
 							Kind:           kinds.Gateway,
 							NamespacedName: client.ObjectKeyFromObject(gw2),
+							GatewayNsName:  client.ObjectKeyFromObject(gw2),
 							Attachment: &graph.ParentRefAttachmentStatus{
 								AcceptedHostnames: map[string][]string{
 									graph.CreateParentRefListenerKey(
@@ -878,6 +882,7 @@ var _ = Describe("ChangeProcessor", func() {
 						{
 							Kind:           kinds.Gateway,
 							NamespacedName: client.ObjectKeyFromObject(gw1),
+							GatewayNsName:  client.ObjectKeyFromObject(gw1),
 							Attachment: &graph.ParentRefAttachmentStatus{
 								AcceptedHostnames: map[string][]string{
 									graph.CreateParentRefListenerKey(
@@ -893,6 +898,7 @@ var _ = Describe("ChangeProcessor", func() {
 						{
 							Kind:           kinds.Gateway,
 							NamespacedName: client.ObjectKeyFromObject(gw1),
+							GatewayNsName:  client.ObjectKeyFromObject(gw1),
 							Attachment: &graph.ParentRefAttachmentStatus{
 								AcceptedHostnames: map[string][]string{
 									graph.CreateParentRefListenerKey(
@@ -944,6 +950,7 @@ var _ = Describe("ChangeProcessor", func() {
 						{
 							Kind:           kinds.Gateway,
 							NamespacedName: client.ObjectKeyFromObject(gw2),
+							GatewayNsName:  client.ObjectKeyFromObject(gw2),
 							Attachment: &graph.ParentRefAttachmentStatus{
 								AcceptedHostnames: map[string][]string{
 									graph.CreateParentRefListenerKey(
@@ -959,6 +966,7 @@ var _ = Describe("ChangeProcessor", func() {
 						{
 							Kind:           kinds.Gateway,
 							NamespacedName: client.ObjectKeyFromObject(gw2),
+							GatewayNsName:  client.ObjectKeyFromObject(gw2),
 							Attachment: &graph.ParentRefAttachmentStatus{
 								AcceptedHostnames: map[string][]string{
 									graph.CreateParentRefListenerKey(
@@ -1010,6 +1018,7 @@ var _ = Describe("ChangeProcessor", func() {
 						{
 							Kind:           kinds.Gateway,
 							NamespacedName: client.ObjectKeyFromObject(gw1),
+							GatewayNsName:  client.ObjectKeyFromObject(gw1),
 							Attachment: &graph.ParentRefAttachmentStatus{
 								AcceptedHostnames: map[string][]string{
 									graph.CreateParentRefListenerKey(
@@ -1046,6 +1055,7 @@ var _ = Describe("ChangeProcessor", func() {
 						{
 							Kind:           kinds.Gateway,
 							NamespacedName: client.ObjectKeyFromObject(gw2),
+							GatewayNsName:  client.ObjectKeyFromObject(gw2),
 							Attachment: &graph.ParentRefAttachmentStatus{
 								AcceptedHostnames: map[string][]string{
 									graph.CreateParentRefListenerKey(
