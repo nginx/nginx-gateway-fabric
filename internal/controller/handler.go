@@ -416,7 +416,7 @@ func gatewayHasPendingWAFBundle(gr *graph.Graph, gw *graph.Gateway) bool {
 					continue
 				}
 				for _, parentRef := range route.ParentRefs {
-					if parentRef.Kind == kinds.Gateway && parentRef.NamespacedName == gwNsName {
+					if parentRef.GatewayNsName == gwNsName {
 						return true
 					}
 				}
@@ -467,9 +467,7 @@ func collectPolicyTargetDeployments(
 				continue
 			}
 			for _, parentRef := range route.ParentRefs {
-				if parentRef.Kind == kinds.Gateway {
-					addGateway(parentRef.NamespacedName)
-				}
+				addGateway(parentRef.GatewayNsName)
 			}
 		}
 	}

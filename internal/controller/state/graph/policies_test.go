@@ -2726,6 +2726,7 @@ func TestSnippetsPolicyPropagation(t *testing.T) {
 			{
 				Kind:           kinds.Gateway,
 				NamespacedName: gwNsName,
+				GatewayNsName:  gwNsName,
 			},
 		},
 	}
@@ -2741,6 +2742,7 @@ func TestSnippetsPolicyPropagation(t *testing.T) {
 			{
 				Kind:           kinds.Gateway,
 				NamespacedName: otherGwNsName,
+				GatewayNsName:  otherGwNsName,
 			},
 		},
 	}
@@ -2756,10 +2758,12 @@ func TestSnippetsPolicyPropagation(t *testing.T) {
 			{
 				Kind:           kinds.Gateway,
 				NamespacedName: gwNsName,
+				GatewayNsName:  gwNsName,
 			},
 			{
 				Kind:           kinds.Gateway,
 				NamespacedName: otherGwNsName,
+				GatewayNsName:  otherGwNsName,
 			},
 		},
 	}

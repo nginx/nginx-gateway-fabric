@@ -84,6 +84,10 @@ func TestBuildTLSRoute(t *testing.T) {
 			Namespace: "test",
 			Name:      "gateway",
 		},
+		GatewayNsName: types.NamespacedName{
+			Namespace: "test",
+			Name:      "gateway",
+		},
 	}
 
 	listenerSetParentRefGraph := ParentRef{
@@ -610,6 +614,10 @@ func TestBuildTLSRoute(t *testing.T) {
 							Namespace: "test",
 							Name:      "gateway",
 						},
+						GatewayNsName: types.NamespacedName{
+							Namespace: "test",
+							Name:      "gateway",
+						},
 					},
 				},
 				Spec: L4RouteSpec{
@@ -860,6 +868,7 @@ func TestHasTLSTerminateParent_NilModeDefaultsToTerminate(t *testing.T) {
 	parentRefs := []ParentRef{{
 		Kind:           gatewayv1.Kind(kinds.Gateway),
 		NamespacedName: types.NamespacedName{Namespace: "test", Name: "gateway"},
+		GatewayNsName:  types.NamespacedName{Namespace: "test", Name: "gateway"},
 		SectionName:    &sectionName,
 	}}
 

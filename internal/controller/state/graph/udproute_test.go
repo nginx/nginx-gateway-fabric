@@ -81,6 +81,10 @@ func TestBuildUDPRoute(t *testing.T) {
 			Namespace: "test",
 			Name:      "gateway",
 		},
+		GatewayNsName: types.NamespacedName{
+			Namespace: "test",
+			Name:      "gateway",
+		},
 	}
 
 	listenerSetParentRefGraph := ParentRef{
