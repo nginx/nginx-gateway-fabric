@@ -40,6 +40,7 @@ func supportedFeatures(experimental bool) []gatewayv1.SupportedFeature {
 
 		// HTTPRoute extended
 		features.SupportHTTPRouteBackendProtocolWebSocket,
+		features.SupportHTTPRouteBackendProtocolH2C,
 		features.SupportHTTPRouteDestinationPortMatching,
 		features.SupportHTTPRouteHostRewrite,
 		features.SupportHTTPRouteMethodMatching,

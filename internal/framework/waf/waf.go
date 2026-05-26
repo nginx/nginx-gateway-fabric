@@ -6,4 +6,4 @@ package waf
 // It is used both as the default image tag for the waf-enforcer and waf-config-mgr
 // sidecar containers and as the nap_release query parameter when compiling
 // policy bundles via the F5 NGINX One Console API.
-const Release = "5.13.0"
+const Release = "5.13.1"
