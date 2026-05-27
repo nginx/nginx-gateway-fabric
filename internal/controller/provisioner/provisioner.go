@@ -440,14 +440,15 @@ func (p *NginxProvisioner) reprovisionNginx(
 	resourceName string,
 	gateway *gatewayv1.Gateway,
 	nProxyCfg *graph.EffectiveNginxProxy,
+	allListeners []*graph.Listener,
 ) error {
 	if !p.isLeader() {
 		return nil
 	}
-	if len(gateway.Spec.Listeners) == 0 {
+	if len(allListeners) == 0 {
 		return nil
 	}
-	objects, err := p.buildNginxResourceObjects(resourceName, gateway, nProxyCfg)
+	objects, err := p.buildNginxResourceObjects(resourceName, gateway, nProxyCfg, allListeners)
 	if err != nil {
 		p.cfg.Logger.Error(err, "error provisioning some nginx resources")
 	}
@@ -594,7 +595,12 @@ func (p *NginxProvisioner) RegisterGateway(
 	}
 
 	if gateway.Valid && len(gateway.Listeners) > 0 {
-		objects, err := p.buildNginxResourceObjects(resourceName, gateway.Source, gateway.EffectiveNginxProxy)
+		objects, err := p.buildNginxResourceObjects(
+			resourceName,
+			gateway.Source,
+			gateway.EffectiveNginxProxy,
+			gateway.Listeners,
+		)
 		if err != nil {
 			p.cfg.Logger.Error(err, "error building some nginx resources")
 		}

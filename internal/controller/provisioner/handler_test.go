@@ -125,7 +125,16 @@ func TestHandleEventBatch_Upsert(t *testing.T) {
 
 	store.registerResourceInGatewayConfig(
 		client.ObjectKeyFromObject(gateway),
-		&graph.Gateway{Source: gateway, Valid: true},
+		&graph.Gateway{
+			Source: gateway,
+			Valid:  true,
+			Listeners: []*graph.Listener{
+				{
+					Name:   "listener-80",
+					Source: gatewayv1.Listener{Port: 80},
+				},
+			},
+		},
 	)
 
 	// Test handling Deployment
@@ -254,7 +263,16 @@ func TestHandleEventBatch_Delete(t *testing.T) {
 
 	store.registerResourceInGatewayConfig(
 		client.ObjectKeyFromObject(gateway),
-		&graph.Gateway{Source: gateway, Valid: true},
+		&graph.Gateway{
+			Source: gateway,
+			Valid:  true,
+			Listeners: []*graph.Listener{
+				{
+					Name:   "listener-80",
+					Source: gatewayv1.Listener{Port: 80},
+				},
+			},
+		},
 	)
 
 	deployment := &appsv1.Deployment{

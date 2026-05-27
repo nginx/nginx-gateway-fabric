@@ -236,12 +236,13 @@ func (h *eventHandler) provisionResource(
 		var err error
 		resourceName := controller.CreateNginxResourceName(gatewayNSName.Name, h.gcName)
 
-		// Provision NGINX resources only when listeners are defined on the Gateway.
-		if len(resources.Gateway.Source.Spec.Listeners) > 0 {
+		// Provision NGINX resources only when listeners are defined on the Gateway (including ListenerSets).
+		if len(resources.Gateway.Listeners) > 0 {
 			objects, err = h.provisioner.buildNginxResourceObjects(
 				resourceName,
 				resources.Gateway.Source,
 				resources.Gateway.EffectiveNginxProxy,
+				resources.Gateway.Listeners,
 			)
 			if err != nil {
 				logger.Error(err, "error building some nginx resources")
@@ -291,6 +292,7 @@ func (h *eventHandler) reprovisionResources(ctx context.Context, event *events.D
 				resourceName,
 				gateway.Source,
 				gateway.EffectiveNginxProxy,
+				gateway.Listeners,
 			); err != nil {
 				return err
 			}
