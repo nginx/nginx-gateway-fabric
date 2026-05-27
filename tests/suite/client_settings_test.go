@@ -348,6 +348,35 @@ var _ = Describe("ClientSettingsPolicy", Ordered, Label("functional", "cspolicy"
 			})
 		})
 	})
+
+	// Regression test: overlap-route-1 and overlap-route-2 share the same
+	// gateway:hostname:port/path ("overlap.example.com", PathPrefix "/") and
+	// therefore overlap with each other. The CSP targets the coffee route
+	// ("cafe.example.com", "/coffee"), which shares no path with either of
+	// them. The overlap between the two non-targeted routes must not produce
+	// a false-positive TargetConflict on the CSP.
+	Context("TargetConflict regression", func() {
+		When("two non-targeted routes overlap with each other but not with the policy target", func() {
+			targetConflictFiles := []string{
+				"clientsettings/target-conflict-overlapping-routes.yaml",
+				"clientsettings/target-conflict-csp.yaml",
+			}
+
+			BeforeAll(func() {
+				Expect(resourceManager.ApplyFromFiles(targetConflictFiles, namespace)).To(Succeed())
+				Expect(resourceManager.WaitForAppsToBeReady(namespace)).To(Succeed())
+			})
+
+			AfterAll(func() {
+				Expect(resourceManager.DeleteFromFiles(targetConflictFiles, namespace)).To(Succeed())
+			})
+
+			Specify("the policy is accepted without a false-positive TargetConflict", func() {
+				nsname := types.NamespacedName{Name: "target-conflict-csp", Namespace: namespace}
+				Expect(waitForCSPolicyToBeAccepted(nsname)).To(Succeed())
+			})
+		})
+	})
 })
 
 func waitForCSPolicyToBeAccepted(policyNsname types.NamespacedName) error {

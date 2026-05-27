@@ -1,0 +1,15 @@
+# ClientSettingsPolicy targeting the coffee route (hostname "cafe.example.com", path "/coffee").
+# The coffee route does not share a gateway:hostname:port/path with overlap-route-1 or
+# overlap-route-2 ("overlap.example.com"). This policy must be Accepted even though
+# those two non-targeted routes overlap with each other.
+apiVersion: gateway.nginx.org/v1alpha1
+kind: ClientSettingsPolicy
+metadata:
+  name: target-conflict-csp
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: coffee
+  body:
+    maxSize: "5000"
