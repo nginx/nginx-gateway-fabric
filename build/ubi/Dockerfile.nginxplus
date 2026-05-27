@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.23
+# syntax=docker/dockerfile:1.24
 FROM scratch AS nginx-files
 
 # NGINX Plus repo and key files (must be provided at build time)
