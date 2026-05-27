@@ -1465,7 +1465,6 @@ func TestProcessPolicies_RouteOverlap(t *testing.T) {
 				}: createTestRouteWithPaths("hr-coffee", "/coffee"),
 				// Two non-targeted routes on a *different* gateway sharing the same path.
 				// These two routes overlap with each other, but neither overlaps with hr-coffee.
-				// Before the fix, the mutation of the shared map caused a false-positive conflict.
 				{
 					RouteType:      RouteTypeHTTP,
 					NamespacedName: types.NamespacedName{Namespace: testNs, Name: "foreign-route-1"},
