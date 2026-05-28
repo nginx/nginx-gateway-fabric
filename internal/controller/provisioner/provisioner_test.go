@@ -638,7 +638,7 @@ func TestNonLeaderProvisioner(t *testing.T) {
 	g.Expect(provisioner.provisionNginx(t.Context(), "gw-nginx", nil, nil)).To(Succeed())
 	expectResourcesToNotExist(t, g, fakeClient, nsName)
 
-	g.Expect(provisioner.reprovisionNginx(t.Context(), "gw-nginx", nil, nil)).To(Succeed())
+	g.Expect(provisioner.reprovisionNginx(t.Context(), "gw-nginx", nil, nil, nil)).To(Succeed())
 	expectResourcesToNotExist(t, g, fakeClient, nsName)
 
 	g.Expect(provisioner.deprovisionNginxForInvalidGateway(t.Context(), nsName)).To(Succeed())

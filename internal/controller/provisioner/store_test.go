@@ -449,6 +449,82 @@ func TestGatewayChanged(t *testing.T) {
 				},
 			}},
 		},
+		{
+			name: "listener added via ListenerSet",
+			original: &graph.Gateway{
+				Listeners: []*graph.Listener{
+					{
+						Name:   "http",
+						Source: gatewayv1.Listener{Port: 80, Protocol: gatewayv1.HTTPProtocolType},
+					},
+				},
+			},
+			updated: &graph.Gateway{
+				Listeners: []*graph.Listener{
+					{
+						Name:   "http",
+						Source: gatewayv1.Listener{Port: 80, Protocol: gatewayv1.HTTPProtocolType},
+					},
+					{
+						Name:   "https",
+						Source: gatewayv1.Listener{Port: 443, Protocol: gatewayv1.HTTPSProtocolType},
+					},
+				},
+			},
+			changed: true,
+		},
+		{
+			name: "listener removed from ListenerSet",
+			original: &graph.Gateway{
+				Listeners: []*graph.Listener{
+					{
+						Name:   "http",
+						Source: gatewayv1.Listener{Port: 80, Protocol: gatewayv1.HTTPProtocolType},
+					},
+					{
+						Name:   "https",
+						Source: gatewayv1.Listener{Port: 443, Protocol: gatewayv1.HTTPSProtocolType},
+					},
+				},
+			},
+			updated: &graph.Gateway{
+				Listeners: []*graph.Listener{
+					{
+						Name:   "http",
+						Source: gatewayv1.Listener{Port: 80, Protocol: gatewayv1.HTTPProtocolType},
+					},
+				},
+			},
+			changed: true,
+		},
+		{
+			name: "same listeners including ListenerSet - no changes",
+			original: &graph.Gateway{
+				Listeners: []*graph.Listener{
+					{
+						Name:   "http",
+						Source: gatewayv1.Listener{Port: 80, Protocol: gatewayv1.HTTPProtocolType},
+					},
+					{
+						Name:   "https",
+						Source: gatewayv1.Listener{Port: 443, Protocol: gatewayv1.HTTPSProtocolType},
+					},
+				},
+			},
+			updated: &graph.Gateway{
+				Listeners: []*graph.Listener{
+					{
+						Name:   "http",
+						Source: gatewayv1.Listener{Port: 80, Protocol: gatewayv1.HTTPProtocolType},
+					},
+					{
+						Name:   "https",
+						Source: gatewayv1.Listener{Port: 443, Protocol: gatewayv1.HTTPSProtocolType},
+					},
+				},
+			},
+			changed: false,
+		},
 	}
 
 	for _, test := range tests {
