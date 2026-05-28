@@ -308,7 +308,10 @@ func gatewayChanged(original, updated *graph.Gateway) bool {
 	return listenersChanged(original.Listeners, updated.Listeners)
 }
 
-// listenersChanged returns true if the set of listener ports/protocols has changed.
+// listenersChanged returns true if the set of listener names, ports, protocols, or hostnames
+// has changed. Order is intentionally ignored: the provisioner only cares about which ports
+// need to be exposed, not their order. Listener conflict resolution is handled upstream in
+// the graph builder and does not affect provisioned resources.
 func listenersChanged(original, updated []*graph.Listener) bool {
 	if len(original) != len(updated) {
 		return true
