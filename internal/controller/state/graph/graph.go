@@ -109,7 +109,7 @@ type Graph struct {
 	PlusSecrets map[types.NamespacedName][]PlusSecretFile
 	// PLMSecrets holds the PLM S3 storage secrets, keyed by NamespacedName with the configured roles as value.
 	// Used by IsReferenced to ensure PLM secrets trigger graph rebuilds when updated.
-	PLMSecrets map[types.NamespacedName][]string
+	PLMSecrets map[types.NamespacedName][]PLMRole
 }
 
 // NginxReloadResult describes the result of an NGINX reload.
@@ -260,7 +260,7 @@ func BuildGraph(
 	plusSecrets map[types.NamespacedName][]PlusSecretFile,
 	wafFetcher fetch.Fetcher,
 	plmFetcher *s3fetch.Fetcher,
-	plmSecretNames map[types.NamespacedName][]string,
+	plmSecretNames map[types.NamespacedName][]PLMRole,
 	previousWAFBundles map[WAFBundleKey]*WAFBundleData,
 	validators validation.Validators,
 	logger logr.Logger,

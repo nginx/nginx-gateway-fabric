@@ -183,8 +183,8 @@ func splitHostPort(value string) (host, port string, err error) {
 		return u.Hostname(), u.Port(), nil
 	}
 
-	// This function assumes a port exists. If it doesn't, ignore those errors. Any errors with the endpoint
-	// will be caught by further validation.
+	// net.SplitHostPort requires a port; when the value has no port, it returns a "missing port" error.
+	// We treat that as valid (port is optional) and return the original value as host.
 	host, port, splitErr := net.SplitHostPort(value)
 	if splitErr != nil {
 		if strings.Contains(splitErr.Error(), "missing port") || strings.Contains(splitErr.Error(), "too many colons") {

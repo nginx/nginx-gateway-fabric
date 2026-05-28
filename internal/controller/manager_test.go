@@ -367,6 +367,40 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 			},
 		},
 		{
+			name: "PLM CRDs not included when APPolicy and APLogConf not discovered",
+			cfg: config.Config{
+				GatewayClassName: gcName,
+			},
+			discoveredCRDs: map[string]bool{
+				"ReferenceGrant": true,
+				kinds.APPolicy:   false,
+				kinds.APLogConf:  false,
+			},
+			expectedObjects: []client.Object{
+				&gatewayv1.GatewayClass{ObjectMeta: metav1.ObjectMeta{Name: "nginx"}},
+			},
+			expectedObjectLists: []client.ObjectList{
+				&apiv1.ServiceList{},
+				&apiv1.SecretList{},
+				&apiv1.NamespaceList{},
+				&discoveryV1.EndpointSliceList{},
+				&gatewayv1.HTTPRouteList{},
+				&apiv1.ConfigMapList{},
+				&gatewayv1.ReferenceGrantList{},
+				&ngfAPIv1alpha2.NginxProxyList{},
+				&gatewayv1.GRPCRouteList{},
+				&ngfAPIv1alpha1.ClientSettingsPolicyList{},
+				&ngfAPIv1alpha2.ObservabilityPolicyList{},
+				&ngfAPIv1alpha1.ProxySettingsPolicyList{},
+				&ngfAPIv1alpha1.UpstreamSettingsPolicyList{},
+				&ngfAPIv1alpha1.AuthenticationFilterList{},
+				&ngfAPIv1alpha1.RateLimitPolicyList{},
+				&ngfAPIv1alpha1.WAFPolicyList{},
+				partialObjectMetadataList,
+				&gatewayv1.GatewayList{},
+			},
+		},
+		{
 			name: "all features enabled",
 			cfg: config.Config{
 				GatewayClassName:     gcName,
@@ -1154,7 +1188,7 @@ func TestBuildPLMSecretNames(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		plmCfg   *config.PLMStorageConfig
-		expected map[types.NamespacedName][]string
+		expected map[types.NamespacedName][]graph.PLMRole
 		name     string
 		ns       string
 	}{
@@ -1172,9 +1206,9 @@ func TestBuildPLMSecretNames(t *testing.T) {
 				CASecretName:          "ca-secret",
 			},
 			ns: "nginx-gateway",
-			expected: map[types.NamespacedName][]string{
-				{Namespace: "nginx-gateway", Name: "cred-secret"}: {"credentials"},
-				{Namespace: "nginx-gateway", Name: "ca-secret"}:   {"ca"},
+			expected: map[types.NamespacedName][]graph.PLMRole{
+				{Namespace: "nginx-gateway", Name: "cred-secret"}: {graph.PLMRoleCredentials},
+				{Namespace: "nginx-gateway", Name: "ca-secret"}:   {graph.PLMRoleCA},
 			},
 		},
 		{
@@ -1186,10 +1220,10 @@ func TestBuildPLMSecretNames(t *testing.T) {
 				ClientSSLSecretName:   "plm-ns/client-secret",
 			},
 			ns: "nginx-gateway",
-			expected: map[types.NamespacedName][]string{
-				{Namespace: "plm-ns", Name: "cred-secret"}:   {"credentials"},
-				{Namespace: "plm-ns", Name: "ca-secret"}:     {"ca"},
-				{Namespace: "plm-ns", Name: "client-secret"}: {"clientssl"},
+			expected: map[types.NamespacedName][]graph.PLMRole{
+				{Namespace: "plm-ns", Name: "cred-secret"}:   {graph.PLMRoleCredentials},
+				{Namespace: "plm-ns", Name: "ca-secret"}:     {graph.PLMRoleCA},
+				{Namespace: "plm-ns", Name: "client-secret"}: {graph.PLMRoleClientSSL},
 			},
 		},
 		{
@@ -1200,9 +1234,9 @@ func TestBuildPLMSecretNames(t *testing.T) {
 				CASecretName:          "ca-secret",
 			},
 			ns: "nginx-gateway",
-			expected: map[types.NamespacedName][]string{
-				{Namespace: "other-ns", Name: "cred-secret"}:    {"credentials"},
-				{Namespace: "nginx-gateway", Name: "ca-secret"}: {"ca"},
+			expected: map[types.NamespacedName][]graph.PLMRole{
+				{Namespace: "other-ns", Name: "cred-secret"}:    {graph.PLMRoleCredentials},
+				{Namespace: "nginx-gateway", Name: "ca-secret"}: {graph.PLMRoleCA},
 			},
 		},
 	}

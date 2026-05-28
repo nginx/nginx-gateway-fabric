@@ -184,13 +184,24 @@ type WAFBundleData struct {
 	Data     []byte
 }
 
+// PLMRole identifies the role of a Kubernetes Secret in PLM S3 storage authentication.
+type PLMRole string
+
+const (
+	// PLMRoleCredentials is the role for the Secret containing S3 access key ID and secret access key.
+	PLMRoleCredentials PLMRole = "credentials"
+	// PLMRoleCA is the role for the Secret containing the CA certificate for TLS verification.
+	PLMRoleCA PLMRole = "ca"
+	// PLMRoleClientSSL is the role for the Secret containing the client TLS certificate and key for mTLS.
+	PLMRoleClientSSL PLMRole = "clientssl"
+)
+
 const (
 	gatewayGroupKind = v1.GroupName + "/" + kinds.Gateway
 	hrGroupKind      = v1.GroupName + "/" + kinds.HTTPRoute
 	grpcGroupKind    = v1.GroupName + "/" + kinds.GRPCRoute
 	serviceGroupKind = "core" + "/" + kinds.Service
-	// plmDefaultAccessKeyID is the S3 access key ID used by the PLM chart's SeaweedFS configuration.
-	// This is hardcoded in the PLM chart's policy-controller-deployment.yaml.
+	// plmDefaultAccessKeyID is the fixed S3 access key ID configured by the SeaweedFS operator.
 	plmDefaultAccessKeyID = "adminKey"
 )
 
@@ -1714,6 +1725,9 @@ func plmFetchCredentials(wafInput *WAFProcessingInput) (*s3fetch.Credentials, *s
 		wafInput.PLMResolvedSecrets.ResolutionError
 }
 
+// handlePLMBundleFetchError handles a failed PLM bundle fetch by falling back to a previously fetched bundle
+// if one exists (stale-bundle warning), or marking the policy as pending if no previous bundle is available
+// (fail-closed). Returns the fallback bundle data and true if a previous bundle was used.
 func handlePLMBundleFetchError(
 	policy *Policy,
 	previousBundles map[WAFBundleKey]*WAFBundleData,
@@ -1737,11 +1751,11 @@ func handlePLMBundleFetchError(
 }
 
 // resolvePLMSecrets resolves PLM S3 credentials and TLS config from cluster Secrets.
-// plmSecretNames maps each secret NamespacedName to its role ("credentials", "ca", "clientssl").
+// plmSecretNames maps each secret NamespacedName to its PLMRole(s).
 func resolvePLMSecrets(
 	logger logr.Logger,
 	clusterSecrets map[types.NamespacedName]*corev1.Secret,
-	plmSecretNames map[types.NamespacedName][]string,
+	plmSecretNames map[types.NamespacedName][]PLMRole,
 ) *PLMResolvedSecrets {
 	if len(plmSecretNames) == 0 {
 		return nil
@@ -1766,7 +1780,7 @@ func resolvePLMSecrets(
 
 		for _, role := range roles {
 			switch role {
-			case "credentials":
+			case PLMRoleCredentials:
 				accessKeyID, secretAccessKey, err := resolvePLMCredentials(secret)
 				if err != nil {
 					logger.Error(err, "PLM secret is invalid", "secret", nsName, "role", role)
@@ -1781,7 +1795,7 @@ func resolvePLMSecrets(
 					AccessKeyID:     accessKeyID,
 					SecretAccessKey: secretAccessKey,
 				}
-			case "ca":
+			case PLMRoleCA:
 				caData, err := resolvePLMCA(secret)
 				if err != nil {
 					logger.Error(err, "PLM secret is invalid", "secret", nsName, "role", role)
@@ -1796,7 +1810,7 @@ func resolvePLMSecrets(
 					result.TLS = &s3fetch.TLSConfig{}
 				}
 				result.TLS.CAData = caData
-			case "clientssl":
+			case PLMRoleClientSSL:
 				certData, keyData, err := resolvePLMClientSSL(secret)
 				if err != nil {
 					logger.Error(err, "PLM secret is invalid", "secret", nsName, "role", role)

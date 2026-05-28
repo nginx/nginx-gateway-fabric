@@ -3745,9 +3745,9 @@ func TestResolvePLMSecrets(t *testing.T) {
 			resolved := resolvePLMSecrets(
 				logr.Discard(),
 				test.clusterSecrets,
-				map[types.NamespacedName][]string{
-					sharedSecretName:      {"ca", "clientssl"},
-					credentialsSecretName: {"credentials"},
+				map[types.NamespacedName][]PLMRole{
+					sharedSecretName:      {PLMRoleCA, PLMRoleClientSSL},
+					credentialsSecretName: {PLMRoleCredentials},
 				},
 			)
 

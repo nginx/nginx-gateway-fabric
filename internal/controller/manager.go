@@ -1157,7 +1157,7 @@ func createWAFFetcher(logger logr.Logger) fetch.Fetcher {
 
 // createPLMFetcher creates an S3 fetcher for PLM policy bundles and returns the secret names
 // that should be tracked for IsReferenced. Returns (nil, nil) if PLM is not configured.
-func createPLMFetcher(cfg config.Config) (*s3fetch.Fetcher, map[types.NamespacedName][]string) {
+func createPLMFetcher(cfg config.Config) (*s3fetch.Fetcher, map[types.NamespacedName][]graph.PLMRole) {
 	if cfg.PLMStorageConfig == nil {
 		return nil, nil
 	}
@@ -1173,20 +1173,20 @@ func createPLMFetcher(cfg config.Config) (*s3fetch.Fetcher, map[types.Namespaced
 	return fetcher, secretNames
 }
 
-// buildPLMSecretNames builds a map of NamespacedName→role for PLM storage secrets.
+// buildPLMSecretNames builds a map of NamespacedName→PLMRole for PLM storage secrets.
 // Secret names may be in "namespace/name" format for cross-namespace references,
 // or plain "name" format which defaults to the provided namespace.
 func buildPLMSecretNames(
 	plmCfg *config.PLMStorageConfig,
 	defaultNamespace string,
-) map[types.NamespacedName][]string {
+) map[types.NamespacedName][]graph.PLMRole {
 	if plmCfg == nil {
 		return nil
 	}
 
-	names := make(map[types.NamespacedName][]string)
+	names := make(map[types.NamespacedName][]graph.PLMRole)
 
-	addSecret := func(value, role string) {
+	addSecret := func(value string, role graph.PLMRole) {
 		if value != "" {
 			ns, name := parsePLMSecretName(value, defaultNamespace)
 			nsName := types.NamespacedName{Namespace: ns, Name: name}
@@ -1196,9 +1196,9 @@ func buildPLMSecretNames(
 		}
 	}
 
-	addSecret(plmCfg.CredentialsSecretName, "credentials")
-	addSecret(plmCfg.CASecretName, "ca")
-	addSecret(plmCfg.ClientSSLSecretName, "clientssl")
+	addSecret(plmCfg.CredentialsSecretName, graph.PLMRoleCredentials)
+	addSecret(plmCfg.CASecretName, graph.PLMRoleCA)
+	addSecret(plmCfg.ClientSSLSecretName, graph.PLMRoleClientSSL)
 
 	return names
 }

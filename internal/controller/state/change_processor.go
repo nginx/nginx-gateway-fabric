@@ -80,8 +80,8 @@ type ChangeProcessorConfig struct {
 	// PLMFetcher fetches bundle files from PLM's S3-compatible storage.
 	// Nil if PLM is not configured.
 	PLMFetcher *s3fetch.Fetcher
-	// PLMSecretNames maps each PLM secret NamespacedName to its role(s) ("credentials", "ca", "clientssl").
-	PLMSecretNames map[types.NamespacedName][]string
+	// PLMSecretNames maps each PLM secret NamespacedName to its PLMRole(s).
+	PLMSecretNames map[types.NamespacedName][]graph.PLMRole
 	// Logger is the logger for this Change Processor.
 	Logger logr.Logger
 	// GatewayCtlrName is the name of the Gateway controller.
