@@ -252,6 +252,7 @@ func TestBuildGRPCRoutes(t *testing.T) {
 							SectionName:         gr.Spec.ParentRefs[0].SectionName,
 							Kind:                v1.Kind(kinds.Gateway),
 							NamespacedName:      gwNsName,
+							GatewayNsName:       gwNsName,
 						},
 					},
 					Valid:      true,
@@ -1023,6 +1024,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 						SectionName:         grBoth.Spec.ParentRefs[0].SectionName,
 						Kind:                v1.Kind(kinds.Gateway),
 						NamespacedName:      gatewayNsName,
+						GatewayNsName:       gatewayNsName,
 					},
 				},
 				Valid:      true,
@@ -1079,6 +1081,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 						SectionName:         grEmptyMatch.Spec.ParentRefs[0].SectionName,
 						Kind:                v1.Kind(kinds.Gateway),
 						NamespacedName:      gatewayNsName,
+						GatewayNsName:       gatewayNsName,
 					},
 				},
 				Valid:      true,
@@ -1113,6 +1116,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 						SectionName:         grValidFilter.Spec.ParentRefs[0].SectionName,
 						Kind:                v1.Kind(kinds.Gateway),
 						NamespacedName:      gatewayNsName,
+						GatewayNsName:       gatewayNsName,
 					},
 				},
 				Valid:      true,
@@ -1158,6 +1162,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 						SectionName:         grInvalidMatchesEmptyMethodFields.Spec.ParentRefs[0].SectionName,
 						Kind:                v1.Kind(kinds.Gateway),
 						NamespacedName:      gatewayNsName,
+						GatewayNsName:       gatewayNsName,
 					},
 				},
 				Conditions: []conditions.Condition{
@@ -1204,6 +1209,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 						SectionName:         grInvalidMatchesInvalidMethodFields.Spec.ParentRefs[0].SectionName,
 						Kind:                v1.Kind(kinds.Gateway),
 						NamespacedName:      gatewayNsName,
+						GatewayNsName:       gatewayNsName,
 					},
 				},
 				Conditions: []conditions.Condition{
@@ -1254,6 +1260,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 						SectionName:         grOneInvalid.Spec.ParentRefs[0].SectionName,
 						Kind:                v1.Kind(kinds.Gateway),
 						NamespacedName:      gatewayNsName,
+						GatewayNsName:       gatewayNsName,
 					},
 				},
 				Conditions: []conditions.Condition{
@@ -1315,6 +1322,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 						SectionName:         grInvalidHeadersInvalidType.Spec.ParentRefs[0].SectionName,
 						Kind:                v1.Kind(kinds.Gateway),
 						NamespacedName:      gatewayNsName,
+						GatewayNsName:       gatewayNsName,
 					},
 				},
 				Conditions: []conditions.Condition{
@@ -1355,6 +1363,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 						SectionName:         grInvalidHeadersEmptyType.Spec.ParentRefs[0].SectionName,
 						Kind:                v1.Kind(kinds.Gateway),
 						NamespacedName:      gatewayNsName,
+						GatewayNsName:       gatewayNsName,
 					},
 				},
 				Conditions: []conditions.Condition{
@@ -1395,6 +1404,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 						SectionName:         grInvalidMatchesNilMethodType.Spec.ParentRefs[0].SectionName,
 						Kind:                v1.Kind(kinds.Gateway),
 						NamespacedName:      gatewayNsName,
+						GatewayNsName:       gatewayNsName,
 					},
 				},
 				Conditions: []conditions.Condition{
@@ -1434,6 +1444,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 						SectionName:         grInvalidFilter.Spec.ParentRefs[0].SectionName,
 						Kind:                v1.Kind(kinds.Gateway),
 						NamespacedName:      gatewayNsName,
+						GatewayNsName:       gatewayNsName,
 					},
 				},
 				Conditions: []conditions.Condition{
@@ -1481,6 +1492,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 						SectionName:         grInvalidHostname.Spec.ParentRefs[0].SectionName,
 						Kind:                v1.Kind(kinds.Gateway),
 						NamespacedName:      gatewayNsName,
+						GatewayNsName:       gatewayNsName,
 					},
 				},
 				Conditions: []conditions.Condition{
@@ -1506,6 +1518,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 						SectionName:         grInvalidSnippetsFilter.Spec.ParentRefs[0].SectionName,
 						Kind:                v1.Kind(kinds.Gateway),
 						NamespacedName:      gatewayNsName,
+						GatewayNsName:       gatewayNsName,
 					},
 				},
 				Conditions: []conditions.Condition{
@@ -1546,6 +1559,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 						SectionName:         grUnresolvableSnippetsFilter.Spec.ParentRefs[0].SectionName,
 						Kind:                v1.Kind(kinds.Gateway),
 						NamespacedName:      gatewayNsName,
+						GatewayNsName:       gatewayNsName,
 					},
 				},
 				Conditions: []conditions.Condition{
@@ -1587,6 +1601,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 						SectionName:         grInvalidAndUnresolvableSnippetsFilter.Spec.ParentRefs[0].SectionName,
 						Kind:                v1.Kind(kinds.Gateway),
 						NamespacedName:      gatewayNsName,
+						GatewayNsName:       gatewayNsName,
 					},
 				},
 				Conditions: []conditions.Condition{
@@ -1632,6 +1647,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 						SectionName:         grInvalidAuthenticationFilter.Spec.ParentRefs[0].SectionName,
 						Kind:                v1.Kind(kinds.Gateway),
 						NamespacedName:      gatewayNsName,
+						GatewayNsName:       gatewayNsName,
 					},
 				},
 				Conditions: []conditions.Condition{
@@ -1672,6 +1688,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 						SectionName:         grUnresolvableAuthenticationFilter.Spec.ParentRefs[0].SectionName,
 						Kind:                v1.Kind(kinds.Gateway),
 						NamespacedName:      gatewayNsName,
+						GatewayNsName:       gatewayNsName,
 					},
 				},
 				Conditions: []conditions.Condition{
@@ -1713,6 +1730,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 						SectionName:         grInvalidAndUnresolvableAuthenticationFilter.Spec.ParentRefs[0].SectionName,
 						Kind:                v1.Kind(kinds.Gateway),
 						NamespacedName:      gatewayNsName,
+						GatewayNsName:       gatewayNsName,
 					},
 				},
 				Conditions: []conditions.Condition{
@@ -1757,6 +1775,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 						SectionName:         grInvalidAndValidAuthenticationFilter.Spec.ParentRefs[0].SectionName,
 						Kind:                v1.Kind(kinds.Gateway),
 						NamespacedName:      gatewayNsName,
+						GatewayNsName:       gatewayNsName,
 					},
 				},
 				Conditions: []conditions.Condition{
@@ -1801,6 +1820,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 						SectionName:         grUnresolvedAndValidAuthenticationFilter.Spec.ParentRefs[0].SectionName,
 						Kind:                v1.Kind(kinds.Gateway),
 						NamespacedName:      gatewayNsName,
+						GatewayNsName:       gatewayNsName,
 					},
 				},
 				Conditions: []conditions.Condition{
@@ -1847,6 +1867,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 						SectionName:         grTwoValidAuthenticationFilter.Spec.ParentRefs[0].SectionName,
 						Kind:                v1.Kind(kinds.Gateway),
 						NamespacedName:      gatewayNsName,
+						GatewayNsName:       gatewayNsName,
 					},
 				},
 				Conditions: []conditions.Condition{
@@ -1903,6 +1924,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 						SectionName:         grValidWithUnsupportedField.Spec.ParentRefs[0].SectionName,
 						Kind:                v1.Kind(kinds.Gateway),
 						NamespacedName:      gatewayNsName,
+						GatewayNsName:       gatewayNsName,
 					},
 				},
 				Valid:      true,
@@ -1940,6 +1962,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 						SectionName:         grInvalidWithUnsupportedField.Spec.ParentRefs[0].SectionName,
 						Kind:                v1.Kind(kinds.Gateway),
 						NamespacedName:      gatewayNsName,
+						GatewayNsName:       gatewayNsName,
 					},
 				},
 				Valid:      false,
@@ -2161,6 +2184,7 @@ func TestBuildGRPCRouteWithMirrorRoutes(t *testing.T) {
 				SectionName:         gr.Spec.ParentRefs[0].SectionName,
 				Kind:                v1.Kind(kinds.Gateway),
 				NamespacedName:      gatewayNsName,
+				GatewayNsName:       gatewayNsName,
 			},
 		},
 		{

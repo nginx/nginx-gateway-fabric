@@ -62,6 +62,10 @@ func TestBuildTCPRoute(t *testing.T) {
 			Namespace: "test",
 			Name:      "gateway",
 		},
+		GatewayNsName: types.NamespacedName{
+			Namespace: "test",
+			Name:      "gateway",
+		},
 	}
 
 	listenerSetParentRef := gatewayv1.ParentReference{

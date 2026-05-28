@@ -308,6 +308,7 @@ func TestBuildHTTPRoutes(t *testing.T) {
 							SectionName:         hr.Spec.ParentRefs[0].SectionName,
 							Kind:                gatewayv1.Kind(kinds.Gateway),
 							NamespacedName:      gwNsName,
+							GatewayNsName:       gwNsName,
 						},
 					},
 					Valid:      true,
@@ -873,6 +874,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 						SectionName:         hr.Spec.ParentRefs[0].SectionName,
 						Kind:                gatewayv1.Kind(kinds.Gateway),
 						NamespacedName:      gatewayNsName,
+						GatewayNsName:       gatewayNsName,
 					},
 				},
 				Valid:      true,
@@ -920,6 +922,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 						SectionName:         hrInvalidMatchesEmptyPathType.Spec.ParentRefs[0].SectionName,
 						Kind:                gatewayv1.Kind(kinds.Gateway),
 						NamespacedName:      gatewayNsName,
+						GatewayNsName:       gatewayNsName,
 					},
 				},
 				Conditions: []conditions.Condition{
@@ -968,6 +971,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 						SectionName:         hrInvalidMatchesEmptyPathValue.Spec.ParentRefs[0].SectionName,
 						Kind:                gatewayv1.Kind(kinds.Gateway),
 						NamespacedName:      gatewayNsName,
+						GatewayNsName:       gatewayNsName,
 					},
 				},
 				Conditions: []conditions.Condition{
@@ -1013,6 +1017,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 						SectionName:         hrInvalidHostname.Spec.ParentRefs[0].SectionName,
 						Kind:                gatewayv1.Kind(kinds.Gateway),
 						NamespacedName:      gatewayNsName,
+						GatewayNsName:       gatewayNsName,
 					},
 				},
 				Conditions: []conditions.Condition{
@@ -1038,6 +1043,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 						SectionName:         hrInvalidMatches.Spec.ParentRefs[0].SectionName,
 						Kind:                gatewayv1.Kind(kinds.Gateway),
 						NamespacedName:      gatewayNsName,
+						GatewayNsName:       gatewayNsName,
 					},
 				},
 				Conditions: []conditions.Condition{
@@ -1077,6 +1083,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 						SectionName:         hrInvalidFilters.Spec.ParentRefs[0].SectionName,
 						Kind:                gatewayv1.Kind(kinds.Gateway),
 						NamespacedName:      gatewayNsName,
+						GatewayNsName:       gatewayNsName,
 					},
 				},
 				Conditions: []conditions.Condition{
@@ -1117,6 +1124,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 						SectionName:         hrDroppedInvalidMatches.Spec.ParentRefs[0].SectionName,
 						Kind:                gatewayv1.Kind(kinds.Gateway),
 						NamespacedName:      gatewayNsName,
+						GatewayNsName:       gatewayNsName,
 					},
 				},
 				Conditions: []conditions.Condition{
@@ -1165,6 +1173,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 						SectionName:         hrDroppedInvalidMatchesAndInvalidFilters.Spec.ParentRefs[0].SectionName,
 						Kind:                gatewayv1.Kind(kinds.Gateway),
 						NamespacedName:      gatewayNsName,
+						GatewayNsName:       gatewayNsName,
 					},
 				},
 				Conditions: []conditions.Condition{
@@ -1228,6 +1237,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 						SectionName:         hrDroppedInvalidFilters.Spec.ParentRefs[0].SectionName,
 						Kind:                gatewayv1.Kind(kinds.Gateway),
 						NamespacedName:      gatewayNsName,
+						GatewayNsName:       gatewayNsName,
 					},
 				},
 				Conditions: []conditions.Condition{
@@ -1279,6 +1289,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 						SectionName:         hrValidSnippetsFilter.Spec.ParentRefs[0].SectionName,
 						Kind:                gatewayv1.Kind(kinds.Gateway),
 						NamespacedName:      gatewayNsName,
+						GatewayNsName:       gatewayNsName,
 					},
 				},
 				Spec: L7RouteSpec{
@@ -1325,6 +1336,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 						SectionName:         hrValidAuthenticationFilter.Spec.ParentRefs[0].SectionName,
 						Kind:                gatewayv1.Kind(kinds.Gateway),
 						NamespacedName:      gatewayNsName,
+						GatewayNsName:       gatewayNsName,
 					},
 				},
 				Spec: L7RouteSpec{
@@ -1369,6 +1381,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 						SectionName:         hrInvalidSnippetsFilter.Spec.ParentRefs[0].SectionName,
 						Kind:                gatewayv1.Kind(kinds.Gateway),
 						NamespacedName:      gatewayNsName,
+						GatewayNsName:       gatewayNsName,
 					},
 				},
 				Conditions: []conditions.Condition{
@@ -1409,6 +1422,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 						SectionName:         hrInvalidAuthenticationFilter.Spec.ParentRefs[0].SectionName,
 						Kind:                gatewayv1.Kind(kinds.Gateway),
 						NamespacedName:      gatewayNsName,
+						GatewayNsName:       gatewayNsName,
 					},
 				},
 				Conditions: []conditions.Condition{
@@ -1449,6 +1463,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 						SectionName:         hrUnresolvableSnippetsFilter.Spec.ParentRefs[0].SectionName,
 						Kind:                gatewayv1.Kind(kinds.Gateway),
 						NamespacedName:      gatewayNsName,
+						GatewayNsName:       gatewayNsName,
 					},
 				},
 				Conditions: []conditions.Condition{
@@ -1490,6 +1505,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 						SectionName:         hrUnresolvableAuthenticationFilter.Spec.ParentRefs[0].SectionName,
 						Kind:                gatewayv1.Kind(kinds.Gateway),
 						NamespacedName:      gatewayNsName,
+						GatewayNsName:       gatewayNsName,
 					},
 				},
 				Conditions: []conditions.Condition{
@@ -1531,6 +1547,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 						SectionName:         hrInvalidAndUnresolvableSnippetsFilter.Spec.ParentRefs[0].SectionName,
 						Kind:                gatewayv1.Kind(kinds.Gateway),
 						NamespacedName:      gatewayNsName,
+						GatewayNsName:       gatewayNsName,
 					},
 				},
 				Conditions: []conditions.Condition{
@@ -1578,6 +1595,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 						SectionName:         hrInvalidAndUnresolvableAuthenticationFilter.Spec.ParentRefs[0].SectionName,
 						Kind:                gatewayv1.Kind(kinds.Gateway),
 						NamespacedName:      gatewayNsName,
+						GatewayNsName:       gatewayNsName,
 					},
 				},
 				Conditions: []conditions.Condition{
@@ -1624,6 +1642,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 						SectionName:         hrValidAndUnresolvableAuthenticationFilter.Spec.ParentRefs[0].SectionName,
 						Kind:                gatewayv1.Kind(kinds.Gateway),
 						NamespacedName:      gatewayNsName,
+						GatewayNsName:       gatewayNsName,
 					},
 				},
 				Conditions: []conditions.Condition{
@@ -1681,6 +1700,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 						SectionName:         hrValidAndInvalidAuthenticationFilter.Spec.ParentRefs[0].SectionName,
 						Kind:                gatewayv1.Kind(kinds.Gateway),
 						NamespacedName:      gatewayNsName,
+						GatewayNsName:       gatewayNsName,
 					},
 				},
 				Conditions: []conditions.Condition{
@@ -1738,6 +1758,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 						SectionName:         hrTwoValidAuthenticationFilters.Spec.ParentRefs[0].SectionName,
 						Kind:                gatewayv1.Kind(kinds.Gateway),
 						NamespacedName:      gatewayNsName,
+						GatewayNsName:       gatewayNsName,
 					},
 				},
 				Conditions: []conditions.Condition{
@@ -1794,6 +1815,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 						SectionName:         hrValidWithUnsupportedField.Spec.ParentRefs[0].SectionName,
 						Kind:                gatewayv1.Kind(kinds.Gateway),
 						NamespacedName:      gatewayNsName,
+						GatewayNsName:       gatewayNsName,
 					},
 				},
 				Valid:      true,
@@ -1831,6 +1853,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 						SectionName:         hrInferencePool.Spec.ParentRefs[0].SectionName,
 						Kind:                gatewayv1.Kind(kinds.Gateway),
 						NamespacedName:      gatewayNsName,
+						GatewayNsName:       gatewayNsName,
 					},
 				},
 				Valid:      true,
@@ -1880,6 +1903,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 						SectionName:         hrInferencePoolDoesNotExist.Spec.ParentRefs[0].SectionName,
 						Kind:                gatewayv1.Kind(kinds.Gateway),
 						NamespacedName:      gatewayNsName,
+						GatewayNsName:       gatewayNsName,
 					},
 				},
 				Valid:      true,
@@ -2052,6 +2076,7 @@ func TestBuildHTTPRouteWithMirrorRoutes(t *testing.T) {
 				SectionName:         hr.Spec.ParentRefs[0].SectionName,
 				Kind:                gatewayv1.Kind(kinds.Gateway),
 				NamespacedName:      gatewayNsName,
+				GatewayNsName:       gatewayNsName,
 			},
 		},
 		{

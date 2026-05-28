@@ -84,6 +84,10 @@ func TestBuildTLSRoute(t *testing.T) {
 			Namespace: "test",
 			Name:      "gateway",
 		},
+		GatewayNsName: types.NamespacedName{
+			Namespace: "test",
+			Name:      "gateway",
+		},
 	}
 
 	listenerSetParentRefGraph := ParentRef{
@@ -607,6 +611,10 @@ func TestBuildTLSRoute(t *testing.T) {
 						EffectiveNginxProxy: &EffectiveNginxProxy{IPFamily: helpers.GetPointer(ngfAPI.IPv6)},
 						Kind:                gatewayv1.Kind(kinds.Gateway),
 						NamespacedName: types.NamespacedName{
+							Namespace: "test",
+							Name:      "gateway",
+						},
+						GatewayNsName: types.NamespacedName{
 							Namespace: "test",
 							Name:      "gateway",
 						},
