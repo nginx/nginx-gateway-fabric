@@ -1448,6 +1448,34 @@ func TestProcessPolicies_RouteOverlap(t *testing.T) {
 			},
 			valid: true,
 		},
+		{
+			// Regression test for: two non-targeted routes that overlap with EACH OTHER
+			// (same gateway:hostname:port/path) must not produce a false-positive TargetConflict
+			// on an unrelated policy whose target route is on a completely different gateway.
+			name:      "two non-targeted routes overlap each other but not the policy target; no conflict",
+			validator: &policiesfakes.FakeValidator{},
+			policies: map[PolicyKey]policies.Policy{
+				pol1Key: pol1,
+			},
+			routes: map[RouteKey]*L7Route{
+				// Targeted route: hr-coffee on gw (the policy target).
+				{
+					RouteType:      RouteTypeHTTP,
+					NamespacedName: types.NamespacedName{Namespace: testNs, Name: "hr-coffee"},
+				}: createTestRouteWithPaths("hr-coffee", "/coffee"),
+				// Two non-targeted routes on a *different* gateway sharing the same path.
+				// These two routes overlap with each other, but neither overlaps with hr-coffee.
+				{
+					RouteType:      RouteTypeHTTP,
+					NamespacedName: types.NamespacedName{Namespace: testNs, Name: "foreign-route-1"},
+				}: createTestRouteWithGateway("foreign-route-1", "other-gw", "/"),
+				{
+					RouteType:      RouteTypeHTTP,
+					NamespacedName: types.NamespacedName{Namespace: testNs, Name: "foreign-route-2"},
+				}: createTestRouteWithGateway("foreign-route-2", "other-gw", "/"),
+			},
+			valid: true,
+		},
 	}
 
 	gateways := map[types.NamespacedName]*Gateway{
@@ -1455,6 +1483,15 @@ func TestProcessPolicies_RouteOverlap(t *testing.T) {
 			Source: &v1.Gateway{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "gw",
+					Namespace: testNs,
+				},
+			},
+			Valid: true,
+		},
+		{Namespace: testNs, Name: "other-gw"}: {
+			Source: &v1.Gateway{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "other-gw",
 					Namespace: testNs,
 				},
 			},
@@ -1783,6 +1820,7 @@ func createTestRouteWithPaths(name string, paths ...string) *L7Route {
 		})
 	}
 
+	gwNsName := types.NamespacedName{Namespace: testNs, Name: "gw"}
 	route := &L7Route{
 		Source: &v1.HTTPRoute{
 			ObjectMeta: metav1.ObjectMeta{
@@ -1798,7 +1836,8 @@ func createTestRouteWithPaths(name string, paths ...string) *L7Route {
 		ParentRefs: []ParentRef{
 			{
 				Kind:           kinds.Gateway,
-				NamespacedName: types.NamespacedName{Namespace: testNs, Name: "gw"},
+				NamespacedName: gwNsName,
+				GatewayNsName:  gwNsName,
 				Attachment: &ParentRefAttachmentStatus{
 					AcceptedHostnames: map[string][]string{"listener-1": {"foo.example.com"}},
 					ListenerPort:      80,
@@ -1808,6 +1847,43 @@ func createTestRouteWithPaths(name string, paths ...string) *L7Route {
 	}
 
 	return route
+}
+
+func createTestRouteWithGateway(name, gatewayName, path string) *L7Route {
+	routeMatches := []v1.HTTPRouteMatch{
+		{
+			Path: &v1.HTTPPathMatch{
+				Type:  helpers.GetPointer(v1.PathMatchPathPrefix),
+				Value: helpers.GetPointer(path),
+			},
+		},
+	}
+
+	gwNsName := types.NamespacedName{Namespace: testNs, Name: gatewayName}
+	return &L7Route{
+		Source: &v1.HTTPRoute{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      name,
+				Namespace: testNs,
+			},
+		},
+		Spec: L7RouteSpec{
+			Rules: []RouteRule{
+				{Matches: routeMatches},
+			},
+		},
+		ParentRefs: []ParentRef{
+			{
+				Kind:           kinds.Gateway,
+				NamespacedName: gwNsName,
+				GatewayNsName:  gwNsName,
+				Attachment: &ParentRefAttachmentStatus{
+					AcceptedHostnames: map[string][]string{"listener-1": {"bar.example.com"}},
+					ListenerPort:      80,
+				},
+			},
+		},
+	}
 }
 
 func createTestRouteWithMultipleGateways(name string, gatewayNames []string, path string) *L7Route {
@@ -1822,9 +1898,11 @@ func createTestRouteWithMultipleGateways(name string, gatewayNames []string, pat
 
 	parentRefs := make([]ParentRef, 0, len(gatewayNames))
 	for _, gwName := range gatewayNames {
+		gwNsName := types.NamespacedName{Namespace: testNs, Name: gwName}
 		parentRefs = append(parentRefs, ParentRef{
 			Kind:           kinds.Gateway,
-			NamespacedName: types.NamespacedName{Namespace: testNs, Name: gwName},
+			NamespacedName: gwNsName,
+			GatewayNsName:  gwNsName,
 			Attachment: &ParentRefAttachmentStatus{
 				AcceptedHostnames: map[string][]string{"listener-1": {"foo.example.com"}},
 				ListenerPort:      80,
