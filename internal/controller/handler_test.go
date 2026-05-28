@@ -2104,7 +2104,7 @@ func TestCollectPolicyTargetDeployments(t *testing.T) {
 				{NamespacedName: routeNsName, RouteType: graph.RouteTypeHTTP}: {
 					Valid: true,
 					ParentRefs: []graph.ParentRef{
-						{Kind: kinds.Gateway, NamespacedName: gwNsName},
+						{Kind: kinds.Gateway, NamespacedName: gwNsName, GatewayNsName: gwNsName},
 					},
 				},
 			},
@@ -2156,7 +2156,7 @@ func TestCollectPolicyTargetDeployments(t *testing.T) {
 				{NamespacedName: routeNsName, RouteType: graph.RouteTypeHTTP}: {
 					Valid: true,
 					ParentRefs: []graph.ParentRef{
-						{Kind: kinds.Gateway, NamespacedName: gwNsName},
+						{Kind: kinds.Gateway, NamespacedName: gwNsName, GatewayNsName: gwNsName},
 					},
 				},
 			},
@@ -2296,7 +2296,7 @@ func TestGatewayHasPendingWAFBundle(t *testing.T) {
 				{NamespacedName: types.NamespacedName{Namespace: "default", Name: "my-route"}, RouteType: graph.RouteTypeHTTP}: {
 					Valid: true,
 					ParentRefs: []graph.ParentRef{
-						{Kind: kinds.Gateway, NamespacedName: gwNsName},
+						{Kind: kinds.Gateway, NamespacedName: gwNsName, GatewayNsName: gwNsName},
 					},
 				},
 			},
@@ -2336,7 +2336,7 @@ func TestGatewayHasPendingWAFBundle(t *testing.T) {
 				}: {
 					Valid: true,
 					ParentRefs: []graph.ParentRef{
-						{Kind: kinds.Gateway, NamespacedName: gwNsName},
+						{Kind: kinds.Gateway, NamespacedName: gwNsName, GatewayNsName: gwNsName},
 					},
 				},
 			},

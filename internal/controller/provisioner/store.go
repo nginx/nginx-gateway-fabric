@@ -299,7 +299,50 @@ func gatewayChanged(original, updated *graph.Gateway) bool {
 		return true
 	}
 
-	return !reflect.DeepEqual(original.EffectiveNginxProxy, updated.EffectiveNginxProxy)
+	if !reflect.DeepEqual(original.EffectiveNginxProxy, updated.EffectiveNginxProxy) {
+		return true
+	}
+
+	// Check if the effective set of listeners changed (e.g., due to ListenerSet additions/removals).
+	// We compare port/protocol pairs since those determine the Service and container ports.
+	return listenersChanged(original.Listeners, updated.Listeners)
+}
+
+// listenersChanged returns true if the set of listener names, ports, protocols, or hostnames
+// has changed. Order is intentionally ignored: the provisioner only cares about which ports
+// need to be exposed, not their order. Listener conflict resolution is handled upstream in
+// the graph builder and does not affect provisioned resources.
+func listenersChanged(original, updated []*graph.Listener) bool {
+	if len(original) != len(updated) {
+		return true
+	}
+
+	type listenerKey struct {
+		Name     string
+		Protocol gatewayv1.ProtocolType
+		Hostname string
+		Port     gatewayv1.PortNumber
+	}
+
+	buildSet := func(listeners []*graph.Listener) map[listenerKey]struct{} {
+		set := make(map[listenerKey]struct{}, len(listeners))
+		for _, l := range listeners {
+			hostname := ""
+			if l.Source.Hostname != nil {
+				hostname = string(*l.Source.Hostname)
+			}
+			key := listenerKey{
+				Name:     l.Name,
+				Port:     l.Source.Port,
+				Protocol: l.Source.Protocol,
+				Hostname: hostname,
+			}
+			set[key] = struct{}{}
+		}
+		return set
+	}
+
+	return !reflect.DeepEqual(buildSet(original), buildSet(updated))
 }
 
 func (s *store) getNginxResourcesForGateway(nsName types.NamespacedName) *NginxResources {

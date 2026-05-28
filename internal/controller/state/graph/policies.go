@@ -370,18 +370,18 @@ func attachPolicyToRoute(
 	}
 
 	for _, parentRef := range route.ParentRefs {
-		if parentRef.Kind == kinds.Gateway && parentRef.EffectiveNginxProxy != nil {
+		if parentRef.EffectiveNginxProxy != nil {
 			globalSettings := &policies.GlobalSettings{
 				TelemetryEnabled: telemetryEnabledForNginxProxy(parentRef.EffectiveNginxProxy),
 				WAFEnabled:       WAFEnabledForNginxProxy(parentRef.EffectiveNginxProxy),
 			}
 
 			if conds := validator.ValidateGlobalSettings(policy.Source, globalSettings); len(conds) > 0 {
-				policy.InvalidForGateways[parentRef.NamespacedName] = struct{}{}
+				policy.InvalidForGateways[parentRef.GatewayNsName] = struct{}{}
 				ancestor.Conditions = append(ancestor.Conditions, conds...)
 			} else {
 				// Policy is effective for this gateway (not adding to InvalidForGateways)
-				effectiveGateways = append(effectiveGateways, parentRef.NamespacedName)
+				effectiveGateways = append(effectiveGateways, parentRef.GatewayNsName)
 			}
 		}
 	}
@@ -486,8 +486,9 @@ func propagateSnippetsPolicyToRoutes(
 
 	for _, route := range routes {
 		for _, parentRef := range route.ParentRefs {
-			// Check if the route is attached to this specific gateway
-			if parentRef.Kind == kinds.Gateway && parentRef.NamespacedName == gwNsName {
+			// Check if the route is attached to this specific gateway, either directly
+			// or via a ListenerSet (GatewayNsName resolves to the parent Gateway for both).
+			if parentRef.GatewayNsName == gwNsName {
 				// Avoid duplicate attachment if logic runs multiple times (though graph build is single pass)
 				// or if policy targets both.
 				alreadyAttached := slices.Contains(route.Policies, policy)
@@ -623,13 +624,15 @@ func checkTargetRoutesForOverlap(
 	return conds
 }
 
-// checkForRouteOverlap checks if any route references the same namespace/gateway-name:hostname:port/path combination
-// as a route referenced in a policy.
+// checkForRouteOverlap checks if a non-targeted route references the same
+// namespace/gateway-name:hostname:port/path combination as a targeted route in the policy.
+// It only reads from the gatewayHostPortPaths map — it does not mutate it.
+// This prevents two unrelated non-targeted routes from triggering a false-positive conflict.
 func checkForRouteOverlap(route *L7Route, gatewayHostPortPaths map[string]string) *conditions.Condition {
 	currentRouteName := fmt.Sprintf("%s/%s", route.Source.GetNamespace(), route.Source.GetName())
 
 	for _, parentRef := range route.ParentRefs {
-		if parentRef.Attachment != nil && parentRef.Kind == kinds.Gateway {
+		if parentRef.Attachment != nil {
 			port := parentRef.Attachment.ListenerPort
 			// FIXME(sarthyparty): https://github.com/nginx/nginx-gateway-fabric/issues/3811
 			// Need to merge listener hostnames with route hostnames so wildcards are handled correctly
@@ -638,11 +641,16 @@ func checkForRouteOverlap(route *L7Route, gatewayHostPortPaths map[string]string
 				for _, rule := range route.Spec.Rules {
 					for _, match := range rule.Matches {
 						if match.Path != nil && match.Path.Value != nil {
-							key := fmt.Sprintf("%s:%s:%d%s", parentRef.NamespacedName.String(), hostname, port, *match.Path.Value)
-							if val, ok := gatewayHostPortPaths[key]; !ok {
-								gatewayHostPortPaths[key] = currentRouteName
-							} else if val != currentRouteName {
-								// Only report conflict if it's a different route
+							// Use GatewayNsName to ensure overlap detection works across routes
+							// attached directly to a Gateway and those attached via ListenerSet.
+							key := fmt.Sprintf(
+								"%s:%s:%d%s",
+								parentRef.GatewayNsName.String(),
+								hostname,
+								port,
+								*match.Path.Value,
+							)
+							if val, ok := gatewayHostPortPaths[key]; ok && val != currentRouteName {
 								msg := fmt.Sprintf(
 									"Policy cannot be applied to target %q since another "+
 										"Route %q shares a namespace/gateway-name:hostname:port/path combination with this target",
@@ -662,13 +670,33 @@ func checkForRouteOverlap(route *L7Route, gatewayHostPortPaths map[string]string
 	return nil
 }
 
-// buildGatewayHostPortPaths uses the same logic as checkForRouteOverlap, except it's
-// simply initializing the gatewayHostPortPaths map with the route that's referenced in the Policy,
-// so it doesn't care about the return value.
+// buildGatewayHostPortPaths builds a map of namespace/gateway-name:hostname:port/path keys
+// for a route that is targeted by the policy.
 func buildGatewayHostPortPaths(route *L7Route) map[string]string {
 	gatewayHostPortPaths := make(map[string]string)
+	routeName := fmt.Sprintf("%s/%s", route.Source.GetNamespace(), route.Source.GetName())
 
-	checkForRouteOverlap(route, gatewayHostPortPaths)
+	for _, parentRef := range route.ParentRefs {
+		if parentRef.Attachment != nil {
+			port := parentRef.Attachment.ListenerPort
+			for _, hostname := range parentRef.Attachment.AcceptedHostnames {
+				for _, rule := range route.Spec.Rules {
+					for _, match := range rule.Matches {
+						if match.Path != nil && match.Path.Value != nil {
+							key := fmt.Sprintf(
+								"%s:%s:%d%s",
+								parentRef.GatewayNsName.String(),
+								hostname,
+								port,
+								*match.Path.Value,
+							)
+							gatewayHostPortPaths[key] = routeName
+						}
+					}
+				}
+			}
+		}
+	}
 
 	return gatewayHostPortPaths
 }

@@ -360,6 +360,7 @@ func createInternalRoute(
 			{
 				Kind:           kinds.Gateway,
 				NamespacedName: gatewayNsName,
+				GatewayNsName:  gatewayNsName,
 				Attachment: &graph.ParentRefAttachmentStatus{
 					AcceptedHostnames: map[string][]string{
 						graph.CreateParentRefListenerKey(gatewayNsName, listenerName): hostnames,
@@ -798,6 +799,7 @@ func TestBuildConfiguration(t *testing.T) {
 			{
 				Kind:           kinds.Gateway,
 				NamespacedName: gatewayNsName,
+				GatewayNsName:  gatewayNsName,
 				Attachment: &graph.ParentRefAttachmentStatus{
 					AcceptedHostnames: map[string][]string{
 						graph.CreateParentRefListenerKey(gatewayNsName, "listener-443-2"): {"app.example.com"},
@@ -807,6 +809,7 @@ func TestBuildConfiguration(t *testing.T) {
 			{
 				Kind:           kinds.Gateway,
 				NamespacedName: gatewayNsName,
+				GatewayNsName:  gatewayNsName,
 				Attachment: &graph.ParentRefAttachmentStatus{
 					AcceptedHostnames: map[string][]string{
 						graph.CreateParentRefListenerKey(gatewayNsName, "listener-444-3"): {"app.example.com"},
@@ -2849,6 +2852,7 @@ func TestBuildConfiguration(t *testing.T) {
 					{
 						Kind:           kinds.ListenerSet,
 						NamespacedName: listenerSetNsName,
+						GatewayNsName:  gatewayNsName,
 						Attachment: &graph.ParentRefAttachmentStatus{
 							AcceptedHostnames: map[string][]string{
 								// Key uses ListenerSet name instead of Gateway name
@@ -2950,6 +2954,7 @@ func TestBuildConfiguration(t *testing.T) {
 						{
 							Kind:           kinds.ListenerSet,
 							NamespacedName: listenerSetNsName,
+							GatewayNsName:  gatewayNsName,
 							Attachment: &graph.ParentRefAttachmentStatus{
 								AcceptedHostnames: map[string][]string{
 									// Key uses ListenerSet name instead of Gateway name
@@ -4918,6 +4923,7 @@ func TestBuildTLSServers(t *testing.T) {
 										{
 											Kind:           kinds.Gateway,
 											NamespacedName: gatewayNsName,
+											GatewayNsName:  gatewayNsName,
 											Attachment: &graph.ParentRefAttachmentStatus{
 												AcceptedHostnames: map[string][]string{
 													graph.CreateParentRefListenerKey(
@@ -5052,6 +5058,7 @@ func TestBuildTLSServers(t *testing.T) {
 										{
 											Kind:           kinds.ListenerSet,
 											NamespacedName: listenerSetNsName,
+											GatewayNsName:  types.NamespacedName{Namespace: "test", Name: "gateway"},
 											Attachment: &graph.ParentRefAttachmentStatus{
 												AcceptedHostnames: map[string][]string{
 													// Key uses ListenerSet name instead of Gateway name
@@ -5133,6 +5140,7 @@ func TestBuildTLSServers(t *testing.T) {
 										{
 											Kind:           kinds.Gateway,
 											NamespacedName: gatewayNsName,
+											GatewayNsName:  gatewayNsName,
 											Attachment: &graph.ParentRefAttachmentStatus{
 												AcceptedHostnames: map[string][]string{
 													graph.CreateParentRefListenerKey(
@@ -5250,6 +5258,7 @@ func TestBuildTLSServers(t *testing.T) {
 										{
 											Kind:           kinds.Gateway,
 											NamespacedName: gatewayNsName,
+											GatewayNsName:  gatewayNsName,
 											Attachment: &graph.ParentRefAttachmentStatus{
 												AcceptedHostnames: map[string][]string{
 													graph.CreateParentRefListenerKey(
@@ -5305,6 +5314,7 @@ func TestBuildTLSServers(t *testing.T) {
 										{
 											Kind:           kinds.Gateway,
 											NamespacedName: gatewayNsName,
+											GatewayNsName:  gatewayNsName,
 											Attachment: &graph.ParentRefAttachmentStatus{
 												AcceptedHostnames: map[string][]string{
 													graph.CreateParentRefListenerKey(
@@ -5396,6 +5406,7 @@ func TestBuildTLSServers(t *testing.T) {
 										{
 											Kind:           kinds.Gateway,
 											NamespacedName: gatewayNsName,
+											GatewayNsName:  gatewayNsName,
 											Attachment: &graph.ParentRefAttachmentStatus{
 												AcceptedHostnames: map[string][]string{
 													graph.CreateParentRefListenerKey(

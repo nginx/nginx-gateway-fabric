@@ -301,6 +301,10 @@ spec:
     port: 443
     protocol: TCP
     targetPort: 8443
+  - name: metrics
+    port: 9113
+    protocol: TCP
+    targetPort: 9113
   selector:
     app.kubernetes.io/instance: nginx-gateway
     app.kubernetes.io/name: nginx-gateway

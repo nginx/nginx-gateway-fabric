@@ -2,7 +2,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.20.1
+    controller-gen.kubebuilder.io/version: v0.21.0
   name: authenticationfilters.gateway.nginx.org
 spec:
   group: gateway.nginx.org
@@ -456,7 +456,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.20.1
+    controller-gen.kubebuilder.io/version: v0.21.0
   labels:
     gateway.networking.k8s.io/policy: inherited
   name: clientsettingspolicies.gateway.nginx.org
@@ -919,7 +919,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.20.1
+    controller-gen.kubebuilder.io/version: v0.21.0
   name: nginxgateways.gateway.nginx.org
 spec:
   group: gateway.nginx.org
@@ -1052,7 +1052,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.20.1
+    controller-gen.kubebuilder.io/version: v0.21.0
   name: nginxproxies.gateway.nginx.org
 spec:
   group: gateway.nginx.org
@@ -10236,7 +10236,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.20.1
+    controller-gen.kubebuilder.io/version: v0.21.0
   labels:
     gateway.networking.k8s.io/policy: direct
   name: observabilitypolicies.gateway.nginx.org
@@ -10720,7 +10720,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.20.1
+    controller-gen.kubebuilder.io/version: v0.21.0
   labels:
     gateway.networking.k8s.io/policy: inherited
   name: proxysettingspolicies.gateway.nginx.org
@@ -11200,7 +11200,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.20.1
+    controller-gen.kubebuilder.io/version: v0.21.0
   labels:
     gateway.networking.k8s.io/policy: inherited
   name: ratelimitpolicies.gateway.nginx.org
@@ -11711,7 +11711,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.20.1
+    controller-gen.kubebuilder.io/version: v0.21.0
   name: snippetsfilters.gateway.nginx.org
 spec:
   group: gateway.nginx.org
@@ -11900,7 +11900,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.20.1
+    controller-gen.kubebuilder.io/version: v0.21.0
   labels:
     gateway.networking.k8s.io/policy: direct
   name: snippetspolicies.gateway.nginx.org
@@ -12330,7 +12330,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.20.1
+    controller-gen.kubebuilder.io/version: v0.21.0
   labels:
     gateway.networking.k8s.io/policy: direct
   name: upstreamsettingspolicies.gateway.nginx.org
@@ -12815,7 +12815,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.20.1
+    controller-gen.kubebuilder.io/version: v0.21.0
   labels:
     gateway.networking.k8s.io/policy: inherited
   name: wafpolicies.gateway.nginx.org
