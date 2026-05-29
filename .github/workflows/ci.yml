@@ -45,608 +45,605 @@ permissions:
   contents: read
 
 jobs:
-  create-tag-and-release:
-    runs-on: ubuntu-24.04
-    if: github.event_name == 'workflow_dispatch' && inputs.release_version != '' && startsWith(github.ref, 'refs/heads/release-')
-    permissions:
-      contents: write
-    steps:
-      - name: Validate Release Branch and Version
-        run: |
-          echo "Validating release from: ${GITHUB_REF}"
+#   create-tag-and-release:
+#     runs-on: ubuntu-24.04
+#     if: github.event_name == 'workflow_dispatch' && inputs.release_version != '' && startsWith(github.ref, 'refs/heads/release-')
+#     permissions:
+#       contents: write
+#     steps:
+#       - name: Validate Release Branch and Version
+#         run: |
+#           echo "Validating release from: ${GITHUB_REF}"
 
-          INPUT_VERSION="${{ inputs.release_version }}"
-          INPUT_OPERATOR_VERSION="${{ inputs.operator_version }}"
+#           INPUT_VERSION="${{ inputs.release_version }}"
+#           INPUT_OPERATOR_VERSION="${{ inputs.operator_version }}"
 
-          # Validate version format
-          if [[ ! "${INPUT_VERSION}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-          echo "❌ Invalid version format: ${INPUT_VERSION}"
-          echo "Expected format: v1.2.3"
-          exit 1
-          fi
+#           # Validate version format
+#           if [[ ! "${INPUT_VERSION}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+#           echo "❌ Invalid version format: ${INPUT_VERSION}"
+#           echo "Expected format: v1.2.3"
+#           exit 1
+#           fi
 
-          # Validate version format if operator version is provided
-          if [[ -n "${INPUT_OPERATOR_VERSION}" && ! "${INPUT_OPERATOR_VERSION}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-          echo "❌ Invalid operator version format: ${INPUT_OPERATOR_VERSION}"
-          echo "Expected format: v1.2.3"
-          exit 1
-          fi
+#           # Validate version format if operator version is provided
+#           if [[ -n "${INPUT_OPERATOR_VERSION}" && ! "${INPUT_OPERATOR_VERSION}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+#           echo "❌ Invalid operator version format: ${INPUT_OPERATOR_VERSION}"
+#           echo "Expected format: v1.2.3"
+#           exit 1
+#           fi
 
-          echo "✅ Valid release branch: ${GITHUB_REF}"
-          echo "✅ Valid version format: ${INPUT_VERSION}"
-          [[ -n "${INPUT_OPERATOR_VERSION}" ]] && echo "✅ Valid operator version format: ${INPUT_OPERATOR_VERSION}"
+#           echo "✅ Valid release branch: ${GITHUB_REF}"
+#           echo "✅ Valid version format: ${INPUT_VERSION}"
+#           [[ -n "${INPUT_OPERATOR_VERSION}" ]] && echo "✅ Valid operator version format: ${INPUT_OPERATOR_VERSION}"
 
-      - name: Checkout Repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          fetch-depth: 0
+#       - name: Checkout Repository
+#         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+#         with:
+#           fetch-depth: 0
 
-      - name: Create Release Tag
-        run: |
-          VERSION="${{ inputs.release_version }}"
-          git config user.name "NGF Release Bot"
-          git config user.email "integrations@nginx.com"
+#       - name: Create Release Tag
+#         run: |
+#           VERSION="${{ inputs.release_version }}"
+#           git config user.name "NGF Release Bot"
+#           git config user.email "integrations@nginx.com"
 
-          if git rev-parse --verify "refs/tags/${VERSION}" >/dev/null 2>&1; then
-          echo "Tag ${VERSION} already exists - skipping tag creation"
-          else
-          echo "Creating annotated tag ${VERSION}"
-          git tag -a "${VERSION}" -m "Release ${VERSION}"
+#           if git rev-parse --verify "refs/tags/${VERSION}" >/dev/null 2>&1; then
+#           echo "Tag ${VERSION} already exists - skipping tag creation"
+#           else
+#           echo "Creating annotated tag ${VERSION}"
+#           git tag -a "${VERSION}" -m "Release ${VERSION}"
 
-          if [[ "${{ inputs.dry_run }}" == "true" ]]; then
-          echo "DRY RUN: Would push tag ${VERSION} and operator tag ${{ inputs.operator_version || '' }}"
-          git push --dry-run origin "${VERSION}"
-          else
-          git push origin "${VERSION}"
-          echo "Created and pushed tag: ${VERSION}"
-          fi
-          fi
+#           if [[ "${{ inputs.dry_run }}" == "true" ]]; then
+#           echo "DRY RUN: Would push tag ${VERSION} and operator tag ${{ inputs.operator_version || '' }}"
+#           git push --dry-run origin "${VERSION}"
+#           else
+#           git push origin "${VERSION}"
+#           echo "Created and pushed tag: ${VERSION}"
+#           fi
+#           fi
 
-  vars:
-    name: Checks and variables
-    runs-on: ubuntu-24.04
-    outputs:
-      go_path: ${{ steps.vars.outputs.go_path }}
-      min_k8s_version: ${{ steps.vars.outputs.min_k8s_version }}
-      k8s_latest: ${{ steps.vars.outputs.k8s_latest }}
-      helm_changes: ${{ steps.filter.outputs.charts }}
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          fetch-depth: 0
-      - name: Setup Golang Environment
-        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
-        with:
-          go-version: stable
-          cache-dependency-path: |
-            go.sum
-            tests/go.sum
+#   vars:
+#     name: Checks and variables
+#     runs-on: ubuntu-24.04
+#     outputs:
+#       go_path: ${{ steps.vars.outputs.go_path }}
+#       min_k8s_version: ${{ steps.vars.outputs.min_k8s_version }}
+#       k8s_latest: ${{ steps.vars.outputs.k8s_latest }}
+#       helm_changes: ${{ steps.filter.outputs.charts }}
+#     steps:
+#       - name: Checkout Repository
+#         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+#         with:
+#           fetch-depth: 0
+#       - name: Setup Golang Environment
+#         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+#         with:
+#           go-version: stable
+#           cache-dependency-path: |
+#             go.sum
+#             tests/go.sum
 
-      - name: Check for changes
-        uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
-        id: filter
-        with:
-          filters: |
-            charts:
-            - charts/nginx-gateway-fabric/**/*
-            rbac:
-            - operators/**/*
-            - charts/nginx-gateway-fabric/**/*
+#       - name: Check for changes
+#         uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
+#         id: filter
+#         with:
+#           filters: |
+#             charts:
+#             - charts/nginx-gateway-fabric/**/*
+#             rbac:
+#             - operators/**/*
+#             - charts/nginx-gateway-fabric/**/*
 
-      - name: Output Variables
-        id: vars
-        run: |
-          K8S_KIND_VERSION=v1.35.1 # renovate: datasource=docker depName=kindest/node
-          echo "go_path=$(go env GOPATH)" >> $GITHUB_OUTPUT
-          echo "min_k8s_version=v1.31.14" >> $GITHUB_OUTPUT
-          echo "k8s_latest=${K8S_KIND_VERSION}" >> $GITHUB_OUTPUT
+#       - name: Output Variables
+#         id: vars
+#         run: |
+#           K8S_KIND_VERSION=v1.35.1 # renovate: datasource=docker depName=kindest/node
+#           echo "go_path=$(go env GOPATH)" >> $GITHUB_OUTPUT
+#           echo "min_k8s_version=v1.31.14" >> $GITHUB_OUTPUT
+#           echo "k8s_latest=${K8S_KIND_VERSION}" >> $GITHUB_OUTPUT
 
-      - name: Check if go.mod and go.sum are up to date
-        run: go mod tidy && git diff --exit-code -- go.mod go.sum
+#       - name: Check if go.mod and go.sum are up to date
+#         run: go mod tidy && git diff --exit-code -- go.mod go.sum
 
-      - name: Check if go.mod and go.sum are up to date in tests
-        run: go mod tidy && git diff --exit-code -- go.mod go.sum
-        working-directory: tests
+#       - name: Check if go.mod and go.sum are up to date in tests
+#         run: go mod tidy && git diff --exit-code -- go.mod go.sum
+#         working-directory: tests
 
-      - name: Check if all the generated files are up to date
-        run: make generate-all && git diff --exit-code
+#       - name: Check if all the generated files are up to date
+#         run: make generate-all && git diff --exit-code
 
-      - name: Verify Operator RBAC Synchronization
-        if: steps.filter.outputs.rbac == 'true'
-        run: ./operators/scripts/verify-rbac-sync.sh
+#       - name: Verify Operator RBAC Synchronization
+#         if: steps.filter.outputs.rbac == 'true'
+#         run: ./operators/scripts/verify-rbac-sync.sh
 
-  unit-tests:
-    name: Unit Tests
-    runs-on: ubuntu-24.04
-    needs: vars
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+#   unit-tests:
+#     name: Unit Tests
+#     runs-on: ubuntu-24.04
+#     needs: vars
+#     steps:
+#       - name: Checkout Repository
+#         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Setup Golang Environment
-        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
-        with:
-          go-version: stable
-          cache-dependency-path: |
-            go.sum
-            tests/go.sum
+#       - name: Setup Golang Environment
+#         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+#         with:
+#           go-version: stable
+#           cache-dependency-path: |
+#             go.sum
+#             tests/go.sum
 
-      - name: Run Tests
-        run: make unit-test
+#       - name: Run Tests
+#         run: make unit-test
 
-      - name: Upload coverage reports to Codecov
-        uses: codecov/codecov-action@e79a6962e0d4c0c17b229090214935d2e33f8354 # v6.0.1
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
+#       - name: Upload coverage reports to Codecov
+#         uses: codecov/codecov-action@e79a6962e0d4c0c17b229090214935d2e33f8354 # v6.0.1
+#         with:
+#           token: ${{ secrets.CODECOV_TOKEN }}
 
-      - name: Upload Coverage Report
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: cover-${{ github.run_id }}.html
-          path: ${{ github.workspace }}/cover.html
-        if: always()
+#       - name: Upload Coverage Report
+#         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+#         with:
+#           name: cover-${{ github.run_id }}.html
+#           path: ${{ github.workspace }}/cover.html
+#         if: always()
 
-  njs-unit-tests:
-    name: NJS Unit Tests
-    runs-on: ubuntu-24.04
-    needs: vars
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+#   njs-unit-tests:
+#     name: NJS Unit Tests
+#     runs-on: ubuntu-24.04
+#     needs: vars
+#     steps:
+#       - name: Checkout Repository
+#         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Setup Node.js Environment
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
-        with:
-          node-version-file: .nvmrc
-          cache: 'npm'
-          cache-dependency-path: internal/controller/nginx/modules/package-lock.json
+#       - name: Setup Node.js Environment
+#         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+#         with:
+#           node-version-file: .nvmrc
+#           cache: 'npm'
+#           cache-dependency-path: internal/controller/nginx/modules/package-lock.json
 
-      - name: Run tests
-        run: npm --prefix ${{ github.workspace }}/internal/controller/nginx/modules install-ci-test
+#       - name: Run tests
+#         run: npm --prefix ${{ github.workspace }}/internal/controller/nginx/modules install-ci-test
 
-      - name: Upload coverage reports to Codecov
-        uses: codecov/codecov-action@e79a6962e0d4c0c17b229090214935d2e33f8354 # v6.0.1
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
+#       - name: Upload coverage reports to Codecov
+#         uses: codecov/codecov-action@e79a6962e0d4c0c17b229090214935d2e33f8354 # v6.0.1
+#         with:
+#           token: ${{ secrets.CODECOV_TOKEN }}
 
-  binary:
-    name: Build Binary
-    runs-on: ${{ github.repository_owner == 'nginx' && (inputs.is_production_release || ((github.event_name == 'push' || github.event_name == 'schedule') && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release-')))) && 'ubuntu-24.04-amd64' || 'ubuntu-24.04' }}
-    # Run in parallel with tests - they're independent validations
-    needs: [vars]
-    outputs:
-      json: ${{ steps.gateway_binaries.outputs.json }}
-    permissions:
-      contents: write # for goreleaser/goreleaser-action and lucacome/draft-release to create/update releases
-      id-token: write # for goreleaser/goreleaser-action to sign artifacts
-      issues: write # for goreleaser/goreleaser-action to close milestone
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          fetch-depth: 0
-          ref: ${{ ((inputs.dry_run == false || inputs.dry_run == null) && inputs.release_version) || github.ref }}
+#   binary:
+#     name: Build Binary
+#     runs-on: ${{ github.repository_owner == 'nginx' && (inputs.is_production_release || ((github.event_name == 'push' || github.event_name == 'schedule') && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release-')))) && 'ubuntu-24.04-amd64' || 'ubuntu-24.04' }}
+#     # Run in parallel with tests - they're independent validations
+#     needs: [vars]
+#     outputs:
+#       json: ${{ steps.gateway_binaries.outputs.json }}
+#     permissions:
+#       contents: write # for goreleaser/goreleaser-action and lucacome/draft-release to create/update releases
+#       id-token: write # for goreleaser/goreleaser-action to sign artifacts
+#       issues: write # for goreleaser/goreleaser-action to close milestone
+#     steps:
+#       - name: Checkout Repository
+#         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+#         with:
+#           fetch-depth: 0
+#           ref: ${{ ((inputs.dry_run == false || inputs.dry_run == null) && inputs.release_version) || github.ref }}
 
-      - name: Configure GOPROXY
-        id: goproxy
-        run: |
-          if [[ "${{ secrets.ARTIFACTORY_USER }}" != "" ]] && ([[ "${{ inputs.is_production_release }}" == "true" ]] || [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" =~ ^refs/heads/release- ]]); then
-          echo "Production mode - using production Artifactory"
-          GOPROXY_VALUE="https://${{ secrets.ARTIFACTORY_USER }}:${{ secrets.ARTIFACTORY_TOKEN }}@${{ secrets.ARTIFACTORY_ENDPOINT }}"
-          elif [[ "${{ secrets.ARTIFACTORY_USER }}" != "" ]] && [[ ("${{ github.event_name }}" == "push" || "${{ github.event_name }}" == "schedule") && "${{ github.ref }}" == "refs/heads/main" ]]; then
-          echo "Dev mode - using dev Artifactory"
-          GOPROXY_VALUE="https://${{ secrets.ARTIFACTORY_USER }}:${{ secrets.ARTIFACTORY_TOKEN }}@${{ secrets.ARTIFACTORY_DEV_ENDPOINT }}"
-          else
-          echo "Using direct GOPROXY"
-          GOPROXY_VALUE="proxy.golang.org,direct"
-          fi
-          echo "GOPROXY=${GOPROXY_VALUE}" >> $GITHUB_ENV
+#       - name: Configure GOPROXY
+#         id: goproxy
+#         run: |
+#           if [[ "${{ secrets.ARTIFACTORY_USER }}" != "" ]] && ([[ "${{ inputs.is_production_release }}" == "true" ]] || [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" =~ ^refs/heads/release- ]]); then
+#           echo "Production mode - using production Artifactory"
+#           GOPROXY_VALUE="https://${{ secrets.ARTIFACTORY_USER }}:${{ secrets.ARTIFACTORY_TOKEN }}@${{ secrets.ARTIFACTORY_ENDPOINT }}"
+#           elif [[ "${{ secrets.ARTIFACTORY_USER }}" != "" ]] && [[ ("${{ github.event_name }}" == "push" || "${{ github.event_name }}" == "schedule") && "${{ github.ref }}" == "refs/heads/main" ]]; then
+#           echo "Dev mode - using dev Artifactory"
+#           GOPROXY_VALUE="https://${{ secrets.ARTIFACTORY_USER }}:${{ secrets.ARTIFACTORY_TOKEN }}@${{ secrets.ARTIFACTORY_DEV_ENDPOINT }}"
+#           else
+#           echo "Using direct GOPROXY"
+#           GOPROXY_VALUE="proxy.golang.org,direct"
+#           fi
+#           echo "GOPROXY=${GOPROXY_VALUE}" >> $GITHUB_ENV
 
-      - name: Setup Golang Environment
-        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
-        with:
-          go-version: stable
-          cache-dependency-path: |
-            go.sum
-            tests/go.sum
+#       - name: Setup Golang Environment
+#         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+#         with:
+#           go-version: stable
+#           cache-dependency-path: |
+#             go.sum
+#             tests/go.sum
 
-      - name: Set Go module cache
-        run: |
-          mkdir -p ${{ github.workspace }}/.gocache
-          echo "GOMODCACHE=${{ github.workspace }}/.gocache" >> $GITHUB_ENV
-          echo "GOCACHE=${{ github.workspace }}/.gocache" >> $GITHUB_ENV
+#       - name: Set Go module cache
+#         run: |
+#           mkdir -p ${{ github.workspace }}/.gocache
+#           echo "GOMODCACHE=${{ github.workspace }}/.gocache" >> $GITHUB_ENV
+#           echo "GOCACHE=${{ github.workspace }}/.gocache" >> $GITHUB_ENV
 
-      - name: Create/Update Draft
-        uses: lucacome/draft-release@3c9a48ffbf0dfe983aea7e3cd8d524965f25e1a8 # v2.2.0
-        with:
-          minor-label: "enhancement"
-          major-label: "change"
-          publish: ${{ inputs.is_production_release && (inputs.dry_run == false || inputs.dry_run == null) && true || false }}
-          collapse-after: 20
-          notes-header: |
-            *Below is the auto-generated changelog, which includes all PRs that went into the release.
-            For a shorter version that highlights only important changes, see [CHANGELOG.md](https://github.com/nginx/nginx-gateway-fabric/blob/{{version}}/CHANGELOG.md).*
-        if: ${{ (github.event_name == 'push' && github.ref != 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.is_production_release) }}
+#       - name: Create/Update Draft
+#         uses: lucacome/draft-release@3c9a48ffbf0dfe983aea7e3cd8d524965f25e1a8 # v2.2.0
+#         with:
+#           minor-label: "enhancement"
+#           major-label: "change"
+#           publish: ${{ inputs.is_production_release && (inputs.dry_run == false || inputs.dry_run == null) && true || false }}
+#           collapse-after: 20
+#           notes-header: |
+#             *Below is the auto-generated changelog, which includes all PRs that went into the release.
+#             For a shorter version that highlights only important changes, see [CHANGELOG.md](https://github.com/nginx/nginx-gateway-fabric/blob/{{version}}/CHANGELOG.md).*
+#         if: ${{ (github.event_name == 'push' && github.ref != 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.is_production_release) }}
 
-      - name: Download Syft
-        if: ${{ inputs.is_production_release }}
-        uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+#       - name: Download Syft
+#         if: ${{ inputs.is_production_release }}
+#         uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
 
-      - name: Install Cosign
-        if: ${{ inputs.is_production_release }}
-        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+#       - name: Install Cosign
+#         if: ${{ inputs.is_production_release }}
+#         uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
 
-      - name: Build binary
-        uses: goreleaser/goreleaser-action@5daf1e915a5f0af01ddbcd89a43b8061ff4f1a89 # v7.2.2
-        with:
-          version: v2.16.0 # renovate: datasource=github-tags depName=goreleaser/goreleaser
-          # On PRs: build only amd64 for speed (tests run on amd64 runners)
-          # On main/release: build both amd64 and arm64
-          args: ${{ (inputs.is_production_release && (inputs.dry_run == false || inputs.dry_run == null)) && 'release' || (github.event_name == 'pull_request' && 'build --single-target --snapshot' || 'build --snapshot') }} --clean
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GOPATH: ${{ needs.vars.outputs.go_path }}
-          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK_COMMUNITY }}
-          TELEMETRY_ENDPOINT: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/heads/release-') && 'oss-dev.edge.df.f5.com:443' || 'oss.edge.df.f5.com:443' }}
-          TELEMETRY_ENDPOINT_INSECURE: "false"
+#       - name: Build binary
+#         uses: goreleaser/goreleaser-action@5daf1e915a5f0af01ddbcd89a43b8061ff4f1a89 # v7.2.2
+#         with:
+#           version: v2.16.0 # renovate: datasource=github-tags depName=goreleaser/goreleaser
+#           # On PRs: build only amd64 for speed (tests run on amd64 runners)
+#           # On main/release: build both amd64 and arm64
+#           args: ${{ (inputs.is_production_release && (inputs.dry_run == false || inputs.dry_run == null)) && 'release' || (github.event_name == 'pull_request' && 'build --single-target --snapshot' || 'build --snapshot') }} --clean
+#         env:
+#           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+#           GOPATH: ${{ needs.vars.outputs.go_path }}
+#           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK_COMMUNITY }}
+#           TELEMETRY_ENDPOINT: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/heads/release-') && 'oss-dev.edge.df.f5.com:443' || 'oss.edge.df.f5.com:443' }}
+#           TELEMETRY_ENDPOINT_INSECURE: "false"
 
-      - name: Extract gateway binaries info
-        id: gateway_binaries
-        run: |
-          set -e
-          binaries=()
-          for bin in $(find ${{ github.workspace }}/dist -type f -name "gateway"); do
-          dir=$(basename $(dirname "$bin"))
-          if [[ "$dir" =~ gateway_([a-zA-Z0-9]+)_([a-zA-Z0-9]+) ]]; then
-          os="${BASH_REMATCH[1]}"
-          arch="${BASH_REMATCH[2]}"
-          digest=$(sha256sum "$bin" | cut -d' ' -f1)
-          binaries+=("{\"path\":\"$bin\",\"os\":\"$os\",\"arch\":\"$arch\",\"digest\":\"$digest\"}")
-          fi
-          done
-          # Join array elements with commas
-          IFS=','
-          json="[${binaries[*]}]"
-          echo "Generated JSON: $json"
-          echo "json=$json" >> $GITHUB_OUTPUT
+#       - name: Extract gateway binaries info
+#         id: gateway_binaries
+#         run: |
+#           set -e
+#           binaries=()
+#           for bin in $(find ${{ github.workspace }}/dist -type f -name "gateway"); do
+#           dir=$(basename $(dirname "$bin"))
+#           if [[ "$dir" =~ gateway_([a-zA-Z0-9]+)_([a-zA-Z0-9]+) ]]; then
+#           os="${BASH_REMATCH[1]}"
+#           arch="${BASH_REMATCH[2]}"
+#           digest=$(sha256sum "$bin" | cut -d' ' -f1)
+#           binaries+=("{\"path\":\"$bin\",\"os\":\"$os\",\"arch\":\"$arch\",\"digest\":\"$digest\"}")
+#           fi
+#           done
+#           # Join array elements with commas
+#           IFS=','
+#           json="[${binaries[*]}]"
+#           echo "Generated JSON: $json"
+#           echo "json=$json" >> $GITHUB_OUTPUT
 
-      - name: Upload Artifacts
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: dist-${{ github.run_id }}
-          path: ${{ github.workspace }}/dist
-          retention-days: 1
+#       - name: Upload Artifacts
+#         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+#         with:
+#           name: dist-${{ github.run_id }}
+#           path: ${{ github.workspace }}/dist
+#           retention-days: 1
 
-  assertion:
-    name: Generate and Sign Assertion Documents
-    needs: [vars, binary]
-    if: ${{ inputs.is_production_release }}
-    permissions:
-      contents: read
-      id-token: write # for compliance-rules action to sign assertion doc
-    runs-on: ubuntu-24.04-amd64
-    strategy:
-      fail-fast: false
-      matrix:
-        gateway: ${{ fromJson(needs.binary.outputs.json) }}
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+#   assertion:
+#     name: Generate and Sign Assertion Documents
+#     needs: [vars, binary]
+#     if: ${{ inputs.is_production_release }}
+#     permissions:
+#       contents: read
+#       id-token: write # for compliance-rules action to sign assertion doc
+#     runs-on: ubuntu-24.04-amd64
+#     strategy:
+#       fail-fast: false
+#       matrix:
+#         gateway: ${{ fromJson(needs.binary.outputs.json) }}
+#     steps:
+#       - name: Checkout Repository
+#         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Configure GOPROXY
-        id: goproxy
-        run: |
-          echo "Production mode - using production Artifactory"
-          GOPROXY_VALUE="https://${{ secrets.ARTIFACTORY_USER }}:${{ secrets.ARTIFACTORY_TOKEN }}@${{ secrets.ARTIFACTORY_ENDPOINT }}"
-          echo "GOPROXY=${GOPROXY_VALUE}" >> $GITHUB_ENV
+#       - name: Configure GOPROXY
+#         id: goproxy
+#         run: |
+#           echo "Production mode - using production Artifactory"
+#           GOPROXY_VALUE="https://${{ secrets.ARTIFACTORY_USER }}:${{ secrets.ARTIFACTORY_TOKEN }}@${{ secrets.ARTIFACTORY_ENDPOINT }}"
+#           echo "GOPROXY=${GOPROXY_VALUE}" >> $GITHUB_ENV
 
-      - name: Setup Golang Environment
-        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
-        with:
-          go-version: stable
+#       - name: Setup Golang Environment
+#         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+#         with:
+#           go-version: stable
 
-      - name: Download Artifacts
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: dist-${{ github.run_id }}
-          path: ${{ github.workspace }}/dist
+#       - name: Download Artifacts
+#         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+#         with:
+#           name: dist-${{ github.run_id }}
+#           path: ${{ github.workspace }}/dist
 
-      - name: List Dependencies in Go Binary
-        id: godeps
-        run: |
-          go version -m dist/gateway_${{ matrix.gateway.os }}_${{ matrix.gateway.arch }}*/gateway > goversionm_${{ github.run_id }}_${{ github.run_number }}_${{ matrix.gateway.os }}_${{ matrix.gateway.arch }}.txt
-          echo "goversionm=$(find -type f -name "goversionm*.txt" | head -n 1)" >> $GITHUB_OUTPUT
-          goversionm=$(find -type f -name "goversionm*.txt" | head -n 1)
-          cat $goversionm
+#       - name: List Dependencies in Go Binary
+#         id: godeps
+#         run: |
+#           go version -m dist/gateway_${{ matrix.gateway.os }}_${{ matrix.gateway.arch }}*/gateway > goversionm_${{ github.run_id }}_${{ github.run_number }}_${{ matrix.gateway.os }}_${{ matrix.gateway.arch }}.txt
+#           echo "goversionm=$(find -type f -name "goversionm*.txt" | head -n 1)" >> $GITHUB_OUTPUT
+#           goversionm=$(find -type f -name "goversionm*.txt" | head -n 1)
+#           cat $goversionm
 
-      - name: Generate Assertion Document
-        id: assertiondoc
-        uses: nginx/compliance-rules/.github/actions/assertion@543d32464b56e6a695939f41ba8009cbb10e413a # v0.3.3
-        with:
-          artifact-name: ${{ github.event.repository.name }}_${{ github.sha }}_${{ github.run_number }}_${{ matrix.gateway.os }}_${{ matrix.gateway.arch }}
-          artifact-digest: ${{ matrix.gateway.digest }}
-          build-type: 'github'
-          builder-id: 'github.com'
-          builder-version: '0.1.0-xyz'
-          invocation-id: ${{ github.run_id }}.${{ github.run_number }}.${{ strategy.job-index }}
-          started-on: ${{ github.event.head_commit.timestamp || github.event.created_at }}
-          finished-on: ${{ github.event.head_commit.timestamp || github.event.created_at }}
-          artifactory-user: ${{ secrets.ARTIFACTORY_USER }}
-          artifactory-api-token: ${{ secrets.ARTIFACTORY_TOKEN }}
-          artifactory-url: ${{ secrets.ARTIFACTORY_URL }}
-          artifactory-repo: 'f5-nginx-go-local-approved-dependency'
-          build-content-path: ${{ steps.godeps.outputs.goversionm }}
-          assertion-doc-file: assertion_${{ github.event.repository.name }}_${{ github.sha }}_${{ github.run_id }}_${{ github.run_number }}_${{ matrix.gateway.os }}_${{ matrix.gateway.arch }}.json
+#       - name: Generate Assertion Document
+#         id: assertiondoc
+#         uses: nginx/compliance-rules/.github/actions/assertion@543d32464b56e6a695939f41ba8009cbb10e413a # v0.3.3
+#         with:
+#           artifact-name: ${{ github.event.repository.name }}_${{ github.sha }}_${{ github.run_number }}_${{ matrix.gateway.os }}_${{ matrix.gateway.arch }}
+#           artifact-digest: ${{ matrix.gateway.digest }}
+#           build-type: 'github'
+#           builder-id: 'github.com'
+#           builder-version: '0.1.0-xyz'
+#           invocation-id: ${{ github.run_id }}.${{ github.run_number }}.${{ strategy.job-index }}
+#           started-on: ${{ github.event.head_commit.timestamp || github.event.created_at }}
+#           finished-on: ${{ github.event.head_commit.timestamp || github.event.created_at }}
+#           artifactory-user: ${{ secrets.ARTIFACTORY_USER }}
+#           artifactory-api-token: ${{ secrets.ARTIFACTORY_TOKEN }}
+#           artifactory-url: ${{ secrets.ARTIFACTORY_URL }}
+#           artifactory-repo: 'f5-nginx-go-local-approved-dependency'
+#           build-content-path: ${{ steps.godeps.outputs.goversionm }}
+#           assertion-doc-file: assertion_${{ github.event.repository.name }}_${{ github.sha }}_${{ github.run_id }}_${{ github.run_number }}_${{ matrix.gateway.os }}_${{ matrix.gateway.arch }}.json
 
-      - name: Sign and Store Assertion Document
-        id: sign
-        uses: nginx/compliance-rules/.github/actions/sign@543d32464b56e6a695939f41ba8009cbb10e413a # v0.3.3
-        with:
-          assertion-doc: ${{ steps.assertiondoc.outputs.assertion-document-path }}
+#       - name: Sign and Store Assertion Document
+#         id: sign
+#         uses: nginx/compliance-rules/.github/actions/sign@543d32464b56e6a695939f41ba8009cbb10e413a # v0.3.3
+#         with:
+#           assertion-doc: ${{ steps.assertiondoc.outputs.assertion-document-path }}
 
-  build-oss:
-    name: Build OSS images
-    needs: [vars, binary]
-    strategy:
-      fail-fast: false
-      matrix:
-        image: [ngf, nginx]
-        # On PRs: build only amd64 for speed (tests run on amd64)
-        # On main/release: build both amd64 and arm64
-        platforms: ${{ github.event_name == 'pull_request' && fromJSON('["linux/amd64"]') || fromJSON('["linux/arm64, linux/amd64"]') }}
-        # On PRs: only standard OS (2 jobs)
-        # On main/release: include ubi (4 jobs)
-        build-os: ${{ github.event_name == 'pull_request' && fromJSON('[""]') || fromJSON('["", "ubi"]') }}
-    uses: ./.github/workflows/build.yml
-    with:
-      image: ${{ matrix.image }}
-      platforms: ${{ matrix.platforms }}
-      build-os: ${{ matrix.build-os }}
-      tag: ${{ inputs.release_version || '' }}
-      dry_run: ${{ inputs.dry_run || false}}
-      runner: ${{ github.repository_owner == 'nginx' && (inputs.is_production_release || ((github.event_name == 'push' || github.event_name == 'schedule') && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release-')))) && 'ubuntu-24.04-amd64' || 'ubuntu-24.04' }}
-    permissions:
-      contents: read # for docker/build-push-action to read repo content
-      security-events: write # for github/codeql-action/upload-sarif to upload SARIF results
-      packages: write # for docker/build-push-action to push to GHCR
-      id-token: write # for docker/login to login to NGINX registry
-    secrets: inherit
+#   build-oss:
+#     name: Build OSS images
+#     needs: [vars, binary]
+#     strategy:
+#       fail-fast: false
+#       matrix:
+#         image: [ngf, nginx]
+#         # On PRs: build only amd64 for speed (tests run on amd64)
+#         # On main/release: build both amd64 and arm64
+#         platforms: ${{ github.event_name == 'pull_request' && fromJSON('["linux/amd64"]') || fromJSON('["linux/arm64, linux/amd64"]') }}
+#         # On PRs: only standard OS (2 jobs)
+#         # On main/release: include ubi (4 jobs)
+#         build-os: ${{ github.event_name == 'pull_request' && fromJSON('[""]') || fromJSON('["", "ubi"]') }}
+#     uses: ./.github/workflows/build.yml
+#     with:
+#       image: ${{ matrix.image }}
+#       platforms: ${{ matrix.platforms }}
+#       build-os: ${{ matrix.build-os }}
+#       tag: ${{ inputs.release_version || '' }}
+#       dry_run: ${{ inputs.dry_run || false}}
+#       runner: ${{ github.repository_owner == 'nginx' && (inputs.is_production_release || ((github.event_name == 'push' || github.event_name == 'schedule') && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release-')))) && 'ubuntu-24.04-amd64' || 'ubuntu-24.04' }}
+#     permissions:
+#       contents: read # for docker/build-push-action to read repo content
+#       security-events: write # for github/codeql-action/upload-sarif to upload SARIF results
+#       packages: write # for docker/build-push-action to push to GHCR
+#       id-token: write # for docker/login to login to NGINX registry
+#     secrets: inherit
 
-  build-plus:
-    name: Build Plus images
-    needs: [vars, binary]
-    uses: ./.github/workflows/build.yml
-    strategy:
-      fail-fast: false
-      matrix:
-        # On PRs: only standard OS (1 job)
-        # On main/release: include ubi (2 jobs)
-        build-os: ${{ github.event_name == 'pull_request' && fromJSON('[""]') || fromJSON('["", "ubi"]') }}
-    with:
-      image: plus
-      # On PRs: build only amd64 for speed (tests run on amd64)
-      # On main/release: build both amd64 and arm64
-      platforms: ${{ github.event_name == 'pull_request' && 'linux/amd64' || 'linux/arm64, linux/amd64' }}
-      build-os: ${{ matrix.build-os }}
-      tag: ${{ inputs.release_version || '' }}
-      dry_run: ${{ inputs.dry_run || false }}
-      runner: ${{ github.repository_owner == 'nginx' && (inputs.is_production_release || ((github.event_name == 'push' || github.event_name == 'schedule') && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release-')))) && 'ubuntu-24.04-amd64' || 'ubuntu-24.04' }}
-    permissions:
-      contents: read # for docker/build-push-action to read repo content
-      security-events: write # for github/codeql-action/upload-sarif to upload SARIF results
-      packages: write # for docker/build-push-action to push to GHCR
-      id-token: write # for docker/login to login to NGINX registry
-    secrets: inherit
+#   build-plus:
+#     name: Build Plus images
+#     needs: [vars, binary]
+#     uses: ./.github/workflows/build.yml
+#     strategy:
+#       fail-fast: false
+#       matrix:
+#         # On PRs: only standard OS (1 job)
+#         # On main/release: include ubi (2 jobs)
+#         build-os: ${{ github.event_name == 'pull_request' && fromJSON('[""]') || fromJSON('["", "ubi"]') }}
+#     with:
+#       image: plus
+#       # On PRs: build only amd64 for speed (tests run on amd64)
+#       # On main/release: build both amd64 and arm64
+#       platforms: ${{ github.event_name == 'pull_request' && 'linux/amd64' || 'linux/arm64, linux/amd64' }}
+#       build-os: ${{ matrix.build-os }}
+#       tag: ${{ inputs.release_version || '' }}
+#       dry_run: ${{ inputs.dry_run || false }}
+#       runner: ${{ github.repository_owner == 'nginx' && (inputs.is_production_release || ((github.event_name == 'push' || github.event_name == 'schedule') && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release-')))) && 'ubuntu-24.04-amd64' || 'ubuntu-24.04' }}
+#     permissions:
+#       contents: read # for docker/build-push-action to read repo content
+#       security-events: write # for github/codeql-action/upload-sarif to upload SARIF results
+#       packages: write # for docker/build-push-action to push to GHCR
+#       id-token: write # for docker/login to login to NGINX registry
+#     secrets: inherit
 
-  build-plus-nap-waf:
-    name: Build Plus NAP WAF images
-    needs: [vars, binary]
-    uses: ./.github/workflows/build.yml
-    strategy:
-      fail-fast: false
-      matrix:
-        # On PRs: only standard OS (1 job)
-        # On main/release: include ubi (2 jobs)
-        build-os: ${{ github.event_name == 'pull_request' && fromJSON('[""]') || fromJSON('["", "ubi"]') }}
-    with:
-      image: plus-nap-waf
-      platforms: "linux/amd64"
-      build-os: ${{ matrix.build-os }}
-      tag: ${{ inputs.release_version || '' }}
-      dry_run: ${{ inputs.dry_run || false }}
-      runner: ${{ github.repository_owner == 'nginx' && (inputs.is_production_release || ((github.event_name == 'push' || github.event_name == 'schedule') && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release-')))) && 'ubuntu-24.04-amd64' || 'ubuntu-24.04' }}
-    permissions:
-      contents: read # for docker/build-push-action to read repo content
-      security-events: write # for github/codeql-action/upload-sarif to upload SARIF results
-      packages: write # for docker/build-push-action to push to GHCR
-      id-token: write # for docker/login to login to NGINX registry
-    secrets: inherit
+#   build-plus-nap-waf:
+#     name: Build Plus NAP WAF images
+#     needs: [vars, binary]
+#     uses: ./.github/workflows/build.yml
+#     strategy:
+#       fail-fast: false
+#       matrix:
+#         # On PRs: only standard OS (1 job)
+#         # On main/release: include ubi (2 jobs)
+#         build-os: ${{ github.event_name == 'pull_request' && fromJSON('[""]') || fromJSON('["", "ubi"]') }}
+#     with:
+#       image: plus-nap-waf
+#       platforms: "linux/amd64"
+#       build-os: ${{ matrix.build-os }}
+#       tag: ${{ inputs.release_version || '' }}
+#       dry_run: ${{ inputs.dry_run || false }}
+#       runner: ${{ github.repository_owner == 'nginx' && (inputs.is_production_release || ((github.event_name == 'push' || github.event_name == 'schedule') && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release-')))) && 'ubuntu-24.04-amd64' || 'ubuntu-24.04' }}
+#     permissions:
+#       contents: read # for docker/build-push-action to read repo content
+#       security-events: write # for github/codeql-action/upload-sarif to upload SARIF results
+#       packages: write # for docker/build-push-action to push to GHCR
+#       id-token: write # for docker/login to login to NGINX registry
+#     secrets: inherit
 
-  build-operator:
-    name: Build Operator images
-    needs: [vars, binary]
-    uses: ./.github/workflows/build.yml
-    with:
-      image: operator
-      # On PRs: build only amd64 for speed (tests run on amd64)
-      # On main/release: build both amd64 and arm64
-      platforms: ${{ github.event_name == 'pull_request' && 'linux/amd64' || 'linux/arm64, linux/amd64' }}
-      tag: ${{ inputs.operator_version || '' }}
-      dry_run: ${{ inputs.dry_run || false }}
-      runner: ${{ github.repository_owner == 'nginx' && (inputs.is_production_release || ((github.event_name == 'push' || github.event_name == 'schedule') && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release-')))) && 'ubuntu-24.04-amd64' || 'ubuntu-24.04' }}
-    permissions:
-      contents: read # for docker/build-push-action to read repo content
-      security-events: write # for github/codeql-action/upload-sarif to upload SARIF results
-      packages: write # for docker/build-push-action to push to GHCR
-      id-token: write # for docker/login to login to NGINX registry
-    secrets: inherit
+#   build-operator:
+#     name: Build Operator images
+#     needs: [vars, binary]
+#     uses: ./.github/workflows/build.yml
+#     with:
+#       image: operator
+#       # On PRs: build only amd64 for speed (tests run on amd64)
+#       # On main/release: build both amd64 and arm64
+#       platforms: ${{ github.event_name == 'pull_request' && 'linux/amd64' || 'linux/arm64, linux/amd64' }}
+#       tag: ${{ inputs.operator_version || '' }}
+#       dry_run: ${{ inputs.dry_run || false }}
+#       runner: ${{ github.repository_owner == 'nginx' && (inputs.is_production_release || ((github.event_name == 'push' || github.event_name == 'schedule') && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release-')))) && 'ubuntu-24.04-amd64' || 'ubuntu-24.04' }}
+#     permissions:
+#       contents: read # for docker/build-push-action to read repo content
+#       security-events: write # for github/codeql-action/upload-sarif to upload SARIF results
+#       packages: write # for docker/build-push-action to push to GHCR
+#       id-token: write # for docker/login to login to NGINX registry
+#     secrets: inherit
 
   redhat-certification:
     name: Submit images for RedHat certification
-    needs: [build-oss, build-operator]
-    if: ${{ inputs.is_production_release }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - image: ngf
-            tag: ${{ inputs.release_version }}
+            tag: v2.6.3
           - image: nginx
-            tag: ${{ inputs.release_version }}
+            tag: v2.6.3
           - image: operator
-            tag: ${{ inputs.operator_version }}
+            tag: v1.4.3
     uses: ./.github/workflows/redhat-certification.yml
     with:
       image: ${{ matrix.image }}
       tag: ${{ matrix.tag }}
-      dry_run: ${{ inputs.dry_run }}
     secrets: inherit
 
-  functional-tests:
-    name: Functional tests
-    needs: [vars, build-oss, build-plus, build-plus-nap-waf]
-    strategy:
-      fail-fast: false
-      matrix:
-        # On PRs: run nginx + plus + waf with latest k8s only (2 jobs)
-        # On main/release: run full matrix (8 jobs)
-        image: [nginx, plus, plus-waf]
-        build-os: ${{ github.event_name == 'pull_request' && fromJSON('[""]') || fromJSON('["", "ubi"]') }}
-        k8s-version: ${{ github.event_name == 'pull_request' && fromJSON(format('["{0}"]', needs.vars.outputs.k8s_latest)) || fromJSON(format('["{0}", "{1}"]', needs.vars.outputs.min_k8s_version, needs.vars.outputs.k8s_latest)) }}
-    uses: ./.github/workflows/functional.yml
-    with:
-      image: ${{ matrix.image }}
-      k8s-version: ${{ matrix.k8s-version }}
-      build-os: ${{ matrix.build-os }}
-    secrets: inherit
-    permissions:
-      contents: read
+#   functional-tests:
+#     name: Functional tests
+#     needs: [vars, build-oss, build-plus, build-plus-nap-waf]
+#     strategy:
+#       fail-fast: false
+#       matrix:
+#         # On PRs: run nginx + plus + waf with latest k8s only (2 jobs)
+#         # On main/release: run full matrix (8 jobs)
+#         image: [nginx, plus, plus-waf]
+#         build-os: ${{ github.event_name == 'pull_request' && fromJSON('[""]') || fromJSON('["", "ubi"]') }}
+#         k8s-version: ${{ github.event_name == 'pull_request' && fromJSON(format('["{0}"]', needs.vars.outputs.k8s_latest)) || fromJSON(format('["{0}", "{1}"]', needs.vars.outputs.min_k8s_version, needs.vars.outputs.k8s_latest)) }}
+#     uses: ./.github/workflows/functional.yml
+#     with:
+#       image: ${{ matrix.image }}
+#       k8s-version: ${{ matrix.k8s-version }}
+#       build-os: ${{ matrix.build-os }}
+#     secrets: inherit
+#     permissions:
+#       contents: read
 
-  conformance-tests:
-    name: Conformance tests
-    needs: [vars, build-oss, build-plus]
-    strategy:
-      fail-fast: false
-      matrix:
-        # On PRs: run latest k8s, experimental enabled (1 job - most coverage)
-        # On main/release: run full matrix (16 jobs)
-        image: [nginx, plus]
-        build-os: ${{ github.event_name == 'pull_request' && fromJSON('[""]') || fromJSON('["", "ubi"]') }}
-        k8s-version: ${{ github.event_name == 'pull_request' && fromJSON(format('["{0}"]', needs.vars.outputs.k8s_latest)) || fromJSON(format('["{0}", "{1}"]', needs.vars.outputs.min_k8s_version, needs.vars.outputs.k8s_latest)) }}
-        enable-experimental: ${{ github.event_name == 'pull_request' && fromJSON('[true]') || fromJSON('[true, false]') }}
-    uses: ./.github/workflows/conformance.yml
-    with:
-      image: ${{ matrix.image }}
-      k8s-version: ${{ matrix.k8s-version }}
-      enable-experimental: ${{ matrix.enable-experimental }}
-      build-os: ${{ matrix.build-os }}
-      production-release: ${{ inputs.is_production_release == true && (inputs.dry_run == false || inputs.dry_run == null) }}
-      release_version: ${{ inputs.release_version }}
-      enable-inference-extension: true
-    secrets: inherit
-    permissions:
-      contents: write
+#   conformance-tests:
+#     name: Conformance tests
+#     needs: [vars, build-oss, build-plus]
+#     strategy:
+#       fail-fast: false
+#       matrix:
+#         # On PRs: run latest k8s, experimental enabled (1 job - most coverage)
+#         # On main/release: run full matrix (16 jobs)
+#         image: [nginx, plus]
+#         build-os: ${{ github.event_name == 'pull_request' && fromJSON('[""]') || fromJSON('["", "ubi"]') }}
+#         k8s-version: ${{ github.event_name == 'pull_request' && fromJSON(format('["{0}"]', needs.vars.outputs.k8s_latest)) || fromJSON(format('["{0}", "{1}"]', needs.vars.outputs.min_k8s_version, needs.vars.outputs.k8s_latest)) }}
+#         enable-experimental: ${{ github.event_name == 'pull_request' && fromJSON('[true]') || fromJSON('[true, false]') }}
+#     uses: ./.github/workflows/conformance.yml
+#     with:
+#       image: ${{ matrix.image }}
+#       k8s-version: ${{ matrix.k8s-version }}
+#       enable-experimental: ${{ matrix.enable-experimental }}
+#       build-os: ${{ matrix.build-os }}
+#       production-release: ${{ inputs.is_production_release == true && (inputs.dry_run == false || inputs.dry_run == null) }}
+#       release_version: ${{ inputs.release_version }}
+#       enable-inference-extension: true
+#     secrets: inherit
+#     permissions:
+#       contents: write
 
   # Since the name of the test jobs change whenever we update the k8s version, it makes it tedious
   # to manually update Github settings to require those jobs to pass. This bypasses that by
   # requiring this job to pass.
-  test-completion:
-    name: Functional/Conformance Tests Pass
-    if: always()
-    needs: [functional-tests, conformance-tests]
-    runs-on: ubuntu-24.04
-    steps:
-      - name: Check test results
-        run: |
-          if [[ "${{ needs.functional-tests.result }}" == "failure" || "${{ needs.functional-tests.result }}" == "cancelled" ]]; then
-          echo "❌ Functional tests ${{ needs.functional-tests.result }}"
-          exit 1
-          fi
-          if [[ "${{ needs.conformance-tests.result }}" == "failure" || "${{ needs.conformance-tests.result }}" == "cancelled" ]]; then
-          echo "❌ Conformance tests ${{ needs.conformance-tests.result }}"
-          exit 1
-          fi
-          echo "✅ All tests passed successfully!"
+#   test-completion:
+#     name: Functional/Conformance Tests Pass
+#     if: always()
+#     needs: [functional-tests, conformance-tests]
+#     runs-on: ubuntu-24.04
+#     steps:
+#       - name: Check test results
+#         run: |
+#           if [[ "${{ needs.functional-tests.result }}" == "failure" || "${{ needs.functional-tests.result }}" == "cancelled" ]]; then
+#           echo "❌ Functional tests ${{ needs.functional-tests.result }}"
+#           exit 1
+#           fi
+#           if [[ "${{ needs.conformance-tests.result }}" == "failure" || "${{ needs.conformance-tests.result }}" == "cancelled" ]]; then
+#           echo "❌ Conformance tests ${{ needs.conformance-tests.result }}"
+#           exit 1
+#           fi
+#           echo "✅ All tests passed successfully!"
 
-  helm-tests:
-    name: Helm Tests
-    needs: [vars, build-oss, build-plus]
-    strategy:
-      fail-fast: false
-      matrix:
-        image: [nginx, plus]
-        k8s-version:
-          [
-            "${{ needs.vars.outputs.min_k8s_version }}",
-            "${{ needs.vars.outputs.k8s_latest }}",
-          ]
-    uses: ./.github/workflows/helm.yml
-    with:
-      image: ${{ matrix.image }}
-      k8s-version: ${{ matrix.k8s-version }}
-      tag: ${{ inputs.release_version || '' }}
-    secrets: inherit
-    if: ${{ needs.vars.outputs.helm_changes == 'true' || github.event_name == 'schedule' || inputs.is_production_release }}
+#   helm-tests:
+#     name: Helm Tests
+#     needs: [vars, build-oss, build-plus]
+#     strategy:
+#       fail-fast: false
+#       matrix:
+#         image: [nginx, plus]
+#         k8s-version:
+#           [
+#             "${{ needs.vars.outputs.min_k8s_version }}",
+#             "${{ needs.vars.outputs.k8s_latest }}",
+#           ]
+#     uses: ./.github/workflows/helm.yml
+#     with:
+#       image: ${{ matrix.image }}
+#       k8s-version: ${{ matrix.k8s-version }}
+#       tag: ${{ inputs.release_version || '' }}
+#     secrets: inherit
+#     if: ${{ needs.vars.outputs.helm_changes == 'true' || github.event_name == 'schedule' || inputs.is_production_release }}
 
-  publish-helm:
-    name: Package and Publish Helm Chart
-    runs-on: ${{ github.repository_owner == 'nginx' && 'ubuntu-24.04-amd64' || 'ubuntu-24.04' }}
-    needs: [vars, helm-tests]
-    if: ${{ inputs.is_production_release || github.ref == 'refs/heads/main' }}
-    permissions:
-      contents: read
-      packages: write # for helm to push to GHCR
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+#   publish-helm:
+#     name: Package and Publish Helm Chart
+#     runs-on: ${{ github.repository_owner == 'nginx' && 'ubuntu-24.04-amd64' || 'ubuntu-24.04' }}
+#     needs: [vars, helm-tests]
+#     if: ${{ inputs.is_production_release || github.ref == 'refs/heads/main' }}
+#     permissions:
+#       contents: read
+#       packages: write # for helm to push to GHCR
+#     steps:
+#       - name: Checkout Repository
+#         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Setup Helm
-        uses: azure/setup-helm@dda3372f752e03dde6b3237bc9431cdc2f7a02a2 # v5.0.0
+#       - name: Setup Helm
+#         uses: azure/setup-helm@dda3372f752e03dde6b3237bc9431cdc2f7a02a2 # v5.0.0
 
-      - name: Login to GitHub Container Registry
-        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.repository_owner }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+#       - name: Login to GitHub Container Registry
+#         uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
+#         with:
+#           registry: ghcr.io
+#           username: ${{ github.repository_owner }}
+#           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Package
-        id: package
-        run: |
-          output=$(helm package ${{ !inputs.is_production_release && '--app-version edge --version 0.0.0-edge' || '' }} charts/nginx-gateway-fabric)
-          echo "path=$(basename -- $(echo $output | cut -d: -f2))" >> $GITHUB_OUTPUT
+#       - name: Package
+#         id: package
+#         run: |
+#           output=$(helm package ${{ !inputs.is_production_release && '--app-version edge --version 0.0.0-edge' || '' }} charts/nginx-gateway-fabric)
+#           echo "path=$(basename -- $(echo $output | cut -d: -f2))" >> $GITHUB_OUTPUT
 
-      - name: Push to GitHub Container Registry
-        if: ${{ inputs.dry_run == false || inputs.dry_run == null }}
-        run: |
-          helm push ${{ steps.package.outputs.path }} oci://ghcr.io/nginx/charts
+#       - name: Push to GitHub Container Registry
+#         if: ${{ inputs.dry_run == false || inputs.dry_run == null }}
+#         run: |
+#           helm push ${{ steps.package.outputs.path }} oci://ghcr.io/nginx/charts
 
-  cel-tests:
-    name: CEL Tests
-    runs-on: ubuntu-24.04
-    needs: vars
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+#   cel-tests:
+#     name: CEL Tests
+#     runs-on: ubuntu-24.04
+#     needs: vars
+#     steps:
+#       - name: Checkout Repository
+#         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Setup Golang Environment
-        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
-        with:
-          go-version: stable
-          cache-dependency-path: |
-            go.sum
-            tests/go.sum
+#       - name: Setup Golang Environment
+#         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+#         with:
+#           go-version: stable
+#           cache-dependency-path: |
+#             go.sum
+#             tests/go.sum
 
-      - name: Deploy Kubernetes
-        id: k8s
-        run: |
-          kind create cluster --name ${{ github.run_id }} --image=kindest/node:${{ needs.vars.outputs.k8s_latest }}
+#       - name: Deploy Kubernetes
+#         id: k8s
+#         run: |
+#           kind create cluster --name ${{ github.run_id }} --image=kindest/node:${{ needs.vars.outputs.k8s_latest }}
 
-      - name: Apply CustomResourceDefinition
-        run: |
-          kubectl kustomize config/crd | kubectl apply --server-side -f -
+#       - name: Apply CustomResourceDefinition
+#         run: |
+#           kubectl kustomize config/crd | kubectl apply --server-side -f -
 
-      - name: Run Tests
-        run: make test-cel-validation
-        working-directory: ./tests
+#       - name: Run Tests
+#         run: make test-cel-validation
+#         working-directory: ./tests

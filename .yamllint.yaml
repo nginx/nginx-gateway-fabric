@@ -16,6 +16,7 @@ rules:
   comments-indentation:
     ignore: |
       charts/nginx-gateway-fabric/values.yaml
+      .github/workflows/ci.yml
   document-end: disable
   document-start: disable
   empty-lines: enable
