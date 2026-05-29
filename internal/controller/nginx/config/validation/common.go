@@ -17,7 +17,7 @@ const (
 )
 
 var (
-	pathRegexp   = regexp2.MustCompile("^"+pathFmt+"$", 0)
+	pathRegexp   = regexp2.MustCompile("^"+pathFmt+"$", regexp2.None)
 	pathExamples = []string{"/", "/path", "/path/subpath-123"}
 )
 
