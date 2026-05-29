@@ -4,6 +4,57 @@ This document includes a curated changelog for each release. We also publish a c
 a [GitHub release](https://github.com/nginx/nginx-gateway-fabric/releases), which, by contrast, is auto-generated
 and includes links to all PRs that went into the release.
 
+## Release 2.6.3
+
+* Fix Agent mTLS CA cert pool not refreshing after certificate rotation by @nginx-bot in https://github.com/nginx/nginx-gateway-fabric/pull/5344
+* Address ListenerSet Attachment gaps (#5329) by @ciarams87 in https://github.com/nginx/nginx-gateway-fabric/pull/5353
+* Fix false-positive TargetConflict on policies when unrelated routes overlap each other by @nginx-bot in https://github.com/nginx/nginx-gateway-fabric/pull/5359
+* Fix ListenerSet listeners not being included in provisioned Service and container ports by @nginx-bot in https://github.com/nginx/nginx-gateway-fabric/pull/5360
+
+
+%%DATE%%
+
+FEATURES:
+
+-
+
+BUG FIXES:
+
+-
+
+DOCUMENTATION:
+
+-
+
+HELM CHART:
+
+- The version of the Helm chart is now 2.6.3
+
+UPGRADE:
+
+-
+
+KNOWN ISSUES:
+
+-
+
+COMPATIBILITY:
+
+- Gateway API version: ``
+- Gateway API Inference Extension version: ``
+- NGINX version: ``
+- NGINX Plus version: ``
+- F5 WAF on NGINX version: ``
+- NGINX Agent version: ``
+- Kubernetes version: ``
+
+CONTAINER IMAGES:
+
+- Control plane: `ghcr.io/nginx/nginx-gateway-fabric:2.6.3`
+- Data plane: `ghcr.io/nginx/nginx-gateway-fabric/nginx:2.6.3`
+- Data plane with NGINX Plus: `private-registry.nginx.com/nginx-gateway-fabric/nginx-plus:2.6.3`
+- Data plane with NGINX Plus and F5 WAF: `private-registry.nginx.com/nginx-gateway-fabric/nginx-plus-f5waf:2.6.3`
+- Operator: `ghcr.io/nginx/nginx-gateway-fabric/operator:1.4.3`
 ## Release 2.6.2
 
 _May 22, 2026_
