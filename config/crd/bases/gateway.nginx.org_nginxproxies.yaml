@@ -8451,6 +8451,7 @@ spec:
                             description: |-
                               MaxUnavailable is the maximum number of pods that can be unavailable after an eviction.
                               Value can be an absolute number (e.g. 1) or a percentage of desired pods (e.g. 50%).
+                              Mutually exclusive with MinAvailable.
                             x-kubernetes-int-or-string: true
                           minAvailable:
                             anyOf:
@@ -8459,6 +8460,7 @@ spec:
                             description: |-
                               MinAvailable is the minimum number of pods that must be available after an eviction.
                               Value can be an absolute number (e.g. 1) or a percentage of desired pods (e.g. 50%).
+                              Mutually exclusive with MaxUnavailable.
                             x-kubernetes-int-or-string: true
                           unhealthyPodEvictionPolicy:
                             description: |-
