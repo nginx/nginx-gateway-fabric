@@ -326,19 +326,16 @@ func TestValidate_ValidateLoadBalancingMethod(t *testing.T) {
 			expConditions: nil,
 		},
 		{
-			name: "plus load balancing method least_time last_byte not allowed with Plus disabled",
+			name: "oss method least_time last_byte allowed with Plus disabled",
 			policy: &ngfAPI.UpstreamSettingsPolicy{
 				Spec: ngfAPI.UpstreamSettingsPolicySpec{
 					LoadBalancingMethod: helpers.GetPointer(ngfAPI.LoadBalancingTypeLeastTimeLastByte),
 				},
 			},
-			expConditions: []conditions.Condition{
-				conditions.NewPolicyInvalid("spec.loadBalancingMethod: Invalid value: \"least_time last_byte\": " +
-					"NGINX OSS supports the following load balancing methods: "),
-			},
+			expConditions: nil,
 		},
 		{
-			name: "plus load balancing method least_time header allowed with Plus enabled",
+			name: "oss method least_time header allowed with Plus enabled",
 			policy: &ngfAPI.UpstreamSettingsPolicy{
 				Spec: ngfAPI.UpstreamSettingsPolicySpec{
 					LoadBalancingMethod: helpers.GetPointer(ngfAPI.LoadBalancingTypeLeastTimeHeader),

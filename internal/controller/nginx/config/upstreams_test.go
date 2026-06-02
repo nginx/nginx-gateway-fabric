@@ -145,8 +145,8 @@ func TestExecuteUpstreams_NginxOSS(t *testing.T) {
 		"zone up5-usp 2m;":    1,
 		"zone up6-usp-keepAlive-connections-zero 2m;": 1,
 
-		"random two least_conn;": 5,
-		"keepalive 16;":          4,
+		"least_time header;": 5,
+		"keepalive 16;":      4,
 	}
 
 	upstreams := gen.createUpstreams(stateUpstreams, upstreamsettings.NewProcessor())
@@ -339,9 +339,9 @@ func TestExecuteUpstreams_NginxPlus(t *testing.T) {
 		"upstream up9-usp-keepAlive-connections-zero": 1,
 		"upstream invalid-backend-ref":                1,
 
-		"random two least_conn;": 9,
-		"ip_hash;":               1,
-		"keepalive 16;":          8,
+		"least_time header;": 9,
+		"ip_hash;":           1,
+		"keepalive 16;":      8,
 
 		"zone up1 1m;":                                1,
 		"zone up2 1m;":                                1,
@@ -1298,8 +1298,9 @@ func TestCreateStreamUpstreams(t *testing.T) {
 
 	expUpstreams := []stream.Upstream{
 		{
-			Name:     "up1",
-			ZoneSize: ossZoneSize,
+			Name:                "up1",
+			ZoneSize:            ossZoneSize,
+			LoadBalancingMethod: "least_time bytes",
 			Servers: []stream.UpstreamServer{
 				{
 					Address: "10.0.0.0:80",
@@ -1316,8 +1317,9 @@ func TestCreateStreamUpstreams(t *testing.T) {
 			},
 		},
 		{
-			Name:     "up2",
-			ZoneSize: ossZoneSize,
+			Name:                "up2",
+			ZoneSize:            ossZoneSize,
+			LoadBalancingMethod: "least_time bytes",
 			Servers: []stream.UpstreamServer{
 				{
 					Address: "11.0.0.0:80",
@@ -1359,8 +1361,9 @@ func TestCreateStreamUpstream(t *testing.T) {
 				},
 			},
 			expectedUpstream: stream.Upstream{
-				Name:     "multiple-endpoints",
-				ZoneSize: ossZoneSize,
+				Name:                "multiple-endpoints",
+				ZoneSize:            ossZoneSize,
+				LoadBalancingMethod: "least_time bytes",
 				Servers: []stream.UpstreamServer{
 					{
 						Address: "10.0.0.1:80",
@@ -1387,8 +1390,9 @@ func TestCreateStreamUpstream(t *testing.T) {
 				},
 			},
 			expectedUpstream: stream.Upstream{
-				Name:     "external-name-service",
-				ZoneSize: ossZoneSize,
+				Name:                "external-name-service",
+				ZoneSize:            ossZoneSize,
+				LoadBalancingMethod: "least_time bytes",
 				Servers: []stream.UpstreamServer{
 					{
 						Address: "backend.example.com:443",
@@ -1419,8 +1423,9 @@ func TestCreateStreamUpstream(t *testing.T) {
 				},
 			},
 			expectedUpstream: stream.Upstream{
-				Name:     "mixed-endpoints",
-				ZoneSize: ossZoneSize,
+				Name:                "mixed-endpoints",
+				ZoneSize:            ossZoneSize,
+				LoadBalancingMethod: "least_time bytes",
 				Servers: []stream.UpstreamServer{
 					{
 						Address: "192.168.1.10:8080",
@@ -1462,9 +1467,10 @@ func TestCreateStreamUpstreamPlus(t *testing.T) {
 		},
 	}
 	expectedUpstream := stream.Upstream{
-		Name:      "multiple-endpoints",
-		ZoneSize:  plusZoneSize,
-		StateFile: stateDir + "/multiple-endpoints.conf",
+		Name:                "multiple-endpoints",
+		ZoneSize:            plusZoneSize,
+		StateFile:           stateDir + "/multiple-endpoints.conf",
+		LoadBalancingMethod: "least_time bytes",
 		Servers: []stream.UpstreamServer{
 			{
 				Address: "10.0.0.1:80",
@@ -1702,9 +1708,9 @@ func TestExecuteUpstreams_LoadBalancingMethod(t *testing.T) {
 		{
 			name: "default load balancing method",
 			expectedSubStrings: map[string]int{
-				"upstream up1-usp-ipv4":  1,
-				"upstream up2-usp-ipv6":  1,
-				"random two least_conn;": 2,
+				"upstream up1-usp-ipv4": 1,
+				"upstream up2-usp-ipv6": 1,
+				"least_time header;":    2,
 			},
 		},
 		{
