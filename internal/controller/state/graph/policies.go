@@ -1238,7 +1238,7 @@ func resolveBundleAuth(
 
 	secret, exists := wafInput.Secrets[secretNsName]
 	if !exists {
-		cond := conditions.NewPolicyRefsNotResolvedBundleAuthSecretNotFound(
+		cond := conditions.NewPolicyRefsNotResolved(
 			fmt.Sprintf("auth secret %q not found", secretNsName),
 		)
 		return nil, &cond
@@ -1250,7 +1250,7 @@ func resolveBundleAuth(
 	if token, ok := secret.Data[secrets.BundleTokenKey]; ok {
 		auth.BearerToken = strings.TrimSpace(string(token))
 		if auth.BearerToken == "" {
-			cond := conditions.NewPolicyRefsNotResolvedBundleAuthSecretInvalid(
+			cond := conditions.NewPolicyRefsNotResolved(
 				fmt.Sprintf("auth secret %q has empty %q key", secretNsName, secrets.BundleTokenKey),
 			)
 			return nil, &cond
@@ -1259,7 +1259,7 @@ func resolveBundleAuth(
 		auth.Username = strings.TrimSpace(string(secret.Data[secrets.BundleUsernameKey]))
 		auth.Password = strings.TrimSpace(string(secret.Data[secrets.BundlePasswordKey]))
 		if auth.Username == "" || auth.Password == "" {
-			cond := conditions.NewPolicyRefsNotResolvedBundleAuthSecretInvalid(fmt.Sprintf(
+			cond := conditions.NewPolicyRefsNotResolved(fmt.Sprintf(
 				"auth secret %q must contain either %q or both %q and %q",
 				secretNsName, secrets.BundleTokenKey, secrets.BundleUsernameKey, secrets.BundlePasswordKey,
 			))
@@ -1288,7 +1288,7 @@ func resolveTLSCA(
 
 	secret, exists := wafInput.Secrets[secretNsName]
 	if !exists {
-		cond := conditions.NewPolicyRefsNotResolvedTLSSecretNotFound(
+		cond := conditions.NewPolicyRefsNotResolved(
 			fmt.Sprintf("TLS CA secret %q not found", secretNsName),
 		)
 		return nil, &cond
@@ -1296,14 +1296,14 @@ func resolveTLSCA(
 
 	caData, ok := secret.Data[secrets.CAKey]
 	if !ok {
-		cond := conditions.NewPolicyRefsNotResolvedTLSSecretInvalid(
+		cond := conditions.NewPolicyRefsNotResolved(
 			fmt.Sprintf("TLS CA secret %q missing %q key", secretNsName, secrets.CAKey),
 		)
 		return nil, &cond
 	}
 
 	if len(bytes.TrimSpace(caData)) == 0 {
-		cond := conditions.NewPolicyRefsNotResolvedTLSSecretInvalid(
+		cond := conditions.NewPolicyRefsNotResolved(
 			fmt.Sprintf("TLS CA secret %q has empty %q key", secretNsName, secrets.CAKey),
 		)
 		return nil, &cond
@@ -1423,7 +1423,7 @@ func validatePLMAPolicyReference(
 		return true
 	}
 
-	cond := conditions.NewPolicyRefsNotPermittedAPPolicy(
+	cond := conditions.NewPolicyRefsNotPermitted(
 		fmt.Sprintf("cross-namespace reference to APPolicy %q not permitted by ReferenceGrant", nsName),
 	)
 	policy.Conditions = append(policy.Conditions, cond)
@@ -1439,7 +1439,7 @@ func getPLMAPPolicyStatus(
 ) (*unstructured.Unstructured, *wafv1.APPolicyStatus, bool) {
 	apPolicy, exists := wafInput.APPolicies[nsName]
 	if !exists {
-		cond := conditions.NewPolicyRefsNotResolvedAPPolicyNotFound(
+		cond := conditions.NewPolicyRefsNotResolved(
 			fmt.Sprintf("APPolicy %q not found", nsName),
 		)
 		policy.Conditions = append(policy.Conditions, cond)
@@ -1450,7 +1450,7 @@ func getPLMAPPolicyStatus(
 
 	status, err := wafv1.ParseAPPolicyStatus(apPolicy)
 	if err != nil {
-		cond := conditions.NewPolicyRefsNotResolvedAPPolicyNotReady(
+		cond := conditions.NewPolicyRefsNotResolved(
 			fmt.Sprintf("failed to parse APPolicy %q status: %v", nsName, err),
 		)
 		policy.Conditions = append(policy.Conditions, cond)
@@ -1460,7 +1460,7 @@ func getPLMAPPolicyStatus(
 	}
 
 	if status.Bundle == nil {
-		cond := conditions.NewPolicyRefsNotResolvedAPPolicyNotReady(
+		cond := conditions.NewPolicyRefsNotResolved(
 			fmt.Sprintf("APPolicy %q bundle is not ready (state: unknown)", nsName),
 		)
 		policy.Conditions = append(policy.Conditions, cond)
@@ -1470,7 +1470,7 @@ func getPLMAPPolicyStatus(
 	}
 
 	if status.Bundle.State == wafv1.BundleStateInvalid {
-		cond := conditions.NewPolicyRefsNotResolvedAPPolicyInvalid(
+		cond := conditions.NewPolicyRefsNotResolved(
 			fmt.Sprintf("APPolicy %q bundle is invalid (state: %s)", nsName, status.Bundle.State),
 		)
 		policy.Conditions = append(policy.Conditions, cond)
@@ -1480,7 +1480,7 @@ func getPLMAPPolicyStatus(
 	}
 
 	if status.Bundle.State != wafv1.BundleStateReady {
-		cond := conditions.NewPolicyRefsNotResolvedAPPolicyNotReady(
+		cond := conditions.NewPolicyRefsNotResolved(
 			fmt.Sprintf("APPolicy %q bundle is not ready (state: %s)", nsName, status.Bundle.State),
 		)
 		policy.Conditions = append(policy.Conditions, cond)
@@ -1609,7 +1609,7 @@ func validatePLMAPLogConfReference(
 		return true
 	}
 
-	cond := conditions.NewPolicyRefsNotPermittedAPLogConf(
+	cond := conditions.NewPolicyRefsNotPermitted(
 		fmt.Sprintf("cross-namespace reference to APLogConf %q not permitted by ReferenceGrant", nsName),
 	)
 	policy.Conditions = append(policy.Conditions, cond)
@@ -1625,7 +1625,7 @@ func getPLMAPLogConfStatus(
 ) (*wafv1.APLogConfStatus, bool) {
 	apLogConf, exists := wafInput.APLogConfs[nsName]
 	if !exists {
-		cond := conditions.NewPolicyRefsNotResolvedAPLogConfNotFound(
+		cond := conditions.NewPolicyRefsNotResolved(
 			fmt.Sprintf("APLogConf %q not found", nsName),
 		)
 		policy.Conditions = append(policy.Conditions, cond)
@@ -1636,7 +1636,7 @@ func getPLMAPLogConfStatus(
 
 	status, err := wafv1.ParseAPLogConfStatus(apLogConf)
 	if err != nil {
-		cond := conditions.NewPolicyRefsNotResolvedAPLogConfNotReady(
+		cond := conditions.NewPolicyRefsNotResolved(
 			fmt.Sprintf("failed to parse APLogConf %q status: %v", nsName, err),
 		)
 		policy.Conditions = append(policy.Conditions, cond)
@@ -1650,7 +1650,7 @@ func getPLMAPLogConfStatus(
 	}
 
 	if status.Bundle != nil && status.Bundle.State == wafv1.BundleStateInvalid {
-		cond := conditions.NewPolicyRefsNotResolvedAPLogConfInvalid(
+		cond := conditions.NewPolicyRefsNotResolved(
 			fmt.Sprintf("APLogConf %q bundle is invalid (state: %s)", nsName, status.Bundle.State),
 		)
 		policy.Conditions = append(policy.Conditions, cond)
@@ -1664,7 +1664,7 @@ func getPLMAPLogConfStatus(
 		state = status.Bundle.State
 	}
 
-	cond := conditions.NewPolicyRefsNotResolvedAPLogConfNotReady(
+	cond := conditions.NewPolicyRefsNotResolved(
 		fmt.Sprintf("APLogConf %q bundle is not ready (state: %s)", nsName, state),
 	)
 	policy.Conditions = append(policy.Conditions, cond)

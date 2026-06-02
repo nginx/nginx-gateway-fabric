@@ -1628,40 +1628,10 @@ func NewPolicyProgrammed() Condition {
 	}
 }
 
-// NewPolicyRefsNotResolvedBundleAuthSecretNotFound returns a Condition that indicates the auth secret was not found.
-func NewPolicyRefsNotResolvedBundleAuthSecretNotFound(msg string) Condition {
-	return Condition{
-		Type:    string(WAFResolvedRefsConditionType),
-		Status:  metav1.ConditionFalse,
-		Reason:  string(PolicyReasonInvalidRef),
-		Message: msg,
-	}
-}
-
-// NewPolicyRefsNotResolvedBundleAuthSecretInvalid returns a Condition that indicates the auth secret is missing
-// expected keys.
-func NewPolicyRefsNotResolvedBundleAuthSecretInvalid(msg string) Condition {
-	return Condition{
-		Type:    string(WAFResolvedRefsConditionType),
-		Status:  metav1.ConditionFalse,
-		Reason:  string(PolicyReasonInvalidRef),
-		Message: msg,
-	}
-}
-
-// NewPolicyRefsNotResolvedTLSSecretNotFound returns a Condition that indicates the TLS CA secret was not found.
-func NewPolicyRefsNotResolvedTLSSecretNotFound(msg string) Condition {
-	return Condition{
-		Type:    string(WAFResolvedRefsConditionType),
-		Status:  metav1.ConditionFalse,
-		Reason:  string(PolicyReasonInvalidRef),
-		Message: msg,
-	}
-}
-
-// NewPolicyRefsNotResolvedTLSSecretInvalid returns a Condition that indicates the TLS CA secret is missing
-// the expected ca.crt key.
-func NewPolicyRefsNotResolvedTLSSecretInvalid(msg string) Condition {
+// NewPolicyRefsNotResolved returns a Condition that indicates a WAFPolicy reference could not be
+// resolved (e.g. missing/invalid secret, missing/not-ready/invalid AP resource). The caller is
+// expected to format the message to describe which reference failed.
+func NewPolicyRefsNotResolved(msg string) Condition {
 	return Condition{
 		Type:    string(WAFResolvedRefsConditionType),
 		Status:  metav1.ConditionFalse,
@@ -1729,90 +1699,13 @@ func NewPolicyNotProgrammedBundlePending(errMsg string) Condition {
 	}
 }
 
-// NewPolicyRefsNotPermittedAPPolicy returns a Condition that indicates a cross-namespace APPolicy
-// reference is not permitted by a ReferenceGrant.
-func NewPolicyRefsNotPermittedAPPolicy(msg string) Condition {
+// NewPolicyRefsNotPermitted returns a Condition that indicates a cross-namespace reference
+// (APPolicy or APLogConf) is not permitted by a ReferenceGrant.
+func NewPolicyRefsNotPermitted(msg string) Condition {
 	return Condition{
 		Type:    string(WAFResolvedRefsConditionType),
 		Status:  metav1.ConditionFalse,
 		Reason:  "RefNotPermitted",
-		Message: msg,
-	}
-}
-
-// NewPolicyRefsNotPermittedAPLogConf returns a Condition that indicates a cross-namespace APLogConf
-// reference is not permitted by a ReferenceGrant.
-func NewPolicyRefsNotPermittedAPLogConf(msg string) Condition {
-	return Condition{
-		Type:    string(WAFResolvedRefsConditionType),
-		Status:  metav1.ConditionFalse,
-		Reason:  "RefNotPermitted",
-		Message: msg,
-	}
-}
-
-// NewPolicyRefsNotResolvedAPPolicyNotFound returns a Condition that indicates the referenced
-// APPolicy was not found in the cluster.
-func NewPolicyRefsNotResolvedAPPolicyNotFound(msg string) Condition {
-	return Condition{
-		Type:    string(WAFResolvedRefsConditionType),
-		Status:  metav1.ConditionFalse,
-		Reason:  string(PolicyReasonInvalidRef),
-		Message: msg,
-	}
-}
-
-// NewPolicyRefsNotResolvedAPPolicyNotReady returns a Condition that indicates the referenced
-// APPolicy exists but its bundle is not in the ready state.
-func NewPolicyRefsNotResolvedAPPolicyNotReady(msg string) Condition {
-	return Condition{
-		Type:    string(WAFResolvedRefsConditionType),
-		Status:  metav1.ConditionFalse,
-		Reason:  string(PolicyReasonInvalidRef),
-		Message: msg,
-	}
-}
-
-// NewPolicyRefsNotResolvedAPPolicyInvalid returns a Condition that indicates the referenced
-// APPolicy exists but is in a terminal invalid state.
-func NewPolicyRefsNotResolvedAPPolicyInvalid(msg string) Condition {
-	return Condition{
-		Type:    string(WAFResolvedRefsConditionType),
-		Status:  metav1.ConditionFalse,
-		Reason:  string(PolicyReasonInvalidRef),
-		Message: msg,
-	}
-}
-
-// NewPolicyRefsNotResolvedAPLogConfNotFound returns a Condition that indicates the referenced
-// APLogConf was not found in the cluster.
-func NewPolicyRefsNotResolvedAPLogConfNotFound(msg string) Condition {
-	return Condition{
-		Type:    string(WAFResolvedRefsConditionType),
-		Status:  metav1.ConditionFalse,
-		Reason:  string(PolicyReasonInvalidRef),
-		Message: msg,
-	}
-}
-
-// NewPolicyRefsNotResolvedAPLogConfNotReady returns a Condition that indicates the referenced
-// APLogConf exists but its bundle is not in the ready state.
-func NewPolicyRefsNotResolvedAPLogConfNotReady(msg string) Condition {
-	return Condition{
-		Type:    string(WAFResolvedRefsConditionType),
-		Status:  metav1.ConditionFalse,
-		Reason:  string(PolicyReasonInvalidRef),
-		Message: msg,
-	}
-}
-
-// NewPolicyRefsNotResolvedAPLogConfInvalid returns a Condition that indicates the referenced
-// APLogConf exists but is in a terminal invalid state.
-func NewPolicyRefsNotResolvedAPLogConfInvalid(msg string) Condition {
-	return Condition{
-		Type:    string(WAFResolvedRefsConditionType),
-		Status:  metav1.ConditionFalse,
-		Reason:  string(PolicyReasonInvalidRef),
 		Message: msg,
 	}
 }

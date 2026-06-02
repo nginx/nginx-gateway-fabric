@@ -63,8 +63,11 @@ func validateNamespacedResourceName(value string) error {
 		return errors.New("must be set")
 	}
 
-	parts := strings.SplitN(value, "/", 2)
-	if len(parts) == 2 {
+	parts := strings.Split(value, "/")
+	switch len(parts) {
+	case 1:
+		return validateResourceName(value)
+	case 2:
 		if msgs := validation.IsDNS1123Subdomain(parts[0]); len(msgs) > 0 {
 			return fmt.Errorf("invalid namespace: %s", strings.Join(msgs, "; "))
 		}
@@ -72,9 +75,9 @@ func validateNamespacedResourceName(value string) error {
 			return fmt.Errorf("invalid name: %s", strings.Join(msgs, "; "))
 		}
 		return nil
+	default:
+		return fmt.Errorf("invalid format: expected name or namespace/name, got %q", value)
 	}
-
-	return validateResourceName(value)
 }
 
 func validateQualifiedName(name string) error {

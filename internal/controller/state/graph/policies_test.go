@@ -3064,7 +3064,7 @@ func TestProcessWAFPolicies(t *testing.T) {
 			expSecrets: map[types.NamespacedName]*corev1.Secret{},
 			expConditions: func(_ *Policy) []conditions.Condition {
 				return []conditions.Condition{
-					conditions.NewPolicyRefsNotResolvedBundleAuthSecretNotFound(
+					conditions.NewPolicyRefsNotResolved(
 						fmt.Sprintf("auth secret %q not found", authSecretNsName),
 					),
 				}
@@ -3113,7 +3113,7 @@ func TestProcessWAFPolicies(t *testing.T) {
 			expSecrets: map[types.NamespacedName]*corev1.Secret{},
 			expConditions: func(_ *Policy) []conditions.Condition {
 				return []conditions.Condition{
-					conditions.NewPolicyRefsNotResolvedTLSSecretNotFound(
+					conditions.NewPolicyRefsNotResolved(
 						fmt.Sprintf("TLS CA secret %q not found", tlsSecretNsName),
 					),
 				}
@@ -3142,7 +3142,7 @@ func TestProcessWAFPolicies(t *testing.T) {
 			expSecrets: map[types.NamespacedName]*corev1.Secret{},
 			expConditions: func(_ *Policy) []conditions.Condition {
 				return []conditions.Condition{
-					conditions.NewPolicyRefsNotResolvedTLSSecretInvalid(
+					conditions.NewPolicyRefsNotResolved(
 						fmt.Sprintf("TLS CA secret %q has empty %q key", tlsSecretNsName, secrets.CAKey),
 					),
 				}
@@ -3171,7 +3171,7 @@ func TestProcessWAFPolicies(t *testing.T) {
 			expSecrets: map[types.NamespacedName]*corev1.Secret{},
 			expConditions: func(_ *Policy) []conditions.Condition {
 				return []conditions.Condition{
-					conditions.NewPolicyRefsNotResolvedTLSSecretInvalid(
+					conditions.NewPolicyRefsNotResolved(
 						fmt.Sprintf("TLS CA secret %q has empty %q key", tlsSecretNsName, secrets.CAKey),
 					),
 				}
@@ -3350,7 +3350,7 @@ func TestProcessWAFPolicies(t *testing.T) {
 			expSecrets: map[types.NamespacedName]*corev1.Secret{},
 			expConditions: func(_ *Policy) []conditions.Condition {
 				return []conditions.Condition{
-					conditions.NewPolicyRefsNotResolvedBundleAuthSecretNotFound(
+					conditions.NewPolicyRefsNotResolved(
 						fmt.Sprintf("auth secret %q not found", authSecretNsName),
 					),
 				}
@@ -3391,7 +3391,7 @@ func TestProcessWAFPolicies(t *testing.T) {
 			expSecrets: map[types.NamespacedName]*corev1.Secret{},
 			expConditions: func(_ *Policy) []conditions.Condition {
 				return []conditions.Condition{
-					conditions.NewPolicyRefsNotResolvedTLSSecretNotFound(
+					conditions.NewPolicyRefsNotResolved(
 						fmt.Sprintf("TLS CA secret %q not found", tlsSecretNsName),
 					),
 				}
@@ -3486,7 +3486,7 @@ func TestProcessWAFPolicies(t *testing.T) {
 			expSecrets: map[types.NamespacedName]*corev1.Secret{},
 			expConditions: func(_ *Policy) []conditions.Condition {
 				return []conditions.Condition{
-					conditions.NewPolicyRefsNotResolvedBundleAuthSecretNotFound(
+					conditions.NewPolicyRefsNotResolved(
 						fmt.Sprintf("auth secret %q not found", authSecretNsName),
 					),
 				}
@@ -3801,7 +3801,7 @@ func TestResolveBundleAuth(t *testing.T) {
 		{
 			name:   "secret not found",
 			secret: nil,
-			expCond: helpers.GetPointer(conditions.NewPolicyRefsNotResolvedBundleAuthSecretNotFound(
+			expCond: helpers.GetPointer(conditions.NewPolicyRefsNotResolved(
 				fmt.Sprintf("auth secret %q not found", secretNsName),
 			)),
 		},
@@ -3818,7 +3818,7 @@ func TestResolveBundleAuth(t *testing.T) {
 			secret: &corev1.Secret{
 				Data: map[string][]byte{secrets.BundleTokenKey: []byte("   ")},
 			},
-			expCond: helpers.GetPointer(conditions.NewPolicyRefsNotResolvedBundleAuthSecretInvalid(
+			expCond: helpers.GetPointer(conditions.NewPolicyRefsNotResolved(
 				fmt.Sprintf("auth secret %q has empty %q key", secretNsName, secrets.BundleTokenKey),
 			)),
 			expSecret: true,
@@ -3842,7 +3842,7 @@ func TestResolveBundleAuth(t *testing.T) {
 					secrets.BundlePasswordKey: []byte(""),
 				},
 			},
-			expCond: helpers.GetPointer(conditions.NewPolicyRefsNotResolvedBundleAuthSecretInvalid(fmt.Sprintf(
+			expCond: helpers.GetPointer(conditions.NewPolicyRefsNotResolved(fmt.Sprintf(
 				"auth secret %q must contain either %q or both %q and %q",
 				secretNsName, secrets.BundleTokenKey, secrets.BundleUsernameKey, secrets.BundlePasswordKey,
 			))),
@@ -3853,7 +3853,7 @@ func TestResolveBundleAuth(t *testing.T) {
 			secret: &corev1.Secret{
 				Data: map[string][]byte{},
 			},
-			expCond: helpers.GetPointer(conditions.NewPolicyRefsNotResolvedBundleAuthSecretInvalid(fmt.Sprintf(
+			expCond: helpers.GetPointer(conditions.NewPolicyRefsNotResolved(fmt.Sprintf(
 				"auth secret %q must contain either %q or both %q and %q",
 				secretNsName, secrets.BundleTokenKey, secrets.BundleUsernameKey, secrets.BundlePasswordKey,
 			))),

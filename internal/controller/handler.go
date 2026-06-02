@@ -125,6 +125,7 @@ type apResourceKey struct {
 	resourceType apResourceType
 }
 
+// String implements fmt.Stringer so apResourceType values render as a human-readable kind in logs.
 func (t apResourceType) String() string {
 	switch t {
 	case apResourceTypePolicy:
@@ -132,7 +133,7 @@ func (t apResourceType) String() string {
 	case apResourceTypeLogConf:
 		return kinds.APLogConf
 	default:
-		return "unknown"
+		panic(fmt.Sprintf("unknown apResourceType: %d", t))
 	}
 }
 
