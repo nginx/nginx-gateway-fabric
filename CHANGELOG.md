@@ -4,6 +4,44 @@ This document includes a curated changelog for each release. We also publish a c
 a [GitHub release](https://github.com/nginx/nginx-gateway-fabric/releases), which, by contrast, is auto-generated
 and includes links to all PRs that went into the release.
 
+## Release 2.6.3
+
+_May 29, 2026_
+
+BUG FIXES:
+
+- Fixed an issue where the NGINX Agent loses its mTLS connection to the control plane after the certificates are overwritten with a new CA and cannot reconnect. [5344](https://github.com/nginx/nginx-gateway-fabric/pull/5344)
+- Fixed an issue where some policies, SnippetsFilters, and validation were being skipped for routes attached to a Gateway via ListenerSet. [5353](https://github.com/nginx/nginx-gateway-fabric/pull/5353)
+- Fixed an issue where policies were reporting a false TargetConflict when unrelated routes in other namespaces share a hostname and path with each other. [5359](https://github.com/nginx/nginx-gateway-fabric/pull/5359)
+- Fixed an issue where ListenerSet listener ports were not being exposed on the provisioned NGINX Service and container. [5360](https://github.com/nginx/nginx-gateway-fabric/pull/5360)
+
+HELM CHART:
+
+- The version of the Helm chart is now 2.6.3
+
+KNOWN ISSUES:
+
+- New upstream 110 error against stale IP after 2.6.1. [5330](https://github.com/nginx/nginx-gateway-fabric/issues/5330)
+- Corrupted gRPC subscriber streams. [5348](https://github.com/nginx/nginx-gateway-fabric/issues/5348)
+
+COMPATIBILITY:
+
+- Gateway API version: `1.5.1`
+- Gateway API Inference Extension version: `1.5.0`
+- NGINX version: `1.31.1`
+- NGINX Plus version: `R37.0`
+- F5 WAF on NGINX version: `5.13.1`
+- NGINX Agent version: `v3.10.3`
+- Kubernetes version: `1.31+`
+
+CONTAINER IMAGES:
+
+- Control plane: `ghcr.io/nginx/nginx-gateway-fabric:2.6.3`
+- Data plane: `ghcr.io/nginx/nginx-gateway-fabric/nginx:2.6.3`
+- Data plane with NGINX Plus: `private-registry.nginx.com/nginx-gateway-fabric/nginx-plus:2.6.3`
+- Data plane with NGINX Plus and F5 WAF: `private-registry.nginx.com/nginx-gateway-fabric/nginx-plus-f5waf:2.6.3`
+- Operator: `ghcr.io/nginx/nginx-gateway-fabric/operator:1.4.3`
+
 ## Release 2.6.2
 
 _May 22, 2026_
