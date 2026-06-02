@@ -477,6 +477,8 @@ func Test_MultipleGateways_WithNginxProxy(t *testing.T) {
 					},
 				},
 				nil, // wafFetcher
+				nil, // plmFetcher
+				nil, // plmSecretNames
 				nil, // previousWAFBundles
 				validation.Validators{
 					HTTPFieldsValidator: &validationfakes.FakeHTTPFieldsValidator{},
@@ -998,6 +1000,8 @@ func Test_MultipleGateways_WithListeners(t *testing.T) {
 					},
 				},
 				nil, // wafFetcher
+				nil, // plmFetcher
+				nil, // plmSecretNames
 				nil, // previousWAFBundles
 				validation.Validators{
 					HTTPFieldsValidator: &validationfakes.FakeHTTPFieldsValidator{},

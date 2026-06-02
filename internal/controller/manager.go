@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -42,6 +43,7 @@ import (
 
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
+	wafv1 "github.com/nginx/nginx-gateway-fabric/v2/apis/waf/v1"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/config"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/crd"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/licensing"
@@ -77,6 +79,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/runnables"
 	ngftypes "github.com/nginx/nginx-gateway-fabric/v2/internal/framework/types"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/waf/fetch"
+	s3fetch "github.com/nginx/nginx-gateway-fabric/v2/internal/framework/waf/fetch/s3"
 	wafpolling "github.com/nginx/nginx-gateway-fabric/v2/internal/framework/waf/poller"
 )
 
@@ -103,6 +106,19 @@ func init() {
 	utilruntime.Must(rbacv1.AddToScheme(scheme))
 	utilruntime.Must(gatewayv1beta1.Install(scheme))
 	utilruntime.Must(inference.Install(scheme))
+
+	// Pre-register unstructured AP types (and their List variants) so fake clients built
+	// with this scheme don't lazily mutate the shared scheme during parallel test execution.
+	scheme.AddKnownTypeWithName(kinds.APPolicyGVK, kinds.NewAPPolicyObject())
+	scheme.AddKnownTypeWithName(kinds.APLogConfGVK, kinds.NewAPLogConfObject())
+	scheme.AddKnownTypeWithName(
+		kinds.APPolicyGVK.GroupVersion().WithKind(kinds.APPolicy+"List"),
+		kinds.NewAPPolicyList(),
+	)
+	scheme.AddKnownTypeWithName(
+		kinds.APLogConfGVK.GroupVersion().WithKind(kinds.APLogConf+"List"),
+		kinds.NewAPLogConfList(),
+	)
 }
 
 func StartManager(cfg config.Config) error {
@@ -143,6 +159,8 @@ func StartManager(cfg config.Config) error {
 	wafFetcher := createWAFFetcher(cfg.Logger.WithName("wafFetcher"))
 	var wafPollerManager wafpolling.Manager
 
+	plmFetcher, plmSecretNames := createPLMFetcher(cfg)
+
 	processor := state.NewChangeProcessorImpl(state.ChangeProcessorConfig{
 		GatewayCtlrName:  cfg.GatewayCtlrName,
 		GatewayClassName: cfg.GatewayClassName,
@@ -157,6 +175,8 @@ func StartManager(cfg config.Config) error {
 		MustExtractGVK: mustExtractGVK,
 		PlusSecrets:    plusSecrets,
 		WAFFetcher:     wafFetcher,
+		PLMFetcher:     plmFetcher,
+		PLMSecretNames: plmSecretNames,
 		PolledWAFBundles: func() map[graph.WAFBundleKey]*graph.WAFBundleData {
 			if wafPollerManager == nil {
 				return nil
@@ -226,6 +246,7 @@ func StartManager(cfg config.Config) error {
 		nginxDeployments:        nginxUpdater.NginxDeployments,
 		wafPollerManager:        wafPollerManager,
 		inferenceExtension:      cfg.InferenceExtension,
+		plmEnabled:              cfg.PLMStorageConfig != nil,
 	})
 
 	objects, objectLists := prepareFirstEventBatchPreparerArgs(cfg, discoveredCRDs)
@@ -656,6 +677,113 @@ func filterControllersByCRDExistence(
 	return filtered, discoveredCRDs, nil
 }
 
+// featureFlagControllerCfgs returns controller configs that are gated behind feature flags.
+func featureFlagControllerCfgs(cfg config.Config) []ctlrCfg {
+	var cfgs []ctlrCfg
+
+	// APPolicy/APLogConf - register only when PLM storage is configured. These resources are
+	// reconciled exclusively to support PLM-sourced WAF policies, and their RBAC in the Helm
+	// chart is gated on the same condition, so registering them unconditionally would cause
+	// the controller to fail to list/watch them on clusters with App Protect CRDs installed
+	// but no PLM configuration.
+	if cfg.PLMStorageConfig != nil {
+		cfgs = append(cfgs,
+			ctlrCfg{
+				objectType: kinds.NewAPPolicyObject(),
+				options: []controller.Option{
+					controller.WithK8sPredicate(predicate.PLMStatusChangedPredicate{}),
+				},
+				requireCRDCheck: true,
+				crdGVK: &schema.GroupVersionKind{
+					Group:   wafv1.Group,
+					Version: wafv1.Version,
+					Kind:    kinds.APPolicy,
+				},
+			},
+			ctlrCfg{
+				objectType: kinds.NewAPLogConfObject(),
+				options: []controller.Option{
+					controller.WithK8sPredicate(predicate.PLMStatusChangedPredicate{}),
+				},
+				requireCRDCheck: true,
+				crdGVK: &schema.GroupVersionKind{
+					Group:   wafv1.Group,
+					Version: wafv1.Version,
+					Kind:    kinds.APLogConf,
+				},
+			},
+		)
+	}
+
+	if cfg.ExperimentalFeatures {
+		cfgs = append(cfgs,
+			ctlrCfg{
+				objectType: &gatewayv1alpha2.TCPRoute{},
+				options: []controller.Option{
+					controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
+				},
+				requireCRDCheck: true,
+				crdGVK: &schema.GroupVersionKind{
+					Group:   "gateway.networking.k8s.io",
+					Version: "v1alpha2",
+					Kind:    "TCPRoute",
+				},
+			},
+			ctlrCfg{
+				objectType: &gatewayv1alpha2.UDPRoute{},
+				options: []controller.Option{
+					controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
+				},
+				requireCRDCheck: true,
+				crdGVK: &schema.GroupVersionKind{
+					Group:   "gateway.networking.k8s.io",
+					Version: "v1alpha2",
+					Kind:    "UDPRoute",
+				},
+			},
+		)
+	}
+
+	if cfg.InferenceExtension {
+		cfgs = append(cfgs,
+			ctlrCfg{
+				objectType: &inference.InferencePool{},
+				options: []controller.Option{
+					controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
+				},
+				// Skip CRD check for InferenceExtension as it uses a non-standard API group (x-k8s.io)
+				// that may not be properly discoverable via the standard API discovery mechanism.
+				// The InferenceExtension flag itself controls whether this controller is enabled.
+				requireCRDCheck: false,
+			},
+		)
+	}
+
+	if cfg.SnippetsFilters || cfg.Snippets {
+		cfgs = append(cfgs,
+			ctlrCfg{
+				objectType: &ngfAPIv1alpha1.SnippetsFilter{},
+				options: []controller.Option{
+					controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
+				},
+			},
+		)
+	}
+
+	if cfg.Snippets {
+		cfgs = append(cfgs,
+			ctlrCfg{
+				objectType: &ngfAPIv1alpha1.SnippetsPolicy{},
+				options: []controller.Option{
+					controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
+				},
+			},
+		)
+	}
+
+	return cfgs
+}
+
 func registerControllers(
 	ctx context.Context,
 	cfg config.Config,
@@ -805,6 +933,8 @@ func registerControllers(
 		},
 	}
 
+	controllerRegCfgs = append(controllerRegCfgs, featureFlagControllerCfgs(cfg)...)
+
 	// BackendTLSPolicy/TLSRoute v1 - conditionally register if CRD exists
 	controllerRegCfgs = append(controllerRegCfgs,
 		ctlrCfg{
@@ -845,52 +975,6 @@ func registerControllers(
 		},
 	)
 
-	if cfg.ExperimentalFeatures {
-		gwExpFeatures := []ctlrCfg{
-			{
-				objectType: &gatewayv1alpha2.TCPRoute{},
-				options: []controller.Option{
-					controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
-				},
-				requireCRDCheck: true,
-				crdGVK: &schema.GroupVersionKind{
-					Group:   "gateway.networking.k8s.io",
-					Version: "v1alpha2",
-					Kind:    "TCPRoute",
-				},
-			},
-			{
-				objectType: &gatewayv1alpha2.UDPRoute{},
-				options: []controller.Option{
-					controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
-				},
-				requireCRDCheck: true,
-				crdGVK: &schema.GroupVersionKind{
-					Group:   "gateway.networking.k8s.io",
-					Version: "v1alpha2",
-					Kind:    "UDPRoute",
-				},
-			},
-		}
-		controllerRegCfgs = append(controllerRegCfgs, gwExpFeatures...)
-	}
-
-	if cfg.InferenceExtension {
-		inferenceExt := []ctlrCfg{
-			{
-				objectType: &inference.InferencePool{},
-				options: []controller.Option{
-					controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
-				},
-				// Skip CRD check for InferenceExtension as it uses a non-standard API group (x-k8s.io)
-				// that may not be properly discoverable via the standard API discovery mechanism.
-				// The InferenceExtension flag itself controls whether this controller is enabled.
-				requireCRDCheck: false,
-			},
-		}
-		controllerRegCfgs = append(controllerRegCfgs, inferenceExt...)
-	}
-
 	if cfg.ConfigName != "" {
 		controllerRegCfgs = append(controllerRegCfgs,
 			ctlrCfg{
@@ -909,28 +993,6 @@ func registerControllers(
 		); err != nil {
 			return nil, fmt.Errorf("error setting initial control plane configuration: %w", err)
 		}
-	}
-
-	if cfg.SnippetsFilters || cfg.Snippets {
-		controllerRegCfgs = append(controllerRegCfgs,
-			ctlrCfg{
-				objectType: &ngfAPIv1alpha1.SnippetsFilter{},
-				options: []controller.Option{
-					controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
-				},
-			},
-		)
-	}
-
-	if cfg.Snippets {
-		controllerRegCfgs = append(controllerRegCfgs,
-			ctlrCfg{
-				objectType: &ngfAPIv1alpha1.SnippetsPolicy{},
-				options: []controller.Option{
-					controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
-				},
-			},
-		)
 	}
 
 	// Filter controllers based on CRD existence
@@ -1064,14 +1126,31 @@ func validateSecret(reader client.Reader, nsName types.NamespacedName, fields ..
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	var secret apiv1.Secret
-	if err := reader.Get(ctx, nsName, &secret); err != nil {
-		return fmt.Errorf("error getting %q Secret: %w", nsName.Name, err)
+	secret, err := getSecret(ctx, reader, nsName)
+	if err != nil {
+		return err
 	}
 
+	return validateSecretData(secret, fields...)
+}
+
+func getSecret(
+	ctx context.Context,
+	reader client.Reader,
+	nsName types.NamespacedName,
+) (*apiv1.Secret, error) {
+	var secret apiv1.Secret
+	if err := reader.Get(ctx, nsName, &secret); err != nil {
+		return nil, fmt.Errorf("error getting %q Secret: %w", nsName.Name, err)
+	}
+
+	return &secret, nil
+}
+
+func validateSecretData(secret *apiv1.Secret, fields ...string) error {
 	for _, field := range fields {
 		if _, ok := secret.Data[field]; !ok {
-			return fmt.Errorf("secret %q does not have expected field %q", nsName.Name, field)
+			return fmt.Errorf("secret %q does not have expected field %q", secret.Name, field)
 		}
 	}
 
@@ -1081,6 +1160,64 @@ func validateSecret(reader client.Reader, nsName types.NamespacedName, fields ..
 // createWAFFetcher creates an HTTP fetcher for WAF policy bundles.
 func createWAFFetcher(logger logr.Logger) fetch.Fetcher {
 	return fetch.NewHTTPFetcher(logger)
+}
+
+// createPLMFetcher creates an S3 fetcher for PLM policy bundles and returns the secret names
+// that should be tracked for IsReferenced. Returns (nil, nil) if PLM is not configured.
+func createPLMFetcher(cfg config.Config) (*s3fetch.Fetcher, map[types.NamespacedName][]graph.PLMRole) {
+	if cfg.PLMStorageConfig == nil {
+		return nil, nil
+	}
+
+	fetcher := s3fetch.NewFetcher(
+		cfg.Logger.WithName("plmFetcher"),
+		cfg.PLMStorageConfig.URL,
+		cfg.PLMStorageConfig.SkipVerify,
+	)
+
+	secretNames := buildPLMSecretNames(cfg.PLMStorageConfig, cfg.GatewayPodConfig.Namespace)
+
+	return fetcher, secretNames
+}
+
+// buildPLMSecretNames builds a map of NamespacedName→PLMRole for PLM storage secrets.
+// Secret names may be in "namespace/name" format for cross-namespace references,
+// or plain "name" format which defaults to the provided namespace.
+func buildPLMSecretNames(
+	plmCfg *config.PLMStorageConfig,
+	defaultNamespace string,
+) map[types.NamespacedName][]graph.PLMRole {
+	if plmCfg == nil {
+		return nil
+	}
+
+	names := make(map[types.NamespacedName][]graph.PLMRole)
+
+	addSecret := func(value string, role graph.PLMRole) {
+		if value != "" {
+			ns, name := parsePLMSecretName(value, defaultNamespace)
+			nsName := types.NamespacedName{Namespace: ns, Name: name}
+			if !slices.Contains(names[nsName], role) {
+				names[nsName] = append(names[nsName], role)
+			}
+		}
+	}
+
+	addSecret(plmCfg.CredentialsSecretName, graph.PLMRoleCredentials)
+	addSecret(plmCfg.CASecretName, graph.PLMRoleCA)
+	addSecret(plmCfg.ClientSSLSecretName, graph.PLMRoleClientSSL)
+
+	return names
+}
+
+// parsePLMSecretName splits a "namespace/name" string into its parts.
+// If no namespace prefix is present, the provided defaultNamespace is used.
+func parsePLMSecretName(value, defaultNamespace string) (namespace, name string) {
+	parts := strings.SplitN(value, "/", 2)
+	if len(parts) == 2 {
+		return parts[0], parts[1]
+	}
+	return defaultNamespace, value
 }
 
 // 10 min jitter is enough per telemetry destination recommendation
@@ -1168,6 +1305,14 @@ func prepareFirstEventBatchPreparerArgs(
 		&ngfAPIv1alpha1.RateLimitPolicyList{},
 		&ngfAPIv1alpha1.WAFPolicyList{},
 		partialObjectMetadataList,
+	}
+
+	if discoveredCRDs[kinds.APPolicy] {
+		objectLists = append(objectLists, kinds.NewAPPolicyList())
+	}
+
+	if discoveredCRDs[kinds.APLogConf] {
+		objectLists = append(objectLists, kinds.NewAPLogConfList())
 	}
 
 	// Add ReferenceGrant list - use v1 if available, otherwise fall back to v1beta1
