@@ -303,6 +303,8 @@ compile-waf-bundles-ci: check-for-docker ## Compile NAP WAF policy bundles for C
 
 .PHONY: test-waf
 test-waf: PLUS_ENABLED=true
+# The WAF suite also installs the PLM controller (f5-waf-policy-controller) from the nginx-stable
+# helm repo and reuses REGISTRY_JWT_FILE to pull its images from private-registry.nginx.com.
 test-waf: build-crossplane-image ## Runs the WAF tests on a kind cluster. Bundles must already be compiled (run compile-waf-bundles first).
 	kind load docker-image nginx-crossplane:latest --name $(CLUSTER_NAME)
 	go run github.com/onsi/ginkgo/v2/ginkgo --race --randomize-all --keep-going --fail-on-pending \
@@ -319,6 +321,8 @@ test-waf: build-crossplane-image ## Runs the WAF tests on a kind cluster. Bundle
 .PHONY: test-waf-gke
 test-waf-gke: PLUS_ENABLED=true
 test-waf-gke: GOARCH=amd64
+# The WAF suite also installs the PLM controller (f5-waf-policy-controller) from the nginx-stable
+# helm repo and reuses REGISTRY_JWT_FILE to pull its images from private-registry.nginx.com.
 test-waf-gke: compile-waf-bundles check-for-plus-usage-endpoint build-crossplane-image ## Runs the WAF tests on a GKE cluster (amd64 only).
 	./scripts/push-crossplane-image.sh
 	go run github.com/onsi/ginkgo/v2/ginkgo --race --randomize-all --keep-going --fail-on-pending \

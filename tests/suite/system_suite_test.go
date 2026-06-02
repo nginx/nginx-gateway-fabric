@@ -191,6 +191,13 @@ func setup(cfg setupConfig, extraInstallArgs ...string) {
 		return
 	}
 
+	// When running the WAF suite, install the PLM controller (f5-waf-policy-controller) before NGF
+	// and configure NGF with the PLM storage flags so that type: PLM WAFPolicies can fetch bundles
+	// from PLM's in-cluster SeaweedFS storage. HTTP/NIM/N1C source tests are unaffected.
+	if isWAF(GinkgoLabelFilter()) {
+		extraInstallArgs = append(extraInstallArgs, setupPLM()...)
+	}
+
 	installCfg := createNGFInstallConfig(cfg, extraInstallArgs...)
 
 	podNames, err := resourceManager.GetReadyNGFPodNames(
@@ -427,6 +434,13 @@ var _ = SynchronizedAfterSuite(
 
 			teardown(relName)
 		}
+
+		// Tear down the PLM controller installed for the WAF suite.
+		if isWAF(labelFilter) {
+			output, err := framework.UninstallPLM()
+			Expect(err).ToNot(HaveOccurred(), string(output))
+			Expect(resourceManager.DeleteNamespace(framework.PLMNamespace)).To(Succeed())
+		}
 	},
 	// Phase 2: runs on proc 1 only, after all procs complete phase 1.
 	// Delete cluster-wide CRDs once all per-proc helm releases are gone.
@@ -442,6 +456,39 @@ var _ = SynchronizedAfterSuite(
 		Expect(err).ToNot(HaveOccurred(), string(output))
 	},
 )
+
+// setupPLM installs the PLM controller and returns the Helm value args that configure NGF to fetch
+// type: PLM WAFPolicy bundles from PLM's in-cluster SeaweedFS S3 storage. It is only called for the
+// WAF suite, which requires NGINX Plus and the private-registry image pull credentials.
+func setupPLM() []string {
+	GinkgoWriter.Printf("Setting up PLM (f5-waf-policy-controller) for the WAF suite\n")
+
+	// The PLM controller and SeaweedFS images come from private-registry.nginx.com; reuse the same
+	// registry JWT used for the NGINX Plus data plane to create the image pull secret in the PLM
+	// namespace before installing the chart.
+	Expect(*nginxImageJWTFileName).ToNot(BeEmpty(),
+		"WAF suite requires --nginx-image-jwt-file-name to pull PLM images")
+	Expect(framework.CreateImagePullSecret(resourceManager, framework.PLMNamespace, *nginxImageJWTFileName)).
+		To(Succeed())
+
+	output, err := framework.InstallPLM()
+	Expect(err).ToNot(HaveOccurred(), string(output))
+
+	// NGF reads the SeaweedFS credentials Secret from the PLM namespace via the cross-namespace
+	// "<namespace>/<name>" form. watchNamespaces is left empty (all namespaces) so NGF can see the
+	// Secret and any APPolicy/APLogConf resources regardless of namespace. The SeaweedFS filer is
+	// installed with certificates disabled, so PLMStorageURL is plain HTTP and no TLS config is set.
+	credsRef := fmt.Sprintf("%s/%s", framework.PLMNamespace, framework.PLMCredentialsSecretName)
+
+	return []string{
+		"--set", "nginxGateway.plmStorage.url=" + framework.PLMStorageURL,
+		"--set", "nginxGateway.plmStorage.credentialsSecretName=" + credsRef,
+	}
+}
+
+func isWAF(labelFilter string) bool {
+	return strings.Contains(labelFilter, "waf")
+}
 
 func isNFR(labelFilter string) bool {
 	return strings.Contains(labelFilter, "nfr") ||

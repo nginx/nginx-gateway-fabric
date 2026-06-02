@@ -1,0 +1,14 @@
+# A malformed APPolicy that PLM cannot compile. The template name is invalid, so the PLM compiler
+# rejects it and sets status.bundle.state: invalid. NGF reflects this as ResolvedRefs=False/InvalidRef
+# on any WAFPolicy that references it.
+apiVersion: appprotect.f5.com/v1
+kind: APPolicy
+metadata:
+  name: malformed-policy
+spec:
+  policy:
+    name: malformed-policy
+    template:
+      name: THIS_TEMPLATE_DOES_NOT_EXIST
+    applicationLanguage: utf-8
+    enforcementMode: not-a-valid-enforcement-mode

@@ -1,0 +1,21 @@
+# type: PLM WAFPolicy targeting the Gateway. References the APPolicy and APLogConf compiled by PLM
+# (same namespace as the WAFPolicy). NGF fetches both bundles from PLM's SeaweedFS storage.
+apiVersion: gateway.nginx.org/v1alpha1
+kind: WAFPolicy
+metadata:
+  name: gateway-waf-plm
+spec:
+  targetRefs:
+  - group: gateway.networking.k8s.io
+    kind: Gateway
+    name: gateway
+  type: PLM
+  policyRef:
+    apPolicyRef:
+      name: attack-signatures
+  securityLogs:
+  - logRef:
+      apLogConfRef:
+        name: log-illegal
+    destination:
+      type: stderr

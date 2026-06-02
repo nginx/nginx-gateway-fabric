@@ -1,0 +1,13 @@
+apiVersion: gateway.nginx.org/v1alpha1
+kind: WAFPolicy
+metadata:
+  name: gateway-waf-plm-pending
+spec:
+  targetRefs:
+  - group: gateway.networking.k8s.io
+    kind: Gateway
+    name: gateway
+  type: PLM
+  policyRef:
+    apPolicyRef:
+      name: attack-signatures-pending
