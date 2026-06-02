@@ -1628,40 +1628,10 @@ func NewPolicyProgrammed() Condition {
 	}
 }
 
-// NewPolicyRefsNotResolvedBundleAuthSecretNotFound returns a Condition that indicates the auth secret was not found.
-func NewPolicyRefsNotResolvedBundleAuthSecretNotFound(msg string) Condition {
-	return Condition{
-		Type:    string(WAFResolvedRefsConditionType),
-		Status:  metav1.ConditionFalse,
-		Reason:  string(PolicyReasonInvalidRef),
-		Message: msg,
-	}
-}
-
-// NewPolicyRefsNotResolvedBundleAuthSecretInvalid returns a Condition that indicates the auth secret is missing
-// expected keys.
-func NewPolicyRefsNotResolvedBundleAuthSecretInvalid(msg string) Condition {
-	return Condition{
-		Type:    string(WAFResolvedRefsConditionType),
-		Status:  metav1.ConditionFalse,
-		Reason:  string(PolicyReasonInvalidRef),
-		Message: msg,
-	}
-}
-
-// NewPolicyRefsNotResolvedTLSSecretNotFound returns a Condition that indicates the TLS CA secret was not found.
-func NewPolicyRefsNotResolvedTLSSecretNotFound(msg string) Condition {
-	return Condition{
-		Type:    string(WAFResolvedRefsConditionType),
-		Status:  metav1.ConditionFalse,
-		Reason:  string(PolicyReasonInvalidRef),
-		Message: msg,
-	}
-}
-
-// NewPolicyRefsNotResolvedTLSSecretInvalid returns a Condition that indicates the TLS CA secret is missing
-// the expected ca.crt key.
-func NewPolicyRefsNotResolvedTLSSecretInvalid(msg string) Condition {
+// NewPolicyRefsNotResolved returns a Condition that indicates a WAFPolicy reference could not be
+// resolved (e.g. missing/invalid secret, missing/not-ready/invalid AP resource). The caller is
+// expected to format the message to describe which reference failed.
+func NewPolicyRefsNotResolved(msg string) Condition {
 	return Condition{
 		Type:    string(WAFResolvedRefsConditionType),
 		Status:  metav1.ConditionFalse,
@@ -1726,5 +1696,27 @@ func NewPolicyNotProgrammedBundlePending(errMsg string) Condition {
 		Status:  metav1.ConditionFalse,
 		Reason:  string(PolicyReasonPending),
 		Message: fmt.Sprintf("Waiting for WAF bundle; last fetch error: %s", errMsg),
+	}
+}
+
+// NewPolicyRefsNotPermitted returns a Condition that indicates a cross-namespace reference
+// (APPolicy or APLogConf) is not permitted by a ReferenceGrant.
+func NewPolicyRefsNotPermitted(msg string) Condition {
+	return Condition{
+		Type:    string(WAFResolvedRefsConditionType),
+		Status:  metav1.ConditionFalse,
+		Reason:  "RefNotPermitted",
+		Message: msg,
+	}
+}
+
+// NewPolicyNotAcceptedPLMNotConfigured returns a Condition that indicates a PLM WAFPolicy was
+// created but PLM storage is not configured via CLI flags.
+func NewPolicyNotAcceptedPLMNotConfigured() Condition {
+	return Condition{
+		Type:    string(v1.PolicyConditionAccepted),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(v1.PolicyReasonInvalid),
+		Message: "PLM storage not configured; set --plm-storage-url on the controller",
 	}
 }

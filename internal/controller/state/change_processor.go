@@ -10,6 +10,7 @@ import (
 	discoveryV1 "k8s.io/api/discovery/v1"
 	apiext "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/events"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -27,6 +28,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 	ngftypes "github.com/nginx/nginx-gateway-fabric/v2/internal/framework/types"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/waf/fetch"
+	s3fetch "github.com/nginx/nginx-gateway-fabric/v2/internal/framework/waf/fetch/s3"
 )
 
 //go:generate go tool counterfeiter -generate
@@ -63,18 +65,23 @@ type ChangeProcessorConfig struct {
 	EventRecorder events.EventRecorder
 	// WAFFetcher fetches WAF policy bundles from HTTP/HTTPS URLs.
 	WAFFetcher fetch.Fetcher
-	// MustExtractGVK is a function that extracts schema.GroupVersionKind from a client.Object.
-	MustExtractGVK kinds.MustExtractGVK
-	// PlusSecrets is a list of secret files used for NGINX Plus reporting (JWT, client SSL, CA).
-	PlusSecrets map[types.NamespacedName][]graph.PlusSecretFile
-	// DiscoveredCRDs is a map of discovered CRDs in the cluster,
-	// where the key is the CRD name and the value indicates if the CRD exists.
-	DiscoveredCRDs map[string]bool
 	// PolledWAFBundles returns the latest bundles fetched by WAF pollers.
 	// These take precedence over graph-cached bundles during stale-bundle fallback,
 	// preventing a graph rebuild from overwriting newer polled data with older cached data.
 	// May be nil if WAF polling is not enabled.
 	PolledWAFBundles func() map[graph.WAFBundleKey]*graph.WAFBundleData
+	// PlusSecrets is a list of secret files used for NGINX Plus reporting (JWT, client SSL, CA).
+	PlusSecrets map[types.NamespacedName][]graph.PlusSecretFile
+	// DiscoveredCRDs is a map of discovered CRDs in the cluster,
+	// where the key is the CRD name and the value indicates if the CRD exists.
+	DiscoveredCRDs map[string]bool
+	// MustExtractGVK is a function that extracts schema.GroupVersionKind from a client.Object.
+	MustExtractGVK kinds.MustExtractGVK
+	// PLMFetcher fetches bundle files from PLM's S3-compatible storage.
+	// Nil if PLM is not configured.
+	PLMFetcher *s3fetch.Fetcher
+	// PLMSecretNames maps each PLM secret NamespacedName to its PLMRole(s).
+	PLMSecretNames map[types.NamespacedName][]graph.PLMRole
 	// Logger is the logger for this Change Processor.
 	Logger logr.Logger
 	// GatewayCtlrName is the name of the Gateway controller.
@@ -127,6 +134,8 @@ func NewChangeProcessorImpl(cfg ChangeProcessorConfig) *ChangeProcessorImpl {
 		AuthenticationFilters: make(map[types.NamespacedName]*ngfAPIv1alpha1.AuthenticationFilter),
 		InferencePools:        make(map[types.NamespacedName]*inference.InferencePool),
 		ListenerSets:          make(map[types.NamespacedName]*v1.ListenerSet),
+		APPolicies:            make(map[types.NamespacedName]*unstructured.Unstructured),
+		APLogConfs:            make(map[types.NamespacedName]*unstructured.Unstructured),
 	}
 
 	processor := &ChangeProcessorImpl{
@@ -245,6 +254,16 @@ func NewChangeProcessorImpl(cfg ChangeProcessorConfig) *ChangeProcessorImpl {
 			predicate: funcPredicate{stateChanged: isNGFPolicyRelevant},
 		},
 		{
+			gvk:       cfg.MustExtractGVK(kinds.NewAPPolicyObject()),
+			store:     newObjectStoreMapAdapter(clusterStore.APPolicies),
+			predicate: nil,
+		},
+		{
+			gvk:       cfg.MustExtractGVK(kinds.NewAPLogConfObject()),
+			store:     newObjectStoreMapAdapter(clusterStore.APLogConfs),
+			predicate: nil,
+		},
+		{
 			gvk:       cfg.MustExtractGVK(&v1.TLSRoute{}),
 			store:     newObjectStoreMapAdapter(clusterStore.TLSRoutes),
 			predicate: nil,
@@ -355,6 +374,8 @@ func (c *ChangeProcessorImpl) Process(ctx context.Context) *graph.Graph {
 		c.cfg.GatewayClassName,
 		c.cfg.PlusSecrets,
 		c.cfg.WAFFetcher,
+		c.cfg.PLMFetcher,
+		c.cfg.PLMSecretNames,
 		previousWAFBundles,
 		c.cfg.Validators,
 		c.cfg.Logger,

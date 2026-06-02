@@ -27,6 +27,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/crd/crdfakes"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/secrets"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 	ngftypes "github.com/nginx/nginx-gateway-fabric/v2/internal/framework/types"
 )
 
@@ -42,6 +43,8 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 			Kind:    "CustomResourceDefinition",
 		},
 	)
+	apPolicyList := kinds.NewAPPolicyList()
+	apLogConfList := kinds.NewAPLogConfList()
 
 	tests := []struct {
 		discoveredCRDs      map[string]bool
@@ -50,6 +53,42 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 		expectedObjectLists []client.ObjectList
 		cfg                 config.Config
 	}{
+		{
+			name: "includes PLM resources when CRDs are discovered",
+			cfg: config.Config{
+				GatewayClassName: gcName,
+			},
+			discoveredCRDs: map[string]bool{
+				"ReferenceGrant": true,
+				kinds.APPolicy:   true,
+				kinds.APLogConf:  true,
+			},
+			expectedObjects: []client.Object{
+				&gatewayv1.GatewayClass{ObjectMeta: metav1.ObjectMeta{Name: "nginx"}},
+			},
+			expectedObjectLists: []client.ObjectList{
+				&apiv1.ServiceList{},
+				&apiv1.SecretList{},
+				&apiv1.NamespaceList{},
+				&discoveryV1.EndpointSliceList{},
+				&gatewayv1.HTTPRouteList{},
+				&apiv1.ConfigMapList{},
+				&gatewayv1.ReferenceGrantList{},
+				&ngfAPIv1alpha2.NginxProxyList{},
+				&gatewayv1.GRPCRouteList{},
+				&ngfAPIv1alpha1.ClientSettingsPolicyList{},
+				&ngfAPIv1alpha2.ObservabilityPolicyList{},
+				&ngfAPIv1alpha1.ProxySettingsPolicyList{},
+				&ngfAPIv1alpha1.UpstreamSettingsPolicyList{},
+				&ngfAPIv1alpha1.AuthenticationFilterList{},
+				&ngfAPIv1alpha1.RateLimitPolicyList{},
+				&ngfAPIv1alpha1.WAFPolicyList{},
+				partialObjectMetadataList,
+				apPolicyList,
+				apLogConfList,
+				&gatewayv1.GatewayList{},
+			},
+		},
 		{
 			name: "base case with BackendTLSPolicy v1 and ListenerSet",
 			cfg: config.Config{
@@ -328,6 +367,40 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 			},
 		},
 		{
+			name: "PLM CRDs not included when APPolicy and APLogConf not discovered",
+			cfg: config.Config{
+				GatewayClassName: gcName,
+			},
+			discoveredCRDs: map[string]bool{
+				"ReferenceGrant": true,
+				kinds.APPolicy:   false,
+				kinds.APLogConf:  false,
+			},
+			expectedObjects: []client.Object{
+				&gatewayv1.GatewayClass{ObjectMeta: metav1.ObjectMeta{Name: "nginx"}},
+			},
+			expectedObjectLists: []client.ObjectList{
+				&apiv1.ServiceList{},
+				&apiv1.SecretList{},
+				&apiv1.NamespaceList{},
+				&discoveryV1.EndpointSliceList{},
+				&gatewayv1.HTTPRouteList{},
+				&apiv1.ConfigMapList{},
+				&gatewayv1.ReferenceGrantList{},
+				&ngfAPIv1alpha2.NginxProxyList{},
+				&gatewayv1.GRPCRouteList{},
+				&ngfAPIv1alpha1.ClientSettingsPolicyList{},
+				&ngfAPIv1alpha2.ObservabilityPolicyList{},
+				&ngfAPIv1alpha1.ProxySettingsPolicyList{},
+				&ngfAPIv1alpha1.UpstreamSettingsPolicyList{},
+				&ngfAPIv1alpha1.AuthenticationFilterList{},
+				&ngfAPIv1alpha1.RateLimitPolicyList{},
+				&ngfAPIv1alpha1.WAFPolicyList{},
+				partialObjectMetadataList,
+				&gatewayv1.GatewayList{},
+			},
+		},
+		{
 			name: "all features enabled",
 			cfg: config.Config{
 				GatewayClassName:     gcName,
@@ -578,8 +651,8 @@ func TestCreatePlusSecretMetadata(t *testing.T) {
 
 	tests := []struct {
 		expSecrets map[types.NamespacedName][]graph.PlusSecretFile
-		name       string
 		getSecrets func() []runtime.Object
+		name       string
 		cfg        config.Config
 		expErr     bool
 	}{
@@ -1071,4 +1144,111 @@ func createTypedObject(gvk *schema.GroupVersionKind) ngftypes.ObjectType {
 	obj := &gatewayv1alpha2.TCPRoute{}
 	obj.SetGroupVersionKind(*gvk)
 	return obj
+}
+
+func TestParsePLMSecretName(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name             string
+		value            string
+		defaultNamespace string
+		expNamespace     string
+		expName          string
+	}{
+		{
+			name:             "plain name uses default namespace",
+			value:            "my-secret",
+			defaultNamespace: "nginx-gateway",
+			expNamespace:     "nginx-gateway",
+			expName:          "my-secret",
+		},
+		{
+			name:             "namespaced name overrides default",
+			value:            "other-ns/my-secret",
+			defaultNamespace: "nginx-gateway",
+			expNamespace:     "other-ns",
+			expName:          "my-secret",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			ns, name := parsePLMSecretName(test.value, test.defaultNamespace)
+
+			g.Expect(ns).To(Equal(test.expNamespace))
+			g.Expect(name).To(Equal(test.expName))
+		})
+	}
+}
+
+func TestBuildPLMSecretNames(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		plmCfg   *config.PLMStorageConfig
+		expected map[types.NamespacedName][]graph.PLMRole
+		name     string
+		ns       string
+	}{
+		{
+			name:     "nil config returns nil",
+			plmCfg:   nil,
+			ns:       "nginx-gateway",
+			expected: nil,
+		},
+		{
+			name: "plain names use default namespace",
+			plmCfg: &config.PLMStorageConfig{
+				URL:                   "http://example.com",
+				CredentialsSecretName: "cred-secret",
+				CASecretName:          "ca-secret",
+			},
+			ns: "nginx-gateway",
+			expected: map[types.NamespacedName][]graph.PLMRole{
+				{Namespace: "nginx-gateway", Name: "cred-secret"}: {graph.PLMRoleCredentials},
+				{Namespace: "nginx-gateway", Name: "ca-secret"}:   {graph.PLMRoleCA},
+			},
+		},
+		{
+			name: "namespaced names override default",
+			plmCfg: &config.PLMStorageConfig{ //nolint:gosec // not hardcoded credentials, these are secret names
+				URL:                   "http://example.com",
+				CredentialsSecretName: "plm-ns/cred-secret",
+				CASecretName:          "plm-ns/ca-secret",
+				ClientSSLSecretName:   "plm-ns/client-secret",
+			},
+			ns: "nginx-gateway",
+			expected: map[types.NamespacedName][]graph.PLMRole{
+				{Namespace: "plm-ns", Name: "cred-secret"}:   {graph.PLMRoleCredentials},
+				{Namespace: "plm-ns", Name: "ca-secret"}:     {graph.PLMRoleCA},
+				{Namespace: "plm-ns", Name: "client-secret"}: {graph.PLMRoleClientSSL},
+			},
+		},
+		{
+			name: "mixed namespaced and plain names",
+			plmCfg: &config.PLMStorageConfig{ //nolint:gosec // not hardcoded credentials, these are secret names
+				URL:                   "http://example.com",
+				CredentialsSecretName: "other-ns/cred-secret",
+				CASecretName:          "ca-secret",
+			},
+			ns: "nginx-gateway",
+			expected: map[types.NamespacedName][]graph.PLMRole{
+				{Namespace: "other-ns", Name: "cred-secret"}:    {graph.PLMRoleCredentials},
+				{Namespace: "nginx-gateway", Name: "ca-secret"}: {graph.PLMRoleCA},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			result := buildPLMSecretNames(test.plmCfg, test.ns)
+
+			g.Expect(result).To(Equal(test.expected))
+		})
+	}
 }
