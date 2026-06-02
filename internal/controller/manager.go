@@ -346,6 +346,7 @@ func createAndRegisterProvisioner(
 			InferenceExtension:             cfg.InferenceExtension,
 			EndpointPickerDisableTLS:       cfg.EndpointPickerDisableTLS,
 			EndpointPickerTLSSkipVerify:    cfg.EndpointPickerTLSSkipVerify,
+			ServerTLSDomain:                cfg.ServerTLSDomain,
 		},
 	)
 	if err != nil {

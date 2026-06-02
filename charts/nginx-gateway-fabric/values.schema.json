@@ -1296,6 +1296,12 @@
       ],
       "title": "nginxGateway",
       "type": "object"
+    },
+    "serverTLSDomain": {
+      "default": "svc",
+      "description": "The domain suffix used in the server TLS certificate SAN and agent config host. Defaults to \"svc\".",
+      "title": "serverTLSDomain",
+      "type": "string"
     }
   },
   "required": [],

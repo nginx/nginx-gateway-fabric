@@ -328,6 +328,7 @@ spec:
         - --config=nginx-gateway-config
         - --service=nginx-gateway
         - --agent-tls-secret=agent-tls
+        - --server-tls-domain=svc
         - --nginx-docker-secret=nginx-plus-registry-secret
         - --nginx-plus
         - --usage-report-secret=nplus-license
@@ -416,6 +417,7 @@ spec:
         - generate-certs
         - --service=nginx-gateway
         - --cluster-domain=cluster.local
+        - --server-tls-domain=svc
         - --server-tls-secret=server-tls
         - --agent-tls-secret=agent-tls
         env:
