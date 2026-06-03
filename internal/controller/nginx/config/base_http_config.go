@@ -45,13 +45,13 @@ type httpConfig struct {
 	DNSResolver             *dataplane.DNSResolverConfig
 	AccessLog               *AccessLog
 	Compression             *dataplane.CompressionSettings
+	ClaimSets               map[string][]string
+	OIDCProviders           []*oidcConfiguration
+	Includes                []shared.Include
 	GatewaySecretID         dataplane.SSLKeyPairID
 	NginxReadinessProbePath string
 	ServerTokens            string
-	OIDCProviders           []*oidcConfiguration
 	WAFCookieSeed           string
-	Includes                []shared.Include
-	ClaimSets               map[string][]string
 	NginxReadinessProbePort int32
 	IPFamily                shared.IPFamily
 	HTTP2                   bool

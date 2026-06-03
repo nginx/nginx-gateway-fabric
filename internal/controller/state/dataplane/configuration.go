@@ -833,7 +833,7 @@ func buildAuthZConfigs(
 		}
 
 		switch filter.Source.Spec.Type {
-		//FIXME(s.odonovan): Support OIDC.
+		// FIXME(s.odonovan): Support OIDC.
 		case ngfAPIv1alpha1.AuthTypeJWT:
 			if filter.Source.Spec.JWT == nil || filter.Source.Spec.JWT.Authorization == nil {
 				continue
@@ -1084,12 +1084,12 @@ type claimPatternAnchors struct {
 var (
 	// allAnchors uses (?:.*,)? and (?:,.*)? to match a value within a comma-separated list
 	// when multiple claims are concatenated with +.
-	// Example: (?:.*,)?acme-co(?:,.*)? as part of a larger ^...$ anchored pattern
+	// Example: (?:.*,)?acme-co(?:,.*)? as part of a larger ^...$ anchored pattern.
 	allAnchors = claimPatternAnchors{prefix: "(?:.*,)?", suffix: "(?:,.*)?"}
 
 	// anyAnchors uses (?:^|,) and (?:,|$) to match a value within a comma-separated list
 	// when the claim is evaluated independently.
-	// Example: (?:^|,)cli(?:,|$) matches "cli", "cli,api", "api,cli", "api,cli,ops"
+	// Example: (?:^|,)cli(?:,|$) matches "cli", "cli,api", "api,cli", "api,cli,ops".
 	anyAnchors = claimPatternAnchors{prefix: "(?:^|,)", suffix: "(?:,|$)"}
 )
 
@@ -1133,7 +1133,7 @@ func buildMapValuePattern(values []string, matchType *ngfAPIv1alpha1.ClaimMatchT
 }
 
 // generateListMatchPattern generates a regex pattern that matches any of the provided patterns.
-// Example: input ["val1", "val2"] returns (val1|val2)
+// Example: input ["val1", "val2"] returns (val1|val2).
 func generateListMatchPattern(patterns []string) string {
 	return "(" + strings.Join(patterns, "|") + ")"
 }

@@ -2105,8 +2105,8 @@ func TestValidateJWTAuthorization(t *testing.T) {
 
 	tests := []struct {
 		name          string
-		authz         *ngfAPI.Authorization
 		authValidator *validationfakes.FakeAuthFieldsValidator
+		authz         *ngfAPI.Authorization
 		expectErrs    bool
 	}{
 		{

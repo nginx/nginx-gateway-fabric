@@ -440,14 +440,14 @@ type AuthZConfig struct {
 
 // AuthZRuleMap represents one or more NGINX maps for a single rule.
 type AuthZRuleMap struct {
-	Maps    []shared.Map
 	Require ngfAPIv1alpha1.RequireType
+	Maps    []shared.Map
 }
 
 // AuthZMap is the final map combining all rule results.
 type AuthZMap struct {
-	shared.Map
 	Require ngfAPIv1alpha1.RequireType
+	shared.Map
 }
 
 // ProxySetHeaderClaim maps a claim variable to a proxy_set_header name.

@@ -356,9 +356,6 @@ const (
 // Authorization specifies a set of required claim rules
 // that a token's claim must match to be authorized, given the require type defined.
 type Authorization struct {
-	// Rules defines a list of claims and their specific authorization requirements.
-	Rules []Rule `json:"rules"`
-
 	// Require sets top level authorization requirement.
 	// When set to All, the requirements for all claims in a rule must be met.
 	// When set to Any, the requirements for any one claim in a rule must be met.
@@ -366,14 +363,13 @@ type Authorization struct {
 	// +optional
 	// +kubebuilder:default=Any
 	Require *RequireType `json:"require,omitempty"`
+
+	// Rules defines a list of claims and their specific authorization requirements.
+	Rules []Rule `json:"rules"`
 }
 
 // Rule defines a list of claims, and authorization rules for those claims.
 type Rule struct {
-	// Claims defines a list of claims required by users.
-	// +kubebuilder:validation:MinItems=1
-	Claims []Claim `json:"claims"`
-
 	// Require sets the authorization mode for a specific claim within a rule.
 	// When set to All, a token's claim must match all values within that claim.
 	// When set to Any, a token's claim must match at least one value with that claim.
@@ -381,10 +377,21 @@ type Rule struct {
 	// +optional
 	// +kubebuilder:default=Any
 	Require *RequireType `json:"require,omitempty"`
+
+	// Claims defines a list of claims required by users.
+	// +kubebuilder:validation:MinItems=1
+	Claims []Claim `json:"claims"`
 }
 
 // Claim describes the exact name/value pair of claims that must be matched.
 type Claim struct {
+	// ProxySetHeader sets both the name and variable for `proxy_set_header`
+	// Example: For claim name `sub` for JWT auth
+	//
+	// proxy_set_header X-JWT-Claim-Sub $jwt_claim_sub;
+	// +kubebuilder:validation:Pattern=`^[a-zA-Z0-9_/-]+$`
+	ProxySetHeader *string `json:"proxySetHeader,omitempty"`
+
 	// Name is the name of the claim within the token.
 	// +kubebuilder:validation:Pattern=`^[a-zA-Z0-9_/-]+$`
 	Name string `json:"name"`
@@ -394,13 +401,6 @@ type Claim struct {
 	// +kubebuilder:validation:items:Pattern=`^[^\n\r;#\$\{\}\|&><'"]+$`
 	// +kubebuilder:validation:MinItems=1
 	Values []string `json:"values"`
-
-	// ProxySetHeader sets both the name and variable for `proxy_set_header`
-	// Example: For claim name `sub` for JWT auth
-	//
-	// proxy_set_header X-JWT-Claim-Sub $jwt_claim_sub;
-	// +kubebuilder:validation:Pattern=`^[a-zA-Z0-9_/-]+$`
-	ProxySetHeader *string `json:"proxySetHeader,omitempty"`
 
 	// Match sets the match type for the claim.
 	// +kubebuilder:default=Exact

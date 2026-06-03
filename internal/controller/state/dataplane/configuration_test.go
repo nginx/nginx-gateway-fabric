@@ -6400,7 +6400,8 @@ func TestBuildJWTAuthZConfigFromAuthenticationFilters(t *testing.T) {
 	makeJWTFilter := func(
 		ns, name string,
 		valid, referenced bool,
-		authZ ngfAPIv1alpha1.Authorization) *graph.AuthenticationFilter {
+		authZ ngfAPIv1alpha1.Authorization,
+	) *graph.AuthenticationFilter {
 		return &graph.AuthenticationFilter{
 			Source: &ngfAPIv1alpha1.AuthenticationFilter{
 				ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: name},
@@ -6422,13 +6423,15 @@ func TestBuildJWTAuthZConfigFromAuthenticationFilters(t *testing.T) {
 
 	makeJWTFilterWithNoRules := func(
 		ns, name string,
-		valid, referenced bool) *graph.AuthenticationFilter {
+		valid, referenced bool,
+	) *graph.AuthenticationFilter {
 		return makeJWTFilter(ns, name, valid, referenced, ngfAPIv1alpha1.Authorization{})
 	}
 
 	makeJWTFilterWithOneRuleAndDefaultSettings := func(
 		ns, name string,
-		valid, referenced bool) *graph.AuthenticationFilter {
+		valid, referenced bool,
+	) *graph.AuthenticationFilter {
 		authZ := ngfAPIv1alpha1.Authorization{
 			Rules: []ngfAPIv1alpha1.Rule{
 				{
@@ -6446,7 +6449,8 @@ func TestBuildJWTAuthZConfigFromAuthenticationFilters(t *testing.T) {
 
 	makeJWTFilterWithNestedClaim := func(
 		ns, name string,
-		valid, referenced bool) *graph.AuthenticationFilter {
+		valid, referenced bool,
+	) *graph.AuthenticationFilter {
 		authZ := ngfAPIv1alpha1.Authorization{
 			Rules: []ngfAPIv1alpha1.Rule{
 				{
@@ -6466,7 +6470,8 @@ func TestBuildJWTAuthZConfigFromAuthenticationFilters(t *testing.T) {
 
 	makeJWTFilterWithOneRuleAndCustomRequireTypesAndProxySetHeader := func(
 		ns, name string,
-		valid, referenced bool) *graph.AuthenticationFilter {
+		valid, referenced bool,
+	) *graph.AuthenticationFilter {
 		authZ := ngfAPIv1alpha1.Authorization{
 			Require: helpers.GetPointer(ngfAPIv1alpha1.RequireTypeAll),
 			Rules: []ngfAPIv1alpha1.Rule{
@@ -6488,7 +6493,8 @@ func TestBuildJWTAuthZConfigFromAuthenticationFilters(t *testing.T) {
 	makeJWTFilterWithOneRuleAndCustomMatchType := func(
 		ns, name string,
 		valid, referenced bool,
-		match ngfAPIv1alpha1.ClaimMatchType) *graph.AuthenticationFilter {
+		match ngfAPIv1alpha1.ClaimMatchType,
+	) *graph.AuthenticationFilter {
 		authZ := ngfAPIv1alpha1.Authorization{
 			Rules: []ngfAPIv1alpha1.Rule{
 				{
@@ -6508,7 +6514,8 @@ func TestBuildJWTAuthZConfigFromAuthenticationFilters(t *testing.T) {
 	makeJWTFilterWithMixOfAnyAndAllRequireTypes := func(
 		ns, name string,
 		valid, referenced bool,
-		rtTopLevel ngfAPIv1alpha1.RequireType) *graph.AuthenticationFilter {
+		rtTopLevel ngfAPIv1alpha1.RequireType,
+	) *graph.AuthenticationFilter {
 		authZ := ngfAPIv1alpha1.Authorization{
 			Require: helpers.GetPointer(rtTopLevel),
 			Rules: []ngfAPIv1alpha1.Rule{

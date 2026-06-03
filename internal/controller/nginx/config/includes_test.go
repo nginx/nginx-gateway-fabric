@@ -525,10 +525,10 @@ func TestCreateIncludeFromAuthZRuleMap(t *testing.T) {
 	tests := []struct {
 		name            string
 		filterNsName    string
-		ruleIdx         int
 		ruleMap         dataplane.AuthZRuleMap
 		expName         string
 		expContentParts []string
+		ruleIdx         int
 	}{
 		{
 			name:         "single map with require all",
@@ -756,9 +756,9 @@ func TestCreateIncludesFromAuthZConfigs(t *testing.T) {
 	tests := []struct {
 		name              string
 		authZConfigs      []*dataplane.AuthZConfig
-		expIncludeCount   int
 		expIncludeNames   []string
 		expIncludeContent []string
+		expIncludeCount   int
 	}{
 		{
 			name:            "nil authZConfigs returns nil",

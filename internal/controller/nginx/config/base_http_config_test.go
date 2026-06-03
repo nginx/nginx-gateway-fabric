@@ -897,8 +897,8 @@ func TestCollectAuthZClaimSets(t *testing.T) {
 
 	tests := []struct {
 		name         string
-		authZConfigs []*dataplane.AuthZConfig
 		expClaimSets map[string][]string
+		authZConfigs []*dataplane.AuthZConfig
 	}{
 		{
 			name:         "nil authZConfigs returns nil",
@@ -1052,11 +1052,11 @@ func TestExecuteBaseHttp_AuthZIncludes(t *testing.T) {
 	tests := []struct {
 		name                   string
 		conf                   dataplane.Configuration
-		expResultCount         int
 		expHTTPContains        []string
 		expHTTPNotContains     []string
 		expIncludeDestinations []string
 		expIncludeContains     []string
+		expResultCount         int
 	}{
 		{
 			name:           "no authz configs produces only http.conf with no authz directives",
