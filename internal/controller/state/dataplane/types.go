@@ -9,6 +9,7 @@ import (
 
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/shared"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/resolver"
 )
@@ -35,6 +36,8 @@ type Configuration struct {
 	SSLKeyPairs map[SSLKeyPairID]SSLKeyPair
 	// AuthSecrets holds all unique secrets for authentication.
 	AuthSecrets map[AuthFileID]AuthFileData
+	// AuthZConfigs holds the complete authorization configuration for JWT claims.
+	AuthZConfigs []*AuthZConfig
 	// AuxiliarySecrets contains additional secret data, like certificates/keys/tokens that are not related to
 	// Gateway API resources.
 	AuxiliarySecrets map[graph.SecretFileType][]byte
@@ -411,6 +414,49 @@ type AuthJWT struct {
 	Realm string
 	// Data contains the JWT public key data required for authentication.
 	Data []byte
+	// Leeway specifies the allowable clock skew between the nbf and exp claims.
+	Leeway *ngfAPIv1alpha1.Duration
+	// AuthRequireVariable is the variable name used by auth_jwt_require.
+	AuthRequireVariable string
+	// AuthZProxySetHeaders are claim-based proxy_set_header directives from authorization config.
+	AuthZProxySetHeaders []ProxySetHeaderClaim
+}
+
+// AuthZConfig holds the complete authorization configuration for JWT claims.
+type AuthZConfig struct {
+	// FilterNsName is the namespaced name of the AuthenticationFilter this config belongs to.
+	FilterNsName string
+	// AuthClaimSets are the auth_jwt_claim_set directives keyed by variable name.
+	AuthClaimSets map[string][]string
+	// RuleMaps are the per-rule maps (http context).
+	RuleMaps []AuthZRuleMap
+	// AuthZMap is the final aggregation map (http context).
+	AuthZMap *AuthZMap
+	// RequireVariable is the variable name used in auth_jwt_require (location context).
+	RequireVariable string
+	// ProxySetHeaders are claim-based proxy_set_header directives (location context).
+	ProxySetHeaders []ProxySetHeaderClaim
+}
+
+// AuthZRuleMap represents one or more NGINX maps for a single rule.
+type AuthZRuleMap struct {
+	Maps    []shared.Map
+	Require ngfAPIv1alpha1.RequireType
+}
+
+// AuthZMap is the final map combining all rule results.
+type AuthZMap struct {
+	shared.Map
+	Require ngfAPIv1alpha1.RequireType
+}
+
+// ProxySetHeaderClaim maps a claim variable to a proxy_set_header name.
+// Example:
+//
+//	proxy_set_header X-User-Role $claim_roles;
+type ProxySetHeaderClaim struct {
+	HeaderName    string
+	ClaimVariable string
 }
 
 // AuthJWTRemote holds configuration for remote JWKS retrieval.

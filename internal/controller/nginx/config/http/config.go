@@ -66,6 +66,8 @@ type Location struct {
 	AuthExternalRequest *AuthExternalRequest
 	// AuthJWT contains the configuration for JWT authentication.
 	AuthJWT *AuthJWT
+	// AuthRequire sets the auth_jwt_require directive for this location.
+	AuthRequire string
 	// AuthBasic contains the configuration for basic authentication.
 	AuthBasic *AuthBasic
 	// ProxyPassRequestBody renders proxy_pass_request_body ("on"/"off"); unset leaves the directive out.
@@ -236,10 +238,19 @@ type AuthBasic struct {
 // AuthJWT holds the configuration for JWT authentication using the auth_jwt directive.
 // See https://nginx.org/en/docs/http/ngx_http_auth_jwt_module.html
 type AuthJWT struct {
-	KeyCache *ngfAPI.Duration
-	Remote   *AuthJWTRemote
-	Realm    string
-	File     string
+	KeyCache        *ngfAPI.Duration
+	Remote          *AuthJWTRemote
+	Leeway          *ngfAPI.Duration
+	Realm           string
+	File            string
+	AuthRequire     string
+	ProxySetHeaders []ProxySetHeaderClaim
+}
+
+// ProxySetHeaderClaim maps a claim variable to a proxy_set_header name.
+type ProxySetHeaderClaim struct {
+	HeaderName    string
+	ClaimVariable string
 }
 
 // AuthJWTRemote holds configuration for remote JWKS retrieval.

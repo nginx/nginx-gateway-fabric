@@ -335,6 +335,16 @@ func convertAuthenticationFilterJwtAuth(
 				Remote:   remote,
 			}
 		}
+
+		// Populate authorization fields (auth_jwt_require + proxy_set_header) from the AuthZConfig
+		if result != nil && specJWT.Authorization != nil {
+			authZConfig := buildAuthZConfigFromAuthZSpec(specJWT.Authorization)
+			if authZConfig != nil {
+				result.AuthRequireVariable = authZConfig.RequireVariable
+				result.AuthZProxySetHeaders = authZConfig.ProxySetHeaders
+				result.Leeway = specJWT.Leeway
+			}
+		}
 	}
 
 	return result

@@ -51,6 +51,7 @@ type httpConfig struct {
 	OIDCProviders           []*oidcConfiguration
 	WAFCookieSeed           string
 	Includes                []shared.Include
+	ClaimSets               map[string][]string
 	NginxReadinessProbePort int32
 	IPFamily                shared.IPFamily
 	HTTP2                   bool
@@ -69,6 +70,11 @@ func executeBaseHTTPConfig(conf dataplane.Configuration, generator policies.Gene
 	policyIncludes := createIncludesFromPolicyGenerateResult(generator.GenerateForHTTP(conf.BaseHTTPConfig.Policies))
 	includes = append(includes, policyIncludes...)
 
+	authZIncludes := createIncludesFromAuthZConfigs(conf.AuthZConfigs)
+	includes = append(includes, authZIncludes...)
+
+	claimSets := collectAuthZClaimSets(conf.AuthZConfigs)
+
 	hc := httpConfig{
 		HTTP2:                   conf.BaseHTTPConfig.HTTP2,
 		Includes:                includes,
@@ -83,6 +89,7 @@ func executeBaseHTTPConfig(conf dataplane.Configuration, generator policies.Gene
 		Compression:             conf.BaseHTTPConfig.Compression,
 		WAF:                     conf.WAF.Enabled,
 		WAFCookieSeed:           conf.WAF.CookieSeed,
+		ClaimSets:               claimSets,
 	}
 
 	results := make([]executeResult, 0, len(includes)+1)
@@ -205,4 +212,30 @@ func buildAccessLog(accessLogConfig *dataplane.AccessLog) *AccessLog {
 		return accessLog
 	}
 	return nil
+}
+
+// collectAuthZClaimSets collects all ClaimSets from AuthZConfigs.
+func collectAuthZClaimSets(authZConfigs []*dataplane.AuthZConfig) map[string][]string {
+	if len(authZConfigs) == 0 {
+		return nil
+	}
+
+	allClaimSets := make(map[string][]string)
+
+	for _, cfg := range authZConfigs {
+		if cfg == nil {
+			continue
+		}
+		for k, v := range cfg.AuthClaimSets {
+			if _, exists := allClaimSets[k]; !exists {
+				allClaimSets[k] = v
+			}
+		}
+	}
+
+	if len(allClaimSets) == 0 {
+		return nil
+	}
+
+	return allClaimSets
 }

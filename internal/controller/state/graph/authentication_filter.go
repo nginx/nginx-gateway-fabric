@@ -127,6 +127,12 @@ func validateAuthenticationFilter(
 		} else if af.Spec.JWT.Source == ngfAPI.JWTKeySourceRemote && af.Spec.JWT.Remote != nil {
 			conds, valid = validateRemoteJWT(af, nsname, resourceResolver)
 		}
+		if af.Spec.JWT.Authorization != nil {
+			if authZErrs := validateJWTAuthorization(af.Spec.JWT.Authorization, authValidator); len(authZErrs) > 0 {
+				conds = append(conds, conditions.NewAuthenticationFilterInvalid(authZErrs.ToAggregate().Error()))
+				valid = false
+			}
+		}
 	case ngfAPI.AuthTypeOIDC:
 		if !isPlus {
 			cond := conditions.NewAuthenticationFilterInvalid("OIDC Authentication requires NGINX Plus.")
@@ -170,6 +176,50 @@ func validateRemoteJWT(
 	}
 
 	return nil, true
+}
+
+func validateJWTAuthorization(
+	authz *ngfAPI.Authorization,
+	authValidator validation.AuthFieldsValidator,
+) field.ErrorList {
+	var allErrs field.ErrorList
+
+	for ruleIdx, rule := range authz.Rules {
+		rulePath := field.NewPath("spec.jwt.authorization.rules").Index(ruleIdx)
+		for claimIdx, claim := range rule.Claims {
+			claimPath := rulePath.Child("claims").Index(claimIdx)
+
+			if err := authValidator.ValidateAuthZClaimName(claim.Name); err != nil {
+				allErrs = append(allErrs, field.Invalid(
+					claimPath.Child("name"),
+					claim.Name,
+					err.Error(),
+				))
+			}
+
+			for valueIdx, value := range claim.Values {
+				if err := authValidator.ValidateAuthZClaimValue(value); err != nil {
+					allErrs = append(allErrs, field.Invalid(
+						claimPath.Child("values").Index(valueIdx),
+						value,
+						err.Error(),
+					))
+				}
+			}
+
+			if claim.ProxySetHeader != nil {
+				if err := authValidator.ValidateAuthZProxySetHeader(*claim.ProxySetHeader); err != nil {
+					allErrs = append(allErrs, field.Invalid(
+						claimPath.Child("proxySetHeader"),
+						*claim.ProxySetHeader,
+						err.Error(),
+					))
+				}
+			}
+		}
+	}
+
+	return allErrs
 }
 
 func resolveAuthenticationFilterSecret(

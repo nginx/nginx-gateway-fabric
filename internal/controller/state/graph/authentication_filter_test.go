@@ -2097,3 +2097,136 @@ func createAuthenticationFilterJWTRemote(
 		Valid: true,
 	}
 }
+
+func TestValidateJWTAuthorization(t *testing.T) {
+	t.Parallel()
+
+	proxyHeader := "X-JWT-Sub"
+
+	tests := []struct {
+		name          string
+		authz         *ngfAPI.Authorization
+		authValidator *validationfakes.FakeAuthFieldsValidator
+		expectErrs    bool
+	}{
+		{
+			name: "valid authorization with all fields",
+			authz: &ngfAPI.Authorization{
+				Rules: []ngfAPI.Rule{
+					{
+						Claims: []ngfAPI.Claim{
+							{
+								Name:           "sub",
+								Values:         []string{"user1", "user2"},
+								ProxySetHeader: &proxyHeader,
+							},
+						},
+					},
+				},
+			},
+			authValidator: &validationfakes.FakeAuthFieldsValidator{},
+			expectErrs:    false,
+		},
+		{
+			name: "valid claim value as regex",
+			authz: &ngfAPI.Authorization{
+				Rules: []ngfAPI.Rule{
+					{
+						Claims: []ngfAPI.Claim{
+							{
+								Name:   "sub",
+								Values: []string{"/user[0-9]+/"},
+							},
+						},
+					},
+				},
+			},
+			authValidator: &validationfakes.FakeAuthFieldsValidator{},
+			expectErrs:    false,
+		},
+		{
+			name: "invalid claim name",
+			authz: &ngfAPI.Authorization{
+				Rules: []ngfAPI.Rule{
+					{
+						Claims: []ngfAPI.Claim{
+							{
+								Name:   "bad;name",
+								Values: []string{"value"},
+							},
+						},
+					},
+				},
+			},
+			authValidator: func() *validationfakes.FakeAuthFieldsValidator {
+				v := &validationfakes.FakeAuthFieldsValidator{}
+				v.ValidateAuthZClaimNameReturns(errors.New("invalid claim name"))
+				return v
+			}(),
+			expectErrs: true,
+		},
+		{
+			name: "invalid claim value",
+			authz: &ngfAPI.Authorization{
+				Rules: []ngfAPI.Rule{
+					{
+						Claims: []ngfAPI.Claim{
+							{
+								Name:   "sub",
+								Values: []string{"bad;value"},
+							},
+						},
+					},
+				},
+			},
+			authValidator: func() *validationfakes.FakeAuthFieldsValidator {
+				v := &validationfakes.FakeAuthFieldsValidator{}
+				v.ValidateAuthZClaimValueReturns(errors.New("invalid claim value"))
+				return v
+			}(),
+			expectErrs: true,
+		},
+		{
+			name: "invalid proxy set header",
+			authz: &ngfAPI.Authorization{
+				Rules: []ngfAPI.Rule{
+					{
+						Claims: []ngfAPI.Claim{
+							{
+								Name:           "sub",
+								Values:         []string{"user1"},
+								ProxySetHeader: &proxyHeader,
+							},
+						},
+					},
+				},
+			},
+			authValidator: func() *validationfakes.FakeAuthFieldsValidator {
+				v := &validationfakes.FakeAuthFieldsValidator{}
+				v.ValidateAuthZProxySetHeaderReturns(errors.New("invalid header"))
+				return v
+			}(),
+			expectErrs: true,
+		},
+		{
+			name:          "nil authorization",
+			authz:         &ngfAPI.Authorization{},
+			authValidator: &validationfakes.FakeAuthFieldsValidator{},
+			expectErrs:    false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			errs := validateJWTAuthorization(tt.authz, tt.authValidator)
+			if tt.expectErrs {
+				g.Expect(errs).ToNot(BeEmpty())
+			} else {
+				g.Expect(errs).To(BeEmpty())
+			}
+		})
+	}
+}

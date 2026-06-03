@@ -63,6 +63,9 @@ type AuthFieldsValidator interface {
 	ValidateOIDCLogoutURI(uri string) error
 	ValidateOIDCPostLogoutURI(uri string) error
 	ValidateOIDCFrontChannelLogoutURI(uri string) error
+	ValidateAuthZClaimName(name string) error
+	ValidateAuthZClaimValue(value string) error
+	ValidateAuthZProxySetHeader(header string) error
 }
 
 // PolicyValidator validates an NGF Policy.
