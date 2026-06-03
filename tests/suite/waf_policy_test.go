@@ -1058,7 +1058,10 @@ func waitForAPBundleState(kind string, nsname types.NamespacedName, wantState st
 				return false, nil
 			}
 
-			state, found, _ := unstructured.NestedString(obj.Object, "status", "bundle", "state")
+			state, found, err := unstructured.NestedString(obj.Object, "status", "bundle", "state")
+			if err != nil {
+				return false, err
+			}
 			if !found {
 				GinkgoWriter.Printf("%s %q has no status.bundle.state yet\n", kind, nsname)
 				return false, nil

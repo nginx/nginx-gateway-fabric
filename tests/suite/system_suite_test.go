@@ -194,7 +194,7 @@ func setup(cfg setupConfig, extraInstallArgs ...string) {
 	// When running the WAF suite, install the PLM controller (f5-waf-policy-controller) before NGF
 	// and configure NGF with the PLM storage flags so that type: PLM WAFPolicies can fetch bundles
 	// from PLM's in-cluster SeaweedFS storage. HTTP/NIM/N1C source tests are unaffected.
-	if isWAF(GinkgoLabelFilter()) {
+	if isWAF(GinkgoLabelFilter()) && *wafEnabled && runtime.GOARCH != "arm64" {
 		extraInstallArgs = append(extraInstallArgs, setupPLM()...)
 	}
 
@@ -436,7 +436,7 @@ var _ = SynchronizedAfterSuite(
 		}
 
 		// Tear down the PLM controller installed for the WAF suite.
-		if isWAF(labelFilter) {
+		if isWAF(labelFilter) && *wafEnabled && runtime.GOARCH != "arm64" {
 			output, err := framework.UninstallPLM()
 			Expect(err).ToNot(HaveOccurred(), string(output))
 			// With the PLM controller gone, the finalizers on its APSignatures resources would
