@@ -720,7 +720,7 @@ type DaemonSetSpec struct {
 	Patches []Patch `json:"patches,omitempty"`
 }
 
-// PodDisruptionBudgetSpec is the configuration for a PodDisruptionBudget.
+// PodDisruptionBudget is the configuration for limiting the number of concurrent disruptions of a pod.
 // MinAvailable and MaxUnavailable are mutually exclusive; only one may be set.
 // The Kubernetes API will reject a PodDisruptionBudget with both fields set.
 type PodDisruptionBudgetSpec struct {

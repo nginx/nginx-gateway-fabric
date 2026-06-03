@@ -400,7 +400,18 @@ func (p *NginxProvisioner) buildPDB(
 		return nil
 	}
 
-	return buildNginxDeploymentPDB(objectMeta, nProxyCfg.Kubernetes.Deployment.PodDisruptionBudget, selectorLabels)
+	pdbSpec := nProxyCfg.Kubernetes.Deployment.PodDisruptionBudget
+	return &policyv1.PodDisruptionBudget{
+		ObjectMeta: objectMeta,
+		Spec: policyv1.PodDisruptionBudgetSpec{
+			Selector: &metav1.LabelSelector{
+				MatchLabels: selectorLabels,
+			},
+			MinAvailable:               pdbSpec.MinAvailable,
+			MaxUnavailable:             pdbSpec.MaxUnavailable,
+			UnhealthyPodEvictionPolicy: pdbSpec.UnhealthyPodEvictionPolicy,
+		},
+	}
 }
 
 func (p *NginxProvisioner) buildNginxSecrets(
@@ -1612,24 +1623,6 @@ func buildNginxDeploymentHPA(
 			MaxReplicas: autoScaling.MaxReplicas,
 			Metrics:     metrics,
 			Behavior:    autoScaling.Behavior,
-		},
-	}
-}
-
-func buildNginxDeploymentPDB(
-	objectMeta metav1.ObjectMeta,
-	pdbSpec *ngfAPIv1alpha2.PodDisruptionBudgetSpec,
-	selectorLabels map[string]string,
-) *policyv1.PodDisruptionBudget {
-	return &policyv1.PodDisruptionBudget{
-		ObjectMeta: objectMeta,
-		Spec: policyv1.PodDisruptionBudgetSpec{
-			Selector: &metav1.LabelSelector{
-				MatchLabels: selectorLabels,
-			},
-			MinAvailable:               pdbSpec.MinAvailable,
-			MaxUnavailable:             pdbSpec.MaxUnavailable,
-			UnhealthyPodEvictionPolicy: pdbSpec.UnhealthyPodEvictionPolicy,
 		},
 	}
 }

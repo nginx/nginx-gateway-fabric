@@ -1719,6 +1719,8 @@ func TestBuildResourcesForInvalidGatewayCleanup_DataplaneKeySecret(t *testing.T)
 func TestBuildNginxDeploymentPDB(t *testing.T) {
 	t.Parallel()
 
+	provisioner := &NginxProvisioner{}
+
 	selectorLabels := map[string]string{
 		"app":     "nginx",
 		"gateway": "gw",
@@ -1780,7 +1782,17 @@ func TestBuildNginxDeploymentPDB(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			pdb := buildNginxDeploymentPDB(objectMeta, tt.pdbSpec, selectorLabels)
+			nProxyCfg := &graph.EffectiveNginxProxy{
+				Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+					Deployment: &ngfAPIv1alpha2.DeploymentSpec{
+						PodDisruptionBudget: tt.pdbSpec,
+					},
+				},
+			}
+
+			obj := provisioner.buildPDB(objectMeta, nProxyCfg, selectorLabels)
+			pdb, ok := obj.(*policyv1.PodDisruptionBudget)
+			g.Expect(ok).To(BeTrue())
 
 			g.Expect(pdb.Name).To(Equal(objectMeta.Name))
 			g.Expect(pdb.Namespace).To(Equal(objectMeta.Namespace))
