@@ -113,7 +113,7 @@ func RemovePLMFinalizers() {
 		return
 	}
 
-	for _, name := range strings.Fields(string(out)) {
+	for name := range strings.FieldsSeq(string(out)) {
 		GinkgoWriter.Printf("Removing finalizers from PLM resource %q in namespace %q\n", name, PLMNamespace)
 		patchCmd := exec.CommandContext(
 			context.Background(),
