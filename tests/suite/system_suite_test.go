@@ -439,6 +439,9 @@ var _ = SynchronizedAfterSuite(
 		if isWAF(labelFilter) {
 			output, err := framework.UninstallPLM()
 			Expect(err).ToNot(HaveOccurred(), string(output))
+			// With the PLM controller gone, the finalizers on its APSignatures resources would
+			// otherwise block deletion of the PLM namespace; clear them first.
+			framework.RemovePLMFinalizers()
 			Expect(resourceManager.DeleteNamespace(framework.PLMNamespace)).To(Succeed())
 		}
 	},

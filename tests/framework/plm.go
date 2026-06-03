@@ -93,3 +93,37 @@ func UninstallPLM() ([]byte, error) {
 
 	return exec.CommandContext(context.Background(), "helm", args...).CombinedOutput()
 }
+
+// RemovePLMFinalizers clears the finalizers on PLM's APSignatures resources in the PLM namespace.
+// PLM puts a finalizer on these resources; once the controller is removed by UninstallPLM there is
+// nothing left to process the finalizer, so it blocks deletion of the PLM namespace. This is
+// best-effort: if the CRD or resources are absent (e.g. PLM never fully installed) it is a no-op.
+func RemovePLMFinalizers() {
+	listCmd := exec.CommandContext(
+		context.Background(),
+		"kubectl", "get", "apsignatures.appprotect.f5.com",
+		"--namespace", PLMNamespace,
+		"--ignore-not-found",
+		"-o", "name",
+	)
+	out, err := listCmd.CombinedOutput()
+	if err != nil {
+		// The CRD may not exist if PLM failed to install; nothing to clean up.
+		GinkgoWriter.Printf("Skipping PLM finalizer removal (could not list apsignatures): %s\n", string(out))
+		return
+	}
+
+	for _, name := range strings.Fields(string(out)) {
+		GinkgoWriter.Printf("Removing finalizers from PLM resource %q in namespace %q\n", name, PLMNamespace)
+		patchCmd := exec.CommandContext(
+			context.Background(),
+			"kubectl", "patch", name,
+			"--namespace", PLMNamespace,
+			"--type=merge",
+			"-p", `{"metadata":{"finalizers":[]}}`,
+		)
+		if pout, perr := patchCmd.CombinedOutput(); perr != nil {
+			GinkgoWriter.Printf("Failed to remove finalizers from %q: %v: %s\n", name, perr, string(pout))
+		}
+	}
+}
