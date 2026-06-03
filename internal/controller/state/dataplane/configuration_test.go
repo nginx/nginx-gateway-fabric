@@ -6568,14 +6568,18 @@ func TestBuildJWTAuthZConfigFromAuthenticationFilters(t *testing.T) {
 		{
 			name: "filter is invalid",
 			authFilters: map[types.NamespacedName]*graph.AuthenticationFilter{
-				{Namespace: "test", Name: "jwt-filter"}: makeJWTFilterWithOneRuleAndDefaultSettings("test", "jwt-filter", false, true),
+				{Namespace: "test", Name: "jwt-filter"}: makeJWTFilterWithOneRuleAndDefaultSettings(
+					"test", "jwt-filter", false, true,
+				),
 			},
 			expected: nil,
 		},
 		{
 			name: "filter is not referenced",
 			authFilters: map[types.NamespacedName]*graph.AuthenticationFilter{
-				{Namespace: "test", Name: "jwt-filter"}: makeJWTFilterWithOneRuleAndDefaultSettings("test", "jwt-filter", true, false),
+				{Namespace: "test", Name: "jwt-filter"}: makeJWTFilterWithOneRuleAndDefaultSettings(
+					"test", "jwt-filter", true, false,
+				),
 			},
 			expected: nil,
 		},

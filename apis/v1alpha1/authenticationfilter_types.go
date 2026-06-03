@@ -396,15 +396,15 @@ type Claim struct {
 	// +kubebuilder:validation:Pattern=`^[a-zA-Z0-9_/-]+$`
 	Name string `json:"name"`
 
+	// Match sets the match type for the claim.
+	// +kubebuilder:default=Exact
+	Match ClaimMatchType `json:"match,omitempty"`
+
 	// Values are the values within the claim.
 	// When more than one value is set, the claim must match any of these values.
 	// +kubebuilder:validation:items:Pattern=`^[^\n\r;#\$\{\}\|&><'"]+$`
 	// +kubebuilder:validation:MinItems=1
 	Values []string `json:"values"`
-
-	// Match sets the match type for the claim.
-	// +kubebuilder:default=Exact
-	Match ClaimMatchType `json:"match,omitempty"`
 }
 
 // AuthenticationFilterStatus defines the state of AuthenticationFilter.

@@ -664,9 +664,9 @@ func TestCreateIncludeFromAuthZMap(t *testing.T) {
 	tests := []struct {
 		name            string
 		filterNsName    string
-		authZMap        dataplane.AuthZMap
 		expName         string
 		expContentParts []string
+		authZMap        dataplane.AuthZMap
 	}{
 		{
 			name:         "top-level map with require all",

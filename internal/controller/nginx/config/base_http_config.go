@@ -46,12 +46,12 @@ type httpConfig struct {
 	AccessLog               *AccessLog
 	Compression             *dataplane.CompressionSettings
 	ClaimSets               map[string][]string
-	OIDCProviders           []*oidcConfiguration
-	Includes                []shared.Include
 	GatewaySecretID         dataplane.SSLKeyPairID
 	NginxReadinessProbePath string
 	ServerTokens            string
 	WAFCookieSeed           string
+	Includes                []shared.Include
+	OIDCProviders           []*oidcConfiguration
 	NginxReadinessProbePort int32
 	IPFamily                shared.IPFamily
 	HTTP2                   bool

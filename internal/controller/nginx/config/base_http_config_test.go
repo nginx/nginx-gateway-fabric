@@ -1051,11 +1051,11 @@ func TestExecuteBaseHttp_AuthZIncludes(t *testing.T) {
 
 	tests := []struct {
 		name                   string
-		conf                   dataplane.Configuration
 		expHTTPContains        []string
 		expHTTPNotContains     []string
 		expIncludeDestinations []string
 		expIncludeContains     []string
+		conf                   dataplane.Configuration
 		expResultCount         int
 	}{
 		{

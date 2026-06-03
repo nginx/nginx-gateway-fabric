@@ -11,7 +11,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 
-	"github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	"github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/http"
@@ -172,7 +171,7 @@ func TestExecuteServers(t *testing.T) {
 											SecretName:      "auth-jwt-filter",
 											SecretNamespace: "test-ns",
 											Realm:           "JWT Restricted",
-											KeyCache:        helpers.GetPointer(v1alpha1.Duration("10s")),
+											KeyCache:        helpers.GetPointer(ngfAPIv1alpha1.Duration("10s")),
 											Data:            []byte("token"),
 										},
 									},

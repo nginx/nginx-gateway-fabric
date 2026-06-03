@@ -832,9 +832,8 @@ func buildAuthZConfigs(
 			continue
 		}
 
-		switch filter.Source.Spec.Type {
 		// FIXME(s.odonovan): Support OIDC.
-		case ngfAPIv1alpha1.AuthTypeJWT:
+		if filter.Source.Spec.Type == ngfAPIv1alpha1.AuthTypeJWT {
 			if filter.Source.Spec.JWT == nil || filter.Source.Spec.JWT.Authorization == nil {
 				continue
 			}
@@ -941,7 +940,7 @@ func buildAuthZRuleMap(
 //	    default 0;
 //	}
 func buildAuthZRuleMapAny(ruleIndex int, claims []ngfAPIv1alpha1.Claim) AuthZRuleMap {
-	var maps []shared.Map
+	var ruleMaps []shared.Map
 	perClaimVars := make([]string, 0, len(claims))
 
 	for _, claim := range claims {
@@ -953,7 +952,7 @@ func buildAuthZRuleMapAny(ruleIndex int, claims []ngfAPIv1alpha1.Claim) AuthZRul
 
 		pattern := "~" + generateClaimValuePattern(claim.Values, &claim.Match, anyAnchors)
 
-		maps = append(maps, shared.Map{
+		ruleMaps = append(ruleMaps, shared.Map{
 			Source:   claimVarName,
 			Variable: perClaimVar,
 			Parameters: []shared.MapParameter{
@@ -968,7 +967,7 @@ func buildAuthZRuleMapAny(ruleIndex int, claims []ngfAPIv1alpha1.Claim) AuthZRul
 	resultVar := fmt.Sprintf("$rule_%d_any", ruleIndex)
 	combiningSource := strings.Join(perClaimVars, "")
 
-	maps = append(maps, shared.Map{
+	ruleMaps = append(ruleMaps, shared.Map{
 		Source:   combiningSource,
 		Variable: resultVar,
 		Parameters: []shared.MapParameter{
@@ -977,7 +976,7 @@ func buildAuthZRuleMapAny(ruleIndex int, claims []ngfAPIv1alpha1.Claim) AuthZRul
 		},
 	})
 
-	return AuthZRuleMap{Maps: maps, Require: ngfAPIv1alpha1.RequireTypeAny}
+	return AuthZRuleMap{Maps: ruleMaps, Require: ngfAPIv1alpha1.RequireTypeAny}
 }
 
 // buildAuthZRuleMapAll builds maps for require:All mode.

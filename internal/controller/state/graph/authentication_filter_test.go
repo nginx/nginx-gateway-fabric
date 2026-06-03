@@ -2104,9 +2104,9 @@ func TestValidateJWTAuthorization(t *testing.T) {
 	proxyHeader := "X-JWT-Sub"
 
 	tests := []struct {
-		name          string
 		authValidator *validationfakes.FakeAuthFieldsValidator
 		authz         *ngfAPI.Authorization
+		name          string
 		expectErrs    bool
 	}{
 		{
