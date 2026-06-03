@@ -1440,7 +1440,7 @@ func TestConvertAuthenticationFilter(t *testing.T) {
 				},
 			},
 			expected: func() *AuthenticationFilter {
-				authZConfig := buildAuthZConfigFromAuthZSpec(&ngfAPIv1alpha1.Authorization{
+				authZConfig := buildAuthZConfigFromAuthZSpec("test_af", &ngfAPIv1alpha1.Authorization{
 					Rules: []ngfAPIv1alpha1.Rule{
 						{
 							Claims: []ngfAPIv1alpha1.Claim{
@@ -1507,7 +1507,7 @@ func TestConvertAuthenticationFilter(t *testing.T) {
 			},
 			referencedSecrets: nil,
 			expected: func() *AuthenticationFilter {
-				authZConfig := buildAuthZConfigFromAuthZSpec(&ngfAPIv1alpha1.Authorization{
+				authZConfig := buildAuthZConfigFromAuthZSpec("test_af", &ngfAPIv1alpha1.Authorization{
 					Rules: []ngfAPIv1alpha1.Rule{
 						{
 							Claims: []ngfAPIv1alpha1.Claim{

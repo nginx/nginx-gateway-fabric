@@ -837,8 +837,10 @@ func buildAuthZConfigs(
 			if filter.Source.Spec.JWT == nil || filter.Source.Spec.JWT.Authorization == nil {
 				continue
 			}
-			if cfg := buildAuthZConfigFromAuthZSpec(filter.Source.Spec.JWT.Authorization); cfg != nil {
-				cfg.FilterNsName = strings.Join([]string{nsName.Namespace, nsName.Name}, "_")
+			filterNsName := strings.Join([]string{nsName.Namespace, nsName.Name}, "_")
+			filterPrefix := sanitizeVariablePrefix(filterNsName)
+			if cfg := buildAuthZConfigFromAuthZSpec(filterPrefix, filter.Source.Spec.JWT.Authorization); cfg != nil {
+				cfg.FilterNsName = filterNsName
 				authZConfigs = append(authZConfigs, cfg)
 			}
 		}
@@ -853,7 +855,10 @@ func buildAuthZConfigs(
 //   - AuthZMap: a final aggregation map combining all rule results
 //   - RequireVariable: the variable name for the auth_jwt_require directive
 //   - ProxySetHeaders: claim-based proxy_set_header directives
-func buildAuthZConfigFromAuthZSpec(authZSpec *ngfAPIv1alpha1.Authorization) *AuthZConfig {
+func buildAuthZConfigFromAuthZSpec(
+	filterPrefix string,
+	authZSpec *ngfAPIv1alpha1.Authorization,
+) *AuthZConfig {
 	if authZSpec == nil || len(authZSpec.Rules) == 0 {
 		return nil
 	}
@@ -864,7 +869,7 @@ func buildAuthZConfigFromAuthZSpec(authZSpec *ngfAPIv1alpha1.Authorization) *Aut
 	config.AuthClaimSets = make(map[string][]string)
 	for _, rule := range authZSpec.Rules {
 		for _, claim := range rule.Claims {
-			varName := generateClaimVariableName(claim.Name)
+			varName := generateClaimVariableName(filterPrefix, claim.Name)
 			if _, exists := config.AuthClaimSets[varName]; !exists {
 				config.AuthClaimSets[varName] = splitClaimName(claim.Name)
 			}
@@ -886,7 +891,7 @@ func buildAuthZConfigFromAuthZSpec(authZSpec *ngfAPIv1alpha1.Authorization) *Aut
 			requireType = *rule.Require
 		}
 
-		ruleMap := buildAuthZRuleMap(ruleIdx, requireType, rule.Claims)
+		ruleMap := buildAuthZRuleMap(filterPrefix, ruleIdx, requireType, rule.Claims)
 		config.RuleMaps = append(config.RuleMaps, ruleMap)
 
 		// Collect the result variable name for this map
@@ -898,7 +903,7 @@ func buildAuthZConfigFromAuthZSpec(authZSpec *ngfAPIv1alpha1.Authorization) *Aut
 	if authZSpec.Require != nil {
 		authZRequire = *authZSpec.Require
 	}
-	config.AuthZMap = buildAuthZRuleResultMap(authZRequire, ruleResultVars)
+	config.AuthZMap = buildAuthZRuleResultMap(filterPrefix, authZRequire, ruleResultVars)
 	if config.AuthZMap != nil {
 		config.RequireVariable = config.AuthZMap.Variable
 	} else {
@@ -911,15 +916,16 @@ func buildAuthZConfigFromAuthZSpec(authZSpec *ngfAPIv1alpha1.Authorization) *Aut
 
 // buildAuthZRuleMap builds the NGINX maps for a single authorization rule.
 func buildAuthZRuleMap(
+	filterPrefix string,
 	ruleIndex int,
 	requireType ngfAPIv1alpha1.RequireType,
 	claims []ngfAPIv1alpha1.Claim,
 ) AuthZRuleMap {
 	switch requireType {
 	case ngfAPIv1alpha1.RequireTypeAll:
-		return buildAuthZRuleMapAll(ruleIndex, claims)
+		return buildAuthZRuleMapAll(filterPrefix, ruleIndex, claims)
 	default: // RequireTypeAny
-		return buildAuthZRuleMapAny(ruleIndex, claims)
+		return buildAuthZRuleMapAny(filterPrefix, ruleIndex, claims)
 	}
 }
 
@@ -939,15 +945,15 @@ func buildAuthZRuleMap(
 //	    ~1 1;
 //	    default 0;
 //	}
-func buildAuthZRuleMapAny(ruleIndex int, claims []ngfAPIv1alpha1.Claim) AuthZRuleMap {
+func buildAuthZRuleMapAny(filterPrefix string, ruleIndex int, claims []ngfAPIv1alpha1.Claim) AuthZRuleMap {
 	var ruleMaps []shared.Map
 	perClaimVars := make([]string, 0, len(claims))
 
 	for _, claim := range claims {
-		claimVarName := generateClaimVariableName(claim.Name)
-		claimShortName := strings.TrimPrefix(claimVarName, "$claim_")
-		// Use "claim_" prefix to ensure variable name starts with a letter (NGINX requirement)
-		perClaimVar := fmt.Sprintf("$claim_%s_rule_%d", claimShortName, ruleIndex)
+		claimVarName := generateClaimVariableName(filterPrefix, claim.Name)
+		claimShortName := strings.TrimPrefix(claimVarName, "$"+filterPrefix+"_claim_")
+		// Use filterPrefix at start to scope per-filter.
+		perClaimVar := fmt.Sprintf("$%s_claim_%s_rule_%d", filterPrefix, claimShortName, ruleIndex)
 		perClaimVars = append(perClaimVars, perClaimVar)
 
 		pattern := "~" + generateClaimValuePattern(claim.Values, &claim.Match, anyAnchors)
@@ -964,7 +970,7 @@ func buildAuthZRuleMapAny(ruleIndex int, claims []ngfAPIv1alpha1.Claim) AuthZRul
 
 	// Combining map: used only for rules[].claims in Any mode;
 	// if any per-claim variable is 1, the rule passes
-	resultVar := fmt.Sprintf("$rule_%d_any", ruleIndex)
+	resultVar := fmt.Sprintf("$%s_rule_%d_any", filterPrefix, ruleIndex)
 	combiningSource := strings.Join(perClaimVars, "")
 
 	ruleMaps = append(ruleMaps, shared.Map{
@@ -988,16 +994,16 @@ func buildAuthZRuleMapAny(ruleIndex int, claims []ngfAPIv1alpha1.Claim) AuthZRul
 //	    ~^(?:.*\b)?myissuer(?:\b.*)?\+(?:.*\b)?myaudience(?:\b.*)?$ 1;
 //	    default 0;
 //	}
-func buildAuthZRuleMapAll(ruleIndex int, claims []ngfAPIv1alpha1.Claim) AuthZRuleMap {
+func buildAuthZRuleMapAll(filterPrefix string, ruleIndex int, claims []ngfAPIv1alpha1.Claim) AuthZRuleMap {
 	sources := make([]string, 0, len(claims))
 	patterns := make([]string, 0, len(claims))
 
 	for _, claim := range claims {
-		sources = append(sources, generateClaimVariableName(claim.Name))
+		sources = append(sources, generateClaimVariableName(filterPrefix, claim.Name))
 		patterns = append(patterns, generateClaimValuePattern(claim.Values, &claim.Match, allAnchors))
 	}
 
-	resultVar := fmt.Sprintf("$rule_%d_all", ruleIndex)
+	resultVar := fmt.Sprintf("$%s_rule_%d_all", filterPrefix, ruleIndex)
 	source := strings.Join(sources, "+")
 	combinedPattern := "~^" + strings.Join(patterns, `\+`) + "$"
 
@@ -1015,6 +1021,7 @@ func buildAuthZRuleMapAll(ruleIndex int, claims []ngfAPIv1alpha1.Claim) AuthZRul
 
 // buildAuthZRuleResultMap builds the final aggregation map that combines all rule results.
 func buildAuthZRuleResultMap(
+	filterPrefix string,
 	requireType ngfAPIv1alpha1.RequireType,
 	ruleResultVars []string,
 ) *AuthZMap {
@@ -1034,10 +1041,10 @@ func buildAuthZRuleResultMap(
 
 	switch requireType {
 	case ngfAPIv1alpha1.RequireTypeAny:
-		variable = "$authz_require_any"
+		variable = fmt.Sprintf("$%s_authz_require_any", filterPrefix)
 		matchPattern = "~1" // if any rule result contains 1
 	default: // RequireTypeAll
-		variable = "$authz_require_all"
+		variable = fmt.Sprintf("$%s_authz_require_all", filterPrefix)
 		// All rule results must be 1: e.g., for 3 rules, match "111"
 		matchPattern = strings.Repeat("1", len(ruleResultVars))
 	}
@@ -1055,15 +1062,23 @@ func buildAuthZRuleResultMap(
 	}
 }
 
-// generateClaimVariableName generates the NGINX variable name for a claim.
+// generateClaimVariableName generates the NGINX variable name for a claim, scoped by filter prefix.
 // Dots, slashes, and dashes in claim names are replaced with underscores for NGINX variable compatibility,
 // since NGINX variable names only allow [a-zA-Z0-9_].
-// Examples:
-//   - "realm_access/roles" becomes "$claim_realm_access_roles"
-//   - "app_1-role" becomes "$claim_app_1_role"
-func generateClaimVariableName(claimName string) string {
-	safeName := strings.NewReplacer(".", "_", "/", "_", "-", "_").Replace(claimName)
-	return fmt.Sprintf("$claim_%s", safeName)
+// The filterPrefix ensures uniqueness across multiple AuthenticationFilters.
+// Examples (with filterPrefix "test_auth"):
+//   - "realm_access/roles" becomes "$test_auth_claim_realm_access_roles"
+//   - "app_1-role" becomes "$test_auth_claim_app_1_role"
+func generateClaimVariableName(filterPrefix, claimName string) string {
+	safeName := sanitizeVariablePrefix(claimName)
+	return fmt.Sprintf("$%s_claim_%s", filterPrefix, safeName)
+}
+
+// sanitizeVariablePrefix converts a string value into a valid NGINX variable prefix.
+// NGINX variable names only allow [a-zA-Z0-9_], so any other characters (e.g., dashes) are replaced
+// with underscores.
+func sanitizeVariablePrefix(value string) string {
+	return strings.NewReplacer("-", "_", ".", "_", "/", "_").Replace(value)
 }
 
 // splitClaimName splits a claim name into parts for the auth_jwt_claim_set directive.

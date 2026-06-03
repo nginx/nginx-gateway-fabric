@@ -338,7 +338,9 @@ func convertAuthenticationFilterJwtAuth(
 
 		// Populate authorization fields (auth_jwt_require + proxy_set_header) from the AuthZConfig
 		if result != nil && specJWT.Authorization != nil {
-			authZConfig := buildAuthZConfigFromAuthZSpec(specJWT.Authorization)
+			filterNsName := strings.Join([]string{filter.Source.Namespace, filter.Source.Name}, "_")
+			filterPrefix := sanitizeVariablePrefix(filterNsName)
+			authZConfig := buildAuthZConfigFromAuthZSpec(filterPrefix, specJWT.Authorization)
 			if authZConfig != nil {
 				result.AuthRequireVariable = authZConfig.RequireVariable
 				result.AuthZProxySetHeaders = authZConfig.ProxySetHeaders

@@ -6624,16 +6624,16 @@ func TestBuildJWTAuthZConfigFromAuthenticationFilters(t *testing.T) {
 						{
 							Maps: []shared.Map{
 								{
-									Source:   "$claim_role",
-									Variable: "$claim_role_rule_0",
+									Source:   "$test_jwt_filter_claim_role",
+									Variable: "$test_jwt_filter_claim_role_rule_0",
 									Parameters: []shared.MapParameter{
 										{Value: `~(?:^|,)admin(?:,|$)`, Result: "1"},
 										{Value: "default", Result: "0"},
 									},
 								},
 								{
-									Source:   "$claim_role_rule_0",
-									Variable: "$rule_0_any",
+									Source:   "$test_jwt_filter_claim_role_rule_0",
+									Variable: "$test_jwt_filter_rule_0_any",
 									Parameters: []shared.MapParameter{
 										{Value: "~1", Result: "1"},
 										{Value: "default", Result: "0"},
@@ -6644,11 +6644,11 @@ func TestBuildJWTAuthZConfigFromAuthenticationFilters(t *testing.T) {
 						},
 					},
 					AuthClaimSets: map[string][]string{
-						"$claim_role": {"role"},
+						"$test_jwt_filter_claim_role": {"role"},
 					},
 					// Single rule: use rule's result variable directly.
 					// No aggregation map is generated.
-					RequireVariable: "$rule_0_any",
+					RequireVariable: "$test_jwt_filter_rule_0_any",
 				},
 			},
 		},
@@ -6669,10 +6669,10 @@ func TestBuildJWTAuthZConfigFromAuthenticationFilters(t *testing.T) {
 						{
 							Maps: []shared.Map{
 								{
-									Source:   "$claim_realm_access_roles",
-									Variable: "$rule_0_all",
+									Source:   "$test_jwt_filter_claim_realm_access_roles",
+									Variable: "$test_jwt_filter_rule_0_all",
 									Parameters: []shared.MapParameter{
-										{Value: `~^(?:.*,)?admin(?:,.*)?$`, Result: "1"},
+										{Value: `~^(?:.*,)?admin(?:,.*)?\$`, Result: "1"},
 										{Value: "default", Result: "0"},
 									},
 								},
@@ -6681,11 +6681,11 @@ func TestBuildJWTAuthZConfigFromAuthenticationFilters(t *testing.T) {
 						},
 					},
 					AuthClaimSets: map[string][]string{
-						"$claim_realm_access_roles": {"realm_access", "roles"},
+						"$test_jwt_filter_claim_realm_access_roles": {"realm_access", "roles"},
 					},
 					// Single rule: use rule's result variable directly.
 					// No aggregation map is generated.
-					RequireVariable: "$rule_0_all",
+					RequireVariable: "$test_jwt_filter_rule_0_all",
 				},
 			},
 		},
@@ -6707,8 +6707,8 @@ func TestBuildJWTAuthZConfigFromAuthenticationFilters(t *testing.T) {
 						{
 							Maps: []shared.Map{
 								{
-									Source:   "$claim_aud",
-									Variable: "$claim_aud_rule_0",
+									Source:   "$test_jwt_filter_claim_aud",
+									Variable: "$test_jwt_filter_claim_aud_rule_0",
 									Parameters: []shared.MapParameter{
 										// Match Regex are inserted as is
 										// We don't exscape any characters
@@ -6717,8 +6717,8 @@ func TestBuildJWTAuthZConfigFromAuthenticationFilters(t *testing.T) {
 									},
 								},
 								{
-									Source:   "$claim_aud_rule_0",
-									Variable: "$rule_0_any",
+									Source:   "$test_jwt_filter_claim_aud_rule_0",
+									Variable: "$test_jwt_filter_rule_0_any",
 									Parameters: []shared.MapParameter{
 										{Value: "~1", Result: "1"},
 										{Value: "default", Result: "0"},
@@ -6729,11 +6729,11 @@ func TestBuildJWTAuthZConfigFromAuthenticationFilters(t *testing.T) {
 						},
 					},
 					AuthClaimSets: map[string][]string{
-						"$claim_aud": {"aud"},
+						"$test_jwt_filter_claim_aud": {"aud"},
 					},
 					// Single rule: use rule's result variable directly.
 					// No aggregation map is generated.
-					RequireVariable: "$rule_0_any",
+					RequireVariable: "$test_jwt_filter_rule_0_any",
 				},
 			},
 		},
@@ -6754,10 +6754,10 @@ func TestBuildJWTAuthZConfigFromAuthenticationFilters(t *testing.T) {
 						{
 							Maps: []shared.Map{
 								{
-									Source:   "$claim_role",
-									Variable: "$rule_0_all",
+									Source:   "$test_jwt_filter_claim_role",
+									Variable: "$test_jwt_filter_rule_0_all",
 									Parameters: []shared.MapParameter{
-										{Value: `~^(?:.*,)?admin(?:,.*)?$`, Result: "1"},
+										{Value: `~^(?:.*,)?admin(?:,.*)?\$`, Result: "1"},
 										{Value: "default", Result: "0"},
 									},
 								},
@@ -6766,15 +6766,15 @@ func TestBuildJWTAuthZConfigFromAuthenticationFilters(t *testing.T) {
 						},
 					},
 					AuthClaimSets: map[string][]string{
-						"$claim_role": {"role"},
+						"$test_jwt_filter_claim_role": {"role"},
 					},
 					// Single rule: use rule's result variable directly.
 					// No aggregation map is generated.
-					RequireVariable: "$rule_0_all",
+					RequireVariable: "$test_jwt_filter_rule_0_all",
 					ProxySetHeaders: []ProxySetHeaderClaim{
 						{
 							HeaderName:    "X-Role",
-							ClaimVariable: "$claim_role",
+							ClaimVariable: "$test_jwt_filter_claim_role",
 						},
 					},
 				},
@@ -6798,24 +6798,24 @@ func TestBuildJWTAuthZConfigFromAuthenticationFilters(t *testing.T) {
 						{
 							Maps: []shared.Map{
 								{
-									Source:   "$claim_role",
-									Variable: "$claim_role_rule_0",
+									Source:   "$test_jwt_filter_claim_role",
+									Variable: "$test_jwt_filter_claim_role_rule_0",
 									Parameters: []shared.MapParameter{
 										{Value: `~(?:^|,)admin(?:,|$)`, Result: "1"},
 										{Value: "default", Result: "0"},
 									},
 								},
 								{
-									Source:   "$claim_tenant",
-									Variable: "$claim_tenant_rule_0",
+									Source:   "$test_jwt_filter_claim_tenant",
+									Variable: "$test_jwt_filter_claim_tenant_rule_0",
 									Parameters: []shared.MapParameter{
 										{Value: `~(?:^|,)acme-co(?:,|$)`, Result: "1"},
 										{Value: "default", Result: "0"},
 									},
 								},
 								{
-									Source:   "$claim_role_rule_0$claim_tenant_rule_0",
-									Variable: "$rule_0_any",
+									Source:   "$test_jwt_filter_claim_role_rule_0$test_jwt_filter_claim_tenant_rule_0",
+									Variable: "$test_jwt_filter_rule_0_any",
 									Parameters: []shared.MapParameter{
 										{Value: "~1", Result: "1"},
 										{Value: "default", Result: "0"},
@@ -6827,11 +6827,11 @@ func TestBuildJWTAuthZConfigFromAuthenticationFilters(t *testing.T) {
 						{
 							Maps: []shared.Map{
 								{
-									Source:   "$claim_department+$claim_iss",
-									Variable: "$rule_1_all",
+									Source:   "$test_jwt_filter_claim_department+$test_jwt_filter_claim_iss",
+									Variable: "$test_jwt_filter_rule_1_all",
 									Parameters: []shared.MapParameter{
 										{
-											Value:  `~^(?:.*,)?(sales|ops)(?:,.*)?\+(?:.*,)?http://foo\.com(?:,.*)?$`,
+											Value:  `~^(?:.*,)?(sales|ops)(?:,.*)?\+(?:.*,)?http://foo\.com(?:,.*)?\$`,
 											Result: "1",
 										},
 										{Value: "default", Result: "0"},
@@ -6844,8 +6844,8 @@ func TestBuildJWTAuthZConfigFromAuthenticationFilters(t *testing.T) {
 					AuthZMap: &AuthZMap{
 						Require: ngfAPIv1alpha1.RequireTypeAll,
 						Map: shared.Map{
-							Source:   "$rule_0_any$rule_1_all",
-							Variable: "$authz_require_all",
+							Source:   "$test_jwt_filter_rule_0_any$test_jwt_filter_rule_1_all",
+							Variable: "$test_jwt_filter_authz_require_all",
 							Parameters: []shared.MapParameter{
 								{Value: "11", Result: "1"},
 								{Value: "default", Result: "0"},
@@ -6853,13 +6853,13 @@ func TestBuildJWTAuthZConfigFromAuthenticationFilters(t *testing.T) {
 						},
 					},
 					AuthClaimSets: map[string][]string{
-						"$claim_department": {"department"},
-						"$claim_iss":        {"iss"},
-						"$claim_role":       {"role"},
-						"$claim_tenant":     {"tenant"},
+						"$test_jwt_filter_claim_department": {"department"},
+						"$test_jwt_filter_claim_iss":        {"iss"},
+						"$test_jwt_filter_claim_role":       {"role"},
+						"$test_jwt_filter_claim_tenant":     {"tenant"},
 					},
 					// Multiple rules: generate aggregation map that combines rules according to top level require type.
-					RequireVariable: "$authz_require_all",
+					RequireVariable: "$test_jwt_filter_authz_require_all",
 				},
 			},
 		},
@@ -6881,24 +6881,24 @@ func TestBuildJWTAuthZConfigFromAuthenticationFilters(t *testing.T) {
 						{
 							Maps: []shared.Map{
 								{
-									Source:   "$claim_role",
-									Variable: "$claim_role_rule_0",
+									Source:   "$test_jwt_filter_claim_role",
+									Variable: "$test_jwt_filter_claim_role_rule_0",
 									Parameters: []shared.MapParameter{
 										{Value: `~(?:^|,)admin(?:,|$)`, Result: "1"},
 										{Value: "default", Result: "0"},
 									},
 								},
 								{
-									Source:   "$claim_tenant",
-									Variable: "$claim_tenant_rule_0",
+									Source:   "$test_jwt_filter_claim_tenant",
+									Variable: "$test_jwt_filter_claim_tenant_rule_0",
 									Parameters: []shared.MapParameter{
 										{Value: `~(?:^|,)acme-co(?:,|$)`, Result: "1"},
 										{Value: "default", Result: "0"},
 									},
 								},
 								{
-									Source:   "$claim_role_rule_0$claim_tenant_rule_0",
-									Variable: "$rule_0_any",
+									Source:   "$test_jwt_filter_claim_role_rule_0$test_jwt_filter_claim_tenant_rule_0",
+									Variable: "$test_jwt_filter_rule_0_any",
 									Parameters: []shared.MapParameter{
 										{Value: "~1", Result: "1"},
 										{Value: "default", Result: "0"},
@@ -6910,11 +6910,11 @@ func TestBuildJWTAuthZConfigFromAuthenticationFilters(t *testing.T) {
 						{
 							Maps: []shared.Map{
 								{
-									Source:   "$claim_department+$claim_iss",
-									Variable: "$rule_1_all",
+									Source:   "$test_jwt_filter_claim_department+$test_jwt_filter_claim_iss",
+									Variable: "$test_jwt_filter_rule_1_all",
 									Parameters: []shared.MapParameter{
 										{
-											Value:  `~^(?:.*,)?(sales|ops)(?:,.*)?\+(?:.*,)?http://foo\.com(?:,.*)?$`,
+											Value:  `~^(?:.*,)?(sales|ops)(?:,.*)?\+(?:.*,)?http://foo\.com(?:,.*)?\$`,
 											Result: "1",
 										},
 										{Value: "default", Result: "0"},
@@ -6927,8 +6927,8 @@ func TestBuildJWTAuthZConfigFromAuthenticationFilters(t *testing.T) {
 					AuthZMap: &AuthZMap{
 						Require: ngfAPIv1alpha1.RequireTypeAny,
 						Map: shared.Map{
-							Source:   "$rule_0_any$rule_1_all",
-							Variable: "$authz_require_any",
+							Source:   "$test_jwt_filter_rule_0_any$test_jwt_filter_rule_1_all",
+							Variable: "$test_jwt_filter_authz_require_any",
 							Parameters: []shared.MapParameter{
 								{Value: "~1", Result: "1"},
 								{Value: "default", Result: "0"},
@@ -6936,13 +6936,13 @@ func TestBuildJWTAuthZConfigFromAuthenticationFilters(t *testing.T) {
 						},
 					},
 					AuthClaimSets: map[string][]string{
-						"$claim_department": {"department"},
-						"$claim_iss":        {"iss"},
-						"$claim_role":       {"role"},
-						"$claim_tenant":     {"tenant"},
+						"$test_jwt_filter_claim_department": {"department"},
+						"$test_jwt_filter_claim_iss":        {"iss"},
+						"$test_jwt_filter_claim_role":       {"role"},
+						"$test_jwt_filter_claim_tenant":     {"tenant"},
 					},
 					// Multiple rules: generate aggregation map that combines rules according to top level require type.
-					RequireVariable: "$authz_require_any",
+					RequireVariable: "$test_jwt_filter_authz_require_any",
 				},
 			},
 		},
@@ -6971,6 +6971,145 @@ func TestBuildJWTAuthZConfigFromAuthenticationFilters(t *testing.T) {
 				tc.expected[0].AuthZMap = nil
 			}
 		})
+	}
+}
+
+// TestBuildAuthZConfigs_MultipleFiltersNoVariableCollision is a regression test that verifies
+// two AuthenticationFilters sharing the same rule index produce unique NGINX map variable names.
+func TestBuildAuthZConfigs_MultipleFiltersNoVariableCollision(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	requireAll := ngfAPIv1alpha1.RequireTypeAll
+
+	authFilters := map[types.NamespacedName]*graph.AuthenticationFilter{
+		{Namespace: "team-a", Name: "auth"}: {
+			Source: &ngfAPIv1alpha1.AuthenticationFilter{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "team-a", Name: "auth"},
+				Spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+					Type: ngfAPIv1alpha1.AuthTypeJWT,
+					JWT: &ngfAPIv1alpha1.JWTAuth{
+						Realm:  "team-a-realm",
+						Source: ngfAPIv1alpha1.JWTKeySourceFile,
+						File: &ngfAPIv1alpha1.JWTFileKeySource{
+							SecretRef: ngfAPIv1alpha1.LocalObjectReference{Name: "jwt-secret"},
+						},
+						Authorization: &ngfAPIv1alpha1.Authorization{
+							Require: &requireAll,
+							Rules: []ngfAPIv1alpha1.Rule{
+								{
+									Require: &requireAll,
+									Claims: []ngfAPIv1alpha1.Claim{
+										{
+											Name:   "sub",
+											Values: []string{"alice"},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			Valid:      true,
+			Referenced: true,
+		},
+		{Namespace: "team-b", Name: "auth"}: {
+			Source: &ngfAPIv1alpha1.AuthenticationFilter{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "team-b", Name: "auth"},
+				Spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+					Type: ngfAPIv1alpha1.AuthTypeJWT,
+					JWT: &ngfAPIv1alpha1.JWTAuth{
+						Realm:  "team-b-realm",
+						Source: ngfAPIv1alpha1.JWTKeySourceFile,
+						File: &ngfAPIv1alpha1.JWTFileKeySource{
+							SecretRef: ngfAPIv1alpha1.LocalObjectReference{Name: "jwt-secret"},
+						},
+						Authorization: &ngfAPIv1alpha1.Authorization{
+							Require: &requireAll,
+							Rules: []ngfAPIv1alpha1.Rule{
+								{
+									Require: &requireAll,
+									Claims: []ngfAPIv1alpha1.Claim{
+										{
+											Name:   "sub",
+											Values: []string{"bob"},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			Valid:      true,
+			Referenced: true,
+		},
+	}
+
+	results := buildAuthZConfigs(authFilters)
+	g.Expect(results).To(HaveLen(2))
+
+	// Collect all variable names across both configs.
+	allVars := make(map[string]string)
+	for _, cfg := range results {
+		for _, rm := range cfg.RuleMaps {
+			for _, m := range rm.Maps {
+				owner, exists := allVars[m.Variable]
+				g.Expect(exists).To(BeFalse(),
+					"variable %q from filter %q collides with filter %q",
+					m.Variable, cfg.FilterNsName, owner,
+				)
+				allVars[m.Variable] = cfg.FilterNsName
+			}
+		}
+		if cfg.AuthZMap != nil {
+			owner, exists := allVars[cfg.AuthZMap.Map.Variable]
+			g.Expect(exists).To(BeFalse(),
+				"authz map variable %q from filter %q collides with filter %q",
+				cfg.AuthZMap.Map.Variable, cfg.FilterNsName, owner,
+			)
+			allVars[cfg.AuthZMap.Map.Variable] = cfg.FilterNsName
+		}
+	}
+
+	// Collect all claim set variable names across both configs.
+	allClaimVars := make(map[string]string)
+	for _, cfg := range results {
+		for claimVar := range cfg.AuthClaimSets {
+			owner, exists := allClaimVars[claimVar]
+			g.Expect(exists).To(BeFalse(),
+				"claim variable %q from filter %q collides with filter %q",
+				claimVar, cfg.FilterNsName, owner,
+			)
+			allClaimVars[claimVar] = cfg.FilterNsName
+		}
+	}
+
+	// Verify each config's variables contain its sanitized filter namespace prefix.
+	// FilterNsName uses ns_name format (e.g. "team-a_auth").
+	// Variable names are sanitized, so we sanitize the prefix too.
+	for _, cfg := range results {
+		sanitized := sanitizeVariablePrefix(cfg.FilterNsName)
+		prefix := "$" + sanitized + "_"
+		for _, rm := range cfg.RuleMaps {
+			for _, m := range rm.Maps {
+				g.Expect(m.Variable).To(HavePrefix(prefix),
+					"variable %q should be prefixed with %q", m.Variable, prefix,
+				)
+			}
+		}
+		if cfg.AuthZMap != nil {
+			g.Expect(cfg.AuthZMap.Map.Variable).To(HavePrefix(prefix),
+				"authz map variable %q should be prefixed with %q",
+				cfg.AuthZMap.Map.Variable, prefix,
+			)
+		}
+		for claimVar := range cfg.AuthClaimSets {
+			g.Expect(claimVar).To(HavePrefix("$"+sanitized+"_claim_"),
+				"claim variable %q should contain filter namespace prefix", claimVar,
+			)
+		}
 	}
 }
 
