@@ -1,0 +1,12 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: ListenerSet
+metadata:
+  name: extra-listeners
+spec:
+  parentRef:
+    name: gateway
+  listeners:
+  - name: http-extra
+    port: 80
+    protocol: HTTP
+    hostname: "ls.example.com"

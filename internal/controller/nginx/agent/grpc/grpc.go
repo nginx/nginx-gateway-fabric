@@ -137,9 +137,62 @@ func (g *Server) createServer(tlsCredentials credentials.TransportCredentials) *
 }
 
 func getTLSConfig() (credentials.TransportCredentials, error) {
-	caPem, err := os.ReadFile(caCertPath)
-	if err != nil {
+	return buildTLSCredentials(caCertPath, tlsCertPath, tlsKeyPath)
+}
+
+// buildTLSCredentials creates mTLS transport credentials that dynamically reload TLS files on
+// each new connection. The CA cert pool and server certificate are read from disk for every
+// incoming TLS handshake via GetConfigForClient, so that certificate rotations (e.g., from the
+// cert-generator Helm pre-upgrade job) take effect without a control plane restart.
+//
+// caPath, certPath, and keyPath are validated on startup; if any file is missing or unparseable
+// the function returns an error before the server starts accepting connections.
+func buildTLSCredentials(caPath, certPath, keyPath string) (credentials.TransportCredentials, error) {
+	// Validate that the initial TLS files exist and are parseable.
+	if _, err := loadCACertPool(caPath); err != nil {
 		return nil, err
+	}
+	if _, err := tls.LoadX509KeyPair(certPath, keyPath); err != nil {
+		return nil, err
+	}
+
+	tlsConfig := &tls.Config{
+		GetConfigForClient: buildConfigForClient(caPath, certPath, keyPath),
+		MinVersion:         tls.VersionTLS13,
+	}
+
+	return credentials.NewTLS(tlsConfig), nil
+}
+
+// buildConfigForClient returns a GetConfigForClient callback that builds a fresh tls.Config
+// for each incoming connection by reading the CA cert pool and server certificate from disk.
+func buildConfigForClient(caPath, certPath, keyPath string) func(*tls.ClientHelloInfo) (*tls.Config, error) {
+	return func(_ *tls.ClientHelloInfo) (*tls.Config, error) {
+		certPool, err := loadCACertPool(caPath)
+		if err != nil {
+			return nil, err
+		}
+
+		return &tls.Config{
+			GetCertificate: func(_ *tls.ClientHelloInfo) (*tls.Certificate, error) {
+				serverCert, err := tls.LoadX509KeyPair(certPath, keyPath)
+				if err != nil {
+					return nil, err
+				}
+				return &serverCert, nil
+			},
+			ClientAuth: tls.RequireAndVerifyClientCert,
+			ClientCAs:  certPool,
+			MinVersion: tls.VersionTLS13,
+		}, nil
+	}
+}
+
+// loadCACertPool reads the CA certificate from the given path and returns a new CertPool.
+func loadCACertPool(caPath string) (*x509.CertPool, error) {
+	caPem, err := os.ReadFile(caPath)
+	if err != nil {
+		return nil, fmt.Errorf("error reading CA cert: %w", err)
 	}
 
 	certPool := x509.NewCertPool()
@@ -147,19 +200,7 @@ func getTLSConfig() (credentials.TransportCredentials, error) {
 		return nil, errors.New("error parsing CA PEM")
 	}
 
-	getCertificateCallback := func(*tls.ClientHelloInfo) (*tls.Certificate, error) {
-		serverCert, err := tls.LoadX509KeyPair(tlsCertPath, tlsKeyPath)
-		return &serverCert, err
-	}
-
-	tlsConfig := &tls.Config{
-		GetCertificate: getCertificateCallback,
-		ClientAuth:     tls.RequireAndVerifyClientCert,
-		ClientCAs:      certPool,
-		MinVersion:     tls.VersionTLS13,
-	}
-
-	return credentials.NewTLS(tlsConfig), nil
+	return certPool, nil
 }
 
 var _ manager.Runnable = &Server{}

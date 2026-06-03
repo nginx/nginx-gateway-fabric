@@ -2114,11 +2114,24 @@ func TestValidateGatewayParametersRef(t *testing.T) {
 func TestGetReferencedSnippetsFilters(t *testing.T) {
 	t.Parallel()
 
+	listenerSetNsName := types.NamespacedName{Namespace: "gateway-ns", Name: "test-listenerset"}
+
 	gw := &Gateway{
 		Source: &v1.Gateway{
 			ObjectMeta: metav1.ObjectMeta{
 				Namespace: "gateway-ns",
 				Name:      "test-gateway",
+			},
+		},
+		AttachedListenerSets: map[types.NamespacedName]*ListenerSet{
+			listenerSetNsName: {
+				Source: &v1.ListenerSet{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "gateway-ns",
+						Name:      "test-listenerset",
+					},
+				},
+				Valid: true,
 			},
 		},
 	}
@@ -2151,6 +2164,16 @@ func TestGetReferencedSnippetsFilters(t *testing.T) {
 			},
 		},
 		Valid: false,
+	}
+
+	sf4 := &SnippetsFilter{
+		Source: &ngfAPIv1alpha1.SnippetsFilter{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: "app4",
+				Name:      "listenerset-route-filter",
+			},
+		},
+		Valid: true,
 	}
 
 	routeAttachedToGateway := &L7Route{
@@ -2255,6 +2278,41 @@ func TestGetReferencedSnippetsFilters(t *testing.T) {
 		},
 	}
 
+	// Route attached via ListenerSet (not directly to the Gateway).
+	routeAttachedViaListenerSet := &L7Route{
+		Source: &v1.HTTPRoute{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: "app4",
+				Name:      "listenerset-route",
+			},
+		},
+		Valid: true,
+		ParentRefs: []ParentRef{
+			{
+				Kind:           kinds.ListenerSet,
+				NamespacedName: listenerSetNsName,
+			},
+		},
+		Spec: L7RouteSpec{
+			Rules: []RouteRule{
+				{
+					Filters: RouteRuleFilters{
+						Valid: true,
+						Filters: []Filter{
+							{
+								FilterType: FilterExtensionRef,
+								ResolvedExtensionRef: &ExtensionRefFilter{
+									SnippetsFilter: sf4,
+									Valid:          true,
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
 	routes := map[RouteKey]*L7Route{
 		{
 			NamespacedName: types.NamespacedName{Namespace: "app1", Name: "attached-route"},
@@ -2268,21 +2326,30 @@ func TestGetReferencedSnippetsFilters(t *testing.T) {
 			NamespacedName: types.NamespacedName{Namespace: "app3", Name: "route-with-invalid-filter"},
 			RouteType:      RouteTypeHTTP,
 		}: routeWithInvalidFilter,
+		{
+			NamespacedName: types.NamespacedName{Namespace: "app4", Name: "listenerset-route"},
+			RouteType:      RouteTypeHTTP,
+		}: routeAttachedViaListenerSet,
 	}
 
 	allSnippetsFilters := map[types.NamespacedName]*SnippetsFilter{
-		{Namespace: "app1", Name: "app1-logging"}:   sf1,
-		{Namespace: "app2", Name: "app2-logging"}:   sf2,
-		{Namespace: "app3", Name: "invalid-filter"}: sf3Invalid,
+		{Namespace: "app1", Name: "app1-logging"}:             sf1,
+		{Namespace: "app2", Name: "app2-logging"}:             sf2,
+		{Namespace: "app3", Name: "invalid-filter"}:           sf3Invalid,
+		{Namespace: "app4", Name: "listenerset-route-filter"}: sf4,
 	}
 
 	g := NewWithT(t)
 
 	result := gw.GetReferencedSnippetsFilters(routes, allSnippetsFilters)
 
-	// Should only include sf1 (valid filter from route attached to this gateway)
+	// Should include sf1 (valid filter from route attached directly to gateway)
+	// and sf4 (valid filter from route attached via ListenerSet).
+	// sf2 is excluded (route not attached to this gateway).
+	// sf3Invalid is excluded (invalid filter).
 	expectedResult := map[types.NamespacedName]*SnippetsFilter{
-		{Namespace: "app1", Name: "app1-logging"}: sf1,
+		{Namespace: "app1", Name: "app1-logging"}:             sf1,
+		{Namespace: "app4", Name: "listenerset-route-filter"}: sf4,
 	}
 
 	g.Expect(result).To(Equal(expectedResult))
@@ -2299,11 +2366,24 @@ func TestGetReferencedSnippetsFilters(t *testing.T) {
 func TestGetReferencedRateLimitPolicies(t *testing.T) {
 	t.Parallel()
 
+	listenerSetNsName := types.NamespacedName{Namespace: "gateway-ns", Name: "test-listenerset"}
+
 	gw := &Gateway{
 		Source: &v1.Gateway{
 			ObjectMeta: metav1.ObjectMeta{
 				Namespace: "gateway-ns",
 				Name:      "test-gateway",
+			},
+		},
+		AttachedListenerSets: map[types.NamespacedName]*ListenerSet{
+			listenerSetNsName: {
+				Source: &v1.ListenerSet{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "gateway-ns",
+						Name:      "test-listenerset",
+					},
+				},
+				Valid: true,
 			},
 		},
 	}
@@ -2428,6 +2508,23 @@ func TestGetReferencedRateLimitPolicies(t *testing.T) {
 		},
 	}
 
+	// Policy targeting a route that is attached via ListenerSet.
+	rlpListenerSetRoute := &Policy{
+		Source: &ngfAPIv1alpha1.RateLimitPolicy{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: "app8",
+				Name:      "listenerset-route-rate-limit",
+			},
+		},
+		Valid: true,
+		TargetRefs: []PolicyTargetRef{
+			{
+				Kind:   kinds.HTTPRoute,
+				Nsname: types.NamespacedName{Namespace: "app8", Name: "listenerset-route"},
+			},
+		},
+	}
+
 	routeAttachedToGateway := &L7Route{
 		Source: &v1.HTTPRoute{
 			ObjectMeta: metav1.ObjectMeta{
@@ -2476,6 +2573,23 @@ func TestGetReferencedRateLimitPolicies(t *testing.T) {
 		},
 	}
 
+	// Route attached via ListenerSet (not directly to the Gateway).
+	routeAttachedViaListenerSet := &L7Route{
+		Source: &v1.HTTPRoute{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: "app8",
+				Name:      "listenerset-route",
+			},
+		},
+		Valid: true,
+		ParentRefs: []ParentRef{
+			{
+				Kind:           kinds.ListenerSet,
+				NamespacedName: listenerSetNsName,
+			},
+		},
+	}
+
 	routes := map[RouteKey]*L7Route{
 		{
 			NamespacedName: types.NamespacedName{Namespace: "app1", Name: "attached-route"},
@@ -2489,6 +2603,10 @@ func TestGetReferencedRateLimitPolicies(t *testing.T) {
 			NamespacedName: types.NamespacedName{Namespace: "app2", Name: "not-attached-route"},
 			RouteType:      RouteTypeHTTP,
 		}: routeNotAttachedToGateway,
+		{
+			NamespacedName: types.NamespacedName{Namespace: "app8", Name: "listenerset-route"},
+			RouteType:      RouteTypeHTTP,
+		}: routeAttachedViaListenerSet,
 	}
 
 	allPolicies := map[PolicyKey]*Policy{
@@ -2533,14 +2651,19 @@ func TestGetReferencedRateLimitPolicies(t *testing.T) {
 				},
 			},
 		},
+		{
+			NsName: types.NamespacedName{Namespace: "app8", Name: "listenerset-route-rate-limit"},
+			GVK:    schema.GroupVersionKind{Kind: kinds.RateLimitPolicy},
+		}: rlpListenerSetRoute,
 	}
 
 	g := NewWithT(t)
 
 	result := gw.GetReferencedRateLimitPolicies(routes, allPolicies)
 
-	// Should only include rlp1 (valid RateLimitPolicy targeting attached route, not gateway)
-	// and rlpGRPC (valid RateLimitPolicy targeting attached GRPC route)
+	// Should include rlp1 (valid RateLimitPolicy targeting attached route, not gateway),
+	// rlpGRPC (valid RateLimitPolicy targeting attached GRPC route), and
+	// rlpListenerSetRoute (valid RateLimitPolicy targeting route attached via ListenerSet).
 	expectedResult := map[PolicyKey]*Policy{
 		{
 			NsName: types.NamespacedName{Namespace: "app1", Name: "app1-rate-limit"},
@@ -2550,6 +2673,10 @@ func TestGetReferencedRateLimitPolicies(t *testing.T) {
 			NsName: types.NamespacedName{Namespace: "app5", Name: "grpc-rate-limit"},
 			GVK:    schema.GroupVersionKind{Kind: kinds.RateLimitPolicy},
 		}: rlpGRPC,
+		{
+			NsName: types.NamespacedName{Namespace: "app8", Name: "listenerset-route-rate-limit"},
+			GVK:    schema.GroupVersionKind{Kind: kinds.RateLimitPolicy},
+		}: rlpListenerSetRoute,
 	}
 
 	g.Expect(result).To(Equal(expectedResult))

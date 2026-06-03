@@ -459,10 +459,122 @@ var _ = Describe("RateLimitPolicy", Ordered, Label("functional", "rate-limit-pol
 			)
 		})
 	})
+
+	// Regression test: RateLimitPolicy targeting an HTTPRoute attached via a ListenerSet
+	// previously caused an NGINX crash ("zero size shared memory zone") because the
+	// limit_req_zone directive was not generated at the HTTP level, while the limit_req
+	// directive was still generated at the location level.
+	When("RateLimitPolicy is applied to an HTTPRoute attached via ListenerSet", func() {
+		lsFiles := []string{
+			"rate-limit-policy/listenerset.yaml",
+			"rate-limit-policy/listenerset-route.yaml",
+			"rate-limit-policy/listenerset-rlp.yaml",
+		}
+
+		var baseCoffeeURL string
+
+		BeforeAll(func() {
+			Expect(resourceManager.ApplyFromFiles(lsFiles, namespace)).To(Succeed())
+			Expect(resourceManager.WaitForAppsToBeReady(namespace)).To(Succeed())
+
+			port := 80
+			if portFwdPort != 0 {
+				port = portFwdPort
+			}
+			baseCoffeeURL = fmt.Sprintf("http://ls.example.com:%d%s", port, "/coffee")
+		})
+
+		AfterAll(func() {
+			Expect(resourceManager.DeleteFromFiles(lsFiles, namespace)).To(Succeed())
+		})
+
+		Specify("rateLimitPolicy is accepted", func() {
+			rlpNsName := types.NamespacedName{Name: "ls-route-rate-limit", Namespace: namespace}
+
+			err := waitForRateLimitPolicyStatus(
+				rlpNsName,
+				1,
+				metav1.ConditionTrue,
+				gatewayv1.PolicyReasonAccepted,
+			)
+			Expect(err).ToNot(HaveOccurred(), "ls-route-rate-limit was not accepted")
+		})
+
+		Context("verify working traffic", func() {
+			It("should return HTTP 200 initially and a custom error code once the rate limit is exceeded", func() {
+				Eventually(
+					func() error {
+						return verifyRateLimitPolicyWorksAsExpected(baseCoffeeURL, address, "URI: /coffee", 466)
+					}).
+					WithTimeout(timeoutConfig.RequestTimeout).
+					WithPolling(500 * time.Millisecond).
+					Should(Succeed())
+			})
+		})
+
+		Context("nginx directives", func() {
+			var conf *framework.Payload
+
+			BeforeAll(func() {
+				var err error
+				conf, err = resourceManager.GetNginxConfig(nginxPodName, namespace, "")
+				Expect(err).ToNot(HaveOccurred())
+			})
+
+			DescribeTable("are set properly for",
+				func(getCfgs func() []framework.ExpectedNginxField) {
+					for _, expCfg := range getCfgs() {
+						Expect(framework.ValidateNginxFieldExists(conf, expCfg)).To(Succeed())
+					}
+				},
+				Entry("listenerset route policy", func() []framework.ExpectedNginxField {
+					return []framework.ExpectedNginxField{
+						{
+							Directive: "include",
+							Value:     fmt.Sprintf("%s%s", filePrefix, "_ls-route-rate-limit_internal_http.conf"),
+							File:      "http.conf",
+						},
+						{
+							File:      fmt.Sprintf("%s%s", filePrefix, "_ls-route-rate-limit_internal_http.conf"),
+							Directive: "limit_req_zone",
+							Value: fmt.Sprintf(
+								"$binary_remote_addr zone=%s_rl_ls-route-rate-limit_rule0:10m rate=1r/m",
+								namespace,
+							),
+						},
+						{
+							Directive: "include",
+							Value:     fmt.Sprintf("%s%s", filePrefix, "_ls-route-rate-limit_route.conf"),
+							File:      "http.conf",
+							Server:    "ls.example.com",
+							Location:  "/coffee",
+						},
+						{
+							File:      fmt.Sprintf("%s%s", filePrefix, "_ls-route-rate-limit_route.conf"),
+							Directive: "limit_req",
+							Value:     fmt.Sprintf("zone=%s_rl_ls-route-rate-limit_rule0 burst=3", namespace),
+						},
+						{
+							File:      fmt.Sprintf("%s%s", filePrefix, "_ls-route-rate-limit_route.conf"),
+							Directive: "limit_req_log_level",
+							Value:     "warn",
+						},
+						{
+							File:      fmt.Sprintf("%s%s", filePrefix, "_ls-route-rate-limit_route.conf"),
+							Directive: "limit_req_status",
+							Value:     "466",
+						},
+					}
+				}),
+			)
+		})
+	})
 })
 
 // waitForRateLimitPolicyStatus waits until the RateLimitPolicy has the
 // specified number of ancestors and the specified condition status and reason.
+//
+//nolint:unparam // condStatus and condReason are kept as parameters for readability at call sites
 func waitForRateLimitPolicyStatus(
 	rlpNsName types.NamespacedName,
 	ancestorCount int,
@@ -546,6 +658,7 @@ func findTargetRefForAncestor(
 	return gatewayv1.LocalPolicyTargetReference{}, false
 }
 
+//nolint:unparam // responseBodyMessage is kept as a parameter for readability at call sites
 func verifyRateLimitPolicyWorksAsExpected(appURL, address, responseBodyMessage string, expectedCode int) error {
 	err := framework.ExpectRequestToSucceed(timeoutConfig.RequestTimeout, appURL, address, responseBodyMessage)
 	if err != nil {

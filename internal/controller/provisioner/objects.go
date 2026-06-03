@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"net"
 	"sort"
 	"strconv"
 	"strings"
@@ -88,10 +89,13 @@ type resourceNames struct {
 }
 
 // buildNginxResourceObjects builds all the NGINX resource objects for a given Gateway and EffectiveNginxProxy.
+// The allListeners parameter must include all listeners from both the Gateway and any attached ListenerSets;
+// these are used to determine which ports the Service and container should expose.
 func (p *NginxProvisioner) buildNginxResourceObjects(
 	resourceName string,
 	gateway *gatewayv1.Gateway,
 	nProxyCfg *graph.EffectiveNginxProxy,
+	allListeners []*graph.Listener,
 ) ([]client.Object, error) {
 	// NOTE: When adding new fields to the generated objects, please ensure to update the corresponding spec
 	// setter function in setter.go to set the new fields when updating the object.
@@ -149,8 +153,8 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 		}
 	}
 
-	// build ports from gateway listeners
-	ports := p.buildPortsFromListeners(gateway.Spec.Listeners)
+	// build ports from all listeners (Gateway + ListenerSets)
+	ports := p.buildPortsFromListeners(allListeners)
 
 	// Add healthcheck port to service if expose is enabled
 	var healthcheckPort int32
@@ -159,7 +163,7 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 		ports = appendUniquePortProtoEntry(ports, portProtoEntry{Port: healthcheckPort, Protocol: corev1.ProtocolTCP})
 	}
 
-	service, err := buildNginxService(
+	service, err := p.buildNginxService(
 		cloneObjectMeta(objectMeta),
 		nProxyCfg,
 		ports,
@@ -306,20 +310,21 @@ func (p *NginxProvisioner) buildServiceAccount(
 	return serviceAccount, nil
 }
 
-// buildPortsFromListeners builds a list of port/protocol entries from the Gateway listeners.
+// buildPortsFromListeners builds a list of port/protocol entries from the graph listeners.
+// This includes listeners from both the Gateway and any attached ListenerSets.
 // A port number can appear multiple times if it has different protocols (e.g., TCP and UDP on port 53).
-func (p *NginxProvisioner) buildPortsFromListeners(listeners []gatewayv1.Listener) []portProtoEntry {
+func (p *NginxProvisioner) buildPortsFromListeners(listeners []*graph.Listener) []portProtoEntry {
 	seen := make(map[portProtoEntry]struct{}, len(listeners))
 	ports := make([]portProtoEntry, 0, len(listeners))
 	for _, listener := range listeners {
 		var protocol corev1.Protocol
-		switch listener.Protocol {
+		switch listener.Source.Protocol {
 		case gatewayv1.UDPProtocolType:
 			protocol = corev1.ProtocolUDP
 		default:
 			protocol = corev1.ProtocolTCP
 		}
-		entry := portProtoEntry{Port: listener.Port, Protocol: protocol}
+		entry := portProtoEntry{Port: listener.Source.Port, Protocol: protocol}
 		if _, exists := seen[entry]; !exists {
 			seen[entry] = struct{}{}
 			ports = append(ports, entry)
@@ -657,7 +662,7 @@ func (p *NginxProvisioner) buildOpenshiftObjects(
 	return []client.Object{role, roleBinding}, errs
 }
 
-func buildNginxService(
+func (p *NginxProvisioner) buildNginxService(
 	objectMeta metav1.ObjectMeta,
 	nProxyCfg *graph.EffectiveNginxProxy,
 	ports []portProtoEntry,
@@ -677,13 +682,13 @@ func buildNginxService(
 
 	var externalIPs []string
 	for _, addr := range addresses {
-		if addr.Type != nil && *addr.Type == gatewayv1.IPAddressType {
+		if addr.Type != nil && *addr.Type == gatewayv1.IPAddressType && net.ParseIP(addr.Value) != nil {
 			externalIPs = append(externalIPs, addr.Value)
 		}
 	}
 
 	var servicePolicy corev1.ServiceExternalTrafficPolicy
-	if serviceType != corev1.ServiceTypeClusterIP || len(externalIPs) > 0 {
+	if serviceType != corev1.ServiceTypeClusterIP {
 		servicePolicy = defaultServicePolicy
 		if serviceCfg.ExternalTrafficPolicy != nil {
 			servicePolicy = corev1.ServiceExternalTrafficPolicy(*serviceCfg.ExternalTrafficPolicy)
@@ -698,7 +703,6 @@ func buildNginxService(
 			Type:                  serviceType,
 			Ports:                 servicePorts,
 			ExternalTrafficPolicy: servicePolicy,
-			ExternalIPs:           externalIPs,
 			Selector:              selectorLabels,
 			IPFamilyPolicy:        helpers.GetPointer(corev1.IPFamilyPolicyPreferDualStack),
 		},
@@ -708,14 +712,29 @@ func buildNginxService(
 
 	setSvcLoadBalancerSettings(serviceCfg, &svc.Spec)
 
-	// Apply service patches
+	// Apply service patches before the LoadBalancerClass check so that a patch-provided
+	// class is visible when we decide whether to set our own.
 	if nProxyCfg != nil && nProxyCfg.Kubernetes != nil && nProxyCfg.Kubernetes.Service != nil {
 		if err := applyPatches(svc, nProxyCfg.Kubernetes.Service.Patches); err != nil {
 			return svc, fmt.Errorf("failed to apply service patches: %w", err)
 		}
 	}
 
+	p.updateLoadBalancerClass(svc, externalIPs)
+
 	return svc, nil
+}
+
+// updateLoadBalancerClass sets the Service's LoadBalancerClass to this controller
+// if the Gateway has IP addresses and the Service is a LoadBalancer.
+func (p *NginxProvisioner) updateLoadBalancerClass(
+	svc *corev1.Service,
+	gwExternalIPs []string,
+) {
+	if svc.Spec.Type == corev1.ServiceTypeLoadBalancer && len(gwExternalIPs) > 0 {
+		ctlr := p.cfg.GatewayCtlrName
+		svc.Spec.LoadBalancerClass = &ctlr
+	}
 }
 
 func buildServicePorts(

@@ -513,10 +513,9 @@ func checkExternalNameValidForGateways(
 	invalidForGateways map[types.NamespacedName]conditions.Condition,
 ) map[types.NamespacedName]conditions.Condition {
 	for _, parentRef := range parentRefs {
-		if parentRef.Kind == kinds.Gateway &&
-			(parentRef.EffectiveNginxProxy == nil ||
-				parentRef.EffectiveNginxProxy.DNSResolver == nil) {
-			invalidForGateways[parentRef.NamespacedName] = conditions.NewRouteBackendRefUnsupportedValue(
+		if parentRef.EffectiveNginxProxy == nil ||
+			parentRef.EffectiveNginxProxy.DNSResolver == nil {
+			invalidForGateways[parentRef.GatewayNsName] = conditions.NewRouteBackendRefUnsupportedValue(
 				"ExternalName service requires DNS resolver configuration in Gateway's NginxProxy",
 			)
 		}

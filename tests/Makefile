@@ -50,6 +50,12 @@ build-test-runner-image: ## Build conformance test runner image
 build-crossplane-image: ## Build the crossplane image
 	docker build --platform $(GOOS)/$(GOARCH) --build-arg NGINX_CONF_DIR=$(NGINX_CONF_DIR) -t nginx-crossplane:latest -f framework/crossplane/Dockerfile ..
 
+.PHONY: deploy-metallb
+deploy-metallb: ## Deploy MetalLB to the cluster (required for LoadBalancer service type in the conformance tests)
+	kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.15.3/config/manifests/metallb-native.yaml
+	kubectl wait --namespace metallb-system --for=condition=ready pod --selector=app=metallb --timeout=90s
+	kubectl apply -f conformance/metallb-pool.yaml
+
 .PHONY: run-conformance-tests
 run-conformance-tests: ## Run conformance tests
 	kind load docker-image $(CONFORMANCE_PREFIX):$(CONFORMANCE_TAG) --name $(CLUSTER_NAME)
@@ -224,7 +230,7 @@ add-local-ip-to-cluster: ## Add local IP to the GKE cluster master-authorized-ne
 update-firewall-with-local-ip: ## Update the firewall rule with local IP address
 	./scripts/update-firewall-with-local-ip.sh
 
-HELM_PARAMETERS += --set nginxGateway.name=nginx-gateway --set nginx.service.type=ClusterIP --set nginxGateway.gwAPIInferenceExtension.enable=$(ENABLE_INFERENCE_EXTENSION)
+HELM_PARAMETERS += --set nginxGateway.name=nginx-gateway --set nginx.service.type=LoadBalancer --set nginxGateway.gwAPIInferenceExtension.enable=$(ENABLE_INFERENCE_EXTENSION)
 
 # this target is used to install the gateway-api CRDs from the main branch (only used in the nightly CI job)
 # it overrides the target in the main Makefile when the GW_API_VERSION is set to main

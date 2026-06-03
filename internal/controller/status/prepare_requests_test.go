@@ -119,6 +119,7 @@ var (
 			},
 			Kind:           kinds.Gateway,
 			NamespacedName: gwNsName,
+			GatewayNsName:  gwNsName,
 		},
 		{
 			Idx:         1,
@@ -129,6 +130,7 @@ var (
 			},
 			Kind:           kinds.Gateway,
 			NamespacedName: gwNsName,
+			GatewayNsName:  gwNsName,
 		},
 		{
 			Idx:         2,
@@ -139,6 +141,7 @@ var (
 			},
 			Kind:           kinds.Gateway,
 			NamespacedName: gwNsName,
+			GatewayNsName:  gwNsName,
 		},
 		{
 			Idx:         3,
@@ -149,6 +152,7 @@ var (
 			},
 			Kind:           kinds.Gateway,
 			NamespacedName: gwNsName,
+			GatewayNsName:  gwNsName,
 		},
 		{
 			Idx:         3,
@@ -158,6 +162,7 @@ var (
 			},
 			Kind:           kinds.Gateway,
 			NamespacedName: gwNsName,
+			GatewayNsName:  gwNsName,
 		},
 		{
 			Idx:         3,
@@ -168,6 +173,7 @@ var (
 			},
 			Kind:           kinds.Gateway,
 			NamespacedName: gwNsName,
+			GatewayNsName:  gwNsName,
 		},
 		{
 			Idx:         4,
@@ -178,6 +184,7 @@ var (
 			},
 			Kind:           kinds.Gateway,
 			NamespacedName: gwNsName,
+			GatewayNsName:  gwNsName,
 		},
 		{
 			Idx:         4,
@@ -188,6 +195,7 @@ var (
 			},
 			Kind:           kinds.Gateway,
 			NamespacedName: gwNsName,
+			GatewayNsName:  gwNsName,
 		},
 		{
 			Idx:         5,
@@ -198,6 +206,7 @@ var (
 			},
 			Kind:           kinds.ListenerSet,
 			NamespacedName: lsNsName,
+			GatewayNsName:  gwNsName,
 		},
 		{
 			Idx:         6,
@@ -208,6 +217,7 @@ var (
 			},
 			Kind:           kinds.ListenerSet,
 			NamespacedName: lsNsName,
+			GatewayNsName:  gwNsName,
 		},
 		{
 			Idx:         6,
@@ -218,6 +228,7 @@ var (
 			},
 			Kind:           kinds.ListenerSet,
 			NamespacedName: lsNsName,
+			GatewayNsName:  gwNsName,
 		},
 		{
 			Idx:         7,
@@ -228,6 +239,7 @@ var (
 			},
 			Kind:           kinds.ListenerSet,
 			NamespacedName: lsNsName,
+			GatewayNsName:  gwNsName,
 		},
 	}
 
@@ -238,6 +250,7 @@ var (
 			SectionName:    commonRouteSpecInvalid.ParentRefs[0].SectionName,
 			Kind:           kinds.Gateway,
 			NamespacedName: gwNsName,
+			GatewayNsName:  gwNsName,
 		},
 	}
 

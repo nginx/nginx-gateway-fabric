@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net"
 	"sync"
 	"time"
 
@@ -416,7 +415,7 @@ func gatewayHasPendingWAFBundle(gr *graph.Graph, gw *graph.Gateway) bool {
 					continue
 				}
 				for _, parentRef := range route.ParentRefs {
-					if parentRef.Kind == kinds.Gateway && parentRef.NamespacedName == gwNsName {
+					if parentRef.GatewayNsName == gwNsName {
 						return true
 					}
 				}
@@ -467,9 +466,7 @@ func collectPolicyTargetDeployments(
 				continue
 			}
 			for _, parentRef := range route.ParentRefs {
-				if parentRef.Kind == kinds.Gateway {
-					addGateway(parentRef.NamespacedName)
-				}
+				addGateway(parentRef.GatewayNsName)
 			}
 		}
 	}
@@ -931,32 +928,37 @@ func getGatewayAddresses(
 		gwSvc = *svc
 	}
 
-	return getGatewayAddressesForStatus(&gwSvc, gateway), nil
+	return getGatewayAddressesForStatus(&gwSvc), nil
 }
 
-func getGatewayAddressesForStatus(
-	svc *v1.Service,
-	gateway *graph.Gateway,
-) (gwAddresses []gatewayv1.GatewayStatusAddress) {
+func getGatewayAddressesForStatus(svc *v1.Service) (gwAddresses []gatewayv1.GatewayStatusAddress) {
+	// Preserve order but deduplicate addresses and hostnames so the Gateway status
+	// does not contain duplicates coming from Service status and Gateway spec.addresses.
+	addrSeen := make(map[string]struct{})
+	hostSeen := make(map[string]struct{})
+
 	var addresses, hostnames []string
+
 	switch svc.Spec.Type {
 	case v1.ServiceTypeLoadBalancer:
 		for _, ingress := range svc.Status.LoadBalancer.Ingress {
 			if ingress.IP != "" {
-				addresses = append(addresses, ingress.IP)
+				if _, ok := addrSeen[ingress.IP]; !ok {
+					addrSeen[ingress.IP] = struct{}{}
+					addresses = append(addresses, ingress.IP)
+				}
 			} else if ingress.Hostname != "" {
-				hostnames = append(hostnames, ingress.Hostname)
+				if _, ok := hostSeen[ingress.Hostname]; !ok {
+					hostSeen[ingress.Hostname] = struct{}{}
+					hostnames = append(hostnames, ingress.Hostname)
+				}
 			}
 		}
 	default:
-		addresses = append(addresses, svc.Spec.ClusterIP)
-	}
-
-	for _, address := range gateway.Source.Spec.Addresses {
-		if address.Type != nil &&
-			*address.Type == gatewayv1.IPAddressType &&
-			net.ParseIP(address.Value) != nil {
-			addresses = append(addresses, address.Value)
+		if svc.Spec.ClusterIP != "" {
+			addr := svc.Spec.ClusterIP
+			addrSeen[addr] = struct{}{}
+			addresses = append(addresses, addr)
 		}
 	}
 
@@ -976,6 +978,7 @@ func getGatewayAddressesForStatus(
 		}
 		gwAddresses = append(gwAddresses, statusAddr)
 	}
+
 	return gwAddresses
 }
 
