@@ -20,14 +20,12 @@ import (
 // Implements policies.Validator interface.
 type Validator struct {
 	genericValidator validation.GenericValidator
-	plusEnabled      bool
 }
 
 // NewValidator returns a new Validator.
-func NewValidator(genericValidator validation.GenericValidator, plusEnabled bool) Validator {
+func NewValidator(genericValidator validation.GenericValidator) Validator {
 	return Validator{
 		genericValidator: genericValidator,
-		plusEnabled:      plusEnabled,
 	}
 }
 
@@ -167,20 +165,14 @@ func (v Validator) validateLoadBalancingMethod(spec ngfAPI.UpstreamSettingsPolic
 	path := field.NewPath("spec")
 	lbPath := path.Child("loadBalancingMethod")
 
-	allowedMethods := httpConfig.OSSAllowedLBMethods
-	nginxType := "NGINX OSS"
-	if v.plusEnabled {
-		allowedMethods = httpConfig.PlusAllowedLBMethods
-		nginxType = "NGINX Plus"
-	}
+	allowedMethods := httpConfig.AllowedLBMethods
 
 	if _, ok := allowedMethods[*spec.LoadBalancingMethod]; !ok {
 		allErrs = append(allErrs, field.Invalid(
 			lbPath,
 			*spec.LoadBalancingMethod,
 			fmt.Sprintf(
-				"%s supports the following load balancing methods: %s",
-				nginxType,
+				"supports the following load balancing methods: %s",
 				getLoadBalancingMethodList(allowedMethods),
 			),
 		))

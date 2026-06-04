@@ -258,38 +258,19 @@ type ServerConfig struct {
 	DisableSNIHostValidation bool
 }
 
-var (
-	OSSAllowedLBMethods = map[ngfAPI.LoadBalancingType]struct{}{
-		ngfAPI.LoadBalancingTypeRoundRobin:                 {},
-		ngfAPI.LoadBalancingTypeLeastConnection:            {},
-		ngfAPI.LoadBalancingTypeIPHash:                     {},
-		ngfAPI.LoadBalancingTypeRandom:                     {},
-		ngfAPI.LoadBalancingTypeHash:                       {},
-		ngfAPI.LoadBalancingTypeHashConsistent:             {},
-		ngfAPI.LoadBalancingTypeRandomTwo:                  {},
-		ngfAPI.LoadBalancingTypeRandomTwoLeastConnection:   {},
-		ngfAPI.LoadBalancingTypeLeastTimeHeader:            {},
-		ngfAPI.LoadBalancingTypeLeastTimeLastByte:          {},
-		ngfAPI.LoadBalancingTypeLeastTimeHeaderInflight:    {},
-		ngfAPI.LoadBalancingTypeLeastTimeLastByteInflight:  {},
-		ngfAPI.LoadBalancingTypeRandomTwoLeastTimeHeader:   {},
-		ngfAPI.LoadBalancingTypeRandomTwoLeastTimeLastByte: {},
-	}
-
-	PlusAllowedLBMethods = map[ngfAPI.LoadBalancingType]struct{}{
-		ngfAPI.LoadBalancingTypeRoundRobin:                 {},
-		ngfAPI.LoadBalancingTypeLeastConnection:            {},
-		ngfAPI.LoadBalancingTypeIPHash:                     {},
-		ngfAPI.LoadBalancingTypeRandom:                     {},
-		ngfAPI.LoadBalancingTypeHash:                       {},
-		ngfAPI.LoadBalancingTypeHashConsistent:             {},
-		ngfAPI.LoadBalancingTypeRandomTwo:                  {},
-		ngfAPI.LoadBalancingTypeRandomTwoLeastConnection:   {},
-		ngfAPI.LoadBalancingTypeLeastTimeHeader:            {},
-		ngfAPI.LoadBalancingTypeLeastTimeLastByte:          {},
-		ngfAPI.LoadBalancingTypeLeastTimeHeaderInflight:    {},
-		ngfAPI.LoadBalancingTypeLeastTimeLastByteInflight:  {},
-		ngfAPI.LoadBalancingTypeRandomTwoLeastTimeHeader:   {},
-		ngfAPI.LoadBalancingTypeRandomTwoLeastTimeLastByte: {},
-	}
-)
+var AllowedLBMethods = map[ngfAPI.LoadBalancingType]struct{}{
+	ngfAPI.LoadBalancingTypeRoundRobin:                 {},
+	ngfAPI.LoadBalancingTypeLeastConnection:            {},
+	ngfAPI.LoadBalancingTypeIPHash:                     {},
+	ngfAPI.LoadBalancingTypeRandom:                     {},
+	ngfAPI.LoadBalancingTypeHash:                       {},
+	ngfAPI.LoadBalancingTypeHashConsistent:             {},
+	ngfAPI.LoadBalancingTypeRandomTwo:                  {},
+	ngfAPI.LoadBalancingTypeRandomTwoLeastConnection:   {},
+	ngfAPI.LoadBalancingTypeLeastTimeHeader:            {},
+	ngfAPI.LoadBalancingTypeLeastTimeLastByte:          {},
+	ngfAPI.LoadBalancingTypeLeastTimeHeaderInflight:    {},
+	ngfAPI.LoadBalancingTypeLeastTimeLastByteInflight:  {},
+	ngfAPI.LoadBalancingTypeRandomTwoLeastTimeHeader:   {},
+	ngfAPI.LoadBalancingTypeRandomTwoLeastTimeLastByte: {},
+}
