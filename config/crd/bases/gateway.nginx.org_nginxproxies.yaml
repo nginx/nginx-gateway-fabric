@@ -8441,7 +8441,7 @@ spec:
                         type: object
                       podDisruptionBudget:
                         description: |-
-                          PodDisruptionBudget is the configuration for a PodDisruptionBudget.
+                          PodDisruptionBudget is the configuration for limiting the number of concurrent disruptions of a pod.
                           A PodDisruptionBudget is created when this field is set.
                         properties:
                           maxUnavailable:

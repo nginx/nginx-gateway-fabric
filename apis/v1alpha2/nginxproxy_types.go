@@ -668,7 +668,7 @@ type DeploymentSpec struct {
 	// +optional
 	Autoscaling *AutoscalingSpec `json:"autoscaling,omitempty"`
 
-	// PodDisruptionBudget is the configuration for a PodDisruptionBudget.
+	// PodDisruptionBudget is the configuration for limiting the number of concurrent disruptions of a pod.
 	// A PodDisruptionBudget is created when this field is set.
 	//
 	// +optional
@@ -720,7 +720,8 @@ type DaemonSetSpec struct {
 	Patches []Patch `json:"patches,omitempty"`
 }
 
-// PodDisruptionBudget is the configuration for limiting the number of concurrent disruptions of a pod.
+// PodDisruptionBudget is the configuration for PodDisruptionBudget,
+// which limits the number of concurrent disruptions of a pod.
 // MinAvailable and MaxUnavailable are mutually exclusive; only one may be set.
 // The Kubernetes API will reject a PodDisruptionBudget with both fields set.
 type PodDisruptionBudgetSpec struct {
