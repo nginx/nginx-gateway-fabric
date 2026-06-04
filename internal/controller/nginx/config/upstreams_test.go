@@ -145,8 +145,8 @@ func TestExecuteUpstreams_NginxOSS(t *testing.T) {
 		"zone up5-usp 2m;":    1,
 		"zone up6-usp-keepAlive-connections-zero 2m;": 1,
 
-		"least_time header;": 5,
-		"keepalive 16;":      4,
+		defaultLBMethod + ";": 5,
+		"keepalive 16;":       4,
 	}
 
 	upstreams := gen.createUpstreams(stateUpstreams, upstreamsettings.NewProcessor())
@@ -339,9 +339,9 @@ func TestExecuteUpstreams_NginxPlus(t *testing.T) {
 		"upstream up9-usp-keepAlive-connections-zero": 1,
 		"upstream invalid-backend-ref":                1,
 
-		"least_time header;": 9,
-		"ip_hash;":           1,
-		"keepalive 16;":      8,
+		defaultLBMethod + ";": 9,
+		"ip_hash;":            1,
+		"keepalive 16;":       8,
 
 		"zone up1 1m;":                                1,
 		"zone up2 1m;":                                1,
@@ -1300,7 +1300,7 @@ func TestCreateStreamUpstreams(t *testing.T) {
 		{
 			Name:                "up1",
 			ZoneSize:            ossZoneSize,
-			LoadBalancingMethod: "least_time bytes",
+			LoadBalancingMethod: defaultStreamLBMethod,
 			Servers: []stream.UpstreamServer{
 				{
 					Address: "10.0.0.0:80",
@@ -1363,7 +1363,7 @@ func TestCreateStreamUpstream(t *testing.T) {
 			expectedUpstream: stream.Upstream{
 				Name:                "multiple-endpoints",
 				ZoneSize:            ossZoneSize,
-				LoadBalancingMethod: "least_time bytes",
+				LoadBalancingMethod: defaultStreamLBMethod,
 				Servers: []stream.UpstreamServer{
 					{
 						Address: "10.0.0.1:80",
@@ -1470,7 +1470,7 @@ func TestCreateStreamUpstreamPlus(t *testing.T) {
 		Name:                "multiple-endpoints",
 		ZoneSize:            plusZoneSize,
 		StateFile:           stateDir + "/multiple-endpoints.conf",
-		LoadBalancingMethod: "least_time bytes",
+		LoadBalancingMethod: defaultStreamLBMethod,
 		Servers: []stream.UpstreamServer{
 			{
 				Address: "10.0.0.1:80",
@@ -1710,7 +1710,7 @@ func TestExecuteUpstreams_LoadBalancingMethod(t *testing.T) {
 			expectedSubStrings: map[string]int{
 				"upstream up1-usp-ipv4": 1,
 				"upstream up2-usp-ipv6": 1,
-				"least_time header;":    2,
+				defaultLBMethod + ";":   2,
 			},
 		},
 		{
@@ -1800,7 +1800,7 @@ func TestExecuteUpstreams_LoadBalancingMethod(t *testing.T) {
 			expectedSubStrings: map[string]int{
 				"upstream up1-usp-ipv4": 1,
 				"upstream up2-usp-ipv6": 1,
-				"least_time header;":    2,
+				defaultLBMethod + ";":   2,
 			},
 		},
 		{

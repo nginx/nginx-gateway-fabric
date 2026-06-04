@@ -303,38 +303,18 @@ func TestValidate_ValidateLoadBalancingMethod(t *testing.T) {
 		policy        *ngfAPI.UpstreamSettingsPolicy
 		name          string
 		expConditions []conditions.Condition
-		plusEnabled   bool
 	}{
 		{
-			name: "oss method random with Plus disabled",
-			policy: &ngfAPI.UpstreamSettingsPolicy{
-				Spec: ngfAPI.UpstreamSettingsPolicySpec{
-					LoadBalancingMethod: helpers.GetPointer(ngfAPI.LoadBalancingTypeRandom),
-				},
-			},
-			expConditions: nil,
-		},
-		{
-			name: "oss method hash consistent with Plus disabled",
-			policy: &ngfAPI.UpstreamSettingsPolicy{
-				Spec: ngfAPI.UpstreamSettingsPolicySpec{
-					LoadBalancingMethod: helpers.GetPointer(ngfAPI.LoadBalancingTypeHashConsistent),
-				},
-			},
-			expConditions: nil,
-		},
-		{
-			name: "oss method least_time header allowed with Plus enabled",
+			name: "valid load balancing method",
 			policy: &ngfAPI.UpstreamSettingsPolicy{
 				Spec: ngfAPI.UpstreamSettingsPolicySpec{
 					LoadBalancingMethod: helpers.GetPointer(ngfAPI.LoadBalancingTypeLeastTimeHeader),
 				},
 			},
-			plusEnabled:   true,
 			expConditions: nil,
 		},
 		{
-			name: "invalid load balancing method for NGINX OSS",
+			name: "invalid load balancing method",
 			policy: &ngfAPI.UpstreamSettingsPolicy{
 				Spec: ngfAPI.UpstreamSettingsPolicySpec{
 					LoadBalancingMethod: helpers.GetPointer(ngfAPI.LoadBalancingType("invalid-method")),
@@ -342,21 +322,8 @@ func TestValidate_ValidateLoadBalancingMethod(t *testing.T) {
 			},
 			expConditions: []conditions.Condition{
 				conditions.NewPolicyInvalid("spec.loadBalancingMethod: Invalid value: \"invalid-method\": " +
-					"supports the following load balancing methods: "),
+					"The following load balancing methods are supported: "),
 			},
-		},
-		{
-			name: "invalid load balancing method for NGINX Plus",
-			policy: &ngfAPI.UpstreamSettingsPolicy{
-				Spec: ngfAPI.UpstreamSettingsPolicySpec{
-					LoadBalancingMethod: helpers.GetPointer(ngfAPI.LoadBalancingType("invalid-method")),
-				},
-			},
-			expConditions: []conditions.Condition{
-				conditions.NewPolicyInvalid("spec.loadBalancingMethod: Invalid value: \"invalid-method\": " +
-					"supports the following load balancing methods: "),
-			},
-			plusEnabled: true,
 		},
 	}
 
@@ -371,6 +338,8 @@ func TestValidate_ValidateLoadBalancingMethod(t *testing.T) {
 			if test.expConditions != nil {
 				g.Expect(conds).To(HaveLen(1))
 				g.Expect(conds[0].Message).To(ContainSubstring(test.expConditions[0].Message))
+			} else {
+				g.Expect(conds).To(BeNil())
 			}
 		})
 	}

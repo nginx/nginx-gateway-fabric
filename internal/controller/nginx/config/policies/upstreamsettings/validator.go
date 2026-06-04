@@ -172,7 +172,7 @@ func (v Validator) validateLoadBalancingMethod(spec ngfAPI.UpstreamSettingsPolic
 			lbPath,
 			*spec.LoadBalancingMethod,
 			fmt.Sprintf(
-				"supports the following load balancing methods: %s",
+				"The following load balancing methods are supported: %s",
 				getLoadBalancingMethodList(allowedMethods),
 			),
 		))
