@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dlclark/regexp2"
+	"github.com/dlclark/regexp2/v2"
 	k8svalidation "k8s.io/apimachinery/pkg/util/validation"
 )
 
@@ -17,7 +17,7 @@ const (
 )
 
 var (
-	pathRegexp   = regexp2.MustCompile("^"+pathFmt+"$", 0)
+	pathRegexp   = regexp2.MustCompile("^"+pathFmt+"$", regexp2.None)
 	pathExamples = []string{"/", "/path", "/path/subpath-123"}
 )
 
