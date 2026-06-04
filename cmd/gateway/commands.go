@@ -175,7 +175,7 @@ func createControllerCommand() *cobra.Command {
 		}
 
 		serverTLSDomain = stringValidatingValue{
-			validator: validateQualifiedName,
+			validator: validateResourceName,
 			value:     "svc",
 		}
 	)
@@ -607,7 +607,7 @@ func createGenerateCertsCommand() *cobra.Command {
 			value:     defaultDomain,
 		}
 		serverTLSDomain = stringValidatingValue{
-			validator: validateQualifiedName,
+			validator: validateResourceName,
 			value:     "svc",
 		}
 		overwrite bool
