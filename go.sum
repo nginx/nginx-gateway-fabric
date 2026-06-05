@@ -179,8 +179,8 @@ github.com/modern-go/reflect2 v1.0.3-0.20250322232337-35a7c28c31ee h1:W5t00kpgFd
 github.com/modern-go/reflect2 v1.0.3-0.20250322232337-35a7c28c31ee/go.mod h1:yWuevngMOJpCy52FWWMvUC8ws7m/LJsjYzDa0/r8luk=
 github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 h1:C3w9PqII01/Oq1c1nUAm88MOHcQC9l5mIlSMApZMrHA=
 github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822/go.mod h1:+n7T8mK8HuQTcFwEeznm/DIxMOiR9yIdICNftLE1DvQ=
-github.com/nginx/agent/v3 v3.10.3 h1:MwYCCdmhsIc4teupehrpm7LA+jwgaImrr+JeBf4+PqE=
-github.com/nginx/agent/v3 v3.10.3/go.mod h1:170U88JNnd7J3ra7/ZfOzBBFHROnH5gG+b9ZNyXsWhQ=
+github.com/nginx/agent/v3 v3.10.4 h1:kdCvRPTPzfj7SmohqcfJyfkTHtLJFZ6MFQtu3/BYI40=
+github.com/nginx/agent/v3 v3.10.4/go.mod h1:nTGdLlhG67dgmm+kXiSGFrBTT1jQto/cspQvdoKUb58=
 github.com/nginx/nginx-plus-go-client/v3 v3.0.1 h1:SU8MoRQVSa1aXqNUI3fc+OA9GM30aqAhV4yBWs9tD2s=
 github.com/nginx/nginx-plus-go-client/v3 v3.0.1/go.mod h1:PjlGB6drb5RCWnUp1XDTlzKFPRI2a3ePg2kNCb1AN94=
 github.com/nginx/telemetry-exporter v0.1.5 h1:niCAHMii9a74UW3GuqpBt/n1/FIAKrZtTxtEH0MGSiU=
@@ -219,8 +219,8 @@ github.com/sagikazarmark/locafero v0.11.0 h1:1iurJgmM9G3PA/I+wWYIOw/5SyBtxapeHDc
 github.com/sagikazarmark/locafero v0.11.0/go.mod h1:nVIGvgyzw595SUSUE6tvCp3YYTeHs15MvlmU87WwIik=
 github.com/sclevine/spec v1.4.0 h1:z/Q9idDcay5m5irkZ28M7PtQM4aOISzOpj4bUPkDee8=
 github.com/sclevine/spec v1.4.0/go.mod h1:LvpgJaFyvQzRvc1kaDs0bulYwzC70PbiYjC4QnFHkOM=
-github.com/shirou/gopsutil/v4 v4.26.3 h1:2ESdQt90yU3oXF/CdOlRCJxrP+Am1aBYubTMTfxJ1qc=
-github.com/shirou/gopsutil/v4 v4.26.3/go.mod h1:LZ6ewCSkBqUpvSOf+LsTGnRinC6iaNUNMGBtDkJBaLQ=
+github.com/shirou/gopsutil/v4 v4.26.5 h1:RPcBXkpz7kOj9PqGFQOlBPZHsyaPvPVQc098y9RmCNM=
+github.com/shirou/gopsutil/v4 v4.26.5/go.mod h1:LZ6ewCSkBqUpvSOf+LsTGnRinC6iaNUNMGBtDkJBaLQ=
 github.com/sirupsen/logrus v1.9.4 h1:TsZE7l11zFCLZnZ+teH4Umoq5BhEIfIzfRDZ1Uzql2w=
 github.com/sirupsen/logrus v1.9.4/go.mod h1:ftWc9WdOfJ0a92nsE2jF5u5ZwH8Bv2zdeOC42RjbV2g=
 github.com/sourcegraph/conc v0.3.1-0.20240121214520-5f936abd7ae8 h1:+jumHNA0Wrelhe64i8F6HNlS8pkoyMv5sreGx2Ry5Rw=

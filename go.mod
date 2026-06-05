@@ -9,7 +9,7 @@ require (
 	github.com/go-logr/logr v1.4.3
 	github.com/google/go-cmp v0.7.0
 	github.com/google/uuid v1.6.0
-	github.com/nginx/agent/v3 v3.10.3
+	github.com/nginx/agent/v3 v3.10.4
 	github.com/nginx/telemetry-exporter v0.1.5
 	github.com/onsi/ginkgo/v2 v2.29.0
 	github.com/onsi/gomega v1.41.0
