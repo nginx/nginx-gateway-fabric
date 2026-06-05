@@ -153,6 +153,27 @@ const (
 	// pushes the new bundle to the data plane.
 	PolicyReasonBundleUpdated v1.PolicyConditionReason = "BundleUpdated"
 
+	// PolicyConditionProgrammed is the GEP-713 "Programmed" condition type. It indicates whether the policy's
+	// spec is guaranteed by the controller to be fully programmed for enforcement in the data plane.
+	// It shares the "Programmed" type value with WAFProgrammedConditionType; the two are kept separate for now
+	// and may be consolidated in a follow-up.
+	PolicyConditionProgrammed v1.PolicyConditionType = "Programmed"
+
+	// PolicyReasonPartiallyProgrammed is reserved for the "Programmed" condition (status True) when only part of
+	// the policy's spec is programmed because other parts were superseded during conflict resolution (GEP-713).
+	// NGF resolves policy conflicts all-or-nothing: a policy that loses conflict resolution is rejected in full
+	// and reported as Overridden, so no partial-override path sets this reason yet. It is kept defined ahead of
+	// field-level partial-override support.
+	PolicyReasonPartiallyProgrammed v1.PolicyConditionReason = "PartiallyProgrammed"
+
+	// PolicyReasonReconciling is used with the "Programmed" condition (status False) when the policy is not yet
+	// programmed because it is invalid or still being reconciled by the controller (GEP-713).
+	PolicyReasonReconciling v1.PolicyConditionReason = "Reconciling"
+
+	// PolicyReasonOverridden is used with the "Programmed" condition (status False) when the policy has been
+	// fully overridden by another policy of greater precedence during conflict resolution (GEP-713).
+	PolicyReasonOverridden v1.PolicyConditionReason = "Overridden"
+
 	// ClientSettingsPolicyAffected is used with the "PolicyAffected" condition when a
 	// ClientSettingsPolicy is applied to a Gateway, HTTPRoute, or GRPCRoute.
 	ClientSettingsPolicyAffected v1.PolicyConditionType = "ClientSettingsPolicyAffected"
@@ -1239,6 +1260,40 @@ func NewPolicyConflicted(msg string) Condition {
 		Status:  metav1.ConditionFalse,
 		Reason:  string(v1.PolicyReasonConflicted),
 		Message: msg,
+	}
+}
+
+// NewSettingsPolicyProgrammed returns the GEP-713 "Programmed" Condition (status True) indicating that the
+// Policy has been fully programmed for enforcement in the data plane.
+func NewSettingsPolicyProgrammed() Condition {
+	return Condition{
+		Type:    string(PolicyConditionProgrammed),
+		Status:  metav1.ConditionTrue,
+		Reason:  string(PolicyReasonProgrammed),
+		Message: "Policy is programmed in the data plane",
+	}
+}
+
+// NewSettingsPolicyNotProgrammed returns the GEP-713 "Programmed" Condition (status False) indicating that the
+// Policy is not programmed in the data plane because it is invalid or still being reconciled.
+func NewSettingsPolicyNotProgrammed() Condition {
+	return Condition{
+		Type:    string(PolicyConditionProgrammed),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(PolicyReasonReconciling),
+		Message: "Policy is not programmed in the data plane",
+	}
+}
+
+// NewSettingsPolicyOverridden returns the GEP-713 "Programmed" Condition (status False) indicating that the
+// Policy is not programmed in the data plane because it was fully overridden by a conflicting Policy of greater
+// precedence during conflict resolution.
+func NewSettingsPolicyOverridden() Condition {
+	return Condition{
+		Type:    string(PolicyConditionProgrammed),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(PolicyReasonOverridden),
+		Message: "Policy is overridden by a conflicting policy of greater precedence",
 	}
 }
 
