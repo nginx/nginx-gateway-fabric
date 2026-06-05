@@ -111,7 +111,7 @@
     },
     "fullnameOverride": {
       "default": "",
-      "description": "String to fully override the release name.",
+      "description": "String to fully override the generated resource names.",
       "title": "fullnameOverride",
       "type": "string"
     },
@@ -131,7 +131,7 @@
     },
     "nameOverride": {
       "default": "",
-      "description": "String to partially override the release name.",
+      "description": "String to partially override the chart name used for resource naming.",
       "title": "nameOverride",
       "type": "string"
     },
