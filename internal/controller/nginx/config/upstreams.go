@@ -34,9 +34,9 @@ const (
 	// stateDir is the directory for storing state files.
 	stateDir = "/var/lib/nginx/state"
 	// default load balancing method.
-	defaultLBMethod = "least_time header"
+	defaultLBMethod = "random two least_time header"
 	// default load balancing method for stream upstreams.
-	defaultStreamLBMethod = "least_time bytes"
+	defaultStreamLBMethod = "random two least_time first_byte"
 )
 
 // keepAliveChecker takes an upstream name and returns if it has keep alive settings enabled.

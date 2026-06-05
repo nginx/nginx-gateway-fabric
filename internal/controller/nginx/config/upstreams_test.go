@@ -1319,7 +1319,7 @@ func TestCreateStreamUpstreams(t *testing.T) {
 		{
 			Name:                "up2",
 			ZoneSize:            ossZoneSize,
-			LoadBalancingMethod: "least_time bytes",
+			LoadBalancingMethod: defaultStreamLBMethod,
 			Servers: []stream.UpstreamServer{
 				{
 					Address: "11.0.0.0:80",
@@ -1392,7 +1392,7 @@ func TestCreateStreamUpstream(t *testing.T) {
 			expectedUpstream: stream.Upstream{
 				Name:                "external-name-service",
 				ZoneSize:            ossZoneSize,
-				LoadBalancingMethod: "least_time bytes",
+				LoadBalancingMethod: defaultStreamLBMethod,
 				Servers: []stream.UpstreamServer{
 					{
 						Address: "backend.example.com:443",
@@ -1425,7 +1425,7 @@ func TestCreateStreamUpstream(t *testing.T) {
 			expectedUpstream: stream.Upstream{
 				Name:                "mixed-endpoints",
 				ZoneSize:            ossZoneSize,
-				LoadBalancingMethod: "least_time bytes",
+				LoadBalancingMethod: defaultStreamLBMethod,
 				Servers: []stream.UpstreamServer{
 					{
 						Address: "192.168.1.10:8080",
@@ -1710,7 +1710,7 @@ func TestExecuteUpstreams_LoadBalancingMethod(t *testing.T) {
 			expectedSubStrings: map[string]int{
 				"upstream up1-usp-ipv4": 1,
 				"upstream up2-usp-ipv6": 1,
-				defaultLBMethod + ";":   2,
+				"least_time header;":    2,
 			},
 		},
 		{
@@ -1800,7 +1800,7 @@ func TestExecuteUpstreams_LoadBalancingMethod(t *testing.T) {
 			expectedSubStrings: map[string]int{
 				"upstream up1-usp-ipv4": 1,
 				"upstream up2-usp-ipv6": 1,
-				defaultLBMethod + ";":   2,
+				"least_time header;":    2,
 			},
 		},
 		{
