@@ -18,7 +18,7 @@ func TestGenerateCertificates(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	certConfig, err := generateCertificates("nginx", "default", "cluster.local")
+	certConfig, err := generateCertificates("nginx", "default", "cluster.local", "svc")
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(certConfig).ToNot(BeNil())
 	g.Expect(certConfig.caCertificate).ToNot(BeNil())
@@ -59,6 +59,28 @@ func TestGenerateCertificates(t *testing.T) {
 	g.Expect(err).ToNot(HaveOccurred())
 }
 
+func TestGenerateCertificatesWithCustomServerTLSDomain(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	certConfig, err := generateCertificates("nginx", "default", "cluster.local", "internal.mycompany.com")
+	g.Expect(err).ToNot(HaveOccurred())
+
+	pool := x509.NewCertPool()
+	g.Expect(pool.AppendCertsFromPEM(certConfig.caCertificate)).To(BeTrue())
+
+	block, _ := pem.Decode(certConfig.serverCertificate)
+	g.Expect(block).ToNot(BeNil())
+	serverCert, err := x509.ParseCertificate(block.Bytes)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	_, err = serverCert.Verify(x509.VerifyOptions{
+		DNSName: "nginx.default.internal.mycompany.com",
+		Roots:   pool,
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+}
+
 func TestCreateSecrets(t *testing.T) {
 	t.Parallel()
 
@@ -79,7 +101,7 @@ func TestCreateSecrets(t *testing.T) {
 	}
 
 	verifySecrets := func(g *WithT, name string, overwrite bool) {
-		certConfig, err := generateCertificates("nginx", "default", "cluster.local")
+		certConfig, err := generateCertificates("nginx", "default", "cluster.local", "svc")
 		g.Expect(err).ToNot(HaveOccurred())
 		g.Expect(certConfig).ToNot(BeNil())
 
@@ -103,7 +125,7 @@ func TestCreateSecrets(t *testing.T) {
 		g.Expect(clientSecret.Data[secrets.TLSKeyKey]).To(Equal(certConfig.clientKey))
 
 		// If overwrite is false, then no updates should occur. If true, then updates should occur.
-		newCertConfig, err := generateCertificates("nginx", "default", "new-DNS-name")
+		newCertConfig, err := generateCertificates("nginx", "default", "new-DNS-name", "svc")
 		g.Expect(err).ToNot(HaveOccurred())
 		g.Expect(newCertConfig).ToNot(BeNil())
 		g.Expect(newCertConfig).ToNot(Equal(certConfig))

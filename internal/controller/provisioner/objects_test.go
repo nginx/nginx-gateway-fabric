@@ -1832,6 +1832,7 @@ func TestBuildNginxConfigMaps_AgentFields(t *testing.T) {
 				EndpointPort:           443,
 				EndpointTLSSkipVerify:  false,
 			},
+			ServerTLSDomain: "svc",
 		},
 	}
 	objectMeta := metav1.ObjectMeta{Name: "test", Namespace: "default"}
@@ -1867,6 +1868,8 @@ func TestBuildNginxConfigMaps_AgentFields(t *testing.T) {
 	g.Expect(data).To(ContainSubstring("host: console.example.com"))
 	g.Expect(data).To(ContainSubstring("port: 443"))
 	g.Expect(data).To(ContainSubstring("skip_verify: false"))
+	g.Expect(data).To(ContainSubstring("host: test-service.default.svc"))
+	g.Expect(data).To(ContainSubstring("server_name: test-service.default.svc"))
 	// Verify base agent features are present (metrics enabled by default)
 	g.Expect(data).To(ContainSubstring("- configuration"))
 	g.Expect(data).To(ContainSubstring("- certificates"))
@@ -1874,6 +1877,40 @@ func TestBuildNginxConfigMaps_AgentFields(t *testing.T) {
 	// Should not have WAF or Plus features
 	g.Expect(data).ToNot(ContainSubstring("- logs-nap"))
 	g.Expect(data).ToNot(ContainSubstring("- api-action"))
+}
+
+func TestBuildNginxConfigMaps_AgentConfigUsesCustomServerTLSDomain(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	fakeClient := createFakeClientWithScheme()
+	provisioner := &NginxProvisioner{
+		k8sClient: fakeClient,
+		cfg: Config{
+			GatewayPodConfig: &config.GatewayPodConfig{
+				Namespace:   "default",
+				ServiceName: "test-service",
+			},
+			AgentLabels:     make(map[string]string),
+			ServerTLSDomain: "internal.mycompany.com",
+		},
+	}
+	objectMeta := metav1.ObjectMeta{Name: "test", Namespace: "default"}
+
+	gateway := &gatewayv1.Gateway{
+		ObjectMeta: metav1.ObjectMeta{Name: "gw", Namespace: "default"},
+	}
+
+	names := provisioner.buildResourceNames("gw-nginx")
+	configMaps, errs := provisioner.buildNginxConfigMaps(objectMeta, &graph.EffectiveNginxProxy{}, names, gateway)
+	g.Expect(errs).To(BeNil())
+
+	agentCM, ok := configMaps[1].(*corev1.ConfigMap)
+	g.Expect(ok).To(BeTrue())
+	data := agentCM.Data[configmaps.AgentConfKey]
+
+	g.Expect(data).To(ContainSubstring("host: test-service.default.internal.mycompany.com"))
+	g.Expect(data).To(ContainSubstring("server_name: test-service.default.internal.mycompany.com"))
 }
 
 func TestBuildReadinessProbe(t *testing.T) {

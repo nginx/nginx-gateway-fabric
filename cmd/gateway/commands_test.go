@@ -529,6 +529,48 @@ func TestControllerCmdFlagValidation(t *testing.T) {
 			wantErr:           true,
 			expectedErrPrefix: `invalid argument "!@#$" for "--watch-namespaces" flag: invalid format: `,
 		},
+		{
+			name: "server-tls-domain accepts a single label",
+			args: []string{
+				"--gateway-ctlr-name=gateway.nginx.org/nginx-gateway",
+				"--gatewayclass=nginx",
+				"--server-tls-domain=svc",
+			},
+			wantErr: false,
+		},
+		{
+			name: "server-tls-domain accepts a multi-label domain",
+			args: []string{
+				"--gateway-ctlr-name=gateway.nginx.org/nginx-gateway",
+				"--gatewayclass=nginx",
+				"--server-tls-domain=internal.mycompany.com",
+			},
+			wantErr: false,
+		},
+		{
+			name: "server-tls-domain is set to empty string",
+			args: []string{
+				"--server-tls-domain=",
+			},
+			wantErr:           true,
+			expectedErrPrefix: `invalid argument "" for "--server-tls-domain" flag: must be set`,
+		},
+		{
+			name: "server-tls-domain contains uppercase characters which are not valid in a DNS subdomain",
+			args: []string{
+				"--server-tls-domain=Internal.MyCompany.Com",
+			},
+			wantErr:           true,
+			expectedErrPrefix: `invalid argument "Internal.MyCompany.Com" for "--server-tls-domain" flag: invalid format`,
+		},
+		{
+			name: "server-tls-domain contains an underscore which is not valid in a DNS subdomain",
+			args: []string{
+				"--server-tls-domain=my_domain.com",
+			},
+			wantErr:           true,
+			expectedErrPrefix: `invalid argument "my_domain.com" for "--server-tls-domain" flag: invalid format`,
+		},
 	}
 
 	// common flags validation is tested separately
@@ -625,6 +667,44 @@ func TestGenerateCertsCmdFlagValidation(t *testing.T) {
 			},
 			wantErr:           true,
 			expectedErrPrefix: `invalid argument "!@#$" for "--cluster-domain" flag: invalid format`,
+		},
+		{
+			name: "server-tls-domain accepts a single label",
+			args: []string{
+				"--server-tls-domain=svc",
+			},
+			wantErr: false,
+		},
+		{
+			name: "server-tls-domain accepts a multi-label domain",
+			args: []string{
+				"--server-tls-domain=internal.mycompany.com",
+			},
+			wantErr: false,
+		},
+		{
+			name: "server-tls-domain is set to empty string",
+			args: []string{
+				"--server-tls-domain=",
+			},
+			wantErr:           true,
+			expectedErrPrefix: `invalid argument "" for "--server-tls-domain" flag: must be set`,
+		},
+		{
+			name: "server-tls-domain contains uppercase characters which are not valid in a DNS subdomain",
+			args: []string{
+				"--server-tls-domain=Internal.MyCompany.Com",
+			},
+			wantErr:           true,
+			expectedErrPrefix: `invalid argument "Internal.MyCompany.Com" for "--server-tls-domain" flag: invalid format`,
+		},
+		{
+			name: "server-tls-domain contains an underscore which is not valid in a DNS subdomain",
+			args: []string{
+				"--server-tls-domain=my_domain.com",
+			},
+			wantErr:           true,
+			expectedErrPrefix: `invalid argument "my_domain.com" for "--server-tls-domain" flag: invalid format`,
 		},
 	}
 

@@ -16,18 +16,20 @@ type Config struct {
 	GatewayPodConfig GatewayPodConfig
 	// Logger is the Zap Logger used by all components.
 	Logger logr.Logger
-	// NGINXSCCName is the name of the SecurityContextConstraints for the NGINX Pods. Only applicable in OpenShift.
-	NGINXSCCName string
+	// GatewayClassName is the name of the GatewayClass resource that the Gateway will use.
+	GatewayClassName string
 	// ConfigName is the name of the NginxGateway resource for this controller.
 	ConfigName string
 	// AgentTLSSecretName is the name of the TLS Secret used by NGINX Agent to communicate with the control plane.
 	AgentTLSSecretName string
-	// GatewayClassName is the name of the GatewayClass resource that the Gateway will use.
-	GatewayClassName string
+	// ServerTLSDomain is the domain suffix used in the server TLS cert SAN and agent config host. Defaults to "svc".
+	ServerTLSDomain string
 	// ImageSource is the source of the NGINX Gateway image.
 	ImageSource string
 	// GatewayCtlrName is the name of this controller.
 	GatewayCtlrName string
+	// NGINXSCCName is the name of the SecurityContextConstraints for the NGINX Pods. Only applicable in OpenShift.
+	NGINXSCCName string
 	// UsageReportConfig specifies the NGINX Plus usage reporting configuration.
 	UsageReportConfig UsageReportConfig
 	// Flags contains the NGF command-line flag names and values.

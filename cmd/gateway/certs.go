@@ -45,7 +45,7 @@ type certificateConfig struct {
 }
 
 // generateCertificates creates a CA, server, and client certificates and keys.
-func generateCertificates(service, namespace, clientDNSDomain string) (*certificateConfig, error) {
+func generateCertificates(service, namespace, clientDNSDomain, serverTLSDomain string) (*certificateConfig, error) {
 	caCertPEM, caKeyPEM, err := generateCA()
 	if err != nil {
 		return nil, fmt.Errorf("error generating CA: %w", err)
@@ -56,7 +56,7 @@ func generateCertificates(service, namespace, clientDNSDomain string) (*certific
 		return nil, err
 	}
 
-	serverCert, serverKey, err := generateCert(caKeyPair, serverDNSNames(service, namespace))
+	serverCert, serverKey, err := generateCert(caKeyPair, serverDNSNames(service, namespace, serverTLSDomain))
 	if err != nil {
 		return nil, fmt.Errorf("error generating server cert: %w", err)
 	}
@@ -154,9 +154,9 @@ func subjectKeyID(n *big.Int) []byte {
 	return h.Sum(nil)
 }
 
-func serverDNSNames(service, namespace string) []string {
+func serverDNSNames(service, namespace, serverTLSDomain string) []string {
 	return []string{
-		fmt.Sprintf("%s.%s.svc", service, namespace),
+		fmt.Sprintf("%s.%s.%s", service, namespace, serverTLSDomain),
 	}
 }
 
