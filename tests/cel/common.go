@@ -81,6 +81,9 @@ const (
 	// Strategy validation error.
 	expectedStrategyMustBeOfTypeRatio = "ratio can only be specified if strategy is of type ratio"
 
+	// PodDisruptionBudget validation error.
+	expectedPDBExactlyOneFieldError = "exactly one of minAvailable or maxUnavailable must be set"
+
 	// Compression validation errors.
 	expectedCompressionGzipRequiredError = "type 'gzip' requires spec.compression.gzip to be set"
 

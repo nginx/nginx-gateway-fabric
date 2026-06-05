@@ -720,10 +720,12 @@ type DaemonSetSpec struct {
 	Patches []Patch `json:"patches,omitempty"`
 }
 
-// PodDisruptionBudget is the configuration for PodDisruptionBudget,
+// PodDisruptionBudgetSpec is the configuration for PodDisruptionBudget,
 // which limits the number of concurrent disruptions of a pod.
-// MinAvailable and MaxUnavailable are mutually exclusive; only one may be set.
-// The Kubernetes API will reject a PodDisruptionBudget with both fields set.
+//
+// +kubebuilder:validation:XValidation:message="exactly one of minAvailable or maxUnavailable must be set",rule="(has(self.minAvailable) && !has(self.maxUnavailable)) || (!has(self.minAvailable) && has(self.maxUnavailable))"
+//
+//nolint:lll
 type PodDisruptionBudgetSpec struct {
 	// MinAvailable is the minimum number of pods that must be available after an eviction.
 	// Value can be an absolute number (e.g. 1) or a percentage of desired pods (e.g. 50%).

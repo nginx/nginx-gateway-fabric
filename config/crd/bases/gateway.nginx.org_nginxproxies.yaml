@@ -8472,6 +8472,11 @@ spec:
                             - AlwaysAllow
                             type: string
                         type: object
+                        x-kubernetes-validations:
+                        - message: exactly one of minAvailable or maxUnavailable must
+                            be set
+                          rule: (has(self.minAvailable) && !has(self.maxUnavailable))
+                            || (!has(self.minAvailable) && has(self.maxUnavailable))
                       replicas:
                         description: Number of desired Pods.
                         format: int32

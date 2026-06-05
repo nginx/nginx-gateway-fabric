@@ -844,6 +844,8 @@ func isLoadBalancerClassImmutabilityErr(err error) bool {
 	return false
 }
 
+// needToDeletePDB returns true if a PDB was previously created for this Gateway
+// but is no longer configured in the NginxProxy spec, and therefore should be deleted.
 func needToDeletePDB(cfg *NginxResources) bool {
 	if cfg.PDB.Name != "" && cfg.Gateway != nil {
 		if cfg.Gateway.EffectiveNginxProxy != nil &&
