@@ -196,6 +196,9 @@ func (p *NginxProvisioner) Enable(ctx context.Context) {
 
 	p.lock.RLock()
 	for _, gatewayNSName := range p.resourcesToDeleteOnStartup {
+		if p.store.getGateway(gatewayNSName) != nil {
+			continue
+		}
 		if err := p.deprovisionNginxForInvalidGateway(ctx, gatewayNSName); err != nil {
 			p.cfg.Logger.Error(err, "error deprovisioning nginx resources on startup")
 		}
