@@ -1710,7 +1710,7 @@ func TestExecuteUpstreams_LoadBalancingMethod(t *testing.T) {
 			expectedSubStrings: map[string]int{
 				"upstream up1-usp-ipv4": 1,
 				"upstream up2-usp-ipv6": 1,
-				"least_time header;":    2,
+				defaultLBMethod + ";":   2,
 			},
 		},
 		{
