@@ -66,8 +66,6 @@ type Location struct {
 	AuthExternalRequest *AuthExternalRequest
 	// AuthJWT contains the configuration for JWT authentication.
 	AuthJWT *AuthJWT
-	// AuthRequire sets the auth_jwt_require directive for this location.
-	AuthRequire string
 	// AuthBasic contains the configuration for basic authentication.
 	AuthBasic *AuthBasic
 	// ProxyPassRequestBody renders proxy_pass_request_body ("on"/"off"); unset leaves the directive out.

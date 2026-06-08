@@ -2,7 +2,6 @@ package config
 
 import (
 	"fmt"
-	"reflect"
 	"sort"
 	"strings"
 	"testing"
@@ -897,7 +896,7 @@ func TestCollectAuthZClaimSets(t *testing.T) {
 
 	tests := []struct {
 		name         string
-		expClaimSets map[string][]string
+		expClaimSets []ClaimSet
 		authZConfigs []*dataplane.AuthZConfig
 	}{
 		{
@@ -925,8 +924,8 @@ func TestCollectAuthZClaimSets(t *testing.T) {
 					},
 				},
 			},
-			expClaimSets: map[string][]string{
-				"$jwt_claim_sub": {"sub"},
+			expClaimSets: []ClaimSet{
+				{Variable: "$jwt_claim_sub", Claims: []string{"sub"}},
 			},
 		},
 		{
@@ -946,9 +945,9 @@ func TestCollectAuthZClaimSets(t *testing.T) {
 					},
 				},
 			},
-			expClaimSets: map[string][]string{
-				"$jwt_claim_sub":  {"sub"},
-				"$jwt_claim_role": {"role"},
+			expClaimSets: []ClaimSet{
+				{Variable: "$jwt_claim_role", Claims: []string{"role"}},
+				{Variable: "$jwt_claim_sub", Claims: []string{"sub"}},
 			},
 		},
 		{
@@ -961,8 +960,8 @@ func TestCollectAuthZClaimSets(t *testing.T) {
 					},
 				},
 			},
-			expClaimSets: map[string][]string{
-				"$jwt_claim_roles": {"realm_access", "roles"},
+			expClaimSets: []ClaimSet{
+				{Variable: "$jwt_claim_roles", Claims: []string{"realm_access", "roles"}},
 			},
 		},
 		{
@@ -976,9 +975,9 @@ func TestCollectAuthZClaimSets(t *testing.T) {
 					},
 				},
 			},
-			expClaimSets: map[string][]string{
-				"$jwt_claim_sub":  {"sub"},
-				"$jwt_claim_role": {"role"},
+			expClaimSets: []ClaimSet{
+				{Variable: "$jwt_claim_role", Claims: []string{"role"}},
+				{Variable: "$jwt_claim_sub", Claims: []string{"sub"}},
 			},
 		},
 		{
@@ -1016,8 +1015,26 @@ func TestCollectAuthZClaimSets(t *testing.T) {
 				},
 				nil,
 			},
-			expClaimSets: map[string][]string{
-				"$jwt_claim_sub": {"sub"},
+			expClaimSets: []ClaimSet{
+				{Variable: "$jwt_claim_sub", Claims: []string{"sub"}},
+			},
+		},
+		{
+			name: "results are sorted by variable name",
+			authZConfigs: []*dataplane.AuthZConfig{
+				{
+					FilterNsName: "test-ns_my-filter",
+					AuthClaimSets: map[string][]string{
+						"$jwt_claim_sub":  {"sub"},
+						"$jwt_claim_aud":  {"aud"},
+						"$jwt_claim_role": {"role"},
+					},
+				},
+			},
+			expClaimSets: []ClaimSet{
+				{Variable: "$jwt_claim_aud", Claims: []string{"aud"}},
+				{Variable: "$jwt_claim_role", Claims: []string{"role"}},
+				{Variable: "$jwt_claim_sub", Claims: []string{"sub"}},
 			},
 		},
 	}
@@ -1029,19 +1046,7 @@ func TestCollectAuthZClaimSets(t *testing.T) {
 
 			claimSets := collectAuthZClaimSets(test.authZConfigs)
 
-			g.Expect(claimSets).To(HaveLen(len(test.expClaimSets)))
-
-			for expVar, expValue := range test.expClaimSets {
-				found := false
-				for gotVar, gotValue := range claimSets {
-					if expVar == gotVar && reflect.DeepEqual(expValue, gotValue) {
-						found = true
-						break
-					}
-				}
-				g.Expect(found).To(BeTrue(),
-					fmt.Sprintf("expected claim set variable %q not found", expVar))
-			}
+			g.Expect(claimSets).To(Equal(test.expClaimSets))
 		})
 	}
 }

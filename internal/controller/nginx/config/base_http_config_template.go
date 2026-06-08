@@ -85,8 +85,8 @@ proxy_ssl_certificate /etc/nginx/secrets/{{ $.GatewaySecretID }}.pem;
 proxy_ssl_certificate_key /etc/nginx/secrets/{{ $.GatewaySecretID }}.pem;
 {{- end }}
 
-{{- range $key, $value := .ClaimSets }}
-auth_jwt_claim_set {{ $key }}{{ range $value }} {{ . }}{{ end }};
+{{- range .ClaimSets }}
+auth_jwt_claim_set {{ .Variable }}{{ range .Claims }} {{ . }}{{ end }};
 {{- end }}
 
 {{ range $i := .Includes -}}

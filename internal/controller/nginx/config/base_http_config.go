@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"net"
+	"sort"
 	gotemplate "text/template"
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
@@ -41,15 +42,23 @@ type oidcConfiguration struct {
 	TokenHint              string
 }
 
+// ClaimSet represents a single auth_jwt_claim_set directive with its NGINX variable name and claim path components.
+type ClaimSet struct {
+	// Variable is the NGINX variable name (e.g., "$jwt_claim_sub").
+	Variable string
+	// Claims are the claim path components (e.g., ["realm_access", "roles"]).
+	Claims []string
+}
+
 type httpConfig struct {
 	DNSResolver             *dataplane.DNSResolverConfig
 	AccessLog               *AccessLog
 	Compression             *dataplane.CompressionSettings
-	ClaimSets               map[string][]string
 	GatewaySecretID         dataplane.SSLKeyPairID
 	NginxReadinessProbePath string
 	ServerTokens            string
 	WAFCookieSeed           string
+	ClaimSets               []ClaimSet
 	Includes                []shared.Include
 	OIDCProviders           []*oidcConfiguration
 	NginxReadinessProbePort int32
@@ -214,28 +223,38 @@ func buildAccessLog(accessLogConfig *dataplane.AccessLog) *AccessLog {
 	return nil
 }
 
-// collectAuthZClaimSets collects all ClaimSets from AuthZConfigs.
-func collectAuthZClaimSets(authZConfigs []*dataplane.AuthZConfig) map[string][]string {
+// collectAuthZClaimSets collects all ClaimSets from AuthZConfigs
+// and returns a slice sorted by variable name for a deterministic output.
+func collectAuthZClaimSets(authZConfigs []*dataplane.AuthZConfig) []ClaimSet {
 	if len(authZConfigs) == 0 {
 		return nil
 	}
 
-	allClaimSets := make(map[string][]string)
+	seen := make(map[string][]string)
 
 	for _, cfg := range authZConfigs {
 		if cfg == nil {
 			continue
 		}
 		for k, v := range cfg.AuthClaimSets {
-			if _, exists := allClaimSets[k]; !exists {
-				allClaimSets[k] = v
+			if _, exists := seen[k]; !exists {
+				seen[k] = v
 			}
 		}
 	}
 
-	if len(allClaimSets) == 0 {
+	if len(seen) == 0 {
 		return nil
 	}
 
-	return allClaimSets
+	result := make([]ClaimSet, 0, len(seen))
+	for variable, claims := range seen {
+		result = append(result, ClaimSet{Variable: variable, Claims: claims})
+	}
+
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].Variable < result[j].Variable
+	})
+
+	return result
 }
