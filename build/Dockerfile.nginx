@@ -11,6 +11,7 @@ ARG NGINX_VERSION=1.31.1
 
 # renovate: datasource=github-tags depName=nginx/agent
 ARG NGINX_AGENT_VERSION=v3.10.4
+ARG NGINX_AGENT_BRANCH=main
 ARG NJS_DIR
 ARG NGINX_CONF_DIR
 ARG BUILD_AGENT
@@ -21,8 +22,18 @@ RUN --mount=type=bind,from=nginx-files,src=nginx_signing.rsa.pub,target=/etc/apk
     addgroup -g 1001 -S nginx \
     && adduser -S -D -H -u 101 -h /var/cache/nginx -s /sbin/nologin -G nginx -g nginx nginx \
     && printf "%s\n" "https://packages.nginx.org/nginx/mainline/alpine/v$(egrep -o '^[0-9]+\.[0-9]+' /etc/alpine-release)/main" >> /etc/apk/repositories \
-    && printf "%s\n" "https://packages.nginx.org/nginx-agent/alpine/v$(egrep -o '^[0-9]+\.[0-9]+' /etc/alpine-release)/main" >> /etc/apk/repositories \
-    && apk add --no-cache nginx~=${NGINX_VERSION} nginx-module-njs nginx-module-otel nginx-agent=${NGINX_AGENT_VERSION#v}
+    && apk add --no-cache nginx~=${NGINX_VERSION} nginx-module-njs nginx-module-otel
+
+RUN apk add --no-cache git go make \
+    && git clone --branch ${NGINX_AGENT_BRANCH} --depth 1 https://github.com/nginx/agent.git /tmp/agent \
+    && cd /tmp/agent \
+    && make build \
+    && cp /tmp/agent/build/nginx-agent /usr/bin/nginx-agent \
+    && mkdir -p /etc/nginx-agent \
+    && cp /tmp/agent/nginx-agent.conf /etc/nginx-agent/ \
+    && cd / \
+    && rm -rf /tmp/agent \
+    && apk del git go make
 
 RUN apk add --no-cache bash \
     && mkdir -p /usr/lib/nginx/modules \
