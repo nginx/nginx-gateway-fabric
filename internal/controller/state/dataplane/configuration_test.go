@@ -6952,24 +6952,22 @@ func TestBuildJWTAuthZConfigFromAuthenticationFilters(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 			result := buildAuthZConfigs(tc.authFilters)
-
-			for _, r := range result {
-				g.Expect(r.AuthClaimSets).To(Equal(tc.expected[0].AuthClaimSets))
-				g.Expect(r.RuleMaps).To(ContainElements(tc.expected[0].RuleMaps))
-				g.Expect(r.ProxySetHeaders).To(ContainElements(tc.expected[0].ProxySetHeaders))
-				if r.AuthZMap != nil {
-					g.Expect(*r.AuthZMap).To(Equal(*tc.expected[0].AuthZMap))
-				} else {
-					g.Expect(tc.expected[0].AuthZMap).To(BeNil())
-				}
-				g.Expect(r.FilterNsName).To(Equal(tc.expected[0].FilterNsName))
-				g.Expect(r.RequireVariable).To(Equal(tc.expected[0].RequireVariable))
-
-				// Set AuthZMap to nil before comparing the rest of the struct,
-				// since it's compared separately above and can be nil in some cases.
-				r.AuthZMap = nil
-				tc.expected[0].AuthZMap = nil
+			g.Expect(result).To(HaveLen(len(tc.expected)))
+			if len(tc.expected) == 0 {
+				return
 			}
+
+			r := result[0]
+			g.Expect(r.AuthClaimSets).To(Equal(tc.expected[0].AuthClaimSets))
+			g.Expect(r.RuleMaps).To(ContainElements(tc.expected[0].RuleMaps))
+			g.Expect(r.ProxySetHeaders).To(ContainElements(tc.expected[0].ProxySetHeaders))
+			if r.AuthZMap != nil {
+				g.Expect(*r.AuthZMap).To(Equal(*tc.expected[0].AuthZMap))
+			} else {
+				g.Expect(tc.expected[0].AuthZMap).To(BeNil())
+			}
+			g.Expect(r.FilterNsName).To(Equal(tc.expected[0].FilterNsName))
+			g.Expect(r.RequireVariable).To(Equal(tc.expected[0].RequireVariable))
 		})
 	}
 }
