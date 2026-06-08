@@ -138,11 +138,6 @@ var (
 		"user",
 		"app-1",
 	}
-	proxySetHeaderExamples = []string{
-		"X-User-Role",
-		"X-App-Name",
-		"X-Custom-Header_1",
-	}
 )
 
 const (

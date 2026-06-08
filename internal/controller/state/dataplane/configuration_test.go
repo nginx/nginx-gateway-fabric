@@ -7064,12 +7064,12 @@ func TestBuildAuthZConfigs_MultipleFiltersNoVariableCollision(t *testing.T) {
 			}
 		}
 		if cfg.AuthZMap != nil {
-			owner, exists := allVars[cfg.AuthZMap.Map.Variable]
+			owner, exists := allVars[cfg.AuthZMap.Variable]
 			g.Expect(exists).To(BeFalse(),
 				"authz map variable %q from filter %q collides with filter %q",
-				cfg.AuthZMap.Map.Variable, cfg.FilterNsName, owner,
+				cfg.AuthZMap.Variable, cfg.FilterNsName, owner,
 			)
-			allVars[cfg.AuthZMap.Map.Variable] = cfg.FilterNsName
+			allVars[cfg.AuthZMap.Variable] = cfg.FilterNsName
 		}
 	}
 
@@ -7100,9 +7100,9 @@ func TestBuildAuthZConfigs_MultipleFiltersNoVariableCollision(t *testing.T) {
 			}
 		}
 		if cfg.AuthZMap != nil {
-			g.Expect(cfg.AuthZMap.Map.Variable).To(HavePrefix(prefix),
+			g.Expect(cfg.AuthZMap.Variable).To(HavePrefix(prefix),
 				"authz map variable %q should be prefixed with %q",
-				cfg.AuthZMap.Map.Variable, prefix,
+				cfg.AuthZMap.Variable, prefix,
 			)
 		}
 		for claimVar := range cfg.AuthClaimSets {
