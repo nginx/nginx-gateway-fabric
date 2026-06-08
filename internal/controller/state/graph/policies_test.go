@@ -1259,13 +1259,15 @@ func TestProcessPolicies(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			processed, _ := processPolicies(
+			processed, _, _ := processPolicies(
 				t.Context(),
 				logr.Discard(),
 				test.policies,
 				test.validator,
 				routes,
 				services,
+				nil,
+				nil,
 				gateways,
 				nil,
 			)
@@ -1485,12 +1487,14 @@ func TestProcessPolicies_RouteOverlap(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			processed, _ := processPolicies(
+			processed, _, _ := processPolicies(
 				t.Context(),
 				logr.Discard(),
 				test.policies,
 				test.validator,
 				test.routes,
+				nil,
+				nil,
 				nil,
 				gateways,
 				nil,
@@ -2520,8 +2524,8 @@ func TestNGFPolicyAncestorLimitHandling(t *testing.T) {
 	g := NewWithT(t)
 
 	// Process policies which should trigger ancestor limit handling
-	processedPolicies, _ := processPolicies(
-		t.Context(), logr.Discard(), testPolicies, validator, routes, referencedServices, gateways, nil,
+	processedPolicies, _, _ := processPolicies(
+		t.Context(), logr.Discard(), testPolicies, validator, routes, referencedServices, nil, nil, gateways, nil,
 	)
 
 	// Create a graph and attach policies to trigger ancestor limit handling

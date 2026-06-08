@@ -16,6 +16,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
+	corev1 "k8s.io/api/core/v1"
+
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
@@ -149,9 +151,13 @@ func BuildConfiguration(
 			serviceResolver,
 			g.ReferencedServices,
 		),
-		BackendGroups:        backendGroups,
-		SSLKeyPairs:          buildSSLKeyPairs(g.ReferencedSecrets, gateway),
-		AuthSecrets:          buildAuthSecrets(g.AuthenticationFilters, g.ReferencedSecrets),
+		BackendGroups: backendGroups,
+		SSLKeyPairs:   buildSSLKeyPairs(g.ReferencedSecrets, gateway),
+		AuthSecrets: buildAuthSecrets(
+			g.AuthenticationFilters,
+			g.ReferencedSecrets,
+			g.ReferencedPayloadProcessorSecrets,
+		),
 		Telemetry:            buildTelemetry(g, gateway),
 		BaseHTTPConfig:       baseHTTPConfig,
 		BaseStreamConfig:     baseStreamConfig,
@@ -164,6 +170,7 @@ func BuildConfiguration(
 		SSLListenerHostnames: sslListenerHostnames,
 		CertBundles:          certBundles,
 		WAF:                  buildWAF(gateway),
+		GuardrailsEnabled:    len(g.ReferencedPayloadProcessorSecrets) > 0 || hasGuardrailsInServers(httpServers, sslServers),
 	}
 
 	return config
@@ -764,6 +771,7 @@ func getCertRefBundleData(bundle secrets.CertificateBundle) []byte {
 func buildAuthSecrets(
 	authenticationFilters map[types.NamespacedName]*graph.AuthenticationFilter,
 	secretsMap map[types.NamespacedName]*secrets.Secret,
+	payloadProcessorSecrets map[types.NamespacedName]*corev1.Secret,
 ) map[AuthFileID]AuthFileData {
 	authFileData := make(map[AuthFileID]AuthFileData, len(authenticationFilters))
 
@@ -779,6 +787,18 @@ func buildAuthSecrets(
 		}
 
 		authFileData[id] = data
+	}
+
+	// Include any referenced PayloadProcessor bearer tokens as auth files so they get emitted
+	// as secret files for the dataplane generator.
+	for nsname, s := range payloadProcessorSecrets {
+		if s == nil || s.Data == nil {
+			continue
+		}
+		if token, ok := s.Data["token"]; ok {
+			id := GenerateAuthTokenFileID(nsname.Namespace, nsname.Name)
+			authFileData[id] = AuthFileData(token)
+		}
 	}
 
 	return authFileData
@@ -937,6 +957,40 @@ func convertBackendTLS(btp *graph.BackendTLSPolicy, gwNsName types.NamespacedNam
 	return verify
 }
 
+// convertGraphGuardrails converts graph-level PayloadProcessor state into a dataplane GuardrailsConfig.
+func convertGraphGuardrails(graphPolicies []*graph.Policy) *GuardrailsConfig {
+	if len(graphPolicies) == 0 {
+		return nil
+	}
+
+	for _, p := range graphPolicies {
+		if p == nil || !p.Valid || p.PayloadProcessorState == nil {
+			continue
+		}
+		s := p.PayloadProcessorState
+		if s.APIURL == "" {
+			continue
+		}
+
+		g := &GuardrailsConfig{
+			Filter:           "on",
+			APIURL:           s.APIURL,
+			TimeoutMS:        s.TimeoutMS,
+			InspectMode:      s.InspectMode,
+			MaxResponseBytes: s.MaxResponseBytes,
+		}
+
+		if s.APITokenSecret != nil {
+			id := GenerateAuthTokenFileID(s.APITokenSecret.Namespace, s.APITokenSecret.Name)
+			g.APITokenAuthFileID = id
+		}
+
+		return g
+	}
+
+	return nil
+}
+
 func buildServers(
 	gateway *graph.Gateway,
 	referencedServices map[types.NamespacedName]*graph.ReferencedService,
@@ -961,7 +1015,13 @@ func buildServers(
 				rulesForProtocol[l.Source.Protocol][l.Source.Port] = rules
 			}
 
-			rules.upsertListener(l, gateway, referencedServices, referencedSecrets, extAuthCertBundleIDs)
+			rules.upsertListener(
+				l,
+				gateway,
+				referencedServices,
+				referencedSecrets,
+				extAuthCertBundleIDs,
+			)
 
 			if l.Source.Protocol == v1.HTTPSProtocolType {
 				hostname := ""
@@ -1052,7 +1112,14 @@ func (hpr *hostPathRules) upsertListener(
 			continue
 		}
 
-		hpr.upsertRoute(r, l, gateway, referencedServices, referencedSecrets, extAuthCertBundleIDs)
+		hpr.upsertRoute(
+			r,
+			l,
+			gateway,
+			referencedServices,
+			referencedSecrets,
+			extAuthCertBundleIDs,
+		)
 	}
 }
 
@@ -1156,6 +1223,7 @@ func (hpr *hostPathRules) upsertRoute(
 					BackendGroup: backendGroup,
 					Filters:      filters,
 					Match:        convertMatch(m),
+					Guardrails:   convertGraphGuardrails(route.Policies),
 				})
 
 				hpr.rulesPerHost[h][key] = hostRule
@@ -1553,6 +1621,11 @@ func GenerateAuthBasicFileID(namespace, name string) AuthFileID {
 // GenerateAuthJWTFileID is used to generate IDs for jwt auth files.
 func GenerateAuthJWTFileID(namespace, name string) AuthFileID {
 	return AuthFileID(fmt.Sprintf("jwt_auth_%s_%s", namespace, name))
+}
+
+// GenerateAuthTokenFileID is used to generate IDs for guardrails API bearer token files.
+func GenerateAuthTokenFileID(namespace, name string) AuthFileID {
+	return AuthFileID(fmt.Sprintf("guardrails_token_%s_%s", namespace, name))
 }
 
 // buildOIDCProviderFromAuthenticationFilters builds the OIDC provider configs from the processed
@@ -2207,6 +2280,23 @@ func buildCompressionConfig(compression *ngfAPIv1alpha2.Compression) *Compressio
 	}
 
 	return settings
+}
+
+// hasGuardrailsInServers returns true if any MatchRule in the given servers has a non-nil GuardrailsConfig.
+// Used as a fallback when ReferencedPayloadProcessorSecrets is empty (e.g. no auth token configured).
+func hasGuardrailsInServers(servers ...[]VirtualServer) bool {
+	for _, group := range servers {
+		for _, s := range group {
+			for _, pr := range s.PathRules {
+				for _, mr := range pr.MatchRules {
+					if mr.Guardrails != nil {
+						return true
+					}
+				}
+			}
+		}
+	}
+	return false
 }
 
 func buildWAF(gateway *graph.Gateway) WAFConfig {

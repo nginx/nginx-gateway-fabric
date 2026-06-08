@@ -27,57 +27,31 @@ const (
 
 // Configuration is an intermediate representation of dataplane configuration.
 type Configuration struct {
-	// CertBundles holds all unique Certificate Bundles, including CA certs and CRL files.
-	CertBundles map[CertBundleID]CertBundle
-	// BaseStreamConfig holds the configuration options at the stream context.
-	BaseStreamConfig BaseStreamConfig
-	// SSLKeyPairs holds all unique SSLKeyPairs.
-	SSLKeyPairs map[SSLKeyPairID]SSLKeyPair
-	// AuthSecrets holds all unique secrets for authentication.
-	AuthSecrets map[AuthFileID]AuthFileData
-	// AuxiliarySecrets contains additional secret data, like certificates/keys/tokens that are not related to
-	// Gateway API resources.
-	AuxiliarySecrets map[graph.SecretFileType][]byte
-	// OIDCProviders holds all OIDC provider configurations at the HTTP level.
-	OIDCProviders []OIDCProvider
-	// DeploymentContext contains metadata about NGF and the cluster.
-	DeploymentContext DeploymentContext
-	// Logging defines logging related settings for NGINX.
-	Logging Logging
-	// WAF defines the WAF configuration.
-	WAF WAFConfig
-	// BackendGroups holds all unique BackendGroups.
-	BackendGroups []BackendGroup
-	// TCPServers holds all TCPServers
-	TCPServers []Layer4VirtualServer
-	// HTTPServers holds all HTTPServers.
-	HTTPServers []VirtualServer
-	// NginxPlus specifies NGINX Plus additional settings.
-	NginxPlus NginxPlus
-	// StreamUpstreams holds all unique stream Upstreams (TLS, TCP, UDP)
-	StreamUpstreams []Upstream
-	// SSLServers holds all SSLServers.
-	SSLServers []VirtualServer
-	// Upstreams holds all unique http Upstreams.
-	Upstreams []Upstream
-	// Policies holds the policies attached to the Gateway.
-	Policies []policies.Policy
-	// UDPServers holds all UDPServers
-	UDPServers []Layer4VirtualServer
-	// TLSServers holds all TLS servers (both Passthrough and Terminate mode).
-	TLSServers []Layer4VirtualServer
-	// SSLListenerHostnames maps each HTTPS port to its list of raw listener hostnames.
-	// An empty string represents a listener with no hostname (catch-all).
-	// Used to build NGINX maps for misdirected request detection.
+	CertBundles          map[CertBundleID]CertBundle
+	BaseStreamConfig     BaseStreamConfig
+	SSLKeyPairs          map[SSLKeyPairID]SSLKeyPair
+	AuthSecrets          map[AuthFileID]AuthFileData
+	AuxiliarySecrets     map[graph.SecretFileType][]byte
 	SSLListenerHostnames map[int32][]string
-	// MainSnippets holds all the snippets that apply to the main context.
-	MainSnippets []Snippet
-	// Telemetry holds the Otel configuration.
-	Telemetry Telemetry
-	// BaseHTTPConfig holds the configuration options at the http context.
-	BaseHTTPConfig BaseHTTPConfig
-	// WorkerConnections specifies the maximum number of simultaneous connections that can be opened by a worker process.
-	WorkerConnections int32
+	DeploymentContext    DeploymentContext
+	Logging              Logging
+	WAF                  WAFConfig
+	HTTPServers          []VirtualServer
+	Upstreams            []Upstream
+	TCPServers           []Layer4VirtualServer
+	MainSnippets         []Snippet
+	NginxPlus            NginxPlus
+	StreamUpstreams      []Upstream
+	SSLServers           []VirtualServer
+	BackendGroups        []BackendGroup
+	Policies             []policies.Policy
+	UDPServers           []Layer4VirtualServer
+	TLSServers           []Layer4VirtualServer
+	OIDCProviders        []OIDCProvider
+	Telemetry            Telemetry
+	BaseHTTPConfig       BaseHTTPConfig
+	WorkerConnections    int32
+	GuardrailsEnabled    bool
 }
 
 // SSLKeyPairID is a unique identifier for a SSLKeyPair.
@@ -530,14 +504,22 @@ type HTTPQueryParamMatch struct {
 // If no rule or match is specified by the user, the default rule {{path:{ type: "PathPrefix", value: "/"}}}
 // is set by the schema.
 type MatchRule struct {
-	// Filters holds the filters for the MatchRule.
-	Filters HTTPFilters
-	// Source is the ObjectMeta of the resource that includes the rule.
-	Source *metav1.ObjectMeta
-	// Match holds the match for the rule.
-	Match Match
-	// BackendGroup is the group of Backends that the rule routes to.
+	Source       *metav1.ObjectMeta
+	Guardrails   *GuardrailsConfig
+	Filters      HTTPFilters
+	Match        Match
 	BackendGroup BackendGroup
+}
+
+// GuardrailsConfig contains ai-guardrails / extproc configuration that must be emitted
+// into the generated NGINX location for the match.
+type GuardrailsConfig struct {
+	TimeoutMS          *int64
+	MaxResponseBytes   *int32
+	Filter             string
+	APIURL             string
+	APITokenAuthFileID AuthFileID
+	InspectMode        string
 }
 
 // Match represents a match for a routing rule which consist of matches against various HTTP request attributes.

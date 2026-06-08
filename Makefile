@@ -4,6 +4,7 @@ SELF_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 CHART_DIR = $(SELF_DIR)charts/nginx-gateway-fabric
 NGINX_CONF_DIR = internal/controller/nginx/conf
 NJS_DIR = internal/controller/nginx/modules/src
+RUST_DIR = internal/controller/nginx/modules/rust/ai-guardrails
 KIND_CONFIG_FILE = $(SELF_DIR)config/cluster/kind-cluster.yaml
 NGINX_DOCKER_BUILD_PLUS_ARGS = --secret id=nginx-repo.crt,src=$(SELF_DIR)nginx-repo.crt --secret id=nginx-repo.key,src=$(SELF_DIR)nginx-repo.key
 NGINX_DOCKER_BUILD_NAP_WAF_ARGS = --build-arg INCLUDE_NAP_WAF=true
@@ -16,7 +17,7 @@ TELEMETRY_ENDPOINT=# if empty, NGF will report telemetry in its logs at debug le
 TELEMETRY_ENDPOINT_INSECURE = false
 
 ENABLE_EXPERIMENTAL ?= false
-ENABLE_INFERENCE_EXTENSION ?= false
+ENABLE_INFERENCE_EXTENSION ?= true
 
 # go build flags - should not be overridden by the user
 GO_LINKER_FlAGS_VARS = -X main.version=${VERSION} -X main.telemetryReportPeriod=${TELEMETRY_REPORT_PERIOD} -X main.telemetryEndpoint=${TELEMETRY_ENDPOINT} -X main.telemetryEndpointInsecure=${TELEMETRY_ENDPOINT_INSECURE}
@@ -40,6 +41,8 @@ NODE_VERSION = 24
 CHART_TESTING_VERSION = v3.14.0
 # renovate: datasource=github-tags depName=dadav/helm-schema
 HELM_SCHEMA_VERSION = 0.23.3
+# renovate: datasource=docker depName=rust
+RUST_VERSION = 1.94
 
 # variables that can be overridden by the user
 PREFIX ?= nginx-gateway-fabric## The name of the NGF image. For example, nginx-gateway-fabric
@@ -58,7 +61,7 @@ PLUS_LICENSE_FILE ?= $(SELF_DIR)license.jwt
 REGISTRY_JWT_FILE ?= $(SELF_DIR)dockerconfig.jwt## Path to the JWT file for the NGINX private registry
 NGINX_IMAGE_PULL_SECRET ?= nginx-plus-registry-secret## Image pull secret name for the NGINX Plus registry
 PLUS_USAGE_ENDPOINT ?=## The N+ usage endpoint. For development, please set to the N1 staging endpoint.
-HELM_PARAMETERS ?=## Optional extra parameters for the Helm install
+HELM_PARAMETERS ?= --set nginxGateway.gwAPIInferenceExtension.enable=true ## Optional extra parameters for the Helm install
 # HELM_WAF_PARAMETERS = --set nginxGateway.plmStorage.url=f5-waf-seaweed-filer.nap5-helm-policy.svc.cluster.local:9333 --set nginxGateway.plmStorage.credentialsSecretName=nap5-helm-policy/f5-waf-seaweedfs-auth --set nginxGateway.plmStorage.tls.caSecretName=nap5-helm-policy/f5-waf-seaweedfs-ca-cert --set nginxGateway.plmStorage.tls.clientSSLSecretName=nap5-helm-policy/f5-waf-seaweedfs-client-cert --set nginxGateway.plmStorage.tls.insecureSkipVerify=true
 
 override NGINX_DOCKER_BUILD_OPTIONS += --build-arg NJS_DIR=$(NJS_DIR) --build-arg NGINX_CONF_DIR=$(NGINX_CONF_DIR) --build-arg BUILD_AGENT=$(BUILD_AGENT)
@@ -248,6 +251,28 @@ njs-unit-test: ## Run unit tests for the njs httpmatches module
 		node:${NODE_VERSION} \
 		/bin/bash -c "npm ci && npm test && npm run clean"
 
+.PHONY: rust-fmt
+rust-fmt: ## Run rustfmt against the inference Rust module
+	docker run --rm -w /modules \
+		-v $(CURDIR)/$(RUST_DIR):/modules/ \
+		rust:${RUST_VERSION} \
+		/bin/bash -c "rustup component add rustfmt && cargo fmt"
+
+.PHONY: rust-lint
+rust-lint: ## Run clippy against the inference Rust module
+	docker build -f $(RUST_DIR)/Dockerfile.testing \
+		--target run \
+		--build-arg COMMAND="clippy --lib --tests -- -D warnings" \
+		--build-arg CACHE_BUST="$(shell date +%s)" \
+		$(RUST_DIR)
+
+.PHONY: rust-unit-test
+rust-unit-test: ## Run unit tests with coverage for the inference Rust module
+	docker build -f $(RUST_DIR)/Dockerfile.testing \
+		--target coverage-output \
+		--output type=local,dest=$(RUST_DIR)/coverage \
+		$(RUST_DIR)
+
 .PHONY: lint-helm
 lint-helm: ## Run the helm chart linter
 	docker run --pull always --rm -v $(CURDIR):/nginx-gateway-fabric -w /nginx-gateway-fabric quay.io/helmpack/chart-testing:$(CHART_TESTING_VERSION) ct lint --config .ct.yaml
@@ -344,4 +369,4 @@ debug-install-local-build: debug-build-images debug-load-images helm-install-loc
 debug-install-local-build-with-plus: debug-build-images-with-plus debug-load-images-with-plus helm-install-local-with-plus ## Install NGF with NGINX Plus from local build using debug NGF binary on configured kind cluster.
 
 .PHONY: dev-all
-dev-all: deps fmt njs-fmt vet lint unit-test njs-unit-test ## Run all the development checks
+dev-all: deps fmt njs-fmt rust-fmt vet lint unit-test njs-unit-test rust-unit-test  ## Run all the development checks

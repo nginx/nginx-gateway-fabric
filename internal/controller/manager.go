@@ -52,6 +52,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/clientsettings"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/observability"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/payloadprocessor"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/proxysettings"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/ratelimit"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/snippetspolicy"
@@ -463,6 +464,10 @@ func createPolicyManager(
 		{
 			GVK:       mustExtractGVK(&ngfAPIv1alpha1.WAFPolicy{}),
 			Validator: waf.NewValidator(),
+		},
+		{
+			GVK:       mustExtractGVK(&ngfAPIv1alpha1.PayloadProcessor{}),
+			Validator: payloadprocessor.NewValidator(),
 		},
 	}
 
@@ -926,6 +931,16 @@ func registerControllers(
 		)
 	}
 
+	// Register PayloadProcessor controller (always enabled)
+	controllerRegCfgs = append(controllerRegCfgs,
+		ctlrCfg{
+			objectType: &ngfAPIv1alpha1.PayloadProcessor{},
+			options: []controller.Option{
+				controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
+			},
+		},
+	)
+
 	// Filter controllers based on CRD existence
 	crdChecker := &crd.CheckerImpl{}
 	controllerRegCfgs, discoveredCRDs, err := filterControllersByCRDExistence(
@@ -1208,6 +1223,11 @@ func prepareFirstEventBatchPreparerArgs(
 			&ngfAPIv1alpha1.SnippetsPolicyList{},
 		)
 	}
+
+	objectLists = append(
+		objectLists,
+		&ngfAPIv1alpha1.PayloadProcessorList{},
+	)
 
 	objectLists = append(objectLists, &gatewayv1.GatewayList{})
 

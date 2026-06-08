@@ -1,0 +1,106 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: vllm-qwen3-32b-epp
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: vllm-qwen3-32b-epp
+rules:
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["discovery.k8s.io"]
+  resources: ["endpointslices"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["inference.networking.k8s.io"]
+  resources: ["inferencepools", "inferencemodels"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["inference.networking.k8s.io"]
+  resources: ["inferencepools/status"]
+  verbs: ["patch", "update"]
+- apiGroups: ["inference.networking.x-k8s.io"]
+  resources: ["inferencemodelrewrites", "inferenceobjectives", "inferencepoolimports"]
+  verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: vllm-qwen3-32b-epp
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: vllm-qwen3-32b-epp
+subjects:
+- kind: ServiceAccount
+  name: vllm-qwen3-32b-epp
+  namespace: default
+---
+## InferencePool — groups the vLLM simulator pods so the Endpoint Picker (EPP)
+## can select individual replicas at request time.
+apiVersion: inference.networking.k8s.io/v1
+kind: InferencePool
+metadata:
+  name: vllm-qwen3-32b
+spec:
+  # Must match the pod labels on the vLLM simulator Deployment.
+  selector:
+    matchLabels:
+      app: vllm-qwen3-32b
+  targetPorts:
+  - number: 8000
+  endpointPickerRef:
+    name: vllm-qwen3-32b-epp
+    port:
+      number: 9002
+---
+## Endpoint Picker (EPP) — picks the best replica for each request.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm-qwen3-32b-epp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vllm-qwen3-32b-epp
+  template:
+    metadata:
+      labels:
+        app: vllm-qwen3-32b-epp
+    spec:
+      serviceAccountName: vllm-qwen3-32b-epp
+      containers:
+      - name: epp
+        image: registry.k8s.io/gateway-api-inference-extension/epp:v1.5.0
+        args:
+        - --pool-name=vllm-qwen3-32b
+        - --pool-namespace=$(POD_NAMESPACE)
+        env:
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        ports:
+        - name: grpc
+          containerPort: 9002
+        - name: metrics
+          containerPort: 9090
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "256Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vllm-qwen3-32b-epp
+spec:
+  selector:
+    app: vllm-qwen3-32b-epp
+  ports:
+  - name: grpc
+    port: 9002
+    targetPort: grpc
+    protocol: TCP

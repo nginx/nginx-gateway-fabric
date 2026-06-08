@@ -58,57 +58,43 @@ const (
 
 // Location holds all configuration for an HTTP location.
 type Location struct {
-	// Return specifies a return directive (e.g., HTTP status or redirect) for this location block.
-	Return *Return
-	// ProxySSLVerify controls SSL verification for upstreams when proxying requests.
-	ProxySSLVerify *ProxySSLVerify
-	// AuthExternalRequest holds external auth (auth_request) configuration.
-	AuthExternalRequest *AuthExternalRequest
-	// AuthJWT contains the configuration for JWT authentication.
-	AuthJWT *AuthJWT
-	// AuthBasic contains the configuration for basic authentication.
-	AuthBasic *AuthBasic
-	// ProxyPassRequestBody renders proxy_pass_request_body ("on"/"off"); unset leaves the directive out.
-	ProxyPassRequestBody string
-	// ProxyPassRequestHeaders renders proxy_pass_request_headers ("on"/"off"); unset leaves the directive out.
-	ProxyPassRequestHeaders string
-	// MirrorSplitClientsVariableName is the variable name for split_clients, used in traffic mirroring scenarios.
+	Return                         *Return
+	ProxySSLVerify                 *ProxySSLVerify
+	AuthExternalRequest            *AuthExternalRequest
+	AuthJWT                        *AuthJWT
+	AuthBasic                      *AuthBasic
+	Guardrails                     *GuardrailsConfig
+	HTTPMatchKey                   string
+	AuthOIDCProviderName           string
+	EPPInternalPath                string
+	EPPHost                        string
+	Type                           LocationType
+	Path                           string
+	ProxyPassRequestHeaders        string
+	ProxyPass                      string
+	ProxyHTTPVersion               string
 	MirrorSplitClientsVariableName string
-	// EPPInternalPath is the internal path for the inference NJS module to redirect to.
-	EPPInternalPath string
-	// EPPHost is the host for the EndpointPicker, used for inference routing.
-	EPPHost string
-	// Type indicates the type of location (external, internal, redirect, etc).
-	Type LocationType
-	// Path is the NGINX location path.
-	Path string
-	// HTTPMatchKey is the key for associating HTTP match rules, used for routing and NJS module logic.
-	HTTPMatchKey string
-	// ProxyPass is the upstream backend (URL or name) to which requests are proxied.
-	ProxyPass string
-	// ProxyHTTPVersion is the HTTP protocol version for proxying (e.g. "1.1" or "2").
-	// When empty, NGINX defaults to "1.1".
-	ProxyHTTPVersion string
-	// AuthOIDCProviderName is the name of the oidc_provider to be referenced in this location.
-	AuthOIDCProviderName string
-	// ResponseHeaders are custom response headers to be sent.
-	ResponseHeaders ResponseHeaders
-	// ProxySetHeaders are headers to set when proxying requests upstream.
-	ProxySetHeaders []Header
-	// Rewrites are rewrite rules for modifying request paths.
-	Rewrites []string
-	// MirrorPaths are paths to which requests are mirrored.
-	MirrorPaths []string
-	// Includes are additional NGINX config snippets or policies to include in this location.
-	Includes []shared.Include
-	// CORSHeaders are the CORS headers to be added for this location.
-	CORSHeaders []Header
-	// EPPPort is the port for the EndpointPicker, used for inference routing.
-	EPPPort int
-	// ClientMaxBodySize renders client_max_body_size in bytes; unset leaves the directive out.
-	ClientMaxBodySize uint16
-	// GRPC indicates if this location proxies gRPC traffic.
-	GRPC bool
+	ProxyPassRequestBody           string
+	ResponseHeaders                ResponseHeaders
+	ProxySetHeaders                []Header
+	Rewrites                       []string
+	MirrorPaths                    []string
+	Includes                       []shared.Include
+	CORSHeaders                    []Header
+	EPPPort                        int
+	ClientMaxBodySize              uint16
+	GRPC                           bool
+}
+
+// GuardrailsConfig contains ai-guardrails / extproc configuration that is emitted into
+// the generated NGINX location.
+type GuardrailsConfig struct {
+	TimeoutMS        *int64
+	MaxResponseBytes *int32
+	Filter           string
+	APIURL           string
+	APITokenFile     string
+	InspectMode      string
 }
 
 // AuthExternalRequest holds the auth_request configuration for a location.

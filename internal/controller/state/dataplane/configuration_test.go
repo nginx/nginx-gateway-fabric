@@ -8596,7 +8596,7 @@ func TestBuildAuthSecrets(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			result := buildAuthSecrets(test.filters, test.secrets)
+			result := buildAuthSecrets(test.filters, test.secrets, nil)
 
 			g.Expect(result).To(Equal(test.expected))
 		})

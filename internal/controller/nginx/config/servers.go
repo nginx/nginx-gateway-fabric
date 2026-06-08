@@ -736,9 +736,10 @@ func createInternalLocationsForRule(
 				// This ensures the correct name gets generated to correlate with the split clients generation.
 				// If there is only one backend, this is effectively a no-op.
 				tempRule := dataplane.MatchRule{
-					Source:  r.Source,
-					Match:   r.Match,
-					Filters: r.Filters,
+					Source:     r.Source,
+					Match:      r.Match,
+					Filters:    r.Filters,
+					Guardrails: r.Guardrails,
 					BackendGroup: dataplane.BackendGroup{
 						Source:      r.BackendGroup.Source,
 						RuleIdx:     r.BackendGroup.RuleIdx,
@@ -819,6 +820,7 @@ func createInternalLocationsForRule(
 	return internalLocations, matches
 }
 
+//nolint:gocyclo
 func createInferenceLocationsForRule(
 	serverID string,
 	pathRuleIdx int,
@@ -883,9 +885,10 @@ func createInferenceLocationsForRule(
 			// This ensures the correct name gets generated to correlate with the split clients generation.
 			// If there is only one backend, this is effectively a no-op.
 			tempRule := dataplane.MatchRule{
-				Source:  r.Source,
-				Match:   r.Match,
-				Filters: r.Filters,
+				Source:     r.Source,
+				Match:      r.Match,
+				Filters:    r.Filters,
+				Guardrails: r.Guardrails,
 				BackendGroup: dataplane.BackendGroup{
 					Source:      r.BackendGroup.Source,
 					RuleIdx:     r.BackendGroup.RuleIdx,
@@ -927,6 +930,27 @@ func createInferenceLocationsForRule(
 						extLocations[i] = setLocationEPPConfig(extLocations[i], intProxyPassLocation.Path, eppHost, portNum)
 					}
 				}
+			}
+		}
+		// Propagate guardrails config to external locations.
+		// When the EPP NJS js_content handler reads r.requestText to forward to the EPP shim,
+		// NGINX calls the request body filter chain while r->loc_conf still points to the
+		// external (EPP) location.  Without guardrails directives here the request prompt is
+		// never inspected; the response is inspected via the internal proxy-pass location which
+		// already has guardrails applied by updateLocation above.
+		if r.Guardrails != nil {
+			gc := &http.GuardrailsConfig{
+				Filter:           r.Guardrails.Filter,
+				APIURL:           r.Guardrails.APIURL,
+				TimeoutMS:        r.Guardrails.TimeoutMS,
+				InspectMode:      r.Guardrails.InspectMode,
+				MaxResponseBytes: r.Guardrails.MaxResponseBytes,
+			}
+			if r.Guardrails.APITokenAuthFileID != "" {
+				gc.APITokenFile = generateAuthFileName(r.Guardrails.APITokenAuthFileID)
+			}
+			for i := range extLocations {
+				extLocations[i].Guardrails = gc
 			}
 		}
 	}
@@ -1231,6 +1255,20 @@ func updateLocation(
 		keepAliveCheck,
 		disableBaseProxySetHeaders,
 	)
+
+	// Map guardrails config from dataplane MatchRule to http.Location so templates can emit directives.
+	if matchRule.Guardrails != nil {
+		location.Guardrails = &http.GuardrailsConfig{
+			Filter:           matchRule.Guardrails.Filter,
+			APIURL:           matchRule.Guardrails.APIURL,
+			TimeoutMS:        matchRule.Guardrails.TimeoutMS,
+			InspectMode:      matchRule.Guardrails.InspectMode,
+			MaxResponseBytes: matchRule.Guardrails.MaxResponseBytes,
+		}
+		if matchRule.Guardrails.APITokenAuthFileID != "" {
+			location.Guardrails.APITokenFile = generateAuthFileName(matchRule.Guardrails.APITokenAuthFileID)
+		}
+	}
 
 	return location
 }

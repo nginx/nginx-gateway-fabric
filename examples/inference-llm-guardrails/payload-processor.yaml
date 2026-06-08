@@ -1,0 +1,23 @@
+apiVersion: gateway.nginx.org/v1alpha1
+kind: PayloadProcessor
+metadata:
+  name: llm-guardrails
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: llm-route
+  phase: PostRouting
+  processors:
+  - name: guardrails
+    type: ExtProc
+    failureMode: FailClosed
+    timeout: 2s
+    extProc:
+      backendRef:
+        group: ""
+        kind: Service
+        name: guardrails-api
+      port: 443
+      authTokenRef:
+        name: guardrails-token

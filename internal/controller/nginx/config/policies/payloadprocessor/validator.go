@@ -1,0 +1,68 @@
+package payloadprocessor
+
+import (
+	"fmt"
+
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
+
+	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
+)
+
+// Validator validates a PayloadProcessor policy.
+// Implements policies.Validator interface.
+type Validator struct{}
+
+// NewValidator returns a new Validator.
+func NewValidator() *Validator { return &Validator{} }
+
+// Validate validates the spec of a PayloadProcessor.
+func (v *Validator) Validate(policy policies.Policy) []conditions.Condition {
+	pp := helpers.MustCastObject[*ngfAPI.PayloadProcessor](policy)
+
+	// TargetRef validation: allow Gateway or HTTPRoute
+	supportedKinds := []gatewayv1.Kind{kinds.Gateway, kinds.HTTPRoute}
+	supportedGroups := []gatewayv1.Group{gatewayv1.GroupName}
+
+	if err := policies.ValidateTargetRef(pp.Spec.TargetRef, nil, supportedGroups, supportedKinds); err != nil {
+		return []conditions.Condition{conditions.NewPolicyInvalid(err.Error())}
+	}
+
+	// Ensure processors are present and of supported type (ExtProc only for now)
+	if len(pp.Spec.Processors) == 0 {
+		return []conditions.Condition{conditions.NewPolicyInvalid("spec.processors must contain at least one processor")}
+	}
+
+	for i, proc := range pp.Spec.Processors {
+		if proc.Type != ngfAPI.ExtProcType {
+			msg := fmt.Sprintf("processor at index %d has unsupported type %q; only ExtProc is supported", i, proc.Type)
+			return []conditions.Condition{conditions.NewPolicyInvalid(msg)}
+		}
+		if proc.ExtProc == nil {
+			msg := fmt.Sprintf("processor at index %d missing extProc configuration", i)
+			return []conditions.Condition{conditions.NewPolicyInvalid(msg)}
+		}
+		if proc.ExtProc.BackendRef.Name == "" {
+			msg := fmt.Sprintf("processor at index %d extProc.backendRef.name must be set", i)
+			return []conditions.Condition{conditions.NewPolicyInvalid(msg)}
+		}
+		if proc.ExtProc.Port < 1 || proc.ExtProc.Port > 65535 {
+			msg := fmt.Sprintf("processor at index %d extProc.port must be a valid TCP port", i)
+			return []conditions.Condition{conditions.NewPolicyInvalid(msg)}
+		}
+	}
+
+	return nil
+}
+
+// ValidateGlobalSettings validates the policy with respect to global settings.
+func (v *Validator) ValidateGlobalSettings(_ policies.Policy, _ *policies.GlobalSettings) []conditions.Condition {
+	return nil
+}
+
+// Conflicts returns true if the two PayloadProcessors conflict.
+// For now, we conservatively return false to allow multiple processors; graph layer may mark invalid per-target.
+func (v *Validator) Conflicts(_ policies.Policy, _ policies.Policy) bool { return false }

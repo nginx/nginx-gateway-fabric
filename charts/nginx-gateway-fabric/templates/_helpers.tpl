@@ -235,6 +235,7 @@ Create namespaced RBAC rules.
   - proxysettingspolicies
   - ratelimitpolicies
   - wafpolicies
+  - payloadprocessors
   {{- if or .Values.nginxGateway.snippetsFilters.enable .Values.nginxGateway.snippets.enable }}
   - snippetsfilters
   {{- end }}
@@ -255,6 +256,7 @@ Create namespaced RBAC rules.
   - proxysettingspolicies/status
   - ratelimitpolicies/status
   - wafpolicies/status
+  - payloadprocessors/status
   {{- if or .Values.nginxGateway.snippetsFilters.enable .Values.nginxGateway.snippets.enable }}
   - snippetsfilters/status
   {{- end }}

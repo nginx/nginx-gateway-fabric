@@ -36,6 +36,8 @@ type Policy struct {
 	InvalidForGateways map[types.NamespacedName]struct{}
 	// WAFState holds WAF-specific state for this policy. Only populated for WAFPolicy resources.
 	WAFState *PolicyWAFState
+	// PayloadProcessorState holds AI Guardrails related resolved state for PayloadProcessor resources.
+	PayloadProcessorState *PolicyPayloadProcessorState
 	// Ancestors is a list of ancestor objects of the Policy. Used in status.
 	Ancestors []PolicyAncestor
 	// TargetRefs are the resources that the Policy targets.
@@ -63,6 +65,17 @@ type PolicyWAFState struct {
 	// (cold-miss on startup or after all retries are exhausted with no previous bundle).
 	// The Gateway config push is withheld until this is resolved to maintain fail-closed posture.
 	BundlePending bool
+}
+
+// PolicyPayloadProcessorState holds resolved AI Guardrails state for a PayloadProcessor policy.
+type PolicyPayloadProcessorState struct {
+	TimeoutMS        *int64
+	MaxResponseBytes *int32
+	APITokenSecret   *types.NamespacedName
+	BackendService   types.NamespacedName
+	APIURL           string
+	APIToken         string
+	InspectMode      string
 }
 
 // PolicyAncestor represents an ancestor of a Policy.
@@ -527,11 +540,13 @@ func processPolicies(
 	validator validation.PolicyValidator,
 	routes map[RouteKey]*L7Route,
 	services map[types.NamespacedName]*ReferencedService,
+	allServices map[types.NamespacedName]*corev1.Service,
+	allSecrets map[types.NamespacedName]*corev1.Secret,
 	gws map[types.NamespacedName]*Gateway,
 	wafInput *WAFProcessingInput,
-) (map[PolicyKey]*Policy, *WAFProcessingOutput) {
+) (map[PolicyKey]*Policy, *WAFProcessingOutput, *PayloadProcessingOutput) {
 	if len(pols) == 0 || len(gws) == 0 {
-		return nil, nil
+		return nil, nil, nil
 	}
 
 	processedPolicies := make(map[PolicyKey]*Policy)
@@ -595,7 +610,10 @@ func processPolicies(
 
 	wafOutput := processWAFPolicies(ctx, logger, processedPolicies, wafInput)
 
-	return processedPolicies, wafOutput
+	// Process PayloadProcessor policies (resolve ExtProc backend and auth token secret)
+	payloadOutput := processPayloadProcessorPolicies(processedPolicies, allServices, allSecrets)
+
+	return processedPolicies, wafOutput, payloadOutput
 }
 
 func checkTargetRoutesForOverlap(

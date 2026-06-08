@@ -168,6 +168,23 @@ server {
         include {{ $i.Name }};
         {{- end }}
 
+        {{- if $l.Guardrails }}
+        guardrails_filter {{ $l.Guardrails.Filter }};
+        guardrails_api_url "{{ $l.Guardrails.APIURL }}";
+            {{- if $l.Guardrails.APITokenFile }}
+        guardrails_api_token_file {{ $l.Guardrails.APITokenFile }};
+            {{- end }}
+            {{- if $l.Guardrails.TimeoutMS }}
+        guardrails_timeout_ms {{ $l.Guardrails.TimeoutMS }};
+            {{- end }}
+            {{- if $l.Guardrails.InspectMode }}
+        guardrails_inspect_mode {{ $l.Guardrails.InspectMode }};
+            {{- end }}
+            {{- if $l.Guardrails.MaxResponseBytes }}
+        guardrails_max_response_bytes {{ $l.Guardrails.MaxResponseBytes }};
+            {{- end }}
+        {{- end }}
+
         {{- if $l.AuthBasic }}
         auth_basic "{{ $l.AuthBasic.Realm }}";
         auth_basic_user_file {{ $l.AuthBasic.File }};
