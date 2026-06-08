@@ -186,8 +186,20 @@ func validateJWTAuthorization(
 
 	for ruleIdx, rule := range authz.Rules {
 		rulePath := field.NewPath("spec.jwt.authorization.rules").Index(ruleIdx)
+
+		seenClaimNames := make(map[string]int)
 		for claimIdx, claim := range rule.Claims {
 			claimPath := rulePath.Child("claims").Index(claimIdx)
+
+			if firstIdx, exists := seenClaimNames[claim.Name]; exists {
+				allErrs = append(allErrs, field.Invalid(
+					claimPath.Child("name"),
+					claim.Name,
+					fmt.Sprintf("duplicate claim name; already defined at claims[%d]", firstIdx),
+				))
+			} else {
+				seenClaimNames[claim.Name] = claimIdx
+			}
 
 			if err := authValidator.ValidateAuthZClaimName(claim.Name); err != nil {
 				allErrs = append(allErrs, field.Invalid(

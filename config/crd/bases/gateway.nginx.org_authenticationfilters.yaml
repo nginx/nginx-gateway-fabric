@@ -154,6 +154,10 @@ spec:
                           required:
                           - claims
                           type: object
+                          x-kubernetes-validations:
+                          - message: claim names must be unique within a rule
+                            rule: self.claims.all(c, self.claims.exists_one(d, d.name
+                              == c.name))
                         type: array
                     required:
                     - rules

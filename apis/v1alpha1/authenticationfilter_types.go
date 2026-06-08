@@ -369,6 +369,10 @@ type Authorization struct {
 }
 
 // Rule defines a list of claims, and authorization rules for those claims.
+//
+// +kubebuilder:validation:XValidation:message="claim names must be unique within a rule",rule="self.claims.all(c, self.claims.exists_one(d, d.name == c.name))"
+//
+//nolint:lll
 type Rule struct {
 	// Require sets the authorization mode for a specific claim within a rule.
 	// When set to All, a token's claim must match all values within that claim.
