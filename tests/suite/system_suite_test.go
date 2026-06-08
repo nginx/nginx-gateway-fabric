@@ -520,10 +520,10 @@ func isWAF(labelFilter string) bool {
 
 // plmEnabled reports whether the PLM controller should be installed for this run. It mirrors the
 // prerequisites the WAF specs use to skip (see waf_policy_test.go): the WAF label must be active,
-// NGINX Plus with WAF images must be enabled, and the architecture must not be arm64 (NAP WAF does
-// not support arm64). This prevents suite setup from installing PLM when the specs will skip.
+// NGINX Plus with WAF images must be enabled, and the run must be on amd64 (NAP WAF only supports
+// amd64, not arm64). This prevents suite setup from installing PLM when the specs will skip.
 func plmEnabled(labelFilter string) bool {
-	return isWAF(labelFilter) && *wafEnabled && runtime.GOARCH != "arm64"
+	return isWAF(labelFilter) && *wafEnabled && runtime.GOARCH == "amd64"
 }
 
 func isNFR(labelFilter string) bool {

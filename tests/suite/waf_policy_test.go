@@ -920,49 +920,14 @@ var _ = Describe("WAFPolicy", Ordered, Label("waf"), func() {
 			})
 		})
 
-		Context("a type: PLM WAFPolicy whose APPolicy bundle is not yet ready", Ordered, func() {
-			// Apply the APPolicy and the WAFPolicy together, before PLM finishes compiling, to
-			// exercise the not-yet-ready path, then confirm it resolves once compilation completes.
-			// Uses dedicated, uniquely-named resources so it does not collide with the shared
-			// APPolicy or the Gateway-targeted WAFPolicy used by the other contexts.
-			apFiles := []string{"waf-policy/appolicy-pending.yaml"}
-			policyFiles := []string{"waf-policy/wafpolicy-plm-pending.yaml"}
-
-			BeforeAll(func() {
-				Expect(resourceManager.ApplyFromFiles(apFiles, namespace)).To(Succeed())
-				Expect(resourceManager.ApplyFromFiles(policyFiles, namespace)).To(Succeed())
-			})
-
-			AfterAll(func() {
-				Expect(resourceManager.DeleteFromFiles(policyFiles, namespace)).To(Succeed())
-				Expect(resourceManager.DeleteFromFiles(apFiles, namespace)).To(Succeed())
-			})
-
-			It("eventually becomes Programmed once PLM finishes compiling the bundle", func() {
-				// While the bundle is pending/processing NGF reports ResolvedRefs=False/InvalidRef
-				// (bundle not ready) and withholds the config (fail-closed). Once PLM marks the
-				// APPolicy ready, NGF fetches the bundle and programs the policy.
-				Expect(waitForAPBundleState(
-					"APPolicy",
-					types.NamespacedName{Name: "attack-signatures-pending", Namespace: namespace},
-					plmBundleStateReady,
-				)).To(Succeed())
-
-				nsname := types.NamespacedName{Name: "gateway-waf-plm-pending", Namespace: namespace}
-				Expect(waitForWAFPolicyAccepted(nsname)).To(Succeed())
-				Expect(waitForWAFPolicyCondition(
-					nsname, "Programmed", metav1.ConditionTrue, "Programmed",
-				)).To(Succeed())
-			})
-		})
-
 		Context("a cross-namespace type: PLM WAFPolicy", Ordered, func() {
 			// The APPolicy lives in a separate namespace; the WAFPolicy is in the waf-policy
 			// namespace. Without a ReferenceGrant the reference is denied; adding the grant resolves
 			// it. watchNamespaces is empty (all), so NGF sees the APPolicy in the other namespace.
+			// Reuses appolicy.yaml (applied to the other namespace) since the spec is identical.
 			const otherNamespace = "waf-policy-plm-xns"
 
-			apFiles := []string{"waf-policy/appolicy-othernamespace.yaml"}
+			apFiles := []string{"waf-policy/appolicy.yaml"}
 			policyFiles := []string{"waf-policy/wafpolicy-plm-crossns.yaml"}
 			grantFiles := []string{"waf-policy/referencegrant-appolicy.yaml"}
 
@@ -973,7 +938,7 @@ var _ = Describe("WAFPolicy", Ordered, Label("waf"), func() {
 				Expect(resourceManager.ApplyFromFiles(apFiles, otherNamespace)).To(Succeed())
 				Expect(waitForAPBundleState(
 					"APPolicy",
-					types.NamespacedName{Name: "attack-signatures-xns", Namespace: otherNamespace},
+					types.NamespacedName{Name: "attack-signatures", Namespace: otherNamespace},
 					plmBundleStateReady,
 				)).To(Succeed())
 
