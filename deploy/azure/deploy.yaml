@@ -328,6 +328,7 @@ spec:
         - --config=nginx-gateway-config
         - --service=nginx-gateway
         - --agent-tls-secret=agent-tls
+        - --server-tls-domain=svc
         - --metrics-port=9113
         - --health-port=8081
         - --leader-election-lock-name=nginx-gateway-leader-election
@@ -414,6 +415,7 @@ spec:
         - generate-certs
         - --service=nginx-gateway
         - --cluster-domain=cluster.local
+        - --server-tls-domain=svc
         - --server-tls-secret=server-tls
         - --agent-tls-secret=agent-tls
         env:

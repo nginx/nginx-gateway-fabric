@@ -98,6 +98,7 @@ func createControllerCommand() *cobra.Command {
 		snippetsFlag                        = "snippets"
 		nginxSCCFlag                        = "nginx-scc"
 		watchNamespacesFlag                 = "watch-namespaces"
+		serverTLSDomainFlag                 = "server-tls-domain"
 	)
 
 	// flag values
@@ -171,6 +172,11 @@ func createControllerCommand() *cobra.Command {
 
 		watchNamespaces = stringSliceValidatingValue{
 			validator: validateResourceName,
+		}
+
+		serverTLSDomain = stringValidatingValue{
+			validator: validateResourceName,
+			value:     "svc",
 		}
 	)
 
@@ -302,6 +308,7 @@ func createControllerCommand() *cobra.Command {
 				EndpointPickerDisableTLS:    endpointPickerDisableTLS,
 				EndpointPickerTLSSkipVerify: endpointPickerTLSSkipVerify,
 				WatchNamespaces:             watchNamespaces.values,
+				ServerTLSDomain:             serverTLSDomain.value,
 			}
 
 			if err := controller.StartManager(conf); err != nil {
@@ -546,6 +553,12 @@ func createControllerCommand() *cobra.Command {
 			`The controller's own namespace is always watched.`,
 	)
 
+	cmd.Flags().Var(
+		&serverTLSDomain,
+		serverTLSDomainFlag,
+		`The domain suffix used in the server TLS certificate SAN and agent config host. Defaults to "svc".`,
+	)
+
 	return cmd
 }
 
@@ -573,6 +586,7 @@ func createGenerateCertsCommand() *cobra.Command {
 		serviceFlag         = "service"
 		clusterDomainFlag   = "cluster-domain"
 		overwriteFlag       = "overwrite"
+		serverTLSDomainFlag = "server-tls-domain"
 	)
 
 	// flag values
@@ -592,6 +606,10 @@ func createGenerateCertsCommand() *cobra.Command {
 			validator: validateQualifiedName,
 			value:     defaultDomain,
 		}
+		serverTLSDomain = stringValidatingValue{
+			validator: validateResourceName,
+			value:     "svc",
+		}
 		overwrite bool
 	)
 
@@ -604,7 +622,7 @@ func createGenerateCertsCommand() *cobra.Command {
 				return fmt.Errorf("POD_NAMESPACE must be specified in the ENV")
 			}
 
-			certConfig, err := generateCertificates(serviceName.value, namespace, clusterDomain.value)
+			certConfig, err := generateCertificates(serviceName.value, namespace, clusterDomain.value, serverTLSDomain.value)
 			if err != nil {
 				return fmt.Errorf("error generating certificates: %w", err)
 			}
@@ -657,6 +675,12 @@ func createGenerateCertsCommand() *cobra.Command {
 		&clusterDomain,
 		clusterDomainFlag,
 		`The DNS domain of your Kubernetes cluster.`,
+	)
+
+	cmd.Flags().Var(
+		&serverTLSDomain,
+		serverTLSDomainFlag,
+		`The domain suffix used in the server TLS certificate SAN. Defaults to "svc".`,
 	)
 
 	cmd.Flags().BoolVar(

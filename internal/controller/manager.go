@@ -326,6 +326,11 @@ func createAndRegisterProvisioner(
 	statusQueue *status.Queue,
 	recorder k8sEvents.EventRecorder,
 ) (*provisioner.NginxProvisioner, error) {
+	serverTLSDomain := cfg.ServerTLSDomain
+	if serverTLSDomain == "" {
+		serverTLSDomain = "svc"
+	}
+
 	nginxProvisioner, provLoop, err := provisioner.NewNginxProvisioner(
 		ctx,
 		mgr,
@@ -346,6 +351,7 @@ func createAndRegisterProvisioner(
 			InferenceExtension:             cfg.InferenceExtension,
 			EndpointPickerDisableTLS:       cfg.EndpointPickerDisableTLS,
 			EndpointPickerTLSSkipVerify:    cfg.EndpointPickerTLSSkipVerify,
+			ServerTLSDomain:                serverTLSDomain,
 		},
 	)
 	if err != nil {

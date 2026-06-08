@@ -580,12 +580,13 @@ func (p *NginxProvisioner) buildAgentConfigMap(
 	agentLabels[nginxTypes.AgentOwnerTypeLabel] = depType
 
 	agentFields := map[string]any{
-		"Plus":          p.cfg.Plus,
-		"ServiceName":   p.cfg.GatewayPodConfig.ServiceName,
-		"Namespace":     p.cfg.GatewayPodConfig.Namespace,
-		"EnableMetrics": enableMetrics,
-		"MetricsPort":   metricsPort,
-		"AgentLabels":   agentLabels,
+		"Plus":            p.cfg.Plus,
+		"ServiceName":     p.cfg.GatewayPodConfig.ServiceName,
+		"Namespace":       p.cfg.GatewayPodConfig.Namespace,
+		"ServerTLSDomain": p.cfg.ServerTLSDomain,
+		"EnableMetrics":   enableMetrics,
+		"MetricsPort":     metricsPort,
+		"AgentLabels":     agentLabels,
 	}
 
 	if nProxyCfg != nil {

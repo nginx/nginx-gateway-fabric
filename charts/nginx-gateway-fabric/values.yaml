@@ -3,6 +3,9 @@
 # -- The DNS cluster domain of your Kubernetes cluster.
 clusterDomain: cluster.local
 
+# -- The domain suffix used in the server TLS certificate SAN and agent config host. Defaults to "svc".
+serverTLSDomain: svc
+
 # -- The nginxGateway section contains configuration for the NGINX Gateway Fabric control plane deployment.
 nginxGateway:
   # @schema

@@ -56,11 +56,12 @@ type Config struct {
 	GatewayPodConfig *config.GatewayPodConfig
 	AgentLabels      map[string]string
 	Logger           logr.Logger
-	NGINXSCCName     string
 	GCName           string
+	NGINXSCCName     string
 	// GatewayCtlrName is the controller name string (from main config)
 	GatewayCtlrName                string
 	AgentTLSSecretName             string
+	ServerTLSDomain                string
 	NginxDockerSecretNames         []string
 	NginxOneConsoleTelemetryConfig config.NginxOneConsoleTelemetryConfig
 	Plus                           bool
@@ -196,6 +197,9 @@ func (p *NginxProvisioner) Enable(ctx context.Context) {
 
 	p.lock.RLock()
 	for _, gatewayNSName := range p.resourcesToDeleteOnStartup {
+		if p.store.getGateway(gatewayNSName) != nil {
+			continue
+		}
 		if err := p.deprovisionNginxForInvalidGateway(ctx, gatewayNSName); err != nil {
 			p.cfg.Logger.Error(err, "error deprovisioning nginx resources on startup")
 		}

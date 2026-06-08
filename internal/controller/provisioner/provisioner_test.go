@@ -346,23 +346,65 @@ func TestNewNginxProvisioner(t *testing.T) {
 
 func TestEnable(t *testing.T) {
 	t.Parallel()
-	g := NewWithT(t)
 
-	dep := &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "gw-nginx",
-			Namespace: "default",
+	tests := []struct {
+		name           string
+		gatewayInStore bool
+		wantDepDeleted bool
+	}{
+		{
+			name:           "gateway is not in the store, data plane resources are deprovisioned on leader promotion",
+			gatewayInStore: false,
+			wantDepDeleted: true,
+		},
+		{
+			name: "gateway is in the store, " +
+				"data plane resources are preserved on leader promotion because the gateway is live",
+			gatewayInStore: true,
+			wantDepDeleted: false,
 		},
 	}
-	provisioner, fakeClient, _ := defaultNginxProvisioner(dep)
-	provisioner.setResourceToDelete(types.NamespacedName{Name: "gw", Namespace: "default"})
-	provisioner.leader = false
 
-	provisioner.Enable(t.Context())
-	g.Expect(provisioner.isLeader()).To(BeTrue())
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
 
-	g.Expect(provisioner.resourcesToDeleteOnStartup).To(BeEmpty())
-	expectResourcesToNotExist(t, g, fakeClient, types.NamespacedName{Name: "gw-nginx", Namespace: "default"})
+			dep := &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "gw-nginx",
+					Namespace: "default",
+				},
+			}
+			provisioner, fakeClient, _ := defaultNginxProvisioner(dep)
+			provisioner.setResourceToDelete(types.NamespacedName{Name: "gw", Namespace: "default"})
+			provisioner.leader = false
+
+			if tt.gatewayInStore {
+				provisioner.store.updateGateway(&gatewayv1.Gateway{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "gw",
+						Namespace: "default",
+					},
+				})
+			}
+
+			provisioner.Enable(t.Context())
+			g.Expect(provisioner.isLeader()).To(BeTrue())
+			g.Expect(provisioner.resourcesToDeleteOnStartup).To(BeEmpty())
+
+			err := fakeClient.Get(
+				t.Context(),
+				types.NamespacedName{Name: "gw-nginx", Namespace: "default"},
+				&appsv1.Deployment{},
+			)
+			if tt.wantDepDeleted {
+				g.Expect(err).To(HaveOccurred())
+			} else {
+				g.Expect(err).ToNot(HaveOccurred())
+			}
+		})
+	}
 }
 
 func TestRegisterGateway(t *testing.T) {

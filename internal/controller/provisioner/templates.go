@@ -35,7 +35,7 @@ const mgmtTemplateText = `mgmt {
 
 const agentTemplateText = `command:
     server:
-        host: {{ .ServiceName }}.{{ .Namespace }}.svc
+        host: {{ .ServiceName }}.{{ .Namespace }}.{{ .ServerTLSDomain }}
         port: 443
     auth:
         tokenpath: /var/run/secrets/ngf/serviceaccount/token
@@ -43,7 +43,7 @@ const agentTemplateText = `command:
         cert: /var/run/secrets/ngf/tls.crt
         key: /var/run/secrets/ngf/tls.key
         ca: /var/run/secrets/ngf/ca.crt
-        server_name: {{ .ServiceName }}.{{ .Namespace }}.svc
+        server_name: {{ .ServiceName }}.{{ .Namespace }}.{{ .ServerTLSDomain }}
 allowed_directories:
 - /etc/nginx
 - /usr/share/nginx
