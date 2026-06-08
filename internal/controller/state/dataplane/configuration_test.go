@@ -6627,7 +6627,7 @@ func TestBuildJWTAuthZConfigFromAuthenticationFilters(t *testing.T) {
 									Source:   "$test_jwt_filter_claim_role",
 									Variable: "$test_jwt_filter_claim_role_rule_0",
 									Parameters: []shared.MapParameter{
-										{Value: `~(?:^|,)admin(?:,|$)`, Result: "1"},
+										{Value: `"~(?:^|,)admin(?:,|$)"`, Result: "1"},
 										{Value: "default", Result: "0"},
 									},
 								},
@@ -6672,7 +6672,7 @@ func TestBuildJWTAuthZConfigFromAuthenticationFilters(t *testing.T) {
 									Source:   "$test_jwt_filter_claim_realm_access_roles",
 									Variable: "$test_jwt_filter_rule_0_all",
 									Parameters: []shared.MapParameter{
-										{Value: `~^(?:.*,)?admin(?:,.*)?\$`, Result: "1"},
+										{Value: `"~^(?:.*,)?admin(?:,.*)?$"`, Result: "1"},
 										{Value: "default", Result: "0"},
 									},
 								},
@@ -6712,7 +6712,7 @@ func TestBuildJWTAuthZConfigFromAuthenticationFilters(t *testing.T) {
 									Parameters: []shared.MapParameter{
 										// Match Regex are inserted as is
 										// We don't exscape any characters
-										{Value: `~(?:^|,)a(.*)ws(?:,|$)`, Result: "1"},
+										{Value: `"~(?:^|,)a(.*)ws(?:,|$)"`, Result: "1"},
 										{Value: "default", Result: "0"},
 									},
 								},
@@ -6757,7 +6757,7 @@ func TestBuildJWTAuthZConfigFromAuthenticationFilters(t *testing.T) {
 									Source:   "$test_jwt_filter_claim_role",
 									Variable: "$test_jwt_filter_rule_0_all",
 									Parameters: []shared.MapParameter{
-										{Value: `~^(?:.*,)?admin(?:,.*)?\$`, Result: "1"},
+										{Value: `"~^(?:.*,)?admin(?:,.*)?$"`, Result: "1"},
 										{Value: "default", Result: "0"},
 									},
 								},
@@ -6801,7 +6801,7 @@ func TestBuildJWTAuthZConfigFromAuthenticationFilters(t *testing.T) {
 									Source:   "$test_jwt_filter_claim_role",
 									Variable: "$test_jwt_filter_claim_role_rule_0",
 									Parameters: []shared.MapParameter{
-										{Value: `~(?:^|,)admin(?:,|$)`, Result: "1"},
+										{Value: `"~(?:^|,)admin(?:,|$)"`, Result: "1"},
 										{Value: "default", Result: "0"},
 									},
 								},
@@ -6809,7 +6809,7 @@ func TestBuildJWTAuthZConfigFromAuthenticationFilters(t *testing.T) {
 									Source:   "$test_jwt_filter_claim_tenant",
 									Variable: "$test_jwt_filter_claim_tenant_rule_0",
 									Parameters: []shared.MapParameter{
-										{Value: `~(?:^|,)acme-co(?:,|$)`, Result: "1"},
+										{Value: `"~(?:^|,)acme-co(?:,|$)"`, Result: "1"},
 										{Value: "default", Result: "0"},
 									},
 								},
@@ -6831,7 +6831,7 @@ func TestBuildJWTAuthZConfigFromAuthenticationFilters(t *testing.T) {
 									Variable: "$test_jwt_filter_rule_1_all",
 									Parameters: []shared.MapParameter{
 										{
-											Value:  `~^(?:.*,)?(sales|ops)(?:,.*)?\+(?:.*,)?http://foo\.com(?:,.*)?\$`,
+											Value:  `"~^(?:.*,)?(sales|ops)(?:,.*)?\+(?:.*,)?http://foo\.com(?:,.*)?$"`,
 											Result: "1",
 										},
 										{Value: "default", Result: "0"},
@@ -6884,7 +6884,7 @@ func TestBuildJWTAuthZConfigFromAuthenticationFilters(t *testing.T) {
 									Source:   "$test_jwt_filter_claim_role",
 									Variable: "$test_jwt_filter_claim_role_rule_0",
 									Parameters: []shared.MapParameter{
-										{Value: `~(?:^|,)admin(?:,|$)`, Result: "1"},
+										{Value: `"~(?:^|,)admin(?:,|$)"`, Result: "1"},
 										{Value: "default", Result: "0"},
 									},
 								},
@@ -6892,7 +6892,7 @@ func TestBuildJWTAuthZConfigFromAuthenticationFilters(t *testing.T) {
 									Source:   "$test_jwt_filter_claim_tenant",
 									Variable: "$test_jwt_filter_claim_tenant_rule_0",
 									Parameters: []shared.MapParameter{
-										{Value: `~(?:^|,)acme-co(?:,|$)`, Result: "1"},
+										{Value: `"~(?:^|,)acme-co(?:,|$)"`, Result: "1"},
 										{Value: "default", Result: "0"},
 									},
 								},
@@ -6914,7 +6914,7 @@ func TestBuildJWTAuthZConfigFromAuthenticationFilters(t *testing.T) {
 									Variable: "$test_jwt_filter_rule_1_all",
 									Parameters: []shared.MapParameter{
 										{
-											Value:  `~^(?:.*,)?(sales|ops)(?:,.*)?\+(?:.*,)?http://foo\.com(?:,.*)?\$`,
+											Value:  `"~^(?:.*,)?(sales|ops)(?:,.*)?\+(?:.*,)?http://foo\.com(?:,.*)?$"`,
 											Result: "1",
 										},
 										{Value: "default", Result: "0"},

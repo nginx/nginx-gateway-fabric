@@ -123,9 +123,8 @@ func (AuthFieldValidator) ValidateOIDCFrontChannelLogoutURI(uri string) error {
 }
 
 var (
-	authZClaimNameRegexp      = regexp.MustCompile(authZSafeNameFmt)
-	authZClaimValueRegexp     = regexp.MustCompile(authZSafeValueFmt)
-	authZProxySetHeaderRegexp = regexp.MustCompile(authZSafeNameFmt)
+	authZClaimNameRegexp  = regexp.MustCompile(authZSafeNameFmt)
+	authZClaimValueRegexp = regexp.MustCompile(authZSafeValueFmt)
 )
 
 var (
@@ -148,7 +147,7 @@ var (
 
 const (
 	// authZSafeNameFmt allows letters, numbers, underscores, dashes, and slashes.
-	// Validates claim names and proxy_set_header names.
+	// Validates claim names.
 	authZSafeNameFmt = `^[a-zA-Z0-9_/-]+$`
 	authZNameErrMsg  = "must contain only letters, numbers, underscores, dashes, or slashes"
 )
@@ -184,11 +183,5 @@ func (AuthFieldValidator) ValidateAuthZClaimValue(value string) error {
 
 // ValidateAuthZProxySetHeader validates that a proxy set header name contains only allowed characters.
 func (AuthFieldValidator) ValidateAuthZProxySetHeader(header string) error {
-	if !authZProxySetHeaderRegexp.MatchString(header) {
-		return errors.New(k8svalidation.RegexError(
-			authZNameErrMsg,
-			authZSafeNameFmt,
-			proxySetHeaderExamples...))
-	}
-	return nil
+	return validateHeaderName(header)
 }

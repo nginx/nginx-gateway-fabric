@@ -956,7 +956,7 @@ func buildAuthZRuleMapAny(filterPrefix string, ruleIndex int, claims []ngfAPIv1a
 		perClaimVar := fmt.Sprintf("$%s_claim_%s_rule_%d", filterPrefix, claimShortName, ruleIndex)
 		perClaimVars = append(perClaimVars, perClaimVar)
 
-		pattern := "~" + generateClaimValuePattern(claim.Values, &claim.Match, anyAnchors)
+		pattern := "\"~" + generateClaimValuePattern(claim.Values, &claim.Match, anyAnchors) + "\""
 
 		ruleMaps = append(ruleMaps, shared.Map{
 			Source:   claimVarName,
@@ -1005,7 +1005,7 @@ func buildAuthZRuleMapAll(filterPrefix string, ruleIndex int, claims []ngfAPIv1a
 
 	resultVar := fmt.Sprintf("$%s_rule_%d_all", filterPrefix, ruleIndex)
 	source := strings.Join(sources, "+")
-	combinedPattern := "~^" + strings.Join(patterns, `\+`) + "$"
+	combinedPattern := "\"~^" + strings.Join(patterns, `\+`) + "$\""
 
 	authZMap := shared.Map{
 		Source:   source,

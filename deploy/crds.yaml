@@ -123,7 +123,7 @@ spec:
                                       Example: For claim name `sub` for JWT auth
 
                                       proxy_set_header X-JWT-Claim-Sub $jwt_claim_sub;
-                                    pattern: ^[a-zA-Z0-9_/-]+$
+                                    pattern: ^[-A-Za-z0-9]+$
                                     type: string
                                   values:
                                     description: |-

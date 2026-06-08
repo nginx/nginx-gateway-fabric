@@ -1580,6 +1580,8 @@ func TestConvertAuthenticationFilter(t *testing.T) {
 					Realm:           "my-realm",
 					KeyCache:        helpers.GetPointer(ngfAPIv1alpha1.Duration("60s")),
 					Data:            []byte("token"),
+					// Leeway should still be set even if Authorization rules are empty.
+					Leeway: helpers.GetPointer(ngfAPIv1alpha1.Duration("30s")),
 				},
 			},
 		},
@@ -1625,6 +1627,8 @@ func TestConvertAuthenticationFilter(t *testing.T) {
 					Realm:           "my-realm",
 					KeyCache:        helpers.GetPointer(ngfAPIv1alpha1.Duration("60s")),
 					Data:            []byte("token"),
+					// Leeway should still be set even if Authorization is nil
+					Leeway: helpers.GetPointer(ngfAPIv1alpha1.Duration("30s")),
 				},
 			},
 		},

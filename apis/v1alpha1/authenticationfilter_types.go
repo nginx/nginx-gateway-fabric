@@ -389,7 +389,7 @@ type Claim struct {
 	// Example: For claim name `sub` for JWT auth
 	//
 	// proxy_set_header X-JWT-Claim-Sub $jwt_claim_sub;
-	// +kubebuilder:validation:Pattern=`^[a-zA-Z0-9_/-]+$`
+	// +kubebuilder:validation:Pattern=`^[-A-Za-z0-9]+$`
 	ProxySetHeader *string `json:"proxySetHeader,omitempty"`
 
 	// Name is the name of the claim within the token.

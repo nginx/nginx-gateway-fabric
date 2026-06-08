@@ -263,11 +263,9 @@ func TestValidateAuthZProxySetHeader(t *testing.T) {
 		validator.ValidateAuthZProxySetHeader,
 		`X-User-Role`,
 		`X-App-Name`,
-		`X-Custom-Header_1`,
 		`X-JWT-Claim-Sub`,
 		`Authorization`,
 		`X-Groups`,
-		`My-Header/Path`,
 	)
 
 	testInvalidValuesForSimpleValidator(
@@ -285,5 +283,7 @@ func TestValidateAuthZProxySetHeader(t *testing.T) {
 		`Header<Name`,
 		`Header'Name`,
 		`Header"Name`,
+		`X-Custom-Header_1`,
+		`My-Header/Path`,
 	)
 }
