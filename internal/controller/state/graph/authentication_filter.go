@@ -184,6 +184,10 @@ func validateJWTAuthorization(
 ) field.ErrorList {
 	var allErrs field.ErrorList
 
+	// Track sanitized claim names across all rules to detect collisions.
+	// Key: sanitized name, Value: original claim name that first produced it.
+	globalSanitizedNames := make(map[string]string)
+
 	for ruleIdx, rule := range authz.Rules {
 		rulePath := field.NewPath("spec.jwt.authorization.rules").Index(ruleIdx)
 
@@ -209,6 +213,28 @@ func validateJWTAuthorization(
 				))
 			}
 
+			// Check for sanitized name collisions across all rules.
+			// NGINX variable names only allow [a-zA-Z0-9_], so characters like -, ., /
+			// are replaced with underscores. This means distinct claim names like
+			// "realm_access/roles" and "realm_access_roles" would map to the same
+			// NGINX variable, causing silent incorrect authorization decisions.
+			sanitized := sanitizeClaimNameForVariable(claim.Name)
+			if originalName, exists := globalSanitizedNames[sanitized]; exists {
+				if originalName != claim.Name {
+					allErrs = append(allErrs, field.Invalid(
+						claimPath.Child("name"),
+						claim.Name,
+						fmt.Sprintf(
+							"claim name produces the same NGINX variable name as %q after sanitization "+
+								"(both become %q); use distinct claim names that don't collide",
+							originalName, sanitized,
+						),
+					))
+				}
+			} else {
+				globalSanitizedNames[sanitized] = claim.Name
+			}
+
 			for valueIdx, value := range claim.Values {
 				if err := authValidator.ValidateAuthZClaimValue(value); err != nil {
 					allErrs = append(allErrs, field.Invalid(
@@ -232,6 +258,14 @@ func validateJWTAuthorization(
 	}
 
 	return allErrs
+}
+
+// sanitizeClaimNameForVariable applies the same sanitization as the dataplane's
+// sanitizeVariablePrefix: it replaces characters that are invalid in NGINX variable
+// names (-, ., /) with underscores. This is used during validation to detect claim
+// names that would collide when converted to NGINX variables.
+func sanitizeClaimNameForVariable(name string) string {
+	return strings.NewReplacer("-", "_", ".", "_", "/", "_").Replace(name)
 }
 
 func resolveAuthenticationFilterSecret(

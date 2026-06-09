@@ -2260,6 +2260,98 @@ func TestValidateJWTAuthorization(t *testing.T) {
 			authValidator: &validationfakes.FakeAuthFieldsValidator{},
 			expectErrs:    false,
 		},
+		{
+			name: "claim names collide after sanitization - slash vs underscore",
+			authz: &ngfAPI.Authorization{
+				Rules: []ngfAPI.Rule{
+					{
+						Claims: []ngfAPI.Claim{
+							{
+								Name:   "realm_access/roles",
+								Values: []string{"admin"},
+							},
+						},
+					},
+					{
+						Claims: []ngfAPI.Claim{
+							{
+								Name:   "realm_access_roles",
+								Values: []string{"viewer"},
+							},
+						},
+					},
+				},
+			},
+			authValidator: &validationfakes.FakeAuthFieldsValidator{},
+			expectErrs:    true,
+		},
+		{
+			name: "claim names collide after sanitization - dash vs underscore",
+			authz: &ngfAPI.Authorization{
+				Rules: []ngfAPI.Rule{
+					{
+						Claims: []ngfAPI.Claim{
+							{
+								Name:   "realm-access-roles",
+								Values: []string{"admin"},
+							},
+							{
+								Name:   "realm_access_roles",
+								Values: []string{"viewer"},
+							},
+						},
+					},
+				},
+			},
+			authValidator: &validationfakes.FakeAuthFieldsValidator{},
+			expectErrs:    true,
+		},
+		{
+			name: "claim names collide after sanitization - slash vs dash in same rule",
+			authz: &ngfAPI.Authorization{
+				Rules: []ngfAPI.Rule{
+					{
+						Claims: []ngfAPI.Claim{
+							{
+								Name:   "realm_access/roles",
+								Values: []string{"admin"},
+							},
+							{
+								Name:   "realm-access/roles",
+								Values: []string{"editor"},
+							},
+						},
+					},
+				},
+			},
+			authValidator: &validationfakes.FakeAuthFieldsValidator{},
+			expectErrs:    true,
+		},
+		{
+			name: "same claim name in different rules does not trigger collision",
+			authz: &ngfAPI.Authorization{
+				Rules: []ngfAPI.Rule{
+					{
+						Claims: []ngfAPI.Claim{
+							{
+								Name:   "realm_access/roles",
+								Values: []string{"admin"},
+							},
+						},
+					},
+					{
+						Claims: []ngfAPI.Claim{
+							{
+								Name:   "realm_access/roles",
+								Values: []string{"viewer"},
+							},
+						},
+					},
+				},
+			},
+			authValidator: &validationfakes.FakeAuthFieldsValidator{},
+			expectErrs:    false,
+		},
 	}
 
 	for _, tt := range tests {
