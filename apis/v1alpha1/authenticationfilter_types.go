@@ -365,6 +365,8 @@ type Authorization struct {
 	Require *RequireType `json:"require,omitempty"`
 
 	// Rules defines a list of claims and their specific authorization requirements.
+	//
+	// +kubebuilder:validation:MaxItems=32
 	Rules []Rule `json:"rules"`
 }
 
@@ -384,6 +386,7 @@ type Rule struct {
 
 	// Claims defines a list of claims required by users.
 	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=32
 	Claims []Claim `json:"claims"`
 }
 
@@ -408,6 +411,7 @@ type Claim struct {
 	// When more than one value is set, the claim must match any of these values.
 	// +kubebuilder:validation:items:Pattern=`^[^\n\r;#\$\{\}\|&><'"]+$`
 	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=32
 	Values []string `json:"values"`
 }
 

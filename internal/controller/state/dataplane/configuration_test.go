@@ -6710,8 +6710,8 @@ func TestBuildJWTAuthZConfigFromAuthenticationFilters(t *testing.T) {
 									Source:   "$test_jwt_filter_claim_aud",
 									Variable: "$test_jwt_filter_claim_aud_rule_0",
 									Parameters: []shared.MapParameter{
-									// Regex matches are inserted as-is
-									// We don't escape any characters
+										// Regex matches are inserted as-is
+										// We don't escape any characters
 										{Value: `"~(?:^|,)a(.*)ws(?:,|$)"`, Result: "1"},
 										{Value: "default", Result: "0"},
 									},

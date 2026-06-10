@@ -132,12 +132,14 @@ spec:
                                     items:
                                       pattern: ^[^\n\r;#\$\{\}\|&><'"]+$
                                       type: string
+                                    maxItems: 32
                                     minItems: 1
                                     type: array
                                 required:
                                 - name
                                 - values
                                 type: object
+                              maxItems: 32
                               minItems: 1
                               type: array
                             require:
@@ -157,6 +159,7 @@ spec:
                           - message: claim names must be unique within a rule
                             rule: self.claims.all(c, self.claims.exists_one(d, d.name
                               == c.name))
+                        maxItems: 32
                         type: array
                     required:
                     - rules
