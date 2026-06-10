@@ -1298,9 +1298,8 @@ func TestCreateStreamUpstreams(t *testing.T) {
 
 	expUpstreams := []stream.Upstream{
 		{
-			Name:                "up1",
-			ZoneSize:            ossZoneSize,
-			LoadBalancingMethod: defaultStreamLBMethod,
+			Name:     "up1",
+			ZoneSize: ossZoneSize,
 			Servers: []stream.UpstreamServer{
 				{
 					Address: "10.0.0.0:80",
@@ -1317,9 +1316,8 @@ func TestCreateStreamUpstreams(t *testing.T) {
 			},
 		},
 		{
-			Name:                "up2",
-			ZoneSize:            ossZoneSize,
-			LoadBalancingMethod: defaultStreamLBMethod,
+			Name:     "up2",
+			ZoneSize: ossZoneSize,
 			Servers: []stream.UpstreamServer{
 				{
 					Address: "11.0.0.0:80",
@@ -1361,9 +1359,8 @@ func TestCreateStreamUpstream(t *testing.T) {
 				},
 			},
 			expectedUpstream: stream.Upstream{
-				Name:                "multiple-endpoints",
-				ZoneSize:            ossZoneSize,
-				LoadBalancingMethod: defaultStreamLBMethod,
+				Name:     "multiple-endpoints",
+				ZoneSize: ossZoneSize,
 				Servers: []stream.UpstreamServer{
 					{
 						Address: "10.0.0.1:80",
@@ -1390,9 +1387,8 @@ func TestCreateStreamUpstream(t *testing.T) {
 				},
 			},
 			expectedUpstream: stream.Upstream{
-				Name:                "external-name-service",
-				ZoneSize:            ossZoneSize,
-				LoadBalancingMethod: defaultStreamLBMethod,
+				Name:     "external-name-service",
+				ZoneSize: ossZoneSize,
 				Servers: []stream.UpstreamServer{
 					{
 						Address: "backend.example.com:443",
@@ -1423,9 +1419,8 @@ func TestCreateStreamUpstream(t *testing.T) {
 				},
 			},
 			expectedUpstream: stream.Upstream{
-				Name:                "mixed-endpoints",
-				ZoneSize:            ossZoneSize,
-				LoadBalancingMethod: defaultStreamLBMethod,
+				Name:     "mixed-endpoints",
+				ZoneSize: ossZoneSize,
 				Servers: []stream.UpstreamServer{
 					{
 						Address: "192.168.1.10:8080",
@@ -1467,10 +1462,9 @@ func TestCreateStreamUpstreamPlus(t *testing.T) {
 		},
 	}
 	expectedUpstream := stream.Upstream{
-		Name:                "multiple-endpoints",
-		ZoneSize:            plusZoneSize,
-		StateFile:           stateDir + "/multiple-endpoints.conf",
-		LoadBalancingMethod: defaultStreamLBMethod,
+		Name:      "multiple-endpoints",
+		ZoneSize:  plusZoneSize,
+		StateFile: stateDir + "/multiple-endpoints.conf",
 		Servers: []stream.UpstreamServer{
 			{
 				Address: "10.0.0.1:80",

@@ -180,8 +180,8 @@ type Upstream struct {
 	Name                string
 	ZoneSize            string // format: 512k, 1m
 	StateFile           string
-	LoadBalancingMethod string
 	HashMethodKey       string
+	LoadBalancingMethod string
 	KeepAlive           UpstreamKeepAlive
 	Servers             []UpstreamServer
 }
@@ -258,19 +258,36 @@ type ServerConfig struct {
 	DisableSNIHostValidation bool
 }
 
-var AllowedLBMethods = map[ngfAPI.LoadBalancingType]struct{}{
-	ngfAPI.LoadBalancingTypeRoundRobin:                 {},
-	ngfAPI.LoadBalancingTypeLeastConnection:            {},
-	ngfAPI.LoadBalancingTypeIPHash:                     {},
-	ngfAPI.LoadBalancingTypeRandom:                     {},
-	ngfAPI.LoadBalancingTypeHash:                       {},
-	ngfAPI.LoadBalancingTypeHashConsistent:             {},
-	ngfAPI.LoadBalancingTypeRandomTwo:                  {},
-	ngfAPI.LoadBalancingTypeRandomTwoLeastConnection:   {},
-	ngfAPI.LoadBalancingTypeLeastTimeHeader:            {},
-	ngfAPI.LoadBalancingTypeLeastTimeLastByte:          {},
-	ngfAPI.LoadBalancingTypeLeastTimeHeaderInflight:    {},
-	ngfAPI.LoadBalancingTypeLeastTimeLastByteInflight:  {},
-	ngfAPI.LoadBalancingTypeRandomTwoLeastTimeHeader:   {},
-	ngfAPI.LoadBalancingTypeRandomTwoLeastTimeLastByte: {},
-}
+var (
+	OSSAllowedLBMethods = map[ngfAPI.LoadBalancingType]struct{}{
+		ngfAPI.LoadBalancingTypeRoundRobin:                {},
+		ngfAPI.LoadBalancingTypeLeastConnection:           {},
+		ngfAPI.LoadBalancingTypeIPHash:                    {},
+		ngfAPI.LoadBalancingTypeRandom:                    {},
+		ngfAPI.LoadBalancingTypeHash:                      {},
+		ngfAPI.LoadBalancingTypeHashConsistent:            {},
+		ngfAPI.LoadBalancingTypeRandomTwo:                 {},
+		ngfAPI.LoadBalancingTypeRandomTwoLeastConnection:  {},
+		ngfAPI.LoadBalancingTypeLeastTimeHeader:           {},
+		ngfAPI.LoadBalancingTypeLeastTimeLastByte:         {},
+		ngfAPI.LoadBalancingTypeLeastTimeHeaderInflight:   {},
+		ngfAPI.LoadBalancingTypeLeastTimeLastByteInflight: {},
+	}
+
+	PlusAllowedLBMethods = map[ngfAPI.LoadBalancingType]struct{}{
+		ngfAPI.LoadBalancingTypeRoundRobin:                 {},
+		ngfAPI.LoadBalancingTypeLeastConnection:            {},
+		ngfAPI.LoadBalancingTypeIPHash:                     {},
+		ngfAPI.LoadBalancingTypeRandom:                     {},
+		ngfAPI.LoadBalancingTypeHash:                       {},
+		ngfAPI.LoadBalancingTypeHashConsistent:             {},
+		ngfAPI.LoadBalancingTypeRandomTwo:                  {},
+		ngfAPI.LoadBalancingTypeRandomTwoLeastConnection:   {},
+		ngfAPI.LoadBalancingTypeLeastTimeHeader:            {},
+		ngfAPI.LoadBalancingTypeLeastTimeLastByte:          {},
+		ngfAPI.LoadBalancingTypeLeastTimeHeaderInflight:    {},
+		ngfAPI.LoadBalancingTypeLeastTimeLastByteInflight:  {},
+		ngfAPI.LoadBalancingTypeRandomTwoLeastTimeHeader:   {},
+		ngfAPI.LoadBalancingTypeRandomTwoLeastTimeLastByte: {},
+	}
+)

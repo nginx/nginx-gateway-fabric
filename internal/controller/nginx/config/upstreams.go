@@ -34,9 +34,7 @@ const (
 	// stateDir is the directory for storing state files.
 	stateDir = "/var/lib/nginx/state"
 	// default load balancing method.
-	defaultLBMethod = "random two least_time=header"
-	// default load balancing method for stream upstreams.
-	defaultStreamLBMethod = "random two least_time=first_byte"
+	defaultLBMethod = "random two least_conn"
 )
 
 // keepAliveChecker takes an upstream name and returns if it has keep alive settings enabled.
@@ -125,11 +123,10 @@ func (g GeneratorImpl) createStreamUpstream(up dataplane.Upstream) stream.Upstre
 	}
 
 	return stream.Upstream{
-		Name:                up.Name,
-		ZoneSize:            zoneSize,
-		StateFile:           stateFile,
-		LoadBalancingMethod: defaultStreamLBMethod,
-		Servers:             upstreamServers,
+		Name:      up.Name,
+		ZoneSize:  zoneSize,
+		StateFile: stateFile,
+		Servers:   upstreamServers,
 	}
 }
 

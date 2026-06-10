@@ -484,7 +484,7 @@ func createPolicyManager(
 		},
 		{
 			GVK:       mustExtractGVK(&ngfAPIv1alpha1.UpstreamSettingsPolicy{}),
-			Validator: upstreamsettings.NewValidator(validator),
+			Validator: upstreamsettings.NewValidator(validator, cfg.Plus),
 		},
 		{
 			GVK:       mustExtractGVK(&ngfAPIv1alpha1.RateLimitPolicy{}),

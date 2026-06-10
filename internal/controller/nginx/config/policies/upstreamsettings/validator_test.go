@@ -16,6 +16,8 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
 
+const plusDisabled = false
+
 type policyModFunc func(policy *ngfAPI.UpstreamSettingsPolicy) *ngfAPI.UpstreamSettingsPolicy
 
 func createValidPolicy() *ngfAPI.UpstreamSettingsPolicy {
@@ -126,7 +128,7 @@ func TestValidator_Validate(t *testing.T) {
 		},
 	}
 
-	v := upstreamsettings.NewValidator(validation.GenericValidator{})
+	v := upstreamsettings.NewValidator(validation.GenericValidator{}, plusDisabled)
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -141,7 +143,7 @@ func TestValidator_Validate(t *testing.T) {
 
 func TestValidator_ValidatePanics(t *testing.T) {
 	t.Parallel()
-	v := upstreamsettings.NewValidator(nil)
+	v := upstreamsettings.NewValidator(nil, plusDisabled)
 
 	validate := func() {
 		_ = v.Validate(&policiesfakes.FakePolicy{})
@@ -156,7 +158,7 @@ func TestValidator_ValidateGlobalSettings(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	v := upstreamsettings.NewValidator(validation.GenericValidator{})
+	v := upstreamsettings.NewValidator(validation.GenericValidator{}, plusDisabled)
 
 	g.Expect(v.ValidateGlobalSettings(nil, nil)).To(BeNil())
 }
@@ -271,7 +273,7 @@ func TestValidator_Conflicts(t *testing.T) {
 		},
 	}
 
-	v := upstreamsettings.NewValidator(nil)
+	v := upstreamsettings.NewValidator(nil, plusDisabled)
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -285,7 +287,7 @@ func TestValidator_Conflicts(t *testing.T) {
 
 func TestValidator_ConflictsPanics(t *testing.T) {
 	t.Parallel()
-	v := upstreamsettings.NewValidator(nil)
+	v := upstreamsettings.NewValidator(nil, plusDisabled)
 
 	conflicts := func() {
 		_ = v.Conflicts(&policiesfakes.FakePolicy{}, &policiesfakes.FakePolicy{})
@@ -303,18 +305,50 @@ func TestValidate_ValidateLoadBalancingMethod(t *testing.T) {
 		policy        *ngfAPI.UpstreamSettingsPolicy
 		name          string
 		expConditions []conditions.Condition
+		plusEnabled   bool
 	}{
 		{
-			name: "valid load balancing method",
+			name: "oss method random with Plus disabled",
 			policy: &ngfAPI.UpstreamSettingsPolicy{
 				Spec: ngfAPI.UpstreamSettingsPolicySpec{
-					LoadBalancingMethod: helpers.GetPointer(ngfAPI.LoadBalancingTypeLeastTimeHeader),
+					LoadBalancingMethod: helpers.GetPointer(ngfAPI.LoadBalancingTypeRandom),
 				},
 			},
 			expConditions: nil,
 		},
 		{
-			name: "invalid load balancing method",
+			name: "oss method hash consistent with Plus disabled",
+			policy: &ngfAPI.UpstreamSettingsPolicy{
+				Spec: ngfAPI.UpstreamSettingsPolicySpec{
+					LoadBalancingMethod: helpers.GetPointer(ngfAPI.LoadBalancingTypeHashConsistent),
+				},
+			},
+			expConditions: nil,
+		},
+		{
+			name: "plus load balancing method random two least_time not allowed with Plus disabled",
+			policy: &ngfAPI.UpstreamSettingsPolicy{
+				Spec: ngfAPI.UpstreamSettingsPolicySpec{
+					LoadBalancingMethod: helpers.GetPointer(ngfAPI.LoadBalancingTypeRandomTwoLeastTimeHeader),
+				},
+			},
+			expConditions: []conditions.Condition{
+				conditions.NewPolicyInvalid("spec.loadBalancingMethod: Invalid value: \"random two least_time=header\": " +
+					"NGINX OSS supports the following load balancing methods: "),
+			},
+		},
+		{
+			name: "plus load balancing method least_time header allowed with Plus enabled",
+			policy: &ngfAPI.UpstreamSettingsPolicy{
+				Spec: ngfAPI.UpstreamSettingsPolicySpec{
+					LoadBalancingMethod: helpers.GetPointer(ngfAPI.LoadBalancingTypeLeastTimeHeader),
+				},
+			},
+			plusEnabled:   true,
+			expConditions: nil,
+		},
+		{
+			name: "invalid load balancing method for NGINX OSS",
 			policy: &ngfAPI.UpstreamSettingsPolicy{
 				Spec: ngfAPI.UpstreamSettingsPolicySpec{
 					LoadBalancingMethod: helpers.GetPointer(ngfAPI.LoadBalancingType("invalid-method")),
@@ -322,8 +356,21 @@ func TestValidate_ValidateLoadBalancingMethod(t *testing.T) {
 			},
 			expConditions: []conditions.Condition{
 				conditions.NewPolicyInvalid("spec.loadBalancingMethod: Invalid value: \"invalid-method\": " +
-					"The following load balancing methods are supported: "),
+					"NGINX OSS supports the following load balancing methods: "),
 			},
+		},
+		{
+			name: "invalid load balancing method for NGINX Plus",
+			policy: &ngfAPI.UpstreamSettingsPolicy{
+				Spec: ngfAPI.UpstreamSettingsPolicySpec{
+					LoadBalancingMethod: helpers.GetPointer(ngfAPI.LoadBalancingType("invalid-method")),
+				},
+			},
+			expConditions: []conditions.Condition{
+				conditions.NewPolicyInvalid("spec.loadBalancingMethod: Invalid value: \"invalid-method\": " +
+					"NGINX Plus supports the following load balancing methods: "),
+			},
+			plusEnabled: true,
 		},
 	}
 
@@ -332,7 +379,7 @@ func TestValidate_ValidateLoadBalancingMethod(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			v := upstreamsettings.NewValidator(validation.GenericValidator{})
+			v := upstreamsettings.NewValidator(validation.GenericValidator{}, test.plusEnabled)
 			conds := v.Validate(test.policy)
 
 			if test.expConditions != nil {
