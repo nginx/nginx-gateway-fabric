@@ -9,7 +9,10 @@ import (
 
 	"github.com/go-logr/logr"
 	v1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -92,6 +95,11 @@ type eventHandlerConfig struct {
 	plus bool
 	// InferenceExtension indicates if Gateway API Inference Extension support is enabled.
 	inferenceExtension bool
+	// plmEnabled indicates whether PLM storage is configured. When false, AP resource
+	// reconciliation (finalizer management, listing) is skipped — APPolicy/APLogConf are
+	// only relevant for PLM-sourced WAFPolicies, and the corresponding RBAC permissions
+	// in the Helm chart are gated on the same condition.
+	plmEnabled bool
 }
 
 const (
@@ -99,7 +107,34 @@ const (
 	groupAllExceptGateways = "all-graphs-except-gateways"
 	groupGateways          = "gateways"
 	groupControlPlane      = "control-plane"
+
+	// apResourceFinalizer prevents deletion of AP resources that are still referenced by WAFPolicy.
+	apResourceFinalizer = "gateway.nginx.org/ap-policy-protection"
 )
+
+type apResourceType int
+
+const (
+	apResourceTypePolicy apResourceType = iota
+	apResourceTypeLogConf
+)
+
+type apResourceKey struct {
+	nsName       types.NamespacedName
+	resourceType apResourceType
+}
+
+// String implements fmt.Stringer so apResourceType values render as a human-readable kind in logs.
+func (t apResourceType) String() string {
+	switch t {
+	case apResourceTypePolicy:
+		return kinds.APPolicy
+	case apResourceTypeLogConf:
+		return kinds.APLogConf
+	default:
+		panic(fmt.Sprintf("unknown apResourceType: %d", t))
+	}
+}
 
 // filterKey is the `kind_namespace_name" of an object being filtered.
 type filterKey string
@@ -119,16 +154,15 @@ type objectFilter struct {
 // (3) Updating control plane configuration.
 // (4) Tracks the NGINX Plus usage reporting Secret (if applicable).
 type eventHandlerImpl struct {
-	// latestConfigurations are the latest Configuration generation for each Gateway tree.
-	latestConfigurations map[types.NamespacedName]*dataplane.Configuration
-
-	// objectFilters contains all created objectFilters, with the key being a filterKey
-	objectFilters map[filterKey]objectFilter
-
-	cfg        eventHandlerConfig
-	lock       sync.RWMutex
-	leaderLock sync.RWMutex
-	leader     bool
+	latestConfigurations  map[types.NamespacedName]*dataplane.Configuration
+	objectFilters         map[filterKey]objectFilter
+	finalizedAPResources  map[apResourceKey]struct{}
+	cfg                   eventHandlerConfig
+	lock                  sync.RWMutex
+	leaderLock            sync.RWMutex
+	finalizerLock         sync.Mutex
+	finalizersInitialized bool
+	leader                bool
 }
 
 // newEventHandlerImpl creates a new eventHandlerImpl.
@@ -136,6 +170,7 @@ func newEventHandlerImpl(cfg eventHandlerConfig) *eventHandlerImpl {
 	handler := &eventHandlerImpl{
 		cfg:                  cfg,
 		latestConfigurations: make(map[types.NamespacedName]*dataplane.Configuration),
+		finalizedAPResources: make(map[apResourceKey]struct{}),
 	}
 
 	handler.objectFilters = map[filterKey]objectFilter{
@@ -196,6 +231,8 @@ func (h *eventHandlerImpl) sendNginxConfig(ctx context.Context, logger logr.Logg
 	// Reconcile WAF bundle pollers on every graph update, regardless of Gateway state.
 	// This ensures pollers for deleted or orphaned policies are stopped even on early returns.
 	defer h.reconcileWAFPollers(ctx, gr)
+
+	h.reconcileAPResourceFinalizers(ctx, logger, gr)
 
 	if len(gr.Gateways) == 0 {
 		// still need to update GatewayClass status
@@ -316,6 +353,11 @@ func (h *eventHandlerImpl) reconcileWAFPollers(ctx context.Context, gr *graph.Gr
 
 		wafPolicy, ok := policy.Source.(*ngfAPI.WAFPolicy)
 		if !ok {
+			continue
+		}
+
+		// PLM policies use event-driven watches, not polling.
+		if wafPolicy.Spec.Type == ngfAPI.PolicySourceTypePLM {
 			continue
 		}
 
@@ -1018,6 +1060,162 @@ func (h *eventHandlerImpl) setLatestConfiguration(gateway *graph.Gateway, cfg *d
 
 func objectFilterKey(obj client.Object, nsName types.NamespacedName) filterKey {
 	return filterKey(fmt.Sprintf("%T_%s_%s", obj, nsName.Namespace, nsName.Name))
+}
+
+func (h *eventHandlerImpl) reconcileAPResourceFinalizers(
+	ctx context.Context,
+	logger logr.Logger,
+	gr *graph.Graph,
+) {
+	if !h.isLeader() {
+		return
+	}
+
+	// When PLM is not configured, the controller does not watch AP resources and has no RBAC
+	// permissions to list or patch them, so there is nothing to reconcile.
+	if !h.cfg.plmEnabled {
+		return
+	}
+
+	h.finalizerLock.Lock()
+	defer h.finalizerLock.Unlock()
+
+	if err := h.initializeAPResourceFinalizers(ctx); err != nil {
+		logger.Error(err, "Failed to initialize AP resource finalizer state")
+		return
+	}
+
+	desired := make(map[apResourceKey]struct{})
+	for nsName := range gr.ReferencedAPPolicies {
+		desired[apResourceKey{nsName: nsName, resourceType: apResourceTypePolicy}] = struct{}{}
+	}
+	for nsName := range gr.ReferencedAPLogConfs {
+		desired[apResourceKey{nsName: nsName, resourceType: apResourceTypeLogConf}] = struct{}{}
+	}
+
+	for key := range desired {
+		if _, exists := h.finalizedAPResources[key]; exists {
+			continue
+		}
+
+		reconciled, err := h.updateAPResourceFinalizer(ctx, key, controllerutil.AddFinalizer)
+		if err != nil {
+			logger.Error(err, "Failed to add finalizer to AP resource", "resource", key.nsName)
+			continue
+		}
+		if !reconciled {
+			continue
+		}
+
+		h.finalizedAPResources[key] = struct{}{}
+	}
+
+	for key := range h.finalizedAPResources {
+		if _, exists := desired[key]; exists {
+			continue
+		}
+
+		reconciled, err := h.updateAPResourceFinalizer(ctx, key, controllerutil.RemoveFinalizer)
+		if err != nil {
+			logger.Error(err, "Failed to remove finalizer from AP resource", "resource", key.nsName)
+			continue
+		}
+		if !reconciled {
+			delete(h.finalizedAPResources, key)
+			continue
+		}
+
+		delete(h.finalizedAPResources, key)
+	}
+}
+
+func (h *eventHandlerImpl) initializeAPResourceFinalizers(ctx context.Context) error {
+	if h.finalizersInitialized {
+		return nil
+	}
+
+	resources, err := h.listFinalizedAPResources(ctx)
+	if err != nil {
+		return err
+	}
+
+	h.finalizedAPResources = resources
+	h.finalizersInitialized = true
+
+	return nil
+}
+
+func (h *eventHandlerImpl) listFinalizedAPResources(ctx context.Context) (map[apResourceKey]struct{}, error) {
+	resources := make(map[apResourceKey]struct{})
+
+	if err := h.collectFinalizedAPResources(ctx, kinds.NewAPPolicyList(), apResourceTypePolicy, resources); err != nil {
+		return nil, err
+	}
+
+	if err := h.collectFinalizedAPResources(ctx, kinds.NewAPLogConfList(), apResourceTypeLogConf, resources); err != nil {
+		return nil, err
+	}
+
+	return resources, nil
+}
+
+func (h *eventHandlerImpl) collectFinalizedAPResources(
+	ctx context.Context,
+	list *unstructured.UnstructuredList,
+	resourceType apResourceType,
+	resources map[apResourceKey]struct{},
+) error {
+	if err := h.cfg.k8sClient.List(ctx, list); err != nil {
+		if apierrors.IsNotFound(err) || apimeta.IsNoMatchError(err) {
+			return nil
+		}
+
+		return fmt.Errorf("listing %s resources: %w", resourceType, err)
+	}
+
+	for i := range list.Items {
+		if !controllerutil.ContainsFinalizer(&list.Items[i], apResourceFinalizer) {
+			continue
+		}
+
+		resources[apResourceKey{
+			nsName:       client.ObjectKeyFromObject(&list.Items[i]),
+			resourceType: resourceType,
+		}] = struct{}{}
+	}
+
+	return nil
+}
+
+func (h *eventHandlerImpl) updateAPResourceFinalizer(
+	ctx context.Context,
+	key apResourceKey,
+	mutateFinalizer func(client.Object, string) bool,
+) (bool, error) {
+	obj := kinds.NewAPPolicyObject()
+	if key.resourceType == apResourceTypeLogConf {
+		obj = kinds.NewAPLogConfObject()
+	}
+
+	if err := h.cfg.k8sClient.Get(ctx, key.nsName, obj); err != nil {
+		if apierrors.IsNotFound(err) {
+			return false, nil
+		}
+
+		return false, fmt.Errorf("getting AP resource: %w", err)
+	}
+
+	patch := client.MergeFrom(obj.DeepCopy())
+
+	if changed := mutateFinalizer(obj, apResourceFinalizer); !changed {
+		return true, nil
+	}
+
+	if err := h.cfg.k8sClient.Patch(ctx, obj, patch); err != nil {
+		return false, fmt.Errorf("patching AP resource finalizer: %w", err)
+	}
+
+	return true, nil
 }
 
 // ensureInferencePoolServices ensures a headless Service exists and is up to date for each InferencePool.

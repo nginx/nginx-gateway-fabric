@@ -10,6 +10,9 @@ import (
 const DefaultNginxMetricsPort = int32(9113)
 
 type Config struct {
+	// PLMStorageConfig holds configuration for connecting to PLM's S3-compatible storage.
+	// Nil when PLM is not configured.
+	PLMStorageConfig *PLMStorageConfig
 	// AtomicLevel is an atomically changeable, dynamic logging level.
 	AtomicLevel zap.AtomicLevel
 	// GatewayPodConfig contains information about this Pod.
@@ -62,6 +65,20 @@ type Config struct {
 	EndpointPickerDisableTLS bool
 	// EndpointPickerTLSSkipVerify indicates if secure verification is skipped for EndpointPicker communication.
 	EndpointPickerTLSSkipVerify bool
+}
+
+// PLMStorageConfig holds configuration for connecting to PLM's S3-compatible storage (SeaweedFS).
+type PLMStorageConfig struct {
+	// URL is the S3-compatible storage endpoint URL.
+	URL string
+	// CredentialsSecretName is the name of the Secret containing the S3 secret access key for PLM storage.
+	CredentialsSecretName string
+	// CASecretName is the name of the Secret containing the CA certificate for TLS verification.
+	CASecretName string
+	// ClientSSLSecretName is the name of the Secret containing client TLS cert/key for mutual TLS.
+	ClientSSLSecretName string
+	// SkipVerify disables TLS certificate verification (dev/test only).
+	SkipVerify bool
 }
 
 // GatewayPodConfig contains information about this Pod.

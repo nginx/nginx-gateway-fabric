@@ -8,6 +8,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	discoveryV1 "k8s.io/api/discovery/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -26,6 +27,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 	ngftypes "github.com/nginx/nginx-gateway-fabric/v2/internal/framework/types"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/waf/fetch"
+	s3fetch "github.com/nginx/nginx-gateway-fabric/v2/internal/framework/waf/fetch/s3"
 )
 
 // ClusterState includes cluster resources necessary to build the Graph.
@@ -50,6 +52,8 @@ type ClusterState struct {
 	AuthenticationFilters map[types.NamespacedName]*ngfAPIv1alpha1.AuthenticationFilter
 	InferencePools        map[types.NamespacedName]*inference.InferencePool
 	ListenerSets          map[types.NamespacedName]*gatewayv1.ListenerSet
+	APPolicies            map[types.NamespacedName]*unstructured.Unstructured
+	APLogConfs            map[types.NamespacedName]*unstructured.Unstructured
 }
 
 // Graph is a Graph-like representation of Gateway API resources.
@@ -89,6 +93,10 @@ type Graph struct {
 	// ReferencedWAFBundles includes the WAFPolicy Bundles that have been referenced by any Gateways
 	// or Routes.
 	ReferencedWAFBundles map[WAFBundleKey]*WAFBundleData
+	// ReferencedAPPolicies includes APPolicy resources referenced by WAFPolicy resources.
+	ReferencedAPPolicies map[types.NamespacedName]*unstructured.Unstructured
+	// ReferencedAPLogConfs includes APLogConf resources referenced by WAFPolicy resources.
+	ReferencedAPLogConfs map[types.NamespacedName]*unstructured.Unstructured
 	// ReferencedWAFSecrets includes Secrets referenced by WAFPolicy (auth and TLS CA).
 	ReferencedWAFSecrets map[types.NamespacedName]*v1.Secret
 	// SnippetsFilters holds all the SnippetsFilters.
@@ -99,6 +107,9 @@ type Graph struct {
 	ListenerSets map[types.NamespacedName]*ListenerSet
 	// PlusSecrets holds the secrets related to NGINX Plus licensing.
 	PlusSecrets map[types.NamespacedName][]PlusSecretFile
+	// PLMSecrets holds the PLM S3 storage secrets, keyed by NamespacedName with the configured roles as value.
+	// Used by IsReferenced to ensure PLM secrets trigger graph rebuilds when updated.
+	PLMSecrets map[types.NamespacedName][]PLMRole
 }
 
 // NginxReloadResult describes the result of an NGINX reload.
@@ -123,11 +134,12 @@ func (g *Graph) IsReferenced(resourceType ngftypes.ObjectType, nsname types.Name
 	switch obj := resourceType.(type) {
 	case *v1.Secret:
 		// Check if secret is a Gateway-referenced Secret, or if it's a Secret used for
-		// NGINX Plus reporting or WAF bundle auth.
+		// NGINX Plus reporting, WAF bundle auth, or PLM S3 storage.
 		_, exists := g.ReferencedSecrets[nsname]
 		_, plusSecretExists := g.PlusSecrets[nsname]
 		_, wafAuthSecretExists := g.ReferencedWAFSecrets[nsname]
-		return exists || plusSecretExists || wafAuthSecretExists
+		_, plmSecretExists := g.PLMSecrets[nsname]
+		return exists || plusSecretExists || wafAuthSecretExists || plmSecretExists
 	case *v1.ConfigMap:
 		_, exists := g.ReferencedCaCertConfigMaps[nsname]
 		return exists
@@ -166,6 +178,17 @@ func (g *Graph) IsReferenced(resourceType ngftypes.ObjectType, nsname types.Name
 	case *ngfAPIv1alpha2.NginxProxy:
 		_, exists := g.ReferencedNginxProxies[nsname]
 		return exists
+	case *unstructured.Unstructured:
+		switch obj.GroupVersionKind() {
+		case kinds.APPolicyGVK:
+			_, exists := g.ReferencedAPPolicies[nsname]
+			return exists
+		case kinds.APLogConfGVK:
+			_, exists := g.ReferencedAPLogConfs[nsname]
+			return exists
+		default:
+			return false
+		}
 	default:
 		return false
 	}
@@ -236,6 +259,8 @@ func BuildGraph(
 	gcName string,
 	plusSecrets map[types.NamespacedName][]PlusSecretFile,
 	wafFetcher fetch.Fetcher,
+	plmFetcher *s3fetch.Fetcher,
+	plmSecretNames map[types.NamespacedName][]PLMRole,
 	previousWAFBundles map[WAFBundleKey]*WAFBundleData,
 	validators validation.Validators,
 	logger logr.Logger,
@@ -341,11 +366,17 @@ func BuildGraph(
 	addGatewaysForBackendTLSPolicies(processedBackendTLSPolicies, referencedServices, controllerName, gws, logger)
 
 	var wafInput *WAFProcessingInput
-	if wafFetcher != nil {
+	if wafFetcher != nil || plmFetcher != nil {
+		plmResolvedSecrets := resolvePLMSecrets(logger, state.Secrets, plmSecretNames)
 		wafInput = &WAFProcessingInput{
-			Fetcher:         wafFetcher,
-			Secrets:         state.Secrets,
-			PreviousBundles: previousWAFBundles,
+			Fetcher:            wafFetcher,
+			PLMFetcher:         plmFetcher,
+			Secrets:            state.Secrets,
+			PreviousBundles:    previousWAFBundles,
+			APPolicies:         state.APPolicies,
+			APLogConfs:         state.APLogConfs,
+			RefGrantResolver:   refGrantResolver,
+			PLMResolvedSecrets: plmResolvedSecrets,
 		}
 	}
 
@@ -367,9 +398,13 @@ func BuildGraph(
 	setPlusSecretContent(state.Secrets, plusSecrets)
 
 	var referencedWAFBundles map[WAFBundleKey]*WAFBundleData
+	var referencedAPPolicies map[types.NamespacedName]*unstructured.Unstructured
+	var referencedAPLogConfs map[types.NamespacedName]*unstructured.Unstructured
 	var referencedWAFAuthSecrets map[types.NamespacedName]*v1.Secret
 	if wafOutput != nil {
 		referencedWAFBundles = wafOutput.Bundles
+		referencedAPPolicies = wafOutput.ReferencedAPPolicies
+		referencedAPLogConfs = wafOutput.ReferencedAPLogConfs
 		referencedWAFAuthSecrets = wafOutput.ReferencedWAFSecrets
 	}
 
@@ -391,7 +426,10 @@ func BuildGraph(
 		AuthenticationFilters:      processedAuthenticationFilters,
 		ListenerSets:               listenerSets,
 		PlusSecrets:                plusSecrets,
+		PLMSecrets:                 plmSecretNames,
 		ReferencedWAFBundles:       referencedWAFBundles,
+		ReferencedAPPolicies:       referencedAPPolicies,
+		ReferencedAPLogConfs:       referencedAPLogConfs,
 		ReferencedWAFSecrets:       referencedWAFAuthSecrets,
 	}
 
