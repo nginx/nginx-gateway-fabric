@@ -79,10 +79,10 @@ func executeBaseHTTPConfig(conf dataplane.Configuration, generator policies.Gene
 	policyIncludes := createIncludesFromPolicyGenerateResult(generator.GenerateForHTTP(conf.BaseHTTPConfig.Policies))
 	includes = append(includes, policyIncludes...)
 
-	authZIncludes := createIncludesFromAuthZConfigs(conf.AuthZConfigs)
+	authZIncludes := createIncludesFromAuthZConfigs(conf.BaseHTTPConfig.AuthZConfigs)
 	includes = append(includes, authZIncludes...)
 
-	claimSets := collectAuthZClaimSets(conf.AuthZConfigs)
+	claimSets := collectAuthZClaimSets(conf.BaseHTTPConfig.AuthZConfigs)
 
 	hc := httpConfig{
 		HTTP2:                   conf.BaseHTTPConfig.HTTP2,

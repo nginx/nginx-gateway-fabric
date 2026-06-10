@@ -36,8 +36,6 @@ type Configuration struct {
 	SSLKeyPairs map[SSLKeyPairID]SSLKeyPair
 	// AuthSecrets holds all unique secrets for authentication.
 	AuthSecrets map[AuthFileID]AuthFileData
-	// AuthZConfigs holds the complete authorization configuration for JWT claims.
-	AuthZConfigs []*AuthZConfig
 	// AuxiliarySecrets contains additional secret data, like certificates/keys/tokens that are not related to
 	// Gateway API resources.
 	AuxiliarySecrets map[graph.SecretFileType][]byte
@@ -698,6 +696,8 @@ type BaseHTTPConfig struct {
 	DNSResolver *DNSResolverConfig
 	// Compression defines the compression settings for NGINX.
 	Compression *CompressionSettings
+	// AuthZConfigs holds the complete authorization configuration for JWT claims.
+	AuthZConfigs []*AuthZConfig
 	// DisableBaseProxySetHeaders specifies which default proxy_set_header entries should be omitted.
 	DisableBaseProxySetHeaders []string
 	// IPFamily specifies the IP family for all servers.

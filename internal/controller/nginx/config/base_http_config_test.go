@@ -1075,7 +1075,7 @@ func TestExecuteBaseHttp_AuthZIncludes(t *testing.T) {
 		{
 			name: "nil authz configs produces only http.conf with no authz directives",
 			conf: dataplane.Configuration{
-				AuthZConfigs: nil,
+				BaseHTTPConfig: dataplane.BaseHTTPConfig{AuthZConfigs: nil},
 			},
 			expResultCount: 1,
 			expHTTPNotContains: []string{
@@ -1085,7 +1085,7 @@ func TestExecuteBaseHttp_AuthZIncludes(t *testing.T) {
 		{
 			name: "single config with one rule map and one claim set",
 			conf: dataplane.Configuration{
-				AuthZConfigs: []*dataplane.AuthZConfig{
+				BaseHTTPConfig: dataplane.BaseHTTPConfig{AuthZConfigs: []*dataplane.AuthZConfig{
 					{
 						FilterNsName: "test-ns_my-filter",
 						AuthClaimSets: map[string][]string{
@@ -1107,7 +1107,7 @@ func TestExecuteBaseHttp_AuthZIncludes(t *testing.T) {
 							},
 						},
 					},
-				},
+				}},
 			},
 			expResultCount: 2, // http.conf + 1 include
 			expHTTPContains: []string{
@@ -1128,7 +1128,7 @@ func TestExecuteBaseHttp_AuthZIncludes(t *testing.T) {
 		{
 			name: "config with RequireTypeAny generates require_any include",
 			conf: dataplane.Configuration{
-				AuthZConfigs: []*dataplane.AuthZConfig{
+				BaseHTTPConfig: dataplane.BaseHTTPConfig{AuthZConfigs: []*dataplane.AuthZConfig{
 					{
 						FilterNsName: "test-ns_my-filter",
 						RuleMaps: []dataplane.AuthZRuleMap{
@@ -1147,7 +1147,7 @@ func TestExecuteBaseHttp_AuthZIncludes(t *testing.T) {
 							},
 						},
 					},
-				},
+				}},
 			},
 			expResultCount: 2,
 			expHTTPContains: []string{
@@ -1163,7 +1163,7 @@ func TestExecuteBaseHttp_AuthZIncludes(t *testing.T) {
 		{
 			name: "config with AuthZMap generates top-level authz include",
 			conf: dataplane.Configuration{
-				AuthZConfigs: []*dataplane.AuthZConfig{
+				BaseHTTPConfig: dataplane.BaseHTTPConfig{AuthZConfigs: []*dataplane.AuthZConfig{
 					{
 						FilterNsName: "test-ns_my-filter",
 						RuleMaps: []dataplane.AuthZRuleMap{
@@ -1193,7 +1193,7 @@ func TestExecuteBaseHttp_AuthZIncludes(t *testing.T) {
 							},
 						},
 					},
-				},
+				}},
 			},
 			expResultCount: 3, // http.conf + rule include + authz include
 			expHTTPContains: []string{
@@ -1216,7 +1216,7 @@ func TestExecuteBaseHttp_AuthZIncludes(t *testing.T) {
 		{
 			name: "multiple AuthZConfigs produce multiple includes",
 			conf: dataplane.Configuration{
-				AuthZConfigs: []*dataplane.AuthZConfig{
+				BaseHTTPConfig: dataplane.BaseHTTPConfig{AuthZConfigs: []*dataplane.AuthZConfig{
 					{
 						FilterNsName: "test-ns_filter-a",
 						AuthClaimSets: map[string][]string{
@@ -1259,7 +1259,7 @@ func TestExecuteBaseHttp_AuthZIncludes(t *testing.T) {
 							},
 						},
 					},
-				},
+				}},
 			},
 			expResultCount: 3, // http.conf + 2 includes
 			expHTTPContains: []string{
@@ -1284,7 +1284,7 @@ func TestExecuteBaseHttp_AuthZIncludes(t *testing.T) {
 		{
 			name: "duplicate claim sets across configs are deduplicated in http.conf",
 			conf: dataplane.Configuration{
-				AuthZConfigs: []*dataplane.AuthZConfig{
+				BaseHTTPConfig: dataplane.BaseHTTPConfig{AuthZConfigs: []*dataplane.AuthZConfig{
 					{
 						FilterNsName: "test-ns_filter-a",
 						AuthClaimSets: map[string][]string{
@@ -1325,7 +1325,7 @@ func TestExecuteBaseHttp_AuthZIncludes(t *testing.T) {
 							},
 						},
 					},
-				},
+				}},
 			},
 			expResultCount: 3, // http.conf + 2 includes
 			expHTTPContains: []string{
@@ -1335,7 +1335,7 @@ func TestExecuteBaseHttp_AuthZIncludes(t *testing.T) {
 		{
 			name: "nested claim set parts render correctly in http.conf",
 			conf: dataplane.Configuration{
-				AuthZConfigs: []*dataplane.AuthZConfig{
+				BaseHTTPConfig: dataplane.BaseHTTPConfig{AuthZConfigs: []*dataplane.AuthZConfig{
 					{
 						FilterNsName: "test-ns_my-filter",
 						AuthClaimSets: map[string][]string{
@@ -1357,7 +1357,7 @@ func TestExecuteBaseHttp_AuthZIncludes(t *testing.T) {
 							},
 						},
 					},
-				},
+				}},
 			},
 			expResultCount: 2,
 			expHTTPContains: []string{
@@ -1367,7 +1367,7 @@ func TestExecuteBaseHttp_AuthZIncludes(t *testing.T) {
 		{
 			name: "multiple different claim sets all render in http.conf",
 			conf: dataplane.Configuration{
-				AuthZConfigs: []*dataplane.AuthZConfig{
+				BaseHTTPConfig: dataplane.BaseHTTPConfig{AuthZConfigs: []*dataplane.AuthZConfig{
 					{
 						FilterNsName: "test-ns_my-filter",
 						AuthClaimSets: map[string][]string{
@@ -1391,7 +1391,7 @@ func TestExecuteBaseHttp_AuthZIncludes(t *testing.T) {
 							},
 						},
 					},
-				},
+				}},
 			},
 			expResultCount: 2,
 			expHTTPContains: []string{
@@ -1464,7 +1464,7 @@ func TestExecuteBaseHttp_AuthZIncludes_ClaimSetDeduplication(t *testing.T) {
 	g := NewWithT(t)
 
 	conf := dataplane.Configuration{
-		AuthZConfigs: []*dataplane.AuthZConfig{
+		BaseHTTPConfig: dataplane.BaseHTTPConfig{AuthZConfigs: []*dataplane.AuthZConfig{
 			{
 				FilterNsName: "test-ns_filter-a",
 				AuthClaimSets: map[string][]string{
@@ -1505,7 +1505,7 @@ func TestExecuteBaseHttp_AuthZIncludes_ClaimSetDeduplication(t *testing.T) {
 					},
 				},
 			},
-		},
+		}},
 	}
 
 	res := executeBaseHTTPConfig(conf, &policiesfakes.FakeGenerator{})

@@ -87,6 +87,7 @@ func BuildConfiguration(
 	gatewayRateLimitPolicies := gateway.GetReferencedRateLimitPolicies(g.Routes, g.NGFPolicies)
 
 	baseHTTPConfig := buildBaseHTTPConfig(gateway, gatewaySnippetsFilters, gatewayRateLimitPolicies)
+	baseHTTPConfig.AuthZConfigs = buildAuthZConfigs(g.AuthenticationFilters)
 	baseStreamConfig := buildBaseStreamConfig(gateway)
 
 	httpServers, sslServers, sslListenerHostnames, extAuthCertBundleIDs := buildServers(
@@ -153,7 +154,6 @@ func BuildConfiguration(
 		BackendGroups:        backendGroups,
 		SSLKeyPairs:          buildSSLKeyPairs(g.ReferencedSecrets, gateway),
 		AuthSecrets:          buildAuthSecrets(g.AuthenticationFilters, g.ReferencedSecrets),
-		AuthZConfigs:         buildAuthZConfigs(g.AuthenticationFilters),
 		Telemetry:            buildTelemetry(g, gateway),
 		BaseHTTPConfig:       baseHTTPConfig,
 		BaseStreamConfig:     baseStreamConfig,

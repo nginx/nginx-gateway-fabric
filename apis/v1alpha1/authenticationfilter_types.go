@@ -366,6 +366,7 @@ type Authorization struct {
 
 	// Rules defines a list of claims and their specific authorization requirements.
 	//
+	// +kubebuilder:validation:MinItems=1
 	// +kubebuilder:validation:MaxItems=32
 	Rules []Rule `json:"rules"`
 }
@@ -397,10 +398,12 @@ type Claim struct {
 	//
 	// proxy_set_header X-JWT-Claim-Sub $jwt_claim_sub;
 	// +kubebuilder:validation:Pattern=`^[-A-Za-z0-9]+$`
+	// +kubebuilder:validation:MaxLength=253
 	ProxySetHeader *string `json:"proxySetHeader,omitempty"`
 
 	// Name is the name of the claim within the token.
 	// +kubebuilder:validation:Pattern=`^[a-zA-Z0-9_/-]+$`
+	// +kubebuilder:validation:MaxLength=253
 	Name string `json:"name"`
 
 	// Match sets the match type for the claim.
@@ -412,6 +415,7 @@ type Claim struct {
 	// +kubebuilder:validation:items:Pattern=`^[^\n\r;#\$\{\}\|&><'"]+$`
 	// +kubebuilder:validation:MinItems=1
 	// +kubebuilder:validation:MaxItems=32
+	// +kubebuilder:validation:items:MaxLength=256
 	Values []string `json:"values"`
 }
 

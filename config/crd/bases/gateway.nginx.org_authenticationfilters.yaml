@@ -116,6 +116,7 @@ spec:
                                   name:
                                     description: Name is the name of the claim within
                                       the token.
+                                    maxLength: 253
                                     pattern: ^[a-zA-Z0-9_/-]+$
                                     type: string
                                   proxySetHeader:
@@ -124,6 +125,7 @@ spec:
                                       Example: For claim name `sub` for JWT auth
 
                                       proxy_set_header X-JWT-Claim-Sub $jwt_claim_sub;
+                                    maxLength: 253
                                     pattern: ^[-A-Za-z0-9]+$
                                     type: string
                                   values:
@@ -131,6 +133,7 @@ spec:
                                       Values are the values within the claim.
                                       When more than one value is set, the claim must match any of these values.
                                     items:
+                                      maxLength: 256
                                       pattern: ^[^\n\r;#\$\{\}\|&><'"]+$
                                       type: string
                                     maxItems: 32
@@ -161,6 +164,7 @@ spec:
                             rule: self.claims.all(c, self.claims.exists_one(d, d.name
                               == c.name))
                         maxItems: 32
+                        minItems: 1
                         type: array
                     required:
                     - rules
