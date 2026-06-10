@@ -407,7 +407,7 @@ func assertBuildConfiguration(g *WithT, result, expected Configuration) {
 	g.Expect(result.Upstreams).To(ConsistOf(expected.Upstreams))
 	g.Expect(result.HTTPServers).To(ConsistOf(expected.HTTPServers))
 	g.Expect(result.SSLServers).To(ConsistOf(expected.SSLServers))
-	g.Expect(result.TLSPassthroughServers).To(ConsistOf(expected.TLSPassthroughServers))
+	g.Expect(result.TLSServers).To(ConsistOf(expected.TLSServers))
 	g.Expect(result.SSLKeyPairs).To(Equal(expected.SSLKeyPairs))
 	g.Expect(result.CertBundles).To(Equal(expected.CertBundles))
 	g.Expect(result.Telemetry).To(Equal(expected.Telemetry))
@@ -2013,7 +2013,7 @@ func TestBuildConfiguration(t *testing.T) {
 						Name:      "default_secure-app_8443",
 					},
 				}
-				conf.TLSPassthroughServers = []Layer4VirtualServer{
+				conf.TLSServers = []Layer4VirtualServer{
 					{
 						Hostname: "app.example.com",
 						Upstreams: []Layer4Upstream{
@@ -2039,7 +2039,7 @@ func TestBuildConfiguration(t *testing.T) {
 						Hostname:  "",
 						Upstreams: []Layer4Upstream{},
 						Port:      443,
-						IsDefault: false,
+						IsDefault: true,
 					},
 				}
 				conf.SSLServers[0].SSL = &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}}
@@ -2987,7 +2987,7 @@ func TestBuildConfiguration(t *testing.T) {
 				return g
 			}),
 			expConf: getModifiedExpectedConfiguration(func(conf Configuration) Configuration {
-				conf.TLSPassthroughServers = []Layer4VirtualServer{
+				conf.TLSServers = []Layer4VirtualServer{
 					{
 						Hostname: "app.example.com",
 						Port:     443,
@@ -3136,7 +3136,7 @@ func TestBuildConfiguration_Plus(t *testing.T) {
 			g.Expect(result.Upstreams).To(ConsistOf(test.expConf.Upstreams))
 			g.Expect(result.HTTPServers).To(ConsistOf(test.expConf.HTTPServers))
 			g.Expect(result.SSLServers).To(ConsistOf(test.expConf.SSLServers))
-			g.Expect(result.TLSPassthroughServers).To(ConsistOf(test.expConf.TLSPassthroughServers))
+			g.Expect(result.TLSServers).To(ConsistOf(test.expConf.TLSServers))
 			g.Expect(result.SSLKeyPairs).To(Equal(test.expConf.SSLKeyPairs))
 			g.Expect(result.CertBundles).To(Equal(test.expConf.CertBundles))
 			g.Expect(result.Telemetry).To(Equal(test.expConf.Telemetry))
@@ -5447,7 +5447,7 @@ func TestCreatePassthroughServers(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			result := buildPassthroughServers(test.gateway)
+			result := buildTLSServers(test.gateway)
 			g.Expect(result).To(Equal(test.expected))
 		})
 	}
@@ -5633,9 +5633,6 @@ func TestBuildStreamUpstreams(t *testing.T) {
 	) ([]resolver.Endpoint, error) {
 		if nsName == secureAppKey.NamespacedName {
 			return nil, errors.New("error")
-		}
-		if nsName == clusterAppKey.NamespacedName {
-			t.Fatal("resolver should not be called when UseClusterIP is enabled for stream upstreams")
 		}
 		return fakeEndpoints, nil
 	}
@@ -10948,6 +10945,7 @@ func TestBuildCertBundles(t *testing.T) {
 			result := buildCertBundles(
 				test.refCertBundles,
 				test.backendGroups,
+				nil,
 				test.extAuthCertBundleIDs,
 				test.authBundles,
 			)
