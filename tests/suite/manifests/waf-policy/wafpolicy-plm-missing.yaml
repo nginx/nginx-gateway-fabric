@@ -1,0 +1,15 @@
+# type: PLM WAFPolicy referencing an APPolicy that does not exist. NGF must set
+# ResolvedRefs=False/InvalidRef ("APPolicy ... not found") and emit no app_protect_policy_file.
+apiVersion: gateway.nginx.org/v1alpha1
+kind: WAFPolicy
+metadata:
+  name: gateway-waf-plm-missing
+spec:
+  targetRefs:
+  - group: gateway.networking.k8s.io
+    kind: Gateway
+    name: gateway
+  type: PLM
+  policyRef:
+    apPolicyRef:
+      name: does-not-exist
