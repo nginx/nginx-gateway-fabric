@@ -1,0 +1,124 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: rollout-mgr
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: rollout-mgr
+rules:
+- apiGroups:
+  - "apps"
+  resources:
+  - deployments
+  verbs:
+  - patch
+- apiGroups:
+  - "appprotect.f5.com"
+  resources:
+  - appolicies
+  verbs:
+  - get
+  - patch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: rollout-mgr
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: rollout-mgr
+subjects:
+- kind: ServiceAccount
+  name: rollout-mgr
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: coffee-rollout-mgr
+spec:
+  schedule: "* */6 * * *" # every minute every 6 hours
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: rollout-mgr
+          containers:
+          - name: coffee-rollout-mgr
+            image: curlimages/curl:8.20.0
+            imagePullPolicy: IfNotPresent
+            command:
+            - /bin/sh
+            - -c
+            args:
+            - |
+                TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
+                RESTARTED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+                curl -X PATCH -s -k -v \
+                -H "Authorization: Bearer $TOKEN" \
+                -H "Content-type: application/merge-patch+json" \
+                --data-raw "{\"spec\": {\"template\": {\"metadata\": {\"annotations\": {\"kubectl.kubernetes.io/restartedAt\": \"$RESTARTED_AT\"}}}}}" \
+                "https://kubernetes.default/apis/apps/v1/namespaces/longevity-waf/deployments/coffee?fieldManager=kubectl-rollout" 2>&1
+          restartPolicy: OnFailure
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: tea-rollout-mgr
+spec:
+  schedule: "* 3,9,15,21 * * *" # every minute every 6 hours, 3 hours apart from coffee
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: rollout-mgr
+          containers:
+          - name: tea-rollout-mgr
+            image: curlimages/curl:8.20.0
+            imagePullPolicy: IfNotPresent
+            command:
+            - /bin/sh
+            - -c
+            args:
+            - |
+                TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
+                RESTARTED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+                curl -X PATCH -s -k -v \
+                -H "Authorization: Bearer $TOKEN" \
+                -H "Content-type: application/merge-patch+json" \
+                --data-raw "{\"spec\": {\"template\": {\"metadata\": {\"annotations\": {\"kubectl.kubernetes.io/restartedAt\": \"$RESTARTED_AT\"}}}}}" \
+                "https://kubernetes.default/apis/apps/v1/namespaces/longevity-waf/deployments/tea?fieldManager=kubectl-rollout" 2>&1
+          restartPolicy: OnFailure
+---
+# Periodically update the APPolicy spec to exercise the PLM event-driven recompile → NGF fetch path.
+# A benign change (adding/toggling a comment field) is enough to trigger PLM recompilation.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: appolicy-updater
+spec:
+  schedule: "0 12 * * *" # once a day at noon
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: rollout-mgr
+          containers:
+          - name: appolicy-updater
+            image: curlimages/curl:8.20.0
+            imagePullPolicy: IfNotPresent
+            command:
+            - /bin/sh
+            - -c
+            args:
+            - |
+                TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
+                UPDATED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+                curl -X PATCH -s -k -v \
+                -H "Authorization: Bearer $TOKEN" \
+                -H "Content-type: application/merge-patch+json" \
+                --data-raw "{\"metadata\": {\"annotations\": {\"longevity.nginx.org/last-updated\": \"$UPDATED_AT\"}}}" \
+                "https://kubernetes.default/apis/appprotect.f5.com/v1/namespaces/longevity-waf/appolicies/attack-signatures-blocking?fieldManager=appolicy-updater" 2>&1
+          restartPolicy: OnFailure
