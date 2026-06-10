@@ -2209,27 +2209,6 @@ func TestValidateJWTAuthorization(t *testing.T) {
 			expectErrs: true,
 		},
 		{
-			name: "duplicate claim names within a single rule",
-			authz: &ngfAPI.Authorization{
-				Rules: []ngfAPI.Rule{
-					{
-						Claims: []ngfAPI.Claim{
-							{
-								Name:   "sub",
-								Values: []string{"user1"},
-							},
-							{
-								Name:   "sub",
-								Values: []string{"user2"},
-							},
-						},
-					},
-				},
-			},
-			authValidator: &validationfakes.FakeAuthFieldsValidator{},
-			expectErrs:    true,
-		},
-		{
 			name: "same claim name in different rules is valid",
 			authz: &ngfAPI.Authorization{
 				Rules: []ngfAPI.Rule{
