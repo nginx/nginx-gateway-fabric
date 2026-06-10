@@ -49,7 +49,7 @@ upstream {{ $u.Name }} {
 const streamUpstreamsTemplateText = `
 {{ range $u := . }}
 upstream {{ $u.Name }} {
-    {{ if $u.LoadBalancingMethod }}{{ $u.LoadBalancingMethod }};{{ end }}
+    random two least_conn;
     {{ if $u.ZoneSize -}}
     zone {{ $u.Name }} {{ $u.ZoneSize }};
     {{- end }}
