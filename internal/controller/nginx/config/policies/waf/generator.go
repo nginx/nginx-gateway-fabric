@@ -65,41 +65,20 @@ func generate(pols []policies.Policy) policies.GenerateResultFiles {
 
 		fields := map[string]any{}
 
-		if wp.Spec.PolicySource.HTTPSource != nil ||
+		if wp.Spec.PolicySource != nil && (wp.Spec.PolicySource.HTTPSource != nil ||
 			wp.Spec.PolicySource.NIMSource != nil ||
-			wp.Spec.PolicySource.N1CSource != nil {
-			bundleName := fmt.Sprintf("%s_%s", wp.Namespace, wp.Name)
+			wp.Spec.PolicySource.N1CSource != nil) ||
+			wp.Spec.PolicyRef != nil && wp.Spec.PolicyRef.APPolicyRef != nil {
+			bundleName := string(graph.PLMPolicyBundleKey(types.NamespacedName{
+				Namespace: wp.Namespace,
+				Name:      wp.Name,
+			}))
 			bundlePath := fmt.Sprintf("%s/%s.tgz", appProtectBundleFolder, bundleName)
 			fields["BundlePath"] = bundlePath
 		}
 
-		if len(wp.Spec.SecurityLogs) > 0 {
-			securityLogs := make([]map[string]string, 0, len(wp.Spec.SecurityLogs))
-
-			for _, secLog := range wp.Spec.SecurityLogs {
-				logEntry := map[string]string{}
-
-				switch {
-				case secLog.LogSource.HTTPSource != nil || secLog.LogSource.NIMSource != nil || secLog.LogSource.N1CSource != nil:
-					bundleName := graph.LogBundleKey(
-						types.NamespacedName{Namespace: pol.GetNamespace(), Name: pol.GetName()},
-						&secLog.LogSource,
-					)
-					bundlePath := fmt.Sprintf("%s/%s.tgz", appProtectBundleFolder, bundleName)
-					logEntry["LogProfileBundlePath"] = bundlePath
-				case secLog.LogSource.DefaultProfile != nil:
-					logEntry["LogProfileName"] = string(*secLog.LogSource.DefaultProfile)
-				default:
-					continue
-				}
-
-				logEntry["Destination"] = formatSecurityLogDestination(secLog.Destination)
-				securityLogs = append(securityLogs, logEntry)
-			}
-
-			if len(securityLogs) > 0 {
-				fields["SecurityLogs"] = securityLogs
-			}
+		if securityLogs := buildSecurityLogEntries(wp, pol); len(securityLogs) > 0 {
+			fields["SecurityLogs"] = securityLogs
 		}
 
 		files = append(files, policies.File{
@@ -109,6 +88,35 @@ func generate(pols []policies.Policy) policies.GenerateResultFiles {
 	}
 
 	return files
+}
+
+func buildSecurityLogEntries(wp *ngfAPI.WAFPolicy, pol policies.Policy) []map[string]string {
+	securityLogs := make([]map[string]string, 0, len(wp.Spec.SecurityLogs))
+	polNsName := types.NamespacedName{Namespace: pol.GetNamespace(), Name: pol.GetName()}
+
+	for _, secLog := range wp.Spec.SecurityLogs {
+		logEntry := map[string]string{}
+
+		switch {
+		case secLog.LogRef != nil && secLog.LogRef.APLogConfRef != nil:
+			bundleName := graph.PLMLogBundleKey(polNsName, secLog.LogRef.APLogConfRef)
+			logEntry["LogProfileBundlePath"] = fmt.Sprintf("%s/%s.tgz", appProtectBundleFolder, bundleName)
+		case secLog.LogSource == nil:
+			continue
+		case secLog.LogSource.HTTPSource != nil || secLog.LogSource.NIMSource != nil || secLog.LogSource.N1CSource != nil:
+			bundleName := graph.LogBundleKey(polNsName, secLog.LogSource)
+			logEntry["LogProfileBundlePath"] = fmt.Sprintf("%s/%s.tgz", appProtectBundleFolder, bundleName)
+		case secLog.LogSource.DefaultProfile != nil:
+			logEntry["LogProfileName"] = string(*secLog.LogSource.DefaultProfile)
+		default:
+			continue
+		}
+
+		logEntry["Destination"] = formatSecurityLogDestination(secLog.Destination)
+		securityLogs = append(securityLogs, logEntry)
+	}
+
+	return securityLogs
 }
 
 func formatSecurityLogDestination(dest ngfAPI.SecurityLogDestination) string {

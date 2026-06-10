@@ -73,17 +73,19 @@ The following terms are used consistently throughout this document:
 
 ### WAFPolicy Structure
 
-The `WAFPolicy` spec is organised around a single `type` discriminator at the top level. All policy source configuration — whether a remote URL, a managed platform reference, or a PLM CRD reference — lives inside `policySource`. Similarly, all log source configuration lives inside `logSource` within each `securityLogs` entry. This follows the discriminated-union pattern familiar from Kubernetes volume sources.
+The `WAFPolicy` spec is organised around a single `type` discriminator at the top level. Non-CRD bundle fetch configuration (HTTP, NIM, N1C) lives inside `policySource`, while CRD-backed policy references (PLM) live inside `policyRef`. Similarly, each `securityLogs` entry uses `logSource` for non-CRD log profile sources and `logRef` for CRD-backed log profile references. This separation cleanly distinguishes remote fetch config from Kubernetes-native CRD references.
 
 ```shell
-spec.type                          → selects which sub-field of policySource is relevant
-spec.policySource.httpSource       → direct URL fetch configuration (type: HTTP)
-spec.policySource.nimSource        → NIM fetch configuration (type: NIM)
-spec.policySource.n1cSource        → N1C fetch configuration (type: N1C)
-spec.securityLogs[*].logSource     → all log fetch configuration (defaultProfile, httpSource, nimSource, n1cSource)
+spec.type                              → selects which sub-field is relevant
+spec.policySource.httpSource           → direct URL fetch configuration (type: HTTP)
+spec.policySource.nimSource            → NIM fetch configuration (type: NIM)
+spec.policySource.n1cSource            → N1C fetch configuration (type: N1C)
+spec.policyRef.apPolicyRef             → APPolicy CRD reference (type: PLM)
+spec.securityLogs[*].logSource         → non-CRD log fetch config (defaultProfile, httpSource, nimSource, n1cSource)
+spec.securityLogs[*].logRef.apLogConfRef → APLogConf CRD reference (type: PLM)
 ```
 
-CEL validation rules enforce that the correct sub-fields are populated for the selected `type`, and that mutually exclusive fields are not set together.
+`policySource` and `logSource` are optional pointer fields — they are omitted entirely for `type: PLM`, which uses `policyRef` and `logRef` instead. CEL validation rules enforce that `policySource` is not set for PLM (and vice versa), that the correct source sub-field is set for the declared `type`, and that mutually exclusive sub-fields are not set together.
 
 ### Policy Lifecycle Model
 
@@ -124,7 +126,8 @@ The table below shows who owns each step for each source type:
 - NGF watches `APPolicy` and `APLogConf` status and fetches bundles via S3 API when a new compilation is detected
 - No polling required — updates are event-driven via Kubernetes watch
 - PLM storage access is configured cluster-wide via CLI flags/Helm values (not per-WAFPolicy)
-- `policySource.apPolicyRef` is required; all `policySource.*Source` fields must not be set
+- `policyRef.apPolicyRef` is required; `policySource.*Source` fields must not be set
+- Log sources use `logRef.apLogConfRef` instead of `logSource.*Source`
 - Cross-namespace `APPolicy`/`APLogConf` references require a `ReferenceGrant`
 
 ### GitOps Integration
@@ -387,7 +390,7 @@ For subsequent policy definition updates, repeat steps 1–3 in NIM. If polling 
 
 1. Create an `APPolicy` CRD (and optionally `APLogConf` CRDs) in Kubernetes
 2. PLM Policy Controller watches the CRD, triggers compilation, stores the bundle in in-cluster S3 storage, and updates `APPolicy.status` with the bundle location and checksum
-3. Create `WAFPolicy` with `type: PLM` and `policySource.apPolicyRef` pointing to the `APPolicy` by name and namespace
+3. Create `WAFPolicy` with `type: PLM` and `policyRef.apPolicyRef` pointing to the `APPolicy` by name and namespace
 4. NGF watches `APPolicy.status`; when `status.bundle.state` becomes `ready`, NGF fetches the bundle from PLM storage via S3 API and deploys it
 5. Subsequent `APPolicy` spec changes trigger PLM recompilation, a status update, and a new NGF fetch — no polling required
 
@@ -460,7 +463,7 @@ sequenceDiagram
     PLMCompiler->>PLMStorage: Store compiled bundle
     PLMController->>APPolicy: Update status.bundle (location + sha256 + state=ready)
 
-    User->>WAFPolicy: Create WAFPolicy (type: PLM, policySource.apPolicyRef)
+    User->>WAFPolicy: Create WAFPolicy (type: PLM, policyRef.apPolicyRef)
     NGF->>WAFPolicy: Watch WAFPolicy
     NGF->>APPolicy: Watch referenced APPolicy status
     APPolicy-->>NGF: Status update: state=ready, location set
@@ -483,7 +486,7 @@ sequenceDiagram
 
 The `securityLogs` section supports multiple logging configurations, each generating an `app_protect_security_log` directive. All log source configuration lives inside `logSource` within each entry.
 
-Within each `securityLogs` entry, exactly one of the following must be set inside `logSource`:
+Within each `securityLogs` entry, exactly one of `logSource` or `logRef` must be set. `logSource` is an optional pointer field — it is omitted for PLM-backed log profiles. When `logSource` is set, exactly one of the following must be set:
 
 | Field                        | Description                                              | Applicable types |
 |------------------------------|----------------------------------------------------------|------------------|
@@ -491,9 +494,9 @@ Within each `securityLogs` entry, exactly one of the following must be set insid
 | `logSource.httpSource`       | Direct URL to a compiled log profile bundle              | HTTP             |
 | `logSource.nimSource`        | NIM log profile bundle configuration                     | NIM              |
 | `logSource.n1cSource`        | N1C log profile bundle configuration                     | N1C              |
-| `logSource.apLogConfRef`     | Reference to an `APLogConf` CRD compiled by PLM          | PLM only         |
+| `logRef.apLogConfRef`        | Reference to an `APLogConf` CRD compiled by PLM          | PLM only         |
 
-When `logSource.httpSource`, `logSource.nimSource`, or `logSource.n1cSource` is set, the same `auth`, `tlsSecret`, `validation`, `polling`, `timeout`, `retryAttempts`, and `insecureSkipVerify` fields apply as for `policySource`.
+When `logSource.httpSource`, `logSource.nimSource`, or `logSource.n1cSource` is set, the same `auth`, `tlsSecret`, `validation`, `polling`, `timeout`, `retryAttempts`, and `insecureSkipVerify` fields on `logSource` apply as for `policySource`.
 
 **Built-in Log Profiles (`logSource.defaultProfile`):**
 
@@ -740,23 +743,21 @@ The `WAFPolicy` CRD is used for all source types. The top-level `type` field sel
 | `PLM`  | Policy Lifecycle Management — APPolicy/APLogConf CRD references (not yet implemented) |
 
 ```go
-// +kubebuilder:validation:Enum=HTTP;NIM;N1C
+// +kubebuilder:validation:Enum=HTTP;NIM;N1C;PLM
 type PolicySourceType string
 ```
 
-> **Note:** `PLM` will be added to the enum when implemented.
-
 #### CEL Validation Rules
 
-The following mutual exclusion rules are enforced at admission time:
+The following rules are enforced at admission time:
 
-- When `type` is `HTTP`: `policySource.httpSource` must be set; `nimSource` and `n1cSource` must not be set
-- When `type` is `NIM`: `policySource.nimSource` must be set; `httpSource` and `n1cSource` must not be set
-- When `type` is `N1C`: `policySource.n1cSource` must be set; `httpSource` and `nimSource` must not be set
-- When `type` is `PLM` (future): `policySource.apPolicyRef` must be set; all `*Source` fields must not be set; `policySource.polling` must not be set
-- `validation.verifyChecksum` is only supported for `type: HTTP`
-- Within `securityLogs[*].logSource`: exactly one of `defaultProfile`, `httpSource`, `nimSource`, `n1cSource`, or `apLogConfRef` must be set
-- `logSource.apLogConfRef` may only be set when `spec.type` is `PLM`
+- `policySource` must not be set when `type` is `PLM`; `policyRef` must not be set when `type` is not `PLM`
+- When `policySource` is set, exactly one of `httpSource`, `nimSource`, or `n1cSource` must be set, and it must match the declared `type`
+- When `type` is `PLM`, `policyRef.apPolicyRef` is required
+- `policySource.validation.verifyChecksum` is only supported for `type: HTTP`
+- Within each `securityLogs` entry, exactly one of `logSource` or `logRef` must be set
+- When `logSource` is set, exactly one of `defaultProfile`, `httpSource`, `nimSource`, or `n1cSource` must be set
+- `logRef.apLogConfRef` may only be set when `spec.type` is `PLM`
 
 #### type: HTTP Example
 
@@ -895,7 +896,7 @@ When `policyObjectID` is set instead of `policyName`, the name lookup step is sk
 
 > **Note:** PLM is not yet implemented. This example documents the intended API.
 
-For `type: PLM`, `policySource.apPolicyRef` references an `APPolicy` CRD. No `*Source` fields may be set. Log sources use `logSource.apLogConfRef` to reference `APLogConf` CRDs.
+For `type: PLM`, `policyRef.apPolicyRef` references an `APPolicy` CRD. No `policySource.*Source` fields may be set. Log sources use `logRef.apLogConfRef` to reference `APLogConf` CRDs.
 
 ```yaml
 apiVersion: gateway.nginx.org/v1alpha1
@@ -909,7 +910,7 @@ spec:
   - group: gateway.networking.k8s.io
     kind: Gateway
     name: secure-gateway
-  policySource:
+  policyRef:
     apPolicyRef:
       name: "production-web-policy"
       namespace: "security"
@@ -917,7 +918,7 @@ spec:
   securityLogs:
   - destination:
       type: stderr
-    logSource:
+    logRef:
       apLogConfRef:
         name: "log-blocked-profile"
         namespace: "security"
@@ -925,7 +926,7 @@ spec:
       type: file
       file:
         path: "/var/log/app_protect/admin-security.log"
-    logSource:
+    logRef:
       apLogConfRef:
         name: "log-all-verbose-profile"
         namespace: "security"
@@ -943,14 +944,14 @@ spec:
   - group: gateway.networking.k8s.io
     kind: HTTPRoute
     name: admin-route
-  policySource:
+  policyRef:
     apPolicyRef:
       name: "admin-strict-web-policy"
       namespace: "security"
   securityLogs:
   - destination:
       type: stderr
-    logSource:
+    logRef:
       apLogConfRef:
         name: "log-all-verbose-profile"
         namespace: "security"
@@ -963,7 +964,7 @@ spec:
 This resource is created by users/security teams. PLM controllers handle compilation and status updates. NGF only reads this resource.
 
 ```yaml
-apiVersion: waf.f5.com/v1alpha1
+apiVersion: appprotect.f5.com/v1
 kind: APPolicy
 metadata:
   name: production-web-policy
@@ -1002,7 +1003,7 @@ NGF reads `status.bundle.state`, `status.bundle.location`, and `status.bundle.sh
 > **Note:** PLM is not yet implemented.
 
 ```yaml
-apiVersion: waf.f5.com/v1alpha1
+apiVersion: appprotect.f5.com/v1
 kind: APLogConf
 metadata:
   name: log-blocked-profile
@@ -1030,7 +1031,7 @@ status:
 
 > **Note:** PLM is not yet implemented.
 
-When `policySource.apPolicyRef` or `logSource.apLogConfRef` references a resource in a different namespace, a `ReferenceGrant` is required in the target namespace:
+When `policyRef.apPolicyRef` or `logRef.apLogConfRef` references a resource in a different namespace, a `ReferenceGrant` is required in the target namespace:
 
 ```yaml
 apiVersion: gateway.networking.k8s.io/v1
@@ -1044,9 +1045,9 @@ spec:
     kind: WAFPolicy
     namespace: applications
   to:
-  - group: waf.f5.com
+  - group: appprotect.f5.com
     kind: APPolicy
-  - group: waf.f5.com
+  - group: appprotect.f5.com
     kind: APLogConf
 ```
 
@@ -1322,7 +1323,7 @@ Rules: added when the object starts being affected; only one condition exists ev
 #### Watchers
 
 - WAFPolicy controller
-- Watch `APPolicy` and `APLogConf` resources referenced by `policySource.apPolicyRef` / `logSource.apLogConfRef` (PLM — future)
+- Watch `APPolicy` and `APLogConf` resources referenced by `policyRef.apPolicyRef` / `logRef.apLogConfRef` (PLM — future)
 - Enqueue WAFPolicy reconcile when `APPolicy` or `APLogConf` `status.bundle.state` transitions to `ready` or `status.processing.datetime` changes (PLM — future)
 - Watch PLM credential and TLS Secrets; rebuild S3 client on change (PLM — future)
 
@@ -1348,7 +1349,7 @@ Rules: added when the object starts being affected; only one condition exists ev
 
 #### ReferenceGrant Validation (PLM — future)
 
-- Validate cross-namespace `policySource.apPolicyRef` and `logSource.apLogConfRef` references
+- Validate cross-namespace `policyRef.apPolicyRef` and `logRef.apLogConfRef` references
 - Check for `ReferenceGrant` in the target namespace
 - Set `ResolvedRefs=False/RefNotPermitted` if grant is absent
 
@@ -1394,7 +1395,7 @@ For all source types, NGF fetches compiled bundles, verifies integrity, writes t
 - PLM: APPolicy watcher — state transition detection, ignored non-ready states (future)
 - PLM: APLogConf watcher — same as APPolicy, for log profiles (future)
 - PLM: S3 fetcher — bundle location parsing, S3 request construction, credential injection, checksum verification (future)
-- PLM: ReferenceGrant validation for `policySource.apPolicyRef` and `logSource.apLogConfRef` (future)
+- PLM: ReferenceGrant validation for `policyRef.apPolicyRef` and `logRef.apLogConfRef` (future)
 - PLM: TLS configuration — CA cert loading, client cert loading, dynamic secret rotation (future)
 - CEL validation: wrong `*Source` field for the selected `type` → rejected; `validation.verifyChecksum` set on non-HTTP type → rejected; multiple `logSource` fields set simultaneously → rejected
 
@@ -1416,7 +1417,7 @@ For all source types, NGF fetches compiled bundles, verifies integrity, writes t
 - PLM: failure scenarios — APPolicy not found, state != ready, S3 fetch error, checksum mismatch, missing ReferenceGrant (future)
 - PLM: S3 communication — plain HTTP, HTTPS with CA verification, mutual TLS (future)
 - PLM: secret rotation — credential and TLS Secret updates applied without pod restart (future)
-- PLM: multiple `logSource.apLogConfRef` entries per WAFPolicy (future)
+- PLM: multiple `logRef.apLogConfRef` entries per WAFPolicy (future)
 
 ### Performance Testing
 
@@ -1689,7 +1690,7 @@ spec:
     enable: true
 ---
 # 3. APPolicy CRD (managed by security team; compiled by PLM)
-apiVersion: waf.f5.com/v1alpha1
+apiVersion: appprotect.f5.com/v1
 kind: APPolicy
 metadata:
   name: production-web-policy
@@ -1703,7 +1704,7 @@ spec:
 # status.bundle.state becomes "ready" after PLM compilation
 ---
 # 4. APLogConf CRD (managed by security team; compiled by PLM)
-apiVersion: waf.f5.com/v1alpha1
+apiVersion: appprotect.f5.com/v1
 kind: APLogConf
 metadata:
   name: log-blocked-profile
@@ -1729,9 +1730,9 @@ spec:
     kind: WAFPolicy
     namespace: applications
   to:
-  - group: waf.f5.com
+  - group: appprotect.f5.com
     kind: APPolicy
-  - group: waf.f5.com
+  - group: appprotect.f5.com
     kind: APLogConf
 ---
 # 6. Gateway
@@ -1764,14 +1765,14 @@ spec:
   - group: gateway.networking.k8s.io
     kind: Gateway
     name: secure-gateway
-  policySource:
+  policyRef:
     apPolicyRef:
       name: "production-web-policy"
       namespace: "security"
   securityLogs:
   - destination:
       type: stderr
-    logSource:
+    logRef:
       apLogConfRef:
         name: "log-blocked-profile"
         namespace: "security"

@@ -30,8 +30,8 @@ spec:
         description: |-
           WAFPolicy is an Inherited Attached Policy. It provides a way to configure F5 WAF for NGINX
           for Gateways and Routes by referencing compiled WAF policy bundles. Bundles can be fetched directly from an
-          HTTP/HTTPS URL (type: HTTP), from an NGINX Instance Manager instance (type: NIM), or from an F5 NGINX One
-          Console instance (type: N1C).
+          HTTP/HTTPS URL (type: HTTP), from an NGINX Instance Manager instance (type: NIM), from an F5 NGINX One
+          Console instance (type: N1C), or from a Policy Lifecycle Manager's S3-compatible storage (type: PLM).
         properties:
           apiVersion:
             description: |-
@@ -53,8 +53,40 @@ spec:
           spec:
             description: Spec defines the desired state of the WAFPolicy.
             properties:
+              policyRef:
+                description: |-
+                  PolicyRef holds all CRD-backed policy references.
+                  Used for the PLM policy type.
+                properties:
+                  apPolicyRef:
+                    description: |-
+                      APPolicyRef references an APPolicy CRD compiled by PLM.
+                      Cross-namespace references require a ReferenceGrant.
+                    properties:
+                      name:
+                        description: Name is the name of the APPolicy resource.
+                        maxLength: 253
+                        minLength: 1
+                        pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
+                        type: string
+                      namespace:
+                        description: |-
+                          Namespace is the namespace of the APPolicy resource.
+                          If not set, the namespace of the WAFPolicy is used.
+                          Cross-namespace references require a ReferenceGrant.
+                        maxLength: 63
+                        minLength: 1
+                        pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                        type: string
+                    required:
+                    - name
+                    type: object
+                type: object
               policySource:
-                description: PolicySource holds all policy bundle fetch configuration.
+                description: |-
+                  PolicySource holds all non-CRD bundle fetch configuration.
+                  Used for HTTP, NIM, and N1C policy types.
+                  Must not be set when type is PLM.
                 properties:
                   auth:
                     description: Auth configures authentication credentials for fetching
@@ -251,12 +283,17 @@ spec:
                       rule: '!(has(self.verifyChecksum) && self.verifyChecksum &&
                         has(self.expectedChecksum))'
                 type: object
+                x-kubernetes-validations:
+                - message: exactly one of httpSource, nimSource, or n1cSource must
+                    be set
+                  rule: '[has(self.httpSource), has(self.nimSource), has(self.n1cSource)].filter(x,
+                    x).size() == 1'
               securityLogs:
                 description: SecurityLogs defines security logging configurations.
                 items:
                   description: |-
                     WAFSecurityLog defines security logging configuration for app_protect_security_log directives.
-                    Exactly one of logSource.defaultProfile, logSource.httpSource, logSource.nimSource, or logSource.n1cSource must be set.
+                    Exactly one of logSource or logRef must be set.
                   properties:
                     destination:
                       description: Destination defines where security logs are sent.
@@ -310,10 +347,40 @@ spec:
                       - message: destination.syslog must be set if and only if type
                           is syslog
                         rule: (self.type == 'syslog') == has(self.syslog)
+                    logRef:
+                      description: |-
+                        LogRef configures all CRD-backed log profile references for this log entry.
+                        Used for PLM-backed APLogConf references.
+                      properties:
+                        apLogConfRef:
+                          description: |-
+                            APLogConfRef references an APLogConf CRD compiled by PLM.
+                            Cross-namespace references require a ReferenceGrant.
+                          properties:
+                            name:
+                              description: Name is the name of the APLogConf resource.
+                              maxLength: 253
+                              minLength: 1
+                              pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
+                              type: string
+                            namespace:
+                              description: |-
+                                Namespace is the namespace of the APLogConf resource.
+                                If not set, the namespace of the WAFPolicy is used.
+                                Cross-namespace references require a ReferenceGrant.
+                              maxLength: 63
+                              minLength: 1
+                              pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                              type: string
+                          required:
+                          - name
+                          type: object
+                      type: object
                     logSource:
                       description: |-
-                        LogSource configures the log profile bundle source for this log entry.
-                        Exactly one of url or defaultProfile must be set.
+                        LogSource configures all non-CRD log profile bundle sources for this log entry.
+                        Used for defaultProfile, httpSource, nimSource, and n1cSource.
+                        Must not be set when logRef is used.
                       properties:
                         auth:
                           description: |-
@@ -511,18 +578,17 @@ spec:
                               && has(self.expectedChecksum))'
                       type: object
                       x-kubernetes-validations:
-                      - message: exactly one of logSource.defaultProfile, logSource.httpSource,
-                          logSource.nimSource, or logSource.n1cSource must be set
-                        rule: (has(self.defaultProfile) && !has(self.httpSource) &&
-                          !has(self.nimSource) && !has(self.n1cSource)) || (!has(self.defaultProfile)
-                          && has(self.httpSource) && !has(self.nimSource) && !has(self.n1cSource))
-                          || (!has(self.defaultProfile) && !has(self.httpSource) &&
-                          has(self.nimSource) && !has(self.n1cSource)) || (!has(self.defaultProfile)
-                          && !has(self.httpSource) && !has(self.nimSource) && has(self.n1cSource))
+                      - message: exactly one of defaultProfile, httpSource, nimSource,
+                          or n1cSource must be set
+                        rule: '[has(self.defaultProfile), has(self.httpSource), has(self.nimSource),
+                          has(self.n1cSource)].filter(x, x).size() == 1'
                   required:
                   - destination
-                  - logSource
                   type: object
+                  x-kubernetes-validations:
+                  - message: exactly one of logSource or logRef must be set
+                    rule: '[has(self.logSource), has(self.logRef) && has(self.logRef.apLogConfRef)].filter(x,
+                      x).size() == 1'
                 maxItems: 32
                 type: array
               targetRefs:
@@ -577,29 +643,37 @@ spec:
                 description: |-
                   Type identifies the source type for the policy bundle.
                   HTTP fetches directly from a URL; NIM uses the NGINX Instance Manager bundles API;
-                  N1C uses the F5 NGINX One Console security policies API.
+                  N1C uses the F5 NGINX One Console security policies API; PLM references an APPolicy
+                  CRD managed by the Policy Lifecycle Manager.
                 enum:
                 - HTTP
                 - NIM
                 - N1C
+                - PLM
                 type: string
             required:
-            - policySource
             - targetRefs
             - type
             type: object
             x-kubernetes-validations:
-            - message: policySource.httpSource must be set if and only if type is
-                HTTP
-              rule: (self.type == 'HTTP') == (has(self.policySource) && has(self.policySource.httpSource))
-            - message: policySource.nimSource must be set if and only if type is NIM
-              rule: (self.type == 'NIM') == (has(self.policySource) && has(self.policySource.nimSource))
-            - message: policySource.n1cSource must be set if and only if type is N1C
-              rule: (self.type == 'N1C') == (has(self.policySource) && has(self.policySource.n1cSource))
+            - message: policySource must not be set when type is PLM
+              rule: '!(self.type == ''PLM'' && has(self.policySource))'
+            - message: policyRef must not be set when type is not PLM
+              rule: '!(self.type != ''PLM'' && has(self.policyRef))'
+            - message: type must match the configured policy source
+              rule: self.type == 'PLM' || (has(self.policySource) && ((self.type ==
+                'HTTP' && has(self.policySource.httpSource)) || (self.type == 'NIM'
+                && has(self.policySource.nimSource)) || (self.type == 'N1C' && has(self.policySource.n1cSource))))
+            - message: policyRef.apPolicyRef is required when type is PLM
+              rule: self.type != 'PLM' || (has(self.policyRef) && has(self.policyRef.apPolicyRef))
             - message: policySource.validation.verifyChecksum is only supported for
                 type HTTP
-              rule: '!(self.type != ''HTTP'' && has(self.policySource) && has(self.policySource.validation)
+              rule: '!has(self.policySource) || !(self.type != ''HTTP'' && has(self.policySource.validation)
                 && has(self.policySource.validation.verifyChecksum) && self.policySource.validation.verifyChecksum)'
+            - message: securityLogs[*].logRef.apLogConfRef is only allowed when type
+                is PLM
+              rule: self.type == 'PLM' || !has(self.securityLogs) || self.securityLogs.all(sl,
+                !has(sl.logRef) || !has(sl.logRef.apLogConfRef))
           status:
             description: Status defines the state of the WAFPolicy.
             properties:

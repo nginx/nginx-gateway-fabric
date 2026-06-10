@@ -23,9 +23,10 @@ func TestGenerate(t *testing.T) {
 	nimLogProfileName := "nim-log-profile"
 
 	tests := []struct {
-		name       string
-		policy     policies.Policy
-		expStrings []string
+		name          string
+		policy        policies.Policy
+		expStrings    []string
+		notExpStrings []string
 	}{
 		{
 			name: "basic case with policy bundle URL",
@@ -35,7 +36,7 @@ func TestGenerate(t *testing.T) {
 					Namespace: "my-namespace",
 				},
 				Spec: ngfAPIv1alpha1.WAFPolicySpec{
-					PolicySource: ngfAPIv1alpha1.PolicySource{
+					PolicySource: &ngfAPIv1alpha1.PolicySource{
 						HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: policyURL},
 					},
 				},
@@ -53,12 +54,12 @@ func TestGenerate(t *testing.T) {
 					Namespace: "test-ns",
 				},
 				Spec: ngfAPIv1alpha1.WAFPolicySpec{
-					PolicySource: ngfAPIv1alpha1.PolicySource{
+					PolicySource: &ngfAPIv1alpha1.PolicySource{
 						HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: policyURL},
 					},
 					SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
 						{
-							LogSource: ngfAPIv1alpha1.LogSource{
+							LogSource: &ngfAPIv1alpha1.LogSource{
 								HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{
 									URL: logURL,
 								},
@@ -85,12 +86,12 @@ func TestGenerate(t *testing.T) {
 					Namespace: "test-ns",
 				},
 				Spec: ngfAPIv1alpha1.WAFPolicySpec{
-					PolicySource: ngfAPIv1alpha1.PolicySource{
+					PolicySource: &ngfAPIv1alpha1.PolicySource{
 						HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: policyURL},
 					},
 					SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
 						{
-							LogSource: ngfAPIv1alpha1.LogSource{
+							LogSource: &ngfAPIv1alpha1.LogSource{
 								HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: logURL},
 							},
 							Destination: ngfAPIv1alpha1.SecurityLogDestination{
@@ -119,7 +120,7 @@ func TestGenerate(t *testing.T) {
 				Spec: ngfAPIv1alpha1.WAFPolicySpec{
 					SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
 						{
-							LogSource: ngfAPIv1alpha1.LogSource{
+							LogSource: &ngfAPIv1alpha1.LogSource{
 								HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: logURL},
 							},
 							Destination: ngfAPIv1alpha1.SecurityLogDestination{
@@ -146,7 +147,7 @@ func TestGenerate(t *testing.T) {
 					Namespace: "test-ns",
 				},
 				Spec: ngfAPIv1alpha1.WAFPolicySpec{
-					PolicySource: ngfAPIv1alpha1.PolicySource{
+					PolicySource: &ngfAPIv1alpha1.PolicySource{
 						NIMSource: &ngfAPIv1alpha1.NIMBundleSource{
 							URL:        policyURL,
 							PolicyName: &nimPolicyName,
@@ -154,7 +155,7 @@ func TestGenerate(t *testing.T) {
 					},
 					SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
 						{
-							LogSource: ngfAPIv1alpha1.LogSource{
+							LogSource: &ngfAPIv1alpha1.LogSource{
 								NIMSource: &ngfAPIv1alpha1.NIMLogProfileBundleSource{
 									URL:         logURL,
 									ProfileName: nimLogProfileName,
@@ -183,12 +184,12 @@ func TestGenerate(t *testing.T) {
 					Namespace: "app-ns",
 				},
 				Spec: ngfAPIv1alpha1.WAFPolicySpec{
-					PolicySource: ngfAPIv1alpha1.PolicySource{
+					PolicySource: &ngfAPIv1alpha1.PolicySource{
 						HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: policyURL},
 					},
 					SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
 						{
-							LogSource: ngfAPIv1alpha1.LogSource{
+							LogSource: &ngfAPIv1alpha1.LogSource{
 								HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: logURL},
 							},
 							Destination: ngfAPIv1alpha1.SecurityLogDestination{
@@ -196,7 +197,7 @@ func TestGenerate(t *testing.T) {
 							},
 						},
 						{
-							LogSource: ngfAPIv1alpha1.LogSource{
+							LogSource: &ngfAPIv1alpha1.LogSource{
 								NIMSource: &ngfAPIv1alpha1.NIMLogProfileBundleSource{
 									URL:         logURL2,
 									ProfileName: nimLogProfileName,
@@ -222,6 +223,64 @@ func TestGenerate(t *testing.T) {
 			},
 		},
 		{
+			name: "security log with nil LogSource is skipped",
+			policy: &ngfAPIv1alpha1.WAFPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "waf-nil-log",
+					Namespace: "app-ns",
+				},
+				Spec: ngfAPIv1alpha1.WAFPolicySpec{
+					PolicySource: &ngfAPIv1alpha1.PolicySource{
+						HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: "https://example.com/policy.tgz"},
+					},
+					SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
+						{
+							// LogSource is nil — should be skipped.
+							Destination: ngfAPIv1alpha1.SecurityLogDestination{
+								Type: ngfAPIv1alpha1.SecurityLogDestinationTypeStderr,
+							},
+						},
+					},
+				},
+			},
+			expStrings: []string{
+				"app_protect_enable on;",
+			},
+			notExpStrings: []string{
+				"app_protect_security_log",
+			},
+		},
+		{
+			name: "PLM policy and log bundle paths are generated",
+			policy: &ngfAPIv1alpha1.WAFPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "waf-plm",
+					Namespace: "app-ns",
+				},
+				Spec: ngfAPIv1alpha1.WAFPolicySpec{
+					PolicyRef: &ngfAPIv1alpha1.PolicyRef{
+						APPolicyRef: &ngfAPIv1alpha1.APPolicyReference{Name: "ap-policy"},
+					},
+					SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
+						{
+							LogRef: &ngfAPIv1alpha1.LogRef{
+								APLogConfRef: &ngfAPIv1alpha1.APLogConfReference{Name: "ap-logconf"},
+							},
+							Destination: ngfAPIv1alpha1.SecurityLogDestination{
+								Type: ngfAPIv1alpha1.SecurityLogDestinationTypeStderr,
+							},
+						},
+					},
+				},
+			},
+			expStrings: []string{
+				"app_protect_enable on;",
+				"app_protect_policy_file \"/etc/app_protect/bundles/app-ns_waf-plm.tgz\";",
+				"app_protect_security_log_enable on;",
+				"app_protect_security_log \"/etc/app_protect/bundles/app-ns_waf-plm_log_app-ns_ap-logconf.tgz\" stderr;",
+			},
+		},
+		{
 			name: "no policy bundle - no policy directives",
 			policy: &ngfAPIv1alpha1.WAFPolicy{
 				ObjectMeta: metav1.ObjectMeta{
@@ -234,13 +293,21 @@ func TestGenerate(t *testing.T) {
 		},
 	}
 
-	checkResults := func(t *testing.T, resFiles policies.GenerateResultFiles, expStrings []string) {
+	checkResults := func(
+		t *testing.T,
+		resFiles policies.GenerateResultFiles,
+		expStrings []string,
+		notExpStrings []string,
+	) {
 		t.Helper()
 		g := NewWithT(t)
 		g.Expect(resFiles).To(HaveLen(1))
 
 		for _, str := range expStrings {
 			g.Expect(string(resFiles[0].Content)).To(ContainSubstring(str))
+		}
+		for _, str := range notExpStrings {
+			g.Expect(string(resFiles[0].Content)).ToNot(ContainSubstring(str))
 		}
 	}
 
@@ -250,10 +317,10 @@ func TestGenerate(t *testing.T) {
 			generator := waf.NewGenerator()
 
 			resFiles := generator.GenerateForServer([]policies.Policy{test.policy}, http.Server{})
-			checkResults(t, resFiles, test.expStrings)
+			checkResults(t, resFiles, test.expStrings, test.notExpStrings)
 
 			resFiles = generator.GenerateForLocation([]policies.Policy{test.policy}, http.Location{})
-			checkResults(t, resFiles, test.expStrings)
+			checkResults(t, resFiles, test.expStrings, test.notExpStrings)
 		})
 	}
 }

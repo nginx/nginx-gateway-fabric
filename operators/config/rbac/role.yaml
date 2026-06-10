@@ -225,5 +225,15 @@ rules:
   - services/status
   verbs:
   - patch
+- apiGroups:
+  - appprotect.f5.com
+  resources:
+  - appolicies
+  - aplogconfs
+  verbs:
+  - get
+  - list
+  - patch
+  - watch
 
 # +kubebuilder:scaffold:rules

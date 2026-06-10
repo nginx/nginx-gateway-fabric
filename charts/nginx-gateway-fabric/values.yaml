@@ -19,6 +19,9 @@ nginxGateway:
 
   # -- List of namespaces to watch for resources. If not set, all namespaces are watched.
   # The controller's own namespace is always included.
+  # NOTE: If PLM is installed and configured via nginxGateway.plmStorage, ensure PLM's
+  # policyController.watchNamespace covers the namespaces where APPolicy and APLogConf
+  # resources will be created.
   watchNamespaces: []
 
   # @schema
@@ -307,6 +310,30 @@ nginxGateway:
     # and SnippetsPolicies. Enable SnippetsFilters feature. SnippetsFilters allow inserting NGINX configuration into
     # the generated NGINX config for HTTPRoute and GRPCRoute resources.
     enable: false
+
+  # Configuration for PLM (Policy Lifecycle Manager) S3-compatible storage.
+  # Required when any WAFPolicy uses type: PLM.
+  # PLM (f5-waf-policy-controller) must be installed separately.
+  plmStorage:
+    # -- The URL of the PLM S3-compatible storage endpoint (SeaweedFS filer S3 gateway).
+    # Example: https://my-release-f5-waf-seaweed-filer.plm-namespace.svc.cluster.local:9333
+    url: ""
+
+    # -- The name of the Secret containing S3 credentials for PLM storage.
+    # Use "namespace/name" format for cross-namespace references, or plain "name" for the controller namespace.
+    credentialsSecretName: ""
+
+    tls:
+      # -- The name of the Secret containing the CA certificate for PLM storage TLS verification.
+      # Use "namespace/name" format for cross-namespace references.
+      caSecretName: ""
+
+      # -- The name of the Secret containing client TLS certificate and key for mutual TLS with PLM storage.
+      # Use "namespace/name" format for cross-namespace references.
+      clientSSLSecretName: ""
+
+      # -- Disable TLS certificate verification for PLM storage connections (dev/test only).
+      insecureSkipVerify: false
 
 # -- The nginx section contains the configuration for all NGINX data plane deployments
 # installed by the NGINX Gateway Fabric control plane.

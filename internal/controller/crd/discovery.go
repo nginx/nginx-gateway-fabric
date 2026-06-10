@@ -3,6 +3,7 @@ package crd
 import (
 	"fmt"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/rest"
@@ -52,8 +53,10 @@ func (c *CheckerImpl) CheckCRDsExist(
 	for gv, gvkList := range gvToGVKs {
 		resourceList, err := discoveryClient.ServerResourcesForGroupVersion(gv.String())
 		if err != nil {
-			// If the group/version doesn't exist, mark all GVKs in this GV as non-existent
-			if discovery.IsGroupDiscoveryFailedError(err) {
+			// If the group/version doesn't exist, mark all GVKs in this GV as non-existent.
+			// The API server returns NotFound for unknown group/versions, and discovery may
+			// also wrap that as a group-discovery failure depending on the cluster state.
+			if discovery.IsGroupDiscoveryFailedError(err) || apierrors.IsNotFound(err) {
 				for _, gvk := range gvkList {
 					results[gvk] = false
 				}
