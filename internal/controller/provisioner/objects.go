@@ -224,6 +224,8 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 	return objects, errors.Join(errs...)
 }
 
+// buildHPAAndPDB builds the HPA and PDB for the NGINX deployment
+// if they are enabled in the EffectiveNginxProxy configuration.
 func (p *NginxProvisioner) buildHPAAndPDB(
 	objectMeta metav1.ObjectMeta,
 	nProxyCfg *graph.EffectiveNginxProxy,
@@ -1865,8 +1867,8 @@ func (p *NginxProvisioner) buildResourcesForInvalidGatewayCleanup(
 	// Order to delete:
 	// 1. deployment/daemonset
 	// 2. service
-	// 3. hpa
-	// 4. pdb
+	// 3. hpa (Horizontal Pod Autoscaler)
+	// 4. pdb (Pod Disruption Budget)
 	// 5. role/binding (if openshift)
 	// 6. serviceaccount
 	// 7. configmaps

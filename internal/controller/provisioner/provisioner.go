@@ -862,6 +862,8 @@ func needToDeletePDB(cfg *NginxResources) bool {
 	return false
 }
 
+// needToDeleteHPA returns true if an HPA was previously created for this Gateway
+// but is no longer configured in the NginxProxy spec, and therefore should be deleted.
 func needToDeleteHPA(cfg *NginxResources) bool {
 	if cfg.HPA.Name != "" && cfg.Gateway != nil {
 		if cfg.Gateway.EffectiveNginxProxy != nil &&
