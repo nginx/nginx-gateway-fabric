@@ -1,0 +1,15 @@
+# type: PLM WAFPolicy targeting the coffee HTTPRoute. Produces location-level app_protect
+# directives. Reuses the attack-signatures APPolicy compiled by PLM.
+apiVersion: gateway.nginx.org/v1alpha1
+kind: WAFPolicy
+metadata:
+  name: coffee-route-waf-plm
+spec:
+  targetRefs:
+  - group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: coffee
+  type: PLM
+  policyRef:
+    apPolicyRef:
+      name: attack-signatures

@@ -1,0 +1,15 @@
+# ReferenceGrant (in the APPolicy's namespace, waf-policy-plm-xns) permitting WAFPolicy resources in
+# the waf-policy namespace to reference APPolicy resources here. Flips the cross-namespace PLM
+# WAFPolicy from ResolvedRefs=False/RefNotPermitted to resolved.
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: allow-waf-policy-to-appolicy
+spec:
+  from:
+  - group: gateway.nginx.org
+    kind: WAFPolicy
+    namespace: waf-policy
+  to:
+  - group: appprotect.f5.com
+    kind: APPolicy

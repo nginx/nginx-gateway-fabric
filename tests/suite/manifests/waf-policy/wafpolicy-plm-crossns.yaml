@@ -1,0 +1,17 @@
+# type: PLM WAFPolicy in the waf-policy namespace referencing an APPolicy in another namespace
+# (waf-policy-plm-xns). Without a ReferenceGrant, NGF must set ResolvedRefs=False/RefNotPermitted.
+# Once the ReferenceGrant (referencegrant-appolicy.yaml) is applied, it must resolve and program.
+apiVersion: gateway.nginx.org/v1alpha1
+kind: WAFPolicy
+metadata:
+  name: gateway-waf-plm-crossns
+spec:
+  targetRefs:
+  - group: gateway.networking.k8s.io
+    kind: Gateway
+    name: gateway
+  type: PLM
+  policyRef:
+    apPolicyRef:
+      name: attack-signatures
+      namespace: waf-policy-plm-xns
