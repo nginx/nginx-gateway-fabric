@@ -51,8 +51,8 @@ fi
 # --- Clean traffic (wrk) ---
 # Two wrk instances mirror the two routes verified by the functional PLM tests.
 echo "Starting wrk clean traffic..."
-nohup wrk -t2 -c80 -d72h "http://${WAF_HOST}/coffee" >~/waf-coffee.txt 2>&1 &
-nohup wrk -t2 -c80 -d72h "http://${WAF_HOST}/tea" >~/waf-tea.txt 2>&1 &
+nohup wrk -t2 -c80 -d2h "http://${WAF_HOST}/coffee" >~/waf-coffee.txt 2>&1 &
+nohup wrk -t2 -c80 -d2h "http://${WAF_HOST}/tea" >~/waf-tea.txt 2>&1 &
 
 # --- Attack traffic loop ---
 # XSS payload matches the functional PLM test (</script> encoded), SQLi on tea.
@@ -68,21 +68,31 @@ nohup bash -c '
     while true; do
         TS=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
-        # XSS probe on /coffee — </script> matches the functional PLM test payload
-        STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+        # XSS probe on /coffee — </script> matches the functional PLM test payload.
+        # NAP WAF blocks with HTTP 200 + "Request Rejected" body by default; also handle
+        # explicit 403 when APPolicy response-pages is configured.
+        RESPONSE=$(curl -s -w "\n%{http_code}" \
             "http://${WAF_HOST}/coffee?x=${xss_payload}" \
-            2>/dev/null || echo "000")
+            2>/dev/null || echo -e "\n000")
+        STATUS=$(printf '%s' "${RESPONSE}" | tail -1)
+        BODY=$(printf '%s' "${RESPONSE}" | head -n -1)
         BLOCKED="false"
-        [[ "${STATUS}" == "200" ]] || BLOCKED="true"
+        if [[ "${STATUS}" != "200" ]] || echo "${BODY}" | grep -qi "request rejected"; then
+            BLOCKED="true"
+        fi
         echo "${TS},/coffee,xss,${STATUS},${BLOCKED}" >> "${ATTACK_FILE}"
 
         # SQLi probe on /tea
-        STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+        RESPONSE=$(curl -s -w "\n%{http_code}" \
             --data-urlencode "q=${sqli_payload}" \
             "http://${WAF_HOST}/tea" \
-            2>/dev/null || echo "000")
+            2>/dev/null || echo -e "\n000")
+        STATUS=$(printf '%s' "${RESPONSE}" | tail -1)
+        BODY=$(printf '%s' "${RESPONSE}" | head -n -1)
         BLOCKED="false"
-        [[ "${STATUS}" == "200" ]] || BLOCKED="true"
+        if [[ "${STATUS}" != "200" ]] || echo "${BODY}" | grep -qi "request rejected"; then
+            BLOCKED="true"
+        fi
         echo "${TS},/tea,sqli,${STATUS},${BLOCKED}" >> "${ATTACK_FILE}"
 
         sleep 5

@@ -9,6 +9,10 @@ spec:
       name: POLICY_TEMPLATE_NGINX_BASE
     applicationLanguage: utf-8
     enforcementMode: blocking
+    response-pages:
+    - responseStatusCode: "403"
+      responseType: default
+      type: default
     signature-sets:
     - name: All Signatures
       block: true
