@@ -127,6 +127,56 @@ var _ = Describe("Longevity", Label("longevity-setup", "longevity-teardown"), fu
 	})
 })
 
+// writeWAFAttackResults reads waf-attacks.txt, counts successfully blocked probes, and writes
+// only the unexpected (unblocked) rows to the results file. This keeps the results concise while
+// still surfacing any enforcement failures.
+func writeWAFAttackResults(resultsFile *os.File, homeDir string) error {
+	file := fmt.Sprintf("%s/waf-attacks.txt", homeDir)
+	content, err := os.ReadFile(file)
+	if err != nil {
+		return err
+	}
+
+	lines := strings.Split(strings.TrimSpace(string(content)), "\n")
+	var header string
+	var unexpected []string
+	blockedCount := 0
+
+	for i, line := range lines {
+		if i == 0 {
+			continue
+		}
+		if line == "" {
+			continue
+		}
+		fields := strings.Split(line, ",")
+
+		// successful lines should looks like this:
+		// 2026-06-11T18:53:40Z,/coffee,xss,200,true
+		// 2026-06-11T18:53:40Z,/tea,sqli,200,true
+		if len(fields) >= 5 && fields[len(fields)-1] == "true" {
+			blockedCount++
+		} else {
+			unexpected = append(unexpected, line)
+		}
+	}
+
+	var out strings.Builder
+	fmt.Fprintf(&out, "WAF Attack Log (blocked: %d, unexpected: %d):\n\n", blockedCount, len(unexpected))
+	if len(unexpected) > 0 {
+		out.WriteString("```text\n")
+		out.WriteString(header + "\n")
+		for _, line := range unexpected {
+			out.WriteString(line + "\n")
+		}
+		out.WriteString("```\n")
+	} else {
+		out.WriteString("All attack probes were blocked successfully.\n")
+	}
+
+	return framework.WriteContent(resultsFile, out.String())
+}
+
 func writeTrafficResults(resultsFile *os.File, homeDir, filename, testname string) error {
 	file := fmt.Sprintf("%s/%s", homeDir, filename)
 	content, err := os.ReadFile(file)
@@ -221,9 +271,9 @@ func teardownWAFLongevity(resultsFile *os.File, homeDir string, wafNs core.Names
 	Expect(writeTrafficResults(resultsFile, homeDir, "waf-coffee.txt", "WAF HTTP (coffee)")).To(Succeed())
 	Expect(writeTrafficResults(resultsFile, homeDir, "waf-tea.txt", "WAF HTTP (tea)")).To(Succeed())
 
-	// Write attack traffic results (blocked/allowed counts).
+	// Write attack traffic results — only unexpected (unblocked) rows plus a blocked count.
 	Expect(framework.WriteContent(resultsFile, "\n## WAF Attack Results\n")).To(Succeed())
-	Expect(writeTrafficResults(resultsFile, homeDir, "waf-attacks.txt", "WAF Attack Log")).To(Succeed())
+	Expect(writeWAFAttackResults(resultsFile, homeDir)).To(Succeed())
 
 	// Verify the WAFPolicy is still accepted at teardown to confirm sustained enforcement.
 	nsname := types.NamespacedName{Name: "gateway-waf-plm", Namespace: wafNs.Name}
