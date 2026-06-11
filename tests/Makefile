@@ -191,7 +191,7 @@ ipv6-tests: ## Example usage: make ipv6-tests TAG=release-X.Y-rc
 		--pull-policy=$(PULL_POLICY) --service-type=$(GW_SERVICE_TYPE) \
 		--plus-enabled=$(PLUS_ENABLED) --plus-license-file-name=$(PLUS_LICENSE_FILE) \
 		--plus-usage-endpoint=$(PLUS_USAGE_ENDPOINT) --gke-project=$(GKE_PROJECT) \
-		--waf-enabled=$(WAF_ENABLED) --nginx-image-jwt-file-name=$(REGISTRY_JWT_FILE)
+        --waf-enabled=$(WAF_ENABLED) $(if $(filter true,$(WAF_ENABLED)),--nginx-image-jwt-file-name=$(REGISTRY_JWT_FILE))
 
 .PHONY: test
 test: build-crossplane-image ## Runs the functional tests on your kind k8s cluster
