@@ -571,6 +571,12 @@ unsafe extern "C" fn guardrails_header_filter(r: *mut ngx_http_request_t) -> ngx
         return call_next_header_filter(r);
     }
 
+    // Don't suppress error responses — these originate from our own 403 injection
+    // (send_403_and_finalize) and must reach the client unmodified.
+    if (*r).headers_out.status >= 400 {
+        return call_next_header_filter(r);
+    }
+
     // SSE: always pass through — streaming responses cannot be fully buffered.
     if is_sse_response(r) {
         eprintln!("[guardrails] Header filter: SSE detected, passing through");
