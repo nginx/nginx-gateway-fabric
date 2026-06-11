@@ -186,6 +186,8 @@ func setupWAFLongevity(wafNs core.Namespace, wafFiles []string) {
 	// credentials so NGF can fetch compiled NAP policy bundles from SeaweedFS.
 	extraArgs := append(plmNGFInstallArgs(),
 		"--set", "nginx.imagePullSecret="+framework.PlusImagePullSecretName,
+		"--set", "certGenerator.serverTLSSecretName=ngf-longevity-waf-server-tls",
+		"--set", "certGenerator.agentTLSSecretName=ngf-longevity-waf-agent-tls",
 	)
 	output, err = framework.InstallNGF(wafInstallCfg, extraArgs...)
 	Expect(err).ToNot(HaveOccurred(), string(output))
