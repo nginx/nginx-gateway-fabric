@@ -6,7 +6,7 @@
 #   2. Attack loop          — periodic XSS and SQLi probes that the WAF should block, results
 #                             written to ~/waf-attacks.txt for collection at teardown
 #
-# Expects the gateway-nginx LoadBalancer service in the longevity-waf namespace to be ready.
+# Expects the gateway-nginx-waf LoadBalancer service in the longevity-waf namespace to be ready.
 
 set -euo pipefail
 
@@ -16,9 +16,9 @@ MAX_WAIT=300
 INTERVAL=5
 ELAPSED=0
 
-echo "Waiting for gateway-nginx LoadBalancer IP in namespace '${WAF_NS}'..."
+echo "Waiting for gateway-nginx-waf LoadBalancer IP in namespace '${WAF_NS}'..."
 while true; do
-    SVC_IP=$(kubectl -n "${WAF_NS}" get svc gateway-nginx -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true)
+    SVC_IP=$(kubectl -n "${WAF_NS}" get svc gateway-nginx-waf -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true)
     if [[ -n ${SVC_IP} ]]; then
         echo "LoadBalancer IP assigned: ${SVC_IP}"
         break
