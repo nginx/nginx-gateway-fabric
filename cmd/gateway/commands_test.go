@@ -359,7 +359,7 @@ func TestControllerCmdFlagValidation(t *testing.T) {
 			},
 			wantErr: true,
 			expectedErrPrefix: `invalid argument "$*(invalid)" for "--usage-report-endpoint" flag: ` +
-				`"$*(invalid)" must be a domain name or IP address with optional port`,
+				`"$*(invalid)" must be in the format [http://|https://]<host>[:<port>]`,
 		},
 		{
 			name: "usage-report-resolver is set to empty string",
@@ -376,7 +376,7 @@ func TestControllerCmdFlagValidation(t *testing.T) {
 			},
 			wantErr: true,
 			expectedErrPrefix: `invalid argument "$*(invalid)" for "--usage-report-resolver" flag: ` +
-				`"$*(invalid)" must be a domain name or IP address with optional port`,
+				`"$*(invalid)" must be in the format [http://|https://]<host>[:<port>]`,
 		},
 		{
 			name: "usage-report-ca-secret is set to empty string",
@@ -529,6 +529,48 @@ func TestControllerCmdFlagValidation(t *testing.T) {
 			wantErr:           true,
 			expectedErrPrefix: `invalid argument "!@#$" for "--watch-namespaces" flag: invalid format: `,
 		},
+		{
+			name: "server-tls-domain accepts a single label",
+			args: []string{
+				"--gateway-ctlr-name=gateway.nginx.org/nginx-gateway",
+				"--gatewayclass=nginx",
+				"--server-tls-domain=svc",
+			},
+			wantErr: false,
+		},
+		{
+			name: "server-tls-domain accepts a multi-label domain",
+			args: []string{
+				"--gateway-ctlr-name=gateway.nginx.org/nginx-gateway",
+				"--gatewayclass=nginx",
+				"--server-tls-domain=internal.mycompany.com",
+			},
+			wantErr: false,
+		},
+		{
+			name: "server-tls-domain is set to empty string",
+			args: []string{
+				"--server-tls-domain=",
+			},
+			wantErr:           true,
+			expectedErrPrefix: `invalid argument "" for "--server-tls-domain" flag: must be set`,
+		},
+		{
+			name: "server-tls-domain contains uppercase characters which are not valid in a DNS subdomain",
+			args: []string{
+				"--server-tls-domain=Internal.MyCompany.Com",
+			},
+			wantErr:           true,
+			expectedErrPrefix: `invalid argument "Internal.MyCompany.Com" for "--server-tls-domain" flag: invalid format`,
+		},
+		{
+			name: "server-tls-domain contains an underscore which is not valid in a DNS subdomain",
+			args: []string{
+				"--server-tls-domain=my_domain.com",
+			},
+			wantErr:           true,
+			expectedErrPrefix: `invalid argument "my_domain.com" for "--server-tls-domain" flag: invalid format`,
+		},
 	}
 
 	// common flags validation is tested separately
@@ -625,6 +667,44 @@ func TestGenerateCertsCmdFlagValidation(t *testing.T) {
 			},
 			wantErr:           true,
 			expectedErrPrefix: `invalid argument "!@#$" for "--cluster-domain" flag: invalid format`,
+		},
+		{
+			name: "server-tls-domain accepts a single label",
+			args: []string{
+				"--server-tls-domain=svc",
+			},
+			wantErr: false,
+		},
+		{
+			name: "server-tls-domain accepts a multi-label domain",
+			args: []string{
+				"--server-tls-domain=internal.mycompany.com",
+			},
+			wantErr: false,
+		},
+		{
+			name: "server-tls-domain is set to empty string",
+			args: []string{
+				"--server-tls-domain=",
+			},
+			wantErr:           true,
+			expectedErrPrefix: `invalid argument "" for "--server-tls-domain" flag: must be set`,
+		},
+		{
+			name: "server-tls-domain contains uppercase characters which are not valid in a DNS subdomain",
+			args: []string{
+				"--server-tls-domain=Internal.MyCompany.Com",
+			},
+			wantErr:           true,
+			expectedErrPrefix: `invalid argument "Internal.MyCompany.Com" for "--server-tls-domain" flag: invalid format`,
+		},
+		{
+			name: "server-tls-domain contains an underscore which is not valid in a DNS subdomain",
+			args: []string{
+				"--server-tls-domain=my_domain.com",
+			},
+			wantErr:           true,
+			expectedErrPrefix: `invalid argument "my_domain.com" for "--server-tls-domain" flag: invalid format`,
 		},
 	}
 
@@ -959,6 +1039,89 @@ func TestUsageReportConfig(t *testing.T) {
 					t.Errorf("expected result %+v, but got %+v", tc.expected, result)
 				}
 			}
+		})
+	}
+}
+
+func TestValidatePLMSecretNamespacesWatched(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		params      plmStorageParams
+		ctrlNS      string
+		watchNS     []string
+		expectError bool
+	}{
+		{
+			name: "no watch namespaces allows all secrets",
+			params: plmStorageParams{
+				URL:               stringValidatingValue{value: "https://plm.example.com"},
+				CredentialsSecret: stringValidatingValue{value: "other-ns/cred-secret"},
+			},
+			watchNS:     nil,
+			expectError: false,
+		},
+		{
+			name: "same-namespace secret name bypasses watch validation",
+			params: plmStorageParams{
+				URL:               stringValidatingValue{value: "https://plm.example.com"},
+				CredentialsSecret: stringValidatingValue{value: "cred-secret"},
+			},
+			watchNS:     []string{"app-ns"},
+			expectError: false,
+		},
+		{
+			name: "explicit namespace in watched set is allowed",
+			params: plmStorageParams{
+				URL:               stringValidatingValue{value: "https://plm.example.com"},
+				CredentialsSecret: stringValidatingValue{value: "plm-ns/cred-secret"},
+				CASecret:          stringValidatingValue{value: "plm-ns/ca-secret"},
+			},
+			watchNS:     []string{"plm-ns"},
+			expectError: false,
+		},
+		{
+			name: "explicit namespace outside watched set is rejected",
+			params: plmStorageParams{
+				URL:               stringValidatingValue{value: "https://plm.example.com"},
+				CredentialsSecret: stringValidatingValue{value: "plm-ns/cred-secret"},
+			},
+			watchNS:     []string{"app-ns"},
+			expectError: true,
+		},
+		{
+			name: "PLM secret namespaces are ignored when URL is unset",
+			params: plmStorageParams{
+				CredentialsSecret: stringValidatingValue{value: "plm-ns/cred-secret"},
+			},
+			watchNS:     []string{"app-ns"},
+			expectError: false,
+		},
+		{
+			name: "explicit controller namespace is allowed even when not in watch list",
+			params: plmStorageParams{
+				URL:               stringValidatingValue{value: "https://plm.example.com"},
+				CredentialsSecret: stringValidatingValue{value: "nginx-gateway/cred-secret"},
+			},
+			ctrlNS:      "nginx-gateway",
+			watchNS:     []string{"app-ns"},
+			expectError: false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			err := validatePLMSecretNamespacesWatched(tc.params, tc.watchNS, tc.ctrlNS)
+			if tc.expectError {
+				g.Expect(err).To(HaveOccurred())
+				return
+			}
+
+			g.Expect(err).ToNot(HaveOccurred())
 		})
 	}
 }

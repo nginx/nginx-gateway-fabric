@@ -119,6 +119,12 @@ rules:
 - apiGroups:
   - ""
   resources:
+  - services/status
+  verbs:
+  - patch
+- apiGroups:
+  - ""
+  resources:
   - pods
   verbs:
   - get
@@ -155,6 +161,17 @@ rules:
   - autoscaling
   resources:
   - horizontalpodautoscalers
+  verbs:
+  - create
+  - update
+  - delete
+  - list
+  - get
+  - watch
+- apiGroups:
+  - policy
+  resources:
+  - poddisruptionbudgets
   verbs:
   - create
   - update
@@ -301,6 +318,10 @@ spec:
     port: 443
     protocol: TCP
     targetPort: 8443
+  - name: metrics
+    port: 9113
+    protocol: TCP
+    targetPort: 9113
   selector:
     app.kubernetes.io/instance: nginx-gateway
     app.kubernetes.io/name: nginx-gateway
@@ -339,6 +360,7 @@ spec:
         - --config=nginx-gateway-config
         - --service=nginx-gateway
         - --agent-tls-secret=agent-tls
+        - --server-tls-domain=svc
         - --metrics-port=9113
         - --health-port=8081
         - --leader-election-lock-name=nginx-gateway-leader-election
@@ -424,6 +446,7 @@ spec:
         - generate-certs
         - --service=nginx-gateway
         - --cluster-domain=cluster.local
+        - --server-tls-domain=svc
         - --server-tls-secret=server-tls
         - --agent-tls-secret=agent-tls
         env:

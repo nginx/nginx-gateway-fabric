@@ -14,10 +14,12 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/resolver"
 )
 
+const testGatewayClientCertID = dataplane.SSLKeyPairID("ssl_keypair_default_gateway-client-cert")
+
 func TestExecuteStreamServers(t *testing.T) {
 	t.Parallel()
 	conf := dataplane.Configuration{
-		TLSPassthroughServers: []dataplane.Layer4VirtualServer{
+		TLSServers: []dataplane.Layer4VirtualServer{
 			{
 				Hostname: "example.com",
 				Port:     8081,
@@ -85,7 +87,7 @@ func TestExecuteStreamServers(t *testing.T) {
 func TestExecuteStreamServers_Plus(t *testing.T) {
 	t.Parallel()
 	config := dataplane.Configuration{
-		TLSPassthroughServers: []dataplane.Layer4VirtualServer{
+		TLSServers: []dataplane.Layer4VirtualServer{
 			{
 				Hostname: "example.com",
 				Port:     8081,
@@ -127,10 +129,100 @@ func TestExecuteStreamServers_Plus(t *testing.T) {
 	}
 }
 
+func TestExecuteStreamServersWithTLSTerminate(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	conf := dataplane.Configuration{
+		BaseHTTPConfig: dataplane.BaseHTTPConfig{
+			GatewaySecretID: testGatewayClientCertID,
+		},
+		TLSServers: []dataplane.Layer4VirtualServer{
+			{
+				// Passthrough server
+				Hostname: "passthrough.example.com",
+				Port:     8443,
+				Upstreams: []dataplane.Layer4Upstream{
+					{Name: "pt-backend", Weight: 0},
+				},
+			},
+			{
+				// TLS Terminate server
+				Hostname: "terminate.example.com",
+				Port:     8443,
+				SSL: &dataplane.SSL{
+					KeyPairIDs:          []dataplane.SSLKeyPairID{"ssl_keypair_default_cert"},
+					Protocols:           "TLSv1.2 TLSv1.3",
+					Ciphers:             "HIGH:!aNULL",
+					PreferServerCiphers: true,
+				},
+				Upstreams: []dataplane.Layer4Upstream{
+					{Name: "term-backend", Weight: 0},
+				},
+			},
+			{
+				// Default terminate server (reject handshake)
+				Hostname:  "~^",
+				Port:      8443,
+				IsDefault: true,
+				SSL: &dataplane.SSL{
+					KeyPairIDs: []dataplane.SSLKeyPairID{"default-cert"},
+				},
+			},
+		},
+		StreamUpstreams: []dataplane.Upstream{
+			{
+				Name: "pt-backend",
+				Endpoints: []resolver.Endpoint{
+					{Address: "10.0.0.1", Port: 80},
+				},
+			},
+			{
+				Name: "term-backend",
+				Endpoints: []resolver.Endpoint{
+					{Address: "10.0.0.2", Port: 443},
+				},
+			},
+		},
+	}
+
+	gen := GeneratorImpl{}
+	results := gen.executeStreamServers(conf)
+	g.Expect(results).To(HaveLen(1))
+
+	serverConf := string(results[0].data)
+	testGatewayClientCertPath := fmt.Sprintf("/etc/nginx/secrets/%s.pem", testGatewayClientCertID)
+
+	expSubStrings := map[string]int{
+		fmt.Sprintf("proxy_ssl_certificate %s;", testGatewayClientCertPath):     1,
+		fmt.Sprintf("proxy_ssl_certificate_key %s;", testGatewayClientCertPath): 1,
+		// Passthrough socket server
+		"ssl_preread on;": 1,
+		// TLS Terminate socket server SSL directives
+		"ssl_certificate /etc/nginx/secrets/ssl_keypair_default_cert.pem;":     1,
+		"ssl_certificate_key /etc/nginx/secrets/ssl_keypair_default_cert.pem;": 1,
+		"ssl_protocols TLSv1.2 TLSv1.3;":                                       1,
+		"ssl_ciphers HIGH:!aNULL;":                                             1,
+		"ssl_prefer_server_ciphers on;":                                        1,
+		// Default terminate server rejects handshake
+		"ssl_reject_handshake on;": 1,
+		// Listen with ssl suffix for terminate servers
+		" ssl;": 2, // terminate server + default terminate server
+	}
+
+	for expSubStr, expCount := range expSubStrings {
+		g.Expect(strings.Count(serverConf, expSubStr)).To(
+			Equal(expCount),
+			fmt.Sprintf("expected %q to appear %d time(s), got %d",
+				expSubStr, expCount, strings.Count(serverConf, expSubStr)),
+		)
+	}
+}
+
 func TestCreateStreamServers(t *testing.T) {
 	t.Parallel()
 	conf := dataplane.Configuration{
-		TLSPassthroughServers: []dataplane.Layer4VirtualServer{
+		TLSServers: []dataplane.Layer4VirtualServer{
 			{
 				Hostname: "example.com",
 				Port:     8081,
@@ -205,23 +297,23 @@ func TestCreateStreamServers(t *testing.T) {
 
 	expectedStreamServers := []stream.Server{
 		{
-			Listen:     getSocketNameTLS(conf.TLSPassthroughServers[0].Port, conf.TLSPassthroughServers[0].Hostname),
-			ProxyPass:  conf.TLSPassthroughServers[0].Upstreams[0].Name,
-			StatusZone: conf.TLSPassthroughServers[0].Hostname,
+			Listen:     getSocketNameTLS(conf.TLSServers[0].Port, conf.TLSServers[0].Hostname),
+			ProxyPass:  conf.TLSServers[0].Upstreams[0].Name,
+			StatusZone: conf.TLSServers[0].Hostname,
 			SSLPreread: false,
 			IsSocket:   true,
 		},
 		{
-			Listen:     getSocketNameTLS(conf.TLSPassthroughServers[1].Port, conf.TLSPassthroughServers[1].Hostname),
-			ProxyPass:  conf.TLSPassthroughServers[1].Upstreams[0].Name,
-			StatusZone: conf.TLSPassthroughServers[1].Hostname,
+			Listen:     getSocketNameTLS(conf.TLSServers[1].Port, conf.TLSServers[1].Hostname),
+			ProxyPass:  conf.TLSServers[1].Upstreams[0].Name,
+			StatusZone: conf.TLSServers[1].Hostname,
 			SSLPreread: false,
 			IsSocket:   true,
 		},
 		{
-			Listen:     getSocketNameTLS(conf.TLSPassthroughServers[2].Port, conf.TLSPassthroughServers[2].Hostname),
-			ProxyPass:  conf.TLSPassthroughServers[2].Upstreams[0].Name,
-			StatusZone: conf.TLSPassthroughServers[2].Hostname,
+			Listen:     getSocketNameTLS(conf.TLSServers[2].Port, conf.TLSServers[2].Hostname),
+			ProxyPass:  conf.TLSServers[2].Upstreams[0].Name,
+			StatusZone: conf.TLSServers[2].Hostname,
 			SSLPreread: false,
 			IsSocket:   true,
 		},
@@ -243,7 +335,7 @@ func TestCreateStreamServers(t *testing.T) {
 
 func TestExecuteStreamServersForIPFamily(t *testing.T) {
 	t.Parallel()
-	passThroughServers := []dataplane.Layer4VirtualServer{
+	tlsServers := []dataplane.Layer4VirtualServer{
 		{
 			Hostname: "cafe.example.com",
 			Port:     8443,
@@ -273,12 +365,12 @@ func TestExecuteStreamServersForIPFamily(t *testing.T) {
 				BaseHTTPConfig: dataplane.BaseHTTPConfig{
 					IPFamily: dataplane.IPv4,
 				},
-				TLSPassthroughServers: passThroughServers,
-				StreamUpstreams:       streamUpstreams,
+				TLSServers:      tlsServers,
+				StreamUpstreams: streamUpstreams,
 			},
 			expectedServerConfig: map[string]int{
 				"listen 8443;": 1,
-				"listen unix:/var/run/nginx/cafe.example.com-8443.sock;": 1,
+				fmt.Sprintf("listen %scafe.example.com-8443.sock;", SocketBasePath): 1,
 			},
 		},
 		{
@@ -287,12 +379,12 @@ func TestExecuteStreamServersForIPFamily(t *testing.T) {
 				BaseHTTPConfig: dataplane.BaseHTTPConfig{
 					IPFamily: dataplane.IPv6,
 				},
-				TLSPassthroughServers: passThroughServers,
-				StreamUpstreams:       streamUpstreams,
+				TLSServers:      tlsServers,
+				StreamUpstreams: streamUpstreams,
 			},
 			expectedServerConfig: map[string]int{
 				"listen [::]:8443;": 1,
-				"listen unix:/var/run/nginx/cafe.example.com-8443.sock;": 1,
+				fmt.Sprintf("listen %scafe.example.com-8443.sock;", SocketBasePath): 1,
 			},
 		},
 		{
@@ -301,13 +393,13 @@ func TestExecuteStreamServersForIPFamily(t *testing.T) {
 				BaseHTTPConfig: dataplane.BaseHTTPConfig{
 					IPFamily: dataplane.Dual,
 				},
-				TLSPassthroughServers: passThroughServers,
-				StreamUpstreams:       streamUpstreams,
+				TLSServers:      tlsServers,
+				StreamUpstreams: streamUpstreams,
 			},
 			expectedServerConfig: map[string]int{
 				"listen 8443;":      1,
 				"listen [::]:8443;": 1,
-				"listen unix:/var/run/nginx/cafe.example.com-8443.sock;": 1,
+				fmt.Sprintf("listen %scafe.example.com-8443.sock;", SocketBasePath): 1,
 			},
 		},
 	}
@@ -331,7 +423,7 @@ func TestExecuteStreamServersForIPFamily(t *testing.T) {
 
 func TestExecuteStreamServers_RewriteClientIP(t *testing.T) {
 	t.Parallel()
-	passThroughServers := []dataplane.Layer4VirtualServer{
+	tlsServers := []dataplane.Layer4VirtualServer{
 		{
 			Hostname: "cafe.example.com",
 			Port:     8443,
@@ -358,13 +450,13 @@ func TestExecuteStreamServers_RewriteClientIP(t *testing.T) {
 		{
 			msg: "rewrite client IP not configured",
 			config: dataplane.Configuration{
-				TLSPassthroughServers: passThroughServers,
-				StreamUpstreams:       streamUpstreams,
+				TLSServers:      tlsServers,
+				StreamUpstreams: streamUpstreams,
 			},
 			expectedStreamConfig: map[string]int{
 				"listen 8443;":      1,
 				"listen [::]:8443;": 1,
-				"listen unix:/var/run/nginx/cafe.example.com-8443.sock;": 1,
+				fmt.Sprintf("listen %scafe.example.com-8443.sock;", SocketBasePath): 1,
 			},
 		},
 		{
@@ -377,17 +469,17 @@ func TestExecuteStreamServers_RewriteClientIP(t *testing.T) {
 						IPRecursive:      false,
 					},
 				},
-				TLSPassthroughServers: passThroughServers,
-				StreamUpstreams:       streamUpstreams,
+				TLSServers:      tlsServers,
+				StreamUpstreams: streamUpstreams,
 			},
 			expectedStreamConfig: map[string]int{
 				"listen 8443;":      1,
 				"listen [::]:8443;": 1,
-				"listen unix:/var/run/nginx/cafe.example.com-8443.sock proxy_protocol;": 1,
-				"set_real_ip_from 10.1.1.22/32;":                                        1,
-				"set_real_ip_from ::1/128;":                                             1,
-				"set_real_ip_from 3.4.5.6;":                                             1,
-				"real_ip_recursive on;":                                                 0,
+				fmt.Sprintf("listen %scafe.example.com-8443.sock proxy_protocol;", SocketBasePath): 1,
+				"set_real_ip_from 10.1.1.22/32;": 1,
+				"set_real_ip_from ::1/128;":      1,
+				"set_real_ip_from 3.4.5.6;":      1,
+				"real_ip_recursive on;":          0,
 			},
 		},
 		{
@@ -400,13 +492,13 @@ func TestExecuteStreamServers_RewriteClientIP(t *testing.T) {
 						IPRecursive:      true,
 					},
 				},
-				TLSPassthroughServers: passThroughServers,
-				StreamUpstreams:       streamUpstreams,
+				TLSServers:      tlsServers,
+				StreamUpstreams: streamUpstreams,
 			},
 			expectedStreamConfig: map[string]int{
 				"listen 8443;":      1,
 				"listen [::]:8443;": 1,
-				"listen unix:/var/run/nginx/cafe.example.com-8443.sock;": 1,
+				fmt.Sprintf("listen %scafe.example.com-8443.sock;", SocketBasePath): 1,
 			},
 		},
 	}
@@ -431,7 +523,7 @@ func TestExecuteStreamServers_RewriteClientIP(t *testing.T) {
 func TestCreateStreamServersWithNone(t *testing.T) {
 	t.Parallel()
 	conf := dataplane.Configuration{
-		TLSPassthroughServers: nil,
+		TLSServers: nil,
 	}
 
 	logger := logr.Discard()
@@ -440,6 +532,380 @@ func TestCreateStreamServersWithNone(t *testing.T) {
 	g := NewWithT(t)
 
 	g.Expect(streamServers).To(BeNil())
+}
+
+func TestCreateStreamServersWithTLSTerminate(t *testing.T) {
+	t.Parallel()
+
+	conf := dataplane.Configuration{
+		TLSServers: []dataplane.Layer4VirtualServer{
+			{
+				// Passthrough server
+				Hostname: "passthrough.example.com",
+				Port:     8443,
+				Upstreams: []dataplane.Layer4Upstream{
+					{Name: "passthrough-backend", Weight: 0},
+				},
+			},
+			{
+				// Terminate server
+				Hostname: "terminate.example.com",
+				Port:     8443,
+				SSL: &dataplane.SSL{
+					KeyPairIDs: []dataplane.SSLKeyPairID{"cert1"},
+					Protocols:  "TLSv1.2 TLSv1.3",
+					Ciphers:    "HIGH:!aNULL",
+				},
+				Upstreams: []dataplane.Layer4Upstream{
+					{Name: "terminate-backend", Weight: 0},
+				},
+			},
+		},
+		StreamUpstreams: []dataplane.Upstream{
+			{
+				Name: "passthrough-backend",
+				Endpoints: []resolver.Endpoint{
+					{Address: "10.0.0.1", Port: 80},
+				},
+			},
+			{
+				Name: "terminate-backend",
+				Endpoints: []resolver.Endpoint{
+					{Address: "10.0.0.2", Port: 80},
+				},
+			},
+		},
+	}
+
+	logger := logr.Discard()
+	streamServers := createStreamServers(logger, conf)
+
+	g := NewWithT(t)
+
+	expectedStreamServers := []stream.Server{
+		{
+			// Passthrough socket server
+			Listen:     getSocketNameTLS(8443, "passthrough.example.com"),
+			ProxyPass:  "passthrough-backend",
+			StatusZone: "passthrough.example.com",
+			IsSocket:   true,
+		},
+		{
+			// Terminate socket server
+			Listen:     getSocketNameTLSTerminate(8443, "terminate.example.com"),
+			ProxyPass:  "terminate-backend",
+			StatusZone: "terminate.example.com",
+			IsSocket:   true,
+			SSL: &stream.SSL{
+				Certificates:    []string{generatePEMFileName("cert1")},
+				CertificateKeys: []string{generatePEMFileName("cert1")},
+				Protocols:       "TLSv1.2 TLSv1.3",
+				Ciphers:         "HIGH:!aNULL",
+			},
+		},
+		{
+			// Port-level SNI router
+			Listen:     fmt.Sprint(8443),
+			Target:     getTLSPassthroughVarName(8443),
+			StatusZone: "passthrough.example.com",
+			SSLPreread: true,
+		},
+	}
+	g.Expect(streamServers).To(ConsistOf(expectedStreamServers))
+}
+
+func TestCreateTLSTerminateSocketServer(t *testing.T) {
+	t.Parallel()
+
+	upstreams := map[string]dataplane.Upstream{
+		"backend1": {
+			Name:      "backend1",
+			Endpoints: []resolver.Endpoint{{Address: "10.0.0.1", Port: 80}},
+		},
+		"no-endpoints": {
+			Name:      "no-endpoints",
+			Endpoints: nil,
+		},
+	}
+
+	conf := dataplane.Configuration{}
+
+	tests := []struct {
+		name     string
+		expected []stream.Server
+		server   dataplane.Layer4VirtualServer
+	}{
+		{
+			name: "terminate server with valid upstream",
+			server: dataplane.Layer4VirtualServer{
+				Hostname: "app.example.com",
+				Port:     8443,
+				SSL: &dataplane.SSL{
+					KeyPairIDs:          []dataplane.SSLKeyPairID{"keypair1"},
+					Protocols:           "TLSv1.2 TLSv1.3",
+					Ciphers:             "HIGH:!aNULL",
+					PreferServerCiphers: true,
+				},
+				Upstreams: []dataplane.Layer4Upstream{
+					{Name: "backend1", Weight: 0},
+				},
+			},
+			expected: []stream.Server{
+				{
+					Listen:     getSocketNameTLSTerminate(8443, "app.example.com"),
+					StatusZone: "app.example.com",
+					ProxyPass:  "backend1",
+					IsSocket:   true,
+					SSL: &stream.SSL{
+						Certificates:        []string{generatePEMFileName("keypair1")},
+						CertificateKeys:     []string{generatePEMFileName("keypair1")},
+						Protocols:           "TLSv1.2 TLSv1.3",
+						Ciphers:             "HIGH:!aNULL",
+						PreferServerCiphers: true,
+					},
+				},
+			},
+		},
+		{
+			name: "default terminate server rejects handshake",
+			server: dataplane.Layer4VirtualServer{
+				Hostname:  "~^",
+				Port:      8443,
+				IsDefault: true,
+				SSL: &dataplane.SSL{
+					KeyPairIDs: []dataplane.SSLKeyPairID{"default-keypair"},
+				},
+			},
+			expected: []stream.Server{
+				{
+					Listen:   getSocketNameTLSTerminate(8443, "~^"),
+					IsSocket: true,
+					SSL: &stream.SSL{
+						RejectHandshake: true,
+					},
+				},
+			},
+		},
+		{
+			name: "default terminate server with empty hostname rejects handshake",
+			server: dataplane.Layer4VirtualServer{
+				Hostname:  "",
+				Port:      8443,
+				IsDefault: true,
+				SSL: &dataplane.SSL{
+					KeyPairIDs: []dataplane.SSLKeyPairID{"default-keypair"},
+				},
+			},
+			expected: []stream.Server{
+				{
+					Listen:   getSocketNameTLSTerminate(8443, ""),
+					IsSocket: true,
+					SSL: &stream.SSL{
+						RejectHandshake: true,
+					},
+				},
+			},
+		},
+		{
+			name: "terminate server with no upstreams returns nil",
+			server: dataplane.Layer4VirtualServer{
+				Hostname: "app.example.com",
+				Port:     8443,
+				SSL: &dataplane.SSL{
+					KeyPairIDs: []dataplane.SSLKeyPairID{"keypair1"},
+				},
+				Upstreams: []dataplane.Layer4Upstream{},
+			},
+			expected: nil,
+		},
+		{
+			name: "terminate server with empty hostname returns nil",
+			server: dataplane.Layer4VirtualServer{
+				Hostname: "",
+				Port:     8443,
+				SSL: &dataplane.SSL{
+					KeyPairIDs: []dataplane.SSLKeyPairID{"keypair1"},
+				},
+				Upstreams: []dataplane.Layer4Upstream{
+					{Name: "backend1", Weight: 0},
+				},
+			},
+			expected: nil,
+		},
+		{
+			name: "terminate server with upstream not found returns nil",
+			server: dataplane.Layer4VirtualServer{
+				Hostname: "app.example.com",
+				Port:     8443,
+				SSL: &dataplane.SSL{
+					KeyPairIDs: []dataplane.SSLKeyPairID{"keypair1"},
+				},
+				Upstreams: []dataplane.Layer4Upstream{
+					{Name: "missing-backend", Weight: 0},
+				},
+			},
+			expected: nil,
+		},
+		{
+			name: "terminate server with upstream having no endpoints returns nil",
+			server: dataplane.Layer4VirtualServer{
+				Hostname: "app.example.com",
+				Port:     8443,
+				SSL: &dataplane.SSL{
+					KeyPairIDs: []dataplane.SSLKeyPairID{"keypair1"},
+				},
+				Upstreams: []dataplane.Layer4Upstream{
+					{Name: "no-endpoints", Weight: 0},
+				},
+			},
+			expected: nil,
+		},
+		{
+			name: "terminate server with multiple key pairs",
+			server: dataplane.Layer4VirtualServer{
+				Hostname: "multi-cert.example.com",
+				Port:     8443,
+				SSL: &dataplane.SSL{
+					KeyPairIDs: []dataplane.SSLKeyPairID{"keypair1", "keypair2"},
+					Protocols:  "TLSv1.3",
+				},
+				Upstreams: []dataplane.Layer4Upstream{
+					{Name: "backend1", Weight: 0},
+				},
+			},
+			expected: []stream.Server{
+				{
+					Listen:     getSocketNameTLSTerminate(8443, "multi-cert.example.com"),
+					StatusZone: "multi-cert.example.com",
+					ProxyPass:  "backend1",
+					IsSocket:   true,
+					SSL: &stream.SSL{
+						Certificates:    []string{generatePEMFileName("keypair1"), generatePEMFileName("keypair2")},
+						CertificateKeys: []string{generatePEMFileName("keypair1"), generatePEMFileName("keypair2")},
+						Protocols:       "TLSv1.3",
+					},
+				},
+			},
+		},
+		{
+			name: "terminate server with backend tls verification",
+			server: dataplane.Layer4VirtualServer{
+				Hostname: "secure.example.com",
+				Port:     8443,
+				SSL: &dataplane.SSL{
+					KeyPairIDs: []dataplane.SSLKeyPairID{"keypair1"},
+				},
+				VerifyTLS: &dataplane.VerifyTLS{
+					CertBundleID: dataplane.CertBundleID("cert_bundle_default_ca"),
+					Hostname:     "backend.example.com",
+				},
+				Upstreams: []dataplane.Layer4Upstream{
+					{Name: "backend1", Weight: 0},
+				},
+			},
+			expected: []stream.Server{
+				{
+					Listen:     getSocketNameTLSTerminate(8443, "secure.example.com"),
+					StatusZone: "secure.example.com",
+					ProxyPass:  "backend1",
+					IsSocket:   true,
+					SSL: &stream.SSL{
+						Certificates:    []string{generatePEMFileName("keypair1")},
+						CertificateKeys: []string{generatePEMFileName("keypair1")},
+					},
+					ProxySSLVerify: &stream.ProxySSLVerify{
+						TrustedCertificate: generateCertBundleFileName(dataplane.CertBundleID("cert_bundle_default_ca")),
+						Name:               "backend.example.com",
+					},
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			result := createTLSTerminateSocketServer(tt.server, upstreams, conf)
+
+			if tt.expected == nil {
+				g.Expect(result).To(BeNil())
+			} else {
+				g.Expect(result).To(Equal(tt.expected))
+			}
+		})
+	}
+}
+
+func TestBuildStreamSSL(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		ssl      *dataplane.SSL
+		expected *stream.SSL
+		name     string
+	}{
+		{
+			name:     "nil SSL returns nil",
+			ssl:      nil,
+			expected: nil,
+		},
+		{
+			name: "single key pair",
+			ssl: &dataplane.SSL{
+				KeyPairIDs: []dataplane.SSLKeyPairID{"my-keypair"},
+			},
+			expected: &stream.SSL{
+				Certificates:    []string{"/etc/nginx/secrets/my-keypair.pem"},
+				CertificateKeys: []string{"/etc/nginx/secrets/my-keypair.pem"},
+			},
+		},
+		{
+			name: "multiple key pairs with all fields",
+			ssl: &dataplane.SSL{
+				KeyPairIDs:          []dataplane.SSLKeyPairID{"keypair-a", "keypair-b"},
+				Protocols:           "TLSv1.2 TLSv1.3",
+				Ciphers:             "ECDHE-RSA-AES256-GCM-SHA384",
+				PreferServerCiphers: true,
+			},
+			expected: &stream.SSL{
+				Certificates: []string{
+					"/etc/nginx/secrets/keypair-a.pem",
+					"/etc/nginx/secrets/keypair-b.pem",
+				},
+				CertificateKeys: []string{
+					"/etc/nginx/secrets/keypair-a.pem",
+					"/etc/nginx/secrets/keypair-b.pem",
+				},
+				Protocols:           "TLSv1.2 TLSv1.3",
+				Ciphers:             "ECDHE-RSA-AES256-GCM-SHA384",
+				PreferServerCiphers: true,
+			},
+		},
+		{
+			name: "empty key pair IDs",
+			ssl: &dataplane.SSL{
+				KeyPairIDs: []dataplane.SSLKeyPairID{},
+				Protocols:  "TLSv1.3",
+			},
+			expected: &stream.SSL{
+				Certificates:    []string{},
+				CertificateKeys: []string{},
+				Protocols:       "TLSv1.3",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			result := buildStreamSSL(tt.ssl)
+			g.Expect(result).To(Equal(tt.expected))
+		})
+	}
 }
 
 func TestExecuteStreamServersWithResolver(t *testing.T) {
@@ -467,7 +933,7 @@ resolver 8.8.8.8 8.8.4.4 valid=60s ipv6=off;
 resolver_timeout 10s;
 
 server {
-    listen unix:/var/run/nginx/connection-closed-server.sock;
+    listen ` + SocketBasePath + `connection-closed-server.sock;
     return "";
 }
 `,
@@ -482,7 +948,7 @@ server {
 			expectedConfig: `
 
 server {
-    listen unix:/var/run/nginx/connection-closed-server.sock;
+    listen ` + SocketBasePath + `connection-closed-server.sock;
     return "";
 }
 `,
@@ -505,7 +971,7 @@ resolver [2001:4860:4860::8888] valid=30s;
 resolver_timeout 5s;
 
 server {
-    listen unix:/var/run/nginx/connection-closed-server.sock;
+    listen ` + SocketBasePath + `connection-closed-server.sock;
     return "";
 }
 `,

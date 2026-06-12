@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"net"
 	"sort"
 	"strconv"
 	"strings"
@@ -15,6 +16,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -30,6 +32,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/configmaps"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/secrets"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/waf"
@@ -87,10 +90,13 @@ type resourceNames struct {
 }
 
 // buildNginxResourceObjects builds all the NGINX resource objects for a given Gateway and EffectiveNginxProxy.
+// The allListeners parameter must include all listeners from both the Gateway and any attached ListenerSets;
+// these are used to determine which ports the Service and container should expose.
 func (p *NginxProvisioner) buildNginxResourceObjects(
 	resourceName string,
 	gateway *gatewayv1.Gateway,
 	nProxyCfg *graph.EffectiveNginxProxy,
+	allListeners []*graph.Listener,
 ) ([]client.Object, error) {
 	// NOTE: When adding new fields to the generated objects, please ensure to update the corresponding spec
 	// setter function in setter.go to set the new fields when updating the object.
@@ -148,8 +154,8 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 		}
 	}
 
-	// build ports from gateway listeners
-	ports := p.buildPortsFromListeners(gateway.Spec.Listeners)
+	// build ports from all listeners (Gateway + ListenerSets)
+	ports := p.buildPortsFromListeners(allListeners)
 
 	// Add healthcheck port to service if expose is enabled
 	var healthcheckPort int32
@@ -158,7 +164,7 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 		ports = appendUniquePortProtoEntry(ports, portProtoEntry{Port: healthcheckPort, Protocol: corev1.ProtocolTCP})
 	}
 
-	service, err := buildNginxService(
+	service, err := p.buildNginxService(
 		cloneObjectMeta(objectMeta),
 		nProxyCfg,
 		ports,
@@ -201,6 +207,7 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 	// service
 	// deployment/daemonset
 	// hpa
+	// pdb
 
 	objects := make([]client.Object, 0, len(configmapsList)+len(secretsList)+len(openshiftObjs)+3)
 	objects = append(objects, secretsList...)
@@ -212,6 +219,21 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 
 	objects = append(objects, service, deployment)
 
+	objects, errs = p.buildHPAAndPDB(objectMeta, nProxyCfg, selectorLabels, gateway, objects, errs)
+
+	return objects, errors.Join(errs...)
+}
+
+// buildHPAAndPDB builds the HPA and PDB for the NGINX deployment
+// if they are enabled in the EffectiveNginxProxy configuration.
+func (p *NginxProvisioner) buildHPAAndPDB(
+	objectMeta metav1.ObjectMeta,
+	nProxyCfg *graph.EffectiveNginxProxy,
+	selectorLabels map[string]string,
+	gateway *gatewayv1.Gateway,
+	objects []client.Object,
+	errs []error,
+) ([]client.Object, []error) {
 	if hpa := p.buildHPA(objectMeta, nProxyCfg); hpa != nil {
 		if err := p.setOwnerReference(hpa, gateway); err != nil {
 			errs = append(errs, fmt.Errorf("failed to set owner reference on HPA %s: %w", hpa.GetName(), err))
@@ -219,7 +241,14 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 		objects = append(objects, hpa)
 	}
 
-	return objects, errors.Join(errs...)
+	if pdb := p.buildPDB(objectMeta, nProxyCfg, selectorLabels); pdb != nil {
+		if err := p.setOwnerReference(pdb, gateway); err != nil {
+			errs = append(errs, fmt.Errorf("failed to set owner reference on pod disruption budget %s: %w", pdb.GetName(), err))
+		}
+		objects = append(objects, pdb)
+	}
+
+	return objects, errs
 }
 
 // buildResourceNames builds all the resource names for a given gateway resource name.
@@ -305,20 +334,21 @@ func (p *NginxProvisioner) buildServiceAccount(
 	return serviceAccount, nil
 }
 
-// buildPortsFromListeners builds a list of port/protocol entries from the Gateway listeners.
+// buildPortsFromListeners builds a list of port/protocol entries from the graph listeners.
+// This includes listeners from both the Gateway and any attached ListenerSets.
 // A port number can appear multiple times if it has different protocols (e.g., TCP and UDP on port 53).
-func (p *NginxProvisioner) buildPortsFromListeners(listeners []gatewayv1.Listener) []portProtoEntry {
+func (p *NginxProvisioner) buildPortsFromListeners(listeners []*graph.Listener) []portProtoEntry {
 	seen := make(map[portProtoEntry]struct{}, len(listeners))
 	ports := make([]portProtoEntry, 0, len(listeners))
 	for _, listener := range listeners {
 		var protocol corev1.Protocol
-		switch listener.Protocol {
+		switch listener.Source.Protocol {
 		case gatewayv1.UDPProtocolType:
 			protocol = corev1.ProtocolUDP
 		default:
 			protocol = corev1.ProtocolTCP
 		}
-		entry := portProtoEntry{Port: listener.Port, Protocol: protocol}
+		entry := portProtoEntry{Port: listener.Source.Port, Protocol: protocol}
 		if _, exists := seen[entry]; !exists {
 			seen[entry] = struct{}{}
 			ports = append(ports, entry)
@@ -360,6 +390,30 @@ func (p *NginxProvisioner) buildHPA(
 	}
 
 	return buildNginxDeploymentHPA(objectMeta, nProxyCfg.Kubernetes.Deployment.Autoscaling)
+}
+
+func (p *NginxProvisioner) buildPDB(
+	objectMeta metav1.ObjectMeta,
+	nProxyCfg *graph.EffectiveNginxProxy,
+	selectorLabels map[string]string,
+) client.Object {
+	if nProxyCfg == nil || nProxyCfg.Kubernetes == nil || nProxyCfg.Kubernetes.Deployment == nil ||
+		nProxyCfg.Kubernetes.Deployment.PodDisruptionBudget == nil {
+		return nil
+	}
+
+	pdbSpec := nProxyCfg.Kubernetes.Deployment.PodDisruptionBudget
+	return &policyv1.PodDisruptionBudget{
+		ObjectMeta: objectMeta,
+		Spec: policyv1.PodDisruptionBudgetSpec{
+			Selector: &metav1.LabelSelector{
+				MatchLabels: selectorLabels,
+			},
+			MinAvailable:               pdbSpec.MinAvailable,
+			MaxUnavailable:             pdbSpec.MaxUnavailable,
+			UnhealthyPodEvictionPolicy: pdbSpec.UnhealthyPodEvictionPolicy,
+		},
+	}
 }
 
 func (p *NginxProvisioner) buildNginxSecrets(
@@ -574,12 +628,13 @@ func (p *NginxProvisioner) buildAgentConfigMap(
 	agentLabels[nginxTypes.AgentOwnerTypeLabel] = depType
 
 	agentFields := map[string]any{
-		"Plus":          p.cfg.Plus,
-		"ServiceName":   p.cfg.GatewayPodConfig.ServiceName,
-		"Namespace":     p.cfg.GatewayPodConfig.Namespace,
-		"EnableMetrics": enableMetrics,
-		"MetricsPort":   metricsPort,
-		"AgentLabels":   agentLabels,
+		"Plus":            p.cfg.Plus,
+		"ServiceName":     p.cfg.GatewayPodConfig.ServiceName,
+		"Namespace":       p.cfg.GatewayPodConfig.Namespace,
+		"ServerTLSDomain": p.cfg.ServerTLSDomain,
+		"EnableMetrics":   enableMetrics,
+		"MetricsPort":     metricsPort,
+		"AgentLabels":     agentLabels,
 	}
 
 	if nProxyCfg != nil {
@@ -656,7 +711,7 @@ func (p *NginxProvisioner) buildOpenshiftObjects(
 	return []client.Object{role, roleBinding}, errs
 }
 
-func buildNginxService(
+func (p *NginxProvisioner) buildNginxService(
 	objectMeta metav1.ObjectMeta,
 	nProxyCfg *graph.EffectiveNginxProxy,
 	ports []portProtoEntry,
@@ -676,13 +731,13 @@ func buildNginxService(
 
 	var externalIPs []string
 	for _, addr := range addresses {
-		if addr.Type != nil && *addr.Type == gatewayv1.IPAddressType {
+		if addr.Type != nil && *addr.Type == gatewayv1.IPAddressType && net.ParseIP(addr.Value) != nil {
 			externalIPs = append(externalIPs, addr.Value)
 		}
 	}
 
 	var servicePolicy corev1.ServiceExternalTrafficPolicy
-	if serviceType != corev1.ServiceTypeClusterIP || len(externalIPs) > 0 {
+	if serviceType != corev1.ServiceTypeClusterIP {
 		servicePolicy = defaultServicePolicy
 		if serviceCfg.ExternalTrafficPolicy != nil {
 			servicePolicy = corev1.ServiceExternalTrafficPolicy(*serviceCfg.ExternalTrafficPolicy)
@@ -697,7 +752,6 @@ func buildNginxService(
 			Type:                  serviceType,
 			Ports:                 servicePorts,
 			ExternalTrafficPolicy: servicePolicy,
-			ExternalIPs:           externalIPs,
 			Selector:              selectorLabels,
 			IPFamilyPolicy:        helpers.GetPointer(corev1.IPFamilyPolicyPreferDualStack),
 		},
@@ -707,14 +761,29 @@ func buildNginxService(
 
 	setSvcLoadBalancerSettings(serviceCfg, &svc.Spec)
 
-	// Apply service patches
+	// Apply service patches before the LoadBalancerClass check so that a patch-provided
+	// class is visible when we decide whether to set our own.
 	if nProxyCfg != nil && nProxyCfg.Kubernetes != nil && nProxyCfg.Kubernetes.Service != nil {
 		if err := applyPatches(svc, nProxyCfg.Kubernetes.Service.Patches); err != nil {
 			return svc, fmt.Errorf("failed to apply service patches: %w", err)
 		}
 	}
 
+	p.updateLoadBalancerClass(svc, externalIPs)
+
 	return svc, nil
+}
+
+// updateLoadBalancerClass sets the Service's LoadBalancerClass to this controller
+// if the Gateway has IP addresses and the Service is a LoadBalancer.
+func (p *NginxProvisioner) updateLoadBalancerClass(
+	svc *corev1.Service,
+	gwExternalIPs []string,
+) {
+	if svc.Spec.Type == corev1.ServiceTypeLoadBalancer && len(gwExternalIPs) > 0 {
+		ctlr := p.cfg.GatewayCtlrName
+		svc.Spec.LoadBalancerClass = &ctlr
+	}
 }
 
 func buildServicePorts(
@@ -1105,9 +1174,10 @@ func (p *NginxProvisioner) buildNginxContainer(
 			Capabilities: &corev1.Capabilities{
 				Drop: []corev1.Capability{"ALL"},
 			},
-			ReadOnlyRootFilesystem: helpers.GetPointer(true),
-			RunAsGroup:             helpers.GetPointer[int64](1001),
-			RunAsUser:              helpers.GetPointer[int64](101),
+			AllowPrivilegeEscalation: helpers.GetPointer(false),
+			ReadOnlyRootFilesystem:   helpers.GetPointer(true),
+			RunAsGroup:               helpers.GetPointer[int64](1001),
+			RunAsUser:                helpers.GetPointer[int64](101),
 			SeccompProfile: &corev1.SeccompProfile{
 				Type: corev1.SeccompProfileTypeRuntimeDefault,
 			},
@@ -1241,9 +1311,10 @@ func (p *NginxProvisioner) buildInitContainers(nProxyCfg *graph.EffectiveNginxPr
 				Capabilities: &corev1.Capabilities{
 					Drop: []corev1.Capability{"ALL"},
 				},
-				ReadOnlyRootFilesystem: helpers.GetPointer(true),
-				RunAsGroup:             helpers.GetPointer[int64](1001),
-				RunAsUser:              helpers.GetPointer[int64](101),
+				AllowPrivilegeEscalation: helpers.GetPointer(false),
+				ReadOnlyRootFilesystem:   helpers.GetPointer(true),
+				RunAsGroup:               helpers.GetPointer[int64](1001),
+				RunAsUser:                helpers.GetPointer[int64](101),
 				SeccompProfile: &corev1.SeccompProfile{
 					Type: corev1.SeccompProfileTypeRuntimeDefault,
 				},
@@ -1390,8 +1461,8 @@ func (p *NginxProvisioner) configureNginxPlus(
 	if names.jwt != "" {
 		volumeMounts = append(volumeMounts, corev1.VolumeMount{
 			Name:      "nginx-plus-license",
-			MountPath: "/etc/nginx/license.jwt",
-			SubPath:   "license.jwt",
+			MountPath: "/etc/nginx/" + secrets.LicenseJWTKey,
+			SubPath:   secrets.LicenseJWTKey,
 		})
 		spec.Spec.Volumes = append(spec.Spec.Volumes, corev1.Volume{
 			Name:         "nginx-plus-license",
@@ -1796,11 +1867,12 @@ func (p *NginxProvisioner) buildResourcesForInvalidGatewayCleanup(
 	// Order to delete:
 	// 1. deployment/daemonset
 	// 2. service
-	// 3. hpa
-	// 4. role/binding (if openshift)
-	// 5. serviceaccount
-	// 6. configmaps
-	// 7. secrets
+	// 3. hpa (Horizontal Pod Autoscaler)
+	// 4. pdb (Pod Disruption Budget)
+	// 5. role/binding (if openshift)
+	// 6. serviceaccount
+	// 7. configmaps
+	// 8. secrets
 
 	var objects []client.Object
 
@@ -1829,7 +1901,10 @@ func (p *NginxProvisioner) buildResourcesForInvalidGatewayCleanup(
 	// 3. HPA
 	objects = append(objects, &autoscalingv2.HorizontalPodAutoscaler{ObjectMeta: baseMeta})
 
-	// 4. OpenShift Role/RoleBinding
+	// 4. PDB
+	objects = append(objects, &policyv1.PodDisruptionBudget{ObjectMeta: baseMeta})
+
+	// 5. OpenShift Role/RoleBinding
 	if p.isOpenshift {
 		objects = append(objects,
 			&rbacv1.Role{ObjectMeta: baseMeta},
@@ -1837,16 +1912,16 @@ func (p *NginxProvisioner) buildResourcesForInvalidGatewayCleanup(
 		)
 	}
 
-	// 5. ServiceAccount
+	// 6. ServiceAccount
 	objects = append(objects, &corev1.ServiceAccount{ObjectMeta: baseMeta})
 
-	// 6. ConfigMaps
+	// 7. ConfigMaps
 	objects = append(objects,
 		&corev1.ConfigMap{ObjectMeta: meta(resourceName(nginxIncludesConfigMapNameSuffix))},
 		&corev1.ConfigMap{ObjectMeta: meta(resourceName(nginxAgentConfigMapNameSuffix))},
 	)
 
-	// 7. Secrets
+	// 8. Secrets
 	objects = append(objects, &corev1.Secret{ObjectMeta: meta(resourceName(p.cfg.AgentTLSSecretName))})
 
 	for _, name := range p.cfg.NginxDockerSecretNames {

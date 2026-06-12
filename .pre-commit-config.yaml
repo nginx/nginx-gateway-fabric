@@ -31,14 +31,14 @@ repos:
       - id: gitleaks
 
   - repo: https://github.com/rbubley/mirrors-prettier
-    rev: v3.8.3
+    rev: v3.8.4
     hooks:
       - id: prettier
         types:
           - javascript
 
   - repo: https://github.com/golangci/golangci-lint
-    rev: v2.12.1
+    rev: v2.12.2
     hooks:
       - id: golangci-lint-full
         name: golangci-lint-root
@@ -85,7 +85,7 @@ repos:
         args: [-w, -s, -i, "4"]
 
   - repo: https://github.com/dadav/helm-schema
-    rev: 0.23.2
+    rev: 0.23.4
     hooks:
       - id: helm-schema
         args:

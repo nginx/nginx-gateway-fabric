@@ -128,6 +128,7 @@ spec:
         - generate-certs
         - --service={{ include "nginx-gateway.fullname" . }}
         - --cluster-domain={{ .Values.clusterDomain }}
+        - --server-tls-domain={{ .Values.serverTLSDomain }}
         - --server-tls-secret={{ .Values.certGenerator.serverTLSSecretName }}
         - --agent-tls-secret={{ .Values.certGenerator.agentTLSSecretName }}
         {{- if .Values.certGenerator.overwrite }}

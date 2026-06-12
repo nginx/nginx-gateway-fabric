@@ -25,6 +25,7 @@ var (
 		secrets.BundleUsernameKey,
 		secrets.BundlePasswordKey,
 		secrets.BundleTokenKey,
+		secrets.PLMS3Secret,
 	}
 
 	configMapKeys = []string{

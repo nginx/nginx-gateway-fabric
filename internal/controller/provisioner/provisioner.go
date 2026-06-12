@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"reflect"
 	"slices"
 	"strings"
@@ -16,6 +17,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -48,16 +50,19 @@ type Provisioner interface {
 
 // Config is the configuration for the Provisioner.
 type Config struct {
-	DeploymentStore                agent.DeploymentStorer
-	EventRecorder                  k8sEvents.EventRecorder
-	PlusUsageConfig                *config.UsageReportConfig
-	StatusQueue                    *status.Queue
-	GatewayPodConfig               *config.GatewayPodConfig
-	AgentLabels                    map[string]string
-	Logger                         logr.Logger
-	NGINXSCCName                   string
-	GCName                         string
+	DeploymentStore  agent.DeploymentStorer
+	EventRecorder    k8sEvents.EventRecorder
+	PlusUsageConfig  *config.UsageReportConfig
+	StatusQueue      *status.Queue
+	GatewayPodConfig *config.GatewayPodConfig
+	AgentLabels      map[string]string
+	Logger           logr.Logger
+	GCName           string
+	NGINXSCCName     string
+	// GatewayCtlrName is the controller name string (from main config)
+	GatewayCtlrName                string
 	AgentTLSSecretName             string
+	ServerTLSDomain                string
 	NginxDockerSecretNames         []string
 	NginxOneConsoleTelemetryConfig config.NginxOneConsoleTelemetryConfig
 	Plus                           bool
@@ -193,6 +198,9 @@ func (p *NginxProvisioner) Enable(ctx context.Context) {
 
 	p.lock.RLock()
 	for _, gatewayNSName := range p.resourcesToDeleteOnStartup {
+		if p.store.getGateway(gatewayNSName) != nil {
+			continue
+		}
 		if err := p.deprovisionNginxForInvalidGateway(ctx, gatewayNSName); err != nil {
 			p.cfg.Logger.Error(err, "error deprovisioning nginx resources on startup")
 		}
@@ -219,6 +227,116 @@ func (p *NginxProvisioner) setResourceToDelete(gatewayNSName types.NamespacedNam
 	defer p.lock.Unlock()
 
 	p.resourcesToDeleteOnStartup = append(p.resourcesToDeleteOnStartup, gatewayNSName)
+}
+
+// patchServiceStatus updates the Service.status.loadBalancer.ingress with the provided IPs.
+func (p *NginxProvisioner) patchServiceStatus(ctx context.Context, namespace, name string, ips []string) error {
+	if len(ips) == 0 {
+		return nil
+	}
+
+	svc := &corev1.Service{}
+	key := types.NamespacedName{Namespace: namespace, Name: name}
+	if err := p.k8sClient.Get(ctx, key, svc); err != nil {
+		return fmt.Errorf("failed to get Service for status patch: %w", err)
+	}
+
+	// Ensure this Service appears to belong to NGF by checking managed-by and instance labels.
+	// If it doesn't, avoid modifying status of unrelated Services.
+	managedBy := svc.Labels[controller.AppManagedByLabel]
+	instance := svc.Labels[controller.AppInstanceLabel]
+	expectedManagedBy := controller.CreateNginxResourceName(p.cfg.GatewayPodConfig.InstanceName, p.cfg.GCName)
+	if instance != p.cfg.GatewayPodConfig.InstanceName || managedBy != expectedManagedBy {
+		p.cfg.Logger.V(1).Info(
+			"skipping status patch for Service that is not managed by NGF",
+			"service", fmt.Sprintf("%s/%s", namespace, name),
+		)
+		return nil
+	}
+
+	// Build a map of existing ingress entries
+	ingress := createUniqueIngressList(svc, ips)
+
+	// If the desired IPs already match the existing IPs (order-sensitive), nothing to do.
+	existingIPs := make([]string, 0, len(svc.Status.LoadBalancer.Ingress))
+	for _, ingress := range svc.Status.LoadBalancer.Ingress {
+		existingIPs = append(existingIPs, ingress.IP)
+	}
+	desiredIPs := make([]string, 0, len(ingress))
+	for _, ingress := range ingress {
+		desiredIPs = append(desiredIPs, ingress.IP)
+	}
+	if slices.Equal(existingIPs, desiredIPs) {
+		return nil
+	}
+
+	// Patch the status subresource using MergeFrom to avoid clobbering concurrent updates.
+	original := svc.DeepCopy()
+	svc.Status.LoadBalancer.Ingress = ingress
+
+	backoff := wait.Backoff{Steps: 5, Duration: 100 * time.Millisecond, Factor: 2.0, Jitter: 0.1}
+	err := wait.ExponentialBackoff(backoff, func() (bool, error) {
+		if err := p.k8sClient.Status().Patch(ctx, svc, client.MergeFrom(original)); err != nil {
+			p.cfg.Logger.V(1).Info(
+				"Encountered error patching service status",
+				"error", err,
+				"namespace", svc.Namespace,
+				"name", svc.Name,
+				"kind", svc.GetObjectKind().GroupVersionKind().Kind,
+			)
+
+			if apierrors.IsConflict(err) {
+				// Refresh original and svc and retry
+				if getErr := p.k8sClient.Get(ctx, key, original); getErr != nil {
+					if apierrors.IsNotFound(getErr) {
+						return true, getErr
+					}
+					return false, nil
+				}
+				// apply desired ingress onto a fresh copy
+				svc = original.DeepCopy()
+				svc.Status.LoadBalancer.Ingress = ingress
+				return false, nil
+			}
+
+			return false, nil
+		}
+
+		return true, nil
+	})
+	if err != nil {
+		return fmt.Errorf("failed to patch Service status: %w", err)
+	}
+
+	return nil
+}
+
+// createUniqueIngressList takes the existing Service and the desired list of IPs,
+// and returns a list of LoadBalancerIngress.
+func createUniqueIngressList(svc *corev1.Service, ips []string) []corev1.LoadBalancerIngress {
+	existingByIP := make(map[string]corev1.LoadBalancerIngress, len(svc.Status.LoadBalancer.Ingress))
+	for _, ingress := range svc.Status.LoadBalancer.Ingress {
+		existingByIP[ingress.IP] = ingress
+	}
+
+	// Build unique ingress list preserving order and any existing fields.
+	seen := make(map[string]struct{})
+	ingress := make([]corev1.LoadBalancerIngress, 0, len(ips))
+	for _, ip := range ips {
+		if ip == "" || net.ParseIP(ip) == nil {
+			continue
+		}
+		if _, ok := seen[ip]; ok {
+			continue
+		}
+		seen[ip] = struct{}{}
+		if existing, ok := existingByIP[ip]; ok {
+			ingress = append(ingress, existing)
+		} else {
+			ingress = append(ingress, corev1.LoadBalancerIngress{IP: ip})
+		}
+	}
+	return ingress
 }
 
 // minimalObjectFactory is a map of constructors for creating minimal objects with only name and namespace set.
@@ -249,6 +367,9 @@ var minimalObjectFactory = map[reflect.Type]func(name, namespace string) client.
 	},
 	reflect.TypeOf(&autoscalingv2.HorizontalPodAutoscaler{}): func(name, namespace string) client.Object {
 		return &autoscalingv2.HorizontalPodAutoscaler{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace}}
+	},
+	reflect.TypeOf(&policyv1.PodDisruptionBudget{}): func(name, namespace string) client.Object {
+		return &policyv1.PodDisruptionBudget{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace}}
 	},
 }
 
@@ -311,6 +432,13 @@ func (p *NginxProvisioner) provisionNginx(
 
 				if upsertErr != nil {
 					if apierrors.IsInvalid(upsertErr) { // log this error at the error level
+						// spec.loadBalancerClass is immutable in Kubernetes; it cannot be changed after
+						// a Service is created. We cannot delete and recreate the Service because that
+						// would release and re-allocate the external IP, breaking DNS for users.
+						// Return the error to stop retrying; the outer handler will log and surface it.
+						if _, ok := obj.(*corev1.Service); ok && isLoadBalancerClassImmutabilityErr(upsertErr) {
+							return false, upsertErr
+						}
 						p.cfg.Logger.Error(
 							upsertErr,
 							"Retrying CreateOrUpdate for nginx resource after error",
@@ -367,6 +495,28 @@ func (p *NginxProvisioner) provisionNginx(
 			if res == controllerutil.OperationResultUpdated &&
 				strings.HasSuffix(minimalObj.GetName(), nginxAgentConfigMapNameSuffix) {
 				agentConfigMapUpdated = true
+			}
+		}
+
+		// If the Service is a LoadBalancer and the Gateway declares IP-type addresses,
+		// patch the Service status with those IPs.
+		if svc, ok := minimalObj.(*corev1.Service); ok {
+			if svc.Spec.Type == corev1.ServiceTypeLoadBalancer {
+				var ips []string
+				for _, addr := range gateway.Spec.Addresses {
+					if addr.Type != nil && *addr.Type == gatewayv1.IPAddressType {
+						ips = append(ips, addr.Value)
+					}
+				}
+				if svc.Spec.LoadBalancerClass != nil && *svc.Spec.LoadBalancerClass == p.cfg.GatewayCtlrName && len(ips) > 0 {
+					if err := p.patchServiceStatus(ctx, svc.GetNamespace(), svc.GetName(), ips); err != nil {
+						p.cfg.Logger.Error(
+							err,
+							"failed to patch Service status with gateway external IPs",
+							"service", fmt.Sprintf("%s/%s", svc.GetNamespace(), svc.GetName()),
+						)
+					}
+				}
 			}
 		}
 
@@ -440,14 +590,15 @@ func (p *NginxProvisioner) reprovisionNginx(
 	resourceName string,
 	gateway *gatewayv1.Gateway,
 	nProxyCfg *graph.EffectiveNginxProxy,
+	allListeners []*graph.Listener,
 ) error {
 	if !p.isLeader() {
 		return nil
 	}
-	if len(gateway.Spec.Listeners) == 0 {
+	if len(allListeners) == 0 {
 		return nil
 	}
-	objects, err := p.buildNginxResourceObjects(resourceName, gateway, nProxyCfg)
+	objects, err := p.buildNginxResourceObjects(resourceName, gateway, nProxyCfg, allListeners)
 	if err != nil {
 		p.cfg.Logger.Error(err, "error provisioning some nginx resources")
 	}
@@ -594,7 +745,12 @@ func (p *NginxProvisioner) RegisterGateway(
 	}
 
 	if gateway.Valid && len(gateway.Listeners) > 0 {
-		objects, err := p.buildNginxResourceObjects(resourceName, gateway.Source, gateway.EffectiveNginxProxy)
+		objects, err := p.buildNginxResourceObjects(
+			resourceName,
+			gateway.Source,
+			gateway.EffectiveNginxProxy,
+			gateway.Listeners,
+		)
 		if err != nil {
 			p.cfg.Logger.Error(err, "error building some nginx resources")
 		}
@@ -603,21 +759,7 @@ func (p *NginxProvisioner) RegisterGateway(
 		// If HPA was disabled, remove it.
 		nginxResources := p.store.getNginxResourcesForGateway(gatewayNSName)
 		if nginxResources != nil {
-			if needToDeleteDaemonSet(nginxResources) {
-				if err := p.deleteObject(ctx, &appsv1.DaemonSet{ObjectMeta: nginxResources.DaemonSet}); err != nil {
-					p.cfg.Logger.Error(err, "error deleting nginx resource")
-				}
-			} else if needToDeleteDeployment(nginxResources) {
-				if err := p.deleteObject(ctx, &appsv1.Deployment{ObjectMeta: nginxResources.Deployment}); err != nil {
-					p.cfg.Logger.Error(err, "error deleting nginx resource")
-				}
-			}
-
-			if needToDeleteHPA(nginxResources) {
-				if err := p.deleteObject(ctx, &autoscalingv2.HorizontalPodAutoscaler{ObjectMeta: nginxResources.HPA}); err != nil {
-					p.cfg.Logger.Error(err, "error deleting nginx resource")
-				}
-			}
+			p.handleObjectDeletion(ctx, nginxResources)
 		}
 
 		if err := p.provisionNginx(ctx, resourceName, gateway.Source, objects); err != nil {
@@ -630,6 +772,30 @@ func (p *NginxProvisioner) RegisterGateway(
 	}
 
 	return nil
+}
+
+func (p *NginxProvisioner) handleObjectDeletion(ctx context.Context, nginxResources *NginxResources) {
+	if needToDeleteDaemonSet(nginxResources) {
+		if err := p.deleteObject(ctx, &appsv1.DaemonSet{ObjectMeta: nginxResources.DaemonSet}); err != nil {
+			p.cfg.Logger.Error(err, "error deleting nginx resource")
+		}
+	} else if needToDeleteDeployment(nginxResources) {
+		if err := p.deleteObject(ctx, &appsv1.Deployment{ObjectMeta: nginxResources.Deployment}); err != nil {
+			p.cfg.Logger.Error(err, "error deleting nginx resource")
+		}
+	}
+
+	if needToDeleteHPA(nginxResources) {
+		if err := p.deleteObject(ctx, &autoscalingv2.HorizontalPodAutoscaler{ObjectMeta: nginxResources.HPA}); err != nil {
+			p.cfg.Logger.Error(err, "error deleting nginx resource")
+		}
+	}
+
+	if needToDeletePDB(nginxResources) {
+		if err := p.deleteObject(ctx, &policyv1.PodDisruptionBudget{ObjectMeta: nginxResources.PDB}); err != nil {
+			p.cfg.Logger.Error(err, "error deleting nginx resource")
+		}
+	}
 }
 
 func needToDeleteDeployment(cfg *NginxResources) bool {
@@ -660,6 +826,44 @@ func needToDeleteDaemonSet(cfg *NginxResources) bool {
 	return false
 }
 
+// isLoadBalancerClassImmutabilityErr returns true when the error is a Kubernetes validation
+// error for the spec.loadBalancerClass field, which is immutable once a Service is created.
+func isLoadBalancerClassImmutabilityErr(err error) bool {
+	var statusErr *apierrors.StatusError
+	if !errors.As(err, &statusErr) {
+		return false
+	}
+	if statusErr.ErrStatus.Details == nil {
+		return false
+	}
+	for _, cause := range statusErr.ErrStatus.Details.Causes {
+		if cause.Field == "spec.loadBalancerClass" {
+			return true
+		}
+	}
+	return false
+}
+
+// needToDeletePDB returns true if a PDB was previously created for this Gateway
+// but is no longer configured in the NginxProxy spec, and therefore should be deleted.
+func needToDeletePDB(cfg *NginxResources) bool {
+	if cfg.PDB.Name != "" && cfg.Gateway != nil {
+		if cfg.Gateway.EffectiveNginxProxy != nil &&
+			cfg.Gateway.EffectiveNginxProxy.Kubernetes != nil &&
+			(cfg.Gateway.EffectiveNginxProxy.Kubernetes.Deployment == nil ||
+				cfg.Gateway.EffectiveNginxProxy.Kubernetes.Deployment.PodDisruptionBudget == nil) {
+			return true
+		} else if cfg.Gateway.EffectiveNginxProxy == nil ||
+			cfg.Gateway.EffectiveNginxProxy.Kubernetes == nil {
+			return true
+		}
+	}
+
+	return false
+}
+
+// needToDeleteHPA returns true if an HPA was previously created for this Gateway
+// but is no longer configured in the NginxProxy spec, and therefore should be deleted.
 func needToDeleteHPA(cfg *NginxResources) bool {
 	if cfg.HPA.Name != "" && cfg.Gateway != nil {
 		if cfg.Gateway.EffectiveNginxProxy != nil &&

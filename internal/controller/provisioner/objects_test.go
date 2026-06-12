@@ -8,6 +8,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -26,6 +27,18 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
+
+// graphListenersFromGateway converts raw Gateway spec listeners to graph Listeners for testing.
+func graphListenersFromGateway(gw *gatewayv1.Gateway) []*graph.Listener {
+	listeners := make([]*graph.Listener, 0, len(gw.Spec.Listeners))
+	for _, l := range gw.Spec.Listeners {
+		listeners = append(listeners, &graph.Listener{
+			Name:   string(l.Name),
+			Source: l,
+		})
+	}
+	return listeners
+}
 
 func findDaemonSet(objects []client.Object) *appsv1.DaemonSet {
 	for _, obj := range objects {
@@ -78,6 +91,7 @@ func TestBuildNginxResourceObjects(t *testing.T) {
 			},
 			AgentTLSSecretName: agentTLSTestSecretName,
 			AgentLabels:        make(map[string]string),
+			GatewayCtlrName:    "nginx-gateway-controller",
 		},
 		baseLabelSelector: metav1.LabelSelector{
 			MatchLabels: map[string]string{
@@ -150,7 +164,9 @@ func TestBuildNginxResourceObjects(t *testing.T) {
 					},
 				},
 			},
-		})
+		},
+		graphListenersFromGateway(gateway),
+	)
 	g.Expect(err).ToNot(HaveOccurred())
 
 	g.Expect(objects).To(HaveLen(6))
@@ -232,7 +248,8 @@ func TestBuildNginxResourceObjects(t *testing.T) {
 			TargetPort: intstr.FromInt(9999),
 		},
 	}))
-	g.Expect(svc.Spec.ExternalIPs).To(Equal([]string{"192.0.0.2"}))
+	g.Expect(svc.Spec.ExternalIPs).To(BeNil())
+	g.Expect(*svc.Spec.LoadBalancerClass).To(Equal("nginx-gateway-controller"))
 
 	depObj := objects[5]
 	dep, ok := depObj.(*appsv1.Deployment)
@@ -275,6 +292,115 @@ func TestBuildNginxResourceObjects(t *testing.T) {
 
 	g.Expect(initContainer.Image).To(Equal("ngf-image"))
 	g.Expect(initContainer.ImagePullPolicy).To(Equal(defaultImagePullPolicy))
+}
+
+// TestBuildNginxResourceObjects_ListenerSetPorts verifies that listeners from ListenerSets
+// are included in the Service and container ports. This is a regression test for a bug where
+// a ListenerSet adding an HTTPS listener on port 443 would not create a LB rule for that port.
+func TestBuildNginxResourceObjects_ListenerSetPorts(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	agentTLSSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      agentTLSTestSecretName,
+			Namespace: ngfNamespace,
+		},
+		Data: map[string][]byte{secrets.TLSCertKey: []byte("tls")},
+	}
+	fakeClient := createFakeClientWithScheme(agentTLSSecret)
+
+	provisioner := &NginxProvisioner{
+		cfg: Config{
+			GatewayPodConfig: &config.GatewayPodConfig{
+				Namespace: ngfNamespace,
+				Version:   "1.0.0",
+				Image:     "ngf-image",
+			},
+			AgentTLSSecretName: agentTLSTestSecretName,
+			AgentLabels:        make(map[string]string),
+		},
+		baseLabelSelector: metav1.LabelSelector{
+			MatchLabels: map[string]string{
+				"app": "nginx",
+			},
+		},
+		k8sClient: fakeClient,
+	}
+
+	// Gateway only defines port 80
+	gateway := &gatewayv1.Gateway{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "gw",
+			Namespace: "default",
+		},
+		Spec: gatewayv1.GatewaySpec{
+			Listeners: []gatewayv1.Listener{
+				{
+					Name:     "http",
+					Port:     80,
+					Protocol: gatewayv1.HTTPProtocolType,
+				},
+			},
+		},
+	}
+
+	// The graph has merged listeners from both the Gateway (port 80) and a ListenerSet (port 443)
+	hostname := gatewayv1.Hostname("example.org")
+	allListeners := []*graph.Listener{
+		{
+			Name:   "http",
+			Source: gatewayv1.Listener{Name: "http", Port: 80, Protocol: gatewayv1.HTTPProtocolType},
+		},
+		{
+			Name:   "https",
+			Source: gatewayv1.Listener{Name: "https", Port: 443, Protocol: gatewayv1.HTTPSProtocolType, Hostname: &hostname},
+		},
+	}
+
+	resourceName := "gw-nginx"
+	objects, err := provisioner.buildNginxResourceObjects(
+		resourceName,
+		gateway,
+		&graph.EffectiveNginxProxy{},
+		allListeners,
+	)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Find the Service and verify it has both port 80 and port 443
+	var svc *corev1.Service
+	for _, obj := range objects {
+		if s, ok := obj.(*corev1.Service); ok {
+			svc = s
+			break
+		}
+	}
+	g.Expect(svc).ToNot(BeNil(), "Service should be created")
+
+	var hasPort80, hasPort443 bool
+	for _, port := range svc.Spec.Ports {
+		if port.Port == 80 {
+			hasPort80 = true
+		}
+		if port.Port == 443 {
+			hasPort443 = true
+		}
+	}
+	g.Expect(hasPort80).To(BeTrue(), "Service should have port 80 from Gateway listener")
+	g.Expect(hasPort443).To(BeTrue(), "Service should have port 443 from ListenerSet listener")
+
+	// Find the Deployment and verify container ports include 443
+	dep := findDeployment(objects)
+	g.Expect(dep).ToNot(BeNil(), "Deployment should be created")
+
+	var containerHasPort443 bool
+	for _, port := range dep.Spec.Template.Spec.Containers[0].Ports {
+		if port.ContainerPort == 443 {
+			containerHasPort443 = true
+			break
+		}
+	}
+	g.Expect(containerHasPort443).To(BeTrue(), "Container should have port 443 from ListenerSet listener")
 }
 
 func TestBuildNginxResourceObjects_NginxProxyConfig(t *testing.T) {
@@ -369,7 +495,12 @@ func TestBuildNginxResourceObjects_NginxProxyConfig(t *testing.T) {
 		},
 	}
 
-	objects, err := provisioner.buildNginxResourceObjects(resourceName, gateway, nProxyCfg)
+	objects, err := provisioner.buildNginxResourceObjects(
+		resourceName,
+		gateway,
+		nProxyCfg,
+		graphListenersFromGateway(gateway),
+	)
 	g.Expect(err).ToNot(HaveOccurred())
 
 	g.Expect(objects).To(HaveLen(7))
@@ -394,7 +525,7 @@ func TestBuildNginxResourceObjects_NginxProxyConfig(t *testing.T) {
 	svc, ok := svcObj.(*corev1.Service)
 	g.Expect(ok).To(BeTrue())
 	g.Expect(svc.Spec.Type).To(Equal(corev1.ServiceTypeNodePort))
-	g.Expect(svc.Spec.ExternalTrafficPolicy).To(Equal(corev1.ServiceExternalTrafficPolicyTypeCluster))
+	g.Expect(svc.Spec.ExternalTrafficPolicy).To(Equal(corev1.ServiceExternalTrafficPolicyCluster))
 	g.Expect(svc.Spec.LoadBalancerIP).To(Equal("1.2.3.4"))
 	g.Expect(*svc.Spec.LoadBalancerClass).To(Equal("myLoadBalancerClass"))
 	g.Expect(svc.Spec.LoadBalancerSourceRanges).To(Equal([]string{"5.6.7.8"}))
@@ -541,7 +672,12 @@ func TestBuildNginxResourceObjects_ExposeHealthcheck(t *testing.T) {
 				k8sClient: fakeClient,
 			}
 
-			objects, err := provisioner.buildNginxResourceObjects(resourceName, gateway, test.nProxyCfg)
+			objects, err := provisioner.buildNginxResourceObjects(
+				resourceName,
+				gateway,
+				test.nProxyCfg,
+				graphListenersFromGateway(gateway),
+			)
 			g.Expect(err).ToNot(HaveOccurred())
 
 			// Find the service object
@@ -710,7 +846,12 @@ func TestBuildNginxResourceObjects_DeploymentReplicasFromHPA(t *testing.T) {
 				},
 			}
 
-			objects, err := provisioner.buildNginxResourceObjects(resourceName, gateway, nProxyCfg)
+			objects, err := provisioner.buildNginxResourceObjects(
+				resourceName,
+				gateway,
+				nProxyCfg,
+				graphListenersFromGateway(gateway),
+			)
 			g.Expect(err).ToNot(HaveOccurred())
 
 			// Find the deployment object
@@ -806,7 +947,12 @@ func TestBuildNginxResourceObjects_Plus(t *testing.T) {
 	}
 
 	resourceName := "gw-nginx"
-	objects, err := provisioner.buildNginxResourceObjects(resourceName, gateway, &graph.EffectiveNginxProxy{})
+	objects, err := provisioner.buildNginxResourceObjects(
+		resourceName,
+		gateway,
+		&graph.EffectiveNginxProxy{},
+		graphListenersFromGateway(gateway),
+	)
 	g.Expect(err).ToNot(HaveOccurred())
 
 	g.Expect(objects).To(HaveLen(9))
@@ -956,7 +1102,12 @@ func TestBuildNginxResourceObjects_DockerSecrets(t *testing.T) {
 	}
 
 	resourceName := "gw-nginx"
-	objects, err := provisioner.buildNginxResourceObjects(resourceName, gateway, &graph.EffectiveNginxProxy{})
+	objects, err := provisioner.buildNginxResourceObjects(
+		resourceName,
+		gateway,
+		&graph.EffectiveNginxProxy{},
+		graphListenersFromGateway(gateway),
+	)
 	g.Expect(err).ToNot(HaveOccurred())
 
 	g.Expect(objects).To(HaveLen(9))
@@ -1085,7 +1236,12 @@ func TestBuildNginxResourceObjects_DaemonSet(t *testing.T) {
 	}
 
 	resourceName := "gw-nginx"
-	objects, err := provisioner.buildNginxResourceObjects(resourceName, gateway, nProxyCfg)
+	objects, err := provisioner.buildNginxResourceObjects(
+		resourceName,
+		gateway,
+		nProxyCfg,
+		graphListenersFromGateway(gateway),
+	)
 	g.Expect(err).ToNot(HaveOccurred())
 
 	// 2 secrets (agentTLS, JWT) + 2 configmaps (includes, agent) + serviceaccount + service + daemonset
@@ -1166,7 +1322,12 @@ func TestBuildNginxResourceObjects_OpenShift(t *testing.T) {
 	}
 
 	resourceName := "gw-nginx"
-	objects, err := provisioner.buildNginxResourceObjects(resourceName, gateway, &graph.EffectiveNginxProxy{})
+	objects, err := provisioner.buildNginxResourceObjects(
+		resourceName,
+		gateway,
+		&graph.EffectiveNginxProxy{},
+		graphListenersFromGateway(gateway),
+	)
 	g.Expect(err).ToNot(HaveOccurred())
 
 	g.Expect(objects).To(HaveLen(8))
@@ -1243,7 +1404,12 @@ func TestBuildNginxResourceObjects_DataplaneKeySecret(t *testing.T) {
 	}
 
 	resourceName := "gw-nginx"
-	objects, err := provisioner.buildNginxResourceObjects(resourceName, gateway, &graph.EffectiveNginxProxy{})
+	objects, err := provisioner.buildNginxResourceObjects(
+		resourceName,
+		gateway,
+		&graph.EffectiveNginxProxy{},
+		graphListenersFromGateway(gateway),
+	)
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(objects).To(HaveLen(7)) // 2 secrets, 2 configmaps, serviceaccount, service, deployment
 
@@ -1313,7 +1479,7 @@ func TestBuildResourcesForInvalidGatewayCleanup(t *testing.T) {
 
 	objects := provisioner.buildResourcesForInvalidGatewayCleanup(deploymentNSName)
 
-	g.Expect(objects).To(HaveLen(8))
+	g.Expect(objects).To(HaveLen(9))
 
 	validateMeta := func(obj client.Object, name string) {
 		g.Expect(obj.GetName()).To(Equal(name))
@@ -1340,17 +1506,22 @@ func TestBuildResourcesForInvalidGatewayCleanup(t *testing.T) {
 	g.Expect(ok).To(BeTrue())
 	validateMeta(hpa, deploymentNSName.Name)
 
-	svcAcctObj := objects[4]
+	pdbObj := objects[4]
+	pdb, ok := pdbObj.(*policyv1.PodDisruptionBudget)
+	g.Expect(ok).To(BeTrue())
+	validateMeta(pdb, deploymentNSName.Name)
+
+	svcAcctObj := objects[5]
 	svcAcct, ok := svcAcctObj.(*corev1.ServiceAccount)
 	g.Expect(ok).To(BeTrue())
 	validateMeta(svcAcct, deploymentNSName.Name)
 
-	cmObj := objects[5]
+	cmObj := objects[6]
 	cm, ok := cmObj.(*corev1.ConfigMap)
 	g.Expect(ok).To(BeTrue())
 	validateMeta(cm, controller.CreateNginxResourceName(deploymentNSName.Name, nginxIncludesConfigMapNameSuffix))
 
-	cmObj = objects[6]
+	cmObj = objects[7]
 	cm, ok = cmObj.(*corev1.ConfigMap)
 	g.Expect(ok).To(BeTrue())
 	validateMeta(cm, controller.CreateNginxResourceName(deploymentNSName.Name, nginxAgentConfigMapNameSuffix))
@@ -1380,7 +1551,7 @@ func TestBuildResourcesForInvalidGatewayCleanup_Plus(t *testing.T) {
 
 	objects := provisioner.buildResourcesForInvalidGatewayCleanup(deploymentNSName)
 
-	g.Expect(objects).To(HaveLen(12))
+	g.Expect(objects).To(HaveLen(13))
 
 	validateMeta := func(obj client.Object, name string) {
 		g.Expect(obj.GetName()).To(Equal(name))
@@ -1407,22 +1578,27 @@ func TestBuildResourcesForInvalidGatewayCleanup_Plus(t *testing.T) {
 	g.Expect(ok).To(BeTrue())
 	validateMeta(hpa, deploymentNSName.Name)
 
-	svcAcctObj := objects[4]
+	pdbObj := objects[4]
+	pdb, ok := pdbObj.(*policyv1.PodDisruptionBudget)
+	g.Expect(ok).To(BeTrue())
+	validateMeta(pdb, deploymentNSName.Name)
+
+	svcAcctObj := objects[5]
 	svcAcct, ok := svcAcctObj.(*corev1.ServiceAccount)
 	g.Expect(ok).To(BeTrue())
 	validateMeta(svcAcct, deploymentNSName.Name)
 
-	cmObj := objects[5]
+	cmObj := objects[6]
 	cm, ok := cmObj.(*corev1.ConfigMap)
 	g.Expect(ok).To(BeTrue())
 	validateMeta(cm, controller.CreateNginxResourceName(deploymentNSName.Name, nginxIncludesConfigMapNameSuffix))
 
-	cmObj = objects[6]
+	cmObj = objects[7]
 	cm, ok = cmObj.(*corev1.ConfigMap)
 	g.Expect(ok).To(BeTrue())
 	validateMeta(cm, controller.CreateNginxResourceName(deploymentNSName.Name, nginxAgentConfigMapNameSuffix))
 
-	secretObj := objects[7]
+	secretObj := objects[8]
 	secret, ok := secretObj.(*corev1.Secret)
 	g.Expect(ok).To(BeTrue())
 	validateMeta(secret, controller.CreateNginxResourceName(
@@ -1430,7 +1606,7 @@ func TestBuildResourcesForInvalidGatewayCleanup_Plus(t *testing.T) {
 		provisioner.cfg.AgentTLSSecretName,
 	))
 
-	secretObj = objects[8]
+	secretObj = objects[9]
 	secret, ok = secretObj.(*corev1.Secret)
 	g.Expect(ok).To(BeTrue())
 	validateMeta(secret, controller.CreateNginxResourceName(
@@ -1438,7 +1614,7 @@ func TestBuildResourcesForInvalidGatewayCleanup_Plus(t *testing.T) {
 		provisioner.cfg.NginxDockerSecretNames[0],
 	))
 
-	secretObj = objects[9]
+	secretObj = objects[10]
 	secret, ok = secretObj.(*corev1.Secret)
 	g.Expect(ok).To(BeTrue())
 	validateMeta(secret, controller.CreateNginxResourceName(
@@ -1446,7 +1622,7 @@ func TestBuildResourcesForInvalidGatewayCleanup_Plus(t *testing.T) {
 		provisioner.cfg.PlusUsageConfig.CASecretName,
 	))
 
-	secretObj = objects[10]
+	secretObj = objects[11]
 	secret, ok = secretObj.(*corev1.Secret)
 	g.Expect(ok).To(BeTrue())
 	validateMeta(secret, controller.CreateNginxResourceName(
@@ -1468,7 +1644,7 @@ func TestBuildResourcesForInvalidGatewayCleanup_OpenShift(t *testing.T) {
 
 	objects := provisioner.buildResourcesForInvalidGatewayCleanup(deploymentNSName)
 
-	g.Expect(objects).To(HaveLen(10))
+	g.Expect(objects).To(HaveLen(11))
 
 	validateMeta := func(obj client.Object, name string) {
 		g.Expect(obj.GetName()).To(Equal(name))
@@ -1480,12 +1656,17 @@ func TestBuildResourcesForInvalidGatewayCleanup_OpenShift(t *testing.T) {
 	g.Expect(ok).To(BeTrue())
 	validateMeta(hpa, deploymentNSName.Name)
 
-	roleObj := objects[4]
+	pdbObj := objects[4]
+	pdb, ok := pdbObj.(*policyv1.PodDisruptionBudget)
+	g.Expect(ok).To(BeTrue())
+	validateMeta(pdb, deploymentNSName.Name)
+
+	roleObj := objects[5]
 	role, ok := roleObj.(*rbacv1.Role)
 	g.Expect(ok).To(BeTrue())
 	validateMeta(role, deploymentNSName.Name)
 
-	roleBindingObj := objects[5]
+	roleBindingObj := objects[6]
 	roleBinding, ok := roleBindingObj.(*rbacv1.RoleBinding)
 	g.Expect(ok).To(BeTrue())
 	validateMeta(roleBinding, deploymentNSName.Name)
@@ -1514,8 +1695,8 @@ func TestBuildResourcesForInvalidGatewayCleanup_DataplaneKeySecret(t *testing.T)
 	objects := provisioner.buildResourcesForInvalidGatewayCleanup(deploymentNSName)
 
 	// Should include the dataplane key secret in the objects list
-	// Default: deployment, daemonset, service, hpa, serviceaccount, 2 configmaps, agentTLSSecret, dataplaneKeySecret
-	g.Expect(objects).To(HaveLen(9))
+	// Default: deployment, daemonset, service, hpa, pdb, serviceaccount, 2 configmaps, agentTLSSecret, dataplaneKeySecret
+	g.Expect(objects).To(HaveLen(10))
 
 	validateMeta := func(obj client.Object, name string) {
 		g.Expect(obj.GetName()).To(Equal(name))
@@ -1533,6 +1714,95 @@ func TestBuildResourcesForInvalidGatewayCleanup_DataplaneKeySecret(t *testing.T)
 		}
 	}
 	g.Expect(found).To(BeTrue())
+}
+
+func TestBuildNginxDeploymentPDB(t *testing.T) {
+	t.Parallel()
+
+	provisioner := &NginxProvisioner{}
+
+	selectorLabels := map[string]string{
+		"app":     "nginx",
+		"gateway": "gw",
+	}
+	objectMeta := metav1.ObjectMeta{
+		Name:      "gw-nginx",
+		Namespace: "default",
+		Labels:    map[string]string{"app": "nginx"},
+	}
+
+	tests := []struct {
+		pdbSpec                        *ngfAPIv1alpha2.PodDisruptionBudgetSpec
+		wantMinAvail                   *intstr.IntOrString
+		wantMaxUnavail                 *intstr.IntOrString
+		wantUnhealthyPodEvictionPolicy *policyv1.UnhealthyPodEvictionPolicyType
+		name                           string
+	}{
+		{
+			name: "minAvailable set as absolute number",
+			pdbSpec: &ngfAPIv1alpha2.PodDisruptionBudgetSpec{
+				MinAvailable: func() *intstr.IntOrString { v := intstr.FromInt32(1); return &v }(),
+			},
+			wantMinAvail: func() *intstr.IntOrString { v := intstr.FromInt32(1); return &v }(),
+		},
+		{
+			name: "minAvailable set as percentage",
+			pdbSpec: &ngfAPIv1alpha2.PodDisruptionBudgetSpec{
+				MinAvailable: func() *intstr.IntOrString { v := intstr.FromString("50%"); return &v }(),
+			},
+			wantMinAvail: func() *intstr.IntOrString { v := intstr.FromString("50%"); return &v }(),
+		},
+		{
+			name: "maxUnavailable set as absolute number",
+			pdbSpec: &ngfAPIv1alpha2.PodDisruptionBudgetSpec{
+				MaxUnavailable: func() *intstr.IntOrString { v := intstr.FromInt32(1); return &v }(),
+			},
+			wantMaxUnavail: func() *intstr.IntOrString { v := intstr.FromInt32(1); return &v }(),
+		},
+		{
+			name: "maxUnavailable set as percentage",
+			pdbSpec: &ngfAPIv1alpha2.PodDisruptionBudgetSpec{
+				MaxUnavailable: func() *intstr.IntOrString { v := intstr.FromString("20%"); return &v }(),
+			},
+			wantMaxUnavail: func() *intstr.IntOrString { v := intstr.FromString("20%"); return &v }(),
+		},
+		{
+			name: "unhealthyPodEvictionPolicy set to AlwaysAllow",
+			pdbSpec: &ngfAPIv1alpha2.PodDisruptionBudgetSpec{
+				MinAvailable:               func() *intstr.IntOrString { v := intstr.FromInt32(1); return &v }(),
+				UnhealthyPodEvictionPolicy: helpers.GetPointer(policyv1.AlwaysAllow),
+			},
+			wantMinAvail:                   func() *intstr.IntOrString { v := intstr.FromInt32(1); return &v }(),
+			wantUnhealthyPodEvictionPolicy: helpers.GetPointer(policyv1.AlwaysAllow),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			nProxyCfg := &graph.EffectiveNginxProxy{
+				Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+					Deployment: &ngfAPIv1alpha2.DeploymentSpec{
+						PodDisruptionBudget: tt.pdbSpec,
+					},
+				},
+			}
+
+			obj := provisioner.buildPDB(objectMeta, nProxyCfg, selectorLabels)
+			pdb, ok := obj.(*policyv1.PodDisruptionBudget)
+			g.Expect(ok).To(BeTrue())
+
+			g.Expect(pdb.Name).To(Equal(objectMeta.Name))
+			g.Expect(pdb.Namespace).To(Equal(objectMeta.Namespace))
+			g.Expect(pdb.Spec.Selector).ToNot(BeNil())
+			g.Expect(pdb.Spec.Selector.MatchLabels).To(Equal(selectorLabels))
+			g.Expect(pdb.Spec.MinAvailable).To(Equal(tt.wantMinAvail))
+			g.Expect(pdb.Spec.MaxUnavailable).To(Equal(tt.wantMaxUnavail))
+			g.Expect(pdb.Spec.UnhealthyPodEvictionPolicy).To(Equal(tt.wantUnhealthyPodEvictionPolicy))
+		})
+	}
 }
 
 func TestSetIPFamily(t *testing.T) {
@@ -1667,6 +1937,7 @@ func TestBuildNginxConfigMaps_AgentFields(t *testing.T) {
 				EndpointPort:           443,
 				EndpointTLSSkipVerify:  false,
 			},
+			ServerTLSDomain: "svc",
 		},
 	}
 	objectMeta := metav1.ObjectMeta{Name: "test", Namespace: "default"}
@@ -1702,6 +1973,8 @@ func TestBuildNginxConfigMaps_AgentFields(t *testing.T) {
 	g.Expect(data).To(ContainSubstring("host: console.example.com"))
 	g.Expect(data).To(ContainSubstring("port: 443"))
 	g.Expect(data).To(ContainSubstring("skip_verify: false"))
+	g.Expect(data).To(ContainSubstring("host: test-service.default.svc"))
+	g.Expect(data).To(ContainSubstring("server_name: test-service.default.svc"))
 	// Verify base agent features are present (metrics enabled by default)
 	g.Expect(data).To(ContainSubstring("- configuration"))
 	g.Expect(data).To(ContainSubstring("- certificates"))
@@ -1709,6 +1982,40 @@ func TestBuildNginxConfigMaps_AgentFields(t *testing.T) {
 	// Should not have WAF or Plus features
 	g.Expect(data).ToNot(ContainSubstring("- logs-nap"))
 	g.Expect(data).ToNot(ContainSubstring("- api-action"))
+}
+
+func TestBuildNginxConfigMaps_AgentConfigUsesCustomServerTLSDomain(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	fakeClient := createFakeClientWithScheme()
+	provisioner := &NginxProvisioner{
+		k8sClient: fakeClient,
+		cfg: Config{
+			GatewayPodConfig: &config.GatewayPodConfig{
+				Namespace:   "default",
+				ServiceName: "test-service",
+			},
+			AgentLabels:     make(map[string]string),
+			ServerTLSDomain: "internal.mycompany.com",
+		},
+	}
+	objectMeta := metav1.ObjectMeta{Name: "test", Namespace: "default"}
+
+	gateway := &gatewayv1.Gateway{
+		ObjectMeta: metav1.ObjectMeta{Name: "gw", Namespace: "default"},
+	}
+
+	names := provisioner.buildResourceNames("gw-nginx")
+	configMaps, errs := provisioner.buildNginxConfigMaps(objectMeta, &graph.EffectiveNginxProxy{}, names, gateway)
+	g.Expect(errs).To(BeNil())
+
+	agentCM, ok := configMaps[1].(*corev1.ConfigMap)
+	g.Expect(ok).To(BeTrue())
+	data := agentCM.Data[configmaps.AgentConfKey]
+
+	g.Expect(data).To(ContainSubstring("host: test-service.default.internal.mycompany.com"))
+	g.Expect(data).To(ContainSubstring("server_name: test-service.default.internal.mycompany.com"))
 }
 
 func TestBuildReadinessProbe(t *testing.T) {
@@ -1940,7 +2247,12 @@ func TestBuildNginxResourceObjects_Patches(t *testing.T) {
 		},
 	}
 
-	objects, err := provisioner.buildNginxResourceObjects("gw-nginx", gateway, nProxyCfg)
+	objects, err := provisioner.buildNginxResourceObjects(
+		"gw-nginx",
+		gateway,
+		nProxyCfg,
+		graphListenersFromGateway(gateway),
+	)
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(objects).To(HaveLen(6))
 
@@ -1985,7 +2297,12 @@ func TestBuildNginxResourceObjects_Patches(t *testing.T) {
 		},
 	}
 
-	objects, err = provisioner.buildNginxResourceObjects("gw-nginx", gateway, nProxyCfg)
+	objects, err = provisioner.buildNginxResourceObjects(
+		"gw-nginx",
+		gateway,
+		nProxyCfg,
+		graphListenersFromGateway(gateway),
+	)
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(objects).To(HaveLen(6))
 
@@ -2016,7 +2333,12 @@ func TestBuildNginxResourceObjects_Patches(t *testing.T) {
 		},
 	}
 
-	objects, err = provisioner.buildNginxResourceObjects("gw-nginx", gateway, nProxyCfg)
+	objects, err = provisioner.buildNginxResourceObjects(
+		"gw-nginx",
+		gateway,
+		nProxyCfg,
+		graphListenersFromGateway(gateway),
+	)
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(objects).To(HaveLen(6))
 
@@ -2057,7 +2379,12 @@ func TestBuildNginxResourceObjects_Patches(t *testing.T) {
 		},
 	}
 
-	objects, err = provisioner.buildNginxResourceObjects("gw-nginx", gateway, nProxyCfg)
+	objects, err = provisioner.buildNginxResourceObjects(
+		"gw-nginx",
+		gateway,
+		nProxyCfg,
+		graphListenersFromGateway(gateway),
+	)
 	g.Expect(err).To(HaveOccurred())
 	g.Expect(err.Error()).To(ContainSubstring("failed to apply service patches"))
 	g.Expect(err.Error()).To(ContainSubstring("failed to apply deployment patches"))
@@ -2079,7 +2406,12 @@ func TestBuildNginxResourceObjects_Patches(t *testing.T) {
 		},
 	}
 
-	objects, err = provisioner.buildNginxResourceObjects("gw-nginx", gateway, nProxyCfg)
+	objects, err = provisioner.buildNginxResourceObjects(
+		"gw-nginx",
+		gateway,
+		nProxyCfg,
+		graphListenersFromGateway(gateway),
+	)
 	g.Expect(err).To(HaveOccurred())
 	g.Expect(err.Error()).To(ContainSubstring("unsupported patch type"))
 	g.Expect(objects).To(HaveLen(6))
@@ -2104,7 +2436,12 @@ func TestBuildNginxResourceObjects_Patches(t *testing.T) {
 		},
 	}
 
-	objects, err = provisioner.buildNginxResourceObjects("gw-nginx", gateway, nProxyCfg)
+	objects, err = provisioner.buildNginxResourceObjects(
+		"gw-nginx",
+		gateway,
+		nProxyCfg,
+		graphListenersFromGateway(gateway),
+	)
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(objects).To(HaveLen(6))
 
@@ -2144,7 +2481,12 @@ func TestBuildNginxResourceObjects_Patches(t *testing.T) {
 		},
 	}
 
-	objects, err = provisioner.buildNginxResourceObjects("gw-nginx", gateway, nProxyCfg)
+	objects, err = provisioner.buildNginxResourceObjects(
+		"gw-nginx",
+		gateway,
+		nProxyCfg,
+		graphListenersFromGateway(gateway),
+	)
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(objects).To(HaveLen(6))
 
@@ -2224,7 +2566,12 @@ func TestBuildNginxResourceObjects_InferenceExtension(t *testing.T) {
 			},
 		},
 	}
-	objects, err := provisioner.buildNginxResourceObjects("gw-nginx", gateway, npCfg)
+	objects, err := provisioner.buildNginxResourceObjects(
+		"gw-nginx",
+		gateway,
+		npCfg,
+		graphListenersFromGateway(gateway),
+	)
 	g.Expect(err).ToNot(HaveOccurred())
 
 	// Find the deployment object
@@ -2349,7 +2696,12 @@ func TestOwnerReferencesAreSet(t *testing.T) {
 	resourceName := controller.CreateNginxResourceName(gateway.Name, "nginx")
 
 	// Build resources
-	objects, err := provisioner.buildNginxResourceObjects(resourceName, gateway, nil)
+	objects, err := provisioner.buildNginxResourceObjects(
+		resourceName,
+		gateway,
+		nil,
+		graphListenersFromGateway(gateway),
+	)
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(objects).ToNot(BeEmpty())
 
@@ -2367,37 +2719,81 @@ func TestOwnerReferencesAreSet(t *testing.T) {
 	}
 }
 
-func TestBuildNginxResourceObjects_ClusterIPWithExternalIPs(t *testing.T) {
+func TestBuildNginxResourceObjects_LoadBalancerClass(t *testing.T) {
 	t.Parallel()
 
+	const ctlrName = "gateway.nginx.org/test-controller"
+
+	makeProvisioner := func(gatewayCtlrName string) *NginxProvisioner {
+		// Create a fresh secret per call so parallel subtests don't share a mutable object.
+		// The fake client builder writes ResourceVersion on the objects passed to it, which
+		// causes a data race when the same object pointer is used concurrently.
+		agentTLSSecret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      agentTLSTestSecretName,
+				Namespace: ngfNamespace,
+			},
+			Data: map[string][]byte{secrets.TLSCertKey: []byte("tls")},
+		}
+		return &NginxProvisioner{
+			cfg: Config{
+				GatewayPodConfig: &config.GatewayPodConfig{
+					Namespace: ngfNamespace,
+					Version:   "1.0.0",
+				},
+				AgentTLSSecretName: agentTLSTestSecretName,
+				AgentLabels:        make(map[string]string),
+				GatewayCtlrName:    gatewayCtlrName,
+			},
+			baseLabelSelector: metav1.LabelSelector{
+				MatchLabels: map[string]string{"app": "nginx"},
+			},
+			k8sClient: createFakeClientWithScheme(agentTLSSecret),
+		}
+	}
+
+	ipAddresses := []gatewayv1.GatewaySpecAddress{
+		{Type: helpers.GetPointer(gatewayv1.IPAddressType), Value: "10.0.0.1"},
+	}
+
 	tests := []struct {
-		nProxyCfg                     *graph.EffectiveNginxProxy
-		name                          string
-		expectedExternalTrafficPolicy corev1.ServiceExternalTrafficPolicy
-		gatewayAddresses              []gatewayv1.GatewaySpecAddress
-		expectedExternalIPs           []string
+		nProxyCfg        *graph.EffectiveNginxProxy
+		expectedLBClass  *string
+		name             string
+		gatewayCtlrName  string
+		gatewayAddresses []gatewayv1.GatewaySpecAddress
 	}{
 		{
-			name: "ClusterIP service with an IP-type Gateway address sets externalTrafficPolicy to Local",
-			gatewayAddresses: []gatewayv1.GatewaySpecAddress{
-				{
-					Type:  helpers.GetPointer(gatewayv1.IPAddressType),
-					Value: "10.0.0.1",
-				},
-			},
+			name:             "LB service + IP addresses + no user LBClass + GatewayCtlrName set → sets LoadBalancerClass",
+			gatewayCtlrName:  ctlrName,
+			gatewayAddresses: ipAddresses,
+			nProxyCfg:        nil,
+			expectedLBClass:  helpers.GetPointer(ctlrName),
+		},
+		{
+			name:             "LB service + IP addresses + user LBClass in nProxyCfg → sets LoadBalancerClass",
+			gatewayCtlrName:  ctlrName,
+			gatewayAddresses: ipAddresses,
 			nProxyCfg: &graph.EffectiveNginxProxy{
 				Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
 					Service: &ngfAPIv1alpha2.ServiceSpec{
-						ServiceType:           helpers.GetPointer(ngfAPIv1alpha2.ServiceTypeClusterIP),
-						ExternalTrafficPolicy: helpers.GetPointer(ngfAPIv1alpha2.ExternalTrafficPolicyLocal),
+						LoadBalancerClass: helpers.GetPointer("custom-lb-class"),
 					},
 				},
 			},
-			expectedExternalIPs:           []string{"10.0.0.1"},
-			expectedExternalTrafficPolicy: corev1.ServiceExternalTrafficPolicyLocal,
+			expectedLBClass: helpers.GetPointer(string(ctlrName)),
 		},
 		{
-			name: "ClusterIP service with no Gateway addresses leaves externalTrafficPolicy unset",
+			name:             "LB service + no IP addresses → LoadBalancerClass nil",
+			gatewayCtlrName:  ctlrName,
+			gatewayAddresses: nil,
+			nProxyCfg:        nil,
+			expectedLBClass:  nil,
+		},
+		{
+			name:             "ClusterIP service + IP addresses → LoadBalancerClass nil",
+			gatewayCtlrName:  ctlrName,
+			gatewayAddresses: ipAddresses,
 			nProxyCfg: &graph.EffectiveNginxProxy{
 				Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
 					Service: &ngfAPIv1alpha2.ServiceSpec{
@@ -2405,8 +2801,7 @@ func TestBuildNginxResourceObjects_ClusterIPWithExternalIPs(t *testing.T) {
 					},
 				},
 			},
-			expectedExternalIPs:           nil,
-			expectedExternalTrafficPolicy: "",
+			expectedLBClass: nil,
 		},
 	}
 
@@ -2415,29 +2810,7 @@ func TestBuildNginxResourceObjects_ClusterIPWithExternalIPs(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			agentTLSSecret := &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      agentTLSTestSecretName,
-					Namespace: ngfNamespace,
-				},
-				Data: map[string][]byte{secrets.TLSCertKey: []byte("tls")},
-			}
-			fakeClient := createFakeClientWithScheme(agentTLSSecret)
-
-			provisioner := &NginxProvisioner{
-				cfg: Config{
-					GatewayPodConfig: &config.GatewayPodConfig{
-						Namespace: ngfNamespace,
-						Version:   "1.0.0",
-					},
-					AgentTLSSecretName: agentTLSTestSecretName,
-					AgentLabels:        make(map[string]string),
-				},
-				baseLabelSelector: metav1.LabelSelector{
-					MatchLabels: map[string]string{"app": "nginx"},
-				},
-				k8sClient: fakeClient,
-			}
+			provisioner := makeProvisioner(test.gatewayCtlrName)
 
 			gateway := &gatewayv1.Gateway{
 				ObjectMeta: metav1.ObjectMeta{Name: "gw", Namespace: "default"},
@@ -2447,7 +2820,12 @@ func TestBuildNginxResourceObjects_ClusterIPWithExternalIPs(t *testing.T) {
 				},
 			}
 
-			objects, err := provisioner.buildNginxResourceObjects("gw-nginx", gateway, test.nProxyCfg)
+			objects, err := provisioner.buildNginxResourceObjects(
+				"gw-nginx",
+				gateway,
+				test.nProxyCfg,
+				graphListenersFromGateway(gateway),
+			)
 			g.Expect(err).ToNot(HaveOccurred())
 
 			var svc *corev1.Service
@@ -2458,9 +2836,13 @@ func TestBuildNginxResourceObjects_ClusterIPWithExternalIPs(t *testing.T) {
 				}
 			}
 			g.Expect(svc).ToNot(BeNil())
-			g.Expect(svc.Spec.Type).To(Equal(corev1.ServiceTypeClusterIP))
-			g.Expect(svc.Spec.ExternalIPs).To(Equal(test.expectedExternalIPs))
-			g.Expect(svc.Spec.ExternalTrafficPolicy).To(Equal(test.expectedExternalTrafficPolicy))
+			g.Expect(svc.Spec.ExternalIPs).To(BeNil())
+			if test.expectedLBClass == nil {
+				g.Expect(svc.Spec.LoadBalancerClass).To(BeNil())
+			} else {
+				g.Expect(svc.Spec.LoadBalancerClass).ToNot(BeNil())
+				g.Expect(*svc.Spec.LoadBalancerClass).To(Equal(*test.expectedLBClass))
+			}
 		})
 	}
 }
@@ -2554,7 +2936,12 @@ func TestBuildNginxResourceObjects_WAF(t *testing.T) {
 		},
 	}
 
-	objects, err := provisioner.buildNginxResourceObjects(resourceName, gateway, nProxyCfg)
+	objects, err := provisioner.buildNginxResourceObjects(
+		resourceName,
+		gateway,
+		nProxyCfg,
+		graphListenersFromGateway(gateway),
+	)
 	g.Expect(err).ToNot(HaveOccurred())
 
 	// 2 secrets (agentTLS, JWT) + 2 configmaps (includes, agent) + serviceaccount + service + deployment
@@ -2676,6 +3063,61 @@ func TestBuildNginxResourceObjects_WAF(t *testing.T) {
 	for _, expectedVolume := range wafVolumeMountNames {
 		g.Expect(volumeNames).To(ContainElement(expectedVolume))
 	}
+}
+
+func TestNginxContainerSecurityContext(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	provisioner := &NginxProvisioner{
+		cfg: Config{
+			GatewayPodConfig: &config.GatewayPodConfig{Version: "1.0.0"},
+		},
+	}
+
+	container := provisioner.buildNginxContainer(nil, nil)
+	g.Expect(container.SecurityContext).To(Equal(&corev1.SecurityContext{
+		Capabilities: &corev1.Capabilities{
+			Drop: []corev1.Capability{"ALL"},
+		},
+		AllowPrivilegeEscalation: helpers.GetPointer(false),
+		ReadOnlyRootFilesystem:   helpers.GetPointer(true),
+		RunAsGroup:               helpers.GetPointer[int64](1001),
+		RunAsUser:                helpers.GetPointer[int64](101),
+		SeccompProfile: &corev1.SeccompProfile{
+			Type: corev1.SeccompProfileTypeRuntimeDefault,
+		},
+	}))
+}
+
+func TestInitContainerSecurityContext(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	provisioner := &NginxProvisioner{
+		cfg: Config{
+			GatewayPodConfig: &config.GatewayPodConfig{
+				Version: "1.0.0",
+				Image:   "ngf-image",
+			},
+			AgentLabels: make(map[string]string),
+		},
+	}
+
+	initContainers := provisioner.buildInitContainers(nil)
+	g.Expect(initContainers).To(HaveLen(1))
+	g.Expect(initContainers[0].SecurityContext).To(Equal(&corev1.SecurityContext{
+		Capabilities: &corev1.Capabilities{
+			Drop: []corev1.Capability{"ALL"},
+		},
+		AllowPrivilegeEscalation: helpers.GetPointer(false),
+		ReadOnlyRootFilesystem:   helpers.GetPointer(true),
+		RunAsGroup:               helpers.GetPointer[int64](1001),
+		RunAsUser:                helpers.GetPointer[int64](101),
+		SeccompProfile: &corev1.SeccompProfile{
+			Type: corev1.SeccompProfileTypeRuntimeDefault,
+		},
+	}))
 }
 
 func TestDetermineNginxImageName(t *testing.T) {

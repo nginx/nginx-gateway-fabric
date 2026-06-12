@@ -21,11 +21,12 @@ func (g GeneratorImpl) executeStreamServers(conf dataplane.Configuration) []exec
 	splitClients := createStreamSplitClients(conf)
 
 	streamServerConfig := stream.ServerConfig{
-		Servers:      streamServers,
-		SplitClients: splitClients,
-		IPFamily:     getIPFamily(conf.BaseHTTPConfig),
-		Plus:         g.plus,
-		DNSResolver:  buildDNSResolver(conf.BaseStreamConfig.DNSResolver),
+		Servers:         streamServers,
+		SplitClients:    splitClients,
+		IPFamily:        getIPFamily(conf.BaseHTTPConfig),
+		Plus:            g.plus,
+		DNSResolver:     buildDNSResolver(conf.BaseStreamConfig.DNSResolver),
+		GatewaySecretID: conf.BaseHTTPConfig.GatewaySecretID,
 	}
 
 	streamServerResult := executeResult{
@@ -45,7 +46,7 @@ type portProtoKey struct {
 }
 
 func createStreamServers(logger logr.Logger, conf dataplane.Configuration) []stream.Server {
-	totalServers := len(conf.TLSPassthroughServers) + len(conf.TCPServers) + len(conf.UDPServers)
+	totalServers := len(conf.TLSServers) + len(conf.TCPServers) + len(conf.UDPServers)
 	if totalServers == 0 {
 		return nil
 	}
@@ -58,8 +59,12 @@ func createStreamServers(logger logr.Logger, conf dataplane.Configuration) []str
 		upstreams[u.Name] = u
 	}
 
-	for _, server := range conf.TLSPassthroughServers {
-		if len(server.Upstreams) > 0 {
+	for _, server := range conf.TLSServers {
+		if server.SSL != nil {
+			// TLS Terminate mode: create a socket server with SSL termination
+			streamServers = append(streamServers, createTLSTerminateSocketServer(server, upstreams, conf)...)
+		} else if len(server.Upstreams) > 0 {
+			// TLS Passthrough mode: create a socket server that proxies encrypted traffic
 			upstreamName := server.Upstreams[0].Name
 			if u, ok := upstreams[upstreamName]; ok && server.Hostname != "" && len(u.Endpoints) > 0 {
 				streamServer := stream.Server{
@@ -254,5 +259,97 @@ func createSplitClientForL4Server(server dataplane.Layer4VirtualServer) *stream.
 	return &stream.SplitClient{
 		VariableName:  fmt.Sprintf("backend_%d", server.Port),
 		Distributions: distributions,
+	}
+}
+
+// createTLSTerminateSocketServer creates stream socket servers for TLS Terminate mode.
+// These servers terminate TLS and proxy the decrypted TCP traffic to upstreams.
+func createTLSTerminateSocketServer(
+	server dataplane.Layer4VirtualServer,
+	upstreams map[string]dataplane.Upstream,
+	conf dataplane.Configuration,
+) []stream.Server {
+	if server.IsDefault {
+		// Default server for TLS Terminate: reject TLS handshake for unmatched traffic.
+		// Empty hostname defaults reject when no routes match the listener.
+		// Named hostname defaults reject when SNI doesn't match.
+		// Both cases use ssl_reject_handshake to avoid creating non-functional servers.
+		return []stream.Server{
+			{
+				Listen:   getSocketNameTLSTerminate(server.Port, server.Hostname),
+				IsSocket: true,
+				SSL: &stream.SSL{
+					RejectHandshake: true,
+				},
+				RewriteClientIP: getRewriteClientIPSettingsForStream(
+					conf.BaseHTTPConfig.RewriteClientIPSettings,
+				),
+			},
+		}
+	}
+
+	if len(server.Upstreams) == 0 || server.Hostname == "" {
+		return nil
+	}
+
+	upstreamName := server.Upstreams[0].Name
+	u, ok := upstreams[upstreamName]
+	if !ok || len(u.Endpoints) == 0 {
+		return nil
+	}
+
+	streamServer := stream.Server{
+		Listen:         getSocketNameTLSTerminate(server.Port, server.Hostname),
+		StatusZone:     server.Hostname,
+		ProxyPass:      upstreamName,
+		IsSocket:       true,
+		SSL:            buildStreamSSL(server.SSL),
+		ProxySSLVerify: buildStreamProxySSLVerify(server.VerifyTLS),
+	}
+	streamServer.RewriteClientIP = getRewriteClientIPSettingsForStream(
+		conf.BaseHTTPConfig.RewriteClientIPSettings,
+	)
+
+	return []stream.Server{streamServer}
+}
+
+func buildStreamProxySSLVerify(v *dataplane.VerifyTLS) *stream.ProxySSLVerify {
+	if v == nil {
+		return nil
+	}
+
+	trustedCert := v.RootCAPath
+	if v.CertBundleID != "" {
+		trustedCert = generateCertBundleFileName(v.CertBundleID)
+	}
+
+	return &stream.ProxySSLVerify{
+		TrustedCertificate: trustedCert,
+		Name:               v.Hostname,
+	}
+}
+
+// buildStreamSSL converts a dataplane SSL config into a stream.SSL config,
+// generating the PEM file paths for each certificate/key pair.
+func buildStreamSSL(ssl *dataplane.SSL) *stream.SSL {
+	if ssl == nil {
+		return nil
+	}
+
+	certs := make([]string, 0, len(ssl.KeyPairIDs))
+	keys := make([]string, 0, len(ssl.KeyPairIDs))
+
+	for _, id := range ssl.KeyPairIDs {
+		pemFile := generatePEMFileName(id)
+		certs = append(certs, pemFile)
+		keys = append(keys, pemFile)
+	}
+
+	return &stream.SSL{
+		Certificates:        certs,
+		CertificateKeys:     keys,
+		Protocols:           ssl.Protocols,
+		Ciphers:             ssl.Ciphers,
+		PreferServerCiphers: ssl.PreferServerCiphers,
 	}
 }

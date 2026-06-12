@@ -10,24 +10,29 @@ import (
 const DefaultNginxMetricsPort = int32(9113)
 
 type Config struct {
+	// PLMStorageConfig holds configuration for connecting to PLM's S3-compatible storage.
+	// Nil when PLM is not configured.
+	PLMStorageConfig *PLMStorageConfig
 	// AtomicLevel is an atomically changeable, dynamic logging level.
 	AtomicLevel zap.AtomicLevel
 	// GatewayPodConfig contains information about this Pod.
 	GatewayPodConfig GatewayPodConfig
 	// Logger is the Zap Logger used by all components.
 	Logger logr.Logger
-	// NGINXSCCName is the name of the SecurityContextConstraints for the NGINX Pods. Only applicable in OpenShift.
-	NGINXSCCName string
+	// GatewayClassName is the name of the GatewayClass resource that the Gateway will use.
+	GatewayClassName string
 	// ConfigName is the name of the NginxGateway resource for this controller.
 	ConfigName string
 	// AgentTLSSecretName is the name of the TLS Secret used by NGINX Agent to communicate with the control plane.
 	AgentTLSSecretName string
-	// GatewayClassName is the name of the GatewayClass resource that the Gateway will use.
-	GatewayClassName string
+	// ServerTLSDomain is the domain suffix used in the server TLS cert SAN and agent config host. Defaults to "svc".
+	ServerTLSDomain string
 	// ImageSource is the source of the NGINX Gateway image.
 	ImageSource string
 	// GatewayCtlrName is the name of this controller.
 	GatewayCtlrName string
+	// NGINXSCCName is the name of the SecurityContextConstraints for the NGINX Pods. Only applicable in OpenShift.
+	NGINXSCCName string
 	// UsageReportConfig specifies the NGINX Plus usage reporting configuration.
 	UsageReportConfig UsageReportConfig
 	// Flags contains the NGF command-line flag names and values.
@@ -60,6 +65,20 @@ type Config struct {
 	EndpointPickerDisableTLS bool
 	// EndpointPickerTLSSkipVerify indicates if secure verification is skipped for EndpointPicker communication.
 	EndpointPickerTLSSkipVerify bool
+}
+
+// PLMStorageConfig holds configuration for connecting to PLM's S3-compatible storage (SeaweedFS).
+type PLMStorageConfig struct {
+	// URL is the S3-compatible storage endpoint URL.
+	URL string
+	// CredentialsSecretName is the name of the Secret containing the S3 secret access key for PLM storage.
+	CredentialsSecretName string
+	// CASecretName is the name of the Secret containing the CA certificate for TLS verification.
+	CASecretName string
+	// ClientSSLSecretName is the name of the Secret containing client TLS cert/key for mutual TLS.
+	ClientSSLSecretName string
+	// SkipVerify disables TLS certificate verification (dev/test only).
+	SkipVerify bool
 }
 
 // GatewayPodConfig contains information about this Pod.

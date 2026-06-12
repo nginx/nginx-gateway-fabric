@@ -38,10 +38,15 @@ type ParentRef struct {
 	// Port is the network port this Route targets.
 	Port *v1.PortNumber
 	// EffectiveNginxProxy is the effective NGINX Proxy configuration for this ParentRef.
-	// Will be nil if ParentRef is not of Kind Gateway.
+	// For Gateway parents, this is the Gateway's EffectiveNginxProxy.
+	// For ListenerSet parents, this is inherited from the parent Gateway's EffectiveNginxProxy.
 	EffectiveNginxProxy *EffectiveNginxProxy
 	// NamespacedName is the NamespacedName of the ParentRef
 	NamespacedName types.NamespacedName
+	// GatewayNsName is the NamespacedName of the Gateway this ParentRef is associated with.
+	// For Gateway parents, this equals NamespacedName. For ListenerSet parents, this is the
+	// NamespacedName of the ListenerSet's parent Gateway.
+	GatewayNsName types.NamespacedName
 	// Kind is the Kind of the ParentRef, it can be either Gateway or ListenerSet.
 	Kind v1.Kind
 	// Idx is the index of the corresponding ParentReference in the Route.
@@ -293,6 +298,7 @@ func buildL4RoutesForGateways(
 	tcpRoutes map[types.NamespacedName]*v1alpha.TCPRoute,
 	udpRoutes map[types.NamespacedName]*v1alpha.UDPRoute,
 	services map[types.NamespacedName]*apiv1.Service,
+	backendTLSPolicies map[types.NamespacedName]*BackendTLSPolicy,
 	gws map[types.NamespacedName]*Gateway,
 	resolver *referenceGrantResolver,
 	listenerSets map[types.NamespacedName]*ListenerSet,
@@ -307,6 +313,7 @@ func buildL4RoutesForGateways(
 			route,
 			gws,
 			services,
+			backendTLSPolicies,
 			resolver.refAllowedFrom(fromTLSRoute(route.Namespace)),
 			listenerSets,
 		)
@@ -400,6 +407,47 @@ func buildRoutesForGateways(
 	return routes
 }
 
+// resolveParentRef finds the Gateway or ListenerSet for a parent reference and populates the ParentRef fields.
+// Returns the resolved Gateway and/or ListenerSet, or nil for both if the parent cannot be found.
+func resolveParentRef(
+	p v1.ParentReference,
+	kind string,
+	routeNamespace string,
+	gws map[types.NamespacedName]*Gateway,
+	listenerSets map[types.NamespacedName]*ListenerSet,
+	parentRef *ParentRef,
+) (*Gateway, *ListenerSet) {
+	switch kind {
+	case kinds.Gateway:
+		gw := findGatewayForParentRef(p, routeNamespace, gws)
+		if gw == nil {
+			return nil, nil
+		}
+		parentRef.EffectiveNginxProxy = gw.EffectiveNginxProxy
+		parentRef.NamespacedName = client.ObjectKeyFromObject(gw.Source)
+		parentRef.GatewayNsName = parentRef.NamespacedName
+
+		return gw, nil
+	case kinds.ListenerSet:
+		ls := findListenerSetForParentRef(p, routeNamespace, listenerSets)
+		if ls == nil {
+			return nil, nil
+		}
+		parentRef.NamespacedName = client.ObjectKeyFromObject(ls.Source)
+		if ls.Gateway != nil {
+			gwKey := client.ObjectKeyFromObject(ls.Gateway)
+			parentRef.GatewayNsName = gwKey
+			if parentGW, ok := gws[gwKey]; ok {
+				parentRef.EffectiveNginxProxy = parentGW.EffectiveNginxProxy
+			}
+		}
+
+		return nil, ls
+	}
+
+	return nil, nil
+}
+
 func buildSectionNameRefs(
 	parentRefs []v1.ParentReference,
 	routeNamespace string,
@@ -435,22 +483,9 @@ func buildSectionNameRefs(
 			Kind: v1.Kind(kind),
 		}
 
-		var gw *Gateway
-		var ls *ListenerSet
-		switch kind {
-		case kinds.Gateway:
-			gw = findGatewayForParentRef(p, routeNamespace, gws)
-			if gw == nil {
-				continue
-			}
-			parentRef.EffectiveNginxProxy = gw.EffectiveNginxProxy
-			parentRef.NamespacedName = client.ObjectKeyFromObject(gw.Source)
-		case kinds.ListenerSet:
-			ls = findListenerSetForParentRef(p, routeNamespace, listenerSets)
-			if ls == nil {
-				continue
-			}
-			parentRef.NamespacedName = client.ObjectKeyFromObject(ls.Source)
+		gw, ls := resolveParentRef(p, kind, routeNamespace, gws, listenerSets, &parentRef)
+		if gw == nil && ls == nil {
+			continue
 		}
 
 		k := key{

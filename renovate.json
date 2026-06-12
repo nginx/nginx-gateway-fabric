@@ -20,7 +20,7 @@
     },
     {
       "matchPackageNames": [
-        "registry.access.redhat.com/ubi9/**"
+        "registry.access.redhat.com/ubi10/**"
       ],
       "matchUpdateTypes": [
         "patch"

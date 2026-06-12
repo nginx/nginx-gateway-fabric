@@ -6,16 +6,16 @@ NGINX Plus: false
 
 NGINX Gateway Fabric:
 
-- Commit: 17c42c8bbbb004ba9c0e9b867396c5f8937207cd
-- Date: 2026-04-01T18:33:47Z
+- Commit: 28d0224c5f1617ace603b72889b5bb7aa272ea20
+- Date: 2026-06-01T17:32:15Z
 - Dirty: false
 
 GKE Cluster:
 
 - Node count: 12
-- k8s version: v1.35.1-gke.1396002
+- k8s version: v1.35.3-gke.1389002
 - vCPUs per node: 16
-- RAM per node: 64305Mi
+- RAM per node: 65848300Ki
 - Max pods per node: 110
 - Zone: us-west1-b
 - Instance Type: n2d-standard-16
@@ -24,19 +24,19 @@ GKE Cluster:
 
 ### Event Batch Processing
 
-- Total: 264
-- Average Time: 49ms
+- Total: 1289
+- Average Time: 9ms
 - Event Batch Processing distribution:
-	- 500.0ms: 254
-	- 1000.0ms: 264
-	- 5000.0ms: 264
-	- 10000.0ms: 264
-	- 30000.0ms: 264
-	- +Infms: 264
+	- 500.0ms: 1278
+	- 1000.0ms: 1289
+	- 5000.0ms: 1289
+	- 10000.0ms: 1289
+	- 30000.0ms: 1289
+	- +Infms: 1289
 
 ### Errors
 
-- NGF errors: 6
+- NGF errors: 9
 - NGF container restarts: 0
 - NGINX errors: 0
 - NGINX container restarts: 0
@@ -50,19 +50,19 @@ The logs are attached only if there are errors.
 
 ### Event Batch Processing
 
-- Total: 330
-- Average Time: 40ms
+- Total: 1349
+- Average Time: 7ms
 - Event Batch Processing distribution:
-	- 500.0ms: 319
-	- 1000.0ms: 330
-	- 5000.0ms: 330
-	- 10000.0ms: 330
-	- 30000.0ms: 330
-	- +Infms: 330
+	- 500.0ms: 1345
+	- 1000.0ms: 1349
+	- 5000.0ms: 1349
+	- 10000.0ms: 1349
+	- 30000.0ms: 1349
+	- +Infms: 1349
 
 ### Errors
 
-- NGF errors: 12
+- NGF errors: 8
 - NGF container restarts: 0
 - NGINX errors: 0
 - NGINX container restarts: 0
@@ -76,15 +76,15 @@ The logs are attached only if there are errors.
 
 ### Event Batch Processing
 
-- Total: 1013
-- Average Time: 154ms
+- Total: 2076
+- Average Time: 76ms
 - Event Batch Processing distribution:
-	- 500.0ms: 954
-	- 1000.0ms: 1013
-	- 5000.0ms: 1013
-	- 10000.0ms: 1013
-	- 30000.0ms: 1013
-	- +Infms: 1013
+	- 500.0ms: 2022
+	- 1000.0ms: 2076
+	- 5000.0ms: 2076
+	- 10000.0ms: 2076
+	- 30000.0ms: 2076
+	- +Infms: 2076
 
 ### Errors
 
@@ -102,19 +102,19 @@ The logs are attached only if there are errors.
 
 ### Event Batch Processing
 
-- Total: 91
-- Average Time: 167ms
+- Total: 80
+- Average Time: 123ms
 - Event Batch Processing distribution:
-	- 500.0ms: 83
-	- 1000.0ms: 91
-	- 5000.0ms: 91
-	- 10000.0ms: 91
-	- 30000.0ms: 91
-	- +Infms: 91
+	- 500.0ms: 75
+	- 1000.0ms: 80
+	- 5000.0ms: 80
+	- 10000.0ms: 80
+	- 30000.0ms: 80
+	- +Infms: 80
 
 ### Errors
 
-- NGF errors: 1
+- NGF errors: 2
 - NGF container restarts: 0
 - NGINX errors: 0
 - NGINX container restarts: 0
@@ -127,9 +127,9 @@ The logs are attached only if there are errors.
 ## Test TestScale_HTTPMatches
 
 ```text
-Requests      [total, rate, throughput]         30000, 1000.04, 1000.01
-Duration      [total, attack, wait]             30s, 29.999s, 741.932µs
-Latencies     [min, mean, 50, 90, 95, 99, max]  612.885µs, 799.729µs, 777.706µs, 887.424µs, 937.249µs, 1.095ms, 12.351ms
+Requests      [total, rate, throughput]         30000, 1000.04, 1000.00
+Duration      [total, attack, wait]             30s, 29.999s, 1.183ms
+Latencies     [min, mean, 50, 90, 95, 99, max]  736.413µs, 1.197ms, 1.154ms, 1.5ms, 1.604ms, 1.884ms, 31.531ms
 Bytes In      [total, mean]                     4830000, 161.00
 Bytes Out     [total, mean]                     0, 0.00
 Success       [ratio]                           100.00%
@@ -137,9 +137,9 @@ Status Codes  [code:count]                      200:30000
 Error Set:
 ```
 ```text
-Requests      [total, rate, throughput]         30000, 1000.02, 999.99
-Duration      [total, attack, wait]             30s, 29.999s, 905.48µs
-Latencies     [min, mean, 50, 90, 95, 99, max]  690.698µs, 909.184µs, 885.855µs, 1.009ms, 1.068ms, 1.251ms, 13.947ms
+Requests      [total, rate, throughput]         30000, 1000.01, 999.95
+Duration      [total, attack, wait]             30.002s, 30s, 1.821ms
+Latencies     [min, mean, 50, 90, 95, 99, max]  835.696µs, 1.374ms, 1.337ms, 1.667ms, 1.801ms, 2.271ms, 22.116ms
 Bytes In      [total, mean]                     4830000, 161.00
 Bytes Out     [total, mean]                     0, 0.00
 Success       [ratio]                           100.00%

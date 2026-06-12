@@ -8,6 +8,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -22,6 +23,7 @@ type NginxResources struct {
 	Gateway             *graph.Gateway
 	Deployment          metav1.ObjectMeta
 	HPA                 metav1.ObjectMeta
+	PDB                 metav1.ObjectMeta
 	DaemonSet           metav1.ObjectMeta
 	Service             metav1.ObjectMeta
 	ServiceAccount      metav1.ObjectMeta
@@ -152,6 +154,14 @@ func (s *store) registerResourceInGatewayConfig(gatewayNSName types.NamespacedNa
 			}
 		} else {
 			cfg.HPA = obj.ObjectMeta
+		}
+	case *policyv1.PodDisruptionBudget:
+		if cfg, ok := s.nginxResources[gatewayNSName]; !ok {
+			s.nginxResources[gatewayNSName] = &NginxResources{
+				PDB: obj.ObjectMeta,
+			}
+		} else {
+			cfg.PDB = obj.ObjectMeta
 		}
 	case *appsv1.DaemonSet:
 		if cfg, ok := s.nginxResources[gatewayNSName]; !ok {
@@ -299,7 +309,50 @@ func gatewayChanged(original, updated *graph.Gateway) bool {
 		return true
 	}
 
-	return !reflect.DeepEqual(original.EffectiveNginxProxy, updated.EffectiveNginxProxy)
+	if !reflect.DeepEqual(original.EffectiveNginxProxy, updated.EffectiveNginxProxy) {
+		return true
+	}
+
+	// Check if the effective set of listeners changed (e.g., due to ListenerSet additions/removals).
+	// We compare port/protocol pairs since those determine the Service and container ports.
+	return listenersChanged(original.Listeners, updated.Listeners)
+}
+
+// listenersChanged returns true if the set of listener names, ports, protocols, or hostnames
+// has changed. Order is intentionally ignored: the provisioner only cares about which ports
+// need to be exposed, not their order. Listener conflict resolution is handled upstream in
+// the graph builder and does not affect provisioned resources.
+func listenersChanged(original, updated []*graph.Listener) bool {
+	if len(original) != len(updated) {
+		return true
+	}
+
+	type listenerKey struct {
+		Name     string
+		Protocol gatewayv1.ProtocolType
+		Hostname string
+		Port     gatewayv1.PortNumber
+	}
+
+	buildSet := func(listeners []*graph.Listener) map[listenerKey]struct{} {
+		set := make(map[listenerKey]struct{}, len(listeners))
+		for _, l := range listeners {
+			hostname := ""
+			if l.Source.Hostname != nil {
+				hostname = string(*l.Source.Hostname)
+			}
+			key := listenerKey{
+				Name:     l.Name,
+				Port:     l.Source.Port,
+				Protocol: l.Source.Protocol,
+				Hostname: hostname,
+			}
+			set[key] = struct{}{}
+		}
+		return set
+	}
+
+	return !reflect.DeepEqual(buildSet(original), buildSet(updated))
 }
 
 func (s *store) getNginxResourcesForGateway(nsName types.NamespacedName) *NginxResources {
@@ -329,6 +382,10 @@ func (s *store) gatewayExistsForResource(object client.Object, nsName types.Name
 			}
 		case *autoscalingv2.HorizontalPodAutoscaler:
 			if resourceMatches(resources.HPA, nsName) {
+				return resources.Gateway
+			}
+		case *policyv1.PodDisruptionBudget:
+			if resourceMatches(resources.PDB, nsName) {
 				return resources.Gateway
 			}
 		case *appsv1.DaemonSet:
@@ -416,6 +473,10 @@ func (s *store) getResourceVersionForObject(gatewayNSName types.NamespacedName, 
 	case *autoscalingv2.HorizontalPodAutoscaler:
 		if resources.HPA.GetName() == obj.GetName() {
 			return resources.HPA.GetResourceVersion()
+		}
+	case *policyv1.PodDisruptionBudget:
+		if resources.PDB.GetName() == obj.GetName() {
+			return resources.PDB.GetResourceVersion()
 		}
 	case *appsv1.DaemonSet:
 		if resources.DaemonSet.GetName() == obj.GetName() {

@@ -401,7 +401,7 @@ func BuildBundleSources(
 	var sources []BundleSource
 
 	// Check if policySource has polling enabled.
-	if spec.PolicySource.Polling != nil && spec.PolicySource.Polling.Enabled {
+	if spec.PolicySource != nil && spec.PolicySource.Polling != nil && spec.PolicySource.Polling.Enabled {
 		interval := defaultPollingInterval
 		if spec.PolicySource.Polling.Interval != nil && spec.PolicySource.Polling.Interval.Duration > 0 {
 			interval = spec.PolicySource.Polling.Interval.Duration
@@ -410,7 +410,7 @@ func BuildBundleSources(
 		sources = append(sources, BundleSource{
 			Type:        PolicyBundle,
 			BundleKey:   graph.PolicyBundleKey(policyNsName),
-			Request:     graph.BuildPolicyFetchRequest(&spec.PolicySource, spec.Type, auth, tlsCA),
+			Request:     graph.BuildPolicyFetchRequest(spec.PolicySource, spec.Type, auth, tlsCA),
 			Description: "policy bundle",
 			Interval:    interval,
 		})
@@ -418,6 +418,9 @@ func BuildBundleSources(
 
 	// Check each logSource for polling.
 	for _, secLog := range spec.SecurityLogs {
+		if secLog.LogSource == nil {
+			continue
+		}
 		if secLog.LogSource.HTTPSource == nil && secLog.LogSource.NIMSource == nil && secLog.LogSource.N1CSource == nil {
 			continue // DefaultProfile, no polling needed.
 		}
@@ -432,9 +435,9 @@ func BuildBundleSources(
 
 		sources = append(sources, BundleSource{
 			Type:        LogProfileBundle,
-			BundleKey:   graph.LogBundleKey(policyNsName, &secLog.LogSource),
-			Request:     graph.BuildLogFetchRequest(&secLog.LogSource, auth, tlsCA),
-			Description: graph.LogBundleDescription(&secLog.LogSource),
+			BundleKey:   graph.LogBundleKey(policyNsName, secLog.LogSource),
+			Request:     graph.BuildLogFetchRequest(secLog.LogSource, auth, tlsCA),
+			Description: graph.LogBundleDescription(secLog.LogSource),
 			Interval:    interval,
 		})
 	}

@@ -110,9 +110,10 @@ type setupConfig struct {
 	telemetry     bool
 }
 
-func setup(cfg setupConfig, extraInstallArgs ...string) {
-	log.SetLogger(GinkgoLogr)
-
+// newResourceManager builds a ResourceManager with a fully-configured client. It does not set any
+// package-level globals, so it can be used both by setup() (per-proc) and by the synchronized
+// before/after suite phases (which run before setup() populates the globals).
+func newResourceManager() framework.ResourceManager {
 	k8sConfig := ctlr.GetConfigOrDie()
 	scheme := k8sRuntime.NewScheme()
 	Expect(core.AddToScheme(scheme)).To(Succeed())
@@ -124,25 +125,29 @@ func setup(cfg setupConfig, extraInstallArgs ...string) {
 	Expect(ngfAPIv1alpha1.AddToScheme(scheme)).To(Succeed())
 	Expect(ngfAPIv1alpha2.AddToScheme(scheme)).To(Succeed())
 
-	options := client.Options{
-		Scheme: scheme,
-	}
-	var err error
-	k8sClient, err = client.New(k8sConfig, options)
+	cl, err := client.New(k8sConfig, client.Options{Scheme: scheme})
 	Expect(err).ToNot(HaveOccurred())
 
 	clientGoClient, err := kubernetes.NewForConfig(k8sConfig)
 	Expect(err).ToNot(HaveOccurred())
 
-	timeoutConfig = framework.DefaultTimeoutConfig()
-	resourceManager = framework.ResourceManager{
-		K8sClient:      k8sClient,
+	return framework.ResourceManager{
+		K8sClient:      cl,
 		ClientGoClient: clientGoClient,
 		K8sConfig:      k8sConfig,
 		FS:             manifests,
-		TimeoutConfig:  timeoutConfig,
+		TimeoutConfig:  framework.DefaultTimeoutConfig(),
 	}
+}
 
+func setup(cfg setupConfig, extraInstallArgs ...string) {
+	log.SetLogger(GinkgoLogr)
+
+	resourceManager = newResourceManager()
+	k8sClient = resourceManager.K8sClient
+	timeoutConfig = resourceManager.TimeoutConfig
+
+	var err error
 	clusterInfo, err = resourceManager.GetClusterInfo()
 	Expect(err).ToNot(HaveOccurred())
 
@@ -189,6 +194,14 @@ func setup(cfg setupConfig, extraInstallArgs ...string) {
 
 	if !cfg.deploy {
 		return
+	}
+
+	// When running the WAF suite, configure NGF with the PLM storage flags so that type: PLM
+	// WAFPolicies can fetch bundles from PLM's in-cluster SeaweedFS storage. PLM itself is a
+	// cluster-scoped singleton installed once in SynchronizedBeforeSuite (not here, which runs in
+	// every parallel proc). HTTP/NIM/N1C source tests are unaffected.
+	if plmEnabled(GinkgoLabelFilter()) {
+		extraInstallArgs = append(extraInstallArgs, plmNGFInstallArgs()...)
 	}
 
 	installCfg := createNGFInstallConfig(cfg, extraInstallArgs...)
@@ -359,6 +372,15 @@ var _ = SynchronizedBeforeSuite(
 		output, err = framework.InstallNGFCRDs(chartPath)
 		Expect(err).ToNot(HaveOccurred(), string(output))
 
+		// Install PLM once for the whole suite (it is a cluster-scoped singleton). Doing it here,
+		// before any per-proc NGF install in phase 2, ensures the storage Service and credentials
+		// Secret exist when NGF starts, and avoids the release/namespace collisions that would occur
+		// if it were installed from per-proc setup() under --procs > 1. Gated on the same
+		// prerequisites the WAF specs use so we do not install it when the specs will skip.
+		if plmEnabled(GinkgoLabelFilter()) {
+			installPLM()
+		}
+
 		return nil
 	},
 	// Phase 2: runs on all procs after phase 1 completes.
@@ -436,12 +458,73 @@ var _ = SynchronizedAfterSuite(
 			return
 		}
 
+		// Tear down the PLM controller (installed once in phase 1) after all per-proc NGF releases
+		// are gone. Done here in phase 2 so the cluster-scoped singleton is uninstalled exactly once.
+		if plmEnabled(GinkgoLabelFilter()) {
+			output, err := framework.UninstallPLM()
+			Expect(err).ToNot(HaveOccurred(), string(output))
+			// With the PLM controller gone, the finalizers on its APSignatures resources would
+			// otherwise block deletion of the PLM namespace; clear them first.
+			framework.RemovePLMFinalizers()
+			Expect(resourceManager.DeleteNamespace(framework.PLMNamespace)).To(Succeed())
+		}
+
 		Expect(framework.DeleteNGFCRDs(resourceManager)).To(Succeed())
 
 		output, err := framework.UninstallGatewayAPI(*gatewayAPIVersion)
 		Expect(err).ToNot(HaveOccurred(), string(output))
 	},
 )
+
+// installPLM creates the registry image pull secret in the PLM namespace and installs the PLM
+// controller (f5-waf-policy-controller). It must be called once for the whole suite (from
+// SynchronizedBeforeSuite phase 1) because PLM is a cluster-scoped singleton with a fixed
+// namespace/release name; installing it from per-proc setup() would race under --procs > 1.
+func installPLM() {
+	GinkgoWriter.Printf("Setting up PLM (f5-waf-policy-controller) for the WAF suite\n")
+
+	// The PLM controller and SeaweedFS images come from private-registry.nginx.com; reuse the same
+	// registry JWT used for the NGINX Plus data plane to create the image pull secret in the PLM
+	// namespace before installing the chart. A standalone ResourceManager is used because the
+	// package-level one is not populated until setup() runs in phase 2.
+	Expect(*nginxImageJWTFileName).ToNot(BeEmpty(),
+		"WAF suite requires --nginx-image-jwt-file-name to pull PLM images")
+	rm := newResourceManager()
+	Expect(framework.CreateImagePullSecret(rm, framework.PLMNamespace, *nginxImageJWTFileName)).
+		To(Succeed())
+
+	output, err := framework.InstallPLM()
+	Expect(err).ToNot(HaveOccurred(), string(output))
+}
+
+// plmNGFInstallArgs returns the Helm value args that configure NGF to fetch type: PLM WAFPolicy
+// bundles from PLM's in-cluster SeaweedFS S3 storage. The referenced storage URL and credentials
+// Secret are static (derived from the PLM release name/namespace), so each per-proc NGF install can
+// compute them without re-installing PLM.
+func plmNGFInstallArgs() []string {
+	// NGF reads the SeaweedFS credentials Secret from the PLM namespace via the cross-namespace
+	// "<namespace>/<name>" form. watchNamespaces is left empty (all namespaces) so NGF can see the
+	// Secret and any APPolicy/APLogConf resources regardless of namespace. The SeaweedFS filer is
+	// installed with certificates disabled, so PLMStorageURL is plain HTTP and no TLS config is set.
+	credsRef := fmt.Sprintf("%s/%s", framework.PLMNamespace, framework.PLMCredentialsSecretName)
+
+	return []string{
+		"--set", "nginxGateway.plmStorage.url=" + framework.PLMStorageURL,
+		"--set", "nginxGateway.plmStorage.credentialsSecretName=" + credsRef,
+	}
+}
+
+func isWAF(labelFilter string) bool {
+	return strings.Contains(labelFilter, "waf")
+}
+
+// plmEnabled reports whether the PLM controller should be installed for this run. It mirrors the
+// prerequisites the WAF specs use to skip (see waf_policy_test.go): the WAF label must be active,
+// NGINX Plus with WAF images must be enabled, and the run must be on amd64 (NAP WAF only supports
+// amd64, not arm64). This prevents suite setup from installing PLM when the specs will skip.
+func plmEnabled(labelFilter string) bool {
+	return isWAF(labelFilter) && *wafEnabled && runtime.GOARCH == "amd64"
+}
 
 func isNFR(labelFilter string) bool {
 	return strings.Contains(labelFilter, "nfr") ||

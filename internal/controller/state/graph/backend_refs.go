@@ -513,10 +513,9 @@ func checkExternalNameValidForGateways(
 	invalidForGateways map[types.NamespacedName]conditions.Condition,
 ) map[types.NamespacedName]conditions.Condition {
 	for _, parentRef := range parentRefs {
-		if parentRef.Kind == kinds.Gateway &&
-			(parentRef.EffectiveNginxProxy == nil ||
-				parentRef.EffectiveNginxProxy.DNSResolver == nil) {
-			invalidForGateways[parentRef.NamespacedName] = conditions.NewRouteBackendRefUnsupportedValue(
+		if parentRef.EffectiveNginxProxy == nil ||
+			parentRef.EffectiveNginxProxy.DNSResolver == nil {
+			invalidForGateways[parentRef.GatewayNsName] = conditions.NewRouteBackendRefUnsupportedValue(
 				"ExternalName service requires DNS resolver configuration in Gateway's NginxProxy",
 			)
 		}
@@ -723,12 +722,8 @@ func validateRouteBackendRefAppProtocol(
 	// Currently we only support recognition of the Kubernetes Standard Application Protocols defined in KEP-3726.
 	switch appProtocol {
 	case AppProtocolTypeH2C:
-		if routeType == RouteTypeGRPC {
+		if routeType == RouteTypeGRPC || routeType == RouteTypeHTTP {
 			return nil
-		}
-
-		if routeType == RouteTypeHTTP {
-			return fmt.Errorf("%w; nginx does not support proxying to upstreams with http2 or h2c", err)
 		}
 
 		return err

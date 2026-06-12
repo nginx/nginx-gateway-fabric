@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.23
+# syntax=docker/dockerfile:1.24
 FROM scratch AS nginx-files
 
 # Repository and key files for UBI-based builds
@@ -6,14 +6,15 @@ ADD --link --chown=101:1001 https://nginx.org/keys/nginx_signing.key nginx_signi
 ADD --link --chown=101:1001 build/ubi/repos/nginx.repo nginx.repo
 ADD --link --chown=101:1001 build/ubi/repos/agent.repo agent.repo
 
-FROM ghcr.io/nginx/dependencies/nginx-ubi:ubi9@sha256:edefd779f98fd3ba4bb92a795dde41be345664e6e531840b5682e947b0674307 AS ubi9-packages
+FROM ghcr.io/nginx/dependencies/nginx-ubi:ubi10@sha256:3998f88d4de99423119b61b47d2bd3d995be7a1368014f5edd8e63f93f946445 AS ubi10-packages
 
-FROM registry.access.redhat.com/ubi9/ubi-minimal:9.7 AS ubi-nginx
+FROM registry.access.redhat.com/ubi10/ubi-minimal:10.2 AS ubi-nginx
 
-RUN microdnf -y update glib2 && microdnf clean all
+# renovate: datasource=github-tags depName=nginx/nginx
+ARG NGINX_VERSION=1.31.1
 
 # renovate: datasource=github-tags depName=nginx/agent
-ARG NGINX_AGENT_VERSION=v3.9.1
+ARG NGINX_AGENT_VERSION=v3.10.4
 ARG NJS_DIR
 ARG NGINX_CONF_DIR
 ARG BUILD_AGENT
@@ -33,16 +34,17 @@ COPY --link --chown=101:1001 LICENSE /licenses/
 RUN --mount=type=bind,from=nginx-files,src=nginx_signing.key,target=/tmp/nginx_signing.key \
     --mount=type=bind,from=nginx-files,src=nginx.repo,target=/etc/yum.repos.d/nginx.repo \
     --mount=type=bind,from=nginx-files,src=agent.repo,target=/etc/yum.repos.d/agent.repo \
-    --mount=type=bind,from=ubi9-packages,src=/,target=/ubi-bin/ \
+    --mount=type=bind,from=ubi10-packages,src=/,target=/ubi-bin/ \
     # Import NGINX signing key
     rpm --import /tmp/nginx_signing.key \
     # Install c-ares from the dependencies image (contains required libs)
     && rpm -Uvh /ubi-bin/c-ares-*.rpm \
     # Create nginx user with consistent UID/GID
+    && microdnf --nodocs install -y shadow-utils \
     && groupadd -g 1001 nginx \
     && useradd -r -u 101 -g nginx -s /sbin/nologin -d /var/cache/nginx nginx \
     # Install NGINX and modules including OTEL
-    && microdnf --nodocs install -y nginx nginx-module-njs nginx-module-otel \
+    && microdnf --nodocs install -y nginx-${NGINX_VERSION} nginx-module-njs-${NGINX_VERSION}* nginx-module-otel-${NGINX_VERSION}* \
     # Install nginx-agent
     && microdnf --nodocs install -y nginx-agent-${NGINX_AGENT_VERSION#v}* \
     # Clean up

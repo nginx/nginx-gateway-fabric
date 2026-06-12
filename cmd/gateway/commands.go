@@ -6,6 +6,7 @@ import (
 	"os"
 	"runtime/debug"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -40,6 +41,12 @@ const (
 	nginxOneTelemetryEndpointHost   = "agent.connect.nginx.com"
 	endpointPickerDisableTLSFlag    = "endpoint-picker-disable-tls"
 	endpointPickerTLSSkipVerifyFlag = "endpoint-picker-tls-skip-verify"
+
+	plmStorageURLFlag               = "plm-storage-url"
+	plmStorageCredentialsSecretFlag = "plm-storage-credentials-secret" //nolint:gosec // not credentials
+	plmStorageCASecretFlag          = "plm-storage-ca-secret"          //nolint:gosec // not credentials
+	plmStorageClientSSLSecretFlag   = "plm-storage-client-ssl-secret"  //nolint:gosec // not credentials
+	plmStorageSkipVerifyFlag        = "plm-storage-skip-verify"
 )
 
 // usageReportParams holds the parameters for building the usage report configuration for PLUS.
@@ -51,6 +58,15 @@ type usageReportParams struct {
 	Resolver             stringValidatingValue
 	SkipVerify           bool
 	EnforceInitialReport bool
+}
+
+// plmStorageParams holds the parameters for building the PLM storage configuration.
+type plmStorageParams struct {
+	URL               stringValidatingValue
+	CredentialsSecret stringValidatingValue
+	CASecret          stringValidatingValue
+	ClientSSLSecret   stringValidatingValue
+	SkipVerify        bool
 }
 
 func createRootCommand() *cobra.Command {
@@ -98,6 +114,7 @@ func createControllerCommand() *cobra.Command {
 		snippetsFlag                        = "snippets"
 		nginxSCCFlag                        = "nginx-scc"
 		watchNamespacesFlag                 = "watch-namespaces"
+		serverTLSDomainFlag                 = "server-tls-domain"
 	)
 
 	// flag values
@@ -172,7 +189,27 @@ func createControllerCommand() *cobra.Command {
 		watchNamespaces = stringSliceValidatingValue{
 			validator: validateResourceName,
 		}
+
+		serverTLSDomain = stringValidatingValue{
+			validator: validateResourceName,
+			value:     "svc",
+		}
 	)
+
+	plmParams := plmStorageParams{
+		URL: stringValidatingValue{
+			validator: validateURL,
+		},
+		CredentialsSecret: stringValidatingValue{
+			validator: validateNamespacedResourceName,
+		},
+		CASecret: stringValidatingValue{
+			validator: validateNamespacedResourceName,
+		},
+		ClientSSLSecret: stringValidatingValue{
+			validator: validateNamespacedResourceName,
+		},
+	}
 
 	usageReportParams := usageReportParams{
 		SecretName: stringValidatingValue{
@@ -196,6 +233,9 @@ func createControllerCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "controller",
 		Short: "Run the NGINX Gateway Fabric control plane",
+		PreRunE: func(_ *cobra.Command, _ []string) error {
+			return validatePLMSecretNamespacesWatched(plmParams, watchNamespaces.values, os.Getenv("POD_NAMESPACE"))
+		},
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			atom := zap.NewAtomicLevel()
 
@@ -244,6 +284,8 @@ func createControllerCommand() *cobra.Command {
 					return err
 				}
 			}
+
+			plmStorageConfig := buildPLMStorageConfig(plmParams)
 
 			flagKeys, flagValues := parseFlags(cmd.Flags())
 
@@ -302,6 +344,8 @@ func createControllerCommand() *cobra.Command {
 				EndpointPickerDisableTLS:    endpointPickerDisableTLS,
 				EndpointPickerTLSSkipVerify: endpointPickerTLSSkipVerify,
 				WatchNamespaces:             watchNamespaces.values,
+				ServerTLSDomain:             serverTLSDomain.value,
+				PLMStorageConfig:            plmStorageConfig,
 			}
 
 			if err := controller.StartManager(conf); err != nil {
@@ -546,6 +590,46 @@ func createControllerCommand() *cobra.Command {
 			`The controller's own namespace is always watched.`,
 	)
 
+	cmd.Flags().Var(
+		&serverTLSDomain,
+		serverTLSDomainFlag,
+		`The domain suffix used in the server TLS certificate SAN and agent config host. Defaults to "svc".`,
+	)
+
+	cmd.Flags().Var(
+		&plmParams.URL,
+		plmStorageURLFlag,
+		"The URL of the PLM S3-compatible storage endpoint. Required when any WAFPolicy uses type: PLM.",
+	)
+
+	cmd.Flags().Var(
+		&plmParams.CredentialsSecret,
+		plmStorageCredentialsSecretFlag,
+		"The name of the Secret containing the PLM S3 credentials key (seaweedfs_admin_secret). "+
+			"Use \"name\" for the controller namespace or \"namespace/name\" for a watched namespace.",
+	)
+
+	cmd.Flags().Var(
+		&plmParams.CASecret,
+		plmStorageCASecretFlag,
+		"The name of the Secret containing the CA certificate for verifying PLM storage TLS. "+
+			"Use \"name\" for the controller namespace or \"namespace/name\" for a watched namespace.",
+	)
+
+	cmd.Flags().Var(
+		&plmParams.ClientSSLSecret,
+		plmStorageClientSSLSecretFlag,
+		"The name of the Secret containing client TLS certificate and key for mutual TLS with PLM storage. "+
+			"Use \"name\" for the controller namespace or \"namespace/name\" for a watched namespace.",
+	)
+
+	cmd.Flags().BoolVar(
+		&plmParams.SkipVerify,
+		plmStorageSkipVerifyFlag,
+		false,
+		"Disable TLS certificate verification when connecting to PLM storage. Not recommended for production.",
+	)
+
 	return cmd
 }
 
@@ -565,6 +649,73 @@ func buildUsageReportConfig(params usageReportParams) (config.UsageReportConfig,
 	}, nil
 }
 
+func buildPLMStorageConfig(params plmStorageParams) *config.PLMStorageConfig {
+	if params.URL.value == "" {
+		return nil
+	}
+
+	return &config.PLMStorageConfig{
+		URL:                   params.URL.value,
+		CredentialsSecretName: params.CredentialsSecret.value,
+		CASecretName:          params.CASecret.value,
+		ClientSSLSecretName:   params.ClientSSLSecret.value,
+		SkipVerify:            params.SkipVerify,
+	}
+}
+
+func validatePLMSecretNamespacesWatched(
+	params plmStorageParams,
+	watchNamespaces []string,
+	controllerNamespace string,
+) error {
+	if params.URL.value == "" {
+		return nil
+	}
+
+	if len(watchNamespaces) == 0 {
+		return nil
+	}
+
+	watchedNamespacesSet := make(map[string]struct{}, len(watchNamespaces)+1)
+	for _, namespace := range watchNamespaces {
+		watchedNamespacesSet[namespace] = struct{}{}
+	}
+	// The controller's own namespace is always watched at runtime (see buildManagerCache in
+	// internal/controller/manager.go), so secrets explicitly scoped to it are valid even when
+	// it is not listed in --watch-namespaces.
+	if controllerNamespace != "" {
+		watchedNamespacesSet[controllerNamespace] = struct{}{}
+	}
+
+	secretFlags := []struct {
+		flagName string
+		value    string
+	}{
+		{flagName: plmStorageCredentialsSecretFlag, value: params.CredentialsSecret.value},
+		{flagName: plmStorageCASecretFlag, value: params.CASecret.value},
+		{flagName: plmStorageClientSSLSecretFlag, value: params.ClientSSLSecret.value},
+	}
+
+	for _, secretFlag := range secretFlags {
+		namespace, _, hasExplicitNamespace := strings.Cut(secretFlag.value, "/")
+		if !hasExplicitNamespace {
+			continue
+		}
+
+		if _, ok := watchedNamespacesSet[namespace]; ok {
+			continue
+		}
+
+		return fmt.Errorf(
+			"--%s references namespace %q, which is not included in --watch-namespaces",
+			secretFlag.flagName,
+			namespace,
+		)
+	}
+
+	return nil
+}
+
 func createGenerateCertsCommand() *cobra.Command {
 	// flag names
 	const (
@@ -573,6 +724,7 @@ func createGenerateCertsCommand() *cobra.Command {
 		serviceFlag         = "service"
 		clusterDomainFlag   = "cluster-domain"
 		overwriteFlag       = "overwrite"
+		serverTLSDomainFlag = "server-tls-domain"
 	)
 
 	// flag values
@@ -592,6 +744,10 @@ func createGenerateCertsCommand() *cobra.Command {
 			validator: validateQualifiedName,
 			value:     defaultDomain,
 		}
+		serverTLSDomain = stringValidatingValue{
+			validator: validateResourceName,
+			value:     "svc",
+		}
 		overwrite bool
 	)
 
@@ -604,7 +760,7 @@ func createGenerateCertsCommand() *cobra.Command {
 				return fmt.Errorf("POD_NAMESPACE must be specified in the ENV")
 			}
 
-			certConfig, err := generateCertificates(serviceName.value, namespace, clusterDomain.value)
+			certConfig, err := generateCertificates(serviceName.value, namespace, clusterDomain.value, serverTLSDomain.value)
 			if err != nil {
 				return fmt.Errorf("error generating certificates: %w", err)
 			}
@@ -657,6 +813,12 @@ func createGenerateCertsCommand() *cobra.Command {
 		&clusterDomain,
 		clusterDomainFlag,
 		`The DNS domain of your Kubernetes cluster.`,
+	)
+
+	cmd.Flags().Var(
+		&serverTLSDomain,
+		serverTLSDomainFlag,
+		`The domain suffix used in the server TLS certificate SAN. Defaults to "svc".`,
 	)
 
 	cmd.Flags().BoolVar(

@@ -3,8 +3,10 @@ package v1alpha2
 import (
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 
 	"github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 )
@@ -21,7 +23,7 @@ import (
 // If referenced from a Gateway, the settings apply to that Gateway alone. If both a Gateway and its GatewayClass
 // reference an NginxProxy, the settings are merged. Settings specified on the Gateway NginxProxy override those
 // set on the GatewayClass NginxProxy.
-type NginxProxy struct { //nolint:govet // standard field alignment, don't change it
+type NginxProxy struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
@@ -118,11 +120,49 @@ type NginxProxySpec struct {
 	//
 	// +optional
 	ServerTokens *string `json:"serverTokens,omitempty"`
+	// Compression defines the configuration for HTTP response compression.
+	// When set, NGINX compresses responses for clients that support it,
+	// reducing bandwidth usage.
+	//
+	// +optional
+	Compression *Compression `json:"compression,omitempty"`
 	// WAF configures NGINX App Protect WAF functionality.
 	//
 	// +optional
 	WAF *WAFSpec `json:"waf,omitempty"`
+	// DisableBaseHeaders specifies which default X-* base headers should be omitted
+	// from being added to the base proxy_set_header directives in the NGINX configuration.
+	// This allows users to set these headers themselves without NGF overriding them.
+	//
+	// Supported values are limited to X-* base headers and "*".
+	// A value of "*" disables all X-* base headers.
+	//
+	// +optional
+	// +listType=set
+	// +kubebuilder:validation:MaxItems=6
+	DisableBaseHeaders []BaseHeaderName `json:"disableBaseHeaders,omitempty"`
 }
+
+// BaseHeaderName is the name of a base X-* header that can be disabled
+// from being added to the base proxy_set_header directives in the NGINX configuration.
+//
+// +kubebuilder:validation:Enum=*;X-Forwarded-For;X-Forwarded-Proto;X-Forwarded-Host;X-Forwarded-Port;X-Real-IP
+type BaseHeaderName string
+
+const (
+	// AllXBaseHeaders disables all X-* base headers.
+	AllXBaseHeaders BaseHeaderName = "*"
+	// HeaderXForwardedFor is the X-Forwarded-For header.
+	HeaderXForwardedFor BaseHeaderName = "X-Forwarded-For"
+	// HeaderXForwardedProto is the X-Forwarded-Proto header.
+	HeaderXForwardedProto BaseHeaderName = "X-Forwarded-Proto"
+	// HeaderXForwardedHost is the X-Forwarded-Host header.
+	HeaderXForwardedHost BaseHeaderName = "X-Forwarded-Host"
+	// HeaderXForwardedPort is the X-Forwarded-Port header.
+	HeaderXForwardedPort BaseHeaderName = "X-Forwarded-Port"
+	// HeaderXRealIP is the X-Real-IP header.
+	HeaderXRealIP BaseHeaderName = "X-Real-IP"
+)
 
 // WAFSpec configures NGINX App Protect WAF.
 type WAFSpec struct {
@@ -165,7 +205,7 @@ type Telemetry struct {
 	Exporter *TelemetryExporter `json:"exporter,omitempty"`
 
 	// ServiceName is the "service.name" attribute of the OpenTelemetry resource.
-	// Default is 'ngf:<gateway-namespace>:<gateway-name>'. If a value is provided by the user,
+	// Default is 'ngf:gateway-namespace:gateway-name'. If a value is provided by the user,
 	// then the default becomes a prefix to that value.
 	//
 	// +optional
@@ -332,6 +372,10 @@ const (
 )
 
 // NginxLogging defines logging related settings for NGINX.
+//
+// +kubebuilder:validation:XValidation:message="JSON-formatted error logs are not supported when errorLevel is debug",rule="!(has(self.errorLogFormat) && self.errorLogFormat == 'json' && has(self.errorLevel) && self.errorLevel == 'debug')"
+//
+//nolint:lll
 type NginxLogging struct {
 	// ErrorLevel defines the error log level. Possible log levels listed in order of increasing severity are
 	// debug, info, notice, warn, error, crit, alert, and emerg. Setting a certain log level will cause all messages
@@ -341,6 +385,16 @@ type NginxLogging struct {
 	// +optional
 	// +kubebuilder:default=info
 	ErrorLevel *NginxErrorLogLevel `json:"errorLevel,omitempty"`
+
+	// ErrorLogFormat controls the output format of the NGINX error_log directive.
+	// Set to 'json' to enable JSON-formatted error logs for NGINX Plus only and
+	// cannot be combined with errorLevel: debug.
+	// When set to 'json', NGINX Gateway Fabric also emits a JSON-formatted access log
+	// if the user has not supplied a custom access log format.
+	// See https://nginx.org/en/docs/ngx_core_module.html#error_log
+	//
+	// +optional
+	ErrorLogFormat *NginxErrorLogFormat `json:"errorLogFormat,omitempty"`
 
 	// AgentLevel defines the log level of the NGINX agent process. Changing this value results in a
 	// re-roll of the NGINX deployment.
@@ -355,6 +409,19 @@ type NginxLogging struct {
 	// +optional
 	AccessLog *NginxAccessLog `json:"accessLog,omitempty"`
 }
+
+// NginxErrorLogFormat defines the output format for NGINX error logs.
+//
+// +kubebuilder:validation:Enum=default;json
+type NginxErrorLogFormat string
+
+const (
+	// NginxErrorLogFormatDefault uses NGINX's standard error log format.
+	NginxErrorLogFormatDefault NginxErrorLogFormat = "default"
+
+	// NginxErrorLogFormatJSON enables JSON-formatted error logs. Requires NGINX Plus.
+	NginxErrorLogFormatJSON NginxErrorLogFormat = "json"
+)
 
 // NginxErrorLogLevel type defines the log level of error logs for NGINX.
 //
@@ -601,6 +668,12 @@ type DeploymentSpec struct {
 	// +optional
 	Autoscaling *AutoscalingSpec `json:"autoscaling,omitempty"`
 
+	// PodDisruptionBudget is the configuration for limiting the number of concurrent disruptions of a pod.
+	// A PodDisruptionBudget is created when this field is set.
+	//
+	// +optional
+	PodDisruptionBudget *PodDisruptionBudgetSpec `json:"podDisruptionBudget,omitempty"`
+
 	// WAFContainers defines container specifications for NGINX App Protect WAF v5 containers.
 	// These containers are only deployed when WAF is enabled in the NginxProxy spec.
 	//
@@ -645,6 +718,36 @@ type DaemonSetSpec struct {
 	//
 	// +optional
 	Patches []Patch `json:"patches,omitempty"`
+}
+
+// PodDisruptionBudgetSpec is the configuration for PodDisruptionBudget,
+// which limits the number of concurrent disruptions of a pod.
+//
+// +kubebuilder:validation:XValidation:message="exactly one of minAvailable or maxUnavailable must be set",rule="(has(self.minAvailable) && !has(self.maxUnavailable)) || (!has(self.minAvailable) && has(self.maxUnavailable))"
+//
+//nolint:lll
+type PodDisruptionBudgetSpec struct {
+	// MinAvailable is the minimum number of pods that must be available after an eviction.
+	// Value can be an absolute number (e.g. 1) or a percentage of desired pods (e.g. 50%).
+	// Mutually exclusive with MaxUnavailable.
+	//
+	// +optional
+	MinAvailable *intstr.IntOrString `json:"minAvailable,omitempty"`
+
+	// MaxUnavailable is the maximum number of pods that can be unavailable after an eviction.
+	// Value can be an absolute number (e.g. 1) or a percentage of desired pods (e.g. 50%).
+	// Mutually exclusive with MinAvailable.
+	//
+	// +optional
+	MaxUnavailable *intstr.IntOrString `json:"maxUnavailable,omitempty"`
+
+	// UnhealthyPodEvictionPolicy defines when unhealthy pods should be considered for eviction.
+	// Valid values are IfHealthyBudget and AlwaysAllow.
+	// Defaults to IfHealthyBudget if not set.
+	//
+	// +optional
+	// +kubebuilder:validation:Enum=IfHealthyBudget;AlwaysAllow
+	UnhealthyPodEvictionPolicy *policyv1.UnhealthyPodEvictionPolicyType `json:"unhealthyPodEvictionPolicy,omitempty"`
 }
 
 // AutoscalingSpec is the configuration for the Horizontal Pod Autoscaling.
@@ -888,8 +991,7 @@ type ServiceSpec struct {
 	ServiceType *ServiceType `json:"type,omitempty"`
 
 	// ExternalTrafficPolicy describes how nodes distribute service traffic they
-	// receive on one of the Service's "externally-facing" addresses (NodePorts, ExternalIPs,
-	// and LoadBalancer IPs).
+	// receive on one of the Service's "externally-facing" addresses (NodePorts and LoadBalancer IPs).
 	//
 	// +optional
 	// +kubebuilder:default=Local
@@ -945,8 +1047,7 @@ const (
 )
 
 // ExternalTrafficPolicy describes how nodes distribute service traffic they
-// receive on one of the Service's "externally-facing" addresses (NodePorts, ExternalIPs,
-// and LoadBalancer IPs).
+// receive on one of the Service's "externally-facing" addresses (NodePorts and LoadBalancer IPs).
 // +kubebuilder:validation:Enum=Cluster;Local
 type ExternalTrafficPolicy corev1.ServiceExternalTrafficPolicy
 
@@ -987,3 +1088,149 @@ type HostPort struct {
 	// +kubebuilder:validation:Maximum=65535
 	ContainerPort int32 `json:"containerPort"`
 }
+
+// Compression defines the configuration for HTTP response compression.
+// +kubebuilder:validation:XValidation:message="type 'gzip' requires spec.compression.gzip to be set",rule="!(self.type == 'gzip' && !has(self.gzip))"
+//
+//nolint:lll
+type Compression struct {
+	// Gzip defines gzip module-specific compression settings.
+	//
+	// +optional
+	Gzip *GzipSettings `json:"gzip,omitempty"`
+	// Buffers sets the number and size of buffers used to compress a response.
+	//
+	// NGINX directive: https://nginx.org/en/docs/http/ngx_http_gzip_module.html#gzip_buffers
+	//
+	// +optional
+	Buffers *CompressionBuffers `json:"buffers,omitempty"`
+	// Level sets the compression level.
+	// Higher values provide better compression but use more CPU.
+	//
+	// NGINX directive: https://nginx.org/en/docs/http/ngx_http_gzip_module.html#gzip_comp_level
+	//
+	// +optional
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=9
+	Level *int32 `json:"level,omitempty"`
+	// MinLength sets the minimum length of a response that will be compressed.
+	// The length is determined from the "Content-Length" response header field.
+	//
+	// NGINX directive: https://nginx.org/en/docs/http/ngx_http_gzip_module.html#gzip_min_length
+	//
+	// +optional
+	// +kubebuilder:validation:Minimum=0
+	MinLength *int32 `json:"minLength,omitempty"`
+	// Type specifies the compression algorithm to use.
+	// Currently only gzip is supported.
+	//
+	Type CompressionType `json:"type"`
+	// MimeTypes specifies the MIME types to compress in addition to "text/html".
+	// "text/html" is always compressed when compression is enabled.
+	// Wildcards like "text/*" are not supported by NGINX.
+	// Example: ["application/json", "text/css", "application/javascript"]
+	//
+	// NGINX directive: https://nginx.org/en/docs/http/ngx_http_gzip_module.html#gzip_types
+	//
+	// +optional
+	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=32
+	MimeTypes []string `json:"mimeTypes,omitempty"`
+}
+
+// CompressionBuffers defines the number and size of buffers used for compression.
+type CompressionBuffers struct {
+	// Size sets the size of each buffer.
+	Size v1alpha1.Size `json:"size"`
+
+	// Number sets the number of buffers.
+	//
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=256
+	Number int32 `json:"number"`
+}
+
+// CompressionType defines the type of compression algorithm.
+// +kubebuilder:validation:Enum=gzip
+type CompressionType string
+
+const (
+	// GzipCompressionType specifies gzip compression.
+	GzipCompressionType CompressionType = "gzip"
+)
+
+// GzipSettings defines gzip module-specific compression settings.
+type GzipSettings struct {
+	// Vary enables or disables inserting the "Vary: Accept-Encoding" response header
+	// when gzip compression is active.
+	//
+	// NGINX directive: https://nginx.org/en/docs/http/ngx_http_gzip_module.html#gzip_vary
+	//
+	// +optional
+	Vary *bool `json:"vary,omitempty"`
+	// HTTPVersion sets the minimum HTTP version of a request required to compress a response.
+	//
+	// NGINX directive: https://nginx.org/en/docs/http/ngx_http_gzip_module.html#gzip_http_version
+	//
+	// +optional
+	HTTPVersion *GzipHTTPVersion `json:"httpVersion,omitempty"`
+	// Disable specifies regular expressions to match User-Agent headers of requests
+	// that should not be gzip-compressed.
+	//
+	// NGINX directive: https://nginx.org/en/docs/http/ngx_http_gzip_module.html#gzip_disable
+	//
+	// +optional
+	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=16
+	Disable []string `json:"disable,omitempty"`
+	// Proxied enables or disables gzip compression for proxied requests depending on the request and response.
+	// Accepted values are: "off", "expired", "no-cache", "no-store", "private", "no_last_modified",
+	// "no_etag", "auth", "any".
+	// Multiple values can be specified.
+	//
+	// NGINX directive: https://nginx.org/en/docs/http/ngx_http_gzip_module.html#gzip_proxied
+	//
+	// +optional
+	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=9
+	Proxied []GzipProxiedType `json:"proxied,omitempty"`
+}
+
+// GzipProxiedType defines the conditions under which responses from proxied requests are compressed.
+// +kubebuilder:validation:Enum=off;expired;no-cache;no-store;private;no_last_modified;no_etag;auth;any
+type GzipProxiedType string
+
+const (
+	// GzipProxiedOff disables compression for all proxied requests.
+	GzipProxiedOff GzipProxiedType = "off"
+	// GzipProxiedExpired enables compression if a response header includes the "Expires" field.
+	GzipProxiedExpired GzipProxiedType = "expired"
+	// GzipProxiedNoCache enables compression if a response header includes
+	// "Cache-Control" with the "no-cache" parameter.
+	GzipProxiedNoCache GzipProxiedType = "no-cache"
+	// GzipProxiedNoStore enables compression if a response header includes
+	// "Cache-Control" with the "no-store" parameter.
+	GzipProxiedNoStore GzipProxiedType = "no-store"
+	// GzipProxiedPrivate enables compression if a response header includes
+	// "Cache-Control" with the "private" parameter.
+	GzipProxiedPrivate GzipProxiedType = "private"
+	// GzipProxiedNoLastModified enables compression if a response header does not include "Last-Modified".
+	GzipProxiedNoLastModified GzipProxiedType = "no_last_modified"
+	// GzipProxiedNoETag enables compression if a response header does not include "ETag".
+	GzipProxiedNoETag GzipProxiedType = "no_etag"
+	// GzipProxiedAuth enables compression if a request header includes "Authorization".
+	GzipProxiedAuth GzipProxiedType = "auth"
+	// GzipProxiedAny enables compression for all proxied requests.
+	GzipProxiedAny GzipProxiedType = "any"
+)
+
+// GzipHTTPVersion defines the minimum HTTP version required for gzip compression.
+// +kubebuilder:validation:Enum="1.0";"1.1"
+type GzipHTTPVersion string
+
+const (
+	// GzipHTTPVersion10 sets the minimum HTTP version to 1.0.
+	GzipHTTPVersion10 GzipHTTPVersion = "1.0"
+	// GzipHTTPVersion11 sets the minimum HTTP version to 1.1.
+	GzipHTTPVersion11 GzipHTTPVersion = "1.1"
+)

@@ -72,11 +72,20 @@ const (
 
 	expectedIfModeSetTrustedAddressesError = "if mode is set, trustedAddresses is a required field"
 
+	// Logging validation error.
+	expectedJSONNotSupportedWithDebugError = "JSON-formatted error logs are not supported when errorLevel is debug"
+
 	// Replicas validation error.
 	expectedMinReplicasLessThanOrEqualError = "minReplicas must be less than or equal to maxReplicas"
 
 	// Strategy validation error.
 	expectedStrategyMustBeOfTypeRatio = "ratio can only be specified if strategy is of type ratio"
+
+	// PodDisruptionBudget validation error.
+	expectedPDBExactlyOneFieldError = "exactly one of minAvailable or maxUnavailable must be set"
+
+	// Compression validation errors.
+	expectedCompressionGzipRequiredError = "type 'gzip' requires spec.compression.gzip to be set"
 
 	// Snippets validation errors.
 	expectedSnippetsContextError = "Only one snippet allowed per context"
@@ -86,17 +95,25 @@ const (
 		`is 'hash' or 'hash consistent'`
 
 	// WAFPolicy errors.
-	expectedWAFFileIfAndOnlyIfFileTypeError = "destination.file must be set if and only if type is file"
-	expectedWAFSyslogIfAndOnlyIfSyslogType  = "destination.syslog must be set if and only if type is syslog"
-	//nolint: lll
-	expectedWAFLogSourceMutualExclusionError = "exactly one of logSource.defaultProfile, logSource.httpSource, logSource.nimSource, or logSource.n1cSource must be set"
+	expectedWAFFileIfAndOnlyIfFileTypeError     = "destination.file must be set if and only if type is file"
+	expectedWAFSyslogIfAndOnlyIfSyslogType      = "destination.syslog must be set if and only if type is syslog"
+	expectedWAFPolicySourceNotSetForPLMError    = "policySource must not be set when type is PLM"
+	expectedWAFPolicyRefNotSetForNonPLMError    = "policyRef must not be set when type is not PLM"
+	expectedWAFPolicySourceTypeMatchError       = "type must match the configured policy source"
+	expectedWAFPolicyRefRequiredForPLMError     = "policyRef.apPolicyRef is required when type is PLM"
+	expectedWAFPolicySourceMutualExclusionError = "exactly one of httpSource, nimSource, " +
+		"or n1cSource must be set"
+	expectedWAFLogSourceOrLogRefError        = "exactly one of logSource or logRef must be set"
+	expectedWAFLogSourceMutualExclusionError = "exactly one of defaultProfile, httpSource, " +
+		"nimSource, or n1cSource must be set"
 
 	expectedWAFN1CLogProfileMutualExclusionError = "exactly one of profileName or profileObjectID must be set"
 	expectedWAFN1CLogProfileObjectIDPatternError = `^lp_[A-Za-z0-9_-]+$`
 	expectedWAFValidationMutualExclusionError    = "verifyChecksum and expectedChecksum are mutually exclusive"
 	expectedWAFVerifyChecksumHTTPOnlyError       = "policySource.validation.verifyChecksum is only supported for type HTTP"
-	expectedWAFNIMSourceIfAndOnlyIfNIMType       = "policySource.nimSource must be set if and only if type is NIM"
-	expectedWAFN1CSourceIfAndOnlyIfN1CType       = "policySource.n1cSource must be set if and only if type is N1C"
+	expectedWAFAPResourceNamePatternError        = `^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$`
+	expectedWAFAPResourceNamespacePatternError   = `^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`
+	expectedWAFPLMLogSourceTypeError             = "securityLogs[*].logRef.apLogConfRef is only allowed when type is PLM"
 	expectedWAFNIMPolicyUIDPatternError          = `^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`
 	expectedWAFN1CPolicyObjectIDPatternError     = `^pol_[A-Za-z0-9_-]+$`
 	expectedWAFN1CPolicyVersionIDPatternError    = `^pv_[A-Za-z0-9_-]+$`

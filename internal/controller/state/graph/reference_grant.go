@@ -129,6 +129,37 @@ func fromListenerSet(namespace string) fromResource {
 	}
 }
 
+const (
+	ngfAPIGroup = "gateway.nginx.org"
+	wafAPIGroup = "appprotect.f5.com"
+)
+
+func fromWAFPolicy(namespace string) fromResource {
+	return fromResource{
+		group:     ngfAPIGroup,
+		kind:      kinds.WAFPolicy,
+		namespace: namespace,
+	}
+}
+
+func toAPPolicy(nsname types.NamespacedName) toResource {
+	return toResource{
+		group:     wafAPIGroup,
+		kind:      kinds.APPolicy,
+		name:      nsname.Name,
+		namespace: nsname.Namespace,
+	}
+}
+
+func toAPLogConf(nsname types.NamespacedName) toResource {
+	return toResource{
+		group:     wafAPIGroup,
+		kind:      kinds.APLogConf,
+		name:      nsname.Name,
+		namespace: nsname.Namespace,
+	}
+}
+
 // newReferenceGrantResolver creates a new referenceGrantResolver.
 func newReferenceGrantResolver(refGrants map[types.NamespacedName]*v1.ReferenceGrant) *referenceGrantResolver {
 	allowed := make(map[allowedReference]struct{})

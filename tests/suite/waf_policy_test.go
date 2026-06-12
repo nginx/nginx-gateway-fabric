@@ -15,6 +15,8 @@ import (
 	. "github.com/onsi/gomega"
 	core "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -733,7 +735,349 @@ var _ = Describe("WAFPolicy", Ordered, Label("waf"), func() {
 				Should(Succeed(), "expected traffic to continue after WAF policy removal")
 		})
 	})
+
+	// PLM (Policy Lifecycle Manager) source tests. These exercise the type: PLM WAFPolicy path:
+	// APPolicy/APLogConf CRDs are compiled by the PLM controller (installed in suite setup) into
+	// bundles stored in PLM's in-cluster SeaweedFS, and NGF fetches them via the S3 endpoint
+	// configured through the --plm-storage-* flags. The HTTP-source tests above share the same NGF
+	// install and remain unaffected.
+	Context("when using the PLM source", Ordered, func() {
+		sharedAPFiles := []string{"waf-policy/appolicy.yaml", "waf-policy/aplogconf.yaml"}
+
+		BeforeAll(func() {
+			Expect(resourceManager.ApplyFromFiles(sharedAPFiles, namespace)).To(Succeed())
+			Expect(waitForAPBundleState(
+				"APPolicy",
+				types.NamespacedName{Name: "attack-signatures", Namespace: namespace},
+				plmBundleStateReady,
+			)).To(Succeed())
+			Expect(waitForAPBundleState(
+				"APLogConf",
+				types.NamespacedName{Name: "log-illegal", Namespace: namespace},
+				plmBundleStateReady,
+			)).To(Succeed())
+		})
+
+		AfterAll(func() {
+			Expect(resourceManager.DeleteFromFiles(sharedAPFiles, namespace)).To(Succeed())
+		})
+
+		Context("a valid type: PLM WAFPolicy targeting the Gateway", Ordered, func() {
+			policyFiles := []string{"waf-policy/wafpolicy-plm.yaml"}
+
+			var conf *framework.Payload
+
+			BeforeAll(func() {
+				Expect(resourceManager.ApplyFromFiles(policyFiles, namespace)).To(Succeed())
+			})
+
+			AfterAll(func() {
+				Expect(resourceManager.DeleteFromFiles(policyFiles, namespace)).To(Succeed())
+			})
+
+			It("is accepted and programmed once the bundle is fetched from PLM storage", func() {
+				nsname := types.NamespacedName{Name: "gateway-waf-plm", Namespace: namespace}
+				Expect(waitForWAFPolicyAccepted(nsname)).To(Succeed())
+				Expect(waitForWAFPolicyCondition(nsname, "Programmed", metav1.ConditionTrue, "Programmed")).To(Succeed())
+
+				var err error
+				conf, err = resourceManager.GetNginxConfig(nginxPodName, namespace, nginxCrossplanePath)
+				Expect(err).ToNot(HaveOccurred())
+			})
+
+			DescribeTable("produces the correct NGINX directives",
+				func(expFields []framework.ExpectedNginxField) {
+					for _, field := range expFields {
+						Expect(framework.ValidateNginxFieldExists(conf, field)).To(Succeed())
+					}
+				},
+				Entry("server-level WAF directives", func() []framework.ExpectedNginxField {
+					wafFile := fmt.Sprintf("WAFPolicy_%s_gateway-waf-plm.conf", namespace)
+					return []framework.ExpectedNginxField{
+						{Directive: "app_protect_enable", Value: "on", File: wafFile},
+						{
+							Directive: "app_protect_policy_file",
+							Value:     fmt.Sprintf("/etc/app_protect/bundles/%s_gateway-waf-plm.tgz", namespace),
+							File:      wafFile,
+						},
+						{Directive: "app_protect_security_log_enable", Value: "on", File: wafFile},
+						{
+							Directive:             "app_protect_security_log",
+							Value:                 fmt.Sprintf("/etc/app_protect/bundles/%s_gateway-waf-plm_log_", namespace),
+							File:                  wafFile,
+							ValueSubstringAllowed: true,
+						},
+					}
+				}()),
+			)
+
+			It("blocks requests containing attack signatures", func() {
+				expectXSSBlocked()
+			})
+		})
+
+		Context("a valid type: PLM WAFPolicy targeting an HTTPRoute", Ordered, func() {
+			policyFiles := []string{"waf-policy/wafpolicy-plm-route.yaml"}
+
+			var conf *framework.Payload
+
+			BeforeAll(func() {
+				Expect(resourceManager.ApplyFromFiles(policyFiles, namespace)).To(Succeed())
+			})
+
+			AfterAll(func() {
+				Expect(resourceManager.DeleteFromFiles(policyFiles, namespace)).To(Succeed())
+			})
+
+			It("is accepted and programmed", func() {
+				nsname := types.NamespacedName{Name: "coffee-route-waf-plm", Namespace: namespace}
+				Expect(waitForWAFPolicyAccepted(nsname)).To(Succeed())
+				Expect(waitForWAFPolicyCondition(nsname, "Programmed", metav1.ConditionTrue, "Programmed")).To(Succeed())
+
+				var err error
+				conf, err = resourceManager.GetNginxConfig(nginxPodName, namespace, nginxCrossplanePath)
+				Expect(err).ToNot(HaveOccurred())
+			})
+
+			DescribeTable("produces WAF directives in the location block",
+				func(expFields []framework.ExpectedNginxField) {
+					for _, field := range expFields {
+						Expect(framework.ValidateNginxFieldExists(conf, field)).To(Succeed())
+					}
+				},
+				Entry("location-level WAF directives", func() []framework.ExpectedNginxField {
+					wafFile := fmt.Sprintf("WAFPolicy_%s_coffee-route-waf-plm.conf", namespace)
+					return []framework.ExpectedNginxField{
+						{Directive: "app_protect_enable", Value: "on", File: wafFile, Location: "/coffee"},
+						{
+							Directive: "app_protect_policy_file",
+							Value:     fmt.Sprintf("/etc/app_protect/bundles/%s_coffee-route-waf-plm.tgz", namespace),
+							File:      wafFile,
+							Location:  "/coffee",
+						},
+					}
+				}()),
+			)
+
+			It("blocks attack signatures on the protected route", func() {
+				expectXSSBlocked()
+			})
+		})
+
+		Context("a type: PLM WAFPolicy referencing a nonexistent APPolicy", Ordered, func() {
+			policyFiles := []string{"waf-policy/wafpolicy-plm-missing.yaml"}
+
+			BeforeAll(func() {
+				Expect(resourceManager.ApplyFromFiles(policyFiles, namespace)).To(Succeed())
+			})
+
+			AfterAll(func() {
+				Expect(resourceManager.DeleteFromFiles(policyFiles, namespace)).To(Succeed())
+			})
+
+			It("has a ResolvedRefs=False/InvalidRef condition", func() {
+				nsname := types.NamespacedName{Name: "gateway-waf-plm-missing", Namespace: namespace}
+				Expect(waitForWAFPolicyCondition(
+					nsname, "ResolvedRefs", metav1.ConditionFalse, "InvalidRef",
+				)).To(Succeed())
+			})
+
+			It("does not add app_protect directives to NGINX config", func() {
+				expectNoWAFPolicyFile(nginxPodName, namespace, "gateway-waf-plm-missing")
+			})
+		})
+
+		Context("a type: PLM WAFPolicy referencing a malformed APPolicy", Ordered, func() {
+			apFiles := []string{"waf-policy/appolicy-malformed.yaml"}
+			policyFiles := []string{"waf-policy/wafpolicy-plm-malformed.yaml"}
+
+			BeforeAll(func() {
+				Expect(resourceManager.ApplyFromFiles(apFiles, namespace)).To(Succeed())
+				// PLM compiles the policy, fails, and sets state: invalid.
+				Expect(waitForAPBundleState(
+					"APPolicy",
+					types.NamespacedName{Name: "malformed-policy", Namespace: namespace},
+					plmBundleStateInvalid,
+				)).To(Succeed())
+
+				Expect(resourceManager.ApplyFromFiles(policyFiles, namespace)).To(Succeed())
+			})
+
+			AfterAll(func() {
+				Expect(resourceManager.DeleteFromFiles(policyFiles, namespace)).To(Succeed())
+				Expect(resourceManager.DeleteFromFiles(apFiles, namespace)).To(Succeed())
+			})
+
+			It("has a ResolvedRefs=False/InvalidRef condition", func() {
+				nsname := types.NamespacedName{Name: "gateway-waf-plm-malformed", Namespace: namespace}
+				Expect(waitForWAFPolicyCondition(
+					nsname, "ResolvedRefs", metav1.ConditionFalse, "InvalidRef",
+				)).To(Succeed())
+			})
+
+			It("does not add app_protect directives to NGINX config", func() {
+				expectNoWAFPolicyFile(nginxPodName, namespace, "gateway-waf-plm-malformed")
+			})
+		})
+
+		Context("a cross-namespace type: PLM WAFPolicy", Ordered, func() {
+			// The APPolicy lives in a separate namespace; the WAFPolicy is in the waf-policy
+			// namespace. Without a ReferenceGrant the reference is denied; adding the grant resolves
+			// it. watchNamespaces is empty (all), so NGF sees the APPolicy in the other namespace.
+			// Reuses appolicy.yaml (applied to the other namespace) since the spec is identical.
+			const otherNamespace = "waf-policy-plm-xns"
+
+			apFiles := []string{"waf-policy/appolicy.yaml"}
+			policyFiles := []string{"waf-policy/wafpolicy-plm-crossns.yaml"}
+			grantFiles := []string{"waf-policy/referencegrant-appolicy.yaml"}
+
+			BeforeAll(func() {
+				ns := &core.Namespace{ObjectMeta: metav1.ObjectMeta{Name: otherNamespace}}
+				Expect(resourceManager.Apply([]client.Object{ns})).To(Succeed())
+
+				Expect(resourceManager.ApplyFromFiles(apFiles, otherNamespace)).To(Succeed())
+				Expect(waitForAPBundleState(
+					"APPolicy",
+					types.NamespacedName{Name: "attack-signatures", Namespace: otherNamespace},
+					plmBundleStateReady,
+				)).To(Succeed())
+
+				Expect(resourceManager.ApplyFromFiles(policyFiles, namespace)).To(Succeed())
+			})
+
+			AfterAll(func() {
+				Expect(resourceManager.DeleteFromFiles(grantFiles, otherNamespace)).To(Succeed())
+				Expect(resourceManager.DeleteFromFiles(policyFiles, namespace)).To(Succeed())
+				Expect(resourceManager.DeleteFromFiles(apFiles, otherNamespace)).To(Succeed())
+				Expect(resourceManager.DeleteNamespace(otherNamespace)).To(Succeed())
+			})
+
+			It("is denied with ResolvedRefs=False/RefNotPermitted when no ReferenceGrant exists", func() {
+				nsname := types.NamespacedName{Name: "gateway-waf-plm-crossns", Namespace: namespace}
+				Expect(waitForWAFPolicyCondition(
+					nsname, "ResolvedRefs", metav1.ConditionFalse, "RefNotPermitted",
+				)).To(Succeed())
+				expectNoWAFPolicyFile(nginxPodName, namespace, "gateway-waf-plm-crossns")
+			})
+
+			It("resolves and programs once a ReferenceGrant permits the reference", func() {
+				Expect(resourceManager.ApplyFromFiles(grantFiles, otherNamespace)).To(Succeed())
+
+				nsname := types.NamespacedName{Name: "gateway-waf-plm-crossns", Namespace: namespace}
+				Expect(waitForWAFPolicyCondition(
+					nsname, "ResolvedRefs", metav1.ConditionTrue, "ResolvedRefs",
+				)).To(Succeed())
+				Expect(waitForWAFPolicyCondition(
+					nsname, "Programmed", metav1.ConditionTrue, "Programmed",
+				)).To(Succeed())
+
+				Eventually(func() error {
+					conf, err := resourceManager.GetNginxConfig(nginxPodName, namespace, nginxCrossplanePath)
+					if err != nil {
+						return err
+					}
+					return framework.ValidateNginxFieldExists(conf, framework.ExpectedNginxField{
+						Directive: "app_protect_policy_file",
+						Value:     fmt.Sprintf("/etc/app_protect/bundles/%s_gateway-waf-plm-crossns.tgz", namespace),
+						File:      fmt.Sprintf("WAFPolicy_%s_gateway-waf-plm-crossns.conf", namespace),
+					})
+				}).
+					WithTimeout(timeoutConfig.GetStatusTimeout).
+					WithPolling(500*time.Millisecond).
+					Should(Succeed(), "expected the cross-namespace PLM policy bundle to be programmed after the grant")
+			})
+		})
+	})
 })
+
+const (
+	// plmBundleStateReady/Invalid are the APPolicy/APLogConf status.bundle.state values written by
+	// the PLM controller after (attempting) compilation.
+	plmBundleStateReady   = "ready"
+	plmBundleStateInvalid = "invalid"
+
+	// plmCompileTimeout bounds how long we wait for PLM to compile an APPolicy/APLogConf into a
+	// bundle. Compilation runs as a Job in the PLM controller and can take a while on a cold cluster.
+	plmCompileTimeout = 4 * time.Minute
+)
+
+// waitForAPBundleState polls the unstructured APPolicy/APLogConf (appprotect.f5.com/v1) until its
+// status.bundle.state equals wantState. These CRDs are owned by the PLM controller and are not in
+// the test scheme, so they are read as unstructured objects.
+func waitForAPBundleState(kind string, nsname types.NamespacedName, wantState string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), plmCompileTimeout)
+	defer cancel()
+
+	GinkgoWriter.Printf("Waiting for %s %q status.bundle.state to be %q\n", kind, nsname, wantState)
+
+	return wait.PollUntilContextCancel(ctx, 2*time.Second, true,
+		func(ctx context.Context) (bool, error) {
+			obj := &unstructured.Unstructured{}
+			obj.SetGroupVersionKind(schema.GroupVersionKind{
+				Group:   "appprotect.f5.com",
+				Version: "v1",
+				Kind:    kind,
+			})
+			if err := resourceManager.Get(ctx, nsname, obj); err != nil {
+				GinkgoWriter.Printf("%s %q not retrievable yet: %v\n", kind, nsname, err)
+				return false, nil
+			}
+
+			state, found, err := unstructured.NestedString(obj.Object, "status", "bundle", "state")
+			if err != nil {
+				return false, err
+			}
+			if !found {
+				GinkgoWriter.Printf("%s %q has no status.bundle.state yet\n", kind, nsname)
+				return false, nil
+			}
+			if state == wantState {
+				return true, nil
+			}
+			GinkgoWriter.Printf("%s %q state is %q, waiting for %q\n", kind, nsname, state, wantState)
+			return false, nil
+		},
+	)
+}
+
+// expectXSSBlocked sends an XSS payload to /coffee and asserts WAF rejects it.
+func expectXSSBlocked() {
+	port := 80
+	if portFwdPort != 0 {
+		port = portFwdPort
+	}
+	// </script> is a classic XSS payload that the attack-signatures policy blocks.
+	attackURL := fmt.Sprintf("http://cafe.example.com:%d/coffee?x=%%3C%%2Fscript%%3E", port)
+
+	Eventually(func() (bool, error) {
+		resp, err := framework.Get(framework.Request{
+			URL:     attackURL,
+			Address: address,
+			Timeout: timeoutConfig.RequestTimeout,
+		})
+		if err != nil {
+			return false, err
+		}
+		return strings.Contains(resp.Body, "Request Rejected"), nil
+	}).
+		WithTimeout(timeoutConfig.RequestTimeout).
+		WithPolling(500*time.Millisecond).
+		Should(BeTrue(), "expected WAF to block XSS attack signature")
+}
+
+// expectNoWAFPolicyFile asserts the NGINX config has no app_protect_policy_file directive for the
+// given WAFPolicy (i.e. the policy was not programmed).
+func expectNoWAFPolicyFile(podName, ns, policyName string) {
+	conf, err := resourceManager.GetNginxConfig(podName, ns, nginxCrossplanePath)
+	Expect(err).ToNot(HaveOccurred())
+
+	err = framework.ValidateNginxFieldExists(conf, framework.ExpectedNginxField{
+		Directive: "app_protect_policy_file",
+		Value:     fmt.Sprintf("/etc/app_protect/bundles/%s_%s.tgz", ns, policyName),
+		File:      fmt.Sprintf("WAFPolicy_%s_%s.conf", ns, policyName),
+	})
+	Expect(err).To(HaveOccurred(), "expected no WAF policy directive for %q", policyName)
+}
 
 // waitForWAFPolicyAccepted polls until the WAFPolicy has Accepted/True/Accepted.
 func waitForWAFPolicyAccepted(nsname types.NamespacedName) error {

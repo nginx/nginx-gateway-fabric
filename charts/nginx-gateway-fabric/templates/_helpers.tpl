@@ -132,6 +132,12 @@ Create namespaced RBAC rules.
 - apiGroups:
   - ""
   resources:
+  - services/status
+  verbs:
+  - patch
+- apiGroups:
+  - ""
+  resources:
   - pods
   verbs:
   - get
@@ -168,6 +174,17 @@ Create namespaced RBAC rules.
   - autoscaling
   resources:
   - horizontalpodautoscalers
+  verbs:
+  - create
+  - update
+  - delete
+  - list
+  - get
+  - watch
+- apiGroups:
+  - policy
+  resources:
+  - poddisruptionbudgets
   verbs:
   - create
   - update
@@ -279,6 +296,18 @@ Create namespaced RBAC rules.
   - inferencepools/finalizers
   verbs:
   - update
+  {{- end }}
+  {{- if .Values.nginxGateway.plmStorage.url }}
+- apiGroups:
+  - appprotect.f5.com
+  resources:
+  - appolicies
+  - aplogconfs
+  verbs:
+  - get
+  - list
+  - patch
+  - watch
   {{- end }}
   {{- if .Values.nginxGateway.leaderElection.enable }}
 - apiGroups:
