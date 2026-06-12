@@ -189,8 +189,6 @@ func writeTrafficResults(resultsFile *os.File, homeDir, filename, testname strin
 }
 
 // setupWAFLongevity installs PLM and the NGF WAF release, applies WAF resources, and waits for them to be ready.
-// This mirrors the installPLM() + createNGFInstallConfig() pattern from system_suite_test.go that
-// the functional WAF tests use in SynchronizedBeforeSuite.
 func setupWAFLongevity(wafNs core.Namespace, wafFiles []string) {
 	GinkgoWriter.Println("Setting up WAF+PLM longevity test")
 
@@ -201,13 +199,9 @@ func setupWAFLongevity(wafNs core.Namespace, wafFiles []string) {
 	Expect(framework.CreateImagePullSecret(resourceManager, framework.PLMNamespace, *nginxImageJWTFileName)).
 		To(Succeed())
 
-	// Install the PLM controller (f5-waf-policy-controller). Chart coordinates are hardcoded in
-	// framework.InstallPLM — no dynamic chart URL/version variables are needed.
 	output, err := framework.InstallPLM()
 	Expect(err).ToNot(HaveOccurred(), string(output))
 
-	// Build the install config for the WAF-specific NGF release (ngf-longevity-waf).
-	// It uses nginx-plus-f5waf (NGINX Plus with NAP WAF bundled) instead of nginx-plus.
 	wafInstallCfg := framework.InstallationConfig{
 		ReleaseName:          "ngf-longevity-waf",
 		Namespace:            ngfNamespace,
@@ -234,6 +228,8 @@ func setupWAFLongevity(wafNs core.Namespace, wafFiles []string) {
 
 	// Install the WAF NGF release. plmNGFInstallArgs() configures the PLM storage URL and
 	// credentials so NGF can fetch compiled NAP policy bundles from SeaweedFS.
+	// TLS secret names are set to unique values to avoid conflict with non-waf ngf release
+	// in same namespace.
 	extraArgs := append(plmNGFInstallArgs(),
 		"--set", "nginx.imagePullSecret="+framework.PlusImagePullSecretName,
 		"--set", "certGenerator.serverTLSSecretName=ngf-longevity-waf-server-tls",
@@ -261,9 +257,7 @@ func setupWAFLongevity(wafNs core.Namespace, wafFiles []string) {
 }
 
 // teardownWAFLongevity collects WAF traffic results, logs, removes WAF application resources,
-// and uninstalls PLM. This mirrors the SynchronizedAfterSuite PLM cleanup in system_suite_test.go.
-// The ngf-longevity-waf Helm release is left running; it will be cleaned up when SynchronizedAfterSuite
-// teardown("ngf-longevity") deletes the nginx-gateway namespace.
+// and uninstalls PLM.
 func teardownWAFLongevity(resultsFile *os.File, homeDir string, wafNs core.Namespace, wafFiles []string) {
 	GinkgoWriter.Println("Tearing down WAF+PLM longevity test")
 
@@ -285,8 +279,7 @@ func teardownWAFLongevity(resultsFile *os.File, homeDir string, wafNs core.Names
 	Expect(resourceManager.DeleteFromFiles(wafFiles, wafNs.Name)).To(Succeed())
 	Expect(resourceManager.DeleteNamespace(wafNs.Name)).To(Succeed())
 
-	// Uninstall PLM and clean up its namespace. PLM lives in its own namespace (framework.PLMNamespace),
-	// separate from nginx-gateway, so this is safe before SynchronizedAfterSuite runs.
+	// Uninstall PLM and clean up its namespace.
 	output, err := framework.UninstallPLM()
 	Expect(err).ToNot(HaveOccurred(), string(output))
 	framework.RemovePLMFinalizers()
