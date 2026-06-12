@@ -85,8 +85,6 @@ func addBackendRefsToRouteRules(
 
 // addHTTPBackendRefsToRules iterates over the rules of a Route and adds a list of BackendRef to each rule.
 // If a reference in a rule is invalid, the function will add a condition to the rule.
-//
-//nolint:gocyclo
 func addBackendRefsToRules(
 	route *L7Route,
 	refGrantResolver *referenceGrantResolver,
@@ -114,44 +112,16 @@ func addBackendRefsToRules(
 		backendRefs := make([]BackendRef, 0, len(rule.RouteBackendRefs))
 
 		for refIdx, ref := range rule.RouteBackendRefs {
-			basePath := field.NewPath("spec").Child("rules").Index(idx)
-			refPath := basePath.Child("backendRefs").Index(refIdx)
-			if ref.MirrorBackendIdx != nil {
-				refPath = basePath.Child("filters").Index(*ref.MirrorBackendIdx).Child("backendRef")
-			} else if ref.ExternalAuthBackendIdx != nil {
-				refPath = basePath.Child("filters").Index(*ref.ExternalAuthBackendIdx).Child("externalAuth").Child("backendRef")
-			}
+			refPath := backendRefPath(idx, refIdx, ref)
 			routeNs := route.Source.GetNamespace()
 
 			// if we have an InferencePool backend disguised as a Service, set any necessary values
 			if ref.IsInferencePool {
-				namespace := routeNs
-				if ref.Namespace != nil {
-					namespace = string(*ref.Namespace)
+				updated, ok := resolveInferencePoolRef(route, ref, routeNs, referencedInferencePools)
+				if !ok {
+					continue
 				}
-
-				poolName := types.NamespacedName{
-					Name:      ref.InferencePoolName,
-					Namespace: namespace,
-				}
-
-				if pool, exists := referencedInferencePools[poolName]; exists {
-					// If the InferencePool is invalid, add a condition to the route
-					if !pool.Valid {
-						route.Conditions = append(route.Conditions, conditions.NewRouteBackendRefInvalidInferencePool(
-							fmt.Sprintf("Referenced InferencePool %s/%s is invalid",
-								poolName.Namespace,
-								poolName.Name,
-							),
-						))
-						continue
-					}
-
-					port := gatewayv1.PortNumber(pool.Source.Spec.TargetPorts[0].Number)
-					ref.Port = helpers.GetPointer(port)
-					ref.EndpointPickerConfig.EndpointPickerRef = &pool.Source.Spec.EndpointPickerRef
-					ref.EndpointPickerConfig.NsName = poolName.Namespace
-				}
+				ref = updated
 			}
 
 			ref, conds := createBackendRef(
@@ -184,6 +154,64 @@ func addBackendRefsToRules(
 			route.Conditions = append(route.Conditions, *cond)
 		}
 	}
+}
+
+// backendRefPath returns the field path used for conditions on a single backendRef. For refs that
+// originate from a mirror or external-auth filter, the path points at the filter's backendRef rather
+// than the rule's backendRefs list.
+func backendRefPath(ruleIdx, refIdx int, ref RouteBackendRef) *field.Path {
+	basePath := field.NewPath("spec").Child("rules").Index(ruleIdx)
+	if ref.MirrorBackendIdx != nil {
+		return basePath.Child("filters").Index(*ref.MirrorBackendIdx).Child("backendRef")
+	}
+	if ref.ExternalAuthBackendIdx != nil {
+		return basePath.Child("filters").Index(*ref.ExternalAuthBackendIdx).Child("externalAuth").Child("backendRef")
+	}
+	return basePath.Child("backendRefs").Index(refIdx)
+}
+
+// resolveInferencePoolRef enriches a ref that targets an InferencePool (disguised as a Service) with
+// the pool's port and EndpointPicker configuration. It returns false, after recording a condition on
+// the route, when the referenced InferencePool exists but is invalid, signaling that the ref should be
+// skipped. When the pool is not found, the ref is returned unchanged.
+func resolveInferencePoolRef(
+	route *L7Route,
+	ref RouteBackendRef,
+	routeNs string,
+	referencedInferencePools map[types.NamespacedName]*ReferencedInferencePool,
+) (RouteBackendRef, bool) {
+	namespace := routeNs
+	if ref.Namespace != nil {
+		namespace = string(*ref.Namespace)
+	}
+
+	poolName := types.NamespacedName{
+		Name:      ref.InferencePoolName,
+		Namespace: namespace,
+	}
+
+	pool, exists := referencedInferencePools[poolName]
+	if !exists {
+		return ref, true
+	}
+
+	// If the InferencePool is invalid, add a condition to the route
+	if !pool.Valid {
+		route.Conditions = append(route.Conditions, conditions.NewRouteBackendRefInvalidInferencePool(
+			fmt.Sprintf("Referenced InferencePool %s/%s is invalid",
+				poolName.Namespace,
+				poolName.Name,
+			),
+		))
+		return ref, false
+	}
+
+	port := gatewayv1.PortNumber(pool.Source.Spec.TargetPorts[0].Number)
+	ref.Port = helpers.GetPointer(port)
+	ref.EndpointPickerConfig.EndpointPickerRef = &pool.Source.Spec.EndpointPickerRef
+	ref.EndpointPickerConfig.NsName = poolName.Namespace
+
+	return ref, true
 }
 
 // invalidateRuleIfExternalAuthBackendUnresolved marks a rule's filters invalid when it carries an
