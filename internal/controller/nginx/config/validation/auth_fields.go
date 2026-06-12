@@ -121,3 +121,62 @@ func (AuthFieldValidator) ValidateOIDCLogoutURI(uri string) error {
 func (AuthFieldValidator) ValidateOIDCFrontChannelLogoutURI(uri string) error {
 	return validatePathURI(uri)
 }
+
+var (
+	authZClaimNameRegexp  = regexp.MustCompile(authZSafeNameFmt)
+	authZClaimValueRegexp = regexp.MustCompile(authZSafeValueFmt)
+)
+
+var (
+	claimNameExamples = []string{
+		"role",
+		"app-1/role",
+		"app_1-role",
+	}
+	claimValueExamples = []string{
+		"admin",
+		"user",
+		"app-1",
+	}
+)
+
+const (
+	// authZSafeNameFmt allows letters, numbers, underscores, dashes, and slashes.
+	// Validates claim names.
+	authZSafeNameFmt = `^[a-zA-Z0-9_/-]+$`
+	authZNameErrMsg  = "must contain only letters, numbers, underscores, dashes, or slashes"
+)
+
+const (
+	// authZSafeValueFmt disallows newlines and special characters.
+	// Validates claim values.
+	authZSafeValueFmt = `^[^\n\r;#\$\{\}\|&><'"]+$`
+	authZValueErrMsg  = "must not contain newlines or special characters like ; # $ { } | & > < ' \""
+)
+
+// ValidateAuthZClaimName validates that an authorization claim name contains only allowed characters.
+func (AuthFieldValidator) ValidateAuthZClaimName(name string) error {
+	if !authZClaimNameRegexp.MatchString(name) {
+		return errors.New(k8svalidation.RegexError(
+			authZNameErrMsg,
+			authZSafeNameFmt,
+			claimNameExamples...))
+	}
+	return nil
+}
+
+// ValidateAuthZClaimValue validates that an authorization claim value does not contain disallowed characters.
+func (AuthFieldValidator) ValidateAuthZClaimValue(value string) error {
+	if !authZClaimValueRegexp.MatchString(value) {
+		return errors.New(k8svalidation.RegexError(
+			authZValueErrMsg,
+			authZSafeValueFmt,
+			claimValueExamples...))
+	}
+	return nil
+}
+
+// ValidateAuthZProxySetHeader validates that a proxy set header name contains only allowed characters.
+func (AuthFieldValidator) ValidateAuthZProxySetHeader(header string) error {
+	return validateHeaderName(header)
+}

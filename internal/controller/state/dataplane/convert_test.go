@@ -1392,6 +1392,246 @@ func TestConvertAuthenticationFilter(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "jwt auth file-based with authorization populates authz fields",
+			filter: &graph.AuthenticationFilter{
+				Source: &ngfAPIv1alpha1.AuthenticationFilter{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "af",
+						Namespace: "test",
+					},
+					Spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+						Type: ngfAPIv1alpha1.AuthTypeJWT,
+						JWT: &ngfAPIv1alpha1.JWTAuth{
+							Realm:  "my-realm",
+							Source: ngfAPIv1alpha1.JWTKeySourceFile,
+							File: &ngfAPIv1alpha1.JWTFileKeySource{
+								SecretRef: ngfAPIv1alpha1.LocalObjectReference{Name: "jwt-secret"},
+							},
+							KeyCache: helpers.GetPointer(ngfAPIv1alpha1.Duration("60s")),
+							Leeway:   helpers.GetPointer(ngfAPIv1alpha1.Duration("30s")),
+							Authorization: &ngfAPIv1alpha1.Authorization{
+								Rules: []ngfAPIv1alpha1.Rule{
+									{
+										Claims: []ngfAPIv1alpha1.Claim{
+											{
+												Name:   "aud",
+												Values: []string{"my-api"},
+												Match:  ngfAPIv1alpha1.ClaimMatchTypeExact,
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+				Valid:      true,
+				Referenced: true,
+			},
+			referencedSecrets: map[types.NamespacedName]*secrets.Secret{
+				{Namespace: "test", Name: "jwt-secret"}: {
+					Source: &apiv1.Secret{
+						ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "jwt-secret"},
+						Data: map[string][]byte{
+							secrets.AuthKey: []byte("token"),
+						},
+					},
+				},
+			},
+			expected: func() *AuthenticationFilter {
+				authZConfig := buildAuthZConfigFromAuthZSpec("test_af", &ngfAPIv1alpha1.Authorization{
+					Rules: []ngfAPIv1alpha1.Rule{
+						{
+							Claims: []ngfAPIv1alpha1.Claim{
+								{
+									Name:   "aud",
+									Values: []string{"my-api"},
+									Match:  ngfAPIv1alpha1.ClaimMatchTypeExact,
+								},
+							},
+						},
+					},
+				})
+				return &AuthenticationFilter{
+					JWT: &AuthJWT{
+						SecretName:           "jwt-secret",
+						SecretNamespace:      "test",
+						Realm:                "my-realm",
+						KeyCache:             helpers.GetPointer(ngfAPIv1alpha1.Duration("60s")),
+						Data:                 []byte("token"),
+						Leeway:               helpers.GetPointer(ngfAPIv1alpha1.Duration("30s")),
+						AuthRequireVariable:  authZConfig.RequireVariable,
+						AuthZProxySetHeaders: authZConfig.ProxySetHeaders,
+					},
+				}
+			}(),
+		},
+		{
+			name: "jwt auth remote with authorization populates authz fields",
+			filter: &graph.AuthenticationFilter{
+				Source: &ngfAPIv1alpha1.AuthenticationFilter{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "af",
+						Namespace: "test",
+					},
+					Spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+						Type: ngfAPIv1alpha1.AuthTypeJWT,
+						JWT: &ngfAPIv1alpha1.JWTAuth{
+							Realm:  "my-realm",
+							Source: ngfAPIv1alpha1.JWTKeySourceRemote,
+							Remote: &ngfAPIv1alpha1.JWTRemoteKeySource{
+								URI: "https://idp.example.com/jwks",
+							},
+							KeyCache: helpers.GetPointer(ngfAPIv1alpha1.Duration("1h")),
+							Leeway:   helpers.GetPointer(ngfAPIv1alpha1.Duration("10s")),
+							Authorization: &ngfAPIv1alpha1.Authorization{
+								Rules: []ngfAPIv1alpha1.Rule{
+									{
+										Claims: []ngfAPIv1alpha1.Claim{
+											{
+												Name:           "roles",
+												Values:         []string{"admin"},
+												Match:          ngfAPIv1alpha1.ClaimMatchTypeExact,
+												ProxySetHeader: helpers.GetPointer("X-User-Role"),
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+				Valid:      true,
+				Referenced: true,
+			},
+			referencedSecrets: nil,
+			expected: func() *AuthenticationFilter {
+				authZConfig := buildAuthZConfigFromAuthZSpec("test_af", &ngfAPIv1alpha1.Authorization{
+					Rules: []ngfAPIv1alpha1.Rule{
+						{
+							Claims: []ngfAPIv1alpha1.Claim{
+								{
+									Name:           "roles",
+									Values:         []string{"admin"},
+									Match:          ngfAPIv1alpha1.ClaimMatchTypeExact,
+									ProxySetHeader: helpers.GetPointer("X-User-Role"),
+								},
+							},
+						},
+					},
+				})
+				return &AuthenticationFilter{
+					JWT: &AuthJWT{
+						Realm:    "my-realm",
+						KeyCache: helpers.GetPointer(ngfAPIv1alpha1.Duration("1h")),
+						Remote: &AuthJWTRemote{
+							URI:  "https://idp.example.com/jwks",
+							Path: "/_ngf-internal-test_af_jwks_uri",
+						},
+						Leeway:               helpers.GetPointer(ngfAPIv1alpha1.Duration("10s")),
+						AuthRequireVariable:  authZConfig.RequireVariable,
+						AuthZProxySetHeaders: authZConfig.ProxySetHeaders,
+					},
+				}
+			}(),
+		},
+		{
+			name: "jwt auth with authorization but empty rules does not populate authz fields",
+			filter: &graph.AuthenticationFilter{
+				Source: &ngfAPIv1alpha1.AuthenticationFilter{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "af",
+						Namespace: "test",
+					},
+					Spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+						Type: ngfAPIv1alpha1.AuthTypeJWT,
+						JWT: &ngfAPIv1alpha1.JWTAuth{
+							Realm:  "my-realm",
+							Source: ngfAPIv1alpha1.JWTKeySourceFile,
+							File: &ngfAPIv1alpha1.JWTFileKeySource{
+								SecretRef: ngfAPIv1alpha1.LocalObjectReference{Name: "jwt-secret"},
+							},
+							KeyCache: helpers.GetPointer(ngfAPIv1alpha1.Duration("60s")),
+							Leeway:   helpers.GetPointer(ngfAPIv1alpha1.Duration("30s")),
+							Authorization: &ngfAPIv1alpha1.Authorization{
+								Rules: []ngfAPIv1alpha1.Rule{},
+							},
+						},
+					},
+				},
+				Valid:      true,
+				Referenced: true,
+			},
+			referencedSecrets: map[types.NamespacedName]*secrets.Secret{
+				{Namespace: "test", Name: "jwt-secret"}: {
+					Source: &apiv1.Secret{
+						ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "jwt-secret"},
+						Data: map[string][]byte{
+							secrets.AuthKey: []byte("token"),
+						},
+					},
+				},
+			},
+			expected: &AuthenticationFilter{
+				JWT: &AuthJWT{
+					SecretName:      "jwt-secret",
+					SecretNamespace: "test",
+					Realm:           "my-realm",
+					KeyCache:        helpers.GetPointer(ngfAPIv1alpha1.Duration("60s")),
+					Data:            []byte("token"),
+					// Leeway should still be set even if Authorization rules are empty.
+					Leeway: helpers.GetPointer(ngfAPIv1alpha1.Duration("30s")),
+				},
+			},
+		},
+		{
+			name: "jwt auth with nil authorization does not populate authz fields",
+			filter: &graph.AuthenticationFilter{
+				Source: &ngfAPIv1alpha1.AuthenticationFilter{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "af",
+						Namespace: "test",
+					},
+					Spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+						Type: ngfAPIv1alpha1.AuthTypeJWT,
+						JWT: &ngfAPIv1alpha1.JWTAuth{
+							Realm:  "my-realm",
+							Source: ngfAPIv1alpha1.JWTKeySourceFile,
+							File: &ngfAPIv1alpha1.JWTFileKeySource{
+								SecretRef: ngfAPIv1alpha1.LocalObjectReference{Name: "jwt-secret"},
+							},
+							KeyCache:      helpers.GetPointer(ngfAPIv1alpha1.Duration("60s")),
+							Leeway:        helpers.GetPointer(ngfAPIv1alpha1.Duration("30s")),
+							Authorization: nil,
+						},
+					},
+				},
+				Valid:      true,
+				Referenced: true,
+			},
+			referencedSecrets: map[types.NamespacedName]*secrets.Secret{
+				{Namespace: "test", Name: "jwt-secret"}: {
+					Source: &apiv1.Secret{
+						ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "jwt-secret"},
+						Data: map[string][]byte{
+							secrets.AuthKey: []byte("token"),
+						},
+					},
+				},
+			},
+			expected: &AuthenticationFilter{
+				JWT: &AuthJWT{
+					SecretName:      "jwt-secret",
+					SecretNamespace: "test",
+					Realm:           "my-realm",
+					KeyCache:        helpers.GetPointer(ngfAPIv1alpha1.Duration("60s")),
+					Data:            []byte("token"),
+					// Leeway should still be set even if Authorization is nil
+					Leeway: helpers.GetPointer(ngfAPIv1alpha1.Duration("30s")),
+				},
+			},
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

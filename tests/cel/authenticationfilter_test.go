@@ -274,6 +274,33 @@ func TestAuthenticationFilterValidateJWTAccepted(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "Validate: type=JWT with unique claim names across different rules is accepted",
+			spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+				Type: ngfAPIv1alpha1.AuthTypeJWT,
+				JWT: &ngfAPIv1alpha1.JWTAuth{
+					Realm:  "Restricted Area",
+					Source: ngfAPIv1alpha1.JWTKeySourceFile,
+					File: &ngfAPIv1alpha1.JWTFileKeySource{
+						SecretRef: ngfAPIv1alpha1.LocalObjectReference{Name: uniqueResourceName("jwt-secret")},
+					},
+					Authorization: &ngfAPIv1alpha1.Authorization{
+						Rules: []ngfAPIv1alpha1.Rule{
+							{
+								Claims: []ngfAPIv1alpha1.Claim{
+									{Name: "role", Values: []string{"admin"}},
+								},
+							},
+							{
+								Claims: []ngfAPIv1alpha1.Claim{
+									{Name: "role", Values: []string{"editor"}},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -463,6 +490,30 @@ func TestAuthenticationFilterValidateJWTRejected(t *testing.T) {
 				},
 			},
 			wantErrors: []string{expectedJWTRemoteOnlyError},
+		},
+		{
+			name: "Validate: type=JWT with duplicate claim names within a rule is rejected",
+			spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+				Type: ngfAPIv1alpha1.AuthTypeJWT,
+				JWT: &ngfAPIv1alpha1.JWTAuth{
+					Realm:  "Restricted Area",
+					Source: ngfAPIv1alpha1.JWTKeySourceFile,
+					File: &ngfAPIv1alpha1.JWTFileKeySource{
+						SecretRef: ngfAPIv1alpha1.LocalObjectReference{Name: uniqueResourceName("jwt-secret")},
+					},
+					Authorization: &ngfAPIv1alpha1.Authorization{
+						Rules: []ngfAPIv1alpha1.Rule{
+							{
+								Claims: []ngfAPIv1alpha1.Claim{
+									{Name: "role", Values: []string{"admin"}},
+									{Name: "role", Values: []string{"editor"}},
+								},
+							},
+						},
+					},
+				},
+			},
+			wantErrors: []string{expectedDuplicateClaimNamesError},
 		},
 	}
 

@@ -179,3 +179,111 @@ func TestValidateOIDCFrontChannelLogoutURI(t *testing.T) {
 		`/frontchannel_logout$bad`,
 	)
 }
+
+func TestValidateAuthZClaimName(t *testing.T) {
+	t.Parallel()
+	validator := AuthFieldValidator{}
+
+	testValidValuesForSimpleValidator(
+		t,
+		validator.ValidateAuthZClaimName,
+		`role`,
+		`app-1/role`,
+		`app_1-role`,
+		`sub`,
+		`groups`,
+		`my-claim`,
+		`my_claim`,
+		`claim/nested/path`,
+		`ABC123`,
+	)
+
+	testInvalidValuesForSimpleValidator(
+		t,
+		validator.ValidateAuthZClaimName,
+		``,
+		`claim;name`,
+		`claim$name`,
+		`claim name`,
+		`claim#name`,
+		`claim{name}`,
+		`claim|name`,
+		`claim&name`,
+		`claim>name`,
+		`claim<name`,
+		`claim'name`,
+		`claim"name`,
+	)
+}
+
+func TestValidateAuthZClaimValue(t *testing.T) {
+	t.Parallel()
+	validator := AuthFieldValidator{}
+
+	testValidValuesForSimpleValidator(
+		t,
+		validator.ValidateAuthZClaimValue,
+		`admin`,
+		`user`,
+		`app-1`,
+		`role_name`,
+		`value/with/slashes`,
+		`value-with-dashes`,
+		`value_with_underscores`,
+		`MixedCase123`,
+		`value with spaces`,
+		`https://issuer.example.com/`,
+	)
+
+	testInvalidValuesForSimpleValidator(
+		t,
+		validator.ValidateAuthZClaimValue,
+		``,
+		"value\nwith\nnewlines",
+		"value\rwith\rcarriage",
+		`value;semicolon`,
+		`value#hash`,
+		`value$dollar`,
+		`value{brace}`,
+		`value|pipe`,
+		`value&ampersand`,
+		`value>greater`,
+		`value<less`,
+		`value'quote`,
+		`value"doublequote`,
+	)
+}
+
+func TestValidateAuthZProxySetHeader(t *testing.T) {
+	t.Parallel()
+	validator := AuthFieldValidator{}
+
+	testValidValuesForSimpleValidator(
+		t,
+		validator.ValidateAuthZProxySetHeader,
+		`X-User-Role`,
+		`X-App-Name`,
+		`X-JWT-Claim-Sub`,
+		`Authorization`,
+		`X-Groups`,
+	)
+
+	testInvalidValuesForSimpleValidator(
+		t,
+		validator.ValidateAuthZProxySetHeader,
+		``,
+		`Header;Name`,
+		`Header$Name`,
+		`Header Name`,
+		`Header#Name`,
+		`Header{Name}`,
+		`Header|Name`,
+		`Header&Name`,
+		`Header>Name`,
+		`Header<Name`,
+		`Header'Name`,
+		`Header"Name`,
+		`X-Custom-Header_1`,
+		`My-Header/Path`,
+	)
+}

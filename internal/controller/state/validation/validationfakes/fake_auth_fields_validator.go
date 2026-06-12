@@ -8,6 +8,39 @@ import (
 )
 
 type FakeAuthFieldsValidator struct {
+	ValidateAuthZClaimNameStub        func(string) error
+	validateAuthZClaimNameMutex       sync.RWMutex
+	validateAuthZClaimNameArgsForCall []struct {
+		arg1 string
+	}
+	validateAuthZClaimNameReturns struct {
+		result1 error
+	}
+	validateAuthZClaimNameReturnsOnCall map[int]struct {
+		result1 error
+	}
+	ValidateAuthZClaimValueStub        func(string) error
+	validateAuthZClaimValueMutex       sync.RWMutex
+	validateAuthZClaimValueArgsForCall []struct {
+		arg1 string
+	}
+	validateAuthZClaimValueReturns struct {
+		result1 error
+	}
+	validateAuthZClaimValueReturnsOnCall map[int]struct {
+		result1 error
+	}
+	ValidateAuthZProxySetHeaderStub        func(string) error
+	validateAuthZProxySetHeaderMutex       sync.RWMutex
+	validateAuthZProxySetHeaderArgsForCall []struct {
+		arg1 string
+	}
+	validateAuthZProxySetHeaderReturns struct {
+		result1 error
+	}
+	validateAuthZProxySetHeaderReturnsOnCall map[int]struct {
+		result1 error
+	}
 	ValidateOIDCConfigURLStub        func(string) error
 	validateOIDCConfigURLMutex       sync.RWMutex
 	validateOIDCConfigURLArgsForCall []struct {
@@ -76,6 +109,189 @@ type FakeAuthFieldsValidator struct {
 	}
 	invocations      map[string][][]interface{}
 	invocationsMutex sync.RWMutex
+}
+
+func (fake *FakeAuthFieldsValidator) ValidateAuthZClaimName(arg1 string) error {
+	fake.validateAuthZClaimNameMutex.Lock()
+	ret, specificReturn := fake.validateAuthZClaimNameReturnsOnCall[len(fake.validateAuthZClaimNameArgsForCall)]
+	fake.validateAuthZClaimNameArgsForCall = append(fake.validateAuthZClaimNameArgsForCall, struct {
+		arg1 string
+	}{arg1})
+	stub := fake.ValidateAuthZClaimNameStub
+	fakeReturns := fake.validateAuthZClaimNameReturns
+	fake.recordInvocation("ValidateAuthZClaimName", []interface{}{arg1})
+	fake.validateAuthZClaimNameMutex.Unlock()
+	if stub != nil {
+		return stub(arg1)
+	}
+	if specificReturn {
+		return ret.result1
+	}
+	return fakeReturns.result1
+}
+
+func (fake *FakeAuthFieldsValidator) ValidateAuthZClaimNameCallCount() int {
+	fake.validateAuthZClaimNameMutex.RLock()
+	defer fake.validateAuthZClaimNameMutex.RUnlock()
+	return len(fake.validateAuthZClaimNameArgsForCall)
+}
+
+func (fake *FakeAuthFieldsValidator) ValidateAuthZClaimNameCalls(stub func(string) error) {
+	fake.validateAuthZClaimNameMutex.Lock()
+	defer fake.validateAuthZClaimNameMutex.Unlock()
+	fake.ValidateAuthZClaimNameStub = stub
+}
+
+func (fake *FakeAuthFieldsValidator) ValidateAuthZClaimNameArgsForCall(i int) string {
+	fake.validateAuthZClaimNameMutex.RLock()
+	defer fake.validateAuthZClaimNameMutex.RUnlock()
+	argsForCall := fake.validateAuthZClaimNameArgsForCall[i]
+	return argsForCall.arg1
+}
+
+func (fake *FakeAuthFieldsValidator) ValidateAuthZClaimNameReturns(result1 error) {
+	fake.validateAuthZClaimNameMutex.Lock()
+	defer fake.validateAuthZClaimNameMutex.Unlock()
+	fake.ValidateAuthZClaimNameStub = nil
+	fake.validateAuthZClaimNameReturns = struct {
+		result1 error
+	}{result1}
+}
+
+func (fake *FakeAuthFieldsValidator) ValidateAuthZClaimNameReturnsOnCall(i int, result1 error) {
+	fake.validateAuthZClaimNameMutex.Lock()
+	defer fake.validateAuthZClaimNameMutex.Unlock()
+	fake.ValidateAuthZClaimNameStub = nil
+	if fake.validateAuthZClaimNameReturnsOnCall == nil {
+		fake.validateAuthZClaimNameReturnsOnCall = make(map[int]struct {
+			result1 error
+		})
+	}
+	fake.validateAuthZClaimNameReturnsOnCall[i] = struct {
+		result1 error
+	}{result1}
+}
+
+func (fake *FakeAuthFieldsValidator) ValidateAuthZClaimValue(arg1 string) error {
+	fake.validateAuthZClaimValueMutex.Lock()
+	ret, specificReturn := fake.validateAuthZClaimValueReturnsOnCall[len(fake.validateAuthZClaimValueArgsForCall)]
+	fake.validateAuthZClaimValueArgsForCall = append(fake.validateAuthZClaimValueArgsForCall, struct {
+		arg1 string
+	}{arg1})
+	stub := fake.ValidateAuthZClaimValueStub
+	fakeReturns := fake.validateAuthZClaimValueReturns
+	fake.recordInvocation("ValidateAuthZClaimValue", []interface{}{arg1})
+	fake.validateAuthZClaimValueMutex.Unlock()
+	if stub != nil {
+		return stub(arg1)
+	}
+	if specificReturn {
+		return ret.result1
+	}
+	return fakeReturns.result1
+}
+
+func (fake *FakeAuthFieldsValidator) ValidateAuthZClaimValueCallCount() int {
+	fake.validateAuthZClaimValueMutex.RLock()
+	defer fake.validateAuthZClaimValueMutex.RUnlock()
+	return len(fake.validateAuthZClaimValueArgsForCall)
+}
+
+func (fake *FakeAuthFieldsValidator) ValidateAuthZClaimValueCalls(stub func(string) error) {
+	fake.validateAuthZClaimValueMutex.Lock()
+	defer fake.validateAuthZClaimValueMutex.Unlock()
+	fake.ValidateAuthZClaimValueStub = stub
+}
+
+func (fake *FakeAuthFieldsValidator) ValidateAuthZClaimValueArgsForCall(i int) string {
+	fake.validateAuthZClaimValueMutex.RLock()
+	defer fake.validateAuthZClaimValueMutex.RUnlock()
+	argsForCall := fake.validateAuthZClaimValueArgsForCall[i]
+	return argsForCall.arg1
+}
+
+func (fake *FakeAuthFieldsValidator) ValidateAuthZClaimValueReturns(result1 error) {
+	fake.validateAuthZClaimValueMutex.Lock()
+	defer fake.validateAuthZClaimValueMutex.Unlock()
+	fake.ValidateAuthZClaimValueStub = nil
+	fake.validateAuthZClaimValueReturns = struct {
+		result1 error
+	}{result1}
+}
+
+func (fake *FakeAuthFieldsValidator) ValidateAuthZClaimValueReturnsOnCall(i int, result1 error) {
+	fake.validateAuthZClaimValueMutex.Lock()
+	defer fake.validateAuthZClaimValueMutex.Unlock()
+	fake.ValidateAuthZClaimValueStub = nil
+	if fake.validateAuthZClaimValueReturnsOnCall == nil {
+		fake.validateAuthZClaimValueReturnsOnCall = make(map[int]struct {
+			result1 error
+		})
+	}
+	fake.validateAuthZClaimValueReturnsOnCall[i] = struct {
+		result1 error
+	}{result1}
+}
+
+func (fake *FakeAuthFieldsValidator) ValidateAuthZProxySetHeader(arg1 string) error {
+	fake.validateAuthZProxySetHeaderMutex.Lock()
+	ret, specificReturn := fake.validateAuthZProxySetHeaderReturnsOnCall[len(fake.validateAuthZProxySetHeaderArgsForCall)]
+	fake.validateAuthZProxySetHeaderArgsForCall = append(fake.validateAuthZProxySetHeaderArgsForCall, struct {
+		arg1 string
+	}{arg1})
+	stub := fake.ValidateAuthZProxySetHeaderStub
+	fakeReturns := fake.validateAuthZProxySetHeaderReturns
+	fake.recordInvocation("ValidateAuthZProxySetHeader", []interface{}{arg1})
+	fake.validateAuthZProxySetHeaderMutex.Unlock()
+	if stub != nil {
+		return stub(arg1)
+	}
+	if specificReturn {
+		return ret.result1
+	}
+	return fakeReturns.result1
+}
+
+func (fake *FakeAuthFieldsValidator) ValidateAuthZProxySetHeaderCallCount() int {
+	fake.validateAuthZProxySetHeaderMutex.RLock()
+	defer fake.validateAuthZProxySetHeaderMutex.RUnlock()
+	return len(fake.validateAuthZProxySetHeaderArgsForCall)
+}
+
+func (fake *FakeAuthFieldsValidator) ValidateAuthZProxySetHeaderCalls(stub func(string) error) {
+	fake.validateAuthZProxySetHeaderMutex.Lock()
+	defer fake.validateAuthZProxySetHeaderMutex.Unlock()
+	fake.ValidateAuthZProxySetHeaderStub = stub
+}
+
+func (fake *FakeAuthFieldsValidator) ValidateAuthZProxySetHeaderArgsForCall(i int) string {
+	fake.validateAuthZProxySetHeaderMutex.RLock()
+	defer fake.validateAuthZProxySetHeaderMutex.RUnlock()
+	argsForCall := fake.validateAuthZProxySetHeaderArgsForCall[i]
+	return argsForCall.arg1
+}
+
+func (fake *FakeAuthFieldsValidator) ValidateAuthZProxySetHeaderReturns(result1 error) {
+	fake.validateAuthZProxySetHeaderMutex.Lock()
+	defer fake.validateAuthZProxySetHeaderMutex.Unlock()
+	fake.ValidateAuthZProxySetHeaderStub = nil
+	fake.validateAuthZProxySetHeaderReturns = struct {
+		result1 error
+	}{result1}
+}
+
+func (fake *FakeAuthFieldsValidator) ValidateAuthZProxySetHeaderReturnsOnCall(i int, result1 error) {
+	fake.validateAuthZProxySetHeaderMutex.Lock()
+	defer fake.validateAuthZProxySetHeaderMutex.Unlock()
+	fake.ValidateAuthZProxySetHeaderStub = nil
+	if fake.validateAuthZProxySetHeaderReturnsOnCall == nil {
+		fake.validateAuthZProxySetHeaderReturnsOnCall = make(map[int]struct {
+			result1 error
+		})
+	}
+	fake.validateAuthZProxySetHeaderReturnsOnCall[i] = struct {
+		result1 error
+	}{result1}
 }
 
 func (fake *FakeAuthFieldsValidator) ValidateOIDCConfigURL(arg1 string) error {

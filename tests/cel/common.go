@@ -48,6 +48,7 @@ const (
 	expectedJWTFileOnlyError             = "source File must not set spec.remote"
 	expectedJWTRemoteRequiredError       = "source Remote requires spec.remote to be set"
 	expectedJWTRemoteOnlyError           = "source Remote must not set spec.file"
+	expectedDuplicateClaimNamesError     = "claim names must be unique within a rule"
 
 	expectedTargetRefKindMustBeGatewayOrHTTPRouteOrGrpcRouteError = "TargetRef Kind must be one of: " +
 		"Gateway, HTTPRoute, or GRPCRoute"

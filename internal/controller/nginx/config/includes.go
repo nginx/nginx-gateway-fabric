@@ -1,10 +1,14 @@
 package config
 
 import (
+	"fmt"
+	"strings"
+
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/http"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/shared"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
 
 // createIncludeExecuteResultsFromServers creates a list of executeResults -- or NGINX config files -- from all
@@ -61,6 +65,66 @@ func createIncludeFromSnippet(snippet dataplane.Snippet) shared.Include {
 	return shared.Include{
 		Name:    includesFolder + "/" + snippet.Name + ".conf",
 		Content: []byte(snippet.Contents),
+	}
+}
+
+// createIncludesFromAuthZConfigs creates include files for AuthZ map configurations.
+// Each rule's maps are placed in their own include file named:
+//
+//	<filter namespace-name>_rule_<index>_require_<all|any>.conf
+//
+// The top-level aggregation map is placed in:
+//
+//	<filter namespace-name>_authz_require_<all|any>.conf
+func createIncludesFromAuthZConfigs(authZConfigs []*dataplane.AuthZConfig) []shared.Include {
+	if len(authZConfigs) == 0 {
+		return nil
+	}
+
+	var includes []shared.Include
+
+	for _, cfg := range authZConfigs {
+		if cfg == nil {
+			continue
+		}
+
+		// Create per-rule include files
+		for ruleIdx, ruleMap := range cfg.RuleMaps {
+			if len(ruleMap.Maps) == 0 {
+				continue
+			}
+			includes = append(includes, createIncludeFromAuthZRuleMap(cfg.FilterNsName, ruleIdx, ruleMap))
+		}
+
+		if cfg.AuthZMap != nil && cfg.AuthZMap.Source != "" {
+			includes = append(includes, createIncludeFromAuthZMap(cfg.FilterNsName, *cfg.AuthZMap))
+		}
+	}
+
+	return includes
+}
+
+// createIncludeFromAuthZRuleMap creates an include file for a single AuthZ rule map.
+func createIncludeFromAuthZRuleMap(filterNsName string, ruleIdx int, ruleMap dataplane.AuthZRuleMap) shared.Include {
+	fileName := fmt.Sprintf(
+		"%s/%s_rule_%d_require_%s.conf",
+		includesFolder, filterNsName, ruleIdx, strings.ToLower(string(ruleMap.Require)),
+	)
+	return shared.Include{
+		Name:    fileName,
+		Content: helpers.MustExecuteTemplate(mapsTemplate, ruleMap.Maps),
+	}
+}
+
+// createIncludeFromAuthZMap creates an include file for a top-level AuthZ map.
+func createIncludeFromAuthZMap(filterNsName string, authZMap dataplane.AuthZMap) shared.Include {
+	fileName := fmt.Sprintf(
+		"%s/%s_authz_require_%s.conf",
+		includesFolder, filterNsName, strings.ToLower(string(authZMap.Require)),
+	)
+	return shared.Include{
+		Name:    fileName,
+		Content: helpers.MustExecuteTemplate(mapsTemplate, []shared.Map{authZMap.Map}),
 	}
 }
 

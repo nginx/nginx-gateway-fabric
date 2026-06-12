@@ -280,6 +280,22 @@ type JWTAuth struct {
 	// +optional
 	Remote *JWTRemoteKeySource `json:"remote,omitempty"`
 
+	// Authorization defines the authorization (authz) specification.
+	// Enables configuration of token claim validation.
+	//
+	// +optional
+	Authorization *Authorization `json:"authorization,omitempty"`
+
+	// Leeway is the acceptable clock skew for exp & nbf claims.
+	// If exp & nbf claims are not defined, this directive takes no effect.
+	// Configures `auth_jwt_leeway` directive.
+	// https://nginx.org/en/docs/http/ngx_http_auth_jwt_module.html#auth_jwt_leeway
+	// Example: "auth_jwt_leeway 60s".
+	// Default: 0s.
+	//
+	// +optional
+	Leeway *Duration `json:"leeway,omitempty"`
+
 	// Realm used by NGINX `auth_jwt` directive
 	// https://nginx.org/en/docs/http/ngx_http_auth_jwt_module.html#auth_jwt
 	// Configures "realm="<realm_value>" in WWW-Authenticate header in error page location.
@@ -313,6 +329,94 @@ type JWTRemoteKeySource struct {
 	// +optional
 	// +kubebuilder:validation:MaxItems=1
 	CACertificateRefs []LocalObjectReference `json:"caCertificateRefs,omitempty"`
+}
+
+// RequireType defines how JWT Claims are validated.
+// +kubebuilder:validation:Enum=All;Any
+type RequireType string
+
+const (
+	// RequireTypeAll authorizes claims that satisfy all requirements.
+	RequireTypeAll RequireType = "All"
+	// RequireTypeAny authorizes claims that satisfy any requirement.
+	RequireTypeAny RequireType = "Any"
+)
+
+// ClaimMatchType defines how claim values are parsed.
+// +kubebuilder:validation:Enum=Exact;Regex
+type ClaimMatchType string
+
+const (
+	// ClaimMatchTypeExact treats claim values as their exact value.
+	ClaimMatchTypeExact ClaimMatchType = "Exact"
+	// ClaimMatchTypeRegex treats claim values as a regex value.
+	ClaimMatchTypeRegex ClaimMatchType = "Regex"
+)
+
+// Authorization specifies a set of required claim rules
+// that a token's claim must match to be authorized, given the require type defined.
+type Authorization struct {
+	// Require sets top level authorization requirement.
+	// When set to All, the requirements for all claims in a rule must be met.
+	// When set to Any, the requirements for any one claim in a rule must be met.
+	//
+	// +optional
+	// +kubebuilder:default=Any
+	Require *RequireType `json:"require,omitempty"`
+
+	// Rules defines a list of claims and their specific authorization requirements.
+	//
+	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=32
+	Rules []Rule `json:"rules"`
+}
+
+// Rule defines a list of claims, and authorization rules for those claims.
+//
+// +kubebuilder:validation:XValidation:message="claim names must be unique within a rule",rule="self.claims.all(c, self.claims.exists_one(d, d.name == c.name))"
+//
+//nolint:lll
+type Rule struct {
+	// Require sets the authorization mode for a specific claim within a rule.
+	// When set to All, a token's claim must match all values within that claim.
+	// When set to Any, a token's claim must match at least one value with that claim.
+	//
+	// +optional
+	// +kubebuilder:default=Any
+	Require *RequireType `json:"require,omitempty"`
+
+	// Claims defines a list of claims required by users.
+	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=32
+	Claims []Claim `json:"claims"`
+}
+
+// Claim describes the exact name/value pair of claims that must be matched.
+type Claim struct {
+	// ProxySetHeader sets both the name and variable for `proxy_set_header`
+	// Example: For claim name `sub` for JWT auth
+	//
+	// proxy_set_header X-JWT-Claim-Sub $jwt_claim_sub;
+	// +kubebuilder:validation:Pattern=`^[-A-Za-z0-9]+$`
+	// +kubebuilder:validation:MaxLength=253
+	ProxySetHeader *string `json:"proxySetHeader,omitempty"`
+
+	// Name is the name of the claim within the token.
+	// +kubebuilder:validation:Pattern=`^[a-zA-Z0-9_/-]+$`
+	// +kubebuilder:validation:MaxLength=253
+	Name string `json:"name"`
+
+	// Match sets the match type for the claim.
+	// +kubebuilder:default=Exact
+	Match ClaimMatchType `json:"match,omitempty"`
+
+	// Values are the values within the claim.
+	// When more than one value is set, the claim must match any of these values.
+	// +kubebuilder:validation:items:Pattern=`^[^\n\r;#\$\{\}\|&><'"]+$`
+	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=32
+	// +kubebuilder:validation:items:MaxLength=256
+	Values []string `json:"values"`
 }
 
 // AuthenticationFilterStatus defines the state of AuthenticationFilter.

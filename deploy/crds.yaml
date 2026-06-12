@@ -75,6 +75,99 @@ spec:
               jwt:
                 description: JWT configures JSON Web Token authentication (NGINX Plus).
                 properties:
+                  authorization:
+                    description: |-
+                      Authorization defines the authorization (authz) specification.
+                      Enables configuration of token claim validation.
+                    properties:
+                      require:
+                        default: Any
+                        description: |-
+                          Require sets top level authorization requirement.
+                          When set to All, the requirements for all claims in a rule must be met.
+                          When set to Any, the requirements for any one claim in a rule must be met.
+                        enum:
+                        - All
+                        - Any
+                        type: string
+                      rules:
+                        description: Rules defines a list of claims and their specific
+                          authorization requirements.
+                        items:
+                          description: Rule defines a list of claims, and authorization
+                            rules for those claims.
+                          properties:
+                            claims:
+                              description: Claims defines a list of claims required
+                                by users.
+                              items:
+                                description: Claim describes the exact name/value
+                                  pair of claims that must be matched.
+                                properties:
+                                  match:
+                                    default: Exact
+                                    description: Match sets the match type for the
+                                      claim.
+                                    enum:
+                                    - Exact
+                                    - Regex
+                                    type: string
+                                  name:
+                                    description: Name is the name of the claim within
+                                      the token.
+                                    maxLength: 253
+                                    pattern: ^[a-zA-Z0-9_/-]+$
+                                    type: string
+                                  proxySetHeader:
+                                    description: |-
+                                      ProxySetHeader sets both the name and variable for `proxy_set_header`
+                                      Example: For claim name `sub` for JWT auth
+
+                                      proxy_set_header X-JWT-Claim-Sub $jwt_claim_sub;
+                                    maxLength: 253
+                                    pattern: ^[-A-Za-z0-9]+$
+                                    type: string
+                                  values:
+                                    description: |-
+                                      Values are the values within the claim.
+                                      When more than one value is set, the claim must match any of these values.
+                                    items:
+                                      maxLength: 256
+                                      pattern: ^[^\n\r;#\$\{\}\|&><'"]+$
+                                      type: string
+                                    maxItems: 32
+                                    minItems: 1
+                                    type: array
+                                required:
+                                - name
+                                - values
+                                type: object
+                              maxItems: 32
+                              minItems: 1
+                              type: array
+                            require:
+                              default: Any
+                              description: |-
+                                Require sets the authorization mode for a specific claim within a rule.
+                                When set to All, a token's claim must match all values within that claim.
+                                When set to Any, a token's claim must match at least one value with that claim.
+                              enum:
+                              - All
+                              - Any
+                              type: string
+                          required:
+                          - claims
+                          type: object
+                          x-kubernetes-validations:
+                          - message: claim names must be unique within a rule
+                            rule: self.claims.all(c, self.claims.exists_one(d, d.name
+                              == c.name))
+                        maxItems: 32
+                        minItems: 1
+                        type: array
+                    required:
+                    - rules
+                    type: object
                   file:
                     description: |-
                       File specifies local JWKS configuration.
@@ -99,6 +192,16 @@ spec:
                       Configures `auth_jwt_key_cache` directive.
                       https://nginx.org/en/docs/http/ngx_http_auth_jwt_module.html#auth_jwt_key_cache
                       Example: "auth_jwt_key_cache 10m;".
+                    pattern: ^[0-9]{1,4}(ms|s|m|h)?$
+                    type: string
+                  leeway:
+                    description: |-
+                      Leeway is the acceptable clock skew for exp & nbf claims.
+                      If exp & nbf claims are not defined, this directive takes no effect.
+                      Configures `auth_jwt_leeway` directive.
+                      https://nginx.org/en/docs/http/ngx_http_auth_jwt_module.html#auth_jwt_leeway
+                      Example: "auth_jwt_leeway 60s".
+                      Default: 0s.
                     pattern: ^[0-9]{1,4}(ms|s|m|h)?$
                     type: string
                   realm:
