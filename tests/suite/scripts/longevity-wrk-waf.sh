@@ -51,8 +51,8 @@ fi
 # --- Clean traffic (wrk) ---
 # Two wrk instances mirror the two routes verified by the functional PLM tests.
 echo "Starting wrk clean traffic..."
-nohup wrk -t2 -c80 -d2h "http://${WAF_HOST}/coffee" >~/waf-coffee.txt 2>&1 &
-nohup wrk -t2 -c80 -d2h "http://${WAF_HOST}/tea" >~/waf-tea.txt 2>&1 &
+nohup wrk -t2 -c80 -d72h "http://${WAF_HOST}/coffee" >~/waf-coffee.txt 2>&1 &
+nohup wrk -t2 -c80 -d72h "http://${WAF_HOST}/tea" >~/waf-tea.txt 2>&1 &
 
 # --- Attack traffic loop ---
 # XSS payload matches the functional PLM test (</script> encoded), SQLi on tea.
