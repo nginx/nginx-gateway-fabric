@@ -1245,8 +1245,8 @@ func TestCreateStreamUpstream(t *testing.T) {
 
 	tests := []struct {
 		msg              string
-		stateUpstream    dataplane.Upstream
 		expectedUpstream stream.Upstream
+		stateUpstream    dataplane.Upstream
 	}{
 		{
 			stateUpstream: dataplane.Upstream{
