@@ -8,6 +8,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -1478,7 +1479,7 @@ func TestBuildResourcesForInvalidGatewayCleanup(t *testing.T) {
 
 	objects := provisioner.buildResourcesForInvalidGatewayCleanup(deploymentNSName)
 
-	g.Expect(objects).To(HaveLen(8))
+	g.Expect(objects).To(HaveLen(9))
 
 	validateMeta := func(obj client.Object, name string) {
 		g.Expect(obj.GetName()).To(Equal(name))
@@ -1505,17 +1506,22 @@ func TestBuildResourcesForInvalidGatewayCleanup(t *testing.T) {
 	g.Expect(ok).To(BeTrue())
 	validateMeta(hpa, deploymentNSName.Name)
 
-	svcAcctObj := objects[4]
+	pdbObj := objects[4]
+	pdb, ok := pdbObj.(*policyv1.PodDisruptionBudget)
+	g.Expect(ok).To(BeTrue())
+	validateMeta(pdb, deploymentNSName.Name)
+
+	svcAcctObj := objects[5]
 	svcAcct, ok := svcAcctObj.(*corev1.ServiceAccount)
 	g.Expect(ok).To(BeTrue())
 	validateMeta(svcAcct, deploymentNSName.Name)
 
-	cmObj := objects[5]
+	cmObj := objects[6]
 	cm, ok := cmObj.(*corev1.ConfigMap)
 	g.Expect(ok).To(BeTrue())
 	validateMeta(cm, controller.CreateNginxResourceName(deploymentNSName.Name, nginxIncludesConfigMapNameSuffix))
 
-	cmObj = objects[6]
+	cmObj = objects[7]
 	cm, ok = cmObj.(*corev1.ConfigMap)
 	g.Expect(ok).To(BeTrue())
 	validateMeta(cm, controller.CreateNginxResourceName(deploymentNSName.Name, nginxAgentConfigMapNameSuffix))
@@ -1545,7 +1551,7 @@ func TestBuildResourcesForInvalidGatewayCleanup_Plus(t *testing.T) {
 
 	objects := provisioner.buildResourcesForInvalidGatewayCleanup(deploymentNSName)
 
-	g.Expect(objects).To(HaveLen(12))
+	g.Expect(objects).To(HaveLen(13))
 
 	validateMeta := func(obj client.Object, name string) {
 		g.Expect(obj.GetName()).To(Equal(name))
@@ -1572,22 +1578,27 @@ func TestBuildResourcesForInvalidGatewayCleanup_Plus(t *testing.T) {
 	g.Expect(ok).To(BeTrue())
 	validateMeta(hpa, deploymentNSName.Name)
 
-	svcAcctObj := objects[4]
+	pdbObj := objects[4]
+	pdb, ok := pdbObj.(*policyv1.PodDisruptionBudget)
+	g.Expect(ok).To(BeTrue())
+	validateMeta(pdb, deploymentNSName.Name)
+
+	svcAcctObj := objects[5]
 	svcAcct, ok := svcAcctObj.(*corev1.ServiceAccount)
 	g.Expect(ok).To(BeTrue())
 	validateMeta(svcAcct, deploymentNSName.Name)
 
-	cmObj := objects[5]
+	cmObj := objects[6]
 	cm, ok := cmObj.(*corev1.ConfigMap)
 	g.Expect(ok).To(BeTrue())
 	validateMeta(cm, controller.CreateNginxResourceName(deploymentNSName.Name, nginxIncludesConfigMapNameSuffix))
 
-	cmObj = objects[6]
+	cmObj = objects[7]
 	cm, ok = cmObj.(*corev1.ConfigMap)
 	g.Expect(ok).To(BeTrue())
 	validateMeta(cm, controller.CreateNginxResourceName(deploymentNSName.Name, nginxAgentConfigMapNameSuffix))
 
-	secretObj := objects[7]
+	secretObj := objects[8]
 	secret, ok := secretObj.(*corev1.Secret)
 	g.Expect(ok).To(BeTrue())
 	validateMeta(secret, controller.CreateNginxResourceName(
@@ -1595,7 +1606,7 @@ func TestBuildResourcesForInvalidGatewayCleanup_Plus(t *testing.T) {
 		provisioner.cfg.AgentTLSSecretName,
 	))
 
-	secretObj = objects[8]
+	secretObj = objects[9]
 	secret, ok = secretObj.(*corev1.Secret)
 	g.Expect(ok).To(BeTrue())
 	validateMeta(secret, controller.CreateNginxResourceName(
@@ -1603,7 +1614,7 @@ func TestBuildResourcesForInvalidGatewayCleanup_Plus(t *testing.T) {
 		provisioner.cfg.NginxDockerSecretNames[0],
 	))
 
-	secretObj = objects[9]
+	secretObj = objects[10]
 	secret, ok = secretObj.(*corev1.Secret)
 	g.Expect(ok).To(BeTrue())
 	validateMeta(secret, controller.CreateNginxResourceName(
@@ -1611,7 +1622,7 @@ func TestBuildResourcesForInvalidGatewayCleanup_Plus(t *testing.T) {
 		provisioner.cfg.PlusUsageConfig.CASecretName,
 	))
 
-	secretObj = objects[10]
+	secretObj = objects[11]
 	secret, ok = secretObj.(*corev1.Secret)
 	g.Expect(ok).To(BeTrue())
 	validateMeta(secret, controller.CreateNginxResourceName(
@@ -1633,7 +1644,7 @@ func TestBuildResourcesForInvalidGatewayCleanup_OpenShift(t *testing.T) {
 
 	objects := provisioner.buildResourcesForInvalidGatewayCleanup(deploymentNSName)
 
-	g.Expect(objects).To(HaveLen(10))
+	g.Expect(objects).To(HaveLen(11))
 
 	validateMeta := func(obj client.Object, name string) {
 		g.Expect(obj.GetName()).To(Equal(name))
@@ -1645,12 +1656,17 @@ func TestBuildResourcesForInvalidGatewayCleanup_OpenShift(t *testing.T) {
 	g.Expect(ok).To(BeTrue())
 	validateMeta(hpa, deploymentNSName.Name)
 
-	roleObj := objects[4]
+	pdbObj := objects[4]
+	pdb, ok := pdbObj.(*policyv1.PodDisruptionBudget)
+	g.Expect(ok).To(BeTrue())
+	validateMeta(pdb, deploymentNSName.Name)
+
+	roleObj := objects[5]
 	role, ok := roleObj.(*rbacv1.Role)
 	g.Expect(ok).To(BeTrue())
 	validateMeta(role, deploymentNSName.Name)
 
-	roleBindingObj := objects[5]
+	roleBindingObj := objects[6]
 	roleBinding, ok := roleBindingObj.(*rbacv1.RoleBinding)
 	g.Expect(ok).To(BeTrue())
 	validateMeta(roleBinding, deploymentNSName.Name)
@@ -1679,8 +1695,8 @@ func TestBuildResourcesForInvalidGatewayCleanup_DataplaneKeySecret(t *testing.T)
 	objects := provisioner.buildResourcesForInvalidGatewayCleanup(deploymentNSName)
 
 	// Should include the dataplane key secret in the objects list
-	// Default: deployment, daemonset, service, hpa, serviceaccount, 2 configmaps, agentTLSSecret, dataplaneKeySecret
-	g.Expect(objects).To(HaveLen(9))
+	// Default: deployment, daemonset, service, hpa, pdb, serviceaccount, 2 configmaps, agentTLSSecret, dataplaneKeySecret
+	g.Expect(objects).To(HaveLen(10))
 
 	validateMeta := func(obj client.Object, name string) {
 		g.Expect(obj.GetName()).To(Equal(name))
@@ -1698,6 +1714,95 @@ func TestBuildResourcesForInvalidGatewayCleanup_DataplaneKeySecret(t *testing.T)
 		}
 	}
 	g.Expect(found).To(BeTrue())
+}
+
+func TestBuildNginxDeploymentPDB(t *testing.T) {
+	t.Parallel()
+
+	provisioner := &NginxProvisioner{}
+
+	selectorLabels := map[string]string{
+		"app":     "nginx",
+		"gateway": "gw",
+	}
+	objectMeta := metav1.ObjectMeta{
+		Name:      "gw-nginx",
+		Namespace: "default",
+		Labels:    map[string]string{"app": "nginx"},
+	}
+
+	tests := []struct {
+		pdbSpec                        *ngfAPIv1alpha2.PodDisruptionBudgetSpec
+		wantMinAvail                   *intstr.IntOrString
+		wantMaxUnavail                 *intstr.IntOrString
+		wantUnhealthyPodEvictionPolicy *policyv1.UnhealthyPodEvictionPolicyType
+		name                           string
+	}{
+		{
+			name: "minAvailable set as absolute number",
+			pdbSpec: &ngfAPIv1alpha2.PodDisruptionBudgetSpec{
+				MinAvailable: func() *intstr.IntOrString { v := intstr.FromInt32(1); return &v }(),
+			},
+			wantMinAvail: func() *intstr.IntOrString { v := intstr.FromInt32(1); return &v }(),
+		},
+		{
+			name: "minAvailable set as percentage",
+			pdbSpec: &ngfAPIv1alpha2.PodDisruptionBudgetSpec{
+				MinAvailable: func() *intstr.IntOrString { v := intstr.FromString("50%"); return &v }(),
+			},
+			wantMinAvail: func() *intstr.IntOrString { v := intstr.FromString("50%"); return &v }(),
+		},
+		{
+			name: "maxUnavailable set as absolute number",
+			pdbSpec: &ngfAPIv1alpha2.PodDisruptionBudgetSpec{
+				MaxUnavailable: func() *intstr.IntOrString { v := intstr.FromInt32(1); return &v }(),
+			},
+			wantMaxUnavail: func() *intstr.IntOrString { v := intstr.FromInt32(1); return &v }(),
+		},
+		{
+			name: "maxUnavailable set as percentage",
+			pdbSpec: &ngfAPIv1alpha2.PodDisruptionBudgetSpec{
+				MaxUnavailable: func() *intstr.IntOrString { v := intstr.FromString("20%"); return &v }(),
+			},
+			wantMaxUnavail: func() *intstr.IntOrString { v := intstr.FromString("20%"); return &v }(),
+		},
+		{
+			name: "unhealthyPodEvictionPolicy set to AlwaysAllow",
+			pdbSpec: &ngfAPIv1alpha2.PodDisruptionBudgetSpec{
+				MinAvailable:               func() *intstr.IntOrString { v := intstr.FromInt32(1); return &v }(),
+				UnhealthyPodEvictionPolicy: helpers.GetPointer(policyv1.AlwaysAllow),
+			},
+			wantMinAvail:                   func() *intstr.IntOrString { v := intstr.FromInt32(1); return &v }(),
+			wantUnhealthyPodEvictionPolicy: helpers.GetPointer(policyv1.AlwaysAllow),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			nProxyCfg := &graph.EffectiveNginxProxy{
+				Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+					Deployment: &ngfAPIv1alpha2.DeploymentSpec{
+						PodDisruptionBudget: tt.pdbSpec,
+					},
+				},
+			}
+
+			obj := provisioner.buildPDB(objectMeta, nProxyCfg, selectorLabels)
+			pdb, ok := obj.(*policyv1.PodDisruptionBudget)
+			g.Expect(ok).To(BeTrue())
+
+			g.Expect(pdb.Name).To(Equal(objectMeta.Name))
+			g.Expect(pdb.Namespace).To(Equal(objectMeta.Namespace))
+			g.Expect(pdb.Spec.Selector).ToNot(BeNil())
+			g.Expect(pdb.Spec.Selector.MatchLabels).To(Equal(selectorLabels))
+			g.Expect(pdb.Spec.MinAvailable).To(Equal(tt.wantMinAvail))
+			g.Expect(pdb.Spec.MaxUnavailable).To(Equal(tt.wantMaxUnavail))
+			g.Expect(pdb.Spec.UnhealthyPodEvictionPolicy).To(Equal(tt.wantUnhealthyPodEvictionPolicy))
+		})
+	}
 }
 
 func TestSetIPFamily(t *testing.T) {

@@ -182,6 +182,17 @@ Create namespaced RBAC rules.
   - get
   - watch
 - apiGroups:
+  - policy
+  resources:
+  - poddisruptionbudgets
+  verbs:
+  - create
+  - update
+  - delete
+  - list
+  - get
+  - watch
+- apiGroups:
   - discovery.k8s.io
   resources:
   - endpointslices
