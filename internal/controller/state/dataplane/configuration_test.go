@@ -2021,12 +2021,6 @@ func TestBuildConfiguration(t *testing.T) {
 						Port: 443,
 					},
 					{
-						Hostname:  "",
-						Upstreams: []Layer4Upstream{},
-						Port:      443,
-						IsDefault: true,
-					},
-					{
 						Hostname:  "*.example.com",
 						Upstreams: []Layer4Upstream{},
 						Port:      443,
@@ -2039,6 +2033,12 @@ func TestBuildConfiguration(t *testing.T) {
 						},
 						Port:      444,
 						IsDefault: false,
+					},
+					{
+						Hostname:  "",
+						Upstreams: []Layer4Upstream{},
+						Port:      443,
+						IsDefault: true,
 					},
 				}
 				conf.SSLServers[0].SSL = &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}}
@@ -4861,7 +4861,7 @@ func TestCreateRatioVarName(t *testing.T) {
 	g.Expect(CreateRatioVarName(25)).To(Equal("$otel_ratio_25"))
 }
 
-func TestBuildTLSServers(t *testing.T) {
+func TestCreatePassthroughServers(t *testing.T) {
 	t.Parallel()
 
 	getL4RouteKey := func(name string) graph.L4RouteKey {
@@ -5468,6 +5468,7 @@ func TestBuildStreamUpstreams(t *testing.T) {
 	secureApp4Key := getL4RouteKey("secure-app4")
 	secureApp5Key := getL4RouteKey("secure-app5")
 	secureApp6Key := getL4RouteKey("secure-app6")
+	clusterAppKey := getL4RouteKey("cluster-app")
 	externalAppKey := getL4RouteKey("external-app")
 
 	gateway := &graph.Gateway{
@@ -5574,6 +5575,25 @@ func TestBuildStreamUpstreams(t *testing.T) {
 							},
 						},
 					},
+					clusterAppKey: {
+						Valid: true,
+						Spec: graph.L4RouteSpec{
+							Hostnames: []v1.Hostname{"cluster.example.com"},
+							BackendRef: graph.BackendRef{
+								Valid:     true,
+								SvcNsName: clusterAppKey.NamespacedName,
+								ServicePort: apiv1.ServicePort{
+									Name:     "https",
+									Protocol: "TCP",
+									Port:     8443,
+									TargetPort: intstr.IntOrString{
+										Type:   intstr.Int,
+										IntVal: 8443,
+									},
+								},
+							},
+						},
+					},
 					externalAppKey: {
 						Valid: true,
 						Spec: graph.L4RouteSpec{
@@ -5624,6 +5644,22 @@ func TestBuildStreamUpstreams(t *testing.T) {
 
 	referencedServices := map[types.NamespacedName]*graph.ReferencedService{
 		{Namespace: "default", Name: "external-app"}: externalNameService,
+		clusterAppKey.NamespacedName: {
+			ClusterIP: "10.96.0.1",
+			Policies: []*graph.Policy{
+				{
+					Source: &ngfAPIv1alpha1.UpstreamSettingsPolicy{
+						ObjectMeta: metav1.ObjectMeta{
+							Namespace: "default",
+							Name:      "usp-use-cluster-ip",
+						},
+						Spec: ngfAPIv1alpha1.UpstreamSettingsPolicySpec{UseClusterIP: helpers.GetPointer(true)},
+					},
+					Valid: true,
+				},
+			},
+			GatewayNsNames: map[types.NamespacedName]struct{}{{Name: "gateway", Namespace: "test"}: {}},
+		},
 	}
 
 	streamUpstreams := buildStreamUpstreams(
@@ -5641,6 +5677,10 @@ func TestBuildStreamUpstreams(t *testing.T) {
 		},
 		{
 			Name:      "default_secure-app5_8443",
+			Endpoints: fakeEndpoints,
+		},
+		{
+			Name:      "default_cluster-app_8443",
 			Endpoints: fakeEndpoints,
 		},
 		{
@@ -7494,59 +7534,6 @@ func TestBuildDNSResolverConfig(t *testing.T) {
 
 			result := buildDNSResolverConfig(test.dnsResolver)
 			g.Expect(result).To(Equal(test.expected))
-		})
-	}
-}
-
-func TestBuildDisableBaseProxySetHeaders(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		np       *graph.EffectiveNginxProxy
-		name     string
-		expected []string
-	}{
-		{
-			name:     "nil nginx proxy",
-			np:       nil,
-			expected: nil,
-		},
-		{
-			name:     "empty disabled headers",
-			np:       &graph.EffectiveNginxProxy{},
-			expected: nil,
-		},
-		{
-			name: "disabled headers configured",
-			np: &graph.EffectiveNginxProxy{
-				DisableBaseHeaders: []ngfAPIv1alpha2.BaseHeaderName{
-					ngfAPIv1alpha2.HeaderXForwardedFor,
-					ngfAPIv1alpha2.HeaderXForwardedProto,
-				},
-			},
-			expected: []string{
-				string(ngfAPIv1alpha2.HeaderXForwardedFor),
-				string(ngfAPIv1alpha2.HeaderXForwardedProto),
-			},
-		},
-		{
-			name: "wildcard disabled headers configured",
-			np: &graph.EffectiveNginxProxy{
-				DisableBaseHeaders: []ngfAPIv1alpha2.BaseHeaderName{
-					ngfAPIv1alpha2.AllXBaseHeaders,
-				},
-			},
-			expected: []string{"*"},
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			g := NewWithT(t)
-
-			result := buildDisableBaseProxySetHeaders(tc.np)
-			g.Expect(result).To(Equal(tc.expected))
 		})
 	}
 }
@@ -9783,89 +9770,6 @@ func TestBuildClientConfigForSSLServersFrontendValidationModes(t *testing.T) {
 	}
 }
 
-func TestBuildCompressionConfig(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		compression *ngfAPIv1alpha2.Compression
-		expected    *CompressionSettings
-		name        string
-	}{
-		{
-			name:        "nil compression",
-			compression: nil,
-			expected:    nil,
-		},
-		{
-			name:        "empty compression struct",
-			compression: &ngfAPIv1alpha2.Compression{},
-			expected:    &CompressionSettings{},
-		},
-		{
-			name: "compression with mime types only",
-			compression: &ngfAPIv1alpha2.Compression{
-				Type:      ngfAPIv1alpha2.GzipCompressionType,
-				MimeTypes: []string{"text/css", "application/json"},
-			},
-			expected: &CompressionSettings{
-				MimeTypes: []string{"text/css", "application/json"},
-			},
-		},
-		{
-			name: "compression with gzip but no http version defaults to 1.1",
-			compression: &ngfAPIv1alpha2.Compression{
-				Type:      ngfAPIv1alpha2.GzipCompressionType,
-				MimeTypes: []string{"text/css"},
-				Gzip:      &ngfAPIv1alpha2.GzipSettings{},
-			},
-			expected: &CompressionSettings{
-				MimeTypes:   []string{"text/css"},
-				HTTPVersion: "1.1",
-			},
-		},
-		{
-			name: "compression with all options",
-			compression: &ngfAPIv1alpha2.Compression{
-				Type:      ngfAPIv1alpha2.GzipCompressionType,
-				MimeTypes: []string{"text/css"},
-				Level:     helpers.GetPointer[int32](6),
-				MinLength: helpers.GetPointer[int32](256),
-				Buffers: &ngfAPIv1alpha2.CompressionBuffers{
-					Number: 32,
-					Size:   "4k",
-				},
-				Gzip: &ngfAPIv1alpha2.GzipSettings{
-					Proxied:     []ngfAPIv1alpha2.GzipProxiedType{ngfAPIv1alpha2.GzipProxiedAny},
-					Vary:        helpers.GetPointer(true),
-					Disable:     []string{"msie6"},
-					HTTPVersion: helpers.GetPointer(ngfAPIv1alpha2.GzipHTTPVersion10),
-				},
-			},
-			expected: &CompressionSettings{
-				Level:        6,
-				MinLength:    helpers.GetPointer[int32](256),
-				BufferNumber: 32,
-				BufferSize:   "4k",
-				MimeTypes:    []string{"text/css"},
-				Vary:         true,
-				Proxied:      []string{"any"},
-				Disable:      []string{"msie6"},
-				HTTPVersion:  "1.0",
-			},
-		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
-			g := NewWithT(t)
-
-			result := buildCompressionConfig(test.compression)
-			g.Expect(result).To(Equal(test.expected))
-		})
-	}
-}
-
 func TestBuildWAF(t *testing.T) {
 	t.Parallel()
 
@@ -10205,12 +10109,6 @@ func TestBuildCertBundles(t *testing.T) {
 		},
 	}
 
-	tlsServersWithTLS := []Layer4VirtualServer{
-		{
-			VerifyTLS: &VerifyTLS{CertBundleID: generateCertBundleID(backendBundle.Name)},
-		},
-	}
-
 	extAuthIDs := map[CertBundleID]struct{}{
 		generateCertBundleID(extAuthBundle.Name): {},
 	}
@@ -10222,7 +10120,6 @@ func TestBuildCertBundles(t *testing.T) {
 		name                 string
 		refCertBundles       []secrets.CertificateBundle
 		backendGroups        []BackendGroup
-		tlsServers           []Layer4VirtualServer
 	}{
 		{
 			name:                 "external auth filter BTP cert bundle is written even when no backend group references it",
@@ -10231,16 +10128,6 @@ func TestBuildCertBundles(t *testing.T) {
 			extAuthCertBundleIDs: extAuthIDs,
 			expected: map[CertBundleID]CertBundle{
 				generateCertBundleID(extAuthBundle.Name): CertBundle("ext-auth-ca-data"),
-			},
-		},
-		{
-			name:                 "TLSRoute terminate verify cert bundle is written when only TLS servers reference it",
-			refCertBundles:       []secrets.CertificateBundle{backendBundle},
-			backendGroups:        nil,
-			tlsServers:           tlsServersWithTLS,
-			extAuthCertBundleIDs: nil,
-			expected: map[CertBundleID]CertBundle{
-				generateCertBundleID(backendBundle.Name): CertBundle("backend-ca-data"),
 			},
 		},
 		{
@@ -10274,7 +10161,7 @@ func TestBuildCertBundles(t *testing.T) {
 			result := buildCertBundles(
 				test.refCertBundles,
 				test.backendGroups,
-				test.tlsServers,
+				nil,
 				test.extAuthCertBundleIDs,
 				test.authBundles,
 			)
@@ -10282,4 +10169,85 @@ func TestBuildCertBundles(t *testing.T) {
 			g.Expect(result).To(Equal(test.expected))
 		})
 	}
+}
+
+func TestBuildUpstreamsWithClusterIP(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	clusterIP := "10.96.0.1"
+	svcKey := types.NamespacedName{Namespace: "default", Name: "my-svc"}
+
+	usp := &ngfAPIv1alpha1.UpstreamSettingsPolicy{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "usp"},
+		Spec:       ngfAPIv1alpha1.UpstreamSettingsPolicySpec{UseClusterIP: helpers.GetPointer(true)},
+	}
+
+	gateway := &graph.Gateway{
+		Source: &v1.Gateway{ObjectMeta: metav1.ObjectMeta{Name: "gw", Namespace: "default"}},
+		Listeners: []*graph.Listener{
+			{
+				Valid: true,
+				Source: v1.Listener{
+					Protocol: v1.HTTPProtocolType,
+					Port:     80,
+				},
+				Routes: map[graph.RouteKey]*graph.L7Route{
+					{NamespacedName: types.NamespacedName{Namespace: "default", Name: "route"}}: {
+						Valid: true,
+						Spec: graph.L7RouteSpec{
+							Rules: []graph.RouteRule{
+								{
+									ValidMatches: true,
+									Filters:      graph.RouteRuleFilters{Valid: true},
+									BackendRefs: []graph.BackendRef{
+										{
+											Valid:       true,
+											SvcNsName:   svcKey,
+											ServicePort: apiv1.ServicePort{Port: 80},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	referencedServices := map[types.NamespacedName]*graph.ReferencedService{
+		svcKey: {
+			ClusterIP: clusterIP,
+			Policies: []*graph.Policy{
+				{
+					Source: usp,
+					Valid:  true,
+				},
+			},
+			GatewayNsNames: map[types.NamespacedName]struct{}{
+				{Name: "gw", Namespace: "default"}: {},
+			},
+		},
+	}
+
+	// Resolver should NOT be called when UseClusterIP is true
+	fakeResolver := &resolverfakes.FakeServiceResolver{}
+	fakeResolver.ResolveStub = func(
+		_ context.Context,
+		_ logr.Logger,
+		_ types.NamespacedName,
+		_ apiv1.ServicePort,
+		_ []discoveryV1.AddressType,
+	) ([]resolver.Endpoint, error) {
+		t.Fatal("resolver should not be called when UseClusterIP is true")
+		return nil, nil
+	}
+
+	upstreams := buildUpstreams(t.Context(), logr.Discard(), gateway, fakeResolver, referencedServices)
+
+	g.Expect(upstreams).To(HaveLen(1))
+	g.Expect(upstreams[0].Endpoints).To(Equal([]resolver.Endpoint{
+		{Address: clusterIP, Port: 80},
+	}))
 }

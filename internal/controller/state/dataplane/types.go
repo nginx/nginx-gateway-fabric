@@ -9,6 +9,7 @@ import (
 
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/upstreamsettings"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/resolver"
 )
@@ -162,18 +163,13 @@ func (l4vs Layer4VirtualServer) NeedsWeightDistribution() bool {
 
 // Upstream is a pool of endpoints to be load balanced.
 type Upstream struct {
-	// SessionPersistence holds the session persistence configuration for the upstream.
 	SessionPersistence SessionPersistenceConfig
-	// Name is the name of the Upstream. Will be unique for each service/port combination.
-	Name string
-	// ErrorMsg contains the error message if the Upstream is invalid.
-	ErrorMsg string
-	// StateFileKey is the key for naming the state file for NGINX Plus upstreams.
-	StateFileKey string
-	// Endpoints are the endpoints of the Upstream.
-	Endpoints []resolver.Endpoint
-	// Policies holds all the valid policies that apply to the Upstream.
-	Policies []policies.Policy
+	Name               string
+	ErrorMsg           string
+	StateFileKey       string
+	Endpoints          []resolver.Endpoint
+	Policies           []policies.Policy
+	UpstreamSettings   upstreamsettings.UpstreamSettings
 }
 
 // SessionPersistenceConfig holds the session persistence configuration for an upstream.
