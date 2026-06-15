@@ -218,7 +218,7 @@ make build-test-runner-image
 #### To deploy MetalLB to the kind cluster
 
 > This is needed to assign external IPs to the Loadbalancer Services spun up in the conformance test.
-> If your cluster can already do this, it is okay to skip
+> If your cluster can already do this, it is okay to skip.
 
 ```makefile
 make deploy-metallb
@@ -410,10 +410,16 @@ The longevity test optionally includes a WAF+PLM scenario that runs alongside th
 
 **In the pipeline:** Enable the WAF scenario by setting the `waf_plm_enabled` input to `true` when triggering the [longevity-start workflow](https://github.com/nginx/nginx-gateway-fabric/actions/workflows/longevity-start.yml). The WAF scenario only runs for the `plus` matrix job; it is automatically skipped for the `oss` job.
 
-**Manually:** Place `dockerconfig.jwt` at the repo root, then pass `WAF_PLM_ENABLED=true` and `REGISTRY_JWT_FILE` when starting the test:
+**Manually:** Place `dockerconfig.jwt` at the repo root (the default location for `REGISTRY_JWT_FILE`), then run:
 
 ```makefile
-make start-longevity-test PLUS_ENABLED=true WAF_PLM_ENABLED=true REGISTRY_JWT_FILE=$(pwd)/../dockerconfig.jwt
+make start-longevity-test PLUS_ENABLED=true WAF_PLM_ENABLED=true
+```
+
+If your `dockerconfig.jwt` is elsewhere, override the variable explicitly:
+
+```makefile
+make start-longevity-test PLUS_ENABLED=true WAF_PLM_ENABLED=true REGISTRY_JWT_FILE=/path/to/dockerconfig.jwt
 ```
 
 The setup (`longevity-setup` label) will:
