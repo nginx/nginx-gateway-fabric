@@ -1480,6 +1480,36 @@ func TestProcessPolicies_RouteOverlap(t *testing.T) {
 			},
 			valid: true,
 		},
+		{
+			name:      "overlap detected when routes share a hostname but have different hostname sets",
+			validator: &policiesfakes.FakeValidator{},
+			policies: map[PolicyKey]policies.Policy{
+				pol1Key: pol1,
+			},
+			routes: map[RouteKey]*L7Route{
+				// hr-coffee: the route targeted by pol1's targetRef
+				{
+					RouteType:      RouteTypeHTTP,
+					NamespacedName: types.NamespacedName{Namespace: testNs, Name: "hr-coffee"},
+				}: createTestRouteWithPaths("hr-coffee", "/coffee"),
+				// hr-multi-host: not targeted by pol1, but present in the cluster and overlapping on foo.example.com:/coffee
+				{
+					RouteType:      RouteTypeHTTP,
+					NamespacedName: types.NamespacedName{Namespace: testNs, Name: "hr-multi-host"},
+				}: createTestRouteWithMultipleHostnames("hr-multi-host", "/coffee"),
+			},
+			valid: false,
+			expConditions: []conditions.Condition{
+				{
+					Type:   "Accepted",
+					Status: "False",
+					Reason: "TargetConflict",
+					Message: "Policy cannot be applied to target \"test/hr-coffee\" since another Route " +
+						"\"test/hr-multi-host\" shares a namespace/gateway-name:hostname:port/path " +
+						"combination with this target",
+				},
+			},
+		},
 	}
 
 	gateways := map[types.NamespacedName]*Gateway{
@@ -1930,6 +1960,47 @@ func createTestRouteWithMultipleGateways(name string, gatewayNames []string, pat
 	}
 
 	return route
+}
+
+// createTestRouteWithMultipleHostnames creates a route with multiple accepted hostnames on the same listener.
+func createTestRouteWithMultipleHostnames(name string, paths ...string) *L7Route {
+	routeMatches := make([]v1.HTTPRouteMatch, 0, len(paths))
+
+	for _, path := range paths {
+		routeMatches = append(routeMatches, v1.HTTPRouteMatch{
+			Path: &v1.HTTPPathMatch{
+				Type:  helpers.GetPointer(v1.PathMatchExact),
+				Value: helpers.GetPointer(path),
+			},
+		})
+	}
+
+	gwNsName := types.NamespacedName{Namespace: testNs, Name: "gw"}
+	return &L7Route{
+		Source: &v1.HTTPRoute{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      name,
+				Namespace: testNs,
+			},
+		},
+		Spec: L7RouteSpec{
+			Rules: []RouteRule{
+				{Matches: routeMatches},
+			},
+		},
+		ParentRefs: []ParentRef{
+			{
+				Kind:           kinds.Gateway,
+				NamespacedName: gwNsName,
+				GatewayNsName:  gwNsName,
+				Attachment: &ParentRefAttachmentStatus{
+					// Two hostnames: foo.example.com (shared with other routes) and bar.example.com (extra).
+					AcceptedHostnames: map[string][]string{"listener-1": {"foo.example.com", "bar.example.com"}},
+					ListenerPort:      80,
+				},
+			},
+		},
+	}
 }
 
 func getGatewayParentRef(gwNsName types.NamespacedName) v1.ParentReference {
