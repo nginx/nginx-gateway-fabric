@@ -33,7 +33,7 @@ on:
         description: GKE cluster region
         required: true
         default: us-west1
-      waf_enabled:
+      waf_plm_enabled:
         description: Was the WAF+PLM longevity scenario enabled when the test was started?
         required: false
         default: false
@@ -116,7 +116,7 @@ jobs:
           echo "ADD_VM_IP_AUTH_NETWORKS=true" >> vars.env
           echo "PLUS_ENABLED=${{ matrix.type == 'plus' }}" >> vars.env
           echo "NGF_VERSION=${{ needs.vars.outputs.version }}" >> vars.env
-          echo "WAF_ENABLED=${{ inputs.waf_enabled || false }}" >> vars.env
+          echo "WAF_PLM_ENABLED=${{ inputs.waf_plm_enabled || false }}" >> vars.env
 
       - name: Update firewall
         working-directory: ./tests

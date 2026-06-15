@@ -408,12 +408,12 @@ The longevity test optionally includes a WAF+PLM scenario that runs alongside th
 - A `dockerconfig.jwt` file at the repo root (registry pull secret for `private-registry.nginx.com`)
 - A `license.jwt` file at the repo root (NGINX Plus billing/reporting JWT)
 
-**In the pipeline:** Enable the WAF scenario by setting the `waf_enabled` input to `true` when triggering the [longevity-start workflow](https://github.com/nginx/nginx-gateway-fabric/actions/workflows/longevity-start.yml). The WAF scenario only runs for the `plus` matrix job; it is automatically skipped for the `oss` job.
+**In the pipeline:** Enable the WAF scenario by setting the `waf_plm_enabled` input to `true` when triggering the [longevity-start workflow](https://github.com/nginx/nginx-gateway-fabric/actions/workflows/longevity-start.yml). The WAF scenario only runs for the `plus` matrix job; it is automatically skipped for the `oss` job.
 
-**Manually:** Place `dockerconfig.jwt` at the repo root, then pass `WAF_ENABLED=true` and `REGISTRY_JWT_FILE` when starting the test:
+**Manually:** Place `dockerconfig.jwt` at the repo root, then pass `WAF_PLM_ENABLED=true` and `REGISTRY_JWT_FILE` when starting the test:
 
 ```makefile
-make start-longevity-test PLUS_ENABLED=true WAF_ENABLED=true REGISTRY_JWT_FILE=$(pwd)/../dockerconfig.jwt
+make start-longevity-test PLUS_ENABLED=true WAF_PLM_ENABLED=true REGISTRY_JWT_FILE=$(pwd)/../dockerconfig.jwt
 ```
 
 The setup (`longevity-setup` label) will:

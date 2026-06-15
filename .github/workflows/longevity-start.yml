@@ -25,7 +25,7 @@ on:
         description: GKE cluster region
         required: true
         default: us-west1
-      waf_enabled:
+      waf_plm_enabled:
         description: Enable WAF+PLM longevity scenario (requires NGINX Plus + WAF images, amd64)
         required: false
         default: false
@@ -113,7 +113,7 @@ jobs:
           echo "NGF_VERSION=${{ needs.vars.outputs.version }}" >> vars.env
           echo "GKE_MACHINE_TYPE=n2d-standard-16" >> vars.env
           echo "PLUS_USAGE_ENDPOINT=${{ secrets.JWT_PLUS_REPORTING_ENDPOINT }}" >> vars.env
-          echo "WAF_ENABLED=${{ inputs.waf_enabled && matrix.type == 'plus' || false }}" >> vars.env
+          echo "WAF_PLM_ENABLED=${{ inputs.waf_plm_enabled && matrix.type == 'plus' || false }}" >> vars.env
           echo "REGISTRY_JWT_FILE=~/nginx-gateway-fabric/dockerconfig.jwt" >> vars.env
 
       - name: Setup license file for plus
@@ -123,7 +123,7 @@ jobs:
         run: echo "${PLUS_LICENSE}" > license.jwt
 
       - name: Setup registry JWT for WAF images
-        if: ${{ inputs.waf_enabled == true && matrix.type == 'plus' }}
+        if: ${{ inputs.waf_plm_enabled == true && matrix.type == 'plus' }}
         env:
           IMAGE_PULL_SECRET: ${{ secrets.JWT_PLUS_REGISTRY }}
         run: echo "${IMAGE_PULL_SECRET}" > dockerconfig.jwt
