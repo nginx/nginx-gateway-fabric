@@ -1,0 +1,16 @@
+# ClientSettingsPolicy targeting overlap-route-1.
+# Because overlap-route-1 and overlap-route-2 share hostname "overlap.example.com"
+# with PathPrefix "/" (differing only by a header match), they overlap.
+# A CSP targeting one of these overlapping routes must receive a TargetConflict
+# (Accepted: False, Reason: Conflicted).
+apiVersion: gateway.nginx.org/v1alpha1
+kind: ClientSettingsPolicy
+metadata:
+  name: overlap-target-csp
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: overlap-route-1
+  body:
+    maxSize: "5000"

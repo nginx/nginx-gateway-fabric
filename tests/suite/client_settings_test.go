@@ -377,6 +377,36 @@ var _ = Describe("ClientSettingsPolicy", Ordered, Label("functional", "cspolicy"
 			})
 		})
 	})
+
+	// Test: overlap-route-1 (hostname "overlap.example.com") and overlap-route-2
+	// (hostnames "overlap.example.com" and "b.example.com") share the same
+	// gateway:hostname:port/path on "overlap.example.com" with PathPrefix "/",
+	// differentiated only by a header match. Given both routes share a hostname (overlap.example.com)
+	// they are still considered as overlapping.
+	// The CSP targets overlap-route-1 directly. Because the target route overlaps
+	// with overlap-route-2, the CSP must receive a TargetConflict (Accepted: False).
+	Context("TargetConflict with overlapping routes", func() {
+		When("the CSP targets a route that overlaps with another route that has an additional hostname", func() {
+			overlapConflictFiles := []string{
+				"clientsettings/target-conflict-routes-hostname-set.yaml",
+				"clientsettings/overlap-target-csp.yaml",
+			}
+
+			BeforeAll(func() {
+				Expect(resourceManager.ApplyFromFiles(overlapConflictFiles, namespace)).To(Succeed())
+				Expect(resourceManager.WaitForAppsToBeReady(namespace)).To(Succeed())
+			})
+
+			AfterAll(func() {
+				Expect(resourceManager.DeleteFromFiles(overlapConflictFiles, namespace)).To(Succeed())
+			})
+
+			Specify("the policy is conflicted because the target route overlaps with another route", func() {
+				nsname := types.NamespacedName{Name: "overlap-target-csp", Namespace: namespace}
+				Expect(waitForCSPolicyToHaveTargetConflict(nsname)).To(Succeed())
+			})
+		})
+	})
 })
 
 func waitForCSPolicyToBeAccepted(policyNsname types.NamespacedName) error {
@@ -405,6 +435,23 @@ func waitForCSPolicyToBeConflicted(policyNsname types.NamespacedName) error {
 		policyNsname,
 		metav1.ConditionFalse,
 		v1.PolicyReasonConflicted,
+	)
+}
+
+func waitForCSPolicyToHaveTargetConflict(policyNsname types.NamespacedName) error {
+	ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.GetStatusTimeout)
+	defer cancel()
+
+	GinkgoWriter.Printf(
+		"Waiting for ClientSettingsPolicy %q to have the condition Accepted/False/TargetConflict\n",
+		policyNsname,
+	)
+
+	return waitForClientSettingsAncestorStatus(
+		ctx,
+		policyNsname,
+		metav1.ConditionFalse,
+		"TargetConflict",
 	)
 }
 
