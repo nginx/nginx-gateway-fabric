@@ -650,121 +650,152 @@ func isL4Protocol(protocol v1.ProtocolType) bool {
 	return protocol == v1.TCPProtocolType || protocol == v1.UDPProtocolType
 }
 
-// FIXME(bjee19): Refactor before release 2.7
-//
-//nolint:gocyclo // will refactor at some point
+const (
+	portProtocolConflictMsg = "Multiple listeners for the same port %d specify incompatible protocols; " +
+		"ensure only one protocol per port"
+
+	portHostnameConflictMsg = "HTTPS and TLS listeners for the same port %d specify overlapping hostnames; " +
+		"ensure no overlapping hostnames for HTTPS and TLS listeners for the same port"
+
+	portL4SameProtocolConflictMsg = "Multiple %s listeners cannot share the same port %d"
+)
+
+// portConflictResolver detects protocol and hostname conflicts between listeners that share a
+// port. Listeners are fed in one at a time; each is validated against the listeners already seen
+// for its port, and conflicting listeners are marked invalid with the appropriate condition.
+type portConflictResolver struct {
+	protocolGroups    map[v1.ProtocolType]int
+	conflictedPorts   map[v1.PortNumber]bool
+	portProtocolOwner map[v1.PortNumber]int
+	listenersByPort   map[v1.PortNumber][]*Listener
+}
+
 func createPortConflictResolver() listenerConflictResolver {
 	const (
 		secureProtocolGroup   int = 0
 		insecureProtocolGroup int = 1
 		l4ProtocolGroup       int = 2
 	)
-	protocolGroups := map[v1.ProtocolType]int{
-		v1.TLSProtocolType:   secureProtocolGroup,
-		v1.HTTPProtocolType:  insecureProtocolGroup,
-		v1.HTTPSProtocolType: secureProtocolGroup,
-		v1.TCPProtocolType:   l4ProtocolGroup,
-		v1.UDPProtocolType:   l4ProtocolGroup,
+
+	r := &portConflictResolver{
+		protocolGroups: map[v1.ProtocolType]int{
+			v1.TLSProtocolType:   secureProtocolGroup,
+			v1.HTTPProtocolType:  insecureProtocolGroup,
+			v1.HTTPSProtocolType: secureProtocolGroup,
+			v1.TCPProtocolType:   l4ProtocolGroup,
+			v1.UDPProtocolType:   l4ProtocolGroup,
+		},
+		conflictedPorts:   make(map[v1.PortNumber]bool),
+		portProtocolOwner: make(map[v1.PortNumber]int),
+		listenersByPort:   make(map[v1.PortNumber][]*Listener),
 	}
-	conflictedPorts := make(map[v1.PortNumber]bool)
-	portProtocolOwner := make(map[v1.PortNumber]int)
-	listenersByPort := make(map[v1.PortNumber][]*Listener)
 
-	format := "Multiple listeners for the same port %d specify incompatible protocols; " +
-		"ensure only one protocol per port"
+	return r.resolve
+}
 
-	formatHostname := "HTTPS and TLS listeners for the same port %d specify overlapping hostnames; " +
-		"ensure no overlapping hostnames for HTTPS and TLS listeners for the same port"
+// resolve validates a single listener against the listeners already seen for its port.
+func (r *portConflictResolver) resolve(l *Listener) {
+	port := l.Source.Port
 
-	formatL4SameProtocol := "Multiple %s listeners cannot share the same port %d"
+	// if port is in map of conflictedPorts then we only need to set the current listener to invalid
+	if r.conflictedPorts[port] {
+		invalidateProtocolConflict(l, port)
+		return
+	}
 
-	return func(l *Listener) {
-		port := l.Source.Port
+	// otherwise, we add the listener to the list of listeners for this port
+	// and then check if the protocol owner for the port is different from the current listener's protocol.
+	protocolGroup, ok := r.portProtocolOwner[port]
+	if !ok {
+		r.portProtocolOwner[port] = r.protocolGroups[l.Source.Protocol]
+		r.listenersByPort[port] = append(r.listenersByPort[port], l)
+		return
+	}
 
-		// if port is in map of conflictedPorts then we only need to set the current listener to invalid
-		if conflictedPorts[port] {
-			l.Valid = false
+	if protocolGroup != r.protocolGroups[l.Source.Protocol] {
+		r.resolveProtocolGroupConflict(l, port)
+	} else {
+		r.resolveSameProtocolGroupConflict(l, port)
+	}
 
-			conflictedConds := conditions.NewListenerProtocolConflict(fmt.Sprintf(format, port))
-			l.Conditions = append(l.Conditions, conflictedConds...)
-			return
+	r.listenersByPort[port] = append(r.listenersByPort[port], l)
+}
+
+// resolveProtocolGroupConflict handles a listener whose protocol group differs from the port's
+// owner. If the conflicting listener is from a Gateway (ListenerSetName is empty) we mark the port
+// as conflicted and invalidate all listeners we've seen for it. However, if the conflicting
+// listener is from a ListenerSet, this means we are currently merging listeners from a ListenerSet
+// onto the Gateway, and we can only mark the current listener as invalid, allowing the existing
+// listener(s) on the Gateway (native to the Gateway or already merged from a ListenerSet) to stay
+// valid.
+func (r *portConflictResolver) resolveProtocolGroupConflict(l *Listener, port v1.PortNumber) {
+	if l.ListenerSetName.Name == "" {
+		r.conflictedPorts[port] = true
+		for _, listener := range r.listenersByPort[port] {
+			invalidateProtocolConflict(listener, port)
 		}
+	}
 
-		// otherwise, we add the listener to the list of listeners for this port
-		// and then check if the protocol owner for the port is different from the current listener's protocol.
+	invalidateProtocolConflict(l, port)
+}
 
-		protocolGroup, ok := portProtocolOwner[port]
-		if !ok {
-			portProtocolOwner[port] = protocolGroups[l.Source.Protocol]
-			listenersByPort[port] = append(listenersByPort[port], l)
-			return
-		}
-
-		// if protocol group owner doesn't match the listener's protocol group and the conflicting listener is from a Gateway
-		// (ListenerSetName is empty) we mark the port as conflicted, and invalidate all listeners we've seen for this port.
-		// This is just to satisfy a specific listener conflict case. However, if the conflicting listener
-		// is from a ListenerSet,
-		// this means we are currently merging listeners from a ListenerSet onto the Gateway, and we can only mark the current
-		// listener as invalid, allowing the existing listener(s) on the Gateway (native to the Gateway
-		// or already merged from a ListenerSet)
-		// to stay valid.
-		if protocolGroup != protocolGroups[l.Source.Protocol] {
+// resolveSameProtocolGroupConflict handles a listener that shares the port's protocol group,
+// checking it against previously seen listeners for L4 same-protocol clashes and for HTTPS/TLS
+// overlapping hostnames.
+func (r *portConflictResolver) resolveSameProtocolGroupConflict(l *Listener, port v1.PortNumber) {
+	foundConflict := false
+	for _, listener := range r.listenersByPort[port] {
+		if isL4Protocol(l.Source.Protocol) &&
+			listener.Source.Protocol == l.Source.Protocol {
+			// Similar to the case above, if the conflicting listener is from a ListenerSet,
+			// we only mark the current listener as invalid.
 			if l.ListenerSetName.Name == "" {
-				conflictedPorts[port] = true
-				for _, listener := range listenersByPort[port] {
-					listener.Valid = false
-					conflictedConds := conditions.NewListenerProtocolConflict(fmt.Sprintf(format, port))
-					listener.Conditions = append(listener.Conditions, conflictedConds...)
-				}
+				invalidateL4ProtocolConflict(listener, l.Source.Protocol, port)
 			}
-
-			l.Valid = false
-			conflictedConds := conditions.NewListenerProtocolConflict(fmt.Sprintf(format, port))
-			l.Conditions = append(l.Conditions, conflictedConds...)
-		} else {
-			foundConflict := false
-			for _, listener := range listenersByPort[port] {
-				if isL4Protocol(l.Source.Protocol) &&
-					listener.Source.Protocol == l.Source.Protocol {
-					// Similar to the case above, if the conflicting listener is from a ListenerSet,
-					// we only mark the current listener as invalid.
-					if l.ListenerSetName.Name == "" {
-						listener.Valid = false
-						conflictedConds := conditions.NewListenerProtocolConflict(
-							fmt.Sprintf(formatL4SameProtocol, l.Source.Protocol, port))
-						listener.Conditions = append(listener.Conditions, conflictedConds...)
-					}
-					foundConflict = true
-				}
-				if listener.Source.Protocol != l.Source.Protocol &&
-					!isL4Protocol(listener.Source.Protocol) && !isL4Protocol(l.Source.Protocol) &&
-					haveOverlap(l.Source.Hostname, listener.Source.Hostname) {
-					// Similar to the case above, if the conflicting listener is from a ListenerSet,
-					// we only mark the current listener as invalid.
-					if l.ListenerSetName.Name == "" {
-						listener.Valid = false
-						conflictedConds := conditions.NewListenerHostnameConflict(fmt.Sprintf(formatHostname, port))
-						listener.Conditions = append(listener.Conditions, conflictedConds...)
-					}
-					foundConflict = true
-				}
-			}
-
-			if foundConflict {
-				l.Valid = false
-				if isL4Protocol(l.Source.Protocol) {
-					conflictedConds := conditions.NewListenerProtocolConflict(
-						fmt.Sprintf(formatL4SameProtocol, l.Source.Protocol, port))
-					l.Conditions = append(l.Conditions, conflictedConds...)
-				} else {
-					conflictedConds := conditions.NewListenerHostnameConflict(fmt.Sprintf(formatHostname, port))
-					l.Conditions = append(l.Conditions, conflictedConds...)
-				}
-			}
+			foundConflict = true
 		}
-
-		listenersByPort[port] = append(listenersByPort[port], l)
+		if listener.Source.Protocol != l.Source.Protocol &&
+			!isL4Protocol(listener.Source.Protocol) && !isL4Protocol(l.Source.Protocol) &&
+			haveOverlap(l.Source.Hostname, listener.Source.Hostname) {
+			// Similar to the case above, if the conflicting listener is from a ListenerSet,
+			// we only mark the current listener as invalid.
+			if l.ListenerSetName.Name == "" {
+				invalidateHostnameConflict(listener, port)
+			}
+			foundConflict = true
+		}
 	}
+
+	if !foundConflict {
+		return
+	}
+
+	if isL4Protocol(l.Source.Protocol) {
+		invalidateL4ProtocolConflict(l, l.Source.Protocol, port)
+	} else {
+		invalidateHostnameConflict(l, port)
+	}
+}
+
+// invalidateProtocolConflict marks a listener invalid for an incompatible-protocol port conflict.
+func invalidateProtocolConflict(l *Listener, port v1.PortNumber) {
+	l.Valid = false
+	l.Conditions = append(l.Conditions,
+		conditions.NewListenerProtocolConflict(fmt.Sprintf(portProtocolConflictMsg, port))...)
+}
+
+// invalidateL4ProtocolConflict marks a listener invalid for an L4 same-protocol port conflict.
+func invalidateL4ProtocolConflict(l *Listener, protocol v1.ProtocolType, port v1.PortNumber) {
+	l.Valid = false
+	l.Conditions = append(l.Conditions,
+		conditions.NewListenerProtocolConflict(fmt.Sprintf(portL4SameProtocolConflictMsg, protocol, port))...)
+}
+
+// invalidateHostnameConflict marks a listener invalid for an overlapping-hostname port conflict.
+func invalidateHostnameConflict(l *Listener, port v1.PortNumber) {
+	l.Valid = false
+	l.Conditions = append(l.Conditions,
+		conditions.NewListenerHostnameConflict(fmt.Sprintf(portHostnameConflictMsg, port))...)
 }
 
 func uniqueListenerConflictResolver() listenerConflictResolver {
