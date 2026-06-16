@@ -34,6 +34,7 @@ rules:
       tests/suite/manifests/proxy-settings-policy/app.yaml
       tests/suite/manifests/longevity
       tests/suite/manifests/authentication-filter/keycloak.yaml
+      tests/suite/manifests/longevity-waf
   key-duplicates: enable
   key-ordering: disable
   line-length:
@@ -43,6 +44,7 @@ rules:
     ignore: |
       .github/
       tests/suite/manifests/longevity/cronjob.yaml
+      tests/suite/manifests/longevity-waf/cronjob.yaml
       .goreleaser.yml
       charts/nginx-gateway-fabric/
       operators/config/crd/bases/gateway.nginx.org_nginxgatewayfabrics.yaml
