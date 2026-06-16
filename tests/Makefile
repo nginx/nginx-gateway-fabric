@@ -173,6 +173,8 @@ start-longevity-test: nfr-test ## Start the longevity test to run for 3 days in 
 stop-longevity-test: export STOP_LONGEVITY=true
 stop-longevity-test: nfr-test ## Stop the longevity test and collects results
 
+WAF_PLM_ENABLED ?= false## Set to true to enable WAF+PLM longevity scenario (requires NGINX Plus + WAF images, amd64)
+
 .PHONY: ipv6-tests
 ipv6-tests: GOARCH=amd64
 ipv6-tests: ## Example usage: make ipv6-tests TAG=release-X.Y-rc
@@ -188,7 +190,8 @@ ipv6-tests: ## Example usage: make ipv6-tests TAG=release-X.Y-rc
 		--ngf-image-repo=$(PREFIX) --nginx-image-repo=$(NGINX_PREFIX) --nginx-plus-image-repo=$(NGINX_PLUS_PREFIX) \
 		--pull-policy=$(PULL_POLICY) --service-type=$(GW_SERVICE_TYPE) \
 		--plus-enabled=$(PLUS_ENABLED) --plus-license-file-name=$(PLUS_LICENSE_FILE) \
-		--plus-usage-endpoint=$(PLUS_USAGE_ENDPOINT) --gke-project=$(GKE_PROJECT)
+		--plus-usage-endpoint=$(PLUS_USAGE_ENDPOINT) --gke-project=$(GKE_PROJECT) \
+        --waf-enabled=$(WAF_PLM_ENABLED) $(if $(filter true,$(WAF_PLM_ENABLED)),--nginx-image-jwt-file-name=$(REGISTRY_JWT_FILE))
 
 .PHONY: test
 test: build-crossplane-image ## Runs the functional tests on your kind k8s cluster

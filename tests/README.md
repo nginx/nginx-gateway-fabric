@@ -21,18 +21,21 @@ This directory contains the tests for NGINX Gateway Fabric. The tests are divide
     - [Option 1 - Build and install NGINX Gateway Fabric from local to configured kind cluster](#option-1---build-and-install-nginx-gateway-fabric-from-local-to-configured-kind-cluster)
     - [Option 2 - Install NGINX Gateway Fabric from local already built image to configured kind cluster](#option-2---install-nginx-gateway-fabric-from-local-already-built-image-to-configured-kind-cluster)
   - [Step 2 - Build conformance test runner image](#step-2---build-conformance-test-runner-image)
-  - [Step 3 - Run Conformance tests](#step-3---run-conformance-tests)
+  - [Step 3 - Deploy MetalLB to the kind cluster](#step-3---deploy-metallb-to-the-kind-cluster)
+    - [To deploy MetalLB to the kind cluster](#to-deploy-metallb-to-the-kind-cluster)
+  - [Step 4 - Run Conformance tests](#step-4---run-conformance-tests)
     - [To run Gateway conformance tests](#to-run-gateway-conformance-tests)
     - [To run Inference conformance tests](#to-run-inference-conformance-tests)
-  - [Step 4 - Cleanup the conformance test fixtures and uninstall NGINX Gateway Fabric](#step-4---cleanup-the-conformance-test-fixtures-and-uninstall-nginx-gateway-fabric)
-  - [Step 5 - Revert changes to Go modules](#step-5---revert-changes-to-go-modules)
-  - [Step 6 - Delete kind cluster](#step-6---delete-kind-cluster)
+  - [Step 5 - Cleanup the conformance test fixtures and uninstall NGINX Gateway Fabric](#step-5---cleanup-the-conformance-test-fixtures-and-uninstall-nginx-gateway-fabric)
+  - [Step 6 - Revert changes to Go modules](#step-6---revert-changes-to-go-modules)
+  - [Step 7 - Delete kind cluster](#step-7---delete-kind-cluster)
 - [System Testing](#system-testing)
   - [Logging in tests](#logging-in-tests)
   - [Step 1 - Run the tests](#step-1---run-the-tests)
     - [Run the functional tests locally](#run-the-functional-tests-locally)
     - [Run the NFR tests on a GKE cluster from a GCP VM](#run-the-nfr-tests-on-a-gke-cluster-from-a-gcp-vm)
       - [Longevity testing](#longevity-testing)
+        - [WAF+PLM longevity scenario](#wafplm-longevity-scenario)
     - [Run the WAF tests on a GKE cluster](#run-the-waf-tests-on-a-gke-cluster)
   - [Common test amendments](#common-test-amendments)
   - [Step 2 - Cleanup](#step-2---cleanup)
@@ -210,7 +213,18 @@ go mod tidy
 make build-test-runner-image
 ```
 
-### Step 3 - Run Conformance tests
+### Step 3 - Deploy MetalLB to the kind cluster
+
+#### To deploy MetalLB to the kind cluster
+
+> This is needed to assign external IPs to the Loadbalancer Services spun up in the conformance test.
+> If your cluster can already do this, it is okay to skip.
+
+```makefile
+make deploy-metallb
+```
+
+### Step 4 - Run Conformance tests
 
 #### To run Gateway conformance tests
 
@@ -224,7 +238,7 @@ make run-conformance-tests
 make run-inference-conformance-tests
 ```
 
-### Step 4 - Cleanup the conformance test fixtures and uninstall NGINX Gateway Fabric
+### Step 5 - Cleanup the conformance test fixtures and uninstall NGINX Gateway Fabric
 
 ```makefile
 make cleanup-conformance-tests
@@ -234,7 +248,7 @@ make cleanup-conformance-tests
 make uninstall-ngf
 ```
 
-### Step 5 - Revert changes to Go modules
+### Step 6 - Revert changes to Go modules
 
 **Optional** Not required if you aren't running the `main` Gateway API tests.
 
@@ -242,7 +256,7 @@ make uninstall-ngf
 make reset-go-modules
 ```
 
-### Step 6 - Delete kind cluster
+### Step 7 - Delete kind cluster
 
 ```makefile
 make delete-kind-cluster
@@ -384,6 +398,47 @@ make stop-longevity-test
 
 > Note if running from your machine instead of the pipeline: If you want to re-run the longevity test, you need to clear out the `cafe.example.com` entry from the `/etc/hosts` file on your VM.
 
+###### WAF+PLM longevity scenario
+
+The longevity test optionally includes a WAF+PLM scenario that runs alongside the standard longevity test. It deploys a second NGF release (`ngf-longevity-waf`) using the `nginx-plus-f5waf` image and the F5 WAF Policy Lifecycle Manager (PLM), then sustains clean and attack traffic for the duration of the run.
+
+**Requirements:**
+- NGINX Plus with NAP WAF images (amd64 only — not supported on arm64)
+- Access to `private-registry.nginx.com` (used to pull PLM and WAF sidecar images)
+- A `dockerconfig.jwt` file at the repo root (registry pull secret for `private-registry.nginx.com`)
+- A `license.jwt` file at the repo root (NGINX Plus billing/reporting JWT)
+
+**In the pipeline:** Enable the WAF scenario by setting the `waf_plm_enabled` input to `true` when triggering the [longevity-start workflow](https://github.com/nginx/nginx-gateway-fabric/actions/workflows/longevity-start.yml). The WAF scenario only runs for the `plus` matrix job; it is automatically skipped for the `oss` job.
+
+**Manually:** Place `dockerconfig.jwt` at the repo root (the default location for `REGISTRY_JWT_FILE`), then run:
+
+```makefile
+make start-longevity-test PLUS_ENABLED=true WAF_PLM_ENABLED=true
+```
+
+If your `dockerconfig.jwt` is elsewhere, override the variable explicitly:
+
+```makefile
+make start-longevity-test PLUS_ENABLED=true WAF_PLM_ENABLED=true REGISTRY_JWT_FILE=/path/to/dockerconfig.jwt
+```
+
+The setup (`longevity-setup` label) will:
+1. Create the image pull secret in the `plm` namespace from `dockerconfig.jwt`
+2. Install PLM (`f5-waf-policy-controller` Helm chart) into the `plm` namespace
+3. Install the `ngf-longevity-waf` NGF Helm release with `gatewayClassName: nginx-waf` and unique TLS secret names to avoid colliding with the standard longevity release
+4. Apply WAF application resources to the `longevity-waf` namespace (APPolicy, APLogConf, WAFPolicy, Gateway, HTTPRoutes, CronJobs)
+5. Wait for the WAFPolicy to reach `Accepted` state — confirming PLM compiled the bundle and NGF loaded it into the data plane
+
+The `suite/scripts/longevity-wrk-waf.sh` script is started automatically and runs for the duration of the test. It sends clean traffic to `/coffee` and `/tea` on `waf.example.com`, and periodically sends XSS and SQLi attack probes. Attack results are written to `~/waf-attacks.txt` in CSV format — a `blocked=true` entry for every row confirms the WAF is enforcing correctly.
+
+> Note: The WAF uses NAP WAF's default block response (HTTP 200 with a "Request Rejected" body). Attack probes are detected as blocked by checking for this string in the response body.
+
+At teardown (`longevity-teardown` label), the results file will include:
+- `## WAF Traffic` — wrk summaries for clean traffic on `/coffee` and `/tea`
+- `## WAF Attack Results` — a count of blocked probes and a table of any unexpected (unblocked) rows. If all probes were blocked, a single summary line is written instead.
+
+> Note if running from your machine instead of the pipeline: If you want to re-run the WAF longevity test, you need to clear out the `waf.example.com` entry from the `/etc/hosts` file on your VM in addition to the `cafe.example.com` entry.
+
 #### Run the WAF tests on a GKE cluster
 
 WAF tests require NGINX Plus with NAP WAF images and run on GKE (amd64 only). Before running:
@@ -397,6 +452,8 @@ WAF tests require NGINX Plus with NAP WAF images and run on GKE (amd64 only). Be
    ```
 
    This will compile the WAF policy bundles from the JSON sources in `suite/manifests/waf-policy/`, create the image pull secret in the `nginx-gateway` namespace so the WAF sidecar images (`waf-enforcer`, `waf-config-mgr`) can be pulled from `private-registry.nginx.com`, and run the tests labelled `waf` against the GKE cluster.
+
+> Note: For the WAF longevity scenario, see the [WAF+PLM longevity scenario](#wafplm-longevity-scenario) section above.
 
 ### Common test amendments
 

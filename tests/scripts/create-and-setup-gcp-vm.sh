@@ -60,6 +60,12 @@ fi
 
 gcloud compute scp --quiet --zone "${GKE_CLUSTER_ZONE}" --project="${GKE_PROJECT}" "${REPO_DIR}"/license.jwt username@"${RESOURCE_NAME}":~/nginx-gateway-fabric/
 
+# Copy the registry JWT for WAF image pulls if it exists (written by CI for WAF longevity runs).
+if [ -f "${REPO_DIR}/dockerconfig.jwt" ]; then
+    echo "Copying over registry JWT for WAF image pulls..."
+    gcloud compute scp --quiet --zone "${GKE_CLUSTER_ZONE}" --project="${GKE_PROJECT}" "${REPO_DIR}"/dockerconfig.jwt username@"${RESOURCE_NAME}":~/nginx-gateway-fabric/
+fi
+
 gcloud compute ssh --zone "${GKE_CLUSTER_ZONE}" --project="${GKE_PROJECT}" username@"${RESOURCE_NAME}" \
     --command="bash -i <<EOF
 cd nginx-gateway-fabric/tests
