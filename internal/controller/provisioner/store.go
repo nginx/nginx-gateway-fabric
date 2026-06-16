@@ -123,86 +123,36 @@ func (s *store) getGateways() map[types.NamespacedName]*gatewayv1.Gateway {
 // we don't attempt to update nginx resources when the main event handler triggers this call with an unrelated event
 // (like a Route update) that shouldn't result in nginx resource changes.
 //
-//nolint:gocyclo
+// The Gateway case returns whether anything we care about changed; all other resource types always
+// report a change.
 func (s *store) registerResourceInGatewayConfig(gatewayNSName types.NamespacedName, object any) bool {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
 	switch obj := object.(type) {
 	case *graph.Gateway:
-		if cfg, ok := s.nginxResources[gatewayNSName]; !ok {
-			s.nginxResources[gatewayNSName] = &NginxResources{
-				Gateway: obj,
-			}
-		} else {
+		if cfg, ok := s.nginxResources[gatewayNSName]; ok {
 			changed := gatewayChanged(cfg.Gateway, obj)
 			cfg.Gateway = obj
 			return changed
 		}
+		s.nginxResources[gatewayNSName] = &NginxResources{Gateway: obj}
 	case *appsv1.Deployment:
-		if cfg, ok := s.nginxResources[gatewayNSName]; !ok {
-			s.nginxResources[gatewayNSName] = &NginxResources{
-				Deployment: obj.ObjectMeta,
-			}
-		} else {
-			cfg.Deployment = obj.ObjectMeta
-		}
+		s.getOrCreateNginxResources(gatewayNSName).Deployment = obj.ObjectMeta
 	case *autoscalingv2.HorizontalPodAutoscaler:
-		if cfg, ok := s.nginxResources[gatewayNSName]; !ok {
-			s.nginxResources[gatewayNSName] = &NginxResources{
-				HPA: obj.ObjectMeta,
-			}
-		} else {
-			cfg.HPA = obj.ObjectMeta
-		}
+		s.getOrCreateNginxResources(gatewayNSName).HPA = obj.ObjectMeta
 	case *policyv1.PodDisruptionBudget:
-		if cfg, ok := s.nginxResources[gatewayNSName]; !ok {
-			s.nginxResources[gatewayNSName] = &NginxResources{
-				PDB: obj.ObjectMeta,
-			}
-		} else {
-			cfg.PDB = obj.ObjectMeta
-		}
+		s.getOrCreateNginxResources(gatewayNSName).PDB = obj.ObjectMeta
 	case *appsv1.DaemonSet:
-		if cfg, ok := s.nginxResources[gatewayNSName]; !ok {
-			s.nginxResources[gatewayNSName] = &NginxResources{
-				DaemonSet: obj.ObjectMeta,
-			}
-		} else {
-			cfg.DaemonSet = obj.ObjectMeta
-		}
+		s.getOrCreateNginxResources(gatewayNSName).DaemonSet = obj.ObjectMeta
 	case *corev1.Service:
-		if cfg, ok := s.nginxResources[gatewayNSName]; !ok {
-			s.nginxResources[gatewayNSName] = &NginxResources{
-				Service: obj.ObjectMeta,
-			}
-		} else {
-			cfg.Service = obj.ObjectMeta
-		}
+		s.getOrCreateNginxResources(gatewayNSName).Service = obj.ObjectMeta
 	case *corev1.ServiceAccount:
-		if cfg, ok := s.nginxResources[gatewayNSName]; !ok {
-			s.nginxResources[gatewayNSName] = &NginxResources{
-				ServiceAccount: obj.ObjectMeta,
-			}
-		} else {
-			cfg.ServiceAccount = obj.ObjectMeta
-		}
+		s.getOrCreateNginxResources(gatewayNSName).ServiceAccount = obj.ObjectMeta
 	case *rbacv1.Role:
-		if cfg, ok := s.nginxResources[gatewayNSName]; !ok {
-			s.nginxResources[gatewayNSName] = &NginxResources{
-				Role: obj.ObjectMeta,
-			}
-		} else {
-			cfg.Role = obj.ObjectMeta
-		}
+		s.getOrCreateNginxResources(gatewayNSName).Role = obj.ObjectMeta
 	case *rbacv1.RoleBinding:
-		if cfg, ok := s.nginxResources[gatewayNSName]; !ok {
-			s.nginxResources[gatewayNSName] = &NginxResources{
-				RoleBinding: obj.ObjectMeta,
-			}
-		} else {
-			cfg.RoleBinding = obj.ObjectMeta
-		}
+		s.getOrCreateNginxResources(gatewayNSName).RoleBinding = obj.ObjectMeta
 	case *corev1.ConfigMap:
 		s.registerConfigMapInGatewayConfig(obj, gatewayNSName)
 	case *corev1.Secret:
@@ -210,6 +160,18 @@ func (s *store) registerResourceInGatewayConfig(gatewayNSName types.NamespacedNa
 	}
 
 	return true
+}
+
+// getOrCreateNginxResources returns the NginxResources tracked for the given Gateway, creating and
+// storing an empty entry first if none exists yet. Callers must hold s.lock.
+func (s *store) getOrCreateNginxResources(gatewayNSName types.NamespacedName) *NginxResources {
+	cfg, ok := s.nginxResources[gatewayNSName]
+	if !ok {
+		cfg = &NginxResources{}
+		s.nginxResources[gatewayNSName] = cfg
+	}
+
+	return cfg
 }
 
 func (s *store) registerConfigMapInGatewayConfig(obj *corev1.ConfigMap, gatewayNSName types.NamespacedName) {
