@@ -145,8 +145,8 @@ func TestExecuteUpstreams_NginxOSS(t *testing.T) {
 		"zone up5-usp 2m;":    1,
 		"zone up6-usp-keepAlive-connections-zero 2m;": 1,
 
-		"random two least_conn;": 5,
-		"keepalive 16;":          4,
+		defaultLBMethod + ";": 5,
+		"keepalive 16;":       4,
 	}
 
 	upstreams := gen.createUpstreams(stateUpstreams, upstreamsettings.NewProcessor())
@@ -339,9 +339,9 @@ func TestExecuteUpstreams_NginxPlus(t *testing.T) {
 		"upstream up9-usp-keepAlive-connections-zero": 1,
 		"upstream invalid-backend-ref":                1,
 
-		"random two least_conn;": 9,
-		"ip_hash;":               1,
-		"keepalive 16;":          8,
+		defaultLBMethod + ";": 9,
+		"ip_hash;":            1,
+		"keepalive 16;":       8,
 
 		"zone up1 1m;":                                1,
 		"zone up2 1m;":                                1,
@@ -1702,9 +1702,9 @@ func TestExecuteUpstreams_LoadBalancingMethod(t *testing.T) {
 		{
 			name: "default load balancing method",
 			expectedSubStrings: map[string]int{
-				"upstream up1-usp-ipv4":  1,
-				"upstream up2-usp-ipv6":  1,
-				"random two least_conn;": 2,
+				"upstream up1-usp-ipv4": 1,
+				"upstream up2-usp-ipv6": 1,
+				defaultLBMethod + ";":   2,
 			},
 		},
 		{

@@ -11,6 +11,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -79,7 +80,8 @@ func (h *eventHandler) handleUpsertEvent(ctx context.Context, e *events.UpsertEv
 	case *gatewayv1.Gateway:
 		h.store.updateGateway(obj)
 	case *appsv1.Deployment, *appsv1.DaemonSet, *corev1.ServiceAccount,
-		*corev1.ConfigMap, *rbacv1.Role, *rbacv1.RoleBinding, *autoscalingv2.HorizontalPodAutoscaler:
+		*corev1.ConfigMap, *rbacv1.Role, *rbacv1.RoleBinding,
+		*autoscalingv2.HorizontalPodAutoscaler, *policyv1.PodDisruptionBudget:
 		if gatewayNSName, ok := h.getGatewayForManagedResource(obj); ok {
 			if err := h.updateOrDeleteResources(ctx, logger, obj, gatewayNSName); err != nil {
 				return fmt.Errorf("error handling resource update: %w", err)
@@ -145,7 +147,8 @@ func (h *eventHandler) handleDeleteEvent(ctx context.Context, e *events.DeleteEv
 		}
 		h.provisioner.cfg.DeploymentStore.Remove(deploymentNSName)
 	case *appsv1.Deployment, *appsv1.DaemonSet, *corev1.Service, *corev1.ServiceAccount,
-		*corev1.ConfigMap, *rbacv1.Role, *rbacv1.RoleBinding, *autoscalingv2.HorizontalPodAutoscaler:
+		*corev1.ConfigMap, *rbacv1.Role, *rbacv1.RoleBinding,
+		*autoscalingv2.HorizontalPodAutoscaler, *policyv1.PodDisruptionBudget:
 
 		if err := h.reprovisionResources(ctx, e); err != nil {
 			return fmt.Errorf("error re-provisioning nginx resources: %w", err)

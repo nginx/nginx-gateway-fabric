@@ -3,8 +3,10 @@ package v1alpha2
 import (
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 
 	"github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 )
@@ -666,6 +668,12 @@ type DeploymentSpec struct {
 	// +optional
 	Autoscaling *AutoscalingSpec `json:"autoscaling,omitempty"`
 
+	// PodDisruptionBudget is the configuration for limiting the number of concurrent disruptions of a pod.
+	// A PodDisruptionBudget is created when this field is set.
+	//
+	// +optional
+	PodDisruptionBudget *PodDisruptionBudgetSpec `json:"podDisruptionBudget,omitempty"`
+
 	// WAFContainers defines container specifications for NGINX App Protect WAF v5 containers.
 	// These containers are only deployed when WAF is enabled in the NginxProxy spec.
 	//
@@ -710,6 +718,36 @@ type DaemonSetSpec struct {
 	//
 	// +optional
 	Patches []Patch `json:"patches,omitempty"`
+}
+
+// PodDisruptionBudgetSpec is the configuration for PodDisruptionBudget,
+// which limits the number of concurrent disruptions of a pod.
+//
+// +kubebuilder:validation:XValidation:message="exactly one of minAvailable or maxUnavailable must be set",rule="(has(self.minAvailable) && !has(self.maxUnavailable)) || (!has(self.minAvailable) && has(self.maxUnavailable))"
+//
+//nolint:lll
+type PodDisruptionBudgetSpec struct {
+	// MinAvailable is the minimum number of pods that must be available after an eviction.
+	// Value can be an absolute number (e.g. 1) or a percentage of desired pods (e.g. 50%).
+	// Mutually exclusive with MaxUnavailable.
+	//
+	// +optional
+	MinAvailable *intstr.IntOrString `json:"minAvailable,omitempty"`
+
+	// MaxUnavailable is the maximum number of pods that can be unavailable after an eviction.
+	// Value can be an absolute number (e.g. 1) or a percentage of desired pods (e.g. 50%).
+	// Mutually exclusive with MinAvailable.
+	//
+	// +optional
+	MaxUnavailable *intstr.IntOrString `json:"maxUnavailable,omitempty"`
+
+	// UnhealthyPodEvictionPolicy defines when unhealthy pods should be considered for eviction.
+	// Valid values are IfHealthyBudget and AlwaysAllow.
+	// Defaults to IfHealthyBudget if not set.
+	//
+	// +optional
+	// +kubebuilder:validation:Enum=IfHealthyBudget;AlwaysAllow
+	UnhealthyPodEvictionPolicy *policyv1.UnhealthyPodEvictionPolicyType `json:"unhealthyPodEvictionPolicy,omitempty"`
 }
 
 // AutoscalingSpec is the configuration for the Horizontal Pod Autoscaling.
