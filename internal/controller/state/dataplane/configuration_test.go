@@ -6771,10 +6771,10 @@ func TestBuildJWTAuthZConfigFromAuthenticationFilters(t *testing.T) {
 					// Single rule: use rule's result variable directly.
 					// No aggregation map is generated.
 					RequireVariable: "$test_jwt_filter_rule_0_all",
-					ProxySetHeaders: []ProxySetHeaderClaim{
+					ProxySetHeaders: []HTTPHeader{
 						{
-							HeaderName:    "X-Role",
-							ClaimVariable: "$test_jwt_filter_claim_role",
+							Name:  "X-Role",
+							Value: "$test_jwt_filter_claim_role",
 						},
 					},
 				},

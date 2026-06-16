@@ -242,7 +242,7 @@ type AuthJWT struct {
 	Realm           string
 	File            string
 	AuthRequire     string
-	ProxySetHeaders []ProxySetHeaderClaim
+	ProxySetHeaders []Header
 }
 
 // ProxySetHeaderClaim maps a claim variable to a proxy_set_header name.

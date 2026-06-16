@@ -1288,11 +1288,11 @@ func updateLocationAuthenticationFilter(
 			jwt.AuthRequire = authenticationFilter.JWT.AuthRequireVariable
 		}
 		if len(authenticationFilter.JWT.AuthZProxySetHeaders) > 0 {
-			proxySetHeaders := make([]http.ProxySetHeaderClaim, 0, len(authenticationFilter.JWT.AuthZProxySetHeaders))
+			proxySetHeaders := make([]http.Header, 0, len(authenticationFilter.JWT.AuthZProxySetHeaders))
 			for _, psh := range authenticationFilter.JWT.AuthZProxySetHeaders {
-				proxySetHeaders = append(proxySetHeaders, http.ProxySetHeaderClaim{
-					HeaderName:    psh.HeaderName,
-					ClaimVariable: psh.ClaimVariable,
+				proxySetHeaders = append(proxySetHeaders, http.Header{
+					Name:  psh.Name,
+					Value: psh.Value,
 				})
 			}
 			jwt.ProxySetHeaders = proxySetHeaders

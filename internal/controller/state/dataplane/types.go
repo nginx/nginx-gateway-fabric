@@ -417,7 +417,7 @@ type AuthJWT struct {
 	// AuthRequireVariable is the variable name used by auth_jwt_require.
 	AuthRequireVariable string
 	// AuthZProxySetHeaders are claim-based proxy_set_header directives from authorization config.
-	AuthZProxySetHeaders []ProxySetHeaderClaim
+	AuthZProxySetHeaders []HTTPHeader
 }
 
 // AuthZConfig holds the complete authorization configuration for JWT claims.
@@ -433,7 +433,7 @@ type AuthZConfig struct {
 	// RequireVariable is the variable name used in auth_jwt_require (location context).
 	RequireVariable string
 	// ProxySetHeaders are claim-based proxy_set_header directives (location context).
-	ProxySetHeaders []ProxySetHeaderClaim
+	ProxySetHeaders []HTTPHeader
 }
 
 // AuthZRuleMap represents one or more NGINX maps for a single rule.

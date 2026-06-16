@@ -6214,9 +6214,9 @@ func TestUpdateLocationAuthenticationFilter(t *testing.T) {
 					SecretName:      "jwt-secret",
 					SecretNamespace: "test-ns",
 					Realm:           "AuthZ Realm",
-					AuthZProxySetHeaders: []dataplane.ProxySetHeaderClaim{
-						{HeaderName: "X-User-Role", ClaimVariable: "$jwt_claim_role"},
-						{HeaderName: "X-User-Sub", ClaimVariable: "$jwt_claim_sub"},
+					AuthZProxySetHeaders: []dataplane.HTTPHeader{
+						{Name: "X-User-Role", Value: "$jwt_claim_role"},
+						{Name: "X-User-Sub", Value: "$jwt_claim_sub"},
 					},
 				},
 			},
@@ -6226,9 +6226,9 @@ func TestUpdateLocationAuthenticationFilter(t *testing.T) {
 				AuthJWT: &http.AuthJWT{
 					Realm: "AuthZ Realm",
 					File:  "/etc/nginx/secrets/jwt_auth_test-ns_jwt-secret",
-					ProxySetHeaders: []http.ProxySetHeaderClaim{
-						{HeaderName: "X-User-Role", ClaimVariable: "$jwt_claim_role"},
-						{HeaderName: "X-User-Sub", ClaimVariable: "$jwt_claim_sub"},
+					ProxySetHeaders: []http.Header{
+						{Name: "X-User-Role", Value: "$jwt_claim_role"},
+						{Name: "X-User-Sub", Value: "$jwt_claim_sub"},
 					},
 				},
 			},
@@ -6243,8 +6243,8 @@ func TestUpdateLocationAuthenticationFilter(t *testing.T) {
 					KeyCache:            helpers.GetPointer(ngfAPIv1alpha1.Duration("5m")),
 					Leeway:              helpers.GetPointer(ngfAPIv1alpha1.Duration("30s")),
 					AuthRequireVariable: "$test_authz_any",
-					AuthZProxySetHeaders: []dataplane.ProxySetHeaderClaim{
-						{HeaderName: "X-Audience", ClaimVariable: "$jwt_claim_aud"},
+					AuthZProxySetHeaders: []dataplane.HTTPHeader{
+						{Name: "X-Audience", Value: "$jwt_claim_aud"},
 					},
 				},
 			},
@@ -6257,8 +6257,8 @@ func TestUpdateLocationAuthenticationFilter(t *testing.T) {
 					KeyCache:    helpers.GetPointer(ngfAPIv1alpha1.Duration("5m")),
 					Leeway:      helpers.GetPointer(ngfAPIv1alpha1.Duration("30s")),
 					AuthRequire: "$test_authz_any",
-					ProxySetHeaders: []http.ProxySetHeaderClaim{
-						{HeaderName: "X-Audience", ClaimVariable: "$jwt_claim_aud"},
+					ProxySetHeaders: []http.Header{
+						{Name: "X-Audience", Value: "$jwt_claim_aud"},
 					},
 				},
 			},
@@ -6289,7 +6289,7 @@ func TestUpdateLocationAuthenticationFilter(t *testing.T) {
 					SecretName:           "jwt-secret",
 					SecretNamespace:      "test-ns",
 					Realm:                "No Headers",
-					AuthZProxySetHeaders: []dataplane.ProxySetHeaderClaim{},
+					AuthZProxySetHeaders: []dataplane.HTTPHeader{},
 				},
 			},
 			expected: http.Location{

@@ -875,9 +875,9 @@ func buildAuthZConfigFromAuthZSpec(
 			}
 			// Get proxy_set_header entries
 			if claim.ProxySetHeader != nil && *claim.ProxySetHeader != "" {
-				config.ProxySetHeaders = append(config.ProxySetHeaders, ProxySetHeaderClaim{
-					HeaderName:    *claim.ProxySetHeader,
-					ClaimVariable: varName,
+				config.ProxySetHeaders = append(config.ProxySetHeaders, HTTPHeader{
+					Name:  *claim.ProxySetHeader,
+					Value: varName,
 				})
 			}
 		}
@@ -1019,7 +1019,28 @@ func buildAuthZRuleMapAll(filterPrefix string, ruleIndex int, claims []ngfAPIv1a
 	return AuthZRuleMap{Maps: []shared.Map{authZMap}, Require: ngfAPIv1alpha1.RequireTypeAll}
 }
 
-// buildAuthZRuleResultMap builds the final aggregation map that combines all rule results.
+// buildAuthZRuleResultMap builds the final aggregation map that combines all per-rule result
+// variables into a single NGINX map whose output variable is used by the auth_jwt_require directive.
+// Returns nil when there are zero or one rules.
+// When one rule exists, use the result variable directly.
+//
+// In require:Any mode, the concatenated rule results are checked for the presence of at least
+// one "1" i.e. at least one rule passed.
+// Example with 3 rules:
+//
+//	map $rule_0_any$rule_1_all$rule_2_any $test_auth_authz_require_any {
+//	    ~1      1;
+//	    default 0;
+//	}
+//
+// In require:All mode, the concatenated rule results must all be "1".
+// The match pattern is an exact string of N ones, where N is the number of rules.
+// Example with 3 rules:
+//
+//	map $rule_0_any$rule_1_all$rule_2_any $test_auth_authz_require_all {
+//	    111     1;
+//	    default 0;
+//	}
 func buildAuthZRuleResultMap(
 	filterPrefix string,
 	requireType ngfAPIv1alpha1.RequireType,
