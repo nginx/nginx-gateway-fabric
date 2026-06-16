@@ -34,7 +34,7 @@ on:
         required: true
         default: us-west1
       waf_plm_enabled:
-        description: Was the WAF+PLM longevity scenario enabled when the test was started?
+        description: Indicates whether the WAF+PLM longevity scenario was enabled when the test run was initiated.
         required: false
         default: false
         type: boolean

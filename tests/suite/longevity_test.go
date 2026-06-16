@@ -90,6 +90,8 @@ var _ = Describe("Longevity", Label("longevity-setup", "longevity-teardown"), fu
 			} else {
 				setupWAFLongevity(wafNs, wafFiles)
 			}
+		} else {
+			GinkgoWriter.Println("Skipping WAF longevity setup: --waf-enabled and --plus-enabled flags are not both set")
 		}
 	})
 
@@ -138,7 +140,6 @@ func writeWAFAttackResults(resultsFile *os.File, homeDir string) error {
 	}
 
 	lines := strings.Split(strings.TrimSpace(string(content)), "\n")
-	var header string
 	var unexpected []string
 	blockedCount := 0
 
@@ -151,7 +152,7 @@ func writeWAFAttackResults(resultsFile *os.File, homeDir string) error {
 		}
 		fields := strings.Split(line, ",")
 
-		// successful lines should looks like this:
+		// successful lines should look like this:
 		// 2026-06-11T18:53:40Z,/coffee,xss,200,true
 		// 2026-06-11T18:53:40Z,/tea,sqli,200,true
 		if len(fields) >= 5 && fields[len(fields)-1] == "true" {
@@ -165,7 +166,6 @@ func writeWAFAttackResults(resultsFile *os.File, homeDir string) error {
 	fmt.Fprintf(&out, "WAF Attack Log (blocked: %d, unexpected: %d):\n\n", blockedCount, len(unexpected))
 	if len(unexpected) > 0 {
 		out.WriteString("```text\n")
-		out.WriteString(header + "\n")
 		for _, line := range unexpected {
 			out.WriteString(line + "\n")
 		}

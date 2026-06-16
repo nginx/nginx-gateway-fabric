@@ -55,7 +55,6 @@ nohup wrk -t2 -c80 -d72h "http://${WAF_HOST}/coffee" >~/waf-coffee.txt 2>&1 &
 nohup wrk -t2 -c80 -d72h "http://${WAF_HOST}/tea" >~/waf-tea.txt 2>&1 &
 
 # --- Attack traffic loop ---
-# XSS payload matches the functional PLM test (</script> encoded), SQLi on tea.
 echo "Starting WAF attack traffic loop..."
 nohup bash -c '
     WAF_HOST="'"${WAF_HOST}"'"
@@ -68,16 +67,14 @@ nohup bash -c '
     while true; do
         TS=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
-        # XSS probe on /coffee — </script> matches the functional PLM test payload.
-        # NAP WAF blocks with HTTP 200 + "Request Rejected" body by default; also handle
-        # explicit 403 when APPolicy response-pages is configured.
+        # NAP WAF blocks with HTTP 200 + "Request Rejected" body by default.
         RESPONSE=$(curl -s -w "\n%{http_code}" \
             "http://${WAF_HOST}/coffee?x=${xss_payload}" \
             2>/dev/null || echo -e "\n000")
         STATUS=$(printf '%s' "${RESPONSE}" | tail -1)
         BODY=$(printf '%s' "${RESPONSE}" | head -n -1)
         BLOCKED="false"
-        if [[ "${STATUS}" != "200" ]] || echo "${BODY}" | grep -qi "request rejected"; then
+        if [[ "${STATUS}" == "200" ]] && echo "${BODY}" | grep -qi "request rejected"; then
             BLOCKED="true"
         fi
         echo "${TS},/coffee,xss,${STATUS},${BLOCKED}" >> "${ATTACK_FILE}"
@@ -90,7 +87,7 @@ nohup bash -c '
         STATUS=$(printf '%s' "${RESPONSE}" | tail -1)
         BODY=$(printf '%s' "${RESPONSE}" | head -n -1)
         BLOCKED="false"
-        if [[ "${STATUS}" != "200" ]] || echo "${BODY}" | grep -qi "request rejected"; then
+        if [[ "${STATUS}" == "200" ]] && echo "${BODY}" | grep -qi "request rejected"; then
             BLOCKED="true"
         fi
         echo "${TS},/tea,sqli,${STATUS},${BLOCKED}" >> "${ATTACK_FILE}"
