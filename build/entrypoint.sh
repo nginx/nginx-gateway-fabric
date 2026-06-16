@@ -55,7 +55,7 @@ done
 
 # start nginx-agent, pass args
 echo "starting nginx-agent ..."
-nginx-agent &
+GOMEMLIMIT=150MiB GOGC=75 nginx-agent &
 
 agent_pid=$!
 

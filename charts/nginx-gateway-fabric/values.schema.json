@@ -1130,6 +1130,59 @@
           "title": "podAnnotations",
           "type": "object"
         },
+        "podDisruptionBudget": {
+          "description": "PodDisruptionBudget configuration for the NGINX Gateway Fabric control plane.",
+          "properties": {
+            "enable": {
+              "default": false,
+              "description": "Enable or disable PodDisruptionBudget for the control plane.",
+              "title": "enable",
+              "type": "boolean"
+            },
+            "maxUnavailable": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "string"
+                }
+              ],
+              "default": "",
+              "description": "Maximum number of pods that can be unavailable after an eviction. Value can be an absolute number (e.g. 1) or a percentage (e.g. 50%). Mutually exclusive with minAvailable.",
+              "required": [],
+              "title": "maxUnavailable"
+            },
+            "minAvailable": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "string"
+                }
+              ],
+              "default": "",
+              "description": "Minimum number of pods that must be available after an eviction. Value can be an absolute number (e.g. 1) or a percentage (e.g. 50%). Mutually exclusive with maxUnavailable.",
+              "required": [],
+              "title": "minAvailable"
+            },
+            "unhealthyPodEvictionPolicy": {
+              "default": "",
+              "description": "Defines when unhealthy pods should be considered for eviction. Valid values are IfHealthyBudget and AlwaysAllow.",
+              "enum": [
+                "",
+                "IfHealthyBudget",
+                "AlwaysAllow"
+              ],
+              "required": [],
+              "title": "unhealthyPodEvictionPolicy"
+            }
+          },
+          "required": [],
+          "title": "podDisruptionBudget",
+          "type": "object"
+        },
         "priorityClassName": {
           "default": "",
           "description": "The priority class name for the NGINX Gateway Fabric control plane pod.",
