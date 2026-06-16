@@ -8,6 +8,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -204,6 +205,18 @@ func TestRegisterResourceInGatewayConfig(t *testing.T) {
 	// HPA again, already exists
 	resources = registerAndGetResources(hpa)
 	g.Expect(resources.HPA).To(Equal(defaultMeta))
+
+	// clear out resources before next test
+	store.deleteResourcesForGateway(nsName)
+
+	// PDB
+	pdb := &policyv1.PodDisruptionBudget{ObjectMeta: defaultMeta}
+	resources = registerAndGetResources(pdb)
+	g.Expect(resources.PDB).To(Equal(defaultMeta))
+
+	// PDB again, already exists
+	resources = registerAndGetResources(pdb)
+	g.Expect(resources.PDB).To(Equal(defaultMeta))
 
 	// clear out resources before next test
 	store.deleteResourcesForGateway(nsName)
@@ -577,6 +590,10 @@ func TestGatewayExistsForResource(t *testing.T) {
 			Name:      "test-hpa",
 			Namespace: "default",
 		},
+		PDB: metav1.ObjectMeta{
+			Name:      "test-pdb",
+			Namespace: "default",
+		},
 		Role: metav1.ObjectMeta{
 			Name:      "test-role",
 			Namespace: "default",
@@ -671,6 +688,16 @@ func TestGatewayExistsForResource(t *testing.T) {
 			object: &autoscalingv2.HorizontalPodAutoscaler{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-hpa",
+					Namespace: "default",
+				},
+			},
+			expected: gateway,
+		},
+		{
+			name: "PDB exists",
+			object: &policyv1.PodDisruptionBudget{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-pdb",
 					Namespace: "default",
 				},
 			},
@@ -830,6 +857,11 @@ func TestGetResourceVersionForObject(t *testing.T) {
 			Namespace:       "default",
 			ResourceVersion: "5",
 		},
+		PDB: metav1.ObjectMeta{
+			Name:            "test-pdb",
+			Namespace:       "default",
+			ResourceVersion: "5a",
+		},
 		Role: metav1.ObjectMeta{
 			Name:            "test-role",
 			Namespace:       "default",
@@ -938,6 +970,16 @@ func TestGetResourceVersionForObject(t *testing.T) {
 				},
 			},
 			expectedResult: "5",
+		},
+		{
+			name: "PDB resource version",
+			object: &policyv1.PodDisruptionBudget{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-pdb",
+					Namespace: "default",
+				},
+			},
+			expectedResult: "5a",
 		},
 		{
 			name: "Role resource version",

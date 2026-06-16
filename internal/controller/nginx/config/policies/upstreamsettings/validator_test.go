@@ -326,14 +326,14 @@ func TestValidate_ValidateLoadBalancingMethod(t *testing.T) {
 			expConditions: nil,
 		},
 		{
-			name: "plus load balancing method least_time last_byte not allowed with Plus disabled",
+			name: "plus load balancing method random two least_time not allowed with Plus disabled",
 			policy: &ngfAPI.UpstreamSettingsPolicy{
 				Spec: ngfAPI.UpstreamSettingsPolicySpec{
-					LoadBalancingMethod: helpers.GetPointer(ngfAPI.LoadBalancingTypeLeastTimeLastByte),
+					LoadBalancingMethod: helpers.GetPointer(ngfAPI.LoadBalancingTypeRandomTwoLeastTimeHeader),
 				},
 			},
 			expConditions: []conditions.Condition{
-				conditions.NewPolicyInvalid("spec.loadBalancingMethod: Invalid value: \"least_time last_byte\": " +
+				conditions.NewPolicyInvalid("spec.loadBalancingMethod: Invalid value: \"random two least_time=header\": " +
 					"NGINX OSS supports the following load balancing methods: "),
 			},
 		},
@@ -385,6 +385,8 @@ func TestValidate_ValidateLoadBalancingMethod(t *testing.T) {
 			if test.expConditions != nil {
 				g.Expect(conds).To(HaveLen(1))
 				g.Expect(conds[0].Message).To(ContainSubstring(test.expConditions[0].Message))
+			} else {
+				g.Expect(conds).To(BeNil())
 			}
 		})
 	}

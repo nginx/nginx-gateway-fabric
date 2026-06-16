@@ -17,6 +17,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -366,6 +367,9 @@ var minimalObjectFactory = map[reflect.Type]func(name, namespace string) client.
 	},
 	reflect.TypeOf(&autoscalingv2.HorizontalPodAutoscaler{}): func(name, namespace string) client.Object {
 		return &autoscalingv2.HorizontalPodAutoscaler{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace}}
+	},
+	reflect.TypeOf(&policyv1.PodDisruptionBudget{}): func(name, namespace string) client.Object {
+		return &policyv1.PodDisruptionBudget{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace}}
 	},
 }
 
@@ -755,21 +759,7 @@ func (p *NginxProvisioner) RegisterGateway(
 		// If HPA was disabled, remove it.
 		nginxResources := p.store.getNginxResourcesForGateway(gatewayNSName)
 		if nginxResources != nil {
-			if needToDeleteDaemonSet(nginxResources) {
-				if err := p.deleteObject(ctx, &appsv1.DaemonSet{ObjectMeta: nginxResources.DaemonSet}); err != nil {
-					p.cfg.Logger.Error(err, "error deleting nginx resource")
-				}
-			} else if needToDeleteDeployment(nginxResources) {
-				if err := p.deleteObject(ctx, &appsv1.Deployment{ObjectMeta: nginxResources.Deployment}); err != nil {
-					p.cfg.Logger.Error(err, "error deleting nginx resource")
-				}
-			}
-
-			if needToDeleteHPA(nginxResources) {
-				if err := p.deleteObject(ctx, &autoscalingv2.HorizontalPodAutoscaler{ObjectMeta: nginxResources.HPA}); err != nil {
-					p.cfg.Logger.Error(err, "error deleting nginx resource")
-				}
-			}
+			p.handleObjectDeletion(ctx, nginxResources)
 		}
 
 		if err := p.provisionNginx(ctx, resourceName, gateway.Source, objects); err != nil {
@@ -782,6 +772,30 @@ func (p *NginxProvisioner) RegisterGateway(
 	}
 
 	return nil
+}
+
+func (p *NginxProvisioner) handleObjectDeletion(ctx context.Context, nginxResources *NginxResources) {
+	if needToDeleteDaemonSet(nginxResources) {
+		if err := p.deleteObject(ctx, &appsv1.DaemonSet{ObjectMeta: nginxResources.DaemonSet}); err != nil {
+			p.cfg.Logger.Error(err, "error deleting nginx resource")
+		}
+	} else if needToDeleteDeployment(nginxResources) {
+		if err := p.deleteObject(ctx, &appsv1.Deployment{ObjectMeta: nginxResources.Deployment}); err != nil {
+			p.cfg.Logger.Error(err, "error deleting nginx resource")
+		}
+	}
+
+	if needToDeleteHPA(nginxResources) {
+		if err := p.deleteObject(ctx, &autoscalingv2.HorizontalPodAutoscaler{ObjectMeta: nginxResources.HPA}); err != nil {
+			p.cfg.Logger.Error(err, "error deleting nginx resource")
+		}
+	}
+
+	if needToDeletePDB(nginxResources) {
+		if err := p.deleteObject(ctx, &policyv1.PodDisruptionBudget{ObjectMeta: nginxResources.PDB}); err != nil {
+			p.cfg.Logger.Error(err, "error deleting nginx resource")
+		}
+	}
 }
 
 func needToDeleteDeployment(cfg *NginxResources) bool {
@@ -830,6 +844,26 @@ func isLoadBalancerClassImmutabilityErr(err error) bool {
 	return false
 }
 
+// needToDeletePDB returns true if a PDB was previously created for this Gateway
+// but is no longer configured in the NginxProxy spec, and therefore should be deleted.
+func needToDeletePDB(cfg *NginxResources) bool {
+	if cfg.PDB.Name != "" && cfg.Gateway != nil {
+		if cfg.Gateway.EffectiveNginxProxy != nil &&
+			cfg.Gateway.EffectiveNginxProxy.Kubernetes != nil &&
+			(cfg.Gateway.EffectiveNginxProxy.Kubernetes.Deployment == nil ||
+				cfg.Gateway.EffectiveNginxProxy.Kubernetes.Deployment.PodDisruptionBudget == nil) {
+			return true
+		} else if cfg.Gateway.EffectiveNginxProxy == nil ||
+			cfg.Gateway.EffectiveNginxProxy.Kubernetes == nil {
+			return true
+		}
+	}
+
+	return false
+}
+
+// needToDeleteHPA returns true if an HPA was previously created for this Gateway
+// but is no longer configured in the NginxProxy spec, and therefore should be deleted.
 func needToDeleteHPA(cfg *NginxResources) bool {
 	if cfg.HPA.Name != "" && cfg.Gateway != nil {
 		if cfg.Gateway.EffectiveNginxProxy != nil &&

@@ -7,8 +7,10 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
@@ -419,6 +421,49 @@ func TestHpaSpecSetter(t *testing.T) {
 
 	// Object meta fields, ensure name and namespace didn't change
 	g.Expect(existing.Name).To(Equal("test-hpa"))
+	g.Expect(existing.Namespace).To(Equal("default"))
+	g.Expect(existing.Annotations).To(Equal(annotations))
+	g.Expect(existing.Labels).To(Equal(labels))
+
+	g.Expect(existing.Spec).To(Equal(spec))
+}
+
+func TestPdbSpecSetter(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	existing := &policyv1.PodDisruptionBudget{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-pdb",
+			Namespace: "default",
+		},
+	}
+
+	labels := map[string]string{
+		"app": "nginx-gateway",
+	}
+
+	annotations := map[string]string{
+		"custom.annotation": "test-value",
+	}
+
+	desiredMeta := metav1.ObjectMeta{
+		Labels:      labels,
+		Annotations: annotations,
+	}
+
+	minAvailable := intstr.FromInt32(1)
+	spec := policyv1.PodDisruptionBudgetSpec{
+		Selector: &metav1.LabelSelector{
+			MatchLabels: map[string]string{"app": "nginx"},
+		},
+		MinAvailable: &minAvailable,
+	}
+
+	err := pdbSpecSetter(existing, spec, desiredMeta)()
+	g.Expect(err).ToNot(HaveOccurred())
+
+	g.Expect(existing.Name).To(Equal("test-pdb"))
 	g.Expect(existing.Namespace).To(Equal("default"))
 	g.Expect(existing.Annotations).To(Equal(annotations))
 	g.Expect(existing.Labels).To(Equal(labels))
