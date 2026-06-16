@@ -194,7 +194,7 @@ server {
         auth_jwt_require {{ $l.AuthJWT.AuthRequire }};
             {{- end }}
             {{- range $l.AuthJWT.ProxySetHeaders }}
-        proxy_set_header {{ .HeaderName }} {{ .ClaimVariable }};
+        proxy_set_header {{ .Name }} {{ .Value }};
             {{- end }}
         {{- end }}
 
