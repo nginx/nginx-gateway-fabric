@@ -2,7 +2,7 @@
 # Because overlap-route-1 and overlap-route-2 share hostname "overlap.example.com"
 # with PathPrefix "/" (differing only by a header match), they overlap.
 # A CSP targeting one of these overlapping routes must receive a TargetConflict
-# (Accepted: False, Reason: Conflicted).
+# (Accepted: False, Reason: TargetConflict).
 apiVersion: gateway.nginx.org/v1alpha1
 kind: ClientSettingsPolicy
 metadata:

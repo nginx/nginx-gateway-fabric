@@ -2,7 +2,7 @@
 # one with hostname "overlap.example.com" with PathPrefix "/".
 # one with hostname "overlap.example.com, b.example.com" with PathPrefix "/" and a header match.
 # Given they share one of the same hostnames, they should generate the same gateway:hostname:port/path.
-# For a policy targeting either route, a TargetConflict should be generated due this overlap.
+# For a policy targeting either route, a TargetConflict should be generated due to this overlap.
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
