@@ -325,49 +325,54 @@ func (h *eventHandler) provisionResourceForAllGateways(
 
 // deprovisionSecretsForAllGateways cleans up any secrets that a user deleted that were duplicated
 // for all Gateways. For example, NGINX Plus secrets.
-//
-//nolint:gocyclo // will refactor at some point
 func (h *eventHandler) deprovisionSecretsForAllGateways(ctx context.Context, secret string) error {
 	var allErrs []error
-	gateways := h.store.getGateways()
 
-	for gateway := range gateways {
+	for gateway := range h.store.getGateways() {
 		resources := h.store.getNginxResourcesForGateway(gateway)
 		if resources == nil {
 			continue
 		}
 
-		switch {
-		case strings.HasSuffix(resources.AgentTLSSecret.Name, secret):
-			if err := h.provisioner.deleteObject(ctx, &corev1.Secret{ObjectMeta: resources.AgentTLSSecret}); err != nil {
-				allErrs = append(allErrs, err)
+		allErrs = append(allErrs, h.deprovisionMatchingSecrets(ctx, resources, secret)...)
+	}
+
+	return errors.Join(allErrs...)
+}
+
+// deprovisionMatchingSecrets deletes the duplicated secrets for a single Gateway whose names match the
+// deleted user secret. The named secrets are checked in priority order and only the first match is
+// deprovisioned; if none match, the duplicated docker registry secrets are checked instead.
+func (h *eventHandler) deprovisionMatchingSecrets(
+	ctx context.Context,
+	resources *NginxResources,
+	secret string,
+) []error {
+	namedSecrets := []metav1.ObjectMeta{
+		resources.AgentTLSSecret,
+		resources.PlusJWTSecret,
+		resources.PlusCASecret,
+		resources.PlusClientSSLSecret,
+		resources.DataplaneKeySecret,
+	}
+
+	for _, meta := range namedSecrets {
+		if strings.HasSuffix(meta.Name, secret) {
+			if err := h.provisioner.deleteObject(ctx, &corev1.Secret{ObjectMeta: meta}); err != nil {
+				return []error{err}
 			}
-		case strings.HasSuffix(resources.PlusJWTSecret.Name, secret):
-			if err := h.provisioner.deleteObject(ctx, &corev1.Secret{ObjectMeta: resources.PlusJWTSecret}); err != nil {
-				allErrs = append(allErrs, err)
-			}
-		case strings.HasSuffix(resources.PlusCASecret.Name, secret):
-			if err := h.provisioner.deleteObject(ctx, &corev1.Secret{ObjectMeta: resources.PlusCASecret}); err != nil {
-				allErrs = append(allErrs, err)
-			}
-		case strings.HasSuffix(resources.PlusClientSSLSecret.Name, secret):
-			if err := h.provisioner.deleteObject(ctx, &corev1.Secret{ObjectMeta: resources.PlusClientSSLSecret}); err != nil {
-				allErrs = append(allErrs, err)
-			}
-		case strings.HasSuffix(resources.DataplaneKeySecret.Name, secret):
-			if err := h.provisioner.deleteObject(ctx, &corev1.Secret{ObjectMeta: resources.DataplaneKeySecret}); err != nil {
-				allErrs = append(allErrs, err)
-			}
-		default:
-			for _, dockerSecret := range resources.DockerSecrets {
-				if strings.HasSuffix(dockerSecret.Name, secret) {
-					if err := h.provisioner.deleteObject(ctx, &corev1.Secret{ObjectMeta: dockerSecret}); err != nil {
-						allErrs = append(allErrs, err)
-					}
-				}
+			return nil
+		}
+	}
+
+	var errs []error
+	for _, dockerSecret := range resources.DockerSecrets {
+		if strings.HasSuffix(dockerSecret.Name, secret) {
+			if err := h.provisioner.deleteObject(ctx, &corev1.Secret{ObjectMeta: dockerSecret}); err != nil {
+				errs = append(errs, err)
 			}
 		}
 	}
 
-	return errors.Join(allErrs...)
+	return errs
 }
