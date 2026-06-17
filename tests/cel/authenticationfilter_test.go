@@ -533,3 +533,115 @@ func TestAuthenticationFilterValidateJWTRejected(t *testing.T) {
 		})
 	}
 }
+
+func TestAuthenticationFilterExtraAuthArgs(t *testing.T) {
+	t.Parallel()
+	k8sClient := getKubernetesClient(t)
+
+	tests := []struct {
+		name       string
+		spec       ngfAPIv1alpha1.AuthenticationFilterSpec
+		wantErrors []string
+	}{
+		{
+			name: "Validate: valid extraAuthArgs accepted",
+			spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+				Type: ngfAPIv1alpha1.AuthTypeOIDC,
+				OIDC: &ngfAPIv1alpha1.OIDCAuth{
+					Issuer:   "https://example.com",
+					ClientID: "client-id",
+					ClientSecretRef: ngfAPIv1alpha1.LocalObjectReference{
+						Name: uniqueResourceName("auth-secret"),
+					},
+					ExtraAuthArgs: map[string]string{
+						"prompt":     "consent",
+						"audience":   "api",
+						"acr_values": "urn:mace:incommon:iap:silver",
+					},
+				},
+			},
+		},
+		{
+			name: "Validate: extraAuthArgs with empty values accepted",
+			spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+				Type: ngfAPIv1alpha1.AuthTypeOIDC,
+				OIDC: &ngfAPIv1alpha1.OIDCAuth{
+					Issuer:   "https://example.com",
+					ClientID: "client-id",
+					ClientSecretRef: ngfAPIv1alpha1.LocalObjectReference{
+						Name: uniqueResourceName("auth-secret"),
+					},
+					ExtraAuthArgs: map[string]string{
+						"prompt": "",
+					},
+				},
+			},
+		},
+		{
+			name:       "Validate: extraAuthArgs with invalid key containing semicolons rejected",
+			wantErrors: []string{expectedExtraAuthArgsKeyError},
+			spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+				Type: ngfAPIv1alpha1.AuthTypeOIDC,
+				OIDC: &ngfAPIv1alpha1.OIDCAuth{
+					Issuer:   "https://example.com",
+					ClientID: "client-id",
+					ClientSecretRef: ngfAPIv1alpha1.LocalObjectReference{
+						Name: uniqueResourceName("auth-secret"),
+					},
+					ExtraAuthArgs: map[string]string{
+						"bad;key": "value",
+					},
+				},
+			},
+		},
+		{
+			name:       "Validate: extraAuthArgs with invalid key containing spaces rejected",
+			wantErrors: []string{expectedExtraAuthArgsKeyError},
+			spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+				Type: ngfAPIv1alpha1.AuthTypeOIDC,
+				OIDC: &ngfAPIv1alpha1.OIDCAuth{
+					Issuer:   "https://example.com",
+					ClientID: "client-id",
+					ClientSecretRef: ngfAPIv1alpha1.LocalObjectReference{
+						Name: uniqueResourceName("auth-secret"),
+					},
+					ExtraAuthArgs: map[string]string{
+						"bad key": "value",
+					},
+				},
+			},
+		},
+		{
+			name: "Validate: extraAuthArgs with special chars in values accepted (validated at Go level)",
+			spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+				Type: ngfAPIv1alpha1.AuthTypeOIDC,
+				OIDC: &ngfAPIv1alpha1.OIDCAuth{
+					Issuer:   "https://example.com",
+					ClientID: "client-id",
+					ClientSecretRef: ngfAPIv1alpha1.LocalObjectReference{
+						Name: uniqueResourceName("auth-secret"),
+					},
+					ExtraAuthArgs: map[string]string{
+						"key": "value;with;semicolons",
+					},
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			authFilter := &ngfAPIv1alpha1.AuthenticationFilter{
+				ObjectMeta: controllerruntime.ObjectMeta{
+					Name:      uniqueResourceName(testResourceName),
+					Namespace: defaultNamespace,
+				},
+				Spec: tt.spec,
+			}
+
+			validateCrd(t, tt.wantErrors, authFilter, k8sClient)
+		})
+	}
+}

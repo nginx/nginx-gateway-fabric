@@ -239,8 +239,8 @@ func processGRPCRouteRule(
 		var interfaceFilters []any
 		if len(b.Filters) > 0 {
 			interfaceFilters = make([]any, 0, len(b.Filters))
-			for i, v := range b.Filters {
-				interfaceFilters[i] = v
+			for _, filter := range b.Filters {
+				interfaceFilters = append(interfaceFilters, filter)
 			}
 		}
 		rbr := RouteBackendRef{

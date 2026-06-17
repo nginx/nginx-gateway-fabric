@@ -52,6 +52,18 @@ type FakeAuthFieldsValidator struct {
 	validateOIDCConfigURLReturnsOnCall map[int]struct {
 		result1 error
 	}
+	ValidateOIDCExtraAuthArgStub        func(string, string) error
+	validateOIDCExtraAuthArgMutex       sync.RWMutex
+	validateOIDCExtraAuthArgArgsForCall []struct {
+		arg1 string
+		arg2 string
+	}
+	validateOIDCExtraAuthArgReturns struct {
+		result1 error
+	}
+	validateOIDCExtraAuthArgReturnsOnCall map[int]struct {
+		result1 error
+	}
 	ValidateOIDCFrontChannelLogoutURIStub        func(string) error
 	validateOIDCFrontChannelLogoutURIMutex       sync.RWMutex
 	validateOIDCFrontChannelLogoutURIArgsForCall []struct {
@@ -351,6 +363,68 @@ func (fake *FakeAuthFieldsValidator) ValidateOIDCConfigURLReturnsOnCall(i int, r
 		})
 	}
 	fake.validateOIDCConfigURLReturnsOnCall[i] = struct {
+		result1 error
+	}{result1}
+}
+
+func (fake *FakeAuthFieldsValidator) ValidateOIDCExtraAuthArg(arg1 string, arg2 string) error {
+	fake.validateOIDCExtraAuthArgMutex.Lock()
+	ret, specificReturn := fake.validateOIDCExtraAuthArgReturnsOnCall[len(fake.validateOIDCExtraAuthArgArgsForCall)]
+	fake.validateOIDCExtraAuthArgArgsForCall = append(fake.validateOIDCExtraAuthArgArgsForCall, struct {
+		arg1 string
+		arg2 string
+	}{arg1, arg2})
+	stub := fake.ValidateOIDCExtraAuthArgStub
+	fakeReturns := fake.validateOIDCExtraAuthArgReturns
+	fake.recordInvocation("ValidateOIDCExtraAuthArg", []interface{}{arg1, arg2})
+	fake.validateOIDCExtraAuthArgMutex.Unlock()
+	if stub != nil {
+		return stub(arg1, arg2)
+	}
+	if specificReturn {
+		return ret.result1
+	}
+	return fakeReturns.result1
+}
+
+func (fake *FakeAuthFieldsValidator) ValidateOIDCExtraAuthArgCallCount() int {
+	fake.validateOIDCExtraAuthArgMutex.RLock()
+	defer fake.validateOIDCExtraAuthArgMutex.RUnlock()
+	return len(fake.validateOIDCExtraAuthArgArgsForCall)
+}
+
+func (fake *FakeAuthFieldsValidator) ValidateOIDCExtraAuthArgCalls(stub func(string, string) error) {
+	fake.validateOIDCExtraAuthArgMutex.Lock()
+	defer fake.validateOIDCExtraAuthArgMutex.Unlock()
+	fake.ValidateOIDCExtraAuthArgStub = stub
+}
+
+func (fake *FakeAuthFieldsValidator) ValidateOIDCExtraAuthArgArgsForCall(i int) (string, string) {
+	fake.validateOIDCExtraAuthArgMutex.RLock()
+	defer fake.validateOIDCExtraAuthArgMutex.RUnlock()
+	argsForCall := fake.validateOIDCExtraAuthArgArgsForCall[i]
+	return argsForCall.arg1, argsForCall.arg2
+}
+
+func (fake *FakeAuthFieldsValidator) ValidateOIDCExtraAuthArgReturns(result1 error) {
+	fake.validateOIDCExtraAuthArgMutex.Lock()
+	defer fake.validateOIDCExtraAuthArgMutex.Unlock()
+	fake.ValidateOIDCExtraAuthArgStub = nil
+	fake.validateOIDCExtraAuthArgReturns = struct {
+		result1 error
+	}{result1}
+}
+
+func (fake *FakeAuthFieldsValidator) ValidateOIDCExtraAuthArgReturnsOnCall(i int, result1 error) {
+	fake.validateOIDCExtraAuthArgMutex.Lock()
+	defer fake.validateOIDCExtraAuthArgMutex.Unlock()
+	fake.ValidateOIDCExtraAuthArgStub = nil
+	if fake.validateOIDCExtraAuthArgReturnsOnCall == nil {
+		fake.validateOIDCExtraAuthArgReturnsOnCall = make(map[int]struct {
+			result1 error
+		})
+	}
+	fake.validateOIDCExtraAuthArgReturnsOnCall[i] = struct {
 		result1 error
 	}{result1}
 }

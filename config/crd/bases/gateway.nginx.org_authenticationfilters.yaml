@@ -335,6 +335,7 @@ spec:
                       ExtraAuthArgs sets additional query arguments for the authentication request URL.
                       Arguments are appended with "&". For example: "prompt=consent&audience=api".
                       Directive: https://nginx.org/en/docs/http/ngx_http_oidc_module.html#extra_auth_args
+                    maxProperties: 16
                     type: object
                   issuer:
                     description: |-
@@ -421,6 +422,10 @@ spec:
                 - clientSecretRef
                 - issuer
                 type: object
+                x-kubernetes-validations:
+                - message: extraAuthArgs keys must contain only alphanumeric characters,
+                    hyphens, underscores, or dots
+                  rule: '!has(self.extraAuthArgs) || self.extraAuthArgs.all(key, key.matches(''^[a-zA-Z0-9_.-]+$''))'
               type:
                 description: Type selects the authentication mechanism.
                 enum:

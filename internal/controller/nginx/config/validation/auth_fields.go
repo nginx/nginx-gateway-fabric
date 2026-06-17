@@ -2,6 +2,7 @@ package validation
 
 import (
 	"errors"
+	"fmt"
 	"regexp"
 
 	k8svalidation "k8s.io/apimachinery/pkg/util/validation"
@@ -179,4 +180,32 @@ func (AuthFieldValidator) ValidateAuthZClaimValue(value string) error {
 // ValidateAuthZProxySetHeader validates that a proxy set header name contains only allowed characters.
 func (AuthFieldValidator) ValidateAuthZProxySetHeader(header string) error {
 	return validateHeaderName(header)
+}
+
+const (
+	// extraAuthArgKeyFmt validates OIDC extra auth arg keys.
+	// Keys must contain only alphanumeric characters, hyphens, underscores, or dots.
+	extraAuthArgKeyFmt    = `^[a-zA-Z0-9_.-]+$`
+	extraAuthArgKeyErrMsg = "must contain only alphanumeric characters, hyphens, underscores, or dots"
+)
+
+var extraAuthArgKeyRegexp = regexp.MustCompile(extraAuthArgKeyFmt)
+
+// ValidateOIDCExtraAuthArg validates a single key-value pair from the OIDC extraAuthArgs map.
+// Keys must be valid query parameter names. Values are placed inside a double-quoted NGINX
+// directive, so they are validated with the same escaped-string rules used elsewhere: no
+// unescaped double quotes, no dollar signs (variable expansion is not needed for query
+// parameters), and no trailing backslash.
+func (AuthFieldValidator) ValidateOIDCExtraAuthArg(key, value string) error {
+	if !extraAuthArgKeyRegexp.MatchString(key) {
+		return fmt.Errorf(
+			"invalid key %q: %s",
+			key,
+			k8svalidation.RegexError(extraAuthArgKeyErrMsg, extraAuthArgKeyFmt, "prompt", "acr_values"),
+		)
+	}
+	if err := validateEscapedStringNoVarExpansion(value, []string{"consent", "openid profile"}); err != nil {
+		return fmt.Errorf("invalid value for key %q: %w", key, err)
+	}
+	return nil
 }

@@ -129,3 +129,23 @@ func (GenericValidator) ValidateNginxVariableName(name string) error {
 
 	return nil
 }
+
+// ValidateServerTokensValue validates a custom server_tokens value that will be placed inside
+// double quotes in the NGINX configuration. It ensures no unescaped double quotes or
+// trailing backslashes that could break the NGINX config.
+func (GenericValidator) ValidateServerTokensValue(value string) error {
+	return validateEscapedString(value, []string{"my-server", "nginx"})
+}
+
+// ValidateAccessLogFormatString validates a custom access log format string that will
+// be placed inside single quotes in the NGINX configuration. Single quotes must be
+// rejected since they cannot be escaped in NGINX single-quoted strings.
+func (GenericValidator) ValidateAccessLogFormatString(value string) error {
+	return validateSingleQuotedString(
+		value,
+		[]string{
+			`$remote_addr - $remote_user [$time_local] "$request" $status`,
+			`{"remote_addr": "$remote_addr", "status": "$status"}`,
+		},
+	)
+}
