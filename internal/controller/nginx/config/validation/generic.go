@@ -129,3 +129,10 @@ func (GenericValidator) ValidateNginxVariableName(name string) error {
 
 	return nil
 }
+
+// ValidateServerTokensValue validates a custom server_tokens value that will be placed inside
+// double quotes in the NGINX configuration. It ensures no unescaped double quotes or
+// trailing backslashes that could break the NGINX config.
+func (GenericValidator) ValidateServerTokensValue(value string) error {
+	return validateEscapedString(value, []string{"my-server", "nginx"})
+}

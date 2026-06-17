@@ -8890,6 +8890,8 @@ spec:
                   See: https://nginx.org/en/docs/http/ngx_http_core_module.html#server_tokens
                   NGINX directive: https://nginx.org/en/docs/http/ngx_http_core_module.html#server_tokens
                   Default is "off".
+                maxLength: 255
+                pattern: ^([^"\\]|\\.)*$
                 type: string
               telemetry:
                 description: Telemetry specifies the OpenTelemetry configuration.

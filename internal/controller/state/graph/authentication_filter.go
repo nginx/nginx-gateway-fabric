@@ -294,6 +294,16 @@ func validateOIDCFields(
 		}
 	}
 
+	for key, value := range oidcSpec.ExtraAuthArgs {
+		if err := authValidator.ValidateOIDCExtraAuthArg(key, value); err != nil {
+			allErrs = append(allErrs, field.Invalid(
+				field.NewPath("spec.oidc.extraAuthArgs"),
+				key+"="+value,
+				err.Error(),
+			))
+		}
+	}
+
 	return allErrs
 }
 

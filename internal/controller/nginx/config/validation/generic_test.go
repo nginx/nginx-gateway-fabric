@@ -142,3 +142,24 @@ func TestValidateNginxVariableName(t *testing.T) {
 		`$request_id;`,
 	)
 }
+
+func TestValidateServerTokensValue(t *testing.T) {
+	t.Parallel()
+	validator := GenericValidator{}
+
+	testValidValuesForSimpleValidator(
+		t,
+		validator.ValidateServerTokensValue,
+		`my-server`,
+		`nginx`,
+		`custom server token`,
+		``,
+	)
+
+	testInvalidValuesForSimpleValidator(
+		t,
+		validator.ValidateServerTokensValue,
+		`bad"value`,
+		`value\`,
+	)
+}

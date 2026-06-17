@@ -117,6 +117,8 @@ type NginxProxySpec struct {
 	//
 	//
 	// +optional
+	// +kubebuilder:validation:MaxLength=255
+	// +kubebuilder:validation:Pattern=`^([^"\\]|\\.)*$`
 	ServerTokens *string `json:"serverTokens,omitempty"`
 	// WAF configures NGINX App Protect WAF functionality.
 	//

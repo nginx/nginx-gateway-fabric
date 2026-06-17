@@ -51,6 +51,7 @@ type GenericValidator interface {
 	ValidateNginxSize(size string) error
 	ValidateEndpoint(endpoint string) error
 	ValidateNginxVariableName(name string) error
+	ValidateServerTokensValue(value string) error
 }
 
 // AuthFieldsValidator validates authentication-related fields from NGF API resources.
@@ -63,6 +64,7 @@ type AuthFieldsValidator interface {
 	ValidateOIDCLogoutURI(uri string) error
 	ValidateOIDCPostLogoutURI(uri string) error
 	ValidateOIDCFrontChannelLogoutURI(uri string) error
+	ValidateOIDCExtraAuthArg(key, value string) error
 }
 
 // PolicyValidator validates an NGF Policy.

@@ -94,6 +94,8 @@ type BasicAuth struct {
 // OIDCAuth configures OpenID Connect Authentication.
 // Only available for NGINX Plus users.
 //
+// +kubebuilder:validation:XValidation:message="extraAuthArgs keys must contain only alphanumeric characters, hyphens, underscores, or dots",rule="!has(self.extraAuthArgs) || self.extraAuthArgs.all(key, key.matches('^[a-zA-Z0-9_.-]+$'))"
+//
 //nolint:lll
 type OIDCAuth struct {
 	// CRLSecretRef references a Secret containing a certificate
@@ -123,6 +125,7 @@ type OIDCAuth struct {
 	// Directive: https://nginx.org/en/docs/http/ngx_http_oidc_module.html#extra_auth_args
 	//
 	// +optional
+	// +kubebuilder:validation:MaxProperties=16
 	ExtraAuthArgs map[string]string `json:"extraAuthArgs,omitempty"`
 
 	// Session configures session management for OIDC authentication.

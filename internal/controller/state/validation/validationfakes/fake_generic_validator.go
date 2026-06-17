@@ -63,6 +63,17 @@ type FakeGenericValidator struct {
 	validateNginxVariableNameReturnsOnCall map[int]struct {
 		result1 error
 	}
+	ValidateServerTokensValueStub        func(string) error
+	validateServerTokensValueMutex       sync.RWMutex
+	validateServerTokensValueArgsForCall []struct {
+		arg1 string
+	}
+	validateServerTokensValueReturns struct {
+		result1 error
+	}
+	validateServerTokensValueReturnsOnCall map[int]struct {
+		result1 error
+	}
 	ValidateServiceNameStub        func(string) error
 	validateServiceNameMutex       sync.RWMutex
 	validateServiceNameArgsForCall []struct {
@@ -379,6 +390,67 @@ func (fake *FakeGenericValidator) ValidateNginxVariableNameReturnsOnCall(i int, 
 		})
 	}
 	fake.validateNginxVariableNameReturnsOnCall[i] = struct {
+		result1 error
+	}{result1}
+}
+
+func (fake *FakeGenericValidator) ValidateServerTokensValue(arg1 string) error {
+	fake.validateServerTokensValueMutex.Lock()
+	ret, specificReturn := fake.validateServerTokensValueReturnsOnCall[len(fake.validateServerTokensValueArgsForCall)]
+	fake.validateServerTokensValueArgsForCall = append(fake.validateServerTokensValueArgsForCall, struct {
+		arg1 string
+	}{arg1})
+	stub := fake.ValidateServerTokensValueStub
+	fakeReturns := fake.validateServerTokensValueReturns
+	fake.recordInvocation("ValidateServerTokensValue", []interface{}{arg1})
+	fake.validateServerTokensValueMutex.Unlock()
+	if stub != nil {
+		return stub(arg1)
+	}
+	if specificReturn {
+		return ret.result1
+	}
+	return fakeReturns.result1
+}
+
+func (fake *FakeGenericValidator) ValidateServerTokensValueCallCount() int {
+	fake.validateServerTokensValueMutex.RLock()
+	defer fake.validateServerTokensValueMutex.RUnlock()
+	return len(fake.validateServerTokensValueArgsForCall)
+}
+
+func (fake *FakeGenericValidator) ValidateServerTokensValueCalls(stub func(string) error) {
+	fake.validateServerTokensValueMutex.Lock()
+	defer fake.validateServerTokensValueMutex.Unlock()
+	fake.ValidateServerTokensValueStub = stub
+}
+
+func (fake *FakeGenericValidator) ValidateServerTokensValueArgsForCall(i int) string {
+	fake.validateServerTokensValueMutex.RLock()
+	defer fake.validateServerTokensValueMutex.RUnlock()
+	argsForCall := fake.validateServerTokensValueArgsForCall[i]
+	return argsForCall.arg1
+}
+
+func (fake *FakeGenericValidator) ValidateServerTokensValueReturns(result1 error) {
+	fake.validateServerTokensValueMutex.Lock()
+	defer fake.validateServerTokensValueMutex.Unlock()
+	fake.ValidateServerTokensValueStub = nil
+	fake.validateServerTokensValueReturns = struct {
+		result1 error
+	}{result1}
+}
+
+func (fake *FakeGenericValidator) ValidateServerTokensValueReturnsOnCall(i int, result1 error) {
+	fake.validateServerTokensValueMutex.Lock()
+	defer fake.validateServerTokensValueMutex.Unlock()
+	fake.ValidateServerTokensValueStub = nil
+	if fake.validateServerTokensValueReturnsOnCall == nil {
+		fake.validateServerTokensValueReturnsOnCall = make(map[int]struct {
+			result1 error
+		})
+	}
+	fake.validateServerTokensValueReturnsOnCall[i] = struct {
 		result1 error
 	}{result1}
 }

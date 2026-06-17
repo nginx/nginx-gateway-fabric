@@ -355,7 +355,7 @@ func validateNginxProxy(
 
 	allErrs = append(allErrs, validateNginxPlus(npCfg)...)
 
-	allErrs = append(allErrs, validateServerTokens(npCfg, plus)...)
+	allErrs = append(allErrs, validateServerTokens(validator, npCfg, plus)...)
 
 	return allErrs
 }
@@ -582,18 +582,24 @@ func validateNginxPlus(npCfg *ngfAPIv1alpha2.NginxProxy) field.ErrorList {
 	return allErrs
 }
 
-func validateServerTokens(npCfg *ngfAPIv1alpha2.NginxProxy, plus bool) field.ErrorList {
+func validateServerTokens(
+	validator validation.GenericValidator,
+	npCfg *ngfAPIv1alpha2.NginxProxy,
+	plus bool,
+) field.ErrorList {
+	if npCfg.Spec.ServerTokens == nil {
+		return nil
+	}
+
 	var allErrs field.ErrorList
-	spec := field.NewPath("spec")
+	serverTokens := *npCfg.Spec.ServerTokens
+	serverTokensPath := field.NewPath("spec").Child("serverTokens")
 
-	if npCfg.Spec.ServerTokens != nil && !plus {
-		serverTokens := *npCfg.Spec.ServerTokens
-		serverTokensPath := spec.Child("serverTokens")
-
-		switch serverTokens {
-		case ServerTokenOff, ServerTokenOn, ServerTokenBuild:
-			// only keyword server_tokens off|on|build is allowed in OSS
-		default:
+	switch serverTokens {
+	case ServerTokenOff, ServerTokenOn, ServerTokenBuild:
+		// keywords are always valid for both OSS and Plus
+	default:
+		if !plus {
 			allErrs = append(
 				allErrs,
 				field.Invalid(
@@ -602,6 +608,11 @@ func validateServerTokens(npCfg *ngfAPIv1alpha2.NginxProxy, plus bool) field.Err
 					"custom string values for serverTokens are only allowed with NGINX Plus."+
 						" For NGINX OSS, allowed values are 'off', 'on', and 'build'.",
 				),
+			)
+		} else if err := validator.ValidateServerTokensValue(serverTokens); err != nil {
+			allErrs = append(
+				allErrs,
+				field.Invalid(serverTokensPath, serverTokens, err.Error()),
 			)
 		}
 	}

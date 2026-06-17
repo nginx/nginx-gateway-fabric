@@ -78,6 +78,13 @@ const (
 	// Strategy validation error.
 	expectedStrategyMustBeOfTypeRatio = "ratio can only be specified if strategy is of type ratio"
 
+	// ServerTokens validation error.
+	expectedServerTokensPatternError = `serverTokens in body should match`
+
+	// ExtraAuthArgs validation error.
+	expectedExtraAuthArgsKeyError = "extraAuthArgs keys must contain only alphanumeric characters, hyphens, " +
+		"underscores, or dots"
+
 	// Snippets validation errors.
 	expectedSnippetsContextError = "Only one snippet allowed per context"
 

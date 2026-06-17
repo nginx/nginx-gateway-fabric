@@ -1908,6 +1908,25 @@ func TestValidateServerTokens(t *testing.T) {
 			plus:           true,
 		},
 		{
+			name:      "valid keyword serverTokens with NGINX Plus",
+			validator: createValidValidator(),
+			np: &ngfAPIv1alpha2.NginxProxy{
+				Spec: ngfAPIv1alpha2.NginxProxySpec{
+					ServerTokens: helpers.GetPointer(ServerTokenOff),
+				},
+			},
+			expectErrCount: 0,
+			plus:           true,
+		},
+		{
+			name:      "nil serverTokens",
+			validator: createValidValidator(),
+			np: &ngfAPIv1alpha2.NginxProxy{
+				Spec: ngfAPIv1alpha2.NginxProxySpec{},
+			},
+			expectErrCount: 0,
+		},
+		{
 			name:      "invalid custom serverTokens with NGINX OSS",
 			validator: createValidValidator(),
 			np: &ngfAPIv1alpha2.NginxProxy{
@@ -1920,6 +1939,21 @@ func TestValidateServerTokens(t *testing.T) {
 				"\"custom-string\": custom string values for serverTokens are only allowed with NGINX Plus." +
 				" For NGINX OSS, allowed values are 'off', 'on', and 'build'.",
 		},
+		{
+			name: "invalid custom serverTokens with NGINX Plus containing dangerous chars",
+			validator: func() *validationfakes.FakeGenericValidator {
+				v := createValidValidator()
+				v.ValidateServerTokensValueReturns(errors.New("error"))
+				return v
+			}(),
+			np: &ngfAPIv1alpha2.NginxProxy{
+				Spec: ngfAPIv1alpha2.NginxProxySpec{
+					ServerTokens: helpers.GetPointer(`bad"value`),
+				},
+			},
+			expectErrCount: 1,
+			plus:           true,
+		},
 	}
 
 	for _, test := range tests {
@@ -1927,9 +1961,9 @@ func TestValidateServerTokens(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			allErrs := validateServerTokens(test.np, test.plus)
+			allErrs := validateServerTokens(test.validator, test.np, test.plus)
 			g.Expect(allErrs).To(HaveLen(test.expectErrCount))
-			if len(allErrs) > 0 {
+			if test.errorString != "" {
 				g.Expect(allErrs.ToAggregate().Error()).To(Equal(test.errorString))
 			}
 		})
