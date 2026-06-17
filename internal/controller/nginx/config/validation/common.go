@@ -22,6 +22,25 @@ var (
 )
 
 const (
+	singleQuotedStringFmt    = `[^']*`
+	singleQuotedStringErrMsg = `must not contain single quotes (')`
+)
+
+var singleQuotedStringFmtRegexp = regexp.MustCompile("^" + singleQuotedStringFmt + "$")
+
+// validateSingleQuotedString validates a string that will be placed inside single quotes
+// in the NGINX config. Single quotes cannot be escaped in NGINX single-quoted strings,
+// so they must not be present.
+// If the value is invalid, the function returns an error that includes the specified examples of valid values.
+func validateSingleQuotedString(value string, examples []string) error {
+	if !singleQuotedStringFmtRegexp.MatchString(value) {
+		msg := k8svalidation.RegexError(singleQuotedStringErrMsg, singleQuotedStringFmt, examples...)
+		return errors.New(msg)
+	}
+	return nil
+}
+
+const (
 	escapedStringsFmt    = `([^"\\]|\\.)*`
 	escapedStringsErrMsg = `must have all '"' (double quotes) escaped and must not end with an unescaped '\' ` +
 		`(backslash)`

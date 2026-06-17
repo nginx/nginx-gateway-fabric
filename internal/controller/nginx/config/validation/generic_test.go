@@ -163,3 +163,25 @@ func TestValidateServerTokensValue(t *testing.T) {
 		`value\`,
 	)
 }
+
+func TestValidateAccessLogFormatString(t *testing.T) {
+	t.Parallel()
+	validator := GenericValidator{}
+
+	testValidValuesForSimpleValidator(
+		t,
+		validator.ValidateAccessLogFormatString,
+		`$remote_addr - $remote_user [$time_local] "$request" $status $body_bytes_sent`,
+		`{"remote_addr": "$remote_addr", "status": "$status"}`,
+		`$request\t$status`,
+		``,
+	)
+
+	testInvalidValuesForSimpleValidator(
+		t,
+		validator.ValidateAccessLogFormatString,
+		`format with 'quotes'`,
+		`'; bad stuff; #`,
+		`$remote_addr'`,
+	)
+}

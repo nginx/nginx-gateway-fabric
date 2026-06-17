@@ -421,9 +421,13 @@ type NginxAccessLog struct {
 	// Format specifies the custom log format string.
 	// If not specified, NGINX default 'combined' format is used.
 	// For now only path /dev/stdout can be used.
+	// Single quotes are not allowed because the format is rendered inside
+	// a single-quoted NGINX log_format directive.
 	// See https://nginx.org/en/docs/http/ngx_http_log_module.html#log_format
 	//
 	// +optional
+	// +kubebuilder:validation:MaxLength=4096
+	// +kubebuilder:validation:Pattern=`^[^']*$`
 	Format *string `json:"format,omitempty"`
 
 	// Escape specifies how to escape characters in variables for access log.

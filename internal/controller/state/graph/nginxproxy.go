@@ -347,7 +347,7 @@ func validateNginxProxy(
 		}
 	}
 
-	allErrs = append(allErrs, validateLogging(npCfg)...)
+	allErrs = append(allErrs, validateLogging(validator, npCfg)...)
 
 	allErrs = append(allErrs, validateDNSResolver(validator, npCfg)...)
 
@@ -360,7 +360,10 @@ func validateNginxProxy(
 	return allErrs
 }
 
-func validateLogging(npCfg *ngfAPIv1alpha2.NginxProxy) field.ErrorList {
+func validateLogging(
+	validator validation.GenericValidator,
+	npCfg *ngfAPIv1alpha2.NginxProxy,
+) field.ErrorList {
 	var allErrs field.ErrorList
 	spec := field.NewPath("spec")
 
@@ -390,6 +393,19 @@ func validateLogging(npCfg *ngfAPIv1alpha2.NginxProxy) field.ErrorList {
 						logging.ErrorLevel,
 						validLogLevels,
 					))
+			}
+		}
+
+		if logging.AccessLog != nil && logging.AccessLog.Format != nil {
+			if err := validator.ValidateAccessLogFormatString(*logging.AccessLog.Format); err != nil {
+				allErrs = append(
+					allErrs,
+					field.Invalid(
+						loggingPath.Child("accessLog", "format"),
+						*logging.AccessLog.Format,
+						err.Error(),
+					),
+				)
 			}
 		}
 	}

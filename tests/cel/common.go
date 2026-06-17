@@ -81,6 +81,9 @@ const (
 	// ServerTokens validation error.
 	expectedServerTokensPatternError = `serverTokens in body should match`
 
+	// AccessLog format validation error.
+	expectedAccessLogFormatPatternError = `format in body should match`
+
 	// ExtraAuthArgs validation error.
 	expectedExtraAuthArgsKeyError = "extraAuthArgs keys must contain only alphanumeric characters, hyphens, " +
 		"underscores, or dots"

@@ -197,6 +197,70 @@ func TestNginxProxyAutoscaling(t *testing.T) {
 	}
 }
 
+func TestNginxProxyAccessLogFormat(t *testing.T) {
+	t.Parallel()
+	k8sClient := getKubernetesClient(t)
+
+	tests := []struct {
+		spec       ngfAPIv1alpha2.NginxProxySpec
+		name       string
+		wantErrors []string
+	}{
+		{
+			name: "Validate NginxProxy with valid standard access log format is accepted",
+			spec: ngfAPIv1alpha2.NginxProxySpec{
+				Logging: &ngfAPIv1alpha2.NginxLogging{
+					AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
+						Format: helpers.GetPointer(
+							`$remote_addr - $remote_user [$time_local] "$request" $status`,
+						),
+					},
+				},
+			},
+		},
+		{
+			name: "Validate NginxProxy with valid JSON access log format is accepted",
+			spec: ngfAPIv1alpha2.NginxProxySpec{
+				Logging: &ngfAPIv1alpha2.NginxLogging{
+					AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
+						Format: helpers.GetPointer(
+							`{"remote_addr": "$remote_addr", "status": "$status"}`,
+						),
+					},
+				},
+			},
+		},
+		{
+			name:       "Validate NginxProxy with single quote in access log format is rejected",
+			wantErrors: []string{expectedAccessLogFormatPatternError},
+			spec: ngfAPIv1alpha2.NginxProxySpec{
+				Logging: &ngfAPIv1alpha2.NginxLogging{
+					AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
+						Format: helpers.GetPointer(`'; bad stuff; #`),
+					},
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			spec := tt.spec
+			resourceName := uniqueResourceName(testResourceName)
+
+			nginxProxy := &ngfAPIv1alpha2.NginxProxy{
+				ObjectMeta: controllerruntime.ObjectMeta{
+					Name:      resourceName,
+					Namespace: defaultNamespace,
+				},
+				Spec: spec,
+			}
+			validateCrd(t, tt.wantErrors, nginxProxy, k8sClient)
+		})
+	}
+}
+
 func TestNginxProxyServerTokens(t *testing.T) {
 	t.Parallel()
 	k8sClient := getKubernetesClient(t)

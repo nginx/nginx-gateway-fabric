@@ -8,6 +8,17 @@ import (
 )
 
 type FakeGenericValidator struct {
+	ValidateAccessLogFormatStringStub        func(string) error
+	validateAccessLogFormatStringMutex       sync.RWMutex
+	validateAccessLogFormatStringArgsForCall []struct {
+		arg1 string
+	}
+	validateAccessLogFormatStringReturns struct {
+		result1 error
+	}
+	validateAccessLogFormatStringReturnsOnCall map[int]struct {
+		result1 error
+	}
 	ValidateEndpointStub        func(string) error
 	validateEndpointMutex       sync.RWMutex
 	validateEndpointArgsForCall []struct {
@@ -87,6 +98,67 @@ type FakeGenericValidator struct {
 	}
 	invocations      map[string][][]interface{}
 	invocationsMutex sync.RWMutex
+}
+
+func (fake *FakeGenericValidator) ValidateAccessLogFormatString(arg1 string) error {
+	fake.validateAccessLogFormatStringMutex.Lock()
+	ret, specificReturn := fake.validateAccessLogFormatStringReturnsOnCall[len(fake.validateAccessLogFormatStringArgsForCall)]
+	fake.validateAccessLogFormatStringArgsForCall = append(fake.validateAccessLogFormatStringArgsForCall, struct {
+		arg1 string
+	}{arg1})
+	stub := fake.ValidateAccessLogFormatStringStub
+	fakeReturns := fake.validateAccessLogFormatStringReturns
+	fake.recordInvocation("ValidateAccessLogFormatString", []interface{}{arg1})
+	fake.validateAccessLogFormatStringMutex.Unlock()
+	if stub != nil {
+		return stub(arg1)
+	}
+	if specificReturn {
+		return ret.result1
+	}
+	return fakeReturns.result1
+}
+
+func (fake *FakeGenericValidator) ValidateAccessLogFormatStringCallCount() int {
+	fake.validateAccessLogFormatStringMutex.RLock()
+	defer fake.validateAccessLogFormatStringMutex.RUnlock()
+	return len(fake.validateAccessLogFormatStringArgsForCall)
+}
+
+func (fake *FakeGenericValidator) ValidateAccessLogFormatStringCalls(stub func(string) error) {
+	fake.validateAccessLogFormatStringMutex.Lock()
+	defer fake.validateAccessLogFormatStringMutex.Unlock()
+	fake.ValidateAccessLogFormatStringStub = stub
+}
+
+func (fake *FakeGenericValidator) ValidateAccessLogFormatStringArgsForCall(i int) string {
+	fake.validateAccessLogFormatStringMutex.RLock()
+	defer fake.validateAccessLogFormatStringMutex.RUnlock()
+	argsForCall := fake.validateAccessLogFormatStringArgsForCall[i]
+	return argsForCall.arg1
+}
+
+func (fake *FakeGenericValidator) ValidateAccessLogFormatStringReturns(result1 error) {
+	fake.validateAccessLogFormatStringMutex.Lock()
+	defer fake.validateAccessLogFormatStringMutex.Unlock()
+	fake.ValidateAccessLogFormatStringStub = nil
+	fake.validateAccessLogFormatStringReturns = struct {
+		result1 error
+	}{result1}
+}
+
+func (fake *FakeGenericValidator) ValidateAccessLogFormatStringReturnsOnCall(i int, result1 error) {
+	fake.validateAccessLogFormatStringMutex.Lock()
+	defer fake.validateAccessLogFormatStringMutex.Unlock()
+	fake.ValidateAccessLogFormatStringStub = nil
+	if fake.validateAccessLogFormatStringReturnsOnCall == nil {
+		fake.validateAccessLogFormatStringReturnsOnCall = make(map[int]struct {
+			result1 error
+		})
+	}
+	fake.validateAccessLogFormatStringReturnsOnCall[i] = struct {
+		result1 error
+	}{result1}
 }
 
 func (fake *FakeGenericValidator) ValidateEndpoint(arg1 string) error {
