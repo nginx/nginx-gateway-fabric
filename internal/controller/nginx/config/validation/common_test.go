@@ -30,6 +30,7 @@ func TestValidateSingleQuotedString(t *testing.T) {
 		`'; bad stuff; #`,
 		`$remote_addr'`,
 		`'`,
+		"format with\nnewline",
 	)
 }
 

@@ -294,10 +294,11 @@ func validateOIDCFields(
 		}
 	}
 
+	extraAuthArgsPath := field.NewPath("spec", "oidc", "extraAuthArgs")
 	for key, value := range oidcSpec.ExtraAuthArgs {
 		if err := authValidator.ValidateOIDCExtraAuthArg(key, value); err != nil {
 			allErrs = append(allErrs, field.Invalid(
-				field.NewPath("spec.oidc.extraAuthArgs"),
+				extraAuthArgsPath,
 				key+"="+value,
 				err.Error(),
 			))

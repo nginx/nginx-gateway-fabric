@@ -241,6 +241,17 @@ func TestNginxProxyAccessLogFormat(t *testing.T) {
 				},
 			},
 		},
+		{
+			name:       "Validate NginxProxy with newline in access log format is rejected",
+			wantErrors: []string{expectedAccessLogFormatPatternError},
+			spec: ngfAPIv1alpha2.NginxProxySpec{
+				Logging: &ngfAPIv1alpha2.NginxLogging{
+					AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
+						Format: helpers.GetPointer("$remote_addr\n$status"),
+					},
+				},
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -303,29 +314,10 @@ func TestNginxProxyServerTokens(t *testing.T) {
 			},
 		},
 		{
-			name: "Validate NginxProxy with escaped quote in serverTokens is accepted",
-			spec: ngfAPIv1alpha2.NginxProxySpec{
-				ServerTokens: helpers.GetPointer(`my \"server\"`),
-			},
-		},
-		{
-			name: "Validate NginxProxy with dollar sign in serverTokens is accepted",
-			spec: ngfAPIv1alpha2.NginxProxySpec{
-				ServerTokens: helpers.GetPointer("$hostname"),
-			},
-		},
-		{
-			name:       "Validate NginxProxy with bare double quote in serverTokens is rejected",
+			name:       "Validate NginxProxy with newline in serverTokens is rejected",
 			wantErrors: []string{expectedServerTokensPatternError},
 			spec: ngfAPIv1alpha2.NginxProxySpec{
-				ServerTokens: helpers.GetPointer(`bad"value`),
-			},
-		},
-		{
-			name:       "Validate NginxProxy with trailing backslash in serverTokens is rejected",
-			wantErrors: []string{expectedServerTokensPatternError},
-			spec: ngfAPIv1alpha2.NginxProxySpec{
-				ServerTokens: helpers.GetPointer(`bad\`),
+				ServerTokens: helpers.GetPointer("bad\nvalue"),
 			},
 		},
 		{

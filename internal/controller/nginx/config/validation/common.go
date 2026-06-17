@@ -24,6 +24,7 @@ var (
 const (
 	singleQuotedStringFmt    = `[^']*`
 	singleQuotedStringErrMsg = `must not contain single quotes (')`
+	lineBreakErrMsg          = "must not contain line breaks"
 )
 
 var singleQuotedStringFmtRegexp = regexp.MustCompile("^" + singleQuotedStringFmt + "$")
@@ -33,10 +34,22 @@ var singleQuotedStringFmtRegexp = regexp.MustCompile("^" + singleQuotedStringFmt
 // so they must not be present.
 // If the value is invalid, the function returns an error that includes the specified examples of valid values.
 func validateSingleQuotedString(value string, examples []string) error {
+	if err := validateNoLineBreaks(value); err != nil {
+		return err
+	}
+
 	if !singleQuotedStringFmtRegexp.MatchString(value) {
 		msg := k8svalidation.RegexError(singleQuotedStringErrMsg, singleQuotedStringFmt, examples...)
 		return errors.New(msg)
 	}
+	return nil
+}
+
+func validateNoLineBreaks(value string) error {
+	if strings.ContainsAny(value, "\r\n") {
+		return errors.New(lineBreakErrMsg)
+	}
+
 	return nil
 }
 
@@ -53,6 +66,10 @@ var escapedStringsFmtRegexp = regexp.MustCompile("^" + escapedStringsFmt + "$")
 // For example, server_name "hello $not_a_var world"
 // If the value is invalid, the function returns an error that includes the specified examples of valid values.
 func validateEscapedString(value string, examples []string) error {
+	if err := validateNoLineBreaks(value); err != nil {
+		return err
+	}
+
 	if !escapedStringsFmtRegexp.MatchString(value) {
 		msg := k8svalidation.RegexError(escapedStringsErrMsg, escapedStringsFmt, examples...)
 		return errors.New(msg)
@@ -72,6 +89,10 @@ var escapedStringsNoVarExpansionFmtRegexp = regexp.MustCompile("^" + escapedStri
 // prevent variable expansion.
 // If the value is invalid, the function returns an error that includes the specified examples of valid values.
 func validateEscapedStringNoVarExpansion(value string, examples []string) error {
+	if err := validateNoLineBreaks(value); err != nil {
+		return err
+	}
+
 	if !escapedStringsNoVarExpansionFmtRegexp.MatchString(value) {
 		msg := k8svalidation.RegexError(
 			escapedStringsNoVarExpansionErrMsg,

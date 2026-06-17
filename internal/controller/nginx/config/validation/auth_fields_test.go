@@ -239,6 +239,7 @@ func TestValidateOIDCExtraAuthArg(t *testing.T) {
 			`value"with"quotes`,
 			`value$with$dollars`,
 			`value\`,
+			"value\nwith\nnewlines",
 		}
 
 		for _, value := range invalidValues {

@@ -161,6 +161,7 @@ func TestValidateServerTokensValue(t *testing.T) {
 		validator.ValidateServerTokensValue,
 		`bad"value`,
 		`value\`,
+		"bad\nvalue",
 	)
 }
 
@@ -183,5 +184,6 @@ func TestValidateAccessLogFormatString(t *testing.T) {
 		`format with 'quotes'`,
 		`'; bad stuff; #`,
 		`$remote_addr'`,
+		"$remote_addr\n$status",
 	)
 }

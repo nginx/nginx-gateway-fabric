@@ -397,12 +397,15 @@ func validateLogging(
 		}
 
 		if logging.AccessLog != nil && logging.AccessLog.Format != nil {
-			if err := validator.ValidateAccessLogFormatString(*logging.AccessLog.Format); err != nil {
+			accessLogFormatPath := loggingPath.Child("accessLog", "format")
+			accessLogFormat := *logging.AccessLog.Format
+
+			if err := validator.ValidateAccessLogFormatString(accessLogFormat); err != nil {
 				allErrs = append(
 					allErrs,
 					field.Invalid(
-						loggingPath.Child("accessLog", "format"),
-						*logging.AccessLog.Format,
+						accessLogFormatPath,
+						accessLogFormat,
 						err.Error(),
 					),
 				)
