@@ -11,7 +11,7 @@ FROM ghcr.io/nginx/dependencies/nginx-ubi:ubi10@sha256:3998f88d4de99423119b61b47
 FROM registry.access.redhat.com/ubi10/ubi-minimal:10.2 AS ubi-nginx
 
 # renovate: datasource=github-tags depName=nginx/nginx
-ARG NGINX_VERSION=1.31.1
+ARG NGINX_VERSION=1.31.2
 
 # renovate: datasource=github-tags depName=nginx/agent
 ARG NGINX_AGENT_VERSION=v3.11.1
