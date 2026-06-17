@@ -35,7 +35,7 @@ COPY LICENSE /licenses/LICENSE
 LABEL name="nginx-gateway-fabric-operator" \
       maintainer="kubernetes@nginx.com" \
       vendor="F5 NGINX" \
-      version="1.4.3" \
+      version="1.4.4" \
       release="1" \
       summary="NGINX Gateway Fabric Operator" \
       description="Helm-based operator for NGINX Gateway Fabric"
