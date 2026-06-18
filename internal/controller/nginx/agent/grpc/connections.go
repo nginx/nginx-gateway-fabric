@@ -13,10 +13,10 @@ import (
 // ConnectionsTracker defines an interface to track all connections between the control plane
 // and nginx agents.
 type ConnectionsTracker interface {
-	Track(key string, conn Connection)
+	Track(key string, conn Connection) int
 	GetConnection(key string) Connection
 	SetInstanceID(key, id string)
-	RemoveConnection(key string)
+	RemoveConnection(key string, generation int)
 }
 
 // Connection contains the data about a single nginx agent connection.
@@ -24,6 +24,7 @@ type Connection struct {
 	InstanceID string
 	ParentType string
 	ParentName types.NamespacedName
+	Generation int
 }
 
 // Ready returns if the connection is ready to be used. In other words, agent
@@ -37,6 +38,9 @@ type AgentConnectionsTracker struct {
 	// connections contains a map of all IP addresses that have connected and their connection info.
 	connections map[string]Connection
 
+	// lastGeneration is the monotonic source for Connection.Generation.
+	lastGeneration int
+
 	lock sync.RWMutex
 }
 
@@ -47,12 +51,16 @@ func NewConnectionsTracker() ConnectionsTracker {
 	}
 }
 
-// Track adds a connection to the tracking map.
-func (c *AgentConnectionsTracker) Track(key string, conn Connection) {
+// Track adds a connection to the tracking map and returns its assigned generation.
+func (c *AgentConnectionsTracker) Track(key string, conn Connection) int {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
+	c.lastGeneration++
+	conn.Generation = c.lastGeneration
 	c.connections[key] = conn
+
+	return c.lastGeneration
 }
 
 // GetConnection returns the requested connection.
@@ -74,10 +82,12 @@ func (c *AgentConnectionsTracker) SetInstanceID(key, id string) {
 	}
 }
 
-// RemoveConnection removes a connection from the tracking map.
-func (c *AgentConnectionsTracker) RemoveConnection(key string) {
+// RemoveConnection deletes the entry only if its generation matches (compare-and-delete).
+func (c *AgentConnectionsTracker) RemoveConnection(key string, generation int) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
-	delete(c.connections, key)
+	if conn, ok := c.connections[key]; ok && conn.Generation == generation {
+		delete(c.connections, key)
+	}
 }
