@@ -1285,7 +1285,9 @@ func updateLocationAuthenticationFilter(
 		}
 
 		if authenticationFilter.JWT.AuthRequireVariable != "" {
-			jwt.AuthRequire = authenticationFilter.JWT.AuthRequireVariable
+			jwt.AuthZConfig = &http.AuthZConfig{
+				AuthRequire: authenticationFilter.JWT.AuthRequireVariable,
+			}
 		}
 		if len(authenticationFilter.JWT.AuthZProxySetHeaders) > 0 {
 			proxySetHeaders := make([]http.Header, 0, len(authenticationFilter.JWT.AuthZProxySetHeaders))
@@ -1295,14 +1297,37 @@ func updateLocationAuthenticationFilter(
 					Value: psh.Value,
 				})
 			}
-			jwt.ProxySetHeaders = proxySetHeaders
+			if jwt.AuthZConfig == nil {
+				jwt.AuthZConfig = &http.AuthZConfig{}
+			}
+			jwt.AuthZConfig.ProxySetHeaders = proxySetHeaders
 		}
 
 		location.AuthJWT = jwt
 	}
 
-	if authenticationFilter.OIDC != nil {
-		location.AuthOIDCProviderName = authenticationFilter.OIDC.Name
+	if authenticationFilter.OIDC != nil && authenticationFilter.OIDC.Provider != nil {
+		location.AuthOIDC.ProviderName = authenticationFilter.OIDC.Provider.Name
+
+		// If OIDC has authorization config, add auth_jwt for ID token claim validation
+		if authenticationFilter.OIDC.AuthRequireVariable != "" {
+			location.AuthOIDC.AuthZConfig = &http.AuthZConfig{
+				AuthRequire: authenticationFilter.OIDC.AuthRequireVariable,
+			}
+		}
+		if len(authenticationFilter.OIDC.AuthZProxySetHeaders) > 0 {
+			proxySetHeaders := make([]http.Header, 0, len(authenticationFilter.OIDC.AuthZProxySetHeaders))
+			for _, psh := range authenticationFilter.OIDC.AuthZProxySetHeaders {
+				proxySetHeaders = append(proxySetHeaders, http.Header{
+					Name:  psh.Name,
+					Value: psh.Value,
+				})
+			}
+			if location.AuthOIDC.AuthZConfig == nil {
+				location.AuthOIDC.AuthZConfig = &http.AuthZConfig{}
+			}
+			location.AuthOIDC.AuthZConfig.ProxySetHeaders = proxySetHeaders
+		}
 	}
 
 	return location
@@ -2071,10 +2096,12 @@ func findOIDCProviders(pathRules []dataplane.PathRule) []*dataplane.OIDCProvider
 	var providers []*dataplane.OIDCProvider
 	for _, rule := range pathRules {
 		for _, matchRule := range rule.MatchRules {
-			if matchRule.Filters.AuthenticationFilter == nil || matchRule.Filters.AuthenticationFilter.OIDC == nil {
+			if matchRule.Filters.AuthenticationFilter == nil ||
+				matchRule.Filters.AuthenticationFilter.OIDC == nil ||
+				matchRule.Filters.AuthenticationFilter.OIDC.Provider == nil {
 				continue
 			}
-			provider := matchRule.Filters.AuthenticationFilter.OIDC
+			provider := matchRule.Filters.AuthenticationFilter.OIDC.Provider
 			if _, exists := seen[provider.Name]; !exists {
 				seen[provider.Name] = struct{}{}
 				providers = append(providers, provider)
@@ -2134,9 +2161,11 @@ func existingExactPathSet(pathRules []dataplane.PathRule) map[string]struct{} {
 // This is created for path-only URIs: redirectURI, logoutURI, or frontChannelLogoutURI.
 func createOIDCCallbackLocation(provider *dataplane.OIDCProvider, path string) http.Location {
 	return http.Location{
-		Path:                 "= " + path,
-		Type:                 http.ExternalLocationType,
-		AuthOIDCProviderName: provider.Name,
+		Path: "= " + path,
+		Type: http.ExternalLocationType,
+		AuthOIDC: http.AuthOIDC{
+			ProviderName: provider.Name,
+		},
 	}
 }
 

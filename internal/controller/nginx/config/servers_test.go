@@ -6108,14 +6108,16 @@ func TestUpdateLocationAuthenticationFilter(t *testing.T) {
 		{
 			name: "authentication filter with OIDC",
 			filter: &dataplane.AuthenticationFilter{
-				OIDC: &dataplane.OIDCProvider{
+				OIDC: &dataplane.AuthOIDC{Provider: &dataplane.OIDCProvider{
 					Name: "oidc_test_my-filter",
-				},
+				}},
 			},
 			expected: http.Location{
-				Path:                 "/",
-				Type:                 http.ExternalLocationType,
-				AuthOIDCProviderName: "oidc_test_my-filter",
+				Path: "/",
+				Type: http.ExternalLocationType,
+				AuthOIDC: http.AuthOIDC{
+					ProviderName: "oidc_test_my-filter",
+				},
 			},
 		},
 		{
@@ -6201,9 +6203,11 @@ func TestUpdateLocationAuthenticationFilter(t *testing.T) {
 				Path: "/",
 				Type: http.ExternalLocationType,
 				AuthJWT: &http.AuthJWT{
-					Realm:       "AuthZ Realm",
-					File:        "/etc/nginx/secrets/jwt_auth_test-ns_jwt-secret",
-					AuthRequire: "$test_authz_all",
+					Realm: "AuthZ Realm",
+					File:  "/etc/nginx/secrets/jwt_auth_test-ns_jwt-secret",
+					AuthZConfig: &http.AuthZConfig{
+						AuthRequire: "$test_authz_all",
+					},
 				},
 			},
 		},
@@ -6226,9 +6230,11 @@ func TestUpdateLocationAuthenticationFilter(t *testing.T) {
 				AuthJWT: &http.AuthJWT{
 					Realm: "AuthZ Realm",
 					File:  "/etc/nginx/secrets/jwt_auth_test-ns_jwt-secret",
-					ProxySetHeaders: []http.Header{
-						{Name: "X-User-Role", Value: "$jwt_claim_role"},
-						{Name: "X-User-Sub", Value: "$jwt_claim_sub"},
+					AuthZConfig: &http.AuthZConfig{
+						ProxySetHeaders: []http.Header{
+							{Name: "X-User-Role", Value: "$jwt_claim_role"},
+							{Name: "X-User-Sub", Value: "$jwt_claim_sub"},
+						},
 					},
 				},
 			},
@@ -6252,13 +6258,15 @@ func TestUpdateLocationAuthenticationFilter(t *testing.T) {
 				Path: "/",
 				Type: http.ExternalLocationType,
 				AuthJWT: &http.AuthJWT{
-					Realm:       "Full AuthZ",
-					File:        "/etc/nginx/secrets/jwt_auth_test-ns_jwt-secret",
-					KeyCache:    helpers.GetPointer(ngfAPIv1alpha1.Duration("5m")),
-					Leeway:      helpers.GetPointer(ngfAPIv1alpha1.Duration("30s")),
-					AuthRequire: "$test_authz_any",
-					ProxySetHeaders: []http.Header{
-						{Name: "X-Audience", Value: "$jwt_claim_aud"},
+					Realm:    "Full AuthZ",
+					File:     "/etc/nginx/secrets/jwt_auth_test-ns_jwt-secret",
+					KeyCache: helpers.GetPointer(ngfAPIv1alpha1.Duration("5m")),
+					Leeway:   helpers.GetPointer(ngfAPIv1alpha1.Duration("30s")),
+					AuthZConfig: &http.AuthZConfig{
+						AuthRequire: "$test_authz_any",
+						ProxySetHeaders: []http.Header{
+							{Name: "X-Audience", Value: "$jwt_claim_aud"},
+						},
 					},
 				},
 			},
@@ -6298,6 +6306,107 @@ func TestUpdateLocationAuthenticationFilter(t *testing.T) {
 				AuthJWT: &http.AuthJWT{
 					Realm: "No Headers",
 					File:  "/etc/nginx/secrets/jwt_auth_test-ns_jwt-secret",
+				},
+			},
+		},
+		{
+			name: "authentication filter with OIDC and AuthRequireVariable",
+			filter: &dataplane.AuthenticationFilter{
+				OIDC: &dataplane.AuthOIDC{
+					Provider:            &dataplane.OIDCProvider{Name: "oidc_test_my-filter"},
+					AuthRequireVariable: "$oidc_authz_all",
+				},
+			},
+			expected: http.Location{
+				Path: "/",
+				Type: http.ExternalLocationType,
+				AuthOIDC: http.AuthOIDC{
+					ProviderName: "oidc_test_my-filter",
+					AuthZConfig: &http.AuthZConfig{
+						AuthRequire: "$oidc_authz_all",
+					},
+				},
+			},
+		},
+		{
+			name: "authentication filter with OIDC and AuthZProxySetHeaders",
+			filter: &dataplane.AuthenticationFilter{
+				OIDC: &dataplane.AuthOIDC{
+					Provider: &dataplane.OIDCProvider{Name: "oidc_test_my-filter"},
+					AuthZProxySetHeaders: []dataplane.HTTPHeader{
+						{Name: "X-OIDC-Email", Value: "$oidc_claim_email"},
+						{Name: "X-OIDC-Sub", Value: "$oidc_claim_sub"},
+					},
+				},
+			},
+			expected: http.Location{
+				Path: "/",
+				Type: http.ExternalLocationType,
+				AuthOIDC: http.AuthOIDC{
+					ProviderName: "oidc_test_my-filter",
+					AuthZConfig: &http.AuthZConfig{
+						ProxySetHeaders: []http.Header{
+							{Name: "X-OIDC-Email", Value: "$oidc_claim_email"},
+							{Name: "X-OIDC-Sub", Value: "$oidc_claim_sub"},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "authentication filter with OIDC AuthRequireVariable and AuthZProxySetHeaders combined",
+			filter: &dataplane.AuthenticationFilter{
+				OIDC: &dataplane.AuthOIDC{
+					Provider:            &dataplane.OIDCProvider{Name: "oidc_test_my-filter"},
+					AuthRequireVariable: "$oidc_authz_any",
+					AuthZProxySetHeaders: []dataplane.HTTPHeader{
+						{Name: "X-OIDC-Role", Value: "$oidc_claim_role"},
+					},
+				},
+			},
+			expected: http.Location{
+				Path: "/",
+				Type: http.ExternalLocationType,
+				AuthOIDC: http.AuthOIDC{
+					ProviderName: "oidc_test_my-filter",
+					AuthZConfig: &http.AuthZConfig{
+						AuthRequire: "$oidc_authz_any",
+						ProxySetHeaders: []http.Header{
+							{Name: "X-OIDC-Role", Value: "$oidc_claim_role"},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "authentication filter with OIDC empty AuthRequireVariable and no AuthZProxySetHeaders",
+			filter: &dataplane.AuthenticationFilter{
+				OIDC: &dataplane.AuthOIDC{
+					Provider:            &dataplane.OIDCProvider{Name: "oidc_test_my-filter"},
+					AuthRequireVariable: "",
+				},
+			},
+			expected: http.Location{
+				Path: "/",
+				Type: http.ExternalLocationType,
+				AuthOIDC: http.AuthOIDC{
+					ProviderName: "oidc_test_my-filter",
+				},
+			},
+		},
+		{
+			name: "authentication filter with OIDC empty AuthZProxySetHeaders is not set",
+			filter: &dataplane.AuthenticationFilter{
+				OIDC: &dataplane.AuthOIDC{
+					Provider:             &dataplane.OIDCProvider{Name: "oidc_test_my-filter"},
+					AuthZProxySetHeaders: []dataplane.HTTPHeader{},
+				},
+			},
+			expected: http.Location{
+				Path: "/",
+				Type: http.ExternalLocationType,
+				AuthOIDC: http.AuthOIDC{
+					ProviderName: "oidc_test_my-filter",
 				},
 			},
 		},
@@ -6348,9 +6457,9 @@ func TestExecuteServers_OIDCAuth(t *testing.T) {
 										BackendGroup: backend,
 										Filters: dataplane.HTTPFilters{
 											AuthenticationFilter: &dataplane.AuthenticationFilter{
-												OIDC: &dataplane.OIDCProvider{
+												OIDC: &dataplane.AuthOIDC{Provider: &dataplane.OIDCProvider{
 													Name: "oidc_test_my-filter",
-												},
+												}},
 											},
 										},
 									},
@@ -6431,10 +6540,10 @@ func TestExecuteServers_OIDCAuth(t *testing.T) {
 										BackendGroup: backend,
 										Filters: dataplane.HTTPFilters{
 											AuthenticationFilter: &dataplane.AuthenticationFilter{
-												OIDC: &dataplane.OIDCProvider{
+												OIDC: &dataplane.AuthOIDC{Provider: &dataplane.OIDCProvider{
 													Name:        "oidc_test_my-filter",
 													RedirectURI: "/oidc_callback_test_my-filter",
-												},
+												}},
 											},
 										},
 									},
@@ -6466,10 +6575,10 @@ func TestExecuteServers_OIDCAuth(t *testing.T) {
 										BackendGroup: backend,
 										Filters: dataplane.HTTPFilters{
 											AuthenticationFilter: &dataplane.AuthenticationFilter{
-												OIDC: &dataplane.OIDCProvider{
+												OIDC: &dataplane.AuthOIDC{Provider: &dataplane.OIDCProvider{
 													Name:        "oidc_test_filter-one",
 													RedirectURI: "/oidc_callback_test_filter-one",
-												},
+												}},
 											},
 										},
 									},
@@ -6484,10 +6593,10 @@ func TestExecuteServers_OIDCAuth(t *testing.T) {
 										BackendGroup: backend,
 										Filters: dataplane.HTTPFilters{
 											AuthenticationFilter: &dataplane.AuthenticationFilter{
-												OIDC: &dataplane.OIDCProvider{
+												OIDC: &dataplane.AuthOIDC{Provider: &dataplane.OIDCProvider{
 													Name:        "oidc_test_filter-two",
 													RedirectURI: "/oidc_callback_test_filter-two",
-												},
+												}},
 											},
 										},
 									},
@@ -6543,7 +6652,7 @@ func TestOIDCCallbackLocation(t *testing.T) {
 	hrNsName := types.NamespacedName{Namespace: "test", Name: "route1"}
 
 	oidcFilter := &dataplane.AuthenticationFilter{
-		OIDC: &dataplane.OIDCProvider{Name: providerName, RedirectURI: oidcCallbackPath},
+		OIDC: &dataplane.AuthOIDC{Provider: &dataplane.OIDCProvider{Name: providerName, RedirectURI: oidcCallbackPath}},
 	}
 
 	singleBackend := dataplane.BackendGroup{
@@ -6629,7 +6738,7 @@ func TestOIDCCallbackLocation(t *testing.T) {
 				cb := createOIDCCallbackLocation(provider, oidcCallbackPath)
 				g.Expect(cb.Path).To(Equal("= " + oidcCallbackPath))
 				g.Expect(cb.Type).To(Equal(http.ExternalLocationType))
-				g.Expect(cb.AuthOIDCProviderName).To(Equal(providerName))
+				g.Expect(cb.AuthOIDC.ProviderName).To(Equal(providerName))
 				g.Expect(cb.ProxyPass).To(BeEmpty())
 				g.Expect(cb.ProxySetHeaders).To(BeNil())
 			},
@@ -6641,7 +6750,7 @@ func TestOIDCCallbackLocation(t *testing.T) {
 				g := NewWithT(t)
 				cb := callbackFrom([]dataplane.PathRule{oidcPathRule(singleBackend, false)})
 				g.Expect(cb).NotTo(BeNil())
-				g.Expect(cb.AuthOIDCProviderName).To(Equal(providerName))
+				g.Expect(cb.AuthOIDC.ProviderName).To(Equal(providerName))
 				g.Expect(cb.Type).To(Equal(http.ExternalLocationType))
 				g.Expect(cb.ProxyPass).To(BeEmpty())
 			},
@@ -6653,7 +6762,7 @@ func TestOIDCCallbackLocation(t *testing.T) {
 				g := NewWithT(t)
 				cb := callbackFrom([]dataplane.PathRule{oidcPathRule(weightedBackend, false)})
 				g.Expect(cb).NotTo(BeNil())
-				g.Expect(cb.AuthOIDCProviderName).To(Equal(providerName))
+				g.Expect(cb.AuthOIDC.ProviderName).To(Equal(providerName))
 				g.Expect(cb.Type).To(Equal(http.ExternalLocationType))
 			},
 		},
@@ -6664,7 +6773,7 @@ func TestOIDCCallbackLocation(t *testing.T) {
 				g := NewWithT(t)
 				cb := callbackFrom([]dataplane.PathRule{oidcPathRule(inferenceBackend, true)})
 				g.Expect(cb).NotTo(BeNil())
-				g.Expect(cb.AuthOIDCProviderName).To(Equal(providerName))
+				g.Expect(cb.AuthOIDC.ProviderName).To(Equal(providerName))
 				g.Expect(cb.Type).To(Equal(http.ExternalLocationType))
 			},
 		},
@@ -6694,10 +6803,10 @@ func TestOIDCCallbackLocation(t *testing.T) {
 
 				coffeeSlashPath := "/coffee/"
 				conflictingFilter := &dataplane.AuthenticationFilter{
-					OIDC: &dataplane.OIDCProvider{
+					OIDC: &dataplane.AuthOIDC{Provider: &dataplane.OIDCProvider{
 						Name:        providerName,
 						RedirectURI: coffeeSlashPath,
-					},
+					}},
 				}
 
 				locs, _, _ := createLocations(
@@ -6741,10 +6850,10 @@ func TestOIDCCallbackLocation(t *testing.T) {
 
 				exactCallbackPath := "/my-callback"
 				exactFilter := &dataplane.AuthenticationFilter{
-					OIDC: &dataplane.OIDCProvider{
+					OIDC: &dataplane.AuthOIDC{Provider: &dataplane.OIDCProvider{
 						Name:        providerName,
 						RedirectURI: exactCallbackPath,
-					},
+					}},
 				}
 
 				locs, _, _ := createLocations(
@@ -6790,10 +6899,10 @@ func TestOIDCCallbackLocation(t *testing.T) {
 				provider2Name := "oidc_test_other-filter"
 				provider2CallbackPath := "/oidc_callback_test_other-filter"
 				oidcFilter2 := &dataplane.AuthenticationFilter{
-					OIDC: &dataplane.OIDCProvider{
+					OIDC: &dataplane.AuthOIDC{Provider: &dataplane.OIDCProvider{
 						Name:        provider2Name,
 						RedirectURI: provider2CallbackPath,
-					},
+					}},
 				}
 
 				locs, _, _ := createLocations(
@@ -6833,9 +6942,9 @@ func TestOIDCCallbackLocation(t *testing.T) {
 				var callbackPaths []string
 				var callbackProviders []string
 				for _, loc := range locs {
-					if loc.AuthOIDCProviderName != "" && loc.ProxyPass == "" {
+					if loc.AuthOIDC.ProviderName != "" && loc.ProxyPass == "" {
 						callbackPaths = append(callbackPaths, loc.Path)
-						callbackProviders = append(callbackProviders, loc.AuthOIDCProviderName)
+						callbackProviders = append(callbackProviders, loc.AuthOIDC.ProviderName)
 					}
 				}
 
@@ -6920,8 +7029,8 @@ func TestOIDCURILocations(t *testing.T) {
 		},
 	}
 
-	// buildProvider creates an OIDCProvider with the specified URI field set.
-	buildProvider := func(uriType, uriPath string) *dataplane.OIDCProvider {
+	// buildProvider creates an AuthOIDC with the specified URI field set.
+	buildProvider := func(uriType, uriPath string) *dataplane.AuthOIDC {
 		provider := &dataplane.OIDCProvider{
 			Name:        providerName,
 			RedirectURI: oidcCallbackPath,
@@ -6932,7 +7041,7 @@ func TestOIDCURILocations(t *testing.T) {
 		case "FrontChannelLogoutURI":
 			provider.FrontChannelLogoutURI = &uriPath
 		}
-		return provider
+		return &dataplane.AuthOIDC{Provider: provider}
 	}
 
 	// findOIDCCallbackLocation finds the OIDC callback location by its exact path.
@@ -6989,7 +7098,7 @@ func TestOIDCURILocations(t *testing.T) {
 
 			loc := findOIDCCallbackLocation(locs, uriType.path)
 			g.Expect(loc).NotTo(BeNil(), "expected OIDC callback location for %s", uriType.name)
-			g.Expect(loc.AuthOIDCProviderName).To(Equal(providerName))
+			g.Expect(loc.AuthOIDC.ProviderName).To(Equal(providerName))
 			g.Expect(loc.Type).To(Equal(http.ExternalLocationType))
 		})
 
@@ -7026,12 +7135,12 @@ func TestOIDCURILocations(t *testing.T) {
 		logoutPath := "/logged_out"
 		frontChannelPath := "/frontchannel-logout"
 		filter := &dataplane.AuthenticationFilter{
-			OIDC: &dataplane.OIDCProvider{
+			OIDC: &dataplane.AuthOIDC{Provider: &dataplane.OIDCProvider{
 				Name:                  providerName,
 				RedirectURI:           oidcCallbackPath,
 				LogoutURI:             &logoutPath,
 				FrontChannelLogoutURI: &frontChannelPath,
-			},
+			}},
 		}
 		locs := runCreateLocations([]dataplane.PathRule{
 			{
@@ -7051,12 +7160,12 @@ func TestOIDCURILocations(t *testing.T) {
 		frontChannelLoc := findOIDCCallbackLocation(locs, frontChannelPath)
 
 		g.Expect(logoutLoc).NotTo(BeNil(), "expected LogoutURI location")
-		g.Expect(logoutLoc.AuthOIDCProviderName).To(Equal(providerName))
+		g.Expect(logoutLoc.AuthOIDC.ProviderName).To(Equal(providerName))
 		g.Expect(logoutLoc.Type).To(Equal(http.ExternalLocationType))
 		g.Expect(logoutLoc.ProxyPass).To(BeEmpty())
 
 		g.Expect(frontChannelLoc).NotTo(BeNil(), "expected FrontChannelLogoutURI location")
-		g.Expect(frontChannelLoc.AuthOIDCProviderName).To(Equal(providerName))
+		g.Expect(frontChannelLoc.AuthOIDC.ProviderName).To(Equal(providerName))
 		g.Expect(frontChannelLoc.Type).To(Equal(http.ExternalLocationType))
 		g.Expect(frontChannelLoc.ProxyPass).To(BeEmpty())
 	})
@@ -7071,7 +7180,7 @@ func TestFindOIDCProviders(t *testing.T) {
 	makeRule := func(path string, provider *dataplane.OIDCProvider) dataplane.PathRule {
 		var authFilter *dataplane.AuthenticationFilter
 		if provider != nil {
-			authFilter = &dataplane.AuthenticationFilter{OIDC: provider}
+			authFilter = &dataplane.AuthenticationFilter{OIDC: &dataplane.AuthOIDC{Provider: provider}}
 		}
 		return dataplane.PathRule{
 			Path:     path,

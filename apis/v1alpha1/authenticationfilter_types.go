@@ -183,6 +183,13 @@ type OIDCAuth struct {
 	// +optional
 	// +kubebuilder:validation:MaxItems=1
 	CACertificateRefs []LocalObjectReference `json:"caCertificateRefs,omitempty"`
+
+	// Authorization defines the authorization (authz) specification.
+	// Enables configuration of ID token claim validation for OIDC authentication.
+	// Claims are extracted from the ID token using the auth_jwt module with token=$oidc_id_token.
+	//
+	// +optional
+	Authorization *Authorization `json:"authorization,omitempty"`
 }
 
 // OIDCSessionConfig configures session management for OIDC authentication.
