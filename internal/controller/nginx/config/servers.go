@@ -1255,82 +1255,95 @@ func updateLocationAuthenticationFilter(
 	}
 
 	if authenticationFilter.JWT != nil {
-		jwt := &http.AuthJWT{
-			Realm:    authenticationFilter.JWT.Realm,
-			KeyCache: authenticationFilter.JWT.KeyCache,
-			Leeway:   authenticationFilter.JWT.Leeway,
-		}
-
-		if authenticationFilter.JWT.Remote != nil {
-			remote := &http.AuthJWTRemote{
-				URI:  authenticationFilter.JWT.Remote.URI,
-				Path: authenticationFilter.JWT.Remote.Path,
-			}
-
-			if authenticationFilter.JWT.Remote.CACertBundlePath != "" {
-				remote.TrustedCertificate = generateCertBundleFileName(
-					authenticationFilter.JWT.Remote.CACertBundlePath,
-				)
-			} else {
-				remote.TrustedCertificate = dataplane.AlpineSSLRootCAPath
-			}
-
-			jwt.Remote = remote
-		} else {
-			id := dataplane.GenerateAuthJWTFileID(
-				authenticationFilter.JWT.SecretNamespace,
-				authenticationFilter.JWT.SecretName,
-			)
-			jwt.File = generateAuthFileName(id)
-		}
-
-		if authenticationFilter.JWT.AuthRequireVariable != "" {
-			jwt.AuthZConfig = &http.AuthZConfig{
-				AuthRequire: authenticationFilter.JWT.AuthRequireVariable,
-			}
-		}
-		if len(authenticationFilter.JWT.AuthZProxySetHeaders) > 0 {
-			proxySetHeaders := make([]http.Header, 0, len(authenticationFilter.JWT.AuthZProxySetHeaders))
-			for _, psh := range authenticationFilter.JWT.AuthZProxySetHeaders {
-				proxySetHeaders = append(proxySetHeaders, http.Header{
-					Name:  psh.Name,
-					Value: psh.Value,
-				})
-			}
-			if jwt.AuthZConfig == nil {
-				jwt.AuthZConfig = &http.AuthZConfig{}
-			}
-			jwt.AuthZConfig.ProxySetHeaders = proxySetHeaders
-		}
-
-		location.AuthJWT = jwt
+		location.AuthJWT = getAuthJWTLocationConfig(authenticationFilter.JWT)
 	}
 
 	if authenticationFilter.OIDC != nil && authenticationFilter.OIDC.Provider != nil {
-		location.AuthOIDC.ProviderName = authenticationFilter.OIDC.Provider.Name
-
-		// If OIDC has authorization config, add auth_jwt for ID token claim validation
-		if authenticationFilter.OIDC.AuthRequireVariable != "" {
-			location.AuthOIDC.AuthZConfig = &http.AuthZConfig{
-				AuthRequire: authenticationFilter.OIDC.AuthRequireVariable,
-			}
-		}
-		if len(authenticationFilter.OIDC.AuthZProxySetHeaders) > 0 {
-			proxySetHeaders := make([]http.Header, 0, len(authenticationFilter.OIDC.AuthZProxySetHeaders))
-			for _, psh := range authenticationFilter.OIDC.AuthZProxySetHeaders {
-				proxySetHeaders = append(proxySetHeaders, http.Header{
-					Name:  psh.Name,
-					Value: psh.Value,
-				})
-			}
-			if location.AuthOIDC.AuthZConfig == nil {
-				location.AuthOIDC.AuthZConfig = &http.AuthZConfig{}
-			}
-			location.AuthOIDC.AuthZConfig.ProxySetHeaders = proxySetHeaders
-		}
+		location.AuthOIDC = getAuthOIDCLocationConfig(authenticationFilter.OIDC)
 	}
 
 	return location
+}
+
+// getAuthJWTLocationConfig returns the AuthJWT configuration for a given JWT authentication filter.
+// It handles both remote and local JWT configurations.
+func getAuthJWTLocationConfig(jwtAuthFilter *dataplane.AuthJWT) *http.AuthJWT {
+	jwt := &http.AuthJWT{
+		Realm:    jwtAuthFilter.Realm,
+		KeyCache: jwtAuthFilter.KeyCache,
+		Leeway:   jwtAuthFilter.Leeway,
+	}
+
+	if jwtAuthFilter.Remote != nil {
+		remote := &http.AuthJWTRemote{
+			URI:  jwtAuthFilter.Remote.URI,
+			Path: jwtAuthFilter.Remote.Path,
+		}
+
+		if jwtAuthFilter.Remote.CACertBundlePath != "" {
+			remote.TrustedCertificate = generateCertBundleFileName(
+				jwtAuthFilter.Remote.CACertBundlePath,
+			)
+		} else {
+			remote.TrustedCertificate = dataplane.AlpineSSLRootCAPath
+		}
+
+		jwt.Remote = remote
+	} else {
+		id := dataplane.GenerateAuthJWTFileID(
+			jwtAuthFilter.SecretNamespace,
+			jwtAuthFilter.SecretName,
+		)
+		jwt.File = generateAuthFileName(id)
+	}
+
+	if jwtAuthFilter.AuthRequireVariable != "" {
+		jwt.AuthZConfig = &http.AuthZConfig{
+			AuthRequire: jwtAuthFilter.AuthRequireVariable,
+		}
+	}
+	if len(jwtAuthFilter.AuthZProxySetHeaders) > 0 {
+		proxySetHeaders := make([]http.Header, 0, len(jwtAuthFilter.AuthZProxySetHeaders))
+		for _, psh := range jwtAuthFilter.AuthZProxySetHeaders {
+			proxySetHeaders = append(proxySetHeaders, http.Header{
+				Name:  psh.Name,
+				Value: psh.Value,
+			})
+		}
+		if jwt.AuthZConfig == nil {
+			jwt.AuthZConfig = &http.AuthZConfig{}
+		}
+		jwt.AuthZConfig.ProxySetHeaders = proxySetHeaders
+	}
+	return jwt
+}
+
+// getAuthOIDCLocationConfig returns the AuthOIDC configuration for a given OIDC authentication filter.
+func getAuthOIDCLocationConfig(oidcAuthFilter *dataplane.AuthOIDC) *http.AuthOIDC {
+	oidc := &http.AuthOIDC{
+		ProviderName: oidcAuthFilter.Provider.Name,
+	}
+
+	// If OIDC has authorization config, add auth_jwt for ID token claim validation
+	if oidcAuthFilter.AuthRequireVariable != "" {
+		oidc.AuthZConfig = &http.AuthZConfig{
+			AuthRequire: oidcAuthFilter.AuthRequireVariable,
+		}
+	}
+	if len(oidcAuthFilter.AuthZProxySetHeaders) > 0 {
+		proxySetHeaders := make([]http.Header, 0, len(oidcAuthFilter.AuthZProxySetHeaders))
+		for _, psh := range oidcAuthFilter.AuthZProxySetHeaders {
+			proxySetHeaders = append(proxySetHeaders, http.Header{
+				Name:  psh.Name,
+				Value: psh.Value,
+			})
+		}
+		if oidc.AuthZConfig == nil {
+			oidc.AuthZConfig = &http.AuthZConfig{}
+		}
+		oidc.AuthZConfig.ProxySetHeaders = proxySetHeaders
+	}
+	return oidc
 }
 
 func updateLocationExternalAuthFilter(
@@ -2163,7 +2176,7 @@ func createOIDCCallbackLocation(provider *dataplane.OIDCProvider, path string) h
 	return http.Location{
 		Path: "= " + path,
 		Type: http.ExternalLocationType,
-		AuthOIDC: http.AuthOIDC{
+		AuthOIDC: &http.AuthOIDC{
 			ProviderName: provider.Name,
 		},
 	}

@@ -173,6 +173,7 @@ server {
         auth_basic_user_file {{ $l.AuthBasic.File }};
         {{- end }}
 
+        {{- if $l.AuthOIDC }}
         {{- if $l.AuthOIDC.ProviderName }}
         auth_oidc {{ $l.AuthOIDC.ProviderName }};
             {{- if $l.AuthOIDC.AuthZConfig }}
@@ -184,6 +185,7 @@ server {
         proxy_set_header {{ .Name }} {{ .Value }};
                 {{- end }}
             {{- end }}
+        {{- end }}
         {{- end }}
 
         {{- if $l.AuthJWT }}

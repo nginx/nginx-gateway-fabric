@@ -6115,7 +6115,7 @@ func TestUpdateLocationAuthenticationFilter(t *testing.T) {
 			expected: http.Location{
 				Path: "/",
 				Type: http.ExternalLocationType,
-				AuthOIDC: http.AuthOIDC{
+				AuthOIDC: &http.AuthOIDC{
 					ProviderName: "oidc_test_my-filter",
 				},
 			},
@@ -6320,7 +6320,7 @@ func TestUpdateLocationAuthenticationFilter(t *testing.T) {
 			expected: http.Location{
 				Path: "/",
 				Type: http.ExternalLocationType,
-				AuthOIDC: http.AuthOIDC{
+				AuthOIDC: &http.AuthOIDC{
 					ProviderName: "oidc_test_my-filter",
 					AuthZConfig: &http.AuthZConfig{
 						AuthRequire: "$oidc_authz_all",
@@ -6342,7 +6342,7 @@ func TestUpdateLocationAuthenticationFilter(t *testing.T) {
 			expected: http.Location{
 				Path: "/",
 				Type: http.ExternalLocationType,
-				AuthOIDC: http.AuthOIDC{
+				AuthOIDC: &http.AuthOIDC{
 					ProviderName: "oidc_test_my-filter",
 					AuthZConfig: &http.AuthZConfig{
 						ProxySetHeaders: []http.Header{
@@ -6367,7 +6367,7 @@ func TestUpdateLocationAuthenticationFilter(t *testing.T) {
 			expected: http.Location{
 				Path: "/",
 				Type: http.ExternalLocationType,
-				AuthOIDC: http.AuthOIDC{
+				AuthOIDC: &http.AuthOIDC{
 					ProviderName: "oidc_test_my-filter",
 					AuthZConfig: &http.AuthZConfig{
 						AuthRequire: "$oidc_authz_any",
@@ -6389,7 +6389,7 @@ func TestUpdateLocationAuthenticationFilter(t *testing.T) {
 			expected: http.Location{
 				Path: "/",
 				Type: http.ExternalLocationType,
-				AuthOIDC: http.AuthOIDC{
+				AuthOIDC: &http.AuthOIDC{
 					ProviderName: "oidc_test_my-filter",
 				},
 			},
@@ -6405,7 +6405,7 @@ func TestUpdateLocationAuthenticationFilter(t *testing.T) {
 			expected: http.Location{
 				Path: "/",
 				Type: http.ExternalLocationType,
-				AuthOIDC: http.AuthOIDC{
+				AuthOIDC: &http.AuthOIDC{
 					ProviderName: "oidc_test_my-filter",
 				},
 			},

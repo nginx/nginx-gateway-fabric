@@ -7469,7 +7469,7 @@ func TestBuildAuthZConfigs_OIDCFilter(t *testing.T) {
 					ngfAPIv1alpha1.RequireTypeAll,
 				),
 			},
-			//nolint:lll
+
 			expected: []*AuthZConfig{
 				{
 					FilterNsName: "test_oidc-filter",
@@ -7549,7 +7549,7 @@ func TestBuildAuthZConfigs_OIDCFilter(t *testing.T) {
 					ngfAPIv1alpha1.RequireTypeAny,
 				),
 			},
-			//nolint:lll
+
 			expected: []*AuthZConfig{
 				{
 					FilterNsName: "test_oidc-filter",

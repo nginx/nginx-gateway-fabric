@@ -90,7 +90,7 @@ type Location struct {
 	// When empty, NGINX defaults to "1.1".
 	ProxyHTTPVersion string
 	// AuthOIDC holds the OIDC authentication configuration for this location.
-	AuthOIDC AuthOIDC
+	AuthOIDC *AuthOIDC
 	// ResponseHeaders are custom response headers to be sent.
 	ResponseHeaders ResponseHeaders
 	// ProxySetHeaders are headers to set when proxying requests upstream.
@@ -113,11 +113,11 @@ type Location struct {
 
 // AuthOIDC holds the OIDC authentication configuration for a location.
 type AuthOIDC struct {
-	// ProviderName is the name of the oidc_provider to be referenced in this location.
-	ProviderName string
 	// AuthZConfig holds the authorization configuration for OIDC.
 	// When set, the `auth_jwt` direcetive is enabled to process JWT claims.
 	AuthZConfig *AuthZConfig
+	// ProviderName is the name of the oidc_provider to be referenced in this location.
+	ProviderName string
 }
 
 // AuthExternalRequest holds the auth_request configuration for a location.
@@ -248,9 +248,9 @@ type AuthJWT struct {
 	KeyCache    *ngfAPI.Duration
 	Remote      *AuthJWTRemote
 	Leeway      *ngfAPI.Duration
+	AuthZConfig *AuthZConfig
 	Realm       string
 	File        string
-	AuthZConfig *AuthZConfig
 }
 
 // ProxySetHeaderClaim maps a claim variable to a proxy_set_header name.
