@@ -157,7 +157,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 							} else {
 								Eventually(
 									func() error {
-										return framework.ExpectUnauthenticatedRequest(
+										return framework.Expect401Response(
 											timeoutConfig.RequestTimeout,
 											fmt.Sprintf("%s%d%s", test.url, port, test.path),
 											address,
@@ -1074,7 +1074,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 				It("should return 401 for invalid JWT token", func() {
 					Eventually(
 						func() error {
-							return framework.ExpectUnauthenticatedRequest(
+							return framework.Expect401Response(
 								timeoutConfig.RequestTimeout,
 								fmt.Sprintf("http://cafe.example.com:%d/jwt-coffee", port),
 								address,
@@ -1187,7 +1187,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 				It("should return 401 when JWT filter uses secret with invalid JWKS data", func() {
 					Eventually(
 						func() error {
-							return framework.ExpectUnauthenticatedRequest(
+							return framework.Expect401Response(
 								timeoutConfig.RequestTimeout,
 								fmt.Sprintf("http://cafe.example.com:%d/jwt-invalid-jwks", port),
 								address,
@@ -1308,7 +1308,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 				It("should return 401 for invalid JWT token", func() {
 					Eventually(
 						func() error {
-							return framework.ExpectUnauthenticatedRequest(
+							return framework.Expect401Response(
 								timeoutConfig.RequestTimeout,
 								fmt.Sprintf("http://cafe.example.com:%d/jwt-remote-coffee", port),
 								address,
@@ -1324,7 +1324,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 				It("should return 401 when no token is provided", func() {
 					Eventually(
 						func() error {
-							return framework.ExpectUnauthenticatedRequest(
+							return framework.Expect401Response(
 								timeoutConfig.RequestTimeout,
 								fmt.Sprintf("http://cafe.example.com:%d/jwt-remote-coffee", port),
 								address,
@@ -1558,7 +1558,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 
 					Eventually(
 						func() error {
-							return framework.ExpectForbiddenRequest(
+							return framework.Expect401Response(
 								timeoutConfig.RequestTimeout,
 								fmt.Sprintf("http://cafe.example.com:%d/jwt-authz-any", port),
 								address,
@@ -1581,7 +1581,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 
 					Eventually(
 						func() error {
-							return framework.ExpectForbiddenRequest(
+							return framework.Expect401Response(
 								timeoutConfig.RequestTimeout,
 								fmt.Sprintf("http://cafe.example.com:%d/jwt-authz-any", port),
 								address,
@@ -1633,7 +1633,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 
 					Eventually(
 						func() error {
-							return framework.ExpectForbiddenRequest(
+							return framework.Expect401Response(
 								timeoutConfig.RequestTimeout,
 								fmt.Sprintf("http://cafe.example.com:%d/jwt-authz-all", port),
 								address,
@@ -1658,7 +1658,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 
 					Eventually(
 						func() error {
-							return framework.ExpectForbiddenRequest(
+							return framework.Expect401Response(
 								timeoutConfig.RequestTimeout,
 								fmt.Sprintf("http://cafe.example.com:%d/jwt-authz-all", port),
 								address,
@@ -1709,7 +1709,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 
 					Eventually(
 						func() error {
-							return framework.ExpectForbiddenRequest(
+							return framework.Expect401Response(
 								timeoutConfig.RequestTimeout,
 								fmt.Sprintf("http://cafe.example.com:%d/jwt-authz-regex", port),
 								address,
@@ -1786,7 +1786,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 
 					Eventually(
 						func() error {
-							return framework.ExpectForbiddenRequest(
+							return framework.Expect401Response(
 								timeoutConfig.RequestTimeout,
 								fmt.Sprintf("http://cafe.example.com:%d/jwt-authz-multi", port),
 								address,

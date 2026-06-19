@@ -230,7 +230,7 @@ func ExpectRequestToFail(timeout time.Duration, appURL, address string) error {
 	return nil
 }
 
-func ExpectUnauthenticatedRequest(timeout time.Duration, appURL, address string, opts ...Option) error {
+func Expect401Response(timeout time.Duration, appURL, address string, opts ...Option) error {
 	options := TestOptions(opts...)
 	request := Request{
 		Headers: options.requestHeaders,
