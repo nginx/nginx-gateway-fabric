@@ -1,6 +1,10 @@
 package validation
 
-import "testing"
+import (
+	"testing"
+
+	. "github.com/onsi/gomega"
+)
 
 func TestValidateOIDCIssuer(t *testing.T) {
 	t.Parallel()
@@ -286,4 +290,70 @@ func TestValidateAuthZProxySetHeader(t *testing.T) {
 		`X-Custom-Header_1`,
 		`My-Header/Path`,
 	)
+}
+
+func TestValidateOIDCExtraAuthArg(t *testing.T) {
+	t.Parallel()
+	validator := AuthFieldValidator{}
+
+	t.Run("valid key-value pairs", func(t *testing.T) {
+		t.Parallel()
+		validPairs := []struct {
+			key   string
+			value string
+		}{
+			{key: "prompt", value: "consent"},
+			{key: "audience", value: "api"},
+			{key: "scope", value: "openid profile"},
+			{key: "acr_values", value: "urn:mace:incommon:iap:silver"},
+			{key: "login_hint", value: "user@example.com"},
+			{key: "ui.locales", value: "en"},
+			{key: "max-age", value: "3600"},
+			{key: "key", value: ""},
+			{key: "key", value: "value;with;semicolons"},
+			{key: "key", value: "value{with}braces"},
+		}
+
+		for _, pair := range validPairs {
+			g := NewWithT(t)
+			err := validator.ValidateOIDCExtraAuthArg(pair.key, pair.value)
+			g.Expect(err).ToNot(HaveOccurred(), "key=%q value=%q", pair.key, pair.value)
+		}
+	})
+
+	t.Run("invalid keys", func(t *testing.T) {
+		t.Parallel()
+		invalidKeys := []string{
+			"",
+			"key with spaces",
+			"key;semi",
+			"key$dollar",
+			`key"quote`,
+			"key{brace",
+			"key=equals",
+			"key&amp",
+		}
+
+		for _, key := range invalidKeys {
+			g := NewWithT(t)
+			err := validator.ValidateOIDCExtraAuthArg(key, "valid-value")
+			g.Expect(err).To(HaveOccurred(), "key=%q", key)
+		}
+	})
+
+	t.Run("invalid values", func(t *testing.T) {
+		t.Parallel()
+		invalidValues := []string{
+			`value"with"quotes`,
+			`value$with$dollars`,
+			`value\`,
+			"value\nwith\nnewlines",
+		}
+
+		for _, value := range invalidValues {
+			g := NewWithT(t)
+			err := validator.ValidateOIDCExtraAuthArg("valid-key", value)
+			g.Expect(err).To(HaveOccurred(), "value=%q", value)
+		}
+	})
 }

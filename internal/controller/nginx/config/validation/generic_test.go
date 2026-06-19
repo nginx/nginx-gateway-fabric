@@ -142,3 +142,48 @@ func TestValidateNginxVariableName(t *testing.T) {
 		`$request_id;`,
 	)
 }
+
+func TestValidateServerTokensValue(t *testing.T) {
+	t.Parallel()
+	validator := GenericValidator{}
+
+	testValidValuesForSimpleValidator(
+		t,
+		validator.ValidateServerTokensValue,
+		`my-server`,
+		`nginx`,
+		`custom server token`,
+		``,
+	)
+
+	testInvalidValuesForSimpleValidator(
+		t,
+		validator.ValidateServerTokensValue,
+		`bad"value`,
+		`value\`,
+		"bad\nvalue",
+	)
+}
+
+func TestValidateAccessLogFormatString(t *testing.T) {
+	t.Parallel()
+	validator := GenericValidator{}
+
+	testValidValuesForSimpleValidator(
+		t,
+		validator.ValidateAccessLogFormatString,
+		`$remote_addr - $remote_user [$time_local] "$request" $status $body_bytes_sent`,
+		`{"remote_addr": "$remote_addr", "status": "$status"}`,
+		`$request\t$status`,
+		``,
+	)
+
+	testInvalidValuesForSimpleValidator(
+		t,
+		validator.ValidateAccessLogFormatString,
+		`format with 'quotes'`,
+		`'; bad stuff; #`,
+		`$remote_addr'`,
+		"$remote_addr\n$status",
+	)
+}

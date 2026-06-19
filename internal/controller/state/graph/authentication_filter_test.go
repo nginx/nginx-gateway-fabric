@@ -685,6 +685,36 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 			expCond: conditions.Condition{},
 		},
 		{
+			name: "invalid: OIDC extraAuthArgs fails validation",
+			args: args{
+				secretNsName: types.NamespacedName{Namespace: "test", Name: "oidc"},
+				isPlus:       true,
+				authValidator: &validationfakes.FakeAuthFieldsValidator{
+					ValidateOIDCExtraAuthArgStub: func(_, _ string) error {
+						return errors.New("invalid extra auth arg")
+					},
+				},
+				filter: createAuthenticationFilterWithOIDC(
+					types.NamespacedName{Namespace: "test", Name: "oidc"},
+					&ngfAPI.OIDCAuth{
+						ClientID:        "client-id",
+						ClientSecretRef: ngfAPI.LocalObjectReference{Name: "client-secret"},
+						ExtraAuthArgs:   map[string]string{"bad;key": "value"},
+					},
+					false,
+				).Source,
+				resources: map[resolver.ResourceKey]client.Object{
+					{
+						ResourceType:   resolver.ResourceTypeSecret,
+						NamespacedName: types.NamespacedName{Namespace: "test", Name: "client-secret"},
+					}: createOpaqueClientSecret("client-secret", true),
+				},
+			},
+			expCond: conditions.NewAuthenticationFilterInvalid(
+				`spec.oidc.extraAuthArgs: Invalid value: "bad;key=value": invalid extra auth arg`,
+			),
+		},
+		{
 			name: "invalid: OIDC issuer fails regex validation",
 			args: args{
 				secretNsName: types.NamespacedName{Namespace: "test", Name: "oidc"},

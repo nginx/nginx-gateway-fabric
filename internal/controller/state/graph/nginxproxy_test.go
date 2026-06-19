@@ -24,6 +24,7 @@ func createValidValidator() *validationfakes.FakeGenericValidator {
 	v.ValidateEndpointReturns(nil)
 	v.ValidateServiceNameReturns(nil)
 	v.ValidateNginxDurationReturns(nil)
+	v.ValidateAccessLogFormatStringReturns(nil)
 
 	return v
 }
@@ -34,6 +35,7 @@ func createInvalidValidator() *validationfakes.FakeGenericValidator {
 	v.ValidateEndpointReturns(errors.New("error"))
 	v.ValidateServiceNameReturns(errors.New("error"))
 	v.ValidateNginxDurationReturns(errors.New("error"))
+	v.ValidateAccessLogFormatStringReturns(errors.New("error"))
 
 	return v
 }
@@ -1625,6 +1627,7 @@ func TestValidateLogging(t *testing.T) {
 
 	tests := []struct {
 		np             *ngfAPIv1alpha2.NginxProxy
+		validator      *validationfakes.FakeGenericValidator
 		name           string
 		errorString    string
 		expectErrCount int
@@ -1638,6 +1641,7 @@ func TestValidateLogging(t *testing.T) {
 					},
 				},
 			},
+			validator:      createValidValidator(),
 			name:           "valid debug log level",
 			errorString:    "",
 			expectErrCount: 0,
@@ -1650,6 +1654,7 @@ func TestValidateLogging(t *testing.T) {
 					},
 				},
 			},
+			validator:      createValidValidator(),
 			name:           "valid info log level",
 			errorString:    "",
 			expectErrCount: 0,
@@ -1662,6 +1667,7 @@ func TestValidateLogging(t *testing.T) {
 					},
 				},
 			},
+			validator:      createValidValidator(),
 			name:           "valid notice log level",
 			errorString:    "",
 			expectErrCount: 0,
@@ -1674,6 +1680,7 @@ func TestValidateLogging(t *testing.T) {
 					},
 				},
 			},
+			validator:      createValidValidator(),
 			name:           "valid warn log level",
 			errorString:    "",
 			expectErrCount: 0,
@@ -1686,6 +1693,7 @@ func TestValidateLogging(t *testing.T) {
 					},
 				},
 			},
+			validator:      createValidValidator(),
 			name:           "valid error log level",
 			errorString:    "",
 			expectErrCount: 0,
@@ -1698,6 +1706,7 @@ func TestValidateLogging(t *testing.T) {
 					},
 				},
 			},
+			validator:      createValidValidator(),
 			name:           "valid crit log level",
 			errorString:    "",
 			expectErrCount: 0,
@@ -1710,6 +1719,7 @@ func TestValidateLogging(t *testing.T) {
 					},
 				},
 			},
+			validator:      createValidValidator(),
 			name:           "valid alert log level",
 			errorString:    "",
 			expectErrCount: 0,
@@ -1722,6 +1732,7 @@ func TestValidateLogging(t *testing.T) {
 					},
 				},
 			},
+			validator:      createValidValidator(),
 			name:           "valid emerg log level",
 			errorString:    "",
 			expectErrCount: 0,
@@ -1734,7 +1745,8 @@ func TestValidateLogging(t *testing.T) {
 					},
 				},
 			},
-			name: "invalid log level",
+			validator: createValidValidator(),
+			name:      "invalid log level",
 			errorString: "spec.logging.errorLevel: Unsupported value: \"invalid-log-level\": supported values:" +
 				" \"debug\", \"info\", \"notice\", \"warn\", \"error\", \"crit\", \"alert\", \"emerg\"",
 			expectErrCount: 1,
@@ -1745,6 +1757,7 @@ func TestValidateLogging(t *testing.T) {
 					Logging: &ngfAPIv1alpha2.NginxLogging{},
 				},
 			},
+			validator:      createValidValidator(),
 			name:           "empty log level",
 			errorString:    "",
 			expectErrCount: 0,
@@ -1789,6 +1802,63 @@ func TestValidateLogging(t *testing.T) {
 				" JSON-formatted error logs are only supported with NGINX Plus",
 			expectErrCount: 1,
 		},
+		{
+			np: &ngfAPIv1alpha2.NginxProxy{
+				Spec: ngfAPIv1alpha2.NginxProxySpec{
+					Logging: &ngfAPIv1alpha2.NginxLogging{
+						AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
+							Format: helpers.GetPointer(
+								`$remote_addr - $remote_user [$time_local] "$request" $status`,
+							),
+						},
+					},
+				},
+			},
+			validator:      createValidValidator(),
+			name:           "valid access log format",
+			errorString:    "",
+			expectErrCount: 0,
+		},
+		{
+			np: &ngfAPIv1alpha2.NginxProxy{
+				Spec: ngfAPIv1alpha2.NginxProxySpec{
+					Logging: &ngfAPIv1alpha2.NginxLogging{
+						AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
+							Format: helpers.GetPointer("bad format"),
+						},
+					},
+				},
+			},
+			validator:      createInvalidValidator(),
+			name:           "invalid access log format",
+			expectErrCount: 1,
+		},
+		{
+			np: &ngfAPIv1alpha2.NginxProxy{
+				Spec: ngfAPIv1alpha2.NginxProxySpec{
+					Logging: &ngfAPIv1alpha2.NginxLogging{
+						AccessLog: &ngfAPIv1alpha2.NginxAccessLog{},
+					},
+				},
+			},
+			validator:      createValidValidator(),
+			name:           "nil access log format",
+			errorString:    "",
+			expectErrCount: 0,
+		},
+		{
+			np: &ngfAPIv1alpha2.NginxProxy{
+				Spec: ngfAPIv1alpha2.NginxProxySpec{
+					Logging: &ngfAPIv1alpha2.NginxLogging{
+						AccessLog: nil,
+					},
+				},
+			},
+			validator:      createValidValidator(),
+			name:           "nil access log",
+			errorString:    "",
+			expectErrCount: 0,
+		},
 	}
 
 	for _, test := range tests {
@@ -1796,9 +1866,9 @@ func TestValidateLogging(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			allErrs := validateLogging(test.np, test.plus)
+			allErrs := validateLogging(test.validator, test.np, test.plus)
 			g.Expect(allErrs).To(HaveLen(test.expectErrCount))
-			if len(allErrs) > 0 {
+			if len(allErrs) > 0 && test.errorString != "" {
 				g.Expect(allErrs.ToAggregate().Error()).To(Equal(test.errorString))
 			}
 		})
@@ -1949,6 +2019,25 @@ func TestValidateServerTokens(t *testing.T) {
 			plus:           true,
 		},
 		{
+			name:      "valid keyword serverTokens with NGINX Plus",
+			validator: createValidValidator(),
+			np: &ngfAPIv1alpha2.NginxProxy{
+				Spec: ngfAPIv1alpha2.NginxProxySpec{
+					ServerTokens: helpers.GetPointer(ServerTokenOff),
+				},
+			},
+			expectErrCount: 0,
+			plus:           true,
+		},
+		{
+			name:      "nil serverTokens",
+			validator: createValidValidator(),
+			np: &ngfAPIv1alpha2.NginxProxy{
+				Spec: ngfAPIv1alpha2.NginxProxySpec{},
+			},
+			expectErrCount: 0,
+		},
+		{
 			name:      "invalid custom serverTokens with NGINX OSS",
 			validator: createValidValidator(),
 			np: &ngfAPIv1alpha2.NginxProxy{
@@ -1961,6 +2050,21 @@ func TestValidateServerTokens(t *testing.T) {
 				"\"custom-string\": custom string values for serverTokens are only allowed with NGINX Plus." +
 				" For NGINX OSS, allowed values are 'off', 'on', and 'build'.",
 		},
+		{
+			name: "invalid custom serverTokens with NGINX Plus containing dangerous chars",
+			validator: func() *validationfakes.FakeGenericValidator {
+				v := createValidValidator()
+				v.ValidateServerTokensValueReturns(errors.New("error"))
+				return v
+			}(),
+			np: &ngfAPIv1alpha2.NginxProxy{
+				Spec: ngfAPIv1alpha2.NginxProxySpec{
+					ServerTokens: helpers.GetPointer(`bad"value`),
+				},
+			},
+			expectErrCount: 1,
+			plus:           true,
+		},
 	}
 
 	for _, test := range tests {
@@ -1968,9 +2072,9 @@ func TestValidateServerTokens(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			allErrs := validateServerTokens(test.np, test.plus)
+			allErrs := validateServerTokens(test.validator, test.np, test.plus)
 			g.Expect(allErrs).To(HaveLen(test.expectErrCount))
-			if len(allErrs) > 0 {
+			if test.errorString != "" {
 				g.Expect(allErrs.ToAggregate().Error()).To(Equal(test.errorString))
 			}
 		})
