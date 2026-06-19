@@ -261,19 +261,3 @@ func Expect500Response(timeout time.Duration, appURL, address string, opts ...Op
 
 	return nil
 }
-
-func ExpectForbiddenRequest(timeout time.Duration, appURL, address string, opts ...Option) error {
-	options := TestOptions(opts...)
-	request := Request{
-		Headers: options.requestHeaders,
-		URL:     appURL,
-		Address: address,
-		Timeout: timeout,
-	}
-	resp, _ := Get(request, opts...)
-	if resp.StatusCode != http.StatusForbidden {
-		return fmt.Errorf("expected http status to be 403, got %d", resp.StatusCode)
-	}
-
-	return nil
-}
