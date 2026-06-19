@@ -1435,6 +1435,695 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 				)
 			})
 		})
+
+		When("valid JWT AuthenticationFilter with authorization is applied", func() {
+			var (
+				jwtHelper     *JWTTestHelper
+				jwtSecret     *core.Secret
+				jwtAuthzFiles = []string{"authentication-filter/jwt-authz-auth.yaml"}
+			)
+
+			BeforeAll(func() {
+				var err error
+				jwtHelper, err = NewJWTTestHelper("test-key-id")
+				Expect(err).ToNot(HaveOccurred())
+
+				jwtSecret = &core.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "jwks-secret",
+						Namespace: namespace,
+					},
+					Type: core.SecretTypeOpaque,
+					StringData: map[string]string{
+						"auth": jwtHelper.JWKS,
+					},
+				}
+
+				Expect(resourceManager.Apply([]client.Object{jwtSecret})).To(Succeed())
+				Expect(resourceManager.ApplyFromFiles(jwtAuthzFiles, namespace)).To(Succeed())
+				Expect(resourceManager.WaitForAppsToBeReady(namespace)).To(Succeed())
+			})
+
+			AfterAll(func() {
+				framework.AddNginxLogsAndEventsToReport(resourceManager, namespace)
+				Expect(resourceManager.DeleteFromFiles(jwtAuthzFiles, namespace)).To(Succeed())
+
+				ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.DeleteTimeout)
+				defer cancel()
+				Expect(resourceManager.Delete(ctx, jwtSecret, nil)).To(Succeed())
+
+				if jwtHelper != nil {
+					jwtHelper.Cleanup()
+				}
+			})
+
+			Specify("JWT authorization authenticationFilters are accepted", func() {
+				filterNames := []string{
+					"jwt-authz-any-exact",
+					"jwt-authz-all-claims",
+					"jwt-authz-regex",
+					"jwt-authz-multi-rules",
+					"jwt-authz-proxy-header",
+				}
+
+				for _, name := range filterNames {
+					nsname := types.NamespacedName{Name: name, Namespace: namespace}
+					Eventually(checkForAuthenticationFilterToBeAccepted).
+						WithArguments(nsname).
+						WithTimeout(timeoutConfig.GetStatusTimeout).
+						WithPolling(500*time.Millisecond).
+						Should(Succeed(), fmt.Sprintf("%s was not accepted", name))
+				}
+			})
+
+			Context("JWT authorization with Require Any, single rule, Exact match", func() {
+				It("should return 200 when token has matching claim value", func() {
+					token, err := jwtHelper.generateToken(map[string]interface{}{
+						"sub":  "test-user",
+						"role": "admin",
+						"iat":  time.Now().Unix(),
+						"exp":  9999999999,
+					})
+					Expect(err).ToNot(HaveOccurred())
+
+					Eventually(
+						func() error {
+							return framework.ExpectRequestToSucceed(
+								timeoutConfig.RequestTimeout,
+								fmt.Sprintf("http://cafe.example.com:%d/jwt-authz-any", port),
+								address,
+								"URI: /jwt-authz-any",
+								framework.WithRequestHeaders(map[string]string{
+									"Authorization": fmt.Sprintf("Bearer %s", token),
+								}))
+						}).
+						WithTimeout(timeoutConfig.RequestTimeout).
+						WithPolling(500 * time.Millisecond).
+						Should(Succeed())
+				})
+
+				It("should return 200 when token has alternative matching claim value", func() {
+					token, err := jwtHelper.generateToken(map[string]interface{}{
+						"sub":  "test-user",
+						"role": "editor",
+						"iat":  time.Now().Unix(),
+						"exp":  9999999999,
+					})
+					Expect(err).ToNot(HaveOccurred())
+
+					Eventually(
+						func() error {
+							return framework.ExpectRequestToSucceed(
+								timeoutConfig.RequestTimeout,
+								fmt.Sprintf("http://cafe.example.com:%d/jwt-authz-any", port),
+								address,
+								"URI: /jwt-authz-any",
+								framework.WithRequestHeaders(map[string]string{
+									"Authorization": fmt.Sprintf("Bearer %s", token),
+								}))
+						}).
+						WithTimeout(timeoutConfig.RequestTimeout).
+						WithPolling(500 * time.Millisecond).
+						Should(Succeed())
+				})
+
+				It("should return 403 when token has non-matching claim value", func() {
+					token, err := jwtHelper.generateToken(map[string]interface{}{
+						"sub":  "test-user",
+						"role": "viewer",
+						"iat":  time.Now().Unix(),
+						"exp":  9999999999,
+					})
+					Expect(err).ToNot(HaveOccurred())
+
+					Eventually(
+						func() error {
+							return framework.ExpectForbiddenRequest(
+								timeoutConfig.RequestTimeout,
+								fmt.Sprintf("http://cafe.example.com:%d/jwt-authz-any", port),
+								address,
+								framework.WithRequestHeaders(map[string]string{
+									"Authorization": fmt.Sprintf("Bearer %s", token),
+								}))
+						}).
+						WithTimeout(timeoutConfig.RequestTimeout).
+						WithPolling(500 * time.Millisecond).
+						Should(Succeed())
+				})
+
+				It("should return 403 when token is missing the required claim", func() {
+					token, err := jwtHelper.generateToken(map[string]interface{}{
+						"sub": "test-user",
+						"iat": time.Now().Unix(),
+						"exp": 9999999999,
+					})
+					Expect(err).ToNot(HaveOccurred())
+
+					Eventually(
+						func() error {
+							return framework.ExpectForbiddenRequest(
+								timeoutConfig.RequestTimeout,
+								fmt.Sprintf("http://cafe.example.com:%d/jwt-authz-any", port),
+								address,
+								framework.WithRequestHeaders(map[string]string{
+									"Authorization": fmt.Sprintf("Bearer %s", token),
+								}))
+						}).
+						WithTimeout(timeoutConfig.RequestTimeout).
+						WithPolling(500 * time.Millisecond).
+						Should(Succeed())
+				})
+			})
+
+			Context("JWT authorization with Require All, multiple claims", func() {
+				It("should return 200 when token satisfies ALL required claims", func() {
+					token, err := jwtHelper.generateToken(map[string]interface{}{
+						"sub":        "test-user",
+						"role":       "admin",
+						"department": "engineering",
+						"iat":        time.Now().Unix(),
+						"exp":        9999999999,
+					})
+					Expect(err).ToNot(HaveOccurred())
+
+					Eventually(
+						func() error {
+							return framework.ExpectRequestToSucceed(
+								timeoutConfig.RequestTimeout,
+								fmt.Sprintf("http://cafe.example.com:%d/jwt-authz-all", port),
+								address,
+								"URI: /jwt-authz-all",
+								framework.WithRequestHeaders(map[string]string{
+									"Authorization": fmt.Sprintf("Bearer %s", token),
+								}))
+						}).
+						WithTimeout(timeoutConfig.RequestTimeout).
+						WithPolling(500 * time.Millisecond).
+						Should(Succeed())
+				})
+
+				It("should return 403 when token is missing one required claim", func() {
+					token, err := jwtHelper.generateToken(map[string]interface{}{
+						"sub":  "test-user",
+						"role": "admin",
+						"iat":  time.Now().Unix(),
+						"exp":  9999999999,
+					})
+					Expect(err).ToNot(HaveOccurred())
+
+					Eventually(
+						func() error {
+							return framework.ExpectForbiddenRequest(
+								timeoutConfig.RequestTimeout,
+								fmt.Sprintf("http://cafe.example.com:%d/jwt-authz-all", port),
+								address,
+								framework.WithRequestHeaders(map[string]string{
+									"Authorization": fmt.Sprintf("Bearer %s", token),
+								}))
+						}).
+						WithTimeout(timeoutConfig.RequestTimeout).
+						WithPolling(500 * time.Millisecond).
+						Should(Succeed())
+				})
+
+				It("should return 403 when token has wrong value for one claim", func() {
+					token, err := jwtHelper.generateToken(map[string]interface{}{
+						"sub":        "test-user",
+						"role":       "admin",
+						"department": "marketing",
+						"iat":        time.Now().Unix(),
+						"exp":        9999999999,
+					})
+					Expect(err).ToNot(HaveOccurred())
+
+					Eventually(
+						func() error {
+							return framework.ExpectForbiddenRequest(
+								timeoutConfig.RequestTimeout,
+								fmt.Sprintf("http://cafe.example.com:%d/jwt-authz-all", port),
+								address,
+								framework.WithRequestHeaders(map[string]string{
+									"Authorization": fmt.Sprintf("Bearer %s", token),
+								}))
+						}).
+						WithTimeout(timeoutConfig.RequestTimeout).
+						WithPolling(500 * time.Millisecond).
+						Should(Succeed())
+				})
+			})
+
+			Context("JWT authorization with Regex claim matching", func() {
+				It("should return 200 when claim value matches regex", func() {
+					token, err := jwtHelper.generateToken(map[string]interface{}{
+						"sub":   "test-user",
+						"email": "user@example.com",
+						"iat":   time.Now().Unix(),
+						"exp":   9999999999,
+					})
+					Expect(err).ToNot(HaveOccurred())
+
+					Eventually(
+						func() error {
+							return framework.ExpectRequestToSucceed(
+								timeoutConfig.RequestTimeout,
+								fmt.Sprintf("http://cafe.example.com:%d/jwt-authz-regex", port),
+								address,
+								"URI: /jwt-authz-regex",
+								framework.WithRequestHeaders(map[string]string{
+									"Authorization": fmt.Sprintf("Bearer %s", token),
+								}))
+						}).
+						WithTimeout(timeoutConfig.RequestTimeout).
+						WithPolling(500 * time.Millisecond).
+						Should(Succeed())
+				})
+
+				It("should return 403 when claim value does not match regex", func() {
+					token, err := jwtHelper.generateToken(map[string]interface{}{
+						"sub":   "test-user",
+						"email": "user@otherdomain.com",
+						"iat":   time.Now().Unix(),
+						"exp":   9999999999,
+					})
+					Expect(err).ToNot(HaveOccurred())
+
+					Eventually(
+						func() error {
+							return framework.ExpectForbiddenRequest(
+								timeoutConfig.RequestTimeout,
+								fmt.Sprintf("http://cafe.example.com:%d/jwt-authz-regex", port),
+								address,
+								framework.WithRequestHeaders(map[string]string{
+									"Authorization": fmt.Sprintf("Bearer %s", token),
+								}))
+						}).
+						WithTimeout(timeoutConfig.RequestTimeout).
+						WithPolling(500 * time.Millisecond).
+						Should(Succeed())
+				})
+			})
+
+			Context("JWT authorization with multiple rules (Any across rules)", func() {
+				It("should return 200 when token matches first rule", func() {
+					token, err := jwtHelper.generateToken(map[string]interface{}{
+						"sub":  "test-user",
+						"role": "superadmin",
+						"iat":  time.Now().Unix(),
+						"exp":  9999999999,
+					})
+					Expect(err).ToNot(HaveOccurred())
+
+					Eventually(
+						func() error {
+							return framework.ExpectRequestToSucceed(
+								timeoutConfig.RequestTimeout,
+								fmt.Sprintf("http://cafe.example.com:%d/jwt-authz-multi", port),
+								address,
+								"URI: /jwt-authz-multi",
+								framework.WithRequestHeaders(map[string]string{
+									"Authorization": fmt.Sprintf("Bearer %s", token),
+								}))
+						}).
+						WithTimeout(timeoutConfig.RequestTimeout).
+						WithPolling(500 * time.Millisecond).
+						Should(Succeed())
+				})
+
+				It("should return 200 when token matches second rule", func() {
+					token, err := jwtHelper.generateToken(map[string]interface{}{
+						"sub":        "test-user",
+						"department": "engineering",
+						"iat":        time.Now().Unix(),
+						"exp":        9999999999,
+					})
+					Expect(err).ToNot(HaveOccurred())
+
+					Eventually(
+						func() error {
+							return framework.ExpectRequestToSucceed(
+								timeoutConfig.RequestTimeout,
+								fmt.Sprintf("http://cafe.example.com:%d/jwt-authz-multi", port),
+								address,
+								"URI: /jwt-authz-multi",
+								framework.WithRequestHeaders(map[string]string{
+									"Authorization": fmt.Sprintf("Bearer %s", token),
+								}))
+						}).
+						WithTimeout(timeoutConfig.RequestTimeout).
+						WithPolling(500 * time.Millisecond).
+						Should(Succeed())
+				})
+
+				It("should return 403 when token matches neither rule", func() {
+					token, err := jwtHelper.generateToken(map[string]interface{}{
+						"sub":        "test-user",
+						"role":       "viewer",
+						"department": "marketing",
+						"iat":        time.Now().Unix(),
+						"exp":        9999999999,
+					})
+					Expect(err).ToNot(HaveOccurred())
+
+					Eventually(
+						func() error {
+							return framework.ExpectForbiddenRequest(
+								timeoutConfig.RequestTimeout,
+								fmt.Sprintf("http://cafe.example.com:%d/jwt-authz-multi", port),
+								address,
+								framework.WithRequestHeaders(map[string]string{
+									"Authorization": fmt.Sprintf("Bearer %s", token),
+								}))
+						}).
+						WithTimeout(timeoutConfig.RequestTimeout).
+						WithPolling(500 * time.Millisecond).
+						Should(Succeed())
+				})
+			})
+
+			Context("JWT authorization with proxySetHeader", func() {
+				It("should return 200 and forward claim values as headers to backend", func() {
+					token, err := jwtHelper.generateToken(map[string]interface{}{
+						"sub":  "test-user",
+						"role": "admin",
+						"iat":  time.Now().Unix(),
+						"exp":  9999999999,
+					})
+					Expect(err).ToNot(HaveOccurred())
+
+					Eventually(
+						func() error {
+							return framework.ExpectRequestToSucceed(
+								timeoutConfig.RequestTimeout,
+								fmt.Sprintf("http://cafe.example.com:%d/jwt-authz-header", port),
+								address,
+								"URI: /jwt-authz-header",
+								framework.WithRequestHeaders(map[string]string{
+									"Authorization": fmt.Sprintf("Bearer %s", token),
+								}))
+						}).
+						WithTimeout(timeoutConfig.RequestTimeout).
+						WithPolling(500 * time.Millisecond).
+						Should(Succeed())
+				})
+			})
+
+			Context("JWT authorization nginx directives", func() {
+				var conf *framework.Payload
+
+				BeforeAll(func() {
+					var err error
+					conf, err = resourceManager.GetNginxConfig(nginxPodName, namespace, "")
+					Expect(err).ToNot(HaveOccurred())
+				})
+
+				DescribeTable("are set properly for",
+					func(expCfgs []framework.ExpectedNginxField) {
+						for _, expCfg := range expCfgs {
+							Expect(framework.ValidateNginxFieldExists(conf, expCfg)).To(Succeed())
+						}
+					},
+					Entry("JWT authorization with auth_jwt_require directive", []framework.ExpectedNginxField{
+						{
+							Directive:             "auth_jwt_require",
+							Value:                 "jwt-authz-any-exact",
+							File:                  "http.conf",
+							Server:                "*.example.com",
+							Location:              "/jwt-authz-any",
+							ValueSubstringAllowed: true,
+						},
+					}),
+					Entry("JWT authorization with auth_jwt directive", []framework.ExpectedNginxField{
+						{
+							Directive: "auth_jwt",
+							Value:     "JWT AuthZ Any Exact",
+							File:      "http.conf",
+							Server:    "*.example.com",
+							Location:  "/jwt-authz-any",
+						},
+					}),
+					Entry("JWT authorization with proxy_set_header for claims", []framework.ExpectedNginxField{
+						{
+							Directive:             "proxy_set_header",
+							Value:                 "X-JWT-Sub",
+							File:                  "http.conf",
+							Server:                "*.example.com",
+							Location:              "/jwt-authz-header",
+							ValueSubstringAllowed: true,
+						},
+						{
+							Directive:             "proxy_set_header",
+							Value:                 "X-JWT-Role",
+							File:                  "http.conf",
+							Server:                "*.example.com",
+							Location:              "/jwt-authz-header",
+							ValueSubstringAllowed: true,
+						},
+					}),
+				)
+			})
+		})
+
+		When("valid OIDC AuthenticationFilter with authorization is applied", Ordered, func() {
+			var (
+				oidcAuthzFiles = []string{
+					"authentication-filter/oidc-authz-auth.yaml",
+				}
+				clientPodFiles = []string{
+					"authentication-filter/oidc-client-pod.yaml",
+				}
+
+				savedDNSResolver *ngfAPIv1alpha2.DNSResolver
+				nginxServiceIP   string
+				clientPodName    = "oidc-test-client"
+			)
+
+			BeforeAll(func() {
+				ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.UpdateTimeout)
+				defer cancel()
+
+				var kubeDNSSvc core.Service
+				kubeDNSKey := types.NamespacedName{Name: "kube-dns", Namespace: "kube-system"}
+				Expect(resourceManager.Get(ctx, kubeDNSKey, &kubeDNSSvc)).To(Succeed())
+				kubeDNSIP := kubeDNSSvc.Spec.ClusterIP
+				Expect(kubeDNSIP).ToNot(BeEmpty(), "kube-dns ClusterIP should not be empty")
+
+				nginxProxyNsName := types.NamespacedName{
+					Name:      fmt.Sprintf("%s-proxy-config", releaseName),
+					Namespace: ngfNamespace,
+				}
+				var nginxProxy ngfAPIv1alpha2.NginxProxy
+				Expect(resourceManager.Get(ctx, nginxProxyNsName, &nginxProxy)).To(Succeed())
+
+				savedDNSResolver = nginxProxy.Spec.DNSResolver
+
+				nginxProxy.Spec.DNSResolver = &ngfAPIv1alpha2.DNSResolver{
+					Addresses: []ngfAPIv1alpha2.DNSResolverAddress{
+						{
+							Type:  ngfAPIv1alpha2.DNSResolverIPAddressType,
+							Value: kubeDNSIP,
+						},
+					},
+				}
+				Expect(resourceManager.Update(ctx, &nginxProxy, nil)).To(Succeed())
+
+				Expect(resourceManager.ApplyFromFiles(oidcAuthzFiles, namespace)).To(Succeed())
+				Expect(resourceManager.WaitForAppsToBeReady(namespace)).To(Succeed())
+
+				var nginxSvc core.Service
+				nginxSvcKey := types.NamespacedName{
+					Name:      fmt.Sprintf("auth-gateway-%s", gatewayClassName),
+					Namespace: namespace,
+				}
+				Eventually(func() error {
+					svcCtx, svcCancel := context.WithTimeout(context.Background(), timeoutConfig.GetTimeout)
+					defer svcCancel()
+					return resourceManager.Get(svcCtx, nginxSvcKey, &nginxSvc)
+				}).WithTimeout(timeoutConfig.GetStatusTimeout).
+					WithPolling(500 * time.Millisecond).
+					Should(Succeed())
+
+				nginxServiceIP = nginxSvc.Spec.ClusterIP
+				Expect(nginxServiceIP).ToNot(BeEmpty(), "NGINX service ClusterIP should not be empty")
+
+				Expect(resourceManager.ApplyFromFiles(clientPodFiles, namespace)).To(Succeed())
+
+				clientCtx, clientCancel := context.WithTimeout(context.Background(), timeoutConfig.CreateTimeout)
+				defer clientCancel()
+				Expect(resourceManager.WaitForPodsToBeReady(clientCtx, namespace)).To(Succeed())
+			})
+
+			AfterAll(func() {
+				framework.AddNginxLogsAndEventsToReport(resourceManager, namespace)
+
+				ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.UpdateTimeout)
+				defer cancel()
+
+				nginxProxyNsName := types.NamespacedName{
+					Name:      fmt.Sprintf("%s-proxy-config", releaseName),
+					Namespace: ngfNamespace,
+				}
+				var nginxProxy ngfAPIv1alpha2.NginxProxy
+				Expect(resourceManager.Get(ctx, nginxProxyNsName, &nginxProxy)).To(Succeed())
+				nginxProxy.Spec.DNSResolver = savedDNSResolver
+				Expect(resourceManager.Update(ctx, &nginxProxy, nil)).To(Succeed())
+
+				Expect(resourceManager.DeleteFromFiles(clientPodFiles, namespace)).To(Succeed())
+				Expect(resourceManager.DeleteFromFiles(oidcAuthzFiles, namespace)).To(Succeed())
+			})
+
+			Specify("OIDC authorization authenticationFilters are accepted", func() {
+				filterNames := []string{
+					"oidc-authz-any",
+					"oidc-authz-all",
+					"oidc-authz-regex",
+					"oidc-authz-header",
+				}
+
+				for _, name := range filterNames {
+					nsname := types.NamespacedName{Name: name, Namespace: namespace}
+					Eventually(checkForAuthenticationFilterToBeAccepted).
+						WithArguments(nsname).
+						WithTimeout(timeoutConfig.GetStatusTimeout).
+						WithPolling(500*time.Millisecond).
+						Should(Succeed(), fmt.Sprintf("%s was not accepted", name))
+				}
+			})
+
+			DescribeTable("should successfully authenticate and authorize via OIDC with authorization",
+				func(path, logoutPath, expectedBody string) {
+					Eventually(func() error {
+						ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.RequestTimeout)
+						defer cancel()
+
+						statusCode, body, err := framework.PerformOIDCLoginInCluster(
+							ctx,
+							resourceManager.ClientGoClient,
+							resourceManager.K8sConfig,
+							namespace, clientPodName,
+							nginxServiceIP, "cafe.example.com", path,
+							"testuser", "testpassword",
+						)
+						if err != nil {
+							return fmt.Errorf("OIDC login failed: %w", err)
+						}
+						if statusCode != 200 {
+							return fmt.Errorf("expected status 200, got %d, body: %s", statusCode, body)
+						}
+						if !strings.Contains(body, expectedBody) {
+							return fmt.Errorf("expected response body to contain %q, got: %s", expectedBody, body)
+						}
+						return nil
+					}).
+						WithTimeout(timeoutConfig.RequestTimeout).
+						WithPolling(5 * time.Second).
+						Should(Succeed())
+
+					Eventually(func() error {
+						ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.RequestTimeout)
+						defer cancel()
+
+						statusCode, body, err := framework.PerformOIDCLogoutInCluster(
+							ctx,
+							resourceManager.ClientGoClient,
+							resourceManager.K8sConfig,
+							namespace, clientPodName,
+							nginxServiceIP, "cafe.example.com",
+							logoutPath, path,
+						)
+						if err != nil {
+							return fmt.Errorf("OIDC logout failed: %w", err)
+						}
+						if statusCode != 200 {
+							return fmt.Errorf("expected logout status 200, got %d, body: %s", statusCode, body)
+						}
+						if !strings.Contains(body, "You are logged out") {
+							return fmt.Errorf(
+								"expected response to contain %q, got: %s",
+								"You are logged out", body,
+							)
+						}
+						return nil
+					}).
+						WithTimeout(timeoutConfig.RequestTimeout).
+						WithPolling(5 * time.Second).
+						Should(Succeed())
+				},
+				Entry("OIDC authz Any with email_verified claim",
+					"/oidc-authz-any", "/logout-authz-any", "URI: /oidc-authz-any"),
+				Entry("OIDC authz All with email_verified and preferred_username claims",
+					"/oidc-authz-all", "/logout-authz-all", "URI: /oidc-authz-all"),
+				Entry("OIDC authz Regex with email claim matching pattern",
+					"/oidc-authz-regex", "/logout-authz-regex", "URI: /oidc-authz-regex"),
+				Entry("OIDC authz with proxySetHeader for claims",
+					"/oidc-authz-header", "/logout-authz-header", "URI: /oidc-authz-header"),
+			)
+
+			Context("OIDC authorization nginx directives", func() {
+				var conf *framework.Payload
+				authzAnyProvider := fmt.Sprintf("%s_oidc-authz-any", namespace)
+
+				BeforeAll(func() {
+					var err error
+					conf, err = resourceManager.GetNginxConfig(nginxPodName, namespace, "")
+					Expect(err).ToNot(HaveOccurred())
+				})
+
+				DescribeTable("are set properly for",
+					func(expCfgs []framework.ExpectedNginxField) {
+						for _, expCfg := range expCfgs {
+							Expect(framework.ValidateNginxFieldExists(conf, expCfg)).To(Succeed())
+						}
+					},
+					Entry("OIDC auth_oidc directive in authz-protected location", []framework.ExpectedNginxField{
+						{
+							Directive: "auth_oidc",
+							Value:     authzAnyProvider,
+							File:      "http.conf",
+							Server:    "cafe.example.com",
+							Location:  "/oidc-authz-any",
+						},
+					}),
+					Entry("OIDC auth_jwt with token=$oidc_id_token for claim validation", []framework.ExpectedNginxField{
+						{
+							Directive:             "auth_jwt",
+							Value:                 "token=$oidc_id_token",
+							File:                  "http.conf",
+							Server:                "cafe.example.com",
+							Location:              "/oidc-authz-any",
+							ValueSubstringAllowed: true,
+						},
+					}),
+					Entry("OIDC auth_jwt_require directive for authorization", []framework.ExpectedNginxField{
+						{
+							Directive:             "auth_jwt_require",
+							Value:                 "oidc-authz-any",
+							File:                  "http.conf",
+							Server:                "cafe.example.com",
+							Location:              "/oidc-authz-any",
+							ValueSubstringAllowed: true,
+						},
+					}),
+					Entry("OIDC proxy_set_header for claim forwarding", []framework.ExpectedNginxField{
+						{
+							Directive:             "proxy_set_header",
+							Value:                 "X-OIDC-User",
+							File:                  "http.conf",
+							Server:                "cafe.example.com",
+							Location:              "/oidc-authz-header",
+							ValueSubstringAllowed: true,
+						},
+						{
+							Directive:             "proxy_set_header",
+							Value:                 "X-OIDC-Email",
+							File:                  "http.conf",
+							Server:                "cafe.example.com",
+							Location:              "/oidc-authz-header",
+							ValueSubstringAllowed: true,
+						},
+					}),
+				)
+			})
+		})
 	})
 })
 
