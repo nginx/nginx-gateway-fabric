@@ -1,6 +1,9 @@
 package upstreamsettings_test
 
 import (
+	"sort"
+	"strconv"
+	"strings"
 	"testing"
 
 	. "github.com/onsi/gomega"
@@ -390,4 +393,46 @@ func TestValidate_ValidateLoadBalancingMethod(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestValidate_LoadBalancingMethodListDeterministicOrder verifies that the list of supported load
+// balancing methods in the validation error message is emitted in a stable, sorted order. The list
+// is derived from a Go map, whose iteration order is randomized, so emitting it unsorted produces a
+// non-deterministic (flaky) error message (see
+// https://github.com/nginx/nginx-gateway-fabric/issues/5428).
+func TestValidate_LoadBalancingMethodListDeterministicOrder(t *testing.T) {
+	t.Parallel()
+
+	for _, plusEnabled := range []bool{false, true} {
+		t.Run("plusEnabled="+strconv.FormatBool(plusEnabled), func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			policy := &ngfAPI.UpstreamSettingsPolicy{
+				Spec: ngfAPI.UpstreamSettingsPolicySpec{
+					LoadBalancingMethod: helpers.GetPointer(ngfAPI.LoadBalancingType("invalid-method")),
+				},
+			}
+
+			v := upstreamsettings.NewValidator(validation.GenericValidator{}, plusEnabled)
+
+			// Validate multiple times to guard against the list only incidentally being sorted.
+			for range 10 {
+				conds := v.Validate(policy)
+				g.Expect(conds).To(HaveLen(1))
+
+				_, list, found := strings.Cut(conds[0].Message, "load balancing methods: ")
+				g.Expect(found).To(BeTrue())
+
+				methods := strings.Split(list, ", ")
+				g.Expect(methods).To(BeEquivalentTo(sortedCopy(methods)))
+			}
+		})
+	}
+}
+
+func sortedCopy(s []string) []string {
+	out := append([]string(nil), s...)
+	sort.Strings(out)
+	return out
 }

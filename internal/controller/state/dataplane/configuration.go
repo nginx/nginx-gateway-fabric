@@ -368,7 +368,29 @@ func buildL4Servers(logger logr.Logger, gateway *graph.Gateway, protocol v1.Prot
 		}
 	}
 
+	// L4 routes are iterated from a map, so sort the resulting servers to produce a stable order.
+	// Preserve order so that this doesn't trigger an unnecessary reload.
+	sort.Slice(servers, func(i, j int) bool {
+		if servers[i].Port != servers[j].Port {
+			return servers[i].Port < servers[j].Port
+		}
+		if servers[i].Hostname != servers[j].Hostname {
+			return servers[i].Hostname < servers[j].Hostname
+		}
+		return layer4UpstreamsKey(servers[i].Upstreams) < layer4UpstreamsKey(servers[j].Upstreams)
+	})
+
 	return servers
+}
+
+// layer4UpstreamsKey builds a stable comparison key from a server's upstreams so that L4 servers
+// sharing the same port and hostname are ordered deterministically.
+func layer4UpstreamsKey(upstreams []Layer4Upstream) string {
+	names := make([]string, 0, len(upstreams))
+	for _, u := range upstreams {
+		names = append(names, u.Name)
+	}
+	return strings.Join(names, ",")
 }
 
 // buildStreamUpstreams builds all stream upstreams.
@@ -455,6 +477,12 @@ func buildStreamUpstreams(
 	for _, up := range uniqueUpstreams {
 		upstreams = append(upstreams, up)
 	}
+
+	// Preserve order so that this doesn't trigger an unnecessary reload.
+	sort.Slice(upstreams, func(i, j int) bool {
+		return upstreams[i].Name < upstreams[j].Name
+	})
+
 	return upstreams
 }
 

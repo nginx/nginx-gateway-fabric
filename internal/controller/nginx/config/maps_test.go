@@ -211,6 +211,60 @@ func TestBuildAddHeaderMaps(t *testing.T) {
 	g.Expect(maps).To(ConsistOf(expectedMap))
 }
 
+// TestBuildAddHeaderMapsOrder verifies that the add-header maps are emitted in a stable, sorted
+// order regardless of the order the headers are encountered. The maps are derived from a Go map,
+// whose iteration order is randomized; emitting them unsorted causes spurious NGINX reloads (see
+// https://github.com/nginx/nginx-gateway-fabric/issues/5428).
+func TestBuildAddHeaderMapsOrder(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	// Header names deliberately provided in non-alphabetical order.
+	addHeaders := []dataplane.HTTPHeader{
+		{Name: "x-header-charlie", Value: "c"},
+		{Name: "x-header-alpha", Value: "a"},
+		{Name: "x-header-echo", Value: "e"},
+		{Name: "x-header-bravo", Value: "b"},
+		{Name: "x-header-delta", Value: "d"},
+	}
+
+	testServers := []dataplane.VirtualServer{
+		{
+			PathRules: []dataplane.PathRule{
+				{
+					MatchRules: []dataplane.MatchRule{
+						{
+							Filters: dataplane.HTTPFilters{
+								RequestHeaderModifiers: &dataplane.HTTPHeaderFilter{Add: addHeaders},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	expectedSources := []string{
+		"${http_x_header_alpha}",
+		"${http_x_header_bravo}",
+		"${http_x_header_charlie}",
+		"${http_x_header_delta}",
+		"${http_x_header_echo}",
+	}
+
+	// Build several times to guard against the result only incidentally being sorted.
+	for range 10 {
+		maps := buildAddHeaderMaps(testServers)
+
+		sources := make([]string, 0, len(maps))
+		for _, m := range maps {
+			sources = append(sources, m.Source)
+		}
+
+		g.Expect(sources).To(Equal(expectedSources))
+	}
+}
+
 func TestExecuteStreamMaps(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
