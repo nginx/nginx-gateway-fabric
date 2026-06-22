@@ -236,10 +236,19 @@ type AuthBasic struct {
 // AuthJWT holds the configuration for JWT authentication using the auth_jwt directive.
 // See https://nginx.org/en/docs/http/ngx_http_auth_jwt_module.html
 type AuthJWT struct {
-	KeyCache *ngfAPI.Duration
-	Remote   *AuthJWTRemote
-	Realm    string
-	File     string
+	KeyCache        *ngfAPI.Duration
+	Remote          *AuthJWTRemote
+	Leeway          *ngfAPI.Duration
+	Realm           string
+	File            string
+	AuthRequire     string
+	ProxySetHeaders []Header
+}
+
+// ProxySetHeaderClaim maps a claim variable to a proxy_set_header name.
+type ProxySetHeaderClaim struct {
+	HeaderName    string
+	ClaimVariable string
 }
 
 // AuthJWTRemote holds configuration for remote JWKS retrieval.
