@@ -269,8 +269,8 @@ spec:
                 properties:
                   authorization:
                     description: |-
-                      Authorization specifies a set of required claim rules
-                      that a token's claim must match to be authorized, given the require type defined.
+                      Authorization defines the authorization (authz) specification.
+                      Enables configuration of token claim validation.
                     properties:
                       require:
                         default: Any
@@ -361,6 +361,15 @@ spec:
                     - rules
                     type: object
                   caCertificateRefs:
+                    description: |-
+                      CACertificateRefs references a list of secrets containing trusted CA certificates
+                      in PEM format used to verify the certificates of the OpenID Provider endpoints.
+                      The referenced secrets must contain an entry with the key "ca.crt".
+                      Only one secret can be referenced currently.
+                      If not specified, the system CA bundle is used.
+
+                      Directive: https://nginx.org/en/docs/http/ngx_http_oidc_module.html#ssl_trusted_certificate
+                      NGINX Default: system CA bundle
                     items:
                       description: LocalObjectReference specifies a local Kubernetes
                         object.
@@ -371,12 +380,20 @@ spec:
                       required:
                       - name
                       type: object
+                    maxItems: 1
                     type: array
                   clientID:
+                    description: |-
+                      ClientID is the client identifier registered with the OpenID Provider.
+                      Directive: https://nginx.org/en/docs/http/ngx_http_oidc_module.html#client_id
+                    minLength: 1
                     type: string
                   clientSecretRef:
-                    description: LocalObjectReference specifies a local Kubernetes
-                      object.
+                    description: |-
+                      ClientSecretRef references a Kubernetes secret which contains the OIDC client secret to be used in the
+                      Authentication Request: https://openid.net/specs/openid-connect-core-1_0.html#AuthRequest.
+                      The referenced Secret must contain an entry with the key "client-secret".
+                      Directive: https://nginx.org/en/docs/http/ngx_http_oidc_module.html#client_secret
                     properties:
                       name:
                         description: Name is the name of the referenced object.
@@ -385,10 +402,17 @@ spec:
                     - name
                     type: object
                   configURL:
+                    description: |-
+                      ConfigURL sets a custom URL to retrieve the OpenID Provider metadata.
+                      Directive: https://nginx.org/en/docs/http/ngx_http_oidc_module.html#config_url
+                      NGINX Default: <issuer>/.well-known/openid-configuration
+                    pattern: ^https:\/\/[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*(:[0-9]{1,5})?(\/[a-zA-Z0-9._~:\/?@!&'()*+,=-]*)?$
                     type: string
                   crlSecretRef:
-                    description: LocalObjectReference specifies a local Kubernetes
-                      object.
+                    description: |-
+                      CRLSecretRef references a Secret containing a certificate
+                      revocation list in PEM format. The referenced Secret must contain an entry with the key "ca.crl".
+                      This is used to verify that certificates presented by the OpenID Provider endpoints have not been revoked.
                     properties:
                       name:
                         description: Name is the name of the referenced object.
@@ -399,12 +423,26 @@ spec:
                   extraAuthArgs:
                     additionalProperties:
                       type: string
+                    description: |-
+                      ExtraAuthArgs sets additional query arguments for the authentication request URL.
+                      Arguments are appended with "&". For example: "prompt=consent&audience=api".
+                      Directive: https://nginx.org/en/docs/http/ngx_http_oidc_module.html#extra_auth_args
+                    maxProperties: 16
                     type: object
                   issuer:
+                    description: |-
+                      Issuer is the URL of the OpenID Provider.
+                      Must exactly match the "issuer" value from the provider's
+                      .well-known/openid-configuration endpoint.
+                      Directive: https://nginx.org/en/docs/http/ngx_http_oidc_module.html#issuer
+                      Examples:
+                        - Keycloak: "https://keycloak.example.com/realms/my-realm"
+                        - Okta: "https://dev-123456.okta.com/oauth2/default"
+                        - Auth0: "https://my-tenant.auth0.com/"
+                    pattern: ^https:\/\/[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*(:[0-9]{1,5})?(\/[a-zA-Z0-9._~:\/?@!&'()*+,=-]*)?$
                     type: string
                   logout:
-                    description: OIDCLogoutConfig defines the logout behavior for
-                      OIDC authentication.
+                    description: Logout defines the logout behavior for OIDC authentication.
                     properties:
                       frontChannelLogoutURI:
                         description: |-
@@ -438,12 +476,24 @@ spec:
                         type: string
                     type: object
                   pkce:
+                    description: |-
+                      PKCE enables Proof Key for Code Exchange (PKCE) for the authentication flow.
+                      If nil, NGINX automatically enables PKCE when the OpenID Provider requires it.
+                      Directive: https://nginx.org/en/docs/http/ngx_http_oidc_module.html#pkce
                     type: boolean
                   redirectURI:
+                    description: |-
+                      RedirectURI sets a custom redirect URI for the OIDC callback.
+                      If a path-only URI is specified, a callback location block is created to handle the redirect from the OIDC provider.
+                      If a full URI is specified, it points to an external callback handler; no location block is created.
+                      If not specified, defaults to /oidc_callback_<filternamespace>_<filtername>.
+                      Directive: https://nginx.org/en/docs/http/ngx_http_oidc_module.html#redirect_uri
+                      NGINX Default: /oidc_callback
+                      Example: /oidc_callback, https://cafe.example.com:8442/oidc_callback
+                    pattern: ^(https:\/\/[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*(:[0-9]{1,5})?(\/[a-zA-Z0-9._~:\/?@!&'()*+,=-]*)?|\/[a-zA-Z0-9._~:\/?@!&'()*+,=-]*)$
                     type: string
                   session:
-                    description: OIDCSessionConfig configures session management for
-                      OIDC authentication.
+                    description: Session configures session management for OIDC authentication.
                     properties:
                       cookieName:
                         description: |-
