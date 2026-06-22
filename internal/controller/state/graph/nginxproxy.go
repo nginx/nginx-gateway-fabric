@@ -371,7 +371,7 @@ func validateNginxProxy(
 		}
 	}
 
-	allErrs = append(allErrs, validateLogging(npCfg, plus)...)
+	allErrs = append(allErrs, validateLogging(validator, npCfg, plus)...)
 
 	allErrs = append(allErrs, validateDNSResolver(validator, npCfg)...)
 
@@ -379,14 +379,18 @@ func validateNginxProxy(
 
 	allErrs = append(allErrs, validateNginxPlus(npCfg)...)
 
-	allErrs = append(allErrs, validateServerTokens(npCfg, plus)...)
+	allErrs = append(allErrs, validateServerTokens(validator, npCfg, plus)...)
 
 	allErrs = append(allErrs, validateCompression(validator, npCfg)...)
 
 	return allErrs
 }
 
-func validateLogging(npCfg *ngfAPIv1alpha2.NginxProxy, plus bool) field.ErrorList {
+func validateLogging(
+	validator validation.GenericValidator,
+	npCfg *ngfAPIv1alpha2.NginxProxy,
+	plus bool,
+) field.ErrorList {
 	var allErrs field.ErrorList
 	spec := field.NewPath("spec")
 
@@ -428,6 +432,22 @@ func validateLogging(npCfg *ngfAPIv1alpha2.NginxProxy, plus bool) field.ErrorLis
 					"JSON-formatted error logs are only supported with NGINX Plus",
 				),
 			)
+		}
+
+		if logging.AccessLog != nil && logging.AccessLog.Format != nil {
+			accessLogFormatPath := loggingPath.Child("accessLog", "format")
+			accessLogFormat := *logging.AccessLog.Format
+
+			if err := validator.ValidateAccessLogFormatString(accessLogFormat); err != nil {
+				allErrs = append(
+					allErrs,
+					field.Invalid(
+						accessLogFormatPath,
+						accessLogFormat,
+						err.Error(),
+					),
+				)
+			}
 		}
 	}
 
@@ -619,18 +639,24 @@ func validateNginxPlus(npCfg *ngfAPIv1alpha2.NginxProxy) field.ErrorList {
 	return allErrs
 }
 
-func validateServerTokens(npCfg *ngfAPIv1alpha2.NginxProxy, plus bool) field.ErrorList {
+func validateServerTokens(
+	validator validation.GenericValidator,
+	npCfg *ngfAPIv1alpha2.NginxProxy,
+	plus bool,
+) field.ErrorList {
+	if npCfg.Spec.ServerTokens == nil {
+		return nil
+	}
+
 	var allErrs field.ErrorList
-	spec := field.NewPath("spec")
+	serverTokens := *npCfg.Spec.ServerTokens
+	serverTokensPath := field.NewPath("spec").Child("serverTokens")
 
-	if npCfg.Spec.ServerTokens != nil && !plus {
-		serverTokens := *npCfg.Spec.ServerTokens
-		serverTokensPath := spec.Child("serverTokens")
-
-		switch serverTokens {
-		case ServerTokenOff, ServerTokenOn, ServerTokenBuild:
-			// only keyword server_tokens off|on|build is allowed in OSS
-		default:
+	switch serverTokens {
+	case ServerTokenOff, ServerTokenOn, ServerTokenBuild:
+		// keywords are always valid for both OSS and Plus
+	default:
+		if !plus {
 			allErrs = append(
 				allErrs,
 				field.Invalid(
@@ -639,6 +665,11 @@ func validateServerTokens(npCfg *ngfAPIv1alpha2.NginxProxy, plus bool) field.Err
 					"custom string values for serverTokens are only allowed with NGINX Plus."+
 						" For NGINX OSS, allowed values are 'off', 'on', and 'build'.",
 				),
+			)
+		} else if err := validator.ValidateServerTokensValue(serverTokens); err != nil {
+			allErrs = append(
+				allErrs,
+				field.Invalid(serverTokensPath, serverTokens, err.Error()),
 			)
 		}
 	}

@@ -2629,3 +2629,50 @@ func TestProcessGRPCRouteRules_UnsupportedFields(t *testing.T) {
 		})
 	}
 }
+
+func TestProcessGRPCRouteRule_BackendRefFilters(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	// A GRPCRouteRule whose BackendRef carries a filter must not panic.
+	specRule := v1.GRPCRouteRule{
+		BackendRefs: []v1.GRPCBackendRef{
+			{
+				BackendRef: v1.BackendRef{
+					BackendObjectReference: v1.BackendObjectReference{
+						Name: "backend",
+						Port: helpers.GetPointer[v1.PortNumber](80),
+					},
+				},
+				Filters: []v1.GRPCRouteFilter{
+					{
+						Type: v1.GRPCRouteFilterRequestHeaderModifier,
+						RequestHeaderModifier: &v1.HTTPHeaderFilter{
+							Add: []v1.HTTPHeader{
+								{Name: "X-Test", Value: "value"},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	grpcRouteNsName := types.NamespacedName{
+		Namespace: "test",
+		Name:      "grpc-route",
+	}
+
+	rule, ruleErrors := processGRPCRouteRule(
+		specRule,
+		0,
+		validation.SkipValidator{},
+		nil,
+		grpcRouteNsName,
+		FeatureFlags{},
+	)
+
+	g.Expect(ruleErrors.invalid).To(BeEmpty())
+	g.Expect(rule.RouteBackendRefs).To(HaveLen(1))
+	g.Expect(rule.RouteBackendRefs[0].Filters).To(HaveLen(1))
+}

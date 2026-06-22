@@ -8922,7 +8922,11 @@ spec:
                           Format specifies the custom log format string.
                           If not specified, NGINX default 'combined' format is used.
                           For now only path /dev/stdout can be used.
+                          Single quotes and line breaks are not allowed because the format is
+                          rendered inside a single-quoted NGINX log_format directive.
                           See https://nginx.org/en/docs/http/ngx_http_log_module.html#log_format
+                        maxLength: 4096
+                        pattern: ^[^'\x0A\x0D]*$
                         type: string
                     type: object
                   agentLevel:
@@ -9092,6 +9096,8 @@ spec:
                   See: https://nginx.org/en/docs/http/ngx_http_core_module.html#server_tokens
                   NGINX directive: https://nginx.org/en/docs/http/ngx_http_core_module.html#server_tokens
                   Default is "off".
+                maxLength: 255
+                pattern: ^([^"\\\x0A\x0D]|\\[^\x0A\x0D])*$
                 type: string
               telemetry:
                 description: Telemetry specifies the OpenTelemetry configuration.
