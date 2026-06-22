@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"net"
+	"sort"
 	gotemplate "text/template"
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
@@ -41,6 +42,14 @@ type oidcConfiguration struct {
 	TokenHint              string
 }
 
+// ClaimSet represents a single auth_jwt_claim_set directive with its NGINX variable name and claim path components.
+type ClaimSet struct {
+	// Variable is the NGINX variable name (e.g., "$jwt_claim_sub").
+	Variable string
+	// Claims are the claim path components (e.g., ["realm_access", "roles"]).
+	Claims []string
+}
+
 type httpConfig struct {
 	DNSResolver             *dataplane.DNSResolverConfig
 	AccessLog               *AccessLog
@@ -48,9 +57,10 @@ type httpConfig struct {
 	GatewaySecretID         dataplane.SSLKeyPairID
 	NginxReadinessProbePath string
 	ServerTokens            string
-	OIDCProviders           []*oidcConfiguration
 	WAFCookieSeed           string
+	ClaimSets               []ClaimSet
 	Includes                []shared.Include
+	OIDCProviders           []*oidcConfiguration
 	NginxReadinessProbePort int32
 	IPFamily                shared.IPFamily
 	HTTP2                   bool
@@ -69,6 +79,11 @@ func executeBaseHTTPConfig(conf dataplane.Configuration, generator policies.Gene
 	policyIncludes := createIncludesFromPolicyGenerateResult(generator.GenerateForHTTP(conf.BaseHTTPConfig.Policies))
 	includes = append(includes, policyIncludes...)
 
+	authZIncludes := createIncludesFromAuthZConfigs(conf.BaseHTTPConfig.AuthZConfigs)
+	includes = append(includes, authZIncludes...)
+
+	claimSets := collectAuthZClaimSets(conf.BaseHTTPConfig.AuthZConfigs)
+
 	hc := httpConfig{
 		HTTP2:                   conf.BaseHTTPConfig.HTTP2,
 		Includes:                includes,
@@ -83,6 +98,7 @@ func executeBaseHTTPConfig(conf dataplane.Configuration, generator policies.Gene
 		Compression:             conf.BaseHTTPConfig.Compression,
 		WAF:                     conf.WAF.Enabled,
 		WAFCookieSeed:           conf.WAF.CookieSeed,
+		ClaimSets:               claimSets,
 	}
 
 	results := make([]executeResult, 0, len(includes)+1)
@@ -205,4 +221,40 @@ func buildAccessLog(accessLogConfig *dataplane.AccessLog) *AccessLog {
 		return accessLog
 	}
 	return nil
+}
+
+// collectAuthZClaimSets collects all ClaimSets from AuthZConfigs
+// and returns a slice sorted by variable name for a deterministic output.
+func collectAuthZClaimSets(authZConfigs []*dataplane.AuthZConfig) []ClaimSet {
+	if len(authZConfigs) == 0 {
+		return nil
+	}
+
+	seen := make(map[string][]string)
+
+	for _, cfg := range authZConfigs {
+		if cfg == nil {
+			continue
+		}
+		for k, v := range cfg.AuthClaimSets {
+			if _, exists := seen[k]; !exists {
+				seen[k] = v
+			}
+		}
+	}
+
+	if len(seen) == 0 {
+		return nil
+	}
+
+	result := make([]ClaimSet, 0, len(seen))
+	for variable, claims := range seen {
+		result = append(result, ClaimSet{Variable: variable, Claims: claims})
+	}
+
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].Variable < result[j].Variable
+	})
+
+	return result
 }

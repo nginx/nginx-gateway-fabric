@@ -8,8 +8,10 @@ import (
 
 	. "github.com/onsi/gomega"
 
+	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/policiesfakes"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/shared"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
@@ -887,6 +889,637 @@ func TestExecuteBaseHttp_OIDCProviders(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestCollectAuthZClaimSets(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		expClaimSets []ClaimSet
+		authZConfigs []*dataplane.AuthZConfig
+	}{
+		{
+			name:         "nil authZConfigs returns nil",
+			authZConfigs: nil,
+			expClaimSets: nil,
+		},
+		{
+			name:         "empty authZConfigs returns nil",
+			authZConfigs: []*dataplane.AuthZConfig{},
+			expClaimSets: nil,
+		},
+		{
+			name:         "nil entry in authZConfigs is skipped",
+			authZConfigs: []*dataplane.AuthZConfig{nil},
+			expClaimSets: nil,
+		},
+		{
+			name: "single config with one claim set",
+			authZConfigs: []*dataplane.AuthZConfig{
+				{
+					FilterNsName: "test-ns_my-filter",
+					AuthClaimSets: map[string][]string{
+						"$jwt_claim_sub": {"sub"},
+					},
+				},
+			},
+			expClaimSets: []ClaimSet{
+				{Variable: "$jwt_claim_sub", Claims: []string{"sub"}},
+			},
+		},
+		{
+			name: "duplicate claim sets across configs are deduplicated",
+			authZConfigs: []*dataplane.AuthZConfig{
+				{
+					FilterNsName: "test-ns_filter-a",
+					AuthClaimSets: map[string][]string{
+						"$jwt_claim_sub": {"sub"},
+					},
+				},
+				{
+					FilterNsName: "test-ns_filter-b",
+					AuthClaimSets: map[string][]string{
+						"$jwt_claim_sub":  {"sub"},
+						"$jwt_claim_role": {"role"},
+					},
+				},
+			},
+			expClaimSets: []ClaimSet{
+				{Variable: "$jwt_claim_role", Claims: []string{"role"}},
+				{Variable: "$jwt_claim_sub", Claims: []string{"sub"}},
+			},
+		},
+		{
+			name: "nested claim set parts are collected correctly",
+			authZConfigs: []*dataplane.AuthZConfig{
+				{
+					FilterNsName: "test-ns_my-filter",
+					AuthClaimSets: map[string][]string{
+						"$jwt_claim_roles": {"realm_access", "roles"},
+					},
+				},
+			},
+			expClaimSets: []ClaimSet{
+				{Variable: "$jwt_claim_roles", Claims: []string{"realm_access", "roles"}},
+			},
+		},
+		{
+			name: "config with claim sets only and no rule maps",
+			authZConfigs: []*dataplane.AuthZConfig{
+				{
+					FilterNsName: "test-ns_my-filter",
+					AuthClaimSets: map[string][]string{
+						"$jwt_claim_sub":  {"sub"},
+						"$jwt_claim_role": {"role"},
+					},
+				},
+			},
+			expClaimSets: []ClaimSet{
+				{Variable: "$jwt_claim_role", Claims: []string{"role"}},
+				{Variable: "$jwt_claim_sub", Claims: []string{"sub"}},
+			},
+		},
+		{
+			name: "config with no claim sets returns empty",
+			authZConfigs: []*dataplane.AuthZConfig{
+				{
+					FilterNsName: "test-ns_my-filter",
+					RuleMaps: []dataplane.AuthZRuleMap{
+						{
+							Require: ngfAPIv1alpha1.RequireTypeAll,
+							Maps: []shared.Map{
+								{
+									Source:   "$jwt_claim_sub",
+									Variable: "$test_rule_0_all",
+									Parameters: []shared.MapParameter{
+										{Value: "admin", Result: "1"},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expClaimSets: nil,
+		},
+		{
+			name: "nil configs among valid configs are skipped",
+			authZConfigs: []*dataplane.AuthZConfig{
+				nil,
+				{
+					FilterNsName: "test-ns_my-filter",
+					AuthClaimSets: map[string][]string{
+						"$jwt_claim_sub": {"sub"},
+					},
+				},
+				nil,
+			},
+			expClaimSets: []ClaimSet{
+				{Variable: "$jwt_claim_sub", Claims: []string{"sub"}},
+			},
+		},
+		{
+			name: "results are sorted by variable name",
+			authZConfigs: []*dataplane.AuthZConfig{
+				{
+					FilterNsName: "test-ns_my-filter",
+					AuthClaimSets: map[string][]string{
+						"$jwt_claim_sub":  {"sub"},
+						"$jwt_claim_aud":  {"aud"},
+						"$jwt_claim_role": {"role"},
+					},
+				},
+			},
+			expClaimSets: []ClaimSet{
+				{Variable: "$jwt_claim_aud", Claims: []string{"aud"}},
+				{Variable: "$jwt_claim_role", Claims: []string{"role"}},
+				{Variable: "$jwt_claim_sub", Claims: []string{"sub"}},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			claimSets := collectAuthZClaimSets(test.authZConfigs)
+
+			g.Expect(claimSets).To(Equal(test.expClaimSets))
+		})
+	}
+}
+
+func TestExecuteBaseHttp_AuthZIncludes(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name                   string
+		expHTTPContains        []string
+		expHTTPNotContains     []string
+		expIncludeDestinations []string
+		expIncludeContains     []string
+		conf                   dataplane.Configuration
+		expResultCount         int
+	}{
+		{
+			name:           "no authz configs produces only http.conf with no authz directives",
+			conf:           dataplane.Configuration{},
+			expResultCount: 1,
+			expHTTPNotContains: []string{
+				"auth_jwt_claim_set",
+				"include " + includesFolder,
+			},
+		},
+		{
+			name: "nil authz configs produces only http.conf with no authz directives",
+			conf: dataplane.Configuration{
+				BaseHTTPConfig: dataplane.BaseHTTPConfig{AuthZConfigs: nil},
+			},
+			expResultCount: 1,
+			expHTTPNotContains: []string{
+				"auth_jwt_claim_set",
+			},
+		},
+		{
+			name: "single config with one rule map and one claim set",
+			conf: dataplane.Configuration{
+				BaseHTTPConfig: dataplane.BaseHTTPConfig{AuthZConfigs: []*dataplane.AuthZConfig{
+					{
+						FilterNsName: "test-ns_my-filter",
+						AuthClaimSets: map[string][]string{
+							"$jwt_claim_sub": {"sub"},
+						},
+						RuleMaps: []dataplane.AuthZRuleMap{
+							{
+								Require: ngfAPIv1alpha1.RequireTypeAll,
+								Maps: []shared.Map{
+									{
+										Source:   "$jwt_claim_sub",
+										Variable: "$test_rule_0_all",
+										Parameters: []shared.MapParameter{
+											{Value: "admin", Result: "1"},
+											{Value: "default", Result: "0"},
+										},
+									},
+								},
+							},
+						},
+					},
+				}},
+			},
+			expResultCount: 2, // http.conf + 1 include
+			expHTTPContains: []string{
+				"include " + includesFolder + "/test-ns_my-filter_rule_0_require_all.conf;",
+				"auth_jwt_claim_set $jwt_claim_sub sub;",
+			},
+			expHTTPNotContains: []string{ // map should be in includes file only
+				"map $jwt_claim_sub $test_rule_0_all",
+			},
+			expIncludeDestinations: []string{
+				includesFolder + "/test-ns_my-filter_rule_0_require_all.conf",
+			},
+			expIncludeContains: []string{
+				"map $jwt_claim_sub $test_rule_0_all",
+				"admin 1;",
+			},
+		},
+		{
+			name: "config with RequireTypeAny generates require_any include",
+			conf: dataplane.Configuration{
+				BaseHTTPConfig: dataplane.BaseHTTPConfig{AuthZConfigs: []*dataplane.AuthZConfig{
+					{
+						FilterNsName: "test-ns_my-filter",
+						RuleMaps: []dataplane.AuthZRuleMap{
+							{
+								Require: ngfAPIv1alpha1.RequireTypeAny,
+								Maps: []shared.Map{
+									{
+										Source:   "$jwt_claim_role",
+										Variable: "$test_rule_0_any",
+										Parameters: []shared.MapParameter{
+											{Value: "editor", Result: "1"},
+											{Value: "default", Result: "0"},
+										},
+									},
+								},
+							},
+						},
+					},
+				}},
+			},
+			expResultCount: 2,
+			expHTTPContains: []string{
+				"include " + includesFolder + "/test-ns_my-filter_rule_0_require_any.conf;",
+			},
+			expIncludeDestinations: []string{
+				includesFolder + "/test-ns_my-filter_rule_0_require_any.conf",
+			},
+			expIncludeContains: []string{
+				"map $jwt_claim_role $test_rule_0_any",
+			},
+		},
+		{
+			name: "config with AuthZMap generates top-level authz include",
+			conf: dataplane.Configuration{
+				BaseHTTPConfig: dataplane.BaseHTTPConfig{AuthZConfigs: []*dataplane.AuthZConfig{
+					{
+						FilterNsName: "test-ns_my-filter",
+						RuleMaps: []dataplane.AuthZRuleMap{
+							{
+								Require: ngfAPIv1alpha1.RequireTypeAll,
+								Maps: []shared.Map{
+									{
+										Source:   "$jwt_claim_sub",
+										Variable: "$test_rule_0_all",
+										Parameters: []shared.MapParameter{
+											{Value: "admin", Result: "1"},
+											{Value: "default", Result: "0"},
+										},
+									},
+								},
+							},
+						},
+						AuthZMap: &dataplane.AuthZMap{
+							Require: ngfAPIv1alpha1.RequireTypeAll,
+							Map: shared.Map{
+								Source:   "$test_rule_0_all",
+								Variable: "$test_authz_all",
+								Parameters: []shared.MapParameter{
+									{Value: "1", Result: "1"},
+									{Value: "default", Result: "0"},
+								},
+							},
+						},
+					},
+				}},
+			},
+			expResultCount: 3, // http.conf + rule include + authz include
+			expHTTPContains: []string{
+				"include " + includesFolder + "/test-ns_my-filter_rule_0_require_all.conf;",
+				"include " + includesFolder + "/test-ns_my-filter_authz_require_all.conf;",
+			},
+			expIncludeDestinations: []string{
+				includesFolder + "/test-ns_my-filter_rule_0_require_all.conf",
+				includesFolder + "/test-ns_my-filter_authz_require_all.conf",
+			},
+			expIncludeContains: []string{
+				"map $jwt_claim_sub $test_rule_0_all",
+				"admin 1;",
+				"default 0;",
+				"map $test_rule_0_all $test_authz_all",
+				"1 1;",
+				"default 0;",
+			},
+		},
+		{
+			name: "multiple AuthZConfigs produce multiple includes",
+			conf: dataplane.Configuration{
+				BaseHTTPConfig: dataplane.BaseHTTPConfig{AuthZConfigs: []*dataplane.AuthZConfig{
+					{
+						FilterNsName: "test-ns_filter-a",
+						AuthClaimSets: map[string][]string{
+							"$jwt_claim_sub": {"sub"},
+						},
+						RuleMaps: []dataplane.AuthZRuleMap{
+							{
+								Require: ngfAPIv1alpha1.RequireTypeAll,
+								Maps: []shared.Map{
+									{
+										Source:   "$jwt_claim_sub",
+										Variable: "$a_rule_0_all",
+										Parameters: []shared.MapParameter{
+											{Value: "admin", Result: "1"},
+											{Value: "default", Result: "0"},
+										},
+									},
+								},
+							},
+						},
+					},
+					{
+						FilterNsName: "test-ns_filter-b",
+						AuthClaimSets: map[string][]string{
+							"$jwt_claim_role": {"role"},
+						},
+						RuleMaps: []dataplane.AuthZRuleMap{
+							{
+								Require: ngfAPIv1alpha1.RequireTypeAny,
+								Maps: []shared.Map{
+									{
+										Source:   "$jwt_claim_role",
+										Variable: "$b_rule_0_any",
+										Parameters: []shared.MapParameter{
+											{Value: "editor", Result: "1"},
+											{Value: "default", Result: "0"},
+										},
+									},
+								},
+							},
+						},
+					},
+				}},
+			},
+			expResultCount: 3, // http.conf + 2 includes
+			expHTTPContains: []string{
+				"include " + includesFolder + "/test-ns_filter-a_rule_0_require_all.conf;",
+				"include " + includesFolder + "/test-ns_filter-b_rule_0_require_any.conf;",
+				"auth_jwt_claim_set $jwt_claim_sub sub;",
+				"auth_jwt_claim_set $jwt_claim_role role;",
+			},
+			expIncludeDestinations: []string{
+				includesFolder + "/test-ns_filter-a_rule_0_require_all.conf",
+				includesFolder + "/test-ns_filter-b_rule_0_require_any.conf",
+			},
+			expIncludeContains: []string{
+				"map $jwt_claim_sub $a_rule_0_all",
+				"admin 1;",
+				"default 0;",
+				"map $jwt_claim_role $b_rule_0_any",
+				"editor 1;",
+				"default 0;",
+			},
+		},
+		{
+			name: "duplicate claim sets across configs are deduplicated in http.conf",
+			conf: dataplane.Configuration{
+				BaseHTTPConfig: dataplane.BaseHTTPConfig{AuthZConfigs: []*dataplane.AuthZConfig{
+					{
+						FilterNsName: "test-ns_filter-a",
+						AuthClaimSets: map[string][]string{
+							"$jwt_claim_sub": {"sub"},
+						},
+						RuleMaps: []dataplane.AuthZRuleMap{
+							{
+								Require: ngfAPIv1alpha1.RequireTypeAll,
+								Maps: []shared.Map{
+									{
+										Source:   "$jwt_claim_sub",
+										Variable: "$a_rule_0_all",
+										Parameters: []shared.MapParameter{
+											{Value: "admin", Result: "1"},
+										},
+									},
+								},
+							},
+						},
+					},
+					{
+						FilterNsName: "test-ns_filter-b",
+						AuthClaimSets: map[string][]string{
+							"$jwt_claim_sub": {"sub"}, // duplicate
+						},
+						RuleMaps: []dataplane.AuthZRuleMap{
+							{
+								Require: ngfAPIv1alpha1.RequireTypeAll,
+								Maps: []shared.Map{
+									{
+										Source:   "$jwt_claim_sub",
+										Variable: "$b_rule_0_all",
+										Parameters: []shared.MapParameter{
+											{Value: "viewer", Result: "1"},
+										},
+									},
+								},
+							},
+						},
+					},
+				}},
+			},
+			expResultCount: 3, // http.conf + 2 includes
+			expHTTPContains: []string{
+				"auth_jwt_claim_set $jwt_claim_sub sub;",
+			},
+		},
+		{
+			name: "nested claim set parts render correctly in http.conf",
+			conf: dataplane.Configuration{
+				BaseHTTPConfig: dataplane.BaseHTTPConfig{AuthZConfigs: []*dataplane.AuthZConfig{
+					{
+						FilterNsName: "test-ns_my-filter",
+						AuthClaimSets: map[string][]string{
+							"$jwt_claim_roles": {"realm_access", "roles"},
+						},
+						RuleMaps: []dataplane.AuthZRuleMap{
+							{
+								Require: ngfAPIv1alpha1.RequireTypeAll,
+								Maps: []shared.Map{
+									{
+										Source:   "$jwt_claim_roles",
+										Variable: "$test_rule_0_all",
+										Parameters: []shared.MapParameter{
+											{Value: "admin", Result: "1"},
+											{Value: "default", Result: "0"},
+										},
+									},
+								},
+							},
+						},
+					},
+				}},
+			},
+			expResultCount: 2,
+			expHTTPContains: []string{
+				"auth_jwt_claim_set $jwt_claim_roles realm_access roles;",
+			},
+		},
+		{
+			name: "multiple different claim sets all render in http.conf",
+			conf: dataplane.Configuration{
+				BaseHTTPConfig: dataplane.BaseHTTPConfig{AuthZConfigs: []*dataplane.AuthZConfig{
+					{
+						FilterNsName: "test-ns_my-filter",
+						AuthClaimSets: map[string][]string{
+							"$jwt_claim_sub":  {"sub"},
+							"$jwt_claim_role": {"role"},
+							"$jwt_claim_aud":  {"aud"},
+						},
+						RuleMaps: []dataplane.AuthZRuleMap{
+							{
+								Require: ngfAPIv1alpha1.RequireTypeAll,
+								Maps: []shared.Map{
+									{
+										Source:   "$jwt_claim_sub",
+										Variable: "$test_rule_0_all",
+										Parameters: []shared.MapParameter{
+											{Value: "admin", Result: "1"},
+											{Value: "default", Result: "0"},
+										},
+									},
+								},
+							},
+						},
+					},
+				}},
+			},
+			expResultCount: 2,
+			expHTTPContains: []string{
+				"auth_jwt_claim_set $jwt_claim_sub sub;",
+				"auth_jwt_claim_set $jwt_claim_role role;",
+				"auth_jwt_claim_set $jwt_claim_aud aud;",
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			res := executeBaseHTTPConfig(test.conf, &policiesfakes.FakeGenerator{})
+			g.Expect(res).To(HaveLen(test.expResultCount))
+
+			sort.Slice(res, func(i, j int) bool {
+				return res[i].dest < res[j].dest
+			})
+
+			// First result should always be http.conf
+			g.Expect(res[0].dest).To(Equal(httpConfigFile))
+			httpRes := string(res[0].data)
+
+			for _, expContains := range test.expHTTPContains {
+				g.Expect(httpRes).To(ContainSubstring(expContains),
+					"http.conf should contain: %s", expContains)
+			}
+
+			for _, expNotContains := range test.expHTTPNotContains {
+				g.Expect(httpRes).NotTo(ContainSubstring(expNotContains),
+					"http.conf should NOT contain: %s", expNotContains)
+			}
+
+			// Check include file destinations
+			for i, expDest := range test.expIncludeDestinations {
+				found := false
+				for _, r := range res[1:] {
+					if r.dest == expDest {
+						found = true
+						break
+					}
+				}
+				g.Expect(found).To(BeTrue(),
+					"expected include destination %q not found (index %d)", expDest, i)
+			}
+
+			// Check include file contents
+			for _, expContent := range test.expIncludeContains {
+				found := false
+				for _, r := range res[1:] {
+					if strings.Contains(string(r.data), expContent) {
+						found = true
+						break
+					}
+				}
+				g.Expect(found).To(BeTrue(),
+					"expected content %q not found in any include file", expContent)
+			}
+		})
+	}
+}
+
+// TestExecuteBaseHttp_AuthZIncludes_ClaimSetDeduplication verifies that duplicate claim sets
+// across multiple AuthZConfigs result in only one auth_jwt_claim_set directive in http.conf.
+func TestExecuteBaseHttp_AuthZIncludes_ClaimSetDeduplication(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	conf := dataplane.Configuration{
+		BaseHTTPConfig: dataplane.BaseHTTPConfig{AuthZConfigs: []*dataplane.AuthZConfig{
+			{
+				FilterNsName: "test-ns_filter-a",
+				AuthClaimSets: map[string][]string{
+					"$jwt_claim_sub": {"sub"},
+				},
+				RuleMaps: []dataplane.AuthZRuleMap{
+					{
+						Require: ngfAPIv1alpha1.RequireTypeAll,
+						Maps: []shared.Map{
+							{
+								Source:   "$jwt_claim_sub",
+								Variable: "$a_rule_0_all",
+								Parameters: []shared.MapParameter{
+									{Value: "admin", Result: "1"},
+								},
+							},
+						},
+					},
+				},
+			},
+			{
+				FilterNsName: "test-ns_filter-b",
+				AuthClaimSets: map[string][]string{
+					"$jwt_claim_sub": {"sub"}, // duplicate
+				},
+				RuleMaps: []dataplane.AuthZRuleMap{
+					{
+						Require: ngfAPIv1alpha1.RequireTypeAll,
+						Maps: []shared.Map{
+							{
+								Source:   "$jwt_claim_sub",
+								Variable: "$b_rule_0_all",
+								Parameters: []shared.MapParameter{
+									{Value: "viewer", Result: "1"},
+								},
+							},
+						},
+					},
+				},
+			},
+		}},
+	}
+
+	res := executeBaseHTTPConfig(conf, &policiesfakes.FakeGenerator{})
+	g.Expect(res).To(HaveLen(3)) // http.conf + 2 includes
+
+	sort.Slice(res, func(i, j int) bool {
+		return res[i].dest < res[j].dest
+	})
+
+	httpRes := string(res[0].data)
+
+	// Count occurrences of the claim set directive - should be exactly 1
+	count := strings.Count(httpRes, "auth_jwt_claim_set $jwt_claim_sub sub;")
+	g.Expect(count).To(Equal(1), "duplicate claim set should be deduplicated to exactly 1 directive")
 }
 
 func TestExecuteBaseHttp_Compression(t *testing.T) {
