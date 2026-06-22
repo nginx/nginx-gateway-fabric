@@ -6942,7 +6942,7 @@ func TestOIDCCallbackLocation(t *testing.T) {
 				var callbackPaths []string
 				var callbackProviders []string
 				for _, loc := range locs {
-					if loc.AuthOIDC.ProviderName != "" && loc.ProxyPass == "" {
+					if loc.AuthOIDC != nil && loc.AuthOIDC.ProviderName != "" && loc.ProxyPass == "" {
 						callbackPaths = append(callbackPaths, loc.Path)
 						callbackProviders = append(callbackProviders, loc.AuthOIDC.ProviderName)
 					}
