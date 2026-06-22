@@ -98,101 +98,18 @@ type BasicAuth struct {
 //
 //nolint:lll
 type OIDCAuth struct {
-	// CRLSecretRef references a Secret containing a certificate
-	// revocation list in PEM format. The referenced Secret must contain an entry with the key "ca.crl".
-	// This is used to verify that certificates presented by the OpenID Provider endpoints have not been revoked.
-	//
-	// +optional
-	CRLSecretRef *LocalObjectReference `json:"crlSecretRef,omitempty"`
-
-	// ConfigURL sets a custom URL to retrieve the OpenID Provider metadata.
-	// Directive: https://nginx.org/en/docs/http/ngx_http_oidc_module.html#config_url
-	// NGINX Default: <issuer>/.well-known/openid-configuration
-	//
-	// +optional
-	// +kubebuilder:validation:Pattern=`^https:\/\/[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*(:[0-9]{1,5})?(\/[a-zA-Z0-9._~:\/?@!&'()*+,=-]*)?$`
-	ConfigURL *string `json:"configURL,omitempty"`
-
-	// PKCE enables Proof Key for Code Exchange (PKCE) for the authentication flow.
-	// If nil, NGINX automatically enables PKCE when the OpenID Provider requires it.
-	// Directive: https://nginx.org/en/docs/http/ngx_http_oidc_module.html#pkce
-	//
-	// +optional
-	PKCE *bool `json:"pkce,omitempty"`
-
-	// ExtraAuthArgs sets additional query arguments for the authentication request URL.
-	// Arguments are appended with "&". For example: "prompt=consent&audience=api".
-	// Directive: https://nginx.org/en/docs/http/ngx_http_oidc_module.html#extra_auth_args
-	//
-	// +optional
-	// +kubebuilder:validation:MaxProperties=16
-	ExtraAuthArgs map[string]string `json:"extraAuthArgs,omitempty"`
-
-	// Session configures session management for OIDC authentication.
-	//
-	// +optional
-	Session *OIDCSessionConfig `json:"session,omitempty"`
-
-	// Logout defines the logout behavior for OIDC authentication.
-	//
-	// +optional
-	Logout *OIDCLogoutConfig `json:"logout,omitempty"`
-
-	// RedirectURI sets a custom redirect URI for the OIDC callback.
-	// If a path-only URI is specified, a callback location block is created to handle the redirect from the OIDC provider.
-	// If a full URI is specified, it points to an external callback handler; no location block is created.
-	// If not specified, defaults to /oidc_callback_<filternamespace>_<filtername>.
-	// Directive: https://nginx.org/en/docs/http/ngx_http_oidc_module.html#redirect_uri
-	// NGINX Default: /oidc_callback
-	// Example: /oidc_callback, https://cafe.example.com:8442/oidc_callback
-	//
-	// +optional
-	// +kubebuilder:validation:Pattern=`^(https:\/\/[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*(:[0-9]{1,5})?(\/[a-zA-Z0-9._~:\/?@!&'()*+,=-]*)?|\/[a-zA-Z0-9._~:\/?@!&'()*+,=-]*)$`
-	RedirectURI *string `json:"redirectURI,omitempty"`
-
-	// Issuer is the URL of the OpenID Provider.
-	// Must exactly match the "issuer" value from the provider's
-	// .well-known/openid-configuration endpoint.
-	// Directive: https://nginx.org/en/docs/http/ngx_http_oidc_module.html#issuer
-	// Examples:
-	//   - Keycloak: "https://keycloak.example.com/realms/my-realm"
-	//   - Okta: "https://dev-123456.okta.com/oauth2/default"
-	//   - Auth0: "https://my-tenant.auth0.com/"
-	//
-	// +kubebuilder:validation:Pattern=`^https:\/\/[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*(:[0-9]{1,5})?(\/[a-zA-Z0-9._~:\/?@!&'()*+,=-]*)?$`
-	Issuer string `json:"issuer"`
-
-	// ClientID is the client identifier registered with the OpenID Provider.
-	// Directive: https://nginx.org/en/docs/http/ngx_http_oidc_module.html#client_id
-	//
-	// +kubebuilder:validation:MinLength=1
-	ClientID string `json:"clientID"`
-
-	// ClientSecretRef references a Kubernetes secret which contains the OIDC client secret to be used in the
-	// Authentication Request: https://openid.net/specs/openid-connect-core-1_0.html#AuthRequest.
-	// The referenced Secret must contain an entry with the key "client-secret".
-	// Directive: https://nginx.org/en/docs/http/ngx_http_oidc_module.html#client_secret
-	ClientSecretRef LocalObjectReference `json:"clientSecretRef"`
-
-	// CACertificateRefs references a list of secrets containing trusted CA certificates
-	// in PEM format used to verify the certificates of the OpenID Provider endpoints.
-	// The referenced secrets must contain an entry with the key "ca.crt".
-	// Only one secret can be referenced currently.
-	// If not specified, the system CA bundle is used.
-	//
-	// Directive: https://nginx.org/en/docs/http/ngx_http_oidc_module.html#ssl_trusted_certificate
-	// NGINX Default: system CA bundle
-	//
-	// +optional
-	// +kubebuilder:validation:MaxItems=1
+	ExtraAuthArgs     map[string]string      `json:"extraAuthArgs,omitempty"`
+	CRLSecretRef      *LocalObjectReference  `json:"crlSecretRef,omitempty"`
+	ConfigURL         *string                `json:"configURL,omitempty"`
+	PKCE              *bool                  `json:"pkce,omitempty"`
+	Session           *OIDCSessionConfig     `json:"session,omitempty"`
+	Logout            *OIDCLogoutConfig      `json:"logout,omitempty"`
+	RedirectURI       *string                `json:"redirectURI,omitempty"`
+	Authorization     *Authorization         `json:"authorization,omitempty"`
+	ClientSecretRef   LocalObjectReference   `json:"clientSecretRef"`
+	Issuer            string                 `json:"issuer"`
+	ClientID          string                 `json:"clientID"`
 	CACertificateRefs []LocalObjectReference `json:"caCertificateRefs,omitempty"`
-
-	// Authorization defines the authorization (authz) specification.
-	// Enables configuration of ID token claim validation for OIDC authentication.
-	// Claims are extracted from the ID token using the auth_jwt module with token=$oidc_id_token.
-	//
-	// +optional
-	Authorization *Authorization `json:"authorization,omitempty"`
 }
 
 // OIDCSessionConfig configures session management for OIDC authentication.
