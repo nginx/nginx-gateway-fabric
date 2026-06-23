@@ -11,7 +11,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 
-	"github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
+	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	"github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/http"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
@@ -171,7 +171,7 @@ func TestExecuteServers(t *testing.T) {
 											SecretName:      "auth-jwt-filter",
 											SecretNamespace: "test-ns",
 											Realm:           "JWT Restricted",
-											KeyCache:        helpers.GetPointer(v1alpha1.Duration("10s")),
+											KeyCache:        helpers.GetPointer(ngfAPIv1alpha1.Duration("10s")),
 											Data:            []byte("token"),
 										},
 									},
@@ -6116,6 +6116,189 @@ func TestUpdateLocationAuthenticationFilter(t *testing.T) {
 				Path:                 "/",
 				Type:                 http.ExternalLocationType,
 				AuthOIDCProviderName: "oidc_test_my-filter",
+			},
+		},
+		{
+			name: "authentication filter with JWT local file",
+			filter: &dataplane.AuthenticationFilter{
+				JWT: &dataplane.AuthJWT{
+					SecretName:      "jwt-secret",
+					SecretNamespace: "test-ns",
+					Realm:           "JWT Realm",
+					KeyCache:        helpers.GetPointer(ngfAPIv1alpha1.Duration("10s")),
+				},
+			},
+			expected: http.Location{
+				Path: "/",
+				Type: http.ExternalLocationType,
+				AuthJWT: &http.AuthJWT{
+					Realm:    "JWT Realm",
+					KeyCache: helpers.GetPointer(ngfAPIv1alpha1.Duration("10s")),
+					File:     "/etc/nginx/secrets/jwt_auth_test-ns_jwt-secret",
+				},
+			},
+		},
+		{
+			name: "authentication filter with JWT remote JWKS",
+			filter: &dataplane.AuthenticationFilter{
+				JWT: &dataplane.AuthJWT{
+					Realm: "Remote Realm",
+					Remote: &dataplane.AuthJWTRemote{
+						URI:              "https://idp.example.com/jwks",
+						Path:             "/_jwks_test_my-filter",
+						CACertBundlePath: "ca_bundle_test_my-ca",
+					},
+				},
+			},
+			expected: http.Location{
+				Path: "/",
+				Type: http.ExternalLocationType,
+				AuthJWT: &http.AuthJWT{
+					Realm: "Remote Realm",
+					Remote: &http.AuthJWTRemote{
+						URI:                "https://idp.example.com/jwks",
+						Path:               "/_jwks_test_my-filter",
+						TrustedCertificate: "/etc/nginx/secrets/ca_bundle_test_my-ca.crt",
+					},
+				},
+			},
+		},
+		{
+			name: "authentication filter with JWT remote JWKS without CA cert uses Alpine default",
+			filter: &dataplane.AuthenticationFilter{
+				JWT: &dataplane.AuthJWT{
+					Realm: "Remote Realm",
+					Remote: &dataplane.AuthJWTRemote{
+						URI:  "https://idp.example.com/jwks",
+						Path: "/_jwks_test_my-filter",
+					},
+				},
+			},
+			expected: http.Location{
+				Path: "/",
+				Type: http.ExternalLocationType,
+				AuthJWT: &http.AuthJWT{
+					Realm: "Remote Realm",
+					Remote: &http.AuthJWTRemote{
+						URI:                "https://idp.example.com/jwks",
+						Path:               "/_jwks_test_my-filter",
+						TrustedCertificate: dataplane.AlpineSSLRootCAPath,
+					},
+				},
+			},
+		},
+		{
+			name: "authentication filter with JWT and AuthRequireVariable",
+			filter: &dataplane.AuthenticationFilter{
+				JWT: &dataplane.AuthJWT{
+					SecretName:          "jwt-secret",
+					SecretNamespace:     "test-ns",
+					Realm:               "AuthZ Realm",
+					AuthRequireVariable: "$test_authz_all",
+				},
+			},
+			expected: http.Location{
+				Path: "/",
+				Type: http.ExternalLocationType,
+				AuthJWT: &http.AuthJWT{
+					Realm:       "AuthZ Realm",
+					File:        "/etc/nginx/secrets/jwt_auth_test-ns_jwt-secret",
+					AuthRequire: "$test_authz_all",
+				},
+			},
+		},
+		{
+			name: "authentication filter with JWT and AuthZProxySetHeaders",
+			filter: &dataplane.AuthenticationFilter{
+				JWT: &dataplane.AuthJWT{
+					SecretName:      "jwt-secret",
+					SecretNamespace: "test-ns",
+					Realm:           "AuthZ Realm",
+					AuthZProxySetHeaders: []dataplane.HTTPHeader{
+						{Name: "X-User-Role", Value: "$jwt_claim_role"},
+						{Name: "X-User-Sub", Value: "$jwt_claim_sub"},
+					},
+				},
+			},
+			expected: http.Location{
+				Path: "/",
+				Type: http.ExternalLocationType,
+				AuthJWT: &http.AuthJWT{
+					Realm: "AuthZ Realm",
+					File:  "/etc/nginx/secrets/jwt_auth_test-ns_jwt-secret",
+					ProxySetHeaders: []http.Header{
+						{Name: "X-User-Role", Value: "$jwt_claim_role"},
+						{Name: "X-User-Sub", Value: "$jwt_claim_sub"},
+					},
+				},
+			},
+		},
+		{
+			name: "authentication filter with JWT AuthRequireVariable and AuthZProxySetHeaders combined",
+			filter: &dataplane.AuthenticationFilter{
+				JWT: &dataplane.AuthJWT{
+					SecretName:          "jwt-secret",
+					SecretNamespace:     "test-ns",
+					Realm:               "Full AuthZ",
+					KeyCache:            helpers.GetPointer(ngfAPIv1alpha1.Duration("5m")),
+					Leeway:              helpers.GetPointer(ngfAPIv1alpha1.Duration("30s")),
+					AuthRequireVariable: "$test_authz_any",
+					AuthZProxySetHeaders: []dataplane.HTTPHeader{
+						{Name: "X-Audience", Value: "$jwt_claim_aud"},
+					},
+				},
+			},
+			expected: http.Location{
+				Path: "/",
+				Type: http.ExternalLocationType,
+				AuthJWT: &http.AuthJWT{
+					Realm:       "Full AuthZ",
+					File:        "/etc/nginx/secrets/jwt_auth_test-ns_jwt-secret",
+					KeyCache:    helpers.GetPointer(ngfAPIv1alpha1.Duration("5m")),
+					Leeway:      helpers.GetPointer(ngfAPIv1alpha1.Duration("30s")),
+					AuthRequire: "$test_authz_any",
+					ProxySetHeaders: []http.Header{
+						{Name: "X-Audience", Value: "$jwt_claim_aud"},
+					},
+				},
+			},
+		},
+		{
+			name: "authentication filter with JWT empty AuthRequireVariable is not set",
+			filter: &dataplane.AuthenticationFilter{
+				JWT: &dataplane.AuthJWT{
+					SecretName:          "jwt-secret",
+					SecretNamespace:     "test-ns",
+					Realm:               "No Require",
+					AuthRequireVariable: "",
+				},
+			},
+			expected: http.Location{
+				Path: "/",
+				Type: http.ExternalLocationType,
+				AuthJWT: &http.AuthJWT{
+					Realm: "No Require",
+					File:  "/etc/nginx/secrets/jwt_auth_test-ns_jwt-secret",
+				},
+			},
+		},
+		{
+			name: "authentication filter with JWT empty AuthZProxySetHeaders is not set",
+			filter: &dataplane.AuthenticationFilter{
+				JWT: &dataplane.AuthJWT{
+					SecretName:           "jwt-secret",
+					SecretNamespace:      "test-ns",
+					Realm:                "No Headers",
+					AuthZProxySetHeaders: []dataplane.HTTPHeader{},
+				},
+			},
+			expected: http.Location{
+				Path: "/",
+				Type: http.ExternalLocationType,
+				AuthJWT: &http.AuthJWT{
+					Realm: "No Headers",
+					File:  "/etc/nginx/secrets/jwt_auth_test-ns_jwt-secret",
+				},
 			},
 		},
 	}
