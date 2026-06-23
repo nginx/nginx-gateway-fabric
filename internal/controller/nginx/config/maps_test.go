@@ -99,7 +99,7 @@ func TestExecuteMaps(t *testing.T) {
 		"map ${http_my_set_header} $my_set_header_header_var {":               0,
 		"$inference_workload_endpoint":                                        2,
 		"$inference_backend":                                                  1,
-		"invalid-backend-ref":                                                 1,
+		"invalid-backend-ref":                                                 2,
 		"map $ssl_server_name $sni_listener_id_443":                           1,
 		"map $host $host_listener_id_443":                                     1,
 	}
@@ -678,7 +678,9 @@ func TestBuildInferenceMaps(t *testing.T) {
 
 				// Verify parameter structure
 				g.Expect(m.Parameters[0].Value).To(Equal("\"\""))
-				g.Expect(m.Parameters[0].Result).To(Equal(upstreamName))
+				if expectedConfig, exists := tc.expectedConfig[upstreamName]; exists {
+					g.Expect(m.Parameters[0].Result).To(Equal(expectedConfig.defaultResult))
+				}
 				g.Expect(m.Parameters[1].Value).To(Equal("~.+"))
 				g.Expect(m.Parameters[1].Result).To(Equal("$inference_workload_endpoint"))
 				g.Expect(m.Parameters[2].Value).To(Equal("default"))

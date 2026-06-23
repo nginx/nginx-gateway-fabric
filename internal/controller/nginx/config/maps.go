@@ -412,10 +412,10 @@ func buildInferenceMaps(groups []dataplane.BackendGroup) []shared.Map {
 			// Build the ordered parameter list.
 			params := make([]shared.MapParameter, 0, 3)
 
-			// no endpoint picked by EPP go to inference pool directly
+			// no endpoint picked by EPP uses failure-mode-aware routing
 			params = append(params, shared.MapParameter{
 				Value:  `""`,
-				Result: backend.UpstreamName,
+				Result: defaultResult,
 			})
 
 			// endpoint picked by the EPP is stored in $inference_workload_endpoint.
