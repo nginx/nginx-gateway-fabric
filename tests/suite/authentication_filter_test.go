@@ -1332,14 +1332,17 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 				Expect(resourceManager.DeleteFromFiles(jwtRemoteManifestFiles, namespace)).To(Succeed())
 			})
 
-			Specify("JWT remote authenticationFilter is accepted", func() {
-				nsname := types.NamespacedName{Name: "jwt-remote-auth", Namespace: namespace}
+			Specify("JWT remote authenticationFilters are accepted", func() {
+				remoteFilterNames := []string{"jwt-remote-auth", "jwt-remote-authz"}
 
-				Eventually(checkForAuthenticationFilterToBeAccepted).
-					WithArguments(nsname).
-					WithTimeout(timeoutConfig.GetStatusTimeout).
-					WithPolling(500*time.Millisecond).
-					Should(Succeed(), "jwt-remote-auth was not accepted")
+				for _, name := range remoteFilterNames {
+					nsname := types.NamespacedName{Name: name, Namespace: namespace}
+					Eventually(checkForAuthenticationFilterToBeAccepted).
+						WithArguments(nsname).
+						WithTimeout(timeoutConfig.GetStatusTimeout).
+						WithPolling(500*time.Millisecond).
+						Should(Succeed(), fmt.Sprintf("%s was not accepted", name))
+				}
 			})
 
 			Context("verify traffic with valid JWT Remote AuthenticationFilter configuration for HTTPRoutes", func() {
@@ -1398,6 +1401,57 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 								fmt.Sprintf("http://cafe.example.com:%d/jwt-remote-tea", port),
 								address,
 								"URI: /jwt-remote-tea",
+							)
+						}).
+						WithTimeout(timeoutConfig.RequestTimeout).
+						WithPolling(500 * time.Millisecond).
+						Should(Succeed())
+				})
+			})
+
+			Context("verify JWT Remote AuthenticationFilter with authorization", func() {
+				It("should return 200 when Keycloak token has matching claim", func() {
+					// The Keycloak test user has preferred_username=testuser,
+					// which matches the jwt-remote-authz filter's authorization rule.
+					Eventually(
+						func() error {
+							return framework.ExpectRequestToSucceed(
+								timeoutConfig.RequestTimeout,
+								fmt.Sprintf("http://cafe.example.com:%d/jwt-remote-authz", port),
+								address,
+								"URI: /jwt-remote-authz",
+								framework.WithRequestHeaders(map[string]string{
+									"Authorization": fmt.Sprintf("Bearer %s", keycloakToken),
+								}))
+						}).
+						WithTimeout(timeoutConfig.RequestTimeout).
+						WithPolling(500 * time.Millisecond).
+						Should(Succeed())
+				})
+
+				It("should return 401 for invalid JWT token on authz-protected remote endpoint", func() {
+					Eventually(
+						func() error {
+							return framework.Expect401Response(
+								timeoutConfig.RequestTimeout,
+								fmt.Sprintf("http://cafe.example.com:%d/jwt-remote-authz", port),
+								address,
+								framework.WithRequestHeaders(map[string]string{
+									"Authorization": "Bearer invalid.jwt.token",
+								}))
+						}).
+						WithTimeout(timeoutConfig.RequestTimeout).
+						WithPolling(500 * time.Millisecond).
+						Should(Succeed())
+				})
+
+				It("should return 401 when no token is provided on authz-protected remote endpoint", func() {
+					Eventually(
+						func() error {
+							return framework.Expect401Response(
+								timeoutConfig.RequestTimeout,
+								fmt.Sprintf("http://cafe.example.com:%d/jwt-remote-authz", port),
+								address,
 							)
 						}).
 						WithTimeout(timeoutConfig.RequestTimeout).
@@ -1538,6 +1592,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 					"jwt-authz-all-claims",
 					"jwt-authz-regex",
 					"jwt-authz-multi-rules",
+					"jwt-authz-multi-rules-all",
 					"jwt-authz-proxy-header",
 				}
 
@@ -1844,6 +1899,107 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 							return framework.Expect401Response(
 								timeoutConfig.RequestTimeout,
 								fmt.Sprintf("http://cafe.example.com:%d/jwt-authz-multi", port),
+								address,
+								framework.WithRequestHeaders(map[string]string{
+									"Authorization": fmt.Sprintf("Bearer %s", token),
+								}))
+						}).
+						WithTimeout(timeoutConfig.RequestTimeout).
+						WithPolling(500 * time.Millisecond).
+						Should(Succeed())
+				})
+			})
+
+			Context("JWT authorization with multiple rules (All across rules)", func() {
+				It("should return 200 when token satisfies all rules", func() {
+					token, err := jwtHelper.generateToken(map[string]interface{}{
+						"sub":        "test-user",
+						"role":       "superadmin",
+						"department": "engineering",
+						"iat":        time.Now().Unix(),
+						"exp":        9999999999,
+					})
+					Expect(err).ToNot(HaveOccurred())
+
+					Eventually(
+						func() error {
+							return framework.ExpectRequestToSucceed(
+								timeoutConfig.RequestTimeout,
+								fmt.Sprintf("http://cafe.example.com:%d/jwt-authz-multi-all", port),
+								address,
+								"URI: /jwt-authz-multi-all",
+								framework.WithRequestHeaders(map[string]string{
+									"Authorization": fmt.Sprintf("Bearer %s", token),
+								}))
+						}).
+						WithTimeout(timeoutConfig.RequestTimeout).
+						WithPolling(500 * time.Millisecond).
+						Should(Succeed())
+				})
+
+				It("should return 401 when token matches only the first rule", func() {
+					token, err := jwtHelper.generateToken(map[string]interface{}{
+						"sub":  "test-user",
+						"role": "superadmin",
+						"iat":  time.Now().Unix(),
+						"exp":  9999999999,
+					})
+					Expect(err).ToNot(HaveOccurred())
+
+					Eventually(
+						func() error {
+							return framework.Expect401Response(
+								timeoutConfig.RequestTimeout,
+								fmt.Sprintf("http://cafe.example.com:%d/jwt-authz-multi-all", port),
+								address,
+								framework.WithRequestHeaders(map[string]string{
+									"Authorization": fmt.Sprintf("Bearer %s", token),
+								}))
+						}).
+						WithTimeout(timeoutConfig.RequestTimeout).
+						WithPolling(500 * time.Millisecond).
+						Should(Succeed())
+				})
+
+				It("should return 401 when token matches only the second rule", func() {
+					token, err := jwtHelper.generateToken(map[string]interface{}{
+						"sub":        "test-user",
+						"department": "engineering",
+						"iat":        time.Now().Unix(),
+						"exp":        9999999999,
+					})
+					Expect(err).ToNot(HaveOccurred())
+
+					Eventually(
+						func() error {
+							return framework.Expect401Response(
+								timeoutConfig.RequestTimeout,
+								fmt.Sprintf("http://cafe.example.com:%d/jwt-authz-multi-all", port),
+								address,
+								framework.WithRequestHeaders(map[string]string{
+									"Authorization": fmt.Sprintf("Bearer %s", token),
+								}))
+						}).
+						WithTimeout(timeoutConfig.RequestTimeout).
+						WithPolling(500 * time.Millisecond).
+						Should(Succeed())
+				})
+
+				It("should return 401 when token matches neither rule", func() {
+					token, err := jwtHelper.generateToken(map[string]interface{}{
+						"sub":        "test-user",
+						"role":       "viewer",
+						"department": "marketing",
+						"iat":        time.Now().Unix(),
+						"exp":        9999999999,
+					})
+					Expect(err).ToNot(HaveOccurred())
+
+					Eventually(
+						func() error {
+							return framework.Expect401Response(
+								timeoutConfig.RequestTimeout,
+								fmt.Sprintf("http://cafe.example.com:%d/jwt-authz-multi-all", port),
 								address,
 								framework.WithRequestHeaders(map[string]string{
 									"Authorization": fmt.Sprintf("Bearer %s", token),

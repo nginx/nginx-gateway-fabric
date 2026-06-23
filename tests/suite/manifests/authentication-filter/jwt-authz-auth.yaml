@@ -106,6 +106,36 @@ spec:
               values:
                 - "engineering"
 ---
+# JWT AuthenticationFilter with authorization: multiple rules (All across rules)
+apiVersion: gateway.nginx.org/v1alpha1
+kind: AuthenticationFilter
+metadata:
+  name: jwt-authz-multi-rules-all
+spec:
+  type: JWT
+  jwt:
+    realm: "JWT AuthZ Multi Rules All"
+    source: File
+    file:
+      secretRef:
+        name: jwks-secret
+    keyCache: 10m
+    authorization:
+      require: All
+      rules:
+        - require: Any
+          claims:
+            - name: role
+              match: Exact
+              values:
+                - "superadmin"
+        - require: Any
+          claims:
+            - name: department
+              match: Exact
+              values:
+                - "engineering"
+---
 # JWT AuthenticationFilter with authorization: proxySetHeader
 apiVersion: gateway.nginx.org/v1alpha1
 kind: AuthenticationFilter
@@ -187,7 +217,7 @@ spec:
             group: gateway.nginx.org
             kind: AuthenticationFilter
             name: jwt-authz-regex
-    # Route for multiple rules authorization
+    # Route for multiple rules authorization (Any)
     - matches:
         - path:
             type: PathPrefix
@@ -201,6 +231,20 @@ spec:
             group: gateway.nginx.org
             kind: AuthenticationFilter
             name: jwt-authz-multi-rules
+    # Route for multiple rules authorization (All)
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /jwt-authz-multi-all
+      backendRefs:
+        - name: coffee
+          port: 80
+      filters:
+        - type: ExtensionRef
+          extensionRef:
+            group: gateway.nginx.org
+            kind: AuthenticationFilter
+            name: jwt-authz-multi-rules-all
     # Route for proxySetHeader authorization
     - matches:
         - path:
