@@ -424,9 +424,9 @@ func buildInferenceMaps(groups []dataplane.BackendGroup) []shared.Map {
 				Result: `$inference_workload_endpoint`,
 			})
 
-			// this is set based on EPP failure mode,
-			// if EPP is failOpen, we set the default to the inference pool upstream,
-			// if EPP is failClose, we set the default to invalidBackendRef.
+			// default case: if the EPP returns an unknown value, we fall back to the default result.
+			// EPP should return either "" or a valid endpoint, which are handled by the previous two parameters,
+			// but this additional check acts as a safety net.
 			params = append(params, shared.MapParameter{
 				Value:  "default",
 				Result: defaultResult,
