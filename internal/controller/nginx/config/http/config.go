@@ -266,7 +266,7 @@ type AuthJWTRemote struct {
 	Path               string
 }
 
-// AuthZConfig the authorization configuration for JWT and OIDC authentication.
+// AuthZConfig is the authorization configuration for JWT and OIDC authentication.
 // This includes the auth_jwt_require variable and claim-based proxy_set_header directives.
 type AuthZConfig struct {
 	// AuthRequire is the variable name for the auth_jwt_require directive.
