@@ -114,7 +114,7 @@ type Location struct {
 // AuthOIDC holds the OIDC authentication configuration for a location.
 type AuthOIDC struct {
 	// AuthZConfig holds the authorization configuration for OIDC.
-	// When set, the `auth_jwt` direcetive is enabled to process JWT claims.
+	// When set, the `auth_jwt` directive is enabled to process JWT claims.
 	AuthZConfig *AuthZConfig
 	// ProviderName is the name of the oidc_provider to be referenced in this location.
 	ProviderName string

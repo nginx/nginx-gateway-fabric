@@ -1602,7 +1602,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 						Should(Succeed())
 				})
 
-				It("should return 403 when token has non-matching claim value", func() {
+				It("should return 401 when token has non-matching claim value", func() {
 					token, err := jwtHelper.generateToken(map[string]interface{}{
 						"sub":  "test-user",
 						"role": "viewer",
@@ -1626,7 +1626,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 						Should(Succeed())
 				})
 
-				It("should return 403 when token is missing the required claim", func() {
+				It("should return 401 when token is missing the required claim", func() {
 					token, err := jwtHelper.generateToken(map[string]interface{}{
 						"sub": "test-user",
 						"iat": time.Now().Unix(),
@@ -1677,7 +1677,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 						Should(Succeed())
 				})
 
-				It("should return 403 when token is missing one required claim", func() {
+				It("should return 401 when token is missing one required claim", func() {
 					token, err := jwtHelper.generateToken(map[string]interface{}{
 						"sub":  "test-user",
 						"role": "admin",
@@ -1701,7 +1701,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 						Should(Succeed())
 				})
 
-				It("should return 403 when token has wrong value for one claim", func() {
+				It("should return 401 when token has wrong value for one claim", func() {
 					token, err := jwtHelper.generateToken(map[string]interface{}{
 						"sub":        "test-user",
 						"role":       "admin",
@@ -1753,7 +1753,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 						Should(Succeed())
 				})
 
-				It("should return 403 when claim value does not match regex", func() {
+				It("should return 401 when claim value does not match regex", func() {
 					token, err := jwtHelper.generateToken(map[string]interface{}{
 						"sub":   "test-user",
 						"email": "user@otherdomain.com",
@@ -1829,7 +1829,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 						Should(Succeed())
 				})
 
-				It("should return 403 when token matches neither rule", func() {
+				It("should return 401 when token matches neither rule", func() {
 					token, err := jwtHelper.generateToken(map[string]interface{}{
 						"sub":        "test-user",
 						"role":       "viewer",
