@@ -5,6 +5,35 @@ import (
 	"testing"
 )
 
+func TestValidateSingleQuotedString(t *testing.T) {
+	t.Parallel()
+	validator := func(value string) error { return validateSingleQuotedString(value, []string{"example"}) }
+
+	testValidValuesForSimpleValidator(
+		t,
+		validator,
+		`$remote_addr - $remote_user [$time_local] "$request" $status`,
+		`{"remote_addr": "$remote_addr", "status": "$status"}`,
+		`$request\t$status`,
+		`test test`,
+		`test`,
+		``,
+		`value with "double quotes"`,
+		`value with \backslash`,
+		`value;with;semicolons`,
+		`value{with}braces`,
+	)
+	testInvalidValuesForSimpleValidator(
+		t,
+		validator,
+		`format with 'single' quotes`,
+		`'; bad stuff; #`,
+		`$remote_addr'`,
+		`'`,
+		"format with\nnewline",
+	)
+}
+
 func TestValidateEscapedString(t *testing.T) {
 	t.Parallel()
 	validator := func(value string) error { return validateEscapedString(value, []string{"example"}) }

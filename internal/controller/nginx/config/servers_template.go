@@ -187,6 +187,15 @@ server {
             {{- if $l.AuthJWT.KeyCache }}
         auth_jwt_key_cache {{ $l.AuthJWT.KeyCache }};
             {{- end }}
+            {{- if $l.AuthJWT.Leeway }}
+        auth_jwt_leeway {{ $l.AuthJWT.Leeway }};
+            {{- end }}
+            {{- if $l.AuthJWT.AuthRequire }}
+        auth_jwt_require {{ $l.AuthJWT.AuthRequire }};
+            {{- end }}
+            {{- range $l.AuthJWT.ProxySetHeaders }}
+        proxy_set_header {{ .Name }} {{ .Value }};
+            {{- end }}
         {{- end }}
 
         {{- if $l.CORSHeaders }}

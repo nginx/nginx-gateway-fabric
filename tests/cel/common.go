@@ -48,6 +48,7 @@ const (
 	expectedJWTFileOnlyError             = "source File must not set spec.remote"
 	expectedJWTRemoteRequiredError       = "source Remote requires spec.remote to be set"
 	expectedJWTRemoteOnlyError           = "source Remote must not set spec.file"
+	expectedDuplicateClaimNamesError     = "claim names must be unique within a rule"
 
 	expectedTargetRefKindMustBeGatewayOrHTTPRouteOrGrpcRouteError = "TargetRef Kind must be one of: " +
 		"Gateway, HTTPRoute, or GRPCRoute"
@@ -86,6 +87,15 @@ const (
 
 	// Compression validation errors.
 	expectedCompressionGzipRequiredError = "type 'gzip' requires spec.compression.gzip to be set"
+	// ServerTokens validation error.
+	expectedServerTokensPatternError = `serverTokens in body should match`
+
+	// AccessLog format validation error.
+	expectedAccessLogFormatPatternError = `format in body should match`
+
+	// ExtraAuthArgs validation error.
+	expectedExtraAuthArgsKeyError = "extraAuthArgs keys must contain only alphanumeric characters, hyphens, " +
+		"underscores, or dots"
 
 	// Snippets validation errors.
 	expectedSnippetsContextError = "Only one snippet allowed per context"

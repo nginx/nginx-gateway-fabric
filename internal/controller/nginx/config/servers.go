@@ -1258,6 +1258,7 @@ func updateLocationAuthenticationFilter(
 		jwt := &http.AuthJWT{
 			Realm:    authenticationFilter.JWT.Realm,
 			KeyCache: authenticationFilter.JWT.KeyCache,
+			Leeway:   authenticationFilter.JWT.Leeway,
 		}
 
 		if authenticationFilter.JWT.Remote != nil {
@@ -1281,6 +1282,20 @@ func updateLocationAuthenticationFilter(
 				authenticationFilter.JWT.SecretName,
 			)
 			jwt.File = generateAuthFileName(id)
+		}
+
+		if authenticationFilter.JWT.AuthRequireVariable != "" {
+			jwt.AuthRequire = authenticationFilter.JWT.AuthRequireVariable
+		}
+		if len(authenticationFilter.JWT.AuthZProxySetHeaders) > 0 {
+			proxySetHeaders := make([]http.Header, 0, len(authenticationFilter.JWT.AuthZProxySetHeaders))
+			for _, psh := range authenticationFilter.JWT.AuthZProxySetHeaders {
+				proxySetHeaders = append(proxySetHeaders, http.Header{
+					Name:  psh.Name,
+					Value: psh.Value,
+				})
+			}
+			jwt.ProxySetHeaders = proxySetHeaders
 		}
 
 		location.AuthJWT = jwt

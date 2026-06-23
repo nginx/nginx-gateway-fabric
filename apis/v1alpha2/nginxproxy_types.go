@@ -119,6 +119,8 @@ type NginxProxySpec struct {
 	//
 	//
 	// +optional
+	// +kubebuilder:validation:MaxLength=255
+	// +kubebuilder:validation:Pattern=`^([^"\\\x0A\x0D]|\\[^\x0A\x0D])*$`
 	ServerTokens *string `json:"serverTokens,omitempty"`
 	// Compression defines the configuration for HTTP response compression.
 	// When set, NGINX compresses responses for clients that support it,
@@ -486,9 +488,13 @@ type NginxAccessLog struct {
 	// Format specifies the custom log format string.
 	// If not specified, NGINX default 'combined' format is used.
 	// For now only path /dev/stdout can be used.
+	// Single quotes and line breaks are not allowed because the format is
+	// rendered inside a single-quoted NGINX log_format directive.
 	// See https://nginx.org/en/docs/http/ngx_http_log_module.html#log_format
 	//
 	// +optional
+	// +kubebuilder:validation:MaxLength=4096
+	// +kubebuilder:validation:Pattern=`^[^'\x0A\x0D]*$`
 	Format *string `json:"format,omitempty"`
 
 	// Escape specifies how to escape characters in variables for access log.
