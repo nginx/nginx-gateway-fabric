@@ -82,6 +82,15 @@ func TestExecuteMaps(t *testing.T) {
 							},
 						},
 					},
+					{
+						UpstreamName: "upstream2",
+						EndpointPickerConfig: &dataplane.EndpointPickerConfig{
+							NsName: "default",
+							EndpointPickerRef: &inference.EndpointPickerRef{
+								FailureMode: inference.EndpointPickerFailOpen,
+							},
+						},
+					},
 				},
 			},
 		},
@@ -97,9 +106,11 @@ func TestExecuteMaps(t *testing.T) {
 		"map ${http_my_second_add_header} $my_second_add_header_header_var {": 1,
 		"~.* ${http_my_second_add_header},;":                                  1,
 		"map ${http_my_set_header} $my_set_header_header_var {":               0,
-		"$inference_workload_endpoint":                                        2,
-		"$inference_backend":                                                  1,
+		"$inference_workload_endpoint":                                        4,
+		"$inference_backend":                                                  2,
 		"invalid-backend-ref":                                                 2,
+		"default upstream2;":                                                  1,
+		`"" upstream2;`:                                                       1,
 		"map $ssl_server_name $sni_listener_id_443":                           1,
 		"map $host $host_listener_id_443":                                     1,
 	}
