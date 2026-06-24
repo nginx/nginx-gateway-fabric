@@ -417,7 +417,6 @@ func resourceMatches(objMeta metav1.ObjectMeta, nsName types.NamespacedName) boo
 	return objMeta.GetName() == nsName.Name && objMeta.GetNamespace() == nsName.Namespace
 }
 
-//nolint:gocyclo
 func (s *store) getResourceVersionForObject(gatewayNSName types.NamespacedName, object client.Object) string {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
@@ -429,41 +428,35 @@ func (s *store) getResourceVersionForObject(gatewayNSName types.NamespacedName, 
 
 	switch obj := object.(type) {
 	case *appsv1.Deployment:
-		if resources.Deployment.GetName() == obj.GetName() {
-			return resources.Deployment.GetResourceVersion()
-		}
+		return resourceVersionIfNameMatches(resources.Deployment, obj.GetName())
 	case *autoscalingv2.HorizontalPodAutoscaler:
-		if resources.HPA.GetName() == obj.GetName() {
-			return resources.HPA.GetResourceVersion()
-		}
+		return resourceVersionIfNameMatches(resources.HPA, obj.GetName())
 	case *policyv1.PodDisruptionBudget:
-		if resources.PDB.GetName() == obj.GetName() {
-			return resources.PDB.GetResourceVersion()
-		}
+		return resourceVersionIfNameMatches(resources.PDB, obj.GetName())
 	case *appsv1.DaemonSet:
-		if resources.DaemonSet.GetName() == obj.GetName() {
-			return resources.DaemonSet.GetResourceVersion()
-		}
+		return resourceVersionIfNameMatches(resources.DaemonSet, obj.GetName())
 	case *corev1.Service:
-		if resources.Service.GetName() == obj.GetName() {
-			return resources.Service.GetResourceVersion()
-		}
+		return resourceVersionIfNameMatches(resources.Service, obj.GetName())
 	case *corev1.ServiceAccount:
-		if resources.ServiceAccount.GetName() == obj.GetName() {
-			return resources.ServiceAccount.GetResourceVersion()
-		}
+		return resourceVersionIfNameMatches(resources.ServiceAccount, obj.GetName())
 	case *rbacv1.Role:
-		if resources.Role.GetName() == obj.GetName() {
-			return resources.Role.GetResourceVersion()
-		}
+		return resourceVersionIfNameMatches(resources.Role, obj.GetName())
 	case *rbacv1.RoleBinding:
-		if resources.RoleBinding.GetName() == obj.GetName() {
-			return resources.RoleBinding.GetResourceVersion()
-		}
+		return resourceVersionIfNameMatches(resources.RoleBinding, obj.GetName())
 	case *corev1.ConfigMap:
 		return getResourceVersionForConfigMap(resources, obj)
 	case *corev1.Secret:
 		return getResourceVersionForSecret(resources, obj)
+	}
+
+	return ""
+}
+
+// resourceVersionIfNameMatches returns the tracked resource's ResourceVersion when its name matches
+// the provided name, and an empty string otherwise.
+func resourceVersionIfNameMatches(meta metav1.ObjectMeta, name string) string {
+	if meta.GetName() == name {
+		return meta.GetResourceVersion()
 	}
 
 	return ""
