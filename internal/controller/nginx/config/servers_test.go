@@ -6732,6 +6732,354 @@ func TestExecuteServers_OIDCAuth(t *testing.T) {
 	}
 }
 
+func TestExecuteServers_JWTAuth(t *testing.T) {
+	t.Parallel()
+
+	backend := dataplane.BackendGroup{
+		Source:  types.NamespacedName{Namespace: "test", Name: "route1"},
+		RuleIdx: 0,
+		Backends: []dataplane.Backend{
+			{UpstreamName: "test_foo_80", Valid: true, Weight: 1},
+		},
+	}
+
+	tests := []struct {
+		name       string
+		expPresent []string
+		expAbsent  []string
+		conf       dataplane.Configuration
+	}{
+		{
+			name: "JWT auth with local key file present in location",
+			conf: dataplane.Configuration{
+				HTTPServers: []dataplane.VirtualServer{
+					{
+						Hostname: "example.com",
+						Port:     8080,
+						PathRules: []dataplane.PathRule{
+							{
+								Path:     "/",
+								PathType: dataplane.PathTypePrefix,
+								MatchRules: []dataplane.MatchRule{
+									{
+										Match:        dataplane.Match{},
+										BackendGroup: backend,
+										Filters: dataplane.HTTPFilters{
+											AuthenticationFilter: &dataplane.AuthenticationFilter{
+												JWT: &dataplane.AuthJWT{
+													SecretName:      "jwt-secret",
+													SecretNamespace: "test-ns",
+													Realm:           "JWT Restricted",
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expPresent: []string{
+				`auth_jwt "JWT Restricted";`,
+				"auth_jwt_key_file /etc/nginx/secrets/jwt_auth_test-ns_jwt-secret;",
+			},
+			expAbsent: []string{"auth_basic", "auth_oidc", "auth_jwt_key_request", "auth_jwt_key_cache", "auth_jwt_leeway"},
+		},
+		{
+			name: "JWT auth with key cache and leeway",
+			conf: dataplane.Configuration{
+				HTTPServers: []dataplane.VirtualServer{
+					{
+						Hostname: "example.com",
+						Port:     8080,
+						PathRules: []dataplane.PathRule{
+							{
+								Path:     "/",
+								PathType: dataplane.PathTypePrefix,
+								MatchRules: []dataplane.MatchRule{
+									{
+										Match:        dataplane.Match{},
+										BackendGroup: backend,
+										Filters: dataplane.HTTPFilters{
+											AuthenticationFilter: &dataplane.AuthenticationFilter{
+												JWT: &dataplane.AuthJWT{
+													SecretName:      "jwt-secret",
+													SecretNamespace: "test-ns",
+													Realm:           "JWT Restricted",
+													KeyCache:        helpers.GetPointer(ngfAPIv1alpha1.Duration("10s")),
+													Leeway:          helpers.GetPointer(ngfAPIv1alpha1.Duration("30s")),
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expPresent: []string{
+				`auth_jwt "JWT Restricted";`,
+				"auth_jwt_key_file /etc/nginx/secrets/jwt_auth_test-ns_jwt-secret;",
+				"auth_jwt_key_cache 10s;",
+				"auth_jwt_leeway 30s;",
+			},
+			expAbsent: []string{"auth_basic", "auth_oidc", "auth_jwt_key_request"},
+		},
+		{
+			name: "JWT auth with remote JWKS URI",
+			conf: dataplane.Configuration{
+				HTTPServers: []dataplane.VirtualServer{
+					{
+						Hostname: "example.com",
+						Port:     8080,
+						PathRules: []dataplane.PathRule{
+							{
+								Path:     "/",
+								PathType: dataplane.PathTypePrefix,
+								MatchRules: []dataplane.MatchRule{
+									{
+										Match:        dataplane.Match{},
+										BackendGroup: backend,
+										Filters: dataplane.HTTPFilters{
+											AuthenticationFilter: &dataplane.AuthenticationFilter{
+												JWT: &dataplane.AuthJWT{
+													Realm: "Remote JWT",
+													Remote: &dataplane.AuthJWTRemote{
+														URI:  "https://idp.example.com/jwks",
+														Path: "/_jwks_test_my-filter",
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expPresent: []string{
+				`auth_jwt "Remote JWT";`,
+				"auth_jwt_key_request /_jwks_test_my-filter;",
+			},
+			expAbsent: []string{"auth_basic", "auth_oidc", "auth_jwt_key_file"},
+		},
+		{
+			name: "JWT auth with authorization require and proxy set headers",
+			conf: dataplane.Configuration{
+				HTTPServers: []dataplane.VirtualServer{
+					{
+						Hostname: "example.com",
+						Port:     8080,
+						PathRules: []dataplane.PathRule{
+							{
+								Path:     "/protected",
+								PathType: dataplane.PathTypePrefix,
+								MatchRules: []dataplane.MatchRule{
+									{
+										Match:        dataplane.Match{},
+										BackendGroup: backend,
+										Filters: dataplane.HTTPFilters{
+											AuthenticationFilter: &dataplane.AuthenticationFilter{
+												JWT: &dataplane.AuthJWT{
+													SecretName:          "jwt-secret",
+													SecretNamespace:     "test-ns",
+													Realm:               "AuthZ Realm",
+													AuthRequireVariable: "$test_authz_all",
+													AuthZProxySetHeaders: []dataplane.HTTPHeader{
+														{Name: "X-User-Role", Value: "$jwt_claim_role"},
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expPresent: []string{
+				`auth_jwt "AuthZ Realm";`,
+				"auth_jwt_key_file /etc/nginx/secrets/jwt_auth_test-ns_jwt-secret;",
+				"auth_jwt_require $test_authz_all;",
+				"proxy_set_header X-User-Role $jwt_claim_role;",
+			},
+			expAbsent: []string{"auth_basic", "auth_oidc", "auth_jwt_key_request", "auth_jwt_key_cache", "auth_jwt_leeway"},
+		},
+		{
+			name: "nil AuthenticationFilter results in no auth_jwt in location",
+			conf: dataplane.Configuration{
+				HTTPServers: []dataplane.VirtualServer{
+					{
+						Hostname: "example.com",
+						Port:     8080,
+						PathRules: []dataplane.PathRule{
+							{
+								Path:     "/",
+								PathType: dataplane.PathTypePrefix,
+								MatchRules: []dataplane.MatchRule{
+									{
+										Match:        dataplane.Match{},
+										BackendGroup: backend,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expAbsent: []string{"auth_jwt", "auth_basic", "auth_oidc"},
+		},
+		{
+			name: "empty authentication filter results in no auth_jwt in location",
+			conf: dataplane.Configuration{
+				HTTPServers: []dataplane.VirtualServer{
+					{
+						Hostname: "example.com",
+						Port:     8080,
+						PathRules: []dataplane.PathRule{
+							{
+								Path:     "/",
+								PathType: dataplane.PathTypePrefix,
+								MatchRules: []dataplane.MatchRule{
+									{
+										Match:        dataplane.Match{},
+										BackendGroup: backend,
+										Filters: dataplane.HTTPFilters{
+											AuthenticationFilter: &dataplane.AuthenticationFilter{},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expAbsent: []string{"auth_jwt", "auth_basic", "auth_oidc"},
+		},
+		{
+			name: "JWT auth on SSL server with key cache",
+			conf: dataplane.Configuration{
+				SSLServers: []dataplane.VirtualServer{
+					{
+						Hostname: "secure.example.com",
+						Port:     8443,
+						SSL: &dataplane.SSL{
+							KeyPairIDs: []dataplane.SSLKeyPairID{"test-keypair"},
+						},
+						PathRules: []dataplane.PathRule{
+							{
+								Path:     "/api",
+								PathType: dataplane.PathTypePrefix,
+								MatchRules: []dataplane.MatchRule{
+									{
+										Match:        dataplane.Match{},
+										BackendGroup: backend,
+										Filters: dataplane.HTTPFilters{
+											AuthenticationFilter: &dataplane.AuthenticationFilter{
+												JWT: &dataplane.AuthJWT{
+													SecretName:      "jwt-secret",
+													SecretNamespace: "default",
+													Realm:           "SSL JWT",
+													KeyCache:        helpers.GetPointer(ngfAPIv1alpha1.Duration("5m")),
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expPresent: []string{
+				`auth_jwt "SSL JWT";`,
+				"auth_jwt_key_file /etc/nginx/secrets/jwt_auth_default_jwt-secret;",
+				"auth_jwt_key_cache 5m;",
+				"ssl_certificate /etc/nginx/secrets/test-keypair.pem;",
+			},
+			expAbsent: []string{"auth_basic", "auth_oidc", "auth_jwt_key_request"},
+		},
+		{
+			name: "two path rules where one has JWT auth and the other does not",
+			conf: dataplane.Configuration{
+				HTTPServers: []dataplane.VirtualServer{
+					{
+						Hostname: "example.com",
+						Port:     8080,
+						PathRules: []dataplane.PathRule{
+							{
+								Path:     "/protected",
+								PathType: dataplane.PathTypePrefix,
+								MatchRules: []dataplane.MatchRule{
+									{
+										Match:        dataplane.Match{},
+										BackendGroup: backend,
+										Filters: dataplane.HTTPFilters{
+											AuthenticationFilter: &dataplane.AuthenticationFilter{
+												JWT: &dataplane.AuthJWT{
+													SecretName:      "jwt-secret",
+													SecretNamespace: "test-ns",
+													Realm:           "Protected",
+												},
+											},
+										},
+									},
+								},
+							},
+							{
+								Path:     "/public",
+								PathType: dataplane.PathTypePrefix,
+								MatchRules: []dataplane.MatchRule{
+									{
+										Match:        dataplane.Match{},
+										BackendGroup: backend,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expPresent: []string{
+				"location /protected",
+				`auth_jwt "Protected";`,
+				"auth_jwt_key_file /etc/nginx/secrets/jwt_auth_test-ns_jwt-secret;",
+				"location /public",
+			},
+			expAbsent: []string{"auth_basic", "auth_oidc", "auth_jwt_key_request"},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			gen := GeneratorImpl{}
+			results := gen.executeServers(test.conf, &policiesfakes.FakeGenerator{}, alwaysFalseKeepAliveChecker)
+
+			var httpData string
+			for _, res := range results {
+				if res.dest == httpConfigFile {
+					httpData = string(res.data)
+					break
+				}
+			}
+
+			for _, sub := range test.expPresent {
+				g.Expect(httpData).To(ContainSubstring(sub))
+			}
+			for _, absent := range test.expAbsent {
+				g.Expect(httpData).NotTo(ContainSubstring(absent))
+			}
+		})
+	}
+}
+
 func TestOIDCCallbackLocation(t *testing.T) {
 	t.Parallel()
 
