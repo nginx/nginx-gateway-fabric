@@ -770,7 +770,16 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 				})
 
 				Specify("OIDC authenticationFilters are accepted", func() {
-					filterNames := []string{"oidc-auth-coffee", "oidc-auth-tea"}
+					filterNames := []string{
+						"oidc-auth-coffee",
+						"oidc-auth-tea",
+						"oidc-authz-claims-any",
+						"oidc-authz-claims-all",
+						"oidc-authz-regex",
+						"oidc-authz-header",
+						"oidc-authz-require-all",
+						"oidc-authz-nested-claim",
+					}
 
 					for _, name := range filterNames {
 						nsname := types.NamespacedName{Name: name, Namespace: namespace}
@@ -847,13 +856,17 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 					Entry("coffee path with nginx-gateway-coffee client", "/coffee", "/logout-coffee", "URI: /coffee"),
 					Entry("tea path with nginx-gateway-tea client", "/tea", "/logout-tea", "URI: /tea"),
 					Entry("OIDC authz Any with email_verified claim",
-						"/oidc-authz-any", "/logout-authz-any", "URI: /oidc-authz-any"),
+						"/oidc-authz-claims-any", "/logout-authz-any", "URI: /oidc-authz-claims-any"),
 					Entry("OIDC authz All with email_verified and preferred_username claims",
-						"/oidc-authz-all", "/logout-authz-all", "URI: /oidc-authz-all"),
+						"/oidc-authz-claims-all", "/logout-authz-all", "URI: /oidc-authz-claims-all"),
 					Entry("OIDC authz Regex with email claim matching pattern",
 						"/oidc-authz-regex", "/logout-authz-regex", "URI: /oidc-authz-regex"),
 					Entry("OIDC authz with proxySetHeader for claims",
 						"/oidc-authz-header", "/logout-authz-header", "URI: /oidc-authz-header"),
+					Entry("OIDC authz with require All at top level",
+						"/oidc-authz-require-all", "/logout-authz-require-all", "URI: /oidc-authz-require-all"),
+					Entry("OIDC authz with nested claim (realm_access/roles)",
+						"/oidc-authz-nested", "/logout-authz-nested", "URI: /oidc-authz-nested"),
 				)
 
 				Context("nginx directives", func() {
@@ -1003,10 +1016,10 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 						Entry("OIDC auth_oidc directive in authz-protected location", []framework.ExpectedNginxField{
 							{
 								Directive: "auth_oidc",
-								Value:     fmt.Sprintf("%s_oidc-authz-any", namespace),
+								Value:     fmt.Sprintf("%s_oidc-authz-claims-any", namespace),
 								File:      "http.conf",
 								Server:    "cafe.example.com",
-								Location:  "/oidc-authz-any",
+								Location:  "/oidc-authz-claims-any",
 							},
 						}),
 						Entry("OIDC auth_jwt with token=$oidc_id_token for claim validation", []framework.ExpectedNginxField{
@@ -1015,17 +1028,17 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 								Value:                 "token=$oidc_id_token",
 								File:                  "http.conf",
 								Server:                "cafe.example.com",
-								Location:              "/oidc-authz-any",
+								Location:              "/oidc-authz-claims-any",
 								ValueSubstringAllowed: true,
 							},
 						}),
 						Entry("OIDC auth_jwt_require directive for authorization", []framework.ExpectedNginxField{
 							{
 								Directive:             "auth_jwt_require",
-								Value:                 "oidc_authz_any",
+								Value:                 "oidc_authz_claims_any",
 								File:                  "http.conf",
 								Server:                "cafe.example.com",
-								Location:              "/oidc-authz-any",
+								Location:              "/oidc-authz-claims-any",
 								ValueSubstringAllowed: true,
 							},
 						}),
@@ -1044,6 +1057,42 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 								File:                  "http.conf",
 								Server:                "cafe.example.com",
 								Location:              "/oidc-authz-header",
+								ValueSubstringAllowed: true,
+							},
+						}),
+						Entry("OIDC auth_jwt_require directive for require All at top level", []framework.ExpectedNginxField{
+							{
+								Directive:             "auth_jwt_require",
+								Value:                 "oidc_authz_require_all",
+								File:                  "http.conf",
+								Server:                "cafe.example.com",
+								Location:              "/oidc-authz-require-all",
+								ValueSubstringAllowed: true,
+							},
+						}),
+						Entry("OIDC auth_jwt_claim_set directive for nested claim", []framework.ExpectedNginxField{
+							{
+								Directive:             "auth_jwt_claim_set",
+								Value:                 "realm_access roles",
+								File:                  "http.conf",
+								ValueSubstringAllowed: true,
+							},
+						}),
+						Entry("OIDC proxy_set_header for nested claim forwarding", []framework.ExpectedNginxField{
+							{
+								Directive:             "proxy_set_header",
+								Value:                 "X-ROLES-RealmAccess",
+								File:                  "http.conf",
+								Server:                "cafe.example.com",
+								Location:              "/oidc-authz-nested",
+								ValueSubstringAllowed: true,
+							},
+							{
+								Directive:             "proxy_set_header",
+								Value:                 "X-OIDC-Email",
+								File:                  "http.conf",
+								Server:                "cafe.example.com",
+								Location:              "/oidc-authz-nested",
 								ValueSubstringAllowed: true,
 							},
 						}),
