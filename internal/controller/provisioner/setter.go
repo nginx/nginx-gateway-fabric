@@ -9,6 +9,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -27,6 +28,10 @@ func objectSpecSetter(minimalObject, object client.Object) controllerutil.Mutate
 	case *autoscalingv2.HorizontalPodAutoscaler:
 		if minObj, ok := minimalObject.(*autoscalingv2.HorizontalPodAutoscaler); ok {
 			return hpaSpecSetter(minObj, obj.Spec, obj.ObjectMeta)
+		}
+	case *policyv1.PodDisruptionBudget:
+		if minObj, ok := minimalObject.(*policyv1.PodDisruptionBudget); ok {
+			return pdbSpecSetter(minObj, obj.Spec, obj.ObjectMeta)
 		}
 	case *appsv1.DaemonSet:
 		if minObj, ok := minimalObject.(*appsv1.DaemonSet); ok {
@@ -94,6 +99,21 @@ func hpaSpecSetter(
 		hpa.OwnerReferences = objectMeta.OwnerReferences
 
 		hpa.Spec = spec
+		return nil
+	}
+}
+
+func pdbSpecSetter(
+	pdb *policyv1.PodDisruptionBudget,
+	spec policyv1.PodDisruptionBudgetSpec,
+	objectMeta metav1.ObjectMeta,
+) controllerutil.MutateFn {
+	return func() error {
+		pdb.Labels = objectMeta.Labels
+		pdb.Annotations = objectMeta.Annotations
+		pdb.OwnerReferences = objectMeta.OwnerReferences
+
+		pdb.Spec = spec
 		return nil
 	}
 }

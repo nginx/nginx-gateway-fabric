@@ -8,6 +8,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -147,6 +148,16 @@ func newEventLoop(
 				),
 			},
 		},
+		{
+			objectType: &policyv1.PodDisruptionBudget{},
+			options: []controller.Option{
+				controller.WithK8sPredicate(
+					k8spredicate.And(
+						nginxResourceLabelPredicate,
+					),
+				),
+			},
+		},
 	}
 
 	if isOpenshift {
@@ -202,6 +213,7 @@ func newEventLoop(
 		&appsv1.DeploymentList{},
 		&appsv1.DaemonSetList{},
 		&autoscalingv2.HorizontalPodAutoscalerList{},
+		&policyv1.PodDisruptionBudgetList{},
 		&corev1.ServiceList{},
 		&corev1.ServiceAccountList{},
 		&corev1.ConfigMapList{},
