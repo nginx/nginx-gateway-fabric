@@ -6470,7 +6470,7 @@ func TestExecuteServers_OIDCAuth(t *testing.T) {
 				},
 			},
 			expPresent: []string{"auth_oidc oidc_test_my-filter;"},
-			expAbsent:  []string{"auth_basic"},
+			expAbsent:  []string{"auth_basic", "auth_jwt"},
 		},
 		{
 			name: "nil AuthenticationFilter results in no auth_oidc in location",
@@ -6494,7 +6494,7 @@ func TestExecuteServers_OIDCAuth(t *testing.T) {
 					},
 				},
 			},
-			expAbsent: []string{"auth_oidc", "auth_basic"},
+			expAbsent: []string{"auth_oidc", "auth_basic", "auth_jwt"},
 		},
 		{
 			name: "Empty authentication filter results in no auth_oidc in location",
@@ -6521,7 +6521,7 @@ func TestExecuteServers_OIDCAuth(t *testing.T) {
 					},
 				},
 			},
-			expAbsent: []string{"auth_oidc"},
+			expAbsent: []string{"auth_oidc", "auth_jwt", "auth_basic"},
 		},
 		{
 			name: "OIDC filter with redirect URI generates a callback location with auth_oidc",
@@ -6556,6 +6556,97 @@ func TestExecuteServers_OIDCAuth(t *testing.T) {
 			expPresent: []string{
 				"location = /oidc_callback_test_my-filter {",
 				"auth_oidc oidc_test_my-filter;",
+			},
+			expAbsent: []string{
+				"auth_basic",
+				"auth_jwt",
+			},
+		},
+		{
+			name: "OIDC auth with authorization - single rule with one claim",
+			conf: dataplane.Configuration{
+				HTTPServers: []dataplane.VirtualServer{
+					{
+						Hostname: "example.com",
+						Port:     8080,
+						PathRules: []dataplane.PathRule{
+							{
+								Path:     "/protected",
+								PathType: dataplane.PathTypePrefix,
+								MatchRules: []dataplane.MatchRule{
+									{
+										Match:        dataplane.Match{},
+										BackendGroup: backend,
+										Filters: dataplane.HTTPFilters{
+											AuthenticationFilter: &dataplane.AuthenticationFilter{
+												OIDC: &dataplane.AuthOIDC{
+													Provider: &dataplane.OIDCProvider{
+														Name: "oidc_test_my-filter",
+													},
+													AuthRequireVariable: "$oidc_authz_all",
+													AuthZProxySetHeaders: []dataplane.HTTPHeader{
+														{Name: "X-User-Role", Value: "$jwt_claim_role"},
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expPresent: []string{
+				`auth_oidc oidc_test_my-filter;`,
+				`auth_jwt "" token=$oidc_id_token;`,
+				`auth_jwt_require $oidc_authz_all;`,
+				`proxy_set_header X-User-Role $jwt_claim_role;`,
+			},
+			expAbsent: []string{
+				"auth_basic",
+			},
+		},
+		{
+			name: "OIDC auth with authorization - single rule with no proxy set headers",
+			conf: dataplane.Configuration{
+				HTTPServers: []dataplane.VirtualServer{
+					{
+						Hostname: "example.com",
+						Port:     8080,
+						PathRules: []dataplane.PathRule{
+							{
+								Path:     "/protected",
+								PathType: dataplane.PathTypePrefix,
+								MatchRules: []dataplane.MatchRule{
+									{
+										Match:        dataplane.Match{},
+										BackendGroup: backend,
+										Filters: dataplane.HTTPFilters{
+											AuthenticationFilter: &dataplane.AuthenticationFilter{
+												OIDC: &dataplane.AuthOIDC{
+													Provider: &dataplane.OIDCProvider{
+														Name: "oidc_test_my-filter",
+													},
+													AuthRequireVariable: "$oidc_authz_all",
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expPresent: []string{
+				`auth_oidc oidc_test_my-filter;`,
+				`auth_jwt "" token=$oidc_id_token;`,
+				`auth_jwt_require $oidc_authz_all;`,
+			},
+			expAbsent: []string{
+				`proxy_set_header X-User-Role`,
+				"auth_basic",
 			},
 		},
 		{
