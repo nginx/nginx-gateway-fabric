@@ -5636,7 +5636,7 @@ func TestBuildStreamUpstreams(t *testing.T) {
 	)
 
 	// Upstreams are sorted by name so that identical input produces a stable order and doesn't
-	// trigger spurious NGINX reloads (https://github.com/nginx/nginx-gateway-fabric/issues/5428).
+	// trigger spurious NGINX reloads.
 	expectedStreamUpstreams := []Upstream{
 		{
 			Name: "default_external-app_443",
@@ -5886,7 +5886,7 @@ func TestBuildL4Servers(t *testing.T) {
 				},
 			},
 			protocol:        v1.TCPProtocolType,
-			expectedServers: []Layer4VirtualServer{},
+			expectedServers: nil,
 		},
 		{
 			name: "skips routes with no valid backends",
@@ -5926,7 +5926,7 @@ func TestBuildL4Servers(t *testing.T) {
 				},
 			},
 			protocol:        v1.TCPProtocolType,
-			expectedServers: []Layer4VirtualServer{},
+			expectedServers: nil,
 		},
 		{
 			name: "skips routes with empty backend refs",
@@ -5956,7 +5956,7 @@ func TestBuildL4Servers(t *testing.T) {
 				},
 			},
 			protocol:        v1.TCPProtocolType,
-			expectedServers: []Layer4VirtualServer{},
+			expectedServers: nil,
 		},
 		{
 			name: "skips invalid listeners",
@@ -5996,7 +5996,7 @@ func TestBuildL4Servers(t *testing.T) {
 				},
 			},
 			protocol:        v1.TCPProtocolType,
-			expectedServers: []Layer4VirtualServer{},
+			expectedServers: nil,
 		},
 		{
 			name: "filters by protocol - TCP listener ignored for UDP protocol",
@@ -6036,7 +6036,7 @@ func TestBuildL4Servers(t *testing.T) {
 				},
 			},
 			protocol:        v1.UDPProtocolType,
-			expectedServers: []Layer4VirtualServer{},
+			expectedServers: nil,
 		},
 		{
 			name: "multiple listeners and routes",
@@ -6169,7 +6169,71 @@ func TestBuildL4Servers(t *testing.T) {
 				},
 			},
 			protocol:        v1.TCPProtocolType,
-			expectedServers: []Layer4VirtualServer{},
+			expectedServers: nil,
+		},
+		{
+			// L4Routes is a map (randomized iteration order). The route names are chosen so that map
+			// order differs from the expected output, verifying the servers are sorted deterministically.
+			name: "multiple TCP routes on the same listener are sorted by upstream",
+			gateway: &graph.Gateway{
+				Source: &v1.Gateway{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "test",
+						Name:      "gateway",
+					},
+				},
+				Listeners: []*graph.Listener{
+					{
+						Name:  "tcp-listener",
+						Valid: true,
+						Source: v1.Listener{
+							Protocol: v1.TCPProtocolType,
+							Port:     8080,
+						},
+						L4Routes: map[graph.L4RouteKey]*graph.L4Route{
+							{NamespacedName: types.NamespacedName{Namespace: "default", Name: "route-c"}}: createL4Route(
+								"route-c", true, []graph.BackendRef{{
+									Valid:       true,
+									SvcNsName:   types.NamespacedName{Namespace: "default", Name: "svc-c"},
+									ServicePort: apiv1.ServicePort{Name: "tcp", Port: 8080},
+									Weight:      1,
+								}},
+							),
+							{NamespacedName: types.NamespacedName{Namespace: "default", Name: "route-a"}}: createL4Route(
+								"route-a", true, []graph.BackendRef{{
+									Valid:       true,
+									SvcNsName:   types.NamespacedName{Namespace: "default", Name: "svc-a"},
+									ServicePort: apiv1.ServicePort{Name: "tcp", Port: 8080},
+									Weight:      1,
+								}},
+							),
+							{NamespacedName: types.NamespacedName{Namespace: "default", Name: "route-d"}}: createL4Route(
+								"route-d", true, []graph.BackendRef{{
+									Valid:       true,
+									SvcNsName:   types.NamespacedName{Namespace: "default", Name: "svc-d"},
+									ServicePort: apiv1.ServicePort{Name: "tcp", Port: 8080},
+									Weight:      1,
+								}},
+							),
+							{NamespacedName: types.NamespacedName{Namespace: "default", Name: "route-b"}}: createL4Route(
+								"route-b", true, []graph.BackendRef{{
+									Valid:       true,
+									SvcNsName:   types.NamespacedName{Namespace: "default", Name: "svc-b"},
+									ServicePort: apiv1.ServicePort{Name: "tcp", Port: 8080},
+									Weight:      1,
+								}},
+							),
+						},
+					},
+				},
+			},
+			protocol: v1.TCPProtocolType,
+			expectedServers: []Layer4VirtualServer{
+				{Hostname: "", Port: 8080, Upstreams: []Layer4Upstream{{Name: "default_svc-a_8080", Weight: 1}}},
+				{Hostname: "", Port: 8080, Upstreams: []Layer4Upstream{{Name: "default_svc-b_8080", Weight: 1}}},
+				{Hostname: "", Port: 8080, Upstreams: []Layer4Upstream{{Name: "default_svc-c_8080", Weight: 1}}},
+				{Hostname: "", Port: 8080, Upstreams: []Layer4Upstream{{Name: "default_svc-d_8080", Weight: 1}}},
+			},
 		},
 	}
 
@@ -6180,67 +6244,9 @@ func TestBuildL4Servers(t *testing.T) {
 
 			servers := buildL4Servers(logr.Discard(), tt.gateway, tt.protocol)
 
-			g.Expect(servers).To(ConsistOf(tt.expectedServers))
+			// Equal (not ConsistOf) so that the deterministic, sorted order of servers is verified.
+			g.Expect(servers).To(Equal(tt.expectedServers))
 		})
-	}
-}
-
-// TestBuildL4ServersOrder verifies that L4 servers are emitted in a stable, sorted order. The
-// servers are derived from the listener's L4Routes map, whose iteration order is randomized, so
-// emitting them unsorted produces non-deterministic config and spurious NGINX reloads
-// (https://github.com/nginx/nginx-gateway-fabric/issues/5428).
-func TestBuildL4ServersOrder(t *testing.T) {
-	t.Parallel()
-	g := NewWithT(t)
-
-	l4Route := func(name, svc string) *graph.L4Route {
-		return &graph.L4Route{
-			Valid: true,
-			Source: &v1alpha2.TCPRoute{
-				ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: name},
-			},
-			Spec: graph.L4RouteSpec{
-				BackendRefs: []graph.BackendRef{
-					{
-						Valid:       true,
-						SvcNsName:   types.NamespacedName{Namespace: "default", Name: svc},
-						ServicePort: apiv1.ServicePort{Name: "tcp", Port: 8080},
-						Weight:      1,
-					},
-				},
-			},
-		}
-	}
-
-	// Routes are added in non-sorted order; their keys come from a map.
-	gateway := &graph.Gateway{
-		Source: &v1.Gateway{
-			ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "gateway"},
-		},
-		Listeners: []*graph.Listener{
-			{
-				Name:   "tcp-listener",
-				Valid:  true,
-				Source: v1.Listener{Protocol: v1.TCPProtocolType, Port: 8080},
-				L4Routes: map[graph.L4RouteKey]*graph.L4Route{
-					{NamespacedName: types.NamespacedName{Namespace: "default", Name: "route-c"}}: l4Route("route-c", "svc-c"),
-					{NamespacedName: types.NamespacedName{Namespace: "default", Name: "route-a"}}: l4Route("route-a", "svc-a"),
-					{NamespacedName: types.NamespacedName{Namespace: "default", Name: "route-b"}}: l4Route("route-b", "svc-b"),
-				},
-			},
-		},
-	}
-
-	expectedServers := []Layer4VirtualServer{
-		{Hostname: "", Port: 8080, Upstreams: []Layer4Upstream{{Name: "default_svc-a_8080", Weight: 1}}},
-		{Hostname: "", Port: 8080, Upstreams: []Layer4Upstream{{Name: "default_svc-b_8080", Weight: 1}}},
-		{Hostname: "", Port: 8080, Upstreams: []Layer4Upstream{{Name: "default_svc-c_8080", Weight: 1}}},
-	}
-
-	// Build several times to guard against the result only incidentally being sorted.
-	for range 10 {
-		servers := buildL4Servers(logr.Discard(), gateway, v1.TCPProtocolType)
-		g.Expect(servers).To(Equal(expectedServers))
 	}
 }
 

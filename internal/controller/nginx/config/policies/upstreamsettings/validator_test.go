@@ -1,9 +1,6 @@
 package upstreamsettings_test
 
 import (
-	"sort"
-	"strconv"
-	"strings"
 	"testing"
 
 	. "github.com/onsi/gomega"
@@ -20,6 +17,19 @@ import (
 )
 
 const plusDisabled = false
+
+// Expected, deterministically-ordered list of supported load balancing methods in validation error
+// messages. The methods are derived from a Go map, so the validator sorts them; asserting against
+// these exact strings verifies that ordering stays stable.
+const (
+	ossLBMethods = "hash, hash consistent, ip_hash, least_conn, least_time header, " +
+		"least_time header inflight, least_time last_byte, least_time last_byte inflight, " +
+		"random, random two, random two least_conn, round_robin"
+	plusLBMethods = "hash, hash consistent, ip_hash, least_conn, least_time header, " +
+		"least_time header inflight, least_time last_byte, least_time last_byte inflight, " +
+		"random, random two, random two least_conn, random two least_time=header, " +
+		"random two least_time=last_byte, round_robin"
+)
 
 type policyModFunc func(policy *ngfAPI.UpstreamSettingsPolicy) *ngfAPI.UpstreamSettingsPolicy
 
@@ -337,7 +347,7 @@ func TestValidate_ValidateLoadBalancingMethod(t *testing.T) {
 			},
 			expConditions: []conditions.Condition{
 				conditions.NewPolicyInvalid("spec.loadBalancingMethod: Invalid value: \"random two least_time=header\": " +
-					"NGINX OSS supports the following load balancing methods: "),
+					"NGINX OSS supports the following load balancing methods: " + ossLBMethods),
 			},
 		},
 		{
@@ -359,7 +369,7 @@ func TestValidate_ValidateLoadBalancingMethod(t *testing.T) {
 			},
 			expConditions: []conditions.Condition{
 				conditions.NewPolicyInvalid("spec.loadBalancingMethod: Invalid value: \"invalid-method\": " +
-					"NGINX OSS supports the following load balancing methods: "),
+					"NGINX OSS supports the following load balancing methods: " + ossLBMethods),
 			},
 		},
 		{
@@ -371,7 +381,7 @@ func TestValidate_ValidateLoadBalancingMethod(t *testing.T) {
 			},
 			expConditions: []conditions.Condition{
 				conditions.NewPolicyInvalid("spec.loadBalancingMethod: Invalid value: \"invalid-method\": " +
-					"NGINX Plus supports the following load balancing methods: "),
+					"NGINX Plus supports the following load balancing methods: " + plusLBMethods),
 			},
 			plusEnabled: true,
 		},
@@ -387,52 +397,10 @@ func TestValidate_ValidateLoadBalancingMethod(t *testing.T) {
 
 			if test.expConditions != nil {
 				g.Expect(conds).To(HaveLen(1))
-				g.Expect(conds[0].Message).To(ContainSubstring(test.expConditions[0].Message))
+				g.Expect(conds[0].Message).To(Equal(test.expConditions[0].Message))
 			} else {
 				g.Expect(conds).To(BeNil())
 			}
 		})
 	}
-}
-
-// TestValidate_LoadBalancingMethodListDeterministicOrder verifies that the list of supported load
-// balancing methods in the validation error message is emitted in a stable, sorted order. The list
-// is derived from a Go map, whose iteration order is randomized, so emitting it unsorted produces a
-// non-deterministic (flaky) error message (see
-// https://github.com/nginx/nginx-gateway-fabric/issues/5428).
-func TestValidate_LoadBalancingMethodListDeterministicOrder(t *testing.T) {
-	t.Parallel()
-
-	for _, plusEnabled := range []bool{false, true} {
-		t.Run("plusEnabled="+strconv.FormatBool(plusEnabled), func(t *testing.T) {
-			t.Parallel()
-			g := NewWithT(t)
-
-			policy := &ngfAPI.UpstreamSettingsPolicy{
-				Spec: ngfAPI.UpstreamSettingsPolicySpec{
-					LoadBalancingMethod: helpers.GetPointer(ngfAPI.LoadBalancingType("invalid-method")),
-				},
-			}
-
-			v := upstreamsettings.NewValidator(validation.GenericValidator{}, plusEnabled)
-
-			// Validate multiple times to guard against the list only incidentally being sorted.
-			for range 10 {
-				conds := v.Validate(policy)
-				g.Expect(conds).To(HaveLen(1))
-
-				_, list, found := strings.Cut(conds[0].Message, "load balancing methods: ")
-				g.Expect(found).To(BeTrue())
-
-				methods := strings.Split(list, ", ")
-				g.Expect(methods).To(BeEquivalentTo(sortedCopy(methods)))
-			}
-		})
-	}
-}
-
-func sortedCopy(s []string) []string {
-	out := append([]string(nil), s...)
-	sort.Strings(out)
-	return out
 }
