@@ -27,7 +27,7 @@ We will use the IngressLink resource available in CIS to configure BIG-IP so tha
 
 ## API, Customer Driven Interfaces, and User Experience
 
-### Architecture and data flow
+### Architecture and Data flow
 
 To better understand how resources are created in the cluster and reflected back into BigIP lets look at the diagram below:
 
@@ -509,10 +509,6 @@ spec:
 
 `trustedAddresses` is a security control. NGINX only honors a PROXY header from a source listed in this field, so the field must contain the BIG-IP self-IP that originates traffic to the pods. Use that self-IP's subnet. In an HA pair, cover both devices' self-IPs, because either one can be the active sender. Both sides also have to agree on whether PROXY protocol is in use. If NGINX expects a PROXY header but BIG-IP is not sending one, or BIG-IP sends one but NGINX is not expecting it, the connection fails.
 
-### API Definition
-
-
-
 ## Use Cases
 
 - Exposes Nginx Gateway Fabric behind an existing BIG-IP without manually configuring virtual servers and pools.
@@ -553,7 +549,4 @@ The test flow:
 
 ## References
 
-- [Rewrite Client IP proposal](rewrite-client-ip.md)
-- [Gateway Settings (NginxProxy) proposal](gateway-settings.md)
-- [F5 Container Ingress Services](https://github.com/F5Networks/k8s-bigip-ctlr)
 - [IngressLink CRD](https://github.com/F5Networks/k8s-bigip-ctlr/blob/68c2c90ee30299350b169a6415e18ed3378a4a1f/docs/config_examples/customResourceDefinitions/customresourcedefinitions.yml#L1114)
