@@ -1791,7 +1791,6 @@ func getPath(path *v1.HTTPPathMatch) string {
 	return *path.Value
 }
 
-//nolint:gocyclo
 func createHTTPFilters(
 	filters []graph.Filter,
 	ruleIdx int,
@@ -1806,65 +1805,115 @@ func createHTTPFilters(
 	for _, f := range filters {
 		switch f.FilterType {
 		case graph.FilterRequestRedirect:
-			if result.RequestRedirect == nil {
-				// using the first filter
-				result.RequestRedirect = convertHTTPRequestRedirectFilter(f.RequestRedirect)
-			}
+			result.addRequestRedirect(f.RequestRedirect)
 		case graph.FilterURLRewrite:
-			if result.RequestURLRewrite == nil {
-				// using the first filter
-				result.RequestURLRewrite = convertHTTPURLRewriteFilter(f.URLRewrite)
-			}
+			result.addURLRewrite(f.URLRewrite)
 		case graph.FilterRequestMirror:
-			result.RequestMirrors = append(
-				result.RequestMirrors,
-				convertHTTPRequestMirrorFilter(f.RequestMirror, ruleIdx, routeNsName),
-			)
+			result.addRequestMirror(f.RequestMirror, ruleIdx, routeNsName)
 		case graph.FilterRequestHeaderModifier:
-			if result.RequestHeaderModifiers == nil {
-				// using the first filter
-				result.RequestHeaderModifiers = convertHTTPHeaderFilter(f.RequestHeaderModifier)
-			}
+			result.addRequestHeaderModifier(f.RequestHeaderModifier)
 		case graph.FilterResponseHeaderModifier:
-			if result.ResponseHeaderModifiers == nil {
-				// using the first filter
-				result.ResponseHeaderModifiers = convertHTTPHeaderFilter(f.ResponseHeaderModifier)
-			}
+			result.addResponseHeaderModifier(f.ResponseHeaderModifier)
 		case graph.FilterExtensionRef:
-			if f.ResolvedExtensionRef != nil {
-				if f.ResolvedExtensionRef.SnippetsFilter != nil {
-					result.SnippetsFilters = append(
-						result.SnippetsFilters,
-						convertSnippetsFilter(f.ResolvedExtensionRef.SnippetsFilter),
-					)
-				}
-				if f.ResolvedExtensionRef.AuthenticationFilter != nil {
-					result.AuthenticationFilter = convertAuthenticationFilter(
-						f.ResolvedExtensionRef.AuthenticationFilter,
-						referencedSecrets,
-					)
-				}
-			}
+			result.addExtensionRef(f.ResolvedExtensionRef, referencedSecrets)
 		case graph.FilterCORS:
-			if result.CORSFilter == nil {
-				result.CORSFilter = convertHTTPCORSFilter(f.CORS)
-			}
+			result.addCORS(f.CORS)
 		case graph.FilterExternalAuth:
-			if result.ExternalAuthFilter == nil {
-				for _, br := range backendRefs {
-					if br.IsExternalAuthBackend && br.Valid {
-						result.ExternalAuthFilter = convertHTTPExternalAuthFilter(f.ExternalAuth, br, routeNsName, ruleIdx, gwNsName)
-						if result.ExternalAuthFilter.VerifyTLS != nil && extAuthCertBundleIDs != nil {
-							extAuthCertBundleIDs[result.ExternalAuthFilter.VerifyTLS.CertBundleID] = struct{}{}
-						}
-						break
-					}
-				}
-			}
+			result.addExternalAuth(f.ExternalAuth, backendRefs, routeNsName, ruleIdx, gwNsName, extAuthCertBundleIDs)
 		}
 	}
 
 	return result
+}
+
+func (hf *HTTPFilters) addRequestRedirect(redirect *v1.HTTPRequestRedirectFilter) {
+	if hf.RequestRedirect == nil {
+		// using the first filter
+		hf.RequestRedirect = convertHTTPRequestRedirectFilter(redirect)
+	}
+}
+
+func (hf *HTTPFilters) addURLRewrite(rewrite *v1.HTTPURLRewriteFilter) {
+	if hf.RequestURLRewrite == nil {
+		// using the first filter
+		hf.RequestURLRewrite = convertHTTPURLRewriteFilter(rewrite)
+	}
+}
+
+func (hf *HTTPFilters) addRequestMirror(
+	mirror *v1.HTTPRequestMirrorFilter,
+	ruleIdx int,
+	routeNsName types.NamespacedName,
+) {
+	hf.RequestMirrors = append(
+		hf.RequestMirrors,
+		convertHTTPRequestMirrorFilter(mirror, ruleIdx, routeNsName),
+	)
+}
+
+func (hf *HTTPFilters) addRequestHeaderModifier(modifier *v1.HTTPHeaderFilter) {
+	if hf.RequestHeaderModifiers == nil {
+		// using the first filter
+		hf.RequestHeaderModifiers = convertHTTPHeaderFilter(modifier)
+	}
+}
+
+func (hf *HTTPFilters) addResponseHeaderModifier(modifier *v1.HTTPHeaderFilter) {
+	if hf.ResponseHeaderModifiers == nil {
+		// using the first filter
+		hf.ResponseHeaderModifiers = convertHTTPHeaderFilter(modifier)
+	}
+}
+
+func (hf *HTTPFilters) addExtensionRef(
+	ref *graph.ExtensionRefFilter,
+	referencedSecrets map[types.NamespacedName]*secrets.Secret,
+) {
+	if ref == nil {
+		return
+	}
+
+	if ref.SnippetsFilter != nil {
+		hf.SnippetsFilters = append(
+			hf.SnippetsFilters,
+			convertSnippetsFilter(ref.SnippetsFilter),
+		)
+	}
+	if ref.AuthenticationFilter != nil {
+		hf.AuthenticationFilter = convertAuthenticationFilter(
+			ref.AuthenticationFilter,
+			referencedSecrets,
+		)
+	}
+}
+
+func (hf *HTTPFilters) addCORS(cors *v1.HTTPCORSFilter) {
+	if hf.CORSFilter == nil {
+		hf.CORSFilter = convertHTTPCORSFilter(cors)
+	}
+}
+
+func (hf *HTTPFilters) addExternalAuth(
+	extAuth *v1.HTTPExternalAuthFilter,
+	backendRefs []graph.BackendRef,
+	routeNsName types.NamespacedName,
+	ruleIdx int,
+	gwNsName types.NamespacedName,
+	extAuthCertBundleIDs map[CertBundleID]struct{},
+) {
+	if hf.ExternalAuthFilter != nil {
+		return
+	}
+
+	for _, br := range backendRefs {
+		if br.IsExternalAuthBackend && br.Valid {
+			hf.ExternalAuthFilter = convertHTTPExternalAuthFilter(extAuth, br, routeNsName, ruleIdx, gwNsName)
+			if hf.ExternalAuthFilter.VerifyTLS != nil && extAuthCertBundleIDs != nil {
+				extAuthCertBundleIDs[hf.ExternalAuthFilter.VerifyTLS.CertBundleID] = struct{}{}
+			}
+			break
+		}
+	}
 }
 
 // listenerHostnameMoreSpecific returns true if host1 is more specific than host2.

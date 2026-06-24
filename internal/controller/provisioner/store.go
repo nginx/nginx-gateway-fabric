@@ -331,60 +331,46 @@ func (s *store) deleteResourcesForGateway(nsName types.NamespacedName) {
 	delete(s.nginxResources, nsName)
 }
 
-//nolint:gocyclo // will refactor at some point
 func (s *store) gatewayExistsForResource(object client.Object, nsName types.NamespacedName) *graph.Gateway {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
 	for _, resources := range s.nginxResources {
-		switch object.(type) {
-		case *appsv1.Deployment:
-			if resourceMatches(resources.Deployment, nsName) {
-				return resources.Gateway
-			}
-		case *autoscalingv2.HorizontalPodAutoscaler:
-			if resourceMatches(resources.HPA, nsName) {
-				return resources.Gateway
-			}
-		case *policyv1.PodDisruptionBudget:
-			if resourceMatches(resources.PDB, nsName) {
-				return resources.Gateway
-			}
-		case *appsv1.DaemonSet:
-			if resourceMatches(resources.DaemonSet, nsName) {
-				return resources.Gateway
-			}
-		case *corev1.Service:
-			if resourceMatches(resources.Service, nsName) {
-				return resources.Gateway
-			}
-		case *corev1.ServiceAccount:
-			if resourceMatches(resources.ServiceAccount, nsName) {
-				return resources.Gateway
-			}
-		case *rbacv1.Role:
-			if resourceMatches(resources.Role, nsName) {
-				return resources.Gateway
-			}
-		case *rbacv1.RoleBinding:
-			if resourceMatches(resources.RoleBinding, nsName) {
-				return resources.Gateway
-			}
-		case *corev1.ConfigMap:
-			if resourceMatches(resources.BootstrapConfigMap, nsName) {
-				return resources.Gateway
-			}
-			if resourceMatches(resources.AgentConfigMap, nsName) {
-				return resources.Gateway
-			}
-		case *corev1.Secret:
-			if secretResourceMatches(resources, nsName) {
-				return resources.Gateway
-			}
+		if resources.matchesObject(object, nsName) {
+			return resources.Gateway
 		}
 	}
 
 	return nil
+}
+
+// matchesObject reports whether nsName identifies one of the nginx resources tracked for this
+// Gateway, dispatching on the concrete type of object.
+func (r *NginxResources) matchesObject(object client.Object, nsName types.NamespacedName) bool {
+	switch object.(type) {
+	case *appsv1.Deployment:
+		return resourceMatches(r.Deployment, nsName)
+	case *autoscalingv2.HorizontalPodAutoscaler:
+		return resourceMatches(r.HPA, nsName)
+	case *policyv1.PodDisruptionBudget:
+		return resourceMatches(r.PDB, nsName)
+	case *appsv1.DaemonSet:
+		return resourceMatches(r.DaemonSet, nsName)
+	case *corev1.Service:
+		return resourceMatches(r.Service, nsName)
+	case *corev1.ServiceAccount:
+		return resourceMatches(r.ServiceAccount, nsName)
+	case *rbacv1.Role:
+		return resourceMatches(r.Role, nsName)
+	case *rbacv1.RoleBinding:
+		return resourceMatches(r.RoleBinding, nsName)
+	case *corev1.ConfigMap:
+		return resourceMatches(r.BootstrapConfigMap, nsName) || resourceMatches(r.AgentConfigMap, nsName)
+	case *corev1.Secret:
+		return secretResourceMatches(r, nsName)
+	}
+
+	return false
 }
 
 func secretResourceMatches(resources *NginxResources, nsName types.NamespacedName) bool {
