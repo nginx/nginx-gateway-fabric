@@ -33,6 +33,11 @@ on:
         description: GKE cluster region
         required: true
         default: us-west1
+      waf_plm_enabled:
+        description: Indicates whether the WAF+PLM longevity scenario was enabled when the test run was initiated.
+        required: false
+        default: false
+        type: boolean
 
 env:
   PLUS_USAGE_ENDPOINT: ${{ secrets.JWT_PLUS_REPORTING_ENDPOINT }}
@@ -71,7 +76,7 @@ jobs:
         type: ${{ fromJson(needs.vars.outputs.types) }}
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Authenticate to Google Cloud
         id: auth
@@ -111,6 +116,7 @@ jobs:
           echo "ADD_VM_IP_AUTH_NETWORKS=true" >> vars.env
           echo "PLUS_ENABLED=${{ matrix.type == 'plus' }}" >> vars.env
           echo "NGF_VERSION=${{ needs.vars.outputs.version }}" >> vars.env
+          echo "WAF_PLM_ENABLED=${{ inputs.waf_plm_enabled || false }}" >> vars.env
 
       - name: Update firewall
         working-directory: ./tests
@@ -145,7 +151,7 @@ jobs:
     if: ${{ inputs.open_pull_request == true }}
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Download Artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1

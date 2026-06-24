@@ -24,6 +24,7 @@ import (
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/policiesfakes"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/shared"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/configmaps"
@@ -6391,6 +6392,722 @@ func TestBuildOIDCProviderFromAuthenticationFilters(t *testing.T) {
 			g.Expect(result).To(ConsistOf(tc.expected))
 			g.Expect(certBundles).To(Equal(tc.expectedCertBundles))
 		})
+	}
+}
+
+func TestBuildJWTAuthZConfigFromAuthenticationFilters(t *testing.T) {
+	t.Parallel()
+	makeJWTFilter := func(
+		ns, name string,
+		valid, referenced bool,
+		authZ ngfAPIv1alpha1.Authorization,
+	) *graph.AuthenticationFilter {
+		return &graph.AuthenticationFilter{
+			Source: &ngfAPIv1alpha1.AuthenticationFilter{
+				ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: name},
+				Spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+					Type: ngfAPIv1alpha1.AuthTypeJWT,
+					JWT: &ngfAPIv1alpha1.JWTAuth{
+						Realm: "nginx-gateway",
+						File: &ngfAPIv1alpha1.JWTFileKeySource{
+							SecretRef: ngfAPIv1alpha1.LocalObjectReference{Name: "jwt-secret"},
+						},
+						Authorization: &authZ,
+					},
+				},
+			},
+			Valid:      valid,
+			Referenced: referenced,
+		}
+	}
+
+	makeJWTFilterWithNoRules := func(
+		ns, name string,
+		valid, referenced bool,
+	) *graph.AuthenticationFilter {
+		return makeJWTFilter(ns, name, valid, referenced, ngfAPIv1alpha1.Authorization{})
+	}
+
+	makeJWTFilterWithOneRuleAndDefaultSettings := func(
+		ns, name string,
+		valid, referenced bool,
+	) *graph.AuthenticationFilter {
+		authZ := ngfAPIv1alpha1.Authorization{
+			Rules: []ngfAPIv1alpha1.Rule{
+				{
+					Claims: []ngfAPIv1alpha1.Claim{
+						{
+							Name:   "role",
+							Values: []string{"admin"},
+						},
+					},
+				},
+			},
+		}
+		return makeJWTFilter(ns, name, valid, referenced, authZ)
+	}
+
+	makeJWTFilterWithNestedClaim := func(
+		ns, name string,
+		valid, referenced bool,
+	) *graph.AuthenticationFilter {
+		authZ := ngfAPIv1alpha1.Authorization{
+			Rules: []ngfAPIv1alpha1.Rule{
+				{
+					Claims: []ngfAPIv1alpha1.Claim{
+						{
+							Name:   "realm_access/roles",
+							Values: []string{"admin"},
+						},
+					},
+					Require: helpers.GetPointer(ngfAPIv1alpha1.RequireTypeAll),
+				},
+			},
+			Require: helpers.GetPointer(ngfAPIv1alpha1.RequireTypeAll),
+		}
+		return makeJWTFilter(ns, name, valid, referenced, authZ)
+	}
+
+	makeJWTFilterWithOneRuleAndCustomRequireTypesAndProxySetHeader := func(
+		ns, name string,
+		valid, referenced bool,
+	) *graph.AuthenticationFilter {
+		authZ := ngfAPIv1alpha1.Authorization{
+			Require: helpers.GetPointer(ngfAPIv1alpha1.RequireTypeAll),
+			Rules: []ngfAPIv1alpha1.Rule{
+				{
+					Claims: []ngfAPIv1alpha1.Claim{
+						{
+							Name:           "role",
+							Values:         []string{"admin"},
+							ProxySetHeader: helpers.GetPointer("X-Role"),
+						},
+					},
+					Require: helpers.GetPointer(ngfAPIv1alpha1.RequireTypeAll),
+				},
+			},
+		}
+		return makeJWTFilter(ns, name, valid, referenced, authZ)
+	}
+
+	makeJWTFilterWithOneRuleAndCustomMatchType := func(
+		ns, name string,
+		valid, referenced bool,
+		match ngfAPIv1alpha1.ClaimMatchType,
+	) *graph.AuthenticationFilter {
+		authZ := ngfAPIv1alpha1.Authorization{
+			Rules: []ngfAPIv1alpha1.Rule{
+				{
+					Claims: []ngfAPIv1alpha1.Claim{
+						{
+							Name:   "aud",
+							Values: []string{"a(.*)ws"},
+							Match:  match,
+						},
+					},
+				},
+			},
+		}
+		return makeJWTFilter(ns, name, valid, referenced, authZ)
+	}
+
+	makeJWTFilterWithMixOfAnyAndAllRequireTypes := func(
+		ns, name string,
+		valid, referenced bool,
+		rtTopLevel ngfAPIv1alpha1.RequireType,
+	) *graph.AuthenticationFilter {
+		authZ := ngfAPIv1alpha1.Authorization{
+			Require: helpers.GetPointer(rtTopLevel),
+			Rules: []ngfAPIv1alpha1.Rule{
+				{
+					Claims: []ngfAPIv1alpha1.Claim{
+						{
+							Name:   "role",
+							Values: []string{"admin"},
+						},
+						{
+							Name:   "tenant",
+							Values: []string{"acme-co"},
+						},
+					},
+					Require: helpers.GetPointer(ngfAPIv1alpha1.RequireTypeAny),
+				},
+				{
+					Claims: []ngfAPIv1alpha1.Claim{
+						{
+							Name:   "department",
+							Values: []string{"sales", "ops"},
+						},
+						{
+							Name:   "iss",
+							Values: []string{"http://foo.com"},
+						},
+					},
+					Require: helpers.GetPointer(ngfAPIv1alpha1.RequireTypeAll),
+				},
+			},
+		}
+		return makeJWTFilter(ns, name, valid, referenced, authZ)
+	}
+
+	tests := []struct {
+		authFilters map[types.NamespacedName]*graph.AuthenticationFilter
+		name        string
+		expected    []*AuthZConfig
+	}{
+		{
+			name:        "nil auth filters",
+			authFilters: nil,
+			expected:    nil,
+		},
+		{
+			name:        "empty auth filters",
+			authFilters: map[types.NamespacedName]*graph.AuthenticationFilter{},
+			expected:    nil,
+		},
+		{
+			name: "filter is invalid",
+			authFilters: map[types.NamespacedName]*graph.AuthenticationFilter{
+				{Namespace: "test", Name: "jwt-filter"}: makeJWTFilterWithOneRuleAndDefaultSettings(
+					"test", "jwt-filter", false, true,
+				),
+			},
+			expected: nil,
+		},
+		{
+			name: "filter is not referenced",
+			authFilters: map[types.NamespacedName]*graph.AuthenticationFilter{
+				{Namespace: "test", Name: "jwt-filter"}: makeJWTFilterWithOneRuleAndDefaultSettings(
+					"test", "jwt-filter", true, false,
+				),
+			},
+			expected: nil,
+		},
+		{
+			name: "filter is not JWT type",
+			authFilters: map[types.NamespacedName]*graph.AuthenticationFilter{
+				{Namespace: "test", Name: "basic-filter"}: {
+					Source: &ngfAPIv1alpha1.AuthenticationFilter{
+						ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "basic-filter"},
+						Spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+							Type:  ngfAPIv1alpha1.AuthTypeBasic,
+							Basic: &ngfAPIv1alpha1.BasicAuth{SecretRef: ngfAPIv1alpha1.LocalObjectReference{Name: "auth-secret"}},
+						},
+					},
+					Valid:      true,
+					Referenced: true,
+				},
+			},
+			expected: nil,
+		},
+		{
+			name: "valid JWT filter with no rules results in empty AuthZConfig",
+			authFilters: map[types.NamespacedName]*graph.AuthenticationFilter{
+				{Namespace: "test", Name: "jwt-filter"}: makeJWTFilterWithNoRules("test", "jwt-filter", true, true),
+			},
+			expected: nil,
+		},
+		{
+			name: "valid JWT filter with one rule and default settings",
+			authFilters: map[types.NamespacedName]*graph.AuthenticationFilter{
+				{Namespace: "test", Name: "jwt-filter"}: makeJWTFilterWithOneRuleAndDefaultSettings(
+					"test",
+					"jwt-filter",
+					true,
+					true,
+				),
+			},
+			expected: []*AuthZConfig{
+				{
+					FilterNsName: "test_jwt-filter",
+					RuleMaps: []AuthZRuleMap{
+						{
+							Maps: []shared.Map{
+								{
+									Source:   "$test_jwt_filter_claim_role",
+									Variable: "$test_jwt_filter_claim_role_rule_0",
+									Parameters: []shared.MapParameter{
+										{Value: `"~(?:^|,)admin(?:,|$)"`, Result: "1"},
+										{Value: "default", Result: "0"},
+									},
+								},
+								{
+									Source:   "$test_jwt_filter_claim_role_rule_0",
+									Variable: "$test_jwt_filter_rule_0_any",
+									Parameters: []shared.MapParameter{
+										{Value: "~1", Result: "1"},
+										{Value: "default", Result: "0"},
+									},
+								},
+							},
+							Require: ngfAPIv1alpha1.RequireTypeAny,
+						},
+					},
+					AuthClaimSets: map[string][]string{
+						"$test_jwt_filter_claim_role": {"role"},
+					},
+					// Single rule: use rule's result variable directly.
+					// No aggregation map is generated.
+					RequireVariable: "$test_jwt_filter_rule_0_any",
+				},
+			},
+		},
+		{
+			name: "valid JWT filter with nested claim",
+			authFilters: map[types.NamespacedName]*graph.AuthenticationFilter{
+				{Namespace: "test", Name: "jwt-filter"}: makeJWTFilterWithNestedClaim(
+					"test",
+					"jwt-filter",
+					true,
+					true,
+				),
+			},
+			expected: []*AuthZConfig{
+				{
+					FilterNsName: "test_jwt-filter",
+					RuleMaps: []AuthZRuleMap{
+						{
+							Maps: []shared.Map{
+								{
+									Source:   "$test_jwt_filter_claim_realm_access_roles",
+									Variable: "$test_jwt_filter_rule_0_all",
+									Parameters: []shared.MapParameter{
+										{Value: `"~^(?:.*,)?admin(?:,.*)?$"`, Result: "1"},
+										{Value: "default", Result: "0"},
+									},
+								},
+							},
+							Require: ngfAPIv1alpha1.RequireTypeAll,
+						},
+					},
+					AuthClaimSets: map[string][]string{
+						"$test_jwt_filter_claim_realm_access_roles": {"realm_access", "roles"},
+					},
+					// Single rule: use rule's result variable directly.
+					// No aggregation map is generated.
+					RequireVariable: "$test_jwt_filter_rule_0_all",
+				},
+			},
+		},
+		{
+			name: "valid JWT filter with one rules with regex match",
+			authFilters: map[types.NamespacedName]*graph.AuthenticationFilter{
+				{Namespace: "test", Name: "jwt-filter"}: makeJWTFilterWithOneRuleAndCustomMatchType(
+					"test",
+					"jwt-filter",
+					true,
+					true,
+					ngfAPIv1alpha1.ClaimMatchTypeRegex,
+				),
+			},
+			expected: []*AuthZConfig{
+				{
+					FilterNsName: "test_jwt-filter",
+					RuleMaps: []AuthZRuleMap{
+						{
+							Maps: []shared.Map{
+								{
+									Source:   "$test_jwt_filter_claim_aud",
+									Variable: "$test_jwt_filter_claim_aud_rule_0",
+									Parameters: []shared.MapParameter{
+										// Regex matches are inserted as-is
+										// We don't escape any characters
+										{Value: `"~(?:^|,)a(.*)ws(?:,|$)"`, Result: "1"},
+										{Value: "default", Result: "0"},
+									},
+								},
+								{
+									Source:   "$test_jwt_filter_claim_aud_rule_0",
+									Variable: "$test_jwt_filter_rule_0_any",
+									Parameters: []shared.MapParameter{
+										{Value: "~1", Result: "1"},
+										{Value: "default", Result: "0"},
+									},
+								},
+							},
+							Require: ngfAPIv1alpha1.RequireTypeAny,
+						},
+					},
+					AuthClaimSets: map[string][]string{
+						"$test_jwt_filter_claim_aud": {"aud"},
+					},
+					// Single rule: use rule's result variable directly.
+					// No aggregation map is generated.
+					RequireVariable: "$test_jwt_filter_rule_0_any",
+				},
+			},
+		},
+		{
+			name: "valid JWT filter with one rule, custom require types and proxy set header",
+			authFilters: map[types.NamespacedName]*graph.AuthenticationFilter{
+				{Namespace: "test", Name: "jwt-filter"}: makeJWTFilterWithOneRuleAndCustomRequireTypesAndProxySetHeader(
+					"test",
+					"jwt-filter",
+					true,
+					true,
+				),
+			},
+			expected: []*AuthZConfig{
+				{
+					FilterNsName: "test_jwt-filter",
+					RuleMaps: []AuthZRuleMap{
+						{
+							Maps: []shared.Map{
+								{
+									Source:   "$test_jwt_filter_claim_role",
+									Variable: "$test_jwt_filter_rule_0_all",
+									Parameters: []shared.MapParameter{
+										{Value: `"~^(?:.*,)?admin(?:,.*)?$"`, Result: "1"},
+										{Value: "default", Result: "0"},
+									},
+								},
+							},
+							Require: ngfAPIv1alpha1.RequireTypeAll,
+						},
+					},
+					AuthClaimSets: map[string][]string{
+						"$test_jwt_filter_claim_role": {"role"},
+					},
+					// Single rule: use rule's result variable directly.
+					// No aggregation map is generated.
+					RequireVariable: "$test_jwt_filter_rule_0_all",
+					ProxySetHeaders: []HTTPHeader{
+						{
+							Name:  "X-Role",
+							Value: "$test_jwt_filter_claim_role",
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "valid JWT filter with multiple rules, top level require set to All, claim 1 set to Any, claim 2 set to All",
+			authFilters: map[types.NamespacedName]*graph.AuthenticationFilter{
+				{Namespace: "test", Name: "jwt-filter"}: makeJWTFilterWithMixOfAnyAndAllRequireTypes(
+					"test",
+					"jwt-filter",
+					true,
+					true,
+					ngfAPIv1alpha1.RequireTypeAll,
+				),
+			},
+			expected: []*AuthZConfig{
+				{
+					FilterNsName: "test_jwt-filter",
+					RuleMaps: []AuthZRuleMap{
+						{
+							Maps: []shared.Map{
+								{
+									Source:   "$test_jwt_filter_claim_role",
+									Variable: "$test_jwt_filter_claim_role_rule_0",
+									Parameters: []shared.MapParameter{
+										{Value: `"~(?:^|,)admin(?:,|$)"`, Result: "1"},
+										{Value: "default", Result: "0"},
+									},
+								},
+								{
+									Source:   "$test_jwt_filter_claim_tenant",
+									Variable: "$test_jwt_filter_claim_tenant_rule_0",
+									Parameters: []shared.MapParameter{
+										{Value: `"~(?:^|,)acme-co(?:,|$)"`, Result: "1"},
+										{Value: "default", Result: "0"},
+									},
+								},
+								{
+									Source:   "$test_jwt_filter_claim_role_rule_0$test_jwt_filter_claim_tenant_rule_0",
+									Variable: "$test_jwt_filter_rule_0_any",
+									Parameters: []shared.MapParameter{
+										{Value: "~1", Result: "1"},
+										{Value: "default", Result: "0"},
+									},
+								},
+							},
+							Require: ngfAPIv1alpha1.RequireTypeAny,
+						},
+						{
+							Maps: []shared.Map{
+								{
+									Source:   "$test_jwt_filter_claim_department+$test_jwt_filter_claim_iss",
+									Variable: "$test_jwt_filter_rule_1_all",
+									Parameters: []shared.MapParameter{
+										{
+											Value:  `"~^(?:.*,)?(sales|ops)(?:,.*)?\+(?:.*,)?http://foo\.com(?:,.*)?$"`,
+											Result: "1",
+										},
+										{Value: "default", Result: "0"},
+									},
+								},
+							},
+							Require: ngfAPIv1alpha1.RequireTypeAll,
+						},
+					},
+					AuthZMap: &AuthZMap{
+						Require: ngfAPIv1alpha1.RequireTypeAll,
+						Map: shared.Map{
+							Source:   "$test_jwt_filter_rule_0_any$test_jwt_filter_rule_1_all",
+							Variable: "$test_jwt_filter_authz_require_all",
+							Parameters: []shared.MapParameter{
+								{Value: "11", Result: "1"},
+								{Value: "default", Result: "0"},
+							},
+						},
+					},
+					AuthClaimSets: map[string][]string{
+						"$test_jwt_filter_claim_department": {"department"},
+						"$test_jwt_filter_claim_iss":        {"iss"},
+						"$test_jwt_filter_claim_role":       {"role"},
+						"$test_jwt_filter_claim_tenant":     {"tenant"},
+					},
+					// Multiple rules: generate aggregation map that combines rules according to top level require type.
+					RequireVariable: "$test_jwt_filter_authz_require_all",
+				},
+			},
+		},
+		{
+			name: "valid JWT filter with multiple rules, top level require set to Any, claim 1 set to Any, claim 2 set to All",
+			authFilters: map[types.NamespacedName]*graph.AuthenticationFilter{
+				{Namespace: "test", Name: "jwt-filter"}: makeJWTFilterWithMixOfAnyAndAllRequireTypes(
+					"test",
+					"jwt-filter",
+					true,
+					true,
+					ngfAPIv1alpha1.RequireTypeAny,
+				),
+			},
+			expected: []*AuthZConfig{
+				{
+					FilterNsName: "test_jwt-filter",
+					RuleMaps: []AuthZRuleMap{
+						{
+							Maps: []shared.Map{
+								{
+									Source:   "$test_jwt_filter_claim_role",
+									Variable: "$test_jwt_filter_claim_role_rule_0",
+									Parameters: []shared.MapParameter{
+										{Value: `"~(?:^|,)admin(?:,|$)"`, Result: "1"},
+										{Value: "default", Result: "0"},
+									},
+								},
+								{
+									Source:   "$test_jwt_filter_claim_tenant",
+									Variable: "$test_jwt_filter_claim_tenant_rule_0",
+									Parameters: []shared.MapParameter{
+										{Value: `"~(?:^|,)acme-co(?:,|$)"`, Result: "1"},
+										{Value: "default", Result: "0"},
+									},
+								},
+								{
+									Source:   "$test_jwt_filter_claim_role_rule_0$test_jwt_filter_claim_tenant_rule_0",
+									Variable: "$test_jwt_filter_rule_0_any",
+									Parameters: []shared.MapParameter{
+										{Value: "~1", Result: "1"},
+										{Value: "default", Result: "0"},
+									},
+								},
+							},
+							Require: ngfAPIv1alpha1.RequireTypeAny,
+						},
+						{
+							Maps: []shared.Map{
+								{
+									Source:   "$test_jwt_filter_claim_department+$test_jwt_filter_claim_iss",
+									Variable: "$test_jwt_filter_rule_1_all",
+									Parameters: []shared.MapParameter{
+										{
+											Value:  `"~^(?:.*,)?(sales|ops)(?:,.*)?\+(?:.*,)?http://foo\.com(?:,.*)?$"`,
+											Result: "1",
+										},
+										{Value: "default", Result: "0"},
+									},
+								},
+							},
+							Require: ngfAPIv1alpha1.RequireTypeAll,
+						},
+					},
+					AuthZMap: &AuthZMap{
+						Require: ngfAPIv1alpha1.RequireTypeAny,
+						Map: shared.Map{
+							Source:   "$test_jwt_filter_rule_0_any$test_jwt_filter_rule_1_all",
+							Variable: "$test_jwt_filter_authz_require_any",
+							Parameters: []shared.MapParameter{
+								{Value: "~1", Result: "1"},
+								{Value: "default", Result: "0"},
+							},
+						},
+					},
+					AuthClaimSets: map[string][]string{
+						"$test_jwt_filter_claim_department": {"department"},
+						"$test_jwt_filter_claim_iss":        {"iss"},
+						"$test_jwt_filter_claim_role":       {"role"},
+						"$test_jwt_filter_claim_tenant":     {"tenant"},
+					},
+					// Multiple rules: generate aggregation map that combines rules according to top level require type.
+					RequireVariable: "$test_jwt_filter_authz_require_any",
+				},
+			},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+			result := buildAuthZConfigs(tc.authFilters)
+			g.Expect(result).To(HaveLen(len(tc.expected)))
+			if len(tc.expected) == 0 {
+				return
+			}
+
+			r := result[0]
+			g.Expect(r.AuthClaimSets).To(Equal(tc.expected[0].AuthClaimSets))
+			g.Expect(r.RuleMaps).To(ContainElements(tc.expected[0].RuleMaps))
+			g.Expect(r.ProxySetHeaders).To(ContainElements(tc.expected[0].ProxySetHeaders))
+			if r.AuthZMap != nil {
+				g.Expect(*r.AuthZMap).To(Equal(*tc.expected[0].AuthZMap))
+			} else {
+				g.Expect(tc.expected[0].AuthZMap).To(BeNil())
+			}
+			g.Expect(r.FilterNsName).To(Equal(tc.expected[0].FilterNsName))
+			g.Expect(r.RequireVariable).To(Equal(tc.expected[0].RequireVariable))
+		})
+	}
+}
+
+// TestBuildAuthZConfigs_MultipleFiltersNoVariableCollision is a regression test that verifies
+// two AuthenticationFilters sharing the same rule index produce unique NGINX map variable names.
+func TestBuildAuthZConfigs_MultipleFiltersNoVariableCollision(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	requireAll := ngfAPIv1alpha1.RequireTypeAll
+
+	authFilters := map[types.NamespacedName]*graph.AuthenticationFilter{
+		{Namespace: "team-a", Name: "auth"}: {
+			Source: &ngfAPIv1alpha1.AuthenticationFilter{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "team-a", Name: "auth"},
+				Spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+					Type: ngfAPIv1alpha1.AuthTypeJWT,
+					JWT: &ngfAPIv1alpha1.JWTAuth{
+						Realm:  "team-a-realm",
+						Source: ngfAPIv1alpha1.JWTKeySourceFile,
+						File: &ngfAPIv1alpha1.JWTFileKeySource{
+							SecretRef: ngfAPIv1alpha1.LocalObjectReference{Name: "jwt-secret"},
+						},
+						Authorization: &ngfAPIv1alpha1.Authorization{
+							Require: &requireAll,
+							Rules: []ngfAPIv1alpha1.Rule{
+								{
+									Require: &requireAll,
+									Claims: []ngfAPIv1alpha1.Claim{
+										{
+											Name:   "sub",
+											Values: []string{"alice"},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			Valid:      true,
+			Referenced: true,
+		},
+		{Namespace: "team-b", Name: "auth"}: {
+			Source: &ngfAPIv1alpha1.AuthenticationFilter{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "team-b", Name: "auth"},
+				Spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+					Type: ngfAPIv1alpha1.AuthTypeJWT,
+					JWT: &ngfAPIv1alpha1.JWTAuth{
+						Realm:  "team-b-realm",
+						Source: ngfAPIv1alpha1.JWTKeySourceFile,
+						File: &ngfAPIv1alpha1.JWTFileKeySource{
+							SecretRef: ngfAPIv1alpha1.LocalObjectReference{Name: "jwt-secret"},
+						},
+						Authorization: &ngfAPIv1alpha1.Authorization{
+							Require: &requireAll,
+							Rules: []ngfAPIv1alpha1.Rule{
+								{
+									Require: &requireAll,
+									Claims: []ngfAPIv1alpha1.Claim{
+										{
+											Name:   "sub",
+											Values: []string{"bob"},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			Valid:      true,
+			Referenced: true,
+		},
+	}
+
+	results := buildAuthZConfigs(authFilters)
+	g.Expect(results).To(HaveLen(2))
+
+	// Collect all variable names across both configs.
+	allVars := make(map[string]string)
+	for _, cfg := range results {
+		for _, rm := range cfg.RuleMaps {
+			for _, m := range rm.Maps {
+				owner, exists := allVars[m.Variable]
+				g.Expect(exists).To(BeFalse(),
+					"variable %q from filter %q collides with filter %q",
+					m.Variable, cfg.FilterNsName, owner,
+				)
+				allVars[m.Variable] = cfg.FilterNsName
+			}
+		}
+		if cfg.AuthZMap != nil {
+			owner, exists := allVars[cfg.AuthZMap.Variable]
+			g.Expect(exists).To(BeFalse(),
+				"authz map variable %q from filter %q collides with filter %q",
+				cfg.AuthZMap.Variable, cfg.FilterNsName, owner,
+			)
+			allVars[cfg.AuthZMap.Variable] = cfg.FilterNsName
+		}
+	}
+
+	// Collect all claim set variable names across both configs.
+	allClaimVars := make(map[string]string)
+	for _, cfg := range results {
+		for claimVar := range cfg.AuthClaimSets {
+			owner, exists := allClaimVars[claimVar]
+			g.Expect(exists).To(BeFalse(),
+				"claim variable %q from filter %q collides with filter %q",
+				claimVar, cfg.FilterNsName, owner,
+			)
+			allClaimVars[claimVar] = cfg.FilterNsName
+		}
+	}
+
+	// Verify each config's variables contain its sanitized filter namespace prefix.
+	// FilterNsName uses ns_name format (e.g. "team-a_auth").
+	// Variable names are sanitized, so we sanitize the prefix too.
+	for _, cfg := range results {
+		sanitized := sanitizeVariablePrefix(cfg.FilterNsName)
+		prefix := "$" + sanitized + "_"
+		for _, rm := range cfg.RuleMaps {
+			for _, m := range rm.Maps {
+				g.Expect(m.Variable).To(HavePrefix(prefix),
+					"variable %q should be prefixed with %q", m.Variable, prefix,
+				)
+			}
+		}
+		if cfg.AuthZMap != nil {
+			g.Expect(cfg.AuthZMap.Variable).To(HavePrefix(prefix),
+				"authz map variable %q should be prefixed with %q",
+				cfg.AuthZMap.Variable, prefix,
+			)
+		}
+		for claimVar := range cfg.AuthClaimSets {
+			g.Expect(claimVar).To(HavePrefix("$"+sanitized+"_claim_"),
+				"claim variable %q should contain filter namespace prefix", claimVar,
+			)
+		}
 	}
 }
 

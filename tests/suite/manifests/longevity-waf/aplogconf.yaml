@@ -1,0 +1,11 @@
+apiVersion: appprotect.f5.com/v1
+kind: APLogConf
+metadata:
+  name: log-illegal
+spec:
+  filter:
+    request_type: illegal
+  content:
+    format: default
+    max_request_size: any
+    max_message_size: 15k
