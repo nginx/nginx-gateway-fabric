@@ -1021,7 +1021,30 @@ func bindToListenerL4(
 	return true, true, true, false
 }
 
-//nolint:gocyclo // will refactor in future
+// resolveAttachmentListenerSet returns the ListenerSet NamespacedName that the parentRef targets
+// (the zero value for a Gateway ref) and whether the ref should be processed. A ref that targets a
+// different Gateway, or a ListenerSet that is missing or not owned by this Gateway, is skipped.
+func resolveAttachmentListenerSet(
+	ref *ParentRef,
+	gwNsName types.NamespacedName,
+	listenerSets map[types.NamespacedName]*ListenerSet,
+) (types.NamespacedName, bool) {
+	switch ref.Kind {
+	case kinds.ListenerSet:
+		ls := listenerSets[ref.NamespacedName]
+		if ls == nil || ls.Gateway == nil || client.ObjectKeyFromObject(ls.Gateway) != gwNsName {
+			return types.NamespacedName{}, false
+		}
+		return ref.NamespacedName, true
+	case kinds.Gateway:
+		if ref.NamespacedName != gwNsName {
+			return types.NamespacedName{}, false
+		}
+	}
+
+	return types.NamespacedName{}, true
+}
+
 func bindL7RouteToListeners(
 	route *L7Route,
 	gw *Gateway,
@@ -1040,19 +1063,9 @@ func bindL7RouteToListeners(
 			Namespace: gw.Source.Namespace,
 		}
 
-		var lsNsName types.NamespacedName
-		switch ref.Kind {
-		case kinds.ListenerSet:
-			if listenerSets[ref.NamespacedName] == nil ||
-				listenerSets[ref.NamespacedName].Gateway == nil ||
-				client.ObjectKeyFromObject(listenerSets[ref.NamespacedName].Gateway) != gwNsName {
-				continue
-			}
-			lsNsName = ref.NamespacedName
-		case kinds.Gateway:
-			if ref.NamespacedName != gwNsName {
-				continue
-			}
+		lsNsName, ok := resolveAttachmentListenerSet(ref, gwNsName, listenerSets)
+		if !ok {
+			continue
 		}
 
 		attachment, attachableListeners := validateParentRef(ref, gw, listenerSets[lsNsName])
