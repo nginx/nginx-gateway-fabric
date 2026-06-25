@@ -4,9 +4,45 @@ This document includes a curated changelog for each release. We also publish a c
 a [GitHub release](https://github.com/nginx/nginx-gateway-fabric/releases), which, by contrast, is auto-generated
 and includes links to all PRs that went into the release.
 
+## Release 2.6.5
+
+_June 17, 2026_
+
+DEPENDENCIES:
+
+- Update NGINX OSS to 1.31.2 [5472](https://github.com/nginx/nginx-gateway-fabric/pull/5472).
+
+HELM CHART:
+
+- The version of the Helm chart is now 2.6.5
+
+COMPATIBILITY:
+
+- Gateway API version: `1.5.1`
+- Gateway API Inference Extension version: `1.5.0`
+- NGINX version: `1.31.2`
+- NGINX Plus version: `R37.0`
+- F5 WAF on NGINX version: `5.13.1`
+- NGINX Agent version: `v3.11.1`
+- Kubernetes version: `1.31+`
+
+CONTAINER IMAGES:
+
+- Control plane: `ghcr.io/nginx/nginx-gateway-fabric:2.6.5`
+- Data plane: `ghcr.io/nginx/nginx-gateway-fabric/nginx:2.6.5`
+- Data plane with NGINX Plus: `private-registry.nginx.com/nginx-gateway-fabric/nginx-plus:2.6.5`
+- Data plane with NGINX Plus and F5 WAF: `private-registry.nginx.com/nginx-gateway-fabric/nginx-plus-f5waf:2.6.5`
+- Operator: `ghcr.io/nginx/nginx-gateway-fabric/operator:1.4.5`
+
 ## Release 2.6.4
 
 _June 17, 2026_
+
+SECURITY:
+
+- Extend validation for OIDC extra args in AuthenticationFilter and Server Tokens in NginxProxy [5467](https://github.com/nginx/nginx-gateway-fabric/pull/5467). This addresses [CVE-2026-11311](https://my.f5.com/manage/s/article/K000161611)
+- Extend validation for Access Log Format in NginxProxy [5467](https://github.com/nginx/nginx-gateway-fabric/pull/5467). This addresses [CVE-2026-50107](https://my.f5.com/manage/s/article/K000161785)
+- Fix GRPCRoute BackendRef filter panic [5467](https://github.com/nginx/nginx-gateway-fabric/pull/5467). This addresses [CVE-2026-32682](https://my.f5.com/manage/s/article/K000161786)
 
 BUG FIXES:
 

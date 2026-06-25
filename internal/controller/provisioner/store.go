@@ -123,86 +123,36 @@ func (s *store) getGateways() map[types.NamespacedName]*gatewayv1.Gateway {
 // we don't attempt to update nginx resources when the main event handler triggers this call with an unrelated event
 // (like a Route update) that shouldn't result in nginx resource changes.
 //
-//nolint:gocyclo
+// The Gateway case returns whether anything we care about changed; all other resource types always
+// report a change.
 func (s *store) registerResourceInGatewayConfig(gatewayNSName types.NamespacedName, object any) bool {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
 	switch obj := object.(type) {
 	case *graph.Gateway:
-		if cfg, ok := s.nginxResources[gatewayNSName]; !ok {
-			s.nginxResources[gatewayNSName] = &NginxResources{
-				Gateway: obj,
-			}
-		} else {
+		if cfg, ok := s.nginxResources[gatewayNSName]; ok {
 			changed := gatewayChanged(cfg.Gateway, obj)
 			cfg.Gateway = obj
 			return changed
 		}
+		s.nginxResources[gatewayNSName] = &NginxResources{Gateway: obj}
 	case *appsv1.Deployment:
-		if cfg, ok := s.nginxResources[gatewayNSName]; !ok {
-			s.nginxResources[gatewayNSName] = &NginxResources{
-				Deployment: obj.ObjectMeta,
-			}
-		} else {
-			cfg.Deployment = obj.ObjectMeta
-		}
+		s.getOrCreateNginxResources(gatewayNSName).Deployment = obj.ObjectMeta
 	case *autoscalingv2.HorizontalPodAutoscaler:
-		if cfg, ok := s.nginxResources[gatewayNSName]; !ok {
-			s.nginxResources[gatewayNSName] = &NginxResources{
-				HPA: obj.ObjectMeta,
-			}
-		} else {
-			cfg.HPA = obj.ObjectMeta
-		}
+		s.getOrCreateNginxResources(gatewayNSName).HPA = obj.ObjectMeta
 	case *policyv1.PodDisruptionBudget:
-		if cfg, ok := s.nginxResources[gatewayNSName]; !ok {
-			s.nginxResources[gatewayNSName] = &NginxResources{
-				PDB: obj.ObjectMeta,
-			}
-		} else {
-			cfg.PDB = obj.ObjectMeta
-		}
+		s.getOrCreateNginxResources(gatewayNSName).PDB = obj.ObjectMeta
 	case *appsv1.DaemonSet:
-		if cfg, ok := s.nginxResources[gatewayNSName]; !ok {
-			s.nginxResources[gatewayNSName] = &NginxResources{
-				DaemonSet: obj.ObjectMeta,
-			}
-		} else {
-			cfg.DaemonSet = obj.ObjectMeta
-		}
+		s.getOrCreateNginxResources(gatewayNSName).DaemonSet = obj.ObjectMeta
 	case *corev1.Service:
-		if cfg, ok := s.nginxResources[gatewayNSName]; !ok {
-			s.nginxResources[gatewayNSName] = &NginxResources{
-				Service: obj.ObjectMeta,
-			}
-		} else {
-			cfg.Service = obj.ObjectMeta
-		}
+		s.getOrCreateNginxResources(gatewayNSName).Service = obj.ObjectMeta
 	case *corev1.ServiceAccount:
-		if cfg, ok := s.nginxResources[gatewayNSName]; !ok {
-			s.nginxResources[gatewayNSName] = &NginxResources{
-				ServiceAccount: obj.ObjectMeta,
-			}
-		} else {
-			cfg.ServiceAccount = obj.ObjectMeta
-		}
+		s.getOrCreateNginxResources(gatewayNSName).ServiceAccount = obj.ObjectMeta
 	case *rbacv1.Role:
-		if cfg, ok := s.nginxResources[gatewayNSName]; !ok {
-			s.nginxResources[gatewayNSName] = &NginxResources{
-				Role: obj.ObjectMeta,
-			}
-		} else {
-			cfg.Role = obj.ObjectMeta
-		}
+		s.getOrCreateNginxResources(gatewayNSName).Role = obj.ObjectMeta
 	case *rbacv1.RoleBinding:
-		if cfg, ok := s.nginxResources[gatewayNSName]; !ok {
-			s.nginxResources[gatewayNSName] = &NginxResources{
-				RoleBinding: obj.ObjectMeta,
-			}
-		} else {
-			cfg.RoleBinding = obj.ObjectMeta
-		}
+		s.getOrCreateNginxResources(gatewayNSName).RoleBinding = obj.ObjectMeta
 	case *corev1.ConfigMap:
 		s.registerConfigMapInGatewayConfig(obj, gatewayNSName)
 	case *corev1.Secret:
@@ -210,6 +160,18 @@ func (s *store) registerResourceInGatewayConfig(gatewayNSName types.NamespacedNa
 	}
 
 	return true
+}
+
+// getOrCreateNginxResources returns the NginxResources tracked for the given Gateway, creating and
+// storing an empty entry first if none exists yet. Callers must hold s.lock.
+func (s *store) getOrCreateNginxResources(gatewayNSName types.NamespacedName) *NginxResources {
+	cfg, ok := s.nginxResources[gatewayNSName]
+	if !ok {
+		cfg = &NginxResources{}
+		s.nginxResources[gatewayNSName] = cfg
+	}
+
+	return cfg
 }
 
 func (s *store) registerConfigMapInGatewayConfig(obj *corev1.ConfigMap, gatewayNSName types.NamespacedName) {
@@ -369,60 +331,46 @@ func (s *store) deleteResourcesForGateway(nsName types.NamespacedName) {
 	delete(s.nginxResources, nsName)
 }
 
-//nolint:gocyclo // will refactor at some point
 func (s *store) gatewayExistsForResource(object client.Object, nsName types.NamespacedName) *graph.Gateway {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
 	for _, resources := range s.nginxResources {
-		switch object.(type) {
-		case *appsv1.Deployment:
-			if resourceMatches(resources.Deployment, nsName) {
-				return resources.Gateway
-			}
-		case *autoscalingv2.HorizontalPodAutoscaler:
-			if resourceMatches(resources.HPA, nsName) {
-				return resources.Gateway
-			}
-		case *policyv1.PodDisruptionBudget:
-			if resourceMatches(resources.PDB, nsName) {
-				return resources.Gateway
-			}
-		case *appsv1.DaemonSet:
-			if resourceMatches(resources.DaemonSet, nsName) {
-				return resources.Gateway
-			}
-		case *corev1.Service:
-			if resourceMatches(resources.Service, nsName) {
-				return resources.Gateway
-			}
-		case *corev1.ServiceAccount:
-			if resourceMatches(resources.ServiceAccount, nsName) {
-				return resources.Gateway
-			}
-		case *rbacv1.Role:
-			if resourceMatches(resources.Role, nsName) {
-				return resources.Gateway
-			}
-		case *rbacv1.RoleBinding:
-			if resourceMatches(resources.RoleBinding, nsName) {
-				return resources.Gateway
-			}
-		case *corev1.ConfigMap:
-			if resourceMatches(resources.BootstrapConfigMap, nsName) {
-				return resources.Gateway
-			}
-			if resourceMatches(resources.AgentConfigMap, nsName) {
-				return resources.Gateway
-			}
-		case *corev1.Secret:
-			if secretResourceMatches(resources, nsName) {
-				return resources.Gateway
-			}
+		if resources.matchesObject(object, nsName) {
+			return resources.Gateway
 		}
 	}
 
 	return nil
+}
+
+// matchesObject reports whether nsName identifies one of the nginx resources tracked for this
+// Gateway, dispatching on the concrete type of object.
+func (r *NginxResources) matchesObject(object client.Object, nsName types.NamespacedName) bool {
+	switch object.(type) {
+	case *appsv1.Deployment:
+		return resourceMatches(r.Deployment, nsName)
+	case *autoscalingv2.HorizontalPodAutoscaler:
+		return resourceMatches(r.HPA, nsName)
+	case *policyv1.PodDisruptionBudget:
+		return resourceMatches(r.PDB, nsName)
+	case *appsv1.DaemonSet:
+		return resourceMatches(r.DaemonSet, nsName)
+	case *corev1.Service:
+		return resourceMatches(r.Service, nsName)
+	case *corev1.ServiceAccount:
+		return resourceMatches(r.ServiceAccount, nsName)
+	case *rbacv1.Role:
+		return resourceMatches(r.Role, nsName)
+	case *rbacv1.RoleBinding:
+		return resourceMatches(r.RoleBinding, nsName)
+	case *corev1.ConfigMap:
+		return resourceMatches(r.BootstrapConfigMap, nsName) || resourceMatches(r.AgentConfigMap, nsName)
+	case *corev1.Secret:
+		return secretResourceMatches(r, nsName)
+	}
+
+	return false
 }
 
 func secretResourceMatches(resources *NginxResources, nsName types.NamespacedName) bool {
@@ -455,7 +403,6 @@ func resourceMatches(objMeta metav1.ObjectMeta, nsName types.NamespacedName) boo
 	return objMeta.GetName() == nsName.Name && objMeta.GetNamespace() == nsName.Namespace
 }
 
-//nolint:gocyclo
 func (s *store) getResourceVersionForObject(gatewayNSName types.NamespacedName, object client.Object) string {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
@@ -467,41 +414,35 @@ func (s *store) getResourceVersionForObject(gatewayNSName types.NamespacedName, 
 
 	switch obj := object.(type) {
 	case *appsv1.Deployment:
-		if resources.Deployment.GetName() == obj.GetName() {
-			return resources.Deployment.GetResourceVersion()
-		}
+		return resourceVersionIfNameMatches(resources.Deployment, obj.GetName())
 	case *autoscalingv2.HorizontalPodAutoscaler:
-		if resources.HPA.GetName() == obj.GetName() {
-			return resources.HPA.GetResourceVersion()
-		}
+		return resourceVersionIfNameMatches(resources.HPA, obj.GetName())
 	case *policyv1.PodDisruptionBudget:
-		if resources.PDB.GetName() == obj.GetName() {
-			return resources.PDB.GetResourceVersion()
-		}
+		return resourceVersionIfNameMatches(resources.PDB, obj.GetName())
 	case *appsv1.DaemonSet:
-		if resources.DaemonSet.GetName() == obj.GetName() {
-			return resources.DaemonSet.GetResourceVersion()
-		}
+		return resourceVersionIfNameMatches(resources.DaemonSet, obj.GetName())
 	case *corev1.Service:
-		if resources.Service.GetName() == obj.GetName() {
-			return resources.Service.GetResourceVersion()
-		}
+		return resourceVersionIfNameMatches(resources.Service, obj.GetName())
 	case *corev1.ServiceAccount:
-		if resources.ServiceAccount.GetName() == obj.GetName() {
-			return resources.ServiceAccount.GetResourceVersion()
-		}
+		return resourceVersionIfNameMatches(resources.ServiceAccount, obj.GetName())
 	case *rbacv1.Role:
-		if resources.Role.GetName() == obj.GetName() {
-			return resources.Role.GetResourceVersion()
-		}
+		return resourceVersionIfNameMatches(resources.Role, obj.GetName())
 	case *rbacv1.RoleBinding:
-		if resources.RoleBinding.GetName() == obj.GetName() {
-			return resources.RoleBinding.GetResourceVersion()
-		}
+		return resourceVersionIfNameMatches(resources.RoleBinding, obj.GetName())
 	case *corev1.ConfigMap:
 		return getResourceVersionForConfigMap(resources, obj)
 	case *corev1.Secret:
 		return getResourceVersionForSecret(resources, obj)
+	}
+
+	return ""
+}
+
+// resourceVersionIfNameMatches returns the tracked resource's ResourceVersion when its name matches
+// the provided name, and an empty string otherwise.
+func resourceVersionIfNameMatches(meta metav1.ObjectMeta, name string) string {
+	if meta.GetName() == name {
+		return meta.GetResourceVersion()
 	}
 
 	return ""
