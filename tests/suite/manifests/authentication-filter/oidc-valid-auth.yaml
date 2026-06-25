@@ -46,7 +46,7 @@ spec:
     logout:
       uri: /logout-tea
 ---
-# OIDC AuthenticationFilter with authorization: Require Any, Exact match on email claim
+# OIDC AuthenticationFilter with authorization: Require Any, Exact match on email_verified claim
 apiVersion: gateway.nginx.org/v1alpha1
 kind: AuthenticationFilter
 metadata:
