@@ -1,0 +1,15 @@
+# type: PLM WAFPolicy referencing the malformed APPolicy (status.bundle.state: invalid).
+# NGF must set ResolvedRefs=False/InvalidRef and emit no app_protect_policy_file directive.
+apiVersion: gateway.nginx.org/v1alpha1
+kind: WAFPolicy
+metadata:
+  name: gateway-waf-plm-malformed
+spec:
+  targetRefs:
+  - group: gateway.networking.k8s.io
+    kind: Gateway
+    name: gateway
+  type: PLM
+  policyRef:
+    apPolicyRef:
+      name: malformed-policy

@@ -16,6 +16,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -206,6 +207,7 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 	// service
 	// deployment/daemonset
 	// hpa
+	// pdb
 
 	objects := make([]client.Object, 0, len(configmapsList)+len(secretsList)+len(openshiftObjs)+3)
 	objects = append(objects, secretsList...)
@@ -217,6 +219,21 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 
 	objects = append(objects, service, deployment)
 
+	objects, errs = p.buildHPAAndPDB(objectMeta, nProxyCfg, selectorLabels, gateway, objects, errs)
+
+	return objects, errors.Join(errs...)
+}
+
+// buildHPAAndPDB builds the HPA and PDB for the NGINX deployment
+// if they are enabled in the EffectiveNginxProxy configuration.
+func (p *NginxProvisioner) buildHPAAndPDB(
+	objectMeta metav1.ObjectMeta,
+	nProxyCfg *graph.EffectiveNginxProxy,
+	selectorLabels map[string]string,
+	gateway *gatewayv1.Gateway,
+	objects []client.Object,
+	errs []error,
+) ([]client.Object, []error) {
 	if hpa := p.buildHPA(objectMeta, nProxyCfg); hpa != nil {
 		if err := p.setOwnerReference(hpa, gateway); err != nil {
 			errs = append(errs, fmt.Errorf("failed to set owner reference on HPA %s: %w", hpa.GetName(), err))
@@ -224,7 +241,14 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 		objects = append(objects, hpa)
 	}
 
-	return objects, errors.Join(errs...)
+	if pdb := p.buildPDB(objectMeta, nProxyCfg, selectorLabels); pdb != nil {
+		if err := p.setOwnerReference(pdb, gateway); err != nil {
+			errs = append(errs, fmt.Errorf("failed to set owner reference on pod disruption budget %s: %w", pdb.GetName(), err))
+		}
+		objects = append(objects, pdb)
+	}
+
+	return objects, errs
 }
 
 // buildResourceNames builds all the resource names for a given gateway resource name.
@@ -366,6 +390,30 @@ func (p *NginxProvisioner) buildHPA(
 	}
 
 	return buildNginxDeploymentHPA(objectMeta, nProxyCfg.Kubernetes.Deployment.Autoscaling)
+}
+
+func (p *NginxProvisioner) buildPDB(
+	objectMeta metav1.ObjectMeta,
+	nProxyCfg *graph.EffectiveNginxProxy,
+	selectorLabels map[string]string,
+) client.Object {
+	if nProxyCfg == nil || nProxyCfg.Kubernetes == nil || nProxyCfg.Kubernetes.Deployment == nil ||
+		nProxyCfg.Kubernetes.Deployment.PodDisruptionBudget == nil {
+		return nil
+	}
+
+	pdbSpec := nProxyCfg.Kubernetes.Deployment.PodDisruptionBudget
+	return &policyv1.PodDisruptionBudget{
+		ObjectMeta: objectMeta,
+		Spec: policyv1.PodDisruptionBudgetSpec{
+			Selector: &metav1.LabelSelector{
+				MatchLabels: selectorLabels,
+			},
+			MinAvailable:               pdbSpec.MinAvailable,
+			MaxUnavailable:             pdbSpec.MaxUnavailable,
+			UnhealthyPodEvictionPolicy: pdbSpec.UnhealthyPodEvictionPolicy,
+		},
+	}
 }
 
 func (p *NginxProvisioner) buildNginxSecrets(
@@ -1819,11 +1867,12 @@ func (p *NginxProvisioner) buildResourcesForInvalidGatewayCleanup(
 	// Order to delete:
 	// 1. deployment/daemonset
 	// 2. service
-	// 3. hpa
-	// 4. role/binding (if openshift)
-	// 5. serviceaccount
-	// 6. configmaps
-	// 7. secrets
+	// 3. hpa (Horizontal Pod Autoscaler)
+	// 4. pdb (Pod Disruption Budget)
+	// 5. role/binding (if openshift)
+	// 6. serviceaccount
+	// 7. configmaps
+	// 8. secrets
 
 	var objects []client.Object
 
@@ -1852,7 +1901,10 @@ func (p *NginxProvisioner) buildResourcesForInvalidGatewayCleanup(
 	// 3. HPA
 	objects = append(objects, &autoscalingv2.HorizontalPodAutoscaler{ObjectMeta: baseMeta})
 
-	// 4. OpenShift Role/RoleBinding
+	// 4. PDB
+	objects = append(objects, &policyv1.PodDisruptionBudget{ObjectMeta: baseMeta})
+
+	// 5. OpenShift Role/RoleBinding
 	if p.isOpenshift {
 		objects = append(objects,
 			&rbacv1.Role{ObjectMeta: baseMeta},
@@ -1860,16 +1912,16 @@ func (p *NginxProvisioner) buildResourcesForInvalidGatewayCleanup(
 		)
 	}
 
-	// 5. ServiceAccount
+	// 6. ServiceAccount
 	objects = append(objects, &corev1.ServiceAccount{ObjectMeta: baseMeta})
 
-	// 6. ConfigMaps
+	// 7. ConfigMaps
 	objects = append(objects,
 		&corev1.ConfigMap{ObjectMeta: meta(resourceName(nginxIncludesConfigMapNameSuffix))},
 		&corev1.ConfigMap{ObjectMeta: meta(resourceName(nginxAgentConfigMapNameSuffix))},
 	)
 
-	// 7. Secrets
+	// 8. Secrets
 	objects = append(objects, &corev1.Secret{ObjectMeta: meta(resourceName(p.cfg.AgentTLSSecretName))})
 
 	for _, name := range p.cfg.NginxDockerSecretNames {

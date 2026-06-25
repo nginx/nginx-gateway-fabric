@@ -12,12 +12,14 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"k8s.io/client-go/rest"
@@ -56,6 +58,7 @@ func createScheme() *runtime.Scheme {
 	utilruntime.Must(corev1.AddToScheme(scheme))
 	utilruntime.Must(appsv1.AddToScheme(scheme))
 	utilruntime.Must(autoscalingv2.AddToScheme(scheme))
+	utilruntime.Must(policyv1.AddToScheme(scheme))
 	utilruntime.Must(rbacv1.AddToScheme(scheme))
 
 	return scheme
@@ -684,6 +687,49 @@ func TestRegisterGateway_CleansUpOldHPA(t *testing.T) {
 	g.Expect(hpaErr).To(HaveOccurred())
 }
 
+func TestRegisterGateway_CleansUpOldPDB(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	oldPDB := &policyv1.PodDisruptionBudget{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "gw-nginx",
+			Namespace: "default",
+		},
+	}
+	gateway := &graph.Gateway{
+		Source: &gatewayv1.Gateway{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "gw",
+				Namespace: "default",
+			},
+		},
+		Listeners: []*graph.Listener{
+			{},
+		},
+		Valid: true,
+		EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+			Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+				Deployment: &ngfAPIv1alpha2.DeploymentSpec{},
+			},
+		},
+	}
+
+	provisioner, fakeClient, _ := defaultNginxProvisioner(gateway.Source, oldPDB)
+	provisioner.store.nginxResources[types.NamespacedName{Name: "gw", Namespace: "default"}] = &NginxResources{
+		PDB: oldPDB.ObjectMeta,
+	}
+
+	g.Expect(provisioner.RegisterGateway(t.Context(), gateway, "gw-nginx")).To(Succeed())
+
+	pdbErr := fakeClient.Get(
+		t.Context(),
+		types.NamespacedName{Name: "gw-nginx", Namespace: "default"},
+		&policyv1.PodDisruptionBudget{},
+	)
+	g.Expect(pdbErr).To(HaveOccurred())
+}
+
 func TestRegisterGateway_EmptyListeners(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
@@ -1096,6 +1142,29 @@ func TestCreateMinimalClone(t *testing.T) {
 				g.Expect(hpa.GetAnnotations()).To(BeEmpty())
 				g.Expect(hpa.Spec.MinReplicas).To(BeNil())
 				g.Expect(hpa.Spec.MaxReplicas).To(Equal(int32(0)))
+			},
+		},
+		{
+			name: "creates minimal PodDisruptionBudget",
+			input: &policyv1.PodDisruptionBudget{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:        "test-pdb",
+					Namespace:   "test-namespace",
+					Labels:      map[string]string{"app": "nginx"},
+					Annotations: map[string]string{"note": "test"},
+				},
+				Spec: policyv1.PodDisruptionBudgetSpec{
+					MinAvailable: helpers.GetPointer(intstr.FromInt32(1)),
+				},
+			},
+			validate: func(g *WithT, obj client.Object) {
+				pdb, ok := obj.(*policyv1.PodDisruptionBudget)
+				g.Expect(ok).To(BeTrue())
+				g.Expect(pdb.GetName()).To(Equal("test-pdb"))
+				g.Expect(pdb.GetNamespace()).To(Equal("test-namespace"))
+				g.Expect(pdb.GetLabels()).To(BeEmpty())
+				g.Expect(pdb.GetAnnotations()).To(BeEmpty())
+				g.Expect(pdb.Spec.MinAvailable).To(BeNil())
 			},
 		},
 		{

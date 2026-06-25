@@ -63,6 +63,9 @@ const (
 
 	// BundleTokenKey is the Secret key for WAF bundle Bearer Token authentication.
 	BundleTokenKey = "token"
+
+	// PLMS3Secret is the Secret data key for the PLM S3 storage secret access key.
+	PLMS3Secret = "seaweedfs_admin_secret"
 )
 
 // CertificateBundle is used to submit certificate data to nginx that is kubernetes aware.

@@ -63,7 +63,7 @@ run-conformance-tests: ## Run conformance tests
 	kubectl run -i conformance \
 		--image=$(CONFORMANCE_PREFIX):$(CONFORMANCE_TAG) --image-pull-policy=Never \
 		--overrides='{ "spec": { "serviceAccountName": "conformance" }	}' \
-		--restart=Never -- sh -c "go test -v -timeout 15m -run TestConformance . -tags conformance,experimental -args --gateway-class=$(GATEWAY_CLASS) \
+		--restart=Never -- sh -c "go test -v -timeout 20m -run TestConformance . -tags conformance,experimental -args --gateway-class=$(GATEWAY_CLASS) \
 						        --version=$(NGF_VERSION) --skip-tests=$(SKIP_TESTS) --conformance-profiles=$(CONFORMANCE_PROFILES) \
 								--report-output=output.txt; cat output.txt" | tee output.txt
 	./scripts/check-pod-exit-code.sh conformance
@@ -85,7 +85,7 @@ run-conformance-tests-openshift: ## Run conformance tests on OpenShift (skips te
 	kubectl run -i conformance \
 		--image=$(CONFORMANCE_PREFIX):$(CONFORMANCE_TAG) --image-pull-policy=Always \
 		--overrides='{ "spec": { "serviceAccountName": "conformance" }	}' \
-		--restart=Never -- sh -c "go test -v -timeout 15m -run TestConformance . -tags conformance,experimental -args --gateway-class=$(GATEWAY_CLASS) \
+		--restart=Never -- sh -c "go test -v -timeout 20m -run TestConformance . -tags conformance,experimental -args --gateway-class=$(GATEWAY_CLASS) \
 						        --supported-features=$(SUPPORTED_EXTENDED_FEATURES_OPENSHIFT) --version=$(NGF_VERSION) --skip-tests=$(SKIP_TESTS_OPENSHIFT) --conformance-profiles=$(CONFORMANCE_PROFILES) \
 								--allow-crds-mismatch --report-output=output.txt; cat output.txt" | tee output.txt
 	./scripts/check-pod-exit-code.sh conformance
@@ -173,6 +173,8 @@ start-longevity-test: nfr-test ## Start the longevity test to run for 3 days in 
 stop-longevity-test: export STOP_LONGEVITY=true
 stop-longevity-test: nfr-test ## Stop the longevity test and collects results
 
+WAF_PLM_ENABLED ?= false## Set to true to enable WAF+PLM longevity scenario (requires NGINX Plus + WAF images, amd64)
+
 .PHONY: ipv6-tests
 ipv6-tests: GOARCH=amd64
 ipv6-tests: ## Example usage: make ipv6-tests TAG=release-X.Y-rc
@@ -188,7 +190,8 @@ ipv6-tests: ## Example usage: make ipv6-tests TAG=release-X.Y-rc
 		--ngf-image-repo=$(PREFIX) --nginx-image-repo=$(NGINX_PREFIX) --nginx-plus-image-repo=$(NGINX_PLUS_PREFIX) \
 		--pull-policy=$(PULL_POLICY) --service-type=$(GW_SERVICE_TYPE) \
 		--plus-enabled=$(PLUS_ENABLED) --plus-license-file-name=$(PLUS_LICENSE_FILE) \
-		--plus-usage-endpoint=$(PLUS_USAGE_ENDPOINT) --gke-project=$(GKE_PROJECT)
+		--plus-usage-endpoint=$(PLUS_USAGE_ENDPOINT) --gke-project=$(GKE_PROJECT) \
+        --waf-enabled=$(WAF_PLM_ENABLED) $(if $(filter true,$(WAF_PLM_ENABLED)),--nginx-image-jwt-file-name=$(REGISTRY_JWT_FILE))
 
 .PHONY: test
 test: build-crossplane-image ## Runs the functional tests on your kind k8s cluster
@@ -303,6 +306,8 @@ compile-waf-bundles-ci: check-for-docker ## Compile NAP WAF policy bundles for C
 
 .PHONY: test-waf
 test-waf: PLUS_ENABLED=true
+# The WAF suite also installs the PLM controller (f5-waf-policy-controller) from the nginx-stable
+# helm repo and reuses REGISTRY_JWT_FILE to pull its images from private-registry.nginx.com.
 test-waf: build-crossplane-image ## Runs the WAF tests on a kind cluster. Bundles must already be compiled (run compile-waf-bundles first).
 	kind load docker-image nginx-crossplane:latest --name $(CLUSTER_NAME)
 	go run github.com/onsi/ginkgo/v2/ginkgo --race --randomize-all --keep-going --fail-on-pending \
@@ -319,6 +324,8 @@ test-waf: build-crossplane-image ## Runs the WAF tests on a kind cluster. Bundle
 .PHONY: test-waf-gke
 test-waf-gke: PLUS_ENABLED=true
 test-waf-gke: GOARCH=amd64
+# The WAF suite also installs the PLM controller (f5-waf-policy-controller) from the nginx-stable
+# helm repo and reuses REGISTRY_JWT_FILE to pull its images from private-registry.nginx.com.
 test-waf-gke: compile-waf-bundles check-for-plus-usage-endpoint build-crossplane-image ## Runs the WAF tests on a GKE cluster (amd64 only).
 	./scripts/push-crossplane-image.sh
 	go run github.com/onsi/ginkgo/v2/ginkgo --race --randomize-all --keep-going --fail-on-pending \

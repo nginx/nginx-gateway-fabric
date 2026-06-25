@@ -17,6 +17,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -367,6 +368,9 @@ var minimalObjectFactory = map[reflect.Type]func(name, namespace string) client.
 	reflect.TypeOf(&autoscalingv2.HorizontalPodAutoscaler{}): func(name, namespace string) client.Object {
 		return &autoscalingv2.HorizontalPodAutoscaler{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace}}
 	},
+	reflect.TypeOf(&policyv1.PodDisruptionBudget{}): func(name, namespace string) client.Object {
+		return &policyv1.PodDisruptionBudget{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace}}
+	},
 }
 
 // createMinimalClone creates a new object of the same type with only name and namespace set.
@@ -382,7 +386,6 @@ func createMinimalClone(obj client.Object) client.Object {
 	return factory(obj.GetName(), obj.GetNamespace())
 }
 
-//nolint:gocyclo // will refactor at some point
 func (p *NginxProvisioner) provisionNginx(
 	ctx context.Context,
 	resourceName string,
@@ -405,115 +408,19 @@ func (p *NginxProvisioner) provisionNginx(
 		"resource names", objNames,
 	)
 
-	var agentConfigMapUpdated, deploymentCreated bool
-	var deploymentObj *appsv1.Deployment
-	var daemonSetObj *appsv1.DaemonSet
+	var state nginxProvisionState
 	for _, obj := range objects {
-		// Create a minimal clone with only name and namespace for CreateOrUpdate
-		// This follows the CreateOrUpdate documentation that says only name/namespace should be set
-		minimalObj := createMinimalClone(obj)
-
-		createCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-
-		var res controllerutil.OperationResult
-		var upsertErr error
-		if err := wait.PollUntilContextCancel(
-			createCtx,
-			500*time.Millisecond,
-			true, /* poll immediately */
-			func(ctx context.Context) (bool, error) {
-				// Use minimalObj for CreateOrUpdate but pass both to objectSpecSetter so we can transfer
-				// the desired spec and other meta details of the object
-				res, upsertErr = controllerutil.CreateOrUpdate(ctx, p.k8sClient, minimalObj, objectSpecSetter(minimalObj, obj))
-
-				if upsertErr != nil {
-					if apierrors.IsInvalid(upsertErr) { // log this error at the error level
-						// spec.loadBalancerClass is immutable in Kubernetes; it cannot be changed after
-						// a Service is created. We cannot delete and recreate the Service because that
-						// would release and re-allocate the external IP, breaking DNS for users.
-						// Return the error to stop retrying; the outer handler will log and surface it.
-						if _, ok := obj.(*corev1.Service); ok && isLoadBalancerClassImmutabilityErr(upsertErr) {
-							return false, upsertErr
-						}
-						p.cfg.Logger.Error(
-							upsertErr,
-							"Retrying CreateOrUpdate for nginx resource after error",
-							"namespace", gateway.GetNamespace(),
-							"name", fmt.Sprintf("%s (%s)", resourceName, reflect.TypeOf(obj).Elem().Name()),
-						)
-					} else {
-						p.cfg.Logger.V(1).Info(
-							"Retrying CreateOrUpdate for nginx resource after error",
-							"namespace", gateway.GetNamespace(),
-							"name", fmt.Sprintf("%s (%s)", resourceName, reflect.TypeOf(obj).Elem().Name()),
-							"error", upsertErr.Error(),
-						)
-					}
-					return false, nil
-				}
-				return true, nil
-			},
-		); err != nil {
-			p.cfg.Logger.Error(
-				err,
-				"Failed to CreateOrUpdate nginx resource after retries",
-				"namespace", gateway.GetNamespace(),
-				"name", fmt.Sprintf("%s (%s)", resourceName, reflect.TypeOf(obj).Elem().Name()),
-			)
-
-			fullErr := errors.Join(err, upsertErr)
-			p.cfg.EventRecorder.Eventf(
-				obj,
-				gateway,
-				corev1.EventTypeWarning,
-				"CreateOrUpdateFailed",
-				"None",
-				"Failed to create or update nginx resource: %s",
-				fullErr.Error(),
-			)
-			cancel()
-			return fullErr
+		minimalObj, res, err := p.createOrUpdateNginxResource(ctx, resourceName, gateway, obj)
+		if err != nil {
+			return err
 		}
-		cancel()
 
-		switch o := minimalObj.(type) {
-		case *appsv1.Deployment:
-			deploymentObj = o
-			if res == controllerutil.OperationResultCreated {
-				deploymentCreated = true
-			}
-		case *appsv1.DaemonSet:
-			daemonSetObj = o
-			if res == controllerutil.OperationResultCreated {
-				deploymentCreated = true
-			}
-		case *corev1.ConfigMap:
-			if res == controllerutil.OperationResultUpdated &&
-				strings.HasSuffix(minimalObj.GetName(), nginxAgentConfigMapNameSuffix) {
-				agentConfigMapUpdated = true
-			}
-		}
+		state.track(minimalObj, res)
 
 		// If the Service is a LoadBalancer and the Gateway declares IP-type addresses,
 		// patch the Service status with those IPs.
 		if svc, ok := minimalObj.(*corev1.Service); ok {
-			if svc.Spec.Type == corev1.ServiceTypeLoadBalancer {
-				var ips []string
-				for _, addr := range gateway.Spec.Addresses {
-					if addr.Type != nil && *addr.Type == gatewayv1.IPAddressType {
-						ips = append(ips, addr.Value)
-					}
-				}
-				if svc.Spec.LoadBalancerClass != nil && *svc.Spec.LoadBalancerClass == p.cfg.GatewayCtlrName && len(ips) > 0 {
-					if err := p.patchServiceStatus(ctx, svc.GetNamespace(), svc.GetName(), ips); err != nil {
-						p.cfg.Logger.Error(
-							err,
-							"failed to patch Service status with gateway external IPs",
-							"service", fmt.Sprintf("%s/%s", svc.GetNamespace(), svc.GetName()),
-						)
-					}
-				}
-			}
+			p.patchLoadBalancerServiceStatus(ctx, svc, gateway)
 		}
 
 		if res != controllerutil.OperationResultCreated && res != controllerutil.OperationResultUpdated {
@@ -535,47 +442,198 @@ func (p *NginxProvisioner) provisionNginx(
 	}
 
 	// if agent configmap was updated, then we'll need to restart the deployment/daemonset
-	if agentConfigMapUpdated && !deploymentCreated {
-		updateCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-		defer cancel()
+	return p.restartNginxAfterConfigUpdate(ctx, gateway, state)
+}
 
-		var object client.Object
-		if deploymentObj != nil {
-			if deploymentObj.Spec.Template.Annotations == nil {
-				deploymentObj.Spec.Template.Annotations = make(map[string]string)
-			}
-			deploymentObj.Spec.Template.Annotations[controller.RestartedAnnotation] = time.Now().Format(time.RFC3339)
-			object = deploymentObj
-		} else if daemonSetObj != nil {
-			if daemonSetObj.Spec.Template.Annotations == nil {
-				daemonSetObj.Spec.Template.Annotations = make(map[string]string)
-			}
-			daemonSetObj.Spec.Template.Annotations[controller.RestartedAnnotation] = time.Now().Format(time.RFC3339)
-			object = daemonSetObj
+// nginxProvisionState tracks the resources observed while provisioning a Gateway's nginx objects,
+// so that an agent ConfigMap update can trigger a restart of the corresponding Deployment/DaemonSet.
+type nginxProvisionState struct {
+	deploymentObj         *appsv1.Deployment
+	daemonSetObj          *appsv1.DaemonSet
+	agentConfigMapUpdated bool
+	deploymentCreated     bool
+}
+
+// track records the result of creating or updating a single nginx resource.
+func (s *nginxProvisionState) track(minimalObj client.Object, res controllerutil.OperationResult) {
+	switch o := minimalObj.(type) {
+	case *appsv1.Deployment:
+		s.deploymentObj = o
+		if res == controllerutil.OperationResultCreated {
+			s.deploymentCreated = true
 		}
-
-		if object == nil {
-			return nil
+	case *appsv1.DaemonSet:
+		s.daemonSetObj = o
+		if res == controllerutil.OperationResultCreated {
+			s.deploymentCreated = true
 		}
+	case *corev1.ConfigMap:
+		if res == controllerutil.OperationResultUpdated &&
+			strings.HasSuffix(minimalObj.GetName(), nginxAgentConfigMapNameSuffix) {
+			s.agentConfigMapUpdated = true
+		}
+	}
+}
 
-		p.cfg.Logger.V(1).Info(
-			"Restarting nginx after agent configmap update",
-			"name", object.GetName(),
-			"namespace", object.GetNamespace(),
+// createOrUpdateNginxResource creates or updates a single nginx resource, retrying on transient
+// errors. It returns the minimal clone that was reconciled along with the operation result. On
+// failure it records a warning event on the Gateway and returns the error.
+func (p *NginxProvisioner) createOrUpdateNginxResource(
+	ctx context.Context,
+	resourceName string,
+	gateway *gatewayv1.Gateway,
+	obj client.Object,
+) (client.Object, controllerutil.OperationResult, error) {
+	// Create a minimal clone with only name and namespace for CreateOrUpdate
+	// This follows the CreateOrUpdate documentation that says only name/namespace should be set
+	minimalObj := createMinimalClone(obj)
+
+	createCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	var res controllerutil.OperationResult
+	var upsertErr error
+	if err := wait.PollUntilContextCancel(
+		createCtx,
+		500*time.Millisecond,
+		true, /* poll immediately */
+		func(ctx context.Context) (bool, error) {
+			// Use minimalObj for CreateOrUpdate but pass both to objectSpecSetter so we can transfer
+			// the desired spec and other meta details of the object
+			res, upsertErr = controllerutil.CreateOrUpdate(ctx, p.k8sClient, minimalObj, objectSpecSetter(minimalObj, obj))
+
+			if upsertErr != nil {
+				if apierrors.IsInvalid(upsertErr) { // log this error at the error level
+					// spec.loadBalancerClass is immutable in Kubernetes; it cannot be changed after
+					// a Service is created. We cannot delete and recreate the Service because that
+					// would release and re-allocate the external IP, breaking DNS for users.
+					// Return the error to stop retrying; the outer handler will log and surface it.
+					if _, ok := obj.(*corev1.Service); ok && isLoadBalancerClassImmutabilityErr(upsertErr) {
+						return false, upsertErr
+					}
+					p.cfg.Logger.Error(
+						upsertErr,
+						"Retrying CreateOrUpdate for nginx resource after error",
+						"namespace", gateway.GetNamespace(),
+						"name", fmt.Sprintf("%s (%s)", resourceName, reflect.TypeOf(obj).Elem().Name()),
+					)
+				} else {
+					p.cfg.Logger.V(1).Info(
+						"Retrying CreateOrUpdate for nginx resource after error",
+						"namespace", gateway.GetNamespace(),
+						"name", fmt.Sprintf("%s (%s)", resourceName, reflect.TypeOf(obj).Elem().Name()),
+						"error", upsertErr.Error(),
+					)
+				}
+				return false, nil
+			}
+			return true, nil
+		},
+	); err != nil {
+		p.cfg.Logger.Error(
+			err,
+			"Failed to CreateOrUpdate nginx resource after retries",
+			"namespace", gateway.GetNamespace(),
+			"name", fmt.Sprintf("%s (%s)", resourceName, reflect.TypeOf(obj).Elem().Name()),
 		)
 
-		if err := p.k8sClient.Update(updateCtx, object); err != nil && !apierrors.IsConflict(err) {
-			p.cfg.EventRecorder.Eventf(
-				object,
-				gateway,
-				corev1.EventTypeWarning,
-				"RestartFailed",
-				"None",
-				"Failed to restart nginx after agent config update: %s",
-				err.Error(),
-			)
-			return err
+		fullErr := errors.Join(err, upsertErr)
+		p.cfg.EventRecorder.Eventf(
+			obj,
+			gateway,
+			corev1.EventTypeWarning,
+			"CreateOrUpdateFailed",
+			"None",
+			"Failed to create or update nginx resource: %s",
+			fullErr.Error(),
+		)
+		return nil, res, fullErr
+	}
+
+	return minimalObj, res, nil
+}
+
+// patchLoadBalancerServiceStatus patches a LoadBalancer Service's status with the Gateway's
+// IP-type addresses when the Service is managed by this controller. Patch failures are logged
+// but not returned, since they should not block provisioning.
+func (p *NginxProvisioner) patchLoadBalancerServiceStatus(
+	ctx context.Context,
+	svc *corev1.Service,
+	gateway *gatewayv1.Gateway,
+) {
+	if svc.Spec.Type != corev1.ServiceTypeLoadBalancer {
+		return
+	}
+
+	var ips []string
+	for _, addr := range gateway.Spec.Addresses {
+		if addr.Type != nil && *addr.Type == gatewayv1.IPAddressType {
+			ips = append(ips, addr.Value)
 		}
+	}
+
+	if svc.Spec.LoadBalancerClass != nil && *svc.Spec.LoadBalancerClass == p.cfg.GatewayCtlrName && len(ips) > 0 {
+		if err := p.patchServiceStatus(ctx, svc.GetNamespace(), svc.GetName(), ips); err != nil {
+			p.cfg.Logger.Error(
+				err,
+				"failed to patch Service status with gateway external IPs",
+				"service", fmt.Sprintf("%s/%s", svc.GetNamespace(), svc.GetName()),
+			)
+		}
+	}
+}
+
+// restartNginxAfterConfigUpdate restarts the provisioned Deployment/DaemonSet when the agent
+// ConfigMap was updated without the workload itself being newly created, so that nginx picks up
+// the new agent configuration.
+func (p *NginxProvisioner) restartNginxAfterConfigUpdate(
+	ctx context.Context,
+	gateway *gatewayv1.Gateway,
+	state nginxProvisionState,
+) error {
+	if !state.agentConfigMapUpdated || state.deploymentCreated {
+		return nil
+	}
+
+	updateCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	var object client.Object
+	if state.deploymentObj != nil {
+		if state.deploymentObj.Spec.Template.Annotations == nil {
+			state.deploymentObj.Spec.Template.Annotations = make(map[string]string)
+		}
+		state.deploymentObj.Spec.Template.Annotations[controller.RestartedAnnotation] = time.Now().Format(time.RFC3339)
+		object = state.deploymentObj
+	} else if state.daemonSetObj != nil {
+		if state.daemonSetObj.Spec.Template.Annotations == nil {
+			state.daemonSetObj.Spec.Template.Annotations = make(map[string]string)
+		}
+		state.daemonSetObj.Spec.Template.Annotations[controller.RestartedAnnotation] = time.Now().Format(time.RFC3339)
+		object = state.daemonSetObj
+	}
+
+	if object == nil {
+		return nil
+	}
+
+	p.cfg.Logger.V(1).Info(
+		"Restarting nginx after agent configmap update",
+		"name", object.GetName(),
+		"namespace", object.GetNamespace(),
+	)
+
+	if err := p.k8sClient.Update(updateCtx, object); err != nil && !apierrors.IsConflict(err) {
+		p.cfg.EventRecorder.Eventf(
+			object,
+			gateway,
+			corev1.EventTypeWarning,
+			"RestartFailed",
+			"None",
+			"Failed to restart nginx after agent config update: %s",
+			err.Error(),
+		)
+		return err
 	}
 
 	return nil
@@ -755,21 +813,7 @@ func (p *NginxProvisioner) RegisterGateway(
 		// If HPA was disabled, remove it.
 		nginxResources := p.store.getNginxResourcesForGateway(gatewayNSName)
 		if nginxResources != nil {
-			if needToDeleteDaemonSet(nginxResources) {
-				if err := p.deleteObject(ctx, &appsv1.DaemonSet{ObjectMeta: nginxResources.DaemonSet}); err != nil {
-					p.cfg.Logger.Error(err, "error deleting nginx resource")
-				}
-			} else if needToDeleteDeployment(nginxResources) {
-				if err := p.deleteObject(ctx, &appsv1.Deployment{ObjectMeta: nginxResources.Deployment}); err != nil {
-					p.cfg.Logger.Error(err, "error deleting nginx resource")
-				}
-			}
-
-			if needToDeleteHPA(nginxResources) {
-				if err := p.deleteObject(ctx, &autoscalingv2.HorizontalPodAutoscaler{ObjectMeta: nginxResources.HPA}); err != nil {
-					p.cfg.Logger.Error(err, "error deleting nginx resource")
-				}
-			}
+			p.handleObjectDeletion(ctx, nginxResources)
 		}
 
 		if err := p.provisionNginx(ctx, resourceName, gateway.Source, objects); err != nil {
@@ -782,6 +826,30 @@ func (p *NginxProvisioner) RegisterGateway(
 	}
 
 	return nil
+}
+
+func (p *NginxProvisioner) handleObjectDeletion(ctx context.Context, nginxResources *NginxResources) {
+	if needToDeleteDaemonSet(nginxResources) {
+		if err := p.deleteObject(ctx, &appsv1.DaemonSet{ObjectMeta: nginxResources.DaemonSet}); err != nil {
+			p.cfg.Logger.Error(err, "error deleting nginx resource")
+		}
+	} else if needToDeleteDeployment(nginxResources) {
+		if err := p.deleteObject(ctx, &appsv1.Deployment{ObjectMeta: nginxResources.Deployment}); err != nil {
+			p.cfg.Logger.Error(err, "error deleting nginx resource")
+		}
+	}
+
+	if needToDeleteHPA(nginxResources) {
+		if err := p.deleteObject(ctx, &autoscalingv2.HorizontalPodAutoscaler{ObjectMeta: nginxResources.HPA}); err != nil {
+			p.cfg.Logger.Error(err, "error deleting nginx resource")
+		}
+	}
+
+	if needToDeletePDB(nginxResources) {
+		if err := p.deleteObject(ctx, &policyv1.PodDisruptionBudget{ObjectMeta: nginxResources.PDB}); err != nil {
+			p.cfg.Logger.Error(err, "error deleting nginx resource")
+		}
+	}
 }
 
 func needToDeleteDeployment(cfg *NginxResources) bool {
@@ -830,6 +898,26 @@ func isLoadBalancerClassImmutabilityErr(err error) bool {
 	return false
 }
 
+// needToDeletePDB returns true if a PDB was previously created for this Gateway
+// but is no longer configured in the NginxProxy spec, and therefore should be deleted.
+func needToDeletePDB(cfg *NginxResources) bool {
+	if cfg.PDB.Name != "" && cfg.Gateway != nil {
+		if cfg.Gateway.EffectiveNginxProxy != nil &&
+			cfg.Gateway.EffectiveNginxProxy.Kubernetes != nil &&
+			(cfg.Gateway.EffectiveNginxProxy.Kubernetes.Deployment == nil ||
+				cfg.Gateway.EffectiveNginxProxy.Kubernetes.Deployment.PodDisruptionBudget == nil) {
+			return true
+		} else if cfg.Gateway.EffectiveNginxProxy == nil ||
+			cfg.Gateway.EffectiveNginxProxy.Kubernetes == nil {
+			return true
+		}
+	}
+
+	return false
+}
+
+// needToDeleteHPA returns true if an HPA was previously created for this Gateway
+// but is no longer configured in the NginxProxy spec, and therefore should be deleted.
 func needToDeleteHPA(cfg *NginxResources) bool {
 	if cfg.HPA.Name != "" && cfg.Gateway != nil {
 		if cfg.Gateway.EffectiveNginxProxy != nil &&

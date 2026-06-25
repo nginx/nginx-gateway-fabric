@@ -75,6 +75,99 @@ spec:
               jwt:
                 description: JWT configures JSON Web Token authentication (NGINX Plus).
                 properties:
+                  authorization:
+                    description: |-
+                      Authorization defines the authorization (authz) specification.
+                      Enables configuration of token claim validation.
+                    properties:
+                      require:
+                        default: Any
+                        description: |-
+                          Require sets top level authorization requirement.
+                          When set to All, the requirements for all claims in a rule must be met.
+                          When set to Any, the requirements for any one claim in a rule must be met.
+                        enum:
+                        - All
+                        - Any
+                        type: string
+                      rules:
+                        description: Rules defines a list of claims and their specific
+                          authorization requirements.
+                        items:
+                          description: Rule defines a list of claims, and authorization
+                            rules for those claims.
+                          properties:
+                            claims:
+                              description: Claims defines a list of claims required
+                                by users.
+                              items:
+                                description: Claim describes the exact name/value
+                                  pair of claims that must be matched.
+                                properties:
+                                  match:
+                                    default: Exact
+                                    description: Match sets the match type for the
+                                      claim.
+                                    enum:
+                                    - Exact
+                                    - Regex
+                                    type: string
+                                  name:
+                                    description: Name is the name of the claim within
+                                      the token.
+                                    maxLength: 253
+                                    pattern: ^[a-zA-Z0-9_/-]+$
+                                    type: string
+                                  proxySetHeader:
+                                    description: |-
+                                      ProxySetHeader sets both the name and variable for `proxy_set_header`
+                                      Example: For claim name `sub` for JWT auth
+
+                                      proxy_set_header X-JWT-Claim-Sub $jwt_claim_sub;
+                                    maxLength: 253
+                                    pattern: ^[-A-Za-z0-9]+$
+                                    type: string
+                                  values:
+                                    description: |-
+                                      Values are the values within the claim.
+                                      When more than one value is set, the claim must match any of these values.
+                                    items:
+                                      maxLength: 256
+                                      pattern: ^[^\n\r;#\$\{\}\|&><'"]+$
+                                      type: string
+                                    maxItems: 32
+                                    minItems: 1
+                                    type: array
+                                required:
+                                - name
+                                - values
+                                type: object
+                              maxItems: 32
+                              minItems: 1
+                              type: array
+                            require:
+                              default: Any
+                              description: |-
+                                Require sets the authorization mode for a specific claim within a rule.
+                                When set to All, a token's claim must match all values within that claim.
+                                When set to Any, a token's claim must match at least one value with that claim.
+                              enum:
+                              - All
+                              - Any
+                              type: string
+                          required:
+                          - claims
+                          type: object
+                          x-kubernetes-validations:
+                          - message: claim names must be unique within a rule
+                            rule: self.claims.all(c, self.claims.exists_one(d, d.name
+                              == c.name))
+                        maxItems: 32
+                        minItems: 1
+                        type: array
+                    required:
+                    - rules
+                    type: object
                   file:
                     description: |-
                       File specifies local JWKS configuration.
@@ -99,6 +192,16 @@ spec:
                       Configures `auth_jwt_key_cache` directive.
                       https://nginx.org/en/docs/http/ngx_http_auth_jwt_module.html#auth_jwt_key_cache
                       Example: "auth_jwt_key_cache 10m;".
+                    pattern: ^[0-9]{1,4}(ms|s|m|h)?$
+                    type: string
+                  leeway:
+                    description: |-
+                      Leeway is the acceptable clock skew for exp & nbf claims.
+                      If exp & nbf claims are not defined, this directive takes no effect.
+                      Configures `auth_jwt_leeway` directive.
+                      https://nginx.org/en/docs/http/ngx_http_auth_jwt_module.html#auth_jwt_leeway
+                      Example: "auth_jwt_leeway 60s".
+                      Default: 0s.
                     pattern: ^[0-9]{1,4}(ms|s|m|h)?$
                     type: string
                   realm:
@@ -231,6 +334,7 @@ spec:
                       ExtraAuthArgs sets additional query arguments for the authentication request URL.
                       Arguments are appended with "&". For example: "prompt=consent&audience=api".
                       Directive: https://nginx.org/en/docs/http/ngx_http_oidc_module.html#extra_auth_args
+                    maxProperties: 16
                     type: object
                   issuer:
                     description: |-
@@ -317,6 +421,10 @@ spec:
                 - clientSecretRef
                 - issuer
                 type: object
+                x-kubernetes-validations:
+                - message: extraAuthArgs keys must contain only alphanumeric characters,
+                    hyphens, underscores, or dots
+                  rule: '!has(self.extraAuthArgs) || self.extraAuthArgs.all(key, key.matches(''^[a-zA-Z0-9_.-]+$''))'
               type:
                 description: Type selects the authentication mechanism.
                 enum:
@@ -9488,6 +9596,44 @@ spec:
                               type: object
                             type: array
                         type: object
+                      podDisruptionBudget:
+                        description: |-
+                          PodDisruptionBudget is the configuration for limiting the number of concurrent disruptions of a pod.
+                          A PodDisruptionBudget is created when this field is set.
+                        properties:
+                          maxUnavailable:
+                            anyOf:
+                            - type: integer
+                            - type: string
+                            description: |-
+                              MaxUnavailable is the maximum number of pods that can be unavailable after an eviction.
+                              Value can be an absolute number (e.g. 1) or a percentage of desired pods (e.g. 50%).
+                              Mutually exclusive with MinAvailable.
+                            x-kubernetes-int-or-string: true
+                          minAvailable:
+                            anyOf:
+                            - type: integer
+                            - type: string
+                            description: |-
+                              MinAvailable is the minimum number of pods that must be available after an eviction.
+                              Value can be an absolute number (e.g. 1) or a percentage of desired pods (e.g. 50%).
+                              Mutually exclusive with MaxUnavailable.
+                            x-kubernetes-int-or-string: true
+                          unhealthyPodEvictionPolicy:
+                            description: |-
+                              UnhealthyPodEvictionPolicy defines when unhealthy pods should be considered for eviction.
+                              Valid values are IfHealthyBudget and AlwaysAllow.
+                              Defaults to IfHealthyBudget if not set.
+                            enum:
+                            - IfHealthyBudget
+                            - AlwaysAllow
+                            type: string
+                        type: object
+                        x-kubernetes-validations:
+                        - message: exactly one of minAvailable or maxUnavailable must
+                            be set
+                          rule: (has(self.minAvailable) && !has(self.maxUnavailable))
+                            || (!has(self.minAvailable) && has(self.maxUnavailable))
                       replicas:
                         description: Number of desired Pods.
                         format: int32
@@ -9933,7 +10079,11 @@ spec:
                           Format specifies the custom log format string.
                           If not specified, NGINX default 'combined' format is used.
                           For now only path /dev/stdout can be used.
+                          Single quotes and line breaks are not allowed because the format is
+                          rendered inside a single-quoted NGINX log_format directive.
                           See https://nginx.org/en/docs/http/ngx_http_log_module.html#log_format
+                        maxLength: 4096
+                        pattern: ^[^'\x0A\x0D]*$
                         type: string
                     type: object
                   agentLevel:
@@ -10103,6 +10253,8 @@ spec:
                   See: https://nginx.org/en/docs/http/ngx_http_core_module.html#server_tokens
                   NGINX directive: https://nginx.org/en/docs/http/ngx_http_core_module.html#server_tokens
                   Default is "off".
+                maxLength: 255
+                pattern: ^([^"\\\x0A\x0D]|\\[^\x0A\x0D])*$
                 type: string
               telemetry:
                 description: Telemetry specifies the OpenTelemetry configuration.
@@ -12842,8 +12994,8 @@ spec:
         description: |-
           WAFPolicy is an Inherited Attached Policy. It provides a way to configure F5 WAF for NGINX
           for Gateways and Routes by referencing compiled WAF policy bundles. Bundles can be fetched directly from an
-          HTTP/HTTPS URL (type: HTTP), from an NGINX Instance Manager instance (type: NIM), or from an F5 NGINX One
-          Console instance (type: N1C).
+          HTTP/HTTPS URL (type: HTTP), from an NGINX Instance Manager instance (type: NIM), from an F5 NGINX One
+          Console instance (type: N1C), or from a Policy Lifecycle Manager's S3-compatible storage (type: PLM).
         properties:
           apiVersion:
             description: |-
@@ -12865,8 +13017,40 @@ spec:
           spec:
             description: Spec defines the desired state of the WAFPolicy.
             properties:
+              policyRef:
+                description: |-
+                  PolicyRef holds all CRD-backed policy references.
+                  Used for the PLM policy type.
+                properties:
+                  apPolicyRef:
+                    description: |-
+                      APPolicyRef references an APPolicy CRD compiled by PLM.
+                      Cross-namespace references require a ReferenceGrant.
+                    properties:
+                      name:
+                        description: Name is the name of the APPolicy resource.
+                        maxLength: 253
+                        minLength: 1
+                        pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
+                        type: string
+                      namespace:
+                        description: |-
+                          Namespace is the namespace of the APPolicy resource.
+                          If not set, the namespace of the WAFPolicy is used.
+                          Cross-namespace references require a ReferenceGrant.
+                        maxLength: 63
+                        minLength: 1
+                        pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                        type: string
+                    required:
+                    - name
+                    type: object
+                type: object
               policySource:
-                description: PolicySource holds all policy bundle fetch configuration.
+                description: |-
+                  PolicySource holds all non-CRD bundle fetch configuration.
+                  Used for HTTP, NIM, and N1C policy types.
+                  Must not be set when type is PLM.
                 properties:
                   auth:
                     description: Auth configures authentication credentials for fetching
@@ -13063,12 +13247,17 @@ spec:
                       rule: '!(has(self.verifyChecksum) && self.verifyChecksum &&
                         has(self.expectedChecksum))'
                 type: object
+                x-kubernetes-validations:
+                - message: exactly one of httpSource, nimSource, or n1cSource must
+                    be set
+                  rule: '[has(self.httpSource), has(self.nimSource), has(self.n1cSource)].filter(x,
+                    x).size() == 1'
               securityLogs:
                 description: SecurityLogs defines security logging configurations.
                 items:
                   description: |-
                     WAFSecurityLog defines security logging configuration for app_protect_security_log directives.
-                    Exactly one of logSource.defaultProfile, logSource.httpSource, logSource.nimSource, or logSource.n1cSource must be set.
+                    Exactly one of logSource or logRef must be set.
                   properties:
                     destination:
                       description: Destination defines where security logs are sent.
@@ -13122,10 +13311,40 @@ spec:
                       - message: destination.syslog must be set if and only if type
                           is syslog
                         rule: (self.type == 'syslog') == has(self.syslog)
+                    logRef:
+                      description: |-
+                        LogRef configures all CRD-backed log profile references for this log entry.
+                        Used for PLM-backed APLogConf references.
+                      properties:
+                        apLogConfRef:
+                          description: |-
+                            APLogConfRef references an APLogConf CRD compiled by PLM.
+                            Cross-namespace references require a ReferenceGrant.
+                          properties:
+                            name:
+                              description: Name is the name of the APLogConf resource.
+                              maxLength: 253
+                              minLength: 1
+                              pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
+                              type: string
+                            namespace:
+                              description: |-
+                                Namespace is the namespace of the APLogConf resource.
+                                If not set, the namespace of the WAFPolicy is used.
+                                Cross-namespace references require a ReferenceGrant.
+                              maxLength: 63
+                              minLength: 1
+                              pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                              type: string
+                          required:
+                          - name
+                          type: object
+                      type: object
                     logSource:
                       description: |-
-                        LogSource configures the log profile bundle source for this log entry.
-                        Exactly one of url or defaultProfile must be set.
+                        LogSource configures all non-CRD log profile bundle sources for this log entry.
+                        Used for defaultProfile, httpSource, nimSource, and n1cSource.
+                        Must not be set when logRef is used.
                       properties:
                         auth:
                           description: |-
@@ -13323,18 +13542,17 @@ spec:
                               && has(self.expectedChecksum))'
                       type: object
                       x-kubernetes-validations:
-                      - message: exactly one of logSource.defaultProfile, logSource.httpSource,
-                          logSource.nimSource, or logSource.n1cSource must be set
-                        rule: (has(self.defaultProfile) && !has(self.httpSource) &&
-                          !has(self.nimSource) && !has(self.n1cSource)) || (!has(self.defaultProfile)
-                          && has(self.httpSource) && !has(self.nimSource) && !has(self.n1cSource))
-                          || (!has(self.defaultProfile) && !has(self.httpSource) &&
-                          has(self.nimSource) && !has(self.n1cSource)) || (!has(self.defaultProfile)
-                          && !has(self.httpSource) && !has(self.nimSource) && has(self.n1cSource))
+                      - message: exactly one of defaultProfile, httpSource, nimSource,
+                          or n1cSource must be set
+                        rule: '[has(self.defaultProfile), has(self.httpSource), has(self.nimSource),
+                          has(self.n1cSource)].filter(x, x).size() == 1'
                   required:
                   - destination
-                  - logSource
                   type: object
+                  x-kubernetes-validations:
+                  - message: exactly one of logSource or logRef must be set
+                    rule: '[has(self.logSource), has(self.logRef) && has(self.logRef.apLogConfRef)].filter(x,
+                      x).size() == 1'
                 maxItems: 32
                 type: array
               targetRefs:
@@ -13389,29 +13607,37 @@ spec:
                 description: |-
                   Type identifies the source type for the policy bundle.
                   HTTP fetches directly from a URL; NIM uses the NGINX Instance Manager bundles API;
-                  N1C uses the F5 NGINX One Console security policies API.
+                  N1C uses the F5 NGINX One Console security policies API; PLM references an APPolicy
+                  CRD managed by the Policy Lifecycle Manager.
                 enum:
                 - HTTP
                 - NIM
                 - N1C
+                - PLM
                 type: string
             required:
-            - policySource
             - targetRefs
             - type
             type: object
             x-kubernetes-validations:
-            - message: policySource.httpSource must be set if and only if type is
-                HTTP
-              rule: (self.type == 'HTTP') == (has(self.policySource) && has(self.policySource.httpSource))
-            - message: policySource.nimSource must be set if and only if type is NIM
-              rule: (self.type == 'NIM') == (has(self.policySource) && has(self.policySource.nimSource))
-            - message: policySource.n1cSource must be set if and only if type is N1C
-              rule: (self.type == 'N1C') == (has(self.policySource) && has(self.policySource.n1cSource))
+            - message: policySource must not be set when type is PLM
+              rule: '!(self.type == ''PLM'' && has(self.policySource))'
+            - message: policyRef must not be set when type is not PLM
+              rule: '!(self.type != ''PLM'' && has(self.policyRef))'
+            - message: type must match the configured policy source
+              rule: self.type == 'PLM' || (has(self.policySource) && ((self.type ==
+                'HTTP' && has(self.policySource.httpSource)) || (self.type == 'NIM'
+                && has(self.policySource.nimSource)) || (self.type == 'N1C' && has(self.policySource.n1cSource))))
+            - message: policyRef.apPolicyRef is required when type is PLM
+              rule: self.type != 'PLM' || (has(self.policyRef) && has(self.policyRef.apPolicyRef))
             - message: policySource.validation.verifyChecksum is only supported for
                 type HTTP
-              rule: '!(self.type != ''HTTP'' && has(self.policySource) && has(self.policySource.validation)
+              rule: '!has(self.policySource) || !(self.type != ''HTTP'' && has(self.policySource.validation)
                 && has(self.policySource.validation.verifyChecksum) && self.policySource.validation.verifyChecksum)'
+            - message: securityLogs[*].logRef.apLogConfRef is only allowed when type
+                is PLM
+              rule: self.type == 'PLM' || !has(self.securityLogs) || self.securityLogs.all(sl,
+                !has(sl.logRef) || !has(sl.logRef.apLogConfRef))
           status:
             description: Status defines the state of the WAFPolicy.
             properties:

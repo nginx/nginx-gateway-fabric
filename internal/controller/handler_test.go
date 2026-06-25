@@ -15,6 +15,7 @@ import (
 	discoveryV1 "k8s.io/api/discovery/v1"
 	apiErrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	k8sEvents "k8s.io/client-go/tools/events"
@@ -1379,7 +1380,7 @@ func makeWAFPolicy(pollingEnabled bool) *ngfAPI.WAFPolicy {
 				Name:  "my-gateway",
 			},
 		},
-		PolicySource: ngfAPI.PolicySource{
+		PolicySource: &ngfAPI.PolicySource{
 			HTTPSource: &ngfAPI.HTTPBundleSource{URL: "http://example.com/policy.tgz"},
 		},
 	}
@@ -1889,6 +1890,83 @@ func TestMergeWAFPollErrors(t *testing.T) {
 		expectedCond := conditions.NewPolicyProgrammedStaleBundleWarning("policy bundle", "connection refused")
 		g.Expect(policy.Conditions[0]).To(Equal(expectedCond))
 	})
+}
+
+func TestReconcileAPResourceFinalizers(t *testing.T) {
+	t.Parallel()
+
+	g := NewWithT(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	policyNsName := types.NamespacedName{Namespace: "default", Name: "ap-policy"}
+	logConfNsName := types.NamespacedName{Namespace: "default", Name: "ap-logconf"}
+
+	apPolicy := kinds.NewAPPolicyObject()
+	apPolicy.SetNamespace(policyNsName.Namespace)
+	apPolicy.SetName(policyNsName.Name)
+
+	apLogConf := kinds.NewAPLogConfObject()
+	apLogConf.SetNamespace(logConfNsName.Namespace)
+	apLogConf.SetName(logConfNsName.Name)
+
+	fakeK8sClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(apPolicy, apLogConf).
+		Build()
+
+	handler := newEventHandlerImpl(eventHandlerConfig{
+		ctx:         ctx,
+		k8sClient:   fakeK8sClient,
+		statusQueue: status.NewQueue(),
+		plmEnabled:  true,
+	})
+	handler.leader = true
+
+	// expectFinalizer fetches the object from the fake client and asserts finalizer presence.
+	expectFinalizer := func(
+		nsName types.NamespacedName,
+		newObj func() *unstructured.Unstructured,
+		present bool,
+	) {
+		t.Helper()
+		obj := newObj()
+		g.Expect(fakeK8sClient.Get(ctx, nsName, obj)).To(Succeed())
+		matcher := ContainElement(apResourceFinalizer)
+		if present {
+			g.Expect(obj.GetFinalizers()).To(matcher)
+		} else {
+			g.Expect(obj.GetFinalizers()).NotTo(matcher)
+		}
+	}
+
+	// Step 1: reconcile with referenced resources → finalizers should be added.
+	handler.reconcileAPResourceFinalizers(ctx, logr.Discard(), &graph.Graph{
+		ReferencedAPPolicies: map[types.NamespacedName]*unstructured.Unstructured{
+			policyNsName: apPolicy,
+		},
+		ReferencedAPLogConfs: map[types.NamespacedName]*unstructured.Unstructured{
+			logConfNsName: apLogConf,
+		},
+	})
+
+	expectFinalizer(policyNsName, kinds.NewAPPolicyObject, true)
+	expectFinalizer(logConfNsName, kinds.NewAPLogConfObject, true)
+
+	// Step 2: simulate a restart/leader failover. A fresh handler with an empty in-memory
+	// finalizedAPResources map must still discover and remove stale finalizers from the cluster.
+	restartedHandler := newEventHandlerImpl(eventHandlerConfig{
+		ctx:         ctx,
+		k8sClient:   fakeK8sClient,
+		statusQueue: status.NewQueue(),
+		plmEnabled:  true,
+	})
+	restartedHandler.leader = true
+	restartedHandler.reconcileAPResourceFinalizers(ctx, logr.Discard(), &graph.Graph{})
+
+	expectFinalizer(policyNsName, kinds.NewAPPolicyObject, false)
+	expectFinalizer(logConfNsName, kinds.NewAPLogConfObject, false)
+	g.Expect(restartedHandler.finalizedAPResources).To(BeEmpty())
 }
 
 func TestMergeWAFBundleUpdates(t *testing.T) {

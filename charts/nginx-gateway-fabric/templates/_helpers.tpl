@@ -182,6 +182,17 @@ Create namespaced RBAC rules.
   - get
   - watch
 - apiGroups:
+  - policy
+  resources:
+  - poddisruptionbudgets
+  verbs:
+  - create
+  - update
+  - delete
+  - list
+  - get
+  - watch
+- apiGroups:
   - discovery.k8s.io
   resources:
   - endpointslices
@@ -285,6 +296,18 @@ Create namespaced RBAC rules.
   - inferencepools/finalizers
   verbs:
   - update
+  {{- end }}
+  {{- if .Values.nginxGateway.plmStorage.url }}
+- apiGroups:
+  - appprotect.f5.com
+  resources:
+  - appolicies
+  - aplogconfs
+  verbs:
+  - get
+  - list
+  - patch
+  - watch
   {{- end }}
   {{- if .Values.nginxGateway.leaderElection.enable }}
 - apiGroups:

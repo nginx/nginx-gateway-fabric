@@ -1,0 +1,25 @@
+# A valid APPolicy compiled by the PLM controller (f5-waf-policy-controller).
+# PLM watches this resource, compiles the NAP policy, uploads the bundle to its in-cluster
+# SeaweedFS storage, and writes status.bundle (state: ready, location, sha256). NGF then fetches
+# the bundle via the S3 endpoint. The policy mirrors attack-signatures-blocking.json so the same
+# XSS-blocking assertion used by the HTTP-source tests applies.
+apiVersion: appprotect.f5.com/v1
+kind: APPolicy
+metadata:
+  name: attack-signatures
+spec:
+  policy:
+    name: attack-signatures-blocking
+    template:
+      name: POLICY_TEMPLATE_NGINX_BASE
+    applicationLanguage: utf-8
+    enforcementMode: blocking
+    signature-sets:
+    - name: All Signatures
+      block: true
+      alarm: true
+    cookies:
+    - name: "*"
+      attackSignaturesCheck: true
+      enforcementType: enforce
+      maskValueInLogs: false

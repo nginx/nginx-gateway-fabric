@@ -3,6 +3,7 @@ package kinds
 import (
 	"fmt"
 
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -48,6 +49,57 @@ const (
 	// ConfigMap is the ConfigMap kind.
 	ConfigMap = "ConfigMap"
 )
+
+// PLM (Policy Lifecycle Manager) kinds.
+const (
+	// APPolicy is the APPolicy kind from the appprotect.f5.com API group.
+	APPolicy = "APPolicy"
+	// APLogConf is the APLogConf kind from the appprotect.f5.com API group.
+	APLogConf = "APLogConf"
+)
+
+var (
+	// APPolicyGVK is the GroupVersionKind for the APPolicy resource.
+	APPolicyGVK = schema.GroupVersionKind{Group: "appprotect.f5.com", Version: "v1", Kind: APPolicy}
+	// APLogConfGVK is the GroupVersionKind for the APLogConf resource.
+	APLogConfGVK = schema.GroupVersionKind{Group: "appprotect.f5.com", Version: "v1", Kind: APLogConf}
+)
+
+// NewAPPolicyObject returns a new unstructured APPolicy with the correct GVK set.
+func NewAPPolicyObject() *unstructured.Unstructured {
+	obj := &unstructured.Unstructured{}
+	obj.SetGroupVersionKind(APPolicyGVK)
+	return obj
+}
+
+// NewAPLogConfObject returns a new unstructured APLogConf with the correct GVK set.
+func NewAPLogConfObject() *unstructured.Unstructured {
+	obj := &unstructured.Unstructured{}
+	obj.SetGroupVersionKind(APLogConfGVK)
+	return obj
+}
+
+// NewAPPolicyList returns a new unstructured list for APPolicy resources.
+func NewAPPolicyList() *unstructured.UnstructuredList {
+	list := &unstructured.UnstructuredList{}
+	list.SetGroupVersionKind(schema.GroupVersionKind{
+		Group:   APPolicyGVK.Group,
+		Version: APPolicyGVK.Version,
+		Kind:    APPolicy + "List",
+	})
+	return list
+}
+
+// NewAPLogConfList returns a new unstructured list for APLogConf resources.
+func NewAPLogConfList() *unstructured.UnstructuredList {
+	list := &unstructured.UnstructuredList{}
+	list.SetGroupVersionKind(schema.GroupVersionKind{
+		Group:   APLogConfGVK.Group,
+		Version: APLogConfGVK.Version,
+		Kind:    APLogConf + "List",
+	})
+	return list
+}
 
 // NGINX Gateway Fabric kinds.
 const (
