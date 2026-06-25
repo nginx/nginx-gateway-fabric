@@ -40,6 +40,10 @@ func (d *NGFResourceCounts) Attributes() []attribute.KeyValue {
 	attrs = append(attrs, attribute.Int64("GatewayAttachedWAFPolicyCount", d.GatewayAttachedWAFPolicyCount))
 	attrs = append(attrs, attribute.Int64("RouteAttachedWAFPolicyCount", d.RouteAttachedWAFPolicyCount))
 	attrs = append(attrs, attribute.Int64("WAFEnabledGatewayCount", d.WAFEnabledGatewayCount))
+	attrs = append(attrs, attribute.Int64("HTTPWAFPolicyCount", d.HTTPWAFPolicyCount))
+	attrs = append(attrs, attribute.Int64("NIMWAFPolicyCount", d.NIMWAFPolicyCount))
+	attrs = append(attrs, attribute.Int64("N1CWAFPolicyCount", d.N1CWAFPolicyCount))
+	attrs = append(attrs, attribute.Int64("PLMWAFPolicyCount", d.PLMWAFPolicyCount))
 	attrs = append(attrs, attribute.Int64("ListenerSetCount", d.ListenerSetCount))
 
 	return attrs

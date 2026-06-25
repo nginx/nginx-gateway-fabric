@@ -145,6 +145,14 @@ type NGFResourceCounts struct {
 	RouteAttachedWAFPolicyCount int64
 	// WAFEnabledGatewayCount is the number of Gateways with WAF enabled on their effective NginxProxy.
 	WAFEnabledGatewayCount int64
+	// HTTPWAFPolicyCount is the number of WAFPolicies with HTTP source type.
+	HTTPWAFPolicyCount int64
+	// NIMWAFPolicyCount is the number of WAFPolicies with NIM source type.
+	NIMWAFPolicyCount int64
+	// N1CWAFPolicyCount is the number of WAFPolicies with N1C source type.
+	N1CWAFPolicyCount int64
+	// PLMWAFPolicyCount is the number of WAFPolicies with PLM source type.
+	PLMWAFPolicyCount int64
 	// ListenerSetCount is the number of relevant ListenerSets.
 	ListenerSetCount int64
 }
@@ -172,6 +180,18 @@ func (rc *NGFResourceCounts) CountPolicies(g *graph.Graph) {
 			gatewayCount, routeCount := countPolicyTargetRefs(policy)
 			rc.GatewayAttachedWAFPolicyCount += gatewayCount
 			rc.RouteAttachedWAFPolicyCount += routeCount
+			if wafPolicy, ok := policy.Source.(*ngfAPIv1alpha1.WAFPolicy); ok && wafPolicy != nil {
+				switch wafPolicy.Spec.Type {
+				case ngfAPIv1alpha1.PolicySourceTypeHTTP:
+					rc.HTTPWAFPolicyCount++
+				case ngfAPIv1alpha1.PolicySourceTypeNIM:
+					rc.NIMWAFPolicyCount++
+				case ngfAPIv1alpha1.PolicySourceTypeN1C:
+					rc.N1CWAFPolicyCount++
+				case ngfAPIv1alpha1.PolicySourceTypePLM:
+					rc.PLMWAFPolicyCount++
+				}
+			}
 		case kinds.ProxySettingsPolicy:
 			gatewayCount, routeCount := countPolicyTargetRefs(policy)
 			rc.GatewayAttachedProxySettingsPolicyCount += gatewayCount
