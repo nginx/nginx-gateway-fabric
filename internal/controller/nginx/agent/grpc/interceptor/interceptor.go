@@ -157,17 +157,18 @@ func (c ContextSetter) validateToken(ctx context.Context, grpcInfo *grpcContext.
 		return nil, status.Error(codes.Internal, fmt.Sprintf("error listing pods: %s", err.Error()))
 	}
 
-	runningCount := 0
 	for _, pod := range podList.Items {
 		if pod.Status.Phase == corev1.PodRunning {
-			runningCount++
+			return grpcContext.NewGrpcContext(ctx, *grpcInfo), nil
+		}
+		// Also consider a pod valid if the nginx container has started,
+		// even if the pod phase hasn't reached Running yet (e.g. sidecar still initializing).
+		for _, cs := range pod.Status.ContainerStatuses {
+			if cs.Name == "nginx" && cs.Started != nil && *cs.Started {
+				return grpcContext.NewGrpcContext(ctx, *grpcInfo), nil
+			}
 		}
 	}
 
-	if runningCount < 1 {
-		msg := fmt.Sprintf("no running pods found for service account %s/%s", usernameItems[2], usernameItems[3])
-		return nil, status.Error(codes.Unauthenticated, msg)
-	}
-
-	return grpcContext.NewGrpcContext(ctx, *grpcInfo), nil
+	return nil, status.Error(codes.Unauthenticated, "no running pods match the request")
 }

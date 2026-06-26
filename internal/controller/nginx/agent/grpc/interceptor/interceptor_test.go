@@ -19,6 +19,7 @@ import (
 
 	grpcContext "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent/grpc/context"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
 
 type mockServerStream struct {
@@ -326,6 +327,66 @@ func TestValidateToken_PodListOptions(t *testing.T) {
 					},
 				},
 				Status: corev1.PodStatus{Phase: corev1.PodPending},
+			},
+			grpcInfo:  &grpcContext.GrpcInfo{Token: "dummy-token"},
+			shouldErr: true,
+		},
+		{
+			name: "pod pending but nginx container started",
+			pod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "nginx-pod",
+					Namespace: "default",
+					Labels: map[string]string{
+						controller.AppNameLabel: "gateway-nginx",
+					},
+				},
+				Status: corev1.PodStatus{
+					Phase: corev1.PodPending,
+					ContainerStatuses: []corev1.ContainerStatus{
+						{Name: "nginx", Started: helpers.GetPointer(true)},
+					},
+				},
+			},
+			grpcInfo:  &grpcContext.GrpcInfo{Token: "dummy-token"},
+			shouldErr: false,
+		},
+		{
+			name: "pod pending and nginx container not started",
+			pod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "nginx-pod",
+					Namespace: "default",
+					Labels: map[string]string{
+						controller.AppNameLabel: "gateway-nginx",
+					},
+				},
+				Status: corev1.PodStatus{
+					Phase: corev1.PodPending,
+					ContainerStatuses: []corev1.ContainerStatus{
+						{Name: "nginx", Started: helpers.GetPointer(false)},
+					},
+				},
+			},
+			grpcInfo:  &grpcContext.GrpcInfo{Token: "dummy-token"},
+			shouldErr: true,
+		},
+		{
+			name: "pod pending and non-nginx container started",
+			pod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "nginx-pod",
+					Namespace: "default",
+					Labels: map[string]string{
+						controller.AppNameLabel: "gateway-nginx",
+					},
+				},
+				Status: corev1.PodStatus{
+					Phase: corev1.PodPending,
+					ContainerStatuses: []corev1.ContainerStatus{
+						{Name: "agent", Started: helpers.GetPointer(true)},
+					},
+				},
 			},
 			grpcInfo:  &grpcContext.GrpcInfo{Token: "dummy-token"},
 			shouldErr: true,
