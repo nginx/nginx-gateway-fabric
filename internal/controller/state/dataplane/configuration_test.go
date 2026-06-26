@@ -5635,25 +5635,27 @@ func TestBuildStreamUpstreams(t *testing.T) {
 		referencedServices,
 	)
 
+	// Upstreams are sorted by name so that identical input produces a stable order and doesn't
+	// trigger spurious NGINX reloads.
 	expectedStreamUpstreams := []Upstream{
-		{
-			Name:     "default_secure-app_8443",
-			ErrorMsg: "error",
-		},
-		{
-			Name:      "default_secure-app5_8443",
-			Endpoints: fakeEndpoints,
-		},
 		{
 			Name: "default_external-app_443",
 			Endpoints: []resolver.Endpoint{
 				{Address: "external.example.com", Port: 443, Resolve: true},
 			},
 		},
+		{
+			Name:      "default_secure-app5_8443",
+			Endpoints: fakeEndpoints,
+		},
+		{
+			Name:     "default_secure-app_8443",
+			ErrorMsg: "error",
+		},
 	}
 	g := NewWithT(t)
 
-	g.Expect(streamUpstreams).To(ConsistOf(expectedStreamUpstreams))
+	g.Expect(streamUpstreams).To(Equal(expectedStreamUpstreams))
 }
 
 func TestBuildL4Servers(t *testing.T) {
@@ -5884,7 +5886,7 @@ func TestBuildL4Servers(t *testing.T) {
 				},
 			},
 			protocol:        v1.TCPProtocolType,
-			expectedServers: []Layer4VirtualServer{},
+			expectedServers: nil,
 		},
 		{
 			name: "skips routes with no valid backends",
@@ -5924,7 +5926,7 @@ func TestBuildL4Servers(t *testing.T) {
 				},
 			},
 			protocol:        v1.TCPProtocolType,
-			expectedServers: []Layer4VirtualServer{},
+			expectedServers: nil,
 		},
 		{
 			name: "skips routes with empty backend refs",
@@ -5954,7 +5956,7 @@ func TestBuildL4Servers(t *testing.T) {
 				},
 			},
 			protocol:        v1.TCPProtocolType,
-			expectedServers: []Layer4VirtualServer{},
+			expectedServers: nil,
 		},
 		{
 			name: "skips invalid listeners",
@@ -5994,7 +5996,7 @@ func TestBuildL4Servers(t *testing.T) {
 				},
 			},
 			protocol:        v1.TCPProtocolType,
-			expectedServers: []Layer4VirtualServer{},
+			expectedServers: nil,
 		},
 		{
 			name: "filters by protocol - TCP listener ignored for UDP protocol",
@@ -6034,7 +6036,7 @@ func TestBuildL4Servers(t *testing.T) {
 				},
 			},
 			protocol:        v1.UDPProtocolType,
-			expectedServers: []Layer4VirtualServer{},
+			expectedServers: nil,
 		},
 		{
 			name: "multiple listeners and routes",
@@ -6167,7 +6169,71 @@ func TestBuildL4Servers(t *testing.T) {
 				},
 			},
 			protocol:        v1.TCPProtocolType,
-			expectedServers: []Layer4VirtualServer{},
+			expectedServers: nil,
+		},
+		{
+			// L4Routes is a map (randomized iteration order). The route names are chosen so that map
+			// order differs from the expected output, verifying the servers are sorted deterministically.
+			name: "multiple TCP routes on the same listener are sorted by upstream",
+			gateway: &graph.Gateway{
+				Source: &v1.Gateway{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "test",
+						Name:      "gateway",
+					},
+				},
+				Listeners: []*graph.Listener{
+					{
+						Name:  "tcp-listener",
+						Valid: true,
+						Source: v1.Listener{
+							Protocol: v1.TCPProtocolType,
+							Port:     8080,
+						},
+						L4Routes: map[graph.L4RouteKey]*graph.L4Route{
+							{NamespacedName: types.NamespacedName{Namespace: "default", Name: "route-c"}}: createL4Route(
+								"route-c", true, []graph.BackendRef{{
+									Valid:       true,
+									SvcNsName:   types.NamespacedName{Namespace: "default", Name: "svc-c"},
+									ServicePort: apiv1.ServicePort{Name: "tcp", Port: 8080},
+									Weight:      1,
+								}},
+							),
+							{NamespacedName: types.NamespacedName{Namespace: "default", Name: "route-a"}}: createL4Route(
+								"route-a", true, []graph.BackendRef{{
+									Valid:       true,
+									SvcNsName:   types.NamespacedName{Namespace: "default", Name: "svc-a"},
+									ServicePort: apiv1.ServicePort{Name: "tcp", Port: 8080},
+									Weight:      1,
+								}},
+							),
+							{NamespacedName: types.NamespacedName{Namespace: "default", Name: "route-d"}}: createL4Route(
+								"route-d", true, []graph.BackendRef{{
+									Valid:       true,
+									SvcNsName:   types.NamespacedName{Namespace: "default", Name: "svc-d"},
+									ServicePort: apiv1.ServicePort{Name: "tcp", Port: 8080},
+									Weight:      1,
+								}},
+							),
+							{NamespacedName: types.NamespacedName{Namespace: "default", Name: "route-b"}}: createL4Route(
+								"route-b", true, []graph.BackendRef{{
+									Valid:       true,
+									SvcNsName:   types.NamespacedName{Namespace: "default", Name: "svc-b"},
+									ServicePort: apiv1.ServicePort{Name: "tcp", Port: 8080},
+									Weight:      1,
+								}},
+							),
+						},
+					},
+				},
+			},
+			protocol: v1.TCPProtocolType,
+			expectedServers: []Layer4VirtualServer{
+				{Hostname: "", Port: 8080, Upstreams: []Layer4Upstream{{Name: "default_svc-a_8080", Weight: 1}}},
+				{Hostname: "", Port: 8080, Upstreams: []Layer4Upstream{{Name: "default_svc-b_8080", Weight: 1}}},
+				{Hostname: "", Port: 8080, Upstreams: []Layer4Upstream{{Name: "default_svc-c_8080", Weight: 1}}},
+				{Hostname: "", Port: 8080, Upstreams: []Layer4Upstream{{Name: "default_svc-d_8080", Weight: 1}}},
+			},
 		},
 	}
 
@@ -6178,7 +6244,8 @@ func TestBuildL4Servers(t *testing.T) {
 
 			servers := buildL4Servers(logr.Discard(), tt.gateway, tt.protocol)
 
-			g.Expect(servers).To(ConsistOf(tt.expectedServers))
+			// Equal (not ConsistOf) so that the deterministic, sorted order of servers is verified.
+			g.Expect(servers).To(Equal(tt.expectedServers))
 		})
 	}
 }
