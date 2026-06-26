@@ -133,18 +133,29 @@ func createEndpointPickerHandler(factory extProcClientFactory, logger logr.Logge
 	})
 }
 
+// requestHasBody reports whether the HTTP method is expected to carry a request body.
+func requestHasBody(method string) bool {
+	switch method {
+	case http.MethodGet, http.MethodHead, http.MethodOptions, http.MethodDelete, http.MethodTrace:
+		return false
+	}
+	return true
+}
+
 func sendRequest(stream extprocv3.ExternalProcessor_ProcessClient, r *http.Request) (int, error) {
 	if err := stream.Send(buildHeaderRequest(r)); err != nil {
 		return http.StatusBadGateway, fmt.Errorf("error sending headers: %w", err)
 	}
 
-	bodyReq, err := buildBodyRequest(r)
-	if err != nil {
-		return http.StatusInternalServerError, fmt.Errorf("error building body request: %w", err)
-	}
+	if requestHasBody(r.Method) {
+		bodyReq, err := buildBodyRequest(r)
+		if err != nil {
+			return http.StatusInternalServerError, fmt.Errorf("error building body request: %w", err)
+		}
 
-	if err := stream.Send(bodyReq); err != nil {
-		return http.StatusBadGateway, fmt.Errorf("error sending body: %w", err)
+		if err := stream.Send(bodyReq); err != nil {
+			return http.StatusBadGateway, fmt.Errorf("error sending body: %w", err)
+		}
 	}
 
 	if err := stream.CloseSend(); err != nil {
@@ -180,7 +191,7 @@ func buildHeaderRequest(r *http.Request) *extprocv3.ProcessingRequest {
 		Request: &extprocv3.ProcessingRequest_RequestHeaders{
 			RequestHeaders: &extprocv3.HttpHeaders{
 				Headers:     headerMap,
-				EndOfStream: false,
+				EndOfStream: !requestHasBody(r.Method),
 			},
 		},
 	}
