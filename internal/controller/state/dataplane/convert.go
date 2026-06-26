@@ -245,7 +245,7 @@ func convertAuthenticationFilterBasicAuth(
 func convertAuthenticationFilterOIDC(
 	filter *graph.AuthenticationFilter,
 	referencedSecrets map[types.NamespacedName]*secrets.Secret,
-) *OIDCProvider {
+) *AuthOIDC {
 	if filter.Source.Spec.OIDC == nil {
 		return nil
 	}
@@ -300,7 +300,22 @@ func convertAuthenticationFilterOIDC(
 		oidc.TokenHint = specOIDC.Logout.TokenHint
 	}
 
-	return oidc
+	result := &AuthOIDC{
+		Provider: oidc,
+	}
+
+	// Populate authorization fields (auth_jwt_require + proxy_set_header) from the AuthZConfig
+	if specOIDC.Authorization != nil {
+		filterNsName := strings.Join([]string{filter.Source.Namespace, filter.Source.Name}, "_")
+		filterPrefix := sanitizeVariablePrefix(filterNsName)
+		authZConfig := buildAuthZConfigFromAuthZSpec(filterPrefix, specOIDC.Authorization)
+		if authZConfig != nil {
+			result.AuthRequireVariable = authZConfig.RequireVariable
+			result.AuthZProxySetHeaders = authZConfig.ProxySetHeaders
+		}
+	}
+
+	return result
 }
 
 func convertAuthenticationFilterJwtAuth(

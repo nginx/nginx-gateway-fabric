@@ -334,7 +334,7 @@ type AuthenticationFilter struct {
 	Basic *AuthBasic
 
 	// OIDC contains fields related to OIDC authentication.
-	OIDC *OIDCProvider
+	OIDC *AuthOIDC
 
 	// JWT contains fields related to JWT authentication.
 	JWT *AuthJWT
@@ -393,6 +393,17 @@ type OIDCProvider struct {
 	CRLData []byte
 	// CACertData is the raw PEM bytes of the CA certificates.
 	CACertData []byte
+}
+
+// AuthOIDC holds the OIDC authentication configuration, combining the provider
+// configuration with optional claim-based authorization.
+type AuthOIDC struct {
+	// Provider holds the OIDC provider configuration (maps to the oidc_provider directive).
+	Provider *OIDCProvider
+	// AuthRequireVariable is the variable name used by auth_jwt_require for OIDC claim validation.
+	AuthRequireVariable string
+	// AuthZProxySetHeaders are claim-based proxy_set_header directives from authorization config.
+	AuthZProxySetHeaders []HTTPHeader
 }
 
 const (

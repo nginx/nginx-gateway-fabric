@@ -13,6 +13,31 @@ spec:
         - name: keycloak-ca-secret
     keyCache: 10m
 ---
+# JWT AuthenticationFilter with Remote source and authorization
+apiVersion: gateway.nginx.org/v1alpha1
+kind: AuthenticationFilter
+metadata:
+  name: jwt-remote-authz
+spec:
+  type: JWT
+  jwt:
+    realm: "JWT Remote AuthZ"
+    source: Remote
+    remote:
+      uri: https://keycloak.authentication-filter.svc.cluster.local:8443/realms/nginx-gateway/protocol/openid-connect/certs
+      caCertificateRefs:
+        - name: keycloak-ca-secret
+    keyCache: 10m
+    authorization:
+      require: Any
+      rules:
+        - require: Any
+          claims:
+            - name: preferred_username
+              match: Exact
+              values:
+                - "testuser"
+---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
@@ -41,3 +66,17 @@ spec:
       backendRefs:
         - name: tea
           port: 80
+    # Route for remote JWT with authorization
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /jwt-remote-authz
+      backendRefs:
+        - name: coffee
+          port: 80
+      filters:
+        - type: ExtensionRef
+          extensionRef:
+            group: gateway.nginx.org
+            kind: AuthenticationFilter
+            name: jwt-remote-authz

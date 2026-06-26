@@ -1,0 +1,261 @@
+---
+# JWT AuthenticationFilter with authorization: Require Any, single rule, Exact match
+apiVersion: gateway.nginx.org/v1alpha1
+kind: AuthenticationFilter
+metadata:
+  name: jwt-authz-any-exact
+spec:
+  type: JWT
+  jwt:
+    realm: "JWT AuthZ Any Exact"
+    source: File
+    file:
+      secretRef:
+        name: jwks-secret
+    keyCache: 10m
+    authorization:
+      require: Any
+      rules:
+        - require: Any
+          claims:
+            - name: role
+              match: Exact
+              values:
+                - "admin"
+                - "editor"
+---
+# JWT AuthenticationFilter with authorization: Require All, multiple claims
+apiVersion: gateway.nginx.org/v1alpha1
+kind: AuthenticationFilter
+metadata:
+  name: jwt-authz-all-claims
+spec:
+  type: JWT
+  jwt:
+    realm: "JWT AuthZ All Claims"
+    source: File
+    file:
+      secretRef:
+        name: jwks-secret
+    keyCache: 10m
+    authorization:
+      require: Any
+      rules:
+        - require: All
+          claims:
+            - name: role
+              match: Exact
+              values:
+                - "admin"
+            - name: department
+              match: Exact
+              values:
+                - "engineering"
+---
+# JWT AuthenticationFilter with authorization: Regex claim matching
+apiVersion: gateway.nginx.org/v1alpha1
+kind: AuthenticationFilter
+metadata:
+  name: jwt-authz-regex
+spec:
+  type: JWT
+  jwt:
+    realm: "JWT AuthZ Regex"
+    source: File
+    file:
+      secretRef:
+        name: jwks-secret
+    keyCache: 10m
+    authorization:
+      require: Any
+      rules:
+        - require: Any
+          claims:
+            - name: email
+              match: Regex
+              values:
+                - ".*@example\\.com"
+---
+# JWT AuthenticationFilter with authorization: multiple rules (Any across rules)
+apiVersion: gateway.nginx.org/v1alpha1
+kind: AuthenticationFilter
+metadata:
+  name: jwt-authz-multi-rules
+spec:
+  type: JWT
+  jwt:
+    realm: "JWT AuthZ Multi Rules"
+    source: File
+    file:
+      secretRef:
+        name: jwks-secret
+    keyCache: 10m
+    authorization:
+      require: Any
+      rules:
+        - require: Any
+          claims:
+            - name: role
+              match: Exact
+              values:
+                - "superadmin"
+        - require: Any
+          claims:
+            - name: department
+              match: Exact
+              values:
+                - "engineering"
+---
+# JWT AuthenticationFilter with authorization: multiple rules (All across rules)
+apiVersion: gateway.nginx.org/v1alpha1
+kind: AuthenticationFilter
+metadata:
+  name: jwt-authz-multi-rules-all
+spec:
+  type: JWT
+  jwt:
+    realm: "JWT AuthZ Multi Rules All"
+    source: File
+    file:
+      secretRef:
+        name: jwks-secret
+    keyCache: 10m
+    authorization:
+      require: All
+      rules:
+        - require: Any
+          claims:
+            - name: role
+              match: Exact
+              values:
+                - "superadmin"
+        - require: Any
+          claims:
+            - name: department
+              match: Exact
+              values:
+                - "engineering"
+---
+# JWT AuthenticationFilter with authorization: proxySetHeader
+apiVersion: gateway.nginx.org/v1alpha1
+kind: AuthenticationFilter
+metadata:
+  name: jwt-authz-proxy-header
+spec:
+  type: JWT
+  jwt:
+    realm: "JWT AuthZ Proxy Header"
+    source: File
+    file:
+      secretRef:
+        name: jwks-secret
+    keyCache: 10m
+    authorization:
+      require: Any
+      rules:
+        - require: Any
+          claims:
+            - name: sub
+              match: Exact
+              values:
+                - "test-user"
+              proxySetHeader: X-JWT-Sub
+            - name: role
+              match: Exact
+              values:
+                - "admin"
+              proxySetHeader: X-JWT-Role
+---
+# HTTPRoutes for JWT authorization tests
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: jwt-authz-cafe-routes
+spec:
+  parentRefs:
+    - name: auth-gateway
+  rules:
+    # Route for Any/Exact authorization
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /jwt-authz-any
+      backendRefs:
+        - name: coffee
+          port: 80
+      filters:
+        - type: ExtensionRef
+          extensionRef:
+            group: gateway.nginx.org
+            kind: AuthenticationFilter
+            name: jwt-authz-any-exact
+    # Route for All claims authorization
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /jwt-authz-all
+      backendRefs:
+        - name: coffee
+          port: 80
+      filters:
+        - type: ExtensionRef
+          extensionRef:
+            group: gateway.nginx.org
+            kind: AuthenticationFilter
+            name: jwt-authz-all-claims
+    # Route for Regex authorization
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /jwt-authz-regex
+      backendRefs:
+        - name: coffee
+          port: 80
+      filters:
+        - type: ExtensionRef
+          extensionRef:
+            group: gateway.nginx.org
+            kind: AuthenticationFilter
+            name: jwt-authz-regex
+    # Route for multiple rules authorization (Any)
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /jwt-authz-multi
+      backendRefs:
+        - name: coffee
+          port: 80
+      filters:
+        - type: ExtensionRef
+          extensionRef:
+            group: gateway.nginx.org
+            kind: AuthenticationFilter
+            name: jwt-authz-multi-rules
+    # Route for multiple rules authorization (All)
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /jwt-authz-multi-all
+      backendRefs:
+        - name: coffee
+          port: 80
+      filters:
+        - type: ExtensionRef
+          extensionRef:
+            group: gateway.nginx.org
+            kind: AuthenticationFilter
+            name: jwt-authz-multi-rules-all
+    # Route for proxySetHeader authorization
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /jwt-authz-header
+      backendRefs:
+        - name: coffee
+          port: 80
+      filters:
+        - type: ExtensionRef
+          extensionRef:
+            group: gateway.nginx.org
+            kind: AuthenticationFilter
+            name: jwt-authz-proxy-header
