@@ -14,6 +14,7 @@ import (
 	authv1 "k8s.io/api/authentication/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	grpcContext "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent/grpc/context"
@@ -24,6 +25,24 @@ const (
 	headerUUID = "uuid"
 	headerAuth = "authorization"
 )
+
+// PodCheckRetry controls how long validateToken will wait for the agent's Pod
+// to appear as Running in the cache. This handles a startup race where the
+// agent dials before NGF's Pod informer reflects the new Pod (for example, when
+// a WAF-enabled NGINX Pod starts and the agent dials before NGF has seen the
+// Pod's Running status, or while sidecars like waf-config-mgr are still
+// initializing).
+type PodCheckRetry struct {
+	// PollInterval is the interval between Pod list attempts.
+	PollInterval time.Duration
+	// Timeout is the total time spent polling before giving up.
+	Timeout time.Duration
+}
+
+var defaultPodCheckRetry = PodCheckRetry{
+	PollInterval: 500 * time.Millisecond,
+	Timeout:      15 * time.Second,
+}
 
 // streamHandler is a struct that implements StreamHandler, allowing the interceptor to replace the context.
 type streamHandler struct {
@@ -38,12 +57,14 @@ func (sh *streamHandler) Context() context.Context {
 type ContextSetter struct {
 	k8sClient client.Client
 	audience  string
+	podCheck  PodCheckRetry
 }
 
 func NewContextSetter(k8sClient client.Client, audience string) ContextSetter {
 	return ContextSetter{
 		k8sClient: k8sClient,
 		audience:  audience,
+		podCheck:  defaultPodCheckRetry,
 	}
 }
 
@@ -54,7 +75,7 @@ func (c ContextSetter) Stream(logger logr.Logger) grpc.StreamServerInterceptor {
 		_ *grpc.StreamServerInfo,
 		handler grpc.StreamHandler,
 	) error {
-		ctx, err := c.validateConnection(ss.Context())
+		ctx, err := c.validateConnection(ss.Context(), logger)
 		if err != nil {
 			logger.Error(err, "error validating connection")
 			return err
@@ -73,7 +94,7 @@ func (c ContextSetter) Unary(logger logr.Logger) grpc.UnaryServerInterceptor {
 		_ *grpc.UnaryServerInfo,
 		handler grpc.UnaryHandler,
 	) (resp any, err error) {
-		if ctx, err = c.validateConnection(ctx); err != nil {
+		if ctx, err = c.validateConnection(ctx, logger); err != nil {
 			logger.Error(err, "error validating connection")
 			return nil, err
 		}
@@ -83,13 +104,13 @@ func (c ContextSetter) Unary(logger logr.Logger) grpc.UnaryServerInterceptor {
 
 // validateConnection checks that the connection is valid and returns a new
 // context containing information used by the gRPC command/file services.
-func (c ContextSetter) validateConnection(ctx context.Context) (context.Context, error) {
+func (c ContextSetter) validateConnection(ctx context.Context, logger logr.Logger) (context.Context, error) {
 	grpcInfo, err := getGrpcInfo(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	return c.validateToken(ctx, grpcInfo)
+	return c.validateToken(ctx, grpcInfo, logger)
 }
 
 func getGrpcInfo(ctx context.Context) (*grpcContext.GrpcInfo, error) {
@@ -114,7 +135,11 @@ func getGrpcInfo(ctx context.Context) (*grpcContext.GrpcInfo, error) {
 	}, nil
 }
 
-func (c ContextSetter) validateToken(ctx context.Context, grpcInfo *grpcContext.GrpcInfo) (context.Context, error) {
+func (c ContextSetter) validateToken(
+	ctx context.Context,
+	grpcInfo *grpcContext.GrpcInfo,
+	logger logr.Logger,
+) (context.Context, error) {
 	tokenReview := &authv1.TokenReview{
 		Spec: authv1.TokenReviewSpec{
 			Audiences: []string{c.audience},
@@ -142,32 +167,89 @@ func (c ContextSetter) validateToken(ctx context.Context, grpcInfo *grpcContext.
 		return nil, status.Error(codes.Unauthenticated, msg)
 	}
 
-	getCtx, getCancel := context.WithTimeout(ctx, 30*time.Second)
-	defer getCancel()
+	saNamespace := usernameItems[2]
+	saName := usernameItems[3]
 
-	var podList corev1.PodList
 	opts := &client.ListOptions{
-		Namespace: usernameItems[2],
+		Namespace: saNamespace,
 		LabelSelector: labels.Set(map[string]string{
-			controller.AppNameLabel: usernameItems[3],
+			controller.AppNameLabel: saName,
 		}).AsSelector(),
 	}
 
-	if err := c.k8sClient.List(getCtx, &podList, opts); err != nil {
-		return nil, status.Error(codes.Internal, fmt.Sprintf("error listing pods: %s", err.Error()))
-	}
-
-	runningCount := 0
-	for _, pod := range podList.Items {
-		if pod.Status.Phase == corev1.PodRunning {
-			runningCount++
-		}
-	}
-
-	if runningCount < 1 {
-		msg := fmt.Sprintf("no running pods found for service account %s/%s", usernameItems[2], usernameItems[3])
-		return nil, status.Error(codes.Unauthenticated, msg)
+	if err := c.waitForRunningPod(ctx, logger, opts, saNamespace, saName); err != nil {
+		return nil, err
 	}
 
 	return grpcContext.NewGrpcContext(ctx, *grpcInfo), nil
+}
+
+// waitForRunningPod polls for a Running Pod that matches the agent's
+// ServiceAccount. This absorbs a brief startup race where the agent dials
+// before NGF's cache has observed the new Pod as Running (e.g. when slower
+// sidecars like waf-config-mgr delay full Pod readiness). Authentication
+// failures are returned immediately by validateToken; this helper only
+// handles the "no running pods yet" transient case.
+func (c ContextSetter) waitForRunningPod(
+	ctx context.Context,
+	logger logr.Logger,
+	opts *client.ListOptions,
+	saNamespace, saName string,
+) error {
+	retry := c.podCheck
+	if retry.PollInterval <= 0 || retry.Timeout <= 0 {
+		retry = defaultPodCheckRetry
+	}
+
+	waitCtx, cancel := context.WithTimeout(ctx, retry.Timeout)
+	defer cancel()
+
+	start := time.Now()
+	var (
+		attempt int
+		listErr error
+	)
+
+	pollErr := wait.PollUntilContextCancel(waitCtx, retry.PollInterval, true,
+		func(ctx context.Context) (bool, error) {
+			attempt++
+			var podList corev1.PodList
+			if err := c.k8sClient.List(ctx, &podList, opts); err != nil {
+				listErr = status.Error(codes.Internal, fmt.Sprintf("error listing pods: %s", err.Error()))
+				return false, listErr
+			}
+
+			for _, pod := range podList.Items {
+				if pod.Status.Phase == corev1.PodRunning {
+					return true, nil
+				}
+			}
+
+			logger.V(1).Info(
+				"no running pods found for agent service account; retrying",
+				"namespace", saNamespace,
+				"serviceAccount", saName,
+				"attempt", attempt,
+				"elapsed", time.Since(start).String(),
+			)
+			return false, nil
+		},
+	)
+	if pollErr == nil {
+		return nil
+	}
+	// If the wait was interrupted (deadline/cancel) rather than the condition
+	// returning a hard error, surface the startup-not-ready signal as
+	// Unavailable so callers can retry; otherwise propagate the List error.
+	if wait.Interrupted(pollErr) {
+		return status.Error(codes.Unavailable, fmt.Sprintf(
+			"no running pods found for service account %s/%s after %d attempts (%s); "+
+				"the agent's Pod may still be starting",
+			saNamespace, saName, attempt, time.Since(start),
+		))
+	}
+	if listErr != nil {
+		return listErr
+	}
+	return pollErr
 }
