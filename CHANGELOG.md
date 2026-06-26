@@ -16,6 +16,7 @@ DEPENDENCIES:
 BUG FIXES:
 
 - Change gRPC error code from NotFound to Internal for connection or deployment not found errors [5502](https://github.com/nginx/nginx-gateway-fabric/pull/5502)
+- Fix agent startup race condition when waf is enabled [5513](https://github.com/nginx/nginx-gateway-fabric/pull/5513)
 - Sort map-derived NGINX config for deterministic output [5511](https://github.com/nginx/nginx-gateway-fabric/pull/5511). Thanks to [ItsVigneshMurugan](https://github.com/ItsVigneshMurugan)
 
 HELM CHART:
