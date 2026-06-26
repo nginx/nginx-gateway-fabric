@@ -3,7 +3,9 @@ package interceptor
 import (
 	"context"
 	"errors"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/go-logr/logr"
 	. "github.com/onsi/gomega"
@@ -21,6 +23,13 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller"
 )
 
+// fastPodCheck makes test runs that exercise the no-running-pods retry loop
+// complete quickly while still exercising at least one retry iteration.
+var fastPodCheck = PodCheckRetry{
+	PollInterval: time.Millisecond,
+	Timeout:      20 * time.Millisecond,
+}
+
 type mockServerStream struct {
 	grpc.ServerStream
 	ctx context.Context
@@ -35,6 +44,8 @@ type mockClient struct {
 	createErr, listErr              error
 	username, appName, podNamespace string
 	authenticated                   bool
+	// noRunningPods, when true, returns a pod that is not in Running phase.
+	noRunningPods bool
 }
 
 func (m *mockClient) Create(_ context.Context, obj client.Object, _ ...client.CreateOption) error {
@@ -61,13 +72,18 @@ func (m *mockClient) List(_ context.Context, obj client.ObjectList, _ ...client.
 		}
 	}
 
+	phase := corev1.PodRunning
+	if m.noRunningPods {
+		phase = corev1.PodPending
+	}
+
 	podList.Items = []corev1.Pod{
 		{
 			ObjectMeta: metav1.ObjectMeta{
 				Namespace: m.podNamespace,
 				Labels:    labels,
 			},
-			Status: corev1.PodStatus{Phase: corev1.PodRunning},
+			Status: corev1.PodStatus{Phase: phase},
 		},
 	}
 
@@ -92,6 +108,7 @@ func TestInterceptor(t *testing.T) {
 		name          string
 		expErrMsg     string
 		authenticated bool
+		noRunningPods bool
 		expErrCode    codes.Code
 	}{
 		{
@@ -184,6 +201,17 @@ func TestInterceptor(t *testing.T) {
 			expErrCode:    codes.Unauthenticated,
 			expErrMsg:     "must be of the format",
 		},
+		{
+			name:          "no running pods times out as Unavailable",
+			md:            validMetadata,
+			username:      "system:serviceaccount:default:gateway-nginx",
+			appName:       "gateway-nginx",
+			podNamespace:  "default",
+			authenticated: true,
+			noRunningPods: true,
+			expErrCode:    codes.Unavailable,
+			expErrMsg:     "no running pods found for service account default/gateway-nginx",
+		},
 	}
 
 	streamHandler := func(_ any, _ grpc.ServerStream) error {
@@ -206,8 +234,10 @@ func TestInterceptor(t *testing.T) {
 				username:      test.username,
 				appName:       test.appName,
 				podNamespace:  test.podNamespace,
+				noRunningPods: test.noRunningPods,
 			}
 			cs := NewContextSetter(mockK8sClient, "ngf-audience")
+			cs.podCheck = fastPodCheck
 
 			ctx := t.Context()
 			if test.md != nil {
@@ -351,15 +381,107 @@ func TestValidateToken_PodListOptions(t *testing.T) {
 
 			patchedClient := &patchClient{fakeClient}
 			csPatched := NewContextSetter(patchedClient, "ngf-audience")
+			csPatched.podCheck = fastPodCheck
 
-			resultCtx, err := csPatched.validateToken(t.Context(), tc.grpcInfo)
+			resultCtx, err := csPatched.validateToken(t.Context(), tc.grpcInfo, logr.Discard())
 			if tc.shouldErr {
 				g.Expect(err).To(HaveOccurred())
 				g.Expect(err.Error()).To(ContainSubstring("no running pods"))
+				g.Expect(status.Code(err)).To(Equal(codes.Unavailable))
 			} else {
 				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(resultCtx).ToNot(BeNil())
 			}
 		})
 	}
+}
+
+// retryListClient simulates the cache race where a Pod listing returns no
+// running Pods on the first N calls and a Running Pod afterwards.
+type retryListClient struct {
+	client.Client
+	runningAfter int32
+	calls        atomic.Int32
+}
+
+func (r *retryListClient) Create(_ context.Context, obj client.Object, _ ...client.CreateOption) error {
+	if tr, ok := obj.(*authv1.TokenReview); ok {
+		tr.Status.Authenticated = true
+		tr.Status.User.Username = "system:serviceaccount:default:gateway-nginx"
+	}
+	return nil
+}
+
+func (r *retryListClient) List(_ context.Context, obj client.ObjectList, _ ...client.ListOption) error {
+	podList, ok := obj.(*corev1.PodList)
+	if !ok {
+		return errors.New("couldn't convert object to PodList")
+	}
+
+	phase := corev1.PodPending
+	if r.calls.Add(1) > r.runningAfter {
+		phase = corev1.PodRunning
+	}
+
+	podList.Items = []corev1.Pod{
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: "default",
+				Labels: map[string]string{
+					controller.AppNameLabel: "gateway-nginx",
+				},
+			},
+			Status: corev1.PodStatus{Phase: phase},
+		},
+	}
+	return nil
+}
+
+func TestValidateToken_RetriesUntilPodIsRunning(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	rc := &retryListClient{runningAfter: 2}
+	cs := NewContextSetter(rc, "ngf-audience")
+	cs.podCheck = PodCheckRetry{
+		PollInterval: time.Millisecond,
+		Timeout:      time.Second,
+	}
+
+	resultCtx, err := cs.validateToken(t.Context(), &grpcContext.GrpcInfo{Token: "dummy"}, logr.Discard())
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(resultCtx).ToNot(BeNil())
+	g.Expect(rc.calls.Load()).To(BeNumerically(">", int32(2)),
+		"expected at least one retry before pod was observed as Running")
+}
+
+// notAuthenticatedClient always rejects the TokenReview, simulating a true auth failure.
+type notAuthenticatedClient struct {
+	client.Client
+}
+
+func (n *notAuthenticatedClient) Create(_ context.Context, obj client.Object, _ ...client.CreateOption) error {
+	if tr, ok := obj.(*authv1.TokenReview); ok {
+		tr.Status.Authenticated = false
+		tr.Status.Error = "bad token"
+	}
+	return nil
+}
+
+func TestValidateToken_AuthFailureIsImmediateUnauthenticated(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	cs := NewContextSetter(&notAuthenticatedClient{}, "ngf-audience")
+	// Use the production retry config to make sure auth failures still return
+	// immediately rather than going through the retry path.
+	start := time.Now()
+	_, err := cs.validateToken(t.Context(), &grpcContext.GrpcInfo{Token: "dummy"}, logr.Discard())
+	elapsed := time.Since(start)
+
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(status.Code(err)).To(Equal(codes.Unauthenticated))
+	g.Expect(err.Error()).To(ContainSubstring("invalid authorization"))
+	g.Expect(elapsed).To(BeNumerically("<", time.Second),
+		"auth failure should not go through the pod-check retry loop")
 }
