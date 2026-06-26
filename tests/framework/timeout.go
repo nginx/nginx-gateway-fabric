@@ -50,7 +50,7 @@ type TimeoutConfig struct {
 // DefaultTimeoutConfig populates a TimeoutConfig with the default values.
 func DefaultTimeoutConfig() TimeoutConfig {
 	return TimeoutConfig{
-		CreateTimeout:                60 * time.Second,
+		CreateTimeout:                120 * time.Second,
 		UpdateTimeout:                60 * time.Second,
 		DeleteTimeout:                10 * time.Second,
 		DeleteNamespaceTimeout:       300 * time.Second,
