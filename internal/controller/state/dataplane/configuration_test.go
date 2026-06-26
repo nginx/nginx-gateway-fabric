@@ -5676,7 +5676,7 @@ func TestBuildStreamUpstreams(t *testing.T) {
 	expectedStreamUpstreams := []Upstream{
 		{
 			Name:      "default_cluster-app_8443",
-			Endpoints: []resolver.Endpoint{{Address: "10.96.0.1", Port: 8443}},
+			Endpoints: fakeEndpoints,
 		},
 		{
 			Name: "default_external-app_443",
@@ -5685,12 +5685,12 @@ func TestBuildStreamUpstreams(t *testing.T) {
 			},
 		},
 		{
-			Name:     "default_secure-app_8443",
-			ErrorMsg: "error",
-		},
-		{
 			Name:      "default_secure-app5_8443",
 			Endpoints: fakeEndpoints,
+		},
+		{
+			Name:     "default_secure-app_8443",
+			ErrorMsg: "error",
 		},
 	}
 	g := NewWithT(t)
