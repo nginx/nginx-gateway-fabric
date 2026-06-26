@@ -26,9 +26,8 @@ import (
 // fastPodCheck makes test runs that exercise the no-running-pods retry loop
 // complete quickly while still exercising at least one retry iteration.
 var fastPodCheck = PodCheckRetry{
-	InitialBackoff: time.Millisecond,
-	MaxBackoff:     2 * time.Millisecond,
-	Timeout:        20 * time.Millisecond,
+	PollInterval: time.Millisecond,
+	Timeout:      20 * time.Millisecond,
 }
 
 type mockServerStream struct {
@@ -445,9 +444,8 @@ func TestValidateToken_RetriesUntilPodIsRunning(t *testing.T) {
 	rc := &retryListClient{runningAfter: 2}
 	cs := NewContextSetter(rc, "ngf-audience")
 	cs.podCheck = PodCheckRetry{
-		InitialBackoff: time.Millisecond,
-		MaxBackoff:     2 * time.Millisecond,
-		Timeout:        time.Second,
+		PollInterval: time.Millisecond,
+		Timeout:      time.Second,
 	}
 
 	resultCtx, err := cs.validateToken(t.Context(), &grpcContext.GrpcInfo{Token: "dummy"}, logr.Discard())

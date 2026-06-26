@@ -14,6 +14,7 @@ import (
 	authv1 "k8s.io/api/authentication/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	grpcContext "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent/grpc/context"
@@ -32,18 +33,15 @@ const (
 // Pod's Running status, or while sidecars like waf-config-mgr are still
 // initializing).
 type PodCheckRetry struct {
-	// InitialBackoff is the initial wait between retries.
-	InitialBackoff time.Duration
-	// MaxBackoff caps the per-attempt wait between retries.
-	MaxBackoff time.Duration
-	// Timeout is the total time spent retrying before giving up.
+	// PollInterval is the interval between Pod list attempts.
+	PollInterval time.Duration
+	// Timeout is the total time spent polling before giving up.
 	Timeout time.Duration
 }
 
 var defaultPodCheckRetry = PodCheckRetry{
-	InitialBackoff: 100 * time.Millisecond,
-	MaxBackoff:     1 * time.Second,
-	Timeout:        15 * time.Second,
+	PollInterval: 500 * time.Millisecond,
+	Timeout:      15 * time.Second,
 }
 
 // streamHandler is a struct that implements StreamHandler, allowing the interceptor to replace the context.
@@ -186,12 +184,12 @@ func (c ContextSetter) validateToken(
 	return grpcContext.NewGrpcContext(ctx, *grpcInfo), nil
 }
 
-// waitForRunningPod retries the Pod listing for the agent's ServiceAccount
-// with bounded exponential backoff. This absorbs a brief startup race where
-// the agent dials before NGF's cache has observed the new Pod as Running
-// (e.g. when slower sidecars like waf-config-mgr delay full Pod readiness).
-// Authentication failures are returned immediately by validateToken; this
-// helper only handles the "no running pods yet" transient case.
+// waitForRunningPod polls for a Running Pod that matches the agent's
+// ServiceAccount. This absorbs a brief startup race where the agent dials
+// before NGF's cache has observed the new Pod as Running (e.g. when slower
+// sidecars like waf-config-mgr delay full Pod readiness). Authentication
+// failures are returned immediately by validateToken; this helper only
+// handles the "no running pods yet" transient case.
 func (c ContextSetter) waitForRunningPod(
 	ctx context.Context,
 	logger logr.Logger,
@@ -199,57 +197,59 @@ func (c ContextSetter) waitForRunningPod(
 	saNamespace, saName string,
 ) error {
 	retry := c.podCheck
-	if retry.InitialBackoff <= 0 || retry.MaxBackoff <= 0 || retry.Timeout <= 0 {
+	if retry.PollInterval <= 0 || retry.Timeout <= 0 {
 		retry = defaultPodCheckRetry
 	}
 
-	deadline := time.Now().Add(retry.Timeout)
-	backoff := retry.InitialBackoff
+	waitCtx, cancel := context.WithTimeout(ctx, retry.Timeout)
+	defer cancel()
+
 	start := time.Now()
-	attempt := 0
+	var (
+		attempt int
+		listErr error
+	)
 
-	for {
-		attempt++
-
-		listCtx, listCancel := context.WithTimeout(ctx, 30*time.Second)
-		var podList corev1.PodList
-		listErr := c.k8sClient.List(listCtx, &podList, opts)
-		listCancel()
-		if listErr != nil {
-			return status.Error(codes.Internal, fmt.Sprintf("error listing pods: %s", listErr.Error()))
-		}
-
-		for _, pod := range podList.Items {
-			if pod.Status.Phase == corev1.PodRunning {
-				return nil
+	pollErr := wait.PollUntilContextCancel(waitCtx, retry.PollInterval, true,
+		func(ctx context.Context) (bool, error) {
+			attempt++
+			var podList corev1.PodList
+			if err := c.k8sClient.List(ctx, &podList, opts); err != nil {
+				listErr = status.Error(codes.Internal, fmt.Sprintf("error listing pods: %s", err.Error()))
+				return false, listErr
 			}
-		}
 
-		logger.V(1).Info(
-			"no running pods found for agent service account; retrying",
-			"namespace", saNamespace,
-			"serviceAccount", saName,
-			"attempt", attempt,
-			"elapsed", time.Since(start).String(),
-		)
+			for _, pod := range podList.Items {
+				if pod.Status.Phase == corev1.PodRunning {
+					return true, nil
+				}
+			}
 
-		if time.Now().Add(backoff).After(deadline) {
-			return status.Error(codes.Unavailable, fmt.Sprintf(
-				"no running pods found for service account %s/%s after %d attempts (%s); "+
-					"the agent's Pod may still be starting",
-				saNamespace, saName, attempt, time.Since(start),
-			))
-		}
-
-		select {
-		case <-ctx.Done():
-			return status.FromContextError(ctx.Err()).Err()
-		case <-time.After(backoff):
-		}
-
-		backoff *= 2
-		if backoff > retry.MaxBackoff {
-			backoff = retry.MaxBackoff
-		}
+			logger.V(1).Info(
+				"no running pods found for agent service account; retrying",
+				"namespace", saNamespace,
+				"serviceAccount", saName,
+				"attempt", attempt,
+				"elapsed", time.Since(start).String(),
+			)
+			return false, nil
+		},
+	)
+	if pollErr == nil {
+		return nil
 	}
+	// If the wait was interrupted (deadline/cancel) rather than the condition
+	// returning a hard error, surface the startup-not-ready signal as
+	// Unavailable so callers can retry; otherwise propagate the List error.
+	if wait.Interrupted(pollErr) {
+		return status.Error(codes.Unavailable, fmt.Sprintf(
+			"no running pods found for service account %s/%s after %d attempts (%s); "+
+				"the agent's Pod may still be starting",
+			saNamespace, saName, attempt, time.Since(start),
+		))
+	}
+	if listErr != nil {
+		return listErr
+	}
+	return pollErr
 }
