@@ -538,7 +538,7 @@
               "type": "string"
             },
             "tag": {
-              "default": "2.6.5",
+              "default": "2.6.6",
               "title": "tag",
               "type": "string"
             }
@@ -970,7 +970,7 @@
               "type": "string"
             },
             "tag": {
-              "default": "2.6.5",
+              "default": "2.6.6",
               "title": "tag",
               "type": "string"
             }
