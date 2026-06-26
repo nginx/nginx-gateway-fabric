@@ -10,8 +10,8 @@ _June 26, 2026_
 
 DEPENDENCIES:
 
-- F5 WAF on NGINX to 5.11.3
-- NGINX Agnet to 3.11.2
+- F5 WAF on NGINX to 5.13.2 [5505](https://github.com/nginx/nginx-gateway-fabric/pull/5505)
+- NGINX Agent to 3.11.2 [5510](https://github.com/nginx/nginx-gateway-fabric/pull/5510)
 
 BUG FIXES:
 
