@@ -67,6 +67,18 @@ type UpstreamSettingsPolicySpec struct {
 	// +optional
 	HashMethodKey *HashMethodKey `json:"hashMethodKey,omitempty"`
 
+	// UseClusterIP configures NGINX to route to the Service ClusterIP and port instead of individual
+	// Pod IPs. When enabled, NGINX will target a single upstream server corresponding to the Service's
+	// ClusterIP, which is useful for service mesh compatibility and other Kubernetes
+	// controllers/operators that require traffic to traverse the Service VIP.
+	// This setting applies only when the target Service has a ClusterIP. For headless Services
+	// (ClusterIP: None) and ExternalName Services, normal endpoint resolution is used instead.
+	// This setting is also not applied to L4/stream upstreams.
+	// Defaults to false.
+	//
+	// +optional
+	UseClusterIP *bool `json:"useClusterIP,omitempty"`
+
 	// TargetRefs identifies API object(s) to apply the policy to.
 	// Objects must be in the same namespace as the policy.
 	// Support: Service
