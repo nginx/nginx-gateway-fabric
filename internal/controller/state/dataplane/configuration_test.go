@@ -7178,6 +7178,543 @@ func TestBuildAuthZConfigs_MultipleFiltersNoVariableCollision(t *testing.T) {
 	}
 }
 
+// TestBuildAuthZConfigs_OIDCFilter verifies that buildAuthZConfigs correctly processes
+// OIDC filters with Authorization configuration.
+func TestBuildAuthZConfigs_OIDCFilter(t *testing.T) {
+	t.Parallel()
+
+	makeOIDCFilter := func(
+		ns, name string,
+		valid, referenced bool,
+		authZ ngfAPIv1alpha1.Authorization,
+	) *graph.AuthenticationFilter {
+		return &graph.AuthenticationFilter{
+			Source: &ngfAPIv1alpha1.AuthenticationFilter{
+				ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: name},
+				Spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+					Type: ngfAPIv1alpha1.AuthTypeOIDC,
+					OIDC: &ngfAPIv1alpha1.OIDCAuth{
+						Issuer:          "https://idp.example.com",
+						ClientID:        "client-id",
+						ClientSecretRef: ngfAPIv1alpha1.LocalObjectReference{Name: "oidc-secret"},
+						Authorization:   &authZ,
+					},
+				},
+			},
+			Valid:      valid,
+			Referenced: referenced,
+		}
+	}
+
+	makeOIDCFilterWithNoRules := func(
+		ns, name string,
+		valid, referenced bool,
+	) *graph.AuthenticationFilter {
+		return makeOIDCFilter(ns, name, valid, referenced, ngfAPIv1alpha1.Authorization{})
+	}
+
+	makeOIDCFilterWithOneRuleAndDefaultSettings := func(
+		ns, name string,
+		valid, referenced bool,
+	) *graph.AuthenticationFilter {
+		authZ := ngfAPIv1alpha1.Authorization{
+			Rules: []ngfAPIv1alpha1.Rule{
+				{
+					Claims: []ngfAPIv1alpha1.Claim{
+						{
+							Name:   "email",
+							Values: []string{"admin@example.com"},
+						},
+					},
+				},
+			},
+		}
+		return makeOIDCFilter(ns, name, valid, referenced, authZ)
+	}
+
+	makeOIDCFilterWithNestedClaim := func(
+		ns, name string,
+		valid, referenced bool,
+	) *graph.AuthenticationFilter {
+		authZ := ngfAPIv1alpha1.Authorization{
+			Rules: []ngfAPIv1alpha1.Rule{
+				{
+					Claims: []ngfAPIv1alpha1.Claim{
+						{
+							Name:   "realm_access/roles",
+							Values: []string{"admin"},
+						},
+					},
+					Require: helpers.GetPointer(ngfAPIv1alpha1.RequireTypeAll),
+				},
+			},
+			Require: helpers.GetPointer(ngfAPIv1alpha1.RequireTypeAll),
+		}
+		return makeOIDCFilter(ns, name, valid, referenced, authZ)
+	}
+
+	makeOIDCFilterWithOneRuleAndCustomRequireTypesAndProxySetHeader := func(
+		ns, name string,
+		valid, referenced bool,
+	) *graph.AuthenticationFilter {
+		authZ := ngfAPIv1alpha1.Authorization{
+			Require: helpers.GetPointer(ngfAPIv1alpha1.RequireTypeAll),
+			Rules: []ngfAPIv1alpha1.Rule{
+				{
+					Claims: []ngfAPIv1alpha1.Claim{
+						{
+							Name:           "groups",
+							Values:         []string{"engineering"},
+							ProxySetHeader: helpers.GetPointer("X-Groups"),
+						},
+					},
+					Require: helpers.GetPointer(ngfAPIv1alpha1.RequireTypeAll),
+				},
+			},
+		}
+		return makeOIDCFilter(ns, name, valid, referenced, authZ)
+	}
+
+	makeOIDCFilterWithOneRuleAndCustomMatchType := func(
+		ns, name string,
+		valid, referenced bool,
+		match ngfAPIv1alpha1.ClaimMatchType,
+	) *graph.AuthenticationFilter {
+		authZ := ngfAPIv1alpha1.Authorization{
+			Rules: []ngfAPIv1alpha1.Rule{
+				{
+					Claims: []ngfAPIv1alpha1.Claim{
+						{
+							Name:   "aud",
+							Values: []string{"a(.*)ws"},
+							Match:  match,
+						},
+					},
+				},
+			},
+		}
+		return makeOIDCFilter(ns, name, valid, referenced, authZ)
+	}
+
+	makeOIDCFilterWithMixOfAnyAndAllRequireTypes := func(
+		ns, name string,
+		valid, referenced bool,
+		rtTopLevel ngfAPIv1alpha1.RequireType,
+	) *graph.AuthenticationFilter {
+		authZ := ngfAPIv1alpha1.Authorization{
+			Require: helpers.GetPointer(rtTopLevel),
+			Rules: []ngfAPIv1alpha1.Rule{
+				{
+					Claims: []ngfAPIv1alpha1.Claim{
+						{
+							Name:   "email",
+							Values: []string{"admin@example.com"},
+						},
+						{
+							Name:   "tenant",
+							Values: []string{"acme-co"},
+						},
+					},
+					Require: helpers.GetPointer(ngfAPIv1alpha1.RequireTypeAny),
+				},
+				{
+					Claims: []ngfAPIv1alpha1.Claim{
+						{
+							Name:   "department",
+							Values: []string{"sales", "ops"},
+						},
+						{
+							Name:   "iss",
+							Values: []string{"https://idp.example.com"},
+						},
+					},
+					Require: helpers.GetPointer(ngfAPIv1alpha1.RequireTypeAll),
+				},
+			},
+		}
+		return makeOIDCFilter(ns, name, valid, referenced, authZ)
+	}
+
+	tests := []struct {
+		authFilters map[types.NamespacedName]*graph.AuthenticationFilter
+		name        string
+		expected    []*AuthZConfig
+	}{
+		{
+			name:        "nil auth filters",
+			authFilters: nil,
+			expected:    nil,
+		},
+		{
+			name:        "empty auth filters",
+			authFilters: map[types.NamespacedName]*graph.AuthenticationFilter{},
+			expected:    nil,
+		},
+		{
+			name: "OIDC filter is invalid",
+			authFilters: map[types.NamespacedName]*graph.AuthenticationFilter{
+				{Namespace: "test", Name: "oidc-filter"}: makeOIDCFilterWithOneRuleAndDefaultSettings(
+					"test", "oidc-filter", false, true,
+				),
+			},
+			expected: nil,
+		},
+		{
+			name: "OIDC filter is not referenced",
+			authFilters: map[types.NamespacedName]*graph.AuthenticationFilter{
+				{Namespace: "test", Name: "oidc-filter"}: makeOIDCFilterWithOneRuleAndDefaultSettings(
+					"test", "oidc-filter", true, false,
+				),
+			},
+			expected: nil,
+		},
+		{
+			name: "valid OIDC filter with no rules results in nil",
+			authFilters: map[types.NamespacedName]*graph.AuthenticationFilter{
+				{Namespace: "test", Name: "oidc-filter"}: makeOIDCFilterWithNoRules(
+					"test", "oidc-filter", true, true,
+				),
+			},
+			expected: nil,
+		},
+		{
+			name: "valid OIDC filter with one rule and default settings",
+			authFilters: map[types.NamespacedName]*graph.AuthenticationFilter{
+				{Namespace: "test", Name: "oidc-filter"}: makeOIDCFilterWithOneRuleAndDefaultSettings(
+					"test", "oidc-filter", true, true,
+				),
+			},
+			expected: []*AuthZConfig{
+				{
+					FilterNsName: "test_oidc-filter",
+					RuleMaps: []AuthZRuleMap{
+						{
+							Maps: []shared.Map{
+								{
+									Source:   "$test_oidc_filter_claim_email",
+									Variable: "$test_oidc_filter_claim_email_rule_0",
+									Parameters: []shared.MapParameter{
+										{Value: `"~(?:^|,)admin@example\.com(?:,|$)"`, Result: "1"},
+										{Value: "default", Result: "0"},
+									},
+								},
+								{
+									Source:   "$test_oidc_filter_claim_email_rule_0",
+									Variable: "$test_oidc_filter_rule_0_any",
+									Parameters: []shared.MapParameter{
+										{Value: "~1", Result: "1"},
+										{Value: "default", Result: "0"},
+									},
+								},
+							},
+							Require: ngfAPIv1alpha1.RequireTypeAny,
+						},
+					},
+					AuthClaimSets: map[string][]string{
+						"$test_oidc_filter_claim_email": {"email"},
+					},
+					RequireVariable: "$test_oidc_filter_rule_0_any",
+				},
+			},
+		},
+		{
+			name: "valid OIDC filter with nested claim",
+			authFilters: map[types.NamespacedName]*graph.AuthenticationFilter{
+				{Namespace: "test", Name: "oidc-filter"}: makeOIDCFilterWithNestedClaim(
+					"test", "oidc-filter", true, true,
+				),
+			},
+			expected: []*AuthZConfig{
+				{
+					FilterNsName: "test_oidc-filter",
+					RuleMaps: []AuthZRuleMap{
+						{
+							Maps: []shared.Map{
+								{
+									Source:   "$test_oidc_filter_claim_realm_access_roles",
+									Variable: "$test_oidc_filter_rule_0_all",
+									Parameters: []shared.MapParameter{
+										{Value: `"~^(?:.*,)?admin(?:,.*)?$"`, Result: "1"},
+										{Value: "default", Result: "0"},
+									},
+								},
+							},
+							Require: ngfAPIv1alpha1.RequireTypeAll,
+						},
+					},
+					AuthClaimSets: map[string][]string{
+						"$test_oidc_filter_claim_realm_access_roles": {"realm_access", "roles"},
+					},
+					RequireVariable: "$test_oidc_filter_rule_0_all",
+				},
+			},
+		},
+		{
+			name: "valid OIDC filter with one rule and regex match",
+			authFilters: map[types.NamespacedName]*graph.AuthenticationFilter{
+				{Namespace: "test", Name: "oidc-filter"}: makeOIDCFilterWithOneRuleAndCustomMatchType(
+					"test", "oidc-filter", true, true,
+					ngfAPIv1alpha1.ClaimMatchTypeRegex,
+				),
+			},
+			expected: []*AuthZConfig{
+				{
+					FilterNsName: "test_oidc-filter",
+					RuleMaps: []AuthZRuleMap{
+						{
+							Maps: []shared.Map{
+								{
+									Source:   "$test_oidc_filter_claim_aud",
+									Variable: "$test_oidc_filter_claim_aud_rule_0",
+									Parameters: []shared.MapParameter{
+										{Value: `"~(?:^|,)a(.*)ws(?:,|$)"`, Result: "1"},
+										{Value: "default", Result: "0"},
+									},
+								},
+								{
+									Source:   "$test_oidc_filter_claim_aud_rule_0",
+									Variable: "$test_oidc_filter_rule_0_any",
+									Parameters: []shared.MapParameter{
+										{Value: "~1", Result: "1"},
+										{Value: "default", Result: "0"},
+									},
+								},
+							},
+							Require: ngfAPIv1alpha1.RequireTypeAny,
+						},
+					},
+					AuthClaimSets: map[string][]string{
+						"$test_oidc_filter_claim_aud": {"aud"},
+					},
+					RequireVariable: "$test_oidc_filter_rule_0_any",
+				},
+			},
+		},
+		{
+			name: "valid OIDC filter with one rule, custom require types and proxy set header",
+			authFilters: map[types.NamespacedName]*graph.AuthenticationFilter{
+				{Namespace: "test", Name: "oidc-filter"}: makeOIDCFilterWithOneRuleAndCustomRequireTypesAndProxySetHeader(
+					"test", "oidc-filter", true, true,
+				),
+			},
+			expected: []*AuthZConfig{
+				{
+					FilterNsName: "test_oidc-filter",
+					RuleMaps: []AuthZRuleMap{
+						{
+							Maps: []shared.Map{
+								{
+									Source:   "$test_oidc_filter_claim_groups",
+									Variable: "$test_oidc_filter_rule_0_all",
+									Parameters: []shared.MapParameter{
+										{Value: `"~^(?:.*,)?engineering(?:,.*)?$"`, Result: "1"},
+										{Value: "default", Result: "0"},
+									},
+								},
+							},
+							Require: ngfAPIv1alpha1.RequireTypeAll,
+						},
+					},
+					AuthClaimSets: map[string][]string{
+						"$test_oidc_filter_claim_groups": {"groups"},
+					},
+					RequireVariable: "$test_oidc_filter_rule_0_all",
+					ProxySetHeaders: []HTTPHeader{
+						{
+							Name:  "X-Groups",
+							Value: "$test_oidc_filter_claim_groups",
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "valid OIDC filter with multiple rules, top level require All, rule 1 Any, rule 2 All",
+			authFilters: map[types.NamespacedName]*graph.AuthenticationFilter{
+				{Namespace: "test", Name: "oidc-filter"}: makeOIDCFilterWithMixOfAnyAndAllRequireTypes(
+					"test", "oidc-filter", true, true,
+					ngfAPIv1alpha1.RequireTypeAll,
+				),
+			},
+
+			expected: []*AuthZConfig{
+				{
+					FilterNsName: "test_oidc-filter",
+					RuleMaps: []AuthZRuleMap{
+						{
+							Maps: []shared.Map{
+								{
+									Source:   "$test_oidc_filter_claim_email",
+									Variable: "$test_oidc_filter_claim_email_rule_0",
+									Parameters: []shared.MapParameter{
+										{Value: `"~(?:^|,)admin@example\.com(?:,|$)"`, Result: "1"},
+										{Value: "default", Result: "0"},
+									},
+								},
+								{
+									Source:   "$test_oidc_filter_claim_tenant",
+									Variable: "$test_oidc_filter_claim_tenant_rule_0",
+									Parameters: []shared.MapParameter{
+										{Value: `"~(?:^|,)acme-co(?:,|$)"`, Result: "1"},
+										{Value: "default", Result: "0"},
+									},
+								},
+								{
+									Source:   "$test_oidc_filter_claim_email_rule_0$test_oidc_filter_claim_tenant_rule_0",
+									Variable: "$test_oidc_filter_rule_0_any",
+									Parameters: []shared.MapParameter{
+										{Value: "~1", Result: "1"},
+										{Value: "default", Result: "0"},
+									},
+								},
+							},
+							Require: ngfAPIv1alpha1.RequireTypeAny,
+						},
+						{
+							Maps: []shared.Map{
+								{
+									Source:   "$test_oidc_filter_claim_department+$test_oidc_filter_claim_iss",
+									Variable: "$test_oidc_filter_rule_1_all",
+									Parameters: []shared.MapParameter{
+										{
+											Value:  `"~^(?:.*,)?(sales|ops)(?:,.*)?\+(?:.*,)?https://idp\.example\.com(?:,.*)?$"`,
+											Result: "1",
+										},
+										{Value: "default", Result: "0"},
+									},
+								},
+							},
+							Require: ngfAPIv1alpha1.RequireTypeAll,
+						},
+					},
+					AuthZMap: &AuthZMap{
+						Require: ngfAPIv1alpha1.RequireTypeAll,
+						Map: shared.Map{
+							Source:   "$test_oidc_filter_rule_0_any$test_oidc_filter_rule_1_all",
+							Variable: "$test_oidc_filter_authz_require_all",
+							Parameters: []shared.MapParameter{
+								{Value: "11", Result: "1"},
+								{Value: "default", Result: "0"},
+							},
+						},
+					},
+					AuthClaimSets: map[string][]string{
+						"$test_oidc_filter_claim_department": {"department"},
+						"$test_oidc_filter_claim_email":      {"email"},
+						"$test_oidc_filter_claim_iss":        {"iss"},
+						"$test_oidc_filter_claim_tenant":     {"tenant"},
+					},
+					RequireVariable: "$test_oidc_filter_authz_require_all",
+				},
+			},
+		},
+		{
+			name: "valid OIDC filter with multiple rules, top level require Any, rule 1 Any, rule 2 All",
+			authFilters: map[types.NamespacedName]*graph.AuthenticationFilter{
+				{Namespace: "test", Name: "oidc-filter"}: makeOIDCFilterWithMixOfAnyAndAllRequireTypes(
+					"test", "oidc-filter", true, true,
+					ngfAPIv1alpha1.RequireTypeAny,
+				),
+			},
+
+			expected: []*AuthZConfig{
+				{
+					FilterNsName: "test_oidc-filter",
+					RuleMaps: []AuthZRuleMap{
+						{
+							Maps: []shared.Map{
+								{
+									Source:   "$test_oidc_filter_claim_email",
+									Variable: "$test_oidc_filter_claim_email_rule_0",
+									Parameters: []shared.MapParameter{
+										{Value: `"~(?:^|,)admin@example\.com(?:,|$)"`, Result: "1"},
+										{Value: "default", Result: "0"},
+									},
+								},
+								{
+									Source:   "$test_oidc_filter_claim_tenant",
+									Variable: "$test_oidc_filter_claim_tenant_rule_0",
+									Parameters: []shared.MapParameter{
+										{Value: `"~(?:^|,)acme-co(?:,|$)"`, Result: "1"},
+										{Value: "default", Result: "0"},
+									},
+								},
+								{
+									Source:   "$test_oidc_filter_claim_email_rule_0$test_oidc_filter_claim_tenant_rule_0",
+									Variable: "$test_oidc_filter_rule_0_any",
+									Parameters: []shared.MapParameter{
+										{Value: "~1", Result: "1"},
+										{Value: "default", Result: "0"},
+									},
+								},
+							},
+							Require: ngfAPIv1alpha1.RequireTypeAny,
+						},
+						{
+							Maps: []shared.Map{
+								{
+									Source:   "$test_oidc_filter_claim_department+$test_oidc_filter_claim_iss",
+									Variable: "$test_oidc_filter_rule_1_all",
+									Parameters: []shared.MapParameter{
+										{
+											Value:  `"~^(?:.*,)?(sales|ops)(?:,.*)?\+(?:.*,)?https://idp\.example\.com(?:,.*)?$"`,
+											Result: "1",
+										},
+										{Value: "default", Result: "0"},
+									},
+								},
+							},
+							Require: ngfAPIv1alpha1.RequireTypeAll,
+						},
+					},
+					AuthZMap: &AuthZMap{
+						Require: ngfAPIv1alpha1.RequireTypeAny,
+						Map: shared.Map{
+							Source:   "$test_oidc_filter_rule_0_any$test_oidc_filter_rule_1_all",
+							Variable: "$test_oidc_filter_authz_require_any",
+							Parameters: []shared.MapParameter{
+								{Value: "~1", Result: "1"},
+								{Value: "default", Result: "0"},
+							},
+						},
+					},
+					AuthClaimSets: map[string][]string{
+						"$test_oidc_filter_claim_department": {"department"},
+						"$test_oidc_filter_claim_email":      {"email"},
+						"$test_oidc_filter_claim_iss":        {"iss"},
+						"$test_oidc_filter_claim_tenant":     {"tenant"},
+					},
+					RequireVariable: "$test_oidc_filter_authz_require_any",
+				},
+			},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+			result := buildAuthZConfigs(tc.authFilters)
+			g.Expect(result).To(HaveLen(len(tc.expected)))
+			if len(tc.expected) == 0 {
+				return
+			}
+
+			r := result[0]
+			expected := tc.expected[0]
+			g.Expect(r.AuthClaimSets).To(Equal(expected.AuthClaimSets))
+			g.Expect(r.RuleMaps).To(ContainElements(expected.RuleMaps))
+			g.Expect(r.ProxySetHeaders).To(ContainElements(expected.ProxySetHeaders))
+			if r.AuthZMap != nil {
+				g.Expect(*r.AuthZMap).To(Equal(*expected.AuthZMap))
+			} else {
+				g.Expect(expected.AuthZMap).To(BeNil())
+			}
+			g.Expect(r.FilterNsName).To(Equal(expected.FilterNsName))
+			g.Expect(r.RequireVariable).To(Equal(expected.RequireVariable))
+		})
+	}
+}
+
 func TestBuildRewriteIPSettings(t *testing.T) {
 	t.Parallel()
 	tests := []struct {

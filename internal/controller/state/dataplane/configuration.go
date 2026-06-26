@@ -860,17 +860,28 @@ func buildAuthZConfigs(
 			continue
 		}
 
-		// FIXME(s.odonovan): Support OIDC.
-		if filter.Source.Spec.Type == ngfAPIv1alpha1.AuthTypeJWT {
-			if filter.Source.Spec.JWT == nil || filter.Source.Spec.JWT.Authorization == nil {
-				continue
+		var authzSpec *ngfAPIv1alpha1.Authorization
+
+		switch filter.Source.Spec.Type {
+		case ngfAPIv1alpha1.AuthTypeJWT:
+			if filter.Source.Spec.JWT != nil {
+				authzSpec = filter.Source.Spec.JWT.Authorization
 			}
-			filterNsName := strings.Join([]string{nsName.Namespace, nsName.Name}, "_")
-			filterPrefix := sanitizeVariablePrefix(filterNsName)
-			if cfg := buildAuthZConfigFromAuthZSpec(filterPrefix, filter.Source.Spec.JWT.Authorization); cfg != nil {
-				cfg.FilterNsName = filterNsName
-				authZConfigs = append(authZConfigs, cfg)
+		case ngfAPIv1alpha1.AuthTypeOIDC:
+			if filter.Source.Spec.OIDC != nil {
+				authzSpec = filter.Source.Spec.OIDC.Authorization
 			}
+		}
+
+		if authzSpec == nil {
+			continue
+		}
+
+		filterNsName := strings.Join([]string{nsName.Namespace, nsName.Name}, "_")
+		filterPrefix := sanitizeVariablePrefix(filterNsName)
+		if cfg := buildAuthZConfigFromAuthZSpec(filterPrefix, authzSpec); cfg != nil {
+			cfg.FilterNsName = filterNsName
+			authZConfigs = append(authZConfigs, cfg)
 		}
 	}
 	return authZConfigs
@@ -2017,10 +2028,10 @@ func buildOIDCProviderFromAuthenticationFilters(
 			continue
 		}
 		converted := convertAuthenticationFilter(af, referencedSecrets)
-		if converted.OIDC == nil {
+		if converted.OIDC == nil || converted.OIDC.Provider == nil {
 			continue
 		}
-		provider := *converted.OIDC
+		provider := *converted.OIDC.Provider
 		if provider.CACertBundleID != "" && provider.CACertData != nil {
 			certBundles[provider.CACertBundleID] = provider.CACertData
 		}
