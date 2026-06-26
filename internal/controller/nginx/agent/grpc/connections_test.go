@@ -19,7 +19,7 @@ func TestGetConnection(t *testing.T) {
 		InstanceID: "instance1",
 		ParentName: types.NamespacedName{Namespace: "default", Name: "parent1"},
 	}
-	tracker.Track("key1", conn)
+	conn.Generation = tracker.Track("key1", conn)
 
 	trackedConn := tracker.GetConnection("key1")
 	g.Expect(trackedConn).To(Equal(conn))
@@ -80,11 +80,38 @@ func TestRemoveConnection(t *testing.T) {
 		InstanceID: "instance1",
 		ParentName: types.NamespacedName{Namespace: "default", Name: "parent1"},
 	}
-	tracker.Track("key1", conn)
+	conn.Generation = tracker.Track("key1", conn)
 
 	trackedConn := tracker.GetConnection("key1")
 	g.Expect(trackedConn).To(Equal(conn))
 
-	tracker.RemoveConnection("key1")
+	tracker.RemoveConnection("key1", conn.Generation)
+	g.Expect(tracker.GetConnection("key1")).To(Equal(agentgrpc.Connection{}))
+}
+
+// TestRemoveConnection_StaleGenerationIsNoOp: a stale (old-generation) RemoveConnection must not
+// delete a re-tracked connection.
+func TestRemoveConnection_StaleGenerationIsNoOp(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	tracker := agentgrpc.NewConnectionsTracker()
+	conn := agentgrpc.Connection{
+		InstanceID: "instance1",
+		ParentName: types.NamespacedName{Namespace: "default", Name: "parent1"},
+	}
+
+	staleGen := tracker.Track("key1", conn) // original stream
+	liveGen := tracker.Track("key1", conn)  // reconnect re-tracks same key
+	g.Expect(liveGen).ToNot(Equal(staleGen))
+
+	// Stale stream's deferred cleanup must NOT wipe the live entry.
+	tracker.RemoveConnection("key1", staleGen)
+	liveConn := tracker.GetConnection("key1")
+	g.Expect(liveConn.Ready()).To(BeTrue())
+	g.Expect(liveConn.Generation).To(Equal(liveGen))
+
+	// The live stream's own cleanup still removes it.
+	tracker.RemoveConnection("key1", liveGen)
 	g.Expect(tracker.GetConnection("key1")).To(Equal(agentgrpc.Connection{}))
 }

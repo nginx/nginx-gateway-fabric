@@ -19,10 +19,11 @@ type FakeConnectionsTracker struct {
 	getConnectionReturnsOnCall map[int]struct {
 		result1 grpc.Connection
 	}
-	RemoveConnectionStub        func(string)
+	RemoveConnectionStub        func(string, int)
 	removeConnectionMutex       sync.RWMutex
 	removeConnectionArgsForCall []struct {
 		arg1 string
+		arg2 int
 	}
 	SetInstanceIDStub        func(string, string)
 	setInstanceIDMutex       sync.RWMutex
@@ -30,11 +31,17 @@ type FakeConnectionsTracker struct {
 		arg1 string
 		arg2 string
 	}
-	TrackStub        func(string, grpc.Connection)
+	TrackStub        func(string, grpc.Connection) int
 	trackMutex       sync.RWMutex
 	trackArgsForCall []struct {
 		arg1 string
 		arg2 grpc.Connection
+	}
+	trackReturns struct {
+		result1 int
+	}
+	trackReturnsOnCall map[int]struct {
+		result1 int
 	}
 	invocations      map[string][][]interface{}
 	invocationsMutex sync.RWMutex
@@ -101,16 +108,17 @@ func (fake *FakeConnectionsTracker) GetConnectionReturnsOnCall(i int, result1 gr
 	}{result1}
 }
 
-func (fake *FakeConnectionsTracker) RemoveConnection(arg1 string) {
+func (fake *FakeConnectionsTracker) RemoveConnection(arg1 string, arg2 int) {
 	fake.removeConnectionMutex.Lock()
 	fake.removeConnectionArgsForCall = append(fake.removeConnectionArgsForCall, struct {
 		arg1 string
-	}{arg1})
+		arg2 int
+	}{arg1, arg2})
 	stub := fake.RemoveConnectionStub
-	fake.recordInvocation("RemoveConnection", []interface{}{arg1})
+	fake.recordInvocation("RemoveConnection", []interface{}{arg1, arg2})
 	fake.removeConnectionMutex.Unlock()
 	if stub != nil {
-		fake.RemoveConnectionStub(arg1)
+		fake.RemoveConnectionStub(arg1, arg2)
 	}
 }
 
@@ -120,17 +128,17 @@ func (fake *FakeConnectionsTracker) RemoveConnectionCallCount() int {
 	return len(fake.removeConnectionArgsForCall)
 }
 
-func (fake *FakeConnectionsTracker) RemoveConnectionCalls(stub func(string)) {
+func (fake *FakeConnectionsTracker) RemoveConnectionCalls(stub func(string, int)) {
 	fake.removeConnectionMutex.Lock()
 	defer fake.removeConnectionMutex.Unlock()
 	fake.RemoveConnectionStub = stub
 }
 
-func (fake *FakeConnectionsTracker) RemoveConnectionArgsForCall(i int) string {
+func (fake *FakeConnectionsTracker) RemoveConnectionArgsForCall(i int) (string, int) {
 	fake.removeConnectionMutex.RLock()
 	defer fake.removeConnectionMutex.RUnlock()
 	argsForCall := fake.removeConnectionArgsForCall[i]
-	return argsForCall.arg1
+	return argsForCall.arg1, argsForCall.arg2
 }
 
 func (fake *FakeConnectionsTracker) SetInstanceID(arg1 string, arg2 string) {
@@ -166,18 +174,24 @@ func (fake *FakeConnectionsTracker) SetInstanceIDArgsForCall(i int) (string, str
 	return argsForCall.arg1, argsForCall.arg2
 }
 
-func (fake *FakeConnectionsTracker) Track(arg1 string, arg2 grpc.Connection) {
+func (fake *FakeConnectionsTracker) Track(arg1 string, arg2 grpc.Connection) int {
 	fake.trackMutex.Lock()
+	ret, specificReturn := fake.trackReturnsOnCall[len(fake.trackArgsForCall)]
 	fake.trackArgsForCall = append(fake.trackArgsForCall, struct {
 		arg1 string
 		arg2 grpc.Connection
 	}{arg1, arg2})
 	stub := fake.TrackStub
+	fakeReturns := fake.trackReturns
 	fake.recordInvocation("Track", []interface{}{arg1, arg2})
 	fake.trackMutex.Unlock()
 	if stub != nil {
-		fake.TrackStub(arg1, arg2)
+		return stub(arg1, arg2)
 	}
+	if specificReturn {
+		return ret.result1
+	}
+	return fakeReturns.result1
 }
 
 func (fake *FakeConnectionsTracker) TrackCallCount() int {
@@ -186,7 +200,7 @@ func (fake *FakeConnectionsTracker) TrackCallCount() int {
 	return len(fake.trackArgsForCall)
 }
 
-func (fake *FakeConnectionsTracker) TrackCalls(stub func(string, grpc.Connection)) {
+func (fake *FakeConnectionsTracker) TrackCalls(stub func(string, grpc.Connection) int) {
 	fake.trackMutex.Lock()
 	defer fake.trackMutex.Unlock()
 	fake.TrackStub = stub
@@ -197,6 +211,29 @@ func (fake *FakeConnectionsTracker) TrackArgsForCall(i int) (string, grpc.Connec
 	defer fake.trackMutex.RUnlock()
 	argsForCall := fake.trackArgsForCall[i]
 	return argsForCall.arg1, argsForCall.arg2
+}
+
+func (fake *FakeConnectionsTracker) TrackReturns(result1 int) {
+	fake.trackMutex.Lock()
+	defer fake.trackMutex.Unlock()
+	fake.TrackStub = nil
+	fake.trackReturns = struct {
+		result1 int
+	}{result1}
+}
+
+func (fake *FakeConnectionsTracker) TrackReturnsOnCall(i int, result1 int) {
+	fake.trackMutex.Lock()
+	defer fake.trackMutex.Unlock()
+	fake.TrackStub = nil
+	if fake.trackReturnsOnCall == nil {
+		fake.trackReturnsOnCall = make(map[int]struct {
+			result1 int
+		})
+	}
+	fake.trackReturnsOnCall[i] = struct {
+		result1 int
+	}{result1}
 }
 
 func (fake *FakeConnectionsTracker) Invocations() map[string][][]interface{} {
