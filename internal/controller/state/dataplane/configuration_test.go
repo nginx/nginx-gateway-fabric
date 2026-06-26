@@ -4862,7 +4862,7 @@ func TestCreateRatioVarName(t *testing.T) {
 	g.Expect(CreateRatioVarName(25)).To(Equal("$otel_ratio_25"))
 }
 
-func TestCreatePassthroughServers(t *testing.T) {
+func TestBuildTLSServers(t *testing.T) {
 	t.Parallel()
 
 	getL4RouteKey := func(name string) graph.L4RouteKey {
@@ -8322,6 +8322,59 @@ func TestBuildDNSResolverConfig(t *testing.T) {
 	}
 }
 
+func TestBuildDisableBaseProxySetHeaders(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		np       *graph.EffectiveNginxProxy
+		name     string
+		expected []string
+	}{
+		{
+			name:     "nil nginx proxy",
+			np:       nil,
+			expected: nil,
+		},
+		{
+			name:     "empty disabled headers",
+			np:       &graph.EffectiveNginxProxy{},
+			expected: nil,
+		},
+		{
+			name: "disabled headers configured",
+			np: &graph.EffectiveNginxProxy{
+				DisableBaseHeaders: []ngfAPIv1alpha2.BaseHeaderName{
+					ngfAPIv1alpha2.HeaderXForwardedFor,
+					ngfAPIv1alpha2.HeaderXForwardedProto,
+				},
+			},
+			expected: []string{
+				string(ngfAPIv1alpha2.HeaderXForwardedFor),
+				string(ngfAPIv1alpha2.HeaderXForwardedProto),
+			},
+		},
+		{
+			name: "wildcard disabled headers configured",
+			np: &graph.EffectiveNginxProxy{
+				DisableBaseHeaders: []ngfAPIv1alpha2.BaseHeaderName{
+					ngfAPIv1alpha2.AllXBaseHeaders,
+				},
+			},
+			expected: []string{"*"},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			result := buildDisableBaseProxySetHeaders(tc.np)
+			g.Expect(result).To(Equal(tc.expected))
+		})
+	}
+}
+
 //nolint:gosec // Tests with mock SSL/TLS configuration data, not real credentials.
 func TestBuildConfiguration_GatewaysAndListeners(t *testing.T) {
 	t.Parallel()
@@ -10554,6 +10607,89 @@ func TestBuildClientConfigForSSLServersFrontendValidationModes(t *testing.T) {
 	}
 }
 
+func TestBuildCompressionConfig(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		compression *ngfAPIv1alpha2.Compression
+		expected    *CompressionSettings
+		name        string
+	}{
+		{
+			name:        "nil compression",
+			compression: nil,
+			expected:    nil,
+		},
+		{
+			name:        "empty compression struct",
+			compression: &ngfAPIv1alpha2.Compression{},
+			expected:    &CompressionSettings{},
+		},
+		{
+			name: "compression with mime types only",
+			compression: &ngfAPIv1alpha2.Compression{
+				Type:      ngfAPIv1alpha2.GzipCompressionType,
+				MimeTypes: []string{"text/css", "application/json"},
+			},
+			expected: &CompressionSettings{
+				MimeTypes: []string{"text/css", "application/json"},
+			},
+		},
+		{
+			name: "compression with gzip but no http version defaults to 1.1",
+			compression: &ngfAPIv1alpha2.Compression{
+				Type:      ngfAPIv1alpha2.GzipCompressionType,
+				MimeTypes: []string{"text/css"},
+				Gzip:      &ngfAPIv1alpha2.GzipSettings{},
+			},
+			expected: &CompressionSettings{
+				MimeTypes:   []string{"text/css"},
+				HTTPVersion: "1.1",
+			},
+		},
+		{
+			name: "compression with all options",
+			compression: &ngfAPIv1alpha2.Compression{
+				Type:      ngfAPIv1alpha2.GzipCompressionType,
+				MimeTypes: []string{"text/css"},
+				Level:     helpers.GetPointer[int32](6),
+				MinLength: helpers.GetPointer[int32](256),
+				Buffers: &ngfAPIv1alpha2.CompressionBuffers{
+					Number: 32,
+					Size:   "4k",
+				},
+				Gzip: &ngfAPIv1alpha2.GzipSettings{
+					Proxied:     []ngfAPIv1alpha2.GzipProxiedType{ngfAPIv1alpha2.GzipProxiedAny},
+					Vary:        helpers.GetPointer(true),
+					Disable:     []string{"msie6"},
+					HTTPVersion: helpers.GetPointer(ngfAPIv1alpha2.GzipHTTPVersion10),
+				},
+			},
+			expected: &CompressionSettings{
+				Level:        6,
+				MinLength:    helpers.GetPointer[int32](256),
+				BufferNumber: 32,
+				BufferSize:   "4k",
+				MimeTypes:    []string{"text/css"},
+				Vary:         true,
+				Proxied:      []string{"any"},
+				Disable:      []string{"msie6"},
+				HTTPVersion:  "1.0",
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			result := buildCompressionConfig(test.compression)
+			g.Expect(result).To(Equal(test.expected))
+		})
+	}
+}
+
 func TestBuildWAF(t *testing.T) {
 	t.Parallel()
 
@@ -10893,6 +11029,12 @@ func TestBuildCertBundles(t *testing.T) {
 		},
 	}
 
+	tlsServersWithTLS := []Layer4VirtualServer{
+		{
+			VerifyTLS: &VerifyTLS{CertBundleID: generateCertBundleID(backendBundle.Name)},
+		},
+	}
+
 	extAuthIDs := map[CertBundleID]struct{}{
 		generateCertBundleID(extAuthBundle.Name): {},
 	}
@@ -10904,6 +11046,7 @@ func TestBuildCertBundles(t *testing.T) {
 		name                 string
 		refCertBundles       []secrets.CertificateBundle
 		backendGroups        []BackendGroup
+		tlsServers           []Layer4VirtualServer
 	}{
 		{
 			name:                 "external auth filter BTP cert bundle is written even when no backend group references it",
@@ -10912,6 +11055,16 @@ func TestBuildCertBundles(t *testing.T) {
 			extAuthCertBundleIDs: extAuthIDs,
 			expected: map[CertBundleID]CertBundle{
 				generateCertBundleID(extAuthBundle.Name): CertBundle("ext-auth-ca-data"),
+			},
+		},
+		{
+			name:                 "TLSRoute terminate verify cert bundle is written when only TLS servers reference it",
+			refCertBundles:       []secrets.CertificateBundle{backendBundle},
+			backendGroups:        nil,
+			tlsServers:           tlsServersWithTLS,
+			extAuthCertBundleIDs: nil,
+			expected: map[CertBundleID]CertBundle{
+				generateCertBundleID(backendBundle.Name): CertBundle("backend-ca-data"),
 			},
 		},
 		{
@@ -10945,7 +11098,7 @@ func TestBuildCertBundles(t *testing.T) {
 			result := buildCertBundles(
 				test.refCertBundles,
 				test.backendGroups,
-				nil,
+				test.tlsServers,
 				test.extAuthCertBundleIDs,
 				test.authBundles,
 			)
