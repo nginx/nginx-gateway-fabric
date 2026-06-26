@@ -6,43 +6,30 @@ and includes links to all PRs that went into the release.
 
 ## Release 2.6.6
 
-n
+_June 26, 2026_
 
-%%DATE%%
+DEPENDENCIES:
 
-FEATURES:
-
--
+- F5 WAF on NGINX to 5.11.3
+- NGINX Agnet to 3.11.2
 
 BUG FIXES:
 
--
-
-DOCUMENTATION:
-
--
+- Change gRPC error code from NotFound to Internal for connection or deployment not found errors [5502](https://github.com/nginx/nginx-gateway-fabric/pull/5502)
 
 HELM CHART:
 
 - The version of the Helm chart is now 2.6.6
 
-UPGRADE:
-
--
-
-KNOWN ISSUES:
-
--
-
 COMPATIBILITY:
 
-- Gateway API version: ``
-- Gateway API Inference Extension version: ``
-- NGINX version: ``
-- NGINX Plus version: ``
-- F5 WAF on NGINX version: ``
-- NGINX Agent version: ``
-- Kubernetes version: ``
+- Gateway API version: `1.5.1`
+- Gateway API Inference Extension version: `1.5.0`
+- NGINX version: `1.31.2`
+- NGINX Plus version: `R37.0`
+- F5 WAF on NGINX version: `5.13.2`
+- NGINX Agent version: `v3.11.2`
+- Kubernetes version: `1.31+`
 
 CONTAINER IMAGES:
 
@@ -51,6 +38,7 @@ CONTAINER IMAGES:
 - Data plane with NGINX Plus: `private-registry.nginx.com/nginx-gateway-fabric/nginx-plus:2.6.6`
 - Data plane with NGINX Plus and F5 WAF: `private-registry.nginx.com/nginx-gateway-fabric/nginx-plus-f5waf:2.6.6`
 - Operator: `ghcr.io/nginx/nginx-gateway-fabric/operator:1.4.6`
+
 ## Release 2.6.5
 
 _June 17, 2026_
