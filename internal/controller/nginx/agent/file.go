@@ -138,12 +138,12 @@ func (fs *fileService) GetFileStream(
 func (fs *fileService) getFileContents(req *pb.GetFileRequest, connKey string) ([]byte, error) {
 	conn := fs.connTracker.GetConnection(connKey)
 	if conn.InstanceID == "" {
-		return nil, status.Errorf(codes.NotFound, "connection not found")
+		return nil, status.Errorf(codes.Internal, "connection not found")
 	}
 
 	deployment := fs.nginxDeployments.Get(conn.ParentName)
 	if deployment == nil {
-		return nil, status.Errorf(codes.NotFound, "deployment not found in store")
+		return nil, status.Errorf(codes.Internal, "deployment not found in store")
 	}
 
 	filename := req.GetFileMeta().GetName()
@@ -206,12 +206,12 @@ func (fs *fileService) UpdateOverview(
 
 	conn := fs.connTracker.GetConnection(grpcInfo.UUID)
 	if conn.InstanceID == "" {
-		return &pb.UpdateOverviewResponse{}, status.Errorf(codes.NotFound, "connection not found")
+		return &pb.UpdateOverviewResponse{}, status.Errorf(codes.Internal, "connection not found")
 	}
 
 	deployment := fs.nginxDeployments.Get(conn.ParentName)
 	if deployment == nil {
-		return &pb.UpdateOverviewResponse{}, status.Errorf(codes.NotFound, "deployment not found in store")
+		return &pb.UpdateOverviewResponse{}, status.Errorf(codes.Internal, "deployment not found in store")
 	}
 
 	requestFiles := req.GetOverview().GetFiles()
