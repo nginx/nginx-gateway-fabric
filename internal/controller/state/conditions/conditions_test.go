@@ -301,3 +301,53 @@ func TestNewListenerCACertificateConditions(t *testing.T) {
 		})
 	}
 }
+
+func TestNewPolicyProgrammedConditions(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		newCond  func() Condition
+		expected Condition
+	}{
+		{
+			name:    "NewSettingsPolicyProgrammed",
+			newCond: NewSettingsPolicyProgrammed,
+			expected: Condition{
+				Type:    string(PolicyConditionProgrammed),
+				Status:  metav1.ConditionTrue,
+				Reason:  string(PolicyReasonProgrammed),
+				Message: "Policy is programmed in the data plane",
+			},
+		},
+		{
+			name:    "NewSettingsPolicyNotProgrammed",
+			newCond: NewSettingsPolicyNotProgrammed,
+			expected: Condition{
+				Type:    string(PolicyConditionProgrammed),
+				Status:  metav1.ConditionFalse,
+				Reason:  string(PolicyReasonReconciling),
+				Message: "Policy is not programmed in the data plane",
+			},
+		},
+		{
+			name:    "NewSettingsPolicyOverridden",
+			newCond: NewSettingsPolicyOverridden,
+			expected: Condition{
+				Type:    string(PolicyConditionProgrammed),
+				Status:  metav1.ConditionFalse,
+				Reason:  string(PolicyReasonOverridden),
+				Message: "Policy is overridden by a conflicting policy of greater precedence",
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			g.Expect(test.newCond()).To(Equal(test.expected))
+		})
+	}
+}
