@@ -85,6 +85,10 @@ const (
 	// PodDisruptionBudget validation error.
 	expectedPDBExactlyOneFieldError = "exactly one of minAvailable or maxUnavailable must be set"
 
+	// WorkerProcesses validation errors.
+	expectedWorkerProcessesRangeError   = "workerProcesses must be 'auto' or an integer between 1 and 1024"
+	expectedWorkerProcessesPatternError = `workerProcesses in body should match`
+
 	// Compression validation errors.
 	expectedCompressionGzipRequiredError = "type 'gzip' requires spec.compression.gzip to be set"
 	// ServerTokens validation error.

@@ -574,6 +574,16 @@ func (p *NginxProvisioner) buildBootstrapConfigMap(
 		"WorkerConnections": workerConnections,
 	}
 
+	// worker_processes is configurable for OSS NGINX only; NGINX Plus uses the value
+	// hardcoded in its base nginx.conf. Leaving the field unset skips rendering the directive.
+	if !p.cfg.Plus {
+		workerProcesses := dataplane.DefaultWorkerProcesses
+		if nProxyCfg != nil && nProxyCfg.WorkerProcesses != nil {
+			workerProcesses = *nProxyCfg.WorkerProcesses
+		}
+		mainFields["WorkerProcesses"] = workerProcesses
+	}
+
 	eventsFields := map[string]any{
 		"WorkerConnections": workerConnections,
 	}

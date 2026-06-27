@@ -32,6 +32,7 @@ const (
 	defaultErrorLogLevel           = "info"
 	AlpineSSLRootCAPath            = "/etc/ssl/cert.pem"
 	DefaultWorkerConnections       = int32(1024)
+	DefaultWorkerProcesses         = "auto"
 	DefaultNginxReadinessProbePort = int32(8081)
 	DefaultNginxReadinessProbePath = "/readyz"
 	// DefaultLogFormatName is used when user provides custom access_log format.
@@ -163,6 +164,7 @@ func BuildConfiguration(
 		Policies:             buildPolicies(gateway, gateway.Policies),
 		AuxiliarySecrets:     buildAuxiliarySecrets(g.PlusSecrets),
 		WorkerConnections:    buildWorkerConnections(gateway),
+		WorkerProcesses:      buildWorkerProcesses(gateway),
 		SSLListenerHostnames: sslListenerHostnames,
 		CertBundles:          certBundles,
 		WAF:                  buildWAF(gateway),
@@ -2485,6 +2487,19 @@ func buildWorkerConnections(gateway *graph.Gateway) int32 {
 	return DefaultWorkerConnections
 }
 
+func buildWorkerProcesses(gateway *graph.Gateway) string {
+	if gateway == nil || gateway.EffectiveNginxProxy == nil {
+		return DefaultWorkerProcesses
+	}
+
+	ngfProxy := gateway.EffectiveNginxProxy
+	if ngfProxy.WorkerProcesses != nil {
+		return *ngfProxy.WorkerProcesses
+	}
+
+	return DefaultWorkerProcesses
+}
+
 func buildAuxiliarySecrets(
 	secretsMap map[types.NamespacedName][]graph.PlusSecretFile,
 ) map[graph.SecretFileType][]byte {
@@ -2527,6 +2542,7 @@ func GetDefaultConfiguration(g *graph.Graph, gateway *graph.Gateway) Configurati
 		NginxPlus:         NginxPlus{},
 		AuxiliarySecrets:  buildAuxiliarySecrets(g.PlusSecrets),
 		WorkerConnections: buildWorkerConnections(gateway),
+		WorkerProcesses:   buildWorkerProcesses(gateway),
 	}
 }
 

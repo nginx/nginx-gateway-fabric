@@ -474,6 +474,12 @@
               "maximum": 65535,
               "minimum": 1,
               "type": "integer"
+            },
+            "workerProcesses": {
+              "description": "The number of NGINX worker processes (\"auto\" or an integer between 1 and 1024). OSS NGINX only. Default is \"auto\".",
+              "maxLength": 4,
+              "pattern": "^(auto|[1-9][0-9]*)$",
+              "type": "string"
             }
           },
           "required": [],
