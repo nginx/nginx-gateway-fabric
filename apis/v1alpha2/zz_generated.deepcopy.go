@@ -633,6 +633,11 @@ func (in *NginxProxySpec) DeepCopyInto(out *NginxProxySpec) {
 		*out = new(int32)
 		**out = **in
 	}
+	if in.WorkerProcesses != nil {
+		in, out := &in.WorkerProcesses, &out.WorkerProcesses
+		*out = new(string)
+		**out = **in
+	}
 	if in.DNSResolver != nil {
 		in, out := &in.DNSResolver, &out.DNSResolver
 		*out = new(DNSResolver)

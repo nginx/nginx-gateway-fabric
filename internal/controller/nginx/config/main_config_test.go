@@ -45,7 +45,7 @@ func TestExecuteMainConfig_Telemetry(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			res := executeMainConfig(test.conf, &policiesfakes.FakeGenerator{})
+			res := executeMainConfig(test.conf, &policiesfakes.FakeGenerator{}, false)
 			g.Expect(res).To(HaveLen(1))
 			g.Expect(res[0].dest).To(Equal(mainIncludesConfigFile))
 			if test.expLoadModuleDirective {
@@ -94,7 +94,7 @@ func TestExecuteMainConfig_Waf(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			res := executeMainConfig(test.conf, &policiesfakes.FakeGenerator{})
+			res := executeMainConfig(test.conf, &policiesfakes.FakeGenerator{}, false)
 			g.Expect(res).To(HaveLen(1))
 			g.Expect(res[0].dest).To(Equal(mainIncludesConfigFile))
 			if test.expLoadModuleDirective {
@@ -134,7 +134,7 @@ func TestExecuteMainConfig_Logging(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			res := executeMainConfig(dataplane.Configuration{Logging: test.logging}, &policiesfakes.FakeGenerator{})
+			res := executeMainConfig(dataplane.Configuration{Logging: test.logging}, &policiesfakes.FakeGenerator{}, false)
 			g.Expect(res).To(HaveLen(1))
 			g.Expect(res[0].dest).To(Equal(mainIncludesConfigFile))
 			g.Expect(string(res[0].data)).To(ContainSubstring(test.expDirective))
@@ -167,7 +167,7 @@ func TestExecuteMainConfig_Snippets(t *testing.T) {
 
 	g := NewWithT(t)
 
-	res := executeMainConfig(conf, &policiesfakes.FakeGenerator{})
+	res := executeMainConfig(conf, &policiesfakes.FakeGenerator{}, false)
 	g.Expect(res).To(HaveLen(4))
 
 	// sort results by filename
@@ -241,10 +241,59 @@ func TestExecuteMainConfig_WorkerConnections(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			res := executeMainConfig(test.conf, &policiesfakes.FakeGenerator{})
+			res := executeMainConfig(test.conf, &policiesfakes.FakeGenerator{}, false)
 			g.Expect(res).To(HaveLen(1))
 			g.Expect(res[0].dest).To(Equal(mainIncludesConfigFile))
 			g.Expect(string(res[0].data)).To(ContainSubstring("error_log stderr"))
+		})
+	}
+}
+
+func TestExecuteMainConfig_WorkerProcesses(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name             string
+		expWorkerProcess string
+		conf             dataplane.Configuration
+		plus             bool
+		expectWorkerProc bool
+	}{
+		{
+			name:             "custom worker processes (OSS)",
+			conf:             dataplane.Configuration{WorkerProcesses: "4"},
+			plus:             false,
+			expWorkerProcess: "worker_processes 4;",
+			expectWorkerProc: true,
+		},
+		{
+			name:             "default worker processes (OSS)",
+			conf:             dataplane.Configuration{WorkerProcesses: dataplane.DefaultWorkerProcesses},
+			plus:             false,
+			expWorkerProcess: "worker_processes auto;",
+			expectWorkerProc: true,
+		},
+		{
+			name:             "worker processes not rendered for Plus",
+			conf:             dataplane.Configuration{WorkerProcesses: "4"},
+			plus:             true,
+			expectWorkerProc: false,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			res := executeMainConfig(test.conf, &policiesfakes.FakeGenerator{}, test.plus)
+			g.Expect(res).To(HaveLen(1))
+			g.Expect(res[0].dest).To(Equal(mainIncludesConfigFile))
+			if test.expectWorkerProc {
+				g.Expect(string(res[0].data)).To(ContainSubstring(test.expWorkerProcess))
+			} else {
+				g.Expect(string(res[0].data)).ToNot(ContainSubstring("worker_processes"))
+			}
 		})
 	}
 }
