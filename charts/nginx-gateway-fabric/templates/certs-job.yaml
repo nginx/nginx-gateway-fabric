@@ -7,7 +7,8 @@ metadata:
   labels:
   {{- include "nginx-gateway.labels" . | nindent 4 }}
   annotations:
-    "helm.sh/hook": pre-install
+    "helm.sh/hook": pre-install, pre-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
 automountServiceAccountToken: false
 {{- if or .Values.nginxGateway.serviceAccount.imagePullSecret .Values.nginxGateway.serviceAccount.imagePullSecrets }}
 imagePullSecrets:
@@ -29,7 +30,8 @@ metadata:
   labels:
   {{- include "nginx-gateway.labels" . | nindent 4 }}
   annotations:
-    "helm.sh/hook": pre-install
+    "helm.sh/hook": pre-install, pre-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
 rules:
 - apiGroups:
   - ""
@@ -48,7 +50,8 @@ metadata:
   labels:
   {{- include "nginx-gateway.labels" . | nindent 4 }}
   annotations:
-    "helm.sh/hook": pre-install
+    "helm.sh/hook": pre-install, pre-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
@@ -67,7 +70,8 @@ metadata:
   {{- include "nginx-gateway.labels" . | nindent 4 }}
   annotations:
     "helm.sh/hook-weight": "-1"
-    "helm.sh/hook": pre-install
+    "helm.sh/hook": pre-install, pre-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
 allowPrivilegeEscalation: false
 allowHostDirVolumePlugin: false
 allowHostIPC: false
