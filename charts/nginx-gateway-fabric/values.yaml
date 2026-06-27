@@ -1,5 +1,11 @@
 # yaml-language-server: $schema=values.schema.json
 
+# -- String to partially override the chart name used for resource naming.
+nameOverride: ""
+
+# -- String to fully override the generated resource names.
+fullnameOverride: ""
+
 # -- The DNS cluster domain of your Kubernetes cluster.
 clusterDomain: cluster.local
 
