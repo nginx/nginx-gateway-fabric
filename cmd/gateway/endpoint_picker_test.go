@@ -345,7 +345,8 @@ func TestEndpointPickerHandler_GETRequest(t *testing.T) {
 	g.Expect(resp.StatusCode).To(Equal(http.StatusOK))
 	g.Expect(resp.Header.Get(eppMetadata.DestinationEndpointKey)).To(Equal("10.0.0.1:8080"))
 
-	// Only headers should be sent — no body frame.
+	// Request should be sent with only headers and end_of_stream set to true,
+	// since GET requests do not have a body.
 	g.Expect(sentRequests).To(HaveLen(1))
 	g.Expect(sentRequests[0].GetRequestHeaders()).NotTo(BeNil())
 	g.Expect(sentRequests[0].GetRequestHeaders().GetEndOfStream()).To(BeTrue())
