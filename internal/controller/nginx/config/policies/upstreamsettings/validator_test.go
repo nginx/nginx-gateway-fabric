@@ -18,6 +18,19 @@ import (
 
 const plusDisabled = false
 
+// Expected, deterministically-ordered list of supported load balancing methods in validation error
+// messages. The methods are derived from a Go map, so the validator sorts them; asserting against
+// these exact strings verifies that ordering stays stable.
+const (
+	ossLBMethods = "hash, hash consistent, ip_hash, least_conn, least_time header, " +
+		"least_time header inflight, least_time last_byte, least_time last_byte inflight, " +
+		"random, random two, random two least_conn, round_robin"
+	plusLBMethods = "hash, hash consistent, ip_hash, least_conn, least_time header, " +
+		"least_time header inflight, least_time last_byte, least_time last_byte inflight, " +
+		"random, random two, random two least_conn, random two least_time=header, " +
+		"random two least_time=last_byte, round_robin"
+)
+
 type policyModFunc func(policy *ngfAPI.UpstreamSettingsPolicy) *ngfAPI.UpstreamSettingsPolicy
 
 func createValidPolicy() *ngfAPI.UpstreamSettingsPolicy {
@@ -326,15 +339,15 @@ func TestValidate_ValidateLoadBalancingMethod(t *testing.T) {
 			expConditions: nil,
 		},
 		{
-			name: "plus load balancing method least_time last_byte not allowed with Plus disabled",
+			name: "plus load balancing method random two least_time not allowed with Plus disabled",
 			policy: &ngfAPI.UpstreamSettingsPolicy{
 				Spec: ngfAPI.UpstreamSettingsPolicySpec{
-					LoadBalancingMethod: helpers.GetPointer(ngfAPI.LoadBalancingTypeLeastTimeLastByte),
+					LoadBalancingMethod: helpers.GetPointer(ngfAPI.LoadBalancingTypeRandomTwoLeastTimeHeader),
 				},
 			},
 			expConditions: []conditions.Condition{
-				conditions.NewPolicyInvalid("spec.loadBalancingMethod: Invalid value: \"least_time last_byte\": " +
-					"NGINX OSS supports the following load balancing methods: "),
+				conditions.NewPolicyInvalid("spec.loadBalancingMethod: Invalid value: \"random two least_time=header\": " +
+					"NGINX OSS supports the following load balancing methods: " + ossLBMethods),
 			},
 		},
 		{
@@ -356,7 +369,7 @@ func TestValidate_ValidateLoadBalancingMethod(t *testing.T) {
 			},
 			expConditions: []conditions.Condition{
 				conditions.NewPolicyInvalid("spec.loadBalancingMethod: Invalid value: \"invalid-method\": " +
-					"NGINX OSS supports the following load balancing methods: "),
+					"NGINX OSS supports the following load balancing methods: " + ossLBMethods),
 			},
 		},
 		{
@@ -368,7 +381,7 @@ func TestValidate_ValidateLoadBalancingMethod(t *testing.T) {
 			},
 			expConditions: []conditions.Condition{
 				conditions.NewPolicyInvalid("spec.loadBalancingMethod: Invalid value: \"invalid-method\": " +
-					"NGINX Plus supports the following load balancing methods: "),
+					"NGINX Plus supports the following load balancing methods: " + plusLBMethods),
 			},
 			plusEnabled: true,
 		},
@@ -384,7 +397,9 @@ func TestValidate_ValidateLoadBalancingMethod(t *testing.T) {
 
 			if test.expConditions != nil {
 				g.Expect(conds).To(HaveLen(1))
-				g.Expect(conds[0].Message).To(ContainSubstring(test.expConditions[0].Message))
+				g.Expect(conds[0].Message).To(Equal(test.expConditions[0].Message))
+			} else {
+				g.Expect(conds).To(BeNil())
 			}
 		})
 	}

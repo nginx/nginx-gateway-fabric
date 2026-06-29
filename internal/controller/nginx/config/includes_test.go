@@ -1,10 +1,13 @@
 package config
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 
 	. "github.com/onsi/gomega"
 
+	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/http"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/shared"
@@ -512,6 +515,515 @@ func TestCreateIncludeExecuteResults(t *testing.T) {
 
 			results := createIncludeExecuteResults(test.includes)
 			g.Expect(results).To(ConsistOf(test.expExecuteResults))
+		})
+	}
+}
+
+func TestCreateIncludeFromAuthZRuleMap(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name            string
+		filterNsName    string
+		ruleMap         dataplane.AuthZRuleMap
+		expName         string
+		expContentParts []string
+		ruleIdx         int
+	}{
+		{
+			name:         "single map with require all",
+			filterNsName: "test-ns_my-filter",
+			ruleIdx:      0,
+			ruleMap: dataplane.AuthZRuleMap{
+				Require: ngfAPIv1alpha1.RequireTypeAll,
+				Maps: []shared.Map{
+					{
+						Source:   "$jwt_claim_sub",
+						Variable: "$test_rule_0_all",
+						Parameters: []shared.MapParameter{
+							{Value: "admin", Result: "1"},
+							{Value: "default", Result: "0"},
+						},
+					},
+				},
+			},
+			expName: fmt.Sprintf("%s/test-ns_my-filter_rule_0_require_all.conf", includesFolder),
+			expContentParts: []string{
+				"map $jwt_claim_sub $test_rule_0_all",
+				"admin 1;",
+				"default 0;",
+			},
+		},
+		{
+			name:         "single map with require any",
+			filterNsName: "test-ns_my-filter",
+			ruleIdx:      2,
+			ruleMap: dataplane.AuthZRuleMap{
+				Require: ngfAPIv1alpha1.RequireTypeAny,
+				Maps: []shared.Map{
+					{
+						Source:   "$jwt_claim_role",
+						Variable: "$test_rule_2_any",
+						Parameters: []shared.MapParameter{
+							{Value: "editor", Result: "1"},
+							{Value: "default", Result: "0"},
+						},
+					},
+				},
+			},
+			expName: fmt.Sprintf("%s/test-ns_my-filter_rule_2_require_any.conf", includesFolder),
+			expContentParts: []string{
+				"map $jwt_claim_role $test_rule_2_any",
+				"editor 1;",
+				"default 0;",
+			},
+		},
+		{
+			name:         "multiple maps within a single rule map are rendered together",
+			filterNsName: "test-ns_my-filter",
+			ruleIdx:      0,
+			ruleMap: dataplane.AuthZRuleMap{
+				Require: ngfAPIv1alpha1.RequireTypeAll,
+				Maps: []shared.Map{
+					{
+						Source:   "$jwt_claim_sub",
+						Variable: "$test_rule_0_sub",
+						Parameters: []shared.MapParameter{
+							{Value: "admin", Result: "1"},
+							{Value: "default", Result: "0"},
+						},
+					},
+					{
+						Source:   "$jwt_claim_role",
+						Variable: "$test_rule_0_role",
+						Parameters: []shared.MapParameter{
+							{Value: "editor", Result: "1"},
+							{Value: "default", Result: "0"},
+						},
+					},
+				},
+			},
+			expName: fmt.Sprintf("%s/test-ns_my-filter_rule_0_require_all.conf", includesFolder),
+			expContentParts: []string{
+				"map $jwt_claim_sub $test_rule_0_sub",
+				"admin 1;",
+				"default 0;",
+				"map $jwt_claim_role $test_rule_0_role",
+				"editor 1;",
+				"default 0;",
+			},
+		},
+		{
+			name:         "rule index is reflected in filename",
+			filterNsName: "ns_filter",
+			ruleIdx:      5,
+			ruleMap: dataplane.AuthZRuleMap{
+				Require: ngfAPIv1alpha1.RequireTypeAll,
+				Maps: []shared.Map{
+					{
+						Source:   "$jwt_claim_sub",
+						Variable: "$rule_5_all",
+						Parameters: []shared.MapParameter{
+							{Value: "user", Result: "1"},
+							{Value: "default", Result: "0"},
+						},
+					},
+				},
+			},
+			expName: fmt.Sprintf("%s/ns_filter_rule_5_require_all.conf", includesFolder),
+			expContentParts: []string{
+				"map $jwt_claim_sub $rule_5_all",
+				"user 1;",
+				"default 0;",
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			include := createIncludeFromAuthZRuleMap(test.filterNsName, test.ruleIdx, test.ruleMap)
+
+			g.Expect(include.Name).To(Equal(test.expName))
+			g.Expect(include.Content).NotTo(BeEmpty())
+
+			content := string(include.Content)
+			for _, part := range test.expContentParts {
+				g.Expect(content).To(ContainSubstring(part),
+					fmt.Sprintf("expected content to contain %q, got:\n%s", part, content))
+			}
+		})
+	}
+}
+
+func TestCreateIncludeFromAuthZMap(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name            string
+		filterNsName    string
+		expName         string
+		expContentParts []string
+		authZMap        dataplane.AuthZMap
+	}{
+		{
+			name:         "top-level map with require all",
+			filterNsName: "test-ns_my-filter",
+			authZMap: dataplane.AuthZMap{
+				Require: ngfAPIv1alpha1.RequireTypeAll,
+				Map: shared.Map{
+					Source:   "$test_rule_0_all$test_rule_1_all",
+					Variable: "$test_authz_all",
+					Parameters: []shared.MapParameter{
+						{Value: "11", Result: "1"},
+						{Value: "default", Result: "0"},
+					},
+				},
+			},
+			expName: fmt.Sprintf("%s/test-ns_my-filter_authz_require_all.conf", includesFolder),
+			expContentParts: []string{
+				"map $test_rule_0_all$test_rule_1_all $test_authz_all",
+				"11 1;",
+				"default 0;",
+			},
+		},
+		{
+			name:         "top-level map with require any",
+			filterNsName: "test-ns_my-filter",
+			authZMap: dataplane.AuthZMap{
+				Require: ngfAPIv1alpha1.RequireTypeAny,
+				Map: shared.Map{
+					Source:   "$test_rule_0_any",
+					Variable: "$test_authz_any",
+					Parameters: []shared.MapParameter{
+						{Value: "~1", Result: "1"},
+						{Value: "default", Result: "0"},
+					},
+				},
+			},
+			expName: fmt.Sprintf("%s/test-ns_my-filter_authz_require_any.conf", includesFolder),
+			expContentParts: []string{
+				"map $test_rule_0_any $test_authz_any",
+				"~1 1;",
+				"default 0;",
+			},
+		},
+		{
+			name:         "filter namespace name is used in filename",
+			filterNsName: "prod-ns_auth-filter",
+			authZMap: dataplane.AuthZMap{
+				Require: ngfAPIv1alpha1.RequireTypeAll,
+				Map: shared.Map{
+					Source:   "$rule_var",
+					Variable: "$authz_var",
+					Parameters: []shared.MapParameter{
+						{Value: "1", Result: "1"},
+						{Value: "default", Result: "0"},
+					},
+				},
+			},
+			expName: fmt.Sprintf("%s/prod-ns_auth-filter_authz_require_all.conf", includesFolder),
+			expContentParts: []string{
+				"map $rule_var $authz_var",
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			include := createIncludeFromAuthZMap(test.filterNsName, test.authZMap)
+
+			g.Expect(include.Name).To(Equal(test.expName))
+			g.Expect(include.Content).NotTo(BeEmpty())
+
+			content := string(include.Content)
+			for _, part := range test.expContentParts {
+				g.Expect(content).To(ContainSubstring(part),
+					fmt.Sprintf("expected content to contain %q, got:\n%s", part, content))
+			}
+		})
+	}
+}
+
+func TestCreateIncludesFromAuthZConfigs(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name              string
+		authZConfigs      []*dataplane.AuthZConfig
+		expIncludeNames   []string
+		expIncludeContent []string
+		expIncludeCount   int
+	}{
+		{
+			name:            "nil authZConfigs returns nil",
+			authZConfigs:    nil,
+			expIncludeCount: 0,
+		},
+		{
+			name:            "empty authZConfigs returns nil",
+			authZConfigs:    []*dataplane.AuthZConfig{},
+			expIncludeCount: 0,
+		},
+		{
+			name:            "nil entry in authZConfigs is skipped",
+			authZConfigs:    []*dataplane.AuthZConfig{nil},
+			expIncludeCount: 0,
+		},
+		{
+			name: "rule map with empty maps is skipped",
+			authZConfigs: []*dataplane.AuthZConfig{
+				{
+					FilterNsName: "test-ns_my-filter",
+					RuleMaps: []dataplane.AuthZRuleMap{
+						{Maps: []shared.Map{}},
+					},
+				},
+			},
+			expIncludeCount: 0,
+		},
+		{
+			name: "authz map with empty source is skipped",
+			authZConfigs: []*dataplane.AuthZConfig{
+				{
+					FilterNsName: "test-ns_my-filter",
+					AuthZMap: &dataplane.AuthZMap{
+						Require: ngfAPIv1alpha1.RequireTypeAll,
+						Map: shared.Map{
+							Source:   "",
+							Variable: "$test_authz_all",
+						},
+					},
+				},
+			},
+			expIncludeCount: 0,
+		},
+		{
+			name: "single config with one rule map generates one include",
+			authZConfigs: []*dataplane.AuthZConfig{
+				{
+					FilterNsName: "test-ns_my-filter",
+					RuleMaps: []dataplane.AuthZRuleMap{
+						{
+							Require: ngfAPIv1alpha1.RequireTypeAll,
+							Maps: []shared.Map{
+								{
+									Source:   "$jwt_claim_sub",
+									Variable: "$test_rule_0_all",
+									Parameters: []shared.MapParameter{
+										{Value: "admin", Result: "1"},
+										{Value: "default", Result: "0"},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expIncludeCount: 1,
+			expIncludeNames: []string{
+				includesFolder + "/test-ns_my-filter_rule_0_require_all.conf",
+			},
+			expIncludeContent: []string{
+				"map $jwt_claim_sub $test_rule_0_all",
+				"admin 1;",
+				"default 0;",
+			},
+		},
+		{
+			name: "config with rule maps and top-level authz map",
+			authZConfigs: []*dataplane.AuthZConfig{
+				{
+					FilterNsName: "test-ns_my-filter",
+					RuleMaps: []dataplane.AuthZRuleMap{
+						{
+							Require: ngfAPIv1alpha1.RequireTypeAll,
+							Maps: []shared.Map{
+								{
+									Source:   "$jwt_claim_sub",
+									Variable: "$test_rule_0_all",
+									Parameters: []shared.MapParameter{
+										{Value: "admin", Result: "1"},
+										{Value: "default", Result: "0"},
+									},
+								},
+							},
+						},
+					},
+					AuthZMap: &dataplane.AuthZMap{
+						Require: ngfAPIv1alpha1.RequireTypeAll,
+						Map: shared.Map{
+							Source:   "$test_rule_0_all",
+							Variable: "$test_authz_all",
+							Parameters: []shared.MapParameter{
+								{Value: "1", Result: "1"},
+								{Value: "default", Result: "0"},
+							},
+						},
+					},
+				},
+			},
+			expIncludeCount: 2,
+			expIncludeNames: []string{
+				includesFolder + "/test-ns_my-filter_rule_0_require_all.conf",
+				includesFolder + "/test-ns_my-filter_authz_require_all.conf",
+			},
+			expIncludeContent: []string{
+				"map $jwt_claim_sub $test_rule_0_all",
+				"admin 1;",
+				"map $test_rule_0_all $test_authz_all",
+				"1 1;",
+				"default 0;",
+			},
+		},
+		{
+			name: "multiple configs generate includes for each",
+			authZConfigs: []*dataplane.AuthZConfig{
+				{
+					FilterNsName: "ns_filter-a",
+					RuleMaps: []dataplane.AuthZRuleMap{
+						{
+							Require: ngfAPIv1alpha1.RequireTypeAll,
+							Maps: []shared.Map{
+								{
+									Source:   "$jwt_claim_sub",
+									Variable: "$a_rule_0_all",
+									Parameters: []shared.MapParameter{
+										{Value: "admin", Result: "1"},
+										{Value: "default", Result: "0"},
+									},
+								},
+							},
+						},
+					},
+				},
+				{
+					FilterNsName: "ns_filter-b",
+					RuleMaps: []dataplane.AuthZRuleMap{
+						{
+							Require: ngfAPIv1alpha1.RequireTypeAny,
+							Maps: []shared.Map{
+								{
+									Source:   "$jwt_claim_role",
+									Variable: "$b_rule_0_any",
+									Parameters: []shared.MapParameter{
+										{Value: "editor", Result: "1"},
+										{Value: "default", Result: "0"},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expIncludeCount: 2,
+			expIncludeNames: []string{
+				includesFolder + "/ns_filter-a_rule_0_require_all.conf",
+				includesFolder + "/ns_filter-b_rule_0_require_any.conf",
+			},
+			expIncludeContent: []string{
+				"map $jwt_claim_sub $a_rule_0_all",
+				"admin 1;",
+				"default 0;",
+				"map $jwt_claim_role $b_rule_0_any",
+				"editor 1;",
+				"default 0;",
+			},
+		},
+		{
+			name: "nil config entries are skipped among valid configs",
+			authZConfigs: []*dataplane.AuthZConfig{
+				nil,
+				{
+					FilterNsName: "test-ns_my-filter",
+					RuleMaps: []dataplane.AuthZRuleMap{
+						{
+							Require: ngfAPIv1alpha1.RequireTypeAll,
+							Maps: []shared.Map{
+								{
+									Source:   "$jwt_claim_sub",
+									Variable: "$test_rule_0_all",
+									Parameters: []shared.MapParameter{
+										{Value: "admin", Result: "1"},
+										{Value: "default", Result: "0"},
+									},
+								},
+							},
+						},
+					},
+				},
+				nil,
+			},
+			expIncludeCount: 1,
+			expIncludeNames: []string{
+				includesFolder + "/test-ns_my-filter_rule_0_require_all.conf",
+			},
+			expIncludeContent: []string{
+				"map $jwt_claim_sub $test_rule_0_all",
+				"admin 1;",
+				"default 0;",
+			},
+		},
+		{
+			name: "config with only authz map and no rule maps",
+			authZConfigs: []*dataplane.AuthZConfig{
+				{
+					FilterNsName: "test-ns_my-filter",
+					AuthZMap: &dataplane.AuthZMap{
+						Require: ngfAPIv1alpha1.RequireTypeAny,
+						Map: shared.Map{
+							Source:   "$test_rule_0_any",
+							Variable: "$test_authz_any",
+							Parameters: []shared.MapParameter{
+								{Value: "1", Result: "1"},
+								{Value: "default", Result: "0"},
+							},
+						},
+					},
+				},
+			},
+			expIncludeCount: 1,
+			expIncludeNames: []string{
+				includesFolder + "/test-ns_my-filter_authz_require_any.conf",
+			},
+			expIncludeContent: []string{
+				"map $test_rule_0_any $test_authz_any",
+				"1 1;",
+				"default 0;",
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			includes := createIncludesFromAuthZConfigs(test.authZConfigs)
+
+			g.Expect(includes).To(HaveLen(test.expIncludeCount))
+
+			for i, expName := range test.expIncludeNames {
+				g.Expect(includes[i].Name).To(Equal(expName))
+				g.Expect(includes[i].Content).NotTo(BeEmpty())
+			}
+
+			for _, expContent := range test.expIncludeContent {
+				found := false
+				for _, inc := range includes {
+					if strings.Contains(string(inc.Content), expContent) {
+						found = true
+						break
+					}
+				}
+				g.Expect(found).To(BeTrue(),
+					fmt.Sprintf("expected content %q not found in any include", expContent))
+			}
 		})
 	}
 }

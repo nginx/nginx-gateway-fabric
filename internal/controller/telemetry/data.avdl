@@ -145,6 +145,18 @@ attached at the Route level. */
 		/** WAFEnabledGatewayCount is the number of Gateways with WAF enabled on their effective NginxProxy. */
 		long? WAFEnabledGatewayCount = null;
 		
+		/** HTTPWAFPolicyCount is the number of WAFPolicies with HTTP source type. */
+		long? HTTPWAFPolicyCount = null;
+		
+		/** NIMWAFPolicyCount is the number of WAFPolicies with NIM source type. */
+		long? NIMWAFPolicyCount = null;
+		
+		/** N1CWAFPolicyCount is the number of WAFPolicies with N1C source type. */
+		long? N1CWAFPolicyCount = null;
+		
+		/** PLMWAFPolicyCount is the number of WAFPolicies with PLM source type. */
+		long? PLMWAFPolicyCount = null;
+		
 		/** ListenerSetCount is the number of relevant ListenerSets. */
 		long? ListenerSetCount = null;
 		

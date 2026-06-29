@@ -685,6 +685,36 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 			expCond: conditions.Condition{},
 		},
 		{
+			name: "invalid: OIDC extraAuthArgs fails validation",
+			args: args{
+				secretNsName: types.NamespacedName{Namespace: "test", Name: "oidc"},
+				isPlus:       true,
+				authValidator: &validationfakes.FakeAuthFieldsValidator{
+					ValidateOIDCExtraAuthArgStub: func(_, _ string) error {
+						return errors.New("invalid extra auth arg")
+					},
+				},
+				filter: createAuthenticationFilterWithOIDC(
+					types.NamespacedName{Namespace: "test", Name: "oidc"},
+					&ngfAPI.OIDCAuth{
+						ClientID:        "client-id",
+						ClientSecretRef: ngfAPI.LocalObjectReference{Name: "client-secret"},
+						ExtraAuthArgs:   map[string]string{"bad;key": "value"},
+					},
+					false,
+				).Source,
+				resources: map[resolver.ResourceKey]client.Object{
+					{
+						ResourceType:   resolver.ResourceTypeSecret,
+						NamespacedName: types.NamespacedName{Namespace: "test", Name: "client-secret"},
+					}: createOpaqueClientSecret("client-secret", true),
+				},
+			},
+			expCond: conditions.NewAuthenticationFilterInvalid(
+				`spec.oidc.extraAuthArgs: Invalid value: "bad;key=value": invalid extra auth arg`,
+			),
+		},
+		{
 			name: "invalid: OIDC issuer fails regex validation",
 			args: args{
 				secretNsName: types.NamespacedName{Namespace: "test", Name: "oidc"},
@@ -2095,5 +2125,255 @@ func createAuthenticationFilterJWTRemote(
 			},
 		},
 		Valid: true,
+	}
+}
+
+func TestValidateJWTAuthorization(t *testing.T) {
+	t.Parallel()
+
+	proxyHeader := "X-JWT-Sub"
+
+	tests := []struct {
+		authValidator *validationfakes.FakeAuthFieldsValidator
+		authz         *ngfAPI.Authorization
+		name          string
+		expectErrs    bool
+	}{
+		{
+			name: "valid authorization with all fields",
+			authz: &ngfAPI.Authorization{
+				Rules: []ngfAPI.Rule{
+					{
+						Claims: []ngfAPI.Claim{
+							{
+								Name:           "sub",
+								Values:         []string{"user1", "user2"},
+								ProxySetHeader: &proxyHeader,
+							},
+						},
+					},
+				},
+			},
+			authValidator: &validationfakes.FakeAuthFieldsValidator{},
+			expectErrs:    false,
+		},
+		{
+			name: "valid claim value as regex",
+			authz: &ngfAPI.Authorization{
+				Rules: []ngfAPI.Rule{
+					{
+						Claims: []ngfAPI.Claim{
+							{
+								Name:   "sub",
+								Values: []string{"/user[0-9]+/"},
+							},
+						},
+					},
+				},
+			},
+			authValidator: &validationfakes.FakeAuthFieldsValidator{},
+			expectErrs:    false,
+		},
+		{
+			name: "invalid claim name",
+			authz: &ngfAPI.Authorization{
+				Rules: []ngfAPI.Rule{
+					{
+						Claims: []ngfAPI.Claim{
+							{
+								Name:   "bad;name",
+								Values: []string{"value"},
+							},
+						},
+					},
+				},
+			},
+			authValidator: func() *validationfakes.FakeAuthFieldsValidator {
+				v := &validationfakes.FakeAuthFieldsValidator{}
+				v.ValidateAuthZClaimNameReturns(errors.New("invalid claim name"))
+				return v
+			}(),
+			expectErrs: true,
+		},
+		{
+			name: "invalid claim value",
+			authz: &ngfAPI.Authorization{
+				Rules: []ngfAPI.Rule{
+					{
+						Claims: []ngfAPI.Claim{
+							{
+								Name:   "sub",
+								Values: []string{"bad;value"},
+							},
+						},
+					},
+				},
+			},
+			authValidator: func() *validationfakes.FakeAuthFieldsValidator {
+				v := &validationfakes.FakeAuthFieldsValidator{}
+				v.ValidateAuthZClaimValueReturns(errors.New("invalid claim value"))
+				return v
+			}(),
+			expectErrs: true,
+		},
+		{
+			name: "invalid proxy set header",
+			authz: &ngfAPI.Authorization{
+				Rules: []ngfAPI.Rule{
+					{
+						Claims: []ngfAPI.Claim{
+							{
+								Name:           "sub",
+								Values:         []string{"user1"},
+								ProxySetHeader: &proxyHeader,
+							},
+						},
+					},
+				},
+			},
+			authValidator: func() *validationfakes.FakeAuthFieldsValidator {
+				v := &validationfakes.FakeAuthFieldsValidator{}
+				v.ValidateAuthZProxySetHeaderReturns(errors.New("invalid header"))
+				return v
+			}(),
+			expectErrs: true,
+		},
+		{
+			name: "same claim name in different rules is valid",
+			authz: &ngfAPI.Authorization{
+				Rules: []ngfAPI.Rule{
+					{
+						Claims: []ngfAPI.Claim{
+							{
+								Name:   "sub",
+								Values: []string{"user1"},
+							},
+						},
+					},
+					{
+						Claims: []ngfAPI.Claim{
+							{
+								Name:   "sub",
+								Values: []string{"user2"},
+							},
+						},
+					},
+				},
+			},
+			authValidator: &validationfakes.FakeAuthFieldsValidator{},
+			expectErrs:    false,
+		},
+		{
+			name:          "nil authorization",
+			authz:         &ngfAPI.Authorization{},
+			authValidator: &validationfakes.FakeAuthFieldsValidator{},
+			expectErrs:    false,
+		},
+		{
+			name: "claim names collide after sanitization - slash vs underscore",
+			authz: &ngfAPI.Authorization{
+				Rules: []ngfAPI.Rule{
+					{
+						Claims: []ngfAPI.Claim{
+							{
+								Name:   "realm_access/roles",
+								Values: []string{"admin"},
+							},
+						},
+					},
+					{
+						Claims: []ngfAPI.Claim{
+							{
+								Name:   "realm_access_roles",
+								Values: []string{"viewer"},
+							},
+						},
+					},
+				},
+			},
+			authValidator: &validationfakes.FakeAuthFieldsValidator{},
+			expectErrs:    true,
+		},
+		{
+			name: "claim names collide after sanitization - dash vs underscore",
+			authz: &ngfAPI.Authorization{
+				Rules: []ngfAPI.Rule{
+					{
+						Claims: []ngfAPI.Claim{
+							{
+								Name:   "realm-access-roles",
+								Values: []string{"admin"},
+							},
+							{
+								Name:   "realm_access_roles",
+								Values: []string{"viewer"},
+							},
+						},
+					},
+				},
+			},
+			authValidator: &validationfakes.FakeAuthFieldsValidator{},
+			expectErrs:    true,
+		},
+		{
+			name: "claim names collide after sanitization - slash vs dash in same rule",
+			authz: &ngfAPI.Authorization{
+				Rules: []ngfAPI.Rule{
+					{
+						Claims: []ngfAPI.Claim{
+							{
+								Name:   "realm_access/roles",
+								Values: []string{"admin"},
+							},
+							{
+								Name:   "realm-access/roles",
+								Values: []string{"editor"},
+							},
+						},
+					},
+				},
+			},
+			authValidator: &validationfakes.FakeAuthFieldsValidator{},
+			expectErrs:    true,
+		},
+		{
+			name: "same claim name in different rules does not trigger collision",
+			authz: &ngfAPI.Authorization{
+				Rules: []ngfAPI.Rule{
+					{
+						Claims: []ngfAPI.Claim{
+							{
+								Name:   "realm_access/roles",
+								Values: []string{"admin"},
+							},
+						},
+					},
+					{
+						Claims: []ngfAPI.Claim{
+							{
+								Name:   "realm_access/roles",
+								Values: []string{"viewer"},
+							},
+						},
+					},
+				},
+			},
+			authValidator: &validationfakes.FakeAuthFieldsValidator{},
+			expectErrs:    false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			errs := validateJWTAuthorization(tt.authz, tt.authValidator)
+			if tt.expectErrs {
+				g.Expect(errs).ToNot(BeEmpty())
+			} else {
+				g.Expect(errs).To(BeEmpty())
+			}
+		})
 	}
 }

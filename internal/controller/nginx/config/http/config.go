@@ -89,8 +89,8 @@ type Location struct {
 	// ProxyHTTPVersion is the HTTP protocol version for proxying (e.g. "1.1" or "2").
 	// When empty, NGINX defaults to "1.1".
 	ProxyHTTPVersion string
-	// AuthOIDCProviderName is the name of the oidc_provider to be referenced in this location.
-	AuthOIDCProviderName string
+	// AuthOIDC holds the OIDC authentication configuration for this location.
+	AuthOIDC *AuthOIDC
 	// ResponseHeaders are custom response headers to be sent.
 	ResponseHeaders ResponseHeaders
 	// ProxySetHeaders are headers to set when proxying requests upstream.
@@ -109,6 +109,15 @@ type Location struct {
 	ClientMaxBodySize uint16
 	// GRPC indicates if this location proxies gRPC traffic.
 	GRPC bool
+}
+
+// AuthOIDC holds the OIDC authentication configuration for a location.
+type AuthOIDC struct {
+	// AuthZConfig holds the authorization configuration for OIDC.
+	// When set, the `auth_jwt` directive is enabled to process JWT claims.
+	AuthZConfig *AuthZConfig
+	// ProviderName is the name of the oidc_provider to be referenced in this location.
+	ProviderName string
 }
 
 // AuthExternalRequest holds the auth_request configuration for a location.
@@ -180,8 +189,8 @@ type Upstream struct {
 	Name                string
 	ZoneSize            string // format: 512k, 1m
 	StateFile           string
-	LoadBalancingMethod string
 	HashMethodKey       string
+	LoadBalancingMethod string
 	KeepAlive           UpstreamKeepAlive
 	Servers             []UpstreamServer
 }
@@ -236,10 +245,18 @@ type AuthBasic struct {
 // AuthJWT holds the configuration for JWT authentication using the auth_jwt directive.
 // See https://nginx.org/en/docs/http/ngx_http_auth_jwt_module.html
 type AuthJWT struct {
-	KeyCache *ngfAPI.Duration
-	Remote   *AuthJWTRemote
-	Realm    string
-	File     string
+	KeyCache    *ngfAPI.Duration
+	Remote      *AuthJWTRemote
+	Leeway      *ngfAPI.Duration
+	AuthZConfig *AuthZConfig
+	Realm       string
+	File        string
+}
+
+// ProxySetHeaderClaim maps a claim variable to a proxy_set_header name.
+type ProxySetHeaderClaim struct {
+	HeaderName    string
+	ClaimVariable string
 }
 
 // AuthJWTRemote holds configuration for remote JWKS retrieval.
@@ -247,6 +264,15 @@ type AuthJWTRemote struct {
 	TrustedCertificate string
 	URI                string
 	Path               string
+}
+
+// AuthZConfig is the authorization configuration for JWT and OIDC authentication.
+// This includes the auth_jwt_require variable and claim-based proxy_set_header directives.
+type AuthZConfig struct {
+	// AuthRequire is the variable name for the auth_jwt_require directive.
+	AuthRequire string
+	// ProxySetHeaders are claim-based proxy_set_header directives.
+	ProxySetHeaders []Header
 }
 
 // ServerConfig holds configuration for an HTTP server and IP family to be used by NGINX.
@@ -260,14 +286,18 @@ type ServerConfig struct {
 
 var (
 	OSSAllowedLBMethods = map[ngfAPI.LoadBalancingType]struct{}{
-		ngfAPI.LoadBalancingTypeRoundRobin:               {},
-		ngfAPI.LoadBalancingTypeLeastConnection:          {},
-		ngfAPI.LoadBalancingTypeIPHash:                   {},
-		ngfAPI.LoadBalancingTypeRandom:                   {},
-		ngfAPI.LoadBalancingTypeHash:                     {},
-		ngfAPI.LoadBalancingTypeHashConsistent:           {},
-		ngfAPI.LoadBalancingTypeRandomTwo:                {},
-		ngfAPI.LoadBalancingTypeRandomTwoLeastConnection: {},
+		ngfAPI.LoadBalancingTypeRoundRobin:                {},
+		ngfAPI.LoadBalancingTypeLeastConnection:           {},
+		ngfAPI.LoadBalancingTypeIPHash:                    {},
+		ngfAPI.LoadBalancingTypeRandom:                    {},
+		ngfAPI.LoadBalancingTypeHash:                      {},
+		ngfAPI.LoadBalancingTypeHashConsistent:            {},
+		ngfAPI.LoadBalancingTypeRandomTwo:                 {},
+		ngfAPI.LoadBalancingTypeRandomTwoLeastConnection:  {},
+		ngfAPI.LoadBalancingTypeLeastTimeHeader:           {},
+		ngfAPI.LoadBalancingTypeLeastTimeLastByte:         {},
+		ngfAPI.LoadBalancingTypeLeastTimeHeaderInflight:   {},
+		ngfAPI.LoadBalancingTypeLeastTimeLastByteInflight: {},
 	}
 
 	PlusAllowedLBMethods = map[ngfAPI.LoadBalancingType]struct{}{

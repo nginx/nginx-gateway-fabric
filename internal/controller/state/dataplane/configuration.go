@@ -19,6 +19,7 @@ import (
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/shared"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/configmaps"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/secrets"
@@ -86,6 +87,7 @@ func BuildConfiguration(
 	gatewayRateLimitPolicies := gateway.GetReferencedRateLimitPolicies(g.Routes, g.NGFPolicies)
 
 	baseHTTPConfig := buildBaseHTTPConfig(gateway, gatewaySnippetsFilters, gatewayRateLimitPolicies)
+	baseHTTPConfig.AuthZConfigs = buildAuthZConfigs(g.AuthenticationFilters)
 	baseStreamConfig := buildBaseStreamConfig(gateway)
 
 	httpServers, sslServers, sslListenerHostnames, extAuthCertBundleIDs := buildServers(
@@ -366,7 +368,29 @@ func buildL4Servers(logger logr.Logger, gateway *graph.Gateway, protocol v1.Prot
 		}
 	}
 
+	// L4 routes are iterated from a map, so sort the resulting servers to produce a stable order.
+	// Preserve order so that this doesn't trigger an unnecessary reload.
+	sort.Slice(servers, func(i, j int) bool {
+		if servers[i].Port != servers[j].Port {
+			return servers[i].Port < servers[j].Port
+		}
+		if servers[i].Hostname != servers[j].Hostname {
+			return servers[i].Hostname < servers[j].Hostname
+		}
+		return layer4UpstreamsKey(servers[i].Upstreams) < layer4UpstreamsKey(servers[j].Upstreams)
+	})
+
 	return servers
+}
+
+// layer4UpstreamsKey builds a stable comparison key from a server's upstreams so that L4 servers
+// sharing the same port and hostname are ordered deterministically.
+func layer4UpstreamsKey(upstreams []Layer4Upstream) string {
+	names := make([]string, 0, len(upstreams))
+	for _, u := range upstreams {
+		names = append(names, u.Name)
+	}
+	return strings.Join(names, ",")
 }
 
 // buildStreamUpstreams builds all stream upstreams.
@@ -453,6 +477,12 @@ func buildStreamUpstreams(
 	for _, up := range uniqueUpstreams {
 		upstreams = append(upstreams, up)
 	}
+
+	// Preserve order so that this doesn't trigger an unnecessary reload.
+	sort.Slice(upstreams, func(i, j int) bool {
+		return upstreams[i].Name < upstreams[j].Name
+	})
+
 	return upstreams
 }
 
@@ -817,6 +847,383 @@ func getAuthFileIDAndData(
 	}
 
 	return authFileID, data
+}
+
+// buildAuthZConfigs builds AuthZConfig entries from authentication filters.
+func buildAuthZConfigs(
+	authenticationFilters map[types.NamespacedName]*graph.AuthenticationFilter,
+) []*AuthZConfig {
+	var authZConfigs []*AuthZConfig
+
+	for nsName, filter := range authenticationFilters {
+		if filter == nil || filter.Source == nil || !filter.Valid || !filter.Referenced {
+			continue
+		}
+
+		var authzSpec *ngfAPIv1alpha1.Authorization
+
+		switch filter.Source.Spec.Type {
+		case ngfAPIv1alpha1.AuthTypeJWT:
+			if filter.Source.Spec.JWT != nil {
+				authzSpec = filter.Source.Spec.JWT.Authorization
+			}
+		case ngfAPIv1alpha1.AuthTypeOIDC:
+			if filter.Source.Spec.OIDC != nil {
+				authzSpec = filter.Source.Spec.OIDC.Authorization
+			}
+		}
+
+		if authzSpec == nil {
+			continue
+		}
+
+		filterNsName := strings.Join([]string{nsName.Namespace, nsName.Name}, "_")
+		filterPrefix := sanitizeVariablePrefix(filterNsName)
+		if cfg := buildAuthZConfigFromAuthZSpec(filterPrefix, authzSpec); cfg != nil {
+			cfg.FilterNsName = filterNsName
+			authZConfigs = append(authZConfigs, cfg)
+		}
+	}
+	return authZConfigs
+}
+
+// buildAuthZConfigFromAuthZSpec builds a complete AuthZConfig from an Authorization spec.
+// This produces:
+//   - ClaimSets: auth_jwt_claim_set directives for each unique claim name
+//   - RuleMaps: per-rule NGINX maps that validate claim values
+//   - AuthZMap: a final aggregation map combining all rule results
+//   - RequireVariable: the variable name for the auth_jwt_require directive
+//   - ProxySetHeaders: claim-based proxy_set_header directives
+func buildAuthZConfigFromAuthZSpec(
+	filterPrefix string,
+	authZSpec *ngfAPIv1alpha1.Authorization,
+) *AuthZConfig {
+	if authZSpec == nil || len(authZSpec.Rules) == 0 {
+		return nil
+	}
+
+	config := &AuthZConfig{}
+
+	// 1. Build ClaimSets from unique claim names across all rules
+	config.AuthClaimSets = make(map[string][]string)
+	for _, rule := range authZSpec.Rules {
+		for _, claim := range rule.Claims {
+			varName := generateClaimVariableName(filterPrefix, claim.Name)
+			if _, exists := config.AuthClaimSets[varName]; !exists {
+				config.AuthClaimSets[varName] = splitClaimName(claim.Name)
+			}
+			// Get proxy_set_header entries
+			if claim.ProxySetHeader != nil && *claim.ProxySetHeader != "" {
+				config.ProxySetHeaders = append(config.ProxySetHeaders, HTTPHeader{
+					Name:  *claim.ProxySetHeader,
+					Value: varName,
+				})
+			}
+		}
+	}
+
+	// 2. Build per-rule maps
+	ruleResultVars := make([]string, 0, len(authZSpec.Rules))
+	for ruleIdx, rule := range authZSpec.Rules {
+		requireType := ngfAPIv1alpha1.RequireTypeAny
+		if rule.Require != nil {
+			requireType = *rule.Require
+		}
+
+		ruleMap := buildAuthZRuleMap(filterPrefix, ruleIdx, requireType, rule.Claims)
+		config.RuleMaps = append(config.RuleMaps, ruleMap)
+
+		// Collect the result variable name for this map
+		ruleResultVars = append(ruleResultVars, ruleMap.Maps[len(ruleMap.Maps)-1].Variable)
+	}
+
+	// 3. Build aggregation map
+	authZRequire := ngfAPIv1alpha1.RequireTypeAny
+	if authZSpec.Require != nil {
+		authZRequire = *authZSpec.Require
+	}
+	config.AuthZMap = buildAuthZRuleResultMap(filterPrefix, authZRequire, ruleResultVars)
+	if config.AuthZMap != nil {
+		config.RequireVariable = config.AuthZMap.Variable
+	} else {
+		// Single rule: use the rule's result variable directly
+		config.RequireVariable = ruleResultVars[len(ruleResultVars)-1]
+	}
+
+	return config
+}
+
+// buildAuthZRuleMap builds the NGINX maps for a single authorization rule.
+func buildAuthZRuleMap(
+	filterPrefix string,
+	ruleIndex int,
+	requireType ngfAPIv1alpha1.RequireType,
+	claims []ngfAPIv1alpha1.Claim,
+) AuthZRuleMap {
+	switch requireType {
+	case ngfAPIv1alpha1.RequireTypeAll:
+		return buildAuthZRuleMapAll(filterPrefix, ruleIndex, claims)
+	default: // RequireTypeAny
+		return buildAuthZRuleMapAny(filterPrefix, ruleIndex, claims)
+	}
+}
+
+// buildAuthZRuleMapAny builds maps for require:Any mode.
+// In Any mode, we create one map per claim, then a combining map.
+// Example:
+//
+//	map $claim_iss $iss_rule_0 {
+//	    ~^(?:.*\b)?val1(?:\b.*)?$ 1;
+//	    default 0;
+//	}
+//	map $claim_aud $aud_rule_0 {
+//	    ~^(?:.*\b)?val2(?:\b.*)?$ 1;
+//	    default 0;
+//	}
+//	map $iss_rule_0$aud_rule_0 $rule_0_any {
+//	    ~1 1;
+//	    default 0;
+//	}
+func buildAuthZRuleMapAny(filterPrefix string, ruleIndex int, claims []ngfAPIv1alpha1.Claim) AuthZRuleMap {
+	var ruleMaps []shared.Map
+	perClaimVars := make([]string, 0, len(claims))
+
+	for _, claim := range claims {
+		claimVarName := generateClaimVariableName(filterPrefix, claim.Name)
+		claimShortName := strings.TrimPrefix(claimVarName, "$"+filterPrefix+"_claim_")
+		// Use filterPrefix at start to scope per-filter.
+		perClaimVar := fmt.Sprintf("$%s_claim_%s_rule_%d", filterPrefix, claimShortName, ruleIndex)
+		perClaimVars = append(perClaimVars, perClaimVar)
+
+		pattern := "\"~" + generateClaimValuePattern(claim.Values, &claim.Match, anyAnchors) + "\""
+
+		ruleMaps = append(ruleMaps, shared.Map{
+			Source:   claimVarName,
+			Variable: perClaimVar,
+			Parameters: []shared.MapParameter{
+				{Value: pattern, Result: "1"},
+				{Value: "default", Result: "0"},
+			},
+		})
+	}
+
+	// Combining map: used only for rules[].claims in Any mode;
+	// if any per-claim variable is 1, the rule passes
+	resultVar := fmt.Sprintf("$%s_rule_%d_any", filterPrefix, ruleIndex)
+	combiningSource := strings.Join(perClaimVars, "")
+
+	ruleMaps = append(ruleMaps, shared.Map{
+		Source:   combiningSource,
+		Variable: resultVar,
+		Parameters: []shared.MapParameter{
+			{Value: "~1", Result: "1"},
+			{Value: "default", Result: "0"},
+		},
+	})
+
+	return AuthZRuleMap{Maps: ruleMaps, Require: ngfAPIv1alpha1.RequireTypeAny}
+}
+
+// buildAuthZRuleMapAll builds maps for require:All mode.
+// In All mode, all claim variables are concatenated as the map source,
+// and all values are matched simultaneously in a single regex pattern.
+// Example:
+//
+//	map $claim_iss+$claim_aud $rule_0_all {
+//	    ~^(?:.*\b)?myissuer(?:\b.*)?\+(?:.*\b)?myaudience(?:\b.*)?$ 1;
+//	    default 0;
+//	}
+func buildAuthZRuleMapAll(filterPrefix string, ruleIndex int, claims []ngfAPIv1alpha1.Claim) AuthZRuleMap {
+	sources := make([]string, 0, len(claims))
+	patterns := make([]string, 0, len(claims))
+
+	for _, claim := range claims {
+		sources = append(sources, generateClaimVariableName(filterPrefix, claim.Name))
+		patterns = append(patterns, generateClaimValuePattern(claim.Values, &claim.Match, allAnchors))
+	}
+
+	resultVar := fmt.Sprintf("$%s_rule_%d_all", filterPrefix, ruleIndex)
+	source := strings.Join(sources, "+")
+	combinedPattern := "\"~^" + strings.Join(patterns, `\+`) + "$\""
+
+	authZMap := shared.Map{
+		Source:   source,
+		Variable: resultVar,
+		Parameters: []shared.MapParameter{
+			{Value: combinedPattern, Result: "1"},
+			{Value: "default", Result: "0"},
+		},
+	}
+
+	return AuthZRuleMap{Maps: []shared.Map{authZMap}, Require: ngfAPIv1alpha1.RequireTypeAll}
+}
+
+// buildAuthZRuleResultMap builds the final aggregation map that combines all per-rule result
+// variables into a single NGINX map whose output variable is used by the auth_jwt_require directive.
+// Returns nil when there are zero or one rules.
+// When one rule exists, use the result variable directly.
+//
+// In require:Any mode, the concatenated rule results are checked for the presence of at least
+// one "1" i.e. at least one rule passed.
+// Example with 3 rules:
+//
+//	map $rule_0_any$rule_1_all$rule_2_any $test_auth_authz_require_any {
+//	    ~1      1;
+//	    default 0;
+//	}
+//
+// In require:All mode, the concatenated rule results must all be "1".
+// The match pattern is an exact string of N ones, where N is the number of rules.
+// Example with 3 rules:
+//
+//	map $rule_0_any$rule_1_all$rule_2_any $test_auth_authz_require_all {
+//	    111     1;
+//	    default 0;
+//	}
+func buildAuthZRuleResultMap(
+	filterPrefix string,
+	requireType ngfAPIv1alpha1.RequireType,
+	ruleResultVars []string,
+) *AuthZMap {
+	if len(ruleResultVars) == 0 {
+		return nil
+	}
+
+	// If there's only one rule, no aggregation map is needed;
+	// the caller uses the rule's result variable directly.
+	if len(ruleResultVars) == 1 {
+		return nil
+	}
+
+	var variable string
+	var matchPattern string
+	source := strings.Join(ruleResultVars, "")
+
+	switch requireType {
+	case ngfAPIv1alpha1.RequireTypeAny:
+		variable = fmt.Sprintf("$%s_authz_require_any", filterPrefix)
+		matchPattern = "~1" // if any rule result contains 1
+	default: // RequireTypeAll
+		variable = fmt.Sprintf("$%s_authz_require_all", filterPrefix)
+		// All rule results must be 1: e.g., for 3 rules, match "111"
+		matchPattern = strings.Repeat("1", len(ruleResultVars))
+	}
+
+	return &AuthZMap{
+		Map: shared.Map{
+			Source:   source,
+			Variable: variable,
+			Parameters: []shared.MapParameter{
+				{Value: matchPattern, Result: "1"},
+				{Value: "default", Result: "0"},
+			},
+		},
+		Require: requireType,
+	}
+}
+
+// generateClaimVariableName generates the NGINX variable name for a claim, scoped by filter prefix.
+// Dots, slashes, and dashes in claim names are replaced with underscores for NGINX variable compatibility,
+// since NGINX variable names only allow [a-zA-Z0-9_].
+// The filterPrefix ensures uniqueness across multiple AuthenticationFilters.
+// Examples (with filterPrefix "test_auth"):
+//   - "realm_access/roles" becomes "$test_auth_claim_realm_access_roles"
+//   - "app_1-role" becomes "$test_auth_claim_app_1_role"
+func generateClaimVariableName(filterPrefix, claimName string) string {
+	safeName := sanitizeVariablePrefix(claimName)
+	return fmt.Sprintf("$%s_claim_%s", filterPrefix, safeName)
+}
+
+// sanitizeVariablePrefix converts a string value into a valid NGINX variable prefix.
+// NGINX variable names only allow [a-zA-Z0-9_], so any other characters (e.g., dashes) are replaced
+// with underscores.
+func sanitizeVariablePrefix(value string) string {
+	return strings.NewReplacer("-", "_", ".", "_", "/", "_").Replace(value)
+}
+
+// splitClaimName splits a claim name into parts for the auth_jwt_claim_set directive.
+// The "/" character is used as the nesting separator for nested JWT claims.
+// For example, "realm_access/roles" becomes ["realm_access", "roles"].
+// A claim name without "/" (e.g., "aud") returns ["aud"].
+func splitClaimName(name string) []string {
+	return strings.Split(name, "/")
+}
+
+// claimPatternAnchors defines the regex prefix and suffix for wrapping claim value patterns.
+type claimPatternAnchors struct {
+	prefix string
+	suffix string
+}
+
+var (
+	// allAnchors uses (?:.*,)? and (?:,.*)? to match a value within a comma-separated list
+	// when multiple claims are concatenated with +.
+	// Example: (?:.*,)?acme-co(?:,.*)? as part of a larger ^...$ anchored pattern.
+	allAnchors = claimPatternAnchors{prefix: "(?:.*,)?", suffix: "(?:,.*)?"}
+
+	// anyAnchors uses (?:^|,) and (?:,|$) to match a value within a comma-separated list
+	// when the claim is evaluated independently.
+	// Example: (?:^|,)cli(?:,|$) matches "cli", "cli,api", "api,cli", "api,cli,ops".
+	anyAnchors = claimPatternAnchors{prefix: "(?:^|,)", suffix: "(?:,|$)"}
+)
+
+// generateClaimValuePattern generates a regex pattern for claim value matching,
+// wrapping the value pattern with the provided anchors.
+func generateClaimValuePattern(
+	values []string,
+	matchType *ngfAPIv1alpha1.ClaimMatchType,
+	anchors claimPatternAnchors,
+) string {
+	if len(values) == 0 {
+		return ".*"
+	}
+
+	valuePattern := buildMapValuePattern(values, matchType)
+
+	return fmt.Sprintf("%s%s%s", anchors.prefix, valuePattern, anchors.suffix)
+}
+
+// buildMapValuePattern builds a regex safe pattern for list of values
+// and applying regex escaping where necessary.
+// Examples:
+// - Values ["val1", "val2"] and exact match, returns (?:^|,)(?:val1|val2)(?:,|$)
+// - Value "https://issuer.example-1.com" with exact match returns https://issuer\.example-1\.com
+func buildMapValuePattern(values []string, matchType *ngfAPIv1alpha1.ClaimMatchType) string {
+	patterns := make([]string, 0, len(values))
+	for _, value := range values {
+		if matchType != nil && *matchType == ngfAPIv1alpha1.ClaimMatchTypeRegex {
+			// Regex match: use the value as-is
+			patterns = append(patterns, value)
+		} else {
+			// Exact match: escape regex special characters
+			patterns = append(patterns, regexEscape(value))
+		}
+	}
+
+	if len(patterns) == 1 {
+		return patterns[0]
+	}
+	return generateListMatchPattern(patterns)
+}
+
+// generateListMatchPattern generates a regex pattern that matches any of the provided patterns.
+// Example: input ["val1", "val2"] returns (val1|val2).
+func generateListMatchPattern(patterns []string) string {
+	return "(" + strings.Join(patterns, "|") + ")"
+}
+
+// regexEscape escapes special regex characters in a string.
+// Example: "https://issuer.example-1.com" becomes "https://issuer\.example-1\.com"
+func regexEscape(value string) string {
+	special := `\.+*?^${}()|[]`
+	var result strings.Builder
+	for _, character := range value {
+		if strings.ContainsRune(special, character) {
+			result.WriteRune('\\')
+		}
+		result.WriteRune(character)
+	}
+	return result.String()
 }
 
 func buildBackendGroups(servers []VirtualServer) []BackendGroup {
@@ -1423,7 +1830,6 @@ func getPath(path *v1.HTTPPathMatch) string {
 	return *path.Value
 }
 
-//nolint:gocyclo
 func createHTTPFilters(
 	filters []graph.Filter,
 	ruleIdx int,
@@ -1438,65 +1844,115 @@ func createHTTPFilters(
 	for _, f := range filters {
 		switch f.FilterType {
 		case graph.FilterRequestRedirect:
-			if result.RequestRedirect == nil {
-				// using the first filter
-				result.RequestRedirect = convertHTTPRequestRedirectFilter(f.RequestRedirect)
-			}
+			result.addRequestRedirect(f.RequestRedirect)
 		case graph.FilterURLRewrite:
-			if result.RequestURLRewrite == nil {
-				// using the first filter
-				result.RequestURLRewrite = convertHTTPURLRewriteFilter(f.URLRewrite)
-			}
+			result.addURLRewrite(f.URLRewrite)
 		case graph.FilterRequestMirror:
-			result.RequestMirrors = append(
-				result.RequestMirrors,
-				convertHTTPRequestMirrorFilter(f.RequestMirror, ruleIdx, routeNsName),
-			)
+			result.addRequestMirror(f.RequestMirror, ruleIdx, routeNsName)
 		case graph.FilterRequestHeaderModifier:
-			if result.RequestHeaderModifiers == nil {
-				// using the first filter
-				result.RequestHeaderModifiers = convertHTTPHeaderFilter(f.RequestHeaderModifier)
-			}
+			result.addRequestHeaderModifier(f.RequestHeaderModifier)
 		case graph.FilterResponseHeaderModifier:
-			if result.ResponseHeaderModifiers == nil {
-				// using the first filter
-				result.ResponseHeaderModifiers = convertHTTPHeaderFilter(f.ResponseHeaderModifier)
-			}
+			result.addResponseHeaderModifier(f.ResponseHeaderModifier)
 		case graph.FilterExtensionRef:
-			if f.ResolvedExtensionRef != nil {
-				if f.ResolvedExtensionRef.SnippetsFilter != nil {
-					result.SnippetsFilters = append(
-						result.SnippetsFilters,
-						convertSnippetsFilter(f.ResolvedExtensionRef.SnippetsFilter),
-					)
-				}
-				if f.ResolvedExtensionRef.AuthenticationFilter != nil {
-					result.AuthenticationFilter = convertAuthenticationFilter(
-						f.ResolvedExtensionRef.AuthenticationFilter,
-						referencedSecrets,
-					)
-				}
-			}
+			result.addExtensionRef(f.ResolvedExtensionRef, referencedSecrets)
 		case graph.FilterCORS:
-			if result.CORSFilter == nil {
-				result.CORSFilter = convertHTTPCORSFilter(f.CORS)
-			}
+			result.addCORS(f.CORS)
 		case graph.FilterExternalAuth:
-			if result.ExternalAuthFilter == nil {
-				for _, br := range backendRefs {
-					if br.IsExternalAuthBackend && br.Valid {
-						result.ExternalAuthFilter = convertHTTPExternalAuthFilter(f.ExternalAuth, br, routeNsName, ruleIdx, gwNsName)
-						if result.ExternalAuthFilter.VerifyTLS != nil && extAuthCertBundleIDs != nil {
-							extAuthCertBundleIDs[result.ExternalAuthFilter.VerifyTLS.CertBundleID] = struct{}{}
-						}
-						break
-					}
-				}
-			}
+			result.addExternalAuth(f.ExternalAuth, backendRefs, routeNsName, ruleIdx, gwNsName, extAuthCertBundleIDs)
 		}
 	}
 
 	return result
+}
+
+func (hf *HTTPFilters) addRequestRedirect(redirect *v1.HTTPRequestRedirectFilter) {
+	if hf.RequestRedirect == nil {
+		// using the first filter
+		hf.RequestRedirect = convertHTTPRequestRedirectFilter(redirect)
+	}
+}
+
+func (hf *HTTPFilters) addURLRewrite(rewrite *v1.HTTPURLRewriteFilter) {
+	if hf.RequestURLRewrite == nil {
+		// using the first filter
+		hf.RequestURLRewrite = convertHTTPURLRewriteFilter(rewrite)
+	}
+}
+
+func (hf *HTTPFilters) addRequestMirror(
+	mirror *v1.HTTPRequestMirrorFilter,
+	ruleIdx int,
+	routeNsName types.NamespacedName,
+) {
+	hf.RequestMirrors = append(
+		hf.RequestMirrors,
+		convertHTTPRequestMirrorFilter(mirror, ruleIdx, routeNsName),
+	)
+}
+
+func (hf *HTTPFilters) addRequestHeaderModifier(modifier *v1.HTTPHeaderFilter) {
+	if hf.RequestHeaderModifiers == nil {
+		// using the first filter
+		hf.RequestHeaderModifiers = convertHTTPHeaderFilter(modifier)
+	}
+}
+
+func (hf *HTTPFilters) addResponseHeaderModifier(modifier *v1.HTTPHeaderFilter) {
+	if hf.ResponseHeaderModifiers == nil {
+		// using the first filter
+		hf.ResponseHeaderModifiers = convertHTTPHeaderFilter(modifier)
+	}
+}
+
+func (hf *HTTPFilters) addExtensionRef(
+	ref *graph.ExtensionRefFilter,
+	referencedSecrets map[types.NamespacedName]*secrets.Secret,
+) {
+	if ref == nil {
+		return
+	}
+
+	if ref.SnippetsFilter != nil {
+		hf.SnippetsFilters = append(
+			hf.SnippetsFilters,
+			convertSnippetsFilter(ref.SnippetsFilter),
+		)
+	}
+	if ref.AuthenticationFilter != nil {
+		hf.AuthenticationFilter = convertAuthenticationFilter(
+			ref.AuthenticationFilter,
+			referencedSecrets,
+		)
+	}
+}
+
+func (hf *HTTPFilters) addCORS(cors *v1.HTTPCORSFilter) {
+	if hf.CORSFilter == nil {
+		hf.CORSFilter = convertHTTPCORSFilter(cors)
+	}
+}
+
+func (hf *HTTPFilters) addExternalAuth(
+	extAuth *v1.HTTPExternalAuthFilter,
+	backendRefs []graph.BackendRef,
+	routeNsName types.NamespacedName,
+	ruleIdx int,
+	gwNsName types.NamespacedName,
+	extAuthCertBundleIDs map[CertBundleID]struct{},
+) {
+	if hf.ExternalAuthFilter != nil {
+		return
+	}
+
+	for _, br := range backendRefs {
+		if br.IsExternalAuthBackend && br.Valid {
+			hf.ExternalAuthFilter = convertHTTPExternalAuthFilter(extAuth, br, routeNsName, ruleIdx, gwNsName)
+			if hf.ExternalAuthFilter.VerifyTLS != nil && extAuthCertBundleIDs != nil {
+				extAuthCertBundleIDs[hf.ExternalAuthFilter.VerifyTLS.CertBundleID] = struct{}{}
+			}
+			break
+		}
+	}
 }
 
 // listenerHostnameMoreSpecific returns true if host1 is more specific than host2.
@@ -1572,10 +2028,10 @@ func buildOIDCProviderFromAuthenticationFilters(
 			continue
 		}
 		converted := convertAuthenticationFilter(af, referencedSecrets)
-		if converted.OIDC == nil {
+		if converted.OIDC == nil || converted.OIDC.Provider == nil {
 			continue
 		}
-		provider := *converted.OIDC
+		provider := *converted.OIDC.Provider
 		if provider.CACertBundleID != "" && provider.CACertData != nil {
 			certBundles[provider.CACertBundleID] = provider.CACertData
 		}

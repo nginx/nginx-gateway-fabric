@@ -544,11 +544,30 @@ var _ = Describe("Collector", Ordered, func() {
 						{
 							NsName: types.NamespacedName{Namespace: "test", Name: "WAFPolicy-1"},
 							GVK:    schema.GroupVersionKind{Kind: kinds.WAFPolicy},
-						}: {TargetRefs: []graph.PolicyTargetRef{{Kind: kinds.HTTPRoute}, {Kind: kinds.GRPCRoute}}},
+						}: {
+							Source: &ngfAPI.WAFPolicy{
+								Spec: ngfAPI.WAFPolicySpec{
+									Type: ngfAPI.PolicySourceTypeHTTP,
+								},
+							},
+							TargetRefs: []graph.PolicyTargetRef{
+								{Kind: kinds.HTTPRoute},
+								{Kind: kinds.GRPCRoute},
+							},
+						},
 						{
 							NsName: types.NamespacedName{Namespace: "test", Name: "WAFPolicy-2"},
 							GVK:    schema.GroupVersionKind{Kind: kinds.WAFPolicy},
-						}: {TargetRefs: []graph.PolicyTargetRef{{Kind: kinds.Gateway}}},
+						}: {
+							Source: &ngfAPI.WAFPolicy{
+								Spec: ngfAPI.WAFPolicySpec{
+									Type: ngfAPI.PolicySourceTypeNIM,
+								},
+							},
+							TargetRefs: []graph.PolicyTargetRef{
+								{Kind: kinds.Gateway},
+							},
+						},
 					},
 					ReferencedNginxProxies: map[types.NamespacedName]*graph.NginxProxy{
 						{Namespace: "test", Name: "NginxProxy-1"}: &gcNP,
@@ -691,6 +710,8 @@ var _ = Describe("Collector", Ordered, func() {
 					GatewayAttachedWAFPolicyCount:            1,
 					RouteAttachedWAFPolicyCount:              2,
 					WAFEnabledGatewayCount:                   1,
+					HTTPWAFPolicyCount:                       1,
+					NIMWAFPolicyCount:                        1,
 					ListenerSetCount:                         3,
 				}
 				expData.ClusterVersion = "1.29.2"
@@ -944,11 +965,56 @@ var _ = Describe("Collector", Ordered, func() {
 					{
 						NsName: types.NamespacedName{Namespace: "test", Name: "WAFPolicy-1"},
 						GVK:    schema.GroupVersionKind{Kind: kinds.WAFPolicy},
-					}: {TargetRefs: []graph.PolicyTargetRef{{Kind: kinds.HTTPRoute}, {Kind: kinds.GRPCRoute}}},
+					}: {
+						Source: &ngfAPI.WAFPolicy{
+							Spec: ngfAPI.WAFPolicySpec{
+								Type: ngfAPI.PolicySourceTypeN1C,
+							},
+						},
+						TargetRefs: []graph.PolicyTargetRef{
+							{Kind: kinds.HTTPRoute},
+							{Kind: kinds.GRPCRoute},
+						},
+					},
 					{
 						NsName: types.NamespacedName{Namespace: "test", Name: "WAFPolicy-2"},
 						GVK:    schema.GroupVersionKind{Kind: kinds.WAFPolicy},
-					}: {TargetRefs: []graph.PolicyTargetRef{{Kind: kinds.Gateway}}},
+					}: {
+						Source: &ngfAPI.WAFPolicy{
+							Spec: ngfAPI.WAFPolicySpec{
+								Type: ngfAPI.PolicySourceTypePLM,
+							},
+						},
+						TargetRefs: []graph.PolicyTargetRef{
+							{Kind: kinds.Gateway},
+						},
+					},
+					{
+						NsName: types.NamespacedName{Namespace: "test", Name: "WAFPolicy-3"},
+						GVK:    schema.GroupVersionKind{Kind: kinds.WAFPolicy},
+					}: {
+						Source: &ngfAPI.WAFPolicy{
+							Spec: ngfAPI.WAFPolicySpec{
+								Type: ngfAPI.PolicySourceTypeHTTP,
+							},
+						},
+						TargetRefs: []graph.PolicyTargetRef{
+							{Kind: kinds.HTTPRoute},
+						},
+					},
+					{
+						NsName: types.NamespacedName{Namespace: "test", Name: "WAFPolicy-4"},
+						GVK:    schema.GroupVersionKind{Kind: kinds.WAFPolicy},
+					}: {
+						Source: &ngfAPI.WAFPolicy{
+							Spec: ngfAPI.WAFPolicySpec{
+								Type: ngfAPI.PolicySourceTypeNIM,
+							},
+						},
+						TargetRefs: []graph.PolicyTargetRef{
+							{Kind: kinds.Gateway},
+						},
+					},
 				},
 				ReferencedNginxProxies: map[types.NamespacedName]*graph.NginxProxy{
 					{Namespace: "test", Name: "NginxProxy-1"}: {Valid: true},
@@ -1059,9 +1125,13 @@ var _ = Describe("Collector", Ordered, func() {
 					InferencePoolCount:                       1,
 					GatewayAttachedProxySettingsPolicyCount:  2,
 					RouteAttachedProxySettingsPolicyCount:    3,
-					GatewayAttachedWAFPolicyCount:            1,
-					RouteAttachedWAFPolicyCount:              2,
+					GatewayAttachedWAFPolicyCount:            2,
+					RouteAttachedWAFPolicyCount:              3,
 					WAFEnabledGatewayCount:                   1,
+					HTTPWAFPolicyCount:                       1,
+					NIMWAFPolicyCount:                        1,
+					N1CWAFPolicyCount:                        1,
+					PLMWAFPolicyCount:                        1,
 					ListenerSetCount:                         1,
 				}
 				expData.NginxPodCount = 1

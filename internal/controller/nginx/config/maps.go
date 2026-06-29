@@ -344,8 +344,16 @@ func buildAddHeaderMaps(servers []dataplane.VirtualServer) []shared.Map {
 		}
 	}
 
-	maps := make([]shared.Map, 0, len(addHeaderNames))
+	// Sort the names so that the maps are emitted in a stable order and identical
+	// input doesn't trigger an unnecessary reload.
+	names := make([]string, 0, len(addHeaderNames))
 	for m := range addHeaderNames {
+		names = append(names, m)
+	}
+	sort.Strings(names)
+
+	maps := make([]shared.Map, 0, len(names))
+	for _, m := range names {
 		maps = append(maps, createAddHeadersMap(m))
 	}
 	return maps
