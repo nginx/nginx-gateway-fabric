@@ -135,7 +135,12 @@ func createEndpointPickerHandler(factory extProcClientFactory, logger logr.Logge
 
 // requestHasBody reports whether the HTTP request has a body.
 func requestHasBody(r *http.Request) bool {
-	return r.Body != nil && r.Body != http.NoBody
+	if r == nil || r.Body == nil || r.Body == http.NoBody {
+		return false
+	}
+	// ContentLength == 0 indicates an explicitly empty body; treat that as no body.
+	// ContentLength < 0 means unknown length (e.g. chunked), so assume a body is present.
+	return r.ContentLength != 0
 }
 
 func sendRequest(stream extprocv3.ExternalProcessor_ProcessClient, r *http.Request) (int, error) {
