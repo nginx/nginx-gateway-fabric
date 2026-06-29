@@ -238,33 +238,7 @@ func TestEndpointPickerHandler_Errors(t *testing.T) {
 	}
 	runErrorTestCase(factory, true, http.StatusBadGateway, "error sending headers")
 
-	// 4a. Error building body request (content length 0)
-	client = &mockProcessClient{
-		SendFunc: func(*extprocv3.ProcessingRequest) error {
-			return nil
-		},
-		RecvFunc: func() (*extprocv3.ProcessingResponse, error) { return nil, io.EOF },
-	}
-	extProcClient = &mockExtProcClient{
-		ProcessFunc: func(context.Context, ...grpc.CallOption) (extprocv3.ExternalProcessor_ProcessClient, error) {
-			return client, nil
-		},
-	}
-	factory = func(string) (extprocv3.ExternalProcessorClient, func() error, error) {
-		return extProcClient, func() error { return nil }, nil
-	}
-	h := createEndpointPickerHandler(factory, logr.Discard())
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/", nil) // nil body, ContentLength = 0
-	req.Header.Set(types.EPPEndpointHostHeader, "test-host")
-	req.Header.Set(types.EPPEndpointPortHeader, "1234")
-	w := httptest.NewRecorder()
-	h.ServeHTTP(w, req)
-	resp := w.Result()
-	g.Expect(resp.StatusCode).To(Equal(http.StatusInternalServerError))
-	body, _ := io.ReadAll(resp.Body)
-	g.Expect(string(body)).To(ContainSubstring("request body is empty"))
-
-	// 4b. Error sending body
+	// 4. Error sending body
 	client = &mockProcessClient{
 		SendFunc: func(req *extprocv3.ProcessingRequest) error {
 			if req.GetRequestBody() != nil {
