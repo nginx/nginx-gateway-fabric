@@ -15,9 +15,9 @@ RUN GOOS=$TARGETOS GOARCH=$TARGETARCH make build/helm-operator
 
 FROM registry.access.redhat.com/ubi10/ubi-minimal:10.2
 
-# Update system packages to fix vulnerabilities
+# Keep the base image immutable during build and pick up security fixes by updating the base image.
 USER root
-RUN microdnf update -y && microdnf clean all
+RUN microdnf clean all
 
 ENV HOME=/opt/helm \
     USER_NAME=helm \
