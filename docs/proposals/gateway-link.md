@@ -21,9 +21,9 @@ This Enhancement Proposal extends the [NginxProxy API](../../apis/v1alpha2/nginx
 
 ## Introduction
 
-F5 BIG-IP is commonly deployed as the external load balancer in front of Kubernetes ingress. F5 CIS watches Kubernetes resources and configures BIG-IP declaratively via a configuration API named Application Services 3 (AS3). CIS supports an `IngressLink` custom resource definition (`ingresslinks.cis.f5.com`) that is designed to link an external load balancer to an in-cluster ingress data plane. An IngressLink resource creates a BIG-IP virtual server and a pool whose members are selected from a Kubernetes Service based on selector labels. The IngressLink's `selector` matches the labels on a Service, reads that Service's endpoints, and programs them as the pool members. As the Service's endpoints change, CIS keeps the pool in sync.
+[F5 BIG-IP](https://www.f5.com/products/big-ip) is commonly deployed as the external load balancer in front of Kubernetes ingress. [F5 CIS](https://github.com/F5Networks/k8s-bigip-ctlr) watches Kubernetes resources and configures BIG-IP declaratively via a configuration API named Application Services 3 (AS3). CIS supports an `IngressLink` custom resource definition (`ingresslinks.cis.f5.com`) that is designed to link an external load balancer to an in-cluster ingress data plane. An IngressLink resource creates a BIG-IP [virtual server](https://techdocs.f5.com/kb/en-us/products/big-ip_ltm/manuals/product/ltm-basics-11-6-0/2.html) and a [pool](https://techdocs.f5.com/kb/en-us/products/big-ip_ltm/manuals/product/ltm-basics-11-6-0/4.html#unique_1127536889) whose members are selected from a Kubernetes Service based on selector labels. The IngressLink's `selector` matches the labels on a Service, reads that Service's endpoints, and programs them as the pool members. As the Service's endpoints change, CIS keeps the pool in sync.
 
-We will use the IngressLink resource to configure BIG-IP so that it acts as an external load balancer in front of NGINX Gateway Fabric. Client connections arrive at BIG-IP, which forwards them to NGINX Gateway Fabric to be routed to the backend applications. The data plane is provisioned per Gateway, so each Gateway gets its own Service. Because the Service determines the pool members on BIG-IP, each Gateway creates its own IngressLink, virtual server, and pool. This gives per-Gateway isolation that maps naturally onto BIG-IP virtual servers and partitions.
+We will use the IngressLink resource to configure BIG-IP so that it acts as an external load balancer in front of NGINX Gateway Fabric. Client connections arrive at BIG-IP, which forwards them to the NGINX data plane to be routed to the backend applications. The data plane is provisioned per Gateway, so each Gateway gets its own Service whose endpoints are the data plane pods. NGINX Gateway Fabric creates one IngressLink per Gateway, and CIS configures it into a BIG-IP virtual server and pool. The pool members are the data plane pods behind that Service, so scaling the Deployment up or down updates the pool to match. This gives per-Gateway isolation that maps naturally onto BIG-IP virtual servers and partitions.
 
 ## API, Customer Driven Interfaces, and User Experience
 
@@ -101,7 +101,7 @@ flowchart LR
 
 The following fields will be added to `NginxProxy` API:
 
-```yaml
+```go
 // ExternalLoadBalancersSpec defines configuration for integrating with external
 // load balancers that front NGINX Gateway Fabric. Each field configures a
 // specific external load balancer integration.
@@ -117,6 +117,7 @@ type ExternalLoadBalancersSpec struct {
 // GatewayLinkSpec defines the configuration for integrating with F5 BIG-IP
 // as the external load balancer for NGINX Gateway Fabric using F5
 // Container Ingress Services.
+// IngressLink API Definition: https://github.com/F5Networks/k8s-bigip-ctlr/blob/68c2c90ee30299350b169a6415e18ed3378a4a1f/docs/config_examples/customResourceDefinitions/customresourcedefinitions.yml#L1114
 //
 // +kubebuilder:validation:XValidation:message="virtualServerAddress and ipamLabel are mutually exclusive",rule="!(has(self.virtualServerAddress) && has(self.ipamLabel))"
 // +kubebuilder:validation:XValidation:message="one of virtualServerAddress or ipamLabel must be set",rule="has(self.virtualServerAddress) || has(self.ipamLabel)"
@@ -124,11 +125,6 @@ type ExternalLoadBalancersSpec struct {
 //
 //nolint:lll
 type GatewayLinkSpec struct {
-	// Enabled indicates whether GatewayLink integration is enabled.
-	//
-	// +optional
-	Enabled *bool `json:"enabled,omitempty"`
-
 	// VirtualServerAddress is the static IP address to configure on BIG-IP for the virtual server.
 	// This is mutually exclusive with IPAMLabel.
 	//
@@ -153,7 +149,8 @@ type GatewayLinkSpec struct {
 	// Host is the hostname for the BIG-IP virtual server.
 	//
 	// +optional
-	Host *gatewayv1.Hostname `json:"host,omitempty"`
+	// +kubebuilder:validation:Pattern=`^(([a-zA-Z0-9\*]|[a-zA-Z0-9][a-zA-Z0-9\-]*[a-zA-Z0-9])\.)*([A-Za-z0-9]|[A-Za-z0-9][A-Za-z0-9\-]*[A-Za-z0-9])$`
+	Host *string `json:"host,omitempty"`
 
 	// Partition is the BIG-IP partition where resources will be created.
 	// The partition must already exist on BIG-IP and cannot be "Common".
@@ -197,29 +194,26 @@ type GatewayLinkSpec struct {
 	//
 	// +optional
 	ServiceAddress *GatewayLinkServiceAddress `json:"serviceAddress,omitempty"`
+
+	// AdditionalIngressLinkSpec is an escape hatch for IngressLink fields that are not yet
+	// modeled by GatewayLink. Its contents are merged verbatim into the generated IngressLink
+	// spec and are NOT validated by NGINX Gateway Fabric. Fields set here take lower precedence
+	// than the explicitly modeled GatewayLink fields above; NGINX Gateway Fabric always sets the
+	// IngressLink selector internally and it cannot be overridden through this field. Use with
+	// caution - contents bypass schema validation, defaulting, and CEL rules, and flow through to
+	// BIG-IP via F5 CIS.
+	//
+	// +kubebuilder:pruning:PreserveUnknownFields
+	// +optional
+	AdditionalIngressLinkSpec *runtime.RawExtension `json:"additionalIngressLinkSpec,omitempty"`
 }
 
 // GatewayLinkServiceAddress configures Layer 3 settings for the BIG-IP virtual server address.
 type GatewayLinkServiceAddress struct {
-	// ARPEnabled controls whether BIG-IP answers ARP requests for the virtual server address.
-	//
-	// +optional
-	ARPEnabled *bool `json:"arpEnabled,omitempty"`
-
 	// ICMPEcho controls whether the virtual server address responds to ICMP echo (ping).
 	//
 	// +optional
 	ICMPEcho *ICMPEcho `json:"icmpEcho,omitempty"`
-
-	// RouteAdvertisement controls how BIG-IP advertises a route to the virtual server address.
-	//
-	// +optional
-	RouteAdvertisement *RouteAdvertisement `json:"routeAdvertisement,omitempty"`
-
-	// SpanningEnabled enables spanning for the virtual server address across traffic groups.
-	//
-	// +optional
-	SpanningEnabled *bool `json:"spanningEnabled,omitempty"`
 
 	// TrafficGroup is the BIG-IP traffic group that owns the virtual server address,
 	// in the full path format, for example "/Common/traffic-group-test".
@@ -242,30 +236,6 @@ const (
 
 	// ICMPEchoSelective means BIG-IP responds to ICMP echo based on the state of the virtual server.
 	ICMPEchoSelective ICMPEcho = "selective"
-)
-
-// RouteAdvertisement controls how BIG-IP advertises a route to the virtual server address.
-// +kubebuilder:validation:Enum=enable;disable;selective;always;any;all
-type RouteAdvertisement string
-
-const (
-	// RouteAdvertisementEnable enables route advertisement for the virtual server address.
-	RouteAdvertisementEnable RouteAdvertisement = "enable"
-
-	// RouteAdvertisementDisable disables route advertisement for the virtual server address.
-	RouteAdvertisementDisable RouteAdvertisement = "disable"
-
-	// RouteAdvertisementSelective advertises the route based on the state of the virtual server.
-	RouteAdvertisementSelective RouteAdvertisement = "selective"
-
-	// RouteAdvertisementAlways always advertises the route.
-	RouteAdvertisementAlways RouteAdvertisement = "always"
-
-	// RouteAdvertisementAny advertises the route while any virtual server using the address is available.
-	RouteAdvertisementAny RouteAdvertisement = "any"
-
-	// RouteAdvertisementAll advertises the route while all virtual servers using the address are available.
-	RouteAdvertisementAll RouteAdvertisement = "all"
 )
 
 // TLSReferenceType specifies where the BIG-IP SSL profiles come from.
@@ -323,11 +293,16 @@ type GatewayLinkMonitor struct {
 }
 
 // GatewayLinkMultiCluster defines the multi-cluster configuration for GatewayLink.
-// When configured, CIS will load balance traffic across NGINX Gateway Fabric instances
-// in multiple clusters.
+// When configured, CIS load balances traffic across NGINX Gateway Fabric instances
+// in multiple clusters. This is set only on the cluster that runs CIS. The other
+// clusters run NGINX Gateway Fabric with a matching Gateway and Service but not CIS,
+// so they do not set multiCluster. CIS reaches those clusters over a kubeconfig.
 type GatewayLinkMultiCluster struct {
-	// LocalClusterName is the name of the current cluster as configured in the CIS deployment
-	// (--cluster-name flag).
+	// LocalClusterName is the name of this cluster as configured in the CIS deployment
+	// via the --local-cluster-name flag. NGINX Gateway Fabric uses it as the cluster name
+	// for the local entry in the IngressLink's multiClusterServices, which points at this
+	// cluster's own Gateway Service. It must match the name CIS knows this cluster by,
+	// otherwise CIS cannot resolve the local service.
 	//
 	// +kubebuilder:validation:Required
 	LocalClusterName string `json:"localClusterName"`
@@ -456,11 +431,13 @@ spec:
 
 ## Known Limitations
 
-Within `serviceAddress`, the `icmpEcho` and `trafficGroup` settings were verified to take effect on BIG-IP. The `arpEnabled`, `spanningEnabled`, and `routeAdvertisement` settings were confirmed to reach BIG-IP and be applied to the virtual server address, but their runtime behavior was not exercised because that requires a more involved network setup, such as a dynamic routing peer for route advertisement.
+Within `serviceAddress`, the `icmpEcho` and `trafficGroup` settings were verified to take effect on BIG-IP. The `arpEnabled`, `spanningEnabled`, and `routeAdvertisement` settings reached BIG-IP and were applied to the virtual server address, but their runtime behavior was not exercised, since that needs a more involved network setup such as a dynamic routing peer for route advertisement.
+
+Rather than model every IngressLink setting as a typed field, we expose `ingressAdditionalSpec`, a passthrough that forwards fields directly to the IngressLink without adding them to the NginxProxy CRD. The `arpEnabled`, `spanningEnabled`, and `routeAdvertisement` settings are set through it, and the same passthrough covers any other IngressLink field NGF does not model.
 
 ## Testing
 
-We will add functional tests that exercise the integration end to end against a real BIG-IP. We have access to a long-standing BIG-IP instance to run them against.
+We will add functional tests that exercise the integration end to end against a real BIG-IP. We have access to a long-standing BIG-IP instance to run them against. These tests require BIG-IP stack, so they cannot run in the CI pipelines and are run manually.
 
 The test flow:
 
@@ -470,6 +447,8 @@ The test flow:
 4. Create a Gateway and verify that NGF provisions the `IngressLink` and that CIS configures the virtual server and pool on BIG-IP.
 5. Send traffic to the virtual server IP and confirm that it reaches the application through NGF.
 6. Tear down the test by deleting the partition and removing the public key from the BIG-IP stack.
+
+These tests need to be run manually since they need a configured Big-IP stack. They should be run before every major release to ensure all functionalities work as expected or when we update the CIS version in use.
 
 ## Security Considerations
 
