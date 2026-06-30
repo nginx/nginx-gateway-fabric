@@ -128,6 +128,22 @@ const (
 	expectedWAFN1CPolicyObjectIDPatternError     = `^pol_[A-Za-z0-9_-]+$`
 	expectedWAFN1CPolicyVersionIDPatternError    = `^pv_[A-Za-z0-9_-]+$`
 
+	// GatewayLink CEL validation errors.
+	expectedGatewayLinkVSAddressIPAMMutualExclusionError = "virtualServerAddress and ipamLabel are mutually exclusive"
+	expectedGatewayLinkVSAddressOrIPAMRequiredError      = "one of virtualServerAddress or ipamLabel must be set"
+	expectedGatewayLinkPartitionNotCommonError           = "partition cannot be Common"
+
+	// GatewayLink pattern validation errors.
+	expectedGatewayLinkVSAddressPatternError = `^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}` +
+		`([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])$`
+	expectedGatewayLinkVSNamePatternError       = `^[a-zA-Z]+([A-Za-z0-9-._+])*([A-Za-z0-9])$`
+	expectedGatewayLinkIPAMLabelPatternError    = `^[a-zA-Z]+[-A-Za-z0-9_.:]+[A-Za-z0-9]+$`
+	expectedGatewayLinkPartitionPatternError    = `^[a-zA-Z]+[-A-Za-z0-9_.]+$`
+	expectedGatewayLinkIRulePatternError        = `^/[a-zA-Z]+([A-Za-z0-9-_+]+/)+([-A-Za-z0-9_.:]+/?)*$`
+	expectedGatewayLinkMonitorNamePatternError  = `^/[a-zA-Z]+([A-Za-z0-9-_+]+/)+([-A-Za-z0-9_.:]+/?)*$`
+	expectedGatewayLinkTLSProfilePatternError   = `^/?[a-zA-Z]+([-A-Za-z0-9_+]+/)*([-A-Za-z0-9_.:]+/?)*$`
+	expectedGatewayLinkTrafficGroupPatternError = `^/([A-Za-z0-9-_+]+/)+([-A-Za-z0-9_.:]+/?)*$`
+
 	// Namespace for tests.
 	defaultNamespace = "default"
 

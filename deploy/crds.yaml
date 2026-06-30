@@ -1526,6 +1526,17 @@ spec:
                       as the external load balancer for NGINX Gateway Fabric using the F5
                       Container Ingress Services.
                     properties:
+                      additionalIngressLinkSpec:
+                        description: |-
+                          AdditionalIngressLinkSpec is an escape hatch for IngressLink fields that are not yet
+                          modeled by GatewayLink. Its contents are merged verbatim into the generated IngressLink
+                          spec and are NOT validated by NGINX Gateway Fabric. Fields set here take lower precedence
+                          than the explicitly modeled GatewayLink fields above; NGINX Gateway Fabric always sets the
+                          IngressLink selector internally and it cannot be overridden through this field. Use with
+                          caution - contents bypass schema validation, defaulting, and CEL rules, and flow through to
+                          BIG-IP via F5 CIS.
+                        type: object
+                        x-kubernetes-preserve-unknown-fields: true
                       bigipRouteDomain:
                         description: BigIPRouteDomain is the route domain ID for the
                           BIG-IP virtual server.
@@ -1533,15 +1544,9 @@ spec:
                         maximum: 65535
                         minimum: 0
                         type: integer
-                      enabled:
-                        description: Enabled indicates whether GatewayLink integration
-                          is enabled.
-                        type: boolean
                       host:
                         description: Host is the hostname for the BIG-IP virtual server.
-                        maxLength: 253
-                        minLength: 1
-                        pattern: ^(\*\.)?[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
+                        pattern: ^(([a-zA-Z0-9\*]|[a-zA-Z0-9][a-zA-Z0-9\-]*[a-zA-Z0-9])\.)*([A-Za-z0-9]|[A-Za-z0-9][A-Za-z0-9\-]*[A-Za-z0-9])$
                         type: string
                       iRules:
                         description: |-
@@ -1589,8 +1594,11 @@ spec:
                         properties:
                           localClusterName:
                             description: |-
-                              LocalClusterName is the name of the current cluster as configured in the CIS deployment
-                              (--cluster-name flag).
+                              LocalClusterName is the name of this cluster as configured in the CIS deployment
+                              via the --local-cluster-name flag. NGINX Gateway Fabric uses it as the cluster name
+                              for the local entry in the IngressLink's multiClusterServices, which points at this
+                              cluster's own Gateway Service. It must match the name CIS knows this cluster by,
+                              otherwise CIS cannot resolve the local service.
                             type: string
                           remoteClusters:
                             description: RemoteClusters is the list of remote clusters
@@ -1639,10 +1647,6 @@ spec:
                         description: ServiceAddress configures Layer 3 settings for
                           the BIG-IP virtual server address.
                         properties:
-                          arpEnabled:
-                            description: ARPEnabled controls whether BIG-IP answers
-                              ARP requests for the virtual server address.
-                            type: boolean
                           icmpEcho:
                             description: ICMPEcho controls whether the virtual server
                               address responds to ICMP echo (ping).
@@ -1651,21 +1655,6 @@ spec:
                             - disable
                             - selective
                             type: string
-                          routeAdvertisement:
-                            description: RouteAdvertisement controls how BIG-IP advertises
-                              a route to the virtual server address.
-                            enum:
-                            - enable
-                            - disable
-                            - selective
-                            - always
-                            - any
-                            - all
-                            type: string
-                          spanningEnabled:
-                            description: SpanningEnabled enables spanning for the
-                              virtual server address across traffic groups.
-                            type: boolean
                           trafficGroup:
                             description: |-
                               TrafficGroup is the BIG-IP traffic group that owns the virtual server address,

@@ -6,8 +6,8 @@ import (
 	policyv1 "k8s.io/api/policy/v1"
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 )
@@ -25,11 +25,9 @@ import (
 // reference an NginxProxy, the settings are merged. Settings specified on the Gateway NginxProxy override those
 // set on the GatewayClass NginxProxy.
 type NginxProxy struct {
+	Spec              NginxProxySpec `json:"spec"`
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
-
-	// Spec defines the desired state of the NginxProxy.
-	Spec NginxProxySpec `json:"spec"`
 }
 
 // +kubebuilder:object:root=true
@@ -43,16 +41,17 @@ type NginxProxyList struct {
 
 // NginxProxySpec defines the desired state of the NginxProxy.
 type NginxProxySpec struct {
-	// IPFamily specifies the IP family to be used by the NGINX.
-	// Default is "dual", meaning the server will use both IPv4 and IPv6.
+	// Kubernetes contains the configuration for the NGINX Deployment and Service Kubernetes objects.
 	//
 	// +optional
-	// +kubebuilder:default=dual
-	IPFamily *IPFamilyType `json:"ipFamily,omitempty"`
-	// Telemetry specifies the OpenTelemetry configuration.
+	Kubernetes *KubernetesSpec `json:"kubernetes,omitempty"`
+	// WorkerConnections specifies the maximum number of simultaneous connections that can be opened by a worker process.
+	// Default is 1024.
 	//
 	// +optional
-	Telemetry *Telemetry `json:"telemetry,omitempty"`
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=65535
+	WorkerConnections *int32 `json:"workerConnections,omitempty"`
 	// Metrics defines the configuration for Prometheus scraping metrics. Changing this value results in a
 	// re-roll of the NGINX deployment.
 	//
@@ -72,11 +71,21 @@ type NginxProxySpec struct {
 	//
 	// +optional
 	NginxPlus *NginxPlus `json:"nginxPlus,omitempty"`
+	// Telemetry specifies the OpenTelemetry configuration.
+	//
+	// +optional
+	Telemetry *Telemetry `json:"telemetry,omitempty"`
 	// DisableHTTP2 defines if http2 should be disabled for all servers.
 	// If not specified, or set to false, http2 will be enabled for all servers.
 	//
 	// +optional
 	DisableHTTP2 *bool `json:"disableHTTP2,omitempty"`
+	// IPFamily specifies the IP family to be used by the NGINX.
+	// Default is "dual", meaning the server will use both IPv4 and IPv6.
+	//
+	// +optional
+	// +kubebuilder:default=dual
+	IPFamily *IPFamilyType `json:"ipFamily,omitempty"`
 	// DisableSNIHostValidation disables the validation that ensures the SNI hostname
 	// matches the Host header in HTTPS requests. When disabled, HTTPS connections can
 	// be reused for requests to different hostnames covered by the same certificate.
@@ -86,17 +95,6 @@ type NginxProxySpec struct {
 	//
 	// +optional
 	DisableSNIHostValidation *bool `json:"disableSNIHostValidation,omitempty"`
-	// Kubernetes contains the configuration for the NGINX Deployment and Service Kubernetes objects.
-	//
-	// +optional
-	Kubernetes *KubernetesSpec `json:"kubernetes,omitempty"`
-	// WorkerConnections specifies the maximum number of simultaneous connections that can be opened by a worker process.
-	// Default is 1024.
-	//
-	// +optional
-	// +kubebuilder:validation:Minimum=1
-	// +kubebuilder:validation:Maximum=65535
-	WorkerConnections *int32 `json:"workerConnections,omitempty"`
 	// DNSResolver specifies the DNS resolver configuration for external name resolution.
 	// This enables support for routing to ExternalName Services.
 	//
@@ -133,6 +131,12 @@ type NginxProxySpec struct {
 	//
 	// +optional
 	WAF *WAFSpec `json:"waf,omitempty"`
+	// ExternalLoadBalancersSpec defines configuration for integrating with external
+	// load balancers that front NGINX Gateway Fabric. Each field configures a
+	// specific external load balancer integration.
+	//
+	// +optional
+	ExternalLoadBalancers *ExternalLoadBalancersSpec `json:"externalLoadBalancers,omitempty"`
 	// DisableBaseHeaders specifies which default X-* base headers should be omitted
 	// from being added to the base proxy_set_header directives in the NGINX configuration.
 	// This allows users to set these headers themselves without NGF overriding them.
@@ -144,11 +148,6 @@ type NginxProxySpec struct {
 	// +listType=set
 	// +kubebuilder:validation:MaxItems=6
 	DisableBaseHeaders []BaseHeaderName `json:"disableBaseHeaders,omitempty"`
-
-	// ExternalLoadBalancers specifies the configuration for external load balancers.
-	//
-	// +optional
-	ExternalLoadBalancers *ExternalLoadBalancersSpec `json:"externalLoadBalancers,omitempty"`
 }
 
 // BaseHeaderName is the name of a base X-* header that can be disabled
@@ -1262,6 +1261,7 @@ type ExternalLoadBalancersSpec struct {
 // GatewayLinkSpec defines the configuration for integrating with F5 BIG-IP
 // as the external load balancer for NGINX Gateway Fabric using F5
 // Container Ingress Services.
+// IngressLink API definition: https://github.com/F5Networks/k8s-bigip-ctlr/blob/68c2c90ee30299350b169a6415e18ed3378a4a1f/docs/config_examples/customResourceDefinitions/customresourcedefinitions.yml#L1114
 //
 // +kubebuilder:validation:XValidation:message="virtualServerAddress and ipamLabel are mutually exclusive",rule="!(has(self.virtualServerAddress) && has(self.ipamLabel))"
 // +kubebuilder:validation:XValidation:message="one of virtualServerAddress or ipamLabel must be set",rule="has(self.virtualServerAddress) || has(self.ipamLabel)"
@@ -1269,11 +1269,6 @@ type ExternalLoadBalancersSpec struct {
 //
 //nolint:lll
 type GatewayLinkSpec struct {
-	// Enabled indicates whether GatewayLink integration is enabled.
-	//
-	// +optional
-	Enabled *bool `json:"enabled,omitempty"`
-
 	// VirtualServerAddress is the static IP address to configure on BIG-IP for the virtual server.
 	// This is mutually exclusive with IPAMLabel.
 	//
@@ -1298,7 +1293,8 @@ type GatewayLinkSpec struct {
 	// Host is the hostname for the BIG-IP virtual server.
 	//
 	// +optional
-	Host *gatewayv1.Hostname `json:"host,omitempty"`
+	// +kubebuilder:validation:Pattern=`^(([a-zA-Z0-9\*]|[a-zA-Z0-9][a-zA-Z0-9\-]*[a-zA-Z0-9])\.)*([A-Za-z0-9]|[A-Za-z0-9][A-Za-z0-9\-]*[A-Za-z0-9])$`
+	Host *string `json:"host,omitempty"`
 
 	// Partition is the BIG-IP partition where resources will be created.
 	// The partition must already exist on BIG-IP and cannot be "Common".
@@ -1325,6 +1321,23 @@ type GatewayLinkSpec struct {
 	// +optional
 	MultiCluster *GatewayLinkMultiCluster `json:"multiCluster,omitempty"`
 
+	// ServiceAddress configures Layer 3 settings for the BIG-IP virtual server address.
+	//
+	// +optional
+	ServiceAddress *GatewayLinkServiceAddress `json:"serviceAddress,omitempty"`
+
+	// AdditionalIngressLinkSpec is an escape hatch for IngressLink fields that are not yet
+	// modeled by GatewayLink. Its contents are merged verbatim into the generated IngressLink
+	// spec and are NOT validated by NGINX Gateway Fabric. Fields set here take lower precedence
+	// than the explicitly modeled GatewayLink fields above; NGINX Gateway Fabric always sets the
+	// IngressLink selector internally and it cannot be overridden through this field. Use with
+	// caution - contents bypass schema validation, defaulting, and CEL rules, and flow through to
+	// BIG-IP via F5 CIS.
+	//
+	// +kubebuilder:pruning:PreserveUnknownFields
+	// +optional
+	AdditionalIngressLinkSpec *runtime.RawExtension `json:"additionalIngressLinkSpec,omitempty"`
+
 	// IRules is a list of BIG-IP iRules to apply to the virtual server.
 	// Each iRule must be specified using the full path format /partition/irule_name,
 	// for example "/Common/Proxy_Protocol_iRule".
@@ -1337,34 +1350,14 @@ type GatewayLinkSpec struct {
 	//
 	// +optional
 	Monitors []GatewayLinkMonitor `json:"monitors,omitempty"`
-
-	// ServiceAddress configures Layer 3 settings for the BIG-IP virtual server address.
-	//
-	// +optional
-	ServiceAddress *GatewayLinkServiceAddress `json:"serviceAddress,omitempty"`
 }
 
 // GatewayLinkServiceAddress configures Layer 3 settings for the BIG-IP virtual server address.
 type GatewayLinkServiceAddress struct {
-	// ARPEnabled controls whether BIG-IP answers ARP requests for the virtual server address.
-	//
-	// +optional
-	ARPEnabled *bool `json:"arpEnabled,omitempty"`
-
 	// ICMPEcho controls whether the virtual server address responds to ICMP echo (ping).
 	//
 	// +optional
 	ICMPEcho *ICMPEcho `json:"icmpEcho,omitempty"`
-
-	// RouteAdvertisement controls how BIG-IP advertises a route to the virtual server address.
-	//
-	// +optional
-	RouteAdvertisement *RouteAdvertisement `json:"routeAdvertisement,omitempty"`
-
-	// SpanningEnabled enables spanning for the virtual server address across traffic groups.
-	//
-	// +optional
-	SpanningEnabled *bool `json:"spanningEnabled,omitempty"`
 
 	// TrafficGroup is the BIG-IP traffic group that owns the virtual server address,
 	// in the full path format, for example "/Common/traffic-group-test".
@@ -1387,30 +1380,6 @@ const (
 
 	// ICMPEchoSelective means BIG-IP responds to ICMP echo based on the state of the virtual server.
 	ICMPEchoSelective ICMPEcho = "selective"
-)
-
-// RouteAdvertisement controls how BIG-IP advertises a route to the virtual server address.
-// +kubebuilder:validation:Enum=enable;disable;selective;always;any;all
-type RouteAdvertisement string
-
-const (
-	// RouteAdvertisementEnable enables route advertisement for the virtual server address.
-	RouteAdvertisementEnable RouteAdvertisement = "enable"
-
-	// RouteAdvertisementDisable disables route advertisement for the virtual server address.
-	RouteAdvertisementDisable RouteAdvertisement = "disable"
-
-	// RouteAdvertisementSelective advertises the route based on the state of the virtual server.
-	RouteAdvertisementSelective RouteAdvertisement = "selective"
-
-	// RouteAdvertisementAlways always advertises the route.
-	RouteAdvertisementAlways RouteAdvertisement = "always"
-
-	// RouteAdvertisementAny advertises the route while any virtual server using the address is available.
-	RouteAdvertisementAny RouteAdvertisement = "any"
-
-	// RouteAdvertisementAll advertises the route while all virtual servers using the address are available.
-	RouteAdvertisementAll RouteAdvertisement = "all"
 )
 
 // TLSReferenceType specifies where the BIG-IP SSL profiles come from.
@@ -1470,11 +1439,16 @@ type GatewayLinkMonitor struct {
 // GatewayLinkMultiCluster defines the multi-cluster configuration for GatewayLink.
 // When configured, CIS will load balance traffic across NGINX Gateway Fabric instances
 // in multiple clusters.
+// When configured, CIS load balances traffic across NGINX Gateway Fabric instances
+// in multiple clusters. This is set only on the cluster that runs CIS. The other
+// clusters run NGINX Gateway Fabric with a matching Gateway and Service but not CIS,
+// so they do not set multiCluster. CIS reaches those clusters over a kubeconfig.
 type GatewayLinkMultiCluster struct {
-	// LocalClusterName is the name of the current cluster as configured in the CIS deployment
-	// (--cluster-name flag).
-	//
-	// +kubebuilder:validation:Required
+	// LocalClusterName is the name of this cluster as configured in the CIS deployment
+	// via the --local-cluster-name flag. NGINX Gateway Fabric uses it as the cluster name
+	// for the local entry in the IngressLink's multiClusterServices, which points at this
+	// cluster's own Gateway Service. It must match the name CIS knows this cluster by,
+	// otherwise CIS cannot resolve the local service.
 	LocalClusterName string `json:"localClusterName"`
 
 	// RemoteClusters is the list of remote clusters that also run NGINX Gateway Fabric.
