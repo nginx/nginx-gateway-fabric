@@ -635,7 +635,7 @@ func (in *NginxProxySpec) DeepCopyInto(out *NginxProxySpec) {
 	}
 	if in.WorkerProcesses != nil {
 		in, out := &in.WorkerProcesses, &out.WorkerProcesses
-		*out = new(string)
+		*out = new(int32)
 		**out = **in
 	}
 	if in.DNSResolver != nil {

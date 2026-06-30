@@ -8585,7 +8585,7 @@ func TestBuildWorkerProcesses(t *testing.T) {
 			msg: "NginxProxy specifies worker processes",
 			gw: &graph.Gateway{
 				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
-					WorkerProcesses: helpers.GetPointer("2"),
+					WorkerProcesses: helpers.GetPointer[int32](2),
 				},
 			},
 			expWorkerProcesses: "2",

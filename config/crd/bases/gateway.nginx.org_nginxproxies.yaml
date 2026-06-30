@@ -9222,16 +9222,13 @@ spec:
               workerProcesses:
                 description: |-
                   WorkerProcesses configures the number of NGINX worker processes.
-                  Accepts "auto" (one worker per CPU core) or an integer between 1 and 1024.
+                  The value must be an integer between 1 and 1024.
+                  When unset, NGINX uses "auto" (one worker per CPU core).
                   This setting applies to OSS NGINX only; NGINX Plus deployments always use "auto".
-                  Default is "auto".
-                maxLength: 4
-                pattern: ^(auto|[1-9][0-9]*)$
-                type: string
-                x-kubernetes-validations:
-                - message: workerProcesses must be 'auto' or an integer between 1
-                    and 1024
-                  rule: self == 'auto' || (int(self) >= 1 && int(self) <= 1024)
+                format: int32
+                maximum: 1024
+                minimum: 1
+                type: integer
             type: object
         required:
         - spec

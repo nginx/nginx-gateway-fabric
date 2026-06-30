@@ -476,10 +476,10 @@
               "type": "integer"
             },
             "workerProcesses": {
-              "description": "The number of NGINX worker processes (\"auto\" or an integer between 1 and 1024). OSS NGINX only. Default is \"auto\".",
-              "maxLength": 4,
-              "pattern": "^(auto|[1-9][0-9]*)$",
-              "type": "string"
+              "description": "The number of NGINX worker processes (an integer between 1 and 1024). Omit to use \"auto\" (one worker per CPU core). OSS NGINX only.",
+              "maximum": 1024,
+              "minimum": 1,
+              "type": "integer"
             }
           },
           "required": [],

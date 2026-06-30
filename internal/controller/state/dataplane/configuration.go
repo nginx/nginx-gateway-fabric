@@ -7,6 +7,7 @@ import (
 	"maps"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/go-logr/logr"
@@ -2494,7 +2495,7 @@ func buildWorkerProcesses(gateway *graph.Gateway) string {
 
 	ngfProxy := gateway.EffectiveNginxProxy
 	if ngfProxy.WorkerProcesses != nil {
-		return *ngfProxy.WorkerProcesses
+		return strconv.FormatInt(int64(*ngfProxy.WorkerProcesses), 10)
 	}
 
 	return DefaultWorkerProcesses

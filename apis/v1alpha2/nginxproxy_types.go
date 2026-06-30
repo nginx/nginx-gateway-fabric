@@ -97,16 +97,14 @@ type NginxProxySpec struct {
 	// +kubebuilder:validation:Maximum=65535
 	WorkerConnections *int32 `json:"workerConnections,omitempty"`
 	// WorkerProcesses configures the number of NGINX worker processes.
-	// Accepts "auto" (one worker per CPU core) or an integer between 1 and 1024.
+	// The value must be an integer between 1 and 1024.
+	// When unset, NGINX uses "auto" (one worker per CPU core).
 	// This setting applies to OSS NGINX only; NGINX Plus deployments always use "auto".
-	// Default is "auto".
 	//
 	// +optional
-	// +kubebuilder:validation:MaxLength=4
-	// +kubebuilder:validation:Pattern=`^(auto|[1-9][0-9]*)$`
-	// +kubebuilder:validation:XValidation:message="workerProcesses must be 'auto' or an integer between 1 and 1024",rule="self == 'auto' || (int(self) >= 1 && int(self) <= 1024)"
-	//nolint:lll
-	WorkerProcesses *string `json:"workerProcesses,omitempty"`
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=1024
+	WorkerProcesses *int32 `json:"workerProcesses,omitempty"`
 	// DNSResolver specifies the DNS resolver configuration for external name resolution.
 	// This enables support for routing to ExternalName Services.
 	//

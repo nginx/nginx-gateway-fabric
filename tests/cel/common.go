@@ -86,8 +86,8 @@ const (
 	expectedPDBExactlyOneFieldError = "exactly one of minAvailable or maxUnavailable must be set"
 
 	// WorkerProcesses validation errors.
-	expectedWorkerProcessesRangeError   = "workerProcesses must be 'auto' or an integer between 1 and 1024"
-	expectedWorkerProcessesPatternError = `workerProcesses in body should match`
+	expectedWorkerProcessesMinError = "workerProcesses in body should be greater than or equal to 1"
+	expectedWorkerProcessesMaxError = "workerProcesses in body should be less than or equal to 1024"
 
 	// Compression validation errors.
 	expectedCompressionGzipRequiredError = "type 'gzip' requires spec.compression.gzip to be set"

@@ -579,7 +579,7 @@ func (p *NginxProvisioner) buildBootstrapConfigMap(
 	if !p.cfg.Plus {
 		workerProcesses := dataplane.DefaultWorkerProcesses
 		if nProxyCfg != nil && nProxyCfg.WorkerProcesses != nil {
-			workerProcesses = *nProxyCfg.WorkerProcesses
+			workerProcesses = strconv.FormatInt(int64(*nProxyCfg.WorkerProcesses), 10)
 		}
 		mainFields["WorkerProcesses"] = workerProcesses
 	}

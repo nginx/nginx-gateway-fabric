@@ -1951,7 +1951,7 @@ func TestBuildNginxConfigMaps_WorkerProcesses(t *testing.T) {
 	g.Expect(getBootstrapMainConf(&graph.EffectiveNginxProxy{})).To(ContainSubstring("worker_processes auto;"))
 
 	// Custom worker processes.
-	customCfg := &graph.EffectiveNginxProxy{WorkerProcesses: helpers.GetPointer("4")}
+	customCfg := &graph.EffectiveNginxProxy{WorkerProcesses: helpers.GetPointer[int32](4)}
 	g.Expect(getBootstrapMainConf(customCfg)).To(ContainSubstring("worker_processes 4;"))
 
 	// NGINX Plus does not render worker_processes (it is set in the Plus base nginx.conf).

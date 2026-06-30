@@ -75,42 +75,29 @@ func TestNginxProxyWorkerProcesses(t *testing.T) {
 		wantErrors []string
 	}{
 		{
-			name: "Validate workerProcesses 'auto' is valid",
-			spec: ngfAPIv1alpha2.NginxProxySpec{
-				WorkerProcesses: helpers.GetPointer("auto"),
-			},
-		},
-		{
 			name: "Validate workerProcesses minimum '1' is valid",
 			spec: ngfAPIv1alpha2.NginxProxySpec{
-				WorkerProcesses: helpers.GetPointer("1"),
+				WorkerProcesses: helpers.GetPointer[int32](1),
 			},
 		},
 		{
 			name: "Validate workerProcesses maximum '1024' is valid",
 			spec: ngfAPIv1alpha2.NginxProxySpec{
-				WorkerProcesses: helpers.GetPointer("1024"),
+				WorkerProcesses: helpers.GetPointer[int32](1024),
 			},
 		},
 		{
 			name:       "Validate workerProcesses '0' is invalid",
-			wantErrors: []string{expectedWorkerProcessesPatternError},
+			wantErrors: []string{expectedWorkerProcessesMinError},
 			spec: ngfAPIv1alpha2.NginxProxySpec{
-				WorkerProcesses: helpers.GetPointer("0"),
+				WorkerProcesses: helpers.GetPointer[int32](0),
 			},
 		},
 		{
 			name:       "Validate workerProcesses above maximum '1025' is invalid",
-			wantErrors: []string{expectedWorkerProcessesRangeError},
+			wantErrors: []string{expectedWorkerProcessesMaxError},
 			spec: ngfAPIv1alpha2.NginxProxySpec{
-				WorkerProcesses: helpers.GetPointer("1025"),
-			},
-		},
-		{
-			name:       "Validate workerProcesses non-numeric string is invalid",
-			wantErrors: []string{expectedWorkerProcessesPatternError},
-			spec: ngfAPIv1alpha2.NginxProxySpec{
-				WorkerProcesses: helpers.GetPointer("two"),
+				WorkerProcesses: helpers.GetPointer[int32](1025),
 			},
 		},
 	}

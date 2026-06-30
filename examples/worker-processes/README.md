@@ -8,8 +8,8 @@ core on the node. On large nodes where the data plane Pod is given a small CPU
 limit, this can spawn far more workers than intended, increasing memory usage.
 Setting `workerProcesses` lets you pin a fixed worker count.
 
-The field accepts `"auto"` or an integer between `1` and `1024`. It applies to
-OSS NGINX only; NGINX Plus always uses `auto`.
+The field accepts an integer between `1` and `1024`. Omit the field to use the
+default `auto`. It applies to OSS NGINX only; NGINX Plus always uses `auto`.
 
 ## Apply the NginxProxy
 
