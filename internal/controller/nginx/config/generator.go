@@ -223,7 +223,7 @@ func (g GeneratorImpl) getExecuteFuncs(
 	keepAliveCheck keepAliveChecker,
 ) []executeFunc {
 	return []executeFunc{
-		g.newExecuteMainConfigFunc(generator),
+		newExecuteMainConfigFunc(generator),
 		executeEventsConfig,
 		newExecuteBaseHTTPConfigFunc(generator),
 		g.newExecuteServersFunc(generator, keepAliveCheck),

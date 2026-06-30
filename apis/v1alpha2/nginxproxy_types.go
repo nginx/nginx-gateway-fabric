@@ -99,7 +99,6 @@ type NginxProxySpec struct {
 	// WorkerProcesses configures the number of NGINX worker processes.
 	// The value must be an integer between 1 and 1024.
 	// When unset, NGINX uses "auto" (one worker per CPU core).
-	// This setting applies to OSS NGINX only; NGINX Plus deployments always use "auto".
 	//
 	// +optional
 	// +kubebuilder:validation:Minimum=1

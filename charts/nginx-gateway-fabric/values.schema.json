@@ -476,7 +476,7 @@
               "type": "integer"
             },
             "workerProcesses": {
-              "description": "The number of NGINX worker processes (an integer between 1 and 1024). Omit to use \"auto\" (one worker per CPU core). OSS NGINX only.",
+              "description": "The number of NGINX worker processes (an integer between 1 and 1024). Omit to use \"auto\" (one worker per CPU core).",
               "maximum": 1024,
               "minimum": 1,
               "type": "integer"

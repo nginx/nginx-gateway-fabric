@@ -1954,10 +1954,10 @@ func TestBuildNginxConfigMaps_WorkerProcesses(t *testing.T) {
 	customCfg := &graph.EffectiveNginxProxy{WorkerProcesses: helpers.GetPointer[int32](4)}
 	g.Expect(getBootstrapMainConf(customCfg)).To(ContainSubstring("worker_processes 4;"))
 
-	// NGINX Plus does not render worker_processes (it is set in the Plus base nginx.conf).
+	// NGINX Plus renders worker_processes the same way as OSS.
 	provisioner.cfg.Plus = true
 	provisioner.cfg.PlusUsageConfig = &config.UsageReportConfig{SecretName: jwtTestSecretName}
-	g.Expect(getBootstrapMainConf(customCfg)).ToNot(ContainSubstring("worker_processes"))
+	g.Expect(getBootstrapMainConf(customCfg)).To(ContainSubstring("worker_processes 4;"))
 }
 
 func TestBuildNginxConfigMaps_AgentFields(t *testing.T) {

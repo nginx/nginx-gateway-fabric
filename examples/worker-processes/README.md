@@ -9,7 +9,7 @@ limit, this can spawn far more workers than intended, increasing memory usage.
 Setting `workerProcesses` lets you pin a fixed worker count.
 
 The field accepts an integer between `1` and `1024`. Omit the field to use the
-default `auto`. It applies to OSS NGINX only; NGINX Plus always uses `auto`.
+default `auto`. It applies to both OSS NGINX and NGINX Plus.
 
 ## Apply the NginxProxy
 

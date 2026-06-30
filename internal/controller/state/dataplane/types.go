@@ -48,7 +48,6 @@ type Configuration struct {
 	// Logging defines logging related settings for NGINX.
 	Logging Logging
 	// WorkerProcesses configures the number of NGINX worker processes ("auto" or a positive integer).
-	// Applies to OSS NGINX only; NGINX Plus always uses "auto".
 	WorkerProcesses string
 	// WAF defines the WAF configuration.
 	WAF WAFConfig

@@ -11,9 +11,7 @@ load_module modules/ngx_http_app_protect_module.so;
 
 error_log stderr {{ .Conf.Logging.ErrorLevel }}{{ if eq .Conf.Logging.ErrorLogFormat "json" }} json{{ end }};
 
-{{ if not .Plus -}}
 worker_processes {{ .Conf.WorkerProcesses }};
-{{ end -}}
 
 {{ range $i := .Includes -}}
 include {{ $i.Name }};

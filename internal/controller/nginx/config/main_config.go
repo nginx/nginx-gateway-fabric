@@ -25,16 +25,15 @@ var (
 type mainConfig struct {
 	Includes []shared.Include
 	Conf     dataplane.Configuration
-	Plus     bool
 }
 
-func (g GeneratorImpl) newExecuteMainConfigFunc(generator policies.Generator) executeFunc {
+func newExecuteMainConfigFunc(generator policies.Generator) executeFunc {
 	return func(conf dataplane.Configuration) []executeResult {
-		return executeMainConfig(conf, generator, g.plus)
+		return executeMainConfig(conf, generator)
 	}
 }
 
-func executeMainConfig(conf dataplane.Configuration, generator policies.Generator, plus bool) []executeResult {
+func executeMainConfig(conf dataplane.Configuration, generator policies.Generator) []executeResult {
 	includes := createIncludesFromSnippets(conf.MainSnippets)
 
 	policyIncludes := createIncludesFromPolicyGenerateResult(generator.GenerateForMain(conf.Policies))
@@ -43,7 +42,6 @@ func executeMainConfig(conf dataplane.Configuration, generator policies.Generato
 	mc := mainConfig{
 		Conf:     conf,
 		Includes: includes,
-		Plus:     plus,
 	}
 
 	results := make([]executeResult, 0, len(includes)+1)

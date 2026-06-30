@@ -7,5 +7,4 @@ spec:
   # (one worker per CPU core). This is useful when the data plane runs on large
   # nodes but is given a small CPU limit, to avoid spawning a worker per node core.
   # Must be an integer between 1 and 1024. Omit the field to use "auto".
-  # Applies to OSS NGINX only.
   workerProcesses: 2
