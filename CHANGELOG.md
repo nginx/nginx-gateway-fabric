@@ -4,6 +4,43 @@ This document includes a curated changelog for each release. We also publish a c
 a [GitHub release](https://github.com/nginx/nginx-gateway-fabric/releases), which, by contrast, is auto-generated
 and includes links to all PRs that went into the release.
 
+## Release 2.6.6
+
+_June 26, 2026_
+
+DEPENDENCIES:
+
+- F5 WAF on NGINX to 5.13.2 [5505](https://github.com/nginx/nginx-gateway-fabric/pull/5505)
+- NGINX Agent to 3.11.2 [5510](https://github.com/nginx/nginx-gateway-fabric/pull/5510)
+
+BUG FIXES:
+
+- Change gRPC error code from NotFound to Internal for connection or deployment not found errors [5502](https://github.com/nginx/nginx-gateway-fabric/pull/5502)
+- Fix agent startup race condition when waf is enabled [5513](https://github.com/nginx/nginx-gateway-fabric/pull/5513)
+- Sort map-derived NGINX config for deterministic output [5511](https://github.com/nginx/nginx-gateway-fabric/pull/5511). Thanks to [ItsVigneshMurugan](https://github.com/ItsVigneshMurugan)
+
+HELM CHART:
+
+- The version of the Helm chart is now 2.6.6
+
+COMPATIBILITY:
+
+- Gateway API version: `1.5.1`
+- Gateway API Inference Extension version: `1.5.0`
+- NGINX version: `1.31.2`
+- NGINX Plus version: `R37.0`
+- F5 WAF on NGINX version: `5.13.2`
+- NGINX Agent version: `v3.11.2`
+- Kubernetes version: `1.31+`
+
+CONTAINER IMAGES:
+
+- Control plane: `ghcr.io/nginx/nginx-gateway-fabric:2.6.6`
+- Data plane: `ghcr.io/nginx/nginx-gateway-fabric/nginx:2.6.6`
+- Data plane with NGINX Plus: `private-registry.nginx.com/nginx-gateway-fabric/nginx-plus:2.6.6`
+- Data plane with NGINX Plus and F5 WAF: `private-registry.nginx.com/nginx-gateway-fabric/nginx-plus-f5waf:2.6.6`
+- Operator: `ghcr.io/nginx/nginx-gateway-fabric/operator:1.4.6`
+
 ## Release 2.6.5
 
 _June 17, 2026_
