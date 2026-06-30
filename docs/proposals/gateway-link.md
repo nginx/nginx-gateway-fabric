@@ -63,7 +63,7 @@ sequenceDiagram
 
 NGINX Gateway Fabric must be installed with `--set nginxGateway.gatewayLink.enable=true` so that the controller starts watching the IngressLink CRDs. With that in place, the flow for a Gateway is:
 
-1. A user creates a Gateway that references an NginxProxy with `gatewayLink.enabled: true`.
+1. A user creates a Gateway that references an NginxProxy with gatewayLink spec.
 2. NGF reads the NginxProxy and provisions the data plane Deployment and Service for the Gateway.
 3. NGF creates one IngressLink resource in the Gateway's namespace, owned by the Gateway, with its spec built from the NginxProxy `gatewayLink` configuration.
 4. CIS sees the IngressLink and configures BIG-IP. If `virtualServerAddress` is set, CIS posts an AS3 declaration that creates the virtual server and pool directly. If `ipamLabel` is set instead, the F5 IPAM Controller first allocates an IP from the labelled pool and writes it to the IngressLink status, and then CIS posts the AS3 declaration using that IP.
@@ -282,13 +282,11 @@ type GatewayLinkMonitor struct {
 	// Name is the full path of the health monitor on BIG-IP (e.g., "/Common/http").
 	//
 	// +kubebuilder:validation:Pattern=`^\/[a-zA-Z]+([A-z0-9-_+]+\/)+([-A-z0-9_.:]+\/?)*$`
-	// +kubebuilder:validation:Required
 	Name string `json:"name"`
 
 	// Reference specifies the source of the monitor. Currently only "bigip" is supported.
 	//
 	// +kubebuilder:validation:Enum=bigip
-	// +kubebuilder:validation:Required
 	Reference string `json:"reference"`
 }
 
@@ -303,8 +301,6 @@ type GatewayLinkMultiCluster struct {
 	// for the local entry in the IngressLink's multiClusterServices, which points at this
 	// cluster's own Gateway Service. It must match the name CIS knows this cluster by,
 	// otherwise CIS cannot resolve the local service.
-	//
-	// +kubebuilder:validation:Required
 	LocalClusterName string `json:"localClusterName"`
 
 	// RemoteClusters is the list of remote clusters that also run NGINX Gateway Fabric.
@@ -351,7 +347,6 @@ metadata:
 spec:
   externalLoadBalancers:
      gatewayLink:
-       enabled: true
        virtualServerAddress: "10.8.3.101"   # or ipamLabel
        iRules:
          - "/Common/Proxy_Protocol_iRule"
@@ -360,16 +355,15 @@ spec:
        trustedAddresses:
          - type: CIDR
            value: "10.8.0.0/14"
-     kubernetes:
-       service:
-         type: NodePort          # must match CIS --pool-member-type
+  kubernetes:
+    service:
+      type: NodePort          # must match CIS --pool-member-type
 ```
 
 The supported fields for configuring BIG-IP through the IngressLink CRD:
 
 | Field | Type | Default | Description |
 | --- | --- | --- | --- |
-| `enabled` | bool | false | Enables GatewayLink so that NGF creates an IngressLink for the Gateway. |
 | `virtualServerAddress` | IPv4 string | — | The static IP address for the BIG-IP virtual server. This is mutually exclusive with `ipamLabel`. |
 | `ipamLabel` | string | — | A label that tells the F5 IPAM Controller to allocate the virtual server IP from a pool. This is mutually exclusive with `virtualServerAddress`. |
 | `virtualServerName` | string | CIS-generated | A custom name for the BIG-IP virtual server. |
