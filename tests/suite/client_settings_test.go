@@ -474,35 +474,34 @@ func ancestorStatusMustHaveAcceptedCondition(
 	condReason v1.PolicyConditionReason,
 ) error {
 	GinkgoWriter.Printf("Checking if ancestor status has accepted condition\n")
-	if len(status.Conditions) != 1 {
-		tooManyConditionsErr := fmt.Errorf("expected 1 condition in status, got %d", len(status.Conditions))
-		GinkgoWriter.Printf("ERROR: %v\n", tooManyConditionsErr)
+	// Settings policies now also carry the GEP-713 "Programmed" condition alongside "Accepted",
+	// so locate the Accepted condition by type rather than asserting a single condition.
+	for _, cond := range status.Conditions {
+		if cond.Type != string(v1.PolicyConditionAccepted) {
+			continue
+		}
 
-		return tooManyConditionsErr
+		if cond.Status != condStatus {
+			wrongStatusErr := fmt.Errorf("expected condition status to be %s, got %s", condStatus, cond.Status)
+			GinkgoWriter.Printf("ERROR: %v\n", wrongStatusErr)
+
+			return wrongStatusErr
+		}
+
+		if cond.Reason != string(condReason) {
+			wrongReasonErr := fmt.Errorf("expected condition reason to be %s, got %s", condReason, cond.Reason)
+			GinkgoWriter.Printf("ERROR: %v\n", wrongReasonErr)
+
+			return wrongReasonErr
+		}
+
+		return nil
 	}
 
-	if status.Conditions[0].Type != string(v1.RouteConditionAccepted) {
-		wrongTypeErr := fmt.Errorf("expected condition type to be Accepted, got %s", status.Conditions[0].Type)
-		GinkgoWriter.Printf("ERROR: %v\n", wrongTypeErr)
+	missingAcceptedErr := fmt.Errorf("status has no Accepted condition, got %d conditions", len(status.Conditions))
+	GinkgoWriter.Printf("ERROR: %v\n", missingAcceptedErr)
 
-		return wrongTypeErr
-	}
-
-	if status.Conditions[0].Status != condStatus {
-		wrongStatusErr := fmt.Errorf("expected condition status to be %s, got %s", condStatus, status.Conditions[0].Status)
-		GinkgoWriter.Printf("ERROR: %v\n", wrongStatusErr)
-
-		return wrongStatusErr
-	}
-
-	if status.Conditions[0].Reason != string(condReason) {
-		wrongReasonErr := fmt.Errorf("expected condition reason to be %s, got %s", condReason, status.Conditions[0].Reason)
-		GinkgoWriter.Printf("ERROR: %v\n", wrongReasonErr)
-
-		return wrongReasonErr
-	}
-
-	return nil
+	return missingAcceptedErr
 }
 
 func ancestorMustEqualTargetRef(
