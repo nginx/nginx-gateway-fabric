@@ -25,7 +25,9 @@ import (
 // reference an NginxProxy, the settings are merged. Settings specified on the Gateway NginxProxy override those
 // set on the GatewayClass NginxProxy.
 type NginxProxy struct {
-	Spec              NginxProxySpec `json:"spec"`
+	// Spec defines the desired state of the NginxProxy.
+	Spec NginxProxySpec `json:"spec"`
+
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 }
@@ -131,7 +133,7 @@ type NginxProxySpec struct {
 	//
 	// +optional
 	WAF *WAFSpec `json:"waf,omitempty"`
-	// ExternalLoadBalancersSpec defines configuration for integrating with external
+	// ExternalLoadBalancers defines configuration for integrating with external
 	// load balancers that front NGINX Gateway Fabric. Each field configures a
 	// specific external load balancer integration.
 	//

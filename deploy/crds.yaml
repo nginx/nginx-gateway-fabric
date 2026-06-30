@@ -1517,8 +1517,10 @@ spec:
                 - addresses
                 type: object
               externalLoadBalancers:
-                description: ExternalLoadBalancers specifies the configuration for
-                  external load balancers.
+                description: |-
+                  ExternalLoadBalancers defines configuration for integrating with external
+                  load balancers that front NGINX Gateway Fabric. Each field configures a
+                  specific external load balancer integration.
                 properties:
                   gatewayLink:
                     description: |-
