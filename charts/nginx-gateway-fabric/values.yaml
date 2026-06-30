@@ -638,6 +638,11 @@ nginx:
   #     minimum: 1
   #     maximum: 65535
   #     description: The number of worker connections for NGINX. Default is 1024.
+  #   workerProcesses:
+  #     type: integer
+  #     minimum: 1
+  #     maximum: 1024
+  #     description: The number of NGINX worker processes (an integer between 1 and 1024). Omit to use "auto" (one worker per CPU core).
   #   dnsResolver:
   #     type: object
   #     description: DNSResolver specifies the DNS resolver configuration for external name resolution. This enables support for routing to ExternalName Services.
