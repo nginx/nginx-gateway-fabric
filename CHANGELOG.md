@@ -4,6 +4,76 @@ This document includes a curated changelog for each release. We also publish a c
 a [GitHub release](https://github.com/nginx/nginx-gateway-fabric/releases), which, by contrast, is auto-generated
 and includes links to all PRs that went into the release.
 
+## Release 2.6.7
+
+* Add support for External Authentication for HTTPRoutes by @salonichf5 in https://github.com/nginx/nginx-gateway-fabric/pull/5145
+* helm: add automountServiceAccountToken and extraVolumes/Mounts for cert-generator by @dap0am in https://github.com/nginx/nginx-gateway-fabric/pull/5242
+* Readd AllowPrivilegeEscalation: false to containers by @ciarams87 in https://github.com/nginx/nginx-gateway-fabric/pull/5277
+* Add support for disabling xforwarded base headers by @bjee19 in https://github.com/nginx/nginx-gateway-fabric/pull/5288
+* Bumps version for NGINX OSS, NGINX Plus, NGINX Agent and WAF compiler by @salonichf5 in https://github.com/nginx/nginx-gateway-fabric/pull/5289
+* Support mode Terminate for protocol TLS by @sjberman in https://github.com/nginx/nginx-gateway-fabric/pull/5287
+* feat: add HTTP response compression support to NginxProxy (#4570) by @oyiz-michael in https://github.com/nginx/nginx-gateway-fabric/pull/5064
+* NGINX Plus: Add support for error_log in json format and structure access log in json format by @salonichf5 in https://github.com/nginx/nginx-gateway-fabric/pull/5302
+* Update F5 WAF to 5.13.1 and NGINX OSS to 1.31.1 by @ciarams87 in https://github.com/nginx/nginx-gateway-fabric/pull/5318
+* Add support for upstream HTTP/2 by @bjee19 in https://github.com/nginx/nginx-gateway-fabric/pull/5308
+* Fix Agent mTLS CA cert pool not refreshing after certificate rotation by @ciarams87 in https://github.com/nginx/nginx-gateway-fabric/pull/5332
+* Address ListenerSet gaps by @ciarams87 in https://github.com/nginx/nginx-gateway-fabric/pull/5329
+* helm: fix expose metrics port the Service by @Alja9 in https://github.com/nginx/nginx-gateway-fabric/pull/5326
+* Fix false-positive TargetConflict on policies when unrelated routes overlap each other by @ciarams87 in https://github.com/nginx/nginx-gateway-fabric/pull/5351
+* Fix ListenerSet listeners not being included in provisioned Service and container ports by @ciarams87 in https://github.com/nginx/nginx-gateway-fabric/pull/5354
+* Stop using deprecated externalIPs service field by @dhurley in https://github.com/nginx/nginx-gateway-fabric/pull/5294
+* Skip deprovisioning live gateways queued before leader promotion by @salonichf5 in https://github.com/nginx/nginx-gateway-fabric/pull/5388
+* Add server TLS domain configurable for certs and controller by @salonichf5 in https://github.com/nginx/nginx-gateway-fabric/pull/5380
+* Add pod disruption budget for control plane and data plane by @salonichf5 in https://github.com/nginx/nginx-gateway-fabric/pull/5370
+* Set a memory soft limit for nginx-agent process to enable garbage collection by @bjee19 in https://github.com/nginx/nginx-gateway-fabric/pull/5349
+* make least_time LB available in OSS and update default LB methods by @yogarajalakshmi-s in https://github.com/nginx/nginx-gateway-fabric/pull/5381
+* Add Claim validation to JWT type AuthenticationFilters by @shaun-nx in https://github.com/nginx/nginx-gateway-fabric/pull/5387
+* Sort map-derived NGINX config for deterministic output by @ItsVigneshMurugan in https://github.com/nginx/nginx-gateway-fabric/pull/5486
+
+
+%%DATE%%
+
+FEATURES:
+
+-
+
+BUG FIXES:
+
+-
+
+DOCUMENTATION:
+
+-
+
+HELM CHART:
+
+- The version of the Helm chart is now 2.6.7
+
+UPGRADE:
+
+-
+
+KNOWN ISSUES:
+
+-
+
+COMPATIBILITY:
+
+- Gateway API version: ``
+- Gateway API Inference Extension version: ``
+- NGINX version: ``
+- NGINX Plus version: ``
+- F5 WAF on NGINX version: ``
+- NGINX Agent version: ``
+- Kubernetes version: ``
+
+CONTAINER IMAGES:
+
+- Control plane: `ghcr.io/nginx/nginx-gateway-fabric:2.6.7`
+- Data plane: `ghcr.io/nginx/nginx-gateway-fabric/nginx:2.6.7`
+- Data plane with NGINX Plus: `private-registry.nginx.com/nginx-gateway-fabric/nginx-plus:2.6.7`
+- Data plane with NGINX Plus and F5 WAF: `private-registry.nginx.com/nginx-gateway-fabric/nginx-plus-f5waf:2.6.7`
+- Operator: `ghcr.io/nginx/nginx-gateway-fabric/operator:1.4.7`
 ## Release 2.6.6
 
 _June 26, 2026_
