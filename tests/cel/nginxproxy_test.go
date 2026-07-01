@@ -65,6 +65,61 @@ func TestNginxProxyKubernetes(t *testing.T) {
 	}
 }
 
+func TestNginxProxyWorkerProcesses(t *testing.T) {
+	t.Parallel()
+	k8sClient := getKubernetesClient(t)
+
+	tests := []struct {
+		spec       ngfAPIv1alpha2.NginxProxySpec
+		name       string
+		wantErrors []string
+	}{
+		{
+			name: "Validate workerProcesses minimum '1' is valid",
+			spec: ngfAPIv1alpha2.NginxProxySpec{
+				WorkerProcesses: helpers.GetPointer[int32](1),
+			},
+		},
+		{
+			name: "Validate workerProcesses maximum '1024' is valid",
+			spec: ngfAPIv1alpha2.NginxProxySpec{
+				WorkerProcesses: helpers.GetPointer[int32](1024),
+			},
+		},
+		{
+			name:       "Validate workerProcesses '0' is invalid",
+			wantErrors: []string{expectedWorkerProcessesMinError},
+			spec: ngfAPIv1alpha2.NginxProxySpec{
+				WorkerProcesses: helpers.GetPointer[int32](0),
+			},
+		},
+		{
+			name:       "Validate workerProcesses above maximum '1025' is invalid",
+			wantErrors: []string{expectedWorkerProcessesMaxError},
+			spec: ngfAPIv1alpha2.NginxProxySpec{
+				WorkerProcesses: helpers.GetPointer[int32](1025),
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			spec := tt.spec
+			resourceName := uniqueResourceName(testResourceName)
+
+			nginxProxy := &ngfAPIv1alpha2.NginxProxy{
+				ObjectMeta: controllerruntime.ObjectMeta{
+					Name:      resourceName,
+					Namespace: defaultNamespace,
+				},
+				Spec: spec,
+			}
+			validateCrd(t, tt.wantErrors, nginxProxy, k8sClient)
+		})
+	}
+}
+
 func TestNginxProxyRewriteClientIP(t *testing.T) {
 	t.Parallel()
 	k8sClient := getKubernetesClient(t)

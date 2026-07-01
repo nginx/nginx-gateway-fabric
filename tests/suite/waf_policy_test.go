@@ -100,6 +100,17 @@ var _ = Describe("WAFPolicy", Ordered, Label("waf"), func() {
 
 		nginxPodName = nginxPodNames[0]
 
+		// Explicitly gate on the WAF sidecar containers being Ready before we
+		// proceed to agent-dependent assertions. PodReady implies all containers
+		// are ready, but waf-config-mgr can lag behind nginx; this gives a
+		// clear diagnostic if a specific container fails to come up.
+		Expect(waitForContainersReady(
+			namespace,
+			nginxPodName,
+			[]string{"nginx", "waf-config-mgr", "waf-enforcer"},
+			timeoutConfig.GetStatusTimeout,
+		)).To(Succeed())
+
 		setUpPortForward(nginxPodName, namespace)
 	})
 
@@ -1193,4 +1204,58 @@ func waitForWAFPolicyAncestorStatus(
 			return false, nil
 		},
 	)
+}
+
+// waitForContainersReady polls until every named container in the given Pod
+// reports Ready=true. On timeout it reports which specific containers were
+// missing or not ready, which helps diagnose WAF startup ordering issues
+// (e.g. waf-config-mgr lagging behind nginx).
+func waitForContainersReady(
+	namespace, podName string,
+	containerNames []string,
+	timeout time.Duration,
+) error {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	GinkgoWriter.Printf(
+		"Waiting for containers %v in Pod %s/%s to be Ready\n",
+		containerNames, namespace, podName,
+	)
+
+	var lastNotReady []string
+	pollErr := wait.PollUntilContextCancel(ctx, 500*time.Millisecond, true,
+		func(ctx context.Context) (bool, error) {
+			var pod core.Pod
+			if err := resourceManager.Get(ctx, types.NamespacedName{Name: podName, Namespace: namespace}, &pod); err != nil {
+				return false, err
+			}
+
+			statusByName := make(map[string]core.ContainerStatus, len(pod.Status.ContainerStatuses))
+			for _, cs := range pod.Status.ContainerStatuses {
+				statusByName[cs.Name] = cs
+			}
+
+			notReady := make([]string, 0, len(containerNames))
+			for _, name := range containerNames {
+				cs, ok := statusByName[name]
+				if !ok {
+					notReady = append(notReady, fmt.Sprintf("%s(missing)", name))
+					continue
+				}
+				if !cs.Ready {
+					notReady = append(notReady, fmt.Sprintf("%s(ready=false)", name))
+				}
+			}
+			lastNotReady = notReady
+			return len(notReady) == 0, nil
+		},
+	)
+	if pollErr != nil {
+		return fmt.Errorf(
+			"timed out waiting for containers in Pod %s/%s to be Ready (not ready: %v): %w",
+			namespace, podName, lastNotReady, pollErr,
+		)
+	}
+	return nil
 }

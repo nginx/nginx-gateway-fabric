@@ -57,7 +57,7 @@ spec:
       - name: gateway-nginx-nginx-registry-secret
       initContainers:
       - name: compile-attack-signatures
-        image: private-registry.nginx.com/nap/waf-compiler:5.13.1
+        image: private-registry.nginx.com/nap/waf-compiler:5.13.2
         args:
         - -p
         - /policies/attack-signatures-blocking.json
@@ -69,7 +69,7 @@ spec:
         - name: bundles
           mountPath: /bundles
       - name: compile-dataguard
-        image: private-registry.nginx.com/nap/waf-compiler:5.13.1
+        image: private-registry.nginx.com/nap/waf-compiler:5.13.2
         args:
         - -p
         - /policies/dataguard-blocking.json

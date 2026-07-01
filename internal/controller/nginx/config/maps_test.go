@@ -131,6 +131,10 @@ func TestExecuteMaps(t *testing.T) {
 func TestBuildAddHeaderMaps(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
+	// Add headers are deliberately provided in non-alphabetical order (and with a duplicate) so the
+	// expected maps below verify that the output is deduplicated and emitted in a stable, sorted
+	// order. The maps are derived from a Go map, whose iteration order is randomized; emitting them
+	// unsorted causes spurious NGINX reloads.
 	pathRules := []dataplane.PathRule{
 		{
 			MatchRules: []dataplane.MatchRule{
@@ -138,6 +142,10 @@ func TestBuildAddHeaderMaps(t *testing.T) {
 					Filters: dataplane.HTTPFilters{
 						RequestHeaderModifiers: &dataplane.HTTPHeaderFilter{
 							Add: []dataplane.HTTPHeader{
+								{
+									Name:  "my-zeta-add-header",
+									Value: "some-value-123",
+								},
 								{
 									Name:  "my-add-header",
 									Value: "some-value-123",
@@ -171,6 +179,10 @@ func TestBuildAddHeaderMaps(t *testing.T) {
 							},
 							Add: []dataplane.HTTPHeader{
 								{
+									Name:  "my-alpha-add-header",
+									Value: "some-value-123",
+								},
+								{
 									Name:  "my-add-header",
 									Value: "some-value-123",
 								},
@@ -193,6 +205,7 @@ func TestBuildAddHeaderMaps(t *testing.T) {
 			IsDefault: true,
 		},
 	}
+	// expectedMap is in alphabetical order, matching the deterministic order buildAddHeaderMaps emits.
 	expectedMap := []shared.Map{
 		{
 			Source:   "${http_my_add_header}",
@@ -202,6 +215,17 @@ func TestBuildAddHeaderMaps(t *testing.T) {
 				{
 					Value:  "~.*",
 					Result: "${http_my_add_header},",
+				},
+			},
+		},
+		{
+			Source:   "${http_my_alpha_add_header}",
+			Variable: "$my_alpha_add_header_header_var",
+			Parameters: []shared.MapParameter{
+				{Value: "default", Result: "''"},
+				{
+					Value:  "~.*",
+					Result: "${http_my_alpha_add_header},",
 				},
 			},
 		},
@@ -216,10 +240,21 @@ func TestBuildAddHeaderMaps(t *testing.T) {
 				},
 			},
 		},
+		{
+			Source:   "${http_my_zeta_add_header}",
+			Variable: "$my_zeta_add_header_header_var",
+			Parameters: []shared.MapParameter{
+				{Value: "default", Result: "''"},
+				{
+					Value:  "~.*",
+					Result: "${http_my_zeta_add_header},",
+				},
+			},
+		},
 	}
 	maps := buildAddHeaderMaps(testServers)
 
-	g.Expect(maps).To(ConsistOf(expectedMap))
+	g.Expect(maps).To(Equal(expectedMap))
 }
 
 func TestExecuteStreamMaps(t *testing.T) {
