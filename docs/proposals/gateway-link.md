@@ -82,7 +82,7 @@ flowchart LR
     end
 
     subgraph K8s ["Kubernetes cluster"]
-        SVC["NGF Service<br/>NodePort or ClusterIP"]
+        SVC["NGINX Service<br/>NodePort or ClusterIP"]
         NGF["NGINX pod<br/>(routes via HTTPRoute)"]
         subgraph Backends ["Backend pods"]
             B1["Pod A"]
@@ -172,7 +172,7 @@ type GatewayLinkSpec struct {
 	TLS *GatewayLinkTLS `json:"tls,omitempty"`
 
 	// MultiCluster defines the multi-cluster configuration for load balancing traffic
-	// across NGINX Gateway Fabric instances in multiple clusters.
+	// across NGINX instances in multiple clusters.
 	//
 	// +optional
 	MultiCluster *GatewayLinkMultiCluster `json:"multiCluster,omitempty"`
@@ -291,9 +291,9 @@ type GatewayLinkMonitor struct {
 }
 
 // GatewayLinkMultiCluster defines the multi-cluster configuration for GatewayLink.
-// When configured, CIS load balances traffic across NGINX Gateway Fabric instances
+// When configured, CIS load balances traffic across NGINX instances
 // in multiple clusters. This is set only on the cluster that runs CIS. The other
-// clusters run NGINX Gateway Fabric with a matching Gateway and Service but not CIS,
+// clusters run NGINX with a matching Gateway and Service but not CIS,
 // so they do not set multiCluster. CIS reaches those clusters over a kubeconfig.
 type GatewayLinkMultiCluster struct {
 	// LocalClusterName is the name of this cluster as configured in the CIS deployment
@@ -316,13 +316,13 @@ type GatewayLinkRemoteCluster struct {
 	// +kubebuilder:validation:Required
 	ClusterName *string `json:"clusterName"`
 
-	// Namespace is the namespace of the NGINX Gateway Fabric service in the remote cluster.
+	// Namespace is the namespace of the NGINX service in the remote cluster.
 	// If not specified, defaults to the local Gateway's namespace.
 	//
 	// +optional
 	Namespace *string `json:"namespace,omitempty"`
 
-	// Service is the name of the NGINX Gateway Fabric service in the remote cluster.
+	// Service is the name of the NGINX service in the remote cluster.
 	// If not specified, defaults to the local Gateway's service name.
 	//
 	// +optional
@@ -382,7 +382,9 @@ The supported fields for configuring BIG-IP through the IngressLink CRD:
 
 ### Understanding the correlation between service type and CIS pool member type
 
-The Gateway data plane Service type (`kubernetes.service.type`) must match the CIS `--pool-member-type`. The Service type determines how BIG-IP reaches NGINX Gateway Fabric, and configuring it correctly is essential because it decides what CIS puts into the pool of the virtual server it creates on BIG-IP.
+The Gateway data plane Service type (`kubernetes.service.type`) must match the CIS pool member type. The pool member type is a CIS setting, the `--pool-member-type` flag chosen when CIS is installed, and it is either `nodeport` or `cluster`. It is set by whoever installs CIS, not through the NginxProxy CRD, and it is separate from the `selector`. The `selector` chooses which Service CIS reads, while the pool member type decides how CIS turns that Service's endpoints into pool members. NGINX Gateway Fabric sets the `selector` itself, but the operator must set the CIS pool member type to match the Nginx Service type. The Service type determines how BIG-IP reaches NGINX, so it decides what CIS puts into the pool of the virtual server it creates on BIG-IP.
+
+CIS is installed separately from NGINX Gateway Fabric, typically with the F5 Helm chart. Its install-time settings, including `--pool-member-type` and the BIG-IP partition and credentials, are the operator's responsibility and are not managed by NGINX Gateway Fabric.
 
 With CIS in `nodeport` mode, the Service must be `NodePort` and CIS populates the pool with each node's IP and the Service's allocated node port. BIG-IP needs reachability to the node IP and node port, and traffic takes an extra hop through `kube-proxy` on the node before reaching a pod. With CIS in `cluster` mode, the Service must be `ClusterIP` and CIS programs the pod IPs directly as pool members, but this requires BIG-IP to have a network path to the pod network using a static route to the pod CIDR via the node. If the Service type and the pool member type do not match, the pool will not be populated.
 
@@ -458,4 +460,4 @@ These tests need to be run manually since they need a configured Big-IP stack. T
 
 ## References
 
-- [IngressLink CRD](https://github.com/F5Networks/k8s-bigip-ctlr/blob/68c2c90ee30299350b169a6415e18ed3378a4a1f/docs/config_examples/customResourceDefinitions/customresourcedefinitions.yml#L1114)
+- [IngressLink CRD](https://github.com/F5Networks/k8s-bigip-ctlr/blob/master/docs/config_examples/customResourceDefinitions/customresourcedefinitions.yml)
