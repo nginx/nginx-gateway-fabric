@@ -29,6 +29,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
+	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/config"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/provisioner/openshift"
@@ -74,6 +75,7 @@ type Config struct {
 // NginxProvisioner handles provisioning nginx kubernetes resources.
 type NginxProvisioner struct {
 	k8sClient         client.Client
+	clusterIPFamily   ngfAPIv1alpha2.IPFamilyType
 	store             *store
 	baseLabelSelector metav1.LabelSelector
 	// resourcesToDeleteOnStartup contains a list of Gateway names that no longer exist
@@ -156,8 +158,11 @@ func NewNginxProvisioner(
 		cfg.AgentLabels = make(map[string]string)
 	}
 
+	clusterIPFamily := detectClusterIPFamily(ctx, mgr.GetClient())
+
 	provisioner := &NginxProvisioner{
 		k8sClient:                  mgr.GetClient(),
+		clusterIPFamily:            clusterIPFamily,
 		store:                      store,
 		baseLabelSelector:          selector,
 		resourcesToDeleteOnStartup: []types.NamespacedName{},

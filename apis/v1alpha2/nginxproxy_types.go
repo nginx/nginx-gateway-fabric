@@ -43,10 +43,10 @@ type NginxProxyList struct {
 // NginxProxySpec defines the desired state of the NginxProxy.
 type NginxProxySpec struct {
 	// IPFamily specifies the IP family to be used by the NGINX.
-	// Default is "dual", meaning the server will use both IPv4 and IPv6.
+	// Default is "auto", meaning NGF will detect the cluster's IP family and configure NGINX accordingly.
 	//
 	// +optional
-	// +kubebuilder:default=dual
+	// +kubebuilder:default=auto
 	IPFamily *IPFamilyType `json:"ipFamily,omitempty"`
 	// Telemetry specifies the OpenTelemetry configuration.
 	//
@@ -345,7 +345,7 @@ const (
 
 // IPFamilyType specifies the IP family to be used by NGINX.
 //
-// +kubebuilder:validation:Enum=dual;ipv4;ipv6
+// +kubebuilder:validation:Enum=dual;ipv4;ipv6;auto
 type IPFamilyType string
 
 const (
@@ -355,6 +355,8 @@ const (
 	IPv4 IPFamilyType = "ipv4"
 	// IPv6 specifies that NGINX will use only IPv6.
 	IPv6 IPFamilyType = "ipv6"
+	// Auto specifies that NGF will detect the cluster's IP family and configure NGINX accordingly.
+	Auto IPFamilyType = "auto"
 )
 
 // RewriteClientIPAddress specifies the address type and value for a RewriteClientIP address.
