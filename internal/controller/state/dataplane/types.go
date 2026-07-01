@@ -39,22 +39,24 @@ type Configuration struct {
 	// AuxiliarySecrets contains additional secret data, like certificates/keys/tokens that are not related to
 	// Gateway API resources.
 	AuxiliarySecrets map[graph.SecretFileType][]byte
-	// OIDCProviders holds all OIDC provider configurations at the HTTP level.
-	OIDCProviders []OIDCProvider
+	// SSLListenerHostnames maps each HTTPS port to its list of raw listener hostnames.
+	// An empty string represents a listener with no hostname (catch-all).
+	// Used to build NGINX maps for misdirected request detection.
+	SSLListenerHostnames map[int32][]string
 	// DeploymentContext contains metadata about NGF and the cluster.
 	DeploymentContext DeploymentContext
 	// Logging defines logging related settings for NGINX.
 	Logging Logging
+	// WorkerProcesses configures the number of NGINX worker processes ("auto" or a positive integer).
+	WorkerProcesses string
 	// WAF defines the WAF configuration.
 	WAF WAFConfig
-	// BackendGroups holds all unique BackendGroups.
-	BackendGroups []BackendGroup
-	// TCPServers holds all TCPServers
-	TCPServers []Layer4VirtualServer
-	// HTTPServers holds all HTTPServers.
-	HTTPServers []VirtualServer
 	// NginxPlus specifies NGINX Plus additional settings.
 	NginxPlus NginxPlus
+	// UDPServers holds all UDPServers
+	UDPServers []Layer4VirtualServer
+	// TCPServers holds all TCPServers
+	TCPServers []Layer4VirtualServer
 	// StreamUpstreams holds all unique stream Upstreams (TLS, TCP, UDP)
 	StreamUpstreams []Upstream
 	// SSLServers holds all SSLServers.
@@ -63,16 +65,16 @@ type Configuration struct {
 	Upstreams []Upstream
 	// Policies holds the policies attached to the Gateway.
 	Policies []policies.Policy
-	// UDPServers holds all UDPServers
-	UDPServers []Layer4VirtualServer
+	// HTTPServers holds all HTTPServers.
+	HTTPServers []VirtualServer
 	// TLSServers holds all TLS servers (both Passthrough and Terminate mode).
 	TLSServers []Layer4VirtualServer
-	// SSLListenerHostnames maps each HTTPS port to its list of raw listener hostnames.
-	// An empty string represents a listener with no hostname (catch-all).
-	// Used to build NGINX maps for misdirected request detection.
-	SSLListenerHostnames map[int32][]string
+	// BackendGroups holds all unique BackendGroups.
+	BackendGroups []BackendGroup
 	// MainSnippets holds all the snippets that apply to the main context.
 	MainSnippets []Snippet
+	// OIDCProviders holds all OIDC provider configurations at the HTTP level.
+	OIDCProviders []OIDCProvider
 	// Telemetry holds the Otel configuration.
 	Telemetry Telemetry
 	// BaseHTTPConfig holds the configuration options at the http context.
