@@ -17,7 +17,7 @@ FROM registry.access.redhat.com/ubi10/ubi-minimal:10.2
 
 # Update system packages to fix vulnerabilities
 USER root
-RUN microdnf update -y && microdnf clean all
+RUN microdnf update -y --refresh --nobest && microdnf clean all
 
 ENV HOME=/opt/helm \
     USER_NAME=helm \
