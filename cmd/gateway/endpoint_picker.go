@@ -133,18 +133,30 @@ func createEndpointPickerHandler(factory extProcClientFactory, logger logr.Logge
 	})
 }
 
+// requestHasBody reports whether the HTTP request has a body.
+func requestHasBody(r *http.Request) bool {
+	if r == nil || r.Body == nil || r.Body == http.NoBody {
+		return false
+	}
+	// ContentLength == 0 indicates an explicitly empty body; treat that as no body.
+	// ContentLength < 0 means unknown length (e.g. chunked), so assume a body is present.
+	return r.ContentLength != 0
+}
+
 func sendRequest(stream extprocv3.ExternalProcessor_ProcessClient, r *http.Request) (int, error) {
 	if err := stream.Send(buildHeaderRequest(r)); err != nil {
 		return http.StatusBadGateway, fmt.Errorf("error sending headers: %w", err)
 	}
 
-	bodyReq, err := buildBodyRequest(r)
-	if err != nil {
-		return http.StatusInternalServerError, fmt.Errorf("error building body request: %w", err)
-	}
+	if requestHasBody(r) {
+		bodyReq, err := buildBodyRequest(r)
+		if err != nil {
+			return http.StatusInternalServerError, fmt.Errorf("error building body request: %w", err)
+		}
 
-	if err := stream.Send(bodyReq); err != nil {
-		return http.StatusBadGateway, fmt.Errorf("error sending body: %w", err)
+		if err := stream.Send(bodyReq); err != nil {
+			return http.StatusBadGateway, fmt.Errorf("error sending body: %w", err)
+		}
 	}
 
 	if err := stream.CloseSend(); err != nil {
@@ -180,7 +192,7 @@ func buildHeaderRequest(r *http.Request) *extprocv3.ProcessingRequest {
 		Request: &extprocv3.ProcessingRequest_RequestHeaders{
 			RequestHeaders: &extprocv3.HttpHeaders{
 				Headers:     headerMap,
-				EndOfStream: false,
+				EndOfStream: !requestHasBody(r),
 			},
 		},
 	}
