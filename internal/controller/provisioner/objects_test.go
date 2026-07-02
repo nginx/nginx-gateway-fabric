@@ -1844,19 +1844,17 @@ func TestSetIPFamily(t *testing.T) {
 	g.Expect(svc.Spec.IPFamilyPolicy).To(Equal(helpers.GetPointer(corev1.IPFamilyPolicySingleStack)))
 	g.Expect(svc.Spec.IPFamilies).To(Equal([]corev1.IPFamily{corev1.IPv6Protocol}))
 
-	// nProxyCfg.IPFamily is Auto and cluster is IPv4-only, should set SingleStack and IPv4
+	// nProxyCfg.IPFamily is nil, should use clusterIPFamily (IPv4-only cluster detected)
 	svc = newSvc()
-	ipFamily = ngfAPIv1alpha2.Auto
 	provisioner.clusterIPFamily = ngfAPIv1alpha2.IPv4
-	provisioner.setIPFamily(&graph.EffectiveNginxProxy{IPFamily: &ipFamily}, svc)
+	provisioner.setIPFamily(&graph.EffectiveNginxProxy{}, svc)
 	g.Expect(svc.Spec.IPFamilyPolicy).To(Equal(helpers.GetPointer(corev1.IPFamilyPolicySingleStack)))
 	g.Expect(svc.Spec.IPFamilies).To(Equal([]corev1.IPFamily{corev1.IPv4Protocol}))
 
-	// nProxyCfg.IPFamily is Auto and cluster is dual-stack, should keep PreferDualStack (no change)
+	// nProxyCfg.IPFamily is nil, should use clusterIPFamily (dual-stack cluster detected)
 	svc = newSvc()
-	ipFamily = ngfAPIv1alpha2.Auto
 	provisioner.clusterIPFamily = ngfAPIv1alpha2.Dual
-	provisioner.setIPFamily(&graph.EffectiveNginxProxy{IPFamily: &ipFamily}, svc)
+	provisioner.setIPFamily(&graph.EffectiveNginxProxy{}, svc)
 	g.Expect(svc.Spec.IPFamilyPolicy).To(BeNil())
 	g.Expect(svc.Spec.IPFamilies).To(BeNil())
 }
@@ -1881,6 +1879,19 @@ func TestDetectClusterIPFamily(t *testing.T) {
 				},
 			},
 			expectedFamily: ngfAPIv1alpha2.IPv4,
+		},
+		{
+			name: "IPv6-only cluster",
+			kubeService: &corev1.Service{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "kubernetes",
+					Namespace: "default",
+				},
+				Spec: corev1.ServiceSpec{
+					IPFamilies: []corev1.IPFamily{corev1.IPv6Protocol},
+				},
+			},
+			expectedFamily: ngfAPIv1alpha2.IPv6,
 		},
 		{
 			name: "dual-stack cluster",

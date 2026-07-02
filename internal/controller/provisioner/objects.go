@@ -853,28 +853,26 @@ func detectClusterIPFamily(ctx context.Context, k8sClient client.Client) ngfAPIv
 	}, svc); err != nil {
 		return ngfAPIv1alpha2.Dual
 	}
-	for _, family := range svc.Spec.IPFamilies {
-		if family == corev1.IPv6Protocol {
-			return ngfAPIv1alpha2.Dual
+	if len(svc.Spec.IPFamilies) == 1 {
+		if svc.Spec.IPFamilies[0] == corev1.IPv4Protocol {
+			return ngfAPIv1alpha2.IPv4
 		}
+		return ngfAPIv1alpha2.IPv6
 	}
-	return ngfAPIv1alpha2.IPv4
+	return ngfAPIv1alpha2.Dual
 }
 
 func (p *NginxProvisioner) setIPFamily(nProxyCfg *graph.EffectiveNginxProxy, svc *corev1.Service) {
-	if nProxyCfg == nil || nProxyCfg.IPFamily == nil {
-		return
+	ipFamily := p.clusterIPFamily
+	if ipFamily == "" {
+		ipFamily = ngfAPIv1alpha2.Dual
 	}
-
-	ipFamily := *nProxyCfg.IPFamily
-	if ipFamily == ngfAPIv1alpha2.Auto {
-		ipFamily = p.clusterIPFamily
+	if nProxyCfg != nil && nProxyCfg.IPFamily != nil {
+		ipFamily = *nProxyCfg.IPFamily
 	}
-
 	if ipFamily == ngfAPIv1alpha2.Dual {
 		return
 	}
-
 	svc.Spec.IPFamilyPolicy = helpers.GetPointer(corev1.IPFamilyPolicySingleStack)
 	if ipFamily == ngfAPIv1alpha2.IPv4 {
 		svc.Spec.IPFamilies = []corev1.IPFamily{corev1.IPv4Protocol}
