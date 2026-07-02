@@ -848,7 +848,7 @@ func buildServicePorts(
 func detectClusterIPFamily(ctx context.Context, k8sClient client.Client) ngfAPIv1alpha2.IPFamilyType {
 	svc := &corev1.Service{}
 	if err := k8sClient.Get(ctx, types.NamespacedName{
-		Namespace: "kube-system",
+		Namespace: "default",
 		Name:      "kubernetes",
 	}, svc); err != nil {
 		return ngfAPIv1alpha2.Dual
