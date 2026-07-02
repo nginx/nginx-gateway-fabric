@@ -415,15 +415,19 @@ func buildInferenceMaps(groups []dataplane.BackendGroup) []shared.Map {
 			// we fall back to the upstream
 			case inference.EndpointPickerFailOpen:
 				defaultResult = backend.UpstreamName
+
+			// default to FailClose behavior if the failure mode is not set or unknown
+			default:
+				defaultResult = invalidBackendRef
 			}
 
 			// Build the ordered parameter list.
 			params := make([]shared.MapParameter, 0, 3)
 
-			// no endpoint picked by EPP go to inference pool directly
+			// no endpoint picked by EPP uses failure-mode-aware routing
 			params = append(params, shared.MapParameter{
 				Value:  `""`,
-				Result: backend.UpstreamName,
+				Result: defaultResult,
 			})
 
 			// endpoint picked by the EPP is stored in $inference_workload_endpoint.
@@ -432,9 +436,9 @@ func buildInferenceMaps(groups []dataplane.BackendGroup) []shared.Map {
 				Result: `$inference_workload_endpoint`,
 			})
 
-			// this is set based on EPP failure mode,
-			// if EPP is failOpen, we set the default to the inference pool upstream,
-			// if EPP is failClose, we set the default to invalidBackendRef.
+			// Note: with the current `~.+` matcher below, any non-empty value will match
+			// and this `default` entry will not be reached. Keep this as a defensive fallback
+			// in case the matchers change or are tightened to validate endpoint formats.
 			params = append(params, shared.MapParameter{
 				Value:  "default",
 				Result: defaultResult,
