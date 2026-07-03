@@ -44,6 +44,24 @@ server {
         return 444;
     }
         {{- end}}
+
+    # Fallback location for the default SSL server.
+    # When a TLS connection arrives without SNI (e.g., from an AWS NLB doing TLS re-encryption),
+    # NGINX selects this default_server for the TLS handshake. After the handshake, NGINX routes
+    # the request to the correct server block based on the Host/:authority header.
+    # This fallback handles two scenarios:
+    # 1. HTTP/2 connection coalescing: the client reuses a connection for a different hostname.
+    #    If the Host header matches a known server name, return 421 (Misdirected Request) per
+    #    RFC 9113 Section 9.1.2 to signal the client to retry on a new connection with correct SNI.
+    # 2. Unknown hosts: return 404 for requests whose Host header doesn't match any server name.
+    location / {
+        {{- if $s.MisdirectedRequestVars }}
+        if ({{ $s.MisdirectedRequestVars.HostVar }} != "0") {
+            return 421;
+        }
+        {{- end }}
+        return 404;
+    }
     {{- else }}
     ssl_reject_handshake on;
     {{- end }}

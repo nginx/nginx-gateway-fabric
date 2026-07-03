@@ -230,6 +230,12 @@ func createSSLServer(
 		}
 		if virtualServer.SSL != nil {
 			server.SSL = buildHTTPSSL(virtualServer.SSL)
+			if !disableSNIHostValidation {
+				server.MisdirectedRequestVars = &http.MisdirectedRequestVars{
+					SNIVar:  misdirectedRequestSNIVar(virtualServer.Port),
+					HostVar: misdirectedRequestHostVar(virtualServer.Port),
+				}
+			}
 		}
 
 		return server, nil
