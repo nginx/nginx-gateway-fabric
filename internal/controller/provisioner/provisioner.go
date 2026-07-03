@@ -158,7 +158,7 @@ func NewNginxProvisioner(
 		cfg.AgentLabels = make(map[string]string)
 	}
 
-	clusterIPFamily := detectClusterIPFamily(ctx, mgr.GetClient())
+	clusterIPFamily := detectClusterIPFamily(ctx, mgr.GetAPIReader())
 
 	provisioner := &NginxProvisioner{
 		k8sClient:                  mgr.GetClient(),

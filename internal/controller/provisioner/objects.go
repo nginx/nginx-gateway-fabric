@@ -845,9 +845,9 @@ func buildServicePorts(
 
 // detectClusterIPFamily detects the IP family of the cluster by checking the
 // kubernetes Service in kube-system. Returns Dual if detection fails, as a safe fallback.
-func detectClusterIPFamily(ctx context.Context, k8sClient client.Client) ngfAPIv1alpha2.IPFamilyType {
+func detectClusterIPFamily(ctx context.Context, reader client.Reader) ngfAPIv1alpha2.IPFamilyType {
 	svc := &corev1.Service{}
-	if err := k8sClient.Get(ctx, types.NamespacedName{
+	if err := reader.Get(ctx, types.NamespacedName{
 		Namespace: "default",
 		Name:      "kubernetes",
 	}, svc); err != nil {
