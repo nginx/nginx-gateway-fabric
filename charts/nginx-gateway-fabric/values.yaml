@@ -939,6 +939,9 @@ gateways: []
 #   annotationKey: annotationValue
 # spec:
 #   gatewayClassName: nginx
+#   allowedListeners:
+#     namespaces:
+#       from: All
 #    addresses:
 #    - type: IPAddress
 #      value: 1.2.3.4
