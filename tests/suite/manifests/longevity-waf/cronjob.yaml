@@ -47,7 +47,7 @@ spec:
           serviceAccountName: rollout-mgr
           containers:
           - name: coffee-rollout-mgr
-            image: curlimages/curl:8.20.0
+            image: curlimages/curl:8.21.0
             imagePullPolicy: IfNotPresent
             command:
             - /bin/sh
@@ -76,7 +76,7 @@ spec:
           serviceAccountName: rollout-mgr
           containers:
           - name: tea-rollout-mgr
-            image: curlimages/curl:8.20.0
+            image: curlimages/curl:8.21.0
             imagePullPolicy: IfNotPresent
             command:
             - /bin/sh
@@ -107,7 +107,7 @@ spec:
           serviceAccountName: rollout-mgr
           containers:
           - name: appolicy-updater
-            image: curlimages/curl:8.20.0
+            image: curlimages/curl:8.21.0
             imagePullPolicy: IfNotPresent
             command:
             - /bin/sh

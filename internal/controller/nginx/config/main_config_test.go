@@ -249,6 +249,39 @@ func TestExecuteMainConfig_WorkerConnections(t *testing.T) {
 	}
 }
 
+func TestExecuteMainConfig_WorkerProcesses(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name             string
+		expWorkerProcess string
+		conf             dataplane.Configuration
+	}{
+		{
+			name:             "custom worker processes",
+			conf:             dataplane.Configuration{WorkerProcesses: "4"},
+			expWorkerProcess: "worker_processes 4;",
+		},
+		{
+			name:             "default worker processes",
+			conf:             dataplane.Configuration{WorkerProcesses: dataplane.DefaultWorkerProcesses},
+			expWorkerProcess: "worker_processes auto;",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			res := executeMainConfig(test.conf, &policiesfakes.FakeGenerator{})
+			g.Expect(res).To(HaveLen(1))
+			g.Expect(res[0].dest).To(Equal(mainIncludesConfigFile))
+			g.Expect(string(res[0].data)).To(ContainSubstring(test.expWorkerProcess))
+		})
+	}
+}
+
 func TestExecuteEventsConfig_WorkerConnections(t *testing.T) {
 	t.Parallel()
 

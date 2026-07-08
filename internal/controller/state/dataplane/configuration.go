@@ -7,6 +7,7 @@ import (
 	"maps"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/go-logr/logr"
@@ -32,6 +33,7 @@ const (
 	defaultErrorLogLevel           = "info"
 	AlpineSSLRootCAPath            = "/etc/ssl/cert.pem"
 	DefaultWorkerConnections       = int32(1024)
+	DefaultWorkerProcesses         = "auto"
 	DefaultNginxReadinessProbePort = int32(8081)
 	DefaultNginxReadinessProbePath = "/readyz"
 	// DefaultLogFormatName is used when user provides custom access_log format.
@@ -163,6 +165,7 @@ func BuildConfiguration(
 		Policies:             buildPolicies(gateway, gateway.Policies),
 		AuxiliarySecrets:     buildAuxiliarySecrets(g.PlusSecrets),
 		WorkerConnections:    buildWorkerConnections(gateway),
+		WorkerProcesses:      buildWorkerProcesses(gateway),
 		SSLListenerHostnames: sslListenerHostnames,
 		CertBundles:          certBundles,
 		WAF:                  buildWAF(gateway),
@@ -368,7 +371,29 @@ func buildL4Servers(logger logr.Logger, gateway *graph.Gateway, protocol v1.Prot
 		}
 	}
 
+	// L4 routes are iterated from a map, so sort the resulting servers to produce a stable order.
+	// Preserve order so that this doesn't trigger an unnecessary reload.
+	sort.Slice(servers, func(i, j int) bool {
+		if servers[i].Port != servers[j].Port {
+			return servers[i].Port < servers[j].Port
+		}
+		if servers[i].Hostname != servers[j].Hostname {
+			return servers[i].Hostname < servers[j].Hostname
+		}
+		return layer4UpstreamsKey(servers[i].Upstreams) < layer4UpstreamsKey(servers[j].Upstreams)
+	})
+
 	return servers
+}
+
+// layer4UpstreamsKey builds a stable comparison key from a server's upstreams so that L4 servers
+// sharing the same port and hostname are ordered deterministically.
+func layer4UpstreamsKey(upstreams []Layer4Upstream) string {
+	names := make([]string, 0, len(upstreams))
+	for _, u := range upstreams {
+		names = append(names, u.Name)
+	}
+	return strings.Join(names, ",")
 }
 
 // buildStreamUpstreams builds all stream upstreams.
@@ -455,6 +480,12 @@ func buildStreamUpstreams(
 	for _, up := range uniqueUpstreams {
 		upstreams = append(upstreams, up)
 	}
+
+	// Preserve order so that this doesn't trigger an unnecessary reload.
+	sort.Slice(upstreams, func(i, j int) bool {
+		return upstreams[i].Name < upstreams[j].Name
+	})
+
 	return upstreams
 }
 
@@ -832,17 +863,28 @@ func buildAuthZConfigs(
 			continue
 		}
 
-		// FIXME(s.odonovan): Support OIDC.
-		if filter.Source.Spec.Type == ngfAPIv1alpha1.AuthTypeJWT {
-			if filter.Source.Spec.JWT == nil || filter.Source.Spec.JWT.Authorization == nil {
-				continue
+		var authzSpec *ngfAPIv1alpha1.Authorization
+
+		switch filter.Source.Spec.Type {
+		case ngfAPIv1alpha1.AuthTypeJWT:
+			if filter.Source.Spec.JWT != nil {
+				authzSpec = filter.Source.Spec.JWT.Authorization
 			}
-			filterNsName := strings.Join([]string{nsName.Namespace, nsName.Name}, "_")
-			filterPrefix := sanitizeVariablePrefix(filterNsName)
-			if cfg := buildAuthZConfigFromAuthZSpec(filterPrefix, filter.Source.Spec.JWT.Authorization); cfg != nil {
-				cfg.FilterNsName = filterNsName
-				authZConfigs = append(authZConfigs, cfg)
+		case ngfAPIv1alpha1.AuthTypeOIDC:
+			if filter.Source.Spec.OIDC != nil {
+				authzSpec = filter.Source.Spec.OIDC.Authorization
 			}
+		}
+
+		if authzSpec == nil {
+			continue
+		}
+
+		filterNsName := strings.Join([]string{nsName.Namespace, nsName.Name}, "_")
+		filterPrefix := sanitizeVariablePrefix(filterNsName)
+		if cfg := buildAuthZConfigFromAuthZSpec(filterPrefix, authzSpec); cfg != nil {
+			cfg.FilterNsName = filterNsName
+			authZConfigs = append(authZConfigs, cfg)
 		}
 	}
 	return authZConfigs
@@ -1989,10 +2031,10 @@ func buildOIDCProviderFromAuthenticationFilters(
 			continue
 		}
 		converted := convertAuthenticationFilter(af, referencedSecrets)
-		if converted.OIDC == nil {
+		if converted.OIDC == nil || converted.OIDC.Provider == nil {
 			continue
 		}
-		provider := *converted.OIDC
+		provider := *converted.OIDC.Provider
 		if provider.CACertBundleID != "" && provider.CACertData != nil {
 			certBundles[provider.CACertBundleID] = provider.CACertData
 		}
@@ -2446,6 +2488,19 @@ func buildWorkerConnections(gateway *graph.Gateway) int32 {
 	return DefaultWorkerConnections
 }
 
+func buildWorkerProcesses(gateway *graph.Gateway) string {
+	if gateway == nil || gateway.EffectiveNginxProxy == nil {
+		return DefaultWorkerProcesses
+	}
+
+	ngfProxy := gateway.EffectiveNginxProxy
+	if ngfProxy.WorkerProcesses != nil {
+		return strconv.FormatInt(int64(*ngfProxy.WorkerProcesses), 10)
+	}
+
+	return DefaultWorkerProcesses
+}
+
 func buildAuxiliarySecrets(
 	secretsMap map[types.NamespacedName][]graph.PlusSecretFile,
 ) map[graph.SecretFileType][]byte {
@@ -2488,6 +2543,7 @@ func GetDefaultConfiguration(g *graph.Graph, gateway *graph.Gateway) Configurati
 		NginxPlus:         NginxPlus{},
 		AuxiliarySecrets:  buildAuxiliarySecrets(g.PlusSecrets),
 		WorkerConnections: buildWorkerConnections(gateway),
+		WorkerProcesses:   buildWorkerProcesses(gateway),
 	}
 }
 

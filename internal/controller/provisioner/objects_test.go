@@ -1915,6 +1915,51 @@ func TestBuildNginxConfigMaps_WorkerConnections(t *testing.T) {
 	g.Expect(bootstrapCM.Data[configmaps.EventsConfKey]).To(ContainSubstring("worker_connections 2048;"))
 }
 
+func TestBuildNginxConfigMaps_WorkerProcesses(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	provisioner := &NginxProvisioner{
+		k8sClient: createFakeClientWithScheme(),
+		cfg: Config{
+			GatewayPodConfig: &config.GatewayPodConfig{
+				Namespace:   "default",
+				ServiceName: "test-service",
+			},
+			AgentLabels: make(map[string]string),
+		},
+	}
+	objectMeta := metav1.ObjectMeta{Name: "test", Namespace: "default"}
+	gateway := &gatewayv1.Gateway{
+		ObjectMeta: metav1.ObjectMeta{Name: "gw", Namespace: "default"},
+	}
+	names := provisioner.buildResourceNames("gw-nginx")
+
+	getBootstrapMainConf := func(nProxyCfg *graph.EffectiveNginxProxy) string {
+		configMaps, errs := provisioner.buildNginxConfigMaps(objectMeta, nProxyCfg, names, gateway)
+		g.Expect(errs).To(BeNil())
+		g.Expect(configMaps).To(HaveLen(2))
+		bootstrapCM, ok := configMaps[0].(*corev1.ConfigMap)
+		g.Expect(ok).To(BeTrue())
+		return bootstrapCM.Data[configmaps.MainConfKey]
+	}
+
+	// Default worker processes (nil NginxProxy config).
+	g.Expect(getBootstrapMainConf(nil)).To(ContainSubstring("worker_processes auto;"))
+
+	// Default worker processes (empty NginxProxy config).
+	g.Expect(getBootstrapMainConf(&graph.EffectiveNginxProxy{})).To(ContainSubstring("worker_processes auto;"))
+
+	// Custom worker processes.
+	customCfg := &graph.EffectiveNginxProxy{WorkerProcesses: helpers.GetPointer[int32](4)}
+	g.Expect(getBootstrapMainConf(customCfg)).To(ContainSubstring("worker_processes 4;"))
+
+	// NGINX Plus renders worker_processes the same way as OSS.
+	provisioner.cfg.Plus = true
+	provisioner.cfg.PlusUsageConfig = &config.UsageReportConfig{SecretName: jwtTestSecretName}
+	g.Expect(getBootstrapMainConf(customCfg)).To(ContainSubstring("worker_processes 4;"))
+}
+
 func TestBuildNginxConfigMaps_AgentFields(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)

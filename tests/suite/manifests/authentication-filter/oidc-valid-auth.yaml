@@ -46,6 +46,184 @@ spec:
     logout:
       uri: /logout-tea
 ---
+# OIDC AuthenticationFilter with authorization: Require Any, Exact match on email_verified claim
+apiVersion: gateway.nginx.org/v1alpha1
+kind: AuthenticationFilter
+metadata:
+  name: oidc-authz-claims-any
+spec:
+  type: OIDC
+  oidc:
+    issuer: https://keycloak.authentication-filter.svc.cluster.local:8443/realms/nginx-gateway
+    clientID: nginx-gateway-coffee
+    clientSecretRef:
+      name: keycloak-coffee-client-secret
+    caCertificateRefs:
+      - name: keycloak-ca-secret
+    logout:
+      uri: /logout-authz-any
+    authorization:
+      require: Any
+      rules:
+        - require: Any
+          claims:
+            - name: email_verified
+              match: Exact
+              values:
+                - "true"
+---
+# OIDC AuthenticationFilter with authorization: Require All, multiple claims
+apiVersion: gateway.nginx.org/v1alpha1
+kind: AuthenticationFilter
+metadata:
+  name: oidc-authz-claims-all
+spec:
+  type: OIDC
+  oidc:
+    issuer: https://keycloak.authentication-filter.svc.cluster.local:8443/realms/nginx-gateway
+    clientID: nginx-gateway-coffee
+    clientSecretRef:
+      name: keycloak-coffee-client-secret
+    caCertificateRefs:
+      - name: keycloak-ca-secret
+    logout:
+      uri: /logout-authz-all
+    authorization:
+      require: Any
+      rules:
+        - require: All
+          claims:
+            - name: email_verified
+              match: Exact
+              values:
+                - "true"
+            - name: preferred_username
+              match: Exact
+              values:
+                - "testuser"
+---
+# OIDC AuthenticationFilter with authorization: Regex claim matching
+apiVersion: gateway.nginx.org/v1alpha1
+kind: AuthenticationFilter
+metadata:
+  name: oidc-authz-regex
+spec:
+  type: OIDC
+  oidc:
+    issuer: https://keycloak.authentication-filter.svc.cluster.local:8443/realms/nginx-gateway
+    clientID: nginx-gateway-coffee
+    clientSecretRef:
+      name: keycloak-coffee-client-secret
+    caCertificateRefs:
+      - name: keycloak-ca-secret
+    logout:
+      uri: /logout-authz-regex
+    authorization:
+      require: Any
+      rules:
+        - require: Any
+          claims:
+            - name: email
+              match: Regex
+              values:
+                - ".*@example\\.com"
+---
+# OIDC AuthenticationFilter with authorization: proxySetHeader
+apiVersion: gateway.nginx.org/v1alpha1
+kind: AuthenticationFilter
+metadata:
+  name: oidc-authz-header
+spec:
+  type: OIDC
+  oidc:
+    issuer: https://keycloak.authentication-filter.svc.cluster.local:8443/realms/nginx-gateway
+    clientID: nginx-gateway-coffee
+    clientSecretRef:
+      name: keycloak-coffee-client-secret
+    caCertificateRefs:
+      - name: keycloak-ca-secret
+    logout:
+      uri: /logout-authz-header
+    authorization:
+      require: Any
+      rules:
+        - require: Any
+          claims:
+            - name: preferred_username
+              match: Exact
+              values:
+                - "testuser"
+              proxySetHeader: X-OIDC-User
+            - name: email
+              match: Exact
+              values:
+                - "testuser@example.com"
+              proxySetHeader: X-OIDC-Email
+---
+# OIDC AuthenticationFilter with authorization: Require All at top level, multiple rules
+apiVersion: gateway.nginx.org/v1alpha1
+kind: AuthenticationFilter
+metadata:
+  name: oidc-authz-require-all
+spec:
+  type: OIDC
+  oidc:
+    issuer: https://keycloak.authentication-filter.svc.cluster.local:8443/realms/nginx-gateway
+    clientID: nginx-gateway-coffee
+    clientSecretRef:
+      name: keycloak-coffee-client-secret
+    caCertificateRefs:
+      - name: keycloak-ca-secret
+    logout:
+      uri: /logout-authz-require-all
+    authorization:
+      require: All
+      rules:
+        - require: Any
+          claims:
+            - name: email_verified
+              match: Exact
+              values:
+                - "true"
+        - require: Any
+          claims:
+            - name: preferred_username
+              match: Exact
+              values:
+                - "testuser"
+---
+# OIDC AuthenticationFilter with authorization: nested claim using "/" separator
+apiVersion: gateway.nginx.org/v1alpha1
+kind: AuthenticationFilter
+metadata:
+  name: oidc-authz-nested-claim
+spec:
+  type: OIDC
+  oidc:
+    issuer: https://keycloak.authentication-filter.svc.cluster.local:8443/realms/nginx-gateway
+    clientID: nginx-gateway-coffee
+    clientSecretRef:
+      name: keycloak-coffee-client-secret
+    caCertificateRefs:
+      - name: keycloak-ca-secret
+    logout:
+      uri: /logout-authz-nested
+    authorization:
+      require: Any
+      rules:
+        - require: Any
+          claims:
+            - name: realm_access/roles
+              match: Exact
+              values:
+                - "user"
+              proxySetHeader: X-ROLES-RealmAccess
+            - name: email
+              match: Exact
+              values:
+                - "testuser@example.com"
+              proxySetHeader: X-OIDC-Email
+---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
@@ -83,3 +261,86 @@ spec:
             group: gateway.nginx.org
             kind: AuthenticationFilter
             name: oidc-auth-tea
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /oidc-authz-claims-any
+      backendRefs:
+        - name: coffee
+          port: 80
+      filters:
+        - type: ExtensionRef
+          extensionRef:
+            group: gateway.nginx.org
+            kind: AuthenticationFilter
+            name: oidc-authz-claims-any
+    # Route for All claims authorization
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /oidc-authz-claims-all
+      backendRefs:
+        - name: coffee
+          port: 80
+      filters:
+        - type: ExtensionRef
+          extensionRef:
+            group: gateway.nginx.org
+            kind: AuthenticationFilter
+            name: oidc-authz-claims-all
+    # Route for Regex authorization
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /oidc-authz-regex
+      backendRefs:
+        - name: coffee
+          port: 80
+      filters:
+        - type: ExtensionRef
+          extensionRef:
+            group: gateway.nginx.org
+            kind: AuthenticationFilter
+            name: oidc-authz-regex
+    # Route for proxySetHeader authorization
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /oidc-authz-header
+      backendRefs:
+        - name: coffee
+          port: 80
+      filters:
+        - type: ExtensionRef
+          extensionRef:
+            group: gateway.nginx.org
+            kind: AuthenticationFilter
+            name: oidc-authz-header
+    # Route for Require All at top level authorization
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /oidc-authz-require-all
+      backendRefs:
+        - name: coffee
+          port: 80
+      filters:
+        - type: ExtensionRef
+          extensionRef:
+            group: gateway.nginx.org
+            kind: AuthenticationFilter
+            name: oidc-authz-require-all
+    # Route for nested claim authorization
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /oidc-authz-nested
+      backendRefs:
+        - name: coffee
+          port: 80
+      filters:
+        - type: ExtensionRef
+          extensionRef:
+            group: gateway.nginx.org
+            kind: AuthenticationFilter
+            name: oidc-authz-nested-claim

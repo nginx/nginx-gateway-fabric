@@ -10,7 +10,10 @@ var (
 )
 
 const mainTemplateText = `
-error_log stderr {{ .ErrorLevel }};`
+error_log stderr {{ .ErrorLevel }};
+{{- if .WorkerProcesses }}
+worker_processes {{ .WorkerProcesses }};
+{{- end }}`
 
 const eventsTemplateText = `
 worker_connections {{ .WorkerConnections }};`

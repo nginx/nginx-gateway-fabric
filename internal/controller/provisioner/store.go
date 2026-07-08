@@ -194,57 +194,36 @@ func (s *store) registerConfigMapInGatewayConfig(obj *corev1.ConfigMap, gatewayN
 	}
 }
 
-//nolint:gocyclo // will refactor at some point
-func (s *store) registerSecretInGatewayConfig(obj *corev1.Secret, gatewayNSName types.NamespacedName) {
-	hasSuffix := func(str, suffix string) bool {
-		return suffix != "" && strings.HasSuffix(str, suffix)
+// hasSuffix reports whether str ends with a non-empty suffix.
+func hasSuffix(str, suffix string) bool {
+	return suffix != "" && strings.HasSuffix(str, suffix)
+}
+
+// assignNamedSecret sets the matching named-secret field on cfg from obj and
+// reports whether obj matched one of the configured named secrets.
+// Callers must hold s.lock.
+func (s *store) assignNamedSecret(cfg *NginxResources, obj *corev1.Secret) bool {
+	switch name := obj.GetName(); {
+	case hasSuffix(name, s.agentTLSSecretName):
+		cfg.AgentTLSSecret = obj.ObjectMeta
+	case hasSuffix(name, s.jwtSecretName):
+		cfg.PlusJWTSecret = obj.ObjectMeta
+	case hasSuffix(name, s.caSecretName):
+		cfg.PlusCASecret = obj.ObjectMeta
+	case hasSuffix(name, s.clientSSLSecretName):
+		cfg.PlusClientSSLSecret = obj.ObjectMeta
+	case hasSuffix(name, s.dataplaneKeySecretName):
+		cfg.DataplaneKeySecret = obj.ObjectMeta
+	default:
+		return false
 	}
 
-	if cfg, ok := s.nginxResources[gatewayNSName]; !ok {
-		switch {
-		case hasSuffix(obj.GetName(), s.agentTLSSecretName):
-			s.nginxResources[gatewayNSName] = &NginxResources{
-				AgentTLSSecret: obj.ObjectMeta,
-			}
-		case hasSuffix(obj.GetName(), s.jwtSecretName):
-			s.nginxResources[gatewayNSName] = &NginxResources{
-				PlusJWTSecret: obj.ObjectMeta,
-			}
-		case hasSuffix(obj.GetName(), s.caSecretName):
-			s.nginxResources[gatewayNSName] = &NginxResources{
-				PlusCASecret: obj.ObjectMeta,
-			}
-		case hasSuffix(obj.GetName(), s.clientSSLSecretName):
-			s.nginxResources[gatewayNSName] = &NginxResources{
-				PlusClientSSLSecret: obj.ObjectMeta,
-			}
-		case hasSuffix(obj.GetName(), s.dataplaneKeySecretName):
-			s.nginxResources[gatewayNSName] = &NginxResources{
-				DataplaneKeySecret: obj.ObjectMeta,
-			}
-		}
+	return true
+}
 
-		for secret := range s.dockerSecretNames {
-			if hasSuffix(obj.GetName(), secret) {
-				s.nginxResources[gatewayNSName] = &NginxResources{
-					DockerSecrets: []metav1.ObjectMeta{obj.ObjectMeta},
-				}
-				break
-			}
-		}
-	} else {
-		switch {
-		case hasSuffix(obj.GetName(), s.agentTLSSecretName):
-			cfg.AgentTLSSecret = obj.ObjectMeta
-		case hasSuffix(obj.GetName(), s.jwtSecretName):
-			cfg.PlusJWTSecret = obj.ObjectMeta
-		case hasSuffix(obj.GetName(), s.caSecretName):
-			cfg.PlusCASecret = obj.ObjectMeta
-		case hasSuffix(obj.GetName(), s.clientSSLSecretName):
-			cfg.PlusClientSSLSecret = obj.ObjectMeta
-		case hasSuffix(obj.GetName(), s.dataplaneKeySecretName):
-			cfg.DataplaneKeySecret = obj.ObjectMeta
-		}
+func (s *store) registerSecretInGatewayConfig(obj *corev1.Secret, gatewayNSName types.NamespacedName) {
+	if cfg, ok := s.nginxResources[gatewayNSName]; ok {
+		s.assignNamedSecret(cfg, obj)
 
 		for secret := range s.dockerSecretNames {
 			if hasSuffix(obj.GetName(), secret) {
@@ -254,6 +233,25 @@ func (s *store) registerSecretInGatewayConfig(obj *corev1.Secret, gatewayNSName 
 					cfg.DockerSecrets = append(cfg.DockerSecrets, obj.ObjectMeta)
 				}
 			}
+		}
+
+		return
+	}
+
+	// No config exists yet for this Gateway: create a fresh entry only when the
+	// Secret matches a configured name. A matching docker secret overwrites the
+	// entry, preserving the original first-match-wins behavior.
+	cfg := &NginxResources{}
+	if s.assignNamedSecret(cfg, obj) {
+		s.nginxResources[gatewayNSName] = cfg
+	}
+
+	for secret := range s.dockerSecretNames {
+		if hasSuffix(obj.GetName(), secret) {
+			s.nginxResources[gatewayNSName] = &NginxResources{
+				DockerSecrets: []metav1.ObjectMeta{obj.ObjectMeta},
+			}
+			break
 		}
 	}
 }
