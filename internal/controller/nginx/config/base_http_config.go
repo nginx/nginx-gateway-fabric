@@ -125,6 +125,9 @@ func buildDNSResolver(dnsResolver *dataplane.DNSResolverConfig) *dataplane.DNSRe
 	for _, address := range dnsResolver.Addresses {
 		ip := net.ParseIP(address)
 		if ip == nil {
+			// Not an IP; validateDNSResolver guarantees this is a DNS-1123 hostname.
+			// nginx's resolver directive supports hostnames directly.
+			fixed.Addresses = append(fixed.Addresses, address)
 			continue
 		}
 

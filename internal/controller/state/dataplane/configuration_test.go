@@ -8561,6 +8561,47 @@ func TestBuildWorkerConnections(t *testing.T) {
 	}
 }
 
+func TestBuildWorkerProcesses(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		gw                 *graph.Gateway
+		msg                string
+		expWorkerProcesses string
+	}{
+		{
+			msg:                "NginxProxy is nil",
+			gw:                 &graph.Gateway{},
+			expWorkerProcesses: DefaultWorkerProcesses,
+		},
+		{
+			msg: "NginxProxy doesn't specify worker processes",
+			gw: &graph.Gateway{
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{},
+			},
+			expWorkerProcesses: DefaultWorkerProcesses,
+		},
+		{
+			msg: "NginxProxy specifies worker processes",
+			gw: &graph.Gateway{
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+					WorkerProcesses: helpers.GetPointer[int32](2),
+				},
+			},
+			expWorkerProcesses: "2",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.msg, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			g.Expect(buildWorkerProcesses(tc.gw)).To(Equal(tc.expWorkerProcesses))
+		})
+	}
+}
+
 func TestBuildBaseHTTPConfig_ReadinessProbe(t *testing.T) {
 	t.Parallel()
 
