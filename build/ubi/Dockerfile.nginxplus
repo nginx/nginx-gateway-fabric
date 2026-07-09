@@ -7,7 +7,7 @@ ADD --link --chown=101:1001 https://nginx.org/keys/nginx_signing.key nginx_signi
 ADD --link --chown=101:1001 build/ubi/repos/agent.repo agent.repo
 ADD --link --chown=101:1001 build/ubi/repos/app-protect.repo app-protect.repo
 
-FROM ghcr.io/nginx/dependencies/nginx-ubi:ubi10@sha256:d0e6bdcb164b114fddf05e39f47433fee2c7901521f1d77cf71bb330d666ce06 AS ubi10-packages
+FROM ghcr.io/nginx/dependencies/nginx-ubi:ubi10@sha256:a21948baea3a4c2995f5a2a827a58f27fdf41a06e3bcb25f7241ae9704f0e89b AS ubi10-packages
 
 FROM registry.access.redhat.com/ubi10/ubi-minimal:10.2 AS ubi-nginx-plus
 
