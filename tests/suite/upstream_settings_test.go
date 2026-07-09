@@ -381,6 +381,7 @@ var _ = Describe("UpstreamSettingsPolicy", Ordered, Label("functional", "uspolic
 	When("UseClusterIP is enabled for an UpstreamSettingsPolicy", func() {
 		usps := []string{
 			"upstream-settings-policy/use-cluster-ip-usp.yaml",
+			"upstream-settings-policy/use-cluster-ip-conflict-usp.yaml",
 		}
 
 		BeforeAll(func() {
@@ -398,6 +399,17 @@ var _ = Describe("UpstreamSettingsPolicy", Ordered, Label("functional", "uspolic
 				gatewayName,
 				metav1.ConditionTrue,
 				gatewayv1.PolicyReasonAccepted,
+			)
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		Specify("a conflicting second policy is marked conflicted", func() {
+			uspolicyNsName := types.NamespacedName{Name: "cluster-ip-conflict-usp", Namespace: namespace}
+			err := waitForUSPolicyStatus(
+				uspolicyNsName,
+				gatewayName,
+				metav1.ConditionFalse,
+				gatewayv1.PolicyReasonConflicted,
 			)
 			Expect(err).ToNot(HaveOccurred())
 		})

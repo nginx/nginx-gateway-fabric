@@ -92,14 +92,14 @@ func conflicts(a, b ngfAPI.UpstreamSettingsPolicySpec) bool {
 		}
 	}
 
-	if checkConflictsForLoadBalancingAndClusterIPFields(a, b) {
+	if resolveConflictsInUpstreamSettings(a, b) {
 		return true
 	}
 
 	return false
 }
 
-func checkConflictsForLoadBalancingAndClusterIPFields(a, b ngfAPI.UpstreamSettingsPolicySpec) bool {
+func resolveConflictsInUpstreamSettings(a, b ngfAPI.UpstreamSettingsPolicySpec) bool {
 	if a.LoadBalancingMethod != nil && b.LoadBalancingMethod != nil {
 		return true
 	}
