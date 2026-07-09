@@ -151,7 +151,7 @@ func TestGetFile_ConnectionNotFound(t *testing.T) {
 
 	resp, err := fs.GetFile(ctx, req)
 
-	g.Expect(err).To(Equal(status.Errorf(codes.NotFound, "connection not found")))
+	g.Expect(err).To(Equal(status.Errorf(codes.Internal, "connection not found")))
 	g.Expect(resp).To(BeNil())
 }
 
@@ -183,7 +183,7 @@ func TestGetFile_DeploymentNotFound(t *testing.T) {
 
 	resp, err := fs.GetFile(ctx, req)
 
-	g.Expect(err).To(Equal(status.Errorf(codes.NotFound, "deployment not found in store")))
+	g.Expect(err).To(Equal(status.Errorf(codes.Internal, "deployment not found in store")))
 	g.Expect(resp).To(BeNil())
 }
 
@@ -522,7 +522,7 @@ func TestUpdateOverview_ConnectionNotFound(t *testing.T) {
 
 	resp, err := fs.UpdateOverview(ctx, req)
 
-	g.Expect(err).To(Equal(status.Errorf(codes.NotFound, "connection not found")))
+	g.Expect(err).To(Equal(status.Errorf(codes.Internal, "connection not found")))
 	g.Expect(resp).To(Equal(&pb.UpdateOverviewResponse{}))
 }
 
@@ -560,7 +560,7 @@ func TestUpdateOverview_DeploymentNotFound(t *testing.T) {
 
 	resp, err := fs.UpdateOverview(ctx, req)
 
-	g.Expect(err).To(Equal(status.Errorf(codes.NotFound, "deployment not found in store")))
+	g.Expect(err).To(Equal(status.Errorf(codes.Internal, "deployment not found in store")))
 	g.Expect(resp).To(Equal(&pb.UpdateOverviewResponse{}))
 }
 

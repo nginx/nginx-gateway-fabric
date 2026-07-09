@@ -2,6 +2,7 @@ package upstreamsettings
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"k8s.io/apimachinery/pkg/util/validation/field"
@@ -202,5 +203,7 @@ func getLoadBalancingMethodList(lbMethods map[ngfAPI.LoadBalancingType]struct{})
 	for method := range lbMethods {
 		methods = append(methods, string(method))
 	}
+	// Sort so that the error message is deterministic regardless of map iteration order.
+	sort.Strings(methods)
 	return strings.Join(methods, ", ")
 }

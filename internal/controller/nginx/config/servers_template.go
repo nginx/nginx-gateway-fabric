@@ -173,8 +173,19 @@ server {
         auth_basic_user_file {{ $l.AuthBasic.File }};
         {{- end }}
 
-        {{- if $l.AuthOIDCProviderName }}
-        auth_oidc {{ $l.AuthOIDCProviderName }};
+        {{- if $l.AuthOIDC }}
+        {{- if $l.AuthOIDC.ProviderName }}
+        auth_oidc {{ $l.AuthOIDC.ProviderName }};
+            {{- if $l.AuthOIDC.AuthZConfig }}
+        auth_jwt "" token=$oidc_id_token;
+                {{- if $l.AuthOIDC.AuthZConfig.AuthRequire }}
+        auth_jwt_require {{ $l.AuthOIDC.AuthZConfig.AuthRequire }};
+                {{- end }}
+                {{- range $l.AuthOIDC.AuthZConfig.ProxySetHeaders }}
+        proxy_set_header {{ .Name }} {{ .Value }};
+                {{- end }}
+            {{- end }}
+        {{- end }}
         {{- end }}
 
         {{- if $l.AuthJWT }}
@@ -190,11 +201,13 @@ server {
             {{- if $l.AuthJWT.Leeway }}
         auth_jwt_leeway {{ $l.AuthJWT.Leeway }};
             {{- end }}
-            {{- if $l.AuthJWT.AuthRequire }}
-        auth_jwt_require {{ $l.AuthJWT.AuthRequire }};
-            {{- end }}
-            {{- range $l.AuthJWT.ProxySetHeaders }}
+            {{- if $l.AuthJWT.AuthZConfig }}
+                {{- if $l.AuthJWT.AuthZConfig.AuthRequire }}
+        auth_jwt_require {{ $l.AuthJWT.AuthZConfig.AuthRequire }};
+                {{- end }}
+                {{- range $l.AuthJWT.AuthZConfig.ProxySetHeaders }}
         proxy_set_header {{ .Name }} {{ .Value }};
+                {{- end }}
             {{- end }}
         {{- end }}
 

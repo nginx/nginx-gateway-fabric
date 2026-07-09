@@ -82,6 +82,15 @@ func TestExecuteMaps(t *testing.T) {
 							},
 						},
 					},
+					{
+						UpstreamName: "upstream2",
+						EndpointPickerConfig: &dataplane.EndpointPickerConfig{
+							NsName: "default",
+							EndpointPickerRef: &inference.EndpointPickerRef{
+								FailureMode: inference.EndpointPickerFailOpen,
+							},
+						},
+					},
 				},
 			},
 		},
@@ -97,9 +106,11 @@ func TestExecuteMaps(t *testing.T) {
 		"map ${http_my_second_add_header} $my_second_add_header_header_var {": 1,
 		"~.* ${http_my_second_add_header},;":                                  1,
 		"map ${http_my_set_header} $my_set_header_header_var {":               0,
-		"$inference_workload_endpoint":                                        2,
-		"$inference_backend":                                                  1,
-		"invalid-backend-ref":                                                 1,
+		"$inference_workload_endpoint":                                        4,
+		"$inference_backend":                                                  2,
+		"invalid-backend-ref":                                                 2,
+		"default upstream2;":                                                  1,
+		`"" upstream2;`:                                                       1,
 		"map $ssl_server_name $sni_listener_id_443":                           1,
 		"map $host $host_listener_id_443":                                     1,
 	}
@@ -120,6 +131,10 @@ func TestExecuteMaps(t *testing.T) {
 func TestBuildAddHeaderMaps(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
+	// Add headers are deliberately provided in non-alphabetical order (and with a duplicate) so the
+	// expected maps below verify that the output is deduplicated and emitted in a stable, sorted
+	// order. The maps are derived from a Go map, whose iteration order is randomized; emitting them
+	// unsorted causes spurious NGINX reloads.
 	pathRules := []dataplane.PathRule{
 		{
 			MatchRules: []dataplane.MatchRule{
@@ -127,6 +142,10 @@ func TestBuildAddHeaderMaps(t *testing.T) {
 					Filters: dataplane.HTTPFilters{
 						RequestHeaderModifiers: &dataplane.HTTPHeaderFilter{
 							Add: []dataplane.HTTPHeader{
+								{
+									Name:  "my-zeta-add-header",
+									Value: "some-value-123",
+								},
 								{
 									Name:  "my-add-header",
 									Value: "some-value-123",
@@ -160,6 +179,10 @@ func TestBuildAddHeaderMaps(t *testing.T) {
 							},
 							Add: []dataplane.HTTPHeader{
 								{
+									Name:  "my-alpha-add-header",
+									Value: "some-value-123",
+								},
+								{
 									Name:  "my-add-header",
 									Value: "some-value-123",
 								},
@@ -182,6 +205,7 @@ func TestBuildAddHeaderMaps(t *testing.T) {
 			IsDefault: true,
 		},
 	}
+	// expectedMap is in alphabetical order, matching the deterministic order buildAddHeaderMaps emits.
 	expectedMap := []shared.Map{
 		{
 			Source:   "${http_my_add_header}",
@@ -191,6 +215,17 @@ func TestBuildAddHeaderMaps(t *testing.T) {
 				{
 					Value:  "~.*",
 					Result: "${http_my_add_header},",
+				},
+			},
+		},
+		{
+			Source:   "${http_my_alpha_add_header}",
+			Variable: "$my_alpha_add_header_header_var",
+			Parameters: []shared.MapParameter{
+				{Value: "default", Result: "''"},
+				{
+					Value:  "~.*",
+					Result: "${http_my_alpha_add_header},",
 				},
 			},
 		},
@@ -205,10 +240,21 @@ func TestBuildAddHeaderMaps(t *testing.T) {
 				},
 			},
 		},
+		{
+			Source:   "${http_my_zeta_add_header}",
+			Variable: "$my_zeta_add_header_header_var",
+			Parameters: []shared.MapParameter{
+				{Value: "default", Result: "''"},
+				{
+					Value:  "~.*",
+					Result: "${http_my_zeta_add_header},",
+				},
+			},
+		},
 	}
 	maps := buildAddHeaderMaps(testServers)
 
-	g.Expect(maps).To(ConsistOf(expectedMap))
+	g.Expect(maps).To(Equal(expectedMap))
 }
 
 func TestExecuteStreamMaps(t *testing.T) {
@@ -678,7 +724,9 @@ func TestBuildInferenceMaps(t *testing.T) {
 
 				// Verify parameter structure
 				g.Expect(m.Parameters[0].Value).To(Equal("\"\""))
-				g.Expect(m.Parameters[0].Result).To(Equal(upstreamName))
+				if expectedConfig, exists := tc.expectedConfig[upstreamName]; exists {
+					g.Expect(m.Parameters[0].Result).To(Equal(expectedConfig.defaultResult))
+				}
 				g.Expect(m.Parameters[1].Value).To(Equal("~.+"))
 				g.Expect(m.Parameters[1].Result).To(Equal("$inference_workload_endpoint"))
 				g.Expect(m.Parameters[2].Value).To(Equal("default"))

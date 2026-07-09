@@ -194,57 +194,36 @@ func (s *store) registerConfigMapInGatewayConfig(obj *corev1.ConfigMap, gatewayN
 	}
 }
 
-//nolint:gocyclo // will refactor at some point
-func (s *store) registerSecretInGatewayConfig(obj *corev1.Secret, gatewayNSName types.NamespacedName) {
-	hasSuffix := func(str, suffix string) bool {
-		return suffix != "" && strings.HasSuffix(str, suffix)
+// hasSuffix reports whether str ends with a non-empty suffix.
+func hasSuffix(str, suffix string) bool {
+	return suffix != "" && strings.HasSuffix(str, suffix)
+}
+
+// assignNamedSecret sets the matching named-secret field on cfg from obj and
+// reports whether obj matched one of the configured named secrets.
+// Callers must hold s.lock.
+func (s *store) assignNamedSecret(cfg *NginxResources, obj *corev1.Secret) bool {
+	switch name := obj.GetName(); {
+	case hasSuffix(name, s.agentTLSSecretName):
+		cfg.AgentTLSSecret = obj.ObjectMeta
+	case hasSuffix(name, s.jwtSecretName):
+		cfg.PlusJWTSecret = obj.ObjectMeta
+	case hasSuffix(name, s.caSecretName):
+		cfg.PlusCASecret = obj.ObjectMeta
+	case hasSuffix(name, s.clientSSLSecretName):
+		cfg.PlusClientSSLSecret = obj.ObjectMeta
+	case hasSuffix(name, s.dataplaneKeySecretName):
+		cfg.DataplaneKeySecret = obj.ObjectMeta
+	default:
+		return false
 	}
 
-	if cfg, ok := s.nginxResources[gatewayNSName]; !ok {
-		switch {
-		case hasSuffix(obj.GetName(), s.agentTLSSecretName):
-			s.nginxResources[gatewayNSName] = &NginxResources{
-				AgentTLSSecret: obj.ObjectMeta,
-			}
-		case hasSuffix(obj.GetName(), s.jwtSecretName):
-			s.nginxResources[gatewayNSName] = &NginxResources{
-				PlusJWTSecret: obj.ObjectMeta,
-			}
-		case hasSuffix(obj.GetName(), s.caSecretName):
-			s.nginxResources[gatewayNSName] = &NginxResources{
-				PlusCASecret: obj.ObjectMeta,
-			}
-		case hasSuffix(obj.GetName(), s.clientSSLSecretName):
-			s.nginxResources[gatewayNSName] = &NginxResources{
-				PlusClientSSLSecret: obj.ObjectMeta,
-			}
-		case hasSuffix(obj.GetName(), s.dataplaneKeySecretName):
-			s.nginxResources[gatewayNSName] = &NginxResources{
-				DataplaneKeySecret: obj.ObjectMeta,
-			}
-		}
+	return true
+}
 
-		for secret := range s.dockerSecretNames {
-			if hasSuffix(obj.GetName(), secret) {
-				s.nginxResources[gatewayNSName] = &NginxResources{
-					DockerSecrets: []metav1.ObjectMeta{obj.ObjectMeta},
-				}
-				break
-			}
-		}
-	} else {
-		switch {
-		case hasSuffix(obj.GetName(), s.agentTLSSecretName):
-			cfg.AgentTLSSecret = obj.ObjectMeta
-		case hasSuffix(obj.GetName(), s.jwtSecretName):
-			cfg.PlusJWTSecret = obj.ObjectMeta
-		case hasSuffix(obj.GetName(), s.caSecretName):
-			cfg.PlusCASecret = obj.ObjectMeta
-		case hasSuffix(obj.GetName(), s.clientSSLSecretName):
-			cfg.PlusClientSSLSecret = obj.ObjectMeta
-		case hasSuffix(obj.GetName(), s.dataplaneKeySecretName):
-			cfg.DataplaneKeySecret = obj.ObjectMeta
-		}
+func (s *store) registerSecretInGatewayConfig(obj *corev1.Secret, gatewayNSName types.NamespacedName) {
+	if cfg, ok := s.nginxResources[gatewayNSName]; ok {
+		s.assignNamedSecret(cfg, obj)
 
 		for secret := range s.dockerSecretNames {
 			if hasSuffix(obj.GetName(), secret) {
@@ -254,6 +233,25 @@ func (s *store) registerSecretInGatewayConfig(obj *corev1.Secret, gatewayNSName 
 					cfg.DockerSecrets = append(cfg.DockerSecrets, obj.ObjectMeta)
 				}
 			}
+		}
+
+		return
+	}
+
+	// No config exists yet for this Gateway: create a fresh entry only when the
+	// Secret matches a configured name. A matching docker secret overwrites the
+	// entry, preserving the original first-match-wins behavior.
+	cfg := &NginxResources{}
+	if s.assignNamedSecret(cfg, obj) {
+		s.nginxResources[gatewayNSName] = cfg
+	}
+
+	for secret := range s.dockerSecretNames {
+		if hasSuffix(obj.GetName(), secret) {
+			s.nginxResources[gatewayNSName] = &NginxResources{
+				DockerSecrets: []metav1.ObjectMeta{obj.ObjectMeta},
+			}
+			break
 		}
 	}
 }
@@ -331,60 +329,46 @@ func (s *store) deleteResourcesForGateway(nsName types.NamespacedName) {
 	delete(s.nginxResources, nsName)
 }
 
-//nolint:gocyclo // will refactor at some point
 func (s *store) gatewayExistsForResource(object client.Object, nsName types.NamespacedName) *graph.Gateway {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
 	for _, resources := range s.nginxResources {
-		switch object.(type) {
-		case *appsv1.Deployment:
-			if resourceMatches(resources.Deployment, nsName) {
-				return resources.Gateway
-			}
-		case *autoscalingv2.HorizontalPodAutoscaler:
-			if resourceMatches(resources.HPA, nsName) {
-				return resources.Gateway
-			}
-		case *policyv1.PodDisruptionBudget:
-			if resourceMatches(resources.PDB, nsName) {
-				return resources.Gateway
-			}
-		case *appsv1.DaemonSet:
-			if resourceMatches(resources.DaemonSet, nsName) {
-				return resources.Gateway
-			}
-		case *corev1.Service:
-			if resourceMatches(resources.Service, nsName) {
-				return resources.Gateway
-			}
-		case *corev1.ServiceAccount:
-			if resourceMatches(resources.ServiceAccount, nsName) {
-				return resources.Gateway
-			}
-		case *rbacv1.Role:
-			if resourceMatches(resources.Role, nsName) {
-				return resources.Gateway
-			}
-		case *rbacv1.RoleBinding:
-			if resourceMatches(resources.RoleBinding, nsName) {
-				return resources.Gateway
-			}
-		case *corev1.ConfigMap:
-			if resourceMatches(resources.BootstrapConfigMap, nsName) {
-				return resources.Gateway
-			}
-			if resourceMatches(resources.AgentConfigMap, nsName) {
-				return resources.Gateway
-			}
-		case *corev1.Secret:
-			if secretResourceMatches(resources, nsName) {
-				return resources.Gateway
-			}
+		if resources.matchesObject(object, nsName) {
+			return resources.Gateway
 		}
 	}
 
 	return nil
+}
+
+// matchesObject reports whether nsName identifies one of the nginx resources tracked for this
+// Gateway, dispatching on the concrete type of object.
+func (r *NginxResources) matchesObject(object client.Object, nsName types.NamespacedName) bool {
+	switch object.(type) {
+	case *appsv1.Deployment:
+		return resourceMatches(r.Deployment, nsName)
+	case *autoscalingv2.HorizontalPodAutoscaler:
+		return resourceMatches(r.HPA, nsName)
+	case *policyv1.PodDisruptionBudget:
+		return resourceMatches(r.PDB, nsName)
+	case *appsv1.DaemonSet:
+		return resourceMatches(r.DaemonSet, nsName)
+	case *corev1.Service:
+		return resourceMatches(r.Service, nsName)
+	case *corev1.ServiceAccount:
+		return resourceMatches(r.ServiceAccount, nsName)
+	case *rbacv1.Role:
+		return resourceMatches(r.Role, nsName)
+	case *rbacv1.RoleBinding:
+		return resourceMatches(r.RoleBinding, nsName)
+	case *corev1.ConfigMap:
+		return resourceMatches(r.BootstrapConfigMap, nsName) || resourceMatches(r.AgentConfigMap, nsName)
+	case *corev1.Secret:
+		return secretResourceMatches(r, nsName)
+	}
+
+	return false
 }
 
 func secretResourceMatches(resources *NginxResources, nsName types.NamespacedName) bool {

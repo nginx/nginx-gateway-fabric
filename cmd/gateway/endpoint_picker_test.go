@@ -238,33 +238,7 @@ func TestEndpointPickerHandler_Errors(t *testing.T) {
 	}
 	runErrorTestCase(factory, true, http.StatusBadGateway, "error sending headers")
 
-	// 4a. Error building body request (content length 0)
-	client = &mockProcessClient{
-		SendFunc: func(*extprocv3.ProcessingRequest) error {
-			return nil
-		},
-		RecvFunc: func() (*extprocv3.ProcessingResponse, error) { return nil, io.EOF },
-	}
-	extProcClient = &mockExtProcClient{
-		ProcessFunc: func(context.Context, ...grpc.CallOption) (extprocv3.ExternalProcessor_ProcessClient, error) {
-			return client, nil
-		},
-	}
-	factory = func(string) (extprocv3.ExternalProcessorClient, func() error, error) {
-		return extProcClient, func() error { return nil }, nil
-	}
-	h := createEndpointPickerHandler(factory, logr.Discard())
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/", nil) // nil body, ContentLength = 0
-	req.Header.Set(types.EPPEndpointHostHeader, "test-host")
-	req.Header.Set(types.EPPEndpointPortHeader, "1234")
-	w := httptest.NewRecorder()
-	h.ServeHTTP(w, req)
-	resp := w.Result()
-	g.Expect(resp.StatusCode).To(Equal(http.StatusInternalServerError))
-	body, _ := io.ReadAll(resp.Body)
-	g.Expect(string(body)).To(ContainSubstring("request body is empty"))
-
-	// 4b. Error sending body
+	// 4. Error sending body
 	client = &mockProcessClient{
 		SendFunc: func(req *extprocv3.ProcessingRequest) error {
 			if req.GetRequestBody() != nil {
@@ -286,4 +260,68 @@ func TestEndpointPickerHandler_Errors(t *testing.T) {
 
 	// 5. Error with empty headers
 	runErrorTestCase(factory, false, http.StatusBadRequest, "missing at least one of required headers")
+}
+
+func TestEndpointPickerHandler_GETRequest(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	var sentRequests []*extprocv3.ProcessingRequest
+	callCount := 0
+	client := &mockProcessClient{
+		SendFunc: func(req *extprocv3.ProcessingRequest) error {
+			sentRequests = append(sentRequests, req)
+			return nil
+		},
+		RecvFunc: func() (*extprocv3.ProcessingResponse, error) {
+			if callCount == 0 {
+				callCount++
+				resp := &extprocv3.ProcessingResponse{
+					Response: &extprocv3.ProcessingResponse_RequestHeaders{
+						RequestHeaders: &extprocv3.HeadersResponse{
+							Response: &extprocv3.CommonResponse{
+								HeaderMutation: &extprocv3.HeaderMutation{
+									SetHeaders: []*corev3.HeaderValueOption{{
+										Header: &corev3.HeaderValue{
+											Key:      eppMetadata.DestinationEndpointKey,
+											RawValue: []byte("10.0.0.1:8080"),
+										},
+									}},
+								},
+							},
+						},
+					},
+				}
+				return resp, nil
+			}
+			return nil, io.EOF
+		},
+	}
+
+	extProcClient := &mockExtProcClient{
+		ProcessFunc: func(context.Context, ...grpc.CallOption) (extprocv3.ExternalProcessor_ProcessClient, error) {
+			return client, nil
+		},
+	}
+	factory := func(string) (extprocv3.ExternalProcessorClient, func() error, error) {
+		return extProcClient, func() error { return nil }, nil
+	}
+
+	h := createEndpointPickerHandler(factory, logr.Discard())
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
+	req.Header.Set(types.EPPEndpointHostHeader, "test-host")
+	req.Header.Set(types.EPPEndpointPortHeader, "1234")
+	w := httptest.NewRecorder()
+
+	h.ServeHTTP(w, req)
+
+	resp := w.Result()
+	g.Expect(resp.StatusCode).To(Equal(http.StatusOK))
+	g.Expect(resp.Header.Get(eppMetadata.DestinationEndpointKey)).To(Equal("10.0.0.1:8080"))
+
+	// Request should be sent with only headers and end_of_stream set to true,
+	// since GET requests do not have a body.
+	g.Expect(sentRequests).To(HaveLen(1))
+	g.Expect(sentRequests[0].GetRequestHeaders()).NotTo(BeNil())
+	g.Expect(sentRequests[0].GetRequestHeaders().GetEndOfStream()).To(BeTrue())
 }

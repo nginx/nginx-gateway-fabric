@@ -98,6 +98,14 @@ type BasicAuth struct {
 //
 //nolint:lll
 type OIDCAuth struct {
+	// ExtraAuthArgs sets additional query arguments for the authentication request URL.
+	// Arguments are appended with "&". For example: "prompt=consent&audience=api".
+	// Directive: https://nginx.org/en/docs/http/ngx_http_oidc_module.html#extra_auth_args
+	//
+	// +optional
+	// +kubebuilder:validation:MaxProperties=16
+	ExtraAuthArgs map[string]string `json:"extraAuthArgs,omitempty"`
+
 	// CRLSecretRef references a Secret containing a certificate
 	// revocation list in PEM format. The referenced Secret must contain an entry with the key "ca.crl".
 	// This is used to verify that certificates presented by the OpenID Provider endpoints have not been revoked.
@@ -119,14 +127,6 @@ type OIDCAuth struct {
 	//
 	// +optional
 	PKCE *bool `json:"pkce,omitempty"`
-
-	// ExtraAuthArgs sets additional query arguments for the authentication request URL.
-	// Arguments are appended with "&". For example: "prompt=consent&audience=api".
-	// Directive: https://nginx.org/en/docs/http/ngx_http_oidc_module.html#extra_auth_args
-	//
-	// +optional
-	// +kubebuilder:validation:MaxProperties=16
-	ExtraAuthArgs map[string]string `json:"extraAuthArgs,omitempty"`
 
 	// Session configures session management for OIDC authentication.
 	//
@@ -150,6 +150,18 @@ type OIDCAuth struct {
 	// +kubebuilder:validation:Pattern=`^(https:\/\/[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*(:[0-9]{1,5})?(\/[a-zA-Z0-9._~:\/?@!&'()*+,=-]*)?|\/[a-zA-Z0-9._~:\/?@!&'()*+,=-]*)$`
 	RedirectURI *string `json:"redirectURI,omitempty"`
 
+	// Authorization defines the authorization (authz) specification.
+	// Enables configuration of token claim validation.
+	//
+	// +optional
+	Authorization *Authorization `json:"authorization,omitempty"`
+
+	// ClientSecretRef references a Kubernetes secret which contains the OIDC client secret to be used in the
+	// Authentication Request: https://openid.net/specs/openid-connect-core-1_0.html#AuthRequest.
+	// The referenced Secret must contain an entry with the key "client-secret".
+	// Directive: https://nginx.org/en/docs/http/ngx_http_oidc_module.html#client_secret
+	ClientSecretRef LocalObjectReference `json:"clientSecretRef"`
+
 	// Issuer is the URL of the OpenID Provider.
 	// Must exactly match the "issuer" value from the provider's
 	// .well-known/openid-configuration endpoint.
@@ -167,12 +179,6 @@ type OIDCAuth struct {
 	//
 	// +kubebuilder:validation:MinLength=1
 	ClientID string `json:"clientID"`
-
-	// ClientSecretRef references a Kubernetes secret which contains the OIDC client secret to be used in the
-	// Authentication Request: https://openid.net/specs/openid-connect-core-1_0.html#AuthRequest.
-	// The referenced Secret must contain an entry with the key "client-secret".
-	// Directive: https://nginx.org/en/docs/http/ngx_http_oidc_module.html#client_secret
-	ClientSecretRef LocalObjectReference `json:"clientSecretRef"`
 
 	// CACertificateRefs references a list of secrets containing trusted CA certificates
 	// in PEM format used to verify the certificates of the OpenID Provider endpoints.
