@@ -222,9 +222,10 @@ func TestGetFile_FileNotFound(t *testing.T) {
 	g.Expect(resp).To(BeNil())
 }
 
-// TestGetFile_ReconnectRace_Issue5330: a stale stream's RemoveConnection must not wipe a live
-// re-tracked entry after a same-UUID reconnect. Fails pre-fix with "connection not found".
-func TestGetFile_ReconnectRace_Issue5330(t *testing.T) {
+// TestGetFile_ReconnectRace validates the fix for issue 5330: https://github.com/nginx/nginx-gateway-fabric/issues/5330
+// A stale stream's RemoveConnection must not wipe a live re-tracked
+// entry after a same-UUID reconnect. Fails pre-fix with "connection not found".
+func TestGetFile_ReconnectRace(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 

@@ -135,16 +135,18 @@ func (cs *commandService) Subscribe(in pb.CommandService_SubscribeServer) error 
 	if !ok {
 		return agentgrpc.ErrStatusInvalidConnection
 	}
-	// Generation-guarded cleanup: a stale reconnected stream can't delete the live entry.
-	generation := cs.connTracker.GetConnection(grpcInfo.UUID).Generation
-	defer cs.connTracker.RemoveConnection(grpcInfo.UUID, generation)
-
 	// wait for the agent to report itself and nginx
 	conn, deployment, err := cs.waitForConnection(ctx, grpcInfo)
 	if err != nil {
+		// remove a connection that was tracked but never became ready so it doesn't leak
+		if staleConn := cs.connTracker.GetConnection(grpcInfo.UUID); !staleConn.Ready() {
+			cs.connTracker.RemoveConnection(grpcInfo.UUID, staleConn.Generation)
+		}
 		cs.logger.Error(err, "error waiting for connection", "uuid", grpcInfo.UUID)
 		return err
 	}
+	// generation-guarded cleanup: a stale reconnected stream can't delete a live re-tracked entry
+	defer cs.connTracker.RemoveConnection(grpcInfo.UUID, conn.Generation)
 	defer deployment.RemovePodStatus(grpcInfo.UUID)
 
 	cs.logger.Info(
