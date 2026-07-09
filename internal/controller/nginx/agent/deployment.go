@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
+	"slices"
 	"strings"
 	"sync"
 
@@ -48,6 +50,8 @@ type Deployment struct {
 	imageVersion string
 
 	configVersion string
+	// appliedConfigVersion is the config version that was last successfully applied by the agents.
+	appliedConfigVersion string
 	// error that is set if a ConfigApply call failed for a Pod. This is needed
 	// because if subsequent upstream API calls are made within the same update event,
 	// and are successful, the previous error would be lost in the podStatuses map.
@@ -208,6 +212,12 @@ func (d *Deployment) SetFiles(files []File, volumeMounts []v1.VolumeMount) *broa
 	return d.rebuildFileOverviews()
 }
 
+// SetAppliedConfigVersion records the config version that was successfully applied by the agents.
+// The deployment FileLock MUST already be locked before calling this function.
+func (d *Deployment) SetAppliedConfigVersion(configVersion string) {
+	d.appliedConfigVersion = configVersion
+}
+
 // SetNGINXPlusActions updates the deployment's latest NGINX Plus Actions to perform if using NGINX Plus.
 // Used by a Subscriber when it first connects.
 // The deployment FileLock MUST already be locked before calling this function.
@@ -218,8 +228,8 @@ func (d *Deployment) SetNGINXPlusActions(actions []*pb.NGINXPlusAction) {
 // UpdateWAFBundle replaces or inserts a WAF bundle file in the deployment's file list.
 // It finds an existing file by its full path and replaces its contents and metadata,
 // or appends a new file entry if the bundle does not yet exist.
-// Returns a broadcast message if the config version changed (i.e. the bundle contents differ
-// from what was previously stored), or nil if nothing changed.
+// Returns a broadcast message if the resulting config version differs from the last
+// successfully applied version, or nil if that version is already applied.
 // The deployment FileLock MUST already be locked before calling this function.
 func (d *Deployment) UpdateWAFBundle(bundlePath string, data []byte) *broadcast.NginxAgentMessage {
 	newHash := filesHelper.GenerateHash(data)
@@ -253,8 +263,9 @@ func (d *Deployment) UpdateWAFBundle(bundlePath string, data []byte) *broadcast.
 }
 
 // RemoveWAFBundle removes a WAF bundle file from the deployment's file list.
-// Returns a broadcast message if the config version changed, or nil if the bundle
-// was not found or nothing changed.
+// Returns a broadcast message if the resulting config version differs from the last
+// successfully applied version, or nil if the bundle was not found or that version
+// is already applied.
 // The deployment FileLock MUST already be locked before calling this function.
 func (d *Deployment) RemoveWAFBundle(bundlePath string) *broadcast.NginxAgentMessage {
 	for i, f := range d.files {
@@ -267,7 +278,8 @@ func (d *Deployment) RemoveWAFBundle(bundlePath string) *broadcast.NginxAgentMes
 }
 
 // rebuildFileOverviews regenerates the file overviews and config version from the current
-// file list. Returns a broadcast message if the config version changed.
+// file list. Returns a broadcast message if the resulting config version differs from the
+// last successfully applied version.
 // The deployment FileLock MUST already be locked before calling this function.
 func (d *Deployment) rebuildFileOverviews() *broadcast.NginxAgentMessage {
 	fileOverviews := make([]*pb.File, 0, len(d.files))
@@ -290,7 +302,8 @@ func (d *Deployment) rebuildFileOverviews() *broadcast.NginxAgentMessage {
 		fileIgnoreSet[f] = struct{}{}
 	}
 
-	for f := range fileIgnoreSet {
+	// iterate in sorted order so the resulting overviews are deterministic
+	for _, f := range slices.Sorted(maps.Keys(fileIgnoreSet)) {
 		fileOverviews = append(fileOverviews, &pb.File{
 			FileMeta: &pb.FileMeta{
 				Name:        f,
@@ -300,14 +313,13 @@ func (d *Deployment) rebuildFileOverviews() *broadcast.NginxAgentMessage {
 		})
 	}
 
-	newConfigVersion := filesHelper.GenerateConfigVersion(fileOverviews)
-	if d.configVersion == newConfigVersion {
-		// files have not changed, nothing to send
+	d.configVersion = filesHelper.GenerateConfigVersion(fileOverviews)
+	d.fileOverviews = fileOverviews
+
+	if d.appliedConfigVersion == d.configVersion {
+		// this version was already successfully applied, nothing to send
 		return nil
 	}
-
-	d.configVersion = newConfigVersion
-	d.fileOverviews = fileOverviews
 
 	return &broadcast.NginxAgentMessage{
 		Type:          broadcast.ConfigApplyRequest,

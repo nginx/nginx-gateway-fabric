@@ -31,3 +31,7 @@ type WAFBundleReconcileEvent struct {
 	// PolicyNsName is the namespace/name of the WAFPolicy whose bundle is now available.
 	PolicyNsName types.NamespacedName
 }
+
+// NginxConfigRetryEvent is injected by the event handler after a config push to an nginx
+// deployment fails. It triggers a graph rebuild so the push is retried.
+type NginxConfigRetryEvent struct{}

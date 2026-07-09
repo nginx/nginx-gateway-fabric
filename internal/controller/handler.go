@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -75,6 +76,8 @@ type eventHandlerConfig struct {
 	graphBuiltHealthChecker *graphBuiltHealthChecker
 	// statusQueue contains updates when the handler should write statuses.
 	statusQueue *status.Queue
+	// eventCh is used to inject events into the event loop, e.g. to retry a failed config push.
+	eventCh chan<- any
 	// nginxDeployments contains a map of all nginx Deployments, and data about them.
 	nginxDeployments *agent.DeploymentStore
 	// wafPollerManager manages WAF bundle polling for policies with polling enabled.
@@ -110,6 +113,12 @@ const (
 
 	// apResourceFinalizer prevents deletion of AP resources that are still referenced by WAFPolicy.
 	apResourceFinalizer = "gateway.nginx.org/ap-policy-protection"
+
+	// nginxConfigRetryBaseDelay is the initial delay before a failed nginx config push is retried.
+	nginxConfigRetryBaseDelay = 5 * time.Second
+
+	// nginxConfigRetryMaxDelay caps the exponential backoff of the config push retry delay.
+	nginxConfigRetryMaxDelay = 5 * time.Minute
 )
 
 type apResourceType int
@@ -154,10 +163,14 @@ type objectFilter struct {
 // (3) Updating control plane configuration.
 // (4) Tracks the NGINX Plus usage reporting Secret (if applicable).
 type eventHandlerImpl struct {
-	latestConfigurations  map[types.NamespacedName]*dataplane.Configuration
-	objectFilters         map[filterKey]objectFilter
-	finalizedAPResources  map[apResourceKey]struct{}
-	cfg                   eventHandlerConfig
+	latestConfigurations map[types.NamespacedName]*dataplane.Configuration
+	objectFilters        map[filterKey]objectFilter
+	finalizedAPResources map[apResourceKey]struct{}
+	cfg                  eventHandlerConfig
+	// configRetryDelay is the current config push retry delay in nanoseconds.
+	configRetryDelay atomic.Int64
+	// configRetryScheduled tracks whether a config push retry event is already pending.
+	configRetryScheduled  atomic.Bool
 	lock                  sync.RWMutex
 	leaderLock            sync.RWMutex
 	finalizerLock         sync.Mutex
@@ -172,6 +185,7 @@ func newEventHandlerImpl(cfg eventHandlerConfig) *eventHandlerImpl {
 		latestConfigurations: make(map[types.NamespacedName]*dataplane.Configuration),
 		finalizedAPResources: make(map[apResourceKey]struct{}),
 	}
+	handler.configRetryDelay.Store(int64(nginxConfigRetryBaseDelay))
 
 	handler.objectFilters = map[filterKey]objectFilter{
 		// NginxGateway CRD
@@ -228,6 +242,9 @@ func (h *eventHandlerImpl) sendNginxConfig(ctx context.Context, logger logr.Logg
 		return
 	}
 
+	var pushFailed bool
+	defer func() { h.scheduleNginxConfigRetry(pushFailed) }()
+
 	// Reconcile WAF bundle pollers on every graph update, regardless of Gateway state.
 	// This ensures pollers for deleted or orphaned policies are stopped even on early returns.
 	defer h.reconcileWAFPollers(ctx, gr)
@@ -282,58 +299,97 @@ func (h *eventHandlerImpl) sendNginxConfig(ctx context.Context, logger logr.Logg
 			continue
 		}
 
-		deployment := h.cfg.nginxDeployments.GetOrStore(ctx, gw.DeploymentName, gw.Source.GetName())
-		if deployment == nil {
-			panic("expected deployment, got nil")
+		if err := h.pushGatewayConfig(ctx, logger, gr, gw); err != nil {
+			pushFailed = true
 		}
-
-		nginxImage, _ := provisioner.DetermineNginxImageName(
-			gw.EffectiveNginxProxy,
-			h.cfg.plus,
-			h.cfg.gatewayPodConfig.Version,
-		)
-		deployment.SetImageVersion(nginxImage)
-
-		cfg := dataplane.BuildConfiguration(ctx, logger, gr, gw, h.cfg.serviceResolver, h.cfg.plus)
-		depCtx, getErr := h.getDeploymentContext(ctx)
-		if getErr != nil {
-			logger.Error(getErr, "error getting deployment context for usage reporting")
-		}
-		cfg.DeploymentContext = depCtx
-
-		h.setLatestConfiguration(gw, &cfg)
-
-		vm := []v1.VolumeMount{}
-		if gw.EffectiveNginxProxy != nil &&
-			gw.EffectiveNginxProxy.Kubernetes != nil {
-			if gw.EffectiveNginxProxy.Kubernetes.Deployment != nil {
-				vm = gw.EffectiveNginxProxy.Kubernetes.Deployment.Container.VolumeMounts
-			}
-
-			if gw.EffectiveNginxProxy.Kubernetes.DaemonSet != nil {
-				vm = gw.EffectiveNginxProxy.Kubernetes.DaemonSet.Container.VolumeMounts
-			}
-		}
-
-		deployment.FileLock.Lock()
-		h.updateNginxConf(deployment, cfg, vm)
-		deployment.FileLock.Unlock()
-
-		configErr := deployment.GetLatestConfigError()
-		upstreamErr := deployment.GetLatestUpstreamError()
-		err := errors.Join(configErr, upstreamErr)
-
-		obj := &status.QueueObject{
-			UpdateType:        status.UpdateAll,
-			Error:             err,
-			NginxConfigPushed: true,
-			Deployment: status.Deployment{
-				NamespacedName: gw.DeploymentName,
-				GatewayName:    gw.Source.GetName(),
-			},
-		}
-		h.cfg.statusQueue.Enqueue(obj)
 	}
+}
+
+// pushGatewayConfig builds and pushes the nginx configuration for a single Gateway and
+// enqueues the resulting status update. It returns the config push error, if any.
+func (h *eventHandlerImpl) pushGatewayConfig(
+	ctx context.Context,
+	logger logr.Logger,
+	gr *graph.Graph,
+	gw *graph.Gateway,
+) error {
+	deployment := h.cfg.nginxDeployments.GetOrStore(ctx, gw.DeploymentName, gw.Source.GetName())
+	if deployment == nil {
+		panic("expected deployment, got nil")
+	}
+
+	nginxImage, _ := provisioner.DetermineNginxImageName(
+		gw.EffectiveNginxProxy,
+		h.cfg.plus,
+		h.cfg.gatewayPodConfig.Version,
+	)
+	deployment.SetImageVersion(nginxImage)
+
+	cfg := dataplane.BuildConfiguration(ctx, logger, gr, gw, h.cfg.serviceResolver, h.cfg.plus)
+	depCtx, getErr := h.getDeploymentContext(ctx)
+	if getErr != nil {
+		logger.Error(getErr, "error getting deployment context for usage reporting")
+	}
+	cfg.DeploymentContext = depCtx
+
+	h.setLatestConfiguration(gw, &cfg)
+
+	vm := []v1.VolumeMount{}
+	if gw.EffectiveNginxProxy != nil &&
+		gw.EffectiveNginxProxy.Kubernetes != nil {
+		if gw.EffectiveNginxProxy.Kubernetes.Deployment != nil {
+			vm = gw.EffectiveNginxProxy.Kubernetes.Deployment.Container.VolumeMounts
+		}
+
+		if gw.EffectiveNginxProxy.Kubernetes.DaemonSet != nil {
+			vm = gw.EffectiveNginxProxy.Kubernetes.DaemonSet.Container.VolumeMounts
+		}
+	}
+
+	deployment.FileLock.Lock()
+	h.updateNginxConf(deployment, cfg, vm)
+	deployment.FileLock.Unlock()
+
+	configErr := deployment.GetLatestConfigError()
+	upstreamErr := deployment.GetLatestUpstreamError()
+	err := errors.Join(configErr, upstreamErr)
+
+	obj := &status.QueueObject{
+		UpdateType:        status.UpdateAll,
+		Error:             err,
+		NginxConfigPushed: true,
+		Deployment: status.Deployment{
+			NamespacedName: gw.DeploymentName,
+			GatewayName:    gw.Source.GetName(),
+		},
+	}
+	h.cfg.statusQueue.Enqueue(obj)
+
+	return err
+}
+
+// scheduleNginxConfigRetry schedules a delayed NginxConfigRetryEvent when a config push
+// failed, so the push is retried without waiting for an unrelated cluster event. At most
+// one retry is pending at a time; the delay backs off exponentially and resets on success.
+func (h *eventHandlerImpl) scheduleNginxConfigRetry(failed bool) {
+	if !failed {
+		h.configRetryDelay.Store(int64(nginxConfigRetryBaseDelay))
+		return
+	}
+
+	if !h.configRetryScheduled.CompareAndSwap(false, true) {
+		return
+	}
+
+	delay := time.Duration(h.configRetryDelay.Load())
+	h.configRetryDelay.Store(int64(min(delay*2, nginxConfigRetryMaxDelay)))
+
+	time.AfterFunc(delay, func() {
+		select {
+		case h.cfg.eventCh <- events.NginxConfigRetryEvent{}:
+		case <-h.cfg.ctx.Done():
+		}
+	})
 }
 
 // reconcileWAFPollers starts, updates, or stops WAF bundle pollers based on the current graph state.
@@ -869,6 +925,11 @@ func (h *eventHandlerImpl) parseAndCaptureEvent(ctx context.Context, logger logr
 		// return nil and the pending Gateway is never unblocked.
 		// We do not call CaptureUpsertChange here because that would overwrite the real policy
 		// object in cluster state with a metadata-only stub, corrupting the next graph build.
+		h.cfg.processor.ForceRebuild()
+	case events.NginxConfigRetryEvent:
+		h.configRetryScheduled.Store(false)
+		logger.Info("Retrying nginx configuration update after a failed attempt")
+		// mark the processor dirty so the rebuild re-sends any unapplied configuration
 		h.cfg.processor.ForceRebuild()
 	default:
 		panic(fmt.Errorf("unknown event type %T", e))

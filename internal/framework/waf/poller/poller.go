@@ -375,6 +375,9 @@ func (p *poller) pushBundleToDeployments(bundleKey graph.WAFBundleKey, data []by
 		if msg != nil {
 			applied := deployment.GetBroadcaster().Send(*msg)
 			if applied {
+				if deployment.GetConfigurationStatus() == nil {
+					deployment.SetAppliedConfigVersion(msg.ConfigVersion)
+				}
 				p.logger.Info(
 					"Pushed updated WAF bundle to deployment",
 					"deployment", depName,
