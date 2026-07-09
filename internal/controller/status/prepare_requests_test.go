@@ -2361,10 +2361,30 @@ func TestBuildNGFPolicyStatuses(t *testing.T) {
 
 	transitionTime := helpers.PrepareTimeForFakeClient(metav1.Now())
 
+	// programmedCond and notProgrammedCond are the GEP-713 "Programmed" conditions expected for the NGF
+	// settings policies (ClientSettingsPolicy is used as the representative type below).
+	programmedCond := metav1.Condition{
+		Type:               string(conditions.PolicyConditionProgrammed),
+		Status:             metav1.ConditionTrue,
+		ObservedGeneration: 2,
+		LastTransitionTime: transitionTime,
+		Reason:             string(conditions.PolicyReasonProgrammed),
+		Message:            "Policy is programmed in the data plane",
+	}
+	notProgrammedCond := metav1.Condition{
+		Type:               string(conditions.PolicyConditionProgrammed),
+		Status:             metav1.ConditionFalse,
+		ObservedGeneration: 2,
+		LastTransitionTime: transitionTime,
+		Reason:             string(conditions.PolicyReasonReconciling),
+		Message:            "Policy is not programmed in the data plane",
+	}
+
 	type policyCfg struct {
 		Ancestors  []graph.PolicyAncestor
 		Name       string
 		Conditions []conditions.Condition
+		Valid      bool
 	}
 
 	// We have to use a real policy here because the test makes the status update using the k8sClient.
@@ -2380,6 +2400,7 @@ func TestBuildNGFPolicyStatuses(t *testing.T) {
 			},
 			Conditions: cfg.Conditions,
 			Ancestors:  cfg.Ancestors,
+			Valid:      cfg.Valid,
 		}
 	}
 
@@ -2391,7 +2412,8 @@ func TestBuildNGFPolicyStatuses(t *testing.T) {
 		GVK:    schema.GroupVersionKind{Group: ngfAPI.GroupName, Kind: kinds.ClientSettingsPolicy},
 	}
 	validPolicyCfg := policyCfg{
-		Name: validPolicyKey.NsName.Name,
+		Name:  validPolicyKey.NsName.Name,
+		Valid: true,
 		Ancestors: []graph.PolicyAncestor{
 			{
 				Ancestor: v1.ParentReference{
@@ -2431,8 +2453,12 @@ func TestBuildNGFPolicyStatuses(t *testing.T) {
 		NsName: types.NamespacedName{Namespace: "test", Name: "target-not-found-pol"},
 		GVK:    schema.GroupVersionKind{Group: ngfAPI.GroupName, Kind: kinds.ClientSettingsPolicy},
 	}
+	// Valid is true here while the ancestor carries an Accepted=False (TargetNotFound) condition: the policy
+	// is structurally valid but failed to attach. This exercises ancestorAccepted() returning false rather
+	// than the pol.Valid short-circuit, so the "Programmed=False" result is driven by the ancestor check.
 	targetRefNotFoundPolicyCfg := policyCfg{
-		Name: targetRefNotFoundPolicyKey.NsName.Name,
+		Name:  targetRefNotFoundPolicyKey.NsName.Name,
+		Valid: true,
 		Ancestors: []graph.PolicyAncestor{
 			{
 				Ancestor: v1.ParentReference{
@@ -2494,6 +2520,7 @@ func TestBuildNGFPolicyStatuses(t *testing.T) {
 							},
 							ControllerName: gatewayCtlrName,
 							Conditions: []metav1.Condition{
+								notProgrammedCond,
 								{
 									Type:               string(v1.PolicyConditionAccepted),
 									Status:             metav1.ConditionFalse,
@@ -2510,6 +2537,7 @@ func TestBuildNGFPolicyStatuses(t *testing.T) {
 							},
 							ControllerName: gatewayCtlrName,
 							Conditions: []metav1.Condition{
+								notProgrammedCond,
 								{
 									Type:               string(v1.PolicyConditionAccepted),
 									Status:             metav1.ConditionFalse,
@@ -2530,6 +2558,7 @@ func TestBuildNGFPolicyStatuses(t *testing.T) {
 							},
 							ControllerName: gatewayCtlrName,
 							Conditions: []metav1.Condition{
+								notProgrammedCond,
 								{
 									Type:               string(v1.PolicyConditionAccepted),
 									Status:             metav1.ConditionFalse,
@@ -2558,6 +2587,7 @@ func TestBuildNGFPolicyStatuses(t *testing.T) {
 									Reason:             string(v1.PolicyReasonAccepted),
 									Message:            "The Policy is accepted",
 								},
+								programmedCond,
 							},
 						},
 						{
@@ -2574,6 +2604,7 @@ func TestBuildNGFPolicyStatuses(t *testing.T) {
 									Reason:             string(v1.PolicyReasonAccepted),
 									Message:            "The Policy is accepted",
 								},
+								programmedCond,
 							},
 						},
 					},
@@ -2594,6 +2625,7 @@ func TestBuildNGFPolicyStatuses(t *testing.T) {
 							},
 							ControllerName: gatewayCtlrName,
 							Conditions: []metav1.Condition{
+								notProgrammedCond,
 								{
 									Type:               string(v1.PolicyConditionAccepted),
 									Status:             metav1.ConditionFalse,
@@ -2643,6 +2675,107 @@ func TestBuildNGFPolicyStatuses(t *testing.T) {
 				err := k8sClient.Get(t.Context(), nsname, &pol)
 				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(helpers.Diff(expected, pol.Status)).To(BeEmpty())
+			}
+		})
+	}
+}
+
+func TestBuildNGFPolicyStatusesProgrammedCondition(t *testing.T) {
+	t.Parallel()
+
+	const gatewayCtlrName = "controller"
+
+	transitionTime := helpers.PrepareTimeForFakeClient(metav1.Now())
+
+	// The GEP-713 "Programmed" condition is added based on the policy Kind, so each of the NGF policy
+	// kinds that report it is exercised. ClientSettingsPolicy is used as the representative Source type for
+	// the fake client (status assembly only branches on the PolicyKey Kind, not the concrete Source type).
+	policyKinds := []string{
+		kinds.ClientSettingsPolicy,
+		kinds.UpstreamSettingsPolicy,
+		kinds.ObservabilityPolicy,
+		kinds.ProxySettingsPolicy,
+		kinds.RateLimitPolicy,
+		kinds.SnippetsPolicy,
+	}
+
+	programmedCond := metav1.Condition{
+		Type:               string(conditions.PolicyConditionProgrammed),
+		Status:             metav1.ConditionTrue,
+		ObservedGeneration: 1,
+		LastTransitionTime: transitionTime,
+		Reason:             string(conditions.PolicyReasonProgrammed),
+		Message:            "Policy is programmed in the data plane",
+	}
+	notProgrammedCond := programmedCond
+	notProgrammedCond.Status = metav1.ConditionFalse
+	notProgrammedCond.Reason = string(conditions.PolicyReasonReconciling)
+	notProgrammedCond.Message = "Policy is not programmed in the data plane"
+
+	overriddenCond := programmedCond
+	overriddenCond.Status = metav1.ConditionFalse
+	overriddenCond.Reason = string(conditions.PolicyReasonOverridden)
+	overriddenCond.Message = "Policy is overridden by a conflicting policy of greater precedence"
+
+	for _, kind := range policyKinds {
+		t.Run(kind, func(t *testing.T) {
+			t.Parallel()
+
+			tests := []struct {
+				expected    metav1.Condition
+				name        string
+				policyConds []conditions.Condition
+				valid       bool
+			}{
+				{name: "valid policy is programmed", valid: true, expected: programmedCond},
+				{name: "invalid policy is not programmed", valid: false, expected: notProgrammedCond},
+				{
+					name:  "conflicted policy is overridden",
+					valid: false,
+					policyConds: []conditions.Condition{
+						conditions.NewPolicyConflicted("Conflicts with another " + kind),
+					},
+					expected: overriddenCond,
+				},
+			}
+
+			for _, test := range tests {
+				t.Run(test.name, func(t *testing.T) {
+					t.Parallel()
+					g := NewWithT(t)
+
+					nsname := types.NamespacedName{Namespace: "test", Name: "pol"}
+					policies := map[graph.PolicyKey]*graph.Policy{
+						{
+							NsName: nsname,
+							GVK:    schema.GroupVersionKind{Group: ngfAPI.GroupName, Kind: kind},
+						}: {
+							Source: &ngfAPI.ClientSettingsPolicy{
+								ObjectMeta: metav1.ObjectMeta{Name: nsname.Name, Namespace: nsname.Namespace, Generation: 1},
+							},
+							Valid:      test.valid,
+							Conditions: test.policyConds,
+							Ancestors: []graph.PolicyAncestor{
+								{Ancestor: v1.ParentReference{Name: "ancestor1"}},
+							},
+						},
+					}
+
+					k8sClient := createK8sClientFor(&ngfAPI.ClientSettingsPolicy{})
+					for _, pol := range policies {
+						g.Expect(k8sClient.Create(t.Context(), pol.Source)).To(Succeed())
+					}
+
+					reqs := PrepareNGFPolicyRequests(policies, transitionTime, gatewayCtlrName)
+					g.Expect(reqs).To(HaveLen(1))
+
+					NewUpdater(k8sClient, logr.Discard()).Update(t.Context(), reqs...)
+
+					var pol ngfAPI.ClientSettingsPolicy
+					g.Expect(k8sClient.Get(t.Context(), nsname, &pol)).To(Succeed())
+					g.Expect(pol.Status.Ancestors).To(HaveLen(1))
+					g.Expect(pol.Status.Ancestors[0].Conditions).To(ContainElement(test.expected))
+				})
 			}
 		})
 	}
