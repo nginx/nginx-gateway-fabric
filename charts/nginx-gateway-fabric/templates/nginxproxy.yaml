@@ -57,7 +57,7 @@ spec:
       patches:
         {{- toYaml .Values.nginx.patches | nindent 8 }}
       {{- end }}
-      {{- if .Values.nginx.wafContainers }}
+      {{- if and .Values.nginx.wafContainers }}
       wafContainers:
         {{- toYaml .Values.nginx.wafContainers | nindent 8 }}
       {{- end }}
@@ -84,7 +84,7 @@ spec:
       patches:
         {{- toYaml .Values.nginx.patches | nindent 8 }}
       {{- end }}
-      {{- if .Values.nginx.wafContainers }}
+      {{- if and .Values.nginx.wafContainers }}
       wafContainers:
         {{- toYaml .Values.nginx.wafContainers | nindent 8 }}
       {{- end }}
