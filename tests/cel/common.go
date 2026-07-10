@@ -132,6 +132,15 @@ const (
 	expectedWAFN1CPolicyObjectIDPatternError     = `^pol_[A-Za-z0-9_-]+$`
 	expectedWAFN1CPolicyVersionIDPatternError    = `^pv_[A-Za-z0-9_-]+$`
 
+	// ExternalLoadBalancers validation errors.
+	expectedELBBackendRequiredError                         = "exactly one external load balancer backend must be set"
+	expectedELBTargetRefKindGatewayError                    = "TargetRef Kind must be Gateway"
+	expectedELBTargetRefsMinItemsError                      = "spec.targetRefs in body should have at least 1 items"
+	expectedELBTargetRefsMaxItemsError                      = "spec.targetRefs: Too many: 2: must have at most 1"
+	expectedELBVirtualServerAddressIPAMLabelExclusiveError  = "virtualServerAddress and ipamLabel are mutually exclusive"
+	expectedELBVirtualServerAddressOrIPAMLabelRequiredError = "one of virtualServerAddress or ipamLabel must be set"
+	expectedELBPartitionCommonError                         = "partition cannot be Common"
+
 	// Namespace for tests.
 	defaultNamespace = "default"
 
