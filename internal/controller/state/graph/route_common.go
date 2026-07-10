@@ -1546,13 +1546,6 @@ func validateSessionPersistenceConfig(
 		))
 	}
 
-	if sp.IdleTimeout != nil {
-		errors.warn = append(errors.warn, field.Forbidden(
-			path.Child("idleTimeout"),
-			"IdleTimeout",
-		))
-	}
-
 	var timeout string
 	if sp.AbsoluteTimeout != nil {
 		if absoluteTimeout, err := validator.ValidateDuration(string(*sp.AbsoluteTimeout)); err != nil {
