@@ -3,6 +3,7 @@ kind: Kustomization
 resources:
   - bases/gateway.nginx.org_authenticationfilters.yaml
   - bases/gateway.nginx.org_clientsettingspolicies.yaml
+  - bases/gateway.nginx.org_externalloadbalancers.yaml
   - bases/gateway.nginx.org_nginxgateways.yaml
   - bases/gateway.nginx.org_nginxproxies.yaml
   - bases/gateway.nginx.org_observabilitypolicies.yaml
