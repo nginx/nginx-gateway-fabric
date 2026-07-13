@@ -36,11 +36,10 @@ const (
 		`The controller name must be of the form: DOMAIN/PATH. The controller's domain is '%s'`
 	plusFlag = "nginx-plus"
 
-	serverTLSSecret                 = "server-tls"
-	agentTLSSecret                  = "agent-tls"
-	nginxOneTelemetryEndpointHost   = "agent.connect.nginx.com"
-	endpointPickerDisableTLSFlag    = "endpoint-picker-disable-tls"
-	endpointPickerTLSSkipVerifyFlag = "endpoint-picker-tls-skip-verify"
+	serverTLSSecret               = "server-tls"
+	agentTLSSecret                = "agent-tls"
+	nginxOneTelemetryEndpointHost = "agent.connect.nginx.com"
+	clusterDomainFlag             = "cluster-domain"
 
 	plmStorageURLFlag               = "plm-storage-url"
 	plmStorageCredentialsSecretFlag = "plm-storage-credentials-secret" //nolint:gosec // not credentials
@@ -102,6 +101,8 @@ func createControllerCommand() *cobra.Command {
 		productTelemetryDisableFlag         = "product-telemetry-disable"
 		gwAPIExperimentalFlag               = "gateway-api-experimental-features"
 		gwAPIInferenceExtensionFlag         = "gateway-api-inference-extension"
+		endpointPickerDisableTLSFlag        = "endpoint-picker-disable-tls"
+		endpointPickerTLSSkipVerifyFlag     = "endpoint-picker-tls-skip-verify"
 		nginxDockerSecretFlag               = "nginx-docker-secret" //nolint:gosec // not credentials
 		usageReportSecretFlag               = "usage-report-secret"
 		usageReportEndpointFlag             = "usage-report-endpoint"
@@ -185,6 +186,11 @@ func createControllerCommand() *cobra.Command {
 
 		endpointPickerDisableTLS    bool
 		endpointPickerTLSSkipVerify = true
+
+		clusterDomain = stringValidatingValue{
+			validator: validateQualifiedName,
+			value:     "cluster.local",
+		}
 
 		watchNamespaces = stringSliceValidatingValue{
 			validator: validateResourceName,
@@ -325,7 +331,12 @@ func createControllerCommand() *cobra.Command {
 				Plus:                 plus,
 				ExperimentalFeatures: gwExperimentalFeatures,
 				InferenceExtension:   gwInferenceExtension,
-				ImageSource:          imageSource,
+				InferenceExtensionConfig: config.InferenceExtensionConfig{
+					ClusterDomain: clusterDomain.value,
+					DisableTLS:    endpointPickerDisableTLS,
+					TLSSkipVerify: endpointPickerTLSSkipVerify,
+				},
+				ImageSource: imageSource,
 				Flags: config.Flags{
 					Names:  flagKeys,
 					Values: flagValues,
@@ -341,11 +352,9 @@ func createControllerCommand() *cobra.Command {
 					EndpointPort:           nginxOneConsoleTelemetryEndpointPort.value,
 					EndpointTLSSkipVerify:  nginxOneConsoleTLSSkipVerify,
 				},
-				EndpointPickerDisableTLS:    endpointPickerDisableTLS,
-				EndpointPickerTLSSkipVerify: endpointPickerTLSSkipVerify,
-				WatchNamespaces:             watchNamespaces.values,
-				ServerTLSDomain:             serverTLSDomain.value,
-				PLMStorageConfig:            plmStorageConfig,
+				WatchNamespaces:  watchNamespaces.values,
+				ServerTLSDomain:  serverTLSDomain.value,
+				PLMStorageConfig: plmStorageConfig,
 			}
 
 			if err := controller.StartManager(conf); err != nil {
@@ -499,7 +508,27 @@ func createControllerCommand() *cobra.Command {
 			"traffic to AI workloads.",
 	)
 
-	addEPPConnectionFlags(cmd, &endpointPickerDisableTLS, &endpointPickerTLSSkipVerify)
+	cmd.Flags().BoolVar(
+		&endpointPickerDisableTLS,
+		endpointPickerDisableTLSFlag,
+		false,
+		"Disables TLS when connecting to the EndpointPicker. "+
+			"Set to true only for development/testing or when using a service mesh for encryption.",
+	)
+
+	cmd.Flags().BoolVar(
+		&endpointPickerTLSSkipVerify,
+		endpointPickerTLSSkipVerifyFlag,
+		true,
+		"Disables server certificate verification when connecting to the EndpointPicker, if TLS is enabled. "+
+			"REQUIRED: Must be true until Gateway API Inference Extension EndpointPicker supports mounting certificates.",
+	)
+
+	cmd.Flags().Var(
+		&clusterDomain,
+		clusterDomainFlag,
+		`The DNS domain of your Kubernetes cluster.`,
+	)
 
 	cmd.Flags().Var(
 		&nginxDockerSecrets,
@@ -722,7 +751,6 @@ func createGenerateCertsCommand() *cobra.Command {
 		serverTLSSecretFlag = "server-tls-secret" //nolint:gosec // not credentials
 		agentTLSSecretFlag  = "agent-tls-secret"
 		serviceFlag         = "service"
-		clusterDomainFlag   = "cluster-domain"
 		overwriteFlag       = "overwrite"
 		serverTLSDomainFlag = "server-tls-domain"
 	)
@@ -879,13 +907,18 @@ func createInitializeCommand() *cobra.Command {
 			}
 
 			return initialize(initializeConfig{
-				fileManager:   file.NewStdLibOSFileManager(),
-				fileGenerator: ngxConfig.NewGeneratorImpl(plus, nil, logger.WithName("generator")),
-				logger:        logger,
-				podUID:        podUID,
-				clusterUID:    clusterUID,
-				plus:          plus,
-				copy:          files,
+				fileManager: file.NewStdLibOSFileManager(),
+				fileGenerator: ngxConfig.NewGeneratorImpl(
+					plus,
+					nil,
+					nil,
+					logger.WithName("generator"),
+				),
+				logger:     logger,
+				podUID:     podUID,
+				clusterUID: clusterUID,
+				plus:       plus,
+				copy:       files,
 			})
 		},
 	}
@@ -945,45 +978,6 @@ func createSleepCommand() *cobra.Command {
 	)
 
 	return cmd
-}
-
-func createEndpointPickerCommand() *cobra.Command {
-	var endpointPickerDisableTLS bool
-	endpointPickerTLSSkipVerify := true
-	cmd := &cobra.Command{
-		Use:   "endpoint-picker",
-		Short: "Shim server for communication between NGINX and the Gateway API Inference Extension Endpoint Picker",
-		RunE: func(_ *cobra.Command, _ []string) error {
-			logger := ctlrZap.New().WithName("endpoint-picker-shim")
-			handler := createEndpointPickerHandler(
-				realExtProcClientFactory(endpointPickerDisableTLS, endpointPickerTLSSkipVerify),
-				logger,
-			)
-			return endpointPickerServer(handler)
-		},
-	}
-
-	addEPPConnectionFlags(cmd, &endpointPickerDisableTLS, &endpointPickerTLSSkipVerify)
-
-	return cmd
-}
-
-func addEPPConnectionFlags(cmd *cobra.Command, disableTLS, tlsSkipVerify *bool) {
-	cmd.Flags().BoolVar(
-		disableTLS,
-		endpointPickerDisableTLSFlag,
-		false,
-		"Disables TLS when connecting to the EndpointPicker. "+
-			"Set to true only for development/testing or when using a service mesh for encryption.",
-	)
-
-	cmd.Flags().BoolVar(
-		tlsSkipVerify,
-		endpointPickerTLSSkipVerifyFlag,
-		true,
-		"Disables server certificate verification when connecting to the EndpointPicker, if TLS is enabled. "+
-			"REQUIRED: Must be true until Gateway API Inference Extension EndpointPicker supports mounting certificates.",
-	)
 }
 
 func parseFlags(flags *pflag.FlagSet) ([]string, []string) {

@@ -150,6 +150,7 @@ func TestGenerate(t *testing.T) {
 	generator := config.NewGeneratorImpl(
 		plus,
 		&ngfConfig.UsageReportConfig{Endpoint: "test-endpoint"},
+		nil,
 		logr.Discard(),
 	)
 

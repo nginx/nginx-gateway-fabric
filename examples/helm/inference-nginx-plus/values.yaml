@@ -2,6 +2,9 @@ nginxGateway:
   name: nginx-gateway
   gwAPIInferenceExtension:
     enable: true
+    endpointPicker:
+      disableTLS: false
+      skipVerify: true
 
 nginx:
   plus: true
