@@ -404,7 +404,7 @@ var _ = Describe("UpstreamSettingsPolicy", Ordered, Label("functional", "uspolic
 		})
 
 		Specify("a conflicting second policy is marked conflicted", func() {
-			uspolicyNsName := types.NamespacedName{Name: "cluster-ip-conflict-usp", Namespace: namespace}
+			uspolicyNsName := types.NamespacedName{Name: "z-cluster-ip-conflict-usp", Namespace: namespace}
 			err := waitForUSPolicyStatus(
 				uspolicyNsName,
 				gatewayName,

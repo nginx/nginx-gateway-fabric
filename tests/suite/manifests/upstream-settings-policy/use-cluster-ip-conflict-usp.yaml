@@ -1,7 +1,7 @@
 apiVersion: gateway.nginx.org/v1alpha1
 kind: UpstreamSettingsPolicy
 metadata:
-  name: cluster-ip-conflict-usp
+  name: z-cluster-ip-conflict-usp
 spec:
   targetRefs:
     - group: core
