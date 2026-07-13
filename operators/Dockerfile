@@ -5,7 +5,7 @@ ARG TARGETOS
 
 WORKDIR /workspace
 
-ARG HELM_OPERATOR_COMMIT=dc231827cd920fdd15533bc134b0969d521c8d6f
+ARG HELM_OPERATOR_COMMIT=da17edcc8fc8aaf09fcae6abd4a7aaa96cff175d
 RUN git init . && \
     git remote add origin https://github.com/operator-framework/operator-sdk.git && \
     git fetch --depth 1 origin ${HELM_OPERATOR_COMMIT} && \
