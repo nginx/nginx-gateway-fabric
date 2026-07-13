@@ -133,7 +133,6 @@ Users can configure [sessionPersistence](https://gateway-api.sigs.k8s.io/referen
 | ---------- | --------------- | ------------------- |
 | `sessionName` | `name` | Direct mapping to `sticky cookie` name. |
 | `absoluteTimeout` | `expires` | Only used when `cookieConfig.lifetimeType=Permanent`; not enforced for `Session` cookies. |
-| `idleTimeout` | _not supported_ | NGINX does not support idle-based invalidation for sticky cookies. Sessions expire only when the cookie expires or the session ends. |
 | `type` | `cookie` | Only cookie-based persistence is supported. If Header is specified, the sessionPersistence spec is ignored and a warning/status message is reported on the route, but the route itself remains valid. |
 | `cookieConfig.lifetimeType=Session` | _no `expires` set_ | Session cookies expire when the browser session ends. |
 | `cookieConfig.lifetimeType=Permanent` | `expires=<absoluteTimeout>` | Cookie persists until the specified timeout. `absoluteTimeout` is required when `lifetimeType` is `Permanent`. |
