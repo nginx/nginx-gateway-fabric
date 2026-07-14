@@ -128,7 +128,7 @@ cleanup-conformance-tests: ## Clean up conformance tests fixtures
 	kubectl delete pod conformance-inference --ignore-not-found
 	kubectl delete -f conformance/conformance-rbac.yaml --ignore-not-found
 	kubectl delete -f conformance/metallb-pool.yaml --ignore-not-found
-	kubectl delete -f https://raw.githubusercontent.com/metallb/metallb/v0.15.3/config/manifests/metallb-native.yaml --ignore-not-found
+	-kubectl delete -f https://raw.githubusercontent.com/metallb/metallb/v0.15.3/config/manifests/metallb-native.yaml --ignore-not-found
 
 .PHONY: reset-go-modules
 reset-go-modules: ## Reset the go modules changes

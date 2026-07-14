@@ -880,10 +880,10 @@ func needToDeleteDaemonSet(cfg *NginxResources) bool {
 }
 
 // deleteServiceForLBClassChange checks whether the desired Service's loadBalancerClass differs
-// from the existing Service in the cluster. If so, it clears the Service from the store (so the
-// delete-event handler does not attempt to reprovision it) and deletes the existing Service.
-// The subsequent CreateOrUpdate in the provisioning loop will then create a fresh Service with
-// the correct loadBalancerClass.
+// from the value tracked in the in-memory store. If so, it clears the Service from the store
+// (so the delete-event handler does not attempt to reprovision it) and deletes the existing
+// Service. The subsequent CreateOrUpdate in the provisioning loop will then create a fresh
+// Service with the correct loadBalancerClass.
 func (p *NginxProvisioner) deleteServiceForLBClassChange(
 	ctx context.Context,
 	gateway *gatewayv1.Gateway,
@@ -933,6 +933,12 @@ func (p *NginxProvisioner) deleteServiceForLBClassChange(
 		ObjectMeta: nginxRes.Service,
 	}
 
+	// Save the store entry so we can restore it if the delete fails.
+	savedSvc := &corev1.Service{
+		ObjectMeta: nginxRes.Service,
+		Spec:       corev1.ServiceSpec{LoadBalancerClass: nginxRes.ServiceLBClass},
+	}
+
 	// Clear the Service from the store before deleting so the event handler
 	// does not treat this as an unexpected deletion requiring reprovisioning.
 	p.store.clearServiceForGateway(gatewayNSName)
@@ -942,6 +948,8 @@ func (p *NginxProvisioner) deleteServiceForLBClassChange(
 
 	if err := p.k8sClient.Delete(deleteCtx, svcToDelete); err != nil && !apierrors.IsNotFound(err) {
 		p.cfg.Logger.Error(err, "failed to delete Service for loadBalancerClass change")
+		// Restore the store entry so the next reconcile can retry deletion.
+		p.store.registerResourceInGatewayConfig(gatewayNSName, savedSvc)
 	}
 }
 

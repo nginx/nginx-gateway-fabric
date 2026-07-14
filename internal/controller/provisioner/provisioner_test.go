@@ -800,6 +800,69 @@ func TestProvisionNginxDeletesServiceOnLBClassChange(t *testing.T) {
 	g.Expect(*got.Spec.LoadBalancerClass).To(Equal(lbClass))
 }
 
+func TestDeleteServiceForLBClassChangeRestoresStoreOnFailure(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	gatewayNSName := types.NamespacedName{Name: "gw", Namespace: "default"}
+
+	existingSvc := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{Name: "gw-nginx", Namespace: "default"},
+		Spec:       corev1.ServiceSpec{Type: corev1.ServiceTypeLoadBalancer},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(createScheme()).
+		WithObjects(existingSvc).
+		Build()
+
+	st := newStore(nil, "", "", "", "", "")
+	st.registerResourceInGatewayConfig(gatewayNSName, existingSvc)
+
+	deleteErr := errors.New("connection refused")
+	provisioner := &NginxProvisioner{
+		leader: true,
+		store:  st,
+		cfg: Config{
+			Logger:           logr.Discard(),
+			EventRecorder:    &k8sEvents.FakeRecorder{},
+			GatewayPodConfig: &config.GatewayPodConfig{},
+		},
+		k8sClient: &deleteFailingClient{Client: fakeClient, err: deleteErr},
+	}
+
+	lbClass := "gateway.nginx.org/nginx-gateway-controller"
+	desiredSvc := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{Name: "gw-nginx", Namespace: "default"},
+		Spec: corev1.ServiceSpec{
+			Type:              corev1.ServiceTypeLoadBalancer,
+			LoadBalancerClass: &lbClass,
+		},
+	}
+
+	gateway := &gatewayv1.Gateway{
+		ObjectMeta: metav1.ObjectMeta{Name: "gw", Namespace: "default"},
+	}
+
+	provisioner.deleteServiceForLBClassChange(t.Context(), gateway, []client.Object{desiredSvc})
+
+	// The store entry should be restored so the next reconcile can retry deletion.
+	nginxRes := st.getNginxResourcesForGateway(gatewayNSName)
+	g.Expect(nginxRes).ToNot(BeNil())
+	g.Expect(nginxRes.Service.Name).To(Equal("gw-nginx"))
+	g.Expect(nginxRes.ServiceLBClass).To(BeNil())
+}
+
+// deleteFailingClient wraps a client.Client and fails all Delete calls with the configured error.
+type deleteFailingClient struct {
+	client.Client
+	err error
+}
+
+func (d *deleteFailingClient) Delete(_ context.Context, _ client.Object, _ ...client.DeleteOption) error {
+	return d.err
+}
+
 func TestProvisionerRestartsDeployment(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
