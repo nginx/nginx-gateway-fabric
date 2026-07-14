@@ -6,11 +6,9 @@ import (
 	"testing"
 
 	. "github.com/onsi/gomega"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/http"
-	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/upstreamsettings"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/stream"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/types"
@@ -69,23 +67,15 @@ func TestExecuteUpstreams_NginxOSS(t *testing.T) {
 					Port:    80,
 				},
 			},
-			Policies: []policies.Policy{
-				&ngfAPI.UpstreamSettingsPolicy{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "usp",
-						Namespace: "test",
-					},
-					Spec: ngfAPI.UpstreamSettingsPolicySpec{
-						ZoneSize: helpers.GetPointer[ngfAPI.Size]("2m"),
-						KeepAlive: helpers.GetPointer(ngfAPI.UpstreamKeepAlive{
-							Connections: helpers.GetPointer(int32(1)),
-							Requests:    helpers.GetPointer(int32(1)),
-							Time:        helpers.GetPointer[ngfAPI.Duration]("5s"),
-							Timeout:     helpers.GetPointer[ngfAPI.Duration]("10s"),
-						}),
-						LoadBalancingMethod: helpers.GetPointer(ngfAPI.LoadBalancingTypeIPHash),
-					},
+			UpstreamSettings: upstreamsettings.UpstreamSettings{
+				ZoneSize: "2m",
+				KeepAlive: http.UpstreamKeepAlive{
+					Connections: helpers.GetPointer[int32](1),
+					Requests:    1,
+					Time:        "5s",
+					Timeout:     "10s",
 				},
+				LoadBalancingMethod: string(ngfAPI.LoadBalancingTypeIPHash),
 			},
 		},
 		{
@@ -96,21 +86,13 @@ func TestExecuteUpstreams_NginxOSS(t *testing.T) {
 					Port:    80,
 				},
 			},
-			Policies: []policies.Policy{
-				&ngfAPI.UpstreamSettingsPolicy{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "usp-no-keepalive-connections",
-						Namespace: "test",
-					},
-					Spec: ngfAPI.UpstreamSettingsPolicySpec{
-						ZoneSize: helpers.GetPointer[ngfAPI.Size]("2m"),
-						KeepAlive: helpers.GetPointer(ngfAPI.UpstreamKeepAlive{
-							Connections: helpers.GetPointer(int32(0)),
-							Requests:    helpers.GetPointer(int32(1)),
-							Time:        helpers.GetPointer[ngfAPI.Duration]("5s"),
-							Timeout:     helpers.GetPointer[ngfAPI.Duration]("10s"),
-						}),
-					},
+			UpstreamSettings: upstreamsettings.UpstreamSettings{
+				ZoneSize: "2m",
+				KeepAlive: http.UpstreamKeepAlive{
+					Connections: helpers.GetPointer[int32](0),
+					Requests:    1,
+					Time:        "5s",
+					Timeout:     "10s",
 				},
 			},
 		},
@@ -149,7 +131,7 @@ func TestExecuteUpstreams_NginxOSS(t *testing.T) {
 		"keepalive 16;":       4,
 	}
 
-	upstreams := gen.createUpstreams(stateUpstreams, upstreamsettings.NewProcessor())
+	upstreams := gen.createUpstreams(stateUpstreams)
 
 	upstreamResults := executeUpstreams(upstreams)
 	g := NewWithT(t)
@@ -236,23 +218,15 @@ func TestExecuteUpstreams_NginxPlus(t *testing.T) {
 					Port:    80,
 				},
 			},
-			Policies: []policies.Policy{
-				&ngfAPI.UpstreamSettingsPolicy{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "usp",
-						Namespace: "test",
-					},
-					Spec: ngfAPI.UpstreamSettingsPolicySpec{
-						ZoneSize: helpers.GetPointer[ngfAPI.Size]("2m"),
-						KeepAlive: helpers.GetPointer(ngfAPI.UpstreamKeepAlive{
-							Connections: helpers.GetPointer(int32(1)),
-							Requests:    helpers.GetPointer(int32(1)),
-							Time:        helpers.GetPointer[ngfAPI.Duration]("5s"),
-							Timeout:     helpers.GetPointer[ngfAPI.Duration]("10s"),
-						}),
-						LoadBalancingMethod: helpers.GetPointer(ngfAPI.LoadBalancingTypeIPHash),
-					},
+			UpstreamSettings: upstreamsettings.UpstreamSettings{
+				ZoneSize: "2m",
+				KeepAlive: http.UpstreamKeepAlive{
+					Connections: helpers.GetPointer[int32](1),
+					Requests:    1,
+					Time:        "5s",
+					Timeout:     "10s",
 				},
+				LoadBalancingMethod: string(ngfAPI.LoadBalancingTypeIPHash),
 			},
 			SessionPersistence: dataplane.SessionPersistenceConfig{
 				Name:        "session-persistence",
@@ -307,21 +281,13 @@ func TestExecuteUpstreams_NginxPlus(t *testing.T) {
 					Port:    80,
 				},
 			},
-			Policies: []policies.Policy{
-				&ngfAPI.UpstreamSettingsPolicy{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "usp-no-keepalive-connections",
-						Namespace: "test",
-					},
-					Spec: ngfAPI.UpstreamSettingsPolicySpec{
-						ZoneSize: helpers.GetPointer[ngfAPI.Size]("2m"),
-						KeepAlive: helpers.GetPointer(ngfAPI.UpstreamKeepAlive{
-							Connections: helpers.GetPointer(int32(0)),
-							Requests:    helpers.GetPointer(int32(1)),
-							Time:        helpers.GetPointer[ngfAPI.Duration]("5s"),
-							Timeout:     helpers.GetPointer[ngfAPI.Duration]("10s"),
-						}),
-					},
+			UpstreamSettings: upstreamsettings.UpstreamSettings{
+				ZoneSize: "2m",
+				KeepAlive: http.UpstreamKeepAlive{
+					Connections: helpers.GetPointer[int32](0),
+					Requests:    1,
+					Time:        "5s",
+					Timeout:     "10s",
 				},
 			},
 		},
@@ -375,7 +341,7 @@ func TestExecuteUpstreams_NginxPlus(t *testing.T) {
 		fmt.Sprintf("server %snginx-500-server.sock;", SocketBasePath):        1,
 	}
 
-	upstreams := gen.createUpstreams(stateUpstreams, upstreamsettings.NewProcessor())
+	upstreams := gen.createUpstreams(stateUpstreams)
 
 	upstreamResults := executeUpstreams(upstreams)
 	g := NewWithT(t)
@@ -444,23 +410,15 @@ func TestCreateUpstreams(t *testing.T) {
 					Port:    80,
 				},
 			},
-			Policies: []policies.Policy{
-				&ngfAPI.UpstreamSettingsPolicy{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "usp",
-						Namespace: "test",
-					},
-					Spec: ngfAPI.UpstreamSettingsPolicySpec{
-						ZoneSize: helpers.GetPointer[ngfAPI.Size]("2m"),
-						KeepAlive: helpers.GetPointer(ngfAPI.UpstreamKeepAlive{
-							Connections: helpers.GetPointer(int32(1)),
-							Requests:    helpers.GetPointer(int32(1)),
-							Time:        helpers.GetPointer[ngfAPI.Duration]("5s"),
-							Timeout:     helpers.GetPointer[ngfAPI.Duration]("10s"),
-						}),
-						LoadBalancingMethod: helpers.GetPointer((ngfAPI.LoadBalancingTypeIPHash)),
-					},
+			UpstreamSettings: upstreamsettings.UpstreamSettings{
+				ZoneSize: "2m",
+				KeepAlive: http.UpstreamKeepAlive{
+					Connections: helpers.GetPointer[int32](1),
+					Requests:    1,
+					Time:        "5s",
+					Timeout:     "10s",
 				},
+				LoadBalancingMethod: string(ngfAPI.LoadBalancingTypeIPHash),
 			},
 		},
 	}
@@ -543,7 +501,7 @@ func TestCreateUpstreams(t *testing.T) {
 	}
 
 	g := NewWithT(t)
-	result := gen.createUpstreams(stateUpstreams, upstreamsettings.NewProcessor())
+	result := gen.createUpstreams(stateUpstreams)
 	g.Expect(result).To(Equal(expUpstreams))
 }
 
@@ -661,23 +619,15 @@ func TestCreateUpstream(t *testing.T) {
 						Port:    80,
 					},
 				},
-				Policies: []policies.Policy{
-					&ngfAPI.UpstreamSettingsPolicy{
-						ObjectMeta: metav1.ObjectMeta{
-							Name:      "usp",
-							Namespace: "test",
-						},
-						Spec: ngfAPI.UpstreamSettingsPolicySpec{
-							ZoneSize: helpers.GetPointer[ngfAPI.Size]("2m"),
-							KeepAlive: helpers.GetPointer(ngfAPI.UpstreamKeepAlive{
-								Connections: helpers.GetPointer(int32(1)),
-								Requests:    helpers.GetPointer(int32(1)),
-								Time:        helpers.GetPointer[ngfAPI.Duration]("5s"),
-								Timeout:     helpers.GetPointer[ngfAPI.Duration]("10s"),
-							}),
-							LoadBalancingMethod: helpers.GetPointer(ngfAPI.LoadBalancingTypeIPHash),
-						},
+				UpstreamSettings: upstreamsettings.UpstreamSettings{
+					ZoneSize: "2m",
+					KeepAlive: http.UpstreamKeepAlive{
+						Connections: helpers.GetPointer[int32](1),
+						Requests:    1,
+						Time:        "5s",
+						Timeout:     "10s",
 					},
+					LoadBalancingMethod: string(ngfAPI.LoadBalancingTypeIPHash),
 				},
 			},
 			expectedUpstream: http.Upstream{
@@ -707,33 +657,15 @@ func TestCreateUpstream(t *testing.T) {
 						Port:    80,
 					},
 				},
-				Policies: []policies.Policy{
-					&ngfAPI.UpstreamSettingsPolicy{
-						ObjectMeta: metav1.ObjectMeta{
-							Name:      "usp1",
-							Namespace: "test",
-						},
-						Spec: ngfAPI.UpstreamSettingsPolicySpec{
-							ZoneSize: helpers.GetPointer[ngfAPI.Size]("2m"),
-							KeepAlive: helpers.GetPointer(ngfAPI.UpstreamKeepAlive{
-								Time:    helpers.GetPointer[ngfAPI.Duration]("5s"),
-								Timeout: helpers.GetPointer[ngfAPI.Duration]("10s"),
-							}),
-							LoadBalancingMethod: helpers.GetPointer(ngfAPI.LoadBalancingTypeRandomTwoLeastConnection),
-						},
+				UpstreamSettings: upstreamsettings.UpstreamSettings{
+					ZoneSize: "2m",
+					KeepAlive: http.UpstreamKeepAlive{
+						Connections: helpers.GetPointer[int32](1),
+						Requests:    1,
+						Time:        "5s",
+						Timeout:     "10s",
 					},
-					&ngfAPI.UpstreamSettingsPolicy{
-						ObjectMeta: metav1.ObjectMeta{
-							Name:      "usp2",
-							Namespace: "test",
-						},
-						Spec: ngfAPI.UpstreamSettingsPolicySpec{
-							KeepAlive: helpers.GetPointer(ngfAPI.UpstreamKeepAlive{
-								Connections: helpers.GetPointer(int32(1)),
-								Requests:    helpers.GetPointer(int32(1)),
-							}),
-						},
-					},
+					LoadBalancingMethod: string(ngfAPI.LoadBalancingTypeRandomTwoLeastConnection),
 				},
 			},
 			expectedUpstream: http.Upstream{
@@ -763,14 +695,6 @@ func TestCreateUpstream(t *testing.T) {
 						Port:    80,
 					},
 				},
-				Policies: []policies.Policy{
-					&ngfAPI.UpstreamSettingsPolicy{
-						ObjectMeta: metav1.ObjectMeta{
-							Name:      "usp1",
-							Namespace: "test",
-						},
-					},
-				},
 			},
 			expectedUpstream: http.Upstream{
 				Name:     "empty upstreamSettingsPolicies",
@@ -794,20 +718,12 @@ func TestCreateUpstream(t *testing.T) {
 						Port:    80,
 					},
 				},
-				Policies: []policies.Policy{
-					&ngfAPI.UpstreamSettingsPolicy{
-						ObjectMeta: metav1.ObjectMeta{
-							Name:      "usp1",
-							Namespace: "test",
-						},
-						Spec: ngfAPI.UpstreamSettingsPolicySpec{
-							KeepAlive: helpers.GetPointer(ngfAPI.UpstreamKeepAlive{
-								Connections: helpers.GetPointer(int32(1)),
-								Requests:    helpers.GetPointer(int32(1)),
-								Time:        helpers.GetPointer[ngfAPI.Duration]("5s"),
-								Timeout:     helpers.GetPointer[ngfAPI.Duration]("10s"),
-							}),
-						},
+				UpstreamSettings: upstreamsettings.UpstreamSettings{
+					KeepAlive: http.UpstreamKeepAlive{
+						Connections: helpers.GetPointer[int32](1),
+						Requests:    1,
+						Time:        "5s",
+						Timeout:     "10s",
 					},
 				},
 			},
@@ -838,16 +754,8 @@ func TestCreateUpstream(t *testing.T) {
 						Port:    80,
 					},
 				},
-				Policies: []policies.Policy{
-					&ngfAPI.UpstreamSettingsPolicy{
-						ObjectMeta: metav1.ObjectMeta{
-							Name:      "usp1",
-							Namespace: "test",
-						},
-						Spec: ngfAPI.UpstreamSettingsPolicySpec{
-							LoadBalancingMethod: helpers.GetPointer(ngfAPI.LoadBalancingTypeIPHash),
-						},
-					},
+				UpstreamSettings: upstreamsettings.UpstreamSettings{
+					LoadBalancingMethod: string(ngfAPI.LoadBalancingTypeIPHash),
 				},
 			},
 			expectedUpstream: http.Upstream{
@@ -934,7 +842,7 @@ func TestCreateUpstream(t *testing.T) {
 		t.Run(test.msg, func(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
-			result := gen.createUpstream(test.stateUpstream, upstreamsettings.NewProcessor())
+			result := gen.createUpstream(test.stateUpstream)
 			g.Expect(result).To(Equal(test.expectedUpstream))
 		})
 	}
@@ -1037,7 +945,7 @@ func TestCreateUpstreamPlus(t *testing.T) {
 		t.Run(test.msg, func(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
-			result := gen.createUpstream(test.stateUpstream, upstreamsettings.NewProcessor())
+			result := gen.createUpstream(test.stateUpstream)
 			g.Expect(result).To(Equal(test.expectedUpstream))
 		})
 	}
@@ -1337,8 +1245,8 @@ func TestCreateStreamUpstream(t *testing.T) {
 
 	tests := []struct {
 		msg              string
-		stateUpstream    dataplane.Upstream
 		expectedUpstream stream.Upstream
+		stateUpstream    dataplane.Upstream
 	}{
 		{
 			stateUpstream: dataplane.Upstream{
@@ -1840,17 +1748,9 @@ func TestExecuteUpstreams_LoadBalancingMethod(t *testing.T) {
 							Port:    80,
 						},
 					},
-					Policies: []policies.Policy{
-						&ngfAPI.UpstreamSettingsPolicy{
-							ObjectMeta: metav1.ObjectMeta{
-								Name:      "usp-ipv4",
-								Namespace: "test",
-							},
-							Spec: ngfAPI.UpstreamSettingsPolicySpec{
-								LoadBalancingMethod: helpers.GetPointer(tt.lbType),
-								HashMethodKey:       helpers.GetPointer(tt.HashMethodKey),
-							},
-						},
+					UpstreamSettings: upstreamsettings.UpstreamSettings{
+						LoadBalancingMethod: string(tt.lbType),
+						HashMethodKey:       string(tt.HashMethodKey),
 					},
 				},
 				{
@@ -1861,22 +1761,14 @@ func TestExecuteUpstreams_LoadBalancingMethod(t *testing.T) {
 							Port:    80,
 						},
 					},
-					Policies: []policies.Policy{
-						&ngfAPI.UpstreamSettingsPolicy{
-							ObjectMeta: metav1.ObjectMeta{
-								Name:      "usp-ipv6",
-								Namespace: "test",
-							},
-							Spec: ngfAPI.UpstreamSettingsPolicySpec{
-								LoadBalancingMethod: helpers.GetPointer(tt.lbType),
-								HashMethodKey:       helpers.GetPointer(tt.HashMethodKey),
-							},
-						},
+					UpstreamSettings: upstreamsettings.UpstreamSettings{
+						LoadBalancingMethod: string(tt.lbType),
+						HashMethodKey:       string(tt.HashMethodKey),
 					},
 				},
 			}
 
-			upstreams := gen.createUpstreams(stateUpstreams, upstreamsettings.NewProcessor())
+			upstreams := gen.createUpstreams(stateUpstreams)
 			upstreamResults := executeUpstreams(upstreams)
 
 			g.Expect(upstreamResults).To(HaveLen(1))

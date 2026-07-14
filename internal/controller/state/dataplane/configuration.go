@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"maps"
+	"net"
 	"slices"
 	"sort"
 	"strconv"
@@ -20,6 +21,7 @@ import (
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/upstreamsettings"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/shared"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/configmaps"
@@ -457,6 +459,7 @@ func buildStreamUpstreams(
 					br,
 					serviceResolver,
 					referencedServices,
+					false, // L4 stream upstreams do not support UseClusterIP
 				)
 				if err != nil {
 					errMsg = err.Error()
@@ -1779,23 +1782,27 @@ func buildUpstream(
 	}
 
 	var errMsg string
+
+	var upstreamPolicies []policies.Policy
+	var uspSettings upstreamsettings.UpstreamSettings
+	if graphSvc, exists := referencedServices[br.SvcNsName]; exists {
+		upstreamPolicies = buildPolicies(gateway, graphSvc.Policies)
+		uspSettings = upstreamsettings.Processor{}.Process(upstreamPolicies)
+	}
+
 	eps, err := resolveUpstreamEndpoints(
 		ctx,
 		logger,
 		br,
 		svcResolver,
 		referencedServices,
+		uspSettings.UseClusterIP,
 	)
 	if err != nil {
 		errMsg = err.Error()
 		logger.V(1).Info("failed to resolve endpoints, endpoints may not be ready", "error", errMsg, "service", br.SvcNsName)
 	} else {
 		logger.V(1).Info("successfully resolved endpoints", "service", br.SvcNsName)
-	}
-
-	var upstreamPolicies []policies.Policy
-	if graphSvc, exists := referencedServices[br.SvcNsName]; exists {
-		upstreamPolicies = buildPolicies(gateway, graphSvc.Policies)
 	}
 
 	var sp SessionPersistenceConfig
@@ -1813,6 +1820,7 @@ func buildUpstream(
 		Endpoints:          eps,
 		ErrorMsg:           errMsg,
 		Policies:           upstreamPolicies,
+		UpstreamSettings:   uspSettings,
 		SessionPersistence: sp,
 		StateFileKey:       br.BaseServicePortKey(),
 	}
@@ -2584,13 +2592,27 @@ func getExternalHostname(
 	return ""
 }
 
+// getClusterIP returns the ClusterIP of a Service if known, or empty string.
+// Returns an empty string for headless services or if the service is not found.
+func getClusterIP(
+	svcNsName types.NamespacedName,
+	referencedServices map[types.NamespacedName]*graph.ReferencedService,
+) string {
+	if graphSvc, exists := referencedServices[svcNsName]; exists {
+		return graphSvc.ClusterIP
+	}
+	return ""
+}
+
 // resolveUpstreamEndpoints handles service resolution for both regular and ExternalName services.
+// When useClusterIP is true, it returns a single endpoint using the Service ClusterIP.
 func resolveUpstreamEndpoints(
 	ctx context.Context,
 	logger logr.Logger,
 	br graph.BackendRef,
 	svcResolver resolver.ServiceResolver,
 	referencedServices map[types.NamespacedName]*graph.ReferencedService,
+	useClusterIP bool,
 ) ([]resolver.Endpoint, error) {
 	// Check if this is an ExternalName service
 	if externalName := getExternalHostname(br.SvcNsName, referencedServices); externalName != "" {
@@ -2608,6 +2630,20 @@ func resolveUpstreamEndpoints(
 			"port", br.ServicePort.Port)
 
 		return []resolver.Endpoint{endpoint}, nil
+	}
+
+	// When UseClusterIP is enabled, route to the Service ClusterIP instead of Pod IPs.
+	if useClusterIP {
+		if clusterIP := getClusterIP(br.SvcNsName, referencedServices); clusterIP != "" {
+			ip := net.ParseIP(clusterIP)
+			isIPv6 := ip != nil && ip.To4() == nil
+			endpoint := resolver.Endpoint{
+				Address: clusterIP,
+				Port:    br.ServicePort.Port,
+				IPv6:    isIPv6,
+			}
+			return []resolver.Endpoint{endpoint}, nil
+		}
 	}
 
 	// Resolve endpoints for both IPv4 and IPv6. NginxProxy ipFamily controls only the

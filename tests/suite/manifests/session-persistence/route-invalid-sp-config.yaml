@@ -19,7 +19,6 @@ spec:
     sessionPersistence:
       sessionName: invalid-config
       type: Header
-      idleTimeout: 30m
       absoluteTimeout: 10000h # duration too long for NGINX
 ---
 apiVersion: gateway.networking.k8s.io/v1
@@ -41,5 +40,4 @@ spec:
     sessionPersistence:
       sessionName: invalid-config
       type: Header
-      idleTimeout: 30m
       absoluteTimeout: 10000h # duration too long for NGINX
