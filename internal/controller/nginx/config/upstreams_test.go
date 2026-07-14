@@ -509,9 +509,9 @@ func TestCreateUpstream(t *testing.T) {
 	t.Parallel()
 	gen := GeneratorImpl{}
 	tests := []struct {
+		stateUpstream    dataplane.Upstream
 		msg              string
 		expectedUpstream http.Upstream
-		stateUpstream    dataplane.Upstream
 	}{
 		{
 			stateUpstream: dataplane.Upstream{
@@ -853,9 +853,9 @@ func TestCreateUpstreamPlus(t *testing.T) {
 	gen := GeneratorImpl{plus: true}
 
 	tests := []struct {
-		expectedUpstream http.Upstream
-		msg              string
 		stateUpstream    dataplane.Upstream
+		msg              string
+		expectedUpstream http.Upstream
 	}{
 		{
 			msg: "with endpoints",
@@ -1244,9 +1244,9 @@ func TestCreateStreamUpstream(t *testing.T) {
 	gen := GeneratorImpl{}
 
 	tests := []struct {
+		stateUpstream    dataplane.Upstream
 		msg              string
 		expectedUpstream stream.Upstream
-		stateUpstream    dataplane.Upstream
 	}{
 		{
 			stateUpstream: dataplane.Upstream{

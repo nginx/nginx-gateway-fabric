@@ -17,9 +17,9 @@ func TestProcess(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
+		expUpstreamSettings UpstreamSettings
 		name                string
 		policies            []policies.Policy
-		expUpstreamSettings UpstreamSettings
 	}{
 		{
 			name: "all fields populated",
