@@ -1846,6 +1846,11 @@ func (in *UpstreamSettingsPolicySpec) DeepCopyInto(out *UpstreamSettingsPolicySp
 		*out = new(HashMethodKey)
 		**out = **in
 	}
+	if in.UseClusterIP != nil {
+		in, out := &in.UseClusterIP, &out.UseClusterIP
+		*out = new(bool)
+		**out = **in
+	}
 	if in.TargetRefs != nil {
 		in, out := &in.TargetRefs, &out.TargetRefs
 		*out = make([]apisv1.LocalPolicyTargetReference, len(*in))

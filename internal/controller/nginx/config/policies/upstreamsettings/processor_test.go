@@ -18,8 +18,8 @@ func TestProcess(t *testing.T) {
 
 	tests := []struct {
 		name                string
-		expUpstreamSettings UpstreamSettings
 		policies            []policies.Policy
+		expUpstreamSettings UpstreamSettings
 	}{
 		{
 			name: "all fields populated",
@@ -383,6 +383,40 @@ func TestProcess(t *testing.T) {
 				},
 				LoadBalancingMethod: string(ngfAPIv1alpha1.LoadBalancingTypeHash),
 				HashMethodKey:       "$remote_addr",
+			},
+		},
+		{
+			name: "UseClusterIP enabled",
+			policies: []policies.Policy{
+				&ngfAPIv1alpha1.UpstreamSettingsPolicy{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "usp-use-cluster-ip",
+						Namespace: "test",
+					},
+					Spec: ngfAPIv1alpha1.UpstreamSettingsPolicySpec{
+						UseClusterIP: helpers.GetPointer(true),
+					},
+				},
+			},
+			expUpstreamSettings: UpstreamSettings{
+				UseClusterIP: true,
+			},
+		},
+		{
+			name: "UseClusterIP disabled (explicitly false)",
+			policies: []policies.Policy{
+				&ngfAPIv1alpha1.UpstreamSettingsPolicy{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "usp-use-cluster-ip-false",
+						Namespace: "test",
+					},
+					Spec: ngfAPIv1alpha1.UpstreamSettingsPolicySpec{
+						UseClusterIP: helpers.GetPointer(false),
+					},
+				},
+			},
+			expUpstreamSettings: UpstreamSettings{
+				UseClusterIP: false,
 			},
 		},
 	}

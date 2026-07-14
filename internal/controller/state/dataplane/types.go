@@ -9,6 +9,7 @@ import (
 
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/upstreamsettings"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/shared"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/resolver"
@@ -177,6 +178,8 @@ type Upstream struct {
 	Endpoints []resolver.Endpoint
 	// Policies holds all the valid policies that apply to the Upstream.
 	Policies []policies.Policy
+	// UpstreamSettings holds the processed settings from UpstreamSettingsPolicy for this upstream.
+	UpstreamSettings upstreamsettings.UpstreamSettings
 }
 
 // SessionPersistenceConfig holds the session persistence configuration for an upstream.
