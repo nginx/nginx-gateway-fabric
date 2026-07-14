@@ -569,9 +569,15 @@ func (p *NginxProvisioner) buildBootstrapConfigMap(
 		workerConnections = *nProxyCfg.WorkerConnections
 	}
 
+	workerProcesses := dataplane.DefaultWorkerProcesses
+	if nProxyCfg != nil && nProxyCfg.WorkerProcesses != nil {
+		workerProcesses = strconv.FormatInt(int64(*nProxyCfg.WorkerProcesses), 10)
+	}
+
 	mainFields := map[string]any{
 		"ErrorLevel":        logLevel,
 		"WorkerConnections": workerConnections,
+		"WorkerProcesses":   workerProcesses,
 	}
 
 	eventsFields := map[string]any{

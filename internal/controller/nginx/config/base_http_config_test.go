@@ -473,6 +473,50 @@ func TestExecuteBaseHttp_DNSResolver(t *testing.T) {
 			expectedConfig: "resolver [2606:4700:4700::64] 8.8.8.8 [2606:4700:4700::6400] 8.8.4.4;",
 		},
 		{
+			name: "DNS resolver with single hostname",
+			conf: dataplane.Configuration{
+				BaseHTTPConfig: dataplane.BaseHTTPConfig{
+					DNSResolver: &dataplane.DNSResolverConfig{
+						Addresses: []string{"dns.google"},
+					},
+				},
+			},
+			expectedConfig: "resolver dns.google;",
+		},
+		{
+			name: "DNS resolver with hostname and IPv4 address",
+			conf: dataplane.Configuration{
+				BaseHTTPConfig: dataplane.BaseHTTPConfig{
+					DNSResolver: &dataplane.DNSResolverConfig{
+						Addresses: []string{"dns.google", "8.8.8.8"},
+					},
+				},
+			},
+			expectedConfig: "resolver dns.google 8.8.8.8;",
+		},
+		{
+			name: "DNS resolver with hostname and IPv6 address",
+			conf: dataplane.Configuration{
+				BaseHTTPConfig: dataplane.BaseHTTPConfig{
+					DNSResolver: &dataplane.DNSResolverConfig{
+						Addresses: []string{"kube-dns.kube-system.svc.cluster.local", "2606:4700:4700::64"},
+					},
+				},
+			},
+			expectedConfig: "resolver kube-dns.kube-system.svc.cluster.local [2606:4700:4700::64];",
+		},
+		{
+			name: "DNS resolver with cluster-local hostname (GH-5410 reproducer)",
+			conf: dataplane.Configuration{
+				BaseHTTPConfig: dataplane.BaseHTTPConfig{
+					DNSResolver: &dataplane.DNSResolverConfig{
+						Addresses: []string{"kube-dns.kube-system.svc.cluster.local"},
+					},
+				},
+			},
+			expectedConfig: "resolver kube-dns.kube-system.svc.cluster.local;",
+		},
+		{
 			name: "no DNS resolver",
 			conf: dataplane.Configuration{
 				BaseHTTPConfig: dataplane.BaseHTTPConfig{

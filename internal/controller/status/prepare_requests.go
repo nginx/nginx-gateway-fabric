@@ -413,6 +413,60 @@ func prepareGatewayRequest(
 	}
 }
 
+// settingsPolicyKinds are the NGF custom policy kinds that report a GEP-713 "Programmed" condition
+// indicating whether their settings have been programmed into the NGINX data plane.
+var settingsPolicyKinds = map[string]struct{}{
+	kinds.ClientSettingsPolicy:   {},
+	kinds.UpstreamSettingsPolicy: {},
+	kinds.ObservabilityPolicy:    {},
+	kinds.ProxySettingsPolicy:    {},
+	kinds.RateLimitPolicy:        {},
+	kinds.SnippetsPolicy:         {},
+}
+
+// ancestorAccepted reports whether the policy is accepted for the given ancestor, i.e. neither the
+// ancestor-specific nor the policy-wide conditions mark the Accepted condition as False.
+func ancestorAccepted(ancestor graph.PolicyAncestor, policyConds []conditions.Condition) bool {
+	for _, conds := range [][]conditions.Condition{ancestor.Conditions, policyConds} {
+		for _, cond := range conds {
+			if cond.Type == string(v1.PolicyConditionAccepted) && cond.Status == metav1.ConditionFalse {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// ancestorConflicted reports whether the policy lost conflict resolution for the given ancestor, i.e. an
+// Accepted condition is set to False with the Conflicted reason on either the ancestor-specific or the
+// policy-wide conditions.
+func ancestorConflicted(ancestor graph.PolicyAncestor, policyConds []conditions.Condition) bool {
+	for _, conds := range [][]conditions.Condition{ancestor.Conditions, policyConds} {
+		for _, cond := range conds {
+			if cond.Type == string(v1.PolicyConditionAccepted) &&
+				cond.Status == metav1.ConditionFalse &&
+				cond.Reason == string(v1.PolicyReasonConflicted) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// settingsPolicyProgrammedCondition returns the GEP-713 "Programmed" condition for an NGF settings policy on the
+// given ancestor: Programmed when the policy is valid and accepted, Overridden when it lost conflict resolution
+// to a higher-precedence policy, and not programmed (Reconciling) otherwise.
+func settingsPolicyProgrammedCondition(pol *graph.Policy, ancestor graph.PolicyAncestor) conditions.Condition {
+	switch {
+	case pol.Valid && ancestorAccepted(ancestor, pol.Conditions):
+		return conditions.NewSettingsPolicyProgrammed()
+	case ancestorConflicted(ancestor, pol.Conditions):
+		return conditions.NewSettingsPolicyOverridden()
+	default:
+		return conditions.NewSettingsPolicyNotProgrammed()
+	}
+}
+
 func PrepareNGFPolicyRequests(
 	policies map[graph.PolicyKey]*graph.Policy,
 	transitionTime metav1.Time,
@@ -428,9 +482,13 @@ func PrepareNGFPolicyRequests(
 		}
 
 		for _, ancestor := range pol.Ancestors {
+			_, isSettingsPolicy := settingsPolicyKinds[key.GVK.Kind]
+
 			defaultCount := 1
 			if key.GVK.Kind == kinds.WAFPolicy {
 				defaultCount = 3
+			} else if isSettingsPolicy {
+				defaultCount = 2
 			}
 			allConds := make([]conditions.Condition, 0, len(pol.Conditions)+len(ancestor.Conditions)+defaultCount)
 
@@ -441,6 +499,11 @@ func PrepareNGFPolicyRequests(
 			if key.GVK.Kind == kinds.WAFPolicy {
 				allConds = append(allConds, conditions.NewPolicyResolvedRefs())
 				allConds = append(allConds, conditions.NewPolicyProgrammed())
+			} else if isSettingsPolicy {
+				// GEP-713 "Programmed" condition. The policy's settings are programmed into the data plane
+				// when it is valid and accepted for this ancestor, reported as Overridden when it lost conflict
+				// resolution to a higher-precedence policy, and as not yet programmed (Reconciling) otherwise.
+				allConds = append(allConds, settingsPolicyProgrammedCondition(pol, ancestor))
 			}
 			allConds = append(allConds, ancestor.Conditions...)
 			allConds = append(allConds, pol.Conditions...)

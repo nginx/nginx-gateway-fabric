@@ -1,0 +1,10 @@
+apiVersion: gateway.nginx.org/v1alpha1
+kind: UpstreamSettingsPolicy
+metadata:
+  name: z-cluster-ip-conflict-usp
+spec:
+  targetRefs:
+    - group: core
+      kind: Service
+      name: coffee
+  useClusterIP: false

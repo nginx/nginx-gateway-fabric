@@ -976,6 +976,45 @@ server {
 }
 `,
 		},
+		{
+			name: "stream servers with hostname DNS resolver",
+			conf: dataplane.Configuration{
+				BaseStreamConfig: dataplane.BaseStreamConfig{
+					DNSResolver: &dataplane.DNSResolverConfig{
+						Addresses: []string{"kube-dns.kube-system.svc.cluster.local"},
+						Valid:     "30s",
+					},
+				},
+			},
+			expectedConfig: `
+# DNS resolver configuration for ExternalName services
+resolver kube-dns.kube-system.svc.cluster.local valid=30s;
+
+server {
+    listen ` + SocketBasePath + `connection-closed-server.sock;
+    return "";
+}
+`,
+		},
+		{
+			name: "stream servers with mixed hostname and IP DNS resolver",
+			conf: dataplane.Configuration{
+				BaseStreamConfig: dataplane.BaseStreamConfig{
+					DNSResolver: &dataplane.DNSResolverConfig{
+						Addresses: []string{"dns.google", "8.8.8.8", "2001:4860:4860::8888"},
+					},
+				},
+			},
+			expectedConfig: `
+# DNS resolver configuration for ExternalName services
+resolver dns.google 8.8.8.8 [2001:4860:4860::8888];
+
+server {
+    listen ` + SocketBasePath + `connection-closed-server.sock;
+    return "";
+}
+`,
+		},
 	}
 
 	for _, test := range tests {
