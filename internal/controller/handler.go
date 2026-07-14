@@ -969,6 +969,8 @@ func getGatewayAddresses(
 		svcName := controller.CreateNginxResourceName(gateway.Source.GetName(), gatewayClassName)
 		key := types.NamespacedName{Name: svcName, Namespace: gateway.Source.GetNamespace()}
 
+		expectLBIngress := gatewayExpectsLoadBalancerIngress(gateway)
+
 		pollCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		defer cancel()
 
@@ -981,6 +983,16 @@ func getGatewayAddresses(
 					return false, nil //nolint:nilerr // need to retry without returning error
 				}
 
+				// When the Gateway declares IP-type spec addresses and the Service is a
+				// LoadBalancer, the provisioner patches Service.Status.LoadBalancer.Ingress
+				// with those IPs. The informer cache may not reflect that patch yet, so keep
+				// polling until the Ingress entries appear.
+				if expectLBIngress &&
+					gwSvc.Spec.Type == v1.ServiceTypeLoadBalancer &&
+					len(gwSvc.Status.LoadBalancer.Ingress) == 0 {
+					return false, nil
+				}
+
 				return true, nil
 			},
 		); err != nil {
@@ -991,6 +1003,18 @@ func getGatewayAddresses(
 	}
 
 	return getGatewayAddressesForStatus(&gwSvc), nil
+}
+
+// gatewayExpectsLoadBalancerIngress returns true when the Gateway declares at least one
+// IP-type spec address, meaning the provisioner will patch the Service's LoadBalancer
+// Ingress status with those IPs.
+func gatewayExpectsLoadBalancerIngress(gateway *graph.Gateway) bool {
+	for _, addr := range gateway.Source.Spec.Addresses {
+		if addr.Type != nil && *addr.Type == gatewayv1.IPAddressType {
+			return true
+		}
+	}
+	return false
 }
 
 func getGatewayAddressesForStatus(svc *v1.Service) (gwAddresses []gatewayv1.GatewayStatusAddress) {
