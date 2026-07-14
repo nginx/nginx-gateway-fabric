@@ -399,7 +399,7 @@ func TestProcess(t *testing.T) {
 				},
 			},
 			expUpstreamSettings: UpstreamSettings{
-				UseClusterIP: true,
+				UseClusterIP: helpers.GetPointer(true),
 			},
 		},
 		{
@@ -416,7 +416,7 @@ func TestProcess(t *testing.T) {
 				},
 			},
 			expUpstreamSettings: UpstreamSettings{
-				UseClusterIP: false,
+				UseClusterIP: helpers.GetPointer(false),
 			},
 		},
 	}

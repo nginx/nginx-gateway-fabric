@@ -11766,3 +11766,122 @@ func TestBuildUpstreamsWithClusterIP(t *testing.T) {
 		{Address: clusterIP, Port: 80},
 	}))
 }
+
+func TestBuildUpstreamsUseClusterIPPrecedence(t *testing.T) {
+	t.Parallel()
+
+	clusterIP := "10.96.0.1"
+	svcKey := types.NamespacedName{Namespace: "default", Name: "my-svc"}
+	podEndpoints := []resolver.Endpoint{{Address: "10.0.0.1", Port: 80}}
+
+	tests := []struct {
+		nginxProxyUseClusterIP *bool
+		uspUseClusterIP        *bool
+		name                   string
+		expectClusterIP        bool
+	}{
+		{
+			name:                   "NginxProxy enables, no UpstreamSettingsPolicy",
+			nginxProxyUseClusterIP: helpers.GetPointer(true),
+			uspUseClusterIP:        nil,
+			expectClusterIP:        true,
+		},
+		{
+			name:                   "UpstreamSettingsPolicy enables, NginxProxy unset",
+			nginxProxyUseClusterIP: nil,
+			uspUseClusterIP:        helpers.GetPointer(true),
+			expectClusterIP:        true,
+		},
+		{
+			name:                   "UpstreamSettingsPolicy disables, overriding NginxProxy enabled",
+			nginxProxyUseClusterIP: helpers.GetPointer(true),
+			uspUseClusterIP:        helpers.GetPointer(false),
+			expectClusterIP:        false,
+		},
+		{
+			name:                   "UpstreamSettingsPolicy enables, overriding NginxProxy disabled",
+			nginxProxyUseClusterIP: helpers.GetPointer(false),
+			uspUseClusterIP:        helpers.GetPointer(true),
+			expectClusterIP:        true,
+		},
+		{
+			name:                   "neither NginxProxy nor UpstreamSettingsPolicy set",
+			nginxProxyUseClusterIP: nil,
+			uspUseClusterIP:        nil,
+			expectClusterIP:        false,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			var svcPolicies []*graph.Policy
+			if test.uspUseClusterIP != nil {
+				usp := &ngfAPIv1alpha1.UpstreamSettingsPolicy{
+					ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "usp"},
+					Spec:       ngfAPIv1alpha1.UpstreamSettingsPolicySpec{UseClusterIP: test.uspUseClusterIP},
+				}
+				svcPolicies = []*graph.Policy{{Source: usp, Valid: true}}
+			}
+
+			gateway := &graph.Gateway{
+				Source: &v1.Gateway{ObjectMeta: metav1.ObjectMeta{Name: "gw", Namespace: "default"}},
+				Listeners: []*graph.Listener{
+					{
+						Valid:  true,
+						Source: v1.Listener{Protocol: v1.HTTPProtocolType, Port: 80},
+						Routes: map[graph.RouteKey]*graph.L7Route{
+							{NamespacedName: types.NamespacedName{Namespace: "default", Name: "route"}}: {
+								Valid: true,
+								Spec: graph.L7RouteSpec{
+									Rules: []graph.RouteRule{
+										{
+											ValidMatches: true,
+											Filters:      graph.RouteRuleFilters{Valid: true},
+											BackendRefs: []graph.BackendRef{
+												{
+													Valid:       true,
+													SvcNsName:   svcKey,
+													ServicePort: apiv1.ServicePort{Port: 80},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			}
+			if test.nginxProxyUseClusterIP != nil {
+				gateway.EffectiveNginxProxy = &graph.EffectiveNginxProxy{UseClusterIP: test.nginxProxyUseClusterIP}
+			}
+
+			referencedServices := map[types.NamespacedName]*graph.ReferencedService{
+				svcKey: {
+					ClusterIP: clusterIP,
+					Policies:  svcPolicies,
+					GatewayNsNames: map[types.NamespacedName]struct{}{
+						{Name: "gw", Namespace: "default"}: {},
+					},
+				},
+			}
+
+			fakeResolver := &resolverfakes.FakeServiceResolver{}
+			fakeResolver.ResolveReturns(podEndpoints, nil)
+
+			upstreams := buildUpstreams(t.Context(), logr.Discard(), gateway, fakeResolver, referencedServices)
+
+			g.Expect(upstreams).To(HaveLen(1))
+			if test.expectClusterIP {
+				g.Expect(fakeResolver.ResolveCallCount()).To(Equal(0))
+				g.Expect(upstreams[0].Endpoints).To(Equal([]resolver.Endpoint{{Address: clusterIP, Port: 80}}))
+			} else {
+				g.Expect(fakeResolver.ResolveCallCount()).To(Equal(1))
+				g.Expect(upstreams[0].Endpoints).To(Equal(podEndpoints))
+			}
+		})
+	}
+}

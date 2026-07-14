@@ -20,7 +20,9 @@ type UpstreamSettings struct {
 	// KeepAlive contains the keepalive settings.
 	KeepAlive http.UpstreamKeepAlive
 	// UseClusterIP indicates whether to route to the Service ClusterIP instead of Pod IPs.
-	UseClusterIP bool
+	// A nil value means the policy did not set this field, allowing callers to fall back to
+	// other configuration (e.g. the NginxProxy setting).
+	UseClusterIP *bool
 }
 
 // NewProcessor returns a new Processor.
@@ -78,7 +80,7 @@ func processPolicies(pols []policies.Policy) UpstreamSettings {
 		}
 
 		if usp.Spec.UseClusterIP != nil {
-			upstreamSettings.UseClusterIP = *usp.Spec.UseClusterIP
+			upstreamSettings.UseClusterIP = usp.Spec.UseClusterIP
 		}
 	}
 

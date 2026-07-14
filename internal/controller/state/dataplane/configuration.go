@@ -1790,13 +1790,20 @@ func buildUpstream(
 		uspSettings = upstreamsettings.Processor{}.Process(upstreamPolicies)
 	}
 
+	// The NginxProxy setting provides the default; a UseClusterIP value set in an
+	// UpstreamSettingsPolicy for this Service takes precedence over that default.
+	useClusterIP := useClusterIPForNginxProxy(gateway.EffectiveNginxProxy)
+	if uspSettings.UseClusterIP != nil {
+		useClusterIP = *uspSettings.UseClusterIP
+	}
+
 	eps, err := resolveUpstreamEndpoints(
 		ctx,
 		logger,
 		br,
 		svcResolver,
 		referencedServices,
-		uspSettings.UseClusterIP,
+		useClusterIP,
 	)
 	if err != nil {
 		errMsg = err.Error()
@@ -2602,6 +2609,12 @@ func getClusterIP(
 		return graphSvc.ClusterIP
 	}
 	return ""
+}
+
+// useClusterIPForNginxProxy returns whether the NginxProxy configuration enables routing to the
+// Service ClusterIP instead of individual Pod IPs.
+func useClusterIPForNginxProxy(np *graph.EffectiveNginxProxy) bool {
+	return np != nil && np.UseClusterIP != nil && *np.UseClusterIP
 }
 
 // resolveUpstreamEndpoints handles service resolution for both regular and ExternalName services.
