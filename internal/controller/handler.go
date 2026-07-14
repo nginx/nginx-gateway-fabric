@@ -246,23 +246,30 @@ func (h *eventHandlerImpl) sendNginxConfig(ctx context.Context, logger logr.Logg
 	// ensure headless "shadow" Services are created for any referenced InferencePools
 	h.ensureInferencePoolServices(ctx, gr.ReferencedInferencePools)
 
+	// Track RegisterGateway goroutines so we can wait for them to complete before
+	// enqueuing status updates. RegisterGateway may patch Service status with Gateway
+	// spec addresses (for static address support), and the status update reads from
+	// the Service. Without this synchronization the status update can race with the
+	// Service status patch, causing intermittent empty Gateway addresses.
+	var provisionerWg sync.WaitGroup
+	var statusObjects []*status.QueueObject
+
 	for _, gw := range gr.Gateways {
-		go func() {
+		provisionerWg.Go(func() {
 			if err := h.cfg.nginxProvisioner.RegisterGateway(ctx, gw, gw.DeploymentName.Name); err != nil {
 				logger.Error(err, "error from provisioner")
 			}
-		}()
+		})
 
 		// If no listeners or invalid, update status but skip config generation
 		if len(gw.Listeners) == 0 || !gw.Valid {
-			obj := &status.QueueObject{
+			statusObjects = append(statusObjects, &status.QueueObject{
 				Deployment: status.Deployment{
 					NamespacedName: gw.DeploymentName,
 					GatewayName:    gw.Source.GetName(),
 				},
 				UpdateType: status.UpdateAll,
-			}
-			h.cfg.statusQueue.Enqueue(obj)
+			})
 			continue
 		}
 
@@ -270,15 +277,14 @@ func (h *eventHandlerImpl) sendNginxConfig(ctx context.Context, logger logr.Logg
 			// Fail-closed (default): a pending bundle blocks the config push until the bundle is available.
 			// Enqueue a status update because the config is being withheld in this fail-closed case,
 			// making the pending condition visible to the operator.
-			obj := &status.QueueObject{
+			statusObjects = append(statusObjects, &status.QueueObject{
 				UpdateType: status.UpdateAll,
 				Deployment: status.Deployment{
 					NamespacedName: gw.DeploymentName,
 					GatewayName:    gw.Source.GetName(),
 				},
 				Error: errors.New("NGINX configuration update withheld: WAF bundle for Gateway is still pending"),
-			}
-			h.cfg.statusQueue.Enqueue(obj)
+			})
 			continue
 		}
 
@@ -303,27 +309,15 @@ func (h *eventHandlerImpl) sendNginxConfig(ctx context.Context, logger logr.Logg
 
 		h.setLatestConfiguration(gw, &cfg)
 
-		vm := []v1.VolumeMount{}
-		if gw.EffectiveNginxProxy != nil &&
-			gw.EffectiveNginxProxy.Kubernetes != nil {
-			if gw.EffectiveNginxProxy.Kubernetes.Deployment != nil {
-				vm = gw.EffectiveNginxProxy.Kubernetes.Deployment.Container.VolumeMounts
-			}
-
-			if gw.EffectiveNginxProxy.Kubernetes.DaemonSet != nil {
-				vm = gw.EffectiveNginxProxy.Kubernetes.DaemonSet.Container.VolumeMounts
-			}
-		}
-
 		deployment.FileLock.Lock()
-		h.updateNginxConf(deployment, cfg, vm)
+		h.updateNginxConf(deployment, cfg, effectiveVolumeMounts(gw.EffectiveNginxProxy))
 		deployment.FileLock.Unlock()
 
 		configErr := deployment.GetLatestConfigError()
 		upstreamErr := deployment.GetLatestUpstreamError()
 		err := errors.Join(configErr, upstreamErr)
 
-		obj := &status.QueueObject{
+		statusObjects = append(statusObjects, &status.QueueObject{
 			UpdateType:        status.UpdateAll,
 			Error:             err,
 			NginxConfigPushed: true,
@@ -331,9 +325,35 @@ func (h *eventHandlerImpl) sendNginxConfig(ctx context.Context, logger logr.Logg
 				NamespacedName: gw.DeploymentName,
 				GatewayName:    gw.Source.GetName(),
 			},
-		}
+		})
+	}
+
+	// Wait for all provisioner goroutines to finish before enqueuing status updates.
+	// This ensures Service status (e.g. LoadBalancer Ingress IPs) is fully patched
+	// before the status handler reads it to populate Gateway addresses.
+	provisionerWg.Wait()
+
+	for _, obj := range statusObjects {
 		h.cfg.statusQueue.Enqueue(obj)
 	}
+}
+
+// effectiveVolumeMounts returns the user-configured volume mounts from the EffectiveNginxProxy,
+// or nil if none are configured.
+func effectiveVolumeMounts(np *graph.EffectiveNginxProxy) []v1.VolumeMount {
+	if np == nil || np.Kubernetes == nil {
+		return nil
+	}
+
+	if np.Kubernetes.Deployment != nil {
+		return np.Kubernetes.Deployment.Container.VolumeMounts
+	}
+
+	if np.Kubernetes.DaemonSet != nil {
+		return np.Kubernetes.DaemonSet.Container.VolumeMounts
+	}
+
+	return nil
 }
 
 // reconcileWAFPollers starts, updates, or stops WAF bundle pollers based on the current graph state.

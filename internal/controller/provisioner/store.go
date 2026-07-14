@@ -26,6 +26,7 @@ type NginxResources struct {
 	PDB                 metav1.ObjectMeta
 	DaemonSet           metav1.ObjectMeta
 	Service             metav1.ObjectMeta
+	ServiceLBClass      *string
 	ServiceAccount      metav1.ObjectMeta
 	Role                metav1.ObjectMeta
 	RoleBinding         metav1.ObjectMeta
@@ -146,7 +147,9 @@ func (s *store) registerResourceInGatewayConfig(gatewayNSName types.NamespacedNa
 	case *appsv1.DaemonSet:
 		s.getOrCreateNginxResources(gatewayNSName).DaemonSet = obj.ObjectMeta
 	case *corev1.Service:
-		s.getOrCreateNginxResources(gatewayNSName).Service = obj.ObjectMeta
+		res := s.getOrCreateNginxResources(gatewayNSName)
+		res.Service = obj.ObjectMeta
+		res.ServiceLBClass = obj.Spec.LoadBalancerClass
 	case *corev1.ServiceAccount:
 		s.getOrCreateNginxResources(gatewayNSName).ServiceAccount = obj.ObjectMeta
 	case *rbacv1.Role:
@@ -327,6 +330,19 @@ func (s *store) deleteResourcesForGateway(nsName types.NamespacedName) {
 	defer s.lock.Unlock()
 
 	delete(s.nginxResources, nsName)
+}
+
+// clearServiceForGateway removes the Service entry from the NginxResources tracked for the
+// given Gateway. This prevents the delete-event handler from treating a subsequent intentional
+// Service deletion as an unexpected removal that needs reprovisioning.
+func (s *store) clearServiceForGateway(gatewayNSName types.NamespacedName) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	if cfg, ok := s.nginxResources[gatewayNSName]; ok {
+		cfg.Service = metav1.ObjectMeta{}
+		cfg.ServiceLBClass = nil
+	}
 }
 
 func (s *store) gatewayExistsForResource(object client.Object, nsName types.NamespacedName) *graph.Gateway {
