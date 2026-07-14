@@ -16,6 +16,8 @@ type ReferencedService struct {
 	GatewayNsNames map[types.NamespacedName]struct{}
 	// ExternalName holds the external service name for ExternalName type services.
 	ExternalName string
+	// ClusterIP is the ClusterIP of the Service, used when UseClusterIP is enabled.
+	ClusterIP string
 	// Policies is a list of NGF Policies that target this Service.
 	Policies []*Policy
 	// IsExternalName indicates whether this Service is of type ExternalName.
@@ -166,11 +168,13 @@ func ensureReferencedService(
 	}
 
 	isExternal, externalName := getServiceExternalNameInfo(svcNsName, services)
+	clusterIP := getServiceClusterIP(svcNsName, services)
 	referencedServices[svcNsName] = &ReferencedService{
 		Policies:       nil,
 		GatewayNsNames: make(map[types.NamespacedName]struct{}),
 		IsExternalName: isExternal,
 		ExternalName:   externalName,
+		ClusterIP:      clusterIP,
 	}
 }
 
@@ -185,4 +189,21 @@ func getServiceExternalNameInfo(
 	}
 
 	return true, svc.Spec.ExternalName
+}
+
+// getServiceClusterIP returns the ClusterIP of a Service, or empty string if the
+// Service is not found, is headless (ClusterIP: None), or does not have a ClusterIP set (e.g. ExternalName Services).
+func getServiceClusterIP(
+	svcNsName types.NamespacedName,
+	services map[types.NamespacedName]*v1.Service,
+) string {
+	svc, exists := services[svcNsName]
+	if !exists {
+		return ""
+	}
+	// Headless services (ClusterIP == "None") cannot be used with UseClusterIP.
+	if svc.Spec.ClusterIP == v1.ClusterIPNone || svc.Spec.ClusterIP == "" {
+		return ""
+	}
+	return svc.Spec.ClusterIP
 }

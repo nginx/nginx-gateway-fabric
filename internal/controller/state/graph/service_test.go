@@ -637,3 +637,68 @@ func TestBuildReferencedServices(t *testing.T) {
 		})
 	}
 }
+
+func TestGetServiceClusterIP(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		svcNsName  types.NamespacedName
+		services   map[types.NamespacedName]*corev1.Service
+		expCluster string
+	}{
+		{
+			name:      "service not found",
+			svcNsName: types.NamespacedName{Namespace: "default", Name: "missing"},
+			services:  map[types.NamespacedName]*corev1.Service{},
+		},
+		{
+			name:      "normal ClusterIP service",
+			svcNsName: types.NamespacedName{Namespace: "default", Name: "my-svc"},
+			services: map[types.NamespacedName]*corev1.Service{
+				{Namespace: "default", Name: "my-svc"}: {
+					Spec: corev1.ServiceSpec{
+						ClusterIP: "10.96.0.1",
+						Type:      corev1.ServiceTypeClusterIP,
+					},
+				},
+			},
+			expCluster: "10.96.0.1",
+		},
+		{
+			name:      "headless service returns empty string",
+			svcNsName: types.NamespacedName{Namespace: "default", Name: "headless"},
+			services: map[types.NamespacedName]*corev1.Service{
+				{Namespace: "default", Name: "headless"}: {
+					Spec: corev1.ServiceSpec{
+						ClusterIP: corev1.ClusterIPNone,
+						Type:      corev1.ServiceTypeClusterIP,
+					},
+				},
+			},
+			expCluster: "",
+		},
+		{
+			name:      "ExternalName service returns empty string",
+			svcNsName: types.NamespacedName{Namespace: "default", Name: "ext-svc"},
+			services: map[types.NamespacedName]*corev1.Service{
+				{Namespace: "default", Name: "ext-svc"}: {
+					Spec: corev1.ServiceSpec{
+						Type:         corev1.ServiceTypeExternalName,
+						ExternalName: "api.example.com",
+						ClusterIP:    "",
+					},
+				},
+			},
+			expCluster: "",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+			g.Expect(getServiceClusterIP(test.svcNsName, test.services)).To(Equal(test.expCluster))
+		})
+	}
+}
