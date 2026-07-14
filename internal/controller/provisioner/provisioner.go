@@ -412,7 +412,9 @@ func (p *NginxProvisioner) provisionNginx(
 	// we must delete the existing Service first because loadBalancerClass is immutable.
 	// We clear it from the store before deleting so the event handler doesn't try to
 	// reprovision it.
-	p.deleteServiceForLBClassChange(ctx, gateway, objects)
+	if err := p.deleteServiceForLBClassChange(ctx, gateway, objects); err != nil {
+		return err
+	}
 
 	var state nginxProvisionState
 	for _, obj := range objects {
@@ -886,11 +888,14 @@ func needToDeleteDaemonSet(cfg *NginxResources) bool {
 // (so the delete-event handler does not attempt to reprovision it) and deletes the existing
 // Service. The subsequent CreateOrUpdate in the provisioning loop will then create a fresh
 // Service with the correct loadBalancerClass.
+//
+// Returns an error if the Service could not be deleted, so the caller can abort and requeue
+// rather than proceeding into the immutable-field Invalid error loop.
 func (p *NginxProvisioner) deleteServiceForLBClassChange(
 	ctx context.Context,
 	gateway *gatewayv1.Gateway,
 	objects []client.Object,
-) {
+) error {
 	var desiredSvc *corev1.Service
 	for _, obj := range objects {
 		if svc, ok := obj.(*corev1.Service); ok {
@@ -899,7 +904,7 @@ func (p *NginxProvisioner) deleteServiceForLBClassChange(
 		}
 	}
 	if desiredSvc == nil {
-		return
+		return nil
 	}
 
 	gatewayNSName := client.ObjectKeyFromObject(gateway)
@@ -918,15 +923,17 @@ func (p *NginxProvisioner) deleteServiceForLBClassChange(
 		existing := &corev1.Service{}
 		key := types.NamespacedName{Name: desiredSvc.Name, Namespace: desiredSvc.Namespace}
 		if err := p.k8sClient.Get(ctx, key, existing); err != nil {
-			// Service doesn't exist in the cluster; nothing to delete.
-			return
+			if apierrors.IsNotFound(err) {
+				return nil
+			}
+			return fmt.Errorf("failed to get existing Service for loadBalancerClass check: %w", err)
 		}
 		existingLBClass = existing.Spec.LoadBalancerClass
 		svcToDelete = existing
 	}
 
 	if !needToDeleteServiceForLBClassChange(existingLBClass, desiredSvc.Spec.LoadBalancerClass) {
-		return
+		return nil
 	}
 
 	p.cfg.Logger.Info(
@@ -963,12 +970,14 @@ func (p *NginxProvisioner) deleteServiceForLBClassChange(
 	defer cancel()
 
 	if err := p.k8sClient.Delete(deleteCtx, svcToDelete); err != nil && !apierrors.IsNotFound(err) {
-		p.cfg.Logger.Error(err, "failed to delete Service for loadBalancerClass change")
 		// Restore the store entry so the next reconcile can retry deletion.
 		if savedSvc != nil {
 			p.store.registerResourceInGatewayConfig(gatewayNSName, savedSvc)
 		}
+		return fmt.Errorf("failed to delete Service for loadBalancerClass change: %w", err)
 	}
+
+	return nil
 }
 
 // needToDeleteServiceForLBClassChange returns true when the existing and desired loadBalancerClass

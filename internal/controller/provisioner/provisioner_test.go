@@ -844,7 +844,9 @@ func TestDeleteServiceForLBClassChangeRestoresStoreOnFailure(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "gw", Namespace: "default"},
 	}
 
-	provisioner.deleteServiceForLBClassChange(t.Context(), gateway, []client.Object{desiredSvc})
+	err := provisioner.deleteServiceForLBClassChange(t.Context(), gateway, []client.Object{desiredSvc})
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(err.Error()).To(ContainSubstring("connection refused"))
 
 	// The store entry should be restored so the next reconcile can retry deletion.
 	nginxRes := st.getNginxResourcesForGateway(gatewayNSName)
@@ -896,11 +898,12 @@ func TestDeleteServiceForLBClassChangeFallsBackToLiveGet(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "gw", Namespace: "default"},
 	}
 
-	provisioner.deleteServiceForLBClassChange(t.Context(), gateway, []client.Object{desiredSvc})
+	err := provisioner.deleteServiceForLBClassChange(t.Context(), gateway, []client.Object{desiredSvc})
+	g.Expect(err).ToNot(HaveOccurred())
 
 	// The old Service should have been deleted via the fallback GET path.
 	got := &corev1.Service{}
-	err := fakeClient.Get(
+	err = fakeClient.Get(
 		t.Context(),
 		types.NamespacedName{Name: "gw-nginx", Namespace: "default"},
 		got,
