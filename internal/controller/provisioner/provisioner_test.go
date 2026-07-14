@@ -853,6 +853,61 @@ func TestDeleteServiceForLBClassChangeRestoresStoreOnFailure(t *testing.T) {
 	g.Expect(nginxRes.ServiceLBClass).To(BeNil())
 }
 
+func TestDeleteServiceForLBClassChangeFallsBackToLiveGet(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	// Service exists in the cluster with no LoadBalancerClass, but the store is empty
+	// (simulating a controller restart before the informer delivers the event).
+	existingSvc := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{Name: "gw-nginx", Namespace: "default"},
+		Spec:       corev1.ServiceSpec{Type: corev1.ServiceTypeLoadBalancer},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(createScheme()).
+		WithObjects(existingSvc).
+		Build()
+
+	st := newStore(nil, "", "", "", "", "")
+	// Intentionally do NOT register the Service in the store.
+
+	provisioner := &NginxProvisioner{
+		leader: true,
+		store:  st,
+		cfg: Config{
+			Logger:           logr.Discard(),
+			EventRecorder:    &k8sEvents.FakeRecorder{},
+			GatewayPodConfig: &config.GatewayPodConfig{},
+		},
+		k8sClient: fakeClient,
+	}
+
+	lbClass := "gateway.nginx.org/nginx-gateway-controller"
+	desiredSvc := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{Name: "gw-nginx", Namespace: "default"},
+		Spec: corev1.ServiceSpec{
+			Type:              corev1.ServiceTypeLoadBalancer,
+			LoadBalancerClass: &lbClass,
+		},
+	}
+
+	gateway := &gatewayv1.Gateway{
+		ObjectMeta: metav1.ObjectMeta{Name: "gw", Namespace: "default"},
+	}
+
+	provisioner.deleteServiceForLBClassChange(t.Context(), gateway, []client.Object{desiredSvc})
+
+	// The old Service should have been deleted via the fallback GET path.
+	got := &corev1.Service{}
+	err := fakeClient.Get(
+		t.Context(),
+		types.NamespacedName{Name: "gw-nginx", Namespace: "default"},
+		got,
+	)
+	g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
+}
+
 // deleteFailingClient wraps a client.Client and fails all Delete calls with the configured error.
 type deleteFailingClient struct {
 	client.Client

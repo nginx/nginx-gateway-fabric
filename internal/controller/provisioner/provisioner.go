@@ -880,7 +880,9 @@ func needToDeleteDaemonSet(cfg *NginxResources) bool {
 }
 
 // deleteServiceForLBClassChange checks whether the desired Service's loadBalancerClass differs
-// from the value tracked in the in-memory store. If so, it clears the Service from the store
+// from the existing Service. It first checks the in-memory store, falling back to a live GET
+// when the store doesn't yet have the Service (e.g. after a controller restart before the
+// informer delivers the event). If a mismatch is found, it clears the Service from the store
 // (so the delete-event handler does not attempt to reprovision it) and deletes the existing
 // Service. The subsequent CreateOrUpdate in the provisioning loop will then create a fresh
 // Service with the correct loadBalancerClass.
@@ -902,20 +904,35 @@ func (p *NginxProvisioner) deleteServiceForLBClassChange(
 
 	gatewayNSName := client.ObjectKeyFromObject(gateway)
 
+	var existingLBClass *string
+	var svcToDelete *corev1.Service
+	inStore := false
+
 	nginxRes := p.store.getNginxResourcesForGateway(gatewayNSName)
-	if nginxRes == nil || nginxRes.Service.Name == "" {
-		// Service hasn't been provisioned yet; nothing to delete.
-		return
+	if nginxRes != nil && nginxRes.Service.Name != "" {
+		existingLBClass = nginxRes.ServiceLBClass
+		svcToDelete = &corev1.Service{ObjectMeta: nginxRes.Service}
+		inStore = true
+	} else {
+		// Store doesn't have the Service yet; fall back to a live GET.
+		existing := &corev1.Service{}
+		key := types.NamespacedName{Name: desiredSvc.Name, Namespace: desiredSvc.Namespace}
+		if err := p.k8sClient.Get(ctx, key, existing); err != nil {
+			// Service doesn't exist in the cluster; nothing to delete.
+			return
+		}
+		existingLBClass = existing.Spec.LoadBalancerClass
+		svcToDelete = existing
 	}
 
-	if !needToDeleteServiceForLBClassChange(nginxRes.ServiceLBClass, desiredSvc.Spec.LoadBalancerClass) {
+	if !needToDeleteServiceForLBClassChange(existingLBClass, desiredSvc.Spec.LoadBalancerClass) {
 		return
 	}
 
 	p.cfg.Logger.Info(
 		"Deleting Service to update immutable loadBalancerClass field",
-		"namespace", nginxRes.Service.Namespace,
-		"name", nginxRes.Service.Name,
+		"namespace", svcToDelete.Namespace,
+		"name", svcToDelete.Name,
 	)
 
 	p.cfg.EventRecorder.Eventf(
@@ -925,23 +942,22 @@ func (p *NginxProvisioner) deleteServiceForLBClassChange(
 		"RecreatingService",
 		"None",
 		"Deleting Service %s/%s to update immutable loadBalancerClass; it will be recreated",
-		nginxRes.Service.Namespace,
-		nginxRes.Service.Name,
+		svcToDelete.Namespace,
+		svcToDelete.Name,
 	)
 
-	svcToDelete := &corev1.Service{
-		ObjectMeta: nginxRes.Service,
-	}
-
 	// Save the store entry so we can restore it if the delete fails.
-	savedSvc := &corev1.Service{
-		ObjectMeta: nginxRes.Service,
-		Spec:       corev1.ServiceSpec{LoadBalancerClass: nginxRes.ServiceLBClass},
-	}
+	var savedSvc *corev1.Service
+	if inStore {
+		savedSvc = &corev1.Service{
+			ObjectMeta: nginxRes.Service,
+			Spec:       corev1.ServiceSpec{LoadBalancerClass: nginxRes.ServiceLBClass},
+		}
 
-	// Clear the Service from the store before deleting so the event handler
-	// does not treat this as an unexpected deletion requiring reprovisioning.
-	p.store.clearServiceForGateway(gatewayNSName)
+		// Clear the Service from the store before deleting so the event handler
+		// does not treat this as an unexpected deletion requiring reprovisioning.
+		p.store.clearServiceForGateway(gatewayNSName)
+	}
 
 	deleteCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
@@ -949,7 +965,9 @@ func (p *NginxProvisioner) deleteServiceForLBClassChange(
 	if err := p.k8sClient.Delete(deleteCtx, svcToDelete); err != nil && !apierrors.IsNotFound(err) {
 		p.cfg.Logger.Error(err, "failed to delete Service for loadBalancerClass change")
 		// Restore the store entry so the next reconcile can retry deletion.
-		p.store.registerResourceInGatewayConfig(gatewayNSName, savedSvc)
+		if savedSvc != nil {
+			p.store.registerResourceInGatewayConfig(gatewayNSName, savedSvc)
+		}
 	}
 }
 
