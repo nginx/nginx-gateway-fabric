@@ -10,22 +10,22 @@ spec:
   - "cafe.example.com"
   rules:
   - matches:
-      - path:
-          type: PathPrefix
-          value: /coffee
+    - path:
+        type: PathPrefix
+        value: /coffee
     backendRefs:
-      - name: coffee
-        port: 80
+    - name: coffee
+      port: 80
     filters:
-      - type: ExtensionRef
-        extensionRef:
-          group: gateway.nginx.org
-          kind: AuthenticationFilter
-          name: basic-auth
+    - type: ExtensionRef
+      extensionRef:
+        group: gateway.nginx.org
+        kind: AuthenticationFilter
+        name: basic-auth
   - matches:
-      - path:
-          type: PathPrefix
-          value: /tea
+    - path:
+        type: PathPrefix
+        value: /tea
     backendRefs:
-      - name: tea
-        port: 80
+    - name: tea
+      port: 80
