@@ -438,10 +438,7 @@ var _ = Describe("UpstreamSettingsPolicy", Ordered, Label("functional", "uspolic
 		})
 
 		Context("nginx config", func() {
-			var (
-				conf      *framework.Payload
-				clusterIP string
-			)
+			var clusterIP string
 
 			BeforeAll(func() {
 				ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.GetStatusTimeout)
@@ -455,10 +452,6 @@ var _ = Describe("UpstreamSettingsPolicy", Ordered, Label("functional", "uspolic
 				)
 				Expect(err).ToNot(HaveOccurred())
 				clusterIP = svc.Spec.ClusterIP
-
-				var cfgErr error
-				conf, cfgErr = resourceManager.GetNginxConfig(nginxPodName, namespace, "")
-				Expect(cfgErr).ToNot(HaveOccurred())
 			})
 
 			It("uses the Service ClusterIP as the upstream server", func() {
@@ -469,12 +462,58 @@ var _ = Describe("UpstreamSettingsPolicy", Ordered, Label("functional", "uspolic
 					serverAddr = fmt.Sprintf("%s:80", clusterIP)
 				}
 
-				Expect(framework.ValidateNginxFieldExists(conf, framework.ExpectedNginxField{
-					Directive: "server",
-					Value:     serverAddr,
-					Upstream:  "uspolicy_coffee_80",
-					File:      "http.conf",
-				})).To(Succeed())
+				upstreamName := "uspolicy_coffee_80"
+
+				if *plusEnabled {
+					// In NGINX Plus, upstream servers are managed via the Plus API and
+					// persisted in a state file rather than as server directives in the
+					// config. Read the state file to verify the ClusterIP is used.
+					Eventually(func() error {
+						ctx, cancel := context.WithTimeout(
+							context.Background(),
+							timeoutConfig.RequestTimeout,
+						)
+						defer cancel()
+
+						stateFileContent, err := resourceManager.GetNginxStateFile(
+							ctx, nginxPodName, namespace, upstreamName,
+						)
+						if err != nil {
+							return err
+						}
+
+						if !strings.Contains(stateFileContent, serverAddr) {
+							return fmt.Errorf(
+								"expected state file for upstream %s to contain server %s, got: %s",
+								upstreamName,
+								serverAddr,
+								stateFileContent,
+							)
+						}
+
+						return nil
+					}).
+						WithTimeout(timeoutConfig.GetStatusTimeout).
+						WithPolling(500 * time.Millisecond).
+						Should(Succeed())
+				} else {
+					Eventually(func() error {
+						conf, err := resourceManager.GetNginxConfig(nginxPodName, namespace, "")
+						if err != nil {
+							return err
+						}
+
+						return framework.ValidateNginxFieldExists(conf, framework.ExpectedNginxField{
+							Directive: "server",
+							Value:     serverAddr,
+							Upstream:  upstreamName,
+							File:      "http.conf",
+						})
+					}).
+						WithTimeout(timeoutConfig.GetStatusTimeout).
+						WithPolling(500 * time.Millisecond).
+						Should(Succeed())
+				}
 			})
 		})
 	})
