@@ -135,6 +135,7 @@ func NewChangeProcessorImpl(cfg ChangeProcessorConfig) *ChangeProcessorImpl {
 		ListenerSets:          make(map[types.NamespacedName]*v1.ListenerSet),
 		APPolicies:            make(map[types.NamespacedName]*unstructured.Unstructured),
 		APLogConfs:            make(map[types.NamespacedName]*unstructured.Unstructured),
+		ExternalLoadBalancer:  make(map[types.NamespacedName]*ngfAPIv1alpha1.ExternalLoadBalancer),
 	}
 
 	processor := &ChangeProcessorImpl{
@@ -260,6 +261,11 @@ func NewChangeProcessorImpl(cfg ChangeProcessorConfig) *ChangeProcessorImpl {
 		{
 			gvk:       cfg.MustExtractGVK(kinds.NewAPLogConfObject()),
 			store:     newObjectStoreMapAdapter(clusterStore.APLogConfs),
+			predicate: nil,
+		},
+		{
+			gvk:       cfg.MustExtractGVK(&ngfAPIv1alpha1.ExternalLoadBalancer{}),
+			store:     newObjectStoreMapAdapter(clusterStore.ExternalLoadBalancer),
 			predicate: nil,
 		},
 		{

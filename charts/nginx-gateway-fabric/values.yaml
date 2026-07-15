@@ -369,6 +369,12 @@ nginxGateway:
       # -- Disable TLS certificate verification for PLM storage connections (dev/test only).
       insecureSkipVerify: false
 
+  externalLoadBalancer:
+    # -- Enable ExternalLoadBalancer support. Allows for fronting a Gateway with an external load balancer.
+    # Supported load balancers:
+    # - F5 BIG-IP, through F5 Container Ingress Services.
+    enable: false
+
 # -- The nginx section contains the configuration for all NGINX data plane deployments
 # installed by the NGINX Gateway Fabric control plane.
 nginx:

@@ -16,6 +16,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
@@ -39,6 +40,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller/controllerfakes"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
 
 const (
@@ -728,7 +730,7 @@ func TestNonLeaderProvisioner(t *testing.T) {
 	g.Expect(provisioner.provisionNginx(t.Context(), "gw-nginx", nil, nil)).To(Succeed())
 	expectResourcesToNotExist(t, g, fakeClient, nsName)
 
-	g.Expect(provisioner.reprovisionNginx(t.Context(), "gw-nginx", nil, nil, nil)).To(Succeed())
+	g.Expect(provisioner.reprovisionNginx(t.Context(), "gw-nginx", nil, nil, nil, nil)).To(Succeed())
 	expectResourcesToNotExist(t, g, fakeClient, nsName)
 
 	g.Expect(provisioner.deprovisionNginxForInvalidGateway(t.Context(), nsName)).To(Succeed())
@@ -1361,6 +1363,30 @@ func TestCreateMinimalClone_UnsupportedType(t *testing.T) {
 	g.Expect(func() {
 		createMinimalClone(unsupported)
 	}).To(Panic())
+}
+
+func TestCreateMinimalClone_Unstructured(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	il := &unstructured.Unstructured{}
+	il.SetGroupVersionKind(kinds.IngressLinkGVK)
+	il.SetName("gw-nginx")
+	il.SetNamespace("default")
+	il.SetLabels(map[string]string{"app": "gw-nginx"})
+	il.Object["spec"] = map[string]any{"virtualServerAddress": "10.0.0.1"}
+
+	clone := createMinimalClone(il)
+
+	cloneU, ok := clone.(*unstructured.Unstructured)
+	g.Expect(ok).To(BeTrue())
+	g.Expect(cloneU.GroupVersionKind()).To(Equal(kinds.IngressLinkGVK))
+	g.Expect(cloneU.GetName()).To(Equal("gw-nginx"))
+	g.Expect(cloneU.GetNamespace()).To(Equal("default"))
+	// Only name, namespace, and GVK should be set on the minimal clone.
+	g.Expect(cloneU.GetLabels()).To(BeEmpty())
+	g.Expect(cloneU.Object).ToNot(HaveKey("spec"))
+	g.Expect(clone).ToNot(BeIdenticalTo(il))
 }
 
 func TestCreateMinimalClone_CreatesSeparateInstances(t *testing.T) {

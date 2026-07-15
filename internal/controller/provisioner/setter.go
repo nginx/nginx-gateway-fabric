@@ -12,6 +12,7 @@ import (
 	policyv1 "k8s.io/api/policy/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
@@ -61,9 +62,28 @@ func objectSpecSetter(minimalObject, object client.Object) controllerutil.Mutate
 		if minObj, ok := minimalObject.(*rbacv1.RoleBinding); ok {
 			return roleBindingSpecSetter(minObj, obj.RoleRef, obj.Subjects, obj.ObjectMeta)
 		}
+	case *unstructured.Unstructured:
+		if minObj, ok := minimalObject.(*unstructured.Unstructured); ok {
+			return unstructuredSpecSetter(minObj, obj)
+		}
 	}
 
 	return nil
+}
+
+// unstructuredSpecSetter transfers the desired spec, labels, and annotations onto minObj. Without
+// it CreateOrUpdate would use a nil MutateFn for unstructured objects and silently drop updates.
+func unstructuredSpecSetter(minObj, obj *unstructured.Unstructured) controllerutil.MutateFn {
+	desiredSpec := obj.Object["spec"]
+	desiredLabels := obj.GetLabels()
+	desiredAnnotations := obj.GetAnnotations()
+
+	return func() error {
+		minObj.Object["spec"] = desiredSpec
+		minObj.SetLabels(desiredLabels)
+		minObj.SetAnnotations(mergeAnnotations(minObj.GetAnnotations(), desiredAnnotations))
+		return nil
+	}
 }
 
 func deploymentSpecSetter(

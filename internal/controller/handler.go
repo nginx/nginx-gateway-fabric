@@ -154,9 +154,12 @@ type objectFilter struct {
 // (3) Updating control plane configuration.
 // (4) Tracks the NGINX Plus usage reporting Secret (if applicable).
 type eventHandlerImpl struct {
-	latestConfigurations  map[types.NamespacedName]*dataplane.Configuration
-	objectFilters         map[filterKey]objectFilter
-	finalizedAPResources  map[apResourceKey]struct{}
+	latestConfigurations map[types.NamespacedName]*dataplane.Configuration
+	objectFilters        map[filterKey]objectFilter
+	finalizedAPResources map[apResourceKey]struct{}
+	// ingressLinkAddresses is each Gateway's IngressLink address, cached because the graph will not
+	// carry it until a later Gateway event rebuilds it.
+	ingressLinkAddresses  map[types.NamespacedName]string
 	cfg                   eventHandlerConfig
 	lock                  sync.RWMutex
 	leaderLock            sync.RWMutex
@@ -171,6 +174,7 @@ func newEventHandlerImpl(cfg eventHandlerConfig) *eventHandlerImpl {
 		cfg:                  cfg,
 		latestConfigurations: make(map[types.NamespacedName]*dataplane.Configuration),
 		finalizedAPResources: make(map[apResourceKey]struct{}),
+		ingressLinkAddresses: make(map[types.NamespacedName]string),
 	}
 
 	handler.objectFilters = map[filterKey]objectFilter{
@@ -577,47 +581,144 @@ func (h *eventHandlerImpl) waitForStatusUpdates(ctx context.Context) {
 		case status.UpdateAll:
 			h.updateStatuses(ctx, gr, gw)
 		case status.UpdateGateway:
-			if gw == nil {
-				continue
-			}
-
-			gwAddresses, err := getGatewayAddresses(
-				ctx,
-				h.cfg.k8sClient,
-				item.GatewayService,
-				gw,
-				h.cfg.gatewayClassName,
-			)
-			if err != nil {
-				msg := "error getting Gateway Service IP address"
-				h.cfg.logger.Error(err, msg)
-				h.cfg.eventRecorder.Eventf(
-					item.GatewayService,
-					gw.Source,
-					v1.EventTypeWarning,
-					"GetServiceIPFailed",
-					"None",
-					msg+": %s",
-					err.Error(),
-				)
-			}
-
-			transitionTime := metav1.Now()
-
-			gatewayStatuses := status.PrepareGatewayRequests(
-				gw,
-				transitionTime,
-				gwAddresses,
-				gw.LatestReloadResult,
-			)
-			h.cfg.statusUpdater.UpdateGroup(ctx, groupGateways, gatewayStatuses...)
+			h.handleGatewayServiceStatusUpdate(ctx, item, gw)
+		case status.UpdateGatewayIngressLink:
+			h.handleIngressLinkStatusUpdate(ctx, item, gw)
 		default:
-			panic(fmt.Sprintf("unknown event type %T", item.UpdateType))
+			panic(fmt.Sprintf("unknown update type %d", item.UpdateType))
 		}
 	}
 }
 
+// handleGatewayServiceStatusUpdate writes the Gateway status with the address resolved from its data
+// plane Service.
+func (h *eventHandlerImpl) handleGatewayServiceStatusUpdate(
+	ctx context.Context,
+	item *status.QueueObject,
+	gw *graph.Gateway,
+) {
+	if gw == nil {
+		return
+	}
+
+	gwAddresses, err := getGatewayAddresses(
+		ctx,
+		h.cfg.k8sClient,
+		item.GatewayService,
+		gw,
+		h.cfg.gatewayClassName,
+	)
+	if err != nil {
+		msg := "error getting Gateway Service IP address"
+		h.cfg.logger.Error(err, msg)
+		h.cfg.eventRecorder.Eventf(
+			item.GatewayService,
+			gw.Source,
+			v1.EventTypeWarning,
+			"GetServiceIPFailed",
+			"None",
+			msg+": %s",
+			err.Error(),
+		)
+	}
+
+	h.updateGatewayStatus(ctx, gw, gwAddresses)
+}
+
+func (h *eventHandlerImpl) handleIngressLinkStatusUpdate(
+	ctx context.Context,
+	item *status.QueueObject,
+	gw *graph.Gateway,
+) {
+	if gw == nil {
+		return
+	}
+
+	// Cached because gw.Source comes from the last built graph, which will not carry this address
+	// until a later Gateway event rebuilds it.
+	gwNSName := client.ObjectKeyFromObject(gw.Source)
+	h.ingressLinkAddresses[gwNSName] = item.IngressLinkAddress
+
+	gwAddresses := []gatewayv1.GatewayStatusAddress{
+		{
+			Type:  helpers.GetPointer(gatewayv1.IPAddressType),
+			Value: item.IngressLinkAddress,
+		},
+	}
+
+	h.updateGatewayStatus(ctx, gw, gwAddresses)
+}
+
+// pruneIngressLinkAddresses bounds the cache to the set of Gateways still in the graph.
+func (h *eventHandlerImpl) pruneIngressLinkAddresses(gr *graph.Graph) {
+	for nsName := range h.ingressLinkAddresses {
+		if _, ok := gr.Gateways[nsName]; !ok {
+			delete(h.ingressLinkAddresses, nsName)
+		}
+	}
+}
+
+func (h *eventHandlerImpl) updateGatewayStatus(
+	ctx context.Context,
+	gw *graph.Gateway,
+	gwAddresses []gatewayv1.GatewayStatusAddress,
+) {
+	transitionTime := metav1.Now()
+	gatewayStatuses := status.PrepareGatewayRequests(
+		gw,
+		transitionTime,
+		gwAddresses,
+		gw.LatestReloadResult,
+	)
+	h.cfg.statusUpdater.UpdateGroup(ctx, groupGateways, gatewayStatuses...)
+}
+
+// configuredAddress returns the address the attached ExternalLoadBalancer configures up front.
+func configuredAddress(gw *graph.Gateway) string {
+	if gw == nil || gw.ExternalLoadBalancer == nil {
+		return ""
+	}
+
+	if gl := gw.ExternalLoadBalancer.Spec.GatewayLink; gl != nil && gl.VirtualServerAddress != nil {
+		return *gl.VirtualServerAddress
+	}
+
+	return ""
+}
+
+// getExternalLoadBalancerAddresses returns the Gateway addresses for a Gateway fronted by an
+// external load balancer, in priority order:
+// 1. The address the load balancer reported back.
+// 2. The address configured up front on the ExternalLoadBalancer, known at creation time.
+// 3. The Gateway's existing status addresses (fallback).
+func (h *eventHandlerImpl) getExternalLoadBalancerAddresses(gw *graph.Gateway) []gatewayv1.GatewayStatusAddress {
+	gwNSName := client.ObjectKeyFromObject(gw.Source)
+
+	if addr, ok := h.ingressLinkAddresses[gwNSName]; ok && addr != "" {
+		return []gatewayv1.GatewayStatusAddress{
+			{
+				Type:  helpers.GetPointer(gatewayv1.IPAddressType),
+				Value: addr,
+			},
+		}
+	}
+
+	if addr := configuredAddress(gw); addr != "" {
+		return []gatewayv1.GatewayStatusAddress{
+			{
+				Type:  helpers.GetPointer(gatewayv1.IPAddressType),
+				Value: addr,
+			},
+		}
+	}
+
+	return gw.Source.Status.Addresses
+}
+
 func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph, gw *graph.Gateway) {
+	// Runs on every graph rebuild, including Gateway deletions.
+	h.pruneIngressLinkAddresses(gr)
+
 	transitionTime := metav1.Now()
 	gcReqs := status.PrepareGatewayClassRequests(gr.GatewayClass, gr.IgnoredGatewayClasses, transitionTime)
 
@@ -626,19 +727,25 @@ func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph, 
 		return
 	}
 
-	gwAddresses, err := getGatewayAddresses(ctx, h.cfg.k8sClient, nil, gw, h.cfg.gatewayClassName)
-	if err != nil {
-		msg := "error getting Gateway Service IP address"
-		h.cfg.logger.Error(err, msg)
-		h.cfg.eventRecorder.Eventf(
-			&v1.Service{},
-			gw.Source,
-			v1.EventTypeWarning,
-			"GetServiceIPFailed",
-			"None",
-			msg+": %s",
-			err.Error(),
-		)
+	var gwAddresses []gatewayv1.GatewayStatusAddress
+	if gw.ExternalLoadBalancer != nil {
+		gwAddresses = h.getExternalLoadBalancerAddresses(gw)
+	} else {
+		var err error
+		gwAddresses, err = getGatewayAddresses(ctx, h.cfg.k8sClient, nil, gw, h.cfg.gatewayClassName)
+		if err != nil {
+			msg := "error getting Gateway Service IP address"
+			h.cfg.logger.Error(err, msg)
+			h.cfg.eventRecorder.Eventf(
+				&v1.Service{},
+				gw.Source,
+				v1.EventTypeWarning,
+				"GetServiceIPFailed",
+				"None",
+				msg+": %s",
+				err.Error(),
+			)
+		}
 	}
 
 	routeReqs := status.PrepareRouteRequests(
@@ -671,11 +778,16 @@ func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph, 
 		gr.ListenerSets,
 		transitionTime,
 	)
+	externalLoadBalancerReqs := status.PrepareExternalLoadBalancerRequests(
+		gr.ExternalLoadBalancers,
+		transitionTime,
+		h.cfg.gatewayCtlrName,
+	)
 
 	// unfortunately, status is not on clusterState stored by the change processor, so we need to make a k8sAPI call here
 	ipList := &inference.InferencePoolList{}
 	if h.cfg.inferenceExtension {
-		err = h.cfg.k8sClient.List(ctx, ipList)
+		err := h.cfg.k8sClient.List(ctx, ipList)
 		if err != nil {
 			msg := "error listing InferencePools for status update"
 			h.cfg.logger.Error(err, msg)
@@ -708,6 +820,7 @@ func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph, 
 			len(snippetsFilterReqs)+
 			len(authenticationFilterReqs)+
 			len(listenerSetReqs)+
+			len(externalLoadBalancerReqs)+
 			len(inferencePoolReqs),
 	)
 	reqs = append(reqs, gcReqs...)
@@ -717,12 +830,15 @@ func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph, 
 	reqs = append(reqs, snippetsFilterReqs...)
 	reqs = append(reqs, authenticationFilterReqs...)
 	reqs = append(reqs, listenerSetReqs...)
+	reqs = append(reqs, externalLoadBalancerReqs...)
 	reqs = append(reqs, inferencePoolReqs...)
 
 	h.cfg.statusUpdater.UpdateGroup(ctx, groupAllExceptGateways, reqs...)
 
 	// We put Gateway status updates separately from the rest of the statuses because we want to be able
 	// to update them separately from the rest of the graph whenever the public IP of NGF changes.
+	// For a Gateway fronted by an external load balancer, gwAddresses are resolved via
+	// getExternalLoadBalancerAddresses.
 	gwReqs := status.PrepareGatewayRequests(
 		gw,
 		transitionTime,

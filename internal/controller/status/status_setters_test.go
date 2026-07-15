@@ -1763,6 +1763,147 @@ func TestNewSnippetsFilterStatusSetter(t *testing.T) {
 	}
 }
 
+func TestNewExternalLoadBalancerStatusSetter(t *testing.T) {
+	t.Parallel()
+	const (
+		controllerName      = "controller"
+		otherControllerName = "other-controller"
+	)
+	tests := []struct {
+		name                         string
+		status, expStatus, newStatus ngfAPI.ExternalLoadBalancerStatus
+		expStatusSet                 bool
+	}{
+		{
+			name: "ExternalLoadBalancer has no status",
+			newStatus: ngfAPI.ExternalLoadBalancerStatus{
+				Controllers: []ngfAPI.ControllerStatus{
+					{
+						Conditions:     []metav1.Condition{{Message: "new condition"}},
+						ControllerName: controllerName,
+					},
+				},
+			},
+			expStatusSet: true,
+			expStatus: ngfAPI.ExternalLoadBalancerStatus{
+				Controllers: []ngfAPI.ControllerStatus{
+					{
+						Conditions:     []metav1.Condition{{Message: "new condition"}},
+						ControllerName: controllerName,
+					},
+				},
+			},
+		},
+		{
+			name: "ExternalLoadBalancer has old status",
+			status: ngfAPI.ExternalLoadBalancerStatus{
+				Controllers: []ngfAPI.ControllerStatus{
+					{
+						Conditions:     []metav1.Condition{{Message: "old condition"}},
+						ControllerName: controllerName,
+					},
+				},
+			},
+			newStatus: ngfAPI.ExternalLoadBalancerStatus{
+				Controllers: []ngfAPI.ControllerStatus{
+					{
+						Conditions:     []metav1.Condition{{Message: "new condition"}},
+						ControllerName: controllerName,
+					},
+				},
+			},
+			expStatusSet: true,
+			expStatus: ngfAPI.ExternalLoadBalancerStatus{
+				Controllers: []ngfAPI.ControllerStatus{
+					{
+						Conditions:     []metav1.Condition{{Message: "new condition"}},
+						ControllerName: controllerName,
+					},
+				},
+			},
+		},
+		{
+			name: "ExternalLoadBalancer has old status and other controller status",
+			newStatus: ngfAPI.ExternalLoadBalancerStatus{
+				Controllers: []ngfAPI.ControllerStatus{
+					{
+						Conditions:     []metav1.Condition{{Message: "new condition"}},
+						ControllerName: controllerName,
+					},
+				},
+			},
+			status: ngfAPI.ExternalLoadBalancerStatus{
+				Controllers: []ngfAPI.ControllerStatus{
+					{
+						ControllerName: otherControllerName,
+						Conditions:     []metav1.Condition{{Message: "some condition"}},
+					},
+					{
+						ControllerName: controllerName,
+						Conditions:     []metav1.Condition{{Message: "old condition"}},
+					},
+				},
+			},
+			expStatus: ngfAPI.ExternalLoadBalancerStatus{
+				Controllers: []ngfAPI.ControllerStatus{
+					{
+						ControllerName: otherControllerName,
+						Conditions:     []metav1.Condition{{Message: "some condition"}},
+					},
+					{
+						ControllerName: controllerName,
+						Conditions:     []metav1.Condition{{Message: "new condition"}},
+					},
+				},
+			},
+			expStatusSet: true,
+		},
+		{
+			name: "ExternalLoadBalancer has same status",
+			status: ngfAPI.ExternalLoadBalancerStatus{
+				Controllers: []ngfAPI.ControllerStatus{
+					{
+						Conditions:     []metav1.Condition{{Message: "same condition"}},
+						ControllerName: controllerName,
+					},
+				},
+			},
+			newStatus: ngfAPI.ExternalLoadBalancerStatus{
+				Controllers: []ngfAPI.ControllerStatus{
+					{
+						Conditions:     []metav1.Condition{{Message: "same condition"}},
+						ControllerName: controllerName,
+					},
+				},
+			},
+			expStatusSet: false,
+			expStatus: ngfAPI.ExternalLoadBalancerStatus{
+				Controllers: []ngfAPI.ControllerStatus{
+					{
+						Conditions:     []metav1.Condition{{Message: "same condition"}},
+						ControllerName: controllerName,
+					},
+				},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			setter := newExternalLoadBalancerStatusSetter(test.newStatus, controllerName)
+			elb := &ngfAPI.ExternalLoadBalancer{Status: test.status}
+
+			statusSet := setter(elb)
+
+			g.Expect(statusSet).To(Equal(test.expStatusSet))
+			g.Expect(elb.Status).To(Equal(test.expStatus))
+		})
+	}
+}
+
 func TestNewAuthenticationFilterStatusSetter(t *testing.T) {
 	t.Parallel()
 	const (

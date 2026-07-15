@@ -10,9 +10,11 @@ import (
 	policyv1 "k8s.io/api/policy/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
 
 func TestServiceSpecSetter_PreservesExternalAnnotations(t *testing.T) {
@@ -889,4 +891,54 @@ func TestRoleBindingSpecSetter(t *testing.T) {
 
 	g.Expect(existing.RoleRef).To(Equal(roleRef))
 	g.Expect(existing.Subjects).To(Equal(subjects))
+}
+
+func TestUnstructuredSpecSetter(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		existingAnnotations map[string]string
+		expectedAnnotations map[string]string
+		name                string
+	}{
+		{
+			name: "transfers spec, labels, and NGF-managed annotations onto a fresh object",
+			expectedAnnotations: map[string]string{
+				"custom.annotation": "value",
+				"gateway.nginx.org/internal-managed-annotation-keys": "custom.annotation",
+			},
+		},
+		{
+			name:                "preserves external annotations already on the object",
+			existingAnnotations: map[string]string{"external.controller/managed": "keep-me"},
+			expectedAnnotations: map[string]string{
+				"external.controller/managed":                        "keep-me",
+				"custom.annotation":                                  "value",
+				"gateway.nginx.org/internal-managed-annotation-keys": "custom.annotation",
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			desired := &unstructured.Unstructured{}
+			desired.SetGroupVersionKind(kinds.IngressLinkGVK)
+			desired.Object["spec"] = map[string]any{"virtualServerAddress": "10.0.0.1"}
+			desired.SetLabels(map[string]string{"app": "nginx-gateway"})
+			desired.SetAnnotations(map[string]string{"custom.annotation": "value"})
+
+			minObj := &unstructured.Unstructured{}
+			minObj.SetGroupVersionKind(kinds.IngressLinkGVK)
+			minObj.SetAnnotations(test.existingAnnotations)
+
+			g.Expect(unstructuredSpecSetter(minObj, desired)()).ToNot(HaveOccurred())
+
+			g.Expect(minObj.Object["spec"]).To(Equal(map[string]any{"virtualServerAddress": "10.0.0.1"}))
+			g.Expect(minObj.GetLabels()).To(Equal(map[string]string{"app": "nginx-gateway"}))
+			g.Expect(minObj.GetAnnotations()).To(Equal(test.expectedAnnotations))
+		})
+	}
 }

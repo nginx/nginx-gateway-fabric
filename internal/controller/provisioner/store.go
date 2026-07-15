@@ -11,33 +11,36 @@ import (
 	policyv1 "k8s.io/api/policy/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
 
 // NginxResources are all of the NGINX resources deployed in relation to a Gateway.
 type NginxResources struct {
-	Gateway             *graph.Gateway
-	Deployment          metav1.ObjectMeta
-	HPA                 metav1.ObjectMeta
-	PDB                 metav1.ObjectMeta
-	DaemonSet           metav1.ObjectMeta
-	Service             metav1.ObjectMeta
-	ServiceLBClass      *string
-	ServiceAccount      metav1.ObjectMeta
-	Role                metav1.ObjectMeta
-	RoleBinding         metav1.ObjectMeta
-	BootstrapConfigMap  metav1.ObjectMeta
-	AgentConfigMap      metav1.ObjectMeta
-	AgentTLSSecret      metav1.ObjectMeta
-	PlusJWTSecret       metav1.ObjectMeta
-	PlusClientSSLSecret metav1.ObjectMeta
-	PlusCASecret        metav1.ObjectMeta
-	DataplaneKeySecret  metav1.ObjectMeta
-	DockerSecrets       []metav1.ObjectMeta
+	Gateway              *graph.Gateway
+	Deployment           metav1.ObjectMeta
+	HPA                  metav1.ObjectMeta
+	PDB                  metav1.ObjectMeta
+	DaemonSet            metav1.ObjectMeta
+	Service              metav1.ObjectMeta
+	ServiceLBClass       *string
+	ServiceAccount       metav1.ObjectMeta
+	Role                 metav1.ObjectMeta
+	RoleBinding          metav1.ObjectMeta
+	BootstrapConfigMap   metav1.ObjectMeta
+	AgentConfigMap       metav1.ObjectMeta
+	AgentTLSSecret       metav1.ObjectMeta
+	PlusJWTSecret        metav1.ObjectMeta
+	PlusCASecret         metav1.ObjectMeta
+	DataplaneKeySecret   metav1.ObjectMeta
+	DockerSecrets        []metav1.ObjectMeta
+	PlusClientSSLSecret  metav1.ObjectMeta
+	ExternalLoadBalancer metav1.ObjectMeta
 }
 
 // store stores the cluster state needed by the provisioner and allows to update it from the events.
@@ -160,9 +163,18 @@ func (s *store) registerResourceInGatewayConfig(gatewayNSName types.NamespacedNa
 		s.registerConfigMapInGatewayConfig(obj, gatewayNSName)
 	case *corev1.Secret:
 		s.registerSecretInGatewayConfig(obj, gatewayNSName)
+	case *unstructured.Unstructured:
+		if obj.GroupVersionKind() == kinds.IngressLinkGVK {
+			s.getOrCreateNginxResources(gatewayNSName).ExternalLoadBalancer = objectMetaOf(obj)
+		}
 	}
 
 	return true
+}
+
+// objectMetaOf is the tracked subset of an unstructured object's metadata.
+func objectMetaOf(obj client.Object) metav1.ObjectMeta {
+	return metav1.ObjectMeta{Name: obj.GetName(), Namespace: obj.GetNamespace()}
 }
 
 // getOrCreateNginxResources returns the NginxResources tracked for the given Gateway, creating and
@@ -276,6 +288,12 @@ func gatewayChanged(original, updated *graph.Gateway) bool {
 		return true
 	}
 
+	// The IngressLink is built from an ExternalLoadBalancer resource attached to the Gateway,
+	// so a change to the attached gatewayLink config must trigger a rebuild.
+	if !reflect.DeepEqual(extractExternalLoadBalancer(original), extractExternalLoadBalancer(updated)) {
+		return true
+	}
+
 	// Check if the effective set of listeners changed (e.g., due to ListenerSet additions/removals).
 	// We compare port/protocol pairs since those determine the Service and container ports.
 	return listenersChanged(original.Listeners, updated.Listeners)
@@ -382,6 +400,8 @@ func (r *NginxResources) matchesObject(object client.Object, nsName types.Namesp
 		return resourceMatches(r.BootstrapConfigMap, nsName) || resourceMatches(r.AgentConfigMap, nsName)
 	case *corev1.Secret:
 		return secretResourceMatches(r, nsName)
+	case *unstructured.Unstructured:
+		return resourceMatches(r.ExternalLoadBalancer, nsName)
 	}
 
 	return false

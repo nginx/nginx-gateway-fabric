@@ -536,6 +536,70 @@ func authenticationStatusEqual(status1, status2 ngfAPI.ControllerStatus) bool {
 	return ConditionsEqual(status1.Conditions, status2.Conditions)
 }
 
+func newExternalLoadBalancerStatusSetter(
+	elbStatus ngfAPI.ExternalLoadBalancerStatus,
+	gatewayCtlrName string,
+) Setter {
+	return func(obj client.Object) (wasSet bool) {
+		elb := helpers.MustCastObject[*ngfAPI.ExternalLoadBalancer](obj)
+
+		maxControllerStatus := 1 + len(elb.Status.Controllers)
+		controllerStatuses := make([]ngfAPI.ControllerStatus, 0, maxControllerStatus)
+
+		for _, status := range elb.Status.Controllers {
+			if string(status.ControllerName) != gatewayCtlrName {
+				controllerStatuses = append(controllerStatuses, status)
+			}
+		}
+
+		controllerStatuses = append(controllerStatuses, elbStatus.Controllers...)
+		elbStatus.Controllers = controllerStatuses
+
+		if externalLoadBalancerStatusEqual(gatewayCtlrName, elbStatus.Controllers, elb.Status.Controllers) {
+			return false
+		}
+
+		elb.Status = elbStatus
+		return true
+	}
+}
+
+func externalLoadBalancerStatusEqual(gatewayCtlrName string, currStatus, prevStatus []ngfAPI.ControllerStatus) bool {
+	for _, prev := range prevStatus {
+		if prev.ControllerName != gatewayv1.GatewayController(gatewayCtlrName) {
+			continue
+		}
+
+		exists := slices.ContainsFunc(currStatus, func(currStatus ngfAPI.ControllerStatus) bool {
+			return externalLoadBalancerControllerStatusEqual(currStatus, prev)
+		})
+
+		if !exists {
+			return false
+		}
+	}
+
+	for _, curr := range currStatus {
+		exists := slices.ContainsFunc(prevStatus, func(prevStatus ngfAPI.ControllerStatus) bool {
+			return externalLoadBalancerControllerStatusEqual(curr, prevStatus)
+		})
+
+		if !exists {
+			return false
+		}
+	}
+
+	return true
+}
+
+func externalLoadBalancerControllerStatusEqual(status1, status2 ngfAPI.ControllerStatus) bool {
+	if status1.ControllerName != status2.ControllerName {
+		return false
+	}
+
+	return ConditionsEqual(status1.Conditions, status2.Conditions)
+}
+
 func newListenerSetStatusSetter(lsStatus gatewayv1.ListenerSetStatus) Setter {
 	return func(obj client.Object) (wasSet bool) {
 		ls := helpers.MustCastObject[*gatewayv1.ListenerSet](obj)

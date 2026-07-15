@@ -175,6 +175,7 @@ rules:
   - authenticationfilters
   - snippetspolicies
   - wafpolicies
+  - externalloadbalancers
   verbs:
   - create
   - delete
@@ -195,6 +196,7 @@ rules:
   - authenticationfilters/status
   - snippetspolicies/status
   - wafpolicies/status
+  - externalloadbalancers/status
   verbs:
   - update
 - apiGroups:
@@ -247,5 +249,23 @@ rules:
   - list
   - patch
   - watch
+- apiGroups:
+  - cis.f5.com
+  resources:
+  - ingresslinks
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - cis.f5.com
+  resources:
+  - ingresslinks/status
+  verbs:
+  - get
 
 # +kubebuilder:scaffold:rules

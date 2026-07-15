@@ -645,6 +645,44 @@ func PrepareAuthenticationFilterRequests(
 	return reqs
 }
 
+// PrepareExternalLoadBalancerRequests prepares status UpdateRequests for the given ExternalLoadBalancer resources.
+func PrepareExternalLoadBalancerRequests(
+	externalLoadBalancers map[types.NamespacedName]*graph.ExternalLoadBalancer,
+	transitionTime metav1.Time,
+	gatewayCtlrName string,
+) []UpdateRequest {
+	reqs := make([]UpdateRequest, 0, len(externalLoadBalancers))
+
+	for nsname, elb := range externalLoadBalancers {
+		allConds := make([]conditions.Condition, 0, len(elb.Conditions)+1)
+
+		// The order of conditions matters here.
+		// We add the default condition first, followed by the ExternalLoadBalancer conditions.
+		// DeduplicateConditions will ensure the last condition wins.
+		allConds = append(allConds, conditions.NewExternalLoadBalancerAccepted())
+		allConds = append(allConds, elb.Conditions...)
+
+		conds := conditions.DeduplicateConditions(allConds)
+		apiConds := conditions.ConvertConditions(conds, elb.Source.GetGeneration(), transitionTime)
+		status := ngfAPI.ExternalLoadBalancerStatus{
+			Controllers: []ngfAPI.ControllerStatus{
+				{
+					Conditions:     apiConds,
+					ControllerName: v1alpha2.GatewayController(gatewayCtlrName),
+				},
+			},
+		}
+
+		reqs = append(reqs, UpdateRequest{
+			NsName:       nsname,
+			ResourceType: elb.Source,
+			Setter:       newExternalLoadBalancerStatusSetter(status, gatewayCtlrName),
+		})
+	}
+
+	return reqs
+}
+
 // PrepareListenerSetRequests prepares status UpdateRequests for the given ListenerSets.
 func PrepareListenerSetRequests(
 	listenerSets map[types.NamespacedName]*graph.ListenerSet,
