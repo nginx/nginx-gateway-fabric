@@ -70,122 +70,6 @@ var _ = Describe("UpstreamSettingsPolicy", Ordered, Label("functional", "uspolic
 		Expect(resourceManager.DeleteNamespace(namespace)).To(Succeed())
 	})
 
-	When("UseClusterIP is enabled for an UpstreamSettingsPolicy", func() {
-		usps := []string{
-			"upstream-settings-policy/use-cluster-ip-usp.yaml",
-			"upstream-settings-policy/use-cluster-ip-conflict-usp.yaml",
-		}
-
-		BeforeAll(func() {
-			Expect(resourceManager.ApplyFromFiles(usps, namespace)).To(Succeed())
-		})
-
-		AfterAll(func() {
-			Expect(resourceManager.DeleteFromFiles(usps, namespace)).To(Succeed())
-		})
-
-		Specify("the policy is accepted", func() {
-			uspolicyNsName := types.NamespacedName{Name: "cluster-ip-usp", Namespace: namespace}
-			err := waitForUSPolicyStatus(
-				uspolicyNsName,
-				gatewayName,
-				metav1.ConditionTrue,
-				gatewayv1.PolicyReasonAccepted,
-			)
-			Expect(err).ToNot(HaveOccurred())
-		})
-
-		Specify("a conflicting second policy is marked conflicted", func() {
-			uspolicyNsName := types.NamespacedName{Name: "z-cluster-ip-conflict-usp", Namespace: namespace}
-			err := waitForUSPolicyStatus(
-				uspolicyNsName,
-				gatewayName,
-				metav1.ConditionFalse,
-				gatewayv1.PolicyReasonConflicted,
-			)
-			Expect(err).ToNot(HaveOccurred())
-		})
-
-		Context("verify working traffic", func() {
-			It("should return a 200 response", func() {
-				port := 80
-				if portFwdPort != 0 {
-					port = portFwdPort
-				}
-				coffeeURL := fmt.Sprintf("http://cafe.example.com:%d/coffee", port)
-
-				Eventually(
-					func() error {
-						return framework.ExpectRequestToSucceed(
-							timeoutConfig.RequestTimeout,
-							coffeeURL,
-							address,
-							"URI: /coffee",
-						)
-					}).
-					WithTimeout(timeoutConfig.RequestTimeout).
-					WithPolling(500 * time.Millisecond).
-					Should(Succeed())
-			})
-		})
-
-		Context("nginx config", func() {
-			var clusterIP string
-
-			BeforeAll(func() {
-				ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.GetStatusTimeout)
-				defer cancel()
-
-				var svc core.Service
-				err := resourceManager.Get(
-					ctx,
-					types.NamespacedName{Name: "coffee", Namespace: namespace},
-					&svc,
-				)
-				Expect(err).ToNot(HaveOccurred())
-				clusterIP = svc.Spec.ClusterIP
-			})
-
-			It("uses the Service ClusterIP as the upstream server", func() {
-				var serverAddr string
-				if strings.Contains(clusterIP, ":") {
-					serverAddr = fmt.Sprintf("[%s]:80", clusterIP)
-				} else {
-					serverAddr = fmt.Sprintf("%s:80", clusterIP)
-				}
-
-				Eventually(func() error {
-					ctx, cancel := context.WithTimeout(
-						context.Background(),
-						timeoutConfig.GetStatusTimeout,
-					)
-
-					conf, err := resourceManager.GetNginxConfig(nginxPodName, namespace, "")
-					if err != nil {
-						return err
-					}
-
-					return resourceManager.ValidateNginxField(
-						ctx,
-						conf,
-						framework.ExpectedNginxField{
-							Directive: "server",
-							Value:     serverAddr,
-							Upstream:  "uspolicy_coffee_80",
-							File:      "http.conf",
-						},
-						nginxPodName,
-						namespace,
-						*plusEnabled,
-					)
-				}).
-					WithTimeout(timeoutConfig.GetStatusTimeout).
-					WithPolling(500 * time.Millisecond).
-					Should(Succeed())
-			})
-		})
-	})
-
 	When("UpstreamSettingsPolicies target distinct Services", func() {
 		usps := []string{
 			"upstream-settings-policy/valid-usps.yaml",
@@ -491,6 +375,123 @@ var _ = Describe("UpstreamSettingsPolicy", Ordered, Label("functional", "uspolic
 					},
 				}),
 			)
+		})
+	})
+
+	When("UseClusterIP is enabled for an UpstreamSettingsPolicy", func() {
+		usps := []string{
+			"upstream-settings-policy/use-cluster-ip-usp.yaml",
+			"upstream-settings-policy/use-cluster-ip-conflict-usp.yaml",
+		}
+
+		BeforeAll(func() {
+			Expect(resourceManager.ApplyFromFiles(usps, namespace)).To(Succeed())
+		})
+
+		AfterAll(func() {
+			Expect(resourceManager.DeleteFromFiles(usps, namespace)).To(Succeed())
+		})
+
+		Specify("the policy is accepted", func() {
+			uspolicyNsName := types.NamespacedName{Name: "cluster-ip-usp", Namespace: namespace}
+			err := waitForUSPolicyStatus(
+				uspolicyNsName,
+				gatewayName,
+				metav1.ConditionTrue,
+				gatewayv1.PolicyReasonAccepted,
+			)
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		Specify("a conflicting second policy is marked conflicted", func() {
+			uspolicyNsName := types.NamespacedName{Name: "z-cluster-ip-conflict-usp", Namespace: namespace}
+			err := waitForUSPolicyStatus(
+				uspolicyNsName,
+				gatewayName,
+				metav1.ConditionFalse,
+				gatewayv1.PolicyReasonConflicted,
+			)
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		Context("verify working traffic", func() {
+			It("should return a 200 response", func() {
+				port := 80
+				if portFwdPort != 0 {
+					port = portFwdPort
+				}
+				coffeeURL := fmt.Sprintf("http://cafe.example.com:%d/coffee", port)
+
+				Eventually(
+					func() error {
+						return framework.ExpectRequestToSucceed(
+							timeoutConfig.RequestTimeout,
+							coffeeURL,
+							address,
+							"URI: /coffee",
+						)
+					}).
+					WithTimeout(timeoutConfig.RequestTimeout).
+					WithPolling(500 * time.Millisecond).
+					Should(Succeed())
+			})
+		})
+
+		Context("nginx config", func() {
+			var clusterIP string
+
+			BeforeAll(func() {
+				ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.GetStatusTimeout)
+				defer cancel()
+
+				var svc core.Service
+				err := resourceManager.Get(
+					ctx,
+					types.NamespacedName{Name: "coffee", Namespace: namespace},
+					&svc,
+				)
+				Expect(err).ToNot(HaveOccurred())
+				clusterIP = svc.Spec.ClusterIP
+			})
+
+			It("uses the Service ClusterIP as the upstream server", func() {
+				var serverAddr string
+				if strings.Contains(clusterIP, ":") {
+					serverAddr = fmt.Sprintf("[%s]:80", clusterIP)
+				} else {
+					serverAddr = fmt.Sprintf("%s:80", clusterIP)
+				}
+
+				Eventually(func() error {
+					ctx, cancel := context.WithTimeout(
+						context.Background(),
+						timeoutConfig.GetStatusTimeout,
+					)
+					defer cancel()
+
+					conf, err := resourceManager.GetNginxConfig(nginxPodName, namespace, "")
+					if err != nil {
+						return err
+					}
+
+					return resourceManager.ValidateNginxField(
+						ctx,
+						conf,
+						framework.ExpectedNginxField{
+							Directive: "server",
+							Value:     serverAddr,
+							Upstream:  "uspolicy_coffee_80",
+							File:      "http.conf",
+						},
+						nginxPodName,
+						namespace,
+						*plusEnabled,
+					)
+				}).
+					WithTimeout(timeoutConfig.GetStatusTimeout).
+					WithPolling(500 * time.Millisecond).
+					Should(Succeed())
+			})
 		})
 	})
 
