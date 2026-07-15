@@ -157,9 +157,8 @@ var _ = Describe("UpstreamSettingsPolicy", Ordered, Label("functional", "uspolic
 				Eventually(func() error {
 					ctx, cancel := context.WithTimeout(
 						context.Background(),
-						timeoutConfig.RequestTimeout,
+						timeoutConfig.GetStatusTimeout,
 					)
-					defer cancel()
 
 					conf, err := resourceManager.GetNginxConfig(nginxPodName, namespace, "")
 					if err != nil {
