@@ -246,95 +246,82 @@ func (h *eventHandlerImpl) sendNginxConfig(ctx context.Context, logger logr.Logg
 	// ensure headless "shadow" Services are created for any referenced InferencePools
 	h.ensureInferencePoolServices(ctx, gr.ReferencedInferencePools)
 
-	// Track RegisterGateway goroutines so we can wait for them to complete before
-	// enqueuing status updates. RegisterGateway may patch Service status with Gateway
-	// spec addresses (for static address support), and the status update reads from
-	// the Service. Without this synchronization the status update can race with the
-	// Service status patch, causing intermittent empty Gateway addresses.
-	var provisionerWg sync.WaitGroup
-	var statusObjects []*status.QueueObject
-
 	for _, gw := range gr.Gateways {
-		provisionerWg.Go(func() {
-			if err := h.cfg.nginxProvisioner.RegisterGateway(ctx, gw, gw.DeploymentName.Name); err != nil {
-				logger.Error(err, "error from provisioner")
-			}
-		})
+		// Build the status object for this Gateway inline, then launch a goroutine
+		// that waits for RegisterGateway to complete before enqueuing it. This ensures
+		// Service status (e.g. LoadBalancer Ingress IPs patched by the provisioner) is
+		// fully written before the status handler reads it, without coupling unrelated
+		// Gateways together.
+		var statusObj *status.QueueObject
 
-		// If no listeners or invalid, update status but skip config generation
-		if len(gw.Listeners) == 0 || !gw.Valid {
-			statusObjects = append(statusObjects, &status.QueueObject{
+		switch {
+		// If no listeners or invalid, update status but skip config generation.
+		case len(gw.Listeners) == 0 || !gw.Valid:
+			statusObj = &status.QueueObject{
 				Deployment: status.Deployment{
 					NamespacedName: gw.DeploymentName,
 					GatewayName:    gw.Source.GetName(),
 				},
 				UpdateType: status.UpdateAll,
-			})
-			continue
-		}
-
-		if gatewayHasPendingWAFBundle(gr, gw) && !graph.WAFBundleFailOpenForNginxProxy(gw.EffectiveNginxProxy) {
-			// Fail-closed (default): a pending bundle blocks the config push until the bundle is available.
-			// Enqueue a status update because the config is being withheld in this fail-closed case,
-			// making the pending condition visible to the operator.
-			statusObjects = append(statusObjects, &status.QueueObject{
+			}
+		// Fail-closed (default): a pending bundle blocks the config push until the bundle is available.
+		// Enqueue a status update because the config is being withheld in this fail-closed case,
+		// making the pending condition visible to the operator.
+		case gatewayHasPendingWAFBundle(gr, gw) && !graph.WAFBundleFailOpenForNginxProxy(gw.EffectiveNginxProxy):
+			statusObj = &status.QueueObject{
 				UpdateType: status.UpdateAll,
 				Deployment: status.Deployment{
 					NamespacedName: gw.DeploymentName,
 					GatewayName:    gw.Source.GetName(),
 				},
 				Error: errors.New("NGINX configuration update withheld: WAF bundle for Gateway is still pending"),
-			})
-			continue
+			}
+		default:
+			deployment := h.cfg.nginxDeployments.GetOrStore(ctx, gw.DeploymentName, gw.Source.GetName())
+			if deployment == nil {
+				panic("expected deployment, got nil")
+			}
+
+			nginxImage, _ := provisioner.DetermineNginxImageName(
+				gw.EffectiveNginxProxy,
+				h.cfg.plus,
+				h.cfg.gatewayPodConfig.Version,
+			)
+			deployment.SetImageVersion(nginxImage)
+
+			cfg := dataplane.BuildConfiguration(ctx, logger, gr, gw, h.cfg.serviceResolver, h.cfg.plus)
+			depCtx, getErr := h.getDeploymentContext(ctx)
+			if getErr != nil {
+				logger.Error(getErr, "error getting deployment context for usage reporting")
+			}
+			cfg.DeploymentContext = depCtx
+
+			h.setLatestConfiguration(gw, &cfg)
+
+			deployment.FileLock.Lock()
+			h.updateNginxConf(deployment, cfg, effectiveVolumeMounts(gw.EffectiveNginxProxy))
+			deployment.FileLock.Unlock()
+
+			configErr := deployment.GetLatestConfigError()
+			upstreamErr := deployment.GetLatestUpstreamError()
+
+			statusObj = &status.QueueObject{
+				UpdateType:        status.UpdateAll,
+				Error:             errors.Join(configErr, upstreamErr),
+				NginxConfigPushed: true,
+				Deployment: status.Deployment{
+					NamespacedName: gw.DeploymentName,
+					GatewayName:    gw.Source.GetName(),
+				},
+			}
 		}
 
-		deployment := h.cfg.nginxDeployments.GetOrStore(ctx, gw.DeploymentName, gw.Source.GetName())
-		if deployment == nil {
-			panic("expected deployment, got nil")
-		}
-
-		nginxImage, _ := provisioner.DetermineNginxImageName(
-			gw.EffectiveNginxProxy,
-			h.cfg.plus,
-			h.cfg.gatewayPodConfig.Version,
-		)
-		deployment.SetImageVersion(nginxImage)
-
-		cfg := dataplane.BuildConfiguration(ctx, logger, gr, gw, h.cfg.serviceResolver, h.cfg.plus)
-		depCtx, getErr := h.getDeploymentContext(ctx)
-		if getErr != nil {
-			logger.Error(getErr, "error getting deployment context for usage reporting")
-		}
-		cfg.DeploymentContext = depCtx
-
-		h.setLatestConfiguration(gw, &cfg)
-
-		deployment.FileLock.Lock()
-		h.updateNginxConf(deployment, cfg, effectiveVolumeMounts(gw.EffectiveNginxProxy))
-		deployment.FileLock.Unlock()
-
-		configErr := deployment.GetLatestConfigError()
-		upstreamErr := deployment.GetLatestUpstreamError()
-		err := errors.Join(configErr, upstreamErr)
-
-		statusObjects = append(statusObjects, &status.QueueObject{
-			UpdateType:        status.UpdateAll,
-			Error:             err,
-			NginxConfigPushed: true,
-			Deployment: status.Deployment{
-				NamespacedName: gw.DeploymentName,
-				GatewayName:    gw.Source.GetName(),
-			},
-		})
-	}
-
-	// Wait for all provisioner goroutines to finish before enqueuing status updates.
-	// This ensures Service status (e.g. LoadBalancer Ingress IPs) is fully patched
-	// before the status handler reads it to populate Gateway addresses.
-	provisionerWg.Wait()
-
-	for _, obj := range statusObjects {
-		h.cfg.statusQueue.Enqueue(obj)
+		go func() {
+			if err := h.cfg.nginxProvisioner.RegisterGateway(ctx, gw, gw.DeploymentName.Name); err != nil {
+				logger.Error(err, "error from provisioner")
+			}
+			h.cfg.statusQueue.Enqueue(statusObj)
+		}()
 	}
 }
 
