@@ -462,35 +462,58 @@ var _ = Describe("UpstreamSettingsPolicy", Ordered, Label("functional", "uspolic
 					serverAddr = fmt.Sprintf("%s:80", clusterIP)
 				}
 
-				Eventually(func() error {
-					ctx, cancel := context.WithTimeout(
-						context.Background(),
-						timeoutConfig.GetStatusTimeout,
-					)
-					defer cancel()
+				upstreamName := "uspolicy_coffee_80"
 
-					conf, err := resourceManager.GetNginxConfig(nginxPodName, namespace, "")
-					if err != nil {
-						return err
-					}
+				if *plusEnabled {
+					// In NGINX Plus, upstream servers are managed via the Plus API and
+					// persisted in a state file rather than as server directives in the
+					// config. Read the state file to verify the ClusterIP is used.
+					Eventually(func() error {
+						ctx, cancel := context.WithTimeout(
+							context.Background(),
+							timeoutConfig.RequestTimeout,
+						)
+						defer cancel()
 
-					return resourceManager.ValidateNginxField(
-						ctx,
-						conf,
-						framework.ExpectedNginxField{
+						stateFileContent, err := resourceManager.GetNginxStateFile(
+							ctx, nginxPodName, namespace, upstreamName,
+						)
+						if err != nil {
+							return err
+						}
+
+						if !strings.Contains(stateFileContent, serverAddr) {
+							return fmt.Errorf(
+								"expected state file for upstream %s to contain server %s, got: %s",
+								upstreamName,
+								serverAddr,
+								stateFileContent,
+							)
+						}
+
+						return nil
+					}).
+						WithTimeout(timeoutConfig.GetStatusTimeout).
+						WithPolling(500 * time.Millisecond).
+						Should(Succeed())
+				} else {
+					Eventually(func() error {
+						conf, err := resourceManager.GetNginxConfig(nginxPodName, namespace, "")
+						if err != nil {
+							return err
+						}
+
+						return framework.ValidateNginxFieldExists(conf, framework.ExpectedNginxField{
 							Directive: "server",
 							Value:     serverAddr,
-							Upstream:  "uspolicy_coffee_80",
+							Upstream:  upstreamName,
 							File:      "http.conf",
-						},
-						nginxPodName,
-						namespace,
-						*plusEnabled,
-					)
-				}).
-					WithTimeout(timeoutConfig.GetStatusTimeout).
-					WithPolling(500 * time.Millisecond).
-					Should(Succeed())
+						})
+					}).
+						WithTimeout(timeoutConfig.GetStatusTimeout).
+						WithPolling(500 * time.Millisecond).
+						Should(Succeed())
+				}
 			})
 		})
 	})

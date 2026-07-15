@@ -1269,47 +1269,6 @@ func (rm *ResourceManager) GetNginxStateFile(
 	return result.Stdout, nil
 }
 
-// stateFileDirectives are directives that are managed via the NGINX Plus API and stored in
-// state files rather than in the nginx config. When validating these directives in NGINX Plus,
-// the state file must be inspected instead of the config.
-var stateFileDirectives = map[string]bool{
-	"server": true,
-}
-
-// ValidateNginxField validates that an expected nginx field exists. For most directives, it checks
-// the parsed nginx config. For directives managed by the NGINX Plus API (e.g., "server" within an
-// upstream), it reads the upstream state file from the nginx container instead.
-// This provides a unified validation interface that works transparently for both OSS and Plus.
-func (rm *ResourceManager) ValidateNginxField(
-	ctx context.Context,
-	conf *Payload,
-	expFieldCfg ExpectedNginxField,
-	nginxPodName,
-	namespace string,
-	plus bool,
-) error {
-	if plus && stateFileDirectives[expFieldCfg.Directive] && expFieldCfg.Upstream != "" {
-		stateFileContent, err := rm.GetNginxStateFile(ctx, nginxPodName, namespace, expFieldCfg.Upstream)
-		if err != nil {
-			return err
-		}
-
-		expected := fmt.Sprintf("%s %s", expFieldCfg.Directive, expFieldCfg.Value)
-		if !strings.Contains(stateFileContent, expected) {
-			return fmt.Errorf(
-				"expected state file for upstream %s to contain %s, got: %s",
-				expFieldCfg.Upstream,
-				expected,
-				stateFileContent,
-			)
-		}
-
-		return nil
-	}
-
-	return ValidateNginxFieldExists(conf, expFieldCfg)
-}
-
 // GetNginxConfig uses crossplane to get the nginx configuration and convert it to JSON.
 // If the crossplane image is loaded locally on the node, crossplaneImageRepo can be empty.
 func (rm *ResourceManager) GetNginxConfig(
