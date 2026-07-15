@@ -1230,6 +1230,86 @@ func (rm *ResourceManager) WaitForGatewayObservedGeneration(
 	)
 }
 
+const (
+	// NginxStateDir is the directory where NGINX Plus stores upstream state files.
+	NginxStateDir = "/var/lib/nginx/state"
+
+	// NginxContainerName is the name of the NGINX container in the pod.
+	NginxContainerName = "nginx"
+)
+
+// GetNginxStateFile reads the contents of an NGINX Plus upstream state file from the nginx container.
+// The state file is located at /var/lib/nginx/state/<upstreamName>.conf.
+// In NGINX Plus, upstream servers are managed via the Plus API and persisted in state files
+// rather than as server directives in the config.
+func (rm *ResourceManager) GetNginxStateFile(
+	ctx context.Context,
+	nginxPodName,
+	namespace,
+	upstreamName string,
+) (string, error) {
+	stateFilePath := fmt.Sprintf("%s/%s.conf", NginxStateDir, upstreamName)
+
+	GinkgoWriter.Printf(
+		"Reading NGINX state file %q from pod %q in namespace %q\n",
+		stateFilePath, nginxPodName, namespace,
+	)
+
+	result, err := rm.ExecInPod(
+		ctx,
+		namespace,
+		nginxPodName,
+		NginxContainerName,
+		[]string{"cat", stateFilePath},
+	)
+	if err != nil {
+		return "", fmt.Errorf("failed to read state file %s: %w", stateFilePath, err)
+	}
+
+	return result.Stdout, nil
+}
+
+// stateFileDirectives are directives that are managed via the NGINX Plus API and stored in
+// state files rather than in the nginx config. When validating these directives in NGINX Plus,
+// the state file must be inspected instead of the config.
+var stateFileDirectives = map[string]bool{
+	"server": true,
+}
+
+// ValidateNginxField validates that an expected nginx field exists. For most directives, it checks
+// the parsed nginx config. For directives managed by the NGINX Plus API (e.g., "server" within an
+// upstream), it reads the upstream state file from the nginx container instead.
+// This provides a unified validation interface that works transparently for both OSS and Plus.
+func (rm *ResourceManager) ValidateNginxField(
+	ctx context.Context,
+	conf *Payload,
+	expFieldCfg ExpectedNginxField,
+	nginxPodName,
+	namespace string,
+	plus bool,
+) error {
+	if plus && stateFileDirectives[expFieldCfg.Directive] && expFieldCfg.Upstream != "" {
+		stateFileContent, err := rm.GetNginxStateFile(ctx, nginxPodName, namespace, expFieldCfg.Upstream)
+		if err != nil {
+			return err
+		}
+
+		if !strings.Contains(stateFileContent, expFieldCfg.Value) {
+			return fmt.Errorf(
+				"expected state file for upstream %s to contain %s %s, got: %s",
+				expFieldCfg.Upstream,
+				expFieldCfg.Directive,
+				expFieldCfg.Value,
+				stateFileContent,
+			)
+		}
+
+		return nil
+	}
+
+	return ValidateNginxFieldExists(conf, expFieldCfg)
+}
+
 // GetNginxConfig uses crossplane to get the nginx configuration and convert it to JSON.
 // If the crossplane image is loaded locally on the node, crossplaneImageRepo can be empty.
 func (rm *ResourceManager) GetNginxConfig(

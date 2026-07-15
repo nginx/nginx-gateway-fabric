@@ -155,17 +155,30 @@ var _ = Describe("UpstreamSettingsPolicy", Ordered, Label("functional", "uspolic
 				}
 
 				Eventually(func() error {
+					ctx, cancel := context.WithTimeout(
+						context.Background(),
+						timeoutConfig.RequestTimeout,
+					)
+					defer cancel()
+
 					conf, err := resourceManager.GetNginxConfig(nginxPodName, namespace, "")
 					if err != nil {
 						return err
 					}
 
-					return framework.ValidateNginxFieldExists(conf, framework.ExpectedNginxField{
-						Directive: "server",
-						Value:     serverAddr,
-						Upstream:  "uspolicy_coffee_80",
-						File:      "http.conf",
-					})
+					return resourceManager.ValidateNginxField(
+						ctx,
+						conf,
+						framework.ExpectedNginxField{
+							Directive: "server",
+							Value:     serverAddr,
+							Upstream:  "uspolicy_coffee_80",
+							File:      "http.conf",
+						},
+						nginxPodName,
+						namespace,
+						*plusEnabled,
+					)
 				}).
 					WithTimeout(timeoutConfig.GetStatusTimeout).
 					WithPolling(500 * time.Millisecond).
