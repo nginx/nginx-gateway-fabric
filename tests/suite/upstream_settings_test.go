@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -374,6 +375,146 @@ var _ = Describe("UpstreamSettingsPolicy", Ordered, Label("functional", "uspolic
 					},
 				}),
 			)
+		})
+	})
+
+	When("UseClusterIP is enabled for an UpstreamSettingsPolicy", func() {
+		usps := []string{
+			"upstream-settings-policy/use-cluster-ip-usp.yaml",
+			"upstream-settings-policy/use-cluster-ip-conflict-usp.yaml",
+		}
+
+		BeforeAll(func() {
+			Expect(resourceManager.ApplyFromFiles(usps, namespace)).To(Succeed())
+		})
+
+		AfterAll(func() {
+			Expect(resourceManager.DeleteFromFiles(usps, namespace)).To(Succeed())
+		})
+
+		Specify("the policy is accepted", func() {
+			uspolicyNsName := types.NamespacedName{Name: "cluster-ip-usp", Namespace: namespace}
+			err := waitForUSPolicyStatus(
+				uspolicyNsName,
+				gatewayName,
+				metav1.ConditionTrue,
+				gatewayv1.PolicyReasonAccepted,
+			)
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		Specify("a conflicting second policy is marked conflicted", func() {
+			uspolicyNsName := types.NamespacedName{Name: "z-cluster-ip-conflict-usp", Namespace: namespace}
+			err := waitForUSPolicyStatus(
+				uspolicyNsName,
+				gatewayName,
+				metav1.ConditionFalse,
+				gatewayv1.PolicyReasonConflicted,
+			)
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		Context("verify working traffic", func() {
+			It("should return a 200 response", func() {
+				port := 80
+				if portFwdPort != 0 {
+					port = portFwdPort
+				}
+				coffeeURL := fmt.Sprintf("http://cafe.example.com:%d/coffee", port)
+
+				Eventually(
+					func() error {
+						return framework.ExpectRequestToSucceed(
+							timeoutConfig.RequestTimeout,
+							coffeeURL,
+							address,
+							"URI: /coffee",
+						)
+					}).
+					WithTimeout(timeoutConfig.RequestTimeout).
+					WithPolling(500 * time.Millisecond).
+					Should(Succeed())
+			})
+		})
+
+		Context("nginx config", func() {
+			var clusterIP string
+
+			BeforeAll(func() {
+				ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.GetStatusTimeout)
+				defer cancel()
+
+				var svc core.Service
+				err := resourceManager.Get(
+					ctx,
+					types.NamespacedName{Name: "coffee", Namespace: namespace},
+					&svc,
+				)
+				Expect(err).ToNot(HaveOccurred())
+				clusterIP = svc.Spec.ClusterIP
+			})
+
+			It("uses the Service ClusterIP as the upstream server", func() {
+				var serverAddr string
+				if strings.Contains(clusterIP, ":") {
+					serverAddr = fmt.Sprintf("[%s]:80", clusterIP)
+				} else {
+					serverAddr = fmt.Sprintf("%s:80", clusterIP)
+				}
+
+				upstreamName := "uspolicy_coffee_80"
+
+				if *plusEnabled {
+					// In NGINX Plus, upstream servers are managed via the Plus API and
+					// persisted in a state file rather than as server directives in the
+					// config. Read the state file to verify the ClusterIP is used.
+					Eventually(func() error {
+						ctx, cancel := context.WithTimeout(
+							context.Background(),
+							timeoutConfig.RequestTimeout,
+						)
+						defer cancel()
+
+						stateFileContent, err := resourceManager.GetNginxStateFile(
+							ctx, nginxPodName, namespace, upstreamName,
+						)
+						if err != nil {
+							return err
+						}
+
+						if !strings.Contains(stateFileContent, serverAddr) {
+							return fmt.Errorf(
+								"expected state file for upstream %s to contain server %s, got: %s",
+								upstreamName,
+								serverAddr,
+								stateFileContent,
+							)
+						}
+
+						return nil
+					}).
+						WithTimeout(timeoutConfig.GetStatusTimeout).
+						WithPolling(500 * time.Millisecond).
+						Should(Succeed())
+				} else {
+					Eventually(func() error {
+						conf, err := resourceManager.GetNginxConfig(nginxPodName, namespace, "")
+						if err != nil {
+							return err
+						}
+
+						return framework.ValidateNginxFieldExists(conf, framework.ExpectedNginxField{
+							Directive: "server",
+							Value:     serverAddr,
+							Upstream:  upstreamName,
+							File:      "http.conf",
+						})
+					}).
+						WithTimeout(timeoutConfig.GetStatusTimeout).
+						WithPolling(500 * time.Millisecond).
+						Should(Succeed())
+				}
+			})
 		})
 	})
 

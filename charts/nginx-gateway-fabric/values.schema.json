@@ -109,6 +109,12 @@
       "title": "extraObjects",
       "type": "array"
     },
+    "fullnameOverride": {
+      "default": "",
+      "description": "String to fully override the generated resource names.",
+      "title": "fullnameOverride",
+      "type": "string"
+    },
     "gateways": {
       "description": "A list of Gateway objects. View https://gateway-api.sigs.k8s.io/reference/spec/#gateway for full Gateway reference.",
       "items": {
@@ -122,6 +128,12 @@
       "required": [],
       "title": "global",
       "type": "object"
+    },
+    "nameOverride": {
+      "default": "",
+      "description": "String to partially override the chart name used for resource naming.",
+      "title": "nameOverride",
+      "type": "string"
     },
     "nginx": {
       "description": "The nginx section contains the configuration for all NGINX data plane deployments\ninstalled by the NGINX Gateway Fabric control plane.",

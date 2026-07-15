@@ -124,4 +124,5 @@ To create a new release, follow these steps:
 4. Test the release branch for release-readiness.
 5. If a problem is found, return to Step 2.
 6. Follow Steps 5-8 from the [Major or Minor Release](#major-or-minor-release) section.
+   1. In step 5, if there is a new operator version, update the version in [operators/Makefile](/operators/Makefile) and [operators/Dockerfile](/operators/Dockerfile).
 7. Prepare and merge a PR into the main branch of the [documentation repository](https://github.com/nginx/documentation) to update the NGF version in `layouts/shortcodes/version-ngf.html`. If any of our APIs have changed, in the NGF repo, run `make generate-api-docs` and copy the generated file from `docs/api/content.md` into the documentation repo to `content/ngf/reference/api.md`. Update the Technical Specifications table to match the latest table in our repo's README.

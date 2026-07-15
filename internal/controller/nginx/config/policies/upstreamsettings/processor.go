@@ -19,6 +19,8 @@ type UpstreamSettings struct {
 	HashMethodKey string
 	// KeepAlive contains the keepalive settings.
 	KeepAlive http.UpstreamKeepAlive
+	// UseClusterIP indicates whether to route to the Service ClusterIP instead of Pod IPs.
+	UseClusterIP bool
 }
 
 // NewProcessor returns a new Processor.
@@ -73,6 +75,10 @@ func processPolicies(pols []policies.Policy) UpstreamSettings {
 
 		if usp.Spec.HashMethodKey != nil {
 			upstreamSettings.HashMethodKey = string(*usp.Spec.HashMethodKey)
+		}
+
+		if usp.Spec.UseClusterIP != nil {
+			upstreamSettings.UseClusterIP = *usp.Spec.UseClusterIP
 		}
 	}
 
