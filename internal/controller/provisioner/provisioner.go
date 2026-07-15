@@ -966,8 +966,10 @@ func (p *NginxProvisioner) deleteServiceForLBClassChange(
 		p.store.clearServiceForGateway(gatewayNSName)
 	}
 
-	deleteCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	deleteCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
+
+	key := client.ObjectKeyFromObject(svcToDelete)
 
 	if err := p.k8sClient.Delete(deleteCtx, svcToDelete); err != nil && !apierrors.IsNotFound(err) {
 		// Restore the store entry so the next reconcile can retry deletion.
@@ -975,6 +977,19 @@ func (p *NginxProvisioner) deleteServiceForLBClassChange(
 			p.store.registerResourceInGatewayConfig(gatewayNSName, savedSvc)
 		}
 		return fmt.Errorf("failed to delete Service for loadBalancerClass change: %w", err)
+	}
+
+	// The Service may stick around briefly (e.g. due to LoadBalancer finalizers). Wait until it is fully deleted
+	// so the subsequent CreateOrUpdate can create a fresh Service instead of retrying an immutable-field update.
+	if err := wait.PollUntilContextCancel(deleteCtx, 250*time.Millisecond, true, func(ctx context.Context) (bool, error) {
+		var tmp corev1.Service
+		getErr := p.k8sClient.Get(ctx, key, &tmp)
+		return apierrors.IsNotFound(getErr), nil
+	}); err != nil {
+		if savedSvc != nil {
+			p.store.registerResourceInGatewayConfig(gatewayNSName, savedSvc)
+		}
+		return fmt.Errorf("timed out waiting for Service deletion for loadBalancerClass change: %w", err)
 	}
 
 	return nil
