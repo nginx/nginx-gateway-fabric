@@ -1294,12 +1294,12 @@ func (rm *ResourceManager) ValidateNginxField(
 			return err
 		}
 
-		if !strings.Contains(stateFileContent, expFieldCfg.Value) {
+		expected := fmt.Sprintf("%s %s", expFieldCfg.Directive, expFieldCfg.Value)
+		if !strings.Contains(stateFileContent, expected) {
 			return fmt.Errorf(
-				"expected state file for upstream %s to contain %s %s, got: %s",
+				"expected state file for upstream %s to contain %s, got: %s",
 				expFieldCfg.Upstream,
-				expFieldCfg.Directive,
-				expFieldCfg.Value,
+				expected,
 				stateFileContent,
 			)
 		}
