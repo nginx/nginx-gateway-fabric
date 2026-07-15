@@ -18,7 +18,6 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/proxysettings"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/ratelimit"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/snippetspolicy"
-	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/upstreamsettings"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/waf"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/file"
@@ -185,7 +184,7 @@ func (g GeneratorImpl) executeConfigTemplates(
 ) []agent.File {
 	fileBytes := make(map[string][]byte)
 
-	httpUpstreams := g.createUpstreams(conf.Upstreams, upstreamsettings.NewProcessor())
+	httpUpstreams := g.createUpstreams(conf.Upstreams)
 	keepAliveCheck := newKeepAliveChecker(httpUpstreams)
 
 	for _, execute := range g.getExecuteFuncs(generator, httpUpstreams, keepAliveCheck) {

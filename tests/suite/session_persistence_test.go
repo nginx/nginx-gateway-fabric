@@ -20,8 +20,7 @@ import (
 )
 
 var invalidSPErrMsgs = "[spec.rules[0].sessionPersistence.type: Unsupported value: \"Header\": " +
-	"supported values: \"Cookie\", spec.rules[0].sessionPersistence.idleTimeout: " +
-	"Forbidden: IdleTimeout, spec.rules[0].sessionPersistence.absoluteTimeout: " +
+	"supported values: \"Cookie\", spec.rules[0].sessionPersistence.absoluteTimeout: " +
 	"Invalid value: \"10000h\": duration is too large for NGINX format (exceeds 9999h), " +
 	"spec.rules[0].sessionPersistence: Invalid value: \"spec.rules[0].sessionPersistence\":" +
 	" session persistence is ignored because there are errors in the configuration]"
@@ -221,6 +220,7 @@ var _ = Describe("SessionPersistence Plus", Ordered, Label("functional", "sessio
 				if !*plusEnabled {
 					Skip("Skipping Session Persistence Plus tests on NGINX OSS deployment")
 				}
+
 				Eventually(
 					func() error {
 						return expectRequestToSucceedAndReuseCookie(baseCoffeeURL, address, "URI: /coffee", 11)

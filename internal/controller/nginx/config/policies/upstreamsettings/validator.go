@@ -92,19 +92,23 @@ func conflicts(a, b ngfAPI.UpstreamSettingsPolicySpec) bool {
 		}
 	}
 
-	if checkConflictsForLoadBalancingFields(a, b) {
+	if resolveConflictsInUpstreamSettings(a, b) {
 		return true
 	}
 
 	return false
 }
 
-func checkConflictsForLoadBalancingFields(a, b ngfAPI.UpstreamSettingsPolicySpec) bool {
+func resolveConflictsInUpstreamSettings(a, b ngfAPI.UpstreamSettingsPolicySpec) bool {
 	if a.LoadBalancingMethod != nil && b.LoadBalancingMethod != nil {
 		return true
 	}
 
 	if a.HashMethodKey != nil && b.HashMethodKey != nil {
+		return true
+	}
+
+	if a.UseClusterIP != nil && b.UseClusterIP != nil {
 		return true
 	}
 

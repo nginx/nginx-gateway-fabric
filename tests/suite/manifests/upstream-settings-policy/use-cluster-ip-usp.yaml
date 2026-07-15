@@ -1,0 +1,10 @@
+apiVersion: gateway.nginx.org/v1alpha1
+kind: UpstreamSettingsPolicy
+metadata:
+  name: cluster-ip-usp
+spec:
+  targetRefs:
+    - group: core
+      kind: Service
+      name: coffee
+  useClusterIP: true

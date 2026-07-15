@@ -17,6 +17,10 @@ metadata:
   {{- end }}
 spec:
   gatewayClassName: {{ default "nginx" .spec.gatewayClassName }}
+  {{- with .spec.allowedListeners }}
+  allowedListeners:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
   {{- with .spec.infrastructure }}
   infrastructure:
     {{- toYaml . | nindent 4 }}
