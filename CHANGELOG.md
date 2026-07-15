@@ -4,6 +4,36 @@ This document includes a curated changelog for each release. We also publish a c
 a [GitHub release](https://github.com/nginx/nginx-gateway-fabric/releases), which, by contrast, is auto-generated
 and includes links to all PRs that went into the release.
 
+## Release 2.6.7
+
+_July 15, 2026_
+
+DEPENDENCIES:
+
+- Update NGINX OSS to 1.31.3 [5580](https://github.com/nginx/nginx-gateway-fabric/pull/5580).
+
+HELM CHART:
+
+- The version of the Helm chart is now 2.6.7
+
+COMPATIBILITY:
+
+- Gateway API version: `1.5.1`
+- Gateway API Inference Extension version: `1.5.0`
+- NGINX version: `1.31.3`
+- NGINX Plus version: `R37.0`
+- F5 WAF on NGINX version: `5.13.2`
+- NGINX Agent version: `v3.11.2`
+- Kubernetes version: `1.31+`
+
+CONTAINER IMAGES:
+
+- Control plane: `ghcr.io/nginx/nginx-gateway-fabric:2.6.7`
+- Data plane: `ghcr.io/nginx/nginx-gateway-fabric/nginx:2.6.7`
+- Data plane with NGINX Plus: `private-registry.nginx.com/nginx-gateway-fabric/nginx-plus:2.6.7`
+- Data plane with NGINX Plus and F5 WAF: `private-registry.nginx.com/nginx-gateway-fabric/nginx-plus-f5waf:2.6.7`
+- Operator: `ghcr.io/nginx/nginx-gateway-fabric/operator:1.4.7`
+
 ## Release 2.6.6
 
 _June 26, 2026_
