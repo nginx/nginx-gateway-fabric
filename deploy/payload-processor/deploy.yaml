@@ -222,6 +222,7 @@ rules:
   - proxysettingspolicies
   - ratelimitpolicies
   - wafpolicies
+  - payloadprocessors
   verbs:
   - list
   - watch
@@ -236,6 +237,7 @@ rules:
   - proxysettingspolicies/status
   - ratelimitpolicies/status
   - wafpolicies/status
+  - payloadprocessors/status
   verbs:
   - update
 - apiGroups:
@@ -343,6 +345,7 @@ spec:
         - --metrics-port=9113
         - --health-port=8081
         - --leader-election-lock-name=nginx-gateway-leader-election
+        - --payload-processor
         env:
         - name: POD_NAMESPACE
           valueFrom:
@@ -394,8 +397,6 @@ spec:
         volumeMounts:
         - mountPath: /var/run/secrets/ngf
           name: nginx-agent-tls
-      nodeSelector:
-        kubernetes.io/os: linux
       securityContext:
         fsGroup: 1001
         runAsNonRoot: true
@@ -500,9 +501,6 @@ spec:
           pullPolicy: Always
           repository: ghcr.io/nginx/nginx-gateway-fabric/nginx
           tag: edge
-      pod:
-        nodeSelector:
-          kubernetes.io/os: linux
       replicas: 1
     service:
       externalTrafficPolicy: Local

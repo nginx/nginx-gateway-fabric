@@ -222,7 +222,6 @@ rules:
   - proxysettingspolicies
   - ratelimitpolicies
   - wafpolicies
-  - payloadprocessors
   - snippetsfilters
   - snippetspolicies
   verbs:
@@ -239,7 +238,6 @@ rules:
   - proxysettingspolicies/status
   - ratelimitpolicies/status
   - wafpolicies/status
-  - payloadprocessors/status
   - snippetsfilters/status
   - snippetspolicies/status
   verbs:

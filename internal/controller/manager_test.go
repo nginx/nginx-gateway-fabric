@@ -83,7 +83,6 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&ngfAPIv1alpha1.AuthenticationFilterList{},
 				&ngfAPIv1alpha1.RateLimitPolicyList{},
 				&ngfAPIv1alpha1.WAFPolicyList{},
-				&ngfAPIv1alpha1.PayloadProcessorList{},
 				partialObjectMetadataList,
 				apPolicyList,
 				apLogConfList,
@@ -124,7 +123,6 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&ngfAPIv1alpha1.RateLimitPolicyList{},
 				&gatewayv1.ListenerSetList{},
 				&ngfAPIv1alpha1.WAFPolicyList{},
-				&ngfAPIv1alpha1.PayloadProcessorList{},
 			},
 		},
 		{
@@ -159,7 +157,6 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				partialObjectMetadataList,
 				&gatewayv1.GatewayList{},
 				&ngfAPIv1alpha1.WAFPolicyList{},
-				&ngfAPIv1alpha1.PayloadProcessorList{},
 			},
 		},
 		{
@@ -203,7 +200,6 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&ngfAPIv1alpha1.RateLimitPolicyList{},
 				&gatewayv1.ListenerSetList{},
 				&ngfAPIv1alpha1.WAFPolicyList{},
-				&ngfAPIv1alpha1.PayloadProcessorList{},
 			},
 		},
 		{
@@ -243,7 +239,6 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&ngfAPIv1alpha1.AuthenticationFilterList{},
 				&gatewayv1.ListenerSetList{},
 				&ngfAPIv1alpha1.WAFPolicyList{},
-				&ngfAPIv1alpha1.PayloadProcessorList{},
 			},
 		},
 		{
@@ -282,7 +277,6 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&ngfAPIv1alpha1.RateLimitPolicyList{},
 				&gatewayv1.ListenerSetList{},
 				&ngfAPIv1alpha1.WAFPolicyList{},
-				&ngfAPIv1alpha1.PayloadProcessorList{},
 			},
 		},
 		{
@@ -322,7 +316,6 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&ngfAPIv1alpha1.RateLimitPolicyList{},
 				&gatewayv1.ListenerSetList{},
 				&ngfAPIv1alpha1.WAFPolicyList{},
-				&ngfAPIv1alpha1.PayloadProcessorList{},
 			},
 		},
 		{
@@ -371,7 +364,6 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&ngfAPIv1alpha1.RateLimitPolicyList{},
 				&gatewayv1.ListenerSetList{},
 				&ngfAPIv1alpha1.WAFPolicyList{},
-				&ngfAPIv1alpha1.PayloadProcessorList{},
 			},
 		},
 		{
@@ -404,7 +396,6 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&ngfAPIv1alpha1.AuthenticationFilterList{},
 				&ngfAPIv1alpha1.RateLimitPolicyList{},
 				&ngfAPIv1alpha1.WAFPolicyList{},
-				&ngfAPIv1alpha1.PayloadProcessorList{},
 				partialObjectMetadataList,
 				&gatewayv1.GatewayList{},
 			},
@@ -416,6 +407,7 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				ExperimentalFeatures: true,
 				InferenceExtension:   true,
 				Snippets:             true,
+				PayloadProcessor:     true,
 			},
 			discoveredCRDs: map[string]bool{
 				"BackendTLSPolicy": true,
@@ -493,7 +485,6 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&ngfAPIv1alpha1.RateLimitPolicyList{},
 				&gatewayv1.ListenerSetList{},
 				&ngfAPIv1alpha1.WAFPolicyList{},
-				&ngfAPIv1alpha1.PayloadProcessorList{},
 			},
 		},
 	}

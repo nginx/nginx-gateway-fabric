@@ -52,21 +52,17 @@ spec:
           spec:
             description: Spec defines the desired state of the PayloadProcessor.
             properties:
-              processors:
-                description: |-
-                  Processor is an ordered list of processing steps applied to HTTP request payloads.
-                  Processors execute sequentially in array order. If a processor rejects the request,
-                  subsequent processors are skipped.
+              processor:
+                description: Processor defines the processing step to be applied to
+                  the request and response payloads.
                 properties:
                   extProc:
-                    description: |-
-                      ExtProcConfig defines the configuration for an ExtProc processor that delegates to an external service.
-                      The wire protocol between the gateway and the external service is implementation-defined;
-                      a follow-on GEP will standardize a common protocol.
+                    description: ExtProc defines the configuration for an ExtProc
+                      processor that delegates to an external service.
                     properties:
                       authTokenRef:
-                        description: LocalObjectReference specifies a local Kubernetes
-                          object.
+                        description: AuthTokenRef is an optional reference to a Secret
+                          containing an authentication token for the external service.
                         properties:
                           name:
                             description: Name is the name of the referenced object.
@@ -75,15 +71,8 @@ spec:
                         - name
                         type: object
                       backendRef:
-                        description: |-
-                          LocalObjectReference identifies an API object within the namespace of the
-                          referrer.
-                          The API object must be valid in the cluster; the Group and Kind must
-                          be registered in the cluster for this reference to be valid.
-
-                          References to objects with invalid Group and Kind are not valid, and must
-                          be rejected by the implementation, with appropriate Conditions set
-                          on the containing object.
+                        description: BackendRef is a reference to the external service
+                          that will process the payloads.
                         properties:
                           group:
                             description: |-
@@ -110,6 +99,8 @@ spec:
                         - name
                         type: object
                       port:
+                        description: Port is the TCP port on which the external service
+                          is listening.
                         format: int32
                         type: integer
                     required:
@@ -117,11 +108,8 @@ spec:
                     - port
                     type: object
                   timeout:
-                    description: |-
-                      Duration is a string value representing a duration in time.
-                      Duration can be specified in milliseconds (ms), seconds (s), minutes (m), hours (h).
-                      A value without a suffix is seconds.
-                      Examples: 120s, 50ms, 5m, 1h.
+                    description: Timeout is the maximum time to wait for the processor
+                      to complete processing a request or response.
                     pattern: ^[0-9]{1,4}(ms|s|m|h)?$
                     type: string
                 type: object
@@ -160,7 +148,7 @@ spec:
                 - message: TargetRef Group must be gateway.networking.k8s.io
                   rule: self.group == 'gateway.networking.k8s.io'
             required:
-            - processors
+            - processor
             - targetRef
             type: object
           status:

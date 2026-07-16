@@ -37,18 +37,27 @@ type PayloadProcessorList struct {
 }
 
 // PayloadProcessorSpec defines the desired state of a PayloadProcessor.
-//
-
 type PayloadProcessorSpec struct {
-	Processor PayloadProcessorEntry                `json:"processors"`
+	// Processor defines the processing step to be applied to the request and response payloads.
+	Processor PayloadProcessorEntry `json:"processor"`
+
+	// TargetRef identifies the Gateway or HTTPRoute this policy applies to.
+	// Objects must be in the same namespace as the policy.
+	// Follows the standard policy attachment pattern (GEP-713).
+	//
+	// Support: Gateway, HTTPRoute
+	//
+	// +kubebuilder:validation:XValidation:message="TargetRef Kind must be Gateway or HTTPRoute",rule="self.kind == 'Gateway' || self.kind == 'HTTPRoute'"
+	// +kubebuilder:validation:XValidation:message="TargetRef Group must be gateway.networking.k8s.io",rule="self.group == 'gateway.networking.k8s.io'"
+	//nolint:lll
 	TargetRef gatewayv1.LocalPolicyTargetReference `json:"targetRef"`
 }
 
 // PayloadProcessorEntry defines a single processing step in the pipeline.
-//
-
 type PayloadProcessorEntry struct {
-	Timeout *Duration      `json:"timeout,omitempty"`
+	// Timeout is the maximum time to wait for the processor to complete processing a request or response.
+	Timeout *Duration `json:"timeout,omitempty"`
+	// ExtProc defines the configuration for an ExtProc processor that delegates to an external service.
 	ExtProc *ExtProcConfig `json:"extProc,omitempty"`
 }
 
@@ -56,7 +65,10 @@ type PayloadProcessorEntry struct {
 // The wire protocol between the gateway and the external service is implementation-defined;
 // a follow-on GEP will standardize a common protocol.
 type ExtProcConfig struct {
-	AuthTokenRef *LocalObjectReference          `json:"authTokenRef,omitempty"`
-	BackendRef   gatewayv1.LocalObjectReference `json:"backendRef"`
-	Port         int32                          `json:"port"`
+	// AuthTokenRef is an optional reference to a Secret containing an authentication token for the external service.
+	AuthTokenRef *LocalObjectReference `json:"authTokenRef,omitempty"`
+	// BackendRef is a reference to the external service that will process the payloads.
+	BackendRef gatewayv1.LocalObjectReference `json:"backendRef"`
+	// Port is the TCP port on which the external service is listening.
+	Port int32 `json:"port"`
 }

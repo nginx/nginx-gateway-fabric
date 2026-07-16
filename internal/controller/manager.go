@@ -190,8 +190,9 @@ func StartManager(cfg config.Config) error {
 			Plus:         cfg.Plus,
 			Experimental: cfg.ExperimentalFeatures,
 		},
-		DiscoveredCRDs: discoveredCRDs,
-		Snippets:       cfg.Snippets,
+		DiscoveredCRDs:   discoveredCRDs,
+		Snippets:         cfg.Snippets,
+		PayloadProcessor: cfg.PayloadProcessor,
 	})
 
 	statusUpdater := status.NewUpdater(
@@ -495,16 +496,19 @@ func createPolicyManager(
 			GVK:       mustExtractGVK(&ngfAPIv1alpha1.WAFPolicy{}),
 			Validator: waf.NewValidator(),
 		},
-		{
-			GVK:       mustExtractGVK(&ngfAPIv1alpha1.PayloadProcessor{}),
-			Validator: payloadprocessor.NewValidator(),
-		},
 	}
 
 	if cfg.Snippets {
 		cfgs = append(cfgs, policies.ManagerConfig{
 			GVK:       mustExtractGVK(&ngfAPIv1alpha1.SnippetsPolicy{}),
 			Validator: snippetspolicy.NewValidator(),
+		})
+	}
+
+	if cfg.PayloadProcessor {
+		cfgs = append(cfgs, policies.ManagerConfig{
+			GVK:       mustExtractGVK(&ngfAPIv1alpha1.PayloadProcessor{}),
+			Validator: payloadprocessor.NewValidator(),
 		})
 	}
 
@@ -788,6 +792,17 @@ func featureFlagControllerCfgs(cfg config.Config) []ctlrCfg {
 		)
 	}
 
+	if cfg.PayloadProcessor {
+		cfgs = append(cfgs,
+			ctlrCfg{
+				objectType: &ngfAPIv1alpha1.PayloadProcessor{},
+				options: []controller.Option{
+					controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
+				},
+			},
+		)
+	}
+
 	return cfgs
 }
 
@@ -934,12 +949,6 @@ func registerControllers(
 		},
 		{
 			objectType: &ngfAPIv1alpha1.WAFPolicy{},
-			options: []controller.Option{
-				controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
-			},
-		},
-		{
-			objectType: &ngfAPIv1alpha1.PayloadProcessor{},
 			options: []controller.Option{
 				controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
 			},
@@ -1317,7 +1326,6 @@ func prepareFirstEventBatchPreparerArgs(
 		&ngfAPIv1alpha1.AuthenticationFilterList{},
 		&ngfAPIv1alpha1.RateLimitPolicyList{},
 		&ngfAPIv1alpha1.WAFPolicyList{},
-		&ngfAPIv1alpha1.PayloadProcessorList{},
 		partialObjectMetadataList,
 	}
 
@@ -1372,6 +1380,13 @@ func prepareFirstEventBatchPreparerArgs(
 		objectLists = append(
 			objectLists,
 			&ngfAPIv1alpha1.SnippetsPolicyList{},
+		)
+	}
+
+	if cfg.PayloadProcessor {
+		objectLists = append(
+			objectLists,
+			&ngfAPIv1alpha1.PayloadProcessorList{},
 		)
 	}
 

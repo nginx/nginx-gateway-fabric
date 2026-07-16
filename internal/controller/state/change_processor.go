@@ -92,6 +92,8 @@ type ChangeProcessorConfig struct {
 	FeatureFlags graph.FeatureFlags
 	// Snippets indicates if Snippets are enabled. This will enable both SnippetsFilter and SnippetsPolicy APIs.
 	Snippets bool
+	// PayloadProcessor indicates if the PayloadProcessor API is enabled. Opt-in; used for features such as Guardrails.
+	PayloadProcessor bool
 }
 
 // ChangeProcessorImpl is an implementation of ChangeProcessor.
@@ -298,16 +300,19 @@ func NewChangeProcessorImpl(cfg ChangeProcessorConfig) *ChangeProcessorImpl {
 			store:     newObjectStoreMapAdapter(clusterStore.ListenerSets),
 			predicate: nil,
 		},
-		{
-			gvk:       cfg.MustExtractGVK(&ngfAPIv1alpha1.PayloadProcessor{}),
-			store:     commonPolicyObjectStore,
-			predicate: funcPredicate{stateChanged: isNGFPolicyRelevant},
-		},
 	}
 
 	if cfg.Snippets {
 		trackingUpdaterCfg = append(trackingUpdaterCfg, changeTrackingUpdaterObjectTypeCfg{
 			gvk:       cfg.MustExtractGVK(&ngfAPIv1alpha1.SnippetsPolicy{}),
+			store:     commonPolicyObjectStore,
+			predicate: funcPredicate{stateChanged: isNGFPolicyRelevant},
+		})
+	}
+
+	if cfg.PayloadProcessor {
+		trackingUpdaterCfg = append(trackingUpdaterCfg, changeTrackingUpdaterObjectTypeCfg{
+			gvk:       cfg.MustExtractGVK(&ngfAPIv1alpha1.PayloadProcessor{}),
 			store:     commonPolicyObjectStore,
 			predicate: funcPredicate{stateChanged: isNGFPolicyRelevant},
 		})

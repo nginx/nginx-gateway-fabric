@@ -252,7 +252,9 @@ Create namespaced RBAC rules.
   - proxysettingspolicies
   - ratelimitpolicies
   - wafpolicies
+  {{- if .Values.nginxGateway.payloadProcessor.enable }}
   - payloadprocessors
+  {{- end }}
   {{- if or .Values.nginxGateway.snippetsFilters.enable .Values.nginxGateway.snippets.enable }}
   - snippetsfilters
   {{- end }}
@@ -273,7 +275,9 @@ Create namespaced RBAC rules.
   - proxysettingspolicies/status
   - ratelimitpolicies/status
   - wafpolicies/status
+  {{- if .Values.nginxGateway.payloadProcessor.enable }}
   - payloadprocessors/status
+  {{- end }}
   {{- if or .Values.nginxGateway.snippetsFilters.enable .Values.nginxGateway.snippets.enable }}
   - snippetsfilters/status
   {{- end }}
