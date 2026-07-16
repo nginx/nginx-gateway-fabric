@@ -284,6 +284,32 @@ func TestValidator_Conflicts(t *testing.T) {
 			},
 			conflicts: true,
 		},
+		{
+			name: "useClusterIP conflicts",
+			polA: &ngfAPI.UpstreamSettingsPolicy{
+				Spec: ngfAPI.UpstreamSettingsPolicySpec{
+					UseClusterIP: helpers.GetPointer(true),
+				},
+			},
+			polB: &ngfAPI.UpstreamSettingsPolicy{
+				Spec: ngfAPI.UpstreamSettingsPolicySpec{
+					UseClusterIP: helpers.GetPointer(false),
+				},
+			},
+			conflicts: true,
+		},
+		{
+			name: "no conflict when only one policy sets useClusterIP",
+			polA: &ngfAPI.UpstreamSettingsPolicy{
+				Spec: ngfAPI.UpstreamSettingsPolicySpec{
+					UseClusterIP: helpers.GetPointer(true),
+				},
+			},
+			polB: &ngfAPI.UpstreamSettingsPolicy{
+				Spec: ngfAPI.UpstreamSettingsPolicySpec{},
+			},
+			conflicts: false,
+		},
 	}
 
 	v := upstreamsettings.NewValidator(nil, plusDisabled)

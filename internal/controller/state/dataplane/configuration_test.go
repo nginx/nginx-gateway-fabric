@@ -2022,12 +2022,6 @@ func TestBuildConfiguration(t *testing.T) {
 						Port: 443,
 					},
 					{
-						Hostname:  "",
-						Upstreams: []Layer4Upstream{},
-						Port:      443,
-						IsDefault: true,
-					},
-					{
 						Hostname:  "*.example.com",
 						Upstreams: []Layer4Upstream{},
 						Port:      443,
@@ -2040,6 +2034,12 @@ func TestBuildConfiguration(t *testing.T) {
 						},
 						Port:      444,
 						IsDefault: false,
+					},
+					{
+						Hostname:  "",
+						Upstreams: []Layer4Upstream{},
+						Port:      443,
+						IsDefault: true,
 					},
 				}
 				conf.SSLServers[0].SSL = &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}}
@@ -5469,6 +5469,7 @@ func TestBuildStreamUpstreams(t *testing.T) {
 	secureApp4Key := getL4RouteKey("secure-app4")
 	secureApp5Key := getL4RouteKey("secure-app5")
 	secureApp6Key := getL4RouteKey("secure-app6")
+	clusterAppKey := getL4RouteKey("cluster-app")
 	externalAppKey := getL4RouteKey("external-app")
 
 	gateway := &graph.Gateway{
@@ -5575,6 +5576,25 @@ func TestBuildStreamUpstreams(t *testing.T) {
 							},
 						},
 					},
+					clusterAppKey: {
+						Valid: true,
+						Spec: graph.L4RouteSpec{
+							Hostnames: []v1.Hostname{"cluster.example.com"},
+							BackendRef: graph.BackendRef{
+								Valid:     true,
+								SvcNsName: clusterAppKey.NamespacedName,
+								ServicePort: apiv1.ServicePort{
+									Name:     "https",
+									Protocol: "TCP",
+									Port:     8443,
+									TargetPort: intstr.IntOrString{
+										Type:   intstr.Int,
+										IntVal: 8443,
+									},
+								},
+							},
+						},
+					},
 					externalAppKey: {
 						Valid: true,
 						Spec: graph.L4RouteSpec{
@@ -5625,6 +5645,22 @@ func TestBuildStreamUpstreams(t *testing.T) {
 
 	referencedServices := map[types.NamespacedName]*graph.ReferencedService{
 		{Namespace: "default", Name: "external-app"}: externalNameService,
+		clusterAppKey.NamespacedName: {
+			ClusterIP: "10.96.0.1",
+			Policies: []*graph.Policy{
+				{
+					Source: &ngfAPIv1alpha1.UpstreamSettingsPolicy{
+						ObjectMeta: metav1.ObjectMeta{
+							Namespace: "default",
+							Name:      "usp-use-cluster-ip",
+						},
+						Spec: ngfAPIv1alpha1.UpstreamSettingsPolicySpec{UseClusterIP: helpers.GetPointer(true)},
+					},
+					Valid: true,
+				},
+			},
+			GatewayNsNames: map[types.NamespacedName]struct{}{{Name: "gateway", Namespace: "test"}: {}},
+		},
 	}
 
 	streamUpstreams := buildStreamUpstreams(
@@ -5638,6 +5674,10 @@ func TestBuildStreamUpstreams(t *testing.T) {
 	// Upstreams are sorted by name so that identical input produces a stable order and doesn't
 	// trigger spurious NGINX reloads.
 	expectedStreamUpstreams := []Upstream{
+		{
+			Name:      "default_cluster-app_8443",
+			Endpoints: fakeEndpoints,
+		},
 		{
 			Name: "default_external-app_443",
 			Endpoints: []resolver.Endpoint{
@@ -11644,4 +11684,85 @@ func TestBuildCertBundles(t *testing.T) {
 			g.Expect(result).To(Equal(test.expected))
 		})
 	}
+}
+
+func TestBuildUpstreamsWithClusterIP(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	clusterIP := "10.96.0.1"
+	svcKey := types.NamespacedName{Namespace: "default", Name: "my-svc"}
+
+	usp := &ngfAPIv1alpha1.UpstreamSettingsPolicy{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "usp"},
+		Spec:       ngfAPIv1alpha1.UpstreamSettingsPolicySpec{UseClusterIP: helpers.GetPointer(true)},
+	}
+
+	gateway := &graph.Gateway{
+		Source: &v1.Gateway{ObjectMeta: metav1.ObjectMeta{Name: "gw", Namespace: "default"}},
+		Listeners: []*graph.Listener{
+			{
+				Valid: true,
+				Source: v1.Listener{
+					Protocol: v1.HTTPProtocolType,
+					Port:     80,
+				},
+				Routes: map[graph.RouteKey]*graph.L7Route{
+					{NamespacedName: types.NamespacedName{Namespace: "default", Name: "route"}}: {
+						Valid: true,
+						Spec: graph.L7RouteSpec{
+							Rules: []graph.RouteRule{
+								{
+									ValidMatches: true,
+									Filters:      graph.RouteRuleFilters{Valid: true},
+									BackendRefs: []graph.BackendRef{
+										{
+											Valid:       true,
+											SvcNsName:   svcKey,
+											ServicePort: apiv1.ServicePort{Port: 80},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	referencedServices := map[types.NamespacedName]*graph.ReferencedService{
+		svcKey: {
+			ClusterIP: clusterIP,
+			Policies: []*graph.Policy{
+				{
+					Source: usp,
+					Valid:  true,
+				},
+			},
+			GatewayNsNames: map[types.NamespacedName]struct{}{
+				{Name: "gw", Namespace: "default"}: {},
+			},
+		},
+	}
+
+	// Resolver should NOT be called when UseClusterIP is true
+	fakeResolver := &resolverfakes.FakeServiceResolver{}
+	fakeResolver.ResolveStub = func(
+		_ context.Context,
+		_ logr.Logger,
+		_ types.NamespacedName,
+		_ apiv1.ServicePort,
+		_ []discoveryV1.AddressType,
+	) ([]resolver.Endpoint, error) {
+		t.Fatal("resolver should not be called when UseClusterIP is true")
+		return nil, nil
+	}
+
+	upstreams := buildUpstreams(t.Context(), logr.Discard(), gateway, fakeResolver, referencedServices)
+
+	g.Expect(upstreams).To(HaveLen(1))
+	g.Expect(upstreams[0].Endpoints).To(Equal([]resolver.Endpoint{
+		{Address: clusterIP, Port: 80},
+	}))
 }

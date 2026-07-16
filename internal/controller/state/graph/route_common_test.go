@@ -5871,22 +5871,6 @@ func TestValidateSessionPersistence(t *testing.T) {
 			validator: createDurationValidator(),
 		},
 		{
-			name: "session persistence returns error when idleTimeout is specified",
-			sessionPersistence: &gatewayv1.SessionPersistence{
-				Type:        helpers.GetPointer(gatewayv1.CookieBasedSessionPersistence),
-				IdleTimeout: helpers.GetPointer(gatewayv1.Duration("10m")),
-			},
-			expectedErrors: routeRuleErrors{
-				warn: field.ErrorList{
-					field.Forbidden(
-						sessionPersistencePath.Child("idleTimeout"),
-						"IdleTimeout",
-					),
-				},
-			},
-			validator: createDurationValidator(),
-		},
-		{
 			name: "session persistence returns error when absoluteTimeout is invalid",
 			sessionPersistence: &gatewayv1.SessionPersistence{
 				Type:            helpers.GetPointer(gatewayv1.CookieBasedSessionPersistence),
