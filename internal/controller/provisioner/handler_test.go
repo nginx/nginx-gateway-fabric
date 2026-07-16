@@ -412,7 +412,7 @@ func TestHandleEventBatch_Delete(t *testing.T) {
 }
 
 // TestHandleEventBatch_GatewayDeletingClearedOnRecreate verifies that when a Gateway is deleted
-// and then a new Gateway with the same name/namespace is created (e.g. after namespace recycling),
+// and then a new Gateway with the same name/namespace is created,
 // the "deleting" mark is cleared so that reprovisionResources can re-create managed resources.
 func TestHandleEventBatch_GatewayDeletingClearedOnRecreate(t *testing.T) {
 	t.Parallel()
