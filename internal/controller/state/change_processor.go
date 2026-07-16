@@ -298,6 +298,11 @@ func NewChangeProcessorImpl(cfg ChangeProcessorConfig) *ChangeProcessorImpl {
 			store:     newObjectStoreMapAdapter(clusterStore.ListenerSets),
 			predicate: nil,
 		},
+		{
+			gvk:       cfg.MustExtractGVK(&ngfAPIv1alpha1.PayloadProcessor{}),
+			store:     commonPolicyObjectStore,
+			predicate: funcPredicate{stateChanged: isNGFPolicyRelevant},
+		},
 	}
 
 	if cfg.Snippets {

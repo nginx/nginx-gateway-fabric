@@ -226,6 +226,7 @@ rules:
   - proxysettingspolicies
   - ratelimitpolicies
   - wafpolicies
+  - payloadprocessors
   verbs:
   - list
   - watch
@@ -240,6 +241,7 @@ rules:
   - proxysettingspolicies/status
   - ratelimitpolicies/status
   - wafpolicies/status
+  - payloadprocessors/status
   verbs:
   - update
 - apiGroups:

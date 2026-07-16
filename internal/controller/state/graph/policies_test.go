@@ -2343,6 +2343,22 @@ func TestAddStatusToTargetRefs(t *testing.T) {
 	}).ToNot(Panic())
 }
 
+func TestAddStatusToTargetRefsPayloadProcessor(t *testing.T) {
+	t.Parallel()
+
+	g := NewWithT(t)
+
+	var condsList []conditions.Condition
+
+	// Appends the PolicyAffected condition for PayloadProcessor.
+	addStatusToTargetRefs(kinds.PayloadProcessor, &condsList)
+	g.Expect(condsList).To(ConsistOf(conditions.NewPayloadProcessorPolicyAffected()))
+
+	// Does not duplicate the condition when called again.
+	addStatusToTargetRefs(kinds.PayloadProcessor, &condsList)
+	g.Expect(condsList).To(ConsistOf(conditions.NewPayloadProcessorPolicyAffected()))
+}
+
 func TestNGFPolicyAncestorsFullFunc(t *testing.T) {
 	t.Parallel()
 

@@ -175,6 +175,7 @@ rules:
   - authenticationfilters
   - snippetspolicies
   - wafpolicies
+  - payloadprocessors
   verbs:
   - create
   - delete
@@ -195,6 +196,7 @@ rules:
   - authenticationfilters/status
   - snippetspolicies/status
   - wafpolicies/status
+  - payloadprocessors/status
   verbs:
   - update
 - apiGroups:

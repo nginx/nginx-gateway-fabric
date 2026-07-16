@@ -196,6 +196,10 @@ const (
 	// RateLimitPolicy is applied to a Gateway, HTTPRoute, or GRPCRoute.
 	RateLimitPolicyAffected v1.PolicyConditionType = "RateLimitPolicyAffected"
 
+	// PayloadProcessorPolicyAffected is used with the "PolicyAffected" condition when a
+	// PayloadProcessor is applied to a Gateway or HTTPRoute.
+	PayloadProcessorPolicyAffected v1.PolicyConditionType = "PayloadProcessorPolicyAffected"
+
 	// PolicyAffectedReason is used with the "PolicyAffected" condition when a
 	// custom policy is applied to Gateways or Routes.
 	PolicyAffectedReason v1.PolicyConditionReason = "PolicyAffected"
@@ -1448,6 +1452,17 @@ func NewRateLimitPolicyAffected() Condition {
 		Status:  metav1.ConditionTrue,
 		Reason:  string(PolicyAffectedReason),
 		Message: "The RateLimitPolicy is applied to the resource",
+	}
+}
+
+// NewPayloadProcessorPolicyAffected returns a Condition that indicates that a PayloadProcessor
+// is applied to the resource.
+func NewPayloadProcessorPolicyAffected() Condition {
+	return Condition{
+		Type:    string(PayloadProcessorPolicyAffected),
+		Status:  metav1.ConditionTrue,
+		Reason:  string(PolicyAffectedReason),
+		Message: "PayloadProcessor is applied to the resource",
 	}
 }
 

@@ -886,6 +886,7 @@ func addPolicyAffectedStatusToTargetRefs(
 	}
 }
 
+//nolint:gocyclo // will refactor later
 func addStatusToTargetRefs(policyKind string, conditionsList *[]conditions.Condition) {
 	if conditionsList == nil {
 		return
@@ -921,6 +922,11 @@ func addStatusToTargetRefs(policyKind string, conditionsList *[]conditions.Condi
 			return
 		}
 		*conditionsList = append(*conditionsList, conditions.NewWAFPolicyAffected())
+	case kinds.PayloadProcessor:
+		if conditions.HasMatchingCondition(*conditionsList, conditions.NewPayloadProcessorPolicyAffected()) {
+			return
+		}
+		*conditionsList = append(*conditionsList, conditions.NewPayloadProcessorPolicyAffected())
 	}
 }
 

@@ -55,6 +55,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/clientsettings"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/observability"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/payloadprocessor"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/proxysettings"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/ratelimit"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/snippetspolicy"
@@ -493,6 +494,10 @@ func createPolicyManager(
 		{
 			GVK:       mustExtractGVK(&ngfAPIv1alpha1.WAFPolicy{}),
 			Validator: waf.NewValidator(),
+		},
+		{
+			GVK:       mustExtractGVK(&ngfAPIv1alpha1.PayloadProcessor{}),
+			Validator: payloadprocessor.NewValidator(),
 		},
 	}
 
@@ -933,6 +938,12 @@ func registerControllers(
 				controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
 			},
 		},
+		{
+			objectType: &ngfAPIv1alpha1.PayloadProcessor{},
+			options: []controller.Option{
+				controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
+			},
+		},
 	}
 
 	controllerRegCfgs = append(controllerRegCfgs, featureFlagControllerCfgs(cfg)...)
@@ -1306,6 +1317,7 @@ func prepareFirstEventBatchPreparerArgs(
 		&ngfAPIv1alpha1.AuthenticationFilterList{},
 		&ngfAPIv1alpha1.RateLimitPolicyList{},
 		&ngfAPIv1alpha1.WAFPolicyList{},
+		&ngfAPIv1alpha1.PayloadProcessorList{},
 		partialObjectMetadataList,
 	}
 

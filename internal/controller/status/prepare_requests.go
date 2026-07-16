@@ -422,6 +422,7 @@ var settingsPolicyKinds = map[string]struct{}{
 	kinds.ProxySettingsPolicy:    {},
 	kinds.RateLimitPolicy:        {},
 	kinds.SnippetsPolicy:         {},
+	kinds.PayloadProcessor:       {},
 }
 
 // ancestorAccepted reports whether the policy is accepted for the given ancestor, i.e. neither the
