@@ -503,6 +503,13 @@ func (s *store) markGatewayDeleting(nsName types.NamespacedName) {
 	s.deletingGateways.Store(nsName, struct{}{})
 }
 
+// clearGatewayDeleting removes the deleting mark for a Gateway.
+// This must be called when a Gateway with the same name is re-created
+// so that reprovisionResources is not blocked for the new Gateway's managed resources.
+func (s *store) clearGatewayDeleting(nsName types.NamespacedName) {
+	s.deletingGateways.Delete(nsName)
+}
+
 // isGatewayDeleting checks if a Gateway is marked as being deleted.
 func (s *store) isGatewayDeleting(nsName types.NamespacedName) bool {
 	_, exists := s.deletingGateways.Load(nsName)
