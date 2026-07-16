@@ -247,30 +247,28 @@ func (h *eventHandlerImpl) sendNginxConfig(ctx context.Context, logger logr.Logg
 	h.ensureInferencePoolServices(ctx, gr.ReferencedInferencePools)
 
 	for _, gw := range gr.Gateways {
-		go func() {
-			if err := h.cfg.nginxProvisioner.RegisterGateway(ctx, gw, gw.DeploymentName.Name); err != nil {
-				logger.Error(err, "error from provisioner")
-			}
-		}()
+		// Build the status object for this Gateway inline, then launch a goroutine
+		// that waits for RegisterGateway to complete before enqueuing it. This ensures
+		// Service status (e.g. LoadBalancer Ingress IPs patched by the provisioner) is
+		// fully written before the status handler reads it, without coupling unrelated
+		// Gateways together.
+		var statusObj *status.QueueObject
 
-		// If no listeners or invalid, update status but skip config generation
-		if len(gw.Listeners) == 0 || !gw.Valid {
-			obj := &status.QueueObject{
+		switch {
+		// If no listeners or invalid, update status but skip config generation.
+		case len(gw.Listeners) == 0 || !gw.Valid:
+			statusObj = &status.QueueObject{
 				Deployment: status.Deployment{
 					NamespacedName: gw.DeploymentName,
 					GatewayName:    gw.Source.GetName(),
 				},
 				UpdateType: status.UpdateAll,
 			}
-			h.cfg.statusQueue.Enqueue(obj)
-			continue
-		}
-
-		if gatewayHasPendingWAFBundle(gr, gw) && !graph.WAFBundleFailOpenForNginxProxy(gw.EffectiveNginxProxy) {
-			// Fail-closed (default): a pending bundle blocks the config push until the bundle is available.
-			// Enqueue a status update because the config is being withheld in this fail-closed case,
-			// making the pending condition visible to the operator.
-			obj := &status.QueueObject{
+		// Fail-closed (default): a pending bundle blocks the config push until the bundle is available.
+		// Enqueue a status update because the config is being withheld in this fail-closed case,
+		// making the pending condition visible to the operator.
+		case gatewayHasPendingWAFBundle(gr, gw) && !graph.WAFBundleFailOpenForNginxProxy(gw.EffectiveNginxProxy):
+			statusObj = &status.QueueObject{
 				UpdateType: status.UpdateAll,
 				Deployment: status.Deployment{
 					NamespacedName: gw.DeploymentName,
@@ -278,62 +276,71 @@ func (h *eventHandlerImpl) sendNginxConfig(ctx context.Context, logger logr.Logg
 				},
 				Error: errors.New("NGINX configuration update withheld: WAF bundle for Gateway is still pending"),
 			}
-			h.cfg.statusQueue.Enqueue(obj)
-			continue
-		}
-
-		deployment := h.cfg.nginxDeployments.GetOrStore(ctx, gw.DeploymentName, gw.Source.GetName())
-		if deployment == nil {
-			panic("expected deployment, got nil")
-		}
-
-		nginxImage, _ := provisioner.DetermineNginxImageName(
-			gw.EffectiveNginxProxy,
-			h.cfg.plus,
-			h.cfg.gatewayPodConfig.Version,
-		)
-		deployment.SetImageVersion(nginxImage)
-
-		cfg := dataplane.BuildConfiguration(ctx, logger, gr, gw, h.cfg.serviceResolver, h.cfg.plus)
-		depCtx, getErr := h.getDeploymentContext(ctx)
-		if getErr != nil {
-			logger.Error(getErr, "error getting deployment context for usage reporting")
-		}
-		cfg.DeploymentContext = depCtx
-
-		h.setLatestConfiguration(gw, &cfg)
-
-		vm := []v1.VolumeMount{}
-		if gw.EffectiveNginxProxy != nil &&
-			gw.EffectiveNginxProxy.Kubernetes != nil {
-			if gw.EffectiveNginxProxy.Kubernetes.Deployment != nil {
-				vm = gw.EffectiveNginxProxy.Kubernetes.Deployment.Container.VolumeMounts
+		default:
+			deployment := h.cfg.nginxDeployments.GetOrStore(ctx, gw.DeploymentName, gw.Source.GetName())
+			if deployment == nil {
+				panic("expected deployment, got nil")
 			}
 
-			if gw.EffectiveNginxProxy.Kubernetes.DaemonSet != nil {
-				vm = gw.EffectiveNginxProxy.Kubernetes.DaemonSet.Container.VolumeMounts
+			nginxImage, _ := provisioner.DetermineNginxImageName(
+				gw.EffectiveNginxProxy,
+				h.cfg.plus,
+				h.cfg.gatewayPodConfig.Version,
+			)
+			deployment.SetImageVersion(nginxImage)
+
+			cfg := dataplane.BuildConfiguration(ctx, logger, gr, gw, h.cfg.serviceResolver, h.cfg.plus)
+			depCtx, getErr := h.getDeploymentContext(ctx)
+			if getErr != nil {
+				logger.Error(getErr, "error getting deployment context for usage reporting")
+			}
+			cfg.DeploymentContext = depCtx
+
+			h.setLatestConfiguration(gw, &cfg)
+
+			deployment.FileLock.Lock()
+			h.updateNginxConf(deployment, cfg, effectiveVolumeMounts(gw.EffectiveNginxProxy))
+			deployment.FileLock.Unlock()
+
+			configErr := deployment.GetLatestConfigError()
+			upstreamErr := deployment.GetLatestUpstreamError()
+
+			statusObj = &status.QueueObject{
+				UpdateType:        status.UpdateAll,
+				Error:             errors.Join(configErr, upstreamErr),
+				NginxConfigPushed: true,
+				Deployment: status.Deployment{
+					NamespacedName: gw.DeploymentName,
+					GatewayName:    gw.Source.GetName(),
+				},
 			}
 		}
 
-		deployment.FileLock.Lock()
-		h.updateNginxConf(deployment, cfg, vm)
-		deployment.FileLock.Unlock()
-
-		configErr := deployment.GetLatestConfigError()
-		upstreamErr := deployment.GetLatestUpstreamError()
-		err := errors.Join(configErr, upstreamErr)
-
-		obj := &status.QueueObject{
-			UpdateType:        status.UpdateAll,
-			Error:             err,
-			NginxConfigPushed: true,
-			Deployment: status.Deployment{
-				NamespacedName: gw.DeploymentName,
-				GatewayName:    gw.Source.GetName(),
-			},
-		}
-		h.cfg.statusQueue.Enqueue(obj)
+		go func() {
+			if err := h.cfg.nginxProvisioner.RegisterGateway(ctx, gw, gw.DeploymentName.Name); err != nil {
+				logger.Error(err, "error from provisioner")
+			}
+			h.cfg.statusQueue.Enqueue(statusObj)
+		}()
 	}
+}
+
+// effectiveVolumeMounts returns the user-configured volume mounts from the EffectiveNginxProxy,
+// or nil if none are configured.
+func effectiveVolumeMounts(np *graph.EffectiveNginxProxy) []v1.VolumeMount {
+	if np == nil || np.Kubernetes == nil {
+		return nil
+	}
+
+	if np.Kubernetes.Deployment != nil {
+		return np.Kubernetes.Deployment.Container.VolumeMounts
+	}
+
+	if np.Kubernetes.DaemonSet != nil {
+		return np.Kubernetes.DaemonSet.Container.VolumeMounts
+	}
+
+	return nil
 }
 
 // reconcileWAFPollers starts, updates, or stops WAF bundle pollers based on the current graph state.
@@ -949,6 +956,8 @@ func getGatewayAddresses(
 		svcName := controller.CreateNginxResourceName(gateway.Source.GetName(), gatewayClassName)
 		key := types.NamespacedName{Name: svcName, Namespace: gateway.Source.GetNamespace()}
 
+		expectLBIngress := gatewayExpectsLoadBalancerIngress(gateway)
+
 		pollCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		defer cancel()
 
@@ -961,6 +970,16 @@ func getGatewayAddresses(
 					return false, nil //nolint:nilerr // need to retry without returning error
 				}
 
+				// When the Gateway declares IP-type spec addresses and the Service is a
+				// LoadBalancer, the provisioner patches Service.Status.LoadBalancer.Ingress
+				// with those IPs. The informer cache may not reflect that patch yet, so keep
+				// polling until the Ingress entries appear.
+				if expectLBIngress &&
+					gwSvc.Spec.Type == v1.ServiceTypeLoadBalancer &&
+					len(gwSvc.Status.LoadBalancer.Ingress) == 0 {
+					return false, nil
+				}
+
 				return true, nil
 			},
 		); err != nil {
@@ -971,6 +990,18 @@ func getGatewayAddresses(
 	}
 
 	return getGatewayAddressesForStatus(&gwSvc), nil
+}
+
+// gatewayExpectsLoadBalancerIngress returns true when the Gateway declares at least one
+// IP-type spec address, meaning the provisioner will patch the Service's LoadBalancer
+// Ingress status with those IPs.
+func gatewayExpectsLoadBalancerIngress(gateway *graph.Gateway) bool {
+	for _, addr := range gateway.Source.Spec.Addresses {
+		if addr.Type != nil && *addr.Type == gatewayv1.IPAddressType {
+			return true
+		}
+	}
+	return false
 }
 
 func getGatewayAddressesForStatus(svc *v1.Service) (gwAddresses []gatewayv1.GatewayStatusAddress) {

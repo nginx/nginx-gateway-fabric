@@ -225,10 +225,6 @@ var _ = Describe("Graceful Recovery: abrupt node restart",
 		})
 
 		It("recovers when node is restarted abruptly", func() {
-			if *plusEnabled {
-				Skip("Skipping test when using NGINX Plus due to known issue:" +
-					" https://github.com/nginx/nginx-gateway-fabric/issues/3248")
-			}
 			runRestartNodeTest(
 				gracefulRecoveryFiles, &ns,
 				&activeNGFPodName, &activeNginxPodName,

@@ -169,7 +169,6 @@ jobs:
 
       - name: Run conformance tests
         run: |
-          make deploy-metallb
           make run-conformance-tests CONFORMANCE_TAG=${{ github.sha }} NGF_VERSION=${{ github.ref_name }} CLUSTER_NAME=${{ github.run_id }}
           core_result=$(cat conformance-profile.yaml | yq '.profiles[0].core.result')
           extended_result=$(cat conformance-profile.yaml | yq '.profiles[0].extended.result')

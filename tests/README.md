@@ -21,14 +21,12 @@ This directory contains the tests for NGINX Gateway Fabric. The tests are divide
     - [Option 1 - Build and install NGINX Gateway Fabric from local to configured kind cluster](#option-1---build-and-install-nginx-gateway-fabric-from-local-to-configured-kind-cluster)
     - [Option 2 - Install NGINX Gateway Fabric from local already built image to configured kind cluster](#option-2---install-nginx-gateway-fabric-from-local-already-built-image-to-configured-kind-cluster)
   - [Step 2 - Build conformance test runner image](#step-2---build-conformance-test-runner-image)
-  - [Step 3 - Deploy MetalLB to the kind cluster](#step-3---deploy-metallb-to-the-kind-cluster)
-    - [To deploy MetalLB to the kind cluster](#to-deploy-metallb-to-the-kind-cluster)
-  - [Step 4 - Run Conformance tests](#step-4---run-conformance-tests)
+  - [Step 3 - Run Conformance tests](#step-3---run-conformance-tests)
     - [To run Gateway conformance tests](#to-run-gateway-conformance-tests)
     - [To run Inference conformance tests](#to-run-inference-conformance-tests)
-  - [Step 5 - Cleanup the conformance test fixtures and uninstall NGINX Gateway Fabric](#step-5---cleanup-the-conformance-test-fixtures-and-uninstall-nginx-gateway-fabric)
-  - [Step 6 - Revert changes to Go modules](#step-6---revert-changes-to-go-modules)
-  - [Step 7 - Delete kind cluster](#step-7---delete-kind-cluster)
+  - [Step 4 - Cleanup the conformance test fixtures and uninstall NGINX Gateway Fabric](#step-4---cleanup-the-conformance-test-fixtures-and-uninstall-nginx-gateway-fabric)
+  - [Step 5 - Revert changes to Go modules](#step-5---revert-changes-to-go-modules)
+  - [Step 6 - Delete kind cluster](#step-6---delete-kind-cluster)
 - [System Testing](#system-testing)
   - [Logging in tests](#logging-in-tests)
   - [Step 1 - Run the tests](#step-1---run-the-tests)
@@ -213,20 +211,11 @@ go mod tidy
 make build-test-runner-image
 ```
 
-### Step 3 - Deploy MetalLB to the kind cluster
-
-#### To deploy MetalLB to the kind cluster
-
-> This is needed to assign external IPs to the Loadbalancer Services spun up in the conformance test.
-> If your cluster can already do this, it is okay to skip.
-
-```makefile
-make deploy-metallb
-```
-
-### Step 4 - Run Conformance tests
+### Step 3 - Run Conformance tests
 
 #### To run Gateway conformance tests
+
+This will also pre-install MetalLB to assign external IPs to the LoadBalancer Services.
 
 ```makefile
 make run-conformance-tests
@@ -238,7 +227,7 @@ make run-conformance-tests
 make run-inference-conformance-tests
 ```
 
-### Step 5 - Cleanup the conformance test fixtures and uninstall NGINX Gateway Fabric
+### Step 4 - Cleanup the conformance test fixtures and uninstall NGINX Gateway Fabric
 
 ```makefile
 make cleanup-conformance-tests
@@ -248,7 +237,7 @@ make cleanup-conformance-tests
 make uninstall-ngf
 ```
 
-### Step 6 - Revert changes to Go modules
+### Step 5 - Revert changes to Go modules
 
 **Optional** Not required if you aren't running the `main` Gateway API tests.
 
@@ -256,7 +245,7 @@ make uninstall-ngf
 make reset-go-modules
 ```
 
-### Step 7 - Delete kind cluster
+### Step 6 - Delete kind cluster
 
 ```makefile
 make delete-kind-cluster
