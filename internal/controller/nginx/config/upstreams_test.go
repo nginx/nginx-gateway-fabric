@@ -417,7 +417,6 @@ func TestCreateUpstreams(t *testing.T) {
 				LoadBalancingMethod: string(ngfAPI.LoadBalancingTypeIPHash),
 			},
 		},
-
 		{
 			Name: "up6-usp",
 			Endpoints: []resolver.Endpoint{
