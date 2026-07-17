@@ -24,12 +24,14 @@ func createValidPolicy() *ngfAPI.PayloadProcessor {
 				Kind:  kinds.Gateway,
 				Name:  "gateway",
 			},
-			Processor: ngfAPI.PayloadProcessorEntry{
-				ExtProc: &ngfAPI.ExtProcConfig{
-					BackendRef: v1.LocalObjectReference{
-						Name: "ext-proc-service",
+			Processors: []ngfAPI.PayloadProcessorEntry{
+				{
+					ExtProc: &ngfAPI.ExtProcConfig{
+						BackendRef: v1.LocalObjectReference{
+							Name: "ext-proc-service",
+						},
+						Port: 9000,
 					},
-					Port: 9000,
 				},
 			},
 		},
@@ -61,10 +63,21 @@ func TestValidator_Validate(t *testing.T) {
 			},
 		},
 		{
+			name: "no processors",
+			policy: func() *ngfAPI.PayloadProcessor {
+				p := createValidPolicy()
+				p.Spec.Processors = nil
+				return p
+			}(),
+			expConditions: []conditions.Condition{
+				conditions.NewPolicyInvalid("at least one processor must be specified"),
+			},
+		},
+		{
 			name: "missing extProc configuration",
 			policy: func() *ngfAPI.PayloadProcessor {
 				p := createValidPolicy()
-				p.Spec.Processor.ExtProc = nil
+				p.Spec.Processors[0].ExtProc = nil
 				return p
 			}(),
 			expConditions: []conditions.Condition{
@@ -75,7 +88,7 @@ func TestValidator_Validate(t *testing.T) {
 			name: "missing extProc backendRef name",
 			policy: func() *ngfAPI.PayloadProcessor {
 				p := createValidPolicy()
-				p.Spec.Processor.ExtProc.BackendRef.Name = ""
+				p.Spec.Processors[0].ExtProc.BackendRef.Name = ""
 				return p
 			}(),
 			expConditions: []conditions.Condition{
@@ -86,7 +99,7 @@ func TestValidator_Validate(t *testing.T) {
 			name: "invalid extProc port",
 			policy: func() *ngfAPI.PayloadProcessor {
 				p := createValidPolicy()
-				p.Spec.Processor.ExtProc.Port = 0
+				p.Spec.Processors[0].ExtProc.Port = 0
 				return p
 			}(),
 			expConditions: []conditions.Condition{
@@ -126,6 +139,7 @@ func TestValidator_Conflicts(t *testing.T) {
 	pol1 := createValidPolicy()
 	pol2 := createValidPolicy()
 
-	// PayloadProcessor doesn't support merging.
-	g.Expect(validator.Conflicts(pol1, pol2)).To(BeFalse())
+	// PayloadProcessors occupy a single phase, so any two targeting the same object conflict.
+	// The graph layer keeps the oldest and marks newer ones Conflicted.
+	g.Expect(validator.Conflicts(pol1, pol2)).To(BeTrue())
 }

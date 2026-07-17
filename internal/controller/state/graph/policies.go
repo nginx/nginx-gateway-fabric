@@ -280,6 +280,53 @@ func (g *Graph) attachPolicies(validator validation.PolicyValidator, ctlrName st
 	}
 }
 
+// resolveEffectivePayloadProcessors computes the effective PayloadProcessor for each Route.
+// A PayloadProcessor attached directly to a Route takes precedence over one attached to the
+// Route's parent Gateway. This is realized as data-plane behavior; the Gateway-attached policy
+// remains valid (Programmed=True) because it still applies to requests not covered by an
+// overriding Route-attached policy.
+//
+// The result is stored on L7Route.EffectivePayloadProcessor. There is no config generator for
+// PayloadProcessor yet, so this field is currently unused at runtime. When the generator lands,
+// it should read L7Route.EffectivePayloadProcessor (e.g. alongside buildPolicies in
+// internal/controller/state/dataplane/configuration.go) to emit the per-route processing config,
+// rather than iterating route.Policies directly, so that this Route-over-Gateway precedence is honored.
+func resolveEffectivePayloadProcessors(
+	gateways map[types.NamespacedName]*Gateway,
+	routes map[RouteKey]*L7Route,
+) {
+	for _, route := range routes {
+		// A PayloadProcessor attached directly to the Route wins.
+		if routePolicy := firstValidPayloadProcessor(route.Policies); routePolicy != nil {
+			route.EffectivePayloadProcessor = routePolicy
+			continue
+		}
+
+		// Otherwise fall back to a PayloadProcessor attached to any of the Route's parent Gateways.
+		for _, parentRef := range route.ParentRefs {
+			gw, exists := gateways[parentRef.GatewayNsName]
+			if !exists || gw == nil {
+				continue
+			}
+
+			if gwPolicy := firstValidPayloadProcessor(gw.Policies); gwPolicy != nil {
+				route.EffectivePayloadProcessor = gwPolicy
+				break
+			}
+		}
+	}
+}
+
+// firstValidPayloadProcessor returns the first valid PayloadProcessor policy in the list, or nil.
+func firstValidPayloadProcessor(pols []*Policy) *Policy {
+	for _, policy := range pols {
+		if policy.Valid && getPolicyKind(policy.Source) == kinds.PayloadProcessor {
+			return policy
+		}
+	}
+	return nil
+}
+
 func attachPolicyToService(
 	policy *Policy,
 	svc *ReferencedService,

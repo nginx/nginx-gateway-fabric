@@ -28,9 +28,8 @@ spec:
     schema:
       openAPIV3Schema:
         description: |-
-          PayloadProcessor is an Inherited Attached Policy. It enables declarative, ordered processing of HTTP
+          PayloadProcessor is an Inherited Attached Policy. It enables declarative processing of HTTP
           request and response payloads (headers and body) by attaching to a Gateway or HTTPRoute.
-          Processors execute sequentially; if any processor rejects a request, subsequent processors are skipped.
         properties:
           apiVersion:
             description: |-
@@ -52,75 +51,83 @@ spec:
           spec:
             description: Spec defines the desired state of the PayloadProcessor.
             properties:
-              processor:
-                description: Processor defines the processing step to be applied to
-                  the request and response payloads.
-                properties:
-                  extProc:
-                    description: ExtProc defines the configuration for an ExtProc
-                      processor that delegates to an external service.
-                    properties:
-                      authTokenRef:
-                        description: AuthTokenRef is an optional reference to a Secret
-                          containing an authentication token for the external service.
-                        properties:
-                          name:
-                            description: Name is the name of the referenced object.
-                            type: string
-                        required:
-                        - name
-                        type: object
-                      backendRef:
-                        description: BackendRef is a reference to the external service
-                          that will process the payloads.
-                        properties:
-                          group:
-                            description: |-
-                              Group is the group of the referent. For example, "gateway.networking.k8s.io".
-                              When unspecified or empty string, core API group is inferred.
-                            maxLength: 253
-                            pattern: ^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
-                            type: string
-                          kind:
-                            description: Kind is kind of the referent. For example
-                              "HTTPRoute" or "Service".
-                            maxLength: 63
-                            minLength: 1
-                            pattern: ^[a-zA-Z]([-a-zA-Z0-9]*[a-zA-Z0-9])?$
-                            type: string
-                          name:
-                            description: Name is the name of the referent.
-                            maxLength: 253
-                            minLength: 1
-                            type: string
-                        required:
-                        - group
-                        - kind
-                        - name
-                        type: object
-                        x-kubernetes-validations:
-                        - message: backendRef.name must not be empty
-                          rule: size(self.name) > 0
-                      port:
-                        description: Port is the TCP port on which the external service
-                          is listening.
-                        format: int32
-                        maximum: 65535
-                        minimum: 1
-                        type: integer
-                    required:
-                    - backendRef
-                    - port
-                    type: object
-                  timeout:
-                    description: Timeout is the maximum time to wait for the processor
-                      to complete processing a request or response.
-                    pattern: ^[0-9]{1,4}(ms|s|m|h)?$
-                    type: string
-                type: object
-                x-kubernetes-validations:
-                - message: processor must specify extProc
-                  rule: has(self.extProc)
+              processors:
+                description: |-
+                  Processors is an ordered list of processing steps to be applied to the request and response payloads.
+                  It is currently limited to a single processor (MaxItems=1); the list form is reserved for future
+                  multi-processor pipelines.
+                items:
+                  description: PayloadProcessorEntry defines a single processing step
+                    in the pipeline.
+                  properties:
+                    extProc:
+                      description: ExtProc defines the configuration for an ExtProc
+                        processor that delegates to an external service.
+                      properties:
+                        authTokenRef:
+                          description: AuthTokenRef is a reference to a Secret containing
+                            an authentication token for the external service.
+                          properties:
+                            name:
+                              description: Name is the name of the referenced object.
+                              type: string
+                          required:
+                          - name
+                          type: object
+                        backendRef:
+                          description: BackendRef is a reference to the external service
+                            that will process the payloads.
+                          properties:
+                            group:
+                              description: |-
+                                Group is the group of the referent. For example, "gateway.networking.k8s.io".
+                                When unspecified or empty string, core API group is inferred.
+                              maxLength: 253
+                              pattern: ^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
+                              type: string
+                            kind:
+                              description: Kind is kind of the referent. For example
+                                "HTTPRoute" or "Service".
+                              maxLength: 63
+                              minLength: 1
+                              pattern: ^[a-zA-Z]([-a-zA-Z0-9]*[a-zA-Z0-9])?$
+                              type: string
+                            name:
+                              description: Name is the name of the referent.
+                              maxLength: 253
+                              minLength: 1
+                              type: string
+                          required:
+                          - group
+                          - kind
+                          - name
+                          type: object
+                          x-kubernetes-validations:
+                          - message: backendRef.name must not be empty
+                            rule: size(self.name) > 0
+                        port:
+                          description: Port is the TCP port on which the external
+                            service is listening.
+                          format: int32
+                          maximum: 65535
+                          minimum: 1
+                          type: integer
+                      required:
+                      - backendRef
+                      - port
+                      type: object
+                    timeout:
+                      description: Timeout is the maximum time to wait for the processor
+                        to complete processing a request or response.
+                      pattern: ^[0-9]{1,4}(ms|s|m|h)?$
+                      type: string
+                  type: object
+                  x-kubernetes-validations:
+                  - message: processor must specify extProc
+                    rule: has(self.extProc)
+                maxItems: 1
+                minItems: 1
+                type: array
               targetRef:
                 description: |-
                   TargetRef identifies the Gateway or HTTPRoute this policy applies to.
@@ -156,7 +163,7 @@ spec:
                 - message: TargetRef Group must be gateway.networking.k8s.io
                   rule: self.group == 'gateway.networking.k8s.io'
             required:
-            - processor
+            - processors
             - targetRef
             type: object
           status:

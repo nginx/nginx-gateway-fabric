@@ -29,14 +29,20 @@ func (v *Validator) Validate(policy policies.Policy) []conditions.Condition {
 		return []conditions.Condition{conditions.NewPolicyInvalid(err.Error())}
 	}
 
-	if pp.Spec.Processor.ExtProc == nil {
-		return []conditions.Condition{conditions.NewPolicyInvalid("processor missing extProc configuration")}
+	if len(pp.Spec.Processors) == 0 {
+		return []conditions.Condition{conditions.NewPolicyInvalid("at least one processor must be specified")}
 	}
-	if pp.Spec.Processor.ExtProc.BackendRef.Name == "" {
-		return []conditions.Condition{conditions.NewPolicyInvalid("processor extProc.backendRef.name must be set")}
-	}
-	if pp.Spec.Processor.ExtProc.Port < 1 || pp.Spec.Processor.ExtProc.Port > 65535 {
-		return []conditions.Condition{conditions.NewPolicyInvalid("processor extProc.port must be a valid TCP port")}
+
+	for _, processor := range pp.Spec.Processors {
+		if processor.ExtProc == nil {
+			return []conditions.Condition{conditions.NewPolicyInvalid("processor missing extProc configuration")}
+		}
+		if processor.ExtProc.BackendRef.Name == "" {
+			return []conditions.Condition{conditions.NewPolicyInvalid("processor extProc.backendRef.name must be set")}
+		}
+		if processor.ExtProc.Port < 1 || processor.ExtProc.Port > 65535 {
+			return []conditions.Condition{conditions.NewPolicyInvalid("processor extProc.port must be a valid TCP port")}
+		}
 	}
 
 	return nil
@@ -48,5 +54,7 @@ func (v *Validator) ValidateGlobalSettings(_ policies.Policy, _ *policies.Global
 }
 
 // Conflicts returns true if the two PayloadProcessors conflict.
-// For now, we conservatively return false to allow multiple processors; graph layer may mark invalid per-target.
-func (v *Validator) Conflicts(_ policies.Policy, _ policies.Policy) bool { return false }
+// PayloadProcessors occupy a single processing phase, so any two policies targeting the same object
+// conflict. markConflictedPolicies groups by policy GVK and target ref and sorts oldest-first, so the
+// oldest policy is kept and newer conflicting policies are marked Conflicted.
+func (v *Validator) Conflicts(_ policies.Policy, _ policies.Policy) bool { return true }

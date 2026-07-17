@@ -13,9 +13,8 @@ import (
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 // +kubebuilder:metadata:labels="gateway.networking.k8s.io/policy=inherited"
 
-// PayloadProcessor is an Inherited Attached Policy. It enables declarative, ordered processing of HTTP
+// PayloadProcessor is an Inherited Attached Policy. It enables declarative processing of HTTP
 // request and response payloads (headers and body) by attaching to a Gateway or HTTPRoute.
-// Processors execute sequentially; if any processor rejects a request, subsequent processors are skipped.
 type PayloadProcessor struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -38,9 +37,6 @@ type PayloadProcessorList struct {
 
 // PayloadProcessorSpec defines the desired state of a PayloadProcessor.
 type PayloadProcessorSpec struct {
-	// Processor defines the processing step to be applied to the request and response payloads.
-	Processor PayloadProcessorEntry `json:"processor"`
-
 	// TargetRef identifies the Gateway or HTTPRoute this policy applies to.
 	// Objects must be in the same namespace as the policy.
 	// Follows the standard policy attachment pattern (GEP-713).
@@ -51,6 +47,13 @@ type PayloadProcessorSpec struct {
 	// +kubebuilder:validation:XValidation:message="TargetRef Group must be gateway.networking.k8s.io",rule="self.group == 'gateway.networking.k8s.io'"
 	//nolint:lll
 	TargetRef gatewayv1.LocalPolicyTargetReference `json:"targetRef"`
+	// Processors is an ordered list of processing steps to be applied to the request and response payloads.
+	// It is currently limited to a single processor (MaxItems=1); the list form is reserved for future
+	// multi-processor pipelines.
+	//
+	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=1
+	Processors []PayloadProcessorEntry `json:"processors"`
 }
 
 // PayloadProcessorEntry defines a single processing step in the pipeline.
@@ -66,10 +69,8 @@ type PayloadProcessorEntry struct {
 }
 
 // ExtProcConfig defines the configuration for an ExtProc processor that delegates to an external service.
-// The wire protocol between the gateway and the external service is implementation-defined;
-// a follow-on GEP will standardize a common protocol.
 type ExtProcConfig struct {
-	// AuthTokenRef is an optional reference to a Secret containing an authentication token for the external service.
+	// AuthTokenRef is a reference to a Secret containing an authentication token for the external service.
 	AuthTokenRef *LocalObjectReference `json:"authTokenRef,omitempty"`
 	// BackendRef is a reference to the external service that will process the payloads.
 	//

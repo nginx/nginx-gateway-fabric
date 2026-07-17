@@ -18,12 +18,14 @@ func validPayloadProcessorSpec() ngfAPIv1alpha1.PayloadProcessorSpec {
 			Kind:  gatewayKind,
 			Group: gatewayGroup,
 		},
-		Processor: ngfAPIv1alpha1.PayloadProcessorEntry{
-			ExtProc: &ngfAPIv1alpha1.ExtProcConfig{
-				BackendRef: gatewayv1.LocalObjectReference{
-					Name: "ext-svc",
+		Processors: []ngfAPIv1alpha1.PayloadProcessorEntry{
+			{
+				ExtProc: &ngfAPIv1alpha1.ExtProcConfig{
+					BackendRef: gatewayv1.LocalObjectReference{
+						Name: "ext-svc",
+					},
+					Port: 9000,
 				},
-				Port: 9000,
 			},
 		},
 	}
@@ -155,7 +157,49 @@ func TestPayloadProcessorProcessorExtProc(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			spec := validPayloadProcessorSpec()
-			spec.Processor = tt.processor
+			spec.Processors = []ngfAPIv1alpha1.PayloadProcessorEntry{tt.processor}
+			validateCrd(t, tt.wantErrors, createPayloadProcessor(spec), k8sClient)
+		})
+	}
+}
+
+func TestPayloadProcessorProcessorsMaxItems(t *testing.T) {
+	t.Parallel()
+	k8sClient := getKubernetesClient(t)
+
+	extProc := ngfAPIv1alpha1.PayloadProcessorEntry{
+		ExtProc: &ngfAPIv1alpha1.ExtProcConfig{
+			BackendRef: gatewayv1.LocalObjectReference{Name: "ext-svc"},
+			Port:       9000,
+		},
+	}
+
+	tests := []struct {
+		name       string
+		processors []ngfAPIv1alpha1.PayloadProcessorEntry
+		wantErrors []string
+	}{
+		{
+			name:       "Validate empty processors list is not allowed",
+			processors: []ngfAPIv1alpha1.PayloadProcessorEntry{},
+			wantErrors: []string{"should have at least 1 items"},
+		},
+		{
+			name:       "Validate single processor is allowed",
+			processors: []ngfAPIv1alpha1.PayloadProcessorEntry{extProc},
+		},
+		{
+			name:       "Validate two processors is not allowed",
+			processors: []ngfAPIv1alpha1.PayloadProcessorEntry{extProc, extProc},
+			wantErrors: []string{"should have at most 1 items"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			spec := validPayloadProcessorSpec()
+			spec.Processors = tt.processors
 			validateCrd(t, tt.wantErrors, createPayloadProcessor(spec), k8sClient)
 		})
 	}
@@ -185,7 +229,7 @@ func TestPayloadProcessorBackendRefName(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			spec := validPayloadProcessorSpec()
-			spec.Processor.ExtProc.BackendRef.Name = tt.backendRefName
+			spec.Processors[0].ExtProc.BackendRef.Name = tt.backendRefName
 			validateCrd(t, tt.wantErrors, createPayloadProcessor(spec), k8sClient)
 		})
 	}
@@ -228,7 +272,7 @@ func TestPayloadProcessorPort(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			spec := validPayloadProcessorSpec()
-			spec.Processor.ExtProc.Port = tt.port
+			spec.Processors[0].ExtProc.Port = tt.port
 			validateCrd(t, tt.wantErrors, createPayloadProcessor(spec), k8sClient)
 		})
 	}
@@ -279,7 +323,7 @@ func TestPayloadProcessorTimeout(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			spec := validPayloadProcessorSpec()
-			spec.Processor.Timeout = tt.timeout
+			spec.Processors[0].Timeout = tt.timeout
 			validateCrd(t, tt.wantErrors, createPayloadProcessor(spec), k8sClient)
 		})
 	}

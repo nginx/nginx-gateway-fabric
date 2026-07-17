@@ -92,7 +92,7 @@ type ChangeProcessorConfig struct {
 	FeatureFlags graph.FeatureFlags
 	// Snippets indicates if Snippets are enabled. This will enable both SnippetsFilter and SnippetsPolicy APIs.
 	Snippets bool
-	// PayloadProcessor indicates if the PayloadProcessor API is enabled. Opt-in; used for features such as Guardrails.
+	// PayloadProcessor indicates if the PayloadProcessor API is enabled.
 	PayloadProcessor bool
 }
 
