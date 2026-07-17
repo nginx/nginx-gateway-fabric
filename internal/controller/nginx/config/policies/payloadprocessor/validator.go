@@ -34,24 +34,24 @@ func (v *Validator) Validate(policy policies.Policy) []conditions.Condition {
 	}
 
 	for _, processor := range pp.Spec.Processors {
-		if processor.ExtProc == nil {
-			return []conditions.Condition{conditions.NewPolicyInvalid("processor missing extProc configuration")}
+		if processor.ExtProcess == nil {
+			return []conditions.Condition{conditions.NewPolicyInvalid("processor missing extProcess configuration")}
 		}
-		if processor.ExtProc.BackendRef.Name == "" {
-			return []conditions.Condition{conditions.NewPolicyInvalid("processor extProc.backendRef.name must be set")}
+		if processor.ExtProcess.BackendRef.Name == "" {
+			return []conditions.Condition{conditions.NewPolicyInvalid("processor extProcess.backendRef.name must be set")}
 		}
-		if group := processor.ExtProc.BackendRef.Group; group != nil && *group != "" && *group != "core" {
-			return []conditions.Condition{conditions.NewPolicyInvalid("processor extProc.backendRef.group must be core")}
+		if group := processor.ExtProcess.BackendRef.Group; group != nil && *group != "" && *group != "core" {
+			return []conditions.Condition{conditions.NewPolicyInvalid("processor extProcess.backendRef.group must be core")}
 		}
-		if kind := processor.ExtProc.BackendRef.Kind; kind != nil && *kind != kinds.Service {
-			return []conditions.Condition{conditions.NewPolicyInvalid("processor extProc.backendRef.kind must be Service")}
+		if kind := processor.ExtProcess.BackendRef.Kind; kind != nil && *kind != kinds.Service {
+			return []conditions.Condition{conditions.NewPolicyInvalid("processor extProcess.backendRef.kind must be Service")}
 		}
-		if processor.ExtProc.BackendRef.Port == nil {
-			return []conditions.Condition{conditions.NewPolicyInvalid("processor extProc.backendRef.port must be set")}
+		if processor.ExtProcess.BackendRef.Port == nil {
+			return []conditions.Condition{conditions.NewPolicyInvalid("processor extProcess.backendRef.port must be set")}
 		}
-		if port := *processor.ExtProc.BackendRef.Port; port < 1 || port > 65535 {
+		if port := *processor.ExtProcess.BackendRef.Port; port < 1 || port > 65535 {
 			return []conditions.Condition{
-				conditions.NewPolicyInvalid("processor extProc.backendRef.port must be a valid TCP port"),
+				conditions.NewPolicyInvalid("processor extProcess.backendRef.port must be a valid TCP port"),
 			}
 		}
 	}

@@ -134,7 +134,7 @@ const (
 
 	// PayloadProcessor validation errors.
 	expectedTargetRefKindGatewayOrHTTPRouteError = "TargetRef Kind must be Gateway or HTTPRoute"
-	expectedProcessorExtProcRequiredError        = "processor must specify extProc"
+	expectedProcessorExtProcessRequiredError     = "processor must specify ExtProcess"
 	expectedBackendRefNameEmptyError             = "backendRef.name must not be empty"
 
 	// Namespace for tests.

@@ -9,7 +9,7 @@ import (
 // +kubebuilder:object:root=true
 // +kubebuilder:storageversion
 // +kubebuilder:subresource:status
-// +kubebuilder:resource:categories=nginx-gateway-fabric,shortName=pprocessor,scope=Namespaced
+// +kubebuilder:resource:categories=nginx-gateway-fabric,scope=Namespaced
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 // +kubebuilder:metadata:labels="gateway.networking.k8s.io/policy=inherited"
 
@@ -59,19 +59,19 @@ type PayloadProcessorSpec struct {
 
 // PayloadProcessorEntry defines a single processing step in the pipeline.
 //
-// +kubebuilder:validation:XValidation:message="processor must specify extProc",rule="has(self.extProc)"
+// +kubebuilder:validation:XValidation:message="processor must specify extProcess",rule="has(self.extProcess)"
 type PayloadProcessorEntry struct {
 	// Timeout is the maximum time to wait for the processor to complete processing a request or response.
 	//
 	// +optional
 	Timeout *Duration `json:"timeout,omitempty"`
 
-	// ExtProc defines the configuration for an ExtProc processor that delegates to an external service.
-	ExtProc *ExtProcConfig `json:"extProc,omitempty"`
+	// ExtProcess defines the configuration for an ExtProcess processor that delegates to an external service.
+	ExtProcess *ExtProcessConfig `json:"extProcess,omitempty"`
 }
 
-// ExtProcConfig defines the configuration for an ExtProc processor that delegates to an external service.
-type ExtProcConfig struct {
+// ExtProcessConfig defines the configuration for an ExtProcess processor that delegates to an external service.
+type ExtProcessConfig struct {
 	// AuthTokenRef is a reference to a Secret containing an authentication token for the external service.
 	AuthTokenRef *LocalObjectReference `json:"authTokenRef,omitempty"`
 

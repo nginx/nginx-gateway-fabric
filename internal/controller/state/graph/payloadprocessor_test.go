@@ -133,26 +133,26 @@ func TestResolveEffectivePayloadProcessors_IgnoresInvalidPolicies(t *testing.T) 
 	g.Expect(route.EffectivePayloadProcessor).To(Equal(gwPolicy))
 }
 
-// payloadProcessorWithBackendRef builds a real PayloadProcessor source with a single ExtProc
+// payloadProcessorWithBackendRef builds a real PayloadProcessor source with a single ExtProcess
 // backendRef targeting the given Service namespace/name.
 func payloadProcessorWithBackendRef(backendNs string) *ngfAPIv1alpha1.PayloadProcessor {
 	policyNs := "ns1"
 	backendName := "ext-svc"
 
-	extProc := &ngfAPIv1alpha1.ExtProcConfig{
+	extProcess := &ngfAPIv1alpha1.ExtProcessConfig{
 		BackendRef: v1.BackendObjectReference{
 			Name: v1.ObjectName(backendName),
 			Port: helpers.GetPointer[v1.PortNumber](9000),
 		},
 	}
 	if backendNs != "" {
-		extProc.BackendRef.Namespace = helpers.GetPointer(v1.Namespace(backendNs))
+		extProcess.BackendRef.Namespace = helpers.GetPointer(v1.Namespace(backendNs))
 	}
 
 	return &ngfAPIv1alpha1.PayloadProcessor{
 		ObjectMeta: metav1.ObjectMeta{Name: "pp", Namespace: policyNs},
 		Spec: ngfAPIv1alpha1.PayloadProcessorSpec{
-			Processors: []ngfAPIv1alpha1.PayloadProcessorEntry{{ExtProc: extProc}},
+			Processors: []ngfAPIv1alpha1.PayloadProcessorEntry{{ExtProcess: extProcess}},
 		},
 	}
 }

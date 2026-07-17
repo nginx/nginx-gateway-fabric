@@ -10986,8 +10986,6 @@ spec:
     kind: PayloadProcessor
     listKind: PayloadProcessorList
     plural: payloadprocessors
-    shortNames:
-    - pprocessor
     singular: payloadprocessor
   scope: Namespaced
   versions:
@@ -11031,8 +11029,8 @@ spec:
                   description: PayloadProcessorEntry defines a single processing step
                     in the pipeline.
                   properties:
-                    extProc:
-                      description: ExtProc defines the configuration for an ExtProc
+                    extProcess:
+                      description: ExtProcess defines the configuration for an ExtProcess
                         processor that delegates to an external service.
                       properties:
                         authTokenRef:
@@ -11136,8 +11134,8 @@ spec:
                       type: string
                   type: object
                   x-kubernetes-validations:
-                  - message: processor must specify extProc
-                    rule: has(self.extProc)
+                  - message: processor must specify extProcess
+                    rule: has(self.extProcess)
                 maxItems: 1
                 minItems: 1
                 type: array

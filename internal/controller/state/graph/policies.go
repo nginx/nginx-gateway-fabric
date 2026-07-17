@@ -707,7 +707,7 @@ func processPolicies(
 	return processedPolicies, wafOutput
 }
 
-// validatePayloadProcessorRefs validates cross-namespace ExtProc backendRefs on PayloadProcessor policies.
+// validatePayloadProcessorRefs validates cross-namespace ExtProcess backendRefs on PayloadProcessor policies.
 // A backendRef targeting a Service in a namespace different from the PayloadProcessor's own namespace
 // requires a ReferenceGrant permitting the reference. Policies that are already invalid are skipped.
 func validatePayloadProcessorRefs(
@@ -725,16 +725,16 @@ func validatePayloadProcessorRefs(
 		}
 
 		for _, processor := range pp.Spec.Processors {
-			if processor.ExtProc == nil || processor.ExtProc.BackendRef.Namespace == nil {
+			if processor.ExtProcess == nil || processor.ExtProcess.BackendRef.Namespace == nil {
 				continue
 			}
 
-			refNs := string(*processor.ExtProc.BackendRef.Namespace)
+			refNs := string(*processor.ExtProcess.BackendRef.Namespace)
 			if refNs == pp.Namespace {
 				continue
 			}
 
-			refNsName := types.NamespacedName{Namespace: refNs, Name: string(processor.ExtProc.BackendRef.Name)}
+			refNsName := types.NamespacedName{Namespace: refNs, Name: string(processor.ExtProcess.BackendRef.Name)}
 			if refGrantResolver != nil &&
 				refGrantResolver.refAllowed(toService(refNsName), fromPayloadProcessor(pp.Namespace)) {
 				continue

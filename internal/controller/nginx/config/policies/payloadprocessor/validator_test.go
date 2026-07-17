@@ -27,7 +27,7 @@ func createValidPolicy() *ngfAPI.PayloadProcessor {
 			},
 			Processors: []ngfAPI.PayloadProcessorEntry{
 				{
-					ExtProc: &ngfAPI.ExtProcConfig{
+					ExtProcess: &ngfAPI.ExtProcessConfig{
 						BackendRef: v1.BackendObjectReference{
 							Name: "ext-proc-service",
 							Port: helpers.GetPointer[v1.PortNumber](9000),
@@ -75,69 +75,69 @@ func TestValidator_Validate(t *testing.T) {
 			},
 		},
 		{
-			name: "missing extProc configuration",
+			name: "missing extProcess configuration",
 			policy: func() *ngfAPI.PayloadProcessor {
 				p := createValidPolicy()
-				p.Spec.Processors[0].ExtProc = nil
+				p.Spec.Processors[0].ExtProcess = nil
 				return p
 			}(),
 			expConditions: []conditions.Condition{
-				conditions.NewPolicyInvalid("processor missing extProc configuration"),
+				conditions.NewPolicyInvalid("processor missing extProcess configuration"),
 			},
 		},
 		{
-			name: "missing extProc backendRef name",
+			name: "missing extProcess backendRef name",
 			policy: func() *ngfAPI.PayloadProcessor {
 				p := createValidPolicy()
-				p.Spec.Processors[0].ExtProc.BackendRef.Name = ""
+				p.Spec.Processors[0].ExtProcess.BackendRef.Name = ""
 				return p
 			}(),
 			expConditions: []conditions.Condition{
-				conditions.NewPolicyInvalid("processor extProc.backendRef.name must be set"),
+				conditions.NewPolicyInvalid("processor extProcess.backendRef.name must be set"),
 			},
 		},
 		{
-			name: "invalid extProc backendRef group",
+			name: "invalid extProcess backendRef group",
 			policy: func() *ngfAPI.PayloadProcessor {
 				p := createValidPolicy()
-				p.Spec.Processors[0].ExtProc.BackendRef.Group = helpers.GetPointer[v1.Group]("invalid.group")
+				p.Spec.Processors[0].ExtProcess.BackendRef.Group = helpers.GetPointer[v1.Group]("invalid.group")
 				return p
 			}(),
 			expConditions: []conditions.Condition{
-				conditions.NewPolicyInvalid("processor extProc.backendRef.group must be core"),
+				conditions.NewPolicyInvalid("processor extProcess.backendRef.group must be core"),
 			},
 		},
 		{
-			name: "invalid extProc backendRef kind",
+			name: "invalid extProcess backendRef kind",
 			policy: func() *ngfAPI.PayloadProcessor {
 				p := createValidPolicy()
-				p.Spec.Processors[0].ExtProc.BackendRef.Kind = helpers.GetPointer[v1.Kind]("Secret")
+				p.Spec.Processors[0].ExtProcess.BackendRef.Kind = helpers.GetPointer[v1.Kind]("Secret")
 				return p
 			}(),
 			expConditions: []conditions.Condition{
-				conditions.NewPolicyInvalid("processor extProc.backendRef.kind must be Service"),
+				conditions.NewPolicyInvalid("processor extProcess.backendRef.kind must be Service"),
 			},
 		},
 		{
-			name: "missing extProc backendRef port",
+			name: "missing extProcess backendRef port",
 			policy: func() *ngfAPI.PayloadProcessor {
 				p := createValidPolicy()
-				p.Spec.Processors[0].ExtProc.BackendRef.Port = nil
+				p.Spec.Processors[0].ExtProcess.BackendRef.Port = nil
 				return p
 			}(),
 			expConditions: []conditions.Condition{
-				conditions.NewPolicyInvalid("processor extProc.backendRef.port must be set"),
+				conditions.NewPolicyInvalid("processor extProcess.backendRef.port must be set"),
 			},
 		},
 		{
-			name: "invalid extProc backendRef port",
+			name: "invalid extProcess backendRef port",
 			policy: func() *ngfAPI.PayloadProcessor {
 				p := createValidPolicy()
-				p.Spec.Processors[0].ExtProc.BackendRef.Port = helpers.GetPointer[v1.PortNumber](0)
+				p.Spec.Processors[0].ExtProcess.BackendRef.Port = helpers.GetPointer[v1.PortNumber](0)
 				return p
 			}(),
 			expConditions: []conditions.Condition{
-				conditions.NewPolicyInvalid("processor extProc.backendRef.port must be a valid TCP port"),
+				conditions.NewPolicyInvalid("processor extProcess.backendRef.port must be a valid TCP port"),
 			},
 		},
 	}
