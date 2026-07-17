@@ -47,6 +47,7 @@ type PayloadProcessorSpec struct {
 	// +kubebuilder:validation:XValidation:message="TargetRef Group must be gateway.networking.k8s.io",rule="self.group == 'gateway.networking.k8s.io'"
 	//nolint:lll
 	TargetRef gatewayv1.LocalPolicyTargetReference `json:"targetRef"`
+
 	// Processors is an ordered list of processing steps to be applied to the request and response payloads.
 	// It is currently limited to a single processor (MaxItems=1); the list form is reserved for future
 	// multi-processor pipelines.
@@ -64,6 +65,7 @@ type PayloadProcessorEntry struct {
 	//
 	// +optional
 	Timeout *Duration `json:"timeout,omitempty"`
+
 	// ExtProc defines the configuration for an ExtProc processor that delegates to an external service.
 	ExtProc *ExtProcConfig `json:"extProc,omitempty"`
 }
@@ -72,10 +74,12 @@ type PayloadProcessorEntry struct {
 type ExtProcConfig struct {
 	// AuthTokenRef is a reference to a Secret containing an authentication token for the external service.
 	AuthTokenRef *LocalObjectReference `json:"authTokenRef,omitempty"`
+
 	// BackendRef is a reference to the external service that will process the payloads.
 	//
 	// +kubebuilder:validation:XValidation:message="backendRef.name must not be empty",rule="size(self.name) > 0"
 	BackendRef gatewayv1.LocalObjectReference `json:"backendRef"`
+
 	// Port is the TCP port on which the external service is listening.
 	//
 	// +kubebuilder:validation:Minimum=1
