@@ -1230,6 +1230,45 @@ func (rm *ResourceManager) WaitForGatewayObservedGeneration(
 	)
 }
 
+const (
+	// NginxStateDir is the directory where NGINX Plus stores upstream state files.
+	NginxStateDir = "/var/lib/nginx/state"
+
+	// NginxContainerName is the name of the NGINX container in the pod.
+	NginxContainerName = "nginx"
+)
+
+// GetNginxStateFile reads the contents of an NGINX Plus upstream state file from the nginx container.
+// The state file is located at /var/lib/nginx/state/<upstreamName>.conf.
+// In NGINX Plus, upstream servers are managed via the Plus API and persisted in state files
+// rather than as server directives in the config.
+func (rm *ResourceManager) GetNginxStateFile(
+	ctx context.Context,
+	nginxPodName,
+	namespace,
+	upstreamName string,
+) (string, error) {
+	stateFilePath := fmt.Sprintf("%s/%s.conf", NginxStateDir, upstreamName)
+
+	GinkgoWriter.Printf(
+		"Reading NGINX state file %q from pod %q in namespace %q\n",
+		stateFilePath, nginxPodName, namespace,
+	)
+
+	result, err := rm.ExecInPod(
+		ctx,
+		namespace,
+		nginxPodName,
+		NginxContainerName,
+		[]string{"cat", stateFilePath},
+	)
+	if err != nil {
+		return "", fmt.Errorf("failed to read state file %s: %w", stateFilePath, err)
+	}
+
+	return result.Stdout, nil
+}
+
 // GetNginxConfig uses crossplane to get the nginx configuration and convert it to JSON.
 // If the crossplane image is loaded locally on the node, crossplaneImageRepo can be empty.
 func (rm *ResourceManager) GetNginxConfig(

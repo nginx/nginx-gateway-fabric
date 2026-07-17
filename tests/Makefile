@@ -57,7 +57,7 @@ deploy-metallb: ## Deploy MetalLB to the cluster (required for LoadBalancer serv
 	kubectl apply -f conformance/metallb-pool.yaml
 
 .PHONY: run-conformance-tests
-run-conformance-tests: ## Run conformance tests
+run-conformance-tests: deploy-metallb ## Run conformance tests
 	kind load docker-image $(CONFORMANCE_PREFIX):$(CONFORMANCE_TAG) --name $(CLUSTER_NAME)
 	kubectl apply -f conformance/conformance-rbac.yaml
 	kubectl run -i conformance \
@@ -127,6 +127,8 @@ cleanup-conformance-tests: ## Clean up conformance tests fixtures
 	kubectl delete pod conformance --ignore-not-found
 	kubectl delete pod conformance-inference --ignore-not-found
 	kubectl delete -f conformance/conformance-rbac.yaml --ignore-not-found
+	kubectl delete -f conformance/metallb-pool.yaml --ignore-not-found || true
+	kubectl delete -f https://raw.githubusercontent.com/metallb/metallb/v0.15.3/config/manifests/metallb-native.yaml --ignore-not-found || true
 
 .PHONY: reset-go-modules
 reset-go-modules: ## Reset the go modules changes

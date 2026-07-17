@@ -408,6 +408,14 @@ func (p *NginxProvisioner) provisionNginx(
 		"resource names", objNames,
 	)
 
+	// If the desired Service has a different loadBalancerClass than the existing one,
+	// we must delete the existing Service first because loadBalancerClass is immutable.
+	// We clear it from the store before deleting so the event handler doesn't try to
+	// reprovision it.
+	if err := p.deleteServiceForLBClassChange(ctx, gateway, objects); err != nil {
+		return err
+	}
+
 	var state nginxProvisionState
 	for _, obj := range objects {
 		minimalObj, res, err := p.createOrUpdateNginxResource(ctx, resourceName, gateway, obj)
@@ -504,13 +512,6 @@ func (p *NginxProvisioner) createOrUpdateNginxResource(
 
 			if upsertErr != nil {
 				if apierrors.IsInvalid(upsertErr) { // log this error at the error level
-					// spec.loadBalancerClass is immutable in Kubernetes; it cannot be changed after
-					// a Service is created. We cannot delete and recreate the Service because that
-					// would release and re-allocate the external IP, breaking DNS for users.
-					// Return the error to stop retrying; the outer handler will log and surface it.
-					if _, ok := obj.(*corev1.Service); ok && isLoadBalancerClassImmutabilityErr(upsertErr) {
-						return false, upsertErr
-					}
 					p.cfg.Logger.Error(
 						upsertErr,
 						"Retrying CreateOrUpdate for nginx resource after error",
@@ -880,22 +881,132 @@ func needToDeleteDaemonSet(cfg *NginxResources) bool {
 	return false
 }
 
-// isLoadBalancerClassImmutabilityErr returns true when the error is a Kubernetes validation
-// error for the spec.loadBalancerClass field, which is immutable once a Service is created.
-func isLoadBalancerClassImmutabilityErr(err error) bool {
-	var statusErr *apierrors.StatusError
-	if !errors.As(err, &statusErr) {
-		return false
-	}
-	if statusErr.ErrStatus.Details == nil {
-		return false
-	}
-	for _, cause := range statusErr.ErrStatus.Details.Causes {
-		if cause.Field == "spec.loadBalancerClass" {
-			return true
+// deleteServiceForLBClassChange checks whether the desired Service's loadBalancerClass differs
+// from the existing Service. It first checks the in-memory store, falling back to a live GET
+// when the store doesn't yet have the Service (e.g. after a controller restart before the
+// informer delivers the event). If a mismatch is found, it clears the Service from the store
+// (so the delete-event handler does not attempt to reprovision it) and deletes the existing
+// Service. The subsequent CreateOrUpdate in the provisioning loop will then create a fresh
+// Service with the correct loadBalancerClass.
+//
+// Returns an error if the Service could not be deleted, so the caller can abort and requeue
+// rather than proceeding into the immutable-field Invalid error loop.
+func (p *NginxProvisioner) deleteServiceForLBClassChange(
+	ctx context.Context,
+	gateway *gatewayv1.Gateway,
+	objects []client.Object,
+) error {
+	var desiredSvc *corev1.Service
+	for _, obj := range objects {
+		if svc, ok := obj.(*corev1.Service); ok {
+			desiredSvc = svc
+			break
 		}
 	}
-	return false
+	if desiredSvc == nil {
+		return nil
+	}
+
+	gatewayNSName := client.ObjectKeyFromObject(gateway)
+
+	var existingLBClass *string
+	var svcToDelete *corev1.Service
+	inStore := false
+
+	nginxRes := p.store.getNginxResourcesForGateway(gatewayNSName)
+	if nginxRes != nil && nginxRes.Service.Name != "" {
+		existingLBClass = nginxRes.ServiceLBClass
+		svcToDelete = &corev1.Service{ObjectMeta: nginxRes.Service}
+		inStore = true
+	} else {
+		// Store doesn't have the Service yet; fall back to a live GET.
+		existing := &corev1.Service{}
+		key := types.NamespacedName{Name: desiredSvc.Name, Namespace: desiredSvc.Namespace}
+		if err := p.k8sClient.Get(ctx, key, existing); err != nil {
+			if apierrors.IsNotFound(err) {
+				return nil
+			}
+			return fmt.Errorf("failed to get existing Service for loadBalancerClass check: %w", err)
+		}
+		existingLBClass = existing.Spec.LoadBalancerClass
+		svcToDelete = existing
+	}
+
+	if !needToDeleteServiceForLBClassChange(existingLBClass, desiredSvc.Spec.LoadBalancerClass) {
+		return nil
+	}
+
+	p.cfg.Logger.Info(
+		"Deleting Service to update immutable loadBalancerClass field",
+		"namespace", svcToDelete.Namespace,
+		"name", svcToDelete.Name,
+	)
+
+	p.cfg.EventRecorder.Eventf(
+		desiredSvc,
+		gateway,
+		corev1.EventTypeNormal,
+		"RecreatingService",
+		"None",
+		"Deleting Service %s/%s to update immutable loadBalancerClass; it will be recreated",
+		svcToDelete.Namespace,
+		svcToDelete.Name,
+	)
+
+	// Save the store entry so we can restore it if the delete fails.
+	var savedSvc *corev1.Service
+	if inStore {
+		savedSvc = &corev1.Service{
+			ObjectMeta: nginxRes.Service,
+			Spec:       corev1.ServiceSpec{LoadBalancerClass: nginxRes.ServiceLBClass},
+		}
+
+		// Clear the Service from the store before deleting so the event handler
+		// does not treat this as an unexpected deletion requiring reprovisioning.
+		p.store.clearServiceForGateway(gatewayNSName)
+	}
+
+	deleteCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	key := client.ObjectKeyFromObject(svcToDelete)
+
+	if err := p.k8sClient.Delete(deleteCtx, svcToDelete); err != nil && !apierrors.IsNotFound(err) {
+		// Restore the store entry so the next reconcile can retry deletion.
+		if savedSvc != nil {
+			p.store.registerResourceInGatewayConfig(gatewayNSName, savedSvc)
+		}
+		return fmt.Errorf("failed to delete Service for loadBalancerClass change: %w", err)
+	}
+
+	// The Service may stick around briefly (e.g. due to LoadBalancer finalizers). Wait until it is fully deleted
+	// so the subsequent CreateOrUpdate can create a fresh Service instead of retrying an immutable-field update.
+	if err := wait.PollUntilContextCancel(deleteCtx, 250*time.Millisecond, true, func(ctx context.Context) (bool, error) {
+		var tmp corev1.Service
+		getErr := p.k8sClient.Get(ctx, key, &tmp)
+		return apierrors.IsNotFound(getErr), nil
+	}); err != nil {
+		if savedSvc != nil {
+			p.store.registerResourceInGatewayConfig(gatewayNSName, savedSvc)
+		}
+		return fmt.Errorf("timed out waiting for Service deletion for loadBalancerClass change: %w", err)
+	}
+
+	return nil
+}
+
+// needToDeleteServiceForLBClassChange returns true when the existing and desired loadBalancerClass
+// values differ and therefore the Service must be deleted and recreated.
+func needToDeleteServiceForLBClassChange(existing, desired *string) bool {
+	// Both nil or both point to the same value → no change.
+	if (existing == nil) == (desired == nil) {
+		if existing == nil {
+			return false
+		}
+		return *existing != *desired
+	}
+	// One is nil and the other is not → change.
+	return true
 }
 
 // needToDeletePDB returns true if a PDB was previously created for this Gateway
