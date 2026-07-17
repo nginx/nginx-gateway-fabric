@@ -2409,14 +2409,14 @@ func TestConvertGRPCMatches(t *testing.T) {
 				{
 					Path: &v1.HTTPPathMatch{
 						Type:  helpers.GetPointer(v1.PathMatchExact),
-						Value: new("/myService/myMethod"),
+						Value: helpers.GetPointer("/myService/myMethod"),
 					},
 					Headers: []v1.HTTPHeaderMatch{},
 				},
 				{
 					Path: &v1.HTTPPathMatch{
 						Type:  helpers.GetPointer(v1.PathMatchPathPrefix),
-						Value: new("/"),
+						Value: helpers.GetPointer("/"),
 					},
 					Headers: []v1.HTTPHeaderMatch{
 						{

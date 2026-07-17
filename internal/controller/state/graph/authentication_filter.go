@@ -589,17 +589,16 @@ func propagateInvalidOIDCFiltersToRouteRules(filterRefs map[*AuthenticationFilte
 		nonHTTPSMsg = "OIDC authentication requires an HTTPS listener"
 	)
 
-	invalidatedRoutes := make(map[*L7Route]struct{})
+	globallyInvalidRoutes := make(map[*L7Route]struct{})
 	for af, refs := range filterRefs {
 		for _, ref := range refs {
 			if !af.Valid {
 				ref.route.Spec.Rules[ref.ruleIdx].Filters.Filters[ref.filterIdx].ResolvedExtensionRef.Valid = false
 				ref.route.Spec.Rules[ref.ruleIdx].Filters.Valid = false
-				invalidatedRoutes[ref.route] = struct{}{}
+				globallyInvalidRoutes[ref.route] = struct{}{}
 			} else if ref.nonHTTPS {
 				ref.route.Spec.Rules[ref.ruleIdx].Filters.Filters[ref.filterIdx].ResolvedExtensionRef.Valid = false
 				ref.route.Spec.Rules[ref.ruleIdx].Filters.Valid = false
-				invalidatedRoutes[ref.route] = struct{}{}
 				mergeOrAppendRouteCondition(
 					ref.route,
 					conditions.NewRouteResolvedRefsInvalidFilter(nonHTTPSMsg),
@@ -608,7 +607,7 @@ func propagateInvalidOIDCFiltersToRouteRules(filterRefs map[*AuthenticationFilte
 		}
 	}
 
-	for route := range invalidatedRoutes {
+	for route := range globallyInvalidRoutes {
 		mergeOrAppendRouteCondition(route, conditions.NewRouteResolvedRefsInvalidFilter(invalidMsg))
 	}
 }
