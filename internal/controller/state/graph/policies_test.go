@@ -2354,11 +2354,11 @@ func TestAddStatusToTargetRefsPayloadProcessor(t *testing.T) {
 
 	// Appends the PolicyAffected condition for PayloadProcessor.
 	addStatusToTargetRefs(kinds.PayloadProcessor, &condsList)
-	g.Expect(condsList).To(ConsistOf(conditions.NewPayloadProcessorPolicyAffected()))
+	g.Expect(condsList).To(Equal([]conditions.Condition{conditions.NewPayloadProcessorPolicyAffected()}))
 
 	// Does not duplicate the condition when called again.
 	addStatusToTargetRefs(kinds.PayloadProcessor, &condsList)
-	g.Expect(condsList).To(ConsistOf(conditions.NewPayloadProcessorPolicyAffected()))
+	g.Expect(condsList).To(Equal([]conditions.Condition{conditions.NewPayloadProcessorPolicyAffected()}))
 }
 
 func TestNGFPolicyAncestorsFullFunc(t *testing.T) {
