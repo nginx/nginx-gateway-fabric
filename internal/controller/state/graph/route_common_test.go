@@ -2084,6 +2084,72 @@ func TestAllowedRouteType(t *testing.T) {
 	}
 }
 
+func TestIsRouteNamespaceAllowedByListener(t *testing.T) {
+	t.Parallel()
+
+	selectorFrom := gatewayv1.NamespacesFromSelector
+	selector, _ := metav1.LabelSelectorAsSelector(&metav1.LabelSelector{
+		MatchLabels: map[string]string{"env": "prod"},
+	})
+
+	listener := &Listener{
+		Source: gatewayv1.Listener{
+			AllowedRoutes: &gatewayv1.AllowedRoutes{
+				Namespaces: &gatewayv1.RouteNamespaces{
+					From: &selectorFrom,
+				},
+			},
+		},
+		AllowedRouteLabelSelector: selector,
+	}
+
+	tests := []struct {
+		namespaces map[types.NamespacedName]*v1.Namespace
+		name       string
+		expected   bool
+	}{
+		{
+			name: "namespace exists and matches selector",
+			namespaces: map[types.NamespacedName]*v1.Namespace{
+				{Name: "route-ns"}: {
+					ObjectMeta: metav1.ObjectMeta{
+						Name:   "route-ns",
+						Labels: map[string]string{"env": "prod"},
+					},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "namespace exists but does not match selector",
+			namespaces: map[types.NamespacedName]*v1.Namespace{
+				{Name: "route-ns"}: {
+					ObjectMeta: metav1.ObjectMeta{
+						Name:   "route-ns",
+						Labels: map[string]string{"env": "staging"},
+					},
+				},
+			},
+			expected: false,
+		},
+		{
+			name:       "namespace missing from map returns false instead of panicking",
+			namespaces: map[types.NamespacedName]*v1.Namespace{},
+			expected:   false,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			result := isRouteNamespaceAllowedByListener(listener, "route-ns", "gw-ns", test.namespaces)
+			g.Expect(result).To(Equal(test.expected))
+		})
+	}
+}
+
 func TestBindL4RouteToListeners(t *testing.T) {
 	t.Parallel()
 	// we create a new listener each time because the function under test can modify it

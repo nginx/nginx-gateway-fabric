@@ -37,7 +37,7 @@ func truncateAndHashName(name string, suffix string) string {
 	// Always include the suffix, truncate name as needed
 	hash := sha256.Sum256([]byte(full))
 	hashStr := hex.EncodeToString(hash[:])[:hashLen]
-	maxNameLen := MaxServiceNameLen - (len(sep) * 2) - hashLen - len(suffix)
+	maxNameLen := max(MaxServiceNameLen-(len(sep)*2)-hashLen-len(suffix), 0)
 	truncName := name
 	if len(name) > maxNameLen {
 		truncName = name[:maxNameLen]

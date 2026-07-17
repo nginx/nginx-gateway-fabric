@@ -444,6 +444,17 @@ func validateBackendTLSPolicyMatchingAllBackends(backendRefs []BackendRef) *cond
 	return nil
 }
 
+// btpTargetsService reports whether the given targetRef targets a Service with the specified name and namespace.
+func btpTargetsService(
+	targetRef gatewayv1.LocalPolicyTargetReferenceWithSectionName,
+	btpNs, refName, refNs string,
+) bool {
+	return string(targetRef.Name) == refName &&
+		btpNs == refNs &&
+		targetRef.Kind == kinds.Service &&
+		(targetRef.Group == "" || targetRef.Group == "core")
+}
+
 func findBackendTLSPolicyForService(
 	backendTLSPolicies map[types.NamespacedName]*BackendTLSPolicy,
 	refNamespace *gatewayv1.Namespace,
@@ -464,29 +475,30 @@ func findBackendTLSPolicyForService(
 	for _, btp := range backendTLSPolicies {
 		btpNs := btp.Source.Namespace
 		for _, targetRef := range btp.Source.Spec.TargetRefs {
-			if string(targetRef.Name) == refName && btpNs == refNs {
-				// Check if this policy applies to the specific port we're interested in
-				if targetRef.SectionName != nil {
-					// Policy targets a specific port by name
-					if servicePort.Name != string(*targetRef.SectionName) {
-						// This policy targets a different port, skip it
-						continue
-					}
+			if !btpTargetsService(targetRef, btpNs, refName, refNs) {
+				continue
+			}
+			// Check if this policy applies to the specific port we're interested in
+			if targetRef.SectionName != nil {
+				// Policy targets a specific port by name
+				if servicePort.Name != string(*targetRef.SectionName) {
+					// This policy targets a different port, skip it
+					continue
 				}
-				// Policy applies to all ports (no sectionName) or matches our port
+			}
+			// Policy applies to all ports (no sectionName) or matches our port
 
-				if beTLSPolicy == nil {
+			if beTLSPolicy == nil {
+				beTLSPolicy = btp
+			} else {
+				// Found a conflict - determine which policy wins
+				if sort.LessClientObject(btp.Source, beTLSPolicy.Source) {
+					// btp wins, beTLSPolicy loses
+					conflictingPolicies = append(conflictingPolicies, beTLSPolicy)
 					beTLSPolicy = btp
 				} else {
-					// Found a conflict - determine which policy wins
-					if sort.LessClientObject(btp.Source, beTLSPolicy.Source) {
-						// btp wins, beTLSPolicy loses
-						conflictingPolicies = append(conflictingPolicies, beTLSPolicy)
-						beTLSPolicy = btp
-					} else {
-						// beTLSPolicy wins, btp loses
-						conflictingPolicies = append(conflictingPolicies, btp)
-					}
+					// beTLSPolicy wins, btp loses
+					conflictingPolicies = append(conflictingPolicies, btp)
 				}
 			}
 		}
