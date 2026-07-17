@@ -163,7 +163,7 @@ spec:
                       type: string
                   type: object
                   x-kubernetes-validations:
-                  - message: processor must specify extProcess
+                  - message: processor must specify ExtProcess
                     rule: has(self.extProcess)
                 maxItems: 1
                 minItems: 1

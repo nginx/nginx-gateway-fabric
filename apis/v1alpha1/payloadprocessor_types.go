@@ -59,7 +59,7 @@ type PayloadProcessorSpec struct {
 
 // PayloadProcessorEntry defines a single processing step in the pipeline.
 //
-// +kubebuilder:validation:XValidation:message="processor must specify extProcess",rule="has(self.extProcess)"
+// +kubebuilder:validation:XValidation:message="processor must specify ExtProcess",rule="has(self.extProcess)"
 type PayloadProcessorEntry struct {
 	// Timeout is the maximum time to wait for the processor to complete processing a request or response.
 	//
