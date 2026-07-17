@@ -195,7 +195,7 @@ func TestPayloadProcessorProcessorsMaxItems(t *testing.T) {
 		{
 			name:       "Validate two processors is not allowed",
 			processors: []ngfAPIv1alpha1.PayloadProcessorEntry{extProc, extProc},
-			wantErrors: []string{"should have at most 1 items"},
+			wantErrors: []string{"must have at most 1 item"},
 		},
 	}
 
