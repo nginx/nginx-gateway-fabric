@@ -411,6 +411,99 @@ func TestHandleEventBatch_Delete(t *testing.T) {
 	g.Expect(store.getGateway(client.ObjectKeyFromObject(gateway))).To(BeNil())
 }
 
+// TestHandleEventBatch_GatewayDeletingClearedOnRecreate verifies that when a Gateway is deleted
+// and then a new Gateway with the same name/namespace is created,
+// the "deleting" mark is cleared so that reprovisionResources can re-create managed resources.
+func TestHandleEventBatch_GatewayDeletingClearedOnRecreate(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	store := newStore([]string{dockerTestSecretName}, agentTLSTestSecretName, "", "", "", "")
+	provisioner, fakeClient, _ := defaultNginxProvisioner()
+	provisioner.cfg.StatusQueue = status.NewQueue()
+
+	labelSelector := metav1.LabelSelector{
+		MatchLabels: map[string]string{"app": "nginx"},
+	}
+	gcName := "nginx"
+
+	handler, err := newEventHandler(store, provisioner, provisioner.k8sClient, labelSelector, gcName)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	ctx := t.Context()
+	logger := logr.Discard()
+
+	gateway := &gatewayv1.Gateway{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "gw",
+			Namespace: "test-ns",
+			Labels:    map[string]string{"app": "nginx"},
+		},
+		Spec: gatewayv1.GatewaySpec{
+			Listeners: []gatewayv1.Listener{{Port: 80}},
+		},
+	}
+	gwKey := client.ObjectKeyFromObject(gateway)
+
+	graphGateway := &graph.Gateway{
+		Source: gateway,
+		Valid:  true,
+		Listeners: []*graph.Listener{
+			{
+				Name:   "listener-80",
+				Source: gatewayv1.Listener{Port: 80},
+			},
+		},
+	}
+
+	// Step 1: Upsert the Gateway and register it in the store.
+	store.registerResourceInGatewayConfig(gwKey, graphGateway)
+	upsertEvent := &events.UpsertEvent{Resource: gateway}
+	handler.HandleEventBatch(ctx, logger, events.EventBatch{upsertEvent})
+
+	g.Expect(store.isGatewayDeleting(gwKey)).To(BeFalse())
+	g.Expect(store.getGateway(gwKey)).ToNot(BeNil())
+
+	// Register a managed Deployment so we can verify reprovisioning.
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "gw-nginx",
+			Namespace: "test-ns",
+			Labels:    map[string]string{"app": "nginx", controller.GatewayLabel: "gw"},
+		},
+	}
+	g.Expect(fakeClient.Create(ctx, deployment)).To(Succeed())
+	store.registerResourceInGatewayConfig(gwKey, deployment)
+
+	// Step 2: Delete the Gateway. It should be marked as deleting.
+	deleteEvent := &events.DeleteEvent{Type: gateway, NamespacedName: gwKey}
+	handler.HandleEventBatch(ctx, logger, events.EventBatch{deleteEvent})
+
+	g.Expect(store.isGatewayDeleting(gwKey)).To(BeTrue())
+	g.Expect(store.getGateway(gwKey)).To(BeNil())
+
+	// Step 3: Re-create the Gateway (simulating namespace recycling).
+	// The upsert should clear the deleting mark.
+	store.registerResourceInGatewayConfig(gwKey, graphGateway)
+	upsertEvent = &events.UpsertEvent{Resource: gateway}
+	handler.HandleEventBatch(ctx, logger, events.EventBatch{upsertEvent})
+
+	g.Expect(store.isGatewayDeleting(gwKey)).To(BeFalse(), "deleting mark should be cleared after Gateway re-create")
+	g.Expect(store.getGateway(gwKey)).ToNot(BeNil())
+
+	// Step 4: Simulate a stale delete event for a managed resource (e.g. old namespace Service
+	// delete event arriving after the new Gateway's resources were created). The deployment
+	// should be re-created because the Gateway is no longer marked as deleting.
+	store.registerResourceInGatewayConfig(gwKey, deployment)
+	g.Expect(fakeClient.Delete(ctx, deployment)).To(Succeed())
+
+	deleteEvent = &events.DeleteEvent{Type: deployment, NamespacedName: client.ObjectKeyFromObject(deployment)}
+	handler.HandleEventBatch(ctx, logger, events.EventBatch{deleteEvent})
+
+	g.Expect(fakeClient.Get(ctx, client.ObjectKeyFromObject(deployment), &appsv1.Deployment{})).To(Succeed(),
+		"managed Deployment should be reprovisioned after Gateway re-create clears the deleting mark")
+}
+
 func TestHandleEventBatch_NoListeners(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
