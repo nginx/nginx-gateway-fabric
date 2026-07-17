@@ -2086,11 +2086,13 @@ func TestAllowedRouteType(t *testing.T) {
 
 func TestIsRouteNamespaceAllowedByListener(t *testing.T) {
 	t.Parallel()
+	g := NewWithT(t)
 
 	selectorFrom := gatewayv1.NamespacesFromSelector
-	selector, _ := metav1.LabelSelectorAsSelector(&metav1.LabelSelector{
+	selector, err := metav1.LabelSelectorAsSelector(&metav1.LabelSelector{
 		MatchLabels: map[string]string{"env": "prod"},
 	})
+	g.Expect(err).ToNot(HaveOccurred())
 
 	listener := &Listener{
 		Source: gatewayv1.Listener{
