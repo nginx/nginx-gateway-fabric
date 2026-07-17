@@ -317,9 +317,14 @@ func buildTLSDefaultServer(l *graph.Listener, ssl *SSL) *Layer4VirtualServer {
 }
 
 // buildL4Servers builds Layer4 servers (TCP or UDP) from routes attached to listeners.
+// Multiple routes on the same listener (same port) are merged into a single Layer4VirtualServer
+// with combined upstreams so that nginx programs one stream server per port.
 func buildL4Servers(logger logr.Logger, gateway *graph.Gateway, protocol v1.ProtocolType) []Layer4VirtualServer {
-	var servers []Layer4VirtualServer
 	protocolName := string(protocol)
+
+	// Map from listener port to merged server. Multiple routes on the same listener
+	// contribute their backendRefs to a single server entry.
+	serversByPort := make(map[int32]*Layer4VirtualServer)
 
 	for _, l := range gateway.Listeners {
 		if !l.Valid || l.Source.Protocol != protocol {
@@ -363,39 +368,37 @@ func buildL4Servers(logger logr.Logger, gateway *graph.Gateway, protocol v1.Prot
 				continue
 			}
 
-			server := Layer4VirtualServer{
-				Hostname:  "", // Layer4 doesn't use hostnames
-				Upstreams: upstreams,
-				Port:      l.Source.Port,
+			if existing, ok := serversByPort[l.Source.Port]; ok {
+				existing.Upstreams = append(existing.Upstreams, upstreams...)
+			} else {
+				serversByPort[l.Source.Port] = &Layer4VirtualServer{
+					Hostname:  "", // Layer4 doesn't use hostnames
+					Upstreams: upstreams,
+					Port:      l.Source.Port,
+				}
 			}
-
-			servers = append(servers, server)
 		}
 	}
 
-	// L4 routes are iterated from a map, so sort the resulting servers to produce a stable order.
+	if len(serversByPort) == 0 {
+		return nil
+	}
+
+	servers := make([]Layer4VirtualServer, 0, len(serversByPort))
+	for _, s := range serversByPort {
+		// Sort upstreams within each server for deterministic output.
+		sort.Slice(s.Upstreams, func(i, j int) bool {
+			return s.Upstreams[i].Name < s.Upstreams[j].Name
+		})
+		servers = append(servers, *s)
+	}
+
 	// Preserve order so that this doesn't trigger an unnecessary reload.
 	sort.Slice(servers, func(i, j int) bool {
-		if servers[i].Port != servers[j].Port {
-			return servers[i].Port < servers[j].Port
-		}
-		if servers[i].Hostname != servers[j].Hostname {
-			return servers[i].Hostname < servers[j].Hostname
-		}
-		return layer4UpstreamsKey(servers[i].Upstreams) < layer4UpstreamsKey(servers[j].Upstreams)
+		return servers[i].Port < servers[j].Port
 	})
 
 	return servers
-}
-
-// layer4UpstreamsKey builds a stable comparison key from a server's upstreams so that L4 servers
-// sharing the same port and hostname are ordered deterministically.
-func layer4UpstreamsKey(upstreams []Layer4Upstream) string {
-	names := make([]string, 0, len(upstreams))
-	for _, u := range upstreams {
-		names = append(names, u.Name)
-	}
-	return strings.Join(names, ",")
 }
 
 // buildStreamUpstreams builds all stream upstreams.

@@ -6211,9 +6211,9 @@ func TestBuildL4Servers(t *testing.T) {
 			expectedServers: nil,
 		},
 		{
-			// L4Routes is a map (randomized iteration order). The route names are chosen so that map
-			// order differs from the expected output, verifying the servers are sorted deterministically.
-			name: "multiple TCP routes on the same listener are sorted by upstream",
+			// L4Routes is a map (randomized iteration order). Multiple routes on the same listener
+			// are merged into a single server, and their upstreams are sorted for deterministic output.
+			name: "multiple TCP routes on the same listener are merged",
 			gateway: &graph.Gateway{
 				Source: &v1.Gateway{
 					ObjectMeta: metav1.ObjectMeta{
@@ -6268,10 +6268,16 @@ func TestBuildL4Servers(t *testing.T) {
 			},
 			protocol: v1.TCPProtocolType,
 			expectedServers: []Layer4VirtualServer{
-				{Hostname: "", Port: 8080, Upstreams: []Layer4Upstream{{Name: "default_svc-a_8080", Weight: 1}}},
-				{Hostname: "", Port: 8080, Upstreams: []Layer4Upstream{{Name: "default_svc-b_8080", Weight: 1}}},
-				{Hostname: "", Port: 8080, Upstreams: []Layer4Upstream{{Name: "default_svc-c_8080", Weight: 1}}},
-				{Hostname: "", Port: 8080, Upstreams: []Layer4Upstream{{Name: "default_svc-d_8080", Weight: 1}}},
+				{
+					Hostname: "",
+					Port:     8080,
+					Upstreams: []Layer4Upstream{
+						{Name: "default_svc-a_8080", Weight: 1},
+						{Name: "default_svc-b_8080", Weight: 1},
+						{Name: "default_svc-c_8080", Weight: 1},
+						{Name: "default_svc-d_8080", Weight: 1},
+					},
+				},
 			},
 		},
 	}
