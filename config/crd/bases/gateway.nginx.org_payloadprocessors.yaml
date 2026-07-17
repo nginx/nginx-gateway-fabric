@@ -98,10 +98,15 @@ spec:
                         - kind
                         - name
                         type: object
+                        x-kubernetes-validations:
+                        - message: backendRef.name must not be empty
+                          rule: size(self.name) > 0
                       port:
                         description: Port is the TCP port on which the external service
                           is listening.
                         format: int32
+                        maximum: 65535
+                        minimum: 1
                         type: integer
                     required:
                     - backendRef
@@ -113,6 +118,9 @@ spec:
                     pattern: ^[0-9]{1,4}(ms|s|m|h)?$
                     type: string
                 type: object
+                x-kubernetes-validations:
+                - message: processor must specify extProc
+                  rule: has(self.extProc)
               targetRef:
                 description: |-
                   TargetRef identifies the Gateway or HTTPRoute this policy applies to.

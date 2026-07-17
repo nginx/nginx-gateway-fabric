@@ -54,8 +54,12 @@ type PayloadProcessorSpec struct {
 }
 
 // PayloadProcessorEntry defines a single processing step in the pipeline.
+//
+// +kubebuilder:validation:XValidation:message="processor must specify extProc",rule="has(self.extProc)"
 type PayloadProcessorEntry struct {
 	// Timeout is the maximum time to wait for the processor to complete processing a request or response.
+	//
+	// +optional
 	Timeout *Duration `json:"timeout,omitempty"`
 	// ExtProc defines the configuration for an ExtProc processor that delegates to an external service.
 	ExtProc *ExtProcConfig `json:"extProc,omitempty"`
@@ -68,7 +72,12 @@ type ExtProcConfig struct {
 	// AuthTokenRef is an optional reference to a Secret containing an authentication token for the external service.
 	AuthTokenRef *LocalObjectReference `json:"authTokenRef,omitempty"`
 	// BackendRef is a reference to the external service that will process the payloads.
+	//
+	// +kubebuilder:validation:XValidation:message="backendRef.name must not be empty",rule="size(self.name) > 0"
 	BackendRef gatewayv1.LocalObjectReference `json:"backendRef"`
 	// Port is the TCP port on which the external service is listening.
+	//
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=65535
 	Port int32 `json:"port"`
 }

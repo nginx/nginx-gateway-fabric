@@ -132,6 +132,11 @@ const (
 	expectedWAFN1CPolicyObjectIDPatternError     = `^pol_[A-Za-z0-9_-]+$`
 	expectedWAFN1CPolicyVersionIDPatternError    = `^pv_[A-Za-z0-9_-]+$`
 
+	// PayloadProcessor validation errors.
+	expectedTargetRefKindGatewayOrHTTPRouteError = "TargetRef Kind must be Gateway or HTTPRoute"
+	expectedProcessorExtProcRequiredError        = "processor must specify extProc"
+	expectedBackendRefNameEmptyError             = "backendRef.name must not be empty"
+
 	// Namespace for tests.
 	defaultNamespace = "default"
 
