@@ -224,9 +224,17 @@ func createSplitClientForL4Server(server dataplane.Layer4VirtualServer) *stream.
 		return nil
 	}
 
-	// Calculate total weight
+	weightedUpstreams := make([]dataplane.Layer4Upstream, 0, len(server.Upstreams))
+
+	// Calculate total weight while skipping zero-weight backends. Rendering
+	// 0.00% is invalid in stream split_clients and breaks nginx reloads.
 	totalWeight := int32(0)
 	for _, upstream := range server.Upstreams {
+		if upstream.Weight <= 0 {
+			continue
+		}
+
+		weightedUpstreams = append(weightedUpstreams, upstream)
 		totalWeight += upstream.Weight
 	}
 
@@ -234,12 +242,16 @@ func createSplitClientForL4Server(server dataplane.Layer4VirtualServer) *stream.
 		return nil
 	}
 
-	distributions := make([]stream.SplitClientDistribution, 0, len(server.Upstreams))
+	if len(weightedUpstreams) == 1 {
+		return nil
+	}
+
+	distributions := make([]stream.SplitClientDistribution, 0, len(weightedUpstreams))
 	availablePercentage := float64(100)
 
 	// Process all upstreams except the last one
-	for i := range len(server.Upstreams) - 1 {
-		upstream := server.Upstreams[i]
+	for i := range len(weightedUpstreams) - 1 {
+		upstream := weightedUpstreams[i]
 		percentage := percentOf(upstream.Weight, totalWeight)
 		availablePercentage -= percentage
 
@@ -250,7 +262,7 @@ func createSplitClientForL4Server(server dataplane.Layer4VirtualServer) *stream.
 	}
 
 	// The last upstream gets the remaining percentage
-	lastUpstream := server.Upstreams[len(server.Upstreams)-1]
+	lastUpstream := weightedUpstreams[len(weightedUpstreams)-1]
 	distributions = append(distributions, stream.SplitClientDistribution{
 		Percent: fmt.Sprintf("%.2f", availablePercentage),
 		Value:   lastUpstream.Name,
