@@ -149,7 +149,22 @@ func serviceSpecSetter(
 		service.OwnerReferences = objectMeta.OwnerReferences
 		service.Annotations = mergeAnnotations(existingAnnotations, objectMeta.Annotations)
 
+		// Preserve server-assigned immutable fields from the existing Service.
+		// clusterIP and clusterIPs are assigned by the API server on creation and
+		// cannot be changed. When we overwrite the entire Spec we must carry them
+		// forward, otherwise the update is rejected.
+		existingClusterIP := service.Spec.ClusterIP
+		existingClusterIPs := service.Spec.ClusterIPs
+
 		service.Spec = spec
+
+		if existingClusterIP != "" {
+			service.Spec.ClusterIP = existingClusterIP
+		}
+		if len(existingClusterIPs) > 0 {
+			service.Spec.ClusterIPs = existingClusterIPs
+		}
+
 		return nil
 	}
 }

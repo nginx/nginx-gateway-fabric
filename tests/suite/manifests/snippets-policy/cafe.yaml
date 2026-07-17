@@ -52,14 +52,14 @@ spec:
         app: coffee
     spec:
       containers:
-        - name: coffee
-          image: nginxdemos/nginx-hello:plain-text
-          ports:
-            - containerPort: 8080
-          readinessProbe:
-            httpGet:
-              path: /
-              port: 8080
+      - name: coffee
+        image: nginxdemos/nginx-hello:plain-text
+        ports:
+        - containerPort: 8080
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8080
 ---
 apiVersion: v1
 kind: Service
@@ -67,10 +67,10 @@ metadata:
   name: coffee
 spec:
   ports:
-    - port: 80
-      targetPort: 8080
-      protocol: TCP
-      name: http
+  - port: 80
+    targetPort: 8080
+    protocol: TCP
+    name: http
   selector:
     app: coffee
 ---
@@ -89,14 +89,14 @@ spec:
         app: tea
     spec:
       containers:
-        - name: tea
-          image: nginxdemos/nginx-hello:plain-text
-          ports:
-            - containerPort: 8080
-          readinessProbe:
-            httpGet:
-              path: /
-              port: 8080
+      - name: tea
+        image: nginxdemos/nginx-hello:plain-text
+        ports:
+        - containerPort: 8080
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8080
 ---
 apiVersion: v1
 kind: Service
@@ -104,9 +104,9 @@ metadata:
   name: tea
 spec:
   ports:
-    - port: 80
-      targetPort: 8080
-      protocol: TCP
-      name: http
+  - port: 80
+    targetPort: 8080
+    protocol: TCP
+    name: http
   selector:
     app: tea

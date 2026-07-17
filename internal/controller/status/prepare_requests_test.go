@@ -1624,11 +1624,11 @@ func TestBuildGatewayStatuses(t *testing.T) {
 						},
 						{
 							Type:               string(v1.GatewayConditionAccepted),
-							Status:             metav1.ConditionTrue,
+							Status:             metav1.ConditionFalse,
 							ObservedGeneration: 2,
 							LastTransitionTime: transitionTime,
 							Reason:             string(v1.GatewayReasonInvalidParameters),
-							Message: "The Gateway is accepted, but ParametersRef is ignored due to an error: " +
+							Message: "The Gateway is not accepted due to an invalid ParametersRef: " +
 								"The ParametersRef not found",
 						},
 						{

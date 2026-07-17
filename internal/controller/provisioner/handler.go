@@ -78,6 +78,10 @@ func (h *eventHandler) HandleEventBatch(ctx context.Context, logger logr.Logger,
 func (h *eventHandler) handleUpsertEvent(ctx context.Context, e *events.UpsertEvent, logger logr.Logger) error {
 	switch obj := e.Resource.(type) {
 	case *gatewayv1.Gateway:
+		// Clear the deleting mark when a Gateway is (re-)created. Without this, delete + re-create with the
+		// same name could leave a stale deleting entry
+		// that prevents reprovisionResources from re-creating managed resources.
+		h.store.clearGatewayDeleting(client.ObjectKeyFromObject(obj))
 		h.store.updateGateway(obj)
 	case *appsv1.Deployment, *appsv1.DaemonSet, *corev1.ServiceAccount,
 		*corev1.ConfigMap, *rbacv1.Role, *rbacv1.RoleBinding,
@@ -299,6 +303,13 @@ func (h *eventHandler) reprovisionResources(ctx context.Context, event *events.D
 			); err != nil {
 				return err
 			}
+		} else if h.store.isGatewayDeleting(gatewayNsName) {
+			h.provisioner.cfg.Logger.Info(
+				"Skipping reprovisioning of deleted resource because Gateway is marked as deleting",
+				"resource", event.NamespacedName,
+				"resourceType", fmt.Sprintf("%T", event.Type),
+				"gateway", gatewayNsName,
+			)
 		}
 	}
 

@@ -1209,14 +1209,14 @@ func NewGatewayRefInvalid(msg string) Condition {
 }
 
 // NewGatewayInvalidParameters returns a Condition that indicates that the Gateway has invalid parameters.
-// We are allowing Accepted to still be true to prevent nullifying the entire Gateway config if a parametersRef
-// is updated to something invalid.
+// Per the Gateway API spec, the Gateway is not accepted when the parametersRef is invalid.
+// Note: The Gateway is still kept Valid in the graph to prevent nullifying the data plane config.
 func NewGatewayInvalidParameters(msg string) Condition {
 	return Condition{
 		Type:    string(v1.GatewayConditionAccepted),
-		Status:  metav1.ConditionTrue,
+		Status:  metav1.ConditionFalse,
 		Reason:  string(v1.GatewayReasonInvalidParameters),
-		Message: fmt.Sprintf("The Gateway is accepted, but ParametersRef is ignored due to an error: %s", msg),
+		Message: fmt.Sprintf("The Gateway is not accepted due to an invalid ParametersRef: %s", msg),
 	}
 }
 
