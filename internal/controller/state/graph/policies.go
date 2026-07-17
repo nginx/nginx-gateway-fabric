@@ -741,7 +741,7 @@ func validatePayloadProcessorRefs(
 			}
 
 			policy.Conditions = append(policy.Conditions, conditions.NewPolicyRefNotPermitted(
-				fmt.Sprintf("cross-namespace reference to Service %q not permitted by any ReferenceGrant", refNsName),
+				fmt.Sprintf("cross-namespace reference to Service %q not permitted by any ReferenceGrant", refNsName.String()),
 			))
 			policy.Valid = false
 

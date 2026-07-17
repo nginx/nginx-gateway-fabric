@@ -197,7 +197,7 @@ func TestValidatePayloadProcessorRefs(t *testing.T) {
 		},
 		{
 			name:     "same-namespace explicit ref is valid",
-			source:   payloadProcessorWithBackendRef(""),
+			source:   payloadProcessorWithBackendRef(policyNs),
 			resolver: newReferenceGrantResolver(nil),
 			expValid: true,
 		},
