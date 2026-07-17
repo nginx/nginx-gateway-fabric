@@ -76,13 +76,12 @@ type ExtProcConfig struct {
 	AuthTokenRef *LocalObjectReference `json:"authTokenRef,omitempty"`
 
 	// BackendRef is a reference to the external service that will process the payloads.
+	// The referenced backend must be a core Service and must specify a port.
 	//
 	// +kubebuilder:validation:XValidation:message="backendRef.name must not be empty",rule="size(self.name) > 0"
-	BackendRef gatewayv1.LocalObjectReference `json:"backendRef"`
-
-	// Port is the TCP port on which the external service is listening.
-	//
-	// +kubebuilder:validation:Minimum=1
-	// +kubebuilder:validation:Maximum=65535
-	Port int32 `json:"port"`
+	// +kubebuilder:validation:XValidation:message="backendRef.port must be set",rule="has(self.port)"
+	// +kubebuilder:validation:XValidation:message="backendRef.group must be core",rule="!has(self.group) || self.group == '' || self.group == 'core'"
+	// +kubebuilder:validation:XValidation:message="backendRef.kind must be Service",rule="!has(self.kind) || self.kind == 'Service'"
+	//nolint:lll
+	BackendRef gatewayv1.BackendObjectReference `json:"backendRef"`
 }

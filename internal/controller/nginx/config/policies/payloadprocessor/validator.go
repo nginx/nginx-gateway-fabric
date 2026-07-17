@@ -40,8 +40,19 @@ func (v *Validator) Validate(policy policies.Policy) []conditions.Condition {
 		if processor.ExtProc.BackendRef.Name == "" {
 			return []conditions.Condition{conditions.NewPolicyInvalid("processor extProc.backendRef.name must be set")}
 		}
-		if processor.ExtProc.Port < 1 || processor.ExtProc.Port > 65535 {
-			return []conditions.Condition{conditions.NewPolicyInvalid("processor extProc.port must be a valid TCP port")}
+		if group := processor.ExtProc.BackendRef.Group; group != nil && *group != "" && *group != "core" {
+			return []conditions.Condition{conditions.NewPolicyInvalid("processor extProc.backendRef.group must be core")}
+		}
+		if kind := processor.ExtProc.BackendRef.Kind; kind != nil && *kind != kinds.Service {
+			return []conditions.Condition{conditions.NewPolicyInvalid("processor extProc.backendRef.kind must be Service")}
+		}
+		if processor.ExtProc.BackendRef.Port == nil {
+			return []conditions.Condition{conditions.NewPolicyInvalid("processor extProc.backendRef.port must be set")}
+		}
+		if port := *processor.ExtProc.BackendRef.Port; port < 1 || port > 65535 {
+			return []conditions.Condition{
+				conditions.NewPolicyInvalid("processor extProc.backendRef.port must be a valid TCP port"),
+			}
 		}
 	}
 

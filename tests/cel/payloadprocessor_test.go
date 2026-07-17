@@ -21,10 +21,10 @@ func validPayloadProcessorSpec() ngfAPIv1alpha1.PayloadProcessorSpec {
 		Processors: []ngfAPIv1alpha1.PayloadProcessorEntry{
 			{
 				ExtProc: &ngfAPIv1alpha1.ExtProcConfig{
-					BackendRef: gatewayv1.LocalObjectReference{
+					BackendRef: gatewayv1.BackendObjectReference{
 						Name: "ext-svc",
+						Port: helpers.GetPointer[gatewayv1.PortNumber](9000),
 					},
-					Port: 9000,
 				},
 			},
 		},
@@ -134,8 +134,10 @@ func TestPayloadProcessorProcessorExtProc(t *testing.T) {
 			name: "Validate processor with extProc set is allowed",
 			processor: ngfAPIv1alpha1.PayloadProcessorEntry{
 				ExtProc: &ngfAPIv1alpha1.ExtProcConfig{
-					BackendRef: gatewayv1.LocalObjectReference{Name: "ext-svc"},
-					Port:       9000,
+					BackendRef: gatewayv1.BackendObjectReference{
+						Name: "ext-svc",
+						Port: helpers.GetPointer[gatewayv1.PortNumber](9000),
+					},
 				},
 			},
 		},
@@ -169,8 +171,10 @@ func TestPayloadProcessorProcessorsMaxItems(t *testing.T) {
 
 	extProc := ngfAPIv1alpha1.PayloadProcessorEntry{
 		ExtProc: &ngfAPIv1alpha1.ExtProcConfig{
-			BackendRef: gatewayv1.LocalObjectReference{Name: "ext-svc"},
-			Port:       9000,
+			BackendRef: gatewayv1.BackendObjectReference{
+				Name: "ext-svc",
+				Port: helpers.GetPointer[gatewayv1.PortNumber](9000),
+			},
 		},
 	}
 
@@ -235,35 +239,112 @@ func TestPayloadProcessorBackendRefName(t *testing.T) {
 	}
 }
 
+func TestPayloadProcessorBackendRefKind(t *testing.T) {
+	t.Parallel()
+	k8sClient := getKubernetesClient(t)
+
+	tests := []struct {
+		backendRefKind *gatewayv1.Kind
+		name           string
+		wantErrors     []string
+	}{
+		{
+			name:           "Validate unset kind is allowed",
+			backendRefKind: nil,
+		},
+		{
+			name:           "Validate Service kind is allowed",
+			backendRefKind: helpers.GetPointer[gatewayv1.Kind](serviceKind),
+		},
+		{
+			name:           "Validate Secret kind is not allowed",
+			backendRefKind: helpers.GetPointer[gatewayv1.Kind]("Secret"),
+			wantErrors:     []string{"backendRef.kind must be Service"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			spec := validPayloadProcessorSpec()
+			spec.Processors[0].ExtProc.BackendRef.Kind = tt.backendRefKind
+			validateCrd(t, tt.wantErrors, createPayloadProcessor(spec), k8sClient)
+		})
+	}
+}
+
+func TestPayloadProcessorBackendRefGroup(t *testing.T) {
+	t.Parallel()
+	k8sClient := getKubernetesClient(t)
+
+	tests := []struct {
+		backendRefGroup *gatewayv1.Group
+		name            string
+		wantErrors      []string
+	}{
+		{
+			name:            "Validate unset group is allowed",
+			backendRefGroup: nil,
+		},
+		{
+			name:            "Validate empty group is allowed",
+			backendRefGroup: helpers.GetPointer[gatewayv1.Group](""),
+		},
+		{
+			name:            "Validate core group is allowed",
+			backendRefGroup: helpers.GetPointer[gatewayv1.Group]("core"),
+		},
+		{
+			name:            "Validate non-core group is not allowed",
+			backendRefGroup: helpers.GetPointer[gatewayv1.Group](invalidGroup),
+			wantErrors:      []string{"backendRef.group must be core"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			spec := validPayloadProcessorSpec()
+			spec.Processors[0].ExtProc.BackendRef.Group = tt.backendRefGroup
+			validateCrd(t, tt.wantErrors, createPayloadProcessor(spec), k8sClient)
+		})
+	}
+}
+
 func TestPayloadProcessorPort(t *testing.T) {
 	t.Parallel()
 	k8sClient := getKubernetesClient(t)
 
 	tests := []struct {
+		port       *gatewayv1.PortNumber
 		name       string
 		wantErrors []string
-		port       int32
 	}{
 		{
 			name: "Validate port 1 is allowed",
-			port: 1,
+			port: helpers.GetPointer[gatewayv1.PortNumber](1),
 		},
 		{
 			name: "Validate port 80 is allowed",
-			port: 80,
+			port: helpers.GetPointer[gatewayv1.PortNumber](80),
 		},
 		{
 			name: "Validate port 65535 is allowed",
-			port: 65535,
+			port: helpers.GetPointer[gatewayv1.PortNumber](65535),
+		},
+		{
+			name:       "Validate unset port is not allowed",
+			port:       nil,
+			wantErrors: []string{"backendRef.port must be set"},
 		},
 		{
 			name:       "Validate port 0 is not allowed",
-			port:       0,
+			port:       helpers.GetPointer[gatewayv1.PortNumber](0),
 			wantErrors: []string{"port in body should be greater than or equal to 1"},
 		},
 		{
 			name:       "Validate port 65536 is not allowed",
-			port:       65536,
+			port:       helpers.GetPointer[gatewayv1.PortNumber](65536),
 			wantErrors: []string{"port in body should be less than or equal to 65535"},
 		},
 	}
@@ -272,7 +353,7 @@ func TestPayloadProcessorPort(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			spec := validPayloadProcessorSpec()
-			spec.Processors[0].ExtProc.Port = tt.port
+			spec.Processors[0].ExtProc.BackendRef.Port = tt.port
 			validateCrd(t, tt.wantErrors, createPayloadProcessor(spec), k8sClient)
 		})
 	}

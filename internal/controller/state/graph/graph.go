@@ -390,6 +390,7 @@ func BuildGraph(
 		referencedServices,
 		gws,
 		wafInput,
+		refGrantResolver,
 	)
 
 	// add status conditions to each targetRef based on the policies that affect them.

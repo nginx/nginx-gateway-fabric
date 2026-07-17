@@ -3599,8 +3599,10 @@ var _ = Describe("ChangeProcessor", func() {
 						Processors: []ngfAPIv1alpha1.PayloadProcessorEntry{
 							{
 								ExtProc: &ngfAPIv1alpha1.ExtProcConfig{
-									BackendRef: v1.LocalObjectReference{Name: "ext-svc"},
-									Port:       9000,
+									BackendRef: v1.BackendObjectReference{
+										Name: "ext-svc",
+										Port: helpers.GetPointer[v1.PortNumber](9000),
+									},
 								},
 							},
 						},
@@ -3608,7 +3610,7 @@ var _ = Describe("ChangeProcessor", func() {
 				}
 
 				ppUpdated = pp.DeepCopy()
-				ppUpdated.Spec.Processors[0].ExtProc.Port = 9001
+				ppUpdated.Spec.Processors[0].ExtProc.BackendRef.Port = helpers.GetPointer[v1.PortNumber](9001)
 
 				ppKey = graph.PolicyKey{
 					NsName: types.NamespacedName{Name: "pp", Namespace: "test"},

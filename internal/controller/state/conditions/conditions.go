@@ -1256,6 +1256,17 @@ func NewPolicyInvalid(msg string) Condition {
 	}
 }
 
+// NewPolicyRefNotPermitted returns a Condition that indicates that the Policy is not accepted because it
+// contains a cross-namespace reference that is not permitted by any ReferenceGrant.
+func NewPolicyRefNotPermitted(msg string) Condition {
+	return Condition{
+		Type:    string(v1.PolicyConditionAccepted),
+		Status:  metav1.ConditionFalse,
+		Reason:  "RefNotPermitted",
+		Message: msg,
+	}
+}
+
 // NewPolicyConflicted returns a Condition that indicates that the Policy is not accepted because it conflicts with
 // another Policy and a merge is not possible.
 func NewPolicyConflicted(msg string) Condition {

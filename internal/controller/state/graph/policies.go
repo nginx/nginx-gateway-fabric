@@ -635,6 +635,7 @@ func processPolicies(
 	services map[types.NamespacedName]*ReferencedService,
 	gws map[types.NamespacedName]*Gateway,
 	wafInput *WAFProcessingInput,
+	refGrantResolver *referenceGrantResolver,
 ) (map[PolicyKey]*Policy, *WAFProcessingOutput) {
 	if len(pols) == 0 || len(gws) == 0 {
 		return nil, nil
@@ -699,9 +700,54 @@ func processPolicies(
 
 	markConflictedPolicies(processedPolicies, validator)
 
+	validatePayloadProcessorRefs(processedPolicies, refGrantResolver)
+
 	wafOutput := processWAFPolicies(ctx, logger, processedPolicies, wafInput)
 
 	return processedPolicies, wafOutput
+}
+
+// validatePayloadProcessorRefs validates cross-namespace ExtProc backendRefs on PayloadProcessor policies.
+// A backendRef targeting a Service in a namespace different from the PayloadProcessor's own namespace
+// requires a ReferenceGrant permitting the reference. Policies that are already invalid are skipped.
+func validatePayloadProcessorRefs(
+	processedPolicies map[PolicyKey]*Policy,
+	refGrantResolver *referenceGrantResolver,
+) {
+	for _, policy := range processedPolicies {
+		if !policy.Valid || getPolicyKind(policy.Source) != kinds.PayloadProcessor {
+			continue
+		}
+
+		pp, ok := policy.Source.(*ngfAPIv1alpha1.PayloadProcessor)
+		if !ok {
+			continue
+		}
+
+		for _, processor := range pp.Spec.Processors {
+			if processor.ExtProc == nil || processor.ExtProc.BackendRef.Namespace == nil {
+				continue
+			}
+
+			refNs := string(*processor.ExtProc.BackendRef.Namespace)
+			if refNs == pp.Namespace {
+				continue
+			}
+
+			refNsName := types.NamespacedName{Namespace: refNs, Name: string(processor.ExtProc.BackendRef.Name)}
+			if refGrantResolver != nil &&
+				refGrantResolver.refAllowed(toService(refNsName), fromPayloadProcessor(pp.Namespace)) {
+				continue
+			}
+
+			policy.Conditions = append(policy.Conditions, conditions.NewPolicyRefNotPermitted(
+				fmt.Sprintf("cross-namespace reference to Service %q not permitted by any ReferenceGrant", refNsName),
+			))
+			policy.Valid = false
+
+			break
+		}
+	}
 }
 
 func checkTargetRoutesForOverlap(
