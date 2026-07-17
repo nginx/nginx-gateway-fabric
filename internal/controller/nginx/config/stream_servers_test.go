@@ -1093,6 +1093,24 @@ func TestCreateSplitClientForL4Server(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "zero-weight upstreams are excluded from distributions",
+			server: dataplane.Layer4VirtualServer{
+				Port: 5353,
+				Upstreams: []dataplane.Layer4Upstream{
+					{Name: "udp_v1", Weight: 100},
+					{Name: "udp_v2", Weight: 0},
+					{Name: "udp_v3", Weight: 50},
+				},
+			},
+			expected: &stream.SplitClient{
+				VariableName: "backend_5353",
+				Distributions: []stream.SplitClientDistribution{
+					{Percent: "66.66", Value: "udp_v1"},
+					{Percent: "33.34", Value: "udp_v3"},
+				},
+			},
+		},
 	}
 
 	for _, tt := range tests {

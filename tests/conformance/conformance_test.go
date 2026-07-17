@@ -39,7 +39,6 @@ import (
 	"sigs.k8s.io/gateway-api/conformance"
 	conf_v1 "sigs.k8s.io/gateway-api/conformance/apis/v1"
 	"sigs.k8s.io/gateway-api/conformance/tests"
-	"sigs.k8s.io/gateway-api/conformance/utils/flags"
 	"sigs.k8s.io/gateway-api/conformance/utils/suite"
 	"sigs.k8s.io/yaml"
 
@@ -62,14 +61,6 @@ func TestConformance(t *testing.T) {
 	// Set up log collection on test failure
 	defer collectNGFLogsOnFailure(t, g)
 
-	t.Logf(`Running conformance tests with %s GatewayClass\n cleanup: %t\n`+
-		`debug: %t\n enable all features: %t \n supported extended features: [%v]\n exempt features: [%v]\n`+
-		`conformance profiles: [%v]\n skip tests: [%v]`,
-		*flags.GatewayClassName, *flags.CleanupBaseResources, *flags.ShowDebug,
-		*flags.EnableAllSupportedFeatures, *flags.SupportedFeatures, *flags.ExemptFeatures,
-		*flags.ConformanceProfiles, *flags.SkipTests,
-	)
-
 	opts := conformance.DefaultOptions(t)
 	opts.TimeoutConfig.MaxTimeToConsistency = 3 * time.Minute
 
@@ -81,11 +72,19 @@ func TestConformance(t *testing.T) {
 		Organization: "nginx",
 		Project:      "nginx-gateway-fabric",
 		URL:          "https://github.com/nginx/nginx-gateway-fabric",
-		Version:      *flags.ImplementationVersion,
+		Version:      opts.Implementation.Version,
 		Contact: []string{
 			"https://github.com/nginx/nginx-gateway-fabric/discussions/new/choose",
 		},
 	}
+
+	t.Logf(`Running conformance tests with %s GatewayClass\n cleanup: %t\n`+
+		`debug: %t\n enable all features: %t \n supported extended features: [%v]\n exempt features: [%v]\n`+
+		`conformance profiles: [%v]\n skip tests: [%v]`,
+		opts.GatewayClassName, opts.CleanupBaseResources, opts.Debug,
+		opts.EnableAllSupportedFeatures, opts.SupportedFeatures, opts.ExemptFeatures,
+		opts.ConformanceProfiles, opts.SkipTests,
+	)
 
 	testSuite, err := suite.NewConformanceTestSuite(opts)
 	g.Expect(err).To(Not(HaveOccurred()))
@@ -100,7 +99,7 @@ func TestConformance(t *testing.T) {
 	yamlReport, err := yaml.Marshal(report)
 	g.Expect(err).ToNot(HaveOccurred())
 
-	f, err := os.Create(*flags.ReportOutput)
+	f, err := os.Create(opts.ReportOutputPath)
 	g.Expect(err).ToNot(HaveOccurred())
 	defer f.Close()
 
@@ -117,26 +116,26 @@ func TestInferenceExtensionConformance(t *testing.T) {
 	// Set up log collection on test failure
 	defer collectNGFLogsOnFailure(t, g)
 
-	t.Logf(`Running inference conformance tests with %s GatewayClass\n cleanup: %t\n`+
-		`debug: %t\n enable all features: %t \n supported extended features: [%v]\n exempt features: [%v]\n`+
-		`skip tests: [%v]`,
-		*flags.GatewayClassName, *flags.CleanupBaseResources, *flags.ShowDebug,
-		*flags.EnableAllSupportedFeatures, *flags.SupportedFeatures, *flags.ExemptFeatures, *flags.SkipTests,
-	)
-
 	opts := inference_conformance.DefaultOptions(t)
 
 	opts.Implementation = conf_v1.Implementation{
 		Organization: "nginx",
 		Project:      "nginx-gateway-fabric",
 		URL:          "https://github.com/nginx/nginx-gateway-fabric",
-		Version:      *flags.ImplementationVersion,
+		Version:      opts.Implementation.Version,
 		Contact: []string{
 			"https://github.com/nginx/nginx-gateway-fabric/discussions/new/choose",
 		},
 	}
 
-	opts.ConformanceProfiles.Insert(inference_conformance.GatewayLayerProfileName)
+	t.Logf(`Running inference conformance tests with %s GatewayClass\n cleanup: %t\n`+
+		`debug: %t\n enable all features: %t \n supported extended features: [%v]\n exempt features: [%v]\n`+
+		`skip tests: [%v]`,
+		opts.GatewayClassName, opts.CleanupBaseResources, opts.Debug,
+		opts.EnableAllSupportedFeatures, opts.SupportedFeatures, opts.ExemptFeatures, opts.SkipTests,
+	)
+
+	opts.ConformanceProfiles = append(opts.ConformanceProfiles, inference_conformance.GatewayLayerProfileName)
 	inference_conformance.RunConformanceWithOptions(t, opts)
 }
 
