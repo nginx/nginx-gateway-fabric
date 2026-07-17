@@ -227,8 +227,8 @@ func (g GeneratorImpl) createUpstream(
 }
 
 // processKeepAliveSettings normalizes keepalive configuration from an upstream policy.
-// If Connections is nil, the field is omitted.
-// If Connections is set to 0, keepAlive connections to upstream servers is disabled.
+// If Connections is nil, the field is omitted and the NGINX default is used.
+// If Connections is set to 0, keepAlive is disabled.
 func processKeepAliveSettings(spec http.UpstreamKeepAlive) http.UpstreamKeepAlive {
 	if spec.Connections != nil {
 		if *spec.Connections == 0 {
