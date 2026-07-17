@@ -50,31 +50,18 @@ func TestSupportedFeatures(t *testing.T) {
 		gatewayv1.FeatureName(features.SupportGatewayFrontendClientCertificateValidation),
 		gatewayv1.FeatureName(features.SupportGatewayFrontendClientCertificateValidationInsecureFallback),
 		gatewayv1.FeatureName(features.SupportListenerSet),
-	}
-
-	experimentalFeatures := []gatewayv1.FeatureName{
+		gatewayv1.FeatureName(features.SupportTCPRoute),
 		gatewayv1.FeatureName(features.SupportUDPRoute),
-		gatewayv1.FeatureName("TCPRoute"),
 	}
-
-	allFeatures := append(slices.Clone(standardFeatures), experimentalFeatures...)
 
 	tests := []struct {
 		name               string
 		expectedFeatures   []gatewayv1.FeatureName
 		unexpectedFeatures []gatewayv1.FeatureName
-		experimental       bool
 	}{
 		{
-			name:               "standard features only",
-			experimental:       false,
+			name:               "standard features",
 			expectedFeatures:   standardFeatures,
-			unexpectedFeatures: experimentalFeatures,
-		},
-		{
-			name:               "standard and experimental features",
-			experimental:       true,
-			expectedFeatures:   allFeatures,
 			unexpectedFeatures: []gatewayv1.FeatureName{},
 		},
 	}
@@ -84,7 +71,7 @@ func TestSupportedFeatures(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			features := supportedFeatures(tc.experimental)
+			features := supportedFeatures()
 
 			g.Expect(features).To(HaveLen(len(tc.expectedFeatures)))
 

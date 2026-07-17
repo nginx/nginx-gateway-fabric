@@ -18,7 +18,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
-	"sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
@@ -5704,7 +5703,7 @@ func TestBuildL4Servers(t *testing.T) {
 	createL4Route := func(name string, valid bool, backendRefs []graph.BackendRef) *graph.L4Route {
 		return &graph.L4Route{
 			Valid: valid,
-			Source: &v1alpha2.TCPRoute{
+			Source: &v1.TCPRoute{
 				ObjectMeta: metav1.ObjectMeta{
 					Namespace: "default",
 					Name:      name,
@@ -6184,7 +6183,7 @@ func TestBuildL4Servers(t *testing.T) {
 						L4Routes: map[graph.L4RouteKey]*graph.L4Route{
 							{NamespacedName: types.NamespacedName{Namespace: "default", Name: "udp-route"}}: {
 								Valid: true,
-								Source: &v1alpha2.UDPRoute{
+								Source: &v1.UDPRoute{
 									ObjectMeta: metav1.ObjectMeta{
 										Namespace: "default",
 										Name:      "udp-route",

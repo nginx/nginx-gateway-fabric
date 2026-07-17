@@ -13,7 +13,7 @@ GW_SERVICE_TYPE = NodePort## Service type to use for the gateway
 NGF_VERSION ?= edge## NGF version to be tested
 PULL_POLICY ?= Never## Pull policy for the images
 NGINX_CONF_DIR = internal/controller/nginx/conf
-STANDARD_CONFORMANCE_PROFILES = GATEWAY-HTTP,GATEWAY-GRPC,GATEWAY-TLS
+STANDARD_CONFORMANCE_PROFILES = GATEWAY-HTTP,GATEWAY-GRPC,GATEWAY-TLS,GATEWAY-TCP,GATEWAY-UDP
 EXPERIMENTAL_CONFORMANCE_PROFILES =
 CONFORMANCE_PROFILES = $(STANDARD_CONFORMANCE_PROFILES) # by default we use the standard conformance profiles. If experimental is enabled we override this and add the experimental profiles.
 SUPPORTED_EXTENDED_FEATURES_OPENSHIFT = HTTPRouteQueryParamMatching,HTTPRouteMethodMatching,HTTPRoutePortRedirect,HTTPRouteSchemeRedirect,HTTPRouteHostRewrite,HTTPRoutePathRewrite,GatewayPort8080,GatewayAddressEmpty,HTTPRouteResponseHeaderModification,HTTPRoutePathRedirect,GatewayHTTPListenerIsolation,GatewayInfrastructurePropagation,HTTPRouteRequestMirror,HTTPRouteRequestMultipleMirrors,HTTPRouteRequestPercentageMirror,HTTPRouteBackendProtocolWebSocket,HTTPRouteParentRefPort,HTTPRouteDestinationPortMatching,HTTPRouteHTTPSListenerDetectMisdirectedRequests,GatewayBackendClientCertificate
@@ -71,9 +71,11 @@ run-conformance-tests: deploy-metallb ## Run conformance tests
 	rm output.txt
 	grpc_core_result=`yq '.profiles[] | select(.name == "GATEWAY-GRPC") | .core.result' conformance-profile.yaml`; \
 	tls_core_result=`yq '.profiles[] | select(.name == "GATEWAY-TLS") | .core.result' conformance-profile.yaml`; \
+	tcp_core_result=`yq '.profiles[] | select(.name == "GATEWAY-TCP") | .core.result' conformance-profile.yaml`; \
+	udp_core_result=`yq '.profiles[] | select(.name == "GATEWAY-UDP") | .core.result' conformance-profile.yaml`; \
 	http_core_result=`yq '.profiles[] | select(.name == "GATEWAY-HTTP") | .core.result' conformance-profile.yaml`; \
 	http_extended_result=`yq '.profiles[] | select(.name == "GATEWAY-HTTP") | .extended.result' conformance-profile.yaml`; \
-	if [ "$$grpc_core_result" != "failure" ] && [ "$$tls_core_result" != "failure" ] && [ "$$http_core_result" != "failure" ] && [ "$$http_extended_result" != "failure" ] ; then \
+	if [ "$$grpc_core_result" != "failure" ] && [ "$$tls_core_result" != "failure" ] && [ "$$tcp_core_result" != "failure" ] && [ "$$udp_core_result" != "failure" ] && [ "$$http_core_result" != "failure" ] && [ "$$http_extended_result" != "failure" ] ; then \
 		exit 0; \
 	else \
 		exit 2; \

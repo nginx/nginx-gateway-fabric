@@ -16,7 +16,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
-	"sigs.k8s.io/gateway-api/apis/v1alpha2"
 	v1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 	"sigs.k8s.io/gateway-api/pkg/consts"
 
@@ -127,8 +126,8 @@ func NewChangeProcessorImpl(cfg ChangeProcessorConfig) *ChangeProcessorImpl {
 		NginxProxies:          make(map[types.NamespacedName]*ngfAPIv1alpha2.NginxProxy),
 		GRPCRoutes:            make(map[types.NamespacedName]*v1.GRPCRoute),
 		TLSRoutes:             make(map[types.NamespacedName]*v1.TLSRoute),
-		TCPRoutes:             make(map[types.NamespacedName]*v1alpha2.TCPRoute),
-		UDPRoutes:             make(map[types.NamespacedName]*v1alpha2.UDPRoute),
+		TCPRoutes:             make(map[types.NamespacedName]*v1.TCPRoute),
+		UDPRoutes:             make(map[types.NamespacedName]*v1.UDPRoute),
 		NGFPolicies:           make(map[graph.PolicyKey]policies.Policy),
 		SnippetsFilters:       make(map[types.NamespacedName]*ngfAPIv1alpha1.SnippetsFilter),
 		AuthenticationFilters: make(map[types.NamespacedName]*ngfAPIv1alpha1.AuthenticationFilter),
@@ -269,12 +268,12 @@ func NewChangeProcessorImpl(cfg ChangeProcessorConfig) *ChangeProcessorImpl {
 			predicate: nil,
 		},
 		{
-			gvk:       cfg.MustExtractGVK(&v1alpha2.TCPRoute{}),
+			gvk:       cfg.MustExtractGVK(&v1.TCPRoute{}),
 			store:     newObjectStoreMapAdapter(clusterStore.TCPRoutes),
 			predicate: nil,
 		},
 		{
-			gvk:       cfg.MustExtractGVK(&v1alpha2.UDPRoute{}),
+			gvk:       cfg.MustExtractGVK(&v1.UDPRoute{}),
 			store:     newObjectStoreMapAdapter(clusterStore.UDPRoutes),
 			predicate: nil,
 		},

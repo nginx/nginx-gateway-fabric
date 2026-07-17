@@ -3,11 +3,11 @@ package graph
 import (
 	apiv1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/gateway-api/apis/v1alpha2"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
 func buildUDPRoute(
-	udpRoute *v1alpha2.UDPRoute,
+	udpRoute *gatewayv1.UDPRoute,
 	gws map[types.NamespacedName]*Gateway,
 	services map[types.NamespacedName]*apiv1.Service,
 	refGrantResolver func(resource toResource) bool,

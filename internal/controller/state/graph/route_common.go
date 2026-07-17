@@ -12,7 +12,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
-	v1alpha "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/ngfsort"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
@@ -248,9 +247,9 @@ func CreateRouteKeyL4(obj client.Object) L4RouteKey {
 	switch obj.(type) {
 	case *v1.TLSRoute:
 		routeType = RouteTypeTLS
-	case *v1alpha.TCPRoute:
+	case *v1.TCPRoute:
 		routeType = RouteTypeTCP
-	case *v1alpha.UDPRoute:
+	case *v1.UDPRoute:
 		routeType = RouteTypeUDP
 	default:
 		panic(fmt.Sprintf("Unknown type: %T", obj))
@@ -295,8 +294,8 @@ func (e routeRuleErrors) append(newErrors routeRuleErrors) routeRuleErrors {
 
 func buildL4RoutesForGateways(
 	tlsRoutes map[types.NamespacedName]*v1.TLSRoute,
-	tcpRoutes map[types.NamespacedName]*v1alpha.TCPRoute,
-	udpRoutes map[types.NamespacedName]*v1alpha.UDPRoute,
+	tcpRoutes map[types.NamespacedName]*v1.TCPRoute,
+	udpRoutes map[types.NamespacedName]*v1.UDPRoute,
 	services map[types.NamespacedName]*apiv1.Service,
 	backendTLSPolicies map[types.NamespacedName]*BackendTLSPolicy,
 	gws map[types.NamespacedName]*Gateway,
@@ -893,13 +892,12 @@ func tryToAttachL4RouteToListeners(
 	var (
 		attachedToAtLeastOneValidListener  bool
 		allowed, attached, hostnamesUnique bool
-		multipleRoutesOnListener           bool
 	)
 
 	sortListenersByHostname(attachableListeners)
 
 	for _, l := range attachableListeners {
-		routeAllowed, routeAttached, routeHostnamesUnique, routeMultiple := bindToListenerL4(
+		routeAllowed, routeAttached, routeHostnamesUnique := bindToListenerL4(
 			l,
 			route,
 			namespaces,
@@ -911,15 +909,11 @@ func tryToAttachL4RouteToListeners(
 		attached = attached || routeAttached
 		hostnamesUnique = hostnamesUnique || routeHostnamesUnique
 		attachedToAtLeastOneValidListener = attachedToAtLeastOneValidListener || (routeAttached && l.Valid)
-		multipleRoutesOnListener = multipleRoutesOnListener || routeMultiple
 	}
 
 	if !attached {
 		if !allowed {
 			return conditions.NewRouteNotAllowedByListeners(), false
-		}
-		if multipleRoutesOnListener {
-			return conditions.NewRouteMultipleRoutesOnListener(), false
 		}
 		if !hostnamesUnique {
 			return conditions.NewRouteHostnameConflict(), false
@@ -953,9 +947,9 @@ func getL4RouteKind(route *L4Route) v1.Kind {
 	switch route.Source.(type) {
 	case *v1.TLSRoute:
 		return v1.Kind(kinds.TLSRoute)
-	case *v1alpha.TCPRoute:
+	case *v1.TCPRoute:
 		return v1.Kind(kinds.TCPRoute)
-	case *v1alpha.UDPRoute:
+	case *v1.UDPRoute:
 		return v1.Kind(kinds.UDPRoute)
 	default:
 		panic(fmt.Sprintf("Unknown type: %T", route.Source))
@@ -969,38 +963,31 @@ func bindToListenerL4(
 	portHostnamesMap map[string]struct{},
 	refStatus *ParentRefAttachmentStatus,
 	parentRefNamespace string,
-) (allowed, attached, notConflicting, multipleRoutesOnListener bool) {
+) (allowed, attached, notConflicting bool) {
 	if !isRouteNamespaceAllowedByListener(l, route.Source.GetNamespace(), parentRefNamespace, namespaces) {
-		return false, false, false, false
+		return false, false, false
 	}
 
 	routeKind := getL4RouteKind(route)
 	if !isRouteTypeAllowedByListener(l, routeKind) {
-		return false, false, false, false
-	}
-
-	// TCP/UDP protocols have no routing discriminator (no hostname/path/SNI)
-	// so we can only support one route per listener port
-	if routeKind == v1.Kind(kinds.TCPRoute) || routeKind == v1.Kind(kinds.UDPRoute) {
-		currentRouteKey := CreateRouteKeyL4(route.Source)
-		for existingRouteKey := range l.L4Routes {
-			if existingRouteKey != currentRouteKey {
-				// A different TCP/UDP route is already attached to this listener
-				return true, false, true, true
-			}
-		}
+		return false, false, false
 	}
 
 	acceptedListenerHostnames := findAcceptedHostnames(l.Source.Hostname, route.Spec.Hostnames)
 
 	hostnames := make([]string, 0)
-
-	for _, h := range acceptedListenerHostnames {
-		portHostname := fmt.Sprintf("%s:%d:%s", h, l.Source.Port, l.Source.Protocol)
-		_, ok := portHostnamesMap[portHostname]
-		if !ok {
-			portHostnamesMap[portHostname] = struct{}{}
-			hostnames = append(hostnames, h)
+	if routeKind == v1.Kind(kinds.TCPRoute) || routeKind == v1.Kind(kinds.UDPRoute) {
+		// TCP/UDP routes have no hostnames in spec; allow multiple routes on a listener
+		// and avoid using the cross-route hostname conflict map for L4 stream routes.
+		hostnames = append(hostnames, acceptedListenerHostnames...)
+	} else {
+		for _, h := range acceptedListenerHostnames {
+			portHostname := fmt.Sprintf("%s:%d:%s", h, l.Source.Port, l.Source.Protocol)
+			_, ok := portHostnamesMap[portHostname]
+			if !ok {
+				portHostnamesMap[portHostname] = struct{}{}
+				hostnames = append(hostnames, h)
+			}
 		}
 	}
 
@@ -1008,17 +995,17 @@ func bindToListenerL4(
 	// if any hostnames were removed because of conflicts first, and add that condition first. Otherwise, we know that
 	// the hostnames were all removed because they didn't match the listener hostname, so we add that condition.
 	if len(hostnames) == 0 && len(acceptedListenerHostnames) > 0 {
-		return true, false, false, false
+		return true, false, false
 	}
 	if len(hostnames) == 0 {
-		return true, false, true, false
+		return true, false, true
 	}
 
 	refStatus.AcceptedHostnames[CreateParentRefListenerKeyFromListener(l)] = hostnames
 
 	l.L4Routes[CreateRouteKeyL4(route.Source)] = route
 
-	return true, true, true, false
+	return true, true, true
 }
 
 // resolveAttachmentListenerSet returns the ListenerSet NamespacedName that the parentRef targets
@@ -1628,7 +1615,7 @@ type l4RouteConfig struct {
 
 // l4RouteRule represents a rule in TCPRoute or UDPRoute.
 type l4RouteRule struct {
-	backendRefs []v1alpha.BackendRef
+	backendRefs []v1.BackendRef
 }
 
 // buildGenericL4Route is a generic function to build L4Route for both TCP and UDP routes.
@@ -1714,7 +1701,7 @@ func buildGenericL4Route(
 // validate BackendRef for both TCP and UDP routes.
 func validateBackendRefL4RouteMulti(
 	namespace string,
-	ref v1alpha.BackendRef,
+	ref v1.BackendRef,
 	services map[types.NamespacedName]*apiv1.Service,
 	refGrantResolver func(resource toResource) bool,
 	ruleIdx int,
