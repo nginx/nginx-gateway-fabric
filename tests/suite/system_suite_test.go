@@ -257,6 +257,75 @@ func cleanUpPortForward() {
 	}
 }
 
+// expectUpstreamToUseClusterIP verifies that the given upstream targets the ClusterIP of the named Service
+// as its single server. For NGINX Plus the upstream servers are stored in a state file; for OSS they are
+// server directives in http.conf. It is shared by the NginxProxy and UpstreamSettingsPolicy useClusterIP tests.
+func expectUpstreamToUseClusterIP(nginxPodName, namespace, serviceName, upstreamName string) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.GetStatusTimeout)
+	defer cancel()
+
+	var svc core.Service
+	Expect(resourceManager.Get(
+		ctx,
+		k8sTypes.NamespacedName{Name: serviceName, Namespace: namespace},
+		&svc,
+	)).To(Succeed())
+
+	var serverAddr string
+	if strings.Contains(svc.Spec.ClusterIP, ":") {
+		serverAddr = fmt.Sprintf("[%s]:80", svc.Spec.ClusterIP)
+	} else {
+		serverAddr = fmt.Sprintf("%s:80", svc.Spec.ClusterIP)
+	}
+
+	if *plusEnabled {
+		// In NGINX Plus, upstream servers are managed via the Plus API and persisted in a state file
+		// rather than as server directives in the config. Read the state file to verify the ClusterIP is used.
+		Eventually(func() error {
+			ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.RequestTimeout)
+			defer cancel()
+
+			stateFileContent, err := resourceManager.GetNginxStateFile(ctx, nginxPodName, namespace, upstreamName)
+			if err != nil {
+				return err
+			}
+
+			if !strings.Contains(stateFileContent, serverAddr) {
+				return fmt.Errorf(
+					"expected state file for upstream %s to contain server %s, got: %s",
+					upstreamName,
+					serverAddr,
+					stateFileContent,
+				)
+			}
+
+			return nil
+		}).
+			WithTimeout(timeoutConfig.GetStatusTimeout).
+			WithPolling(500 * time.Millisecond).
+			Should(Succeed())
+
+		return
+	}
+
+	Eventually(func() error {
+		conf, err := resourceManager.GetNginxConfig(nginxPodName, namespace, "")
+		if err != nil {
+			return err
+		}
+
+		return framework.ValidateNginxFieldExists(conf, framework.ExpectedNginxField{
+			Directive: "server",
+			Value:     serverAddr,
+			Upstream:  upstreamName,
+			File:      "http.conf",
+		})
+	}).
+		WithTimeout(timeoutConfig.GetStatusTimeout).
+		WithPolling(500 * time.Millisecond).
+		Should(Succeed())
+}
+
 func createNGFInstallConfig(cfg setupConfig, extraInstallArgs ...string) framework.InstallationConfig {
 	GinkgoWriter.Printf("Creating NGF installation config\n")
 	installCfg := framework.InstallationConfig{
