@@ -73,6 +73,7 @@ func BuildConfiguration(
 	gateway *graph.Gateway,
 	serviceResolver resolver.ServiceResolver,
 	plus bool,
+	clusterIPFamily ngfAPIv1alpha2.IPFamilyType,
 ) Configuration {
 	if g.GatewayClass == nil || !g.GatewayClass.Valid || gateway == nil {
 		config := GetDefaultConfiguration(g, gateway)
@@ -90,7 +91,7 @@ func BuildConfiguration(
 	// policies that are attached directly to the Gateway
 	gatewayRateLimitPolicies := gateway.GetReferencedRateLimitPolicies(g.Routes, g.NGFPolicies)
 
-	baseHTTPConfig := buildBaseHTTPConfig(gateway, gatewaySnippetsFilters, gatewayRateLimitPolicies)
+	baseHTTPConfig := buildBaseHTTPConfig(gateway, gatewaySnippetsFilters, gatewayRateLimitPolicies, clusterIPFamily)
 	baseHTTPConfig.AuthZConfigs = buildAuthZConfigs(g.AuthenticationFilters)
 	baseStreamConfig := buildBaseStreamConfig(gateway)
 
@@ -2154,6 +2155,7 @@ func buildBaseHTTPConfig(
 	gateway *graph.Gateway,
 	gatewaySnippetsFilters map[types.NamespacedName]*graph.SnippetsFilter,
 	gatewayRateLimitPolicies map[graph.PolicyKey]*graph.Policy,
+	clusterIPFamily ngfAPIv1alpha2.IPFamilyType,
 ) BaseHTTPConfig {
 	baseConfig := BaseHTTPConfig{
 		// HTTP2 should be enabled by default
@@ -2196,6 +2198,13 @@ func buildBaseHTTPConfig(
 
 	if np.IPFamily != nil {
 		switch *np.IPFamily {
+		case ngfAPIv1alpha2.IPv4:
+			baseConfig.IPFamily = IPv4
+		case ngfAPIv1alpha2.IPv6:
+			baseConfig.IPFamily = IPv6
+		}
+	} else {
+		switch clusterIPFamily {
 		case ngfAPIv1alpha2.IPv4:
 			baseConfig.IPFamily = IPv4
 		case ngfAPIv1alpha2.IPv6:

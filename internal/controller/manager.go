@@ -244,6 +244,7 @@ func StartManager(cfg config.Config) error {
 		gatewayInstanceName:     cfg.GatewayPodConfig.InstanceName,
 		gatewayClassName:        cfg.GatewayClassName,
 		plus:                    cfg.Plus,
+		clusterIPFamily:         nginxProvisioner.ClusterIPFamily(),
 		statusQueue:             statusQueue,
 		nginxDeployments:        nginxUpdater.NginxDeployments,
 		wafPollerManager:        wafPollerManager,

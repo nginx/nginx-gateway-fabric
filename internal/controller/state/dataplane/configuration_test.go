@@ -3023,6 +3023,7 @@ func TestBuildConfiguration(t *testing.T) {
 				test.graph.Gateways[gatewayNsName],
 				fakeResolver,
 				false,
+				ngfAPIv1alpha2.Dual,
 			)
 
 			assertBuildConfiguration(g, result, test.expConf)
@@ -3130,6 +3131,7 @@ func TestBuildConfiguration_Plus(t *testing.T) {
 				test.graph.Gateways[gatewayNsName],
 				fakeResolver,
 				true,
+				ngfAPIv1alpha2.Dual,
 			)
 
 			g.Expect(result.BackendGroups).To(ConsistOf(test.expConf.BackendGroups))
@@ -7873,6 +7875,7 @@ func TestBuildRewriteIPSettings(t *testing.T) {
 				tc.g.Gateways[types.NamespacedName{}],
 				make(map[types.NamespacedName]*graph.SnippetsFilter),
 				make(map[graph.PolicyKey]*graph.Policy),
+				ngfAPIv1alpha2.Dual,
 			)
 			g.Expect(baseConfig.RewriteClientIPSettings).To(Equal(tc.expRewriteIPSettings))
 		})
@@ -8834,7 +8837,7 @@ func TestBuildBaseHTTPConfig_ReadinessProbe(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			g.Expect(buildBaseHTTPConfig(tc.gateway, nil, nil)).To(Equal(tc.expected))
+			g.Expect(buildBaseHTTPConfig(tc.gateway, nil, nil, ngfAPIv1alpha2.Dual)).To(Equal(tc.expected))
 		})
 	}
 }
@@ -9384,6 +9387,7 @@ func TestBuildConfiguration_GatewaysAndListeners(t *testing.T) {
 				test.graph.Gateways[gatewayNsName],
 				fakeResolver,
 				false,
+				ngfAPIv1alpha2.Dual,
 			)
 
 			assertBuildConfiguration(g, result, test.expConf)
@@ -9647,6 +9651,7 @@ func TestBuildConfiguration_NginxProxy(t *testing.T) {
 				test.graph.Gateways[gatewayNsName],
 				fakeResolver,
 				false,
+				ngfAPIv1alpha2.Dual,
 			)
 
 			assertBuildConfiguration(g, result, test.expConf)
