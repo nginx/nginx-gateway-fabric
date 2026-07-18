@@ -225,6 +225,11 @@ func (p *NginxProvisioner) isLeader() bool {
 	return p.leader
 }
 
+// ClusterIPFamily returns the IP family detected from the cluster at startup.
+func (p *NginxProvisioner) ClusterIPFamily() ngfAPIv1alpha2.IPFamilyType {
+	return p.clusterIPFamily
+}
+
 // setResourceToDelete is called when there are resources to delete, but this pod is not leader.
 // Once it becomes leader, it will delete those resources.
 func (p *NginxProvisioner) setResourceToDelete(gatewayNSName types.NamespacedName) {
