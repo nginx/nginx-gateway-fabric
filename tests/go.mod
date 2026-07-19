@@ -5,7 +5,7 @@ go 1.26.0
 replace (
 	github.com/nginx/nginx-gateway-fabric/v2 => ../
 	sigs.k8s.io/gateway-api-inference-extension => sigs.k8s.io/gateway-api-inference-extension v0.0.0-20260630040015-68e63dd2700e
-	sigs.k8s.io/gateway-api-inference-extension/conformance => sigs.k8s.io/gateway-api-inference-extension/conformance v0.0.0-20260630040015-68e63dd2700e
+	sigs.k8s.io/gateway-api-inference-extension/conformance => sigs.k8s.io/gateway-api-inference-extension/conformance v1.5.0
 )
 
 require (
