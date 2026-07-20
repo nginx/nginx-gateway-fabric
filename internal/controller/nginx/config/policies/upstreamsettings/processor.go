@@ -11,6 +11,10 @@ type Processor struct{}
 
 // UpstreamSettings contains settings from UpstreamSettingsPolicy.
 type UpstreamSettings struct {
+	// UseClusterIP indicates whether to route to the Service ClusterIP instead of Pod IPs.
+	// A nil value means the policy did not set this field, allowing callers to fall back to
+	// other configuration (e.g. the NginxProxy setting).
+	UseClusterIP *bool
 	// ZoneSize is the zone size setting.
 	ZoneSize string
 	// LoadBalancingMethod is the load balancing method setting.
@@ -19,8 +23,6 @@ type UpstreamSettings struct {
 	HashMethodKey string
 	// KeepAlive contains the keepalive settings.
 	KeepAlive http.UpstreamKeepAlive
-	// UseClusterIP indicates whether to route to the Service ClusterIP instead of Pod IPs.
-	UseClusterIP bool
 }
 
 // NewProcessor returns a new Processor.
@@ -78,7 +80,7 @@ func processPolicies(pols []policies.Policy) UpstreamSettings {
 		}
 
 		if usp.Spec.UseClusterIP != nil {
-			upstreamSettings.UseClusterIP = *usp.Spec.UseClusterIP
+			upstreamSettings.UseClusterIP = usp.Spec.UseClusterIP
 		}
 	}
 

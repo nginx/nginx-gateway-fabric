@@ -1,0 +1,6 @@
+apiVersion: gateway.nginx.org/v1alpha2
+kind: NginxProxy
+metadata:
+  name: cluster-ip-proxy
+spec:
+  useClusterIP: true

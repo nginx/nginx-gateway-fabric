@@ -10,7 +10,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
-	"sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
@@ -54,24 +53,24 @@ func PrepareRouteRequests(
 			}
 			reqs = append(reqs, req)
 
-		case *v1alpha2.TCPRoute:
-			status := v1alpha2.TCPRouteStatus{
+		case *v1.TCPRoute:
+			status := v1.TCPRouteStatus{
 				RouteStatus: routeStatus,
 			}
 			req := UpdateRequest{
 				NsName:       routeKey.NamespacedName,
-				ResourceType: &v1alpha2.TCPRoute{},
+				ResourceType: &v1.TCPRoute{},
 				Setter:       newTCPRouteStatusSetter(status, gatewayCtlrName),
 			}
 			reqs = append(reqs, req)
 
-		case *v1alpha2.UDPRoute:
-			status := v1alpha2.UDPRouteStatus{
+		case *v1.UDPRoute:
+			status := v1.UDPRouteStatus{
 				RouteStatus: routeStatus,
 			}
 			req := UpdateRequest{
 				NsName:       routeKey.NamespacedName,
-				ResourceType: &v1alpha2.UDPRoute{},
+				ResourceType: &v1.UDPRoute{},
 				Setter:       newUDPRouteStatusSetter(status, gatewayCtlrName),
 			}
 			reqs = append(reqs, req)
@@ -244,7 +243,7 @@ func PrepareGatewayClassRequests(
 		var suppFeatures []v1.SupportedFeature
 		// Skip reporting supported features if we are in BestEffort mode
 		if !gc.BestEffort {
-			suppFeatures = supportedFeatures(gc.ExperimentalSupported)
+			suppFeatures = supportedFeatures()
 		}
 
 		req := UpdateRequest{
@@ -264,7 +263,7 @@ func PrepareGatewayClassRequests(
 		// Skip reporting supported features if we are in BestEffort mode
 		// If gc is nil, we can safely populate supported features
 		if gc == nil || !gc.BestEffort {
-			ignoredSuppFeatures = supportedFeatures(false)
+			ignoredSuppFeatures = supportedFeatures()
 		}
 
 		req := UpdateRequest{
@@ -513,7 +512,7 @@ func PrepareNGFPolicyRequests(
 
 			ancestorStatuses = append(ancestorStatuses, v1.PolicyAncestorStatus{
 				AncestorRef:    ancestor.Ancestor,
-				ControllerName: v1alpha2.GatewayController(gatewayCtlrName),
+				ControllerName: v1.GatewayController(gatewayCtlrName),
 				Conditions:     apiConds,
 			})
 		}
@@ -555,7 +554,7 @@ func PrepareBackendTLSPolicyRequests(
 					Group:     helpers.GetPointer[v1.Group](v1.GroupName),
 					Kind:      helpers.GetPointer[v1.Kind](kinds.Gateway),
 				},
-				ControllerName: v1alpha2.GatewayController(gatewayCtlrName),
+				ControllerName: v1.GatewayController(gatewayCtlrName),
 				Conditions:     apiConds,
 			}
 
@@ -598,7 +597,7 @@ func PrepareSnippetsFilterRequests(
 			Controllers: []ngfAPI.ControllerStatus{
 				{
 					Conditions:     apiConds,
-					ControllerName: v1alpha2.GatewayController(gatewayCtlrName),
+					ControllerName: v1.GatewayController(gatewayCtlrName),
 				},
 			},
 		}
@@ -631,7 +630,7 @@ func PrepareAuthenticationFilterRequests(
 			Controllers: []ngfAPI.ControllerStatus{
 				{
 					Conditions:     apiConds,
-					ControllerName: v1alpha2.GatewayController(gatewayCtlrName),
+					ControllerName: v1.GatewayController(gatewayCtlrName),
 				},
 			},
 		}

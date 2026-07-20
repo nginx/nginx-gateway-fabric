@@ -510,6 +510,9 @@ nginx:
   #   disableSNIHostValidation:
   #     description: DisableSNIHostValidation disables the validation that ensures the SNI hostname matches the Host header in HTTPS requests. This resolves HTTP/2 connection coalescing issues with wildcard certificates but introduces security risks as described in Gateway API GEP-3567.
   #     type: boolean
+  #   useClusterIP:
+  #     description: UseClusterIP configures NGINX to route to the Service ClusterIP and port instead of individual Pod IPs. Applies only when the target Service has a ClusterIP; headless (ClusterIP:None) and ExternalName Services use normal endpoint resolution. Not applied to L4/stream upstreams. A UseClusterIP value set in an UpstreamSettingsPolicy for a Service takes precedence over this setting. Defaults to false.
+  #     type: boolean
   #   ipFamily:
   #     description: IPFamily specifies the IP family to be used by the NGINX.
   #     enum:

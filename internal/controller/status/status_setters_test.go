@@ -7,7 +7,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
-	"sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/policiesfakes"
@@ -501,7 +500,7 @@ func TestNewTLSRouteStatusSetter(t *testing.T) {
 		{
 			name: "TLSRoute has no status",
 			newStatus: gatewayv1.TLSRouteStatus{
-				RouteStatus: v1alpha2.RouteStatus{
+				RouteStatus: gatewayv1.RouteStatus{
 					Parents: []gatewayv1.RouteParentStatus{
 						{
 							ParentRef:      gatewayv1.ParentReference{},
@@ -2214,12 +2213,12 @@ func TestNewTCPRouteStatusSetter(t *testing.T) {
 
 	tests := []struct {
 		name                         string
-		status, newStatus, expStatus v1alpha2.TCPRouteStatus
+		status, newStatus, expStatus gatewayv1.TCPRouteStatus
 		expStatusSet                 bool
 	}{
 		{
 			name: "TCPRoute has no status",
-			newStatus: v1alpha2.TCPRouteStatus{
+			newStatus: gatewayv1.TCPRouteStatus{
 				RouteStatus: gatewayv1.RouteStatus{
 					Parents: []gatewayv1.RouteParentStatus{
 						{
@@ -2230,7 +2229,7 @@ func TestNewTCPRouteStatusSetter(t *testing.T) {
 					},
 				},
 			},
-			expStatus: v1alpha2.TCPRouteStatus{
+			expStatus: gatewayv1.TCPRouteStatus{
 				RouteStatus: gatewayv1.RouteStatus{
 					Parents: []gatewayv1.RouteParentStatus{
 						{
@@ -2245,7 +2244,7 @@ func TestNewTCPRouteStatusSetter(t *testing.T) {
 		},
 		{
 			name: "TCPRoute has old status",
-			newStatus: v1alpha2.TCPRouteStatus{
+			newStatus: gatewayv1.TCPRouteStatus{
 				RouteStatus: gatewayv1.RouteStatus{
 					Parents: []gatewayv1.RouteParentStatus{
 						{
@@ -2256,7 +2255,7 @@ func TestNewTCPRouteStatusSetter(t *testing.T) {
 					},
 				},
 			},
-			status: v1alpha2.TCPRouteStatus{
+			status: gatewayv1.TCPRouteStatus{
 				RouteStatus: gatewayv1.RouteStatus{
 					Parents: []gatewayv1.RouteParentStatus{
 						{
@@ -2267,7 +2266,7 @@ func TestNewTCPRouteStatusSetter(t *testing.T) {
 					},
 				},
 			},
-			expStatus: v1alpha2.TCPRouteStatus{
+			expStatus: gatewayv1.TCPRouteStatus{
 				RouteStatus: gatewayv1.RouteStatus{
 					Parents: []gatewayv1.RouteParentStatus{
 						{
@@ -2282,7 +2281,7 @@ func TestNewTCPRouteStatusSetter(t *testing.T) {
 		},
 		{
 			name: "TCPRoute has old status, keep other controller statuses",
-			newStatus: v1alpha2.TCPRouteStatus{
+			newStatus: gatewayv1.TCPRouteStatus{
 				RouteStatus: gatewayv1.RouteStatus{
 					Parents: []gatewayv1.RouteParentStatus{
 						{
@@ -2293,7 +2292,7 @@ func TestNewTCPRouteStatusSetter(t *testing.T) {
 					},
 				},
 			},
-			status: v1alpha2.TCPRouteStatus{
+			status: gatewayv1.TCPRouteStatus{
 				RouteStatus: gatewayv1.RouteStatus{
 					Parents: []gatewayv1.RouteParentStatus{
 						{
@@ -2309,7 +2308,7 @@ func TestNewTCPRouteStatusSetter(t *testing.T) {
 					},
 				},
 			},
-			expStatus: v1alpha2.TCPRouteStatus{
+			expStatus: gatewayv1.TCPRouteStatus{
 				RouteStatus: gatewayv1.RouteStatus{
 					Parents: []gatewayv1.RouteParentStatus{
 						{
@@ -2329,7 +2328,7 @@ func TestNewTCPRouteStatusSetter(t *testing.T) {
 		},
 		{
 			name: "TCPRoute has same status",
-			newStatus: v1alpha2.TCPRouteStatus{
+			newStatus: gatewayv1.TCPRouteStatus{
 				RouteStatus: gatewayv1.RouteStatus{
 					Parents: []gatewayv1.RouteParentStatus{
 						{
@@ -2340,7 +2339,7 @@ func TestNewTCPRouteStatusSetter(t *testing.T) {
 					},
 				},
 			},
-			status: v1alpha2.TCPRouteStatus{
+			status: gatewayv1.TCPRouteStatus{
 				RouteStatus: gatewayv1.RouteStatus{
 					Parents: []gatewayv1.RouteParentStatus{
 						{
@@ -2351,7 +2350,7 @@ func TestNewTCPRouteStatusSetter(t *testing.T) {
 					},
 				},
 			},
-			expStatus: v1alpha2.TCPRouteStatus{
+			expStatus: gatewayv1.TCPRouteStatus{
 				RouteStatus: gatewayv1.RouteStatus{
 					Parents: []gatewayv1.RouteParentStatus{
 						{
@@ -2372,7 +2371,7 @@ func TestNewTCPRouteStatusSetter(t *testing.T) {
 			g := NewWithT(t)
 
 			setter := newTCPRouteStatusSetter(test.newStatus, controllerName)
-			obj := &v1alpha2.TCPRoute{Status: test.status}
+			obj := &gatewayv1.TCPRoute{Status: test.status}
 
 			statusSet := setter(obj)
 
@@ -2391,12 +2390,12 @@ func TestNewUDPRouteStatusSetter(t *testing.T) {
 
 	tests := []struct {
 		name                         string
-		status, newStatus, expStatus v1alpha2.UDPRouteStatus
+		status, newStatus, expStatus gatewayv1.UDPRouteStatus
 		expStatusSet                 bool
 	}{
 		{
 			name: "UDPRoute has no status",
-			newStatus: v1alpha2.UDPRouteStatus{
+			newStatus: gatewayv1.UDPRouteStatus{
 				RouteStatus: gatewayv1.RouteStatus{
 					Parents: []gatewayv1.RouteParentStatus{
 						{
@@ -2407,7 +2406,7 @@ func TestNewUDPRouteStatusSetter(t *testing.T) {
 					},
 				},
 			},
-			expStatus: v1alpha2.UDPRouteStatus{
+			expStatus: gatewayv1.UDPRouteStatus{
 				RouteStatus: gatewayv1.RouteStatus{
 					Parents: []gatewayv1.RouteParentStatus{
 						{
@@ -2422,7 +2421,7 @@ func TestNewUDPRouteStatusSetter(t *testing.T) {
 		},
 		{
 			name: "UDPRoute has old status",
-			newStatus: v1alpha2.UDPRouteStatus{
+			newStatus: gatewayv1.UDPRouteStatus{
 				RouteStatus: gatewayv1.RouteStatus{
 					Parents: []gatewayv1.RouteParentStatus{
 						{
@@ -2433,7 +2432,7 @@ func TestNewUDPRouteStatusSetter(t *testing.T) {
 					},
 				},
 			},
-			status: v1alpha2.UDPRouteStatus{
+			status: gatewayv1.UDPRouteStatus{
 				RouteStatus: gatewayv1.RouteStatus{
 					Parents: []gatewayv1.RouteParentStatus{
 						{
@@ -2444,7 +2443,7 @@ func TestNewUDPRouteStatusSetter(t *testing.T) {
 					},
 				},
 			},
-			expStatus: v1alpha2.UDPRouteStatus{
+			expStatus: gatewayv1.UDPRouteStatus{
 				RouteStatus: gatewayv1.RouteStatus{
 					Parents: []gatewayv1.RouteParentStatus{
 						{
@@ -2459,7 +2458,7 @@ func TestNewUDPRouteStatusSetter(t *testing.T) {
 		},
 		{
 			name: "UDPRoute has old status, keep other controller statuses",
-			newStatus: v1alpha2.UDPRouteStatus{
+			newStatus: gatewayv1.UDPRouteStatus{
 				RouteStatus: gatewayv1.RouteStatus{
 					Parents: []gatewayv1.RouteParentStatus{
 						{
@@ -2470,7 +2469,7 @@ func TestNewUDPRouteStatusSetter(t *testing.T) {
 					},
 				},
 			},
-			status: v1alpha2.UDPRouteStatus{
+			status: gatewayv1.UDPRouteStatus{
 				RouteStatus: gatewayv1.RouteStatus{
 					Parents: []gatewayv1.RouteParentStatus{
 						{
@@ -2486,7 +2485,7 @@ func TestNewUDPRouteStatusSetter(t *testing.T) {
 					},
 				},
 			},
-			expStatus: v1alpha2.UDPRouteStatus{
+			expStatus: gatewayv1.UDPRouteStatus{
 				RouteStatus: gatewayv1.RouteStatus{
 					Parents: []gatewayv1.RouteParentStatus{
 						{
@@ -2506,7 +2505,7 @@ func TestNewUDPRouteStatusSetter(t *testing.T) {
 		},
 		{
 			name: "UDPRoute has same status",
-			newStatus: v1alpha2.UDPRouteStatus{
+			newStatus: gatewayv1.UDPRouteStatus{
 				RouteStatus: gatewayv1.RouteStatus{
 					Parents: []gatewayv1.RouteParentStatus{
 						{
@@ -2517,7 +2516,7 @@ func TestNewUDPRouteStatusSetter(t *testing.T) {
 					},
 				},
 			},
-			status: v1alpha2.UDPRouteStatus{
+			status: gatewayv1.UDPRouteStatus{
 				RouteStatus: gatewayv1.RouteStatus{
 					Parents: []gatewayv1.RouteParentStatus{
 						{
@@ -2528,7 +2527,7 @@ func TestNewUDPRouteStatusSetter(t *testing.T) {
 					},
 				},
 			},
-			expStatus: v1alpha2.UDPRouteStatus{
+			expStatus: gatewayv1.UDPRouteStatus{
 				RouteStatus: gatewayv1.RouteStatus{
 					Parents: []gatewayv1.RouteParentStatus{
 						{
@@ -2549,7 +2548,7 @@ func TestNewUDPRouteStatusSetter(t *testing.T) {
 			g := NewWithT(t)
 
 			setter := newUDPRouteStatusSetter(test.newStatus, controllerName)
-			obj := &v1alpha2.UDPRoute{Status: test.status}
+			obj := &gatewayv1.UDPRoute{Status: test.status}
 
 			statusSet := setter(obj)
 

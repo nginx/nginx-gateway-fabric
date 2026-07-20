@@ -6,7 +6,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
-	"sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
@@ -161,9 +160,9 @@ func newGRPCRouteStatusSetter(status gatewayv1.GRPCRouteStatus, gatewayCtlrName 
 	}
 }
 
-func newTCPRouteStatusSetter(status v1alpha2.TCPRouteStatus, gatewayCtlrName string) Setter {
+func newTCPRouteStatusSetter(status gatewayv1.TCPRouteStatus, gatewayCtlrName string) Setter {
 	return func(object client.Object) (wasSet bool) {
-		tr := helpers.MustCastObject[*v1alpha2.TCPRoute](object)
+		tr := helpers.MustCastObject[*gatewayv1.TCPRoute](object)
 
 		// keep all the parent statuses that belong to other controllers
 		for _, os := range tr.Status.Parents {
@@ -182,9 +181,9 @@ func newTCPRouteStatusSetter(status v1alpha2.TCPRouteStatus, gatewayCtlrName str
 	}
 }
 
-func newUDPRouteStatusSetter(status v1alpha2.UDPRouteStatus, gatewayCtlrName string) Setter {
+func newUDPRouteStatusSetter(status gatewayv1.UDPRouteStatus, gatewayCtlrName string) Setter {
 	return func(object client.Object) (wasSet bool) {
-		ur := helpers.MustCastObject[*v1alpha2.UDPRoute](object)
+		ur := helpers.MustCastObject[*gatewayv1.UDPRoute](object)
 
 		// keep all the parent statuses that belong to other controllers
 		for _, os := range ur.Status.Parents {

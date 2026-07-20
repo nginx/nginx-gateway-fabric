@@ -515,17 +515,6 @@ func NewRouteHostnameConflict() Condition {
 	}
 }
 
-// NewRouteMultipleRoutesOnListener returns a Condition that indicates that the Route is not
-// accepted because of multiple.L4 Routes attached to the same listener, which is not supported.
-func NewRouteMultipleRoutesOnListener() Condition {
-	return Condition{
-		Type:    string(v1.RouteConditionAccepted),
-		Status:  metav1.ConditionFalse,
-		Reason:  string(RouteReasonMultipleRoutesOnListener),
-		Message: "Multiple L4 Routes are attached to the same listener, which is not supported",
-	}
-}
-
 // NewRouteResolvedRefs returns a Condition that indicates that all the references on the Route are resolved.
 func NewRouteResolvedRefs() Condition {
 	return Condition{
