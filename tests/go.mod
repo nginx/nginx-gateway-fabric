@@ -2,7 +2,11 @@ module github.com/nginx/nginx-gateway-fabric/v2/tests
 
 go 1.26.0
 
-replace github.com/nginx/nginx-gateway-fabric/v2 => ../
+replace (
+	github.com/nginx/nginx-gateway-fabric/v2 => ../
+	sigs.k8s.io/gateway-api-inference-extension => sigs.k8s.io/gateway-api-inference-extension v0.0.0-20260630040015-68e63dd2700e
+	sigs.k8s.io/gateway-api-inference-extension/conformance => sigs.k8s.io/gateway-api-inference-extension/conformance v0.0.0-20260630040015-68e63dd2700e
+)
 
 require (
 	github.com/golang-jwt/jwt/v5 v5.3.1
@@ -19,9 +23,9 @@ require (
 	k8s.io/apimachinery v0.36.2
 	k8s.io/client-go v0.36.2
 	sigs.k8s.io/controller-runtime v0.24.1
-	sigs.k8s.io/gateway-api v1.5.1
-	sigs.k8s.io/gateway-api-inference-extension/conformance v1.5.0
-	sigs.k8s.io/gateway-api/conformance v1.5.1
+	sigs.k8s.io/gateway-api v1.6.1
+	sigs.k8s.io/gateway-api-inference-extension/conformance v0.0.0-00010101000000-000000000000
+	sigs.k8s.io/gateway-api/conformance v1.6.1
 	sigs.k8s.io/yaml v1.6.0
 )
 
@@ -78,11 +82,11 @@ require (
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/exp v0.0.0-20260312153236-7ab1446f8b90 // indirect
 	golang.org/x/mod v0.37.0 // indirect
-	golang.org/x/net v0.56.0 // indirect
+	golang.org/x/net v0.57.0 // indirect
 	golang.org/x/oauth2 v0.36.0 // indirect
 	golang.org/x/sync v0.22.0 // indirect
-	golang.org/x/sys v0.46.0 // indirect
-	golang.org/x/term v0.44.0 // indirect
+	golang.org/x/sys v0.47.0 // indirect
+	golang.org/x/term v0.45.0 // indirect
 	golang.org/x/text v0.40.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
 	golang.org/x/tools v0.47.0 // indirect
@@ -98,5 +102,5 @@ require (
 	sigs.k8s.io/gateway-api-inference-extension v1.5.0 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 	sigs.k8s.io/randfill v1.0.0 // indirect
-	sigs.k8s.io/structured-merge-diff/v6 v6.4.0 // indirect
+	sigs.k8s.io/structured-merge-diff/v6 v6.4.2 // indirect
 )

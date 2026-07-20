@@ -618,6 +618,11 @@ func (in *NginxProxySpec) DeepCopyInto(out *NginxProxySpec) {
 		*out = new(bool)
 		**out = **in
 	}
+	if in.UseClusterIP != nil {
+		in, out := &in.UseClusterIP, &out.UseClusterIP
+		*out = new(bool)
+		**out = **in
+	}
 	if in.DisableSNIHostValidation != nil {
 		in, out := &in.DisableSNIHostValidation, &out.DisableSNIHostValidation
 		*out = new(bool)
