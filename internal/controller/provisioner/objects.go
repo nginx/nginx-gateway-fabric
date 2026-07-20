@@ -1888,6 +1888,17 @@ func (p *NginxProvisioner) buildResourcesForInvalidGatewayCleanup(
 	// balancer stops directing traffic at the data plane before the data plane goes away, and the
 	// secrets and config the data plane reads outlive it.
 
+	// Order to delete:
+	// 1. external load balancer
+	// 2. deployment/daemonset
+	// 3. service
+	// 4. hpa (Horizontal Pod Autoscaler)
+	// 5. pdb (Pod Disruption Budget)
+	// 6. role/binding (if openshift)
+	// 7. serviceaccount
+	// 8. configmaps
+	// 9. secrets
+
 	var objects []client.Object
 
 	meta := func(name string) metav1.ObjectMeta {
@@ -1912,7 +1923,7 @@ func (p *NginxProvisioner) buildResourcesForInvalidGatewayCleanup(
 		objects = append(objects, il)
 	}
 
-	// 2. Data plane workloads
+	// 2. Deployment/DaemonSet
 	objects = append(objects,
 		&appsv1.Deployment{ObjectMeta: baseMeta},
 		&appsv1.DaemonSet{ObjectMeta: baseMeta},
