@@ -176,7 +176,7 @@ install-inference-crds: ## Install Gateway API Inference Extension CRDs
 
 .PHONY: install-gateway-link-crds
 install-gateway-link-crds: ## Install the F5 CIS CRDs needed by GatewayLink (owned by F5, not by NGF)
-	kubectl apply -f $(CIS_CRDS_URL)
+	kubectl apply --server-side -f $(CIS_CRDS_URL)
 
 .PHONY: uninstall-gateway-link-crds
 uninstall-gateway-link-crds: ## Uninstall the F5 CIS CRDs
