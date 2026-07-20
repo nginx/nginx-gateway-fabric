@@ -8,6 +8,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/ngfsort"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
 )
 
@@ -40,14 +41,7 @@ func processExternalLoadBalancers(
 		ordered = append(ordered, elb)
 	}
 	sort.Slice(ordered, func(i, j int) bool {
-		ti := ordered[i].CreationTimestamp
-		tj := ordered[j].CreationTimestamp
-		if !ti.Equal(&tj) {
-			return ti.Before(&tj)
-		}
-		ni := types.NamespacedName{Namespace: ordered[i].Namespace, Name: ordered[i].Name}
-		nj := types.NamespacedName{Namespace: ordered[j].Namespace, Name: ordered[j].Name}
-		return ni.String() < nj.String()
+		return ngfsort.LessObjectMeta(&ordered[i].ObjectMeta, &ordered[j].ObjectMeta)
 	})
 
 	processed := make(map[types.NamespacedName]*ExternalLoadBalancer, len(ordered))

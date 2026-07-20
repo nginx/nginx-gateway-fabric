@@ -216,7 +216,12 @@ func newEventLoop(
 			controllerName(kinds.IngressLinkGVK.Kind),
 			mgr,
 			eventCh,
-			controller.WithK8sPredicate(predicate.IngressLinkStatusChangedPredicate{}),
+			controller.WithK8sPredicate(
+				k8spredicate.And(
+					nginxResourceLabelPredicate,
+					predicate.IngressLinkStatusChangedPredicate{},
+				),
+			),
 		); err != nil {
 			return nil, fmt.Errorf(
 				"cannot register controller for %s, required by the gatewayLink external load balancer"+
