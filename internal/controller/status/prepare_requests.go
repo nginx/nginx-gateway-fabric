@@ -668,7 +668,7 @@ func PrepareExternalLoadBalancerRequests(
 			Controllers: []ngfAPI.ControllerStatus{
 				{
 					Conditions:     apiConds,
-					ControllerName: v1alpha2.GatewayController(gatewayCtlrName),
+					ControllerName: v1.GatewayController(gatewayCtlrName),
 				},
 			},
 		}
