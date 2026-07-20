@@ -20,6 +20,7 @@ func validPayloadProcessorSpec() ngfAPIv1alpha1.PayloadProcessorSpec {
 		},
 		Processors: []ngfAPIv1alpha1.PayloadProcessorEntry{
 			{
+				Type: ngfAPIv1alpha1.ProcessorTypeExtProcess,
 				ExtProcess: &ngfAPIv1alpha1.ExtProcessConfig{
 					BackendRef: gatewayv1.BackendObjectReference{
 						Name: "ext-svc",
@@ -133,6 +134,7 @@ func TestPayloadProcessorProcessorExtProcess(t *testing.T) {
 		{
 			name: "Validate processor with ExtProcess set is allowed",
 			processor: ngfAPIv1alpha1.PayloadProcessorEntry{
+				Type: ngfAPIv1alpha1.ProcessorTypeExtProcess,
 				ExtProcess: &ngfAPIv1alpha1.ExtProcessConfig{
 					BackendRef: gatewayv1.BackendObjectReference{
 						Name: "ext-svc",
@@ -143,12 +145,13 @@ func TestPayloadProcessorProcessorExtProcess(t *testing.T) {
 		},
 		{
 			name:       "Validate processor with ExtProcess unset is not allowed",
-			processor:  ngfAPIv1alpha1.PayloadProcessorEntry{},
+			processor:  ngfAPIv1alpha1.PayloadProcessorEntry{Type: ngfAPIv1alpha1.ProcessorTypeExtProcess},
 			wantErrors: []string{expectedProcessorExtProcessRequiredError},
 		},
 		{
 			name: "Validate processor with only timeout set is not allowed",
 			processor: ngfAPIv1alpha1.PayloadProcessorEntry{
+				Type:    ngfAPIv1alpha1.ProcessorTypeExtProcess,
 				Timeout: helpers.GetPointer[ngfAPIv1alpha1.Duration]("5s"),
 			},
 			wantErrors: []string{expectedProcessorExtProcessRequiredError},
@@ -165,11 +168,47 @@ func TestPayloadProcessorProcessorExtProcess(t *testing.T) {
 	}
 }
 
+func TestPayloadProcessorType(t *testing.T) {
+	t.Parallel()
+	k8sClient := getKubernetesClient(t)
+
+	tests := []struct {
+		procType   ngfAPIv1alpha1.ProcessorType
+		name       string
+		wantErrors []string
+	}{
+		{
+			name:     "Validate ExtProcess type is allowed",
+			procType: ngfAPIv1alpha1.ProcessorTypeExtProcess,
+		},
+		{
+			name:       "Validate unset type is not allowed",
+			procType:   "",
+			wantErrors: []string{"Unsupported value: \"\""},
+		},
+		{
+			name:       "Validate unknown type is not allowed",
+			procType:   "InProcess",
+			wantErrors: []string{"Unsupported value: \"InProcess\""},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			spec := validPayloadProcessorSpec()
+			spec.Processors[0].Type = tt.procType
+			validateCrd(t, tt.wantErrors, createPayloadProcessor(spec), k8sClient)
+		})
+	}
+}
+
 func TestPayloadProcessorProcessorsMaxItems(t *testing.T) {
 	t.Parallel()
 	k8sClient := getKubernetesClient(t)
 
 	ExtProcess := ngfAPIv1alpha1.PayloadProcessorEntry{
+		Type: ngfAPIv1alpha1.ProcessorTypeExtProcess,
 		ExtProcess: &ngfAPIv1alpha1.ExtProcessConfig{
 			BackendRef: gatewayv1.BackendObjectReference{
 				Name: "ext-svc",

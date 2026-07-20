@@ -3598,6 +3598,7 @@ var _ = Describe("ChangeProcessor", func() {
 						},
 						Processors: []ngfAPIv1alpha1.PayloadProcessorEntry{
 							{
+								Type: ngfAPIv1alpha1.ProcessorTypeExtProcess,
 								ExtProcess: &ngfAPIv1alpha1.ExtProcessConfig{
 									BackendRef: v1.BackendObjectReference{
 										Name: "ext-svc",

@@ -152,7 +152,9 @@ func payloadProcessorWithBackendRef(backendNs string) *ngfAPIv1alpha1.PayloadPro
 	return &ngfAPIv1alpha1.PayloadProcessor{
 		ObjectMeta: metav1.ObjectMeta{Name: "pp", Namespace: policyNs},
 		Spec: ngfAPIv1alpha1.PayloadProcessorSpec{
-			Processors: []ngfAPIv1alpha1.PayloadProcessorEntry{{ExtProcess: extProcess}},
+			Processors: []ngfAPIv1alpha1.PayloadProcessorEntry{
+				{Type: ngfAPIv1alpha1.ProcessorTypeExtProcess, ExtProcess: extProcess},
+			},
 		},
 	}
 }

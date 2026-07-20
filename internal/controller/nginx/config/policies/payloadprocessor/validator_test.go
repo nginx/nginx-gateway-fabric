@@ -27,6 +27,7 @@ func createValidPolicy() *ngfAPI.PayloadProcessor {
 			},
 			Processors: []ngfAPI.PayloadProcessorEntry{
 				{
+					Type: ngfAPI.ProcessorTypeExtProcess,
 					ExtProcess: &ngfAPI.ExtProcessConfig{
 						BackendRef: v1.BackendObjectReference{
 							Name: "ext-proc-service",
@@ -75,14 +76,25 @@ func TestValidator_Validate(t *testing.T) {
 			},
 		},
 		{
-			name: "missing extProcess configuration",
+			name: "missing type",
+			policy: func() *ngfAPI.PayloadProcessor {
+				p := createValidPolicy()
+				p.Spec.Processors[0].Type = ""
+				return p
+			}(),
+			expConditions: []conditions.Condition{
+				conditions.NewPolicyInvalid("processor type must be ExtProcess"),
+			},
+		},
+		{
+			name: "type set but extProcess nil",
 			policy: func() *ngfAPI.PayloadProcessor {
 				p := createValidPolicy()
 				p.Spec.Processors[0].ExtProcess = nil
 				return p
 			}(),
 			expConditions: []conditions.Condition{
-				conditions.NewPolicyInvalid("processor missing extProcess configuration"),
+				conditions.NewPolicyInvalid("processor extProcess must be set when type is ExtProcess"),
 			},
 		},
 		{

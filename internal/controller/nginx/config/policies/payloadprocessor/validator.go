@@ -34,25 +34,45 @@ func (v *Validator) Validate(policy policies.Policy) []conditions.Condition {
 	}
 
 	for _, processor := range pp.Spec.Processors {
-		if processor.ExtProcess == nil {
-			return []conditions.Condition{conditions.NewPolicyInvalid("processor missing extProcess configuration")}
+		if conds := validateProcessor(processor); conds != nil {
+			return conds
 		}
-		if processor.ExtProcess.BackendRef.Name == "" {
-			return []conditions.Condition{conditions.NewPolicyInvalid("processor extProcess.backendRef.name must be set")}
+	}
+
+	return nil
+}
+
+// validateProcessor validates a single processor entry.
+func validateProcessor(processor ngfAPI.PayloadProcessorEntry) []conditions.Condition {
+	if processor.Type != ngfAPI.ProcessorTypeExtProcess {
+		return []conditions.Condition{conditions.NewPolicyInvalid("processor type must be ExtProcess")}
+	}
+	if processor.ExtProcess == nil {
+		return []conditions.Condition{
+			conditions.NewPolicyInvalid("processor extProcess must be set when type is ExtProcess"),
 		}
-		if group := processor.ExtProcess.BackendRef.Group; group != nil && *group != "" && *group != "core" {
-			return []conditions.Condition{conditions.NewPolicyInvalid("processor extProcess.backendRef.group must be core")}
-		}
-		if kind := processor.ExtProcess.BackendRef.Kind; kind != nil && *kind != kinds.Service {
-			return []conditions.Condition{conditions.NewPolicyInvalid("processor extProcess.backendRef.kind must be Service")}
-		}
-		if processor.ExtProcess.BackendRef.Port == nil {
-			return []conditions.Condition{conditions.NewPolicyInvalid("processor extProcess.backendRef.port must be set")}
-		}
-		if port := *processor.ExtProcess.BackendRef.Port; port < 1 || port > 65535 {
-			return []conditions.Condition{
-				conditions.NewPolicyInvalid("processor extProcess.backendRef.port must be a valid TCP port"),
-			}
+	}
+
+	return validateExtProcessBackendRef(processor.ExtProcess.BackendRef)
+}
+
+// validateExtProcessBackendRef validates the backendRef of an ExtProcess processor.
+func validateExtProcessBackendRef(backendRef gatewayv1.BackendObjectReference) []conditions.Condition {
+	if backendRef.Name == "" {
+		return []conditions.Condition{conditions.NewPolicyInvalid("processor extProcess.backendRef.name must be set")}
+	}
+	if group := backendRef.Group; group != nil && *group != "" && *group != "core" {
+		return []conditions.Condition{conditions.NewPolicyInvalid("processor extProcess.backendRef.group must be core")}
+	}
+	if kind := backendRef.Kind; kind != nil && *kind != kinds.Service {
+		return []conditions.Condition{conditions.NewPolicyInvalid("processor extProcess.backendRef.kind must be Service")}
+	}
+	if backendRef.Port == nil {
+		return []conditions.Condition{conditions.NewPolicyInvalid("processor extProcess.backendRef.port must be set")}
+	}
+	if port := *backendRef.Port; port < 1 || port > 65535 {
+		return []conditions.Condition{
+			conditions.NewPolicyInvalid("processor extProcess.backendRef.port must be a valid TCP port"),
 		}
 	}
 

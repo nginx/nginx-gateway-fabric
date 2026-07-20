@@ -161,10 +161,21 @@ spec:
                         to complete processing a request or response.
                       pattern: ^[0-9]{1,4}(ms|s|m|h)?$
                       type: string
+                    type:
+                      description: |-
+                        Type specifies how the processor executes.
+                        ExtProcess calls an external service.
+                      enum:
+                      - ExtProcess
+                      type: string
+                  required:
+                  - type
                   type: object
                   x-kubernetes-validations:
                   - message: processor must specify ExtProcess
                     rule: has(self.extProcess)
+                  - message: extProcess must be set when type is ExtProcess
+                    rule: self.type != 'ExtProcess' || has(self.extProcess)
                 maxItems: 1
                 minItems: 1
                 type: array
