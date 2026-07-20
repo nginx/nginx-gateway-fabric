@@ -60,7 +60,7 @@ func TestValidator_Validate(t *testing.T) {
 				return p
 			}(),
 			expConditions: []conditions.Condition{
-				conditions.NewPolicyInvalid("kind: Unsupported value: \"Unsupported\": " +
+				conditions.NewPolicyInvalid("spec.targetRef.kind: Unsupported value: \"Unsupported\": " +
 					"supported values: \"Gateway\", \"HTTPRoute\""),
 			},
 		},

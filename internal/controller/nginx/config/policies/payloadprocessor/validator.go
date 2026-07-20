@@ -1,6 +1,7 @@
 package payloadprocessor
 
 import (
+	"k8s.io/apimachinery/pkg/util/validation/field"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
@@ -22,10 +23,11 @@ func (v *Validator) Validate(policy policies.Policy) []conditions.Condition {
 	pp := helpers.MustCastObject[*ngfAPI.PayloadProcessor](policy)
 
 	// TargetRef validation: allow Gateway or HTTPRoute
+	targetRefPath := field.NewPath("spec").Child("targetRef")
 	supportedKinds := []gatewayv1.Kind{kinds.Gateway, kinds.HTTPRoute}
 	supportedGroups := []gatewayv1.Group{gatewayv1.GroupName}
 
-	if err := policies.ValidateTargetRef(pp.Spec.TargetRef, nil, supportedGroups, supportedKinds); err != nil {
+	if err := policies.ValidateTargetRef(pp.Spec.TargetRef, targetRefPath, supportedGroups, supportedKinds); err != nil {
 		return []conditions.Condition{conditions.NewPolicyInvalid(err.Error())}
 	}
 
