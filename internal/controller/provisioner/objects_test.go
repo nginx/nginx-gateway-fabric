@@ -1842,122 +1842,122 @@ func TestSetIPFamily(t *testing.T) {
 	g.Expect(svc.Spec.IPFamilies).To(Equal([]corev1.IPFamily{corev1.IPv6Protocol}))
 }
 
-func TestBuildNginxConfigMaps_WorkerConnections(t *testing.T) {
+func TestBuildNginxConfigMaps_WorkerSettings(t *testing.T) {
 	t.Parallel()
-	g := NewWithT(t)
 
-	provisioner := &NginxProvisioner{
-		k8sClient: createFakeClientWithScheme(),
-		cfg: Config{
-			GatewayPodConfig: &config.GatewayPodConfig{
-				Namespace:   "default",
-				ServiceName: "test-service",
-			},
-			AgentLabels: make(map[string]string),
+	tests := []struct {
+		nProxyCfg        *graph.EffectiveNginxProxy
+		name             string
+		confKey          string
+		expSubStrings    []string
+		notExpSubStrings []string
+		plus             bool
+	}{
+		{
+			name:          "default worker_connections (nil config)",
+			nProxyCfg:     nil,
+			confKey:       configmaps.EventsConfKey,
+			expSubStrings: []string{"worker_connections 1024;"},
+		},
+		{
+			name:          "default worker_connections (empty config)",
+			nProxyCfg:     &graph.EffectiveNginxProxy{},
+			confKey:       configmaps.EventsConfKey,
+			expSubStrings: []string{"worker_connections 1024;"},
+		},
+		{
+			name:          "custom worker_connections",
+			nProxyCfg:     &graph.EffectiveNginxProxy{WorkerConnections: helpers.GetPointer[int32](2048)},
+			confKey:       configmaps.EventsConfKey,
+			expSubStrings: []string{"worker_connections 2048;"},
+		},
+		{
+			name:          "default worker_processes (nil config)",
+			nProxyCfg:     nil,
+			confKey:       configmaps.MainConfKey,
+			expSubStrings: []string{"worker_processes auto;"},
+		},
+		{
+			name:          "default worker_processes (empty config)",
+			nProxyCfg:     &graph.EffectiveNginxProxy{},
+			confKey:       configmaps.MainConfKey,
+			expSubStrings: []string{"worker_processes auto;"},
+		},
+		{
+			name:          "custom worker_processes",
+			nProxyCfg:     &graph.EffectiveNginxProxy{WorkerProcesses: helpers.GetPointer[int32](4)},
+			confKey:       configmaps.MainConfKey,
+			expSubStrings: []string{"worker_processes 4;"},
+		},
+		{
+			name:          "custom worker_processes renders the same way with NGINX Plus",
+			nProxyCfg:     &graph.EffectiveNginxProxy{WorkerProcesses: helpers.GetPointer[int32](4)},
+			confKey:       configmaps.MainConfKey,
+			expSubStrings: []string{"worker_processes 4;"},
+			plus:          true,
+		},
+		{
+			name:             "worker_rlimit_nofile omitted (nil config)",
+			nProxyCfg:        nil,
+			confKey:          configmaps.MainConfKey,
+			notExpSubStrings: []string{"worker_rlimit_nofile"},
+		},
+		{
+			name:             "worker_rlimit_nofile omitted (empty config)",
+			nProxyCfg:        &graph.EffectiveNginxProxy{},
+			confKey:          configmaps.MainConfKey,
+			notExpSubStrings: []string{"worker_rlimit_nofile"},
+		},
+		{
+			name:          "custom worker_rlimit_nofile",
+			nProxyCfg:     &graph.EffectiveNginxProxy{WorkerRlimitNofile: helpers.GetPointer[int32](3124)},
+			confKey:       configmaps.MainConfKey,
+			expSubStrings: []string{"worker_rlimit_nofile 3124;"},
 		},
 	}
-	objectMeta := metav1.ObjectMeta{Name: "test", Namespace: "default"}
 
-	gateway := &gatewayv1.Gateway{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "gw",
-			Namespace: "default",
-		},
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			provisioner := &NginxProvisioner{
+				k8sClient: createFakeClientWithScheme(),
+				cfg: Config{
+					GatewayPodConfig: &config.GatewayPodConfig{
+						Namespace:   "default",
+						ServiceName: "test-service",
+					},
+					AgentLabels: make(map[string]string),
+				},
+			}
+			if test.plus {
+				provisioner.cfg.Plus = true
+				provisioner.cfg.PlusUsageConfig = &config.UsageReportConfig{SecretName: jwtTestSecretName}
+			}
+
+			objectMeta := metav1.ObjectMeta{Name: "test", Namespace: "default"}
+			gateway := &gatewayv1.Gateway{
+				ObjectMeta: metav1.ObjectMeta{Name: "gw", Namespace: "default"},
+			}
+			names := provisioner.buildResourceNames("gw-nginx")
+
+			configMaps, errs := provisioner.buildNginxConfigMaps(objectMeta, test.nProxyCfg, names, gateway)
+			g.Expect(errs).To(BeNil())
+			g.Expect(configMaps).To(HaveLen(2))
+
+			bootstrapCM, ok := configMaps[0].(*corev1.ConfigMap)
+			g.Expect(ok).To(BeTrue())
+
+			conf := bootstrapCM.Data[test.confKey]
+			for _, sub := range test.expSubStrings {
+				g.Expect(conf).To(ContainSubstring(sub))
+			}
+			for _, sub := range test.notExpSubStrings {
+				g.Expect(conf).ToNot(ContainSubstring(sub))
+			}
+		})
 	}
-
-	resourceName := "gw-nginx"
-	names := provisioner.buildResourceNames(resourceName)
-	// Test with default worker connections (nil NginxProxy config)
-	configMaps, errs := provisioner.buildNginxConfigMaps(
-		objectMeta,
-		nil,
-		names,
-		gateway,
-	)
-	g.Expect(errs).To(BeNil())
-	g.Expect(configMaps).To(HaveLen(2))
-
-	bootstrapCM, ok := configMaps[0].(*corev1.ConfigMap)
-	g.Expect(ok).To(BeTrue())
-	g.Expect(bootstrapCM.Data[configmaps.EventsConfKey]).To(ContainSubstring("worker_connections 1024;"))
-
-	// Test with default worker connections (empty NginxProxy config)
-	nProxyCfgEmpty := &graph.EffectiveNginxProxy{}
-	configMaps, errs = provisioner.buildNginxConfigMaps(
-		objectMeta,
-		nProxyCfgEmpty,
-		names,
-		gateway,
-	)
-	g.Expect(errs).To(BeNil())
-	g.Expect(configMaps).To(HaveLen(2))
-
-	bootstrapCM, ok = configMaps[0].(*corev1.ConfigMap)
-	g.Expect(ok).To(BeTrue())
-	g.Expect(bootstrapCM.Data[configmaps.EventsConfKey]).To(ContainSubstring("worker_connections 1024;"))
-
-	// Test with custom worker connections
-	nProxyCfg := &graph.EffectiveNginxProxy{
-		WorkerConnections: helpers.GetPointer(int32(2048)),
-	}
-
-	configMaps, errs = provisioner.buildNginxConfigMaps(
-		objectMeta,
-		nProxyCfg,
-		names,
-		gateway,
-	)
-	g.Expect(errs).To(BeNil())
-	g.Expect(configMaps).To(HaveLen(2))
-
-	bootstrapCM, ok = configMaps[0].(*corev1.ConfigMap)
-	g.Expect(ok).To(BeTrue())
-	g.Expect(bootstrapCM.Data[configmaps.EventsConfKey]).To(ContainSubstring("worker_connections 2048;"))
-}
-
-func TestBuildNginxConfigMaps_WorkerProcesses(t *testing.T) {
-	t.Parallel()
-	g := NewWithT(t)
-
-	provisioner := &NginxProvisioner{
-		k8sClient: createFakeClientWithScheme(),
-		cfg: Config{
-			GatewayPodConfig: &config.GatewayPodConfig{
-				Namespace:   "default",
-				ServiceName: "test-service",
-			},
-			AgentLabels: make(map[string]string),
-		},
-	}
-	objectMeta := metav1.ObjectMeta{Name: "test", Namespace: "default"}
-	gateway := &gatewayv1.Gateway{
-		ObjectMeta: metav1.ObjectMeta{Name: "gw", Namespace: "default"},
-	}
-	names := provisioner.buildResourceNames("gw-nginx")
-
-	getBootstrapMainConf := func(nProxyCfg *graph.EffectiveNginxProxy) string {
-		configMaps, errs := provisioner.buildNginxConfigMaps(objectMeta, nProxyCfg, names, gateway)
-		g.Expect(errs).To(BeNil())
-		g.Expect(configMaps).To(HaveLen(2))
-		bootstrapCM, ok := configMaps[0].(*corev1.ConfigMap)
-		g.Expect(ok).To(BeTrue())
-		return bootstrapCM.Data[configmaps.MainConfKey]
-	}
-
-	// Default worker processes (nil NginxProxy config).
-	g.Expect(getBootstrapMainConf(nil)).To(ContainSubstring("worker_processes auto;"))
-
-	// Default worker processes (empty NginxProxy config).
-	g.Expect(getBootstrapMainConf(&graph.EffectiveNginxProxy{})).To(ContainSubstring("worker_processes auto;"))
-
-	// Custom worker processes.
-	customCfg := &graph.EffectiveNginxProxy{WorkerProcesses: helpers.GetPointer[int32](4)}
-	g.Expect(getBootstrapMainConf(customCfg)).To(ContainSubstring("worker_processes 4;"))
-
-	// NGINX Plus renders worker_processes the same way as OSS.
-	provisioner.cfg.Plus = true
-	provisioner.cfg.PlusUsageConfig = &config.UsageReportConfig{SecretName: jwtTestSecretName}
-	g.Expect(getBootstrapMainConf(customCfg)).To(ContainSubstring("worker_processes 4;"))
 }
 
 func TestBuildNginxConfigMaps_AgentFields(t *testing.T) {

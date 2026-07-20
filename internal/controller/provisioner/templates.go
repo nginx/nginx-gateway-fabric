@@ -13,6 +13,9 @@ const mainTemplateText = `
 error_log stderr {{ .ErrorLevel }};
 {{- if .WorkerProcesses }}
 worker_processes {{ .WorkerProcesses }};
+{{- end }}
+{{- if .WorkerRlimitNofile }}
+worker_rlimit_nofile {{ .WorkerRlimitNofile }};
 {{- end }}`
 
 const eventsTemplateText = `

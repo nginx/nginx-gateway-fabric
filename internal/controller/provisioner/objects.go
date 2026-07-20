@@ -574,10 +574,16 @@ func (p *NginxProvisioner) buildBootstrapConfigMap(
 		workerProcesses = strconv.FormatInt(int64(*nProxyCfg.WorkerProcesses), 10)
 	}
 
+	var workerRlimitNofile string
+	if nProxyCfg != nil && nProxyCfg.WorkerRlimitNofile != nil {
+		workerRlimitNofile = strconv.FormatInt(int64(*nProxyCfg.WorkerRlimitNofile), 10)
+	}
+
 	mainFields := map[string]any{
-		"ErrorLevel":        logLevel,
-		"WorkerConnections": workerConnections,
-		"WorkerProcesses":   workerProcesses,
+		"ErrorLevel":         logLevel,
+		"WorkerConnections":  workerConnections,
+		"WorkerProcesses":    workerProcesses,
+		"WorkerRlimitNofile": workerRlimitNofile,
 	}
 
 	eventsFields := map[string]any{

@@ -163,6 +163,9 @@ type SSL struct {
 	Ciphers             string
 	ClientCertificate   string
 	VerifyClient        string
+	SessionCache        string
+	SessionTimeout      string
+	EcdhCurve           string
 	Certificates        []string
 	CertificateKeys     []string
 	RequireVerifiedCert bool
