@@ -361,12 +361,15 @@ func (d *DeploymentStore) GetOrStore(
 	nsName types.NamespacedName,
 	gatewayName string,
 ) *Deployment {
-	if deployment := d.Get(nsName); deployment != nil {
-		return deployment
-	}
-
 	deployment := newDeployment(broadcast.NewDeploymentBroadcaster(ctx), gatewayName)
-	d.deployments.Store(nsName, deployment)
+	actual, loaded := d.deployments.LoadOrStore(nsName, deployment)
+	if loaded {
+		storedDeployment, ok := actual.(*Deployment)
+		if !ok {
+			panic(fmt.Sprintf("expected Deployment, got type %T", actual))
+		}
+		return storedDeployment
+	}
 
 	return deployment
 }

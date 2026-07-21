@@ -386,6 +386,76 @@ func TestGetFileStream_InvalidRequest(t *testing.T) {
 	g.Expect(server.sentChunks).To(BeEmpty())
 }
 
+func TestGetFileStream_InvalidFileSize(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name        string
+		errMsg      string
+		requestSize int64
+	}{
+		{
+			name:        "negative file size",
+			requestSize: -1,
+			errMsg:      "file size cannot be negative",
+		},
+		{
+			name:        "file size mismatch",
+			requestSize: int64(len([]byte("test content")) + 1),
+			errMsg:      "file size does not match content length",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			deploymentName := types.NamespacedName{Name: "nginx-deployment", Namespace: "default"}
+			connTracker := &agentgrpcfakes.FakeConnectionsTracker{}
+			conn := agentgrpc.Connection{
+				InstanceID: "12345",
+				ParentName: deploymentName,
+			}
+			connTracker.GetConnectionReturns(conn)
+
+			depStore := NewDeploymentStore(connTracker)
+			dep := depStore.GetOrStore(t.Context(), deploymentName, "gateway")
+
+			contents := []byte("test content")
+			dep.files = []File{
+				{
+					Meta: &pb.FileMeta{
+						Name: "test.conf",
+						Hash: "some-hash",
+						Size: int64(len(contents)),
+					},
+					Contents: contents,
+				},
+			}
+
+			fs := newFileService(logr.Discard(), depStore, connTracker)
+
+			ctx := grpcContext.NewGrpcContext(t.Context(), grpcContext.GrpcInfo{UUID: "1234567"})
+
+			req := &pb.GetFileRequest{
+				FileMeta: &pb.FileMeta{
+					Name: "test.conf",
+					Hash: "some-hash",
+					Size: tc.requestSize,
+				},
+				MessageMeta: &pb.MessageMeta{},
+			}
+
+			server := newMockServerStreamingServer(ctx)
+
+			err := fs.GetFileStream(req, server)
+			g.Expect(err).To(Equal(status.Error(codes.InvalidArgument, tc.errMsg)))
+			g.Expect(server.sentChunks).To(BeEmpty())
+		})
+	}
+}
+
 func TestGetOverview(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)

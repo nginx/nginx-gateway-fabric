@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"testing"
@@ -109,11 +110,19 @@ func TestUpdateConfig_NoChange(t *testing.T) {
 	// Set the initial files on the deployment
 	deployment.SetFiles([]File{file}, []v1.VolumeMount{})
 
+	testErr := errors.New("test error")
+	deployment.SetPodErrorStatus("pod1", testErr)
+
 	// Call UpdateConfig with the same files
 	updater.UpdateConfig(deployment, []File{file}, []v1.VolumeMount{})
 
 	// Verify that no new configuration was sent
 	g.Expect(fakeBroadcaster.SendCallCount()).To(Equal(0))
+	g.Expect(deployment.GetLatestConfigError()).To(Equal(testErr))
+
+	deployment.SetPodErrorStatus("pod1", nil)
+	updater.UpdateConfig(deployment, []File{file}, []v1.VolumeMount{})
+	g.Expect(deployment.GetLatestConfigError()).ToNot(HaveOccurred())
 }
 
 func TestUpdateUpstreamServers(t *testing.T) {
@@ -261,9 +270,9 @@ func TestUpdateUpstreamServers(t *testing.T) {
 
 			if test.expErr {
 				expErr := errors.Join(
-					fmt.Errorf("couldn't update upstream via the API: %w", testErr),
-					fmt.Errorf("couldn't update upstream via the API: %w", testErr),
-					fmt.Errorf("couldn't update upstream via the API: %w", testErr),
+					fmt.Errorf("couldn't update upstream via the API: %w", context.DeadlineExceeded),
+					fmt.Errorf("couldn't update upstream via the API: %w", context.DeadlineExceeded),
+					fmt.Errorf("couldn't update upstream via the API: %w", context.DeadlineExceeded),
 				)
 
 				g.Expect(deployment.GetLatestUpstreamError()).To(Equal(expErr))

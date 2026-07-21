@@ -41,10 +41,13 @@ func (m *mockServerStream) Context() context.Context {
 
 type mockClient struct {
 	client.Client
-	createErr, listErr              error
-	username, appName, podNamespace string
-	authenticated                   bool
-	// noRunningPods, when true, returns a pod that is not in Running phase.
+	createErr     error
+	listErr       error
+	extra         map[string]authv1.ExtraValue
+	username      string
+	appName       string
+	podNamespace  string
+	authenticated bool
 	noRunningPods bool
 }
 
@@ -54,7 +57,7 @@ func (m *mockClient) Create(_ context.Context, obj client.Object, _ ...client.Cr
 		return errors.New("couldn't convert object to TokenReview")
 	}
 	tr.Status.Authenticated = m.authenticated
-	tr.Status.User = authv1.UserInfo{Username: m.username}
+	tr.Status.User = authv1.UserInfo{Username: m.username, Extra: m.extra}
 
 	return m.createErr
 }
@@ -151,7 +154,7 @@ func TestInterceptor(t *testing.T) {
 			authenticated: true,
 			createErr:     errors.New("not created"),
 			expErrCode:    codes.Internal,
-			expErrMsg:     "error creating TokenReview",
+			expErrMsg:     "authentication failed",
 		},
 		{
 			name:          "tokenreview created and not authenticated",
@@ -169,7 +172,7 @@ func TestInterceptor(t *testing.T) {
 			authenticated: true,
 			listErr:       errors.New("can't list"),
 			expErrCode:    codes.Internal,
-			expErrMsg:     "error listing pods",
+			expErrMsg:     "authentication failed",
 		},
 		{
 			name:          "invalid username length",
@@ -179,7 +182,7 @@ func TestInterceptor(t *testing.T) {
 			podNamespace:  "default",
 			authenticated: true,
 			expErrCode:    codes.Unauthenticated,
-			expErrMsg:     "must be of the format",
+			expErrMsg:     "invalid authorization",
 		},
 		{
 			name:          "missing system from username",
@@ -189,7 +192,7 @@ func TestInterceptor(t *testing.T) {
 			podNamespace:  "default",
 			authenticated: true,
 			expErrCode:    codes.Unauthenticated,
-			expErrMsg:     "must be of the format",
+			expErrMsg:     "invalid authorization",
 		},
 		{
 			name:          "missing serviceaccount from username",
@@ -199,7 +202,7 @@ func TestInterceptor(t *testing.T) {
 			podNamespace:  "default",
 			authenticated: true,
 			expErrCode:    codes.Unauthenticated,
-			expErrMsg:     "must be of the format",
+			expErrMsg:     "invalid authorization",
 		},
 		{
 			name:          "no running pods times out as Unavailable",
@@ -210,7 +213,7 @@ func TestInterceptor(t *testing.T) {
 			authenticated: true,
 			noRunningPods: true,
 			expErrCode:    codes.Unavailable,
-			expErrMsg:     "no running pods found for service account default/gateway-nginx",
+			expErrMsg:     "agent pod is not ready",
 		},
 	}
 
@@ -250,6 +253,9 @@ func TestInterceptor(t *testing.T) {
 			if test.expErrCode != codes.OK {
 				g.Expect(status.Code(err)).To(Equal(test.expErrCode))
 				g.Expect(err.Error()).To(ContainSubstring(test.expErrMsg))
+				g.Expect(err.Error()).ToNot(ContainSubstring("system:serviceaccount"))
+				g.Expect(err.Error()).ToNot(ContainSubstring("can't list"))
+				g.Expect(err.Error()).ToNot(ContainSubstring("not created"))
 			} else {
 				g.Expect(err).ToNot(HaveOccurred())
 			}
@@ -258,6 +264,9 @@ func TestInterceptor(t *testing.T) {
 			if test.expErrCode != codes.OK {
 				g.Expect(status.Code(err)).To(Equal(test.expErrCode))
 				g.Expect(err.Error()).To(ContainSubstring(test.expErrMsg))
+				g.Expect(err.Error()).ToNot(ContainSubstring("system:serviceaccount"))
+				g.Expect(err.Error()).ToNot(ContainSubstring("can't list"))
+				g.Expect(err.Error()).ToNot(ContainSubstring("not created"))
 			} else {
 				g.Expect(err).ToNot(HaveOccurred())
 			}
@@ -386,7 +395,7 @@ func TestValidateToken_PodListOptions(t *testing.T) {
 			resultCtx, err := csPatched.validateToken(t.Context(), tc.grpcInfo, logr.Discard())
 			if tc.shouldErr {
 				g.Expect(err).To(HaveOccurred())
-				g.Expect(err.Error()).To(ContainSubstring("no running pods"))
+				g.Expect(err.Error()).To(ContainSubstring("agent pod is not ready"))
 				g.Expect(status.Code(err)).To(Equal(codes.Unavailable))
 			} else {
 				g.Expect(err).ToNot(HaveOccurred())
@@ -394,6 +403,65 @@ func TestValidateToken_PodListOptions(t *testing.T) {
 			}
 		})
 	}
+}
+
+type tokenClaimClient struct {
+	client.Client
+	listCalls atomic.Int32
+}
+
+func (t *tokenClaimClient) Create(_ context.Context, obj client.Object, _ ...client.CreateOption) error {
+	tr, ok := obj.(*authv1.TokenReview)
+	if !ok {
+		return errors.New("couldn't convert object to TokenReview")
+	}
+
+	tr.Status.Authenticated = true
+	tr.Status.User = authv1.UserInfo{
+		Username: "system:serviceaccount:default:gateway-nginx",
+		Extra: map[string]authv1.ExtraValue{
+			podNameClaimKey: {"nginx-pod"},
+			podUIDClaimKey:  {"pod-uid"},
+		},
+	}
+
+	return nil
+}
+
+func (t *tokenClaimClient) List(ctx context.Context, obj client.ObjectList, opts ...client.ListOption) error {
+	t.listCalls.Add(1)
+	return t.Client.List(ctx, obj, opts...)
+}
+
+func TestValidateToken_UsesBoundPodClaimsWhenPresent(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "nginx-pod",
+			Namespace: "default",
+			UID:       "pod-uid",
+			Labels: map[string]string{
+				controller.AppNameLabel: "gateway-nginx",
+			},
+		},
+		Spec: corev1.PodSpec{
+			ServiceAccountName: "gateway-nginx",
+		},
+		Status: corev1.PodStatus{Phase: corev1.PodRunning},
+	}
+
+	fakeClient := fake.NewClientBuilder().WithObjects(pod).Build()
+	claimClient := &tokenClaimClient{Client: fakeClient}
+
+	cs := NewContextSetter(claimClient, "ngf-audience")
+	cs.podCheck = PodCheckRetry{PollInterval: time.Millisecond, Timeout: time.Second}
+
+	resultCtx, err := cs.validateToken(t.Context(), &grpcContext.GrpcInfo{Token: "dummy-token"}, logr.Discard())
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(resultCtx).ToNot(BeNil())
+	g.Expect(claimClient.listCalls.Load()).To(Equal(int32(0)))
 }
 
 // retryListClient simulates the cache race where a Pod listing returns no

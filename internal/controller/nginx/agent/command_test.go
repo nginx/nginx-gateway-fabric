@@ -208,6 +208,62 @@ func TestCreateConnection(t *testing.T) {
 			},
 			errString: "error getting pod owner",
 		},
+		{
+			name: "error getting pod owner when labels are split across structs",
+			ctx:  createGrpcContext(t),
+			request: &pb.CreateConnectionRequest{
+				Resource: &pb.Resource{
+					Info: &pb.Resource_ContainerInfo{
+						ContainerInfo: &pb.ContainerInfo{
+							Hostname: "nginx-pod",
+						},
+					},
+					Instances: []*pb.Instance{
+						{
+							InstanceMeta: &pb.InstanceMeta{
+								InstanceId:   "nginx-id",
+								InstanceType: pb.InstanceMeta_INSTANCE_TYPE_NGINX,
+							},
+						},
+						{
+							InstanceMeta: &pb.InstanceMeta{
+								InstanceType: pb.InstanceMeta_INSTANCE_TYPE_AGENT,
+							},
+							InstanceConfig: &pb.InstanceConfig{
+								Config: &pb.InstanceConfig_AgentConfig{
+									AgentConfig: &pb.AgentConfig{
+										Labels: []*structpb.Struct{
+											{
+												Fields: map[string]*structpb.Value{
+													nginxTypes.AgentOwnerNameLabel: {
+														Kind: &structpb.Value_StringValue{StringValue: "test_nginx-deployment"},
+													},
+												},
+											},
+											{
+												Fields: map[string]*structpb.Value{
+													nginxTypes.AgentOwnerTypeLabel: {
+														Kind: &structpb.Value_StringValue{StringValue: nginxTypes.DeploymentType},
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			response: &pb.CreateConnectionResponse{
+				Response: &pb.CommandResponse{
+					Status:  pb.CommandResponse_COMMAND_STATUS_ERROR,
+					Message: "error getting pod owner",
+					Error:   "agent labels missing",
+				},
+			},
+			errString: "error getting pod owner",
+		},
 	}
 
 	for _, test := range tests {

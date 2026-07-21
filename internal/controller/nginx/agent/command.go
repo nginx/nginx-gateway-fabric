@@ -186,7 +186,7 @@ func (cs *commandService) Subscribe(in pb.CommandService_SubscribeServer) error 
 	deployment.FileLock.RUnlock()
 	defer broadcaster.CancelSubscription(channels.ID)
 
-	var pendingBroadcastRequest *broadcast.NginxAgentMessage
+	pendingBroadcastRequest := false
 
 	for {
 		// When a message is received over the ListenCh, it is assumed and required that the
@@ -198,12 +198,14 @@ func (cs *commandService) Subscribe(in pb.CommandService_SubscribeServer) error 
 		// which releases the lock.
 		select {
 		case <-ctx.Done():
-			select {
-			case channels.ResponseCh <- struct{}{}:
-			default:
+			if pendingBroadcastRequest {
+				trySignalBroadcastResponse(channels.ResponseCh)
 			}
 			return grpcStatus.Error(codes.Canceled, context.Cause(ctx).Error())
 		case <-cs.resetConnChan:
+			if pendingBroadcastRequest {
+				trySignalBroadcastResponse(channels.ResponseCh)
+			}
 			return grpcStatus.Error(codes.Unavailable, "TLS files updated")
 		case msg := <-channels.ListenCh:
 			var req *pb.ManagementPlaneRequest
@@ -232,22 +234,19 @@ func (cs *commandService) Subscribe(in pb.CommandService_SubscribeServer) error 
 			if err := msgr.Send(ctx, req); err != nil {
 				cs.logger.Error(err, "error sending request to agent")
 				deployment.SetPodErrorStatus(grpcInfo.UUID, err)
-				channels.ResponseCh <- struct{}{}
+				trySignalBroadcastResponse(channels.ResponseCh)
 
 				return grpcStatus.Error(codes.Internal, err.Error())
 			}
 
 			// Track this broadcast request to distinguish it from initial config operations.
 			// Only broadcast operations should signal ResponseCh for coordination.
-			pendingBroadcastRequest = &msg
+			pendingBroadcastRequest = true
 		case err = <-msgr.Errors():
 			cs.logger.Error(err, "connection error", conn.ParentType, conn.ParentName, "uuid", grpcInfo.UUID)
 			deployment.SetPodErrorStatus(grpcInfo.UUID, err)
-			select {
-			case channels.ResponseCh <- struct{}{}:
-			default:
-			}
-			if pendingBroadcastRequest != nil {
+			if pendingBroadcastRequest {
+				trySignalBroadcastResponse(channels.ResponseCh)
 				cs.logger.V(1).Info("Connection error during pending request, operation failed", "uuid", grpcInfo.UUID)
 			}
 
@@ -270,9 +269,9 @@ func (cs *commandService) Subscribe(in pb.CommandService_SubscribeServer) error 
 
 			// Signal broadcast completion only for tracked broadcast operations.
 			// Initial config responses are ignored to prevent spurious success messages.
-			if pendingBroadcastRequest != nil {
-				pendingBroadcastRequest = nil
-				channels.ResponseCh <- struct{}{}
+			if pendingBroadcastRequest {
+				signalBroadcastResponse(ctx, channels.ResponseCh)
+				pendingBroadcastRequest = false
 			} else {
 				cs.logger.V(1).Info(
 					"Received response for non-broadcast request (likely initial config)",
@@ -281,6 +280,20 @@ func (cs *commandService) Subscribe(in pb.CommandService_SubscribeServer) error 
 				)
 			}
 		}
+	}
+}
+
+func trySignalBroadcastResponse(responseCh chan<- struct{}) {
+	select {
+	case responseCh <- struct{}{}:
+	default:
+	}
+}
+
+func signalBroadcastResponse(ctx context.Context, responseCh chan<- struct{}) {
+	select {
+	case responseCh <- struct{}{}:
+	case <-ctx.Done():
 	}
 }
 
@@ -327,7 +340,7 @@ func (cs *commandService) setInitialConfig(
 	conn *agentgrpc.Connection,
 	msgr messenger.Messenger,
 ) error {
-	if err := cs.validatePodImageVersion(conn.ParentName, conn.ParentType, deployment.imageVersion); err != nil {
+	if err := cs.validatePodImageVersion(ctx, conn.ParentName, conn.ParentType, deployment.imageVersion); err != nil {
 		cs.logAndSendErrorStatus(grpcInfo, deployment, conn, err)
 		return grpcStatus.Errorf(codes.FailedPrecondition, "nginx image version validation failed: %s", err.Error())
 	}
@@ -515,6 +528,7 @@ func buildPlusAPIRequest(action *pb.NGINXPlusAction, instanceID string) *pb.Mana
 // validatePodImageVersion checks if the pod's nginx container image version matches the expected version
 // from its deployment. Returns an error if versions don't match.
 func (cs *commandService) validatePodImageVersion(
+	ctx context.Context,
 	parent types.NamespacedName,
 	parentType string,
 	expectedImage string,
@@ -531,7 +545,7 @@ func (cs *commandService) validatePodImageVersion(
 		return "", false
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
 	switch parentType {
@@ -607,6 +621,7 @@ func getNginxInstanceID(instances []*pb.Instance) string {
 func getAgentDeploymentNameAndType(instances []*pb.Instance) (types.NamespacedName, string) {
 	var nsName types.NamespacedName
 	var depType string
+	found := false
 
 	for _, instance := range instances {
 		instanceType := instance.GetInstanceMeta().GetInstanceType()
@@ -616,15 +631,30 @@ func getAgentDeploymentNameAndType(instances []*pb.Instance) (types.NamespacedNa
 			for _, label := range labels {
 				fields := label.GetFields()
 
-				if val, ok := fields[nginxTypes.AgentOwnerNameLabel]; ok {
-					fullName := val.GetStringValue()
-					parts := strings.SplitN(fullName, "_", 2)
-					if len(parts) == 2 {
-						nsName = types.NamespacedName{Namespace: parts[0], Name: parts[1]}
-					}
+				nameVal, hasName := fields[nginxTypes.AgentOwnerNameLabel]
+				typeVal, hasType := fields[nginxTypes.AgentOwnerTypeLabel]
+				if !hasName || !hasType {
+					continue
 				}
-				if val, ok := fields[nginxTypes.AgentOwnerTypeLabel]; ok {
-					depType = val.GetStringValue()
+
+				fullName := nameVal.GetStringValue()
+				parts := strings.SplitN(fullName, "_", 2)
+				if len(parts) != 2 {
+					continue
+				}
+
+				candidateName := types.NamespacedName{Namespace: parts[0], Name: parts[1]}
+				candidateType := typeVal.GetStringValue()
+
+				if !found {
+					nsName = candidateName
+					depType = candidateType
+					found = true
+					continue
+				}
+
+				if nsName != candidateName || depType != candidateType {
+					return types.NamespacedName{}, ""
 				}
 			}
 		}

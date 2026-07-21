@@ -2,6 +2,7 @@ package agent
 
 import (
 	"errors"
+	"sync"
 	"testing"
 
 	pb "github.com/nginx/agent/v3/api/grpc/mpi/v1"
@@ -241,6 +242,42 @@ func TestSetLatestUpstreamError(t *testing.T) {
 	err := errors.New("test error")
 	deployment.SetLatestUpstreamError(err)
 	g.Expect(deployment.GetLatestUpstreamError()).To(MatchError(err))
+}
+
+func TestDeploymentStore_GetOrStore_Concurrent(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	depStore := NewDeploymentStore(&agentgrpcfakes.FakeConnectionsTracker{})
+	nsName := types.NamespacedName{Name: "nginx", Namespace: "default"}
+
+	const goroutines = 25
+	results := make(chan *Deployment, goroutines)
+
+	var wg sync.WaitGroup
+	for range goroutines {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			results <- depStore.GetOrStore(t.Context(), nsName, "gateway")
+		}()
+	}
+
+	wg.Wait()
+	close(results)
+
+	var first *Deployment
+	for dep := range results {
+		if first == nil {
+			first = dep
+			continue
+		}
+
+		g.Expect(dep).To(BeIdenticalTo(first))
+	}
+
+	stored := depStore.Get(nsName)
+	g.Expect(stored).To(BeIdenticalTo(first))
 }
 
 func TestUpdateWAFBundle(t *testing.T) {

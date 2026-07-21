@@ -2,7 +2,12 @@ package filewatcher
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"os"
+	"path/filepath"
+	"sort"
 	"sync/atomic"
 	"time"
 
@@ -22,8 +27,10 @@ type FileWatcher struct {
 	filesChanged *atomic.Bool
 	watcher      *fsnotify.Watcher
 	notifyCh     chan<- struct{}
+	fileHashes   map[string]string
 	logger       logr.Logger
 	filesToWatch []string
+	pathsToWatch []string
 	interval     time.Duration
 }
 
@@ -41,6 +48,8 @@ func NewFileWatcher(logger logr.Logger, files []string, notifyCh chan<- struct{}
 		watcher:      watcher,
 		logger:       logger,
 		filesToWatch: files,
+		pathsToWatch: buildPathsToWatch(files),
+		fileHashes:   make(map[string]string, len(files)),
 		notifyCh:     notifyCh,
 		interval:     monitoringInterval,
 	}, nil
@@ -51,9 +60,13 @@ func (w *FileWatcher) Watch(ctx context.Context) {
 	w.logger.V(1).Info("Starting file watcher")
 
 	ticker := time.NewTicker(w.interval)
-	for _, file := range w.filesToWatch {
-		w.addWatcher(file)
+	defer ticker.Stop()
+
+	for _, watchPath := range w.pathsToWatch {
+		w.addWatcherWithRetry(ctx, watchPath)
 	}
+
+	w.snapshotFileHashes()
 
 	for {
 		select {
@@ -74,7 +87,32 @@ func (w *FileWatcher) Watch(ctx context.Context) {
 
 func (w *FileWatcher) addWatcher(path string) {
 	if err := w.watcher.Add(path); err != nil {
-		w.logger.Error(err, "failed to watch file", "file", path)
+		w.logger.Error(err, "failed to watch path", "path", path)
+	}
+}
+
+func (w *FileWatcher) addWatcherWithRetry(ctx context.Context, path string) {
+	backoff := 100 * time.Millisecond
+	for attempt := 1; ; attempt++ {
+		if err := w.watcher.Add(path); err != nil {
+			if attempt >= 5 {
+				w.logger.Error(err, "failed to watch path after retries", "path", path, "attempts", attempt)
+				return
+			}
+
+			w.logger.Error(err, "failed to watch path, retrying", "path", path, "attempt", attempt)
+
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(backoff):
+			}
+
+			backoff *= 2
+			continue
+		}
+
+		return
 	}
 }
 
@@ -84,18 +122,70 @@ func (w *FileWatcher) handleEvent(event fsnotify.Event) {
 	}
 
 	if event.Has(fsnotify.Remove) || event.Has(fsnotify.Rename) {
-		w.addWatcher(event.Name)
+		w.addWatcher(filepath.Dir(event.Name))
 	}
 
 	w.filesChanged.Store(true)
 }
 
 func (w *FileWatcher) checkForUpdates() {
+	if w.didFileHashesChange() {
+		w.filesChanged.Store(true)
+	}
+
 	if w.filesChanged.Load() {
 		w.logger.Info("TLS files changed, sending notification to reset nginx agent connections")
 		w.notifyCh <- struct{}{}
 		w.filesChanged.Store(false)
 	}
+}
+
+func (w *FileWatcher) snapshotFileHashes() {
+	for _, file := range w.filesToWatch {
+		w.fileHashes[file] = hashFileContents(file)
+	}
+}
+
+func (w *FileWatcher) didFileHashesChange() bool {
+	changed := false
+	for _, file := range w.filesToWatch {
+		currentHash := hashFileContents(file)
+		if prevHash, ok := w.fileHashes[file]; !ok || prevHash != currentHash {
+			w.fileHashes[file] = currentHash
+			changed = true
+		}
+	}
+
+	return changed
+}
+
+func buildPathsToWatch(files []string) []string {
+	set := make(map[string]struct{}, len(files))
+	for _, file := range files {
+		dir := filepath.Dir(file)
+		if dir == "." {
+			dir = file
+		}
+		set[dir] = struct{}{}
+	}
+
+	paths := make([]string, 0, len(set))
+	for path := range set {
+		paths = append(paths, path)
+	}
+
+	sort.Strings(paths)
+	return paths
+}
+
+func hashFileContents(path string) string {
+	contents, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Sprintf("read-error:%v", err)
+	}
+
+	hash := sha256.Sum256(contents)
+	return hex.EncodeToString(hash[:])
 }
 
 func isEventSkippable(event fsnotify.Event) bool {
