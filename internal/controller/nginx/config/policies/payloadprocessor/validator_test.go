@@ -72,7 +72,7 @@ func TestValidator_Validate(t *testing.T) {
 				return p
 			}(),
 			expConditions: []conditions.Condition{
-				conditions.NewPolicyInvalid("at least one processor must be specified"),
+				conditions.NewPolicyInvalid("spec.processors: Required value: at least one processor must be specified"),
 			},
 		},
 		{
@@ -83,7 +83,8 @@ func TestValidator_Validate(t *testing.T) {
 				return p
 			}(),
 			expConditions: []conditions.Condition{
-				conditions.NewPolicyInvalid("processor type must be ExtProcess"),
+				conditions.NewPolicyInvalid("spec.processors[0].type: Unsupported value: \"\": " +
+					"supported values: \"ExtProcess\""),
 			},
 		},
 		{
@@ -94,7 +95,8 @@ func TestValidator_Validate(t *testing.T) {
 				return p
 			}(),
 			expConditions: []conditions.Condition{
-				conditions.NewPolicyInvalid("processor extProcess must be set when type is ExtProcess"),
+				conditions.NewPolicyInvalid("spec.processors[0].extProcess: Required value: " +
+					"extProcess must be set when type is ExtProcess"),
 			},
 		},
 		{
@@ -105,7 +107,7 @@ func TestValidator_Validate(t *testing.T) {
 				return p
 			}(),
 			expConditions: []conditions.Condition{
-				conditions.NewPolicyInvalid("processor extProcess.backendRef.name must be set"),
+				conditions.NewPolicyInvalid("spec.processors[0].extProcess.backendRef.name: Required value: name must be set"),
 			},
 		},
 		{
@@ -116,7 +118,8 @@ func TestValidator_Validate(t *testing.T) {
 				return p
 			}(),
 			expConditions: []conditions.Condition{
-				conditions.NewPolicyInvalid("processor extProcess.backendRef.group must be core"),
+				conditions.NewPolicyInvalid("spec.processors[0].extProcess.backendRef.group: " +
+					"Unsupported value: \"invalid.group\": supported values: \"core\""),
 			},
 		},
 		{
@@ -127,7 +130,8 @@ func TestValidator_Validate(t *testing.T) {
 				return p
 			}(),
 			expConditions: []conditions.Condition{
-				conditions.NewPolicyInvalid("processor extProcess.backendRef.kind must be Service"),
+				conditions.NewPolicyInvalid("spec.processors[0].extProcess.backendRef.kind: " +
+					"Unsupported value: \"Secret\": supported values: \"Service\""),
 			},
 		},
 		{
@@ -138,7 +142,7 @@ func TestValidator_Validate(t *testing.T) {
 				return p
 			}(),
 			expConditions: []conditions.Condition{
-				conditions.NewPolicyInvalid("processor extProcess.backendRef.port must be set"),
+				conditions.NewPolicyInvalid("spec.processors[0].extProcess.backendRef.port: Required value: port must be set"),
 			},
 		},
 		{
@@ -149,7 +153,8 @@ func TestValidator_Validate(t *testing.T) {
 				return p
 			}(),
 			expConditions: []conditions.Condition{
-				conditions.NewPolicyInvalid("processor extProcess.backendRef.port must be a valid TCP port"),
+				conditions.NewPolicyInvalid("spec.processors[0].extProcess.backendRef.port: " +
+					"Invalid value: 0: port must be a valid TCP port (1-65535)"),
 			},
 		},
 	}
