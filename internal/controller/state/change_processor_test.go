@@ -2,6 +2,7 @@ package state
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/go-logr/logr"
@@ -4474,4 +4475,40 @@ func TestMergedWAFBundles(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestGetLatestGraphReturnsSnapshot(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	gatewayNsName := types.NamespacedName{Namespace: "default", Name: "gw"}
+	policyKey := graph.PolicyKey{NsName: types.NamespacedName{Namespace: "default", Name: "pol"}}
+	processor := &ChangeProcessorImpl{
+		latestGraph: &graph.Graph{
+			Gateways: map[types.NamespacedName]*graph.Gateway{
+				gatewayNsName: {
+					Source: &v1.Gateway{ObjectMeta: metav1.ObjectMeta{Name: "gw", Namespace: "default"}},
+					Listeners: []*graph.Listener{{
+						Conditions: []conditions.Condition{{Type: string(v1.ListenerConditionAccepted)}},
+					}},
+				},
+			},
+			NGFPolicies: map[graph.PolicyKey]*graph.Policy{
+				policyKey: {
+					Conditions: []conditions.Condition{{Type: string(v1.RouteConditionAccepted)}},
+				},
+			},
+		},
+	}
+
+	snapshot := processor.GetLatestGraph()
+	snapshot.Gateways[gatewayNsName].LatestReloadResult.Error = errors.New("mutated")
+	snapshot.Gateways[gatewayNsName].Listeners[0].Conditions[0].Type = "Changed"
+	snapshot.NGFPolicies[policyKey].Conditions[0].Type = "Changed"
+
+	latest := processor.GetLatestGraph()
+	g.Expect(latest.Gateways[gatewayNsName].LatestReloadResult.Error).ToNot(HaveOccurred())
+	g.Expect(latest.Gateways[gatewayNsName].Listeners[0].Conditions[0].Type).
+		To(Equal(string(v1.ListenerConditionAccepted)))
+	g.Expect(latest.NGFPolicies[policyKey].Conditions[0].Type).To(Equal(string(v1.RouteConditionAccepted)))
 }

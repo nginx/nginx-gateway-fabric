@@ -8,8 +8,10 @@ import (
 	"testing"
 
 	"github.com/go-logr/logr"
+	pb "github.com/nginx/agent/v3/api/grpc/mpi/v1"
 	. "github.com/onsi/gomega"
 
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/configfakes"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/file"
@@ -102,8 +104,22 @@ func TestInitialize_Plus(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			fakeFileMgr := &filefakes.FakeOSFileManager{}
+			fakeFileMgr := &filefakes.FakeOSFileManager{
+				OpenStub: func(_ string) (*os.File, error) {
+					return os.CreateTemp(t.TempDir(), "initialize-open-*")
+				},
+				CreateStub: func(_ string) (*os.File, error) {
+					return os.CreateTemp(t.TempDir(), "initialize-create-*")
+				},
+			}
 			fakeGenerator := &configfakes.FakeGenerator{}
+			fakeGenerator.GenerateDeploymentContextReturns(agent.File{
+				Meta: &pb.FileMeta{
+					Name:        "/etc/nginx/main-includes/deployment_ctx.json",
+					Permissions: file.RegularFileMode,
+				},
+				Contents: []byte(`{"integration":"ngf"}`),
+			}, nil)
 
 			ic := initializeConfig{
 				fileManager:   fakeFileMgr,

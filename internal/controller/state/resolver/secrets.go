@@ -77,7 +77,7 @@ func (s *secretEntry) validate(obj client.Object) {
 }
 
 func (s *secretEntry) needsRevalidation(opts *resolveOptions) bool {
-	return opts.expectedSecretKey != "" && opts.expectedSecretKey != s.expectedKey
+	return opts.expectedSecretKey != s.expectedKey
 }
 
 // revalidate re-validates the secret against new resolve options.

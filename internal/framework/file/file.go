@@ -66,15 +66,13 @@ type OSFileManager interface {
 	Copy(dst io.Writer, src io.Reader) error
 }
 
-func Write(fileMgr OSFileManager, file File) error {
+func Write(fileMgr OSFileManager, file File) (resultErr error) {
 	ensureType(file.Type)
 
 	f, err := fileMgr.Create(file.Path)
 	if err != nil {
 		return fmt.Errorf("failed to create file %q: %w", file.Path, err)
 	}
-
-	var resultErr error
 
 	defer func() {
 		if err := f.Close(); err != nil {
@@ -113,9 +111,9 @@ func ensureType(fileType Type) {
 }
 
 // Convert an agent File to an internal File type.
-func Convert(agentFile agent.File) File {
+func Convert(agentFile agent.File) (File, error) {
 	if agentFile.Meta == nil {
-		return File{}
+		return File{}, errors.New("agent file metadata is required")
 	}
 
 	var t Type
@@ -124,11 +122,13 @@ func Convert(agentFile agent.File) File {
 		t = TypeRegular
 	case SecretFileMode:
 		t = TypeSecret
+	default:
+		return File{}, fmt.Errorf("unknown file permissions %q", agentFile.Meta.Permissions)
 	}
 
 	return File{
 		Content: agentFile.Contents,
 		Path:    agentFile.Meta.Name,
 		Type:    t,
-	}
+	}, nil
 }

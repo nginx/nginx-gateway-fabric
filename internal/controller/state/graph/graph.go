@@ -3,6 +3,8 @@ package graph
 import (
 	"context"
 	"fmt"
+	"maps"
+	"slices"
 
 	"github.com/go-logr/logr"
 	v1 "k8s.io/api/core/v1"
@@ -109,6 +111,89 @@ type Graph struct {
 	// PLMSecrets holds the PLM S3 storage secrets, keyed by NamespacedName with the configured roles as value.
 	// Used by IsReferenced to ensure PLM secrets trigger graph rebuilds when updated.
 	PLMSecrets map[types.NamespacedName][]PLMRole
+}
+
+// Snapshot returns a defensive copy of the graph for read-only consumers.
+// It clones top-level maps and the gateway/policy/listener objects that status processing mutates.
+func (g *Graph) Snapshot() *Graph {
+	if g == nil {
+		return nil
+	}
+
+	clone := *g
+	clone.Gateways = cloneGateways(g.Gateways)
+	clone.NGFPolicies = clonePolicies(g.NGFPolicies)
+
+	return &clone
+}
+
+func cloneGateways(src map[types.NamespacedName]*Gateway) map[types.NamespacedName]*Gateway {
+	if src == nil {
+		return nil
+	}
+
+	cloned := make(map[types.NamespacedName]*Gateway, len(src))
+	for key, gateway := range src {
+		if gateway == nil {
+			cloned[key] = nil
+			continue
+		}
+
+		gatewayCopy := *gateway
+		gatewayCopy.AttachedListenerSets = maps.Clone(gateway.AttachedListenerSets)
+		gatewayCopy.Listeners = cloneListeners(gateway.Listeners)
+		gatewayCopy.Conditions = slices.Clone(gateway.Conditions)
+		gatewayCopy.Policies = slices.Clone(gateway.Policies)
+		cloned[key] = &gatewayCopy
+	}
+
+	return cloned
+}
+
+func cloneListeners(src []*Listener) []*Listener {
+	if src == nil {
+		return nil
+	}
+
+	cloned := make([]*Listener, 0, len(src))
+	for _, listener := range src {
+		if listener == nil {
+			cloned = append(cloned, nil)
+			continue
+		}
+
+		listenerCopy := *listener
+		listenerCopy.Conditions = slices.Clone(listener.Conditions)
+		listenerCopy.CACertificateRefs = slices.Clone(listener.CACertificateRefs)
+		listenerCopy.ResolvedSecrets = slices.Clone(listener.ResolvedSecrets)
+		listenerCopy.SupportedKinds = slices.Clone(listener.SupportedKinds)
+		cloned = append(cloned, &listenerCopy)
+	}
+
+	return cloned
+}
+
+func clonePolicies(src map[PolicyKey]*Policy) map[PolicyKey]*Policy {
+	if src == nil {
+		return nil
+	}
+
+	cloned := make(map[PolicyKey]*Policy, len(src))
+	for key, policy := range src {
+		if policy == nil {
+			cloned[key] = nil
+			continue
+		}
+
+		policyCopy := *policy
+		policyCopy.InvalidForGateways = maps.Clone(policy.InvalidForGateways)
+		policyCopy.Ancestors = slices.Clone(policy.Ancestors)
+		policyCopy.TargetRefs = slices.Clone(policy.TargetRefs)
+		policyCopy.Conditions = slices.Clone(policy.Conditions)
+		cloned[key] = &policyCopy
+	}
+
+	return cloned
 }
 
 // NginxReloadResult describes the result of an NGINX reload.

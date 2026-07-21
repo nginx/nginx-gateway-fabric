@@ -117,6 +117,27 @@ var _ = Describe("Write files", Ordered, func() {
 			errTest = errors.New("test error")
 		)
 
+		It("returns a close error from the deferred close path", func() {
+			tmpFile, err := os.CreateTemp(GinkgoT().TempDir(), "close-error-*.conf")
+			Expect(err).ToNot(HaveOccurred())
+
+			mgr := &filefakes.FakeOSFileManager{
+				CreateStub: func(_ string) (*os.File, error) {
+					return tmpFile, nil
+				},
+				ChmodStub: func(_ *os.File, _ os.FileMode) error {
+					return nil
+				},
+				WriteStub: func(file *os.File, _ []byte) error {
+					return file.Close()
+				},
+			}
+
+			err = file.Write(mgr, files[0])
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("failed to close file"))
+		})
+
 		DescribeTable(
 			"should return error on file IO error",
 			func(fakeOSMgr *filefakes.FakeOSFileManager) {
@@ -182,7 +203,30 @@ var _ = Describe("Write files", Ordered, func() {
 			Type:    file.TypeSecret,
 		}
 
-		Expect(file.Convert(agentFile)).To(Equal(expFile))
-		Expect(file.Convert(secretAgentFile)).To(Equal(expSecretFile))
+		convertedFile, err := file.Convert(agentFile)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(convertedFile).To(Equal(expFile))
+
+		convertedSecretFile, err := file.Convert(secretAgentFile)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(convertedSecretFile).To(Equal(expSecretFile))
+	})
+
+	It("rejects agent files with unsupported permissions", func() {
+		_, err := file.Convert(agent.File{
+			Contents: []byte("file contents"),
+			Meta: &pb.FileMeta{
+				Name:        "invalid-file",
+				Permissions: "0600",
+			},
+		})
+
+		Expect(err).To(MatchError("unknown file permissions \"0600\""))
+	})
+
+	It("rejects agent files without metadata", func() {
+		_, err := file.Convert(agent.File{})
+
+		Expect(err).To(MatchError("agent file metadata is required"))
 	})
 })

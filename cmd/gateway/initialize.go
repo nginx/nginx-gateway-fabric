@@ -54,7 +54,12 @@ func initialize(cfg initializeConfig) error {
 		return fmt.Errorf("failed to generate deployment context file: %w", err)
 	}
 
-	if err := file.Write(cfg.fileManager, file.Convert(depCtxFile)); err != nil {
+	convertedFile, err := file.Convert(depCtxFile)
+	if err != nil {
+		return fmt.Errorf("failed to convert deployment context file: %w", err)
+	}
+
+	if err := file.Write(cfg.fileManager, convertedFile); err != nil {
 		return fmt.Errorf("failed to write deployment context file: %w", err)
 	}
 
