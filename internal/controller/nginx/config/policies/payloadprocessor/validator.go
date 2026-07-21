@@ -7,6 +7,7 @@ import (
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/validation"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
@@ -22,10 +23,14 @@ const (
 
 // Validator validates a PayloadProcessor policy.
 // Implements policies.Validator interface.
-type Validator struct{}
+type Validator struct {
+	genericValidator validation.GenericValidator
+}
 
 // NewValidator returns a new Validator.
-func NewValidator() *Validator { return &Validator{} }
+func NewValidator(genericValidator validation.GenericValidator) *Validator {
+	return &Validator{genericValidator: genericValidator}
+}
 
 // Validate validates the spec of a PayloadProcessor.
 func (v *Validator) Validate(policy policies.Policy) []conditions.Condition {
@@ -42,7 +47,7 @@ func (v *Validator) Validate(policy policies.Policy) []conditions.Condition {
 		return []conditions.Condition{conditions.NewPolicyInvalid(err.Error())}
 	}
 
-	if err := validateProcessors(pp.Spec.Processors, specPath.Child("processors")); err != nil {
+	if err := v.validateProcessors(pp.Spec.Processors, specPath.Child("processors")); err != nil {
 		return []conditions.Condition{conditions.NewPolicyInvalid(err.Error())}
 	}
 
@@ -50,19 +55,32 @@ func (v *Validator) Validate(policy policies.Policy) []conditions.Condition {
 }
 
 // validateProcessors validates the list of processor entries.
-func validateProcessors(processors []ngfAPI.PayloadProcessorEntry, processorsPath *field.Path) error {
+func (v *Validator) validateProcessors(processors []ngfAPI.PayloadProcessorEntry, processorsPath *field.Path) error {
 	var allErrs field.ErrorList
 
 	for i, processor := range processors {
-		allErrs = append(allErrs, validateProcessor(processor, processorsPath.Index(i))...)
+		allErrs = append(allErrs, v.validateProcessor(processor, processorsPath.Index(i))...)
 	}
 
 	return allErrs.ToAggregate()
 }
 
 // validateProcessor validates a single processor entry.
-func validateProcessor(processor ngfAPI.PayloadProcessorEntry, processorPath *field.Path) field.ErrorList {
+func (v *Validator) validateProcessor(
+	processor ngfAPI.PayloadProcessorEntry,
+	processorPath *field.Path,
+) field.ErrorList {
 	var allErrs field.ErrorList
+
+	if processor.Timeout != nil {
+		if err := v.genericValidator.ValidateNginxDuration(string(*processor.Timeout)); err != nil {
+			allErrs = append(allErrs, field.Invalid(
+				processorPath.Child("timeout"),
+				*processor.Timeout,
+				err.Error(),
+			))
+		}
+	}
 
 	typePath := processorPath.Child("type")
 	if processor.Type != ngfAPI.ProcessorTypeExtProcess {

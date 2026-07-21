@@ -508,7 +508,7 @@ func createPolicyManager(
 	if cfg.PayloadProcessor {
 		cfgs = append(cfgs, policies.ManagerConfig{
 			GVK:       mustExtractGVK(&ngfAPIv1alpha1.PayloadProcessor{}),
-			Validator: payloadprocessor.NewValidator(),
+			Validator: payloadprocessor.NewValidator(validator),
 		})
 	}
 

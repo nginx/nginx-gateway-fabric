@@ -9,6 +9,7 @@ import (
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/payloadprocessor"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/validation"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
@@ -123,9 +124,32 @@ func TestValidator_Validate(t *testing.T) {
 					"Invalid value: 0: port must be a valid TCP port (1-65535)"),
 			},
 		},
+		{
+			name: "valid timeout",
+			policy: func() *ngfAPI.PayloadProcessor {
+				p := createValidPolicy()
+				p.Spec.Processors[0].Timeout = helpers.GetPointer[ngfAPI.Duration]("30s")
+				return p
+			}(),
+			expConditions: nil,
+		},
+		{
+			name: "invalid timeout",
+			policy: func() *ngfAPI.PayloadProcessor {
+				p := createValidPolicy()
+				p.Spec.Processors[0].Timeout = helpers.GetPointer[ngfAPI.Duration]("invalid")
+				return p
+			}(),
+			expConditions: []conditions.Condition{
+				conditions.NewPolicyInvalid("spec.processors[0].timeout: Invalid value: \"invalid\": " +
+					"^[0-9]{1,4}(ms|s|m|h)? (e.g. '5ms',  or '10s',  or '500m',  or '1000h', " +
+					"regex used for validation is 'must contain an, at most, four digit number " +
+					"followed by 'ms', 's', 'm', or 'h'')"),
+			},
+		},
 	}
 
-	validator := payloadprocessor.NewValidator()
+	validator := payloadprocessor.NewValidator(validation.GenericValidator{})
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -141,7 +165,7 @@ func TestValidator_ValidateGlobalSettings(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	validator := payloadprocessor.NewValidator()
+	validator := payloadprocessor.NewValidator(validation.GenericValidator{})
 	pol := createValidPolicy()
 
 	// PayloadProcessor has no global settings gating.
@@ -152,7 +176,7 @@ func TestValidator_Conflicts(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	validator := payloadprocessor.NewValidator()
+	validator := payloadprocessor.NewValidator(validation.GenericValidator{})
 	pol1 := createValidPolicy()
 	pol2 := createValidPolicy()
 
