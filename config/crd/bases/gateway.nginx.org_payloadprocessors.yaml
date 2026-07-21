@@ -169,9 +169,11 @@ spec:
                       - ExtProcess
                       type: string
                   required:
-                  - extProcess
                   - type
                   type: object
+                  x-kubernetes-validations:
+                  - message: extProcess must be set when type is ExtProcess
+                    rule: self.type != 'ExtProcess' || has(self.extProcess)
                 maxItems: 1
                 minItems: 1
                 type: array

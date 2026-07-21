@@ -69,6 +69,10 @@ const (
 )
 
 // PayloadProcessorEntry defines a single processing step in the pipeline.
+//
+// +kubebuilder:validation:XValidation:message="extProcess must be set when type is ExtProcess",rule="self.type != 'ExtProcess' || has(self.extProcess)"
+//
+//nolint:lll
 type PayloadProcessorEntry struct {
 	// Timeout is the maximum time to wait for the processor to complete processing a request or response.
 	//
@@ -77,13 +81,11 @@ type PayloadProcessorEntry struct {
 
 	// ExtProcess defines the configuration for an ExtProcess processor that delegates to an external service.
 	//
-	// +required
+	// +optional
 	ExtProcess *ExtProcessConfig `json:"extProcess,omitempty"`
 
 	// Type specifies how the processor executes.
 	// ExtProcess calls an external service.
-	//
-	// +required
 	Type ProcessorType `json:"type"`
 }
 

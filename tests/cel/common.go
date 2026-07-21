@@ -134,7 +134,7 @@ const (
 	expectedWAFN1CPolicyVersionIDPatternError    = `^pv_[A-Za-z0-9_-]+$`
 
 	// PayloadProcessor validation errors.
-	expectedProcessorExtProcessRequiredError = "processor must specify ExtProcess"
+	expectedProcessorExtProcessRequiredError = "extProcess must be set when type is ExtProcess"
 	expectedBackendRefNameEmptyError         = "backendRef.name must not be empty"
 	expectedBackendRefKindServiceError       = "backendRef.kind must be Service"
 	expectedBackendRefGroupCoreError         = "backendRef.group must be core"
