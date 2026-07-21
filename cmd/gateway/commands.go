@@ -112,6 +112,7 @@ func createControllerCommand() *cobra.Command {
 		usageReportEnforceInitialReportFlag = "usage-report-enforce-initial-report"
 		snippetsFiltersFlag                 = "snippets-filters"
 		snippetsFlag                        = "snippets"
+		payloadProcessorFlag                = "payload-processor"
 		nginxSCCFlag                        = "nginx-scc"
 		watchNamespacesFlag                 = "watch-namespaces"
 		serverTLSDomainFlag                 = "server-tls-domain"
@@ -179,6 +180,8 @@ func createControllerCommand() *cobra.Command {
 		snippetsFilters      bool
 		snippets             bool
 		externalLoadBalancer bool
+
+		payloadProcessor bool
 
 		plus               bool
 		nginxDockerSecrets = stringSliceValidatingValue{
@@ -334,6 +337,7 @@ func createControllerCommand() *cobra.Command {
 				},
 				SnippetsFilters:        snippetsFilters,
 				Snippets:               snippets,
+				PayloadProcessor:       payloadProcessor,
 				NginxDockerSecretNames: nginxDockerSecrets.values,
 				AgentTLSSecretName:     agentTLSSecretName.value,
 				NGINXSCCName:           nginxSCCName.value,
@@ -585,6 +589,15 @@ func createControllerCommand() *cobra.Command {
 		false,
 		"Enable ExternalLoadBalancer support. Allows for fronting a Gateway with an external load "+
 			"balancer. Supported load balancers: F5 BIG-IP, through F5 Container Ingress Services.",
+	)
+
+	cmd.Flags().BoolVar(
+		&payloadProcessor,
+		payloadProcessorFlag,
+		false,
+		"Enable the PayloadProcessor API. PayloadProcessors enable declarative, ordered processing of HTTP "+
+			"request and response payloads by attaching to a Gateway or HTTPRoute, and are used to implement "+
+			"features such as Guardrails for AI workloads.",
 	)
 
 	cmd.Flags().Var(

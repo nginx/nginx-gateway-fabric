@@ -54,6 +54,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/clientsettings"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/observability"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/payloadprocessor"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/proxysettings"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/ratelimit"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/snippetspolicy"
@@ -187,8 +188,9 @@ func StartManager(cfg config.Config) error {
 			Plus:         cfg.Plus,
 			Experimental: cfg.ExperimentalFeatures,
 		},
-		DiscoveredCRDs: discoveredCRDs,
-		Snippets:       cfg.Snippets,
+		DiscoveredCRDs:   discoveredCRDs,
+		Snippets:         cfg.Snippets,
+		PayloadProcessor: cfg.PayloadProcessor,
 	})
 
 	statusUpdater := status.NewUpdater(
@@ -503,6 +505,13 @@ func createPolicyManager(
 		})
 	}
 
+	if cfg.PayloadProcessor {
+		cfgs = append(cfgs, policies.ManagerConfig{
+			GVK:       mustExtractGVK(&ngfAPIv1alpha1.PayloadProcessor{}),
+			Validator: payloadprocessor.NewValidator(validator),
+		})
+	}
+
 	return policies.NewManager(mustExtractGVK, cfgs...)
 }
 
@@ -759,6 +768,17 @@ func featureFlagControllerCfgs(cfg config.Config) []ctlrCfg {
 		cfgs = append(cfgs,
 			ctlrCfg{
 				objectType: &ngfAPIv1alpha1.SnippetsPolicy{},
+				options: []controller.Option{
+					controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
+				},
+			},
+		)
+	}
+
+	if cfg.PayloadProcessor {
+		cfgs = append(cfgs,
+			ctlrCfg{
+				objectType: &ngfAPIv1alpha1.PayloadProcessor{},
 				options: []controller.Option{
 					controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
 				},
@@ -1370,6 +1390,13 @@ func prepareFirstEventBatchPreparerArgs(
 		objectLists = append(
 			objectLists,
 			&ngfAPIv1alpha1.ExternalLoadBalancerList{},
+		)
+	}
+
+	if cfg.PayloadProcessor {
+		objectLists = append(
+			objectLists,
+			&ngfAPIv1alpha1.PayloadProcessorList{},
 		)
 	}
 
