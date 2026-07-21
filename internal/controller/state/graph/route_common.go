@@ -144,6 +144,11 @@ func (spec *L4RouteSpec) GetBackendRefs() []BackendRef {
 type L7Route struct {
 	// Source is the source Gateway API object of the Route.
 	Source client.Object
+	// EffectivePayloadProcessor is the PayloadProcessor policy that applies to this Route after
+	// resolving Gateway-vs-Route precedence. A PayloadProcessor attached directly to the Route
+	// takes precedence over one attached to the Route's parent Gateway. It is nil if no valid
+	// PayloadProcessor applies to this Route.
+	EffectivePayloadProcessor *Policy
 	// RouteType is the type (http or grpc) of the Route.
 	RouteType RouteType
 	// Spec is the L7RouteSpec of the Route

@@ -123,6 +123,8 @@ const (
 	RateLimitPolicy = "RateLimitPolicy"
 	// WAFPolicy is the WAFPolicy kind.
 	WAFPolicy = "WAFPolicy"
+	// PayloadProcessor is the PayloadProcessor kind.
+	PayloadProcessor = "PayloadProcessor"
 )
 
 // MustExtractGVK is a function that extracts the GroupVersionKind (GVK) of a client.object.

@@ -61,6 +61,8 @@ type Config struct {
 	SnippetsFilters bool
 	// Snippets indicates if Snippets are enabled. This will enable both SnippetsFilter and SnippetsPolicy APIs.
 	Snippets bool
+	// PayloadProcessor indicates if the PayloadProcessor API is enabled. Opt-in; used for features such as Guardrails.
+	PayloadProcessor bool
 	// EndpointPickerDisableTLS indicates if TLS is disabled for EndpointPicker communication.
 	EndpointPickerDisableTLS bool
 	// EndpointPickerTLSSkipVerify indicates if secure verification is skipped for EndpointPicker communication.

@@ -1097,6 +1097,19 @@
           "title": "nodeSelector",
           "type": "object"
         },
+        "payloadProcessor": {
+          "properties": {
+            "enable": {
+              "default": false,
+              "description": "Enable the PayloadProcessor API. PayloadProcessors enable declarative, ordered processing of HTTP request\nand response payloads by attaching to a Gateway or HTTPRoute, and are used to implement features such as\nGuardrails for AI workloads.",
+              "title": "enable",
+              "type": "boolean"
+            }
+          },
+          "required": [],
+          "title": "payloadProcessor",
+          "type": "object"
+        },
         "plmStorage": {
           "description": "Configuration for PLM (Policy Lifecycle Manager) S3-compatible storage.\nRequired when any WAFPolicy uses type: PLM.\nPLM (f5-waf-policy-controller) must be installed separately.",
           "properties": {

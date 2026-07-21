@@ -459,6 +459,7 @@ var _ = Describe("ChangeProcessor", func() {
 				Validators:       createAlwaysValidValidators(),
 				MustExtractGVK:   kinds.NewMustExtractGKV(createScheme()),
 				Snippets:         true,
+				PayloadProcessor: true,
 			})
 		})
 
@@ -3328,7 +3329,9 @@ var _ = Describe("ChangeProcessor", func() {
 				psp, pspUpdated                                         *ngfAPIv1alpha1.ProxySettingsPolicy
 				rlp, rlpUpdated                                         *ngfAPIv1alpha1.RateLimitPolicy
 				waf, wafUpdated                                         *ngfAPIv1alpha1.WAFPolicy
+				pp, ppUpdated                                           *ngfAPIv1alpha1.PayloadProcessor
 				cspKey, obsKey, uspKey, snipKey, pspKey, rlpKey, wafKey graph.PolicyKey
+				ppKey                                                   graph.PolicyKey
 			)
 
 			BeforeAll(func() {
@@ -3581,6 +3584,43 @@ var _ = Describe("ChangeProcessor", func() {
 						Version: "v1alpha1",
 					},
 				}
+
+				pp = &ngfAPIv1alpha1.PayloadProcessor{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "pp",
+						Namespace: "test",
+					},
+					Spec: ngfAPIv1alpha1.PayloadProcessorSpec{
+						TargetRef: v1.LocalPolicyTargetReference{
+							Group: v1.GroupName,
+							Kind:  kinds.Gateway,
+							Name:  "gw",
+						},
+						Processors: []ngfAPIv1alpha1.PayloadProcessorEntry{
+							{
+								Type: ngfAPIv1alpha1.ProcessorTypeExtProcess,
+								ExtProcess: &ngfAPIv1alpha1.ExtProcessConfig{
+									BackendRef: v1.BackendObjectReference{
+										Name: "ext-svc",
+										Port: helpers.GetPointer[v1.PortNumber](9000),
+									},
+								},
+							},
+						},
+					},
+				}
+
+				ppUpdated = pp.DeepCopy()
+				ppUpdated.Spec.Processors[0].ExtProcess.BackendRef.Port = helpers.GetPointer[v1.PortNumber](9001)
+
+				ppKey = graph.PolicyKey{
+					NsName: types.NamespacedName{Name: "pp", Namespace: "test"},
+					GVK: schema.GroupVersionKind{
+						Group:   ngfAPIv1alpha1.GroupName,
+						Kind:    kinds.PayloadProcessor,
+						Version: "v1alpha1",
+					},
+				}
 			})
 
 			/*
@@ -3598,6 +3638,7 @@ var _ = Describe("ChangeProcessor", func() {
 					processor.CaptureUpsertChange(snip)
 					processor.CaptureUpsertChange(psp)
 					processor.CaptureUpsertChange(rlp)
+					processor.CaptureUpsertChange(pp)
 
 					Expect(processor.Process(context.Background())).To(BeNil())
 				})
@@ -3616,6 +3657,8 @@ var _ = Describe("ChangeProcessor", func() {
 					Expect(graph.NGFPolicies[rlpKey].Source).To(Equal(rlp))
 					Expect(graph.NGFPolicies).To(HaveKey(wafKey))
 					Expect(graph.NGFPolicies[wafKey].Source).To(Equal(waf))
+					Expect(graph.NGFPolicies).To(HaveKey(ppKey))
+					Expect(graph.NGFPolicies[ppKey].Source).To(Equal(pp))
 					Expect(graph.NGFPolicies).ToNot(HaveKey(obsKey))
 
 					processor.CaptureUpsertChange(route)
@@ -3652,6 +3695,7 @@ var _ = Describe("ChangeProcessor", func() {
 					processor.CaptureUpsertChange(snipUpdated)
 					processor.CaptureUpsertChange(rlpUpdated)
 					processor.CaptureUpsertChange(wafUpdated)
+					processor.CaptureUpsertChange(ppUpdated)
 
 					graph := processor.Process(context.Background())
 					Expect(graph).ToNot(BeNil())
@@ -3669,6 +3713,8 @@ var _ = Describe("ChangeProcessor", func() {
 					Expect(graph.NGFPolicies[rlpKey].Source).To(Equal(rlpUpdated))
 					Expect(graph.NGFPolicies).To(HaveKey(wafKey))
 					Expect(graph.NGFPolicies[wafKey].Source).To(Equal(wafUpdated))
+					Expect(graph.NGFPolicies).To(HaveKey(ppKey))
+					Expect(graph.NGFPolicies[ppKey].Source).To(Equal(ppUpdated))
 				})
 			})
 			When("the policy is deleted", func() {
@@ -3680,6 +3726,7 @@ var _ = Describe("ChangeProcessor", func() {
 					processor.CaptureDeleteChange(&ngfAPIv1alpha1.ProxySettingsPolicy{}, client.ObjectKeyFromObject(psp))
 					processor.CaptureDeleteChange(&ngfAPIv1alpha1.RateLimitPolicy{}, client.ObjectKeyFromObject(rlp))
 					processor.CaptureDeleteChange(&ngfAPIv1alpha1.WAFPolicy{}, client.ObjectKeyFromObject(waf))
+					processor.CaptureDeleteChange(&ngfAPIv1alpha1.PayloadProcessor{}, client.ObjectKeyFromObject(pp))
 
 					graph := processor.Process(context.Background())
 					Expect(graph).ToNot(BeNil())

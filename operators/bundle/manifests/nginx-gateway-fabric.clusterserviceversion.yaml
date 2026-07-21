@@ -421,6 +421,7 @@ spec:
                 - authenticationfilters
                 - snippetspolicies
                 - wafpolicies
+                - payloadprocessors
               verbs:
                 - create
                 - delete
@@ -441,6 +442,7 @@ spec:
                 - authenticationfilters/status
                 - snippetspolicies/status
                 - wafpolicies/status
+                - payloadprocessors/status
               verbs:
                 - update
             - apiGroups:

@@ -280,6 +280,53 @@ func (g *Graph) attachPolicies(validator validation.PolicyValidator, ctlrName st
 	}
 }
 
+// resolveEffectivePayloadProcessors computes the effective PayloadProcessor for each Route.
+// A PayloadProcessor attached directly to a Route takes precedence over one attached to the
+// Route's parent Gateway. This is realized as data-plane behavior; the Gateway-attached policy
+// remains valid (Programmed=True) because it still applies to requests not covered by an
+// overriding Route-attached policy.
+//
+// The result is stored on L7Route.EffectivePayloadProcessor. There is no config generator for
+// PayloadProcessor yet, so this field is currently unused at runtime. When the generator lands,
+// it should read L7Route.EffectivePayloadProcessor (e.g. alongside buildPolicies in
+// internal/controller/state/dataplane/configuration.go) to emit the per-route processing config,
+// rather than iterating route.Policies directly, so that this Route-over-Gateway precedence is honored.
+func resolveEffectivePayloadProcessors(
+	gateways map[types.NamespacedName]*Gateway,
+	routes map[RouteKey]*L7Route,
+) {
+	for _, route := range routes {
+		// A PayloadProcessor attached directly to the Route wins.
+		if routePolicy := firstValidPayloadProcessor(route.Policies); routePolicy != nil {
+			route.EffectivePayloadProcessor = routePolicy
+			continue
+		}
+
+		// Otherwise fall back to a PayloadProcessor attached to any of the Route's parent Gateways.
+		for _, parentRef := range route.ParentRefs {
+			gw, exists := gateways[parentRef.GatewayNsName]
+			if !exists || gw == nil {
+				continue
+			}
+
+			if gwPolicy := firstValidPayloadProcessor(gw.Policies); gwPolicy != nil {
+				route.EffectivePayloadProcessor = gwPolicy
+				break
+			}
+		}
+	}
+}
+
+// firstValidPayloadProcessor returns the first valid PayloadProcessor policy in the list, or nil.
+func firstValidPayloadProcessor(pols []*Policy) *Policy {
+	for _, policy := range pols {
+		if policy.Valid && getPolicyKind(policy.Source) == kinds.PayloadProcessor {
+			return policy
+		}
+	}
+	return nil
+}
+
 func attachPolicyToService(
 	policy *Policy,
 	svc *ReferencedService,
@@ -588,6 +635,7 @@ func processPolicies(
 	services map[types.NamespacedName]*ReferencedService,
 	gws map[types.NamespacedName]*Gateway,
 	wafInput *WAFProcessingInput,
+	refGrantResolver *referenceGrantResolver,
 ) (map[PolicyKey]*Policy, *WAFProcessingOutput) {
 	if len(pols) == 0 || len(gws) == 0 {
 		return nil, nil
@@ -652,9 +700,54 @@ func processPolicies(
 
 	markConflictedPolicies(processedPolicies, validator)
 
+	validatePayloadProcessorRefs(processedPolicies, refGrantResolver)
+
 	wafOutput := processWAFPolicies(ctx, logger, processedPolicies, wafInput)
 
 	return processedPolicies, wafOutput
+}
+
+// validatePayloadProcessorRefs validates cross-namespace ExtProcess backendRefs on PayloadProcessor policies.
+// A backendRef targeting a Service in a namespace different from the PayloadProcessor's own namespace
+// requires a ReferenceGrant permitting the reference. Policies that are already invalid are skipped.
+func validatePayloadProcessorRefs(
+	processedPolicies map[PolicyKey]*Policy,
+	refGrantResolver *referenceGrantResolver,
+) {
+	for _, policy := range processedPolicies {
+		if !policy.Valid || getPolicyKind(policy.Source) != kinds.PayloadProcessor {
+			continue
+		}
+
+		pp, ok := policy.Source.(*ngfAPIv1alpha1.PayloadProcessor)
+		if !ok {
+			continue
+		}
+
+		for _, processor := range pp.Spec.Processors {
+			if processor.ExtProcess == nil || processor.ExtProcess.BackendRef.Namespace == nil {
+				continue
+			}
+
+			refNs := string(*processor.ExtProcess.BackendRef.Namespace)
+			if refNs == pp.Namespace {
+				continue
+			}
+
+			refNsName := types.NamespacedName{Namespace: refNs, Name: string(processor.ExtProcess.BackendRef.Name)}
+			if refGrantResolver != nil &&
+				refGrantResolver.refAllowed(toService(refNsName), fromPayloadProcessor(pp.Namespace)) {
+				continue
+			}
+
+			policy.Conditions = append(policy.Conditions, conditions.NewPolicyRefNotPermitted(
+				fmt.Sprintf("cross-namespace reference to Service %q not permitted by any ReferenceGrant", refNsName.String()),
+			))
+			policy.Valid = false
+
+			break
+		}
+	}
 }
 
 func checkTargetRoutesForOverlap(
@@ -886,6 +979,7 @@ func addPolicyAffectedStatusToTargetRefs(
 	}
 }
 
+//nolint:gocyclo // will refactor later
 func addStatusToTargetRefs(policyKind string, conditionsList *[]conditions.Condition) {
 	if conditionsList == nil {
 		return
@@ -921,6 +1015,11 @@ func addStatusToTargetRefs(policyKind string, conditionsList *[]conditions.Condi
 			return
 		}
 		*conditionsList = append(*conditionsList, conditions.NewWAFPolicyAffected())
+	case kinds.PayloadProcessor:
+		if conditions.HasMatchingCondition(*conditionsList, conditions.NewPayloadProcessorPolicyAffected()) {
+			return
+		}
+		*conditionsList = append(*conditionsList, conditions.NewPayloadProcessorPolicyAffected())
 	}
 }
 

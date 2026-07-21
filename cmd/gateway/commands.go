@@ -112,6 +112,7 @@ func createControllerCommand() *cobra.Command {
 		usageReportEnforceInitialReportFlag = "usage-report-enforce-initial-report"
 		snippetsFiltersFlag                 = "snippets-filters"
 		snippetsFlag                        = "snippets"
+		payloadProcessorFlag                = "payload-processor"
 		nginxSCCFlag                        = "nginx-scc"
 		watchNamespacesFlag                 = "watch-namespaces"
 		serverTLSDomainFlag                 = "server-tls-domain"
@@ -177,6 +178,8 @@ func createControllerCommand() *cobra.Command {
 
 		snippetsFilters bool
 		snippets        bool
+
+		payloadProcessor bool
 
 		plus               bool
 		nginxDockerSecrets = stringSliceValidatingValue{
@@ -332,6 +335,7 @@ func createControllerCommand() *cobra.Command {
 				},
 				SnippetsFilters:        snippetsFilters,
 				Snippets:               snippets,
+				PayloadProcessor:       payloadProcessor,
 				NginxDockerSecretNames: nginxDockerSecrets.values,
 				AgentTLSSecretName:     agentTLSSecretName.value,
 				NGINXSCCName:           nginxSCCName.value,
@@ -574,6 +578,15 @@ func createControllerCommand() *cobra.Command {
 		"Enable Snippets feature through SnippetsFilter and SnippetsPolicy APIs. SnippetsFilters allow inserting "+
 			"NGINX configuration into the generated NGINX config for HTTPRoute and GRPCRoute resources. SnippetsPolicies "+
 			"allow inserting NGINX configuration into the generated NGINX config for Gateway resources.",
+	)
+
+	cmd.Flags().BoolVar(
+		&payloadProcessor,
+		payloadProcessorFlag,
+		false,
+		"Enable the PayloadProcessor API. PayloadProcessors enable declarative, ordered processing of HTTP "+
+			"request and response payloads by attaching to a Gateway or HTTPRoute, and are used to implement "+
+			"features such as Guardrails for AI workloads.",
 	)
 
 	cmd.Flags().Var(

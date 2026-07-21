@@ -1272,6 +1272,7 @@ func TestProcessPolicies(t *testing.T) {
 				services,
 				gateways,
 				nil,
+				nil,
 			)
 			g.Expect(processed).To(BeEquivalentTo(test.expProcessedPolicies))
 		})
@@ -1534,6 +1535,7 @@ func TestProcessPolicies_RouteOverlap(t *testing.T) {
 				test.routes,
 				nil,
 				gateways,
+				nil,
 				nil,
 			)
 			g.Expect(processed).To(HaveLen(len(test.policies)))
@@ -2343,6 +2345,22 @@ func TestAddStatusToTargetRefs(t *testing.T) {
 	}).ToNot(Panic())
 }
 
+func TestAddStatusToTargetRefsPayloadProcessor(t *testing.T) {
+	t.Parallel()
+
+	g := NewWithT(t)
+
+	var condsList []conditions.Condition
+
+	// Appends the PolicyAffected condition for PayloadProcessor.
+	addStatusToTargetRefs(kinds.PayloadProcessor, &condsList)
+	g.Expect(condsList).To(Equal([]conditions.Condition{conditions.NewPayloadProcessorPolicyAffected()}))
+
+	// Does not duplicate the condition when called again.
+	addStatusToTargetRefs(kinds.PayloadProcessor, &condsList)
+	g.Expect(condsList).To(Equal([]conditions.Condition{conditions.NewPayloadProcessorPolicyAffected()}))
+}
+
 func TestNGFPolicyAncestorsFullFunc(t *testing.T) {
 	t.Parallel()
 
@@ -2603,7 +2621,7 @@ func TestNGFPolicyAncestorLimitHandling(t *testing.T) {
 
 	// Process policies which should trigger ancestor limit handling
 	processedPolicies, _ := processPolicies(
-		t.Context(), logr.Discard(), testPolicies, validator, routes, referencedServices, gateways, nil,
+		t.Context(), logr.Discard(), testPolicies, validator, routes, referencedServices, gateways, nil, nil,
 	)
 
 	// Create a graph and attach policies to trigger ancestor limit handling

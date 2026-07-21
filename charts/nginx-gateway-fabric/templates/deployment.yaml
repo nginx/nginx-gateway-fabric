@@ -119,6 +119,9 @@ spec:
         {{- if .Values.nginxGateway.snippets.enable }}
         - --snippets
         {{- end }}
+        {{- if .Values.nginxGateway.payloadProcessor.enable }}
+        - --payload-processor
+        {{- end }}
         {{- if .Values.nginxGateway.plmStorage.url }}
         - --plm-storage-url={{ .Values.nginxGateway.plmStorage.url }}
         {{- if .Values.nginxGateway.plmStorage.credentialsSecretName }}

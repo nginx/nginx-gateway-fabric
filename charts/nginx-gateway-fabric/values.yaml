@@ -345,6 +345,12 @@ nginxGateway:
     # the generated NGINX config for HTTPRoute and GRPCRoute resources.
     enable: false
 
+  payloadProcessor:
+    # -- Enable the PayloadProcessor API. PayloadProcessors enable declarative, ordered processing of HTTP request
+    # and response payloads by attaching to a Gateway or HTTPRoute, and are used to implement features such as
+    # Guardrails for AI workloads.
+    enable: false
+
   # Configuration for PLM (Policy Lifecycle Manager) S3-compatible storage.
   # Required when any WAFPolicy uses type: PLM.
   # PLM (f5-waf-policy-controller) must be installed separately.
