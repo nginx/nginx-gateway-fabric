@@ -322,6 +322,8 @@ func TestPayloadProcessorTimeout(t *testing.T) {
 	t.Parallel()
 	k8sClient := getKubernetesClient(t)
 
+	const timeoutValidationError = "timeout in body should match"
+
 	tests := []struct {
 		timeout    *ngfAPIv1alpha1.Duration
 		name       string
@@ -350,12 +352,12 @@ func TestPayloadProcessorTimeout(t *testing.T) {
 		{
 			name:       "Validate malformed timeout is not allowed",
 			timeout:    helpers.GetPointer[ngfAPIv1alpha1.Duration]("abc"),
-			wantErrors: []string{"timeout in body should match"},
+			wantErrors: []string{timeoutValidationError},
 		},
 		{
 			name:       "Validate timeout with invalid suffix is not allowed",
 			timeout:    helpers.GetPointer[ngfAPIv1alpha1.Duration]("5x"),
-			wantErrors: []string{"timeout in body should match"},
+			wantErrors: []string{timeoutValidationError},
 		},
 	}
 
