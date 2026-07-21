@@ -18,7 +18,6 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
-	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
@@ -98,6 +97,8 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				"BackendTLSPolicy": true,
 				"ListenerSet":      true,
 				"ReferenceGrant":   true,
+				"TCPRoute":         true,
+				"UDPRoute":         true,
 			},
 			expectedObjects: []client.Object{
 				&gatewayv1.GatewayClass{ObjectMeta: metav1.ObjectMeta{Name: "nginx"}},
@@ -109,6 +110,8 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&discoveryV1.EndpointSliceList{},
 				&gatewayv1.HTTPRouteList{},
 				&gatewayv1.BackendTLSPolicyList{},
+				&gatewayv1.TCPRouteList{},
+				&gatewayv1.UDPRouteList{},
 				&apiv1.ConfigMapList{},
 				&gatewayv1.GatewayList{},
 				&gatewayv1.ReferenceGrantList{},
@@ -189,8 +192,8 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				partialObjectMetadataList,
 				&gatewayv1.BackendTLSPolicyList{},
 				&gatewayv1.TLSRouteList{},
-				&gatewayv1alpha2.TCPRouteList{},
-				&gatewayv1alpha2.UDPRouteList{},
+				&gatewayv1.TCPRouteList{},
+				&gatewayv1.UDPRouteList{},
 				&gatewayv1.GRPCRouteList{},
 				&ngfAPIv1alpha1.ClientSettingsPolicyList{},
 				&ngfAPIv1alpha2.ObservabilityPolicyList{},
@@ -352,8 +355,8 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&inference.InferencePoolList{},
 				&gatewayv1.BackendTLSPolicyList{},
 				&gatewayv1.TLSRouteList{},
-				&gatewayv1alpha2.TCPRouteList{},
-				&gatewayv1alpha2.UDPRouteList{},
+				&gatewayv1.TCPRouteList{},
+				&gatewayv1.UDPRouteList{},
 				&gatewayv1.GRPCRouteList{},
 				&ngfAPIv1alpha1.ClientSettingsPolicyList{},
 				&ngfAPIv1alpha2.ObservabilityPolicyList{},
@@ -434,8 +437,8 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&inference.InferencePoolList{},
 				&gatewayv1.BackendTLSPolicyList{},
 				&gatewayv1.TLSRouteList{},
-				&gatewayv1alpha2.TCPRouteList{},
-				&gatewayv1alpha2.UDPRouteList{},
+				&gatewayv1.TCPRouteList{},
+				&gatewayv1.UDPRouteList{},
 				&gatewayv1.GRPCRouteList{},
 				&ngfAPIv1alpha1.ClientSettingsPolicyList{},
 				&ngfAPIv1alpha2.ObservabilityPolicyList{},
@@ -886,13 +889,13 @@ func TestFilterControllersByCRDExistence(t *testing.T) {
 
 	tlsRouteGVK := schema.GroupVersionKind{
 		Group:   "gateway.networking.k8s.io",
-		Version: "v1alpha2",
+		Version: "v1",
 		Kind:    "TLSRoute",
 	}
 
 	tcpRouteGVK := schema.GroupVersionKind{
 		Group:   "gateway.networking.k8s.io",
-		Version: "v1alpha2",
+		Version: "v1",
 		Kind:    "TCPRoute",
 	}
 
@@ -1141,7 +1144,7 @@ func (f *fakeManagerForCRDTest) GetConfig() *rest.Config {
 
 // createTypedObject creates a typed object with GVK set for testing.
 func createTypedObject(gvk *schema.GroupVersionKind) ngftypes.ObjectType {
-	obj := &gatewayv1alpha2.TCPRoute{}
+	obj := &gatewayv1.TCPRoute{}
 	obj.SetGroupVersionKind(*gvk)
 	return obj
 }

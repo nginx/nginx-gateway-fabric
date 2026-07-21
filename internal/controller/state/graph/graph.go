@@ -14,7 +14,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
-	"sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
@@ -36,8 +35,8 @@ type ClusterState struct {
 	Gateways              map[types.NamespacedName]*gatewayv1.Gateway
 	HTTPRoutes            map[types.NamespacedName]*gatewayv1.HTTPRoute
 	TLSRoutes             map[types.NamespacedName]*gatewayv1.TLSRoute
-	TCPRoutes             map[types.NamespacedName]*v1alpha2.TCPRoute
-	UDPRoutes             map[types.NamespacedName]*v1alpha2.UDPRoute
+	TCPRoutes             map[types.NamespacedName]*gatewayv1.TCPRoute
+	UDPRoutes             map[types.NamespacedName]*gatewayv1.UDPRoute
 	Services              map[types.NamespacedName]*v1.Service
 	Namespaces            map[types.NamespacedName]*v1.Namespace
 	ReferenceGrants       map[types.NamespacedName]*gatewayv1.ReferenceGrant
@@ -285,7 +284,6 @@ func BuildGraph(
 		processedGwClasses.Winner,
 		processedNginxProxies,
 		state.CRDMetadata,
-		featureFlags.Experimental,
 	)
 
 	resourceResolver := newResourceResolver(state)

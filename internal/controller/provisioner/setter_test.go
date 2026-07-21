@@ -161,6 +161,77 @@ func TestServiceSpecSetter_PreservesExternalAnnotations(t *testing.T) {
 	}
 }
 
+func TestServiceSpecSetter_PreservesClusterIP(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name               string
+		existingClusterIP  string
+		existingClusterIPs []string
+		expectedClusterIP  string
+		expectedClusterIPs []string
+	}{
+		{
+			name:               "preserves existing clusterIP and clusterIPs",
+			existingClusterIP:  "10.96.0.1",
+			existingClusterIPs: []string{"10.96.0.1"},
+			expectedClusterIP:  "10.96.0.1",
+			expectedClusterIPs: []string{"10.96.0.1"},
+		},
+		{
+			name:               "preserves dual-stack clusterIPs",
+			existingClusterIP:  "10.96.0.1",
+			existingClusterIPs: []string{"10.96.0.1", "fd00::1"},
+			expectedClusterIP:  "10.96.0.1",
+			expectedClusterIPs: []string{"10.96.0.1", "fd00::1"},
+		},
+		{
+			name:               "no-op when existing clusterIP is empty",
+			existingClusterIP:  "",
+			existingClusterIPs: nil,
+			expectedClusterIP:  "",
+			expectedClusterIPs: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			existingService := &corev1.Service{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-service",
+					Namespace: "default",
+				},
+				Spec: corev1.ServiceSpec{
+					ClusterIP:  tt.existingClusterIP,
+					ClusterIPs: tt.existingClusterIPs,
+				},
+			}
+
+			desiredMeta := metav1.ObjectMeta{
+				Labels: map[string]string{"app": "nginx-gateway"},
+			}
+
+			desiredSpec := corev1.ServiceSpec{
+				Type: corev1.ServiceTypeLoadBalancer,
+				Ports: []corev1.ServicePort{
+					{Name: "http", Port: 80, Protocol: corev1.ProtocolTCP},
+				},
+			}
+
+			err := serviceSpecSetter(existingService, desiredSpec, desiredMeta)()
+			g.Expect(err).ToNot(HaveOccurred())
+
+			g.Expect(existingService.Spec.Type).To(Equal(corev1.ServiceTypeLoadBalancer))
+			g.Expect(existingService.Spec.Ports).To(Equal(desiredSpec.Ports))
+			g.Expect(existingService.Spec.ClusterIP).To(Equal(tt.expectedClusterIP))
+			g.Expect(existingService.Spec.ClusterIPs).To(Equal(tt.expectedClusterIPs))
+		})
+	}
+}
+
 func int32Ptr(i int32) *int32 { return &i }
 
 func TestDeploymentAndDaemonSetSpecSetter(t *testing.T) {

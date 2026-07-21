@@ -17,9 +17,9 @@ func TestProcess(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
+		expUpstreamSettings UpstreamSettings
 		name                string
 		policies            []policies.Policy
-		expUpstreamSettings UpstreamSettings
 	}{
 		{
 			name: "all fields populated",
@@ -399,7 +399,7 @@ func TestProcess(t *testing.T) {
 				},
 			},
 			expUpstreamSettings: UpstreamSettings{
-				UseClusterIP: true,
+				UseClusterIP: helpers.GetPointer(true),
 			},
 		},
 		{
@@ -416,7 +416,7 @@ func TestProcess(t *testing.T) {
 				},
 			},
 			expUpstreamSettings: UpstreamSettings{
-				UseClusterIP: false,
+				UseClusterIP: helpers.GetPointer(false),
 			},
 		},
 	}

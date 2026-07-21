@@ -76,6 +76,18 @@ type NginxProxySpec struct {
 	//
 	// +optional
 	DisableHTTP2 *bool `json:"disableHTTP2,omitempty"`
+	// UseClusterIP configures NGINX to route to the Service ClusterIP and port instead of individual
+	// Pod IPs. When enabled, NGINX will target a single upstream server corresponding to the Service's
+	// ClusterIP, which is useful for service mesh compatibility and other Kubernetes
+	// controllers/operators that require traffic to traverse the Service VIP.
+	// This setting applies only when the target Service has a ClusterIP. For headless Services
+	// (ClusterIP: None) and ExternalName Services, normal endpoint resolution is used instead.
+	// This setting is also not applied to L4/stream upstreams.
+	// A UseClusterIP value set in an UpstreamSettingsPolicy for a Service takes precedence over this setting.
+	// Defaults to false.
+	//
+	// +optional
+	UseClusterIP *bool `json:"useClusterIP,omitempty"`
 	// DisableSNIHostValidation disables the validation that ensures the SNI hostname
 	// matches the Host header in HTTPS requests. When disabled, HTTPS connections can
 	// be reused for requests to different hostnames covered by the same certificate.

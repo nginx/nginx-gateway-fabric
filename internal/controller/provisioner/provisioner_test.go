@@ -272,42 +272,6 @@ func (f *failingClient) Patch(
 	return f.Client.Patch(ctx, obj, patch, opts...)
 }
 
-// lbClassImmutableClient wraps a client.Client and returns a LoadBalancerClass immutability
-// error on the first Service Update call, simulating the immutable-field behavior of the real
-// Kubernetes API. Subsequent Service Updates are delegated to the underlying client unchanged.
-type lbClassImmutableClient struct {
-	client.Client
-	svcUpdateAttempts int
-}
-
-func (c *lbClassImmutableClient) Update(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
-	if _, ok := obj.(*corev1.Service); ok {
-		c.svcUpdateAttempts++
-		if c.svcUpdateAttempts == 1 {
-			return apierrors.NewInvalid(
-				schema.GroupKind{Group: "", Kind: "Service"},
-				obj.GetName(),
-				field.ErrorList{
-					field.Invalid(
-						field.NewPath("spec").Child("loadBalancerClass"),
-						"gateway.nginx.org/nginx-gateway-controller",
-						"may not change once set",
-					),
-				},
-			)
-		}
-	}
-	return c.Client.Update(ctx, obj, opts...)
-}
-
-// Delete delegates to the underlying client and clears the ResourceVersion on obj so that
-// a subsequent CreateOrUpdate can Create the object fresh without a stale ResourceVersion.
-func (c *lbClassImmutableClient) Delete(ctx context.Context, obj client.Object, opts ...client.DeleteOption) error {
-	err := c.Client.Delete(ctx, obj, opts...)
-	obj.SetResourceVersion("")
-	return err
-}
-
 func TestNewNginxProvisioner(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
@@ -772,9 +736,11 @@ func TestNonLeaderProvisioner(t *testing.T) {
 	g.Expect(deploymentStore.RemoveCallCount()).To(Equal(1))
 }
 
-func TestProvisionNginxOnLBClassImmutabilityError(t *testing.T) {
+func TestProvisionNginxDeletesServiceOnLBClassChange(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
+
+	gatewayNSName := types.NamespacedName{Name: "gw", Namespace: "default"}
 
 	// Simulate a Service that was previously provisioned without LoadBalancerClass.
 	existingSvc := &corev1.Service{
@@ -787,18 +753,19 @@ func TestProvisionNginxOnLBClassImmutabilityError(t *testing.T) {
 		WithObjects(existingSvc).
 		Build()
 
-	// Wrap the client so the first Service Update returns an LBClass immutability error.
-	wrappedClient := &lbClassImmutableClient{Client: fakeClient}
+	st := newStore(nil, "", "", "", "", "")
+	// Register the Service in the store so we can verify it gets cleared.
+	st.registerResourceInGatewayConfig(gatewayNSName, existingSvc)
 
 	provisioner := &NginxProvisioner{
 		leader: true,
-		store:  newStore(nil, "", "", "", "", ""),
+		store:  st,
 		cfg: Config{
 			Logger:           logr.Discard(),
 			EventRecorder:    &k8sEvents.FakeRecorder{},
 			GatewayPodConfig: &config.GatewayPodConfig{},
 		},
-		k8sClient: wrappedClient,
+		k8sClient: fakeClient,
 	}
 
 	lbClass := "gateway.nginx.org/nginx-gateway-controller"
@@ -810,15 +777,148 @@ func TestProvisionNginxOnLBClassImmutabilityError(t *testing.T) {
 		},
 	}
 
-	// Gateway has no addresses so patchServiceStatus is not triggered.
 	gateway := &gatewayv1.Gateway{
 		ObjectMeta: metav1.ObjectMeta{Name: "gw", Namespace: "default"},
 	}
 
+	// The store should have the Service registered before provisioning.
+	nginxRes := st.getNginxResourcesForGateway(gatewayNSName)
+	g.Expect(nginxRes).ToNot(BeNil())
+	g.Expect(nginxRes.Service.Name).To(Equal("gw-nginx"))
+
 	err := provisioner.provisionNginx(t.Context(), "gw-nginx", gateway, []client.Object{desiredSvc})
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Verify the Service was recreated with the desired LoadBalancerClass.
+	got := &corev1.Service{}
+	g.Expect(fakeClient.Get(
+		t.Context(),
+		types.NamespacedName{Name: "gw-nginx", Namespace: "default"},
+		got,
+	)).To(Succeed())
+	g.Expect(got.Spec.LoadBalancerClass).ToNot(BeNil())
+	g.Expect(*got.Spec.LoadBalancerClass).To(Equal(lbClass))
+}
+
+func TestDeleteServiceForLBClassChangeRestoresStoreOnFailure(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	gatewayNSName := types.NamespacedName{Name: "gw", Namespace: "default"}
+
+	existingSvc := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{Name: "gw-nginx", Namespace: "default"},
+		Spec:       corev1.ServiceSpec{Type: corev1.ServiceTypeLoadBalancer},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(createScheme()).
+		WithObjects(existingSvc).
+		Build()
+
+	st := newStore(nil, "", "", "", "", "")
+	st.registerResourceInGatewayConfig(gatewayNSName, existingSvc)
+
+	deleteErr := errors.New("connection refused")
+	provisioner := &NginxProvisioner{
+		leader: true,
+		store:  st,
+		cfg: Config{
+			Logger:           logr.Discard(),
+			EventRecorder:    &k8sEvents.FakeRecorder{},
+			GatewayPodConfig: &config.GatewayPodConfig{},
+		},
+		k8sClient: &deleteFailingClient{Client: fakeClient, err: deleteErr},
+	}
+
+	lbClass := "gateway.nginx.org/nginx-gateway-controller"
+	desiredSvc := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{Name: "gw-nginx", Namespace: "default"},
+		Spec: corev1.ServiceSpec{
+			Type:              corev1.ServiceTypeLoadBalancer,
+			LoadBalancerClass: &lbClass,
+		},
+	}
+
+	gateway := &gatewayv1.Gateway{
+		ObjectMeta: metav1.ObjectMeta{Name: "gw", Namespace: "default"},
+	}
+
+	err := provisioner.deleteServiceForLBClassChange(t.Context(), gateway, []client.Object{desiredSvc})
 	g.Expect(err).To(HaveOccurred())
-	// Should not retry when its a LBClass immutability error
-	g.Expect(wrappedClient.svcUpdateAttempts).To(Equal(1))
+	g.Expect(err.Error()).To(ContainSubstring("connection refused"))
+
+	// The store entry should be restored so the next reconcile can retry deletion.
+	nginxRes := st.getNginxResourcesForGateway(gatewayNSName)
+	g.Expect(nginxRes).ToNot(BeNil())
+	g.Expect(nginxRes.Service.Name).To(Equal("gw-nginx"))
+	g.Expect(nginxRes.ServiceLBClass).To(BeNil())
+}
+
+func TestDeleteServiceForLBClassChangeFallsBackToLiveGet(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	// Service exists in the cluster with no LoadBalancerClass, but the store is empty
+	// (simulating a controller restart before the informer delivers the event).
+	existingSvc := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{Name: "gw-nginx", Namespace: "default"},
+		Spec:       corev1.ServiceSpec{Type: corev1.ServiceTypeLoadBalancer},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(createScheme()).
+		WithObjects(existingSvc).
+		Build()
+
+	st := newStore(nil, "", "", "", "", "")
+	// Intentionally do NOT register the Service in the store.
+
+	provisioner := &NginxProvisioner{
+		leader: true,
+		store:  st,
+		cfg: Config{
+			Logger:           logr.Discard(),
+			EventRecorder:    &k8sEvents.FakeRecorder{},
+			GatewayPodConfig: &config.GatewayPodConfig{},
+		},
+		k8sClient: fakeClient,
+	}
+
+	lbClass := "gateway.nginx.org/nginx-gateway-controller"
+	desiredSvc := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{Name: "gw-nginx", Namespace: "default"},
+		Spec: corev1.ServiceSpec{
+			Type:              corev1.ServiceTypeLoadBalancer,
+			LoadBalancerClass: &lbClass,
+		},
+	}
+
+	gateway := &gatewayv1.Gateway{
+		ObjectMeta: metav1.ObjectMeta{Name: "gw", Namespace: "default"},
+	}
+
+	err := provisioner.deleteServiceForLBClassChange(t.Context(), gateway, []client.Object{desiredSvc})
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// The old Service should have been deleted via the fallback GET path.
+	got := &corev1.Service{}
+	err = fakeClient.Get(
+		t.Context(),
+		types.NamespacedName{Name: "gw-nginx", Namespace: "default"},
+		got,
+	)
+	g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
+}
+
+// deleteFailingClient wraps a client.Client and fails all Delete calls with the configured error.
+type deleteFailingClient struct {
+	client.Client
+	err error
+}
+
+func (d *deleteFailingClient) Delete(_ context.Context, _ client.Object, _ ...client.DeleteOption) error {
+	return d.err
 }
 
 func TestProvisionerRestartsDeployment(t *testing.T) {
@@ -1653,65 +1753,40 @@ func TestPatchServiceStatus(t *testing.T) {
 	}
 }
 
-func TestIsLoadBalancerClassImmutabilityErr(t *testing.T) {
+func TestNeedToDeleteServiceForLBClassChange(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		err    error
-		name   string
-		expect bool
+		existing *string
+		desired  *string
+		name     string
+		expect   bool
 	}{
 		{
-			name:   "nil error",
-			err:    nil,
+			name:   "both nil",
 			expect: false,
 		},
 		{
-			name:   "non-invalid API error has no loadBalancerClass cause",
-			err:    apierrors.NewNotFound(schema.GroupResource{Resource: "services"}, "test-svc"),
-			expect: false,
+			name:     "both equal",
+			existing: helpers.GetPointer("my-class"),
+			desired:  helpers.GetPointer("my-class"),
+			expect:   false,
 		},
 		{
-			name: "invalid error for a different field",
-			err: apierrors.NewInvalid(
-				schema.GroupKind{Group: "", Kind: "Service"},
-				"test-svc",
-				field.ErrorList{
-					field.Invalid(field.NewPath("spec").Child("type"), "ClusterIP", "cannot change type"),
-				},
-			),
-			expect: false,
+			name:    "existing nil, desired set",
+			desired: helpers.GetPointer("my-class"),
+			expect:  true,
 		},
 		{
-			name: "invalid error for spec.loadBalancerClass",
-			err: apierrors.NewInvalid(
-				schema.GroupKind{Group: "", Kind: "Service"},
-				"test-svc",
-				field.ErrorList{
-					field.Invalid(
-						field.NewPath("spec").Child("loadBalancerClass"),
-						"gateway.nginx.org/nginx-gateway-controller",
-						"may not change once set",
-					),
-				},
-			),
-			expect: true,
+			name:     "existing set, desired nil",
+			existing: helpers.GetPointer("my-class"),
+			expect:   true,
 		},
 		{
-			name: "invalid error with multiple causes including spec.loadBalancerClass",
-			err: apierrors.NewInvalid(
-				schema.GroupKind{Group: "", Kind: "Service"},
-				"test-svc",
-				field.ErrorList{
-					field.Invalid(field.NewPath("spec").Child("type"), "ClusterIP", "cannot change type"),
-					field.Invalid(
-						field.NewPath("spec").Child("loadBalancerClass"),
-						"gateway.nginx.org/nginx-gateway-controller",
-						"may not change once set",
-					),
-				},
-			),
-			expect: true,
+			name:     "both set but different",
+			existing: helpers.GetPointer("old-class"),
+			desired:  helpers.GetPointer("new-class"),
+			expect:   true,
 		},
 	}
 
@@ -1719,7 +1794,7 @@ func TestIsLoadBalancerClassImmutabilityErr(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
-			g.Expect(isLoadBalancerClassImmutabilityErr(test.err)).To(Equal(test.expect))
+			g.Expect(needToDeleteServiceForLBClassChange(test.existing, test.desired)).To(Equal(test.expect))
 		})
 	}
 }

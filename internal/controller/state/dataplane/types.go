@@ -166,6 +166,8 @@ func (l4vs Layer4VirtualServer) NeedsWeightDistribution() bool {
 
 // Upstream is a pool of endpoints to be load balanced.
 type Upstream struct {
+	// UpstreamSettings holds the processed settings from UpstreamSettingsPolicy for this upstream.
+	UpstreamSettings upstreamsettings.UpstreamSettings
 	// SessionPersistence holds the session persistence configuration for the upstream.
 	SessionPersistence SessionPersistenceConfig
 	// Name is the name of the Upstream. Will be unique for each service/port combination.
@@ -178,8 +180,6 @@ type Upstream struct {
 	Endpoints []resolver.Endpoint
 	// Policies holds all the valid policies that apply to the Upstream.
 	Policies []policies.Policy
-	// UpstreamSettings holds the processed settings from UpstreamSettingsPolicy for this upstream.
-	UpstreamSettings upstreamsettings.UpstreamSettings
 }
 
 // SessionPersistenceConfig holds the session persistence configuration for an upstream.

@@ -13,14 +13,14 @@ GW_SERVICE_TYPE = NodePort## Service type to use for the gateway
 NGF_VERSION ?= edge## NGF version to be tested
 PULL_POLICY ?= Never## Pull policy for the images
 NGINX_CONF_DIR = internal/controller/nginx/conf
-STANDARD_CONFORMANCE_PROFILES = GATEWAY-HTTP,GATEWAY-GRPC,GATEWAY-TLS
+STANDARD_CONFORMANCE_PROFILES = GATEWAY-HTTP,GATEWAY-GRPC,GATEWAY-TLS,GATEWAY-TCP,GATEWAY-UDP
 EXPERIMENTAL_CONFORMANCE_PROFILES =
 CONFORMANCE_PROFILES = $(STANDARD_CONFORMANCE_PROFILES) # by default we use the standard conformance profiles. If experimental is enabled we override this and add the experimental profiles.
 SUPPORTED_EXTENDED_FEATURES_OPENSHIFT = HTTPRouteQueryParamMatching,HTTPRouteMethodMatching,HTTPRoutePortRedirect,HTTPRouteSchemeRedirect,HTTPRouteHostRewrite,HTTPRoutePathRewrite,GatewayPort8080,GatewayAddressEmpty,HTTPRouteResponseHeaderModification,HTTPRoutePathRedirect,GatewayHTTPListenerIsolation,GatewayInfrastructurePropagation,HTTPRouteRequestMirror,HTTPRouteRequestMultipleMirrors,HTTPRouteRequestPercentageMirror,HTTPRouteBackendProtocolWebSocket,HTTPRouteParentRefPort,HTTPRouteDestinationPortMatching,HTTPRouteHTTPSListenerDetectMisdirectedRequests,GatewayBackendClientCertificate
 SKIP_TESTS_OPENSHIFT = HTTPRouteServiceTypes,TLSRouteHostnameIntersection,TLSRouteInvalidBackendRefNonexistent,TLSRouteInvalidBackendRefUnknownKind,TLSRouteInvalidNoMatchingListenerHostname,TLSRouteInvalidNoMatchingListener,TLSRouteInvalidReferenceGrant,TLSRouteListenerPassthroughSupportedKinds,TLSRouteListenerTerminateNotSupported,TLSRouteSimpleSameNamespace
 SKIP_TESTS =
 CEL_TEST_TARGET =
-INFERENCE_SKIP_TESTS = GatewayDestinationEndpointServed,InferencePoolAppProtocol
+INFERENCE_SKIP_TESTS = GatewayDestinationEndpointServed,InferencePoolAppProtocol,InferencePoolMissingEPPRef
 
 # Check if ENABLE_EXPERIMENTAL is true
 # ifeq ($(ENABLE_EXPERIMENTAL),true)
@@ -57,7 +57,7 @@ deploy-metallb: ## Deploy MetalLB to the cluster (required for LoadBalancer serv
 	kubectl apply -f conformance/metallb-pool.yaml
 
 .PHONY: run-conformance-tests
-run-conformance-tests: ## Run conformance tests
+run-conformance-tests: deploy-metallb ## Run conformance tests
 	kind load docker-image $(CONFORMANCE_PREFIX):$(CONFORMANCE_TAG) --name $(CLUSTER_NAME)
 	kubectl apply -f conformance/conformance-rbac.yaml
 	kubectl run -i conformance \
@@ -71,9 +71,11 @@ run-conformance-tests: ## Run conformance tests
 	rm output.txt
 	grpc_core_result=`yq '.profiles[] | select(.name == "GATEWAY-GRPC") | .core.result' conformance-profile.yaml`; \
 	tls_core_result=`yq '.profiles[] | select(.name == "GATEWAY-TLS") | .core.result' conformance-profile.yaml`; \
+	tcp_core_result=`yq '.profiles[] | select(.name == "GATEWAY-TCP") | .core.result' conformance-profile.yaml`; \
+	udp_core_result=`yq '.profiles[] | select(.name == "GATEWAY-UDP") | .core.result' conformance-profile.yaml`; \
 	http_core_result=`yq '.profiles[] | select(.name == "GATEWAY-HTTP") | .core.result' conformance-profile.yaml`; \
 	http_extended_result=`yq '.profiles[] | select(.name == "GATEWAY-HTTP") | .extended.result' conformance-profile.yaml`; \
-	if [ "$$grpc_core_result" != "failure" ] && [ "$$tls_core_result" != "failure" ] && [ "$$http_core_result" != "failure" ] && [ "$$http_extended_result" != "failure" ] ; then \
+	if [ "$$grpc_core_result" != "failure" ] && [ "$$tls_core_result" != "failure" ] && [ "$$tcp_core_result" != "failure" ] && [ "$$udp_core_result" != "failure" ] && [ "$$http_core_result" != "failure" ] && [ "$$http_extended_result" != "failure" ] ; then \
 		exit 0; \
 	else \
 		exit 2; \
@@ -127,6 +129,8 @@ cleanup-conformance-tests: ## Clean up conformance tests fixtures
 	kubectl delete pod conformance --ignore-not-found
 	kubectl delete pod conformance-inference --ignore-not-found
 	kubectl delete -f conformance/conformance-rbac.yaml --ignore-not-found
+	kubectl delete -f conformance/metallb-pool.yaml --ignore-not-found || true
+	kubectl delete -f https://raw.githubusercontent.com/metallb/metallb/v0.15.3/config/manifests/metallb-native.yaml --ignore-not-found || true
 
 .PHONY: reset-go-modules
 reset-go-modules: ## Reset the go modules changes

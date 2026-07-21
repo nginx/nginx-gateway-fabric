@@ -97,3 +97,15 @@ func TestCreateInferencePoolServiceName(t *testing.T) {
 		})
 	}
 }
+
+func TestCreateNginxResourceName_OversizeSuffix(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	// A suffix longer than 53 chars would previously make the internal maxNameLen
+	// negative. The function must not panic and must produce a valid <=63-char name.
+	name := CreateNginxResourceName("name", strings.Repeat("s", 60))
+	g.Expect(len(name)).To(BeNumerically("<=", MaxServiceNameLen))
+	g.Expect(name).NotTo(HavePrefix("-"), "name must not start with a dash")
+	g.Expect(name).NotTo(ContainSubstring("--"))
+}

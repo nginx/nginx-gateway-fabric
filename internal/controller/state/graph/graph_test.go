@@ -16,7 +16,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
-	"sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
@@ -157,7 +156,7 @@ func TestBuildGraph(t *testing.T) {
 				},
 				Validation: gatewayv1.BackendTLSPolicyValidation{
 					Hostname: "foo.example.com",
-					CACertificateRefs: []v1alpha2.LocalObjectReference{
+					CACertificateRefs: []gatewayv1.LocalObjectReference{
 						{
 							Kind:  "ConfigMap",
 							Name:  "configmap",
@@ -590,13 +589,13 @@ func TestBuildGraph(t *testing.T) {
 	tr := createRouteTLS("tr", "gateway-1")
 	tr2 := createRouteTLS("tr2", "gateway-1")
 
-	createRouteTCP := func(name string, gatewayName string) *v1alpha2.TCPRoute {
-		return &v1alpha2.TCPRoute{
+	createRouteTCP := func(name string, gatewayName string) *gatewayv1.TCPRoute {
+		return &gatewayv1.TCPRoute{
 			ObjectMeta: metav1.ObjectMeta{
 				Namespace: testNs,
 				Name:      name,
 			},
-			Spec: v1alpha2.TCPRouteSpec{
+			Spec: gatewayv1.TCPRouteSpec{
 				CommonRouteSpec: gatewayv1.CommonRouteSpec{
 					ParentRefs: []gatewayv1.ParentReference{
 						{
@@ -605,7 +604,7 @@ func TestBuildGraph(t *testing.T) {
 						},
 					},
 				},
-				Rules: []v1alpha2.TCPRouteRule{
+				Rules: []gatewayv1.TCPRouteRule{
 					{
 						BackendRefs: []gatewayv1.BackendRef{
 							commonTLSBackendRef,
@@ -616,13 +615,13 @@ func TestBuildGraph(t *testing.T) {
 		}
 	}
 
-	createRouteUDP := func(name string, gatewayName string) *v1alpha2.UDPRoute {
-		return &v1alpha2.UDPRoute{
+	createRouteUDP := func(name string, gatewayName string) *gatewayv1.UDPRoute {
+		return &gatewayv1.UDPRoute{
 			ObjectMeta: metav1.ObjectMeta{
 				Namespace: testNs,
 				Name:      name,
 			},
-			Spec: v1alpha2.UDPRouteSpec{
+			Spec: gatewayv1.UDPRouteSpec{
 				CommonRouteSpec: gatewayv1.CommonRouteSpec{
 					ParentRefs: []gatewayv1.ParentReference{
 						{
@@ -631,7 +630,7 @@ func TestBuildGraph(t *testing.T) {
 						},
 					},
 				},
-				Rules: []v1alpha2.UDPRouteRule{
+				Rules: []gatewayv1.UDPRouteRule{
 					{
 						BackendRefs: []gatewayv1.BackendRef{
 							commonTLSBackendRef,
@@ -1250,10 +1249,10 @@ func TestBuildGraph(t *testing.T) {
 				client.ObjectKeyFromObject(tr):  tr,
 				client.ObjectKeyFromObject(tr2): tr2,
 			},
-			TCPRoutes: map[types.NamespacedName]*v1alpha2.TCPRoute{
+			TCPRoutes: map[types.NamespacedName]*gatewayv1.TCPRoute{
 				client.ObjectKeyFromObject(tcpr): tcpr,
 			},
-			UDPRoutes: map[types.NamespacedName]*v1alpha2.UDPRoute{
+			UDPRoutes: map[types.NamespacedName]*gatewayv1.UDPRoute{
 				client.ObjectKeyFromObject(udpr): udpr,
 			},
 			GRPCRoutes: map[types.NamespacedName]*gatewayv1.GRPCRoute{
