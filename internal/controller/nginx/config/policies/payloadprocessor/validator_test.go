@@ -65,17 +65,6 @@ func TestValidator_Validate(t *testing.T) {
 			},
 		},
 		{
-			name: "no processors",
-			policy: func() *ngfAPI.PayloadProcessor {
-				p := createValidPolicy()
-				p.Spec.Processors = nil
-				return p
-			}(),
-			expConditions: []conditions.Condition{
-				conditions.NewPolicyInvalid("spec.processors: Required value: at least one processor must be specified"),
-			},
-		},
-		{
 			name: "missing type",
 			policy: func() *ngfAPI.PayloadProcessor {
 				p := createValidPolicy()
@@ -85,29 +74,6 @@ func TestValidator_Validate(t *testing.T) {
 			expConditions: []conditions.Condition{
 				conditions.NewPolicyInvalid("spec.processors[0].type: Unsupported value: \"\": " +
 					"supported values: \"ExtProcess\""),
-			},
-		},
-		{
-			name: "type set but extProcess nil",
-			policy: func() *ngfAPI.PayloadProcessor {
-				p := createValidPolicy()
-				p.Spec.Processors[0].ExtProcess = nil
-				return p
-			}(),
-			expConditions: []conditions.Condition{
-				conditions.NewPolicyInvalid("spec.processors[0].extProcess: Required value: " +
-					"extProcess must be set when type is ExtProcess"),
-			},
-		},
-		{
-			name: "missing extProcess backendRef name",
-			policy: func() *ngfAPI.PayloadProcessor {
-				p := createValidPolicy()
-				p.Spec.Processors[0].ExtProcess.BackendRef.Name = ""
-				return p
-			}(),
-			expConditions: []conditions.Condition{
-				conditions.NewPolicyInvalid("spec.processors[0].extProcess.backendRef.name: Required value: name must be set"),
 			},
 		},
 		{

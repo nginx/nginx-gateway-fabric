@@ -53,11 +53,6 @@ func (v *Validator) Validate(policy policies.Policy) []conditions.Condition {
 func validateProcessors(processors []ngfAPI.PayloadProcessorEntry, processorsPath *field.Path) error {
 	var allErrs field.ErrorList
 
-	if len(processors) == 0 {
-		allErrs = append(allErrs, field.Required(processorsPath, "at least one processor must be specified"))
-		return allErrs.ToAggregate()
-	}
-
 	for i, processor := range processors {
 		allErrs = append(allErrs, validateProcessor(processor, processorsPath.Index(i))...)
 	}
@@ -80,13 +75,6 @@ func validateProcessor(processor ngfAPI.PayloadProcessorEntry, processorPath *fi
 	}
 
 	extProcessPath := processorPath.Child("extProcess")
-	if processor.ExtProcess == nil {
-		allErrs = append(allErrs, field.Required(
-			extProcessPath,
-			"extProcess must be set when type is ExtProcess",
-		))
-		return allErrs
-	}
 
 	allErrs = append(allErrs, validateExtProcessBackendRef(
 		processor.ExtProcess.BackendRef,
@@ -102,10 +90,6 @@ func validateExtProcessBackendRef(
 	backendRefPath *field.Path,
 ) field.ErrorList {
 	var allErrs field.ErrorList
-
-	if backendRef.Name == "" {
-		allErrs = append(allErrs, field.Required(backendRefPath.Child("name"), "name must be set"))
-	}
 
 	if group := backendRef.Group; group != nil && *group != "" && *group != coreGroup {
 		allErrs = append(allErrs, field.NotSupported(

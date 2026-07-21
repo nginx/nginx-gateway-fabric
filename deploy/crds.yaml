@@ -11140,6 +11140,7 @@ spec:
                       - ExtProcess
                       type: string
                   required:
+                  - extProcess
                   - type
                   type: object
                   x-kubernetes-validations:

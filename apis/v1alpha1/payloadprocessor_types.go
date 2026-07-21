@@ -81,6 +81,8 @@ type PayloadProcessorEntry struct {
 	Timeout *Duration `json:"timeout,omitempty"`
 
 	// ExtProcess defines the configuration for an ExtProcess processor that delegates to an external service.
+	//
+	// +required
 	ExtProcess *ExtProcessConfig `json:"extProcess,omitempty"`
 
 	// Type specifies how the processor executes.
