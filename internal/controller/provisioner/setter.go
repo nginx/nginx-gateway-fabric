@@ -77,11 +77,13 @@ func unstructuredSpecSetter(minObj, obj *unstructured.Unstructured) controllerut
 	desiredSpec := obj.Object["spec"]
 	desiredLabels := obj.GetLabels()
 	desiredAnnotations := obj.GetAnnotations()
+	desiredOwnerRefs := obj.GetOwnerReferences()
 
 	return func() error {
 		minObj.Object["spec"] = desiredSpec
 		minObj.SetLabels(desiredLabels)
 		minObj.SetAnnotations(mergeAnnotations(minObj.GetAnnotations(), desiredAnnotations))
+		minObj.SetOwnerReferences(desiredOwnerRefs)
 		return nil
 	}
 }

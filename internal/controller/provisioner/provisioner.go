@@ -39,6 +39,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/telemetry"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/events"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
 
 //go:generate go tool counterfeiter -generate
@@ -868,6 +869,16 @@ func (p *NginxProvisioner) handleObjectDeletion(ctx context.Context, nginxResour
 			p.cfg.Logger.Error(err, "error deleting nginx resource")
 		}
 	}
+
+	if p.needToDeleteIngressLink(nginxResources) {
+		il := &unstructured.Unstructured{}
+		il.SetGroupVersionKind(kinds.IngressLinkGVK)
+		il.SetName(nginxResources.ExternalLoadBalancer.Name)
+		il.SetNamespace(nginxResources.ExternalLoadBalancer.Namespace)
+		if err := p.deleteObject(ctx, il); err != nil {
+			p.cfg.Logger.Error(err, "error deleting nginx resource")
+		}
+	}
 }
 
 func needToDeleteDeployment(cfg *NginxResources) bool {
@@ -1059,4 +1070,14 @@ func needToDeleteHPA(cfg *NginxResources) bool {
 	}
 
 	return false
+}
+
+// needToDeleteIngressLink returns true if an IngressLink was previously provisioned for this Gateway
+// but its ExternalLoadBalancer is no longer attached, and therefore the IngressLink should be deleted.
+// The IngressLink is owned by the Gateway, so it is not garbage collected when only the
+// ExternalLoadBalancer is removed while the Gateway remains.
+func (p *NginxProvisioner) needToDeleteIngressLink(cfg *NginxResources) bool {
+	return p.cfg.ExternalLoadBalancer &&
+		cfg.ExternalLoadBalancer.Name != "" &&
+		extractExternalLoadBalancer(cfg.Gateway) == nil
 }

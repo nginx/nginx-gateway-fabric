@@ -924,11 +924,19 @@ func TestUnstructuredSpecSetter(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
+			ownerRef := metav1.OwnerReference{
+				APIVersion: "gateway.networking.k8s.io/v1",
+				Kind:       "Gateway",
+				Name:       "gw",
+				UID:        "gw-uid",
+			}
+
 			desired := &unstructured.Unstructured{}
 			desired.SetGroupVersionKind(kinds.IngressLinkGVK)
 			desired.Object["spec"] = map[string]any{"virtualServerAddress": "10.0.0.1"}
 			desired.SetLabels(map[string]string{"app": "nginx-gateway"})
 			desired.SetAnnotations(map[string]string{"custom.annotation": "value"})
+			desired.SetOwnerReferences([]metav1.OwnerReference{ownerRef})
 
 			minObj := &unstructured.Unstructured{}
 			minObj.SetGroupVersionKind(kinds.IngressLinkGVK)
@@ -939,6 +947,7 @@ func TestUnstructuredSpecSetter(t *testing.T) {
 			g.Expect(minObj.Object["spec"]).To(Equal(map[string]any{"virtualServerAddress": "10.0.0.1"}))
 			g.Expect(minObj.GetLabels()).To(Equal(map[string]string{"app": "nginx-gateway"}))
 			g.Expect(minObj.GetAnnotations()).To(Equal(test.expectedAnnotations))
+			g.Expect(minObj.GetOwnerReferences()).To(Equal([]metav1.OwnerReference{ownerRef}))
 		})
 	}
 }
