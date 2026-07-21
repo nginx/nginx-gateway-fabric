@@ -85,7 +85,9 @@ type Configuration struct {
 	WorkerConnections int32
 }
 
-// Snapshot returns a defensive copy of the configuration for read-only consumers.
+// Snapshot returns a copy of the configuration for telemetry consumers.
+// It deeply clones upstream data, which is the only mutable portion telemetry reads.
+// Other fields are preserved by value or shared reference because they are not consumed via this path.
 func (c *Configuration) Snapshot() *Configuration {
 	if c == nil {
 		return nil

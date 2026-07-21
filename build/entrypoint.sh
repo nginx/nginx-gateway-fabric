@@ -31,6 +31,9 @@ handle_quit() {
     stop_process QUIT "$nginx_pid"
 }
 
+trap 'handle_term' TERM
+trap 'handle_quit' QUIT
+
 rm -rf /var/run/nginx/*.sock
 
 # Bootstrap the necessary app protect files
@@ -64,9 +67,6 @@ echo "starting nginx-agent ..."
 GOMEMLIMIT=150MiB GOGC=75 nginx-agent &
 
 agent_pid=$!
-
-trap 'handle_term' TERM
-trap 'handle_quit' QUIT
 
 if ! kill -0 "$agent_pid" 2>/dev/null; then
     echo "couldn't start the agent, please check the log file"

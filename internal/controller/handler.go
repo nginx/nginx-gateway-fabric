@@ -1064,7 +1064,7 @@ func (h *eventHandlerImpl) getDeploymentContext(ctx context.Context) (dataplane.
 	return h.cfg.deployCtxCollector.Collect(ctx)
 }
 
-// GetLatestConfiguration gets a read-only snapshot of the latest configuration.
+// GetLatestConfiguration gets configuration snapshots for telemetry consumers.
 func (h *eventHandlerImpl) GetLatestConfiguration() []*dataplane.Configuration {
 	h.lock.RLock()
 	defer h.lock.RUnlock()
