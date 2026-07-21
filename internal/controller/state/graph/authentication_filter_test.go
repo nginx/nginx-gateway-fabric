@@ -1510,7 +1510,7 @@ func TestValidateOIDCHTTPSListeners(t *testing.T) {
 			expFilterValid: true,
 		},
 		{
-			name: "OIDC filter on route attached to HTTP listener - filter marked invalid with HTTPS required condition",
+			name: "OIDC filter on route attached to HTTP listener - filter stays valid, route rules invalidated",
 			buildRouteAndGateway: func() (map[RouteKey]*L7Route, map[types.NamespacedName]*Gateway) {
 				af := createAuthenticationFilterWithOIDC(filterNsName, &ngfAPI.OIDCAuth{}, true)
 				gw := makeGateway(gwNSName, v1.HTTPProtocolType)
@@ -1520,10 +1520,7 @@ func TestValidateOIDCHTTPSListeners(t *testing.T) {
 					},
 					map[types.NamespacedName]*Gateway{gwNSName: gw}
 			},
-			expFilterValid: false,
-			expConditions: []conditions.Condition{
-				conditions.NewAuthenticationFilterInvalid("OIDC authentication requires an HTTPS listener"),
-			},
+			expFilterValid: true,
 		},
 		{
 			name: "OIDC filter already invalid before HTTPS check - not double-processed, stays invalid",
@@ -1557,8 +1554,8 @@ func TestValidateOIDCHTTPSListeners(t *testing.T) {
 			expFilterValid: true,
 		},
 		{
-			name: "shared OIDC filter referenced by a route on HTTP listener and another route on HTTPS listener " +
-				"filter is marked invalid due to HTTP attachment and both routes rules are marked invalid via propagation",
+			name: "shared OIDC filter referenced by HTTP and HTTPS routes - " +
+				"filter stays valid, only HTTP route rules invalidated",
 			buildRouteAndGateway: func() (map[RouteKey]*L7Route, map[types.NamespacedName]*Gateway) {
 				af := createAuthenticationFilterWithOIDC(filterNsName, &ngfAPI.OIDCAuth{}, true)
 				httpGWNSName := types.NamespacedName{Namespace: "default", Name: "http-gw"}
@@ -1577,10 +1574,7 @@ func TestValidateOIDCHTTPSListeners(t *testing.T) {
 					},
 					map[types.NamespacedName]*Gateway{httpGWNSName: httpGW, httpsGWNSName: httpsGW}
 			},
-			expFilterValid: false,
-			expConditions: []conditions.Condition{
-				conditions.NewAuthenticationFilterInvalid("OIDC authentication requires an HTTPS listener"),
-			},
+			expFilterValid: true,
 		},
 		{
 			name: "OIDC filter on route attached to HTTPS ListenerSet listener - valid, no condition added",
@@ -1598,7 +1592,7 @@ func TestValidateOIDCHTTPSListeners(t *testing.T) {
 		},
 		{
 			name: "OIDC filter on route attached to HTTP ListenerSet listener - " +
-				"filter marked invalid with HTTPS required condition",
+				"filter stays valid, route rules invalidated",
 			buildRouteAndGateway: func() (map[RouteKey]*L7Route, map[types.NamespacedName]*Gateway) {
 				af := createAuthenticationFilterWithOIDC(filterNsName, &ngfAPI.OIDCAuth{}, true)
 				listenerSetNsName := types.NamespacedName{Namespace: "test", Name: "listener-set"}
@@ -1609,10 +1603,7 @@ func TestValidateOIDCHTTPSListeners(t *testing.T) {
 					},
 					map[types.NamespacedName]*Gateway{gwNSName: gw}
 			},
-			expFilterValid: false,
-			expConditions: []conditions.Condition{
-				conditions.NewAuthenticationFilterInvalid("OIDC authentication requires an HTTPS listener"),
-			},
+			expFilterValid: true,
 		},
 	}
 
@@ -1641,6 +1632,96 @@ func TestValidateOIDCHTTPSListeners(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestValidateOIDCSharedFilterHTTPAndHTTPS(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	makeGW := func(nsname types.NamespacedName, protocol v1.ProtocolType) *Gateway {
+		return &Gateway{
+			Source: &v1.Gateway{ObjectMeta: metav1.ObjectMeta{Name: nsname.Name, Namespace: nsname.Namespace}},
+			Listeners: []*Listener{{
+				GatewayName: nsname,
+				Name:        "listener",
+				Source:      v1.Listener{Protocol: protocol},
+			}},
+		}
+	}
+
+	makeRoute := func(af *AuthenticationFilter, gwNSName types.NamespacedName) *L7Route {
+		listenerKey := CreateParentRefListenerKey(gwNSName, "listener")
+		return &L7Route{
+			Valid: true,
+			Spec: L7RouteSpec{
+				Rules: []RouteRule{{
+					ValidMatches: true,
+					Filters: RouteRuleFilters{
+						Filters: []Filter{{
+							FilterType:           FilterExtensionRef,
+							ResolvedExtensionRef: &ExtensionRefFilter{AuthenticationFilter: af, Valid: af.Valid},
+						}},
+						Valid: true,
+					},
+				}},
+			},
+			ParentRefs: []ParentRef{{
+				Kind:           kinds.Gateway,
+				NamespacedName: gwNSName,
+				Attachment: &ParentRefAttachmentStatus{
+					AcceptedHostnames: map[string][]string{listenerKey: {"cafe.example.com"}},
+					Attached:          true,
+				},
+			}},
+		}
+	}
+
+	filterNsName := types.NamespacedName{Namespace: "ns", Name: "oidc-filter"}
+	af := createAuthenticationFilterWithOIDC(filterNsName, &ngfAPI.OIDCAuth{}, true)
+
+	httpGWNSName := types.NamespacedName{Namespace: "default", Name: "http-gw"}
+	httpsGWNSName := types.NamespacedName{Namespace: "default", Name: "https-gw"}
+	httpGW := makeGW(httpGWNSName, v1.HTTPProtocolType)
+	httpsGW := makeGW(httpsGWNSName, v1.HTTPSProtocolType)
+
+	httpRoute := makeRoute(af, httpGWNSName)
+	httpsRoute := makeRoute(af, httpsGWNSName)
+
+	routes := map[RouteKey]*L7Route{
+		{NamespacedName: types.NamespacedName{Namespace: "ns", Name: "http-route"}, RouteType: RouteTypeHTTP}:  httpRoute,
+		{NamespacedName: types.NamespacedName{Namespace: "ns", Name: "https-route"}, RouteType: RouteTypeHTTP}: httpsRoute,
+	}
+	gws := map[types.NamespacedName]*Gateway{httpGWNSName: httpGW, httpsGWNSName: httpsGW}
+
+	validateOIDCFilters(routes, gws)
+
+	// The shared filter must remain valid.
+	g.Expect(af.Valid).To(BeTrue(), "shared filter should not be mutated to invalid")
+	g.Expect(af.Conditions).To(BeEmpty(), "shared filter should not have conditions appended")
+
+	// The HTTP route's rules should be invalidated.
+	for _, rule := range httpRoute.Spec.Rules {
+		g.Expect(rule.Filters.Valid).To(BeFalse(), "HTTP route rule filters should be invalid")
+		for _, f := range rule.Filters.Filters {
+			if f.ResolvedExtensionRef != nil {
+				g.Expect(f.ResolvedExtensionRef.Valid).To(BeFalse(),
+					"HTTP route resolved extension ref should be invalid")
+			}
+		}
+	}
+	g.Expect(httpRoute.Conditions).ToNot(BeEmpty(), "HTTP route should have a condition")
+
+	// The HTTPS route's rules should remain valid.
+	for _, rule := range httpsRoute.Spec.Rules {
+		g.Expect(rule.Filters.Valid).To(BeTrue(), "HTTPS route rule filters should remain valid")
+		for _, f := range rule.Filters.Filters {
+			if f.ResolvedExtensionRef != nil {
+				g.Expect(f.ResolvedExtensionRef.Valid).To(BeTrue(),
+					"HTTPS route resolved extension ref should remain valid")
+			}
+		}
+	}
+	g.Expect(httpsRoute.Conditions).To(BeEmpty(), "HTTPS route should not have conditions")
 }
 
 func TestValidateOIDCURIConflictsPerHostname(t *testing.T) {

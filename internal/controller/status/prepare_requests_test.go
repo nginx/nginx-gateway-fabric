@@ -16,7 +16,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
-	"sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
@@ -31,7 +30,6 @@ func createK8sClientFor(resourceType ngftypes.ObjectType) client.Client {
 
 	// for simplicity, we add all used schemes here
 	utilruntime.Must(v1.Install(scheme))
-	utilruntime.Must(v1alpha2.Install(scheme))
 	utilruntime.Must(ngfAPI.AddToScheme(scheme))
 	utilruntime.Must(inference.Install(scheme))
 
@@ -810,7 +808,7 @@ func TestBuildGatewayClassStatuses(t *testing.T) {
 							Message:            conditions.GatewayClassMessageGatewayClassConflict,
 						},
 					},
-					SupportedFeatures: supportedFeatures(false),
+					SupportedFeatures: supportedFeatures(),
 				},
 				{Name: "ignored-2"}: {
 					Conditions: []metav1.Condition{
@@ -823,7 +821,7 @@ func TestBuildGatewayClassStatuses(t *testing.T) {
 							Message:            conditions.GatewayClassMessageGatewayClassConflict,
 						},
 					},
-					SupportedFeatures: supportedFeatures(false),
+					SupportedFeatures: supportedFeatures(),
 				},
 			},
 		},
@@ -857,7 +855,7 @@ func TestBuildGatewayClassStatuses(t *testing.T) {
 							Message:            "The Gateway API CRD versions are supported",
 						},
 					},
-					SupportedFeatures: supportedFeatures(false),
+					SupportedFeatures: supportedFeatures(),
 				},
 			},
 		},
@@ -929,7 +927,7 @@ func TestBuildGatewayClassStatuses(t *testing.T) {
 							Message:            "The Gateway API CRD versions are not recommended. Recommended version is v1.4.0",
 						},
 					},
-					SupportedFeatures: supportedFeatures(false),
+					SupportedFeatures: supportedFeatures(),
 				},
 			},
 		},
@@ -3607,23 +3605,23 @@ func TestBuildInferencePoolStatuses(t *testing.T) {
 
 func TestBuildTCPRouteStatuses(t *testing.T) {
 	t.Parallel()
-	tcpValid := &v1alpha2.TCPRoute{
+	tcpValid := &v1.TCPRoute{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace:  "test",
 			Name:       "tcp-valid",
 			Generation: 3,
 		},
-		Spec: v1alpha2.TCPRouteSpec{
+		Spec: v1.TCPRouteSpec{
 			CommonRouteSpec: commonRouteSpecValid,
 		},
 	}
-	tcpInvalid := &v1alpha2.TCPRoute{
+	tcpInvalid := &v1.TCPRoute{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace:  "test",
 			Name:       "tcp-invalid",
 			Generation: 3,
 		},
-		Spec: v1alpha2.TCPRouteSpec{
+		Spec: v1.TCPRouteSpec{
 			CommonRouteSpec: commonRouteSpecInvalid,
 		},
 	}
@@ -3641,7 +3639,7 @@ func TestBuildTCPRouteStatuses(t *testing.T) {
 		},
 	}
 
-	expectedStatuses := map[types.NamespacedName]v1alpha2.TCPRouteStatus{
+	expectedStatuses := map[types.NamespacedName]v1.TCPRouteStatus{
 		{Namespace: "test", Name: "tcp-valid"}: {
 			RouteStatus: routeStatusValid,
 		},
@@ -3652,7 +3650,7 @@ func TestBuildTCPRouteStatuses(t *testing.T) {
 
 	g := NewWithT(t)
 
-	k8sClient := createK8sClientFor(&v1alpha2.TCPRoute{})
+	k8sClient := createK8sClientFor(&v1.TCPRoute{})
 
 	for _, r := range routes {
 		err := k8sClient.Create(t.Context(), r.Source)
@@ -3673,7 +3671,7 @@ func TestBuildTCPRouteStatuses(t *testing.T) {
 	g.Expect(reqs).To(HaveLen(len(expectedStatuses)))
 
 	for nsname, expected := range expectedStatuses {
-		var tcpRoute v1alpha2.TCPRoute
+		var tcpRoute v1.TCPRoute
 
 		err := k8sClient.Get(t.Context(), nsname, &tcpRoute)
 		g.Expect(err).ToNot(HaveOccurred())
@@ -3683,23 +3681,23 @@ func TestBuildTCPRouteStatuses(t *testing.T) {
 
 func TestBuildUDPRouteStatuses(t *testing.T) {
 	t.Parallel()
-	udpValid := &v1alpha2.UDPRoute{
+	udpValid := &v1.UDPRoute{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace:  "test",
 			Name:       "udp-valid",
 			Generation: 3,
 		},
-		Spec: v1alpha2.UDPRouteSpec{
+		Spec: v1.UDPRouteSpec{
 			CommonRouteSpec: commonRouteSpecValid,
 		},
 	}
-	udpInvalid := &v1alpha2.UDPRoute{
+	udpInvalid := &v1.UDPRoute{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace:  "test",
 			Name:       "udp-invalid",
 			Generation: 3,
 		},
-		Spec: v1alpha2.UDPRouteSpec{
+		Spec: v1.UDPRouteSpec{
 			CommonRouteSpec: commonRouteSpecInvalid,
 		},
 	}
@@ -3717,7 +3715,7 @@ func TestBuildUDPRouteStatuses(t *testing.T) {
 		},
 	}
 
-	expectedStatuses := map[types.NamespacedName]v1alpha2.UDPRouteStatus{
+	expectedStatuses := map[types.NamespacedName]v1.UDPRouteStatus{
 		{Namespace: "test", Name: "udp-valid"}: {
 			RouteStatus: routeStatusValid,
 		},
@@ -3728,7 +3726,7 @@ func TestBuildUDPRouteStatuses(t *testing.T) {
 
 	g := NewWithT(t)
 
-	k8sClient := createK8sClientFor(&v1alpha2.UDPRoute{})
+	k8sClient := createK8sClientFor(&v1.UDPRoute{})
 
 	for _, r := range routes {
 		err := k8sClient.Create(t.Context(), r.Source)
@@ -3749,7 +3747,7 @@ func TestBuildUDPRouteStatuses(t *testing.T) {
 	g.Expect(reqs).To(HaveLen(len(expectedStatuses)))
 
 	for nsname, expected := range expectedStatuses {
-		var udpRoute v1alpha2.UDPRoute
+		var udpRoute v1.UDPRoute
 
 		err := k8sClient.Get(t.Context(), nsname, &udpRoute)
 		g.Expect(err).ToNot(HaveOccurred())

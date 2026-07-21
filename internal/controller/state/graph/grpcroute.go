@@ -339,10 +339,10 @@ func processGRPCRouteRules(
 
 // ConvertGRPCMatches converts a GRPCMatch list to an HTTPRouteMatch list.
 func ConvertGRPCMatches(grpcMatches []v1.GRPCRouteMatch) []v1.HTTPRouteMatch {
-	pathValue := "/"
-	pathType := v1.PathMatchType("PathPrefix")
 	// If no matches are specified, the implementation MUST match every gRPC request.
 	if len(grpcMatches) == 0 {
+		pathType := v1.PathMatchType("PathPrefix")
+		pathValue := "/"
 		return []v1.HTTPRouteMatch{
 			{
 				Path: &v1.HTTPPathMatch{
@@ -356,6 +356,8 @@ func ConvertGRPCMatches(grpcMatches []v1.GRPCRouteMatch) []v1.HTTPRouteMatch {
 	hms := make([]v1.HTTPRouteMatch, 0, len(grpcMatches))
 
 	for _, gm := range grpcMatches {
+		pathValue := "/"
+		pathType := v1.PathMatchType("PathPrefix")
 		var hm v1.HTTPRouteMatch
 		hmHeaders := make([]v1.HTTPHeaderMatch, 0, len(gm.Headers))
 		for _, head := range gm.Headers {

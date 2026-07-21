@@ -8,7 +8,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
-	"sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
@@ -16,15 +15,15 @@ import (
 )
 
 func createUDPRoute(
-	rules []v1alpha2.UDPRouteRule,
+	rules []gatewayv1.UDPRouteRule,
 	parentRefs []gatewayv1.ParentReference,
-) *v1alpha2.UDPRoute {
-	return &v1alpha2.UDPRoute{
+) *gatewayv1.UDPRoute {
+	return &gatewayv1.UDPRoute{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: "test",
 			Name:      "udpr",
 		},
-		Spec: v1alpha2.UDPRouteSpec{
+		Spec: gatewayv1.UDPRouteSpec{
 			CommonRouteSpec: gatewayv1.CommonRouteSpec{
 				ParentRefs: parentRefs,
 			},
@@ -118,7 +117,7 @@ func TestBuildUDPRoute(t *testing.T) {
 	)
 
 	backendRefDNEUDPR := createUDPRoute(
-		[]v1alpha2.UDPRouteRule{
+		[]gatewayv1.UDPRouteRule{
 			{
 				BackendRefs: []gatewayv1.BackendRef{
 					{
@@ -136,7 +135,7 @@ func TestBuildUDPRoute(t *testing.T) {
 	)
 
 	wrongBackendRefGroupUDPR := createUDPRoute(
-		[]v1alpha2.UDPRouteRule{
+		[]gatewayv1.UDPRouteRule{
 			{
 				BackendRefs: []gatewayv1.BackendRef{
 					{
@@ -155,7 +154,7 @@ func TestBuildUDPRoute(t *testing.T) {
 	)
 
 	wrongBackendRefKindUDPR := createUDPRoute(
-		[]v1alpha2.UDPRouteRule{
+		[]gatewayv1.UDPRouteRule{
 			{
 				BackendRefs: []gatewayv1.BackendRef{
 					{
@@ -174,7 +173,7 @@ func TestBuildUDPRoute(t *testing.T) {
 	)
 
 	diffNsBackendRefUDPR := createUDPRoute(
-		[]v1alpha2.UDPRouteRule{
+		[]gatewayv1.UDPRouteRule{
 			{
 				BackendRefs: []gatewayv1.BackendRef{
 					{
@@ -193,7 +192,7 @@ func TestBuildUDPRoute(t *testing.T) {
 	)
 
 	portNilBackendRefUDPR := createUDPRoute(
-		[]v1alpha2.UDPRouteRule{
+		[]gatewayv1.UDPRouteRule{
 			{
 				BackendRefs: []gatewayv1.BackendRef{
 					{
@@ -211,7 +210,7 @@ func TestBuildUDPRoute(t *testing.T) {
 
 	// Valid UDPRoute with single backend
 	validSingleBackendUDPR := createUDPRoute(
-		[]v1alpha2.UDPRouteRule{
+		[]gatewayv1.UDPRouteRule{
 			{
 				BackendRefs: []gatewayv1.BackendRef{
 					{
@@ -230,7 +229,7 @@ func TestBuildUDPRoute(t *testing.T) {
 
 	// Valid UDPRoute with multiple backends (weighted)
 	validMultiBackendUDPR := createUDPRoute(
-		[]v1alpha2.UDPRouteRule{
+		[]gatewayv1.UDPRouteRule{
 			{
 				BackendRefs: []gatewayv1.BackendRef{
 					{
@@ -257,7 +256,7 @@ func TestBuildUDPRoute(t *testing.T) {
 
 	// UDPRoute with multiple rules
 	multiRuleUDPR := createUDPRoute(
-		[]v1alpha2.UDPRouteRule{
+		[]gatewayv1.UDPRouteRule{
 			{
 				BackendRefs: []gatewayv1.BackendRef{
 					{
@@ -286,7 +285,7 @@ func TestBuildUDPRoute(t *testing.T) {
 
 	// Valid UDPRoute with ListenerSet parent ref
 	validUDPRWithListenerSetParentRef := createUDPRoute(
-		[]v1alpha2.UDPRouteRule{
+		[]gatewayv1.UDPRouteRule{
 			{
 				BackendRefs: []gatewayv1.BackendRef{
 					{
@@ -327,7 +326,7 @@ func TestBuildUDPRoute(t *testing.T) {
 	tests := []struct {
 		gateways map[types.NamespacedName]*Gateway
 		services map[types.NamespacedName]*apiv1.Service
-		route    *v1alpha2.UDPRoute
+		route    *gatewayv1.UDPRoute
 		expected *L4Route
 		name     string
 	}{

@@ -20,6 +20,7 @@ import (
 
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/ngfsort"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/upstreamsettings"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/shared"
@@ -317,85 +318,114 @@ func buildTLSDefaultServer(l *graph.Listener, ssl *SSL) *Layer4VirtualServer {
 }
 
 // buildL4Servers builds Layer4 servers (TCP or UDP) from routes attached to listeners.
+// Per the Gateway API conflict resolution guidelines, when multiple routes target the
+// same listener only the oldest route (by creation timestamp) is programmed.
 func buildL4Servers(logger logr.Logger, gateway *graph.Gateway, protocol v1.ProtocolType) []Layer4VirtualServer {
-	var servers []Layer4VirtualServer
 	protocolName := string(protocol)
+
+	var servers []Layer4VirtualServer
 
 	for _, l := range gateway.Listeners {
 		if !l.Valid || l.Source.Protocol != protocol {
 			continue
 		}
 
-		for _, r := range l.L4Routes {
-			if !r.Valid {
-				continue
-			}
-
-			backendRefs := r.Spec.GetBackendRefs()
-
-			if len(backendRefs) == 0 {
-				logger.V(1).Info("Route has no valid backend references, skipping",
-					"route", r.Source.GetName(),
-					"protocol", protocolName,
-				)
-				continue
-			}
-
-			var upstreams []Layer4Upstream
-			for _, br := range backendRefs {
-				if !br.Valid {
-					continue
-				}
-
-				upstreamName := br.ServicePortReference()
-
-				upstreams = append(upstreams, Layer4Upstream{
-					Name:   upstreamName,
-					Weight: br.Weight,
-				})
-			}
-
-			if len(upstreams) == 0 {
-				logger.V(1).Info("No valid upstreams for route, skipping",
-					"route", r.Source.GetName(),
-					"protocol", protocolName,
-				)
-				continue
-			}
-
-			server := Layer4VirtualServer{
-				Hostname:  "", // Layer4 doesn't use hostnames
-				Upstreams: upstreams,
-				Port:      l.Source.Port,
-			}
-
-			servers = append(servers, server)
+		// Find the oldest valid route with usable backends for this listener.
+		oldest := oldestValidL4Route(l.L4Routes, logger, protocolName)
+		if oldest == nil {
+			continue
 		}
+
+		servers = append(servers, *oldest.withPort(l.Source.Port))
 	}
 
-	// L4 routes are iterated from a map, so sort the resulting servers to produce a stable order.
+	if len(servers) == 0 {
+		return nil
+	}
+
 	// Preserve order so that this doesn't trigger an unnecessary reload.
 	sort.Slice(servers, func(i, j int) bool {
-		if servers[i].Port != servers[j].Port {
-			return servers[i].Port < servers[j].Port
-		}
-		if servers[i].Hostname != servers[j].Hostname {
-			return servers[i].Hostname < servers[j].Hostname
-		}
-		return layer4UpstreamsKey(servers[i].Upstreams) < layer4UpstreamsKey(servers[j].Upstreams)
+		return servers[i].Port < servers[j].Port
 	})
 
 	return servers
 }
 
-// layer4UpstreamsKey builds a stable comparison key from a server's upstreams so that L4 servers
-// sharing the same port and hostname are ordered deterministically.
-func layer4UpstreamsKey(upstreams []Layer4Upstream) string {
-	names := make([]string, 0, len(upstreams))
-	for _, u := range upstreams {
-		names = append(names, u.Name)
+// l4RouteUpstreams holds the extracted upstreams for a single L4 route along with
+// the source object for age comparison.
+type l4RouteUpstreams struct {
+	source    client.Object
+	upstreams []Layer4Upstream
+}
+
+func (u *l4RouteUpstreams) withPort(port v1.PortNumber) *Layer4VirtualServer {
+	return &Layer4VirtualServer{
+		Hostname:  "", // Layer4 doesn't use hostnames
+		Upstreams: u.upstreams,
+		Port:      port,
 	}
-	return strings.Join(names, ",")
+}
+
+// oldestValidL4Route returns the oldest route (by creation timestamp) that has
+// at least one valid backend reference, or nil if no such route exists.
+func oldestValidL4Route(
+	routes map[graph.L4RouteKey]*graph.L4Route,
+	logger logr.Logger,
+	protocolName string,
+) *l4RouteUpstreams {
+	var oldest *l4RouteUpstreams
+
+	for _, r := range routes {
+		if !r.Valid {
+			continue
+		}
+
+		backendRefs := r.Spec.GetBackendRefs()
+
+		if len(backendRefs) == 0 {
+			logger.V(1).Info("Route has no valid backend references, skipping",
+				"route", r.Source.GetName(),
+				"protocol", protocolName,
+			)
+			continue
+		}
+
+		var upstreams []Layer4Upstream
+		for _, br := range backendRefs {
+			if !br.Valid {
+				continue
+			}
+
+			upstreams = append(upstreams, Layer4Upstream{
+				Name:   br.ServicePortReference(),
+				Weight: br.Weight,
+			})
+		}
+
+		if len(upstreams) == 0 {
+			logger.V(1).Info("No valid upstreams for route, skipping",
+				"route", r.Source.GetName(),
+				"protocol", protocolName,
+			)
+			continue
+		}
+
+		// Sort upstreams within each route for deterministic output.
+		sort.Slice(upstreams, func(i, j int) bool {
+			return upstreams[i].Name < upstreams[j].Name
+		})
+
+		candidate := &l4RouteUpstreams{
+			source:    r.Source,
+			upstreams: upstreams,
+		}
+
+		if oldest == nil || ngfsort.LessClientObject(candidate.source, oldest.source) {
+			oldest = candidate
+		}
+	}
+
+	return oldest
 }
 
 // buildStreamUpstreams builds all stream upstreams.

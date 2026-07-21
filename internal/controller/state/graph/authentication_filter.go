@@ -30,6 +30,8 @@ type oidcRuleRef struct {
 	route     *L7Route
 	ruleIdx   int
 	filterIdx int
+	// nonHTTPS is true when this route-rule reference is attached via a non-HTTPS listener.
+	nonHTTPS bool
 }
 
 // AuthenticationFilter represents a ngfAPI.AuthenticationFilter.
@@ -480,7 +482,7 @@ func validateOIDCLogoutURIs(
 }
 
 // validateOIDCFilters performs all post-binding OIDC validations in a single pass over routes and rules:
-//   - filters attached to non-HTTPS listeners are marked invalid immediately
+//   - filters referenced via non-HTTPS listeners are recorded per-route-rule
 //   - the remaining valid filters are collected for URI conflict detection across shared hostnames
 func validateOIDCFilters(routes map[RouteKey]*L7Route, gws map[types.NamespacedName]*Gateway) {
 	listenerProtocols := buildListenerProtocolMap(gws)
@@ -529,9 +531,9 @@ func hasNonHTTPSAttachment(parentRefs []ParentRef, listenerProtocols map[string]
 
 // collectOIDCFilterInfo performs a single pass over all valid routes and rules.
 // For each OIDC filter encountered:
-//   - if its route has a non-HTTPS listener attachment and the filter is still valid, it is marked invalid
-//   - all filters (valid or not) are registered in filterRefs for propagation
-//   - only valid filters are registered in hostnameToFilters for URI conflict detection
+//   - if its route has a non-HTTPS listener attachment, the oidcRuleRef is flagged
+//   - all filters are registered in filterRefs for propagation
+//   - only valid filters on HTTPS routes are registered in hostnameToFilters for URI conflict detection
 func collectOIDCFilterInfo(
 	routes map[RouteKey]*L7Route,
 	listenerProtocols map[string]v1.ProtocolType,
@@ -560,14 +562,9 @@ func collectOIDCFilterInfo(
 				if af == nil {
 					continue
 				}
-				if nonHTTPS && af.Valid {
-					af.Conditions = append(af.Conditions,
-						conditions.NewAuthenticationFilterInvalid("OIDC authentication requires an HTTPS listener"),
-					)
-					af.Valid = false
-				}
-				filterRefs[af] = append(filterRefs[af], oidcRuleRef{route: route, ruleIdx: i, filterIdx: j})
-				if af.Valid {
+				ref := oidcRuleRef{route: route, ruleIdx: i, filterIdx: j, nonHTTPS: nonHTTPS}
+				filterRefs[af] = append(filterRefs[af], ref)
+				if af.Valid && !nonHTTPS {
 					nsname := types.NamespacedName{Namespace: af.Source.Namespace, Name: af.Source.Name}
 					for _, hostname := range acceptedHostnames {
 						if hostnameToFilters[hostname] == nil {
@@ -583,25 +580,34 @@ func collectOIDCFilterInfo(
 	return hostnameToFilters, filterRefs
 }
 
-// propagateInvalidOIDCFiltersToRouteRules marks route rules as having an invalid filter when their referenced
-// OIDC filter was invalidated by URI conflict detection. This ensures the dataplane treats those rules as
-// invalid rather than silently skipping authentication.
+// propagateInvalidOIDCFiltersToRouteRules marks route rules as having an invalid filter when:
+//   - the filter is globally invalid (e.g. URI conflict), or
+//   - the route-rule reference is attached via a non-HTTPS listener.
 func propagateInvalidOIDCFiltersToRouteRules(filterRefs map[*AuthenticationFilter][]oidcRuleRef) {
-	const invalidMsg = "OIDC filter is invalid; see filter status for details"
+	const (
+		invalidMsg  = "OIDC filter is invalid; see filter status for details"
+		nonHTTPSMsg = "OIDC authentication requires an HTTPS listener"
+	)
 
-	invalidatedRoutes := make(map[*L7Route]struct{})
+	globallyInvalidRoutes := make(map[*L7Route]struct{})
 	for af, refs := range filterRefs {
-		if af.Valid {
-			continue
-		}
 		for _, ref := range refs {
-			ref.route.Spec.Rules[ref.ruleIdx].Filters.Filters[ref.filterIdx].ResolvedExtensionRef.Valid = false
-			ref.route.Spec.Rules[ref.ruleIdx].Filters.Valid = false
-			invalidatedRoutes[ref.route] = struct{}{}
+			if !af.Valid {
+				ref.route.Spec.Rules[ref.ruleIdx].Filters.Filters[ref.filterIdx].ResolvedExtensionRef.Valid = false
+				ref.route.Spec.Rules[ref.ruleIdx].Filters.Valid = false
+				globallyInvalidRoutes[ref.route] = struct{}{}
+			} else if ref.nonHTTPS {
+				ref.route.Spec.Rules[ref.ruleIdx].Filters.Filters[ref.filterIdx].ResolvedExtensionRef.Valid = false
+				ref.route.Spec.Rules[ref.ruleIdx].Filters.Valid = false
+				mergeOrAppendRouteCondition(
+					ref.route,
+					conditions.NewRouteResolvedRefsInvalidFilter(nonHTTPSMsg),
+				)
+			}
 		}
 	}
 
-	for route := range invalidatedRoutes {
+	for route := range globallyInvalidRoutes {
 		mergeOrAppendRouteCondition(route, conditions.NewRouteResolvedRefsInvalidFilter(invalidMsg))
 	}
 }

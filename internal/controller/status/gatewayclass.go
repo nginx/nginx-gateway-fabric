@@ -9,8 +9,7 @@ import (
 
 // supportedFeatures returns the list of features supported by NGINX Gateway Fabric.
 // The list must be sorted in ascending alphabetical order.
-// If experimental is true, experimental features like TLSRoute will be included.
-func supportedFeatures(experimental bool) []gatewayv1.SupportedFeature {
+func supportedFeatures() []gatewayv1.SupportedFeature {
 	featureNames := []features.FeatureName{
 		// Core features
 		features.SupportGateway,
@@ -58,15 +57,12 @@ func supportedFeatures(experimental bool) []gatewayv1.SupportedFeature {
 		features.SupportHTTPRoute307RedirectStatusCode,
 		features.SupportHTTPRoute308RedirectStatusCode,
 		features.SupportHTTPRouteCORS,
-	}
 
-	// Add experimental features if enabled
-	if experimental {
-		featureNames = append(
-			featureNames,
-			features.SupportUDPRoute,
-			features.FeatureName("TCPRoute"),
-		)
+		// TCPRoute
+		features.SupportTCPRoute,
+
+		// UDPRoute
+		features.SupportUDPRoute,
 	}
 
 	// Sort alphabetically by feature name
