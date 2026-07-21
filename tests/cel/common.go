@@ -138,8 +138,8 @@ const (
 	expectedBackendRefNameEmptyError         = "backendRef.name must not be empty"
 	expectedBackendRefKindServiceError       = "backendRef.kind must be Service"
 	expectedBackendRefGroupCoreError         = "backendRef.group must be core"
-	expectedPortMinimumError                 = "backendRef.port must be greater than or equal to 1"
-	expectedPortMaximumError                 = "backendRef.port must be less than or equal to 65535"
+	expectedPortMinimumError                 = "port in body should be greater than or equal to 1"
+	expectedPortMaximumError                 = "port in body should be less than or equal to 65535"
 	expectedPortRequiredError                = "backendRef.port must be set"
 
 	// Namespace for tests.
