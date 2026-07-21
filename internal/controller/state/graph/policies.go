@@ -709,7 +709,7 @@ func checkForRouteOverlap(route *L7Route, gatewayHostPortPaths map[string]string
 									port,
 									*match.Path.Value,
 								)
-								if val, ok := gatewayHostPortPaths[key]; ok && val != currentRouteName {
+								if val, ok := gatewayHostPortPaths[key]; ok {
 									msg := fmt.Sprintf(
 										"Policy cannot be applied to target %q since another "+
 											"Route %q shares a namespace/gateway-name:hostname:port/path combination with this target",
