@@ -56,6 +56,7 @@ const (
 	expectedTargetRefKindServiceError                    = "TargetRefs Kind must be: Service"
 	expectedTargetRefKindGatewayError                    = "TargetRef Kind must be: Gateway"
 	expectedTargetRefAllSameKindError                    = "All TargetRefs must be the same Kind"
+	expectedTargetRefKindGatewayOrHTTPRouteError         = "TargetRef Kind must be Gateway or HTTPRoute"
 
 	// Group validation errors.
 	expectedTargetRefGroupError     = "TargetRef Group must be gateway.networking.k8s.io"
@@ -133,9 +134,13 @@ const (
 	expectedWAFN1CPolicyVersionIDPatternError    = `^pv_[A-Za-z0-9_-]+$`
 
 	// PayloadProcessor validation errors.
-	expectedTargetRefKindGatewayOrHTTPRouteError = "TargetRef Kind must be Gateway or HTTPRoute"
-	expectedProcessorExtProcessRequiredError     = "processor must specify ExtProcess"
-	expectedBackendRefNameEmptyError             = "backendRef.name must not be empty"
+	expectedProcessorExtProcessRequiredError = "processor must specify ExtProcess"
+	expectedBackendRefNameEmptyError         = "backendRef.name must not be empty"
+	expectedBackendRefKindServiceError       = "backendRef.kind must be Service"
+	expectedBackendRefGroupCoreError         = "backendRef.group must be core"
+	expectedPortMinimumError                 = "backendRef.port must be greater than or equal to 1"
+	expectedPortMaximumError                 = "backendRef.port must be less than or equal to 65535"
+	expectedPortRequiredError                = "backendRef.port must be set"
 
 	// Namespace for tests.
 	defaultNamespace = "default"

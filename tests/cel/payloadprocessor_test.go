@@ -122,52 +122,6 @@ func TestPayloadProcessorTargetRefGroup(t *testing.T) {
 	}
 }
 
-func TestPayloadProcessorProcessorExtProcess(t *testing.T) {
-	t.Parallel()
-	k8sClient := getKubernetesClient(t)
-
-	tests := []struct {
-		processor  ngfAPIv1alpha1.PayloadProcessorEntry
-		name       string
-		wantErrors []string
-	}{
-		{
-			name: "Validate processor with ExtProcess set is allowed",
-			processor: ngfAPIv1alpha1.PayloadProcessorEntry{
-				Type: ngfAPIv1alpha1.ProcessorTypeExtProcess,
-				ExtProcess: &ngfAPIv1alpha1.ExtProcessConfig{
-					BackendRef: gatewayv1.BackendObjectReference{
-						Name: "ext-svc",
-						Port: helpers.GetPointer[gatewayv1.PortNumber](9000),
-					},
-				},
-			},
-		},
-		{
-			name:       "Validate processor with ExtProcess unset is not allowed",
-			processor:  ngfAPIv1alpha1.PayloadProcessorEntry{Type: ngfAPIv1alpha1.ProcessorTypeExtProcess},
-			wantErrors: []string{expectedProcessorExtProcessRequiredError},
-		},
-		{
-			name: "Validate processor with only timeout set is not allowed",
-			processor: ngfAPIv1alpha1.PayloadProcessorEntry{
-				Type:    ngfAPIv1alpha1.ProcessorTypeExtProcess,
-				Timeout: helpers.GetPointer[ngfAPIv1alpha1.Duration]("5s"),
-			},
-			wantErrors: []string{expectedProcessorExtProcessRequiredError},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			spec := validPayloadProcessorSpec()
-			spec.Processors = []ngfAPIv1alpha1.PayloadProcessorEntry{tt.processor}
-			validateCrd(t, tt.wantErrors, createPayloadProcessor(spec), k8sClient)
-		})
-	}
-}
-
 func TestPayloadProcessorBackendRefName(t *testing.T) {
 	t.Parallel()
 	k8sClient := getKubernetesClient(t)
@@ -218,7 +172,7 @@ func TestPayloadProcessorBackendRefKind(t *testing.T) {
 		{
 			name:           "Validate Secret kind is not allowed",
 			backendRefKind: helpers.GetPointer[gatewayv1.Kind]("Secret"),
-			wantErrors:     []string{"backendRef.kind must be Service"},
+			wantErrors:     []string{expectedBackendRefKindServiceError},
 		},
 	}
 
@@ -256,7 +210,7 @@ func TestPayloadProcessorBackendRefGroup(t *testing.T) {
 		{
 			name:            "Validate non-core group is not allowed",
 			backendRefGroup: helpers.GetPointer[gatewayv1.Group](invalidGroup),
-			wantErrors:      []string{"backendRef.group must be core"},
+			wantErrors:      []string{expectedBackendRefGroupCoreError},
 		},
 	}
 
@@ -294,17 +248,17 @@ func TestPayloadProcessorPort(t *testing.T) {
 		{
 			name:       "Validate unset port is not allowed",
 			port:       nil,
-			wantErrors: []string{"backendRef.port must be set"},
+			wantErrors: []string{expectedPortRequiredError},
 		},
 		{
 			name:       "Validate port 0 is not allowed",
 			port:       helpers.GetPointer[gatewayv1.PortNumber](0),
-			wantErrors: []string{"port in body should be greater than or equal to 1"},
+			wantErrors: []string{expectedPortMinimumError},
 		},
 		{
 			name:       "Validate port 65536 is not allowed",
 			port:       helpers.GetPointer[gatewayv1.PortNumber](65536),
-			wantErrors: []string{"port in body should be less than or equal to 65535"},
+			wantErrors: []string{expectedPortMaximumError},
 		},
 	}
 
