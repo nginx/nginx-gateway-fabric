@@ -619,48 +619,102 @@ func getNginxInstanceID(instances []*pb.Instance) string {
 }
 
 func getAgentDeploymentNameAndType(instances []*pb.Instance) (types.NamespacedName, string) {
-	var nsName types.NamespacedName
-	var depType string
-	found := false
+	selected, found := agentOwner{}, false
 
 	for _, instance := range instances {
-		instanceType := instance.GetInstanceMeta().GetInstanceType()
-		if instanceType == pb.InstanceMeta_INSTANCE_TYPE_AGENT {
-			labels := instance.GetInstanceConfig().GetAgentConfig().GetLabels()
+		candidate, candidateFound, err := getAgentOwnerFromInstance(instance)
+		if err != nil {
+			return types.NamespacedName{}, ""
+		}
+		if !candidateFound {
+			continue
+		}
 
-			for _, label := range labels {
-				fields := label.GetFields()
+		if !found {
+			selected = candidate
+			found = true
+			continue
+		}
 
-				nameVal, hasName := fields[nginxTypes.AgentOwnerNameLabel]
-				typeVal, hasType := fields[nginxTypes.AgentOwnerTypeLabel]
-				if !hasName || !hasType {
-					continue
-				}
-
-				fullName := nameVal.GetStringValue()
-				parts := strings.SplitN(fullName, "_", 2)
-				if len(parts) != 2 {
-					continue
-				}
-
-				candidateName := types.NamespacedName{Namespace: parts[0], Name: parts[1]}
-				candidateType := typeVal.GetStringValue()
-
-				if !found {
-					nsName = candidateName
-					depType = candidateType
-					found = true
-					continue
-				}
-
-				if nsName != candidateName || depType != candidateType {
-					return types.NamespacedName{}, ""
-				}
-			}
+		if selected != candidate {
+			return types.NamespacedName{}, ""
 		}
 	}
 
-	return nsName, depType
+	if !found {
+		return types.NamespacedName{}, ""
+	}
+
+	return selected.name, selected.ownerType
+}
+
+type agentOwner struct {
+	name      types.NamespacedName
+	ownerType string
+}
+
+func getAgentOwnerFromInstance(instance *pb.Instance) (agentOwner, bool, error) {
+	if instance.GetInstanceMeta().GetInstanceType() != pb.InstanceMeta_INSTANCE_TYPE_AGENT {
+		return agentOwner{}, false, nil
+	}
+
+	ownerName, ownerType, hasName, hasType, err := collectOwnerLabels(instance)
+	if err != nil {
+		return agentOwner{}, false, err
+	}
+
+	if hasName != hasType {
+		return agentOwner{}, false, errors.New("incomplete owner labels")
+	}
+
+	if !hasName {
+		return agentOwner{}, false, nil
+	}
+
+	ownerNSName, ok := parseOwnerName(ownerName)
+	if !ok || ownerType == "" {
+		return agentOwner{}, false, errors.New("invalid owner labels")
+	}
+
+	return agentOwner{name: ownerNSName, ownerType: ownerType}, true, nil
+}
+
+func collectOwnerLabels(instance *pb.Instance) (string, string, bool, bool, error) {
+	labels := instance.GetInstanceConfig().GetAgentConfig().GetLabels()
+
+	ownerName, ownerType := "", ""
+	hasName, hasType := false, false
+
+	for _, label := range labels {
+		fields := label.GetFields()
+
+		if nameVal, ok := fields[nginxTypes.AgentOwnerNameLabel]; ok {
+			if hasName {
+				return "", "", false, false, errors.New("duplicate owner-name label")
+			}
+			ownerName = nameVal.GetStringValue()
+			hasName = true
+		}
+
+		if typeVal, ok := fields[nginxTypes.AgentOwnerTypeLabel]; ok {
+			if hasType {
+				return "", "", false, false, errors.New("duplicate owner-type label")
+			}
+			ownerType = typeVal.GetStringValue()
+			hasType = true
+		}
+	}
+
+	return ownerName, ownerType, hasName, hasType, nil
+}
+
+func parseOwnerName(ownerName string) (types.NamespacedName, bool) {
+	parts := strings.SplitN(ownerName, "_", 2)
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		return types.NamespacedName{}, false
+	}
+
+	return types.NamespacedName{Namespace: parts[0], Name: parts[1]}, true
 }
 
 // UpdateDataPlaneHealth includes full health information about the data plane as reported by the agent.
