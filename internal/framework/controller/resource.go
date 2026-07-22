@@ -34,17 +34,27 @@ func truncateAndHashName(name string, suffix string) string {
 		return full
 	}
 
-	// Always include the suffix, truncate name as needed
 	hash := sha256.Sum256([]byte(full))
 	hashStr := hex.EncodeToString(hash[:])[:hashLen]
-	maxNameLen := MaxServiceNameLen - (len(sep) * 2) - hashLen - len(suffix)
+
+	// overhead = 2 separators + hash
+	overhead := (len(sep) * 2) + hashLen
+	budget := MaxServiceNameLen - overhead // chars available for name + suffix
+
+	truncSuffix := suffix
+	if len(suffix) >= budget {
+		// Reserve at least 1 char for the name so the result doesn't start with "-".
+		truncSuffix = suffix[:budget-1]
+	}
+
+	maxNameLen := budget - len(truncSuffix)
 	truncName := name
 	if len(name) > maxNameLen {
 		truncName = name[:maxNameLen]
 	}
 
-	// Remove trailing dashes to avoid double-dash when separator is added
+	// Remove trailing dashes to avoid double-dash when separator is added.
 	truncName = strings.TrimRight(truncName, sep)
 
-	return truncName + sep + hashStr + sep + suffix
+	return truncName + sep + hashStr + sep + truncSuffix
 }

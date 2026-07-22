@@ -2020,6 +2020,49 @@ func TestFindBackendTLSPolicyForService(t *testing.T) {
 	}
 }
 
+func TestFindBackendTLSPolicyForService_IgnoresNonServiceKind(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	// BackendTLSPolicy targeting a non-Service Kind (e.g. ConfigMap) with the same name
+	// should not match when looking up policies for a Service.
+	btp := &BackendTLSPolicy{
+		Valid: true,
+		Source: &gatewayv1.BackendTLSPolicy{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "btp",
+				Namespace: "test",
+			},
+			Spec: gatewayv1.BackendTLSPolicySpec{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReferenceWithSectionName{
+					{
+						LocalPolicyTargetReference: gatewayv1.LocalPolicyTargetReference{
+							Group: "",
+							Kind:  "ConfigMap",
+							Name:  "svc1",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	backendTLSPolicies := map[types.NamespacedName]*BackendTLSPolicy{
+		{Namespace: "test", Name: "btp"}: btp,
+	}
+
+	result, err := findBackendTLSPolicyForService(
+		backendTLSPolicies,
+		helpers.GetPointer[gatewayv1.Namespace]("test"),
+		"svc1",
+		"test",
+		v1.ServicePort{Name: "https", Port: 443},
+	)
+
+	g.Expect(result).To(BeNil(), "policy targeting ConfigMap kind should not match a Service lookup")
+	g.Expect(err).ToNot(HaveOccurred())
+}
+
 func TestGetRefGrantFromResourceForRoute(t *testing.T) {
 	t.Parallel()
 	tests := []struct {

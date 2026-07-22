@@ -209,10 +209,8 @@ Create namespaced RBAC rules.
   - backendtlspolicies
   - tlsroutes
   - listenersets
-  {{- if .Values.nginxGateway.gwAPIExperimentalFeatures.enable }}
   - tcproutes
   - udproutes
-  {{- end }}
   verbs:
   - list
   - watch
@@ -227,10 +225,8 @@ Create namespaced RBAC rules.
   - backendtlspolicies/status
   - tlsroutes/status
   - listenersets/status
-  {{- if .Values.nginxGateway.gwAPIExperimentalFeatures.enable }}
   - tcproutes/status
   - udproutes/status
-  {{- end }}
   verbs:
   - update
 - apiGroups:

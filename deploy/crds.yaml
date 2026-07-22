@@ -10433,6 +10433,18 @@ spec:
                     - key
                     x-kubernetes-list-type: map
                 type: object
+              useClusterIP:
+                description: |-
+                  UseClusterIP configures NGINX to route to the Service ClusterIP and port instead of individual
+                  Pod IPs. When enabled, NGINX will target a single upstream server corresponding to the Service's
+                  ClusterIP, which is useful for service mesh compatibility and other Kubernetes
+                  controllers/operators that require traffic to traverse the Service VIP.
+                  This setting applies only when the target Service has a ClusterIP. For headless Services
+                  (ClusterIP: None) and ExternalName Services, normal endpoint resolution is used instead.
+                  This setting is also not applied to L4/stream upstreams.
+                  A UseClusterIP value set in an UpstreamSettingsPolicy for a Service takes precedence over this setting.
+                  Defaults to false.
+                type: boolean
               waf:
                 description: WAF configures NGINX App Protect WAF functionality.
                 properties:
@@ -12646,7 +12658,7 @@ spec:
                       Connections sets the maximum number of idle keep-alive connections to upstream servers that are preserved
                       in the cache of each nginx worker process. When this number is exceeded, the least recently used
                       connections are closed.
-                      The keepAlive directive for upstreams defaults to 16. To override this value, set the connections field.
+                      The keepAlive directive for upstreams defaults to 32. To override this value, set the connections field.
                       To disable the keepAlive directive, set connections to 0.
                       Directive: https://nginx.org/en/docs/http/ngx_http_upstream_module.html#keepalive
                     format: int32
