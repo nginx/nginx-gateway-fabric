@@ -230,7 +230,7 @@ func TestCreateIncludesFromLocationSnippetsFilter(t *testing.T) {
 			g := NewWithT(t)
 
 			includes := createIncludesFromLocationSnippetsFilters(test.filters)
-			g.Expect(includes).To(ConsistOf(test.expIncludes))
+			g.Expect(includes).To(Equal(test.expIncludes))
 		})
 	}
 }

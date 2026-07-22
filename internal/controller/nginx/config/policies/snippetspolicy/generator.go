@@ -1,7 +1,9 @@
 package snippetspolicy
 
 import (
+	"cmp"
 	"fmt"
+	"slices"
 
 	"github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/http"
@@ -67,13 +69,26 @@ func (g *Generator) generate(
 	context v1alpha1.NginxContext,
 ) policies.GenerateResultFiles {
 	var files policies.GenerateResultFiles
+	snippetsPolicies := make([]*v1alpha1.SnippetsPolicy, 0, len(pols))
 
 	for _, policy := range pols {
 		sp, ok := policy.(*v1alpha1.SnippetsPolicy)
 		if !ok {
 			continue
 		}
+		snippetsPolicies = append(snippetsPolicies, sp)
+	}
 
+	// Policy slices are built from graph maps, so their order can change between
+	// reconciliations. Sort them to keep equivalent NGINX configuration stable.
+	slices.SortFunc(snippetsPolicies, func(a, b *v1alpha1.SnippetsPolicy) int {
+		return cmp.Or(
+			cmp.Compare(a.GetNamespace(), b.GetNamespace()),
+			cmp.Compare(a.GetName(), b.GetName()),
+		)
+	})
+
+	for _, sp := range snippetsPolicies {
 		for _, snippet := range sp.Spec.Snippets {
 			if snippet.Context != context {
 				continue

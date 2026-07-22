@@ -132,15 +132,13 @@ func createIncludeFromAuthZMap(filterNsName string, authZMap dataplane.AuthZMap)
 // Duplicate includes are possible when a single policy targets multiple resources, or a snippets filter
 // is referenced on multiple routing rules.
 func deduplicateIncludes(includes []shared.Include) []shared.Include {
-	uniqueIncludes := make(map[string]shared.Include)
+	seen := make(map[string]struct{}, len(includes))
+	results := make([]shared.Include, 0, len(includes))
 	for _, i := range includes {
-		if _, ok := uniqueIncludes[i.Name]; !ok {
-			uniqueIncludes[i.Name] = i
+		if _, ok := seen[i.Name]; ok {
+			continue
 		}
-	}
-
-	results := make([]shared.Include, 0, len(uniqueIncludes))
-	for _, i := range uniqueIncludes {
+		seen[i.Name] = struct{}{}
 		results = append(results, i)
 	}
 
