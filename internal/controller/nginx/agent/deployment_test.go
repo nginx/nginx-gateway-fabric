@@ -61,7 +61,12 @@ func TestSetAndGetFiles(t *testing.T) {
 	wrongHashFile, _ := deployment.GetFile("test.conf", "invalid")
 	g.Expect(wrongHashFile).To(BeNil())
 
-	// Set the same files again
+	// Setting the same files again resends because the version was never marked applied
+	msg = deployment.SetFiles(files, []v1.VolumeMount{})
+	g.Expect(msg).ToNot(BeNil())
+
+	// Once the version is marked as applied, the same files produce no message
+	deployment.SetAppliedConfigVersion(configVersion)
 	msg = deployment.SetFiles(files, []v1.VolumeMount{})
 	g.Expect(msg).To(BeNil())
 
@@ -143,7 +148,8 @@ func TestSetAndGetFiles_VolumeIgnoreFiles(t *testing.T) {
 	wrongHashFile, _ := deployment.GetFile("test.conf", "invalid")
 	g.Expect(wrongHashFile).To(BeNil())
 
-	// Set the same files again
+	// Set the same files again after marking the version as applied
+	deployment.SetAppliedConfigVersion(configVersion)
 	msg = deployment.SetFiles(files, volumeMounts)
 	g.Expect(msg).To(BeNil())
 
@@ -246,9 +252,10 @@ func TestUpdateWAFBundle(t *testing.T) {
 			expectNumFiles: 1,
 		},
 		{
-			name: "returns nil when bundle contents are unchanged",
+			name: "returns nil when bundle contents are unchanged and applied",
 			setup: func(d *Deployment) {
-				d.UpdateWAFBundle(bundlePath, []byte("bundle-v1"))
+				msg := d.UpdateWAFBundle(bundlePath, []byte("bundle-v1"))
+				d.SetAppliedConfigVersion(msg.ConfigVersion)
 			},
 			data:      []byte("bundle-v1"),
 			expectNil: true,

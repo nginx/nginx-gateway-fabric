@@ -317,6 +317,7 @@ func TestSubscribe(t *testing.T) {
 		ParentName: types.NamespacedName{Namespace: "test", Name: "nginx-deployment"},
 		ParentType: nginxTypes.DeploymentType,
 		InstanceID: "nginx-id",
+		Generation: 7,
 	}
 	connTracker.GetConnectionReturns(conn)
 
@@ -451,6 +452,12 @@ func TestSubscribe(t *testing.T) {
 	}).Should(MatchError(ContainSubstring("context canceled")))
 
 	g.Expect(deployment.podStatuses).ToNot(HaveKey("1234567"))
+
+	// cleanup must remove the connection with the established connection's generation
+	g.Expect(connTracker.RemoveConnectionCallCount()).To(Equal(1))
+	removedUUID, removedGeneration := connTracker.RemoveConnectionArgsForCall(0)
+	g.Expect(removedUUID).To(Equal("1234567"))
+	g.Expect(removedGeneration).To(Equal(7))
 }
 
 func TestSubscribe_Reset(t *testing.T) {
@@ -462,6 +469,7 @@ func TestSubscribe_Reset(t *testing.T) {
 		ParentName: types.NamespacedName{Namespace: "test", Name: "nginx-deployment"},
 		ParentType: nginxTypes.DeploymentType,
 		InstanceID: "nginx-id",
+		Generation: 7,
 	}
 	connTracker.GetConnectionReturns(conn)
 

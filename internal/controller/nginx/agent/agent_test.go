@@ -89,6 +89,7 @@ func TestUpdateConfig_NoChange(t *testing.T) {
 	g := NewWithT(t)
 
 	fakeBroadcaster := &broadcastfakes.FakeBroadcaster{}
+	fakeBroadcaster.SendReturns(true)
 
 	updater := NewNginxUpdater(logr.Discard(), fake.NewFakeClient(), &status.Queue{}, nil, false)
 
@@ -105,14 +106,109 @@ func TestUpdateConfig_NoChange(t *testing.T) {
 		Contents: []byte("test content"),
 	}
 
-	// Set the initial files on the deployment
-	deployment.SetFiles([]File{file}, []v1.VolumeMount{})
+	// Apply the initial files successfully
+	updater.UpdateConfig(deployment, []File{file}, []v1.VolumeMount{})
+	g.Expect(fakeBroadcaster.SendCallCount()).To(Equal(1))
 
 	// Call UpdateConfig with the same files
 	updater.UpdateConfig(deployment, []File{file}, []v1.VolumeMount{})
 
 	// Verify that no new configuration was sent
-	g.Expect(fakeBroadcaster.SendCallCount()).To(Equal(0))
+	g.Expect(fakeBroadcaster.SendCallCount()).To(Equal(1))
+}
+
+func TestUpdateConfig_ResendsAfterFailure(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	fakeBroadcaster := &broadcastfakes.FakeBroadcaster{}
+	fakeBroadcaster.SendReturns(true)
+
+	updater := NewNginxUpdater(logr.Discard(), fake.NewFakeClient(), &status.Queue{}, nil, false)
+
+	deployment := &Deployment{
+		broadcaster: fakeBroadcaster,
+		podStatuses: make(map[string]error),
+	}
+
+	fileV1 := File{
+		Meta: &pb.FileMeta{
+			Name: "test.conf",
+			Hash: "v1",
+		},
+		Contents: []byte("v1 content"),
+	}
+	fileV2 := File{
+		Meta: &pb.FileMeta{
+			Name: "test.conf",
+			Hash: "v2",
+		},
+		Contents: []byte("v2 content"),
+	}
+
+	// The initial apply succeeds
+	updater.UpdateConfig(deployment, []File{fileV1}, []v1.VolumeMount{})
+	g.Expect(fakeBroadcaster.SendCallCount()).To(Equal(1))
+	g.Expect(deployment.GetLatestConfigError()).ToNot(HaveOccurred())
+
+	// The next apply fails on the agent
+	testErr := errors.New("connection error")
+	deployment.SetPodErrorStatus("pod1", testErr)
+	updater.UpdateConfig(deployment, []File{fileV2}, []v1.VolumeMount{})
+	g.Expect(fakeBroadcaster.SendCallCount()).To(Equal(2))
+	g.Expect(deployment.GetLatestConfigError()).To(Equal(testErr))
+
+	// A reconcile with the same desired files must resend after a failed apply
+	deployment.SetPodErrorStatus("pod1", nil)
+	updater.UpdateConfig(deployment, []File{fileV2}, []v1.VolumeMount{})
+	g.Expect(fakeBroadcaster.SendCallCount()).To(Equal(3))
+	g.Expect(deployment.GetLatestConfigError()).ToNot(HaveOccurred())
+
+	// Once applied successfully, the same files no longer trigger a send
+	updater.UpdateConfig(deployment, []File{fileV2}, []v1.VolumeMount{})
+	g.Expect(fakeBroadcaster.SendCallCount()).To(Equal(3))
+}
+
+func TestUpdateConfig_ResendsWhenPodReportsFailure(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	fakeBroadcaster := &broadcastfakes.FakeBroadcaster{}
+	fakeBroadcaster.SendReturns(true)
+
+	updater := NewNginxUpdater(logr.Discard(), fake.NewFakeClient(), &status.Queue{}, nil, false)
+
+	deployment := &Deployment{
+		broadcaster: fakeBroadcaster,
+		podStatuses: make(map[string]error),
+	}
+
+	file := File{
+		Meta: &pb.FileMeta{
+			Name: "test.conf",
+			Hash: "12345",
+		},
+		Contents: []byte("test content"),
+	}
+
+	// The initial apply succeeds and the version is marked applied
+	updater.UpdateConfig(deployment, []File{file}, []v1.VolumeMount{})
+	g.Expect(fakeBroadcaster.SendCallCount()).To(Equal(1))
+
+	// A pod failing its initial apply must trigger a resend even though the
+	// desired version is already marked applied
+	testErr := errors.New("initial config apply failed")
+	deployment.SetPodErrorStatus("new-pod", testErr)
+	updater.UpdateConfig(deployment, []File{file}, []v1.VolumeMount{})
+	g.Expect(fakeBroadcaster.SendCallCount()).To(Equal(2))
+	g.Expect(deployment.GetLatestConfigError()).To(Equal(testErr))
+
+	// After the pod applies successfully, the same files no longer trigger a send
+	deployment.SetPodErrorStatus("new-pod", nil)
+	updater.UpdateConfig(deployment, []File{file}, []v1.VolumeMount{})
+	g.Expect(fakeBroadcaster.SendCallCount()).To(Equal(3))
+	updater.UpdateConfig(deployment, []File{file}, []v1.VolumeMount{})
+	g.Expect(fakeBroadcaster.SendCallCount()).To(Equal(3))
 }
 
 func TestUpdateUpstreamServers(t *testing.T) {
@@ -254,7 +350,12 @@ func TestUpdateUpstreamServers(t *testing.T) {
 				g.Expect(deployment.GetNGINXPlusActions()).To(BeNil())
 				g.Expect(fakeBroadcaster.SendCallCount()).To(Equal(0))
 			} else if test.buildUpstreams {
-				g.Expect(deployment.GetNGINXPlusActions()).To(Equal(expActions))
+				if test.expErr {
+					// failed actions are not stored so that the next reconcile retries them
+					g.Expect(deployment.GetNGINXPlusActions()).To(BeEmpty())
+				} else {
+					g.Expect(deployment.GetNGINXPlusActions()).To(Equal(expActions))
+				}
 				g.Expect(fakeBroadcaster.SendCallCount()).To(Equal(3))
 			}
 
@@ -266,10 +367,12 @@ func TestUpdateUpstreamServers(t *testing.T) {
 				)
 
 				g.Expect(deployment.GetLatestUpstreamError()).To(Equal(expErr))
-				// ensure that the error is cleared after the next config is applied
+				// ensure that the error is cleared and the actions are stored after the
+				// same actions are applied successfully on the next reconcile
 				deployment.SetPodErrorStatus("pod1", nil)
 				updater.UpdateUpstreamServers(deployment, conf)
 				g.Expect(deployment.GetLatestUpstreamError()).ToNot(HaveOccurred())
+				g.Expect(deployment.GetNGINXPlusActions()).To(Equal(expActions))
 			} else {
 				g.Expect(deployment.GetLatestUpstreamError()).ToNot(HaveOccurred())
 			}

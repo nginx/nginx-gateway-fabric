@@ -897,6 +897,69 @@ var _ = Describe("eventHandler", func() {
 		Expect(fakeProcessor.ForceRebuildCallCount()).To(Equal(1))
 	})
 
+	It("should schedule a retry when the nginx config push fails", func() {
+		fakeProcessor.ProcessReturns(baseGraph)
+
+		eventCh := make(chan any, 1)
+		handler.cfg.eventCh = eventCh
+		handler.configRetryDelay.Store(int64(10 * time.Millisecond))
+
+		deployment := handler.cfg.nginxDeployments.GetOrStore(
+			ctx,
+			types.NamespacedName{
+				Namespace: "test",
+				Name:      controller.CreateNginxResourceName("gateway", "nginx"),
+			},
+			"gateway",
+		)
+		deployment.SetLatestConfigError(errors.New("apply failed"))
+
+		e := &events.UpsertEvent{Resource: &gatewayv1.HTTPRoute{}}
+		handler.HandleEventBatch(context.Background(), logr.Discard(), []any{e})
+
+		Eventually(eventCh).Should(Receive(Equal(events.NginxConfigRetryEvent{})))
+	})
+
+	It("should schedule at most one pending config push retry", func() {
+		eventCh := make(chan any, 2)
+		handler.cfg.eventCh = eventCh
+		handler.configRetryDelay.Store(int64(10 * time.Millisecond))
+
+		handler.scheduleNginxConfigRetry(true)
+		handler.scheduleNginxConfigRetry(true)
+
+		Eventually(eventCh).Should(Receive(Equal(events.NginxConfigRetryEvent{})))
+		Consistently(eventCh, 50*time.Millisecond).ShouldNot(Receive())
+	})
+
+	It("should back off the config push retry delay and reset it on success", func() {
+		eventCh := make(chan any, 2)
+		handler.cfg.eventCh = eventCh
+		handler.configRetryDelay.Store(int64(10 * time.Millisecond))
+
+		handler.scheduleNginxConfigRetry(true)
+		Expect(time.Duration(handler.configRetryDelay.Load())).To(Equal(20 * time.Millisecond))
+
+		handler.scheduleNginxConfigRetry(false)
+		Expect(time.Duration(handler.configRetryDelay.Load())).To(Equal(nginxConfigRetryBaseDelay))
+
+		handler.configRetryDelay.Store(int64(nginxConfigRetryMaxDelay))
+		handler.configRetryScheduled.Store(false)
+		handler.scheduleNginxConfigRetry(true)
+		Expect(time.Duration(handler.configRetryDelay.Load())).To(Equal(nginxConfigRetryMaxDelay))
+	})
+
+	It("should handle NginxConfigRetryEvent by marking the processor dirty", func() {
+		handler.configRetryScheduled.Store(true)
+
+		batch := []any{events.NginxConfigRetryEvent{}}
+		handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
+
+		Expect(fakeProcessor.ForceRebuildCallCount()).To(Equal(1))
+		// A new retry can be scheduled if the retried push fails again.
+		Expect(handler.configRetryScheduled.Load()).To(BeFalse())
+	})
+
 	It("should process events with volume mounts from Deployment", func() {
 		// Create a gateway with EffectiveNginxProxy containing Deployment VolumeMounts
 		gatewayWithVolumeMounts := &graph.Graph{

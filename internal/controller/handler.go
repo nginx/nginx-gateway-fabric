@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -75,6 +76,8 @@ type eventHandlerConfig struct {
 	graphBuiltHealthChecker *graphBuiltHealthChecker
 	// statusQueue contains updates when the handler should write statuses.
 	statusQueue *status.Queue
+	// eventCh is used to inject events into the event loop, e.g. to retry a failed config push.
+	eventCh chan<- any
 	// nginxDeployments contains a map of all nginx Deployments, and data about them.
 	nginxDeployments *agent.DeploymentStore
 	// wafPollerManager manages WAF bundle polling for policies with polling enabled.
@@ -110,6 +113,12 @@ const (
 
 	// apResourceFinalizer prevents deletion of AP resources that are still referenced by WAFPolicy.
 	apResourceFinalizer = "gateway.nginx.org/ap-policy-protection"
+
+	// nginxConfigRetryBaseDelay is the initial delay before a failed nginx config push is retried.
+	nginxConfigRetryBaseDelay = 5 * time.Second
+
+	// nginxConfigRetryMaxDelay caps the exponential backoff of the config push retry delay.
+	nginxConfigRetryMaxDelay = 5 * time.Minute
 )
 
 type apResourceType int
@@ -154,10 +163,14 @@ type objectFilter struct {
 // (3) Updating control plane configuration.
 // (4) Tracks the NGINX Plus usage reporting Secret (if applicable).
 type eventHandlerImpl struct {
-	latestConfigurations  map[types.NamespacedName]*dataplane.Configuration
-	objectFilters         map[filterKey]objectFilter
-	finalizedAPResources  map[apResourceKey]struct{}
-	cfg                   eventHandlerConfig
+	latestConfigurations map[types.NamespacedName]*dataplane.Configuration
+	objectFilters        map[filterKey]objectFilter
+	finalizedAPResources map[apResourceKey]struct{}
+	cfg                  eventHandlerConfig
+	// configRetryDelay is the current config push retry delay in nanoseconds.
+	configRetryDelay atomic.Int64
+	// configRetryScheduled tracks whether a config push retry event is already pending.
+	configRetryScheduled  atomic.Bool
 	lock                  sync.RWMutex
 	leaderLock            sync.RWMutex
 	finalizerLock         sync.Mutex
@@ -172,6 +185,7 @@ func newEventHandlerImpl(cfg eventHandlerConfig) *eventHandlerImpl {
 		latestConfigurations: make(map[types.NamespacedName]*dataplane.Configuration),
 		finalizedAPResources: make(map[apResourceKey]struct{}),
 	}
+	handler.configRetryDelay.Store(int64(nginxConfigRetryBaseDelay))
 
 	handler.objectFilters = map[filterKey]objectFilter{
 		// NginxGateway CRD
@@ -227,6 +241,9 @@ func (h *eventHandlerImpl) sendNginxConfig(ctx context.Context, logger logr.Logg
 	if gr == nil {
 		return
 	}
+
+	var pushFailed bool
+	defer func() { h.scheduleNginxConfigRetry(pushFailed) }()
 
 	// Reconcile WAF bundle pollers on every graph update, regardless of Gateway state.
 	// This ensures pollers for deleted or orphaned policies are stopped even on early returns.
@@ -304,10 +321,14 @@ func (h *eventHandlerImpl) sendNginxConfig(ctx context.Context, logger logr.Logg
 
 			configErr := deployment.GetLatestConfigError()
 			upstreamErr := deployment.GetLatestUpstreamError()
+			pushErr := errors.Join(configErr, upstreamErr)
+			if pushErr != nil {
+				pushFailed = true
+			}
 
 			statusObj = &status.QueueObject{
 				UpdateType:        status.UpdateAll,
-				Error:             errors.Join(configErr, upstreamErr),
+				Error:             pushErr,
 				NginxConfigPushed: true,
 				Deployment: status.Deployment{
 					NamespacedName: gw.DeploymentName,
@@ -323,6 +344,30 @@ func (h *eventHandlerImpl) sendNginxConfig(ctx context.Context, logger logr.Logg
 			h.cfg.statusQueue.Enqueue(statusObj)
 		}()
 	}
+}
+
+// scheduleNginxConfigRetry schedules a delayed NginxConfigRetryEvent when a config push
+// failed, so the push is retried without waiting for an unrelated cluster event. At most
+// one retry is pending at a time; the delay backs off exponentially and resets on success.
+func (h *eventHandlerImpl) scheduleNginxConfigRetry(failed bool) {
+	if !failed {
+		h.configRetryDelay.Store(int64(nginxConfigRetryBaseDelay))
+		return
+	}
+
+	if !h.configRetryScheduled.CompareAndSwap(false, true) {
+		return
+	}
+
+	delay := time.Duration(h.configRetryDelay.Load())
+	h.configRetryDelay.Store(int64(min(delay*2, nginxConfigRetryMaxDelay)))
+
+	time.AfterFunc(delay, func() {
+		select {
+		case h.cfg.eventCh <- events.NginxConfigRetryEvent{}:
+		case <-h.cfg.ctx.Done():
+		}
+	})
 }
 
 // effectiveVolumeMounts returns the user-configured volume mounts from the EffectiveNginxProxy,
@@ -876,6 +921,11 @@ func (h *eventHandlerImpl) parseAndCaptureEvent(ctx context.Context, logger logr
 		// return nil and the pending Gateway is never unblocked.
 		// We do not call CaptureUpsertChange here because that would overwrite the real policy
 		// object in cluster state with a metadata-only stub, corrupting the next graph build.
+		h.cfg.processor.ForceRebuild()
+	case events.NginxConfigRetryEvent:
+		h.configRetryScheduled.Store(false)
+		logger.Info("Retrying nginx configuration update after a failed attempt")
+		// mark the processor dirty so the rebuild re-sends any unapplied configuration
 		h.cfg.processor.ForceRebuild()
 	default:
 		panic(fmt.Errorf("unknown event type %T", e))

@@ -243,6 +243,7 @@ func StartManager(cfg config.Config) error {
 		gatewayClassName:        cfg.GatewayClassName,
 		plus:                    cfg.Plus,
 		statusQueue:             statusQueue,
+		eventCh:                 eventCh,
 		nginxDeployments:        nginxUpdater.NginxDeployments,
 		wafPollerManager:        wafPollerManager,
 		inferenceExtension:      cfg.InferenceExtension,

@@ -222,6 +222,43 @@ func TestGetFile_FileNotFound(t *testing.T) {
 	g.Expect(resp).To(BeNil())
 }
 
+// TestGetFile_ReconnectRace validates the fix for issue 5330: https://github.com/nginx/nginx-gateway-fabric/issues/5330
+// A stale stream's RemoveConnection must not wipe a live re-tracked
+// entry after a same-UUID reconnect. Fails pre-fix with "connection not found".
+func TestGetFile_ReconnectRace(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	const uuid = "agent-uuid-stable"
+	deploymentName := types.NamespacedName{Name: "nginx-deployment", Namespace: "default"}
+
+	// Real tracker (not the fake) so the Track/RemoveConnection interleaving is exercised for real.
+	connTracker := agentgrpc.NewConnectionsTracker()
+
+	depStore := NewDeploymentStore(connTracker)
+	dep := depStore.GetOrStore(t.Context(), deploymentName, "gateway")
+
+	fileMeta := &pb.FileMeta{Name: "test.conf", Hash: "some-hash"}
+	contents := []byte("test contents")
+	dep.files = []File{{Meta: fileMeta, Contents: contents}}
+
+	conn := agentgrpc.Connection{InstanceID: "12345", ParentName: deploymentName}
+
+	staleGen := connTracker.Track(uuid, conn)    // original stream registers the agent
+	connTracker.Track(uuid, conn)                // agent reconnects (same UUID), re-registers a live connection
+	connTracker.RemoveConnection(uuid, staleGen) // stale original stream's deferred cleanup fires after reconnect
+
+	fs := newFileService(logr.Discard(), depStore, connTracker)
+	ctx := grpcContext.NewGrpcContext(t.Context(), grpcContext.GrpcInfo{UUID: uuid})
+
+	resp, err := fs.GetFile(ctx, &pb.GetFileRequest{FileMeta: fileMeta})
+
+	// The live agent is still connected, so GetFile MUST succeed.
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(resp).ToNot(BeNil())
+	g.Expect(resp.GetContents().GetContents()).To(Equal(contents))
+}
+
 func TestGetFileStream(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)

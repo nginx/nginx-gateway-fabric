@@ -92,8 +92,13 @@ func (n *NginxUpdaterImpl) UpdateConfig(
 ) {
 	msg := deployment.SetFiles(files, volumeMounts)
 	if msg == nil {
-		n.logger.V(1).Info("No changes to nginx configuration files, not sending to agent")
-		return
+		if deployment.GetConfigurationStatus() == nil {
+			n.logger.V(1).Info("No changes to nginx configuration files, not sending to agent")
+			return
+		}
+		// a pod reported a failed apply (e.g. a new pod's initial config), so resend
+		deployment.SetAppliedConfigVersion("")
+		msg = deployment.SetFiles(files, volumeMounts)
 	}
 
 	applied := deployment.GetBroadcaster().Send(*msg)
@@ -101,7 +106,16 @@ func (n *NginxUpdaterImpl) UpdateConfig(
 		n.logger.Info("Sent nginx configuration to agent")
 	}
 
-	deployment.SetLatestConfigError(deployment.GetConfigurationStatus())
+	configStatus := deployment.GetConfigurationStatus()
+	if applied && configStatus == nil {
+		deployment.SetAppliedConfigVersion(msg.ConfigVersion)
+	} else {
+		// the apply failed or no agents were subscribed, so the running configuration is
+		// unknown; clearing the applied version forces a resend on the next rebuild
+		deployment.SetAppliedConfigVersion("")
+	}
+
+	deployment.SetLatestConfigError(configStatus)
 }
 
 // UpdateUpstreamServers sends an APIRequest to the agent to update upstream servers using the NGINX Plus API.
@@ -171,11 +185,15 @@ func (n *NginxUpdaterImpl) UpdateUpstreamServers(
 
 	if len(errs) != 0 {
 		deployment.SetLatestUpstreamError(errors.Join(errs...))
-	} else if applied {
+		return
+	}
+
+	if applied {
 		n.logger.Info("Updated upstream servers using NGINX Plus API")
 	}
 
 	// Store the most recent actions on the deployment so any new subscribers can apply them when first connecting.
+	// Only stored on success so a failed update is retried instead of skipped by the equality check above.
 	deployment.SetNGINXPlusActions(actions)
 }
 
