@@ -104,7 +104,7 @@ run-conformance-tests-openshift: ## Run conformance tests on OpenShift (skips te
 	fi
 
 .PHONY: run-inference-conformance-tests
-run-inference-conformance-tests: ## Run inference conformance tests
+run-inference-conformance-tests: deploy-metallb ## Run inference conformance tests
 	kind load docker-image $(CONFORMANCE_PREFIX):$(CONFORMANCE_TAG) --name $(CLUSTER_NAME)
 	kubectl apply -f conformance/conformance-rbac.yaml
 	kubectl run -i conformance-inference \
