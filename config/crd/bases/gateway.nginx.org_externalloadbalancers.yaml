@@ -16,7 +16,7 @@ spec:
     listKind: ExternalLoadBalancerList
     plural: externalloadbalancers
     shortNames:
-    - elbs
+    - elb
     singular: externalloadbalancer
   scope: Namespaced
   versions:
