@@ -1,6 +1,7 @@
 package provisioner
 
 import (
+	"maps"
 	"testing"
 
 	. "github.com/onsi/gomega"
@@ -12,6 +13,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
 
@@ -435,6 +437,152 @@ func TestDeploymentAndDaemonSetSpecSetter(t *testing.T) {
 					r.run(t, tc)
 				})
 			}
+		})
+	}
+}
+
+func TestDeploymentAndDaemonSetSpecSetter_PreservesRestartAnnotation(t *testing.T) {
+	t.Parallel()
+
+	const restartedAt = "2026-07-22T12:00:00Z"
+
+	tests := []struct {
+		setSpec func(t *testing.T, existingAnnotations map[string]string, desiredTemplate corev1.PodTemplateSpec)
+		name    string
+	}{
+		{
+			name: "Deployment",
+			setSpec: func(t *testing.T, existingAnnotations map[string]string, desiredTemplate corev1.PodTemplateSpec) {
+				t.Helper()
+				g := NewWithT(t)
+				deployment := &appsv1.Deployment{
+					Spec: appsv1.DeploymentSpec{
+						Template: corev1.PodTemplateSpec{
+							ObjectMeta: metav1.ObjectMeta{Annotations: existingAnnotations},
+						},
+					},
+				}
+
+				g.Expect(deploymentSpecSetter(
+					deployment,
+					appsv1.DeploymentSpec{Template: desiredTemplate},
+					metav1.ObjectMeta{},
+				)()).To(Succeed())
+				g.Expect(deployment.Spec.Template.Annotations).To(HaveKeyWithValue(
+					controller.RestartedAnnotation,
+					restartedAt,
+				))
+			},
+		},
+		{
+			name: "DaemonSet",
+			setSpec: func(t *testing.T, existingAnnotations map[string]string, desiredTemplate corev1.PodTemplateSpec) {
+				t.Helper()
+				g := NewWithT(t)
+				daemonSet := &appsv1.DaemonSet{
+					Spec: appsv1.DaemonSetSpec{
+						Template: corev1.PodTemplateSpec{
+							ObjectMeta: metav1.ObjectMeta{Annotations: existingAnnotations},
+						},
+					},
+				}
+
+				g.Expect(daemonSetSpecSetter(
+					daemonSet,
+					appsv1.DaemonSetSpec{Template: desiredTemplate},
+					metav1.ObjectMeta{},
+				)()).To(Succeed())
+				g.Expect(daemonSet.Spec.Template.Annotations).To(HaveKeyWithValue(
+					controller.RestartedAnnotation,
+					restartedAt,
+				))
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			test.setSpec(
+				t,
+				map[string]string{controller.RestartedAnnotation: restartedAt},
+				corev1.PodTemplateSpec{
+					ObjectMeta: metav1.ObjectMeta{
+						Annotations: map[string]string{"prometheus.io/scrape": "true"},
+					},
+				},
+			)
+		})
+	}
+}
+
+func TestPreserveRestartAnnotation(t *testing.T) {
+	t.Parallel()
+
+	const (
+		existingRestart = "2026-07-22T12:00:00Z"
+		desiredRestart  = "2026-07-22T12:01:00Z"
+	)
+
+	tests := []struct {
+		existing map[string]string
+		desired  map[string]string
+		expected map[string]string
+		name     string
+	}{
+		{
+			name: "preserves existing restart when desired omits it",
+			existing: map[string]string{
+				controller.RestartedAnnotation: existingRestart,
+			},
+			desired: map[string]string{
+				"prometheus.io/scrape": "true",
+			},
+			expected: map[string]string{
+				controller.RestartedAnnotation: existingRestart,
+				"prometheus.io/scrape":         "true",
+			},
+		},
+		{
+			name: "explicit desired restart takes precedence",
+			existing: map[string]string{
+				controller.RestartedAnnotation: existingRestart,
+			},
+			desired: map[string]string{
+				controller.RestartedAnnotation: desiredRestart,
+			},
+			expected: map[string]string{
+				controller.RestartedAnnotation: desiredRestart,
+			},
+		},
+		{
+			name: "does not add a restart without an existing value",
+			desired: map[string]string{
+				"prometheus.io/scrape": "true",
+			},
+			expected: map[string]string{
+				"prometheus.io/scrape": "true",
+			},
+		},
+		{
+			name: "creates annotations when desired is nil",
+			existing: map[string]string{
+				controller.RestartedAnnotation: existingRestart,
+			},
+			expected: map[string]string{
+				controller.RestartedAnnotation: existingRestart,
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+			desiredBefore := maps.Clone(test.desired)
+
+			g.Expect(preserveRestartAnnotation(test.existing, test.desired)).To(Equal(test.expected))
+			g.Expect(test.desired).To(Equal(desiredBefore))
 		})
 	}
 }
