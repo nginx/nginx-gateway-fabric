@@ -14,6 +14,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller"
 )
 
 // objectSpecSetter sets the spec of the provided object. This is used when creating or updating the object.
@@ -73,6 +75,7 @@ func deploymentSpecSetter(
 ) controllerutil.MutateFn {
 	return func() error {
 		existingAnnotations := deployment.Annotations
+		existingPodAnnotations := deployment.Spec.Template.Annotations
 
 		// objectMeta fields
 		deployment.Labels = objectMeta.Labels
@@ -83,6 +86,10 @@ func deploymentSpecSetter(
 		deployment.Annotations = mergeAnnotations(existingAnnotations, objectMeta.Annotations)
 
 		deployment.Spec = spec
+		deployment.Spec.Template.Annotations = preserveRestartAnnotation(
+			existingPodAnnotations,
+			deployment.Spec.Template.Annotations,
+		)
 		return nil
 	}
 }
@@ -125,6 +132,7 @@ func daemonSetSpecSetter(
 ) controllerutil.MutateFn {
 	return func() error {
 		existingAnnotations := daemonSet.Annotations
+		existingPodAnnotations := daemonSet.Spec.Template.Annotations
 
 		// objectMeta fields
 		daemonSet.Labels = objectMeta.Labels
@@ -132,8 +140,30 @@ func daemonSetSpecSetter(
 		daemonSet.Annotations = mergeAnnotations(existingAnnotations, objectMeta.Annotations)
 
 		daemonSet.Spec = spec
+		daemonSet.Spec.Template.Annotations = preserveRestartAnnotation(
+			existingPodAnnotations,
+			daemonSet.Spec.Template.Annotations,
+		)
 		return nil
 	}
+}
+
+func preserveRestartAnnotation(existing, desired map[string]string) map[string]string {
+	restartedAt, exists := existing[controller.RestartedAnnotation]
+	if !exists {
+		return desired
+	}
+	if _, explicitlyDesired := desired[controller.RestartedAnnotation]; explicitlyDesired {
+		return desired
+	}
+
+	annotations := maps.Clone(desired)
+	if annotations == nil {
+		annotations = make(map[string]string, 1)
+	}
+	annotations[controller.RestartedAnnotation] = restartedAt
+
+	return annotations
 }
 
 func serviceSpecSetter(
