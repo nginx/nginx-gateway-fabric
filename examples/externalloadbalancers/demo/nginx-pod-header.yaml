@@ -1,0 +1,12 @@
+# Adds a response header revealing which NGINX data plane pod served the request.
+# With BIG-IP in cluster mode (pool members = NGINX pod IPs), scaling replicas and
+# curling repeatedly shows the header value rotate across pods = load balancing.
+# $hostname in NGINX resolves to the pod name.
+apiVersion: gateway.nginx.org/v1alpha1
+kind: SnippetsFilter
+metadata:
+  name: nginx-pod-header
+spec:
+  snippets:
+    - context: http.server.location
+      value: add_header X-Nginx-Pod $hostname always;

@@ -1,0 +1,35 @@
+apiVersion: gateway.nginx.org/v1alpha1
+kind: ExternalLoadBalancer
+metadata:
+  name: cafe-elb
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: my-gateway
+  gatewayLink:
+    # Static IP for the BIG-IP virtual server (mutually exclusive with ipamLabel).
+    virtualServerAddress: "10.145.34.101"
+
+    # BIG-IP partition CIS manages. Must already exist and cannot be "Common".
+    partition: k8s
+
+    # Hostname for the BIG-IP virtual server.
+    host: cafe.example.com
+
+    # Makes BIG-IP send PROXY protocol to NGINX (preserves client IP); pair with
+    # rewriteClientIP: ProxyProtocol on NginxProxy. Must already exist on BIG-IP.
+    iRules:
+      - "/Common/Proxy_Protocol_iRule"
+
+    # BIG-IP client SSL profile (must already exist on BIG-IP). BIG-IP terminates
+    # client TLS and forwards plain HTTP to NGINX; serverSSLs omitted (no re-encrypt).
+    tls:
+      clientSSLs:
+        - /Common/cafe-clientssl
+      reference: bigip
+
+    # BIG-IP health monitor for the pool. Must already exist on BIG-IP.
+    monitors:
+      - name: /Common/nginx_health_8081
+        reference: bigip

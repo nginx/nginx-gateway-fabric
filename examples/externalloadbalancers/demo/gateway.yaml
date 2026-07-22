@@ -1,0 +1,20 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: my-gateway
+spec:
+  gatewayClassName: nginx
+  infrastructure:
+    parametersRef:
+      group: gateway.nginx.org
+      kind: NginxProxy
+      name: nginx-proxy-elb-demo
+  listeners:
+    - name: http
+      port: 80
+      protocol: HTTP
+      hostname: cafe.example.com
+    - name: https
+      port: 443
+      protocol: HTTP              # HTTP protocol on port 443
+      hostname: cafe.example.com  # BIG-IP terminates SSL, sends plain HTTP here

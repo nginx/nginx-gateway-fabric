@@ -21,6 +21,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	k8sEvents "k8s.io/client-go/tools/events"
@@ -29,6 +30,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
+	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/config"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/provisioner/openshift"
@@ -37,6 +39,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/telemetry"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/events"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
 
 //go:generate go tool counterfeiter -generate
@@ -69,6 +72,7 @@ type Config struct {
 	InferenceExtension             bool
 	EndpointPickerDisableTLS       bool
 	EndpointPickerTLSSkipVerify    bool
+	ExternalLoadBalancer           bool
 }
 
 // NginxProvisioner handles provisioning nginx kubernetes resources.
@@ -181,7 +185,10 @@ func NewNginxProvisioner(
 		cfg.AgentTLSSecretName,
 		dataplaneKeySecretName,
 		cfg.PlusUsageConfig,
-		isOpenshift,
+		eventLoopFeatures{
+			isOpenshift:          isOpenshift,
+			externalLoadBalancer: cfg.ExternalLoadBalancer,
+		},
 	)
 	if err != nil {
 		return nil, nil, err
@@ -376,6 +383,15 @@ var minimalObjectFactory = map[reflect.Type]func(name, namespace string) client.
 // createMinimalClone creates a new object of the same type with only name and namespace set.
 // This follows CreateOrUpdate's requirement that only name/namespace should be set on the input object.
 func createMinimalClone(obj client.Object) client.Object {
+	// typed factory map does not have unstructured type so handle it separately
+	if u, ok := obj.(*unstructured.Unstructured); ok {
+		minimal := &unstructured.Unstructured{}
+		minimal.SetGroupVersionKind(u.GroupVersionKind())
+		minimal.SetName(u.GetName())
+		minimal.SetNamespace(u.GetNamespace())
+		return minimal
+	}
+
 	objType := reflect.TypeOf(obj)
 	factory, exists := minimalObjectFactory[objType]
 	if !exists {
@@ -646,6 +662,7 @@ func (p *NginxProvisioner) reprovisionNginx(
 	gateway *gatewayv1.Gateway,
 	nProxyCfg *graph.EffectiveNginxProxy,
 	allListeners []*graph.Listener,
+	elb *ngfAPIv1alpha1.ExternalLoadBalancer,
 ) error {
 	if !p.isLeader() {
 		return nil
@@ -653,7 +670,7 @@ func (p *NginxProvisioner) reprovisionNginx(
 	if len(allListeners) == 0 {
 		return nil
 	}
-	objects, err := p.buildNginxResourceObjects(resourceName, gateway, nProxyCfg, allListeners)
+	objects, err := p.buildNginxResourceObjects(resourceName, gateway, nProxyCfg, allListeners, elb)
 	if err != nil {
 		p.cfg.Logger.Error(err, "error provisioning some nginx resources")
 	}
@@ -805,6 +822,7 @@ func (p *NginxProvisioner) RegisterGateway(
 			gateway.Source,
 			gateway.EffectiveNginxProxy,
 			gateway.Listeners,
+			extractExternalLoadBalancer(gateway),
 		)
 		if err != nil {
 			p.cfg.Logger.Error(err, "error building some nginx resources")
@@ -848,6 +866,16 @@ func (p *NginxProvisioner) handleObjectDeletion(ctx context.Context, nginxResour
 
 	if needToDeletePDB(nginxResources) {
 		if err := p.deleteObject(ctx, &policyv1.PodDisruptionBudget{ObjectMeta: nginxResources.PDB}); err != nil {
+			p.cfg.Logger.Error(err, "error deleting nginx resource")
+		}
+	}
+
+	if p.needToDeleteIngressLink(nginxResources) {
+		il := &unstructured.Unstructured{}
+		il.SetGroupVersionKind(kinds.IngressLinkGVK)
+		il.SetName(nginxResources.ExternalLoadBalancer.Name)
+		il.SetNamespace(nginxResources.ExternalLoadBalancer.Namespace)
+		if err := p.deleteObject(ctx, il); err != nil {
 			p.cfg.Logger.Error(err, "error deleting nginx resource")
 		}
 	}
@@ -1042,4 +1070,14 @@ func needToDeleteHPA(cfg *NginxResources) bool {
 	}
 
 	return false
+}
+
+// needToDeleteIngressLink returns true if an IngressLink was previously provisioned for this Gateway
+// but its ExternalLoadBalancer is no longer attached, and therefore the IngressLink should be deleted.
+// The IngressLink is owned by the Gateway, so it is not garbage collected when only the
+// ExternalLoadBalancer is removed while the Gateway remains.
+func (p *NginxProvisioner) needToDeleteIngressLink(cfg *NginxResources) bool {
+	return p.cfg.ExternalLoadBalancer &&
+		cfg.ExternalLoadBalancer.Name != "" &&
+		extractExternalLoadBalancer(cfg.Gateway) == nil
 }

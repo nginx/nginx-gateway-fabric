@@ -913,6 +913,19 @@
           "title": "configAnnotations",
           "type": "object"
         },
+        "externalLoadBalancer": {
+          "properties": {
+            "enable": {
+              "default": false,
+              "description": "Enable ExternalLoadBalancer support. Allows for fronting a Gateway with an external load balancer.\nSupported load balancers:\n- F5 BIG-IP, through F5 Container Ingress Services.",
+              "title": "enable",
+              "type": "boolean"
+            }
+          },
+          "required": [],
+          "title": "externalLoadBalancer",
+          "type": "object"
+        },
         "extraVolumeMounts": {
           "description": "extraVolumeMounts are the additional volume mounts for the nginx-gateway container.",
           "items": {

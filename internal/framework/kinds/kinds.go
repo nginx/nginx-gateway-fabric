@@ -50,6 +50,14 @@ const (
 	ConfigMap = "ConfigMap"
 )
 
+// Kinds from F5 CIS: https://github.com/F5Networks/k8s-bigip-ctlr
+const (
+	IngressLink = "IngressLink"
+)
+
+// IngressLinkGVK is the GroupVersionKind for the IngressLink resource.
+var IngressLinkGVK = schema.GroupVersionKind{Group: "cis.f5.com", Version: "v1", Kind: IngressLink}
+
 // PLM (Policy Lifecycle Manager) kinds.
 const (
 	// APPolicy is the APPolicy kind from the appprotect.f5.com API group.

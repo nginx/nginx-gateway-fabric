@@ -2513,3 +2513,88 @@ func TestFindWAFPolicyKey(t *testing.T) {
 		})
 	}
 }
+
+func gatewayWithIngressLink(nsName types.NamespacedName, glCfg *ngfAPI.GatewayLinkConfig) *graph.Gateway {
+	gw := &graph.Gateway{
+		Source: &gatewayv1.Gateway{
+			ObjectMeta: metav1.ObjectMeta{Namespace: nsName.Namespace, Name: nsName.Name},
+		},
+	}
+	if glCfg != nil {
+		gw.ExternalLoadBalancer = &ngfAPI.ExternalLoadBalancer{
+			Spec: ngfAPI.ExternalLoadBalancerSpec{GatewayLink: glCfg},
+		}
+	}
+	return gw
+}
+
+func TestGetExternalLoadBalancerAddresses(t *testing.T) {
+	t.Parallel()
+
+	nsName := types.NamespacedName{Namespace: "default", Name: "gw"}
+
+	t.Run("cached IngressLink address takes priority", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+
+		h := &eventHandlerImpl{ingressLinkAddresses: map[types.NamespacedName]string{nsName: "1.2.3.4"}}
+		gw := gatewayWithIngressLink(nsName, &ngfAPI.GatewayLinkConfig{VirtualServerAddress: helpers.GetPointer("10.0.0.1")})
+
+		addrs := h.getExternalLoadBalancerAddresses(gw)
+		g.Expect(addrs).To(HaveLen(1))
+		g.Expect(addrs[0].Value).To(Equal("1.2.3.4"))
+	})
+
+	t.Run("static virtualServerAddress used when no cached address", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+
+		h := &eventHandlerImpl{ingressLinkAddresses: map[types.NamespacedName]string{}}
+		gw := gatewayWithIngressLink(nsName, &ngfAPI.GatewayLinkConfig{VirtualServerAddress: helpers.GetPointer("10.0.0.1")})
+
+		addrs := h.getExternalLoadBalancerAddresses(gw)
+		g.Expect(addrs).To(HaveLen(1))
+		g.Expect(addrs[0].Value).To(Equal("10.0.0.1"))
+	})
+
+	t.Run("falls back to existing status addresses for IPAM case", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+
+		h := &eventHandlerImpl{ingressLinkAddresses: map[types.NamespacedName]string{}}
+		gw := gatewayWithIngressLink(nsName, &ngfAPI.GatewayLinkConfig{IPAMLabel: helpers.GetPointer("prod")})
+		gw.Source.Status.Addresses = []gatewayv1.GatewayStatusAddress{
+			{Type: helpers.GetPointer(gatewayv1.IPAddressType), Value: "9.9.9.9"},
+		}
+
+		addrs := h.getExternalLoadBalancerAddresses(gw)
+		g.Expect(addrs).To(HaveLen(1))
+		g.Expect(addrs[0].Value).To(Equal("9.9.9.9"))
+	})
+}
+
+func TestPruneIngressLinkAddresses(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	live := types.NamespacedName{Namespace: "default", Name: "live"}
+	stale := types.NamespacedName{Namespace: "default", Name: "stale"}
+
+	h := &eventHandlerImpl{
+		ingressLinkAddresses: map[types.NamespacedName]string{
+			live:  "1.1.1.1",
+			stale: "2.2.2.2",
+		},
+	}
+
+	gr := &graph.Graph{
+		Gateways: map[types.NamespacedName]*graph.Gateway{
+			live: gatewayWithIngressLink(live, nil),
+		},
+	}
+
+	h.pruneIngressLinkAddresses(gr)
+
+	g.Expect(h.ingressLinkAddresses).To(HaveKey(live))
+	g.Expect(h.ingressLinkAddresses).ToNot(HaveKey(stale))
+}

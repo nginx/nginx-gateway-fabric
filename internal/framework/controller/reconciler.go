@@ -62,6 +62,13 @@ func (r *Reconciler) mustCreateNewObject(objectType ngftypes.ObjectType) ngftype
 		return partialObj
 	}
 
+	// For unstructured types, we need to preserve the GVK since reflect.New won't copy it.
+	if _, isUnstructured := objectType.(*unstructured.Unstructured); isUnstructured {
+		u := &unstructured.Unstructured{}
+		u.SetGroupVersionKind(objectType.GetObjectKind().GroupVersionKind())
+		return u
+	}
+
 	// without Elem(), t will be a pointer to the type. For example, *v1.Gateway, not v1.Gateway
 	t := reflect.TypeOf(objectType).Elem()
 

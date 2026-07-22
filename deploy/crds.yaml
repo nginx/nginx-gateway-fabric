@@ -1121,18 +1121,20 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.21.0
+  labels:
+    gateway.networking.k8s.io/policy: direct
   name: externalloadbalancers.gateway.nginx.org
 spec:
   group: gateway.nginx.org
   names:
     categories:
     - nginx-gateway-fabric
-    kind: ExternalLoadBalancers
-    listKind: ExternalLoadBalancersList
+    kind: ExternalLoadBalancer
+    listKind: ExternalLoadBalancerList
     plural: externalloadbalancers
     shortNames:
     - elbs
-    singular: externalloadbalancers
+    singular: externalloadbalancer
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
@@ -1143,13 +1145,13 @@ spec:
     schema:
       openAPIV3Schema:
         description: |-
-          ExternalLoadBalancers configures an external load balancer that fronts a Gateway.
+          ExternalLoadBalancer configures an external load balancer that fronts a Gateway.
           It references a Gateway through TargetRefs. NGINX Gateway Fabric provisions the
           external load balancer integration for the Gateway's data plane Service.
 
-          ExternalLoadBalancers maps one-to-one to a Gateway: a Gateway yields exactly one data plane
-          Service, so it is fronted by exactly one ExternalLoadBalancers. When more than one
-          ExternalLoadBalancers references the same Gateway, the oldest is accepted and the others are
+          ExternalLoadBalancer maps one-to-one to a Gateway: a Gateway yields exactly one data plane
+          Service, so it is fronted by exactly one ExternalLoadBalancer. When more than one
+          ExternalLoadBalancer references the same Gateway, the oldest is accepted and the others are
           rejected with Accepted=False.
 
           A resource configures exactly one external load balancer backend. The gatewayLink backend
@@ -1173,7 +1175,7 @@ spec:
           metadata:
             type: object
           spec:
-            description: Spec defines the desired state of the ExternalLoadBalancers.
+            description: Spec defines the desired state of the ExternalLoadBalancer.
             properties:
               gatewayLink:
                 description: |-
@@ -1190,6 +1192,7 @@ spec:
                       IngressLink selector internally and it cannot be overridden through this field. Use with
                       caution since contents bypass schema validation, defaulting, and CEL rules, and flow through to
                       BIG-IP via F5 CIS.
+                    type: object
                     x-kubernetes-preserve-unknown-fields: true
                   bigipRouteDomain:
                     description: BigIPRouteDomain is the route domain ID for the BIG-IP
@@ -1371,7 +1374,7 @@ spec:
               targetRefs:
                 description: |-
                   TargetRefs identifies the Gateways this external load balancer applies to.
-                  Each object must be in the same namespace as the ExternalLoadBalancers resource.
+                  Each object must be in the same namespace as the ExternalLoadBalancer resource.
                   Exactly one Gateway is supported for now.
                   Support: Gateway.
                 items:
@@ -1418,12 +1421,12 @@ spec:
             - message: exactly one external load balancer backend must be set
               rule: has(self.gatewayLink)
           status:
-            description: Status defines the state of the ExternalLoadBalancers.
+            description: Status defines the state of the ExternalLoadBalancer.
             properties:
               controllers:
                 description: |-
-                  Controllers is a list of Gateway API controllers that processed the ExternalLoadBalancers
-                  and the status of the ExternalLoadBalancers with respect to each controller.
+                  Controllers is a list of Gateway API controllers that processed the ExternalLoadBalancer
+                  and the status of the ExternalLoadBalancer with respect to each controller.
                 items:
                   properties:
                     conditions:

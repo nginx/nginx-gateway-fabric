@@ -1,0 +1,30 @@
+apiVersion: gateway.nginx.org/v1alpha2
+kind: NginxProxy
+metadata:
+  name: nginx-proxy-elb-demo
+spec:
+  # Accept the PROXY protocol header that BIG-IP prepends (via the
+  # Proxy_Protocol_iRule referenced on the ExternalLoadBalancer). This lets NGINX
+  # recover the real client IP instead of seeing BIG-IP's self-IP. trustedAddresses
+  # is the network BIG-IP connects from (its VIP/self-IP subnet); NGINX only honors
+  # the PROXY header from these sources.
+  rewriteClientIP:
+    mode: ProxyProtocol
+    trustedAddresses:
+      - type: CIDR
+        value: 10.145.32.0/19
+  kubernetes:
+    # ClusterIP for cluster mode: CIS runs with --pool-member-type=cluster and
+    # adds each NGINX POD IP as a BIG-IP pool member (BIG-IP routes to the pod
+    # CIDR via a static route). Scaling replicas changes the pool member count.
+    service:
+      type: ClusterIP
+    deployment:
+      # Scale the data plane up/down to show BIG-IP pool members follow 1:1.
+      # Patched live during the demo; see scripts/scale.sh.
+      replicas: 1
+      container:
+        readinessProbe:
+          path: "/nginx-ready"
+          port: 8081
+          expose: true

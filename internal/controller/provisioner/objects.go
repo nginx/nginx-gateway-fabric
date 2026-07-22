@@ -19,6 +19,7 @@ import (
 	policyv1 "k8s.io/api/policy/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/strategicpatch"
@@ -26,6 +27,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
+	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/config"
 	nginxTypes "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/types"
@@ -35,6 +37,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/secrets"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/waf"
 )
 
@@ -97,6 +100,7 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 	gateway *gatewayv1.Gateway,
 	nProxyCfg *graph.EffectiveNginxProxy,
 	allListeners []*graph.Listener,
+	elb *ngfAPIv1alpha1.ExternalLoadBalancer,
 ) ([]client.Object, error) {
 	// NOTE: When adding new fields to the generated objects, please ensure to update the corresponding spec
 	// setter function in setter.go to set the new fields when updating the object.
@@ -208,6 +212,7 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 	// deployment/daemonset
 	// hpa
 	// pdb
+	// external load balancer (last: it selects the service, which must exist first)
 
 	objects := make([]client.Object, 0, len(configmapsList)+len(secretsList)+len(openshiftObjs)+3)
 	objects = append(objects, secretsList...)
@@ -220,6 +225,15 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 	objects = append(objects, service, deployment)
 
 	objects, errs = p.buildHPAAndPDB(objectMeta, nProxyCfg, selectorLabels, gateway, objects, errs)
+
+	// ingresslink
+	if lb := p.buildExternalLoadBalancer(objectMeta, elb, selectorLabels); lb != nil {
+		if err := p.setOwnerReference(lb, gateway); err != nil {
+			errs = append(errs, fmt.Errorf("failed to set owner reference on %s %s: %w",
+				lb.GetObjectKind().GroupVersionKind().Kind, lb.GetName(), err))
+		}
+		objects = append(objects, lb)
+	}
 
 	return objects, errors.Join(errs...)
 }
@@ -1870,15 +1884,20 @@ func (p *NginxProvisioner) buildWAFImage(
 func (p *NginxProvisioner) buildResourcesForInvalidGatewayCleanup(
 	deploymentNSName types.NamespacedName,
 ) []client.Object {
+	// Returned in deletion order, reversing the order these are created in: the external load
+	// balancer stops directing traffic at the data plane before the data plane goes away, and the
+	// secrets and config the data plane reads outlive it.
+
 	// Order to delete:
-	// 1. deployment/daemonset
-	// 2. service
-	// 3. hpa (Horizontal Pod Autoscaler)
-	// 4. pdb (Pod Disruption Budget)
-	// 5. role/binding (if openshift)
-	// 6. serviceaccount
-	// 7. configmaps
-	// 8. secrets
+	// 1. external load balancer
+	// 2. deployment/daemonset
+	// 3. service
+	// 4. hpa (Horizontal Pod Autoscaler)
+	// 5. pdb (Pod Disruption Budget)
+	// 6. role/binding (if openshift)
+	// 7. serviceaccount
+	// 8. configmaps
+	// 9. secrets
 
 	var objects []client.Object
 
@@ -1895,22 +1914,31 @@ func (p *NginxProvisioner) buildResourcesForInvalidGatewayCleanup(
 
 	baseMeta := meta(deploymentNSName.Name)
 
-	// 1. Deployment/DaemonSet
+	// 1. External load balancer
+	if p.cfg.ExternalLoadBalancer {
+		il := &unstructured.Unstructured{}
+		il.SetGroupVersionKind(kinds.IngressLinkGVK)
+		il.SetName(baseMeta.Name)
+		il.SetNamespace(baseMeta.Namespace)
+		objects = append(objects, il)
+	}
+
+	// 2. Deployment/DaemonSet
 	objects = append(objects,
 		&appsv1.Deployment{ObjectMeta: baseMeta},
 		&appsv1.DaemonSet{ObjectMeta: baseMeta},
 	)
 
-	// 2. Service
+	// 3. Service
 	objects = append(objects, &corev1.Service{ObjectMeta: baseMeta})
 
-	// 3. HPA
+	// 4. HorizontalPodAutoscaler
 	objects = append(objects, &autoscalingv2.HorizontalPodAutoscaler{ObjectMeta: baseMeta})
 
-	// 4. PDB
+	// 5. PodDisruptionBudget
 	objects = append(objects, &policyv1.PodDisruptionBudget{ObjectMeta: baseMeta})
 
-	// 5. OpenShift Role/RoleBinding
+	// 6. RBAC (OpenShift only)
 	if p.isOpenshift {
 		objects = append(objects,
 			&rbacv1.Role{ObjectMeta: baseMeta},
@@ -1918,16 +1946,16 @@ func (p *NginxProvisioner) buildResourcesForInvalidGatewayCleanup(
 		)
 	}
 
-	// 6. ServiceAccount
+	// 7. ServiceAccount
 	objects = append(objects, &corev1.ServiceAccount{ObjectMeta: baseMeta})
 
-	// 7. ConfigMaps
+	// 8. ConfigMaps
 	objects = append(objects,
 		&corev1.ConfigMap{ObjectMeta: meta(resourceName(nginxIncludesConfigMapNameSuffix))},
 		&corev1.ConfigMap{ObjectMeta: meta(resourceName(nginxAgentConfigMapNameSuffix))},
 	)
 
-	// 8. Secrets
+	// 9. Secrets
 	objects = append(objects, &corev1.Secret{ObjectMeta: meta(resourceName(p.cfg.AgentTLSSecretName))})
 
 	for _, name := range p.cfg.NginxDockerSecretNames {

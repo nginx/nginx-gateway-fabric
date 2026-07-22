@@ -16,6 +16,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
@@ -30,6 +31,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
+	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/config"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent/agentfakes"
@@ -39,6 +41,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller/controllerfakes"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
 
 const (
@@ -694,6 +697,98 @@ func TestRegisterGateway_CleansUpOldPDB(t *testing.T) {
 	g.Expect(pdbErr).To(HaveOccurred())
 }
 
+func TestRegisterGateway_CleansUpLingeringIngressLink(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	oldIngressLink := &unstructured.Unstructured{}
+	oldIngressLink.SetGroupVersionKind(kinds.IngressLinkGVK)
+	oldIngressLink.SetName("gw-nginx")
+	oldIngressLink.SetNamespace("default")
+
+	gateway := &graph.Gateway{
+		Source: &gatewayv1.Gateway{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "gw",
+				Namespace: "default",
+			},
+		},
+		Listeners: []*graph.Listener{
+			{},
+		},
+		Valid: true,
+		// ExternalLoadBalancer is nil: the ELB was detached while the Gateway remains.
+	}
+
+	provisioner, fakeClient, _ := defaultNginxProvisioner(gateway.Source, oldIngressLink)
+	provisioner.cfg.ExternalLoadBalancer = true
+	provisioner.store.nginxResources[types.NamespacedName{Name: "gw", Namespace: "default"}] = &NginxResources{
+		ExternalLoadBalancer: metav1.ObjectMeta{Name: "gw-nginx", Namespace: "default"},
+	}
+
+	g.Expect(provisioner.RegisterGateway(t.Context(), gateway, "gw-nginx")).To(Succeed())
+
+	il := &unstructured.Unstructured{}
+	il.SetGroupVersionKind(kinds.IngressLinkGVK)
+	ilErr := fakeClient.Get(t.Context(), types.NamespacedName{Name: "gw-nginx", Namespace: "default"}, il)
+	g.Expect(ilErr).To(HaveOccurred())
+}
+
+func TestNeedToDeleteIngressLink(t *testing.T) {
+	t.Parallel()
+
+	elb := elbWithGatewayLink(&ngfAPIv1alpha1.GatewayLinkConfig{})
+	trackedIngressLink := metav1.ObjectMeta{Name: "gw-nginx", Namespace: "default"}
+
+	tests := []struct {
+		gateway              *graph.Gateway
+		name                 string
+		trackedELB           metav1.ObjectMeta
+		externalLoadBalancer bool
+		expected             bool
+	}{
+		{
+			name:                 "ExternalLoadBalancer feature disabled",
+			trackedELB:           trackedIngressLink,
+			gateway:              &graph.Gateway{},
+			externalLoadBalancer: false,
+			expected:             false,
+		},
+		{
+			name:                 "no IngressLink was previously provisioned",
+			trackedELB:           metav1.ObjectMeta{},
+			gateway:              &graph.Gateway{},
+			externalLoadBalancer: true,
+			expected:             false,
+		},
+		{
+			name:                 "IngressLink provisioned and ExternalLoadBalancer still attached",
+			trackedELB:           trackedIngressLink,
+			gateway:              &graph.Gateway{ExternalLoadBalancer: elb},
+			externalLoadBalancer: true,
+			expected:             false,
+		},
+		{
+			name:                 "IngressLink provisioned but ExternalLoadBalancer detached",
+			trackedELB:           trackedIngressLink,
+			gateway:              &graph.Gateway{},
+			externalLoadBalancer: true,
+			expected:             true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			p := &NginxProvisioner{cfg: Config{ExternalLoadBalancer: test.externalLoadBalancer}}
+			cfg := &NginxResources{Gateway: test.gateway, ExternalLoadBalancer: test.trackedELB}
+			g.Expect(p.needToDeleteIngressLink(cfg)).To(Equal(test.expected))
+		})
+	}
+}
+
 func TestRegisterGateway_EmptyListeners(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
@@ -728,7 +823,7 @@ func TestNonLeaderProvisioner(t *testing.T) {
 	g.Expect(provisioner.provisionNginx(t.Context(), "gw-nginx", nil, nil)).To(Succeed())
 	expectResourcesToNotExist(t, g, fakeClient, nsName)
 
-	g.Expect(provisioner.reprovisionNginx(t.Context(), "gw-nginx", nil, nil, nil)).To(Succeed())
+	g.Expect(provisioner.reprovisionNginx(t.Context(), "gw-nginx", nil, nil, nil, nil)).To(Succeed())
 	expectResourcesToNotExist(t, g, fakeClient, nsName)
 
 	g.Expect(provisioner.deprovisionNginxForInvalidGateway(t.Context(), nsName)).To(Succeed())
@@ -1361,6 +1456,30 @@ func TestCreateMinimalClone_UnsupportedType(t *testing.T) {
 	g.Expect(func() {
 		createMinimalClone(unsupported)
 	}).To(Panic())
+}
+
+func TestCreateMinimalClone_Unstructured(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	il := &unstructured.Unstructured{}
+	il.SetGroupVersionKind(kinds.IngressLinkGVK)
+	il.SetName("gw-nginx")
+	il.SetNamespace("default")
+	il.SetLabels(map[string]string{"app": "gw-nginx"})
+	il.Object["spec"] = map[string]any{"virtualServerAddress": "10.0.0.1"}
+
+	clone := createMinimalClone(il)
+
+	cloneU, ok := clone.(*unstructured.Unstructured)
+	g.Expect(ok).To(BeTrue())
+	g.Expect(cloneU.GroupVersionKind()).To(Equal(kinds.IngressLinkGVK))
+	g.Expect(cloneU.GetName()).To(Equal("gw-nginx"))
+	g.Expect(cloneU.GetNamespace()).To(Equal("default"))
+	// Only name, namespace, and GVK should be set on the minimal clone.
+	g.Expect(cloneU.GetLabels()).To(BeEmpty())
+	g.Expect(cloneU.Object).ToNot(HaveKey("spec"))
+	g.Expect(clone).ToNot(BeIdenticalTo(il))
 }
 
 func TestCreateMinimalClone_CreatesSeparateInstances(t *testing.T) {

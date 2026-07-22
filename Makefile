@@ -34,6 +34,10 @@ HELM_DOCS_VERSION = v1.14.2
 GEN_CRD_API_REFERENCE_DOCS_VERSION = v0.3.0
 # renovate: datasource=go depName=sigs.k8s.io/controller-tools
 CONTROLLER_TOOLS_VERSION = v0.21.0
+# renovate: datasource=github-tags depName=F5Networks/k8s-bigip-ctlr
+CIS_VERSION = v2.20.4
+# CRD link for F5 Container Ingress Services (CIS) used by GatewayLink.
+CIS_CRDS_URL = https://raw.githubusercontent.com/F5Networks/k8s-bigip-ctlr/$(CIS_VERSION)/docs/config_examples/customResourceDefinitions/customresourcedefinitions.yml
 # renovate: datasource=docker depName=node
 NODE_VERSION = 24
 # renovate: datasource=docker depName=quay.io/helmpack/chart-testing
@@ -169,6 +173,14 @@ uninstall-gateway-crds: ## Uninstall Gateway API CRDs
 .PHONY: install-inference-crds
 install-inference-crds: ## Install Gateway API Inference Extension CRDs
 	kubectl kustomize $(SELF_DIR)config/crd/inference-extension | kubectl apply -f -
+
+.PHONY: install-gateway-link-crds
+install-gateway-link-crds: ## Install the F5 CIS CRDs needed by GatewayLink (owned by F5, not by NGF)
+	kubectl apply --server-side -f $(CIS_CRDS_URL)
+
+.PHONY: uninstall-gateway-link-crds
+uninstall-gateway-link-crds: ## Uninstall the F5 CIS CRDs
+	kubectl delete -f $(CIS_CRDS_URL)
 
 .PHONY: uninstall-inference-crds
 uninstall-inference-crds: ## Uninstall Gateway API Inference Extension CRDs
