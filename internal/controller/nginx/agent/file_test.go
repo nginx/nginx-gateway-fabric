@@ -82,6 +82,48 @@ func TestGetFile(t *testing.T) {
 	g.Expect(resp.GetContents().GetContents()).To(Equal(contents))
 }
 
+func TestGetFile_ReturnsEmptyContents(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	deploymentName := types.NamespacedName{Name: "nginx-deployment", Namespace: "default"}
+
+	connTracker := &agentgrpcfakes.FakeConnectionsTracker{}
+	conn := agentgrpc.Connection{
+		InstanceID: "12345",
+		ParentName: deploymentName,
+	}
+	connTracker.GetConnectionReturns(conn)
+
+	depStore := NewDeploymentStore(connTracker)
+	dep := depStore.GetOrStore(t.Context(), deploymentName, "gateway")
+
+	fileMeta := &pb.FileMeta{
+		Name: "empty.conf",
+		Hash: "some-hash",
+	}
+
+	dep.files = []File{
+		{
+			Meta:     fileMeta,
+			Contents: []byte{},
+		},
+	}
+
+	fs := newFileService(logr.Discard(), depStore, connTracker)
+
+	ctx := grpcContext.NewGrpcContext(t.Context(), grpcContext.GrpcInfo{
+		UUID: "1234567",
+	})
+
+	resp, err := fs.GetFile(ctx, &pb.GetFileRequest{FileMeta: fileMeta})
+
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(resp).ToNot(BeNil())
+	g.Expect(resp.GetContents()).ToNot(BeNil())
+	g.Expect(resp.GetContents().GetContents()).To(BeEmpty())
+}
+
 func TestGetFile_InvalidConnection(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)

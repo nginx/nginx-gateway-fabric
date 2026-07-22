@@ -531,7 +531,10 @@ func createManager(cfg config.Config, healthChecker *graphBuiltHealthChecker) (m
 		options.HealthProbeBindAddress = fmt.Sprintf(":%d", cfg.HealthConfig.Port)
 	}
 
-	clusterCfg := ctlr.GetConfigOrDie()
+	clusterCfg, err := ctlr.GetConfig()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get cluster config: %w", err)
+	}
 	clusterCfg.Timeout = clusterTimeout
 
 	mgr, err := manager.New(clusterCfg, options)
@@ -618,7 +621,6 @@ func filterControllersByCRDExistence(
 ) ([]ctlrCfg, map[string]bool, error) {
 	// Collect GVKs that need checking
 	var gvksToCheck []schema.GroupVersionKind
-	gvkToController := make(map[schema.GroupVersionKind]*ctlrCfg)
 
 	for i := range controllers {
 		if controllers[i].requireCRDCheck {
@@ -630,7 +632,6 @@ func filterControllersByCRDExistence(
 				gvk = controllers[i].objectType.GetObjectKind().GroupVersionKind()
 			}
 			gvksToCheck = append(gvksToCheck, gvk)
-			gvkToController[gvk] = &controllers[i]
 		}
 	}
 

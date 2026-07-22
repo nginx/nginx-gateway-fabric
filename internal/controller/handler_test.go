@@ -37,6 +37,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/resolver"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/statefakes"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/status"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/status/statusfakes"
@@ -2512,4 +2513,31 @@ func TestFindWAFPolicyKey(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestGetLatestConfigurationReturnsSnapshots(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	nsName := types.NamespacedName{Namespace: "default", Name: "gw"}
+	handler := &eventHandlerImpl{
+		latestConfigurations: map[types.NamespacedName]*dataplane.Configuration{
+			nsName: {
+				WorkerProcesses: "auto",
+				Upstreams: []dataplane.Upstream{{
+					Name:      "test-upstream",
+					Endpoints: []resolver.Endpoint{{Address: "10.0.0.1", Port: 8080}},
+				}},
+			},
+		},
+	}
+
+	configs := handler.GetLatestConfiguration()
+	configs[0].WorkerProcesses = "1"
+	configs[0].Upstreams[0].Endpoints[0].Address = "10.0.0.2"
+
+	latest := handler.GetLatestConfiguration()
+	g.Expect(latest).To(HaveLen(1))
+	g.Expect(latest[0].WorkerProcesses).To(Equal("auto"))
+	g.Expect(latest[0].Upstreams[0].Endpoints[0].Address).To(Equal("10.0.0.1"))
 }

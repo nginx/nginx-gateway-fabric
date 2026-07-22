@@ -199,7 +199,7 @@ func ignoreEndpointSlice(
 
 func endpointReady(endpoint discoveryV1.Endpoint) bool {
 	ready := endpoint.Conditions.Ready
-	return ready != nil && *ready
+	return ready == nil || *ready
 }
 
 func filterEndpointSliceList(

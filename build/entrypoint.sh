@@ -2,24 +2,33 @@
 
 set -euxo pipefail
 
+nginx_pid=""
+agent_pid=""
+
+stop_process() {
+    local signal="$1"
+    local pid="$2"
+
+    if [[ -n $pid ]] && kill -0 "$pid" 2>/dev/null; then
+        kill "-$signal" "$pid" 2>/dev/null || true
+        wait "$pid" 2>/dev/null || true
+    fi
+}
+
 handle_term() {
     echo "received TERM signal"
     echo "stopping nginx-agent ..."
-    kill -TERM "${agent_pid}" 2>/dev/null
-    wait -n ${agent_pid}
+    stop_process TERM "$agent_pid"
     echo "stopping nginx ..."
-    kill -TERM "${nginx_pid}" 2>/dev/null
-    wait -n ${nginx_pid}
+    stop_process TERM "$nginx_pid"
 }
 
 handle_quit() {
     echo "received QUIT signal"
     echo "stopping nginx-agent ..."
-    kill -QUIT "${agent_pid}" 2>/dev/null
-    wait -n ${agent_pid}
+    stop_process QUIT "$agent_pid"
     echo "stopping nginx ..."
-    kill -QUIT "${nginx_pid}" 2>/dev/null
-    wait -n ${nginx_pid}
+    stop_process QUIT "$nginx_pid"
 }
 
 trap 'handle_term' TERM
@@ -59,7 +68,7 @@ GOMEMLIMIT=150MiB GOGC=75 nginx-agent &
 
 agent_pid=$!
 
-if [ $? != 0 ]; then
+if ! kill -0 "$agent_pid" 2>/dev/null; then
     echo "couldn't start the agent, please check the log file"
     exit 1
 fi
@@ -67,9 +76,8 @@ fi
 wait_term() {
     wait ${agent_pid}
     trap - TERM
-    kill -QUIT "${nginx_pid}" 2>/dev/null
+    stop_process QUIT "$nginx_pid"
     echo "waiting for nginx to stop..."
-    wait ${nginx_pid}
 }
 
 wait_term

@@ -553,6 +553,12 @@ func TestSecretResolver(t *testing.T) {
 			resolveOpts: []resolver.ResolveOption{resolver.WithExpectedSecretKey(secrets.ClientSecretKey)},
 		},
 		{
+			name: "opaque secret with only client-secret key fails when resolved without an expected key " +
+				"after being cached as valid with client-secret key",
+			nsname:         client.ObjectKeyFromObject(opaqueClientSecretOnly),
+			expectedErrMsg: "opaque secret test/opaque-client-secret-only does not contain the expected key \"\"",
+		},
+		{
 			name: "opaque secret with only client-secret key " +
 				"fails when resolved with ca.crt key even though it was cached as valid",
 			nsname:         client.ObjectKeyFromObject(opaqueClientSecretOnly),

@@ -2,6 +2,7 @@ package dataplane
 
 import (
 	"fmt"
+	"slices"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -82,6 +83,35 @@ type Configuration struct {
 	BaseHTTPConfig BaseHTTPConfig
 	// WorkerConnections specifies the maximum number of simultaneous connections that can be opened by a worker process.
 	WorkerConnections int32
+}
+
+// Snapshot returns a copy of the configuration for telemetry consumers.
+// It deeply clones upstream data, which is the only mutable portion telemetry reads.
+// Other fields are preserved by value or shared reference because they are not consumed via this path.
+func (c *Configuration) Snapshot() *Configuration {
+	if c == nil {
+		return nil
+	}
+
+	clone := *c
+	// Telemetry only needs upstream endpoint/error data from latest configuration snapshots
+	clone.Upstreams = cloneUpstreams(c.Upstreams)
+
+	return &clone
+}
+
+func cloneUpstreams(src []Upstream) []Upstream {
+	if src == nil {
+		return nil
+	}
+
+	cloned := slices.Clone(src)
+	for i := range cloned {
+		cloned[i].Endpoints = slices.Clone(src[i].Endpoints)
+		cloned[i].Policies = slices.Clone(src[i].Policies)
+	}
+
+	return cloned
 }
 
 // SSLKeyPairID is a unique identifier for a SSLKeyPair.

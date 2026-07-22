@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 
@@ -180,23 +181,23 @@ func (d *Deployment) GetFileOverviews() ([]*pb.File, string) {
 // GetNGINXPlusActions returns the current NGINX Plus API Actions for the deployment.
 // The deployment FileLock MUST already be locked before calling this function.
 func (d *Deployment) GetNGINXPlusActions() []*pb.NGINXPlusAction {
-	return d.nginxPlusActions
+	return slices.Clone(d.nginxPlusActions)
 }
 
 // GetFile gets the requested file for the deployment and returns its contents.
 // The deployment FileLock MUST already be locked before calling this function.
-func (d *Deployment) GetFile(name, hash string) ([]byte, string) {
+func (d *Deployment) GetFile(name, hash string) ([]byte, string, bool) {
 	var fileFoundHash string
 	for _, file := range d.files {
 		if name == file.Meta.GetName() {
 			fileFoundHash = file.Meta.GetHash()
 			if hash == file.Meta.GetHash() {
-				return file.Contents, file.Meta.GetHash()
+				return file.Contents, file.Meta.GetHash(), true
 			}
 		}
 	}
 
-	return nil, fileFoundHash
+	return nil, fileFoundHash, false
 }
 
 // SetFiles updates the nginx files and fileOverviews for the deployment and returns the message to send.

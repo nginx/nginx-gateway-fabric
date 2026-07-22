@@ -48,7 +48,7 @@ type ChangeProcessor interface {
 	// Process produces a graph-like representation of GatewayAPI resources.
 	// If no changes were captured, the graph will be empty.
 	Process(ctx context.Context) (graphCfg *graph.Graph)
-	// GetLatestGraph returns the latest Graph.
+	// GetLatestGraph returns a read-only snapshot of the latest Graph.
 	GetLatestGraph() *graph.Graph
 	// ForceRebuild forces the next Process() call to perform a full graph rebuild,
 	// without modifying the cluster state. Used when an external event (e.g. a WAF bundle
@@ -107,7 +107,7 @@ type ChangeProcessorImpl struct {
 	forceClusterStateRebuild func()
 
 	cfg  ChangeProcessorConfig
-	lock sync.Mutex
+	lock sync.RWMutex
 }
 
 // NewChangeProcessorImpl creates a new ChangeProcessorImpl for the Gateway resource with the configured namespace name.
@@ -415,10 +415,10 @@ func (c *ChangeProcessorImpl) mergedWAFBundles() map[graph.WAFBundleKey]*graph.W
 }
 
 func (c *ChangeProcessorImpl) GetLatestGraph() *graph.Graph {
-	c.lock.Lock()
-	defer c.lock.Unlock()
+	c.lock.RLock()
+	defer c.lock.RUnlock()
 
-	return c.latestGraph
+	return c.latestGraph.Snapshot()
 }
 
 // refGrantTrackingCfg returns the change tracking updater config for ReferenceGrant.

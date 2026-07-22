@@ -50,6 +50,7 @@ func createSlice(
 					"1.0.0.3",
 				}, // these endpoints should be ignored because they are not ready
 				Conditions: discoveryV1.EndpointConditions{
+					Ready:       helpers.GetPointer(false),
 					Serving:     helpers.GetPointer(true),
 					Terminating: helpers.GetPointer(true),
 				},
@@ -57,7 +58,7 @@ func createSlice(
 			{
 				Addresses:  []string{"2.0.0.1", "2.0.0.2", "2.0.0.3"},
 				Conditions: discoveryV1.EndpointConditions{
-					// nil conditions should be treated as not ready
+					// nil ready should be treated as ready
 				},
 			},
 		},
@@ -198,11 +199,50 @@ var _ = Describe("ServiceResolver", func() {
 					Port:    8081,
 				},
 				{
+					Address: "2.0.0.1",
+					Port:    8080,
+				},
+				{
+					Address: "2.0.0.2",
+					Port:    8080,
+				},
+				{
+					Address: "2.0.0.3",
+					Port:    8080,
+				},
+				{
+					Address: "2.0.0.1",
+					Port:    8081,
+				},
+				{
+					Address: "2.0.0.2",
+					Port:    8081,
+				},
+				{
+					Address: "2.0.0.3",
+					Port:    8081,
+				},
+				{
 					Address: "12.0.0.1",
 					Port:    8080,
 				},
 				{
 					Address: "FE80:CD00:0:CDE:1257:0:211E:729C",
+					Port:    8080,
+					IPv6:    true,
+				},
+				{
+					Address: "2.0.0.1",
+					Port:    8080,
+					IPv6:    true,
+				},
+				{
+					Address: "2.0.0.2",
+					Port:    8080,
+					IPv6:    true,
+				},
+				{
+					Address: "2.0.0.3",
 					Port:    8080,
 					IPv6:    true,
 				},
