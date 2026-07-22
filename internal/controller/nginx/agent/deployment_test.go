@@ -259,7 +259,7 @@ func TestDeploymentStore_GetOrStore_Concurrent(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			results <- depStore.GetOrStore(t.Context(), nsName, "gateway")
+			results <- depStore.LoadOrStore(t.Context(), nsName, "gateway")
 		}()
 	}
 
@@ -460,13 +460,13 @@ func TestDeploymentStore(t *testing.T) {
 
 	nsName := types.NamespacedName{Namespace: "default", Name: "test-deployment"}
 
-	deployment := store.GetOrStore(t.Context(), nsName, "gateway")
+	deployment := store.LoadOrStore(t.Context(), nsName, "gateway")
 	g.Expect(deployment).ToNot(BeNil())
 
 	fetchedDeployment := store.Get(nsName)
 	g.Expect(fetchedDeployment).To(Equal(deployment))
 
-	deployment = store.GetOrStore(t.Context(), nsName, "gateway")
+	deployment = store.LoadOrStore(t.Context(), nsName, "gateway")
 	g.Expect(fetchedDeployment).To(Equal(deployment))
 
 	store.Remove(nsName)

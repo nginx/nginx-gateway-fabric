@@ -277,7 +277,7 @@ func (h *eventHandlerImpl) sendNginxConfig(ctx context.Context, logger logr.Logg
 				Error: errors.New("NGINX configuration update withheld: WAF bundle for Gateway is still pending"),
 			}
 		default:
-			deployment := h.cfg.nginxDeployments.GetOrStore(ctx, gw.DeploymentName, gw.Source.GetName())
+			deployment := h.cfg.nginxDeployments.LoadOrStore(ctx, gw.DeploymentName, gw.Source.GetName())
 			if deployment == nil {
 				panic("expected deployment, got nil")
 			}

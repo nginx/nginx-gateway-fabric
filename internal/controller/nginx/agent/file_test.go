@@ -49,7 +49,7 @@ func TestGetFile(t *testing.T) {
 	connTracker.GetConnectionReturns(conn)
 
 	depStore := NewDeploymentStore(connTracker)
-	dep := depStore.GetOrStore(t.Context(), deploymentName, "gateway")
+	dep := depStore.LoadOrStore(t.Context(), deploymentName, "gateway")
 
 	fileMeta := &pb.FileMeta{
 		Name: "test.conf",
@@ -156,7 +156,7 @@ func TestGetFile_InvalidRequest(t *testing.T) {
 	connTracker.GetConnectionReturns(conn)
 
 	depStore := NewDeploymentStore(connTracker)
-	_ = depStore.GetOrStore(t.Context(), deploymentName, "gateway")
+	_ = depStore.LoadOrStore(t.Context(), deploymentName, "gateway")
 
 	fs := newFileService(logr.Discard(), depStore, connTracker)
 
@@ -243,7 +243,7 @@ func TestGetFile_FileNotFound(t *testing.T) {
 	connTracker.GetConnectionReturns(conn)
 
 	depStore := NewDeploymentStore(connTracker)
-	depStore.GetOrStore(t.Context(), deploymentName, "gateway")
+	depStore.LoadOrStore(t.Context(), deploymentName, "gateway")
 
 	fs := newFileService(logr.Discard(), depStore, connTracker)
 
@@ -278,7 +278,7 @@ func TestGetFileStream(t *testing.T) {
 	connTracker.GetConnectionReturns(conn)
 
 	depStore := NewDeploymentStore(connTracker)
-	dep := depStore.GetOrStore(t.Context(), deploymentName, "gateway")
+	dep := depStore.LoadOrStore(t.Context(), deploymentName, "gateway")
 
 	// Create a file larger than defaultChunkSize to ensure multiple chunks are sent
 	fileContent := make([]byte, defaultChunkSize+100)
@@ -355,7 +355,7 @@ func TestGetFileStream_InvalidRequest(t *testing.T) {
 	connTracker.GetConnectionReturns(conn)
 
 	depStore := NewDeploymentStore(connTracker)
-	_ = depStore.GetOrStore(t.Context(), deploymentName, "gateway")
+	_ = depStore.LoadOrStore(t.Context(), deploymentName, "gateway")
 
 	fs := newFileService(logr.Discard(), depStore, connTracker)
 
@@ -420,7 +420,7 @@ func TestGetFileStream_InvalidFileSize(t *testing.T) {
 			connTracker.GetConnectionReturns(conn)
 
 			depStore := NewDeploymentStore(connTracker)
-			dep := depStore.GetOrStore(t.Context(), deploymentName, "gateway")
+			dep := depStore.LoadOrStore(t.Context(), deploymentName, "gateway")
 
 			contents := []byte("test content")
 			dep.files = []File{
@@ -481,7 +481,7 @@ func TestUpdateOverview(t *testing.T) {
 	connTracker.GetConnectionReturns(conn)
 
 	depStore := NewDeploymentStore(connTracker)
-	dep := depStore.GetOrStore(t.Context(), deploymentName, "gateway")
+	dep := depStore.LoadOrStore(t.Context(), deploymentName, "gateway")
 
 	// Create a file larger than defaultChunkSize to ensure multiple chunks are sent
 	fileContent := make([]byte, defaultChunkSize+100)
