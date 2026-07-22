@@ -373,6 +373,7 @@ func createAndRegisterProvisioner(
 			EndpointPickerDisableTLS:       cfg.EndpointPickerDisableTLS,
 			EndpointPickerTLSSkipVerify:    cfg.EndpointPickerTLSSkipVerify,
 			ServerTLSDomain:                serverTLSDomain,
+			ExternalLoadBalancer:           cfg.ExternalLoadBalancer,
 		},
 	)
 	if err != nil {
@@ -734,6 +735,17 @@ func featureFlagControllerCfgs(cfg config.Config) []ctlrCfg {
 		cfgs = append(cfgs,
 			ctlrCfg{
 				objectType: &ngfAPIv1alpha1.SnippetsFilter{},
+				options: []controller.Option{
+					controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
+				},
+			},
+		)
+	}
+
+	if cfg.ExternalLoadBalancer {
+		cfgs = append(cfgs,
+			ctlrCfg{
+				objectType: &ngfAPIv1alpha1.ExternalLoadBalancer{},
 				options: []controller.Option{
 					controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
 				},
@@ -1349,6 +1361,13 @@ func prepareFirstEventBatchPreparerArgs(
 		objectLists = append(
 			objectLists,
 			&ngfAPIv1alpha1.SnippetsPolicyList{},
+		)
+	}
+
+	if cfg.ExternalLoadBalancer {
+		objectLists = append(
+			objectLists,
+			&ngfAPIv1alpha1.ExternalLoadBalancerList{},
 		)
 	}
 

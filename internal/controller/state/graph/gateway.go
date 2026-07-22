@@ -8,6 +8,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
+	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/config"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/resolver"
@@ -32,6 +33,8 @@ type Gateway struct {
 	EffectiveNginxProxy *EffectiveNginxProxy
 	// SecretRef is the namespaced name of the secret referenced by the Gateway for backend TLS.
 	SecretRef *types.NamespacedName
+	// ExternalLoadBalancer is the ExternalLoadBalancer resource attached to this Gateway.
+	ExternalLoadBalancer *ngfAPIv1alpha1.ExternalLoadBalancer
 	// ListenerNamespaces holds the allowed listener namespaces for this Gateway, if specified.
 	ListenerNamespaces *v1.ListenerNamespaces
 	// ListenerFactory is used to create listeners for this Gateway. This is used to validate

@@ -65,6 +65,8 @@ type Config struct {
 	EndpointPickerDisableTLS bool
 	// EndpointPickerTLSSkipVerify indicates if secure verification is skipped for EndpointPicker communication.
 	EndpointPickerTLSSkipVerify bool
+	// ExternalLoadBalancer indicates if ExternalLoadBalancer support is enabled.
+	ExternalLoadBalancer bool
 }
 
 // PLMStorageConfig holds configuration for connecting to PLM's S3-compatible storage (SeaweedFS).

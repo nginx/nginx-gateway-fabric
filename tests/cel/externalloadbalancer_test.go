@@ -3,6 +3,8 @@ package cel
 import (
 	"testing"
 
+	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+
 	controllerruntime "sigs.k8s.io/controller-runtime"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
@@ -20,7 +22,7 @@ func gatewayTargetRefs() []gatewayv1.LocalPolicyTargetReference {
 	}
 }
 
-func TestExternalLoadBalancersTargetRefs(t *testing.T) {
+func TestExternalLoadBalancerTargetRefs(t *testing.T) {
 	t.Parallel()
 	k8sClient := getKubernetesClient(t)
 
@@ -92,12 +94,12 @@ func TestExternalLoadBalancersTargetRefs(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			elb := &ngfAPIv1alpha1.ExternalLoadBalancers{
+			elb := &ngfAPIv1alpha1.ExternalLoadBalancer{
 				ObjectMeta: controllerruntime.ObjectMeta{
 					Name:      uniqueResourceName(testResourceName),
 					Namespace: defaultNamespace,
 				},
-				Spec: ngfAPIv1alpha1.ExternalLoadBalancersSpec{
+				Spec: ngfAPIv1alpha1.ExternalLoadBalancerSpec{
 					TargetRefs:  tt.targetRefs,
 					GatewayLink: tt.gatewayLink,
 				},
@@ -107,7 +109,7 @@ func TestExternalLoadBalancersTargetRefs(t *testing.T) {
 	}
 }
 
-func TestExternalLoadBalancersBackend(t *testing.T) {
+func TestExternalLoadBalancerBackend(t *testing.T) {
 	t.Parallel()
 	k8sClient := getKubernetesClient(t)
 
@@ -149,12 +151,12 @@ func TestExternalLoadBalancersBackend(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			elb := &ngfAPIv1alpha1.ExternalLoadBalancers{
+			elb := &ngfAPIv1alpha1.ExternalLoadBalancer{
 				ObjectMeta: controllerruntime.ObjectMeta{
 					Name:      uniqueResourceName(testResourceName),
 					Namespace: defaultNamespace,
 				},
-				Spec: ngfAPIv1alpha1.ExternalLoadBalancersSpec{
+				Spec: ngfAPIv1alpha1.ExternalLoadBalancerSpec{
 					TargetRefs:  gatewayTargetRefs(),
 					GatewayLink: tt.gatewayLink,
 				},
@@ -164,7 +166,7 @@ func TestExternalLoadBalancersBackend(t *testing.T) {
 	}
 }
 
-func TestExternalLoadBalancersPartition(t *testing.T) {
+func TestExternalLoadBalancerPartition(t *testing.T) {
 	t.Parallel()
 	k8sClient := getKubernetesClient(t)
 
@@ -187,16 +189,66 @@ func TestExternalLoadBalancersPartition(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			elb := &ngfAPIv1alpha1.ExternalLoadBalancers{
+			elb := &ngfAPIv1alpha1.ExternalLoadBalancer{
 				ObjectMeta: controllerruntime.ObjectMeta{
 					Name:      uniqueResourceName(testResourceName),
 					Namespace: defaultNamespace,
 				},
-				Spec: ngfAPIv1alpha1.ExternalLoadBalancersSpec{
+				Spec: ngfAPIv1alpha1.ExternalLoadBalancerSpec{
 					TargetRefs: gatewayTargetRefs(),
 					GatewayLink: &ngfAPIv1alpha1.GatewayLinkConfig{
 						VirtualServerAddress: helpers.GetPointer("10.8.3.101"),
 						Partition:            helpers.GetPointer(tt.partition),
+					},
+				},
+			}
+			validateCrd(t, tt.wantErrors, elb, k8sClient)
+		})
+	}
+}
+
+func TestExternalLoadBalancerAdditionalIngressLinkSpec(t *testing.T) {
+	t.Parallel()
+	k8sClient := getKubernetesClient(t)
+
+	tests := []struct {
+		additionalSpec *apiextv1.JSON
+		name           string
+		wantErrors     []string
+	}{
+		{
+			name:           "an object of unmodeled fields is allowed, since the schema preserves them",
+			additionalSpec: &apiextv1.JSON{Raw: []byte(`{"someUnmodeledField":"value","nested":{"a":1}}`)},
+		},
+		{
+			name:           "an empty object is allowed",
+			additionalSpec: &apiextv1.JSON{Raw: []byte(`{}`)},
+		},
+		{
+			name:           "a string is rejected because the escape hatch is merged into the IngressLink spec",
+			additionalSpec: &apiextv1.JSON{Raw: []byte(`"not an object"`)},
+			wantErrors:     []string{expectedELBAdditionalSpecTypeError},
+		},
+		{
+			name:           "an array is rejected because the escape hatch is merged into the IngressLink spec",
+			additionalSpec: &apiextv1.JSON{Raw: []byte(`[1,2,3]`)},
+			wantErrors:     []string{expectedELBAdditionalSpecTypeError},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			elb := &ngfAPIv1alpha1.ExternalLoadBalancer{
+				ObjectMeta: controllerruntime.ObjectMeta{
+					Name:      uniqueResourceName(testResourceName),
+					Namespace: defaultNamespace,
+				},
+				Spec: ngfAPIv1alpha1.ExternalLoadBalancerSpec{
+					TargetRefs: gatewayTargetRefs(),
+					GatewayLink: &ngfAPIv1alpha1.GatewayLinkConfig{
+						VirtualServerAddress:      helpers.GetPointer("10.8.3.101"),
+						AdditionalIngressLinkSpec: tt.additionalSpec,
 					},
 				},
 			}
