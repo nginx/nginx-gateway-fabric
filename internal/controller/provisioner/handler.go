@@ -14,6 +14,7 @@ import (
 	policyv1 "k8s.io/api/policy/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -21,7 +22,9 @@ import (
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/status"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller/predicate"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/events"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
 
 // eventHandler ensures each Gateway for the specific GatewayClass has a corresponding Deployment
@@ -92,18 +95,8 @@ func (h *eventHandler) handleUpsertEvent(ctx context.Context, e *events.UpsertEv
 			}
 		}
 	case *corev1.Service:
-		if gatewayNSName, ok := h.getGatewayForManagedResource(obj); ok {
-			if err := h.updateOrDeleteResources(ctx, logger, obj, gatewayNSName); err != nil {
-				return fmt.Errorf("error handling resource update: %w", err)
-			}
-			h.provisioner.cfg.StatusQueue.Enqueue(&status.QueueObject{
-				Deployment: status.Deployment{
-					NamespacedName: client.ObjectKeyFromObject(obj),
-					GatewayName:    gatewayNSName.Name,
-				},
-				UpdateType:     status.UpdateGateway,
-				GatewayService: obj,
-			})
+		if err := h.handleServiceUpsert(ctx, logger, obj); err != nil {
+			return err
 		}
 	case *corev1.Secret:
 		if gatewayNSName, ok := h.getGatewayForManagedResource(obj); ok {
@@ -115,9 +108,37 @@ func (h *eventHandler) handleUpsertEvent(ctx context.Context, e *events.UpsertEv
 				return fmt.Errorf("error provisioning resource for all gateways: %w", err)
 			}
 		}
+	case *unstructured.Unstructured:
+		// Handle IngressLink status changes
+		if obj.GroupVersionKind() == kinds.IngressLinkGVK {
+			h.handleIngressLinkUpdate(logger, obj)
+		}
 	default:
 		panic(fmt.Errorf("unknown resource type %T", e.Resource))
 	}
+	return nil
+}
+
+// handleServiceUpsert reconciles a managed nginx Service and enqueues a Gateway status update so the
+// Gateway's address reflects the Service's IP.
+func (h *eventHandler) handleServiceUpsert(ctx context.Context, logger logr.Logger, svc *corev1.Service) error {
+	gatewayNSName, ok := h.getGatewayForManagedResource(svc)
+	if !ok {
+		return nil
+	}
+
+	if err := h.updateOrDeleteResources(ctx, logger, svc, gatewayNSName); err != nil {
+		return fmt.Errorf("error handling resource update: %w", err)
+	}
+
+	h.provisioner.cfg.StatusQueue.Enqueue(&status.QueueObject{
+		Deployment: status.Deployment{
+			NamespacedName: client.ObjectKeyFromObject(svc),
+			GatewayName:    gatewayNSName.Name,
+		},
+		UpdateType:     status.UpdateGateway,
+		GatewayService: svc,
+	})
 	return nil
 }
 
@@ -152,7 +173,8 @@ func (h *eventHandler) handleDeleteEvent(ctx context.Context, e *events.DeleteEv
 		h.provisioner.cfg.DeploymentStore.Remove(deploymentNSName)
 	case *appsv1.Deployment, *appsv1.DaemonSet, *corev1.Service, *corev1.ServiceAccount,
 		*corev1.ConfigMap, *rbacv1.Role, *rbacv1.RoleBinding,
-		*autoscalingv2.HorizontalPodAutoscaler, *policyv1.PodDisruptionBudget:
+		*autoscalingv2.HorizontalPodAutoscaler, *policyv1.PodDisruptionBudget,
+		*unstructured.Unstructured:
 
 		if err := h.reprovisionResources(ctx, e); err != nil {
 			return fmt.Errorf("error re-provisioning nginx resources: %w", err)
@@ -250,6 +272,7 @@ func (h *eventHandler) provisionResource(
 				resources.Gateway.Source,
 				resources.Gateway.EffectiveNginxProxy,
 				resources.Gateway.Listeners,
+				extractExternalLoadBalancer(resources.Gateway),
 			)
 			if err != nil {
 				logger.Error(err, "error building some nginx resources")
@@ -300,6 +323,7 @@ func (h *eventHandler) reprovisionResources(ctx context.Context, event *events.D
 				gateway.Source,
 				gateway.EffectiveNginxProxy,
 				gateway.Listeners,
+				extractExternalLoadBalancer(gateway),
 			); err != nil {
 				return err
 			}
@@ -386,4 +410,47 @@ func (h *eventHandler) deprovisionMatchingSecrets(
 	}
 
 	return errs
+}
+
+// handleIngressLinkUpdate processes IngressLink status changes and enqueues Gateway status updates
+// when the vsAddress field changes (i.e., when IPAM allocates an address).
+func (h *eventHandler) handleIngressLinkUpdate(logger logr.Logger, il *unstructured.Unstructured) {
+	objLabels := labels.Set(il.GetLabels())
+	if !h.labelSelector.Matches(objLabels) {
+		return
+	}
+
+	// Get the Gateway name from the labels
+	gatewayName := objLabels.Get(controller.GatewayLabel)
+	if gatewayName == "" {
+		gatewayName = il.GetAnnotations()[controller.GatewayLabel]
+	}
+
+	if gatewayName == "" {
+		logger.V(1).Info("IngressLink has no gateway label, skipping", "name", il.GetName())
+		return
+	}
+
+	// Extract vsAddress from status
+	vsAddress := predicate.GetVSAddress(il)
+	if vsAddress == "" {
+		logger.V(1).Info("IngressLink has no vsAddress in status, waiting for IPAM allocation",
+			"name", il.GetName(), "gateway", gatewayName)
+		return
+	}
+
+	logger.Info("IngressLink status updated with vsAddress",
+		"name", il.GetName(), "gateway", gatewayName, "vsAddress", vsAddress)
+
+	// Enqueue a status update to update the Gateway addresses
+	resourceName := controller.CreateNginxResourceName(gatewayName, h.gcName)
+	statusUpdate := &status.QueueObject{
+		Deployment: status.Deployment{
+			NamespacedName: types.NamespacedName{Namespace: il.GetNamespace(), Name: resourceName},
+			GatewayName:    gatewayName,
+		},
+		UpdateType:         status.UpdateGatewayIngressLink,
+		IngressLinkAddress: vsAddress,
+	}
+	h.provisioner.cfg.StatusQueue.Enqueue(statusUpdate)
 }

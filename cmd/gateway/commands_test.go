@@ -157,6 +157,7 @@ func TestControllerCmdFlagValidation(t *testing.T) {
 				"--usage-report-enforce-initial-report",
 				"--snippets-filters",
 				"--snippets",
+				"--external-load-balancer",
 				"--nginx-scc=nginx-sscc-name",
 				"--nginx-one-dataplane-key-secret=dataplane-key-secret",
 				"--nginx-one-telemetry-endpoint-host=telemetry-endpoint-host",
@@ -425,6 +426,15 @@ func TestControllerCmdFlagValidation(t *testing.T) {
 				` parsing "not-a-bool": invalid syntax`,
 			args: []string{
 				"--snippets=not-a-bool",
+			},
+			wantErr: true,
+		},
+		{
+			name: "external-load-balancer is not a bool",
+			expectedErrPrefix: `invalid argument "not-a-bool" for "--external-load-balancer" flag: strconv.ParseBool:` +
+				` parsing "not-a-bool": invalid syntax`,
+			args: []string{
+				"--external-load-balancer=not-a-bool",
 			},
 			wantErr: true,
 		},

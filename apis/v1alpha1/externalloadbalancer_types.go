@@ -10,45 +10,46 @@ import (
 // +kubebuilder:object:root=true
 // +kubebuilder:storageversion
 // +kubebuilder:subresource:status
-// +kubebuilder:resource:categories=nginx-gateway-fabric,shortName=elbs
+// +kubebuilder:resource:categories=nginx-gateway-fabric,shortName=elb
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
+// +kubebuilder:metadata:labels="gateway.networking.k8s.io/policy=direct"
 
-// ExternalLoadBalancers configures an external load balancer that fronts a Gateway.
+// ExternalLoadBalancer configures an external load balancer that fronts a Gateway.
 // It references a Gateway through TargetRefs. NGINX Gateway Fabric provisions the
 // external load balancer integration for the Gateway's data plane Service.
 //
-// ExternalLoadBalancers maps one-to-one to a Gateway: a Gateway yields exactly one data plane
-// Service, so it is fronted by exactly one ExternalLoadBalancers. When more than one
-// ExternalLoadBalancers references the same Gateway, the oldest is accepted and the others are
+// ExternalLoadBalancer maps one-to-one to a Gateway: a Gateway yields exactly one data plane
+// Service, so it is fronted by exactly one ExternalLoadBalancer. When more than one
+// ExternalLoadBalancer references the same Gateway, the oldest is accepted and the others are
 // rejected with Accepted=False.
 //
 // A resource configures exactly one external load balancer backend. The gatewayLink backend
 // integrates F5 BIG-IP through F5 CIS.
-type ExternalLoadBalancers struct {
+type ExternalLoadBalancer struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	// Spec defines the desired state of the ExternalLoadBalancers.
-	Spec ExternalLoadBalancersSpec `json:"spec"`
+	// Spec defines the desired state of the ExternalLoadBalancer.
+	Spec ExternalLoadBalancerSpec `json:"spec"`
 
-	// Status defines the state of the ExternalLoadBalancers.
-	Status ExternalLoadBalancersStatus `json:"status,omitempty"`
+	// Status defines the state of the ExternalLoadBalancer.
+	Status ExternalLoadBalancerStatus `json:"status,omitempty"`
 }
 
 // +kubebuilder:object:root=true
-// ExternalLoadBalancersList contains a list of ExternalLoadBalancers.
-type ExternalLoadBalancersList struct {
+// ExternalLoadBalancerList contains a list of ExternalLoadBalancer.
+type ExternalLoadBalancerList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []ExternalLoadBalancers `json:"items"`
+	Items           []ExternalLoadBalancer `json:"items"`
 }
 
-// ExternalLoadBalancersSpec defines the desired state of ExternalLoadBalancers.
+// ExternalLoadBalancerSpec defines the desired state of ExternalLoadBalancer.
 //
 // +kubebuilder:validation:XValidation:message="exactly one external load balancer backend must be set",rule="has(self.gatewayLink)"
 //
 //nolint:lll
-type ExternalLoadBalancersSpec struct {
+type ExternalLoadBalancerSpec struct {
 	// GatewayLink configures F5 BIG-IP as the external load balancer using F5
 	// Container Ingress Services. It is the first supported backend. Additional
 	// backend types may be added as sibling fields in the future.
@@ -57,7 +58,7 @@ type ExternalLoadBalancersSpec struct {
 	GatewayLink *GatewayLinkConfig `json:"gatewayLink,omitempty"`
 
 	// TargetRefs identifies the Gateways this external load balancer applies to.
-	// Each object must be in the same namespace as the ExternalLoadBalancers resource.
+	// Each object must be in the same namespace as the ExternalLoadBalancer resource.
 	// Exactly one Gateway is supported for now.
 	// Support: Gateway.
 	//
@@ -145,6 +146,7 @@ type GatewayLinkConfig struct {
 	// caution since contents bypass schema validation, defaulting, and CEL rules, and flow through to
 	// BIG-IP via F5 CIS.
 	//
+	// +kubebuilder:validation:Type=object
 	// +kubebuilder:validation:XPreserveUnknownFields
 	// +optional
 	AdditionalIngressLinkSpec *apiextv1.JSON `json:"additionalIngressLinkSpec,omitempty"`
@@ -291,23 +293,23 @@ type GatewayLinkRemoteCluster struct {
 	Weight *int32 `json:"weight,omitempty"`
 }
 
-// ExternalLoadBalancersStatus defines the state of ExternalLoadBalancers.
-type ExternalLoadBalancersStatus struct {
-	// Controllers is a list of Gateway API controllers that processed the ExternalLoadBalancers
-	// and the status of the ExternalLoadBalancers with respect to each controller.
+// ExternalLoadBalancerStatus defines the state of ExternalLoadBalancer.
+type ExternalLoadBalancerStatus struct {
+	// Controllers is a list of Gateway API controllers that processed the ExternalLoadBalancer
+	// and the status of the ExternalLoadBalancer with respect to each controller.
 	//
 	// +kubebuilder:validation:MaxItems=16
 	Controllers []ControllerStatus `json:"controllers,omitempty"`
 }
 
-// ExternalLoadBalancersConditionType is a type of condition associated with ExternalLoadBalancers.
-type ExternalLoadBalancersConditionType string
+// ExternalLoadBalancerConditionType is a type of condition associated with ExternalLoadBalancer.
+type ExternalLoadBalancerConditionType string
 
-// ExternalLoadBalancersConditionReason is a reason for an ExternalLoadBalancers condition type.
-type ExternalLoadBalancersConditionReason string
+// ExternalLoadBalancerConditionReason is a reason for an ExternalLoadBalancer condition type.
+type ExternalLoadBalancerConditionReason string
 
 const (
-	// ExternalLoadBalancersConditionTypeAccepted indicates that the ExternalLoadBalancers is accepted.
+	// ExternalLoadBalancerConditionTypeAccepted indicates that the ExternalLoadBalancer is accepted.
 	//
 	// Possible reasons for this condition to be True:
 	//
@@ -317,18 +319,18 @@ const (
 	//
 	// * Invalid
 	// * Conflicted.
-	ExternalLoadBalancersConditionTypeAccepted ExternalLoadBalancersConditionType = "Accepted"
+	ExternalLoadBalancerConditionTypeAccepted ExternalLoadBalancerConditionType = "Accepted"
 
-	// ExternalLoadBalancersConditionReasonAccepted is used with the Accepted condition type when
+	// ExternalLoadBalancerConditionReasonAccepted is used with the Accepted condition type when
 	// the condition is true.
-	ExternalLoadBalancersConditionReasonAccepted ExternalLoadBalancersConditionReason = "Accepted"
+	ExternalLoadBalancerConditionReasonAccepted ExternalLoadBalancerConditionReason = "Accepted"
 
-	// ExternalLoadBalancersConditionReasonInvalid is used with the Accepted condition type when
-	// the ExternalLoadBalancers is invalid.
-	ExternalLoadBalancersConditionReasonInvalid ExternalLoadBalancersConditionReason = "Invalid"
+	// ExternalLoadBalancerConditionReasonInvalid is used with the Accepted condition type when
+	// the ExternalLoadBalancer is invalid.
+	ExternalLoadBalancerConditionReasonInvalid ExternalLoadBalancerConditionReason = "Invalid"
 
-	// ExternalLoadBalancersConditionReasonConflicted is used with the Accepted condition type when
-	// another ExternalLoadBalancers already references the same Gateway. A Gateway can be fronted by
+	// ExternalLoadBalancerConditionReasonConflicted is used with the Accepted condition type when
+	// another ExternalLoadBalancer already references the same Gateway. A Gateway can be fronted by
 	// exactly one external load balancer, so the oldest is accepted and the others are Conflicted.
-	ExternalLoadBalancersConditionReasonConflicted ExternalLoadBalancersConditionReason = "Conflicted"
+	ExternalLoadBalancerConditionReasonConflicted ExternalLoadBalancerConditionReason = "Conflicted"
 )
