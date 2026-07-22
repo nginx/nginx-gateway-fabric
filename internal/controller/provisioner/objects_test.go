@@ -1845,74 +1845,76 @@ func TestSetIPFamily(t *testing.T) {
 func TestBuildNginxConfigMaps_WorkerSettings(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		nProxyCfg        *graph.EffectiveNginxProxy
-		name             string
+	// worker_connections is rendered in the events config, while worker_processes and
+	// worker_rlimit_nofile are rendered in the main config. Each test case sets a single
+	// NginxProxy config and asserts the resulting directives across both files, so the
+	// default (nil/empty) cases show every worker directive in one place.
+	type confAssertion struct {
 		confKey          string
 		expSubStrings    []string
 		notExpSubStrings []string
-		plus             bool
+	}
+
+	tests := []struct {
+		nProxyCfg  *graph.EffectiveNginxProxy
+		name       string
+		assertions []confAssertion
+		plus       bool
 	}{
 		{
-			name:          "default worker_connections (nil config)",
-			nProxyCfg:     nil,
-			confKey:       configmaps.EventsConfKey,
-			expSubStrings: []string{"worker_connections 1024;"},
+			name:      "defaults (nil config)",
+			nProxyCfg: nil,
+			assertions: []confAssertion{
+				{confKey: configmaps.EventsConfKey, expSubStrings: []string{"worker_connections 1024;"}},
+				{
+					confKey:          configmaps.MainConfKey,
+					expSubStrings:    []string{"worker_processes auto;"},
+					notExpSubStrings: []string{"worker_rlimit_nofile"},
+				},
+			},
 		},
 		{
-			name:          "default worker_connections (empty config)",
-			nProxyCfg:     &graph.EffectiveNginxProxy{},
-			confKey:       configmaps.EventsConfKey,
-			expSubStrings: []string{"worker_connections 1024;"},
+			name:      "defaults (empty config)",
+			nProxyCfg: &graph.EffectiveNginxProxy{},
+			assertions: []confAssertion{
+				{confKey: configmaps.EventsConfKey, expSubStrings: []string{"worker_connections 1024;"}},
+				{
+					confKey:          configmaps.MainConfKey,
+					expSubStrings:    []string{"worker_processes auto;"},
+					notExpSubStrings: []string{"worker_rlimit_nofile"},
+				},
+			},
 		},
 		{
-			name:          "custom worker_connections",
-			nProxyCfg:     &graph.EffectiveNginxProxy{WorkerConnections: helpers.GetPointer[int32](2048)},
-			confKey:       configmaps.EventsConfKey,
-			expSubStrings: []string{"worker_connections 2048;"},
+			name: "custom worker settings",
+			nProxyCfg: &graph.EffectiveNginxProxy{
+				WorkerConnections:  helpers.GetPointer[int32](2048),
+				WorkerProcesses:    helpers.GetPointer[int32](4),
+				WorkerRlimitNofile: helpers.GetPointer[int32](3124),
+			},
+			assertions: []confAssertion{
+				{confKey: configmaps.EventsConfKey, expSubStrings: []string{"worker_connections 2048;"}},
+				{
+					confKey:       configmaps.MainConfKey,
+					expSubStrings: []string{"worker_processes 4;", "worker_rlimit_nofile 3124;"},
+				},
+			},
 		},
 		{
-			name:          "default worker_processes (nil config)",
-			nProxyCfg:     nil,
-			confKey:       configmaps.MainConfKey,
-			expSubStrings: []string{"worker_processes auto;"},
-		},
-		{
-			name:          "default worker_processes (empty config)",
-			nProxyCfg:     &graph.EffectiveNginxProxy{},
-			confKey:       configmaps.MainConfKey,
-			expSubStrings: []string{"worker_processes auto;"},
-		},
-		{
-			name:          "custom worker_processes",
-			nProxyCfg:     &graph.EffectiveNginxProxy{WorkerProcesses: helpers.GetPointer[int32](4)},
-			confKey:       configmaps.MainConfKey,
-			expSubStrings: []string{"worker_processes 4;"},
-		},
-		{
-			name:          "custom worker_processes renders the same way with NGINX Plus",
-			nProxyCfg:     &graph.EffectiveNginxProxy{WorkerProcesses: helpers.GetPointer[int32](4)},
-			confKey:       configmaps.MainConfKey,
-			expSubStrings: []string{"worker_processes 4;"},
-			plus:          true,
-		},
-		{
-			name:             "worker_rlimit_nofile omitted (nil config)",
-			nProxyCfg:        nil,
-			confKey:          configmaps.MainConfKey,
-			notExpSubStrings: []string{"worker_rlimit_nofile"},
-		},
-		{
-			name:             "worker_rlimit_nofile omitted (empty config)",
-			nProxyCfg:        &graph.EffectiveNginxProxy{},
-			confKey:          configmaps.MainConfKey,
-			notExpSubStrings: []string{"worker_rlimit_nofile"},
-		},
-		{
-			name:          "custom worker_rlimit_nofile",
-			nProxyCfg:     &graph.EffectiveNginxProxy{WorkerRlimitNofile: helpers.GetPointer[int32](3124)},
-			confKey:       configmaps.MainConfKey,
-			expSubStrings: []string{"worker_rlimit_nofile 3124;"},
+			name: "custom worker settings render the same way with NGINX Plus",
+			nProxyCfg: &graph.EffectiveNginxProxy{
+				WorkerConnections:  helpers.GetPointer[int32](2048),
+				WorkerProcesses:    helpers.GetPointer[int32](4),
+				WorkerRlimitNofile: helpers.GetPointer[int32](3124),
+			},
+			plus: true,
+			assertions: []confAssertion{
+				{confKey: configmaps.EventsConfKey, expSubStrings: []string{"worker_connections 2048;"}},
+				{
+					confKey:       configmaps.MainConfKey,
+					expSubStrings: []string{"worker_processes 4;", "worker_rlimit_nofile 3124;"},
+				},
+			},
 		},
 	}
 
@@ -1949,12 +1951,14 @@ func TestBuildNginxConfigMaps_WorkerSettings(t *testing.T) {
 			bootstrapCM, ok := configMaps[0].(*corev1.ConfigMap)
 			g.Expect(ok).To(BeTrue())
 
-			conf := bootstrapCM.Data[test.confKey]
-			for _, sub := range test.expSubStrings {
-				g.Expect(conf).To(ContainSubstring(sub))
-			}
-			for _, sub := range test.notExpSubStrings {
-				g.Expect(conf).ToNot(ContainSubstring(sub))
+			for _, assertion := range test.assertions {
+				conf := bootstrapCM.Data[assertion.confKey]
+				for _, sub := range assertion.expSubStrings {
+					g.Expect(conf).To(ContainSubstring(sub))
+				}
+				for _, sub := range assertion.notExpSubStrings {
+					g.Expect(conf).ToNot(ContainSubstring(sub))
+				}
 			}
 		})
 	}

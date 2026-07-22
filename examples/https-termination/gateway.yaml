@@ -21,9 +21,3 @@ spec:
         nginx.org/ssl-protocols: "TLSv1.2 TLSv1.3"
         nginx.org/ssl-ciphers: "ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384:HIGH:!aNULL:!MD5"
         nginx.org/ssl-prefer-server-ciphers: "on"
-        # Size of a shared TLS session cache; NGF generates the shared zone name. Use "off" or "none" to disable.
-        nginx.org/ssl-session-cache: "10m"
-        # How long a client may reuse TLS session parameters (NGINX time, e.g. 300, 5m, 1h, 1d).
-        nginx.org/ssl-session-timeout: "1d"
-        # Curve(s) for ECDH key exchange: "auto" or a colon-separated list.
-        nginx.org/ssl-ecdh-curve: "auto"
