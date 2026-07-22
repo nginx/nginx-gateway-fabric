@@ -6,54 +6,51 @@ NGINX Plus: false
 
 NGINX Gateway Fabric:
 
-- Commit: 903211b7f256263c546d17dbbc037f7756f492e1
-- Date: 2026-06-30T17:57:05Z
+- Commit: 3f79877f3b0abebd33ccda280a3a8a906fae5359
+- Date: 2026-07-15T15:34:03Z
 - Dirty: false
 
 GKE Cluster:
 
 - Node count: 12
-- k8s version: v1.35.5-gke.1163012
+- k8s version: v1.35.5-gke.1241004
 - vCPUs per node: 16
-- RAM per node: 65848292Ki
+- RAM per node: 65848284Ki
 - Max pods per node: 110
 - Zone: us-west1-b
 - Instance Type: n2d-standard-16
 
-## Test: Send https /tea traffic
-
-```text
-Requests      [total, rate, throughput]         6000, 100.01, 99.73
-Duration      [total, attack, wait]             59.994s, 59.993s, 1.293ms
-Latencies     [min, mean, 50, 90, 95, 99, max]  594.506µs, 314.151ms, 1.024ms, 248.297ms, 3.142s, 5.456s, 6.009s
-Bytes In      [total, mean]                     929326, 154.89
-Bytes Out     [total, mean]                     0, 0.00
-Success       [ratio]                           99.72%
-Status Codes  [code:count]                      0:17  200:5983  
-Error Set:
-Get "https://cafe.example.com/tea": read tcp 10.138.0.85:36807->10.138.0.102:443: read: connection reset by peer
-Get "https://cafe.example.com/tea": read tcp 10.138.0.85:38051->10.138.0.102:443: read: connection reset by peer
-Get "https://cafe.example.com/tea": read tcp 10.138.0.85:42805->10.138.0.102:443: read: connection reset by peer
-Get "https://cafe.example.com/tea": dial tcp 0.0.0.0:0->10.138.0.102:443: connect: connection refused
-```
-
-![https-oss.png](https-oss.png)
-
 ## Test: Send http /coffee traffic
 
 ```text
-Requests      [total, rate, throughput]         6000, 100.01, 99.73
-Duration      [total, attack, wait]             59.994s, 59.991s, 3.028ms
-Latencies     [min, mean, 50, 90, 95, 99, max]  687.558µs, 308.008ms, 1.002ms, 240.74ms, 3.072s, 5.419s, 5.986s
-Bytes In      [total, mean]                     965240, 160.87
+Requests      [total, rate, throughput]         6000, 100.01, 99.78
+Duration      [total, attack, wait]             59.993s, 59.991s, 1.524ms
+Latencies     [min, mean, 50, 90, 95, 99, max]  659.928µs, 252.204ms, 1.035ms, 1.619ms, 2.504s, 4.83s, 5.398s
+Bytes In      [total, mean]                     969732, 161.62
 Bytes Out     [total, mean]                     0, 0.00
-Success       [ratio]                           99.72%
-Status Codes  [code:count]                      0:17  200:5983  
+Success       [ratio]                           99.77%
+Status Codes  [code:count]                      0:14  200:5986  
 Error Set:
-Get "http://cafe.example.com/coffee": read tcp 10.138.0.85:32823->10.138.0.102:80: read: connection reset by peer
-Get "http://cafe.example.com/coffee": read tcp 10.138.0.85:54711->10.138.0.102:80: read: connection reset by peer
-Get "http://cafe.example.com/coffee": read tcp 10.138.0.85:41287->10.138.0.102:80: read: connection reset by peer
-Get "http://cafe.example.com/coffee": dial tcp 0.0.0.0:0->10.138.0.102:80: connect: connection refused
+Get "http://cafe.example.com/coffee": read tcp 10.138.0.104:49203->10.138.0.119:80: read: connection reset by peer
+Get "http://cafe.example.com/coffee": dial tcp 0.0.0.0:0->10.138.0.119:80: connect: connection refused
 ```
 
 ![http-oss.png](http-oss.png)
+
+## Test: Send https /tea traffic
+
+```text
+Requests      [total, rate, throughput]         6000, 100.01, 99.78
+Duration      [total, attack, wait]             59.993s, 59.992s, 1.077ms
+Latencies     [min, mean, 50, 90, 95, 99, max]  719.431µs, 252.957ms, 1.113ms, 1.632ms, 2.511s, 4.834s, 5.401s
+Bytes In      [total, mean]                     935888, 155.98
+Bytes Out     [total, mean]                     0, 0.00
+Success       [ratio]                           99.77%
+Status Codes  [code:count]                      0:14  200:5986  
+Error Set:
+Get "https://cafe.example.com/tea": read tcp 10.138.0.104:48697->10.138.0.119:443: read: connection reset by peer
+Get "https://cafe.example.com/tea": dial tcp 0.0.0.0:0->10.138.0.119:443: connect: connection refused
+Get "https://cafe.example.com/tea": read tcp 10.138.0.104:46427->10.138.0.119:443: read: connection reset by peer
+```
+
+![https-oss.png](https-oss.png)
