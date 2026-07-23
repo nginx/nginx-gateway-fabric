@@ -1,26 +1,16 @@
 //! Guardrails API client — synchronous blocking implementation.
 //!
-//! Uses `ureq`, a blocking HTTP client, which avoids any async-runtime
+//! Uses `minreq`, a small blocking HTTP client, which avoids any async-runtime
 //! re-entrancy issues when called from NGINX's single-threaded event loop.
-//! TLS is provided by rustls verified against the operating system's native
-//! trust store (via `rustls-platform-verifier`), so no bundled root
-//! certificate crate is required — the runtime image must ship
-//! `ca-certificates`.
+//! `minreq` is deliberately chosen over `ureq`/`reqwest` because it does not
+//! depend on the `url` crate, and therefore avoids the idna -> ICU4X
+//! (Unicode-3.0) transitive dependency stack that the dependency-review policy
+//! rejects. TLS is provided by rustls verified against the operating system's
+//! native trust store (via `rustls-native-certs`, enabled by the
+//! `https-rustls-probe` feature), so no bundled root certificate crate is
+//! required — the runtime image must ship `ca-certificates`.
 
-use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
-use std::time::Duration;
-
-/// Shared blocking HTTP agent. A single instance is reused across all
-/// checkpoint calls so connections can be pooled.
-static AGENT: Lazy<ureq::Agent> = Lazy::new(|| {
-    ureq::Agent::config_builder()
-        // A conservative default; each request overrides this with the
-        // per-location `guardrails_timeout_ms` value.
-        .timeout_global(Some(Duration::from_secs(5)))
-        .build()
-        .into()
-});
 
 #[derive(Debug)]
 pub enum GuardrailsError {
@@ -48,6 +38,16 @@ const SCANS_PATH: &str = "/backend/v1/scans";
 /// trailing slash on the base URL so the result never contains a double slash.
 fn build_endpoint(api_url: &str) -> String {
     format!("{}{}", api_url.trim_end_matches('/'), SCANS_PATH)
+}
+
+/// Classify an I/O error as a timeout. minreq surfaces a request timeout as an
+/// `io::Error` with kind `TimedOut` (or `WouldBlock` on some platforms), so we
+/// treat either as a timeout to preserve the caller's fail-closed behaviour.
+fn is_timeout(e: &std::io::Error) -> bool {
+    matches!(
+        e.kind(),
+        std::io::ErrorKind::TimedOut | std::io::ErrorKind::WouldBlock
+    )
 }
 
 #[derive(Serialize)]
@@ -110,49 +110,56 @@ pub fn inspect_content(
     }
     let _ = std::io::Write::flush(&mut std::io::stderr());
 
-    let mut req = AGENT
-        .post(&endpoint)
-        // Override the agent-level default with this location's timeout.
-        .config()
-        .timeout_global(Some(Duration::from_millis(timeout_ms)))
-        .build()
-        .header("Content-Type", "application/json")
-        .header("User-Agent", "nginx-guardrails-filter/0.1.0");
+    // minreq's timeout is expressed in whole seconds, whereas the public
+    // `guardrails_timeout_ms` API is millisecond-granular. Round up to the
+    // nearest second (never below 1s) so a configured timeout is never silently
+    // truncated to zero. This is a deliberate, documented precision reduction.
+    let timeout_secs = timeout_ms.div_ceil(1000).max(1);
+
+    let mut req = minreq::post(&endpoint)
+        .with_timeout(timeout_secs)
+        .with_header("Content-Type", "application/json")
+        .with_header("User-Agent", "nginx-guardrails-filter/0.1.0");
 
     if let Some(token) = api_token {
-        req = req.header("Authorization", format!("Bearer {}", token));
+        req = req.with_header("Authorization", format!("Bearer {}", token));
     }
 
-    // ureq treats a non-2xx status as an error by default. Map each error kind
-    // to the corresponding GuardrailsError so the caller's fail-closed logic
-    // behaves identically to the previous reqwest implementation.
-    let mut response = match req.send_json(&request_body) {
+    let req = req
+        .with_json(&request_body)
+        .map_err(|e| GuardrailsError::RequestFailed(e.to_string()))?;
+
+    // Unlike ureq, minreq does not treat a non-2xx status as an error; we check
+    // the status code explicitly below. Transport-level failures (including
+    // timeouts, which surface as an I/O error) are mapped so the caller's
+    // fail-closed logic behaves identically to the previous implementation.
+    let response = match req.send() {
         Ok(r) => r,
-        Err(ureq::Error::StatusCode(code)) => {
-            eprintln!("[guardrails] API response: status={}", code);
-            let _ = std::io::Write::flush(&mut std::io::stderr());
-            return Err(GuardrailsError::InvalidResponse(format!(
-                "Status: {}",
-                code
-            )));
-        }
-        Err(ureq::Error::Timeout(_)) => {
+        Err(minreq::Error::IoError(e)) if is_timeout(&e) => {
             eprintln!("[guardrails] API request timeout after {}ms", timeout_ms);
+            let _ = std::io::Write::flush(&mut std::io::stderr());
             return Err(GuardrailsError::Timeout);
         }
         Err(e) => {
             eprintln!("[guardrails] API request failed: {}", e);
+            let _ = std::io::Write::flush(&mut std::io::stderr());
             return Err(GuardrailsError::RequestFailed(e.to_string()));
         }
     };
 
-    let status = response.status();
+    let status = response.status_code;
     eprintln!("[guardrails] API response: status={}", status);
     let _ = std::io::Write::flush(&mut std::io::stderr());
 
+    if !(200..300).contains(&status) {
+        return Err(GuardrailsError::InvalidResponse(format!(
+            "Status: {}",
+            status
+        )));
+    }
+
     let guardrails_response: GuardrailsResponse = response
-        .body_mut()
-        .read_json()
+        .json()
         .map_err(|e| GuardrailsError::InvalidResponse(e.to_string()))?;
 
     let cleared = guardrails_response.result.outcome == "cleared";

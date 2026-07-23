@@ -20,23 +20,14 @@ paste = "1.0"
 libc = "0.2"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-# ureq 3.x with a minimal feature set:
-#   - rustls-no-provider + _ring: pure-Rust rustls TLS backend (no OpenSSL link).
-#   - platform-verifier: use the OS/native trust store (rustls-native-certs) instead
-#     of a bundled root-cert crate (webpki-roots), which carries a license the
-#     dependency-review policy rejects.
-#   - json/gzip: request/response JSON and gzip decode.
-# `url`/`cookies` are intentionally NOT enabled: `url` pulls in idna -> the ICU4X
-# (Unicode-3.0) stack, which the dependency-review policy rejects. ureq 3.x makes
-# `url` optional, so keeping these features off removes ~18 disallowed crates.
-ureq = { version = "3", default-features = false, features = [
-    "rustls-no-provider",
-    "_ring",
-    "platform-verifier",
-    "json",
-    "gzip",
-] }
-once_cell = "1.21"
+# minreq: a small, blocking HTTP client. Chosen over ureq/reqwest because it does
+# NOT depend on the `url` crate, so it avoids the idna -> ICU4X (Unicode-3.0) stack
+# that the dependency-review policy rejects.
+#   - https-rustls-probe: pure-Rust rustls TLS verified against the OS trust store
+#     via rustls-native-certs (no bundled root-cert crate like webpki-roots). The
+#     runtime image must ship `ca-certificates`.
+#   - json-using-serde: (de)serialize request/response bodies with serde_json.
+minreq = { version = "2.14", features = ["https-rustls-probe", "json-using-serde"] }
 
 [profile.release]
 opt-level = 3

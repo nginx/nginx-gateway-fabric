@@ -81,14 +81,14 @@ scheme is chosen from the Service *type*:
 | External | `ExternalName` | `https://<externalName>:<backendRef.port>` |
 | In-cluster | `ClusterIP` (or any non-`ExternalName`) | `http://<name>.<namespace>.svc.cluster.local:<backendRef.port>` |
 
-The module itself is scheme-agnostic — the `ureq` client (`src/client.rs`) handles both `http://`
+The module itself is scheme-agnostic — the `minreq` client (`src/client.rs`) handles both `http://`
 and `https://`, so no module change is needed to support either backend. Two consequences worth
 knowing:
 
 - The port comes from the policy's `backendRef.port`, **not** the Service's `.spec.ports`.
 - Externally-addressed backends are always called over https and in-cluster ones over http; the
   scheme cannot currently be overridden independently of the Service type.
-- HTTPS verification uses the **operating system trust store** (rustls + `rustls-platform-verifier`),
+- HTTPS verification uses the **operating system trust store** (rustls + `rustls-native-certs`),
   so the runtime image must ship `ca-certificates`. This is installed in the NGINX Dockerfiles
   (`build/Dockerfile.nginx[plus]`, `build/ubi/Dockerfile.nginx[plus]`). There is no bundled root
   certificate crate.
@@ -133,9 +133,9 @@ A few Rust/NGINX concepts you need in order to read the code:
 | ------ | ------------------ |
 | `src/lib.rs` | Module entry point. Declares the directive table (`ngx_command_t`), the config-parsing handlers, registers the three filters in `postconfiguration`, and implements the request-body / header / response-body filters plus the 403 and stream-termination senders. |
 | `src/config.rs` | `ModuleConfig` — the per-`location` configuration struct, its `Default` values, and the `inspect_requests()` / `inspect_responses()` helpers derived from `enabled` + `inspect_mode`. |
-| `src/client.rs` | The Guardrails API client. A blocking `ureq` HTTP client that `POST`s to `<api_url>/backend/v1/scans`, the request/response JSON shapes, and the fail-closed `GuardrailsError` type. Returns `Ok(true)` when content is *cleared*, `Ok(false)` when *blocked*. TLS uses rustls verified against the OS trust store. Unit tests use a hand-rolled `std::net::TcpListener` mock server (no mock-server dependency). |
+| `src/client.rs` | The Guardrails API client. A blocking `minreq` HTTP client that `POST`s to `<api_url>/backend/v1/scans`, the request/response JSON shapes, and the fail-closed `GuardrailsError` type. Returns `Ok(true)` when content is *cleared*, `Ok(false)` when *blocked*. TLS uses rustls verified against the OS trust store (`rustls-native-certs`). Unit tests use a hand-rolled `std::net::TcpListener` mock server (no mock-server dependency). |
 | `src/stream.rs` | `StreamContext` — the streaming buffer and "checkpoint" logic. Parses SSE / OpenAI / Ollama chunk formats, accumulates text, decides when to inspect, and holds the termination/error message bodies. Contains the module's unit tests. |
-| `Cargo.toml` | Crate manifest: dependencies (`ngx`, `nginx-sys`, `ureq`, `serde`, `serde_json`, …), `crate-type`, and release profile. See the comment on the `ureq` dependency for why its feature set is deliberately minimal. |
+| `Cargo.toml` | Crate manifest: dependencies (`ngx`, `nginx-sys`, `minreq`, `serde`, `serde_json`, …), `crate-type`, and release profile. See the comment on the `minreq` dependency for why it is chosen over `ureq`/`reqwest`. |
 | `Cargo.lock` | Pinned exact dependency versions. Committed for reproducible builds. |
 | `build.rs` | Build script that sets platform-specific linker flags so undefined NGINX symbols are resolved at module-load time rather than at link time. |
 | `Dockerfile.testing` | CI/dev image used by `make rust-lint` and `make rust-unit-test`. Not used to produce the shipped `.so`. |
@@ -153,7 +153,7 @@ All directives are valid in the `location` context. Defaults come from
 | `guardrails_api_url` | URL | *(none)* | Yes | Base URL of the Guardrails API. `/backend/v1/scans` is appended by the client. |
 | `guardrails_api_token_file` | path | *(none)* | Yes (when a token Secret is configured) | Reads the bearer token from a file at config-load time. Preferred over inline tokens. |
 | `guardrails_api_token` | string | *(none)* | No | Inline bearer token. Supported by the module but NGF always uses the file form. |
-| `guardrails_timeout_ms` | integer (ms) | `5000` | Yes (when `timeout` is set on the policy) | Per-request timeout for the API call. |
+| `guardrails_timeout_ms` | integer (ms) | `5000` | Yes (when `timeout` is set on the policy) | Per-request timeout for the API call. The `minreq` client's timeout is second-granular, so the value is rounded **up** to the nearest whole second (minimum 1s). |
 | `guardrails_inspect_mode` | `request` / `response` / `both` / `off` | `both` | No | Which directions to inspect. NGF does not emit this, so the `both` default applies. |
 | `guardrails_max_response_bytes` | integer (bytes) | `10485760` (10 MB) | No | Max response bytes buffered before the stream is blocked. `0` = unlimited. |
 
@@ -266,24 +266,18 @@ That path is exactly what `load_module modules/libai_guardrails.so;` resolves to
   (`servers_template.go`, `main_config_template.go`, and the dataplane/graph types) so the generated
   config and the module stay in sync.
 
-- **`ureq` feature set is deliberately minimal (license/dependency hygiene).** The `ureq` dependency
-  in `Cargo.toml` uses `default-features = false` with only `rustls-no-provider`, `_ring`,
-  `platform-verifier`, `json`, and `gzip`. Do **not** enable the `cookies` feature (or switch to a
-  client that requires `url`): `url` pulls in `idna` → the ICU4X (`icu_*`) crate stack, which is
-  licensed `Unicode-3.0` and is rejected by the `dependency-review` CI workflow. Similarly,
-  `platform-verifier` is used instead of a bundled-roots feature so that no `webpki-roots` /
-  `webpki-root-certs` crate is *compiled*.
-
-- **Phantom entries in `Cargo.lock` are expected.** Cargo records every *optional* dependency a crate
-  declares in `Cargo.lock`, even when the feature is disabled and the crate is never compiled. As a
-  result `Cargo.lock` still lists `cookie_store`, `url`, `idna`, the `icu_*` stack, and
-  `webpki-root-certs` (declared optional by `ureq` / `rustls-platform-verifier`). Confirm they are not
-  actually built with `cargo tree` (they will be absent). Because GitHub's dependency graph is
-  generated from the raw lockfile, these phantom entries are still reported to `dependency-review`;
-  they are allowlisted in the shared `nginx/k8s-common` dependency-review config on the grounds that
-  they are never compiled or shipped in `libai_guardrails.so`. `unicode-ident` (`... AND Unicode-3.0`,
-  via `proc-macro2`/`serde_derive`) is likewise allowlisted as an unavoidable build-time proc-macro
-  dependency.
+- **`minreq` is chosen for license/dependency hygiene — do not swap it for `ureq`/`reqwest`.** The
+  HTTP client is `minreq` with the `https-rustls-probe` and `json-using-serde` features. `minreq`
+  does **not** depend on the `url` crate, so — unlike `ureq`, `reqwest`, `attohttpc`, and `ehttp` —
+  it avoids pulling `idna` → the ICU4X (`icu_*`) crate stack, which is licensed `Unicode-3.0` and is
+  rejected by the `dependency-review` CI workflow. `https-rustls-probe` verifies TLS against the OS
+  trust store via `rustls-native-certs`, so no bundled-roots crate (`webpki-roots` /
+  `webpki-root-certs`) is pulled in either. These crates are absent from **both** the compiled tree
+  (`cargo tree`) **and** `Cargo.lock`, so no `dependency-review` allowlist entries are required for
+  them. (`unicode-ident`, licensed in part `Unicode-3.0`, remains as an unavoidable build-time
+  proc-macro dependency of `serde_derive`; it is independent of the HTTP client choice.) If you
+  change the client or its features, regenerate `Cargo.lock` and confirm the `icu_*` / `url` /
+  `webpki-root-certs` families do not reappear.
 
 - **HTTP client unit tests use a std-only mock.** `src/client.rs` tests spin up a one-shot
   `std::net::TcpListener` HTTP/1.1 server on an ephemeral loopback port instead of using a
