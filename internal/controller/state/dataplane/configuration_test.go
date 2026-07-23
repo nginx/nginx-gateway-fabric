@@ -9659,6 +9659,67 @@ func TestBuildConfiguration_NginxProxy(t *testing.T) {
 	}
 }
 
+func TestBuildConfiguration_ClusterIPFamily(t *testing.T) {
+	t.Parallel()
+	fakeResolver := &resolverfakes.FakeServiceResolver{}
+	fakeResolver.ResolveReturns(fooEndpoints, nil)
+
+	tests := []struct {
+		msg             string
+		clusterIPFamily ngfAPIv1alpha2.IPFamilyType
+		expectedFamily  IPFamilyType
+	}{
+		{
+			msg:             "cluster is IPv4-only, no explicit NginxProxy IPFamily set",
+			clusterIPFamily: ngfAPIv1alpha2.IPv4,
+			expectedFamily:  IPv4,
+		},
+		{
+			msg:             "cluster is IPv6-only, no explicit NginxProxy IPFamily set",
+			clusterIPFamily: ngfAPIv1alpha2.IPv6,
+			expectedFamily:  IPv6,
+		},
+		{
+			msg:             "cluster is dual-stack, no explicit NginxProxy IPFamily set",
+			clusterIPFamily: ngfAPIv1alpha2.Dual,
+			expectedFamily:  Dual,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.msg, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			graph := getModifiedGraph(func(g *graph.Graph) *graph.Graph {
+				gw := g.Gateways[gatewayNsName]
+				gw.Listeners = append(gw.Listeners, &graph.Listener{
+					Name:        "listener-80-1",
+					GatewayName: gatewayNsName,
+					Source:      listener80,
+					Valid:       true,
+					Routes:      map[graph.RouteKey]*graph.L7Route{},
+				})
+				// No IPFamily set on NginxProxy — should use clusterIPFamily
+				gw.EffectiveNginxProxy = &graph.EffectiveNginxProxy{}
+				return g
+			})
+
+			result := BuildConfiguration(
+				t.Context(),
+				logr.Discard(),
+				graph,
+				graph.Gateways[gatewayNsName],
+				fakeResolver,
+				false,
+				test.clusterIPFamily,
+			)
+
+			g.Expect(result.BaseHTTPConfig.IPFamily).To(Equal(test.expectedFamily))
+		})
+	}
+}
+
 func TestBuildSSLKeyPairs(t *testing.T) {
 	t.Parallel()
 

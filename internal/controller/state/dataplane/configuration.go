@@ -2196,20 +2196,17 @@ func buildBaseHTTPConfig(
 		baseConfig.DisableSNIHostValidation = true
 	}
 
-	if np.IPFamily != nil {
-		switch *np.IPFamily {
-		case ngfAPIv1alpha2.IPv4:
-			baseConfig.IPFamily = IPv4
-		case ngfAPIv1alpha2.IPv6:
-			baseConfig.IPFamily = IPv6
-		}
-	} else {
-		switch clusterIPFamily {
-		case ngfAPIv1alpha2.IPv4:
-			baseConfig.IPFamily = IPv4
-		case ngfAPIv1alpha2.IPv6:
-			baseConfig.IPFamily = IPv6
-		}
+	ipFamily := np.IPFamily
+	if ipFamily == nil {
+		// Assign the value from clusterIPFamily if np.IPFamily is empty
+		ipFamily = &clusterIPFamily
+	}
+
+	switch *ipFamily {
+	case ngfAPIv1alpha2.IPv4:
+		baseConfig.IPFamily = IPv4
+	case ngfAPIv1alpha2.IPv6:
+		baseConfig.IPFamily = IPv6
 	}
 
 	baseConfig.RewriteClientIPSettings = buildRewriteClientIPConfig(np.RewriteClientIP)
