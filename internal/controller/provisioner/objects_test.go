@@ -3075,9 +3075,9 @@ func TestBuildNginxResourceObjects_WAF(t *testing.T) {
 	// Check config manager security context
 	g.Expect(configMgrContainer.SecurityContext).ToNot(BeNil())
 	g.Expect(configMgrContainer.SecurityContext.AllowPrivilegeEscalation).To(Equal(helpers.GetPointer(false)))
-	g.Expect(configMgrContainer.SecurityContext.RunAsNonRoot).To(Equal(helpers.GetPointer(false)))
+	g.Expect(configMgrContainer.SecurityContext.RunAsNonRoot).To(Equal(helpers.GetPointer(true)))
 	g.Expect(configMgrContainer.SecurityContext.RunAsUser).To(Equal(helpers.GetPointer[int64](101)))
-	g.Expect(configMgrContainer.SecurityContext.Capabilities.Drop).To(ContainElement(corev1.Capability("all")))
+	g.Expect(configMgrContainer.SecurityContext.Capabilities.Drop).To(ContainElement(corev1.Capability("ALL")))
 
 	// Check config manager resources
 	g.Expect(configMgrContainer.Resources.Limits).To(HaveKey(corev1.ResourceCPU))

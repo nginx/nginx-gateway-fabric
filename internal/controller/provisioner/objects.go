@@ -1747,7 +1747,7 @@ func (p *NginxProvisioner) buildWAFEnforcerContainer(
 			RunAsNonRoot:             helpers.GetPointer(true),
 			ReadOnlyRootFilesystem:   helpers.GetPointer(true),
 			Capabilities: &corev1.Capabilities{
-				Drop: []corev1.Capability{"all"},
+				Drop: []corev1.Capability{"ALL"},
 			},
 		},
 		Env: []corev1.EnvVar{
@@ -1792,11 +1792,11 @@ func (p *NginxProvisioner) buildWAFConfigManagerContainer(
 		ImagePullPolicy: defaultImagePullPolicy,
 		SecurityContext: &corev1.SecurityContext{
 			AllowPrivilegeEscalation: helpers.GetPointer(false),
-			RunAsNonRoot:             helpers.GetPointer(false),
+			RunAsNonRoot:             helpers.GetPointer(true),
 			RunAsUser:                helpers.GetPointer[int64](101),
 			ReadOnlyRootFilesystem:   helpers.GetPointer(true),
 			Capabilities: &corev1.Capabilities{
-				Drop: []corev1.Capability{"all"},
+				Drop: []corev1.Capability{"ALL"},
 			},
 		},
 		VolumeMounts: []corev1.VolumeMount{
