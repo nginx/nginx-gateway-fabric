@@ -13,9 +13,16 @@ import (
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/go-logr/logr"
+	"k8s.io/apimachinery/pkg/util/wait"
 )
 
 const monitoringInterval = 5 * time.Second
+
+// addWatcherRetryBaseDelay is the initial delay between retries when adding a file watcher fails.
+const addWatcherRetryBaseDelay = 100 * time.Millisecond
+
+// addWatcherMaxAttempts is the maximum number of attempts to add a file watcher before giving up.
+const addWatcherMaxAttempts = 5
 
 var emptyEvent = fsnotify.Event{
 	Name: "",
@@ -92,27 +99,28 @@ func (w *FileWatcher) addWatcher(path string) {
 }
 
 func (w *FileWatcher) addWatcherWithRetry(ctx context.Context, path string) {
-	backoff := 100 * time.Millisecond
-	for attempt := 1; ; attempt++ {
+	backoff := wait.Backoff{
+		Duration: addWatcherRetryBaseDelay,
+		Factor:   2.0,
+		Steps:    addWatcherMaxAttempts,
+	}
+
+	attempt := 0
+	var lastErr error
+	err := wait.ExponentialBackoffWithContext(ctx, backoff, func(context.Context) (bool, error) {
+		attempt++
 		if err := w.watcher.Add(path); err != nil {
-			if attempt >= 5 {
-				w.logger.Error(err, "failed to watch path after retries", "path", path, "attempts", attempt)
-				return
-			}
-
+			lastErr = err
 			w.logger.Error(err, "failed to watch path, retrying", "path", path, "attempt", attempt)
-
-			select {
-			case <-ctx.Done():
-				return
-			case <-time.After(backoff):
-			}
-
-			backoff *= 2
-			continue
+			return false, nil
 		}
 
-		return
+		return true, nil
+	})
+	// Only log a final failure if retries were exhausted; if ctx was canceled (e.g. shutdown),
+	// exit silently as the caller no longer cares about the outcome.
+	if err != nil && ctx.Err() == nil {
+		w.logger.Error(lastErr, "failed to watch path after retries", "path", path, "attempts", attempt)
 	}
 }
 
@@ -142,14 +150,21 @@ func (w *FileWatcher) checkForUpdates() {
 
 func (w *FileWatcher) snapshotFileHashes() {
 	for _, file := range w.filesToWatch {
-		w.fileHashes[file] = hashFileContents(file)
+		hash, err := hashFileContents(file)
+		if err != nil {
+			w.logger.Error(err, "failed to read file for hashing", "path", file)
+		}
+		w.fileHashes[file] = hash
 	}
 }
 
 func (w *FileWatcher) didFileHashesChange() bool {
 	changed := false
 	for _, file := range w.filesToWatch {
-		currentHash := hashFileContents(file)
+		currentHash, err := hashFileContents(file)
+		if err != nil {
+			w.logger.Error(err, "failed to read file for hashing", "path", file)
+		}
 		if prevHash, ok := w.fileHashes[file]; !ok || prevHash != currentHash {
 			w.fileHashes[file] = currentHash
 			changed = true
@@ -178,14 +193,14 @@ func buildPathsToWatch(files []string) []string {
 	return paths
 }
 
-func hashFileContents(path string) string {
+func hashFileContents(path string) (string, error) {
 	contents, err := os.ReadFile(path)
 	if err != nil {
-		return fmt.Sprintf("read-error:%v", err)
+		return "", err
 	}
 
 	hash := sha256.Sum256(contents)
-	return hex.EncodeToString(hash[:])
+	return hex.EncodeToString(hash[:]), nil
 }
 
 func isEventSkippable(event fsnotify.Event) bool {

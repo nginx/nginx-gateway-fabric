@@ -244,7 +244,7 @@ func TestSetLatestUpstreamError(t *testing.T) {
 	g.Expect(deployment.GetLatestUpstreamError()).To(MatchError(err))
 }
 
-func TestDeploymentStore_GetOrStore_Concurrent(t *testing.T) {
+func TestDeploymentStore_LoadOrStore_Concurrent(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 

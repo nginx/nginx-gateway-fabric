@@ -96,7 +96,7 @@ func TestGetFile_ReturnsEmptyContents(t *testing.T) {
 	connTracker.GetConnectionReturns(conn)
 
 	depStore := NewDeploymentStore(connTracker)
-	dep := depStore.GetOrStore(t.Context(), deploymentName, "gateway")
+	dep := depStore.LoadOrStore(t.Context(), deploymentName, "gateway")
 
 	fileMeta := &pb.FileMeta{
 		Name: "empty.conf",
