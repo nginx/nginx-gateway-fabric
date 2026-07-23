@@ -306,14 +306,35 @@ func (p *NginxProvisioner) buildLabelsAndAnnotations(
 
 	if gateway.Spec.Infrastructure != nil {
 		for key, value := range gateway.Spec.Infrastructure.Labels {
+			if isReservedMetadataKey(string(key)) {
+				continue
+			}
 			labels[string(key)] = string(value)
 		}
 		for key, value := range gateway.Spec.Infrastructure.Annotations {
+			if isReservedMetadataKey(string(key)) {
+				continue
+			}
 			annotations[string(key)] = string(value)
 		}
 	}
 
 	return selectorLabels, labels, annotations
+}
+
+// reservedMetadataKeys are the label/annotation keys managed by NGF that must not be
+// overwritten by user-supplied Gateway.Spec.Infrastructure labels/annotations.
+var reservedMetadataKeys = map[string]struct{}{
+	controller.GatewayLabel:      {},
+	controller.AppNameLabel:      {},
+	controller.AppInstanceLabel:  {},
+	controller.AppManagedByLabel: {},
+}
+
+// isReservedMetadataKey returns true if key is a label/annotation key managed by NGF.
+func isReservedMetadataKey(key string) bool {
+	_, ok := reservedMetadataKeys[key]
+	return ok
 }
 
 // buildServiceAccount builds the ServiceAccount for NGINX deployment/daemonset.

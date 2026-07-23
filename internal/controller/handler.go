@@ -1289,20 +1289,31 @@ func (h *eventHandlerImpl) ensureInferencePoolServices(
 				Name:      controller.CreateInferencePoolServiceName(pool.Source.Name),
 				Namespace: pool.Source.Namespace,
 				Labels:    labels,
-				OwnerReferences: []metav1.OwnerReference{
-					{
-						APIVersion: pool.Source.APIVersion,
-						Kind:       pool.Source.Kind,
-						Name:       pool.Source.Name,
-						UID:        pool.Source.UID,
-					},
-				},
 			},
 			Spec: v1.ServiceSpec{
 				ClusterIP: v1.ClusterIPNone, // headless
 				Selector:  selectors,
 				Ports:     ports,
 			},
+		}
+
+		if err := controllerutil.SetControllerReference(pool.Source, svc, h.cfg.k8sClient.Scheme()); err != nil {
+			msg := "Failed to set owner reference on headless Service for InferencePool"
+			h.cfg.logger.Error(err, msg, "Service", svc.Name, "InferencePool", pool.Source.Name)
+			h.cfg.eventRecorder.Eventf(
+				svc,
+				&inference.InferencePool{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      pool.Source.Name,
+						Namespace: pool.Source.Namespace,
+					},
+				},
+				v1.EventTypeWarning,
+				"ServiceCreateOrUpdateFailed",
+				"None",
+				"%s %q: %v", msg, pool.Source.Name, err,
+			)
+			continue
 		}
 
 		svcCtx, cancel := context.WithTimeout(ctx, 10*time.Second)

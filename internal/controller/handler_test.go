@@ -16,6 +16,7 @@ import (
 	apiErrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	k8sEvents "k8s.io/client-go/tools/events"
@@ -142,7 +143,7 @@ var _ = Describe("eventHandler", func() {
 				ClusterIP: "1.2.3.4",
 			},
 		}
-		fakeK8sClient = fake.NewFakeClient(gatewaySvc)
+		fakeK8sClient = fake.NewClientBuilder().WithScheme(scheme).WithObjects(gatewaySvc).Build()
 
 		handler = newEventHandlerImpl(eventHandlerConfig{
 			ctx:                     ctx,
@@ -1175,7 +1176,7 @@ var _ = Describe("ensureInferencePoolServices", func() {
 	)
 
 	BeforeEach(func() {
-		fakeK8sClient = fake.NewFakeClient()
+		fakeK8sClient = fake.NewClientBuilder().WithScheme(scheme).Build()
 		fakeEventRecorder = k8sEvents.NewFakeRecorder(1)
 		handler = newEventHandlerImpl(eventHandlerConfig{
 			ctx:           context.Background(),
@@ -1356,6 +1357,10 @@ func (*badFakeClient) Create(context.Context, client.Object, ...client.CreateOpt
 
 func (*badFakeClient) Update(context.Context, client.Object, ...client.UpdateOption) error {
 	return errors.New("update error")
+}
+
+func (*badFakeClient) Scheme() *runtime.Scheme {
+	return scheme
 }
 
 var wafGVK = schema.GroupVersionKind{

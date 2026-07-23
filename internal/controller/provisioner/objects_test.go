@@ -294,6 +294,55 @@ func TestBuildNginxResourceObjects(t *testing.T) {
 	g.Expect(initContainer.ImagePullPolicy).To(Equal(defaultImagePullPolicy))
 }
 
+func TestBuildLabelsAndAnnotations_ReservedKeysNotOverwritten(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	provisioner := &NginxProvisioner{
+		baseLabelSelector: metav1.LabelSelector{
+			MatchLabels: map[string]string{
+				controller.AppInstanceLabel:  "my-gateway",
+				controller.AppManagedByLabel: "nginx-gateway-fabric",
+			},
+		},
+	}
+
+	gateway := &gatewayv1.Gateway{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "gw",
+			Namespace: "default",
+		},
+		Spec: gatewayv1.GatewaySpec{
+			Infrastructure: &gatewayv1.GatewayInfrastructure{
+				Labels: map[gatewayv1.LabelKey]gatewayv1.LabelValue{
+					gatewayv1.LabelKey(controller.AppNameLabel):      "attacker-value",
+					gatewayv1.LabelKey(controller.GatewayLabel):      "attacker-value",
+					gatewayv1.LabelKey(controller.AppInstanceLabel):  "attacker-value",
+					gatewayv1.LabelKey(controller.AppManagedByLabel): "attacker-value",
+					"custom-label": "keep-me",
+				},
+				Annotations: map[gatewayv1.AnnotationKey]gatewayv1.AnnotationValue{
+					gatewayv1.AnnotationKey(controller.AppManagedByLabel): "attacker-value",
+					"custom-annotation": "keep-me",
+				},
+			},
+		},
+	}
+
+	_, labels, annotations := provisioner.buildLabelsAndAnnotations("gw-nginx", gateway)
+
+	// Reserved keys retain their NGF-managed values.
+	g.Expect(labels).To(HaveKeyWithValue(controller.AppNameLabel, "gw-nginx"))
+	g.Expect(labels).To(HaveKeyWithValue(controller.GatewayLabel, "gw"))
+	g.Expect(labels).To(HaveKeyWithValue(controller.AppInstanceLabel, "my-gateway"))
+	g.Expect(labels).To(HaveKeyWithValue(controller.AppManagedByLabel, "nginx-gateway-fabric"))
+	g.Expect(annotations).ToNot(HaveKey(controller.AppManagedByLabel))
+
+	// Non-colliding user-supplied keys are still applied.
+	g.Expect(labels).To(HaveKeyWithValue("custom-label", "keep-me"))
+	g.Expect(annotations).To(HaveKeyWithValue("custom-annotation", "keep-me"))
+}
+
 // TestBuildNginxResourceObjects_ListenerSetPorts verifies that listeners from ListenerSets
 // are included in the Service and container ports. This is a regression test for a bug where
 // a ListenerSet adding an HTTPS listener on port 443 would not create a LB rule for that port.

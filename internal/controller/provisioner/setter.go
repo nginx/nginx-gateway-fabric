@@ -100,10 +100,12 @@ func hpaSpecSetter(
 	objectMeta metav1.ObjectMeta,
 ) controllerutil.MutateFn {
 	return func() error {
+		existingAnnotations := hpa.Annotations
+
 		// objectMeta fields
 		hpa.Labels = objectMeta.Labels
-		hpa.Annotations = objectMeta.Annotations
 		hpa.OwnerReferences = objectMeta.OwnerReferences
+		hpa.Annotations = mergeAnnotations(existingAnnotations, objectMeta.Annotations)
 
 		hpa.Spec = spec
 		return nil
@@ -205,9 +207,11 @@ func serviceAccountSpecSetter(
 	objectMeta metav1.ObjectMeta,
 ) controllerutil.MutateFn {
 	return func() error {
+		existingAnnotations := serviceAccount.Annotations
+
 		// objectMeta fields
 		serviceAccount.Labels = objectMeta.Labels
-		serviceAccount.Annotations = objectMeta.Annotations
+		serviceAccount.Annotations = mergeAnnotations(existingAnnotations, objectMeta.Annotations)
 		serviceAccount.OwnerReferences = objectMeta.OwnerReferences
 
 		serviceAccount.AutomountServiceAccountToken = automountServiceAccountToken
