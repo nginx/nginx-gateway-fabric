@@ -99,11 +99,19 @@ func (fs *fileService) GetFileStream(
 	}
 
 	size := req.GetFileMeta().GetSize()
+	if size < 0 {
+		return status.Error(codes.InvalidArgument, "file size cannot be negative")
+	}
+
+	if size != int64(len(contents)) {
+		return status.Error(codes.InvalidArgument, "file size does not match content length")
+	}
+
 	var sizeUint32 uint32
 	if size > math.MaxUint32 {
-		return status.Error(codes.Internal, "file size is too large and cannot be converted to uint32")
+		return status.Error(codes.InvalidArgument, "file size is too large and cannot be converted to uint32")
 	}
-	sizeUint32 = uint32(size) //nolint:gosec // validation check performed on previous line
+	sizeUint32 = uint32(size)
 	hash := req.GetFileMeta().GetHash()
 
 	fs.logger.V(1).Info(

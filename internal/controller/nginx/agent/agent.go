@@ -92,6 +92,7 @@ func (n *NginxUpdaterImpl) UpdateConfig(
 ) {
 	msg := deployment.SetFiles(files, volumeMounts)
 	if msg == nil {
+		deployment.SetLatestConfigError(deployment.GetConfigurationStatus())
 		n.logger.V(1).Info("No changes to nginx configuration files, not sending to agent")
 		return
 	}
@@ -164,7 +165,7 @@ func (n *NginxUpdaterImpl) UpdateUpstreamServers(
 		requestApplied, err := n.sendRequest(broadcaster, msg, deployment)
 		if err != nil {
 			errs = append(errs, fmt.Errorf(
-				"couldn't update upstream via the API: %w", deployment.GetConfigurationStatus()))
+				"couldn't update upstream via the API: %w", err))
 		}
 		applied = applied || requestApplied
 	}

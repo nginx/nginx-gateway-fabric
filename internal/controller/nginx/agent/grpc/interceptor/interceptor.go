@@ -13,7 +13,9 @@ import (
 	"google.golang.org/grpc/status"
 	authv1 "k8s.io/api/authentication/v1"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -24,6 +26,9 @@ import (
 const (
 	headerUUID = "uuid"
 	headerAuth = "authorization"
+
+	podNameClaimKey = "authentication.kubernetes.io/pod-name"
+	podUIDClaimKey  = "authentication.kubernetes.io/pod-uid"
 )
 
 // PodCheckRetry controls how long validateToken will wait for the agent's Pod
@@ -151,20 +156,20 @@ func (c ContextSetter) validateToken(
 	defer createCancel()
 
 	if err := c.k8sClient.Create(createCtx, tokenReview); err != nil {
-		return nil, status.Error(codes.Internal, fmt.Sprintf("error creating TokenReview: %v", err))
+		logger.Error(err, "failed to create TokenReview")
+		return nil, status.Error(codes.Internal, "authentication failed")
 	}
 
 	if !tokenReview.Status.Authenticated {
-		return nil, status.Error(codes.Unauthenticated, fmt.Sprintf("invalid authorization: %s", tokenReview.Status.Error))
+		logger.V(1).Info("token review was not authenticated", "reason", tokenReview.Status.Error)
+		return nil, status.Error(codes.Unauthenticated, "invalid authorization")
 	}
 
 	usernameItems := strings.Split(tokenReview.Status.User.Username, ":")
 	if len(usernameItems) != 4 || usernameItems[0] != "system" || usernameItems[1] != "serviceaccount" {
-		msg := fmt.Sprintf(
-			"token username must be of the format 'system:serviceaccount:NAMESPACE:NAME': %s",
-			tokenReview.Status.User.Username,
-		)
-		return nil, status.Error(codes.Unauthenticated, msg)
+		format := "system:serviceaccount:NAMESPACE:NAME"
+		logger.V(1).Info(fmt.Sprintf("token username did not match expected service account format %q", format))
+		return nil, status.Error(codes.Unauthenticated, "invalid authorization")
 	}
 
 	saNamespace := usernameItems[2]
@@ -177,11 +182,132 @@ func (c ContextSetter) validateToken(
 		}).AsSelector(),
 	}
 
-	if err := c.waitForRunningPod(ctx, logger, opts, saNamespace, saName); err != nil {
+	validatedByBoundClaims, err := c.waitForBoundPodFromTokenClaims(
+		ctx,
+		logger,
+		saNamespace,
+		saName,
+		tokenReview.Status.User.Extra,
+	)
+	if err != nil {
 		return nil, err
 	}
 
+	if !validatedByBoundClaims {
+		if err := c.waitForRunningPod(ctx, logger, opts, saNamespace, saName); err != nil {
+			return nil, err
+		}
+	}
+
 	return grpcContext.NewGrpcContext(ctx, *grpcInfo), nil
+}
+
+func (c ContextSetter) waitForBoundPodFromTokenClaims(
+	ctx context.Context,
+	logger logr.Logger,
+	saNamespace string,
+	saName string,
+	extra map[string]authv1.ExtraValue,
+) (bool, error) {
+	boundPodName, boundPodUID, ok := getBoundPodClaims(extra)
+	if !ok {
+		logger.V(1).Info("token has no bound pod identity claims; using service-account pod fallback validation")
+		return false, nil
+	}
+
+	retry := c.podCheck
+	if retry.PollInterval <= 0 || retry.Timeout <= 0 {
+		retry = defaultPodCheckRetry
+	}
+
+	return c.waitForBoundPodIdentity(ctx, logger, saNamespace, saName, boundPodName, boundPodUID, retry)
+}
+
+func getBoundPodClaims(extra map[string]authv1.ExtraValue) (name string, uid string, ok bool) {
+	nameValues, hasName := extra[podNameClaimKey]
+	uidValues, hasUID := extra[podUIDClaimKey]
+	if !hasName || !hasUID || len(nameValues) == 0 || len(uidValues) == 0 {
+		return "", "", false
+	}
+
+	return nameValues[0], uidValues[0], true
+}
+
+func (c ContextSetter) waitForBoundPodIdentity(
+	ctx context.Context,
+	logger logr.Logger,
+	saNamespace string,
+	saName string,
+	boundPodName string,
+	boundPodUID string,
+	retry PodCheckRetry,
+) (bool, error) {
+	waitCtx, cancel := context.WithTimeout(ctx, retry.Timeout)
+	defer cancel()
+
+	var validationErr error
+	pollErr := wait.PollUntilContextCancel(waitCtx, retry.PollInterval, true,
+		func(ctx context.Context) (bool, error) {
+			pod := &corev1.Pod{}
+			err := c.k8sClient.Get(ctx, types.NamespacedName{Namespace: saNamespace, Name: boundPodName}, pod)
+			if err != nil {
+				if apierrors.IsNotFound(err) {
+					return false, nil
+				}
+
+				logger.Error(err, "failed to fetch pod from token bound claims", "namespace", saNamespace, "pod", boundPodName)
+				validationErr = status.Error(codes.Internal, "authentication failed")
+				return false, validationErr
+			}
+
+			if reason, ok := validateBoundPodIdentity(pod, saName, boundPodUID); !ok {
+				logger.V(1).Info(
+					"bound pod identity validation failed",
+					"namespace", saNamespace,
+					"pod", boundPodName,
+					"reason", reason,
+				)
+				validationErr = status.Error(codes.Unauthenticated, "invalid authorization")
+				return false, validationErr
+			}
+
+			if pod.Status.Phase != corev1.PodRunning {
+				return false, nil
+			}
+
+			return true, nil
+		},
+	)
+	if pollErr == nil {
+		return true, nil
+	}
+
+	if validationErr != nil {
+		return false, validationErr
+	}
+
+	if wait.Interrupted(pollErr) {
+		return false, status.Error(codes.Unavailable, "agent pod is not ready")
+	}
+
+	logger.Error(pollErr, "error waiting for pod identity from token bound claims")
+	return false, status.Error(codes.Internal, "authentication failed")
+}
+
+func validateBoundPodIdentity(pod *corev1.Pod, serviceAccountName, boundPodUID string) (reason string, ok bool) {
+	if string(pod.UID) != boundPodUID {
+		return "pod UID mismatch", false
+	}
+
+	if pod.Spec.ServiceAccountName != serviceAccountName {
+		return "service account mismatch", false
+	}
+
+	if pod.Labels[controller.AppNameLabel] != serviceAccountName {
+		return "app label mismatch", false
+	}
+
+	return "", true
 }
 
 // waitForRunningPod polls for a Running Pod that matches the agent's
@@ -215,7 +341,8 @@ func (c ContextSetter) waitForRunningPod(
 			attempt++
 			var podList corev1.PodList
 			if err := c.k8sClient.List(ctx, &podList, opts); err != nil {
-				listErr = status.Error(codes.Internal, fmt.Sprintf("error listing pods: %s", err.Error()))
+				logger.Error(err, "failed to list pods for service-account validation")
+				listErr = status.Error(codes.Internal, "authentication failed")
 				return false, listErr
 			}
 
@@ -242,11 +369,14 @@ func (c ContextSetter) waitForRunningPod(
 	// returning a hard error, surface the startup-not-ready signal as
 	// Unavailable so callers can retry; otherwise propagate the List error.
 	if wait.Interrupted(pollErr) {
-		return status.Error(codes.Unavailable, fmt.Sprintf(
-			"no running pods found for service account %s/%s after %d attempts (%s); "+
-				"the agent's Pod may still be starting",
-			saNamespace, saName, attempt, time.Since(start),
-		))
+		logger.V(1).Info(
+			"no running pods found for service account before timeout",
+			"namespace", saNamespace,
+			"serviceAccount", saName,
+			"attempts", attempt,
+			"elapsed", time.Since(start).String(),
+		)
+		return status.Error(codes.Unavailable, "agent pod is not ready")
 	}
 	if listErr != nil {
 		return listErr

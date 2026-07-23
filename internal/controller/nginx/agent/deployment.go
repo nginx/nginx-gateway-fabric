@@ -90,6 +90,15 @@ func (d *Deployment) GetBroadcaster() broadcast.Broadcaster {
 	return d.broadcaster
 }
 
+func (d *Deployment) ensureBroadcaster(ctx context.Context) {
+	d.FileLock.Lock()
+	defer d.FileLock.Unlock()
+
+	if d.broadcaster == nil {
+		d.broadcaster = broadcast.NewDeploymentBroadcaster(ctx)
+	}
+}
+
 // SetImageVersion sets the deployment's image version.
 func (d *Deployment) SetImageVersion(imageVersion string) {
 	d.FileLock.Lock()
@@ -322,7 +331,7 @@ func (d *Deployment) rebuildFileOverviews() *broadcast.NginxAgentMessage {
 // DeploymentStorer is an interface to store Deployments.
 type DeploymentStorer interface {
 	Get(types.NamespacedName) *Deployment
-	GetOrStore(context.Context, types.NamespacedName, string) *Deployment
+	LoadOrStore(context.Context, types.NamespacedName, string) *Deployment
 	Remove(types.NamespacedName)
 }
 
@@ -354,21 +363,22 @@ func (d *DeploymentStore) Get(nsName types.NamespacedName) *Deployment {
 	return deployment
 }
 
-// GetOrStore returns the existing value for the key if present.
+// LoadOrStore returns the existing value for the key if present.
 // Otherwise, it stores and returns the given value.
-func (d *DeploymentStore) GetOrStore(
+func (d *DeploymentStore) LoadOrStore(
 	ctx context.Context,
 	nsName types.NamespacedName,
 	gatewayName string,
 ) *Deployment {
-	if deployment := d.Get(nsName); deployment != nil {
-		return deployment
+	deployment := newDeployment(nil, gatewayName)
+	actual, _ := d.deployments.LoadOrStore(nsName, deployment)
+
+	storedDeployment, ok := actual.(*Deployment)
+	if !ok {
+		panic(fmt.Sprintf("expected Deployment, got type %T", actual))
 	}
-
-	deployment := newDeployment(broadcast.NewDeploymentBroadcaster(ctx), gatewayName)
-	d.deployments.Store(nsName, deployment)
-
-	return deployment
+	storedDeployment.ensureBroadcaster(ctx)
+	return storedDeployment
 }
 
 // StoreWithBroadcaster creates a new Deployment with the supplied broadcaster and stores it.
