@@ -10,7 +10,7 @@ require (
 	github.com/dlclark/regexp2/v2 v2.5.2
 	github.com/envoyproxy/go-control-plane/envoy v1.37.0
 	github.com/fsnotify/fsnotify v1.10.1
-	github.com/go-logr/logr v1.4.3
+	github.com/go-logr/logr v1.4.4
 	github.com/google/go-cmp v0.7.0
 	github.com/google/uuid v1.6.0
 	github.com/nginx/agent/v3 v3.11.2
