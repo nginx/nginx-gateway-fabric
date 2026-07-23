@@ -23,6 +23,7 @@ import (
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
+	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
 	ngfConfig "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/config"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/licensing"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent"
@@ -93,6 +94,8 @@ type eventHandlerConfig struct {
 	gatewayClassName string
 	// plus is whether or not we are running NGINX Plus.
 	plus bool
+	// clusterIPFamily is the IP family detected from the cluster at startup.
+	clusterIPFamily ngfAPIv1alpha2.IPFamilyType
 	// InferenceExtension indicates if Gateway API Inference Extension support is enabled.
 	inferenceExtension bool
 	// plmEnabled indicates whether PLM storage is configured. When false, AP resource
@@ -289,7 +292,7 @@ func (h *eventHandlerImpl) sendNginxConfig(ctx context.Context, logger logr.Logg
 			)
 			deployment.SetImageVersion(nginxImage)
 
-			cfg := dataplane.BuildConfiguration(ctx, logger, gr, gw, h.cfg.serviceResolver, h.cfg.plus)
+			cfg := dataplane.BuildConfiguration(ctx, logger, gr, gw, h.cfg.serviceResolver, h.cfg.plus, h.cfg.clusterIPFamily)
 			depCtx, getErr := h.getDeploymentContext(ctx)
 			if getErr != nil {
 				logger.Error(getErr, "error getting deployment context for usage reporting")

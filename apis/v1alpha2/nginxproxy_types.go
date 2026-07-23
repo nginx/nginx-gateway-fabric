@@ -43,10 +43,10 @@ type NginxProxyList struct {
 // NginxProxySpec defines the desired state of the NginxProxy.
 type NginxProxySpec struct {
 	// IPFamily specifies the IP family to be used by the NGINX.
-	// Default is "dual", meaning the server will use both IPv4 and IPv6.
+	// If not set, NGF inspects the `default/kubernetes` Service's `ipFamilies` field at startup
+	// to obtain the IP family of the cluster and configure NGINX accordingly.
 	//
 	// +optional
-	// +kubebuilder:default=dual
 	IPFamily *IPFamilyType `json:"ipFamily,omitempty"`
 	// Telemetry specifies the OpenTelemetry configuration.
 	//

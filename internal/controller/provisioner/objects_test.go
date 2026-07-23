@@ -1,6 +1,7 @@
 package provisioner
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
@@ -1815,31 +1816,119 @@ func TestSetIPFamily(t *testing.T) {
 		}
 	}
 
+	provisioner := &NginxProvisioner{}
+
 	// nProxyCfg is nil, should not set anything
 	svc := newSvc()
-	setIPFamily(nil, svc)
+	provisioner.setIPFamily(nil, svc)
 	g.Expect(svc.Spec.IPFamilyPolicy).To(BeNil())
 	g.Expect(svc.Spec.IPFamilies).To(BeNil())
 
 	// nProxyCfg.IPFamily is nil, should not set anything
 	svc = newSvc()
-	setIPFamily(&graph.EffectiveNginxProxy{}, svc)
+	provisioner.setIPFamily(&graph.EffectiveNginxProxy{}, svc)
 	g.Expect(svc.Spec.IPFamilyPolicy).To(BeNil())
 	g.Expect(svc.Spec.IPFamilies).To(BeNil())
 
 	// nProxyCfg.IPFamily is IPv4, should set SingleStack and IPFamilies to IPv4
 	svc = newSvc()
 	ipFamily := ngfAPIv1alpha2.IPv4
-	setIPFamily(&graph.EffectiveNginxProxy{IPFamily: &ipFamily}, svc)
+	provisioner.setIPFamily(&graph.EffectiveNginxProxy{IPFamily: &ipFamily}, svc)
 	g.Expect(svc.Spec.IPFamilyPolicy).To(Equal(helpers.GetPointer(corev1.IPFamilyPolicySingleStack)))
 	g.Expect(svc.Spec.IPFamilies).To(Equal([]corev1.IPFamily{corev1.IPv4Protocol}))
 
 	// nProxyCfg.IPFamily is IPv6, should set SingleStack and IPFamilies to IPv6
 	svc = newSvc()
 	ipFamily = ngfAPIv1alpha2.IPv6
-	setIPFamily(&graph.EffectiveNginxProxy{IPFamily: &ipFamily}, svc)
+	provisioner.setIPFamily(&graph.EffectiveNginxProxy{IPFamily: &ipFamily}, svc)
 	g.Expect(svc.Spec.IPFamilyPolicy).To(Equal(helpers.GetPointer(corev1.IPFamilyPolicySingleStack)))
 	g.Expect(svc.Spec.IPFamilies).To(Equal([]corev1.IPFamily{corev1.IPv6Protocol}))
+
+	// nProxyCfg.IPFamily is nil, should use clusterIPFamily (IPv4-only cluster detected)
+	svc = newSvc()
+	provisioner.clusterIPFamily = ngfAPIv1alpha2.IPv4
+	provisioner.setIPFamily(&graph.EffectiveNginxProxy{}, svc)
+	g.Expect(svc.Spec.IPFamilyPolicy).To(Equal(helpers.GetPointer(corev1.IPFamilyPolicySingleStack)))
+	g.Expect(svc.Spec.IPFamilies).To(Equal([]corev1.IPFamily{corev1.IPv4Protocol}))
+
+	// nProxyCfg.IPFamily is nil, should use clusterIPFamily (dual-stack cluster detected)
+	svc = newSvc()
+	provisioner.clusterIPFamily = ngfAPIv1alpha2.Dual
+	provisioner.setIPFamily(&graph.EffectiveNginxProxy{}, svc)
+	g.Expect(svc.Spec.IPFamilyPolicy).To(BeNil())
+	g.Expect(svc.Spec.IPFamilies).To(BeNil())
+}
+
+func TestDetectClusterIPFamily(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name           string
+		kubeService    *corev1.Service
+		expectedFamily ngfAPIv1alpha2.IPFamilyType
+	}{
+		{
+			name: "IPv4-only cluster",
+			kubeService: &corev1.Service{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "kubernetes",
+					Namespace: "default",
+				},
+				Spec: corev1.ServiceSpec{
+					IPFamilies: []corev1.IPFamily{corev1.IPv4Protocol},
+				},
+			},
+			expectedFamily: ngfAPIv1alpha2.IPv4,
+		},
+		{
+			name: "IPv6-only cluster",
+			kubeService: &corev1.Service{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "kubernetes",
+					Namespace: "default",
+				},
+				Spec: corev1.ServiceSpec{
+					IPFamilies: []corev1.IPFamily{corev1.IPv6Protocol},
+				},
+			},
+			expectedFamily: ngfAPIv1alpha2.IPv6,
+		},
+		{
+			name: "dual-stack cluster",
+			kubeService: &corev1.Service{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "kubernetes",
+					Namespace: "default",
+				},
+				Spec: corev1.ServiceSpec{
+					IPFamilies: []corev1.IPFamily{corev1.IPv4Protocol, corev1.IPv6Protocol},
+				},
+			},
+			expectedFamily: ngfAPIv1alpha2.Dual,
+		},
+		{
+			name:           "kubernetes Service not found, fallback to dual",
+			kubeService:    nil,
+			expectedFamily: ngfAPIv1alpha2.Dual,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			var fakeClient client.Client
+			if tt.kubeService != nil {
+				fakeClient = createFakeClientWithScheme(tt.kubeService)
+			} else {
+				fakeClient = createFakeClientWithScheme()
+			}
+
+			result := detectClusterIPFamily(context.Background(), fakeClient)
+			g.Expect(result).To(Equal(tt.expectedFamily))
+		})
+	}
 }
 
 func TestBuildNginxConfigMaps_WorkerConnections(t *testing.T) {

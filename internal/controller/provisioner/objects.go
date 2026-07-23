@@ -763,7 +763,7 @@ func (p *NginxProvisioner) buildNginxService(
 		},
 	}
 
-	setIPFamily(nProxyCfg, svc)
+	p.setIPFamily(nProxyCfg, svc)
 
 	setSvcLoadBalancerSettings(serviceCfg, &svc.Spec)
 
@@ -843,14 +843,41 @@ func buildServicePorts(
 	return servicePorts
 }
 
-func setIPFamily(nProxyCfg *graph.EffectiveNginxProxy, svc *corev1.Service) {
-	if nProxyCfg != nil && nProxyCfg.IPFamily != nil && *nProxyCfg.IPFamily != ngfAPIv1alpha2.Dual {
-		svc.Spec.IPFamilyPolicy = helpers.GetPointer(corev1.IPFamilyPolicySingleStack)
-		if *nProxyCfg.IPFamily == ngfAPIv1alpha2.IPv4 {
-			svc.Spec.IPFamilies = []corev1.IPFamily{corev1.IPv4Protocol}
-		} else {
-			svc.Spec.IPFamilies = []corev1.IPFamily{corev1.IPv6Protocol}
+// detectClusterIPFamily detects the IP family of the cluster by checking the
+// kubernetes Service in kube-system. Returns Dual if detection fails, as a safe fallback.
+func detectClusterIPFamily(ctx context.Context, reader client.Reader) ngfAPIv1alpha2.IPFamilyType {
+	svc := &corev1.Service{}
+	if err := reader.Get(ctx, types.NamespacedName{
+		Namespace: "default",
+		Name:      "kubernetes",
+	}, svc); err != nil {
+		return ngfAPIv1alpha2.Dual
+	}
+	if len(svc.Spec.IPFamilies) == 1 {
+		if svc.Spec.IPFamilies[0] == corev1.IPv4Protocol {
+			return ngfAPIv1alpha2.IPv4
 		}
+		return ngfAPIv1alpha2.IPv6
+	}
+	return ngfAPIv1alpha2.Dual
+}
+
+func (p *NginxProvisioner) setIPFamily(nProxyCfg *graph.EffectiveNginxProxy, svc *corev1.Service) {
+	ipFamily := p.clusterIPFamily
+	if ipFamily == "" {
+		ipFamily = ngfAPIv1alpha2.Dual
+	}
+	if nProxyCfg != nil && nProxyCfg.IPFamily != nil {
+		ipFamily = *nProxyCfg.IPFamily
+	}
+	if ipFamily == ngfAPIv1alpha2.Dual {
+		return
+	}
+	svc.Spec.IPFamilyPolicy = helpers.GetPointer(corev1.IPFamilyPolicySingleStack)
+	if ipFamily == ngfAPIv1alpha2.IPv4 {
+		svc.Spec.IPFamilies = []corev1.IPFamily{corev1.IPv4Protocol}
+	} else {
+		svc.Spec.IPFamilies = []corev1.IPFamily{corev1.IPv6Protocol}
 	}
 }
 

@@ -3023,6 +3023,7 @@ func TestBuildConfiguration(t *testing.T) {
 				test.graph.Gateways[gatewayNsName],
 				fakeResolver,
 				false,
+				ngfAPIv1alpha2.Dual,
 			)
 
 			assertBuildConfiguration(g, result, test.expConf)
@@ -3130,6 +3131,7 @@ func TestBuildConfiguration_Plus(t *testing.T) {
 				test.graph.Gateways[gatewayNsName],
 				fakeResolver,
 				true,
+				ngfAPIv1alpha2.Dual,
 			)
 
 			g.Expect(result.BackendGroups).To(ConsistOf(test.expConf.BackendGroups))
@@ -7939,6 +7941,7 @@ func TestBuildRewriteIPSettings(t *testing.T) {
 				tc.g.Gateways[types.NamespacedName{}],
 				make(map[types.NamespacedName]*graph.SnippetsFilter),
 				make(map[graph.PolicyKey]*graph.Policy),
+				ngfAPIv1alpha2.Dual,
 			)
 			g.Expect(baseConfig.RewriteClientIPSettings).To(Equal(tc.expRewriteIPSettings))
 		})
@@ -8900,7 +8903,7 @@ func TestBuildBaseHTTPConfig_ReadinessProbe(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			g.Expect(buildBaseHTTPConfig(tc.gateway, nil, nil)).To(Equal(tc.expected))
+			g.Expect(buildBaseHTTPConfig(tc.gateway, nil, nil, ngfAPIv1alpha2.Dual)).To(Equal(tc.expected))
 		})
 	}
 }
@@ -9450,6 +9453,7 @@ func TestBuildConfiguration_GatewaysAndListeners(t *testing.T) {
 				test.graph.Gateways[gatewayNsName],
 				fakeResolver,
 				false,
+				ngfAPIv1alpha2.Dual,
 			)
 
 			assertBuildConfiguration(g, result, test.expConf)
@@ -9713,9 +9717,71 @@ func TestBuildConfiguration_NginxProxy(t *testing.T) {
 				test.graph.Gateways[gatewayNsName],
 				fakeResolver,
 				false,
+				ngfAPIv1alpha2.Dual,
 			)
 
 			assertBuildConfiguration(g, result, test.expConf)
+		})
+	}
+}
+
+func TestBuildConfiguration_ClusterIPFamily(t *testing.T) {
+	t.Parallel()
+	fakeResolver := &resolverfakes.FakeServiceResolver{}
+	fakeResolver.ResolveReturns(fooEndpoints, nil)
+
+	tests := []struct {
+		msg             string
+		clusterIPFamily ngfAPIv1alpha2.IPFamilyType
+		expectedFamily  IPFamilyType
+	}{
+		{
+			msg:             "cluster is IPv4-only, no explicit NginxProxy IPFamily set",
+			clusterIPFamily: ngfAPIv1alpha2.IPv4,
+			expectedFamily:  IPv4,
+		},
+		{
+			msg:             "cluster is IPv6-only, no explicit NginxProxy IPFamily set",
+			clusterIPFamily: ngfAPIv1alpha2.IPv6,
+			expectedFamily:  IPv6,
+		},
+		{
+			msg:             "cluster is dual-stack, no explicit NginxProxy IPFamily set",
+			clusterIPFamily: ngfAPIv1alpha2.Dual,
+			expectedFamily:  Dual,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.msg, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			graph := getModifiedGraph(func(g *graph.Graph) *graph.Graph {
+				gw := g.Gateways[gatewayNsName]
+				gw.Listeners = append(gw.Listeners, &graph.Listener{
+					Name:        "listener-80-1",
+					GatewayName: gatewayNsName,
+					Source:      listener80,
+					Valid:       true,
+					Routes:      map[graph.RouteKey]*graph.L7Route{},
+				})
+				// No IPFamily set on NginxProxy — should use clusterIPFamily
+				gw.EffectiveNginxProxy = &graph.EffectiveNginxProxy{}
+				return g
+			})
+
+			result := BuildConfiguration(
+				t.Context(),
+				logr.Discard(),
+				graph,
+				graph.Gateways[gatewayNsName],
+				fakeResolver,
+				false,
+				test.clusterIPFamily,
+			)
+
+			g.Expect(result.BaseHTTPConfig.IPFamily).To(Equal(test.expectedFamily))
 		})
 	}
 }
