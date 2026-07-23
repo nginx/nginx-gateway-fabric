@@ -169,6 +169,7 @@ func BuildConfiguration(
 		AuxiliarySecrets:     buildAuxiliarySecrets(g.PlusSecrets),
 		WorkerConnections:    buildWorkerConnections(gateway),
 		WorkerProcesses:      buildWorkerProcesses(gateway),
+		WorkerRlimitNofile:   buildWorkerRlimitNofile(gateway),
 		SSLListenerHostnames: sslListenerHostnames,
 		CertBundles:          certBundles,
 		WAF:                  buildWAF(gateway),
@@ -1708,9 +1709,55 @@ func buildSSL(listener *graph.Listener) *SSL {
 		if prefer, ok := listener.Source.TLS.Options[graph.SSLPreferServerCiphersKey]; ok {
 			ssl.PreferServerCiphers = (string(prefer) == "on")
 		}
+		if cache, ok := listener.Source.TLS.Options[graph.SSLSessionCacheKey]; ok {
+			ssl.SessionCache = buildSSLSessionCache(listener, string(cache))
+		}
+		if timeout, ok := listener.Source.TLS.Options[graph.SSLSessionTimeoutKey]; ok {
+			ssl.SessionTimeout = string(timeout)
+		}
+		if curve, ok := listener.Source.TLS.Options[graph.SSLEcdhCurveKey]; ok {
+			ssl.EcdhCurve = string(curve)
+		}
 	}
 
 	return ssl
+}
+
+// buildSSLSessionCache converts the user-provided ssl-session-cache option value into a complete
+// ssl_session_cache directive value. The special values "off" and "none" are passed through as-is;
+// any other value is treated as the size of a shared cache whose zone name NGF generates from the
+// listener (the user does not provide the zone name).
+func buildSSLSessionCache(listener *graph.Listener, value string) string {
+	if value == "off" || value == "none" {
+		return value
+	}
+
+	return fmt.Sprintf("shared:%s:%s", generateSSLSessionCacheZoneName(listener), value)
+}
+
+// generateSSLSessionCacheZoneName builds a shared SSL session cache zone name that is unique to the
+// listener. The Gateway (and ListenerSet) namespace and name are included so that Gateways sharing a
+// name across namespaces do not produce the same zone name. Non-alphanumeric characters in the
+// identifiers are replaced with underscores so the result is a valid NGINX zone name.
+func generateSSLSessionCacheZoneName(listener *graph.Listener) string {
+	sanitize := func(s string) string {
+		return strings.Map(func(r rune) rune {
+			switch {
+			case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
+				return r
+			default:
+				return '_'
+			}
+		}, s)
+	}
+
+	parts := []string{"ssl", sanitize(listener.GatewayName.Namespace), sanitize(listener.GatewayName.Name)}
+	if listener.ListenerSetName.Name != "" {
+		parts = append(parts, sanitize(listener.ListenerSetName.Namespace), sanitize(listener.ListenerSetName.Name))
+	}
+	parts = append(parts, sanitize(listener.Name))
+
+	return strings.Join(parts, "_")
 }
 
 // maxServerCount returns the maximum number of VirtualServers that can be built from the host path rules.
@@ -2546,6 +2593,16 @@ func buildWorkerProcesses(gateway *graph.Gateway) string {
 	return DefaultWorkerProcesses
 }
 
+// buildWorkerRlimitNofile returns the configured worker_rlimit_nofile value, or nil when unset
+// (in which case the directive is omitted and NGINX inherits the OS limit).
+func buildWorkerRlimitNofile(gateway *graph.Gateway) *int32 {
+	if gateway == nil || gateway.EffectiveNginxProxy == nil {
+		return nil
+	}
+
+	return gateway.EffectiveNginxProxy.WorkerRlimitNofile
+}
+
 func buildAuxiliarySecrets(
 	secretsMap map[types.NamespacedName][]graph.PlusSecretFile,
 ) map[graph.SecretFileType][]byte {
@@ -2584,11 +2641,12 @@ func buildNginxPlus(gateway *graph.Gateway) NginxPlus {
 
 func GetDefaultConfiguration(g *graph.Graph, gateway *graph.Gateway) Configuration {
 	return Configuration{
-		Logging:           buildLogging(gateway),
-		NginxPlus:         NginxPlus{},
-		AuxiliarySecrets:  buildAuxiliarySecrets(g.PlusSecrets),
-		WorkerConnections: buildWorkerConnections(gateway),
-		WorkerProcesses:   buildWorkerProcesses(gateway),
+		Logging:            buildLogging(gateway),
+		NginxPlus:          NginxPlus{},
+		AuxiliarySecrets:   buildAuxiliarySecrets(g.PlusSecrets),
+		WorkerConnections:  buildWorkerConnections(gateway),
+		WorkerProcesses:    buildWorkerProcesses(gateway),
+		WorkerRlimitNofile: buildWorkerRlimitNofile(gateway),
 	}
 }
 

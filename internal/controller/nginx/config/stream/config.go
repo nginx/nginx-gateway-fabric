@@ -28,6 +28,9 @@ type ProxySSLVerify struct {
 type SSL struct {
 	Protocols           string
 	Ciphers             string
+	SessionCache        string
+	SessionTimeout      string
+	EcdhCurve           string
 	Certificates        []string
 	CertificateKeys     []string
 	PreferServerCiphers bool

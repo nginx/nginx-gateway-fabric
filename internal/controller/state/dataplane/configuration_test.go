@@ -8708,6 +8708,47 @@ func TestBuildWorkerProcesses(t *testing.T) {
 	}
 }
 
+func TestBuildWorkerRlimitNofile(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		gw       *graph.Gateway
+		expValue *int32
+		msg      string
+	}{
+		{
+			msg:      "NginxProxy is nil",
+			gw:       &graph.Gateway{},
+			expValue: nil,
+		},
+		{
+			msg: "NginxProxy doesn't specify worker_rlimit_nofile",
+			gw: &graph.Gateway{
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{},
+			},
+			expValue: nil,
+		},
+		{
+			msg: "NginxProxy specifies worker_rlimit_nofile",
+			gw: &graph.Gateway{
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+					WorkerRlimitNofile: helpers.GetPointer[int32](3124),
+				},
+			},
+			expValue: helpers.GetPointer[int32](3124),
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.msg, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			g.Expect(buildWorkerRlimitNofile(tc.gw)).To(Equal(tc.expValue))
+		})
+	}
+}
+
 func TestBuildBaseHTTPConfig_ReadinessProbe(t *testing.T) {
 	t.Parallel()
 
@@ -9716,6 +9757,139 @@ func TestBuildConfiguration_NginxProxy(t *testing.T) {
 			)
 
 			assertBuildConfiguration(g, result, test.expConf)
+		})
+	}
+}
+
+func TestBuildSSL(t *testing.T) {
+	t.Parallel()
+
+	gwNsName := types.NamespacedName{Namespace: "test", Name: "gateway"}
+
+	newListener := func(opts map[v1.AnnotationKey]v1.AnnotationValue) *graph.Listener {
+		return &graph.Listener{
+			Name:            "https",
+			GatewayName:     gwNsName,
+			ResolvedSecrets: []types.NamespacedName{{Namespace: "test", Name: "tls-secret"}},
+			Source: v1.Listener{
+				TLS: &v1.ListenerTLSConfig{
+					Options: opts,
+				},
+			},
+		}
+	}
+
+	tests := []struct {
+		listener *graph.Listener
+		expSSL   *SSL
+		name     string
+	}{
+		{
+			name:     "no TLS options",
+			listener: newListener(nil),
+			expSSL: &SSL{
+				KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_tls-secret"},
+			},
+		},
+		{
+			name: "all TLS options with shared session cache",
+			listener: newListener(map[v1.AnnotationKey]v1.AnnotationValue{
+				graph.SSLProtocolsKey:      "TLSv1.2 TLSv1.3",
+				graph.SSLCiphersKey:        "HIGH:!aNULL",
+				graph.SSLSessionCacheKey:   "10m",
+				graph.SSLSessionTimeoutKey: "1d",
+				graph.SSLEcdhCurveKey:      "secp384r1:prime256v1",
+			}),
+			expSSL: &SSL{
+				KeyPairIDs:     []SSLKeyPairID{"ssl_keypair_test_tls-secret"},
+				Protocols:      "TLSv1.2 TLSv1.3",
+				Ciphers:        "HIGH:!aNULL",
+				SessionCache:   "shared:ssl_test_gateway_https:10m",
+				SessionTimeout: "1d",
+				EcdhCurve:      "secp384r1:prime256v1",
+			},
+		},
+		{
+			name: "session cache off is passed through",
+			listener: newListener(map[v1.AnnotationKey]v1.AnnotationValue{
+				graph.SSLSessionCacheKey: "off",
+			}),
+			expSSL: &SSL{
+				KeyPairIDs:   []SSLKeyPairID{"ssl_keypair_test_tls-secret"},
+				SessionCache: "off",
+			},
+		},
+		{
+			name: "session cache none is passed through",
+			listener: newListener(map[v1.AnnotationKey]v1.AnnotationValue{
+				graph.SSLSessionCacheKey: "none",
+			}),
+			expSSL: &SSL{
+				KeyPairIDs:   []SSLKeyPairID{"ssl_keypair_test_tls-secret"},
+				SessionCache: "none",
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			g.Expect(buildSSL(tc.listener)).To(Equal(tc.expSSL))
+		})
+	}
+}
+
+func TestGenerateSSLSessionCacheZoneName(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		listener *graph.Listener
+		name     string
+		expName  string
+	}{
+		{
+			name: "gateway listener",
+			listener: &graph.Listener{
+				Name:        "https",
+				GatewayName: types.NamespacedName{Namespace: "test", Name: "gateway"},
+			},
+			expName: "ssl_test_gateway_https",
+		},
+		{
+			name: "listenerset listener",
+			listener: &graph.Listener{
+				Name:            "https",
+				GatewayName:     types.NamespacedName{Namespace: "test", Name: "gateway"},
+				ListenerSetName: types.NamespacedName{Namespace: "other", Name: "my-set"},
+			},
+			expName: "ssl_test_gateway_other_my_set_https",
+		},
+		{
+			name: "gateways with the same name in different namespaces get different zone names",
+			listener: &graph.Listener{
+				Name:        "https",
+				GatewayName: types.NamespacedName{Namespace: "other", Name: "gateway"},
+			},
+			expName: "ssl_other_gateway_https",
+		},
+		{
+			name: "names with non-alphanumeric characters are sanitized",
+			listener: &graph.Listener{
+				Name:        "https.443",
+				GatewayName: types.NamespacedName{Namespace: "test", Name: "my.gateway"},
+			},
+			expName: "ssl_test_my_gateway_https_443",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			g.Expect(generateSSLSessionCacheZoneName(tc.listener)).To(Equal(tc.expName))
 		})
 	}
 }

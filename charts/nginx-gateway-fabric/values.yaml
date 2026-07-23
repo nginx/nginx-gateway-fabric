@@ -652,6 +652,11 @@ nginx:
   #     minimum: 1
   #     maximum: 1024
   #     description: The number of NGINX worker processes (an integer between 1 and 1024). Omit to use "auto" (one worker per CPU core).
+  #   workerRlimitNofile:
+  #     type: integer
+  #     minimum: 1
+  #     maximum: 1048576
+  #     description: Sets the `worker_rlimit_nofile` directive, the maximum number of open files for worker processes. Omit to inherit the OS limit.
   #   dnsResolver:
   #     type: object
   #     description: DNSResolver specifies the DNS resolver configuration for external name resolution. This enables support for routing to ExternalName Services.
