@@ -125,7 +125,7 @@ runs:
           ${{ contains(inputs.image, 'plus') && format('"nginx-repo.crt={0}"', inputs.nginx-crt) || '' }}
           ${{ contains(inputs.image, 'plus') && format('"nginx-repo.key={0}"', inputs.nginx-key) || '' }}
 
-    - name: Update Go Modules
+    - name: Update Test Go Modules
       if: ${{ github.event_name == 'schedule' }}
       shell: bash
       run: make update-go-modules
