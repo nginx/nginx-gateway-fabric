@@ -257,13 +257,24 @@ pub fn inspect_checkpoint(
 }
 
 /// SSE termination event sent to the client when a streaming response is blocked.
+///
+/// This is an *output-side* block: the client's request was valid, but the model's
+/// generated response tripped the guardrails policy. The error `type` is therefore
+/// `api_error` (a server-side failure in OpenAI's error taxonomy), NOT
+/// `invalid_request_error` (which denotes a bad client request). The `code` remains
+/// `content_policy_violation` to convey the policy reason. See the status/type matrix
+/// documented on `send_termination` / `send_blocked_response` in `lib.rs`.
 pub fn termination_message() -> &'static [u8] {
-    b"data: {\"error\":{\"message\":\"Stream terminated by guardrails policy.\",\"type\":\"invalid_request_error\",\"param\":null,\"code\":\"content_policy_violation\"}}\n\n"
+    b"data: {\"error\":{\"message\":\"Stream terminated by guardrails policy.\",\"type\":\"api_error\",\"param\":null,\"code\":\"content_policy_violation\"}}\n\n"
 }
 
 /// Plain JSON error body sent to the client when a non-streaming response is blocked.
+///
+/// Like `termination_message`, this represents an *output-side* block, so the error
+/// `type` is `api_error` (server-side), not `invalid_request_error` (client request).
+/// The `code` stays `content_policy_violation` to convey the policy reason.
 pub fn non_streaming_error_body() -> &'static [u8] {
-    b"{\"error\":{\"message\":\"Response blocked by guardrails policy.\",\"type\":\"invalid_request_error\",\"param\":null,\"code\":\"content_policy_violation\"}}"
+    b"{\"error\":{\"message\":\"Response blocked by guardrails policy.\",\"type\":\"api_error\",\"param\":null,\"code\":\"content_policy_violation\"}}"
 }
 
 #[cfg(test)]
@@ -419,6 +430,26 @@ mod tests {
                 value["error"]["code"], "content_policy_violation",
                 "unexpected code in {json_str}"
             );
+            // Output-side (response/stream) blocks are server-side failures, so the
+            // OpenAI error `type` must be `api_error`, NOT `invalid_request_error`
+            // (which is reserved for the request-side block in `send_403_and_finalize`).
+            assert_eq!(
+                value["error"]["type"], "api_error",
+                "response-side error body must use api_error, got {json_str}"
+            );
         }
+    }
+
+    #[test]
+    fn test_request_block_body_uses_invalid_request_error() {
+        // Mirror of the request-blocked body literal in `lib.rs::send_403_and_finalize`.
+        // The request-side block DOES represent a bad client request, so it must keep
+        // `type: invalid_request_error` (distinct from the output-side `api_error`).
+        // Keep this literal in sync with `send_403_and_finalize`'s JSON_BODY.
+        let request_block_body = br#"{"error":{"message":"Request blocked by guardrails policy.","type":"invalid_request_error","param":null,"code":"content_policy_violation"}}"#;
+        let value: serde_json::Value = serde_json::from_slice(request_block_body)
+            .expect("request block body must be valid JSON");
+        assert_eq!(value["error"]["type"], "invalid_request_error");
+        assert_eq!(value["error"]["code"], "content_policy_violation");
     }
 }

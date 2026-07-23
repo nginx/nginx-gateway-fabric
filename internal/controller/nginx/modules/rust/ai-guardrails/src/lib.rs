@@ -903,9 +903,22 @@ unsafe extern "C" fn guardrails_response_body_filter(
 
 /// Write the appropriate error body into an NGINX buffer and forward it to the next filter.
 /// Uses SSE format (`data: {...}`) for event-stream responses and plain JSON for all others.
-/// Because the response body filter cannot change the HTTP status after headers are committed,
-/// this always returns a 200 response — the error is communicated via the body content.
-/// The only path that can return a true 403 is the request body filter (`send_403_and_finalize`).
+///
+/// HTTP status vs. error `type` matrix across all three block paths:
+///
+/// | Path                            | Function                 | HTTP status | error.type            |
+/// |---------------------------------|--------------------------|-------------|-----------------------|
+/// | Request blocked (input)         | `send_403_and_finalize`  | 403         | `invalid_request_error` |
+/// | Response blocked, non-SSE       | `send_blocked_response`  | 403         | `api_error`           |
+/// | Response blocked, SSE stream    | `send_termination`       | 200 (*)     | `api_error`           |
+///
+/// (*) For SSE responses the upstream headers were already flushed to the client with a
+/// 200 status (SSE cannot be buffered, so the header filter lets it through immediately).
+/// Once headers are committed the status can no longer be changed, so the block is signaled
+/// via an `api_error` body inside an SSE `data:` frame. A 200 response carrying an
+/// `api_error` body is therefore an unavoidable consequence of SSE header timing, NOT a bug.
+/// Request-side (`invalid_request_error`) vs output-side (`api_error`) typing is intentional:
+/// only the input-block path represents a bad client request.
 unsafe fn send_termination(r: *mut ngx_http_request_t, request: &http::Request) -> ngx_int_t {
     let is_sse = is_sse_response(r);
     let term_msg: &[u8] = if is_sse {
@@ -943,7 +956,15 @@ unsafe fn send_termination(r: *mut ngx_http_request_t, request: &http::Request) 
 ///
 /// Called from the response body filter after inspection blocks a non-SSE response.
 /// At this point `r->header_sent == 0` because `guardrails_header_filter` suppressed
-/// the upstream headers on the first pass.
+/// the upstream headers on the first pass, so we can still set the status to 403.
+///
+/// Error `type` note: this is an *output-side* block (the client request was valid;
+/// the model's response was blocked), so the body uses `type: "api_error"` — NOT
+/// `invalid_request_error`, which is reserved for the request-side block in
+/// `send_403_and_finalize`. The body literal below is intentionally kept as its own
+/// copy of `stream::non_streaming_error_body()` (this path predates the shared helper
+/// and must not depend on it inside the delicate FFI body-filter chain); if you change
+/// one, change the other.
 ///
 /// Steps:
 ///   1. Overwrite `headers_out` with 403 status + correct `Content-Length`.
@@ -957,7 +978,8 @@ unsafe fn send_blocked_response(
     request: &http::Request,
     _ctx: &mut StreamContext,
 ) -> ngx_int_t {
-    static JSON_BODY: &[u8] = b"{\"error\":{\"message\":\"Response blocked by guardrails policy.\",\"type\":\"invalid_request_error\",\"param\":null,\"code\":\"content_policy_violation\"}}";
+    // Keep in sync with `stream::non_streaming_error_body()`.
+    static JSON_BODY: &[u8] = b"{\"error\":{\"message\":\"Response blocked by guardrails policy.\",\"type\":\"api_error\",\"param\":null,\"code\":\"content_policy_violation\"}}";
 
     eprintln!(
         "[guardrails] send_blocked_response: committing 403 via direct next-header-filter call"

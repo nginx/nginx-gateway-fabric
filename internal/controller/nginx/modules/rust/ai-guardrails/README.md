@@ -196,6 +196,26 @@ after the upstream has already produced headers.
    - **Blocked** → discards the buffer and sends either a proper `403` (non-SSE, via
      `send_blocked_response`) or an SSE termination event (streaming, via `send_termination`).
 
+### HTTP status vs. error type
+
+The JSON error body follows the OpenAI error shape (`error.{message,type,param,code}`). The `type`
+and HTTP status depend on *which side* was blocked:
+
+| Block path | HTTP status | `error.type` | `error.code` |
+| ------------ | ------------- | -------------- | -------------- |
+| Request (client input) | `403` | `invalid_request_error` | `content_policy_violation` |
+| Response, non-SSE | `403` | `api_error` | `content_policy_violation` |
+| Response, SSE stream | `200`* | `api_error` | `content_policy_violation` |
+
+Request blocks use `invalid_request_error` because the *client's request* was rejected. Response
+blocks use `api_error` because the client request was valid and it was the *model's output* that
+tripped the policy — a server/output-side decision.
+
+*For SSE (`text/event-stream`) responses the upstream `200` headers are flushed to the client
+immediately (SSE cannot be buffered), so the status can no longer be changed by the time the block
+is decided. The block is delivered as an `api_error` payload inside an SSE `data:` frame. A `200`
+carrying an `api_error` body is an unavoidable consequence of SSE header timing, not a bug.
+
 ### Fail-closed behavior
 
 If the Guardrails API errors or times out, the module **blocks** the traffic (treats it as

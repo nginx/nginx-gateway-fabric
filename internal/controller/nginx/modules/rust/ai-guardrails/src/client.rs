@@ -118,13 +118,18 @@ pub fn inspect_content(
 
     let mut req = minreq::post(&endpoint)
         .with_timeout(timeout_secs)
-        .with_header("Content-Type", "application/json")
         .with_header("User-Agent", "nginx-guardrails-filter/0.1.0");
 
     if let Some(token) = api_token {
         req = req.with_header("Authorization", format!("Bearer {}", token));
     }
 
+    // NB: do NOT set `Content-Type` manually here. minreq's `with_header`
+    // *appends* headers (no de-duplication), and `with_json` already pushes its
+    // own `Content-Type: application/json; charset=UTF-8`. Setting it manually
+    // as well produces two `Content-Type` headers on the wire, which the
+    // Guardrails API rejects with HTTP 422 (blocking every request under the
+    // fail-closed policy). Let `with_json` be the single source of the header.
     let req = req
         .with_json(&request_body)
         .map_err(|e| GuardrailsError::RequestFailed(e.to_string()))?;
@@ -199,6 +204,15 @@ mod tests {
             self.head
                 .lines()
                 .any(|l| l.to_ascii_lowercase().starts_with(&needle))
+        }
+
+        /// Case-insensitive count of header lines whose name matches `name`.
+        fn header_count(&self, name: &str) -> usize {
+            let prefix = format!("{}:", name.to_ascii_lowercase());
+            self.head
+                .lines()
+                .filter(|l| l.to_ascii_lowercase().starts_with(&prefix))
+                .count()
         }
     }
 
@@ -376,6 +390,30 @@ mod tests {
                 "disabled": [],
                 "verbose": false,
             })
+        );
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_exactly_one_content_type_header() {
+        // Regression guard: `minreq::with_json` sets its own `Content-Type` and
+        // `with_header` appends without de-duplication, so setting `Content-Type`
+        // manually as well produces a duplicate header that the Guardrails API
+        // rejects with HTTP 422. The client must send exactly one.
+        let (base, rx) = mock_once(
+            "HTTP/1.1 200 OK",
+            "application/json",
+            r#"{"result":{"outcome":"cleared"}}"#,
+        );
+
+        let result = inspect_content("hello", &base, None, TIMEOUT_MS);
+
+        let req = rx.recv().unwrap();
+        assert_eq!(
+            req.header_count("content-type"),
+            1,
+            "expected exactly one Content-Type header, got head:\n{}",
+            req.head
         );
         assert!(result.is_ok());
     }
