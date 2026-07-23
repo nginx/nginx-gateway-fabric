@@ -8,7 +8,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
-	"sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
@@ -16,15 +15,15 @@ import (
 )
 
 func createTCPRoute(
-	rules []v1alpha2.TCPRouteRule,
+	rules []gatewayv1.TCPRouteRule,
 	parentRefs []gatewayv1.ParentReference,
-) *v1alpha2.TCPRoute {
-	return &v1alpha2.TCPRoute{
+) *gatewayv1.TCPRoute {
+	return &gatewayv1.TCPRoute{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: "test",
 			Name:      "tcpr",
 		},
-		Spec: v1alpha2.TCPRouteSpec{
+		Spec: gatewayv1.TCPRouteSpec{
 			CommonRouteSpec: gatewayv1.CommonRouteSpec{
 				ParentRefs: parentRefs,
 			},
@@ -118,7 +117,7 @@ func TestBuildTCPRoute(t *testing.T) {
 	)
 
 	backendRefDNETCPR := createTCPRoute(
-		[]v1alpha2.TCPRouteRule{
+		[]gatewayv1.TCPRouteRule{
 			{
 				BackendRefs: []gatewayv1.BackendRef{
 					{
@@ -136,7 +135,7 @@ func TestBuildTCPRoute(t *testing.T) {
 	)
 
 	wrongBackendRefGroupTCPR := createTCPRoute(
-		[]v1alpha2.TCPRouteRule{
+		[]gatewayv1.TCPRouteRule{
 			{
 				BackendRefs: []gatewayv1.BackendRef{
 					{
@@ -155,7 +154,7 @@ func TestBuildTCPRoute(t *testing.T) {
 	)
 
 	wrongBackendRefKindTCPR := createTCPRoute(
-		[]v1alpha2.TCPRouteRule{
+		[]gatewayv1.TCPRouteRule{
 			{
 				BackendRefs: []gatewayv1.BackendRef{
 					{
@@ -174,7 +173,7 @@ func TestBuildTCPRoute(t *testing.T) {
 	)
 
 	diffNsBackendRefTCPR := createTCPRoute(
-		[]v1alpha2.TCPRouteRule{
+		[]gatewayv1.TCPRouteRule{
 			{
 				BackendRefs: []gatewayv1.BackendRef{
 					{
@@ -193,7 +192,7 @@ func TestBuildTCPRoute(t *testing.T) {
 	)
 
 	portNilBackendRefTCPR := createTCPRoute(
-		[]v1alpha2.TCPRouteRule{
+		[]gatewayv1.TCPRouteRule{
 			{
 				BackendRefs: []gatewayv1.BackendRef{
 					{
@@ -211,7 +210,7 @@ func TestBuildTCPRoute(t *testing.T) {
 
 	// Valid TCPRoute with single backend
 	validSingleBackendTCPR := createTCPRoute(
-		[]v1alpha2.TCPRouteRule{
+		[]gatewayv1.TCPRouteRule{
 			{
 				BackendRefs: []gatewayv1.BackendRef{
 					{
@@ -230,7 +229,7 @@ func TestBuildTCPRoute(t *testing.T) {
 
 	// Valid TCPRoute with multiple backends (weighted)
 	validMultiBackendTCPR := createTCPRoute(
-		[]v1alpha2.TCPRouteRule{
+		[]gatewayv1.TCPRouteRule{
 			{
 				BackendRefs: []gatewayv1.BackendRef{
 					{
@@ -257,7 +256,7 @@ func TestBuildTCPRoute(t *testing.T) {
 
 	// TCPRoute with multiple rules
 	multiRuleTCPR := createTCPRoute(
-		[]v1alpha2.TCPRouteRule{
+		[]gatewayv1.TCPRouteRule{
 			{
 				BackendRefs: []gatewayv1.BackendRef{
 					{
@@ -286,7 +285,7 @@ func TestBuildTCPRoute(t *testing.T) {
 
 	// Valid TCPRoute with ListenerSet parent ref
 	validTCPRWithListenerSetParentRef := createTCPRoute(
-		[]v1alpha2.TCPRouteRule{
+		[]gatewayv1.TCPRouteRule{
 			{
 				BackendRefs: []gatewayv1.BackendRef{
 					{
@@ -327,7 +326,7 @@ func TestBuildTCPRoute(t *testing.T) {
 	tests := []struct {
 		gateways map[types.NamespacedName]*Gateway
 		services map[types.NamespacedName]*apiv1.Service
-		route    *v1alpha2.TCPRoute
+		route    *gatewayv1.TCPRoute
 		expected *L4Route
 		name     string
 	}{

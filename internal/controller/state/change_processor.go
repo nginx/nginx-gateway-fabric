@@ -16,7 +16,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
-	"sigs.k8s.io/gateway-api/apis/v1alpha2"
 	v1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 	"sigs.k8s.io/gateway-api/pkg/consts"
 
@@ -49,7 +48,7 @@ type ChangeProcessor interface {
 	// Process produces a graph-like representation of GatewayAPI resources.
 	// If no changes were captured, the graph will be empty.
 	Process(ctx context.Context) (graphCfg *graph.Graph)
-	// GetLatestGraph returns the latest Graph.
+	// GetLatestGraph returns a read-only snapshot of the latest Graph.
 	GetLatestGraph() *graph.Graph
 	// ForceRebuild forces the next Process() call to perform a full graph rebuild,
 	// without modifying the cluster state. Used when an external event (e.g. a WAF bundle
@@ -108,7 +107,7 @@ type ChangeProcessorImpl struct {
 	forceClusterStateRebuild func()
 
 	cfg  ChangeProcessorConfig
-	lock sync.Mutex
+	lock sync.RWMutex
 }
 
 // NewChangeProcessorImpl creates a new ChangeProcessorImpl for the Gateway resource with the configured namespace name.
@@ -127,8 +126,8 @@ func NewChangeProcessorImpl(cfg ChangeProcessorConfig) *ChangeProcessorImpl {
 		NginxProxies:          make(map[types.NamespacedName]*ngfAPIv1alpha2.NginxProxy),
 		GRPCRoutes:            make(map[types.NamespacedName]*v1.GRPCRoute),
 		TLSRoutes:             make(map[types.NamespacedName]*v1.TLSRoute),
-		TCPRoutes:             make(map[types.NamespacedName]*v1alpha2.TCPRoute),
-		UDPRoutes:             make(map[types.NamespacedName]*v1alpha2.UDPRoute),
+		TCPRoutes:             make(map[types.NamespacedName]*v1.TCPRoute),
+		UDPRoutes:             make(map[types.NamespacedName]*v1.UDPRoute),
 		NGFPolicies:           make(map[graph.PolicyKey]policies.Policy),
 		SnippetsFilters:       make(map[types.NamespacedName]*ngfAPIv1alpha1.SnippetsFilter),
 		AuthenticationFilters: make(map[types.NamespacedName]*ngfAPIv1alpha1.AuthenticationFilter),
@@ -269,12 +268,12 @@ func NewChangeProcessorImpl(cfg ChangeProcessorConfig) *ChangeProcessorImpl {
 			predicate: nil,
 		},
 		{
-			gvk:       cfg.MustExtractGVK(&v1alpha2.TCPRoute{}),
+			gvk:       cfg.MustExtractGVK(&v1.TCPRoute{}),
 			store:     newObjectStoreMapAdapter(clusterStore.TCPRoutes),
 			predicate: nil,
 		},
 		{
-			gvk:       cfg.MustExtractGVK(&v1alpha2.UDPRoute{}),
+			gvk:       cfg.MustExtractGVK(&v1.UDPRoute{}),
 			store:     newObjectStoreMapAdapter(clusterStore.UDPRoutes),
 			predicate: nil,
 		},
@@ -416,10 +415,10 @@ func (c *ChangeProcessorImpl) mergedWAFBundles() map[graph.WAFBundleKey]*graph.W
 }
 
 func (c *ChangeProcessorImpl) GetLatestGraph() *graph.Graph {
-	c.lock.Lock()
-	defer c.lock.Unlock()
+	c.lock.RLock()
+	defer c.lock.RUnlock()
 
-	return c.latestGraph
+	return c.latestGraph.Snapshot()
 }
 
 // refGrantTrackingCfg returns the change tracking updater config for ReferenceGrant.

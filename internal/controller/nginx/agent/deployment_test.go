@@ -53,12 +53,15 @@ func TestSetAndGetFiles(t *testing.T) {
 	g.Expect(msg.FileOverviews).To(HaveLen(9)) // 1 file + 8 ignored files
 	g.Expect(fileOverviews).To(Equal(msg.FileOverviews))
 
-	file, _ := deployment.GetFile("test.conf", "12345")
+	file, _, found := deployment.GetFile("test.conf", "12345")
+	g.Expect(found).To(BeTrue())
 	g.Expect(file).To(Equal([]byte("test content")))
 
-	invalidFile, _ := deployment.GetFile("invalid", "12345")
+	invalidFile, _, found := deployment.GetFile("invalid", "12345")
+	g.Expect(found).To(BeFalse())
 	g.Expect(invalidFile).To(BeNil())
-	wrongHashFile, _ := deployment.GetFile("test.conf", "invalid")
+	wrongHashFile, _, found := deployment.GetFile("test.conf", "invalid")
+	g.Expect(found).To(BeFalse())
 	g.Expect(wrongHashFile).To(BeNil())
 
 	// Set the same files again
@@ -118,7 +121,8 @@ func TestSetAndGetFiles_VolumeIgnoreFiles(t *testing.T) {
 	g.Expect(fileOverviews).To(Equal(msg.FileOverviews))
 
 	// Verify managed file
-	file, _ := deployment.GetFile("test.conf", "12345")
+	file, _, found := deployment.GetFile("test.conf", "12345")
+	g.Expect(found).To(BeTrue())
 	g.Expect(file).To(Equal([]byte("test content")))
 
 	// Check that volume ignore files are present in the unmanaged files
@@ -138,9 +142,11 @@ func TestSetAndGetFiles_VolumeIgnoreFiles(t *testing.T) {
 	g.Expect(unmanagedFiles).ToNot(ContainElement("/etc/nginx/conf.d/default.conf"))
 	g.Expect(unmanagedFiles).ToNot(ContainElement("/one/two/three/etc/ssl"))
 
-	invalidFile, _ := deployment.GetFile("invalid", "12345")
+	invalidFile, _, found := deployment.GetFile("invalid", "12345")
+	g.Expect(found).To(BeFalse())
 	g.Expect(invalidFile).To(BeNil())
-	wrongHashFile, _ := deployment.GetFile("test.conf", "invalid")
+	wrongHashFile, _, found := deployment.GetFile("test.conf", "invalid")
+	g.Expect(found).To(BeFalse())
 	g.Expect(wrongHashFile).To(BeNil())
 
 	// Set the same files again
@@ -168,6 +174,33 @@ func TestSetNGINXPlusActions(t *testing.T) {
 
 	deployment.SetNGINXPlusActions(actions)
 	g.Expect(deployment.GetNGINXPlusActions()).To(Equal(actions))
+
+	returned := deployment.GetNGINXPlusActions()
+	returned[0] = nil
+
+	g.Expect(deployment.GetNGINXPlusActions()[0]).ToNot(BeNil())
+}
+
+func TestGetFile_EmptyContents(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	deployment := newDeployment(&broadcastfakes.FakeBroadcaster{}, "")
+	deployment.files = []File{
+		{
+			Meta: &pb.FileMeta{
+				Name: "empty.conf",
+				Hash: "12345",
+			},
+			Contents: []byte{},
+		},
+	}
+
+	file, hash, found := deployment.GetFile("empty.conf", "12345")
+
+	g.Expect(found).To(BeTrue())
+	g.Expect(hash).To(Equal("12345"))
+	g.Expect(file).To(BeEmpty())
 }
 
 func TestSetPodErrorStatus(t *testing.T) {
@@ -291,7 +324,8 @@ func TestUpdateWAFBundle(t *testing.T) {
 			g.Expect(managedCount).To(Equal(tt.expectNumFiles))
 			g.Expect(bundleHash).ToNot(BeEmpty())
 
-			contents, hash := deployment.GetFile(bundlePath, bundleHash)
+			contents, hash, found := deployment.GetFile(bundlePath, bundleHash)
+			g.Expect(found).To(BeTrue())
 			g.Expect(hash).To(Equal(bundleHash))
 			g.Expect(contents).To(Equal(tt.data))
 		})
@@ -363,7 +397,8 @@ func TestRemoveWAFBundle(t *testing.T) {
 			g.Expect(msg.ConfigVersion).ToNot(BeEmpty())
 
 			// Verify the bundle is gone.
-			contents, hash := deployment.GetFile(bundlePath, "any")
+			contents, hash, found := deployment.GetFile(bundlePath, "any")
+			g.Expect(found).To(BeFalse())
 			g.Expect(contents).To(BeNil())
 			g.Expect(hash).To(BeEmpty())
 

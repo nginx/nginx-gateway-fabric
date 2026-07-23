@@ -1,7 +1,6 @@
 package graph
 
 import (
-	"slices"
 	"strings"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -10,7 +9,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 	"sigs.k8s.io/gateway-api/pkg/consts"
-	"sigs.k8s.io/gateway-api/pkg/features"
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
@@ -37,8 +35,6 @@ type GatewayClass struct {
 	Conditions []conditions.Condition
 	// Valid shows whether the GatewayClass is valid.
 	Valid bool
-	// ExperimentalSupported indicates whether experimental features are supported.
-	ExperimentalSupported bool
 	// BestEffort indicates whether the Gateway API CRD versions are not supported,
 	// but we are attempting to generate configuration.
 	BestEffort bool
@@ -84,7 +80,6 @@ func buildGatewayClass(
 	gc *v1.GatewayClass,
 	nps map[types.NamespacedName]*NginxProxy,
 	crdVersions map[types.NamespacedName]*metav1.PartialObjectMetadata,
-	experimentalEnabled bool,
 ) *GatewayClass {
 	if gc == nil {
 		return nil
@@ -95,18 +90,14 @@ func buildGatewayClass(
 		np = getNginxProxyForGatewayClass(*gc.Spec.ParametersRef, nps)
 	}
 
-	conds, valid, crdExperimental, bestEffort := validateGatewayClass(gc, np, crdVersions)
-
-	// Experimental features are supported only if both the config flag AND CRD channel are experimental
-	experimental := experimentalEnabled && crdExperimental
+	conds, valid, bestEffort := validateGatewayClass(gc, np, crdVersions)
 
 	return &GatewayClass{
-		Source:                gc,
-		NginxProxy:            np,
-		Valid:                 valid,
-		Conditions:            conds,
-		ExperimentalSupported: experimental,
-		BestEffort:            bestEffort,
+		Source:     gc,
+		NginxProxy: np,
+		Valid:      valid,
+		Conditions: conds,
+		BestEffort: bestEffort,
 	}
 }
 
@@ -152,14 +143,14 @@ func validateGatewayClass(
 	gc *v1.GatewayClass,
 	npCfg *NginxProxy,
 	crdVersions map[types.NamespacedName]*metav1.PartialObjectMetadata,
-) ([]conditions.Condition, bool, bool, bool) {
+) ([]conditions.Condition, bool, bool) {
 	var conds []conditions.Condition
 
-	supportedVersionConds, versionsValid, experimental, bestEffort := validateCRDVersions(crdVersions)
+	supportedVersionConds, versionsValid, bestEffort := validateCRDVersions(crdVersions)
 	conds = append(conds, supportedVersionConds...)
 
 	if gc.Spec.ParametersRef == nil {
-		return conds, versionsValid, experimental, bestEffort
+		return conds, versionsValid, bestEffort
 	}
 
 	path := field.NewPath("spec").Child("parametersRef")
@@ -168,7 +159,7 @@ func validateGatewayClass(
 	// return early since parametersRef isn't valid
 	if len(refConds) > 0 {
 		conds = append(conds, refConds...)
-		return conds, versionsValid, experimental, bestEffort
+		return conds, versionsValid, bestEffort
 	}
 
 	if npCfg == nil {
@@ -179,7 +170,7 @@ func validateGatewayClass(
 				field.NotFound(path.Child("name"), gc.Spec.ParametersRef.Name).Error(),
 			),
 		)
-		return conds, versionsValid, experimental, bestEffort
+		return conds, versionsValid, bestEffort
 	}
 
 	if !npCfg.Valid {
@@ -189,10 +180,10 @@ func validateGatewayClass(
 			conditions.NewGatewayClassRefInvalid(msg),
 			conditions.NewGatewayClassInvalidParameters(msg),
 		)
-		return conds, versionsValid, experimental, bestEffort
+		return conds, versionsValid, bestEffort
 	}
 
-	return append(conds, conditions.NewGatewayClassResolvedRefs()), versionsValid, experimental, bestEffort
+	return append(conds, conditions.NewGatewayClassResolvedRefs()), versionsValid, bestEffort
 }
 
 var supportedParamKinds = map[string]struct{}{
@@ -206,8 +197,8 @@ type apiVersion struct {
 
 func validateCRDVersions(
 	crdMetadata map[types.NamespacedName]*metav1.PartialObjectMetadata,
-) (conds []conditions.Condition, valid bool, experimental bool, bestEffort bool) {
-	installedAPIVersions, channels := getBundleVersions(crdMetadata)
+) (conds []conditions.Condition, valid bool, bestEffort bool) {
+	installedAPIVersions := getBundleVersions(crdMetadata)
 	supportedAPIVersion := parseVersionString(consts.BundleVersion)
 
 	var unsupported bool
@@ -220,20 +211,15 @@ func validateCRDVersions(
 		}
 	}
 
-	// Check if any CRD is using experimental channel
-	if slices.Contains(channels, features.FeatureChannelExperimental) {
-		experimental = true
-	}
-
 	if unsupported {
-		return conditions.NewGatewayClassUnsupportedVersion(consts.BundleVersion), false, experimental, false
+		return conditions.NewGatewayClassUnsupportedVersion(consts.BundleVersion), false, false
 	}
 
 	if bestEffort {
-		return conditions.NewGatewayClassSupportedVersionBestEffort(consts.BundleVersion), true, experimental, bestEffort
+		return conditions.NewGatewayClassSupportedVersionBestEffort(consts.BundleVersion), true, bestEffort
 	}
 
-	return nil, true, experimental, false
+	return nil, true, false
 }
 
 func parseVersionString(version string) apiVersion {
@@ -260,23 +246,15 @@ func parseVersionString(version string) apiVersion {
 
 func getBundleVersions(
 	crdMetadata map[types.NamespacedName]*metav1.PartialObjectMetadata,
-) ([]apiVersion, []features.FeatureChannel) {
+) []apiVersion {
 	versions := make([]apiVersion, 0, len(gatewayCRDs))
-	channels := make([]features.FeatureChannel, 0, len(gatewayCRDs))
 
 	for nsname, md := range crdMetadata {
 		if _, ok := gatewayCRDs[nsname.Name]; ok {
 			bundleVersion := md.Annotations[consts.BundleVersionAnnotation]
 			versions = append(versions, parseVersionString(bundleVersion))
-
-			// Default to standard channel if annotation is missing
-			ch := md.Annotations[consts.ChannelAnnotation]
-			if ch == "" {
-				ch = string(features.FeatureChannelStandard)
-			}
-			channels = append(channels, features.FeatureChannel(ch))
 		}
 	}
 
-	return versions, channels
+	return versions
 }

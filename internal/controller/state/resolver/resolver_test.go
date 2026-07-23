@@ -350,7 +350,7 @@ func TestEndpointReady(t *testing.T) {
 					Ready: nil,
 				},
 			},
-			ready: false,
+			ready: true,
 		},
 		{
 			msg: "endpoint not ready",
@@ -523,7 +523,7 @@ func TestCalculateReadyEndpoints(t *testing.T) {
 				{
 					Addresses:  []string{"1.1.0.1", "1.1.0.2", "1.1.0.3, 1.1.0.4, 1.1.0.5"},
 					Conditions: discoveryV1.EndpointConditions{
-						// nil conditions should be treated as not ready
+						// nil conditions should be treated as ready
 					},
 				},
 			},
@@ -542,7 +542,7 @@ func TestCalculateReadyEndpoints(t *testing.T) {
 
 	result := calculateReadyEndpoints(logr.Discard(), slices)
 
-	g.Expect(result).To(Equal(4))
+	g.Expect(result).To(Equal(7))
 }
 
 func generateEndpointSliceList(n int) discoveryV1.EndpointSliceList {

@@ -182,24 +182,12 @@ func TestBuildGatewayClass(t *testing.T) {
 		},
 	}
 
-	experimentalCRDs := map[types.NamespacedName]*metav1.PartialObjectMetadata{
-		{Name: "gateways.gateway.networking.k8s.io"}: {
-			ObjectMeta: metav1.ObjectMeta{
-				Annotations: map[string]string{
-					consts.BundleVersionAnnotation: consts.BundleVersion,
-					consts.ChannelAnnotation:       "experimental",
-				},
-			},
-		},
-	}
-
 	tests := []struct {
-		gc                  *v1.GatewayClass
-		nps                 map[types.NamespacedName]*NginxProxy
-		crdMetadata         map[types.NamespacedName]*metav1.PartialObjectMetadata
-		expected            *GatewayClass
-		name                string
-		experimentalEnabled bool
+		gc          *v1.GatewayClass
+		nps         map[types.NamespacedName]*NginxProxy
+		crdMetadata map[types.NamespacedName]*metav1.PartialObjectMetadata
+		expected    *GatewayClass
+		name        string
 	}{
 		{
 			gc:          validGC,
@@ -340,39 +328,6 @@ func TestBuildGatewayClass(t *testing.T) {
 			},
 			name: "invalid gatewayclass; unsupported version",
 		},
-		{
-			gc:                  validGC,
-			crdMetadata:         experimentalCRDs,
-			experimentalEnabled: true,
-			expected: &GatewayClass{
-				Source:                validGC,
-				Valid:                 true,
-				ExperimentalSupported: true,
-			},
-			name: "experimental enabled and CRDs have experimental channel",
-		},
-		{
-			gc:                  validGC,
-			crdMetadata:         validCRDs,
-			experimentalEnabled: true,
-			expected: &GatewayClass{
-				Source:                validGC,
-				Valid:                 true,
-				ExperimentalSupported: false,
-			},
-			name: "experimental enabled but CRDs have standard channel",
-		},
-		{
-			gc:                  validGC,
-			crdMetadata:         experimentalCRDs,
-			experimentalEnabled: false,
-			expected: &GatewayClass{
-				Source:                validGC,
-				Valid:                 true,
-				ExperimentalSupported: false,
-			},
-			name: "experimental disabled but CRDs have experimental channel",
-		},
 	}
 
 	for _, test := range tests {
@@ -380,7 +335,7 @@ func TestBuildGatewayClass(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			result := buildGatewayClass(test.gc, test.nps, test.crdMetadata, test.experimentalEnabled)
+			result := buildGatewayClass(test.gc, test.nps, test.crdMetadata)
 			g.Expect(helpers.Diff(test.expected, result)).To(BeEmpty())
 		})
 	}
@@ -492,7 +447,7 @@ func TestValidateCRDVersions(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			conds, valid, _, _ := validateCRDVersions(test.crds)
+			conds, valid, _ := validateCRDVersions(test.crds)
 			g.Expect(valid).To(Equal(test.valid))
 			g.Expect(conds).To(Equal(test.expConds))
 		})

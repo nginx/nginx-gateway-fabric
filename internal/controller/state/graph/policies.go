@@ -695,29 +695,30 @@ func checkForRouteOverlap(route *L7Route, gatewayHostPortPaths map[string]string
 			port := parentRef.Attachment.ListenerPort
 			// FIXME(sarthyparty): https://github.com/nginx/nginx-gateway-fabric/issues/3811
 			// Need to merge listener hostnames with route hostnames so wildcards are handled correctly
-			// Also the AcceptedHostnames is a map of slices of strings, so we need to flatten it
-			for _, hostname := range parentRef.Attachment.AcceptedHostnames {
-				for _, rule := range route.Spec.Rules {
-					for _, match := range rule.Matches {
-						if match.Path != nil && match.Path.Value != nil {
-							// Use GatewayNsName to ensure overlap detection works across routes
-							// attached directly to a Gateway and those attached via ListenerSet.
-							key := fmt.Sprintf(
-								"%s:%s:%d%s",
-								parentRef.GatewayNsName.String(),
-								hostname,
-								port,
-								*match.Path.Value,
-							)
-							if val, ok := gatewayHostPortPaths[key]; ok && val != currentRouteName {
-								msg := fmt.Sprintf(
-									"Policy cannot be applied to target %q since another "+
-										"Route %q shares a namespace/gateway-name:hostname:port/path combination with this target",
-									val, currentRouteName,
+			for _, hostnames := range parentRef.Attachment.AcceptedHostnames {
+				for _, hostname := range hostnames {
+					for _, rule := range route.Spec.Rules {
+						for _, match := range rule.Matches {
+							if match.Path != nil && match.Path.Value != nil {
+								// Use GatewayNsName to ensure overlap detection works across routes
+								// attached directly to a Gateway and those attached via ListenerSet.
+								key := fmt.Sprintf(
+									"%s:%s:%d%s",
+									parentRef.GatewayNsName.String(),
+									hostname,
+									port,
+									*match.Path.Value,
 								)
-								cond := conditions.NewPolicyNotAcceptedTargetConflict(msg)
+								if val, ok := gatewayHostPortPaths[key]; ok {
+									msg := fmt.Sprintf(
+										"Policy cannot be applied to target %q since another "+
+											"Route %q shares a namespace/gateway-name:hostname:port/path combination with this target",
+										val, currentRouteName,
+									)
+									cond := conditions.NewPolicyNotAcceptedTargetConflict(msg)
 
-								return &cond
+									return &cond
+								}
 							}
 						}
 					}
@@ -738,18 +739,20 @@ func buildGatewayHostPortPaths(route *L7Route) map[string]string {
 	for _, parentRef := range route.ParentRefs {
 		if parentRef.Attachment != nil {
 			port := parentRef.Attachment.ListenerPort
-			for _, hostname := range parentRef.Attachment.AcceptedHostnames {
-				for _, rule := range route.Spec.Rules {
-					for _, match := range rule.Matches {
-						if match.Path != nil && match.Path.Value != nil {
-							key := fmt.Sprintf(
-								"%s:%s:%d%s",
-								parentRef.GatewayNsName.String(),
-								hostname,
-								port,
-								*match.Path.Value,
-							)
-							gatewayHostPortPaths[key] = routeName
+			for _, hostnames := range parentRef.Attachment.AcceptedHostnames {
+				for _, hostname := range hostnames {
+					for _, rule := range route.Spec.Rules {
+						for _, match := range rule.Matches {
+							if match.Path != nil && match.Path.Value != nil {
+								key := fmt.Sprintf(
+									"%s:%s:%d%s",
+									parentRef.GatewayNsName.String(),
+									hostname,
+									port,
+									*match.Path.Value,
+								)
+								gatewayHostPortPaths[key] = routeName
+							}
 						}
 					}
 				}

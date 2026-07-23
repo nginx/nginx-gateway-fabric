@@ -1361,6 +1361,76 @@ func TestProcessPolicies_RouteOverlap(t *testing.T) {
 			},
 		},
 		{
+			name:      "policy references route with equivalent hostnames in a different order",
+			validator: &policiesfakes.FakeValidator{},
+			policies: map[PolicyKey]policies.Policy{
+				pol1Key: pol1,
+			},
+			routes: map[RouteKey]*L7Route{
+				{
+					RouteType:      RouteTypeHTTP,
+					NamespacedName: types.NamespacedName{Namespace: testNs, Name: "hr-coffee"},
+				}: createTestRouteWithHostnames(
+					"hr-coffee",
+					[]string{"foo.example.com", "bar.example.com"},
+					"/coffee",
+				),
+				{
+					RouteType:      RouteTypeHTTP,
+					NamespacedName: types.NamespacedName{Namespace: testNs, Name: "hr2"},
+				}: createTestRouteWithHostnames(
+					"hr2",
+					[]string{"bar.example.com", "foo.example.com"},
+					"/coffee",
+				),
+			},
+			valid: false,
+			expConditions: []conditions.Condition{
+				{
+					Type:   "Accepted",
+					Status: "False",
+					Reason: "TargetConflict",
+					Message: "Policy cannot be applied to target \"test/hr-coffee\" since another Route " +
+						"\"test/hr2\" shares a namespace/gateway-name:hostname:port/path combination with this target",
+				},
+			},
+		},
+		{
+			name:      "policy references route with a partially overlapping hostname set",
+			validator: &policiesfakes.FakeValidator{},
+			policies: map[PolicyKey]policies.Policy{
+				pol1Key: pol1,
+			},
+			routes: map[RouteKey]*L7Route{
+				{
+					RouteType:      RouteTypeHTTP,
+					NamespacedName: types.NamespacedName{Namespace: testNs, Name: "hr-coffee"},
+				}: createTestRouteWithHostnames(
+					"hr-coffee",
+					[]string{"foo.example.com", "cafe.example.com"},
+					"/coffee",
+				),
+				{
+					RouteType:      RouteTypeHTTP,
+					NamespacedName: types.NamespacedName{Namespace: testNs, Name: "hr2"},
+				}: createTestRouteWithHostnames(
+					"hr2",
+					[]string{"cafe.example.com"},
+					"/coffee",
+				),
+			},
+			valid: false,
+			expConditions: []conditions.Condition{
+				{
+					Type:   "Accepted",
+					Status: "False",
+					Reason: "TargetConflict",
+					Message: "Policy cannot be applied to target \"test/hr-coffee\" since another Route " +
+						"\"test/hr2\" shares a namespace/gateway-name:hostname:port/path combination with this target",
+				},
+			},
+		},
+		{
 			name:      "policy references 2 routes that overlap",
 			validator: &policiesfakes.FakeValidator{},
 			policies: map[PolicyKey]policies.Policy{
@@ -1849,6 +1919,13 @@ func createTestRouteWithPaths(name string, paths ...string) *L7Route {
 			},
 		},
 	}
+
+	return route
+}
+
+func createTestRouteWithHostnames(name string, hostnames []string, paths ...string) *L7Route {
+	route := createTestRouteWithPaths(name, paths...)
+	route.ParentRefs[0].Attachment.AcceptedHostnames["listener-1"] = hostnames
 
 	return route
 }

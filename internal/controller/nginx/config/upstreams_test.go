@@ -17,10 +17,6 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
 
-var defaultKeepAliveSettings = http.UpstreamKeepAlive{
-	Connections: helpers.GetPointer[int32](http.KeepAliveConnectionDefault),
-}
-
 func TestExecuteUpstreams_NginxOSS(t *testing.T) {
 	t.Parallel()
 	gen := GeneratorImpl{
@@ -115,9 +111,10 @@ func TestExecuteUpstreams_NginxOSS(t *testing.T) {
 		fmt.Sprintf("server %snginx-503-server.sock;", SocketBasePath): 1,
 
 		"keepalive 1;":           1,
-		"keepalive_requests 1;":  2,
-		"keepalive_time 5s;":     2,
-		"keepalive_timeout 10s;": 2,
+		"keepalive 0;":           1,
+		"keepalive_requests 1;":  1,
+		"keepalive_time 5s;":     1,
+		"keepalive_timeout 10s;": 1,
 		"ip_hash;":               1,
 
 		"zone up1 512k;":      1,
@@ -128,7 +125,6 @@ func TestExecuteUpstreams_NginxOSS(t *testing.T) {
 		"zone up6-usp-keepAlive-connections-zero 2m;": 1,
 
 		defaultLBMethod + ";": 5,
-		"keepalive 16;":       4,
 	}
 
 	upstreams := gen.createUpstreams(stateUpstreams)
@@ -307,7 +303,6 @@ func TestExecuteUpstreams_NginxPlus(t *testing.T) {
 
 		defaultLBMethod + ";": 9,
 		"ip_hash;":            1,
-		"keepalive 16;":       8,
 
 		"zone up1 1m;":                                1,
 		"zone up2 1m;":                                1,
@@ -324,9 +319,10 @@ func TestExecuteUpstreams_NginxPlus(t *testing.T) {
 		"sticky cookie session-persistence;":                             1,
 
 		"keepalive 1;":           1,
-		"keepalive_requests 1;":  2,
-		"keepalive_time 5s;":     2,
-		"keepalive_timeout 10s;": 2,
+		"keepalive 0;":           1,
+		"keepalive_requests 1;":  1,
+		"keepalive_time 5s;":     1,
+		"keepalive_timeout 10s;": 1,
 
 		"state /var/lib/nginx/state/up1.conf;":      1,
 		"state /var/lib/nginx/state/up2.conf;":      1,
@@ -421,6 +417,25 @@ func TestCreateUpstreams(t *testing.T) {
 				LoadBalancingMethod: string(ngfAPI.LoadBalancingTypeIPHash),
 			},
 		},
+		{
+			Name: "up6-usp",
+			Endpoints: []resolver.Endpoint{
+				{
+					Address: "12.0.0.0",
+					Port:    80,
+				},
+			},
+			UpstreamSettings: upstreamsettings.UpstreamSettings{
+				ZoneSize: "2m",
+				KeepAlive: http.UpstreamKeepAlive{
+					Connections: helpers.GetPointer[int32](0),
+					Requests:    1,
+					Time:        "5s",
+					Timeout:     "10s",
+				},
+				LoadBalancingMethod: string(ngfAPI.LoadBalancingTypeIPHash),
+			},
+		},
 	}
 
 	expUpstreams := []http.Upstream{
@@ -439,7 +454,6 @@ func TestCreateUpstreams(t *testing.T) {
 				},
 			},
 			LoadBalancingMethod: defaultLBMethod,
-			KeepAlive:           defaultKeepAliveSettings,
 		},
 		{
 			Name:     "up2",
@@ -450,7 +464,6 @@ func TestCreateUpstreams(t *testing.T) {
 				},
 			},
 			LoadBalancingMethod: defaultLBMethod,
-			KeepAlive:           defaultKeepAliveSettings,
 		},
 		{
 			Name:     "up3",
@@ -461,7 +474,6 @@ func TestCreateUpstreams(t *testing.T) {
 				},
 			},
 			LoadBalancingMethod: defaultLBMethod,
-			KeepAlive:           defaultKeepAliveSettings,
 		},
 		{
 			Name:     "up4-ipv6",
@@ -472,7 +484,6 @@ func TestCreateUpstreams(t *testing.T) {
 				},
 			},
 			LoadBalancingMethod: defaultLBMethod,
-			KeepAlive:           defaultKeepAliveSettings,
 		},
 		{
 			Name:     "up5-usp",
@@ -487,6 +498,19 @@ func TestCreateUpstreams(t *testing.T) {
 				Requests:    1,
 				Time:        "5s",
 				Timeout:     "10s",
+			},
+			LoadBalancingMethod: string(ngfAPI.LoadBalancingTypeIPHash),
+		},
+		{
+			Name:     "up6-usp",
+			ZoneSize: "2m",
+			Servers: []http.UpstreamServer{
+				{
+					Address: "12.0.0.0:80",
+				},
+			},
+			KeepAlive: http.UpstreamKeepAlive{
+				Connections: helpers.GetPointer[int32](0),
 			},
 			LoadBalancingMethod: string(ngfAPI.LoadBalancingTypeIPHash),
 		},
@@ -527,7 +551,6 @@ func TestCreateUpstream(t *testing.T) {
 					},
 				},
 				LoadBalancingMethod: defaultLBMethod,
-				KeepAlive:           defaultKeepAliveSettings,
 			},
 			msg: "nil endpoints",
 		},
@@ -545,7 +568,6 @@ func TestCreateUpstream(t *testing.T) {
 					},
 				},
 				LoadBalancingMethod: defaultLBMethod,
-				KeepAlive:           defaultKeepAliveSettings,
 			},
 			msg: "no endpoints",
 		},
@@ -582,7 +604,6 @@ func TestCreateUpstream(t *testing.T) {
 					},
 				},
 				LoadBalancingMethod: defaultLBMethod,
-				KeepAlive:           defaultKeepAliveSettings,
 			},
 			msg: "multiple endpoints",
 		},
@@ -606,7 +627,6 @@ func TestCreateUpstream(t *testing.T) {
 					},
 				},
 				LoadBalancingMethod: defaultLBMethod,
-				KeepAlive:           defaultKeepAliveSettings,
 			},
 			msg: "endpoint ipv6",
 		},
@@ -705,7 +725,6 @@ func TestCreateUpstream(t *testing.T) {
 					},
 				},
 				LoadBalancingMethod: defaultLBMethod,
-				KeepAlive:           defaultKeepAliveSettings,
 			},
 			msg: "empty upstreamSettingsPolicies",
 		},
@@ -747,6 +766,39 @@ func TestCreateUpstream(t *testing.T) {
 		},
 		{
 			stateUpstream: dataplane.Upstream{
+				Name: "UpstreamSettingsPolicy KeepAlive Disabled",
+				Endpoints: []resolver.Endpoint{
+					{
+						Address: "10.0.0.1",
+						Port:    80,
+					},
+				},
+				UpstreamSettings: upstreamsettings.UpstreamSettings{
+					KeepAlive: http.UpstreamKeepAlive{
+						Connections: helpers.GetPointer[int32](0),
+						Requests:    1,
+						Time:        "5s",
+						Timeout:     "10s",
+					},
+				},
+			},
+			expectedUpstream: http.Upstream{
+				ZoneSize: "512k",
+				Name:     "UpstreamSettingsPolicy KeepAlive Disabled",
+				Servers: []http.UpstreamServer{
+					{
+						Address: "10.0.0.1:80",
+					},
+				},
+				KeepAlive: http.UpstreamKeepAlive{
+					Connections: helpers.GetPointer[int32](0),
+				},
+				LoadBalancingMethod: defaultLBMethod,
+			},
+			msg: "UpstreamSettingsPolicy KeepAlive Disabled",
+		},
+		{
+			stateUpstream: dataplane.Upstream{
 				Name: "upstreamSettingsPolicy with only load balancing settings",
 				Endpoints: []resolver.Endpoint{
 					{
@@ -767,7 +819,6 @@ func TestCreateUpstream(t *testing.T) {
 					},
 				},
 				LoadBalancingMethod: string(ngfAPI.LoadBalancingTypeIPHash),
-				KeepAlive:           defaultKeepAliveSettings,
 			},
 			msg: "upstreamSettingsPolicy with only load balancing settings",
 		},
@@ -792,7 +843,6 @@ func TestCreateUpstream(t *testing.T) {
 					},
 				},
 				LoadBalancingMethod: defaultLBMethod,
-				KeepAlive:           defaultKeepAliveSettings,
 			},
 			msg: "ExternalName service with DNS name",
 		},
@@ -832,7 +882,6 @@ func TestCreateUpstream(t *testing.T) {
 					},
 				},
 				LoadBalancingMethod: defaultLBMethod,
-				KeepAlive:           defaultKeepAliveSettings,
 			},
 			msg: "mixed IP addresses and DNS names",
 		},
@@ -879,7 +928,6 @@ func TestCreateUpstreamPlus(t *testing.T) {
 					},
 				},
 				LoadBalancingMethod: defaultLBMethod,
-				KeepAlive:           defaultKeepAliveSettings,
 			},
 		},
 		{
@@ -899,7 +947,6 @@ func TestCreateUpstreamPlus(t *testing.T) {
 					},
 				},
 				LoadBalancingMethod: defaultLBMethod,
-				KeepAlive:           defaultKeepAliveSettings,
 			},
 		},
 		{
@@ -936,7 +983,6 @@ func TestCreateUpstreamPlus(t *testing.T) {
 					SessionType: string(dataplane.CookieBasedSessionPersistence),
 					Path:        "/app",
 				},
-				KeepAlive: defaultKeepAliveSettings,
 			},
 		},
 	}

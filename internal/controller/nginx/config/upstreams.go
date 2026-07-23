@@ -227,18 +227,20 @@ func (g GeneratorImpl) createUpstream(
 }
 
 // processKeepAliveSettings normalizes keepalive configuration from an upstream policy.
-// If Connections is nil, it's set to the default value of 16.
-// If Connections is set to 0, it indicates that keepAlive is disabled.
+// If Connections is nil, the field is omitted and the NGINX default is used.
+// If Connections is set to 0, keepAlive is disabled.
 func processKeepAliveSettings(spec http.UpstreamKeepAlive) http.UpstreamKeepAlive {
-	if spec.Connections == nil {
-		spec.Connections = helpers.GetPointer[int32](http.KeepAliveConnectionDefault)
-	}
-
-	if spec.Connections != nil && *spec.Connections == 0 {
+	if spec.Connections != nil {
+		if *spec.Connections == 0 {
+			return http.UpstreamKeepAlive{
+				Connections: spec.Connections,
+			}
+		}
 		return http.UpstreamKeepAlive{
-			Requests: spec.Requests,
-			Time:     spec.Time,
-			Timeout:  spec.Timeout,
+			Connections: spec.Connections,
+			Requests:    spec.Requests,
+			Time:        spec.Time,
+			Timeout:     spec.Timeout,
 		}
 	}
 

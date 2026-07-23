@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"sort"
 	"testing"
+	"time"
 
 	"github.com/go-logr/logr"
 	. "github.com/onsi/gomega"
@@ -18,7 +19,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
-	"sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
@@ -5701,13 +5701,37 @@ func TestBuildStreamUpstreams(t *testing.T) {
 func TestBuildL4Servers(t *testing.T) {
 	t.Parallel()
 
+	baseTime := metav1.NewTime(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC))
+
 	createL4Route := func(name string, valid bool, backendRefs []graph.BackendRef) *graph.L4Route {
 		return &graph.L4Route{
 			Valid: valid,
-			Source: &v1alpha2.TCPRoute{
+			Source: &v1.TCPRoute{
 				ObjectMeta: metav1.ObjectMeta{
-					Namespace: "default",
-					Name:      name,
+					Namespace:         "default",
+					Name:              name,
+					CreationTimestamp: baseTime,
+				},
+			},
+			Spec: graph.L4RouteSpec{
+				BackendRefs: backendRefs,
+			},
+		}
+	}
+
+	createL4RouteWithTimestamp := func(
+		name string,
+		valid bool,
+		backendRefs []graph.BackendRef,
+		ts metav1.Time,
+	) *graph.L4Route {
+		return &graph.L4Route{
+			Valid: valid,
+			Source: &v1.TCPRoute{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace:         "default",
+					Name:              name,
+					CreationTimestamp: ts,
 				},
 			},
 			Spec: graph.L4RouteSpec{
@@ -6184,7 +6208,7 @@ func TestBuildL4Servers(t *testing.T) {
 						L4Routes: map[graph.L4RouteKey]*graph.L4Route{
 							{NamespacedName: types.NamespacedName{Namespace: "default", Name: "udp-route"}}: {
 								Valid: true,
-								Source: &v1alpha2.UDPRoute{
+								Source: &v1.UDPRoute{
 									ObjectMeta: metav1.ObjectMeta{
 										Namespace: "default",
 										Name:      "udp-route",
@@ -6212,9 +6236,9 @@ func TestBuildL4Servers(t *testing.T) {
 			expectedServers: nil,
 		},
 		{
-			// L4Routes is a map (randomized iteration order). The route names are chosen so that map
-			// order differs from the expected output, verifying the servers are sorted deterministically.
-			name: "multiple TCP routes on the same listener are sorted by upstream",
+			// Per Gateway API conflict resolution, only the oldest route is programmed.
+			// route-older was created first; route-newer (created 1 minute later) is ignored.
+			name: "oldest route wins when multiple TCP routes target same listener",
 			gateway: &graph.Gateway{
 				Source: &v1.Gateway{
 					ObjectMeta: metav1.ObjectMeta{
@@ -6231,37 +6255,23 @@ func TestBuildL4Servers(t *testing.T) {
 							Port:     8080,
 						},
 						L4Routes: map[graph.L4RouteKey]*graph.L4Route{
-							{NamespacedName: types.NamespacedName{Namespace: "default", Name: "route-c"}}: createL4Route(
-								"route-c", true, []graph.BackendRef{{
+							{NamespacedName: types.NamespacedName{Namespace: "default", Name: "route-newer"}}: createL4RouteWithTimestamp(
+								"route-newer", true, []graph.BackendRef{{
 									Valid:       true,
-									SvcNsName:   types.NamespacedName{Namespace: "default", Name: "svc-c"},
+									SvcNsName:   types.NamespacedName{Namespace: "default", Name: "svc-newer"},
 									ServicePort: apiv1.ServicePort{Name: "tcp", Port: 8080},
 									Weight:      1,
 								}},
+								metav1.NewTime(baseTime.Add(time.Minute)),
 							),
-							{NamespacedName: types.NamespacedName{Namespace: "default", Name: "route-a"}}: createL4Route(
-								"route-a", true, []graph.BackendRef{{
+							{NamespacedName: types.NamespacedName{Namespace: "default", Name: "route-older"}}: createL4RouteWithTimestamp(
+								"route-older", true, []graph.BackendRef{{
 									Valid:       true,
-									SvcNsName:   types.NamespacedName{Namespace: "default", Name: "svc-a"},
+									SvcNsName:   types.NamespacedName{Namespace: "default", Name: "svc-older"},
 									ServicePort: apiv1.ServicePort{Name: "tcp", Port: 8080},
 									Weight:      1,
 								}},
-							),
-							{NamespacedName: types.NamespacedName{Namespace: "default", Name: "route-d"}}: createL4Route(
-								"route-d", true, []graph.BackendRef{{
-									Valid:       true,
-									SvcNsName:   types.NamespacedName{Namespace: "default", Name: "svc-d"},
-									ServicePort: apiv1.ServicePort{Name: "tcp", Port: 8080},
-									Weight:      1,
-								}},
-							),
-							{NamespacedName: types.NamespacedName{Namespace: "default", Name: "route-b"}}: createL4Route(
-								"route-b", true, []graph.BackendRef{{
-									Valid:       true,
-									SvcNsName:   types.NamespacedName{Namespace: "default", Name: "svc-b"},
-									ServicePort: apiv1.ServicePort{Name: "tcp", Port: 8080},
-									Weight:      1,
-								}},
+								baseTime,
 							),
 						},
 					},
@@ -6269,10 +6279,66 @@ func TestBuildL4Servers(t *testing.T) {
 			},
 			protocol: v1.TCPProtocolType,
 			expectedServers: []Layer4VirtualServer{
-				{Hostname: "", Port: 8080, Upstreams: []Layer4Upstream{{Name: "default_svc-a_8080", Weight: 1}}},
-				{Hostname: "", Port: 8080, Upstreams: []Layer4Upstream{{Name: "default_svc-b_8080", Weight: 1}}},
-				{Hostname: "", Port: 8080, Upstreams: []Layer4Upstream{{Name: "default_svc-c_8080", Weight: 1}}},
-				{Hostname: "", Port: 8080, Upstreams: []Layer4Upstream{{Name: "default_svc-d_8080", Weight: 1}}},
+				{
+					Hostname: "",
+					Port:     8080,
+					Upstreams: []Layer4Upstream{
+						{Name: "default_svc-older_8080", Weight: 1},
+					},
+				},
+			},
+		},
+		{
+			// When timestamps are equal, the route with the alphabetically-first
+			// namespace/name wins (Gateway API tie-breaking rule).
+			name: "same timestamp tie broken by name",
+			gateway: &graph.Gateway{
+				Source: &v1.Gateway{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "test",
+						Name:      "gateway",
+					},
+				},
+				Listeners: []*graph.Listener{
+					{
+						Name:  "tcp-listener",
+						Valid: true,
+						Source: v1.Listener{
+							Protocol: v1.TCPProtocolType,
+							Port:     8080,
+						},
+						L4Routes: map[graph.L4RouteKey]*graph.L4Route{
+							{NamespacedName: types.NamespacedName{Namespace: "default", Name: "route-z"}}: createL4RouteWithTimestamp(
+								"route-z", true, []graph.BackendRef{{
+									Valid:       true,
+									SvcNsName:   types.NamespacedName{Namespace: "default", Name: "svc-z"},
+									ServicePort: apiv1.ServicePort{Name: "tcp", Port: 8080},
+									Weight:      1,
+								}},
+								baseTime,
+							),
+							{NamespacedName: types.NamespacedName{Namespace: "default", Name: "route-a"}}: createL4RouteWithTimestamp(
+								"route-a", true, []graph.BackendRef{{
+									Valid:       true,
+									SvcNsName:   types.NamespacedName{Namespace: "default", Name: "svc-a"},
+									ServicePort: apiv1.ServicePort{Name: "tcp", Port: 8080},
+									Weight:      1,
+								}},
+								baseTime,
+							),
+						},
+					},
+				},
+			},
+			protocol: v1.TCPProtocolType,
+			expectedServers: []Layer4VirtualServer{
+				{
+					Hostname: "",
+					Port:     8080,
+					Upstreams: []Layer4Upstream{
+						{Name: "default_svc-a_8080", Weight: 1},
+					},
+				},
 			},
 		},
 	}

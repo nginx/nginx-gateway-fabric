@@ -196,6 +196,8 @@ rules:
   - backendtlspolicies
   - tlsroutes
   - listenersets
+  - tcproutes
+  - udproutes
   verbs:
   - list
   - watch
@@ -210,6 +212,8 @@ rules:
   - backendtlspolicies/status
   - tlsroutes/status
   - listenersets/status
+  - tcproutes/status
+  - udproutes/status
   verbs:
   - update
 - apiGroups:

@@ -147,8 +147,8 @@ func (fs *fileService) getFileContents(req *pb.GetFileRequest, connKey string) (
 	}
 
 	filename := req.GetFileMeta().GetName()
-	contents, fileFoundHash := deployment.GetFile(filename, req.GetFileMeta().GetHash())
-	if len(contents) == 0 {
+	contents, fileFoundHash, found := deployment.GetFile(filename, req.GetFileMeta().GetHash())
+	if !found {
 		fs.logger.V(1).Info(
 			"Error getting file for agent",
 			"file", filename,

@@ -38,7 +38,6 @@ import (
 	k8spredicate "sigs.k8s.io/controller-runtime/pkg/predicate"
 	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
-	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 	"sigs.k8s.io/gateway-api/pkg/consts"
 
@@ -95,7 +94,6 @@ var scheme = runtime.NewScheme()
 
 func init() {
 	utilruntime.Must(gatewayv1.Install(scheme))
-	utilruntime.Must(gatewayv1alpha2.Install(scheme))
 	utilruntime.Must(apiv1.AddToScheme(scheme))
 	utilruntime.Must(discoveryV1.AddToScheme(scheme))
 	utilruntime.Must(ngfAPIv1alpha1.AddToScheme(scheme))
@@ -533,7 +531,10 @@ func createManager(cfg config.Config, healthChecker *graphBuiltHealthChecker) (m
 		options.HealthProbeBindAddress = fmt.Sprintf(":%d", cfg.HealthConfig.Port)
 	}
 
-	clusterCfg := ctlr.GetConfigOrDie()
+	clusterCfg, err := ctlr.GetConfig()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get cluster config: %w", err)
+	}
 	clusterCfg.Timeout = clusterTimeout
 
 	mgr, err := manager.New(clusterCfg, options)
@@ -620,7 +621,6 @@ func filterControllersByCRDExistence(
 ) ([]ctlrCfg, map[string]bool, error) {
 	// Collect GVKs that need checking
 	var gvksToCheck []schema.GroupVersionKind
-	gvkToController := make(map[schema.GroupVersionKind]*ctlrCfg)
 
 	for i := range controllers {
 		if controllers[i].requireCRDCheck {
@@ -632,7 +632,6 @@ func filterControllersByCRDExistence(
 				gvk = controllers[i].objectType.GetObjectKind().GroupVersionKind()
 			}
 			gvksToCheck = append(gvksToCheck, gvk)
-			gvkToController[gvk] = &controllers[i]
 		}
 	}
 
@@ -712,35 +711,6 @@ func featureFlagControllerCfgs(cfg config.Config) []ctlrCfg {
 					Group:   wafv1.Group,
 					Version: wafv1.Version,
 					Kind:    kinds.APLogConf,
-				},
-			},
-		)
-	}
-
-	if cfg.ExperimentalFeatures {
-		cfgs = append(cfgs,
-			ctlrCfg{
-				objectType: &gatewayv1alpha2.TCPRoute{},
-				options: []controller.Option{
-					controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
-				},
-				requireCRDCheck: true,
-				crdGVK: &schema.GroupVersionKind{
-					Group:   "gateway.networking.k8s.io",
-					Version: "v1alpha2",
-					Kind:    "TCPRoute",
-				},
-			},
-			ctlrCfg{
-				objectType: &gatewayv1alpha2.UDPRoute{},
-				options: []controller.Option{
-					controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
-				},
-				requireCRDCheck: true,
-				crdGVK: &schema.GroupVersionKind{
-					Group:   "gateway.networking.k8s.io",
-					Version: "v1alpha2",
-					Kind:    "UDPRoute",
 				},
 			},
 		)
@@ -892,6 +862,66 @@ func registerControllers(
 			},
 		},
 		{
+			objectType: &gatewayv1.TCPRoute{},
+			options: []controller.Option{
+				controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
+			},
+			requireCRDCheck: true,
+			crdGVK: &schema.GroupVersionKind{
+				Group:   "gateway.networking.k8s.io",
+				Version: "v1",
+				Kind:    "TCPRoute",
+			},
+		},
+		{
+			objectType: &gatewayv1.UDPRoute{},
+			options: []controller.Option{
+				controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
+			},
+			requireCRDCheck: true,
+			crdGVK: &schema.GroupVersionKind{
+				Group:   "gateway.networking.k8s.io",
+				Version: "v1",
+				Kind:    "UDPRoute",
+			},
+		},
+		{
+			objectType: &gatewayv1.BackendTLSPolicy{},
+			options: []controller.Option{
+				controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
+			},
+			requireCRDCheck: true,
+			crdGVK: &schema.GroupVersionKind{
+				Group:   "gateway.networking.k8s.io",
+				Version: "v1",
+				Kind:    "BackendTLSPolicy",
+			},
+		},
+		{
+			objectType: &gatewayv1.TLSRoute{},
+			options: []controller.Option{
+				controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
+			},
+			requireCRDCheck: true,
+			crdGVK: &schema.GroupVersionKind{
+				Group:   "gateway.networking.k8s.io",
+				Version: "v1",
+				Kind:    "TLSRoute",
+			},
+		},
+		{
+			objectType: &gatewayv1.ListenerSet{},
+			options: []controller.Option{
+				controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
+			},
+			requireCRDCheck: true,
+			crdGVK: &schema.GroupVersionKind{
+				Group:   "gateway.networking.k8s.io",
+				Version: "v1",
+				Kind:    "ListenerSet",
+			},
+		},
+		{
 			objectType: &ngfAPIv1alpha1.ClientSettingsPolicy{},
 			options: []controller.Option{
 				controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
@@ -936,46 +966,6 @@ func registerControllers(
 	}
 
 	controllerRegCfgs = append(controllerRegCfgs, featureFlagControllerCfgs(cfg)...)
-
-	// BackendTLSPolicy/TLSRoute v1 - conditionally register if CRD exists
-	controllerRegCfgs = append(controllerRegCfgs,
-		ctlrCfg{
-			objectType: &gatewayv1.BackendTLSPolicy{},
-			options: []controller.Option{
-				controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
-			},
-			requireCRDCheck: true,
-			crdGVK: &schema.GroupVersionKind{
-				Group:   "gateway.networking.k8s.io",
-				Version: "v1",
-				Kind:    "BackendTLSPolicy",
-			},
-		},
-		ctlrCfg{
-			objectType: &gatewayv1.TLSRoute{},
-			options: []controller.Option{
-				controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
-			},
-			requireCRDCheck: true,
-			crdGVK: &schema.GroupVersionKind{
-				Group:   "gateway.networking.k8s.io",
-				Version: "v1",
-				Kind:    "TLSRoute",
-			},
-		},
-		ctlrCfg{
-			objectType: &gatewayv1.ListenerSet{},
-			options: []controller.Option{
-				controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
-			},
-			requireCRDCheck: true,
-			crdGVK: &schema.GroupVersionKind{
-				Group:   "gateway.networking.k8s.io",
-				Version: "v1",
-				Kind:    "ListenerSet",
-			},
-		},
-	)
 
 	if cfg.ConfigName != "" {
 		controllerRegCfgs = append(controllerRegCfgs,
@@ -1333,16 +1323,16 @@ func prepareFirstEventBatchPreparerArgs(
 		objectLists = append(objectLists, &gatewayv1.ListenerSetList{})
 	}
 
-	if cfg.ExperimentalFeatures {
-		if discoveredCRDs["TLSRoute"] {
-			objectLists = append(objectLists, &gatewayv1.TLSRouteList{})
-		}
-		if discoveredCRDs["TCPRoute"] {
-			objectLists = append(objectLists, &gatewayv1alpha2.TCPRouteList{})
-		}
-		if discoveredCRDs["UDPRoute"] {
-			objectLists = append(objectLists, &gatewayv1alpha2.UDPRouteList{})
-		}
+	if discoveredCRDs["TLSRoute"] {
+		objectLists = append(objectLists, &gatewayv1.TLSRouteList{})
+	}
+
+	if discoveredCRDs["TCPRoute"] {
+		objectLists = append(objectLists, &gatewayv1.TCPRouteList{})
+	}
+
+	if discoveredCRDs["UDPRoute"] {
+		objectLists = append(objectLists, &gatewayv1.UDPRouteList{})
 	}
 
 	if cfg.InferenceExtension {

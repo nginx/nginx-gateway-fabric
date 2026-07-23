@@ -146,6 +146,33 @@ func TestGenerator(t *testing.T) {
 		gWithT.Expect(files[1].Name).To(ContainSubstring("p2"))
 	})
 
+	t.Run("GenerateForMain orders policies by namespace and name", func(t *testing.T) {
+		gWithT := NewWithT(t)
+		newPolicy := func(namespace, name string) *v1alpha1.SnippetsPolicy {
+			return &v1alpha1.SnippetsPolicy{
+				ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+				Spec: v1alpha1.SnippetsPolicySpec{
+					Snippets: []v1alpha1.Snippet{
+						{Context: v1alpha1.NginxContextMain, Value: name + ";"},
+					},
+				},
+			}
+		}
+
+		files := g.GenerateForMain([]policies.Policy{
+			newPolicy("zebra", "first"),
+			newPolicy("alpha", "second"),
+			newPolicy("alpha", "first"),
+		})
+
+		gWithT.Expect(files).To(HaveLen(3))
+		gWithT.Expect([]string{files[0].Name, files[1].Name, files[2].Name}).To(Equal([]string{
+			"SnippetsPolicy_main_alpha-first.conf",
+			"SnippetsPolicy_main_alpha-second.conf",
+			"SnippetsPolicy_main_zebra-first.conf",
+		}))
+	})
+
 	t.Run("GenerateForMain with multiple targets", func(t *testing.T) {
 		gWithT := NewWithT(t)
 		policy := &v1alpha1.SnippetsPolicy{
