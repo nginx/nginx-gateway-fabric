@@ -166,7 +166,8 @@ func (c ContextSetter) validateToken(
 
 	usernameItems := strings.Split(tokenReview.Status.User.Username, ":")
 	if len(usernameItems) != 4 || usernameItems[0] != "system" || usernameItems[1] != "serviceaccount" {
-		logger.V(1).Info("token username did not match expected service account format")
+		format := "system:serviceaccount:NAMESPACE:NAME"
+		logger.V(1).Info(fmt.Sprintf("token username did not match expected service account format %q", format))
 		return nil, status.Error(codes.Unauthenticated, "invalid authorization")
 	}
 
