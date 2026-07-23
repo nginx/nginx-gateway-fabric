@@ -609,96 +609,104 @@ func validateListenerTLSOptions(listener v1.Listener, tlsPath *field.Path) (cond
 		SSLSessionTimeoutKey:      true,
 		SSLEcdhCurveKey:           true,
 	}
+	supportedKeys := []string{
+		SSLProtocolsKey,
+		SSLCiphersKey,
+		SSLPreferServerCiphersKey,
+		SSLSessionCacheKey,
+		SSLSessionTimeoutKey,
+		SSLEcdhCurveKey,
+	}
 
 	for optionKey, optionValue := range listener.TLS.Options {
+		path := tlsPath.Child("options").Key(string(optionKey))
 		if !supportedOptions[optionKey] {
-			path := tlsPath.Child("options").Key(string(optionKey))
-			valErr := field.NotSupported(path, optionKey, []string{
-				SSLProtocolsKey,
-				SSLCiphersKey,
-				SSLPreferServerCiphersKey,
-				SSLSessionCacheKey,
-				SSLSessionTimeoutKey,
-				SSLEcdhCurveKey,
-			})
+			valErr := field.NotSupported(path, optionKey, supportedKeys)
 			conds = append(conds, conditions.NewListenerUnsupportedValue(valErr.Error())...)
+			continue
 		}
 
-		// Validate ssl-protocols values
-		if optionKey == SSLProtocolsKey {
-			allowedProtocols := make(map[string]bool)
-
-			for _, value := range sslProtocolsValues {
-				allowedProtocols[value] = true
-			}
-
-			protocols := strings.Fields(string(optionValue))
-			if len(protocols) == 0 {
-				path := tlsPath.Child("options").Key(string(optionKey))
-				valErr := field.NotSupported(path, "", sslProtocolsValues)
-				conds = append(conds, conditions.NewListenerUnsupportedValue(valErr.Error())...)
-			}
-			for _, protocol := range protocols {
-				if !allowedProtocols[protocol] {
-					path := tlsPath.Child("options").Key(string(optionKey))
-					valErr := field.NotSupported(path, protocol, sslProtocolsValues)
-					conds = append(conds, conditions.NewListenerUnsupportedValue(valErr.Error())...)
-				}
-			}
-		}
-
-		// Validate ssl-prefer-server-ciphers values
-		if optionKey == SSLPreferServerCiphersKey {
-			value := string(optionValue)
-			if value != "on" && value != "off" {
-				path := tlsPath.Child("options").Key(string(optionKey))
-				valErr := field.NotSupported(path, value, sslPreferServerCiphersValues)
-				conds = append(conds, conditions.NewListenerUnsupportedValue(valErr.Error())...)
-			}
-		}
-
-		// Validate ssl-ciphers values
-		if optionKey == SSLCiphersKey {
-			value := string(optionValue)
-			if !sslCiphersRegexp.MatchString(value) {
-				path := tlsPath.Child("options").Key(string(optionKey))
-				valErr := field.Invalid(path, value, "invalid ssl ciphers")
-				conds = append(conds, conditions.NewListenerUnsupportedValue(valErr.Error())...)
-			}
-		}
-
-		// Validate ssl-session-cache values
-		if optionKey == SSLSessionCacheKey {
-			value := string(optionValue)
-			if !sslSessionCacheRegexp.MatchString(value) {
-				path := tlsPath.Child("options").Key(string(optionKey))
-				valErr := field.Invalid(path, value, "must be 'off', 'none', or an NGINX size such as '10m'")
-				conds = append(conds, conditions.NewListenerUnsupportedValue(valErr.Error())...)
-			}
-		}
-
-		// Validate ssl-session-timeout values
-		if optionKey == SSLSessionTimeoutKey {
-			value := string(optionValue)
-			if !sslSessionTimeoutRegexp.MatchString(value) {
-				path := tlsPath.Child("options").Key(string(optionKey))
-				valErr := field.Invalid(path, value, "must be an NGINX time such as '300', '5m', '1h', or '1d'")
-				conds = append(conds, conditions.NewListenerUnsupportedValue(valErr.Error())...)
-			}
-		}
-
-		// Validate ssl-ecdh-curve values
-		if optionKey == SSLEcdhCurveKey {
-			value := string(optionValue)
-			if !sslEcdhCurveRegexp.MatchString(value) {
-				path := tlsPath.Child("options").Key(string(optionKey))
-				valErr := field.Invalid(path, value, "must be 'auto' or a colon-separated list of curve names")
-				conds = append(conds, conditions.NewListenerUnsupportedValue(valErr.Error())...)
-			}
-		}
+		conds = append(conds, validateSupportedListenerTLSOption(optionKey, optionValue, path)...)
 	}
 
 	return conds
+}
+
+func validateSupportedListenerTLSOption(
+	optionKey v1.AnnotationKey,
+	optionValue v1.AnnotationValue,
+	path *field.Path,
+) []conditions.Condition {
+	switch optionKey {
+	case SSLProtocolsKey:
+		return validateSSLProtocolsOption(optionValue, path)
+	case SSLPreferServerCiphersKey:
+		value := string(optionValue)
+		if value == "on" || value == "off" {
+			return nil
+		}
+		valErr := field.NotSupported(path, value, sslPreferServerCiphersValues)
+		return conditions.NewListenerUnsupportedValue(valErr.Error())
+	case SSLCiphersKey:
+		return validateTLSOptionPattern(path, string(optionValue), sslCiphersRegexp, "invalid ssl ciphers")
+	case SSLSessionCacheKey:
+		return validateTLSOptionPattern(
+			path,
+			string(optionValue),
+			sslSessionCacheRegexp,
+			"must be 'off', 'none', or an NGINX size such as '10m'",
+		)
+	case SSLSessionTimeoutKey:
+		return validateTLSOptionPattern(
+			path,
+			string(optionValue),
+			sslSessionTimeoutRegexp,
+			"must be an NGINX time such as '300', '5m', '1h', or '1d'",
+		)
+	case SSLEcdhCurveKey:
+		return validateTLSOptionPattern(
+			path,
+			string(optionValue),
+			sslEcdhCurveRegexp,
+			"must be 'auto' or a colon-separated list of curve names",
+		)
+	default:
+		return nil
+	}
+}
+
+func validateSSLProtocolsOption(optionValue v1.AnnotationValue, path *field.Path) []conditions.Condition {
+	allowedProtocols := make(map[string]bool, len(sslProtocolsValues))
+	for _, value := range sslProtocolsValues {
+		allowedProtocols[value] = true
+	}
+
+	var conds []conditions.Condition
+	protocols := strings.Fields(string(optionValue))
+	if len(protocols) == 0 {
+		valErr := field.NotSupported(path, "", sslProtocolsValues)
+		conds = append(conds, conditions.NewListenerUnsupportedValue(valErr.Error())...)
+	}
+	for _, protocol := range protocols {
+		if !allowedProtocols[protocol] {
+			valErr := field.NotSupported(path, protocol, sslProtocolsValues)
+			conds = append(conds, conditions.NewListenerUnsupportedValue(valErr.Error())...)
+		}
+	}
+	return conds
+}
+
+func validateTLSOptionPattern(
+	path *field.Path,
+	value string,
+	re *regexp.Regexp,
+	errMsg string,
+) []conditions.Condition {
+	if re.MatchString(value) {
+		return nil
+	}
+	valErr := field.Invalid(path, value, errMsg)
+	return conditions.NewListenerUnsupportedValue(valErr.Error())
 }
 
 // isL4Protocol checks if the protocol is a Layer 4 protocol (TCP or UDP).

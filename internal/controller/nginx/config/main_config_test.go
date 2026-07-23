@@ -289,8 +289,8 @@ func TestExecuteMainConfig_WorkerRlimitNofile(t *testing.T) {
 	tests := []struct {
 		name         string
 		expDirective string
-		expOmitted   bool
 		conf         dataplane.Configuration
+		expOmitted   bool
 	}{
 		{
 			name:         "custom worker_rlimit_nofile",
