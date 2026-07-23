@@ -81,12 +81,17 @@ scheme is chosen from the Service *type*:
 | External | `ExternalName` | `https://<externalName>:<backendRef.port>` |
 | In-cluster | `ClusterIP` (or any non-`ExternalName`) | `http://<name>.<namespace>.svc.cluster.local:<backendRef.port>` |
 
-The module itself is scheme-agnostic — `reqwest` (`src/client.rs`) handles both `http://` and
-`https://`, so no module change is needed to support either backend. Two consequences worth knowing:
+The module itself is scheme-agnostic — the `ureq` client (`src/client.rs`) handles both `http://`
+and `https://`, so no module change is needed to support either backend. Two consequences worth
+knowing:
 
 - The port comes from the policy's `backendRef.port`, **not** the Service's `.spec.ports`.
 - Externally-addressed backends are always called over https and in-cluster ones over http; the
   scheme cannot currently be overridden independently of the Service type.
+- HTTPS verification uses the **operating system trust store** (rustls + `rustls-platform-verifier`),
+  so the runtime image must ship `ca-certificates`. This is installed in the NGINX Dockerfiles
+  (`build/Dockerfile.nginx[plus]`, `build/ubi/Dockerfile.nginx[plus]`). There is no bundled root
+  certificate crate.
 
 See [`examples/guardrails/README.md`](../../../../../../examples/guardrails/README.md) for
 configuration walkthroughs of both backend styles.
@@ -128,9 +133,9 @@ A few Rust/NGINX concepts you need in order to read the code:
 | ------ | ------------------ |
 | `src/lib.rs` | Module entry point. Declares the directive table (`ngx_command_t`), the config-parsing handlers, registers the three filters in `postconfiguration`, and implements the request-body / header / response-body filters plus the 403 and stream-termination senders. |
 | `src/config.rs` | `ModuleConfig` — the per-`location` configuration struct, its `Default` values, and the `inspect_requests()` / `inspect_responses()` helpers derived from `enabled` + `inspect_mode`. |
-| `src/client.rs` | The Guardrails API client. A blocking `reqwest` HTTP client that `POST`s to `<api_url>/backend/v1/scans`, the request/response JSON shapes, and the fail-closed `GuardrailsError` type. Returns `Ok(true)` when content is *cleared*, `Ok(false)` when *blocked*. |
+| `src/client.rs` | The Guardrails API client. A blocking `ureq` HTTP client that `POST`s to `<api_url>/backend/v1/scans`, the request/response JSON shapes, and the fail-closed `GuardrailsError` type. Returns `Ok(true)` when content is *cleared*, `Ok(false)` when *blocked*. TLS uses rustls verified against the OS trust store. Unit tests use a hand-rolled `std::net::TcpListener` mock server (no mock-server dependency). |
 | `src/stream.rs` | `StreamContext` — the streaming buffer and "checkpoint" logic. Parses SSE / OpenAI / Ollama chunk formats, accumulates text, decides when to inspect, and holds the termination/error message bodies. Contains the module's unit tests. |
-| `Cargo.toml` | Crate manifest: dependencies (`ngx`, `nginx-sys`, `reqwest`, `serde`, `tokio`, …), `crate-type`, and release profile. |
+| `Cargo.toml` | Crate manifest: dependencies (`ngx`, `nginx-sys`, `ureq`, `serde`, `serde_json`, …), `crate-type`, and release profile. See the comment on the `ureq` dependency for why its feature set is deliberately minimal. |
 | `Cargo.lock` | Pinned exact dependency versions. Committed for reproducible builds. |
 | `build.rs` | Build script that sets platform-specific linker flags so undefined NGINX symbols are resolved at module-load time rather than at link time. |
 | `Dockerfile.testing` | CI/dev image used by `make rust-lint` and `make rust-unit-test`. Not used to produce the shipped `.so`. |
@@ -208,7 +213,7 @@ these targets.)
 | --------- | -------------- |
 | `make rust-fmt` | Runs `cargo fmt` to auto-format the code (formatting is enforced). |
 | `make rust-lint` | Runs `clippy` (Rust's linter) with `-D warnings`, so any warning fails the build. Uses `Dockerfile.testing`. |
-| `make rust-unit-test` | Runs the unit tests with coverage and writes `lcov.info` into `coverage/` (gitignored). Uses `Dockerfile.testing`. |
+| `make rust-unit-test` | Runs the unit tests (`cargo test --lib`). Uses `Dockerfile.testing`. |
 
 `make dev-all` runs `rust-fmt` and `rust-unit-test` alongside the Go and NJS checks.
 
@@ -260,3 +265,28 @@ That path is exactly what `load_module modules/libai_guardrails.so;` resolves to
   you change directive names or config fields here, remember to update the corresponding Go layers
   (`servers_template.go`, `main_config_template.go`, and the dataplane/graph types) so the generated
   config and the module stay in sync.
+
+- **`ureq` feature set is deliberately minimal (license/dependency hygiene).** The `ureq` dependency
+  in `Cargo.toml` uses `default-features = false` with only `rustls-no-provider`, `_ring`,
+  `platform-verifier`, `json`, and `gzip`. Do **not** enable the `cookies` feature (or switch to a
+  client that requires `url`): `url` pulls in `idna` → the ICU4X (`icu_*`) crate stack, which is
+  licensed `Unicode-3.0` and is rejected by the `dependency-review` CI workflow. Similarly,
+  `platform-verifier` is used instead of a bundled-roots feature so that no `webpki-roots` /
+  `webpki-root-certs` crate is *compiled*.
+
+- **Phantom entries in `Cargo.lock` are expected.** Cargo records every *optional* dependency a crate
+  declares in `Cargo.lock`, even when the feature is disabled and the crate is never compiled. As a
+  result `Cargo.lock` still lists `cookie_store`, `url`, `idna`, the `icu_*` stack, and
+  `webpki-root-certs` (declared optional by `ureq` / `rustls-platform-verifier`). Confirm they are not
+  actually built with `cargo tree` (they will be absent). Because GitHub's dependency graph is
+  generated from the raw lockfile, these phantom entries are still reported to `dependency-review`;
+  they are allowlisted in the shared `nginx/k8s-common` dependency-review config on the grounds that
+  they are never compiled or shipped in `libai_guardrails.so`. `unicode-ident` (`... AND Unicode-3.0`,
+  via `proc-macro2`/`serde_derive`) is likewise allowlisted as an unavoidable build-time proc-macro
+  dependency.
+
+- **HTTP client unit tests use a std-only mock.** `src/client.rs` tests spin up a one-shot
+  `std::net::TcpListener` HTTP/1.1 server on an ephemeral loopback port instead of using a
+  mock-server crate. This avoids adding a dev-dependency (the previous `httpmock` dragged in
+  license-incompatible transitive crates). If you add client tests, extend the `mock_once` helper
+  rather than reintroducing a mock-server dependency.

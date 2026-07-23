@@ -259,7 +259,7 @@ rust-fmt: ## Run rustfmt against the ai-guardrails Rust module
 		rust:${RUST_VERSION} \
 		/bin/bash -c "rustup component add rustfmt && cargo fmt"
 
-# Shared build/test environment image (toolchain + nginx source + cargo-llvm-cov).
+# Shared build/test environment image (toolchain + nginx source).
 # Built once and reused by rust-lint and rust-unit-test. Because it contains no
 # module source and no test execution, caching it is safe: lint/tests run via
 # `docker run` against bind-mounted source below and can never be cache-skipped.
@@ -278,9 +278,8 @@ rust-lint: rust-test-image ## Run clippy against the ai-guardrails Rust module
 	$(RUST_DOCKER_RUN) cargo clippy --lib --tests -- -D warnings
 
 .PHONY: rust-unit-test
-rust-unit-test: rust-test-image ## Run unit tests with coverage for the ai-guardrails Rust module
-	$(RUST_DOCKER_RUN) cargo llvm-cov --lcov --output-path /modules/coverage/lcov.info
-	@test -s $(RUST_DIR)/coverage/lcov.info || { echo "ERROR: coverage/lcov.info missing or empty — tests may not have run"; exit 1; }
+rust-unit-test: rust-test-image ## Run unit tests for the ai-guardrails Rust module
+	$(RUST_DOCKER_RUN) cargo test --lib
 
 .PHONY: lint-helm
 lint-helm: ## Run the helm chart linter

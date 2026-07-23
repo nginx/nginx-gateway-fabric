@@ -59,7 +59,9 @@ RUN --mount=type=secret,id=nginx-repo.crt,dst=/etc/apk/cert.pem,mode=0644 \
        fi \
     && apk add --no-cache nginx-plus nginx-plus-module-njs nginx-plus-module-otel nginx-agent=${NGINX_AGENT_VERSION#v}
 
-RUN apk add --no-cache bash \
+# ca-certificates provides the system trust store used by the AI Guardrails
+# module's HTTPS client (rustls verifies against the OS/native roots).
+RUN apk add --no-cache bash ca-certificates \
     && mkdir -p /usr/lib/nginx/modules \
     # forward request and error logs to docker log collector
     && ln -sf /dev/stdout /var/log/nginx/access.log \

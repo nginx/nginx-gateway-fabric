@@ -77,8 +77,10 @@ RUN --mount=type=bind,from=nginx-files,src=nginx-plus.repo,target=/etc/yum.repos
     rpm --import /tmp/nginx_signing.key \
     # Install c-ares from the dependencies image (contains required libs)
     && rpm -Uvh /ubi-bin/c-ares-*.rpm \
-    # Create nginx user with consistent UID/GID
-    && microdnf --nodocs install -y shadow-utils \
+    # Create nginx user with consistent UID/GID.
+    # ca-certificates provides the system trust store used by the AI Guardrails
+    # module's HTTPS client (rustls verifies against the OS/native roots).
+    && microdnf --nodocs install -y shadow-utils ca-certificates \
     && groupadd -g 1001 nginx \
     && useradd -r -u 101 -g nginx -s /sbin/nologin -d /var/cache/nginx nginx \
     # Install NGINX Plus and modules (njs, otel)

@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.23
 # Build/test *environment* image for the ai-guardrails Rust module.
-# It contains the toolchain, clang, cargo-llvm-cov, and a configured nginx
+# It contains the toolchain, clang, and a configured nginx
 # source tree, but NO module source and NO test/lint execution. Lint and tests
 # run via `docker run` against bind-mounted source (see the rust-* Makefile
 # targets), so execution is never cache-skipped.
@@ -26,8 +26,6 @@ RUN apk add --no-cache musl-dev protobuf-dev openssl-dev perl make \
     pcre2-dev zlib-dev linux-headers clang20-dev
 
 RUN rustup component add clippy
-
-RUN cargo install cargo-llvm-cov
 
 # renovate: datasource=github-tags depName=nginx/nginx extractVersion=^release-(?<version>.+)$
 ARG NGINX_VERSION=1.30.0
