@@ -69,3 +69,8 @@ docs/api/content.md
 
 # Test tgz files for WAF bundles
 tests/**/*.tgz
+
+# Rust build artifacts
+**/target/
+# Rust coverage output
+internal/controller/nginx/modules/rust/ai-guardrails/coverage/

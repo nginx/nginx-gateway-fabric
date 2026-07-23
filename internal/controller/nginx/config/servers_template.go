@@ -173,6 +173,17 @@ server {
         auth_basic_user_file {{ $l.AuthBasic.File }};
         {{- end }}
 
+        {{- if $l.Guardrails }}
+        guardrails_filter {{ $l.Guardrails.Filter }};
+        guardrails_api_url {{ $l.Guardrails.APIURL }};
+        {{- if $l.Guardrails.APITokenFile }}
+        guardrails_api_token_file {{ $l.Guardrails.APITokenFile }};
+        {{- end }}
+        {{- if $l.Guardrails.TimeoutMS }}
+        guardrails_timeout_ms {{ $l.Guardrails.TimeoutMS }};
+        {{- end }}
+        {{- end }}
+
         {{- if $l.AuthOIDC }}
         {{- if $l.AuthOIDC.ProviderName }}
         auth_oidc {{ $l.AuthOIDC.ProviderName }};

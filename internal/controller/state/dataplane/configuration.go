@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-logr/logr"
 	discoveryV1 "k8s.io/api/discovery/v1"
@@ -159,6 +160,7 @@ func BuildConfiguration(
 		SSLKeyPairs:          buildSSLKeyPairs(g.ReferencedSecrets, gateway),
 		AuthSecrets:          buildAuthSecrets(g.AuthenticationFilters, g.ReferencedSecrets),
 		Telemetry:            buildTelemetry(g, gateway),
+		GuardrailsEnabled:    guardrailsEnabled(httpServers, sslServers),
 		BaseHTTPConfig:       baseHTTPConfig,
 		BaseStreamConfig:     baseStreamConfig,
 		Logging:              buildLogging(gateway),
@@ -172,6 +174,8 @@ func BuildConfiguration(
 		CertBundles:          certBundles,
 		WAF:                  buildWAF(gateway),
 	}
+
+	maps.Copy(config.AuthSecrets, buildGuardrailsAuthSecrets(gateway, g.Routes))
 
 	return config
 }
@@ -1536,6 +1540,8 @@ func (hpr *hostPathRules) upsertRoute(
 
 		pols := buildPolicies(gateway, route.Policies)
 
+		guardrails := convertGraphGuardrails(route)
+
 		for _, h := range hostnames {
 			for _, m := range rule.Matches {
 				path := getPath(m.Path)
@@ -1569,6 +1575,7 @@ func (hpr *hostPathRules) upsertRoute(
 					BackendGroup: backendGroup,
 					Filters:      filters,
 					Match:        convertMatch(m),
+					Guardrails:   guardrails,
 				})
 
 				hpr.rulesPerHost[h][key] = hostRule
@@ -2020,6 +2027,117 @@ func GenerateAuthBasicFileID(namespace, name string) AuthFileID {
 // GenerateAuthJWTFileID is used to generate IDs for jwt auth files.
 func GenerateAuthJWTFileID(namespace, name string) AuthFileID {
 	return AuthFileID(fmt.Sprintf("jwt_auth_%s_%s", namespace, name))
+}
+
+// GenerateGuardrailsTokenFileID is used to generate IDs for guardrails ExtProcess auth token files.
+func GenerateGuardrailsTokenFileID(namespace, name string) AuthFileID {
+	return AuthFileID(fmt.Sprintf("guardrails_token_%s_%s", namespace, name))
+}
+
+// convertGraphGuardrails converts a route's effective PayloadProcessor state into a dataplane
+// GuardrailsConfig. Returns nil when the route has no valid, resolved PayloadProcessor.
+func convertGraphGuardrails(route *graph.L7Route) *GuardrailsConfig {
+	if route == nil {
+		return nil
+	}
+
+	policy := route.EffectivePayloadProcessor
+	if policy == nil || !policy.Valid || policy.PayloadProcessorState == nil {
+		return nil
+	}
+
+	state := policy.PayloadProcessorState
+	if state.APIURL == "" {
+		return nil
+	}
+
+	gc := &GuardrailsConfig{
+		Filter:    "on",
+		APIURL:    state.APIURL,
+		TimeoutMS: convertDurationToMS(state.Timeout),
+	}
+
+	if state.AuthTokenSecret != nil {
+		gc.APITokenAuthFileID = GenerateGuardrailsTokenFileID(
+			state.AuthTokenSecret.Namespace,
+			state.AuthTokenSecret.Name,
+		)
+	}
+
+	return gc
+}
+
+// convertDurationToMS converts an ngf API Duration (e.g. "30s", "500ms", "5m", or a bare number of
+// seconds) into milliseconds. Returns nil when the duration is nil or cannot be parsed.
+func convertDurationToMS(d *ngfAPIv1alpha1.Duration) *int64 {
+	if d == nil {
+		return nil
+	}
+
+	s := strings.TrimSpace(string(*d))
+	if s == "" {
+		return nil
+	}
+
+	// A value without a suffix is seconds (per the Duration API contract).
+	if r := rune(s[len(s)-1]); r >= '0' && r <= '9' {
+		s += "s"
+	}
+
+	parsed, err := time.ParseDuration(s)
+	if err != nil {
+		return nil
+	}
+
+	ms := parsed.Milliseconds()
+	return &ms
+}
+
+// buildGuardrailsAuthSecrets collects the resolved ExtProcess auth token files for all routes attached
+// to the gateway, keyed by their AuthFileID so they are written to the NGINX secrets directory.
+func buildGuardrailsAuthSecrets(
+	gateway *graph.Gateway,
+	routes map[graph.RouteKey]*graph.L7Route,
+) map[AuthFileID]AuthFileData {
+	tokens := make(map[AuthFileID]AuthFileData)
+	if gateway == nil {
+		return tokens
+	}
+
+	for _, route := range routes {
+		policy := route.EffectivePayloadProcessor
+		if policy == nil || !policy.Valid || policy.PayloadProcessorState == nil {
+			continue
+		}
+
+		state := policy.PayloadProcessorState
+		if state.AuthTokenSecret == nil || len(state.ResolvedAuthToken) == 0 {
+			continue
+		}
+
+		id := GenerateGuardrailsTokenFileID(state.AuthTokenSecret.Namespace, state.AuthTokenSecret.Name)
+		tokens[id] = state.ResolvedAuthToken
+	}
+
+	return tokens
+}
+
+// guardrailsEnabled reports whether any location across the given servers has a Guardrails config,
+// which requires the ai-guardrails NGINX module to be loaded.
+func guardrailsEnabled(serverGroups ...[]VirtualServer) bool {
+	for _, servers := range serverGroups {
+		for _, s := range servers {
+			for _, pr := range s.PathRules {
+				for _, mr := range pr.MatchRules {
+					if mr.Guardrails != nil {
+						return true
+					}
+				}
+			}
+		}
+	}
+
+	return false
 }
 
 // buildOIDCProviderFromAuthenticationFilters builds the OIDC provider configs from the processed

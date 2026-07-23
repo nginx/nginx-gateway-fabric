@@ -7,6 +7,39 @@ ADD --link --chown=101:1001 https://nginx.org/keys/nginx_signing.key nginx_signi
 ADD --link --chown=101:1001 build/ubi/repos/agent.repo agent.repo
 ADD --link --chown=101:1001 build/ubi/repos/app-protect.repo app-protect.repo
 
+# Configure nginx source for bindgen to generate Rust FFI bindings.
+# glibc-based stages are required for ABI compatibility with UBI's runtime libraries.
+# NGINX Plus R37 is based on NGINX OSS 1.27.5; use that version for ABI compatibility.
+FROM debian:bookworm-slim AS nginx-source
+
+ARG NGINX_VERSION=1.27.5
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc make libssl-dev libpcre2-dev zlib1g-dev wget ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN wget -q https://nginx.org/download/nginx-${NGINX_VERSION}.tar.gz \
+    && tar xzf nginx-${NGINX_VERSION}.tar.gz
+
+RUN cd nginx-${NGINX_VERSION} && ./configure --with-compat --with-http_ssl_module
+
+# Build the ai-guardrails Rust module against the configured nginx source.
+FROM rust:slim-bookworm AS guardrails-builder
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    clang libssl-dev libpcre2-dev zlib1g-dev make \
+    && rm -rf /var/lib/apt/lists/*
+
+ARG NGINX_VERSION=1.27.5
+
+COPY --from=nginx-source /nginx-${NGINX_VERSION} /nginx-src
+
+ENV NGINX_SOURCE_DIR=/nginx-src
+
+WORKDIR /build
+COPY internal/controller/nginx/modules/rust/ai-guardrails/ ./
+RUN cargo build --release
+
 FROM ghcr.io/nginx/dependencies/nginx-ubi:ubi10@sha256:0d557f564568c9886bce6ff30563887548e6785ce588be6e9821d89a8b60a2b5 AS ubi10-packages
 
 FROM registry.access.redhat.com/ubi10/ubi-minimal:10.2 AS ubi-nginx-plus
@@ -76,6 +109,7 @@ RUN chown -R 101:1001 /etc/nginx /var/cache/nginx
 # Copy configuration files and scripts
 COPY build/entrypoint.sh /agent/entrypoint.sh
 COPY ${NJS_DIR}/ /usr/lib64/nginx/modules/njs/
+COPY --from=guardrails-builder /build/target/release/libai_guardrails.so /usr/lib64/nginx/modules/libai_guardrails.so
 COPY ${NGINX_CONF_DIR}/nginx.conf /etc/nginx/nginx.conf
 COPY ${NGINX_CONF_DIR}/grpc-error-locations.conf /etc/nginx/grpc-error-locations.conf
 COPY ${NGINX_CONF_DIR}/grpc-error-pages.conf /etc/nginx/grpc-error-pages.conf

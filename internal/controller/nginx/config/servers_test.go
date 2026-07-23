@@ -8825,3 +8825,71 @@ func TestUpdateLocationProxySettings_Headers(t *testing.T) {
 		})
 	}
 }
+
+//nolint:gosec // Tests with mock APIURL and APITokenFile
+func TestUpdateLocationGuardrails(t *testing.T) {
+	t.Parallel()
+
+	baseLocation := http.Location{
+		Path: "/",
+		Type: http.ExternalLocationType,
+	}
+
+	timeout := int64(30000)
+
+	tests := []struct {
+		guardrails *dataplane.GuardrailsConfig
+		name       string
+		expected   http.Location
+	}{
+		{
+			name:       "nil guardrails config",
+			guardrails: nil,
+			expected:   baseLocation,
+		},
+		{
+			name: "guardrails with token file and timeout",
+			guardrails: &dataplane.GuardrailsConfig{
+				Filter:             "on",
+				APIURL:             "http://ext-svc.ns1.svc.cluster.local:9000",
+				APITokenAuthFileID: dataplane.GenerateGuardrailsTokenFileID("ns1", "token-secret"),
+				TimeoutMS:          &timeout,
+			},
+			expected: http.Location{
+				Path: "/",
+				Type: http.ExternalLocationType,
+				Guardrails: &http.GuardrailsConfig{
+					Filter:       "on",
+					APIURL:       "http://ext-svc.ns1.svc.cluster.local:9000",
+					APITokenFile: "/etc/nginx/secrets/guardrails_token_ns1_token-secret",
+					TimeoutMS:    &timeout,
+				},
+			},
+		},
+		{
+			name: "guardrails without token file",
+			guardrails: &dataplane.GuardrailsConfig{
+				Filter: "on",
+				APIURL: "http://ext-svc.ns1.svc.cluster.local:9000",
+			},
+			expected: http.Location{
+				Path: "/",
+				Type: http.ExternalLocationType,
+				Guardrails: &http.GuardrailsConfig{
+					Filter: "on",
+					APIURL: "http://ext-svc.ns1.svc.cluster.local:9000",
+				},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			result := updateLocationGuardrails(baseLocation, test.guardrails)
+			g.Expect(result).To(Equal(test.expected))
+		})
+	}
+}

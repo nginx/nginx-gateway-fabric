@@ -3030,6 +3030,122 @@ func TestBuildConfiguration(t *testing.T) {
 	}
 }
 
+func TestBuildConfiguration_Guardrails(t *testing.T) {
+	t.Parallel()
+
+	fakeResolver := &resolverfakes.FakeServiceResolver{}
+	fakeResolver.ResolveReturns(fooEndpoints, nil)
+
+	tokenSecretNsName := types.NamespacedName{Namespace: "test", Name: "guardrails-token"}
+
+	guardrailsPolicy := func() *graph.Policy {
+		return &graph.Policy{
+			Valid: true,
+			PayloadProcessorState: &graph.PolicyPayloadProcessorState{
+				APIURL:            "http://ext-svc.test.svc.cluster.local:9000",
+				Timeout:           helpers.GetPointer[ngfAPIv1alpha1.Duration]("30s"),
+				AuthTokenSecret:   &tokenSecretNsName,
+				ResolvedAuthToken: []byte("tok"),
+			},
+		}
+	}
+
+	// buildGraph creates a graph with a single HTTP listener and route, optionally attaching a
+	// PayloadProcessor policy to that route as its effective processor.
+	buildGraph := func(processor *graph.Policy) *graph.Graph {
+		hr, _, route := createTestResources(
+			"hr-guardrails",
+			"foo.example.com",
+			"listener-80-1",
+			pathAndType{path: "/", pathType: prefix},
+		)
+		route.EffectivePayloadProcessor = processor
+
+		return getModifiedGraph(func(g *graph.Graph) *graph.Graph {
+			gw := g.Gateways[gatewayNsName]
+			gw.Listeners = append(gw.Listeners, &graph.Listener{
+				Name:        "listener-80-1",
+				GatewayName: gatewayNsName,
+				Source:      listener80,
+				Valid:       true,
+				Routes: map[graph.RouteKey]*graph.L7Route{
+					graph.CreateRouteKey(hr): route,
+				},
+			})
+			g.Routes = map[graph.RouteKey]*graph.L7Route{
+				graph.CreateRouteKey(hr): route,
+			}
+			return g
+		})
+	}
+
+	// findGuardrails returns the Guardrails config on the first MatchRule of the first HTTP server's
+	// first path rule, or nil.
+	findGuardrails := func(conf Configuration) *GuardrailsConfig {
+		for _, s := range conf.HTTPServers {
+			for _, pr := range s.PathRules {
+				for _, mr := range pr.MatchRules {
+					if mr.Guardrails != nil {
+						return mr.Guardrails
+					}
+				}
+			}
+		}
+		return nil
+	}
+
+	t.Run("route with effective processor enables guardrails and wires auth secret", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+
+		gr := buildGraph(guardrailsPolicy())
+
+		result := BuildConfiguration(
+			t.Context(),
+			logr.Discard(),
+			gr,
+			gr.Gateways[gatewayNsName],
+			fakeResolver,
+			false,
+		)
+
+		g.Expect(result.GuardrailsEnabled).To(BeTrue())
+
+		tokenFileID := GenerateGuardrailsTokenFileID(tokenSecretNsName.Namespace, tokenSecretNsName.Name)
+		g.Expect(result.AuthSecrets).To(HaveKeyWithValue(tokenFileID, AuthFileData("tok")))
+
+		gc := findGuardrails(result)
+		g.Expect(gc).ToNot(BeNil())
+		g.Expect(gc.Filter).To(Equal("on"))
+		g.Expect(gc.APIURL).To(Equal("http://ext-svc.test.svc.cluster.local:9000"))
+		g.Expect(gc.APITokenAuthFileID).To(Equal(tokenFileID))
+		g.Expect(gc.TimeoutMS).ToNot(BeNil())
+		g.Expect(*gc.TimeoutMS).To(Equal(int64(30000)))
+	})
+
+	t.Run("route without processor leaves guardrails disabled", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+
+		gr := buildGraph(nil)
+
+		result := BuildConfiguration(
+			t.Context(),
+			logr.Discard(),
+			gr,
+			gr.Gateways[gatewayNsName],
+			fakeResolver,
+			false,
+		)
+
+		g.Expect(result.GuardrailsEnabled).To(BeFalse())
+		g.Expect(findGuardrails(result)).To(BeNil())
+
+		tokenFileID := GenerateGuardrailsTokenFileID(tokenSecretNsName.Namespace, tokenSecretNsName.Name)
+		g.Expect(result.AuthSecrets).ToNot(HaveKey(tokenFileID))
+	})
+}
+
 func TestBuildConfiguration_Plus(t *testing.T) {
 	t.Parallel()
 	fooEndpoints := []resolver.Endpoint{

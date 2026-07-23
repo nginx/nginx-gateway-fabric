@@ -4,6 +4,8 @@ SELF_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 CHART_DIR = $(SELF_DIR)charts/nginx-gateway-fabric
 NGINX_CONF_DIR = internal/controller/nginx/conf
 NJS_DIR = internal/controller/nginx/modules/src
+RUST_DIR = internal/controller/nginx/modules/rust/ai-guardrails
+RUST_TEST_IMAGE = ai-guardrails-test
 KIND_CONFIG_FILE = $(SELF_DIR)config/cluster/kind-cluster.yaml
 NGINX_DOCKER_BUILD_PLUS_ARGS = --secret id=nginx-repo.crt,src=$(SELF_DIR)nginx-repo.crt --secret id=nginx-repo.key,src=$(SELF_DIR)nginx-repo.key
 NGINX_DOCKER_BUILD_NAP_WAF_ARGS = --build-arg INCLUDE_NAP_WAF=true
@@ -40,6 +42,8 @@ NODE_VERSION = 24
 CHART_TESTING_VERSION = v3.14.0
 # renovate: datasource=github-tags depName=dadav/helm-schema
 HELM_SCHEMA_VERSION = 0.23.4
+# renovate: datasource=docker depName=rust
+RUST_VERSION = 1.94
 
 # variables that can be overridden by the user
 PREFIX ?= nginx-gateway-fabric## The name of the NGF image. For example, nginx-gateway-fabric
@@ -248,6 +252,36 @@ njs-unit-test: ## Run unit tests for the njs httpmatches module
 		node:${NODE_VERSION} \
 		/bin/bash -c "npm ci && npm test && npm run clean"
 
+.PHONY: rust-fmt
+rust-fmt: ## Run rustfmt against the ai-guardrails Rust module
+	docker run --rm -w /modules \
+		-v $(CURDIR)/$(RUST_DIR):/modules/ \
+		rust:${RUST_VERSION} \
+		/bin/bash -c "rustup component add rustfmt && cargo fmt"
+
+# Shared build/test environment image (toolchain + nginx source + cargo-llvm-cov).
+# Built once and reused by rust-lint and rust-unit-test. Because it contains no
+# module source and no test execution, caching it is safe: lint/tests run via
+# `docker run` against bind-mounted source below and can never be cache-skipped.
+RUST_DOCKER_RUN = docker run --rm -w /modules \
+	-v $(CURDIR)/$(RUST_DIR):/modules/ \
+	-v ai-guardrails-cargo-registry:/usr/local/cargo/registry \
+	-e CARGO_TARGET_DIR=/tmp/target \
+	$(RUST_TEST_IMAGE)
+
+.PHONY: rust-test-image
+rust-test-image: ## Build the ai-guardrails Rust lint/test environment image
+	docker build -f $(RUST_DIR)/Dockerfile.testing --target base -t $(RUST_TEST_IMAGE) $(RUST_DIR)
+
+.PHONY: rust-lint
+rust-lint: rust-test-image ## Run clippy against the ai-guardrails Rust module
+	$(RUST_DOCKER_RUN) cargo clippy --lib --tests -- -D warnings
+
+.PHONY: rust-unit-test
+rust-unit-test: rust-test-image ## Run unit tests with coverage for the ai-guardrails Rust module
+	$(RUST_DOCKER_RUN) cargo llvm-cov --lcov --output-path /modules/coverage/lcov.info
+	@test -s $(RUST_DIR)/coverage/lcov.info || { echo "ERROR: coverage/lcov.info missing or empty — tests may not have run"; exit 1; }
+
 .PHONY: lint-helm
 lint-helm: ## Run the helm chart linter
 	docker run --pull always --rm -v $(CURDIR):/nginx-gateway-fabric -w /nginx-gateway-fabric quay.io/helmpack/chart-testing:$(CHART_TESTING_VERSION) ct lint --config .ct.yaml
@@ -344,4 +378,4 @@ debug-install-local-build: debug-build-images debug-load-images helm-install-loc
 debug-install-local-build-with-plus: debug-build-images-with-plus debug-load-images-with-plus helm-install-local-with-plus ## Install NGF with NGINX Plus from local build using debug NGF binary on configured kind cluster.
 
 .PHONY: dev-all
-dev-all: deps fmt njs-fmt vet lint unit-test njs-unit-test ## Run all the development checks
+dev-all: deps fmt njs-fmt rust-fmt vet lint unit-test njs-unit-test rust-unit-test ## Run all the development checks
