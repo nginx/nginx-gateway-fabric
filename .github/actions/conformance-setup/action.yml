@@ -1,0 +1,166 @@
+name: Setup Conformance Test Environment
+description: >
+  Builds the NGF, NGINX, and conformance test-runner Docker images, provisions
+  a kind cluster, loads the images into it, and installs NGF via Helm. Used to
+  share setup between the standard and inference conformance test jobs so they
+  can run in parallel without duplicating step definitions.
+
+inputs:
+  image:
+    description: Image variant to build (nginx or plus)
+    required: true
+  build-os:
+    description: Build OS suffix (e.g. ubi), empty for default
+    required: false
+    default: ''
+  k8s-version:
+    description: kind node image k8s version
+    required: true
+  cluster-name:
+    description: Name to give the kind cluster
+    required: true
+  production-release:
+    description: Whether this is a production release ('true'/'false')
+    required: false
+    default: 'false'
+  release_version:
+    description: Release version, used for docker metadata tagging
+    required: false
+    default: ''
+  nginx-crt:
+    description: NGINX Plus repo certificate (required for plus images)
+    required: false
+    default: ''
+  nginx-key:
+    description: NGINX Plus repo key (required for plus images)
+    required: false
+    default: ''
+  plus-license:
+    description: NGINX Plus exception reporting license JWT (required for plus images)
+    required: false
+    default: ''
+
+outputs:
+  ngf-version:
+    description: The resolved NGF docker metadata version tag
+    value: ${{ steps.ngf-meta.outputs.version }}
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Golang Environment
+      uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      with:
+        go-version: stable
+
+    - name: Set GOPATH
+      shell: bash
+      run: echo "GOPATH=$(go env GOPATH)" >> $GITHUB_ENV
+
+    - name: Docker Buildx
+      uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+
+    - name: NGF Docker meta
+      id: ngf-meta
+      uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+      with:
+        images: |
+          name=ghcr.io/nginx/nginx-gateway-fabric
+        tags: |
+          type=semver,pattern={{version}},suffix=${{ inputs.build-os != '' && format('-{0}', inputs.build-os) || '' }}
+          type=edge,suffix=${{ inputs.build-os != '' && format('-{0}', inputs.build-os) || '' }}
+          type=schedule,suffix=${{ inputs.build-os != '' && format('-{0}', inputs.build-os) || '' }}
+          type=ref,event=pr,suffix=${{ inputs.build-os != '' && format('-{0}', inputs.build-os) || '' }}
+          type=ref,event=branch,suffix=-rc${{ inputs.build-os != '' && format('-{0}', inputs.build-os) || '' }},enable=${{ startsWith(github.ref, 'refs/heads/release') && inputs.production-release != 'true' }}
+          type=raw,value=${{ inputs.release_version }},enable=${{ inputs.production-release == 'true' && inputs.release_version != '' }},suffix=${{ inputs.build-os != '' && format('-{0}', inputs.build-os) || '' }}
+
+    - name: NGINX Docker meta
+      id: nginx-meta
+      uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+      with:
+        images: |
+          name=ghcr.io/nginx/nginx-gateway-fabric/${{ inputs.image == 'plus' && 'nginx-plus' || inputs.image }}
+        tags: |
+          type=semver,pattern={{version}},suffix=${{ inputs.build-os != '' && format('-{0}', inputs.build-os) || '' }}
+          type=edge,suffix=${{ inputs.build-os != '' && format('-{0}', inputs.build-os) || '' }}
+          type=schedule,suffix=${{ inputs.build-os != '' && format('-{0}', inputs.build-os) || '' }}
+          type=ref,event=pr,suffix=${{ inputs.build-os != '' && format('-{0}', inputs.build-os) || '' }}
+          type=ref,event=branch,suffix=-rc${{ inputs.build-os != '' && format('-{0}', inputs.build-os) || '' }},enable=${{ startsWith(github.ref, 'refs/heads/release') && inputs.production-release != 'true' }}
+          type=raw,value=${{ inputs.release_version }},enable=${{ inputs.production-release == 'true' && inputs.release_version != '' }},suffix=${{ inputs.build-os != '' && format('-{0}', inputs.build-os) || '' }}
+
+    - name: Build binary
+      uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
+      with:
+        version: v2.17.0 # renovate: datasource=github-tags depName=goreleaser/goreleaser
+        args: build --single-target --snapshot --clean
+      env:
+        TELEMETRY_ENDPOINT: "" # disables sending telemetry
+        TELEMETRY_ENDPOINT_INSECURE: "false"
+
+    - name: Build NGF Docker Image
+      uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+      with:
+        file: build/Dockerfile
+        tags: ${{ steps.ngf-meta.outputs.tags }}
+        context: "."
+        target: goreleaser
+        load: true
+        cache-from: type=gha,scope=ngf
+        pull: true
+
+    - name: Build NGINX Docker Image
+      uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+      with:
+        file: build${{ inputs.build-os != '' && format('/{0}', inputs.build-os) || '' }}/Dockerfile${{ inputs.image == 'nginx' && '.nginx' || '' }}${{ inputs.image == 'plus' && '.nginxplus' || '' }}
+        tags: ${{ steps.nginx-meta.outputs.tags }}
+        context: "."
+        load: true
+        cache-from: type=gha,scope=${{ inputs.image }}${{ inputs.build-os != '' && format('-{0}', inputs.build-os) || '' }}
+        pull: true
+        build-args: |
+          NJS_DIR=internal/controller/nginx/modules/src
+          NGINX_CONF_DIR=internal/controller/nginx/conf
+          BUILD_AGENT=gha
+        secrets: |
+          ${{ contains(inputs.image, 'plus') && format('"nginx-repo.crt={0}"', inputs.nginx-crt) || '' }}
+          ${{ contains(inputs.image, 'plus') && format('"nginx-repo.key={0}"', inputs.nginx-key) || '' }}
+
+    - name: Update Test Go Modules
+      if: ${{ github.event_name == 'schedule' }}
+      shell: bash
+      run: make update-go-modules
+      working-directory: ./tests
+
+    - name: Build Test Docker Image
+      uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+      with:
+        file: tests/conformance/Dockerfile
+        tags: conformance-test-runner:${{ github.sha }}
+        context: "."
+        load: true
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        pull: true
+
+    - name: Deploy Kubernetes
+      id: k8s
+      shell: bash
+      run: |
+        kind create cluster --name ${{ inputs.cluster-name }} --image=kindest/node:${{ inputs.k8s-version }}
+        kind load docker-image ${{ join(fromJSON(steps.ngf-meta.outputs.json).tags, ' ') }} ${{ join(fromJSON(steps.nginx-meta.outputs.json).tags, ' ') }} --name ${{ inputs.cluster-name }}
+
+    - name: Setup license file for plus
+      if: ${{ inputs.image == 'plus' }}
+      shell: bash
+      env:
+        PLUS_LICENSE: ${{ inputs.plus-license }}
+      run: echo "${PLUS_LICENSE}" > license.jwt
+
+    - name: Setup conformance tests
+      shell: bash
+      run: |
+        ngf_prefix=ghcr.io/nginx/nginx-gateway-fabric
+        ngf_tag=${{ steps.ngf-meta.outputs.version }}
+        if [ "${{ github.event_name }}" == "schedule" ]; then export GW_API_VERSION=main; fi
+        make helm-install-local${{ inputs.image == 'plus' && '-with-plus' || ''}} PREFIX=${ngf_prefix} TAG=${ngf_tag}
+      working-directory: ./tests

@@ -8,6 +8,7 @@ import (
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/policiesfakes"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
 
 func TestExecuteMainConfig_Telemetry(t *testing.T) {
@@ -278,6 +279,45 @@ func TestExecuteMainConfig_WorkerProcesses(t *testing.T) {
 			g.Expect(res).To(HaveLen(1))
 			g.Expect(res[0].dest).To(Equal(mainIncludesConfigFile))
 			g.Expect(string(res[0].data)).To(ContainSubstring(test.expWorkerProcess))
+		})
+	}
+}
+
+func TestExecuteMainConfig_WorkerRlimitNofile(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		expDirective string
+		conf         dataplane.Configuration
+		expOmitted   bool
+	}{
+		{
+			name:         "custom worker_rlimit_nofile",
+			conf:         dataplane.Configuration{WorkerRlimitNofile: helpers.GetPointer[int32](3124)},
+			expDirective: "worker_rlimit_nofile 3124;",
+		},
+		{
+			name:       "unset worker_rlimit_nofile is omitted",
+			conf:       dataplane.Configuration{},
+			expOmitted: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			res := executeMainConfig(test.conf, &policiesfakes.FakeGenerator{})
+			g.Expect(res).To(HaveLen(1))
+			g.Expect(res[0].dest).To(Equal(mainIncludesConfigFile))
+
+			if test.expOmitted {
+				g.Expect(string(res[0].data)).ToNot(ContainSubstring("worker_rlimit_nofile"))
+			} else {
+				g.Expect(string(res[0].data)).To(ContainSubstring(test.expDirective))
+			}
 		})
 	}
 }

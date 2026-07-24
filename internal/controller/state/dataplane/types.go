@@ -51,6 +51,9 @@ type Configuration struct {
 	Logging Logging
 	// WorkerProcesses configures the number of NGINX worker processes ("auto" or a positive integer).
 	WorkerProcesses string
+	// WorkerRlimitNofile configures the worker_rlimit_nofile directive in the main context.
+	// When nil, the directive is omitted and NGINX inherits the OS limit.
+	WorkerRlimitNofile *int32
 	// WAF defines the WAF configuration.
 	WAF WAFConfig
 	// NginxPlus specifies NGINX Plus additional settings.
@@ -249,6 +252,12 @@ type SSL struct {
 	Protocols string
 	// Ciphers specifies the SSL/TLS ciphers to use.
 	Ciphers string
+	// SessionCache specifies the value for the ssl_session_cache directive. Empty means omit.
+	SessionCache string
+	// SessionTimeout specifies the value for the ssl_session_timeout directive. Empty means omit.
+	SessionTimeout string
+	// EcdhCurve specifies the value for the ssl_ecdh_curve directive. Empty means omit.
+	EcdhCurve string
 	// ClientCertBundleID is the ID of the client certificate bundle for client verification.
 	ClientCertBundleID CertBundleID
 	// VerifyClient specifies the client certificate verification mode.

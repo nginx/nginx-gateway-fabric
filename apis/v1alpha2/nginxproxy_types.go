@@ -116,6 +116,15 @@ type NginxProxySpec struct {
 	// +kubebuilder:validation:Minimum=1
 	// +kubebuilder:validation:Maximum=1024
 	WorkerProcesses *int32 `json:"workerProcesses,omitempty"`
+	// WorkerRlimitNofile changes the limit on the maximum number of open files (RLIMIT_NOFILE)
+	// for worker processes. Used to raise the limit without restarting the main process.
+	// When unset, NGINX inherits the limit from the operating system.
+	// NGINX directive: https://nginx.org/en/docs/ngx_core_module.html#worker_rlimit_nofile
+	//
+	// +optional
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=1048576
+	WorkerRlimitNofile *int32 `json:"workerRlimitNofile,omitempty"`
 	// DNSResolver specifies the DNS resolver configuration for external name resolution.
 	// This enables support for routing to ExternalName Services.
 	//

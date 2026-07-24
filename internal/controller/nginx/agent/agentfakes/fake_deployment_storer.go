@@ -21,17 +21,17 @@ type FakeDeploymentStorer struct {
 	getReturnsOnCall map[int]struct {
 		result1 *agent.Deployment
 	}
-	GetOrStoreStub        func(context.Context, types.NamespacedName, string) *agent.Deployment
-	getOrStoreMutex       sync.RWMutex
-	getOrStoreArgsForCall []struct {
+	LoadOrStoreStub        func(context.Context, types.NamespacedName, string) *agent.Deployment
+	loadOrStoreMutex       sync.RWMutex
+	loadOrStoreArgsForCall []struct {
 		arg1 context.Context
 		arg2 types.NamespacedName
 		arg3 string
 	}
-	getOrStoreReturns struct {
+	loadOrStoreReturns struct {
 		result1 *agent.Deployment
 	}
-	getOrStoreReturnsOnCall map[int]struct {
+	loadOrStoreReturnsOnCall map[int]struct {
 		result1 *agent.Deployment
 	}
 	RemoveStub        func(types.NamespacedName)
@@ -104,18 +104,18 @@ func (fake *FakeDeploymentStorer) GetReturnsOnCall(i int, result1 *agent.Deploym
 	}{result1}
 }
 
-func (fake *FakeDeploymentStorer) GetOrStore(arg1 context.Context, arg2 types.NamespacedName, arg3 string) *agent.Deployment {
-	fake.getOrStoreMutex.Lock()
-	ret, specificReturn := fake.getOrStoreReturnsOnCall[len(fake.getOrStoreArgsForCall)]
-	fake.getOrStoreArgsForCall = append(fake.getOrStoreArgsForCall, struct {
+func (fake *FakeDeploymentStorer) LoadOrStore(arg1 context.Context, arg2 types.NamespacedName, arg3 string) *agent.Deployment {
+	fake.loadOrStoreMutex.Lock()
+	ret, specificReturn := fake.loadOrStoreReturnsOnCall[len(fake.loadOrStoreArgsForCall)]
+	fake.loadOrStoreArgsForCall = append(fake.loadOrStoreArgsForCall, struct {
 		arg1 context.Context
 		arg2 types.NamespacedName
 		arg3 string
 	}{arg1, arg2, arg3})
-	stub := fake.GetOrStoreStub
-	fakeReturns := fake.getOrStoreReturns
-	fake.recordInvocation("GetOrStore", []interface{}{arg1, arg2, arg3})
-	fake.getOrStoreMutex.Unlock()
+	stub := fake.LoadOrStoreStub
+	fakeReturns := fake.loadOrStoreReturns
+	fake.recordInvocation("LoadOrStore", []interface{}{arg1, arg2, arg3})
+	fake.loadOrStoreMutex.Unlock()
 	if stub != nil {
 		return stub(arg1, arg2, arg3)
 	}
@@ -125,44 +125,44 @@ func (fake *FakeDeploymentStorer) GetOrStore(arg1 context.Context, arg2 types.Na
 	return fakeReturns.result1
 }
 
-func (fake *FakeDeploymentStorer) GetOrStoreCallCount() int {
-	fake.getOrStoreMutex.RLock()
-	defer fake.getOrStoreMutex.RUnlock()
-	return len(fake.getOrStoreArgsForCall)
+func (fake *FakeDeploymentStorer) LoadOrStoreCallCount() int {
+	fake.loadOrStoreMutex.RLock()
+	defer fake.loadOrStoreMutex.RUnlock()
+	return len(fake.loadOrStoreArgsForCall)
 }
 
-func (fake *FakeDeploymentStorer) GetOrStoreCalls(stub func(context.Context, types.NamespacedName, string) *agent.Deployment) {
-	fake.getOrStoreMutex.Lock()
-	defer fake.getOrStoreMutex.Unlock()
-	fake.GetOrStoreStub = stub
+func (fake *FakeDeploymentStorer) LoadOrStoreCalls(stub func(context.Context, types.NamespacedName, string) *agent.Deployment) {
+	fake.loadOrStoreMutex.Lock()
+	defer fake.loadOrStoreMutex.Unlock()
+	fake.LoadOrStoreStub = stub
 }
 
-func (fake *FakeDeploymentStorer) GetOrStoreArgsForCall(i int) (context.Context, types.NamespacedName, string) {
-	fake.getOrStoreMutex.RLock()
-	defer fake.getOrStoreMutex.RUnlock()
-	argsForCall := fake.getOrStoreArgsForCall[i]
+func (fake *FakeDeploymentStorer) LoadOrStoreArgsForCall(i int) (context.Context, types.NamespacedName, string) {
+	fake.loadOrStoreMutex.RLock()
+	defer fake.loadOrStoreMutex.RUnlock()
+	argsForCall := fake.loadOrStoreArgsForCall[i]
 	return argsForCall.arg1, argsForCall.arg2, argsForCall.arg3
 }
 
-func (fake *FakeDeploymentStorer) GetOrStoreReturns(result1 *agent.Deployment) {
-	fake.getOrStoreMutex.Lock()
-	defer fake.getOrStoreMutex.Unlock()
-	fake.GetOrStoreStub = nil
-	fake.getOrStoreReturns = struct {
+func (fake *FakeDeploymentStorer) LoadOrStoreReturns(result1 *agent.Deployment) {
+	fake.loadOrStoreMutex.Lock()
+	defer fake.loadOrStoreMutex.Unlock()
+	fake.LoadOrStoreStub = nil
+	fake.loadOrStoreReturns = struct {
 		result1 *agent.Deployment
 	}{result1}
 }
 
-func (fake *FakeDeploymentStorer) GetOrStoreReturnsOnCall(i int, result1 *agent.Deployment) {
-	fake.getOrStoreMutex.Lock()
-	defer fake.getOrStoreMutex.Unlock()
-	fake.GetOrStoreStub = nil
-	if fake.getOrStoreReturnsOnCall == nil {
-		fake.getOrStoreReturnsOnCall = make(map[int]struct {
+func (fake *FakeDeploymentStorer) LoadOrStoreReturnsOnCall(i int, result1 *agent.Deployment) {
+	fake.loadOrStoreMutex.Lock()
+	defer fake.loadOrStoreMutex.Unlock()
+	fake.LoadOrStoreStub = nil
+	if fake.loadOrStoreReturnsOnCall == nil {
+		fake.loadOrStoreReturnsOnCall = make(map[int]struct {
 			result1 *agent.Deployment
 		})
 	}
-	fake.getOrStoreReturnsOnCall[i] = struct {
+	fake.loadOrStoreReturnsOnCall[i] = struct {
 		result1 *agent.Deployment
 	}{result1}
 }

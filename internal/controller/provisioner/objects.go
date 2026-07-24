@@ -306,14 +306,35 @@ func (p *NginxProvisioner) buildLabelsAndAnnotations(
 
 	if gateway.Spec.Infrastructure != nil {
 		for key, value := range gateway.Spec.Infrastructure.Labels {
+			if isReservedMetadataKey(string(key)) {
+				continue
+			}
 			labels[string(key)] = string(value)
 		}
 		for key, value := range gateway.Spec.Infrastructure.Annotations {
+			if isReservedMetadataKey(string(key)) {
+				continue
+			}
 			annotations[string(key)] = string(value)
 		}
 	}
 
 	return selectorLabels, labels, annotations
+}
+
+// reservedMetadataKeys are the label/annotation keys managed by NGF that must not be
+// overwritten by user-supplied Gateway.Spec.Infrastructure labels/annotations.
+var reservedMetadataKeys = map[string]struct{}{
+	controller.GatewayLabel:      {},
+	controller.AppNameLabel:      {},
+	controller.AppInstanceLabel:  {},
+	controller.AppManagedByLabel: {},
+}
+
+// isReservedMetadataKey returns true if key is a label/annotation key managed by NGF.
+func isReservedMetadataKey(key string) bool {
+	_, ok := reservedMetadataKeys[key]
+	return ok
 }
 
 // buildServiceAccount builds the ServiceAccount for NGINX deployment/daemonset.
@@ -574,10 +595,16 @@ func (p *NginxProvisioner) buildBootstrapConfigMap(
 		workerProcesses = strconv.FormatInt(int64(*nProxyCfg.WorkerProcesses), 10)
 	}
 
+	var workerRlimitNofile string
+	if nProxyCfg != nil && nProxyCfg.WorkerRlimitNofile != nil {
+		workerRlimitNofile = strconv.FormatInt(int64(*nProxyCfg.WorkerRlimitNofile), 10)
+	}
+
 	mainFields := map[string]any{
-		"ErrorLevel":        logLevel,
-		"WorkerConnections": workerConnections,
-		"WorkerProcesses":   workerProcesses,
+		"ErrorLevel":         logLevel,
+		"WorkerConnections":  workerConnections,
+		"WorkerProcesses":    workerProcesses,
+		"WorkerRlimitNofile": workerRlimitNofile,
 	}
 
 	eventsFields := map[string]any{
@@ -1747,7 +1774,7 @@ func (p *NginxProvisioner) buildWAFEnforcerContainer(
 			RunAsNonRoot:             helpers.GetPointer(true),
 			ReadOnlyRootFilesystem:   helpers.GetPointer(true),
 			Capabilities: &corev1.Capabilities{
-				Drop: []corev1.Capability{"all"},
+				Drop: []corev1.Capability{"ALL"},
 			},
 		},
 		Env: []corev1.EnvVar{
@@ -1792,11 +1819,11 @@ func (p *NginxProvisioner) buildWAFConfigManagerContainer(
 		ImagePullPolicy: defaultImagePullPolicy,
 		SecurityContext: &corev1.SecurityContext{
 			AllowPrivilegeEscalation: helpers.GetPointer(false),
-			RunAsNonRoot:             helpers.GetPointer(false),
+			RunAsNonRoot:             helpers.GetPointer(true),
 			RunAsUser:                helpers.GetPointer[int64](101),
 			ReadOnlyRootFilesystem:   helpers.GetPointer(true),
 			Capabilities: &corev1.Capabilities{
-				Drop: []corev1.Capability{"all"},
+				Drop: []corev1.Capability{"ALL"},
 			},
 		},
 		VolumeMounts: []corev1.VolumeMount{

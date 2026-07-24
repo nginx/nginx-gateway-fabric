@@ -55,117 +55,19 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup Golang Environment
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      - name: Setup conformance environment
+        id: setup
+        uses: ./.github/actions/conformance-setup
         with:
-          go-version: stable
-
-      - name: Set GOPATH
-        run: echo "GOPATH=$(go env GOPATH)" >> $GITHUB_ENV
-
-      - name: Docker Buildx
-        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
-
-      - name: NGF Docker meta
-        id: ngf-meta
-        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
-        with:
-          images: |
-            name=ghcr.io/nginx/nginx-gateway-fabric
-          tags: |
-            type=semver,pattern={{version}},suffix=${{ inputs.build-os != '' && format('-{0}', inputs.build-os) || '' }}
-            type=edge,suffix=${{ inputs.build-os != '' && format('-{0}', inputs.build-os) || '' }}
-            type=schedule,suffix=${{ inputs.build-os != '' && format('-{0}', inputs.build-os) || '' }}
-            type=ref,event=pr,suffix=${{ inputs.build-os != '' && format('-{0}', inputs.build-os) || '' }}
-            type=ref,event=branch,suffix=-rc${{ inputs.build-os != '' && format('-{0}', inputs.build-os) || '' }},enable=${{ startsWith(github.ref, 'refs/heads/release') && !inputs.production-release }}
-            type=raw,value=${{ inputs.release_version }},enable=${{ inputs.production-release && inputs.release_version != '' }},suffix=${{ inputs.build-os != '' && format('-{0}', inputs.build-os) || '' }}
-
-      - name: NGINX Docker meta
-        id: nginx-meta
-        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
-        with:
-          images: |
-            name=ghcr.io/nginx/nginx-gateway-fabric/${{ inputs.image == 'plus' && 'nginx-plus' || inputs.image }}
-          tags: |
-            type=semver,pattern={{version}},suffix=${{ inputs.build-os != '' && format('-{0}', inputs.build-os) || '' }}
-            type=edge,suffix=${{ inputs.build-os != '' && format('-{0}', inputs.build-os) || '' }}
-            type=schedule,suffix=${{ inputs.build-os != '' && format('-{0}', inputs.build-os) || '' }}
-            type=ref,event=pr,suffix=${{ inputs.build-os != '' && format('-{0}', inputs.build-os) || '' }}
-            type=ref,event=branch,suffix=-rc${{ inputs.build-os != '' && format('-{0}', inputs.build-os) || '' }},enable=${{ startsWith(github.ref, 'refs/heads/release') && !inputs.production-release }}
-            type=raw,value=${{ inputs.release_version }},enable=${{ inputs.production-release && inputs.release_version != '' }},suffix=${{ inputs.build-os != '' && format('-{0}', inputs.build-os) || '' }}
-
-      - name: Build binary
-        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
-        with:
-          version: v2.17.0 # renovate: datasource=github-tags depName=goreleaser/goreleaser
-          args: build --single-target --snapshot --clean
-        env:
-          TELEMETRY_ENDPOINT: "" # disables sending telemetry
-          TELEMETRY_ENDPOINT_INSECURE: "false"
-
-      - name: Build NGF Docker Image
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
-        with:
-          file: build/Dockerfile
-          tags: ${{ steps.ngf-meta.outputs.tags }}
-          context: "."
-          target: goreleaser
-          load: true
-          cache-from: type=gha,scope=ngf
-          pull: true
-
-      - name: Build NGINX Docker Image
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
-        with:
-          file: build${{ inputs.build-os != '' && format('/{0}', inputs.build-os) || '' }}/Dockerfile${{ inputs.image == 'nginx' && '.nginx' || '' }}${{ inputs.image == 'plus' && '.nginxplus' || '' }}
-          tags: ${{ steps.nginx-meta.outputs.tags }}
-          context: "."
-          load: true
-          cache-from: type=gha,scope=${{ inputs.image }}${{ inputs.build-os != '' && format('-{0}', inputs.build-os) || '' }}
-          pull: true
-          build-args: |
-            NJS_DIR=internal/controller/nginx/modules/src
-            NGINX_CONF_DIR=internal/controller/nginx/conf
-            BUILD_AGENT=gha
-          secrets: |
-            ${{ contains(inputs.image, 'plus') && format('"nginx-repo.crt={0}"', secrets.NGINX_CRT) || '' }}
-            ${{ contains(inputs.image, 'plus') && format('"nginx-repo.key={0}"', secrets.NGINX_KEY) || '' }}
-
-      - name: Update Go Modules
-        if: ${{ github.event_name == 'schedule' }}
-        run: make update-go-modules
-        working-directory: ./tests
-
-      - name: Build Test Docker Image
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
-        with:
-          file: tests/conformance/Dockerfile
-          tags: conformance-test-runner:${{ github.sha }}
-          context: "."
-          load: true
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          pull: true
-
-      - name: Deploy Kubernetes
-        id: k8s
-        run: |
-          kind create cluster --name ${{ github.run_id }} --image=kindest/node:${{ inputs.k8s-version }}
-          kind load docker-image ${{ join(fromJSON(steps.ngf-meta.outputs.json).tags, ' ') }} ${{ join(fromJSON(steps.nginx-meta.outputs.json).tags, ' ') }} --name ${{ github.run_id }}
-
-      - name: Setup license file for plus
-        if: ${{ inputs.image == 'plus' }}
-        env:
-          PLUS_LICENSE: ${{ secrets.JWT_PLUS_EXCEPTION_REPORTING }}
-        run: echo "${PLUS_LICENSE}" > license.jwt
-
-      - name: Setup conformance tests
-        run: |
-          ngf_prefix=ghcr.io/nginx/nginx-gateway-fabric
-          ngf_tag=${{ steps.ngf-meta.outputs.version }}
-          if [ ${{ github.event_name }} == "schedule" ]; then export GW_API_VERSION=main; fi
-          make helm-install-local${{ inputs.image == 'plus' && '-with-plus' || ''}} PREFIX=${ngf_prefix} TAG=${ngf_tag}
-        working-directory: ./tests
+          image: ${{ inputs.image }}
+          build-os: ${{ inputs.build-os }}
+          k8s-version: ${{ inputs.k8s-version }}
+          cluster-name: ${{ github.run_id }}
+          production-release: ${{ inputs.production-release }}
+          release_version: ${{ inputs.release_version }}
+          nginx-crt: ${{ secrets.NGINX_CRT }}
+          nginx-key: ${{ secrets.NGINX_KEY }}
+          plus-license: ${{ secrets.JWT_PLUS_EXCEPTION_REPORTING }}
 
       - name: Run conformance tests
         run: |
@@ -179,7 +81,7 @@ jobs:
         if: ${{ inputs.enable-experimental }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: conformance-profile-${{ inputs.image }}-${{ inputs.k8s-version }}-${{ steps.ngf-meta.outputs.version }}
+          name: conformance-profile-${{ inputs.image }}-${{ inputs.k8s-version }}-${{ steps.setup.outputs.ngf-version }}
           path: ./tests/conformance-profile.yaml
 
       - name: Upload profile to release
@@ -189,18 +91,46 @@ jobs:
         run: gh release upload ${{ inputs.release_version }} conformance-profile.yaml --clobber
         working-directory: ./tests
 
+  inference-conformance-tests:
+    name: Run Inference Tests
+    runs-on: ubuntu-24.04
+    if: ${{ !github.event.pull_request.head.repo.fork || inputs.image != 'plus' }}
+    permissions:
+      contents: write # needed for uploading release artifacts
+    env:
+      DOCKER_BUILD_SUMMARY: false
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Setup conformance environment
+        id: setup
+        uses: ./.github/actions/conformance-setup
+        with:
+          image: ${{ inputs.image }}
+          build-os: ${{ inputs.build-os }}
+          k8s-version: ${{ inputs.k8s-version }}
+          cluster-name: ${{ github.run_id }}-inference
+          production-release: ${{ inputs.production-release }}
+          release_version: ${{ inputs.release_version }}
+          nginx-crt: ${{ secrets.NGINX_CRT }}
+          nginx-key: ${{ secrets.NGINX_KEY }}
+          plus-license: ${{ secrets.JWT_PLUS_EXCEPTION_REPORTING }}
+
       - name: Run inference conformance tests
         run: |
-          make run-inference-conformance-tests CONFORMANCE_TAG=${{ github.sha }} NGF_VERSION=${{ github.ref_name }} CLUSTER_NAME=${{ github.run_id }}
+          make run-inference-conformance-tests CONFORMANCE_TAG=${{ github.sha }} NGF_VERSION=${{ github.ref_name }} CLUSTER_NAME=${{ github.run_id }}-inference
           core_result=$(cat conformance-profile-inference.yaml | yq '.profiles[0].core.result')
-          if [ "${core_result}" == "failure" ] ]; then echo "Inference Conformance test failed, see above for details." && exit 2; fi
+          if [ "${core_result}" == "failure" ]; then echo "Inference Conformance test failed, see above for details." && exit 2; fi
         working-directory: ./tests
 
       - name: Upload profile to GitHub
         if: ${{ inputs.enable-experimental }} # add experimental flag to filter result upload
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: conformance-profile-inference-${{ inputs.image }}-${{ inputs.k8s-version }}-${{ steps.ngf-meta.outputs.version }}-${{ github.run_id }}
+          name: conformance-profile-inference-${{ inputs.image }}-${{ inputs.k8s-version }}-${{ steps.setup.outputs.ngf-version }}-${{ github.run_id }}
           path: ./tests/conformance-profile-inference.yaml
 
       - name: Upload profile to release

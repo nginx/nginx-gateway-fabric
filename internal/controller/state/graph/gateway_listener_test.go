@@ -792,7 +792,8 @@ func TestValidateListenerTLSTerminateFields(t *testing.T) {
 			},
 			expected: conditions.NewListenerUnsupportedValue(
 				`tls.options[unsupported-key]: Unsupported value: "unsupported-key": ` +
-					`supported values: "nginx.org/ssl-protocols", "nginx.org/ssl-ciphers", "nginx.org/ssl-prefer-server-ciphers"`,
+					`supported values: "nginx.org/ssl-protocols", "nginx.org/ssl-ciphers", "nginx.org/ssl-prefer-server-ciphers", ` +
+					`"nginx.org/ssl-session-cache", "nginx.org/ssl-session-timeout", "nginx.org/ssl-ecdh-curve"`,
 			),
 			name: "unsupported options",
 		},
@@ -805,11 +806,75 @@ func TestValidateListenerTLSTerminateFields(t *testing.T) {
 						"nginx.org/ssl-protocols":             "TLSv1.2 TLSv1.3",
 						"nginx.org/ssl-ciphers":               "HIGH:!aNULL:!MD5",
 						"nginx.org/ssl-prefer-server-ciphers": "on",
+						"nginx.org/ssl-session-cache":         "10m",
+						"nginx.org/ssl-session-timeout":       "1d",
+						"nginx.org/ssl-ecdh-curve":            "secp384r1:prime256v1",
 					},
 				},
 			},
 			expected: nil,
 			name:     "valid supported options",
+		},
+		{
+			listener: v1.Listener{
+				TLS: &v1.ListenerTLSConfig{
+					Mode:            helpers.GetPointer(v1.TLSModeTerminate),
+					CertificateRefs: []v1.SecretObjectReference{validSecretRef},
+					Options: map[v1.AnnotationKey]v1.AnnotationValue{
+						"nginx.org/ssl-session-cache": "off",
+					},
+				},
+			},
+			expected: nil,
+			name:     "valid nginx.org/ssl-session-cache off value",
+		},
+		{
+			listener: v1.Listener{
+				TLS: &v1.ListenerTLSConfig{
+					Mode:            helpers.GetPointer(v1.TLSModeTerminate),
+					CertificateRefs: []v1.SecretObjectReference{validSecretRef},
+					Options: map[v1.AnnotationKey]v1.AnnotationValue{
+						"nginx.org/ssl-session-cache": "shared:SSL:10m",
+					},
+				},
+			},
+			expected: conditions.NewListenerUnsupportedValue(
+				`tls.options[nginx.org/ssl-session-cache]: Invalid value: "shared:SSL:10m": ` +
+					`must be 'off', 'none', or an NGINX size such as '10m'`,
+			),
+			name: "invalid nginx.org/ssl-session-cache value",
+		},
+		{
+			listener: v1.Listener{
+				TLS: &v1.ListenerTLSConfig{
+					Mode:            helpers.GetPointer(v1.TLSModeTerminate),
+					CertificateRefs: []v1.SecretObjectReference{validSecretRef},
+					Options: map[v1.AnnotationKey]v1.AnnotationValue{
+						"nginx.org/ssl-session-timeout": "5x",
+					},
+				},
+			},
+			expected: conditions.NewListenerUnsupportedValue(
+				`tls.options[nginx.org/ssl-session-timeout]: Invalid value: "5x": ` +
+					`must be an NGINX time such as '300', '5m', '1h', or '1d'`,
+			),
+			name: "invalid nginx.org/ssl-session-timeout value",
+		},
+		{
+			listener: v1.Listener{
+				TLS: &v1.ListenerTLSConfig{
+					Mode:            helpers.GetPointer(v1.TLSModeTerminate),
+					CertificateRefs: []v1.SecretObjectReference{validSecretRef},
+					Options: map[v1.AnnotationKey]v1.AnnotationValue{
+						"nginx.org/ssl-ecdh-curve": "secp384r1;",
+					},
+				},
+			},
+			expected: conditions.NewListenerUnsupportedValue(
+				`tls.options[nginx.org/ssl-ecdh-curve]: Invalid value: "secp384r1;": ` +
+					`must be 'auto' or a colon-separated list of curve names`,
+			),
+			name: "invalid nginx.org/ssl-ecdh-curve value",
 		},
 		{
 			listener: v1.Listener{
