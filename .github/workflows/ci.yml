@@ -210,6 +210,17 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
 
+  rust-unit-tests:
+    name: Rust Unit Tests
+    runs-on: ubuntu-24.04
+    needs: vars
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Run tests
+        run: make rust-unit-test
+
   binary:
     name: Build Binary
     runs-on: ${{ github.repository_owner == 'nginx' && (inputs.is_production_release || ((github.event_name == 'push' || github.event_name == 'schedule') && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release-')))) && 'ubuntu-24.04-amd64' || 'ubuntu-24.04' }}

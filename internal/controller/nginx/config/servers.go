@@ -1216,6 +1216,7 @@ func updateLocation(
 	location = updateLocationAuthenticationFilter(location, filters.AuthenticationFilter)
 	location = updateLocationExternalAuthFilter(location, filters.ExternalAuthFilter)
 	location = updateLocationCORSFilter(location, filters.CORSFilter, serverID, pathRuleIndex, matchRuleIndex)
+	location = updateLocationGuardrails(location, matchRule.Guardrails)
 
 	if filters.RequestRedirect != nil {
 		return updateLocationRedirectFilter(location, filters.RequestRedirect, listenerPort, pathRule)
@@ -1261,6 +1262,31 @@ func updateLocationAuthenticationFilter(
 	if authenticationFilter.OIDC != nil && authenticationFilter.OIDC.Provider != nil {
 		location.AuthOIDC = getAuthOIDCLocationConfig(authenticationFilter.OIDC)
 	}
+
+	return location
+}
+
+// updateLocationGuardrails applies the ai-guardrails (PayloadProcessor ExtProcess) configuration
+// to a location, if present.
+func updateLocationGuardrails(
+	location http.Location,
+	guardrails *dataplane.GuardrailsConfig,
+) http.Location {
+	if guardrails == nil {
+		return location
+	}
+
+	gc := &http.GuardrailsConfig{
+		Filter:    guardrails.Filter,
+		APIURL:    guardrails.APIURL,
+		TimeoutMS: guardrails.TimeoutMS,
+	}
+
+	if guardrails.APITokenAuthFileID != "" {
+		gc.APITokenFile = generateAuthFileName(guardrails.APITokenAuthFileID)
+	}
+
+	location.Guardrails = gc
 
 	return location
 }

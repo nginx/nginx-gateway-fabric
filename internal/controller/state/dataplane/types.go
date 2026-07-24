@@ -82,6 +82,9 @@ type Configuration struct {
 	BaseHTTPConfig BaseHTTPConfig
 	// WorkerConnections specifies the maximum number of simultaneous connections that can be opened by a worker process.
 	WorkerConnections int32
+	// GuardrailsEnabled indicates whether the ai-guardrails NGINX module must be loaded because at least
+	// one location has a Guardrails (PayloadProcessor ExtProcess) configuration.
+	GuardrailsEnabled bool
 }
 
 // SSLKeyPairID is a unique identifier for a SSLKeyPair.
@@ -594,10 +597,25 @@ type MatchRule struct {
 	Filters HTTPFilters
 	// Source is the ObjectMeta of the resource that includes the rule.
 	Source *metav1.ObjectMeta
+	// Guardrails holds the ai-guardrails (PayloadProcessor ExtProcess) configuration for the rule, if any.
+	Guardrails *GuardrailsConfig
 	// Match holds the match for the rule.
 	Match Match
 	// BackendGroup is the group of Backends that the rule routes to.
 	BackendGroup BackendGroup
+}
+
+// GuardrailsConfig contains the ai-guardrails / ExtProcess configuration that must be emitted into the
+// generated NGINX location for a match.
+type GuardrailsConfig struct {
+	// TimeoutMS is the optional request timeout in milliseconds.
+	TimeoutMS *int64
+	// Filter is the value for the guardrails_filter directive (e.g. "on").
+	Filter string
+	// APIURL is the resolved URL of the external Guardrails service.
+	APIURL string
+	// APITokenAuthFileID identifies the auth token file (in AuthSecrets) holding the bearer token, if any.
+	APITokenAuthFileID AuthFileID
 }
 
 // Match represents a match for a routing rule which consist of matches against various HTTP request attributes.

@@ -1,0 +1,39 @@
+[package]
+name = "guardrails_filter"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+authors = ["F5 AI Guardrails Contributors"]
+description = "Rust NGINX module for streaming LLM response inspection with Calypso Guardrails"
+
+[lib]
+name = "ai_guardrails"
+# cdylib produces the .so for nginx; rlib is needed for `cargo test` to link the test harness
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+ngx = { version = "0.5", features = ["async"] }
+nginx-sys = "0.5"
+http = "1"
+bytes = "1"
+paste = "1.0"
+libc = "0.2"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+# minreq: a small, blocking HTTP client. Chosen over ureq/reqwest because it does
+# NOT depend on the `url` crate, so it avoids the idna -> ICU4X (Unicode-3.0) stack
+# that the dependency-review policy rejects.
+#   - https-rustls-probe: rustls TLS verified against the OS trust store via
+#     rustls-native-certs (no bundled root-cert crate like webpki-roots). The
+#     runtime image must ship `ca-certificates`.
+#   - json-using-serde: (de)serialize request/response bodies with serde_json.
+# 3.x is required: minreq 2.x pinned rustls 0.21, which resolved the vulnerable
+# rustls-webpki 0.101.7 (GHSA-82j2-j2ch-gfr8 et al.). 3.x uses rustls 0.23 with
+# patched rustls-webpki 0.103.x. rustls 0.23's default provider is aws-lc-rs, so
+# the builder stages need a C toolchain (clang/perl/make — already present).
+minreq = { version = "3.0", features = ["https-rustls-probe", "json-using-serde"] }
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1

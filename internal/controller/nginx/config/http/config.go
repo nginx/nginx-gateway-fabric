@@ -68,6 +68,8 @@ type Location struct {
 	AuthJWT *AuthJWT
 	// AuthBasic contains the configuration for basic authentication.
 	AuthBasic *AuthBasic
+	// Guardrails holds the ai-guardrails (PayloadProcessor ExtProcess) configuration for this location.
+	Guardrails *GuardrailsConfig
 	// ProxyPassRequestBody renders proxy_pass_request_body ("on"/"off"); unset leaves the directive out.
 	ProxyPassRequestBody string
 	// ProxyPassRequestHeaders renders proxy_pass_request_headers ("on"/"off"); unset leaves the directive out.
@@ -240,6 +242,18 @@ type ProxySSLVerify struct {
 type AuthBasic struct {
 	Realm string
 	File  string
+}
+
+// GuardrailsConfig holds the values for the ai-guardrails module directives on a location.
+type GuardrailsConfig struct {
+	// TimeoutMS renders guardrails_timeout_ms; unset leaves the directive out (Rust default applies).
+	TimeoutMS *int64
+	// Filter renders guardrails_filter ("on"/"off").
+	Filter string
+	// APIURL renders guardrails_api_url (the ExtProcess backend base URL).
+	APIURL string
+	// APITokenFile renders guardrails_api_token_file (absolute path to the auth token file).
+	APITokenFile string
 }
 
 // AuthJWT holds the configuration for JWT authentication using the auth_jwt directive.

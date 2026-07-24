@@ -40,6 +40,9 @@ type Policy struct {
 	InvalidForGateways map[types.NamespacedName]struct{}
 	// WAFState holds WAF-specific state for this policy. Only populated for WAFPolicy resources.
 	WAFState *PolicyWAFState
+	// PayloadProcessorState holds resolved ExtProcess state for this policy.
+	// Only populated for PayloadProcessor resources.
+	PayloadProcessorState *PolicyPayloadProcessorState
 	// Ancestors is a list of ancestor objects of the Policy. Used in status.
 	Ancestors []PolicyAncestor
 	// TargetRefs are the resources that the Policy targets.

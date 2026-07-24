@@ -1,8 +1,42 @@
 # syntax=docker/dockerfile:1.25
+
+# NGINX Plus R37 is based on NGINX OSS 1.27.5; use that version for ABI compatibility.
+ARG NGINX_VERSION=1.27.5
+
 FROM scratch AS nginx-files
 
 # the following links can be replaced with local files if needed, i.e. ADD --chown=101:1001 <local_file> <container_file>
 ADD --link --chown=101:1001 https://cs.nginx.com/static/keys/nginx_signing.rsa.pub nginx_signing.rsa.pub
+
+# Configure nginx source for bindgen to generate Rust FFI bindings.
+FROM alpine:3.23 AS nginx-source
+
+ARG NGINX_VERSION
+
+RUN apk add --no-cache gcc musl-dev openssl-dev pcre2-dev zlib-dev linux-headers perl make
+
+RUN wget -q https://nginx.org/download/nginx-${NGINX_VERSION}.tar.gz \
+    && tar xzf nginx-${NGINX_VERSION}.tar.gz
+
+RUN cd nginx-${NGINX_VERSION} && ./configure --with-compat --with-http_ssl_module
+
+# Build the ai-guardrails Rust module against the configured nginx source.
+FROM rust:alpine AS guardrails-builder
+
+# Pin clang20-dev: clang21's libclang.so cannot be dlopen'd on Alpine musl.
+RUN apk add --no-cache musl-dev openssl-dev perl make \
+    pcre2-dev zlib-dev linux-headers clang20-dev
+
+ARG NGINX_VERSION
+
+COPY --from=nginx-source /nginx-${NGINX_VERSION} /nginx-src
+
+ENV NGINX_SOURCE_DIR=/nginx-src
+ENV RUSTFLAGS="-C target-feature=-crt-static"
+
+WORKDIR /build
+COPY internal/controller/nginx/modules/rust/ai-guardrails/ ./
+RUN cargo build --release
 
 FROM alpine:3.22
 
@@ -28,7 +62,9 @@ RUN --mount=type=secret,id=nginx-repo.crt,dst=/etc/apk/cert.pem,mode=0644 \
        fi \
     && apk add --no-cache nginx-plus nginx-plus-module-njs nginx-plus-module-otel nginx-agent=${NGINX_AGENT_VERSION#v}
 
-RUN apk add --no-cache bash \
+# ca-certificates provides the system trust store used by the AI Guardrails
+# module's HTTPS client (rustls verifies against the OS/native roots).
+RUN apk add --no-cache bash ca-certificates \
     && mkdir -p /usr/lib/nginx/modules \
     # forward request and error logs to docker log collector
     && ln -sf /dev/stdout /var/log/nginx/access.log \
@@ -36,6 +72,7 @@ RUN apk add --no-cache bash \
 
 COPY build/entrypoint.sh /agent/entrypoint.sh
 COPY ${NJS_DIR}/ /usr/lib/nginx/modules/njs/
+COPY --from=guardrails-builder /build/target/release/libai_guardrails.so /usr/lib/nginx/modules/libai_guardrails.so
 COPY ${NGINX_CONF_DIR}/nginx-plus.conf /etc/nginx/nginx.conf
 COPY ${NGINX_CONF_DIR}/grpc-error-locations.conf /etc/nginx/grpc-error-locations.conf
 COPY ${NGINX_CONF_DIR}/grpc-error-pages.conf /etc/nginx/grpc-error-pages.conf
