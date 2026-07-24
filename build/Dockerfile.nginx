@@ -1,4 +1,8 @@
 # syntax=docker/dockerfile:1.25
+
+# renovate: datasource=github-tags depName=nginx/nginx extractVersion=^release-(?<version>.+)$
+ARG NGINX_VERSION=1.31.3
+
 FROM scratch AS nginx-files
 
 # the following links can be replaced with local files if needed, i.e. ADD --chown=101:1001 <local_file> <container_file>
@@ -9,8 +13,7 @@ ADD --link --chown=101:1001 https://cs.nginx.com/static/keys/nginx_signing.rsa.p
 # binary compatibility.
 FROM alpine:3.23 AS nginx-source
 
-# renovate: datasource=github-tags depName=nginx/nginx extractVersion=^release-(?<version>.+)$
-ARG NGINX_VERSION=1.31.3
+ARG NGINX_VERSION
 
 RUN apk add --no-cache gcc musl-dev openssl-dev pcre2-dev zlib-dev linux-headers perl make
 
@@ -26,8 +29,7 @@ FROM rust:alpine AS guardrails-builder
 RUN apk add --no-cache musl-dev openssl-dev perl make \
     pcre2-dev zlib-dev linux-headers clang20-dev
 
-# renovate: datasource=github-tags depName=nginx/nginx extractVersion=^release-(?<version>.+)$
-ARG NGINX_VERSION=1.31.3
+ARG NGINX_VERSION
 
 COPY --from=nginx-source /nginx-${NGINX_VERSION} /nginx-src
 
@@ -40,8 +42,7 @@ RUN cargo build --release
 
 FROM alpine:3.23
 
-# renovate: datasource=github-tags depName=nginx/nginx
-ARG NGINX_VERSION=1.31.3
+ARG NGINX_VERSION
 
 # renovate: datasource=github-tags depName=nginx/agent
 ARG NGINX_AGENT_VERSION=v3.11.2

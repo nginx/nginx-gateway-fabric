@@ -1,14 +1,17 @@
 # syntax=docker/dockerfile:1.25
+
+# NGINX Plus R37 is based on NGINX OSS 1.27.5; use that version for ABI compatibility.
+ARG NGINX_VERSION=1.27.5
+
 FROM scratch AS nginx-files
 
 # the following links can be replaced with local files if needed, i.e. ADD --chown=101:1001 <local_file> <container_file>
 ADD --link --chown=101:1001 https://cs.nginx.com/static/keys/nginx_signing.rsa.pub nginx_signing.rsa.pub
 
 # Configure nginx source for bindgen to generate Rust FFI bindings.
-# NGINX Plus R37 is based on NGINX OSS 1.27.5; use that version for ABI compatibility.
 FROM alpine:3.23 AS nginx-source
 
-ARG NGINX_VERSION=1.27.5
+ARG NGINX_VERSION
 
 RUN apk add --no-cache gcc musl-dev openssl-dev pcre2-dev zlib-dev linux-headers perl make
 
@@ -24,7 +27,7 @@ FROM rust:alpine AS guardrails-builder
 RUN apk add --no-cache musl-dev openssl-dev perl make \
     pcre2-dev zlib-dev linux-headers clang20-dev
 
-ARG NGINX_VERSION=1.27.5
+ARG NGINX_VERSION
 
 COPY --from=nginx-source /nginx-${NGINX_VERSION} /nginx-src
 
