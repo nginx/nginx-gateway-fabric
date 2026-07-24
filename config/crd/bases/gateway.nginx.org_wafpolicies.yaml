@@ -454,6 +454,7 @@ spec:
                                 in N1C that corresponds to the log profile bundle.
                               maxLength: 253
                               minLength: 1
+                              pattern: ^[a-zA-Z0-9\s\/\-_.]+$
                               type: string
                             profileObjectID:
                               description: |-
@@ -488,6 +489,7 @@ spec:
                                 log profile bundle in NIM.
                               maxLength: 253
                               minLength: 1
+                              pattern: ^[a-zA-Z0-9\s\/\-_.]+$
                               type: string
                             url:
                               description: |-
