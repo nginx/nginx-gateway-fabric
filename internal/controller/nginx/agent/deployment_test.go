@@ -2,6 +2,7 @@ package agent
 
 import (
 	"errors"
+	"sync"
 	"testing"
 
 	pb "github.com/nginx/agent/v3/api/grpc/mpi/v1"
@@ -243,6 +244,42 @@ func TestSetLatestUpstreamError(t *testing.T) {
 	g.Expect(deployment.GetLatestUpstreamError()).To(MatchError(err))
 }
 
+func TestDeploymentStore_LoadOrStore_Concurrent(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	depStore := NewDeploymentStore(&agentgrpcfakes.FakeConnectionsTracker{})
+	nsName := types.NamespacedName{Name: "nginx", Namespace: "default"}
+
+	const goroutines = 25
+	results := make(chan *Deployment, goroutines)
+
+	var wg sync.WaitGroup
+	for range goroutines {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			results <- depStore.LoadOrStore(t.Context(), nsName, "gateway")
+		}()
+	}
+
+	wg.Wait()
+	close(results)
+
+	var first *Deployment
+	for dep := range results {
+		if first == nil {
+			first = dep
+			continue
+		}
+
+		g.Expect(dep).To(BeIdenticalTo(first))
+	}
+
+	stored := depStore.Get(nsName)
+	g.Expect(stored).To(BeIdenticalTo(first))
+}
+
 func TestUpdateWAFBundle(t *testing.T) {
 	t.Parallel()
 
@@ -423,13 +460,13 @@ func TestDeploymentStore(t *testing.T) {
 
 	nsName := types.NamespacedName{Namespace: "default", Name: "test-deployment"}
 
-	deployment := store.GetOrStore(t.Context(), nsName, "gateway")
+	deployment := store.LoadOrStore(t.Context(), nsName, "gateway")
 	g.Expect(deployment).ToNot(BeNil())
 
 	fetchedDeployment := store.Get(nsName)
 	g.Expect(fetchedDeployment).To(Equal(deployment))
 
-	deployment = store.GetOrStore(t.Context(), nsName, "gateway")
+	deployment = store.LoadOrStore(t.Context(), nsName, "gateway")
 	g.Expect(fetchedDeployment).To(Equal(deployment))
 
 	store.Remove(nsName)

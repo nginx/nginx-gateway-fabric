@@ -305,6 +305,9 @@ func TestExecuteServers_TLSOptions(t *testing.T) {
 					Protocols:           "TLSv1.2 TLSv1.3",
 					Ciphers:             "ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384:HIGH:!aNULL:!MD5",
 					PreferServerCiphers: true,
+					SessionCache:        "shared:ssl_gw_https:10m",
+					SessionTimeout:      "1d",
+					EcdhCurve:           "secp384r1:prime256v1",
 				},
 				Port: 8443,
 			},
@@ -321,6 +324,9 @@ func TestExecuteServers_TLSOptions(t *testing.T) {
 		"ssl_certificate /etc/nginx/secrets/test-keypair-2.pem;":                                1,
 		"ssl_certificate /etc/nginx/secrets/test-keypair-3.pem;":                                1,
 		"ssl_certificate /etc/nginx/secrets/test-keypair-4.pem;":                                1,
+		"ssl_session_cache shared:ssl_gw_https:10m;":                                            1,
+		"ssl_session_timeout 1d;":                                                               1,
+		"ssl_ecdh_curve secp384r1:prime256v1;":                                                  1,
 	}
 
 	type assertion func(g *WithT, data string)

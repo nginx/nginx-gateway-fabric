@@ -10490,6 +10490,16 @@ spec:
                 maximum: 1024
                 minimum: 1
                 type: integer
+              workerRlimitNofile:
+                description: |-
+                  WorkerRlimitNofile changes the limit on the maximum number of open files (RLIMIT_NOFILE)
+                  for worker processes. Used to raise the limit without restarting the main process.
+                  When unset, NGINX inherits the limit from the operating system.
+                  NGINX directive: https://nginx.org/en/docs/ngx_core_module.html#worker_rlimit_nofile
+                format: int32
+                maximum: 1048576
+                minimum: 1
+                type: integer
             type: object
         required:
         - spec

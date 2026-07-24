@@ -29,6 +29,15 @@ server {
         {{- if $s.SSL.PreferServerCiphers }}
     ssl_prefer_server_ciphers on;
         {{- end }}
+        {{- if $s.SSL.SessionCache }}
+    ssl_session_cache {{ $s.SSL.SessionCache }};
+        {{- end }}
+        {{- if $s.SSL.SessionTimeout }}
+    ssl_session_timeout {{ $s.SSL.SessionTimeout }};
+        {{- end }}
+        {{- if $s.SSL.EcdhCurve }}
+    ssl_ecdh_curve {{ $s.SSL.EcdhCurve }};
+        {{- end }}
         {{- if $s.SSL.ClientCertificate }}
     ssl_client_certificate {{ $s.SSL.ClientCertificate }};
         {{- end }}
@@ -101,6 +110,15 @@ server {
           {{- end }}
           {{- if $s.SSL.PreferServerCiphers }}
     ssl_prefer_server_ciphers on;
+          {{- end }}
+          {{- if $s.SSL.SessionCache }}
+    ssl_session_cache {{ $s.SSL.SessionCache }};
+          {{- end }}
+          {{- if $s.SSL.SessionTimeout }}
+    ssl_session_timeout {{ $s.SSL.SessionTimeout }};
+          {{- end }}
+          {{- if $s.SSL.EcdhCurve }}
+    ssl_ecdh_curve {{ $s.SSL.EcdhCurve }};
           {{- end }}
           {{- if $s.SSL.ClientCertificate }}
     ssl_client_certificate {{ $s.SSL.ClientCertificate }};

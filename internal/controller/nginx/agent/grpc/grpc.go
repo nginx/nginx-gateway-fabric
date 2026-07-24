@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"runtime/debug"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -125,8 +126,8 @@ func (g *Server) createServer(tlsCredentials credentials.TransportCredentials) *
 				PermitWithoutStream: true,
 			},
 		),
-		grpc.ChainStreamInterceptor(g.interceptor.Stream(g.logger)),
-		grpc.ChainUnaryInterceptor(g.interceptor.Unary(g.logger)),
+		grpc.ChainStreamInterceptor(recoveryStreamInterceptor(g.logger), g.interceptor.Stream(g.logger)),
+		grpc.ChainUnaryInterceptor(recoveryUnaryInterceptor(g.logger), g.interceptor.Unary(g.logger)),
 		grpc.Creds(tlsCredentials),
 		// Set max message size to 4MB to match the agent side.
 		grpc.MaxSendMsgSize(1024*1024*4), // 4MB
@@ -134,6 +135,52 @@ func (g *Server) createServer(tlsCredentials credentials.TransportCredentials) *
 	)
 
 	return server
+}
+
+func recoveryStreamInterceptor(logger logr.Logger) grpc.StreamServerInterceptor {
+	return func(
+		srv any,
+		ss grpc.ServerStream,
+		info *grpc.StreamServerInfo,
+		handler grpc.StreamHandler,
+	) (err error) {
+		defer func() {
+			if recovered := recover(); recovered != nil {
+				logger.Error(
+					fmt.Errorf("%v", recovered),
+					"panic recovered in stream RPC",
+					"method", info.FullMethod,
+					"stack", string(debug.Stack()),
+				)
+				err = status.Error(codes.Internal, "internal server error")
+			}
+		}()
+
+		return handler(srv, ss)
+	}
+}
+
+func recoveryUnaryInterceptor(logger logr.Logger) grpc.UnaryServerInterceptor {
+	return func(
+		ctx context.Context,
+		req any,
+		info *grpc.UnaryServerInfo,
+		handler grpc.UnaryHandler,
+	) (resp any, err error) {
+		defer func() {
+			if recovered := recover(); recovered != nil {
+				logger.Error(
+					fmt.Errorf("%v", recovered),
+					"panic recovered in unary RPC",
+					"method", info.FullMethod,
+					"stack", string(debug.Stack()),
+				)
+				err = status.Error(codes.Internal, "internal server error")
+			}
+		}()
+
+		return handler(ctx, req)
+	}
 }
 
 func getTLSConfig() (credentials.TransportCredentials, error) {

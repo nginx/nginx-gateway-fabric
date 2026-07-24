@@ -496,6 +496,12 @@
               "maximum": 1024,
               "minimum": 1,
               "type": "integer"
+            },
+            "workerRlimitNofile": {
+              "description": "Sets the `worker_rlimit_nofile` directive, the maximum number of open files for worker processes. Omit to inherit the OS limit.",
+              "maximum": 1048576,
+              "minimum": 1,
+              "type": "integer"
             }
           },
           "required": [],

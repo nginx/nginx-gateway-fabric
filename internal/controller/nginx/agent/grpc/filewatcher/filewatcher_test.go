@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -67,4 +68,41 @@ func TestFileWatcher_handleEvent(t *testing.T) {
 	w.handleEvent(fsnotify.Event{Name: "test-rename", Op: fsnotify.Rename})
 	g.Expect(w.filesChanged.Load()).To(BeTrue())
 	w.filesChanged.Store(false)
+}
+
+func TestBuildPathsToWatch(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	base := t.TempDir()
+	files := []string{
+		filepath.Join(base, "tls.crt"),
+		filepath.Join(base, "tls.key"),
+		filepath.Join(base, "ca.crt"),
+	}
+
+	paths := buildPathsToWatch(files)
+	g.Expect(paths).To(HaveLen(1))
+	g.Expect(paths[0]).To(Equal(base))
+}
+
+func TestFileWatcher_CheckForUpdates_DetectsChangeWithoutFsNotifyEvent(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	notifyCh := make(chan struct{}, 1)
+	file := path.Join(t.TempDir(), "test-file")
+	err := os.WriteFile(file, []byte("old"), 0o600)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	w, err := NewFileWatcher(logr.Discard(), []string{file}, notifyCh)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	w.snapshotFileHashes()
+
+	err = os.WriteFile(file, []byte("new"), 0o600)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	w.checkForUpdates()
+	g.Expect(notifyCh).To(Receive())
 }

@@ -641,7 +641,11 @@ func TestHpaSpecSetter(t *testing.T) {
 	// Object meta fields, ensure name and namespace didn't change
 	g.Expect(existing.Name).To(Equal("test-hpa"))
 	g.Expect(existing.Namespace).To(Equal("default"))
-	g.Expect(existing.Annotations).To(Equal(annotations))
+	expectedAnnotations := map[string]string{
+		"custom.annotation": "test-value",
+		"gateway.nginx.org/internal-managed-annotation-keys": "custom.annotation",
+	}
+	g.Expect(existing.Annotations).To(Equal(expectedAnnotations))
 	g.Expect(existing.Labels).To(Equal(labels))
 
 	g.Expect(existing.Spec).To(Equal(spec))
@@ -723,7 +727,11 @@ func TestServiceAccountSpecSetter(t *testing.T) {
 	// Object meta fields, ensure name and namespace didn't change
 	g.Expect(existing.Name).To(Equal("test-service-account"))
 	g.Expect(existing.Namespace).To(Equal("default"))
-	g.Expect(existing.Annotations).To(Equal(annotations))
+	expectedAnnotations := map[string]string{
+		"custom.annotation": "test-value",
+		"gateway.nginx.org/internal-managed-annotation-keys": "custom.annotation",
+	}
+	g.Expect(existing.Annotations).To(Equal(expectedAnnotations))
 	g.Expect(existing.Labels).To(Equal(labels))
 
 	g.Expect(existing.AutomountServiceAccountToken).To(Equal(&automountToken))

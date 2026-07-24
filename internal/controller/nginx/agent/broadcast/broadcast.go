@@ -3,6 +3,7 @@ package broadcast
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 
 	pb "github.com/nginx/agent/v3/api/grpc/mpi/v1"
 	"k8s.io/apimachinery/pkg/util/uuid"
@@ -50,7 +51,9 @@ type DeploymentBroadcaster struct {
 	subCh     chan storedChannels
 	unsubCh   chan string
 	listeners map[string]storedChannels
-	doneCh    chan struct{}
+	// doneCh carries the number of listeners that acknowledged the in-flight message once
+	// publishing completes
+	doneCh chan int32
 	// broadcasterCtx is the main context for the broadcaster, which is canceled on shutdown.
 	// It is the parent context for all listener contexts.
 	broadcasterCtx    context.Context
@@ -69,7 +72,7 @@ func NewDeploymentBroadcaster(ctx context.Context) *DeploymentBroadcaster {
 		publishCh:         make(chan NginxAgentMessage),
 		subCh:             make(chan storedChannels),
 		unsubCh:           make(chan string),
-		doneCh:            make(chan struct{}),
+		doneCh:            make(chan int32),
 		broadcasterCtx:    broadcasterCtx,
 		broadcasterCancel: broadcasterCancel,
 	}
@@ -116,7 +119,7 @@ func (b *DeploymentBroadcaster) Subscribe() SubscriberChannels {
 }
 
 // Send the message to all listeners. Wait for all listeners to respond.
-// Returns true if there were listeners that received and responded to the message.
+// Returns true if at least one listener received and acknowledged the message.
 func (b *DeploymentBroadcaster) Send(message NginxAgentMessage) bool {
 	// Try to send message, but can be interrupted by shutdown
 	select {
@@ -127,15 +130,11 @@ func (b *DeploymentBroadcaster) Send(message NginxAgentMessage) bool {
 
 	// Wait for completion, but can be interrupted by shutdown
 	select {
-	case <-b.doneCh:
+	case acked := <-b.doneCh:
+		return acked > 0
 	case <-b.broadcasterCtx.Done():
 		return false
 	}
-
-	b.mu.RLock()
-	defer b.mu.RUnlock()
-
-	return len(b.listeners) > 0
 }
 
 // CancelSubscription removes a Subscriber from the channel list.
@@ -193,7 +192,8 @@ func (b *DeploymentBroadcaster) publisher() {
 			}
 			b.mu.RUnlock()
 
-			// Send to all listeners
+			// Send to all listeners, tracking how many actually acknowledge the message
+			var acked atomic.Int32
 			var wg sync.WaitGroup
 			for _, channels := range currentListeners {
 				wg.Go(func() {
@@ -212,7 +212,8 @@ func (b *DeploymentBroadcaster) publisher() {
 					case <-b.broadcasterCtx.Done():
 						return
 					case <-channels.responseCh:
-						// Response received, continue
+						// Response received, count as acknowledged
+						acked.Add(1)
 						return
 					}
 				})
@@ -224,8 +225,8 @@ func (b *DeploymentBroadcaster) publisher() {
 			// the done signal, so we return to avoid blocking.
 			case <-b.broadcasterCtx.Done():
 				return
-			case b.doneCh <- struct{}{}:
-				// Signal that publishing is done and all responses received
+			case b.doneCh <- acked.Load():
+				// Signal that publishing is done and report how many listeners acknowledged
 			}
 		}
 	}
