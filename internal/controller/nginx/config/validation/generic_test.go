@@ -1,6 +1,77 @@
 package validation
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
+
+// TestValidateGenericErrorMessageOrder ensures that validation errors lead with the
+// human-readable message and reference the raw regex only at the end, i.e. that the
+// msg and fmt arguments passed to k8svalidation.RegexError are not reversed.
+func TestValidateGenericErrorMessageOrder(t *testing.T) {
+	t.Parallel()
+	validator := GenericValidator{}
+
+	tests := []struct {
+		validate   func(string) error
+		name       string
+		value      string
+		wantMsg    string
+		wantRegexp string
+	}{
+		{
+			name:       "duration",
+			validate:   validator.ValidateNginxDuration,
+			value:      "invalid",
+			wantMsg:    durationStringErrMsg,
+			wantRegexp: durationStringFmt,
+		},
+		{
+			name:       "size",
+			validate:   validator.ValidateNginxSize,
+			value:      "invalid",
+			wantMsg:    sizeStringErrMsg,
+			wantRegexp: sizeStringFmt,
+		},
+		{
+			name:       "endpoint",
+			validate:   validator.ValidateEndpoint,
+			value:      "my$endpoint",
+			wantMsg:    endpointStringErrMsg,
+			wantRegexp: endpointStringFmt,
+		},
+		{
+			name:       "variable name",
+			validate:   validator.ValidateNginxVariableName,
+			value:      "var-name",
+			wantMsg:    variableNameErrMsg,
+			wantRegexp: variableNameFmt,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			err := test.validate(test.value)
+			if err == nil {
+				t.Fatalf("%s: expected an error for value %q, got nil", test.name, test.value)
+			}
+
+			msg := err.Error()
+			if !strings.HasPrefix(msg, test.wantMsg) {
+				t.Errorf("%s: expected error to start with human-readable message %q, got %q",
+					test.name, test.wantMsg, msg)
+			}
+
+			wantRegexpFragment := "regex used for validation is '" + test.wantRegexp + "'"
+			if !strings.Contains(msg, wantRegexpFragment) {
+				t.Errorf("%s: expected error to reference regex %q at the end, got %q",
+					test.name, wantRegexpFragment, msg)
+			}
+		})
+	}
+}
 
 func TestGenericValidator_ValidateEscapedStringNoVarExpansion(t *testing.T) {
 	t.Parallel()

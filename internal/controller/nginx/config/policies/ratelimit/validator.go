@@ -147,7 +147,7 @@ func validateNginxRate(rate string) error {
 			"500r/m",
 		}
 
-		return errors.New(k8svalidation.RegexError(rateStringFmt, rateStringErrMsg, examples...))
+		return errors.New(k8svalidation.RegexError(rateStringErrMsg, rateStringFmt, examples...))
 	}
 
 	return nil
@@ -162,7 +162,7 @@ func validateLimitReqKey(key string) error {
 			"my_fixed_key",
 		}
 
-		return errors.New(k8svalidation.RegexError(limitReqKeyFmt, limitReqErrMsg, examples...))
+		return errors.New(k8svalidation.RegexError(limitReqErrMsg, limitReqKeyFmt, examples...))
 	}
 
 	return nil

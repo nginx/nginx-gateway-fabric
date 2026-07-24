@@ -479,7 +479,7 @@ func validateDNSResolver(
 	if dnsResolver.CacheTTL != nil {
 		if err := validator.ValidateNginxDuration(string(*dnsResolver.CacheTTL)); err != nil {
 			allErrs = append(allErrs, field.Invalid(
-				dnsResolverPath.Child("valid"),
+				dnsResolverPath.Child("cacheTTL"),
 				*dnsResolver.CacheTTL,
 				err.Error(),
 			))

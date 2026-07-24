@@ -559,6 +559,7 @@ type NginxPlus struct {
 	// AllowedAddresses specifies IPAddresses or CIDR blocks to the allow list for accessing the NGINX Plus API.
 	//
 	// +optional
+	// +kubebuilder:validation:MaxItems=16
 	AllowedAddresses []NginxPlusAllowAddress `json:"allowedAddresses,omitempty"`
 }
 

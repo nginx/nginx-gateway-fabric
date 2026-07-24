@@ -94,6 +94,7 @@ type LocalRateLimit struct {
 	// Rules contains the list of rate limit rules.
 	//
 	// +optional
+	// +kubebuilder:validation:MinItems=1
 	Rules []RateLimitRule `json:"rules,omitempty"`
 }
 
@@ -116,6 +117,7 @@ type RateLimitRule struct {
 	// Directive: https://nginx.org/en/docs/http/ngx_http_limit_req_module.html#limit_req
 	//
 	// +optional
+	// +kubebuilder:validation:Minimum=0
 	Delay *int32 `json:"delay,omitempty"`
 
 	// NoDelay disables the delaying of excessive requests while requests are being limited.
@@ -133,6 +135,7 @@ type RateLimitRule struct {
 	// Directive: https://nginx.org/en/docs/http/ngx_http_limit_req_module.html#limit_req
 	//
 	// +optional
+	// +kubebuilder:validation:Minimum=0
 	Burst *int32 `json:"burst,omitempty"`
 
 	// Rate represents the rate of requests permitted. The rate is specified in requests per second (r/s)

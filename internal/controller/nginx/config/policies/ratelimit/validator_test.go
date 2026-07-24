@@ -70,9 +70,9 @@ func TestValidator_Validate(t *testing.T) {
 				return p
 			}),
 			expConditions: []conditions.Condition{
-				conditions.NewPolicyInvalid("spec.rateLimit.local.rules.zoneSize: Invalid value: \"invalid\": ^\\d{1,4}(k|m|g)?$ " +
-					"(e.g. '1024',  or '8k',  or '20m',  or '1g', regex used for validation is 'must contain a number. " +
-					"May be followed by 'k', 'm', or 'g', otherwise bytes are assumed')"),
+				conditions.NewPolicyInvalid("spec.rateLimit.local.rules.zoneSize: Invalid value: \"invalid\": " +
+					"must contain a number. May be followed by 'k', 'm', or 'g', otherwise bytes are assumed " +
+					"(e.g. '1024',  or '8k',  or '20m',  or '1g', regex used for validation is '^\\d{1,4}(k|m|g)?$')"),
 			},
 		},
 		{
@@ -82,8 +82,9 @@ func TestValidator_Validate(t *testing.T) {
 				return p
 			}),
 			expConditions: []conditions.Condition{
-				conditions.NewPolicyInvalid("spec.rateLimit.local.rules.rate: Invalid value: \"100rs\": ^\\d+r/[sm]$ " +
-					"(e.g. '10r/s',  or '500r/m', regex used for validation is 'must contain a number followed by 'r/s' or 'r/m'')"),
+				conditions.NewPolicyInvalid("spec.rateLimit.local.rules.rate: Invalid value: \"100rs\": " +
+					"must contain a number followed by 'r/s' or 'r/m' " +
+					"(e.g. '10r/s',  or '500r/m', regex used for validation is '^\\d+r/[sm]$')"),
 			},
 		},
 		{
@@ -94,9 +95,10 @@ func TestValidator_Validate(t *testing.T) {
 			}),
 			expConditions: []conditions.Condition{
 				conditions.NewPolicyInvalid("spec.rateLimit.local.rules.key: Invalid value: " +
-					"\"$invalid_key{}\": ^(?:[^ \\t\\r\\n;{}#$]+|\\$\\w+)+$ (e.g. '$binary_remote_addr',  or " +
-					"'$binary_remote_addr:$request_uri',  or 'my_fixed_key', regex used for validation is 'must be " +
-					"a valid limit_req key consisting of nginx variables and/or strings without spaces or special characters')"),
+					"\"$invalid_key{}\": must be a valid limit_req key consisting of nginx variables and/or " +
+					"strings without spaces or special characters (e.g. '$binary_remote_addr',  or " +
+					"'$binary_remote_addr:$request_uri',  or 'my_fixed_key', regex used for validation is " +
+					"'^(?:[^ \\t\\r\\n;{}#$]+|\\$\\w+)+$')"),
 			},
 		},
 		{

@@ -499,7 +499,7 @@ describe('paramsMatch', () => {
 				);
 			} else if (test.expectTypeError) {
 				expect(() => hm.paramsMatch(test.requestParams, test.params)).to.throw(
-					'invalid header match type',
+					'invalid query parameter match type',
 				);
 			} else {
 				expect(hm.paramsMatch(test.requestParams, test.params)).to.equal(test.expected);

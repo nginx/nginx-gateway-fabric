@@ -10265,6 +10265,7 @@ spec:
                       - type
                       - value
                       type: object
+                    maxItems: 16
                     type: array
                 type: object
               rewriteClientIP:
@@ -11551,6 +11552,7 @@ spec:
 
                                 Directive: https://nginx.org/en/docs/http/ngx_http_limit_req_module.html#limit_req
                               format: int32
+                              minimum: 0
                               type: integer
                             delay:
                               description: |-
@@ -11559,6 +11561,7 @@ spec:
 
                                 Directive: https://nginx.org/en/docs/http/ngx_http_limit_req_module.html#limit_req
                               format: int32
+                              minimum: 0
                               type: integer
                             key:
                               description: |-
@@ -11598,6 +11601,7 @@ spec:
                           - message: NoDelay cannot be true when Delay is also set
                             rule: '!(has(self.noDelay) && has(self.delay) && self.noDelay
                               == true)'
+                        minItems: 1
                         type: array
                     type: object
                   logLevel:
