@@ -1921,7 +1921,7 @@ func TestDetectClusterIPFamily(t *testing.T) {
 			kubeService: &corev1.Service{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "kubernetes",
-					Namespace: "default",
+					Namespace: corev1.NamespaceDefault,
 				},
 				Spec: corev1.ServiceSpec{
 					IPFamilies: []corev1.IPFamily{corev1.IPv4Protocol},
@@ -1934,7 +1934,7 @@ func TestDetectClusterIPFamily(t *testing.T) {
 			kubeService: &corev1.Service{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "kubernetes",
-					Namespace: "default",
+					Namespace: corev1.NamespaceDefault,
 				},
 				Spec: corev1.ServiceSpec{
 					IPFamilies: []corev1.IPFamily{corev1.IPv6Protocol},
@@ -1947,7 +1947,7 @@ func TestDetectClusterIPFamily(t *testing.T) {
 			kubeService: &corev1.Service{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "kubernetes",
-					Namespace: "default",
+					Namespace: corev1.NamespaceDefault,
 				},
 				Spec: corev1.ServiceSpec{
 					IPFamilies: []corev1.IPFamily{corev1.IPv4Protocol, corev1.IPv6Protocol},
