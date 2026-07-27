@@ -702,7 +702,11 @@ func fetchNIMLogProfile(ctx context.Context, client *http.Client, req Request) (
 	}
 
 	logProfileBundleURL := strings.TrimRight(req.URL, "/") +
-		fmt.Sprintf("/api/platform/v1/security/logprofiles/%s/%s/bundle", req.LogProfileName, versionResp.Version)
+		fmt.Sprintf(
+			"/api/platform/v1/security/logprofiles/%s/%s/bundle",
+			url.PathEscape(req.LogProfileName),
+			url.PathEscape(versionResp.Version),
+		)
 	body, err = doGet(ctx, client, logProfileBundleURL, req.Auth)
 	if err != nil {
 		return Result{}, fmt.Errorf("failed to fetch NIM log profile bundle: %w", err)
@@ -1254,7 +1258,11 @@ func fetchNIMLogProfileChecksum(ctx context.Context, client *http.Client, req Re
 	// metadata-only endpoint in NIM. We fetch the full response but discard the bundle bytes,
 	// using only the checksum computed from the decoded content.
 	logProfileBundleURL := strings.TrimRight(req.URL, "/") +
-		fmt.Sprintf("/api/platform/v1/security/logprofiles/%s/%s/bundle", req.LogProfileName, versionResp.Version)
+		fmt.Sprintf(
+			"/api/platform/v1/security/logprofiles/%s/%s/bundle",
+			url.PathEscape(req.LogProfileName),
+			url.PathEscape(versionResp.Version),
+		)
 	body, err = doGet(ctx, client, logProfileBundleURL, req.Auth)
 	if err != nil {
 		return "", fmt.Errorf("failed to fetch NIM log profile bundle metadata: %w", err)
