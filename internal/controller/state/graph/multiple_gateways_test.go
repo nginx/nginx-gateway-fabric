@@ -468,6 +468,7 @@ func Test_MultipleGateways_WithNginxProxy(t *testing.T) {
 				test.clusterState,
 				controllerName,
 				gcName,
+				"cluster.local",
 				map[types.NamespacedName][]PlusSecretFile{
 					client.ObjectKeyFromObject(plusSecret): {
 						{
@@ -991,6 +992,7 @@ func Test_MultipleGateways_WithListeners(t *testing.T) {
 				test.clusterState,
 				controllerName,
 				gcName,
+				"cluster.local",
 				map[types.NamespacedName][]PlusSecretFile{
 					client.ObjectKeyFromObject(plusSecret): {
 						{

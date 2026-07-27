@@ -2490,6 +2490,7 @@ func TestBuildGraph(t *testing.T) {
 				test.store,
 				controllerName,
 				gcName,
+				"cluster.local",
 				map[types.NamespacedName][]PlusSecretFile{
 					client.ObjectKeyFromObject(plusSecret): {
 						{

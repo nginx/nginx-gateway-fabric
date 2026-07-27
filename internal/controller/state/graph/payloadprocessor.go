@@ -40,6 +40,7 @@ func processPayloadProcessorPolicies(
 	processedPolicies map[PolicyKey]*Policy,
 	services map[types.NamespacedName]*corev1.Service,
 	secrets map[types.NamespacedName]*corev1.Secret,
+	clusterDomain string,
 ) *PayloadProcessingOutput {
 	output := &PayloadProcessingOutput{}
 
@@ -53,7 +54,7 @@ func processPayloadProcessorPolicies(
 			continue
 		}
 
-		resolvePayloadProcessor(pp, policy, services, secrets, output)
+		resolvePayloadProcessor(pp, policy, services, secrets, clusterDomain, output)
 	}
 
 	return output
@@ -66,6 +67,7 @@ func resolvePayloadProcessor(
 	policy *Policy,
 	services map[types.NamespacedName]*corev1.Service,
 	secrets map[types.NamespacedName]*corev1.Secret,
+	clusterDomain string,
 	output *PayloadProcessingOutput,
 ) {
 	// The API guarantees exactly one processor of type ExtProcess. Take the first ExtProcess entry.
@@ -81,7 +83,7 @@ func resolvePayloadProcessor(
 	}
 	ext := entry.ExtProcess
 
-	apiURL, err := resolveExtProcessURL(pp.Namespace, ext, services)
+	apiURL, err := resolveExtProcessURL(pp.Namespace, ext, services, clusterDomain)
 	if err != nil {
 		policy.Conditions = append(policy.Conditions, conditions.NewPolicyInvalid(err.Error()))
 		policy.Valid = false
@@ -125,6 +127,7 @@ func resolveExtProcessURL(
 	policyNamespace string,
 	ext *ngfAPIv1alpha1.ExtProcessConfig,
 	services map[types.NamespacedName]*corev1.Service,
+	clusterDomain string,
 ) (string, error) {
 	svcNsName := extProcessServiceNsName(policyNamespace, ext)
 
@@ -146,7 +149,13 @@ func resolveExtProcessURL(
 		return fmt.Sprintf("https://%s:%d", svc.Spec.ExternalName, port), nil
 	}
 
-	return fmt.Sprintf("http://%s.%s.svc.cluster.local:%d", svcNsName.Name, svcNsName.Namespace, port), nil
+	// Fall back to the default cluster domain when the controller flag is unset (e.g. older callers/tests).
+	domain := clusterDomain
+	if domain == "" {
+		domain = "cluster.local"
+	}
+
+	return fmt.Sprintf("http://%s.%s.svc.%s:%d", svcNsName.Name, svcNsName.Namespace, domain, port), nil
 }
 
 // resolveExtProcessAuthToken resolves the optional AuthTokenRef Secret into a bearer token. When no

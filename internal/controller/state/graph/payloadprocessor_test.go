@@ -334,7 +334,7 @@ func TestProcessPayloadProcessorPolicies(t *testing.T) {
 			}
 			processed := map[PolicyKey]*Policy{key: test.policy}
 
-			output := processPayloadProcessorPolicies(processed, services, secrets)
+			output := processPayloadProcessorPolicies(processed, services, secrets, "cluster.local")
 			g.Expect(output).ToNot(BeNil())
 
 			if test.expStateSet {
@@ -381,25 +381,41 @@ func TestResolveExtProcessURL(t *testing.T) {
 	}
 
 	tests := []struct {
-		ext       *ngfAPIv1alpha1.ExtProcessConfig
-		name      string
-		expURL    string
-		expErrSub string
+		ext           *ngfAPIv1alpha1.ExtProcessConfig
+		name          string
+		clusterDomain string
+		expURL        string
+		expErrSub     string
 	}{
 		{
-			name:   "ClusterIP Service resolves to cluster-local http URL",
-			ext:    ext("ext-svc", 9000),
-			expURL: "http://ext-svc.ns1.svc.cluster.local:9000",
+			name:          "ClusterIP Service resolves to cluster-local http URL",
+			ext:           ext("ext-svc", 9000),
+			clusterDomain: "cluster.local",
+			expURL:        "http://ext-svc.ns1.svc.cluster.local:9000",
 		},
 		{
-			name:   "ExternalName Service resolves to https URL with external hostname",
-			ext:    ext("ext-name-svc", 8443),
-			expURL: "https://guardrails.example.com:8443",
+			name:          "ClusterIP Service honors a custom cluster domain",
+			ext:           ext("ext-svc", 9000),
+			clusterDomain: "custom.internal",
+			expURL:        "http://ext-svc.ns1.svc.custom.internal:9000",
 		},
 		{
-			name:      "missing Service returns error",
-			ext:       ext("does-not-exist", 9000),
-			expErrSub: "not found",
+			name:          "empty cluster domain falls back to cluster.local",
+			ext:           ext("ext-svc", 9000),
+			clusterDomain: "",
+			expURL:        "http://ext-svc.ns1.svc.cluster.local:9000",
+		},
+		{
+			name:          "ExternalName Service resolves to https URL with external hostname",
+			ext:           ext("ext-name-svc", 8443),
+			clusterDomain: "cluster.local",
+			expURL:        "https://guardrails.example.com:8443",
+		},
+		{
+			name:          "missing Service returns error",
+			ext:           ext("does-not-exist", 9000),
+			clusterDomain: "cluster.local",
+			expErrSub:     "not found",
 		},
 	}
 
@@ -408,7 +424,7 @@ func TestResolveExtProcessURL(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			url, err := resolveExtProcessURL(policyNs, test.ext, services)
+			url, err := resolveExtProcessURL(policyNs, test.ext, services, test.clusterDomain)
 
 			if test.expErrSub != "" {
 				g.Expect(err).To(HaveOccurred())
@@ -654,7 +670,7 @@ func TestResolvePayloadProcessor(t *testing.T) {
 			policy := &Policy{Valid: true}
 			output := &PayloadProcessingOutput{}
 
-			resolvePayloadProcessor(test.pp, policy, svcs, secrets, output)
+			resolvePayloadProcessor(test.pp, policy, svcs, secrets, "cluster.local", output)
 
 			g.Expect(policy.Valid).To(Equal(test.expValid))
 

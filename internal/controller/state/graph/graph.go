@@ -263,6 +263,7 @@ func BuildGraph(
 	state ClusterState,
 	controllerName string,
 	gcName string,
+	clusterDomain string,
 	plusSecrets map[types.NamespacedName][]PlusSecretFile,
 	wafFetcher fetch.Fetcher,
 	plmFetcher *s3fetch.Fetcher,
@@ -399,7 +400,12 @@ func BuildGraph(
 		refGrantResolver,
 	)
 
-	payloadProcessorOutput := processPayloadProcessorPolicies(processedPolicies, state.Services, state.Secrets)
+	payloadProcessorOutput := processPayloadProcessorPolicies(
+		processedPolicies,
+		state.Services,
+		state.Secrets,
+		clusterDomain,
+	)
 
 	// add status conditions to each targetRef based on the policies that affect them.
 	addPolicyAffectedStatusToTargetRefs(processedPolicies, routes, gws)
