@@ -192,41 +192,20 @@ means the dataset cannot be edited by hand; after changing `test-data.json` you 
 `inference-sim-dataset.sqlite3` with the project's `ds-tool` converter, which uses the same
 tokenizer.
 
-```shell
-# 1. Start the UDS tokenizer server (separate process). ds-tool only *connects* to it.
-#    See https://github.com/llm-d/llm-d-kv-cache/tree/main/services/uds_tokenizer
-#    git clone git@github.com:llm-d/llm-d-kv-cache.git
-#    cd llm-d-kv-cache/services/uds_tokenizer && pip install -e . && python ./run_grpc_server.py
+Follow the steps listed in the [llm-d-inference-sim ds-tool docs](https://github.com/llm-d/llm-d-inference-sim/blob/main/docs/dataset_tool.md).
 
-# 2. For gated models, export a HuggingFace token (env var only; there is no flag):
-export HF_TOKEN=<your_huggingface_token>
+To run the vLLM render server use this command:
 
-# 3. ds-tool refuses to overwrite existing outputs — remove the current artifacts first:
-rm inference-sim-dataset.sqlite3 inference-sim-dataset.json inference-sim-dataset.md 2>/dev/null
+`make run-render MODEL_NAME=Qwen/Qwen3-32B RENDER_PORT=8082`
 
-# 4. Regenerate from test-data.json. Do NOT pass --table-name: it is broken in v0.8.2 (it binds to
-#    the wrong field) and the table must stay the default "llmd" that llm.yaml expects.
-ds-tool \
-  --model Qwen/Qwen3-32B \
-  --hf-repo Qwen/Qwen3-32B \
-  --input-file test-data.json \
-  --output-path . \
-  --output-file inference-sim-dataset
-```
+You may also need to build the ds-tool also:
 
-Then recreate the ConfigMap so the mock LLM picks up the new dataset, and restart the Pod:
-
-```shell
-kubectl delete configmap inference-sim-dataset
-kubectl create configmap inference-sim-dataset \
-  --from-file=inference-sim-dataset.sqlite3=./inference-sim-dataset.sqlite3
-kubectl rollout restart deployment vllm-qwen3-32b
-```
+`make ds-tool-build`
 
 ## Guardrails backend addressing
 
 The Guardrails backend can live **outside** or **inside** the cluster. NGF picks the URL scheme from
-the referenced Service's type (resolved in `resolveExtProcessURL`, `payloadprocessor.go`):
+the referenced Service's type:
 
 | Backend location | Service type | Resolved URL |
 | ------------------ | ------------- | -------------- |
@@ -256,7 +235,7 @@ metadata:
   name: guardrails-api
 spec:
   type: ExternalName
-  externalName: us1.calypsoai.app
+  externalName: my.hostname.app
   ports:
   - name: https
     port: 443
@@ -264,7 +243,7 @@ spec:
 ```
 
 With `backendRef.port: 443` in `payload-processor.yaml`, this resolves to
-`https://us1.calypsoai.app:443`.
+`https://my.hostname.app:443`.
 
 ### In-cluster backend
 
