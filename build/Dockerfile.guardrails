@@ -1,0 +1,62 @@
+# syntax=docker/dockerfile:1.25
+# Standalone build for the ai-guardrails NGINX dynamic module (Alpine/musl).
+#
+# This Dockerfile produces a single artifact: /out/libai_guardrails.so
+# It is consumed by the Alpine-based production Dockerfiles via:
+#   --build-context guardrails-builder=docker-image://$(GUARDRAILS_IMAGE)
+#
+# Build:
+#   docker build --build-arg -f build/Dockerfile.guardrails -t guardrails-alpine:latest .
+
+# renovate: datasource=github-tags depName=nginx/nginx extractVersion=^release-(?<version>.+)$
+ARG NGINX_VERSION=1.31.3
+
+# ---------------------------------------------------------------------------
+# Stage 1: Configure nginx source for bindgen to generate Rust FFI bindings.
+# Only --with-compat is required; it defines NGX_COMPAT for dynamic module
+# binary compatibility.
+# ---------------------------------------------------------------------------
+FROM alpine:3.23 AS nginx-source
+
+ARG NGINX_VERSION
+
+RUN apk add --no-cache gcc musl-dev openssl-dev pcre2-dev zlib-dev linux-headers perl make
+
+RUN wget -q https://nginx.org/download/nginx-${NGINX_VERSION}.tar.gz \
+    && tar xzf nginx-${NGINX_VERSION}.tar.gz
+
+RUN cd nginx-${NGINX_VERSION} && ./configure --with-compat --with-http_ssl_module
+
+# ---------------------------------------------------------------------------
+# Stage 2: Build the ai-guardrails Rust module against the configured source.
+# ---------------------------------------------------------------------------
+# TODO: Pin to specific Rust version to avoid breaking changes in the compiler.
+FROM rust:alpine AS builder
+
+# Pin clang20-dev: clang21's libclang.so cannot be dlopen'd on Alpine musl.
+RUN apk add --no-cache musl-dev openssl-dev perl make \
+    pcre2-dev zlib-dev linux-headers clang20-dev
+
+ARG NGINX_VERSION
+
+COPY --from=nginx-source /nginx-${NGINX_VERSION} /nginx-src
+
+ENV NGINX_SOURCE_DIR=/nginx-src
+ENV RUSTFLAGS="-C target-feature=-crt-static"
+
+WORKDIR /build
+COPY internal/controller/nginx/modules/rust/ai-guardrails/ ./
+# Cache mounts persist the cargo registry and compiled artifacts across builds.
+# The target/ dir is a cache mount (not baked into the layer), so we cp the
+# final .so to /tmp/ where it survives into the image layer for the next stage.
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/build/target \
+    cargo build --release \
+    && cp /build/target/release/libai_guardrails.so /tmp/libai_guardrails.so
+
+# ---------------------------------------------------------------------------
+# Stage 3: Export only the built .so in a minimal image.
+# ---------------------------------------------------------------------------
+FROM scratch
+
+COPY --from=builder /tmp/libai_guardrails.so /out/libai_guardrails.so

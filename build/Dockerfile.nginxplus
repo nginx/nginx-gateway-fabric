@@ -1,42 +1,13 @@
 # syntax=docker/dockerfile:1.25
 
-# NGINX Plus R37 is based on NGINX OSS 1.27.5; use that version for ABI compatibility.
-ARG NGINX_VERSION=1.27.5
-
 FROM scratch AS nginx-files
 
 # the following links can be replaced with local files if needed, i.e. ADD --chown=101:1001 <local_file> <container_file>
 ADD --link --chown=101:1001 https://cs.nginx.com/static/keys/nginx_signing.rsa.pub nginx_signing.rsa.pub
 
-# Configure nginx source for bindgen to generate Rust FFI bindings.
-FROM alpine:3.23 AS nginx-source
-
-ARG NGINX_VERSION
-
-RUN apk add --no-cache gcc musl-dev openssl-dev pcre2-dev zlib-dev linux-headers perl make
-
-RUN wget -q https://nginx.org/download/nginx-${NGINX_VERSION}.tar.gz \
-    && tar xzf nginx-${NGINX_VERSION}.tar.gz
-
-RUN cd nginx-${NGINX_VERSION} && ./configure --with-compat --with-http_ssl_module
-
-# Build the ai-guardrails Rust module against the configured nginx source.
-FROM rust:alpine AS guardrails-builder
-
-# Pin clang20-dev: clang21's libclang.so cannot be dlopen'd on Alpine musl.
-RUN apk add --no-cache musl-dev openssl-dev perl make \
-    pcre2-dev zlib-dev linux-headers clang20-dev
-
-ARG NGINX_VERSION
-
-COPY --from=nginx-source /nginx-${NGINX_VERSION} /nginx-src
-
-ENV NGINX_SOURCE_DIR=/nginx-src
-ENV RUSTFLAGS="-C target-feature=-crt-static"
-
-WORKDIR /build
-COPY internal/controller/nginx/modules/rust/ai-guardrails/ ./
-RUN cargo build --release
+# Default no-op guardrails-builder stage (empty). When INCLUDE_GUARDRAILS=true,
+# the Makefile supplies --build-context which overrides this with the real image.
+FROM scratch AS guardrails-builder
 
 FROM alpine:3.22
 
@@ -45,6 +16,7 @@ ARG NGINX_PLUS_VERSION=R37.0
 ARG NGINX_AGENT_VERSION=v3.11.2
 ARG APP_PROTECT_VERSION=37.0.5.635
 ARG INCLUDE_NAP_WAF=false
+ARG INCLUDE_GUARDRAILS=false
 ARG NJS_DIR
 ARG NGINX_CONF_DIR
 ARG BUILD_AGENT
@@ -72,7 +44,13 @@ RUN apk add --no-cache bash ca-certificates \
 
 COPY build/entrypoint.sh /agent/entrypoint.sh
 COPY ${NJS_DIR}/ /usr/lib/nginx/modules/njs/
-COPY --from=guardrails-builder /build/target/release/libai_guardrails.so /usr/lib/nginx/modules/libai_guardrails.so
+# Optionally install the AI Guardrails dynamic module.
+# When INCLUDE_GUARDRAILS=true, the Makefile overrides the no-op guardrails-builder
+# stage with the real image containing the compiled module.
+RUN --mount=type=bind,from=guardrails-builder,source=/,target=/guardrails-src \
+    if [ "${INCLUDE_GUARDRAILS}" = "true" ] && [ -f /guardrails-src/out/libai_guardrails.so ]; then \
+        cp /guardrails-src/out/libai_guardrails.so /usr/lib/nginx/modules/libai_guardrails.so; \
+    fi
 COPY ${NGINX_CONF_DIR}/nginx-plus.conf /etc/nginx/nginx.conf
 COPY ${NGINX_CONF_DIR}/grpc-error-locations.conf /etc/nginx/grpc-error-locations.conf
 COPY ${NGINX_CONF_DIR}/grpc-error-pages.conf /etc/nginx/grpc-error-pages.conf

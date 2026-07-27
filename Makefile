@@ -6,9 +6,28 @@ NGINX_CONF_DIR = internal/controller/nginx/conf
 NJS_DIR = internal/controller/nginx/modules/src
 RUST_DIR = internal/controller/nginx/modules/rust/ai-guardrails
 RUST_TEST_IMAGE = ai-guardrails-test
+# Per-OS guardrails image names — add a new line here to support additional OS variants.
+GUARDRAILS_IMAGE_alpine = guardrails-alpine
+GUARDRAILS_IMAGE_ubi    = guardrails-ubi
+
+# Default BUILD_OS to "alpine" when unset/empty.
+_BUILD_OS := $(or $(BUILD_OS),alpine)
+
+# Guard against typos / unsupported OS values.
+ifndef GUARDRAILS_IMAGE_$(_BUILD_OS)
+  $(error Unsupported BUILD_OS=$(_BUILD_OS). Supported values: alpine, ubi)
+endif
+
+# Resolve the correct guardrails image name based on BUILD_OS (computed variable lookup).
+GUARDRAILS_IMAGE = $(GUARDRAILS_IMAGE_$(_BUILD_OS)):$(strip $(TAG))
+GUARDRAILS_PLUS_IMAGE = $(GUARDRAILS_IMAGE_$(_BUILD_OS))-plus:$(strip $(TAG))
+
+# NGINX Plus R37 is based on NGINX OSS 1.27.5; use that version for ABI compatibility.
+NGINX_PLUS_OSS_VERSION = 1.27.5
 KIND_CONFIG_FILE = $(SELF_DIR)config/cluster/kind-cluster.yaml
 NGINX_DOCKER_BUILD_PLUS_ARGS = --secret id=nginx-repo.crt,src=$(SELF_DIR)nginx-repo.crt --secret id=nginx-repo.key,src=$(SELF_DIR)nginx-repo.key
 NGINX_DOCKER_BUILD_NAP_WAF_ARGS = --build-arg INCLUDE_NAP_WAF=true
+NGINX_DOCKER_BUILD_GUARDRAILS_ARGS = --build-arg INCLUDE_GUARDRAILS=true
 BUILD_AGENT = local
 
 PROD_TELEMETRY_ENDPOINT = oss.edge.df.f5.com:443
@@ -19,6 +38,7 @@ TELEMETRY_ENDPOINT_INSECURE = false
 
 ENABLE_EXPERIMENTAL ?= false
 ENABLE_INFERENCE_EXTENSION ?= false
+INCLUDE_GUARDRAILS ?= false## Include the AI Guardrails module. Set to true to build with guardrails.
 
 # go build flags - should not be overridden by the user
 GO_LINKER_FlAGS_VARS = -X main.version=${VERSION} -X main.telemetryReportPeriod=${TELEMETRY_REPORT_PERIOD} -X main.telemetryEndpoint=${TELEMETRY_ENDPOINT} -X main.telemetryEndpointInsecure=${TELEMETRY_ENDPOINT_INSECURE}
@@ -101,26 +121,74 @@ build-prod-ngf-image: build-ngf-image ## Build the NGF docker image for producti
 build-ngf-image: check-for-docker build ## Build the NGF docker image
 	docker build --platform linux/$(GOARCH) --build-arg BUILD_AGENT=$(BUILD_AGENT) --target $(strip $(TARGET)) -f $(SELF_DIR)build/$(if $(BUILD_OS),$(BUILD_OS)/)Dockerfile -t $(strip $(PREFIX)):$(strip $(TAG)) $(strip $(SELF_DIR))
 
+.PHONY: build-guardrails-image
+build-guardrails-image: check-for-docker ## Build the ai-guardrails module image
+	docker build --platform linux/$(GOARCH) \
+		-f $(SELF_DIR)build/$(if $(BUILD_OS),$(BUILD_OS)/)Dockerfile.guardrails \
+		-t $(GUARDRAILS_IMAGE) \
+		$(strip $(SELF_DIR))
+
+.PHONY: build-guardrails-plus-image
+build-guardrails-plus-image: check-for-docker ## Build the ai-guardrails module image for NGINX Plus (with correct OSS version for ABI compat)
+	docker build --platform linux/$(GOARCH) \
+		--build-arg NGINX_VERSION=$(NGINX_PLUS_OSS_VERSION) \
+		-f $(SELF_DIR)build/$(if $(BUILD_OS),$(BUILD_OS)/)Dockerfile.guardrails \
+		-t $(GUARDRAILS_PLUS_IMAGE) \
+		$(strip $(SELF_DIR))
+
+# Conditional guardrails args:
+# only add --build-context and --build-arg when INCLUDE_GUARDRAILS=true
+NGINX_DOCKER_GUARDRAILS_CONTEXT = $(if $(filter true,$(INCLUDE_GUARDRAILS)),--build-context guardrails-builder=docker-image://$(GUARDRAILS_IMAGE) $(NGINX_DOCKER_BUILD_GUARDRAILS_ARGS))
+NGINX_DOCKER_GUARDRAILS_PLUS_CONTEXT = $(if $(filter true,$(INCLUDE_GUARDRAILS)),--build-context guardrails-builder=docker-image://$(GUARDRAILS_PLUS_IMAGE) $(NGINX_DOCKER_BUILD_GUARDRAILS_ARGS))
+
+# Conditional guardrails prerequisites
+GUARDRAILS_DEP = $(if $(filter true,$(INCLUDE_GUARDRAILS)),build-guardrails-image)
+GUARDRAILS_PLUS_DEP = $(if $(filter true,$(INCLUDE_GUARDRAILS)),build-guardrails-plus-image)
+
 .PHONY: build-prod-nginx-image
 build-prod-nginx-image: build-nginx-image ## Build the custom nginx image for production
 
 .PHONY: build-nginx-image
-build-nginx-image: check-for-docker ## Build the custom nginx image
-	docker build --platform linux/$(GOARCH) $(strip $(NGINX_DOCKER_BUILD_OPTIONS)) -f $(SELF_DIR)build/$(if $(BUILD_OS),$(BUILD_OS)/)Dockerfile.nginx -t $(strip $(NGINX_PREFIX)):$(strip $(TAG)) $(strip $(SELF_DIR))
+build-nginx-image: check-for-docker $(GUARDRAILS_DEP) ## Build the custom nginx image
+	docker build --platform linux/$(GOARCH) $(strip $(NGINX_DOCKER_BUILD_OPTIONS)) \
+		$(strip $(NGINX_DOCKER_GUARDRAILS_CONTEXT)) \
+		-f $(SELF_DIR)build/$(if $(BUILD_OS),$(BUILD_OS)/)Dockerfile.nginx \
+		-t $(strip $(NGINX_PREFIX)):$(strip $(TAG)) $(strip $(SELF_DIR))
+
+# Convenience target: build nginx image with guardrails enabled
+.PHONY: build-nginx-image-with-guardrails
+build-nginx-image-with-guardrails: INCLUDE_GUARDRAILS=true
+build-nginx-image-with-guardrails: build-nginx-image ## Build the custom nginx image with AI Guardrails
 
 .PHONY: build-prod-nginx-plus-image
 build-prod-nginx-plus-image: build-nginx-plus-image ## Build the custom nginx plus image for production
 
 .PHONY: build-nginx-plus-image
-build-nginx-plus-image: check-for-docker ## Build the custom nginx plus image
-	docker build --platform linux/$(GOARCH) $(strip $(NGINX_DOCKER_BUILD_OPTIONS)) $(strip $(NGINX_DOCKER_BUILD_PLUS_ARGS))  -f $(SELF_DIR)build/$(if $(BUILD_OS),$(BUILD_OS)/)Dockerfile.nginxplus -t $(strip $(NGINX_PLUS_PREFIX)):$(strip $(TAG)) $(strip $(SELF_DIR))
+build-nginx-plus-image: check-for-docker $(GUARDRAILS_PLUS_DEP) ## Build the custom nginx plus image
+	docker build --platform linux/$(GOARCH) $(strip $(NGINX_DOCKER_BUILD_OPTIONS)) $(strip $(NGINX_DOCKER_BUILD_PLUS_ARGS)) \
+		$(strip $(NGINX_DOCKER_GUARDRAILS_PLUS_CONTEXT)) \
+		-f $(SELF_DIR)build/$(if $(BUILD_OS),$(BUILD_OS)/)Dockerfile.nginxplus \
+		-t $(strip $(NGINX_PLUS_PREFIX)):$(strip $(TAG)) $(strip $(SELF_DIR))
+
+# Convenience target: build nginx plus image with guardrails enabled
+.PHONY: build-nginx-plus-image-with-guardrails
+build-nginx-plus-image-with-guardrails: INCLUDE_GUARDRAILS=true
+build-nginx-plus-image-with-guardrails: build-nginx-plus-image ## Build the custom nginx plus image with AI Guardrails
 
 .PHONY: build-nginx-plus-image-with-nap-waf
-build-nginx-plus-image-with-nap-waf: check-for-docker ## Build the custom nginx plus image with NAP WAF. Note that arm is NOT supported.
+build-nginx-plus-image-with-nap-waf: check-for-docker $(GUARDRAILS_PLUS_DEP) ## Build the custom nginx plus image with NAP WAF. Note that arm is NOT supported.
 	@if [ $(GOARCH) = "arm64" ]; then \
 		echo "\033[0;31mIMPORTANT:\033[0m The nginx-plus-waf image cannot be built for arm64 architecture and will be built for amd64."; \
 	fi
-	docker build --platform linux/amd64 $(strip $(NGINX_DOCKER_BUILD_OPTIONS)) $(strip $(NGINX_DOCKER_BUILD_PLUS_ARGS)) $(strip $(NGINX_DOCKER_BUILD_NAP_WAF_ARGS)) -f $(SELF_DIR)build/$(if $(BUILD_OS),$(BUILD_OS)/)Dockerfile.nginxplus -t $(strip $(NGINX_PLUS_PREFIX)):$(strip $(TAG)) $(strip $(SELF_DIR))
+	docker build --platform linux/amd64 $(strip $(NGINX_DOCKER_BUILD_OPTIONS)) $(strip $(NGINX_DOCKER_BUILD_PLUS_ARGS)) $(strip $(NGINX_DOCKER_BUILD_NAP_WAF_ARGS)) \
+		$(strip $(NGINX_DOCKER_GUARDRAILS_PLUS_CONTEXT)) \
+		-f $(SELF_DIR)build/$(if $(BUILD_OS),$(BUILD_OS)/)Dockerfile.nginxplus \
+		-t $(strip $(NGINX_PLUS_PREFIX)):$(strip $(TAG)) $(strip $(SELF_DIR))
+
+# Convenience target: build nginx plus image with NAP WAF and guardrails enabled
+.PHONY: build-nginx-plus-image-with-nap-waf-and-guardrails
+build-nginx-plus-image-with-nap-waf-and-guardrails: INCLUDE_GUARDRAILS=true
+build-nginx-plus-image-with-nap-waf-and-guardrails: build-nginx-plus-image-with-nap-waf ## Build the custom nginx plus image with NAP WAF and AI Guardrails
 
 .PHONY: build-nginx-plus-image-with-nap-waf-dev
 build-nginx-plus-image-with-nap-waf-dev: check-for-docker check-nap-waf-repo-url ## Build the custom nginx plus image with NAP WAF from dev repo. Requires NAP_WAF_REPO_URL env var.

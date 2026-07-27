@@ -1,8 +1,5 @@
 # syntax=docker/dockerfile:1.25
 
-# NGINX Plus R37 is based on NGINX OSS 1.27.5; use that version for ABI compatibility.
-ARG NGINX_VERSION=1.27.5
-
 FROM scratch AS nginx-files
 
 # NGINX Plus repo and key files (must be provided at build time)
@@ -11,45 +8,18 @@ ADD --link --chown=101:1001 https://nginx.org/keys/nginx_signing.key nginx_signi
 ADD --link --chown=101:1001 build/ubi/repos/agent.repo agent.repo
 ADD --link --chown=101:1001 build/ubi/repos/app-protect.repo app-protect.repo
 
-# Configure nginx source for bindgen to generate Rust FFI bindings.
-# glibc-based stages are required for ABI compatibility with UBI's runtime libraries.
-FROM debian:bookworm-slim AS nginx-source
-
-ARG NGINX_VERSION
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc make libssl-dev libpcre2-dev zlib1g-dev wget ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
-
-RUN wget -q https://nginx.org/download/nginx-${NGINX_VERSION}.tar.gz \
-    && tar xzf nginx-${NGINX_VERSION}.tar.gz
-
-RUN cd nginx-${NGINX_VERSION} && ./configure --with-compat --with-http_ssl_module
-
-# Build the ai-guardrails Rust module against the configured nginx source.
-FROM rust:slim-bookworm AS guardrails-builder
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    clang libssl-dev libpcre2-dev zlib1g-dev make \
-    && rm -rf /var/lib/apt/lists/*
-
-ARG NGINX_VERSION
-
-COPY --from=nginx-source /nginx-${NGINX_VERSION} /nginx-src
-
-ENV NGINX_SOURCE_DIR=/nginx-src
-
-WORKDIR /build
-COPY internal/controller/nginx/modules/rust/ai-guardrails/ ./
-RUN cargo build --release
-
 FROM ghcr.io/nginx/dependencies/nginx-ubi:ubi10@sha256:0d557f564568c9886bce6ff30563887548e6785ce588be6e9821d89a8b60a2b5 AS ubi10-packages
+
+# Default no-op guardrails-builder stage (empty). When INCLUDE_GUARDRAILS=true,
+# the Makefile supplies --build-context which overrides this with the real image.
+FROM scratch AS guardrails-builder
 
 FROM registry.access.redhat.com/ubi10/ubi-minimal:10.2 AS ubi-nginx-plus
 
 ARG NGINX_PLUS_VERSION=R37.0
 ARG APP_PROTECT_VERSION=37.0+5.635
 ARG INCLUDE_NAP_WAF=false
+ARG INCLUDE_GUARDRAILS=false
 
 # renovate: datasource=github-tags depName=nginx/agent
 ARG NGINX_AGENT_VERSION=v3.11.2
@@ -114,7 +84,13 @@ RUN chown -R 101:1001 /etc/nginx /var/cache/nginx
 # Copy configuration files and scripts
 COPY build/entrypoint.sh /agent/entrypoint.sh
 COPY ${NJS_DIR}/ /usr/lib64/nginx/modules/njs/
-COPY --from=guardrails-builder /build/target/release/libai_guardrails.so /usr/lib64/nginx/modules/libai_guardrails.so
+# Optionally install the AI Guardrails dynamic module.
+# When INCLUDE_GUARDRAILS=true, the Makefile overrides the no-op guardrails-builder
+# stage with the real image containing the compiled module.
+RUN --mount=type=bind,from=guardrails-builder,source=/,target=/guardrails-src \
+    if [ "${INCLUDE_GUARDRAILS}" = "true" ] && [ -f /guardrails-src/out/libai_guardrails.so ]; then \
+        cp /guardrails-src/out/libai_guardrails.so /usr/lib64/nginx/modules/libai_guardrails.so; \
+    fi
 COPY ${NGINX_CONF_DIR}/nginx.conf /etc/nginx/nginx.conf
 COPY ${NGINX_CONF_DIR}/grpc-error-locations.conf /etc/nginx/grpc-error-locations.conf
 COPY ${NGINX_CONF_DIR}/grpc-error-pages.conf /etc/nginx/grpc-error-pages.conf

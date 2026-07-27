@@ -1,0 +1,65 @@
+# syntax=docker/dockerfile:1.25
+# Standalone build for the ai-guardrails NGINX dynamic module (glibc/Debian).
+#
+# This Dockerfile produces a single artifact: /out/libai_guardrails.so
+# It is consumed by the UBI-based production Dockerfiles via:
+#   --build-context guardrails-builder=docker-image://$(GUARDRAILS_IMAGE)
+#
+# glibc-based stages are required for ABI compatibility with UBI's runtime libraries.
+#
+# Build:
+#   docker build --build-arg NGINX_VERSION=1.31.3 \
+#     -f build/ubi/Dockerfile.guardrails -t guardrails-ubi:latest .
+
+# renovate: datasource=github-tags depName=nginx/nginx extractVersion=^release-(?<version>.+)$
+ARG NGINX_VERSION=1.31.3
+
+# ---------------------------------------------------------------------------
+# Stage 1: Configure nginx source for bindgen to generate Rust FFI bindings.
+# Only --with-compat is required; it defines NGX_COMPAT for dynamic module
+# binary compatibility.
+# ---------------------------------------------------------------------------
+FROM debian:bookworm-slim AS nginx-source
+
+ARG NGINX_VERSION
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc make libssl-dev libpcre2-dev zlib1g-dev wget ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN wget -q https://nginx.org/download/nginx-${NGINX_VERSION}.tar.gz \
+    && tar xzf nginx-${NGINX_VERSION}.tar.gz
+
+RUN cd nginx-${NGINX_VERSION} && ./configure --with-compat --with-http_ssl_module
+
+# ---------------------------------------------------------------------------
+# Stage 2: Build the ai-guardrails Rust module against the configured source.
+# ---------------------------------------------------------------------------
+FROM rust:slim-bookworm AS builder
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    clang libssl-dev libpcre2-dev zlib1g-dev make \
+    && rm -rf /var/lib/apt/lists/*
+
+ARG NGINX_VERSION
+
+COPY --from=nginx-source /nginx-${NGINX_VERSION} /nginx-src
+
+ENV NGINX_SOURCE_DIR=/nginx-src
+
+WORKDIR /build
+COPY internal/controller/nginx/modules/rust/ai-guardrails/ ./
+# Cache mounts persist the cargo registry and compiled artifacts across builds.
+# The target/ dir is a cache mount (not baked into the layer), so we cp the
+# final .so to /tmp/ where it survives into the image layer for the next stage.
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/build/target \
+    cargo build --release \
+    && cp /build/target/release/libai_guardrails.so /tmp/libai_guardrails.so
+
+# ---------------------------------------------------------------------------
+# Stage 3: Export only the built .so in a minimal image.
+# ---------------------------------------------------------------------------
+FROM scratch
+
+COPY --from=builder /tmp/libai_guardrails.so /out/libai_guardrails.so
