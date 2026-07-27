@@ -99,6 +99,9 @@ type Graph struct {
 	// ReferencedAPLogConfs includes APLogConf resources referenced by WAFPolicy resources.
 	ReferencedAPLogConfs map[types.NamespacedName]*unstructured.Unstructured
 	// ReferencedWAFSecrets includes Secrets referenced by WAFPolicy (auth and TLS CA).
+	// Similar to ReferencedSecrets, it includes entries for Secrets that do not exist in the cluster.
+	// We need such entries so that we can query the Graph to determine if a Secret is referenced
+	// by a WAFPolicy, including the case when the Secret is newly created.
 	ReferencedWAFSecrets map[types.NamespacedName]*v1.Secret
 	// SnippetsFilters holds all the SnippetsFilters.
 	SnippetsFilters map[types.NamespacedName]*SnippetsFilter
