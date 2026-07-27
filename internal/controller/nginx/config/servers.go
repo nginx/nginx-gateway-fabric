@@ -1277,7 +1277,7 @@ func updateLocationGuardrails(
 	}
 
 	gc := &http.GuardrailsConfig{
-		Filter:    guardrails.Filter,
+		Enabled:   guardrails.Enabled,
 		APIURL:    guardrails.APIURL,
 		TimeoutMS: guardrails.TimeoutMS,
 	}

@@ -2052,7 +2052,7 @@ func convertGraphGuardrails(route *graph.L7Route) *GuardrailsConfig {
 	}
 
 	gc := &GuardrailsConfig{
-		Filter:    "on",
+		Enabled:   true,
 		APIURL:    state.APIURL,
 		TimeoutMS: convertDurationToMS(state.Timeout),
 	}

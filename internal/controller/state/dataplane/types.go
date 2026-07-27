@@ -610,12 +610,12 @@ type MatchRule struct {
 type GuardrailsConfig struct {
 	// TimeoutMS is the optional request timeout in milliseconds.
 	TimeoutMS *int64
-	// Filter is the value for the guardrails_filter directive (e.g. "on").
-	Filter string
 	// APIURL is the resolved URL of the external Guardrails service.
 	APIURL string
 	// APITokenAuthFileID identifies the auth token file (in AuthSecrets) holding the bearer token, if any.
 	APITokenAuthFileID AuthFileID
+	// Enabled reports whether the guardrails filter is active for the match.
+	Enabled bool
 }
 
 // Match represents a match for a routing rule which consist of matches against various HTTP request attributes.

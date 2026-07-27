@@ -3116,7 +3116,7 @@ func TestBuildConfiguration_Guardrails(t *testing.T) {
 
 		gc := findGuardrails(result)
 		g.Expect(gc).ToNot(BeNil())
-		g.Expect(gc.Filter).To(Equal("on"))
+		g.Expect(gc.Enabled).To(BeTrue())
 		g.Expect(gc.APIURL).To(Equal("http://ext-svc.test.svc.cluster.local:9000"))
 		g.Expect(gc.APITokenAuthFileID).To(Equal(tokenFileID))
 		g.Expect(gc.TimeoutMS).ToNot(BeNil())
@@ -12000,7 +12000,7 @@ func TestConvertGraphGuardrails(t *testing.T) {
 			}
 
 			g.Expect(got).ToNot(BeNil())
-			g.Expect(got.Filter).To(Equal("on"))
+			g.Expect(got.Enabled).To(BeTrue())
 			g.Expect(got.APIURL).To(Equal(test.expURL))
 
 			if test.expFileSet {
@@ -12057,7 +12057,7 @@ func TestGuardrailsEnabled(t *testing.T) {
 	withGuardrails := []VirtualServer{
 		{
 			PathRules: []PathRule{
-				{MatchRules: []MatchRule{{Guardrails: &GuardrailsConfig{Filter: "on"}}}},
+				{MatchRules: []MatchRule{{Guardrails: &GuardrailsConfig{Enabled: true}}}},
 			},
 		},
 	}

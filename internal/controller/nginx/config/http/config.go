@@ -248,12 +248,12 @@ type AuthBasic struct {
 type GuardrailsConfig struct {
 	// TimeoutMS renders guardrails_timeout_ms; unset leaves the directive out (Rust default applies).
 	TimeoutMS *int64
-	// Filter renders guardrails_filter ("on"/"off").
-	Filter string
 	// APIURL renders guardrails_api_url (the ExtProcess backend base URL).
 	APIURL string
 	// APITokenFile renders guardrails_api_token_file (absolute path to the auth token file).
 	APITokenFile string
+	// Enabled renders guardrails_filter as on/off.
+	Enabled bool
 }
 
 // AuthJWT holds the configuration for JWT authentication using the auth_jwt directive.

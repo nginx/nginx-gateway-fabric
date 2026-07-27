@@ -174,7 +174,7 @@ server {
         {{- end }}
 
         {{- if $l.Guardrails }}
-        guardrails_filter {{ $l.Guardrails.Filter }};
+        guardrails_filter {{ if $l.Guardrails.Enabled }}on{{ else }}off{{ end }};
         guardrails_api_url {{ $l.Guardrails.APIURL }};
         {{- if $l.Guardrails.APITokenFile }}
         guardrails_api_token_file {{ $l.Guardrails.APITokenFile }};

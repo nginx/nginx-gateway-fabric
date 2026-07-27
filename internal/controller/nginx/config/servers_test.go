@@ -8850,7 +8850,7 @@ func TestUpdateLocationGuardrails(t *testing.T) {
 		{
 			name: "guardrails with token file and timeout",
 			guardrails: &dataplane.GuardrailsConfig{
-				Filter:             "on",
+				Enabled:            true,
 				APIURL:             "http://ext-svc.ns1.svc.cluster.local:9000",
 				APITokenAuthFileID: dataplane.GenerateGuardrailsTokenFileID("ns1", "token-secret"),
 				TimeoutMS:          &timeout,
@@ -8859,7 +8859,7 @@ func TestUpdateLocationGuardrails(t *testing.T) {
 				Path: "/",
 				Type: http.ExternalLocationType,
 				Guardrails: &http.GuardrailsConfig{
-					Filter:       "on",
+					Enabled:      true,
 					APIURL:       "http://ext-svc.ns1.svc.cluster.local:9000",
 					APITokenFile: "/etc/nginx/secrets/guardrails_token_ns1_token-secret",
 					TimeoutMS:    &timeout,
@@ -8869,15 +8869,15 @@ func TestUpdateLocationGuardrails(t *testing.T) {
 		{
 			name: "guardrails without token file",
 			guardrails: &dataplane.GuardrailsConfig{
-				Filter: "on",
-				APIURL: "http://ext-svc.ns1.svc.cluster.local:9000",
+				Enabled: true,
+				APIURL:  "http://ext-svc.ns1.svc.cluster.local:9000",
 			},
 			expected: http.Location{
 				Path: "/",
 				Type: http.ExternalLocationType,
 				Guardrails: &http.GuardrailsConfig{
-					Filter: "on",
-					APIURL: "http://ext-svc.ns1.svc.cluster.local:9000",
+					Enabled: true,
+					APIURL:  "http://ext-svc.ns1.svc.cluster.local:9000",
 				},
 			},
 		},
