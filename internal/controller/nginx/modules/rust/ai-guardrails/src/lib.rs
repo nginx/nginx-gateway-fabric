@@ -6,11 +6,11 @@ use std::ptr;
 
 use ngx::core::{self, Status};
 use ngx::ffi::{
-    ngx_chain_t, ngx_command_t, ngx_conf_t, ngx_http_finalize_request, ngx_http_module_t,
+    NGX_CONF_FLAG, NGX_CONF_TAKE1, NGX_HTTP_FORBIDDEN, NGX_HTTP_LOC_CONF, NGX_HTTP_LOC_CONF_OFFSET,
+    NGX_HTTP_MODULE, NGX_LOG_EMERG, NGX_LOG_ERR, NGX_LOG_INFO, NGX_LOG_WARN, ngx_chain_t,
+    ngx_command_t, ngx_conf_t, ngx_http_finalize_request, ngx_http_module_t,
     ngx_http_output_body_filter_pt, ngx_http_request_t, ngx_http_top_body_filter, ngx_int_t,
-    ngx_module_t, ngx_str_t, ngx_uint_t, NGX_CONF_FLAG, NGX_CONF_TAKE1, NGX_HTTP_FORBIDDEN,
-    NGX_HTTP_LOC_CONF, NGX_HTTP_LOC_CONF_OFFSET, NGX_HTTP_MODULE, NGX_LOG_EMERG, NGX_LOG_ERR,
-    NGX_LOG_INFO, NGX_LOG_WARN,
+    ngx_module_t, ngx_str_t, ngx_uint_t,
 };
 use ngx::http::{self, HttpModule, HttpModuleLocationConf, Request};
 use ngx::{ngx_conf_log_error, ngx_log_error, ngx_string};
@@ -25,7 +25,7 @@ type ngx_http_request_body_filter_pt =
 type ngx_http_output_header_filter_pt =
     Option<unsafe extern "C" fn(r: *mut ngx_http_request_t) -> ngx_int_t>;
 
-extern "C" {
+unsafe extern "C" {
     // The ngx crate only exposes the response body filter chain; this fills the gap.
     static mut ngx_http_top_request_body_filter: ngx_http_request_body_filter_pt;
     /// Top of the NGINX header filter chain — not exposed by the ngx crate.
@@ -56,27 +56,29 @@ impl http::HttpModule for Module {
     }
 
     unsafe extern "C" fn postconfiguration(_cf: *mut ngx_conf_t) -> ngx_int_t {
-        // Log module initialization
-        eprintln!("[guardrails] Rust module postconfiguration: registering filters");
+        unsafe {
+            // Log module initialization
+            eprintln!("[guardrails] Rust module postconfiguration: registering filters");
 
-        // Register header filter (two-state: suppress on first pass, commit on second).
-        // Must be registered before body filters so it sits at the top of the header chain.
-        NGX_HTTP_NEXT_HEADER_FILTER = ngx_http_top_header_filter;
-        ngx_http_top_header_filter = Some(guardrails_header_filter);
-        eprintln!("[guardrails] Registered header filter");
+            // Register header filter (two-state: suppress on first pass, commit on second).
+            // Must be registered before body filters so it sits at the top of the header chain.
+            NGX_HTTP_NEXT_HEADER_FILTER = ngx_http_top_header_filter;
+            ngx_http_top_header_filter = Some(guardrails_header_filter);
+            eprintln!("[guardrails] Registered header filter");
 
-        // Register request body filter for request inspection
-        NGX_HTTP_NEXT_REQUEST_BODY_FILTER = ngx_http_top_request_body_filter;
-        ngx_http_top_request_body_filter = Some(guardrails_request_body_filter);
-        eprintln!("[guardrails] Registered request body filter");
+            // Register request body filter for request inspection
+            NGX_HTTP_NEXT_REQUEST_BODY_FILTER = ngx_http_top_request_body_filter;
+            ngx_http_top_request_body_filter = Some(guardrails_request_body_filter);
+            eprintln!("[guardrails] Registered request body filter");
 
-        // Register response body filter for response inspection
-        NGX_HTTP_NEXT_BODY_FILTER = ngx_http_top_body_filter;
-        ngx_http_top_body_filter = Some(guardrails_response_body_filter);
-        eprintln!("[guardrails] Registered response body filter");
+            // Register response body filter for response inspection
+            NGX_HTTP_NEXT_BODY_FILTER = ngx_http_top_body_filter;
+            ngx_http_top_body_filter = Some(guardrails_response_body_filter);
+            eprintln!("[guardrails] Registered response body filter");
 
-        eprintln!("[guardrails] Rust module loaded successfully");
-        Status::NGX_OK.into()
+            eprintln!("[guardrails] Rust module loaded successfully");
+            Status::NGX_OK.into()
+        }
     }
 }
 
@@ -86,7 +88,7 @@ unsafe impl HttpModuleLocationConf for Module {
 
 /// Generate NGINX configuration directive handler
 macro_rules! ngx_conf_handler {
-    ($name:ident, $directive:literal, $apply:expr) => {
+    ($name:ident, $directive:literal, $apply:expr_2021) => {
         extern "C" fn $name(
             cf: *mut ngx_conf_t,
             _cmd: *mut ngx_command_t,
@@ -333,12 +335,14 @@ fn get_module_ctx_mut(
 
 /// Returns true if the upstream response has `Content-Type: text/event-stream`.
 unsafe fn is_sse_response(r: *mut ngx_http_request_t) -> bool {
-    let ct = (*r).headers_out.content_type;
-    if ct.len > 0 && !ct.data.is_null() {
-        let ct_slice = std::slice::from_raw_parts(ct.data, ct.len);
-        ct_slice.windows(17).any(|w| w == b"text/event-stream")
-    } else {
-        false
+    unsafe {
+        let ct = (*r).headers_out.content_type;
+        if ct.len > 0 && !ct.data.is_null() {
+            let ct_slice = std::slice::from_raw_parts(ct.data, ct.len);
+            ct_slice.windows(17).any(|w| w == b"text/event-stream")
+        } else {
+            false
+        }
     }
 }
 
@@ -556,59 +560,61 @@ fn call_next_header_filter(r: *mut ngx_http_request_t) -> ngx_int_t {
 /// this function and going straight to the rest of the chain.  This is the same pattern
 /// used by `ngx_http_image_filter_module`.  There is no second pass through this function.
 unsafe extern "C" fn guardrails_header_filter(r: *mut ngx_http_request_t) -> ngx_int_t {
-    if r.is_null() {
-        return call_next_header_filter(r);
-    }
-
-    let request = unsafe { &mut *r.cast::<Request>() };
-
-    // Always pass through for subrequests / internal redirects.
-    if !request.is_main() {
-        return call_next_header_filter(r);
-    }
-
-    // Pass through if response inspection is not configured for this location.
-    let conf = match Module::location_conf(request) {
-        Some(c) => c,
-        None => return call_next_header_filter(r),
-    };
-    if !conf.inspect_responses() {
-        return call_next_header_filter(r);
-    }
-
-    // Don't suppress error responses — these originate from our own 403 injection
-    // (send_403_and_finalize) and must reach the client unmodified.
-    if (*r).headers_out.status >= 400 {
-        return call_next_header_filter(r);
-    }
-
-    // SSE: always pass through — streaming responses cannot be fully buffered.
-    if is_sse_response(r) {
-        eprintln!("[guardrails] Header filter: SSE detected, passing through");
-        return call_next_header_filter(r);
-    }
-
-    // Get or allocate per-request context.
-    let ctx_ptr = get_module_ctx_mut(request, Module::module());
-    let ctx = if ctx_ptr.is_null() {
-        let new_ctx = request.pool().allocate(StreamContext::default());
-        if new_ctx.is_null() {
-            eprintln!("[guardrails] Header filter: pool alloc failed, passing through");
+    unsafe {
+        if r.is_null() {
             return call_next_header_filter(r);
         }
-        request.set_module_ctx(new_ctx.cast(), Module::module());
-        unsafe { &mut *new_ctx }
-    } else {
-        unsafe { &mut *ctx_ptr }
-    };
 
-    // Suppress upstream headers; the body filter will commit them after inspection.
-    eprintln!(
-        "[guardrails] Header filter: suppressing upstream headers (status={})",
-        (*r).headers_out.status
-    );
-    ctx.headers_suppressed = true;
-    Status::NGX_OK.into()
+        let request = &mut *r.cast::<Request>();
+
+        // Always pass through for subrequests / internal redirects.
+        if !request.is_main() {
+            return call_next_header_filter(r);
+        }
+
+        // Pass through if response inspection is not configured for this location.
+        let conf = match Module::location_conf(request) {
+            Some(c) => c,
+            None => return call_next_header_filter(r),
+        };
+        if !conf.inspect_responses() {
+            return call_next_header_filter(r);
+        }
+
+        // Don't suppress error responses — these originate from our own 403 injection
+        // (send_403_and_finalize) and must reach the client unmodified.
+        if (*r).headers_out.status >= 400 {
+            return call_next_header_filter(r);
+        }
+
+        // SSE: always pass through — streaming responses cannot be fully buffered.
+        if is_sse_response(r) {
+            eprintln!("[guardrails] Header filter: SSE detected, passing through");
+            return call_next_header_filter(r);
+        }
+
+        // Get or allocate per-request context.
+        let ctx_ptr = get_module_ctx_mut(request, Module::module());
+        let ctx = if ctx_ptr.is_null() {
+            let new_ctx = request.pool().allocate(StreamContext::default());
+            if new_ctx.is_null() {
+                eprintln!("[guardrails] Header filter: pool alloc failed, passing through");
+                return call_next_header_filter(r);
+            }
+            request.set_module_ctx(new_ctx.cast(), Module::module());
+            &mut *new_ctx
+        } else {
+            &mut *ctx_ptr
+        };
+
+        // Suppress upstream headers; the body filter will commit them after inspection.
+        eprintln!(
+            "[guardrails] Header filter: suppressing upstream headers (status={})",
+            (*r).headers_out.status
+        );
+        ctx.headers_suppressed = true;
+        Status::NGX_OK.into()
+    }
 }
 
 /// Send a 403 Forbidden response with a JSON error body.
@@ -670,232 +676,232 @@ unsafe extern "C" fn guardrails_response_body_filter(
     r: *mut ngx_http_request_t,
     in_chain: *mut ngx_chain_t,
 ) -> ngx_int_t {
-    if r.is_null() {
-        return Status::NGX_ERROR.into();
-    }
-
-    let request = unsafe { &mut *r.cast::<Request>() };
-
-    // Log that filter was called
-    eprintln!("[guardrails] Body filter called for request");
-
-    // Only process main requests
-    if !request.is_main() {
-        eprintln!("[guardrails] Skipping subrequest, passing through");
-        return call_next_response_body_filter(r, in_chain);
-    }
-
-    // Skip inspection for error responses (like 403 from blocked requests)
-    let status = unsafe { (*r).headers_out.status };
-    if status >= 400 {
-        eprintln!(
-            "[guardrails] Skipping error response (status {}), passing through",
-            status
-        );
-        return call_next_response_body_filter(r, in_chain);
-    }
-
-    eprintln!("[guardrails] Processing main request");
-
-    // Get module configuration
-    let conf = match Module::location_conf(request) {
-        Some(c) => {
-            eprintln!(
-                "[guardrails] Found location config: enabled={}, inspect_mode={}",
-                c.enabled, c.inspect_mode
-            );
-            c
+    unsafe {
+        if r.is_null() {
+            return Status::NGX_ERROR.into();
         }
-        None => {
-            eprintln!("[guardrails] No location config found");
+
+        let request = &mut *r.cast::<Request>();
+
+        // Log that filter was called
+        eprintln!("[guardrails] Body filter called for request");
+
+        // Only process main requests
+        if !request.is_main() {
+            eprintln!("[guardrails] Skipping subrequest, passing through");
+            return call_next_response_body_filter(r, in_chain);
+        }
+
+        // Skip inspection for error responses (like 403 from blocked requests)
+        let status = (*r).headers_out.status;
+        if status >= 400 {
+            eprintln!(
+                "[guardrails] Skipping error response (status {}), passing through",
+                status
+            );
+            return call_next_response_body_filter(r, in_chain);
+        }
+
+        eprintln!("[guardrails] Processing main request");
+
+        // Get module configuration
+        let conf = match Module::location_conf(request) {
+            Some(c) => {
+                eprintln!(
+                    "[guardrails] Found location config: enabled={}, inspect_mode={}",
+                    c.enabled, c.inspect_mode
+                );
+                c
+            }
+            None => {
+                eprintln!("[guardrails] No location config found");
+                ngx_log_error!(
+                    NGX_LOG_INFO,
+                    request.log(),
+                    "guardrails: no location config found, passing through"
+                );
+                return call_next_response_body_filter(r, in_chain);
+            }
+        };
+
+        // Skip if not enabled or not inspecting responses
+        if !conf.inspect_responses() {
+            eprintln!(
+                "[guardrails] Response inspection disabled (enabled={}, mode={})",
+                conf.enabled, conf.inspect_mode
+            );
             ngx_log_error!(
                 NGX_LOG_INFO,
                 request.log(),
-                "guardrails: no location config found, passing through"
+                "guardrails: response inspection disabled (enabled={}, mode={}), passing through",
+                conf.enabled,
+                conf.inspect_mode
             );
             return call_next_response_body_filter(r, in_chain);
         }
-    };
 
-    // Skip if not enabled or not inspecting responses
-    if !conf.inspect_responses() {
-        eprintln!(
-            "[guardrails] Response inspection disabled (enabled={}, mode={})",
-            conf.enabled, conf.inspect_mode
-        );
-        ngx_log_error!(
-            NGX_LOG_INFO,
-            request.log(),
-            "guardrails: response inspection disabled (enabled={}, mode={}), passing through",
-            conf.enabled,
-            conf.inspect_mode
-        );
-        return call_next_response_body_filter(r, in_chain);
-    }
+        eprintln!("[guardrails] Will inspect response");
 
-    eprintln!("[guardrails] Will inspect response");
+        // Get or create context
+        let ctx_ptr = get_module_ctx_mut(request, Module::module());
 
-    // Get or create context
-    let ctx_ptr = get_module_ctx_mut(request, Module::module());
+        let ctx = if ctx_ptr.is_null() {
+            eprintln!("[guardrails] Allocating new context (first chunk)");
 
-    let ctx = if ctx_ptr.is_null() {
-        eprintln!("[guardrails] Allocating new context (first chunk)");
-
-        // First chunk - allocate context
-        let new_ctx = request.pool().allocate(StreamContext::default());
-        if new_ctx.is_null() {
-            eprintln!("[guardrails] ERROR: Failed to allocate context!");
-            ngx_log_error!(
-                NGX_LOG_ERR,
-                request.log(),
-                "guardrails: failed to allocate context"
-            );
-            return call_next_response_body_filter(r, in_chain);
-        }
-        request.set_module_ctx(new_ctx.cast(), Module::module());
-        unsafe { &mut *new_ctx }
-    } else {
-        eprintln!("[guardrails] Using existing context");
-        unsafe { &mut *ctx_ptr }
-    };
-
-    // If already blocked, send termination and stop
-    if ctx.blocked {
-        ngx_log_error!(
-            NGX_LOG_WARN,
-            request.log(),
-            "guardrails: stream blocked, sending termination"
-        );
-
-        return send_termination(r, request);
-    }
-
-    // --- Ingest all buffers from the upstream chain -------------------------
-    let mut chain = in_chain;
-    let mut last_buf = false;
-
-    while !chain.is_null() {
-        let buf = unsafe { (*chain).buf };
-        if !buf.is_null() {
-            let buffer = unsafe { &*buf };
-
-            if buffer.last_buf() != 0 || buffer.last_in_chain() != 0 {
-                last_buf = true;
+            // First chunk - allocate context
+            let new_ctx = request.pool().allocate(StreamContext::default());
+            if new_ctx.is_null() {
+                eprintln!("[guardrails] ERROR: Failed to allocate context!");
+                ngx_log_error!(
+                    NGX_LOG_ERR,
+                    request.log(),
+                    "guardrails: failed to allocate context"
+                );
+                return call_next_response_body_filter(r, in_chain);
             }
+            request.set_module_ctx(new_ctx.cast(), Module::module());
+            &mut *new_ctx
+        } else {
+            eprintln!("[guardrails] Using existing context");
+            &mut *ctx_ptr
+        };
 
-            if !buffer.pos.is_null() && !buffer.last.is_null() {
-                let len = unsafe { buffer.last.offset_from(buffer.pos) as usize };
-                let data = unsafe { std::slice::from_raw_parts(buffer.pos, len) };
-                // process_chunk: adds raw bytes to pending_chunks AND parses
-                // complete JSON lines for text extraction / object counting.
-                ctx.process_chunk(data);
-                // Advance pos to last to mark this upstream buffer as consumed.
-                // Without this NGINX thinks the buffer is still in use and stops
-                // reading from upstream once its ~4KB proxy_buffer_size fills up.
-                unsafe {
+        // If already blocked, send termination and stop
+        if ctx.blocked {
+            ngx_log_error!(
+                NGX_LOG_WARN,
+                request.log(),
+                "guardrails: stream blocked, sending termination"
+            );
+
+            return send_termination(r, request);
+        }
+
+        // --- Ingest all buffers from the upstream chain -------------------------
+        let mut chain = in_chain;
+        let mut last_buf = false;
+
+        while !chain.is_null() {
+            let buf = (*chain).buf;
+            if !buf.is_null() {
+                let buffer = &*buf;
+
+                if buffer.last_buf() != 0 || buffer.last_in_chain() != 0 {
+                    last_buf = true;
+                }
+
+                if !buffer.pos.is_null() && !buffer.last.is_null() {
+                    let len = buffer.last.offset_from(buffer.pos) as usize;
+                    let data = std::slice::from_raw_parts(buffer.pos, len);
+                    // process_chunk: adds raw bytes to pending_chunks AND parses
+                    // complete JSON lines for text extraction / object counting.
+                    ctx.process_chunk(data);
+                    // Advance pos to last to mark this upstream buffer as consumed.
+                    // Without this NGINX thinks the buffer is still in use and stops
+                    // reading from upstream once its ~4KB proxy_buffer_size fills up.
                     (*buf).pos = (*buf).last;
                 }
             }
+            chain = (*chain).next;
         }
-        chain = unsafe { (*chain).next };
-    }
 
-    eprintln!(
-        "[guardrails] Chain processed: last_buf={}, pending_chunks={}, accumulated={}, buffered_bytes={}",
-        last_buf,
-        ctx.pending_chunks.len(),
-        ctx.accumulated_text.len(),
-        ctx.total_buffered_bytes
-    );
-
-    // --- Check buffer size limit -------------------------------------------
-    if conf.max_response_bytes > 0 && ctx.total_buffered_bytes > conf.max_response_bytes {
-        ngx_log_error!(
-            NGX_LOG_WARN,
-            request.log(),
-            "guardrails: response buffer limit ({} bytes) exceeded, blocking stream",
-            conf.max_response_bytes
+        eprintln!(
+            "[guardrails] Chain processed: last_buf={}, pending_chunks={}, accumulated={}, buffered_bytes={}",
+            last_buf,
+            ctx.pending_chunks.len(),
+            ctx.accumulated_text.len(),
+            ctx.total_buffered_bytes
         );
-        ctx.blocked = true;
-        ctx.clear_pending_chunks();
-        return if ctx.headers_suppressed {
-            send_blocked_response(r, request, ctx)
-        } else {
-            send_termination(r, request)
-        };
-    }
 
-    // --- Decide whether to inspect now or keep buffering -------------------
-    // Flush any bytes still in line_buffer that were never terminated by a
-    // newline.  This handles non-streaming responses (e.g. /v1/completions)
-    // that arrive as a single JSON blob without a trailing newline.
-    if last_buf {
-        ctx.try_drain_remaining();
-    }
-
-    let do_inspect = ctx.should_inspect_final(last_buf);
-
-    if !do_inspect {
-        // Not enough objects yet — keep buffering, return nothing to client.
-        return Status::NGX_OK.into();
-    }
-
-    // --- Run synchronous Guardrails inspection -----------------------------
-    ngx_log_error!(
-        NGX_LOG_INFO,
-        request.log(),
-        "guardrails: inspecting full stream, accumulated={}",
-        ctx.accumulated_text.len()
-    );
-
-    let inspection_result = stream::inspect_checkpoint(ctx, conf);
-
-    match inspection_result {
-        Ok(true) => {
-            // Cleared — release buffered chunks to the client.
-            ngx_log_error!(NGX_LOG_INFO, request.log(), "guardrails: content cleared");
-
-            // If we suppressed the upstream headers, commit them now before sending body.
-            // Call directly into the rest of the header chain — same pattern as image_filter.
-            if ctx.headers_suppressed {
-                let hdr_rc = call_next_header_filter(r);
-                if hdr_rc == ngx_int_t::from(Status::NGX_ERROR) {
-                    return Status::NGX_ERROR.into();
-                }
-            }
-
-            let chunks_to_send = ctx.take_pending_chunks();
-            if chunks_to_send.is_empty() {
-                return Status::NGX_OK.into();
-            }
-
-            send_chunks(r, request, &chunks_to_send, last_buf || ctx.stream_done)
-        }
-        Ok(false) => {
-            // Blocked — discard buffer and send error response.
-            ngx_log_error!(NGX_LOG_WARN, request.log(), "guardrails: content BLOCKED");
-            ctx.blocked = true;
-            ctx.clear_pending_chunks();
-            if ctx.headers_suppressed {
-                send_blocked_response(r, request, ctx)
-            } else {
-                send_termination(r, request)
-            }
-        }
-        Err(e) => {
-            // Fail-closed: block on any inspection error (consistent with failureMode: FailClosed).
+        // --- Check buffer size limit -------------------------------------------
+        if conf.max_response_bytes > 0 && ctx.total_buffered_bytes > conf.max_response_bytes {
             ngx_log_error!(
-                NGX_LOG_ERR,
+                NGX_LOG_WARN,
                 request.log(),
-                "guardrails: inspection error (fail-closed): {:?}",
-                e
+                "guardrails: response buffer limit ({} bytes) exceeded, blocking stream",
+                conf.max_response_bytes
             );
             ctx.blocked = true;
             ctx.clear_pending_chunks();
-            if ctx.headers_suppressed {
+            return if ctx.headers_suppressed {
                 send_blocked_response(r, request, ctx)
             } else {
                 send_termination(r, request)
+            };
+        }
+
+        // --- Decide whether to inspect now or keep buffering -------------------
+        // Flush any bytes still in line_buffer that were never terminated by a
+        // newline.  This handles non-streaming responses (e.g. /v1/completions)
+        // that arrive as a single JSON blob without a trailing newline.
+        if last_buf {
+            ctx.try_drain_remaining();
+        }
+
+        let do_inspect = ctx.should_inspect_final(last_buf);
+
+        if !do_inspect {
+            // Not enough objects yet — keep buffering, return nothing to client.
+            return Status::NGX_OK.into();
+        }
+
+        // --- Run synchronous Guardrails inspection -----------------------------
+        ngx_log_error!(
+            NGX_LOG_INFO,
+            request.log(),
+            "guardrails: inspecting full stream, accumulated={}",
+            ctx.accumulated_text.len()
+        );
+
+        let inspection_result = stream::inspect_checkpoint(ctx, conf);
+
+        match inspection_result {
+            Ok(true) => {
+                // Cleared — release buffered chunks to the client.
+                ngx_log_error!(NGX_LOG_INFO, request.log(), "guardrails: content cleared");
+
+                // If we suppressed the upstream headers, commit them now before sending body.
+                // Call directly into the rest of the header chain — same pattern as image_filter.
+                if ctx.headers_suppressed {
+                    let hdr_rc = call_next_header_filter(r);
+                    if hdr_rc == ngx_int_t::from(Status::NGX_ERROR) {
+                        return Status::NGX_ERROR.into();
+                    }
+                }
+
+                let chunks_to_send = ctx.take_pending_chunks();
+                if chunks_to_send.is_empty() {
+                    return Status::NGX_OK.into();
+                }
+
+                send_chunks(r, request, &chunks_to_send, last_buf || ctx.stream_done)
+            }
+            Ok(false) => {
+                // Blocked — discard buffer and send error response.
+                ngx_log_error!(NGX_LOG_WARN, request.log(), "guardrails: content BLOCKED");
+                ctx.blocked = true;
+                ctx.clear_pending_chunks();
+                if ctx.headers_suppressed {
+                    send_blocked_response(r, request, ctx)
+                } else {
+                    send_termination(r, request)
+                }
+            }
+            Err(e) => {
+                // Fail-closed: block on any inspection error (consistent with failureMode: FailClosed).
+                ngx_log_error!(
+                    NGX_LOG_ERR,
+                    request.log(),
+                    "guardrails: inspection error (fail-closed): {:?}",
+                    e
+                );
+                ctx.blocked = true;
+                ctx.clear_pending_chunks();
+                if ctx.headers_suppressed {
+                    send_blocked_response(r, request, ctx)
+                } else {
+                    send_termination(r, request)
+                }
             }
         }
     }
@@ -920,36 +926,38 @@ unsafe extern "C" fn guardrails_response_body_filter(
 /// Request-side (`invalid_request_error`) vs output-side (`api_error`) typing is intentional:
 /// only the input-block path represents a bad client request.
 unsafe fn send_termination(r: *mut ngx_http_request_t, request: &http::Request) -> ngx_int_t {
-    let is_sse = is_sse_response(r);
-    let term_msg: &[u8] = if is_sse {
-        stream::termination_message()
-    } else {
-        stream::non_streaming_error_body()
-    };
-    let pool = request.pool();
-    let buf = ngx::ffi::ngx_create_temp_buf(pool.as_ptr(), term_msg.len());
-    if buf.is_null() {
-        return Status::NGX_ERROR.into();
+    unsafe {
+        let is_sse = is_sse_response(r);
+        let term_msg: &[u8] = if is_sse {
+            stream::termination_message()
+        } else {
+            stream::non_streaming_error_body()
+        };
+        let pool = request.pool();
+        let buf = ngx::ffi::ngx_create_temp_buf(pool.as_ptr(), term_msg.len());
+        if buf.is_null() {
+            return Status::NGX_ERROR.into();
+        }
+        ptr::copy_nonoverlapping(term_msg.as_ptr(), (*buf).pos, term_msg.len());
+        (*buf).last = (*buf).pos.add(term_msg.len());
+        (*buf).set_last_buf(1);
+        (*buf).set_flush(1);
+        let out = ngx::ffi::ngx_alloc_chain_link(pool.as_ptr());
+        if out.is_null() {
+            return Status::NGX_ERROR.into();
+        }
+        (*out).buf = buf;
+        (*out).next = ptr::null_mut();
+        // Forward the termination buffer to the client, then return NGX_ERROR so
+        // NGINX closes the connection.  This is critical for non-streaming
+        // responses that carry a Content-Length header: without closing the
+        // connection, curl waits for the remaining promised bytes and hangs.
+        // Do NOT call ngx_http_finalize_request here — calling it from inside the
+        // body filter chain is unsafe and causes double-finalization on keep-alive
+        // connections (finalize with NGX_OK keeps the connection open).
+        call_next_response_body_filter(r, out);
+        Status::NGX_ERROR.into()
     }
-    ptr::copy_nonoverlapping(term_msg.as_ptr(), (*buf).pos, term_msg.len());
-    (*buf).last = (*buf).pos.add(term_msg.len());
-    (*buf).set_last_buf(1);
-    (*buf).set_flush(1);
-    let out = ngx::ffi::ngx_alloc_chain_link(pool.as_ptr());
-    if out.is_null() {
-        return Status::NGX_ERROR.into();
-    }
-    (*out).buf = buf;
-    (*out).next = ptr::null_mut();
-    // Forward the termination buffer to the client, then return NGX_ERROR so
-    // NGINX closes the connection.  This is critical for non-streaming
-    // responses that carry a Content-Length header: without closing the
-    // connection, curl waits for the remaining promised bytes and hangs.
-    // Do NOT call ngx_http_finalize_request here — calling it from inside the
-    // body filter chain is unsafe and causes double-finalization on keep-alive
-    // connections (finalize with NGX_OK keeps the connection open).
-    call_next_response_body_filter(r, out);
-    Status::NGX_ERROR.into()
 }
 
 /// Commit a 403 response via the standard NGINX body-filter header commit pattern.
@@ -978,54 +986,56 @@ unsafe fn send_blocked_response(
     request: &http::Request,
     _ctx: &mut StreamContext,
 ) -> ngx_int_t {
-    // Keep in sync with `stream::non_streaming_error_body()`.
-    static JSON_BODY: &[u8] = b"{\"error\":{\"message\":\"Response blocked by guardrails policy.\",\"type\":\"api_error\",\"param\":null,\"code\":\"content_policy_violation\"}}";
+    unsafe {
+        // Keep in sync with `stream::non_streaming_error_body()`.
+        static JSON_BODY: &[u8] = b"{\"error\":{\"message\":\"Response blocked by guardrails policy.\",\"type\":\"api_error\",\"param\":null,\"code\":\"content_policy_violation\"}}";
 
-    eprintln!(
-        "[guardrails] send_blocked_response: committing 403 via direct next-header-filter call"
-    );
+        eprintln!(
+            "[guardrails] send_blocked_response: committing 403 via direct next-header-filter call"
+        );
 
-    (*r).headers_out.status = NGX_HTTP_FORBIDDEN as ngx_uint_t;
-    (*r).headers_out.content_length_n = JSON_BODY.len() as i64;
-    // Clear the pre-built status_line string that the proxy module set to "200 OK".
-    // If status_line.len > 0, ngx_http_header_filter writes that string verbatim to the
-    // socket regardless of headers_out.status.  Zeroing it forces NGINX to derive the
-    // status line from the integer status code instead.
-    (*r).headers_out.status_line.len = 0;
-    (*r).headers_out.status_line.data = ptr::null_mut();
+        (*r).headers_out.status = NGX_HTTP_FORBIDDEN as ngx_uint_t;
+        (*r).headers_out.content_length_n = JSON_BODY.len() as i64;
+        // Clear the pre-built status_line string that the proxy module set to "200 OK".
+        // If status_line.len > 0, ngx_http_header_filter writes that string verbatim to the
+        // socket regardless of headers_out.status.  Zeroing it forces NGINX to derive the
+        // status line from the integer status code instead.
+        (*r).headers_out.status_line.len = 0;
+        (*r).headers_out.status_line.data = ptr::null_mut();
 
-    // Call directly into the rest of the header filter chain — NOT through
-    // ngx_http_send_header / ngx_http_top_header_filter, which would re-enter
-    // our own guardrails_header_filter and cause double-processing.
-    let hdr_rc = call_next_header_filter(r);
-    if hdr_rc == ngx_int_t::from(Status::NGX_ERROR) {
-        return Status::NGX_ERROR.into();
+        // Call directly into the rest of the header filter chain — NOT through
+        // ngx_http_send_header / ngx_http_top_header_filter, which would re-enter
+        // our own guardrails_header_filter and cause double-processing.
+        let hdr_rc = call_next_header_filter(r);
+        if hdr_rc == ngx_int_t::from(Status::NGX_ERROR) {
+            return Status::NGX_ERROR.into();
+        }
+        if request.header_only() {
+            return Status::NGX_OK.into();
+        }
+
+        // Write the JSON error body.
+        let pool = request.pool();
+        let buf = ngx::ffi::ngx_create_temp_buf(pool.as_ptr(), JSON_BODY.len());
+        if buf.is_null() {
+            return Status::NGX_ERROR.into();
+        }
+        ptr::copy_nonoverlapping(JSON_BODY.as_ptr(), (*buf).pos, JSON_BODY.len());
+        (*buf).last = (*buf).pos.add(JSON_BODY.len());
+        (*buf).set_last_buf(1);
+        (*buf).set_flush(1);
+        (*buf).set_memory(1);
+
+        let out = ngx::ffi::ngx_alloc_chain_link(pool.as_ptr());
+        if out.is_null() {
+            return Status::NGX_ERROR.into();
+        }
+        (*out).buf = buf;
+        (*out).next = ptr::null_mut();
+
+        call_next_response_body_filter(r, out);
+        Status::NGX_ERROR.into()
     }
-    if request.header_only() {
-        return Status::NGX_OK.into();
-    }
-
-    // Write the JSON error body.
-    let pool = request.pool();
-    let buf = ngx::ffi::ngx_create_temp_buf(pool.as_ptr(), JSON_BODY.len());
-    if buf.is_null() {
-        return Status::NGX_ERROR.into();
-    }
-    ptr::copy_nonoverlapping(JSON_BODY.as_ptr(), (*buf).pos, JSON_BODY.len());
-    (*buf).last = (*buf).pos.add(JSON_BODY.len());
-    (*buf).set_last_buf(1);
-    (*buf).set_flush(1);
-    (*buf).set_memory(1);
-
-    let out = ngx::ffi::ngx_alloc_chain_link(pool.as_ptr());
-    if out.is_null() {
-        return Status::NGX_ERROR.into();
-    }
-    (*out).buf = buf;
-    (*out).next = ptr::null_mut();
-
-    call_next_response_body_filter(r, out);
-    Status::NGX_ERROR.into()
 }
 
 /// Build an ngx_chain_t from `chunks` and pass it to the next body filter.
@@ -1038,65 +1048,67 @@ unsafe fn send_chunks(
     chunks: &[Vec<u8>],
     mark_last: bool,
 ) -> ngx_int_t {
-    eprintln!(
-        "[guardrails] Sending {} chunks to client (mark_last={})",
-        chunks.len(),
-        mark_last
-    );
+    unsafe {
+        eprintln!(
+            "[guardrails] Sending {} chunks to client (mark_last={})",
+            chunks.len(),
+            mark_last
+        );
 
-    let pool = request.pool();
-    let mut first_link: *mut ngx_chain_t = ptr::null_mut();
-    let mut prev_link: *mut ngx_chain_t = ptr::null_mut();
-    let last_idx = chunks.len().saturating_sub(1);
+        let pool = request.pool();
+        let mut first_link: *mut ngx_chain_t = ptr::null_mut();
+        let mut prev_link: *mut ngx_chain_t = ptr::null_mut();
+        let last_idx = chunks.len().saturating_sub(1);
 
-    for (idx, chunk_data) in chunks.iter().enumerate() {
-        let buf = ngx::ffi::ngx_create_temp_buf(pool.as_ptr(), chunk_data.len());
-        if buf.is_null() {
-            ngx_log_error!(
-                NGX_LOG_ERR,
-                request.log(),
-                "guardrails: ngx_create_temp_buf failed"
-            );
-            continue;
+        for (idx, chunk_data) in chunks.iter().enumerate() {
+            let buf = ngx::ffi::ngx_create_temp_buf(pool.as_ptr(), chunk_data.len());
+            if buf.is_null() {
+                ngx_log_error!(
+                    NGX_LOG_ERR,
+                    request.log(),
+                    "guardrails: ngx_create_temp_buf failed"
+                );
+                continue;
+            }
+
+            ptr::copy_nonoverlapping(chunk_data.as_ptr(), (*buf).pos, chunk_data.len());
+            (*buf).last = (*buf).pos.add(chunk_data.len());
+
+            // flush=1 tells NGINX to push this data to the client socket immediately;
+            // without it the worker buffers the chain and nothing reaches the client.
+            (*buf).set_flush(1);
+
+            if idx == last_idx && mark_last {
+                (*buf).set_last_buf(1);
+            }
+
+            let link = ngx::ffi::ngx_alloc_chain_link(pool.as_ptr());
+            if link.is_null() {
+                ngx_log_error!(
+                    NGX_LOG_ERR,
+                    request.log(),
+                    "guardrails: ngx_alloc_chain_link failed"
+                );
+                continue;
+            }
+
+            (*link).buf = buf;
+            (*link).next = ptr::null_mut();
+
+            if first_link.is_null() {
+                first_link = link;
+            } else {
+                (*prev_link).next = link;
+            }
+            prev_link = link;
         }
-
-        ptr::copy_nonoverlapping(chunk_data.as_ptr(), (*buf).pos, chunk_data.len());
-        (*buf).last = (*buf).pos.add(chunk_data.len());
-
-        // flush=1 tells NGINX to push this data to the client socket immediately;
-        // without it the worker buffers the chain and nothing reaches the client.
-        (*buf).set_flush(1);
-
-        if idx == last_idx && mark_last {
-            (*buf).set_last_buf(1);
-        }
-
-        let link = ngx::ffi::ngx_alloc_chain_link(pool.as_ptr());
-        if link.is_null() {
-            ngx_log_error!(
-                NGX_LOG_ERR,
-                request.log(),
-                "guardrails: ngx_alloc_chain_link failed"
-            );
-            continue;
-        }
-
-        (*link).buf = buf;
-        (*link).next = ptr::null_mut();
 
         if first_link.is_null() {
-            first_link = link;
-        } else {
-            (*prev_link).next = link;
+            return Status::NGX_OK.into();
         }
-        prev_link = link;
-    }
 
-    if first_link.is_null() {
-        return Status::NGX_OK.into();
+        call_next_response_body_filter(r, first_link)
     }
-
-    call_next_response_body_filter(r, first_link)
 }
 
 /// Call the next response body filter in the chain.

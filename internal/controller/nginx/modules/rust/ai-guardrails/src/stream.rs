@@ -1,6 +1,6 @@
 //! Streaming inspection logic with checkpoint buffering and content extraction.
 
-use crate::client::{inspect_content, GuardrailsError};
+use crate::client::{GuardrailsError, inspect_content};
 use crate::config::ModuleConfig;
 use serde::Deserialize;
 
@@ -44,15 +44,15 @@ fn extract_llm_content(chunk: LlmChunk, accumulated: &mut String, stream_done: &
         if let Some(content) = msg.content {
             accumulated.push_str(&content);
         }
-    } else if let Some(choices) = chunk.choices {
-        if let Some(first) = choices.into_iter().next() {
-            if let Some(delta) = first.delta {
-                if let Some(content) = delta.content {
-                    accumulated.push_str(&content);
-                }
-            } else if let Some(text) = first.text {
-                accumulated.push_str(&text);
+    } else if let Some(choices) = chunk.choices
+        && let Some(first) = choices.into_iter().next()
+    {
+        if let Some(delta) = first.delta {
+            if let Some(content) = delta.content {
+                accumulated.push_str(&content);
             }
+        } else if let Some(text) = first.text {
+            accumulated.push_str(&text);
         }
     }
 }

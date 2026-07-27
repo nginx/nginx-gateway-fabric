@@ -1,10 +1,10 @@
 [package]
 name = "guardrails_filter"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 license = "Apache-2.0"
 authors = ["F5 AI Guardrails Contributors"]
-description = "Rust NGINX module for streaming LLM response inspection with Calypso Guardrails"
+description = "Rust NGINX module for streaming LLM response inspection with F5 AI Guardrails"
 
 [lib]
 name = "ai_guardrails"
