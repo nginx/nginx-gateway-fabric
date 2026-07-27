@@ -22,9 +22,9 @@ for how that module works.
 | `payload-processor.yaml` | The `PayloadProcessor` policy attaching Guardrails to the route. |
 | `guardrails-service.yaml` | The Guardrails backend Service (external, `ExternalName`). |
 | `guardrails-secret.yaml` | Secret holding the Guardrails API bearer token. |
-| `inference-sim-dataset.sqlite3` | Canned dataset served by the mock LLM. |
-| `inference-sim-dataset.json` | Human-readable source for the dataset. |
-| `test-data.json` | Sample request payloads for testing. |
+| `test-data.json` | ShareGPT-style **source** dataset (input to `ds-tool`); each `human` prompt maps to a canned `gpt` response. Edit this to change what the mock LLM returns. |
+| `inference-sim-dataset.sqlite3` | **Generated artifact** — the canned dataset served by the mock LLM, built from `test-data.json` (see [Regenerating the dataset](#regenerating-the-dataset)). |
+| `inference-sim-dataset.json` | **Generated artifact** — human-readable debug dump of the built dataset (tokenized, with `prompt_hash`). Not an input; do not hand-edit. |
 
 ## Setup
 
@@ -78,6 +78,150 @@ kubectl get payloadprocessor llm-guardrails -o yaml
 
 A rejected policy reports `Accepted=False` in its status conditions. Common causes are listed under
 [Troubleshooting](#troubleshooting).
+
+## Testing guardrails
+
+The `ai-guardrails` module inspects traffic on **two independent paths** (see the module's
+[status/type matrix](../../internal/controller/nginx/modules/rust/ai-guardrails/README.md#http-status-vs-error-type)):
+
+- **Request path** — the client's *input* is inspected before it reaches the LLM. A block returns
+  `403` with `error.type: invalid_request_error`. This is driven entirely by the request text, so it
+  works regardless of the mock LLM dataset.
+- **Response path** — the model's *output* is inspected before it reaches the client. A block returns
+  `403` with `error.type: api_error` (non-SSE). This requires the mock LLM to actually *return*
+  disallowed content, which is what the seeded dataset below arranges.
+
+> The examples below use synthetic, well-known **test** values (documentation IP ranges, reserved
+> `555-01xx` phone numbers, the `4111…` Visa test card, `example.com`, etc.) — not real PII. Whether
+> each value is actually blocked depends on your Guardrails backend's policy configuration; enable
+> the relevant detectors (passport, phone, IP, SSN, date of birth, credit card, email) to see them
+> trip. All commands target `/v1/completions`.
+
+### Request blocking (bad input)
+
+Each request embeds one PII type in the `prompt`. Expected result: `HTTP 403`, body
+`{"error":{"type":"invalid_request_error","code":"content_policy_violation", ...}}`. The request
+never reaches the LLM.
+
+```shell
+# Passport
+curl -s http://localhost:8080/v1/completions -H "Content-Type: application/json" \
+  -d '{"model":"meta-llama/Llama-3.1-8B-Instruct","stream":false,"prompt":"My passport number is X12345678"}'
+
+# Phone number
+curl -s http://localhost:8080/v1/completions -H "Content-Type: application/json" \
+  -d '{"model":"meta-llama/Llama-3.1-8B-Instruct","stream":false,"prompt":"Call me at +1-202-555-0173"}'
+
+# IP address
+curl -s http://localhost:8080/v1/completions -H "Content-Type: application/json" \
+  -d '{"model":"meta-llama/Llama-3.1-8B-Instruct","stream":false,"prompt":"My server IP is 192.0.2.14"}'
+
+# SSN
+curl -s http://localhost:8080/v1/completions -H "Content-Type: application/json" \
+  -d '{"model":"meta-llama/Llama-3.1-8B-Instruct","stream":false,"prompt":"My SSN is 123-45-6789"}'
+
+# Date of birth
+curl -s http://localhost:8080/v1/completions -H "Content-Type: application/json" \
+  -d '{"model":"meta-llama/Llama-3.1-8B-Instruct","stream":false,"prompt":"My date of birth is 1985-07-22"}'
+
+# Credit card number
+curl -s http://localhost:8080/v1/completions -H "Content-Type: application/json" \
+  -d '{"model":"meta-llama/Llama-3.1-8B-Instruct","stream":false,"prompt":"My card number is 4111 1111 1111 1111"}'
+
+# Email address
+curl -s http://localhost:8080/v1/completions -H "Content-Type: application/json" \
+  -d '{"model":"meta-llama/Llama-3.1-8B-Instruct","stream":false,"prompt":"My email is jane.doe@example.com"}'
+```
+
+### Response blocking (bad output)
+
+Each request sends a **benign** prompt that the seeded dataset maps to a response containing one PII
+type. The prompt must be sent **verbatim** — the mock LLM matches responses by tokenizing the exact
+prompt (see [Regenerating the dataset](#regenerating-the-dataset)). Expected result: `HTTP 403`,
+body `{"error":{"type":"api_error","code":"content_policy_violation", ...}}`.
+
+```shell
+# Passport            -> "Here is a test passport number: X12345678"
+curl -s http://localhost:8080/v1/completions -H "Content-Type: application/json" \
+  -d '{"model":"meta-llama/Llama-3.1-8B-Instruct","stream":false,"prompt":"Give me a test passport number"}'
+
+# Phone number        -> "Here is a test phone number: +1-202-555-0173"
+curl -s http://localhost:8080/v1/completions -H "Content-Type: application/json" \
+  -d '{"model":"meta-llama/Llama-3.1-8B-Instruct","stream":false,"prompt":"Give me a test phone number"}'
+
+# IP address          -> "Here is a test IP address: 192.0.2.14"
+curl -s http://localhost:8080/v1/completions -H "Content-Type: application/json" \
+  -d '{"model":"meta-llama/Llama-3.1-8B-Instruct","stream":false,"prompt":"Give me a test IP address"}'
+
+# SSN                 -> "Here is a test SSN: 123-45-6789"
+curl -s http://localhost:8080/v1/completions -H "Content-Type: application/json" \
+  -d '{"model":"meta-llama/Llama-3.1-8B-Instruct","stream":false,"prompt":"Give me a test SSN"}'
+
+# Date of birth       -> "Here is a test date of birth: 1985-07-22"
+curl -s http://localhost:8080/v1/completions -H "Content-Type: application/json" \
+  -d '{"model":"meta-llama/Llama-3.1-8B-Instruct","stream":false,"prompt":"Give me a test date of birth"}'
+
+# Credit card number  -> "Here is a test credit card number: 4111 1111 1111 1111"
+curl -s http://localhost:8080/v1/completions -H "Content-Type: application/json" \
+  -d '{"model":"meta-llama/Llama-3.1-8B-Instruct","stream":false,"prompt":"Give me a test credit card number"}'
+
+# Email address       -> "Here is a test email address: jane.doe@example.com"
+curl -s http://localhost:8080/v1/completions -H "Content-Type: application/json" \
+  -d '{"model":"meta-llama/Llama-3.1-8B-Instruct","stream":false,"prompt":"Give me a test email address"}'
+```
+
+> **SSE note:** if you send `"stream": true`, the upstream `200` headers are flushed before the
+> response can be inspected, so a blocked streaming response arrives as `HTTP 200` carrying an
+> `api_error` payload inside an SSE `data:` frame rather than a `403`. This is expected — see the
+> module README's status/type matrix.
+
+### Clean pass-through
+
+A benign prompt whose seeded response contains no PII returns a normal `HTTP 200` completion:
+
+```shell
+curl -s http://localhost:8080/v1/completions -H "Content-Type: application/json" \
+  -d '{"model":"meta-llama/Llama-3.1-8B-Instruct","stream":false,"prompt":"What is NGINX?"}'
+```
+
+### Regenerating the dataset
+
+The mock LLM (`llm-d-inference-sim`) does **not** hash the prompt string directly — it tokenizes the
+prompt with the **real model tokenizer** (`Qwen/Qwen3-32B`) and hashes the resulting token IDs. That
+means the dataset cannot be edited by hand; after changing `test-data.json` you must rebuild
+`inference-sim-dataset.sqlite3` with the project's `ds-tool` converter, which uses the same
+tokenizer.
+
+```shell
+# 1. Start the UDS tokenizer server (separate process). ds-tool only *connects* to it.
+#    See https://github.com/llm-d/llm-d-kv-cache/tree/main/services/uds_tokenizer
+#    git clone git@github.com:llm-d/llm-d-kv-cache.git
+#    cd llm-d-kv-cache/services/uds_tokenizer && pip install -e . && python ./run_grpc_server.py
+
+# 2. For gated models, export a HuggingFace token (env var only; there is no flag):
+export HF_TOKEN=<your_huggingface_token>
+
+# 3. ds-tool refuses to overwrite existing outputs — remove the current artifacts first:
+rm inference-sim-dataset.sqlite3 inference-sim-dataset.json inference-sim-dataset.md 2>/dev/null
+
+# 4. Regenerate from test-data.json. Do NOT pass --table-name: it is broken in v0.8.2 (it binds to
+#    the wrong field) and the table must stay the default "llmd" that llm.yaml expects.
+ds-tool \
+  --model Qwen/Qwen3-32B \
+  --hf-repo Qwen/Qwen3-32B \
+  --input-file test-data.json \
+  --output-path . \
+  --output-file inference-sim-dataset
+```
+
+Then recreate the ConfigMap so the mock LLM picks up the new dataset, and restart the Pod:
+
+```shell
+kubectl delete configmap inference-sim-dataset
+kubectl create configmap inference-sim-dataset \
+  --from-file=inference-sim-dataset.sqlite3=./inference-sim-dataset.sqlite3
+kubectl rollout restart deployment vllm-qwen3-32b
+```
 
 ## Guardrails backend addressing
 

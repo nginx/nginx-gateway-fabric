@@ -37,5 +37,96 @@
         "value": "NGINX (pronounced \"engine-x\") is an open-source, high-performance web server. It functions primarily as an HTTP web server, reverse proxy, load balancer, and HTTP cache.Designed to handle thousands of concurrent connections with minimal memory usage, NGINX is an essential component of modern web infrastructure."
       }
     ]
+  },
+  {
+    "id": "004",
+    "conversations": [
+      {
+        "from": "human",
+        "value": "Give me a test passport number"
+      },
+      {
+        "from": "gpt",
+        "value": "Here is a test passport number: X12345678"
+      }
+    ]
+  },
+  {
+    "id": "005",
+    "conversations": [
+      {
+        "from": "human",
+        "value": "Give me a test phone number"
+      },
+      {
+        "from": "gpt",
+        "value": "Here is a test phone number: +1-202-555-0173"
+      }
+    ]
+  },
+  {
+    "id": "006",
+    "conversations": [
+      {
+        "from": "human",
+        "value": "Give me a test IP address"
+      },
+      {
+        "from": "gpt",
+        "value": "Here is a test IP address: 192.0.2.14"
+      }
+    ]
+  },
+  {
+    "id": "007",
+    "conversations": [
+      {
+        "from": "human",
+        "value": "Give me a test SSN"
+      },
+      {
+        "from": "gpt",
+        "value": "Here is a test SSN: 123-45-6789"
+      }
+    ]
+  },
+  {
+    "id": "008",
+    "conversations": [
+      {
+        "from": "human",
+        "value": "Give me a test date of birth"
+      },
+      {
+        "from": "gpt",
+        "value": "Here is a test date of birth: 1985-07-22"
+      }
+    ]
+  },
+  {
+    "id": "009",
+    "conversations": [
+      {
+        "from": "human",
+        "value": "Give me a test credit card number"
+      },
+      {
+        "from": "gpt",
+        "value": "Here is a test credit card number: 4111 1111 1111 1111"
+      }
+    ]
+  },
+  {
+    "id": "010",
+    "conversations": [
+      {
+        "from": "human",
+        "value": "Give me a test email address"
+      },
+      {
+        "from": "gpt",
+        "value": "Here is a test email address: jane.doe@example.com"
+      }
+    ]
   }
 ]
