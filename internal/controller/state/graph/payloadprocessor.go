@@ -70,9 +70,9 @@ func resolvePayloadProcessor(
 ) {
 	// The API guarantees exactly one processor of type ExtProcess. Take the first ExtProcess entry.
 	var entry *ngfAPIv1alpha1.PayloadProcessorEntry
-	for i := range pp.Spec.Processors {
-		if pp.Spec.Processors[i].ExtProcess != nil {
-			entry = &pp.Spec.Processors[i]
+	for _, processor := range pp.Spec.Processors {
+		if processor.ExtProcess != nil {
+			entry = &processor
 			break
 		}
 	}
