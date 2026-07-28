@@ -467,36 +467,45 @@ func TestResolveExtProcessAuthToken(t *testing.T) {
 	}
 
 	tests := []struct {
-		ext          *ngfAPIv1alpha1.ExtProcessConfig
-		name         string
-		expToken     string
-		expErrSub    string
-		expReference bool
+		ext       *ngfAPIv1alpha1.ExtProcessConfig
+		name      string
+		expToken  string
+		expErrSub string
+		// expRefKey, when set, is the Secret name expected to be tracked in
+		// ReferencedPayloadProcessorSecrets. Empty means the map should be empty.
+		expRefKey string
+		// expRefNilValue asserts the tracked entry has a nil *Secret value (used when
+		// the referenced Secret does not exist but must still be tracked for rebuilds).
+		expRefNilValue bool
 	}{
 		{
 			name: "no AuthTokenRef returns nil without error",
 			ext:  &ngfAPIv1alpha1.ExtProcessConfig{},
 		},
 		{
-			name:         "valid token is trimmed and referenced",
-			ext:          extWithToken("token-secret"),
-			expToken:     "abc123",
-			expReference: true,
+			name:      "valid token is trimmed and referenced",
+			ext:       extWithToken("token-secret"),
+			expToken:  "abc123",
+			expRefKey: "token-secret",
 		},
 		{
-			name:      "missing Secret returns error",
-			ext:       extWithToken("does-not-exist"),
-			expErrSub: "not found",
+			name:           "missing Secret returns error but is still tracked",
+			ext:            extWithToken("does-not-exist"),
+			expErrSub:      "not found",
+			expRefKey:      "does-not-exist",
+			expRefNilValue: true,
 		},
 		{
-			name:      "Secret missing token key returns error",
+			name:      "Secret missing token key returns error but is still tracked",
 			ext:       extWithToken("missing-key"),
 			expErrSub: "missing",
+			expRefKey: "missing-key",
 		},
 		{
-			name:      "empty token returns error",
+			name:      "empty token returns error but is still tracked",
 			ext:       extWithToken("empty-token"),
 			expErrSub: "empty",
+			expRefKey: "empty-token",
 		},
 	}
 
@@ -507,6 +516,20 @@ func TestResolveExtProcessAuthToken(t *testing.T) {
 
 			output := &PayloadProcessingOutput{}
 			token, secretRef, err := resolveExtProcessAuthToken(policyNs, test.ext, secrets, output)
+
+			// The referenced Secret must be tracked regardless of whether resolution
+			// succeeds, so that a rebuild is triggered when the Secret appears or is fixed.
+			if test.expRefKey == "" {
+				g.Expect(output.ReferencedPayloadProcessorSecrets).To(BeEmpty())
+			} else {
+				refKey := types.NamespacedName{Namespace: policyNs, Name: test.expRefKey}
+				g.Expect(output.ReferencedPayloadProcessorSecrets).To(HaveKey(refKey))
+				if test.expRefNilValue {
+					g.Expect(output.ReferencedPayloadProcessorSecrets[refKey]).To(BeNil())
+				} else {
+					g.Expect(output.ReferencedPayloadProcessorSecrets[refKey]).ToNot(BeNil())
+				}
+			}
 
 			if test.expErrSub != "" {
 				g.Expect(err).To(HaveOccurred())
@@ -520,15 +543,11 @@ func TestResolveExtProcessAuthToken(t *testing.T) {
 			if test.expToken == "" {
 				g.Expect(token).To(BeNil())
 				g.Expect(secretRef).To(BeNil())
-				g.Expect(output.ReferencedPayloadProcessorSecrets).To(BeEmpty())
 				return
 			}
 
 			g.Expect(string(token)).To(Equal(test.expToken))
 			g.Expect(secretRef).To(Equal(&secretNsName))
-			if test.expReference {
-				g.Expect(output.ReferencedPayloadProcessorSecrets).To(HaveKey(secretNsName))
-			}
 		})
 	}
 }
@@ -611,6 +630,7 @@ func TestResolvePayloadProcessor(t *testing.T) {
 		pp                *ngfAPIv1alpha1.PayloadProcessor
 		services          map[types.NamespacedName]*corev1.Service
 		expTimeout        *ngfAPIv1alpha1.Duration
+		expTrackedSecret  *types.NamespacedName
 		name              string
 		expAPIURL         string
 		expToken          string
@@ -641,10 +661,14 @@ func TestResolvePayloadProcessor(t *testing.T) {
 			expValid: true,
 		},
 		{
-			name:       "unresolvable auth token invalidates policy",
+			name:       "unresolvable auth token invalidates policy but tracks the Secret",
 			pp:         ppMissingToken,
 			expValid:   false,
 			expCondMsg: "auth token Secret ns1/missing-secret not found",
+			expTrackedSecret: &types.NamespacedName{
+				Namespace: policyNs,
+				Name:      "missing-secret",
+			},
 		},
 		{
 			name:              "cross-namespace backendRef resolves BackendService namespace",
@@ -683,6 +707,12 @@ func TestResolvePayloadProcessor(t *testing.T) {
 				g.Expect(cond.Message).To(ContainSubstring(test.expCondMsg))
 			} else {
 				g.Expect(policy.Conditions).To(BeEmpty())
+			}
+
+			// A referenced auth token Secret must be tracked even when it is missing, so
+			// that a rebuild is triggered once the Secret appears.
+			if test.expTrackedSecret != nil {
+				g.Expect(output.ReferencedPayloadProcessorSecrets).To(HaveKey(*test.expTrackedSecret))
 			}
 
 			if !test.expState {

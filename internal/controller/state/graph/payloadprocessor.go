@@ -171,8 +171,14 @@ func resolveExtProcessAuthToken(
 		return nil, nil, nil
 	}
 
+	if output.ReferencedPayloadProcessorSecrets == nil {
+		output.ReferencedPayloadProcessorSecrets = make(map[types.NamespacedName]*corev1.Secret)
+	}
+
 	secNsName := types.NamespacedName{Namespace: policyNamespace, Name: ext.AuthTokenRef.Name}
 	sec, exists := secrets[secNsName]
+	// Track the secret even if there are errors so that a rebuild is triggered when the Secret appears.
+	output.ReferencedPayloadProcessorSecrets[secNsName] = sec
 	if !exists {
 		return nil, nil, fmt.Errorf(
 			"auth token Secret %s/%s not found",
@@ -200,11 +206,6 @@ func resolveExtProcessAuthToken(
 			guardrailsTokenSecretKey,
 		)
 	}
-
-	if output.ReferencedPayloadProcessorSecrets == nil {
-		output.ReferencedPayloadProcessorSecrets = make(map[types.NamespacedName]*corev1.Secret)
-	}
-	output.ReferencedPayloadProcessorSecrets[secNsName] = sec
 
 	return token, &secNsName, nil
 }

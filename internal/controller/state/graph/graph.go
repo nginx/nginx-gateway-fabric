@@ -100,6 +100,7 @@ type Graph struct {
 	// ReferencedWAFSecrets includes Secrets referenced by WAFPolicy (auth and TLS CA).
 	ReferencedWAFSecrets map[types.NamespacedName]*v1.Secret
 	// ReferencedPayloadProcessorSecrets includes Secrets referenced by PayloadProcessor (auth token).
+	// Similar to ReferencedSecrets, it includes invalid Secrets or those that do not exist
 	ReferencedPayloadProcessorSecrets map[types.NamespacedName]*v1.Secret
 	// SnippetsFilters holds all the SnippetsFilters.
 	SnippetsFilters map[types.NamespacedName]*SnippetsFilter

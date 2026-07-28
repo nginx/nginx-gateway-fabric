@@ -2796,6 +2796,16 @@ func TestIsReferenced(t *testing.T) {
 			expected: true,
 		},
 		{
+			name:     "Secret tracked with nil value in ReferencedPayloadProcessorSecrets is referenced",
+			resource: sameNamespaceDifferentNameSecret,
+			graph: &Graph{
+				ReferencedPayloadProcessorSecrets: map[types.NamespacedName]*v1.Secret{
+					client.ObjectKeyFromObject(sameNamespaceDifferentNameSecret): nil,
+				},
+			},
+			expected: true,
+		},
+		{
 			name:     "Secret not in ReferencedSecrets with same Namespace and different Name is not referenced",
 			resource: sameNamespaceDifferentNameSecret,
 			graph:    graph,
