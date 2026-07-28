@@ -12,6 +12,7 @@ import (
 
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/policiesfakes"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/secrets"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
@@ -267,7 +268,7 @@ func TestProcessPayloadProcessorPolicies(t *testing.T) {
 			Spec:       corev1.ServiceSpec{Type: corev1.ServiceTypeClusterIP},
 		},
 	}
-	secrets := map[types.NamespacedName]*corev1.Secret{}
+	secretsMap := map[types.NamespacedName]*corev1.Secret{}
 
 	// validPP builds a real PayloadProcessor source carrying the PayloadProcessor GVK.
 	validPP := func(valid bool) *Policy {
@@ -334,7 +335,7 @@ func TestProcessPayloadProcessorPolicies(t *testing.T) {
 			}
 			processed := map[PolicyKey]*Policy{key: test.policy}
 
-			output := processPayloadProcessorPolicies(processed, services, secrets, "cluster.local")
+			output := processPayloadProcessorPolicies(processed, services, secretsMap, "cluster.local")
 			g.Expect(output).ToNot(BeNil())
 
 			if test.expStateSet {
@@ -445,10 +446,10 @@ func TestResolveExtProcessAuthToken(t *testing.T) {
 
 	secretNsName := types.NamespacedName{Namespace: policyNs, Name: "token-secret"}
 
-	secrets := map[types.NamespacedName]*corev1.Secret{
+	secretsMap := map[types.NamespacedName]*corev1.Secret{
 		secretNsName: {
 			ObjectMeta: metav1.ObjectMeta{Namespace: policyNs, Name: "token-secret"},
-			Data:       map[string][]byte{guardrailsTokenSecretKey: []byte("  abc123  ")},
+			Data:       map[string][]byte{secrets.GuardrailsTokenKey: []byte("  abc123  ")},
 		},
 		{Namespace: policyNs, Name: "missing-key"}: {
 			ObjectMeta: metav1.ObjectMeta{Namespace: policyNs, Name: "missing-key"},
@@ -456,7 +457,7 @@ func TestResolveExtProcessAuthToken(t *testing.T) {
 		},
 		{Namespace: policyNs, Name: "empty-token"}: {
 			ObjectMeta: metav1.ObjectMeta{Namespace: policyNs, Name: "empty-token"},
-			Data:       map[string][]byte{guardrailsTokenSecretKey: []byte("   ")},
+			Data:       map[string][]byte{secrets.GuardrailsTokenKey: []byte("   ")},
 		},
 	}
 
@@ -515,7 +516,7 @@ func TestResolveExtProcessAuthToken(t *testing.T) {
 			g := NewWithT(t)
 
 			output := &PayloadProcessingOutput{}
-			token, secretRef, err := resolveExtProcessAuthToken(policyNs, test.ext, secrets, output)
+			token, secretRef, err := resolveExtProcessAuthToken(policyNs, test.ext, secretsMap, output)
 
 			// The referenced Secret must be tracked regardless of whether resolution
 			// succeeds, so that a rebuild is triggered when the Secret appears or is fixed.
@@ -566,10 +567,10 @@ func TestResolvePayloadProcessor(t *testing.T) {
 			Spec:       corev1.ServiceSpec{Type: corev1.ServiceTypeClusterIP},
 		},
 	}
-	secrets := map[types.NamespacedName]*corev1.Secret{
+	secretsMap := map[types.NamespacedName]*corev1.Secret{
 		secretNsName: {
 			ObjectMeta: metav1.ObjectMeta{Namespace: policyNs, Name: "token-secret"},
-			Data:       map[string][]byte{guardrailsTokenSecretKey: []byte("tok")},
+			Data:       map[string][]byte{secrets.GuardrailsTokenKey: []byte("tok")},
 		},
 	}
 
@@ -694,7 +695,7 @@ func TestResolvePayloadProcessor(t *testing.T) {
 			policy := &Policy{Valid: true}
 			output := &PayloadProcessingOutput{}
 
-			resolvePayloadProcessor(test.pp, policy, svcs, secrets, "cluster.local", output)
+			resolvePayloadProcessor(test.pp, policy, svcs, secretsMap, "cluster.local", output)
 
 			g.Expect(policy.Valid).To(Equal(test.expValid))
 

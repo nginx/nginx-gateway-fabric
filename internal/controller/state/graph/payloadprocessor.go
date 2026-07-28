@@ -9,11 +9,9 @@ import (
 
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/secrets"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
-
-// guardrailsTokenSecretKey is the key within the AuthTokenRef Secret that holds the bearer token.
-const guardrailsTokenSecretKey = "token"
 
 // PolicyPayloadProcessorState holds resolved ExtProcess state for a PayloadProcessor Policy.
 // This is only populated for PayloadProcessor resources.
@@ -39,7 +37,7 @@ type PayloadProcessingOutput struct {
 func processPayloadProcessorPolicies(
 	processedPolicies map[PolicyKey]*Policy,
 	services map[types.NamespacedName]*corev1.Service,
-	secrets map[types.NamespacedName]*corev1.Secret,
+	clusterSecrets map[types.NamespacedName]*corev1.Secret,
 	clusterDomain string,
 ) *PayloadProcessingOutput {
 	output := &PayloadProcessingOutput{}
@@ -54,7 +52,7 @@ func processPayloadProcessorPolicies(
 			continue
 		}
 
-		resolvePayloadProcessor(pp, policy, services, secrets, clusterDomain, output)
+		resolvePayloadProcessor(pp, policy, services, clusterSecrets, clusterDomain, output)
 	}
 
 	return output
@@ -66,7 +64,7 @@ func resolvePayloadProcessor(
 	pp *ngfAPIv1alpha1.PayloadProcessor,
 	policy *Policy,
 	services map[types.NamespacedName]*corev1.Service,
-	secrets map[types.NamespacedName]*corev1.Secret,
+	clusterSecrets map[types.NamespacedName]*corev1.Secret,
 	clusterDomain string,
 	output *PayloadProcessingOutput,
 ) {
@@ -90,7 +88,7 @@ func resolvePayloadProcessor(
 		return
 	}
 
-	token, tokenSecret, err := resolveExtProcessAuthToken(pp.Namespace, ext, secrets, output)
+	token, tokenSecret, err := resolveExtProcessAuthToken(pp.Namespace, ext, clusterSecrets, output)
 	if err != nil {
 		policy.Conditions = append(policy.Conditions, conditions.NewPolicyInvalid(err.Error()))
 		policy.Valid = false
@@ -164,7 +162,7 @@ func resolveExtProcessURL(
 func resolveExtProcessAuthToken(
 	policyNamespace string,
 	ext *ngfAPIv1alpha1.ExtProcessConfig,
-	secrets map[types.NamespacedName]*corev1.Secret,
+	clusterSecrets map[types.NamespacedName]*corev1.Secret,
 	output *PayloadProcessingOutput,
 ) ([]byte, *types.NamespacedName, error) {
 	if ext.AuthTokenRef == nil {
@@ -176,7 +174,7 @@ func resolveExtProcessAuthToken(
 	}
 
 	secNsName := types.NamespacedName{Namespace: policyNamespace, Name: ext.AuthTokenRef.Name}
-	sec, exists := secrets[secNsName]
+	sec, exists := clusterSecrets[secNsName]
 	// Track the secret even if there are errors so that a rebuild is triggered when the Secret appears.
 	output.ReferencedPayloadProcessorSecrets[secNsName] = sec
 	if !exists {
@@ -187,13 +185,13 @@ func resolveExtProcessAuthToken(
 		)
 	}
 
-	data, ok := sec.Data[guardrailsTokenSecretKey]
+	data, ok := sec.Data[secrets.GuardrailsTokenKey]
 	if !ok {
 		return nil, nil, fmt.Errorf(
 			"auth token Secret %s/%s missing %q key",
 			secNsName.Namespace,
 			secNsName.Name,
-			guardrailsTokenSecretKey,
+			secrets.GuardrailsTokenKey,
 		)
 	}
 
@@ -203,7 +201,7 @@ func resolveExtProcessAuthToken(
 			"auth token Secret %s/%s has empty %q key",
 			secNsName.Namespace,
 			secNsName.Name,
-			guardrailsTokenSecretKey,
+			secrets.GuardrailsTokenKey,
 		)
 	}
 
