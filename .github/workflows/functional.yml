@@ -77,7 +77,7 @@ jobs:
       - name: Build binary
         uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
         with:
-          version: v2.17.0 # renovate: datasource=github-tags depName=goreleaser/goreleaser
+          version: v2.17.1 # renovate: datasource=github-tags depName=goreleaser/goreleaser
           args: build --single-target --snapshot --clean
         env:
           TELEMETRY_ENDPOINT: otel-collector-opentelemetry-collector.collector.svc.cluster.local:4317
@@ -126,7 +126,7 @@ jobs:
 
       - name: Login to NGINX private registry
         if: ${{ inputs.image == 'plus-waf' }}
-        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
+        uses: docker/login-action@abd2ef45e78c5afb21d64d4ca52ee8550d9572c7 # v4.5.1
         with:
           registry: private-registry.nginx.com
           username: ${{ secrets.JWT_PLUS_REGISTRY }}

@@ -3200,7 +3200,9 @@ func TestProcessWAFPolicies(t *testing.T) {
 			},
 			expSecrets: map[types.NamespacedName]*corev1.Secret{},
 			expConditions: func(_ *Policy) []conditions.Condition {
-				return []conditions.Condition{conditions.NewPolicyProgrammedStaleBundleWarning("policy bundle", "fetch failed")}
+				return []conditions.Condition{
+					conditions.NewPolicyProgrammedStaleBundleWarning("policy bundle", "fetch failed"),
+				}
 			},
 			expValid: true,
 		},
@@ -3220,7 +3222,7 @@ func TestProcessWAFPolicies(t *testing.T) {
 				}
 			},
 			expBundles: map[WAFBundleKey]*WAFBundleData{},
-			expSecrets: map[types.NamespacedName]*corev1.Secret{},
+			expSecrets: map[types.NamespacedName]*corev1.Secret{authSecretNsName: nil},
 			expConditions: func(_ *Policy) []conditions.Condition {
 				return []conditions.Condition{
 					conditions.NewPolicyRefsNotResolved(
@@ -3269,7 +3271,7 @@ func TestProcessWAFPolicies(t *testing.T) {
 				}
 			},
 			expBundles: map[WAFBundleKey]*WAFBundleData{},
-			expSecrets: map[types.NamespacedName]*corev1.Secret{},
+			expSecrets: map[types.NamespacedName]*corev1.Secret{tlsSecretNsName: nil},
 			expConditions: func(_ *Policy) []conditions.Condition {
 				return []conditions.Condition{
 					conditions.NewPolicyRefsNotResolved(
@@ -3506,7 +3508,7 @@ func TestProcessWAFPolicies(t *testing.T) {
 			expBundles: map[WAFBundleKey]*WAFBundleData{
 				bundleKey: {Data: fetchedData, Checksum: fetchedChecksum},
 			},
-			expSecrets: map[types.NamespacedName]*corev1.Secret{},
+			expSecrets: map[types.NamespacedName]*corev1.Secret{authSecretNsName: nil},
 			expConditions: func(_ *Policy) []conditions.Condition {
 				return []conditions.Condition{
 					conditions.NewPolicyRefsNotResolved(
@@ -3547,7 +3549,7 @@ func TestProcessWAFPolicies(t *testing.T) {
 			expBundles: map[WAFBundleKey]*WAFBundleData{
 				bundleKey: {Data: fetchedData, Checksum: fetchedChecksum},
 			},
-			expSecrets: map[types.NamespacedName]*corev1.Secret{},
+			expSecrets: map[types.NamespacedName]*corev1.Secret{tlsSecretNsName: nil},
 			expConditions: func(_ *Policy) []conditions.Condition {
 				return []conditions.Condition{
 					conditions.NewPolicyRefsNotResolved(
@@ -3642,7 +3644,7 @@ func TestProcessWAFPolicies(t *testing.T) {
 					Data: fetchedData, Checksum: fetchedChecksum,
 				},
 			},
-			expSecrets: map[types.NamespacedName]*corev1.Secret{},
+			expSecrets: map[types.NamespacedName]*corev1.Secret{authSecretNsName: nil},
 			expConditions: func(_ *Policy) []conditions.Condition {
 				return []conditions.Condition{
 					conditions.NewPolicyRefsNotResolved(
@@ -3951,11 +3953,10 @@ func TestResolveBundleAuth(t *testing.T) {
 	}
 
 	tests := []struct {
-		secret    *corev1.Secret
-		expAuth   *fetch.BundleAuth
-		expCond   *conditions.Condition
-		name      string
-		expSecret bool
+		secret  *corev1.Secret
+		expAuth *fetch.BundleAuth
+		expCond *conditions.Condition
+		name    string
 	}{
 		{
 			name:   "secret not found",
@@ -3969,8 +3970,7 @@ func TestResolveBundleAuth(t *testing.T) {
 			secret: &corev1.Secret{
 				Data: map[string][]byte{secrets.BundleTokenKey: []byte("my-token")},
 			},
-			expAuth:   &fetch.BundleAuth{BearerToken: "my-token"},
-			expSecret: true,
+			expAuth: &fetch.BundleAuth{BearerToken: "my-token"},
 		},
 		{
 			name: "token key present but empty after trimming",
@@ -3980,7 +3980,6 @@ func TestResolveBundleAuth(t *testing.T) {
 			expCond: helpers.GetPointer(conditions.NewPolicyRefsNotResolved(
 				fmt.Sprintf("auth secret %q has empty %q key", secretNsName, secrets.BundleTokenKey),
 			)),
-			expSecret: true,
 		},
 		{
 			name: "username and password present",
@@ -3990,8 +3989,7 @@ func TestResolveBundleAuth(t *testing.T) {
 					secrets.BundlePasswordKey: []byte("pass"),
 				},
 			},
-			expAuth:   &fetch.BundleAuth{Username: "user", Password: "pass"},
-			expSecret: true,
+			expAuth: &fetch.BundleAuth{Username: "user", Password: "pass"},
 		},
 		{
 			name: "username present but password empty",
@@ -4005,7 +4003,6 @@ func TestResolveBundleAuth(t *testing.T) {
 				"auth secret %q must contain either %q or both %q and %q",
 				secretNsName, secrets.BundleTokenKey, secrets.BundleUsernameKey, secrets.BundlePasswordKey,
 			))),
-			expSecret: true,
 		},
 		{
 			name: "both username and password empty",
@@ -4016,7 +4013,6 @@ func TestResolveBundleAuth(t *testing.T) {
 				"auth secret %q must contain either %q or both %q and %q",
 				secretNsName, secrets.BundleTokenKey, secrets.BundleUsernameKey, secrets.BundlePasswordKey,
 			))),
-			expSecret: true,
 		},
 	}
 
@@ -4037,11 +4033,7 @@ func TestResolveBundleAuth(t *testing.T) {
 				g.Expect(got).To(Equal(tc.expAuth))
 			}
 
-			if tc.expSecret {
-				g.Expect(output.ReferencedWAFSecrets).To(HaveKey(secretNsName))
-			} else {
-				g.Expect(output.ReferencedWAFSecrets).To(BeEmpty())
-			}
+			g.Expect(output.ReferencedWAFSecrets).To(HaveKey(secretNsName))
 		})
 	}
 }

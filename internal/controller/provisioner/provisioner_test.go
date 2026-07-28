@@ -309,6 +309,8 @@ func TestNewNginxProvisioner(t *testing.T) {
 	g.Expect(provisioner.baseLabelSelector).To(Equal(labelSelector))
 
 	g.Expect(provisioner.store.dataplaneKeySecretName).To(Equal("dataplane-key"))
+
+	g.Expect(provisioner.clusterIPFamily).To(Equal(ngfAPIv1alpha2.Dual))
 }
 
 func TestEnable(t *testing.T) {

@@ -1269,6 +1269,8 @@ func resolveBundleAuth(
 
 	secret, exists := wafInput.Secrets[secretNsName]
 	if !exists {
+		// Still track the secret so that a rebuild is triggered when the Secret appears.
+		output.ReferencedWAFSecrets[secretNsName] = secret
 		cond := conditions.NewPolicyRefsNotResolved(
 			fmt.Sprintf("auth secret %q not found", secretNsName),
 		)
@@ -1319,6 +1321,8 @@ func resolveTLSCA(
 
 	secret, exists := wafInput.Secrets[secretNsName]
 	if !exists {
+		// Still track the secret so that a rebuild is triggered when the Secret appears.
+		output.ReferencedWAFSecrets[secretNsName] = secret
 		cond := conditions.NewPolicyRefsNotResolved(
 			fmt.Sprintf("TLS CA secret %q not found", secretNsName),
 		)

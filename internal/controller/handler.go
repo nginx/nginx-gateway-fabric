@@ -23,6 +23,7 @@ import (
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
+	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
 	ngfConfig "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/config"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/licensing"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent"
@@ -48,7 +49,8 @@ type handlerMetricsCollector interface {
 
 // eventHandlerConfig holds configuration parameters for eventHandlerImpl.
 type eventHandlerConfig struct {
-	ctx context.Context
+	// serviceResolver resolves Services to Endpoints.
+	serviceResolver resolver.ServiceResolver
 	// nginxUpdater updates nginx configuration using the NGINX agent.
 	nginxUpdater agent.NginxUpdater
 	// nginxProvisioner handles provisioning and deprovisioning nginx resources.
@@ -59,8 +61,8 @@ type eventHandlerConfig struct {
 	statusUpdater status.GroupUpdater
 	// processor is the state ChangeProcessor.
 	processor state.ChangeProcessor
-	// serviceResolver resolves Services to Endpoints.
-	serviceResolver resolver.ServiceResolver
+	// wafPollerManager manages WAF bundle polling for policies with polling enabled.
+	wafPollerManager wafPoller.Manager
 	// generator is the nginx config generator.
 	generator ngxConfig.Generator
 	// k8sClient is a Kubernetes API client.
@@ -69,36 +71,34 @@ type eventHandlerConfig struct {
 	logLevelSetter logLevelSetter
 	// eventRecorder records events for Kubernetes resources.
 	eventRecorder k8sEvents.EventRecorder
-	// deployCtxCollector collects the deployment context for N+ licensing
+	// deployCtxCollector collects the deployment context for N+ licensing.
 	deployCtxCollector licensing.Collector
+	ctx                context.Context
 	// graphBuiltHealthChecker sets the health of the Pod to Ready once we've built our initial graph.
 	graphBuiltHealthChecker *graphBuiltHealthChecker
-	// statusQueue contains updates when the handler should write statuses.
-	statusQueue *status.Queue
 	// nginxDeployments contains a map of all nginx Deployments, and data about them.
 	nginxDeployments *agent.DeploymentStore
-	// wafPollerManager manages WAF bundle polling for policies with polling enabled.
-	wafPollerManager wafPoller.Manager
-	// logger is the logger for the event handler.
-	logger logr.Logger
+	// statusQueue contains updates when the handler should write statuses.
+	statusQueue *status.Queue
 	// gatewayPodConfig contains information about this Pod.
 	gatewayPodConfig ngfConfig.GatewayPodConfig
 	// controlConfigNSName is the NamespacedName of the NginxGateway config for this controller.
 	controlConfigNSName types.NamespacedName
+	// logger is the logger for the event handler.
+	logger logr.Logger
 	// gatewayCtlrName is the name of the NGF controller.
 	gatewayCtlrName string
 	// gatewayInstanceName is the name of the NGINX Gateway instance.
 	gatewayInstanceName string
 	// gatewayClassName is the name of the GatewayClass.
 	gatewayClassName string
+	// clusterIPFamily is the IP family detected from the cluster at startup.
+	clusterIPFamily ngfAPIv1alpha2.IPFamilyType
 	// plus is whether or not we are running NGINX Plus.
 	plus bool
-	// InferenceExtension indicates if Gateway API Inference Extension support is enabled.
+	// inferenceExtension indicates if Gateway API Inference Extension support is enabled.
 	inferenceExtension bool
-	// plmEnabled indicates whether PLM storage is configured. When false, AP resource
-	// reconciliation (finalizer management, listing) is skipped — APPolicy/APLogConf are
-	// only relevant for PLM-sourced WAFPolicies, and the corresponding RBAC permissions
-	// in the Helm chart are gated on the same condition.
+	// plmEnabled indicates whether PLM storage is configured.
 	plmEnabled bool
 }
 
@@ -289,7 +289,7 @@ func (h *eventHandlerImpl) sendNginxConfig(ctx context.Context, logger logr.Logg
 			)
 			deployment.SetImageVersion(nginxImage)
 
-			cfg := dataplane.BuildConfiguration(ctx, logger, gr, gw, h.cfg.serviceResolver, h.cfg.plus)
+			cfg := dataplane.BuildConfiguration(ctx, logger, gr, gw, h.cfg.serviceResolver, h.cfg.plus, h.cfg.clusterIPFamily)
 			depCtx, getErr := h.getDeploymentContext(ctx)
 			if getErr != nil {
 				logger.Error(getErr, "error getting deployment context for usage reporting")
