@@ -70,14 +70,14 @@ jobs:
           platforms: arm64
 
       - name: Login to Docker Hub
-        uses: docker/login-action@abd2ef45e78c5afb21d64d4ca52ee8550d9572c7 # v4.5.1
+        uses: docker/login-action@371161bbe7024a29a25c5e19bfcbc0804fe9ad2c # v4.5.2
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
         if: ${{ inputs.runner == 'ubuntu-24.04-amd64' }}
 
       - name: Login to GitHub Container Registry
-        uses: docker/login-action@abd2ef45e78c5afb21d64d4ca52ee8550d9572c7 # v4.5.1
+        uses: docker/login-action@371161bbe7024a29a25c5e19bfcbc0804fe9ad2c # v4.5.2
         if: ${{ github.event_name != 'pull_request' && inputs.image != 'plus' && inputs.image != 'plus-nap-waf' }}
         with:
           registry: ghcr.io
@@ -94,7 +94,7 @@ jobs:
         if: ${{ github.event_name != 'pull_request' && (inputs.image == 'plus' || inputs.image == 'plus-nap-waf') }}
 
       - name: Login to NGINX Registry
-        uses: docker/login-action@abd2ef45e78c5afb21d64d4ca52ee8550d9572c7 # v4.5.1
+        uses: docker/login-action@371161bbe7024a29a25c5e19bfcbc0804fe9ad2c # v4.5.2
         with:
           registry: docker-mgmt.nginx.com
           username: ${{ steps.idtoken.outputs.id_token }}
@@ -111,7 +111,7 @@ jobs:
         if: ${{ github.event_name != 'pull_request' && (inputs.image == 'plus' || inputs.image == 'plus-nap-waf') }}
 
       - name: Login to GAR
-        uses: docker/login-action@abd2ef45e78c5afb21d64d4ca52ee8550d9572c7 # v4.5.1
+        uses: docker/login-action@371161bbe7024a29a25c5e19bfcbc0804fe9ad2c # v4.5.2
         with:
           registry: us-docker.pkg.dev
           username: oauth2accesstoken
