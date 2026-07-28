@@ -127,7 +127,6 @@ spec:
                           - message: NoDelay cannot be true when Delay is also set
                             rule: '!(has(self.noDelay) && has(self.delay) && self.noDelay
                               == true)'
-                        minItems: 1
                         type: array
                     type: object
                   logLevel:

@@ -94,7 +94,6 @@ type LocalRateLimit struct {
 	// Rules contains the list of rate limit rules.
 	//
 	// +optional
-	// +kubebuilder:validation:MinItems=1
 	Rules []RateLimitRule `json:"rules,omitempty"`
 }
 

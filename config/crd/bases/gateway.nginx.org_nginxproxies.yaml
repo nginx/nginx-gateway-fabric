@@ -9015,7 +9015,6 @@ spec:
                       - type
                       - value
                       type: object
-                    maxItems: 16
                     type: array
                 type: object
               rewriteClientIP:
