@@ -2994,7 +2994,14 @@ func TestProcessWAFPolicies(t *testing.T) {
 	tlsSecretNsName := types.NamespacedName{Namespace: policyNs, Name: tlsSecretName}
 
 	policyNsName := types.NamespacedName{Namespace: policyNs, Name: policyName}
-	bundleKey := PolicyBundleKey(policyNsName)
+	// Use the default HTTP source spec to compute the source-based bundle key.
+	defaultHTTPSpec := ngfAPIv1alpha1.WAFPolicySpec{
+		Type: ngfAPIv1alpha1.PolicySourceTypeHTTP,
+		PolicySource: &ngfAPIv1alpha1.PolicySource{
+			HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: bundleURL},
+		},
+	}
+	bundleKey := PolicyBundleKey(policyNsName, defaultHTTPSpec)
 	logBundleKey := LogBundleKey(
 		policyNsName,
 		&ngfAPIv1alpha1.LogSource{
@@ -3436,7 +3443,15 @@ func TestProcessWAFPolicies(t *testing.T) {
 				}
 			},
 			expBundles: map[WAFBundleKey]*WAFBundleData{
-				bundleKey: {Data: fetchedData, Checksum: fetchedChecksum},
+				PolicyBundleKey(policyNsName, ngfAPIv1alpha1.WAFPolicySpec{
+					Type: ngfAPIv1alpha1.PolicySourceTypeNIM,
+					PolicySource: &ngfAPIv1alpha1.PolicySource{
+						NIMSource: &ngfAPIv1alpha1.NIMBundleSource{
+							URL:        bundleURL,
+							PolicyName: helpers.GetPointer("my-nim-policy"),
+						},
+					},
+				}): {Data: fetchedData, Checksum: fetchedChecksum},
 			},
 			expSecrets: map[types.NamespacedName]*corev1.Secret{},
 			expValid:   true,
@@ -3467,7 +3482,19 @@ func TestProcessWAFPolicies(t *testing.T) {
 				}
 			},
 			expBundles: map[WAFBundleKey]*WAFBundleData{
-				bundleKey: {Data: fetchedData, Checksum: fetchedChecksum},
+				PolicyBundleKey(policyNsName, ngfAPIv1alpha1.WAFPolicySpec{
+					Type: ngfAPIv1alpha1.PolicySourceTypeN1C,
+					PolicySource: &ngfAPIv1alpha1.PolicySource{
+						N1CSource: &ngfAPIv1alpha1.N1CBundleSource{
+							URL:        bundleURL,
+							PolicyName: helpers.GetPointer("my-n1c-policy"),
+							Namespace:  "my-n1c-namespace",
+						},
+						Auth: &ngfAPIv1alpha1.BundleAuth{
+							SecretRef: ngfAPIv1alpha1.LocalObjectReference{Name: authSecretName},
+						},
+					},
+				}): {Data: fetchedData, Checksum: fetchedChecksum},
 			},
 			expSecrets: map[types.NamespacedName]*corev1.Secret{authSecretNsName: tokenSecret},
 			expValid:   true,
@@ -3699,7 +3726,7 @@ func TestProcessWAFPolicies(t *testing.T) {
 			},
 			expBundles: map[WAFBundleKey]*WAFBundleData{
 				bundleKey: {Data: fetchedData, Checksum: fetchedChecksum},
-				WAFBundleKey(fmt.Sprintf("%s_%s_log_%s", "test-ns", policyName, helpers.URLHash(multiLogURL1))): {
+				WAFBundleKey(fmt.Sprintf("log_%s", helpers.URLHash(multiLogURL1))): {
 					Data: fetchedData, Checksum: fetchedChecksum,
 				},
 			},
@@ -4307,7 +4334,7 @@ func TestLogBundleKey(t *testing.T) {
 					ProfileName: profileName,
 				},
 			},
-			expKey: WAFBundleKey(fmt.Sprintf("mynamespace_mypolicy_log_%s_%s", helpers.URLHash(nimURL), profileName)),
+			expKey: WAFBundleKey(fmt.Sprintf("log_%s_%s", helpers.URLHash(nimURL), profileName)),
 		},
 		{
 			name: "N1C source with ProfileObjectID",
@@ -4318,7 +4345,7 @@ func TestLogBundleKey(t *testing.T) {
 					ProfileObjectID: &profileObjectID,
 				},
 			},
-			expKey: WAFBundleKey(fmt.Sprintf("mynamespace_mypolicy_log_%s_n1c-ns_%s", helpers.URLHash(n1cURL), profileObjectID)),
+			expKey: WAFBundleKey(fmt.Sprintf("log_%s_n1c-ns_%s", helpers.URLHash(n1cURL), profileObjectID)),
 		},
 		{
 			name: "N1C source with ProfileName (no ObjectID)",
@@ -4329,7 +4356,7 @@ func TestLogBundleKey(t *testing.T) {
 					ProfileName: &profileName,
 				},
 			},
-			expKey: WAFBundleKey(fmt.Sprintf("mynamespace_mypolicy_log_%s_n1c-ns_%s", helpers.URLHash(n1cURL), profileName)),
+			expKey: WAFBundleKey(fmt.Sprintf("log_%s_n1c-ns_%s", helpers.URLHash(n1cURL), profileName)),
 		},
 		{
 			name: "N1C source with neither ProfileObjectID nor ProfileName",
@@ -4339,7 +4366,7 @@ func TestLogBundleKey(t *testing.T) {
 					Namespace: "n1c-ns",
 				},
 			},
-			expKey: WAFBundleKey(fmt.Sprintf("mynamespace_mypolicy_log_%s_n1c-ns_", helpers.URLHash(n1cURL))),
+			expKey: WAFBundleKey(fmt.Sprintf("log_%s_n1c-ns_", helpers.URLHash(n1cURL))),
 		},
 		{
 			name: "HTTP source",
@@ -4348,7 +4375,7 @@ func TestLogBundleKey(t *testing.T) {
 					URL: httpURL,
 				},
 			},
-			expKey: WAFBundleKey(fmt.Sprintf("mynamespace_mypolicy_log_%s", helpers.URLHash(httpURL))),
+			expKey: WAFBundleKey(fmt.Sprintf("log_%s", helpers.URLHash(httpURL))),
 		},
 	}
 

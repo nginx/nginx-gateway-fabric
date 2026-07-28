@@ -326,6 +326,125 @@ var _ = Describe("WAFPolicy", Ordered, Label("waf"), func() {
 		})
 	})
 
+	// Issue #5478: Two WAFPolicies targeting different HTTPRoutes on the same Gateway but
+	// referencing the same HTTP bundle URL produce identical PolicyBundleKeys. NAP sees the
+	// same internal policy/log-profile name loaded twice and rejects the config with
+	// "Duplicate policy name found" / "Duplicate logging profile name found".
+	//
+	// The bug is confirmed by inspecting the NGF controller logs for the
+	// "configuration_load_failure" event containing the duplicate name error.
+	Context("when two type: HTTP WAFPolicies reference the same bundle URL (issue #5478)", Ordered, func() {
+		dupPolicyFiles := []string{
+			"waf-policy/wafpolicy-duplicate-coffee.yaml",
+			"waf-policy/wafpolicy-duplicate-tea.yaml",
+		}
+
+		var ngfPodName string
+
+		BeforeAll(func() {
+			// Get the NGF controller pod name so we can inspect its logs.
+			ngfPodNames, err := resourceManager.GetReadyNGFPodNames(
+				ngfNamespace, releaseName, timeoutConfig.GetStatusTimeout,
+			)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(ngfPodNames).To(HaveLen(1))
+			ngfPodName = ngfPodNames[0]
+
+			Expect(resourceManager.ApplyFromFiles(dupPolicyFiles, namespace)).To(Succeed())
+		})
+
+		AfterAll(func() {
+			Expect(resourceManager.DeleteFromFiles(dupPolicyFiles, namespace)).To(Succeed())
+		})
+
+		It("accepts both WAFPolicies", func() {
+			coffeeNsName := types.NamespacedName{Name: "coffee-waf-dup", Namespace: namespace}
+			teaNsName := types.NamespacedName{Name: "tea-waf-dup", Namespace: namespace}
+
+			Expect(waitForWAFPolicyAccepted(coffeeNsName)).To(Succeed())
+			Expect(waitForWAFPolicyAccepted(teaNsName)).To(Succeed())
+		})
+
+		It("causes a 'Duplicate policy name found' error in the NGF controller logs", func() {
+			// After both WAFPolicies are accepted, the NGF controller attempts to push the
+			// generated NGINX config. Because both policies produce the same internal NAP
+			// policy name (derived from the identical bundle URL hash), the NGINX config test
+			// fails with "Duplicate policy name found: ngfPolicy".
+			//
+			// We poll the NGF controller logs for this error message.
+			Eventually(func() (bool, error) {
+				logs, err := resourceManager.GetPodLogs(
+					ngfNamespace,
+					ngfPodName,
+					&core.PodLogOptions{Container: "nginx-gateway"},
+				)
+				if err != nil {
+					return false, fmt.Errorf("failed to get NGF controller logs: %w", err)
+				}
+
+				if strings.Contains(logs, "Duplicate policy name found") {
+					GinkgoWriter.Println(
+						"BUG CONFIRMED (issue #5478): NGF logs contain " +
+							"'Duplicate policy name found' error",
+					)
+					return true, nil
+				}
+				return false, nil
+			}).
+				WithTimeout(timeoutConfig.GetStatusTimeout).
+				WithPolling(2*time.Second).
+				Should(BeTrue(),
+					"expected NGF controller logs to contain 'Duplicate policy name found' "+
+						"(configuration_load_failure from NAP)")
+		})
+
+		It("causes a 'Duplicate logging profile name found' error in the NGF controller logs", func() {
+			// Similarly, the security log bundles share the same internal log profile name
+			// because they are compiled from the same logconf.tgz URL. NAP rejects the
+			// config with "Duplicate logging profile name found".
+			Eventually(func() (bool, error) {
+				logs, err := resourceManager.GetPodLogs(
+					ngfNamespace,
+					ngfPodName,
+					&core.PodLogOptions{Container: "nginx-gateway"},
+				)
+				if err != nil {
+					return false, fmt.Errorf("failed to get NGF controller logs: %w", err)
+				}
+
+				if strings.Contains(logs, "Duplicate logging profile name found") {
+					GinkgoWriter.Println(
+						"BUG CONFIRMED (issue #5478): NGF logs contain " +
+							"'Duplicate logging profile name found' error",
+					)
+					return true, nil
+				}
+				return false, nil
+			}).
+				WithTimeout(timeoutConfig.GetStatusTimeout).
+				WithPolling(2*time.Second).
+				Should(BeTrue(),
+					"expected NGF controller logs to contain 'Duplicate logging profile name found' "+
+						"(configuration_load_failure from NAP)")
+		})
+
+		It("reports 'Failed to update NGINX configuration' in the NGF controller logs", func() {
+			// The overall error message wrapping the NAP failure is
+			// "Failed to update NGINX configuration" with "Config apply failed, rolling back config".
+			logs, err := resourceManager.GetPodLogs(
+				ngfNamespace,
+				ngfPodName,
+				&core.PodLogOptions{Container: "nginx-gateway"},
+			)
+			Expect(err).ToNot(HaveOccurred())
+
+			Expect(logs).To(ContainSubstring("Failed to update NGINX configuration"),
+				"expected NGF controller logs to contain the config apply failure message")
+			Expect(logs).To(ContainSubstring("configuration_load_failure"),
+				"expected NGF controller logs to contain 'configuration_load_failure' event from NAP")
+		})
+	})
+
 	Context("when a WAFPolicy references a nonexistent bundle", Ordered, func() {
 		// This context verifies fail-closed behavior (the default): once a WAFPolicy with a
 		// pending bundle is applied, subsequent config changes must be withheld until the bundle

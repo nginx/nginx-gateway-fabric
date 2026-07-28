@@ -939,7 +939,7 @@ func TestBuildBundleSources(t *testing.T) {
 			},
 			expectedSources: 1,
 			validateSources: func(g Gomega, sources []BundleSource) {
-				g.Expect(string(sources[0].BundleKey)).To(ContainSubstring("default_test-policy_log_"))
+				g.Expect(string(sources[0].BundleKey)).To(ContainSubstring("log_"))
 				g.Expect(sources[0].Request.URL).To(Equal("http://example.com/log-profile.tgz"))
 			},
 		},

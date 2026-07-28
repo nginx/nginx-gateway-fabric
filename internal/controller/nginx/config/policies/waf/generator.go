@@ -17,6 +17,8 @@ const appProtectBundleFolder = "/etc/app_protect/bundles"
 
 var tmpl = template.Must(template.New("waf policy").Parse(wafTemplate))
 
+const bundlePathFmt = appProtectBundleFolder + "/%s.tgz"
+
 const wafTemplate = `
 {{- if .BundlePath }}
 app_protect_enable on;
@@ -67,13 +69,19 @@ func generate(pols []policies.Policy) policies.GenerateResultFiles {
 
 		if wp.Spec.PolicySource != nil && (wp.Spec.PolicySource.HTTPSource != nil ||
 			wp.Spec.PolicySource.NIMSource != nil ||
-			wp.Spec.PolicySource.N1CSource != nil) ||
-			wp.Spec.PolicyRef != nil && wp.Spec.PolicyRef.APPolicyRef != nil {
+			wp.Spec.PolicySource.N1CSource != nil) {
+			bundleName := string(graph.PolicyBundleKey(
+				types.NamespacedName{Namespace: wp.Namespace, Name: wp.Name},
+				wp.Spec,
+			))
+			bundlePath := fmt.Sprintf(bundlePathFmt, bundleName)
+			fields["BundlePath"] = bundlePath
+		} else if wp.Spec.PolicyRef != nil && wp.Spec.PolicyRef.APPolicyRef != nil {
 			bundleName := string(graph.PLMPolicyBundleKey(types.NamespacedName{
 				Namespace: wp.Namespace,
 				Name:      wp.Name,
 			}))
-			bundlePath := fmt.Sprintf("%s/%s.tgz", appProtectBundleFolder, bundleName)
+			bundlePath := fmt.Sprintf(bundlePathFmt, bundleName)
 			fields["BundlePath"] = bundlePath
 		}
 
@@ -100,12 +108,12 @@ func buildSecurityLogEntries(wp *ngfAPI.WAFPolicy, pol policies.Policy) []map[st
 		switch {
 		case secLog.LogRef != nil && secLog.LogRef.APLogConfRef != nil:
 			bundleName := graph.PLMLogBundleKey(polNsName, secLog.LogRef.APLogConfRef)
-			logEntry["LogProfileBundlePath"] = fmt.Sprintf("%s/%s.tgz", appProtectBundleFolder, bundleName)
+			logEntry["LogProfileBundlePath"] = fmt.Sprintf(bundlePathFmt, bundleName)
 		case secLog.LogSource == nil:
 			continue
 		case secLog.LogSource.HTTPSource != nil || secLog.LogSource.NIMSource != nil || secLog.LogSource.N1CSource != nil:
 			bundleName := graph.LogBundleKey(polNsName, secLog.LogSource)
-			logEntry["LogProfileBundlePath"] = fmt.Sprintf("%s/%s.tgz", appProtectBundleFolder, bundleName)
+			logEntry["LogProfileBundlePath"] = fmt.Sprintf(bundlePathFmt, bundleName)
 		case secLog.LogSource.DefaultProfile != nil:
 			logEntry["LogProfileName"] = string(*secLog.LogSource.DefaultProfile)
 		default:
