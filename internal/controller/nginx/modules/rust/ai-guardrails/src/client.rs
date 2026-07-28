@@ -134,7 +134,7 @@ pub fn inspect_content(
         .with_json(&request_body)
         .map_err(|e| GuardrailsError::RequestFailed(e.to_string()))?;
 
-    // Unlike ureq, minreq does not treat a non-2xx status as an error; we check
+    // minreq does not treat a non-2xx status as an error; we check
     // the status code explicitly below. Transport-level failures (including
     // timeouts, which surface as an I/O error) are mapped so the caller's
     // fail-closed logic behaves identically to the previous implementation.
@@ -221,8 +221,7 @@ mod tests {
     /// Binds an ephemeral loopback port, accepts a single connection on a
     /// background thread, reads the full request (honouring `Content-Length`),
     /// replies with the canned response, and returns the captured request over
-    /// a channel. This replaces the `httpmock` dev-dependency (which pulled in
-    /// license-incompatible transitive crates) with the standard library only.
+    /// a channel.
     fn mock_once(
         status_line: &'static str,
         content_type: &'static str,

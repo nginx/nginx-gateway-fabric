@@ -53,9 +53,7 @@ Choose one of the two backend styles described in
 [Guardrails backend addressing](#guardrails-backend-addressing) below, then apply the matching
 `guardrails-service.yaml`.
 
-If your backend requires authentication, set the token in `guardrails-secret.yaml` (the value must
-live under the `token` key) and keep the `authTokenRef` in `payload-processor.yaml`. If it does not,
-remove the `authTokenRef` block from `payload-processor.yaml` and skip the Secret.
+Set the token in `guardrails-secret.yaml` (the value must live under the `token` key) with your F5 AI Guardrails API token.
 
 ### 3. Apply the manifests
 
@@ -64,7 +62,7 @@ kubectl apply -f gateway.yaml
 kubectl apply -f llm.yaml
 kubectl apply -f llm-route.yaml
 kubectl apply -f guardrails-service.yaml
-kubectl apply -f guardrails-secret.yaml       # skip if no auth token is needed
+kubectl apply -f guardrails-secret.yaml
 kubectl apply -f payload-processor.yaml
 ```
 

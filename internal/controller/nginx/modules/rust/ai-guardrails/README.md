@@ -260,12 +260,6 @@ That path is exactly what `load_module modules/libai_guardrails.so;` resolves to
 
 ## Gotchas & notes
 
-- **NGINX version pinning matters (ABI).** The module must be compiled against the *same* NGINX
-  version that runs it. The OSS Dockerfiles pin the current OSS version (e.g. `1.31.3`); the Plus
-  Dockerfiles pin `1.27.5` because NGINX Plus R37 is based on that OSS release. `Dockerfile.testing`
-  pins its own version purely for bindgen — nothing is deployed from it, so the exact version there
-  matters less.
-
 - **Alpine (musl) vs UBI (glibc).** The OSS/Plus images build against Alpine/musl and pass
   `RUSTFLAGS="-C target-feature=-crt-static"` to force dynamic linking. The UBI images build against
   Debian/glibc instead, so their libc ABI matches the UBI runtime. The linker flags differ
@@ -294,27 +288,6 @@ That path is exactly what `load_module modules/libai_guardrails.so;` resolves to
   families are absent from **both** the compiled tree (`cargo tree`) **and** `Cargo.lock`.
   (`unicode-ident`, licensed in part `Unicode-3.0`, remains as an unavoidable build-time proc-macro
   dependency of `serde_derive`; it is independent of the HTTP client choice.)
-
-- **`minreq` must be 3.x, not 2.x (security).** minreq 2.x pins `rustls 0.21`, which resolves the
-  vulnerable `rustls-webpki 0.101.7` (GHSA-82j2-j2ch-gfr8 high, plus GHSA-965h-392x-2mh5 and
-  GHSA-xgp8-3hg3-c2mh). 3.x uses `rustls 0.23` with the patched `rustls-webpki 0.103.x`. Do not pin
-  minreq back to 2.x.
-
-- **TLS provider is `aws-lc-rs`; builder stages need a C toolchain.** `rustls 0.23`'s default crypto
-  provider is `aws-lc-rs`, whose `aws-lc-sys` crate compiles C/assembly at build time. All four
-  guardrails-builder Dockerfile stages already ship the required toolchain (`clang`, `perl`, `make`),
-  so no Dockerfile change is needed — but do not remove those packages. TLS is still verified against
-  the OS trust store via `rustls-platform-verifier` / `rustls-native-certs`, so the runtime image
-  must ship `ca-certificates`.
-
-- **One phantom entry in `Cargo.lock`: `webpki-root-certs` (`MPL-2.0`).** `rustls-platform-verifier`
-  declares `webpki-root-certs` as an *optional* dependency (a fallback bundled-roots path we do not
-  use). Cargo records optional deps in `Cargo.lock` even when never compiled, so it appears there but
-  is **absent from the compiled tree** (`cargo tree -i webpki-root-certs` returns nothing, on all
-  targets). Because `dependency-review` reads the raw lockfile, this single entry is reported and is
-  allowlisted in the shared `nginx/k8s-common` dependency-review config on the grounds that it is
-  never compiled or shipped in `libai_guardrails.so`. If you change the client or its features,
-  regenerate `Cargo.lock` and confirm the `icu_*` / `url` family does not reappear.
 
 - **HTTP client unit tests use a std-only mock.** `src/client.rs` tests spin up a one-shot
   `std::net::TcpListener` HTTP/1.1 server on an ephemeral loopback port instead of using a
