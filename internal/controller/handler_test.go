@@ -1667,7 +1667,7 @@ func TestMergeWAFPollErrors(t *testing.T) {
 	t.Parallel()
 
 	wafSpec := &ngfAPI.WAFPolicySpec{
-		Type: ngfAPI.PolicySourceTypeHTTP,
+		Type: ngfAPI.PolicySourceTypeN1C,
 		TargetRefs: []gatewayv1.LocalPolicyTargetReference{
 			{
 				Group: gatewayv1.Group(gatewayv1.GroupName),
@@ -1676,8 +1676,8 @@ func TestMergeWAFPollErrors(t *testing.T) {
 			},
 		},
 		PolicySource: &ngfAPI.PolicySource{
-			HTTPSource: &ngfAPI.HTTPBundleSource{URL: "http://example.com/policy.tgz"},
-			Polling:    &ngfAPI.BundlePolling{Enabled: true},
+			N1CSource: &ngfAPI.N1CBundleSource{URL: "http://example.com/policy.tgz"},
+			Polling:   &ngfAPI.BundlePolling{Enabled: true},
 		},
 	}
 
@@ -2009,7 +2009,7 @@ func TestMergeWAFBundleUpdates(t *testing.T) {
 	t.Parallel()
 
 	wafSpec := &ngfAPI.WAFPolicySpec{
-		Type: ngfAPI.PolicySourceTypeHTTP,
+		Type: ngfAPI.PolicySourceTypeNIM,
 		TargetRefs: []gatewayv1.LocalPolicyTargetReference{
 			{
 				Group: gatewayv1.Group(gatewayv1.GroupName),
@@ -2018,8 +2018,8 @@ func TestMergeWAFBundleUpdates(t *testing.T) {
 			},
 		},
 		PolicySource: &ngfAPI.PolicySource{
-			HTTPSource: &ngfAPI.HTTPBundleSource{URL: "http://example.com/policy.tgz"},
-			Polling:    &ngfAPI.BundlePolling{Enabled: true},
+			NIMSource: &ngfAPI.NIMBundleSource{URL: "http://example.com/policy.tgz"},
+			Polling:   &ngfAPI.BundlePolling{Enabled: true},
 		},
 	}
 
