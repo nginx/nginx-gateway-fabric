@@ -22,6 +22,9 @@ jobs:
     name: Helm Tests Local
     runs-on: ubuntu-24.04
     if: ${{ github.event_name != 'schedule' && (!github.event.pull_request.head.repo.fork || inputs.image != 'plus') }}
+    permissions:
+      contents: read
+      id-token: write # for get-from-vault to authenticate with Azure
     steps:
       - name: Checkout Repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -104,10 +107,18 @@ jobs:
           kubectl kustomize config/crd/gateway-api/standard | kubectl apply -f -
           kubectl create namespace nginx-gateway
 
+      - name: Get secrets
+        if: ${{ inputs.image == 'plus' }}
+        uses: nginx/ci-self-hosted/.github/actions/get-from-vault@refs/heads/main
+        with:
+          client-id: ${{ secrets.AZ_VAULT_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZ_VAULT_TENANT_ID }}
+          vault-name: ${{ secrets.AZ_VAULT_NAME }}
+          secret-names: "jwt-plus-exception-reporting"
+          env-names: "PLUS_LICENSE"
+
       - name: Create plus secret
         if: ${{ inputs.image == 'plus' }}
-        env:
-          PLUS_LICENSE: ${{ secrets.JWT_PLUS_REPORTING }}
         run: |
           echo "${PLUS_LICENSE}" > license.jwt
           kubectl create secret generic nplus-license --from-file license.jwt -n nginx-gateway
@@ -135,6 +146,9 @@ jobs:
     name: Helm Tests Remote
     runs-on: ubuntu-24.04
     if: ${{ github.event_name == 'schedule' }}
+    permissions:
+      contents: read
+      id-token: write # for get-from-vault to authenticate with Azure
     steps:
       - name: Checkout Repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -156,13 +170,21 @@ jobs:
           kubectl kustomize config/crd/gateway-api/standard | kubectl apply -f -
           kubectl create namespace nginx-gateway
 
+      - name: Get secrets
+        if: ${{ inputs.image == 'plus' }}
+        uses: nginx/ci-self-hosted/.github/actions/get-from-vault@refs/heads/main
+        with:
+          client-id: ${{ secrets.AZ_VAULT_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZ_VAULT_TENANT_ID }}
+          vault-name: ${{ secrets.AZ_VAULT_NAME }}
+          secret-names: "jwt-plus-exception-reporting,jwt-plus-waf-registry"
+          env-names: "PLUS_LICENSE,JWT_PLUS_WAF_REGISTRY"
+
       - name: Create plus secrets
         if: ${{ inputs.image == 'plus' }}
-        env:
-          PLUS_LICENSE: ${{ secrets.JWT_PLUS_REPORTING }}
         run: |
           echo "${PLUS_LICENSE}" > license.jwt
-          kubectl create secret docker-registry nginx-plus-registry-secret --docker-server=private-registry.nginx.com --docker-username=${{ secrets.JWT_PLUS_REGISTRY }} --docker-password=none -n nginx-gateway
+          kubectl create secret docker-registry nginx-plus-registry-secret --docker-server=private-registry.nginx.com --docker-username=${JWT_PLUS_WAF_REGISTRY} --docker-password=none -n nginx-gateway
           kubectl create secret generic nplus-license --from-file license.jwt -n nginx-gateway
 
       - name: Set up Python

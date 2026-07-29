@@ -53,6 +53,25 @@ jobs:
         with:
           ref: ${{ (inputs.tag != '' && !inputs.dry_run && inputs.image != 'operator') && format('refs/tags/{0}', inputs.tag) || github.ref }}
 
+      - name: Get secrets
+        if: ${{ inputs.runner == 'ubuntu-24.04-amd64' }}
+        uses: nginx/ci-self-hosted/.github/actions/get-from-vault@refs/heads/main
+        with:
+          client-id: ${{ secrets.AZ_VAULT_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZ_VAULT_TENANT_ID }}
+          vault-name: ${{ secrets.AZ_VAULT_NAME }}
+          secret-names: "gcp-workload-identity,gcp-service-account,gcp-project-id"
+
+      - name: Get secrets from common vault
+        if: ${{ inputs.runner == 'ubuntu-24.04-amd64' }}
+        uses: nginx/ci-self-hosted/.github/actions/get-from-vault@refs/heads/main
+        with:
+          client-id: ${{ secrets.AZ_VAULT_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZ_VAULT_TENANT_ID }}
+          vault-name: ${{ secrets.AZ_COMMON_VAULT_NAME }}
+          secret-names: "docker-username,docker-password${{ (inputs.image == 'plus' || inputs.image == 'plus-nap-waf') && ',nginx-pkg-certificate,nginx-pkg-key' || '' }}"
+          env-names: "DOCKER_USERNAME,DOCKER_PASSWORD${{ (inputs.image == 'plus' || inputs.image == 'plus-nap-waf') && ',NGINX_CRT,NGINX_KEY' || '' }}"
+
       - name: Download Artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -72,8 +91,8 @@ jobs:
       - name: Login to Docker Hub
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          username: ${{ env.DOCKER_USERNAME }}
+          password: ${{ env.DOCKER_PASSWORD }}
         if: ${{ inputs.runner == 'ubuntu-24.04-amd64' }}
 
       - name: Login to GitHub Container Registry
@@ -106,8 +125,8 @@ jobs:
         uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
         with:
           token_format: access_token
-          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY }}
-          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          workload_identity_provider: ${{ env.GCP_WORKLOAD_IDENTITY }}
+          service_account: ${{ env.GCP_SERVICE_ACCOUNT }}
         if: ${{ github.event_name != 'pull_request' && (inputs.image == 'plus' || inputs.image == 'plus-nap-waf') }}
 
       - name: Login to GAR
@@ -127,9 +146,9 @@ jobs:
             name=ghcr.io/${{ github.repository_owner }}/nginx-gateway-fabric,enable=${{ inputs.image == 'ngf' && github.event_name != 'pull_request' }}
             name=ghcr.io/${{ github.repository_owner }}/nginx-gateway-fabric/nginx,enable=${{ inputs.image == 'nginx' && github.event_name != 'pull_request' }}
             name=docker-mgmt.nginx.com/nginx-gateway-fabric/nginx-plus,enable=${{ inputs.image == 'plus' && github.event_name != 'pull_request' }}
-            name=us-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/nginx-gateway-fabric/nginx-plus,enable=${{ inputs.image == 'plus' && github.event_name != 'pull_request' }}
+            name=us-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/nginx-gateway-fabric/nginx-plus,enable=${{ inputs.image == 'plus' && github.event_name != 'pull_request' }}
             name=docker-mgmt.nginx.com/nginx-gateway-fabric/nginx-plus-f5waf,enable=${{ inputs.image == 'plus-nap-waf' && github.event_name != 'pull_request' }}
-            name=us-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/nginx-gateway-fabric/nginx-plus-f5waf,enable=${{ inputs.image == 'plus-nap-waf' && github.event_name != 'pull_request' }}
+            name=us-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/nginx-gateway-fabric/nginx-plus-f5waf,enable=${{ inputs.image == 'plus-nap-waf' && github.event_name != 'pull_request' }}
             name=ghcr.io/${{ github.repository_owner }}/nginx-gateway-fabric/operator,enable=${{ inputs.image == 'operator' && github.event_name != 'pull_request' }}
             name=localhost:5000/nginx-gateway-fabric/${{ inputs.image }}
           flavor: |
@@ -176,9 +195,9 @@ jobs:
             NGINX_CONF_DIR=internal/controller/nginx/conf
             BUILD_AGENT=gha
             INCLUDE_NAP_WAF=${{ inputs.image == 'plus-nap-waf' && 'true' || 'false' }}
-          secrets: |
-            ${{ (inputs.image == 'plus' || inputs.image == 'plus-nap-waf') && format('"nginx-repo.crt={0}"', secrets.NGINX_CRT) || '' }}
-            ${{ (inputs.image == 'plus' || inputs.image == 'plus-nap-waf') && format('"nginx-repo.key={0}"', secrets.NGINX_KEY) || '' }}
+          secret-envs: |
+            ${{ (inputs.image == 'plus' || inputs.image == 'plus-nap-waf') && 'nginx-repo.crt=NGINX_CRT' || '' }}
+            ${{ (inputs.image == 'plus' || inputs.image == 'plus-nap-waf') && 'nginx-repo.key=NGINX_KEY' || '' }}
 
       - name: Inspect SBOM and output manifest
         if: ${{ !inputs.dry_run }}
