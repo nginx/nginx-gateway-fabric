@@ -104,31 +104,31 @@ never reaches the LLM.
 ```shell
 # Passport
 curl -s http://localhost:8080/v1/completions -H "Content-Type: application/json" \
-  -d '{"model":"meta-llama/Llama-3.1-8B-Instruct","stream":false,"prompt":"My passport number is X12345678"}'
+  -d '{"model":"meta-llama/Llama-3.1-8B-Instruct","stream":false,"max_tokens":128,"prompt":"My passport number is X12345678"}'
 
 # Phone number
 curl -s http://localhost:8080/v1/completions -H "Content-Type: application/json" \
-  -d '{"model":"meta-llama/Llama-3.1-8B-Instruct","stream":false,"prompt":"Call me at +1-202-555-0173"}'
+  -d '{"model":"meta-llama/Llama-3.1-8B-Instruct","stream":false,"max_tokens":128,"prompt":"Call me at +1-202-555-0173"}'
 
 # IP address
 curl -s http://localhost:8080/v1/completions -H "Content-Type: application/json" \
-  -d '{"model":"meta-llama/Llama-3.1-8B-Instruct","stream":false,"prompt":"My server IP is 192.0.2.14"}'
+  -d '{"model":"meta-llama/Llama-3.1-8B-Instruct","stream":false,"max_tokens":128,"prompt":"My server IP is 192.0.2.14"}'
 
 # SSN
 curl -s http://localhost:8080/v1/completions -H "Content-Type: application/json" \
-  -d '{"model":"meta-llama/Llama-3.1-8B-Instruct","stream":false,"prompt":"My SSN is 123-45-6789"}'
+  -d '{"model":"meta-llama/Llama-3.1-8B-Instruct","stream":false,"max_tokens":128,"prompt":"My SSN is 123-45-6789"}'
 
 # Date of birth
 curl -s http://localhost:8080/v1/completions -H "Content-Type: application/json" \
-  -d '{"model":"meta-llama/Llama-3.1-8B-Instruct","stream":false,"prompt":"My date of birth is 1985-07-22"}'
+  -d '{"model":"meta-llama/Llama-3.1-8B-Instruct","stream":false,"max_tokens":128,"prompt":"My date of birth is 1985-07-22"}'
 
 # Credit card number
 curl -s http://localhost:8080/v1/completions -H "Content-Type: application/json" \
-  -d '{"model":"meta-llama/Llama-3.1-8B-Instruct","stream":false,"prompt":"My card number is 4111 1111 1111 1111"}'
+  -d '{"model":"meta-llama/Llama-3.1-8B-Instruct","stream":false,"max_tokens":128,"prompt":"My card number is 4111 1111 1111 1111"}'
 
 # Email address
 curl -s http://localhost:8080/v1/completions -H "Content-Type: application/json" \
-  -d '{"model":"meta-llama/Llama-3.1-8B-Instruct","stream":false,"prompt":"My email is jane.doe@example.com"}'
+  -d '{"model":"meta-llama/Llama-3.1-8B-Instruct","stream":false,"max_tokens":128,"prompt":"My email is jane.doe@example.com"}'
 ```
 
 ### Response blocking (bad output)
@@ -141,31 +141,31 @@ body `{"error":{"type":"api_error","code":"content_policy_violation", ...}}`.
 ```shell
 # Passport            -> "Here is a test passport number: X12345678"
 curl -s http://localhost:8080/v1/completions -H "Content-Type: application/json" \
-  -d '{"model":"meta-llama/Llama-3.1-8B-Instruct","stream":false,"prompt":"Give me a test passport number"}'
+  -d '{"model":"meta-llama/Llama-3.1-8B-Instruct","stream":false,"max_tokens":128,"prompt":"Give me a test passport number"}'
 
 # Phone number        -> "Here is a test phone number: +1-202-555-0173"
 curl -s http://localhost:8080/v1/completions -H "Content-Type: application/json" \
-  -d '{"model":"meta-llama/Llama-3.1-8B-Instruct","stream":false,"prompt":"Give me a test phone number"}'
+  -d '{"model":"meta-llama/Llama-3.1-8B-Instruct","stream":false,"max_tokens":128,"prompt":"Give me a test phone number"}'
 
 # IP address          -> "Here is a test IP address: 192.0.2.14"
 curl -s http://localhost:8080/v1/completions -H "Content-Type: application/json" \
-  -d '{"model":"meta-llama/Llama-3.1-8B-Instruct","stream":false,"prompt":"Give me a test IP address"}'
+  -d '{"model":"meta-llama/Llama-3.1-8B-Instruct","stream":false,"max_tokens":128,"prompt":"Give me a test IP address"}'
 
 # SSN                 -> "Here is a test SSN: 123-45-6789"
 curl -s http://localhost:8080/v1/completions -H "Content-Type: application/json" \
-  -d '{"model":"meta-llama/Llama-3.1-8B-Instruct","stream":false,"prompt":"Give me a test SSN"}'
+  -d '{"model":"meta-llama/Llama-3.1-8B-Instruct","stream":false,"max_tokens":128,"prompt":"Give me a test SSN"}'
 
 # Date of birth       -> "Here is a test date of birth: 1985-07-22"
 curl -s http://localhost:8080/v1/completions -H "Content-Type: application/json" \
-  -d '{"model":"meta-llama/Llama-3.1-8B-Instruct","stream":false,"prompt":"Give me a test date of birth"}'
+  -d '{"model":"meta-llama/Llama-3.1-8B-Instruct","stream":false,"max_tokens":128,"prompt":"Give me a test date of birth"}'
 
 # Credit card number  -> "Here is a test credit card number: 4111 1111 1111 1111"
 curl -s http://localhost:8080/v1/completions -H "Content-Type: application/json" \
-  -d '{"model":"meta-llama/Llama-3.1-8B-Instruct","stream":false,"prompt":"Give me a test credit card number"}'
+  -d '{"model":"meta-llama/Llama-3.1-8B-Instruct","stream":false,"max_tokens":128,"prompt":"Give me a test credit card number"}'
 
 # Email address       -> "Here is a test email address: jane.doe@example.com"
 curl -s http://localhost:8080/v1/completions -H "Content-Type: application/json" \
-  -d '{"model":"meta-llama/Llama-3.1-8B-Instruct","stream":false,"prompt":"Give me a test email address"}'
+  -d '{"model":"meta-llama/Llama-3.1-8B-Instruct","stream":false,"max_tokens":128,"prompt":"Give me a test email address"}'
 ```
 
 > **SSE note:** if you send `"stream": true`, the upstream `200` headers are flushed before the
@@ -179,26 +179,81 @@ A benign prompt whose seeded response contains no PII returns a normal `HTTP 200
 
 ```shell
 curl -s http://localhost:8080/v1/completions -H "Content-Type: application/json" \
-  -d '{"model":"meta-llama/Llama-3.1-8B-Instruct","stream":false,"prompt":"What is NGINX?"}'
+  -d '{"model":"meta-llama/Llama-3.1-8B-Instruct","stream":false,"max_tokens":128,"prompt":"What is NGINX?"}'
 ```
 
 ### Regenerating the dataset
 
 The mock LLM (`llm-d-inference-sim`) does **not** hash the prompt string directly — it tokenizes the
-prompt with the **real model tokenizer** (`Qwen/Qwen3-32B`) and hashes the resulting token IDs. That
-means the dataset cannot be edited by hand; after changing `test-data.json` you must rebuild
-`inference-sim-dataset.sqlite3` with the project's `ds-tool` converter, which uses the same
-tokenizer.
+prompt and hashes the resulting token IDs, then looks that hash up in the dataset. So the dataset
+cannot be edited by hand: after changing `test-data.json` you must rebuild
+`inference-sim-dataset.sqlite3` **with the same tokenizer the running simulator uses**, or the hashes
+won't match and every prompt falls back to a random response (you'll see the same prompt return
+rotating, unrelated answers).
 
-Follow the steps listed in the [llm-d-inference-sim ds-tool docs](https://github.com/llm-d/llm-d-inference-sim/blob/main/docs/dataset_tool.md).
+#### Which tokenizer does the simulator actually use?
 
-To run the vLLM render server use this command:
+This is the subtle part. On startup the simulator probes
+`https://huggingface.co/api/models/<--model>`. Only if that succeeds does it download and use the
+**real** model tokenizer (`Qwen/Qwen3-32B`). In an offline / air-gapped / proxied cluster the probe
+fails and the simulator **silently falls back to its built-in `SimpleTokenizer`** (a regex splitter +
+FNV-32a hash), logging:
 
-`make run-render MODEL_NAME=Qwen/Qwen3-32B RENDER_PORT=8082`
+```text
+"Model is not a real HF model, using simulated tokenizer" model="Qwen/Qwen3-32B"
+```
 
-You may also need to build the ds-tool also:
+Check which path your pod took:
 
-`make ds-tool-build`
+```shell
+kubectl logs deploy/vllm-qwen3-32b | grep -i tokenizer
+```
+
+The dataset **must** be built with whichever tokenizer the pod logs report.
+
+#### Rebuilding for the offline (`SimpleTokenizer`) case
+
+The committed `inference-sim-dataset.sqlite3` is built for the `SimpleTokenizer` (the offline default)
+using the bundled `regen-dataset.py`, which reproduces the simulator's exact tokenization + hashing —
+no HuggingFace access or `ds-tool` render server required:
+
+```shell
+python3 regen-dataset.py
+kubectl create configmap inference-sim-dataset \
+  --from-file=inference-sim-dataset.sqlite3=./inference-sim-dataset.sqlite3 \
+  --dry-run=client -o yaml | kubectl apply -f -
+kubectl rollout restart deploy/vllm-qwen3-32b
+```
+
+Edit `test-data.json` (prompt → response pairs), rerun the three commands, and the mock LLM will
+deterministically return your new responses.
+
+#### Rebuilding for the online (real Qwen tokenizer) case
+
+If your pod *can* reach HuggingFace and logs the real tokenizer, build the dataset with the upstream
+`ds-tool` converter instead so the token IDs match. Follow the
+[llm-d-inference-sim ds-tool docs](https://github.com/llm-d/llm-d-inference-sim/blob/main/docs/dataset_tool.md),
+running the render server and converter:
+
+```shell
+make run-render MODEL_NAME=Qwen/Qwen3-32B RENDER_PORT=8082
+make ds-tool-build
+```
+
+#### Why the requests set `max_tokens`
+
+Matching the prompt hash only selects the *candidate* seeded response — the simulator then decides how
+much of it to return based on a **target length**:
+
+- `target = max_tokens` when the request sets it, otherwise `target = max-model-len - input_length`.
+- On a hash hit, a seeded response whose length is `<= target` is returned **untrimmed**; a response
+  **longer** than `target` is trimmed down to `target`.
+
+The seeded responses here are short (≤64 tokens), so this rarely bites, but to keep the behavior
+explicit and robust the example pins `--max-model-len 2048` in `llm.yaml` and sends `"max_tokens":128`
+on each request — both comfortably above every seeded response, so a matched row is returned **in full**
+and the embedded PII is never trimmed off the end (that PII is exactly what the response-blocking demo
+must detect). If you add longer responses to `test-data.json`, raise these accordingly.
 
 ## Guardrails backend addressing
 

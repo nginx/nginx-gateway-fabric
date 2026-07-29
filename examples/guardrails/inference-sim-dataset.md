@@ -8,7 +8,12 @@ The dataset contains pre-tokenized prompts and responses, enabling efficient tes
 
 ## Tokenization Model
 
-Qwen/Qwen3-32B
+Built with the `llm-d-inference-sim` **`SimpleTokenizer`** (regex split + FNV-32a hash) via
+`regen-dataset.py`. This matches the tokenizer the simulator falls back to when it cannot reach
+HuggingFace to load the real `Qwen/Qwen3-32B` tokenizer (the offline / air-gapped default). The
+dataset's `prompt_hash` values must be produced with the same tokenizer the running pod uses, or
+prompt lookups miss and responses become random. See the example README's "Regenerating the dataset"
+section.
 
 ## Source Dataset
 

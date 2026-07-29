@@ -22,6 +22,14 @@ spec:
         - Qwen/Qwen3-32B
         - --port
         - "8000"
+        # Bound the context window. On a prompt-hash hit the simulator returns the
+        # seeded response untrimmed when its length is <= the response-length target,
+        # where target = (max-model-len - input_length) unless the request sets
+        # max_tokens. This ceiling stays well above the longest seeded response so
+        # matched rows are never truncated. (Note: deterministic matching itself
+        # depends on the tokenizer, not this value -- see the dataset README.)
+        - --max-model-len
+        - "2048"
         - --max-loras
         - "2"
         - --lora-modules
