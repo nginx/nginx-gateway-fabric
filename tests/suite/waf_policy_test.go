@@ -1131,6 +1131,102 @@ var _ = Describe("WAFPolicy", Ordered, Label("waf"), func() {
 					Should(Succeed(), "expected the cross-namespace PLM policy bundle to be programmed after the grant")
 			})
 		})
+
+		Context("when two type: PLM WAFPolicies reference the same APPolicy", Ordered, func() {
+			// APPolicy and APLogConf must not produce "Duplicate policy name found" or
+			// "Duplicate logging profile name found" errors from NAP.
+			policyFiles := []string{
+				"waf-policy/wafpolicy-plm-duplicate-coffee.yaml",
+				"waf-policy/wafpolicy-plm-duplicate-tea.yaml",
+			}
+
+			var ngfPodName string
+
+			BeforeAll(func() {
+				ngfPodNames, err := resourceManager.GetReadyNGFPodNames(
+					ngfNamespace, releaseName, timeoutConfig.GetStatusTimeout,
+				)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(ngfPodNames).To(HaveLen(1))
+				ngfPodName = ngfPodNames[0]
+
+				Expect(resourceManager.ApplyFromFiles(policyFiles, namespace)).To(Succeed())
+			})
+
+			AfterAll(func() {
+				Expect(resourceManager.DeleteFromFiles(policyFiles, namespace)).To(Succeed())
+			})
+
+			It("accepts both WAFPolicies", func() {
+				coffeeNsName := types.NamespacedName{Name: "coffee-waf-plm-dup", Namespace: namespace}
+				teaNsName := types.NamespacedName{Name: "tea-waf-plm-dup", Namespace: namespace}
+
+				Expect(waitForWAFPolicyAccepted(coffeeNsName)).To(Succeed())
+				Expect(waitForWAFPolicyAccepted(teaNsName)).To(Succeed())
+			})
+
+			It("does not cause a 'Duplicate policy name found' error", func() {
+				Consistently(func() (bool, error) {
+					logs, err := resourceManager.GetPodLogs(
+						ngfNamespace,
+						ngfPodName,
+						&core.PodLogOptions{Container: "nginx-gateway"},
+					)
+					if err != nil {
+						return false, fmt.Errorf("failed to get NGF controller logs: %w", err)
+					}
+
+					if strings.Contains(logs, "Duplicate policy name found") {
+						return false, fmt.Errorf(
+							"NGF logs contain 'Duplicate policy name found' error",
+						)
+					}
+					return true, nil
+				}).
+					WithTimeout(5*time.Second).
+					WithPolling(2*time.Second).
+					Should(BeTrue(),
+						"expected NGF controller logs to NOT contain 'Duplicate policy name found'")
+			})
+
+			It("does not cause a 'Duplicate logging profile name found' error", func() {
+				Consistently(func() (bool, error) {
+					logs, err := resourceManager.GetPodLogs(
+						ngfNamespace,
+						ngfPodName,
+						&core.PodLogOptions{Container: "nginx-gateway"},
+					)
+					if err != nil {
+						return false, fmt.Errorf("failed to get NGF controller logs: %w", err)
+					}
+
+					if strings.Contains(logs, "Duplicate logging profile name found") {
+						return false, fmt.Errorf(
+							"NGF logs contain 'Duplicate logging profile name found' error",
+						)
+					}
+					return true, nil
+				}).
+					WithTimeout(5*time.Second).
+					WithPolling(2*time.Second).
+					Should(BeTrue(),
+						"expected NGF controller logs to NOT contain 'Duplicate logging profile name found'")
+			})
+
+			It("does not report 'Failed to update NGINX configuration'", func() {
+				logs, err := resourceManager.GetPodLogs(
+					ngfNamespace,
+					ngfPodName,
+					&core.PodLogOptions{Container: "nginx-gateway"},
+				)
+				Expect(err).ToNot(HaveOccurred())
+
+				Expect(logs).ToNot(ContainSubstring("Failed to update NGINX configuration"),
+					"expected NGF controller logs to NOT contain the config apply failure message")
+				Expect(logs).ToNot(ContainSubstring("configuration_load_failure"),
+					"expected NGF controller logs to NOT contain 'configuration_load_failure' event from NAP")
+			})
+		})
 	})
 })
 
