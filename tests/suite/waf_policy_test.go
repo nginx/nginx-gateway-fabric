@@ -941,13 +941,13 @@ var _ = Describe("WAFPolicy", Ordered, Label("waf"), func() {
 						{Directive: "app_protect_enable", Value: "on", File: wafFile},
 						{
 							Directive: "app_protect_policy_file",
-							Value:     fmt.Sprintf("/etc/app_protect/bundles/%s_gateway-waf-plm.tgz", namespace),
+							Value:     fmt.Sprintf("/etc/app_protect/bundles/%s_attack-signatures.tgz", namespace),
 							File:      wafFile,
 						},
 						{Directive: "app_protect_security_log_enable", Value: "on", File: wafFile},
 						{
 							Directive:             "app_protect_security_log",
-							Value:                 fmt.Sprintf("/etc/app_protect/bundles/%s_gateway-waf-plm_log_", namespace),
+							Value:                 fmt.Sprintf("/etc/app_protect/bundles/log_%s_log-illegal", namespace),
 							File:                  wafFile,
 							ValueSubstringAllowed: true,
 						},
@@ -995,7 +995,7 @@ var _ = Describe("WAFPolicy", Ordered, Label("waf"), func() {
 						{Directive: "app_protect_enable", Value: "on", File: wafFile, Location: "/coffee"},
 						{
 							Directive: "app_protect_policy_file",
-							Value:     fmt.Sprintf("/etc/app_protect/bundles/%s_coffee-route-waf-plm.tgz", namespace),
+							Value:     fmt.Sprintf("/etc/app_protect/bundles/%s_attack-signatures.tgz", namespace),
 							File:      wafFile,
 							Location:  "/coffee",
 						},
@@ -1122,7 +1122,7 @@ var _ = Describe("WAFPolicy", Ordered, Label("waf"), func() {
 					}
 					return framework.ValidateNginxFieldExists(conf, framework.ExpectedNginxField{
 						Directive: "app_protect_policy_file",
-						Value:     fmt.Sprintf("/etc/app_protect/bundles/%s_gateway-waf-plm-crossns.tgz", namespace),
+						Value:     fmt.Sprintf("/etc/app_protect/bundles/%s_attack-signatures.tgz", otherNamespace),
 						File:      fmt.Sprintf("WAFPolicy_%s_gateway-waf-plm-crossns.conf", namespace),
 					})
 				}).
