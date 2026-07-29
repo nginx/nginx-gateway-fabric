@@ -23,6 +23,7 @@ import (
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/v2/tests/framework"
 )
 
@@ -143,7 +144,10 @@ var _ = Describe("WAFPolicy", Ordered, Label("waf"), func() {
 	Context("when a valid WAFPolicy targeting an existing Gateway is created", func() {
 		policyFiles := []string{"waf-policy/wafpolicy.yaml"}
 
-		var conf *framework.Payload
+		var (
+			conf   *framework.Payload
+			wafPol ngfAPI.WAFPolicy
+		)
 
 		BeforeAll(func() {
 			Expect(resourceManager.ApplyFromFiles(policyFiles, namespace)).To(Succeed())
@@ -157,39 +161,49 @@ var _ = Describe("WAFPolicy", Ordered, Label("waf"), func() {
 			nsname := types.NamespacedName{Name: "gateway-waf", Namespace: namespace}
 			Expect(waitForWAFPolicyAccepted(nsname)).To(Succeed())
 
+			ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.GetStatusTimeout)
+			defer cancel()
+			Expect(resourceManager.Get(ctx, nsname, &wafPol)).To(Succeed())
+
 			var err error
 			conf, err = resourceManager.GetNginxConfig(nginxPodName, namespace, nginxCrossplanePath)
 			Expect(err).ToNot(HaveOccurred())
 		})
 
 		// app_protect directives are set at the server level for gateway-targeted policies.
+		// The bundle filenames are derived from a hash of the source URL, so we read the
+		// WAFPolicy from the cluster and compute the expected hashes.
 		// The log bundle filename contains a content-derived hash that may change across compiler
 		// versions, so ValueSubstringAllowed is used for that assertion.
-		DescribeTable("produces the correct NGINX directives",
-			func(expFields []framework.ExpectedNginxField) {
-				for _, field := range expFields {
-					Expect(framework.ValidateNginxFieldExists(conf, field)).To(Succeed())
-				}
-			},
-			Entry("server-level WAF directives", func() []framework.ExpectedNginxField {
-				wafFile := fmt.Sprintf("WAFPolicy_%s_gateway-waf.conf", namespace)
-				return []framework.ExpectedNginxField{
-					{Directive: "app_protect_enable", Value: "on", File: wafFile},
-					{
-						Directive: "app_protect_policy_file",
-						Value:     fmt.Sprintf("/etc/app_protect/bundles/%s_gateway-waf.tgz", namespace),
-						File:      wafFile,
-					},
-					{Directive: "app_protect_security_log_enable", Value: "on", File: wafFile},
-					{
-						Directive:             "app_protect_security_log",
-						Value:                 fmt.Sprintf("/etc/app_protect/bundles/%s_gateway-waf_log_", namespace),
-						File:                  wafFile,
-						ValueSubstringAllowed: true,
-					},
-				}
-			}()),
-		)
+		It("produces the correct server-level WAF NGINX directives", func() {
+			wafFile := fmt.Sprintf("WAFPolicy_%s_gateway-waf.conf", namespace)
+
+			Expect(wafPol.Spec.PolicySource).ToNot(BeNil())
+			Expect(wafPol.Spec.PolicySource.HTTPSource).ToNot(BeNil())
+			policyURLHash := helpers.URLHash(wafPol.Spec.PolicySource.HTTPSource.URL)
+
+			Expect(wafPol.Spec.SecurityLogs).ToNot(BeEmpty())
+			Expect(wafPol.Spec.SecurityLogs[0].LogSource.HTTPSource).ToNot(BeNil())
+			logURLHash := helpers.URLHash(wafPol.Spec.SecurityLogs[0].LogSource.HTTPSource.URL)
+
+			for _, field := range []framework.ExpectedNginxField{
+				{Directive: "app_protect_enable", Value: "on", File: wafFile},
+				{
+					Directive: "app_protect_policy_file",
+					Value:     fmt.Sprintf("/etc/app_protect/bundles/%s.tgz", policyURLHash),
+					File:      wafFile,
+				},
+				{Directive: "app_protect_security_log_enable", Value: "on", File: wafFile},
+				{
+					Directive:             "app_protect_security_log",
+					Value:                 fmt.Sprintf("/etc/app_protect/bundles/log_%s", logURLHash),
+					File:                  wafFile,
+					ValueSubstringAllowed: true,
+				},
+			} {
+				Expect(framework.ValidateNginxFieldExists(conf, field)).To(Succeed())
+			}
+		})
 
 		It("blocks requests containing attack signatures", func() {
 			port := 80
@@ -243,7 +257,10 @@ var _ = Describe("WAFPolicy", Ordered, Label("waf"), func() {
 	Context("when a WAFPolicy targets an HTTPRoute", func() {
 		policyFiles := []string{"waf-policy/wafpolicy-route.yaml"}
 
-		var conf *framework.Payload
+		var (
+			conf   *framework.Payload
+			wafPol ngfAPI.WAFPolicy
+		)
 
 		BeforeAll(func() {
 			Expect(resourceManager.ApplyFromFiles(policyFiles, namespace)).To(Succeed())
@@ -257,31 +274,36 @@ var _ = Describe("WAFPolicy", Ordered, Label("waf"), func() {
 			nsname := types.NamespacedName{Name: "coffee-route-waf", Namespace: namespace}
 			Expect(waitForWAFPolicyAccepted(nsname)).To(Succeed())
 
+			ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.GetStatusTimeout)
+			defer cancel()
+			Expect(resourceManager.Get(ctx, nsname, &wafPol)).To(Succeed())
+
 			var err error
 			conf, err = resourceManager.GetNginxConfig(nginxPodName, namespace, nginxCrossplanePath)
 			Expect(err).ToNot(HaveOccurred())
 		})
 
 		// For an HTTPRoute-targeted policy, directives appear in the location block.
-		DescribeTable("produces WAF directives in the location block",
-			func(expFields []framework.ExpectedNginxField) {
-				for _, field := range expFields {
-					Expect(framework.ValidateNginxFieldExists(conf, field)).To(Succeed())
-				}
-			},
-			Entry("location-level WAF directives", func() []framework.ExpectedNginxField {
-				wafFile := fmt.Sprintf("WAFPolicy_%s_coffee-route-waf.conf", namespace)
-				return []framework.ExpectedNginxField{
-					{Directive: "app_protect_enable", Value: "on", File: wafFile, Location: "/coffee"},
-					{
-						Directive: "app_protect_policy_file",
-						Value:     fmt.Sprintf("/etc/app_protect/bundles/%s_coffee-route-waf.tgz", namespace),
-						File:      wafFile,
-						Location:  "/coffee",
-					},
-				}
-			}()),
-		)
+		// The bundle filename is derived from a hash of the source URL.
+		It("produces WAF directives in the location block", func() {
+			wafFile := fmt.Sprintf("WAFPolicy_%s_coffee-route-waf.conf", namespace)
+
+			Expect(wafPol.Spec.PolicySource).ToNot(BeNil())
+			Expect(wafPol.Spec.PolicySource.HTTPSource).ToNot(BeNil())
+			policyURLHash := helpers.URLHash(wafPol.Spec.PolicySource.HTTPSource.URL)
+
+			for _, field := range []framework.ExpectedNginxField{
+				{Directive: "app_protect_enable", Value: "on", File: wafFile, Location: "/coffee"},
+				{
+					Directive: "app_protect_policy_file",
+					Value:     fmt.Sprintf("/etc/app_protect/bundles/%s.tgz", policyURLHash),
+					File:      wafFile,
+					Location:  "/coffee",
+				},
+			} {
+				Expect(framework.ValidateNginxFieldExists(conf, field)).To(Succeed())
+			}
+		})
 
 		It("masks sensitive data in responses on the protected route", func() {
 			port := 80
@@ -326,124 +348,101 @@ var _ = Describe("WAFPolicy", Ordered, Label("waf"), func() {
 		})
 	})
 
-	// Issue #5478: Two WAFPolicies targeting different HTTPRoutes on the same Gateway but
-	// referencing the same HTTP bundle URL produce identical PolicyBundleKeys. NAP sees the
-	// same internal policy/log-profile name loaded twice and rejects the config with
-	// "Duplicate policy name found" / "Duplicate logging profile name found".
-	//
-	// The bug is confirmed by inspecting the NGF controller logs for the
-	// "configuration_load_failure" event containing the duplicate name error.
-	Context("when two type: HTTP WAFPolicies reference the same bundle URL (issue #5478)", Ordered, func() {
-		dupPolicyFiles := []string{
-			"waf-policy/wafpolicy-duplicate-coffee.yaml",
-			"waf-policy/wafpolicy-duplicate-tea.yaml",
-		}
+	Context("when two unique WAFPolicies reference the same bundle URL and target unique HTTPRoutes",
+		Ordered, func() {
+			dupPolicyFiles := []string{
+				"waf-policy/wafpolicy-duplicate-coffee.yaml",
+				"waf-policy/wafpolicy-duplicate-tea.yaml",
+			}
 
-		var ngfPodName string
+			var ngfPodName string
 
-		BeforeAll(func() {
-			// Get the NGF controller pod name so we can inspect its logs.
-			ngfPodNames, err := resourceManager.GetReadyNGFPodNames(
-				ngfNamespace, releaseName, timeoutConfig.GetStatusTimeout,
-			)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(ngfPodNames).To(HaveLen(1))
-			ngfPodName = ngfPodNames[0]
+			BeforeAll(func() {
+				// Get the NGF controller pod name so we can inspect its logs.
+				ngfPodNames, err := resourceManager.GetReadyNGFPodNames(
+					ngfNamespace, releaseName, timeoutConfig.GetStatusTimeout,
+				)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(ngfPodNames).To(HaveLen(1))
+				ngfPodName = ngfPodNames[0]
 
-			Expect(resourceManager.ApplyFromFiles(dupPolicyFiles, namespace)).To(Succeed())
-		})
+				Expect(resourceManager.ApplyFromFiles(dupPolicyFiles, namespace)).To(Succeed())
+			})
 
-		AfterAll(func() {
-			Expect(resourceManager.DeleteFromFiles(dupPolicyFiles, namespace)).To(Succeed())
-		})
+			AfterAll(func() {
+				Expect(resourceManager.DeleteFromFiles(dupPolicyFiles, namespace)).To(Succeed())
+			})
 
-		It("accepts both WAFPolicies", func() {
-			coffeeNsName := types.NamespacedName{Name: "coffee-waf-dup", Namespace: namespace}
-			teaNsName := types.NamespacedName{Name: "tea-waf-dup", Namespace: namespace}
+			It("accepts both WAFPolicies", func() {
+				coffeeNsName := types.NamespacedName{Name: "coffee-waf-dup", Namespace: namespace}
+				teaNsName := types.NamespacedName{Name: "tea-waf-dup", Namespace: namespace}
 
-			Expect(waitForWAFPolicyAccepted(coffeeNsName)).To(Succeed())
-			Expect(waitForWAFPolicyAccepted(teaNsName)).To(Succeed())
-		})
+				Expect(waitForWAFPolicyAccepted(coffeeNsName)).To(Succeed())
+				Expect(waitForWAFPolicyAccepted(teaNsName)).To(Succeed())
+			})
 
-		It("causes a 'Duplicate policy name found' error in the NGF controller logs", func() {
-			// After both WAFPolicies are accepted, the NGF controller attempts to push the
-			// generated NGINX config. Because both policies produce the same internal NAP
-			// policy name (derived from the identical bundle URL hash), the NGINX config test
-			// fails with "Duplicate policy name found: ngfPolicy".
-			//
-			// We poll the NGF controller logs for this error message.
-			Eventually(func() (bool, error) {
+			It("does not cause a 'Duplicate policy name found' error", func() {
+				Consistently(func() (bool, error) {
+					logs, err := resourceManager.GetPodLogs(
+						ngfNamespace,
+						ngfPodName,
+						&core.PodLogOptions{Container: "nginx-gateway"},
+					)
+					if err != nil {
+						return false, fmt.Errorf("failed to get NGF controller logs: %w", err)
+					}
+
+					if strings.Contains(logs, "Duplicate policy name found") {
+						return false, fmt.Errorf(
+							"NGF logs contain 'Duplicate policy name found' error",
+						)
+					}
+					return true, nil
+				}).
+					WithTimeout(timeoutConfig.GetStatusTimeout).
+					WithPolling(2*time.Second).
+					Should(BeTrue(),
+						"expected NGF controller logs to NOT contain 'Duplicate policy name found'")
+			})
+
+			It("does not cause a 'Duplicate logging profile name found' error", func() {
+				Consistently(func() (bool, error) {
+					logs, err := resourceManager.GetPodLogs(
+						ngfNamespace,
+						ngfPodName,
+						&core.PodLogOptions{Container: "nginx-gateway"},
+					)
+					if err != nil {
+						return false, fmt.Errorf("failed to get NGF controller logs: %w", err)
+					}
+
+					if strings.Contains(logs, "Duplicate logging profile name found") {
+						return false, fmt.Errorf(
+							"NGF logs contain 'Duplicate logging profile name found' error",
+						)
+					}
+					return true, nil
+				}).
+					WithTimeout(timeoutConfig.GetStatusTimeout).
+					WithPolling(2*time.Second).
+					Should(BeTrue(),
+						"expected NGF controller logs to NOT contain 'Duplicate logging profile name found'")
+			})
+
+			It("does not report 'Failed to update NGINX configuration'", func() {
 				logs, err := resourceManager.GetPodLogs(
 					ngfNamespace,
 					ngfPodName,
 					&core.PodLogOptions{Container: "nginx-gateway"},
 				)
-				if err != nil {
-					return false, fmt.Errorf("failed to get NGF controller logs: %w", err)
-				}
+				Expect(err).ToNot(HaveOccurred())
 
-				if strings.Contains(logs, "Duplicate policy name found") {
-					GinkgoWriter.Println(
-						"BUG CONFIRMED (issue #5478): NGF logs contain " +
-							"'Duplicate policy name found' error",
-					)
-					return true, nil
-				}
-				return false, nil
-			}).
-				WithTimeout(timeoutConfig.GetStatusTimeout).
-				WithPolling(2*time.Second).
-				Should(BeTrue(),
-					"expected NGF controller logs to contain 'Duplicate policy name found' "+
-						"(configuration_load_failure from NAP)")
+				Expect(logs).ToNot(ContainSubstring("Failed to update NGINX configuration"),
+					"expected NGF controller logs to NOT contain the config apply failure message")
+				Expect(logs).ToNot(ContainSubstring("configuration_load_failure"),
+					"expected NGF controller logs to NOT contain 'configuration_load_failure' event from NAP")
+			})
 		})
-
-		It("causes a 'Duplicate logging profile name found' error in the NGF controller logs", func() {
-			// Similarly, the security log bundles share the same internal log profile name
-			// because they are compiled from the same logconf.tgz URL. NAP rejects the
-			// config with "Duplicate logging profile name found".
-			Eventually(func() (bool, error) {
-				logs, err := resourceManager.GetPodLogs(
-					ngfNamespace,
-					ngfPodName,
-					&core.PodLogOptions{Container: "nginx-gateway"},
-				)
-				if err != nil {
-					return false, fmt.Errorf("failed to get NGF controller logs: %w", err)
-				}
-
-				if strings.Contains(logs, "Duplicate logging profile name found") {
-					GinkgoWriter.Println(
-						"BUG CONFIRMED (issue #5478): NGF logs contain " +
-							"'Duplicate logging profile name found' error",
-					)
-					return true, nil
-				}
-				return false, nil
-			}).
-				WithTimeout(timeoutConfig.GetStatusTimeout).
-				WithPolling(2*time.Second).
-				Should(BeTrue(),
-					"expected NGF controller logs to contain 'Duplicate logging profile name found' "+
-						"(configuration_load_failure from NAP)")
-		})
-
-		It("reports 'Failed to update NGINX configuration' in the NGF controller logs", func() {
-			// The overall error message wrapping the NAP failure is
-			// "Failed to update NGINX configuration" with "Config apply failed, rolling back config".
-			logs, err := resourceManager.GetPodLogs(
-				ngfNamespace,
-				ngfPodName,
-				&core.PodLogOptions{Container: "nginx-gateway"},
-			)
-			Expect(err).ToNot(HaveOccurred())
-
-			Expect(logs).To(ContainSubstring("Failed to update NGINX configuration"),
-				"expected NGF controller logs to contain the config apply failure message")
-			Expect(logs).To(ContainSubstring("configuration_load_failure"),
-				"expected NGF controller logs to contain 'configuration_load_failure' event from NAP")
-		})
-	})
 
 	Context("when a WAFPolicy references a nonexistent bundle", Ordered, func() {
 		// This context verifies fail-closed behavior (the default): once a WAFPolicy with a
@@ -471,9 +470,13 @@ var _ = Describe("WAFPolicy", Ordered, Label("waf"), func() {
 			conf, err := resourceManager.GetNginxConfig(nginxPodName, namespace, nginxCrossplanePath)
 			Expect(err).ToNot(HaveOccurred())
 
+			// The bundle filename is derived from a hash of the source URL.
+			missingBundleURL := "http://bundle-server.waf-policy.svc.cluster.local/nonexistent-bundle.tgz"
+			policyURLHash := helpers.URLHash(missingBundleURL)
+
 			err = framework.ValidateNginxFieldExists(conf, framework.ExpectedNginxField{
 				Directive: "app_protect_policy_file",
-				Value:     fmt.Sprintf("/etc/app_protect/bundles/%s_gateway-waf-missing-bundle.tgz", namespace),
+				Value:     fmt.Sprintf("/etc/app_protect/bundles/%s.tgz", policyURLHash),
 				File:      fmt.Sprintf("WAFPolicy_%s_gateway-waf-missing-bundle.conf", namespace),
 			})
 			Expect(err).To(HaveOccurred(), "expected no WAF policy directive for missing bundle")
@@ -819,10 +822,21 @@ var _ = Describe("WAFPolicy", Ordered, Label("waf"), func() {
 	Context("when a WAFPolicy is deleted", Ordered, func() {
 		policyFiles := []string{"waf-policy/wafpolicy.yaml"}
 
+		// policyURLHash is captured before deletion so we can verify the directive is removed.
+		var policyURLHash string
+
 		BeforeAll(func() {
 			Expect(resourceManager.ApplyFromFiles(policyFiles, namespace)).To(Succeed())
 			nsname := types.NamespacedName{Name: "gateway-waf", Namespace: namespace}
 			Expect(waitForWAFPolicyAccepted(nsname)).To(Succeed())
+
+			ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.GetStatusTimeout)
+			defer cancel()
+			var wafPol ngfAPI.WAFPolicy
+			Expect(resourceManager.Get(ctx, nsname, &wafPol)).To(Succeed())
+			Expect(wafPol.Spec.PolicySource).ToNot(BeNil())
+			Expect(wafPol.Spec.PolicySource.HTTPSource).ToNot(BeNil())
+			policyURLHash = helpers.URLHash(wafPol.Spec.PolicySource.HTTPSource.URL)
 		})
 
 		It("removes WAF directives from the NGINX config after deletion", func() {
@@ -835,7 +849,7 @@ var _ = Describe("WAFPolicy", Ordered, Label("waf"), func() {
 				}
 				err = framework.ValidateNginxFieldExists(conf, framework.ExpectedNginxField{
 					Directive: "app_protect_policy_file",
-					Value:     fmt.Sprintf("/etc/app_protect/bundles/%s_gateway-waf.tgz", namespace),
+					Value:     fmt.Sprintf("/etc/app_protect/bundles/%s.tgz", policyURLHash),
 					File:      fmt.Sprintf("WAFPolicy_%s_gateway-waf.conf", namespace),
 				})
 				if err == nil {
