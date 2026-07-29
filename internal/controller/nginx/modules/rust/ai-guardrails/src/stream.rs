@@ -393,6 +393,33 @@ mod tests {
     }
 
     #[test]
+    fn test_non_llm_body_buffers_but_yields_no_text() {
+        // Regression: a `/v1/models` response is valid JSON but has no LLM
+        // content fields (message/choices/done), so it buffers bytes yet
+        // accumulates no inspectable text. At end-of-stream `should_inspect_final`
+        // is therefore false even though there are pending chunks that MUST still
+        // be flushed to the client (handled in guardrails_response_body_filter).
+        let mut ctx = StreamContext::default();
+        let body = br#"{"object":"list","data":[{"id":"Qwen/Qwen3-32B","object":"model"}]}"#;
+        ctx.process_chunk(body);
+        ctx.try_drain_remaining();
+
+        assert!(
+            ctx.total_buffered_bytes > 0,
+            "raw bytes must be buffered ({} expected > 0)",
+            ctx.total_buffered_bytes
+        );
+        assert_eq!(ctx.accumulated_text, "", "no LLM text should be extracted");
+        assert!(
+            !ctx.should_inspect_final(true),
+            "nothing to inspect at end-of-stream"
+        );
+        // The buffered chunk is still present and must be releasable.
+        let chunks = ctx.take_pending_chunks();
+        assert_eq!(chunks.len(), 1, "buffered body must be available to flush");
+    }
+
+    #[test]
     fn test_take_pending_chunks_resets_state() {
         let mut ctx = StreamContext::default();
         ctx.process_chunk(b"{\"message\":{\"content\":\"a\"},\"done\":false}\n");

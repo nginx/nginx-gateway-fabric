@@ -841,6 +841,29 @@ unsafe extern "C" fn guardrails_response_body_filter(
         let do_inspect = ctx.should_inspect_final(last_buf);
 
         if !do_inspect {
+            // At end-of-stream we must still release the buffered response even
+            // when there is nothing to inspect (e.g. a `/v1/models` JSON body
+            // that yields no LLM-extractable text, so `accumulated_text` is
+            // empty). Otherwise the suppressed headers are never committed and
+            // the buffered bytes are stranded, hanging the client. Mid-stream we
+            // keep buffering as before.
+            if last_buf || ctx.stream_done {
+                // Commit the upstream headers we previously suppressed.
+                if ctx.headers_suppressed {
+                    let hdr_rc = call_next_header_filter(r);
+                    if hdr_rc == ngx_int_t::from(Status::NGX_ERROR) {
+                        return Status::NGX_ERROR.into();
+                    }
+                }
+
+                let chunks_to_send = ctx.take_pending_chunks();
+                if chunks_to_send.is_empty() {
+                    return Status::NGX_OK.into();
+                }
+
+                return send_chunks(r, request, &chunks_to_send, true);
+            }
+
             // Not enough objects yet — keep buffering, return nothing to client.
             return Status::NGX_OK.into();
         }
