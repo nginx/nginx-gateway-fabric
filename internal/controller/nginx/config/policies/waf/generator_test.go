@@ -1,6 +1,7 @@
 package waf_test
 
 import (
+	"fmt"
 	"testing"
 
 	. "github.com/onsi/gomega"
@@ -11,6 +12,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/http"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/waf"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
 
 func TestGenerate(t *testing.T) {
@@ -21,6 +23,9 @@ func TestGenerate(t *testing.T) {
 	logURL2 := "https://storage.example.com/log2.tgz"
 	nimPolicyName := "nim-policy"
 	nimLogProfileName := "nim-log-profile"
+	policyURLHash := helpers.URLHash(policyURL)
+	logURLHash := helpers.URLHash(logURL)
+	logURL2Hash := helpers.URLHash(logURL2)
 
 	tests := []struct {
 		name          string
@@ -43,7 +48,7 @@ func TestGenerate(t *testing.T) {
 			},
 			expStrings: []string{
 				"app_protect_enable on;",
-				"app_protect_policy_file \"/etc/app_protect/bundles/my-namespace_my-name.tgz\";",
+				fmt.Sprintf("app_protect_policy_file \"/etc/app_protect/bundles/%s.tgz\";", policyURLHash),
 			},
 		},
 		{
@@ -73,9 +78,9 @@ func TestGenerate(t *testing.T) {
 			},
 			expStrings: []string{
 				"app_protect_enable on;",
-				"app_protect_policy_file \"/etc/app_protect/bundles/test-ns_waf-with-log.tgz\";",
+				fmt.Sprintf("app_protect_policy_file \"/etc/app_protect/bundles/%s.tgz\";", policyURLHash),
 				"app_protect_security_log_enable on;",
-				"app_protect_security_log \"/etc/app_protect/bundles/log_be666560841a5b89.tgz\" stderr;",
+				fmt.Sprintf("app_protect_security_log \"/etc/app_protect/bundles/log_%s.tgz\" stderr;", logURLHash),
 			},
 		},
 		{
@@ -106,8 +111,10 @@ func TestGenerate(t *testing.T) {
 			},
 			expStrings: []string{
 				"app_protect_security_log_enable on;",
-				"app_protect_security_log \"/etc/app_protect/bundles/log_be666560841a5b89.tgz\"" +
-					" /var/log/nginx/security.log;",
+				fmt.Sprintf(
+					"app_protect_security_log \"/etc/app_protect/bundles/log_%s.tgz\" /var/log/nginx/security.log;",
+					logURLHash,
+				),
 			},
 		},
 		{
@@ -135,8 +142,11 @@ func TestGenerate(t *testing.T) {
 			},
 			expStrings: []string{
 				"app_protect_security_log_enable on;",
-				"app_protect_security_log \"/etc/app_protect/bundles/log_be666560841a5b89.tgz\" " +
-					"syslog:server=syslog.example.com:514;",
+				fmt.Sprintf(
+					"app_protect_security_log "+
+						"\"/etc/app_protect/bundles/log_%s.tgz\" syslog:server=syslog.example.com:514;",
+					logURLHash,
+				),
 			},
 		},
 		{
@@ -170,10 +180,15 @@ func TestGenerate(t *testing.T) {
 			},
 			expStrings: []string{
 				"app_protect_enable on;",
-				"app_protect_policy_file \"/etc/app_protect/bundles/test-ns_waf-nim-log.tgz\";",
+				fmt.Sprintf(
+					"app_protect_policy_file \"/etc/app_protect/bundles/%s_nim-policy.tgz\";",
+					policyURLHash,
+				),
 				"app_protect_security_log_enable on;",
-
-				"app_protect_security_log \"/etc/app_protect/bundles/log_be666560841a5b89_nim-log-profile.tgz\" stderr;",
+				fmt.Sprintf(
+					"app_protect_security_log \"/etc/app_protect/bundles/log_%s_nim-log-profile.tgz\" stderr;",
+					logURLHash,
+				),
 			},
 		},
 		{
@@ -215,11 +230,14 @@ func TestGenerate(t *testing.T) {
 			},
 			expStrings: []string{
 				"app_protect_enable on;",
-				"app_protect_policy_file \"/etc/app_protect/bundles/app-ns_waf-multi-log.tgz\";",
+				fmt.Sprintf("app_protect_policy_file \"/etc/app_protect/bundles/%s.tgz\";", policyURLHash),
 				"app_protect_security_log_enable on;",
-				"app_protect_security_log \"/etc/app_protect/bundles/log_be666560841a5b89.tgz\" stderr;",
-				//nolint: lll
-				"app_protect_security_log \"/etc/app_protect/bundles/log_ab3b8795a7cf07f6_nim-log-profile.tgz\" /var/log/blocked.log;",
+				fmt.Sprintf("app_protect_security_log \"/etc/app_protect/bundles/log_%s.tgz\" stderr;", logURLHash),
+				fmt.Sprintf(
+					"app_protect_security_log "+
+						"\"/etc/app_protect/bundles/log_%s_nim-log-profile.tgz\" /var/log/blocked.log;",
+					logURL2Hash,
+				),
 			},
 		},
 		{
@@ -275,9 +293,9 @@ func TestGenerate(t *testing.T) {
 			},
 			expStrings: []string{
 				"app_protect_enable on;",
-				"app_protect_policy_file \"/etc/app_protect/bundles/app-ns_waf-plm.tgz\";",
+				"app_protect_policy_file \"/etc/app_protect/bundles/app-ns_ap-policy.tgz\";",
 				"app_protect_security_log_enable on;",
-				"app_protect_security_log \"/etc/app_protect/bundles/app-ns_waf-plm_log_app-ns_ap-logconf.tgz\" stderr;",
+				"app_protect_security_log \"/etc/app_protect/bundles/log_app-ns_ap-logconf.tgz\" stderr;",
 			},
 		},
 		{

@@ -70,22 +70,23 @@ func generate(pols []policies.Policy) policies.GenerateResultFiles {
 		if wp.Spec.PolicySource != nil && (wp.Spec.PolicySource.HTTPSource != nil ||
 			wp.Spec.PolicySource.NIMSource != nil ||
 			wp.Spec.PolicySource.N1CSource != nil) {
-			bundleName := string(graph.PolicyBundleKey(
-				types.NamespacedName{Namespace: wp.Namespace, Name: wp.Name},
-				wp.Spec,
-			))
+			bundleName := string(graph.PolicyBundleKey(wp.Spec))
 			bundlePath := fmt.Sprintf(bundlePathFmt, bundleName)
 			fields["BundlePath"] = bundlePath
 		} else if wp.Spec.PolicyRef != nil && wp.Spec.PolicyRef.APPolicyRef != nil {
+			apPolicyNs := wp.Namespace
+			if wp.Spec.PolicyRef.APPolicyRef.Namespace != nil {
+				apPolicyNs = *wp.Spec.PolicyRef.APPolicyRef.Namespace
+			}
 			bundleName := string(graph.PLMPolicyBundleKey(types.NamespacedName{
-				Namespace: wp.Namespace,
-				Name:      wp.Name,
+				Namespace: apPolicyNs,
+				Name:      wp.Spec.PolicyRef.APPolicyRef.Name,
 			}))
 			bundlePath := fmt.Sprintf(bundlePathFmt, bundleName)
 			fields["BundlePath"] = bundlePath
 		}
 
-		if securityLogs := buildSecurityLogEntries(wp, pol); len(securityLogs) > 0 {
+		if securityLogs := buildSecurityLogEntries(wp); len(securityLogs) > 0 {
 			fields["SecurityLogs"] = securityLogs
 		}
 
@@ -98,21 +99,20 @@ func generate(pols []policies.Policy) policies.GenerateResultFiles {
 	return files
 }
 
-func buildSecurityLogEntries(wp *ngfAPI.WAFPolicy, pol policies.Policy) []map[string]string {
+func buildSecurityLogEntries(wp *ngfAPI.WAFPolicy) []map[string]string {
 	securityLogs := make([]map[string]string, 0, len(wp.Spec.SecurityLogs))
-	polNsName := types.NamespacedName{Namespace: pol.GetNamespace(), Name: pol.GetName()}
 
 	for _, secLog := range wp.Spec.SecurityLogs {
 		logEntry := map[string]string{}
 
 		switch {
 		case secLog.LogRef != nil && secLog.LogRef.APLogConfRef != nil:
-			bundleName := graph.PLMLogBundleKey(polNsName, secLog.LogRef.APLogConfRef)
+			bundleName := graph.PLMLogBundleKey(wp.Namespace, secLog.LogRef.APLogConfRef)
 			logEntry["LogProfileBundlePath"] = fmt.Sprintf(bundlePathFmt, bundleName)
 		case secLog.LogSource == nil:
 			continue
 		case secLog.LogSource.HTTPSource != nil || secLog.LogSource.NIMSource != nil || secLog.LogSource.N1CSource != nil:
-			bundleName := graph.LogBundleKey(polNsName, secLog.LogSource)
+			bundleName := graph.LogBundleKey(secLog.LogSource)
 			logEntry["LogProfileBundlePath"] = fmt.Sprintf(bundlePathFmt, bundleName)
 		case secLog.LogSource.DefaultProfile != nil:
 			logEntry["LogProfileName"] = string(*secLog.LogSource.DefaultProfile)

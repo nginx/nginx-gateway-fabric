@@ -108,28 +108,21 @@ type WAFBundleKey string
 //
 // For N1C: key = "<urlHash>_<n1cNamespace>_<policyName|policyObjectID>"
 // For NIM: key = "<urlHash>_<policyName|policyUID>"
-// For HTTP: key = "<urlHash>"
-// Fallback: key = "<k8sNamespace>_<k8sName>" (backward compatible)
-// TODO: Remove policyNsName if not needed.
-func PolicyBundleKey(policyNsName types.NamespacedName, wafSpec ...ngfAPIv1alpha1.WAFPolicySpec) WAFBundleKey {
-	if len(wafSpec) > 0 {
-		if key := sourcePolicyBundleKey(wafSpec[0]); key != "" {
-			return key
-		}
-	}
-	return WAFBundleKey(fmt.Sprintf("%s_%s", policyNsName.Namespace, policyNsName.Name))
+// For HTTP: key = "<urlHash>".
+func PolicyBundleKey(wafSpec ...ngfAPIv1alpha1.WAFPolicySpec) WAFBundleKey {
+	return sourcePolicyBundleKey(wafSpec)
 }
 
 // sourcePolicyBundleKey generates a WAFBundleKey based on the upstream source identity.
 // Returns an empty key if the source cannot be determined.
-func sourcePolicyBundleKey(spec ngfAPIv1alpha1.WAFPolicySpec) WAFBundleKey {
-	if spec.PolicySource == nil {
-		return ""
-	}
+func sourcePolicyBundleKey(wafSpec []ngfAPIv1alpha1.WAFPolicySpec) WAFBundleKey {
+	for _, spec := range wafSpec {
+		if spec.PolicySource == nil {
+			return ""
+		}
 
-	switch spec.Type {
-	case ngfAPIv1alpha1.PolicySourceTypeN1C:
-		if spec.PolicySource.N1CSource != nil {
+		switch {
+		case spec.PolicySource.N1CSource != nil:
 			policyIdentifier := ""
 			if spec.PolicySource.N1CSource.PolicyObjectID != nil {
 				policyIdentifier = *spec.PolicySource.N1CSource.PolicyObjectID
@@ -142,9 +135,7 @@ func sourcePolicyBundleKey(spec ngfAPIv1alpha1.WAFPolicySpec) WAFBundleKey {
 				spec.PolicySource.N1CSource.Namespace,
 				policyIdentifier,
 			))
-		}
-	case ngfAPIv1alpha1.PolicySourceTypeNIM:
-		if spec.PolicySource.NIMSource != nil {
+		case spec.PolicySource.NIMSource != nil:
 			policyIdentifier := ""
 			if spec.PolicySource.NIMSource.PolicyUID != nil {
 				policyIdentifier = *spec.PolicySource.NIMSource.PolicyUID
@@ -156,9 +147,7 @@ func sourcePolicyBundleKey(spec ngfAPIv1alpha1.WAFPolicySpec) WAFBundleKey {
 				helpers.URLHash(spec.PolicySource.NIMSource.URL),
 				policyIdentifier,
 			))
-		}
-	case ngfAPIv1alpha1.PolicySourceTypeHTTP:
-		if spec.PolicySource.HTTPSource != nil {
+		case spec.PolicySource.HTTPSource != nil:
 			return WAFBundleKey(helpers.URLHash(spec.PolicySource.HTTPSource.URL))
 		}
 	}
@@ -170,12 +159,9 @@ func sourcePolicyBundleKey(spec ngfAPIv1alpha1.WAFPolicySpec) WAFBundleKey {
 // The key for NIM is formatted as "<namespace>_<policyName>_log_<nimUrlHash>_<nimProfileName>", where nimUrlHash is a truncated SHA-256 hex digest of the NIM instance URL.
 // The key for N1C is formatted as "<namespace>_<policyName>_log_<n1cUrlHash>_<n1cNamespace>_<n1cProfileIdentifier>", where n1cUrlHash is a truncated SHA-256 hex digest of the N1C instance URL, and n1cProfileIdentifier is either the ProfileObjectID or ProfileName (if ObjectID is not set).
 // The key for HTTP is formatted as "<namespace>_<policyName>_log_<httpUrlHash>", where httpUrlHash is a truncated SHA-256 hex digest of the HTTP URL.
-// TODO: Remove policyNsName if not needed.
 //
 //nolint:lll
-func LogBundleKey(policyNsName types.NamespacedName, logSource *ngfAPIv1alpha1.LogSource) WAFBundleKey {
-	// temp to avoid lint error.
-	fmt.Printf("policyNsName: %s/%s", policyNsName.Namespace, policyNsName.Name)
+func LogBundleKey(logSource *ngfAPIv1alpha1.LogSource) WAFBundleKey {
 	if logSource == nil {
 		return ""
 	}
@@ -1197,10 +1183,7 @@ func fetchPolicyBundle(
 	policy.WAFState.ResolvedAuth = auth
 	policy.WAFState.ResolvedTLSCA = tlsCA
 
-	bundleKey := PolicyBundleKey(
-		types.NamespacedName{Namespace: wafPolicy.Namespace, Name: wafPolicy.Name},
-		wafPolicy.Spec,
-	)
+	bundleKey := PolicyBundleKey(wafPolicy.Spec)
 
 	req := BuildPolicyFetchRequest(policySource, wafPolicy.Spec.Type, auth, tlsCA)
 
@@ -1266,10 +1249,7 @@ func fetchSecurityLogBundles(
 			}
 		}
 
-		bundleKey := LogBundleKey(
-			types.NamespacedName{Namespace: wafPolicy.Namespace, Name: wafPolicy.Name},
-			secLog.LogSource,
-		)
+		bundleKey := LogBundleKey(secLog.LogSource)
 
 		// Multiple SecurityLog entries may reference the same URL and therefore produce the same
 		// bundleKey. Once the bundle has been fetched, skip subsequent entries with the same key
@@ -1411,23 +1391,25 @@ func resolveTLSCA(
 }
 
 // PLMPolicyBundleKey returns the WAFBundleKey for a PLM WAFPolicy's main policy bundle.
-func PLMPolicyBundleKey(policyNsName types.NamespacedName) WAFBundleKey {
-	return WAFBundleKey(fmt.Sprintf("%s_%s", policyNsName.Namespace, policyNsName.Name))
+// The key is derived from the referenced APPolicy's namespace/name so that multiple WAFPolicies
+// referencing the same APPolicy produce a single bundle key.
+func PLMPolicyBundleKey(apPolicyNsName types.NamespacedName) WAFBundleKey {
+	return WAFBundleKey(fmt.Sprintf("%s_%s", apPolicyNsName.Namespace, apPolicyNsName.Name))
 }
 
 // PLMLogBundleKey returns the WAFBundleKey for a PLM WAFPolicy's log profile bundle.
+// The key is derived from the referenced APLogConf's namespace/name so that multiple WAFPolicies
+// referencing the same APLogConf produce a single log bundle key.
 func PLMLogBundleKey(
-	policyNsName types.NamespacedName,
+	policyNamespace string,
 	ref *ngfAPIv1alpha1.APLogConfReference,
 ) WAFBundleKey {
-	ns := policyNsName.Namespace
+	ns := policyNamespace
 	if ref.Namespace != nil {
 		ns = *ref.Namespace
 	}
 	return WAFBundleKey(fmt.Sprintf(
-		"%s_%s_log_%s_%s",
-		policyNsName.Namespace,
-		policyNsName.Name,
+		"log_%s_%s",
 		ns,
 		ref.Name,
 	))
@@ -1474,8 +1456,7 @@ func fetchPLMPolicyBundle(
 		return
 	}
 
-	policyNsName := types.NamespacedName{Namespace: wafPolicy.Namespace, Name: wafPolicy.Name}
-	bundleKey := PLMPolicyBundleKey(policyNsName)
+	bundleKey := PLMPolicyBundleKey(nsName)
 
 	creds, tlsCfg, err := plmFetchCredentials(wafInput)
 	if err != nil {
@@ -1598,8 +1579,6 @@ func fetchPLMSecurityLogBundles(
 	wafInput *WAFProcessingInput,
 	output *WAFProcessingOutput,
 ) {
-	policyNsName := types.NamespacedName{Namespace: wafPolicy.Namespace, Name: wafPolicy.Name}
-
 	for _, secLog := range wafPolicy.Spec.SecurityLogs {
 		if secLog.LogRef == nil || secLog.LogRef.APLogConfRef == nil {
 			// DefaultProfile or other source — no PLM bundle to fetch.
@@ -1626,7 +1605,6 @@ func fetchPLMSecurityLogBundles(
 			policy,
 			wafInput,
 			output,
-			policyNsName,
 			ref,
 		)
 	}
@@ -1639,7 +1617,6 @@ func fetchPLMSecurityLogBundle(
 	policy *Policy,
 	wafInput *WAFProcessingInput,
 	output *WAFProcessingOutput,
-	policyNsName types.NamespacedName,
 	ref *ngfAPIv1alpha1.APLogConfReference,
 ) {
 	nsName := apLogConfRefNamespacedName(wafPolicy.Namespace, ref)
@@ -1651,7 +1628,7 @@ func fetchPLMSecurityLogBundle(
 		output.ReferencedAPLogConfs[nsName] = apLogConf
 	}
 
-	bundleKey := PLMLogBundleKey(policyNsName, ref)
+	bundleKey := PLMLogBundleKey(wafPolicy.Namespace, ref)
 	if _, alreadyFetched := output.Bundles[bundleKey]; alreadyFetched {
 		return
 	}

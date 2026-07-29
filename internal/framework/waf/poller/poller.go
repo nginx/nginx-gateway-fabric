@@ -393,7 +393,6 @@ func (p *poller) pushBundleToDeployments(bundleKey graph.WAFBundleKey, data []by
 // BuildBundleSources constructs BundleSource entries from a WAFPolicy spec.
 // It returns only sources that have polling enabled.
 func BuildBundleSources(
-	policyNsName types.NamespacedName,
 	spec ngfAPIv1alpha1.WAFPolicySpec,
 	auth *fetch.BundleAuth,
 	tlsCA []byte,
@@ -409,7 +408,7 @@ func BuildBundleSources(
 
 		sources = append(sources, BundleSource{
 			Type:        PolicyBundle,
-			BundleKey:   graph.PolicyBundleKey(policyNsName),
+			BundleKey:   graph.PolicyBundleKey(spec),
 			Request:     graph.BuildPolicyFetchRequest(spec.PolicySource, spec.Type, auth, tlsCA),
 			Description: "policy bundle",
 			Interval:    interval,
@@ -435,7 +434,7 @@ func BuildBundleSources(
 
 		sources = append(sources, BundleSource{
 			Type:        LogProfileBundle,
-			BundleKey:   graph.LogBundleKey(policyNsName, secLog.LogSource),
+			BundleKey:   graph.LogBundleKey(secLog.LogSource),
 			Request:     graph.BuildLogFetchRequest(secLog.LogSource, auth, tlsCA),
 			Description: graph.LogBundleDescription(secLog.LogSource),
 			Interval:    interval,

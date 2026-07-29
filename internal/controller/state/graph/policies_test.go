@@ -2993,7 +2993,6 @@ func TestProcessWAFPolicies(t *testing.T) {
 	authSecretNsName := types.NamespacedName{Namespace: policyNs, Name: authSecretName}
 	tlsSecretNsName := types.NamespacedName{Namespace: policyNs, Name: tlsSecretName}
 
-	policyNsName := types.NamespacedName{Namespace: policyNs, Name: policyName}
 	// Use the default HTTP source spec to compute the source-based bundle key.
 	defaultHTTPSpec := ngfAPIv1alpha1.WAFPolicySpec{
 		Type: ngfAPIv1alpha1.PolicySourceTypeHTTP,
@@ -3001,9 +3000,8 @@ func TestProcessWAFPolicies(t *testing.T) {
 			HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: bundleURL},
 		},
 	}
-	bundleKey := PolicyBundleKey(policyNsName, defaultHTTPSpec)
+	bundleKey := PolicyBundleKey(defaultHTTPSpec)
 	logBundleKey := LogBundleKey(
-		policyNsName,
 		&ngfAPIv1alpha1.LogSource{
 			HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: logBundleURL},
 		},
@@ -3443,7 +3441,7 @@ func TestProcessWAFPolicies(t *testing.T) {
 				}
 			},
 			expBundles: map[WAFBundleKey]*WAFBundleData{
-				PolicyBundleKey(policyNsName, ngfAPIv1alpha1.WAFPolicySpec{
+				PolicyBundleKey(ngfAPIv1alpha1.WAFPolicySpec{
 					Type: ngfAPIv1alpha1.PolicySourceTypeNIM,
 					PolicySource: &ngfAPIv1alpha1.PolicySource{
 						NIMSource: &ngfAPIv1alpha1.NIMBundleSource{
@@ -3482,7 +3480,7 @@ func TestProcessWAFPolicies(t *testing.T) {
 				}
 			},
 			expBundles: map[WAFBundleKey]*WAFBundleData{
-				PolicyBundleKey(policyNsName, ngfAPIv1alpha1.WAFPolicySpec{
+				PolicyBundleKey(ngfAPIv1alpha1.WAFPolicySpec{
 					Type: ngfAPIv1alpha1.PolicySourceTypeN1C,
 					PolicySource: &ngfAPIv1alpha1.PolicySource{
 						N1CSource: &ngfAPIv1alpha1.N1CBundleSource{
@@ -3663,7 +3661,6 @@ func TestProcessWAFPolicies(t *testing.T) {
 			expBundles: map[WAFBundleKey]*WAFBundleData{
 				bundleKey: {Data: fetchedData, Checksum: fetchedChecksum},
 				LogBundleKey(
-					types.NamespacedName{Namespace: "test-ns", Name: policyName},
 					&ngfAPIv1alpha1.LogSource{HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: multiLogURL1}},
 				): {
 					Data: fetchedData, Checksum: fetchedChecksum,
@@ -4302,8 +4299,6 @@ func TestBuildPolicyFetchRequest(t *testing.T) {
 func TestLogBundleKey(t *testing.T) {
 	t.Parallel()
 
-	policyNsName := types.NamespacedName{Namespace: "mynamespace", Name: "mypolicy"}
-
 	nimURL := "https://nim.example.com"
 	n1cURL := "https://n1c.example.com"
 	httpURL := "https://http.example.com"
@@ -4384,7 +4379,7 @@ func TestLogBundleKey(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			got := LogBundleKey(policyNsName, tc.logSource)
+			got := LogBundleKey(tc.logSource)
 			g.Expect(got).To(Equal(tc.expKey))
 		})
 	}
@@ -4614,9 +4609,8 @@ func TestFetchPLMPolicyBundle(t *testing.T) {
 		otherNs      = "other-ns"
 	)
 
-	policyNsName := types.NamespacedName{Namespace: policyNs, Name: policyName}
 	apPolicyNsName := types.NamespacedName{Namespace: policyNs, Name: apPolicyName}
-	bundleKey := PLMPolicyBundleKey(policyNsName)
+	bundleKey := PLMPolicyBundleKey(apPolicyNsName)
 
 	makeWAFPolicy := func(ref *ngfAPIv1alpha1.APPolicyReference) *ngfAPIv1alpha1.WAFPolicy {
 		return &ngfAPIv1alpha1.WAFPolicy{
@@ -4989,10 +4983,9 @@ func TestFetchPLMLogBundleData(t *testing.T) {
 		policyNs   = "test-ns"
 		policyName = "my-plm-waf"
 	)
-	policyNsName := types.NamespacedName{Namespace: policyNs, Name: policyName}
 	logConfNsName := types.NamespacedName{Namespace: policyNs, Name: "my-log-conf"}
 	ref := &ngfAPIv1alpha1.APLogConfReference{Name: "my-log-conf"}
-	bundleKey := PLMLogBundleKey(policyNsName, ref)
+	bundleKey := PLMLogBundleKey(policyNs, ref)
 
 	status := &wafv1.APLogConfStatus{
 		Bundle: &wafv1.BundleStatus{
@@ -5157,9 +5150,8 @@ func TestFetchPLMSecurityLogBundle(t *testing.T) {
 		otherNs     = "other-ns"
 	)
 	logConfNsName := types.NamespacedName{Namespace: policyNs, Name: logConfName}
-	policyNsName := types.NamespacedName{Namespace: policyNs, Name: policyName}
 	sameNsRef := &ngfAPIv1alpha1.APLogConfReference{Name: logConfName}
-	bundleKey := PLMLogBundleKey(policyNsName, sameNsRef)
+	bundleKey := PLMLogBundleKey(policyNs, sameNsRef)
 
 	readyLogConf := makeUnstructuredAPResource("APLogConf", policyNs, logConfName, "ready", "s3://b/l.tgz", "sha", true)
 
@@ -5225,7 +5217,7 @@ func TestFetchPLMSecurityLogBundle(t *testing.T) {
 			}
 
 			fetchPLMSecurityLogBundle(
-				t.Context(), logr.Discard(), wafPolicy, policy, tc.wafInput, output, policyNsName, tc.ref,
+				t.Context(), logr.Discard(), wafPolicy, policy, tc.wafInput, output, tc.ref,
 			)
 
 			g.Expect(policy.Valid).To(Equal(tc.expValid))

@@ -382,7 +382,7 @@ func (h *eventHandlerImpl) reconcileWAFPollers(ctx context.Context, gr *graph.Gr
 			resolvedTLSCA = policy.WAFState.ResolvedTLSCA
 		}
 
-		sources := wafPoller.BuildBundleSources(key.NsName, wafPolicy.Spec, resolvedAuth, resolvedTLSCA)
+		sources := wafPoller.BuildBundleSources(wafPolicy.Spec, resolvedAuth, resolvedTLSCA)
 		if len(sources) == 0 {
 			// No sources with polling enabled - stop any existing poller.
 			h.cfg.wafPollerManager.StopPoller(key.NsName)
