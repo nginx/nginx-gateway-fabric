@@ -5,7 +5,12 @@ pub struct ModuleConfig {
     /// Enable/disable the guardrails filter
     pub enabled: bool,
 
-    /// Guardrails API base URL (the path /backend/v1/scans is appended automatically)
+    /// Guardrails API base URL, set by `guardrails_api_url`.
+    ///
+    /// Retained only so the directive parses; both inspection directions now
+    /// reach the backend via the internal subrequest location (`internal_uri`),
+    /// not via a direct call from the module. The concrete backend URL lives in
+    /// the internal location's `proxy_pass`. Kept for config/debug visibility.
     pub api_url: Option<String>,
 
     /// Guardrails API token (set either inline via guardrails_api_token or from a
@@ -15,7 +20,17 @@ pub struct ModuleConfig {
     /// Path of the file that contains the bearer token (set by guardrails_api_token_file).
     pub api_token_file: Option<String>,
 
-    /// Request timeout in milliseconds
+    /// Internal NGINX location URI that proxies to the guardrails backend.
+    /// Set by `guardrails_internal_uri`. When present, request inspection is
+    /// performed via a non-blocking NGINX subrequest to this location (which
+    /// `proxy_pass`es to the guardrails API), instead of a blocking HTTP call.
+    pub internal_uri: Option<String>,
+
+    /// Request timeout in milliseconds, set by `guardrails_timeout_ms`.
+    ///
+    /// Retained only so the directive parses. Timeouts against the guardrails
+    /// backend are now governed by the internal location's `proxy_*_timeout`
+    /// settings (the subrequest inherits them), not by the module.
     pub timeout_ms: u64,
 
     /// Inspect mode: "request", "response", "both", "off"
@@ -33,6 +48,7 @@ impl Default for ModuleConfig {
             api_url: None,
             api_token: None,
             api_token_file: None,
+            internal_uri: None,
             timeout_ms: 5000,
             inspect_mode: "both".to_string(),
             max_response_bytes: 10 * 1024 * 1024,
@@ -63,6 +79,7 @@ mod tests {
         assert!(conf.api_url.is_none());
         assert!(conf.api_token.is_none());
         assert!(conf.api_token_file.is_none());
+        assert!(conf.internal_uri.is_none());
         assert_eq!(conf.timeout_ms, 5000);
         assert_eq!(conf.inspect_mode, "both");
         assert_eq!(conf.max_response_bytes, 10 * 1024 * 1024);

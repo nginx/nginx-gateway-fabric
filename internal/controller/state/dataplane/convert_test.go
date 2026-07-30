@@ -2242,7 +2242,8 @@ func TestConvertGraphGuardrails(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			got := convertGraphGuardrails(test.route)
+			routeNsName := types.NamespacedName{Namespace: "ns1", Name: "route1"}
+			got := convertGraphGuardrails(test.route, routeNsName, 0)
 			if test.expNil {
 				g.Expect(got).To(BeNil())
 				return
@@ -2251,6 +2252,7 @@ func TestConvertGraphGuardrails(t *testing.T) {
 			g.Expect(got).ToNot(BeNil())
 			g.Expect(got.Enabled).To(BeTrue())
 			g.Expect(got.APIURL).To(Equal(test.expURL))
+			g.Expect(got.InternalPath).To(Equal("/_ngf-internal-guardrails-ns1_route1_rule0"))
 
 			if test.expTimeout {
 				g.Expect(got.TimeoutMS).ToNot(BeNil())

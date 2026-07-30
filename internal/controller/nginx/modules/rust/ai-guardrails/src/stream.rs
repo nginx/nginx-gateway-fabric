@@ -1,7 +1,5 @@
 //! Streaming inspection logic with checkpoint buffering and content extraction.
 
-use crate::client::{GuardrailsError, inspect_content};
-use crate::config::ModuleConfig;
 use serde::Deserialize;
 
 /// Unified LLM streaming chunk covering OpenAI and Ollama wire formats.
@@ -57,6 +55,41 @@ fn extract_llm_content(chunk: LlmChunk, accumulated: &mut String, stream_done: &
     }
 }
 
+/// Verdict of an asynchronous response inspection.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum ResponseVerdict {
+    /// Content cleared — release the buffered response to the client.
+    Allow,
+    /// Content blocked (or inspection errored under fail-closed) — send the
+    /// error/termination body instead of the buffered response.
+    Block,
+}
+
+/// State machine for the response path's single end-of-stream inspection.
+///
+/// The transitions are `Idle -> Pending -> Done -> Resumed`. `Done` carries the
+/// verdict recorded by the async completion callback; the posted write-event
+/// handler consumes it exactly once and moves to `Resumed`, which guarantees the
+/// commit-headers/flush/finalize sequence runs **exactly once** even if the
+/// connection write event fires again.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum ResponseInspect {
+    /// No async inspection has been started yet.
+    Idle,
+    /// A subrequest is in flight. The body filter returned `NGX_OK` without
+    /// forwarding the final buffer; the request is kept alive by the in-flight
+    /// subrequest (`ngx_http_subrequest` bumps `r->main->count`). No further
+    /// upstream data is forwarded until the verdict resumes output.
+    Pending,
+    /// The verdict has been recorded by the async completion callback, and a
+    /// write event has been posted to drive `guardrails_resume_write_handler`
+    /// on the next clean event-loop iteration. Not yet committed to the client.
+    Done(ResponseVerdict),
+    /// The write handler has committed headers + body and finalized the request.
+    /// Any further write events for this request are ignored.
+    Resumed,
+}
+
 /// Per-request context for streaming inspection.
 pub struct StreamContext {
     /// Raw chunks buffered from upstream, waiting for inspection to clear them.
@@ -82,6 +115,17 @@ pub struct StreamContext {
     /// on the first pass. The body filter uses this to know it must call
     /// `call_next_header_filter(r)` before forwarding any data to the client.
     pub headers_suppressed: bool,
+
+    /// State of the asynchronous end-of-stream inspection. Drives the output
+    /// suspend/resume in the response-body filter.
+    pub inspect_state: ResponseInspect,
+
+    /// The spawned async inspection task. Kept alive here so it is not cancelled
+    /// by being dropped (dropping an `async-task` `Task` cancels it). The
+    /// `StreamContext` is heap-boxed and a pool cleanup (`stream_ctx_cleanup`,
+    /// registered by `alloc_stream_ctx`) runs its `Drop` at request teardown,
+    /// which drops this field and cancels the task if still in flight.
+    pub inspect_task: Option<ngx::async_::Task<()>>,
 }
 
 impl Default for StreamContext {
@@ -96,6 +140,9 @@ impl Default for StreamContext {
             total_buffered_bytes: 0,
 
             headers_suppressed: false,
+
+            inspect_state: ResponseInspect::Idle,
+            inspect_task: None,
         }
     }
 }
@@ -215,44 +262,6 @@ impl StreamContext {
         self.pending_chunks.clear();
         self.total_buffered_bytes = 0;
         eprintln!("[guardrails] Discarded {} pending chunks (blocked)", n);
-    }
-}
-
-/// Synchronously inspect the new content at a checkpoint.
-///
-/// Returns `Ok(true)` when cleared, `Ok(false)` when the stream should be
-/// terminated.
-pub fn inspect_checkpoint(
-    ctx: &mut StreamContext,
-    conf: &ModuleConfig,
-) -> Result<bool, GuardrailsError> {
-    let api_url = conf
-        .api_url
-        .as_ref()
-        .ok_or_else(|| GuardrailsError::InvalidResponse("No API URL configured".to_string()))?;
-
-    let api_token = conf.api_token.as_deref();
-    let content = ctx.accumulated_text.as_str();
-
-    eprintln!(
-        "[guardrails] Inspecting full stream: {} chars",
-        content.len()
-    );
-
-    if content.is_empty() {
-        eprintln!("[guardrails] No content to inspect, skipping");
-        return Ok(true);
-    }
-
-    let cleared = inspect_content(content, api_url, api_token, conf.timeout_ms)?;
-
-    if cleared {
-        eprintln!("[guardrails] Full-stream inspection CLEARED");
-        Ok(true)
-    } else {
-        eprintln!("[guardrails] Full-stream inspection BLOCKED — terminating stream");
-        ctx.blocked = true;
-        Ok(false)
     }
 }
 

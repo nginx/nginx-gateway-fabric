@@ -8,12 +8,16 @@ use ngx::core::{self, Status};
 use ngx::ffi::{
     NGX_CONF_FLAG, NGX_CONF_TAKE1, NGX_HTTP_FORBIDDEN, NGX_HTTP_LOC_CONF, NGX_HTTP_LOC_CONF_OFFSET,
     NGX_HTTP_MODULE, NGX_LOG_EMERG, NGX_LOG_ERR, NGX_LOG_INFO, NGX_LOG_WARN, ngx_chain_t,
-    ngx_command_t, ngx_conf_t, ngx_http_finalize_request, ngx_http_module_t,
-    ngx_http_output_body_filter_pt, ngx_http_request_t, ngx_http_top_body_filter, ngx_int_t,
-    ngx_module_t, ngx_str_t, ngx_uint_t,
+    ngx_command_t, ngx_conf_t, ngx_http_conf_ctx_t, ngx_http_core_main_conf_t,
+    ngx_http_core_module, ngx_http_finalize_request, ngx_http_handler_pt, ngx_http_module_t,
+    ngx_http_output_body_filter_pt, ngx_http_phases_NGX_HTTP_ACCESS_PHASE, ngx_http_request_t,
+    ngx_http_top_body_filter, ngx_int_t, ngx_module_t, ngx_post_event, ngx_posted_events,
+    ngx_str_t, ngx_uint_t,
 };
 use ngx::http::{self, HttpModule, HttpModuleLocationConf, Request};
 use ngx::{ngx_conf_log_error, ngx_log_error, ngx_string};
+
+use subrequest_client::inspect_content_async;
 
 /// Request body filter function pointer type — not exposed by the ngx crate.
 #[allow(non_camel_case_types)]
@@ -41,12 +45,13 @@ static mut NGX_HTTP_NEXT_REQUEST_BODY_FILTER: ngx_http_request_body_filter_pt = 
 /// Stored next header filter in the chain
 static mut NGX_HTTP_NEXT_HEADER_FILTER: ngx_http_output_header_filter_pt = None;
 
-mod client;
 mod config;
+mod error;
 mod stream;
+mod subrequest_client;
 
 use config::ModuleConfig;
-use stream::StreamContext;
+use stream::{ResponseInspect, ResponseVerdict, StreamContext};
 
 struct Module;
 
@@ -55,7 +60,7 @@ impl http::HttpModule for Module {
         unsafe { &*ptr::addr_of!(ngx_http_guardrails_module) }
     }
 
-    unsafe extern "C" fn postconfiguration(_cf: *mut ngx_conf_t) -> ngx_int_t {
+    unsafe extern "C" fn postconfiguration(cf: *mut ngx_conf_t) -> ngx_int_t {
         unsafe {
             // Log module initialization
             eprintln!("[guardrails] Rust module postconfiguration: registering filters");
@@ -66,15 +71,44 @@ impl http::HttpModule for Module {
             ngx_http_top_header_filter = Some(guardrails_header_filter);
             eprintln!("[guardrails] Registered header filter");
 
-            // Register request body filter for request inspection
+            // Register request body filter (pass-through only). Request inspection
+            // now happens in the ACCESS phase handler below so it can be performed
+            // asynchronously (non-blocking) via an NGINX subrequest.
             NGX_HTTP_NEXT_REQUEST_BODY_FILTER = ngx_http_top_request_body_filter;
             ngx_http_top_request_body_filter = Some(guardrails_request_body_filter);
-            eprintln!("[guardrails] Registered request body filter");
+            eprintln!("[guardrails] Registered request body filter (pass-through)");
 
             // Register response body filter for response inspection
             NGX_HTTP_NEXT_BODY_FILTER = ngx_http_top_body_filter;
             ngx_http_top_body_filter = Some(guardrails_response_body_filter);
             eprintln!("[guardrails] Registered response body filter");
+
+            // Register the ACCESS-phase handler used for non-blocking request
+            // inspection. Access-phase handlers may return NGX_AGAIN/NGX_DONE and
+            // be resumed once async work completes — unlike body filters, which
+            // cannot suspend.
+            // Inline of the C macro `ngx_http_conf_get_module_main_conf(cf, mod)`
+            // = `((ngx_http_conf_ctx_t *) cf->ctx)->main_conf[mod.ctx_index]`.
+            let http_ctx = (*cf).ctx as *mut ngx_http_conf_ctx_t;
+            if http_ctx.is_null() {
+                eprintln!("[guardrails] ERROR: null http conf ctx");
+                return Status::NGX_ERROR.into();
+            }
+            let core_ctx_index = ngx_http_core_module.ctx_index;
+            let cmcf = *(*http_ctx).main_conf.add(core_ctx_index) as *mut ngx_http_core_main_conf_t;
+            if cmcf.is_null() {
+                eprintln!("[guardrails] ERROR: could not get core main conf");
+                return Status::NGX_ERROR.into();
+            }
+            let handlers =
+                &mut (*cmcf).phases[ngx_http_phases_NGX_HTTP_ACCESS_PHASE as usize].handlers;
+            let h = ngx::ffi::ngx_array_push(handlers) as *mut ngx_http_handler_pt;
+            if h.is_null() {
+                eprintln!("[guardrails] ERROR: could not push access-phase handler");
+                return Status::NGX_ERROR.into();
+            }
+            *h = Some(guardrails_access_handler);
+            eprintln!("[guardrails] Registered access-phase handler");
 
             eprintln!("[guardrails] Rust module loaded successfully");
             Status::NGX_OK.into()
@@ -236,8 +270,16 @@ ngx_conf_handler!(
     }
 );
 
+ngx_conf_handler!(
+    ngx_http_guardrails_set_internal_uri,
+    "guardrails_internal_uri",
+    |conf: &mut ModuleConfig, val: &str| {
+        conf.internal_uri = Some(val.to_string());
+    }
+);
+
 // NGINX directives table
-static mut NGX_HTTP_GUARDRAILS_COMMANDS: [ngx_command_t; 8] = [
+static mut NGX_HTTP_GUARDRAILS_COMMANDS: [ngx_command_t; 9] = [
     ngx_command_t {
         name: ngx_string!("guardrails_filter"),
         type_: (NGX_HTTP_LOC_CONF | NGX_CONF_FLAG) as ngx_uint_t,
@@ -294,6 +336,14 @@ static mut NGX_HTTP_GUARDRAILS_COMMANDS: [ngx_command_t; 8] = [
         offset: 0,
         post: ptr::null_mut(),
     },
+    ngx_command_t {
+        name: ngx_string!("guardrails_internal_uri"),
+        type_: (NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1) as ngx_uint_t,
+        set: Some(ngx_http_guardrails_set_internal_uri),
+        conf: NGX_HTTP_LOC_CONF_OFFSET,
+        offset: 0,
+        post: ptr::null_mut(),
+    },
     ngx_command_t::empty(),
 ];
 
@@ -333,6 +383,40 @@ fn get_module_ctx_mut(
     }
 }
 
+/// Cleanup handler that drops the boxed `StreamContext` at request teardown.
+/// Dropping the box drops `inspect_task` (an in-flight `Task`), cancelling it.
+unsafe extern "C" fn stream_ctx_cleanup(data: *mut c_void) {
+    if !data.is_null() {
+        drop(unsafe { Box::from_raw(data as *mut StreamContext) });
+    }
+}
+
+/// Allocate a fresh `StreamContext` on the heap, register a pool cleanup so its
+/// `Drop` runs at request teardown, and stash it in this module's ctx slot.
+///
+/// A raw `pool().allocate` is deliberately NOT used: `StreamContext` owns an
+/// `Option<Task>` whose `Drop` must run to cancel any in-flight inspection task,
+/// and pool allocations do not run destructors. Mirrors `get_request_inspect_state`.
+///
+/// Returns null on allocation failure (the caller should fail open / pass through).
+unsafe fn alloc_stream_ctx(r: *mut ngx_http_request_t) -> *mut StreamContext {
+    unsafe {
+        let raw = Box::into_raw(Box::new(StreamContext::default()));
+
+        let cln = ngx::ffi::ngx_http_cleanup_add(r, 0);
+        if cln.is_null() {
+            drop(Box::from_raw(raw));
+            return ptr::null_mut();
+        }
+        (*cln).handler = Some(stream_ctx_cleanup);
+        (*cln).data = raw as *mut c_void;
+
+        let idx = Module::module().ctx_index;
+        *(*r).ctx.add(idx) = raw as *mut c_void;
+        raw
+    }
+}
+
 /// Returns true if the upstream response has `Content-Type: text/event-stream`.
 unsafe fn is_sse_response(r: *mut ngx_http_request_t) -> bool {
     unsafe {
@@ -360,100 +444,22 @@ struct RequestMessage<'a> {
     content: Option<&'a str>,
 }
 
-/// Request body filter handler - called for each request body chunk
-unsafe extern "C" fn guardrails_request_body_filter(
-    r: *mut ngx_http_request_t,
-    in_chain: *mut ngx_chain_t,
-) -> ngx_int_t {
-    if r.is_null() {
-        return Status::NGX_ERROR.into();
-    }
+/// Extract the text content to inspect from a raw JSON request body.
+/// Returns `None` when there is nothing meaningful to inspect.
+fn extract_inspection_content(body_data: &[u8]) -> Option<String> {
+    let body_str = std::str::from_utf8(body_data).ok()?;
 
-    let request = unsafe { &mut *r.cast::<Request>() };
-
-    eprintln!("[guardrails] Request body filter called");
-
-    // Only process main requests
-    if !request.is_main() {
-        eprintln!("[guardrails] Skipping subrequest");
-        return call_next_request_body_filter(r, in_chain);
-    }
-
-    // Get module configuration
-    let conf = match Module::location_conf(request) {
-        Some(c) => c,
-        None => {
-            eprintln!("[guardrails] No location config");
-            return call_next_request_body_filter(r, in_chain);
-        }
-    };
-
-    // Skip if request inspection is not enabled
-    if !conf.inspect_requests() {
-        eprintln!("[guardrails] Request inspection disabled");
-        return call_next_request_body_filter(r, in_chain);
-    }
-
-    // Collect all request body data from the chain
-    let mut body_data = Vec::new();
-    let mut chain = in_chain;
-
-    while !chain.is_null() {
-        let buf = unsafe { (*chain).buf };
-        if !buf.is_null() {
-            let buffer = unsafe { &*buf };
-            if !buffer.pos.is_null() && !buffer.last.is_null() {
-                let len = unsafe { buffer.last.offset_from(buffer.pos) as usize };
-                let data = unsafe { std::slice::from_raw_parts(buffer.pos, len) };
-                body_data.extend_from_slice(data);
-            }
-        }
-        chain = unsafe { (*chain).next };
-    }
-
-    if body_data.is_empty() {
-        eprintln!("[guardrails] No request body data");
-        return call_next_request_body_filter(r, in_chain);
-    }
-
-    eprintln!(
-        "[guardrails] Read {} bytes from request body",
-        body_data.len()
-    );
-
-    // Parse JSON and extract text content for LLM chat/completion requests.
-    // Using a typed struct with borrowed &str fields avoids allocating a full
-    // serde_json::Value tree; the Cow is Borrowed in the common single-field
-    // case and only becomes Owned when multiple messages are concatenated.
-    let body_str = match std::str::from_utf8(&body_data) {
-        Ok(s) => s,
-        Err(_) => {
-            eprintln!("[guardrails] Request body is not UTF-8");
-            return call_next_request_body_filter(r, in_chain);
-        }
-    };
-
-    let content_to_inspect: Cow<'_, str> = match serde_json::from_str::<RequestBody<'_>>(body_str) {
+    let content: Cow<'_, str> = match serde_json::from_str::<RequestBody<'_>>(body_str) {
         Ok(body) => {
             if let Some(prompt) = body.prompt.filter(|p| !p.is_empty()) {
-                // /v1/completions — borrow directly, no allocation.
-                eprintln!(
-                    "[guardrails] Extracted {} chars from prompt field",
-                    prompt.len()
-                );
                 Cow::Borrowed(prompt)
             } else if let Some(messages) = body.messages {
-                // /v1/chat/completions — join content fields.
                 let extracted: String = messages
                     .iter()
                     .filter_map(|m| m.content)
                     .collect::<Vec<_>>()
                     .join("\n");
                 if !extracted.is_empty() {
-                    eprintln!(
-                        "[guardrails] Extracted {} chars from messages",
-                        extracted.len()
-                    );
                     Cow::Owned(extracted)
                 } else {
                     Cow::Borrowed(body_str)
@@ -465,64 +471,365 @@ unsafe extern "C" fn guardrails_request_body_filter(
         Err(_) => Cow::Borrowed(body_str),
     };
 
-    if content_to_inspect.is_empty() {
-        return call_next_request_body_filter(r, in_chain);
+    if content.is_empty() {
+        None
+    } else {
+        Some(content.into_owned())
     }
+}
 
-    // Call Guardrails API
-    let api_url = match &conf.api_url {
-        Some(url) => url,
-        None => {
-            eprintln!("[guardrails] No API URL configured");
-            return call_next_request_body_filter(r, in_chain);
+/// Verdict of an asynchronous request inspection.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum InspectVerdict {
+    Pending,
+    Allow,
+    Block,
+}
+
+/// Per-request state for the asynchronous ACCESS-phase inspection.
+///
+/// A boxed instance is created when the access handler first fires, its pointer
+/// stashed on the request via a pool cleanup handler so it is dropped when the
+/// request ends (which cancels the spawned task if still running). The verdict
+/// is written by the spawned task's completion and read on the access handler's
+/// second invocation.
+struct RequestInspectState {
+    /// Async task performing the subrequest inspection. Kept alive here so it is
+    /// not cancelled by being dropped (dropping an `async-task` `Task` cancels
+    /// it); it is dropped with the state at request cleanup.
+    task: Option<ngx::async_::Task<()>>,
+    verdict: InspectVerdict,
+    /// True once the body read + spawn has been kicked off (guards re-entry).
+    started: bool,
+    /// Parameters captured for the async inspection, taken by the body-read
+    /// handler when it spawns the task.
+    params: Option<InspectParams>,
+}
+
+impl RequestInspectState {
+    fn new() -> Self {
+        Self {
+            task: None,
+            verdict: InspectVerdict::Pending,
+            started: false,
+            params: None,
         }
-    };
+    }
+}
 
-    let api_token = conf.api_token.as_deref();
+/// Cleanup handler that drops the boxed `RequestInspectState` at request
+/// teardown. Dropping the box drops any in-flight `Task`, cancelling it.
+unsafe extern "C" fn request_inspect_state_cleanup(data: *mut c_void) {
+    if !data.is_null() {
+        // Reconstitute and drop the box.
+        drop(unsafe { Box::from_raw(data as *mut RequestInspectState) });
+    }
+}
 
-    eprintln!(
-        "[guardrails] Inspecting request content ({} chars)",
-        content_to_inspect.len()
-    );
+/// Retrieve the per-request inspection state, allocating it (and registering a
+/// pool cleanup to free it) on first access.
+///
+/// The state pointer is stashed in this module's ctx slot. That slot is shared
+/// with the response-path `StreamContext`; the access handler clears it
+/// (`clear_request_inspect_ctx`) before allowing the request to proceed, so the
+/// response body filter always allocates a fresh `StreamContext`. The boxed
+/// state itself is owned by the pool cleanup handler, so clearing the slot does
+/// not free it — it lives until request teardown, keeping the spawned `Task`
+/// and verdict valid for the duration of inspection.
+///
+/// Returns null only on allocation failure.
+unsafe fn get_request_inspect_state(r: *mut ngx_http_request_t) -> *mut RequestInspectState {
+    unsafe {
+        let idx = Module::module().ctx_index;
+        let slot = (*r).ctx.add(idx);
+        let existing = *slot;
+        if !existing.is_null() {
+            return existing as *mut RequestInspectState;
+        }
 
-    // Perform synchronous inspection
-    let inspection_result =
-        client::inspect_content(&content_to_inspect, api_url, api_token, conf.timeout_ms);
+        // Allocate the state and register a cleanup to drop it at teardown.
+        let boxed = Box::new(RequestInspectState::new());
+        let raw = Box::into_raw(boxed);
 
-    match inspection_result {
-        Ok(allowed) => {
-            if allowed {
-                eprintln!("[guardrails] Request content CLEARED");
+        let cln = ngx::ffi::ngx_http_cleanup_add(r, 0);
+        if cln.is_null() {
+            // Reclaim the box to avoid a leak, then signal failure.
+            drop(Box::from_raw(raw));
+            return ptr::null_mut();
+        }
+        (*cln).handler = Some(request_inspect_state_cleanup);
+        (*cln).data = raw as *mut c_void;
+
+        *slot = raw as *mut c_void;
+        raw
+    }
+}
+
+/// Clear this module's ctx slot so the response body filter allocates a fresh
+/// `StreamContext`. Does not free the boxed `RequestInspectState`; that is owned
+/// by the registered pool cleanup handler.
+unsafe fn clear_request_inspect_ctx(r: *mut ngx_http_request_t) {
+    unsafe {
+        let idx = Module::module().ctx_index;
+        *(*r).ctx.add(idx) = ptr::null_mut();
+    }
+}
+
+/// Access-phase handler for non-blocking request inspection.
+///
+/// Modelled on `ngx_http_auth_request_module` (async wait via `NGX_AGAIN`) plus
+/// `ngx_http_mirror_module` (read body then resume phases). While inspection is
+/// pending the handler returns `NGX_AGAIN`, which makes the access-phase checker
+/// yield without advancing `r->phase_handler`, so this same handler is
+/// re-invoked when phases are resumed.
+///
+/// Lifecycle:
+///   1. First call: if inspection is enabled, allocate `RequestInspectState`,
+///      trigger `ngx_http_read_client_request_body` (which does `r->count++`)
+///      and return `NGX_DONE` to yield.
+///   2. The body-read handler extracts the prompt and spawns an async subrequest
+///      task; when it completes it records the verdict then resumes the phase
+///      engine (`r->write_event_handler = ngx_http_core_run_phases`; call it).
+///   3. Re-invocation: read the verdict — `Allow` → `NGX_OK` (access granted),
+///      `Block`/error → send 403 (fail-closed), `Pending` → `NGX_AGAIN` (wait).
+unsafe extern "C" fn guardrails_access_handler(r: *mut ngx_http_request_t) -> ngx_int_t {
+    unsafe {
+        if r.is_null() {
+            return Status::NGX_ERROR.into();
+        }
+
+        let request = &mut *r.cast::<Request>();
+
+        // Only main requests; subrequests (including our own guardrails
+        // subrequest) must pass straight through.
+        if !request.is_main() {
+            return Status::NGX_DECLINED.into();
+        }
+
+        let conf = match Module::location_conf(request) {
+            Some(c) => c,
+            None => return Status::NGX_DECLINED.into(),
+        };
+
+        if !conf.inspect_requests() {
+            return Status::NGX_DECLINED.into();
+        }
+
+        // The internal guardrails location must be configured; if not, fail
+        // closed (do not silently allow unfiltered content).
+        let internal_uri = match &conf.internal_uri {
+            Some(u) => u.clone(),
+            None => {
+                eprintln!("[guardrails] No internal URI configured (fail-closed)");
+                ngx_log_error!(
+                    NGX_LOG_ERR,
+                    request.log(),
+                    "guardrails: guardrails_internal_uri not configured (fail-closed)"
+                );
+                return send_403_and_finalize(r);
+            }
+        };
+
+        // Retrieve or create the per-request inspection state.
+        let state_ptr = get_request_inspect_state(r);
+        if state_ptr.is_null() {
+            eprintln!("[guardrails] Failed to allocate request inspect state (fail-closed)");
+            return send_403_and_finalize(r);
+        }
+        let state = &mut *state_ptr;
+
+        // Second (or later) invocation: verdict may be ready.
+        match state.verdict {
+            InspectVerdict::Allow => {
+                eprintln!("[guardrails] Request content CLEARED (async)");
                 ngx_log_error!(
                     NGX_LOG_INFO,
                     request.log(),
                     "guardrails: request content cleared by policy"
                 );
-                call_next_request_body_filter(r, in_chain)
-            } else {
-                eprintln!("[guardrails] Request content BLOCKED");
+                // Clear the module ctx slot so the response body filter's
+                // `get_module_ctx_mut` sees null and allocates a fresh
+                // `StreamContext` (the slot is shared between the request-inspect
+                // state and the response StreamContext). The boxed state is freed
+                // by the registered pool cleanup handler at request teardown.
+                clear_request_inspect_ctx(r);
+                // Access granted: advance past the access phase.
+                return Status::NGX_OK.into();
+            }
+            InspectVerdict::Block => {
+                eprintln!("[guardrails] Request content BLOCKED (async)");
                 ngx_log_error!(
                     NGX_LOG_WARN,
                     request.log(),
                     "guardrails: request content BLOCKED by policy"
                 );
-                unsafe { send_403_and_finalize(r) }
+                return send_403_and_finalize(r);
             }
+            InspectVerdict::Pending => {}
         }
-        Err(e) => {
-            eprintln!(
-                "[guardrails] Request inspection error (fail-closed): {:?}",
-                e
-            );
-            ngx_log_error!(
-                NGX_LOG_ERR,
-                request.log(),
-                "guardrails: request inspection error (fail-closed): {:?}",
-                e
-            );
-            unsafe { send_403_and_finalize(r) }
+
+        // Already started and still pending: yield with NGX_AGAIN so the access
+        // checker re-invokes this handler when phases resume.
+        if state.started {
+            return Status::NGX_AGAIN.into();
         }
+        state.started = true;
+
+        // Stash the token + uri on the state so the read handler can use them
+        // without re-borrowing conf (which may be freed across the async gap).
+        state.params = Some(InspectParams {
+            internal_uri,
+            api_token: conf.api_token.clone(),
+        });
+
+        // Trigger reading of the client request body. This does `r->count++`;
+        // when the body is fully read, `guardrails_body_read_handler` fires.
+        // Returning NGX_DONE yields without advancing the phase cursor.
+        let rc = ngx::ffi::ngx_http_read_client_request_body(r, Some(guardrails_body_read_handler));
+        if rc >= ngx::ffi::NGX_HTTP_SPECIAL_RESPONSE as ngx_int_t {
+            // Error reading body.
+            eprintln!("[guardrails] read_client_request_body error: {}", rc);
+            return rc;
+        }
+        Status::NGX_DONE.into()
     }
+}
+
+/// Parameters captured for the async inspection, stored alongside the state so
+/// they survive across the body-read and task boundaries.
+struct InspectParams {
+    internal_uri: String,
+    api_token: Option<String>,
+}
+
+/// Request body read completion handler. Extracts the prompt and spawns the
+/// async inspection subrequest.
+unsafe extern "C" fn guardrails_body_read_handler(r: *mut ngx_http_request_t) {
+    unsafe {
+        eprintln!("[guardrails] Request body read complete; spawning inspection");
+
+        let state_ptr = get_request_inspect_state(r);
+        if state_ptr.is_null() {
+            resume_phases(r, InspectVerdict::Block);
+            return;
+        }
+        let state = &mut *state_ptr;
+
+        let params = match state.params.take() {
+            Some(p) => p,
+            None => {
+                resume_phases(r, InspectVerdict::Block);
+                return;
+            }
+        };
+
+        // Gather the buffered request body.
+        let content = collect_request_body(r).and_then(|bytes| extract_inspection_content(&bytes));
+
+        let content = match content {
+            Some(c) => c,
+            None => {
+                // Nothing to inspect — allow and resume immediately.
+                eprintln!("[guardrails] No inspectable content; allowing");
+                resume_phases(r, InspectVerdict::Allow);
+                return;
+            }
+        };
+
+        // Spawn the async inspection. The task is stored on the state to keep it
+        // alive (dropping a Task cancels it); on completion it records the
+        // verdict and resumes the phase engine.
+        let r_send = SendPtr(r);
+        let state_send = SendPtr(state_ptr);
+        let task = ngx::async_::spawn(async move {
+            let r = r_send.0;
+            let state_ptr = state_send.0;
+            let verdict = match inspect_content_async(
+                r,
+                &params.internal_uri,
+                &content,
+                params.api_token.as_deref(),
+            )
+            .await
+            {
+                Ok(true) => InspectVerdict::Allow,
+                Ok(false) => InspectVerdict::Block,
+                Err(e) => {
+                    eprintln!("[guardrails] Async inspection error (fail-closed): {:?}", e);
+                    InspectVerdict::Block
+                }
+            };
+            let _ = state_ptr; // state pointer used only via resume_phases below
+            resume_phases(r, verdict);
+        });
+
+        state.task = Some(task);
+    }
+}
+
+/// Wrapper to move a raw pointer into a `'static` async task. Sound only under
+/// single-threaded NGINX worker embedding.
+struct SendPtr<T>(*mut T);
+unsafe impl<T> Send for SendPtr<T> {}
+unsafe impl<T> Sync for SendPtr<T> {}
+
+/// Record the verdict on the request-inspection state and resume the HTTP phase
+/// engine so the access handler re-runs and acts on the verdict.
+///
+/// This mirrors `ngx_http_mirror_module`'s body-completion resume: set
+/// `r->write_event_handler = ngx_http_core_run_phases` and call it. The async
+/// task runs from the ngx async scheduler's posted-event context (already inside
+/// the worker event loop), so calling `ngx_http_core_run_phases` directly here
+/// is safe.
+unsafe fn resume_phases(r: *mut ngx_http_request_t, verdict: InspectVerdict) {
+    unsafe {
+        let state_ptr = get_request_inspect_state(r);
+        if !state_ptr.is_null() {
+            (*state_ptr).verdict = verdict;
+        }
+        (*r).write_event_handler = Some(ngx::ffi::ngx_http_core_run_phases);
+        ngx::ffi::ngx_http_core_run_phases(r);
+    }
+}
+
+/// Collect the fully-buffered request body into a contiguous buffer.
+unsafe fn collect_request_body(r: *mut ngx_http_request_t) -> Option<Vec<u8>> {
+    unsafe {
+        let rb = (*r).request_body;
+        if rb.is_null() {
+            return None;
+        }
+        let mut chain = (*rb).bufs;
+        if chain.is_null() {
+            return None;
+        }
+        let mut data = Vec::new();
+        while !chain.is_null() {
+            let buf = (*chain).buf;
+            if !buf.is_null() {
+                let b = &*buf;
+                if !b.pos.is_null() && !b.last.is_null() {
+                    let len = b.last.offset_from(b.pos) as usize;
+                    let slice = std::slice::from_raw_parts(b.pos, len);
+                    data.extend_from_slice(slice);
+                }
+            }
+            chain = (*chain).next;
+        }
+        if data.is_empty() { None } else { Some(data) }
+    }
+}
+
+/// Request body filter handler — pass-through only.
+///
+/// Request inspection has moved to the ACCESS-phase handler
+/// (`guardrails_access_handler`) so it can run asynchronously without blocking
+/// the worker. This filter now simply forwards buffers to the next filter.
+unsafe extern "C" fn guardrails_request_body_filter(
+    r: *mut ngx_http_request_t,
+    in_chain: *mut ngx_chain_t,
+) -> ngx_int_t {
+    call_next_request_body_filter(r, in_chain)
 }
 
 /// Call the next request body filter in the chain
@@ -596,12 +903,11 @@ unsafe extern "C" fn guardrails_header_filter(r: *mut ngx_http_request_t) -> ngx
         // Get or allocate per-request context.
         let ctx_ptr = get_module_ctx_mut(request, Module::module());
         let ctx = if ctx_ptr.is_null() {
-            let new_ctx = request.pool().allocate(StreamContext::default());
+            let new_ctx = alloc_stream_ctx(r);
             if new_ctx.is_null() {
-                eprintln!("[guardrails] Header filter: pool alloc failed, passing through");
+                eprintln!("[guardrails] Header filter: ctx alloc failed, passing through");
                 return call_next_header_filter(r);
             }
-            request.set_module_ctx(new_ctx.cast(), Module::module());
             &mut *new_ctx
         } else {
             &mut *ctx_ptr
@@ -617,8 +923,29 @@ unsafe extern "C" fn guardrails_header_filter(r: *mut ngx_http_request_t) -> ngx
     }
 }
 
-/// Send a 403 Forbidden response with a JSON error body.
-/// Used by the request body filter (called before any upstream headers are sent).
+/// Send a 403 Forbidden response with a JSON error body, then finalize the request.
+///
+/// Called from the ACCESS-phase handler (`guardrails_access_handler`) when request
+/// inspection blocks the prompt.
+///
+/// # Access-phase finalize/return contract (critical)
+///
+/// This function is invoked as (part of) an access-phase handler's return path, which
+/// runs under `ngx_http_core_access_phase`. That checker calls
+/// `ngx_http_finalize_request(r, rc)` for any handler return code that is not
+/// `NGX_OK` / `NGX_AGAIN` / `NGX_DONE`. Therefore this function must:
+///
+///   1. call `ngx_http_finalize_request` **exactly once** itself, and
+///   2. return **`NGX_DONE`** so the phase checker does NOT finalize a second time.
+///
+/// Returning `NGX_ERROR` here (the obvious-looking choice) is a bug: it makes the phase
+/// checker finalize again, and the resulting double-finalize tears the connection down
+/// before the queued body buffer is flushed — the client then receives `403` with an
+/// **empty body** (`403 0` in the access log). This mirrors the same hazard documented
+/// on the response-path helpers (`send_termination`, `send_blocked_response`), which
+/// deliberately avoid calling finalize from inside the body-filter chain.
+///
+/// Every early-exit branch below finalizes once and returns `NGX_DONE` for the same reason.
 unsafe fn send_403_and_finalize(r: *mut ngx_http_request_t) -> ngx_int_t {
     eprintln!("[guardrails] Finalizing request with 403 Forbidden (JSON)");
 
@@ -632,15 +959,16 @@ unsafe fn send_403_and_finalize(r: *mut ngx_http_request_t) -> ngx_int_t {
         .add_header_out("Content-Type", "application/json")
         .is_none()
     {
-        // Fall back to letting NGINX generate the error page
+        // Header alloc failed: finalize with 403 (NGINX generates its default error
+        // page) and yield with NGX_DONE so the phase checker does not finalize again.
         unsafe { ngx_http_finalize_request(r, NGX_HTTP_FORBIDDEN as ngx_int_t) };
-        return Status::NGX_ERROR.into();
+        return Status::NGX_DONE.into();
     }
 
     let send_rc = request.send_header();
     if send_rc == Status::NGX_ERROR || request.header_only() {
         unsafe { ngx_http_finalize_request(r, send_rc.into()) };
-        return Status::NGX_ERROR.into();
+        return Status::NGX_DONE.into();
     }
 
     // Build a single-buffer chain for the JSON body
@@ -649,7 +977,7 @@ unsafe fn send_403_and_finalize(r: *mut ngx_http_request_t) -> ngx_int_t {
         let buf = ngx::ffi::ngx_create_temp_buf(pool.as_ptr(), JSON_BODY.len());
         if buf.is_null() {
             ngx_http_finalize_request(r, NGX_HTTP_FORBIDDEN as ngx_int_t);
-            return Status::NGX_ERROR.into();
+            return Status::NGX_DONE.into();
         }
         ptr::copy_nonoverlapping(JSON_BODY.as_ptr(), (*buf).pos, JSON_BODY.len());
         (*buf).last = (*buf).pos.add(JSON_BODY.len());
@@ -659,7 +987,7 @@ unsafe fn send_403_and_finalize(r: *mut ngx_http_request_t) -> ngx_int_t {
         let out = ngx::ffi::ngx_alloc_chain_link(pool.as_ptr());
         if out.is_null() {
             ngx_http_finalize_request(r, NGX_HTTP_FORBIDDEN as ngx_int_t);
-            return Status::NGX_ERROR.into();
+            return Status::NGX_DONE.into();
         }
         (*out).buf = buf;
         (*out).next = ptr::null_mut();
@@ -668,7 +996,9 @@ unsafe fn send_403_and_finalize(r: *mut ngx_http_request_t) -> ngx_int_t {
         ngx_http_finalize_request(r, filter_rc.into());
     }
 
-    Status::NGX_ERROR.into()
+    // Body queued and finalized exactly once above. Return NGX_DONE so the access-phase
+    // checker yields without a second finalize (which would drop the body).
+    Status::NGX_DONE.into()
 }
 
 /// Response body filter handler - called for each response chunk
@@ -748,8 +1078,9 @@ unsafe extern "C" fn guardrails_response_body_filter(
         let ctx = if ctx_ptr.is_null() {
             eprintln!("[guardrails] Allocating new context (first chunk)");
 
-            // First chunk - allocate context
-            let new_ctx = request.pool().allocate(StreamContext::default());
+            // First chunk - allocate context (heap-boxed + pool cleanup so the
+            // StreamContext's Drop runs at teardown, cancelling any Task).
+            let new_ctx = alloc_stream_ctx(r);
             if new_ctx.is_null() {
                 eprintln!("[guardrails] ERROR: Failed to allocate context!");
                 ngx_log_error!(
@@ -759,12 +1090,19 @@ unsafe extern "C" fn guardrails_response_body_filter(
                 );
                 return call_next_response_body_filter(r, in_chain);
             }
-            request.set_module_ctx(new_ctx.cast(), Module::module());
             &mut *new_ctx
         } else {
             eprintln!("[guardrails] Using existing context");
             &mut *ctx_ptr
         };
+
+        // If an async inspection is already in flight, hold: buffer any late
+        // arrivals (there should be none after last_buf) and return without
+        // forwarding. The async completion callback drives output from here on.
+        if ctx.inspect_state == ResponseInspect::Pending {
+            eprintln!("[guardrails] Body filter re-entered while inspection pending; holding");
+            return Status::NGX_OK.into();
+        }
 
         // If already blocked, send termination and stop
         if ctx.blocked {
@@ -868,63 +1206,225 @@ unsafe extern "C" fn guardrails_response_body_filter(
             return Status::NGX_OK.into();
         }
 
-        // --- Run synchronous Guardrails inspection -----------------------------
+        // --- Suspend output and inspect asynchronously -------------------------
+        //
+        // The response is fully buffered (headers suppressed for non-SSE; every
+        // chunk held in `ctx.pending_chunks`). Rather than block the worker on a
+        // synchronous guardrails call, return NGX_OK without forwarding the final
+        // buffer and spawn an async subrequest (the subrequest keeps the request
+        // alive). When it completes, `resume_output` records the verdict and posts
+        // a write event; `guardrails_resume_write_handler` then commits headers,
+        // flushes the buffered body (or sends the block/termination body), and
+        // finalizes the request exactly once — off the subrequest-finalize stack.
         ngx_log_error!(
             NGX_LOG_INFO,
             request.log(),
-            "guardrails: inspecting full stream, accumulated={}",
+            "guardrails: inspecting full stream (async), accumulated={}",
             ctx.accumulated_text.len()
         );
 
-        let inspection_result = stream::inspect_checkpoint(ctx, conf);
+        // The internal guardrails location must be configured; if not, fail
+        // closed (do not silently release unfiltered content).
+        let internal_uri = match &conf.internal_uri {
+            Some(u) => u.clone(),
+            None => {
+                ngx_log_error!(
+                    NGX_LOG_ERR,
+                    request.log(),
+                    "guardrails: guardrails_internal_uri not configured (fail-closed)"
+                );
+                ctx.blocked = true;
+                ctx.clear_pending_chunks();
+                return if ctx.headers_suppressed {
+                    send_blocked_response(r, request, ctx)
+                } else {
+                    send_termination(r, request)
+                };
+            }
+        };
 
-        match inspection_result {
-            Ok(true) => {
-                // Cleared — release buffered chunks to the client.
-                ngx_log_error!(NGX_LOG_INFO, request.log(), "guardrails: content cleared");
+        // Capture owned parameters for the async task — `conf` (and the borrowed
+        // `ctx` fields) must not be held across the await boundary.
+        let content = ctx.accumulated_text.clone();
+        let api_token = conf.api_token.clone();
 
-                // If we suppressed the upstream headers, commit them now before sending body.
-                // Call directly into the rest of the header chain — same pattern as image_filter.
+        // The request is held open across the async gap by the subrequest itself:
+        // `ngx_http_subrequest` does `r->main->count++`, and that reference is
+        // released when the subrequest finalizes (which is what wakes our task).
+        // `guardrails_resume_write_handler` then issues the single
+        // `ngx_http_finalize_request` that releases the main request's own
+        // outstanding reference. We therefore do NOT manipulate `r->count` here.
+        ctx.inspect_state = ResponseInspect::Pending;
+
+        let r_send = SendPtr(r);
+        let task = ngx::async_::spawn(async move {
+            let r = r_send.0;
+            let verdict =
+                match inspect_content_async(r, &internal_uri, &content, api_token.as_deref()).await
+                {
+                    Ok(true) => ResponseVerdict::Allow,
+                    Ok(false) => ResponseVerdict::Block,
+                    Err(e) => {
+                        eprintln!(
+                            "[guardrails] Async response inspection error (fail-closed): {:?}",
+                            e
+                        );
+                        ResponseVerdict::Block
+                    }
+                };
+            resume_output(r, verdict);
+        });
+
+        // Store the task on the ctx so it is not cancelled by being dropped.
+        ctx.inspect_task = Some(task);
+
+        Status::NGX_OK.into()
+    }
+}
+
+/// Record the async inspection verdict and **defer** the actual output commit to
+/// a posted write event.
+///
+/// # Why defer (critical)
+///
+/// This runs from the spawned task's continuation. Per the ngx async scheduler
+/// (`ngx::async_::spawn`), a task woken while parked is polled **inline**, and the
+/// wake originates from our subrequest completion callback
+/// (`PostSubrequest::handler`) — which NGINX invokes from **inside the
+/// subrequest's `ngx_http_finalize_request`** (`request.c`), before the
+/// subrequest's own `r->main->count--`. Driving the parent's output filter chain
+/// and calling `ngx_http_finalize_request(parent, ...)` from that nested stack is
+/// unsafe. So instead we only record the verdict here, arm
+/// `guardrails_resume_write_handler` as the request's write-event handler, and
+/// post the connection write event. The handler then runs on the next clean
+/// event-loop iteration, after the subrequest has fully finalized. This mirrors
+/// the deferral `start_subrequest` already does after `ngx_http_subrequest`
+/// (`subrequest_client.rs`).
+unsafe fn resume_output(r: *mut ngx_http_request_t, verdict: ResponseVerdict) {
+    unsafe {
+        let request = &mut *r.cast::<Request>();
+
+        // Fetch the response context; if it is somehow gone, finalize defensively.
+        let ctx_ptr = get_module_ctx_mut(request, Module::module());
+        if ctx_ptr.is_null() {
+            eprintln!("[guardrails] resume_output: null ctx (fail-closed finalize)");
+            ngx_http_finalize_request(r, NGX_HTTP_FORBIDDEN as ngx_int_t);
+            return;
+        }
+        let ctx = &mut *ctx_ptr;
+
+        ctx.inspect_state = ResponseInspect::Done(verdict);
+        // Drop the task handle: it has completed (we are running from it) and
+        // keeping it would leave a self-referential handle on the ctx.
+        ctx.inspect_task = None;
+
+        // Arm the resume handler and post the write event so NGINX drives it on
+        // the next event-loop iteration (NOT from inside the subrequest finalize).
+        let conn = (*r).connection;
+        if conn.is_null() || (*conn).write.is_null() {
+            // No connection to post to — fall back to a direct finalize. Without a
+            // write event we cannot flush a body anyway, so release the request.
+            eprintln!("[guardrails] resume_output: null connection/write (direct finalize)");
+            ctx.inspect_state = ResponseInspect::Resumed;
+            ngx_http_finalize_request(r, Status::NGX_OK.into());
+            return;
+        }
+        (*r).write_event_handler = Some(guardrails_resume_write_handler);
+        ngx_post_event((*conn).write, ptr::addr_of_mut!(ngx_posted_events));
+    }
+}
+
+/// Write-event handler that performs the deferred output commit + single finalize
+/// for the response path. Armed by `resume_output` and driven by a posted write
+/// event, so it runs cleanly in the worker event loop (not nested inside the
+/// subrequest's finalize).
+///
+/// # Finalize contract (critical)
+///
+/// The suspended body filter returned `NGX_OK` without forwarding the final
+/// buffer, so the main request is still holding its normal in-flight `r->count`
+/// reference. This handler MUST call `ngx_http_finalize_request` **exactly once**
+/// to release it. The `ResponseInspect` state machine guards this: it acts only
+/// on `Done(verdict)` and transitions to `Resumed`, so a second (spurious) write
+/// event is a no-op.
+///
+/// The finalize **code matters**. The `send_*` helpers queue the body buffer
+/// (with `last_buf`/`flush`) and return `NGX_ERROR` as a legacy sentinel meaning
+/// "body queued; the caller must not finalize" — that contract was for the old
+/// synchronous body filter. Here we deliberately **ignore** that sentinel and
+/// finalize with `NGX_OK`. Finalizing with `NGX_ERROR` routes NGINX to
+/// `ngx_http_terminate_request` (`request.c`), which tears the connection down
+/// **before** the queued body is written — producing an empty `403 0` body and a
+/// client hang. Finalizing with `NGX_OK` instead reaches the `r->buffered` flush
+/// path, so the JSON/SSE body is written before the connection closes.
+unsafe extern "C" fn guardrails_resume_write_handler(r: *mut ngx_http_request_t) {
+    unsafe {
+        let request = &mut *r.cast::<Request>();
+
+        let ctx_ptr = get_module_ctx_mut(request, Module::module());
+        if ctx_ptr.is_null() {
+            eprintln!("[guardrails] resume_write: null ctx (fail-closed finalize)");
+            ngx_http_finalize_request(r, NGX_HTTP_FORBIDDEN as ngx_int_t);
+            return;
+        }
+        let ctx = &mut *ctx_ptr;
+
+        // Only act on a fresh verdict. Anything else (Idle/Pending/Resumed) means
+        // this write event is spurious or a duplicate — do nothing so we finalize
+        // exactly once.
+        let verdict = match ctx.inspect_state {
+            ResponseInspect::Done(v) => v,
+            _ => return,
+        };
+        // Mark consumed up front so a re-entrant write event cannot double-run.
+        ctx.inspect_state = ResponseInspect::Resumed;
+
+        match verdict {
+            ResponseVerdict::Allow => {
+                ngx_log_error!(
+                    NGX_LOG_INFO,
+                    request.log(),
+                    "guardrails: content cleared (async)"
+                );
+
+                // Commit the previously-suppressed upstream headers (non-SSE).
                 if ctx.headers_suppressed {
                     let hdr_rc = call_next_header_filter(r);
                     if hdr_rc == ngx_int_t::from(Status::NGX_ERROR) {
-                        return Status::NGX_ERROR.into();
+                        // Genuine header-filter failure: terminate.
+                        ngx_http_finalize_request(r, Status::NGX_ERROR.into());
+                        return;
                     }
                 }
 
                 let chunks_to_send = ctx.take_pending_chunks();
-                if chunks_to_send.is_empty() {
-                    return Status::NGX_OK.into();
+                if !chunks_to_send.is_empty() {
+                    // mark_last: the stream is complete at this checkpoint.
+                    send_chunks(r, request, &chunks_to_send, true);
                 }
-
-                send_chunks(r, request, &chunks_to_send, last_buf || ctx.stream_done)
+                // Body queued (or nothing to send). Finalize NGX_OK so NGINX
+                // flushes any buffered output, then completes the request.
+                ngx_http_finalize_request(r, Status::NGX_OK.into());
             }
-            Ok(false) => {
-                // Blocked — discard buffer and send error response.
-                ngx_log_error!(NGX_LOG_WARN, request.log(), "guardrails: content BLOCKED");
-                ctx.blocked = true;
-                ctx.clear_pending_chunks();
-                if ctx.headers_suppressed {
-                    send_blocked_response(r, request, ctx)
-                } else {
-                    send_termination(r, request)
-                }
-            }
-            Err(e) => {
-                // Fail-closed: block on any inspection error (consistent with failureMode: FailClosed).
+            ResponseVerdict::Block => {
                 ngx_log_error!(
-                    NGX_LOG_ERR,
+                    NGX_LOG_WARN,
                     request.log(),
-                    "guardrails: inspection error (fail-closed): {:?}",
-                    e
+                    "guardrails: content BLOCKED (async)"
                 );
                 ctx.blocked = true;
                 ctx.clear_pending_chunks();
                 if ctx.headers_suppressed {
-                    send_blocked_response(r, request, ctx)
+                    // Non-SSE: 403 with JSON error body. Queues the body and
+                    // returns the legacy NGX_ERROR sentinel (ignored below).
+                    let _ = send_blocked_response(r, request, ctx);
                 } else {
-                    send_termination(r, request)
+                    // SSE: 200 already flushed; inject an SSE termination frame.
+                    let _ = send_termination(r, request);
                 }
+                // Body queued. Finalize NGX_OK (NOT the helpers' NGX_ERROR) so the
+                // queued body is flushed before the connection closes.
+                ngx_http_finalize_request(r, Status::NGX_OK.into());
             }
         }
     }
@@ -1003,7 +1503,16 @@ unsafe fn send_termination(r: *mut ngx_http_request_t, request: &http::Request) 
 ///      filter (which has already done its job) and goes straight to the rest of the
 ///      chain, ending at `ngx_http_header_filter` which writes "403 Forbidden" to wire.
 ///      This is the same pattern used by `ngx_http_image_filter_module`.
-///   3. Write the JSON error body and return `NGX_ERROR` to close the connection.
+///   3. Queue the JSON error body and return `NGX_ERROR`.
+///
+/// Return-value contract: the `NGX_ERROR` here is a **legacy sentinel** meaning
+/// "body queued; the caller must not finalize". It fit the old synchronous body
+/// filter, where returning `NGX_ERROR` up the filter chain let NGINX flush the
+/// body then tear down. The async caller (`guardrails_resume_write_handler`)
+/// **ignores** this return and finalizes with `NGX_OK` instead — finalizing with
+/// `NGX_ERROR` would terminate the request before the queued body is written
+/// (empty `403 0` + client hang). Do not "simplify" the caller to finalize with
+/// this return value.
 unsafe fn send_blocked_response(
     r: *mut ngx_http_request_t,
     request: &http::Request,

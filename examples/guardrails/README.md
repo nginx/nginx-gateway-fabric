@@ -273,9 +273,19 @@ Two important rules regardless of location:
   backends always over **http**. An in-cluster HTTPS backend or an external HTTP backend cannot be
   expressed today.
 
-The `ai-guardrails` module makes its own outbound HTTP call (it does not proxy through NGINX), so an
-`ExternalName` Guardrails backend does **not** require a DNS resolver in the Gateway's NginxProxy —
-unlike `ExternalName` Services used as HTTPRoute backends.
+The module inspects on **two paths** that reach the Guardrails backend differently (see the module
+README's [request/response architecture](../../internal/controller/nginx/modules/rust/ai-guardrails/README.md#request-path-vs-response-path)):
+
+- **Request path** — inspection runs in an NGINX access-phase handler that issues a **subrequest**
+  through an internal NGINX location (`proxy_pass`). This goes through NGINX's own connection and DNS
+  machinery, so an `ExternalName` backend on this path relies on NGINX resolving the name the same way
+  a normal proxied upstream would.
+- **Response path** — inspection still makes the module's **own** outbound HTTP call (the `minreq`
+  client), which does its own name resolution and does **not** use NGINX's resolver.
+
+Because the request path now proxies through NGINX, prefer configuring a `resolver` (via the Gateway's
+NginxProxy) when using an `ExternalName` Guardrails backend, so the internal location can resolve the
+external hostname at request time.
 
 ### External backend (default in this example)
 

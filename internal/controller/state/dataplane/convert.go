@@ -556,7 +556,11 @@ func buildSortedExtraAuthArgs(extraAuthArgs map[string]string) string {
 
 // convertGraphGuardrails converts a route's effective PayloadProcessor state into a dataplane
 // GuardrailsConfig. Returns nil when the route has no valid, resolved PayloadProcessor.
-func convertGraphGuardrails(route *graph.L7Route) *GuardrailsConfig {
+func convertGraphGuardrails(
+	route *graph.L7Route,
+	routeNsName types.NamespacedName,
+	ruleIdx int,
+) *GuardrailsConfig {
 	if route == nil {
 		return nil
 	}
@@ -572,9 +576,10 @@ func convertGraphGuardrails(route *graph.L7Route) *GuardrailsConfig {
 	}
 
 	gc := &GuardrailsConfig{
-		Enabled:   true,
-		APIURL:    state.APIURL,
-		TimeoutMS: convertDurationToMS(state.Timeout),
+		Enabled:      true,
+		APIURL:       state.APIURL,
+		InternalPath: generateGuardrailsInternalPath(routeNsName, ruleIdx),
+		TimeoutMS:    convertDurationToMS(state.Timeout),
 	}
 
 	if state.AuthTokenSecret != nil {
@@ -585,6 +590,14 @@ func convertGraphGuardrails(route *graph.L7Route) *GuardrailsConfig {
 	}
 
 	return gc
+}
+
+// generateGuardrailsInternalPath builds the NGINX internal location path for a route's guardrails
+// inspection subrequest. Mirrors generateExternalAuthInternalPath so the path is unique per route
+// rule and dedupable across matches that share it.
+func generateGuardrailsInternalPath(routeNsName types.NamespacedName, ruleIdx int) string {
+	return fmt.Sprintf("%s-guardrails-%s_%s_rule%d",
+		http.InternalRoutePathPrefix, routeNsName.Namespace, routeNsName.Name, ruleIdx)
 }
 
 // convertDurationToMS converts an ngf API Duration (e.g. "30s", "500ms", "5m", or a bare number of

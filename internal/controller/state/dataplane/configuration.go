@@ -1539,7 +1539,7 @@ func (hpr *hostPathRules) upsertRoute(
 
 		pols := buildPolicies(gateway, route.Policies)
 
-		guardrails := convertGraphGuardrails(route)
+		guardrails := convertGraphGuardrails(route, routeNsName, idx)
 
 		for _, h := range hostnames {
 			for _, m := range rule.Matches {

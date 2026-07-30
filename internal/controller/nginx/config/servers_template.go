@@ -182,6 +182,9 @@ server {
         {{- if $l.Guardrails.TimeoutMS }}
         guardrails_timeout_ms {{ $l.Guardrails.TimeoutMS }};
         {{- end }}
+        {{- if $l.Guardrails.InternalPath }}
+        guardrails_internal_uri {{ $l.Guardrails.InternalPath }};
+        {{- end }}
         {{- end }}
 
         {{- if $l.AuthOIDC }}
@@ -295,6 +298,9 @@ server {
         proxy_http_version {{ $l.ProxyHTTPVersion }};
         {{- end }}
         {{- if $l.ProxyPass -}}
+            {{- if $l.GuardrailsProxyPassVar }}
+        set $guardrails_backend {{ $l.GuardrailsProxyPassVar }};
+            {{- end }}
             {{ range $h := $l.ProxySetHeaders }}
         {{ $proxyOrGRPC }}_set_header {{ $h.Name }} "{{ $h.Value }}";
             {{- end }}
@@ -328,6 +334,9 @@ server {
                 {{- if $l.ProxySSLVerify.TrustedCertificate }}
         {{ $proxyOrGRPC }}_ssl_trusted_certificate {{ $l.ProxySSLVerify.TrustedCertificate }};
                 {{- end }}
+            {{- else if $l.ProxySSLServerName }}
+        proxy_ssl_server_name on;
+        proxy_ssl_name {{ $l.ProxySSLServerName }};
             {{- end }}
         {{- end }}
     }

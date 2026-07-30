@@ -612,6 +612,9 @@ type GuardrailsConfig struct {
 	TimeoutMS *int64
 	// APIURL is the resolved URL of the external Guardrails service.
 	APIURL string
+	// InternalPath is the NGINX internal location path that the guardrails module issues its
+	// non-blocking inspection subrequest to. That internal location proxies to APIURL.
+	InternalPath string
 	// APITokenAuthFileID identifies the auth token file (in AuthSecrets) holding the bearer token, if any.
 	APITokenAuthFileID AuthFileID
 	// Enabled reports whether the guardrails filter is active for the match.

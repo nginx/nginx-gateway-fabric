@@ -88,6 +88,21 @@ type Location struct {
 	HTTPMatchKey string
 	// ProxyPass is the upstream backend (URL or name) to which requests are proxied.
 	ProxyPass string
+	// ProxySSLServerName, when non-empty, emits `proxy_ssl_server_name on;` and
+	// `proxy_ssl_name <ProxySSLServerName>;` so NGINX sends SNI during the upstream
+	// TLS handshake. Unlike ProxySSLVerify, it does NOT enable proxy_ssl_verify — it
+	// only fixes SNI, leaving certificate verification off. Used by guardrails internal
+	// locations that proxy to an HTTPS (ExternalName) backend.
+	ProxySSLServerName string
+	// GuardrailsProxyPassVar, when non-empty, emits `set $guardrails_backend <value>;`
+	// immediately before proxy_pass in a guardrails internal location. The value is the
+	// backend authority (host:port). Because the accompanying ProxyPass references the
+	// $guardrails_backend variable, NGINX re-resolves the backend via the global resolver
+	// on every request instead of pinning the IP resolved once at worker startup. This is
+	// required for ExternalName backends behind rotating-IP CDNs, where a stale cached IP
+	// causes TLS handshake failures and the module fail-closing with 403. Only set when a
+	// DNS resolver is configured; otherwise the location falls back to a literal proxy_pass.
+	GuardrailsProxyPassVar string
 	// ProxyHTTPVersion is the HTTP protocol version for proxying (e.g. "1.1" or "2").
 	// When empty, NGINX defaults to "1.1".
 	ProxyHTTPVersion string
@@ -252,6 +267,9 @@ type GuardrailsConfig struct {
 	APIURL string
 	// APITokenFile renders guardrails_api_token_file (absolute path to the auth token file).
 	APITokenFile string
+	// InternalPath renders guardrails_internal_uri: the NGINX internal location that the guardrails
+	// module issues its non-blocking inspection subrequest to. That internal location proxies to APIURL.
+	InternalPath string
 	// Enabled renders guardrails_filter as on/off.
 	Enabled bool
 }

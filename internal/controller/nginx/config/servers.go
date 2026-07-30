@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
+	"net/url"
 	"slices"
 	"strconv"
 	"strings"
@@ -173,6 +174,11 @@ func createServers(
 	finalMatchPairs := make(httpMatchPairs)
 	sharedTLSPorts := make(map[int32]struct{})
 
+	// A DNS resolver is required for variable-based proxy_pass (used by guardrails
+	// internal locations) to re-resolve ExternalName backends per request; without one,
+	// those locations fall back to a literal proxy_pass.
+	resolverConfigured := conf.BaseHTTPConfig.DNSResolver != nil
+
 	for _, tlsServer := range conf.TLSServers {
 		sharedTLSPorts[tlsServer.Port] = struct{}{}
 	}
@@ -185,6 +191,7 @@ func createServers(
 			generator,
 			keepAliveCheck,
 			conf.BaseHTTPConfig.DisableBaseProxySetHeaders,
+			resolverConfigured,
 		)
 		servers = append(servers, httpServer)
 		maps.Copy(finalMatchPairs, matchPairs)
@@ -202,6 +209,7 @@ func createServers(
 			keepAliveCheck,
 			disableSNI,
 			conf.BaseHTTPConfig.DisableBaseProxySetHeaders,
+			resolverConfigured,
 		)
 		if _, portInUse := sharedTLSPorts[s.Port]; portInUse {
 			sslServer.Listen = getSocketNameHTTPS(s.Port)
@@ -221,6 +229,7 @@ func createSSLServer(
 	keepAliveCheck keepAliveChecker,
 	disableSNIHostValidation bool,
 	disableBaseProxySetHeaders []string,
+	resolverConfigured bool,
 ) (http.Server, httpMatchPairs) {
 	listen := fmt.Sprint(virtualServer.Port)
 	if virtualServer.IsDefault {
@@ -241,6 +250,7 @@ func createSSLServer(
 		generator,
 		keepAliveCheck,
 		disableBaseProxySetHeaders,
+		resolverConfigured,
 	)
 
 	server := http.Server{
@@ -308,6 +318,7 @@ func createServer(
 	generator policies.Generator,
 	keepAliveCheck keepAliveChecker,
 	disableBaseProxySetHeaders []string,
+	resolverConfigured bool,
 ) (http.Server, httpMatchPairs) {
 	listen := fmt.Sprint(virtualServer.Port)
 
@@ -324,6 +335,7 @@ func createServer(
 		generator,
 		keepAliveCheck,
 		disableBaseProxySetHeaders,
+		resolverConfigured,
 	)
 
 	server := http.Server{
@@ -532,6 +544,7 @@ func createLocations(
 	generator policies.Generator,
 	keepAliveCheck keepAliveChecker,
 	disableBaseProxySetHeaders []string,
+	resolverConfigured bool,
 ) ([]http.Location, httpMatchPairs, bool) {
 	maxLocs, pathsAndTypes := getMaxLocationCountAndPathMap(server.PathRules)
 	locs := make([]http.Location, 0, maxLocs)
@@ -618,6 +631,9 @@ func createLocations(
 
 	// Add internal auth_request locations for ExternalAuth filters
 	locs = append(locs, extractExternalAuthInternalLocations(locs)...)
+
+	// Add internal locations for ai-guardrails inspection subrequests
+	locs = append(locs, extractGuardrailsInternalLocations(locs, resolverConfigured)...)
 
 	return locs, matchPairs, grpcServer
 }
@@ -1277,9 +1293,10 @@ func updateLocationGuardrails(
 	}
 
 	gc := &http.GuardrailsConfig{
-		Enabled:   guardrails.Enabled,
-		APIURL:    guardrails.APIURL,
-		TimeoutMS: guardrails.TimeoutMS,
+		Enabled:      guardrails.Enabled,
+		APIURL:       guardrails.APIURL,
+		InternalPath: guardrails.InternalPath,
+		TimeoutMS:    guardrails.TimeoutMS,
 	}
 
 	if guardrails.APITokenAuthFileID != "" {
@@ -1441,6 +1458,95 @@ func extractExternalAuthInternalLocations(locations []http.Location) []http.Loca
 		result = append(result, authLoc)
 	}
 	return result
+}
+
+// guardrailsScansPath is the guardrails backend endpoint that inspection requests are POSTed to.
+// It is appended to the configured guardrails APIURL to form the internal location's proxy_pass
+// target. Must match SCANS_PATH in the ai-guardrails Rust module.
+const guardrailsScansPath = "/backend/v1/scans"
+
+// guardrailsProxyPassVar is the NGINX variable name used in a guardrails internal
+// location's proxy_pass so the ExternalName backend is re-resolved per request via the
+// global resolver. It is location-scoped (each internal location has its own `set`), so
+// a single shared name is safe even with multiple distinct guardrails backends.
+const guardrailsProxyPassVar = "$guardrails_backend"
+
+// extractGuardrailsInternalLocations synthesizes the internal NGINX locations that the ai-guardrails
+// module issues its non-blocking inspection subrequests to. Each unique GuardrailsConfig.InternalPath
+// yields one internal location that proxies to the guardrails backend's scans endpoint.
+//
+// Modeled on extractExternalAuthInternalLocations: a post-processing pass over already-built
+// locations, deduplicating by internal path so multiple matches sharing a guardrails backend
+// produce a single internal location.
+//
+// resolverConfigured indicates whether a DNS resolver is configured on the NginxProxy. When true,
+// an HTTPS (ExternalName) backend uses a variable-based proxy_pass so NGINX re-resolves the backend
+// per request (avoiding a stale IP pinned at worker startup). When false, a variable proxy_pass would
+// fail config load ("no resolver defined"), so it falls back to a literal proxy_pass.
+func extractGuardrailsInternalLocations(locations []http.Location, resolverConfigured bool) []http.Location {
+	seen := make(map[string]struct{})
+	var result []http.Location
+
+	for _, loc := range locations {
+		if loc.Guardrails == nil || loc.Guardrails.InternalPath == "" {
+			continue
+		}
+		path := loc.Guardrails.InternalPath
+		if _, exists := seen[path]; exists {
+			continue
+		}
+		seen[path] = struct{}{}
+
+		trimmedURL := strings.TrimRight(loc.Guardrails.APIURL, "/")
+		proxyPass := trimmedURL + guardrailsScansPath
+
+		// For an HTTPS (ExternalName) backend, NGINX must send SNI during the TLS
+		// handshake or multi-tenant TLS terminators reject it (alert 40). NGINX
+		// defaults proxy_ssl_server_name to off, so derive the SNI hostname from the
+		// APIURL and set it. Certificate verification is intentionally left off here
+		// (see ProxySSLServerName doc); the response path (rustls) still verifies.
+		//
+		// The HTTP Host header must ALSO carry the backend hostname: when proxy_pass
+		// targets an ExternalName that NGINX resolves to a rotating IP, the default
+		// Host header does not match what a hostname-routing edge (API gateway/CDN)
+		// expects, and the edge rejects the request with 403 before it reaches the
+		// backend app. Set Host explicitly to the APIURL hostname.
+		// In-cluster HTTP backends need neither SNI nor a Host override.
+		var sslServerName string
+		var proxyPassVar string
+		var proxySetHeaders []http.Header
+		if parsed, err := url.Parse(loc.Guardrails.APIURL); err == nil && parsed.Scheme == "https" {
+			sslServerName = parsed.Hostname()
+			proxySetHeaders = []http.Header{{Name: "Host", Value: parsed.Hostname()}}
+
+			// Re-resolve the ExternalName backend per request via a variable proxy_pass,
+			// but only when a resolver exists (otherwise NGINX fails to load the config).
+			// The variable carries the backend authority (host[:port]); the proxy_pass
+			// scheme/path are preserved around it.
+			if resolverConfigured {
+				proxyPassVar = parsed.Host
+				proxyPass = guardrailsVariableProxyPass(parsed)
+			}
+		}
+
+		result = append(result, http.Location{
+			Path:                   path,
+			Type:                   http.InternalLocationType,
+			ProxyPass:              proxyPass,
+			ProxySSLServerName:     sslServerName,
+			GuardrailsProxyPassVar: proxyPassVar,
+			ProxySetHeaders:        proxySetHeaders,
+		})
+	}
+	return result
+}
+
+// guardrailsVariableProxyPass builds a variable-based proxy_pass target for an HTTPS guardrails
+// backend, e.g. "https://$guardrails_backend/backend/v1/scans". The authority is replaced by the
+// guardrailsProxyPassVar variable (set via a `set` directive to parsed.Host) so NGINX re-resolves
+// it per request.
+func guardrailsVariableProxyPass(parsed *url.URL) string {
+	return parsed.Scheme + "://" + guardrailsProxyPassVar + guardrailsScansPath
 }
 
 func updateLocationCORSFilter(
