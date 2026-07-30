@@ -36,15 +36,7 @@ use ngx::ffi::{
 use serde::{Deserialize, Serialize};
 
 use crate::error::{GUARDRAILS_USER_AGENT, GuardrailsError};
-
-/// Wrapper asserting `Send + Sync` for values that are only ever touched on the
-/// single NGINX worker thread. Used to move raw request pointers across the
-/// `.await` boundary of a spawned task.
-struct AssertSendSync<T>(T);
-// Safety: single-threaded embedding — the NGINX worker never touches these
-// values from more than one thread.
-unsafe impl<T> Send for AssertSendSync<T> {}
-unsafe impl<T> Sync for AssertSendSync<T> {}
+use crate::sync_ptr::AssertSendSync;
 
 /// Which side of the LLM exchange a scan applies to. Serializes to the exact
 /// `scanDirection` values the Guardrails backend expects: the request path (the
@@ -89,7 +81,7 @@ pub struct Verdict {
     /// `true` when the backend outcome was `cleared`.
     pub cleared: bool,
     /// Configurable block message from the backend (first failed guardrail's
-    /// `flagMessage`, else its `message`), or `None` to use the caller fallback.
+    /// `message`), or `None` to use the caller fallback.
     pub message: Option<String>,
 }
 
@@ -99,17 +91,14 @@ pub struct Verdict {
 #[derive(Deserialize)]
 struct GuardrailsResponse {
     result: GuardrailsResult,
-    /// Project scanner metadata; carries the configurable per-guardrail
-    /// `flagMessage` keyed by scanner id.
-    #[serde(default)]
-    scanners: Option<GuardrailsScanners>,
 }
 
 #[derive(Deserialize)]
 struct GuardrailsResult {
     outcome: String,
-    /// Per-guardrail results. Populated when the scan request sets
-    /// `verbose:true`. Used to find the first failed guardrail and its message.
+    /// Per-guardrail results. Present on a flagged scan even at `verbose:false`;
+    /// used to find the first failed guardrail and its operator-configured
+    /// `message`.
     #[serde(rename = "scannerResults", default)]
     scanner_results: Vec<ScannerResult>,
 }
@@ -120,27 +109,9 @@ struct ScannerResult {
     /// `"failed"` or `"passed"` (`ScanOutcome`).
     #[serde(default)]
     outcome: String,
-    /// The guardrail's own message, if any.
+    /// The guardrail's operator-configured message, if any.
     #[serde(default)]
     message: Option<String>,
-    /// Identifies which guardrail this is, used to look up the configured
-    /// `flagMessage` in `scanners.configs`.
-    #[serde(rename = "scannerId", default)]
-    scanner_id: Option<String>,
-}
-
-#[derive(Deserialize)]
-struct GuardrailsScanners {
-    /// Per-guardrail project configuration, keyed by scanner id.
-    #[serde(default)]
-    configs: std::collections::HashMap<String, ScannerConfig>,
-}
-
-#[derive(Deserialize)]
-struct ScannerConfig {
-    /// Operator-configured message shown when this guardrail flags content.
-    #[serde(rename = "flagMessage", default)]
-    flag_message: Option<String>,
 }
 
 /// Serialize the guardrails scan request body for the given content.
@@ -148,10 +119,10 @@ struct ScannerConfig {
 /// `verbose` stays `false`. The operator-configured block text is delivered on a
 /// flagged scan as `result.scannerResults[].message` even at `verbose:false`, and
 /// [`extract_block_message`] sources it from there. `verbose:true` would ALSO add
-/// the large top-level `scanners`/`configs.flagMessage` block, but that inflates
-/// the response past the default NGINX `subrequest_output_buffer_size` ("too big
-/// subrequest response" -> empty body -> fail-closed block) and is not needed to
-/// obtain the message. So keep `verbose:false` for the smaller response.
+/// a large top-level scanner-config block, but that inflates the response past the
+/// default NGINX `subrequest_output_buffer_size` ("too big subrequest response" ->
+/// empty body -> fail-closed block) and is not needed to obtain the message. So
+/// keep `verbose:false` for the smaller response.
 fn build_request_body(content: &str, direction: ScanDirection) -> Result<Vec<u8>, GuardrailsError> {
     let request_body = GuardrailsRequest {
         input: content,
@@ -166,31 +137,18 @@ fn build_request_body(content: &str, direction: ScanDirection) -> Result<Vec<u8>
 
 /// Extract the configurable block message from a parsed response.
 ///
-/// Selects the **first failed** guardrail (`outcome == "failed"`) and returns,
-/// in preference order:
-///   1. its operator-configured `flagMessage` (from `scanners.configs[id]`), then
-///   2. its own `message`.
-///
-/// Empty/whitespace strings are treated as absent. Returns `None` when no failed
-/// guardrail has a usable message, signalling the caller to use its fallback.
+/// Selects the **first failed** guardrail (`outcome == "failed"`) and returns
+/// its operator-configured `message`. Empty/whitespace strings are treated as
+/// absent. Returns `None` when no failed guardrail has a usable message,
+/// signalling the caller to use its fallback.
 fn extract_block_message(resp: &GuardrailsResponse) -> Option<String> {
-    let first_failed = resp
-        .result
+    resp.result
         .scanner_results
         .iter()
-        .find(|s| s.outcome == "failed")?;
-
-    let flag_message = first_failed
-        .scanner_id
-        .as_ref()
-        .and_then(|id| resp.scanners.as_ref()?.configs.get(id))
-        .and_then(|cfg| cfg.flag_message.as_deref());
-
-    [flag_message, first_failed.message.as_deref()]
-        .into_iter()
-        .flatten()
+        .find(|s| s.outcome == "failed")
+        .and_then(|s| s.message.as_deref())
         .map(str::trim)
-        .find(|m| !m.is_empty())
+        .filter(|m| !m.is_empty())
         .map(str::to_owned)
 }
 
@@ -605,35 +563,13 @@ mod tests {
     }
 
     #[test]
-    fn test_block_message_prefers_flag_message() {
-        // A failed guardrail with both a configured flagMessage and its own
-        // message: flagMessage wins.
+    fn test_block_message_uses_scanner_message() {
+        // The failed guardrail's own message is used.
         let body = br#"{
             "result": {
                 "outcome": "flagged",
                 "scannerResults": [
-                    {"outcome": "failed", "message": "detector said no", "scannerId": "pii"}
-                ]
-            },
-            "scanners": {
-                "configs": {
-                    "pii": {"flagMessage": "Your prompt contains PII."}
-                }
-            }
-        }"#;
-        let v = parse_outcome(body).unwrap();
-        assert!(!v.cleared);
-        assert_eq!(v.message.as_deref(), Some("Your prompt contains PII."));
-    }
-
-    #[test]
-    fn test_block_message_falls_back_to_scanner_message() {
-        // No flagMessage configured -> use the scanner's own message.
-        let body = br#"{
-            "result": {
-                "outcome": "flagged",
-                "scannerResults": [
-                    {"outcome": "failed", "message": "detector said no", "scannerId": "pii"}
+                    {"outcome": "failed", "message": "detector said no"}
                 ]
             }
         }"#;
@@ -649,9 +585,9 @@ mod tests {
             "result": {
                 "outcome": "flagged",
                 "scannerResults": [
-                    {"outcome": "passed", "message": "ok", "scannerId": "a"},
-                    {"outcome": "failed", "message": "first fail", "scannerId": "b"},
-                    {"outcome": "failed", "message": "second fail", "scannerId": "c"}
+                    {"outcome": "passed", "message": "ok"},
+                    {"outcome": "failed", "message": "first fail"},
+                    {"outcome": "failed", "message": "second fail"}
                 ]
             }
         }"#;
@@ -666,10 +602,9 @@ mod tests {
             "result": {
                 "outcome": "flagged",
                 "scannerResults": [
-                    {"outcome": "failed", "message": "   ", "scannerId": "pii"}
+                    {"outcome": "failed", "message": "   "}
                 ]
-            },
-            "scanners": {"configs": {"pii": {"flagMessage": ""}}}
+            }
         }"#;
         let v = parse_outcome(body).unwrap();
         assert!(!v.cleared);

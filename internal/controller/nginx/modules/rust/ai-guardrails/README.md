@@ -144,11 +144,17 @@ A few Rust/NGINX concepts you need in order to read the code:
 
 | File | What it contains |
 | ------ | ------------------ |
-| `src/lib.rs` | Module entry point. Declares the directive table (`ngx_command_t`), the config-parsing handlers, registers the access-phase handler + header / response-body filters in `postconfiguration`, and implements the async request-inspection handler (body read → spawn task → phase re-drive) and the async response-inspection flow (buffer → spawn task → `resume_output` → single finalize), the header / response-body filters, and the 403 and stream-termination senders. |
-| `src/config.rs` | `ModuleConfig` — the per-`location` configuration struct (including `internal_uri`), its `Default` values, and the `inspect_requests()` / `inspect_responses()` helpers derived from `enabled` + `inspect_mode`. `api_url` / `timeout_ms` are retained only so their directives parse; both are inert in the module (see the field docs). |
+| `src/lib.rs` | Slim crate root / registration hub. Declares the submodules, defines the `Module` type and its `HttpModule` / `HttpModuleLocationConf` impls, and in `postconfiguration` registers the access-phase handler + header / request-body / response-body filters (wiring the `directives`, `ctx`, `request_path`, and `response_path` modules together). Holds the `ngx_modules!` registration and the `ngx_http_guardrails_module` static. |
+| `src/directives.rs` | The directive table (`NGX_HTTP_GUARDRAILS_COMMANDS`) and the five config-parsing handlers (`enable`, `api_url`, `api_token_file`, `timeout`, `internal_uri`) plus the `ngx_conf_handler!` macro they share. |
+| `src/ctx.rs` | The FFI seam shared by both paths: the stored next-filter statics (`NGX_HTTP_NEXT_*`) and their `call_next_*` wrappers, per-request `StreamContext` allocation/cleanup (`get_module_ctx_mut`, `alloc_stream_ctx`), and SSE content-type detection (`is_sse_response` / `is_sse_content_type`). Co-locates the SSE + `call_next` unit tests. |
+| `src/decision.rs` | Pure, NGINX-free decision logic shared by both paths, lifted out of the FFI handlers so it can be unit-tested: `verdict_from_inspection` (fail-closed allow/block mapping), `decide_access_action` (access-handler state machine), `decide_response_action` (body-filter branch precedence), and `block_commit_kind` (SSE-vs-buffered block selector). All tests co-located. |
+| `src/request_path.rs` | The async request-inspection path: the access-phase handler and request-body filter (body read → spawn task → phase re-drive), prompt extraction (`extract_inspection_content`), per-request `RequestInspectState`, and the 403 sender. Consumes `decision::{decide_access_action, verdict_from_inspection}`. Co-locates the prompt-extraction + request-block-body unit tests. |
+| `src/response_path.rs` | The async response-inspection path: the header filter and response-body filter (buffer → spawn task → `resume_output` → single finalize), the `BodyCommit` commit-status enum, and the stream-termination / blocked-response senders. Co-locates the `BodyCommit` unit test. |
+| `src/config.rs` | `ModuleConfig` — the per-`location` configuration struct (including `internal_uri`), its `Default` values, the `MAX_RESPONSE_BYTES` constant, and the `inspect_requests()` / `inspect_responses()` helpers (both return `enabled`; when on, both directions are inspected). `api_url` / `timeout_ms` are retained only so their directives parse; both are inert in the module (see the field docs). |
 | `src/subrequest_client.rs` | The **shared** async inspection client used by **both** the request and response paths. `inspect_content_async` synthesizes the Guardrails JSON request, issues an in-memory NGINX **subrequest** into `guardrails_internal_uri`, and bridges the subrequest completion callback back to the awaiting task via a `oneshot` channel (`PostSubrequest`). Non-blocking: the worker keeps serving other connections while the scan runs. |
 | `src/error.rs` | The path-agnostic `GuardrailsError` type (fail-closed on any `Err`) and the shared `GUARDRAILS_USER_AGENT` constant. Used by `subrequest_client.rs` for both directions. |
-| `src/stream.rs` | `StreamContext` — the streaming buffer and "checkpoint" logic. Parses SSE / OpenAI / Ollama chunk formats, accumulates text, decides when to inspect, and holds the termination/error message bodies. Also holds the response-path async state (`ResponseInspect` / `ResponseVerdict` + the in-flight `Task`). Contains the module's unit tests. |
+| `src/sync_ptr.rs` | The canonical `AssertSendSync<T>` wrapper used to move raw NGINX pointers into the single-threaded `'static` async tasks spawned by both paths. |
+| `src/stream.rs` | `StreamContext` — the streaming buffer and "checkpoint" logic. Parses SSE / OpenAI / Ollama chunk formats, accumulates text, decides when to inspect, and holds the termination/error message bodies. Also holds the response-path async state (`ResponseInspect` / `ResponseVerdict` + the in-flight `Task`). |
 | `Cargo.toml` | Crate manifest: dependencies (`ngx`, `nginx-sys`, `futures`, `serde`, `serde_json`, …), `crate-type`, and release profile. `futures` is used only for its `oneshot` channel (the subrequest bridge). There is deliberately no blocking HTTP client or Rust TLS stack — inspection is done via NGINX subrequests, and backend TLS is NGINX's `proxy_ssl`. |
 | `Cargo.lock` | Pinned exact dependency versions. Committed for reproducible builds. |
 | `build.rs` | Build script that sets platform-specific linker flags so undefined NGINX symbols are resolved at module-load time rather than at link time. |
@@ -166,15 +172,13 @@ All directives are valid in the `location` context. Defaults come from
 | `guardrails_filter` | `on` / `off` | `off` | Yes | Master enable switch for the location. |
 | `guardrails_api_url` | URL | *(none)* | Yes | Base URL of the Guardrails API. Now **inert in the module** — the backend URL lives in the internal location's `proxy_pass` (`<api_url>/backend/v1/scans`). The directive is still emitted/parsed for config visibility. |
 | `guardrails_internal_uri` | path | *(none)* | Yes | URI of the internal NGINX location that **both** the request and response paths subrequest into for inspection. Points at a generated `internal;` location that `proxy_pass`es to `<api_url>/backend/v1/scans`. If unset, inspection fails **closed** (request path returns `403`; response path blocks). |
-| `guardrails_api_token_file` | path | *(none)* | Yes (when a token Secret is configured) | Reads the bearer token from a file at config-load time. Preferred over inline tokens. |
-| `guardrails_api_token` | string | *(none)* | No | Inline bearer token. Supported by the module but NGF always uses the file form. |
+| `guardrails_api_token_file` | path | *(none)* | Yes (when a token Secret is configured) | Reads the bearer token from a file at config-load time. |
 | `guardrails_timeout_ms` | integer (ms) | `5000` | Yes (when `timeout` is set on the policy) | Now **inert in the module** — backend timeouts are governed by the internal location's `proxy_*_timeout` (the subrequest inherits them). The directive is still emitted/parsed for config visibility. |
-| `guardrails_inspect_mode` | `request` / `response` / `both` / `off` | `both` | No | Which directions to inspect. NGF does not emit this, so the `both` default applies. |
-| `guardrails_max_response_bytes` | integer (bytes) | `10485760` (10 MB) | No | Max response bytes buffered before the stream is blocked. `0` = unlimited. |
 
-> The columns marked "No" are directives the module understands but the current NGF control plane
-> does not generate. They fall back to the Rust defaults. If you add API knobs for them later, wire
-> them through the graph → dataplane → template layers (see [How it fits into NGF](#how-it-fits-into-ngf)).
+> When the filter is enabled, **both** the request and response directions are inspected; there is
+> no directive to select a single direction. The response buffer cap is a fixed module constant
+> (`MAX_RESPONSE_BYTES`, 10 MB): a response exceeding it is blocked (fail-closed) rather than
+> buffered unbounded.
 
 ---
 
@@ -238,12 +242,14 @@ The response is trickier because NGINX streams it, and we may need to *change a 
 after the upstream has already produced headers.
 
 1. **Header filter** — on the first pass it *suppresses* the upstream response headers (for non-SSE
-   responses) so nothing is committed to the client yet. SSE (`text/event-stream`) responses are let
-   through immediately because they cannot be fully buffered. Error responses (status ≥ 400,
+   responses) so nothing is committed to the client yet. SSE responses are let
+   through immediately because they cannot be fully buffered; SSE is detected by matching a
+   `text/event-stream` media type in `Content-Type` case-insensitively, ignoring any `;`-delimited
+   parameters (e.g. `; charset=utf-8`). Error responses (status ≥ 400,
    e.g. our own injected 403) are passed through unchanged.
 2. **Response-body filter** — buffers each upstream chunk in a `StreamContext`, extracting text from
-   OpenAI/Ollama chunk formats as it goes. When the stream is complete (or `max_response_bytes` is
-   exceeded), it starts one **async** Guardrails "checkpoint" inspection over the accumulated text:
+   OpenAI/Ollama chunk formats as it goes. When the stream is complete (or the `MAX_RESPONSE_BYTES`
+   cap is exceeded), it starts one **async** Guardrails "checkpoint" inspection over the accumulated text:
    it sets `ResponseInspect::Pending`, spawns the subrequest task, and returns `NGX_OK` without
    forwarding (the in-flight subrequest keeps the request alive). When the task completes,
    `resume_output` acts on the verdict:
@@ -282,10 +288,9 @@ Guardrails backend.
 
 Scan requests are sent with `verbose:false`. The operator-configured block text is still delivered on
 a flagged scan as `result.scannerResults[].message`, so `verbose:true` is not needed — and is
-deliberately avoided because it inflates the response with the large top-level `scanners`/`configs`
-block, which can exceed the default NGINX `subrequest_output_buffer_size` ("too big subrequest
-response" → empty body → fail-closed block). Because `scanners.configs` is absent at `verbose:false`,
-the separate `flagMessage` field is not part of the production flow.
+deliberately avoided because it inflates the response with a large top-level scanner-config block,
+which can exceed the default NGINX `subrequest_output_buffer_size` ("too big subrequest response" →
+empty body → fail-closed block).
 
 On a block, the module selects the **first failed** guardrail (`outcome == "failed"`) and reads its
 `message` field. Empty/whitespace values are treated as absent.
@@ -362,6 +367,51 @@ COPY --from=guardrails-builder /build/target/release/libai_guardrails.so \
 
 That path is exactly what `load_module modules/libai_guardrails.so;` resolves to at runtime.
 
+### What the unit tests cover — and what they cannot
+
+The FFI handlers (`guardrails_access_handler`, `guardrails_response_body_filter`,
+`guardrails_resume_write_handler`, the `send_*` emitters) are inseparable from raw
+`*mut ngx_http_request_t` work, the NGINX filter chain, and the async scheduler, so they cannot be
+exercised by `cargo test`. To keep as much of the decision-making testable as possible, the **pure
+decisions** those handlers make are lifted into `src/decision.rs` — plain functions over ordinary
+Rust values, unit-tested exhaustively, that the handlers then translate into FFI side effects:
+
+| Decision function | What it decides | Consumed by |
+| ------------------- | ----------------- | ------------- |
+| `verdict_from_inspection` | cleared → allow (drop message); flagged → block (keep message); error (`None`) → block, no message (**fail-closed**) | both async tasks (request + response) |
+| `decide_access_action` | access-handler state machine: `GrantAccess` / `Block` / `Wait` / `StartInspection` from `(verdict, started)` | `guardrails_access_handler` |
+| `decide_response_action` | body-filter branch: `HoldForPending` / `EmitBlock` / `BlockOverLimit` / `SpawnInspection` / `FlushBuffered` / `KeepBuffering` (precedence pinned by tests) | `guardrails_response_body_filter` |
+| `block_commit_kind` | headers-suppressed → non-SSE 403 body (`send_blocked_response`) vs. SSE termination frame (`send_termination`) | every response block site (via `commit_block`) |
+
+This isolates the *policy* (fail-closed mapping, branch precedence, SSE-vs-buffered selection) from
+the *mechanism* (buffers, finalize, chain calls), so a regression in policy is caught at
+`make rust-unit-test` time rather than only in live NGINX.
+
+### End-to-end validation matrix (live NGINX required)
+
+The decision logic above is unit-covered, but the mechanism — suppressed-header commit, single
+finalize from a posted write event, body flush before connection close — can only be validated
+against a running NGINX. The following scenarios **must** be re-run live after any change to the
+request/response paths, and map to the go/no-go gates in
+[`DESIGN-async-response-path.md` §6](./DESIGN-async-response-path.md):
+
+| # | Scenario | Expected result | Gate |
+| --- | ---------- | ----------------- | ------ |
+| E1 | Clean **non-SSE** response (e.g. `/v1/chat/completions`, non-streaming) | `200` with **byte-identical** upstream body; headers committed once; request finalized exactly once | G1 |
+| E2 | Blocked **non-SSE** response | `403` with `api_error` JSON body (non-empty — **not** `403 0`) | G2 |
+| E3 | Clean **SSE** stream (`text/event-stream`) | Buffered `data:` frames flushed; stream completes with no client timeout | G3 |
+| E4 | Blocked **SSE** stream | Injected SSE termination frame carrying the block message; `200` (headers already flushed) | G3 |
+| E5 | Blocked **request** prompt (input path) | `403` with `invalid_request_error` JSON body; upstream never contacted | — |
+| E6 | Backend **error / unreachable** (both directions) | **Fail-closed**: request → `403`; response → block body (never released unfiltered) | G4 |
+| E7 | Response exceeds `MAX_RESPONSE_BYTES` (10 MB) | Stream blocked via the buffer-limit path; block/termination body emitted | G4 |
+| E8 | `guardrails_internal_uri` misconfigured / absent | **Fail-closed** on both paths (403 / block body); logged at `ERR` | G4 |
+| E9 | Non-LLM JSON body with no extractable text (e.g. `/v1/models`) | Suppressed headers committed and buffered body released (client does **not** hang) | G1 |
+| E10 | Double-finalize / leaked-request smoke across E1–E4 | No `403 0` empty bodies, no leaked requests, no worker crash under repeated runs | G4 |
+
+> All ten gates are currently **code-complete but not yet validated live** (per DESIGN §6). Running
+> this matrix against a live NGINX is the remaining pre-merge step; record the outcome back in
+> DESIGN §6 when done.
+
 ---
 
 ## Gotchas & notes
@@ -377,12 +427,14 @@ That path is exactly what `load_module modules/libai_guardrails.so;` resolves to
   inside the NGINX process at module-load time. This flag lets the test binary link without them.
   It is **not** used for the production build.
 
-- **Debug logging via `eprintln!`.** The code contains `eprintln!("[guardrails] ...")` calls that
-  write to stderr. These are development/debug traces; production log lines use the NGINX logging
-  macros (`ngx_log_error!`). Treat the `eprintln!` output as verbose debug aid. Traces that echoed
-  scanned content (the raw subrequest response body, received response chunks, and unparsed JSON
-  lines) have been removed so prompt/model output is not leaked to stderr; the remaining traces log
-  only metadata (status codes, byte counts, config, lifecycle).
+- **Logging via NGINX's log macros.** All log lines go through the NGINX logging macros
+  (`ngx_log_error!` / `ngx_conf_log_error!`) and land in the standard NGINX error log — no
+  `eprintln!`/stderr paths remain. Genuine failures (fail-closed branches, alloc failures,
+  inspection errors) log at `NGX_LOG_ERR` / `NGX_LOG_WARN`; verbose lifecycle traces (per-chunk
+  progress, header suppression, resume steps) log at `NGX_LOG_DEBUG_HTTP`, so they appear only when
+  NGINX is built with `--with-debug` and `error_log ... debug;` is configured. Log lines carry only
+  metadata (status codes, byte counts, config, lifecycle) — scanned prompt/model content is never
+  logged.
 
 - **Ported verbatim.** The module source was ported from an upstream reference implementation. If
   you change directive names or config fields here, remember to update the corresponding Go layers

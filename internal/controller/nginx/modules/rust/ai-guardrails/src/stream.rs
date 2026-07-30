@@ -243,19 +243,13 @@ impl StreamContext {
     pub fn take_pending_chunks(&mut self) -> Vec<Vec<u8>> {
         let chunks = std::mem::take(&mut self.pending_chunks);
         self.total_buffered_bytes = 0;
-        eprintln!(
-            "[guardrails] Releasing {} pending chunks to client",
-            chunks.len()
-        );
         chunks
     }
 
     /// Discard all buffered chunks (stream blocked).
     pub fn clear_pending_chunks(&mut self) {
-        let n = self.pending_chunks.len();
         self.pending_chunks.clear();
         self.total_buffered_bytes = 0;
-        eprintln!("[guardrails] Discarded {} pending chunks (blocked)", n);
     }
 }
 

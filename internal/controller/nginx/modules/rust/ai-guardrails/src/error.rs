@@ -27,8 +27,13 @@ impl std::error::Error for GuardrailsError {}
 /// inspection directions (each issues an NGINX subrequest into the internal
 /// guardrails location) so the two paths cannot drift.
 ///
+/// The version suffix is taken from the crate version (`CARGO_PKG_VERSION`) at
+/// compile time, so it stays in sync with `Cargo.toml` automatically instead of
+/// being hardcoded.
+///
 /// Some guardrails backends front their API with an edge/WAF (e.g. CloudFront)
 /// that rejects requests lacking a User-Agent header with `403 Forbidden`. NGINX's
 /// proxy module does not synthesize a default User-Agent for a subrequest, so it
 /// must be set explicitly; otherwise inspection fails closed on every request.
-pub(crate) const GUARDRAILS_USER_AGENT: &str = "nginx-guardrails-filter/0.1.0";
+pub(crate) const GUARDRAILS_USER_AGENT: &str =
+    concat!("nginx-guardrails-filter/", env!("CARGO_PKG_VERSION"));

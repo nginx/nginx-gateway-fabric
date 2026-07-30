@@ -32,14 +32,14 @@ pub struct ModuleConfig {
     /// backend are now governed by the internal location's `proxy_*_timeout`
     /// settings (the subrequest inherits them), not by the module.
     pub timeout_ms: u64,
-
-    /// Inspect mode: "request", "response", "both", "off"
-    pub inspect_mode: String,
-
-    /// Maximum bytes to buffer from the response before failing open.
-    /// 0 means unlimited. Default: 10 MB.
-    pub max_response_bytes: usize,
 }
+
+/// Maximum bytes to buffer from a response before failing closed.
+///
+/// The control plane does not expose this as a directive, so it is a fixed
+/// module constant. A response exceeding this cap is blocked rather than
+/// buffered unbounded (which could exhaust worker memory).
+pub const MAX_RESPONSE_BYTES: usize = 10 * 1024 * 1024;
 
 impl Default for ModuleConfig {
     fn default() -> Self {
@@ -50,21 +50,25 @@ impl Default for ModuleConfig {
             api_token_file: None,
             internal_uri: None,
             timeout_ms: 5000,
-            inspect_mode: "both".to_string(),
-            max_response_bytes: 10 * 1024 * 1024,
         }
     }
 }
 
 impl ModuleConfig {
     /// Should we inspect requests?
+    ///
+    /// Inspection mode is not exposed as a directive; when the filter is
+    /// enabled both directions are inspected ("both").
     pub fn inspect_requests(&self) -> bool {
-        self.enabled && (self.inspect_mode == "request" || self.inspect_mode == "both")
+        self.enabled
     }
 
     /// Should we inspect responses?
+    ///
+    /// See [`Self::inspect_requests`]: enabling the filter inspects both
+    /// directions.
     pub fn inspect_responses(&self) -> bool {
-        self.enabled && (self.inspect_mode == "response" || self.inspect_mode == "both")
+        self.enabled
     }
 }
 
@@ -81,43 +85,27 @@ mod tests {
         assert!(conf.api_token_file.is_none());
         assert!(conf.internal_uri.is_none());
         assert_eq!(conf.timeout_ms, 5000);
-        assert_eq!(conf.inspect_mode, "both");
-        assert_eq!(conf.max_response_bytes, 10 * 1024 * 1024);
     }
 
-    /// Helper to build a config with a given enabled flag and inspect mode.
-    fn conf(enabled: bool, mode: &str) -> ModuleConfig {
+    /// Helper to build a config with a given enabled flag.
+    fn conf(enabled: bool) -> ModuleConfig {
         ModuleConfig {
             enabled,
-            inspect_mode: mode.to_string(),
             ..ModuleConfig::default()
         }
     }
 
     #[test]
-    fn test_inspect_matrix_disabled_never_inspects() {
-        // When disabled, neither direction is inspected regardless of mode.
-        for mode in ["request", "response", "both", "off"] {
-            let c = conf(false, mode);
-            assert!(!c.inspect_requests(), "requests, mode={mode}");
-            assert!(!c.inspect_responses(), "responses, mode={mode}");
-        }
+    fn test_disabled_never_inspects() {
+        let c = conf(false);
+        assert!(!c.inspect_requests());
+        assert!(!c.inspect_responses());
     }
 
     #[test]
-    fn test_inspect_matrix_enabled() {
-        // (mode, expect_requests, expect_responses)
-        let cases = [
-            ("request", true, false),
-            ("response", false, true),
-            ("both", true, true),
-            ("off", false, false),
-            ("unknown", false, false),
-        ];
-        for (mode, want_req, want_resp) in cases {
-            let c = conf(true, mode);
-            assert_eq!(c.inspect_requests(), want_req, "requests, mode={mode}");
-            assert_eq!(c.inspect_responses(), want_resp, "responses, mode={mode}");
-        }
+    fn test_enabled_inspects_both_directions() {
+        let c = conf(true);
+        assert!(c.inspect_requests());
+        assert!(c.inspect_responses());
     }
 }
