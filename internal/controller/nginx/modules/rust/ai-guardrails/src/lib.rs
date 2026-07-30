@@ -17,7 +17,7 @@ use ngx::ffi::{
 use ngx::http::{self, HttpModule, HttpModuleLocationConf, Request};
 use ngx::{ngx_conf_log_error, ngx_log_error, ngx_string};
 
-use subrequest_client::inspect_content_async;
+use subrequest_client::{ScanDirection, inspect_content_async};
 
 /// Request body filter function pointer type — not exposed by the ngx crate.
 #[allow(non_camel_case_types)]
@@ -499,6 +499,10 @@ struct RequestInspectState {
     /// it); it is dropped with the state at request cleanup.
     task: Option<ngx::async_::Task<()>>,
     verdict: InspectVerdict,
+    /// Configurable block message from the guardrails backend for this request,
+    /// recorded by the async completion alongside a `Block` verdict. `None` when
+    /// the backend supplied no usable message (fall back to hardcoded copy).
+    block_message: Option<String>,
     /// True once the body read + spawn has been kicked off (guards re-entry).
     started: bool,
     /// Parameters captured for the async inspection, taken by the body-read
@@ -511,6 +515,7 @@ impl RequestInspectState {
         Self {
             task: None,
             verdict: InspectVerdict::Pending,
+            block_message: None,
             started: false,
             params: None,
         }
@@ -626,7 +631,7 @@ unsafe extern "C" fn guardrails_access_handler(r: *mut ngx_http_request_t) -> ng
                     request.log(),
                     "guardrails: guardrails_internal_uri not configured (fail-closed)"
                 );
-                return send_403_and_finalize(r);
+                return send_403_and_finalize(r, None);
             }
         };
 
@@ -634,7 +639,7 @@ unsafe extern "C" fn guardrails_access_handler(r: *mut ngx_http_request_t) -> ng
         let state_ptr = get_request_inspect_state(r);
         if state_ptr.is_null() {
             eprintln!("[guardrails] Failed to allocate request inspect state (fail-closed)");
-            return send_403_and_finalize(r);
+            return send_403_and_finalize(r, None);
         }
         let state = &mut *state_ptr;
 
@@ -663,7 +668,7 @@ unsafe extern "C" fn guardrails_access_handler(r: *mut ngx_http_request_t) -> ng
                     request.log(),
                     "guardrails: request content BLOCKED by policy"
                 );
-                return send_403_and_finalize(r);
+                return send_403_and_finalize(r, state.block_message.as_deref());
             }
             InspectVerdict::Pending => {}
         }
@@ -710,7 +715,7 @@ unsafe extern "C" fn guardrails_body_read_handler(r: *mut ngx_http_request_t) {
 
         let state_ptr = get_request_inspect_state(r);
         if state_ptr.is_null() {
-            resume_phases(r, InspectVerdict::Block);
+            resume_phases(r, InspectVerdict::Block, None);
             return;
         }
         let state = &mut *state_ptr;
@@ -718,7 +723,7 @@ unsafe extern "C" fn guardrails_body_read_handler(r: *mut ngx_http_request_t) {
         let params = match state.params.take() {
             Some(p) => p,
             None => {
-                resume_phases(r, InspectVerdict::Block);
+                resume_phases(r, InspectVerdict::Block, None);
                 return;
             }
         };
@@ -731,7 +736,7 @@ unsafe extern "C" fn guardrails_body_read_handler(r: *mut ngx_http_request_t) {
             None => {
                 // Nothing to inspect — allow and resume immediately.
                 eprintln!("[guardrails] No inspectable content; allowing");
-                resume_phases(r, InspectVerdict::Allow);
+                resume_phases(r, InspectVerdict::Allow, None);
                 return;
             }
         };
@@ -744,23 +749,24 @@ unsafe extern "C" fn guardrails_body_read_handler(r: *mut ngx_http_request_t) {
         let task = ngx::async_::spawn(async move {
             let r = r_send.0;
             let state_ptr = state_send.0;
-            let verdict = match inspect_content_async(
+            let (verdict, message) = match inspect_content_async(
                 r,
                 &params.internal_uri,
                 &content,
                 params.api_token.as_deref(),
+                ScanDirection::Request,
             )
             .await
             {
-                Ok(true) => InspectVerdict::Allow,
-                Ok(false) => InspectVerdict::Block,
+                Ok(v) if v.cleared => (InspectVerdict::Allow, None),
+                Ok(v) => (InspectVerdict::Block, v.message),
                 Err(e) => {
                     eprintln!("[guardrails] Async inspection error (fail-closed): {:?}", e);
-                    InspectVerdict::Block
+                    (InspectVerdict::Block, None)
                 }
             };
             let _ = state_ptr; // state pointer used only via resume_phases below
-            resume_phases(r, verdict);
+            resume_phases(r, verdict, message);
         });
 
         state.task = Some(task);
@@ -781,11 +787,16 @@ unsafe impl<T> Sync for SendPtr<T> {}
 /// task runs from the ngx async scheduler's posted-event context (already inside
 /// the worker event loop), so calling `ngx_http_core_run_phases` directly here
 /// is safe.
-unsafe fn resume_phases(r: *mut ngx_http_request_t, verdict: InspectVerdict) {
+unsafe fn resume_phases(
+    r: *mut ngx_http_request_t,
+    verdict: InspectVerdict,
+    message: Option<String>,
+) {
     unsafe {
         let state_ptr = get_request_inspect_state(r);
         if !state_ptr.is_null() {
             (*state_ptr).verdict = verdict;
+            (*state_ptr).block_message = message;
         }
         (*r).write_event_handler = Some(ngx::ffi::ngx_http_core_run_phases);
         ngx::ffi::ngx_http_core_run_phases(r);
@@ -923,6 +934,32 @@ unsafe extern "C" fn guardrails_header_filter(r: *mut ngx_http_request_t) -> ngx
     }
 }
 
+/// Default request-block message used when the guardrails backend supplies none.
+const DEFAULT_REQUEST_BLOCK_MESSAGE: &str = "Request blocked by guardrails policy.";
+
+/// Build the request-side 403 error JSON body.
+///
+/// Uses `type: "invalid_request_error"` (the client's request was bad) — distinct
+/// from the output-side `api_error` used by the response-path helpers. `message`
+/// is the backend's configurable block text; when present it is appended to the
+/// default as `"<default> Message: <m>"` (see [`stream::compose_block_message`]),
+/// otherwise the plain [`DEFAULT_REQUEST_BLOCK_MESSAGE`] is used. The composed
+/// message is JSON-escaped via `serde_json`, so backend-supplied text cannot
+/// break out of the JSON envelope.
+fn request_block_body(message: Option<&str>) -> Vec<u8> {
+    let msg = stream::compose_block_message(DEFAULT_REQUEST_BLOCK_MESSAGE, message);
+    serde_json::json!({
+        "error": {
+            "message": msg,
+            "type": "invalid_request_error",
+            "param": null,
+            "code": "content_policy_violation",
+        }
+    })
+    .to_string()
+    .into_bytes()
+}
+
 /// Send a 403 Forbidden response with a JSON error body, then finalize the request.
 ///
 /// Called from the ACCESS-phase handler (`guardrails_access_handler`) when request
@@ -946,15 +983,21 @@ unsafe extern "C" fn guardrails_header_filter(r: *mut ngx_http_request_t) -> ngx
 /// deliberately avoid calling finalize from inside the body-filter chain.
 ///
 /// Every early-exit branch below finalizes once and returns `NGX_DONE` for the same reason.
-unsafe fn send_403_and_finalize(r: *mut ngx_http_request_t) -> ngx_int_t {
+///
+/// `message` is the guardrails backend's configurable block text; when `None`
+/// the [`DEFAULT_REQUEST_BLOCK_MESSAGE`] fallback is used. The request-side error
+/// `type` is `invalid_request_error` (a bad client request), distinct from the
+/// output-side `api_error` used by the response-path helpers.
+unsafe fn send_403_and_finalize(r: *mut ngx_http_request_t, message: Option<&str>) -> ngx_int_t {
     eprintln!("[guardrails] Finalizing request with 403 Forbidden (JSON)");
 
-    static JSON_BODY: &[u8] = b"{\"error\":{\"message\":\"Request blocked by guardrails policy.\",\"type\":\"invalid_request_error\",\"param\":null,\"code\":\"content_policy_violation\"}}";
+    let json_body = request_block_body(message);
+    let json_body = json_body.as_slice();
 
     let request = unsafe { &mut *r.cast::<http::Request>() };
 
     request.set_status(http::HTTPStatus(NGX_HTTP_FORBIDDEN as ngx_uint_t));
-    request.set_content_length_n(JSON_BODY.len());
+    request.set_content_length_n(json_body.len());
     if request
         .add_header_out("Content-Type", "application/json")
         .is_none()
@@ -974,13 +1017,13 @@ unsafe fn send_403_and_finalize(r: *mut ngx_http_request_t) -> ngx_int_t {
     // Build a single-buffer chain for the JSON body
     let pool = request.pool();
     unsafe {
-        let buf = ngx::ffi::ngx_create_temp_buf(pool.as_ptr(), JSON_BODY.len());
+        let buf = ngx::ffi::ngx_create_temp_buf(pool.as_ptr(), json_body.len());
         if buf.is_null() {
             ngx_http_finalize_request(r, NGX_HTTP_FORBIDDEN as ngx_int_t);
             return Status::NGX_DONE.into();
         }
-        ptr::copy_nonoverlapping(JSON_BODY.as_ptr(), (*buf).pos, JSON_BODY.len());
-        (*buf).last = (*buf).pos.add(JSON_BODY.len());
+        ptr::copy_nonoverlapping(json_body.as_ptr(), (*buf).pos, json_body.len());
+        (*buf).last = (*buf).pos.add(json_body.len());
         (*buf).set_last_buf(1);
         (*buf).set_memory(1);
 
@@ -1112,7 +1155,7 @@ unsafe extern "C" fn guardrails_response_body_filter(
                 "guardrails: stream blocked, sending termination"
             );
 
-            return send_termination(r, request);
+            return send_termination(r, request, ctx.block_message.as_deref());
         }
 
         // --- Ingest all buffers from the upstream chain -------------------------
@@ -1164,7 +1207,7 @@ unsafe extern "C" fn guardrails_response_body_filter(
             return if ctx.headers_suppressed {
                 send_blocked_response(r, request, ctx)
             } else {
-                send_termination(r, request)
+                send_termination(r, request, ctx.block_message.as_deref())
             };
         }
 
@@ -1238,7 +1281,7 @@ unsafe extern "C" fn guardrails_response_body_filter(
                 return if ctx.headers_suppressed {
                     send_blocked_response(r, request, ctx)
                 } else {
-                    send_termination(r, request)
+                    send_termination(r, request, ctx.block_message.as_deref())
                 };
             }
         };
@@ -1259,20 +1302,26 @@ unsafe extern "C" fn guardrails_response_body_filter(
         let r_send = SendPtr(r);
         let task = ngx::async_::spawn(async move {
             let r = r_send.0;
-            let verdict =
-                match inspect_content_async(r, &internal_uri, &content, api_token.as_deref()).await
-                {
-                    Ok(true) => ResponseVerdict::Allow,
-                    Ok(false) => ResponseVerdict::Block,
-                    Err(e) => {
-                        eprintln!(
-                            "[guardrails] Async response inspection error (fail-closed): {:?}",
-                            e
-                        );
-                        ResponseVerdict::Block
-                    }
-                };
-            resume_output(r, verdict);
+            let (verdict, message) = match inspect_content_async(
+                r,
+                &internal_uri,
+                &content,
+                api_token.as_deref(),
+                ScanDirection::Response,
+            )
+            .await
+            {
+                Ok(v) if v.cleared => (ResponseVerdict::Allow, None),
+                Ok(v) => (ResponseVerdict::Block, v.message),
+                Err(e) => {
+                    eprintln!(
+                        "[guardrails] Async response inspection error (fail-closed): {:?}",
+                        e
+                    );
+                    (ResponseVerdict::Block, None)
+                }
+            };
+            resume_output(r, verdict, message);
         });
 
         // Store the task on the ctx so it is not cancelled by being dropped.
@@ -1300,7 +1349,11 @@ unsafe extern "C" fn guardrails_response_body_filter(
 /// event-loop iteration, after the subrequest has fully finalized. This mirrors
 /// the deferral `start_subrequest` already does after `ngx_http_subrequest`
 /// (`subrequest_client.rs`).
-unsafe fn resume_output(r: *mut ngx_http_request_t, verdict: ResponseVerdict) {
+unsafe fn resume_output(
+    r: *mut ngx_http_request_t,
+    verdict: ResponseVerdict,
+    message: Option<String>,
+) {
     unsafe {
         let request = &mut *r.cast::<Request>();
 
@@ -1313,6 +1366,7 @@ unsafe fn resume_output(r: *mut ngx_http_request_t, verdict: ResponseVerdict) {
         }
         let ctx = &mut *ctx_ptr;
 
+        ctx.block_message = message;
         ctx.inspect_state = ResponseInspect::Done(verdict);
         // Drop the task handle: it has completed (we are running from it) and
         // keeping it would leave a self-referential handle on the ctx.
@@ -1419,8 +1473,9 @@ unsafe extern "C" fn guardrails_resume_write_handler(r: *mut ngx_http_request_t)
                     // returns the legacy NGX_ERROR sentinel (ignored below).
                     let _ = send_blocked_response(r, request, ctx);
                 } else {
-                    // SSE: 200 already flushed; inject an SSE termination frame.
-                    let _ = send_termination(r, request);
+                    // SSE: 200 already flushed; inject an SSE termination frame
+                    // carrying the backend's configurable block message.
+                    let _ = send_termination(r, request, ctx.block_message.as_deref());
                 }
                 // Body queued. Finalize NGX_OK (NOT the helpers' NGX_ERROR) so the
                 // queued body is flushed before the connection closes.
@@ -1448,14 +1503,19 @@ unsafe extern "C" fn guardrails_resume_write_handler(r: *mut ngx_http_request_t)
 /// `api_error` body is therefore an unavoidable consequence of SSE header timing, NOT a bug.
 /// Request-side (`invalid_request_error`) vs output-side (`api_error`) typing is intentional:
 /// only the input-block path represents a bad client request.
-unsafe fn send_termination(r: *mut ngx_http_request_t, request: &http::Request) -> ngx_int_t {
+unsafe fn send_termination(
+    r: *mut ngx_http_request_t,
+    request: &http::Request,
+    message: Option<&str>,
+) -> ngx_int_t {
     unsafe {
         let is_sse = is_sse_response(r);
-        let term_msg: &[u8] = if is_sse {
-            stream::termination_message()
+        let term_body: Vec<u8> = if is_sse {
+            stream::termination_message(message)
         } else {
-            stream::non_streaming_error_body()
+            stream::non_streaming_error_body(message)
         };
+        let term_msg: &[u8] = term_body.as_slice();
         let pool = request.pool();
         let buf = ngx::ffi::ngx_create_temp_buf(pool.as_ptr(), term_msg.len());
         if buf.is_null() {
@@ -1492,10 +1552,9 @@ unsafe fn send_termination(r: *mut ngx_http_request_t, request: &http::Request) 
 /// Error `type` note: this is an *output-side* block (the client request was valid;
 /// the model's response was blocked), so the body uses `type: "api_error"` — NOT
 /// `invalid_request_error`, which is reserved for the request-side block in
-/// `send_403_and_finalize`. The body literal below is intentionally kept as its own
-/// copy of `stream::non_streaming_error_body()` (this path predates the shared helper
-/// and must not depend on it inside the delicate FFI body-filter chain); if you change
-/// one, change the other.
+/// `send_403_and_finalize`. The body is built by the shared
+/// `stream::non_streaming_error_body(message)` helper, which injects the backend's
+/// configurable block message (or the hardcoded fallback when `None`).
 ///
 /// Steps:
 ///   1. Overwrite `headers_out` with 403 status + correct `Content-Length`.
@@ -1516,18 +1575,21 @@ unsafe fn send_termination(r: *mut ngx_http_request_t, request: &http::Request) 
 unsafe fn send_blocked_response(
     r: *mut ngx_http_request_t,
     request: &http::Request,
-    _ctx: &mut StreamContext,
+    ctx: &mut StreamContext,
 ) -> ngx_int_t {
     unsafe {
-        // Keep in sync with `stream::non_streaming_error_body()`.
-        static JSON_BODY: &[u8] = b"{\"error\":{\"message\":\"Response blocked by guardrails policy.\",\"type\":\"api_error\",\"param\":null,\"code\":\"content_policy_violation\"}}";
+        // Non-SSE output-side block body (`type: api_error`), carrying the
+        // backend's configurable message when present (else the hardcoded
+        // fallback inside `non_streaming_error_body`).
+        let json_body = stream::non_streaming_error_body(ctx.block_message.as_deref());
+        let json_body = json_body.as_slice();
 
         eprintln!(
             "[guardrails] send_blocked_response: committing 403 via direct next-header-filter call"
         );
 
         (*r).headers_out.status = NGX_HTTP_FORBIDDEN as ngx_uint_t;
-        (*r).headers_out.content_length_n = JSON_BODY.len() as i64;
+        (*r).headers_out.content_length_n = json_body.len() as i64;
         // Clear the pre-built status_line string that the proxy module set to "200 OK".
         // If status_line.len > 0, ngx_http_header_filter writes that string verbatim to the
         // socket regardless of headers_out.status.  Zeroing it forces NGINX to derive the
@@ -1548,12 +1610,12 @@ unsafe fn send_blocked_response(
 
         // Write the JSON error body.
         let pool = request.pool();
-        let buf = ngx::ffi::ngx_create_temp_buf(pool.as_ptr(), JSON_BODY.len());
+        let buf = ngx::ffi::ngx_create_temp_buf(pool.as_ptr(), json_body.len());
         if buf.is_null() {
             return Status::NGX_ERROR.into();
         }
-        ptr::copy_nonoverlapping(JSON_BODY.as_ptr(), (*buf).pos, JSON_BODY.len());
-        (*buf).last = (*buf).pos.add(JSON_BODY.len());
+        ptr::copy_nonoverlapping(json_body.as_ptr(), (*buf).pos, json_body.len());
+        (*buf).last = (*buf).pos.add(json_body.len());
         (*buf).set_last_buf(1);
         (*buf).set_flush(1);
         (*buf).set_memory(1);
@@ -1668,5 +1730,40 @@ mod tests {
         }
         let result = call_next_response_body_filter(ptr::null_mut(), ptr::null_mut());
         assert_eq!(result, ngx_int_t::from(Status::NGX_OK));
+    }
+
+    #[test]
+    fn test_request_block_body_none_uses_default() {
+        // No backend message -> plain default, no "Message:" suffix; type stays
+        // invalid_request_error (request-side block).
+        let body = request_block_body(None);
+        let value: serde_json::Value =
+            serde_json::from_slice(&body).expect("request block body must be valid JSON");
+        assert_eq!(value["error"]["message"], DEFAULT_REQUEST_BLOCK_MESSAGE);
+        assert!(
+            !value["error"]["message"]
+                .as_str()
+                .unwrap()
+                .contains("Message:"),
+            "default request block body must not contain a Message: suffix"
+        );
+        assert_eq!(value["error"]["type"], "invalid_request_error");
+        assert_eq!(value["error"]["code"], "content_policy_violation");
+    }
+
+    #[test]
+    fn test_request_block_body_some_appends_message() {
+        // Backend message is appended as "<default> Message: <m>", escaped safely,
+        // type stays invalid_request_error.
+        let msg = r#"blocked by "IP" guardrail"#;
+        let body = request_block_body(Some(msg));
+        let value: serde_json::Value =
+            serde_json::from_slice(&body).expect("request block body must be valid JSON");
+        assert_eq!(
+            value["error"]["message"],
+            format!("{DEFAULT_REQUEST_BLOCK_MESSAGE} Message: {msg}")
+        );
+        assert_eq!(value["error"]["type"], "invalid_request_error");
+        assert_eq!(value["error"]["code"], "content_policy_violation");
     }
 }

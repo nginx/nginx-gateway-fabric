@@ -12,8 +12,10 @@
 //!   * the **response path** (response-body filter) inspects the accumulated
 //!     LLM output at end-of-stream.
 //!
-//! Both call [`inspect_content_async`] with the internal location URI and the
-//! text to scan.
+//! Both call [`inspect_content_async`] with the internal location URI, the
+//! text to scan, and a [`ScanDirection`] (`Request` vs `Response`) that is sent
+//! to the backend as `scanDirection` so it applies the guardrails configured
+//! for that side of the LLM exchange.
 //!
 //! # Threading
 //! NGINX workers are single-threaded; all of the `unsafe impl Send/Sync` below
@@ -44,6 +46,25 @@ struct AssertSendSync<T>(T);
 unsafe impl<T> Send for AssertSendSync<T> {}
 unsafe impl<T> Sync for AssertSendSync<T> {}
 
+/// Which side of the LLM exchange a scan applies to. Serializes to the exact
+/// `scanDirection` values the Guardrails backend expects: the request path (the
+/// user's prompt heading to the LLM) is `"request"`; the response path (the
+/// model's output heading back to the client) is `"response"`.
+#[derive(Clone, Copy)]
+pub enum ScanDirection {
+    Request,
+    Response,
+}
+
+impl ScanDirection {
+    fn as_str(self) -> &'static str {
+        match self {
+            ScanDirection::Request => "request",
+            ScanDirection::Response => "response",
+        }
+    }
+}
+
 /// Guardrails scan request body (mirrors the blocking client's schema).
 #[derive(Serialize)]
 struct GuardrailsRequest<'a> {
@@ -53,49 +74,152 @@ struct GuardrailsRequest<'a> {
     #[serde(rename = "forceEnabled")]
     force_enabled: Vec<String>,
     disabled: Vec<String>,
+    #[serde(rename = "scanDirection")]
+    scan_direction: &'a str,
     verbose: bool,
 }
 
+/// Outcome of an inspection: whether the content cleared, plus an optional
+/// human-facing block message sourced from the guardrails backend.
+///
+/// `message` is populated only on a block, and only when the backend supplied a
+/// usable per-guardrail message (see [`extract_block_message`]). When it is
+/// `None`, callers fall back to their own hardcoded block copy.
+pub struct Verdict {
+    /// `true` when the backend outcome was `cleared`.
+    pub cleared: bool,
+    /// Configurable block message from the backend (first failed guardrail's
+    /// `flagMessage`, else its `message`), or `None` to use the caller fallback.
+    pub message: Option<String>,
+}
+
+/// Top-level guardrails scan response. All fields beyond `result.outcome` are
+/// lenient (`#[serde(default)]`) so a minimal `{"result":{"outcome":...}}`
+/// body still deserializes and yields no message (caller fallback applies).
 #[derive(Deserialize)]
 struct GuardrailsResponse {
     result: GuardrailsResult,
+    /// Project scanner metadata; carries the configurable per-guardrail
+    /// `flagMessage` keyed by scanner id.
+    #[serde(default)]
+    scanners: Option<GuardrailsScanners>,
 }
 
 #[derive(Deserialize)]
 struct GuardrailsResult {
     outcome: String,
+    /// Per-guardrail results. Populated when the scan request sets
+    /// `verbose:true`. Used to find the first failed guardrail and its message.
+    #[serde(rename = "scannerResults", default)]
+    scanner_results: Vec<ScannerResult>,
+}
+
+/// One guardrail's result within `result.scannerResults`.
+#[derive(Deserialize)]
+struct ScannerResult {
+    /// `"failed"` or `"passed"` (`ScanOutcome`).
     #[serde(default)]
-    details: Option<serde_json::Value>,
+    outcome: String,
+    /// The guardrail's own message, if any.
+    #[serde(default)]
+    message: Option<String>,
+    /// Identifies which guardrail this is, used to look up the configured
+    /// `flagMessage` in `scanners.configs`.
+    #[serde(rename = "scannerId", default)]
+    scanner_id: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct GuardrailsScanners {
+    /// Per-guardrail project configuration, keyed by scanner id.
+    #[serde(default)]
+    configs: std::collections::HashMap<String, ScannerConfig>,
+}
+
+#[derive(Deserialize)]
+struct ScannerConfig {
+    /// Operator-configured message shown when this guardrail flags content.
+    #[serde(rename = "flagMessage", default)]
+    flag_message: Option<String>,
 }
 
 /// Serialize the guardrails scan request body for the given content.
-fn build_request_body(content: &str) -> Result<Vec<u8>, GuardrailsError> {
+///
+/// `verbose` stays `false`. The operator-configured block text is delivered on a
+/// flagged scan as `result.scannerResults[].message` even at `verbose:false`, and
+/// [`extract_block_message`] sources it from there. `verbose:true` would ALSO add
+/// the large top-level `scanners`/`configs.flagMessage` block, but that inflates
+/// the response past the default NGINX `subrequest_output_buffer_size` ("too big
+/// subrequest response" -> empty body -> fail-closed block) and is not needed to
+/// obtain the message. So keep `verbose:false` for the smaller response.
+fn build_request_body(content: &str, direction: ScanDirection) -> Result<Vec<u8>, GuardrailsError> {
     let request_body = GuardrailsRequest {
         input: content,
         config_overrides: serde_json::json!({}),
         force_enabled: vec![],
         disabled: vec![],
+        scan_direction: direction.as_str(),
         verbose: false,
     };
     serde_json::to_vec(&request_body).map_err(|e| GuardrailsError::RequestFailed(e.to_string()))
 }
 
-/// Parse the guardrails scan response, returning `true` when cleared.
-fn parse_outcome(body: &[u8]) -> Result<bool, GuardrailsError> {
+/// Extract the configurable block message from a parsed response.
+///
+/// Selects the **first failed** guardrail (`outcome == "failed"`) and returns,
+/// in preference order:
+///   1. its operator-configured `flagMessage` (from `scanners.configs[id]`), then
+///   2. its own `message`.
+///
+/// Empty/whitespace strings are treated as absent. Returns `None` when no failed
+/// guardrail has a usable message, signalling the caller to use its fallback.
+fn extract_block_message(resp: &GuardrailsResponse) -> Option<String> {
+    let first_failed = resp
+        .result
+        .scanner_results
+        .iter()
+        .find(|s| s.outcome == "failed")?;
+
+    let flag_message = first_failed
+        .scanner_id
+        .as_ref()
+        .and_then(|id| resp.scanners.as_ref()?.configs.get(id))
+        .and_then(|cfg| cfg.flag_message.as_deref());
+
+    [flag_message, first_failed.message.as_deref()]
+        .into_iter()
+        .flatten()
+        .map(str::trim)
+        .find(|m| !m.is_empty())
+        .map(str::to_owned)
+}
+
+/// Parse the guardrails scan response into a [`Verdict`].
+///
+/// `cleared` is `true` iff `result.outcome == "cleared"`; on any other outcome
+/// the caller's fail-closed policy blocks. On a block, `message` carries the
+/// backend's configurable text when available (see [`extract_block_message`]).
+fn parse_outcome(body: &[u8]) -> Result<Verdict, GuardrailsError> {
     let resp: GuardrailsResponse = serde_json::from_slice(body)
         .map_err(|e| GuardrailsError::InvalidResponse(e.to_string()))?;
     let cleared = resp.result.outcome == "cleared";
-    eprintln!("[guardrails] Subrequest outcome: {}", resp.result.outcome);
-    if let Some(ref details) = resp.result.details {
-        eprintln!("  Details: {}", details);
-    }
-    Ok(cleared)
+    let message = if cleared {
+        None
+    } else {
+        extract_block_message(&resp)
+    };
+    Ok(Verdict { cleared, message })
 }
 
 /// Inspect `content` by issuing a non-blocking subrequest to the internal
 /// guardrails location `internal_uri`.
 ///
-/// Returns `Ok(true)` when cleared, `Ok(false)` when flagged/blocked. The
+/// `direction` sets the scan's `scanDirection`: the request path passes
+/// [`ScanDirection::Request`] (the prompt heading to the LLM) and the response
+/// path passes [`ScanDirection::Response`] (the model output heading back to the
+/// client), so the backend applies the guardrails configured for that side.
+///
+/// Returns a [`Verdict`] (`cleared` + optional backend block message). The
 /// caller's fail-closed policy applies to the `Err` cases.
 ///
 /// # Safety
@@ -107,14 +231,9 @@ pub async unsafe fn inspect_content_async(
     internal_uri: &str,
     content: &str,
     api_token: Option<&str>,
-) -> Result<bool, GuardrailsError> {
-    let body = build_request_body(content)?;
-
-    eprintln!(
-        "[guardrails] Issuing guardrails subrequest to {} ({} bytes body)",
-        internal_uri,
-        body.len()
-    );
+    direction: ScanDirection,
+) -> Result<Verdict, GuardrailsError> {
+    let body = build_request_body(content, direction)?;
 
     let (post_subrequest, subrequest) =
         unsafe { start_subrequest(parent, internal_uri, &body, api_token) }?;
@@ -288,9 +407,8 @@ unsafe fn body_to_chain(
 /// Read the subrequest's captured response and decide the outcome.
 unsafe fn extract_outcome(
     subrequest: NonNull<ngx_http_request_t>,
-) -> Result<bool, GuardrailsError> {
+) -> Result<Verdict, GuardrailsError> {
     let status = unsafe { subrequest.as_ref().headers_out.status };
-    eprintln!("[guardrails] Subrequest response status={}", status);
     if !(200..300).contains(&(status as u32)) {
         return Err(GuardrailsError::InvalidResponse(format!(
             "guardrails backend status: {}",
@@ -440,7 +558,7 @@ mod tests {
 
     #[test]
     fn test_build_request_body_shape() {
-        let body = build_request_body("hello").unwrap();
+        let body = build_request_body("hello", ScanDirection::Request).unwrap();
         let v: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(
             v,
@@ -449,19 +567,33 @@ mod tests {
                 "configOverrides": {},
                 "forceEnabled": [],
                 "disabled": [],
+                "scanDirection": "request",
                 "verbose": false,
             })
         );
     }
 
     #[test]
+    fn test_build_request_body_response_direction() {
+        let body = build_request_body("hello", ScanDirection::Response).unwrap();
+        let v: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(v["scanDirection"], serde_json::json!("response"));
+    }
+
+    #[test]
     fn test_parse_outcome_cleared() {
-        assert!(parse_outcome(br#"{"result":{"outcome":"cleared"}}"#).unwrap());
+        let v = parse_outcome(br#"{"result":{"outcome":"cleared"}}"#).unwrap();
+        assert!(v.cleared);
+        assert!(v.message.is_none());
     }
 
     #[test]
     fn test_parse_outcome_flagged() {
-        assert!(!parse_outcome(br#"{"result":{"outcome":"flagged"}}"#).unwrap());
+        // Minimal flagged body with no scannerResults -> block, no message
+        // (caller falls back to its hardcoded copy).
+        let v = parse_outcome(br#"{"result":{"outcome":"flagged"}}"#).unwrap();
+        assert!(!v.cleared);
+        assert!(v.message.is_none());
     }
 
     #[test]
@@ -470,5 +602,103 @@ mod tests {
             parse_outcome(b"not json"),
             Err(GuardrailsError::InvalidResponse(_))
         ));
+    }
+
+    #[test]
+    fn test_block_message_prefers_flag_message() {
+        // A failed guardrail with both a configured flagMessage and its own
+        // message: flagMessage wins.
+        let body = br#"{
+            "result": {
+                "outcome": "flagged",
+                "scannerResults": [
+                    {"outcome": "failed", "message": "detector said no", "scannerId": "pii"}
+                ]
+            },
+            "scanners": {
+                "configs": {
+                    "pii": {"flagMessage": "Your prompt contains PII."}
+                }
+            }
+        }"#;
+        let v = parse_outcome(body).unwrap();
+        assert!(!v.cleared);
+        assert_eq!(v.message.as_deref(), Some("Your prompt contains PII."));
+    }
+
+    #[test]
+    fn test_block_message_falls_back_to_scanner_message() {
+        // No flagMessage configured -> use the scanner's own message.
+        let body = br#"{
+            "result": {
+                "outcome": "flagged",
+                "scannerResults": [
+                    {"outcome": "failed", "message": "detector said no", "scannerId": "pii"}
+                ]
+            }
+        }"#;
+        let v = parse_outcome(body).unwrap();
+        assert!(!v.cleared);
+        assert_eq!(v.message.as_deref(), Some("detector said no"));
+    }
+
+    #[test]
+    fn test_block_message_uses_first_failed_guardrail() {
+        // The first failed guardrail's message is used; passed ones are skipped.
+        let body = br#"{
+            "result": {
+                "outcome": "flagged",
+                "scannerResults": [
+                    {"outcome": "passed", "message": "ok", "scannerId": "a"},
+                    {"outcome": "failed", "message": "first fail", "scannerId": "b"},
+                    {"outcome": "failed", "message": "second fail", "scannerId": "c"}
+                ]
+            }
+        }"#;
+        let v = parse_outcome(body).unwrap();
+        assert_eq!(v.message.as_deref(), Some("first fail"));
+    }
+
+    #[test]
+    fn test_block_message_empty_is_ignored() {
+        // Whitespace-only messages are treated as absent -> fallback (None).
+        let body = br#"{
+            "result": {
+                "outcome": "flagged",
+                "scannerResults": [
+                    {"outcome": "failed", "message": "   ", "scannerId": "pii"}
+                ]
+            },
+            "scanners": {"configs": {"pii": {"flagMessage": ""}}}
+        }"#;
+        let v = parse_outcome(body).unwrap();
+        assert!(!v.cleared);
+        assert!(v.message.is_none());
+    }
+
+    #[test]
+    fn test_block_message_from_real_verbose_false_response() {
+        // Regression fixture mirroring an observed live `verbose:false` response:
+        // there is NO top-level `scanners` block (that is verbose-only), but the
+        // failed scanner still carries the operator-configured `message`. The
+        // trailing whitespace in the real message must be trimmed.
+        let body = br#"{
+            "id": "019fb483-2087-7078-b24c-fa57585a52c7",
+            "result": {
+                "scannerResults": [
+                    {"scannerId": "01915be3-0e4e-70d5-aeac-74c59225988e", "outcome": "passed", "data": {"type": "regex", "matches": []}},
+                    {"scannerId": "01915be3-0e4e-70da-b3d1-4177fd5f6136", "outcome": "failed", "message": "This message has been blocked by IP guardrail FLAG MESSAGE@!!!! ", "data": {"type": "regex", "matches": [[27, 37]]}},
+                    {"scannerId": "019d9ada-eb9f-7072-9561-4cdda47bd98d", "outcome": "passed", "data": {"type": "keyword", "matches": {}}}
+                ],
+                "outcome": "flagged"
+            },
+            "redactedInput": "Here is a test IP address: 192.0.2.14"
+        }"#;
+        let v = parse_outcome(body).unwrap();
+        assert!(!v.cleared);
+        assert_eq!(
+            v.message.as_deref(),
+            Some("This message has been blocked by IP guardrail FLAG MESSAGE@!!!!")
+        );
     }
 }

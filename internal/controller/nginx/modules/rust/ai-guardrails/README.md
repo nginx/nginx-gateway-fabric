@@ -275,6 +275,53 @@ immediately (SSE cannot be buffered), so the status can no longer be changed by 
 is decided. The block is delivered as an `api_error` payload inside an SSE `data:` frame. A `200`
 carrying an `api_error` body is an unavoidable consequence of SSE header timing, not a bug.
 
+### Block message (`error.message`)
+
+The `error.message` text combines a per-path default with an optional message supplied by the
+Guardrails backend.
+
+Scan requests are sent with `verbose:false`. The operator-configured block text is still delivered on
+a flagged scan as `result.scannerResults[].message`, so `verbose:true` is not needed — and is
+deliberately avoided because it inflates the response with the large top-level `scanners`/`configs`
+block, which can exceed the default NGINX `subrequest_output_buffer_size` ("too big subrequest
+response" → empty body → fail-closed block). Because `scanners.configs` is absent at `verbose:false`,
+the separate `flagMessage` field is not part of the production flow.
+
+On a block, the module selects the **first failed** guardrail (`outcome == "failed"`) and reads its
+`message` field. Empty/whitespace values are treated as absent.
+
+**Composition.** The per-path default is always present; the backend message, when available, is
+**appended** to it (it does not replace it):
+
+- No backend message → the default verbatim.
+- Backend message present → `"<default> Message: <backend text>"`.
+
+Per-path defaults:
+
+| Block path | Default `error.message` |
+| ------------ | -------------------------- |
+| Request (client input) | `Request blocked by guardrails policy.` |
+| Response, non-SSE | `Response blocked by guardrails policy.` |
+| Response, SSE stream | `Stream terminated by guardrails policy.` |
+
+Example (request path, guardrail configured with a flag message):
+
+```text
+Request blocked by guardrails policy. Message: This message has been blocked by IP guardrail FLAG MESSAGE@!!!!
+```
+
+The backend message is JSON-escaped before injection, so operator-configured text cannot break the
+error envelope. The `type`/`code` fields are never overridden by the backend, so the request-vs-response
+distinction above always holds.
+
+### Scan direction (`scanDirection`)
+
+Each scan request includes a `scanDirection` field that correlates with the LLM exchange, so the
+backend applies the guardrails configured for that side:
+
+- **Request path** (access-phase handler, inspecting the client prompt) sends `scanDirection: "request"`.
+- **Response path** (response-body filter, inspecting the model output) sends `scanDirection: "response"`.
+
 ### Fail-closed behavior
 
 If the Guardrails API errors or times out, the module **blocks** the traffic (treats it as
@@ -330,9 +377,12 @@ That path is exactly what `load_module modules/libai_guardrails.so;` resolves to
   inside the NGINX process at module-load time. This flag lets the test binary link without them.
   It is **not** used for the production build.
 
-- **Debug logging via `eprintln!`.** The code contains many `eprintln!("[guardrails] ...")` calls
-  that write to stderr. These are development/debug traces; production log lines use the NGINX
-  logging macros (`ngx_log_error!`). Treat the `eprintln!` output as verbose debug aid.
+- **Debug logging via `eprintln!`.** The code contains `eprintln!("[guardrails] ...")` calls that
+  write to stderr. These are development/debug traces; production log lines use the NGINX logging
+  macros (`ngx_log_error!`). Treat the `eprintln!` output as verbose debug aid. Traces that echoed
+  scanned content (the raw subrequest response body, received response chunks, and unparsed JSON
+  lines) have been removed so prompt/model output is not leaked to stderr; the remaining traces log
+  only metadata (status codes, byte counts, config, lifecycle).
 
 - **Ported verbatim.** The module source was ported from an upstream reference implementation. If
   you change directive names or config fields here, remember to update the corresponding Go layers

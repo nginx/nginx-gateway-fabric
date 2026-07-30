@@ -120,6 +120,12 @@ pub struct StreamContext {
     /// suspend/resume in the response-body filter.
     pub inspect_state: ResponseInspect,
 
+    /// Configurable block message returned by the guardrails backend for this
+    /// response (first failed guardrail's `flagMessage`/`message`), recorded by
+    /// the async completion. `None` when the backend supplied no usable message,
+    /// in which case the block emitters use their hardcoded fallback copy.
+    pub block_message: Option<String>,
+
     /// The spawned async inspection task. Kept alive here so it is not cancelled
     /// by being dropped (dropping an `async-task` `Task` cancels it). The
     /// `StreamContext` is heap-boxed and a pool cleanup (`stream_ctx_cleanup`,
@@ -142,6 +148,7 @@ impl Default for StreamContext {
             headers_suppressed: false,
 
             inspect_state: ResponseInspect::Idle,
+            block_message: None,
             inspect_task: None,
         }
     }
@@ -161,18 +168,6 @@ impl StreamContext {
         // Hold raw bytes from the client until inspection clears them.
         self.pending_chunks.push(data.to_vec());
         self.total_buffered_bytes += data.len();
-
-        if let Ok(text) = std::str::from_utf8(data) {
-            eprintln!(
-                "[guardrails] Received {} bytes: {}",
-                data.len(),
-                if text.len() > 200 {
-                    format!("{}...", &text[..200])
-                } else {
-                    text.to_string()
-                }
-            );
-        }
 
         // Append to the line buffer and process any complete lines.
         self.line_buffer.extend_from_slice(data);
@@ -221,10 +216,9 @@ impl StreamContext {
                 Ok(chunk) => {
                     extract_llm_content(chunk, &mut self.accumulated_text, &mut self.stream_done)
                 }
-                Err(e) => eprintln!(
-                    "[guardrails] Failed to parse JSON line: {} — line: {}",
-                    e, json_str
-                ),
+                // Malformed/partial JSON lines are expected mid-stream; skip
+                // silently rather than logging (the line may carry model output).
+                Err(_) => continue,
             }
         }
     }
@@ -265,7 +259,50 @@ impl StreamContext {
     }
 }
 
+/// Default block message used when the guardrails backend supplies none.
+pub const DEFAULT_SSE_BLOCK_MESSAGE: &str = "Stream terminated by guardrails policy.";
+/// Default block message used when the guardrails backend supplies none.
+pub const DEFAULT_NON_STREAMING_BLOCK_MESSAGE: &str = "Response blocked by guardrails policy.";
+
+/// Compose the client-facing block message.
+///
+/// When the guardrails backend supplies no message (`None`, or empty after the
+/// upstream trims it), the `default` policy text is returned verbatim. When a
+/// backend message is present, it is appended as `"<default> Message: <m>"` so
+/// the operator-configured text augments (rather than replaces) the policy
+/// notice. The result is later JSON-escaped by [`output_error_json`] /
+/// `request_block_body`, so backend-supplied text cannot break the JSON.
+pub fn compose_block_message(default: &str, message: Option<&str>) -> String {
+    match message {
+        Some(m) => format!("{default} Message: {m}"),
+        None => default.to_owned(),
+    }
+}
+
+/// Build an OpenAI-style error JSON object with the given (already-untrusted)
+/// message, using `type: "api_error"` and `code: "content_policy_violation"`.
+///
+/// `message` is JSON-escaped via `serde_json`, so backend-supplied text cannot
+/// break out of the JSON structure.
+fn output_error_json(message: &str) -> String {
+    let obj = serde_json::json!({
+        "error": {
+            "message": message,
+            "type": "api_error",
+            "param": null,
+            "code": "content_policy_violation",
+        }
+    });
+    // Serializing a plain object of string/null values cannot fail.
+    obj.to_string()
+}
+
 /// SSE termination event sent to the client when a streaming response is blocked.
+///
+/// `message` is the guardrails backend's configurable block text; when present
+/// it is appended to the default as `"<default> Message: <m>"` (see
+/// [`compose_block_message`]), otherwise the plain [`DEFAULT_SSE_BLOCK_MESSAGE`]
+/// is used.
 ///
 /// This is an *output-side* block: the client's request was valid, but the model's
 /// generated response tripped the guardrails policy. The error `type` is therefore
@@ -273,17 +310,28 @@ impl StreamContext {
 /// `invalid_request_error` (which denotes a bad client request). The `code` remains
 /// `content_policy_violation` to convey the policy reason. See the status/type matrix
 /// documented on `send_termination` / `send_blocked_response` in `lib.rs`.
-pub fn termination_message() -> &'static [u8] {
-    b"data: {\"error\":{\"message\":\"Stream terminated by guardrails policy.\",\"type\":\"api_error\",\"param\":null,\"code\":\"content_policy_violation\"}}\n\n"
+pub fn termination_message(message: Option<&str>) -> Vec<u8> {
+    let msg = compose_block_message(DEFAULT_SSE_BLOCK_MESSAGE, message);
+    let mut body = Vec::new();
+    body.extend_from_slice(b"data: ");
+    body.extend_from_slice(output_error_json(&msg).as_bytes());
+    body.extend_from_slice(b"\n\n");
+    body
 }
 
 /// Plain JSON error body sent to the client when a non-streaming response is blocked.
 ///
+/// `message` is the guardrails backend's configurable block text; when present
+/// it is appended to the default as `"<default> Message: <m>"` (see
+/// [`compose_block_message`]), otherwise the plain
+/// [`DEFAULT_NON_STREAMING_BLOCK_MESSAGE`] is used.
+///
 /// Like `termination_message`, this represents an *output-side* block, so the error
 /// `type` is `api_error` (server-side), not `invalid_request_error` (client request).
 /// The `code` stays `content_policy_violation` to convey the policy reason.
-pub fn non_streaming_error_body() -> &'static [u8] {
-    b"{\"error\":{\"message\":\"Response blocked by guardrails policy.\",\"type\":\"api_error\",\"param\":null,\"code\":\"content_policy_violation\"}}"
+pub fn non_streaming_error_body(message: Option<&str>) -> Vec<u8> {
+    let msg = compose_block_message(DEFAULT_NON_STREAMING_BLOCK_MESSAGE, message);
+    output_error_json(&msg).into_bytes()
 }
 
 #[cfg(test)]
@@ -449,39 +497,124 @@ mod tests {
         assert_eq!(ctx.total_buffered_bytes, 0);
     }
 
+    /// Strip the optional SSE `data:` prefix/trailing blank line and parse the
+    /// remaining bytes as an OpenAI error JSON object.
+    fn parse_error_body(body: &[u8]) -> serde_json::Value {
+        let text = std::str::from_utf8(body).expect("utf8");
+        let json_str = text
+            .trim()
+            .strip_prefix("data:")
+            .map(str::trim)
+            .unwrap_or(text.trim());
+        serde_json::from_str(json_str).expect("error body must be valid JSON")
+    }
+
     #[test]
     fn test_error_bodies_are_valid_json_with_policy_code() {
-        for body in [termination_message(), non_streaming_error_body()] {
-            // The SSE termination message is wrapped in "data: ... \n\n"; strip
-            // to isolate the JSON object before parsing.
-            let text = std::str::from_utf8(body).expect("utf8");
-            let json_str = text
-                .trim()
-                .strip_prefix("data:")
-                .map(str::trim)
-                .unwrap_or(text.trim());
-            let value: serde_json::Value =
-                serde_json::from_str(json_str).expect("error body must be valid JSON");
+        // Fallback (None) path: uses the default block copy.
+        for body in [termination_message(None), non_streaming_error_body(None)] {
+            let value = parse_error_body(&body);
             assert_eq!(
                 value["error"]["code"], "content_policy_violation",
-                "unexpected code in {json_str}"
+                "unexpected code in {value}"
             );
             // Output-side (response/stream) blocks are server-side failures, so the
             // OpenAI error `type` must be `api_error`, NOT `invalid_request_error`
             // (which is reserved for the request-side block in `send_403_and_finalize`).
             assert_eq!(
                 value["error"]["type"], "api_error",
-                "response-side error body must use api_error, got {json_str}"
+                "response-side error body must use api_error, got {value}"
             );
+        }
+        assert_eq!(
+            parse_error_body(&termination_message(None))["error"]["message"],
+            DEFAULT_SSE_BLOCK_MESSAGE
+        );
+        assert_eq!(
+            parse_error_body(&non_streaming_error_body(None))["error"]["message"],
+            DEFAULT_NON_STREAMING_BLOCK_MESSAGE
+        );
+    }
+
+    #[test]
+    fn test_compose_block_message() {
+        // None -> default verbatim (no "Message:" suffix).
+        assert_eq!(compose_block_message("Blocked.", None), "Blocked.");
+        // Some -> default with the backend message appended.
+        assert_eq!(
+            compose_block_message("Blocked.", Some("PII detected")),
+            "Blocked. Message: PII detected"
+        );
+    }
+
+    #[test]
+    fn test_error_bodies_carry_backend_message() {
+        // Backend-supplied message is APPENDED to the default as
+        // "<default> Message: <m>", type stays api_error.
+        let msg = "Prompt contains PII (email).";
+        let expected = [
+            (
+                termination_message(Some(msg)),
+                format!("{DEFAULT_SSE_BLOCK_MESSAGE} Message: {msg}"),
+            ),
+            (
+                non_streaming_error_body(Some(msg)),
+                format!("{DEFAULT_NON_STREAMING_BLOCK_MESSAGE} Message: {msg}"),
+            ),
+        ];
+        for (body, want) in expected {
+            let value = parse_error_body(&body);
+            assert_eq!(value["error"]["message"], want);
+            assert_eq!(value["error"]["type"], "api_error");
+            assert_eq!(value["error"]["code"], "content_policy_violation");
         }
     }
 
     #[test]
+    fn test_error_bodies_omit_message_suffix_when_none() {
+        // No backend message -> plain default, no "Message:" segment.
+        let value = parse_error_body(&non_streaming_error_body(None));
+        assert_eq!(
+            value["error"]["message"],
+            DEFAULT_NON_STREAMING_BLOCK_MESSAGE
+        );
+        assert!(
+            !value["error"]["message"]
+                .as_str()
+                .unwrap()
+                .contains("Message:"),
+            "default body must not contain a Message: suffix"
+        );
+    }
+
+    #[test]
+    fn test_error_body_escapes_untrusted_message() {
+        // A message containing JSON metacharacters must not break the envelope,
+        // even after being appended to the default.
+        let msg = r#"bad "quote" and \backslash and }brace"#;
+        let value = parse_error_body(&non_streaming_error_body(Some(msg)));
+        assert_eq!(
+            value["error"]["message"],
+            format!("{DEFAULT_NON_STREAMING_BLOCK_MESSAGE} Message: {msg}")
+        );
+        assert_eq!(value["error"]["type"], "api_error");
+    }
+
+    #[test]
+    fn test_sse_termination_has_data_prefix_and_blank_line() {
+        let body = termination_message(Some("blocked"));
+        let text = std::str::from_utf8(&body).unwrap();
+        assert!(text.starts_with("data: "));
+        assert!(text.ends_with("\n\n"));
+    }
+
+    #[test]
     fn test_request_block_body_uses_invalid_request_error() {
-        // Mirror of the request-blocked body literal in `lib.rs::send_403_and_finalize`.
-        // The request-side block DOES represent a bad client request, so it must keep
-        // `type: invalid_request_error` (distinct from the output-side `api_error`).
-        // Keep this literal in sync with `send_403_and_finalize`'s JSON_BODY.
+        // Mirror of the request-blocked fallback body produced by
+        // `lib.rs::request_block_body(None)`. The request-side block DOES represent a bad
+        // client request, so it must keep `type: invalid_request_error` (distinct from the
+        // output-side `api_error`). Keep this literal in sync with `request_block_body`'s
+        // envelope + `DEFAULT_REQUEST_BLOCK_MESSAGE`.
         let request_block_body = br#"{"error":{"message":"Request blocked by guardrails policy.","type":"invalid_request_error","param":null,"code":"content_policy_violation"}}"#;
         let value: serde_json::Value = serde_json::from_slice(request_block_body)
             .expect("request block body must be valid JSON");
