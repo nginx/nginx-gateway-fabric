@@ -1404,14 +1404,11 @@ func PLMLogBundleKey(
 	policyNamespace string,
 	ref *ngfAPIv1alpha1.APLogConfReference,
 ) WAFBundleKey {
-	ns := policyNamespace
-	if ref.Namespace != nil {
-		ns = *ref.Namespace
-	}
+	nsName := APLogConfRefNamespacedName(policyNamespace, ref)
 	return WAFBundleKey(fmt.Sprintf(
 		"log_%s_%s",
-		ns,
-		ref.Name,
+		nsName.Namespace,
+		nsName.Name,
 	))
 }
 
@@ -1435,13 +1432,8 @@ func fetchPLMPolicyBundle(
 	if wafPolicy.Spec.PolicyRef == nil || wafPolicy.Spec.PolicyRef.APPolicyRef == nil {
 		return
 	}
-	ref := wafPolicy.Spec.PolicyRef.APPolicyRef
 
-	targetNs := wafPolicy.Namespace
-	if ref.Namespace != nil {
-		targetNs = *ref.Namespace
-	}
-	nsName := types.NamespacedName{Namespace: targetNs, Name: ref.Name}
+	nsName := APPolicyRefNamespacedName(wafPolicy.Namespace, wafPolicy.Spec.PolicyRef.APPolicyRef)
 
 	// Check cross-namespace reference permission.
 	if !validatePLMAPolicyReference(wafPolicy, policy, wafInput, nsName) {
@@ -1619,7 +1611,7 @@ func fetchPLMSecurityLogBundle(
 	output *WAFProcessingOutput,
 	ref *ngfAPIv1alpha1.APLogConfReference,
 ) {
-	nsName := apLogConfRefNamespacedName(wafPolicy.Namespace, ref)
+	nsName := APLogConfRefNamespacedName(wafPolicy.Namespace, ref)
 	if !validatePLMAPLogConfReference(wafPolicy, policy, wafInput, nsName) {
 		return
 	}
@@ -1656,9 +1648,25 @@ func fetchPLMSecurityLogBundle(
 	policy.WAFState.Bundles[bundleKey] = bundleData
 }
 
-func apLogConfRefNamespacedName(
+// APLogConfRefNamespacedName returns the namespaced name for an APLogConf reference,
+// defaulting to defaultNamespace when the reference does not specify one.
+func APLogConfRefNamespacedName(
 	defaultNamespace string,
 	ref *ngfAPIv1alpha1.APLogConfReference,
+) types.NamespacedName {
+	targetNs := defaultNamespace
+	if ref.Namespace != nil {
+		targetNs = *ref.Namespace
+	}
+
+	return types.NamespacedName{Namespace: targetNs, Name: ref.Name}
+}
+
+// APPolicyRefNamespacedName returns the namespaced name for an APPolicy reference,
+// defaulting to defaultNamespace when the reference does not specify one.
+func APPolicyRefNamespacedName(
+	defaultNamespace string,
+	ref *ngfAPIv1alpha1.APPolicyReference,
 ) types.NamespacedName {
 	targetNs := defaultNamespace
 	if ref.Namespace != nil {

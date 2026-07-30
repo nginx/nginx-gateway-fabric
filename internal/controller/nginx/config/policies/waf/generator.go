@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"text/template"
 
-	"k8s.io/apimachinery/pkg/types"
-
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/http"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
@@ -74,14 +72,8 @@ func generate(pols []policies.Policy) policies.GenerateResultFiles {
 			bundlePath := fmt.Sprintf(bundlePathFmt, bundleName)
 			fields["BundlePath"] = bundlePath
 		} else if wp.Spec.PolicyRef != nil && wp.Spec.PolicyRef.APPolicyRef != nil {
-			apPolicyNs := wp.Namespace
-			if wp.Spec.PolicyRef.APPolicyRef.Namespace != nil {
-				apPolicyNs = *wp.Spec.PolicyRef.APPolicyRef.Namespace
-			}
-			bundleName := string(graph.PLMPolicyBundleKey(types.NamespacedName{
-				Namespace: apPolicyNs,
-				Name:      wp.Spec.PolicyRef.APPolicyRef.Name,
-			}))
+			nsName := graph.APPolicyRefNamespacedName(wp.Namespace, wp.Spec.PolicyRef.APPolicyRef)
+			bundleName := string(graph.PLMPolicyBundleKey(nsName))
 			bundlePath := fmt.Sprintf(bundlePathFmt, bundleName)
 			fields["BundlePath"] = bundlePath
 		}
