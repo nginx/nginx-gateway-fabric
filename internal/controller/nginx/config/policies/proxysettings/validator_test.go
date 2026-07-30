@@ -61,9 +61,9 @@ func TestValidator_Validate(t *testing.T) {
 				return p
 			}),
 			expConditions: []conditions.Condition{
-				conditions.NewPolicyInvalid("spec.buffering.bufferSize: Invalid value: \"invalid\": ^\\d{1,4}(k|m|g)?$ " +
-					"(e.g. '1024',  or '8k',  or '20m',  or '1g', regex used for validation is 'must contain a number. " +
-					"May be followed by 'k', 'm', or 'g', otherwise bytes are assumed')"),
+				conditions.NewPolicyInvalid("spec.buffering.bufferSize: Invalid value: \"invalid\": " +
+					"must contain a number. May be followed by 'k', 'm', or 'g', otherwise bytes are assumed " +
+					"(e.g. '1024',  or '8k',  or '20m',  or '1g', regex used for validation is '^\\d{1,4}(k|m|g)?$')"),
 			},
 		},
 		{
@@ -73,9 +73,9 @@ func TestValidator_Validate(t *testing.T) {
 				return p
 			}),
 			expConditions: []conditions.Condition{
-				conditions.NewPolicyInvalid("spec.buffering.buffers.size: Invalid value: \"invalid\": ^\\d{1,4}(k|m|g)?$ " +
-					"(e.g. '1024',  or '8k',  or '20m',  or '1g', regex used for validation is 'must contain a number. " +
-					"May be followed by 'k', 'm', or 'g', otherwise bytes are assumed')"),
+				conditions.NewPolicyInvalid("spec.buffering.buffers.size: Invalid value: \"invalid\": " +
+					"must contain a number. May be followed by 'k', 'm', or 'g', otherwise bytes are assumed " +
+					"(e.g. '1024',  or '8k',  or '20m',  or '1g', regex used for validation is '^\\d{1,4}(k|m|g)?$')"),
 			},
 		},
 		{
@@ -85,9 +85,9 @@ func TestValidator_Validate(t *testing.T) {
 				return p
 			}),
 			expConditions: []conditions.Condition{
-				conditions.NewPolicyInvalid("spec.buffering.busyBuffersSize: Invalid value: \"invalid\": ^\\d{1,4}(k|m|g)?$ " +
-					"(e.g. '1024',  or '8k',  or '20m',  or '1g', regex used for validation is 'must contain a number. " +
-					"May be followed by 'k', 'm', or 'g', otherwise bytes are assumed')"),
+				conditions.NewPolicyInvalid("spec.buffering.busyBuffersSize: Invalid value: \"invalid\": " +
+					"must contain a number. May be followed by 'k', 'm', or 'g', otherwise bytes are assumed " +
+					"(e.g. '1024',  or '8k',  or '20m',  or '1g', regex used for validation is '^\\d{1,4}(k|m|g)?$')"),
 			},
 		},
 		{
@@ -178,8 +178,9 @@ func TestValidator_Validate(t *testing.T) {
 			}),
 			expConditions: []conditions.Condition{
 				conditions.NewPolicyInvalid(`spec.timeout.connect: Invalid value: "invalid": ` +
-					`^[0-9]{1,4}(ms|s|m|h)? (e.g. '5ms',  or '10s',  or '500m',  or '1000h', ` +
-					`regex used for validation is 'must contain an, at most, four digit number followed by 'ms', 's', 'm', or 'h'')`),
+					`must contain an, at most, four digit number followed by 'ms', 's', 'm', or 'h' ` +
+					`(e.g. '5ms',  or '10s',  or '500m',  or '1000h', ` +
+					`regex used for validation is '^[0-9]{1,4}(ms|s|m|h)?')`),
 			},
 		},
 		{
@@ -192,8 +193,9 @@ func TestValidator_Validate(t *testing.T) {
 			}),
 			expConditions: []conditions.Condition{
 				conditions.NewPolicyInvalid(`spec.timeout.read: Invalid value: "invalid": ` +
-					`^[0-9]{1,4}(ms|s|m|h)? (e.g. '5ms',  or '10s',  or '500m',  or '1000h', ` +
-					`regex used for validation is 'must contain an, at most, four digit number followed by 'ms', 's', 'm', or 'h'')`),
+					`must contain an, at most, four digit number followed by 'ms', 's', 'm', or 'h' ` +
+					`(e.g. '5ms',  or '10s',  or '500m',  or '1000h', ` +
+					`regex used for validation is '^[0-9]{1,4}(ms|s|m|h)?')`),
 			},
 		},
 		{
@@ -206,8 +208,9 @@ func TestValidator_Validate(t *testing.T) {
 			}),
 			expConditions: []conditions.Condition{
 				conditions.NewPolicyInvalid(`spec.timeout.send: Invalid value: "invalid": ` +
-					`^[0-9]{1,4}(ms|s|m|h)? (e.g. '5ms',  or '10s',  or '500m',  or '1000h', ` +
-					`regex used for validation is 'must contain an, at most, four digit number followed by 'ms', 's', 'm', or 'h'')`),
+					`must contain an, at most, four digit number followed by 'ms', 's', 'm', or 'h' ` +
+					`(e.g. '5ms',  or '10s',  or '500m',  or '1000h', ` +
+					`regex used for validation is '^[0-9]{1,4}(ms|s|m|h)?')`),
 			},
 		},
 		{

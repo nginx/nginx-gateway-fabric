@@ -119,7 +119,7 @@ func validateBackendTLSHostname(btp *v1.BackendTLSPolicy) error {
 	h := string(btp.Spec.Validation.Hostname)
 
 	if err := validateHostname(h); err != nil {
-		path := field.NewPath("tls.hostname")
+		path := field.NewPath("validation", "hostname")
 		valErr := field.Invalid(path, btp.Spec.Validation.Hostname, err.Error())
 		return valErr
 	}

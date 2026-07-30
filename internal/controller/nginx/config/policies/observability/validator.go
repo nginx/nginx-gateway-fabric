@@ -127,13 +127,13 @@ func (v *Validator) validateSettings(spec ngfAPIv1alpha2.ObservabilityPolicySpec
 
 		if spec.Tracing.SpanAttributes != nil {
 			spanAttrPath := tracePath.Child("spanAttributes")
-			for _, spanAttr := range spec.Tracing.SpanAttributes {
+			for i, spanAttr := range spec.Tracing.SpanAttributes {
 				if err := v.genericValidator.ValidateEscapedStringNoVarExpansion(spanAttr.Key); err != nil {
-					allErrs = append(allErrs, field.Invalid(spanAttrPath.Child("key"), spanAttr.Key, err.Error()))
+					allErrs = append(allErrs, field.Invalid(spanAttrPath.Index(i).Child("key"), spanAttr.Key, err.Error()))
 				}
 
 				if err := v.genericValidator.ValidateEscapedStringNoVarExpansion(spanAttr.Value); err != nil {
-					allErrs = append(allErrs, field.Invalid(spanAttrPath.Child("value"), spanAttr.Value, err.Error()))
+					allErrs = append(allErrs, field.Invalid(spanAttrPath.Index(i).Child("value"), spanAttr.Value, err.Error()))
 				}
 			}
 		}

@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -1297,7 +1298,9 @@ func TestHTTPFetcherFetchLogProfileBundleNIM(t *testing.T) {
 	bundleContent := []byte("nim-log-profile-bundle")
 	encoded := base64.StdEncoding.EncodeToString(bundleContent)
 	compilerVersion := "4.6.0"
-	profileName := "my-log-profile"
+	profileName := "my log profile / version 1" // Use URL significant characters to verify proper escaping.
+	escapedProfileName := url.PathEscape(profileName)
+	escapedCompilerVersion := url.PathEscape(compilerVersion)
 	auth := &fetch.BundleAuth{BearerToken: "nimtoken"}
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1307,10 +1310,10 @@ func TestHTTPFetcherFetchLogProfileBundleNIM(t *testing.T) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		switch r.URL.Path {
+		switch r.URL.EscapedPath() {
 		case "/api/platform/v1/security/nap-compiler/versions/latest":
 			json.NewEncoder(w).Encode(map[string]any{"version": compilerVersion}) //nolint:errcheck
-		case "/api/platform/v1/security/logprofiles/" + profileName + "/" + compilerVersion + "/bundle":
+		case "/api/platform/v1/security/logprofiles/" + escapedProfileName + "/" + escapedCompilerVersion + "/bundle":
 			json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck
 				"compiledBundle": encoded,
 				"metaData":       map[string]any{},
@@ -1696,6 +1699,44 @@ func TestFetchPolicyBundleChecksumNIMMultipleItems(t *testing.T) {
 
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(checksum).To(Equal(newHash), "should return the hash of the latest item by created timestamp")
+}
+
+func TestFetchLogProfileBundleChecksumNIM(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	bundleContent := []byte("nim-log-bundle-data")
+	encoded := base64.StdEncoding.EncodeToString(bundleContent)
+	compilerVersion := "4.6.0"
+	profileName := "my log profile / version 1" // Use URL significant characters to verify proper escaping.
+	escapedProfileName := url.PathEscape(profileName)
+	escapedCompilerVersion := url.PathEscape(compilerVersion)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.EscapedPath() {
+		case "/api/platform/v1/security/nap-compiler/versions/latest":
+			json.NewEncoder(w).Encode(map[string]any{"version": compilerVersion}) //nolint:errcheck
+		case "/api/platform/v1/security/logprofiles/" + escapedProfileName + "/" + escapedCompilerVersion + "/bundle":
+			json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck
+				"compiledBundle": encoded,
+				"metaData":       map[string]any{},
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	f := fetch.NewHTTPFetcher(logr.Discard())
+	req := fetch.Request{
+		URL:            srv.URL,
+		LogProfileName: profileName,
+	}
+	checksum, err := f.FetchLogProfileBundleChecksum(t.Context(), req)
+
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(checksum).To(Equal(fetch.ComputeChecksum(bundleContent)))
 }
 
 func TestFetchBundleChecksumErrors(t *testing.T) {

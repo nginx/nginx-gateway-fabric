@@ -228,7 +228,7 @@ function paramsMatch(requestParams, params) {
 		const type = p.slice(firstIdx + 1, idx);
 
 		if (!(type == 'Exact' || type == 'RegularExpression')) {
-			throw Error(`invalid header match type: ${type}`);
+			throw Error(`invalid query parameter match type: ${type}`);
 		}
 
 		// Divide string into key value using the index.

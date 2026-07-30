@@ -55,7 +55,7 @@ func (GenericValidator) ValidateNginxDuration(duration string) error {
 			"1000h",
 		}
 
-		return errors.New(k8svalidation.RegexError(durationStringFmt, durationStringErrMsg, examples...))
+		return errors.New(k8svalidation.RegexError(durationStringErrMsg, durationStringFmt, examples...))
 	}
 
 	return nil
@@ -78,7 +78,7 @@ func (GenericValidator) ValidateNginxSize(size string) error {
 			"1g",
 		}
 
-		return errors.New(k8svalidation.RegexError(sizeStringFmt, sizeStringErrMsg, examples...))
+		return errors.New(k8svalidation.RegexError(sizeStringErrMsg, sizeStringFmt, examples...))
 	}
 
 	return nil
@@ -101,7 +101,7 @@ func (GenericValidator) ValidateEndpoint(endpoint string) error {
 			"http://my-endpoint",
 		}
 
-		return errors.New(k8svalidation.RegexError(endpointStringFmt, endpointStringErrMsg, examples...))
+		return errors.New(k8svalidation.RegexError(endpointStringErrMsg, endpointStringFmt, examples...))
 	}
 
 	return nil
@@ -124,7 +124,7 @@ func (GenericValidator) ValidateNginxVariableName(name string) error {
 			"${remote_addr}",
 		}
 
-		return errors.New(k8svalidation.RegexError(variableNameFmt, variableNameErrMsg, examples...))
+		return errors.New(k8svalidation.RegexError(variableNameErrMsg, variableNameFmt, examples...))
 	}
 
 	return nil

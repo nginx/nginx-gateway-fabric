@@ -1311,6 +1311,22 @@ func TestValidateDNSResolver(t *testing.T) {
 			expectErrCount: 2,
 		},
 		{
+			name:      "invalid DNS resolver cacheTTL duration",
+			validator: createInvalidValidator(),
+			np: &ngfAPIv1alpha2.NginxProxy{
+				Spec: ngfAPIv1alpha2.NginxProxySpec{
+					DNSResolver: &ngfAPIv1alpha2.DNSResolver{
+						Addresses: []ngfAPIv1alpha2.DNSResolverAddress{
+							{Type: ngfAPIv1alpha2.DNSResolverIPAddressType, Value: "8.8.8.8"},
+						},
+						CacheTTL: helpers.GetPointer[ngfAPIv1alpha1.Duration]("invalid-duration"),
+					},
+				},
+			},
+			errorString:    "spec.dnsResolver.cacheTTL",
+			expectErrCount: 1,
+		},
+		{
 			name:      "invalid IP address",
 			validator: createValidValidator(),
 			np: &ngfAPIv1alpha2.NginxProxy{

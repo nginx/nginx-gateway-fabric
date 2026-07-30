@@ -112,9 +112,9 @@ func TestValidator_Validate(t *testing.T) {
 				return p
 			}),
 			expConditions: []conditions.Condition{
-				conditions.NewPolicyInvalid("spec.zoneSize: Invalid value: \"invalid\": ^\\d{1,4}(k|m|g)?$ " +
-					"(e.g. '1024',  or '8k',  or '20m',  or '1g', regex used for validation is 'must contain a number. " +
-					"May be followed by 'k', 'm', or 'g', otherwise bytes are assumed')"),
+				conditions.NewPolicyInvalid("spec.zoneSize: Invalid value: \"invalid\": must contain a number. " +
+					"May be followed by 'k', 'm', or 'g', otherwise bytes are assumed " +
+					"(e.g. '1024',  or '8k',  or '20m',  or '1g', regex used for validation is '^\\d{1,4}(k|m|g)?$')"),
 			},
 		},
 		{
@@ -126,12 +126,14 @@ func TestValidator_Validate(t *testing.T) {
 			}),
 			expConditions: []conditions.Condition{
 				conditions.NewPolicyInvalid(
-					"[spec.keepAlive.time: Invalid value: \"invalid\": ^[0-9]{1,4}(ms|s|m|h)? " +
+					"[spec.keepAlive.time: Invalid value: \"invalid\": " +
+						"must contain an, at most, four digit number followed by 'ms', 's', 'm', or 'h' " +
 						"(e.g. '5ms',  or '10s',  or '500m',  or '1000h', regex used for validation is " +
-						"'must contain an, at most, four digit number followed by 'ms', 's', 'm', or 'h''), " +
-						"spec.keepAlive.timeout: Invalid value: \"invalid\": ^[0-9]{1,4}(ms|s|m|h)? " +
+						"'^[0-9]{1,4}(ms|s|m|h)?'), " +
+						"spec.keepAlive.timeout: Invalid value: \"invalid\": " +
+						"must contain an, at most, four digit number followed by 'ms', 's', 'm', or 'h' " +
 						"(e.g. '5ms',  or '10s',  or '500m',  or '1000h', regex used for validation is " +
-						"'must contain an, at most, four digit number followed by 'ms', 's', 'm', or 'h'')]"),
+						"'^[0-9]{1,4}(ms|s|m|h)?')]"),
 			},
 		},
 		{

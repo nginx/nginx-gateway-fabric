@@ -282,7 +282,7 @@ type NIMLogProfileBundleSource struct {
 	//
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=253
-	// +kubebuilder:validation:Pattern=`^[A-Za-z0-9][-A-Za-z0-9_.]*$`
+	// +kubebuilder:validation:Pattern=`^[a-zA-Z0-9\s\/\-_.]+$`
 	ProfileName string `json:"profileName"`
 
 	// URL is the base URL of the NGINX Instance Manager instance,
@@ -305,7 +305,7 @@ type N1CLogProfileBundleSource struct {
 	//
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=253
-	// +kubebuilder:validation:Pattern=`^[A-Za-z0-9][-A-Za-z0-9_.]*$`
+	// +kubebuilder:validation:Pattern=`^[a-zA-Z0-9\s\/\-_.]+$`
 	ProfileName *string `json:"profileName,omitempty"`
 
 	// ProfileObjectID is the unique object identifier of the log profile in N1C

@@ -78,6 +78,7 @@ spec:
 
                                 Directive: https://nginx.org/en/docs/http/ngx_http_limit_req_module.html#limit_req
                               format: int32
+                              minimum: 0
                               type: integer
                             delay:
                               description: |-
@@ -86,6 +87,7 @@ spec:
 
                                 Directive: https://nginx.org/en/docs/http/ngx_http_limit_req_module.html#limit_req
                               format: int32
+                              minimum: 0
                               type: integer
                             key:
                               description: |-

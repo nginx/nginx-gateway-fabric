@@ -121,7 +121,7 @@ func TestValidator_Validate(t *testing.T) {
 				return p
 			}),
 			expConditions: []conditions.Condition{
-				conditions.NewPolicyInvalid("spec.tracing.spanAttributes.key: Invalid value: \"invalid$$$\": " +
+				conditions.NewPolicyInvalid("spec.tracing.spanAttributes[0].key: Invalid value: \"invalid$$$\": " +
 					"a valid value must have all '\"' escaped and must not contain any '$' or end with an " +
 					"unescaped '\\' (regex used for validation is '([^\"$\\\\]|\\\\[^$])*')"),
 			},
@@ -133,7 +133,7 @@ func TestValidator_Validate(t *testing.T) {
 				return p
 			}),
 			expConditions: []conditions.Condition{
-				conditions.NewPolicyInvalid("spec.tracing.spanAttributes.value: Invalid value: \"invalid$$$\": " +
+				conditions.NewPolicyInvalid("spec.tracing.spanAttributes[0].value: Invalid value: \"invalid$$$\": " +
 					"a valid value must have all '\"' escaped and must not contain any '$' or end with an " +
 					"unescaped '\\' (regex used for validation is '([^\"$\\\\]|\\\\[^$])*')"),
 			},
