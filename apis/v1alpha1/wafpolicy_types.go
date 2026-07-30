@@ -256,6 +256,7 @@ type NIMBundleSource struct {
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=253
+	// +kubebuilder:validation:Pattern=`^[A-Za-z0-9][-A-Za-z0-9_.]*$`
 	PolicyName *string `json:"policyName,omitempty"`
 
 	// PolicyUID is the unique identifier of the compiled policy bundle in NIM.
@@ -281,6 +282,7 @@ type NIMLogProfileBundleSource struct {
 	//
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=253
+	// +kubebuilder:validation:Pattern=`^[A-Za-z0-9][-A-Za-z0-9_.]*$`
 	ProfileName string `json:"profileName"`
 
 	// URL is the base URL of the NGINX Instance Manager instance,
@@ -303,6 +305,7 @@ type N1CLogProfileBundleSource struct {
 	//
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=253
+	// +kubebuilder:validation:Pattern=`^[A-Za-z0-9][-A-Za-z0-9_.]*$`
 	ProfileName *string `json:"profileName,omitempty"`
 
 	// ProfileObjectID is the unique object identifier of the log profile in N1C
@@ -323,6 +326,7 @@ type N1CLogProfileBundleSource struct {
 	//
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=253
+	// +kubebuilder:validation:Pattern=`^[A-Za-z0-9][-A-Za-z0-9_.]*$`
 	Namespace string `json:"namespace"`
 }
 
@@ -339,6 +343,7 @@ type N1CBundleSource struct {
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=253
+	// +kubebuilder:validation:Pattern=`^[A-Za-z0-9][-A-Za-z0-9_.]*$`
 	PolicyName *string `json:"policyName,omitempty"`
 
 	// PolicyObjectID is the unique object identifier of the security policy in N1C
@@ -368,6 +373,7 @@ type N1CBundleSource struct {
 	//
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=253
+	// +kubebuilder:validation:Pattern=`^[A-Za-z0-9][-A-Za-z0-9_.]*$`
 	Namespace string `json:"namespace"`
 }
 

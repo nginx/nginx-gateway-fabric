@@ -4329,7 +4329,7 @@ func TestLogBundleKey(t *testing.T) {
 					ProfileName: profileName,
 				},
 			},
-			expKey: WAFBundleKey(fmt.Sprintf("log_%s_%s", helpers.URLHash(nimURL), profileName)),
+			expKey: WAFBundleKey(fmt.Sprintf("log_%s_%s", helpers.URLHash(nimURL), helpers.URLHash(profileName))),
 		},
 		{
 			name: "N1C source with ProfileObjectID",
@@ -4340,7 +4340,7 @@ func TestLogBundleKey(t *testing.T) {
 					ProfileObjectID: &profileObjectID,
 				},
 			},
-			expKey: WAFBundleKey(fmt.Sprintf("log_%s_n1c-ns_%s", helpers.URLHash(n1cURL), profileObjectID)),
+			expKey: WAFBundleKey(fmt.Sprintf("log_%s_%s", helpers.URLHash(n1cURL), helpers.URLHash("n1c-ns/"+profileObjectID))),
 		},
 		{
 			name: "N1C source with ProfileName (no ObjectID)",
@@ -4351,7 +4351,7 @@ func TestLogBundleKey(t *testing.T) {
 					ProfileName: &profileName,
 				},
 			},
-			expKey: WAFBundleKey(fmt.Sprintf("log_%s_n1c-ns_%s", helpers.URLHash(n1cURL), profileName)),
+			expKey: WAFBundleKey(fmt.Sprintf("log_%s_%s", helpers.URLHash(n1cURL), helpers.URLHash("n1c-ns/"+profileName))),
 		},
 		{
 			name: "N1C source with neither ProfileObjectID nor ProfileName",
@@ -4361,7 +4361,7 @@ func TestLogBundleKey(t *testing.T) {
 					Namespace: "n1c-ns",
 				},
 			},
-			expKey: WAFBundleKey(fmt.Sprintf("log_%s_n1c-ns_", helpers.URLHash(n1cURL))),
+			expKey: WAFBundleKey(fmt.Sprintf("log_%s_%s", helpers.URLHash(n1cURL), helpers.URLHash("n1c-ns/"))),
 		},
 		{
 			name: "HTTP source",
@@ -5271,7 +5271,7 @@ func TestPolicyBundleKey(t *testing.T) {
 					},
 				},
 			},
-			expKey: WAFBundleKey(fmt.Sprintf("%s_%s", helpers.URLHash(nimURL), policyUID)),
+			expKey: WAFBundleKey(fmt.Sprintf("%s_%s", helpers.URLHash(nimURL), helpers.URLHash(policyUID))),
 		},
 		{
 			name: "NIM source with PolicyName (no UID)",
@@ -5283,7 +5283,7 @@ func TestPolicyBundleKey(t *testing.T) {
 					},
 				},
 			},
-			expKey: WAFBundleKey(fmt.Sprintf("%s_%s", helpers.URLHash(nimURL), policyName)),
+			expKey: WAFBundleKey(fmt.Sprintf("%s_%s", helpers.URLHash(nimURL), helpers.URLHash(policyName))),
 		},
 		{
 			name: "N1C source with PolicyObjectID",
@@ -5296,7 +5296,7 @@ func TestPolicyBundleKey(t *testing.T) {
 					},
 				},
 			},
-			expKey: WAFBundleKey(fmt.Sprintf("%s_n1c-ns_%s", helpers.URLHash(n1cURL), policyObjectID)),
+			expKey: WAFBundleKey(fmt.Sprintf("%s_%s", helpers.URLHash(n1cURL), helpers.URLHash("n1c-ns/"+policyObjectID))),
 		},
 		{
 			name: "N1C source with PolicyName (no ObjectID)",
@@ -5309,7 +5309,7 @@ func TestPolicyBundleKey(t *testing.T) {
 					},
 				},
 			},
-			expKey: WAFBundleKey(fmt.Sprintf("%s_n1c-ns_%s", helpers.URLHash(n1cURL), policyName)),
+			expKey: WAFBundleKey(fmt.Sprintf("%s_%s", helpers.URLHash(n1cURL), helpers.URLHash("n1c-ns/"+policyName))),
 		},
 	}
 

@@ -106,8 +106,8 @@ type WAFBundleKey string
 // different K8s namespaces that reference the same upstream policy will share the same
 // bundle file on disk, avoiding "Duplicate policy name found" errors from NAP.
 //
-// For N1C: key = "<urlHash>_<n1cNamespace>_<policyName|policyObjectID>"
-// For NIM: key = "<urlHash>_<policyName|policyUID>"
+// For N1C: key = "<urlHash>_<identifierHash>"
+// For NIM: key = "<urlHash>_<identifierHash>"
 // For HTTP: key = "<urlHash>".
 func PolicyBundleKey(wafSpec ngfAPIv1alpha1.WAFPolicySpec) WAFBundleKey {
 	if wafSpec.PolicySource == nil {
@@ -123,10 +123,13 @@ func PolicyBundleKey(wafSpec ngfAPIv1alpha1.WAFPolicySpec) WAFBundleKey {
 			policyIdentifier = *wafSpec.PolicySource.N1CSource.PolicyName
 		}
 		return WAFBundleKey(fmt.Sprintf(
-			"%s_%s_%s",
+			"%s_%s",
 			helpers.URLHash(wafSpec.PolicySource.N1CSource.URL),
-			wafSpec.PolicySource.N1CSource.Namespace,
-			policyIdentifier,
+			helpers.URLHash(
+				fmt.Sprintf("%s/%s",
+					wafSpec.PolicySource.N1CSource.Namespace,
+					policyIdentifier,
+				)),
 		))
 	case wafSpec.PolicySource.NIMSource != nil:
 		policyIdentifier := ""
@@ -138,7 +141,7 @@ func PolicyBundleKey(wafSpec ngfAPIv1alpha1.WAFPolicySpec) WAFBundleKey {
 		return WAFBundleKey(fmt.Sprintf(
 			"%s_%s",
 			helpers.URLHash(wafSpec.PolicySource.NIMSource.URL),
-			policyIdentifier,
+			helpers.URLHash(policyIdentifier),
 		))
 	case wafSpec.PolicySource.HTTPSource != nil:
 		return WAFBundleKey(helpers.URLHash(wafSpec.PolicySource.HTTPSource.URL))
@@ -147,11 +150,9 @@ func PolicyBundleKey(wafSpec ngfAPIv1alpha1.WAFPolicySpec) WAFBundleKey {
 }
 
 // LogBundleKey returns the WAFBundleKey for a SecurityLog entry's bundle.
-// The key for NIM is formatted as "<namespace>_<policyName>_log_<nimUrlHash>_<nimProfileName>", where nimUrlHash is a truncated SHA-256 hex digest of the NIM instance URL.
-// The key for N1C is formatted as "<namespace>_<policyName>_log_<n1cUrlHash>_<n1cNamespace>_<n1cProfileIdentifier>", where n1cUrlHash is a truncated SHA-256 hex digest of the N1C instance URL, and n1cProfileIdentifier is either the ProfileObjectID or ProfileName (if ObjectID is not set).
-// The key for HTTP is formatted as "<namespace>_<policyName>_log_<httpUrlHash>", where httpUrlHash is a truncated SHA-256 hex digest of the HTTP URL.
-//
-//nolint:lll
+// The key for NIM is formatted as "log_<nimUrlHash>_<profileHash>".
+// The key for N1C is formatted as "log_<n1cUrlHash>_<identifierHash>".
+// The key for HTTP is formatted as "log_<httpUrlHash>".
 func LogBundleKey(logSource *ngfAPIv1alpha1.LogSource) WAFBundleKey {
 	if logSource == nil {
 		return ""
@@ -161,7 +162,7 @@ func LogBundleKey(logSource *ngfAPIv1alpha1.LogSource) WAFBundleKey {
 			fmt.Sprintf(
 				"log_%s_%s",
 				helpers.URLHash(logSource.NIMSource.URL),
-				logSource.NIMSource.ProfileName,
+				helpers.URLHash(logSource.NIMSource.ProfileName),
 			),
 		)
 	}
@@ -175,10 +176,13 @@ func LogBundleKey(logSource *ngfAPIv1alpha1.LogSource) WAFBundleKey {
 		}
 		return WAFBundleKey(
 			fmt.Sprintf(
-				"log_%s_%s_%s",
+				"log_%s_%s",
 				helpers.URLHash(logSource.N1CSource.URL),
-				logSource.N1CSource.Namespace,
-				profileIdentifier,
+				helpers.URLHash(
+					fmt.Sprintf("%s/%s",
+						logSource.N1CSource.Namespace,
+						profileIdentifier,
+					)),
 			),
 		)
 	}

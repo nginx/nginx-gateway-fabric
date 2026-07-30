@@ -401,7 +401,6 @@ func BuildBundleSources(
 
 	sources = append(sources, buildBundlePolicySources(spec, auth, tlsCA)...)
 
-	// Check each logSource for polling.
 	sources = append(sources, buildBundleLogSources(spec, auth, tlsCA)...)
 
 	return sources
@@ -440,6 +439,7 @@ func buildBundleLogSources(
 ) []BundleSource {
 	var sources []BundleSource
 
+	// Check each logSource for polling.
 	for _, secLog := range spec.SecurityLogs {
 		if secLog.LogSource == nil {
 			continue

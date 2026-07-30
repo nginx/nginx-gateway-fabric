@@ -26,6 +26,8 @@ func TestGenerate(t *testing.T) {
 	policyURLHash := helpers.URLHash(policyURL)
 	logURLHash := helpers.URLHash(logURL)
 	logURL2Hash := helpers.URLHash(logURL2)
+	nimPolicyNameHash := helpers.URLHash(nimPolicyName)
+	nimLogProfileNameHash := helpers.URLHash(nimLogProfileName)
 
 	tests := []struct {
 		name          string
@@ -181,13 +183,13 @@ func TestGenerate(t *testing.T) {
 			expStrings: []string{
 				"app_protect_enable on;",
 				fmt.Sprintf(
-					"app_protect_policy_file \"/etc/app_protect/bundles/%s_nim-policy.tgz\";",
-					policyURLHash,
+					"app_protect_policy_file \"/etc/app_protect/bundles/%s_%s.tgz\";",
+					policyURLHash, nimPolicyNameHash,
 				),
 				"app_protect_security_log_enable on;",
 				fmt.Sprintf(
-					"app_protect_security_log \"/etc/app_protect/bundles/log_%s_nim-log-profile.tgz\" stderr;",
-					logURLHash,
+					"app_protect_security_log \"/etc/app_protect/bundles/log_%s_%s.tgz\" stderr;",
+					logURLHash, nimLogProfileNameHash,
 				),
 			},
 		},
@@ -235,8 +237,8 @@ func TestGenerate(t *testing.T) {
 				fmt.Sprintf("app_protect_security_log \"/etc/app_protect/bundles/log_%s.tgz\" stderr;", logURLHash),
 				fmt.Sprintf(
 					"app_protect_security_log "+
-						"\"/etc/app_protect/bundles/log_%s_nim-log-profile.tgz\" /var/log/blocked.log;",
-					logURL2Hash,
+						"\"/etc/app_protect/bundles/log_%s_%s.tgz\" /var/log/blocked.log;",
+					logURL2Hash, nimLogProfileNameHash,
 				),
 			},
 		},
