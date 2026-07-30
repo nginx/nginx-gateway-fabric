@@ -827,6 +827,22 @@ func TestBuildBundleSources(t *testing.T) {
 		expectedSources int
 	}{
 		{
+			name: "nil PolicySource",
+			spec: ngfAPIv1alpha1.WAFPolicySpec{
+				Type:         ngfAPIv1alpha1.PolicySourceTypeHTTP,
+				PolicySource: nil,
+			},
+			expectedSources: 0,
+		},
+		{
+			name: "empty PolicySource ",
+			spec: ngfAPIv1alpha1.WAFPolicySpec{
+				Type:         ngfAPIv1alpha1.PolicySourceTypeHTTP,
+				PolicySource: &ngfAPIv1alpha1.PolicySource{},
+			},
+			expectedSources: 0,
+		},
+		{
 			name: "no polling enabled",
 			spec: ngfAPIv1alpha1.WAFPolicySpec{
 				Type: ngfAPIv1alpha1.PolicySourceTypeHTTP,

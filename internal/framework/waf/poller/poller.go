@@ -399,23 +399,47 @@ func BuildBundleSources(
 ) []BundleSource {
 	var sources []BundleSource
 
-	// Check if policySource has polling enabled.
+	sources = append(sources, buildBundlePolicySources(spec, auth, tlsCA)...)
+
+	// Check each logSource for polling.
+	sources = append(sources, buildBundleLogSources(spec, auth, tlsCA)...)
+
+	return sources
+}
+
+func buildBundlePolicySources(
+	spec ngfAPIv1alpha1.WAFPolicySpec,
+	auth *fetch.BundleAuth,
+	tlsCA []byte,
+) []BundleSource {
+	var source []BundleSource
 	if spec.PolicySource != nil && spec.PolicySource.Polling != nil && spec.PolicySource.Polling.Enabled {
+		// Check if policySource has polling enabled.
 		interval := defaultPollingInterval
 		if spec.PolicySource.Polling.Interval != nil && spec.PolicySource.Polling.Interval.Duration > 0 {
 			interval = spec.PolicySource.Polling.Interval.Duration
 		}
 
-		sources = append(sources, BundleSource{
-			Type:        PolicyBundle,
-			BundleKey:   graph.PolicyBundleKey(spec),
-			Request:     graph.BuildPolicyFetchRequest(spec.PolicySource, spec.Type, auth, tlsCA),
-			Description: "policy bundle",
-			Interval:    interval,
-		})
+		if bundleKey := graph.PolicyBundleKey(spec); bundleKey != "" {
+			source = append(source, BundleSource{
+				Type:        PolicyBundle,
+				BundleKey:   bundleKey,
+				Request:     graph.BuildPolicyFetchRequest(spec.PolicySource, spec.Type, auth, tlsCA),
+				Description: "policy bundle",
+				Interval:    interval,
+			})
+		}
 	}
+	return source
+}
 
-	// Check each logSource for polling.
+func buildBundleLogSources(
+	spec ngfAPIv1alpha1.WAFPolicySpec,
+	auth *fetch.BundleAuth,
+	tlsCA []byte,
+) []BundleSource {
+	var sources []BundleSource
+
 	for _, secLog := range spec.SecurityLogs {
 		if secLog.LogSource == nil {
 			continue

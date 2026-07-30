@@ -5225,3 +5225,101 @@ func TestFetchPLMSecurityLogBundle(t *testing.T) {
 		})
 	}
 }
+
+func TestPolicyBundleKey(t *testing.T) {
+	t.Parallel()
+
+	httpURL := "http://example.com/policy.tgz"
+	nimURL := "https://nim.example.com"
+	n1cURL := "https://n1c.example.com"
+
+	policyName := "my-policy"
+	policyUID := "uid-123"
+	policyObjectID := "obj-456"
+
+	tests := []struct {
+		name   string
+		expKey WAFBundleKey
+		spec   ngfAPIv1alpha1.WAFPolicySpec
+	}{
+		{
+			name:   "nil PolicySource returns empty key",
+			spec:   ngfAPIv1alpha1.WAFPolicySpec{PolicySource: nil},
+			expKey: WAFBundleKey(""),
+		},
+		{
+			name:   "PolicySource with all sub-sources nil returns empty key",
+			spec:   ngfAPIv1alpha1.WAFPolicySpec{PolicySource: &ngfAPIv1alpha1.PolicySource{}},
+			expKey: WAFBundleKey(""),
+		},
+		{
+			name: "HTTP source",
+			spec: ngfAPIv1alpha1.WAFPolicySpec{
+				PolicySource: &ngfAPIv1alpha1.PolicySource{
+					HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: httpURL},
+				},
+			},
+			expKey: WAFBundleKey(helpers.URLHash(httpURL)),
+		},
+		{
+			name: "NIM source with PolicyUID",
+			spec: ngfAPIv1alpha1.WAFPolicySpec{
+				PolicySource: &ngfAPIv1alpha1.PolicySource{
+					NIMSource: &ngfAPIv1alpha1.NIMBundleSource{
+						URL:       nimURL,
+						PolicyUID: &policyUID,
+					},
+				},
+			},
+			expKey: WAFBundleKey(fmt.Sprintf("%s_%s", helpers.URLHash(nimURL), policyUID)),
+		},
+		{
+			name: "NIM source with PolicyName (no UID)",
+			spec: ngfAPIv1alpha1.WAFPolicySpec{
+				PolicySource: &ngfAPIv1alpha1.PolicySource{
+					NIMSource: &ngfAPIv1alpha1.NIMBundleSource{
+						URL:        nimURL,
+						PolicyName: &policyName,
+					},
+				},
+			},
+			expKey: WAFBundleKey(fmt.Sprintf("%s_%s", helpers.URLHash(nimURL), policyName)),
+		},
+		{
+			name: "N1C source with PolicyObjectID",
+			spec: ngfAPIv1alpha1.WAFPolicySpec{
+				PolicySource: &ngfAPIv1alpha1.PolicySource{
+					N1CSource: &ngfAPIv1alpha1.N1CBundleSource{
+						URL:            n1cURL,
+						Namespace:      "n1c-ns",
+						PolicyObjectID: &policyObjectID,
+					},
+				},
+			},
+			expKey: WAFBundleKey(fmt.Sprintf("%s_n1c-ns_%s", helpers.URLHash(n1cURL), policyObjectID)),
+		},
+		{
+			name: "N1C source with PolicyName (no ObjectID)",
+			spec: ngfAPIv1alpha1.WAFPolicySpec{
+				PolicySource: &ngfAPIv1alpha1.PolicySource{
+					N1CSource: &ngfAPIv1alpha1.N1CBundleSource{
+						URL:        n1cURL,
+						Namespace:  "n1c-ns",
+						PolicyName: &policyName,
+					},
+				},
+			},
+			expKey: WAFBundleKey(fmt.Sprintf("%s_n1c-ns_%s", helpers.URLHash(n1cURL), policyName)),
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			got := PolicyBundleKey(tc.spec)
+			g.Expect(got).To(Equal(tc.expKey))
+		})
+	}
+}

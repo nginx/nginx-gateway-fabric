@@ -109,49 +109,40 @@ type WAFBundleKey string
 // For N1C: key = "<urlHash>_<n1cNamespace>_<policyName|policyObjectID>"
 // For NIM: key = "<urlHash>_<policyName|policyUID>"
 // For HTTP: key = "<urlHash>".
-func PolicyBundleKey(wafSpec ...ngfAPIv1alpha1.WAFPolicySpec) WAFBundleKey {
-	return sourcePolicyBundleKey(wafSpec)
-}
-
-// sourcePolicyBundleKey generates a WAFBundleKey based on the upstream source identity.
-// Returns an empty key if the source cannot be determined.
-func sourcePolicyBundleKey(wafSpec []ngfAPIv1alpha1.WAFPolicySpec) WAFBundleKey {
-	for _, spec := range wafSpec {
-		if spec.PolicySource == nil {
-			return ""
-		}
-
-		switch {
-		case spec.PolicySource.N1CSource != nil:
-			policyIdentifier := ""
-			if spec.PolicySource.N1CSource.PolicyObjectID != nil {
-				policyIdentifier = *spec.PolicySource.N1CSource.PolicyObjectID
-			} else if spec.PolicySource.N1CSource.PolicyName != nil {
-				policyIdentifier = *spec.PolicySource.N1CSource.PolicyName
-			}
-			return WAFBundleKey(fmt.Sprintf(
-				"%s_%s_%s",
-				helpers.URLHash(spec.PolicySource.N1CSource.URL),
-				spec.PolicySource.N1CSource.Namespace,
-				policyIdentifier,
-			))
-		case spec.PolicySource.NIMSource != nil:
-			policyIdentifier := ""
-			if spec.PolicySource.NIMSource.PolicyUID != nil {
-				policyIdentifier = *spec.PolicySource.NIMSource.PolicyUID
-			} else if spec.PolicySource.NIMSource.PolicyName != nil {
-				policyIdentifier = *spec.PolicySource.NIMSource.PolicyName
-			}
-			return WAFBundleKey(fmt.Sprintf(
-				"%s_%s",
-				helpers.URLHash(spec.PolicySource.NIMSource.URL),
-				policyIdentifier,
-			))
-		case spec.PolicySource.HTTPSource != nil:
-			return WAFBundleKey(helpers.URLHash(spec.PolicySource.HTTPSource.URL))
-		}
+func PolicyBundleKey(wafSpec ngfAPIv1alpha1.WAFPolicySpec) WAFBundleKey {
+	if wafSpec.PolicySource == nil {
+		return ""
 	}
 
+	switch {
+	case wafSpec.PolicySource.N1CSource != nil:
+		policyIdentifier := ""
+		if wafSpec.PolicySource.N1CSource.PolicyObjectID != nil {
+			policyIdentifier = *wafSpec.PolicySource.N1CSource.PolicyObjectID
+		} else if wafSpec.PolicySource.N1CSource.PolicyName != nil {
+			policyIdentifier = *wafSpec.PolicySource.N1CSource.PolicyName
+		}
+		return WAFBundleKey(fmt.Sprintf(
+			"%s_%s_%s",
+			helpers.URLHash(wafSpec.PolicySource.N1CSource.URL),
+			wafSpec.PolicySource.N1CSource.Namespace,
+			policyIdentifier,
+		))
+	case wafSpec.PolicySource.NIMSource != nil:
+		policyIdentifier := ""
+		if wafSpec.PolicySource.NIMSource.PolicyUID != nil {
+			policyIdentifier = *wafSpec.PolicySource.NIMSource.PolicyUID
+		} else if wafSpec.PolicySource.NIMSource.PolicyName != nil {
+			policyIdentifier = *wafSpec.PolicySource.NIMSource.PolicyName
+		}
+		return WAFBundleKey(fmt.Sprintf(
+			"%s_%s",
+			helpers.URLHash(wafSpec.PolicySource.NIMSource.URL),
+			policyIdentifier,
+		))
+	case wafSpec.PolicySource.HTTPSource != nil:
+		return WAFBundleKey(helpers.URLHash(wafSpec.PolicySource.HTTPSource.URL))
+	}
 	return ""
 }
 
@@ -1184,6 +1175,9 @@ func fetchPolicyBundle(
 	policy.WAFState.ResolvedTLSCA = tlsCA
 
 	bundleKey := PolicyBundleKey(wafPolicy.Spec)
+	if bundleKey == "" {
+		return
+	}
 
 	req := BuildPolicyFetchRequest(policySource, wafPolicy.Spec.Type, auth, tlsCA)
 
