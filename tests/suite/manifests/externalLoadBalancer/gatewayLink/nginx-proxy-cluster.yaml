@@ -1,0 +1,10 @@
+apiVersion: gateway.nginx.org/v1alpha2
+kind: NginxProxy
+metadata:
+  name: gatewaylink-proxy
+spec:
+  kubernetes:
+    service:
+      # ClusterIP because in cluster pool member mode CIS pools the NGINX pod IPs directly and the
+      # BIG-IP routes to them, so no node port is used.
+      type: ClusterIP

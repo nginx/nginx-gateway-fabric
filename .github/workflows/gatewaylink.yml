@@ -1,0 +1,171 @@
+name: GatewayLink Integration Testing
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version of NGF under test
+        required: true
+        default: edge
+      image_tag:
+        description: Tag of the NGF and NGINX Docker images
+        required: true
+        default: edge
+      type:
+        description: Type of NGINX image to test
+        required: true
+        default: both
+        type: choice
+        options: [oss, plus, both]
+  schedule:
+    - cron: "0 16 5,20 * *" # Run on the 5th and 20th of every month at 16:00 UTC
+  # TEMPORARY: remove before merge. feat/gateway-link is the feature branch this PR targets while the
+  # work is being verified; a new workflow does not appear in the workflow_dispatch UI until it is on
+  # a default/base branch, so this trigger is the only way to run it on its own PR.
+  pull_request:
+    branches:
+      - main
+      - feat/gateway-link
+defaults:
+  run:
+    shell: bash
+
+permissions:
+  contents: read
+
+jobs:
+  vars:
+    name: Set up vars
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ github.event.inputs.version || 'edge' }}
+      # TEMPORARY: default to a branch-built image (which has the ExternalLoadBalancer feature) while
+      # verifying on the PR. Restore 'edge' before merge, once the feature is in the edge image.
+      image_tag: ${{ github.event.inputs.image_tag || 'sa.choudhary' }}
+      types: ${{ steps.var.outputs.types }}
+    steps:
+      - name: Set vars
+        id: var
+        run: |
+          if ${{ github.event.inputs.type == 'both' || github.event_name == 'schedule' || github.event_name == 'pull_request' }}; then
+          echo 'types=["oss","plus"]' >> $GITHUB_OUTPUT
+          else
+          echo 'types=["${{ github.event.inputs.type }}"]' >> $GITHUB_OUTPUT
+          fi
+
+  setup-and-run-tests:
+    name: Setup and Run GatewayLink Test (${{ matrix.type }})
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write # needed for authenticating to GCP
+    needs: vars
+    strategy:
+      fail-fast: false
+      matrix:
+        # One leg per NGINX data plane. Each leg runs both pool modes (nodeport then cluster) in a
+        # single suite invocation, so pool mode is not a matrix dimension.
+        type: ${{ fromJson(needs.vars.outputs.types) }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Authenticate to Google Cloud
+        id: auth
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          token_format: access_token
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Login to GAR
+        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
+        with:
+          registry: us-docker.pkg.dev
+          username: oauth2accesstoken
+          password: ${{ steps.auth.outputs.access_token }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          install_components: kubectl
+
+      - name: Setup dotenv file
+        working-directory: ./tests/scripts
+        run: |
+          RUN=${{ github.run_id }}-${{ matrix.type }}
+          echo "RESOURCE_NAME=gatewaylink-tests-${RUN}" >> vars.env
+          echo "TAG=${{ needs.vars.outputs.image_tag }}" >> vars.env
+          # TEMPORARY: pull the branch-built images from GCR (they have the ExternalLoadBalancer
+          # feature). Restore the ghcr.io/nginx prefixes below before merge.
+          echo "PREFIX=gcr.io/${{ secrets.GCP_PROJECT_ID }}/nginx-gateway-fabric" >> vars.env
+          echo "NGINX_PREFIX=gcr.io/${{ secrets.GCP_PROJECT_ID }}/nginx-gateway-fabric/nginx" >> vars.env
+          echo "NGINX_PLUS_PREFIX=us-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/nginx-gateway-fabric/nginx-plus" >> vars.env
+          echo "GKE_CLUSTER_NAME=gatewaylink-tests-${RUN}" >> vars.env
+          echo "GKE_CLUSTER_ZONE=us-central1-c" >> vars.env
+          echo "GKE_CLUSTER_REGION=us-central1" >> vars.env
+          echo "GKE_PROJECT=${{ secrets.GCP_PROJECT_ID }}" >> vars.env
+          echo "GKE_SVC_ACCOUNT=${{ secrets.GCP_SERVICE_ACCOUNT }}" >> vars.env
+          echo "GKE_NODES_SERVICE_ACCOUNT=${{ secrets.GKE_NODES_SERVICE_ACCOUNT }}" >> vars.env
+          echo "NETWORK_TAGS=gatewaylink-tests-${RUN}" >> vars.env
+          # On a pull_request, github.ref_name is the PR merge ref (e.g. "123/merge"), which the VM
+          # cannot check out; github.head_ref is the source branch. Falls back to ref_name for
+          # workflow_dispatch and schedule, where head_ref is empty.
+          echo "NGF_BRANCH=${{ github.head_ref || github.ref_name }}" >> vars.env
+          echo "SOURCE_IP_RANGE=$(curl -sS -4 icanhazip.com)/32" >> vars.env
+          echo "ADD_VM_IP_AUTH_NETWORKS=true" >> vars.env
+          echo "PLUS_ENABLED=${{ matrix.type == 'plus' }}" >> vars.env
+          echo "NGF_VERSION=${{ needs.vars.outputs.version }}" >> vars.env
+          # BIG-IP + CIS
+          echo "BIGIP_RESOURCE_NAME=gatewaylink-bigip-${RUN}" >> vars.env
+          # PAYG image from F5's public image project, so it is not a secret. It self-licenses on boot.
+          echo "BIGIP_IMAGE=projects/f5-7626-networks-public/global/images/f5-bigip-17-1-0-3-0-77-4-payg-good-1gbps-231026113952" >> vars.env
+          echo "BIGIP_NETWORK_TAGS=gatewaylink-bigip-${RUN}" >> vars.env
+          # BIGIP_ADDRESS and BIGIP_VIP are NOT set here. The BIG-IP is created fresh, so
+          # create-bigip-vm.sh reads the assigned mgmt IP and internal VIP back and appends both to
+          # vars.env.
+          echo "BIGIP_MGMT_PORT=8443" >> vars.env
+          echo "BIGIP_PARTITION=gatewaylink" >> vars.env
+          echo "BIGIP_USERNAME=admin" >> vars.env
+          # From a repo secret so it is masked in logs and not committed in plaintext. The management
+          # port is also firewalled to the runner IP and the node and pod ranges only, and the BIG-IP
+          # is torn down each run.
+          echo "BIGIP_PASSWORD=${{ secrets.BIGIP_ADMIN_PASSWORD }}" >> vars.env
+          echo "PLUS_USAGE_ENDPOINT=${{ secrets.JWT_PLUS_REPORTING_ENDPOINT }}" >> vars.env
+
+      - name: Setup license file for plus
+        if: matrix.type == 'plus'
+        env:
+          PLUS_LICENSE: ${{ secrets.JWT_PLUS_REPORTING }}
+        run: echo "${PLUS_LICENSE}" > license.jwt
+
+      - name: Create GKE cluster
+        working-directory: ./tests
+        run: make create-gke-cluster CI=true
+
+      - name: Create GKE router
+        working-directory: ./tests
+        run: make create-gke-router || true
+
+      - name: Create and setup VM
+        working-directory: ./tests
+        run: make create-and-setup-vm
+
+      - name: Create BIG-IP VM
+        working-directory: ./tests
+        run: make create-bigip-vm
+
+      - name: Run GatewayLink test
+        working-directory: ./tests
+        run: make gatewaylink-test CI=true
+
+      - name: Cleanup
+        working-directory: ./tests
+        if: always()
+        run: |
+          bash scripts/cleanup-bigip-vm.sh || true
+          bash scripts/cleanup-vm.sh true
+          bash scripts/cleanup-router.sh true
+          make delete-gke-cluster
+          rm -rf scripts/vars.env

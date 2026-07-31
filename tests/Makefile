@@ -10,6 +10,8 @@ GITHUB_OUTPUT =
 GW_API_VERSION ?= $(shell sed -n 's/.*ref=v\(.*\)/\1/p' ../config/crd/gateway-api/standard/kustomization.yaml)## Supported Gateway API version from current NGF
 GW_API_PREV_VERSION ?= 1.5.1## Supported Gateway API version from previous NGF release
 GW_SERVICE_TYPE = NodePort## Service type to use for the gateway
+GATEWAYLINK_LABEL ?= gatewaylink## GatewayLink label filter: use "gatewaylink && cluster" to run cluster mode only
+BIGIP_MGMT_PORT ?= 8443## BIG-IP management/iControl REST port
 NGF_VERSION ?= edge## NGF version to be tested
 PULL_POLICY ?= Never## Pull policy for the images
 NGINX_CONF_DIR = internal/controller/nginx/conf
@@ -147,6 +149,9 @@ endif
 .PHONY: setup-gcp-and-run-nfr-tests
 setup-gcp-and-run-nfr-tests: create-gke-router create-and-setup-vm nfr-test ## Create and setup a GKE router and GCP VM for tests and run the NFR tests
 
+.PHONY: setup-gcp-and-run-gatewaylink-tests
+setup-gcp-and-run-gatewaylink-tests: create-gke-router create-and-setup-vm create-bigip-vm gatewaylink-test ## Setup GKE + VM + BIG-IP and run the GatewayLink test
+
 .PHONY: create-gke-cluster
 create-gke-cluster: ## Create a GKE cluster
 	./scripts/create-gke-cluster.sh $(CI)
@@ -158,6 +163,14 @@ create-and-setup-vm: ## Create and setup a GCP VM for tests
 .PHONY: create-gke-router
 create-gke-router: ## Create a GKE router to allow egress traffic from private nodes (allows for external image pulls)
 	./scripts/create-gke-router.sh
+
+.PHONY: create-bigip-vm
+create-bigip-vm: ## Create a BIG-IP VE instance for the GatewayLink test
+	./scripts/create-bigip-vm.sh
+
+.PHONY: cleanup-bigip-vm
+cleanup-bigip-vm: ## Delete the BIG-IP VE instance and its firewall rule
+	./scripts/cleanup-bigip-vm.sh
 
 .PHONY: sync-files-to-vm
 sync-files-to-vm: ## Syncs your local NGF files with the NGF repo on the VM
@@ -196,6 +209,24 @@ ipv6-tests: ## Example usage: make ipv6-tests TAG=release-X.Y-rc
 		--plus-enabled=$(PLUS_ENABLED) --plus-license-file-name=$(PLUS_LICENSE_FILE) \
 		--plus-usage-endpoint=$(PLUS_USAGE_ENDPOINT) --gke-project=$(GKE_PROJECT) \
         --waf-enabled=$(WAF_PLM_ENABLED) $(if $(filter true,$(WAF_PLM_ENABLED)),--nginx-image-jwt-file-name=$(REGISTRY_JWT_FILE))
+
+.PHONY: gatewaylink-test
+gatewaylink-test: ## Run the GatewayLink integration test on a GCP VM against a BIG-IP
+	CI=$(CI) ./scripts/run-gatewaylink-tests-gcp-vm.sh
+
+.PHONY: .vm-gatewaylink-test
+.vm-gatewaylink-test: ## Runs the GatewayLink test on the GCP VM (called by `gatewaylink-test`)
+	CGO_ENABLED=1 go run github.com/onsi/ginkgo/v2/ginkgo --race --randomize-all --randomize-suites --keep-going --fail-on-pending \
+		--trace -r -v --buildvcs --force-newlines $(GITHUB_OUTPUT) --flake-attempts=1 --show-node-events --output-interceptor-mode=none \
+		--label-filter "$(GATEWAYLINK_LABEL)" $(GINKGO_FLAGS) --timeout 1h ./suite --  --gateway-api-version=$(GW_API_VERSION) \
+		--gateway-api-prev-version=$(GW_API_PREV_VERSION) --image-tag=$(TAG) --version-under-test=$(NGF_VERSION) \
+		--ngf-image-repo=$(PREFIX) --nginx-image-repo=$(NGINX_PREFIX) --nginx-plus-image-repo=$(NGINX_PLUS_PREFIX) \
+		--pull-policy=$(PULL_POLICY) --service-type=$(GW_SERVICE_TYPE) \
+		--plus-enabled=$(PLUS_ENABLED) --plus-license-file-name=$(PLUS_LICENSE_FILE) \
+		--plus-usage-endpoint=$(PLUS_USAGE_ENDPOINT) --gke-project=$(GKE_PROJECT) \
+		--gatewaylink-enabled=true --bigip-mgmt-port=$(BIGIP_MGMT_PORT) --bigip-vip=$(BIGIP_VIP) \
+		--bigip-partition=$(BIGIP_PARTITION) --bigip-username=$(BIGIP_USERNAME) --bigip-password=$(BIGIP_PASSWORD) \
+		--ipam-range=$(IPAM_RANGE)
 
 .PHONY: test
 test: build-crossplane-image ## Runs the functional tests on your kind k8s cluster

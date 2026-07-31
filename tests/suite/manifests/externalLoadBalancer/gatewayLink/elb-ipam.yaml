@@ -1,0 +1,15 @@
+apiVersion: gateway.nginx.org/v1alpha1
+kind: ExternalLoadBalancer
+metadata:
+  name: gateway-elb
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: gateway
+  gatewayLink:
+    ipamLabel: "production"
+    partition: ${BIGIP_PARTITION}
+    monitors:
+      - name: /Common/http
+        reference: bigip

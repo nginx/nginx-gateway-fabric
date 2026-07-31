@@ -67,6 +67,18 @@ var (
 	plusUsageEndpoint        = flag.String("plus-usage-endpoint", "", "Endpoint for reporting NGINX Plus usage")
 	clusterName              = flag.String("cluster-name", "kind", "Cluster name")
 	gkeProject               = flag.String("gke-project", "", "GKE Project name")
+
+	// GatewayLink/ExternalLoadBalancer integration test variables. These target an external BIG-IP
+	// fronted by CIS. Credentials are supplied as secrets and never committed.
+	gatewaylinkEnabled = flag.Bool(
+		"gatewaylink-enabled", false, "Is the GatewayLink/ExternalLoadBalancer test enabled (requires BIG-IP + CIS)",
+	)
+	bigipMgmtPort  = flag.String("bigip-mgmt-port", "8443", "BIG-IP management port for iControl REST")
+	bigipVIP       = flag.String("bigip-vip", "", "BIG-IP virtual server IP that test traffic is sent to")
+	bigipPartition = flag.String("bigip-partition", "gatewaylink", "BIG-IP partition CIS manages")
+	bigipUsername  = flag.String("bigip-username", "admin", "BIG-IP admin username")
+	bigipPassword  = flag.String("bigip-password", "", "BIG-IP admin password")
+	ipamRange      = flag.String("ipam-range", "", "F5 IPAM Controller address range for the ipamLabel test")
 )
 
 var (
@@ -196,13 +208,7 @@ func setup(cfg setupConfig, extraInstallArgs ...string) {
 		return
 	}
 
-	// When running the WAF suite, configure NGF with the PLM storage flags so that type: PLM
-	// WAFPolicies can fetch bundles from PLM's in-cluster SeaweedFS storage. PLM itself is a
-	// cluster-scoped singleton installed once in SynchronizedBeforeSuite (not here, which runs in
-	// every parallel proc). HTTP/NIM/N1C source tests are unaffected.
-	if plmEnabled(GinkgoLabelFilter()) {
-		extraInstallArgs = append(extraInstallArgs, plmNGFInstallArgs()...)
-	}
+	extraInstallArgs = append(extraInstallArgs, labelInstallArgs(GinkgoLabelFilter())...)
 
 	installCfg := createNGFInstallConfig(cfg, extraInstallArgs...)
 
@@ -213,6 +219,27 @@ func setup(cfg setupConfig, extraInstallArgs ...string) {
 	)
 	Expect(err).ToNot(HaveOccurred())
 	Expect(podNames).ToNot(BeEmpty())
+}
+
+// labelInstallArgs returns the extra NGF Helm install args a specific test label needs.
+func labelInstallArgs(labelFilter string) []string {
+	var args []string
+
+	// The WAF suite needs the PLM storage flags so that type: PLM WAFPolicies can fetch bundles from
+	// PLM's in-cluster SeaweedFS storage. PLM itself is a cluster-scoped singleton installed once in
+	// SynchronizedBeforeSuite. HTTP, NIM, and N1C source tests are unaffected.
+	if plmEnabled(labelFilter) {
+		args = append(args, plmNGFInstallArgs()...)
+	}
+
+	// The GatewayLink suite fronts a Gateway with an ExternalLoadBalancer, which NGF only reconciles
+	// when the externalLoadBalancer feature is enabled at install. Otherwise NGF ignores the
+	// ExternalLoadBalancer entirely and the test times out waiting for Accepted.
+	if strings.Contains(labelFilter, "gatewaylink") {
+		args = append(args, "--set", "nginxGateway.externalLoadBalancer.enable=true")
+	}
+
+	return args
 }
 
 func setUpPortForward(nginxPodName, nginxNamespace string) {
