@@ -256,6 +256,27 @@ func TestSetIngressLinkTLS(t *testing.T) {
 				}))
 			},
 		},
+		{
+			name: "reference defaults to bigip when profiles are listed without one",
+			cfg: &ngfAPIv1alpha1.GatewayLinkConfig{
+				TLS: &ngfAPIv1alpha1.GatewayLinkTLS{
+					ClientSSLs: []string{"/Common/clientssl"},
+				},
+			},
+			verify: func(g Gomega, spec map[string]any) {
+				g.Expect(spec["tls"]).To(Equal(map[string]any{
+					"reference":  "bigip",
+					"clientSSLs": []any{"/Common/clientssl"},
+				}))
+			},
+		},
+		{
+			name: "an empty TLS block writes nothing, not a bare default reference",
+			cfg:  &ngfAPIv1alpha1.GatewayLinkConfig{TLS: &ngfAPIv1alpha1.GatewayLinkTLS{}},
+			verify: func(g Gomega, spec map[string]any) {
+				g.Expect(spec).ToNot(HaveKey("tls"))
+			},
+		},
 	}
 
 	for _, test := range tests {
@@ -293,10 +314,10 @@ func TestSetIngressLinkServiceAddress(t *testing.T) {
 				},
 			},
 			verify: func(g Gomega, spec map[string]any) {
-				g.Expect(spec["serviceAddress"]).To(Equal(map[string]any{
+				g.Expect(spec["serviceAddress"]).To(Equal([]any{map[string]any{
 					"icmpEcho":     "selective",
 					"trafficGroup": "/Common/traffic-group-1",
-				}))
+				}}))
 			},
 		},
 	}
@@ -454,7 +475,7 @@ func TestBuildIngressLinkSpec_Scenarios(t *testing.T) {
 			},
 			expected: map[string]any{
 				"virtualServerAddress": "10.8.3.105",
-				"serviceAddress":       map[string]any{"trafficGroup": "/Common/traffic-group-1"},
+				"serviceAddress":       []any{map[string]any{"trafficGroup": "/Common/traffic-group-1"}},
 				"selector":             selector,
 			},
 		},

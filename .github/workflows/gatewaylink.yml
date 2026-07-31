@@ -101,7 +101,7 @@ jobs:
           # feature). Restore the ghcr.io/nginx prefixes below before merge.
           echo "PREFIX=gcr.io/${{ secrets.GCP_PROJECT_ID }}/nginx-gateway-fabric" >> vars.env
           echo "NGINX_PREFIX=gcr.io/${{ secrets.GCP_PROJECT_ID }}/nginx-gateway-fabric/nginx" >> vars.env
-          echo "NGINX_PLUS_PREFIX=us-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/nginx-gateway-fabric/nginx-plus" >> vars.env
+          echo "NGINX_PLUS_PREFIX=gcr.io/${{ secrets.GCP_PROJECT_ID }}/nginx-gateway-fabric/nginx-plus" >> vars.env
           echo "GKE_CLUSTER_NAME=gatewaylink-tests-${RUN}" >> vars.env
           echo "GKE_CLUSTER_ZONE=us-central1-c" >> vars.env
           echo "GKE_CLUSTER_REGION=us-central1" >> vars.env

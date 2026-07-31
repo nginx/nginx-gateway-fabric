@@ -220,6 +220,7 @@ spec:
                         description: |-
                           Reference specifies the source of the SSL profiles. "bigip" means the profiles already
                           exist on BIG-IP. "secret" means they come from Kubernetes secrets of type kubernetes.io/tls.
+                          If not specified, defaults to "bigip".
                         enum:
                         - bigip
                         - secret
@@ -254,6 +255,10 @@ spec:
                   rule: has(self.virtualServerAddress) || has(self.ipamLabel)
                 - message: partition cannot be Common
                   rule: '!has(self.partition) || self.partition != ''Common'''
+                - message: partition cannot be modified; delete the resource and recreate
+                    it with the new partition
+                  rule: has(self.partition) == has(oldSelf.partition) && (!has(self.partition)
+                    || self.partition == oldSelf.partition)
               targetRefs:
                 description: |-
                   TargetRefs identifies the Gateways this external load balancer applies to.

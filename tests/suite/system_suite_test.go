@@ -118,6 +118,7 @@ type setupConfig struct {
 	gwAPIVersion  string
 	deploy        bool
 	nfr           bool
+	gatewaylink   bool
 	debugLogLevel bool
 	telemetry     bool
 }
@@ -304,7 +305,7 @@ func createNGFInstallConfig(cfg setupConfig, extraInstallArgs ...string) framewo
 		GinkgoWriter.Printf("Installing chart from local directory\n")
 		installCfg.NgfImageRepository = *ngfImageRepository
 		installCfg.NginxImageRepository = *nginxImageRepository
-		if *plusEnabled && cfg.nfr {
+		if *plusEnabled && (cfg.nfr || cfg.gatewaylink) {
 			installCfg.NginxImageRepository = *nginxPlusImageRepository
 		}
 		installCfg.ImageTag = *imageTag
@@ -426,6 +427,7 @@ var _ = SynchronizedBeforeSuite(
 
 		labelFilter := GinkgoLabelFilter()
 		cfg.nfr = isNFR(labelFilter)
+		cfg.gatewaylink = strings.Contains(labelFilter, "gatewaylink")
 
 		// Skip deployment if:
 		skipSubstrings := []string{

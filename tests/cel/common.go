@@ -141,6 +141,7 @@ const (
 	expectedELBVirtualServerAddressIPAMLabelExclusiveError  = "virtualServerAddress and ipamLabel are mutually exclusive"
 	expectedELBVirtualServerAddressOrIPAMLabelRequiredError = "one of virtualServerAddress or ipamLabel must be set"
 	expectedELBPartitionCommonError                         = "partition cannot be Common"
+	expectedELBPartitionImmutableError                      = "partition cannot be modified"
 
 	// Namespace for tests.
 	defaultNamespace = "default"
@@ -205,5 +206,41 @@ func validateCrd(t *testing.T, wantErrors []string, crd client.Object, k8sClient
 		for _, wantError := range wantErrors {
 			g.Expect(err.Error()).To(ContainSubstring(wantError), "Expected error '%s' not found in: %s", wantError, err.Error())
 		}
+	}
+}
+
+// validateCrdUpdate creates a k8s resource, applies mutate to it, and validates the update against
+// the expected errors. Transition rules compare a field against oldSelf, so they only fire on an
+// update and cannot be exercised by validateCrd, which only creates.
+func validateCrdUpdate(
+	t *testing.T,
+	wantErrors []string,
+	crd client.Object,
+	mutate func(client.Object),
+	k8sClient client.Client,
+) {
+	t.Helper()
+	g := NewWithT(t)
+
+	timeoutConfig := framework.DefaultTimeoutConfig()
+	ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.KubernetesClientTimeout)
+	defer cancel()
+
+	g.Expect(k8sClient.Create(ctx, crd)).To(Succeed())
+	defer func() {
+		g.Expect(k8sClient.Delete(ctx, crd)).To(Succeed())
+	}()
+
+	mutate(crd)
+	err := k8sClient.Update(ctx, crd)
+
+	if len(wantErrors) == 0 {
+		g.Expect(err).ToNot(HaveOccurred())
+		return
+	}
+
+	g.Expect(err).To(HaveOccurred())
+	for _, wantError := range wantErrors {
+		g.Expect(err.Error()).To(ContainSubstring(wantError), "Expected error '%s' not found in: %s", wantError, err.Error())
 	}
 }

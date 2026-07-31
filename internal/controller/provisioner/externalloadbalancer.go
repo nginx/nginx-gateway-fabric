@@ -247,8 +247,13 @@ func setIngressLinkTLS(spec map[string]any, ilCfg *ngfAPIv1alpha1.GatewayLinkCon
 	if len(ilCfg.TLS.ServerSSLs) > 0 {
 		tls[ilKeyServerSSLs] = toJSONSlice(ilCfg.TLS.ServerSSLs)
 	}
+	// The reference decides how each profile entry is read, so it is never left to CIS to infer:
+	// entries listed without one are paths to profiles that already exist on BIG-IP. It is set only
+	// alongside a profile list, so an empty tls block still writes nothing.
 	if ilCfg.TLS.Reference != nil {
 		tls[ilKeyReference] = string(*ilCfg.TLS.Reference)
+	} else if len(tls) > 0 {
+		tls[ilKeyReference] = string(ngfAPIv1alpha1.TLSReferenceBigIP)
 	}
 	if len(tls) > 0 {
 		spec[ilKeyTLS] = tls
@@ -267,7 +272,9 @@ func setIngressLinkServiceAddress(spec map[string]any, ilCfg *ngfAPIv1alpha1.Gat
 	if ilCfg.ServiceAddress.TrafficGroup != nil {
 		serviceAddress[ilKeyTrafficGroup] = *ilCfg.ServiceAddress.TrafficGroup
 	}
+
+	// structured to match IngressLink spec array object
 	if len(serviceAddress) > 0 {
-		spec[ilKeyServiceAddress] = serviceAddress
+		spec[ilKeyServiceAddress] = []any{serviceAddress}
 	}
 }
