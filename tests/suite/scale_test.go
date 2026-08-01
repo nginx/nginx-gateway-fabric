@@ -540,14 +540,11 @@ The logs are attached only if there are errors.
 				nginxMetricsStartTime = time.Now()
 			}
 
-			var url string
-			if protocol == "http" && portFwdPort != 0 {
-				url = fmt.Sprintf("%s://%d.example.com:%d", protocol, i, portFwdPort)
-			} else if protocol == "https" && portFwdHTTPSPort != 0 {
-				url = fmt.Sprintf("%s://%d.example.com:%d", protocol, i, portFwdHTTPSPort)
-			} else {
-				url = fmt.Sprintf("%s://%d.example.com", protocol, i)
+			port := portFwdPort
+			if protocol == "https" {
+				port = portFwdHTTPSPort
 			}
+			url := framework.GetURL(fmt.Sprintf("%s://%d.example.com", protocol, i), port)
 
 			startCheck := time.Now()
 
@@ -609,12 +606,7 @@ The logs are attached only if there are errors.
 		nginxDataPlanePodName = nginxPodName
 		nginxMetricsStartTime = time.Now()
 
-		var url string
-		if portFwdPort != 0 {
-			url = fmt.Sprintf("http://hello.example.com:%d", portFwdPort)
-		} else {
-			url = "http://hello.example.com"
-		}
+		url := framework.GetURL("http://hello.example.com", portFwdPort)
 
 		Eventually(
 			framework.CreateResponseChecker(
@@ -770,12 +762,7 @@ The logs are attached only if there are errors.
 
 		setUpPortForward(nginxPodName, namespace)
 
-		var port int
-		if portFwdPort != 0 {
-			port = portFwdPort
-		} else {
-			port = 80
-		}
+		port := framework.GetPort(80, portFwdPort)
 
 		addr := fmt.Sprintf("%s:%d", address, port)
 

@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strconv"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -75,11 +74,7 @@ var _ = Describe("Dataplane performance", Ordered, Label("nfr", "performance"), 
 
 		setUpPortForward(nginxPodNames[0], namespace)
 
-		port := ":80"
-		if portFwdPort != 0 {
-			port = fmt.Sprintf(":%s", strconv.Itoa(portFwdPort))
-		}
-		addr = fmt.Sprintf("%s%s", address, port)
+		addr = fmt.Sprintf("%s:%d", address, framework.GetPort(80, portFwdPort))
 
 		resultsDir, err := framework.CreateResultsDir("dp-perf", version)
 		Expect(err).ToNot(HaveOccurred())

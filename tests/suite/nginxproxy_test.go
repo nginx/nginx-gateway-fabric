@@ -65,11 +65,8 @@ var _ = Describe("NginxProxy UseClusterIP", Ordered, Label("functional", "nginxp
 
 	Context("verify working traffic", func() {
 		It("should return a 200 response", func() {
-			port := 80
-			if portFwdPort != 0 {
-				port = portFwdPort
-			}
-			coffeeURL := fmt.Sprintf("http://cafe.example.com:%d/coffee", port)
+			port := framework.GetPort(80, portFwdPort)
+			coffeeURL := framework.GetURL("http://cafe.example.com/coffee", port)
 
 			Eventually(
 				func() error {

@@ -327,14 +327,8 @@ func grCheckForFailingTraffic(teaURL, coffeeURL string) error {
 // grRefreshURLs updates teaURL and coffeeURL to include the current port forward ports.
 // If no port forward is active (LoadBalancer mode), the base URLs are used unchanged.
 func grRefreshURLs(teaURL, coffeeURL *string) {
-	*coffeeURL = baseHTTPURL + "/coffee"
-	*teaURL = baseHTTPSURL + "/tea"
-	if portFwdPort != 0 {
-		*coffeeURL = fmt.Sprintf("%s:%d/coffee", baseHTTPURL, portFwdPort)
-	}
-	if portFwdHTTPSPort != 0 {
-		*teaURL = fmt.Sprintf("%s:%d/tea", baseHTTPSURL, portFwdHTTPSPort)
-	}
+	*coffeeURL = framework.GetURL(baseHTTPURL+"/coffee", portFwdPort)
+	*teaURL = framework.GetURL(baseHTTPSURL+"/tea", portFwdHTTPSPort)
 }
 
 // checkNGFFunctionality verifies that NGF is functioning correctly by:
