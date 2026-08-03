@@ -93,6 +93,8 @@ jobs:
 
       - name: Setup dotenv file
         working-directory: ./tests/scripts
+        env:
+          NGF_BRANCH: ${{ github.head_ref || github.ref_name }}
         run: |
           RUN=${{ github.run_id }}-${{ matrix.type }}
           echo "RESOURCE_NAME=gatewaylink-tests-${RUN}" >> vars.env
@@ -112,7 +114,7 @@ jobs:
           # On a pull_request, github.ref_name is the PR merge ref (e.g. "123/merge"), which the VM
           # cannot check out; github.head_ref is the source branch. Falls back to ref_name for
           # workflow_dispatch and schedule, where head_ref is empty.
-          echo "NGF_BRANCH=${{ github.head_ref || github.ref_name }}" >> vars.env
+          echo "NGF_BRANCH=${NGF_BRANCH}" >> vars.env
           echo "SOURCE_IP_RANGE=$(curl -sS -4 icanhazip.com)/32" >> vars.env
           echo "ADD_VM_IP_AUTH_NETWORKS=true" >> vars.env
           echo "PLUS_ENABLED=${{ matrix.type == 'plus' }}" >> vars.env

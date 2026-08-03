@@ -3,17 +3,17 @@
 # Creates a single-NIC BIG-IP VE on the same default VPC as the GKE cluster. Both management and data
 # traffic share the one interface. CIS runs in the cluster and programs this BIG-IP, and the test VM
 # sends traffic to its virtual server. The image is PAYG, so it self-licenses on boot and there is no
-# license step. This follows F5's GCP single-NIC VE guide.
+# license step.
 
-# Fail loudly. errexit stops on any failed command. pipefail catches a failure anywhere in a pipe.
-# errtrace runs the ERR trap inside functions and subshells. The trap prints the line and command
-# that failed so a failure is never mistaken for success.
+# F5's GCP single-NIC VE guide - https://clouddocs.f5.com/cloud/public/v1/google/Google_singleNIC.html
+
 set -o errexit
 set -o pipefail
 set -o errtrace
-trap 'rc=$?; echo "ERROR: create-bigip-vm.sh failed at line ${LINENO}: \`${BASH_COMMAND}\` (exit ${rc})" >&2; exit "${rc}"' ERR
+trap 'rc=$?; echo "ERROR: create-bigip-vm.sh failed at line ${LINENO} (exit ${rc})" >&2; exit "${rc}"' ERR
 
-source scripts/vars.env
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
+source "${SCRIPT_DIR}/vars.env"
 
 AS3_RPM_URL="https://github.com/F5Networks/f5-appsvcs-extension/releases/download/v3.56.0/f5-appsvcs-3.56.0-10.noarch.rpm"
 AS3_RPM_NAME="f5-appsvcs-3.56.0-10.noarch.rpm"
@@ -80,10 +80,7 @@ compute_ipam_pool() {
 
 # create_instance boots the BIG-IP VE with the IPAM alias range on its NIC. The pd-ssd boot disk is
 # required: on a slower HDD-backed disk the write-heavy AS3 install saturates disk I/O and wedges the
-# management plane until a reboot (F5 K000138417). The alias is added here at create time rather than
-# with a later network-interfaces update, because the create only needs compute.instances.create,
-# which the CI service account has, while a NIC update needs compute.instances.updateNetworkInterface,
-# which it does not.
+# management plane until a reboot (F5 K000138417).
 create_instance() {
     retry_gcloud gcloud compute instances create "${BIGIP_RESOURCE_NAME}" \
         --project="${GKE_PROJECT}" --zone="${GKE_CLUSTER_ZONE}" \

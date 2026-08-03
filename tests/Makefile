@@ -10,7 +10,7 @@ GITHUB_OUTPUT =
 GW_API_VERSION ?= $(shell sed -n 's/.*ref=v\(.*\)/\1/p' ../config/crd/gateway-api/standard/kustomization.yaml)## Supported Gateway API version from current NGF
 GW_API_PREV_VERSION ?= 1.5.1## Supported Gateway API version from previous NGF release
 GW_SERVICE_TYPE = NodePort## Service type to use for the gateway
-GATEWAYLINK_LABEL ?= gatewaylink## GatewayLink label filter: use "gatewaylink && cluster" to run cluster mode only
+GATEWAYLINK_LABEL ?= gatewaylink## GatewayLink label filter
 BIGIP_MGMT_PORT ?= 8443## BIG-IP management/iControl REST port
 NGF_VERSION ?= edge## NGF version to be tested
 PULL_POLICY ?= Never## Pull policy for the images

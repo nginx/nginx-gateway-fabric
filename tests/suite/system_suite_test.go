@@ -234,8 +234,7 @@ func labelInstallArgs(labelFilter string) []string {
 	}
 
 	// The GatewayLink suite fronts a Gateway with an ExternalLoadBalancer, which NGF only reconciles
-	// when the externalLoadBalancer feature is enabled at install. Otherwise NGF ignores the
-	// ExternalLoadBalancer entirely and the test times out waiting for Accepted.
+	// when the externalLoadBalancer feature is enabled at install.
 	if strings.Contains(labelFilter, "gatewaylink") {
 		args = append(args, "--set", "nginxGateway.externalLoadBalancer.enable=true")
 	}

@@ -4,7 +4,6 @@ import (
 	"context"
 	"net"
 	"net/http"
-	"os"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -101,10 +100,6 @@ func ingressLinkVSAddress() string {
 // given address. A 200 proves the whole chain is live: CIS observed the IngressLink, pushed the AS3
 // declaration, and the BIG-IP monitor marked the pool member up.
 func expectTrafficThroughVIP(address string) {
-	if os.Getenv("GATEWAYLINK_DEBUG_SLEEP") != "" {
-		GinkgoWriter.Printf("GATEWAYLINK_DEBUG_SLEEP set: ELB Accepted, sleeping 10m to inspect the traffic path live\n")
-		time.Sleep(10 * time.Minute)
-	}
 	Eventually(
 		func(g Gomega) {
 			resp, err := framework.Get(framework.Request{
@@ -206,6 +201,9 @@ var _ = Describe("GatewayLink external LB", Ordered, Label("gatewaylink"), func(
 		}
 		if *bigipVIP == "" || *bigipPassword == "" {
 			Skip("Skipping GatewayLink tests: --bigip-vip and --bigip-password must be set")
+		}
+		if *ipamRange == "" {
+			Skip("Skipping GatewayLink tests: --ipam-range must be set (required for IPAM allocation)")
 		}
 	})
 

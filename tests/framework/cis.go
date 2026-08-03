@@ -67,8 +67,6 @@ func InstallCIS(cfg CISConfig) ([]byte, error) {
 		poolMemberType = "nodeport"
 	}
 
-	// On a single-NIC GCP VE the management port is 8443, but CIS assumes 443. If CIS dials the wrong
-	// port it crashloops on a connection timeout. Append the port to the address to avoid that.
 	bigipURL := cfg.BIGIPAddress
 	if cfg.BIGIPMgmtPort != "" {
 		bigipURL = net.JoinHostPort(cfg.BIGIPAddress, cfg.BIGIPMgmtPort)
@@ -76,7 +74,6 @@ func InstallCIS(cfg CISConfig) ([]byte, error) {
 
 	args := []string{
 		"install",
-		"--debug",
 		CISReleaseName,
 		CISChart,
 		"--create-namespace",
@@ -92,8 +89,6 @@ func InstallCIS(cfg CISConfig) ([]byte, error) {
 		"--set", "args.pool_member_type=" + poolMemberType,
 		"--set", "args.insecure=true",
 		"--set", "args.log_level=DEBUG",
-		// Required: without custom-resource mode CIS never watches the IngressLink NGF creates, so no
-		// AS3 declaration is posted and no virtual server is programmed.
 		"--set", "args.custom_resource_mode=true",
 		"--wait",
 	}
@@ -103,7 +98,10 @@ func InstallCIS(cfg CISConfig) ([]byte, error) {
 		args = append(args, "--set", "args.ipam=true")
 	}
 
-	GinkgoWriter.Printf("Installing CIS with command: helm %v\n", strings.Join(args, " "))
+	GinkgoWriter.Printf(
+		"Installing CIS (release=%s, namespace=%s, poolMemberType=%s, ipam=%t)\n",
+		CISReleaseName, CISNamespace, poolMemberType, cfg.EnableIPAM,
+	)
 
 	return exec.CommandContext(context.Background(), "helm", args...).CombinedOutput()
 }
@@ -120,9 +118,6 @@ func UninstallCIS() ([]byte, error) {
 // server and pool CIS programmed in that partition. CIS does not always remove these itself on
 // teardown, especially for IPAM-allocated resources, so this keeps repeated runs against the same
 // BIG-IP from accumulating stale objects. The tenant name is the BIG-IP partition.
-//
-// It is best-effort. Callers run it during cleanup and should log rather than fail on error, since a
-// slow or unreachable management endpoint must not turn a passing test red.
 func DeleteAS3Tenant(address, port, username, password, tenant string) error {
 	mgmtPort := port
 	if mgmtPort == "" {
