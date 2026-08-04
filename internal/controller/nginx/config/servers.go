@@ -1462,7 +1462,7 @@ func extractExternalAuthInternalLocations(locations []http.Location) []http.Loca
 
 // guardrailsScansPath is the guardrails backend endpoint that inspection requests are POSTed to.
 // It is appended to the configured guardrails APIURL to form the internal location's proxy_pass
-// target. Must match SCANS_PATH in the ai-guardrails Rust module.
+// target.
 const guardrailsScansPath = "/backend/v1/scans"
 
 // guardrailsProxyPassVar is the NGINX variable name used in a guardrails internal
@@ -1506,8 +1506,7 @@ func extractGuardrailsInternalLocations(locations []http.Location, resolverConfi
 		// APIURL and set it. Certificate verification is intentionally left off here
 		// (see ProxySSLServerName doc). Both the request and response paths inspect
 		// via this same NGINX subrequest, so this proxy_ssl config governs backend
-		// TLS for both directions; there is no in-module TLS client (the former
-		// blocking minreq/rustls response-path client was removed).
+		// TLS for both directions; there is no in-module TLS client.
 		//
 		// The HTTP Host header must ALSO carry the backend hostname: when proxy_pass
 		// targets an ExternalName that NGINX resolves to a rotating IP, the default
