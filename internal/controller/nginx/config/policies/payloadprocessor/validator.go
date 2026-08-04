@@ -23,13 +23,14 @@ const (
 
 // Validator validates a PayloadProcessor policy.
 // Implements policies.Validator interface.
-type Validator struct {
-	genericValidator validation.GenericValidator
-}
+type Validator struct{}
 
 // NewValidator returns a new Validator.
-func NewValidator(genericValidator validation.GenericValidator) *Validator {
-	return &Validator{genericValidator: genericValidator}
+// The genericValidator parameter is accepted for signature parity with the other policy
+// validators (see the policy-manager registration in manager.go); PayloadProcessor validation
+// does not currently need it.
+func NewValidator(_ validation.GenericValidator) *Validator {
+	return &Validator{}
 }
 
 // Validate validates the spec of a PayloadProcessor.
@@ -71,16 +72,6 @@ func (v *Validator) validateProcessor(
 	processorPath *field.Path,
 ) field.ErrorList {
 	var allErrs field.ErrorList
-
-	if processor.Timeout != nil {
-		if err := v.genericValidator.ValidateNginxDuration(string(*processor.Timeout)); err != nil {
-			allErrs = append(allErrs, field.Invalid(
-				processorPath.Child("timeout"),
-				*processor.Timeout,
-				err.Error(),
-			))
-		}
-	}
 
 	typePath := processorPath.Child("type")
 	if processor.Type != ngfAPI.ProcessorTypeExtProcess {

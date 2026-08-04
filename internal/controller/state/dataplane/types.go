@@ -608,8 +608,6 @@ type MatchRule struct {
 // GuardrailsConfig contains the ai-guardrails / ExtProcess configuration that must be emitted into the
 // generated NGINX location for a match.
 type GuardrailsConfig struct {
-	// TimeoutMS is the optional request timeout in milliseconds.
-	TimeoutMS *int64
 	// APIURL is the resolved URL of the external Guardrails service.
 	APIURL string
 	// InternalPath is the NGINX internal location path that the guardrails module issues its

@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-	"time"
 
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -579,7 +578,6 @@ func convertGraphGuardrails(
 		Enabled:      true,
 		APIURL:       state.APIURL,
 		InternalPath: generateGuardrailsInternalPath(routeNsName, ruleIdx),
-		TimeoutMS:    convertDurationToMS(state.Timeout),
 	}
 
 	if state.AuthTokenSecret != nil {
@@ -598,30 +596,4 @@ func convertGraphGuardrails(
 func generateGuardrailsInternalPath(routeNsName types.NamespacedName, ruleIdx int) string {
 	return fmt.Sprintf("%s-guardrails-%s_%s_rule%d",
 		http.InternalRoutePathPrefix, routeNsName.Namespace, routeNsName.Name, ruleIdx)
-}
-
-// convertDurationToMS converts an ngf API Duration (e.g. "30s", "500ms", "5m", or a bare number of
-// seconds) into milliseconds. Returns nil when the duration is nil or cannot be parsed.
-func convertDurationToMS(d *ngfAPI.Duration) *int64 {
-	if d == nil {
-		return nil
-	}
-
-	s := strings.TrimSpace(string(*d))
-	if s == "" {
-		return nil
-	}
-
-	// A value without a suffix is seconds (per the Duration API contract).
-	if r := rune(s[len(s)-1]); r >= '0' && r <= '9' {
-		s += "s"
-	}
-
-	parsed, err := time.ParseDuration(s)
-	if err != nil {
-		return nil
-	}
-
-	ms := parsed.Milliseconds()
-	return &ms
 }

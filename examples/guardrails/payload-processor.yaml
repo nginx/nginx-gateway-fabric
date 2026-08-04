@@ -9,7 +9,6 @@ spec:
     name: llm-route
   processors:
   - type: ExtProcess
-    timeout: 2s
     extProcess:
       backendRef:
         group: ""

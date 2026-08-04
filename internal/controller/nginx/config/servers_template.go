@@ -301,11 +301,6 @@ server {
         {{ $proxyOrGRPC }}_set_header {{ $h.Name }} "{{ $h.Value }}";
             {{- end }}
         {{ $proxyOrGRPC }}_pass {{ $l.ProxyPass }};
-            {{- if $l.GuardrailsProxyTimeout }}
-        proxy_connect_timeout {{ $l.GuardrailsProxyTimeout }};
-        proxy_read_timeout {{ $l.GuardrailsProxyTimeout }};
-        proxy_send_timeout {{ $l.GuardrailsProxyTimeout }};
-            {{- end }}
             {{- if $l.ProxyPassRequestBody }}
         proxy_pass_request_body {{ $l.ProxyPassRequestBody }};
                 {{- if eq $l.ProxyPassRequestBody "off" }}

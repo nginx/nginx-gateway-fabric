@@ -8357,7 +8357,6 @@ func TestExecuteServers_Guardrails(t *testing.T) {
 											Enabled:      true,
 											APIURL:       "http://ext-svc.ns1.svc.cluster.local:9000",
 											InternalPath: "/_ngf-internal-guardrails-test_route1_rule0",
-											TimeoutMS:    helpers.GetPointer[int64](2000),
 										},
 									},
 								},
@@ -8372,10 +8371,6 @@ func TestExecuteServers_Guardrails(t *testing.T) {
 				"location /_ngf-internal-guardrails-test_route1_rule0 {",
 				"internal;",
 				"proxy_pass http://ext-svc.ns1.svc.cluster.local:9000/backend/v1/scans;",
-				// PayloadProcessor Timeout wired to the internal location's proxy timeouts.
-				"proxy_connect_timeout 2000ms;",
-				"proxy_read_timeout 2000ms;",
-				"proxy_send_timeout 2000ms;",
 			},
 			expAbsent: []string{
 				// In-cluster HTTP backend: no SNI directives.
@@ -8384,6 +8379,10 @@ func TestExecuteServers_Guardrails(t *testing.T) {
 				// guardrails_api_url / guardrails_timeout_ms directives were removed.
 				"guardrails_api_url",
 				"guardrails_timeout_ms",
+				// PayloadProcessor Timeout was removed; NGINX default proxy timeouts apply.
+				"proxy_connect_timeout",
+				"proxy_read_timeout",
+				"proxy_send_timeout",
 			},
 		},
 		{
@@ -9028,8 +9027,6 @@ func TestUpdateLocationGuardrails(t *testing.T) {
 		Type: http.ExternalLocationType,
 	}
 
-	timeout := int64(30000)
-
 	tests := []struct {
 		guardrails *dataplane.GuardrailsConfig
 		name       string
@@ -9041,13 +9038,12 @@ func TestUpdateLocationGuardrails(t *testing.T) {
 			expected:   baseLocation,
 		},
 		{
-			name: "guardrails with token file and timeout",
+			name: "guardrails with token file",
 			guardrails: &dataplane.GuardrailsConfig{
 				Enabled:            true,
 				APIURL:             "http://ext-svc.ns1.svc.cluster.local:9000",
 				InternalPath:       "/_ngf-internal-guardrails-ns1_route1_rule0",
 				APITokenAuthFileID: dataplane.GenerateGuardrailsTokenFileID("ns1", "token-secret"),
-				TimeoutMS:          &timeout,
 			},
 			expected: http.Location{
 				Path: "/",
@@ -9057,7 +9053,6 @@ func TestUpdateLocationGuardrails(t *testing.T) {
 					APIURL:       "http://ext-svc.ns1.svc.cluster.local:9000",
 					APITokenFile: "/etc/nginx/secrets/guardrails_token_ns1_token-secret",
 					InternalPath: "/_ngf-internal-guardrails-ns1_route1_rule0",
-					TimeoutMS:    &timeout,
 				},
 			},
 		},
@@ -9132,51 +9127,6 @@ func TestExtractGuardrailsInternalLocations(t *testing.T) {
 						Enabled:      true,
 						APIURL:       "http://ext-svc.ns1.svc.cluster.local:9000",
 						InternalPath: "/_ngf-internal-guardrails-ns1_route1_rule0",
-					},
-				},
-			},
-			expected: []http.Location{
-				{
-					Path:      "/_ngf-internal-guardrails-ns1_route1_rule0",
-					Type:      http.InternalLocationType,
-					ProxyPass: "http://ext-svc.ns1.svc.cluster.local:9000/backend/v1/scans",
-				},
-			},
-		},
-		{
-			name: "timeout set derives proxy_*_timeout on the internal location",
-			locations: []http.Location{
-				{
-					Path: "/coffee",
-					Type: http.ExternalLocationType,
-					Guardrails: &http.GuardrailsConfig{
-						Enabled:      true,
-						APIURL:       "http://ext-svc.ns1.svc.cluster.local:9000",
-						InternalPath: "/_ngf-internal-guardrails-ns1_route1_rule0",
-						TimeoutMS:    helpers.GetPointer[int64](2000),
-					},
-				},
-			},
-			expected: []http.Location{
-				{
-					Path:                   "/_ngf-internal-guardrails-ns1_route1_rule0",
-					Type:                   http.InternalLocationType,
-					ProxyPass:              "http://ext-svc.ns1.svc.cluster.local:9000/backend/v1/scans",
-					GuardrailsProxyTimeout: "2000ms",
-				},
-			},
-		},
-		{
-			name: "zero timeout leaves proxy timeout empty (nginx defaults apply)",
-			locations: []http.Location{
-				{
-					Path: "/coffee",
-					Type: http.ExternalLocationType,
-					Guardrails: &http.GuardrailsConfig{
-						Enabled:      true,
-						APIURL:       "http://ext-svc.ns1.svc.cluster.local:9000",
-						InternalPath: "/_ngf-internal-guardrails-ns1_route1_rule0",
-						TimeoutMS:    helpers.GetPointer[int64](0),
 					},
 				},
 			},

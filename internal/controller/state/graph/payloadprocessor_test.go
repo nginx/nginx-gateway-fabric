@@ -574,7 +574,7 @@ func TestResolvePayloadProcessor(t *testing.T) {
 		},
 	}
 
-	newPP := func(withToken bool, timeout *ngfAPIv1alpha1.Duration) *ngfAPIv1alpha1.PayloadProcessor {
+	newPP := func(withToken bool) *ngfAPIv1alpha1.PayloadProcessor {
 		ext := &ngfAPIv1alpha1.ExtProcessConfig{
 			BackendRef: v1.BackendObjectReference{
 				Name: "ext-svc",
@@ -588,7 +588,7 @@ func TestResolvePayloadProcessor(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{Namespace: policyNs, Name: "pp"},
 			Spec: ngfAPIv1alpha1.PayloadProcessorSpec{
 				Processors: []ngfAPIv1alpha1.PayloadProcessorEntry{
-					{Type: ngfAPIv1alpha1.ProcessorTypeExtProcess, ExtProcess: ext, Timeout: timeout},
+					{Type: ngfAPIv1alpha1.ProcessorTypeExtProcess, ExtProcess: ext},
 				},
 			},
 		}
@@ -603,10 +603,8 @@ func TestResolvePayloadProcessor(t *testing.T) {
 		},
 	}
 
-	timeout := helpers.GetPointer[ngfAPIv1alpha1.Duration]("30s")
-
 	// ppMissingService is a copy of the default PP whose backendRef points at a missing Service.
-	ppMissingService := newPP(false, nil)
+	ppMissingService := newPP(false)
 	ppMissingService.Spec.Processors[0].ExtProcess.BackendRef.Name = "missing"
 
 	// ppNoEntry has no ExtProcess processor entry.
@@ -618,19 +616,18 @@ func TestResolvePayloadProcessor(t *testing.T) {
 	}
 
 	// ppMissingToken references an auth token Secret that does not exist.
-	ppMissingToken := newPP(true, nil)
+	ppMissingToken := newPP(true)
 	ppMissingToken.Spec.Processors[0].ExtProcess.AuthTokenRef = &ngfAPIv1alpha1.LocalObjectReference{
 		Name: "missing-secret",
 	}
 
 	// ppCrossNamespace targets a Service in a different namespace.
-	ppCrossNamespace := newPP(false, nil)
+	ppCrossNamespace := newPP(false)
 	ppCrossNamespace.Spec.Processors[0].ExtProcess.BackendRef.Namespace = helpers.GetPointer(v1.Namespace(backendNs))
 
 	tests := []struct {
 		pp                *ngfAPIv1alpha1.PayloadProcessor
 		services          map[types.NamespacedName]*corev1.Service
-		expTimeout        *ngfAPIv1alpha1.Duration
 		expTrackedSecret  *types.NamespacedName
 		name              string
 		expAPIURL         string
@@ -642,12 +639,11 @@ func TestResolvePayloadProcessor(t *testing.T) {
 	}{
 		{
 			name:              "valid processor with token populates state",
-			pp:                newPP(true, timeout),
+			pp:                newPP(true),
 			expValid:          true,
 			expState:          true,
 			expAPIURL:         "http://ext-svc.ns1.svc.cluster.local:9000",
 			expToken:          "tok",
-			expTimeout:        timeout,
 			expBackendService: svcNsName,
 		},
 		{
@@ -725,7 +721,6 @@ func TestResolvePayloadProcessor(t *testing.T) {
 			g.Expect(state).ToNot(BeNil())
 			g.Expect(state.APIURL).To(Equal(test.expAPIURL))
 			g.Expect(state.BackendService).To(Equal(test.expBackendService))
-			g.Expect(state.Timeout).To(Equal(test.expTimeout))
 
 			if test.expToken != "" {
 				g.Expect(string(state.ResolvedAuthToken)).To(Equal(test.expToken))

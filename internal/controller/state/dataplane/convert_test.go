@@ -2117,44 +2117,6 @@ func TestConvertWAFBundles(t *testing.T) {
 	}
 }
 
-func TestConvertDurationToMS(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		in     *ngfAPIv1alpha1.Duration
-		name   string
-		expMS  int64
-		expNil bool
-	}{
-		{name: "nil duration", in: nil, expNil: true},
-		{name: "empty string", in: helpers.GetPointer[ngfAPIv1alpha1.Duration](""), expNil: true},
-		{name: "whitespace only", in: helpers.GetPointer[ngfAPIv1alpha1.Duration]("   "), expNil: true},
-		{name: "seconds unit", in: helpers.GetPointer[ngfAPIv1alpha1.Duration]("30s"), expMS: 30000},
-		{name: "milliseconds unit", in: helpers.GetPointer[ngfAPIv1alpha1.Duration]("500ms"), expMS: 500},
-		{name: "minutes unit", in: helpers.GetPointer[ngfAPIv1alpha1.Duration]("2m"), expMS: 120000},
-		{name: "hours unit", in: helpers.GetPointer[ngfAPIv1alpha1.Duration]("1h"), expMS: 3600000},
-		{name: "combined units", in: helpers.GetPointer[ngfAPIv1alpha1.Duration]("1m30s"), expMS: 90000},
-		{name: "surrounding whitespace trimmed", in: helpers.GetPointer[ngfAPIv1alpha1.Duration](" 30s "), expMS: 30000},
-		{name: "bare number is seconds", in: helpers.GetPointer[ngfAPIv1alpha1.Duration]("5"), expMS: 5000},
-		{name: "invalid returns nil", in: helpers.GetPointer[ngfAPIv1alpha1.Duration]("bogus"), expNil: true},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
-			g := NewWithT(t)
-
-			got := convertDurationToMS(test.in)
-			if test.expNil {
-				g.Expect(got).To(BeNil())
-				return
-			}
-			g.Expect(got).ToNot(BeNil())
-			g.Expect(*got).To(Equal(test.expMS))
-		})
-	}
-}
-
 func TestConvertGraphGuardrails(t *testing.T) {
 	t.Parallel()
 
@@ -2163,20 +2125,17 @@ func TestConvertGraphGuardrails(t *testing.T) {
 	validState := func() *graph.PolicyPayloadProcessorState {
 		return &graph.PolicyPayloadProcessorState{
 			APIURL:            "http://ext-svc.ns1.svc.cluster.local:9000",
-			Timeout:           helpers.GetPointer[ngfAPIv1alpha1.Duration]("30s"),
 			AuthTokenSecret:   &secretNsName,
 			ResolvedAuthToken: []byte("tok"),
 		}
 	}
 
 	tests := []struct {
-		route        *graph.L7Route
-		name         string
-		expURL       string
-		expTimeoutMS int64
-		expNil       bool
-		expFileSet   bool
-		expTimeout   bool
+		route      *graph.L7Route
+		name       string
+		expURL     string
+		expNil     bool
+		expFileSet bool
 	}{
 		{
 			name:   "nil route",
@@ -2207,10 +2166,8 @@ func TestConvertGraphGuardrails(t *testing.T) {
 			route: &graph.L7Route{
 				EffectivePayloadProcessor: &graph.Policy{Valid: true, PayloadProcessorState: validState()},
 			},
-			expURL:       "http://ext-svc.ns1.svc.cluster.local:9000",
-			expFileSet:   true,
-			expTimeout:   true,
-			expTimeoutMS: 30000,
+			expURL:     "http://ext-svc.ns1.svc.cluster.local:9000",
+			expFileSet: true,
 		},
 		{
 			name: "valid policy without token",
@@ -2253,13 +2210,6 @@ func TestConvertGraphGuardrails(t *testing.T) {
 			g.Expect(got.Enabled).To(BeTrue())
 			g.Expect(got.APIURL).To(Equal(test.expURL))
 			g.Expect(got.InternalPath).To(Equal("/_ngf-internal-guardrails-ns1_route1_rule0"))
-
-			if test.expTimeout {
-				g.Expect(got.TimeoutMS).ToNot(BeNil())
-				g.Expect(*got.TimeoutMS).To(Equal(test.expTimeoutMS))
-			} else {
-				g.Expect(got.TimeoutMS).To(BeNil())
-			}
 
 			if test.expFileSet {
 				g.Expect(got.APITokenAuthFileID).To(Equal(GenerateGuardrailsTokenFileID("ns1", "token-secret")))

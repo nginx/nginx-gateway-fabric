@@ -16,7 +16,6 @@ import (
 // PolicyPayloadProcessorState holds resolved ExtProcess state for a PayloadProcessor Policy.
 // This is only populated for PayloadProcessor resources.
 type PolicyPayloadProcessorState struct {
-	Timeout           *ngfAPIv1alpha1.Duration
 	AuthTokenSecret   *types.NamespacedName
 	BackendService    types.NamespacedName
 	APIURL            string
@@ -100,7 +99,6 @@ func resolvePayloadProcessor(
 		APIURL:            apiURL,
 		ResolvedAuthToken: token,
 		AuthTokenSecret:   tokenSecret,
-		Timeout:           entry.Timeout,
 		BackendService:    svcNsName,
 	}
 }

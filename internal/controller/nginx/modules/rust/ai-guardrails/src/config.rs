@@ -17,11 +17,10 @@ pub struct ModuleConfig {
     /// performed via a non-blocking NGINX subrequest to this location (which
     /// `proxy_pass`es to the guardrails API), instead of a blocking HTTP call.
     ///
-    /// Timeouts against the guardrails backend are governed by that internal
-    /// location's `proxy_connect_timeout` / `proxy_read_timeout` /
-    /// `proxy_send_timeout` (the subrequest inherits them), derived by the
-    /// control plane from the `PayloadProcessor` `Timeout`. The module itself
-    /// holds no timeout configuration.
+    /// The module holds no timeout configuration. Time bounds against the
+    /// guardrails backend are whatever that internal location's `proxy_*_timeout`
+    /// directives are; absent any override, NGINX's defaults (60s per operation)
+    /// apply. There is no configurable `PayloadProcessor` timeout.
     pub internal_uri: Option<String>,
 }
 

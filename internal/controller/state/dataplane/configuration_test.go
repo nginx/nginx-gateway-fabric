@@ -3043,7 +3043,6 @@ func TestBuildConfiguration_Guardrails(t *testing.T) {
 			Valid: true,
 			PayloadProcessorState: &graph.PolicyPayloadProcessorState{
 				APIURL:            "http://ext-svc.test.svc.cluster.local:9000",
-				Timeout:           helpers.GetPointer[ngfAPIv1alpha1.Duration]("30s"),
 				AuthTokenSecret:   &tokenSecretNsName,
 				ResolvedAuthToken: []byte("tok"),
 			},
@@ -3119,8 +3118,6 @@ func TestBuildConfiguration_Guardrails(t *testing.T) {
 		g.Expect(gc.Enabled).To(BeTrue())
 		g.Expect(gc.APIURL).To(Equal("http://ext-svc.test.svc.cluster.local:9000"))
 		g.Expect(gc.APITokenAuthFileID).To(Equal(tokenFileID))
-		g.Expect(gc.TimeoutMS).ToNot(BeNil())
-		g.Expect(*gc.TimeoutMS).To(Equal(int64(30000)))
 	})
 
 	t.Run("route without processor leaves guardrails disabled", func(t *testing.T) {
