@@ -1504,7 +1504,10 @@ func extractGuardrailsInternalLocations(locations []http.Location, resolverConfi
 		// handshake or multi-tenant TLS terminators reject it (alert 40). NGINX
 		// defaults proxy_ssl_server_name to off, so derive the SNI hostname from the
 		// APIURL and set it. Certificate verification is intentionally left off here
-		// (see ProxySSLServerName doc); the response path (rustls) still verifies.
+		// (see ProxySSLServerName doc). Both the request and response paths inspect
+		// via this same NGINX subrequest, so this proxy_ssl config governs backend
+		// TLS for both directions; there is no in-module TLS client (the former
+		// blocking minreq/rustls response-path client was removed).
 		//
 		// The HTTP Host header must ALSO carry the backend hostname: when proxy_pass
 		// targets an ExternalName that NGINX resolves to a rotating IP, the default
@@ -1512,6 +1515,16 @@ func extractGuardrailsInternalLocations(locations []http.Location, resolverConfi
 		// expects, and the edge rejects the request with 403 before it reaches the
 		// backend app. Set Host explicitly to the APIURL hostname.
 		// In-cluster HTTP backends need neither SNI nor a Host override.
+		// Bound the inspection subrequest to the guardrails backend with the
+		// PayloadProcessor Timeout (carried as TimeoutMS). Applied to all three
+		// proxy timeouts so a single "processor completion" budget governs
+		// connect + send + read. When unset or 0, no directives are emitted and
+		// NGINX's default proxy timeouts (60s) apply.
+		var proxyTimeout string
+		if loc.Guardrails.TimeoutMS != nil && *loc.Guardrails.TimeoutMS > 0 {
+			proxyTimeout = fmt.Sprintf("%dms", *loc.Guardrails.TimeoutMS)
+		}
+
 		var sslServerName string
 		var proxyPassVar string
 		var proxySetHeaders []http.Header
@@ -1535,6 +1548,7 @@ func extractGuardrailsInternalLocations(locations []http.Location, resolverConfi
 			ProxyPass:              proxyPass,
 			ProxySSLServerName:     sslServerName,
 			GuardrailsProxyPassVar: proxyPassVar,
+			GuardrailsProxyTimeout: proxyTimeout,
 			ProxySetHeaders:        proxySetHeaders,
 		})
 	}

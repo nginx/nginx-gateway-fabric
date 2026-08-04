@@ -62,14 +62,6 @@ ngx_conf_handler!(
     }
 );
 
-ngx_conf_handler!(
-    ngx_http_guardrails_set_api_url,
-    "guardrails_api_url",
-    |conf: &mut ModuleConfig, val: &str| {
-        conf.api_url = Some(val.to_string());
-    }
-);
-
 /// Handler for `guardrails_api_token_file <path>`.
 /// Reads the token from the given file at NGINX config-load time, strips whitespace, and stores it
 /// in `ModuleConfig.api_token` exactly as if `guardrails_api_token` had been used.
@@ -127,16 +119,6 @@ extern "C" fn ngx_http_guardrails_set_api_token_file(
 }
 
 ngx_conf_handler!(
-    ngx_http_guardrails_set_timeout,
-    "guardrails_timeout_ms",
-    |conf: &mut ModuleConfig, val: &str| {
-        if let Ok(ms) = val.parse::<u64>() {
-            conf.timeout_ms = ms;
-        }
-    }
-);
-
-ngx_conf_handler!(
     ngx_http_guardrails_set_internal_uri,
     "guardrails_internal_uri",
     |conf: &mut ModuleConfig, val: &str| {
@@ -145,7 +127,7 @@ ngx_conf_handler!(
 );
 
 // NGINX directives table
-pub(crate) static mut NGX_HTTP_GUARDRAILS_COMMANDS: [ngx_command_t; 6] = [
+pub(crate) static mut NGX_HTTP_GUARDRAILS_COMMANDS: [ngx_command_t; 4] = [
     ngx_command_t {
         name: ngx_string!("guardrails_filter"),
         type_: (NGX_HTTP_LOC_CONF | NGX_CONF_FLAG) as ngx_uint_t,
@@ -155,25 +137,9 @@ pub(crate) static mut NGX_HTTP_GUARDRAILS_COMMANDS: [ngx_command_t; 6] = [
         post: ptr::null_mut(),
     },
     ngx_command_t {
-        name: ngx_string!("guardrails_api_url"),
-        type_: (NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1) as ngx_uint_t,
-        set: Some(ngx_http_guardrails_set_api_url),
-        conf: NGX_HTTP_LOC_CONF_OFFSET,
-        offset: 0,
-        post: ptr::null_mut(),
-    },
-    ngx_command_t {
         name: ngx_string!("guardrails_api_token_file"),
         type_: (NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1) as ngx_uint_t,
         set: Some(ngx_http_guardrails_set_api_token_file),
-        conf: NGX_HTTP_LOC_CONF_OFFSET,
-        offset: 0,
-        post: ptr::null_mut(),
-    },
-    ngx_command_t {
-        name: ngx_string!("guardrails_timeout_ms"),
-        type_: (NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1) as ngx_uint_t,
-        set: Some(ngx_http_guardrails_set_timeout),
         conf: NGX_HTTP_LOC_CONF_OFFSET,
         offset: 0,
         post: ptr::null_mut(),

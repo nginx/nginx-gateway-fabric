@@ -8357,6 +8357,7 @@ func TestExecuteServers_Guardrails(t *testing.T) {
 											Enabled:      true,
 											APIURL:       "http://ext-svc.ns1.svc.cluster.local:9000",
 											InternalPath: "/_ngf-internal-guardrails-test_route1_rule0",
+											TimeoutMS:    helpers.GetPointer[int64](2000),
 										},
 									},
 								},
@@ -8367,16 +8368,22 @@ func TestExecuteServers_Guardrails(t *testing.T) {
 			},
 			expPresent: []string{
 				"guardrails_filter on;",
-				"guardrails_api_url http://ext-svc.ns1.svc.cluster.local:9000;",
 				"guardrails_internal_uri /_ngf-internal-guardrails-test_route1_rule0;",
 				"location /_ngf-internal-guardrails-test_route1_rule0 {",
 				"internal;",
 				"proxy_pass http://ext-svc.ns1.svc.cluster.local:9000/backend/v1/scans;",
+				// PayloadProcessor Timeout wired to the internal location's proxy timeouts.
+				"proxy_connect_timeout 2000ms;",
+				"proxy_read_timeout 2000ms;",
+				"proxy_send_timeout 2000ms;",
 			},
 			expAbsent: []string{
 				// In-cluster HTTP backend: no SNI directives.
 				"proxy_ssl_server_name",
 				"proxy_ssl_name",
+				// guardrails_api_url / guardrails_timeout_ms directives were removed.
+				"guardrails_api_url",
+				"guardrails_timeout_ms",
 			},
 		},
 		{
@@ -9125,6 +9132,51 @@ func TestExtractGuardrailsInternalLocations(t *testing.T) {
 						Enabled:      true,
 						APIURL:       "http://ext-svc.ns1.svc.cluster.local:9000",
 						InternalPath: "/_ngf-internal-guardrails-ns1_route1_rule0",
+					},
+				},
+			},
+			expected: []http.Location{
+				{
+					Path:      "/_ngf-internal-guardrails-ns1_route1_rule0",
+					Type:      http.InternalLocationType,
+					ProxyPass: "http://ext-svc.ns1.svc.cluster.local:9000/backend/v1/scans",
+				},
+			},
+		},
+		{
+			name: "timeout set derives proxy_*_timeout on the internal location",
+			locations: []http.Location{
+				{
+					Path: "/coffee",
+					Type: http.ExternalLocationType,
+					Guardrails: &http.GuardrailsConfig{
+						Enabled:      true,
+						APIURL:       "http://ext-svc.ns1.svc.cluster.local:9000",
+						InternalPath: "/_ngf-internal-guardrails-ns1_route1_rule0",
+						TimeoutMS:    helpers.GetPointer[int64](2000),
+					},
+				},
+			},
+			expected: []http.Location{
+				{
+					Path:                   "/_ngf-internal-guardrails-ns1_route1_rule0",
+					Type:                   http.InternalLocationType,
+					ProxyPass:              "http://ext-svc.ns1.svc.cluster.local:9000/backend/v1/scans",
+					GuardrailsProxyTimeout: "2000ms",
+				},
+			},
+		},
+		{
+			name: "zero timeout leaves proxy timeout empty (nginx defaults apply)",
+			locations: []http.Location{
+				{
+					Path: "/coffee",
+					Type: http.ExternalLocationType,
+					Guardrails: &http.GuardrailsConfig{
+						Enabled:      true,
+						APIURL:       "http://ext-svc.ns1.svc.cluster.local:9000",
+						InternalPath: "/_ngf-internal-guardrails-ns1_route1_rule0",
+						TimeoutMS:    helpers.GetPointer[int64](0),
 					},
 				},
 			},

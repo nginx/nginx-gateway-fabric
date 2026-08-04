@@ -103,6 +103,13 @@ type Location struct {
 	// causes TLS handshake failures and the module fail-closing with 403. Only set when a
 	// DNS resolver is configured; otherwise the location falls back to a literal proxy_pass.
 	GuardrailsProxyPassVar string
+	// GuardrailsProxyTimeout, when non-empty, emits proxy_connect_timeout / proxy_read_timeout /
+	// proxy_send_timeout (an NGINX time value such as "2000ms") on a guardrails internal location,
+	// bounding the non-blocking inspection subrequest to the guardrails backend. It is derived by
+	// the control plane from the PayloadProcessor Timeout (see GuardrailsConfig.TimeoutMS). When
+	// empty (Timeout unset or 0), NGINX's default proxy timeouts (60s) apply. Only guardrails
+	// internal locations set this field, so it never affects other locations.
+	GuardrailsProxyTimeout string
 	// ProxyHTTPVersion is the HTTP protocol version for proxying (e.g. "1.1" or "2").
 	// When empty, NGINX defaults to "1.1".
 	ProxyHTTPVersion string
@@ -261,9 +268,12 @@ type AuthBasic struct {
 
 // GuardrailsConfig holds the values for the ai-guardrails module directives on a location.
 type GuardrailsConfig struct {
-	// TimeoutMS renders guardrails_timeout_ms; unset leaves the directive out (Rust default applies).
+	// TimeoutMS carries the PayloadProcessor Timeout (in milliseconds). It is not a directive itself;
+	// it is used to derive the guardrails internal location's proxy_connect/read/send_timeout
+	// (see Location.GuardrailsProxyTimeout). Unset or 0 means NGINX's default proxy timeouts apply.
 	TimeoutMS *int64
-	// APIURL renders guardrails_api_url (the ExtProcess backend base URL).
+	// APIURL is the ExtProcess backend base URL. It is not emitted as a directive; the control plane
+	// uses it to build the guardrails internal location's proxy_pass (<APIURL>/backend/v1/scans).
 	APIURL string
 	// APITokenFile renders guardrails_api_token_file (absolute path to the auth token file).
 	APITokenFile string

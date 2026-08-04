@@ -44,9 +44,10 @@ The feature spans four layers. This module is the last one.
    - Configuration.GuardrailsEnabled  (true if any route has guardrails)
           │
           ▼
-  nginx.conf generation (internal/controller/nginx/config/*)
+   nginx.conf generation (internal/controller/nginx/config/*)
    - main_config_template.go: load_module modules/libai_guardrails.so;   (if GuardrailsEnabled)
    - servers_template.go:     guardrails_* directives inside a location   (per route)
+   - servers_template.go:     proxy_*_timeout on the internal location    (from TimeoutMS)
           │
           ▼
   THIS MODULE (libai_guardrails.so)
@@ -59,18 +60,21 @@ The exact directives the control plane emits into each `location` block
 ```nginx
 location /coffee {
     guardrails_filter on;
-    guardrails_api_url http://guardrails-api.default.svc.cluster.local:443;
     guardrails_api_token_file /etc/nginx/secrets/guardrails_token_default_guardrails-token;
-    guardrails_timeout_ms 2000;
     guardrails_internal_uri /_ngf-internal-guardrails-default_route1_rule0;
     # ...proxy_pass to the LLM upstream...
 }
 
 # The control plane also emits a deduplicated internal location that both the
-# request and response paths subrequest into (one per distinct guardrails_internal_uri):
+# request and response paths subrequest into (one per distinct guardrails_internal_uri).
+# The backend URL and the PayloadProcessor Timeout live here, NOT on the module:
 location /_ngf-internal-guardrails-default_route1_rule0 {
     internal;
     proxy_pass http://guardrails-api.default.svc.cluster.local:443/backend/v1/scans;
+    # from PayloadProcessor Timeout (omitted entirely when unset/0 -> nginx defaults):
+    proxy_connect_timeout 2000ms;
+    proxy_read_timeout 2000ms;
+    proxy_send_timeout 2000ms;
 }
 ```
 
@@ -83,9 +87,10 @@ load_module modules/libai_guardrails.so;
 
 ### Backend addressing (in-cluster vs external)
 
-The value of `guardrails_api_url` is derived from the `PayloadProcessor` policy's `backendRef`
-Service by `resolveExtProcessURL` (`internal/controller/state/graph/payloadprocessor.go`). The URL
-scheme is chosen from the Service *type*:
+The backend URL is derived from the `PayloadProcessor` policy's `backendRef` Service by
+`resolveExtProcessURL` (`internal/controller/state/graph/payloadprocessor.go`). It is **not** passed
+to the module (there is no `guardrails_api_url` directive); the control plane uses it solely to build
+the internal location's `proxy_pass`. The URL scheme is chosen from the Service *type*:
 
 | Backend location | Service type | Resolved URL |
 | ------------------ | ------------- | -------------- |
@@ -145,12 +150,12 @@ A few Rust/NGINX concepts you need in order to read the code:
 | File | What it contains |
 | ------ | ------------------ |
 | `src/lib.rs` | Slim crate root / registration hub. Declares the submodules, defines the `Module` type and its `HttpModule` / `HttpModuleLocationConf` impls, and in `postconfiguration` registers the access-phase handler + header / request-body / response-body filters (wiring the `directives`, `ctx`, `request_path`, and `response_path` modules together). Holds the `ngx_modules!` registration and the `ngx_http_guardrails_module` static. |
-| `src/directives.rs` | The directive table (`NGX_HTTP_GUARDRAILS_COMMANDS`) and the five config-parsing handlers (`enable`, `api_url`, `api_token_file`, `timeout`, `internal_uri`) plus the `ngx_conf_handler!` macro they share. |
+| `src/directives.rs` | The directive table (`NGX_HTTP_GUARDRAILS_COMMANDS`) and the three config-parsing handlers (`enable`, `api_token_file`, `internal_uri`) plus the `ngx_conf_handler!` macro they share. |
 | `src/ctx.rs` | The FFI seam shared by both paths: the stored next-filter statics (`NGX_HTTP_NEXT_*`) and their `call_next_*` wrappers, per-request `StreamContext` allocation/cleanup (`get_module_ctx_mut`, `alloc_stream_ctx`), and SSE content-type detection (`is_sse_response` / `is_sse_content_type`). Co-locates the SSE + `call_next` unit tests. |
 | `src/decision.rs` | Pure, NGINX-free decision logic shared by both paths, lifted out of the FFI handlers so it can be unit-tested: `verdict_from_inspection` (fail-closed allow/block mapping), `decide_access_action` (access-handler state machine), `decide_response_action` (body-filter branch precedence), and `block_commit_kind` (SSE-vs-buffered block selector). All tests co-located. |
 | `src/request_path.rs` | The async request-inspection path: the access-phase handler and request-body filter (body read → spawn task → phase re-drive), prompt extraction (`extract_inspection_content`), per-request `RequestInspectState`, and the 403 sender. Consumes `decision::{decide_access_action, verdict_from_inspection}`. Co-locates the prompt-extraction + request-block-body unit tests. |
 | `src/response_path.rs` | The async response-inspection path: the header filter and response-body filter (buffer → spawn task → `resume_output` → single finalize), the `BodyCommit` commit-status enum, and the stream-termination / blocked-response senders. Co-locates the `BodyCommit` unit test. |
-| `src/config.rs` | `ModuleConfig` — the per-`location` configuration struct (including `internal_uri`), its `Default` values, the `MAX_RESPONSE_BYTES` constant, and the `inspect_requests()` / `inspect_responses()` helpers (both return `enabled`; when on, both directions are inspected). `api_url` / `timeout_ms` are retained only so their directives parse; both are inert in the module (see the field docs). |
+| `src/config.rs` | `ModuleConfig` — the per-`location` configuration struct (`enabled`, `api_token`, `api_token_file`, `internal_uri`), its derived `Default`, the `MAX_RESPONSE_BYTES` constant, and the `inspect_requests()` / `inspect_responses()` helpers (both return `enabled`; when on, both directions are inspected). Holds no backend-URL or timeout config: the backend URL lives control-plane side in the internal location's `proxy_pass`, and timeouts are that location's `proxy_*_timeout`. |
 | `src/subrequest_client.rs` | The **shared** async inspection client used by **both** the request and response paths. `inspect_content_async` synthesizes the Guardrails JSON request, issues an in-memory NGINX **subrequest** into `guardrails_internal_uri`, and bridges the subrequest completion callback back to the awaiting task via a `oneshot` channel (`PostSubrequest`). Non-blocking: the worker keeps serving other connections while the scan runs. |
 | `src/error.rs` | The path-agnostic `GuardrailsError` type (fail-closed on any `Err`) and the shared `GUARDRAILS_USER_AGENT` constant. Used by `subrequest_client.rs` for both directions. |
 | `src/sync_ptr.rs` | The canonical `AssertSendSync<T>` wrapper used to move raw NGINX pointers into the single-threaded `'static` async tasks spawned by both paths. |
@@ -170,11 +175,15 @@ All directives are valid in the `location` context. Defaults come from
 | Directive | Argument | Default | Set by NGF? | Purpose |
 | ----------- | ---------- | --------- | ------------- | --------- |
 | `guardrails_filter` | `on` / `off` | `off` | Yes | Master enable switch for the location. |
-| `guardrails_api_url` | URL | *(none)* | Yes | Base URL of the Guardrails API. Now **inert in the module** — the backend URL lives in the internal location's `proxy_pass` (`<api_url>/backend/v1/scans`). The directive is still emitted/parsed for config visibility. |
-| `guardrails_internal_uri` | path | *(none)* | Yes | URI of the internal NGINX location that **both** the request and response paths subrequest into for inspection. Points at a generated `internal;` location that `proxy_pass`es to `<api_url>/backend/v1/scans`. If unset, inspection fails **closed** (request path returns `403`; response path blocks). |
+| `guardrails_internal_uri` | path | *(none)* | Yes | URI of the internal NGINX location that **both** the request and response paths subrequest into for inspection. Points at a generated `internal;` location that `proxy_pass`es to the backend's `/backend/v1/scans`. If unset, inspection fails **closed** (request path returns `403`; response path blocks). |
 | `guardrails_api_token_file` | path | *(none)* | Yes (when a token Secret is configured) | Reads the bearer token from a file at config-load time. |
-| `guardrails_timeout_ms` | integer (ms) | `5000` | Yes (when `timeout` is set on the policy) | Now **inert in the module** — backend timeouts are governed by the internal location's `proxy_*_timeout` (the subrequest inherits them). The directive is still emitted/parsed for config visibility. |
 
+> The backend URL and the request timeout are **not** module directives. The backend URL is baked
+> into the internal location's `proxy_pass` by the control plane; the `PayloadProcessor` `Timeout`
+> is rendered as `proxy_connect_timeout` / `proxy_read_timeout` / `proxy_send_timeout` on that same
+> internal location (unset or `0` → NGINX's 60s defaults). The earlier `guardrails_api_url` and
+> `guardrails_timeout_ms` directives, which were inert in the module, have been removed.
+>
 > When the filter is enabled, **both** the request and response directions are inspected; there is
 > no directive to select a single direction. The response buffer cap is a fixed module constant
 > (`MAX_RESPONSE_BYTES`, 10 MB): a response exceeding it is blocked (fail-closed) rather than
@@ -201,7 +210,7 @@ and how each hands control back once the verdict is known:
 | Guardrails call | **Non-blocking** NGINX **subrequest** into `guardrails_internal_uri` (`ngx::async_::spawn`) | **Non-blocking** NGINX **subrequest** into `guardrails_internal_uri` (`ngx::async_::spawn`) |
 | Worker impact | Worker keeps serving other connections while the Guardrails backend is slow | Worker keeps serving other connections while the Guardrails backend is slow |
 | DNS / connection | Through NGINX's own upstream + resolver machinery (the internal `proxy_pass` location) | Same — the same internal `proxy_pass` location |
-| Backend addressing | `guardrails_internal_uri` → internal location → `proxy_pass <api_url>/backend/v1/scans` | Same internal location |
+| Backend addressing | `guardrails_internal_uri` → internal location → `proxy_pass <backend-url>/backend/v1/scans` (+ `proxy_*_timeout` from the policy `Timeout`) | Same internal location |
 | Suspend / resume | Return `NGX_DONE`, then re-drive the **phase engine** (`resume_phases`) | Return `NGX_OK` without forwarding, then push output + finalize once (`resume_output`) |
 
 **Why they resume differently.** A body filter cannot suspend-and-be-called-again the way an

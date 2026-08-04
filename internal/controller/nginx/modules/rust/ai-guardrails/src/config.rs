@@ -1,17 +1,10 @@
 //! Configuration module for guardrails filter directives
 
 /// Module configuration for location context
+#[derive(Default)]
 pub struct ModuleConfig {
     /// Enable/disable the guardrails filter
     pub enabled: bool,
-
-    /// Guardrails API base URL, set by `guardrails_api_url`.
-    ///
-    /// Retained only so the directive parses; both inspection directions now
-    /// reach the backend via the internal subrequest location (`internal_uri`),
-    /// not via a direct call from the module. The concrete backend URL lives in
-    /// the internal location's `proxy_pass`. Kept for config/debug visibility.
-    pub api_url: Option<String>,
 
     /// Guardrails API token (set either inline via guardrails_api_token or from a
     /// file via guardrails_api_token_file; the file variant is preferred for secret safety).
@@ -24,14 +17,13 @@ pub struct ModuleConfig {
     /// Set by `guardrails_internal_uri`. When present, request inspection is
     /// performed via a non-blocking NGINX subrequest to this location (which
     /// `proxy_pass`es to the guardrails API), instead of a blocking HTTP call.
-    pub internal_uri: Option<String>,
-
-    /// Request timeout in milliseconds, set by `guardrails_timeout_ms`.
     ///
-    /// Retained only so the directive parses. Timeouts against the guardrails
-    /// backend are now governed by the internal location's `proxy_*_timeout`
-    /// settings (the subrequest inherits them), not by the module.
-    pub timeout_ms: u64,
+    /// Timeouts against the guardrails backend are governed by that internal
+    /// location's `proxy_connect_timeout` / `proxy_read_timeout` /
+    /// `proxy_send_timeout` (the subrequest inherits them), derived by the
+    /// control plane from the `PayloadProcessor` `Timeout`. The module itself
+    /// holds no timeout configuration.
+    pub internal_uri: Option<String>,
 }
 
 /// Maximum bytes to buffer from a response before failing closed.
@@ -40,19 +32,6 @@ pub struct ModuleConfig {
 /// module constant. A response exceeding this cap is blocked rather than
 /// buffered unbounded (which could exhaust worker memory).
 pub const MAX_RESPONSE_BYTES: usize = 10 * 1024 * 1024;
-
-impl Default for ModuleConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            api_url: None,
-            api_token: None,
-            api_token_file: None,
-            internal_uri: None,
-            timeout_ms: 5000,
-        }
-    }
-}
 
 impl ModuleConfig {
     /// Should we inspect requests?
@@ -80,11 +59,9 @@ mod tests {
     fn test_default_values() {
         let conf = ModuleConfig::default();
         assert!(!conf.enabled);
-        assert!(conf.api_url.is_none());
         assert!(conf.api_token.is_none());
         assert!(conf.api_token_file.is_none());
         assert!(conf.internal_uri.is_none());
-        assert_eq!(conf.timeout_ms, 5000);
     }
 
     /// Helper to build a config with a given enabled flag.
