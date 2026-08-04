@@ -382,11 +382,12 @@ func TestResolveExtProcessURL(t *testing.T) {
 	}
 
 	tests := []struct {
-		ext           *ngfAPIv1alpha1.ExtProcessConfig
-		name          string
-		clusterDomain string
-		expURL        string
-		expErrSub     string
+		ext             *ngfAPIv1alpha1.ExtProcessConfig
+		name            string
+		clusterDomain   string
+		expURL          string
+		expErrSub       string
+		expExternalName bool
 	}{
 		{
 			name:          "ClusterIP Service resolves to cluster-local http URL",
@@ -407,10 +408,11 @@ func TestResolveExtProcessURL(t *testing.T) {
 			expURL:        "http://ext-svc.ns1.svc.cluster.local:9000",
 		},
 		{
-			name:          "ExternalName Service resolves to https URL with external hostname",
-			ext:           ext("ext-name-svc", 8443),
-			clusterDomain: "cluster.local",
-			expURL:        "https://guardrails.example.com:8443",
+			name:            "ExternalName Service resolves to https URL with external hostname",
+			ext:             ext("ext-name-svc", 8443),
+			clusterDomain:   "cluster.local",
+			expURL:          "https://guardrails.example.com:8443",
+			expExternalName: true,
 		},
 		{
 			name:          "missing Service returns error",
@@ -425,15 +427,17 @@ func TestResolveExtProcessURL(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			url, err := resolveExtProcessURL(policyNs, test.ext, services, test.clusterDomain)
+			url, isExternalName, err := resolveExtProcessURL(policyNs, test.ext, services, test.clusterDomain)
 
 			if test.expErrSub != "" {
 				g.Expect(err).To(HaveOccurred())
 				g.Expect(err.Error()).To(ContainSubstring(test.expErrSub))
 				g.Expect(url).To(BeEmpty())
+				g.Expect(isExternalName).To(BeFalse())
 			} else {
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(url).To(Equal(test.expURL))
+				g.Expect(isExternalName).To(Equal(test.expExternalName))
 			}
 		})
 	}

@@ -20,6 +20,10 @@ type PolicyPayloadProcessorState struct {
 	BackendService    types.NamespacedName
 	APIURL            string
 	ResolvedAuthToken []byte
+	// BackendIsExternalName reports whether the resolved ExtProcess backend Service is an ExternalName
+	// Service. Such backends are proxied to by hostname and require a DNS resolver on the attached
+	// Gateway's NginxProxy so NGINX can re-resolve the hostname per request.
+	BackendIsExternalName bool
 }
 
 // PayloadProcessingOutput contains payload processor resolution output.
@@ -80,7 +84,7 @@ func resolvePayloadProcessor(
 	}
 	ext := entry.ExtProcess
 
-	apiURL, err := resolveExtProcessURL(pp.Namespace, ext, services, clusterDomain)
+	apiURL, isExternalName, err := resolveExtProcessURL(pp.Namespace, ext, services, clusterDomain)
 	if err != nil {
 		policy.Conditions = append(policy.Conditions, conditions.NewPolicyInvalid(err.Error()))
 		policy.Valid = false
@@ -96,10 +100,11 @@ func resolvePayloadProcessor(
 
 	svcNsName := extProcessServiceNsName(pp.Namespace, ext)
 	policy.PayloadProcessorState = &PolicyPayloadProcessorState{
-		APIURL:            apiURL,
-		ResolvedAuthToken: token,
-		AuthTokenSecret:   tokenSecret,
-		BackendService:    svcNsName,
+		APIURL:                apiURL,
+		ResolvedAuthToken:     token,
+		AuthTokenSecret:       tokenSecret,
+		BackendService:        svcNsName,
+		BackendIsExternalName: isExternalName,
 	}
 }
 
@@ -118,13 +123,13 @@ func extProcessServiceNsName(
 
 // resolveExtProcessURL resolves the backend Service into a URL the Rust module can call. ExternalName
 // Services resolve to an https URL using the external hostname; all others resolve to the cluster-local
-// Service DNS name over http.
+// Service DNS name over http. The returned bool reports whether the backend is an ExternalName Service.
 func resolveExtProcessURL(
 	policyNamespace string,
 	ext *ngfAPIv1alpha1.ExtProcessConfig,
 	services map[types.NamespacedName]*corev1.Service,
 	clusterDomain string,
-) (string, error) {
+) (string, bool, error) {
 	svcNsName := extProcessServiceNsName(policyNamespace, ext)
 
 	var port int32
@@ -134,7 +139,7 @@ func resolveExtProcessURL(
 
 	svc, exists := services[svcNsName]
 	if !exists {
-		return "", fmt.Errorf(
+		return "", false, fmt.Errorf(
 			"backend Service %s/%s not found",
 			svcNsName.Namespace,
 			svcNsName.Name,
@@ -142,7 +147,7 @@ func resolveExtProcessURL(
 	}
 
 	if svc.Spec.Type == corev1.ServiceTypeExternalName && svc.Spec.ExternalName != "" {
-		return fmt.Sprintf("https://%s:%d", svc.Spec.ExternalName, port), nil
+		return fmt.Sprintf("https://%s:%d", svc.Spec.ExternalName, port), true, nil
 	}
 
 	// Fall back to the default cluster domain when the controller flag is unset (e.g. older callers/tests).
@@ -151,7 +156,7 @@ func resolveExtProcessURL(
 		domain = "cluster.local"
 	}
 
-	return fmt.Sprintf("http://%s.%s.svc.%s:%d", svcNsName.Name, svcNsName.Namespace, domain, port), nil
+	return fmt.Sprintf("http://%s.%s.svc.%s:%d", svcNsName.Name, svcNsName.Namespace, domain, port), false, nil
 }
 
 // resolveExtProcessAuthToken resolves the optional AuthTokenRef Secret into a bearer token. When no

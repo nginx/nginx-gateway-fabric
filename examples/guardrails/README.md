@@ -57,6 +57,11 @@ Set the token in `guardrails-secret.yaml` (the value must live under the `token`
 
 ### 3. Apply the manifests
 
+> **Using the default `ExternalName` backend?** First add the `NginxProxy` DNS resolver and wire it
+> to the Gateway via `parametersRef`, otherwise NGINX cannot resolve the external hostname at request
+> time — see
+> [Configuring the DNS resolver](#configuring-the-dns-resolver-required-for-externalname-backends).
+
 ```shell
 kubectl apply -f gateway.yaml
 kubectl apply -f llm.yaml
@@ -279,9 +284,43 @@ the module issues an NGINX **subrequest** through the internal NGINX location (`
 goes through NGINX's own connection and DNS machinery, so an `ExternalName` backend is resolved the
 same way a normal proxied upstream would be — on both paths.
 
-When using an `ExternalName` Guardrails backend, configure a `resolver` (via the Gateway's
-NginxProxy) so the internal location can resolve the external hostname at request time. This applies
-to all inspection traffic.
+When using an `ExternalName` Guardrails backend, you **must** configure a `resolver` (via the
+Gateway's NginxProxy) so the internal location can resolve the external hostname at request time.
+This applies to all inspection traffic. See
+[Configuring the DNS resolver](#configuring-the-dns-resolver-required-for-externalname-backends) below.
+
+### Configuring the DNS resolver (required for `ExternalName` backends)
+
+The guardrails inspection subrequest `proxy_pass`es to the `ExternalName` backend's hostname on both
+the request and response paths. NGINX must be able to resolve that hostname **at request time**, so a
+DNS `resolver` is required. When a resolver is configured, NGF emits a per-request (re-resolving)
+`proxy_pass` so a rotating backend IP is picked up on every request; when it is missing, NGINX fails
+to load the config (`no resolver defined to resolve <host>`) or pins a stale IP at worker startup.
+
+Configure the resolver on an `NginxProxy` resource and attach it to the Gateway via
+`spec.infrastructure.parametersRef`. This mirrors the
+[`examples/externalname-service`](../externalname-service/gateway.yaml) pattern.
+
+Add the `NginxProxy` (in the same namespace as the Gateway):
+
+```yaml
+apiVersion: gateway.nginx.org/v1alpha2
+kind: NginxProxy
+metadata:
+  name: guardrails-nginx-config
+spec:
+  dnsResolver:
+    addresses:
+    - type: IPAddress
+      value: "10.96.0.10"   # in-cluster kube-dns/CoreDNS ClusterIP (cluster-dependent)
+    # timeout: "30s"        # optional
+    # cacheTTL: "60s"       # optional
+    # disableIPv6: false    # optional
+```
+
+> **Find your cluster's DNS ClusterIP:** `kubectl -n kube-system get svc kube-dns` (or `coredns`).
+> `10.96.0.10` is a common default but is cluster-dependent. Use a public resolver (e.g. `8.8.8.8`)
+> instead only if your provider's hostname is not resolvable through cluster DNS.
 
 ### External backend (default in this example)
 
@@ -340,6 +379,7 @@ The `PayloadProcessor` is marked `Accepted=False` when its references cannot be 
 | `auth token Secret ... not found` | `authTokenRef` set but Secret missing. | Apply `guardrails-secret.yaml`, or remove `authTokenRef`. |
 | `auth token Secret ... missing "token" key` | Secret has no `token` key. | Add the token under `stringData.token`. |
 | `auth token Secret ... has empty "token" key` | `token` key present but empty. | Populate the token value. |
+| NGINX error `no resolver defined to resolve <host>`, or guardrails requests fail against an `ExternalName` backend | No `dnsResolver` configured on the NginxProxy. | Add the `dnsResolver` block and wire it via `parametersRef` (see [Configuring the DNS resolver](#configuring-the-dns-resolver-required-for-externalname-backends)). |
 
 Other checks:
 

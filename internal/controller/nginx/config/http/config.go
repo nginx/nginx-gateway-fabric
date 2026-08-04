@@ -100,8 +100,10 @@ type Location struct {
 	// $guardrails_backend variable, NGINX re-resolves the backend via the global resolver
 	// on every request instead of pinning the IP resolved once at worker startup. This is
 	// required for ExternalName backends behind rotating-IP CDNs, where a stale cached IP
-	// causes TLS handshake failures and the module fail-closing with 403. Only set when a
-	// DNS resolver is configured; otherwise the location falls back to a literal proxy_pass.
+	// causes TLS handshake failures and the module fail-closing with 403. A DNS resolver is
+	// required for this variable proxy_pass and is guaranteed to be present: an ExternalName
+	// guardrails backend attached to a Gateway without a resolver is rejected during policy
+	// resolution and never reaches config generation.
 	GuardrailsProxyPassVar string
 	// ProxyHTTPVersion is the HTTP protocol version for proxying (e.g. "1.1" or "2").
 	// When empty, NGINX defaults to "1.1".

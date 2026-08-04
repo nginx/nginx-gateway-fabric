@@ -174,11 +174,6 @@ func createServers(
 	finalMatchPairs := make(httpMatchPairs)
 	sharedTLSPorts := make(map[int32]struct{})
 
-	// A DNS resolver is required for variable-based proxy_pass (used by guardrails
-	// internal locations) to re-resolve ExternalName backends per request; without one,
-	// those locations fall back to a literal proxy_pass.
-	resolverConfigured := conf.BaseHTTPConfig.DNSResolver != nil
-
 	for _, tlsServer := range conf.TLSServers {
 		sharedTLSPorts[tlsServer.Port] = struct{}{}
 	}
@@ -191,7 +186,6 @@ func createServers(
 			generator,
 			keepAliveCheck,
 			conf.BaseHTTPConfig.DisableBaseProxySetHeaders,
-			resolverConfigured,
 		)
 		servers = append(servers, httpServer)
 		maps.Copy(finalMatchPairs, matchPairs)
@@ -209,7 +203,6 @@ func createServers(
 			keepAliveCheck,
 			disableSNI,
 			conf.BaseHTTPConfig.DisableBaseProxySetHeaders,
-			resolverConfigured,
 		)
 		if _, portInUse := sharedTLSPorts[s.Port]; portInUse {
 			sslServer.Listen = getSocketNameHTTPS(s.Port)
@@ -229,7 +222,6 @@ func createSSLServer(
 	keepAliveCheck keepAliveChecker,
 	disableSNIHostValidation bool,
 	disableBaseProxySetHeaders []string,
-	resolverConfigured bool,
 ) (http.Server, httpMatchPairs) {
 	listen := fmt.Sprint(virtualServer.Port)
 	if virtualServer.IsDefault {
@@ -250,7 +242,6 @@ func createSSLServer(
 		generator,
 		keepAliveCheck,
 		disableBaseProxySetHeaders,
-		resolverConfigured,
 	)
 
 	server := http.Server{
@@ -318,7 +309,6 @@ func createServer(
 	generator policies.Generator,
 	keepAliveCheck keepAliveChecker,
 	disableBaseProxySetHeaders []string,
-	resolverConfigured bool,
 ) (http.Server, httpMatchPairs) {
 	listen := fmt.Sprint(virtualServer.Port)
 
@@ -335,7 +325,6 @@ func createServer(
 		generator,
 		keepAliveCheck,
 		disableBaseProxySetHeaders,
-		resolverConfigured,
 	)
 
 	server := http.Server{
@@ -544,7 +533,6 @@ func createLocations(
 	generator policies.Generator,
 	keepAliveCheck keepAliveChecker,
 	disableBaseProxySetHeaders []string,
-	resolverConfigured bool,
 ) ([]http.Location, httpMatchPairs, bool) {
 	maxLocs, pathsAndTypes := getMaxLocationCountAndPathMap(server.PathRules)
 	locs := make([]http.Location, 0, maxLocs)
@@ -633,7 +621,7 @@ func createLocations(
 	locs = append(locs, extractExternalAuthInternalLocations(locs)...)
 
 	// Add internal locations for ai-guardrails inspection subrequests
-	locs = append(locs, extractGuardrailsInternalLocations(locs, resolverConfigured)...)
+	locs = append(locs, extractGuardrailsInternalLocations(locs)...)
 
 	return locs, matchPairs, grpcServer
 }
@@ -1480,11 +1468,12 @@ const guardrailsProxyPassVar = "$guardrails_backend"
 // locations, deduplicating by internal path so multiple matches sharing a guardrails backend
 // produce a single internal location.
 //
-// resolverConfigured indicates whether a DNS resolver is configured on the NginxProxy. When true,
-// an HTTPS (ExternalName) backend uses a variable-based proxy_pass so NGINX re-resolves the backend
-// per request (avoiding a stale IP pinned at worker startup). When false, a variable proxy_pass would
-// fail config load ("no resolver defined"), so it falls back to a literal proxy_pass.
-func extractGuardrailsInternalLocations(locations []http.Location, resolverConfigured bool) []http.Location {
+// An HTTPS (ExternalName) backend uses a variable-based proxy_pass so NGINX re-resolves the backend
+// per request (avoiding a stale IP pinned at worker startup). This requires a DNS resolver, which is
+// guaranteed to be configured for such backends: an ExternalName guardrails backend attached to a
+// Gateway without a resolver is rejected during policy resolution (payloadProcessorResolverMissing)
+// and never reaches config generation.
+func extractGuardrailsInternalLocations(locations []http.Location) []http.Location {
 	seen := make(map[string]struct{})
 	var result []http.Location
 
@@ -1522,14 +1511,13 @@ func extractGuardrailsInternalLocations(locations []http.Location, resolverConfi
 			sslServerName = parsed.Hostname()
 			proxySetHeaders = []http.Header{{Name: "Host", Value: parsed.Hostname()}}
 
-			// Re-resolve the ExternalName backend per request via a variable proxy_pass,
-			// but only when a resolver exists (otherwise NGINX fails to load the config).
-			// The variable carries the backend authority (host[:port]); the proxy_pass
-			// scheme/path are preserved around it.
-			if resolverConfigured {
-				proxyPassVar = parsed.Host
-				proxyPass = guardrailsVariableProxyPass(parsed)
-			}
+			// Re-resolve the ExternalName backend per request via a variable proxy_pass. The
+			// variable carries the backend authority (host[:port]); the proxy_pass scheme/path
+			// are preserved around it. A DNS resolver is guaranteed to be configured here: an
+			// ExternalName (https) guardrails backend without a resolver is rejected during policy
+			// resolution (payloadProcessorResolverMissing), so it never reaches config generation.
+			proxyPassVar = parsed.Host
+			proxyPass = guardrailsVariableProxyPass(parsed)
 		}
 
 		result = append(result, http.Location{

@@ -447,6 +447,15 @@ func attachPolicyToRoute(
 	}
 
 	for _, parentRef := range route.ParentRefs {
+		if payloadProcessorResolverMissing(policy, parentRef.EffectiveNginxProxy) {
+			policy.InvalidForGateways[parentRef.GatewayNsName] = struct{}{}
+			ancestor.Conditions = append(
+				ancestor.Conditions,
+				conditions.NewPolicyInvalid(conditions.PolicyMessagePayloadProcessorResolverMissing),
+			)
+			continue
+		}
+
 		if parentRef.EffectiveNginxProxy != nil {
 			globalSettings := &policies.GlobalSettings{
 				TelemetryEnabled: telemetryEnabledForNginxProxy(parentRef.EffectiveNginxProxy),
@@ -469,6 +478,21 @@ func attachPolicyToRoute(
 	if len(effectiveGateways) > 0 || len(policy.InvalidForGateways) < len(route.ParentRefs) {
 		route.Policies = append(route.Policies, policy)
 	}
+}
+
+// payloadProcessorResolverMissing reports whether the policy is a PayloadProcessor whose ExtProcess
+// backend is an ExternalName Service, but the given effective NginxProxy has no DNS resolver
+// configured. Such a configuration cannot re-resolve the external hostname per request, so the policy
+// must be marked invalid for the affected Gateway (mirroring regular ExternalName route handling in
+// checkExternalNameValidForGateways).
+func payloadProcessorResolverMissing(policy *Policy, effectiveNP *EffectiveNginxProxy) bool {
+	if getPolicyKind(policy.Source) != kinds.PayloadProcessor {
+		return false
+	}
+	if policy.PayloadProcessorState == nil || !policy.PayloadProcessorState.BackendIsExternalName {
+		return false
+	}
+	return effectiveNP == nil || effectiveNP.DNSResolver == nil
 }
 
 func attachPolicyToGateway(
@@ -528,6 +552,15 @@ func attachPolicyToGateway(
 	if !gw.Valid {
 		policy.InvalidForGateways[ref.Nsname] = struct{}{}
 		ancestor.Conditions = []conditions.Condition{conditions.NewPolicyTargetNotFound("The TargetRef is invalid")}
+		policy.Ancestors = append(policy.Ancestors, ancestor)
+		return
+	}
+
+	if payloadProcessorResolverMissing(policy, gw.EffectiveNginxProxy) {
+		policy.InvalidForGateways[ref.Nsname] = struct{}{}
+		ancestor.Conditions = []conditions.Condition{
+			conditions.NewPolicyInvalid(conditions.PolicyMessagePayloadProcessorResolverMissing),
+		}
 		policy.Ancestors = append(policy.Ancestors, ancestor)
 		return
 	}

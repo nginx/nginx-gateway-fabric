@@ -2604,7 +2604,7 @@ func TestCreateLocations_Includes(t *testing.T) {
 		},
 	})
 
-	locations, matches, grpc := createLocations(&httpServer, "1", fakeGenerator, alwaysFalseKeepAliveChecker, nil, false)
+	locations, matches, grpc := createLocations(&httpServer, "1", fakeGenerator, alwaysFalseKeepAliveChecker, nil)
 
 	g := NewWithT(t)
 	g.Expect(grpc).To(BeFalse())
@@ -3116,7 +3116,6 @@ func TestCreateLocations_InferenceBackends(t *testing.T) {
 				&policiesfakes.FakeGenerator{},
 				alwaysFalseKeepAliveChecker,
 				nil,
-				false,
 			)
 
 			g.Expect(helpers.Diff(tc.expLocs, locs)).To(BeEmpty())
@@ -3310,7 +3309,6 @@ func TestCreateLocationsRootPath(t *testing.T) {
 				&policiesfakes.FakeGenerator{},
 				alwaysFalseKeepAliveChecker,
 				nil,
-				false,
 			)
 			g.Expect(locs).To(Equal(test.expLocations))
 			g.Expect(httpMatchPair).To(BeEmpty())
@@ -3443,7 +3441,6 @@ func TestCreateLocationsPath(t *testing.T) {
 				&policiesfakes.FakeGenerator{},
 				alwaysFalseKeepAliveChecker,
 				nil,
-				false,
 			)
 			g.Expect(locs).To(Equal(test.expLocations))
 			g.Expect(httpMatchPair).To(BeEmpty())
@@ -5511,7 +5508,6 @@ func TestCreateLocations_RegexCatchAllShouldSuppressDefault404(t *testing.T) {
 		&policiesfakes.FakeGenerator{},
 		alwaysFalseKeepAliveChecker,
 		nil,
-		false,
 	)
 
 	for _, loc := range locs {
@@ -5563,7 +5559,6 @@ func TestCreateLocations_RegexNonRootShouldNotSuppressDefault404(t *testing.T) {
 		&policiesfakes.FakeGenerator{},
 		alwaysFalseKeepAliveChecker,
 		nil,
-		false,
 	)
 
 	var hasDefault404 bool
@@ -7157,7 +7152,6 @@ func TestOIDCCallbackLocation(t *testing.T) {
 			&policiesfakes.FakeGenerator{},
 			alwaysFalseKeepAliveChecker,
 			nil,
-			false,
 		)
 		for i := range locs {
 			if locs[i].Path == "= "+oidcCallbackPath {
@@ -7275,7 +7269,6 @@ func TestOIDCCallbackLocation(t *testing.T) {
 					&policiesfakes.FakeGenerator{},
 					alwaysFalseKeepAliveChecker,
 					nil,
-					false,
 				)
 
 				var exactCoffeeSlashLocs []http.Location
@@ -7323,7 +7316,6 @@ func TestOIDCCallbackLocation(t *testing.T) {
 					&policiesfakes.FakeGenerator{},
 					alwaysFalseKeepAliveChecker,
 					nil,
-					false,
 				)
 
 				// The exact app route already occupies "= /my-callback", so no separate OIDC callback
@@ -7384,7 +7376,6 @@ func TestOIDCCallbackLocation(t *testing.T) {
 					&policiesfakes.FakeGenerator{},
 					alwaysFalseKeepAliveChecker,
 					nil,
-					false,
 				)
 
 				var callbackPaths []string
@@ -7438,7 +7429,6 @@ func TestOIDCCallbackLocation(t *testing.T) {
 					&policiesfakes.FakeGenerator{},
 					alwaysFalseKeepAliveChecker,
 					nil,
-					false,
 				)
 
 				var callbackLocs []http.Location
@@ -7512,7 +7502,6 @@ func TestOIDCURILocations(t *testing.T) {
 			&policiesfakes.FakeGenerator{},
 			alwaysFalseKeepAliveChecker,
 			nil,
-			false,
 		)
 		return locs
 	}
@@ -8386,50 +8375,10 @@ func TestExecuteServers_Guardrails(t *testing.T) {
 			},
 		},
 		{
-			name: "https backend without resolver emits SNI and literal proxy_pass",
-			conf: dataplane.Configuration{
-				HTTPServers: []dataplane.VirtualServer{
-					{
-						Hostname: "example.com",
-						Port:     8080,
-						PathRules: []dataplane.PathRule{
-							{
-								Path:     "/coffee",
-								PathType: dataplane.PathTypePrefix,
-								MatchRules: []dataplane.MatchRule{
-									{
-										Match:        dataplane.Match{},
-										BackendGroup: backend,
-										Guardrails: &dataplane.GuardrailsConfig{
-											Enabled:      true,
-											APIURL:       "https://guardrails.example.com:443",
-											InternalPath: "/_ngf-internal-guardrails-test_route1_rule0",
-										},
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-			expPresent: []string{
-				"guardrails_internal_uri /_ngf-internal-guardrails-test_route1_rule0;",
-				"location /_ngf-internal-guardrails-test_route1_rule0 {",
-				`proxy_set_header Host "guardrails.example.com";`,
-				"proxy_pass https://guardrails.example.com:443/backend/v1/scans;",
-				"proxy_ssl_server_name on;",
-				"proxy_ssl_name guardrails.example.com;",
-			},
-			expAbsent: []string{
-				// SNI-only: certificate verification must NOT be enabled.
-				"proxy_ssl_verify on;",
-				// No resolver: must not emit the variable proxy_pass machinery.
-				"set $guardrails_backend",
-				"proxy_pass https://$guardrails_backend",
-			},
-		},
-		{
-			name: "https backend with resolver emits variable proxy_pass for per-request resolution",
+			// An https (ExternalName) guardrails backend always emits the variable proxy_pass. A
+			// missing DNS resolver is rejected during policy resolution, so config generation never
+			// sees an ExternalName guardrails backend without a resolver.
+			name: "https backend emits variable proxy_pass for per-request resolution",
 			conf: dataplane.Configuration{
 				BaseHTTPConfig: dataplane.BaseHTTPConfig{
 					DNSResolver: &dataplane.DNSResolverConfig{
@@ -9217,10 +9166,9 @@ func TestExtractGuardrailsInternalLocations(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name               string
-		locations          []http.Location
-		expected           []http.Location
-		resolverConfigured bool
+		name      string
+		locations []http.Location
+		expected  []http.Location
 	}{
 		{
 			name: "no guardrails locations",
@@ -9286,7 +9234,11 @@ func TestExtractGuardrailsInternalLocations(t *testing.T) {
 			},
 		},
 		{
-			name: "https backend without resolver falls back to literal proxy_pass",
+			// An https (ExternalName) backend always uses the variable proxy_pass for per-request
+			// re-resolution. A DNS resolver is guaranteed to be present here: an ExternalName
+			// guardrails backend without a resolver is rejected during policy resolution and never
+			// reaches config generation.
+			name: "https backend uses variable proxy_pass for per-request resolution",
 			locations: []http.Location{
 				{
 					Path: "/coffee",
@@ -9298,31 +9250,6 @@ func TestExtractGuardrailsInternalLocations(t *testing.T) {
 					},
 				},
 			},
-			resolverConfigured: false,
-			expected: []http.Location{
-				{
-					Path:               "/_ngf-internal-guardrails-ns1_route1_rule0",
-					Type:               http.InternalLocationType,
-					ProxyPass:          "https://guardrails.example.com:443/backend/v1/scans",
-					ProxySSLServerName: "guardrails.example.com",
-					ProxySetHeaders:    []http.Header{{Name: "Host", Value: "guardrails.example.com"}},
-				},
-			},
-		},
-		{
-			name: "https backend with resolver uses variable proxy_pass for per-request resolution",
-			locations: []http.Location{
-				{
-					Path: "/coffee",
-					Type: http.ExternalLocationType,
-					Guardrails: &http.GuardrailsConfig{
-						Enabled:      true,
-						APIURL:       "https://guardrails.example.com:443",
-						InternalPath: "/_ngf-internal-guardrails-ns1_route1_rule0",
-					},
-				},
-			},
-			resolverConfigured: true,
 			expected: []http.Location{
 				{
 					Path:                   "/_ngf-internal-guardrails-ns1_route1_rule0",
@@ -9335,7 +9262,7 @@ func TestExtractGuardrailsInternalLocations(t *testing.T) {
 			},
 		},
 		{
-			name: "http backend with resolver still uses literal proxy_pass",
+			name: "http backend uses literal proxy_pass",
 			locations: []http.Location{
 				{
 					Path: "/coffee",
@@ -9347,7 +9274,6 @@ func TestExtractGuardrailsInternalLocations(t *testing.T) {
 					},
 				},
 			},
-			resolverConfigured: true,
 			expected: []http.Location{
 				{
 					Path:      "/_ngf-internal-guardrails-ns1_route1_rule0",
@@ -9414,7 +9340,7 @@ func TestExtractGuardrailsInternalLocations(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			result := extractGuardrailsInternalLocations(test.locations, test.resolverConfigured)
+			result := extractGuardrailsInternalLocations(test.locations)
 			g.Expect(result).To(Equal(test.expected))
 		})
 	}
