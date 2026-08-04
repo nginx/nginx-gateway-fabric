@@ -13,6 +13,8 @@
 //! action back into FFI side effects. Behaviour is intentionally identical to the
 //! inline branches these replaced.
 
+use ngx::ffi::ngx_uint_t;
+
 use crate::subrequest_client::Verdict;
 
 // ---------------------------------------------------------------------------
@@ -243,6 +245,32 @@ pub(crate) fn block_commit_kind(headers_suppressed: bool) -> BlockCommitKind {
     }
 }
 
+// ---------------------------------------------------------------------------
+// 4. Response status gate (shared by the header and body filters)
+// ---------------------------------------------------------------------------
+
+/// Whether a response with this HTTP status should be buffered and inspected.
+///
+/// Guardrails only inspects responses that carry an inspectable LLM body, i.e.
+/// genuine `2xx` payloads. Everything else is passed straight through:
+///   * `1xx` — informational/interim, no final body.
+///   * `204 No Content` / `304 Not Modified` — defined to have no body, so
+///     buffering would suppress headers that never get committed (the body
+///     filter's flush is driven by a `last_buf` body buffer that never arrives),
+///     hanging the client.
+///   * `3xx` — redirects / flow-control responses, no inspectable content.
+///   * `>= 400` — error responses (including our own injected 403) must reach the
+///     client unmodified.
+///
+/// Returns `true` only for `200..=299` excluding `204`.
+///
+/// The header filter and the body filter MUST agree on this predicate: if one
+/// suppresses/buffers while the other passes through, the suppressed headers are
+/// never committed. Centralising the decision here keeps them in lockstep.
+pub(crate) fn should_inspect_status(status: ngx_uint_t) -> bool {
+    (200..300).contains(&status) && status != 204
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -448,5 +476,67 @@ mod tests {
     fn block_commit_not_suppressed_uses_termination() {
         // SSE: headers already flushed -> SSE termination frame.
         assert_eq!(block_commit_kind(false), BlockCommitKind::Termination);
+    }
+
+    // --- should_inspect_status --------------------------------------------
+
+    #[test]
+    fn status_2xx_with_body_is_inspected() {
+        for status in [200, 201, 202, 206, 299] {
+            assert!(
+                should_inspect_status(status),
+                "status {status} should be inspected"
+            );
+        }
+    }
+
+    #[test]
+    fn status_204_no_content_is_not_inspected() {
+        // No body by definition: buffering would strand the suppressed headers.
+        assert!(!should_inspect_status(204));
+    }
+
+    #[test]
+    fn status_304_not_modified_is_not_inspected() {
+        // 304 is < 400 (the old gate missed it) but carries no body.
+        assert!(!should_inspect_status(304));
+    }
+
+    #[test]
+    fn status_3xx_redirects_are_not_inspected() {
+        for status in [300, 301, 302, 303, 307, 308] {
+            assert!(
+                !should_inspect_status(status),
+                "3xx status {status} should pass through"
+            );
+        }
+    }
+
+    #[test]
+    fn status_1xx_informational_is_not_inspected() {
+        for status in [100, 101, 103] {
+            assert!(
+                !should_inspect_status(status),
+                "1xx status {status} should pass through"
+            );
+        }
+    }
+
+    #[test]
+    fn status_4xx_5xx_errors_are_not_inspected() {
+        for status in [400, 403, 404, 429, 500, 502, 503] {
+            assert!(
+                !should_inspect_status(status),
+                "error status {status} should pass through"
+            );
+        }
+    }
+
+    #[test]
+    fn status_boundaries() {
+        assert!(!should_inspect_status(199));
+        assert!(should_inspect_status(200));
+        assert!(should_inspect_status(203));
+        assert!(!should_inspect_status(300));
     }
 }

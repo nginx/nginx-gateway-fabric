@@ -1,5 +1,13 @@
 //! Response-path (output) inspection: two-state header filter, buffering body
 //! filter, async subrequest spawning, and the deferred output commit.
+//!
+//! Only genuine `2xx`-with-body responses are inspected. `1xx`, `204`, `304`,
+//! `3xx` (redirects / flow-control), and `>= 400` (errors, including our own
+//! injected 403) all pass straight through — they carry no inspectable LLM
+//! payload, and buffering a no-body status would suppress headers that are never
+//! committed (hanging the client). The status gate lives in
+//! [`crate::decision::should_inspect_status`] so the header and body filters
+//! stay in lockstep.
 
 use std::ptr;
 
@@ -20,7 +28,7 @@ use crate::ctx::{
 };
 use crate::decision::{
     BlockCommitKind, ResponseAction, ResponseFilterInputs, block_commit_kind,
-    decide_response_action, verdict_from_inspection,
+    decide_response_action, should_inspect_status, verdict_from_inspection,
 };
 use crate::stream::{
     ResponseInspect, ResponseVerdict, StreamContext, non_streaming_error_body, termination_message,
@@ -31,10 +39,13 @@ use crate::sync_ptr::AssertSendSync;
 /// Two-state header filter.
 ///
 /// **First pass** (upstream response headers arrive):
+///   - Only `2xx`-with-body responses are candidates; anything the status gate
+///     ([`should_inspect_status`]) rejects (`1xx`, `204`, `304`, `3xx`, `>= 400`)
+///     passes through unmodified.
 ///   - SSE responses pass through immediately — they cannot be fully buffered.
-///   - All other responses are suppressed: we return `NGX_OK` without calling the next
-///     filter, so `r->header_sent` stays `0` and nothing is written to the socket.
-///     `ctx.headers_suppressed` is set to `true`.
+///   - All other (buffer-eligible `2xx`) responses are suppressed: we return `NGX_OK`
+///     without calling the next filter, so `r->header_sent` stays `0` and nothing is
+///     written to the socket. `ctx.headers_suppressed` is set to `true`.
 ///
 /// When the body filter is ready to commit headers (either the original 200 or a
 /// replacement 403), it calls `call_next_header_filter(r)` **directly** — bypassing
@@ -62,9 +73,11 @@ pub(crate) unsafe extern "C" fn guardrails_header_filter(r: *mut ngx_http_reques
             return call_next_header_filter(r);
         }
 
-        // Don't suppress error responses — these originate from our own 403 injection
-        // (send_403_and_finalize) and must reach the client unmodified.
-        if (*r).headers_out.status >= 400 {
+        // Only buffer/suppress genuine 2xx-with-body responses. 1xx, 204, 304, 3xx
+        // and >= 400 (including our own 403 injection from send_403_and_finalize)
+        // carry no inspectable body and must reach the client unmodified; buffering
+        // a no-body status would strand the suppressed headers (client hang).
+        if !should_inspect_status((*r).headers_out.status) {
             return call_next_header_filter(r);
         }
 
@@ -124,9 +137,11 @@ pub(crate) unsafe extern "C" fn guardrails_response_body_filter(
             return call_next_response_body_filter(r, in_chain);
         }
 
-        // Skip inspection for error responses (like 403 from blocked requests)
-        let status = (*r).headers_out.status;
-        if status >= 400 {
+        // Only inspect genuine 2xx-with-body responses. Must match the header
+        // filter's gate exactly (see should_inspect_status): if the two disagree,
+        // suppressed headers never get committed. Skips 1xx, 204, 304, 3xx and
+        // >= 400 (e.g. the 403 from a blocked request).
+        if !should_inspect_status((*r).headers_out.status) {
             return call_next_response_body_filter(r, in_chain);
         }
 
