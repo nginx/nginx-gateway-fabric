@@ -93,6 +93,18 @@ func TestGetURL(t *testing.T) {
 			expectedURL: "http://cafe.example.com:80/coffee?x=%3C%2Fscript%3E",
 		},
 		{
+			name:        "preserves query and fragment",
+			baseURL:     "http://cafe.example.com/coffee?x=%3C%2Fscript%3E#menu",
+			port:        80,
+			expectedURL: "http://cafe.example.com:80/coffee?x=%3C%2Fscript%3E#menu",
+		},
+		{
+			name:        "preserves fragment without path",
+			baseURL:     "http://cafe.example.com#menu",
+			port:        80,
+			expectedURL: "http://cafe.example.com:80#menu",
+		},
+		{
 			name:        "https scheme",
 			baseURL:     "https://cafe.example.com/tea",
 			port:        8443,
@@ -110,6 +122,24 @@ func TestGetURL(t *testing.T) {
 			port:        8080,
 			expectedURL: "http://hello.example.com:8080/",
 		},
+		{
+			name:        "bracketed IPv6 host",
+			baseURL:     "http://[::1]/hello",
+			port:        8080,
+			expectedURL: "http://[::1]:8080/hello",
+		},
+		{
+			name:        "replaces existing port on IPv6 host",
+			baseURL:     "http://[::1]:80/hello",
+			port:        8080,
+			expectedURL: "http://[::1]:8080/hello",
+		},
+		{
+			name:        "preserves IPv6 query and fragment",
+			baseURL:     "http://[2001:db8::1]/coffee?size=large#menu",
+			port:        8080,
+			expectedURL: "http://[2001:db8::1]:8080/coffee?size=large#menu",
+		},
 	}
 
 	for _, tc := range tests {
@@ -124,7 +154,18 @@ func TestGetURL(t *testing.T) {
 
 func TestGetURLPanicsOnInvalidBaseURL(t *testing.T) {
 	t.Parallel()
-	g := NewWithT(t)
 
-	g.Expect(func() { framework.GetURL("not-a-url", 80) }).To(Panic())
+	for _, baseURL := range []string{
+		"not-a-url",
+		"http://[::1",
+		"http:///missing-host",
+	} {
+		baseURL := baseURL
+		t.Run(baseURL, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			g.Expect(func() { framework.GetURL(baseURL, 80) }).To(Panic())
+		})
+	}
 }
