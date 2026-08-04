@@ -6,8 +6,7 @@ pub struct ModuleConfig {
     /// Enable/disable the guardrails filter
     pub enabled: bool,
 
-    /// Guardrails API token (set either inline via guardrails_api_token or from a
-    /// file via guardrails_api_token_file; the file variant is preferred for secret safety).
+    /// Guardrails API token, read from the file named by `guardrails_api_token_file`.
     pub api_token: Option<String>,
 
     /// Path of the file that contains the bearer token (set by guardrails_api_token_file).
@@ -24,6 +23,37 @@ pub struct ModuleConfig {
     /// control plane from the `PayloadProcessor` `Timeout`. The module itself
     /// holds no timeout configuration.
     pub internal_uri: Option<String>,
+}
+
+/// Error produced while parsing a `guardrails_api_token_file`.
+#[derive(Debug, PartialEq, Eq)]
+pub enum TokenFileError {
+    /// The file was empty or contained only whitespace. This would otherwise
+    /// yield an `Authorization: Bearer ` header (empty credential) and cause
+    /// every inspection to fail closed, so it is treated as a config error.
+    Empty,
+}
+
+impl TokenFileError {
+    /// Human-readable description for config-load error logging.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            TokenFileError::Empty => "is empty or whitespace-only",
+        }
+    }
+}
+
+/// Parse the contents of a token file into a non-empty bearer token.
+///
+/// Surrounding whitespace is trimmed. An empty or whitespace-only file is a
+/// configuration error rather than "no auth": only an absent
+/// `guardrails_api_token_file` directive means no `Authorization` header.
+pub fn parse_token_file_contents(contents: &str) -> Result<String, TokenFileError> {
+    let trimmed = contents.trim();
+    if trimmed.is_empty() {
+        return Err(TokenFileError::Empty);
+    }
+    Ok(trimmed.to_string())
 }
 
 /// Maximum bytes to buffer from a response before failing closed.
@@ -84,5 +114,34 @@ mod tests {
         let c = conf(true);
         assert!(c.inspect_requests());
         assert!(c.inspect_responses());
+    }
+
+    #[test]
+    fn test_parse_token_file_empty_is_error() {
+        assert_eq!(parse_token_file_contents(""), Err(TokenFileError::Empty));
+    }
+
+    #[test]
+    fn test_parse_token_file_whitespace_only_is_error() {
+        assert_eq!(
+            parse_token_file_contents("   \n\t "),
+            Err(TokenFileError::Empty)
+        );
+    }
+
+    #[test]
+    fn test_parse_token_file_trims_surrounding_whitespace() {
+        assert_eq!(
+            parse_token_file_contents("  sk-abc123\n"),
+            Ok("sk-abc123".to_string())
+        );
+    }
+
+    #[test]
+    fn test_parse_token_file_plain_token() {
+        assert_eq!(
+            parse_token_file_contents("sk-abc123"),
+            Ok("sk-abc123".to_string())
+        );
     }
 }

@@ -293,7 +293,10 @@ unsafe fn start_subrequest(
         // requests without a User-Agent with 403. NGINX's proxy module does not add a
         // default User-Agent for a subrequest, so set it explicitly (matching client.rs).
         let _ = request.add_header_in("User-Agent", GUARDRAILS_USER_AGENT);
-        if let Some(token) = api_token {
+        // Only emit the header for a non-empty token: an empty credential would
+        // produce `Authorization: Bearer ` and fail closed. An empty token file
+        // is already rejected at config load, so this is defense-in-depth.
+        if let Some(token) = api_token.filter(|t| !t.is_empty()) {
             let _ = request.add_header_in("Authorization", &format!("Bearer {}", token));
         }
         let _ = request.add_header_in("Content-Length", &format!("{}", body.len()));

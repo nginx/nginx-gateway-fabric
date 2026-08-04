@@ -10,7 +10,7 @@ use ngx::ffi::{
 };
 use ngx::{ngx_conf_log_error, ngx_string};
 
-use crate::config::ModuleConfig;
+use crate::config::{ModuleConfig, parse_token_file_contents};
 
 /// Generate NGINX configuration directive handler
 macro_rules! ngx_conf_handler {
@@ -64,7 +64,7 @@ ngx_conf_handler!(
 
 /// Handler for `guardrails_api_token_file <path>`.
 /// Reads the token from the given file at NGINX config-load time, strips whitespace, and stores it
-/// in `ModuleConfig.api_token` exactly as if `guardrails_api_token` had been used.
+/// in `ModuleConfig.api_token`. An empty or whitespace-only file is rejected as a config error.
 extern "C" fn ngx_http_guardrails_set_api_token_file(
     cf: *mut ngx_conf_t,
     _cmd: *mut ngx_command_t,
@@ -98,11 +98,23 @@ extern "C" fn ngx_http_guardrails_set_api_token_file(
         };
         // Record the file path so we can surface it in config dumps / debug.
         conf.api_token_file = Some(path.to_string());
-        // Read and trim the token at config load time.
+        // Read, trim, and validate the token at config load time.
         match std::fs::read_to_string(path) {
-            Ok(contents) => {
-                conf.api_token = Some(contents.trim().to_string());
-            }
+            Ok(contents) => match parse_token_file_contents(&contents) {
+                Ok(token) => {
+                    conf.api_token = Some(token);
+                }
+                Err(e) => {
+                    ngx_conf_log_error!(
+                        NGX_LOG_EMERG,
+                        cf,
+                        "guardrails_api_token_file: token file \"{}\" {}",
+                        path,
+                        e.as_str()
+                    );
+                    return core::NGX_CONF_ERROR;
+                }
+            },
             Err(e) => {
                 ngx_conf_log_error!(
                     NGX_LOG_EMERG,
