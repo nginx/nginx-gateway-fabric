@@ -29,9 +29,9 @@ const gatewaylinkNamespace = "gatewaylink"
 // gatewaylinkManifests are the resources every pool mode needs. The NginxProxy is applied separately
 // because its Service type differs per mode.
 var gatewaylinkManifests = []string{
-	"externalLoadBalancer/gatewayLink/apps.yaml",
-	"externalLoadBalancer/gatewayLink/routes.yaml",
-	"externalLoadBalancer/gatewayLink/gateway.yaml",
+	"external-load-balancer/gateway-link/apps.yaml",
+	"external-load-balancer/gateway-link/routes.yaml",
+	"external-load-balancer/gateway-link/gateway.yaml",
 }
 
 // externalLoadBalancerAccepted reports whether any controller wrote an Accepted=True condition on
@@ -212,7 +212,7 @@ var _ = Describe("GatewayLink external LB", Ordered, Label("gatewaylink"), func(
 	// only the pod's node advertise the pool member.
 	Describe("nodeport pool mode", Ordered, Label("nodeport"), func() {
 		BeforeAll(func() {
-			installGatewaylinkCIS("nodeport", "externalLoadBalancer/gatewayLink/nginx-proxy.yaml")
+			installGatewaylinkCIS("nodeport", "external-load-balancer/gateway-link/nginx-proxy.yaml")
 		})
 
 		AfterAll(func() {
@@ -220,7 +220,7 @@ var _ = Describe("GatewayLink external LB", Ordered, Label("gatewaylink"), func(
 		})
 
 		It("programs a statically-addressed virtual server and routes traffic through it", func() {
-			applyELBAndWaitAccepted("externalLoadBalancer/gatewayLink/elb-static.yaml")
+			applyELBAndWaitAccepted("external-load-balancer/gateway-link/static.yaml")
 			expectTrafficThroughVIP(*bigipVIP)
 		})
 
@@ -228,7 +228,7 @@ var _ = Describe("GatewayLink external LB", Ordered, Label("gatewaylink"), func(
 		// it allocates through IPAM, so running it last keeps that residue from affecting the static
 		// test.
 		It("allocates a virtual server address from CIS IPAM and routes traffic through it", func() {
-			applyELBAndWaitAccepted("externalLoadBalancer/gatewayLink/elb-ipam.yaml")
+			applyELBAndWaitAccepted("external-load-balancer/gateway-link/ipam.yaml")
 			address := ingressLinkVSAddress()
 			expectTrafficThroughVIP(address)
 		})
@@ -240,7 +240,7 @@ var _ = Describe("GatewayLink external LB", Ordered, Label("gatewaylink"), func(
 	// That routing is in place before this suite runs, so the tests here only assert traffic flows.
 	Describe("cluster pool mode", Ordered, Label("cluster"), func() {
 		BeforeAll(func() {
-			installGatewaylinkCIS("cluster", "externalLoadBalancer/gatewayLink/nginx-proxy-cluster.yaml")
+			installGatewaylinkCIS("cluster", "external-load-balancer/gateway-link/nginx-proxy-cluster.yaml")
 		})
 
 		AfterAll(func() {
@@ -248,12 +248,12 @@ var _ = Describe("GatewayLink external LB", Ordered, Label("gatewaylink"), func(
 		})
 
 		It("programs a statically-addressed virtual server and routes traffic through it", func() {
-			applyELBAndWaitAccepted("externalLoadBalancer/gatewayLink/elb-static.yaml")
+			applyELBAndWaitAccepted("external-load-balancer/gateway-link/static.yaml")
 			expectTrafficThroughVIP(*bigipVIP)
 		})
 
 		It("allocates a virtual server address from CIS IPAM and routes traffic through it", func() {
-			applyELBAndWaitAccepted("externalLoadBalancer/gatewayLink/elb-ipam.yaml")
+			applyELBAndWaitAccepted("external-load-balancer/gateway-link/ipam.yaml")
 			address := ingressLinkVSAddress()
 			expectTrafficThroughVIP(address)
 		})

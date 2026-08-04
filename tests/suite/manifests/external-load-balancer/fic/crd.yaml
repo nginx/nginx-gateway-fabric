@@ -15,8 +15,8 @@ spec:
       served: true
       storage: true
       # The status subresource must be enabled and preserve unknown fields. F5 IPAM Controller
-      # v0.1.13 writes status.IPStatus with that exact capitalization, and a schema that does not
-      # allow it makes Kubernetes silently strip the field, so the allocation never reaches CIS.
+      # writes status.IPStatus with that exact capitalization, and a schema that does not allow it
+      # makes Kubernetes silently strip the field, so the allocation never reaches CIS.
       subresources:
         status: {}
       schema:

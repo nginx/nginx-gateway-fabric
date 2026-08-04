@@ -15,8 +15,18 @@ trap 'rc=$?; echo "ERROR: create-bigip-vm.sh failed at line ${LINENO} (exit ${rc
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
 source "${SCRIPT_DIR}/vars.env"
 
-AS3_RPM_URL="https://github.com/F5Networks/f5-appsvcs-extension/releases/download/v3.56.0/f5-appsvcs-3.56.0-10.noarch.rpm"
-AS3_RPM_NAME="f5-appsvcs-3.56.0-10.noarch.rpm"
+# AS3_VERSION is the git tag, passed in by the Makefile so renovate can track it. The RPM asset name
+# carries an extra build suffix that is not part of the tag, so the download URL is resolved from the
+# release's assets rather than built from the tag.
+AS3_VERSION="${AS3_VERSION:?AS3_VERSION must be set (passed by the Makefile)}"
+AS3_RPM_URL=$(curl -sSL --fail \
+    "https://api.github.com/repos/F5Networks/f5-appsvcs-extension/releases/tags/${AS3_VERSION}" |
+    grep -o '"browser_download_url":[[:space:]]*"[^"]*\.noarch\.rpm"' | head -1 | cut -d'"' -f4)
+if [ -z "${AS3_RPM_URL}" ]; then
+    echo "Could not find a .noarch.rpm asset on AS3 release ${AS3_VERSION}" >&2
+    exit 1
+fi
+AS3_RPM_NAME="${AS3_RPM_URL##*/}"
 
 MGMT="https://${BIGIP_ADDRESS:-PLACEHOLDER}:${BIGIP_MGMT_PORT:-8443}"
 
@@ -56,7 +66,7 @@ create_firewall() {
 
 # compute_ipam_pool picks the IPAM alias range for this BIG-IP. It must be unique per instance so
 # concurrent BIG-IPs on the same subnet do not collide, and its third octet must not be zero, since
-# F5 IPAM Controller v0.1.13 drops a zero octet. The subnet is a /20 like 10.X.0.0/20, so third octets
+# F5 IPAM Controller drops a zero octet. The subnet is a /20 like 10.X.0.0/20, so third octets
 # 0-15 are in range; nodes sit in the .0.x band. A third octet in .2-.15 is derived from a hash of the
 # instance name, which includes the run id and the oss/plus leg, so each leg gets its own band. It
 # sets IPAM_ALIAS (added to the NIC at create) and IPAM_RANGE (the FIC argument).
@@ -179,8 +189,8 @@ wait_mgmt_plane() {
 }
 
 # install_as3 uploads and installs the AS3 RPM, then waits for the REST plane to restart and AS3 to
-# report ready. CIS drives the BIG-IP through AS3, so it must be present before CIS starts. Version
-# 3.56.0 matches the schema that CIS 2.20.4 emits.
+# report ready. CIS drives the BIG-IP through AS3, so it must be present before CIS starts. The AS3
+# version must stay compatible with the schema the installed CIS emits.
 install_as3() {
     if as3_installed; then
         echo "AS3 already installed; skipping."

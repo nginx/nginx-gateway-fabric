@@ -24,6 +24,9 @@ SKIP_TESTS =
 CEL_TEST_TARGET =
 INFERENCE_SKIP_TESTS = GatewayDestinationEndpointServed,InferencePoolAppProtocol,InferencePoolMissingEPPRef
 
+# renovate: datasource=github-releases depName=F5Networks/f5-appsvcs-extension
+AS3_VERSION = v3.56.0
+
 # Check if ENABLE_EXPERIMENTAL is true
 # ifeq ($(ENABLE_EXPERIMENTAL),true)
 #     # If true, add the experimental conformance profiles
@@ -166,7 +169,7 @@ create-gke-router: ## Create a GKE router to allow egress traffic from private n
 
 .PHONY: create-bigip-vm
 create-bigip-vm: ## Create a BIG-IP VE instance for the GatewayLink test
-	./scripts/create-bigip-vm.sh
+	AS3_VERSION=$(AS3_VERSION) ./scripts/create-bigip-vm.sh
 
 .PHONY: cleanup-bigip-vm
 cleanup-bigip-vm: ## Delete the BIG-IP VE instance and its firewall rule
