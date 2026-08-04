@@ -2,6 +2,8 @@ package framework
 
 import (
 	"fmt"
+	"net"
+	"net/url"
 	"strconv"
 	"strings"
 )
@@ -44,7 +46,7 @@ func GetURL(baseURL string, port int) string {
 	for hostEnd < len(baseURL) {
 		switch baseURL[hostEnd] {
 		case '/', '?', '#':
-			// end of host
+			// end of authority
 		default:
 			hostEnd++
 			continue
@@ -52,11 +54,15 @@ func GetURL(baseURL string, port int) string {
 		break
 	}
 
-	host := baseURL[hostStart:hostEnd]
-	// Drop an existing port so we never produce host:old:new.
-	if i := strings.LastIndex(host, ":"); i >= 0 {
-		host = host[:i]
+	parsed, err := url.Parse(baseURL[:hostEnd])
+	if err != nil || parsed.Host == "" || parsed.Hostname() == "" {
+		panic(fmt.Sprintf("GetURL: invalid baseURL %q", baseURL))
 	}
 
-	return baseURL[:hostStart] + host + ":" + strconv.Itoa(port) + baseURL[hostEnd:]
+	authority := net.JoinHostPort(parsed.Hostname(), strconv.Itoa(port))
+	if parsed.User != nil {
+		authority = parsed.User.String() + "@" + authority
+	}
+
+	return baseURL[:hostStart] + authority + baseURL[hostEnd:]
 }
