@@ -13,7 +13,8 @@ set -o errtrace
 trap 'rc=$?; echo "ERROR: create-bigip-vm.sh failed at line ${LINENO} (exit ${rc})" >&2; exit "${rc}"' ERR
 
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
-source "${SCRIPT_DIR}/vars.env"
+VARS_ENV="${SCRIPT_DIR}/vars.env"
+source "${VARS_ENV}"
 
 # AS3_VERSION is the git tag, passed in by the Makefile so renovate can track it. The RPM asset name
 # carries an extra build suffix that is not part of the tag, so the download URL is resolved from the
@@ -265,12 +266,12 @@ read_vip() {
 
     # Drop any BIGIP_ADDRESS and BIGIP_VIP lines from a previous run before appending the current
     # values, so re-running the script does not leave duplicate entries in vars.env.
-    grep -v -E '^BIGIP_ADDRESS=|^BIGIP_VIP=' scripts/vars.env >scripts/vars.env.tmp
-    mv scripts/vars.env.tmp scripts/vars.env
+    grep -v -E '^BIGIP_ADDRESS=|^BIGIP_VIP=' "${VARS_ENV}" >"${VARS_ENV}.tmp"
+    mv "${VARS_ENV}.tmp" "${VARS_ENV}"
     {
         echo "BIGIP_ADDRESS=${BIGIP_ADDRESS}"
         echo "BIGIP_VIP=${internal_ip}"
-    } >>scripts/vars.env
+    } >>"${VARS_ENV}"
 }
 
 # bigip_post sends a JSON POST to an iControl REST path and fails loudly. A 2xx status is success. A
@@ -332,9 +333,9 @@ create_pod_egress() {
 # persist_ipam_range writes IPAM_RANGE to vars.env so the test run reads it, replacing any prior value
 # so a re-run does not duplicate lines.
 persist_ipam_range() {
-    grep -v -E '^IPAM_RANGE=' scripts/vars.env >scripts/vars.env.tmp
-    mv scripts/vars.env.tmp scripts/vars.env
-    echo "IPAM_RANGE=${IPAM_RANGE}" >>scripts/vars.env
+    grep -v -E '^IPAM_RANGE=' "${VARS_ENV}" >"${VARS_ENV}.tmp"
+    mv "${VARS_ENV}.tmp" "${VARS_ENV}"
+    echo "IPAM_RANGE=${IPAM_RANGE}" >>"${VARS_ENV}"
 }
 
 main() {

@@ -4,7 +4,9 @@
 
 set -o pipefail
 
-source scripts/vars.env
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
+
+source "${SCRIPT_DIR}/vars.env"
 
 # Delete each independently so a missing resource never leaves the others orphaned. The instance
 # carries the IPAM alias IP, so that is removed with it. The pods rule is the egress rule added for

@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"os"
 	"os/exec"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -32,33 +31,8 @@ const (
 	FICIPAMPool = "production"
 )
 
-// ficValuesTemplate is the Helm values passed to the FIC chart. ip_range is set here rather than via
-// --set-string because the chart runs a replace filter over the value and helm's --set coerces the
-// JSON map to a list first, which the filter rejects; a values file keeps it a plain string. The
-// chart mounts the allocation database on a PVC and defaults pvc.create to false, so a small claim is
-// created. storageClassName is left unset so the claim binds against whatever default class the
-// cluster has (standard-rwo on GKE, standard on kind), rather than pinning to one environment.
-const ficValuesTemplate = `namespace: %s
-rbac:
-  create: true
-serviceAccount:
-  create: true
-image:
-  user: f5networks
-  repo: f5-ipam-controller
-  version: "%s"
-args:
-  orchestration: "kubernetes"
-  provider: "f5-ip-provider"
-  ip_range: '{"%s":"%s"}'
-  log_level: "DEBUG"
-pvc:
-  create: true
-  storage: 100Mi
-`
-
 // ficCRDManifest is the only FIC resource applied outside Helm. See the FIC comment above.
-const ficCRDManifest = "external-load-balancer/fic/crd.yaml"
+const ficCRDManifest = "externalloadbalancer/fic/crd.yaml"
 
 // InstallFIC applies the FIC CRD, then installs the controller Helm chart pointed at the given IPAM
 // range. The chart is installed into the CIS namespace, which must already exist. ipamRange is the
@@ -82,18 +56,26 @@ func InstallFIC(rm ResourceManager, ipamRange string) ([]byte, error) {
 		return output, fmt.Errorf("error updating helm repos: %w", err)
 	}
 
-	valuesFile, err := os.CreateTemp("", "fic-values-*.yaml")
-	if err != nil {
-		return nil, fmt.Errorf("creating FIC values file: %w", err)
-	}
-	defer os.Remove(valuesFile.Name())
-
-	values := fmt.Sprintf(ficValuesTemplate, CISNamespace, FICImageVersion, FICIPAMPool, ipamRange)
-	if _, err := valuesFile.WriteString(values); err != nil {
-		return nil, fmt.Errorf("writing FIC values file: %w", err)
-	}
-	if err := valuesFile.Close(); err != nil {
-		return nil, fmt.Errorf("closing FIC values file: %w", err)
+	args := []string{
+		"install",
+		FICReleaseName,
+		FICChart,
+		"--namespace", CISNamespace,
+		"--set", "image.version=" + FICImageVersion,
+		"--set", "namespace=" + CISNamespace,
+		"--set", "rbac.create=true",
+		"--set", "serviceAccount.create=true",
+		"--set", "args.log_level=DEBUG",
+		// The chart mounts the allocation database on a PVC and defaults pvc.create to false, which
+		// would leave the deployment waiting on a claim that never appears. storage size is set but the
+		// class is left to the cluster default (standard-rwo on GKE, standard on kind).
+		"--set", "pvc.create=true",
+		"--set", "pvc.storage=100Mi",
+		// The chart runs a replace filter over ip_range expecting a string, but helm's --set treats
+		// unescaped braces as a map literal, so the braces are escaped to keep the value a plain string.
+		// The pool name must match the ExternalLoadBalancer's ipamLabel.
+		"--set-string", fmt.Sprintf(`args.ip_range=\{%q:%q\}`, FICIPAMPool, ipamRange),
+		"--wait",
 	}
 
 	GinkgoWriter.Printf(
@@ -101,14 +83,7 @@ func InstallFIC(rm ResourceManager, ipamRange string) ([]byte, error) {
 		FICReleaseName, CISNamespace, FICImageVersion, FICIPAMPool,
 	)
 
-	//nolint:gosec // args are constants and a runtime-generated temp file path, not user input
-	return exec.CommandContext(
-		context.Background(),
-		"helm", "install", FICReleaseName, FICChart,
-		"--namespace", CISNamespace,
-		"-f", valuesFile.Name(),
-		"--wait",
-	).CombinedOutput()
+	return exec.CommandContext(context.Background(), "helm", args...).CombinedOutput()
 }
 
 // UninstallFIC uninstalls the FIC Helm release and deletes the CRD it applied. It is best-effort so a
