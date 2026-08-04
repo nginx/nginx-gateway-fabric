@@ -187,6 +187,12 @@ func (cs *commandService) Subscribe(in pb.CommandService_SubscribeServer) error 
 	defer broadcaster.CancelSubscription(channels.ID)
 
 	pendingBroadcastRequest := false
+	// pendingCorrelationID tracks the correlation ID of the in-flight broadcast request so that
+	// a stray or duplicate response (e.g. a delayed response from a previous request) can be
+	// distinguished from the actual response to the current request. Without this check, a stray
+	// response could be misattributed as the ack for a different/later request, causing the
+	// retry logic to resend an action that was already applied.
+	var pendingCorrelationID string
 
 	for {
 		// When a message is received over the ListenCh, it is assumed and required that the
@@ -242,6 +248,7 @@ func (cs *commandService) Subscribe(in pb.CommandService_SubscribeServer) error 
 			// Track this broadcast request to distinguish it from initial config operations.
 			// Only broadcast operations should signal ResponseCh for coordination.
 			pendingBroadcastRequest = true
+			pendingCorrelationID = req.GetMessageMeta().GetCorrelationId()
 		case err = <-msgr.Errors():
 			cs.logger.Error(err, "connection error", conn.ParentType, conn.ParentName, "uuid", grpcInfo.UUID)
 			deployment.SetPodErrorStatus(grpcInfo.UUID, err)
@@ -255,6 +262,17 @@ func (cs *commandService) Subscribe(in pb.CommandService_SubscribeServer) error 
 			}
 			return grpcStatus.Error(codes.Internal, err.Error())
 		case msg := <-msgr.Messages():
+			correlationID := msg.GetMessageMeta().GetCorrelationId()
+			if pendingBroadcastRequest && correlationID != "" && correlationID != pendingCorrelationID {
+				cs.logger.V(1).Info(
+					"Ignoring response with unexpected correlation id, likely stale or duplicate",
+					"wantCorrelationId", pendingCorrelationID,
+					"gotCorrelationId", correlationID,
+					"uuid", grpcInfo.UUID,
+				)
+				continue
+			}
+
 			res := msg.GetCommandResponse()
 			if res.GetStatus() != pb.CommandResponse_COMMAND_STATUS_OK {
 				if isRollbackMessage(res.GetMessage()) {
@@ -272,6 +290,7 @@ func (cs *commandService) Subscribe(in pb.CommandService_SubscribeServer) error 
 			if pendingBroadcastRequest {
 				signalBroadcastResponse(ctx, channels.ResponseCh)
 				pendingBroadcastRequest = false
+				pendingCorrelationID = ""
 			} else {
 				cs.logger.V(1).Info(
 					"Received response for non-broadcast request (likely initial config)",
@@ -354,13 +373,14 @@ func (cs *commandService) setInitialConfig(
 		"configVersion", configVersion,
 	)
 
-	if err := msgr.Send(ctx, buildRequest(fileOverviews, conn.InstanceID, configVersion)); err != nil {
+	initialConfigReq := buildRequest(fileOverviews, conn.InstanceID, configVersion)
+	if err := msgr.Send(ctx, initialConfigReq); err != nil {
 		cs.logAndSendErrorStatus(grpcInfo, deployment, conn, err)
 
 		return grpcStatus.Error(codes.Internal, err.Error())
 	}
 
-	applyErr, connErr := cs.waitForInitialConfigApply(ctx, msgr)
+	applyErr, connErr := cs.waitForInitialConfigApply(ctx, msgr, initialConfigReq.GetMessageMeta().GetCorrelationId())
 	if connErr != nil {
 		cs.logger.Error(connErr, "error setting initial configuration", "uuid", grpcInfo.UUID)
 
@@ -378,13 +398,16 @@ func (cs *commandService) setInitialConfig(
 			500*time.Millisecond,
 			true, // poll immediately
 			func(ctx context.Context) (bool, error) {
-				if err := msgr.Send(ctx, buildPlusAPIRequest(action, conn.InstanceID)); err != nil {
+				plusReq := buildPlusAPIRequest(action, conn.InstanceID)
+				if err := msgr.Send(ctx, plusReq); err != nil {
 					cs.logAndSendErrorStatus(grpcInfo, deployment, conn, err)
 
 					return false, grpcStatus.Error(codes.Internal, err.Error())
 				}
 
-				upstreamApplyErr, connErr := cs.waitForInitialConfigApply(ctx, msgr)
+				upstreamApplyErr, connErr := cs.waitForInitialConfigApply(
+					ctx, msgr, plusReq.GetMessageMeta().GetCorrelationId(),
+				)
 				if connErr != nil {
 					cs.logger.Error(connErr, "error setting initial configuration", "uuid", grpcInfo.UUID)
 
@@ -414,7 +437,8 @@ func (cs *commandService) setInitialConfig(
 }
 
 // waitForInitialConfigApply waits for the nginx agent to respond after a Subscriber attempts
-// to apply its initial config.
+// to apply its initial config. It ignores any response whose correlation ID doesn't match
+// expectedCorrelationID.
 // Two errors are returned
 // - applyErr is an error applying the configuration
 // - connectionErr is an error with the connection or sending the configuration
@@ -423,6 +447,7 @@ func (cs *commandService) setInitialConfig(
 func (cs *commandService) waitForInitialConfigApply(
 	ctx context.Context,
 	msgr messenger.Messenger,
+	expectedCorrelationID string,
 ) (applyErr error, connectionErr error) {
 	for {
 		select {
@@ -434,6 +459,16 @@ func (cs *commandService) waitForInitialConfigApply(
 			}
 			return nil, grpcStatus.Error(codes.Internal, err.Error())
 		case msg := <-msgr.Messages():
+			correlationID := msg.GetMessageMeta().GetCorrelationId()
+			if correlationID != "" && correlationID != expectedCorrelationID {
+				cs.logger.V(1).Info(
+					"Ignoring response with unexpected correlation id, likely stale or duplicate",
+					"wantCorrelationId", expectedCorrelationID,
+					"gotCorrelationId", correlationID,
+				)
+				continue
+			}
+
 			res := msg.GetCommandResponse()
 			if res.GetStatus() != pb.CommandResponse_COMMAND_STATUS_OK {
 				applyErr := fmt.Errorf("msg: %s; error: %s", res.GetMessage(), res.GetError())
