@@ -40,6 +40,9 @@ type Policy struct {
 	InvalidForGateways map[types.NamespacedName]struct{}
 	// WAFState holds WAF-specific state for this policy. Only populated for WAFPolicy resources.
 	WAFState *PolicyWAFState
+	// PayloadProcessorState holds resolved ExtProcess state for this policy.
+	// Only populated for PayloadProcessor resources.
+	PayloadProcessorState *PolicyPayloadProcessorState
 	// Ancestors is a list of ancestor objects of the Policy. Used in status.
 	Ancestors []PolicyAncestor
 	// TargetRefs are the resources that the Policy targets.
@@ -286,11 +289,11 @@ func (g *Graph) attachPolicies(validator validation.PolicyValidator, ctlrName st
 // remains valid (Programmed=True) because it still applies to requests not covered by an
 // overriding Route-attached policy.
 //
-// The result is stored on L7Route.EffectivePayloadProcessor. There is no config generator for
-// PayloadProcessor yet, so this field is currently unused at runtime. When the generator lands,
-// it should read L7Route.EffectivePayloadProcessor (e.g. alongside buildPolicies in
-// internal/controller/state/dataplane/configuration.go) to emit the per-route processing config,
-// rather than iterating route.Policies directly, so that this Route-over-Gateway precedence is honored.
+// The result is stored on L7Route.EffectivePayloadProcessor and is consumed by the data-plane
+// config generator (convertGraphGuardrails in internal/controller/state/dataplane/convert.go and
+// buildGuardrailsAuthSecrets in internal/controller/state/dataplane/configuration.go), which reads
+// L7Route.EffectivePayloadProcessor rather than iterating route.Policies directly so that this
+// Route-over-Gateway precedence is honored.
 func resolveEffectivePayloadProcessors(
 	gateways map[types.NamespacedName]*Gateway,
 	routes map[RouteKey]*L7Route,
@@ -444,6 +447,15 @@ func attachPolicyToRoute(
 	}
 
 	for _, parentRef := range route.ParentRefs {
+		if payloadProcessorResolverMissing(policy, parentRef.EffectiveNginxProxy) {
+			policy.InvalidForGateways[parentRef.GatewayNsName] = struct{}{}
+			ancestor.Conditions = append(
+				ancestor.Conditions,
+				conditions.NewPolicyInvalid(conditions.PolicyMessagePayloadProcessorResolverMissing),
+			)
+			continue
+		}
+
 		if parentRef.EffectiveNginxProxy != nil {
 			globalSettings := &policies.GlobalSettings{
 				TelemetryEnabled: telemetryEnabledForNginxProxy(parentRef.EffectiveNginxProxy),
@@ -466,6 +478,21 @@ func attachPolicyToRoute(
 	if len(effectiveGateways) > 0 || len(policy.InvalidForGateways) < len(route.ParentRefs) {
 		route.Policies = append(route.Policies, policy)
 	}
+}
+
+// payloadProcessorResolverMissing reports whether the policy is a PayloadProcessor whose ExtProcess
+// backend is an ExternalName Service, but the given effective NginxProxy has no DNS resolver
+// configured. Such a configuration cannot re-resolve the external hostname per request, so the policy
+// must be marked invalid for the affected Gateway (mirroring regular ExternalName route handling in
+// checkExternalNameValidForGateways).
+func payloadProcessorResolverMissing(policy *Policy, effectiveNP *EffectiveNginxProxy) bool {
+	if getPolicyKind(policy.Source) != kinds.PayloadProcessor {
+		return false
+	}
+	if policy.PayloadProcessorState == nil || !policy.PayloadProcessorState.BackendIsExternalName {
+		return false
+	}
+	return effectiveNP == nil || effectiveNP.DNSResolver == nil
 }
 
 func attachPolicyToGateway(
@@ -525,6 +552,15 @@ func attachPolicyToGateway(
 	if !gw.Valid {
 		policy.InvalidForGateways[ref.Nsname] = struct{}{}
 		ancestor.Conditions = []conditions.Condition{conditions.NewPolicyTargetNotFound("The TargetRef is invalid")}
+		policy.Ancestors = append(policy.Ancestors, ancestor)
+		return
+	}
+
+	if payloadProcessorResolverMissing(policy, gw.EffectiveNginxProxy) {
+		policy.InvalidForGateways[ref.Nsname] = struct{}{}
+		ancestor.Conditions = []conditions.Condition{
+			conditions.NewPolicyInvalid(conditions.PolicyMessagePayloadProcessorResolverMissing),
+		}
 		policy.Ancestors = append(policy.Ancestors, ancestor)
 		return
 	}

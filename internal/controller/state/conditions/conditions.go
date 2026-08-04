@@ -117,6 +117,11 @@ const (
 	// when telemetry is not enabled in the NginxProxy resource.
 	PolicyMessageTelemetryNotEnabled = "Telemetry is not enabled in the NginxProxy resource"
 
+	// PolicyMessagePayloadProcessorResolverMissing is used when an ExternalName PayloadProcessor
+	// backend is attached to a Gateway whose NginxProxy has no DNS resolver configured.
+	PolicyMessagePayloadProcessorResolverMissing = "PayloadProcessor ExternalName backend requires " +
+		"DNS resolver configuration in Gateway's NginxProxy"
+
 	// PolicyReasonTargetConflict is used with the "PolicyAccepted" condition when a Route that it targets
 	// has an overlapping hostname:port/path combination with another Route.
 	PolicyReasonTargetConflict v1.PolicyConditionReason = "TargetConflict"

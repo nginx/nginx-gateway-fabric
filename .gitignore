@@ -69,3 +69,6 @@ docs/api/content.md
 
 # Test tgz files for WAF bundles
 tests/**/*.tgz
+
+# Rust build artifacts
+**/target/
