@@ -14,11 +14,9 @@ use ngx::ngx_log_error;
 
 use crate::Module;
 use crate::ctx::call_next_request_body_filter;
-use crate::decision::{
-    AccessAction, RequestVerdict, decide_access_action, verdict_from_inspection,
-};
+use crate::decision::{AccessAction, RequestVerdict, decide_access_action};
 use crate::stream;
-use crate::subrequest_client::{ScanDirection, inspect_content_async};
+use crate::subrequest_client::{ScanDirection, run_inspection};
 use crate::sync_ptr::AssertSendSync;
 
 /// Typed request body for chat/completion API formats.
@@ -432,45 +430,30 @@ unsafe extern "C" fn guardrails_body_read_handler(r: *mut ngx_http_request_t) {
         // alive (dropping a Task cancels it); on completion it records the
         // verdict and resumes the phase engine.
         //
-        // The `inspect_content_async(...).await` below has no Rust-side timeout;
-        // it is bounded only by the internal location's `proxy_*_timeout` (see
+        // The `run_inspection(...).await` below has no Rust-side timeout; it is
+        // bounded only by the internal location's `proxy_*_timeout` (see
         // `config.rs`) or by request teardown (which cancels this task). Until it
         // resolves, the access phase stays suspended (`NGX_AGAIN`).
         let r_send = AssertSendSync(r);
-        let state_send = AssertSendSync(state_ptr);
         let task = ngx::async_::spawn(async move {
             let r = r_send.0;
-            let state_ptr = state_send.0;
-            // Reduce the inspection result to an Option<Verdict> (None == error,
-            // logged here for its side effect), then defer the allow/block policy
-            // to the shared, unit-tested `verdict_from_inspection`.
-            let outcome = match inspect_content_async(
+            // Await + fail-closed error log + verdict mapping are shared with the
+            // response path via `run_inspection`.
+            let decision = run_inspection(
                 r,
                 &params.internal_uri,
                 &content,
                 params.api_token.as_deref(),
                 ScanDirection::Request,
             )
-            .await
-            {
-                Ok(v) => Some(v),
-                Err(e) => {
-                    ngx_log_error!(
-                        NGX_LOG_ERR,
-                        (*(*r).connection).log,
-                        "guardrails: async request inspection error (fail-closed): {:?}",
-                        e
-                    );
-                    None
-                }
-            };
-            let decision = verdict_from_inspection(outcome);
+            .await;
             let verdict = if decision.allow {
                 InspectVerdict::Allow
             } else {
                 InspectVerdict::Block
             };
-            let _ = state_ptr; // state pointer used only via resume_phases below
+            // The verdict is recorded via resume_phases, which re-fetches the
+            // per-request state from `r`; no captured state pointer is needed.
             resume_phases(r, verdict, decision.message);
         });
 
@@ -575,22 +558,13 @@ fn request_block_body(message: Option<&str>) -> Vec<u8> {
 ///
 /// # Access-phase finalize/return contract (critical)
 ///
-/// This function is invoked as (part of) an access-phase handler's return path, which
-/// runs under `ngx_http_core_access_phase`. That checker calls
-/// `ngx_http_finalize_request(r, rc)` for any handler return code that is not
-/// `NGX_OK` / `NGX_AGAIN` / `NGX_DONE`. Therefore this function must:
-///
-///   1. call `ngx_http_finalize_request` **exactly once** itself, and
-///   2. return **`NGX_DONE`** so the phase checker does NOT finalize a second time.
-///
-/// Returning `NGX_ERROR` here (the obvious-looking choice) is a bug: it makes the phase
-/// checker finalize again, and the resulting double-finalize tears the connection down
-/// before the queued body buffer is flushed — the client then receives `403` with an
-/// **empty body** (`403 0` in the access log). This mirrors the same hazard documented
-/// on the response-path helpers (`send_termination`, `send_blocked_response`), which
-/// deliberately avoid calling finalize from inside the body-filter chain.
-///
-/// Every early-exit branch below finalizes once and returns `NGX_DONE` for the same reason.
+/// `ngx_http_core_access_phase` finalizes for any return code other than
+/// `NGX_OK` / `NGX_AGAIN` / `NGX_DONE`. So this function must (1) call
+/// `ngx_http_finalize_request` **exactly once** itself and (2) return **`NGX_DONE`**
+/// so the checker does not finalize again. Returning `NGX_ERROR` instead triggers a
+/// double-finalize that tears the connection down before the queued body flushes —
+/// the client gets `403` with an **empty body** (`403 0`). Every early-exit branch
+/// below finalizes once and returns `NGX_DONE`.
 ///
 /// `message` is the guardrails backend's configurable block text; when `None`
 /// the [`DEFAULT_REQUEST_BLOCK_MESSAGE`] fallback is used. The request-side error

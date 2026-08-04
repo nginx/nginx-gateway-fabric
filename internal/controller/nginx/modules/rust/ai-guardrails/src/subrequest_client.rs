@@ -29,12 +29,14 @@ use core::ptr::NonNull;
 use futures::channel::oneshot;
 use ngx::core::Status;
 use ngx::ffi::{
-    NGX_HTTP_SUBREQUEST_IN_MEMORY, NGX_OK, ngx_chain_t, ngx_http_post_subrequest_t,
+    NGX_HTTP_SUBREQUEST_IN_MEMORY, NGX_LOG_ERR, NGX_OK, ngx_chain_t, ngx_http_post_subrequest_t,
     ngx_http_request_body_t, ngx_http_request_t, ngx_http_subrequest, ngx_int_t, ngx_list_init,
     ngx_palloc, ngx_pool_t, ngx_post_event, ngx_posted_events, ngx_str_t, ngx_table_elt_t,
 };
+use ngx::ngx_log_error;
 use serde::{Deserialize, Serialize};
 
+use crate::decision::{InspectionDecision, verdict_from_inspection};
 use crate::error::{GUARDRAILS_USER_AGENT, GuardrailsError};
 use crate::sync_ptr::AssertSendSync;
 
@@ -223,6 +225,43 @@ pub async unsafe fn inspect_content_async(
     unsafe { extract_outcome(subrequest.0) }
 }
 
+/// Run one async inspection and reduce it to the shared allow/block decision.
+///
+/// Awaits [`inspect_content_async`], logging any error for its side effect (the
+/// fail-closed policy then blocks with no message), and applies the shared,
+/// unit-tested [`verdict_from_inspection`]. Both the request and response paths
+/// call this so their allow/block handling cannot drift.
+///
+/// # Safety
+/// Same contract as [`inspect_content_async`]: `r` must remain valid for the
+/// duration of the await.
+pub(crate) async unsafe fn run_inspection(
+    r: *mut ngx_http_request_t,
+    internal_uri: &str,
+    content: &str,
+    api_token: Option<&str>,
+    direction: ScanDirection,
+) -> InspectionDecision {
+    let outcome = match unsafe {
+        inspect_content_async(r, internal_uri, content, api_token, direction)
+    }
+    .await
+    {
+        Ok(v) => Some(v),
+        Err(e) => {
+            ngx_log_error!(
+                NGX_LOG_ERR,
+                unsafe { (*(*r).connection).log },
+                "guardrails: async {} inspection error (fail-closed): {:?}",
+                direction.as_str(),
+                e
+            );
+            None
+        }
+    };
+    verdict_from_inspection(outcome)
+}
+
 /// Allocate and issue the subrequest. Returns the pending completion handle and
 /// the created subrequest pointer.
 unsafe fn start_subrequest(
@@ -300,7 +339,7 @@ unsafe fn start_subrequest(
         let _ = request.add_header_in("Content-Type", "application/json");
         // Required: some guardrails backends sit behind an edge/WAF that rejects
         // requests without a User-Agent with 403. NGINX's proxy module does not add a
-        // default User-Agent for a subrequest, so set it explicitly (matching client.rs).
+        // default User-Agent for a subrequest, so set it explicitly.
         let _ = request.add_header_in("User-Agent", GUARDRAILS_USER_AGENT);
         // Only emit the header for a non-empty token: an empty credential would
         // produce `Authorization: Bearer ` and fail closed. An empty token file
@@ -440,25 +479,19 @@ struct PSData {
 /// C `handler` fires inside the subrequest's `ngx_http_finalize_request`.
 ///
 /// # Unbounded await (no Rust-side timeout)
-/// The `finish()` future has **no timeout in Rust**. It resolves only when NGINX
+/// The `finish()` future has **no timeout in Rust**; it resolves only when NGINX
 /// invokes [`handler`](Self::handler) from the subrequest's
-/// `ngx_http_finalize_request`, which happens when the subrequest to the internal
-/// guardrails location completes (or errors). A slow or never-completing backend
-/// therefore leaves the await **pending indefinitely**. The only time bounds are:
-///   * the internal location's `proxy_connect/send/read_timeout` — the sole
-///     configured bound; when one fires, NGINX finalizes the subrequest with a
-///     non-2xx status, the handler runs, and the await resolves to an error
-///     (`extract_outcome` → fail-closed block). See `config.rs` for the timeout
-///     model (there is no module-level timeout directive; NGINX defaults 60s per
-///     operation apply absent an override).
-///   * request teardown — dropping the spawned task drops this handle, whose
-///     `Drop` (below) drops the `oneshot::Sender`, resolving the await to
-///     `Err(Canceled)` → `"subrequest channel canceled"` → fail-closed block.
+/// `ngx_http_finalize_request`. A slow/never-completing backend leaves it pending
+/// indefinitely. The only bounds are:
+///   * the internal location's `proxy_*_timeout` (see `config.rs`; no module-level
+///     directive, NGINX's 60s-per-operation defaults apply) — on fire, the
+///     subrequest finalizes non-2xx → fail-closed block; and
+///   * request teardown — dropping the task drops this handle, whose `Drop`
+///     (below) drops the `oneshot::Sender` → `Err(Canceled)` → fail-closed block.
 ///
-/// Note this means a per-read-resetting `proxy_read_timeout` cannot bound a
-/// backend that dribbles bytes slowly forever; that residual case is only ended
-/// by connection teardown. This is by design (no configurable total-budget
-/// timeout).
+/// A per-read-resetting `proxy_read_timeout` cannot bound a backend that dribbles
+/// bytes forever; that residual case ends only at teardown. By design (no
+/// configurable total-budget timeout).
 struct PostSubrequest {
     post_subrequest: *mut ngx_http_post_subrequest_t,
     receiver: Option<oneshot::Receiver<Status>>,

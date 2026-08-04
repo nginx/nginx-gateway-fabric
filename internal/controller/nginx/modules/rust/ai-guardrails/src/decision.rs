@@ -246,7 +246,7 @@ pub(crate) fn block_commit_kind(headers_suppressed: bool) -> BlockCommitKind {
 }
 
 // ---------------------------------------------------------------------------
-// 4. Response status gate (shared by the header and body filters)
+// 5. Response status gate (shared by the header and body filters)
 // ---------------------------------------------------------------------------
 
 /// Whether a response with this HTTP status should be buffered and inspected.

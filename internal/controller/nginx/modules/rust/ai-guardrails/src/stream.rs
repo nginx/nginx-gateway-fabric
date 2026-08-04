@@ -265,7 +265,7 @@ pub const DEFAULT_NON_STREAMING_BLOCK_MESSAGE: &str = "Response blocked by guard
 /// backend message is present, it is appended as `"<default> Message: <m>"` so
 /// the operator-configured text augments (rather than replaces) the policy
 /// notice. The result is later JSON-escaped by [`output_error_json`] /
-/// `request_block_body`, so backend-supplied text cannot break the JSON.
+/// `request_path::request_block_body`, so backend-supplied text cannot break the JSON.
 pub fn compose_block_message(default: &str, message: Option<&str>) -> String {
     match message {
         Some(m) => format!("{default} Message: {m}"),
@@ -303,7 +303,7 @@ fn output_error_json(message: &str) -> String {
 /// `api_error` (a server-side failure in OpenAI's error taxonomy), NOT
 /// `invalid_request_error` (which denotes a bad client request). The `code` remains
 /// `content_policy_violation` to convey the policy reason. See the status/type matrix
-/// documented on `send_termination` / `send_blocked_response` in `lib.rs`.
+/// documented on `send_termination` / `send_blocked_response` in `response_path.rs`.
 pub fn termination_message(message: Option<&str>) -> Vec<u8> {
     let msg = compose_block_message(DEFAULT_SSE_BLOCK_MESSAGE, message);
     let mut body = Vec::new();
@@ -605,7 +605,7 @@ mod tests {
     #[test]
     fn test_request_block_body_uses_invalid_request_error() {
         // Mirror of the request-blocked fallback body produced by
-        // `lib.rs::request_block_body(None)`. The request-side block DOES represent a bad
+        // `request_path::request_block_body(None)`. The request-side block DOES represent a bad
         // client request, so it must keep `type: invalid_request_error` (distinct from the
         // output-side `api_error`). Keep this literal in sync with `request_block_body`'s
         // envelope + `DEFAULT_REQUEST_BLOCK_MESSAGE`.

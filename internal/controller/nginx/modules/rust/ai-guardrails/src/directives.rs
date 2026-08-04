@@ -12,7 +12,13 @@ use ngx::{ngx_conf_log_error, ngx_string};
 
 use crate::config::{ModuleConfig, parse_token_file_contents};
 
-/// Generate NGINX configuration directive handler
+/// Generate an NGINX configuration directive handler.
+///
+/// Handles the shared boilerplate — null-pointer checks, single-argument arity,
+/// and UTF-8 decoding — then invokes `$apply(conf, val)`. `$apply` returns
+/// `Result<(), String>`; on `Err(msg)` the handler logs `msg` at `NGX_LOG_EMERG`
+/// and fails config load with `NGX_CONF_ERROR`. Infallible directives simply
+/// return `Ok(())`.
 macro_rules! ngx_conf_handler {
     ($name:ident, $directive:literal, $apply:expr_2021) => {
         extern "C" fn $name(
@@ -47,7 +53,14 @@ macro_rules! ngx_conf_handler {
                     }
                 };
                 #[allow(clippy::redundant_closure_call)]
-                ($apply)(conf, val);
+                match ($apply)(conf, val) {
+                    Ok(()) => {}
+                    Err(msg) => {
+                        let msg: String = msg;
+                        ngx_conf_log_error!(NGX_LOG_EMERG, cf, "{}", msg);
+                        return core::NGX_CONF_ERROR;
+                    }
+                }
             }
             core::NGX_CONF_OK
         }
@@ -57,84 +70,40 @@ macro_rules! ngx_conf_handler {
 ngx_conf_handler!(
     ngx_http_guardrails_set_enable,
     "guardrails_filter",
-    |conf: &mut ModuleConfig, val: &str| {
+    |conf: &mut ModuleConfig, val: &str| -> Result<(), String> {
         conf.enabled = val.eq_ignore_ascii_case("on");
+        Ok(())
     }
 );
 
-/// Handler for `guardrails_api_token_file <path>`.
-/// Reads the token from the given file at NGINX config-load time, strips whitespace, and stores it
-/// in `ModuleConfig.api_token`. An empty or whitespace-only file is rejected as a config error.
-extern "C" fn ngx_http_guardrails_set_api_token_file(
-    cf: *mut ngx_conf_t,
-    _cmd: *mut ngx_command_t,
-    conf: *mut c_void,
-) -> *mut c_char {
-    unsafe {
-        if cf.is_null() || conf.is_null() {
-            return core::NGX_CONF_ERROR;
-        }
-        let cf_ref = &mut *cf;
-        let conf = &mut *(conf as *mut ModuleConfig);
-        let args: &[ngx_str_t] = (*cf_ref.args).as_slice();
-        if args.len() < 2 {
-            ngx_conf_log_error!(
-                NGX_LOG_EMERG,
-                cf,
-                "`guardrails_api_token_file` missing argument"
-            );
-            return core::NGX_CONF_ERROR;
-        }
-        let path = match args[1].to_str() {
-            Ok(s) => s,
-            Err(_) => {
-                ngx_conf_log_error!(
-                    NGX_LOG_EMERG,
-                    cf,
-                    "`guardrails_api_token_file` path not valid UTF-8"
-                );
-                return core::NGX_CONF_ERROR;
-            }
-        };
+ngx_conf_handler!(
+    ngx_http_guardrails_set_api_token_file,
+    "guardrails_api_token_file",
+    // Reads the token from `<path>` at NGINX config-load time, strips whitespace,
+    // and stores it in `ModuleConfig.api_token`. An empty/whitespace-only file, or
+    // any read error, is rejected as a config error (returned as `Err(msg)`).
+    |conf: &mut ModuleConfig, path: &str| -> Result<(), String> {
         // Record the file path so we can surface it in config dumps / debug.
         conf.api_token_file = Some(path.to_string());
-        // Read, trim, and validate the token at config load time.
-        match std::fs::read_to_string(path) {
-            Ok(contents) => match parse_token_file_contents(&contents) {
-                Ok(token) => {
-                    conf.api_token = Some(token);
-                }
-                Err(e) => {
-                    ngx_conf_log_error!(
-                        NGX_LOG_EMERG,
-                        cf,
-                        "guardrails_api_token_file: token file \"{}\" {}",
-                        path,
-                        e.as_str()
-                    );
-                    return core::NGX_CONF_ERROR;
-                }
-            },
-            Err(e) => {
-                ngx_conf_log_error!(
-                    NGX_LOG_EMERG,
-                    cf,
-                    "guardrails_api_token_file: failed to read \"{}\": {}",
-                    path,
-                    e
-                );
-                return core::NGX_CONF_ERROR;
-            }
-        }
+        let contents = std::fs::read_to_string(path)
+            .map_err(|e| format!("guardrails_api_token_file: failed to read \"{path}\": {e}"))?;
+        let token = parse_token_file_contents(&contents).map_err(|e| {
+            format!(
+                "guardrails_api_token_file: token file \"{path}\" {}",
+                e.as_str()
+            )
+        })?;
+        conf.api_token = Some(token);
+        Ok(())
     }
-    core::NGX_CONF_OK
-}
+);
 
 ngx_conf_handler!(
     ngx_http_guardrails_set_internal_uri,
     "guardrails_internal_uri",
-    |conf: &mut ModuleConfig, val: &str| {
+    |conf: &mut ModuleConfig, val: &str| -> Result<(), String> {
         conf.internal_uri = Some(val.to_string());
+        Ok(())
     }
 );
 

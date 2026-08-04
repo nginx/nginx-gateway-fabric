@@ -28,12 +28,12 @@ use crate::ctx::{
 };
 use crate::decision::{
     BlockCommitKind, ResponseAction, ResponseFilterInputs, block_commit_kind,
-    decide_response_action, should_inspect_status, verdict_from_inspection,
+    decide_response_action, should_inspect_status,
 };
 use crate::stream::{
     ResponseInspect, ResponseVerdict, StreamContext, non_streaming_error_body, termination_message,
 };
-use crate::subrequest_client::{ScanDirection, inspect_content_async};
+use crate::subrequest_client::{ScanDirection, run_inspection};
 use crate::sync_ptr::AssertSendSync;
 
 /// Two-state header filter.
@@ -324,10 +324,13 @@ pub(crate) unsafe extern "C" fn guardrails_response_body_filter(
                 // return nothing to the client.
                 return Status::NGX_OK.into();
             }
-            // SpawnInspection falls through to the async suspend/spawn below.
-            // HoldForPending / EmitBlock cannot occur here (resolved pre-ingest).
+            // Falls through to the async suspend/spawn below.
             ResponseAction::SpawnInspection => {}
-            ResponseAction::HoldForPending | ResponseAction::EmitBlock => {}
+            // HoldForPending / EmitBlock are resolved in the pre-ingest pass and
+            // cannot reach here; fail loud if that invariant is ever violated.
+            ResponseAction::HoldForPending | ResponseAction::EmitBlock => {
+                unreachable!("pre-ingest short-circuit actions resolved earlier")
+            }
         }
 
         // --- Suspend output and inspect asynchronously -------------------------
@@ -341,7 +344,7 @@ pub(crate) unsafe extern "C" fn guardrails_response_body_filter(
         // flushes the buffered body (or sends the block/termination body), and
         // finalizes the request exactly once — off the subrequest-finalize stack.
         //
-        // The spawned `inspect_content_async(...).await` (below) has no Rust-side
+        // The spawned `run_inspection(...).await` (below) has no Rust-side
         // timeout; it is bounded only by the internal location's `proxy_*_timeout`
         // (see `config.rs`) or by request teardown (which cancels the task). Until
         // it resolves, the body filter forwards nothing and holds every buffered
@@ -385,30 +388,16 @@ pub(crate) unsafe extern "C" fn guardrails_response_body_filter(
         let r_send = AssertSendSync(r);
         let task = ngx::async_::spawn(async move {
             let r = r_send.0;
-            // Reduce to Option<Verdict> (None == error, logged here for its side
-            // effect) then defer the allow/block policy to the shared, unit-tested
-            // `verdict_from_inspection` — identical to the request path.
-            let outcome = match inspect_content_async(
+            // Await + fail-closed error log + verdict mapping are shared with the
+            // request path via `run_inspection`.
+            let decision = run_inspection(
                 r,
                 &internal_uri,
                 &content,
                 api_token.as_deref(),
                 ScanDirection::Response,
             )
-            .await
-            {
-                Ok(v) => Some(v),
-                Err(e) => {
-                    ngx_log_error!(
-                        NGX_LOG_ERR,
-                        (*(*r).connection).log,
-                        "guardrails: async response inspection error (fail-closed): {:?}",
-                        e
-                    );
-                    None
-                }
-            };
-            let decision = verdict_from_inspection(outcome);
+            .await;
             let verdict = if decision.allow {
                 ResponseVerdict::Allow
             } else {
@@ -429,19 +418,15 @@ pub(crate) unsafe extern "C" fn guardrails_response_body_filter(
 ///
 /// # Why defer (critical)
 ///
-/// This runs from the spawned task's continuation. Per the ngx async scheduler
-/// (`ngx::async_::spawn`), a task woken while parked is polled **inline**, and the
-/// wake originates from our subrequest completion callback
-/// (`PostSubrequest::handler`) — which NGINX invokes from **inside the
-/// subrequest's `ngx_http_finalize_request`** (`request.c`), before the
-/// subrequest's own `r->main->count--`. Driving the parent's output filter chain
-/// and calling `ngx_http_finalize_request(parent, ...)` from that nested stack is
-/// unsafe. So instead we only record the verdict here, arm
-/// `guardrails_resume_write_handler` as the request's write-event handler, and
-/// post the connection write event. The handler then runs on the next clean
-/// event-loop iteration, after the subrequest has fully finalized. This mirrors
-/// the deferral `start_subrequest` already does after `ngx_http_subrequest`
-/// (`subrequest_client.rs`).
+/// This runs from the spawned task's continuation, which is polled **inline** by
+/// the wake from `PostSubrequest::handler` — invoked by NGINX from **inside the
+/// subrequest's `ngx_http_finalize_request`**, before its own `r->main->count--`.
+/// Driving the parent's output chain / finalizing the parent from that nested
+/// stack is unsafe. So we only record the verdict, arm
+/// `guardrails_resume_write_handler`, and post the connection write event; it then
+/// runs on the next clean event-loop iteration, after the subrequest has fully
+/// finalized. Mirrors the deferral `start_subrequest` does after
+/// `ngx_http_subrequest` (`subrequest_client.rs`).
 unsafe fn resume_output(
     r: *mut ngx_http_request_t,
     verdict: ResponseVerdict,
@@ -497,21 +482,17 @@ unsafe fn resume_output(
 /// # Finalize contract (critical)
 ///
 /// The suspended body filter returned `NGX_OK` without forwarding the final
-/// buffer, so the main request is still holding its normal in-flight `r->count`
-/// reference. This handler MUST call `ngx_http_finalize_request` **exactly once**
-/// to release it. The `ResponseInspect` state machine guards this: it acts only
-/// on `Done(verdict)` and transitions to `Resumed`, so a second (spurious) write
-/// event is a no-op.
+/// buffer, so the main request still holds its in-flight `r->count` reference.
+/// This handler MUST `ngx_http_finalize_request` **exactly once** to release it;
+/// the `ResponseInspect` state machine guards this (acts only on `Done`, then
+/// moves to `Resumed`, so a spurious second write event is a no-op).
 ///
-/// The finalize **code matters**. The `send_*` helpers queue the body buffer
-/// (with `last_buf`/`flush`) and return `NGX_ERROR` as a legacy sentinel meaning
-/// "body queued; the caller must not finalize" — that contract was for the old
-/// synchronous body filter. Here we deliberately **ignore** that sentinel and
-/// finalize with `NGX_OK`. Finalizing with `NGX_ERROR` routes NGINX to
-/// `ngx_http_terminate_request` (`request.c`), which tears the connection down
-/// **before** the queued body is written — producing an empty `403 0` body and a
-/// client hang. Finalizing with `NGX_OK` instead reaches the `r->buffered` flush
-/// path, so the JSON/SSE body is written before the connection closes.
+/// The finalize **code matters**: always `NGX_OK`. The `send_*` helpers return an
+/// `NGX_ERROR` sentinel meaning "body queued, don't finalize" (a contract for the
+/// old sync filter) which we ignore here. Finalizing with `NGX_ERROR` routes to
+/// `ngx_http_terminate_request`, tearing the connection down **before** the queued
+/// body is written (empty `403 0` + client hang); `NGX_OK` reaches the
+/// `r->buffered` flush path so the JSON/SSE body is written first.
 unsafe extern "C" fn guardrails_resume_write_handler(r: *mut ngx_http_request_t) {
     unsafe {
         let request = &mut *r.cast::<Request>();
