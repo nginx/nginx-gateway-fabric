@@ -40,7 +40,7 @@ The feature spans four layers. This module is the last one.
           │
           ▼
   Dataplane config      (internal/controller/state/dataplane/configuration.go)
-   - GuardrailsConfig{ Filter, APIURL, APITokenAuthFileID, InternalPath }
+    - GuardrailsConfig{ Enabled, APIURL, APITokenAuthFileID, InternalPath }
    - Configuration.GuardrailsEnabled  (true if any route has guardrails)
           │
           ▼
@@ -216,9 +216,7 @@ forwarding** the final buffer, and lets the in-flight subrequest hold the reques
 (`ngx_http_subrequest` bumps `r->main->count`). When the subrequest completes, `resume_output`
 commits the suppressed headers, flushes the buffered body (or sends the block/termination body), and
 calls `ngx_http_finalize_request` **exactly once**. The single-finalize contract is guarded by the
-`ResponseInspect` (`Idle → Pending → Done`) state machine. See
-[`DESIGN-async-response-path.md`](./DESIGN-async-response-path.md) for the full design and the
-subrequest-count reasoning.
+`ResponseInspect` (`Idle → Pending → Done`) state machine.
 
 ### Request path (async access-phase handler)
 
@@ -396,26 +394,21 @@ the *mechanism* (buffers, finalize, chain calls), so a regression in policy is c
 
 The decision logic above is unit-covered, but the mechanism — suppressed-header commit, single
 finalize from a posted write event, body flush before connection close — can only be validated
-against a running NGINX. The following scenarios **must** be re-run live after any change to the
-request/response paths, and map to the go/no-go gates in
-[`DESIGN-async-response-path.md` §6](./DESIGN-async-response-path.md):
+against a running NGINX. The following scenarios **must** be re-run against a live NGINX after any
+change to the request/response paths:
 
-| # | Scenario | Expected result | Gate |
-| --- | ---------- | ----------------- | ------ |
-| E1 | Clean **non-SSE** response (e.g. `/v1/chat/completions`, non-streaming) | `200` with **byte-identical** upstream body; headers committed once; request finalized exactly once | G1 |
-| E2 | Blocked **non-SSE** response | `403` with `api_error` JSON body (non-empty — **not** `403 0`) | G2 |
-| E3 | Clean **SSE** stream (`text/event-stream`) | Buffered `data:` frames flushed; stream completes with no client timeout | G3 |
-| E4 | Blocked **SSE** stream | Injected SSE termination frame carrying the block message; `200` (headers already flushed) | G3 |
-| E5 | Blocked **request** prompt (input path) | `403` with `invalid_request_error` JSON body; upstream never contacted | — |
-| E6 | Backend **error / unreachable** (both directions) | **Fail-closed**: request → `403`; response → block body (never released unfiltered) | G4 |
-| E7 | Response exceeds `MAX_RESPONSE_BYTES` (10 MB) | Stream blocked via the buffer-limit path; block/termination body emitted | G4 |
-| E8 | `guardrails_internal_uri` misconfigured / absent | **Fail-closed** on both paths (403 / block body); logged at `ERR` | G4 |
-| E9 | Non-LLM JSON body with no extractable text (e.g. `/v1/models`) | Suppressed headers committed and buffered body released (client does **not** hang) | G1 |
-| E10 | Double-finalize / leaked-request smoke across E1–E4 | No `403 0` empty bodies, no leaked requests, no worker crash under repeated runs | G4 |
-
-> All ten gates are currently **code-complete but not yet validated live** (per DESIGN §6). Running
-> this matrix against a live NGINX is the remaining pre-merge step; record the outcome back in
-> DESIGN §6 when done.
+| # | Scenario | Expected result |
+| --- | ---------- | ----------------- |
+| E1 | Clean **non-SSE** response (e.g. `/v1/chat/completions`, non-streaming) | `200` with **byte-identical** upstream body; headers committed once; request finalized exactly once |
+| E2 | Blocked **non-SSE** response | `403` with `api_error` JSON body (non-empty — **not** `403 0`) |
+| E3 | Clean **SSE** stream (`text/event-stream`) | Buffered `data:` frames flushed; stream completes with no client timeout |
+| E4 | Blocked **SSE** stream | Injected SSE termination frame carrying the block message; `200` (headers already flushed) |
+| E5 | Blocked **request** prompt (input path) | `403` with `invalid_request_error` JSON body; upstream never contacted |
+| E6 | Backend **error / unreachable** (both directions) | **Fail-closed**: request → `403`; response → block body (never released unfiltered) |
+| E7 | Response exceeds `MAX_RESPONSE_BYTES` (10 MB) | Stream blocked via the buffer-limit path; block/termination body emitted |
+| E8 | `guardrails_internal_uri` misconfigured / absent | **Fail-closed** on both paths (403 / block body); logged at `ERR` |
+| E9 | Non-LLM JSON body with no extractable text (e.g. `/v1/models`) | Suppressed headers committed and buffered body released (client does **not** hang) |
+| E10 | Double-finalize / leaked-request smoke across E1–E4 | No `403 0` empty bodies, no leaked requests, no worker crash under repeated runs |
 
 ---
 

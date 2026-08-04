@@ -32,24 +32,24 @@ This dataset is available in two formats:
 
 | Field | Type | Description |
 | :--- | :--- | :--- |
-| `prompt_hash` | string | SHA-256 hash uniquely identifying the input prompt |
+| `prompt_hash` | string | Base64-encoded SHA-256 hash over the input's little-endian uint32 token IDs, uniquely identifying the input prompt |
 | `input_text` | string | The prompt text (raw or chat-templated) |
 | `generated` | string | The response text from the assistant |
 | `n_gen_tokens` | integer | Total count of tokens in the generated response |
-| `gen_tokens` | object | Tokenized response containing `strings` (token text) and `numbers` (token IDs) |
+| `gen_tokens` | object | Tokenized response containing `Strings` (token text) and `Tokens` (token IDs) |
 
 ### Data Example
 
 ```json
 {
-  "prompt_hash": "OZ5Edy+9rw0CsSMabW2TwSxR78jJGYRVRWtz8SXRm6U=",
-  "n_gen_tokens": 4,
+  "prompt_hash": "zSzS46hXxPKFNrGktZ1ydqpN3hsNySSzZa3JRFBiJCc=",
+  "n_gen_tokens": 1,
   "gen_tokens": {
-    "strings": ["g", "pt", " a", "1"],
-    "numbers": [70, 417, 264, 16]
+    "Tokens": [1743471802],
+    "Strings": ["Hi"]
   },
-  "input_text": "human q1",
-  "generated": "gpt a1"
+  "input_text": "Hello world",
+  "generated": "Hi"
 }
 ```
 
@@ -61,7 +61,7 @@ The table has the following schema:
 
 | Column | Data Type | Description |
 | :--- | :--- | :--- |
-| `id` | INTEGER PRIMARY KEY AUTOINCREMENT | Auto-incrementing primary key |
+| `id` | INTEGER PRIMARY KEY | Primary key |
 | `prompt_hash` | BLOB NOT NULL | Binary hash identifier for the input prompt |
 | `gen_tokens` | JSON NOT NULL | JSON object containing tokenized response data |
 | `n_gen_tokens` | INTEGER NOT NULL | Count of generated tokens |

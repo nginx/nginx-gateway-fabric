@@ -285,7 +285,8 @@ to all inspection traffic.
 
 ### External backend (default in this example)
 
-`guardrails-service.yaml` ships as an `ExternalName` Service pointing at a hosted Guardrails API:
+`guardrails-service.yaml` ships as an `ExternalName` Service pointing at a hosted Guardrails API.
+Replace the `<GUARDRAILS_API_HOSTNAME>` placeholder with your provider's hostname:
 
 ```yaml
 apiVersion: v1
@@ -294,7 +295,7 @@ metadata:
   name: guardrails-api
 spec:
   type: ExternalName
-  externalName: my.hostname.app
+  externalName: <GUARDRAILS_API_HOSTNAME>
   ports:
   - name: https
     port: 443
@@ -302,7 +303,7 @@ spec:
 ```
 
 With `backendRef.port: 443` in `payload-processor.yaml`, this resolves to
-`https://my.hostname.app:443`.
+`https://<GUARDRAILS_API_HOSTNAME>:443`.
 
 ### In-cluster backend
 

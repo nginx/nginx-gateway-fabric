@@ -85,6 +85,17 @@ func (v *Validator) validateProcessor(
 
 	extProcessPath := processorPath.Child("extProcess")
 
+	// An ExtProcess processor must carry its config. The CRD CEL rule enforces this at the API
+	// server, but guard here too so this defense-in-depth validator never nil-derefs on an
+	// invalid object.
+	if processor.ExtProcess == nil {
+		allErrs = append(allErrs, field.Required(
+			extProcessPath,
+			"extProcess is required when type is ExtProcess",
+		))
+		return allErrs
+	}
+
 	allErrs = append(allErrs, validateExtProcessBackendRef(
 		processor.ExtProcess.BackendRef,
 		extProcessPath.Child("backendRef"),

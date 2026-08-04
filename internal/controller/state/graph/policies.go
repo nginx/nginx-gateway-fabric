@@ -289,11 +289,11 @@ func (g *Graph) attachPolicies(validator validation.PolicyValidator, ctlrName st
 // remains valid (Programmed=True) because it still applies to requests not covered by an
 // overriding Route-attached policy.
 //
-// The result is stored on L7Route.EffectivePayloadProcessor. There is no config generator for
-// PayloadProcessor yet, so this field is currently unused at runtime. When the generator lands,
-// it should read L7Route.EffectivePayloadProcessor (e.g. alongside buildPolicies in
-// internal/controller/state/dataplane/configuration.go) to emit the per-route processing config,
-// rather than iterating route.Policies directly, so that this Route-over-Gateway precedence is honored.
+// The result is stored on L7Route.EffectivePayloadProcessor and is consumed by the data-plane
+// config generator (convertGraphGuardrails in internal/controller/state/dataplane/convert.go and
+// buildGuardrailsAuthSecrets in internal/controller/state/dataplane/configuration.go), which reads
+// L7Route.EffectivePayloadProcessor rather than iterating route.Policies directly so that this
+// Route-over-Gateway precedence is honored.
 func resolveEffectivePayloadProcessors(
 	gateways map[types.NamespacedName]*Gateway,
 	routes map[RouteKey]*L7Route,

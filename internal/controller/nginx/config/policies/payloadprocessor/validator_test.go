@@ -78,6 +78,18 @@ func TestValidator_Validate(t *testing.T) {
 			},
 		},
 		{
+			name: "missing extProcess config",
+			policy: func() *ngfAPI.PayloadProcessor {
+				p := createValidPolicy()
+				p.Spec.Processors[0].ExtProcess = nil
+				return p
+			}(),
+			expConditions: []conditions.Condition{
+				conditions.NewPolicyInvalid("spec.processors[0].extProcess: Required value: " +
+					"extProcess is required when type is ExtProcess"),
+			},
+		},
+		{
 			name: "invalid extProcess backendRef group",
 			policy: func() *ngfAPI.PayloadProcessor {
 				p := createValidPolicy()
