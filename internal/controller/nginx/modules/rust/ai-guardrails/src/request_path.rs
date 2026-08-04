@@ -28,6 +28,11 @@ use crate::sync_ptr::AssertSendSync;
 /// borrowed deserialize would *fail* on such inputs — silently falling back to
 /// inspecting the raw JSON envelope instead of the prompt text. Owning the
 /// strings makes prompt extraction reliable for real (escaped) prompts.
+///
+/// `messages[].content` accepts both the plain-string shape and the OpenAI
+/// multimodal array shape (`[{"type":"text","text":"…"}, {"type":"image_url",…}]`);
+/// see [`MessageContent`]. Only text parts are inspected — image/audio parts are
+/// ignored so we scan the prompt text rather than base64 blobs.
 #[derive(serde::Deserialize)]
 struct RequestBody {
     prompt: Option<String>,
@@ -36,14 +41,53 @@ struct RequestBody {
 
 #[derive(serde::Deserialize)]
 struct RequestMessage {
-    content: Option<String>,
+    content: Option<MessageContent>,
+}
+
+/// OpenAI chat `content`: either a plain string or an array of typed parts
+/// (multimodal). Untagged so serde tries the string form first, then the array
+/// form; a `content` that is neither still fails deserialize and lands on the
+/// raw-envelope fallback in [`extract_inspection_content`].
+#[derive(serde::Deserialize)]
+#[serde(untagged)]
+enum MessageContent {
+    Text(String),
+    Parts(Vec<ContentPart>),
+}
+
+/// One element of an array-shaped `content`. Non-text parts (e.g. `image_url`)
+/// have `text: None` and are ignored during extraction.
+#[derive(serde::Deserialize)]
+struct ContentPart {
+    #[serde(rename = "type")]
+    kind: String,
+    text: Option<String>,
+}
+
+impl MessageContent {
+    /// Flatten to the inspectable text: the string itself for the string form,
+    /// or the newline-joined non-empty `text` fields of `type == "text"` parts
+    /// for the array form (non-text parts ignored).
+    fn into_text(self) -> String {
+        match self {
+            MessageContent::Text(s) => s,
+            MessageContent::Parts(parts) => parts
+                .into_iter()
+                .filter(|p| p.kind == "text")
+                .filter_map(|p| p.text)
+                .filter(|t| !t.is_empty())
+                .collect::<Vec<_>>()
+                .join("\n"),
+        }
+    }
 }
 
 /// Extract the text content to inspect from a raw JSON request body.
 ///
 /// Preference order: a non-empty `prompt`, else the newline-joined non-empty
-/// `messages[].content`, else the raw body string (so unknown shapes are still
-/// inspected). Returns `None` when there is nothing meaningful to inspect.
+/// `messages[].content` (string or multimodal-array shape; text parts only),
+/// else the raw body string (so unknown shapes are still inspected). Returns
+/// `None` when there is nothing meaningful to inspect.
 fn extract_inspection_content(body_data: &[u8]) -> Option<String> {
     let body_str = std::str::from_utf8(body_data).ok()?;
 
@@ -55,18 +99,24 @@ fn extract_inspection_content(body_data: &[u8]) -> Option<String> {
                 let extracted: String = messages
                     .into_iter()
                     .filter_map(|m| m.content)
+                    .map(MessageContent::into_text)
                     .filter(|c| !c.is_empty())
                     .collect::<Vec<_>>()
                     .join("\n");
                 if !extracted.is_empty() {
                     Cow::Owned(extracted)
                 } else {
+                    // Nothing inspectable (e.g. an image-only multimodal
+                    // message): fall back to the raw envelope so nothing slips
+                    // through unscanned.
                     Cow::Borrowed(body_str)
                 }
             } else {
                 Cow::Borrowed(body_str)
             }
         }
+        // Genuinely unknown shape (not a known prompt/messages body): inspect
+        // the raw envelope so nothing bypasses scanning.
         Err(_) => Cow::Borrowed(body_str),
     };
 
@@ -667,6 +717,51 @@ mod tests {
     fn test_extract_content_prompt_preferred_over_messages() {
         let body = br#"{"prompt": "P", "messages": [{"content": "M"}]}"#;
         assert_eq!(extract_inspection_content(body).as_deref(), Some("P"));
+    }
+
+    #[test]
+    fn test_extract_content_array_text_parts() {
+        // Multimodal array-shaped content with only text parts.
+        let body = br#"{"messages": [{"content": [{"type": "text", "text": "hello"}]}]}"#;
+        assert_eq!(extract_inspection_content(body).as_deref(), Some("hello"));
+    }
+
+    #[test]
+    fn test_extract_content_array_ignores_image_parts() {
+        // Regression for the array-shaped fallback: a text + image_url message
+        // must extract only the text, NOT fall back to scanning the raw JSON
+        // envelope (which would include the base64 image blob).
+        let body = br#"{"messages": [{"content": [
+            {"type": "text", "text": "describe this"},
+            {"type": "image_url", "image_url": {"url": "data:image/png;base64,AAAABBBBCCCC"}}
+        ]}]}"#;
+        assert_eq!(
+            extract_inspection_content(body).as_deref(),
+            Some("describe this")
+        );
+    }
+
+    #[test]
+    fn test_extract_content_array_image_only_falls_back_to_raw() {
+        // No text parts -> nothing inspectable from messages -> raw envelope.
+        let body = br#"{"messages": [{"content": [
+            {"type": "image_url", "image_url": {"url": "data:image/png;base64,AAAA"}}
+        ]}]}"#;
+        let got = extract_inspection_content(body).expect("raw envelope inspected");
+        assert!(got.contains("image_url"));
+    }
+
+    #[test]
+    fn test_extract_content_mixed_string_and_array_messages() {
+        // A string-content message and an array-content message are joined.
+        let body = br#"{"messages": [
+            {"content": "first"},
+            {"content": [{"type": "text", "text": "second"}, {"type": "text", "text": "third"}]}
+        ]}"#;
+        assert_eq!(
+            extract_inspection_content(body).as_deref(),
+            Some("first\nsecond\nthird")
+        );
     }
 
     #[test]
