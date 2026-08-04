@@ -752,9 +752,10 @@ func createInternalLocationsForRule(
 				// This ensures the correct name gets generated to correlate with the split clients generation.
 				// If there is only one backend, this is effectively a no-op.
 				tempRule := dataplane.MatchRule{
-					Source:  r.Source,
-					Match:   r.Match,
-					Filters: r.Filters,
+					Source:     r.Source,
+					Match:      r.Match,
+					Filters:    r.Filters,
+					Guardrails: r.Guardrails,
 					BackendGroup: dataplane.BackendGroup{
 						Source:      r.BackendGroup.Source,
 						RuleIdx:     r.BackendGroup.RuleIdx,
@@ -899,9 +900,10 @@ func createInferenceLocationsForRule(
 			// This ensures the correct name gets generated to correlate with the split clients generation.
 			// If there is only one backend, this is effectively a no-op.
 			tempRule := dataplane.MatchRule{
-				Source:  r.Source,
-				Match:   r.Match,
-				Filters: r.Filters,
+				Source:     r.Source,
+				Match:      r.Match,
+				Filters:    r.Filters,
+				Guardrails: r.Guardrails,
 				BackendGroup: dataplane.BackendGroup{
 					Source:      r.BackendGroup.Source,
 					RuleIdx:     r.BackendGroup.RuleIdx,
