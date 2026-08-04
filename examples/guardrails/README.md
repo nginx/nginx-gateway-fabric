@@ -273,19 +273,15 @@ Two important rules regardless of location:
   backends always over **http**. An in-cluster HTTPS backend or an external HTTP backend cannot be
   expressed today.
 
-The module inspects on **two paths** that reach the Guardrails backend differently (see the module
-README's [request/response architecture](../../internal/controller/nginx/modules/rust/ai-guardrails/README.md#request-path-vs-response-path)):
+Both inspection paths (request and response) reach the Guardrails backend the **same** way (see the
+module README's [request/response architecture](../../internal/controller/nginx/modules/rust/ai-guardrails/README.md#request-path-vs-response-path)):
+the module issues an NGINX **subrequest** through the internal NGINX location (`proxy_pass`). This
+goes through NGINX's own connection and DNS machinery, so an `ExternalName` backend is resolved the
+same way a normal proxied upstream would be — on both paths.
 
-- **Request path** — inspection runs in an NGINX access-phase handler that issues a **subrequest**
-  through an internal NGINX location (`proxy_pass`). This goes through NGINX's own connection and DNS
-  machinery, so an `ExternalName` backend on this path relies on NGINX resolving the name the same way
-  a normal proxied upstream would.
-- **Response path** — inspection still makes the module's **own** outbound HTTP call (the `minreq`
-  client), which does its own name resolution and does **not** use NGINX's resolver.
-
-Because the request path now proxies through NGINX, prefer configuring a `resolver` (via the Gateway's
-NginxProxy) when using an `ExternalName` Guardrails backend, so the internal location can resolve the
-external hostname at request time.
+When using an `ExternalName` Guardrails backend, configure a `resolver` (via the Gateway's
+NginxProxy) so the internal location can resolve the external hostname at request time. This applies
+to all inspection traffic.
 
 ### External backend (default in this example)
 
