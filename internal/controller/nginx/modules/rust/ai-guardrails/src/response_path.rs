@@ -340,6 +340,12 @@ pub(crate) unsafe extern "C" fn guardrails_response_body_filter(
         // a write event; `guardrails_resume_write_handler` then commits headers,
         // flushes the buffered body (or sends the block/termination body), and
         // finalizes the request exactly once — off the subrequest-finalize stack.
+        //
+        // The spawned `inspect_content_async(...).await` (below) has no Rust-side
+        // timeout; it is bounded only by the internal location's `proxy_*_timeout`
+        // (see `config.rs`) or by request teardown (which cancels the task). Until
+        // it resolves, the body filter forwards nothing and holds every buffered
+        // chunk.
         ngx_log_error!(
             NGX_LOG_INFO,
             request.log(),

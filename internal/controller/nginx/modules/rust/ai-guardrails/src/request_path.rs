@@ -431,6 +431,11 @@ unsafe extern "C" fn guardrails_body_read_handler(r: *mut ngx_http_request_t) {
         // Spawn the async inspection. The task is stored on the state to keep it
         // alive (dropping a Task cancels it); on completion it records the
         // verdict and resumes the phase engine.
+        //
+        // The `inspect_content_async(...).await` below has no Rust-side timeout;
+        // it is bounded only by the internal location's `proxy_*_timeout` (see
+        // `config.rs`) or by request teardown (which cancels this task). Until it
+        // resolves, the access phase stays suspended (`NGX_AGAIN`).
         let r_send = AssertSendSync(r);
         let state_send = AssertSendSync(state_ptr);
         let task = ngx::async_::spawn(async move {

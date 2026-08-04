@@ -180,6 +180,13 @@ fn parse_outcome(body: &[u8]) -> Result<Verdict, GuardrailsError> {
 /// Returns a [`Verdict`] (`cleared` + optional backend block message). The
 /// caller's fail-closed policy applies to the `Err` cases.
 ///
+/// # Timeout
+/// This future is **unbounded in Rust**: it awaits the subrequest completion
+/// (see [`PostSubrequest`]) with no internal timer. A slow or never-completing
+/// guardrails backend keeps it pending; the only bounds are the internal
+/// location's `proxy_*_timeout` (see `config.rs`) or request teardown. Callers
+/// must remain safe to leave suspended until one of those fires.
+///
 /// # Safety
 /// `parent` must be a valid main-request `*mut ngx_http_request_t` that remains
 /// alive for the duration of the returned future (the caller keeps `r->count`
@@ -200,8 +207,10 @@ pub async unsafe fn inspect_content_async(
     // single-threaded embedding.
     let subrequest = AssertSendSync(subrequest);
 
-    // Yield to the NGINX event loop until the subrequest completes. After this
-    // await, `subrequest` has response status in `headers_out` and a complete
+    // Yield to the NGINX event loop until the subrequest completes. This await
+    // has no Rust-side timeout: it is bounded only by the internal location's
+    // `proxy_*_timeout` (see `config.rs`) or by request teardown. After it
+    // resolves, `subrequest` has response status in `headers_out` and a complete
     // in-memory body in `out`.
     let rc = post_subrequest.finish().await?;
     if rc != Status::NGX_OK {
@@ -429,6 +438,27 @@ struct PSData {
 
 /// Pending subrequest completion handle. Awaiting `finish()` resolves when the
 /// C `handler` fires inside the subrequest's `ngx_http_finalize_request`.
+///
+/// # Unbounded await (no Rust-side timeout)
+/// The `finish()` future has **no timeout in Rust**. It resolves only when NGINX
+/// invokes [`handler`](Self::handler) from the subrequest's
+/// `ngx_http_finalize_request`, which happens when the subrequest to the internal
+/// guardrails location completes (or errors). A slow or never-completing backend
+/// therefore leaves the await **pending indefinitely**. The only time bounds are:
+///   * the internal location's `proxy_connect/send/read_timeout` — the sole
+///     configured bound; when one fires, NGINX finalizes the subrequest with a
+///     non-2xx status, the handler runs, and the await resolves to an error
+///     (`extract_outcome` → fail-closed block). See `config.rs` for the timeout
+///     model (there is no module-level timeout directive; NGINX defaults 60s per
+///     operation apply absent an override).
+///   * request teardown — dropping the spawned task drops this handle, whose
+///     `Drop` (below) drops the `oneshot::Sender`, resolving the await to
+///     `Err(Canceled)` → `"subrequest channel canceled"` → fail-closed block.
+///
+/// Note this means a per-read-resetting `proxy_read_timeout` cannot bound a
+/// backend that dribbles bytes slowly forever; that residual case is only ended
+/// by connection teardown. This is by design (no configurable total-budget
+/// timeout).
 struct PostSubrequest {
     post_subrequest: *mut ngx_http_post_subrequest_t,
     receiver: Option<oneshot::Receiver<Status>>,
@@ -471,6 +501,10 @@ impl PostSubrequest {
     }
 
     /// Await subrequest completion.
+    ///
+    /// Unbounded in Rust: see the [`PostSubrequest`] type docs. Resolves via the
+    /// completion `handler` (backend responded / proxy timeout fired) or, on
+    /// request teardown, via the `oneshot::Sender` Drop path (`Err(Canceled)`).
     async fn finish(mut self) -> Result<Status, GuardrailsError> {
         match self.receiver.take() {
             Some(receiver) => receiver
