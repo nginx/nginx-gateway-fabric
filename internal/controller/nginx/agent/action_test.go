@@ -95,6 +95,100 @@ func TestActionsEqual(t *testing.T) {
 			},
 			expected: false,
 		},
+		{
+			name: "Actions are equal but in different order",
+			actionA: []*pb.NGINXPlusAction{
+				{
+					Action: &pb.NGINXPlusAction_UpdateHttpUpstreamServers{
+						UpdateHttpUpstreamServers: &pb.UpdateHTTPUpstreamServers{
+							HttpUpstreamName: "upstream1",
+						},
+					},
+				},
+				{
+					Action: &pb.NGINXPlusAction_UpdateHttpUpstreamServers{
+						UpdateHttpUpstreamServers: &pb.UpdateHTTPUpstreamServers{
+							HttpUpstreamName: "upstream2",
+						},
+					},
+				},
+			},
+			actionB: []*pb.NGINXPlusAction{
+				{
+					Action: &pb.NGINXPlusAction_UpdateHttpUpstreamServers{
+						UpdateHttpUpstreamServers: &pb.UpdateHTTPUpstreamServers{
+							HttpUpstreamName: "upstream2",
+						},
+					},
+				},
+				{
+					Action: &pb.NGINXPlusAction_UpdateHttpUpstreamServers{
+						UpdateHttpUpstreamServers: &pb.UpdateHTTPUpstreamServers{
+							HttpUpstreamName: "upstream1",
+						},
+					},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "Actions contain both HTTP and stream upstreams that are equal but reordered",
+			actionA: []*pb.NGINXPlusAction{
+				{
+					Action: &pb.NGINXPlusAction_UpdateHttpUpstreamServers{
+						UpdateHttpUpstreamServers: &pb.UpdateHTTPUpstreamServers{
+							HttpUpstreamName: "upstream1",
+						},
+					},
+				},
+				{
+					Action: &pb.NGINXPlusAction_UpdateStreamServers{
+						UpdateStreamServers: &pb.UpdateStreamServers{
+							UpstreamStreamName: "stream1",
+						},
+					},
+				},
+			},
+			actionB: []*pb.NGINXPlusAction{
+				{
+					Action: &pb.NGINXPlusAction_UpdateStreamServers{
+						UpdateStreamServers: &pb.UpdateStreamServers{
+							UpstreamStreamName: "stream1",
+						},
+					},
+				},
+				{
+					Action: &pb.NGINXPlusAction_UpdateHttpUpstreamServers{
+						UpdateHttpUpstreamServers: &pb.UpdateHTTPUpstreamServers{
+							HttpUpstreamName: "upstream1",
+						},
+					},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "Actions have same length but different upstream names",
+			actionA: []*pb.NGINXPlusAction{
+				{
+					Action: &pb.NGINXPlusAction_UpdateHttpUpstreamServers{
+						UpdateHttpUpstreamServers: &pb.UpdateHTTPUpstreamServers{
+							HttpUpstreamName: "upstream1",
+						},
+					},
+				},
+			},
+			actionB: []*pb.NGINXPlusAction{
+				{
+					Action: &pb.NGINXPlusAction_UpdateHttpUpstreamServers{
+						UpdateHttpUpstreamServers: &pb.UpdateHTTPUpstreamServers{
+							HttpUpstreamName: "upstream2",
+						},
+					},
+				},
+			},
+			expected: false,
+		},
 	}
 
 	for _, tt := range tests {
