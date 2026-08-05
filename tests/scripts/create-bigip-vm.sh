@@ -113,8 +113,14 @@ read_mgmt_address() {
         echo "Failed to read BIG-IP external mgmt address; aborting." >&2
         exit 1
     fi
+    # Mask the public management IP in GitHub Actions logs so it shows as *** if any later command
+    # echoes it. This is a no-op outside Actions. It is defense in depth: the IP is already kept out
+    # of the logs and vars.env, but a runtime-assigned IP cannot be registered as a real secret.
+    echo "::add-mask::${BIGIP_ADDRESS}"
     MGMT="https://${BIGIP_ADDRESS}:${BIGIP_MGMT_PORT:-8443}"
-    echo "BIG-IP management address: ${BIGIP_ADDRESS}"
+    # The instance name, not the external NAT IP, is logged: these run logs are public and the mgmt
+    # IP is reachable for the life of the run. The name is enough to identify the VM for debugging.
+    echo "BIG-IP management address read for instance ${BIGIP_RESOURCE_NAME}"
 }
 
 # wait_for_ssh blocks until admin SSH works. The probe command run util bash -c true is a no-op that
@@ -264,14 +270,12 @@ read_vip() {
     fi
     echo "BIG-IP internal address (VIP): ${internal_ip}"
 
-    # Drop any BIGIP_ADDRESS and BIGIP_VIP lines from a previous run before appending the current
-    # values, so re-running the script does not leave duplicate entries in vars.env.
-    grep -v -E '^BIGIP_ADDRESS=|^BIGIP_VIP=' "${VARS_ENV}" >"${VARS_ENV}.tmp"
+    # Persist only the internal VIP, which the test reads to send traffic. The external management IP
+    # is used solely by this script while onboarding the BIG-IP, so it is deliberately not written to
+    # vars.env: that file is copied to the test VM and appears in public run logs.
+    grep -v -E '^BIGIP_VIP=' "${VARS_ENV}" >"${VARS_ENV}.tmp"
     mv "${VARS_ENV}.tmp" "${VARS_ENV}"
-    {
-        echo "BIGIP_ADDRESS=${BIGIP_ADDRESS}"
-        echo "BIGIP_VIP=${internal_ip}"
-    } >>"${VARS_ENV}"
+    echo "BIGIP_VIP=${internal_ip}" >>"${VARS_ENV}"
 }
 
 # bigip_post sends a JSON POST to an iControl REST path and fails loudly. A 2xx status is success. A
