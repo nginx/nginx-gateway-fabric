@@ -59,8 +59,8 @@ func TestGetURL(t *testing.T) {
 	tests := []struct {
 		name        string
 		baseURL     string
-		port        int
 		expectedURL string
+		port        int
 	}{
 		{
 			name:        "omits port when zero",
@@ -160,7 +160,6 @@ func TestGetURLPanicsOnInvalidBaseURL(t *testing.T) {
 		"http://[::1",
 		"http:///missing-host",
 	} {
-		baseURL := baseURL
 		t.Run(baseURL, func(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
