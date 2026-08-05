@@ -78,6 +78,7 @@ type ExternalLoadBalancerSpec struct {
 // +kubebuilder:validation:XValidation:message="virtualServerAddress and ipamLabel are mutually exclusive",rule="!(has(self.virtualServerAddress) && has(self.ipamLabel))"
 // +kubebuilder:validation:XValidation:message="one of virtualServerAddress or ipamLabel must be set",rule="has(self.virtualServerAddress) || has(self.ipamLabel)"
 // +kubebuilder:validation:XValidation:message="partition cannot be Common",rule="!has(self.partition) || self.partition != 'Common'"
+// +kubebuilder:validation:XValidation:message="partition cannot be modified; delete the resource and recreate it with the new partition",rule="has(self.partition) == has(oldSelf.partition) && (!has(self.partition) || self.partition == oldSelf.partition)"
 //
 //nolint:lll
 type GatewayLinkConfig struct {
@@ -211,6 +212,7 @@ const (
 type GatewayLinkTLS struct {
 	// Reference specifies the source of the SSL profiles. "bigip" means the profiles already
 	// exist on BIG-IP. "secret" means they come from Kubernetes secrets of type kubernetes.io/tls.
+	// If not specified, defaults to "bigip".
 	//
 	// +optional
 	Reference *TLSReferenceType `json:"reference,omitempty"`

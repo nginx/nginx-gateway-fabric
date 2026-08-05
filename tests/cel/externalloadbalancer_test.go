@@ -6,6 +6,7 @@ import (
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 
 	controllerruntime "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
@@ -203,6 +204,77 @@ func TestExternalLoadBalancerPartition(t *testing.T) {
 				},
 			}
 			validateCrd(t, tt.wantErrors, elb, k8sClient)
+		})
+	}
+}
+
+// TestExternalLoadBalancerPartitionIsImmutable covers the transition rule on partition. F5 CIS
+// enforces the same rule on the IngressLink it owns, so without this NGINX Gateway Fabric would
+// accept a change that CIS then rejects, leaving the two resources out of step.
+func TestExternalLoadBalancerPartitionIsImmutable(t *testing.T) {
+	t.Parallel()
+	k8sClient := getKubernetesClient(t)
+
+	tests := []struct {
+		initialPartition *string
+		updatedPartition *string
+		name             string
+		wantErrors       []string
+	}{
+		{
+			name:             "changing the partition is rejected",
+			initialPartition: helpers.GetPointer("k8s"),
+			updatedPartition: helpers.GetPointer("other"),
+			wantErrors:       []string{expectedELBPartitionImmutableError},
+		},
+		{
+			name:             "removing the partition is rejected",
+			initialPartition: helpers.GetPointer("k8s"),
+			updatedPartition: nil,
+			wantErrors:       []string{expectedELBPartitionImmutableError},
+		},
+		{
+			name:             "adding a partition to a resource that had none is rejected",
+			initialPartition: nil,
+			updatedPartition: helpers.GetPointer("k8s"),
+			wantErrors:       []string{expectedELBPartitionImmutableError},
+		},
+		{
+			name:             "an update that leaves the partition alone is allowed",
+			initialPartition: helpers.GetPointer("k8s"),
+			updatedPartition: helpers.GetPointer("k8s"),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			elb := &ngfAPIv1alpha1.ExternalLoadBalancer{
+				ObjectMeta: controllerruntime.ObjectMeta{
+					Name:      uniqueResourceName(testResourceName),
+					Namespace: defaultNamespace,
+				},
+				Spec: ngfAPIv1alpha1.ExternalLoadBalancerSpec{
+					TargetRefs: gatewayTargetRefs(),
+					GatewayLink: &ngfAPIv1alpha1.GatewayLinkConfig{
+						VirtualServerAddress: helpers.GetPointer("10.8.3.101"),
+						Partition:            tt.initialPartition,
+					},
+				},
+			}
+
+			mutate := func(obj client.Object) {
+				updated, ok := obj.(*ngfAPIv1alpha1.ExternalLoadBalancer)
+				if !ok {
+					t.Fatalf("expected an ExternalLoadBalancer, got %T", obj)
+				}
+				updated.Spec.GatewayLink.Partition = tt.updatedPartition
+				// Changed alongside the partition so the "allowed" case is a real update rather
+				// than a no-op the API server could accept without evaluating the rule.
+				updated.Spec.GatewayLink.VirtualServerName = helpers.GetPointer("updatedName")
+			}
+
+			validateCrdUpdate(t, tt.wantErrors, elb, mutate, k8sClient)
 		})
 	}
 }
