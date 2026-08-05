@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"regexp"
 	"time"
@@ -59,9 +60,12 @@ var _ = Describe("AdvancedRouting", Ordered, Label("functional", "routing"), fun
 	When("valid advanced routing settings are configured for Routes", func() {
 		var baseURL string
 		BeforeAll(func() {
-			port := framework.GetPort(80, portFwdPort)
+			port := 80
+			if portFwdPort != 0 {
+				port = portFwdPort
+			}
 
-			baseURL = framework.GetURL("http://cafe.example.com", port)
+			baseURL = fmt.Sprintf("http://cafe.example.com:%d", port)
 		})
 
 		DescribeTable("verify working traffic for HTTPRoute",
