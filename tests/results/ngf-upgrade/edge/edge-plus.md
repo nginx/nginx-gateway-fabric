@@ -6,54 +6,54 @@ NGINX Plus: true
 
 NGINX Gateway Fabric:
 
-- Commit: 3f79877f3b0abebd33ccda280a3a8a906fae5359
-- Date: 2026-07-15T15:34:03Z
+- Commit: 394bdf0e0c8ae008009546b7a21d8f80248d52be
+- Date: 2026-07-30T17:54:44Z
 - Dirty: false
 
 GKE Cluster:
 
 - Node count: 12
-- k8s version: v1.35.5-gke.1241004
+- k8s version: v1.35.6-gke.1250000
 - vCPUs per node: 16
-- RAM per node: 65848296Ki
+- RAM per node: 65848284Ki
 - Max pods per node: 110
 - Zone: us-west1-b
 - Instance Type: n2d-standard-16
 
-## Test: Send http /coffee traffic
-
-```text
-Requests      [total, rate, throughput]         6000, 100.01, 99.73
-Duration      [total, attack, wait]             59.993s, 59.992s, 1.468ms
-Latencies     [min, mean, 50, 90, 95, 99, max]  614.423µs, 251.052ms, 1.021ms, 1.611ms, 2.491s, 4.82s, 5.389s
-Bytes In      [total, mean]                     965229, 160.87
-Bytes Out     [total, mean]                     0, 0.00
-Success       [ratio]                           99.72%
-Status Codes  [code:count]                      0:17  200:5983  
-Error Set:
-Get "http://cafe.example.com/coffee": read tcp 10.138.0.105:34049->10.138.0.65:80: read: connection reset by peer
-Get "http://cafe.example.com/coffee": read tcp 10.138.0.105:45401->10.138.0.65:80: read: connection reset by peer
-Get "http://cafe.example.com/coffee": read tcp 10.138.0.105:43681->10.138.0.65:80: read: connection reset by peer
-Get "http://cafe.example.com/coffee": dial tcp 0.0.0.0:0->10.138.0.65:80: connect: connection refused
-```
-
-![http-plus.png](http-plus.png)
-
 ## Test: Send https /tea traffic
 
 ```text
-Requests      [total, rate, throughput]         6000, 100.01, 99.73
-Duration      [total, attack, wait]             59.993s, 59.992s, 1.292ms
-Latencies     [min, mean, 50, 90, 95, 99, max]  645.84µs, 251.571ms, 1.036ms, 1.868ms, 2.497s, 4.824s, 5.39s
-Bytes In      [total, mean]                     929388, 154.90
+Requests      [total, rate, throughput]         6000, 100.01, 99.76
+Duration      [total, attack, wait]             59.996s, 59.993s, 2.911ms
+Latencies     [min, mean, 50, 90, 95, 99, max]  592.044µs, 1.406s, 927.575µs, 6.784s, 9.867s, 12.168s, 12.73s
+Bytes In      [total, mean]                     915705, 152.62
 Bytes Out     [total, mean]                     0, 0.00
-Success       [ratio]                           99.72%
-Status Codes  [code:count]                      0:17  200:5983  
+Success       [ratio]                           99.75%
+Status Codes  [code:count]                      0:15  200:5985  
 Error Set:
-Get "https://cafe.example.com/tea": read tcp 10.138.0.105:45663->10.138.0.65:443: read: connection reset by peer
-Get "https://cafe.example.com/tea": read tcp 10.138.0.105:47415->10.138.0.65:443: read: connection reset by peer
-Get "https://cafe.example.com/tea": read tcp 10.138.0.105:43321->10.138.0.65:443: read: connection reset by peer
-Get "https://cafe.example.com/tea": dial tcp 0.0.0.0:0->10.138.0.65:443: connect: connection refused
+Get "https://cafe.example.com/tea": read tcp 10.138.0.127:44385->10.138.15.193:443: read: connection reset by peer
+Get "https://cafe.example.com/tea": read tcp 10.138.0.127:40089->10.138.15.193:443: read: connection reset by peer
+Get "https://cafe.example.com/tea": write tcp 10.138.0.127:37933->10.138.15.193:443: write: connection reset by peer
+Get "https://cafe.example.com/tea": dial tcp 0.0.0.0:0->10.138.15.193:443: connect: connection refused
 ```
 
 ![https-plus.png](https-plus.png)
+
+## Test: Send http /coffee traffic
+
+```text
+Requests      [total, rate, throughput]         6000, 100.01, 99.76
+Duration      [total, attack, wait]             59.996s, 59.992s, 3.746ms
+Latencies     [min, mean, 50, 90, 95, 99, max]  587.451µs, 1.403s, 901.715µs, 6.655s, 9.808s, 12.154s, 12.728s
+Bytes In      [total, mean]                     951615, 158.60
+Bytes Out     [total, mean]                     0, 0.00
+Success       [ratio]                           99.75%
+Status Codes  [code:count]                      0:15  200:5985  
+Error Set:
+Get "http://cafe.example.com/coffee": read tcp 10.138.0.127:34183->10.138.15.193:80: read: connection reset by peer
+Get "http://cafe.example.com/coffee": read tcp 10.138.0.127:33849->10.138.15.193:80: read: connection reset by peer
+Get "http://cafe.example.com/coffee": read tcp 10.138.0.127:38575->10.138.15.193:80: read: connection reset by peer
+Get "http://cafe.example.com/coffee": dial tcp 0.0.0.0:0->10.138.15.193:80: connect: connection refused
+```
+
+![http-plus.png](http-plus.png)
