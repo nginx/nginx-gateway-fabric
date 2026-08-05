@@ -186,12 +186,13 @@ func (cs *commandService) Subscribe(in pb.CommandService_SubscribeServer) error 
 	deployment.FileLock.RUnlock()
 	defer broadcaster.CancelSubscription(channels.ID)
 
-	pendingBroadcastRequest := false
 	// pendingCorrelationID tracks the correlation ID of the in-flight broadcast request so that
 	// a stray or duplicate response (e.g. a delayed response from a previous request) can be
 	// distinguished from the actual response to the current request. Without this check, a stray
 	// response could be misattributed as the ack for a different/later request, causing the
 	// retry logic to resend an action that was already applied.
+	//
+	// An empty value means there is no broadcast request currently in flight.
 	var pendingCorrelationID string
 
 	for {
@@ -204,12 +205,12 @@ func (cs *commandService) Subscribe(in pb.CommandService_SubscribeServer) error 
 		// which releases the lock.
 		select {
 		case <-ctx.Done():
-			if pendingBroadcastRequest {
+			if pendingCorrelationID != "" {
 				trySignalBroadcastResponse(channels.ResponseCh)
 			}
 			return grpcStatus.Error(codes.Canceled, context.Cause(ctx).Error())
 		case <-cs.resetConnChan:
-			if pendingBroadcastRequest {
+			if pendingCorrelationID != "" {
 				trySignalBroadcastResponse(channels.ResponseCh)
 			}
 			return grpcStatus.Error(codes.Unavailable, "TLS files updated")
@@ -247,12 +248,11 @@ func (cs *commandService) Subscribe(in pb.CommandService_SubscribeServer) error 
 
 			// Track this broadcast request to distinguish it from initial config operations.
 			// Only broadcast operations should signal ResponseCh for coordination.
-			pendingBroadcastRequest = true
 			pendingCorrelationID = req.GetMessageMeta().GetCorrelationId()
 		case err = <-msgr.Errors():
 			cs.logger.Error(err, "connection error", conn.ParentType, conn.ParentName, "uuid", grpcInfo.UUID)
 			deployment.SetPodErrorStatus(grpcInfo.UUID, err)
-			if pendingBroadcastRequest {
+			if pendingCorrelationID != "" {
 				trySignalBroadcastResponse(channels.ResponseCh)
 				cs.logger.V(1).Info("Connection error during pending request, operation failed", "uuid", grpcInfo.UUID)
 			}
@@ -263,7 +263,7 @@ func (cs *commandService) Subscribe(in pb.CommandService_SubscribeServer) error 
 			return grpcStatus.Error(codes.Internal, err.Error())
 		case msg := <-msgr.Messages():
 			correlationID := msg.GetMessageMeta().GetCorrelationId()
-			if pendingBroadcastRequest && correlationID != "" && correlationID != pendingCorrelationID {
+			if pendingCorrelationID != "" && correlationID != "" && correlationID != pendingCorrelationID {
 				cs.logger.V(1).Info(
 					"Ignoring response with unexpected correlation id, likely stale or duplicate",
 					"wantCorrelationId", pendingCorrelationID,
@@ -287,9 +287,8 @@ func (cs *commandService) Subscribe(in pb.CommandService_SubscribeServer) error 
 
 			// Signal broadcast completion only for tracked broadcast operations.
 			// Initial config responses are ignored to prevent spurious success messages.
-			if pendingBroadcastRequest {
+			if pendingCorrelationID != "" {
 				signalBroadcastResponse(ctx, channels.ResponseCh)
-				pendingBroadcastRequest = false
 				pendingCorrelationID = ""
 			} else {
 				cs.logger.V(1).Info(
