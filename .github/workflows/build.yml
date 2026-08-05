@@ -54,8 +54,8 @@ jobs:
           ref: ${{ (inputs.tag != '' && !inputs.dry_run && inputs.image != 'operator') && format('refs/tags/{0}', inputs.tag) || github.ref }}
 
       - name: Get secrets
-        if: ${{ inputs.runner == 'ubuntu-24.04-amd64' }}
-        uses: nginx/ci-self-hosted/.github/actions/get-from-vault@refs/heads/main
+        if: ${{ !github.event.pull_request.head.repo.fork }}
+        uses: nginx/ci-self-hosted/.github/actions/get-from-vault@2ac905a974d15594f0e03697b4f88916fbb3694d
         with:
           client-id: ${{ secrets.AZ_VAULT_CLIENT_ID }}
           tenant-id: ${{ secrets.AZ_VAULT_TENANT_ID }}
@@ -63,8 +63,8 @@ jobs:
           secret-names: "gcp-workload-identity,gcp-service-account,gcp-project-id"
 
       - name: Get secrets from common vault
-        if: ${{ inputs.runner == 'ubuntu-24.04-amd64' }}
-        uses: nginx/ci-self-hosted/.github/actions/get-from-vault@refs/heads/main
+        if: ${{ !github.event.pull_request.head.repo.fork }}
+        uses: nginx/ci-self-hosted/.github/actions/get-from-vault@2ac905a974d15594f0e03697b4f88916fbb3694d
         with:
           client-id: ${{ secrets.AZ_VAULT_CLIENT_ID }}
           tenant-id: ${{ secrets.AZ_VAULT_TENANT_ID }}

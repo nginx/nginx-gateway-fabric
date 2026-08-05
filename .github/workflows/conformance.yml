@@ -57,7 +57,7 @@ jobs:
 
       - name: Get secrets
         if: ${{ inputs.image == 'plus' }}
-        uses: nginx/ci-self-hosted/.github/actions/get-from-vault@refs/heads/main
+        uses: nginx/ci-self-hosted/.github/actions/get-from-vault@2ac905a974d15594f0e03697b4f88916fbb3694d
         with:
           client-id: ${{ secrets.AZ_VAULT_CLIENT_ID }}
           tenant-id: ${{ secrets.AZ_VAULT_TENANT_ID }}
@@ -67,7 +67,7 @@ jobs:
 
       - name: Get secrets from common vault
         if: ${{ inputs.image == 'plus' }}
-        uses: nginx/ci-self-hosted/.github/actions/get-from-vault@refs/heads/main
+        uses: nginx/ci-self-hosted/.github/actions/get-from-vault@2ac905a974d15594f0e03697b4f88916fbb3694d
         with:
           client-id: ${{ secrets.AZ_VAULT_CLIENT_ID }}
           tenant-id: ${{ secrets.AZ_VAULT_TENANT_ID }}
@@ -125,7 +125,7 @@ jobs:
 
       - name: Get secrets
         if: ${{ inputs.image == 'plus' }}
-        uses: nginx/ci-self-hosted/.github/actions/get-from-vault@refs/heads/main
+        uses: nginx/ci-self-hosted/.github/actions/get-from-vault@2ac905a974d15594f0e03697b4f88916fbb3694d
         with:
           client-id: ${{ secrets.AZ_VAULT_CLIENT_ID }}
           tenant-id: ${{ secrets.AZ_VAULT_TENANT_ID }}
@@ -135,7 +135,7 @@ jobs:
 
       - name: Get secrets from common vault
         if: ${{ inputs.image == 'plus' }}
-        uses: nginx/ci-self-hosted/.github/actions/get-from-vault@refs/heads/main
+        uses: nginx/ci-self-hosted/.github/actions/get-from-vault@2ac905a974d15594f0e03697b4f88916fbb3694d
         with:
           client-id: ${{ secrets.AZ_VAULT_CLIENT_ID }}
           tenant-id: ${{ secrets.AZ_VAULT_TENANT_ID }}

@@ -28,7 +28,7 @@ rules:
     check-multi-line-strings: true
     ignore: |
       operators/**/*
-      .github/workflows/*
+      .github/workflows/redhat-certification.yml
       examples/proxy-settings-policy/app.yaml
       examples/waf-policy/bundle-server.yaml
       tests/suite/manifests/proxy-settings-policy/app.yaml
