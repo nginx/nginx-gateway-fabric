@@ -318,7 +318,8 @@ spec:
                 items:
                   properties:
                     conditions:
-                      description: Conditions describe the status of the SnippetsFilter.
+                      description: Conditions describe the status of the resource
+                        with respect to this controller.
                       items:
                         description: Condition contains details for one aspect of
                           the current state of this API Resource.

@@ -103,7 +103,7 @@ type ControllerStatus struct {
 	// longer necessary.
 	ControllerName v1.GatewayController `json:"controllerName"`
 
-	// Conditions describe the status of the SnippetsFilter.
+	// Conditions describe the status of the resource with respect to this controller.
 	//
 	// +optional
 	// +listType=map

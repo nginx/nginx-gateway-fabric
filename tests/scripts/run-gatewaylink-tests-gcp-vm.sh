@@ -12,5 +12,5 @@ source "${SCRIPT_DIR}/vars.env"
 gcloud compute scp --zone "${GKE_CLUSTER_ZONE}" --project="${GKE_PROJECT}" "${SCRIPT_DIR}"/vars.env username@"${RESOURCE_NAME}":~
 
 gcloud compute ssh --zone "${GKE_CLUSTER_ZONE}" --project="${GKE_PROJECT}" username@"${RESOURCE_NAME}" \
-    --command="export CI=${CI} GATEWAYLINK_LABEL='${GATEWAYLINK_LABEL:-gatewaylink}' GATEWAYLINK_DEBUG_SLEEP=${GATEWAYLINK_DEBUG_SLEEP} && bash -s" \
+    --command="export CI=${CI} GATEWAYLINK_LABEL='${GATEWAYLINK_LABEL:-gatewaylink}' && bash -s" \
     <"${SCRIPT_DIR}"/remote-scripts/run-gatewaylink-tests.sh
