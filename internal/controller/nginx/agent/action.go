@@ -10,24 +10,48 @@ func actionsEqual(a, b []*pb.NGINXPlusAction) bool {
 		return false
 	}
 
-	for i := range a {
-		switch actionA := a[i].Action.(type) {
-		case *pb.NGINXPlusAction_UpdateHttpUpstreamServers:
-			actionB, ok := b[i].Action.(*pb.NGINXPlusAction_UpdateHttpUpstreamServers)
-			if !ok || !httpUpstreamsEqual(actionA.UpdateHttpUpstreamServers, actionB.UpdateHttpUpstreamServers) {
-				return false
-			}
-		case *pb.NGINXPlusAction_UpdateStreamServers:
-			actionB, ok := b[i].Action.(*pb.NGINXPlusAction_UpdateStreamServers)
-			if !ok || !streamUpstreamsEqual(actionA.UpdateStreamServers, actionB.UpdateStreamServers) {
-				return false
-			}
-		default:
+	aHTTP, aStream := indexActionsByName(a)
+	bHTTP, bStream := indexActionsByName(b)
+
+	if len(aHTTP) != len(bHTTP) || len(aStream) != len(bStream) {
+		return false
+	}
+
+	for name, actionA := range aHTTP {
+		actionB, ok := bHTTP[name]
+		if !ok || !httpUpstreamsEqual(actionA, actionB) {
+			return false
+		}
+	}
+
+	for name, actionA := range aStream {
+		actionB, ok := bStream[name]
+		if !ok || !streamUpstreamsEqual(actionA, actionB) {
 			return false
 		}
 	}
 
 	return true
+}
+
+// indexActionsByName splits a list of NGINXPlusActions into two maps, keyed by upstream name:
+// one for HTTP upstream actions and one for stream upstream actions.
+func indexActionsByName(
+	actions []*pb.NGINXPlusAction,
+) (map[string]*pb.UpdateHTTPUpstreamServers, map[string]*pb.UpdateStreamServers) {
+	httpActions := make(map[string]*pb.UpdateHTTPUpstreamServers, len(actions))
+	streamActions := make(map[string]*pb.UpdateStreamServers, len(actions))
+
+	for _, action := range actions {
+		switch a := action.Action.(type) {
+		case *pb.NGINXPlusAction_UpdateHttpUpstreamServers:
+			httpActions[a.UpdateHttpUpstreamServers.GetHttpUpstreamName()] = a.UpdateHttpUpstreamServers
+		case *pb.NGINXPlusAction_UpdateStreamServers:
+			streamActions[a.UpdateStreamServers.GetUpstreamStreamName()] = a.UpdateStreamServers
+		}
+	}
+
+	return httpActions, streamActions
 }
 
 func httpUpstreamsEqual(a, b *pb.UpdateHTTPUpstreamServers) bool {
