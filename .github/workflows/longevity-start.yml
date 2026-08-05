@@ -148,4 +148,4 @@ jobs:
 
       - name: Start Longevity Tests
         working-directory: ./tests
-        run: make start-longevity-test
+        run: make start-longevity-test PLUS_ENABLED=${{ matrix.type == 'plus' }}

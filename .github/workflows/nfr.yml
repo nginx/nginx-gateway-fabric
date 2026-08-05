@@ -156,9 +156,9 @@ jobs:
         working-directory: ./tests
         run: |
           if ${{ needs.vars.outputs.test_label != 'all' }}; then
-          sed -i '/^GINKGO_LABEL=/s/=.*/="${{ needs.vars.outputs.test_label }}"/' "scripts/vars.env" && make nfr-test CI=true;
+          sed -i '/^GINKGO_LABEL=/s/=.*/="${{ needs.vars.outputs.test_label }}"/' "scripts/vars.env" && make nfr-test CI=true PLUS_ENABLED=${{ matrix.type == 'plus' }};
           else
-          make nfr-test CI=true;
+          make nfr-test CI=true PLUS_ENABLED=${{ matrix.type == 'plus' }};
           fi
 
       - name: Upload Artifacts
