@@ -31,9 +31,6 @@ on:
         default: false
         type: boolean
 
-env:
-  PLUS_USAGE_ENDPOINT: ${{ secrets.JWT_PLUS_REPORTING_ENDPOINT }}
-
 permissions:
   contents: read
 
@@ -70,13 +67,22 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      - name: Get secrets
+        uses: nginx/ci-self-hosted/.github/actions/get-from-vault@2ac905a974d15594f0e03697b4f88916fbb3694d
+        with:
+          client-id: ${{ secrets.AZ_VAULT_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZ_VAULT_TENANT_ID }}
+          vault-name: ${{ secrets.AZ_VAULT_NAME }}
+          secret-names: "gcp-workload-identity,gcp-service-account,gcp-project-id,gcp-nodes-service-account${{ matrix.type == 'plus' && ',jwt-plus-reporting-endpoint,jwt-plus-exception-reporting' || '' }}${{ inputs.waf_plm_enabled == true && matrix.type == 'plus' && ',jwt-plus-waf-registry' || '' }}"
+          env-names: "GCP_WORKLOAD_IDENTITY,GCP_SERVICE_ACCOUNT,GCP_PROJECT_ID,GKE_NODES_SERVICE_ACCOUNT${{ matrix.type == 'plus' && ',PLUS_USAGE_ENDPOINT,PLUS_LICENSE' || '' }}${{ inputs.waf_plm_enabled == true && matrix.type == 'plus' && ',JWT_PLUS_WAF_REGISTRY' || '' }}"
+
       - name: Authenticate to Google Cloud
         id: auth
         uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
         with:
           token_format: access_token
-          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY }}
-          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          workload_identity_provider: ${{ env.GCP_WORKLOAD_IDENTITY }}
+          service_account: ${{ env.GCP_SERVICE_ACCOUNT }}
 
       - name: Login to GAR
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
@@ -88,7 +94,7 @@ jobs:
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
         with:
-          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          project_id: ${{ env.GCP_PROJECT_ID }}
           install_components: kubectl
 
       - name: Setup dotenv file
@@ -98,13 +104,13 @@ jobs:
           echo "TAG=${{ needs.vars.outputs.image_tag }}" >> vars.env
           echo "PREFIX=ghcr.io/nginx/nginx-gateway-fabric" >> vars.env
           echo "NGINX_PREFIX=ghcr.io/nginx/nginx-gateway-fabric/nginx" >> vars.env
-          echo "NGINX_PLUS_PREFIX=us-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/nginx-gateway-fabric/nginx-plus" >> vars.env
+          echo "NGINX_PLUS_PREFIX=us-docker.pkg.dev/${GCP_PROJECT_ID}/nginx-gateway-fabric/nginx-plus" >> vars.env
           echo "GKE_CLUSTER_NAME=longevity-tests-${{ github.run_id }}-${{ matrix.type }}" >> vars.env
           echo "GKE_CLUSTER_ZONE=${{ inputs.zone }}" >> vars.env
           echo "GKE_CLUSTER_REGION=${{ inputs.region }}" >> vars.env
-          echo "GKE_PROJECT=${{ secrets.GCP_PROJECT_ID }}" >> vars.env
-          echo "GKE_SVC_ACCOUNT=${{ secrets.GCP_SERVICE_ACCOUNT }}" >> vars.env
-          echo "GKE_NODES_SERVICE_ACCOUNT=${{ secrets.GKE_NODES_SERVICE_ACCOUNT }}" >> vars.env
+          echo "GKE_PROJECT=${GCP_PROJECT_ID}" >> vars.env
+          echo "GKE_SVC_ACCOUNT=${GCP_SERVICE_ACCOUNT}" >> vars.env
+          echo "GKE_NODES_SERVICE_ACCOUNT=${GKE_NODES_SERVICE_ACCOUNT}" >> vars.env
           echo "NETWORK_TAGS=longevity-tests-${{ github.run_id }}-${{ matrix.type }}" >> vars.env
           echo "NGF_BRANCH=${{ github.ref_name }}" >> vars.env
           echo "SOURCE_IP_RANGE=$(curl -sS -4 icanhazip.com)/32" >> vars.env
@@ -112,21 +118,17 @@ jobs:
           echo "PLUS_ENABLED=${{ matrix.type == 'plus' }}" >> vars.env
           echo "NGF_VERSION=${{ needs.vars.outputs.version }}" >> vars.env
           echo "GKE_MACHINE_TYPE=n2d-standard-16" >> vars.env
-          echo "PLUS_USAGE_ENDPOINT=${{ secrets.JWT_PLUS_REPORTING_ENDPOINT }}" >> vars.env
+          echo "PLUS_USAGE_ENDPOINT=${PLUS_USAGE_ENDPOINT}" >> vars.env
           echo "WAF_PLM_ENABLED=${{ inputs.waf_plm_enabled && matrix.type == 'plus' || false }}" >> vars.env
           echo "REGISTRY_JWT_FILE=~/nginx-gateway-fabric/dockerconfig.jwt" >> vars.env
 
       - name: Setup license file for plus
         if: matrix.type == 'plus'
-        env:
-          PLUS_LICENSE: ${{ secrets.JWT_PLUS_REPORTING }}
         run: echo "${PLUS_LICENSE}" > license.jwt
 
       - name: Setup registry JWT for WAF images
         if: ${{ inputs.waf_plm_enabled == true && matrix.type == 'plus' }}
-        env:
-          IMAGE_PULL_SECRET: ${{ secrets.JWT_PLUS_REGISTRY }}
-        run: echo "${IMAGE_PULL_SECRET}" > dockerconfig.jwt
+        run: echo "${JWT_PLUS_WAF_REGISTRY}" > dockerconfig.jwt
 
       - name: Create GKE cluster
         working-directory: ./tests
@@ -146,4 +148,4 @@ jobs:
 
       - name: Start Longevity Tests
         working-directory: ./tests
-        run: make start-longevity-test
+        run: make start-longevity-test PLUS_ENABLED=${{ matrix.type == 'plus' }}

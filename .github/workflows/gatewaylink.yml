@@ -61,13 +61,22 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      - name: Get secrets
+        uses: nginx/ci-self-hosted/.github/actions/get-from-vault@2ac905a974d15594f0e03697b4f88916fbb3694d
+        with:
+          client-id: ${{ secrets.AZ_VAULT_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZ_VAULT_TENANT_ID }}
+          vault-name: ${{ secrets.AZ_VAULT_NAME }}
+          secret-names: "bigip-admin-password,gcp-workload-identity,gcp-service-account,gcp-project-id,gcp-nodes-service-account${{ matrix.type == 'plus' && ',jwt-plus-reporting-endpoint,jwt-plus-exception-reporting' || '' }}"
+          env-names: "BIGIP_ADMIN_PASSWORD,GCP_WORKLOAD_IDENTITY,GCP_SERVICE_ACCOUNT,GCP_PROJECT_ID,GKE_NODES_SERVICE_ACCOUNT${{ matrix.type == 'plus' && ',PLUS_USAGE_ENDPOINT,PLUS_LICENSE' || '' }}"
+
       - name: Authenticate to Google Cloud
         id: auth
         uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
         with:
           token_format: access_token
-          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY }}
-          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          workload_identity_provider: ${{ env.GCP_WORKLOAD_IDENTITY }}
+          service_account: ${{ env.GCP_SERVICE_ACCOUNT }}
 
       - name: Login to GAR
         uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
@@ -79,7 +88,7 @@ jobs:
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
         with:
-          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          project_id: ${{ env.GCP_PROJECT_ID }}
           install_components: kubectl
 
       - name: Setup dotenv file
@@ -92,13 +101,13 @@ jobs:
           echo "TAG=${{ needs.vars.outputs.image_tag }}" >> vars.env
           echo "PREFIX=ghcr.io/nginx/nginx-gateway-fabric" >> vars.env
           echo "NGINX_PREFIX=ghcr.io/nginx/nginx-gateway-fabric/nginx" >> vars.env
-          echo "NGINX_PLUS_PREFIX=us-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/nginx-gateway-fabric/nginx-plus" >> vars.env
+          echo "NGINX_PLUS_PREFIX=us-docker.pkg.dev/${GCP_PROJECT_ID}/nginx-gateway-fabric/nginx-plus" >> vars.env
           echo "GKE_CLUSTER_NAME=gatewaylink-tests-${RUN}" >> vars.env
           echo "GKE_CLUSTER_ZONE=us-west1-b" >> vars.env
           echo "GKE_CLUSTER_REGION=us-west1" >> vars.env
-          echo "GKE_PROJECT=${{ secrets.GCP_PROJECT_ID }}" >> vars.env
-          echo "GKE_SVC_ACCOUNT=${{ secrets.GCP_SERVICE_ACCOUNT }}" >> vars.env
-          echo "GKE_NODES_SERVICE_ACCOUNT=${{ secrets.GKE_NODES_SERVICE_ACCOUNT }}" >> vars.env
+          echo "GKE_PROJECT=${GCP_PROJECT_ID}" >> vars.env
+          echo "GKE_SVC_ACCOUNT=${GCP_SERVICE_ACCOUNT}" >> vars.env
+          echo "GKE_NODES_SERVICE_ACCOUNT=${GKE_NODES_SERVICE_ACCOUNT}" >> vars.env
           echo "NETWORK_TAGS=gatewaylink-tests-${RUN}" >> vars.env
           echo "NGF_BRANCH=${NGF_BRANCH}" >> vars.env
           echo "SOURCE_IP_RANGE=$(curl -sS -4 icanhazip.com)/32" >> vars.env
@@ -119,13 +128,11 @@ jobs:
           # From a repo secret so it is masked in logs and not committed in plaintext. The management
           # port is also firewalled to the runner IP and the node and pod ranges only, and the BIG-IP
           # is torn down each run.
-          echo "BIGIP_PASSWORD=${{ secrets.BIGIP_ADMIN_PASSWORD }}" >> vars.env
-          echo "PLUS_USAGE_ENDPOINT=${{ secrets.JWT_PLUS_REPORTING_ENDPOINT }}" >> vars.env
+          echo "BIGIP_PASSWORD=${BIGIP_ADMIN_PASSWORD}" >> vars.env
+          echo "PLUS_USAGE_ENDPOINT=${PLUS_USAGE_ENDPOINT}" >> vars.env
 
       - name: Setup license file for plus
         if: matrix.type == 'plus'
-        env:
-          PLUS_LICENSE: ${{ secrets.JWT_PLUS_REPORTING }}
         run: echo "${PLUS_LICENSE}" > license.jwt
 
       - name: Create GKE cluster
