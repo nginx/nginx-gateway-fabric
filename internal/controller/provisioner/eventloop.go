@@ -11,6 +11,7 @@ import (
 	policyv1 "k8s.io/api/policy/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -21,8 +22,23 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller/predicate"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/events"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 	ngftypes "github.com/nginx/nginx-gateway-fabric/v2/internal/framework/types"
 )
+
+// controllerNamePrefix distinguishes the provisioner's controllers from the main control plane's,
+// which watch some of the same kinds.
+const controllerNamePrefix = "provisioner"
+
+func controllerName(kind string) string {
+	return fmt.Sprintf("%s-%s", controllerNamePrefix, kind)
+}
+
+// eventLoopFeatures decides which resources the event loop watches.
+type eventLoopFeatures struct {
+	isOpenshift          bool
+	externalLoadBalancer bool
+}
 
 func newEventLoop(
 	ctx context.Context,
@@ -35,7 +51,7 @@ func newEventLoop(
 	agentTLSSecret string,
 	dataplaneKeySecret string,
 	usageConfig *config.UsageReportConfig,
-	isOpenshift bool,
+	features eventLoopFeatures,
 ) (*events.EventLoop, error) {
 	nginxResourceLabelPredicate := predicate.NginxLabelPredicate(selector)
 
@@ -160,7 +176,7 @@ func newEventLoop(
 		},
 	}
 
-	if isOpenshift {
+	if features.isOpenshift {
 		controllerRegCfgs = append(controllerRegCfgs,
 			ctlrCfg{
 				objectType: &rbacv1.Role{},
@@ -188,6 +204,33 @@ func newEventLoop(
 	}
 
 	eventCh := make(chan any)
+
+	// Registered outside the loop below because an unstructured object is not in the scheme, so its
+	// GVK cannot be resolved with apiutil.GVKForObject.
+	if features.externalLoadBalancer {
+		ingressLinkObj := &unstructured.Unstructured{}
+		ingressLinkObj.SetGroupVersionKind(kinds.IngressLinkGVK)
+		if err := controller.Register(
+			ctx,
+			ingressLinkObj,
+			controllerName(kinds.IngressLinkGVK.Kind),
+			mgr,
+			eventCh,
+			controller.WithK8sPredicate(
+				k8spredicate.And(
+					nginxResourceLabelPredicate,
+					predicate.IngressLinkStatusChangedPredicate{},
+				),
+			),
+		); err != nil {
+			return nil, fmt.Errorf(
+				"cannot register controller for %s, required by the gatewayLink external load balancer"+
+					" backend: ensure the F5 CIS CRDs are installed: %w",
+				kinds.IngressLinkGVK.Kind, err,
+			)
+		}
+	}
+
 	for _, regCfg := range controllerRegCfgs {
 		gvk, err := apiutil.GVKForObject(regCfg.objectType, mgr.GetScheme())
 		if err != nil {
@@ -197,7 +240,7 @@ func newEventLoop(
 		if err := controller.Register(
 			ctx,
 			regCfg.objectType,
-			fmt.Sprintf("provisioner-%s", gvk.Kind),
+			controllerName(gvk.Kind),
 			mgr,
 			eventCh,
 			regCfg.options...,
@@ -220,7 +263,7 @@ func newEventLoop(
 		&corev1.SecretList{},
 	}
 
-	if isOpenshift {
+	if features.isOpenshift {
 		objectList = append(objectList,
 			&rbacv1.RoleList{},
 			&rbacv1.RoleBindingList{},

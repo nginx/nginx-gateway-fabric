@@ -1352,6 +1352,39 @@ func NewSnippetsFilterAccepted() Condition {
 	}
 }
 
+// NewExternalLoadBalancerAccepted returns a Condition that indicates that the ExternalLoadBalancer is accepted
+// and attached to its Gateway.
+func NewExternalLoadBalancerAccepted() Condition {
+	return Condition{
+		Type:    string(ngfAPI.ExternalLoadBalancerConditionTypeAccepted),
+		Status:  metav1.ConditionTrue,
+		Reason:  string(ngfAPI.ExternalLoadBalancerConditionReasonAccepted),
+		Message: "The ExternalLoadBalancer is accepted",
+	}
+}
+
+// NewExternalLoadBalancerInvalid returns a Condition that indicates that the ExternalLoadBalancer is not accepted
+// because it is syntactically or semantically invalid.
+func NewExternalLoadBalancerInvalid(msg string) Condition {
+	return Condition{
+		Type:    string(ngfAPI.ExternalLoadBalancerConditionTypeAccepted),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(ngfAPI.ExternalLoadBalancerConditionReasonInvalid),
+		Message: msg,
+	}
+}
+
+// NewExternalLoadBalancerConflicted returns a Condition that indicates that the ExternalLoadBalancer is not accepted
+// because another ExternalLoadBalancer already fronts the same Gateway.
+func NewExternalLoadBalancerConflicted(msg string) Condition {
+	return Condition{
+		Type:    string(ngfAPI.ExternalLoadBalancerConditionTypeAccepted),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(ngfAPI.ExternalLoadBalancerConditionReasonConflicted),
+		Message: msg,
+	}
+}
+
 // NewAuthenticationFilterInvalid returns a Condition that indicates that the AuthenticationFilter is not accepted
 // because it is syntactically or semantically invalid.
 func NewAuthenticationFilterInvalid(msg string) Condition {

@@ -314,23 +314,36 @@ func UninstallNGF(cfg InstallationConfig, rm ResourceManager) ([]byte, error) {
 
 // DeleteNGFCRDs deletes all NGF CRDs from the cluster.
 func DeleteNGFCRDs(rm ResourceManager) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+	// Each API call gets its own timeout. A single shared context would start its clock before the
+	// List and cover every Delete, so a slow call or a longer CRD list could exhaust the budget
+	// mid-loop and fail whichever delete happened to be in flight.
+	listCtx, listCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer listCancel()
 
 	var crList apiext.CustomResourceDefinitionList
-	if err := rm.List(ctx, &crList); err != nil {
+	if err := rm.List(listCtx, &crList); err != nil {
 		return err
 	}
 
 	for _, cr := range crList.Items {
 		if strings.Contains(cr.Spec.Group, "gateway.nginx.org") {
 			cr := cr
-			if err := rm.Delete(ctx, &cr, nil); err != nil && !apierrors.IsNotFound(err) {
+			if err := deleteCRD(rm, &cr); err != nil {
 				return err
 			}
 		}
 	}
 
+	return nil
+}
+
+func deleteCRD(rm ResourceManager, cr *apiext.CustomResourceDefinition) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	if err := rm.Delete(ctx, cr, nil); err != nil && !apierrors.IsNotFound(err) {
+		return err
+	}
 	return nil
 }
 

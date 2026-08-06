@@ -3165,6 +3165,140 @@ func TestBuildSnippetsFilterStatuses(t *testing.T) {
 	}
 }
 
+func TestPrepareExternalLoadBalancerRequests(t *testing.T) {
+	t.Parallel()
+	transitionTime := helpers.PrepareTimeForFakeClient(metav1.Now())
+
+	elbSource := func(name string) *ngfAPI.ExternalLoadBalancer {
+		return &ngfAPI.ExternalLoadBalancer{
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "test", Generation: 1},
+		}
+	}
+
+	acceptedELB := &graph.ExternalLoadBalancer{
+		Source:     elbSource("accepted-elb"),
+		Valid:      true,
+		Conditions: []conditions.Condition{conditions.NewExternalLoadBalancerAccepted()},
+	}
+	invalidELB := &graph.ExternalLoadBalancer{
+		Source:     elbSource("invalid-elb"),
+		Valid:      false,
+		Conditions: []conditions.Condition{conditions.NewExternalLoadBalancerInvalid("bad partition")},
+	}
+	conflictedELB := &graph.ExternalLoadBalancer{
+		Source:     elbSource("conflicted-elb"),
+		Valid:      false,
+		Conditions: []conditions.Condition{conditions.NewExternalLoadBalancerConflicted("already fronted")},
+	}
+
+	expectedController := func(status metav1.ConditionStatus, reason, message string) []ngfAPI.ControllerStatus {
+		return []ngfAPI.ControllerStatus{
+			{
+				Conditions: []metav1.Condition{
+					{
+						Type:               string(ngfAPI.ExternalLoadBalancerConditionTypeAccepted),
+						Status:             status,
+						ObservedGeneration: 1,
+						LastTransitionTime: transitionTime,
+						Reason:             reason,
+						Message:            message,
+					},
+				},
+				ControllerName: gatewayCtlrName,
+			},
+		}
+	}
+
+	tests := []struct {
+		externalLoadBalancers map[types.NamespacedName]*graph.ExternalLoadBalancer
+		expected              map[types.NamespacedName]ngfAPI.ExternalLoadBalancerStatus
+		name                  string
+		expectedReqs          int
+	}{
+		{
+			name:         "nil externalLoadBalancers",
+			expectedReqs: 0,
+			expected:     map[types.NamespacedName]ngfAPI.ExternalLoadBalancerStatus{},
+		},
+		{
+			name: "accepted externalLoadBalancer",
+			externalLoadBalancers: map[types.NamespacedName]*graph.ExternalLoadBalancer{
+				{Namespace: "test", Name: "accepted-elb"}: acceptedELB,
+			},
+			expectedReqs: 1,
+			expected: map[types.NamespacedName]ngfAPI.ExternalLoadBalancerStatus{
+				{Namespace: "test", Name: "accepted-elb"}: {
+					Controllers: expectedController(
+						metav1.ConditionTrue,
+						string(ngfAPI.ExternalLoadBalancerConditionReasonAccepted),
+						"The ExternalLoadBalancer is accepted",
+					),
+				},
+			},
+		},
+		{
+			name: "invalid externalLoadBalancer overrides the default Accepted condition",
+			externalLoadBalancers: map[types.NamespacedName]*graph.ExternalLoadBalancer{
+				{Namespace: "test", Name: "invalid-elb"}: invalidELB,
+			},
+			expectedReqs: 1,
+			expected: map[types.NamespacedName]ngfAPI.ExternalLoadBalancerStatus{
+				{Namespace: "test", Name: "invalid-elb"}: {
+					Controllers: expectedController(
+						metav1.ConditionFalse,
+						string(ngfAPI.ExternalLoadBalancerConditionReasonInvalid),
+						"bad partition",
+					),
+				},
+			},
+		},
+		{
+			name: "conflicted externalLoadBalancer overrides the default Accepted condition",
+			externalLoadBalancers: map[types.NamespacedName]*graph.ExternalLoadBalancer{
+				{Namespace: "test", Name: "conflicted-elb"}: conflictedELB,
+			},
+			expectedReqs: 1,
+			expected: map[types.NamespacedName]ngfAPI.ExternalLoadBalancerStatus{
+				{Namespace: "test", Name: "conflicted-elb"}: {
+					Controllers: expectedController(
+						metav1.ConditionFalse,
+						string(ngfAPI.ExternalLoadBalancerConditionReasonConflicted),
+						"already fronted",
+					),
+				},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			k8sClient := createK8sClientFor(&ngfAPI.ExternalLoadBalancer{})
+
+			for _, elb := range test.externalLoadBalancers {
+				g.Expect(k8sClient.Create(t.Context(), elb.Source)).ToNot(HaveOccurred())
+			}
+
+			updater := NewUpdater(k8sClient, logr.Discard())
+
+			reqs := PrepareExternalLoadBalancerRequests(test.externalLoadBalancers, transitionTime, gatewayCtlrName)
+
+			g.Expect(reqs).To(HaveLen(test.expectedReqs))
+
+			updater.Update(t.Context(), reqs...)
+
+			for nsname, expected := range test.expected {
+				var elb ngfAPI.ExternalLoadBalancer
+
+				g.Expect(k8sClient.Get(t.Context(), nsname, &elb)).ToNot(HaveOccurred())
+				g.Expect(helpers.Diff(expected, elb.Status)).To(BeEmpty())
+			}
+		})
+	}
+}
+
 func TestBuildAuthenticationFilterStatuses(t *testing.T) {
 	t.Parallel()
 	transitionTime := helpers.PrepareTimeForFakeClient(metav1.Now())

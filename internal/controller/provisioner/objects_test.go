@@ -14,11 +14,13 @@ import (
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
+	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/config"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
@@ -27,6 +29,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/secrets"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
 
 // graphListenersFromGateway converts raw Gateway spec listeners to graph Listeners for testing.
@@ -167,6 +170,7 @@ func TestBuildNginxResourceObjects(t *testing.T) {
 			},
 		},
 		graphListenersFromGateway(gateway),
+		nil,
 	)
 	g.Expect(err).ToNot(HaveOccurred())
 
@@ -414,6 +418,7 @@ func TestBuildNginxResourceObjects_ListenerSetPorts(t *testing.T) {
 		gateway,
 		&graph.EffectiveNginxProxy{},
 		allListeners,
+		nil,
 	)
 	g.Expect(err).ToNot(HaveOccurred())
 
@@ -550,6 +555,7 @@ func TestBuildNginxResourceObjects_NginxProxyConfig(t *testing.T) {
 		gateway,
 		nProxyCfg,
 		graphListenersFromGateway(gateway),
+		nil,
 	)
 	g.Expect(err).ToNot(HaveOccurred())
 
@@ -727,6 +733,7 @@ func TestBuildNginxResourceObjects_ExposeHealthcheck(t *testing.T) {
 				gateway,
 				test.nProxyCfg,
 				graphListenersFromGateway(gateway),
+				nil,
 			)
 			g.Expect(err).ToNot(HaveOccurred())
 
@@ -901,6 +908,7 @@ func TestBuildNginxResourceObjects_DeploymentReplicasFromHPA(t *testing.T) {
 				gateway,
 				nProxyCfg,
 				graphListenersFromGateway(gateway),
+				nil,
 			)
 			g.Expect(err).ToNot(HaveOccurred())
 
@@ -1002,6 +1010,7 @@ func TestBuildNginxResourceObjects_Plus(t *testing.T) {
 		gateway,
 		&graph.EffectiveNginxProxy{},
 		graphListenersFromGateway(gateway),
+		nil,
 	)
 	g.Expect(err).ToNot(HaveOccurred())
 
@@ -1157,6 +1166,7 @@ func TestBuildNginxResourceObjects_DockerSecrets(t *testing.T) {
 		gateway,
 		&graph.EffectiveNginxProxy{},
 		graphListenersFromGateway(gateway),
+		nil,
 	)
 	g.Expect(err).ToNot(HaveOccurred())
 
@@ -1291,6 +1301,7 @@ func TestBuildNginxResourceObjects_DaemonSet(t *testing.T) {
 		gateway,
 		nProxyCfg,
 		graphListenersFromGateway(gateway),
+		nil,
 	)
 	g.Expect(err).ToNot(HaveOccurred())
 
@@ -1377,6 +1388,7 @@ func TestBuildNginxResourceObjects_OpenShift(t *testing.T) {
 		gateway,
 		&graph.EffectiveNginxProxy{},
 		graphListenersFromGateway(gateway),
+		nil,
 	)
 	g.Expect(err).ToNot(HaveOccurred())
 
@@ -1459,6 +1471,7 @@ func TestBuildNginxResourceObjects_DataplaneKeySecret(t *testing.T) {
 		gateway,
 		&graph.EffectiveNginxProxy{},
 		graphListenersFromGateway(gateway),
+		nil,
 	)
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(objects).To(HaveLen(7)) // 2 secrets, 2 configmaps, serviceaccount, service, deployment
@@ -1575,6 +1588,29 @@ func TestBuildResourcesForInvalidGatewayCleanup(t *testing.T) {
 	cm, ok = cmObj.(*corev1.ConfigMap)
 	g.Expect(ok).To(BeTrue())
 	validateMeta(cm, controller.CreateNginxResourceName(deploymentNSName.Name, nginxAgentConfigMapNameSuffix))
+}
+
+func TestBuildResourcesForInvalidGatewayCleanup_ExternalLoadBalancer(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	provisioner := &NginxProvisioner{cfg: Config{ExternalLoadBalancer: true}}
+
+	deploymentNSName := types.NamespacedName{
+		Name:      "gw-nginx",
+		Namespace: "default",
+	}
+
+	objects := provisioner.buildResourcesForInvalidGatewayCleanup(deploymentNSName)
+
+	// The IngressLink is prepended to the default 9 resources so it is deleted first.
+	g.Expect(objects).To(HaveLen(10))
+
+	il, ok := objects[0].(*unstructured.Unstructured)
+	g.Expect(ok).To(BeTrue())
+	g.Expect(il.GroupVersionKind()).To(Equal(kinds.IngressLinkGVK))
+	g.Expect(il.GetName()).To(Equal(deploymentNSName.Name))
+	g.Expect(il.GetNamespace()).To(Equal(deploymentNSName.Namespace))
 }
 
 func TestBuildResourcesForInvalidGatewayCleanup_Plus(t *testing.T) {
@@ -2439,6 +2475,7 @@ func TestBuildNginxResourceObjects_Patches(t *testing.T) {
 		gateway,
 		nProxyCfg,
 		graphListenersFromGateway(gateway),
+		nil,
 	)
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(objects).To(HaveLen(6))
@@ -2489,6 +2526,7 @@ func TestBuildNginxResourceObjects_Patches(t *testing.T) {
 		gateway,
 		nProxyCfg,
 		graphListenersFromGateway(gateway),
+		nil,
 	)
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(objects).To(HaveLen(6))
@@ -2525,6 +2563,7 @@ func TestBuildNginxResourceObjects_Patches(t *testing.T) {
 		gateway,
 		nProxyCfg,
 		graphListenersFromGateway(gateway),
+		nil,
 	)
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(objects).To(HaveLen(6))
@@ -2571,6 +2610,7 @@ func TestBuildNginxResourceObjects_Patches(t *testing.T) {
 		gateway,
 		nProxyCfg,
 		graphListenersFromGateway(gateway),
+		nil,
 	)
 	g.Expect(err).To(HaveOccurred())
 	g.Expect(err.Error()).To(ContainSubstring("failed to apply service patches"))
@@ -2598,6 +2638,7 @@ func TestBuildNginxResourceObjects_Patches(t *testing.T) {
 		gateway,
 		nProxyCfg,
 		graphListenersFromGateway(gateway),
+		nil,
 	)
 	g.Expect(err).To(HaveOccurred())
 	g.Expect(err.Error()).To(ContainSubstring("unsupported patch type"))
@@ -2628,6 +2669,7 @@ func TestBuildNginxResourceObjects_Patches(t *testing.T) {
 		gateway,
 		nProxyCfg,
 		graphListenersFromGateway(gateway),
+		nil,
 	)
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(objects).To(HaveLen(6))
@@ -2673,6 +2715,7 @@ func TestBuildNginxResourceObjects_Patches(t *testing.T) {
 		gateway,
 		nProxyCfg,
 		graphListenersFromGateway(gateway),
+		nil,
 	)
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(objects).To(HaveLen(6))
@@ -2758,6 +2801,7 @@ func TestBuildNginxResourceObjects_InferenceExtension(t *testing.T) {
 		gateway,
 		npCfg,
 		graphListenersFromGateway(gateway),
+		nil,
 	)
 	g.Expect(err).ToNot(HaveOccurred())
 
@@ -2882,12 +2926,17 @@ func TestOwnerReferencesAreSet(t *testing.T) {
 
 	resourceName := controller.CreateNginxResourceName(gateway.Name, "nginx")
 
-	// Build resources
+	// Build resources. An ExternalLoadBalancer is attached so the external load balancer object is
+	// among them and is covered by the owner reference check below.
+	provisioner.cfg.ExternalLoadBalancer = true
 	objects, err := provisioner.buildNginxResourceObjects(
 		resourceName,
 		gateway,
 		nil,
 		graphListenersFromGateway(gateway),
+		elbWithGatewayLink(&ngfAPIv1alpha1.GatewayLinkConfig{
+			VirtualServerAddress: helpers.GetPointer("10.0.0.1"),
+		}),
 	)
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(objects).ToNot(BeEmpty())
@@ -3012,6 +3061,7 @@ func TestBuildNginxResourceObjects_LoadBalancerClass(t *testing.T) {
 				gateway,
 				test.nProxyCfg,
 				graphListenersFromGateway(gateway),
+				nil,
 			)
 			g.Expect(err).ToNot(HaveOccurred())
 
@@ -3128,6 +3178,7 @@ func TestBuildNginxResourceObjects_WAF(t *testing.T) {
 		gateway,
 		nProxyCfg,
 		graphListenersFromGateway(gateway),
+		nil,
 	)
 	g.Expect(err).ToNot(HaveOccurred())
 

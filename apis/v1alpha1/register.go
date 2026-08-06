@@ -50,6 +50,8 @@ func addKnownTypes(scheme *runtime.Scheme) error {
 		&RateLimitPolicyList{},
 		&WAFPolicy{},
 		&WAFPolicyList{},
+		&ExternalLoadBalancer{},
+		&ExternalLoadBalancerList{},
 	)
 	// AddToGroupVersion allows the serialization of client types like ListOptions.
 	metav1.AddToGroupVersion(scheme, SchemeGroupVersion)

@@ -11,6 +11,7 @@ import (
 	policyv1 "k8s.io/api/policy/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -19,6 +20,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
 
 func TestNewStore(t *testing.T) {
@@ -375,6 +377,28 @@ func TestRegisterResourceInGatewayConfig(t *testing.T) {
 	// Dataplane Key Secret again, already exists
 	resources = registerAndGetResources(dataplaneKeySecret)
 	g.Expect(resources.DataplaneKeySecret).To(Equal(dataplaneKeySecretMeta))
+
+	// clear out resources before next test
+	store.deleteResourcesForGateway(nsName)
+
+	// IngressLink (external load balancer)
+	il := &unstructured.Unstructured{}
+	il.SetGroupVersionKind(kinds.IngressLinkGVK)
+	il.SetName(defaultMeta.Name)
+	il.SetNamespace(defaultMeta.Namespace)
+	resources = registerAndGetResources(il)
+	g.Expect(resources.ExternalLoadBalancer).To(Equal(defaultMeta))
+
+	// clear out resources before next test
+	store.deleteResourcesForGateway(nsName)
+
+	// An unstructured object of a different kind is ignored: it creates no resources entry.
+	other := &unstructured.Unstructured{}
+	other.SetGroupVersionKind(kinds.APPolicyGVK)
+	other.SetName("other")
+	other.SetNamespace(defaultMeta.Namespace)
+	store.registerResourceInGatewayConfig(nsName, other)
+	g.Expect(store.getNginxResourcesForGateway(nsName)).To(BeNil())
 }
 
 func TestGatewayChanged(t *testing.T) {
@@ -636,7 +660,16 @@ func TestGatewayExistsForResource(t *testing.T) {
 			Name:      "test-dataplane-key-secret",
 			Namespace: "default",
 		},
+		ExternalLoadBalancer: metav1.ObjectMeta{
+			Name:      "test-ingresslink",
+			Namespace: "default",
+		},
 	}
+
+	ingressLink := &unstructured.Unstructured{}
+	ingressLink.SetGroupVersionKind(kinds.IngressLinkGVK)
+	ingressLink.SetName("test-ingresslink")
+	ingressLink.SetNamespace("default")
 
 	tests := []struct {
 		expected *graph.Gateway
@@ -801,6 +834,11 @@ func TestGatewayExistsForResource(t *testing.T) {
 					Namespace: "default",
 				},
 			},
+			expected: gateway,
+		},
+		{
+			name:     "IngressLink exists",
+			object:   ingressLink,
 			expected: gateway,
 		},
 		{

@@ -16,6 +16,8 @@ const (
 	UpdateAll = iota
 	// UpdateGateway means to just update the status of the Gateway resource.
 	UpdateGateway
+	// UpdateGatewayIngressLink means to update the Gateway status with the IngressLink address.
+	UpdateGatewayIngressLink
 )
 
 type Deployment struct {
@@ -28,9 +30,12 @@ type QueueObject struct {
 	// GatewayService is the Gateway Service that was updated. When set, UpdateType should be UpdateGateway.
 	// Set by the provisioner
 	GatewayService *corev1.Service
-	Error          error
-	Deployment     Deployment
-	UpdateType     UpdateType
+	// IngressLinkAddress is the IP address from the IngressLink status.vsAddress field.
+	// When set, UpdateType should be UpdateGatewayIngressLink.
+	IngressLinkAddress string
+	Error              error
+	Deployment         Deployment
+	UpdateType         UpdateType
 	// NginxConfigPushed indicates that an NGINX configuration push was attempted for this update.
 	// When false the update is a status-only change (e.g. a WAF poll result) and the
 	// "NGINX configuration was successfully updated" log should be suppressed.
