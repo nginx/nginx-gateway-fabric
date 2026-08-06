@@ -905,8 +905,10 @@ func TestNewBackendTLSPolicyStatusSetter(t *testing.T) {
 		}
 
 		// Simulate NewRetryUpdateFunc invoking the same Setter closure again after a conflict.
-		_ = setter(obj)
-		_ = setter(obj)
+		res := setter(obj)
+		g.Expect(res).To(BeTrue())
+		res = setter(obj)
+		g.Expect(res).To(BeFalse())
 
 		otherCount := 0
 		for _, a := range obj.Status.Ancestors {

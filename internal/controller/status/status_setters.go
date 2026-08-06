@@ -165,7 +165,7 @@ func newTCPRouteStatusSetter(status gatewayv1.TCPRouteStatus, gatewayCtlrName st
 		tr := helpers.MustCastObject[*gatewayv1.TCPRoute](object)
 
 		// keep all the parent statuses that belong to other controllers
-		newParents := make([]gatewayv1.RouteParentStatus, 0, len(status.Parents))
+		newParents := make([]gatewayv1.RouteParentStatus, 0, len(status.Parents)+len(tr.Status.Parents))
 		newParents = append(newParents, status.Parents...)
 		for _, os := range tr.Status.Parents {
 			if string(os.ControllerName) != gatewayCtlrName {
@@ -191,7 +191,7 @@ func newUDPRouteStatusSetter(status gatewayv1.UDPRouteStatus, gatewayCtlrName st
 		ur := helpers.MustCastObject[*gatewayv1.UDPRoute](object)
 
 		// keep all the parent statuses that belong to other controllers
-		newParents := make([]gatewayv1.RouteParentStatus, 0, len(status.Parents))
+		newParents := make([]gatewayv1.RouteParentStatus, 0, len(status.Parents)+len(ur.Status.Parents))
 		newParents = append(newParents, status.Parents...)
 		for _, os := range ur.Status.Parents {
 			if string(os.ControllerName) != gatewayCtlrName {
@@ -266,8 +266,6 @@ func routeParentStatusEqual(p1, p2 gatewayv1.RouteParentStatus) bool {
 	if !helpers.EqualPointers(p1.ParentRef.Kind, p2.ParentRef.Kind) {
 		return false
 	}
-
-	// we ignore the rest of the ParentRef fields because we do not set them
 
 	return ConditionsEqual(p1.Conditions, p2.Conditions)
 }
