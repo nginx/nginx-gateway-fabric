@@ -35,7 +35,7 @@ GEN_CRD_API_REFERENCE_DOCS_VERSION = v0.3.0
 # renovate: datasource=go depName=sigs.k8s.io/controller-tools
 CONTROLLER_TOOLS_VERSION = v0.21.0
 # renovate: datasource=github-tags depName=F5Networks/k8s-bigip-ctlr
-CIS_VERSION = v2.20.4
+CIS_VERSION = v20.3.0
 # CRD link for F5 Container Ingress Services (CIS) used by GatewayLink.
 CIS_CRDS_URL = https://raw.githubusercontent.com/F5Networks/k8s-bigip-ctlr/$(CIS_VERSION)/docs/config_examples/customResourceDefinitions/customresourcedefinitions.yml
 # renovate: datasource=docker depName=node
