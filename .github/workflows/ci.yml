@@ -124,7 +124,7 @@ jobs:
             tests/go.sum
 
       - name: Check for changes
-        uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706 # v4.0.2
+        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         id: filter
         with:
           filters: |
@@ -382,7 +382,7 @@ jobs:
 
       - name: Generate Assertion Document
         id: assertiondoc
-        uses: nginx/compliance-rules/.github/actions/assertion@543d32464b56e6a695939f41ba8009cbb10e413a # v0.3.3
+        uses: nginx/compliance-rules/.github/actions/assertion@077e950021045cabd0d29b7d9e6d9cc01def6804 # v0.3.4
         with:
           artifact-name: ${{ github.event.repository.name }}_${{ github.sha }}_${{ github.run_number }}_${{ matrix.gateway.os }}_${{ matrix.gateway.arch }}
           artifact-digest: ${{ matrix.gateway.digest }}
@@ -401,7 +401,7 @@ jobs:
 
       - name: Sign and Store Assertion Document
         id: sign
-        uses: nginx/compliance-rules/.github/actions/sign@543d32464b56e6a695939f41ba8009cbb10e413a # v0.3.3
+        uses: nginx/compliance-rules/.github/actions/sign@077e950021045cabd0d29b7d9e6d9cc01def6804 # v0.3.4
         with:
           assertion-doc: ${{ steps.assertiondoc.outputs.assertion-document-path }}
 
