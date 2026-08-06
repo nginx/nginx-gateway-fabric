@@ -878,6 +878,46 @@ func TestNewBackendTLSPolicyStatusSetter(t *testing.T) {
 			g.Expect(obj.Status).To(Equal(test.expStatus))
 		})
 	}
+
+	t.Run("retry does not duplicate other controller ancestor statuses", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+
+		newStatus := gatewayv1.PolicyStatus{
+			Ancestors: []gatewayv1.PolicyAncestorStatus{
+				{
+					ControllerName: controllerName,
+					Conditions:     []metav1.Condition{{Message: "new condition"}},
+				},
+			},
+		}
+
+		setter := newBackendTLSPolicyStatusSetter(newStatus, controllerName)
+		obj := &gatewayv1.BackendTLSPolicy{
+			Status: gatewayv1.PolicyStatus{
+				Ancestors: []gatewayv1.PolicyAncestorStatus{
+					{
+						ControllerName: otherControllerName,
+						Conditions:     []metav1.Condition{{Message: "some condition"}},
+					},
+				},
+			},
+		}
+
+		// Simulate NewRetryUpdateFunc invoking the same Setter closure again after a conflict.
+		_ = setter(obj)
+		_ = setter(obj)
+
+		otherCount := 0
+		for _, a := range obj.Status.Ancestors {
+			if a.ControllerName == otherControllerName {
+				otherCount++
+			}
+		}
+
+		g.Expect(otherCount).To(Equal(1))
+		g.Expect(obj.Status.Ancestors).To(HaveLen(2))
+	})
 }
 
 func TestNewNGFPolicyStatusSetter(t *testing.T) {
@@ -1027,6 +1067,56 @@ func TestNewNGFPolicyStatusSetter(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("retry does not duplicate other controller ancestor statuses", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+
+		newStatus := gatewayv1.PolicyStatus{
+			Ancestors: []gatewayv1.PolicyAncestorStatus{
+				{
+					ControllerName: controllerName,
+					Conditions:     []metav1.Condition{{Message: "new condition"}},
+				},
+			},
+		}
+
+		setter := newNGFPolicyStatusSetter(newStatus, controllerName)
+
+		// currentStatus simulates the object's status as it evolves across retries -
+		// the setter reads the latest status via GetPolicyStatusStub each call.
+		currentStatus := gatewayv1.PolicyStatus{
+			Ancestors: []gatewayv1.PolicyAncestorStatus{
+				{
+					ControllerName: otherControllerName,
+					Conditions:     []metav1.Condition{{Message: "some condition"}},
+				},
+			},
+		}
+
+		obj := &policiesfakes.FakePolicy{
+			GetPolicyStatusStub: func() gatewayv1.PolicyStatus {
+				return currentStatus
+			},
+			SetPolicyStatusStub: func(status gatewayv1.PolicyStatus) {
+				currentStatus = status
+			},
+		}
+
+		// Simulate NewRetryUpdateFunc invoking the same Setter closure again after a conflict.
+		_ = setter(obj)
+		_ = setter(obj)
+
+		otherCount := 0
+		for _, a := range currentStatus.Ancestors {
+			if a.ControllerName == otherControllerName {
+				otherCount++
+			}
+		}
+
+		g.Expect(otherCount).To(Equal(1))
+		g.Expect(currentStatus.Ancestors).To(HaveLen(2))
+	})
 }
 
 func TestGWStatusEqual(t *testing.T) {
@@ -1378,6 +1468,74 @@ func TestHRStatusEqual(t *testing.T) {
 	}
 }
 
+func TestGroupsEqual(t *testing.T) {
+	t.Parallel()
+
+	empty := gatewayv1.Group("")
+	core := gatewayv1.Group("core")
+	other := gatewayv1.Group("example.com")
+
+	tests := []struct {
+		g1, g2   *gatewayv1.Group
+		name     string
+		expEqual bool
+	}{
+		{
+			name:     "both nil",
+			expEqual: true,
+		},
+		{
+			name:     "nil and empty",
+			g2:       &empty,
+			expEqual: true,
+		},
+		{
+			name:     "nil and core",
+			g2:       &core,
+			expEqual: true,
+		},
+		{
+			name:     "empty and core",
+			g1:       &empty,
+			g2:       &core,
+			expEqual: true,
+		},
+		{
+			name:     "core and core",
+			g1:       &core,
+			g2:       &core,
+			expEqual: true,
+		},
+		{
+			name:     "nil and other",
+			g2:       &other,
+			expEqual: false,
+		},
+		{
+			name:     "core and other",
+			g1:       &core,
+			g2:       &other,
+			expEqual: false,
+		},
+		{
+			name:     "empty and other",
+			g1:       &empty,
+			g2:       &other,
+			expEqual: false,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			g.Expect(groupsEqual(test.g1, test.g2)).To(Equal(test.expEqual))
+			g.Expect(groupsEqual(test.g2, test.g1)).To(Equal(test.expEqual))
+		})
+	}
+}
+
 func TestRouteParentStatusEqual(t *testing.T) {
 	t.Parallel()
 	getDefaultStatus := func() gatewayv1.RouteParentStatus {
@@ -1440,6 +1598,15 @@ func TestRouteParentStatusEqual(t *testing.T) {
 			p1:   getDefaultStatus(),
 			p2: getModifiedStatus(func(status gatewayv1.RouteParentStatus) gatewayv1.RouteParentStatus {
 				status.ParentRef.SectionName = helpers.GetPointer[gatewayv1.SectionName]("different")
+				return status
+			}),
+			expEqual: false,
+		},
+		{
+			name: "different parentRef kind",
+			p1:   getDefaultStatus(),
+			p2: getModifiedStatus(func(status gatewayv1.RouteParentStatus) gatewayv1.RouteParentStatus {
+				status.ParentRef.Kind = helpers.GetPointer[gatewayv1.Kind]("different")
 				return status
 			}),
 			expEqual: false,
@@ -1572,6 +1739,32 @@ func TestPolicyStatusEqual(t *testing.T) {
 			}),
 			controllerName: "ctlr1",
 			expEqual:       false,
+		},
+		{
+			name: "status equal, ancestor group empty string and core are equivalent",
+			previous: getModifiedPolicyStatus(func(s gatewayv1.PolicyStatus) gatewayv1.PolicyStatus {
+				s.Ancestors[0].AncestorRef.Group = helpers.GetPointer[gatewayv1.Group]("")
+				return s
+			}),
+			current: getModifiedPolicyStatus(func(s gatewayv1.PolicyStatus) gatewayv1.PolicyStatus {
+				s.Ancestors[0].AncestorRef.Group = helpers.GetPointer[gatewayv1.Group]("core")
+				return s
+			}),
+			controllerName: "ctlr1",
+			expEqual:       true,
+		},
+		{
+			name: "status equal, ancestor group nil and core are equivalent",
+			previous: getModifiedPolicyStatus(func(s gatewayv1.PolicyStatus) gatewayv1.PolicyStatus {
+				s.Ancestors[0].AncestorRef.Group = nil
+				return s
+			}),
+			current: getModifiedPolicyStatus(func(s gatewayv1.PolicyStatus) gatewayv1.PolicyStatus {
+				s.Ancestors[0].AncestorRef.Group = helpers.GetPointer[gatewayv1.Group]("core")
+				return s
+			}),
+			controllerName: "ctlr1",
+			expEqual:       true,
 		},
 		{
 			name:     "status not equal, different controller name on current",
@@ -1761,6 +1954,46 @@ func TestNewSnippetsFilterStatusSetter(t *testing.T) {
 			g.Expect(sf.Status).To(Equal(test.expStatus))
 		})
 	}
+
+	t.Run("retry does not duplicate other controller statuses", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+
+		newStatus := ngfAPI.SnippetsFilterStatus{
+			Controllers: []ngfAPI.ControllerStatus{
+				{
+					Conditions:     []metav1.Condition{{Message: "new condition"}},
+					ControllerName: controllerName,
+				},
+			},
+		}
+
+		setter := newSnippetsFilterStatusSetter(newStatus, controllerName)
+		sf := &ngfAPI.SnippetsFilter{
+			Status: ngfAPI.SnippetsFilterStatus{
+				Controllers: []ngfAPI.ControllerStatus{
+					{
+						ControllerName: otherControllerName,
+						Conditions:     []metav1.Condition{{Message: "some condition"}},
+					},
+				},
+			},
+		}
+
+		// Simulate NewRetryUpdateFunc invoking the same Setter closure again after a conflict.
+		_ = setter(sf)
+		_ = setter(sf)
+
+		otherCount := 0
+		for _, c := range sf.Status.Controllers {
+			if c.ControllerName == otherControllerName {
+				otherCount++
+			}
+		}
+
+		g.Expect(otherCount).To(Equal(1))
+		g.Expect(sf.Status.Controllers).To(HaveLen(2))
+	})
 }
 
 func TestNewExternalLoadBalancerStatusSetter(t *testing.T) {
@@ -1902,6 +2135,46 @@ func TestNewExternalLoadBalancerStatusSetter(t *testing.T) {
 			g.Expect(elb.Status).To(Equal(test.expStatus))
 		})
 	}
+
+	t.Run("retry does not duplicate other controller statuses", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+
+		newStatus := ngfAPI.ExternalLoadBalancerStatus{
+			Controllers: []ngfAPI.ControllerStatus{
+				{
+					Conditions:     []metav1.Condition{{Message: "new condition"}},
+					ControllerName: controllerName,
+				},
+			},
+		}
+
+		setter := newExternalLoadBalancerStatusSetter(newStatus, controllerName)
+		elb := &ngfAPI.ExternalLoadBalancer{
+			Status: ngfAPI.ExternalLoadBalancerStatus{
+				Controllers: []ngfAPI.ControllerStatus{
+					{
+						ControllerName: otherControllerName,
+						Conditions:     []metav1.Condition{{Message: "some condition"}},
+					},
+				},
+			},
+		}
+
+		// Simulate NewRetryUpdateFunc invoking the same Setter closure again after a conflict.
+		_ = setter(elb)
+		_ = setter(elb)
+
+		otherCount := 0
+		for _, c := range elb.Status.Controllers {
+			if c.ControllerName == otherControllerName {
+				otherCount++
+			}
+		}
+
+		g.Expect(otherCount).To(Equal(1))
+		g.Expect(elb.Status.Controllers).To(HaveLen(2))
+	})
 }
 
 func TestNewAuthenticationFilterStatusSetter(t *testing.T) {
@@ -2043,6 +2316,46 @@ func TestNewAuthenticationFilterStatusSetter(t *testing.T) {
 			g.Expect(af.Status).To(Equal(test.expStatus))
 		})
 	}
+
+	t.Run("retry does not duplicate other controller statuses", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+
+		newStatus := ngfAPI.AuthenticationFilterStatus{
+			Controllers: []ngfAPI.ControllerStatus{
+				{
+					Conditions:     []metav1.Condition{{Message: "new condition"}},
+					ControllerName: controllerName,
+				},
+			},
+		}
+
+		setter := newAuthenticationFilterStatusSetter(newStatus, controllerName)
+		af := &ngfAPI.AuthenticationFilter{
+			Status: ngfAPI.AuthenticationFilterStatus{
+				Controllers: []ngfAPI.ControllerStatus{
+					{
+						ControllerName: otherControllerName,
+						Conditions:     []metav1.Condition{{Message: "some condition"}},
+					},
+				},
+			},
+		}
+
+		// Simulate NewRetryUpdateFunc invoking the same Setter closure again after a conflict.
+		_ = setter(af)
+		_ = setter(af)
+
+		otherCount := 0
+		for _, c := range af.Status.Controllers {
+			if c.ControllerName == otherControllerName {
+				otherCount++
+			}
+		}
+
+		g.Expect(otherCount).To(Equal(1))
+		g.Expect(af.Status.Controllers).To(HaveLen(2))
+	})
 }
 
 func TestInferencePoolStatusSetter(t *testing.T) {
@@ -2327,6 +2640,46 @@ func TestInferencePoolStatusSetter(t *testing.T) {
 			},
 			expStatusSet: false,
 		},
+		{
+			name: "InferencePool has same status, parent ref group empty string and core are equivalent",
+			status: inference.InferencePoolStatus{
+				Parents: []inference.ParentStatus{
+					{
+						Conditions: []metav1.Condition{{Message: "gateway1 is valid parent ref"}},
+						ParentRef: inference.ParentReference{
+							Name:      "gateway1",
+							Namespace: "test",
+							Group:     helpers.GetPointer(inference.Group("")),
+						},
+					},
+				},
+			},
+			newStatus: inference.InferencePoolStatus{
+				Parents: []inference.ParentStatus{
+					{
+						Conditions: []metav1.Condition{{Message: "gateway1 is valid parent ref"}},
+						ParentRef: inference.ParentReference{
+							Name:      "gateway1",
+							Namespace: "test",
+							Group:     helpers.GetPointer(inference.Group("core")),
+						},
+					},
+				},
+			},
+			expStatus: inference.InferencePoolStatus{
+				Parents: []inference.ParentStatus{
+					{
+						Conditions: []metav1.Condition{{Message: "gateway1 is valid parent ref"}},
+						ParentRef: inference.ParentReference{
+							Name:      "gateway1",
+							Namespace: "test",
+							Group:     helpers.GetPointer(inference.Group("")),
+						},
+					},
+				},
+			},
+			expStatusSet: false,
+		},
 	}
 
 	for _, test := range tests {
@@ -2520,6 +2873,52 @@ func TestNewTCPRouteStatusSetter(t *testing.T) {
 			g.Expect(obj.Status).To(Equal(test.expStatus))
 		})
 	}
+
+	t.Run("retry does not duplicate other controller statuses", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+
+		newStatus := gatewayv1.TCPRouteStatus{
+			RouteStatus: gatewayv1.RouteStatus{
+				Parents: []gatewayv1.RouteParentStatus{
+					{
+						ParentRef:      gatewayv1.ParentReference{},
+						ControllerName: gatewayv1.GatewayController(controllerName),
+						Conditions:     []metav1.Condition{{Message: "new condition"}},
+					},
+				},
+			},
+		}
+
+		setter := newTCPRouteStatusSetter(newStatus, controllerName)
+		obj := &gatewayv1.TCPRoute{
+			Status: gatewayv1.TCPRouteStatus{
+				RouteStatus: gatewayv1.RouteStatus{
+					Parents: []gatewayv1.RouteParentStatus{
+						{
+							ParentRef:      gatewayv1.ParentReference{Name: "other"},
+							ControllerName: gatewayv1.GatewayController(otherControllerName),
+							Conditions:     []metav1.Condition{{Message: "other controller condition"}},
+						},
+					},
+				},
+			},
+		}
+
+		// Simulate NewRetryUpdateFunc invoking the same Setter closure again after a conflict.
+		_ = setter(obj)
+		_ = setter(obj)
+
+		otherCount := 0
+		for _, p := range obj.Status.Parents {
+			if p.ControllerName == gatewayv1.GatewayController(otherControllerName) {
+				otherCount++
+			}
+		}
+
+		g.Expect(otherCount).To(Equal(1))
+		g.Expect(obj.Status.Parents).To(HaveLen(2))
+	})
 }
 
 func TestNewUDPRouteStatusSetter(t *testing.T) {
@@ -2697,6 +3096,52 @@ func TestNewUDPRouteStatusSetter(t *testing.T) {
 			g.Expect(obj.Status).To(Equal(test.expStatus))
 		})
 	}
+
+	t.Run("retry does not duplicate other controller statuses", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+
+		newStatus := gatewayv1.UDPRouteStatus{
+			RouteStatus: gatewayv1.RouteStatus{
+				Parents: []gatewayv1.RouteParentStatus{
+					{
+						ParentRef:      gatewayv1.ParentReference{},
+						ControllerName: gatewayv1.GatewayController(controllerName),
+						Conditions:     []metav1.Condition{{Message: "new condition"}},
+					},
+				},
+			},
+		}
+
+		setter := newUDPRouteStatusSetter(newStatus, controllerName)
+		obj := &gatewayv1.UDPRoute{
+			Status: gatewayv1.UDPRouteStatus{
+				RouteStatus: gatewayv1.RouteStatus{
+					Parents: []gatewayv1.RouteParentStatus{
+						{
+							ParentRef:      gatewayv1.ParentReference{Name: "other"},
+							ControllerName: gatewayv1.GatewayController(otherControllerName),
+							Conditions:     []metav1.Condition{{Message: "other controller condition"}},
+						},
+					},
+				},
+			},
+		}
+
+		// Simulate NewRetryUpdateFunc invoking the same Setter closure again after a conflict.
+		_ = setter(obj)
+		_ = setter(obj)
+
+		otherCount := 0
+		for _, p := range obj.Status.Parents {
+			if p.ControllerName == gatewayv1.GatewayController(otherControllerName) {
+				otherCount++
+			}
+		}
+
+		g.Expect(otherCount).To(Equal(1))
+		g.Expect(obj.Status.Parents).To(HaveLen(2))
+	})
 }
 
 func TestNewListenerSetStatusSetter(t *testing.T) {
