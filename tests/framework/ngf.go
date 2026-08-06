@@ -45,6 +45,7 @@ type InstallationConfig struct {
 	NginxImagePullSecret string
 	Plus                 bool
 	Telemetry            bool
+	Guardrails           bool
 	SkipCRDCleanup       bool
 }
 
@@ -125,6 +126,7 @@ func InstallNGF(cfg InstallationConfig, extraArgs ...string) ([]byte, error) {
 
 	args = append(args, setImageArgs(cfg)...)
 	args = append(args, setTelemetryArgs(cfg)...)
+	args = append(args, setGuardrailsArgs(cfg)...)
 	args = append(args, setPlusUsageEndpointArg(cfg)...)
 	if cfg.GatewayClassName != "" {
 		args = append(args, "--set", fmt.Sprintf("nginxGateway.gatewayClassName=%s", cfg.GatewayClassName))
@@ -272,6 +274,7 @@ func UpgradeNGF(cfg InstallationConfig, extraArgs ...string) ([]byte, error) {
 
 	args = append(args, setImageArgs(cfg)...)
 	args = append(args, setTelemetryArgs(cfg)...)
+	args = append(args, setGuardrailsArgs(cfg)...)
 	args = append(args, setPlusUsageEndpointArg(cfg)...)
 	if cfg.GatewayClassName != "" {
 		args = append(args, "--set", fmt.Sprintf("nginxGateway.gatewayClassName=%s", cfg.GatewayClassName))
@@ -342,6 +345,18 @@ func setTelemetryArgs(cfg InstallationConfig) []string {
 		args = append(args, formatValueSet("nginxGateway.productTelemetry.enable", "true")...)
 	} else {
 		args = append(args, formatValueSet("nginxGateway.productTelemetry.enable", "false")...)
+	}
+	return args
+}
+
+// setGuardrailsArgs enables the PayloadProcessor API (guardrails) when requested. It only adds the
+// enabling flag; the default chart value is false, so nothing is emitted when guardrails is off.
+func setGuardrailsArgs(cfg InstallationConfig) []string {
+	var args []string
+
+	if cfg.Guardrails {
+		GinkgoWriter.Printf("Enabling PayloadProcessor (guardrails)\n")
+		args = append(args, formatValueSet("nginxGateway.payloadProcessor.enable", "true")...)
 	}
 	return args
 }

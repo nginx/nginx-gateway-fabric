@@ -33,6 +33,7 @@ This directory contains the tests for NGINX Gateway Fabric. The tests are divide
   - [Logging in tests](#logging-in-tests)
   - [Step 1 - Run the tests](#step-1---run-the-tests)
     - [Run the functional tests locally](#run-the-functional-tests-locally)
+    - [Run the Guardrails (PayloadProcessor) tests](#run-the-guardrails-payloadprocessor-tests)
     - [Run the NFR tests on a GKE cluster from a GCP VM](#run-the-nfr-tests-on-a-gke-cluster-from-a-gcp-vm)
       - [Longevity testing](#longevity-testing)
         - [WAF+PLM longevity scenario](#wafplm-longevity-scenario)
@@ -319,6 +320,32 @@ make test TAG=$(whoami) GINKGO_LABEL=telemetry GINKGO_PROCS=1
 
 > The command above doesn't run the telemetry functional test by default, which requires a dedicated invocation because it uses a
 > specially built image (see above) and it needs to deploy NGF differently from the rest of functional tests.
+
+#### Run the Guardrails (PayloadProcessor) tests
+
+The guardrails functional test exercises the `ai-guardrails` NGINX module end to end. Like the telemetry test, it is
+excluded from the default functional run because it installs NGF with the PayloadProcessor API enabled
+(`nginxGateway.payloadProcessor.enable=true`) and deploys its own mock backends. Use the dedicated target, which builds and
+kind-loads the guardrails mock image (a single Go binary that serves both the mock Guardrails API and a mock LLM) in addition
+to the crossplane image:
+
+```shell
+make test-guardrails TAG=$(whoami)
+```
+
+The suite deploys the mock as two Services in the `guardrails` namespace — `guardrails-api` (POST `/backend/v1/scans`) and
+`mock-llm` (POST `/v1/completions`). Because `PayloadProcessor` is an inherited policy, it is exercised with both attachment
+styles in isolation — attached directly to the `llm-route` HTTPRoute, and attached to the Gateway (which reaches the same
+route location by inheritance). For each attachment, the suite verifies:
+
+- the `PayloadProcessor` is Accepted with the expected ancestor (HTTPRoute vs Gateway) and the `guardrails_filter on;`
+  directive is present in the generated config,
+- a clean prompt is allowed (200) and the echoed completion is returned,
+- a prompt containing the request sentinel (`BLOCKME`) is blocked on the request path (403, `invalid_request_error`),
+- a prompt containing the response sentinel (`BLOCKRESP`) passes the request scan but is blocked on the response path once
+  echoed into the model output (403, `api_error`).
+
+The mock's sentinels are configurable via the `BLOCK_SENTINEL` and `RESPONSE_BLOCK_SENTINEL` environment variables.
 
 #### Run the NFR tests on a GKE cluster from a GCP VM
 

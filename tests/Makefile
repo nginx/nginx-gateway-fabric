@@ -210,6 +210,31 @@ test: build-crossplane-image ## Runs the functional tests on your kind k8s clust
 test-with-plus: PLUS_ENABLED=true
 test-with-plus: check-for-plus-usage-endpoint test ## Runs the functional tests for NGF with NGINX Plus on your default k8s cluster
 
+.PHONY: build-guardrails-mock-image
+build-guardrails-mock-image: ## Build the guardrails mock (Guardrails API + mock LLM) image
+	docker build --platform $(GOOS)/$(GOARCH) -t guardrails-mock:latest -f guardrails-mock/Dockerfile ..
+
+.PHONY: test-guardrails
+# The guardrails suite installs its own NGF with nginxGateway.payloadProcessor.enable=true (it is
+# excluded from the default deploy) and deploys the guardrails mock as the Guardrails API and LLM.
+# It runs single-proc since it manages a dedicated NGF installation.
+test-guardrails: build-crossplane-image build-guardrails-mock-image ## Runs the guardrails (PayloadProcessor) tests on a kind cluster
+	kind load docker-image nginx-crossplane:latest --name $(CLUSTER_NAME)
+	kind load docker-image guardrails-mock:latest --name $(CLUSTER_NAME)
+	go run github.com/onsi/ginkgo/v2/ginkgo --race --randomize-all --keep-going --fail-on-pending \
+		--trace -r -v --buildvcs --force-newlines $(GITHUB_OUTPUT) --procs 1 \
+		--label-filter "guardrails" $(GINKGO_FLAGS) ./suite -- \
+		--gateway-api-version=$(GW_API_VERSION) --gateway-api-prev-version=$(GW_API_PREV_VERSION) \
+		--image-tag=$(TAG) --version-under-test=$(NGF_VERSION) \
+		--ngf-image-repo=$(PREFIX) --nginx-image-repo=$(NGINX_PREFIX) --nginx-plus-image-repo=$(NGINX_PLUS_PREFIX) \
+		--pull-policy=$(PULL_POLICY) --service-type=$(GW_SERVICE_TYPE) \
+		--cluster-name=$(CLUSTER_NAME) --plus-enabled=$(PLUS_ENABLED) \
+		--plus-license-file-name=$(PLUS_LICENSE_FILE) --plus-usage-endpoint=$(PLUS_USAGE_ENDPOINT)
+
+.PHONY: test-guardrails-with-plus
+test-guardrails-with-plus: PLUS_ENABLED=true
+test-guardrails-with-plus: check-for-plus-usage-endpoint test-guardrails ## Runs the guardrails (PayloadProcessor) tests for NGF with NGINX Plus on a kind cluster
+
 .PHONY: cleanup-gcp
 cleanup-gcp: cleanup-router cleanup-vm delete-gke-cluster ## Cleanup all GCP resources
 
