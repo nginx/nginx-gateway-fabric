@@ -108,6 +108,7 @@ type setupConfig struct {
 	nfr           bool
 	debugLogLevel bool
 	telemetry     bool
+	guardrails    bool
 }
 
 // newResourceManager builds a ResourceManager with a fully-configured client. It does not set any
@@ -267,6 +268,7 @@ func createNGFInstallConfig(cfg setupConfig, extraInstallArgs ...string) framewo
 		Plus:                 *plusEnabled,
 		PlusUsageEndpoint:    *plusUsageEndpoint,
 		Telemetry:            cfg.telemetry,
+		Guardrails:           cfg.guardrails,
 		GatewayClassName:     gatewayClassName,
 		NginxImagePullSecret: *nginxImageJWTFileName,
 	}
@@ -407,6 +409,7 @@ var _ = SynchronizedBeforeSuite(
 			"telemetry",          // - running telemetry test (NGF will be deployed as part of the test)
 			"scale",              // - running scale test (this test will deploy its own version)
 			"reconfiguration",    // - running reconfiguration test (test will deploy its own instances)
+			"guardrails",         // - running guardrails test (NGF deployed with payloadProcessor enabled by the test)
 		}
 		for _, s := range skipSubstrings {
 			if strings.Contains(labelFilter, s) {
