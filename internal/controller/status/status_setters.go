@@ -165,17 +165,22 @@ func newTCPRouteStatusSetter(status gatewayv1.TCPRouteStatus, gatewayCtlrName st
 		tr := helpers.MustCastObject[*gatewayv1.TCPRoute](object)
 
 		// keep all the parent statuses that belong to other controllers
+		newParents := make([]gatewayv1.RouteParentStatus, 0, len(status.Parents)+len(tr.Status.Parents))
+		newParents = append(newParents, status.Parents...)
 		for _, os := range tr.Status.Parents {
 			if string(os.ControllerName) != gatewayCtlrName {
-				status.Parents = append(status.Parents, os)
+				newParents = append(newParents, os)
 			}
 		}
 
-		if routeStatusEqual(gatewayCtlrName, tr.Status.Parents, status.Parents) {
+		fullStatus := status
+		fullStatus.Parents = newParents
+
+		if routeStatusEqual(gatewayCtlrName, tr.Status.Parents, fullStatus.Parents) {
 			return false
 		}
 
-		tr.Status = status
+		tr.Status = fullStatus
 
 		return true
 	}
@@ -186,17 +191,22 @@ func newUDPRouteStatusSetter(status gatewayv1.UDPRouteStatus, gatewayCtlrName st
 		ur := helpers.MustCastObject[*gatewayv1.UDPRoute](object)
 
 		// keep all the parent statuses that belong to other controllers
+		newParents := make([]gatewayv1.RouteParentStatus, 0, len(status.Parents)+len(ur.Status.Parents))
+		newParents = append(newParents, status.Parents...)
 		for _, os := range ur.Status.Parents {
 			if string(os.ControllerName) != gatewayCtlrName {
-				status.Parents = append(status.Parents, os)
+				newParents = append(newParents, os)
 			}
 		}
 
-		if routeStatusEqual(gatewayCtlrName, ur.Status.Parents, status.Parents) {
+		fullStatus := status
+		fullStatus.Parents = newParents
+
+		if routeStatusEqual(gatewayCtlrName, ur.Status.Parents, fullStatus.Parents) {
 			return false
 		}
 
-		ur.Status = status
+		ur.Status = fullStatus
 
 		return true
 	}
@@ -253,7 +263,9 @@ func routeParentStatusEqual(p1, p2 gatewayv1.RouteParentStatus) bool {
 		return false
 	}
 
-	// we ignore the rest of the ParentRef fields because we do not set them
+	if !helpers.EqualPointers(p1.ParentRef.Kind, p2.ParentRef.Kind) {
+		return false
+	}
 
 	return ConditionsEqual(p1.Conditions, p2.Conditions)
 }
@@ -301,13 +313,15 @@ func newBackendTLSPolicyStatusSetter(
 		}
 
 		ancestors = append(ancestors, status.Ancestors...)
-		status.Ancestors = ancestors
 
-		if policyStatusEqual(gatewayCtlrName, btp.Status, status) {
+		fullStatus := status
+		fullStatus.Ancestors = ancestors
+
+		if policyStatusEqual(gatewayCtlrName, btp.Status, fullStatus) {
 			return false
 		}
 
-		btp.Status = status
+		btp.Status = fullStatus
 		return true
 	}
 }
@@ -333,13 +347,15 @@ func newNGFPolicyStatusSetter(
 		}
 
 		ancestors = append(ancestors, status.Ancestors...)
-		status.Ancestors = ancestors
 
-		if policyStatusEqual(gatewayCtlrName, prevStatus, status) {
+		fullStatus := status
+		fullStatus.Ancestors = ancestors
+
+		if policyStatusEqual(gatewayCtlrName, prevStatus, fullStatus) {
 			return false
 		}
 
-		policy.SetPolicyStatus(status)
+		policy.SetPolicyStatus(fullStatus)
 		return true
 	}
 }
@@ -378,6 +394,25 @@ func policyStatusEqual(gatewayCtlrName string, prev, cur gatewayv1.PolicyStatus)
 	return true
 }
 
+// groupsEqual returns whether two API group pointers refer to the same API group.
+// Groups are considered equal if EqualPointers would consider them equal, or if they are
+// different representations of the Kubernetes core API group: nil, "", and "core" are all
+// treated as equivalent.
+func groupsEqual[T ~string](g1, g2 *T) bool {
+	normalize := func(g *T) T {
+		if g == nil {
+			return ""
+		}
+		if string(*g) == "core" {
+			return ""
+		}
+
+		return *g
+	}
+
+	return normalize(g1) == normalize(g2)
+}
+
 func ancestorStatusEqual(p1, p2 gatewayv1.PolicyAncestorStatus) bool {
 	if p1.ControllerName != p2.ControllerName {
 		return false
@@ -391,7 +426,7 @@ func ancestorStatusEqual(p1, p2 gatewayv1.PolicyAncestorStatus) bool {
 		return false
 	}
 
-	if !helpers.EqualPointers(p1.AncestorRef.Group, p2.AncestorRef.Group) {
+	if !groupsEqual(p1.AncestorRef.Group, p2.AncestorRef.Group) {
 		return false
 	}
 
@@ -422,13 +457,15 @@ func newSnippetsFilterStatusSetter(
 		}
 
 		controllerStatuses = append(controllerStatuses, snippetsFilterStatus.Controllers...)
-		snippetsFilterStatus.Controllers = controllerStatuses
 
-		if snippetsFilterStatusEqual(gatewayCtlrName, snippetsFilterStatus.Controllers, sf.Status.Controllers) {
+		fullStatus := snippetsFilterStatus
+		fullStatus.Controllers = controllerStatuses
+
+		if snippetsFilterStatusEqual(gatewayCtlrName, fullStatus.Controllers, sf.Status.Controllers) {
 			return false
 		}
 
-		sf.Status = snippetsFilterStatus
+		sf.Status = fullStatus
 		return true
 	}
 }
@@ -489,13 +526,15 @@ func newAuthenticationFilterStatusSetter(afStatus ngfAPI.AuthenticationFilterSta
 		}
 
 		controllerStatuses = append(controllerStatuses, afStatus.Controllers...)
-		afStatus.Controllers = controllerStatuses
 
-		if authenticationFilterStatusEqual(gatewayCtlrName, afStatus.Controllers, af.Status.Controllers) {
+		fullStatus := afStatus
+		fullStatus.Controllers = controllerStatuses
+
+		if authenticationFilterStatusEqual(gatewayCtlrName, fullStatus.Controllers, af.Status.Controllers) {
 			return false
 		}
 
-		af.Status = afStatus
+		af.Status = fullStatus
 		return true
 	}
 }
@@ -553,13 +592,15 @@ func newExternalLoadBalancerStatusSetter(
 		}
 
 		controllerStatuses = append(controllerStatuses, elbStatus.Controllers...)
-		elbStatus.Controllers = controllerStatuses
 
-		if externalLoadBalancerStatusEqual(gatewayCtlrName, elbStatus.Controllers, elb.Status.Controllers) {
+		fullStatus := elbStatus
+		fullStatus.Controllers = controllerStatuses
+
+		if externalLoadBalancerStatusEqual(gatewayCtlrName, fullStatus.Controllers, elb.Status.Controllers) {
 			return false
 		}
 
-		elb.Status = elbStatus
+		elb.Status = fullStatus
 		return true
 	}
 }
@@ -693,7 +734,7 @@ func parentStatusEqual(p1, p2 inference.ParentStatus) bool {
 		return false
 	}
 
-	if !helpers.EqualPointers(&p1.ParentRef.Group, &p2.ParentRef.Group) {
+	if !groupsEqual(p1.ParentRef.Group, p2.ParentRef.Group) {
 		return false
 	}
 
