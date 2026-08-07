@@ -1,8 +1,7 @@
 // Command guardrails-mock serves two mock roles used by the ai-guardrails functional tests:
 //
 //  1. Mock Guardrails API — POST /backend/v1/scans. Returns a deterministic verdict driven by the
-//     inspected content. Schema mirrors what the module sends/parses (see
-//     internal/controller/nginx/modules/rust/ai-guardrails/src/subrequest_client.rs):
+//     inspected content:
 //
 //     request:  {"input":"<text>","configOverrides":{},"forceEnabled":[],"disabled":[],
 //     "scanDirection":"request"|"response","verbose":false}
@@ -32,8 +31,7 @@ import (
 	"strings"
 )
 
-// Protocol constants mirroring the Guardrails wire contract the module parses in
-// internal/controller/nginx/modules/rust/ai-guardrails/src/subrequest_client.rs. These values must
+// Protocol constants mirroring the Guardrails wire contract. These values must
 // stay in sync with that module's ScanDirection and parse_outcome; a mismatch silently breaks the
 // mock (the module fails closed) and surfaces as confusing test failures.
 const (
