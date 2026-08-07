@@ -77,6 +77,7 @@ func InstallPLM() ([]byte, error) {
 		"--set", fmt.Sprintf("imagePullSecrets[0].name=%s", PlusImagePullSecretName),
 		"--set", fmt.Sprintf("seaweedfs-operator.image.pullSecrets=%s", PlusImagePullSecretName),
 		"--set", "seaweedfsOperatorConfig.seaweedfs.certificates.enabled=false",
+		"--set", "seaweedfsOperatorConfig.seaweedfs.volume.requests.storage=8Gi",
 		"--set", "policyController.s3.skipTlsVerify=true",
 		"--wait",
 	}
