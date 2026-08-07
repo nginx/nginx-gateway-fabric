@@ -77,7 +77,7 @@ var _ = Describe("ProxySettingsPolicy", Ordered, Label("functional", "proxy-sett
 			if portFwdPort != 0 {
 				port = portFwdPort
 			}
-			baseURL = helpers.BuildPortFwdURL("http", "cafe.example.com", port, "")
+			baseURL = helpers.BuildPortFwdURL("cafe.example.com", port)
 		})
 
 		AfterAll(func() {
@@ -299,7 +299,7 @@ var _ = Describe("ProxySettingsPolicy", Ordered, Label("functional", "proxy-sett
 			if portFwdPort != 0 {
 				port = portFwdPort
 			}
-			baseURL = helpers.BuildPortFwdURL("http", "cafe.example.com", port, "")
+			baseURL = helpers.BuildPortFwdURL("cafe.example.com", port)
 		})
 
 		AfterAll(func() {
@@ -384,7 +384,7 @@ var _ = Describe("ProxySettingsPolicy", Ordered, Label("functional", "proxy-sett
 			if portFwdPort != 0 {
 				port = portFwdPort
 			}
-			baseURL = helpers.BuildPortFwdURL("http", "cafe.example.com", port, "")
+			baseURL = helpers.BuildPortFwdURL("cafe.example.com", port)
 		})
 
 		AfterAll(func() {
@@ -532,7 +532,7 @@ var _ = Describe("ProxySettingsPolicy", Ordered, Label("functional", "proxy-sett
 			if portFwdPort != 0 {
 				port = portFwdPort
 			}
-			baseURL = helpers.BuildPortFwdURL("http", "cafe.example.com", port, "")
+			baseURL = helpers.BuildPortFwdURL("cafe.example.com", port)
 		})
 
 		AfterAll(func() {

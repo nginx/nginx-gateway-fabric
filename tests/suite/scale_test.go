@@ -614,7 +614,7 @@ The logs are attached only if there are errors.
 		if portFwdPort != 0 {
 			port = portFwdPort
 		}
-		url := helpers.BuildPortFwdURL("http", "hello.example.com", port, "")
+		url := helpers.BuildPortFwdURL("hello.example.com", port)
 
 		Eventually(
 			framework.CreateResponseChecker(

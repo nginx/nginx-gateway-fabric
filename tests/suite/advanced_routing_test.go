@@ -64,7 +64,7 @@ var _ = Describe("AdvancedRouting", Ordered, Label("functional", "routing"), fun
 			if portFwdPort != 0 {
 				port = portFwdPort
 			}
-			baseURL = helpers.BuildPortFwdURL("http", "cafe.example.com", port, "")
+			baseURL = helpers.BuildPortFwdURL("cafe.example.com", port)
 		})
 
 		DescribeTable("verify working traffic for HTTPRoute",

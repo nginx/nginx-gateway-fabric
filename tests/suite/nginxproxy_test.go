@@ -70,7 +70,7 @@ var _ = Describe("NginxProxy UseClusterIP", Ordered, Label("functional", "nginxp
 			if portFwdPort != 0 {
 				port = portFwdPort
 			}
-			coffeeURL := helpers.BuildPortFwdURL("http", "cafe.example.com", port, "coffee")
+			coffeeURL := helpers.BuildPortFwdURL("cafe.example.com/coffee", port)
 
 			Eventually(
 				func() error {

@@ -109,8 +109,8 @@ var _ = Describe("UpstreamSettingsPolicy", Ordered, Label("functional", "uspolic
 				if portFwdPort != 0 {
 					port = portFwdPort
 				}
-				baseCoffeeURL := helpers.BuildPortFwdURL("http", "cafe.example.com", port, "coffee")
-				baseTeaURL := helpers.BuildPortFwdURL("http", "cafe.example.com", port, "tea")
+				baseCoffeeURL := helpers.BuildPortFwdURL("cafe.example.com/coffee", port)
+				baseTeaURL := helpers.BuildPortFwdURL("cafe.example.com/tea", port)
 
 				Eventually(
 					func() error {
@@ -289,8 +289,8 @@ var _ = Describe("UpstreamSettingsPolicy", Ordered, Label("functional", "uspolic
 				if portFwdPort != 0 {
 					port = portFwdPort
 				}
-				baseCoffeeURL := helpers.BuildPortFwdURL("http", "cafe.example.com", port, "coffee")
-				baseTeaURL := helpers.BuildPortFwdURL("http", "cafe.example.com", port, "tea")
+				baseCoffeeURL := helpers.BuildPortFwdURL("cafe.example.com/coffee", port)
+				baseTeaURL := helpers.BuildPortFwdURL("cafe.example.com/tea", port)
 
 				Eventually(
 					func() error {
@@ -421,7 +421,7 @@ var _ = Describe("UpstreamSettingsPolicy", Ordered, Label("functional", "uspolic
 				if portFwdPort != 0 {
 					port = portFwdPort
 				}
-				coffeeURL := helpers.BuildPortFwdURL("http", "cafe.example.com", port, "coffee")
+				coffeeURL := helpers.BuildPortFwdURL("cafe.example.com/coffee", port)
 
 				Eventually(
 					func() error {

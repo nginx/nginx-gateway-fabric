@@ -102,7 +102,7 @@ var _ = Describe("SnippetsFilter", Ordered, Label("functional", "snippets-filter
 				if portFwdPort != 0 {
 					port = portFwdPort
 				}
-				baseURL := helpers.BuildPortFwdURL("http", "cafe.example.com", port, "coffee")
+				baseURL := helpers.BuildPortFwdURL("cafe.example.com/coffee", port)
 
 				Eventually(
 					func() error {

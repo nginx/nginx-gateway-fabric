@@ -106,7 +106,7 @@ var _ = Describe("Tracing", FlakeAttempts(2), Ordered, Label("functional", "trac
 		if portFwdPort != 0 {
 			port = portFwdPort
 		}
-		baseURL := helpers.BuildPortFwdURL("http", "foo.example.com", port, "")
+		baseURL := helpers.BuildPortFwdURL("foo.example.com", port)
 		helloURL = baseURL + "/hello"
 		worldURL = baseURL + "/world"
 		helloworldURL = baseURL + "/helloworld"

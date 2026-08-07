@@ -119,38 +119,38 @@ func ToSafeFileName(input string) string {
 }
 
 // buildPortFwdURL builds a URL for port forwarding based on the given address and port.
-func BuildPortFwdURL(scheme, address string, port int, path string) string {
+func BuildPortFwdURL(rawURL string, port int) string {
+	input := rawURL
+	if !strings.Contains(input, "://") {
+		input = "//" + input
+	}
+
+	parsed, err := url.Parse(input)
+	if err != nil {
+		return ""
+	}
+
+	scheme := parsed.Scheme
 	if scheme == "" {
 		scheme = "http"
 	}
-	host := address
+
+	host := parsed.Hostname() // existing ports stripped away
 	if port != 0 {
-		host = net.JoinHostPort(address, strconv.Itoa(port))
-	}
-	// Fragment comes last, so this must be split before the query.
-	pathAndQuery, rawFragment, _ := strings.Cut(path, "#")
-	rawPath, rawQuery, _ := strings.Cut(pathAndQuery, "?")
-
-	// Ensure there is a leading slash so "coffee" becomes "/coffee".
-	if rawPath != "" && !strings.HasPrefix(rawPath, "/") {
-		rawPath = "/" + rawPath
+		host = net.JoinHostPort(parsed.Hostname(), strconv.Itoa(port))
 	}
 
-	builtURL := &url.URL{
-		Scheme:   scheme,
-		Host:     host,
-		Path:     rawPath,
-		RawQuery: rawQuery,
-	}
-
-	if rawFragment != "" {
-		if fragment, err := url.PathUnescape(rawFragment); err == nil {
-			builtURL.Fragment = fragment
-			builtURL.RawFragment = rawFragment
-		} else {
-			// if not properly encoded, treat as literal text.
-			builtURL.Fragment = rawFragment
-		}
+	// include all parts of URL struct
+	builtURL := url.URL{
+		Scheme:      scheme,
+		Opaque:      parsed.Opaque,
+		User:        parsed.User,
+		Host:        host,
+		Path:        parsed.Path,
+		RawPath:     parsed.RawPath,
+		RawQuery:    parsed.RawQuery,
+		Fragment:    parsed.Fragment,
+		RawFragment: parsed.RawFragment,
 	}
 	return builtURL.String()
 }

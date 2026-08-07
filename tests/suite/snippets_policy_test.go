@@ -111,7 +111,7 @@ var _ = Describe("SnippetsPolicy", Ordered, Label("functional", "snippets-policy
 				if portFwdPort != 0 {
 					port = portFwdPort
 				}
-				baseURL := helpers.BuildPortFwdURL("http", "cafe.example.com", port, "coffee")
+				baseURL := helpers.BuildPortFwdURL("cafe.example.com/coffee", port)
 
 				Eventually(
 					func() error {
@@ -127,7 +127,7 @@ var _ = Describe("SnippetsPolicy", Ordered, Label("functional", "snippets-policy
 				if portFwdPort != 0 {
 					port = portFwdPort
 				}
-				baseURL := helpers.BuildPortFwdURL("http", "cafe.example.com", port, "tea")
+				baseURL := helpers.BuildPortFwdURL("cafe.example.com/tea", port)
 
 				request := framework.Request{
 					URL:     baseURL,
@@ -299,7 +299,7 @@ var _ = Describe("SnippetsPolicy", Ordered, Label("functional", "snippets-policy
 			if portFwdPort != 0 {
 				port = portFwdPort
 			}
-			baseURL := helpers.BuildPortFwdURL("http", "cafe.example.com", port, "coffee")
+			baseURL := helpers.BuildPortFwdURL("cafe.example.com/coffee", port)
 			Expect(
 				framework.ExpectRequestToSucceed(timeoutConfig.RequestTimeout, baseURL, address, "URI: /coffee"),
 			).To(Succeed())

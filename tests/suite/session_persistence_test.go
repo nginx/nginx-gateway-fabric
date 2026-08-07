@@ -104,7 +104,7 @@ var _ = Describe("SessionPersistence OSS", Ordered, Label("functional", "session
 				if portFwdPort != 0 {
 					port = portFwdPort
 				}
-				baseCoffeeURL := helpers.BuildPortFwdURL("http", "cafe.example.com", port, "coffee")
+				baseCoffeeURL := helpers.BuildPortFwdURL("cafe.example.com/coffee", port)
 
 				Eventually(
 					func() error {
@@ -211,8 +211,8 @@ var _ = Describe("SessionPersistence Plus", Ordered, Label("functional", "sessio
 			if portFwdPort != 0 {
 				port = portFwdPort
 			}
-			baseCoffeeURL = helpers.BuildPortFwdURL("http", "cafe.example.com", port, "coffee")
-			baseTeaURL = helpers.BuildPortFwdURL("http", "cafe.example.com", port, "tea/location/flavors")
+			baseCoffeeURL = helpers.BuildPortFwdURL("cafe.example.com/coffee", port)
+			baseTeaURL = helpers.BuildPortFwdURL("cafe.example.com/tea/location/flavors", port)
 		})
 
 		Context("verify working traffic", func() {

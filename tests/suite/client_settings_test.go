@@ -83,7 +83,7 @@ var _ = Describe("ClientSettingsPolicy", Ordered, Label("functional", "cspolicy"
 			if portFwdPort != 0 {
 				port = portFwdPort
 			}
-			baseURL = helpers.BuildPortFwdURL("http", "cafe.example.com", port, "")
+			baseURL = helpers.BuildPortFwdURL("cafe.example.com", port)
 		})
 
 		AfterAll(func() {

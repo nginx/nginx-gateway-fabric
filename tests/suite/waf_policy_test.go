@@ -198,7 +198,7 @@ var _ = Describe("WAFPolicy", Ordered, Label("waf"), func() {
 				port = portFwdPort
 			}
 			// </script> is a classic XSS payload that the attack-signatures policy blocks.
-			attackURL := helpers.BuildPortFwdURL("http", "cafe.example.com", port, "coffee?x=%%3C%%2Fscript%%3E")
+			attackURL := helpers.BuildPortFwdURL("cafe.example.com/coffee?x=%%3C%%2Fscript%%3E", port)
 
 			Eventually(func() (bool, error) {
 				resp, err := framework.Get(framework.Request{
@@ -221,7 +221,7 @@ var _ = Describe("WAFPolicy", Ordered, Label("waf"), func() {
 			if portFwdPort != 0 {
 				port = portFwdPort
 			}
-			coffeeURL := helpers.BuildPortFwdURL("http", "cafe.example.com", port, "coffee")
+			coffeeURL := helpers.BuildPortFwdURL("cafe.example.com/coffee", port)
 
 			// The attack-signatures policy does not mask response data — SSN passes through.
 			Eventually(func() (bool, error) {
@@ -289,7 +289,7 @@ var _ = Describe("WAFPolicy", Ordered, Label("waf"), func() {
 			if portFwdPort != 0 {
 				port = portFwdPort
 			}
-			coffeeURL := helpers.BuildPortFwdURL("http", "cafe.example.com", port, "coffee")
+			coffeeURL := helpers.BuildPortFwdURL("cafe.example.com/coffee", port)
 
 			// The dataguard policy on the coffee route masks SSN and credit card numbers.
 			Eventually(func() (bool, error) {
@@ -314,7 +314,7 @@ var _ = Describe("WAFPolicy", Ordered, Label("waf"), func() {
 			if portFwdPort != 0 {
 				port = portFwdPort
 			}
-			teaURL := helpers.BuildPortFwdURL("http", "cafe.example.com", port, "tea")
+			teaURL := helpers.BuildPortFwdURL("cafe.example.com/tea", port)
 
 			Eventually(func() error {
 				return framework.ExpectRequestToSucceed(
@@ -370,7 +370,7 @@ var _ = Describe("WAFPolicy", Ordered, Label("waf"), func() {
 			if portFwdPort != 0 {
 				port = portFwdPort
 			}
-			sodaURL := helpers.BuildPortFwdURL("http", "cafe.example.com", port, "soda")
+			sodaURL := helpers.BuildPortFwdURL("cafe.example.com/soda", port)
 
 			// Allow a brief window for any (incorrect) config push to propagate, then assert
 			// that the route is still unreachable.
@@ -425,7 +425,7 @@ var _ = Describe("WAFPolicy", Ordered, Label("waf"), func() {
 			if portFwdPort != 0 {
 				port = portFwdPort
 			}
-			sodaURL := helpers.BuildPortFwdURL("http", "cafe.example.com", port, "soda")
+			sodaURL := helpers.BuildPortFwdURL("cafe.example.com/soda", port)
 
 			Eventually(func() error {
 				return framework.ExpectRequestToSucceed(
@@ -508,7 +508,7 @@ var _ = Describe("WAFPolicy", Ordered, Label("waf"), func() {
 			if portFwdPort != 0 {
 				port = portFwdPort
 			}
-			attackURL := helpers.BuildPortFwdURL("http", "cafe.example.com", port, "coffee?x=%%3C%%2Fscript%%3E")
+			attackURL := helpers.BuildPortFwdURL("cafe.example.com/coffee?x=%%3C%%2Fscript%%3E", port)
 
 			Eventually(func() (bool, error) {
 				resp, err := framework.Get(framework.Request{
@@ -552,7 +552,7 @@ var _ = Describe("WAFPolicy", Ordered, Label("waf"), func() {
 			if portFwdPort != 0 {
 				port = portFwdPort
 			}
-			attackURL := helpers.BuildPortFwdURL("http", "cafe.example.com", port, "coffee?x=%%3C%%2Fscript%%3E")
+			attackURL := helpers.BuildPortFwdURL("cafe.example.com/coffee?x=%%3C%%2Fscript%%3E", port)
 
 			Eventually(func() (bool, error) {
 				resp, err := framework.Get(framework.Request{
@@ -668,7 +668,7 @@ var _ = Describe("WAFPolicy", Ordered, Label("waf"), func() {
 			if portFwdPort != 0 {
 				port = portFwdPort
 			}
-			attackURL := helpers.BuildPortFwdURL("http", "cafe.example.com", port, "coffee?x=%%3C%%2Fscript%%3E")
+			attackURL := helpers.BuildPortFwdURL("cafe.example.com/coffee?x=%%3C%%2Fscript%%3E", port)
 
 			for _, podName := range nginxPodNames {
 				conf, err := resourceManager.GetNginxConfig(podName, namespace, nginxCrossplanePath)
@@ -735,7 +735,7 @@ var _ = Describe("WAFPolicy", Ordered, Label("waf"), func() {
 			if portFwdPort != 0 {
 				port = portFwdPort
 			}
-			coffeeURL := helpers.BuildPortFwdURL("http", "cafe.example.com", port, "coffee")
+			coffeeURL := helpers.BuildPortFwdURL("cafe.example.com/coffee", port)
 
 			Eventually(func() error {
 				return framework.ExpectRequestToSucceed(
@@ -1059,7 +1059,7 @@ func expectXSSBlocked() {
 		port = portFwdPort
 	}
 	// </script> is a classic XSS payload that the attack-signatures policy blocks.
-	attackURL := helpers.BuildPortFwdURL("http", "cafe.example.com", port, "coffee?x=%%3C%%2Fscript%%3E")
+	attackURL := helpers.BuildPortFwdURL("cafe.example.com/coffee?x=%%3C%%2Fscript%%3E", port)
 
 	Eventually(func() (bool, error) {
 		resp, err := framework.Get(framework.Request{

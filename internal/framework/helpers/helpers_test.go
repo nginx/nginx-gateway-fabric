@@ -158,113 +158,85 @@ func TestBuildPortFwdURL(t *testing.T) {
 
 	tests := []struct {
 		name        string
-		scheme      string
 		url         string
-		path        string
 		expectedURL string
 		port        int
 	}{
 		{
 			name:        "Test port without a path",
-			scheme:      "http",
-			url:         "cafe.example.com",
-			path:        "",
+			url:         "http://cafe.example.com",
 			expectedURL: "http://cafe.example.com:80",
 			port:        80,
 		},
 		{
 			name:        "Test coffee path",
-			scheme:      "http",
-			url:         "cafe.example.com",
-			path:        "coffee",
+			url:         "http://cafe.example.com/coffee",
 			expectedURL: "http://cafe.example.com:80/coffee",
 			port:        80,
 		},
 		{
 			name:        "Test tea path",
-			scheme:      "http",
-			url:         "cafe.example.com",
-			path:        "tea",
+			url:         "http://cafe.example.com/tea",
 			expectedURL: "http://cafe.example.com:80/tea",
 			port:        80,
 		},
 		{
 			name:        "Test non-privileged port, without path",
-			scheme:      "http",
-			url:         "cafe.example.com",
-			path:        "",
+			url:         "http://cafe.example.com",
 			expectedURL: "http://cafe.example.com:8080",
 			port:        8080,
 		},
 		{
 			name:        "Test non-privileged port, with path",
-			scheme:      "http",
-			url:         "cafe.example.com",
-			path:        "coffee",
+			url:         "http://cafe.example.com/coffee",
 			expectedURL: "http://cafe.example.com:8080/coffee",
 			port:        8080,
 		},
 		{
 			name:        "Test omit port",
-			scheme:      "http",
-			url:         "cafe.example.com",
-			path:        "tea",
+			url:         "http://cafe.example.com/tea",
 			expectedURL: "http://cafe.example.com/tea",
 			port:        0,
 		},
 		{
-			name:        "Test omit scheme",
-			scheme:      "",
-			url:         "cafe.example.com",
-			path:        "",
-			expectedURL: "http://cafe.example.com",
-			port:        0,
-		},
-		{
 			name:        "Test https scheme",
-			scheme:      "https",
-			url:         "cafe.example.com",
-			path:        "",
+			url:         "https://cafe.example.com",
 			expectedURL: "https://cafe.example.com",
 			port:        0,
 		},
 		{
 			name:        "Test https scheme on port 443",
-			scheme:      "https",
-			url:         "cafe.example.com",
-			path:        "",
+			url:         "https://cafe.example.com",
 			expectedURL: "https://cafe.example.com:443",
 			port:        443,
 		},
 		{
-			name:        "Test preserve query",
-			scheme:      "",
+			name:        "Test omit scheme",
 			url:         "cafe.example.com",
-			path:        "coffee?x=%%3C%%2Fscript%%3E",
+			expectedURL: "http://cafe.example.com",
+			port:        0,
+		},
+		{
+			name:        "Test preserve query",
+			url:         "cafe.example.com/coffee?x=%%3C%%2Fscript%%3E",
 			expectedURL: "http://cafe.example.com:80/coffee?x=%%3C%%2Fscript%%3E",
 			port:        80,
 		},
 		{
 			name:        "Test preserve fragment",
-			scheme:      "",
-			url:         "cafe.example.com",
-			path:        "#menu",
+			url:         "cafe.example.com#menu",
 			expectedURL: "http://cafe.example.com#menu",
 			port:        0,
 		},
 		{
 			name:        "Test preserve query and fragment",
-			scheme:      "",
-			url:         "cafe.example.com",
-			path:        "coffee?x=%%3C%%2Fscript%%3E#menu",
+			url:         "cafe.example.com/coffee?x=%%3C%%2Fscript%%3E#menu",
 			expectedURL: "http://cafe.example.com/coffee?x=%%3C%%2Fscript%%3E#menu",
 			port:        0,
 		},
 		{
 			name:        "Test bracketed IPv6",
-			scheme:      "",
-			url:         "::1",
-			path:        "hello",
+			url:         "[::1]/hello",
 			expectedURL: "http://[::1]:443/hello",
 			port:        443,
 		},
@@ -274,7 +246,7 @@ func TestBuildPortFwdURL(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
-			g.Expect(helpers.BuildPortFwdURL(tt.scheme, tt.url, tt.port, tt.path)).To(Equal(tt.expectedURL))
+			g.Expect(helpers.BuildPortFwdURL(tt.url, tt.port)).To(Equal(tt.expectedURL))
 		})
 	}
 }

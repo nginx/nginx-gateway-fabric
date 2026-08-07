@@ -80,7 +80,7 @@ var _ = Describe("RateLimitPolicy", Ordered, Label("functional", "rate-limit-pol
 			if portFwdPort != 0 {
 				port = portFwdPort
 			}
-			baseCoffeeURL = helpers.BuildPortFwdURL("http", "cafe.example.com", port, "coffee")
+			baseCoffeeURL = helpers.BuildPortFwdURL("cafe.example.com/coffee", port)
 		})
 
 		AfterAll(func() {
@@ -257,7 +257,7 @@ var _ = Describe("RateLimitPolicy", Ordered, Label("functional", "rate-limit-pol
 			if portFwdPort != 0 {
 				port = portFwdPort
 			}
-			baseCoffeeURL = helpers.BuildPortFwdURL("http", "cafe.example.com", port, "coffee")
+			baseCoffeeURL = helpers.BuildPortFwdURL("cafe.example.com/coffee", port)
 		})
 
 		AfterAll(func() {
@@ -364,7 +364,7 @@ var _ = Describe("RateLimitPolicy", Ordered, Label("functional", "rate-limit-pol
 			if portFwdPort != 0 {
 				port = portFwdPort
 			}
-			baseCoffeeURL = helpers.BuildPortFwdURL("http", "cafe.example.com", port, "coffee")
+			baseCoffeeURL = helpers.BuildPortFwdURL("cafe.example.com/coffee", port)
 		})
 
 		AfterAll(func() {
@@ -482,7 +482,7 @@ var _ = Describe("RateLimitPolicy", Ordered, Label("functional", "rate-limit-pol
 			if portFwdPort != 0 {
 				port = portFwdPort
 			}
-			baseCoffeeURL = helpers.BuildPortFwdURL("http", "ls.example.com", port, "coffee")
+			baseCoffeeURL = helpers.BuildPortFwdURL("ls.example.com/coffee", port)
 		})
 
 		AfterAll(func() {

@@ -61,7 +61,7 @@ var _ = Describe("Basic test example", Label("functional"), func() {
 		if portFwdPort != 0 {
 			port = portFwdPort
 		}
-		url := helpers.BuildPortFwdURL("http", "foo.example.com", port, "hello")
+		url := helpers.BuildPortFwdURL("foo.example.com/hello", port)
 
 		Eventually(
 			func(g Gomega) {
