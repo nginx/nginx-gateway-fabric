@@ -1,0 +1,20 @@
+apiVersion: gateway.nginx.org/v1alpha1
+kind: PayloadProcessor
+metadata:
+  name: gw-guardrails
+spec:
+  # Attached to the Gateway (not the HTTPRoute). Because PayloadProcessor is an inherited policy,
+  # every route under this Gateway resolves its effective processor to this one, so the route's
+  # location gets guardrails_filter on; the same as a directly route-attached policy.
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: Gateway
+    name: gateway
+  processors:
+  - type: ExtProcess
+    extProcess:
+      backendRef:
+        group: ""
+        kind: Service
+        name: guardrails-api
+        port: 8080
