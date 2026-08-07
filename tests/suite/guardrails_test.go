@@ -18,31 +18,10 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/tests/framework"
 )
 
-// Guardrails (PayloadProcessor) functional test.
-//
-// This suite exercises the ai-guardrails NGINX module end to end. It runs as part of the standard
-// functional suite against the shared per-proc NGF install: nginxGateway.payloadProcessor.enable is
-// turned on for every functional install (see InstallNGF), which is inert for other specs because
-// the module is only loaded when a PayloadProcessor is actually attached to a route. The guardrails
-// mock image (tests/guardrails-mock) is built and loaded into the cluster by the `test` make target.
-//
 // The mock (tests/guardrails-mock) plays two roles behind two Services in the test namespace:
 //   - guardrails-api: POST /backend/v1/scans, flagging any input containing the sentinel "BLOCKME".
 //   - mock-llm:       POST /v1/completions, echoing the prompt back in OpenAI completion format so
 //     the response path can inspect model output carrying the sentinel.
-//
-// PayloadProcessor is an inherited policy that can attach to either an HTTPRoute or a Gateway. This
-// suite verifies both attachment styles in isolation (one PayloadProcessor applied at a time). For
-// each, we verify:
-//   - the PayloadProcessor is Accepted with the expected ancestor (HTTPRoute vs Gateway),
-//   - the module's directives are present in the generated nginx config,
-//   - a clean prompt is allowed (200) and the echoed completion is returned,
-//   - a prompt flagged on the request path is blocked (403, invalid_request_error),
-//   - a prompt whose echoed completion is flagged on the response path is blocked (403, api_error).
-//
-// The Gateway-attached case reaches the same route location by inheritance: every route under the
-// Gateway resolves its effective PayloadProcessor to the Gateway-attached one, so guardrails_filter
-// is rendered into the route's location the same as a directly route-attached policy.
 var _ = Describe("Guardrails (PayloadProcessor)", Ordered, Label("functional", "guardrails"), func() {
 	var (
 		appFiles = []string{
@@ -63,8 +42,6 @@ var _ = Describe("Guardrails (PayloadProcessor)", Ordered, Label("functional", "
 	)
 
 	BeforeAll(func() {
-		// NGF is installed by the shared suite with payloadProcessor enabled (see InstallNGF), so
-		// this spec only deploys its own app namespace and fixtures.
 		ns := &core.Namespace{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: namespace,
@@ -98,23 +75,9 @@ var _ = Describe("Guardrails (PayloadProcessor)", Ordered, Label("functional", "
 		Expect(resourceManager.DeleteNamespace(namespace)).To(Succeed())
 	})
 
-	// runGuardrailsAssertions runs the config + traffic assertions shared by both the HTTPRoute- and
-	// Gateway-attached cases. The behavior is identical regardless of where the policy attaches, so
-	// the only per-case difference (the attachment target and its ancestor) is asserted separately in
-	// each Context's status Specify.
-	//
-	// These assertions tolerate an in-progress reload: the config check re-fetches config on each
-	// poll (an Accepted policy and the dataplane reload that renders it are not strictly synchronized,
-	// and this helper is re-run in the second Context right after the first Context swaps policies),
-	// and the traffic checks already poll. Each Context's status Specify still runs first under
-	// Ordered so a non-Accepted policy fails fast before we bother polling config/traffic.
 	runGuardrailsAssertions := func() {
 		Context("nginx directives", func() {
 			It("enables the guardrails filter on the route location", func() {
-				// The control plane renders `guardrails_filter on;` in the route's location when a
-				// PayloadProcessor is attached (see servers_template.go). Its presence confirms the
-				// PayloadProcessor produced module config for this route. Poll (re-fetching config)
-				// rather than reading once, so a not-yet-settled reload does not flake the check.
 				Eventually(func() error {
 					conf, err := resourceManager.GetNginxConfig(nginxPodName, namespace, "")
 					if err != nil {
@@ -175,8 +138,7 @@ var _ = Describe("Guardrails (PayloadProcessor)", Ordered, Label("functional", "
 				// The module composes the backend-supplied scannerResults[].message into error.message
 				// (see the ai-guardrails module README). Assert the flagged message reaches the client
 				// to cover that composition path. "blocked by test guardrail" must match BLOCK_MESSAGE's
-				// default in tests/guardrails-mock/main.go (BLOCK_MESSAGE is not overridden in apps.yaml,
-				// so the mock default applies).
+				// default in tests/guardrails-mock/main.go
 				Expect(framework.Expect403Response(
 					timeoutConfig.RequestTimeout,
 					completionURL,
@@ -210,9 +172,6 @@ var _ = Describe("Guardrails (PayloadProcessor)", Ordered, Label("functional", "
 		})
 	}
 
-	// Each Context applies exactly one PayloadProcessor and removes it in AfterAll so the two
-	// attachment styles are tested in isolation (no precedence ambiguity between them). Ordered
-	// execution guarantees the HTTPRoute case fully tears down before the Gateway case applies.
 	Context("attached to an HTTPRoute", Ordered, func() {
 		BeforeAll(func() {
 			Expect(resourceManager.ApplyFromFiles(routePolicyFile, namespace)).To(Succeed())
@@ -269,18 +228,6 @@ var _ = Describe("Guardrails (PayloadProcessor)", Ordered, Label("functional", "
 		runGuardrailsAssertions()
 	})
 })
-
-// waitForPayloadProcessorStatus waits until the PayloadProcessor has exactly one ancestor matching
-// the given targetRef (kind/name/group) and the specified condition status and reason. A
-// PayloadProcessor reports a single ancestor per targetRef, so asserting the ancestor matches the
-// targetRef is what distinguishes the HTTPRoute-attached case from the Gateway-attached case. It
-// mirrors waitForRateLimitPolicyStatus / ancestorMustEqualTargetRef since PayloadProcessor also uses
-// gatewayv1.PolicyStatus (ancestor-based).
-//
-// targetRef varies per call site (HTTPRoute vs Gateway); condStatus/condReason are always
-// ConditionTrue/PolicyReasonAccepted today but are kept as parameters to stay general and symmetric
-// with waitForRateLimitPolicyStatus.
-//
 
 func waitForPayloadProcessorStatus(
 	ppNsName types.NamespacedName,
