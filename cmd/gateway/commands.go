@@ -115,6 +115,7 @@ func createControllerCommand() *cobra.Command {
 		nginxSCCFlag                        = "nginx-scc"
 		watchNamespacesFlag                 = "watch-namespaces"
 		serverTLSDomainFlag                 = "server-tls-domain"
+		externalLoadBalancerFlag            = "external-load-balancer"
 	)
 
 	// flag values
@@ -175,8 +176,9 @@ func createControllerCommand() *cobra.Command {
 
 		disableProductTelemetry bool
 
-		snippetsFilters bool
-		snippets        bool
+		snippetsFilters      bool
+		snippets             bool
+		externalLoadBalancer bool
 
 		plus               bool
 		nginxDockerSecrets = stringSliceValidatingValue{
@@ -346,6 +348,7 @@ func createControllerCommand() *cobra.Command {
 				WatchNamespaces:             watchNamespaces.values,
 				ServerTLSDomain:             serverTLSDomain.value,
 				PLMStorageConfig:            plmStorageConfig,
+				ExternalLoadBalancer:        externalLoadBalancer,
 			}
 
 			if err := controller.StartManager(conf); err != nil {
@@ -574,6 +577,14 @@ func createControllerCommand() *cobra.Command {
 		"Enable Snippets feature through SnippetsFilter and SnippetsPolicy APIs. SnippetsFilters allow inserting "+
 			"NGINX configuration into the generated NGINX config for HTTPRoute and GRPCRoute resources. SnippetsPolicies "+
 			"allow inserting NGINX configuration into the generated NGINX config for Gateway resources.",
+	)
+
+	cmd.Flags().BoolVar(
+		&externalLoadBalancer,
+		externalLoadBalancerFlag,
+		false,
+		"Enable ExternalLoadBalancer support. Allows for fronting a Gateway with an external load "+
+			"balancer. Supported load balancers: F5 BIG-IP, through F5 Container Ingress Services.",
 	)
 
 	cmd.Flags().Var(

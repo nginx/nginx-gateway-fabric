@@ -5,12 +5,12 @@
 
 ## Summary
 
-This Enhancement Proposal introduces a standalone `ExternalLoadBalancers` CRD to support integrations with external load balancers that front NGINX Gateway Fabric. The resource references a Gateway through `targetRefs`. The first supported integration is with F5 BIG-IP through F5 Container Ingress Services (CIS). NGINX Gateway Fabric provisions a CIS `IngressLink` resource for the referenced Gateway. CIS uses it to create a virtual server and its pool on BIG-IP that fronts NGINX Gateway Fabric as an external load balancer.
+This Enhancement Proposal introduces a standalone `ExternalLoadBalancer` CRD to support integrations with external load balancers that front NGINX Gateway Fabric. The resource references a Gateway through `targetRefs`. The first supported integration is with F5 BIG-IP through F5 Container Ingress Services (CIS). NGINX Gateway Fabric provisions a CIS `IngressLink` resource for the referenced Gateway. CIS uses it to create a virtual server and its pool on BIG-IP that fronts NGINX Gateway Fabric as an external load balancer.
 
 ## Goals
 
-- Add an `ExternalLoadBalancers` CRD that references a Gateway and supports integrations with different external load balancers.
-- Add `gatewayLink` to the `ExternalLoadBalancers` API to support integration with BIG-IP as an external load balancer configured using the F5 CIS IngressLink CRD.
+- Add an `ExternalLoadBalancer` CRD that references a Gateway and supports integrations with different external load balancers.
+- Add `gatewayLink` to the `ExternalLoadBalancer` API to support integration with BIG-IP as an external load balancer configured using the F5 CIS IngressLink CRD.
 - Expose the IngressLink fields through the `gatewayLink` API, so the BIG-IP virtual server can be configured. The `selector` field is auto-set: NGINX Gateway Fabric sets it internally to match the data plane Service it provisions for the Gateway.
 - Tie the IngressLink lifecycle to its Gateway, so it is created and deleted alongside the Gateway.
 
@@ -23,7 +23,7 @@ This Enhancement Proposal introduces a standalone `ExternalLoadBalancers` CRD to
 
 [F5 BIG-IP](https://www.f5.com/products/big-ip) is commonly deployed as the external load balancer in front of Kubernetes ingress. [F5 CIS](https://github.com/F5Networks/k8s-bigip-ctlr) watches Kubernetes resources and configures BIG-IP declaratively via a configuration API named Application Services 3 (AS3). CIS supports an `IngressLink` custom resource definition (`ingresslinks.cis.f5.com`) that is designed to link an external load balancer to an in-cluster ingress data plane. An IngressLink resource creates a BIG-IP [virtual server](https://techdocs.f5.com/kb/en-us/products/big-ip_ltm/manuals/product/ltm-basics-11-6-0/2.html) and a [pool](https://techdocs.f5.com/kb/en-us/products/big-ip_ltm/manuals/product/ltm-basics-11-6-0/4.html#unique_1127536889) whose members are selected from a Kubernetes Service based on selector labels. The IngressLink's `selector` matches the labels on a Service, reads that Service's endpoints, and programs them as the pool members. As the Service's endpoints change, CIS keeps the pool in sync.
 
-We will use the IngressLink resource to configure BIG-IP so that it acts as an external load balancer in front of NGINX Gateway Fabric. Client connections arrive at BIG-IP, which forwards them to the NGINX data plane to be routed to the backend applications. The data plane is provisioned per Gateway, so each Gateway gets its own Service whose endpoints are the data plane pods. A user creates an `ExternalLoadBalancers` resource that references a Gateway through `targetRefs`, and NGINX Gateway Fabric creates one IngressLink for that Gateway. CIS reads that IngressLink and configures a BIG-IP virtual server and pool from it. The pool members are the data plane pods behind that Service, so scaling the Deployment up or down updates the pool to match. This gives per-Gateway isolation that maps naturally onto BIG-IP virtual servers and partitions.
+We will use the IngressLink resource to configure BIG-IP so that it acts as an external load balancer in front of NGINX Gateway Fabric. Client connections arrive at BIG-IP, which forwards them to the NGINX data plane to be routed to the backend applications. The data plane is provisioned per Gateway, so each Gateway gets its own Service whose endpoints are the data plane pods. A user creates an `ExternalLoadBalancer` resource that references a Gateway through `targetRefs`, and NGINX Gateway Fabric creates one IngressLink for that Gateway. CIS reads that IngressLink and configures a BIG-IP virtual server and pool from it. The pool members are the data plane pods behind that Service, so scaling the Deployment up or down updates the pool to match. This gives per-Gateway isolation that maps naturally onto BIG-IP virtual servers and partitions.
 
 ## API, Customer Driven Interfaces, and User Experience
 
@@ -39,10 +39,10 @@ sequenceDiagram
     participant BIGIP as BIG-IP
     participant IPAM as IPAM Controller
 
-    User->>NGF: Create Gateway + ExternalLoadBalancers (targetRefs → Gateway)
+    User->>NGF: Create Gateway + ExternalLoadBalancer (targetRefs → Gateway)
     NGF->>NGF: Resolve targetRefs to the Gateway
     NGF->>CIS: Create IngressLink CR (same namespace as Gateway)
-    Note over NGF,CIS: IngressLink spec from ExternalLoadBalancers spec.gatewayLink
+    Note over NGF,CIS: IngressLink spec from ExternalLoadBalancer spec.gatewayLink
 
     alt virtualServerAddress set
         CIS->>BIGIP: POST AS3 declaration
@@ -62,9 +62,9 @@ sequenceDiagram
 
 The flow for a Gateway is:
 
-1. A user creates a Gateway and an `ExternalLoadBalancers` resource whose `targetRefs` points at that Gateway.
-2. NGF provisions the data plane Deployment and Service for the Gateway, and resolves the `ExternalLoadBalancers` `targetRefs` to the Gateway.
-3. NGF creates one IngressLink resource in the Gateway's namespace, owned by the Gateway, with its spec built from the `ExternalLoadBalancers` `gatewayLink` configuration.
+1. A user creates a Gateway and an `ExternalLoadBalancer` resource whose `targetRefs` points at that Gateway.
+2. NGF provisions the data plane Deployment and Service for the Gateway, and resolves the `ExternalLoadBalancer` `targetRefs` to the Gateway.
+3. NGF creates one IngressLink resource in the Gateway's namespace, owned by the Gateway, with its spec built from the `ExternalLoadBalancer` `gatewayLink` configuration.
 4. CIS sees the IngressLink and configures BIG-IP. If `virtualServerAddress` is set, CIS posts an AS3 declaration that creates the virtual server and pool directly. If `ipamLabel` is set instead, the F5 IPAM Controller first allocates an IP from the labelled pool and writes it to the IngressLink status, and then CIS posts the AS3 declaration using that IP.
 5. CIS writes the virtual server address back to the IngressLink status.
 6. NGF reads the IngressLink status and writes the virtual server address into `Gateway.status.addresses`.
@@ -100,33 +100,33 @@ flowchart LR
 
 The IngressLink is built together with the Gateway's data plane Service and Deployment and reconciled as one set, so it is kept in sync and is not orphaned when the Gateway is reprovisioned.
 
-Its content comes from two stable sources. The IngressLink `spec` (such as `virtualServerAddress`, `partition`, `iRules`, and `tls`) comes from the `ExternalLoadBalancers` `gatewayLink` configuration, so it changes only when that resource is edited. The IngressLink `selector` is set by NGINX Gateway Fabric to match the data plane Service and is derived from the Gateway, not from the `NginxProxy`.
+Its content comes from two stable sources. The IngressLink `spec` (such as `virtualServerAddress`, `partition`, `iRules`, and `tls`) comes from the `ExternalLoadBalancer` `gatewayLink` configuration, so it changes only when that resource is edited. The IngressLink `selector` is set by NGINX Gateway Fabric to match the data plane Service and is derived from the Gateway, not from the `NginxProxy`.
 
 As a result, the changes an `NginxProxy` drives on the Service or Deployment do not rewrite the IngressLink. The IngressLink selects the Service by stable, NGF-controlled labels, so those changes leave it unchanged. Pool membership is not carried in the IngressLink either; CIS watches the selected Service's endpoints directly and updates the BIG-IP pool as they change, for example when the Deployment scales. Changing the Service type between `NodePort` and `ClusterIP` likewise leaves the IngressLink unchanged, but the pool stays healthy only if the CIS pool member type is set to match the new Service type.
 
 ### API definitions
 
-`ExternalLoadBalancers` is a standalone CRD in the `gateway.nginx.org` group. It references a Gateway through `targetRefs` and holds the external load balancer configuration under `gatewayLink`. See [Why a standalone CRD](#why-a-standalone-crd) and [ExternalLoadBalancers and its targetRefs](#externalloadbalancers-and-its-targetrefs) for the rationale and the mapping to Gateways.
+`ExternalLoadBalancer` is a standalone CRD in the `gateway.nginx.org` group. It references a Gateway through `targetRefs` and holds the external load balancer configuration under `gatewayLink`. See [Why a standalone CRD](#why-a-standalone-crd) and [ExternalLoadBalancer and its targetRefs](#externalloadbalancer-and-its-targetrefs) for the rationale and the mapping to Gateways.
 
 ```go
-// ExternalLoadBalancers configures an external load balancer that fronts a Gateway.
+// ExternalLoadBalancer configures an external load balancer that fronts a Gateway.
 // It references a Gateway through TargetRefs. NGINX Gateway Fabric provisions the
 // external load balancer integration for the Gateway's data plane Service.
-type ExternalLoadBalancers struct {
+type ExternalLoadBalancer struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	// Spec defines the desired state of the ExternalLoadBalancers.
-	Spec ExternalLoadBalancersSpec `json:"spec"`
+	// Spec defines the desired state of the ExternalLoadBalancer.
+	Spec ExternalLoadBalancerSpec `json:"spec"`
 
-	// Status defines the state of the ExternalLoadBalancers.
-	Status ExternalLoadBalancersStatus `json:"status,omitempty"`
+	// Status defines the state of the ExternalLoadBalancer.
+	Status ExternalLoadBalancerStatus `json:"status,omitempty"`
 }
 
-// ExternalLoadBalancersSpec defines the desired state of ExternalLoadBalancers.
+// ExternalLoadBalancerSpec defines the desired state of ExternalLoadBalancer.
 //
 // +kubebuilder:validation:XValidation:message="exactly one external load balancer backend must be set",rule="has(self.gatewayLink)"
-type ExternalLoadBalancersSpec struct {
+type ExternalLoadBalancerSpec struct {
 	// GatewayLink configures F5 BIG-IP as the external load balancer using F5
 	// Container Ingress Services. It is the first supported backend. Additional
 	// backend types may be added as sibling fields in the future.
@@ -135,7 +135,7 @@ type ExternalLoadBalancersSpec struct {
 	GatewayLink *GatewayLinkConfig `json:"gatewayLink,omitempty"`
 
 	// TargetRefs identifies the Gateways this external load balancer applies to.
-	// Each object must be in the same namespace as the ExternalLoadBalancers resource.
+	// Each object must be in the same namespace as the ExternalLoadBalancer resource.
 	// Exactly one Gateway is supported for now; the field is a list so that support
 	// for multiple Gateways can be added later.
 	// Support: Gateway.
@@ -370,11 +370,11 @@ type GatewayLinkRemoteCluster struct {
 }
 ```
 
-Below is an example of an `ExternalLoadBalancers` resource that fronts a Gateway named `gateway` with BIG-IP:
+Below is an example of an `ExternalLoadBalancer` resource that fronts a Gateway named `gateway` with BIG-IP:
 
 ```yaml
 apiVersion: gateway.nginx.org/v1alpha1
-kind: ExternalLoadBalancers
+kind: ExternalLoadBalancer
 metadata:
   name: gateway-bigip
   namespace: default
@@ -390,7 +390,7 @@ spec:
       - "/Common/Proxy_Protocol_iRule"
 ```
 
-The data plane Service type and the client IP preservation settings live on the Gateway's `NginxProxy`, not on `ExternalLoadBalancers`. The Service type must match the CIS pool member type (see [service type and pool member type](#understanding-the-correlation-between-service-type-and-cis-pool-member-type)), and PROXY protocol is configured through `rewriteClientIP` (see [Preserving the real ClientIP](#preserving-the-real-clientip)):
+The data plane Service type and the client IP preservation settings live on the Gateway's `NginxProxy`, not on `ExternalLoadBalancer`. The Service type must match the CIS pool member type (see [service type and pool member type](#understanding-the-correlation-between-service-type-and-cis-pool-member-type)), and PROXY protocol is configured through `rewriteClientIP` (see [Preserving the real ClientIP](#preserving-the-real-clientip)):
 
 ```yaml
 apiVersion: gateway.nginx.org/v1alpha2
@@ -431,15 +431,15 @@ The supported fields for configuring BIG-IP through the IngressLink CRD:
 
 ### Why a standalone CRD
 
-The configuration started as an `externalLoadBalancers` field on the `NginxProxy` CRD. NginxProxy configures the NGINX data plane itself, and the external load balancer configuration is a separate concern that grew large and made NginxProxy convoluted. A dependency on NginxProxy remains, since the data plane Service type has to match the CIS pool member type.
+The configuration started as an `externalLoadBalancer` field on the `NginxProxy` CRD. NginxProxy configures the NGINX data plane itself, and the external load balancer configuration is a separate concern that grew large and made NginxProxy convoluted. A dependency on NginxProxy remains, since the data plane Service type has to match the CIS pool member type.
 
-A standalone `ExternalLoadBalancers` CRD keeps that concern separate and is easier to expand. New external load balancer integrations are added as sibling fields alongside `gatewayLink`. The resource references a Gateway through `targetRefs`, so the lifecycle and scope of the load balancer configuration are tied to a Gateway rather than to the data plane parameters.
+A standalone `ExternalLoadBalancer` CRD keeps that concern separate and is easier to expand. New external load balancer integrations are added as sibling fields alongside `gatewayLink`. The resource references a Gateway through `targetRefs`, so the lifecycle and scope of the load balancer configuration are tied to a Gateway rather than to the data plane parameters.
 
-`ExternalLoadBalancers` is not a Gateway API policy. It does not drive any NGINX configuration; it provisions a sibling IngressLink for the Gateway.
+`ExternalLoadBalancer` is not a Gateway API policy. It does not drive any NGINX configuration; it provisions a sibling IngressLink for the Gateway.
 
-### ExternalLoadBalancers and its targetRefs
+### ExternalLoadBalancer and its targetRefs
 
-An `ExternalLoadBalancers` resource holds the configuration for one external load balancer, and each Gateway has its own data plane Service that the load balancer fronts. For now the mapping is one-to-one: a resource targets a single Gateway, and a Gateway is fronted by a single `ExternalLoadBalancers`. When more than one `ExternalLoadBalancers` targets the same Gateway, the oldest is accepted and the others are rejected with `Accepted=False`, so a Gateway always resolves to a single configuration.
+An `ExternalLoadBalancer` resource holds the configuration for one external load balancer, and each Gateway has its own data plane Service that the load balancer fronts. For now the mapping is one-to-one: a resource targets a single Gateway, and a Gateway is fronted by a single `ExternalLoadBalancer`. When more than one `ExternalLoadBalancer` targets the same Gateway, the oldest is accepted and the others are rejected with `Accepted=False`, so a Gateway always resolves to a single configuration.
 
 `targetRefs` is defined as a list with `maxItems` of one rather than a single reference. This keeps the current behavior strictly one-to-one while leaving room to support multiple Gateways per resource later without a breaking API change, for example a shared configuration fronting several Gateways once the semantics are worked out. Whether one configuration can sensibly front several Gateways depends on the specific external load balancer, so the constraint is enforced here and revisited per backend as needed.
 
@@ -490,11 +490,11 @@ The rule for operators is that two CIS instances against one BIG-IP must use bot
 
 ### Preserving the real ClientIP
 
-BIG-IP opens its own connection to the data plane, so by default NGINX sees BIG-IP as the client instead of the real caller. To preserve the original client IP, BIG-IP prepends a PROXY protocol header by following the `Proxy_Protocol_iRule`, set on the `ExternalLoadBalancers` resource, and NGINX is told to read it through `rewriteClientIP` on the Gateway's `NginxProxy` using the existing [`rewriteClientIP`](rewrite-client-ip.md) API:
+BIG-IP opens its own connection to the data plane, so by default NGINX sees BIG-IP as the client instead of the real caller. To preserve the original client IP, BIG-IP prepends a PROXY protocol header by following the `Proxy_Protocol_iRule`, set on the `ExternalLoadBalancer` resource, and NGINX is told to read it through `rewriteClientIP` on the Gateway's `NginxProxy` using the existing [`rewriteClientIP`](rewrite-client-ip.md) API:
 
 ```yaml
 apiVersion: gateway.nginx.org/v1alpha1
-kind: ExternalLoadBalancers
+kind: ExternalLoadBalancer
 spec:
   gatewayLink:
     iRules:
@@ -531,10 +531,10 @@ We will add integration tests that exercise the integration end to end against a
 
 The test flow:
 
-1. Install NGF and CIS, with the `ExternalLoadBalancers` CRD applied.
+1. Install NGF and CIS, with the `ExternalLoadBalancer` CRD applied.
 2. Mount the BIG-IP public key into the test environment and create a dedicated partition on BIG-IP for the test run.
 3. Run the test in two configurations. The first uses a static `virtualServerAddress`. The second uses the F5 IPAM Controller with an `ipamLabel` so that the address is allocated dynamically.
-4. Create a Gateway and an `ExternalLoadBalancers` resource targeting it, then verify that NGF provisions the `IngressLink` and that CIS configures the virtual server and pool on BIG-IP.
+4. Create a Gateway and an `ExternalLoadBalancer` resource targeting it, then verify that NGF provisions the `IngressLink` and that CIS configures the virtual server and pool on BIG-IP.
 5. Send traffic to the virtual server IP and confirm that it reaches the application through NGF.
 6. Tear down the test by deleting the partition and removing the public key from the BIG-IP stack.
 
@@ -548,7 +548,7 @@ These tests need to be run manually since they need a configured BIG-IP stack. T
 
 ## Alternatives
 
-- Integrate with a different external load balancer. The `ExternalLoadBalancers` CRD is general, so support for other external load balancers can be added alongside `gatewayLink` as a sibling field in the future.
+- Integrate with a different external load balancer. The `ExternalLoadBalancer` CRD is general, so support for other external load balancers can be added alongside `gatewayLink` as a sibling field in the future.
 - Use a LoadBalancer Service with a cloud or MetalLB controller. This works where a Service LoadBalancer implementation exists, but it does not use BIG-IP features such as iRules, profiles, monitors, and partitions, or the F5 operational model.
 - Configure BIG-IP manually, where operators define virtual servers and pools by hand. This loses the declarative automation driven by the Gateway lifecycle and drifts as the data plane endpoints change.
 

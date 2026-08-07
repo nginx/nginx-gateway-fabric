@@ -1,0 +1,12 @@
+apiVersion: gateway.nginx.org/v1alpha2
+kind: NginxProxy
+metadata:
+  name: gatewaylink-proxy
+spec:
+  kubernetes:
+    service:
+      # NodePort so CIS in nodeport pool member mode can pool the node IP and node port.
+      type: NodePort
+      # Local preserves the real client source IP and makes only the node hosting an NGINX pod
+      # advertise the endpoint, so the BIG-IP monitor probes a node that answers.
+      externalTrafficPolicy: Local

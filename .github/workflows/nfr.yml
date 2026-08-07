@@ -43,9 +43,6 @@ defaults:
   run:
     shell: bash
 
-env:
-  PLUS_USAGE_ENDPOINT: ${{ secrets.JWT_PLUS_REPORTING_ENDPOINT }}
-
 permissions:
   contents: read
 
@@ -83,16 +80,25 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      - name: Get secrets
+        uses: nginx/ci-self-hosted/.github/actions/get-from-vault@2ac905a974d15594f0e03697b4f88916fbb3694d
+        with:
+          client-id: ${{ secrets.AZ_VAULT_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZ_VAULT_TENANT_ID }}
+          vault-name: ${{ secrets.AZ_VAULT_NAME }}
+          secret-names: "gcp-workload-identity,gcp-service-account,gcp-project-id,gcp-nodes-service-account${{ matrix.type == 'plus' && ',jwt-plus-reporting-endpoint,jwt-plus-exception-reporting' || '' }}"
+          env-names: "GCP_WORKLOAD_IDENTITY,GCP_SERVICE_ACCOUNT,GCP_PROJECT_ID,GKE_NODES_SERVICE_ACCOUNT${{ matrix.type == 'plus' && ',PLUS_USAGE_ENDPOINT,PLUS_LICENSE' || '' }}"
+
       - name: Authenticate to Google Cloud
         id: auth
         uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
         with:
           token_format: access_token
-          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY }}
-          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          workload_identity_provider: ${{ env.GCP_WORKLOAD_IDENTITY }}
+          service_account: ${{ env.GCP_SERVICE_ACCOUNT }}
 
       - name: Login to GAR
-        uses: docker/login-action@371161bbe7024a29a25c5e19bfcbc0804fe9ad2c # v4.5.2
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: us-docker.pkg.dev
           username: oauth2accesstoken
@@ -101,7 +107,7 @@ jobs:
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
         with:
-          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          project_id: ${{ env.GCP_PROJECT_ID }}
           install_components: kubectl
 
       - name: Setup dotenv file
@@ -111,13 +117,13 @@ jobs:
           echo "TAG=${{ needs.vars.outputs.image_tag }}" >> vars.env
           echo "PREFIX=ghcr.io/nginx/nginx-gateway-fabric" >> vars.env
           echo "NGINX_PREFIX=ghcr.io/nginx/nginx-gateway-fabric/nginx" >> vars.env
-          echo "NGINX_PLUS_PREFIX=us-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/nginx-gateway-fabric/nginx-plus" >> vars.env
+          echo "NGINX_PLUS_PREFIX=us-docker.pkg.dev/${GCP_PROJECT_ID}/nginx-gateway-fabric/nginx-plus" >> vars.env
           echo "GKE_CLUSTER_NAME=nfr-tests-${{ github.run_id }}-${{ matrix.type }}" >> vars.env
           echo "GKE_CLUSTER_ZONE=us-west1-b" >> vars.env
           echo "GKE_CLUSTER_REGION=us-west1" >> vars.env
-          echo "GKE_PROJECT=${{ secrets.GCP_PROJECT_ID }}" >> vars.env
-          echo "GKE_SVC_ACCOUNT=${{ secrets.GCP_SERVICE_ACCOUNT }}" >> vars.env
-          echo "GKE_NODES_SERVICE_ACCOUNT=${{ secrets.GKE_NODES_SERVICE_ACCOUNT }}" >> vars.env
+          echo "GKE_PROJECT=${GCP_PROJECT_ID}" >> vars.env
+          echo "GKE_SVC_ACCOUNT=${GCP_SERVICE_ACCOUNT}" >> vars.env
+          echo "GKE_NODES_SERVICE_ACCOUNT=${GKE_NODES_SERVICE_ACCOUNT}" >> vars.env
           echo "NETWORK_TAGS=nfr-tests-${{ github.run_id }}-${{ matrix.type }}" >> vars.env
           echo "NGF_BRANCH=${{ github.ref_name }}" >> vars.env
           echo "SOURCE_IP_RANGE=$(curl -sS -4 icanhazip.com)/32" >> vars.env
@@ -127,12 +133,10 @@ jobs:
           echo "NGF_VERSION=${{ needs.vars.outputs.version }}" >> vars.env
           echo "GKE_NUM_NODES=12" >> vars.env
           echo "GKE_MACHINE_TYPE=n2d-standard-16" >> vars.env
-          echo "PLUS_USAGE_ENDPOINT=${{ secrets.JWT_PLUS_REPORTING_ENDPOINT }}" >> vars.env
+          echo "PLUS_USAGE_ENDPOINT=${PLUS_USAGE_ENDPOINT}" >> vars.env
 
       - name: Setup license file for plus
         if: matrix.type == 'plus'
-        env:
-          PLUS_LICENSE: ${{ secrets.JWT_PLUS_REPORTING }}
         run: echo "${PLUS_LICENSE}" > license.jwt
 
       - name: Create GKE cluster
@@ -152,9 +156,9 @@ jobs:
         working-directory: ./tests
         run: |
           if ${{ needs.vars.outputs.test_label != 'all' }}; then
-          sed -i '/^GINKGO_LABEL=/s/=.*/="${{ needs.vars.outputs.test_label }}"/' "scripts/vars.env" && make nfr-test CI=true;
+          sed -i '/^GINKGO_LABEL=/s/=.*/="${{ needs.vars.outputs.test_label }}"/' "scripts/vars.env" && make nfr-test CI=true PLUS_ENABLED=${{ matrix.type == 'plus' }};
           else
-          make nfr-test CI=true;
+          make nfr-test CI=true PLUS_ENABLED=${{ matrix.type == 'plus' }};
           fi
 
       - name: Upload Artifacts

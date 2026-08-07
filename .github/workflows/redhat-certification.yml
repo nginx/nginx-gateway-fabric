@@ -28,7 +28,18 @@ jobs:
   certify:
     name: Submit ${{ inputs.image }} image for certification
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write # for get-from-vault to authenticate with Azure
     steps:
+      - name: Get secrets
+        uses: nginx/ci-self-hosted/.github/actions/get-from-vault@2ac905a974d15594f0e03697b4f88916fbb3694d
+        with:
+          client-id: ${{ secrets.AZ_VAULT_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZ_VAULT_TENANT_ID }}
+          vault-name: ${{ secrets.AZ_VAULT_NAME }}
+          secret-names: "certification-component-id-ngf,certification-component-id-nginx,certification-component-id-operator,pyxis-api-token"
+
       - name: Set image reference
         id: image
         run: |
@@ -62,17 +73,17 @@ jobs:
         run: |
           case "${{ inputs.image }}" in
             ngf)
-              COMPONENT_ID="${{ secrets.CERTIFICATION_COMPONENT_ID_NGF }}"
+              COMPONENT_ID="${CERTIFICATION_COMPONENT_ID_NGF}"
               ;;
             nginx)
-              COMPONENT_ID="${{ secrets.CERTIFICATION_COMPONENT_ID_NGINX }}"
+              COMPONENT_ID="${CERTIFICATION_COMPONENT_ID_NGINX}"
               ;;
             operator)
-              COMPONENT_ID="${{ secrets.CERTIFICATION_COMPONENT_ID_OPERATOR }}"
+              COMPONENT_ID="${CERTIFICATION_COMPONENT_ID_OPERATOR}"
               ;;
           esac
 
           preflight check container ${{ steps.image.outputs.ref }} \
-            --pyxis-api-token="${{ secrets.PYXIS_API_TOKEN }}" \
+            --pyxis-api-token="${PYXIS_API_TOKEN}" \
             --certification-component-id="${COMPONENT_ID}" \
             ${{ !inputs.dry_run && '--submit' || '' }}

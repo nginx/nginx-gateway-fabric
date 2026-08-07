@@ -35,6 +35,7 @@ This directory contains the tests for NGINX Gateway Fabric. The tests are divide
       - [Longevity testing](#longevity-testing)
         - [WAF+PLM longevity scenario](#wafplm-longevity-scenario)
     - [Run the WAF tests on a GKE cluster](#run-the-waf-tests-on-a-gke-cluster)
+    - [Run the GatewayLink tests on a GKE cluster](#run-the-gatewaylink-tests-on-a-gke-cluster)
   - [Common test amendments](#common-test-amendments)
   - [Step 2 - Cleanup](#step-2---cleanup)
 
@@ -443,6 +444,19 @@ WAF tests require NGINX Plus with NAP WAF images and run on GKE (amd64 only). Be
    This will compile the WAF policy bundles from the JSON sources in `suite/manifests/waf-policy/`, create the image pull secret in the `nginx-gateway` namespace so the WAF sidecar images (`waf-enforcer`, `waf-config-mgr`) can be pulled from `private-registry.nginx.com`, and run the tests labelled `waf` against the GKE cluster.
 
 > Note: For the WAF longevity scenario, see the [WAF+PLM longevity scenario](#wafplm-longevity-scenario) section above.
+
+#### Run the GatewayLink tests on a GKE cluster
+
+The GatewayLink tests exercise the ExternalLoadBalancer feature end-to-end against a real F5 BIG-IP fronted by CIS, running on GKE from a GCP VM. They run both CIS pool modes (nodeport and cluster) and both a static virtual server address and a CIS IPAM-allocated one.
+
+Before running, copy `scripts/vars.env-example` to `scripts/vars.env` and populate the `BIGIP_*` variables. Then create the GKE cluster, router, and VM as for the NFR tests, create the BIG-IP, and run the tests:
+
+```makefile
+make create-bigip-vm
+make gatewaylink-test
+```
+
+`create-bigip-vm` boots a PAYG BIG-IP VE, installs AS3, and sets up the routing and IPAM address pool the tests need. Clean it up afterwards with `make cleanup-bigip-vm`.
 
 ### Common test amendments
 
