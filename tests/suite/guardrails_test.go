@@ -20,10 +20,11 @@ import (
 
 // Guardrails (PayloadProcessor) functional test.
 //
-// This suite exercises the ai-guardrails NGINX module end to end. Unlike the default functional
-// suite, NGF must be installed with nginxGateway.payloadProcessor.enable=true, so this test is
-// excluded from the default deploy (see the "guardrails" skip entry in system_suite_test.go) and
-// self-installs NGF in BeforeAll, mirroring the telemetry suite.
+// This suite exercises the ai-guardrails NGINX module end to end. It runs as part of the standard
+// functional suite against the shared per-proc NGF install: nginxGateway.payloadProcessor.enable is
+// turned on for every functional install (see InstallNGF), which is inert for other specs because
+// the module is only loaded when a PayloadProcessor is actually attached to a route. The guardrails
+// mock image (tests/guardrails-mock) is built and loaded into the cluster by the `test` make target.
 //
 // The mock (tests/guardrails-mock) plays two roles behind two Services in the test namespace:
 //   - guardrails-api: POST /backend/v1/scans, flagging any input containing the sentinel "BLOCKME".
@@ -42,7 +43,7 @@ import (
 // The Gateway-attached case reaches the same route location by inheritance: every route under the
 // Gateway resolves its effective PayloadProcessor to the Gateway-attached one, so guardrails_filter
 // is rendered into the route's location the same as a directly route-attached policy.
-var _ = Describe("Guardrails (PayloadProcessor)", Ordered, Label("guardrails"), func() {
+var _ = Describe("Guardrails (PayloadProcessor)", Ordered, Label("functional", "guardrails"), func() {
 	var (
 		appFiles = []string{
 			"guardrails/apps.yaml",
@@ -62,12 +63,8 @@ var _ = Describe("Guardrails (PayloadProcessor)", Ordered, Label("guardrails"), 
 	)
 
 	BeforeAll(func() {
-		// NGF is not installed by the suite for the "guardrails" label; install it here with the
-		// PayloadProcessor API enabled.
-		cfg := getDefaultSetupCfg()
-		cfg.guardrails = true
-		setup(cfg)
-
+		// NGF is installed by the shared suite with payloadProcessor enabled (see InstallNGF), so
+		// this spec only deploys its own app namespace and fixtures.
 		ns := &core.Namespace{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: namespace,
@@ -99,9 +96,6 @@ var _ = Describe("Guardrails (PayloadProcessor)", Ordered, Label("guardrails"), 
 		cleanUpPortForward()
 
 		Expect(resourceManager.DeleteNamespace(namespace)).To(Succeed())
-
-		// Tear down the NGF install created in BeforeAll so subsequent suites start clean.
-		teardown(releaseName)
 	})
 
 	// runGuardrailsAssertions runs the config + traffic assertions shared by both the HTTPRoute- and
