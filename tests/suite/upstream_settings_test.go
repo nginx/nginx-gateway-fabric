@@ -17,6 +17,7 @@ import (
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/v2/tests/framework"
 )
 
@@ -108,8 +109,8 @@ var _ = Describe("UpstreamSettingsPolicy", Ordered, Label("functional", "uspolic
 				if portFwdPort != 0 {
 					port = portFwdPort
 				}
-				baseCoffeeURL := fmt.Sprintf("http://cafe.example.com:%d%s", port, "/coffee")
-				baseTeaURL := fmt.Sprintf("http://cafe.example.com:%d%s", port, "/tea")
+				baseCoffeeURL := helpers.BuildPortFwdURL("http", "cafe.example.com", port, "coffee")
+				baseTeaURL := helpers.BuildPortFwdURL("http", "cafe.example.com", port, "tea")
 
 				Eventually(
 					func() error {
@@ -288,8 +289,8 @@ var _ = Describe("UpstreamSettingsPolicy", Ordered, Label("functional", "uspolic
 				if portFwdPort != 0 {
 					port = portFwdPort
 				}
-				baseCoffeeURL := fmt.Sprintf("http://cafe.example.com:%d%s", port, "/coffee")
-				baseTeaURL := fmt.Sprintf("http://cafe.example.com:%d%s", port, "/tea")
+				baseCoffeeURL := helpers.BuildPortFwdURL("http", "cafe.example.com", port, "coffee")
+				baseTeaURL := helpers.BuildPortFwdURL("http", "cafe.example.com", port, "coffee")
 
 				Eventually(
 					func() error {
@@ -420,7 +421,7 @@ var _ = Describe("UpstreamSettingsPolicy", Ordered, Label("functional", "uspolic
 				if portFwdPort != 0 {
 					port = portFwdPort
 				}
-				coffeeURL := fmt.Sprintf("http://cafe.example.com:%d/coffee", port)
+				coffeeURL := helpers.BuildPortFwdURL("http", "cafe.example.com", port, "coffee")
 
 				Eventually(
 					func() error {

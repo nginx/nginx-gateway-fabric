@@ -7,6 +7,9 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
+	"net"
+	"net/url"
+	"strconv"
 	"strings"
 	"text/template"
 
@@ -113,4 +116,41 @@ func ToSafeFileName(input string) string {
 	hasher := sha256.New()
 	hasher.Write([]byte(input))
 	return base64.URLEncoding.EncodeToString(hasher.Sum(nil))
+}
+
+// buildPortFwdURL builds a URL for port forwarding based on the given address and port.
+func BuildPortFwdURL(scheme, address string, port int, path string) string {
+	if scheme == "" {
+		scheme = "http"
+	}
+	host := address
+	if port != 0 {
+		host = net.JoinHostPort(address, strconv.Itoa(port))
+	}
+	// Fragment comes last, so this must be split before the query.
+	pathAndQuery, rawFragment, _ := strings.Cut(path, "#")
+	rawPath, rawQuery, _ := strings.Cut(pathAndQuery, "?")
+
+	// Ensure there is a leading slash so "coffee" becomes "/coffee".
+	if rawPath != "" && !strings.HasPrefix(rawPath, "/") {
+		rawPath = "/" + rawPath
+	}
+
+	builtURL := &url.URL{
+		Scheme:   scheme,
+		Host:     host,
+		Path:     rawPath,
+		RawQuery: rawQuery,
+	}
+
+	if rawFragment != "" {
+		if fragment, err := url.PathUnescape(rawFragment); err == nil {
+			builtURL.Fragment = fragment
+			builtURL.RawFragment = rawFragment
+		} else {
+			// if not properly encoded, treat as literal text.
+			builtURL.Fragment = rawFragment
+		}
+	}
+	return builtURL.String()
 }

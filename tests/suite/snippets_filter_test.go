@@ -14,6 +14,7 @@ import (
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/v2/tests/framework"
 )
 
@@ -101,7 +102,7 @@ var _ = Describe("SnippetsFilter", Ordered, Label("functional", "snippets-filter
 				if portFwdPort != 0 {
 					port = portFwdPort
 				}
-				baseURL := fmt.Sprintf("http://cafe.example.com:%d%s", port, "/coffee")
+				baseURL := helpers.BuildPortFwdURL("http", "cafe.example.com", port, "coffee")
 
 				Eventually(
 					func() error {

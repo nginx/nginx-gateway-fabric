@@ -23,6 +23,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/v2/tests/framework"
 )
 
@@ -609,12 +610,11 @@ The logs are attached only if there are errors.
 		nginxDataPlanePodName = nginxPodName
 		nginxMetricsStartTime = time.Now()
 
-		var url string
+		port := 80
 		if portFwdPort != 0 {
-			url = fmt.Sprintf("http://hello.example.com:%d", portFwdPort)
-		} else {
-			url = "http://hello.example.com"
+			port = portFwdPort
 		}
+		url := helpers.BuildPortFwdURL("http", "hello.example.com", port, "")
 
 		Eventually(
 			framework.CreateResponseChecker(
