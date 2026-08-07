@@ -99,11 +99,8 @@ var _ = Describe("SessionPersistence OSS", Ordered, Label("functional", "session
 
 		Context("verify working traffic", func() {
 			It("should return 200 response for HTTPRoute `coffee` from the same backend", func() {
-				port := 80
-				if portFwdPort != 0 {
-					port = portFwdPort
-				}
-				baseCoffeeURL := fmt.Sprintf("http://cafe.example.com:%d%s", port, "/coffee")
+				port := framework.GetPort(80, portFwdPort)
+				baseCoffeeURL := framework.GetURL("http://cafe.example.com/coffee", port)
 
 				Eventually(
 					func() error {
@@ -206,13 +203,10 @@ var _ = Describe("SessionPersistence Plus", Ordered, Label("functional", "sessio
 		var baseCoffeeURL, baseTeaURL string
 
 		BeforeAll(func() {
-			port := 80
-			if portFwdPort != 0 {
-				port = portFwdPort
-			}
+			port := framework.GetPort(80, portFwdPort)
 
-			baseCoffeeURL = fmt.Sprintf("http://cafe.example.com:%d%s", port, "/coffee")
-			baseTeaURL = fmt.Sprintf("http://cafe.example.com:%d%s", port, "/tea/location/flavors")
+			baseCoffeeURL = framework.GetURL("http://cafe.example.com/coffee", port)
+			baseTeaURL = framework.GetURL("http://cafe.example.com/tea/location/flavors", port)
 		})
 
 		Context("verify working traffic", func() {

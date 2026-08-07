@@ -75,11 +75,8 @@ var _ = Describe("RateLimitPolicy", Ordered, Label("functional", "rate-limit-pol
 		BeforeAll(func() {
 			Expect(resourceManager.ApplyFromFiles(rlpFiles, namespace)).To(Succeed())
 
-			port := 80
-			if portFwdPort != 0 {
-				port = portFwdPort
-			}
-			baseCoffeeURL = fmt.Sprintf("http://cafe.example.com:%d%s", port, "/coffee")
+			port := framework.GetPort(80, portFwdPort)
+			baseCoffeeURL = framework.GetURL("http://cafe.example.com/coffee", port)
 		})
 
 		AfterAll(func() {
@@ -252,11 +249,8 @@ var _ = Describe("RateLimitPolicy", Ordered, Label("functional", "rate-limit-pol
 		BeforeAll(func() {
 			Expect(resourceManager.ApplyFromFiles(rlpFiles, namespace)).To(Succeed())
 
-			port := 80
-			if portFwdPort != 0 {
-				port = portFwdPort
-			}
-			baseCoffeeURL = fmt.Sprintf("http://cafe.example.com:%d%s", port, "/coffee")
+			port := framework.GetPort(80, portFwdPort)
+			baseCoffeeURL = framework.GetURL("http://cafe.example.com/coffee", port)
 		})
 
 		AfterAll(func() {
@@ -359,11 +353,8 @@ var _ = Describe("RateLimitPolicy", Ordered, Label("functional", "rate-limit-pol
 		BeforeAll(func() {
 			Expect(resourceManager.ApplyFromFiles(rlpFiles, namespace)).To(Succeed())
 
-			port := 80
-			if portFwdPort != 0 {
-				port = portFwdPort
-			}
-			baseCoffeeURL = fmt.Sprintf("http://cafe.example.com:%d%s", port, "/coffee")
+			port := framework.GetPort(80, portFwdPort)
+			baseCoffeeURL = framework.GetURL("http://cafe.example.com/coffee", port)
 		})
 
 		AfterAll(func() {
@@ -477,11 +468,8 @@ var _ = Describe("RateLimitPolicy", Ordered, Label("functional", "rate-limit-pol
 			Expect(resourceManager.ApplyFromFiles(lsFiles, namespace)).To(Succeed())
 			Expect(resourceManager.WaitForAppsToBeReady(namespace)).To(Succeed())
 
-			port := 80
-			if portFwdPort != 0 {
-				port = portFwdPort
-			}
-			baseCoffeeURL = fmt.Sprintf("http://ls.example.com:%d%s", port, "/coffee")
+			port := framework.GetPort(80, portFwdPort)
+			baseCoffeeURL = framework.GetURL("http://ls.example.com/coffee", port)
 		})
 
 		AfterAll(func() {

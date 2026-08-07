@@ -104,12 +104,9 @@ var _ = Describe("UpstreamSettingsPolicy", Ordered, Label("functional", "uspolic
 
 		Context("verify working traffic", func() {
 			It("should return a 200 response for HTTPRoutes", func() {
-				port := 80
-				if portFwdPort != 0 {
-					port = portFwdPort
-				}
-				baseCoffeeURL := fmt.Sprintf("http://cafe.example.com:%d%s", port, "/coffee")
-				baseTeaURL := fmt.Sprintf("http://cafe.example.com:%d%s", port, "/tea")
+				port := framework.GetPort(80, portFwdPort)
+				baseCoffeeURL := framework.GetURL("http://cafe.example.com/coffee", port)
+				baseTeaURL := framework.GetURL("http://cafe.example.com/tea", port)
 
 				Eventually(
 					func() error {
@@ -284,12 +281,9 @@ var _ = Describe("UpstreamSettingsPolicy", Ordered, Label("functional", "uspolic
 
 		Context("verify working traffic", func() {
 			It("should return a 200 response for HTTPRoutes", func() {
-				port := 80
-				if portFwdPort != 0 {
-					port = portFwdPort
-				}
-				baseCoffeeURL := fmt.Sprintf("http://cafe.example.com:%d%s", port, "/coffee")
-				baseTeaURL := fmt.Sprintf("http://cafe.example.com:%d%s", port, "/tea")
+				port := framework.GetPort(80, portFwdPort)
+				baseCoffeeURL := framework.GetURL("http://cafe.example.com/coffee", port)
+				baseTeaURL := framework.GetURL("http://cafe.example.com/tea", port)
 
 				Eventually(
 					func() error {
@@ -416,11 +410,8 @@ var _ = Describe("UpstreamSettingsPolicy", Ordered, Label("functional", "uspolic
 
 		Context("verify working traffic", func() {
 			It("should return a 200 response", func() {
-				port := 80
-				if portFwdPort != 0 {
-					port = portFwdPort
-				}
-				coffeeURL := fmt.Sprintf("http://cafe.example.com:%d/coffee", port)
+				port := framework.GetPort(80, portFwdPort)
+				coffeeURL := framework.GetURL("http://cafe.example.com/coffee", port)
 
 				Eventually(
 					func() error {

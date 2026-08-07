@@ -73,12 +73,9 @@ var _ = Describe("ProxySettingsPolicy", Ordered, Label("functional", "proxy-sett
 		BeforeAll(func() {
 			Expect(resourceManager.ApplyFromFiles(policies, namespace)).To(Succeed())
 
-			port := 80
-			if portFwdPort != 0 {
-				port = portFwdPort
-			}
+			port := framework.GetPort(80, portFwdPort)
 
-			baseURL = fmt.Sprintf("http://cafe.example.com:%d", port)
+			baseURL = framework.GetURL("http://cafe.example.com", port)
 		})
 
 		AfterAll(func() {
@@ -296,12 +293,9 @@ var _ = Describe("ProxySettingsPolicy", Ordered, Label("functional", "proxy-sett
 		BeforeAll(func() {
 			Expect(resourceManager.ApplyFromFiles(policies, namespace)).To(Succeed())
 
-			port := 80
-			if portFwdPort != 0 {
-				port = portFwdPort
-			}
+			port := framework.GetPort(80, portFwdPort)
 
-			baseURL = fmt.Sprintf("http://cafe.example.com:%d", port)
+			baseURL = framework.GetURL("http://cafe.example.com", port)
 		})
 
 		AfterAll(func() {
@@ -382,12 +376,9 @@ var _ = Describe("ProxySettingsPolicy", Ordered, Label("functional", "proxy-sett
 		BeforeAll(func() {
 			Expect(resourceManager.ApplyFromFiles(policies, namespace)).To(Succeed())
 
-			port := 80
-			if portFwdPort != 0 {
-				port = portFwdPort
-			}
+			port := framework.GetPort(80, portFwdPort)
 
-			baseURL = fmt.Sprintf("http://cafe.example.com:%d", port)
+			baseURL = framework.GetURL("http://cafe.example.com", port)
 		})
 
 		AfterAll(func() {
@@ -531,12 +522,9 @@ var _ = Describe("ProxySettingsPolicy", Ordered, Label("functional", "proxy-sett
 		BeforeAll(func() {
 			Expect(resourceManager.ApplyFromFiles(policies, namespace)).To(Succeed())
 
-			port := 80
-			if portFwdPort != 0 {
-				port = portFwdPort
-			}
+			port := framework.GetPort(80, portFwdPort)
 
-			baseURL = fmt.Sprintf("http://cafe.example.com:%d", port)
+			baseURL = framework.GetURL("http://cafe.example.com", port)
 		})
 
 		AfterAll(func() {

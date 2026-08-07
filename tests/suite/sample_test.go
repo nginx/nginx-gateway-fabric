@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"net/http"
-	"strconv"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -57,10 +56,7 @@ var _ = Describe("Basic test example", Label("functional"), func() {
 	})
 
 	It("sends traffic", func() {
-		url := "http://foo.example.com/hello"
-		if portFwdPort != 0 {
-			url = fmt.Sprintf("http://foo.example.com:%s/hello", strconv.Itoa(portFwdPort))
-		}
+		url := framework.GetURL("http://foo.example.com/hello", portFwdPort)
 
 		Eventually(
 			func(g Gomega) {
