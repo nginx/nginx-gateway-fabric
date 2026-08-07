@@ -10,6 +10,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/v2/tests/framework"
 )
 
@@ -69,7 +70,7 @@ var _ = Describe("NginxProxy UseClusterIP", Ordered, Label("functional", "nginxp
 			if portFwdPort != 0 {
 				port = portFwdPort
 			}
-			coffeeURL := fmt.Sprintf("http://cafe.example.com:%d/coffee", port)
+			coffeeURL := helpers.BuildPortFwdURL("cafe.example.com/coffee", port)
 
 			Eventually(
 				func() error {

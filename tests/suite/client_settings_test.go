@@ -18,6 +18,7 @@ import (
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/v2/tests/framework"
 )
 
@@ -82,8 +83,7 @@ var _ = Describe("ClientSettingsPolicy", Ordered, Label("functional", "cspolicy"
 			if portFwdPort != 0 {
 				port = portFwdPort
 			}
-
-			baseURL = fmt.Sprintf("http://cafe.example.com:%d", port)
+			baseURL = helpers.BuildPortFwdURL("cafe.example.com", port)
 		})
 
 		AfterAll(func() {

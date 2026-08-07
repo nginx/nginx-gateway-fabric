@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"net/http"
-	"strconv"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -12,6 +11,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/v2/tests/framework"
 )
 
@@ -57,10 +57,11 @@ var _ = Describe("Basic test example", Label("functional"), func() {
 	})
 
 	It("sends traffic", func() {
-		url := "http://foo.example.com/hello"
+		port := 80
 		if portFwdPort != 0 {
-			url = fmt.Sprintf("http://foo.example.com:%s/hello", strconv.Itoa(portFwdPort))
+			port = portFwdPort
 		}
+		url := helpers.BuildPortFwdURL("foo.example.com/hello", port)
 
 		Eventually(
 			func(g Gomega) {

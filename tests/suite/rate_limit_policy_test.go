@@ -17,6 +17,7 @@ import (
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/v2/tests/framework"
 )
 
@@ -79,7 +80,7 @@ var _ = Describe("RateLimitPolicy", Ordered, Label("functional", "rate-limit-pol
 			if portFwdPort != 0 {
 				port = portFwdPort
 			}
-			baseCoffeeURL = fmt.Sprintf("http://cafe.example.com:%d%s", port, "/coffee")
+			baseCoffeeURL = helpers.BuildPortFwdURL("cafe.example.com/coffee", port)
 		})
 
 		AfterAll(func() {
@@ -256,7 +257,7 @@ var _ = Describe("RateLimitPolicy", Ordered, Label("functional", "rate-limit-pol
 			if portFwdPort != 0 {
 				port = portFwdPort
 			}
-			baseCoffeeURL = fmt.Sprintf("http://cafe.example.com:%d%s", port, "/coffee")
+			baseCoffeeURL = helpers.BuildPortFwdURL("cafe.example.com/coffee", port)
 		})
 
 		AfterAll(func() {
@@ -363,7 +364,7 @@ var _ = Describe("RateLimitPolicy", Ordered, Label("functional", "rate-limit-pol
 			if portFwdPort != 0 {
 				port = portFwdPort
 			}
-			baseCoffeeURL = fmt.Sprintf("http://cafe.example.com:%d%s", port, "/coffee")
+			baseCoffeeURL = helpers.BuildPortFwdURL("cafe.example.com/coffee", port)
 		})
 
 		AfterAll(func() {
@@ -481,7 +482,7 @@ var _ = Describe("RateLimitPolicy", Ordered, Label("functional", "rate-limit-pol
 			if portFwdPort != 0 {
 				port = portFwdPort
 			}
-			baseCoffeeURL = fmt.Sprintf("http://ls.example.com:%d%s", port, "/coffee")
+			baseCoffeeURL = helpers.BuildPortFwdURL("ls.example.com/coffee", port)
 		})
 
 		AfterAll(func() {

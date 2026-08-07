@@ -102,15 +102,14 @@ var _ = Describe("Tracing", FlakeAttempts(2), Ordered, Label("functional", "trac
 
 		setUpPortForward(nginxPodNames[0], namespace)
 
-		url := "http://foo.example.com"
-		helloURL = url + "/hello"
-		worldURL = url + "/world"
-		helloworldURL = url + "/helloworld"
+		port := 80
 		if portFwdPort != 0 {
-			helloURL = fmt.Sprintf("%s:%d/hello", url, portFwdPort)
-			worldURL = fmt.Sprintf("%s:%d/world", url, portFwdPort)
-			helloworldURL = fmt.Sprintf("%s:%d/helloworld", url, portFwdPort)
+			port = portFwdPort
 		}
+		baseURL := helpers.BuildPortFwdURL("foo.example.com", port)
+		helloURL = baseURL + "/hello"
+		worldURL = baseURL + "/world"
+		helloworldURL = baseURL + "/helloworld"
 	})
 
 	AfterEach(func() {

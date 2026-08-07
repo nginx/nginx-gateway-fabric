@@ -16,6 +16,7 @@ import (
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/v2/tests/framework"
 )
 
@@ -110,7 +111,7 @@ var _ = Describe("SnippetsPolicy", Ordered, Label("functional", "snippets-policy
 				if portFwdPort != 0 {
 					port = portFwdPort
 				}
-				baseURL := fmt.Sprintf("http://cafe.example.com:%d%s", port, "/coffee")
+				baseURL := helpers.BuildPortFwdURL("cafe.example.com/coffee", port)
 
 				Eventually(
 					func() error {
@@ -126,7 +127,7 @@ var _ = Describe("SnippetsPolicy", Ordered, Label("functional", "snippets-policy
 				if portFwdPort != 0 {
 					port = portFwdPort
 				}
-				baseURL := fmt.Sprintf("http://cafe.example.com:%d%s", port, "/tea")
+				baseURL := helpers.BuildPortFwdURL("cafe.example.com/tea", port)
 
 				request := framework.Request{
 					URL:     baseURL,
@@ -298,7 +299,7 @@ var _ = Describe("SnippetsPolicy", Ordered, Label("functional", "snippets-policy
 			if portFwdPort != 0 {
 				port = portFwdPort
 			}
-			baseURL := fmt.Sprintf("http://cafe.example.com:%d%s", port, "/coffee")
+			baseURL := helpers.BuildPortFwdURL("cafe.example.com/coffee", port)
 			Expect(
 				framework.ExpectRequestToSucceed(timeoutConfig.RequestTimeout, baseURL, address, "URI: /coffee"),
 			).To(Succeed())
