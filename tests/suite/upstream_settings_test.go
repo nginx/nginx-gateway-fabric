@@ -290,7 +290,7 @@ var _ = Describe("UpstreamSettingsPolicy", Ordered, Label("functional", "uspolic
 					port = portFwdPort
 				}
 				baseCoffeeURL := helpers.BuildPortFwdURL("http", "cafe.example.com", port, "coffee")
-				baseTeaURL := helpers.BuildPortFwdURL("http", "cafe.example.com", port, "coffee")
+				baseTeaURL := helpers.BuildPortFwdURL("http", "cafe.example.com", port, "tea")
 
 				Eventually(
 					func() error {

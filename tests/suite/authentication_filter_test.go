@@ -1484,7 +1484,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 						func() error {
 							return framework.Expect401Response(
 								timeoutConfig.RequestTimeout,
-								helpers.BuildPortFwdURL("http", "cafe.example.com", port, ""),
+								helpers.BuildPortFwdURL("http", "cafe.example.com", port, "jwt-remote-authz"),
 								address,
 								framework.WithRequestHeaders(map[string]string{
 									"Authorization": "Bearer invalid.jwt.token",
