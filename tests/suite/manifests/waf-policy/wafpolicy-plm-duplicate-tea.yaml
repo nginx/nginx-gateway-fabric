@@ -1,0 +1,23 @@
+# type: PLM WAFPolicy targeting the tea HTTPRoute with the same APPolicy and
+# APLogConf as wafpolicy-plm-duplicate-coffee.yaml. Both policies reference the
+# identical PLM-compiled bundles, which could trigger "Duplicate policy name found"
+# if bundles are not properly deduplicated.
+apiVersion: gateway.nginx.org/v1alpha1
+kind: WAFPolicy
+metadata:
+  name: tea-waf-plm-dup
+spec:
+  targetRefs:
+  - group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: tea
+  type: PLM
+  policyRef:
+    apPolicyRef:
+      name: attack-signatures
+  securityLogs:
+  - logRef:
+      apLogConfRef:
+        name: log-illegal
+    destination:
+      type: stderr
