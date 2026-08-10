@@ -79,10 +79,7 @@ var _ = Describe("ClientSettingsPolicy", Ordered, Label("functional", "cspolicy"
 		BeforeAll(func() {
 			Expect(resourceManager.ApplyFromFiles(policies, namespace)).To(Succeed())
 
-			port := 80
-			if portFwdPort != 0 {
-				port = portFwdPort
-			}
+			port := helpers.BuildPortFwdPort(80, portFwdPort)
 			baseURL = helpers.BuildPortFwdURL("cafe.example.com", port)
 		})
 

@@ -153,6 +153,49 @@ func TestCapitalizeString(t *testing.T) {
 	}
 }
 
+func TestBuildPortFwdPort(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		defaultPort  int
+		portFwdPort  int
+		expectedPort int
+	}{
+		{
+			name:         "Test defaultPort used",
+			defaultPort:  80,
+			portFwdPort:  0,
+			expectedPort: 80,
+		},
+		{
+			name:         "Test defaultPort overwritten",
+			defaultPort:  80,
+			portFwdPort:  8080,
+			expectedPort: 8080,
+		},
+		{
+			name:         "Test no port set",
+			defaultPort:  0,
+			portFwdPort:  0,
+			expectedPort: 0,
+		},
+		{
+			name:         "Test portFwdPort used when no defaultPort not set",
+			defaultPort:  0,
+			portFwdPort:  8080,
+			expectedPort: 8080,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewGomegaWithT(t)
+			g.Expect(helpers.BuildPortFwdPort(tt.defaultPort, tt.portFwdPort)).To(Equal(tt.expectedPort))
+		})
+	}
+}
+
 func TestBuildPortFwdURL(t *testing.T) {
 	t.Parallel()
 

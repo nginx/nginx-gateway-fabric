@@ -57,10 +57,7 @@ var _ = Describe("Basic test example", Label("functional"), func() {
 	})
 
 	It("sends traffic", func() {
-		port := 80
-		if portFwdPort != 0 {
-			port = portFwdPort
-		}
+		port := helpers.BuildPortFwdPort(80, portFwdPort)
 		url := helpers.BuildPortFwdURL("foo.example.com/hello", port)
 
 		Eventually(

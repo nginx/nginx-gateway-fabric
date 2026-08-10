@@ -98,10 +98,7 @@ var _ = Describe("SnippetsFilter", Ordered, Label("functional", "snippets-filter
 
 		Context("verify working traffic", func() {
 			It("should return a 200 response for HTTPRoute", func() {
-				port := 80
-				if portFwdPort != 0 {
-					port = portFwdPort
-				}
+				port := helpers.BuildPortFwdPort(80, portFwdPort)
 				baseURL := helpers.BuildPortFwdURL("cafe.example.com/coffee", port)
 
 				Eventually(

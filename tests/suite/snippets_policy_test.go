@@ -107,10 +107,7 @@ var _ = Describe("SnippetsPolicy", Ordered, Label("functional", "snippets-policy
 
 		Context("verify working traffic", func() {
 			It("should return a 200 response for HTTPRoute", func() {
-				port := 80
-				if portFwdPort != 0 {
-					port = portFwdPort
-				}
+				port := helpers.BuildPortFwdPort(80, portFwdPort)
 				baseURL := helpers.BuildPortFwdURL("cafe.example.com/coffee", port)
 
 				Eventually(
@@ -123,10 +120,7 @@ var _ = Describe("SnippetsPolicy", Ordered, Label("functional", "snippets-policy
 			})
 
 			It("should return a 200 response for HTTPRoute with header match (internal location)", func() {
-				port := 80
-				if portFwdPort != 0 {
-					port = portFwdPort
-				}
+				port := helpers.BuildPortFwdPort(80, portFwdPort)
 				baseURL := helpers.BuildPortFwdURL("cafe.example.com/tea", port)
 
 				request := framework.Request{
@@ -295,10 +289,7 @@ var _ = Describe("SnippetsPolicy", Ordered, Label("functional", "snippets-policy
 			}).WithTimeout(timeoutConfig.GetStatusTimeout).WithPolling(500 * time.Millisecond).Should(Succeed())
 
 			// Traffic should still work
-			port := 80
-			if portFwdPort != 0 {
-				port = portFwdPort
-			}
+			port := helpers.BuildPortFwdPort(80, portFwdPort)
 			baseURL := helpers.BuildPortFwdURL("cafe.example.com/coffee", port)
 			Expect(
 				framework.ExpectRequestToSucceed(timeoutConfig.RequestTimeout, baseURL, address, "URI: /coffee"),

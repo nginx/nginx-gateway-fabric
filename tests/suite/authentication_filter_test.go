@@ -82,10 +82,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 		nginxPodName = nginxPodNames[0]
 
 		setUpPortForward(nginxPodName, namespace)
-		port = 80
-		if portFwdPort != 0 {
-			port = portFwdPort
-		}
+		port = helpers.BuildPortFwdPort(80, portFwdPort)
 	})
 
 	AfterAll(func() {

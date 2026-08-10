@@ -66,10 +66,7 @@ var _ = Describe("NginxProxy UseClusterIP", Ordered, Label("functional", "nginxp
 
 	Context("verify working traffic", func() {
 		It("should return a 200 response", func() {
-			port := 80
-			if portFwdPort != 0 {
-				port = portFwdPort
-			}
+			port := helpers.BuildPortFwdPort(80, portFwdPort)
 			coffeeURL := helpers.BuildPortFwdURL("cafe.example.com/coffee", port)
 
 			Eventually(

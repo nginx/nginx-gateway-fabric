@@ -610,10 +610,7 @@ The logs are attached only if there are errors.
 		nginxDataPlanePodName = nginxPodName
 		nginxMetricsStartTime = time.Now()
 
-		port := 80
-		if portFwdPort != 0 {
-			port = portFwdPort
-		}
+		port := helpers.BuildPortFwdPort(80, portFwdPort)
 		url := helpers.BuildPortFwdURL("hello.example.com", port)
 
 		Eventually(
@@ -770,12 +767,7 @@ The logs are attached only if there are errors.
 
 		setUpPortForward(nginxPodName, namespace)
 
-		var port int
-		if portFwdPort != 0 {
-			port = portFwdPort
-		} else {
-			port = 80
-		}
+		port := helpers.BuildPortFwdPort(80, portFwdPort)
 
 		addr := fmt.Sprintf("%s:%d", address, port)
 

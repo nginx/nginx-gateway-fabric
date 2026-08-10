@@ -105,10 +105,7 @@ var _ = Describe("UpstreamSettingsPolicy", Ordered, Label("functional", "uspolic
 
 		Context("verify working traffic", func() {
 			It("should return a 200 response for HTTPRoutes", func() {
-				port := 80
-				if portFwdPort != 0 {
-					port = portFwdPort
-				}
+				port := helpers.BuildPortFwdPort(80, portFwdPort)
 				baseCoffeeURL := helpers.BuildPortFwdURL("cafe.example.com/coffee", port)
 				baseTeaURL := helpers.BuildPortFwdURL("cafe.example.com/tea", port)
 
@@ -285,10 +282,7 @@ var _ = Describe("UpstreamSettingsPolicy", Ordered, Label("functional", "uspolic
 
 		Context("verify working traffic", func() {
 			It("should return a 200 response for HTTPRoutes", func() {
-				port := 80
-				if portFwdPort != 0 {
-					port = portFwdPort
-				}
+				port := helpers.BuildPortFwdPort(80, portFwdPort)
 				baseCoffeeURL := helpers.BuildPortFwdURL("cafe.example.com/coffee", port)
 				baseTeaURL := helpers.BuildPortFwdURL("cafe.example.com/tea", port)
 
@@ -417,10 +411,7 @@ var _ = Describe("UpstreamSettingsPolicy", Ordered, Label("functional", "uspolic
 
 		Context("verify working traffic", func() {
 			It("should return a 200 response", func() {
-				port := 80
-				if portFwdPort != 0 {
-					port = portFwdPort
-				}
+				port := helpers.BuildPortFwdPort(80, portFwdPort)
 				coffeeURL := helpers.BuildPortFwdURL("cafe.example.com/coffee", port)
 
 				Eventually(

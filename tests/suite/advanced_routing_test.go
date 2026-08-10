@@ -60,10 +60,7 @@ var _ = Describe("AdvancedRouting", Ordered, Label("functional", "routing"), fun
 	When("valid advanced routing settings are configured for Routes", func() {
 		var baseURL string
 		BeforeAll(func() {
-			port := 80
-			if portFwdPort != 0 {
-				port = portFwdPort
-			}
+			port := helpers.BuildPortFwdPort(80, portFwdPort)
 			baseURL = helpers.BuildPortFwdURL("cafe.example.com", port)
 		})
 

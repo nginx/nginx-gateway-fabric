@@ -100,10 +100,7 @@ var _ = Describe("SessionPersistence OSS", Ordered, Label("functional", "session
 
 		Context("verify working traffic", func() {
 			It("should return 200 response for HTTPRoute `coffee` from the same backend", func() {
-				port := 80
-				if portFwdPort != 0 {
-					port = portFwdPort
-				}
+				port := helpers.BuildPortFwdPort(80, portFwdPort)
 				baseCoffeeURL := helpers.BuildPortFwdURL("cafe.example.com/coffee", port)
 
 				Eventually(
@@ -207,10 +204,7 @@ var _ = Describe("SessionPersistence Plus", Ordered, Label("functional", "sessio
 		var baseCoffeeURL, baseTeaURL string
 
 		BeforeAll(func() {
-			port := 80
-			if portFwdPort != 0 {
-				port = portFwdPort
-			}
+			port := helpers.BuildPortFwdPort(80, portFwdPort)
 			baseCoffeeURL = helpers.BuildPortFwdURL("cafe.example.com/coffee", port)
 			baseTeaURL = helpers.BuildPortFwdURL("cafe.example.com/tea/location/flavors", port)
 		})

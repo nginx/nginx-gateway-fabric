@@ -118,7 +118,16 @@ func ToSafeFileName(input string) string {
 	return base64.URLEncoding.EncodeToString(hasher.Sum(nil))
 }
 
-// buildPortFwdURL builds a URL for port forwarding based on the given address and port.
+// BuildPortFwdPort uses the specified portFwdPort if that is supplied, else uses the defaultPort provided.
+func BuildPortFwdPort(defaultPort int, portFwdPort int) int {
+	if portFwdPort != 0 {
+		return portFwdPort
+	}
+	return defaultPort
+}
+
+// BuildPortFwdURL builds a URL for port forwarding based on the given address and port.
+// If no scheme is provided in the rawURL parameter (i.e. "cafe.example.com"), http is used.
 func BuildPortFwdURL(rawURL string, port int) string {
 	input := rawURL
 	if !strings.Contains(input, "://") {
@@ -130,6 +139,7 @@ func BuildPortFwdURL(rawURL string, port int) string {
 		return ""
 	}
 
+	// use http if no scheme is defined
 	scheme := parsed.Scheme
 	if scheme == "" {
 		scheme = "http"
