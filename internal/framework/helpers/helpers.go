@@ -136,7 +136,7 @@ func BuildPortFwdURL(rawURL string, port int) string {
 
 	parsed, err := url.Parse(input)
 	if err != nil {
-		return ""
+		panic(fmt.Errorf("failed to parse url %q: %w", rawURL, err))
 	}
 
 	// use http if no scheme is defined

@@ -195,7 +195,7 @@ var _ = Describe("WAFPolicy", Ordered, Label("waf"), func() {
 		It("blocks requests containing attack signatures", func() {
 			port := helpers.BuildPortFwdPort(80, portFwdPort)
 			// </script> is a classic XSS payload that the attack-signatures policy blocks.
-			attackURL := helpers.BuildPortFwdURL("cafe.example.com/coffee?x=%%3C%%2Fscript%%3E", port)
+			attackURL := helpers.BuildPortFwdURL("cafe.example.com/coffee?x=%3C%2Fscript%3E", port)
 
 			Eventually(func() (bool, error) {
 				resp, err := framework.Get(framework.Request{
@@ -487,7 +487,7 @@ var _ = Describe("WAFPolicy", Ordered, Label("waf"), func() {
 			Expect(waitForWAFPolicyAccepted(nsname)).To(Succeed())
 
 			port := helpers.BuildPortFwdPort(80, portFwdPort)
-			attackURL := helpers.BuildPortFwdURL("cafe.example.com/coffee?x=%%3C%%2Fscript%%3E", port)
+			attackURL := helpers.BuildPortFwdURL("cafe.example.com/coffee?x=%3C%2Fscript%3E", port)
 
 			Eventually(func() (bool, error) {
 				resp, err := framework.Get(framework.Request{
@@ -528,7 +528,7 @@ var _ = Describe("WAFPolicy", Ordered, Label("waf"), func() {
 
 			// Confirm WAF is still enforcing with the stale bundle — XSS should still be blocked.
 			port := helpers.BuildPortFwdPort(80, portFwdPort)
-			attackURL := helpers.BuildPortFwdURL("cafe.example.com/coffee?x=%%3C%%2Fscript%%3E", port)
+			attackURL := helpers.BuildPortFwdURL("cafe.example.com/coffee?x=%3C%2Fscript%3E", port)
 
 			Eventually(func() (bool, error) {
 				resp, err := framework.Get(framework.Request{
@@ -641,7 +641,7 @@ var _ = Describe("WAFPolicy", Ordered, Label("waf"), func() {
 			// Attack blocking is verified with a single request via the shared address/port-forward —
 			// it does not prove each individual replica is enforcing, but confirms WAF is active.
 			port := helpers.BuildPortFwdPort(80, portFwdPort)
-			attackURL := helpers.BuildPortFwdURL("cafe.example.com/coffee?x=%%3C%%2Fscript%%3E", port)
+			attackURL := helpers.BuildPortFwdURL("cafe.example.com/coffee?x=%3C%2Fscript%3E", port)
 
 			for _, podName := range nginxPodNames {
 				conf, err := resourceManager.GetNginxConfig(podName, namespace, nginxCrossplanePath)
@@ -1026,7 +1026,7 @@ func waitForAPBundleState(kind string, nsname types.NamespacedName, wantState st
 func expectXSSBlocked() {
 	port := helpers.BuildPortFwdPort(80, portFwdPort)
 	// </script> is a classic XSS payload that the attack-signatures policy blocks.
-	attackURL := helpers.BuildPortFwdURL("cafe.example.com/coffee?x=%%3C%%2Fscript%%3E", port)
+	attackURL := helpers.BuildPortFwdURL("cafe.example.com/coffee?x=%3C%2Fscript%3E", port)
 
 	Eventually(func() (bool, error) {
 		resp, err := framework.Get(framework.Request{

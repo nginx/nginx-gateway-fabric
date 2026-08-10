@@ -261,8 +261,8 @@ func TestBuildPortFwdURL(t *testing.T) {
 		},
 		{
 			name:        "Test preserve query",
-			url:         "cafe.example.com/coffee?x=%%3C%%2Fscript%%3E",
-			expectedURL: "http://cafe.example.com:80/coffee?x=%%3C%%2Fscript%%3E",
+			url:         "cafe.example.com/coffee?x=%3C%2Fscript%3E",
+			expectedURL: "http://cafe.example.com:80/coffee?x=%3C%2Fscript%3E",
 			port:        80,
 		},
 		{
@@ -273,8 +273,8 @@ func TestBuildPortFwdURL(t *testing.T) {
 		},
 		{
 			name:        "Test preserve query and fragment",
-			url:         "cafe.example.com/coffee?x=%%3C%%2Fscript%%3E#menu",
-			expectedURL: "http://cafe.example.com/coffee?x=%%3C%%2Fscript%%3E#menu",
+			url:         "cafe.example.com/coffee?x=%3C%2Fscript%3E#menu",
+			expectedURL: "http://cafe.example.com/coffee?x=%3C%2Fscript%3E#menu",
 			port:        0,
 		},
 		{
