@@ -1670,7 +1670,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 						func() error {
 							return framework.ExpectRequestToSucceed(
 								timeoutConfig.RequestTimeout,
-								helpers.BuildPortFwdURL("cafe.examples.com/jwt-authz-any", port),
+								helpers.BuildPortFwdURL("cafe.example.com/jwt-authz-any", port),
 								address,
 								"URI: /jwt-authz-any",
 								framework.WithRequestHeaders(map[string]string{
