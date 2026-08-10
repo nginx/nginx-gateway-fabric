@@ -181,7 +181,7 @@ func TestBuildPortFwdPort(t *testing.T) {
 			expectedPort: 0,
 		},
 		{
-			name:         "Test portFwdPort used when no defaultPort not set",
+			name:         "Test portFwdPort used when defaultPort not set",
 			defaultPort:  0,
 			portFwdPort:  8080,
 			expectedPort: 8080,
