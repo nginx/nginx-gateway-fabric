@@ -78,9 +78,12 @@ var _ = Describe("ClientSettingsPolicy", Ordered, Label("functional", "cspolicy"
 		BeforeAll(func() {
 			Expect(resourceManager.ApplyFromFiles(policies, namespace)).To(Succeed())
 
-			port := framework.GetPort(80, portFwdPort)
+			port := 80
+			if portFwdPort != 0 {
+				port = portFwdPort
+			}
 
-			baseURL = framework.GetURL("http://cafe.example.com", port)
+			baseURL = fmt.Sprintf("http://cafe.example.com:%d", port)
 		})
 
 		AfterAll(func() {

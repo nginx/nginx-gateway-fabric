@@ -81,7 +81,10 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 		nginxPodName = nginxPodNames[0]
 
 		setUpPortForward(nginxPodName, namespace)
-		port = framework.GetPort(80, portFwdPort)
+		port = 80
+		if portFwdPort != 0 {
+			port = portFwdPort
+		}
 	})
 
 	AfterAll(func() {
@@ -1160,7 +1163,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 						func() error {
 							return framework.ExpectRequestToSucceed(
 								timeoutConfig.RequestTimeout,
-								framework.GetURL("http://cafe.example.com/jwt-coffee", port),
+								fmt.Sprintf("http://cafe.example.com:%d/jwt-coffee", port),
 								address,
 								"URI: /jwt-coffee",
 								framework.WithRequestHeaders(map[string]string{
@@ -1177,7 +1180,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 						func() error {
 							return framework.Expect401Response(
 								timeoutConfig.RequestTimeout,
-								framework.GetURL("http://cafe.example.com/jwt-coffee", port),
+								fmt.Sprintf("http://cafe.example.com:%d/jwt-coffee", port),
 								address,
 								framework.WithRequestHeaders(map[string]string{
 									"Authorization": "Bearer invalid.jwt.token",
@@ -1255,7 +1258,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 						func() error {
 							return framework.Expect500Response(
 								timeoutConfig.RequestTimeout,
-								framework.GetURL("http://cafe.example.com/jwt-invalid-secret", port),
+								fmt.Sprintf("http://cafe.example.com:%d/jwt-invalid-secret", port),
 								address,
 								framework.WithRequestHeaders(map[string]string{
 									"Authorization": "Bearer some.jwt.token",
@@ -1290,7 +1293,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 						func() error {
 							return framework.Expect401Response(
 								timeoutConfig.RequestTimeout,
-								framework.GetURL("http://cafe.example.com/jwt-invalid-jwks", port),
+								fmt.Sprintf("http://cafe.example.com:%d/jwt-invalid-jwks", port),
 								address,
 								framework.WithRequestHeaders(map[string]string{
 									"Authorization": "Bearer some.jwt.token",
@@ -1397,7 +1400,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 						func() error {
 							return framework.ExpectRequestToSucceed(
 								timeoutConfig.RequestTimeout,
-								framework.GetURL("http://cafe.example.com/jwt-remote-coffee", port),
+								fmt.Sprintf("http://cafe.example.com:%d/jwt-remote-coffee", port),
 								address,
 								"URI: /jwt-remote-coffee",
 								framework.WithRequestHeaders(map[string]string{
@@ -1414,7 +1417,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 						func() error {
 							return framework.Expect401Response(
 								timeoutConfig.RequestTimeout,
-								framework.GetURL("http://cafe.example.com/jwt-remote-coffee", port),
+								fmt.Sprintf("http://cafe.example.com:%d/jwt-remote-coffee", port),
 								address,
 								framework.WithRequestHeaders(map[string]string{
 									"Authorization": "Bearer invalid.jwt.token",
@@ -1430,7 +1433,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 						func() error {
 							return framework.Expect401Response(
 								timeoutConfig.RequestTimeout,
-								framework.GetURL("http://cafe.example.com/jwt-remote-coffee", port),
+								fmt.Sprintf("http://cafe.example.com:%d/jwt-remote-coffee", port),
 								address,
 							)
 						}).
@@ -1444,7 +1447,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 						func() error {
 							return framework.ExpectRequestToSucceed(
 								timeoutConfig.RequestTimeout,
-								framework.GetURL("http://cafe.example.com/jwt-remote-tea", port),
+								fmt.Sprintf("http://cafe.example.com:%d/jwt-remote-tea", port),
 								address,
 								"URI: /jwt-remote-tea",
 							)
@@ -1463,7 +1466,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 						func() error {
 							return framework.ExpectRequestToSucceed(
 								timeoutConfig.RequestTimeout,
-								framework.GetURL("http://cafe.example.com/jwt-remote-authz", port),
+								fmt.Sprintf("http://cafe.example.com:%d/jwt-remote-authz", port),
 								address,
 								"URI: /jwt-remote-authz",
 								framework.WithRequestHeaders(map[string]string{
@@ -1480,7 +1483,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 						func() error {
 							return framework.Expect401Response(
 								timeoutConfig.RequestTimeout,
-								framework.GetURL("http://cafe.example.com/jwt-remote-authz", port),
+								fmt.Sprintf("http://cafe.example.com:%d/jwt-remote-authz", port),
 								address,
 								framework.WithRequestHeaders(map[string]string{
 									"Authorization": "Bearer invalid.jwt.token",
@@ -1496,7 +1499,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 						func() error {
 							return framework.Expect401Response(
 								timeoutConfig.RequestTimeout,
-								framework.GetURL("http://cafe.example.com/jwt-remote-authz", port),
+								fmt.Sprintf("http://cafe.example.com:%d/jwt-remote-authz", port),
 								address,
 							)
 						}).
@@ -1666,7 +1669,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 						func() error {
 							return framework.ExpectRequestToSucceed(
 								timeoutConfig.RequestTimeout,
-								framework.GetURL("http://cafe.example.com/jwt-authz-any", port),
+								fmt.Sprintf("http://cafe.example.com:%d/jwt-authz-any", port),
 								address,
 								"URI: /jwt-authz-any",
 								framework.WithRequestHeaders(map[string]string{
@@ -1691,7 +1694,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 						func() error {
 							return framework.ExpectRequestToSucceed(
 								timeoutConfig.RequestTimeout,
-								framework.GetURL("http://cafe.example.com/jwt-authz-any", port),
+								fmt.Sprintf("http://cafe.example.com:%d/jwt-authz-any", port),
 								address,
 								"URI: /jwt-authz-any",
 								framework.WithRequestHeaders(map[string]string{
@@ -1716,7 +1719,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 						func() error {
 							return framework.Expect401Response(
 								timeoutConfig.RequestTimeout,
-								framework.GetURL("http://cafe.example.com/jwt-authz-any", port),
+								fmt.Sprintf("http://cafe.example.com:%d/jwt-authz-any", port),
 								address,
 								framework.WithRequestHeaders(map[string]string{
 									"Authorization": fmt.Sprintf("Bearer %s", token),
@@ -1739,7 +1742,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 						func() error {
 							return framework.Expect401Response(
 								timeoutConfig.RequestTimeout,
-								framework.GetURL("http://cafe.example.com/jwt-authz-any", port),
+								fmt.Sprintf("http://cafe.example.com:%d/jwt-authz-any", port),
 								address,
 								framework.WithRequestHeaders(map[string]string{
 									"Authorization": fmt.Sprintf("Bearer %s", token),
@@ -1766,7 +1769,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 						func() error {
 							return framework.ExpectRequestToSucceed(
 								timeoutConfig.RequestTimeout,
-								framework.GetURL("http://cafe.example.com/jwt-authz-all", port),
+								fmt.Sprintf("http://cafe.example.com:%d/jwt-authz-all", port),
 								address,
 								"URI: /jwt-authz-all",
 								framework.WithRequestHeaders(map[string]string{
@@ -1791,7 +1794,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 						func() error {
 							return framework.Expect401Response(
 								timeoutConfig.RequestTimeout,
-								framework.GetURL("http://cafe.example.com/jwt-authz-all", port),
+								fmt.Sprintf("http://cafe.example.com:%d/jwt-authz-all", port),
 								address,
 								framework.WithRequestHeaders(map[string]string{
 									"Authorization": fmt.Sprintf("Bearer %s", token),
@@ -1816,7 +1819,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 						func() error {
 							return framework.Expect401Response(
 								timeoutConfig.RequestTimeout,
-								framework.GetURL("http://cafe.example.com/jwt-authz-all", port),
+								fmt.Sprintf("http://cafe.example.com:%d/jwt-authz-all", port),
 								address,
 								framework.WithRequestHeaders(map[string]string{
 									"Authorization": fmt.Sprintf("Bearer %s", token),
@@ -1842,7 +1845,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 						func() error {
 							return framework.ExpectRequestToSucceed(
 								timeoutConfig.RequestTimeout,
-								framework.GetURL("http://cafe.example.com/jwt-authz-regex", port),
+								fmt.Sprintf("http://cafe.example.com:%d/jwt-authz-regex", port),
 								address,
 								"URI: /jwt-authz-regex",
 								framework.WithRequestHeaders(map[string]string{
@@ -1867,7 +1870,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 						func() error {
 							return framework.Expect401Response(
 								timeoutConfig.RequestTimeout,
-								framework.GetURL("http://cafe.example.com/jwt-authz-regex", port),
+								fmt.Sprintf("http://cafe.example.com:%d/jwt-authz-regex", port),
 								address,
 								framework.WithRequestHeaders(map[string]string{
 									"Authorization": fmt.Sprintf("Bearer %s", token),
@@ -1893,7 +1896,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 						func() error {
 							return framework.ExpectRequestToSucceed(
 								timeoutConfig.RequestTimeout,
-								framework.GetURL("http://cafe.example.com/jwt-authz-multi", port),
+								fmt.Sprintf("http://cafe.example.com:%d/jwt-authz-multi", port),
 								address,
 								"URI: /jwt-authz-multi",
 								framework.WithRequestHeaders(map[string]string{
@@ -1918,7 +1921,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 						func() error {
 							return framework.ExpectRequestToSucceed(
 								timeoutConfig.RequestTimeout,
-								framework.GetURL("http://cafe.example.com/jwt-authz-multi", port),
+								fmt.Sprintf("http://cafe.example.com:%d/jwt-authz-multi", port),
 								address,
 								"URI: /jwt-authz-multi",
 								framework.WithRequestHeaders(map[string]string{
@@ -1944,7 +1947,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 						func() error {
 							return framework.Expect401Response(
 								timeoutConfig.RequestTimeout,
-								framework.GetURL("http://cafe.example.com/jwt-authz-multi", port),
+								fmt.Sprintf("http://cafe.example.com:%d/jwt-authz-multi", port),
 								address,
 								framework.WithRequestHeaders(map[string]string{
 									"Authorization": fmt.Sprintf("Bearer %s", token),
@@ -1971,7 +1974,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 						func() error {
 							return framework.ExpectRequestToSucceed(
 								timeoutConfig.RequestTimeout,
-								framework.GetURL("http://cafe.example.com/jwt-authz-multi-all", port),
+								fmt.Sprintf("http://cafe.example.com:%d/jwt-authz-multi-all", port),
 								address,
 								"URI: /jwt-authz-multi-all",
 								framework.WithRequestHeaders(map[string]string{
@@ -1996,7 +1999,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 						func() error {
 							return framework.Expect401Response(
 								timeoutConfig.RequestTimeout,
-								framework.GetURL("http://cafe.example.com/jwt-authz-multi-all", port),
+								fmt.Sprintf("http://cafe.example.com:%d/jwt-authz-multi-all", port),
 								address,
 								framework.WithRequestHeaders(map[string]string{
 									"Authorization": fmt.Sprintf("Bearer %s", token),
@@ -2020,7 +2023,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 						func() error {
 							return framework.Expect401Response(
 								timeoutConfig.RequestTimeout,
-								framework.GetURL("http://cafe.example.com/jwt-authz-multi-all", port),
+								fmt.Sprintf("http://cafe.example.com:%d/jwt-authz-multi-all", port),
 								address,
 								framework.WithRequestHeaders(map[string]string{
 									"Authorization": fmt.Sprintf("Bearer %s", token),
@@ -2045,7 +2048,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 						func() error {
 							return framework.Expect401Response(
 								timeoutConfig.RequestTimeout,
-								framework.GetURL("http://cafe.example.com/jwt-authz-multi-all", port),
+								fmt.Sprintf("http://cafe.example.com:%d/jwt-authz-multi-all", port),
 								address,
 								framework.WithRequestHeaders(map[string]string{
 									"Authorization": fmt.Sprintf("Bearer %s", token),
@@ -2071,7 +2074,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 						func() error {
 							return framework.ExpectRequestToSucceed(
 								timeoutConfig.RequestTimeout,
-								framework.GetURL("http://cafe.example.com/jwt-authz-header", port),
+								fmt.Sprintf("http://cafe.example.com:%d/jwt-authz-header", port),
 								address,
 								"URI: /jwt-authz-header",
 								framework.WithRequestHeaders(map[string]string{

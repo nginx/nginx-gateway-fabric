@@ -97,8 +97,11 @@ var _ = Describe("SnippetsFilter", Ordered, Label("functional", "snippets-filter
 
 		Context("verify working traffic", func() {
 			It("should return a 200 response for HTTPRoute", func() {
-				port := framework.GetPort(80, portFwdPort)
-				baseURL := framework.GetURL("http://cafe.example.com/coffee", port)
+				port := 80
+				if portFwdPort != 0 {
+					port = portFwdPort
+				}
+				baseURL := fmt.Sprintf("http://cafe.example.com:%d%s", port, "/coffee")
 
 				Eventually(
 					func() error {
