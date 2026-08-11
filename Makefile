@@ -1,3 +1,4 @@
+# test
 # variables that should not be overridden by the user
 VERSION = edge
 SELF_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
