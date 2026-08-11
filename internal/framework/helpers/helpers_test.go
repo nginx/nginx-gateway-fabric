@@ -152,3 +152,144 @@ func TestCapitalizeString(t *testing.T) {
 		})
 	}
 }
+
+func TestBuildPortFwdPort(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		defaultPort  int
+		portFwdPort  int
+		expectedPort int
+	}{
+		{
+			name:         "Test defaultPort used",
+			defaultPort:  80,
+			portFwdPort:  0,
+			expectedPort: 80,
+		},
+		{
+			name:         "Test defaultPort overwritten",
+			defaultPort:  80,
+			portFwdPort:  8080,
+			expectedPort: 8080,
+		},
+		{
+			name:         "Test no port set",
+			defaultPort:  0,
+			portFwdPort:  0,
+			expectedPort: 0,
+		},
+		{
+			name:         "Test portFwdPort used when defaultPort not set",
+			defaultPort:  0,
+			portFwdPort:  8080,
+			expectedPort: 8080,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewGomegaWithT(t)
+			g.Expect(helpers.BuildPortFwdPort(tt.defaultPort, tt.portFwdPort)).To(Equal(tt.expectedPort))
+		})
+	}
+}
+
+func TestBuildPortFwdURL(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		url         string
+		expectedURL string
+		port        int
+	}{
+		{
+			name:        "Test port without a path",
+			url:         "http://cafe.example.com",
+			expectedURL: "http://cafe.example.com:80",
+			port:        80,
+		},
+		{
+			name:        "Test coffee path",
+			url:         "http://cafe.example.com/coffee",
+			expectedURL: "http://cafe.example.com:80/coffee",
+			port:        80,
+		},
+		{
+			name:        "Test tea path",
+			url:         "http://cafe.example.com/tea",
+			expectedURL: "http://cafe.example.com:80/tea",
+			port:        80,
+		},
+		{
+			name:        "Test non-privileged port, without path",
+			url:         "http://cafe.example.com",
+			expectedURL: "http://cafe.example.com:8080",
+			port:        8080,
+		},
+		{
+			name:        "Test non-privileged port, with path",
+			url:         "http://cafe.example.com/coffee",
+			expectedURL: "http://cafe.example.com:8080/coffee",
+			port:        8080,
+		},
+		{
+			name:        "Test omit port",
+			url:         "http://cafe.example.com/tea",
+			expectedURL: "http://cafe.example.com/tea",
+			port:        0,
+		},
+		{
+			name:        "Test https scheme",
+			url:         "https://cafe.example.com",
+			expectedURL: "https://cafe.example.com",
+			port:        0,
+		},
+		{
+			name:        "Test https scheme on port 443",
+			url:         "https://cafe.example.com",
+			expectedURL: "https://cafe.example.com:443",
+			port:        443,
+		},
+		{
+			name:        "Test omit scheme",
+			url:         "cafe.example.com",
+			expectedURL: "http://cafe.example.com",
+			port:        0,
+		},
+		{
+			name:        "Test preserve query",
+			url:         "cafe.example.com/coffee?x=%3C%2Fscript%3E",
+			expectedURL: "http://cafe.example.com:80/coffee?x=%3C%2Fscript%3E",
+			port:        80,
+		},
+		{
+			name:        "Test preserve fragment",
+			url:         "cafe.example.com#menu",
+			expectedURL: "http://cafe.example.com#menu",
+			port:        0,
+		},
+		{
+			name:        "Test preserve query and fragment",
+			url:         "cafe.example.com/coffee?x=%3C%2Fscript%3E#menu",
+			expectedURL: "http://cafe.example.com/coffee?x=%3C%2Fscript%3E#menu",
+			port:        0,
+		},
+		{
+			name:        "Test bracketed IPv6",
+			url:         "[::1]/hello",
+			expectedURL: "http://[::1]:443/hello",
+			port:        443,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+			g.Expect(helpers.BuildPortFwdURL(tt.url, tt.port)).To(Equal(tt.expectedURL))
+		})
+	}
+}
