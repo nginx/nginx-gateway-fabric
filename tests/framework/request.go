@@ -261,3 +261,69 @@ func Expect500Response(timeout time.Duration, appURL, address string, opts ...Op
 
 	return nil
 }
+
+// ExpectPostToSucceed sends a POST request with the given JSON payload and expects a 200 response
+// whose body contains the expected substring. Used for the guardrails "allowed" path where the
+// prompt passes both request and response scans and the LLM's completion is returned to the client.
+func ExpectPostToSucceed(
+	timeout time.Duration,
+	appURL,
+	address,
+	payload,
+	responseBodyMessage string,
+) error {
+	return expectPostResponse(timeout, appURL, address, payload, http.StatusOK, responseBodyMessage)
+}
+
+// Expect403Response sends a POST request with the given JSON payload and expects the guardrails
+// module to block it with a 403 response whose body contains the expected error substring
+// (e.g. "invalid_request_error" for a flagged request, "api_error" for a flagged response).
+func Expect403Response(
+	timeout time.Duration,
+	appURL,
+	address,
+	payload,
+	responseBodyMessage string,
+) error {
+	return expectPostResponse(timeout, appURL, address, payload, http.StatusForbidden, responseBodyMessage)
+}
+
+// expectPostResponse sends a JSON POST request and asserts the response status code equals
+// wantStatus and, when responseBodyMessage is non-empty, that the body contains it.
+func expectPostResponse(
+	timeout time.Duration,
+	appURL,
+	address,
+	payload string,
+	wantStatus int,
+	responseBodyMessage string,
+) error {
+	request := Request{
+		Headers: map[string]string{"Content-Type": "application/json"},
+		Body:    strings.NewReader(payload),
+		URL:     appURL,
+		Address: address,
+		Timeout: timeout,
+	}
+
+	resp, err := Post(request)
+	if err != nil {
+		return fmt.Errorf("error sending POST request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body := new(bytes.Buffer)
+	if _, err := body.ReadFrom(resp.Body); err != nil {
+		return fmt.Errorf("error reading response body: %w", err)
+	}
+
+	if resp.StatusCode != wantStatus {
+		return fmt.Errorf("http status was not %d, got %d, body: %s", wantStatus, resp.StatusCode, body.String())
+	}
+
+	if responseBodyMessage != "" && !strings.Contains(body.String(), responseBodyMessage) {
+		return fmt.Errorf("expected response body to contain %q, got: %s", responseBodyMessage, body.String())
+	}
+
+	return nil
+}

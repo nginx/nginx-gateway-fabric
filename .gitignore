@@ -8,6 +8,9 @@
 # Test binary, built with `go test -c`
 *.test
 
+# Guardrails mock test binary (compiled artifact, built by Dockerfile from source)
+tests/guardrails-mock/guardrails-mock
+
 # Output of the go coverage tool, specifically when used with LiteIDE
 *.out
 cover.html
