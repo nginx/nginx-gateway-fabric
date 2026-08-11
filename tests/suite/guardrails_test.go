@@ -15,6 +15,7 @@ import (
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/v2/tests/framework"
 )
 
@@ -61,11 +62,8 @@ var _ = Describe("Guardrails (PayloadProcessor)", Ordered, Label("functional", "
 		nginxPodName = nginxPodNames[0]
 		setUpPortForward(nginxPodName, namespace)
 
-		port := 80
-		if portFwdPort != 0 {
-			port = portFwdPort
-		}
-		completionURL = fmt.Sprintf("http://llm.example.com:%d/v1/completions", port)
+		port := helpers.BuildPortFwdPort(80, portFwdPort)
+		completionURL = helpers.BuildPortFwdURL("http://llm.example.com:%d/v1/completions", port)
 	})
 
 	AfterAll(func() {
