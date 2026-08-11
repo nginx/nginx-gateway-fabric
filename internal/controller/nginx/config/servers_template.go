@@ -191,6 +191,16 @@ server {
         auth_basic_user_file {{ $l.AuthBasic.File }};
         {{- end }}
 
+        {{- if $l.Guardrails }}
+        guardrails_filter {{ if $l.Guardrails.Enabled }}on{{ else }}off{{ end }};
+        {{- if $l.Guardrails.APITokenFile }}
+        guardrails_api_token_file {{ $l.Guardrails.APITokenFile }};
+        {{- end }}
+        {{- if $l.Guardrails.InternalPath }}
+        guardrails_internal_uri {{ $l.Guardrails.InternalPath }};
+        {{- end }}
+        {{- end }}
+
         {{- if $l.AuthOIDC }}
         {{- if $l.AuthOIDC.ProviderName }}
         auth_oidc {{ $l.AuthOIDC.ProviderName }};
@@ -302,6 +312,9 @@ server {
         proxy_http_version {{ $l.ProxyHTTPVersion }};
         {{- end }}
         {{- if $l.ProxyPass -}}
+            {{- if $l.GuardrailsProxyPassVar }}
+        set $guardrails_backend {{ $l.GuardrailsProxyPassVar }};
+            {{- end }}
             {{ range $h := $l.ProxySetHeaders }}
         {{ $proxyOrGRPC }}_set_header {{ $h.Name }} "{{ $h.Value }}";
             {{- end }}
@@ -335,6 +348,9 @@ server {
                 {{- if $l.ProxySSLVerify.TrustedCertificate }}
         {{ $proxyOrGRPC }}_ssl_trusted_certificate {{ $l.ProxySSLVerify.TrustedCertificate }};
                 {{- end }}
+            {{- else if $l.ProxySSLServerName }}
+        proxy_ssl_server_name on;
+        proxy_ssl_name {{ $l.ProxySSLServerName }};
             {{- end }}
         {{- end }}
     }

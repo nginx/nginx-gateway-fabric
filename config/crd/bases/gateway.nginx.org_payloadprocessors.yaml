@@ -156,11 +156,6 @@ spec:
                       required:
                       - backendRef
                       type: object
-                    timeout:
-                      description: Timeout is the maximum time to wait for the processor
-                        to complete processing a request or response.
-                      pattern: ^[0-9]{1,4}(ms|s|m|h)?$
-                      type: string
                     type:
                       description: |-
                         Type specifies how the processor executes.

@@ -23,13 +23,14 @@ const (
 
 // Validator validates a PayloadProcessor policy.
 // Implements policies.Validator interface.
-type Validator struct {
-	genericValidator validation.GenericValidator
-}
+type Validator struct{}
 
 // NewValidator returns a new Validator.
-func NewValidator(genericValidator validation.GenericValidator) *Validator {
-	return &Validator{genericValidator: genericValidator}
+// The genericValidator parameter is accepted for signature parity with the other policy
+// validators (see the policy-manager registration in manager.go); PayloadProcessor validation
+// does not currently need it.
+func NewValidator(_ validation.GenericValidator) *Validator {
+	return &Validator{}
 }
 
 // Validate validates the spec of a PayloadProcessor.
@@ -72,16 +73,6 @@ func (v *Validator) validateProcessor(
 ) field.ErrorList {
 	var allErrs field.ErrorList
 
-	if processor.Timeout != nil {
-		if err := v.genericValidator.ValidateNginxDuration(string(*processor.Timeout)); err != nil {
-			allErrs = append(allErrs, field.Invalid(
-				processorPath.Child("timeout"),
-				*processor.Timeout,
-				err.Error(),
-			))
-		}
-	}
-
 	typePath := processorPath.Child("type")
 	if processor.Type != ngfAPI.ProcessorTypeExtProcess {
 		allErrs = append(allErrs, field.NotSupported(
@@ -93,6 +84,17 @@ func (v *Validator) validateProcessor(
 	}
 
 	extProcessPath := processorPath.Child("extProcess")
+
+	// An ExtProcess processor must carry its config. The CRD CEL rule enforces this at the API
+	// server, but guard here too so this defense-in-depth validator never nil-derefs on an
+	// invalid object.
+	if processor.ExtProcess == nil {
+		allErrs = append(allErrs, field.Required(
+			extProcessPath,
+			"extProcess is required when type is ExtProcess",
+		))
+		return allErrs
+	}
 
 	allErrs = append(allErrs, validateExtProcessBackendRef(
 		processor.ExtProcess.BackendRef,

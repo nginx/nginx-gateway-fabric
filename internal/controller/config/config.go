@@ -27,6 +27,8 @@ type Config struct {
 	AgentTLSSecretName string
 	// ServerTLSDomain is the domain suffix used in the server TLS cert SAN and agent config host. Defaults to "svc".
 	ServerTLSDomain string
+	// ClusterDomain is the Kubernetes cluster DNS domain used for in-cluster Service URLs. Defaults to "cluster.local".
+	ClusterDomain string
 	// ImageSource is the source of the NGINX Gateway image.
 	ImageSource string
 	// GatewayCtlrName is the name of this controller.

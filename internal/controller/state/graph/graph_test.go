@@ -2519,6 +2519,7 @@ func TestBuildGraph(t *testing.T) {
 				test.store,
 				controllerName,
 				gcName,
+				"cluster.local",
 				map[types.NamespacedName][]PlusSecretFile{
 					client.ObjectKeyFromObject(plusSecret): {
 						{
@@ -2809,6 +2810,26 @@ func TestIsReferenced(t *testing.T) {
 					client.ObjectKeyFromObject(plusSecret): {
 						{Type: PlusReportJWTToken},
 					},
+				},
+			},
+			expected: true,
+		},
+		{
+			name:     "Secret in graph's ReferencedPayloadProcessorSecrets is referenced",
+			resource: sameNamespaceDifferentNameSecret,
+			graph: &Graph{
+				ReferencedPayloadProcessorSecrets: map[types.NamespacedName]*v1.Secret{
+					client.ObjectKeyFromObject(sameNamespaceDifferentNameSecret): sameNamespaceDifferentNameSecret,
+				},
+			},
+			expected: true,
+		},
+		{
+			name:     "Secret tracked with nil value in ReferencedPayloadProcessorSecrets is referenced",
+			resource: sameNamespaceDifferentNameSecret,
+			graph: &Graph{
+				ReferencedPayloadProcessorSecrets: map[types.NamespacedName]*v1.Secret{
+					client.ObjectKeyFromObject(sameNamespaceDifferentNameSecret): nil,
 				},
 			},
 			expected: true,

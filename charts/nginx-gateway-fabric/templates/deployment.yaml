@@ -47,6 +47,7 @@ spec:
         - --service={{ include "nginx-gateway.fullname" . }}
         - --agent-tls-secret={{ .Values.certGenerator.agentTLSSecretName }}
         - --server-tls-domain={{ .Values.serverTLSDomain }}
+        - --cluster-domain={{ .Values.clusterDomain }}
         {{- if .Values.nginxGateway.watchNamespaces }}
         - --watch-namespaces={{ join "," .Values.nginxGateway.watchNamespaces }}
         {{- end }}

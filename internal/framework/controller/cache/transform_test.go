@@ -81,6 +81,7 @@ func TestTransformSecret(t *testing.T) {
 			corev1.DockerConfigKey:     []byte("docker2"),
 			secrets.ClientSecretKey:    []byte("client-secret"),
 			secrets.CRLKey:             []byte("crl"),
+			secrets.GuardrailsTokenKey: []byte("guardrails-token"),
 			"irrelevant":               []byte("nope"),
 		},
 		ObjectMeta: metav1.ObjectMeta{
@@ -103,6 +104,7 @@ func TestTransformSecret(t *testing.T) {
 	g.Expect(resSecret.Data).To(HaveKey(corev1.DockerConfigKey))
 	g.Expect(resSecret.Data).To(HaveKey(secrets.ClientSecretKey))
 	g.Expect(resSecret.Data).To(HaveKey(secrets.CRLKey))
+	g.Expect(resSecret.Data).To(HaveKey(secrets.GuardrailsTokenKey))
 	g.Expect(resSecret.Data).ToNot(HaveKey("irrelevant"))
 	g.Expect(resSecret.ManagedFields).To(BeNil())
 

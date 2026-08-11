@@ -2116,3 +2116,106 @@ func TestConvertWAFBundles(t *testing.T) {
 		})
 	}
 }
+
+func TestConvertGraphGuardrails(t *testing.T) {
+	t.Parallel()
+
+	secretNsName := types.NamespacedName{Namespace: "ns1", Name: "token-secret"}
+
+	validState := func() *graph.PolicyPayloadProcessorState {
+		return &graph.PolicyPayloadProcessorState{
+			APIURL:            "http://ext-svc.ns1.svc.cluster.local:9000",
+			AuthTokenSecret:   &secretNsName,
+			ResolvedAuthToken: []byte("tok"),
+		}
+	}
+
+	tests := []struct {
+		route      *graph.L7Route
+		name       string
+		expURL     string
+		expNil     bool
+		expFileSet bool
+	}{
+		{
+			name:   "nil route",
+			route:  nil,
+			expNil: true,
+		},
+		{
+			name:   "no effective processor",
+			route:  &graph.L7Route{},
+			expNil: true,
+		},
+		{
+			name: "nil processor state",
+			route: &graph.L7Route{
+				EffectivePayloadProcessor: &graph.Policy{Valid: true, PayloadProcessorState: nil},
+			},
+			expNil: true,
+		},
+		{
+			name: "invalid policy",
+			route: &graph.L7Route{
+				EffectivePayloadProcessor: &graph.Policy{Valid: false, PayloadProcessorState: validState()},
+			},
+			expNil: true,
+		},
+		{
+			name: "valid policy with token",
+			route: &graph.L7Route{
+				EffectivePayloadProcessor: &graph.Policy{Valid: true, PayloadProcessorState: validState()},
+			},
+			expURL:     "http://ext-svc.ns1.svc.cluster.local:9000",
+			expFileSet: true,
+		},
+		{
+			name: "valid policy without token",
+			route: &graph.L7Route{
+				EffectivePayloadProcessor: &graph.Policy{
+					Valid: true,
+					PayloadProcessorState: &graph.PolicyPayloadProcessorState{
+						APIURL: "http://ext-svc.ns1.svc.cluster.local:9000",
+					},
+				},
+			},
+			expURL:     "http://ext-svc.ns1.svc.cluster.local:9000",
+			expFileSet: false,
+		},
+		{
+			name: "valid policy with empty APIURL",
+			route: &graph.L7Route{
+				EffectivePayloadProcessor: &graph.Policy{
+					Valid:                 true,
+					PayloadProcessorState: &graph.PolicyPayloadProcessorState{APIURL: ""},
+				},
+			},
+			expNil: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			routeNsName := types.NamespacedName{Namespace: "ns1", Name: "route1"}
+			got := convertGraphGuardrails(test.route, routeNsName, 0)
+			if test.expNil {
+				g.Expect(got).To(BeNil())
+				return
+			}
+
+			g.Expect(got).ToNot(BeNil())
+			g.Expect(got.Enabled).To(BeTrue())
+			g.Expect(got.APIURL).To(Equal(test.expURL))
+			g.Expect(got.InternalPath).To(Equal("/_ngf-internal-guardrails-ns1_route1_rule0"))
+
+			if test.expFileSet {
+				g.Expect(got.APITokenAuthFileID).To(Equal(GenerateGuardrailsTokenFileID("ns1", "token-secret")))
+			} else {
+				g.Expect(got.APITokenAuthFileID).To(BeEmpty())
+			}
+		})
+	}
+}

@@ -178,14 +178,6 @@ func TestPayloadProcessorProcessorExtProcess(t *testing.T) {
 			processor:  ngfAPIv1alpha1.PayloadProcessorEntry{Type: ngfAPIv1alpha1.ProcessorTypeExtProcess},
 			wantErrors: []string{expectedProcessorExtProcessRequiredError},
 		},
-		{
-			name: "Validate processor with only timeout set is not allowed",
-			processor: ngfAPIv1alpha1.PayloadProcessorEntry{
-				Type:    ngfAPIv1alpha1.ProcessorTypeExtProcess,
-				Timeout: helpers.GetPointer[ngfAPIv1alpha1.Duration]("5s"),
-			},
-			wantErrors: []string{expectedProcessorExtProcessRequiredError},
-		},
 	}
 
 	for _, tt := range tests {
@@ -313,59 +305,6 @@ func TestPayloadProcessorPort(t *testing.T) {
 			t.Parallel()
 			spec := validPayloadProcessorSpec()
 			spec.Processors[0].ExtProcess.BackendRef.Port = tt.port
-			validateCrd(t, tt.wantErrors, createPayloadProcessor(spec), k8sClient)
-		})
-	}
-}
-
-func TestPayloadProcessorTimeout(t *testing.T) {
-	t.Parallel()
-	k8sClient := getKubernetesClient(t)
-
-	const timeoutValidationError = "timeout in body should match"
-
-	tests := []struct {
-		timeout    *ngfAPIv1alpha1.Duration
-		name       string
-		wantErrors []string
-	}{
-		{
-			name:    "Validate unset timeout is allowed",
-			timeout: nil,
-		},
-		{
-			name:    "Validate timeout 5s is allowed",
-			timeout: helpers.GetPointer[ngfAPIv1alpha1.Duration]("5s"),
-		},
-		{
-			name:    "Validate timeout 120s is allowed",
-			timeout: helpers.GetPointer[ngfAPIv1alpha1.Duration]("120s"),
-		},
-		{
-			name:    "Validate timeout 50ms is allowed",
-			timeout: helpers.GetPointer[ngfAPIv1alpha1.Duration]("50ms"),
-		},
-		{
-			name:    "Validate timeout 1h is allowed",
-			timeout: helpers.GetPointer[ngfAPIv1alpha1.Duration]("1h"),
-		},
-		{
-			name:       "Validate malformed timeout is not allowed",
-			timeout:    helpers.GetPointer[ngfAPIv1alpha1.Duration]("abc"),
-			wantErrors: []string{timeoutValidationError},
-		},
-		{
-			name:       "Validate timeout with invalid suffix is not allowed",
-			timeout:    helpers.GetPointer[ngfAPIv1alpha1.Duration]("5x"),
-			wantErrors: []string{timeoutValidationError},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			spec := validPayloadProcessorSpec()
-			spec.Processors[0].Timeout = tt.timeout
 			validateCrd(t, tt.wantErrors, createPayloadProcessor(spec), k8sClient)
 		})
 	}

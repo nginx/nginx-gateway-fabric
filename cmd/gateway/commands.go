@@ -41,6 +41,7 @@ const (
 	nginxOneTelemetryEndpointHost   = "agent.connect.nginx.com"
 	endpointPickerDisableTLSFlag    = "endpoint-picker-disable-tls"
 	endpointPickerTLSSkipVerifyFlag = "endpoint-picker-tls-skip-verify"
+	clusterDomainFlag               = "cluster-domain"
 
 	plmStorageURLFlag               = "plm-storage-url"
 	plmStorageCredentialsSecretFlag = "plm-storage-credentials-secret" //nolint:gosec // not credentials
@@ -199,6 +200,11 @@ func createControllerCommand() *cobra.Command {
 			validator: validateResourceName,
 			value:     "svc",
 		}
+
+		clusterDomain = stringValidatingValue{
+			validator: validateQualifiedName,
+			value:     defaultDomain,
+		}
 	)
 
 	plmParams := plmStorageParams{
@@ -351,6 +357,7 @@ func createControllerCommand() *cobra.Command {
 				EndpointPickerTLSSkipVerify: endpointPickerTLSSkipVerify,
 				WatchNamespaces:             watchNamespaces.values,
 				ServerTLSDomain:             serverTLSDomain.value,
+				ClusterDomain:               clusterDomain.value,
 				PLMStorageConfig:            plmStorageConfig,
 				ExternalLoadBalancer:        externalLoadBalancer,
 			}
@@ -621,6 +628,12 @@ func createControllerCommand() *cobra.Command {
 	)
 
 	cmd.Flags().Var(
+		&clusterDomain,
+		clusterDomainFlag,
+		`The DNS domain of your Kubernetes cluster.`,
+	)
+
+	cmd.Flags().Var(
 		&plmParams.URL,
 		plmStorageURLFlag,
 		"The URL of the PLM S3-compatible storage endpoint. Required when any WAFPolicy uses type: PLM.",
@@ -746,7 +759,6 @@ func createGenerateCertsCommand() *cobra.Command {
 		serverTLSSecretFlag = "server-tls-secret" //nolint:gosec // not credentials
 		agentTLSSecretFlag  = "agent-tls-secret"
 		serviceFlag         = "service"
-		clusterDomainFlag   = "cluster-domain"
 		overwriteFlag       = "overwrite"
 		serverTLSDomainFlag = "server-tls-domain"
 	)
