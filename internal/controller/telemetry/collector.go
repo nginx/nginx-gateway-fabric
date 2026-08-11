@@ -155,6 +155,8 @@ type NGFResourceCounts struct {
 	PLMWAFPolicyCount int64
 	// ListenerSetCount is the number of relevant ListenerSets.
 	ListenerSetCount int64
+	// ExternalLoadBalancerCount is the number of relevant ExternalLoadBalancers.
+	ExternalLoadBalancerCount int64
 }
 
 func (rc *NGFResourceCounts) CountPolicies(g *graph.Graph) {
@@ -377,6 +379,7 @@ func collectGraphResourceCount(
 
 	ngfResourceCounts.GatewayAttachedNpCount = gatewayAttachedNPCount
 	ngfResourceCounts.ListenerSetCount = int64(len(g.ListenerSets))
+	ngfResourceCounts.ExternalLoadBalancerCount = int64(len(g.ExternalLoadBalancers))
 
 	ngfResourceCounts.InferencePoolCount = int64(len(g.ReferencedInferencePools))
 

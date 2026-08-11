@@ -628,6 +628,10 @@ var _ = Describe("Collector", Ordered, func() {
 						{Namespace: "test", Name: "listenerSet-2"}: {},
 						{Namespace: "test", Name: "listenerSet-3"}: {},
 					},
+					ExternalLoadBalancers: map[types.NamespacedName]*graph.ExternalLoadBalancer{
+						{Namespace: "test", Name: "elb-1"}: {},
+						{Namespace: "test", Name: "elb-2"}: {},
+					},
 				}
 
 				configs := []*dataplane.Configuration{
@@ -713,6 +717,7 @@ var _ = Describe("Collector", Ordered, func() {
 					HTTPWAFPolicyCount:                       1,
 					NIMWAFPolicyCount:                        1,
 					ListenerSetCount:                         3,
+					ExternalLoadBalancerCount:                2,
 				}
 				expData.ClusterVersion = "1.29.2"
 				expData.ClusterPlatform = "kind"
@@ -1034,6 +1039,9 @@ var _ = Describe("Collector", Ordered, func() {
 				ListenerSets: map[types.NamespacedName]*graph.ListenerSet{
 					{Namespace: "test", Name: "listenerSet-1"}: {},
 				},
+				ExternalLoadBalancers: map[types.NamespacedName]*graph.ExternalLoadBalancer{
+					{Namespace: "test", Name: "elb-1"}: {},
+				},
 			}
 
 			config1 = []*dataplane.Configuration{
@@ -1133,6 +1141,7 @@ var _ = Describe("Collector", Ordered, func() {
 					N1CWAFPolicyCount:                        1,
 					PLMWAFPolicyCount:                        1,
 					ListenerSetCount:                         1,
+					ExternalLoadBalancerCount:                1,
 				}
 				expData.NginxPodCount = 1
 
