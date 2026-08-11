@@ -581,6 +581,31 @@ func TestControllerCmdFlagValidation(t *testing.T) {
 			wantErr:           true,
 			expectedErrPrefix: `invalid argument "my_domain.com" for "--server-tls-domain" flag: invalid format`,
 		},
+		{
+			name: "cluster-domain accepts a valid DNS domain",
+			args: []string{
+				"--gateway-ctlr-name=gateway.nginx.org/nginx-gateway",
+				"--gatewayclass=nginx",
+				"--cluster-domain=cluster.local",
+			},
+			wantErr: false,
+		},
+		{
+			name: "cluster-domain is set to empty string",
+			args: []string{
+				"--cluster-domain=",
+			},
+			wantErr:           true,
+			expectedErrPrefix: `invalid argument "" for "--cluster-domain" flag: must be set`,
+		},
+		{
+			name: "cluster-domain is invalid",
+			args: []string{
+				"--cluster-domain=!@#$",
+			},
+			wantErr:           true,
+			expectedErrPrefix: `invalid argument "!@#$" for "--cluster-domain" flag: invalid format`,
+		},
 	}
 
 	// common flags validation is tested separately

@@ -74,11 +74,6 @@ const (
 //
 //nolint:lll
 type PayloadProcessorEntry struct {
-	// Timeout is the maximum time to wait for the processor to complete processing a request or response.
-	//
-	// +optional
-	Timeout *Duration `json:"timeout,omitempty"`
-
 	// ExtProcess defines the configuration for an ExtProcess processor that delegates to an external service.
 	//
 	// +optional

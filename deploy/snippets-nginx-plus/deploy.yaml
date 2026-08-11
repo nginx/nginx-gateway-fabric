@@ -344,6 +344,7 @@ spec:
         - --service=nginx-gateway
         - --agent-tls-secret=agent-tls
         - --server-tls-domain=svc
+        - --cluster-domain=cluster.local
         - --nginx-docker-secret=nginx-plus-registry-secret
         - --nginx-plus
         - --usage-report-secret=nplus-license

@@ -340,6 +340,7 @@ spec:
         - --service=nginx-gateway
         - --agent-tls-secret=agent-tls
         - --server-tls-domain=svc
+        - --cluster-domain=cluster.local
         - --metrics-port=9113
         - --health-port=8081
         - --leader-election-lock-name=nginx-gateway-leader-election
