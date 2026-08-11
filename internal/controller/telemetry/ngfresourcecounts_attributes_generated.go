@@ -45,6 +45,7 @@ func (d *NGFResourceCounts) Attributes() []attribute.KeyValue {
 	attrs = append(attrs, attribute.Int64("N1CWAFPolicyCount", d.N1CWAFPolicyCount))
 	attrs = append(attrs, attribute.Int64("PLMWAFPolicyCount", d.PLMWAFPolicyCount))
 	attrs = append(attrs, attribute.Int64("ListenerSetCount", d.ListenerSetCount))
+	attrs = append(attrs, attribute.Int64("ExternalLoadBalancerCount", d.ExternalLoadBalancerCount))
 
 	return attrs
 }

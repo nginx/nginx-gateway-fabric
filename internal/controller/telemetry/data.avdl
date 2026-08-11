@@ -160,6 +160,9 @@ attached at the Route level. */
 		/** ListenerSetCount is the number of relevant ListenerSets. */
 		long? ListenerSetCount = null;
 		
+		/** ExternalLoadBalancerCount is the number of relevant ExternalLoadBalancers. */
+		long? ExternalLoadBalancerCount = null;
+		
 		/** NginxPodCount is the total number of Nginx data plane Pods. */
 		long? NginxPodCount = null;
 		
