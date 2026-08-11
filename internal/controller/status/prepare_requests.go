@@ -900,12 +900,13 @@ func PrepareInferencePoolRequests(
 }
 
 // containsParentReference checks if a ParentReference exists in a slice of ParentReferences
-// by comparing Name, Namespace, and Kind fields.
+// by comparing Name, Namespace, Kind, and Group fields.
 func containsParentReference(parentRefs []inference.ParentReference, target inference.ParentReference) bool {
 	for _, ref := range parentRefs {
 		if ref.Name == target.Name &&
 			ref.Namespace == target.Namespace &&
-			ref.Kind == target.Kind {
+			ref.Kind == target.Kind &&
+			groupsEqual(ref.Group, target.Group) {
 			return true
 		}
 	}

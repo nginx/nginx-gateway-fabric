@@ -17,11 +17,22 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+      id-token: write # for get-from-vault to authenticate with Azure
     steps:
       - name: Checkout Repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+
+      - name: Get secrets from common vault
+        if: ${{ !github.event.pull_request.head.repo.fork }}
+        uses: nginx/ci-self-hosted/.github/actions/get-from-vault@2ac905a974d15594f0e03697b4f88916fbb3694d
+        with:
+          client-id: ${{ secrets.AZ_VAULT_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZ_VAULT_TENANT_ID }}
+          vault-name: ${{ secrets.AZ_COMMON_VAULT_NAME }}
+          secret-names: "nginx-bot-pat"
+          env-names: "NGINX_PAT"
 
       - name: Set release branch variable
         id: branch
@@ -35,6 +46,6 @@ jobs:
         uses: carloscastrojumo/github-cherry-pick-action@503773289f4a459069c832dc628826685b75b4b3 # v1.0.10
         with:
           branch: ${{ steps.branch.outputs.branch }}
-          token: ${{ secrets.NGINX_PAT }}
+          token: ${{ env.NGINX_PAT }}
           author: ${{ github.actor }} <${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com>
           cherry-pick-branch: ${{ github.event.pull_request.head.ref }}-cherrypick

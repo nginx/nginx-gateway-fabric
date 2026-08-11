@@ -3511,6 +3511,61 @@ func TestBuildInferencePoolStatuses(t *testing.T) {
 		},
 	}
 
+	// Same Name/Namespace/Kind as an nginx Gateway parent ref, but a different Group.
+	// This should NOT be treated as a match by containsParentReference, so this parent
+	// status must be preserved (not filtered out) even though it's no longer referenced.
+	validInferencePoolWithDifferentGroupStatus := &inference.InferencePool{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "valid-inference-pool-with-different-group-status",
+			Namespace:  "test",
+			Generation: 1,
+		},
+		Status: inference.InferencePoolStatus{
+			Parents: []inference.ParentStatus{
+				{
+					Conditions: []metav1.Condition{
+						validAcceptedCondition,
+						validResolvedRefsCondition,
+					},
+					ParentRef: inference.ParentReference{
+						Namespace: inference.Namespace("test"),
+						Name:      "gateway-1",
+						Kind:      kinds.Gateway,
+						Group:     helpers.GetPointer(inference.Group("different.example.com")),
+					},
+				},
+			},
+		},
+	}
+
+	// Same Name/Namespace/Kind as an nginx Gateway parent ref, and a Group of "core" which
+	// is equivalent to the empty string Group used by nginx's own parent refs. This SHOULD be
+	// treated as a match by containsParentReference, so this parent status must be removed
+	// since the pool is no longer referenced.
+	validInferencePoolWithCoreGroupStatus := &inference.InferencePool{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "valid-inference-pool-with-core-group-status",
+			Namespace:  "test",
+			Generation: 1,
+		},
+		Status: inference.InferencePoolStatus{
+			Parents: []inference.ParentStatus{
+				{
+					Conditions: []metav1.Condition{
+						validAcceptedCondition,
+						validResolvedRefsCondition,
+					},
+					ParentRef: inference.ParentReference{
+						Namespace: inference.Namespace("test"),
+						Name:      "gateway-1",
+						Kind:      kinds.Gateway,
+						Group:     helpers.GetPointer(inference.Group("core")),
+					},
+				},
+			},
+		},
+	}
+
 	tests := []struct {
 		referencedInferencePool map[types.NamespacedName]*graph.ReferencedInferencePool
 		expectedPoolWithStatus  map[types.NamespacedName]inference.InferencePoolStatus
@@ -3699,6 +3754,49 @@ func TestBuildInferencePoolStatuses(t *testing.T) {
 			expectedReqs: 1,
 			expectedPoolWithStatus: map[types.NamespacedName]inference.InferencePoolStatus{
 				{Namespace: "test", Name: "valid-inference-pool-with-status"}: {
+					Parents: nil,
+				},
+			},
+		},
+		{
+			name:                    "inference pool parent status with different Group is not removed",
+			referencedInferencePool: map[types.NamespacedName]*graph.ReferencedInferencePool{},
+			clusterInferencePools: inference.InferencePoolList{
+				Items: []inference.InferencePool{
+					*validInferencePoolWithDifferentGroupStatus,
+				},
+			},
+			expectedReqs: 0,
+			expectedPoolWithStatus: map[types.NamespacedName]inference.InferencePoolStatus{
+				{Namespace: "test", Name: "valid-inference-pool-with-different-group-status"}: {
+					Parents: []inference.ParentStatus{
+						{
+							Conditions: []metav1.Condition{
+								validAcceptedCondition,
+								validResolvedRefsCondition,
+							},
+							ParentRef: inference.ParentReference{
+								Namespace: inference.Namespace("test"),
+								Name:      "gateway-1",
+								Kind:      kinds.Gateway,
+								Group:     helpers.GetPointer(inference.Group("different.example.com")),
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name:                    "inference pool parent status with core Group is removed",
+			referencedInferencePool: map[types.NamespacedName]*graph.ReferencedInferencePool{},
+			clusterInferencePools: inference.InferencePoolList{
+				Items: []inference.InferencePool{
+					*validInferencePoolWithCoreGroupStatus,
+				},
+			},
+			expectedReqs: 1,
+			expectedPoolWithStatus: map[types.NamespacedName]inference.InferencePoolStatus{
+				{Namespace: "test", Name: "valid-inference-pool-with-core-group-status"}: {
 					Parents: nil,
 				},
 			},

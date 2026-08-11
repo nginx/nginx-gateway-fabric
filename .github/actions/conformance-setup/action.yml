@@ -27,18 +27,6 @@ inputs:
     description: Release version, used for docker metadata tagging
     required: false
     default: ''
-  nginx-crt:
-    description: NGINX Plus repo certificate (required for plus images)
-    required: false
-    default: ''
-  nginx-key:
-    description: NGINX Plus repo key (required for plus images)
-    required: false
-    default: ''
-  plus-license:
-    description: NGINX Plus exception reporting license JWT (required for plus images)
-    required: false
-    default: ''
 
 outputs:
   ngf-version:
@@ -121,9 +109,9 @@ runs:
           NJS_DIR=internal/controller/nginx/modules/src
           NGINX_CONF_DIR=internal/controller/nginx/conf
           BUILD_AGENT=gha
-        secrets: |
-          ${{ contains(inputs.image, 'plus') && format('"nginx-repo.crt={0}"', inputs.nginx-crt) || '' }}
-          ${{ contains(inputs.image, 'plus') && format('"nginx-repo.key={0}"', inputs.nginx-key) || '' }}
+        secret-envs: |
+          ${{ contains(inputs.image, 'plus') && 'nginx-repo.crt=NGINX_CRT' || '' }}
+          ${{ contains(inputs.image, 'plus') && 'nginx-repo.key=NGINX_KEY' || '' }}
 
     - name: Update Test Go Modules
       if: ${{ github.event_name == 'schedule' }}
@@ -152,8 +140,6 @@ runs:
     - name: Setup license file for plus
       if: ${{ inputs.image == 'plus' }}
       shell: bash
-      env:
-        PLUS_LICENSE: ${{ inputs.plus-license }}
       run: echo "${PLUS_LICENSE}" > license.jwt
 
     - name: Setup conformance tests
