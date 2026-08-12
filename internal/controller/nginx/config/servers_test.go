@@ -4804,6 +4804,71 @@ func TestCreateBaseProxySetHeaders(t *testing.T) {
 	}
 }
 
+func TestForceStripAcceptEncoding(t *testing.T) {
+	t.Parallel()
+
+	emptyAcceptEncoding := http.Header{Name: "Accept-Encoding", Value: ""}
+
+	tests := []struct {
+		expLast http.Header
+		msg     string
+		headers []http.Header
+		expLen  int
+	}{
+		{
+			msg:     "no existing Accept-Encoding appends empty strip",
+			headers: []http.Header{{Name: "Host", Value: "$gw_api_compliant_host"}},
+			expLast: emptyAcceptEncoding,
+			expLen:  2,
+		},
+		{
+			msg:     "nil headers appends empty strip",
+			headers: nil,
+			expLast: emptyAcceptEncoding,
+			expLen:  1,
+		},
+		{
+			msg: "existing Accept-Encoding is overridden with empty (deduped)",
+			headers: []http.Header{
+				{Name: "Host", Value: "$gw_api_compliant_host"},
+				{Name: "Accept-Encoding", Value: "gzip"},
+			},
+			expLast: emptyAcceptEncoding,
+			expLen:  2,
+		},
+		{
+			msg: "case-insensitive existing Accept-Encoding is overridden",
+			headers: []http.Header{
+				{Name: "accept-encoding", Value: "br"},
+				{Name: "X-Real-IP", Value: "$remote_addr"},
+			},
+			expLast: emptyAcceptEncoding,
+			expLen:  2,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.msg, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			result := forceStripAcceptEncoding(test.headers)
+
+			g.Expect(result).To(HaveLen(test.expLen))
+			// Exactly one Accept-Encoding entry, empty-valued, and it is last.
+			count := 0
+			for _, h := range result {
+				if strings.EqualFold(h.Name, "Accept-Encoding") {
+					count++
+					g.Expect(h.Value).To(Equal(""))
+				}
+			}
+			g.Expect(count).To(Equal(1))
+			g.Expect(result[len(result)-1]).To(Equal(test.expLast))
+		})
+	}
+}
+
 func TestFilterBaseProxySetHeaders(t *testing.T) {
 	t.Parallel()
 
@@ -8366,6 +8431,9 @@ func TestExecuteServers_Guardrails(t *testing.T) {
 				"location /_ngf-internal-guardrails-test_route1_rule0 {",
 				"internal;",
 				"proxy_pass http://ext-svc.ns1.svc.cluster.local:9000/backend/v1/scans;",
+				// Accept-Encoding is stripped so the upstream cannot return a
+				// compressed (uninspectable) body.
+				`proxy_set_header Accept-Encoding "";`,
 			},
 			expAbsent: []string{
 				// In-cluster HTTP backend: no SNI directives.
@@ -9071,6 +9139,35 @@ func TestUpdateLocationProxySettings_Headers(t *testing.T) {
 				{Name: "Upgrade", Value: "$http_upgrade"},
 				{Name: "Connection", Value: "$connection_upgrade"},
 			},
+		},
+		{
+			name:      "non-guardrails location – Accept-Encoding not stripped",
+			matchRule: makeMatchRule(normalBackend),
+			expAbsent: []string{"Accept-Encoding"},
+		},
+		{
+			name: "guardrails enabled – Accept-Encoding stripped (empty value)",
+			matchRule: func() dataplane.MatchRule {
+				mr := makeMatchRule(normalBackend)
+				mr.Guardrails = &dataplane.GuardrailsConfig{
+					Enabled:      true,
+					APIURL:       "http://ext-svc.ns1.svc.cluster.local:9000",
+					InternalPath: "/_ngf-internal-guardrails-ns1_route1_rule0",
+				}
+				return mr
+			}(),
+			expHeaders: []http.Header{
+				{Name: "Accept-Encoding", Value: ""},
+			},
+		},
+		{
+			name: "guardrails disabled – Accept-Encoding not stripped",
+			matchRule: func() dataplane.MatchRule {
+				mr := makeMatchRule(normalBackend)
+				mr.Guardrails = &dataplane.GuardrailsConfig{Enabled: false}
+				return mr
+			}(),
+			expAbsent: []string{"Accept-Encoding"},
 		},
 	}
 

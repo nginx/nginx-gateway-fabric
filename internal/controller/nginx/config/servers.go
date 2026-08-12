@@ -1714,6 +1714,14 @@ func updateLocationProxySettings(
 	)
 	responseHeaders := generateResponseHeaders(&matchRule.Filters)
 
+	// When guardrails inspection is enabled for this location, force
+	// Accept-Encoding to empty so the upstream LLM returns an uninspectable
+	// compressed body. A gzip/br response cannot be parsed by the guardrails
+	// filter and would otherwise be released un-inspected.
+	if matchRule.Guardrails != nil && matchRule.Guardrails.Enabled {
+		proxySetHeaders = forceStripAcceptEncoding(proxySetHeaders)
+	}
+
 	location.ProxySetHeaders = proxySetHeaders
 	location.ProxySSLVerify = createProxyTLSFromBackends(matchRule.BackendGroup.Backends)
 	proxyPass := createProxyPass(
@@ -2155,6 +2163,24 @@ func generateProxySetHeaders(
 	}
 
 	return proxySetHeaders
+}
+
+// forceStripAcceptEncoding removes any existing Accept-Encoding entry (e.g. one
+// added by a RequestHeaderModifier filter) and appends a single empty-valued
+// Accept-Encoding header.
+func forceStripAcceptEncoding(headers []http.Header) []http.Header {
+	const acceptEncoding = "Accept-Encoding"
+
+	stripped := make([]http.Header, 0, len(headers)+1)
+	for _, h := range headers {
+		if strings.EqualFold(h.Name, acceptEncoding) {
+			continue
+		}
+		stripped = append(stripped, h)
+	}
+	stripped = append(stripped, http.Header{Name: acceptEncoding, Value: ""})
+
+	return stripped
 }
 
 func generateResponseHeaders(filters *dataplane.HTTPFilters) http.ResponseHeaders {
