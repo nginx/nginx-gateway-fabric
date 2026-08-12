@@ -9,9 +9,13 @@ use serde::Deserialize;
 struct LlmChunk {
     /// Ollama stream-completion flag.
     done: Option<bool>,
-    /// Ollama message payload.
+    /// Ollama chat message payload (`/api/chat`).
     message: Option<OllamaMessage>,
-    /// OpenAI choices array (streaming chat and non-streaming completions).
+    /// Ollama generate output (`/api/generate`): the generated text is a
+    /// top-level `response` string (streaming and non-streaming both use it).
+    response: Option<String>,
+    /// OpenAI choices array (streaming chat delta, non-streaming chat
+    /// `message.content`, and legacy completions `text`).
     choices: Option<Vec<OpenAIChoice>>,
 }
 
@@ -22,14 +26,22 @@ struct OllamaMessage {
 
 #[derive(Deserialize)]
 struct OpenAIChoice {
-    /// Streaming chat completions delta.
+    /// Streaming chat completions delta (`/v1/chat/completions`, `stream:true`).
     delta: Option<OpenAIDelta>,
-    /// Non-streaming completions text.
+    /// Non-streaming chat completions message (`/v1/chat/completions`,
+    /// `stream:false`): the generated text lives in `message.content`.
+    message: Option<OpenAIMessage>,
+    /// Legacy non-streaming completions text (`/v1/completions`).
     text: Option<String>,
 }
 
 #[derive(Deserialize)]
 struct OpenAIDelta {
+    content: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct OpenAIMessage {
     content: Option<String>,
 }
 
@@ -39,20 +51,30 @@ fn extract_llm_content(chunk: LlmChunk, accumulated: &mut String, stream_done: &
         *stream_done = true;
     }
     if let Some(msg) = chunk.message {
+        // Ollama /api/chat: text is in the top-level message.content.
         if let Some(content) = msg.content {
             accumulated.push_str(&content);
         }
+    } else if let Some(response) = chunk.response {
+        // Ollama /api/generate: text is a top-level `response` string. Without
+        // this, a /api/generate response yields empty accumulated_text and the
+        // response path flushes it un-inspected.
+        accumulated.push_str(&response);
     } else if let Some(choices) = chunk.choices {
         // A completion may carry multiple choices (e.g. n > 1 / best_of), and
         // every choice is forwarded to the client, so every choice must be
         // inspected — scanning only the first would let blocked content in a
         // later choice bypass the guardrail. Accumulate them all.
         for (i, choice) in choices.into_iter().enumerate() {
-            let text = if let Some(delta) = choice.delta {
-                delta.content
-            } else {
-                choice.text
-            };
+            // Precedence delta -> message -> text: a choice carries exactly one
+            // of these in practice. `message.content` covers non-streaming
+            // /v1/chat/completions, whose text would otherwise be dropped
+            // (empty accumulated_text -> un-inspected flush).
+            let text = choice
+                .delta
+                .and_then(|d| d.content)
+                .or_else(|| choice.message.and_then(|m| m.content))
+                .or(choice.text);
             if let Some(text) = text {
                 // Separate distinct choices within this chunk with a newline so
                 // adjacent choice texts can't merge into a token that hides a
@@ -360,6 +382,62 @@ mod tests {
         let data = b"data: {\"choices\":[{\"delta\":{\"content\":\"World\"}}]}\n";
         ctx.process_chunk(data);
         assert_eq!(ctx.accumulated_text, "World");
+    }
+
+    #[test]
+    fn test_ollama_generate_response_extracted() {
+        // Ollama /api/generate: text is a top-level `response` string.
+        let mut ctx = StreamContext::default();
+        ctx.process_chunk(b"{\"model\":\"llama3\",\"response\":\"Hello\",\"done\":true}\n");
+        assert_eq!(ctx.accumulated_text, "Hello");
+    }
+
+    #[test]
+    fn test_ollama_generate_response_streaming() {
+        // Streaming /api/generate delivers `response` in fragments across chunks;
+        // they concatenate with no separator (cross-chunk, like other streams).
+        let mut ctx = StreamContext::default();
+        ctx.process_chunk(b"{\"response\":\"foo\",\"done\":false}\n");
+        ctx.process_chunk(b"{\"response\":\"bar\",\"done\":true}\n");
+        assert_eq!(ctx.accumulated_text, "foobar");
+    }
+
+    #[test]
+    fn test_openai_nonstreaming_chat_message_content_extracted() {
+        // Non-streaming /v1/chat/completions: text is in choices[].message.content.
+        let mut ctx = StreamContext::default();
+        ctx.process_chunk(
+            b"{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"hi\"}}]}\n",
+        );
+        assert_eq!(ctx.accumulated_text, "hi");
+    }
+
+    #[test]
+    fn test_openai_multiple_message_choices_all_extracted() {
+        // n > 1 non-streaming chat: every choice's message.content must be
+        // accumulated, separated by a newline.
+        let mut ctx = StreamContext::default();
+        ctx.process_chunk(
+            b"{\"choices\":[{\"message\":{\"content\":\"a\"}},{\"message\":{\"content\":\"b\"}}]}\n",
+        );
+        assert_eq!(ctx.accumulated_text, "a\nb");
+    }
+
+    #[test]
+    fn test_nonstreaming_chat_sentinel_is_inspected() {
+        // Regression: blocked content in a non-streaming chat message.content
+        // must reach accumulated_text so should_inspect_final fires (rather than
+        // the response being flushed un-inspected).
+        let mut ctx = StreamContext::default();
+        ctx.process_chunk(b"{\"choices\":[{\"message\":{\"content\":\"SENTINEL\"}}]}\n");
+        assert!(
+            ctx.accumulated_text.contains("SENTINEL"),
+            "non-streaming chat message.content must be accumulated for inspection"
+        );
+        assert!(
+            ctx.should_inspect_final(true),
+            "a non-empty extracted body at end-of-stream must trigger inspection"
+        );
     }
 
     #[test]
