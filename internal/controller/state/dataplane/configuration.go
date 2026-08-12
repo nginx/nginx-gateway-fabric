@@ -177,7 +177,7 @@ func BuildConfiguration(
 		WAF:                  buildWAF(gateway),
 	}
 
-	maps.Copy(config.AuthSecrets, buildGuardrailsAuthSecrets(gateway, g.Routes))
+	maps.Copy(config.AuthSecrets, buildGuardrailsAuthSecrets(gateway))
 
 	return config
 }
@@ -1571,7 +1571,7 @@ func (hpr *hostPathRules) upsertRoute(
 
 		pols := buildPolicies(gateway, route.Policies)
 
-		guardrails := convertGraphGuardrails(route, routeNsName, idx)
+		guardrails := convertGraphGuardrails(route, client.ObjectKeyFromObject(gateway.Source), routeNsName, idx)
 
 		for _, h := range hostnames {
 			for _, m := range rule.Matches {
@@ -2118,30 +2118,42 @@ func GenerateGuardrailsTokenFileID(namespace, name string) AuthFileID {
 	return AuthFileID(fmt.Sprintf("guardrails_token_%s_%s", namespace, name))
 }
 
-// buildGuardrailsAuthSecrets collects the resolved ExtProcess auth token files for all routes attached
-// to the gateway, keyed by their AuthFileID so they are written to the NGINX secrets directory.
+// buildGuardrailsAuthSecrets collects the resolved ExtProcess auth token files for the routes attached
+// to this gateway's valid listeners, keyed by their AuthFileID so they are written to the NGINX secrets
+// directory.
 func buildGuardrailsAuthSecrets(
 	gateway *graph.Gateway,
-	routes map[graph.RouteKey]*graph.L7Route,
 ) map[AuthFileID]AuthFileData {
 	tokens := make(map[AuthFileID]AuthFileData)
-	if gateway == nil {
+	if gateway == nil || gateway.Source == nil {
 		return tokens
 	}
 
-	for _, route := range routes {
-		policy := route.EffectivePayloadProcessor
-		if policy == nil || !policy.Valid || policy.PayloadProcessorState == nil {
+	gwNsName := client.ObjectKeyFromObject(gateway.Source)
+
+	for _, l := range gateway.Listeners {
+		if !l.Valid {
 			continue
 		}
 
-		state := policy.PayloadProcessorState
-		if state.AuthTokenSecret == nil || len(state.ResolvedAuthToken) == 0 {
-			continue
-		}
+		for _, route := range l.Routes {
+			if !route.Valid {
+				continue
+			}
 
-		id := GenerateGuardrailsTokenFileID(state.AuthTokenSecret.Namespace, state.AuthTokenSecret.Name)
-		tokens[id] = state.ResolvedAuthToken
+			policy := route.EffectivePayloadProcessors[gwNsName]
+			if policy == nil || !policy.Valid || policy.PayloadProcessorState == nil {
+				continue
+			}
+
+			state := policy.PayloadProcessorState
+			if state.AuthTokenSecret == nil || len(state.ResolvedAuthToken) == 0 {
+				continue
+			}
+
+			id := GenerateGuardrailsTokenFileID(state.AuthTokenSecret.Namespace, state.AuthTokenSecret.Name)
+			tokens[id] = state.ResolvedAuthToken
+		}
 	}
 
 	return tokens

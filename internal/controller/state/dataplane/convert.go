@@ -557,6 +557,7 @@ func buildSortedExtraAuthArgs(extraAuthArgs map[string]string) string {
 // GuardrailsConfig. Returns nil when the route has no valid, resolved PayloadProcessor.
 func convertGraphGuardrails(
 	route *graph.L7Route,
+	gwNsName types.NamespacedName,
 	routeNsName types.NamespacedName,
 	ruleIdx int,
 ) *GuardrailsConfig {
@@ -564,7 +565,7 @@ func convertGraphGuardrails(
 		return nil
 	}
 
-	policy := route.EffectivePayloadProcessor
+	policy := route.EffectivePayloadProcessors[gwNsName]
 	if policy == nil || !policy.Valid || policy.PayloadProcessorState == nil {
 		return nil
 	}

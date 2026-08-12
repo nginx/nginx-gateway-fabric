@@ -283,41 +283,56 @@ func (g *Graph) attachPolicies(validator validation.PolicyValidator, ctlrName st
 	}
 }
 
-// resolveEffectivePayloadProcessors computes the effective PayloadProcessor for each Route.
-// A PayloadProcessor attached directly to a Route takes precedence over one attached to the
-// Route's parent Gateway. This is realized as data-plane behavior; the Gateway-attached policy
-// remains valid (Programmed=True) because it still applies to requests not covered by an
-// overriding Route-attached policy.
-//
-// The result is stored on L7Route.EffectivePayloadProcessor and is consumed by the data-plane
-// config generator (convertGraphGuardrails in internal/controller/state/dataplane/convert.go and
-// buildGuardrailsAuthSecrets in internal/controller/state/dataplane/configuration.go), which reads
-// L7Route.EffectivePayloadProcessor rather than iterating route.Policies directly so that this
-// Route-over-Gateway precedence is honored.
+// resolveEffectivePayloadProcessors computes the effective PayloadProcessor for each Route, per parent
+// Gateway.
 func resolveEffectivePayloadProcessors(
 	gateways map[types.NamespacedName]*Gateway,
 	routes map[RouteKey]*L7Route,
 ) {
 	for _, route := range routes {
-		// A PayloadProcessor attached directly to the Route wins.
-		if routePolicy := firstValidPayloadProcessor(route.Policies); routePolicy != nil {
-			route.EffectivePayloadProcessor = routePolicy
-			continue
-		}
+		// A PayloadProcessor attached directly to the Route wins for every attached Gateway.
+		routePolicy := firstValidPayloadProcessor(route.Policies)
 
-		// Otherwise fall back to a PayloadProcessor attached to any of the Route's parent Gateways.
 		for _, parentRef := range route.ParentRefs {
-			gw, exists := gateways[parentRef.GatewayNsName]
+			// Only inherit for parent Gateways whose attachment succeeded
+			if parentRef.Attachment == nil || !parentRef.Attachment.Attached {
+				continue
+			}
+
+			gwNsName := parentRef.GatewayNsName
+			gw, exists := gateways[gwNsName]
 			if !exists || gw == nil {
 				continue
 			}
 
-			if gwPolicy := firstValidPayloadProcessor(gw.Policies); gwPolicy != nil {
-				route.EffectivePayloadProcessor = gwPolicy
-				break
+			policy := routePolicy
+			if policy == nil {
+				policy = firstValidPayloadProcessorForGateway(gw.Policies, gwNsName)
 			}
+			if policy == nil {
+				continue
+			}
+
+			if route.EffectivePayloadProcessors == nil {
+				route.EffectivePayloadProcessors = make(map[types.NamespacedName]*Policy)
+			}
+			route.EffectivePayloadProcessors[gwNsName] = policy
 		}
 	}
+}
+
+// firstValidPayloadProcessorForGateway returns the first valid PayloadProcessor policy in the list that
+// is not marked invalid for the given Gateway, or nil.
+func firstValidPayloadProcessorForGateway(pols []*Policy, gwNsName types.NamespacedName) *Policy {
+	for _, policy := range pols {
+		if _, invalid := policy.InvalidForGateways[gwNsName]; invalid {
+			continue
+		}
+		if policy.Valid && getPolicyKind(policy.Source) == kinds.PayloadProcessor {
+			return policy
+		}
+	}
+	return nil
 }
 
 // firstValidPayloadProcessor returns the first valid PayloadProcessor policy in the list, or nil.

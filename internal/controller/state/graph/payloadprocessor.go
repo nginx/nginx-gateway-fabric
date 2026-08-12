@@ -146,6 +146,13 @@ func resolveExtProcessURL(
 		)
 	}
 
+	if ext.BackendRef.Port == nil {
+		return "", false, fmt.Errorf("backend Service %s/%s port is not set", svcNsName.Namespace, svcNsName.Name)
+	}
+	if _, err := getServicePort(svc, *ext.BackendRef.Port); err != nil {
+		return "", false, fmt.Errorf("backend Service %s/%s: %w", svcNsName.Namespace, svcNsName.Name, err)
+	}
+
 	if svc.Spec.Type == corev1.ServiceTypeExternalName && svc.Spec.ExternalName != "" {
 		return fmt.Sprintf("https://%s:%d", svc.Spec.ExternalName, port), true, nil
 	}

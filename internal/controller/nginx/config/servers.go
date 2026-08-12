@@ -1493,25 +1493,35 @@ func extractGuardrailsInternalLocations(locations []http.Location) []http.Locati
 		trimmedURL := strings.TrimRight(loc.Guardrails.APIURL, "/")
 		proxyPass := trimmedURL + guardrailsScansPath
 
-		// For an HTTPS (ExternalName) backend, NGINX must send SNI during the TLS
-		// handshake or multi-tenant TLS terminators reject it (alert 40). NGINX
-		// defaults proxy_ssl_server_name to off, so derive the SNI hostname from the
-		// APIURL and set it. Certificate verification is intentionally left off here
-		// (see ProxySSLServerName doc). Both the request and response paths inspect
-		// via this same NGINX subrequest, so this proxy_ssl config governs backend
-		// TLS for both directions; there is no in-module TLS client.
+		// For an HTTPS (ExternalName) backend, NGINX must verify the backend's
+		// certificate and hostname before sending the guardrails auth token and the
+		// inspected request/response content. Enable proxy_ssl_verify against the
+		// image's system trust store (AlpineSSLRootCAPath) and set proxy_ssl_name to
+		// the APIURL hostname so both the certificate chain and the hostname are
+		// checked. This also sends SNI during the TLS handshake, which multi-tenant
+		// TLS terminators require (they otherwise reject with alert 40). Both the
+		// request and response paths inspect via this same NGINX subrequest, so this
+		// proxy_ssl config governs backend TLS for both directions; there is no
+		// in-module TLS client.
+		//
+		// Only backends whose certificate chains to a CA in the system trust store are
+		// supported; private-CA or self-signed guardrails backends are not currently
+		// supported.
 		//
 		// The HTTP Host header must ALSO carry the backend hostname: when proxy_pass
 		// targets an ExternalName that NGINX resolves to a rotating IP, the default
 		// Host header does not match what a hostname-routing edge (API gateway/CDN)
 		// expects, and the edge rejects the request with 403 before it reaches the
 		// backend app. Set Host explicitly to the APIURL hostname.
-		// In-cluster HTTP backends need neither SNI nor a Host override.
-		var sslServerName string
+		// In-cluster HTTP backends need neither TLS verification nor a Host override.
+		var proxySSLVerify *http.ProxySSLVerify
 		var proxyPassVar string
 		var proxySetHeaders []http.Header
 		if parsed, err := url.Parse(loc.Guardrails.APIURL); err == nil && parsed.Scheme == "https" {
-			sslServerName = parsed.Hostname()
+			proxySSLVerify = &http.ProxySSLVerify{
+				Name:               parsed.Hostname(),
+				TrustedCertificate: dataplane.AlpineSSLRootCAPath,
+			}
 			proxySetHeaders = []http.Header{{Name: "Host", Value: parsed.Hostname()}}
 
 			// Re-resolve the ExternalName backend per request via a variable proxy_pass. The
@@ -1527,7 +1537,7 @@ func extractGuardrailsInternalLocations(locations []http.Location) []http.Locati
 			Path:                   path,
 			Type:                   http.InternalLocationType,
 			ProxyPass:              proxyPass,
-			ProxySSLServerName:     sslServerName,
+			ProxySSLVerify:         proxySSLVerify,
 			GuardrailsProxyPassVar: proxyPassVar,
 			ProxySetHeaders:        proxySetHeaders,
 		})

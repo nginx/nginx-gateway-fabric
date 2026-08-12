@@ -88,7 +88,9 @@ func TestResolveEffectivePayloadProcessors(t *testing.T) {
 			gateways := map[types.NamespacedName]*Gateway{gwNsName: gateway}
 
 			route := &L7Route{
-				ParentRefs: []ParentRef{{GatewayNsName: gwNsName}},
+				ParentRefs: []ParentRef{
+					{GatewayNsName: gwNsName, Attachment: &ParentRefAttachmentStatus{Attached: true}},
+				},
 			}
 			if test.routePolicy != nil {
 				route.Policies = []*Policy{test.routePolicy}
@@ -101,9 +103,167 @@ func TestResolveEffectivePayloadProcessors(t *testing.T) {
 
 			resolveEffectivePayloadProcessors(gateways, routes)
 
-			g.Expect(route.EffectivePayloadProcessor).To(Equal(test.expEffective))
+			if test.expEffective == nil {
+				g.Expect(route.EffectivePayloadProcessors).To(BeEmpty())
+			} else {
+				g.Expect(route.EffectivePayloadProcessors).To(HaveKeyWithValue(gwNsName, test.expEffective))
+			}
 		})
 	}
+}
+
+func TestResolveEffectivePayloadProcessors_PerGateway(t *testing.T) {
+	t.Parallel()
+
+	gwANsName := types.NamespacedName{Namespace: testNs, Name: "gw-a"}
+	gwBNsName := types.NamespacedName{Namespace: testNs, Name: "gw-b"}
+
+	attached := func(nsName types.NamespacedName) ParentRef {
+		return ParentRef{GatewayNsName: nsName, Attachment: &ParentRefAttachmentStatus{Attached: true}}
+	}
+
+	t.Run("different Gateway policies resolve independently per Gateway", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+
+		gwAPolicy := payloadProcessorPolicy("gw-a-processor")
+		gwBPolicy := payloadProcessorPolicy("gw-b-processor")
+
+		gateways := map[types.NamespacedName]*Gateway{
+			gwANsName: {Policies: []*Policy{gwAPolicy}},
+			gwBNsName: {Policies: []*Policy{gwBPolicy}},
+		}
+		route := &L7Route{ParentRefs: []ParentRef{attached(gwANsName), attached(gwBNsName)}}
+		routes := map[RouteKey]*L7Route{
+			{NamespacedName: types.NamespacedName{Namespace: testNs, Name: "route"}}: route,
+		}
+
+		resolveEffectivePayloadProcessors(gateways, routes)
+
+		g.Expect(route.EffectivePayloadProcessors).To(HaveKeyWithValue(gwANsName, gwAPolicy))
+		g.Expect(route.EffectivePayloadProcessors).To(HaveKeyWithValue(gwBNsName, gwBPolicy))
+	})
+
+	t.Run("route-attached policy applies to every attached Gateway", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+
+		routePolicy := payloadProcessorPolicy("route-processor")
+		gwBPolicy := payloadProcessorPolicy("gw-b-processor")
+
+		gateways := map[types.NamespacedName]*Gateway{
+			gwANsName: {},
+			gwBNsName: {Policies: []*Policy{gwBPolicy}},
+		}
+		route := &L7Route{
+			Policies:   []*Policy{routePolicy},
+			ParentRefs: []ParentRef{attached(gwANsName), attached(gwBNsName)},
+		}
+		routes := map[RouteKey]*L7Route{
+			{NamespacedName: types.NamespacedName{Namespace: testNs, Name: "route"}}: route,
+		}
+
+		resolveEffectivePayloadProcessors(gateways, routes)
+
+		// The Route-attached policy wins for both Gateways, overriding gw-b's own policy.
+		g.Expect(route.EffectivePayloadProcessors).To(HaveKeyWithValue(gwANsName, routePolicy))
+		g.Expect(route.EffectivePayloadProcessors).To(HaveKeyWithValue(gwBNsName, routePolicy))
+	})
+
+	t.Run("failed parent attachment does not inherit its policy", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+
+		gwAPolicy := payloadProcessorPolicy("gw-a-processor")
+		gwBPolicy := payloadProcessorPolicy("gw-b-processor")
+
+		gateways := map[types.NamespacedName]*Gateway{
+			gwANsName: {Policies: []*Policy{gwAPolicy}},
+			gwBNsName: {Policies: []*Policy{gwBPolicy}},
+		}
+		route := &L7Route{
+			ParentRefs: []ParentRef{
+				// Gateway A attachment failed.
+				{GatewayNsName: gwANsName, Attachment: &ParentRefAttachmentStatus{Attached: false}},
+				attached(gwBNsName),
+			},
+		}
+		routes := map[RouteKey]*L7Route{
+			{NamespacedName: types.NamespacedName{Namespace: testNs, Name: "route"}}: route,
+		}
+
+		resolveEffectivePayloadProcessors(gateways, routes)
+
+		g.Expect(route.EffectivePayloadProcessors).ToNot(HaveKey(gwANsName))
+		g.Expect(route.EffectivePayloadProcessors).To(HaveKeyWithValue(gwBNsName, gwBPolicy))
+	})
+
+	t.Run("nil attachment does not inherit", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+
+		gwAPolicy := payloadProcessorPolicy("gw-a-processor")
+		gateways := map[types.NamespacedName]*Gateway{gwANsName: {Policies: []*Policy{gwAPolicy}}}
+		route := &L7Route{ParentRefs: []ParentRef{{GatewayNsName: gwANsName, Attachment: nil}}}
+		routes := map[RouteKey]*L7Route{
+			{NamespacedName: types.NamespacedName{Namespace: testNs, Name: "route"}}: route,
+		}
+
+		resolveEffectivePayloadProcessors(gateways, routes)
+
+		g.Expect(route.EffectivePayloadProcessors).To(BeEmpty())
+	})
+
+	t.Run("parentRef to a Gateway missing from the map is skipped", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+
+		gwMissingNsName := types.NamespacedName{Namespace: testNs, Name: "gw-missing"}
+		// gw-nil is present in the map but with a nil value, exercising the gw == nil guard.
+		gwNilNsName := types.NamespacedName{Namespace: testNs, Name: "gw-nil"}
+
+		gwAPolicy := payloadProcessorPolicy("gw-a-processor")
+		gateways := map[types.NamespacedName]*Gateway{
+			gwANsName:   {Policies: []*Policy{gwAPolicy}},
+			gwNilNsName: nil,
+		}
+		route := &L7Route{
+			ParentRefs: []ParentRef{
+				attached(gwANsName),
+				// This parent points at a Gateway that is not present in the gateways map.
+				attached(gwMissingNsName),
+				// This parent points at a nil Gateway entry.
+				attached(gwNilNsName),
+			},
+		}
+		routes := map[RouteKey]*L7Route{
+			{NamespacedName: types.NamespacedName{Namespace: testNs, Name: "route"}}: route,
+		}
+
+		resolveEffectivePayloadProcessors(gateways, routes)
+
+		g.Expect(route.EffectivePayloadProcessors).To(HaveKeyWithValue(gwANsName, gwAPolicy))
+		g.Expect(route.EffectivePayloadProcessors).ToNot(HaveKey(gwMissingNsName))
+		g.Expect(route.EffectivePayloadProcessors).ToNot(HaveKey(gwNilNsName))
+	})
+
+	t.Run("policy invalid for the Gateway is not inherited", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+
+		gwAPolicy := payloadProcessorPolicy("gw-a-processor")
+		gwAPolicy.InvalidForGateways = map[types.NamespacedName]struct{}{gwANsName: {}}
+
+		gateways := map[types.NamespacedName]*Gateway{gwANsName: {Policies: []*Policy{gwAPolicy}}}
+		route := &L7Route{ParentRefs: []ParentRef{attached(gwANsName)}}
+		routes := map[RouteKey]*L7Route{
+			{NamespacedName: types.NamespacedName{Namespace: testNs, Name: "route"}}: route,
+		}
+
+		resolveEffectivePayloadProcessors(gateways, routes)
+
+		g.Expect(route.EffectivePayloadProcessors).To(BeEmpty())
+	})
 }
 
 func TestResolveEffectivePayloadProcessors_IgnoresInvalidPolicies(t *testing.T) {
@@ -120,8 +280,10 @@ func TestResolveEffectivePayloadProcessors_IgnoresInvalidPolicies(t *testing.T) 
 	gateways := map[types.NamespacedName]*Gateway{gwNsName: gateway}
 
 	route := &L7Route{
-		ParentRefs: []ParentRef{{GatewayNsName: gwNsName}},
-		Policies:   []*Policy{invalidRoutePolicy},
+		ParentRefs: []ParentRef{
+			{GatewayNsName: gwNsName, Attachment: &ParentRefAttachmentStatus{Attached: true}},
+		},
+		Policies: []*Policy{invalidRoutePolicy},
 	}
 	routeKey := RouteKey{
 		NamespacedName: types.NamespacedName{Namespace: testNs, Name: "route"},
@@ -132,7 +294,7 @@ func TestResolveEffectivePayloadProcessors_IgnoresInvalidPolicies(t *testing.T) 
 	resolveEffectivePayloadProcessors(gateways, routes)
 
 	// An invalid route-attached policy is skipped, so the gateway-attached policy applies.
-	g.Expect(route.EffectivePayloadProcessor).To(Equal(gwPolicy))
+	g.Expect(route.EffectivePayloadProcessors).To(HaveKeyWithValue(gwNsName, gwPolicy))
 }
 
 // payloadProcessorWithBackendRef builds a real PayloadProcessor source with a single ExtProcess
@@ -265,7 +427,10 @@ func TestProcessPayloadProcessorPolicies(t *testing.T) {
 	services := map[types.NamespacedName]*corev1.Service{
 		svcNsName: {
 			ObjectMeta: metav1.ObjectMeta{Namespace: policyNs, Name: "ext-svc"},
-			Spec:       corev1.ServiceSpec{Type: corev1.ServiceTypeClusterIP},
+			Spec: corev1.ServiceSpec{
+				Type:  corev1.ServiceTypeClusterIP,
+				Ports: []corev1.ServicePort{{Port: 9000}},
+			},
 		},
 	}
 	secretsMap := map[types.NamespacedName]*corev1.Secret{}
@@ -361,13 +526,17 @@ func TestResolveExtProcessURL(t *testing.T) {
 	services := map[types.NamespacedName]*corev1.Service{
 		clusterIPSvc: {
 			ObjectMeta: metav1.ObjectMeta{Namespace: policyNs, Name: "ext-svc"},
-			Spec:       corev1.ServiceSpec{Type: corev1.ServiceTypeClusterIP},
+			Spec: corev1.ServiceSpec{
+				Type:  corev1.ServiceTypeClusterIP,
+				Ports: []corev1.ServicePort{{Port: 9000}},
+			},
 		},
 		externalNameSvc: {
 			ObjectMeta: metav1.ObjectMeta{Namespace: policyNs, Name: "ext-name-svc"},
 			Spec: corev1.ServiceSpec{
 				Type:         corev1.ServiceTypeExternalName,
 				ExternalName: "guardrails.example.com",
+				Ports:        []corev1.ServicePort{{Port: 8443}},
 			},
 		},
 	}
@@ -377,6 +546,15 @@ func TestResolveExtProcessURL(t *testing.T) {
 			BackendRef: v1.BackendObjectReference{
 				Name: v1.ObjectName(name),
 				Port: helpers.GetPointer(port),
+			},
+		}
+	}
+
+	// extNoPort builds a config whose BackendRef omits the port, exercising the "port is not set" branch.
+	extNoPort := func(name string) *ngfAPIv1alpha1.ExtProcessConfig {
+		return &ngfAPIv1alpha1.ExtProcessConfig{
+			BackendRef: v1.BackendObjectReference{
+				Name: v1.ObjectName(name),
 			},
 		}
 	}
@@ -419,6 +597,26 @@ func TestResolveExtProcessURL(t *testing.T) {
 			ext:           ext("does-not-exist", 9000),
 			clusterDomain: "cluster.local",
 			expErrSub:     "not found",
+		},
+		{
+			name:          "unset port returns error",
+			ext:           extNoPort("ext-svc"),
+			clusterDomain: "cluster.local",
+			expErrSub:     "port is not set",
+		},
+		{
+			name:          "port not exposed by Service returns error",
+			ext:           ext("ext-svc", 1234),
+			clusterDomain: "cluster.local",
+			expErrSub:     "No matching port",
+		},
+		{
+			// The port check runs before the ExternalName branch, so a non-matching port on an
+			// ExternalName Service still errors rather than resolving to an https URL.
+			name:          "ExternalName Service with non-matching port returns error",
+			ext:           ext("ext-name-svc", 1),
+			clusterDomain: "cluster.local",
+			expErrSub:     "No matching port",
 		},
 	}
 
@@ -568,7 +766,10 @@ func TestResolvePayloadProcessor(t *testing.T) {
 	services := map[types.NamespacedName]*corev1.Service{
 		svcNsName: {
 			ObjectMeta: metav1.ObjectMeta{Namespace: policyNs, Name: "ext-svc"},
-			Spec:       corev1.ServiceSpec{Type: corev1.ServiceTypeClusterIP},
+			Spec: corev1.ServiceSpec{
+				Type:  corev1.ServiceTypeClusterIP,
+				Ports: []corev1.ServicePort{{Port: 9000}},
+			},
 		},
 	}
 	secretsMap := map[types.NamespacedName]*corev1.Secret{
@@ -603,7 +804,10 @@ func TestResolvePayloadProcessor(t *testing.T) {
 	crossServices := map[types.NamespacedName]*corev1.Service{
 		crossSvcNsName: {
 			ObjectMeta: metav1.ObjectMeta{Namespace: backendNs, Name: "ext-svc"},
-			Spec:       corev1.ServiceSpec{Type: corev1.ServiceTypeClusterIP},
+			Spec: corev1.ServiceSpec{
+				Type:  corev1.ServiceTypeClusterIP,
+				Ports: []corev1.ServicePort{{Port: 9000}},
+			},
 		},
 	}
 

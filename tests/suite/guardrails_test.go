@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -63,7 +64,7 @@ var _ = Describe("Guardrails (PayloadProcessor)", Ordered, Label("functional", "
 		setUpPortForward(nginxPodName, namespace)
 
 		port := helpers.BuildPortFwdPort(80, portFwdPort)
-		completionURL = helpers.BuildPortFwdURL("http://llm.example.com:%d/v1/completions", port)
+		completionURL = helpers.BuildPortFwdURL("http://llm.example.com/v1/completions", port)
 	})
 
 	AfterAll(func() {
@@ -144,6 +145,34 @@ var _ = Describe("Guardrails (PayloadProcessor)", Ordered, Label("functional", "
 					payload,
 					"blocked by test guardrail",
 				)).To(Succeed())
+			})
+
+			It("blocks an oversized request body that spills to disk with 403", func() {
+				// NGINX buffers a request body larger than client_body_buffer_size (default 8k on
+				// 32-bit, 16k on 64-bit) to a temp file. Those file-backed buffers contribute no
+				// in-memory bytes, so the guardrails module cannot inspect the prompt. Rather than
+				// letting a large, un-inspected prompt bypass the request scan, the module fails
+				// closed and rejects it with a 403 carrying the distinct "request_too_large" error
+				// type (see request_too_large_body in the ai-guardrails module).
+				//
+				// The prompt contains NO sentinel: this must be blocked purely because it is too
+				// large to inspect, not because of any flagged content. Pad well past 16k to force
+				// the disk spill regardless of platform default.
+				bigPrompt := strings.Repeat("a", 64*1024)
+				payload := fmt.Sprintf(`{"prompt":%q}`, bigPrompt)
+				Eventually(
+					func() error {
+						return framework.Expect403Response(
+							timeoutConfig.RequestTimeout,
+							completionURL,
+							address,
+							payload,
+							"request_too_large",
+						)
+					}).
+					WithTimeout(timeoutConfig.RequestTimeout).
+					WithPolling(500 * time.Millisecond).
+					Should(Succeed())
 			})
 
 			It("blocks a response flagged on the response path with 403", func() {

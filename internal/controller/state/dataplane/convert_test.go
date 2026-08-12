@@ -2121,6 +2121,8 @@ func TestConvertGraphGuardrails(t *testing.T) {
 	t.Parallel()
 
 	secretNsName := types.NamespacedName{Namespace: "ns1", Name: "token-secret"}
+	gwNsName := types.NamespacedName{Namespace: "ns1", Name: "gateway"}
+	otherGwNsName := types.NamespacedName{Namespace: "ns1", Name: "other-gateway"}
 
 	validState := func() *graph.PolicyPayloadProcessorState {
 		return &graph.PolicyPayloadProcessorState{
@@ -2130,67 +2132,80 @@ func TestConvertGraphGuardrails(t *testing.T) {
 		}
 	}
 
+	// routeFor builds a route whose per-Gateway effective processor for gwNsName is the given policy.
+	routeFor := func(policy *graph.Policy) *graph.L7Route {
+		return &graph.L7Route{
+			EffectivePayloadProcessors: map[types.NamespacedName]*graph.Policy{gwNsName: policy},
+		}
+	}
+
 	tests := []struct {
 		route      *graph.L7Route
+		gwNsName   types.NamespacedName
 		name       string
 		expURL     string
 		expNil     bool
 		expFileSet bool
 	}{
 		{
-			name:   "nil route",
-			route:  nil,
-			expNil: true,
+			name:     "nil route",
+			route:    nil,
+			gwNsName: gwNsName,
+			expNil:   true,
 		},
 		{
-			name:   "no effective processor",
-			route:  &graph.L7Route{},
-			expNil: true,
+			name:     "no effective processor",
+			route:    &graph.L7Route{},
+			gwNsName: gwNsName,
+			expNil:   true,
 		},
 		{
-			name: "nil processor state",
-			route: &graph.L7Route{
-				EffectivePayloadProcessor: &graph.Policy{Valid: true, PayloadProcessorState: nil},
-			},
-			expNil: true,
+			name:     "nil processor state",
+			route:    routeFor(&graph.Policy{Valid: true, PayloadProcessorState: nil}),
+			gwNsName: gwNsName,
+			expNil:   true,
 		},
 		{
-			name: "invalid policy",
-			route: &graph.L7Route{
-				EffectivePayloadProcessor: &graph.Policy{Valid: false, PayloadProcessorState: validState()},
-			},
-			expNil: true,
+			name:     "invalid policy",
+			route:    routeFor(&graph.Policy{Valid: false, PayloadProcessorState: validState()}),
+			gwNsName: gwNsName,
+			expNil:   true,
 		},
 		{
-			name: "valid policy with token",
-			route: &graph.L7Route{
-				EffectivePayloadProcessor: &graph.Policy{Valid: true, PayloadProcessorState: validState()},
-			},
+			name:       "valid policy with token",
+			route:      routeFor(&graph.Policy{Valid: true, PayloadProcessorState: validState()}),
+			gwNsName:   gwNsName,
 			expURL:     "http://ext-svc.ns1.svc.cluster.local:9000",
 			expFileSet: true,
 		},
 		{
 			name: "valid policy without token",
-			route: &graph.L7Route{
-				EffectivePayloadProcessor: &graph.Policy{
-					Valid: true,
-					PayloadProcessorState: &graph.PolicyPayloadProcessorState{
-						APIURL: "http://ext-svc.ns1.svc.cluster.local:9000",
-					},
+			route: routeFor(&graph.Policy{
+				Valid: true,
+				PayloadProcessorState: &graph.PolicyPayloadProcessorState{
+					APIURL: "http://ext-svc.ns1.svc.cluster.local:9000",
 				},
-			},
+			}),
+			gwNsName:   gwNsName,
 			expURL:     "http://ext-svc.ns1.svc.cluster.local:9000",
 			expFileSet: false,
 		},
 		{
 			name: "valid policy with empty APIURL",
-			route: &graph.L7Route{
-				EffectivePayloadProcessor: &graph.Policy{
-					Valid:                 true,
-					PayloadProcessorState: &graph.PolicyPayloadProcessorState{APIURL: ""},
-				},
-			},
-			expNil: true,
+			route: routeFor(&graph.Policy{
+				Valid:                 true,
+				PayloadProcessorState: &graph.PolicyPayloadProcessorState{APIURL: ""},
+			}),
+			gwNsName: gwNsName,
+			expNil:   true,
+		},
+		{
+			// The route has a valid processor for gwNsName only; building for another Gateway must
+			// not apply that Gateway's policy.
+			name:     "no processor for the requested Gateway",
+			route:    routeFor(&graph.Policy{Valid: true, PayloadProcessorState: validState()}),
+			gwNsName: otherGwNsName,
+			expNil:   true,
 		},
 	}
 
@@ -2200,7 +2215,7 @@ func TestConvertGraphGuardrails(t *testing.T) {
 			g := NewWithT(t)
 
 			routeNsName := types.NamespacedName{Namespace: "ns1", Name: "route1"}
-			got := convertGraphGuardrails(test.route, routeNsName, 0)
+			got := convertGraphGuardrails(test.route, test.gwNsName, routeNsName, 0)
 			if test.expNil {
 				g.Expect(got).To(BeNil())
 				return

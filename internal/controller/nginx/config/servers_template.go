@@ -348,9 +348,6 @@ server {
                 {{- if $l.ProxySSLVerify.TrustedCertificate }}
         {{ $proxyOrGRPC }}_ssl_trusted_certificate {{ $l.ProxySSLVerify.TrustedCertificate }};
                 {{- end }}
-            {{- else if $l.ProxySSLServerName }}
-        proxy_ssl_server_name on;
-        proxy_ssl_name {{ $l.ProxySSLServerName }};
             {{- end }}
         {{- end }}
     }

@@ -8421,10 +8421,14 @@ func TestExecuteServers_Guardrails(t *testing.T) {
 				`proxy_set_header Host "guardrails.example.com";`,
 				"proxy_pass https://$guardrails_backend/backend/v1/scans;",
 				"proxy_ssl_server_name on;",
+				// The backend certificate and hostname must be verified against the system
+				// trust store before the auth token and inspected content are sent.
+				"proxy_ssl_verify on;",
+				"proxy_ssl_verify_depth 4;",
 				"proxy_ssl_name guardrails.example.com;",
+				"proxy_ssl_trusted_certificate /etc/ssl/cert.pem;",
 			},
 			expAbsent: []string{
-				"proxy_ssl_verify on;",
 				// Must NOT emit the literal (stale-pinning) proxy_pass.
 				"proxy_pass https://guardrails.example.com:443/backend/v1/scans;",
 			},
@@ -9258,10 +9262,13 @@ func TestExtractGuardrailsInternalLocations(t *testing.T) {
 			},
 			expected: []http.Location{
 				{
-					Path:                   "/_ngf-internal-guardrails-ns1_route1_rule0",
-					Type:                   http.InternalLocationType,
-					ProxyPass:              "https://$guardrails_backend/backend/v1/scans",
-					ProxySSLServerName:     "guardrails.example.com",
+					Path:      "/_ngf-internal-guardrails-ns1_route1_rule0",
+					Type:      http.InternalLocationType,
+					ProxyPass: "https://$guardrails_backend/backend/v1/scans",
+					ProxySSLVerify: &http.ProxySSLVerify{
+						Name:               "guardrails.example.com",
+						TrustedCertificate: dataplane.AlpineSSLRootCAPath,
+					},
 					GuardrailsProxyPassVar: "guardrails.example.com:443",
 					ProxySetHeaders:        []http.Header{{Name: "Host", Value: "guardrails.example.com"}},
 				},
@@ -9289,7 +9296,8 @@ func TestExtractGuardrailsInternalLocations(t *testing.T) {
 			},
 		},
 		{
-			name: "http backend leaves ProxySSLServerName empty",
+			// An in-cluster http backend needs no backend TLS verification.
+			name: "http backend leaves ProxySSLVerify nil",
 			locations: []http.Location{
 				{
 					Path: "/coffee",

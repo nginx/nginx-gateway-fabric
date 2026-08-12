@@ -3059,7 +3059,11 @@ func TestBuildConfiguration_Guardrails(t *testing.T) {
 			"listener-80-1",
 			pathAndType{path: "/", pathType: prefix},
 		)
-		route.EffectivePayloadProcessor = processor
+		if processor != nil {
+			route.EffectivePayloadProcessors = map[types.NamespacedName]*graph.Policy{
+				gatewayNsName: processor,
+			}
+		}
 
 		return getModifiedGraph(func(g *graph.Graph) *graph.Graph {
 			gw := g.Gateways[gatewayNsName]
@@ -12312,38 +12316,112 @@ func TestBuildGuardrailsAuthSecrets(t *testing.T) {
 	g := NewWithT(t)
 
 	secretNsName := types.NamespacedName{Namespace: "ns1", Name: "token-secret"}
+	otherSecretNsName := types.NamespacedName{Namespace: "ns1", Name: "other-token-secret"}
 
-	withToken := &graph.L7Route{
-		EffectivePayloadProcessor: &graph.Policy{
+	gwNsName := types.NamespacedName{Namespace: "ns1", Name: "gw"}
+	otherGwNsName := types.NamespacedName{Namespace: "ns1", Name: "other-gw"}
+
+	gwSource := func(nsName types.NamespacedName) *v1.Gateway {
+		return &v1.Gateway{
+			ObjectMeta: metav1.ObjectMeta{Namespace: nsName.Namespace, Name: nsName.Name},
+		}
+	}
+
+	// routeWithToken builds a route whose per-Gateway effective processor (for the given gateways)
+	// carries a token backed by secret.
+	routeWithToken := func(
+		secret types.NamespacedName,
+		token string,
+		valid bool,
+		gateways ...types.NamespacedName,
+	) *graph.L7Route {
+		policy := &graph.Policy{
 			Valid: true,
 			PayloadProcessorState: &graph.PolicyPayloadProcessorState{
 				APIURL:            "http://svc:9000",
-				AuthTokenSecret:   &secretNsName,
-				ResolvedAuthToken: []byte("tok"),
+				AuthTokenSecret:   &secret,
+				ResolvedAuthToken: []byte(token),
+			},
+		}
+		effective := make(map[types.NamespacedName]*graph.Policy)
+		for _, gw := range gateways {
+			effective[gw] = policy
+		}
+		return &graph.L7Route{Valid: valid, EffectivePayloadProcessors: effective}
+	}
+
+	withToken := routeWithToken(secretNsName, "tok", true, gwNsName)
+	withoutToken := &graph.L7Route{
+		Valid: true,
+		EffectivePayloadProcessors: map[types.NamespacedName]*graph.Policy{
+			gwNsName: {
+				Valid:                 true,
+				PayloadProcessorState: &graph.PolicyPayloadProcessorState{APIURL: "http://svc:9000"},
 			},
 		},
 	}
-	withoutToken := &graph.L7Route{
-		EffectivePayloadProcessor: &graph.Policy{
-			Valid:                 true,
-			PayloadProcessorState: &graph.PolicyPayloadProcessorState{APIURL: "http://svc:9000"},
+	noProcessor := &graph.L7Route{Valid: true}
+	// invalidRoute carries a token but is not Valid, so it must be skipped.
+	invalidRoute := routeWithToken(otherSecretNsName, "invalid-route-tok", false, gwNsName)
+	// invalidListenerRoute carries a token but sits on an invalid listener, so it must be skipped.
+	invalidListenerRoute := routeWithToken(otherSecretNsName, "invalid-listener-tok", true, gwNsName)
+	// otherGwOnlyRoute has a token, but only for another Gateway; it must not leak into gw's config
+	// even though it is enumerated under gw's listener.
+	otherGwOnlyRoute := routeWithToken(otherSecretNsName, "other-gw-tok", true, otherGwNsName)
+
+	key := func(name string) graph.RouteKey {
+		return graph.RouteKey{NamespacedName: types.NamespacedName{Namespace: "ns1", Name: name}}
+	}
+
+	gateway := &graph.Gateway{
+		Source: gwSource(gwNsName),
+		Listeners: []*graph.Listener{
+			{
+				Valid: true,
+				Routes: map[graph.RouteKey]*graph.L7Route{
+					key("r1"): withToken,
+					key("r2"): withoutToken,
+					key("r3"): noProcessor,
+					key("r4"): invalidRoute,
+					key("r7"): otherGwOnlyRoute,
+				},
+			},
+			{
+				Valid: false,
+				Routes: map[graph.RouteKey]*graph.L7Route{
+					key("r5"): invalidListenerRoute,
+				},
+			},
 		},
 	}
-	noProcessor := &graph.L7Route{}
 
-	routes := map[graph.RouteKey]*graph.L7Route{
-		{NamespacedName: types.NamespacedName{Namespace: "ns1", Name: "r1"}}: withToken,
-		{NamespacedName: types.NamespacedName{Namespace: "ns1", Name: "r2"}}: withoutToken,
-		{NamespacedName: types.NamespacedName{Namespace: "ns1", Name: "r3"}}: noProcessor,
-	}
-
-	got := buildGuardrailsAuthSecrets(&graph.Gateway{}, routes)
+	got := buildGuardrailsAuthSecrets(gateway)
 
 	id := GenerateGuardrailsTokenFileID("ns1", "token-secret")
+	otherID := GenerateGuardrailsTokenFileID("ns1", "other-token-secret")
+	// Only the valid route on the valid listener with a processor for this gateway contributes a token.
 	g.Expect(got).To(HaveLen(1))
 	g.Expect(got).To(HaveKeyWithValue(id, AuthFileData("tok")))
+	// Tokens from an invalid route, a route on an invalid listener, or a route whose processor belongs
+	// to another gateway must not be included.
+	g.Expect(got).ToNot(HaveKey(otherID))
 
-	g.Expect(buildGuardrailsAuthSecrets(nil, routes)).To(BeEmpty())
+	// The other gateway does collect its own token for the shared route, confirming per-gateway scoping
+	// rather than a global drop.
+	otherGateway := &graph.Gateway{
+		Source: gwSource(otherGwNsName),
+		Listeners: []*graph.Listener{
+			{
+				Valid:  true,
+				Routes: map[graph.RouteKey]*graph.L7Route{key("r7"): otherGwOnlyRoute},
+			},
+		},
+	}
+	g.Expect(buildGuardrailsAuthSecrets(otherGateway)).To(HaveKeyWithValue(otherID, AuthFileData("other-gw-tok")))
+
+	// A gateway with a nil Source yields no tokens.
+	g.Expect(buildGuardrailsAuthSecrets(&graph.Gateway{})).To(BeEmpty())
+	g.Expect(buildGuardrailsAuthSecrets(nil)).To(BeEmpty())
 }
 
 func TestGuardrailsEnabled(t *testing.T) {

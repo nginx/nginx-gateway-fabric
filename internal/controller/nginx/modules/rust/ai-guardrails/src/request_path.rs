@@ -168,6 +168,10 @@ struct RequestInspectState {
     block_message: Option<String>,
     /// True once the body read + spawn has been kicked off (guards re-entry).
     started: bool,
+    /// True when the request body spilled to a temp file and could not be
+    /// inspected in memory. Drives the distinct `request_too_large` 403 error
+    /// body instead of the content-policy block body.
+    too_large: bool,
     /// Parameters captured for the async inspection, taken by the body-read
     /// handler when it spawns the task.
     params: Option<InspectParams>,
@@ -180,6 +184,7 @@ impl RequestInspectState {
             verdict: InspectVerdict::Pending,
             block_message: None,
             started: false,
+            too_large: false,
             params: None,
         }
     }
@@ -293,7 +298,7 @@ pub(crate) unsafe extern "C" fn guardrails_access_handler(r: *mut ngx_http_reque
                     request.log(),
                     "guardrails: guardrails_internal_uri not configured (fail-closed)"
                 );
-                return send_403_and_finalize(r, None);
+                return send_403_and_finalize(r, BlockKind::ContentPolicy(None));
             }
         };
 
@@ -305,7 +310,7 @@ pub(crate) unsafe extern "C" fn guardrails_access_handler(r: *mut ngx_http_reque
                 request.log(),
                 "guardrails: failed to allocate request inspect state (fail-closed)"
             );
-            return send_403_and_finalize(r, None);
+            return send_403_and_finalize(r, BlockKind::ContentPolicy(None));
         }
         let state = &mut *state_ptr;
 
@@ -330,12 +335,24 @@ pub(crate) unsafe extern "C" fn guardrails_access_handler(r: *mut ngx_http_reque
                 Status::NGX_OK.into()
             }
             AccessAction::Block => {
-                ngx_log_error!(
-                    NGX_LOG_WARN,
-                    request.log(),
-                    "guardrails: request content BLOCKED by policy"
-                );
-                send_403_and_finalize(r, state.block_message.as_deref())
+                if state.too_large {
+                    ngx_log_error!(
+                        NGX_LOG_WARN,
+                        request.log(),
+                        "guardrails: request BLOCKED — body too large to inspect (fail-closed)"
+                    );
+                    send_403_and_finalize(r, BlockKind::TooLarge)
+                } else {
+                    ngx_log_error!(
+                        NGX_LOG_WARN,
+                        request.log(),
+                        "guardrails: request content BLOCKED by policy"
+                    );
+                    send_403_and_finalize(
+                        r,
+                        BlockKind::ContentPolicy(state.block_message.as_deref()),
+                    )
+                }
             }
             AccessAction::Wait => {
                 // Already started and still pending: yield with NGX_AGAIN so the
@@ -410,7 +427,23 @@ unsafe extern "C" fn guardrails_body_read_handler(r: *mut ngx_http_request_t) {
         };
 
         // Gather the buffered request body.
-        let content = collect_request_body(r).and_then(|bytes| extract_inspection_content(&bytes));
+        let content = match collect_request_body(r) {
+            CollectedBody::SpilledToDisk => {
+                ngx_log_error!(
+                    NGX_LOG_WARN,
+                    (*(*r).connection).log,
+                    "guardrails: request body spilled to disk (exceeds \
+                     client_body_buffer_size) and cannot be inspected; blocking (fail-closed)"
+                );
+                if !state_ptr.is_null() {
+                    (*state_ptr).too_large = true;
+                }
+                resume_phases(r, InspectVerdict::Block, None);
+                return;
+            }
+            CollectedBody::Content(bytes) => extract_inspection_content(&bytes),
+            CollectedBody::Empty => None,
+        };
 
         let content = match content {
             Some(c) => c,
@@ -485,22 +518,52 @@ unsafe fn resume_phases(
     }
 }
 
-/// Collect the fully-buffered request body into a contiguous buffer.
-unsafe fn collect_request_body(r: *mut ngx_http_request_t) -> Option<Vec<u8>> {
+/// Outcome of collecting the buffered request body.
+///
+/// Distinguishes three cases so the read handler can act correctly on each:
+///   - `Content` — the body was fully available in memory and collected.
+///   - `Empty` — there is genuinely no request body to inspect (allow).
+///   - `SpilledToDisk` — NGINX buffered part/all of the body to a temp file
+///     because it exceeded `client_body_buffer_size`. Those buffers are
+///     file-backed (`in_file`) and contribute no bytes to `pos`/`last`, so the
+///     in-memory content is incomplete and cannot be trusted. The module does
+///     not read disk-backed bodies, so this must **fail closed** (block) rather
+///     than allow an un-inspected prompt through.
+enum CollectedBody {
+    Content(Vec<u8>),
+    Empty,
+    SpilledToDisk,
+}
+
+/// Collect the in-memory request body into a contiguous buffer.
+///
+/// Only reads memory-resident buffers. If any buffer in the chain is file-backed
+/// (NGINX spilled the body past `client_body_buffer_size` to a temp file), the
+/// body cannot be inspected in memory and [`CollectedBody::SpilledToDisk`] is
+/// returned so the caller fails closed. See the module README for how operators
+/// can raise `client_body_buffer_size` to inspect larger prompts in memory.
+unsafe fn collect_request_body(r: *mut ngx_http_request_t) -> CollectedBody {
     unsafe {
         let rb = (*r).request_body;
         if rb.is_null() {
-            return None;
+            return CollectedBody::Empty;
         }
         let mut chain = (*rb).bufs;
         if chain.is_null() {
-            return None;
+            return CollectedBody::Empty;
         }
         let mut data = Vec::new();
         while !chain.is_null() {
             let buf = (*chain).buf;
             if !buf.is_null() {
                 let b = &*buf;
+                // A file-backed buffer means the body spilled to a temp file.
+                // We do not read disk-backed bodies; treat this as un-inspectable
+                // and signal the caller to fail closed. Detect via the `in_file`
+                // flag and, defensively, a non-empty file byte range.
+                if b.in_file() != 0 || b.file_last > b.file_pos {
+                    return CollectedBody::SpilledToDisk;
+                }
                 if !b.pos.is_null() && !b.last.is_null() {
                     let len = b.last.offset_from(b.pos) as usize;
                     let slice = std::slice::from_raw_parts(b.pos, len);
@@ -509,7 +572,11 @@ unsafe fn collect_request_body(r: *mut ngx_http_request_t) -> Option<Vec<u8>> {
             }
             chain = (*chain).next;
         }
-        if data.is_empty() { None } else { Some(data) }
+        if data.is_empty() {
+            CollectedBody::Empty
+        } else {
+            CollectedBody::Content(data)
+        }
     }
 }
 
@@ -527,6 +594,20 @@ pub(crate) unsafe extern "C" fn guardrails_request_body_filter(
 
 /// Default request-block message used when the guardrails backend supplies none.
 const DEFAULT_REQUEST_BLOCK_MESSAGE: &str = "Request blocked by guardrails policy.";
+
+/// Message for the request-too-large (body spilled to disk) block.
+const REQUEST_TOO_LARGE_MESSAGE: &str = "Request body is too large to be inspected by guardrails and was rejected. \
+     Reduce the request size, or raise client_body_buffer_size on the gateway.";
+
+/// Why a request is being blocked with a 403, selecting the error body shape.
+enum BlockKind<'a> {
+    /// Content flagged by policy (or a fail-closed config/allocation error).
+    /// Carries the optional backend-supplied block message.
+    ContentPolicy(Option<&'a str>),
+    /// The request body spilled to a temp file and could not be inspected, so it
+    /// was rejected fail-closed. Emits a distinct `request_too_large` error type.
+    TooLarge,
+}
 
 /// Build the request-side 403 error JSON body.
 ///
@@ -551,6 +632,32 @@ fn request_block_body(message: Option<&str>) -> Vec<u8> {
     .into_bytes()
 }
 
+/// Build the request-too-large 403 error JSON body.
+///
+/// Uses a distinct `type: "request_too_large"` / `code: "request_body_too_large"`
+/// so clients (and operators) can tell a fail-closed "body spilled to disk and
+/// could not be inspected" rejection apart from a content-policy block.
+fn request_too_large_body() -> Vec<u8> {
+    serde_json::json!({
+        "error": {
+            "message": REQUEST_TOO_LARGE_MESSAGE,
+            "type": "request_too_large",
+            "param": null,
+            "code": "request_body_too_large",
+        }
+    })
+    .to_string()
+    .into_bytes()
+}
+
+/// Build the 403 error JSON body for the given block reason.
+fn block_body(kind: BlockKind<'_>) -> Vec<u8> {
+    match kind {
+        BlockKind::ContentPolicy(message) => request_block_body(message),
+        BlockKind::TooLarge => request_too_large_body(),
+    }
+}
+
 /// Send a 403 Forbidden response with a JSON error body, then finalize the request.
 ///
 /// Called from the ACCESS-phase handler (`guardrails_access_handler`) when request
@@ -566,18 +673,19 @@ fn request_block_body(message: Option<&str>) -> Vec<u8> {
 /// the client gets `403` with an **empty body** (`403 0`). Every early-exit branch
 /// below finalizes once and returns `NGX_DONE`.
 ///
-/// `message` is the guardrails backend's configurable block text; when `None`
-/// the [`DEFAULT_REQUEST_BLOCK_MESSAGE`] fallback is used. The request-side error
-/// `type` is `invalid_request_error` (a bad client request), distinct from the
-/// output-side `api_error` used by the response-path helpers.
-unsafe fn send_403_and_finalize(r: *mut ngx_http_request_t, message: Option<&str>) -> ngx_int_t {
+/// `kind` selects the JSON error body: [`BlockKind::ContentPolicy`] emits the
+/// content-policy block (`type: invalid_request_error`, carrying the backend's
+/// optional block text), while [`BlockKind::TooLarge`] emits the distinct
+/// `request_too_large` body. Both are request-side (not the output-side
+/// `api_error` used by the response-path helpers).
+unsafe fn send_403_and_finalize(r: *mut ngx_http_request_t, kind: BlockKind<'_>) -> ngx_int_t {
     ngx_log_error!(
         NGX_LOG_DEBUG_HTTP,
         unsafe { (*(*r).connection).log },
         "guardrails: finalizing request with 403 Forbidden (JSON)"
     );
 
-    let json_body = request_block_body(message);
+    let json_body = block_body(kind);
     let json_body = json_body.as_slice();
 
     let request = unsafe { &mut *r.cast::<http::Request>() };
@@ -667,6 +775,35 @@ mod tests {
         );
         assert_eq!(value["error"]["type"], "invalid_request_error");
         assert_eq!(value["error"]["code"], "content_policy_violation");
+    }
+
+    #[test]
+    fn test_request_too_large_body_uses_distinct_error_type() {
+        // A body spilled to disk is rejected fail-closed with a DISTINCT error
+        // type/code so it is not confused with a content-policy block.
+        let body = request_too_large_body();
+        let value: serde_json::Value =
+            serde_json::from_slice(&body).expect("too-large body must be valid JSON");
+        assert_eq!(value["error"]["message"], REQUEST_TOO_LARGE_MESSAGE);
+        assert_eq!(value["error"]["type"], "request_too_large");
+        assert_eq!(value["error"]["code"], "request_body_too_large");
+        // Must NOT reuse the content-policy typing.
+        assert_ne!(value["error"]["type"], "invalid_request_error");
+        assert_ne!(value["error"]["code"], "content_policy_violation");
+    }
+
+    #[test]
+    fn test_block_body_dispatches_on_kind() {
+        // ContentPolicy -> content-policy error shape.
+        let policy: serde_json::Value =
+            serde_json::from_slice(&block_body(BlockKind::ContentPolicy(None)))
+                .expect("content-policy body must be valid JSON");
+        assert_eq!(policy["error"]["type"], "invalid_request_error");
+
+        // TooLarge -> request-too-large error shape.
+        let too_large: serde_json::Value = serde_json::from_slice(&block_body(BlockKind::TooLarge))
+            .expect("too-large body must be valid JSON");
+        assert_eq!(too_large["error"]["type"], "request_too_large");
     }
 
     #[test]

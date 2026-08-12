@@ -87,12 +87,6 @@ type Location struct {
 	HTTPMatchKey string
 	// ProxyPass is the upstream backend (URL or name) to which requests are proxied.
 	ProxyPass string
-	// ProxySSLServerName, when non-empty, emits `proxy_ssl_server_name on;` and
-	// `proxy_ssl_name <ProxySSLServerName>;` so NGINX sends SNI during the upstream
-	// TLS handshake. Unlike ProxySSLVerify, it does NOT enable proxy_ssl_verify — it
-	// only fixes SNI, leaving certificate verification off. Used by guardrails internal
-	// locations that proxy to an HTTPS (ExternalName) backend.
-	ProxySSLServerName string
 	// GuardrailsProxyPassVar, when non-empty, emits `set $guardrails_backend <value>;`
 	// immediately before proxy_pass in a guardrails internal location. The value is the
 	// backend authority (host:port). Because the accompanying ProxyPass references the

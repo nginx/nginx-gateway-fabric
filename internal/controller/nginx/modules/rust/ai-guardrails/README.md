@@ -106,6 +106,10 @@ consequences worth knowing:
   Dockerfiles `build/Dockerfile.nginx[plus]`, `build/ubi/Dockerfile.nginx[plus]`). The module no
   longer links a Rust TLS stack (rustls/aws-lc-rs) — that dependency existed solely for the old
   blocking `minreq` client, which has been removed.
+  - **Note:** `proxy_ssl_verify` is enabled with hostname checking, so only backends whose
+    certificate chains to a CA in the image's system trust store are supported. Private-CA or
+    self-signed guardrails backends are not currently supported (there is no way to supply a
+    custom CA bundle for the guardrails backend).
 
 See [`examples/guardrails/README.md`](../../../../../../examples/guardrails/README.md) for
 configuration walkthroughs of both backend styles.
@@ -225,7 +229,14 @@ calls `ngx_http_finalize_request` **exactly once**. The single-finalize contract
 2. If `guardrails_internal_uri` is not configured, fails **closed** with a `403`.
 3. **First invocation:** reads the full client request body
    (`ngx_http_read_client_request_body`) and returns `NGX_DONE`.
-4. The body-read callback parses the body as JSON and extracts the text to inspect:
+4. The body-read callback collects the request body from NGINX's in-memory buffers. Only
+   memory-resident buffers are read: if the body exceeded `client_body_buffer_size` and NGINX
+   **spilled it to a temp file**, those buffers are file-backed and carry no in-memory bytes, so
+   the prompt cannot be inspected. Rather than let a large, un-inspected prompt bypass the request
+   scan, the module **fails closed** and rejects it with a `403` carrying the distinct
+   `request_too_large` error type (`request_too_large_body`). To inspect larger prompts in memory,
+   raise `client_body_buffer_size` on the gateway; reading disk-backed bodies is not currently
+   supported. It then parses the body as JSON and extracts the text to inspect:
    - `prompt` field → `/v1/completions` style, or
    - `messages[].content` → `/v1/chat/completions` style (joined together).
    It then **spawns an async task** (`subrequest_client::inspect_content_async`) that issues an
@@ -272,6 +283,7 @@ and HTTP status depend on *which side* was blocked:
 | Block path | HTTP status | `error.type` | `error.code` |
 | ------------ | ------------- | -------------- | -------------- |
 | Request (client input) | `403` | `invalid_request_error` | `content_policy_violation` |
+| Request too large (spilled to disk, un-inspectable) | `403` | `request_too_large` | `request_body_too_large` |
 | Response, non-SSE | `403` | `api_error` | `content_policy_violation` |
 | Response, SSE stream | `200`* | `api_error` | `content_policy_violation` |
 

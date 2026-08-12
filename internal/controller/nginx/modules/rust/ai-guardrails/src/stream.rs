@@ -42,15 +42,29 @@ fn extract_llm_content(chunk: LlmChunk, accumulated: &mut String, stream_done: &
         if let Some(content) = msg.content {
             accumulated.push_str(&content);
         }
-    } else if let Some(choices) = chunk.choices
-        && let Some(first) = choices.into_iter().next()
-    {
-        if let Some(delta) = first.delta {
-            if let Some(content) = delta.content {
-                accumulated.push_str(&content);
+    } else if let Some(choices) = chunk.choices {
+        // A completion may carry multiple choices (e.g. n > 1 / best_of), and
+        // every choice is forwarded to the client, so every choice must be
+        // inspected — scanning only the first would let blocked content in a
+        // later choice bypass the guardrail. Accumulate them all.
+        for (i, choice) in choices.into_iter().enumerate() {
+            let text = if let Some(delta) = choice.delta {
+                delta.content
+            } else {
+                choice.text
+            };
+            if let Some(text) = text {
+                // Separate distinct choices within this chunk with a newline so
+                // adjacent choice texts can't merge into a token that hides a
+                // sentinel at the boundary. Scoped to this chunk's choices only
+                // (i > 0), so streamed fragments of a single choice — which
+                // arrive as separate chunks — still concatenate without a
+                // separator.
+                if i > 0 {
+                    accumulated.push('\n');
+                }
+                accumulated.push_str(&text);
             }
-        } else if let Some(text) = first.text {
-            accumulated.push_str(&text);
         }
     }
 }
@@ -371,6 +385,40 @@ mod tests {
         let mut ctx = StreamContext::default();
         ctx.process_chunk(b"data: {\"choices\":[{\"text\":\"answer\"}]}\n");
         assert_eq!(ctx.accumulated_text, "answer");
+    }
+
+    #[test]
+    fn test_openai_multiple_choice_deltas_all_extracted() {
+        // n > 1 chat completion: every choice's delta content must be
+        // accumulated (not just the first), separated by a newline.
+        let mut ctx = StreamContext::default();
+        ctx.process_chunk(
+            b"data: {\"choices\":[{\"delta\":{\"content\":\"foo\"}},{\"delta\":{\"content\":\"bar\"}}]}\n",
+        );
+        assert_eq!(ctx.accumulated_text, "foo\nbar");
+    }
+
+    #[test]
+    fn test_openai_multiple_completion_texts_all_extracted() {
+        // n > 1 non-streaming completion: every choice's text must be
+        // accumulated, separated by a newline.
+        let mut ctx = StreamContext::default();
+        ctx.process_chunk(b"data: {\"choices\":[{\"text\":\"a\"},{\"text\":\"b\"}]}\n");
+        assert_eq!(ctx.accumulated_text, "a\nb");
+    }
+
+    #[test]
+    fn test_later_choice_content_is_inspected() {
+        // Regression: blocked content in a non-first choice must reach
+        // accumulated_text so it is scanned before the response is released.
+        let mut ctx = StreamContext::default();
+        ctx.process_chunk(
+            b"data: {\"choices\":[{\"delta\":{\"content\":\"clean\"}},{\"delta\":{\"content\":\"SENTINEL\"}}]}\n",
+        );
+        assert!(
+            ctx.accumulated_text.contains("SENTINEL"),
+            "content in a later choice must be accumulated for inspection"
+        );
     }
 
     #[test]
