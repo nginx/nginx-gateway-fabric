@@ -264,10 +264,10 @@ must detect). If you add longer responses to `test-data.json`, raise these accor
 
 The Guardrails backend can live **outside** or **inside** the cluster. NGF picks the URL scheme from
 the referenced Service's type and, **per Gateway**, from whether a
-[`BackendTLSPolicy`](https://gateway-api.sigs.k8s.io/api-types/backendtlspolicy/) is attached to that
-Gateway for the Service:
+[`BackendTLSPolicy`](https://gateway-api.sigs.k8s.io/api-types/backendtlspolicy/) **targets that
+Service** and is **effective for that Gateway**; see the [per-Gateway note](#in-cluster-https-via-backendtlspolicy) below):
 
-| Backend location | Service type | `BackendTLSPolicy` attached (this Gateway)? | Resolved URL (per Gateway) |
+| Backend location | Service type | `BackendTLSPolicy` effective for this Gateway? | Resolved URL (per Gateway) |
 | ------------------ | ------------- | ------------------- | -------------- |
 | External | `ExternalName` | n/a | `https://<externalName>:<backendRef.port>` |
 | In-cluster (plaintext) | `ClusterIP` (or any non-`ExternalName`) | no | `http://<name>.<namespace>.svc.<cluster-domain>:<backendRef.port>` |
@@ -279,9 +279,10 @@ Two important rules regardless of location:
   `.spec.ports`. Set them to the same value or the module will call a dead port.
 - **Scheme selection is per Gateway:** external (`ExternalName`) backends are always called over
   **https**; in-cluster backends default to **http**, and are upgraded to **https** only for the
-  Gateways a `BackendTLSPolicy` is actually attached to. A `BackendTLSPolicy` only affects a Gateway it
-  is attached to, so the same `PayloadProcessor` can be `https` (verified) on one Gateway and plaintext
-  `http` on another that the policy does not cover.
+  Gateways for which a `BackendTLSPolicy` is *effective*. A `BackendTLSPolicy` **targets the backend
+  Service**; it becomes effective for a Gateway only when that Gateway routes to the
+  target Service and the policy is valid for it. So the same `PayloadProcessor` can be `https`
+  (verified) on one Gateway and plaintext `http` on another for which the policy is not effective.
 
 ### In-cluster HTTPS via `BackendTLSPolicy`
 
@@ -303,16 +304,21 @@ request (see [below](#configuring-the-dns-resolver-required-for-externalname-bac
 
 An in-cluster HTTPS example manifest is shown in [In-cluster HTTPS backend](#in-cluster-https-backend).
 
-If the referenced `BackendTLSPolicy` is invalid or not attached to the backend Service, NGF fails
-**closed** (the `PayloadProcessor` is not programmed for that backend) rather than silently falling
-back to plaintext.
+If a `BackendTLSPolicy` targets the backend Service but is invalid (or the referenced CA bundle is
+missing), NGF fails **closed** (the `PayloadProcessor` is not programmed for that backend) rather than
+silently falling back to plaintext. (If no `BackendTLSPolicy` targets the Service at all, the
+in-cluster backend is simply called over plaintext **http**.)
 
-> **Per-Gateway note:** the https upgrade is honored **per Gateway**. A `BackendTLSPolicy` only
-> applies to Gateways it is attached to (subject to the usual attachment/ancestor limits). If a
-> `PayloadProcessor` is used by routes bound to multiple Gateways but its `BackendTLSPolicy` is only
-> attached to some of them, the backend is reached over **https (verified)** on the covered Gateways
-> and over plaintext **http** on the others — the scheme never leaks from one Gateway to another. To
-> get https on every Gateway, ensure the `BackendTLSPolicy` is attached to each of them.
+> **Per-Gateway note:** a `BackendTLSPolicy` **attaches to the backend Service** (via
+> `spec.targetRefs`, `kind: Service`). Its https upgrade is
+> nonetheless scoped **per Gateway**: NGF derives the set of Gateways the policy is *effective* for
+> from which Gateways route to the target Service, and applies the upgrade for a Gateway only when the
+> policy is valid and accepted for it (subject to the usual ancestor limits). So if a
+> `PayloadProcessor` is used by routes bound to multiple Gateways but the policy cannot be applied to
+> some of them (e.g. ancestor-limit trimming or per-Gateway invalidity), the backend is reached over
+> **https (verified)** on the effective Gateways and over plaintext **http** on the others — the scheme
+> never leaks from one Gateway to another. To get https on every Gateway, ensure every such Gateway
+> routes to the target Service and the policy is valid and accepted (within ancestor limits) for each.
 
 Both inspection paths (request and response) reach the Guardrails backend the **same** way (see the
 module README's [request/response architecture](../../internal/controller/nginx/modules/rust/ai-guardrails/README.md#request-path-vs-response-path)):

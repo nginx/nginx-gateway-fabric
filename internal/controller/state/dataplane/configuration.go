@@ -1394,6 +1394,8 @@ func newBackendGroup(
 	}, inferencePoolBackendExists
 }
 
+// convertBackendTLS returns the per-Gateway TLS verification settings for a backend targeted by a
+// BackendTLSPolicy.
 func convertBackendTLS(btp *graph.BackendTLSPolicy, gwNsName types.NamespacedName) *VerifyTLS {
 	if btp == nil || !btp.Valid {
 		return nil

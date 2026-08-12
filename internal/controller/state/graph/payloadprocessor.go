@@ -196,7 +196,7 @@ func resolveExtProcessBackendTLS(
 // policy's ExtProcess backend Service into referencedServices, associating it with the Gateways the
 // policy attaches to. These Services are referenced only through the policy (not a Route backend), so
 // buildReferencedServices does not include them; without this, a BackendTLSPolicy targeting a
-// Guardrails backend Service would never be attached to the relevant Gateways and its TLS settings
+// Guardrails backend Service would never be associated with the relevant Gateways and its TLS settings
 // would be dropped during dataplane conversion (convertBackendTLS is gateway-scoped).
 func addPayloadProcessorBackendServicesToReferencedServices(
 	processedPolicies map[PolicyKey]*Policy,
@@ -310,11 +310,11 @@ func extProcessServiceNsName(
 // ExternalName Services resolve to an https URL using the external hostname (they are always fronted
 // by a hostname-verified, system-trust TLS terminator, with no per-Gateway variance). A cluster-local
 // (ClusterIP) Service resolves to its cluster DNS name over plaintext http here; the per-Gateway https
-// upgrade (when a BackendTLSPolicy is attached to a given Gateway) is applied downstream in the
+// upgrade (when a BackendTLSPolicy is effective for a given Gateway) is applied downstream in the
 // dataplane layer (convertGraphGuardrails), which is the single source of truth for the per-Gateway
 // TLS decision. Keeping the scheme decision out of this policy-scoped resolution avoids emitting https
-// for a Gateway the BackendTLSPolicy is not attached to. The returned bool reports whether the backend
-// is an ExternalName Service.
+// for a Gateway the BackendTLSPolicy is not effective for. The returned bool reports whether the
+// backend is an ExternalName Service.
 func resolveExtProcessURL(
 	svcNsName types.NamespacedName,
 	svc *corev1.Service,

@@ -576,9 +576,9 @@ func convertGraphGuardrails(
 	}
 
 	// convertBackendTLS is the single, per-Gateway source of truth for whether this backend is
-	// verified over TLS for THIS Gateway: it returns non-nil only when the BackendTLSPolicy is
-	// attached to gwNsName. Derive the URL scheme from that result so an in-cluster backend is only
-	// upgraded to https on Gateways the policy is actually attached to.
+	// verified over TLS for THIS Gateway: it returns non-nil only when a BackendTLSPolicy targets the
+	// backend Service and is effective for gwNsName. Derive the URL scheme from that result so an
+	// in-cluster backend is only upgraded to https on Gateways for which the policy is effective.
 	verifyTLS := convertBackendTLS(state.BackendTLSPolicy, gwNsName)
 
 	gc := &GuardrailsConfig{
@@ -603,14 +603,14 @@ func convertGraphGuardrails(
 //
 // The graph resolves in-cluster (ClusterIP) backends to a plaintext http base and ExternalName
 // backends to https (ExternalName is always system-trust https with no per-Gateway variance).
-// verifyTLS is non-nil only when a BackendTLSPolicy is attached to this Gateway; in that case an
-// in-cluster backend must be called over https. ExternalName backends (state.BackendIsExternalName)
-// are already https and are never re-derived here.
+// verifyTLS is non-nil only when a BackendTLSPolicy targets the backend Service and is effective for
+// this Gateway; in that case an in-cluster backend must be called over https. ExternalName backends
+// (state.BackendIsExternalName) are already https and are never re-derived here.
 func guardrailsAPIURLForGateway(state *graph.PolicyPayloadProcessorState, verifyTLS *VerifyTLS) string {
 	if state.BackendIsExternalName || verifyTLS == nil {
 		return state.APIURL
 	}
-	// In-cluster backend fronted by a BackendTLSPolicy attached to this Gateway: upgrade http -> https.
+	// In-cluster backend fronted by a BackendTLSPolicy effective for this Gateway: upgrade http -> https.
 	return strings.Replace(state.APIURL, "http://", "https://", 1)
 }
 

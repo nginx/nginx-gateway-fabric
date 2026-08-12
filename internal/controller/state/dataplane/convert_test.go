@@ -2232,7 +2232,7 @@ func TestConvertGraphGuardrails(t *testing.T) {
 			expNil:   true,
 		},
 		{
-			// BackendTLSPolicy attached to THIS Gateway: dataplane sets VerifyTLS and upgrades the
+			// BackendTLSPolicy effective for THIS Gateway: dataplane sets VerifyTLS and upgrades the
 			// in-cluster http base to https.
 			name: "in-cluster backend with BackendTLSPolicy for this Gateway sets VerifyTLS and upgrades to https",
 			route: routeFor(&graph.Policy{
@@ -2248,7 +2248,7 @@ func TestConvertGraphGuardrails(t *testing.T) {
 			},
 		},
 		{
-			// BackendTLSPolicy attached to ANOTHER Gateway only: for this Gateway there is no TLS
+			// BackendTLSPolicy effective for ANOTHER Gateway only: for this Gateway there is no TLS
 			// trust, so VerifyTLS is nil AND the URL stays plaintext http. This is the divergence the
 			// per-Gateway scheme decision fixes: previously the graph baked https into the URL while
 			// VerifyTLS was nil, producing an unverifiable https backend on this Gateway.
