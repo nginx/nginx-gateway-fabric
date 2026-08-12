@@ -80,14 +80,40 @@ impl MessageContent {
     }
 }
 
+/// Outcome of extracting inspectable text from a raw request body.
+///
+/// Distinguishes "there is genuinely nothing to inspect" (safe to allow) from
+/// "there were bytes but we could not decode them" (must fail closed). The
+/// caller (`guardrails_body_read_handler`) treats these differently: `None`
+/// allows, `Undecodable` blocks. Conflating the two (the previous
+/// `Option<String>` returning `None` for non-UTF-8 bytes) let a non-UTF-8 /
+/// content-encoded prompt bypass inspection.
+enum InspectableContent {
+    /// Decodable content that should be sent to the guardrails backend.
+    Text(String),
+    /// The body was empty or yielded no meaningful text — allow.
+    None,
+    /// The body was non-empty but not valid UTF-8 (e.g. a gzip/br/deflate
+    /// compressed prompt). It cannot be inspected in memory, so the caller
+    /// must fail closed and block.
+    Undecodable,
+}
+
 /// Extract the text content to inspect from a raw JSON request body.
 ///
 /// Preference order: a non-empty `prompt`, else the newline-joined non-empty
 /// `messages[].content` (string or multimodal-array shape; text parts only),
 /// else the raw body string (so unknown shapes are still inspected). Returns
-/// `None` when there is nothing meaningful to inspect.
-fn extract_inspection_content(body_data: &[u8]) -> Option<String> {
-    let body_str = std::str::from_utf8(body_data).ok()?;
+/// [`InspectableContent::None`] when there is nothing meaningful to inspect, and
+/// [`InspectableContent::Undecodable`] when the (non-empty) body is not valid
+/// UTF-8 so it cannot be inspected in memory.
+fn extract_inspection_content(body_data: &[u8]) -> InspectableContent {
+    let body_str = match std::str::from_utf8(body_data) {
+        Ok(s) => s,
+        // Non-UTF-8 bytes: cannot be inspected in memory (e.g. a compressed
+        // body). Signal the caller to fail closed rather than silently allow.
+        Err(_) => return InspectableContent::Undecodable,
+    };
 
     let content: Cow<'_, str> = match serde_json::from_str::<RequestBody>(body_str) {
         Ok(body) => {
@@ -119,9 +145,79 @@ fn extract_inspection_content(body_data: &[u8]) -> Option<String> {
     };
 
     if content.is_empty() {
-        None
+        InspectableContent::None
     } else {
-        Some(content.into_owned())
+        InspectableContent::Text(content.into_owned())
+    }
+}
+
+/// Whether a request `Content-Encoding` header value denotes an encoding the
+/// module cannot inspect. The only inspectable ("no-op") encoding is `identity`;
+/// any other token (`gzip`, `br`, `deflate`, `compress`, …) means the body is
+/// transformed and cannot be scanned in memory, so the caller must fail closed.
+///
+/// The value is matched case-insensitively with surrounding whitespace trimmed.
+/// A comma-separated list is treated as unsupported if **any** token is
+/// non-empty and not `identity` (a single `identity`, or an empty value, is
+/// supported).
+fn is_unsupported_encoding(value: &[u8]) -> bool {
+    value
+        .split(|&b| b == b',')
+        .map(trim_ascii_ws)
+        .filter(|tok| !tok.is_empty())
+        .any(|tok| !tok.eq_ignore_ascii_case(b"identity"))
+}
+
+/// Trim leading/trailing ASCII whitespace from a byte slice.
+fn trim_ascii_ws(mut s: &[u8]) -> &[u8] {
+    while let [first, rest @ ..] = s {
+        if first.is_ascii_whitespace() {
+            s = rest;
+        } else {
+            break;
+        }
+    }
+    while let [rest @ .., last] = s {
+        if last.is_ascii_whitespace() {
+            s = rest;
+        } else {
+            break;
+        }
+    }
+    s
+}
+
+/// Whether the request carries a `Content-Encoding` header that the module
+/// cannot inspect (anything other than `identity`). Iterates `headers_in` (there
+/// is no dedicated struct field for request `Content-Encoding`). Used to fail
+/// closed on content-encoded prompts before deciding there is nothing to inspect.
+unsafe fn request_has_unsupported_encoding(r: *mut ngx_http_request_t) -> bool {
+    unsafe {
+        let list = &(*r).headers_in.headers;
+        let mut part = &list.part as *const ngx::ffi::ngx_list_part_t;
+        while !part.is_null() {
+            let elts = (*part).elts as *const ngx::ffi::ngx_table_elt_t;
+            let n = (*part).nelts;
+            for i in 0..n {
+                let h = &*elts.add(i);
+                if h.key.len == 0 || h.key.data.is_null() {
+                    continue;
+                }
+                let key = std::slice::from_raw_parts(h.key.data, h.key.len);
+                if !key.eq_ignore_ascii_case(b"content-encoding") {
+                    continue;
+                }
+                if h.value.len == 0 || h.value.data.is_null() {
+                    continue;
+                }
+                let value = std::slice::from_raw_parts(h.value.data, h.value.len);
+                if is_unsupported_encoding(value) {
+                    return true;
+                }
+            }
+            part = (*part).next;
+        }
+        false
     }
 }
 
@@ -172,6 +268,10 @@ struct RequestInspectState {
     /// inspected in memory. Drives the distinct `request_too_large` 403 error
     /// body instead of the content-policy block body.
     too_large: bool,
+    /// True when the request could not be inspected because it used an
+    /// unsupported Content-Encoding or a non-UTF-8 body. Drives the distinct
+    /// `unsupported_content_encoding` 403 error body.
+    uninspectable: bool,
     /// Parameters captured for the async inspection, taken by the body-read
     /// handler when it spawns the task.
     params: Option<InspectParams>,
@@ -185,6 +285,7 @@ impl RequestInspectState {
             block_message: None,
             started: false,
             too_large: false,
+            uninspectable: false,
             params: None,
         }
     }
@@ -342,6 +443,14 @@ pub(crate) unsafe extern "C" fn guardrails_access_handler(r: *mut ngx_http_reque
                         "guardrails: request BLOCKED — body too large to inspect (fail-closed)"
                     );
                     send_403_and_finalize(r, BlockKind::TooLarge)
+                } else if state.uninspectable {
+                    ngx_log_error!(
+                        NGX_LOG_WARN,
+                        request.log(),
+                        "guardrails: request BLOCKED — unsupported content encoding / \
+                         non-UTF-8 body (fail-closed)"
+                    );
+                    send_403_and_finalize(r, BlockKind::UnsupportedEncoding)
                 } else {
                     ngx_log_error!(
                         NGX_LOG_WARN,
@@ -426,6 +535,24 @@ unsafe extern "C" fn guardrails_body_read_handler(r: *mut ngx_http_request_t) {
             }
         };
 
+        // A content-encoded request body (Content-Encoding other than identity)
+        // is transformed on the wire and cannot be inspected in memory. Reject it
+        // fail-closed before looking at the (compressed) bytes, so an encoded
+        // prompt cannot slip through as "nothing to inspect".
+        if request_has_unsupported_encoding(r) {
+            ngx_log_error!(
+                NGX_LOG_WARN,
+                (*(*r).connection).log,
+                "guardrails: request uses unsupported Content-Encoding and cannot be \
+                 inspected; blocking (fail-closed)"
+            );
+            if !state_ptr.is_null() {
+                (*state_ptr).uninspectable = true;
+            }
+            resume_phases(r, InspectVerdict::Block, None);
+            return;
+        }
+
         // Gather the buffered request body.
         let content = match collect_request_body(r) {
             CollectedBody::SpilledToDisk => {
@@ -442,12 +569,12 @@ unsafe extern "C" fn guardrails_body_read_handler(r: *mut ngx_http_request_t) {
                 return;
             }
             CollectedBody::Content(bytes) => extract_inspection_content(&bytes),
-            CollectedBody::Empty => None,
+            CollectedBody::Empty => InspectableContent::None,
         };
 
         let content = match content {
-            Some(c) => c,
-            None => {
+            InspectableContent::Text(c) => c,
+            InspectableContent::None => {
                 // Nothing to inspect — allow and resume immediately.
                 ngx_log_error!(
                     NGX_LOG_DEBUG_HTTP,
@@ -455,6 +582,22 @@ unsafe extern "C" fn guardrails_body_read_handler(r: *mut ngx_http_request_t) {
                     "guardrails: no inspectable request content; allowing"
                 );
                 resume_phases(r, InspectVerdict::Allow, None);
+                return;
+            }
+            InspectableContent::Undecodable => {
+                // Non-empty but non-UTF-8 body (e.g. a compressed prompt that
+                // slipped past the Content-Encoding check). Cannot be inspected
+                // in memory — fail closed.
+                ngx_log_error!(
+                    NGX_LOG_WARN,
+                    (*(*r).connection).log,
+                    "guardrails: request body is not valid UTF-8 and cannot be \
+                     inspected; blocking (fail-closed)"
+                );
+                if !state_ptr.is_null() {
+                    (*state_ptr).uninspectable = true;
+                }
+                resume_phases(r, InspectVerdict::Block, None);
                 return;
             }
         };
@@ -599,6 +742,11 @@ const DEFAULT_REQUEST_BLOCK_MESSAGE: &str = "Request blocked by guardrails polic
 const REQUEST_TOO_LARGE_MESSAGE: &str = "Request body is too large to be inspected by guardrails and was rejected. \
      Reduce the request size, or raise client_body_buffer_size on the gateway.";
 
+/// Message for the unsupported-content-encoding / non-UTF-8 body block.
+const UNSUPPORTED_ENCODING_MESSAGE: &str = "Request body could not be inspected by guardrails \
+     (unsupported content encoding or non-UTF-8 body) and was rejected. \
+     Send the request body uncompressed and as UTF-8.";
+
 /// Why a request is being blocked with a 403, selecting the error body shape.
 enum BlockKind<'a> {
     /// Content flagged by policy (or a fail-closed config/allocation error).
@@ -607,6 +755,10 @@ enum BlockKind<'a> {
     /// The request body spilled to a temp file and could not be inspected, so it
     /// was rejected fail-closed. Emits a distinct `request_too_large` error type.
     TooLarge,
+    /// The request used an unsupported Content-Encoding or a non-UTF-8 body and
+    /// could not be inspected, so it was rejected fail-closed. Emits a distinct
+    /// `unsupported_content_encoding` error type.
+    UnsupportedEncoding,
 }
 
 /// Build the request-side 403 error JSON body.
@@ -650,11 +802,31 @@ fn request_too_large_body() -> Vec<u8> {
     .into_bytes()
 }
 
+/// Build the unsupported-content-encoding 403 error JSON body.
+///
+/// Uses a distinct `type: "invalid_request_error"` / `code:
+/// "unsupported_content_encoding"` so clients (and operators) can tell a
+/// fail-closed "body could not be decoded/inspected" rejection apart from a
+/// content-policy block or a request-too-large rejection.
+fn unsupported_encoding_body() -> Vec<u8> {
+    serde_json::json!({
+        "error": {
+            "message": UNSUPPORTED_ENCODING_MESSAGE,
+            "type": "invalid_request_error",
+            "param": null,
+            "code": "unsupported_content_encoding",
+        }
+    })
+    .to_string()
+    .into_bytes()
+}
+
 /// Build the 403 error JSON body for the given block reason.
 fn block_body(kind: BlockKind<'_>) -> Vec<u8> {
     match kind {
         BlockKind::ContentPolicy(message) => request_block_body(message),
         BlockKind::TooLarge => request_too_large_body(),
+        BlockKind::UnsupportedEncoding => unsupported_encoding_body(),
     }
 }
 
@@ -742,6 +914,26 @@ unsafe fn send_403_and_finalize(r: *mut ngx_http_request_t, kind: BlockKind<'_>)
 mod tests {
     use super::*;
 
+    impl InspectableContent {
+        /// Test helper: the extracted text if this is `Text`, else `None`.
+        fn as_text(&self) -> Option<&str> {
+            match self {
+                InspectableContent::Text(s) => Some(s.as_str()),
+                _ => None,
+            }
+        }
+
+        /// Test helper: true if this is the genuinely-nothing-to-inspect case.
+        fn is_none(&self) -> bool {
+            matches!(self, InspectableContent::None)
+        }
+
+        /// Test helper: true if this is the non-UTF-8 fail-closed case.
+        fn is_undecodable(&self) -> bool {
+            matches!(self, InspectableContent::Undecodable)
+        }
+    }
+
     #[test]
     fn test_request_block_body_none_uses_default() {
         // No backend message -> plain default, no "Message:" suffix; type stays
@@ -812,8 +1004,8 @@ mod tests {
         // unescaped — the previous borrowed-deserialize path failed on these and
         // silently inspected the raw JSON envelope instead.
         let body = br#"{"prompt": "line one\nline \"two\""}"#;
-        let got = extract_inspection_content(body).expect("prompt must be extracted");
-        assert_eq!(got, "line one\nline \"two\"");
+        let got = extract_inspection_content(body);
+        assert_eq!(got.as_text(), Some("line one\nline \"two\""));
     }
 
     #[test]
@@ -825,21 +1017,21 @@ mod tests {
             {"content": ""},
             {"content": "second\nline"}
         ]}"#;
-        let got = extract_inspection_content(body).expect("messages must be extracted");
-        assert_eq!(got, "hello \\ world\nsecond\nline");
+        let got = extract_inspection_content(body);
+        assert_eq!(got.as_text(), Some("hello \\ world\nsecond\nline"));
     }
 
     #[test]
     fn test_extract_content_prompt_preferred_over_messages() {
         let body = br#"{"prompt": "P", "messages": [{"content": "M"}]}"#;
-        assert_eq!(extract_inspection_content(body).as_deref(), Some("P"));
+        assert_eq!(extract_inspection_content(body).as_text(), Some("P"));
     }
 
     #[test]
     fn test_extract_content_array_text_parts() {
         // Multimodal array-shaped content with only text parts.
         let body = br#"{"messages": [{"content": [{"type": "text", "text": "hello"}]}]}"#;
-        assert_eq!(extract_inspection_content(body).as_deref(), Some("hello"));
+        assert_eq!(extract_inspection_content(body).as_text(), Some("hello"));
     }
 
     #[test]
@@ -852,7 +1044,7 @@ mod tests {
             {"type": "image_url", "image_url": {"url": "data:image/png;base64,AAAABBBBCCCC"}}
         ]}]}"#;
         assert_eq!(
-            extract_inspection_content(body).as_deref(),
+            extract_inspection_content(body).as_text(),
             Some("describe this")
         );
     }
@@ -863,8 +1055,12 @@ mod tests {
         let body = br#"{"messages": [{"content": [
             {"type": "image_url", "image_url": {"url": "data:image/png;base64,AAAA"}}
         ]}]}"#;
-        let got = extract_inspection_content(body).expect("raw envelope inspected");
-        assert!(got.contains("image_url"));
+        let got = extract_inspection_content(body);
+        assert!(
+            got.as_text()
+                .expect("raw envelope inspected")
+                .contains("image_url")
+        );
     }
 
     #[test]
@@ -875,7 +1071,7 @@ mod tests {
             {"content": [{"type": "text", "text": "second"}, {"type": "text", "text": "third"}]}
         ]}"#;
         assert_eq!(
-            extract_inspection_content(body).as_deref(),
+            extract_inspection_content(body).as_text(),
             Some("first\nsecond\nthird")
         );
     }
@@ -885,7 +1081,7 @@ mod tests {
         // No prompt/messages -> inspect the raw JSON so nothing slips through.
         let body = br#"{"input": "unknown shape"}"#;
         assert_eq!(
-            extract_inspection_content(body).as_deref(),
+            extract_inspection_content(body).as_text(),
             Some(r#"{"input": "unknown shape"}"#)
         );
     }
@@ -894,7 +1090,7 @@ mod tests {
     fn test_extract_content_non_json_falls_back_to_raw() {
         let body = b"just plain text";
         assert_eq!(
-            extract_inspection_content(body).as_deref(),
+            extract_inspection_content(body).as_text(),
             Some("just plain text")
         );
     }
@@ -904,13 +1100,78 @@ mod tests {
         // An empty prompt is not meaningful -> raw body is inspected instead.
         let body = br#"{"prompt": ""}"#;
         assert_eq!(
-            extract_inspection_content(body).as_deref(),
+            extract_inspection_content(body).as_text(),
             Some(r#"{"prompt": ""}"#)
         );
     }
 
     #[test]
-    fn test_extract_content_invalid_utf8_returns_none() {
-        assert!(extract_inspection_content(&[0xff, 0xfe]).is_none());
+    fn test_extract_content_invalid_utf8_is_undecodable() {
+        // A non-empty, non-UTF-8 body (e.g. a compressed prompt) must be reported
+        // as Undecodable so the caller fails closed — NOT None (which would allow
+        // it through un-inspected).
+        let got = extract_inspection_content(&[0xff, 0xfe]);
+        assert!(got.is_undecodable());
+        assert!(!got.is_none());
+        assert_eq!(got.as_text(), None);
+    }
+
+    #[test]
+    fn test_extract_content_empty_body_is_none() {
+        // A genuinely empty body has nothing to inspect and is allowed.
+        assert!(extract_inspection_content(b"").is_none());
+    }
+
+    #[test]
+    fn test_extract_content_gzip_magic_bytes_is_undecodable() {
+        // gzip stream magic + non-UTF-8 continuation: must fail closed.
+        let gzip = [0x1f, 0x8b, 0x08, 0x00, 0xff, 0xfe, 0x00, 0x03];
+        assert!(extract_inspection_content(&gzip).is_undecodable());
+    }
+
+    #[test]
+    fn test_is_unsupported_encoding() {
+        // identity (any case) and empty are supported (inspectable).
+        assert!(!is_unsupported_encoding(b"identity"));
+        assert!(!is_unsupported_encoding(b"Identity"));
+        assert!(!is_unsupported_encoding(b"  IDENTITY  "));
+        assert!(!is_unsupported_encoding(b""));
+        assert!(!is_unsupported_encoding(b"   "));
+        // Any real transfer encoding is unsupported.
+        assert!(is_unsupported_encoding(b"gzip"));
+        assert!(is_unsupported_encoding(b"GZIP"));
+        assert!(is_unsupported_encoding(b"br"));
+        assert!(is_unsupported_encoding(b"deflate"));
+        assert!(is_unsupported_encoding(b"compress"));
+        assert!(is_unsupported_encoding(b" gzip "));
+        // A list containing any non-identity token is unsupported.
+        assert!(is_unsupported_encoding(b"identity, gzip"));
+        assert!(is_unsupported_encoding(b"gzip, identity"));
+        // A list of only identity tokens stays supported.
+        assert!(!is_unsupported_encoding(b"identity, identity"));
+    }
+
+    #[test]
+    fn test_unsupported_encoding_body_uses_distinct_error_type() {
+        // The encoding/UTF-8 fail-closed rejection has a DISTINCT type/code so it
+        // is not confused with a content-policy block or a too-large rejection.
+        let body = unsupported_encoding_body();
+        let value: serde_json::Value =
+            serde_json::from_slice(&body).expect("unsupported-encoding body must be valid JSON");
+        assert_eq!(value["error"]["message"], UNSUPPORTED_ENCODING_MESSAGE);
+        assert_eq!(value["error"]["type"], "invalid_request_error");
+        assert_eq!(value["error"]["code"], "unsupported_content_encoding");
+        // Must NOT reuse the content-policy or too-large code.
+        assert_ne!(value["error"]["code"], "content_policy_violation");
+        assert_ne!(value["error"]["code"], "request_body_too_large");
+    }
+
+    #[test]
+    fn test_block_body_dispatches_unsupported_encoding() {
+        let value: serde_json::Value =
+            serde_json::from_slice(&block_body(BlockKind::UnsupportedEncoding))
+                .expect("unsupported-encoding body must be valid JSON");
+        assert_eq!(value["error"]["type"], "invalid_request_error");
+        assert_eq!(value["error"]["code"], "unsupported_content_encoding");
     }
 }
