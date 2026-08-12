@@ -2,7 +2,7 @@
 # guardrails-mock image serves TLS (ListenAndServeTLS) when TLS_CERT_FILE/TLS_KEY_FILE are set. The
 # serving cert/key are mounted from the "guardrails-api-tls-cert" Secret created by the test (its CA
 # is generated at runtime, so the Secret cannot be a static manifest). NGINX verifies this backend
-# against that CA via the BackendTLSPolicy in backend-tls.yaml.
+# against that CA via the BackendTLSPolicy in payload-processor-https.yaml.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
