@@ -317,7 +317,7 @@ pub(crate) unsafe extern "C" fn guardrails_response_body_filter(
             "guardrails: chain processed: last_buf={}, pending_chunks={}, accumulated={}, buffered_bytes={}",
             last_buf,
             ctx.pending_chunks.len(),
-            ctx.accumulated_text.len(),
+            ctx.decoded_len(),
             ctx.total_buffered_bytes
         );
 
@@ -332,7 +332,7 @@ pub(crate) unsafe extern "C" fn guardrails_response_body_filter(
 
         let over_limit = ctx.total_buffered_bytes > MAX_RESPONSE_BYTES;
         // Inspect when the decoded text checkpoint fires OR — for a response
-        // whose schema we could not decode (empty accumulated_text but a
+        // whose schema we could not decode (no decoded text but a
         // non-empty buffered body, e.g. Anthropic) — via the raw-body fallback.
         // Both route to SpawnInspection; the spawn below picks the content source.
         let should_inspect =
@@ -362,8 +362,8 @@ pub(crate) unsafe extern "C" fn guardrails_response_body_filter(
             ResponseAction::FlushBuffered => {
                 // At end-of-stream we must still release the buffered response
                 // even when there is nothing to inspect (e.g. a `/v1/models` JSON
-                // body that yields no LLM-extractable text, so `accumulated_text`
-                // is empty). Otherwise the suppressed headers are never committed
+                // body that yields no LLM-extractable text, so there is no
+                // decoded text). Otherwise the suppressed headers are never committed
                 // and the buffered bytes are stranded, hanging the client.
                 // Commit the upstream headers we previously suppressed.
                 if ctx.headers_suppressed {
@@ -414,7 +414,7 @@ pub(crate) unsafe extern "C" fn guardrails_response_body_filter(
             NGX_LOG_INFO,
             request.log(),
             "guardrails: inspecting full stream (async), accumulated={}",
-            ctx.accumulated_text.len()
+            ctx.decoded_len()
         );
 
         // The internal guardrails location must be configured; if not, fail
@@ -437,10 +437,10 @@ pub(crate) unsafe extern "C" fn guardrails_response_body_filter(
         // `ctx` fields) must not be held across the await boundary. When no text
         // was decoded (unrecognized schema, via should_inspect_raw_fallback),
         // inspect the raw buffered body instead of an empty string.
-        let content = if ctx.accumulated_text.is_empty() {
+        let content = if ctx.has_no_decoded_text() {
             ctx.raw_inspection_fallback()
         } else {
-            ctx.accumulated_text.clone()
+            ctx.inspection_text()
         };
         let api_token = conf.api_token.clone();
 

@@ -26,6 +26,10 @@ struct OllamaMessage {
 
 #[derive(Deserialize)]
 struct OpenAIChoice {
+    /// Wire choice index (OpenAI `n > 1`). Absent on single-choice responses and
+    /// some provider variants → treated as 0. Used to keep the fragments of one
+    /// choice contiguous even when choices interleave across streamed chunks.
+    index: Option<u32>,
     /// Streaming chat completions delta (`/v1/chat/completions`, `stream:true`).
     delta: Option<OpenAIDelta>,
     /// Non-streaming chat completions message (`/v1/chat/completions`,
@@ -43,52 +47,6 @@ struct OpenAIDelta {
 #[derive(Deserialize)]
 struct OpenAIMessage {
     content: Option<String>,
-}
-
-/// Extract text content from a parsed LLM chunk into `accumulated_text`.
-fn extract_llm_content(chunk: LlmChunk, accumulated: &mut String, stream_done: &mut bool) {
-    if chunk.done.unwrap_or(false) {
-        *stream_done = true;
-    }
-    if let Some(msg) = chunk.message {
-        // Ollama /api/chat: text is in the top-level message.content.
-        if let Some(content) = msg.content {
-            accumulated.push_str(&content);
-        }
-    } else if let Some(response) = chunk.response {
-        // Ollama /api/generate: text is a top-level `response` string. Without
-        // this, a /api/generate response yields empty accumulated_text and the
-        // response path flushes it un-inspected.
-        accumulated.push_str(&response);
-    } else if let Some(choices) = chunk.choices {
-        // A completion may carry multiple choices (e.g. n > 1 / best_of), and
-        // every choice is forwarded to the client, so every choice must be
-        // inspected — scanning only the first would let blocked content in a
-        // later choice bypass the guardrail. Accumulate them all.
-        for (i, choice) in choices.into_iter().enumerate() {
-            // Precedence delta -> message -> text: a choice carries exactly one
-            // of these in practice. `message.content` covers non-streaming
-            // /v1/chat/completions, whose text would otherwise be dropped
-            // (empty accumulated_text -> un-inspected flush).
-            let text = choice
-                .delta
-                .and_then(|d| d.content)
-                .or_else(|| choice.message.and_then(|m| m.content))
-                .or(choice.text);
-            if let Some(text) = text {
-                // Separate distinct choices within this chunk with a newline so
-                // adjacent choice texts can't merge into a token that hides a
-                // sentinel at the boundary. Scoped to this chunk's choices only
-                // (i > 0), so streamed fragments of a single choice — which
-                // arrive as separate chunks — still concatenate without a
-                // separator.
-                if i > 0 {
-                    accumulated.push('\n');
-                }
-                accumulated.push_str(&text);
-            }
-        }
-    }
 }
 
 /// Verdict of an asynchronous response inspection.
@@ -135,8 +93,16 @@ pub struct StreamContext {
     /// Never sent to the client.
     pub line_buffer: Vec<u8>,
 
-    /// Extracted text content from all parsed JSON objects.
-    pub accumulated_text: String,
+    /// Decoded text content, kept per choice index (OpenAI `n > 1`). Non-choice
+    /// providers (Ollama `message`/`response`) and single-choice streams use key
+    /// 0. Keying by the wire choice `index` keeps the fragments of one choice
+    /// contiguous even when choices interleave across streamed chunks; distinct
+    /// choices are joined with '\n' only at inspection time (see
+    /// [`inspection_text`](Self::inspection_text)). Accumulating into a single
+    /// flat string in arrival order would let a prohibited phrase spanning one
+    /// choice's cross-chunk fragments be split by another choice's fragments and
+    /// evade the scan.
+    pub choice_texts: std::collections::HashMap<u32, String>,
 
     /// Set to true once a checkpoint is blocked; no more data is forwarded.
     pub blocked: bool,
@@ -175,7 +141,7 @@ impl Default for StreamContext {
         Self {
             pending_chunks: Vec::new(),
             line_buffer: Vec::with_capacity(4096),
-            accumulated_text: String::with_capacity(4096),
+            choice_texts: std::collections::HashMap::new(),
 
             blocked: false,
             stream_done: false,
@@ -191,11 +157,90 @@ impl Default for StreamContext {
 }
 
 impl StreamContext {
+    /// Append `text` to the accumulator for choice `index`. No separator is
+    /// inserted here so the cross-chunk fragments of a single choice concatenate
+    /// contiguously; distinct choices are separated only at inspection time
+    /// (see [`inspection_text`](Self::inspection_text)).
+    fn push_choice_text(&mut self, index: u32, text: &str) {
+        if text.is_empty() {
+            return;
+        }
+        self.choice_texts.entry(index).or_default().push_str(text);
+    }
+
+    /// True when no choice has accumulated any decoded text.
+    pub fn has_no_decoded_text(&self) -> bool {
+        self.choice_texts.values().all(String::is_empty)
+    }
+
+    /// Total decoded bytes across all choices. Used for logging only.
+    pub fn decoded_len(&self) -> usize {
+        self.choice_texts.values().map(String::len).sum()
+    }
+
+    /// Join the decoded text of distinct choices with '\n' to form the
+    /// inspection payload, ordered by choice index for deterministic output. A
+    /// single choice (the common case) yields its text with no separator, so a
+    /// sentinel token cannot straddle a choice boundary and evade the scan.
+    pub fn inspection_text(&self) -> String {
+        let mut keys: Vec<u32> = self.choice_texts.keys().copied().collect();
+        keys.sort_unstable();
+        keys.iter()
+            .map(|k| self.choice_texts[k].as_str())
+            .filter(|s| !s.is_empty())
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    /// Extract text content from a parsed LLM chunk into the per-choice map.
+    fn extract_llm_content(&mut self, chunk: LlmChunk) {
+        if chunk.done.unwrap_or(false) {
+            self.stream_done = true;
+        }
+        if let Some(msg) = chunk.message {
+            // Ollama /api/chat: text is in the top-level message.content. No
+            // choice index exists, so it accumulates under key 0 (contiguous
+            // across chunks, matching single-stream semantics).
+            if let Some(content) = msg.content {
+                self.push_choice_text(0, &content);
+            }
+        } else if let Some(response) = chunk.response {
+            // Ollama /api/generate: text is a top-level `response` string. Without
+            // this, a /api/generate response yields no decoded text and the
+            // response path flushes it un-inspected. Accumulates under key 0.
+            self.push_choice_text(0, &response);
+        } else if let Some(choices) = chunk.choices {
+            // A completion may carry multiple choices (e.g. n > 1 / best_of), and
+            // every choice is forwarded to the client, so every choice must be
+            // inspected — scanning only the first would let blocked content in a
+            // later choice bypass the guardrail. Accumulate them all, keyed by the
+            // wire `index` so a choice's fragments stay contiguous even when
+            // choices interleave across streamed chunks.
+            for choice in choices {
+                // Missing index (single-choice responses, some providers) → 0.
+                let index = choice.index.unwrap_or(0);
+                // Precedence delta -> message -> text: a choice carries exactly one
+                // of these in practice. `message.content` covers non-streaming
+                // /v1/chat/completions, whose text would otherwise be dropped
+                // (no decoded text -> un-inspected flush).
+                let text = choice
+                    .delta
+                    .and_then(|d| d.content)
+                    .or_else(|| choice.message.and_then(|m| m.content))
+                    .or(choice.text);
+                if let Some(text) = text {
+                    self.push_choice_text(index, &text);
+                }
+            }
+        }
+    }
+
     /// Ingest a new network chunk.
     ///
     /// The raw bytes are added to `pending_chunks` (held from the client).
     /// The bytes are also appended to `line_buffer`.
-    /// When there is a complete JSON line, it is parsed to update `accumulated_text`.
+    /// When there is a complete JSON line, it is parsed to update the per-choice
+    /// decoded-text map.
     pub fn process_chunk(&mut self, data: &[u8]) {
         if data.is_empty() {
             return;
@@ -249,9 +294,7 @@ impl StreamContext {
             }
 
             match serde_json::from_str::<LlmChunk>(json_str) {
-                Ok(chunk) => {
-                    extract_llm_content(chunk, &mut self.accumulated_text, &mut self.stream_done)
-                }
+                Ok(chunk) => self.extract_llm_content(chunk),
                 // Malformed/partial JSON lines are expected mid-stream; skip
                 // silently rather than logging (the line may carry model output).
                 Err(_) => continue,
@@ -261,7 +304,7 @@ impl StreamContext {
 
     /// Returns true when the stream is finished and there is content to inspect.
     pub fn should_inspect_final(&self, last_buf: bool) -> bool {
-        !self.blocked && (last_buf || self.stream_done) && !self.accumulated_text.is_empty()
+        !self.blocked && (last_buf || self.stream_done) && !self.has_no_decoded_text()
     }
 
     /// Returns true when the stream is finished with a non-empty buffered body
@@ -277,7 +320,7 @@ impl StreamContext {
     pub fn should_inspect_raw_fallback(&self, last_buf: bool) -> bool {
         !self.blocked
             && (last_buf || self.stream_done)
-            && self.accumulated_text.is_empty()
+            && self.has_no_decoded_text()
             && !self.pending_chunks.is_empty()
     }
 
@@ -401,7 +444,7 @@ mod tests {
         let mut ctx = StreamContext::default();
         let data = b"{\"model\":\"llama3\",\"message\":{\"role\":\"assistant\",\"content\":\"Hello\"},\"done\":false}\n";
         ctx.process_chunk(data);
-        assert_eq!(ctx.accumulated_text, "Hello");
+        assert_eq!(ctx.inspection_text(), "Hello");
     }
 
     #[test]
@@ -409,7 +452,7 @@ mod tests {
         let mut ctx = StreamContext::default();
         let data = b"data: {\"choices\":[{\"delta\":{\"content\":\"World\"}}]}\n";
         ctx.process_chunk(data);
-        assert_eq!(ctx.accumulated_text, "World");
+        assert_eq!(ctx.inspection_text(), "World");
     }
 
     #[test]
@@ -417,7 +460,7 @@ mod tests {
         // Ollama /api/generate: text is a top-level `response` string.
         let mut ctx = StreamContext::default();
         ctx.process_chunk(b"{\"model\":\"llama3\",\"response\":\"Hello\",\"done\":true}\n");
-        assert_eq!(ctx.accumulated_text, "Hello");
+        assert_eq!(ctx.inspection_text(), "Hello");
     }
 
     #[test]
@@ -427,7 +470,7 @@ mod tests {
         let mut ctx = StreamContext::default();
         ctx.process_chunk(b"{\"response\":\"foo\",\"done\":false}\n");
         ctx.process_chunk(b"{\"response\":\"bar\",\"done\":true}\n");
-        assert_eq!(ctx.accumulated_text, "foobar");
+        assert_eq!(ctx.inspection_text(), "foobar");
     }
 
     #[test]
@@ -437,29 +480,29 @@ mod tests {
         ctx.process_chunk(
             b"{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"hi\"}}]}\n",
         );
-        assert_eq!(ctx.accumulated_text, "hi");
+        assert_eq!(ctx.inspection_text(), "hi");
     }
 
     #[test]
     fn test_openai_multiple_message_choices_all_extracted() {
         // n > 1 non-streaming chat: every choice's message.content must be
-        // accumulated, separated by a newline.
+        // accumulated under its own index and joined with a newline for inspection.
         let mut ctx = StreamContext::default();
         ctx.process_chunk(
-            b"{\"choices\":[{\"message\":{\"content\":\"a\"}},{\"message\":{\"content\":\"b\"}}]}\n",
+            b"{\"choices\":[{\"index\":0,\"message\":{\"content\":\"a\"}},{\"index\":1,\"message\":{\"content\":\"b\"}}]}\n",
         );
-        assert_eq!(ctx.accumulated_text, "a\nb");
+        assert_eq!(ctx.inspection_text(), "a\nb");
     }
 
     #[test]
     fn test_nonstreaming_chat_sentinel_is_inspected() {
         // Regression: blocked content in a non-streaming chat message.content
-        // must reach accumulated_text so should_inspect_final fires (rather than
+        // must reach the decoded text so should_inspect_final fires (rather than
         // the response being flushed un-inspected).
         let mut ctx = StreamContext::default();
         ctx.process_chunk(b"{\"choices\":[{\"message\":{\"content\":\"SENTINEL\"}}]}\n");
         assert!(
-            ctx.accumulated_text.contains("SENTINEL"),
+            ctx.inspection_text().contains("SENTINEL"),
             "non-streaming chat message.content must be accumulated for inspection"
         );
         assert!(
@@ -475,7 +518,7 @@ mod tests {
         ctx.process_chunk(b"{\"message\":{\"content\":\"hi\"},\"done\":false}");
         // Complete the line.
         ctx.process_chunk(b"\n");
-        assert_eq!(ctx.accumulated_text, "hi");
+        assert_eq!(ctx.inspection_text(), "hi");
     }
 
     #[test]
@@ -490,41 +533,79 @@ mod tests {
         // Non-streaming completions use choices[].text rather than a delta.
         let mut ctx = StreamContext::default();
         ctx.process_chunk(b"data: {\"choices\":[{\"text\":\"answer\"}]}\n");
-        assert_eq!(ctx.accumulated_text, "answer");
+        assert_eq!(ctx.inspection_text(), "answer");
     }
 
     #[test]
     fn test_openai_multiple_choice_deltas_all_extracted() {
         // n > 1 chat completion: every choice's delta content must be
-        // accumulated (not just the first), separated by a newline.
+        // accumulated under its own index (not just the first) and joined with a
+        // newline for inspection.
         let mut ctx = StreamContext::default();
         ctx.process_chunk(
-            b"data: {\"choices\":[{\"delta\":{\"content\":\"foo\"}},{\"delta\":{\"content\":\"bar\"}}]}\n",
+            b"data: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"foo\"}},{\"index\":1,\"delta\":{\"content\":\"bar\"}}]}\n",
         );
-        assert_eq!(ctx.accumulated_text, "foo\nbar");
+        assert_eq!(ctx.inspection_text(), "foo\nbar");
     }
 
     #[test]
     fn test_openai_multiple_completion_texts_all_extracted() {
-        // n > 1 non-streaming completion: every choice's text must be
-        // accumulated, separated by a newline.
+        // n > 1 non-streaming completion: every choice's text must be accumulated
+        // under its own index and joined with a newline for inspection.
         let mut ctx = StreamContext::default();
-        ctx.process_chunk(b"data: {\"choices\":[{\"text\":\"a\"},{\"text\":\"b\"}]}\n");
-        assert_eq!(ctx.accumulated_text, "a\nb");
+        ctx.process_chunk(
+            b"data: {\"choices\":[{\"index\":0,\"text\":\"a\"},{\"index\":1,\"text\":\"b\"}]}\n",
+        );
+        assert_eq!(ctx.inspection_text(), "a\nb");
     }
 
     #[test]
     fn test_later_choice_content_is_inspected() {
-        // Regression: blocked content in a non-first choice must reach
-        // accumulated_text so it is scanned before the response is released.
+        // Regression: blocked content in a non-first choice must reach the decoded
+        // text so it is scanned before the response is released.
         let mut ctx = StreamContext::default();
         ctx.process_chunk(
-            b"data: {\"choices\":[{\"delta\":{\"content\":\"clean\"}},{\"delta\":{\"content\":\"SENTINEL\"}}]}\n",
+            b"data: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"clean\"}},{\"index\":1,\"delta\":{\"content\":\"SENTINEL\"}}]}\n",
         );
         assert!(
-            ctx.accumulated_text.contains("SENTINEL"),
+            ctx.inspection_text().contains("SENTINEL"),
             "content in a later choice must be accumulated for inspection"
         );
+    }
+
+    #[test]
+    fn test_interleaved_choices_across_chunks_are_not_merged() {
+        // The core regression: two choices streamed with their fragments
+        // interleaved across chunks. Choice 1's fragments ("Safe " then
+        // "SENTINEL") must stay contiguous so the sentinel token is intact for
+        // inspection, despite choice 0's fragment arriving between them. With the
+        // old flat arrival-order accumulation the text became
+        // "How Safe to XSENTINEL" (roughly), splitting "Safe SENTINEL".
+        let mut ctx = StreamContext::default();
+        ctx.process_chunk(
+            b"data: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"How \"}},{\"index\":1,\"delta\":{\"content\":\"Safe \"}}]}\n",
+        );
+        ctx.process_chunk(
+            b"data: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"to X\"}},{\"index\":1,\"delta\":{\"content\":\"SENTINEL\"}}]}\n",
+        );
+
+        // Choice 0 = "How to X", choice 1 = "Safe SENTINEL", joined by '\n'.
+        assert_eq!(ctx.inspection_text(), "How to X\nSafe SENTINEL");
+        assert!(
+            ctx.inspection_text().contains("Safe SENTINEL"),
+            "a choice's cross-chunk fragments must remain contiguous for inspection"
+        );
+    }
+
+    #[test]
+    fn test_openai_choice_without_index_defaults_to_bucket_zero() {
+        // A choice with no wire `index` (single-choice responses, some providers)
+        // accumulates under key 0, so its cross-chunk fragments stay contiguous
+        // with no separator.
+        let mut ctx = StreamContext::default();
+        ctx.process_chunk(b"data: {\"choices\":[{\"delta\":{\"content\":\"foo\"}}]}\n");
+        ctx.process_chunk(b"data: {\"choices\":[{\"delta\":{\"content\":\"bar\"}}]}\n");
+        assert_eq!(ctx.inspection_text(), "foobar");
     }
 
     #[test]
@@ -532,7 +613,7 @@ mod tests {
         let mut ctx = StreamContext::default();
         ctx.process_chunk(b"data: {\"choices\":[{\"delta\":{\"content\":\"hi\"}}]}\n");
         ctx.process_chunk(b"data: [DONE]\n");
-        assert_eq!(ctx.accumulated_text, "hi");
+        assert_eq!(ctx.inspection_text(), "hi");
     }
 
     #[test]
@@ -542,7 +623,7 @@ mod tests {
             b"data: {\"choices\":[{\"delta\":{\"content\":\"foo\"}}]}\n\
               data: {\"choices\":[{\"delta\":{\"content\":\"bar\"}}]}\n",
         );
-        assert_eq!(ctx.accumulated_text, "foobar");
+        assert_eq!(ctx.inspection_text(), "foobar");
     }
 
     #[test]
@@ -551,7 +632,7 @@ mod tests {
         // A malformed line must not panic and must not block later valid lines.
         ctx.process_chunk(b"data: {not valid json}\n");
         ctx.process_chunk(b"data: {\"choices\":[{\"delta\":{\"content\":\"ok\"}}]}\n");
-        assert_eq!(ctx.accumulated_text, "ok");
+        assert_eq!(ctx.inspection_text(), "ok");
     }
 
     #[test]
@@ -560,16 +641,26 @@ mod tests {
         // trailing newline; try_drain_remaining must still parse it.
         let mut ctx = StreamContext::default();
         ctx.process_chunk(b"{\"choices\":[{\"text\":\"blob\"}]}");
-        assert_eq!(ctx.accumulated_text, "", "not parsed before drain");
+        assert_eq!(ctx.inspection_text(), "", "not parsed before drain");
         ctx.try_drain_remaining();
-        assert_eq!(ctx.accumulated_text, "blob");
+        assert_eq!(ctx.inspection_text(), "blob");
     }
 
     #[test]
     fn test_try_drain_remaining_empty_is_noop() {
         let mut ctx = StreamContext::default();
         ctx.try_drain_remaining();
-        assert_eq!(ctx.accumulated_text, "");
+        assert_eq!(ctx.inspection_text(), "");
+    }
+
+    /// Build a `choice_texts` map for tests: empty `text` yields an empty map
+    /// (so `has_no_decoded_text()` is true), otherwise a single bucket at index 0.
+    fn choice_texts_for(text: &str) -> std::collections::HashMap<u32, String> {
+        let mut m = std::collections::HashMap::new();
+        if !text.is_empty() {
+            m.insert(0, text.to_string());
+        }
+        m
     }
 
     #[test]
@@ -586,7 +677,7 @@ mod tests {
             let ctx = StreamContext {
                 blocked,
                 stream_done,
-                accumulated_text: text.to_string(),
+                choice_texts: choice_texts_for(text),
                 ..StreamContext::default()
             };
             assert_eq!(
@@ -614,7 +705,7 @@ mod tests {
             "raw bytes must be buffered ({} expected > 0)",
             ctx.total_buffered_bytes
         );
-        assert_eq!(ctx.accumulated_text, "", "no LLM text should be extracted");
+        assert_eq!(ctx.inspection_text(), "", "no LLM text should be extracted");
         assert!(
             !ctx.should_inspect_final(true),
             "no decoded text to inspect at end-of-stream"
@@ -632,8 +723,8 @@ mod tests {
     fn test_anthropic_shaped_body_yields_no_decoded_text() {
         // An Anthropic-style response is well-formed JSON but its schema is not
         // covered by extract_llm_content (text lives in content[].text, not
-        // message/choices/response). It must decode to empty accumulated_text so
-        // the raw-body fallback path engages instead of a bare flush.
+        // message/choices/response). It must decode to no text so the raw-body
+        // fallback path engages instead of a bare flush.
         let mut ctx = StreamContext::default();
         let body =
             br#"{"type":"message","role":"assistant","content":[{"type":"text","text":"secret"}]}"#;
@@ -641,7 +732,8 @@ mod tests {
         ctx.try_drain_remaining();
 
         assert_eq!(
-            ctx.accumulated_text, "",
+            ctx.inspection_text(),
+            "",
             "Anthropic schema is undecoded (documents the extraction gap)"
         );
         assert!(
@@ -670,7 +762,7 @@ mod tests {
             let mut ctx = StreamContext {
                 blocked,
                 stream_done,
-                accumulated_text: text.to_string(),
+                choice_texts: choice_texts_for(text),
                 ..StreamContext::default()
             };
             if has_buffer {
