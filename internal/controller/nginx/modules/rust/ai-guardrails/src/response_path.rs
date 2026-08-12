@@ -8,6 +8,13 @@
 //! committed (hanging the client). The status gate lives in
 //! [`crate::decision::should_inspect_status`] so the header and body filters
 //! stay in lockstep.
+//!
+//! Header-only responses (HEAD requests) also pass straight through. Their
+//! no-body-ness comes from the request method, not the status code, so the
+//! status gate cannot catch them; both filters additionally check
+//! `request.header_only()`. Suppressing a header-only `2xx` would strand the
+//! headers (the body filter that commits them is never invoked), hanging the
+//! client.
 
 use std::ptr;
 
@@ -42,6 +49,8 @@ use crate::sync_ptr::AssertSendSync;
 ///   - Only `2xx`-with-body responses are candidates; anything the status gate
 ///     ([`should_inspect_status`]) rejects (`1xx`, `204`, `304`, `3xx`, `>= 400`)
 ///     passes through unmodified.
+///   - Header-only responses (HEAD) pass through unmodified: they have no body
+///     filter to commit suppressed headers, so buffering them hangs the client.
 ///   - SSE responses pass through immediately — they cannot be fully buffered.
 ///   - All other (buffer-eligible `2xx`) responses are suppressed: we return `NGX_OK`
 ///     without calling the next filter, so `r->header_sent` stays `0` and nothing is
@@ -78,6 +87,15 @@ pub(crate) unsafe extern "C" fn guardrails_header_filter(r: *mut ngx_http_reques
         // carry no inspectable body and must reach the client unmodified; buffering
         // a no-body status would strand the suppressed headers (client hang).
         if !should_inspect_status((*r).headers_out.status) {
+            return call_next_header_filter(r);
+        }
+
+        // Header-only responses (HEAD requests) carry no response body, so the
+        // body filter that commits these suppressed headers is never invoked.
+        // Suppressing here would strand the headers and hang the client. Pass
+        // through before any ctx allocation. Kept in lockstep with the body
+        // filter's identical guard.
+        if request.header_only() {
             return call_next_header_filter(r);
         }
 
@@ -138,10 +156,18 @@ pub(crate) unsafe extern "C" fn guardrails_response_body_filter(
         }
 
         // Only inspect genuine 2xx-with-body responses. Must match the header
-        // filter's gate exactly (see should_inspect_status): if the two disagree,
-        // suppressed headers never get committed. Skips 1xx, 204, 304, 3xx and
-        // >= 400 (e.g. the 403 from a blocked request).
+        // filter's gate exactly (see should_inspect_status and the header_only
+        // guard below): if the two disagree, suppressed headers never get
+        // committed. Skips 1xx, 204, 304, 3xx and >= 400 (e.g. the 403 from a
+        // blocked request).
         if !should_inspect_status((*r).headers_out.status) {
+            return call_next_response_body_filter(r, in_chain);
+        }
+
+        // Mirror the header filter's header-only pass-through (see there). NGINX
+        // normally will not invoke the body filter for a header-only (HEAD)
+        // request; this keeps the two gates textually consistent and is defensive.
+        if request.header_only() {
             return call_next_response_body_filter(r, in_chain);
         }
 
