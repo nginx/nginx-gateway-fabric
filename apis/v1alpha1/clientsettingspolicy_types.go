@@ -68,6 +68,14 @@ type ClientBody struct {
 	// +optional
 	MaxSize *Size `json:"maxSize,omitempty"`
 
+	// BufferSize sets the buffer size for reading the client request body.
+	// If the request body is larger than the buffer, the whole body or only its part is written to a
+	// temporary file.
+	// Default: https://nginx.org/en/docs/http/ngx_http_core_module.html#client_body_buffer_size.
+	//
+	// +optional
+	BufferSize *Size `json:"bufferSize,omitempty"`
+
 	// Timeout defines a timeout for reading client request body. The timeout is set only for a period between
 	// two successive read operations, not for the transmission of the whole request body.
 	// If a client does not transmit anything within this time, the request is terminated with the
