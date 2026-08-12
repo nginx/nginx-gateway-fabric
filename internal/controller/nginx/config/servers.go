@@ -1543,10 +1543,12 @@ func extractGuardrailsInternalLocations(locations []http.Location) []http.Locati
 				// ExternalName HTTPS backend verified against the image's system trust store. This
 				// branch is reached only for ExternalName backends: the scheme is https and
 				// VerifyTLS is nil. The dataplane layer (convertGraphGuardrails) is the single source
-				// of truth for the scheme, producing https for an in-cluster (ClusterIP) backend only
-				// when it also sets VerifyTLS (per-Gateway BackendTLSPolicy attachment). Therefore
-				// "https with VerifyTLS == nil" cannot represent an in-cluster backend, and no
-				// in-cluster backend can fall through to this system-trust, variable-proxy_pass path.
+				// of truth: it sets VerifyTLS only for in-cluster (non-ExternalName) backends fronted
+				// by a per-Gateway-effective BackendTLSPolicy, and deliberately leaves VerifyTLS nil
+				// for ExternalName backends even when a BackendTLSPolicy targets their Service (such a
+				// policy is ignored for scheme/proxy purposes). Therefore "https with VerifyTLS == nil"
+				// is always an ExternalName backend, and no in-cluster backend can fall through to this
+				// system-trust, variable-proxy_pass path.
 				// Set proxy_ssl_name/Host to the APIURL hostname (certificate + hostname verification,
 				// SNI, and hostname-routing edges). Re-resolve per request via a variable proxy_pass;
 				// a DNS resolver is guaranteed present.

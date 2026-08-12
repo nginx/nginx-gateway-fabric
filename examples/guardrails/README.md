@@ -269,7 +269,7 @@ Service** and is **effective for that Gateway**; see the [per-Gateway note](#in-
 
 | Backend location | Service type | `BackendTLSPolicy` effective for this Gateway? | Resolved URL (per Gateway) |
 | ------------------ | ------------- | ------------------- | -------------- |
-| External | `ExternalName` | n/a | `https://<externalName>:<backendRef.port>` |
+| External | `ExternalName` | ignored (always system-trust https) | `https://<externalName>:<backendRef.port>` |
 | In-cluster (plaintext) | `ClusterIP` (or any non-`ExternalName`) | no | `http://<name>.<namespace>.svc.<cluster-domain>:<backendRef.port>` |
 | In-cluster (TLS) | `ClusterIP` (or any non-`ExternalName`) | yes | `https://<name>.<namespace>.svc.<cluster-domain>:<backendRef.port>` |
 
@@ -283,6 +283,12 @@ Two important rules regardless of location:
   Service**; it becomes effective for a Gateway only when that Gateway routes to the
   target Service and the policy is valid for it. So the same `PayloadProcessor` can be `https`
   (verified) on one Gateway and plaintext `http` on another for which the policy is not effective.
+- **`BackendTLSPolicy` applies only to in-cluster (`ClusterIP`) backends.** A `BackendTLSPolicy` that
+  targets an **`ExternalName`** guardrails Service is **ignored**: an ExternalName backend is always
+  verified against the image's **system trust store** and uses a **variable `proxy_pass` + `resolver`**
+  so a rotating external IP is re-resolved on every request. It is never pinned to a fixed IP or
+  switched to a private CA by a `BackendTLSPolicy`. To verify a guardrails backend against a private or
+  self-signed CA, use an in-cluster `ClusterIP` Service with a `BackendTLSPolicy` targeting it.
 
 ### In-cluster HTTPS via `BackendTLSPolicy`
 

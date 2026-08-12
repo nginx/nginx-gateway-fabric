@@ -9346,7 +9346,9 @@ func TestExtractGuardrailsInternalLocations(t *testing.T) {
 			// An https (ExternalName) backend always uses the variable proxy_pass for per-request
 			// re-resolution. A DNS resolver is guaranteed to be present here: an ExternalName
 			// guardrails backend without a resolver is rejected during policy resolution and never
-			// reaches config generation.
+			// reaches config generation. VerifyTLS is nil for every ExternalName backend, including
+			// when a BackendTLSPolicy targets its Service (that policy is ignored in the dataplane
+			// layer), so an external backend can never fall into the fixed-proxy_pass in-cluster path.
 			name: "https backend uses variable proxy_pass for per-request resolution",
 			locations: []http.Location{
 				{

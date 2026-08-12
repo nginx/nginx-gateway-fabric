@@ -575,11 +575,16 @@ func convertGraphGuardrails(
 		return nil
 	}
 
-	// convertBackendTLS is the single, per-Gateway source of truth for whether this backend is
+	// convertBackendTLS is the single, per-Gateway source of truth for whether an in-cluster backend is
 	// verified over TLS for THIS Gateway: it returns non-nil only when a BackendTLSPolicy targets the
 	// backend Service and is effective for gwNsName. Derive the URL scheme from that result so an
 	// in-cluster backend is only upgraded to https on Gateways for which the policy is effective.
-	verifyTLS := convertBackendTLS(state.BackendTLSPolicy, gwNsName)
+	//
+	// ExternalName backends are deliberately excluded.
+	var verifyTLS *VerifyTLS
+	if !state.BackendIsExternalName {
+		verifyTLS = convertBackendTLS(state.BackendTLSPolicy, gwNsName)
+	}
 
 	gc := &GuardrailsConfig{
 		Enabled:      true,

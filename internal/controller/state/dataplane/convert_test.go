@@ -2280,6 +2280,39 @@ func TestConvertGraphGuardrails(t *testing.T) {
 			expFileSet:   true,
 			expVerifyTLS: nil,
 		},
+		{
+			// An ExternalName backend whose Service is ALSO targeted by a valid, effective
+			// BackendTLSPolicy: the BTP is ignored for scheme/proxy purposes. VerifyTLS must stay nil
+			// so the NGINX config layer keeps the ExternalName (system-trust, variable proxy_pass)
+			// shape instead of pinning a fixed proxy_pass. This is the regression guard for treating an
+			// external backend as in-cluster.
+			name: "ExternalName backend with BackendTLSPolicy is ignored: stays https with nil VerifyTLS",
+			route: routeFor(&graph.Policy{
+				Valid: true,
+				PayloadProcessorState: &graph.PolicyPayloadProcessorState{
+					APIURL:                "https://guardrails.example.com:8443",
+					AuthTokenSecret:       &secretNsName,
+					ResolvedAuthToken:     []byte("tok"),
+					BackendIsExternalName: true,
+					BackendTLSPolicy: &graph.BackendTLSPolicy{
+						Source: &v1.BackendTLSPolicy{
+							Spec: v1.BackendTLSPolicySpec{
+								Validation: v1.BackendTLSPolicyValidation{
+									Hostname: "guardrails.internal",
+								},
+							},
+						},
+						Valid:     true,
+						CaCertRef: types.NamespacedName{Namespace: "ns1", Name: "ca-configmap"},
+						Gateways:  []types.NamespacedName{gwNsName},
+					},
+				},
+			}),
+			gwNsName:     gwNsName,
+			expURL:       "https://guardrails.example.com:8443",
+			expFileSet:   true,
+			expVerifyTLS: nil,
+		},
 	}
 
 	for _, test := range tests {
