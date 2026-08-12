@@ -107,6 +107,10 @@ type Graph struct {
 	// ReferencedPayloadProcessorSecrets includes Secrets referenced by PayloadProcessor (auth token).
 	// Similar to ReferencedSecrets, it includes invalid Secrets or those that do not exist
 	ReferencedPayloadProcessorSecrets map[types.NamespacedName]*v1.Secret
+	// ReferencedPayloadProcessorServices includes backend Services referenced by PayloadProcessor
+	// policies. Similar to ReferencedServices, it includes entries for Services that do not exist,
+	// so that a rebuild is triggered when a referenced Service is created, deleted, or changed.
+	ReferencedPayloadProcessorServices map[types.NamespacedName]struct{}
 	// SnippetsFilters holds all the SnippetsFilters.
 	SnippetsFilters map[types.NamespacedName]*SnippetsFilter
 	// AuthenticationFilters holds all the AuthenticationFilters.
@@ -256,10 +260,12 @@ func (g *Graph) IsReferenced(resourceType ngftypes.ObjectType, nsname types.Name
 		_, existed := g.ReferencedNamespaces[nsname]
 		exists := isNamespaceReferenced(obj, g.Gateways)
 		return existed || exists
-	// Service reference exists if at least one Route references it.
+	// Service reference exists if at least one Route references it, or a PayloadProcessor policy
+	// references it as its ExtProcess backend.
 	case *v1.Service:
 		_, exists := g.ReferencedServices[nsname]
-		return exists
+		_, payloadProcessorServiceExists := g.ReferencedPayloadProcessorServices[nsname]
+		return exists || payloadProcessorServiceExists
 	// InferencePool reference exists if at least one Route references it.
 	case *inference.InferencePool:
 		_, exists := g.ReferencedInferencePools[nsname]
@@ -516,30 +522,31 @@ func BuildGraph(
 	}
 
 	g := &Graph{
-		GatewayClass:                      gc,
-		Gateways:                          gws,
-		Routes:                            routes,
-		L4Routes:                          l4routes,
-		IgnoredGatewayClasses:             processedGwClasses.Ignored,
-		ReferencedSecrets:                 resourceResolver.GetSecrets(),
-		ReferencedNamespaces:              referencedNamespaces,
-		ReferencedServices:                referencedServices,
-		ReferencedInferencePools:          referencedInferencePools,
-		ReferencedCaCertConfigMaps:        resourceResolver.GetConfigMaps(),
-		ReferencedNginxProxies:            processedNginxProxies,
-		BackendTLSPolicies:                processedBackendTLSPolicies,
-		NGFPolicies:                       processedPolicies,
-		SnippetsFilters:                   processedSnippetsFilters,
-		AuthenticationFilters:             processedAuthenticationFilters,
-		ExternalLoadBalancers:             processedExternalLoadBalancers,
-		ListenerSets:                      listenerSets,
-		PlusSecrets:                       plusSecrets,
-		PLMSecrets:                        plmSecretNames,
-		ReferencedWAFBundles:              referencedWAFBundles,
-		ReferencedAPPolicies:              referencedAPPolicies,
-		ReferencedAPLogConfs:              referencedAPLogConfs,
-		ReferencedWAFSecrets:              referencedWAFAuthSecrets,
-		ReferencedPayloadProcessorSecrets: payloadProcessorOutput.ReferencedPayloadProcessorSecrets,
+		GatewayClass:                       gc,
+		Gateways:                           gws,
+		Routes:                             routes,
+		L4Routes:                           l4routes,
+		IgnoredGatewayClasses:              processedGwClasses.Ignored,
+		ReferencedSecrets:                  resourceResolver.GetSecrets(),
+		ReferencedNamespaces:               referencedNamespaces,
+		ReferencedServices:                 referencedServices,
+		ReferencedInferencePools:           referencedInferencePools,
+		ReferencedCaCertConfigMaps:         resourceResolver.GetConfigMaps(),
+		ReferencedNginxProxies:             processedNginxProxies,
+		BackendTLSPolicies:                 processedBackendTLSPolicies,
+		NGFPolicies:                        processedPolicies,
+		SnippetsFilters:                    processedSnippetsFilters,
+		AuthenticationFilters:              processedAuthenticationFilters,
+		ExternalLoadBalancers:              processedExternalLoadBalancers,
+		ListenerSets:                       listenerSets,
+		PlusSecrets:                        plusSecrets,
+		PLMSecrets:                         plmSecretNames,
+		ReferencedWAFBundles:               referencedWAFBundles,
+		ReferencedAPPolicies:               referencedAPPolicies,
+		ReferencedAPLogConfs:               referencedAPLogConfs,
+		ReferencedWAFSecrets:               referencedWAFAuthSecrets,
+		ReferencedPayloadProcessorSecrets:  payloadProcessorOutput.ReferencedPayloadProcessorSecrets,
+		ReferencedPayloadProcessorServices: payloadProcessorOutput.ReferencedPayloadProcessorServices,
 	}
 
 	g.attachPolicies(validators.PolicyValidator, controllerName, logger)

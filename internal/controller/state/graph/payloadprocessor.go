@@ -31,6 +31,20 @@ type PayloadProcessingOutput struct {
 	// ReferencedPayloadProcessorSecrets contains Secrets referenced by PayloadProcessor policies
 	// (auth token). These must be watched by the change tracker.
 	ReferencedPayloadProcessorSecrets map[types.NamespacedName]*corev1.Secret
+	// ReferencedPayloadProcessorServices holds backend Service NsNames referenced by
+	// PayloadProcessor policies, including missing ones, so the change tracker rebuilds
+	// when they are created, deleted, or changed.
+	ReferencedPayloadProcessorServices map[types.NamespacedName]struct{}
+}
+
+// trackPayloadProcessorService records a backend Service NsName in the output so the change tracker
+// watches it. The Service is tracked even when it does not exist, so that a rebuild is triggered when
+// the Service later appears.
+func trackPayloadProcessorService(output *PayloadProcessingOutput, nsName types.NamespacedName) {
+	if output.ReferencedPayloadProcessorServices == nil {
+		output.ReferencedPayloadProcessorServices = make(map[types.NamespacedName]struct{})
+	}
+	output.ReferencedPayloadProcessorServices[nsName] = struct{}{}
 }
 
 // processPayloadProcessorPolicies resolves the ExtProcess backend Service (including ExternalName)
@@ -84,6 +98,11 @@ func resolvePayloadProcessor(
 	}
 	ext := entry.ExtProcess
 
+	// Track the backend Service before resolution so a rebuild is triggered when the Service is
+	// created, deleted, or changed, even if resolution below fails (e.g. the Service is missing).
+	svcNsName := extProcessServiceNsName(pp.Namespace, ext)
+	trackPayloadProcessorService(output, svcNsName)
+
 	apiURL, isExternalName, err := resolveExtProcessURL(pp.Namespace, ext, services, clusterDomain)
 	if err != nil {
 		policy.Conditions = append(policy.Conditions, conditions.NewPolicyInvalid(err.Error()))
@@ -98,7 +117,6 @@ func resolvePayloadProcessor(
 		return
 	}
 
-	svcNsName := extProcessServiceNsName(pp.Namespace, ext)
 	policy.PayloadProcessorState = &PolicyPayloadProcessorState{
 		APIURL:                apiURL,
 		ResolvedAuthToken:     token,

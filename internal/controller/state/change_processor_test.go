@@ -3040,6 +3040,80 @@ var _ = Describe("ChangeProcessor", func() {
 					})
 				})
 			})
+			Context("processing a PayloadProcessor whose backend Service is not referenced by any route", func() {
+				// ppBackendSvc is referenced only by the PayloadProcessor's ExtProcess backend, not by
+				// any route. It must still be tracked as a referenced Service so that its create, update,
+				// and delete trigger a rebuild; otherwise the policy's resolved configuration would go
+				// stale or never recover when the Service changes.
+				ppBackendSvcNsName := types.NamespacedName{Namespace: "test", Name: "pp-backend-svc"}
+				pp := &ngfAPIv1alpha1.PayloadProcessor{
+					TypeMeta: metav1.TypeMeta{
+						Kind:       kinds.PayloadProcessor,
+						APIVersion: ngfAPIv1alpha1.GroupName + "/v1alpha1",
+					},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "pp-svc-ref",
+						Namespace: "test",
+					},
+					Spec: ngfAPIv1alpha1.PayloadProcessorSpec{
+						TargetRef: v1.LocalPolicyTargetReference{
+							Group: v1.GroupName,
+							Kind:  kinds.Gateway,
+							Name:  "gw",
+						},
+						Processors: []ngfAPIv1alpha1.PayloadProcessorEntry{
+							{
+								Type: ngfAPIv1alpha1.ProcessorTypeExtProcess,
+								ExtProcess: &ngfAPIv1alpha1.ExtProcessConfig{
+									BackendRef: v1.BackendObjectReference{
+										Name: "pp-backend-svc",
+										Port: helpers.GetPointer[v1.PortNumber](9000),
+									},
+								},
+							},
+						},
+					},
+				}
+				ppBackendSvc := &apiv1.Service{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "test",
+						Name:      "pp-backend-svc",
+					},
+					Spec: apiv1.ServiceSpec{
+						Type:  apiv1.ServiceTypeClusterIP,
+						Ports: []apiv1.ServicePort{{Port: 9000}},
+					},
+				}
+
+				When("the PayloadProcessor is added", func() {
+					It("should trigger a change and track its backend Service", func() {
+						processor.CaptureUpsertChange(pp)
+						gr := processor.Process(context.Background())
+						Expect(gr).ToNot(BeNil())
+						// The backend Service must be tracked as referenced even though no route
+						// references it (and even though it does not exist yet).
+						Expect(gr.ReferencedPayloadProcessorServices).To(HaveKey(ppBackendSvcNsName))
+					})
+				})
+				When("its backend Service (referenced by no route) is added", func() {
+					It("should trigger a change", func() {
+						testUpsertTriggersChange(ppBackendSvc)
+					})
+				})
+				When("its backend Service is deleted", func() {
+					It("should trigger a change", func() {
+						testDeleteTriggersChange(ppBackendSvc, ppBackendSvcNsName)
+					})
+				})
+				When("the PayloadProcessor is deleted", func() {
+					It("should trigger a change", func() {
+						testDeleteTriggersChange(
+							&ngfAPIv1alpha1.PayloadProcessor{},
+							types.NamespacedName{Namespace: pp.Namespace, Name: pp.Name},
+						)
+					})
+				})
+			})
 		})
 
 		Describe("namespace changes", Ordered, func() {

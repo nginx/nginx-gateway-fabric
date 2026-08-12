@@ -80,12 +80,16 @@ func validateNamespacedResourceName(value string) error {
 	}
 }
 
-func validateQualifiedName(name string) error {
+// validateClusterDomain validates the Kubernetes cluster DNS domain (e.g. "cluster.local"). The value
+// is interpolated verbatim into in-cluster Service URLs and certificate DNS SANs, so it must be a valid
+// DNS-1123 subdomain (lowercase alphanumerics, '-' and '.'); qualified names such as "my/domain" or
+// values with uppercase characters would produce malformed DNS names and are rejected.
+func validateClusterDomain(name string) error {
 	if len(name) == 0 {
 		return errors.New("must be set")
 	}
 
-	messages := validation.IsQualifiedName(name)
+	messages := validation.IsDNS1123Subdomain(name)
 	if len(messages) > 0 {
 		msg := strings.Join(messages, "; ")
 		return fmt.Errorf("invalid format: %s", msg)

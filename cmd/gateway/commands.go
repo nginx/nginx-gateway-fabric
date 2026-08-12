@@ -202,7 +202,7 @@ func createControllerCommand() *cobra.Command {
 		}
 
 		clusterDomain = stringValidatingValue{
-			validator: validateQualifiedName,
+			validator: validateClusterDomain,
 			value:     defaultDomain,
 		}
 	)
@@ -777,7 +777,7 @@ func createGenerateCertsCommand() *cobra.Command {
 			validator: validateResourceName,
 		}
 		clusterDomain = stringValidatingValue{
-			validator: validateQualifiedName,
+			validator: validateClusterDomain,
 			value:     defaultDomain,
 		}
 		serverTLSDomain = stringValidatingValue{

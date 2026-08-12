@@ -170,6 +170,62 @@ func TestResolveEffectivePayloadProcessors_PerGateway(t *testing.T) {
 		g.Expect(route.EffectivePayloadProcessors).To(HaveKeyWithValue(gwBNsName, routePolicy))
 	})
 
+	t.Run("route-attached policy invalid for one Gateway is not emitted for that Gateway", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+
+		// The route policy is globally Valid but marked invalid for Gateway A (e.g. an ExternalName
+		// backend whose Gateway A lacks a DNS resolver). It must not be emitted for Gateway A, while
+		// still winning for Gateway B.
+		routePolicy := payloadProcessorPolicy("route-processor")
+		routePolicy.InvalidForGateways = map[types.NamespacedName]struct{}{gwANsName: {}}
+
+		gateways := map[types.NamespacedName]*Gateway{
+			gwANsName: {},
+			gwBNsName: {},
+		}
+		route := &L7Route{
+			Policies:   []*Policy{routePolicy},
+			ParentRefs: []ParentRef{attached(gwANsName), attached(gwBNsName)},
+		}
+		routes := map[RouteKey]*L7Route{
+			{NamespacedName: types.NamespacedName{Namespace: testNs, Name: "route"}}: route,
+		}
+
+		resolveEffectivePayloadProcessors(gateways, routes)
+
+		g.Expect(route.EffectivePayloadProcessors).ToNot(HaveKey(gwANsName))
+		g.Expect(route.EffectivePayloadProcessors).To(HaveKeyWithValue(gwBNsName, routePolicy))
+	})
+
+	t.Run("route-attached policy invalid for a Gateway falls back to that Gateway's inherited policy", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+
+		// The route policy is invalid for Gateway A, so Gateway A must fall back to its own
+		// inherited PayloadProcessor. Gateway B still gets the route policy.
+		routePolicy := payloadProcessorPolicy("route-processor")
+		routePolicy.InvalidForGateways = map[types.NamespacedName]struct{}{gwANsName: {}}
+		gwAPolicy := payloadProcessorPolicy("gw-a-processor")
+
+		gateways := map[types.NamespacedName]*Gateway{
+			gwANsName: {Policies: []*Policy{gwAPolicy}},
+			gwBNsName: {},
+		}
+		route := &L7Route{
+			Policies:   []*Policy{routePolicy},
+			ParentRefs: []ParentRef{attached(gwANsName), attached(gwBNsName)},
+		}
+		routes := map[RouteKey]*L7Route{
+			{NamespacedName: types.NamespacedName{Namespace: testNs, Name: "route"}}: route,
+		}
+
+		resolveEffectivePayloadProcessors(gateways, routes)
+
+		g.Expect(route.EffectivePayloadProcessors).To(HaveKeyWithValue(gwANsName, gwAPolicy))
+		g.Expect(route.EffectivePayloadProcessors).To(HaveKeyWithValue(gwBNsName, routePolicy))
+	})
+
 	t.Run("failed parent attachment does not inherit its policy", func(t *testing.T) {
 		t.Parallel()
 		g := NewWithT(t)
@@ -837,6 +893,7 @@ func TestResolvePayloadProcessor(t *testing.T) {
 		pp                *ngfAPIv1alpha1.PayloadProcessor
 		services          map[types.NamespacedName]*corev1.Service
 		expTrackedSecret  *types.NamespacedName
+		expTrackedService *types.NamespacedName
 		name              string
 		expAPIURL         string
 		expToken          string
@@ -853,12 +910,14 @@ func TestResolvePayloadProcessor(t *testing.T) {
 			expAPIURL:         "http://ext-svc.ns1.svc.cluster.local:9000",
 			expToken:          "tok",
 			expBackendService: svcNsName,
+			expTrackedService: &svcNsName,
 		},
 		{
-			name:       "unresolvable Service invalidates policy",
-			pp:         ppMissingService,
-			expValid:   false,
-			expCondMsg: "backend Service ns1/missing not found",
+			name:              "unresolvable Service invalidates policy but tracks the Service",
+			pp:                ppMissingService,
+			expValid:          false,
+			expCondMsg:        "backend Service ns1/missing not found",
+			expTrackedService: &types.NamespacedName{Namespace: policyNs, Name: "missing"},
 		},
 		{
 			name:     "no ExtProcess entry leaves policy untouched",
@@ -874,6 +933,7 @@ func TestResolvePayloadProcessor(t *testing.T) {
 				Namespace: policyNs,
 				Name:      "missing-secret",
 			},
+			expTrackedService: &svcNsName,
 		},
 		{
 			name:              "cross-namespace backendRef resolves BackendService namespace",
@@ -883,6 +943,7 @@ func TestResolvePayloadProcessor(t *testing.T) {
 			expState:          true,
 			expAPIURL:         "http://ext-svc.ns2.svc.cluster.local:9000",
 			expBackendService: crossSvcNsName,
+			expTrackedService: &crossSvcNsName,
 		},
 	}
 
@@ -918,6 +979,14 @@ func TestResolvePayloadProcessor(t *testing.T) {
 			// that a rebuild is triggered once the Secret appears.
 			if test.expTrackedSecret != nil {
 				g.Expect(output.ReferencedPayloadProcessorSecrets).To(HaveKey(*test.expTrackedSecret))
+			}
+
+			// A referenced backend Service must be tracked even when it is missing or resolution
+			// fails, so that a rebuild is triggered when the Service is created, deleted, or changed.
+			if test.expTrackedService != nil {
+				g.Expect(output.ReferencedPayloadProcessorServices).To(HaveKey(*test.expTrackedService))
+			} else {
+				g.Expect(output.ReferencedPayloadProcessorServices).To(BeEmpty())
 			}
 
 			if !test.expState {

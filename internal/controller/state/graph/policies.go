@@ -290,9 +290,6 @@ func resolveEffectivePayloadProcessors(
 	routes map[RouteKey]*L7Route,
 ) {
 	for _, route := range routes {
-		// A PayloadProcessor attached directly to the Route wins for every attached Gateway.
-		routePolicy := firstValidPayloadProcessor(route.Policies)
-
 		for _, parentRef := range route.ParentRefs {
 			// Only inherit for parent Gateways whose attachment succeeded
 			if parentRef.Attachment == nil || !parentRef.Attachment.Attached {
@@ -305,7 +302,12 @@ func resolveEffectivePayloadProcessors(
 				continue
 			}
 
-			policy := routePolicy
+			// A PayloadProcessor attached directly to the Route wins for each Gateway it is valid
+			// for; otherwise fall back to the Gateway's inherited PayloadProcessor. Selecting the
+			// route policy per Gateway (rather than once for all Gateways) ensures a route policy
+			// marked invalid for a specific Gateway (e.g. an ExternalName backend whose Gateway
+			// lacks a DNS resolver) is not emitted for that Gateway.
+			policy := firstValidPayloadProcessorForGateway(route.Policies, gwNsName)
 			if policy == nil {
 				policy = firstValidPayloadProcessorForGateway(gw.Policies, gwNsName)
 			}
@@ -328,16 +330,6 @@ func firstValidPayloadProcessorForGateway(pols []*Policy, gwNsName types.Namespa
 		if _, invalid := policy.InvalidForGateways[gwNsName]; invalid {
 			continue
 		}
-		if policy.Valid && getPolicyKind(policy.Source) == kinds.PayloadProcessor {
-			return policy
-		}
-	}
-	return nil
-}
-
-// firstValidPayloadProcessor returns the first valid PayloadProcessor policy in the list, or nil.
-func firstValidPayloadProcessor(pols []*Policy) *Policy {
-	for _, policy := range pols {
 		if policy.Valid && getPolicyKind(policy.Source) == kinds.PayloadProcessor {
 			return policy
 		}

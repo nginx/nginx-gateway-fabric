@@ -2625,6 +2625,12 @@ func TestIsReferenced(t *testing.T) {
 			Name:      "serviceInGraph",
 		},
 	}
+	payloadProcessorServiceInGraph := &v1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: "default",
+			Name:      "payloadProcessorServiceInGraph",
+		},
+	}
 	emptyService := &v1.Service{}
 
 	inferenceInGraph := &inference.InferencePool{
@@ -2739,6 +2745,9 @@ func TestIsReferenced(t *testing.T) {
 		},
 		ReferencedServices: map[types.NamespacedName]*ReferencedService{
 			client.ObjectKeyFromObject(serviceInGraph): {},
+		},
+		ReferencedPayloadProcessorServices: map[types.NamespacedName]struct{}{
+			client.ObjectKeyFromObject(payloadProcessorServiceInGraph): {},
 		},
 		ReferencedInferencePools: map[types.NamespacedName]*ReferencedInferencePool{
 			client.ObjectKeyFromObject(inferenceInGraph): {},
@@ -2865,6 +2874,12 @@ func TestIsReferenced(t *testing.T) {
 			resource: serviceNotInGraphSameNameDifferentNS,
 			graph:    graph,
 			expected: false,
+		},
+		{
+			name:     "Service referenced only by a PayloadProcessor policy is referenced",
+			resource: payloadProcessorServiceInGraph,
+			graph:    graph,
+			expected: true,
 		},
 		{
 			name:     "Empty Service",
