@@ -860,9 +860,32 @@ func TestResolvePayloadProcessor(t *testing.T) {
 	ppBadPort := newPP(false)
 	ppBadPort.Spec.Processors[0].ExtProcess.BackendRef.Port = helpers.GetPointer[v1.PortNumber](1234)
 
+	// invalidBTPMap is a BackendTLSPolicy targeting the backend Service that is itself invalid, so
+	// resolveExtProcessBackendTLS returns an error and the PayloadProcessor fails closed.
+	invalidBTPMap := map[types.NamespacedName]*BackendTLSPolicy{
+		{Namespace: policyNs, Name: "btp"}: {
+			Valid:      false,
+			Conditions: []conditions.Condition{conditions.NewPolicyInvalid("bad CA reference")},
+			Source: &v1.BackendTLSPolicy{
+				ObjectMeta: metav1.ObjectMeta{Namespace: policyNs, Name: "btp"},
+				Spec: v1.BackendTLSPolicySpec{
+					TargetRefs: []v1.LocalPolicyTargetReferenceWithSectionName{
+						{
+							LocalPolicyTargetReference: v1.LocalPolicyTargetReference{
+								Kind: "Service",
+								Name: "ext-svc",
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
 	tests := []struct {
 		pp                *ngfAPIv1alpha1.PayloadProcessor
 		services          map[types.NamespacedName]*corev1.Service
+		btps              map[types.NamespacedName]*BackendTLSPolicy
 		expTrackedSecret  *types.NamespacedName
 		expTrackedService *types.NamespacedName
 		name              string
@@ -902,6 +925,14 @@ func TestResolvePayloadProcessor(t *testing.T) {
 			pp:                ppBadPort,
 			expValid:          false,
 			expCondMsg:        "backend Service ns1/ext-svc: No matching port",
+			expTrackedService: &svcNsName,
+		},
+		{
+			name:              "invalid BackendTLSPolicy invalidates policy (fail closed)",
+			pp:                newPP(false),
+			btps:              invalidBTPMap,
+			expValid:          false,
+			expCondMsg:        "The BackendTLSPolicy is invalid:",
 			expTrackedService: &svcNsName,
 		},
 		{
@@ -945,7 +976,7 @@ func TestResolvePayloadProcessor(t *testing.T) {
 			policy := &Policy{Valid: true}
 			output := &PayloadProcessingOutput{}
 
-			resolvePayloadProcessor(test.pp, policy, svcs, secretsMap, nil, "cluster.local", output)
+			resolvePayloadProcessor(test.pp, policy, svcs, secretsMap, test.btps, "cluster.local", output)
 
 			g.Expect(policy.Valid).To(Equal(test.expValid))
 
@@ -1235,4 +1266,338 @@ func TestResolveExtProcessBackendTLSInvalidFailsClosed(t *testing.T) {
 	g.Expect(err).To(HaveOccurred())
 	g.Expect(got).To(BeNil())
 	g.Expect(countAcceptedConditions(invalidBTP)).To(Equal(0))
+}
+
+// TestPayloadProcessorGateways exercises the fan-out from a PayloadProcessor policy's target refs to
+// the Gateways it is effective for, covering the Gateway/Route ref kinds and every skip branch
+// (missing route, unattached parentRef, InvalidForGateways, Gateway absent from the map, dedup).
+func TestPayloadProcessorGateways(t *testing.T) {
+	t.Parallel()
+
+	const ns = "ns1"
+
+	gw1 := types.NamespacedName{Namespace: ns, Name: "gw1"}
+	gw2 := types.NamespacedName{Namespace: ns, Name: "gw2"}
+	gw3 := types.NamespacedName{Namespace: ns, Name: "gw3"}
+	unknownGw := types.NamespacedName{Namespace: ns, Name: "unknown-gw"}
+
+	gateways := map[types.NamespacedName]*Gateway{
+		gw1: {},
+		gw2: {},
+		gw3: {},
+	}
+
+	httpRouteNsName := types.NamespacedName{Namespace: ns, Name: "hr"}
+	grpcRouteNsName := types.NamespacedName{Namespace: ns, Name: "gr"}
+
+	// routeWithParents builds an L7Route attached to the given Gateways (all Attached=true).
+	routeWithParents := func(gwNsNames ...types.NamespacedName) *L7Route {
+		parents := make([]ParentRef, 0, len(gwNsNames))
+		for _, gw := range gwNsNames {
+			parents = append(parents, ParentRef{
+				GatewayNsName: gw,
+				Attachment:    &ParentRefAttachmentStatus{Attached: true},
+			})
+		}
+		return &L7Route{ParentRefs: parents}
+	}
+
+	routes := map[RouteKey]*L7Route{
+		routeKeyForKind(kinds.HTTPRoute, httpRouteNsName): routeWithParents(gw1, gw2),
+		routeKeyForKind(kinds.GRPCRoute, grpcRouteNsName): routeWithParents(gw2, gw3),
+	}
+
+	gatewayRef := func(gw types.NamespacedName) PolicyTargetRef {
+		return PolicyTargetRef{Kind: kinds.Gateway, Nsname: gw}
+	}
+	httpRouteRef := func(nsname types.NamespacedName) PolicyTargetRef {
+		return PolicyTargetRef{Kind: kinds.HTTPRoute, Nsname: nsname}
+	}
+	grpcRouteRef := func(nsname types.NamespacedName) PolicyTargetRef {
+		return PolicyTargetRef{Kind: kinds.GRPCRoute, Nsname: nsname}
+	}
+
+	tests := []struct {
+		invalidForGateways map[types.NamespacedName]struct{}
+		name               string
+		targetRefs         []PolicyTargetRef
+		expGateways        []types.NamespacedName
+	}{
+		{
+			name:        "no target refs yields no Gateways",
+			targetRefs:  nil,
+			expGateways: nil,
+		},
+		{
+			name:        "Gateway target ref contributes itself",
+			targetRefs:  []PolicyTargetRef{gatewayRef(gw1)},
+			expGateways: []types.NamespacedName{gw1},
+		},
+		{
+			name:        "Gateway target ref not present in the Gateways map is excluded",
+			targetRefs:  []PolicyTargetRef{gatewayRef(unknownGw)},
+			expGateways: nil,
+		},
+		{
+			name:               "Gateway target ref in InvalidForGateways is excluded",
+			targetRefs:         []PolicyTargetRef{gatewayRef(gw1)},
+			invalidForGateways: map[types.NamespacedName]struct{}{gw1: {}},
+			expGateways:        nil,
+		},
+		{
+			name:        "HTTPRoute target ref contributes attached parent Gateways",
+			targetRefs:  []PolicyTargetRef{httpRouteRef(httpRouteNsName)},
+			expGateways: []types.NamespacedName{gw1, gw2},
+		},
+		{
+			name:        "GRPCRoute target ref contributes attached parent Gateways",
+			targetRefs:  []PolicyTargetRef{grpcRouteRef(grpcRouteNsName)},
+			expGateways: []types.NamespacedName{gw2, gw3},
+		},
+		{
+			name:        "Route target ref for a route missing from the map is skipped",
+			targetRefs:  []PolicyTargetRef{httpRouteRef(types.NamespacedName{Namespace: ns, Name: "missing"})},
+			expGateways: nil,
+		},
+		{
+			name:               "route parent Gateway in InvalidForGateways is excluded",
+			targetRefs:         []PolicyTargetRef{httpRouteRef(httpRouteNsName)},
+			invalidForGateways: map[types.NamespacedName]struct{}{gw1: {}},
+			expGateways:        []types.NamespacedName{gw2},
+		},
+		{
+			name:        "duplicate Gateways across refs are deduplicated",
+			targetRefs:  []PolicyTargetRef{gatewayRef(gw2), httpRouteRef(httpRouteNsName), grpcRouteRef(grpcRouteNsName)},
+			expGateways: []types.NamespacedName{gw1, gw2, gw3},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			policy := &Policy{
+				TargetRefs:         test.targetRefs,
+				InvalidForGateways: test.invalidForGateways,
+			}
+
+			got := payloadProcessorGateways(policy, routes, gateways)
+
+			if len(test.expGateways) == 0 {
+				g.Expect(got).To(BeEmpty())
+				return
+			}
+			g.Expect(got).To(ConsistOf(test.expGateways))
+		})
+	}
+}
+
+// TestPayloadProcessorGatewaysUnattachedParentSkipped verifies that route parentRefs which are not
+// attached (nil Attachment or Attached=false) do not contribute Gateways.
+func TestPayloadProcessorGatewaysUnattachedParentSkipped(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	const ns = "ns1"
+	gwAttached := types.NamespacedName{Namespace: ns, Name: "gw-attached"}
+	gwNilAttachment := types.NamespacedName{Namespace: ns, Name: "gw-nil"}
+	gwNotAttached := types.NamespacedName{Namespace: ns, Name: "gw-detached"}
+
+	gateways := map[types.NamespacedName]*Gateway{
+		gwAttached:      {},
+		gwNilAttachment: {},
+		gwNotAttached:   {},
+	}
+
+	routeNsName := types.NamespacedName{Namespace: ns, Name: "hr"}
+	route := &L7Route{
+		ParentRefs: []ParentRef{
+			{GatewayNsName: gwAttached, Attachment: &ParentRefAttachmentStatus{Attached: true}},
+			{GatewayNsName: gwNilAttachment, Attachment: nil},
+			{GatewayNsName: gwNotAttached, Attachment: &ParentRefAttachmentStatus{Attached: false}},
+		},
+	}
+	routes := map[RouteKey]*L7Route{
+		routeKeyForKind(kinds.HTTPRoute, routeNsName): route,
+	}
+
+	policy := &Policy{
+		TargetRefs: []PolicyTargetRef{{Kind: kinds.HTTPRoute, Nsname: routeNsName}},
+	}
+
+	got := payloadProcessorGateways(policy, routes, gateways)
+	g.Expect(got).To(ConsistOf(gwAttached))
+}
+
+// TestAddPayloadProcessorBackendServicesToReferencedServices covers registering PayloadProcessor
+// backend Services (referenced only via a policy) into referencedServices, including each skip branch
+// and the happy path (service added with its effective Gateways, lazy map init, cross-namespace ref).
+func TestAddPayloadProcessorBackendServicesToReferencedServices(t *testing.T) {
+	t.Parallel()
+
+	const (
+		policyNs  = "ns1"
+		backendNs = "ns2"
+	)
+
+	gvk := schema.GroupVersionKind{Group: ngfAPIGroup, Version: "v1alpha1", Kind: kinds.PayloadProcessor}
+	otherGVK := schema.GroupVersionKind{Group: ngfAPIGroup, Version: "v1alpha1", Kind: "ClientSettingsPolicy"}
+
+	gwNsName := types.NamespacedName{Namespace: policyNs, Name: "gw1"}
+	gateways := map[types.NamespacedName]*Gateway{gwNsName: {}}
+
+	svcNsName := types.NamespacedName{Namespace: policyNs, Name: "ext-svc"}
+	crossSvcNsName := types.NamespacedName{Namespace: backendNs, Name: "ext-svc"}
+	services := map[types.NamespacedName]*corev1.Service{
+		svcNsName: {
+			ObjectMeta: metav1.ObjectMeta{Namespace: policyNs, Name: "ext-svc"},
+			Spec:       corev1.ServiceSpec{Type: corev1.ServiceTypeClusterIP},
+		},
+		crossSvcNsName: {
+			ObjectMeta: metav1.ObjectMeta{Namespace: backendNs, Name: "ext-svc"},
+			Spec:       corev1.ServiceSpec{Type: corev1.ServiceTypeClusterIP},
+		},
+	}
+
+	// keyFor derives the PolicyKey for a policy source.
+	keyFor := func(p *Policy) PolicyKey {
+		return PolicyKey{
+			NsName: types.NamespacedName{Namespace: p.Source.GetNamespace(), Name: p.Source.GetName()},
+			GVK:    p.Source.GetObjectKind().GroupVersionKind(),
+		}
+	}
+
+	// realPP builds a valid PayloadProcessor policy targeting the given backend namespace, effective
+	// for gwNsName via a Gateway target ref.
+	realPP := func(backendRefNs string) *Policy {
+		source := payloadProcessorWithBackendRef(backendRefNs)
+		source.GetObjectKind().SetGroupVersionKind(gvk)
+		return &Policy{
+			Source:     source,
+			Valid:      true,
+			TargetRefs: []PolicyTargetRef{{Kind: kinds.Gateway, Nsname: gwNsName}},
+		}
+	}
+
+	// fakeWithKind builds a fake (non-*PayloadProcessor) policy source reporting the given kind.
+	fakeWithKind := func(name string, kindGVK schema.GroupVersionKind) *Policy {
+		source := &policiesfakes.FakePolicy{
+			GetNameStub:      func() string { return name },
+			GetNamespaceStub: func() string { return policyNs },
+			GetObjectKindStub: func() schema.ObjectKind {
+				return &policiesfakes.FakeObjectKind{
+					GroupVersionKindStub: func() schema.GroupVersionKind { return kindGVK },
+				}
+			},
+		}
+		return &Policy{
+			Source:     source,
+			Valid:      true,
+			TargetRefs: []PolicyTargetRef{{Kind: kinds.Gateway, Nsname: gwNsName}},
+		}
+	}
+
+	// ppNoEntry builds a valid PayloadProcessor policy whose source carries no ExtProcess entry.
+	ppNoEntry := func() *Policy {
+		source := payloadProcessorWithBackendRef("")
+		source.Spec.Processors = nil
+		source.GetObjectKind().SetGroupVersionKind(gvk)
+		return &Policy{
+			Source:     source,
+			Valid:      true,
+			TargetRefs: []PolicyTargetRef{{Kind: kinds.Gateway, Nsname: gwNsName}},
+		}
+	}
+
+	// ppZeroGateways builds a valid PayloadProcessor policy targeting a Gateway that is absent from
+	// the gateways map, so it is effective for zero Gateways.
+	ppZeroGateways := func() *Policy {
+		pp := realPP("")
+		pp.TargetRefs = []PolicyTargetRef{
+			{Kind: kinds.Gateway, Nsname: types.NamespacedName{Namespace: policyNs, Name: "absent"}},
+		}
+		return pp
+	}
+
+	// ppInvalid builds a valid backend PayloadProcessor policy that is marked invalid.
+	ppInvalid := func() *Policy {
+		pp := realPP("")
+		pp.Valid = false
+		return pp
+	}
+
+	tests := []struct {
+		buildPolicy        func() *Policy
+		referencedServices map[types.NamespacedName]*ReferencedService
+		expServiceKey      *types.NamespacedName
+		name               string
+		expEmpty           bool
+	}{
+		{
+			name: "valid PayloadProcessor registers its backend Service with effective Gateways",
+			// nil referencedServices also exercises the lazy-init branch.
+			buildPolicy:        func() *Policy { return realPP("") },
+			referencedServices: nil,
+			expServiceKey:      &svcNsName,
+		},
+		{
+			name:               "cross-namespace backendRef resolves the Service in the backend namespace",
+			buildPolicy:        func() *Policy { return realPP(backendNs) },
+			referencedServices: map[types.NamespacedName]*ReferencedService{},
+			expServiceKey:      &crossSvcNsName,
+		},
+		{
+			name:               "invalid policy is skipped",
+			buildPolicy:        ppInvalid,
+			referencedServices: map[types.NamespacedName]*ReferencedService{},
+			expEmpty:           true,
+		},
+		{
+			name:               "non-PayloadProcessor kind is skipped",
+			buildPolicy:        func() *Policy { return fakeWithKind("csp", otherGVK) },
+			referencedServices: map[types.NamespacedName]*ReferencedService{},
+			expEmpty:           true,
+		},
+		{
+			name:               "PayloadProcessor kind whose source is not a *PayloadProcessor is skipped",
+			buildPolicy:        func() *Policy { return fakeWithKind("pp", gvk) },
+			referencedServices: map[types.NamespacedName]*ReferencedService{},
+			expEmpty:           true,
+		},
+		{
+			name:               "policy with no ExtProcess entry is skipped",
+			buildPolicy:        ppNoEntry,
+			referencedServices: map[types.NamespacedName]*ReferencedService{},
+			expEmpty:           true,
+		},
+		{
+			name:               "policy effective for zero Gateways leaves referencedServices untouched",
+			buildPolicy:        ppZeroGateways,
+			referencedServices: map[types.NamespacedName]*ReferencedService{},
+			expEmpty:           true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			pp := test.buildPolicy()
+			processed := map[PolicyKey]*Policy{keyFor(pp): pp}
+
+			result := addPayloadProcessorBackendServicesToReferencedServices(
+				processed, nil, gateways, test.referencedServices, services,
+			)
+
+			if test.expEmpty {
+				g.Expect(result).To(BeEmpty())
+				return
+			}
+
+			g.Expect(result).To(HaveKey(*test.expServiceKey))
+			g.Expect(result[*test.expServiceKey].GatewayNsNames).To(HaveKey(gwNsName))
+		})
+	}
 }
