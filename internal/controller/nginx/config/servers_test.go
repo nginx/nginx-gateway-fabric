@@ -8486,7 +8486,9 @@ func TestExecuteServers_Guardrails(t *testing.T) {
 			expPresent: []string{
 				"location /_ngf-internal-guardrails-test_route1_rule0 {",
 				"set $guardrails_backend guardrails.example.com:443;",
-				`proxy_set_header Host "guardrails.example.com";`,
+				// Host carries the full authority (host:port) to match the proxy_pass
+				// target; proxy_ssl_name below stays the bare hostname for TLS.
+				`proxy_set_header Host "guardrails.example.com:443";`,
 				"proxy_pass https://$guardrails_backend/backend/v1/scans;",
 				"proxy_ssl_server_name on;",
 				// The backend certificate and hostname must be verified against the system
@@ -9367,7 +9369,38 @@ func TestExtractGuardrailsInternalLocations(t *testing.T) {
 						TrustedCertificate: dataplane.AlpineSSLRootCAPath,
 					},
 					GuardrailsProxyPassVar: "guardrails.example.com:443",
-					ProxySetHeaders:        []http.Header{{Name: "Host", Value: "guardrails.example.com"}},
+					ProxySetHeaders:        []http.Header{{Name: "Host", Value: "guardrails.example.com:443"}},
+				},
+			},
+		},
+		{
+			// A non-default backend port must be carried in the Host header so it
+			// matches the proxy_pass authority; an edge validating the full
+			// authority would otherwise reject the scan and fail traffic closed.
+			// proxy_ssl_name stays the bare hostname (no port) for TLS verification.
+			name: "https backend with non-default port keeps port in Host",
+			locations: []http.Location{
+				{
+					Path: "/coffee",
+					Type: http.ExternalLocationType,
+					Guardrails: &http.GuardrailsConfig{
+						Enabled:      true,
+						APIURL:       "https://guardrails.example.com:8443",
+						InternalPath: "/_ngf-internal-guardrails-ns1_route1_rule0",
+					},
+				},
+			},
+			expected: []http.Location{
+				{
+					Path:      "/_ngf-internal-guardrails-ns1_route1_rule0",
+					Type:      http.InternalLocationType,
+					ProxyPass: "https://$guardrails_backend/backend/v1/scans",
+					ProxySSLVerify: &http.ProxySSLVerify{
+						Name:               "guardrails.example.com",
+						TrustedCertificate: dataplane.AlpineSSLRootCAPath,
+					},
+					GuardrailsProxyPassVar: "guardrails.example.com:8443",
+					ProxySetHeaders:        []http.Header{{Name: "Host", Value: "guardrails.example.com:8443"}},
 				},
 			},
 		},

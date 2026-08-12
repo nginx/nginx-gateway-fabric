@@ -1508,11 +1508,11 @@ func extractGuardrailsInternalLocations(locations []http.Location) []http.Locati
 		// supported; private-CA or self-signed guardrails backends are not currently
 		// supported.
 		//
-		// The HTTP Host header must ALSO carry the backend hostname: when proxy_pass
-		// targets an ExternalName that NGINX resolves to a rotating IP, the default
-		// Host header does not match what a hostname-routing edge (API gateway/CDN)
-		// expects, and the edge rejects the request with 403 before it reaches the
-		// backend app. Set Host explicitly to the APIURL hostname.
+		// The HTTP Host header must ALSO carry the backend authority (host[:port]):
+		// when proxy_pass targets an ExternalName that NGINX resolves to a rotating
+		// IP, the default Host header does not match what a hostname-routing edge
+		// (API gateway/CDN) expects, and the edge rejects the request with 403 before
+		// it reaches the backend app.
 		// In-cluster HTTP backends need neither TLS verification nor a Host override.
 		var proxySSLVerify *http.ProxySSLVerify
 		var proxyPassVar string
@@ -1522,7 +1522,7 @@ func extractGuardrailsInternalLocations(locations []http.Location) []http.Locati
 				Name:               parsed.Hostname(),
 				TrustedCertificate: dataplane.AlpineSSLRootCAPath,
 			}
-			proxySetHeaders = []http.Header{{Name: "Host", Value: parsed.Hostname()}}
+			proxySetHeaders = []http.Header{{Name: "Host", Value: parsed.Host}}
 
 			// Re-resolve the ExternalName backend per request via a variable proxy_pass. The
 			// variable carries the backend authority (host[:port]); the proxy_pass scheme/path
