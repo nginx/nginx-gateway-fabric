@@ -7,7 +7,8 @@ use std::ptr;
 use ngx::core::Status;
 use ngx::ffi::{
     NGX_HTTP_FORBIDDEN, NGX_LOG_DEBUG_HTTP, NGX_LOG_ERR, NGX_LOG_INFO, NGX_LOG_WARN, ngx_chain_t,
-    ngx_http_finalize_request, ngx_http_request_t, ngx_int_t, ngx_uint_t,
+    ngx_http_finalize_request, ngx_http_request_t, ngx_int_t, ngx_post_event, ngx_posted_events,
+    ngx_uint_t,
 };
 use ngx::http::{self, HttpModule, HttpModuleLocationConf, Request};
 use ngx::ngx_log_error;
@@ -363,7 +364,9 @@ unsafe fn clear_request_inspect_ctx(r: *mut ngx_http_request_t) {
 ///      and return `NGX_DONE` to yield.
 ///   2. The body-read handler extracts the prompt and spawns an async subrequest
 ///      task; when it completes it records the verdict then resumes the phase
-///      engine (`r->write_event_handler = ngx_http_core_run_phases`; call it).
+///      engine via a **posted write event** (see `resume_phases`) so the phase
+///      engine re-runs on a clean event-loop iteration rather than inline from
+///      inside the subrequest's finalize.
 ///   3. Re-invocation: read the verdict — `Allow` → `NGX_OK` (access granted),
 ///      `Block`/error → send 403 (fail-closed), `Pending` → `NGX_AGAIN` (wait).
 pub(crate) unsafe extern "C" fn guardrails_access_handler(r: *mut ngx_http_request_t) -> ngx_int_t {
@@ -637,14 +640,27 @@ unsafe extern "C" fn guardrails_body_read_handler(r: *mut ngx_http_request_t) {
     }
 }
 
-/// Record the verdict on the request-inspection state and resume the HTTP phase
-/// engine so the access handler re-runs and acts on the verdict.
+/// Record the async inspection verdict on the request-inspection state and
+/// **defer** the phase-engine resume to a posted write event.
 ///
-/// This mirrors `ngx_http_mirror_module`'s body-completion resume: set
-/// `r->write_event_handler = ngx_http_core_run_phases` and call it. The async
-/// task runs from the ngx async scheduler's posted-event context (already inside
-/// the worker event loop), so calling `ngx_http_core_run_phases` directly here
-/// is safe.
+/// # Why defer (critical)
+///
+/// This runs from the spawned task's continuation, which is polled **inline** by
+/// the wake from `PostSubrequest::handler` — invoked by NGINX from **inside the
+/// subrequest's `ngx_http_finalize_request`**, before its own `r->main->count--`
+/// and posted-request draining. Re-driving the parent's phase engine from that
+/// nested stack is unsafe: a `Block` verdict re-runs the ACCESS phase and
+/// finalizes the parent (`send_403_and_finalize`) while the child subrequest is
+/// still unwinding its own finalize. So we only record the verdict, arm
+/// `guardrails_resume_phases_handler`, and post the connection write event; NGINX
+/// then runs it on the next clean event-loop iteration, after the subrequest has
+/// fully finalized. Mirrors the response path's `resume_output` deferral and the
+/// deferral `start_subrequest` does after `ngx_http_subrequest`.
+///
+/// The verdict slot itself guards against acting twice: the re-invoked access
+/// handler reads the recorded `Allow`/`Block` and either grants access or
+/// finalizes exactly once (a spurious/duplicate write event re-runs the phase
+/// engine, which is idempotent under NGINX's `phase_handler` cursor).
 unsafe fn resume_phases(
     r: *mut ngx_http_request_t,
     verdict: InspectVerdict,
@@ -656,6 +672,40 @@ unsafe fn resume_phases(
             (*state_ptr).verdict = verdict;
             (*state_ptr).block_message = message;
         }
+
+        // Post the resume to a write event so the phase engine runs on the next
+        // event-loop iteration, NOT nested inside the subrequest's finalize.
+        let conn = (*r).connection;
+        if conn.is_null() || (*conn).write.is_null() {
+            // No connection to post to — fall back to driving the phase engine
+            // directly.
+            let request = &mut *r.cast::<Request>();
+            ngx_log_error!(
+                NGX_LOG_ERR,
+                request.log(),
+                "guardrails: resume_phases: null connection/write (direct resume)"
+            );
+            (*r).write_event_handler = Some(ngx::ffi::ngx_http_core_run_phases);
+            ngx::ffi::ngx_http_core_run_phases(r);
+            return;
+        }
+        (*r).write_event_handler = Some(guardrails_resume_phases_handler);
+        ngx_post_event((*conn).write, ptr::addr_of_mut!(ngx_posted_events));
+    }
+}
+
+/// Write-event handler that drives the deferred phase-engine resume for the
+/// request path. Armed by `resume_phases` and driven by a posted write event, so
+/// it runs cleanly in the worker event loop (not nested inside the subrequest's
+/// `ngx_http_finalize_request`).
+///
+/// It hands control back to the core phase engine: the re-invoked ACCESS-phase
+/// handler (`guardrails_access_handler`) reads the recorded verdict and grants
+/// access (`NGX_OK`) or blocks (`send_403_and_finalize`). Setting
+/// `write_event_handler = ngx_http_core_run_phases` keeps subsequent write events
+/// (e.g. while the 403 body flushes) flowing through the core engine.
+unsafe extern "C" fn guardrails_resume_phases_handler(r: *mut ngx_http_request_t) {
+    unsafe {
         (*r).write_event_handler = Some(ngx::ffi::ngx_http_core_run_phases);
         ngx::ffi::ngx_http_core_run_phases(r);
     }
