@@ -647,6 +647,10 @@ type MatchRule struct {
 // GuardrailsConfig contains the ai-guardrails / ExtProcess configuration that must be emitted into the
 // generated NGINX location for a match.
 type GuardrailsConfig struct {
+	// VerifyTLS holds the TLS verification settings (CA bundle + hostname) for an HTTPS Guardrails
+	// backend, derived from a BackendTLSPolicy targeting the backend Service. When set, the guardrails
+	// internal location proxies over https with proxy_ssl_verify on.
+	VerifyTLS *VerifyTLS
 	// APIURL is the resolved URL of the external Guardrails service.
 	APIURL string
 	// InternalPath is the NGINX internal location path that the guardrails module issues its

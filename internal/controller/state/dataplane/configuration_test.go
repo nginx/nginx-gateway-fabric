@@ -12111,6 +12111,67 @@ func TestBuildCertBundles(t *testing.T) {
 	}
 }
 
+func TestCollectGuardrailsCertBundleIDs(t *testing.T) {
+	t.Parallel()
+
+	serverWith := func(guardrails *GuardrailsConfig) VirtualServer {
+		return VirtualServer{
+			PathRules: []PathRule{
+				{MatchRules: []MatchRule{{Guardrails: guardrails}}},
+			},
+		}
+	}
+
+	tests := []struct {
+		name     string
+		expected map[CertBundleID]struct{}
+		servers  []VirtualServer
+	}{
+		{
+			name:     "no guardrails",
+			servers:  []VirtualServer{serverWith(nil)},
+			expected: map[CertBundleID]struct{}{},
+		},
+		{
+			name:     "guardrails without VerifyTLS",
+			servers:  []VirtualServer{serverWith(&GuardrailsConfig{Enabled: true})},
+			expected: map[CertBundleID]struct{}{},
+		},
+		{
+			name: "guardrails VerifyTLS using system store (no CertBundleID) is skipped",
+			servers: []VirtualServer{
+				serverWith(&GuardrailsConfig{Enabled: true, VerifyTLS: &VerifyTLS{RootCAPath: AlpineSSLRootCAPath}}),
+			},
+			expected: map[CertBundleID]struct{}{},
+		},
+		{
+			name: "guardrails VerifyTLS with CertBundleID is collected",
+			servers: []VirtualServer{
+				serverWith(&GuardrailsConfig{Enabled: true, VerifyTLS: &VerifyTLS{CertBundleID: "guardrails-ca"}}),
+			},
+			expected: map[CertBundleID]struct{}{"guardrails-ca": {}},
+		},
+		{
+			name: "multiple guardrails backends across servers are deduplicated",
+			servers: []VirtualServer{
+				serverWith(&GuardrailsConfig{Enabled: true, VerifyTLS: &VerifyTLS{CertBundleID: "ca-a"}}),
+				serverWith(&GuardrailsConfig{Enabled: true, VerifyTLS: &VerifyTLS{CertBundleID: "ca-a"}}),
+				serverWith(&GuardrailsConfig{Enabled: true, VerifyTLS: &VerifyTLS{CertBundleID: "ca-b"}}),
+			},
+			expected: map[CertBundleID]struct{}{"ca-a": {}, "ca-b": {}},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			g.Expect(collectGuardrailsCertBundleIDs(test.servers)).To(Equal(test.expected))
+		})
+	}
+}
+
 func TestBuildUpstreamsWithClusterIP(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)

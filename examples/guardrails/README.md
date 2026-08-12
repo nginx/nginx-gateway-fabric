@@ -263,20 +263,56 @@ must detect). If you add longer responses to `test-data.json`, raise these accor
 ## Guardrails backend addressing
 
 The Guardrails backend can live **outside** or **inside** the cluster. NGF picks the URL scheme from
-the referenced Service's type:
+the referenced Service's type and, **per Gateway**, from whether a
+[`BackendTLSPolicy`](https://gateway-api.sigs.k8s.io/api-types/backendtlspolicy/) is attached to that
+Gateway for the Service:
 
-| Backend location | Service type | Resolved URL |
-| ------------------ | ------------- | -------------- |
-| External | `ExternalName` | `https://<externalName>:<backendRef.port>` |
-| In-cluster | `ClusterIP` (or any non-`ExternalName`) | `http://<name>.<namespace>.svc.cluster.local:<backendRef.port>` |
+| Backend location | Service type | `BackendTLSPolicy` attached (this Gateway)? | Resolved URL (per Gateway) |
+| ------------------ | ------------- | ------------------- | -------------- |
+| External | `ExternalName` | n/a | `https://<externalName>:<backendRef.port>` |
+| In-cluster (plaintext) | `ClusterIP` (or any non-`ExternalName`) | no | `http://<name>.<namespace>.svc.<cluster-domain>:<backendRef.port>` |
+| In-cluster (TLS) | `ClusterIP` (or any non-`ExternalName`) | yes | `https://<name>.<namespace>.svc.<cluster-domain>:<backendRef.port>` |
 
 Two important rules regardless of location:
 
 - **The port comes from `backendRef.port` in `payload-processor.yaml`**, not from the Service's own
   `.spec.ports`. Set them to the same value or the module will call a dead port.
-- **Current scheme limitation:** external backends are always called over **https**, and in-cluster
-  backends always over **http**. An in-cluster HTTPS backend or an external HTTP backend cannot be
-  expressed today.
+- **Scheme selection is per Gateway:** external (`ExternalName`) backends are always called over
+  **https**; in-cluster backends default to **http**, and are upgraded to **https** only for the
+  Gateways a `BackendTLSPolicy` is actually attached to. A `BackendTLSPolicy` only affects a Gateway it
+  is attached to, so the same `PayloadProcessor` can be `https` (verified) on one Gateway and plaintext
+  `http` on another that the policy does not cover.
+
+### In-cluster HTTPS via `BackendTLSPolicy`
+
+An in-cluster ClusterIP backend is called over **https** when a `BackendTLSPolicy` targets its
+Service. In that case NGF:
+
+- verifies the backend certificate against the **CA bundle** referenced by the policy's
+  `validation.caCertificateRefs` (a ConfigMap holding `ca.crt`), so **custom or self-signed CAs are
+  supported** — there is no requirement that the backend cert chain to a public root;
+- uses the policy's `validation.hostname` for `proxy_ssl_name` (SNI), the `Host` header, and
+  certificate hostname verification (`proxy_ssl_verify on`);
+- emits a **fixed `proxy_pass`** to the in-cluster Service FQDN
+  (`https://<name>.<namespace>.svc.<cluster-domain>:<port>`) and therefore needs **no DNS resolver**
+  (ClusterIP is stable; NGINX resolves it at worker startup).
+
+This differs from the `ExternalName` path, which is verified against the **system trust store** and
+uses a **variable `proxy_pass` + `resolver`** so a rotating external IP is re-resolved on every
+request (see [below](#configuring-the-dns-resolver-required-for-externalname-backends)).
+
+An in-cluster HTTPS example manifest is shown in [In-cluster HTTPS backend](#in-cluster-https-backend).
+
+If the referenced `BackendTLSPolicy` is invalid or not attached to the backend Service, NGF fails
+**closed** (the `PayloadProcessor` is not programmed for that backend) rather than silently falling
+back to plaintext.
+
+> **Per-Gateway note:** the https upgrade is honored **per Gateway**. A `BackendTLSPolicy` only
+> applies to Gateways it is attached to (subject to the usual attachment/ancestor limits). If a
+> `PayloadProcessor` is used by routes bound to multiple Gateways but its `BackendTLSPolicy` is only
+> attached to some of them, the backend is reached over **https (verified)** on the covered Gateways
+> and over plaintext **http** on the others — the scheme never leaks from one Gateway to another. To
+> get https on every Gateway, ensure the `BackendTLSPolicy` is attached to each of them.
 
 Both inspection paths (request and response) reach the Guardrails backend the **same** way (see the
 module README's [request/response architecture](../../internal/controller/nginx/modules/rust/ai-guardrails/README.md#request-path-vs-response-path)):
@@ -367,6 +403,58 @@ spec:                           # no `type:` (defaults to ClusterIP), no `extern
 Then update `payload-processor.yaml` so `backendRef.port` matches (e.g. `8080`). This resolves to
 `http://guardrails-api.<namespace>.svc.cluster.local:8080`. Keep the Service in the same namespace
 as the `PayloadProcessor`, or set `backendRef.namespace` explicitly.
+
+### In-cluster HTTPS backend
+
+To call an in-cluster Guardrails backend over **https** (including a backend that presents a
+self-signed or private-CA certificate), keep the normal ClusterIP Service and add a
+`BackendTLSPolicy` targeting it.
+
+First, make the CA that signed your backend's serving certificate available as a ConfigMap holding
+`ca.crt` (in the same namespace as the backend Service):
+
+```shell
+kubectl create configmap guardrails-ca --from-file=ca.crt=./ca.crt
+```
+
+Then apply the Service and `BackendTLSPolicy`:
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: guardrails-api          # keep the name referenced by payload-processor.yaml
+spec:                           # ClusterIP (default); no `externalName:`
+  selector:
+    app: my-guardrails-backend  # must match your backend Pods' labels
+  ports:
+  - name: https
+    port: 8443                  # TLS port your backend listens on
+    targetPort: 8443
+    protocol: TCP
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: BackendTLSPolicy
+metadata:
+  name: guardrails-api-tls
+spec:
+  targetRefs:
+  - group: ""
+    kind: Service
+    name: guardrails-api
+  validation:
+    caCertificateRefs:
+    - group: ""
+      kind: ConfigMap
+      name: guardrails-ca
+    # hostname must match a SAN on the backend's serving certificate; it is
+    # used for SNI, the Host header, and certificate hostname verification.
+    hostname: guardrails-api.default.svc.cluster.local
+```
+
+Set `backendRef.port: 8443` in `payload-processor.yaml` to match the Service port. This resolves to
+`https://guardrails-api.<namespace>.svc.<cluster-domain>:8443`, verified against `guardrails-ca`. No
+DNS resolver is required for the in-cluster HTTPS path.
 
 ## Troubleshooting
 

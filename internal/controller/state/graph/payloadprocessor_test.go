@@ -12,6 +12,7 @@ import (
 
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/policiesfakes"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/secrets"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
@@ -556,7 +557,7 @@ func TestProcessPayloadProcessorPolicies(t *testing.T) {
 			}
 			processed := map[PolicyKey]*Policy{key: test.policy}
 
-			output := processPayloadProcessorPolicies(processed, services, secretsMap, "cluster.local")
+			output := processPayloadProcessorPolicies(processed, services, secretsMap, nil, "cluster.local")
 			g.Expect(output).ToNot(BeNil())
 
 			if test.expStateSet {
@@ -571,108 +572,78 @@ func TestProcessPayloadProcessorPolicies(t *testing.T) {
 	}
 }
 
+// TestResolveExtProcessURL exercises the pure URL derivation. The caller (resolvePayloadProcessor)
+// is responsible for looking up the Service and validating the port, so the missing-Service,
+// unset-port, and non-matching-port error paths are covered by TestResolvePayloadProcessor; this test
+// only covers valid, pre-resolved inputs.
 func TestResolveExtProcessURL(t *testing.T) {
 	t.Parallel()
 
 	const policyNs = "ns1"
 
-	clusterIPSvc := types.NamespacedName{Namespace: policyNs, Name: "ext-svc"}
-	externalNameSvc := types.NamespacedName{Namespace: policyNs, Name: "ext-name-svc"}
+	clusterIPSvcNsName := types.NamespacedName{Namespace: policyNs, Name: "ext-svc"}
+	externalNameSvcNsName := types.NamespacedName{Namespace: policyNs, Name: "ext-name-svc"}
 
-	services := map[types.NamespacedName]*corev1.Service{
-		clusterIPSvc: {
-			ObjectMeta: metav1.ObjectMeta{Namespace: policyNs, Name: "ext-svc"},
-			Spec: corev1.ServiceSpec{
-				Type:  corev1.ServiceTypeClusterIP,
-				Ports: []corev1.ServicePort{{Port: 9000}},
-			},
-		},
-		externalNameSvc: {
-			ObjectMeta: metav1.ObjectMeta{Namespace: policyNs, Name: "ext-name-svc"},
-			Spec: corev1.ServiceSpec{
-				Type:         corev1.ServiceTypeExternalName,
-				ExternalName: "guardrails.example.com",
-				Ports:        []corev1.ServicePort{{Port: 8443}},
-			},
+	clusterIPSvc := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{Namespace: policyNs, Name: "ext-svc"},
+		Spec: corev1.ServiceSpec{
+			Type:  corev1.ServiceTypeClusterIP,
+			Ports: []corev1.ServicePort{{Port: 9000}},
 		},
 	}
-
-	ext := func(name string, port v1.PortNumber) *ngfAPIv1alpha1.ExtProcessConfig {
-		return &ngfAPIv1alpha1.ExtProcessConfig{
-			BackendRef: v1.BackendObjectReference{
-				Name: v1.ObjectName(name),
-				Port: helpers.GetPointer(port),
-			},
-		}
-	}
-
-	// extNoPort builds a config whose BackendRef omits the port, exercising the "port is not set" branch.
-	extNoPort := func(name string) *ngfAPIv1alpha1.ExtProcessConfig {
-		return &ngfAPIv1alpha1.ExtProcessConfig{
-			BackendRef: v1.BackendObjectReference{
-				Name: v1.ObjectName(name),
-			},
-		}
+	externalNameSvc := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{Namespace: policyNs, Name: "ext-name-svc"},
+		Spec: corev1.ServiceSpec{
+			Type:         corev1.ServiceTypeExternalName,
+			ExternalName: "guardrails.example.com",
+			Ports:        []corev1.ServicePort{{Port: 8443}},
+		},
 	}
 
 	tests := []struct {
-		ext             *ngfAPIv1alpha1.ExtProcessConfig
+		svcNsName       types.NamespacedName
+		svc             *corev1.Service
 		name            string
 		clusterDomain   string
 		expURL          string
-		expErrSub       string
+		port            int32
 		expExternalName bool
 	}{
 		{
+			// In-cluster (ClusterIP) backends always resolve to a plaintext http base here. The
+			// per-Gateway https upgrade (when a BackendTLSPolicy is attached) happens in the dataplane
+			// layer (convertGraphGuardrails), not in this policy-scoped resolution.
 			name:          "ClusterIP Service resolves to cluster-local http URL",
-			ext:           ext("ext-svc", 9000),
+			svcNsName:     clusterIPSvcNsName,
+			svc:           clusterIPSvc,
+			port:          9000,
 			clusterDomain: "cluster.local",
 			expURL:        "http://ext-svc.ns1.svc.cluster.local:9000",
 		},
 		{
 			name:          "ClusterIP Service honors a custom cluster domain",
-			ext:           ext("ext-svc", 9000),
+			svcNsName:     clusterIPSvcNsName,
+			svc:           clusterIPSvc,
+			port:          9000,
 			clusterDomain: "custom.internal",
 			expURL:        "http://ext-svc.ns1.svc.custom.internal:9000",
 		},
 		{
 			name:          "empty cluster domain falls back to cluster.local",
-			ext:           ext("ext-svc", 9000),
+			svcNsName:     clusterIPSvcNsName,
+			svc:           clusterIPSvc,
+			port:          9000,
 			clusterDomain: "",
 			expURL:        "http://ext-svc.ns1.svc.cluster.local:9000",
 		},
 		{
 			name:            "ExternalName Service resolves to https URL with external hostname",
-			ext:             ext("ext-name-svc", 8443),
+			svcNsName:       externalNameSvcNsName,
+			svc:             externalNameSvc,
+			port:            8443,
 			clusterDomain:   "cluster.local",
 			expURL:          "https://guardrails.example.com:8443",
 			expExternalName: true,
-		},
-		{
-			name:          "missing Service returns error",
-			ext:           ext("does-not-exist", 9000),
-			clusterDomain: "cluster.local",
-			expErrSub:     "not found",
-		},
-		{
-			name:          "unset port returns error",
-			ext:           extNoPort("ext-svc"),
-			clusterDomain: "cluster.local",
-			expErrSub:     "port is not set",
-		},
-		{
-			name:          "port not exposed by Service returns error",
-			ext:           ext("ext-svc", 1234),
-			clusterDomain: "cluster.local",
-			expErrSub:     "No matching port",
-		},
-		{
-			// The port check runs before the ExternalName branch, so a non-matching port on an
-			// ExternalName Service still errors rather than resolving to an https URL.
-			name:          "ExternalName Service with non-matching port returns error",
-			ext:           ext("ext-name-svc", 1),
-			clusterDomain: "cluster.local",
-			expErrSub:     "No matching port",
 		},
 	}
 
@@ -681,18 +652,10 @@ func TestResolveExtProcessURL(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			url, isExternalName, err := resolveExtProcessURL(policyNs, test.ext, services, test.clusterDomain)
+			url, isExternalName := resolveExtProcessURL(test.svcNsName, test.svc, test.port, test.clusterDomain)
 
-			if test.expErrSub != "" {
-				g.Expect(err).To(HaveOccurred())
-				g.Expect(err.Error()).To(ContainSubstring(test.expErrSub))
-				g.Expect(url).To(BeEmpty())
-				g.Expect(isExternalName).To(BeFalse())
-			} else {
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(url).To(Equal(test.expURL))
-				g.Expect(isExternalName).To(Equal(test.expExternalName))
-			}
+			g.Expect(url).To(Equal(test.expURL))
+			g.Expect(isExternalName).To(Equal(test.expExternalName))
 		})
 	}
 }
@@ -889,6 +852,14 @@ func TestResolvePayloadProcessor(t *testing.T) {
 	ppCrossNamespace := newPP(false)
 	ppCrossNamespace.Spec.Processors[0].ExtProcess.BackendRef.Namespace = helpers.GetPointer(v1.Namespace(backendNs))
 
+	// ppUnsetPort omits backendRef.port entirely.
+	ppUnsetPort := newPP(false)
+	ppUnsetPort.Spec.Processors[0].ExtProcess.BackendRef.Port = nil
+
+	// ppBadPort references a port the Service does not expose.
+	ppBadPort := newPP(false)
+	ppBadPort.Spec.Processors[0].ExtProcess.BackendRef.Port = helpers.GetPointer[v1.PortNumber](1234)
+
 	tests := []struct {
 		pp                *ngfAPIv1alpha1.PayloadProcessor
 		services          map[types.NamespacedName]*corev1.Service
@@ -918,6 +889,20 @@ func TestResolvePayloadProcessor(t *testing.T) {
 			expValid:          false,
 			expCondMsg:        "backend Service ns1/missing not found",
 			expTrackedService: &types.NamespacedName{Namespace: policyNs, Name: "missing"},
+		},
+		{
+			name:              "unset backendRef port invalidates policy",
+			pp:                ppUnsetPort,
+			expValid:          false,
+			expCondMsg:        "backend Service ns1/ext-svc port is not set",
+			expTrackedService: &svcNsName,
+		},
+		{
+			name:              "port not exposed by Service invalidates policy",
+			pp:                ppBadPort,
+			expValid:          false,
+			expCondMsg:        "backend Service ns1/ext-svc: No matching port",
+			expTrackedService: &svcNsName,
 		},
 		{
 			name:     "no ExtProcess entry leaves policy untouched",
@@ -960,7 +945,7 @@ func TestResolvePayloadProcessor(t *testing.T) {
 			policy := &Policy{Valid: true}
 			output := &PayloadProcessingOutput{}
 
-			resolvePayloadProcessor(test.pp, policy, svcs, secretsMap, "cluster.local", output)
+			resolvePayloadProcessor(test.pp, policy, svcs, secretsMap, nil, "cluster.local", output)
 
 			g.Expect(policy.Valid).To(Equal(test.expValid))
 
@@ -1005,4 +990,249 @@ func TestResolvePayloadProcessor(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestResolveExtProcessBackendTLS exercises the BackendTLSPolicy selection given an already-resolved
+// Service port. The Service/port lookup and its error paths live in resolvePayloadProcessor and are
+// covered by TestResolvePayloadProcessor, so this test only supplies a valid resolved port.
+func TestResolveExtProcessBackendTLS(t *testing.T) {
+	t.Parallel()
+
+	const policyNs = "ns1"
+
+	svcPort := corev1.ServicePort{Port: 9000}
+
+	ext := &ngfAPIv1alpha1.ExtProcessConfig{
+		BackendRef: v1.BackendObjectReference{
+			Name: "ext-svc",
+			Port: helpers.GetPointer[v1.PortNumber](9000),
+		},
+	}
+
+	btpNsName := types.NamespacedName{Namespace: policyNs, Name: "btp"}
+	matchingBTP := &BackendTLSPolicy{
+		Valid: true,
+		Source: &v1.BackendTLSPolicy{
+			ObjectMeta: metav1.ObjectMeta{Namespace: policyNs, Name: "btp"},
+			Spec: v1.BackendTLSPolicySpec{
+				TargetRefs: []v1.LocalPolicyTargetReferenceWithSectionName{
+					{
+						LocalPolicyTargetReference: v1.LocalPolicyTargetReference{
+							Group: "",
+							Kind:  "Service",
+							Name:  "ext-svc",
+						},
+					},
+				},
+			},
+		},
+	}
+	btpMap := map[types.NamespacedName]*BackendTLSPolicy{btpNsName: matchingBTP}
+
+	tests := []struct {
+		ext                *ngfAPIv1alpha1.ExtProcessConfig
+		backendTLSPolicies map[types.NamespacedName]*BackendTLSPolicy
+		expBTP             *BackendTLSPolicy
+		name               string
+	}{
+		{
+			name:               "no BackendTLSPolicies returns nil",
+			ext:                ext,
+			backendTLSPolicies: nil,
+			expBTP:             nil,
+		},
+		{
+			name:               "matching BackendTLSPolicy is returned",
+			ext:                ext,
+			backendTLSPolicies: btpMap,
+			expBTP:             matchingBTP,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			got, err := resolveExtProcessBackendTLS(policyNs, test.ext, test.backendTLSPolicies, svcPort)
+			g.Expect(err).NotTo(HaveOccurred())
+			if test.expBTP == nil {
+				g.Expect(got).To(BeNil())
+			} else {
+				g.Expect(got).To(Equal(test.expBTP))
+			}
+		})
+	}
+}
+
+// TestResolvePayloadProcessorHTTPSWithBackendTLS verifies that a ClusterIP backend fronted by a
+// BackendTLSPolicy resolves to a plaintext http base URL at the graph layer and populates
+// BackendTLSPolicy on the resolved state. The per-Gateway https upgrade is applied later in the
+// dataplane layer (convertGraphGuardrails) based on the BackendTLSPolicy's Gateway attachment.
+func TestResolvePayloadProcessorHTTPSWithBackendTLS(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	const policyNs = "ns1"
+	svcNsName := types.NamespacedName{Namespace: policyNs, Name: "ext-svc"}
+
+	services := map[types.NamespacedName]*corev1.Service{
+		svcNsName: {
+			ObjectMeta: metav1.ObjectMeta{Namespace: policyNs, Name: "ext-svc"},
+			Spec: corev1.ServiceSpec{
+				Type:  corev1.ServiceTypeClusterIP,
+				Ports: []corev1.ServicePort{{Port: 9000}},
+			},
+		},
+	}
+
+	btpNsName := types.NamespacedName{Namespace: policyNs, Name: "btp"}
+	btp := &BackendTLSPolicy{
+		Valid: true,
+		Source: &v1.BackendTLSPolicy{
+			ObjectMeta: metav1.ObjectMeta{Namespace: policyNs, Name: "btp"},
+			Spec: v1.BackendTLSPolicySpec{
+				TargetRefs: []v1.LocalPolicyTargetReferenceWithSectionName{
+					{
+						LocalPolicyTargetReference: v1.LocalPolicyTargetReference{
+							Kind: "Service",
+							Name: "ext-svc",
+						},
+					},
+				},
+			},
+		},
+	}
+	btpMap := map[types.NamespacedName]*BackendTLSPolicy{btpNsName: btp}
+
+	pp := &ngfAPIv1alpha1.PayloadProcessor{
+		ObjectMeta: metav1.ObjectMeta{Namespace: policyNs, Name: "pp"},
+		Spec: ngfAPIv1alpha1.PayloadProcessorSpec{
+			Processors: []ngfAPIv1alpha1.PayloadProcessorEntry{
+				{
+					Type: ngfAPIv1alpha1.ProcessorTypeExtProcess,
+					ExtProcess: &ngfAPIv1alpha1.ExtProcessConfig{
+						BackendRef: v1.BackendObjectReference{
+							Name: "ext-svc",
+							Port: helpers.GetPointer[v1.PortNumber](9000),
+						},
+					},
+				},
+			},
+		},
+	}
+
+	policy := &Policy{Valid: true}
+	output := &PayloadProcessingOutput{}
+
+	resolvePayloadProcessor(pp, policy, services, nil, btpMap, "cluster.local", output)
+
+	g.Expect(policy.Valid).To(BeTrue())
+	g.Expect(policy.PayloadProcessorState).ToNot(BeNil())
+	g.Expect(policy.PayloadProcessorState.APIURL).To(Equal("http://ext-svc.ns1.svc.cluster.local:9000"))
+	g.Expect(policy.PayloadProcessorState.BackendTLSPolicy).To(Equal(btp))
+}
+
+// countAcceptedConditions returns how many Accepted conditions are present on a BackendTLSPolicy.
+func countAcceptedConditions(btp *BackendTLSPolicy) int {
+	acceptedReason := conditions.NewPolicyAccepted().Reason
+	count := 0
+	for _, c := range btp.Conditions {
+		if c.Reason == acceptedReason {
+			count++
+		}
+	}
+	return count
+}
+
+// TestResolveExtProcessBackendTLSAcceptsIdempotently verifies that the guardrails backend path records
+// Accepted/IsReferenced on the winning BackendTLSPolicy exactly once, even if the policy already carries
+// an Accepted condition (e.g. it was also referenced by a Route backend). This guards against the
+// duplicate-side-effect regression from splitting selection out of status recording.
+func TestResolveExtProcessBackendTLSAcceptsIdempotently(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	const policyNs = "ns1"
+	svcPort := corev1.ServicePort{Port: 9000}
+	ext := &ngfAPIv1alpha1.ExtProcessConfig{
+		BackendRef: v1.BackendObjectReference{
+			Name: "ext-svc",
+			Port: helpers.GetPointer[v1.PortNumber](9000),
+		},
+	}
+
+	btpNsName := types.NamespacedName{Namespace: policyNs, Name: "btp"}
+	btp := &BackendTLSPolicy{
+		Valid: true,
+		Source: &v1.BackendTLSPolicy{
+			ObjectMeta: metav1.ObjectMeta{Namespace: policyNs, Name: "btp"},
+			Spec: v1.BackendTLSPolicySpec{
+				TargetRefs: []v1.LocalPolicyTargetReferenceWithSectionName{
+					{
+						LocalPolicyTargetReference: v1.LocalPolicyTargetReference{
+							Kind: "Service",
+							Name: "ext-svc",
+						},
+					},
+				},
+			},
+		},
+	}
+	btpMap := map[types.NamespacedName]*BackendTLSPolicy{btpNsName: btp}
+
+	// First resolution records Accepted + IsReferenced once.
+	got, err := resolveExtProcessBackendTLS(policyNs, ext, btpMap, svcPort)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(got).To(Equal(btp))
+	g.Expect(btp.IsReferenced).To(BeTrue())
+	g.Expect(countAcceptedConditions(btp)).To(Equal(1))
+
+	// A second resolution (as if the same policy is referenced again) must not append a duplicate.
+	got, err = resolveExtProcessBackendTLS(policyNs, ext, btpMap, svcPort)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(got).To(Equal(btp))
+	g.Expect(countAcceptedConditions(btp)).To(Equal(1))
+}
+
+// TestResolveExtProcessBackendTLSInvalidFailsClosed verifies that an invalid winning BackendTLSPolicy
+// returns an error (which makes the PayloadProcessor fail closed) and does NOT receive an Accepted
+// condition, while still being marked IsReferenced.
+func TestResolveExtProcessBackendTLSInvalidFailsClosed(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	const policyNs = "ns1"
+	svcPort := corev1.ServicePort{Port: 9000}
+	ext := &ngfAPIv1alpha1.ExtProcessConfig{
+		BackendRef: v1.BackendObjectReference{
+			Name: "ext-svc",
+			Port: helpers.GetPointer[v1.PortNumber](9000),
+		},
+	}
+
+	btpNsName := types.NamespacedName{Namespace: policyNs, Name: "btp"}
+	invalidBTP := &BackendTLSPolicy{
+		Valid:      false,
+		Conditions: []conditions.Condition{conditions.NewPolicyInvalid("bad CA reference")},
+		Source: &v1.BackendTLSPolicy{
+			ObjectMeta: metav1.ObjectMeta{Namespace: policyNs, Name: "btp"},
+			Spec: v1.BackendTLSPolicySpec{
+				TargetRefs: []v1.LocalPolicyTargetReferenceWithSectionName{
+					{
+						LocalPolicyTargetReference: v1.LocalPolicyTargetReference{
+							Kind: "Service",
+							Name: "ext-svc",
+						},
+					},
+				},
+			},
+		},
+	}
+	btpMap := map[types.NamespacedName]*BackendTLSPolicy{btpNsName: invalidBTP}
+
+	got, err := resolveExtProcessBackendTLS(policyNs, ext, btpMap, svcPort)
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(got).To(BeNil())
+	g.Expect(countAcceptedConditions(invalidBTP)).To(Equal(0))
 }

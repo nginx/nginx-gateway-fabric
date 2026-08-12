@@ -40,7 +40,9 @@ The feature spans four layers. This module is the last one.
           │
           ▼
   Dataplane config      (internal/controller/state/dataplane/configuration.go)
-    - GuardrailsConfig{ Enabled, APIURL, APITokenAuthFileID, InternalPath }
+    - GuardrailsConfig{ Enabled, APIURL, APITokenAuthFileID, InternalPath, VerifyTLS }
+      (VerifyTLS is set when the backend Service is fronted by a BackendTLSPolicy;
+       it carries the CA bundle ID + hostname used for proxy_ssl_* verification)
    - Configuration.GuardrailsEnabled  (true if any route has guardrails)
           │
           ▼
@@ -70,7 +72,21 @@ location /coffee {
 # the backend call is bounded only by NGINX's default proxy_*_timeout (60s per operation).
 location /_ngf-internal-guardrails-default_route1_rule0 {
     internal;
-    proxy_pass http://guardrails-api.default.svc.cluster.local:443/backend/v1/scans;
+    proxy_pass http://guardrails-api.default.svc.cluster.local:8080/backend/v1/scans;
+}
+
+# When the backend Service is fronted by a BackendTLSPolicy (in-cluster HTTPS), the
+# same internal location instead emits an https proxy_pass with proxy_ssl_* verification
+# against the policy's CA bundle and hostname:
+location /_ngf-internal-guardrails-default_route1_rule0 {
+    internal;
+    proxy_pass https://guardrails-api.default.svc.cluster.local:8443/backend/v1/scans;
+    proxy_set_header Host guardrails-api.default.svc.cluster.local;
+    proxy_ssl_server_name on;
+    proxy_ssl_verify on;
+    proxy_ssl_verify_depth 4;
+    proxy_ssl_name guardrails-api.default.svc.cluster.local;
+    proxy_ssl_trusted_certificate /etc/nginx/secrets/<ca-bundle-id>.crt;
 }
 ```
 
@@ -86,30 +102,50 @@ load_module modules/libai_guardrails.so;
 The backend URL is derived from the `PayloadProcessor` policy's `backendRef` Service by
 `resolveExtProcessURL` (`internal/controller/state/graph/payloadprocessor.go`). It is **not** passed
 to the module (there is no `guardrails_api_url` directive); the control plane uses it solely to build
-the internal location's `proxy_pass`. The URL scheme is chosen from the Service *type*:
+the internal location's `proxy_pass`. The URL scheme is decided in two stages so it can be correct
+**per Gateway**: the graph layer (`resolveExtProcessURL`) resolves a scheme-neutral base URL from the
+Service *type*, and the dataplane layer (`convertGraphGuardrails`) upgrades an in-cluster base from
+`http` to `https` only for the Gateways a `BackendTLSPolicy` is actually attached to. This avoids
+emitting `https` (with no verification material) on a Gateway the policy does not cover:
 
-| Backend location | Service type | Resolved URL |
-| ------------------ | ------------- | -------------- |
-| External | `ExternalName` | `https://<externalName>:<backendRef.port>` |
-| In-cluster | `ClusterIP` (or any non-`ExternalName`) | `http://<name>.<namespace>.svc.cluster.local:<backendRef.port>` |
+| Backend location | Service type | `BackendTLSPolicy` attached to this Gateway? | Resolved URL (per Gateway) | `proxy_pass` shape |
+| ------------------ | ------------- | ------------------- | -------------- | ------------------ |
+| External | `ExternalName` | n/a | `https://<externalName>:<backendRef.port>` | variable + `resolver` (re-resolved per request) |
+| In-cluster (plaintext) | `ClusterIP` (or any non-`ExternalName`) | no | `http://<name>.<namespace>.svc.<cluster-domain>:<backendRef.port>` | fixed literal |
+| In-cluster (TLS) | `ClusterIP` (or any non-`ExternalName`) | yes | `https://<name>.<namespace>.svc.<cluster-domain>:<backendRef.port>` | fixed literal |
+
+Because the base URL is scheme-neutral (`http` for in-cluster) until the dataplane applies the
+per-Gateway upgrade, the same PayloadProcessor attached across multiple Gateways can resolve to `https`
+on Gateways the `BackendTLSPolicy` covers and remain plaintext `http` on Gateways it does not, instead
+of one scheme leaking across all of them.
 
 The module itself does not make outbound HTTP calls — both inspection directions issue an NGINX
 **subrequest** into the generated internal location, which `proxy_pass`es to the resolved URL. TLS
-to an `https://` backend is therefore handled by NGINX's own `proxy_ssl`, not by the module. Two
-consequences worth knowing:
+to an `https://` backend is therefore handled by NGINX's own `proxy_ssl`, not by the module. Points
+worth knowing:
 
 - The port comes from the policy's `backendRef.port`, **not** the Service's `.spec.ports`.
-- Externally-addressed backends are always called over https and in-cluster ones over http; the
-  scheme cannot currently be overridden independently of the Service type.
-- HTTPS verification is performed by NGINX (`proxy_ssl_*` on the internal location) against the
-  system trust store, so the runtime image must ship `ca-certificates` (installed in the NGINX
-  Dockerfiles `build/Dockerfile.nginx[plus]`, `build/ubi/Dockerfile.nginx[plus]`). The module no
-  longer links a Rust TLS stack (rustls/aws-lc-rs) — that dependency existed solely for the old
-  blocking `minreq` client, which has been removed.
-  - **Note:** `proxy_ssl_verify` is enabled with hostname checking, so only backends whose
-    certificate chains to a CA in the image's system trust store are supported. Private-CA or
-    self-signed guardrails backends are not currently supported (there is no way to supply a
-    custom CA bundle for the guardrails backend).
+- **Scheme selection** is derived, not directly configurable, and is decided **per Gateway**:
+  `ExternalName` → https (variable `proxy_pass` + `resolver`, so a rotating external IP is re-resolved
+  per request) — this is fixed at the graph layer and never varies by Gateway. In-cluster ClusterIP →
+  http at the graph layer, upgraded to https (fixed literal `proxy_pass`, no resolver — ClusterIP is
+  stable) by the dataplane layer for each Gateway a `BackendTLSPolicy` is attached to. The upgrade and
+  the TLS verification material (`VerifyTLS`) are derived from the **same** per-Gateway signal, so an
+  in-cluster backend is never emitted as `https` without the CA/hostname needed to verify it.
+- **HTTPS verification** is performed by NGINX (`proxy_ssl_*` on the internal location):
+  - **`ExternalName`** backends are verified against the **system trust store**, so the runtime
+    image must ship `ca-certificates` (installed in the NGINX Dockerfiles
+    `build/Dockerfile.nginx[plus]`, `build/ubi/Dockerfile.nginx[plus]`).
+  - **In-cluster HTTPS (`BackendTLSPolicy`)** backends are verified against the **CA bundle** the
+    policy references (`validation.caCertificateRefs` → ConfigMap `ca.crt`), materialized as a cert
+    bundle and wired via `proxy_ssl_trusted_certificate`. The policy's `validation.hostname` drives
+    `proxy_ssl_name` (SNI), the `Host` header, and hostname verification (`proxy_ssl_verify on`).
+    **Custom-CA and self-signed guardrails backends are supported** through this path — the backend
+    certificate does **not** need to chain to a public root. If the referenced `BackendTLSPolicy` is
+    invalid or not attached, resolution fails **closed** (the policy is not programmed) rather than
+    downgrading to plaintext.
+  - The module no longer links a Rust TLS stack (rustls/aws-lc-rs) — that dependency existed solely
+    for the old blocking `minreq` client, which has been removed.
 
 See [`examples/guardrails/README.md`](../../../../../../examples/guardrails/README.md) for
 configuration walkthroughs of both backend styles.

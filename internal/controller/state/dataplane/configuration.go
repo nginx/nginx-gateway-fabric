@@ -129,6 +129,14 @@ func BuildConfiguration(
 
 	refCertBundles := buildRefCertificateBundles(g.ReferencedSecrets, g.ReferencedCaCertConfigMaps)
 
+	// Guardrails HTTPS backends carry their own BackendTLSPolicy-derived CA bundle that must be
+	// materialized so the guardrails internal location can proxy_ssl_verify the backend certificate.
+	// Merge those IDs with the ext-auth IDs before resolving referenced bundles.
+	guardrailsCertBundleIDs := collectGuardrailsCertBundleIDs(append(httpServers, sslServers...))
+	for id := range guardrailsCertBundleIDs {
+		extAuthCertBundleIDs[id] = struct{}{}
+	}
+
 	certBundles := buildCertBundles(
 		refCertBundles,
 		backendGroups,
@@ -818,6 +826,26 @@ func buildCertBundles(
 		}
 	}
 	return bundles
+}
+
+// collectGuardrailsCertBundleIDs walks the built virtual servers and returns the set of CA cert
+// bundle IDs referenced by guardrails HTTPS backends (via a BackendTLSPolicy). Bundles using the
+// system trust store (RootCAPath set, no CertBundleID) are skipped as they need no materialization.
+func collectGuardrailsCertBundleIDs(servers []VirtualServer) map[CertBundleID]struct{} {
+	ids := make(map[CertBundleID]struct{})
+	for _, server := range servers {
+		for _, pr := range server.PathRules {
+			for _, mr := range pr.MatchRules {
+				if mr.Guardrails == nil || mr.Guardrails.VerifyTLS == nil {
+					continue
+				}
+				if mr.Guardrails.VerifyTLS.CertBundleID != "" {
+					ids[mr.Guardrails.VerifyTLS.CertBundleID] = struct{}{}
+				}
+			}
+		}
+	}
+	return ids
 }
 
 func getCertRefBundleData(bundle secrets.CertificateBundle) []byte {

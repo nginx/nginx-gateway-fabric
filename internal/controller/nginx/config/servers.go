@@ -1289,6 +1289,7 @@ func updateLocationGuardrails(
 		Enabled:      guardrails.Enabled,
 		APIURL:       guardrails.APIURL,
 		InternalPath: guardrails.InternalPath,
+		VerifyTLS:    createProxySSLVerify(guardrails.VerifyTLS),
 	}
 
 	if guardrails.APITokenAuthFileID != "" {
@@ -1471,11 +1472,15 @@ const guardrailsProxyPassVar = "$guardrails_backend"
 // locations, deduplicating by internal path so multiple matches sharing a guardrails backend
 // produce a single internal location.
 //
-// An HTTPS (ExternalName) backend uses a variable-based proxy_pass so NGINX re-resolves the backend
-// per request (avoiding a stale IP pinned at worker startup). This requires a DNS resolver, which is
-// guaranteed to be configured for such backends: an ExternalName guardrails backend attached to a
-// Gateway without a resolver is rejected during policy resolution (payloadProcessorResolverMissing)
-// and never reaches config generation.
+// Two HTTPS backend shapes are supported:
+//   - ExternalName: verified against the image's system trust store, with a variable-based proxy_pass
+//     so NGINX re-resolves the backend per request (avoiding a stale IP pinned at worker startup).
+//     This requires a DNS resolver, guaranteed for such backends: an ExternalName guardrails backend
+//     attached to a Gateway without a resolver is rejected during policy resolution
+//     (payloadProcessorResolverMissing) and never reaches config generation.
+//   - In-cluster (ClusterIP) fronted by a BackendTLSPolicy (Guardrails.VerifyTLS set): verified
+//     against the policy's CA bundle (private/self-signed supported) and hostname, with a fixed
+//     proxy_pass to the stable cluster DNS Service name (no resolver needed).
 func extractGuardrailsInternalLocations(locations []http.Location) []http.Location {
 	seen := make(map[string]struct{})
 	var result []http.Location
@@ -1493,20 +1498,23 @@ func extractGuardrailsInternalLocations(locations []http.Location) []http.Locati
 		trimmedURL := strings.TrimRight(loc.Guardrails.APIURL, "/")
 		proxyPass := trimmedURL + guardrailsScansPath
 
-		// For an HTTPS (ExternalName) backend, NGINX must verify the backend's
-		// certificate and hostname before sending the guardrails auth token and the
-		// inspected request/response content. Enable proxy_ssl_verify against the
-		// image's system trust store (AlpineSSLRootCAPath) and set proxy_ssl_name to
-		// the APIURL hostname so both the certificate chain and the hostname are
-		// checked. This also sends SNI during the TLS handshake, which multi-tenant
-		// TLS terminators require (they otherwise reject with alert 40). Both the
-		// request and response paths inspect via this same NGINX subrequest, so this
-		// proxy_ssl config governs backend TLS for both directions; there is no
-		// in-module TLS client.
+		// For an HTTPS backend, NGINX must verify the backend's certificate and hostname
+		// before sending the guardrails auth token and the inspected request/response
+		// content. Enable proxy_ssl_verify and set proxy_ssl_name to the verified hostname
+		// so both the certificate chain and the hostname are checked. This also sends SNI
+		// during the TLS handshake, which multi-tenant TLS terminators require (they
+		// otherwise reject with alert 40). Both the request and response paths inspect via
+		// this same NGINX subrequest, so this proxy_ssl config governs backend TLS for both
+		// directions; there is no in-module TLS client.
 		//
-		// Only backends whose certificate chains to a CA in the system trust store are
-		// supported; private-CA or self-signed guardrails backends are not currently
-		// supported.
+		// Two HTTPS backend shapes are supported:
+		//   - ExternalName: verified against the image's system trust store
+		//     (AlpineSSLRootCAPath) using the APIURL hostname, with a variable proxy_pass for
+		//     per-request re-resolution.
+		//   - In-cluster (ClusterIP) fronted by a BackendTLSPolicy (Guardrails.VerifyTLS set):
+		//     verified against the policy's CA bundle (private-CA and self-signed supported, or
+		//     the system store when the policy references no CA) and hostname, with a fixed
+		//     proxy_pass to the stable cluster DNS name.
 		//
 		// The HTTP Host header must ALSO carry the backend authority (host[:port]):
 		// when proxy_pass targets an ExternalName that NGINX resolves to a rotating
@@ -1518,19 +1526,38 @@ func extractGuardrailsInternalLocations(locations []http.Location) []http.Locati
 		var proxyPassVar string
 		var proxySetHeaders []http.Header
 		if parsed, err := url.Parse(loc.Guardrails.APIURL); err == nil && parsed.Scheme == "https" {
-			proxySSLVerify = &http.ProxySSLVerify{
-				Name:               parsed.Hostname(),
-				TrustedCertificate: dataplane.AlpineSSLRootCAPath,
-			}
-			proxySetHeaders = []http.Header{{Name: "Host", Value: parsed.Host}}
+			switch {
+			case loc.Guardrails.VerifyTLS != nil:
+				// In-cluster (ClusterIP) HTTPS backend fronted by a BackendTLSPolicy. Verify against
+				// the policy's CA bundle (or system store when the policy references none) and its
+				// configured hostname, which also drives SNI and the Host header. The backend resolves
+				// via the cluster DNS Service name.
+				verify := *loc.Guardrails.VerifyTLS
+				if verify.Name == "" {
+					verify.Name = parsed.Hostname()
+				}
+				proxySSLVerify = &verify
+				proxySetHeaders = []http.Header{{Name: "Host", Value: verify.Name}}
 
-			// Re-resolve the ExternalName backend per request via a variable proxy_pass. The
-			// variable carries the backend authority (host[:port]); the proxy_pass scheme/path
-			// are preserved around it. A DNS resolver is guaranteed to be configured here: an
-			// ExternalName (https) guardrails backend without a resolver is rejected during policy
-			// resolution (payloadProcessorResolverMissing), so it never reaches config generation.
-			proxyPassVar = parsed.Host
-			proxyPass = guardrailsVariableProxyPass(parsed)
+			default:
+				// ExternalName HTTPS backend verified against the image's system trust store. This
+				// branch is reached only for ExternalName backends: the scheme is https and
+				// VerifyTLS is nil. The dataplane layer (convertGraphGuardrails) is the single source
+				// of truth for the scheme, producing https for an in-cluster (ClusterIP) backend only
+				// when it also sets VerifyTLS (per-Gateway BackendTLSPolicy attachment). Therefore
+				// "https with VerifyTLS == nil" cannot represent an in-cluster backend, and no
+				// in-cluster backend can fall through to this system-trust, variable-proxy_pass path.
+				// Set proxy_ssl_name/Host to the APIURL hostname (certificate + hostname verification,
+				// SNI, and hostname-routing edges). Re-resolve per request via a variable proxy_pass;
+				// a DNS resolver is guaranteed present.
+				proxySSLVerify = &http.ProxySSLVerify{
+					Name:               parsed.Hostname(),
+					TrustedCertificate: dataplane.AlpineSSLRootCAPath,
+				}
+				proxySetHeaders = []http.Header{{Name: "Host", Value: parsed.Host}}
+				proxyPassVar = parsed.Host
+				proxyPass = guardrailsVariableProxyPass(parsed)
+			}
 		}
 
 		result = append(result, http.Location{

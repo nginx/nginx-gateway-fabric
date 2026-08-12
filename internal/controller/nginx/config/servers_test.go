@@ -9405,6 +9405,70 @@ func TestExtractGuardrailsInternalLocations(t *testing.T) {
 			},
 		},
 		{
+			// An in-cluster (ClusterIP) https backend fronted by a BackendTLSPolicy uses a fixed
+			// proxy_pass (stable cluster DNS name, no resolver needed) and verifies against the
+			// policy's CA bundle and hostname, which also drives SNI and the Host header.
+			name: "https ClusterIP backend with BackendTLSPolicy uses fixed proxy_pass and CA bundle",
+			locations: []http.Location{
+				{
+					Path: "/coffee",
+					Type: http.ExternalLocationType,
+					Guardrails: &http.GuardrailsConfig{
+						Enabled:      true,
+						APIURL:       "https://ext-svc.ns1.svc.cluster.local:9000",
+						InternalPath: "/_ngf-internal-guardrails-ns1_route1_rule0",
+						VerifyTLS: &http.ProxySSLVerify{
+							Name:               "guardrails.internal",
+							TrustedCertificate: "/etc/nginx/secrets/ns1-ca.crt",
+						},
+					},
+				},
+			},
+			expected: []http.Location{
+				{
+					Path:      "/_ngf-internal-guardrails-ns1_route1_rule0",
+					Type:      http.InternalLocationType,
+					ProxyPass: "https://ext-svc.ns1.svc.cluster.local:9000/backend/v1/scans",
+					ProxySSLVerify: &http.ProxySSLVerify{
+						Name:               "guardrails.internal",
+						TrustedCertificate: "/etc/nginx/secrets/ns1-ca.crt",
+					},
+					ProxySetHeaders: []http.Header{{Name: "Host", Value: "guardrails.internal"}},
+				},
+			},
+		},
+		{
+			// A BackendTLSPolicy with no CA cert ref verifies against the system trust store
+			// (RootCAPath) while still using a fixed proxy_pass for the in-cluster backend.
+			name: "https ClusterIP backend with BackendTLSPolicy system store falls back to APIURL hostname",
+			locations: []http.Location{
+				{
+					Path: "/coffee",
+					Type: http.ExternalLocationType,
+					Guardrails: &http.GuardrailsConfig{
+						Enabled:      true,
+						APIURL:       "https://ext-svc.ns1.svc.cluster.local:9000",
+						InternalPath: "/_ngf-internal-guardrails-ns1_route1_rule0",
+						VerifyTLS: &http.ProxySSLVerify{
+							TrustedCertificate: dataplane.AlpineSSLRootCAPath,
+						},
+					},
+				},
+			},
+			expected: []http.Location{
+				{
+					Path:      "/_ngf-internal-guardrails-ns1_route1_rule0",
+					Type:      http.InternalLocationType,
+					ProxyPass: "https://ext-svc.ns1.svc.cluster.local:9000/backend/v1/scans",
+					ProxySSLVerify: &http.ProxySSLVerify{
+						Name:               "ext-svc.ns1.svc.cluster.local",
+						TrustedCertificate: dataplane.AlpineSSLRootCAPath,
+					},
+					ProxySetHeaders: []http.Header{{Name: "Host", Value: "ext-svc.ns1.svc.cluster.local"}},
+				},
+			},
+		},
+		{
 			name: "http backend uses literal proxy_pass",
 			locations: []http.Location{
 				{

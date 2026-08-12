@@ -468,8 +468,6 @@ func BuildGraph(
 
 	referencedServices := buildReferencedServices(routes, l4routes, gws, state.Services, listenerSets)
 
-	addGatewaysForBackendTLSPolicies(processedBackendTLSPolicies, referencedServices, controllerName, gws, logger)
-
 	var wafInput *WAFProcessingInput
 	if wafFetcher != nil || plmFetcher != nil {
 		plmResolvedSecrets := resolvePLMSecrets(logger, state.Secrets, plmSecretNames)
@@ -502,8 +500,25 @@ func BuildGraph(
 		processedPolicies,
 		state.Services,
 		state.Secrets,
+		processedBackendTLSPolicies,
 		clusterDomain,
 	)
+
+	// Register PayloadProcessor backend Services (referenced only via a policy, not a Route backend)
+	// into referencedServices with the Gateways their policies attach to, so a BackendTLSPolicy
+	// targeting a Guardrails backend Service picks up those Gateways below.
+	referencedServices = addPayloadProcessorBackendServicesToReferencedServices(
+		processedPolicies,
+		routes,
+		gws,
+		referencedServices,
+		state.Services,
+	)
+
+	// BackendTLSPolicy gateway attachment must run after referencedServices includes both Route
+	// backends and PayloadProcessor backends, so a policy targeting either kind is attached to the
+	// correct Gateways.
+	addGatewaysForBackendTLSPolicies(processedBackendTLSPolicies, referencedServices, controllerName, gws, logger)
 
 	// add status conditions to each targetRef based on the policies that affect them.
 	addPolicyAffectedStatusToTargetRefs(processedPolicies, routes, gws)

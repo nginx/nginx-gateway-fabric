@@ -1,0 +1,66 @@
+# HTTPS variant of the guardrails-api backend used to exercise the BackendTLSPolicy path: the same
+# guardrails-mock image serves TLS (ListenAndServeTLS) when TLS_CERT_FILE/TLS_KEY_FILE are set. The
+# serving cert/key are mounted from the "guardrails-api-tls-cert" Secret created by the test (its CA
+# is generated at runtime, so the Secret cannot be a static manifest). NGINX verifies this backend
+# against that CA via the BackendTLSPolicy in backend-tls.yaml.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: guardrails-api-tls
+  labels:
+    app: guardrails-api-tls
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: guardrails-api-tls
+  template:
+    metadata:
+      labels:
+        app: guardrails-api-tls
+    spec:
+      containers:
+      - name: guardrails-api-tls
+        image: guardrails-mock:latest
+        imagePullPolicy: Never
+        # Sentinels must match the payloads asserted in guardrails_test.go. Kept identical to the
+        # plaintext backend (apps.yaml) so the shared runGuardrailsAssertions helper applies.
+        env:
+        - name: BLOCK_SENTINEL
+          value: BLOCKME
+        - name: RESPONSE_BLOCK_SENTINEL
+          value: BLOCKRESP
+        - name: LISTEN_ADDR
+          value: ":8443"
+        - name: TLS_CERT_FILE
+          value: /etc/tls/tls.crt
+        - name: TLS_KEY_FILE
+          value: /etc/tls/tls.key
+        ports:
+        - containerPort: 8443
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: 8443
+            scheme: HTTPS
+        volumeMounts:
+        - name: tls
+          mountPath: /etc/tls
+          readOnly: true
+      volumes:
+      - name: tls
+        secret:
+          secretName: guardrails-api-tls-cert
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: guardrails-api-tls
+spec:
+  ports:
+  - port: 8443
+    targetPort: 8443
+    protocol: TCP
+    name: https
+  selector:
+    app: guardrails-api-tls
