@@ -43,6 +43,13 @@ use crate::stream::{
 use crate::subrequest_client::{ScanDirection, run_inspection};
 use crate::sync_ptr::AssertSendSync;
 
+/// NGINX spills a buffered response to disk once it
+/// exceeds the in-memory proxy buffers. Such a buffer cannot be inspected or
+/// reconstructed in memory, so the response path fails closed when one appears.
+fn is_file_backed(in_file: u64, file_pos: i64, file_last: i64) -> bool {
+    in_file != 0 || file_last > file_pos
+}
+
 /// Two-state header filter.
 ///
 /// **First pass** (upstream response headers arrive):
@@ -257,6 +264,7 @@ pub(crate) unsafe extern "C" fn guardrails_response_body_filter(
         // --- Ingest all buffers from the upstream chain -------------------------
         let mut chain = in_chain;
         let mut last_buf = false;
+        let mut spilled_to_disk = false;
 
         while !chain.is_null() {
             let buf = (*chain).buf;
@@ -265,6 +273,15 @@ pub(crate) unsafe extern "C" fn guardrails_response_body_filter(
 
                 if buffer.last_buf() != 0 || buffer.last_in_chain() != 0 {
                     last_buf = true;
+                }
+
+                // A file-backed buffer means NGINX spilled the response past its
+                // in-memory proxy buffers to a temp file.
+                // Fail closed rather than drop the chain (which would
+                // truncate the body or hang the client on Content-Length).
+                if is_file_backed(buffer.in_file() as u64, buffer.file_pos, buffer.file_last) {
+                    spilled_to_disk = true;
+                    break;
                 }
 
                 if !buffer.pos.is_null() && !buffer.last.is_null() {
@@ -280,6 +297,18 @@ pub(crate) unsafe extern "C" fn guardrails_response_body_filter(
                 }
             }
             chain = (*chain).next;
+        }
+
+        if spilled_to_disk {
+            ngx_log_error!(
+                NGX_LOG_WARN,
+                request.log(),
+                "guardrails: response body spilled to disk (file-backed buffer); \
+                 cannot inspect in memory, blocking (fail-closed)"
+            );
+            ctx.blocked = true;
+            ctx.clear_pending_chunks();
+            return commit_block(r, request, ctx).into_filter_rc();
         }
 
         ngx_log_error!(
@@ -302,12 +331,18 @@ pub(crate) unsafe extern "C" fn guardrails_response_body_filter(
         }
 
         let over_limit = ctx.total_buffered_bytes > MAX_RESPONSE_BYTES;
+        // Inspect when the decoded text checkpoint fires OR — for a response
+        // whose schema we could not decode (empty accumulated_text but a
+        // non-empty buffered body, e.g. Anthropic) — via the raw-body fallback.
+        // Both route to SpawnInspection; the spawn below picks the content source.
+        let should_inspect =
+            ctx.should_inspect_final(last_buf) || ctx.should_inspect_raw_fallback(last_buf);
         let action = decide_response_action(ResponseFilterInputs {
             // Already resolved to "no short-circuit" in the pre-ingest pass.
             inspection_pending: false,
             already_blocked: false,
             over_limit,
-            should_inspect: ctx.should_inspect_final(last_buf),
+            should_inspect,
             last_buf,
             stream_done: ctx.stream_done,
         });
@@ -399,8 +434,14 @@ pub(crate) unsafe extern "C" fn guardrails_response_body_filter(
         };
 
         // Capture owned parameters for the async task — `conf` (and the borrowed
-        // `ctx` fields) must not be held across the await boundary.
-        let content = ctx.accumulated_text.clone();
+        // `ctx` fields) must not be held across the await boundary. When no text
+        // was decoded (unrecognized schema, via should_inspect_raw_fallback),
+        // inspect the raw buffered body instead of an empty string.
+        let content = if ctx.accumulated_text.is_empty() {
+            ctx.raw_inspection_fallback()
+        } else {
+            ctx.accumulated_text.clone()
+        };
         let api_token = conf.api_token.clone();
 
         // The request is held open across the async gap by the subrequest itself:
@@ -889,6 +930,25 @@ unsafe fn send_chunks(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_is_file_backed() {
+        // (in_file, file_pos, file_last, expected)
+        let cases = [
+            (0u64, 0i64, 0i64, false),   // in-memory buffer, no file range
+            (1u64, 0i64, 0i64, true),    // in_file flag set
+            (0u64, 0i64, 128i64, true),  // non-empty file range (defensive)
+            (0u64, 64i64, 64i64, false), // equal file range => empty => in-memory
+            (1u64, 10i64, 200i64, true), // both signals
+        ];
+        for (in_file, file_pos, file_last, expected) in cases {
+            assert_eq!(
+                is_file_backed(in_file, file_pos, file_last),
+                expected,
+                "in_file={in_file} file_pos={file_pos} file_last={file_last}"
+            );
+        }
+    }
 
     #[test]
     fn test_body_commit_filter_rc_mapping() {

@@ -264,6 +264,34 @@ impl StreamContext {
         !self.blocked && (last_buf || self.stream_done) && !self.accumulated_text.is_empty()
     }
 
+    /// Returns true when the stream is finished with a non-empty buffered body
+    /// that yielded **no** decoded text — i.e. an unrecognized response schema
+    /// (e.g. Anthropic, Cohere, or any provider not covered by
+    /// `extract_llm_content`). In that case the raw buffered body must be
+    /// inspected (via [`raw_inspection_fallback`]) rather than flushed
+    /// un-inspected, which would let un-modeled provider output bypass the
+    /// guardrail. A truly empty body (no `pending_chunks`) does NOT trigger this,
+    /// so genuinely body-less or empty responses still take the flush path.
+    ///
+    /// [`raw_inspection_fallback`]: Self::raw_inspection_fallback
+    pub fn should_inspect_raw_fallback(&self, last_buf: bool) -> bool {
+        !self.blocked
+            && (last_buf || self.stream_done)
+            && self.accumulated_text.is_empty()
+            && !self.pending_chunks.is_empty()
+    }
+
+    /// Raw buffered response body as lossy UTF-8. Used only as the inspection
+    /// content when the response schema yielded no decoded text
+    /// (`should_inspect_raw_fallback`), so un-modeled providers are still scanned.
+    pub fn raw_inspection_fallback(&self) -> String {
+        let mut s = String::new();
+        for chunk in &self.pending_chunks {
+            s.push_str(&String::from_utf8_lossy(chunk));
+        }
+        s
+    }
+
     /// Try to parse any bytes remaining in `line_buffer` as a complete JSON
     /// object.  Called at stream end to handle non-streaming responses that
     /// arrive as a single JSON blob without a trailing newline (e.g. the
@@ -571,11 +599,11 @@ mod tests {
 
     #[test]
     fn test_non_llm_body_buffers_but_yields_no_text() {
-        // Regression: a `/v1/models` response is valid JSON but has no LLM
-        // content fields (message/choices/done), so it buffers bytes yet
-        // accumulates no inspectable text. At end-of-stream `should_inspect_final`
-        // is therefore false even though there are pending chunks that MUST still
-        // be flushed to the client (handled in guardrails_response_body_filter).
+        // A `/v1/models` response is valid JSON but has no LLM content fields
+        // (message/choices/done), so it buffers bytes yet accumulates no
+        // decoded text. `should_inspect_final` is therefore false. Because the
+        // buffer is non-empty, the raw-body fallback (`should_inspect_raw_fallback`)
+        // fires instead so the body is inspected rather than flushed un-inspected.
         let mut ctx = StreamContext::default();
         let body = br#"{"object":"list","data":[{"id":"Qwen/Qwen3-32B","object":"model"}]}"#;
         ctx.process_chunk(body);
@@ -589,11 +617,89 @@ mod tests {
         assert_eq!(ctx.accumulated_text, "", "no LLM text should be extracted");
         assert!(
             !ctx.should_inspect_final(true),
-            "nothing to inspect at end-of-stream"
+            "no decoded text to inspect at end-of-stream"
         );
-        // The buffered chunk is still present and must be releasable.
+        assert!(
+            ctx.should_inspect_raw_fallback(true),
+            "non-empty undecoded body must take the raw-inspection fallback"
+        );
+        // The buffered chunk is still present and available (to inspect / flush).
         let chunks = ctx.take_pending_chunks();
-        assert_eq!(chunks.len(), 1, "buffered body must be available to flush");
+        assert_eq!(chunks.len(), 1, "buffered body must be available");
+    }
+
+    #[test]
+    fn test_anthropic_shaped_body_yields_no_decoded_text() {
+        // An Anthropic-style response is well-formed JSON but its schema is not
+        // covered by extract_llm_content (text lives in content[].text, not
+        // message/choices/response). It must decode to empty accumulated_text so
+        // the raw-body fallback path engages instead of a bare flush.
+        let mut ctx = StreamContext::default();
+        let body =
+            br#"{"type":"message","role":"assistant","content":[{"type":"text","text":"secret"}]}"#;
+        ctx.process_chunk(body);
+        ctx.try_drain_remaining();
+
+        assert_eq!(
+            ctx.accumulated_text, "",
+            "Anthropic schema is undecoded (documents the extraction gap)"
+        );
+        assert!(
+            ctx.should_inspect_raw_fallback(true),
+            "undecoded Anthropic body must take the raw-inspection fallback"
+        );
+        // The raw fallback content carries the model output so it can be scanned.
+        assert!(
+            ctx.raw_inspection_fallback().contains("secret"),
+            "raw fallback must include the undecoded model output"
+        );
+    }
+
+    #[test]
+    fn test_should_inspect_raw_fallback() {
+        // (blocked, last_buf, stream_done, text, has_buffer, expected)
+        let cases = [
+            (false, true, false, "", true, true), // final, no text, buffered => fallback
+            (false, false, true, "", true, true), // stream_done variant
+            (false, false, false, "", true, false), // not final yet
+            (false, true, false, "x", true, false), // decoded text => primary path, not fallback
+            (false, true, false, "", false, false), // truly empty body => flush, not fallback
+            (true, true, true, "", true, false),  // blocked short-circuits
+        ];
+        for (blocked, last_buf, stream_done, text, has_buffer, expected) in cases {
+            let mut ctx = StreamContext {
+                blocked,
+                stream_done,
+                accumulated_text: text.to_string(),
+                ..StreamContext::default()
+            };
+            if has_buffer {
+                ctx.pending_chunks.push(b"{}".to_vec());
+            }
+            assert_eq!(
+                ctx.should_inspect_raw_fallback(last_buf),
+                expected,
+                "blocked={blocked} last_buf={last_buf} stream_done={stream_done} \
+                 text={text:?} has_buffer={has_buffer}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_raw_inspection_fallback_joins_chunks() {
+        let mut ctx = StreamContext::default();
+        assert_eq!(
+            ctx.raw_inspection_fallback(),
+            "",
+            "no chunks => empty fallback"
+        );
+        ctx.pending_chunks.push(b"foo".to_vec());
+        ctx.pending_chunks.push(b"bar".to_vec());
+        assert_eq!(
+            ctx.raw_inspection_fallback(),
+            "foobar",
+            "fallback concatenates all buffered chunks"
+        );
     }
 
     #[test]
