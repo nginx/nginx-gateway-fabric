@@ -160,7 +160,7 @@ fn extract_inspection_content(body_data: &[u8]) -> InspectableContent {
 /// A comma-separated list is treated as unsupported if **any** token is
 /// non-empty and not `identity` (a single `identity`, or an empty value, is
 /// supported).
-fn is_unsupported_encoding(value: &[u8]) -> bool {
+pub(crate) fn is_unsupported_encoding(value: &[u8]) -> bool {
     value
         .split(|&b| b == b',')
         .map(trim_ascii_ws)

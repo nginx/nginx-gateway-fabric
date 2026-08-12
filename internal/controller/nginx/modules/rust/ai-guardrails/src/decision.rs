@@ -144,6 +144,9 @@ pub(crate) fn decide_access_action(verdict: RequestVerdict, started: bool) -> Ac
 pub(crate) struct ResponseFilterInputs {
     /// `ctx.inspect_state == ResponseInspect::Pending` on entry.
     pub inspection_pending: bool,
+    /// `ctx.uninspectable_encoding` — the header filter flagged an unsupported
+    /// `Content-Encoding`, so the (compressed) body cannot be inspected in memory.
+    pub uninspectable_encoding: bool,
     /// `ctx.blocked` on entry.
     pub already_blocked: bool,
     /// `ctx.total_buffered_bytes > MAX_RESPONSE_BYTES` after ingest.
@@ -165,6 +168,10 @@ pub(crate) enum ResponseAction {
     /// The stream was already blocked on a prior chain: emit the block/termination
     /// body now.
     EmitBlock,
+    /// The header filter flagged an unsupported `Content-Encoding`: the body is
+    /// compressed and cannot be inspected in memory, so fail closed and emit the
+    /// block body without ingesting the (compressed) chain.
+    BlockUninspectable,
     /// The buffer-size ceiling was exceeded: block the stream, then emit the
     /// block/termination body.
     BlockOverLimit,
@@ -186,9 +193,10 @@ pub(crate) enum ResponseAction {
 ///
 ///   1. inspection pending -> hold,
 ///   2. already blocked    -> emit block,
-///   3. over the byte limit -> block + emit,
-///   4. checkpoint fired   -> spawn inspection,
-///   5. otherwise: at end-of-stream (`last_buf || stream_done`) flush the
+///   3. uninspectable encoding -> block (fail-closed, pre-ingest),
+///   4. over the byte limit -> block + emit,
+///   5. checkpoint fired   -> spawn inspection,
+///   6. otherwise: at end-of-stream (`last_buf || stream_done`) flush the
 ///      buffered body, else keep buffering.
 ///
 /// Keeping this ordering identical is what makes the extraction behaviour-
@@ -199,6 +207,9 @@ pub(crate) fn decide_response_action(inputs: ResponseFilterInputs) -> ResponseAc
     }
     if inputs.already_blocked {
         return ResponseAction::EmitBlock;
+    }
+    if inputs.uninspectable_encoding {
+        return ResponseAction::BlockUninspectable;
     }
     if inputs.over_limit {
         return ResponseAction::BlockOverLimit;
@@ -371,6 +382,7 @@ mod tests {
     fn base_inputs() -> ResponseFilterInputs {
         ResponseFilterInputs {
             inspection_pending: false,
+            uninspectable_encoding: false,
             already_blocked: false,
             over_limit: false,
             should_inspect: false,
@@ -385,6 +397,7 @@ mod tests {
         // flag set it still holds.
         let inputs = ResponseFilterInputs {
             inspection_pending: true,
+            uninspectable_encoding: true,
             already_blocked: true,
             over_limit: true,
             should_inspect: true,
@@ -398,14 +411,33 @@ mod tests {
     }
 
     #[test]
-    fn response_already_blocked_emits_block_before_limit_and_inspect() {
+    fn response_already_blocked_emits_block_before_encoding_limit_and_inspect() {
         let inputs = ResponseFilterInputs {
             already_blocked: true,
+            uninspectable_encoding: true,
             over_limit: true,
             should_inspect: true,
             ..base_inputs()
         };
         assert_eq!(decide_response_action(inputs), ResponseAction::EmitBlock);
+    }
+
+    #[test]
+    fn response_uninspectable_encoding_blocks_before_limit_and_inspect() {
+        // An unsupported Content-Encoding fails closed and takes precedence over
+        // the byte-limit and checkpoint branches (but not over pending/blocked,
+        // pinned above). This is the compressed-body-cannot-be-inspected case.
+        let inputs = ResponseFilterInputs {
+            uninspectable_encoding: true,
+            over_limit: true,
+            should_inspect: true,
+            last_buf: true,
+            ..base_inputs()
+        };
+        assert_eq!(
+            decide_response_action(inputs),
+            ResponseAction::BlockUninspectable
+        );
     }
 
     #[test]

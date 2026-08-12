@@ -8,6 +8,7 @@ use ngx::ffi::{ngx_chain_t, ngx_http_output_body_filter_pt, ngx_http_request_t, 
 use ngx::http::{self, HttpModule};
 
 use crate::Module;
+use crate::request_path::is_unsupported_encoding;
 use crate::stream::StreamContext;
 use crate::{ngx_http_output_header_filter_pt, ngx_http_request_body_filter_pt};
 
@@ -63,6 +64,61 @@ pub(crate) unsafe fn alloc_stream_ctx(r: *mut ngx_http_request_t) -> *mut Stream
         let idx = Module::module().ctx_index;
         *(*r).ctx.add(idx) = raw as *mut c_void;
         raw
+    }
+}
+
+/// Whether the upstream response carries a `Content-Encoding` the module cannot
+/// inspect (anything other than `identity`).
+///
+/// A content-encoded (`gzip`/`br`/`deflate`/`zstd`/…) response body is transformed
+/// on the wire; buffering and scanning its bytes as text inspects garbage while the
+/// original compressed bytes are what gets released to the client — a guardrail
+/// bypass. The response path fails closed on this, mirroring the request path's
+/// `request_has_unsupported_encoding`.
+///
+/// Both the dedicated `headers_out.content_encoding` field (set by the proxy/gzip
+/// modules) and any `Content-Encoding` entry in the generic `headers_out.headers`
+/// list are checked, so detection does not depend on which one upstream populated.
+/// The token semantics are shared with the request path via [`is_unsupported_encoding`].
+pub(crate) unsafe fn response_has_unsupported_encoding(r: *mut ngx_http_request_t) -> bool {
+    unsafe {
+        // Dedicated field first: the proxy/gzip modules populate this for a
+        // content-encoded response.
+        let ce = (*r).headers_out.content_encoding;
+        if !ce.is_null() && (*ce).value.len > 0 && !(*ce).value.data.is_null() {
+            let value = std::slice::from_raw_parts((*ce).value.data, (*ce).value.len);
+            if is_unsupported_encoding(value) {
+                return true;
+            }
+        }
+
+        // Fall back to scanning the generic headers list in case the dedicated
+        // field was not wired for this response.
+        let list = &(*r).headers_out.headers;
+        let mut part = &list.part as *const ngx::ffi::ngx_list_part_t;
+        while !part.is_null() {
+            let elts = (*part).elts as *const ngx::ffi::ngx_table_elt_t;
+            let n = (*part).nelts;
+            for i in 0..n {
+                let h = &*elts.add(i);
+                if h.key.len == 0 || h.key.data.is_null() {
+                    continue;
+                }
+                let key = std::slice::from_raw_parts(h.key.data, h.key.len);
+                if !key.eq_ignore_ascii_case(b"content-encoding") {
+                    continue;
+                }
+                if h.value.len == 0 || h.value.data.is_null() {
+                    continue;
+                }
+                let value = std::slice::from_raw_parts(h.value.data, h.value.len);
+                if is_unsupported_encoding(value) {
+                    return true;
+                }
+            }
+            part = (*part).next;
+        }
+        false
     }
 }
 

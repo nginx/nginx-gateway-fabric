@@ -118,6 +118,14 @@ pub struct StreamContext {
     /// `call_next_header_filter(r)` before forwarding any data to the client.
     pub headers_suppressed: bool,
 
+    /// Set to `true` by the header filter when the upstream response carries a
+    /// `Content-Encoding` the module cannot inspect (anything other than
+    /// `identity`). A content-encoded body is transformed on the wire, so scanning
+    /// its bytes as text inspects garbage while the original compressed bytes are
+    /// released to the client — a guardrail bypass. The body filter fails closed on
+    /// this flag before any inspection, mirroring the request path.
+    pub uninspectable_encoding: bool,
+
     /// State of the asynchronous end-of-stream inspection. Drives the output
     /// suspend/resume in the response-body filter.
     pub inspect_state: ResponseInspect,
@@ -148,6 +156,7 @@ impl Default for StreamContext {
             total_buffered_bytes: 0,
 
             headers_suppressed: false,
+            uninspectable_encoding: false,
 
             inspect_state: ResponseInspect::Idle,
             block_message: None,

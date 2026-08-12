@@ -31,7 +31,7 @@ use crate::Module;
 use crate::config::MAX_RESPONSE_BYTES;
 use crate::ctx::{
     alloc_stream_ctx, call_next_header_filter, call_next_response_body_filter, get_module_ctx_mut,
-    is_sse_response,
+    is_sse_response, response_has_unsupported_encoding,
 };
 use crate::decision::{
     BlockCommitKind, ResponseAction, ResponseFilterInputs, block_commit_kind,
@@ -133,6 +133,22 @@ pub(crate) unsafe extern "C" fn guardrails_header_filter(r: *mut ngx_http_reques
             &mut *ctx_ptr
         };
 
+        // A content-encoded response body (Content-Encoding other than identity)
+        // is transformed on the wire and cannot be inspected in memory: scanning
+        // its bytes as text inspects garbage while the original compressed bytes
+        // are what gets released to the client. Record it here (before buffering
+        // any of the compressed body) so the body filter fails closed rather than
+        // scanning a lossy string. Mirrors the request path's fail-closed guard.
+        if response_has_unsupported_encoding(r) {
+            ngx_log_error!(
+                NGX_LOG_WARN,
+                request.log(),
+                "guardrails: response uses unsupported Content-Encoding and cannot be \
+                 inspected; will block (fail-closed)"
+            );
+            ctx.uninspectable_encoding = true;
+        }
+
         // Suppress upstream headers; the body filter will commit them after inspection.
         ngx_log_error!(
             NGX_LOG_DEBUG_HTTP,
@@ -229,6 +245,7 @@ pub(crate) unsafe extern "C" fn guardrails_response_body_filter(
         // (post-ingest) inputs are false here and are re-evaluated after ingest.
         let pre = decide_response_action(ResponseFilterInputs {
             inspection_pending: ctx.inspect_state == ResponseInspect::Pending,
+            uninspectable_encoding: ctx.uninspectable_encoding,
             already_blocked: ctx.blocked,
             over_limit: false,
             should_inspect: false,
@@ -255,6 +272,23 @@ pub(crate) unsafe extern "C" fn guardrails_response_body_filter(
                     "guardrails: stream blocked, sending termination"
                 );
                 return send_termination(r, request, ctx.block_message.as_deref()).into_filter_rc();
+            }
+            ResponseAction::BlockUninspectable => {
+                // Fail closed on a content-encoded response before ingesting the
+                // chain. The header filter flagged an unsupported Content-Encoding;
+                // the body bytes are compressed and cannot be inspected in memory,
+                // so scanning them would inspect garbage while releasing the
+                // original compressed bytes. Block instead (headers were
+                // suppressed, so commit_block emits a 403).
+                ngx_log_error!(
+                    NGX_LOG_WARN,
+                    request.log(),
+                    "guardrails: response BLOCKED — unsupported Content-Encoding, body is not \
+                     inspectable in memory (fail-closed)"
+                );
+                ctx.blocked = true;
+                ctx.clear_pending_chunks();
+                return commit_block(r, request, ctx).into_filter_rc();
             }
             // No pre-ingest short-circuit: fall through to ingest the chain and
             // re-decide with the post-ingest inputs below.
@@ -340,6 +374,7 @@ pub(crate) unsafe extern "C" fn guardrails_response_body_filter(
         let action = decide_response_action(ResponseFilterInputs {
             // Already resolved to "no short-circuit" in the pre-ingest pass.
             inspection_pending: false,
+            uninspectable_encoding: false,
             already_blocked: false,
             over_limit,
             should_inspect,
@@ -387,9 +422,12 @@ pub(crate) unsafe extern "C" fn guardrails_response_body_filter(
             }
             // Falls through to the async suspend/spawn below.
             ResponseAction::SpawnInspection => {}
-            // HoldForPending / EmitBlock are resolved in the pre-ingest pass and
-            // cannot reach here; fail loud if that invariant is ever violated.
-            ResponseAction::HoldForPending | ResponseAction::EmitBlock => {
+            // HoldForPending / EmitBlock / BlockUninspectable are resolved in the
+            // pre-ingest pass and cannot reach here; fail loud if that invariant
+            // is ever violated.
+            ResponseAction::HoldForPending
+            | ResponseAction::EmitBlock
+            | ResponseAction::BlockUninspectable => {
                 unreachable!("pre-ingest short-circuit actions resolved earlier")
             }
         }
