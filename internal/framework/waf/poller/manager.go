@@ -196,7 +196,7 @@ func (m *pollerManager) startPoller(ctx context.Context, cfg Config) {
 		if desc == "" {
 			desc = "WAF bundle"
 		}
-		m.recordPollResult(policyNsName, bundleKey, desc, newChecksum, err)
+		m.recordPollResult(poller, policyNsName, bundleKey, desc, newChecksum, err)
 		if m.statusCallback != nil {
 			m.statusCallback(poller.getTargetDeployments())
 		}
@@ -248,7 +248,12 @@ func (m *pollerManager) startPoller(ctx context.Context, cfg Config) {
 // If newChecksum is non-empty, the bundle was successfully updated and the update is recorded.
 // If err is non-nil, it stores the error for this bundle key.
 // This method is called by the internal status callback.
+// The result is discarded unless p is still the registered poller for the policy: an in-flight
+// poll can finish after StopPoller/StopPollersNotIn cleared this poller's state (or after
+// startPoller replaced the poller), and recording it would resurrect state that nothing
+// would ever clean up.
 func (m *pollerManager) recordPollResult(
+	p *poller,
 	policyNsName types.NamespacedName,
 	bundleKey graph.WAFBundleKey,
 	bundleDescription string,
@@ -257,6 +262,12 @@ func (m *pollerManager) recordPollResult(
 ) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+
+	// Ownership check: compare the poller identity, not just key presence, so a result from a
+	// replaced poller cannot be recorded under the new poller's registration.
+	if entry, exists := m.pollers[policyNsName]; !exists || entry.poller != p {
+		return
+	}
 
 	if err == nil {
 		if existing := m.pollErrors[policyNsName]; existing != nil && existing.BundleKey == bundleKey {
@@ -302,8 +313,17 @@ func (m *pollerManager) GetAllBundleUpdates() map[types.NamespacedName]BundleUpd
 // cache — not only when the policy was previously in BundlePending state. A spurious reconcile
 // event in that case is harmless: it triggers an unnecessary graph rebuild but causes no
 // incorrect behavior.
+// The update is discarded if the bundle key is no longer registered: the owning poller has been
+// stopped (or restarted with different sources) and its cache entries cleared, so caching an
+// in-flight result would leave stale bundle data behind that nothing would ever clean up.
 func (m *pollerManager) cacheBundleUpdate(bundleKey graph.WAFBundleKey, data []byte, checksum string) {
 	m.mu.Lock()
+
+	// Ownership check: only cache updates for bundle keys that are still registered.
+	if _, registered := m.bundleKeyToPolicy[bundleKey]; !registered {
+		m.mu.Unlock()
+		return
+	}
 
 	_, alreadyCached := m.bundleCache[bundleKey]
 
