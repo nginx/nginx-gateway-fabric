@@ -812,7 +812,9 @@ unsafe fn send_termination(
 /// configurable block message (or the hardcoded fallback when `None`).
 ///
 /// Steps:
-///   1. Overwrite `headers_out` with 403 status + correct `Content-Length`.
+///   1. Overwrite `headers_out` with 403 status; detach the upstream
+///      `Content-Length` table_elt (else NGINX emits the stale 200-body length and
+///      the client hangs on keep-alive) and set the new `content_length_n`.
 ///   2. Call `call_next_header_filter(r)` **directly** — this skips our own header
 ///      filter (which has already done its job) and goes straight to the rest of the
 ///      chain, ending at `ngx_http_header_filter` which writes "403 Forbidden" to wire.
@@ -847,7 +849,18 @@ unsafe fn send_blocked_response(
         );
 
         (*r).headers_out.status = NGX_HTTP_FORBIDDEN as ngx_uint_t;
+
+        // Detach the upstream `Content-Length` header before setting the new length.
+        // The header filter suppressed (but did not modify) the upstream 200's
+        // headers, so `headers_out.content_length` still points at the upstream
+        // Content-Length table_elt.
+        let cl = (*r).headers_out.content_length;
+        if !cl.is_null() {
+            (*cl).hash = 0;
+            (*r).headers_out.content_length = ptr::null_mut();
+        }
         (*r).headers_out.content_length_n = json_body.len() as i64;
+
         // Clear the pre-built status_line string that the proxy module set to "200 OK".
         // If status_line.len > 0, ngx_http_header_filter writes that string verbatim to the
         // socket regardless of headers_out.status.  Zeroing it forces NGINX to derive the
