@@ -51,7 +51,8 @@ TABLE = "llmd"
 # Go's FindAllString returns each full match (token + trailing whitespace) and
 # skips zero-length matches.
 _TOKEN_RE = re.compile(
-    r'(\{|\}|:|,|-|\.|\?|\!|;|@|#|\$|%|\^|&|\*|\(|\)|\+|\-|_|~|/|\\|>|<|\[|\]|=|"|\w+)(\s*)'
+    r'(\{|\}|:|,|-|\.|\?|\!|;|@|#|\$|%|\^|&|\*|\(|\)|\+|\-|_|~|/|\\|>|<|\[|\]|=|"|\w+)(\s*)',
+    re.ASCII,
 )
 
 

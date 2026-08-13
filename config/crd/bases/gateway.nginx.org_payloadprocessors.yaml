@@ -27,7 +27,7 @@ spec:
       openAPIV3Schema:
         description: |-
           PayloadProcessor is an Inherited Attached Policy. It enables declarative processing of HTTP
-          request and response payloads (headers and body) by attaching to a Gateway or HTTPRoute.
+          request and response payload content by attaching to a Gateway or HTTPRoute.
         properties:
           apiVersion:
             description: |-

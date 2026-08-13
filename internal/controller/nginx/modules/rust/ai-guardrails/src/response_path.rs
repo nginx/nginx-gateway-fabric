@@ -107,12 +107,40 @@ pub(crate) unsafe extern "C" fn guardrails_header_filter(r: *mut ngx_http_reques
         }
 
         // SSE: always pass through — streaming responses cannot be fully buffered.
+        // However, we must still detect unsupported Content-Encoding (gzip/br)
+        // and carry it into the body-filter context so the body filter can fail
+        // closed instead of scanning lossy compressed bytes.
         if is_sse_response(r) {
-            ngx_log_error!(
-                NGX_LOG_DEBUG_HTTP,
-                request.log(),
-                "guardrails: header filter: SSE detected, passing through"
-            );
+            if response_has_unsupported_encoding(r) {
+                let ctx_ptr = get_module_ctx_mut(request, Module::module());
+                let ctx = if ctx_ptr.is_null() {
+                    let new_ctx = alloc_stream_ctx(r);
+                    if new_ctx.is_null() {
+                        ngx_log_error!(
+                            NGX_LOG_ERR,
+                            request.log(),
+                            "guardrails: header filter: ctx alloc failed for SSE encoding check"
+                        );
+                        return Status::NGX_ERROR.into();
+                    }
+                    &mut *new_ctx
+                } else {
+                    &mut *ctx_ptr
+                };
+                ngx_log_error!(
+                    NGX_LOG_WARN,
+                    request.log(),
+                    "guardrails: SSE response uses unsupported Content-Encoding; \
+                     will block in body filter (fail-closed)"
+                );
+                ctx.uninspectable_encoding = true;
+            } else {
+                ngx_log_error!(
+                    NGX_LOG_DEBUG_HTTP,
+                    request.log(),
+                    "guardrails: header filter: SSE detected, passing through"
+                );
+            }
             return call_next_header_filter(r);
         }
 
@@ -124,9 +152,9 @@ pub(crate) unsafe extern "C" fn guardrails_header_filter(r: *mut ngx_http_reques
                 ngx_log_error!(
                     NGX_LOG_ERR,
                     request.log(),
-                    "guardrails: header filter: ctx alloc failed, passing through"
+                    "guardrails: header filter: ctx alloc failed"
                 );
-                return call_next_header_filter(r);
+                return Status::NGX_ERROR.into();
             }
             &mut *new_ctx
         } else {
@@ -231,7 +259,7 @@ pub(crate) unsafe extern "C" fn guardrails_response_body_filter(
                     request.log(),
                     "guardrails: failed to allocate context"
                 );
-                return call_next_response_body_filter(r, in_chain);
+                return Status::NGX_ERROR.into();
             }
             &mut *new_ctx
         } else {
@@ -474,9 +502,24 @@ pub(crate) unsafe extern "C" fn guardrails_response_body_filter(
         // Capture owned parameters for the async task — `conf` (and the borrowed
         // `ctx` fields) must not be held across the await boundary. When no text
         // was decoded (unrecognized schema, via should_inspect_raw_fallback),
-        // inspect the raw buffered body instead of an empty string.
+        // inspect the raw buffered body instead of an empty string. If the raw
+        // body is not valid UTF-8, fail closed: scanning replacement-character
+        // text would differ from the bytes actually released to the client.
         let content = if ctx.has_no_decoded_text() {
-            ctx.raw_inspection_fallback()
+            match ctx.raw_inspection_fallback() {
+                Some(s) => s,
+                None => {
+                    ngx_log_error!(
+                        NGX_LOG_WARN,
+                        request.log(),
+                        "guardrails: raw fallback body is not valid UTF-8; \
+                         blocking (fail-closed)"
+                    );
+                    ctx.blocked = true;
+                    ctx.clear_pending_chunks();
+                    return commit_block(r, request, ctx).into_filter_rc();
+                }
+            }
         } else {
             ctx.inspection_text()
         };
@@ -860,6 +903,18 @@ unsafe fn send_blocked_response(
             (*r).headers_out.content_length = ptr::null_mut();
         }
         (*r).headers_out.content_length_n = json_body.len() as i64;
+
+        // Detach the upstream `Content-Encoding` header. When the
+        // unsupported-encoding fail-closed path reaches this replacement
+        // response, the upstream Content-Encoding (e.g. gzip/br) is still
+        // attached. Sending a plain JSON body labeled as compressed would cause
+        // the client to fail to decode the 403. Zeroing the hash removes it
+        // from the header list, mirroring the Content-Length detach above.
+        let ce = (*r).headers_out.content_encoding;
+        if !ce.is_null() {
+            (*ce).hash = 0;
+            (*r).headers_out.content_encoding = ptr::null_mut();
+        }
 
         // Clear the pre-built status_line string that the proxy module set to "200 OK".
         // If status_line.len > 0, ngx_http_header_filter writes that string verbatim to the

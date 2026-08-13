@@ -14,7 +14,7 @@ import (
 // +kubebuilder:metadata:labels="gateway.networking.k8s.io/policy=inherited"
 
 // PayloadProcessor is an Inherited Attached Policy. It enables declarative processing of HTTP
-// request and response payloads (headers and body) by attaching to a Gateway or HTTPRoute.
+// request and response payload content by attaching to a Gateway or HTTPRoute.
 type PayloadProcessor struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

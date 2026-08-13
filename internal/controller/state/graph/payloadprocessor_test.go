@@ -1268,6 +1268,73 @@ func TestResolveExtProcessBackendTLSInvalidFailsClosed(t *testing.T) {
 	g.Expect(countAcceptedConditions(invalidBTP)).To(Equal(0))
 }
 
+// TestResolveExtProcessBackendTLSRecordsConflicts verifies that conflicting BackendTLSPolicies are
+// marked IsReferenced with a Conflicted condition when the Service is referenced only by a
+// PayloadProcessor (no Route backend path to record them).
+func TestResolveExtProcessBackendTLSRecordsConflicts(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	const policyNs = "ns1"
+	svcPort := corev1.ServicePort{Port: 9000}
+	ext := &ngfAPIv1alpha1.ExtProcessConfig{
+		BackendRef: v1.BackendObjectReference{
+			Name: "ext-svc",
+			Port: helpers.GetPointer[v1.PortNumber](9000),
+		},
+	}
+
+	// Create two valid BTPs targeting the same Service. The deterministic conflict
+	// resolution picks the one that sorts first by client object ordering.
+	winnerNsName := types.NamespacedName{Namespace: policyNs, Name: "aaa-btp"}
+	loserNsName := types.NamespacedName{Namespace: policyNs, Name: "zzz-btp"}
+
+	targetRef := v1.LocalPolicyTargetReferenceWithSectionName{
+		LocalPolicyTargetReference: v1.LocalPolicyTargetReference{
+			Kind: "Service",
+			Name: "ext-svc",
+		},
+	}
+
+	winner := &BackendTLSPolicy{
+		Valid: true,
+		Source: &v1.BackendTLSPolicy{
+			ObjectMeta: metav1.ObjectMeta{Namespace: policyNs, Name: "aaa-btp"},
+			Spec:       v1.BackendTLSPolicySpec{TargetRefs: []v1.LocalPolicyTargetReferenceWithSectionName{targetRef}},
+		},
+	}
+	loser := &BackendTLSPolicy{
+		Valid: true,
+		Source: &v1.BackendTLSPolicy{
+			ObjectMeta: metav1.ObjectMeta{Namespace: policyNs, Name: "zzz-btp"},
+			Spec:       v1.BackendTLSPolicySpec{TargetRefs: []v1.LocalPolicyTargetReferenceWithSectionName{targetRef}},
+		},
+	}
+
+	btpMap := map[types.NamespacedName]*BackendTLSPolicy{
+		winnerNsName: winner,
+		loserNsName:  loser,
+	}
+
+	got, err := resolveExtProcessBackendTLS(policyNs, ext, btpMap, svcPort)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(got).To(Equal(winner))
+
+	// Winner is accepted.
+	g.Expect(winner.IsReferenced).To(BeTrue())
+	g.Expect(countAcceptedConditions(winner)).To(Equal(1))
+
+	// Loser is referenced and carries a Conflicted condition (Type=Accepted, Reason=Conflicted).
+	g.Expect(loser.IsReferenced).To(BeTrue())
+	hasConflicted := false
+	for _, c := range loser.Conditions {
+		if c.Reason == string(v1.PolicyReasonConflicted) {
+			hasConflicted = true
+		}
+	}
+	g.Expect(hasConflicted).To(BeTrue(), "losing BTP must have a Conflicted condition")
+}
+
 // TestPayloadProcessorGateways exercises the fan-out from a PayloadProcessor policy's target refs to
 // the Gateways it is effective for, covering the Gateway/Route ref kinds and every skip branch
 // (missing route, unattached parentRef, InvalidForGateways, Gateway absent from the map, dedup).

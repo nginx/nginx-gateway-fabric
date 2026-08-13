@@ -333,15 +333,19 @@ impl StreamContext {
             && !self.pending_chunks.is_empty()
     }
 
-    /// Raw buffered response body as lossy UTF-8. Used only as the inspection
+    /// Raw buffered response body as strict UTF-8. Used only as the inspection
     /// content when the response schema yielded no decoded text
     /// (`should_inspect_raw_fallback`), so un-modeled providers are still scanned.
-    pub fn raw_inspection_fallback(&self) -> String {
+    ///
+    /// Returns `None` when any chunk contains invalid UTF-8 so the caller can
+    /// fail closed rather than scanning replacement-character text that differs
+    /// from the bytes actually released to the client.
+    pub fn raw_inspection_fallback(&self) -> Option<String> {
         let mut s = String::new();
         for chunk in &self.pending_chunks {
-            s.push_str(&String::from_utf8_lossy(chunk));
+            s.push_str(std::str::from_utf8(chunk).ok()?);
         }
-        s
+        Some(s)
     }
 
     /// Try to parse any bytes remaining in `line_buffer` as a complete JSON
@@ -751,7 +755,9 @@ mod tests {
         );
         // The raw fallback content carries the model output so it can be scanned.
         assert!(
-            ctx.raw_inspection_fallback().contains("secret"),
+            ctx.raw_inspection_fallback()
+                .expect("valid UTF-8 body must return Some")
+                .contains("secret"),
             "raw fallback must include the undecoded model output"
         );
     }
@@ -791,15 +797,28 @@ mod tests {
         let mut ctx = StreamContext::default();
         assert_eq!(
             ctx.raw_inspection_fallback(),
-            "",
+            Some(String::new()),
             "no chunks => empty fallback"
         );
         ctx.pending_chunks.push(b"foo".to_vec());
         ctx.pending_chunks.push(b"bar".to_vec());
         assert_eq!(
             ctx.raw_inspection_fallback(),
-            "foobar",
+            Some("foobar".to_string()),
             "fallback concatenates all buffered chunks"
+        );
+    }
+
+    #[test]
+    fn test_raw_inspection_fallback_rejects_invalid_utf8() {
+        let mut ctx = StreamContext::default();
+        // 0xFF is never valid in UTF-8.
+        ctx.pending_chunks.push(b"valid".to_vec());
+        ctx.pending_chunks.push(vec![0xFF, 0xFE]);
+        assert_eq!(
+            ctx.raw_inspection_fallback(),
+            None,
+            "invalid UTF-8 must return None (fail closed)"
         );
     }
 

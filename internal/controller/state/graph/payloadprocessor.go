@@ -176,13 +176,24 @@ func resolveExtProcessBackendTLS(
 		return nil, nil //nolint:nilnil // no error, no policy
 	}
 
-	btp, _, err := selectBackendTLSPolicyForService(
+	btp, losers, err := selectBackendTLSPolicyForService(
 		backendTLSPolicies,
 		ext.BackendRef.Namespace,
 		string(ext.BackendRef.Name),
 		policyNamespace,
 		svcPort,
 	)
+
+	for _, conflicted := range losers {
+		conflicted.IsReferenced = true
+		conflicted.Conditions = append(
+			conflicted.Conditions,
+			conditions.NewPolicyConflicted(
+				"Conflicts with another BackendTLSPolicy targeting the same Service",
+			),
+		)
+	}
+
 	if err != nil {
 		return nil, err
 	}

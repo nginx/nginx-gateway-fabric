@@ -290,6 +290,9 @@ func resolveEffectivePayloadProcessors(
 	routes map[RouteKey]*L7Route,
 ) {
 	for _, route := range routes {
+		if route.RouteType != RouteTypeHTTP {
+			continue
+		}
 		for _, parentRef := range route.ParentRefs {
 			// Only inherit for parent Gateways whose attachment succeeded
 			if parentRef.Attachment == nil || !parentRef.Attachment.Attached {
