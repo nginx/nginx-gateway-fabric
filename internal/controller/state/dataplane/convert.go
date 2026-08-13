@@ -588,7 +588,7 @@ func convertGraphGuardrails(
 
 	gc := &GuardrailsConfig{
 		Enabled:      true,
-		APIURL:       guardrailsAPIURLForGateway(state, verifyTLS),
+		APIURL:       getGuardrailsAPIURLForGateway(state, verifyTLS),
 		InternalPath: generateGuardrailsInternalPath(routeNsName, ruleIdx),
 		VerifyTLS:    verifyTLS,
 	}
@@ -603,7 +603,7 @@ func convertGraphGuardrails(
 	return gc
 }
 
-// guardrailsAPIURLForGateway returns the guardrails backend URL for a specific Gateway, upgrading the
+// getGuardrailsAPIURLForGateway returns the guardrails backend URL for a specific Gateway, upgrading the
 // graph's plaintext-http base to https when the backend is verified over TLS for this Gateway.
 //
 // The graph resolves in-cluster (ClusterIP) backends to a plaintext http base and ExternalName
@@ -611,7 +611,7 @@ func convertGraphGuardrails(
 // verifyTLS is non-nil only when a BackendTLSPolicy targets the backend Service and is effective for
 // this Gateway; in that case an in-cluster backend must be called over https. ExternalName backends
 // (state.BackendIsExternalName) are already https and are never re-derived here.
-func guardrailsAPIURLForGateway(state *graph.PolicyPayloadProcessorState, verifyTLS *VerifyTLS) string {
+func getGuardrailsAPIURLForGateway(state *graph.PolicyPayloadProcessorState, verifyTLS *VerifyTLS) string {
 	if state.BackendIsExternalName || verifyTLS == nil {
 		return state.APIURL
 	}

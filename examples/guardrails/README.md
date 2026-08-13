@@ -267,7 +267,7 @@ the referenced Service's type and, **per Gateway**, from whether a
 [`BackendTLSPolicy`](https://gateway-api.sigs.k8s.io/api-types/backendtlspolicy/) **targets that
 Service** and is **effective for that Gateway**; see the [per-Gateway note](#in-cluster-https-via-backendtlspolicy) below):
 
-| Backend location | Service type | `BackendTLSPolicy` effective for this Gateway? | Resolved URL (per Gateway) |
+| Backend location | Service type | `BackendTLSPolicy` effective for this Gateway | Resolved URL (per Gateway) |
 | ------------------ | ------------- | ------------------- | -------------- |
 | External | `ExternalName` | ignored (always system-trust https) | `https://<externalName>:<backendRef.port>` |
 | In-cluster (plaintext) | `ClusterIP` (or any non-`ExternalName`) | no | `http://<name>.<namespace>.svc.<cluster-domain>:<backendRef.port>` |
@@ -297,7 +297,7 @@ Service. In that case NGF:
 
 - verifies the backend certificate against the **CA bundle** referenced by the policy's
   `validation.caCertificateRefs` (a ConfigMap holding `ca.crt`), so **custom or self-signed CAs are
-  supported** — there is no requirement that the backend cert chain to a public root;
+  supported** — there is no requirement that the backend cert chains to a public root;
 - uses the policy's `validation.hostname` for `proxy_ssl_name` (SNI), the `Host` header, and
   certificate hostname verification (`proxy_ssl_verify on`);
 - emits a **fixed `proxy_pass`** to the in-cluster Service FQDN
@@ -320,7 +320,7 @@ in-cluster backend is simply called over plaintext **http**.)
 > nonetheless scoped **per Gateway**: NGF derives the set of Gateways the policy is *effective* for
 > from which Gateways route to the target Service, and applies the upgrade for a Gateway only when the
 > policy is valid and accepted for it (subject to the usual ancestor limits). So if a
-> `PayloadProcessor` is used by routes bound to multiple Gateways but the policy cannot be applied to
+> `PayloadProcessor` targets routes bound to multiple Gateways but the policy cannot be applied to
 > some of them (e.g. ancestor-limit trimming or per-Gateway invalidity), the backend is reached over
 > **https (verified)** on the effective Gateways and over plaintext **http** on the others — the scheme
 > never leaks from one Gateway to another. To get https on every Gateway, ensure every such Gateway
