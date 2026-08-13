@@ -1744,7 +1744,7 @@ func updateLocationProxySettings(
 	responseHeaders := generateResponseHeaders(&matchRule.Filters)
 
 	// When guardrails inspection is enabled for this location, force
-	// Accept-Encoding to empty so the upstream LLM returns an uninspectable
+	// Accept-Encoding to empty so the upstream LLM does not return a
 	// compressed body. A gzip/br response cannot be parsed by the guardrails
 	// filter and would otherwise be released un-inspected.
 	if matchRule.Guardrails != nil && matchRule.Guardrails.Enabled {
