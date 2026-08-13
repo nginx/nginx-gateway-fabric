@@ -137,6 +137,12 @@ type NGFResourceCounts struct {
 	// RouteAttachedProxySettingsPolicyCount is the number of relevant ProxySettingsPolicies
 	// attached at the Route level.
 	RouteAttachedProxySettingsPolicyCount int64
+	// GatewayAttachedPayloadProcessorPolicyCount is the number of PayloadProcessor (Guardrails)
+	// policies attached at the Gateway level.
+	GatewayAttachedPayloadProcessorPolicyCount int64
+	// RouteAttachedPayloadProcessorPolicyCount is the number of PayloadProcessor (Guardrails)
+	// policies attached at the Route level.
+	RouteAttachedPayloadProcessorPolicyCount int64
 	// GatewayAttachedWAFPolicyCount is the number of WAFPolicy resources
 	// attached at the Gateway level.
 	GatewayAttachedWAFPolicyCount int64
@@ -182,23 +188,36 @@ func (rc *NGFResourceCounts) CountPolicies(g *graph.Graph) {
 			gatewayCount, routeCount := countPolicyTargetRefs(policy)
 			rc.GatewayAttachedWAFPolicyCount += gatewayCount
 			rc.RouteAttachedWAFPolicyCount += routeCount
-			if wafPolicy, ok := policy.Source.(*ngfAPIv1alpha1.WAFPolicy); ok && wafPolicy != nil {
-				switch wafPolicy.Spec.Type {
-				case ngfAPIv1alpha1.PolicySourceTypeHTTP:
-					rc.HTTPWAFPolicyCount++
-				case ngfAPIv1alpha1.PolicySourceTypeNIM:
-					rc.NIMWAFPolicyCount++
-				case ngfAPIv1alpha1.PolicySourceTypeN1C:
-					rc.N1CWAFPolicyCount++
-				case ngfAPIv1alpha1.PolicySourceTypePLM:
-					rc.PLMWAFPolicyCount++
-				}
-			}
+			rc.countWAFPolicySourceType(policy)
 		case kinds.ProxySettingsPolicy:
 			gatewayCount, routeCount := countPolicyTargetRefs(policy)
 			rc.GatewayAttachedProxySettingsPolicyCount += gatewayCount
 			rc.RouteAttachedProxySettingsPolicyCount += routeCount
+		case kinds.PayloadProcessor:
+			gatewayCount, routeCount := countPolicyTargetRefs(policy)
+			rc.GatewayAttachedPayloadProcessorPolicyCount += gatewayCount
+			rc.RouteAttachedPayloadProcessorPolicyCount += routeCount
 		}
+	}
+}
+
+// countWAFPolicySourceType increments the per-source-type WAFPolicy counters based on the policy's
+// configured source type.
+func (rc *NGFResourceCounts) countWAFPolicySourceType(policy *graph.Policy) {
+	wafPolicy, ok := policy.Source.(*ngfAPIv1alpha1.WAFPolicy)
+	if !ok || wafPolicy == nil {
+		return
+	}
+
+	switch wafPolicy.Spec.Type {
+	case ngfAPIv1alpha1.PolicySourceTypeHTTP:
+		rc.HTTPWAFPolicyCount++
+	case ngfAPIv1alpha1.PolicySourceTypeNIM:
+		rc.NIMWAFPolicyCount++
+	case ngfAPIv1alpha1.PolicySourceTypeN1C:
+		rc.N1CWAFPolicyCount++
+	case ngfAPIv1alpha1.PolicySourceTypePLM:
+		rc.PLMWAFPolicyCount++
 	}
 }
 
