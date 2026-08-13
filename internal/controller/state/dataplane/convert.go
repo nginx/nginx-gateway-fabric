@@ -575,10 +575,22 @@ func convertGraphGuardrails(
 		return nil
 	}
 
+	// convertBackendTLS is the single, per-Gateway source of truth for whether an in-cluster backend is
+	// verified over TLS for THIS Gateway: it returns non-nil only when a BackendTLSPolicy targets the
+	// backend Service and is effective for gwNsName. Derive the URL scheme from that result so an
+	// in-cluster backend is only upgraded to https on Gateways for which the policy is effective.
+	//
+	// ExternalName backends are deliberately excluded.
+	var verifyTLS *VerifyTLS
+	if !state.BackendIsExternalName {
+		verifyTLS = convertBackendTLS(state.BackendTLSPolicy, gwNsName)
+	}
+
 	gc := &GuardrailsConfig{
 		Enabled:      true,
-		APIURL:       state.APIURL,
+		APIURL:       getGuardrailsAPIURLForGateway(state, verifyTLS),
 		InternalPath: generateGuardrailsInternalPath(routeNsName, ruleIdx),
+		VerifyTLS:    verifyTLS,
 	}
 
 	if state.AuthTokenSecret != nil {
@@ -589,6 +601,22 @@ func convertGraphGuardrails(
 	}
 
 	return gc
+}
+
+// getGuardrailsAPIURLForGateway returns the guardrails backend URL for a specific Gateway, upgrading the
+// graph's plaintext-http base to https when the backend is verified over TLS for this Gateway.
+//
+// The graph resolves in-cluster (ClusterIP) backends to a plaintext http base and ExternalName
+// backends to https (ExternalName is always system-trust https with no per-Gateway variance).
+// verifyTLS is non-nil only when a BackendTLSPolicy targets the backend Service and is effective for
+// this Gateway; in that case an in-cluster backend must be called over https. ExternalName backends
+// (state.BackendIsExternalName) are already https and are never re-derived here.
+func getGuardrailsAPIURLForGateway(state *graph.PolicyPayloadProcessorState, verifyTLS *VerifyTLS) string {
+	if state.BackendIsExternalName || verifyTLS == nil {
+		return state.APIURL
+	}
+	// In-cluster backend fronted by a BackendTLSPolicy effective for this Gateway: upgrade http -> https.
+	return strings.Replace(state.APIURL, "http://", "https://", 1)
 }
 
 // generateGuardrailsInternalPath builds the NGINX internal location path for a route's guardrails

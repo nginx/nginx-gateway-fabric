@@ -2132,6 +2132,29 @@ func TestConvertGraphGuardrails(t *testing.T) {
 		}
 	}
 
+	// stateWithBTP mirrors an in-cluster backend fronted by a BackendTLSPolicy attached to the given
+	// Gateways. The graph now resolves in-cluster backends to a plaintext http base; the dataplane
+	// upgrades to https per Gateway (only for Gateways the BackendTLSPolicy is attached to).
+	stateWithBTP := func(btpGateways ...types.NamespacedName) *graph.PolicyPayloadProcessorState {
+		return &graph.PolicyPayloadProcessorState{
+			APIURL:            "http://ext-svc.ns1.svc.cluster.local:9000",
+			AuthTokenSecret:   &secretNsName,
+			ResolvedAuthToken: []byte("tok"),
+			BackendTLSPolicy: &graph.BackendTLSPolicy{
+				Source: &v1.BackendTLSPolicy{
+					Spec: v1.BackendTLSPolicySpec{
+						Validation: v1.BackendTLSPolicyValidation{
+							Hostname: "guardrails.internal",
+						},
+					},
+				},
+				Valid:     true,
+				CaCertRef: types.NamespacedName{Namespace: "ns1", Name: "ca-configmap"},
+				Gateways:  btpGateways,
+			},
+		}
+	}
+
 	// routeFor builds a route whose per-Gateway effective processor for gwNsName is the given policy.
 	routeFor := func(policy *graph.Policy) *graph.L7Route {
 		return &graph.L7Route{
@@ -2140,12 +2163,13 @@ func TestConvertGraphGuardrails(t *testing.T) {
 	}
 
 	tests := []struct {
-		route      *graph.L7Route
-		gwNsName   types.NamespacedName
-		name       string
-		expURL     string
-		expNil     bool
-		expFileSet bool
+		route        *graph.L7Route
+		expVerifyTLS *VerifyTLS
+		gwNsName     types.NamespacedName
+		name         string
+		expURL       string
+		expNil       bool
+		expFileSet   bool
 	}{
 		{
 			name:     "nil route",
@@ -2207,6 +2231,88 @@ func TestConvertGraphGuardrails(t *testing.T) {
 			gwNsName: otherGwNsName,
 			expNil:   true,
 		},
+		{
+			// BackendTLSPolicy effective for THIS Gateway: dataplane sets VerifyTLS and upgrades the
+			// in-cluster http base to https.
+			name: "in-cluster backend with BackendTLSPolicy for this Gateway sets VerifyTLS and upgrades to https",
+			route: routeFor(&graph.Policy{
+				Valid:                 true,
+				PayloadProcessorState: stateWithBTP(gwNsName),
+			}),
+			gwNsName:   gwNsName,
+			expURL:     "https://ext-svc.ns1.svc.cluster.local:9000",
+			expFileSet: true,
+			expVerifyTLS: &VerifyTLS{
+				CertBundleID: generateCertBundleID(types.NamespacedName{Namespace: "ns1", Name: "ca-configmap"}),
+				Hostname:     "guardrails.internal",
+			},
+		},
+		{
+			// BackendTLSPolicy effective for ANOTHER Gateway only: for this Gateway there is no TLS
+			// trust, so VerifyTLS is nil AND the URL stays plaintext http. This is the divergence the
+			// per-Gateway scheme decision fixes: previously the graph baked https into the URL while
+			// VerifyTLS was nil, producing an unverifiable https backend on this Gateway.
+			name: "in-cluster backend with BackendTLSPolicy for another Gateway stays http with nil VerifyTLS",
+			route: routeFor(&graph.Policy{
+				Valid:                 true,
+				PayloadProcessorState: stateWithBTP(otherGwNsName),
+			}),
+			gwNsName:     gwNsName,
+			expURL:       "http://ext-svc.ns1.svc.cluster.local:9000",
+			expFileSet:   true,
+			expVerifyTLS: nil,
+		},
+		{
+			// ExternalName backends are always https at the graph layer and are never re-derived by
+			// the dataplane; VerifyTLS stays nil (system-trust verification handled in NGINX config).
+			name: "ExternalName backend stays https with nil VerifyTLS",
+			route: routeFor(&graph.Policy{
+				Valid: true,
+				PayloadProcessorState: &graph.PolicyPayloadProcessorState{
+					APIURL:                "https://guardrails.example.com:8443",
+					AuthTokenSecret:       &secretNsName,
+					ResolvedAuthToken:     []byte("tok"),
+					BackendIsExternalName: true,
+				},
+			}),
+			gwNsName:     gwNsName,
+			expURL:       "https://guardrails.example.com:8443",
+			expFileSet:   true,
+			expVerifyTLS: nil,
+		},
+		{
+			// An ExternalName backend whose Service is ALSO targeted by a valid, effective
+			// BackendTLSPolicy: the BTP is ignored for scheme/proxy purposes. VerifyTLS must stay nil
+			// so the NGINX config layer keeps the ExternalName (system-trust, variable proxy_pass)
+			// shape instead of pinning a fixed proxy_pass. This is the regression guard for treating an
+			// external backend as in-cluster.
+			name: "ExternalName backend with BackendTLSPolicy is ignored: stays https with nil VerifyTLS",
+			route: routeFor(&graph.Policy{
+				Valid: true,
+				PayloadProcessorState: &graph.PolicyPayloadProcessorState{
+					APIURL:                "https://guardrails.example.com:8443",
+					AuthTokenSecret:       &secretNsName,
+					ResolvedAuthToken:     []byte("tok"),
+					BackendIsExternalName: true,
+					BackendTLSPolicy: &graph.BackendTLSPolicy{
+						Source: &v1.BackendTLSPolicy{
+							Spec: v1.BackendTLSPolicySpec{
+								Validation: v1.BackendTLSPolicyValidation{
+									Hostname: "guardrails.internal",
+								},
+							},
+						},
+						Valid:     true,
+						CaCertRef: types.NamespacedName{Namespace: "ns1", Name: "ca-configmap"},
+						Gateways:  []types.NamespacedName{gwNsName},
+					},
+				},
+			}),
+			gwNsName:     gwNsName,
+			expURL:       "https://guardrails.example.com:8443",
+			expFileSet:   true,
+			expVerifyTLS: nil,
+		},
 	}
 
 	for _, test := range tests {
@@ -2230,6 +2336,12 @@ func TestConvertGraphGuardrails(t *testing.T) {
 				g.Expect(got.APITokenAuthFileID).To(Equal(GenerateGuardrailsTokenFileID("ns1", "token-secret")))
 			} else {
 				g.Expect(got.APITokenAuthFileID).To(BeEmpty())
+			}
+
+			if test.expVerifyTLS == nil {
+				g.Expect(got.VerifyTLS).To(BeNil())
+			} else {
+				g.Expect(got.VerifyTLS).To(Equal(test.expVerifyTLS))
 			}
 		})
 	}

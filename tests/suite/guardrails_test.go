@@ -37,6 +37,12 @@ var _ = Describe("Guardrails (PayloadProcessor)", Ordered, Label("functional", "
 		gatewayPolicyFile = []string{
 			"guardrails/payload-processor-gateway.yaml",
 		}
+		httpsBackendFiles = []string{
+			"guardrails/apps-https.yaml",
+		}
+		httpsPolicyFile = []string{
+			"guardrails/payload-processor-https.yaml",
+		}
 
 		namespace     = "guardrails"
 		nginxPodName  string
@@ -250,6 +256,146 @@ var _ = Describe("Guardrails (PayloadProcessor)", Ordered, Label("functional", "
 				gatewayv1.PolicyReasonAccepted,
 			)
 			Expect(err).ToNot(HaveOccurred(), "gw-guardrails was not accepted")
+		})
+
+		runGuardrailsAssertions()
+	})
+
+	// Exercises the in-cluster HTTPS guardrails backend path: a ClusterIP guardrails Service fronted
+	// by a BackendTLSPolicy. NGF must resolve the backend URL as https and emit proxy_ssl_*
+	// verification (against the policy CA) on the guardrails internal location, with a fixed
+	// proxy_pass to the stable cluster DNS name (no resolver). The guardrails-api-tls backend is the
+	// same mock image serving TLS; its serving cert is signed by a CA generated here and supplied to
+	// the BackendTLSPolicy via the guardrails-ca ConfigMap.
+	Context("attached to an HTTPRoute with an in-cluster HTTPS backend (BackendTLSPolicy)", Ordered, func() {
+		// backendFQDN must match the BackendTLSPolicy hostname and a SAN on the serving cert, and is
+		// the in-cluster Service NGF proxies the guardrails subrequest to.
+		backendFQDN := fmt.Sprintf("guardrails-api-tls.%s.svc.cluster.local", namespace)
+
+		BeforeAll(func() {
+			// Generate a self-signed CA and a server cert (SAN = backend FQDN) for the TLS mock.
+			ca, err := framework.GenerateSelfSignedCACert("Guardrails Test CA")
+			Expect(err).ToNot(HaveOccurred())
+
+			serverCert, err := framework.GenerateSignedServerCert(ca, backendFQDN, []string{backendFQDN})
+			Expect(err).ToNot(HaveOccurred())
+
+			// TLS Secret mounted into the guardrails-api-tls Deployment (serving cert + key).
+			tlsSecret := &core.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "guardrails-api-tls-cert",
+					Namespace: namespace,
+				},
+				Type: core.SecretTypeTLS,
+				Data: map[string][]byte{
+					core.TLSCertKey:       serverCert.CertPEM,
+					core.TLSPrivateKeyKey: serverCert.KeyPEM,
+				},
+			}
+
+			// CA ConfigMap referenced by the BackendTLSPolicy's validation.caCertificateRefs. NGF
+			// materializes this into a cert bundle wired via proxy_ssl_trusted_certificate.
+			caConfigMap := &core.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "guardrails-ca",
+					Namespace: namespace,
+				},
+				Data: map[string]string{
+					"ca.crt": string(ca.CertPEM),
+				},
+			}
+
+			Expect(resourceManager.Apply([]client.Object{tlsSecret, caConfigMap})).To(Succeed())
+
+			Expect(resourceManager.ApplyFromFiles(httpsBackendFiles, namespace)).To(Succeed())
+			Expect(resourceManager.WaitForAppsToBeReady(namespace)).To(Succeed())
+
+			Expect(resourceManager.ApplyFromFiles(httpsPolicyFile, namespace)).To(Succeed())
+		})
+
+		AfterAll(func() {
+			Expect(resourceManager.DeleteFromFiles(httpsPolicyFile, namespace)).To(Succeed())
+			Expect(resourceManager.DeleteFromFiles(httpsBackendFiles, namespace)).To(Succeed())
+			Expect(resourceManager.DeleteResources([]client.Object{
+				&core.Secret{ObjectMeta: metav1.ObjectMeta{Name: "guardrails-api-tls-cert", Namespace: namespace}},
+				&core.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "guardrails-ca", Namespace: namespace}},
+			})).To(Succeed())
+		})
+
+		Specify("the PayloadProcessor is accepted with an HTTPRoute ancestor", func() {
+			ppNsName := types.NamespacedName{Name: "llm-guardrails-https", Namespace: namespace}
+
+			err := waitForPayloadProcessorStatus(
+				ppNsName,
+				gatewayv1.LocalPolicyTargetReference{
+					Group: gatewayv1.GroupName,
+					Kind:  gatewayv1.Kind("HTTPRoute"),
+					Name:  "llm-route",
+				},
+				metav1.ConditionTrue,
+				gatewayv1.PolicyReasonAccepted,
+			)
+			Expect(err).ToNot(HaveOccurred(), "llm-guardrails-https was not accepted")
+		})
+
+		// Assert the raw NGINX config emitted for the guardrails internal location before exercising
+		// traffic: an https proxy_pass to the fixed cluster DNS name plus proxy_ssl verification
+		// against the policy CA and hostname. The internal location lives inside the route's server
+		// block (server_name llm.example.com) and its path is derived deterministically from the
+		// policy target route/rule (see generateGuardrailsInternalPath): a fixed prefix +
+		// -guardrails-<namespace>_<route>_rule0.
+		internalLocation := fmt.Sprintf("/_ngf-internal-guardrails-%s_llm-route_rule0", namespace)
+		Context("nginx directives (in-cluster HTTPS backend)", func() {
+			expectedInternalFields := []framework.ExpectedNginxField{
+				{
+					Directive: "proxy_pass",
+					Value:     fmt.Sprintf("https://%s:8443/backend/v1/scans", backendFQDN),
+					File:      "http.conf",
+					Server:    "llm.example.com",
+					Location:  internalLocation,
+				},
+				{
+					Directive: "proxy_ssl_verify",
+					Value:     "on",
+					File:      "http.conf",
+					Server:    "llm.example.com",
+					Location:  internalLocation,
+				},
+				{
+					Directive: "proxy_ssl_name",
+					Value:     backendFQDN,
+					File:      "http.conf",
+					Server:    "llm.example.com",
+					Location:  internalLocation,
+				},
+				{
+					Directive:             "proxy_ssl_trusted_certificate",
+					Value:                 "/etc/nginx/secrets/",
+					ValueSubstringAllowed: true,
+					File:                  "http.conf",
+					Server:                "llm.example.com",
+					Location:              internalLocation,
+				},
+			}
+
+			It("emits an https proxy_pass with proxy_ssl verification on the guardrails internal location", func() {
+				Eventually(func() error {
+					conf, err := resourceManager.GetNginxConfig(nginxPodName, namespace, "")
+					if err != nil {
+						return err
+					}
+
+					for _, field := range expectedInternalFields {
+						if err := framework.ValidateNginxFieldExists(conf, field); err != nil {
+							return err
+						}
+					}
+					return nil
+				}).
+					WithTimeout(timeoutConfig.GetStatusTimeout).
+					WithPolling(500 * time.Millisecond).
+					Should(Succeed())
+			})
 		})
 
 		runGuardrailsAssertions()

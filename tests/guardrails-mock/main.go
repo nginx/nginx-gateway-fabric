@@ -21,6 +21,10 @@
 //
 // A single binary serves both roles so only one image is built; the two roles are deployed as
 // separate Services (guardrails-api and the mock LLM) pointing at the same Deployment image.
+//
+// TLS: when both TLS_CERT_FILE and TLS_KEY_FILE env vars are set the server listens over HTTPS
+// (ListenAndServeTLS) instead of HTTP. This backs the in-cluster HTTPS guardrails backend used by
+// the BackendTLSPolicy functional test; when unset the server stays HTTP-only (default behavior).
 package main
 
 import (
@@ -171,11 +175,29 @@ func main() {
 		w.WriteHeader(http.StatusOK)
 	})
 
+	// Optional TLS: when both TLS_CERT_FILE and TLS_KEY_FILE are set the mock serves HTTPS instead
+	// of HTTP. This lets the same image back an in-cluster HTTPS guardrails Service (verified by NGINX
+	// via a BackendTLSPolicy) without a separate TLS-terminating sidecar. When either is unset the
+	// mock stays HTTP-only, preserving the default (plaintext) behavior.
+	certFile := os.Getenv("TLS_CERT_FILE")
+	keyFile := os.Getenv("TLS_KEY_FILE")
+
+	server := &http.Server{Addr: addr, Handler: mux}
+	if certFile != "" && keyFile != "" {
+		log.Printf(
+			"guardrails-mock listening on %s over TLS (requestSentinel=%q responseSentinel=%q)",
+			addr, requestSentinel, responseSentinel,
+		)
+		if err := server.ListenAndServeTLS(certFile, keyFile); err != nil {
+			log.Fatalf("server error: %v", err)
+		}
+		return
+	}
+
 	log.Printf(
 		"guardrails-mock listening on %s (requestSentinel=%q responseSentinel=%q)",
 		addr, requestSentinel, responseSentinel,
 	)
-	server := &http.Server{Addr: addr, Handler: mux}
 	if err := server.ListenAndServe(); err != nil {
 		log.Fatalf("server error: %v", err)
 	}

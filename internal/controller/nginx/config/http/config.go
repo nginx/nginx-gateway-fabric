@@ -259,6 +259,11 @@ type AuthBasic struct {
 
 // GuardrailsConfig holds the values for the ai-guardrails module directives on a location.
 type GuardrailsConfig struct {
+	// VerifyTLS holds the resolved backend TLS verification settings (trusted certificate path +
+	// hostname) for an in-cluster HTTPS Guardrails backend fronted by a BackendTLSPolicy. When set,
+	// the guardrails internal location proxies over https with a fixed proxy_pass and proxy_ssl_verify
+	// against these settings.
+	VerifyTLS *ProxySSLVerify
 	// APIURL is the ExtProcess backend base URL. It is not emitted as a directive; the control plane
 	// uses it to build the guardrails internal location's proxy_pass (<APIURL>/backend/v1/scans).
 	APIURL string
