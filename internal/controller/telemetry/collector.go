@@ -137,10 +137,10 @@ type NGFResourceCounts struct {
 	// RouteAttachedProxySettingsPolicyCount is the number of relevant ProxySettingsPolicies
 	// attached at the Route level.
 	RouteAttachedProxySettingsPolicyCount int64
-	// GatewayAttachedPayloadProcessorPolicyCount is the number of PayloadProcessor (Guardrails)
+	// GatewayAttachedPayloadProcessorPolicyCount is the number of PayloadProcessor
 	// policies attached at the Gateway level.
 	GatewayAttachedPayloadProcessorPolicyCount int64
-	// RouteAttachedPayloadProcessorPolicyCount is the number of PayloadProcessor (Guardrails)
+	// RouteAttachedPayloadProcessorPolicyCount is the number of PayloadProcessor
 	// policies attached at the Route level.
 	RouteAttachedPayloadProcessorPolicyCount int64
 	// GatewayAttachedWAFPolicyCount is the number of WAFPolicy resources

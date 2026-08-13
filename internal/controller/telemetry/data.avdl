@@ -134,11 +134,11 @@ attached at the Gateway level. */
 attached at the Route level. */
 		long? RouteAttachedProxySettingsPolicyCount = null;
 		
-		/** GatewayAttachedPayloadProcessorPolicyCount is the number of PayloadProcessor (Guardrails)
+		/** GatewayAttachedPayloadProcessorPolicyCount is the number of PayloadProcessor
 policies attached at the Gateway level. */
 		long? GatewayAttachedPayloadProcessorPolicyCount = null;
 		
-		/** RouteAttachedPayloadProcessorPolicyCount is the number of PayloadProcessor (Guardrails)
+		/** RouteAttachedPayloadProcessorPolicyCount is the number of PayloadProcessor
 policies attached at the Route level. */
 		long? RouteAttachedPayloadProcessorPolicyCount = null;
 		
