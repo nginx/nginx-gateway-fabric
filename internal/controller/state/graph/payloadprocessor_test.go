@@ -89,6 +89,7 @@ func TestResolveEffectivePayloadProcessors(t *testing.T) {
 			gateways := map[types.NamespacedName]*Gateway{gwNsName: gateway}
 
 			route := &L7Route{
+				RouteType: RouteTypeHTTP,
 				ParentRefs: []ParentRef{
 					{GatewayNsName: gwNsName, Attachment: &ParentRefAttachmentStatus{Attached: true}},
 				},
@@ -134,7 +135,10 @@ func TestResolveEffectivePayloadProcessors_PerGateway(t *testing.T) {
 			gwANsName: {Policies: []*Policy{gwAPolicy}},
 			gwBNsName: {Policies: []*Policy{gwBPolicy}},
 		}
-		route := &L7Route{ParentRefs: []ParentRef{attached(gwANsName), attached(gwBNsName)}}
+		route := &L7Route{
+			RouteType:  RouteTypeHTTP,
+			ParentRefs: []ParentRef{attached(gwANsName), attached(gwBNsName)},
+		}
 		routes := map[RouteKey]*L7Route{
 			{NamespacedName: types.NamespacedName{Namespace: testNs, Name: "route"}}: route,
 		}
@@ -157,6 +161,7 @@ func TestResolveEffectivePayloadProcessors_PerGateway(t *testing.T) {
 			gwBNsName: {Policies: []*Policy{gwBPolicy}},
 		}
 		route := &L7Route{
+			RouteType:  RouteTypeHTTP,
 			Policies:   []*Policy{routePolicy},
 			ParentRefs: []ParentRef{attached(gwANsName), attached(gwBNsName)},
 		}
@@ -186,6 +191,7 @@ func TestResolveEffectivePayloadProcessors_PerGateway(t *testing.T) {
 			gwBNsName: {},
 		}
 		route := &L7Route{
+			RouteType:  RouteTypeHTTP,
 			Policies:   []*Policy{routePolicy},
 			ParentRefs: []ParentRef{attached(gwANsName), attached(gwBNsName)},
 		}
@@ -214,6 +220,7 @@ func TestResolveEffectivePayloadProcessors_PerGateway(t *testing.T) {
 			gwBNsName: {},
 		}
 		route := &L7Route{
+			RouteType:  RouteTypeHTTP,
 			Policies:   []*Policy{routePolicy},
 			ParentRefs: []ParentRef{attached(gwANsName), attached(gwBNsName)},
 		}
@@ -239,6 +246,7 @@ func TestResolveEffectivePayloadProcessors_PerGateway(t *testing.T) {
 			gwBNsName: {Policies: []*Policy{gwBPolicy}},
 		}
 		route := &L7Route{
+			RouteType: RouteTypeHTTP,
 			ParentRefs: []ParentRef{
 				// Gateway A attachment failed.
 				{GatewayNsName: gwANsName, Attachment: &ParentRefAttachmentStatus{Attached: false}},
@@ -261,7 +269,10 @@ func TestResolveEffectivePayloadProcessors_PerGateway(t *testing.T) {
 
 		gwAPolicy := payloadProcessorPolicy("gw-a-processor")
 		gateways := map[types.NamespacedName]*Gateway{gwANsName: {Policies: []*Policy{gwAPolicy}}}
-		route := &L7Route{ParentRefs: []ParentRef{{GatewayNsName: gwANsName, Attachment: nil}}}
+		route := &L7Route{
+			RouteType:  RouteTypeHTTP,
+			ParentRefs: []ParentRef{{GatewayNsName: gwANsName, Attachment: nil}},
+		}
 		routes := map[RouteKey]*L7Route{
 			{NamespacedName: types.NamespacedName{Namespace: testNs, Name: "route"}}: route,
 		}
@@ -285,6 +296,7 @@ func TestResolveEffectivePayloadProcessors_PerGateway(t *testing.T) {
 			gwNilNsName: nil,
 		}
 		route := &L7Route{
+			RouteType: RouteTypeHTTP,
 			ParentRefs: []ParentRef{
 				attached(gwANsName),
 				// This parent points at a Gateway that is not present in the gateways map.
@@ -312,7 +324,10 @@ func TestResolveEffectivePayloadProcessors_PerGateway(t *testing.T) {
 		gwAPolicy.InvalidForGateways = map[types.NamespacedName]struct{}{gwANsName: {}}
 
 		gateways := map[types.NamespacedName]*Gateway{gwANsName: {Policies: []*Policy{gwAPolicy}}}
-		route := &L7Route{ParentRefs: []ParentRef{attached(gwANsName)}}
+		route := &L7Route{
+			RouteType:  RouteTypeHTTP,
+			ParentRefs: []ParentRef{attached(gwANsName)},
+		}
 		routes := map[RouteKey]*L7Route{
 			{NamespacedName: types.NamespacedName{Namespace: testNs, Name: "route"}}: route,
 		}
@@ -337,6 +352,7 @@ func TestResolveEffectivePayloadProcessors_IgnoresInvalidPolicies(t *testing.T) 
 	gateways := map[types.NamespacedName]*Gateway{gwNsName: gateway}
 
 	route := &L7Route{
+		RouteType: RouteTypeHTTP,
 		ParentRefs: []ParentRef{
 			{GatewayNsName: gwNsName, Attachment: &ParentRefAttachmentStatus{Attached: true}},
 		},
