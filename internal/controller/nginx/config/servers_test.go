@@ -4804,6 +4804,71 @@ func TestCreateBaseProxySetHeaders(t *testing.T) {
 	}
 }
 
+func TestForceStripAcceptEncoding(t *testing.T) {
+	t.Parallel()
+
+	emptyAcceptEncoding := http.Header{Name: "Accept-Encoding", Value: ""}
+
+	tests := []struct {
+		expLast http.Header
+		msg     string
+		headers []http.Header
+		expLen  int
+	}{
+		{
+			msg:     "no existing Accept-Encoding appends empty strip",
+			headers: []http.Header{{Name: "Host", Value: "$gw_api_compliant_host"}},
+			expLast: emptyAcceptEncoding,
+			expLen:  2,
+		},
+		{
+			msg:     "nil headers appends empty strip",
+			headers: nil,
+			expLast: emptyAcceptEncoding,
+			expLen:  1,
+		},
+		{
+			msg: "existing Accept-Encoding is overridden with empty (deduped)",
+			headers: []http.Header{
+				{Name: "Host", Value: "$gw_api_compliant_host"},
+				{Name: "Accept-Encoding", Value: "gzip"},
+			},
+			expLast: emptyAcceptEncoding,
+			expLen:  2,
+		},
+		{
+			msg: "case-insensitive existing Accept-Encoding is overridden",
+			headers: []http.Header{
+				{Name: "accept-encoding", Value: "br"},
+				{Name: "X-Real-IP", Value: "$remote_addr"},
+			},
+			expLast: emptyAcceptEncoding,
+			expLen:  2,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.msg, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			result := forceStripAcceptEncoding(test.headers)
+
+			g.Expect(result).To(HaveLen(test.expLen))
+			// Exactly one Accept-Encoding entry, empty-valued, and it is last.
+			count := 0
+			for _, h := range result {
+				if strings.EqualFold(h.Name, "Accept-Encoding") {
+					count++
+					g.Expect(h.Value).To(Equal(""))
+				}
+			}
+			g.Expect(count).To(Equal(1))
+			g.Expect(result[len(result)-1]).To(Equal(test.expLast))
+		})
+	}
+}
+
 func TestFilterBaseProxySetHeaders(t *testing.T) {
 	t.Parallel()
 
@@ -8316,6 +8381,282 @@ func TestExecuteServers_ExternalAuth(t *testing.T) {
 	}
 }
 
+func TestExecuteServers_Guardrails(t *testing.T) {
+	t.Parallel()
+
+	backend := dataplane.BackendGroup{
+		Source:  types.NamespacedName{Namespace: "test", Name: "route1"},
+		RuleIdx: 0,
+		Backends: []dataplane.Backend{
+			{UpstreamName: "test_foo_80", Valid: true, Weight: 1},
+		},
+	}
+
+	tests := []struct {
+		name       string
+		expPresent []string
+		expAbsent  []string
+		conf       dataplane.Configuration
+	}{
+		{
+			name: "location with guardrails emits directives and internal inspection location",
+			conf: dataplane.Configuration{
+				HTTPServers: []dataplane.VirtualServer{
+					{
+						Hostname: "example.com",
+						Port:     8080,
+						PathRules: []dataplane.PathRule{
+							{
+								Path:     "/coffee",
+								PathType: dataplane.PathTypePrefix,
+								MatchRules: []dataplane.MatchRule{
+									{
+										Match:        dataplane.Match{},
+										BackendGroup: backend,
+										Guardrails: &dataplane.GuardrailsConfig{
+											Enabled:      true,
+											APIURL:       "http://ext-svc.ns1.svc.cluster.local:9000",
+											InternalPath: "/_ngf-internal-guardrails-test_route1_rule0",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expPresent: []string{
+				"guardrails_filter on;",
+				"guardrails_internal_uri /_ngf-internal-guardrails-test_route1_rule0;",
+				"location /_ngf-internal-guardrails-test_route1_rule0 {",
+				"internal;",
+				"proxy_pass http://ext-svc.ns1.svc.cluster.local:9000/backend/v1/scans;",
+				// Accept-Encoding is stripped so the upstream cannot return a
+				// compressed (uninspectable) body.
+				`proxy_set_header Accept-Encoding "";`,
+			},
+			expAbsent: []string{
+				// In-cluster HTTP backend: no SNI directives.
+				"proxy_ssl_server_name",
+				"proxy_ssl_name",
+				// guardrails_api_url / guardrails_timeout_ms directives were removed.
+				"guardrails_api_url",
+				"guardrails_timeout_ms",
+				// PayloadProcessor Timeout was removed; NGINX default proxy timeouts apply.
+				"proxy_connect_timeout",
+				"proxy_read_timeout",
+				"proxy_send_timeout",
+			},
+		},
+		{
+			// An https (ExternalName) guardrails backend always emits the variable proxy_pass. A
+			// missing DNS resolver is rejected during policy resolution, so config generation never
+			// sees an ExternalName guardrails backend without a resolver.
+			name: "https backend emits variable proxy_pass for per-request resolution",
+			conf: dataplane.Configuration{
+				BaseHTTPConfig: dataplane.BaseHTTPConfig{
+					DNSResolver: &dataplane.DNSResolverConfig{
+						Addresses: []string{"10.96.0.10"},
+					},
+				},
+				HTTPServers: []dataplane.VirtualServer{
+					{
+						Hostname: "example.com",
+						Port:     8080,
+						PathRules: []dataplane.PathRule{
+							{
+								Path:     "/coffee",
+								PathType: dataplane.PathTypePrefix,
+								MatchRules: []dataplane.MatchRule{
+									{
+										Match:        dataplane.Match{},
+										BackendGroup: backend,
+										Guardrails: &dataplane.GuardrailsConfig{
+											Enabled:      true,
+											APIURL:       "https://guardrails.example.com:443",
+											InternalPath: "/_ngf-internal-guardrails-test_route1_rule0",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expPresent: []string{
+				"location /_ngf-internal-guardrails-test_route1_rule0 {",
+				"set $guardrails_backend guardrails.example.com:443;",
+				// Host carries the full authority (host:port) to match the proxy_pass
+				// target; proxy_ssl_name below stays the bare hostname for TLS.
+				`proxy_set_header Host "guardrails.example.com:443";`,
+				"proxy_pass https://$guardrails_backend/backend/v1/scans;",
+				"proxy_ssl_server_name on;",
+				// The backend certificate and hostname must be verified against the system
+				// trust store before the auth token and inspected content are sent.
+				"proxy_ssl_verify on;",
+				"proxy_ssl_verify_depth 4;",
+				"proxy_ssl_name guardrails.example.com;",
+				"proxy_ssl_trusted_certificate /etc/ssl/cert.pem;",
+			},
+			expAbsent: []string{
+				// Must NOT emit the literal (stale-pinning) proxy_pass.
+				"proxy_pass https://guardrails.example.com:443/backend/v1/scans;",
+			},
+		},
+		{
+			// Regression test: guardrails must be applied to inference (InferencePool) backends.
+			// The internal inference proxy_pass location is built from a synthetic MatchRule; the
+			// Guardrails field must be propagated onto it so the directives and internal inspection
+			// location are generated (previously it was dropped, so nothing was emitted).
+			name: "single inference backend emits guardrails on the proxy_pass location",
+			conf: dataplane.Configuration{
+				HTTPServers: []dataplane.VirtualServer{
+					{
+						Hostname: "example.com",
+						Port:     8080,
+						PathRules: []dataplane.PathRule{
+							{
+								Path:                 "/inference",
+								PathType:             dataplane.PathTypePrefix,
+								HasInferenceBackends: true,
+								MatchRules: []dataplane.MatchRule{
+									{
+										Match: dataplane.Match{},
+										BackendGroup: dataplane.BackendGroup{
+											Source:  types.NamespacedName{Namespace: "test", Name: "route1"},
+											RuleIdx: 0,
+											Backends: []dataplane.Backend{
+												{
+													UpstreamName: "test_foo_80",
+													Valid:        true,
+													Weight:       1,
+													EndpointPickerConfig: &dataplane.EndpointPickerConfig{
+														EndpointPickerRef: &inference.EndpointPickerRef{
+															Name: inference.ObjectName("test-epp"),
+															Port: &inference.Port{Number: 80},
+														},
+														NsName: "test",
+													},
+												},
+											},
+										},
+										Guardrails: &dataplane.GuardrailsConfig{
+											Enabled:      true,
+											APIURL:       "http://ext-svc.ns1.svc.cluster.local:9000",
+											InternalPath: "/_ngf-internal-guardrails-test_route1_rule0",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expPresent: []string{
+				"guardrails_filter on;",
+				"guardrails_internal_uri /_ngf-internal-guardrails-test_route1_rule0;",
+				"location /_ngf-internal-guardrails-test_route1_rule0 {",
+				"internal;",
+				"proxy_pass http://ext-svc.ns1.svc.cluster.local:9000/backend/v1/scans;",
+			},
+		},
+		{
+			// Regression test for the multi-backend (split clients) inference path, which is
+			// generated by createInternalLocationsForRule. Each backend's proxy_pass location must
+			// carry the guardrails directives, and a single deduplicated internal inspection
+			// location is produced for the shared guardrails backend.
+			name: "multiple inference backends emit guardrails on each proxy_pass location",
+			conf: dataplane.Configuration{
+				HTTPServers: []dataplane.VirtualServer{
+					{
+						Hostname: "example.com",
+						Port:     8080,
+						PathRules: []dataplane.PathRule{
+							{
+								Path:                 "/inference",
+								PathType:             dataplane.PathTypePrefix,
+								HasInferenceBackends: true,
+								MatchRules: []dataplane.MatchRule{
+									{
+										Match: dataplane.Match{},
+										BackendGroup: dataplane.BackendGroup{
+											Source:  types.NamespacedName{Namespace: "test", Name: "route1"},
+											RuleIdx: 0,
+											Backends: []dataplane.Backend{
+												{
+													UpstreamName: "test_primary_80",
+													Valid:        true,
+													Weight:       70,
+													EndpointPickerConfig: &dataplane.EndpointPickerConfig{
+														EndpointPickerRef: &inference.EndpointPickerRef{
+															Name: inference.ObjectName("primary-epp"),
+															Port: &inference.Port{Number: 80},
+														},
+														NsName: "test",
+													},
+												},
+												{
+													UpstreamName: "test_secondary_80",
+													Valid:        true,
+													Weight:       30,
+													EndpointPickerConfig: &dataplane.EndpointPickerConfig{
+														EndpointPickerRef: &inference.EndpointPickerRef{
+															Name: inference.ObjectName("secondary-epp"),
+															Port: &inference.Port{Number: 80},
+														},
+														NsName: "test",
+													},
+												},
+											},
+										},
+										Guardrails: &dataplane.GuardrailsConfig{
+											Enabled:      true,
+											APIURL:       "http://ext-svc.ns1.svc.cluster.local:9000",
+											InternalPath: "/_ngf-internal-guardrails-test_route1_rule0",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expPresent: []string{
+				"guardrails_filter on;",
+				"guardrails_internal_uri /_ngf-internal-guardrails-test_route1_rule0;",
+				"location /_ngf-internal-guardrails-test_route1_rule0 {",
+				"internal;",
+				"proxy_pass http://ext-svc.ns1.svc.cluster.local:9000/backend/v1/scans;",
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			gen := GeneratorImpl{}
+			results := gen.executeServers(test.conf, &policiesfakes.FakeGenerator{}, alwaysFalseKeepAliveChecker)
+
+			var httpData string
+			for _, res := range results {
+				if res.dest == httpConfigFile {
+					httpData = string(res.data)
+					break
+				}
+			}
+
+			for _, sub := range test.expPresent {
+				g.Expect(httpData).To(ContainSubstring(sub))
+			}
+			for _, absent := range test.expAbsent {
+				g.Expect(httpData).NotTo(ContainSubstring(absent))
+			}
+		})
+	}
+}
+
 func TestUpdateLocationExternalAuthFilter(t *testing.T) {
 	t.Parallel()
 
@@ -8801,6 +9142,35 @@ func TestUpdateLocationProxySettings_Headers(t *testing.T) {
 				{Name: "Connection", Value: "$connection_upgrade"},
 			},
 		},
+		{
+			name:      "non-guardrails location – Accept-Encoding not stripped",
+			matchRule: makeMatchRule(normalBackend),
+			expAbsent: []string{"Accept-Encoding"},
+		},
+		{
+			name: "guardrails enabled – Accept-Encoding stripped (empty value)",
+			matchRule: func() dataplane.MatchRule {
+				mr := makeMatchRule(normalBackend)
+				mr.Guardrails = &dataplane.GuardrailsConfig{
+					Enabled:      true,
+					APIURL:       "http://ext-svc.ns1.svc.cluster.local:9000",
+					InternalPath: "/_ngf-internal-guardrails-ns1_route1_rule0",
+				}
+				return mr
+			}(),
+			expHeaders: []http.Header{
+				{Name: "Accept-Encoding", Value: ""},
+			},
+		},
+		{
+			name: "guardrails disabled – Accept-Encoding not stripped",
+			matchRule: func() dataplane.MatchRule {
+				mr := makeMatchRule(normalBackend)
+				mr.Guardrails = &dataplane.GuardrailsConfig{Enabled: false}
+				return mr
+			}(),
+			expAbsent: []string{"Accept-Encoding"},
+		},
 	}
 
 	for _, tc := range tests {
@@ -8828,6 +9198,360 @@ func TestUpdateLocationProxySettings_Headers(t *testing.T) {
 			for _, name := range tc.expAbsent {
 				g.Expect(headersByName).NotTo(HaveKey(name))
 			}
+		})
+	}
+}
+
+//nolint:gosec // Tests with mock APIURL and APITokenFile
+func TestUpdateLocationGuardrails(t *testing.T) {
+	t.Parallel()
+
+	baseLocation := http.Location{
+		Path: "/",
+		Type: http.ExternalLocationType,
+	}
+
+	tests := []struct {
+		guardrails *dataplane.GuardrailsConfig
+		name       string
+		expected   http.Location
+	}{
+		{
+			name:       "nil guardrails config",
+			guardrails: nil,
+			expected:   baseLocation,
+		},
+		{
+			name: "guardrails with token file",
+			guardrails: &dataplane.GuardrailsConfig{
+				Enabled:            true,
+				APIURL:             "http://ext-svc.ns1.svc.cluster.local:9000",
+				InternalPath:       "/_ngf-internal-guardrails-ns1_route1_rule0",
+				APITokenAuthFileID: dataplane.GenerateGuardrailsTokenFileID("ns1", "token-secret"),
+			},
+			expected: http.Location{
+				Path: "/",
+				Type: http.ExternalLocationType,
+				Guardrails: &http.GuardrailsConfig{
+					Enabled:      true,
+					APIURL:       "http://ext-svc.ns1.svc.cluster.local:9000",
+					APITokenFile: "/etc/nginx/secrets/guardrails_token_ns1_token-secret",
+					InternalPath: "/_ngf-internal-guardrails-ns1_route1_rule0",
+				},
+			},
+		},
+		{
+			name: "guardrails without token file",
+			guardrails: &dataplane.GuardrailsConfig{
+				Enabled:      true,
+				APIURL:       "http://ext-svc.ns1.svc.cluster.local:9000",
+				InternalPath: "/_ngf-internal-guardrails-ns1_route1_rule0",
+			},
+			expected: http.Location{
+				Path: "/",
+				Type: http.ExternalLocationType,
+				Guardrails: &http.GuardrailsConfig{
+					Enabled:      true,
+					APIURL:       "http://ext-svc.ns1.svc.cluster.local:9000",
+					InternalPath: "/_ngf-internal-guardrails-ns1_route1_rule0",
+				},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			result := updateLocationGuardrails(baseLocation, test.guardrails)
+			g.Expect(result).To(Equal(test.expected))
+		})
+	}
+}
+
+//nolint:gosec // Tests with mock APIURLs and other locations, not real credentials.
+func TestExtractGuardrailsInternalLocations(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		locations []http.Location
+		expected  []http.Location
+	}{
+		{
+			name: "no guardrails locations",
+			locations: []http.Location{
+				{Path: "/", Type: http.ExternalLocationType},
+			},
+			expected: nil,
+		},
+		{
+			name: "guardrails without internal path is skipped",
+			locations: []http.Location{
+				{
+					Path: "/",
+					Type: http.ExternalLocationType,
+					Guardrails: &http.GuardrailsConfig{
+						Enabled: true,
+						APIURL:  "http://ext-svc.ns1.svc.cluster.local:9000",
+					},
+				},
+			},
+			expected: nil,
+		},
+		{
+			name: "single guardrails location",
+			locations: []http.Location{
+				{
+					Path: "/coffee",
+					Type: http.ExternalLocationType,
+					Guardrails: &http.GuardrailsConfig{
+						Enabled:      true,
+						APIURL:       "http://ext-svc.ns1.svc.cluster.local:9000",
+						InternalPath: "/_ngf-internal-guardrails-ns1_route1_rule0",
+					},
+				},
+			},
+			expected: []http.Location{
+				{
+					Path:      "/_ngf-internal-guardrails-ns1_route1_rule0",
+					Type:      http.InternalLocationType,
+					ProxyPass: "http://ext-svc.ns1.svc.cluster.local:9000/backend/v1/scans",
+				},
+			},
+		},
+		{
+			name: "trailing slash in APIURL is trimmed",
+			locations: []http.Location{
+				{
+					Path: "/coffee",
+					Type: http.ExternalLocationType,
+					Guardrails: &http.GuardrailsConfig{
+						Enabled:      true,
+						APIURL:       "http://ext-svc.ns1.svc.cluster.local:9000/",
+						InternalPath: "/_ngf-internal-guardrails-ns1_route1_rule0",
+					},
+				},
+			},
+			expected: []http.Location{
+				{
+					Path:      "/_ngf-internal-guardrails-ns1_route1_rule0",
+					Type:      http.InternalLocationType,
+					ProxyPass: "http://ext-svc.ns1.svc.cluster.local:9000/backend/v1/scans",
+				},
+			},
+		},
+		{
+			// An https (ExternalName) backend always uses the variable proxy_pass for per-request
+			// re-resolution. A DNS resolver is guaranteed to be present here: an ExternalName
+			// guardrails backend without a resolver is rejected during policy resolution and never
+			// reaches config generation. VerifyTLS is nil for every ExternalName backend, including
+			// when a BackendTLSPolicy targets its Service (that policy is ignored in the dataplane
+			// layer), so an external backend can never fall into the fixed-proxy_pass in-cluster path.
+			name: "https backend uses variable proxy_pass for per-request resolution",
+			locations: []http.Location{
+				{
+					Path: "/coffee",
+					Type: http.ExternalLocationType,
+					Guardrails: &http.GuardrailsConfig{
+						Enabled:      true,
+						APIURL:       "https://guardrails.example.com:443",
+						InternalPath: "/_ngf-internal-guardrails-ns1_route1_rule0",
+					},
+				},
+			},
+			expected: []http.Location{
+				{
+					Path:      "/_ngf-internal-guardrails-ns1_route1_rule0",
+					Type:      http.InternalLocationType,
+					ProxyPass: "https://$guardrails_backend/backend/v1/scans",
+					ProxySSLVerify: &http.ProxySSLVerify{
+						Name:               "guardrails.example.com",
+						TrustedCertificate: dataplane.AlpineSSLRootCAPath,
+					},
+					GuardrailsProxyPassVar: "guardrails.example.com:443",
+					ProxySetHeaders:        []http.Header{{Name: "Host", Value: "guardrails.example.com:443"}},
+				},
+			},
+		},
+		{
+			// A non-default backend port must be carried in the Host header so it
+			// matches the proxy_pass authority; an edge validating the full
+			// authority would otherwise reject the scan and fail traffic closed.
+			// proxy_ssl_name stays the bare hostname (no port) for TLS verification.
+			name: "https backend with non-default port keeps port in Host",
+			locations: []http.Location{
+				{
+					Path: "/coffee",
+					Type: http.ExternalLocationType,
+					Guardrails: &http.GuardrailsConfig{
+						Enabled:      true,
+						APIURL:       "https://guardrails.example.com:8443",
+						InternalPath: "/_ngf-internal-guardrails-ns1_route1_rule0",
+					},
+				},
+			},
+			expected: []http.Location{
+				{
+					Path:      "/_ngf-internal-guardrails-ns1_route1_rule0",
+					Type:      http.InternalLocationType,
+					ProxyPass: "https://$guardrails_backend/backend/v1/scans",
+					ProxySSLVerify: &http.ProxySSLVerify{
+						Name:               "guardrails.example.com",
+						TrustedCertificate: dataplane.AlpineSSLRootCAPath,
+					},
+					GuardrailsProxyPassVar: "guardrails.example.com:8443",
+					ProxySetHeaders:        []http.Header{{Name: "Host", Value: "guardrails.example.com:8443"}},
+				},
+			},
+		},
+		{
+			// An in-cluster (ClusterIP) https backend fronted by a BackendTLSPolicy uses a fixed
+			// proxy_pass (stable cluster DNS name, no resolver needed) and verifies against the
+			// policy's CA bundle and hostname, which also drives SNI and the Host header.
+			name: "https ClusterIP backend with BackendTLSPolicy uses fixed proxy_pass and CA bundle",
+			locations: []http.Location{
+				{
+					Path: "/coffee",
+					Type: http.ExternalLocationType,
+					Guardrails: &http.GuardrailsConfig{
+						Enabled:      true,
+						APIURL:       "https://ext-svc.ns1.svc.cluster.local:9000",
+						InternalPath: "/_ngf-internal-guardrails-ns1_route1_rule0",
+						VerifyTLS: &http.ProxySSLVerify{
+							Name:               "guardrails.internal",
+							TrustedCertificate: "/etc/nginx/secrets/ns1-ca.crt",
+						},
+					},
+				},
+			},
+			expected: []http.Location{
+				{
+					Path:      "/_ngf-internal-guardrails-ns1_route1_rule0",
+					Type:      http.InternalLocationType,
+					ProxyPass: "https://ext-svc.ns1.svc.cluster.local:9000/backend/v1/scans",
+					ProxySSLVerify: &http.ProxySSLVerify{
+						Name:               "guardrails.internal",
+						TrustedCertificate: "/etc/nginx/secrets/ns1-ca.crt",
+					},
+					ProxySetHeaders: []http.Header{{Name: "Host", Value: "guardrails.internal"}},
+				},
+			},
+		},
+		{
+			// A BackendTLSPolicy with no CA cert ref verifies against the system trust store
+			// (RootCAPath) while still using a fixed proxy_pass for the in-cluster backend.
+			name: "https ClusterIP backend with BackendTLSPolicy system store falls back to APIURL hostname",
+			locations: []http.Location{
+				{
+					Path: "/coffee",
+					Type: http.ExternalLocationType,
+					Guardrails: &http.GuardrailsConfig{
+						Enabled:      true,
+						APIURL:       "https://ext-svc.ns1.svc.cluster.local:9000",
+						InternalPath: "/_ngf-internal-guardrails-ns1_route1_rule0",
+						VerifyTLS: &http.ProxySSLVerify{
+							TrustedCertificate: dataplane.AlpineSSLRootCAPath,
+						},
+					},
+				},
+			},
+			expected: []http.Location{
+				{
+					Path:      "/_ngf-internal-guardrails-ns1_route1_rule0",
+					Type:      http.InternalLocationType,
+					ProxyPass: "https://ext-svc.ns1.svc.cluster.local:9000/backend/v1/scans",
+					ProxySSLVerify: &http.ProxySSLVerify{
+						Name:               "ext-svc.ns1.svc.cluster.local",
+						TrustedCertificate: dataplane.AlpineSSLRootCAPath,
+					},
+					ProxySetHeaders: []http.Header{{Name: "Host", Value: "ext-svc.ns1.svc.cluster.local"}},
+				},
+			},
+		},
+		{
+			name: "http backend uses literal proxy_pass",
+			locations: []http.Location{
+				{
+					Path: "/coffee",
+					Type: http.ExternalLocationType,
+					Guardrails: &http.GuardrailsConfig{
+						Enabled:      true,
+						APIURL:       "http://ext-svc.ns1.svc.cluster.local:9000",
+						InternalPath: "/_ngf-internal-guardrails-ns1_route1_rule0",
+					},
+				},
+			},
+			expected: []http.Location{
+				{
+					Path:      "/_ngf-internal-guardrails-ns1_route1_rule0",
+					Type:      http.InternalLocationType,
+					ProxyPass: "http://ext-svc.ns1.svc.cluster.local:9000/backend/v1/scans",
+				},
+			},
+		},
+		{
+			// An in-cluster http backend needs no backend TLS verification.
+			name: "http backend leaves ProxySSLVerify nil",
+			locations: []http.Location{
+				{
+					Path: "/coffee",
+					Type: http.ExternalLocationType,
+					Guardrails: &http.GuardrailsConfig{
+						Enabled:      true,
+						APIURL:       "http://ext-svc.ns1.svc.cluster.local:9000",
+						InternalPath: "/_ngf-internal-guardrails-ns1_route1_rule0",
+					},
+				},
+			},
+			expected: []http.Location{
+				{
+					Path:      "/_ngf-internal-guardrails-ns1_route1_rule0",
+					Type:      http.InternalLocationType,
+					ProxyPass: "http://ext-svc.ns1.svc.cluster.local:9000/backend/v1/scans",
+				},
+			},
+		},
+		{
+			name: "deduplicates internal locations with same path",
+			locations: []http.Location{
+				{
+					Path: "/coffee",
+					Type: http.ExternalLocationType,
+					Guardrails: &http.GuardrailsConfig{
+						Enabled:      true,
+						APIURL:       "http://ext-svc.ns1.svc.cluster.local:9000",
+						InternalPath: "/_ngf-internal-guardrails-ns1_route1_rule0",
+					},
+				},
+				{
+					Path: "/tea",
+					Type: http.ExternalLocationType,
+					Guardrails: &http.GuardrailsConfig{
+						Enabled:      true,
+						APIURL:       "http://ext-svc.ns1.svc.cluster.local:9000",
+						InternalPath: "/_ngf-internal-guardrails-ns1_route1_rule0",
+					},
+				},
+			},
+			expected: []http.Location{
+				{
+					Path:      "/_ngf-internal-guardrails-ns1_route1_rule0",
+					Type:      http.InternalLocationType,
+					ProxyPass: "http://ext-svc.ns1.svc.cluster.local:9000/backend/v1/scans",
+				},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			result := extractGuardrailsInternalLocations(test.locations)
+			g.Expect(result).To(Equal(test.expected))
 		})
 	}
 }

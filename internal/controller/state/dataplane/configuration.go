@@ -129,6 +129,14 @@ func BuildConfiguration(
 
 	refCertBundles := buildRefCertificateBundles(g.ReferencedSecrets, g.ReferencedCaCertConfigMaps)
 
+	// Guardrails HTTPS backends carry their own BackendTLSPolicy-derived CA bundle that must be
+	// materialized so the guardrails internal location can proxy_ssl_verify the backend certificate.
+	// Merge those IDs with the ext-auth IDs before resolving referenced bundles.
+	guardrailsCertBundleIDs := collectGuardrailsCertBundleIDs(append(httpServers, sslServers...))
+	for id := range guardrailsCertBundleIDs {
+		extAuthCertBundleIDs[id] = struct{}{}
+	}
+
 	certBundles := buildCertBundles(
 		refCertBundles,
 		backendGroups,
@@ -161,6 +169,7 @@ func BuildConfiguration(
 		SSLKeyPairs:          buildSSLKeyPairs(g.ReferencedSecrets, gateway),
 		AuthSecrets:          buildAuthSecrets(g.AuthenticationFilters, g.ReferencedSecrets),
 		Telemetry:            buildTelemetry(g, gateway),
+		GuardrailsEnabled:    guardrailsEnabled(httpServers, sslServers),
 		BaseHTTPConfig:       baseHTTPConfig,
 		BaseStreamConfig:     baseStreamConfig,
 		Logging:              buildLogging(gateway),
@@ -175,6 +184,8 @@ func BuildConfiguration(
 		CertBundles:          certBundles,
 		WAF:                  buildWAF(gateway),
 	}
+
+	maps.Copy(config.AuthSecrets, buildGuardrailsAuthSecrets(gateway))
 
 	return config
 }
@@ -817,6 +828,26 @@ func buildCertBundles(
 	return bundles
 }
 
+// collectGuardrailsCertBundleIDs walks the built virtual servers and returns the set of CA cert
+// bundle IDs referenced by guardrails HTTPS backends (via a BackendTLSPolicy). Bundles using the
+// system trust store (RootCAPath set, no CertBundleID) are skipped as they need no materialization.
+func collectGuardrailsCertBundleIDs(servers []VirtualServer) map[CertBundleID]struct{} {
+	ids := make(map[CertBundleID]struct{})
+	for _, server := range servers {
+		for _, pr := range server.PathRules {
+			for _, mr := range pr.MatchRules {
+				if mr.Guardrails == nil || mr.Guardrails.VerifyTLS == nil {
+					continue
+				}
+				if mr.Guardrails.VerifyTLS.CertBundleID != "" {
+					ids[mr.Guardrails.VerifyTLS.CertBundleID] = struct{}{}
+				}
+			}
+		}
+	}
+	return ids
+}
+
 func getCertRefBundleData(bundle secrets.CertificateBundle) []byte {
 	// the cert could be base64 encoded or plaintext
 	data := make([]byte, base64.StdEncoding.DecodedLen(len(bundle.Cert.CACert)))
@@ -1363,6 +1394,8 @@ func newBackendGroup(
 	}, inferencePoolBackendExists
 }
 
+// convertBackendTLS returns the per-Gateway TLS verification settings for a backend targeted by a
+// BackendTLSPolicy.
 func convertBackendTLS(btp *graph.BackendTLSPolicy, gwNsName types.NamespacedName) *VerifyTLS {
 	if btp == nil || !btp.Valid {
 		return nil
@@ -1568,6 +1601,8 @@ func (hpr *hostPathRules) upsertRoute(
 
 		pols := buildPolicies(gateway, route.Policies)
 
+		guardrails := convertGraphGuardrails(route, client.ObjectKeyFromObject(gateway.Source), routeNsName, idx)
+
 		for _, h := range hostnames {
 			for _, m := range rule.Matches {
 				path := getPath(m.Path)
@@ -1601,6 +1636,7 @@ func (hpr *hostPathRules) upsertRoute(
 					BackendGroup: backendGroup,
 					Filters:      filters,
 					Match:        convertMatch(m),
+					Guardrails:   guardrails,
 				})
 
 				hpr.rulesPerHost[h][key] = hostRule
@@ -2111,6 +2147,70 @@ func GenerateAuthBasicFileID(namespace, name string) AuthFileID {
 // GenerateAuthJWTFileID is used to generate IDs for jwt auth files.
 func GenerateAuthJWTFileID(namespace, name string) AuthFileID {
 	return AuthFileID(fmt.Sprintf("jwt_auth_%s_%s", namespace, name))
+}
+
+// GenerateGuardrailsTokenFileID is used to generate IDs for guardrails ExtProcess auth token files.
+func GenerateGuardrailsTokenFileID(namespace, name string) AuthFileID {
+	return AuthFileID(fmt.Sprintf("guardrails_token_%s_%s", namespace, name))
+}
+
+// buildGuardrailsAuthSecrets collects the resolved ExtProcess auth token files for the routes attached
+// to this gateway's valid listeners, keyed by their AuthFileID so they are written to the NGINX secrets
+// directory.
+func buildGuardrailsAuthSecrets(
+	gateway *graph.Gateway,
+) map[AuthFileID]AuthFileData {
+	tokens := make(map[AuthFileID]AuthFileData)
+	if gateway == nil || gateway.Source == nil {
+		return tokens
+	}
+
+	gwNsName := client.ObjectKeyFromObject(gateway.Source)
+
+	for _, l := range gateway.Listeners {
+		if !l.Valid {
+			continue
+		}
+
+		for _, route := range l.Routes {
+			if !route.Valid {
+				continue
+			}
+
+			policy := route.EffectivePayloadProcessors[gwNsName]
+			if policy == nil || !policy.Valid || policy.PayloadProcessorState == nil {
+				continue
+			}
+
+			state := policy.PayloadProcessorState
+			if state.AuthTokenSecret == nil || len(state.ResolvedAuthToken) == 0 {
+				continue
+			}
+
+			id := GenerateGuardrailsTokenFileID(state.AuthTokenSecret.Namespace, state.AuthTokenSecret.Name)
+			tokens[id] = state.ResolvedAuthToken
+		}
+	}
+
+	return tokens
+}
+
+// guardrailsEnabled reports whether any location across the given servers has a Guardrails config,
+// which requires the ai-guardrails NGINX module to be loaded.
+func guardrailsEnabled(serverGroups ...[]VirtualServer) bool {
+	for _, servers := range serverGroups {
+		for _, s := range servers {
+			for _, pr := range s.PathRules {
+				for _, mr := range pr.MatchRules {
+					if mr.Guardrails != nil {
+						return true
+					}
+				}
+			}
+		}
+	}
+
+	return false
 }
 
 // buildOIDCProviderFromAuthenticationFilters builds the OIDC provider configs from the processed
