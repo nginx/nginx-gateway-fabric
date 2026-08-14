@@ -12191,3 +12191,109 @@ func TestBuildUpstreamsUseClusterIPPrecedence(t *testing.T) {
 		})
 	}
 }
+
+func TestBuildUpstreamsZoneSizePrecedence(t *testing.T) {
+	t.Parallel()
+
+	podEndpoints := []resolver.Endpoint{{Address: "10.0.0.1", Port: 80}}
+	svcKey := types.NamespacedName{Namespace: "default", Name: "my-svc"}
+
+	tests := []struct {
+		nginxProxyZoneSize *ngfAPIv1alpha1.Size
+		uspZoneSize        *ngfAPIv1alpha1.Size
+		expectedZoneSize   *ngfAPIv1alpha1.Size
+		name               string
+	}{
+		{
+			name:               "NginxProxy sets zone size, no UpstreamSettingsPolicy",
+			nginxProxyZoneSize: helpers.GetPointer[ngfAPIv1alpha1.Size]("2m"),
+			uspZoneSize:        nil,
+			expectedZoneSize:   helpers.GetPointer[ngfAPIv1alpha1.Size]("2m"),
+		},
+		{
+			name:               "UpstreamSettingsPolicy sets zone size, NginxProxy unset",
+			nginxProxyZoneSize: nil,
+			uspZoneSize:        helpers.GetPointer[ngfAPIv1alpha1.Size]("2m"),
+			expectedZoneSize:   helpers.GetPointer[ngfAPIv1alpha1.Size]("2m"),
+		},
+		{
+			name:               "NginxProxy and UpstreamSettingsPolicy set zone size, UpstreamSettingsPolicy takes precedence",
+			nginxProxyZoneSize: helpers.GetPointer[ngfAPIv1alpha1.Size]("1m"),
+			uspZoneSize:        helpers.GetPointer[ngfAPIv1alpha1.Size]("2m"),
+			expectedZoneSize:   helpers.GetPointer[ngfAPIv1alpha1.Size]("2m"),
+		},
+		{
+			name:               "neither NginxProxy nor UpstreamSettingsPolicy set zone size",
+			nginxProxyZoneSize: nil,
+			uspZoneSize:        nil,
+			expectedZoneSize:   nil,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			var svcPolicies []*graph.Policy
+			if test.uspZoneSize != nil {
+				usp := &ngfAPIv1alpha1.UpstreamSettingsPolicy{
+					ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "usp"},
+					Spec:       ngfAPIv1alpha1.UpstreamSettingsPolicySpec{ZoneSize: test.uspZoneSize},
+				}
+				svcPolicies = []*graph.Policy{{Source: usp, Valid: true}}
+			}
+
+			gateway := &graph.Gateway{
+				Source: &v1.Gateway{ObjectMeta: metav1.ObjectMeta{Name: "gw", Namespace: "default"}},
+				Listeners: []*graph.Listener{
+					{
+						Valid:  true,
+						Source: v1.Listener{Protocol: v1.HTTPProtocolType, Port: 80},
+						Routes: map[graph.RouteKey]*graph.L7Route{
+							{NamespacedName: types.NamespacedName{Namespace: "default", Name: "route"}}: {
+								Valid: true,
+								Spec: graph.L7RouteSpec{
+									Rules: []graph.RouteRule{
+										{
+											ValidMatches: true,
+											Filters:      graph.RouteRuleFilters{Valid: true},
+											BackendRefs: []graph.BackendRef{
+												{
+													Valid:       true,
+													SvcNsName:   types.NamespacedName{Namespace: "default", Name: "my-svc"},
+													ServicePort: apiv1.ServicePort{Port: 80},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			}
+
+			if test.nginxProxyZoneSize != nil {
+				gateway.EffectiveNginxProxy = &graph.EffectiveNginxProxy{ZoneSize: test.nginxProxyZoneSize}
+			}
+
+			referencedServices := map[types.NamespacedName]*graph.ReferencedService{
+				svcKey: {
+					Policies: svcPolicies,
+					GatewayNsNames: map[types.NamespacedName]struct{}{
+						{Name: "gw", Namespace: "default"}: {},
+					},
+				},
+			}
+
+			fakeResolver := &resolverfakes.FakeServiceResolver{}
+			fakeResolver.ResolveReturns(podEndpoints, nil)
+
+			upstreams := buildUpstreams(t.Context(), logr.Discard(), gateway, fakeResolver, referencedServices)
+
+			g.Expect(upstreams).To(HaveLen(1))
+			g.Expect(upstreams[0].UpstreamSettings.ZoneSize).To(Equal(test.expectedZoneSize))
+		})
+	}
+}

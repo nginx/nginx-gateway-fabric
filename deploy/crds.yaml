@@ -10916,6 +10916,15 @@ spec:
                 maximum: 1048576
                 minimum: 1
                 type: integer
+              zoneSize:
+                description: |-
+                  ZoneSize is the size of the shared memory zone used by the upstream. This memory zone is used to share
+                  the upstream configuration between nginx worker processes. The more servers that an upstream has,
+                  the larger memory zone is required.
+                  Default: OSS: 512k, Plus: 1m.
+                  Directive: https://nginx.org/en/docs/http/ngx_http_upstream_module.html#zone
+                pattern: ^\d{1,4}(k|m|g)?$
+                type: string
             type: object
         required:
         - spec

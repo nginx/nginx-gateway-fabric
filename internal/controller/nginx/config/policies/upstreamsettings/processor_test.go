@@ -43,7 +43,7 @@ func TestProcess(t *testing.T) {
 				},
 			},
 			expUpstreamSettings: UpstreamSettings{
-				ZoneSize: "2m",
+				ZoneSize: helpers.GetPointer[ngfAPIv1alpha1.Size]("2m"),
 				KeepAlive: http.UpstreamKeepAlive{
 					Connections: helpers.GetPointer[int32](1),
 					Requests:    1,
@@ -104,7 +104,24 @@ func TestProcess(t *testing.T) {
 				},
 			},
 			expUpstreamSettings: UpstreamSettings{
-				ZoneSize: "2m",
+				ZoneSize: helpers.GetPointer[ngfAPIv1alpha1.Size]("2m"),
+			},
+		},
+		{
+			name: "zone size not set",
+			policies: []policies.Policy{
+				&ngfAPIv1alpha1.UpstreamSettingsPolicy{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "usp",
+						Namespace: "test",
+					},
+					Spec: ngfAPIv1alpha1.UpstreamSettingsPolicySpec{
+						ZoneSize: nil,
+					},
+				},
+			},
+			expUpstreamSettings: UpstreamSettings{
+				ZoneSize: nil,
 			},
 		},
 		{
@@ -272,7 +289,7 @@ func TestProcess(t *testing.T) {
 				},
 			},
 			expUpstreamSettings: UpstreamSettings{
-				ZoneSize: "2m",
+				ZoneSize: helpers.GetPointer[ngfAPIv1alpha1.Size]("2m"),
 				KeepAlive: http.UpstreamKeepAlive{
 					Connections: helpers.GetPointer[int32](1),
 					Requests:    1,
@@ -374,7 +391,7 @@ func TestProcess(t *testing.T) {
 				},
 			},
 			expUpstreamSettings: UpstreamSettings{
-				ZoneSize: "2m",
+				ZoneSize: helpers.GetPointer[ngfAPIv1alpha1.Size]("2m"),
 				KeepAlive: http.UpstreamKeepAlive{
 					Connections: helpers.GetPointer[int32](1),
 					Requests:    1,

@@ -1,0 +1,10 @@
+apiVersion: gateway.nginx.org/v1alpha1
+kind: UpstreamSettingsPolicy
+metadata:
+  name: zone-size
+spec:
+  targetRefs:
+    - group: core
+      kind: Service
+      name: coffee
+  zoneSize: 2m
