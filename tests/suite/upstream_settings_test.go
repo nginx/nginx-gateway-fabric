@@ -17,6 +17,7 @@ import (
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/v2/tests/framework"
 )
 
@@ -104,12 +105,9 @@ var _ = Describe("UpstreamSettingsPolicy", Ordered, Label("functional", "uspolic
 
 		Context("verify working traffic", func() {
 			It("should return a 200 response for HTTPRoutes", func() {
-				port := 80
-				if portFwdPort != 0 {
-					port = portFwdPort
-				}
-				baseCoffeeURL := fmt.Sprintf("http://cafe.example.com:%d%s", port, "/coffee")
-				baseTeaURL := fmt.Sprintf("http://cafe.example.com:%d%s", port, "/tea")
+				port := helpers.BuildPortFwdPort(80, portFwdPort)
+				baseCoffeeURL := helpers.BuildPortFwdURL("cafe.example.com/coffee", port)
+				baseTeaURL := helpers.BuildPortFwdURL("cafe.example.com/tea", port)
 
 				Eventually(
 					func() error {
@@ -284,12 +282,9 @@ var _ = Describe("UpstreamSettingsPolicy", Ordered, Label("functional", "uspolic
 
 		Context("verify working traffic", func() {
 			It("should return a 200 response for HTTPRoutes", func() {
-				port := 80
-				if portFwdPort != 0 {
-					port = portFwdPort
-				}
-				baseCoffeeURL := fmt.Sprintf("http://cafe.example.com:%d%s", port, "/coffee")
-				baseTeaURL := fmt.Sprintf("http://cafe.example.com:%d%s", port, "/tea")
+				port := helpers.BuildPortFwdPort(80, portFwdPort)
+				baseCoffeeURL := helpers.BuildPortFwdURL("cafe.example.com/coffee", port)
+				baseTeaURL := helpers.BuildPortFwdURL("cafe.example.com/tea", port)
 
 				Eventually(
 					func() error {
@@ -416,11 +411,8 @@ var _ = Describe("UpstreamSettingsPolicy", Ordered, Label("functional", "uspolic
 
 		Context("verify working traffic", func() {
 			It("should return a 200 response", func() {
-				port := 80
-				if portFwdPort != 0 {
-					port = portFwdPort
-				}
-				coffeeURL := fmt.Sprintf("http://cafe.example.com:%d/coffee", port)
+				port := helpers.BuildPortFwdPort(80, portFwdPort)
+				coffeeURL := helpers.BuildPortFwdURL("cafe.example.com/coffee", port)
 
 				Eventually(
 					func() error {

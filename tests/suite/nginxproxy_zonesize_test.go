@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -10,13 +9,13 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/v2/tests/framework"
 )
 
 // This suite verifies the NginxProxy-level zoneSize setting by checking the value present in the UpstreamSettingsPolicy
-// and in the NginxProxy. If the zoneSize is set in the UpstreamSettingsPolicy, it should override the NginxProxy-level
-// setting. Otherwise, the NginxProxy-level setting should be used. If neither are set, the default NGINX values should
-// be used.
+// and in the NginxProxy. The tests check that the zoneSize value in NginxProxy is applied to the upstreams in both
+// the case where zoneSize has and has not been set in the UpstreamSettingsPolicy.
 var _ = Describe("NginxProxy zoneSize", Ordered, Label("functional", "nginxproxy-zonesize"), func() {
 	var (
 		// The NginxProxy is applied before the Gateway so the Gateway's infrastructure.parametersRef resolves.
@@ -70,11 +69,8 @@ var _ = Describe("NginxProxy zoneSize", Ordered, Label("functional", "nginxproxy
 
 	Context("verify working traffic", func() {
 		It("should return a 200 response", func() {
-			port := 80
-			if portFwdPort != 0 {
-				port = portFwdPort
-			}
-			coffeeURL := fmt.Sprintf("http://cafe.example.com:%d/coffee", port)
+			port := helpers.BuildPortFwdPort(80, portFwdPort)
+			coffeeURL := helpers.BuildPortFwdURL("cafe.example.com/coffee", port)
 
 			Eventually(
 				func() error {
@@ -93,6 +89,21 @@ var _ = Describe("NginxProxy zoneSize", Ordered, Label("functional", "nginxproxy
 
 	Context("uspZoneSize is set", func() {
 		It("uses the upstreamSettingsPolicy zone size when set", func() {
+			expectedDirectives := []framework.ExpectedNginxField{
+				{
+					Directive: "zone",
+					Value:     "zonesize_coffee_80 2m",
+					Upstream:  "zonesize_coffee_80",
+					File:      "http.conf",
+				},
+				{
+					Directive: "zone",
+					Value:     "zonesize_tea_80 1m",
+					Upstream:  "zonesize_tea_80",
+					File:      "http.conf",
+				},
+			}
+
 			Eventually(
 				func() error {
 					conf, err := resourceManager.GetNginxConfig(nginxPodName, namespace, "")
@@ -100,12 +111,12 @@ var _ = Describe("NginxProxy zoneSize", Ordered, Label("functional", "nginxproxy
 						return err
 					}
 
-					return framework.ValidateNginxFieldExists(conf, framework.ExpectedNginxField{
-						Directive: "zone",
-						Value:     "zonesize_coffee_80 2m",
-						Upstream:  "zonesize_coffee_80",
-						File:      "http.conf",
-					})
+					for _, directive := range expectedDirectives {
+						if err := framework.ValidateNginxFieldExists(conf, directive); err != nil {
+							return err
+						}
+					}
+					return nil
 				}).
 				WithTimeout(timeoutConfig.GetStatusTimeout).
 				WithPolling(500 * time.Millisecond).

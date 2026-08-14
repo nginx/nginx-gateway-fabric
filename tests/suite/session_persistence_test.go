@@ -16,6 +16,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/v2/tests/framework"
 )
 
@@ -99,11 +100,8 @@ var _ = Describe("SessionPersistence OSS", Ordered, Label("functional", "session
 
 		Context("verify working traffic", func() {
 			It("should return 200 response for HTTPRoute `coffee` from the same backend", func() {
-				port := 80
-				if portFwdPort != 0 {
-					port = portFwdPort
-				}
-				baseCoffeeURL := fmt.Sprintf("http://cafe.example.com:%d%s", port, "/coffee")
+				port := helpers.BuildPortFwdPort(80, portFwdPort)
+				baseCoffeeURL := helpers.BuildPortFwdURL("cafe.example.com/coffee", port)
 
 				Eventually(
 					func() error {
@@ -206,13 +204,9 @@ var _ = Describe("SessionPersistence Plus", Ordered, Label("functional", "sessio
 		var baseCoffeeURL, baseTeaURL string
 
 		BeforeAll(func() {
-			port := 80
-			if portFwdPort != 0 {
-				port = portFwdPort
-			}
-
-			baseCoffeeURL = fmt.Sprintf("http://cafe.example.com:%d%s", port, "/coffee")
-			baseTeaURL = fmt.Sprintf("http://cafe.example.com:%d%s", port, "/tea/location/flavors")
+			port := helpers.BuildPortFwdPort(80, portFwdPort)
+			baseCoffeeURL = helpers.BuildPortFwdURL("cafe.example.com/coffee", port)
+			baseTeaURL = helpers.BuildPortFwdURL("cafe.example.com/tea/location/flavors", port)
 		})
 
 		Context("verify working traffic", func() {
