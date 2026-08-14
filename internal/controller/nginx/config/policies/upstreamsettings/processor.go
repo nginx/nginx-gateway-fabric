@@ -17,7 +17,7 @@ type UpstreamSettings struct {
 	UseClusterIP *bool
 	// ZoneSize is the zone size setting.
 	// A nil value means the policy did not set this field, allowing callers to fall back to
-	// other configuration (e.g. the NginxProxy setting).
+	// global configuration (e.g. the NginxProxy setting).
 	ZoneSize *ngfAPI.Size
 	// LoadBalancingMethod is the load balancing method setting.
 	LoadBalancingMethod string

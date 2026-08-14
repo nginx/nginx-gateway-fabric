@@ -2717,9 +2717,8 @@ func useClusterIPForNginxProxy(np *graph.EffectiveNginxProxy) bool {
 	return np != nil && np.UseClusterIP != nil && *np.UseClusterIP
 }
 
-// resolveZoneSize returns true if the NginxProxy has a zone size configured but the upstream route
-//
-//	does not.
+// resolveZoneSize returns true if the NginxProxy has a zone size configured
+// but the upstream route does not.
 func resolveZoneSize(np *graph.EffectiveNginxProxy, uspZoneSize *ngfAPIv1alpha1.Size) bool {
 	return np != nil && np.ZoneSize != nil && uspZoneSize == nil
 }
