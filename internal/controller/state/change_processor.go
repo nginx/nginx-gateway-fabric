@@ -87,10 +87,14 @@ type ChangeProcessorConfig struct {
 	GatewayCtlrName string
 	// GatewayClassName is the name of the GatewayClass resource.
 	GatewayClassName string
+	// ClusterDomain is the Kubernetes cluster DNS domain used for in-cluster Service URLs.
+	ClusterDomain string
 	// FeatureFlags holds the feature flags for building the Graph.
 	FeatureFlags graph.FeatureFlags
 	// Snippets indicates if Snippets are enabled. This will enable both SnippetsFilter and SnippetsPolicy APIs.
 	Snippets bool
+	// PayloadProcessor indicates if the PayloadProcessor API is enabled.
+	PayloadProcessor bool
 }
 
 // ChangeProcessorImpl is an implementation of ChangeProcessor.
@@ -313,6 +317,14 @@ func NewChangeProcessorImpl(cfg ChangeProcessorConfig) *ChangeProcessorImpl {
 		})
 	}
 
+	if cfg.PayloadProcessor {
+		trackingUpdaterCfg = append(trackingUpdaterCfg, changeTrackingUpdaterObjectTypeCfg{
+			gvk:       cfg.MustExtractGVK(&ngfAPIv1alpha1.PayloadProcessor{}),
+			store:     commonPolicyObjectStore,
+			predicate: funcPredicate{stateChanged: isNGFPolicyRelevant},
+		})
+	}
+
 	trackingUpdater := newChangeTrackingUpdater(
 		cfg.MustExtractGVK,
 		trackingUpdaterCfg,
@@ -377,6 +389,7 @@ func (c *ChangeProcessorImpl) Process(ctx context.Context) *graph.Graph {
 		c.clusterState,
 		c.cfg.GatewayCtlrName,
 		c.cfg.GatewayClassName,
+		c.cfg.ClusterDomain,
 		c.cfg.PlusSecrets,
 		c.cfg.WAFFetcher,
 		c.cfg.PLMFetcher,

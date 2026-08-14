@@ -104,6 +104,13 @@ type Graph struct {
 	// We need such entries so that we can query the Graph to determine if a Secret is referenced
 	// by a WAFPolicy, including the case when the Secret is newly created.
 	ReferencedWAFSecrets map[types.NamespacedName]*v1.Secret
+	// ReferencedPayloadProcessorSecrets includes Secrets referenced by PayloadProcessor (auth token).
+	// Similar to ReferencedSecrets, it includes invalid Secrets or those that do not exist
+	ReferencedPayloadProcessorSecrets map[types.NamespacedName]*v1.Secret
+	// ReferencedPayloadProcessorServices includes backend Services referenced by PayloadProcessor
+	// policies. Similar to ReferencedServices, it includes entries for Services that do not exist,
+	// so that a rebuild is triggered when a referenced Service is created, deleted, or changed.
+	ReferencedPayloadProcessorServices map[types.NamespacedName]struct{}
 	// SnippetsFilters holds all the SnippetsFilters.
 	SnippetsFilters map[types.NamespacedName]*SnippetsFilter
 	// AuthenticationFilters holds all the AuthenticationFilters.
@@ -220,6 +227,8 @@ type FeatureFlags struct {
 }
 
 // IsReferenced returns true if the Graph references the resource.
+//
+//nolint:gocyclo // will refactor later
 func (g *Graph) IsReferenced(resourceType ngftypes.ObjectType, nsname types.NamespacedName) bool {
 	switch obj := resourceType.(type) {
 	case *v1.Secret:
@@ -229,7 +238,9 @@ func (g *Graph) IsReferenced(resourceType ngftypes.ObjectType, nsname types.Name
 		_, plusSecretExists := g.PlusSecrets[nsname]
 		_, wafAuthSecretExists := g.ReferencedWAFSecrets[nsname]
 		_, plmSecretExists := g.PLMSecrets[nsname]
-		return exists || plusSecretExists || wafAuthSecretExists || plmSecretExists
+		_, payloadProcessorSecretExists := g.ReferencedPayloadProcessorSecrets[nsname]
+		return exists || plusSecretExists || wafAuthSecretExists || plmSecretExists ||
+			payloadProcessorSecretExists
 	case *v1.ConfigMap:
 		_, exists := g.ReferencedCaCertConfigMaps[nsname]
 		return exists
@@ -249,10 +260,12 @@ func (g *Graph) IsReferenced(resourceType ngftypes.ObjectType, nsname types.Name
 		_, existed := g.ReferencedNamespaces[nsname]
 		exists := isNamespaceReferenced(obj, g.Gateways)
 		return existed || exists
-	// Service reference exists if at least one Route references it.
+	// Service reference exists if at least one Route references it, or a PayloadProcessor policy
+	// references it as its ExtProcess backend.
 	case *v1.Service:
 		_, exists := g.ReferencedServices[nsname]
-		return exists
+		_, payloadProcessorServiceExists := g.ReferencedPayloadProcessorServices[nsname]
+		return exists || payloadProcessorServiceExists
 	// InferencePool reference exists if at least one Route references it.
 	case *inference.InferencePool:
 		_, exists := g.ReferencedInferencePools[nsname]
@@ -347,6 +360,7 @@ func BuildGraph(
 	state ClusterState,
 	controllerName string,
 	gcName string,
+	clusterDomain string,
 	plusSecrets map[types.NamespacedName][]PlusSecretFile,
 	wafFetcher fetch.Fetcher,
 	plmFetcher *s3fetch.Fetcher,
@@ -454,8 +468,6 @@ func BuildGraph(
 
 	referencedServices := buildReferencedServices(routes, l4routes, gws, state.Services, listenerSets)
 
-	addGatewaysForBackendTLSPolicies(processedBackendTLSPolicies, referencedServices, controllerName, gws, logger)
-
 	var wafInput *WAFProcessingInput
 	if wafFetcher != nil || plmFetcher != nil {
 		plmResolvedSecrets := resolvePLMSecrets(logger, state.Secrets, plmSecretNames)
@@ -481,7 +493,32 @@ func BuildGraph(
 		referencedServices,
 		gws,
 		wafInput,
+		refGrantResolver,
 	)
+
+	payloadProcessorOutput := processPayloadProcessorPolicies(
+		processedPolicies,
+		state.Services,
+		state.Secrets,
+		processedBackendTLSPolicies,
+		clusterDomain,
+	)
+
+	// Register PayloadProcessor backend Services (referenced only via a policy, not a Route backend)
+	// into referencedServices with the Gateways their policies attach to, so a BackendTLSPolicy
+	// targeting a Guardrails backend Service picks up those Gateways below.
+	referencedServices = addPayloadProcessorBackendServicesToReferencedServices(
+		processedPolicies,
+		routes,
+		gws,
+		referencedServices,
+		state.Services,
+	)
+
+	// BackendTLSPolicy gateway attachment must run after referencedServices includes both Route
+	// backends and PayloadProcessor backends, so a policy targeting either kind is attached to the
+	// correct Gateways.
+	addGatewaysForBackendTLSPolicies(processedBackendTLSPolicies, referencedServices, controllerName, gws, logger)
 
 	// add status conditions to each targetRef based on the policies that affect them.
 	addPolicyAffectedStatusToTargetRefs(processedPolicies, routes, gws)
@@ -500,32 +537,35 @@ func BuildGraph(
 	}
 
 	g := &Graph{
-		GatewayClass:               gc,
-		Gateways:                   gws,
-		Routes:                     routes,
-		L4Routes:                   l4routes,
-		IgnoredGatewayClasses:      processedGwClasses.Ignored,
-		ReferencedSecrets:          resourceResolver.GetSecrets(),
-		ReferencedNamespaces:       referencedNamespaces,
-		ReferencedServices:         referencedServices,
-		ReferencedInferencePools:   referencedInferencePools,
-		ReferencedCaCertConfigMaps: resourceResolver.GetConfigMaps(),
-		ReferencedNginxProxies:     processedNginxProxies,
-		BackendTLSPolicies:         processedBackendTLSPolicies,
-		NGFPolicies:                processedPolicies,
-		SnippetsFilters:            processedSnippetsFilters,
-		AuthenticationFilters:      processedAuthenticationFilters,
-		ExternalLoadBalancers:      processedExternalLoadBalancers,
-		ListenerSets:               listenerSets,
-		PlusSecrets:                plusSecrets,
-		PLMSecrets:                 plmSecretNames,
-		ReferencedWAFBundles:       referencedWAFBundles,
-		ReferencedAPPolicies:       referencedAPPolicies,
-		ReferencedAPLogConfs:       referencedAPLogConfs,
-		ReferencedWAFSecrets:       referencedWAFAuthSecrets,
+		GatewayClass:                       gc,
+		Gateways:                           gws,
+		Routes:                             routes,
+		L4Routes:                           l4routes,
+		IgnoredGatewayClasses:              processedGwClasses.Ignored,
+		ReferencedSecrets:                  resourceResolver.GetSecrets(),
+		ReferencedNamespaces:               referencedNamespaces,
+		ReferencedServices:                 referencedServices,
+		ReferencedInferencePools:           referencedInferencePools,
+		ReferencedCaCertConfigMaps:         resourceResolver.GetConfigMaps(),
+		ReferencedNginxProxies:             processedNginxProxies,
+		BackendTLSPolicies:                 processedBackendTLSPolicies,
+		NGFPolicies:                        processedPolicies,
+		SnippetsFilters:                    processedSnippetsFilters,
+		AuthenticationFilters:              processedAuthenticationFilters,
+		ExternalLoadBalancers:              processedExternalLoadBalancers,
+		ListenerSets:                       listenerSets,
+		PlusSecrets:                        plusSecrets,
+		PLMSecrets:                         plmSecretNames,
+		ReferencedWAFBundles:               referencedWAFBundles,
+		ReferencedAPPolicies:               referencedAPPolicies,
+		ReferencedAPLogConfs:               referencedAPLogConfs,
+		ReferencedWAFSecrets:               referencedWAFAuthSecrets,
+		ReferencedPayloadProcessorSecrets:  payloadProcessorOutput.ReferencedPayloadProcessorSecrets,
+		ReferencedPayloadProcessorServices: payloadProcessorOutput.ReferencedPayloadProcessorServices,
 	}
 
 	g.attachPolicies(validators.PolicyValidator, controllerName, logger)
+	resolveEffectivePayloadProcessors(g.Gateways, g.Routes)
 	validateExternalAuthConflicts(routes)
 
 	return g

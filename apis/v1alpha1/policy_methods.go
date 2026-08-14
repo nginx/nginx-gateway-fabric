@@ -79,3 +79,15 @@ func (p *WAFPolicy) GetPolicyStatus() gatewayv1.PolicyStatus {
 func (p *WAFPolicy) SetPolicyStatus(status gatewayv1.PolicyStatus) {
 	p.Status = status
 }
+
+func (p *PayloadProcessor) GetTargetRefs() []gatewayv1.LocalPolicyTargetReference {
+	return []gatewayv1.LocalPolicyTargetReference{p.Spec.TargetRef}
+}
+
+func (p *PayloadProcessor) GetPolicyStatus() gatewayv1.PolicyStatus {
+	return p.Status
+}
+
+func (p *PayloadProcessor) SetPolicyStatus(status gatewayv1.PolicyStatus) {
+	p.Status = status
+}
