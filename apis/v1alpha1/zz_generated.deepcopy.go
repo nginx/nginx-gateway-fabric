@@ -294,6 +294,11 @@ func (in *ClientBody) DeepCopyInto(out *ClientBody) {
 		*out = new(Size)
 		**out = **in
 	}
+	if in.BufferSize != nil {
+		in, out := &in.BufferSize, &out.BufferSize
+		*out = new(Size)
+		**out = **in
+	}
 	if in.Timeout != nil {
 		in, out := &in.Timeout, &out.Timeout
 		*out = new(Duration)
