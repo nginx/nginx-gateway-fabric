@@ -6,16 +6,16 @@ NGINX Plus: false
 
 NGINX Gateway Fabric:
 
-- Commit: 394bdf0e0c8ae008009546b7a21d8f80248d52be
-- Date: 2026-07-30T17:54:44Z
+- Commit: fef4f734728239e3248cda180e74f72e436b06b9
+- Date: 2026-08-14T15:07:13Z
 - Dirty: false
 
 GKE Cluster:
 
 - Node count: 12
-- k8s version: v1.35.6-gke.1250000
+- k8s version: v1.35.6-gke.1258000
 - vCPUs per node: 16
-- RAM per node: 65848292Ki
+- RAM per node: 65848288Ki
 - Max pods per node: 110
 - Zone: us-west1-b
 - Instance Type: n2d-standard-16
@@ -24,19 +24,19 @@ GKE Cluster:
 
 ### Event Batch Processing
 
-- Total: 1281
-- Average Time: 9ms
+- Total: 1284
+- Average Time: 11ms
 - Event Batch Processing distribution:
-	- 500.0ms: 1269
-	- 1000.0ms: 1281
-	- 5000.0ms: 1281
-	- 10000.0ms: 1281
-	- 30000.0ms: 1281
-	- +Infms: 1281
+	- 500.0ms: 1272
+	- 1000.0ms: 1284
+	- 5000.0ms: 1284
+	- 10000.0ms: 1284
+	- 30000.0ms: 1284
+	- +Infms: 1284
 
 ### Errors
 
-- NGF errors: 14
+- NGF errors: 19
 - NGF container restarts: 0
 - NGINX errors: 0
 - NGINX container restarts: 0
@@ -50,19 +50,19 @@ The logs are attached only if there are errors.
 
 ### Event Batch Processing
 
-- Total: 1350
-- Average Time: 11ms
+- Total: 1320
+- Average Time: 10ms
 - Event Batch Processing distribution:
-	- 500.0ms: 1340
-	- 1000.0ms: 1350
-	- 5000.0ms: 1350
-	- 10000.0ms: 1350
-	- 30000.0ms: 1350
-	- +Infms: 1350
+	- 500.0ms: 1311
+	- 1000.0ms: 1320
+	- 5000.0ms: 1320
+	- 10000.0ms: 1320
+	- 30000.0ms: 1320
+	- +Infms: 1320
 
 ### Errors
 
-- NGF errors: 19
+- NGF errors: 17
 - NGF container restarts: 0
 - NGINX errors: 0
 - NGINX container restarts: 0
@@ -76,15 +76,15 @@ The logs are attached only if there are errors.
 
 ### Event Batch Processing
 
-- Total: 2075
-- Average Time: 85ms
+- Total: 2076
+- Average Time: 83ms
 - Event Batch Processing distribution:
-	- 500.0ms: 1985
-	- 1000.0ms: 2075
-	- 5000.0ms: 2075
-	- 10000.0ms: 2075
-	- 30000.0ms: 2075
-	- +Infms: 2075
+	- 500.0ms: 1993
+	- 1000.0ms: 2076
+	- 5000.0ms: 2076
+	- 10000.0ms: 2076
+	- 30000.0ms: 2076
+	- +Infms: 2076
 
 ### Errors
 
@@ -102,15 +102,15 @@ The logs are attached only if there are errors.
 
 ### Event Batch Processing
 
-- Total: 66
-- Average Time: 202ms
+- Total: 278
+- Average Time: 82ms
 - Event Batch Processing distribution:
-	- 500.0ms: 54
-	- 1000.0ms: 66
-	- 5000.0ms: 66
-	- 10000.0ms: 66
-	- 30000.0ms: 66
-	- +Infms: 66
+	- 500.0ms: 274
+	- 1000.0ms: 278
+	- 5000.0ms: 278
+	- 10000.0ms: 278
+	- 30000.0ms: 278
+	- +Infms: 278
 
 ### Errors
 
@@ -127,9 +127,9 @@ The logs are attached only if there are errors.
 ## Test TestScale_HTTPMatches
 
 ```text
-Requests      [total, rate, throughput]         30000, 1000.04, 1000.01
-Duration      [total, attack, wait]             30s, 29.999s, 897.41µs
-Latencies     [min, mean, 50, 90, 95, 99, max]  752.181µs, 950.287µs, 929.833µs, 1.027ms, 1.068ms, 1.225ms, 17.408ms
+Requests      [total, rate, throughput]         30000, 1000.02, 999.99
+Duration      [total, attack, wait]             30s, 29.999s, 1.094ms
+Latencies     [min, mean, 50, 90, 95, 99, max]  750.196µs, 1.125ms, 1.048ms, 1.299ms, 1.405ms, 2.405ms, 16.766ms
 Bytes In      [total, mean]                     4800000, 160.00
 Bytes Out     [total, mean]                     0, 0.00
 Success       [ratio]                           100.00%
@@ -138,8 +138,8 @@ Error Set:
 ```
 ```text
 Requests      [total, rate, throughput]         30000, 1000.03, 999.99
-Duration      [total, attack, wait]             30s, 29.999s, 1.203ms
-Latencies     [min, mean, 50, 90, 95, 99, max]  823.259µs, 1.048ms, 1.029ms, 1.139ms, 1.191ms, 1.327ms, 15.837ms
+Duration      [total, attack, wait]             30s, 29.999s, 1.106ms
+Latencies     [min, mean, 50, 90, 95, 99, max]  836.386µs, 1.248ms, 1.112ms, 1.416ms, 1.585ms, 4.221ms, 33.334ms
 Bytes In      [total, mean]                     4800000, 160.00
 Bytes Out     [total, mean]                     0, 0.00
 Success       [ratio]                           100.00%
