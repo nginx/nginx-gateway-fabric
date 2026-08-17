@@ -27,6 +27,8 @@ type Config struct {
 	AgentTLSSecretName string
 	// ServerTLSDomain is the domain suffix used in the server TLS cert SAN and agent config host. Defaults to "svc".
 	ServerTLSDomain string
+	// ClusterDomain is the Kubernetes cluster DNS domain used for in-cluster Service URLs. Defaults to "cluster.local".
+	ClusterDomain string
 	// ImageSource is the source of the NGINX Gateway image.
 	ImageSource string
 	// GatewayCtlrName is the name of this controller.
@@ -61,6 +63,8 @@ type Config struct {
 	SnippetsFilters bool
 	// Snippets indicates if Snippets are enabled. This will enable both SnippetsFilter and SnippetsPolicy APIs.
 	Snippets bool
+	// PayloadProcessor indicates if the PayloadProcessor API is enabled. Opt-in; used for features such as Guardrails.
+	PayloadProcessor bool
 	// EndpointPickerDisableTLS indicates if TLS is disabled for EndpointPicker communication.
 	EndpointPickerDisableTLS bool
 	// EndpointPickerTLSSkipVerify indicates if secure verification is skipped for EndpointPicker communication.

@@ -118,6 +118,7 @@ func InstallNGF(cfg InstallationConfig, extraArgs ...string) ([]byte, error) {
 		"--wait",
 		"--set", "nginxGateway.snippets.enable=true",
 		"--set", "nginxGateway.gwAPIExperimentalFeatures.enable=true",
+		"--set", "nginxGateway.payloadProcessor.enable=true",
 	}
 	if cfg.ChartVersion != "" {
 		args = append(args, "--version", cfg.ChartVersion)

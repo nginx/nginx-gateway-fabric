@@ -176,6 +176,7 @@ rules:
   - snippetspolicies
   - wafpolicies
   - externalloadbalancers
+  - payloadprocessors
   verbs:
   - create
   - delete
@@ -197,6 +198,7 @@ rules:
   - snippetspolicies/status
   - wafpolicies/status
   - externalloadbalancers/status
+  - payloadprocessors/status
   verbs:
   - update
 - apiGroups:

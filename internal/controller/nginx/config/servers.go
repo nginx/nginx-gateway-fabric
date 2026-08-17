@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
+	"net/url"
 	"slices"
 	"strconv"
 	"strings"
@@ -622,6 +623,9 @@ func createLocations(
 	// Add internal auth_request locations for ExternalAuth filters
 	locs = append(locs, extractExternalAuthInternalLocations(locs)...)
 
+	// Add internal locations for ai-guardrails inspection subrequests
+	locs = append(locs, extractGuardrailsInternalLocations(locs)...)
+
 	return locs, matchPairs, grpcServer
 }
 
@@ -739,9 +743,10 @@ func createInternalLocationsForRule(
 				// This ensures the correct name gets generated to correlate with the split clients generation.
 				// If there is only one backend, this is effectively a no-op.
 				tempRule := dataplane.MatchRule{
-					Source:  r.Source,
-					Match:   r.Match,
-					Filters: r.Filters,
+					Source:     r.Source,
+					Match:      r.Match,
+					Filters:    r.Filters,
+					Guardrails: r.Guardrails,
 					BackendGroup: dataplane.BackendGroup{
 						Source:      r.BackendGroup.Source,
 						RuleIdx:     r.BackendGroup.RuleIdx,
@@ -886,9 +891,10 @@ func createInferenceLocationsForRule(
 			// This ensures the correct name gets generated to correlate with the split clients generation.
 			// If there is only one backend, this is effectively a no-op.
 			tempRule := dataplane.MatchRule{
-				Source:  r.Source,
-				Match:   r.Match,
-				Filters: r.Filters,
+				Source:     r.Source,
+				Match:      r.Match,
+				Filters:    r.Filters,
+				Guardrails: r.Guardrails,
 				BackendGroup: dataplane.BackendGroup{
 					Source:      r.BackendGroup.Source,
 					RuleIdx:     r.BackendGroup.RuleIdx,
@@ -1219,6 +1225,7 @@ func updateLocation(
 	location = updateLocationAuthenticationFilter(location, filters.AuthenticationFilter)
 	location = updateLocationExternalAuthFilter(location, filters.ExternalAuthFilter)
 	location = updateLocationCORSFilter(location, filters.CORSFilter, serverID, pathRuleIndex, matchRuleIndex)
+	location = updateLocationGuardrails(location, matchRule.Guardrails)
 
 	if filters.RequestRedirect != nil {
 		return updateLocationRedirectFilter(location, filters.RequestRedirect, listenerPort, pathRule)
@@ -1264,6 +1271,32 @@ func updateLocationAuthenticationFilter(
 	if authenticationFilter.OIDC != nil && authenticationFilter.OIDC.Provider != nil {
 		location.AuthOIDC = getAuthOIDCLocationConfig(authenticationFilter.OIDC)
 	}
+
+	return location
+}
+
+// updateLocationGuardrails applies the ai-guardrails (PayloadProcessor ExtProcess) configuration
+// to a location, if present.
+func updateLocationGuardrails(
+	location http.Location,
+	guardrails *dataplane.GuardrailsConfig,
+) http.Location {
+	if guardrails == nil {
+		return location
+	}
+
+	gc := &http.GuardrailsConfig{
+		Enabled:      guardrails.Enabled,
+		APIURL:       guardrails.APIURL,
+		InternalPath: guardrails.InternalPath,
+		VerifyTLS:    createProxySSLVerify(guardrails.VerifyTLS),
+	}
+
+	if guardrails.APITokenAuthFileID != "" {
+		gc.APITokenFile = generateAuthFileName(guardrails.APITokenAuthFileID)
+	}
+
+	location.Guardrails = gc
 
 	return location
 }
@@ -1418,6 +1451,135 @@ func extractExternalAuthInternalLocations(locations []http.Location) []http.Loca
 		result = append(result, authLoc)
 	}
 	return result
+}
+
+// guardrailsScansPath is the guardrails backend endpoint that inspection requests are POSTed to.
+// It is appended to the configured guardrails APIURL to form the internal location's proxy_pass
+// target.
+const guardrailsScansPath = "/backend/v1/scans"
+
+// guardrailsProxyPassVar is the NGINX variable name used in a guardrails internal
+// location's proxy_pass so the ExternalName backend is re-resolved per request via the
+// global resolver. It is location-scoped (each internal location has its own `set`), so
+// a single shared name is safe even with multiple distinct guardrails backends.
+const guardrailsProxyPassVar = "$guardrails_backend"
+
+// extractGuardrailsInternalLocations synthesizes the internal NGINX locations that the ai-guardrails
+// module issues its non-blocking inspection subrequests to. Each unique GuardrailsConfig.InternalPath
+// yields one internal location that proxies to the guardrails backend's scans endpoint.
+//
+// Modeled on extractExternalAuthInternalLocations: a post-processing pass over already-built
+// locations, deduplicating by internal path so multiple matches sharing a guardrails backend
+// produce a single internal location.
+//
+// Two HTTPS backend shapes are supported:
+//   - ExternalName: verified against the image's system trust store, with a variable-based proxy_pass
+//     so NGINX re-resolves the backend per request (avoiding a stale IP pinned at worker startup).
+//     This requires a DNS resolver, guaranteed for such backends: an ExternalName guardrails backend
+//     attached to a Gateway without a resolver is rejected during policy resolution
+//     (payloadProcessorResolverMissing) and never reaches config generation.
+//   - In-cluster (ClusterIP) fronted by a BackendTLSPolicy (Guardrails.VerifyTLS set): verified
+//     against the policy's CA bundle (private/self-signed supported) and hostname, with a fixed
+//     proxy_pass to the stable cluster DNS Service name (no resolver needed).
+func extractGuardrailsInternalLocations(locations []http.Location) []http.Location {
+	seen := make(map[string]struct{})
+	var result []http.Location
+
+	for _, loc := range locations {
+		if loc.Guardrails == nil || loc.Guardrails.InternalPath == "" {
+			continue
+		}
+		path := loc.Guardrails.InternalPath
+		if _, exists := seen[path]; exists {
+			continue
+		}
+		seen[path] = struct{}{}
+
+		trimmedURL := strings.TrimRight(loc.Guardrails.APIURL, "/")
+		proxyPass := trimmedURL + guardrailsScansPath
+
+		// For an HTTPS backend, NGINX must verify the backend's certificate and hostname
+		// before sending the guardrails auth token and the inspected request/response
+		// content. Enable proxy_ssl_verify and set proxy_ssl_name to the verified hostname
+		// so both the certificate chain and the hostname are checked. This also sends SNI
+		// during the TLS handshake, which multi-tenant TLS terminators require (they
+		// otherwise reject with alert 40). Both the request and response paths inspect via
+		// this same NGINX subrequest, so this proxy_ssl config governs backend TLS for both
+		// directions; there is no in-module TLS client.
+		//
+		// Two HTTPS backend shapes are supported:
+		//   - ExternalName: verified against the image's system trust store
+		//     (AlpineSSLRootCAPath) using the APIURL hostname, with a variable proxy_pass for
+		//     per-request re-resolution.
+		//   - In-cluster (ClusterIP) fronted by a BackendTLSPolicy (Guardrails.VerifyTLS set):
+		//     verified against the policy's CA bundle (private-CA and self-signed supported, or
+		//     the system store when the policy references no CA) and hostname, with a fixed
+		//     proxy_pass to the stable cluster DNS name.
+		//
+		// The HTTP Host header must ALSO carry the backend authority (host[:port]):
+		// when proxy_pass targets an ExternalName that NGINX resolves to a rotating
+		// IP, the default Host header does not match what a hostname-routing edge
+		// (API gateway/CDN) expects, and the edge rejects the request with 403 before
+		// it reaches the backend app.
+		// In-cluster HTTP backends need neither TLS verification nor a Host override.
+		var proxySSLVerify *http.ProxySSLVerify
+		var proxyPassVar string
+		var proxySetHeaders []http.Header
+		if parsed, err := url.Parse(loc.Guardrails.APIURL); err == nil && parsed.Scheme == "https" {
+			switch {
+			case loc.Guardrails.VerifyTLS != nil:
+				// In-cluster (ClusterIP) HTTPS backend fronted by a BackendTLSPolicy. Verify against
+				// the policy's CA bundle (or system store when the policy references none) and its
+				// configured hostname, which also drives SNI and the Host header. The backend resolves
+				// via the cluster DNS Service name.
+				verify := *loc.Guardrails.VerifyTLS
+				if verify.Name == "" {
+					verify.Name = parsed.Hostname()
+				}
+				proxySSLVerify = &verify
+				proxySetHeaders = []http.Header{{Name: "Host", Value: verify.Name}}
+
+			default:
+				// ExternalName HTTPS backend verified against the image's system trust store. This
+				// branch is reached only for ExternalName backends: the scheme is https and
+				// VerifyTLS is nil. The dataplane layer (convertGraphGuardrails) is the single source
+				// of truth: it sets VerifyTLS only for in-cluster (non-ExternalName) backends fronted
+				// by a per-Gateway-effective BackendTLSPolicy, and deliberately leaves VerifyTLS nil
+				// for ExternalName backends even when a BackendTLSPolicy targets their Service (such a
+				// policy is ignored for scheme/proxy purposes). Therefore "https with VerifyTLS == nil"
+				// is always an ExternalName backend, and no in-cluster backend can fall through to this
+				// system-trust, variable-proxy_pass path.
+				// Set proxy_ssl_name/Host to the APIURL hostname (certificate + hostname verification,
+				// SNI, and hostname-routing edges). Re-resolve per request via a variable proxy_pass;
+				// a DNS resolver is guaranteed present.
+				proxySSLVerify = &http.ProxySSLVerify{
+					Name:               parsed.Hostname(),
+					TrustedCertificate: dataplane.AlpineSSLRootCAPath,
+				}
+				proxySetHeaders = []http.Header{{Name: "Host", Value: parsed.Host}}
+				proxyPassVar = parsed.Host
+				proxyPass = guardrailsVariableProxyPass(parsed)
+			}
+		}
+
+		result = append(result, http.Location{
+			Path:                   path,
+			Type:                   http.InternalLocationType,
+			ProxyPass:              proxyPass,
+			ProxySSLVerify:         proxySSLVerify,
+			GuardrailsProxyPassVar: proxyPassVar,
+			ProxySetHeaders:        proxySetHeaders,
+		})
+	}
+	return result
+}
+
+// guardrailsVariableProxyPass builds a variable-based proxy_pass target for an HTTPS guardrails
+// backend, e.g. "https://$guardrails_backend/backend/v1/scans". The authority is replaced by the
+// guardrailsProxyPassVar variable (set via a `set` directive to parsed.Host) so NGINX re-resolves
+// it per request.
+func guardrailsVariableProxyPass(parsed *url.URL) string {
+	return parsed.Scheme + "://" + guardrailsProxyPassVar + guardrailsScansPath
 }
 
 func updateLocationCORSFilter(
@@ -1580,6 +1742,14 @@ func updateLocationProxySettings(
 		baseProxySetHeaders,
 	)
 	responseHeaders := generateResponseHeaders(&matchRule.Filters)
+
+	// When guardrails inspection is enabled for this location, force
+	// Accept-Encoding to empty so the upstream LLM does not return a
+	// compressed body. A gzip/br response cannot be parsed by the guardrails
+	// filter and would otherwise be released un-inspected.
+	if matchRule.Guardrails != nil && matchRule.Guardrails.Enabled {
+		proxySetHeaders = forceStripAcceptEncoding(proxySetHeaders)
+	}
 
 	location.ProxySetHeaders = proxySetHeaders
 	location.ProxySSLVerify = createProxyTLSFromBackends(matchRule.BackendGroup.Backends)
@@ -2022,6 +2192,24 @@ func generateProxySetHeaders(
 	}
 
 	return proxySetHeaders
+}
+
+// forceStripAcceptEncoding removes any existing Accept-Encoding entry (e.g. one
+// added by a RequestHeaderModifier filter) and appends a single empty-valued
+// Accept-Encoding header.
+func forceStripAcceptEncoding(headers []http.Header) []http.Header {
+	const acceptEncoding = "Accept-Encoding"
+
+	stripped := make([]http.Header, 0, len(headers)+1)
+	for _, h := range headers {
+		if strings.EqualFold(h.Name, acceptEncoding) {
+			continue
+		}
+		stripped = append(stripped, h)
+	}
+	stripped = append(stripped, http.Header{Name: acceptEncoding, Value: ""})
+
+	return stripped
 }
 
 func generateResponseHeaders(filters *dataplane.HTTPFilters) http.ResponseHeaders {
