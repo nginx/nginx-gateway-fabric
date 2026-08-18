@@ -201,8 +201,15 @@ generate-helm-docs: ## Generate the Helm chart documentation
 generate-helm-schema: ## Generate the Helm chart schema
 	go run github.com/dadav/helm-schema/cmd/helm-schema@$(HELM_SCHEMA_VERSION) --chart-search-root=charts --add-schema-reference "--skip-auto-generation=required,additionalProperties" --append-newline
 
+.PHONY: generate-policies
+generate-policies: ## Generate policies that would otherwise have to be manually typed. Must define policies as "PolicyName:singular" to use TargetRef
+	go run apis/policy-generation/policygen.go -package v1alpha1 -output apis/v1alpha1/policy_methods.go \
+		ClientSettingsPolicy:singular ProxySettingsPolicy UpstreamSettingsPolicy SnippetsPolicy RateLimitPolicy WAFPolicy
+	go run apis/policy-generation/policygen.go -package v1alpha2 -output apis/v1alpha2/policy_methods.go \
+		ObservabilityPolicy
+
 .PHONY: generate-all
-generate-all: generate generate-crds generate-helm-schema generate-manifests generate-api-docs generate-helm-docs verify-operator-rbac ## Generate all the necessary files
+generate-all: generate generate-crds generate-helm-schema generate-manifests generate-api-docs generate-helm-docs generate-policies verify-operator-rbac ## Generate all the necessary files
 
 .PHONY: verify-operator-rbac
 verify-operator-rbac: ## Verify operator RBAC is in sync with Helm chart
