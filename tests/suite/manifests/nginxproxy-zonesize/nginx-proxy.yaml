@@ -1,6 +1,0 @@
-apiVersion: gateway.nginx.org/v1alpha2
-kind: NginxProxy
-metadata:
-  name: zone-size-proxy
-spec:
-  zoneSize: "1m"
