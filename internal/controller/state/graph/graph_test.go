@@ -2519,6 +2519,7 @@ func TestBuildGraph(t *testing.T) {
 				test.store,
 				controllerName,
 				gcName,
+				"cluster.local",
 				map[types.NamespacedName][]PlusSecretFile{
 					client.ObjectKeyFromObject(plusSecret): {
 						{
@@ -2622,6 +2623,12 @@ func TestIsReferenced(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: "not-default",
 			Name:      "serviceInGraph",
+		},
+	}
+	payloadProcessorServiceInGraph := &v1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: "default",
+			Name:      "payloadProcessorServiceInGraph",
 		},
 	}
 	emptyService := &v1.Service{}
@@ -2739,6 +2746,9 @@ func TestIsReferenced(t *testing.T) {
 		ReferencedServices: map[types.NamespacedName]*ReferencedService{
 			client.ObjectKeyFromObject(serviceInGraph): {},
 		},
+		ReferencedPayloadProcessorServices: map[types.NamespacedName]struct{}{
+			client.ObjectKeyFromObject(payloadProcessorServiceInGraph): {},
+		},
 		ReferencedInferencePools: map[types.NamespacedName]*ReferencedInferencePool{
 			client.ObjectKeyFromObject(inferenceInGraph): {},
 		},
@@ -2814,6 +2824,26 @@ func TestIsReferenced(t *testing.T) {
 			expected: true,
 		},
 		{
+			name:     "Secret in graph's ReferencedPayloadProcessorSecrets is referenced",
+			resource: sameNamespaceDifferentNameSecret,
+			graph: &Graph{
+				ReferencedPayloadProcessorSecrets: map[types.NamespacedName]*v1.Secret{
+					client.ObjectKeyFromObject(sameNamespaceDifferentNameSecret): sameNamespaceDifferentNameSecret,
+				},
+			},
+			expected: true,
+		},
+		{
+			name:     "Secret tracked with nil value in ReferencedPayloadProcessorSecrets is referenced",
+			resource: sameNamespaceDifferentNameSecret,
+			graph: &Graph{
+				ReferencedPayloadProcessorSecrets: map[types.NamespacedName]*v1.Secret{
+					client.ObjectKeyFromObject(sameNamespaceDifferentNameSecret): nil,
+				},
+			},
+			expected: true,
+		},
+		{
 			name:     "Secret not in ReferencedSecrets with same Namespace and different Name is not referenced",
 			resource: sameNamespaceDifferentNameSecret,
 			graph:    graph,
@@ -2844,6 +2874,12 @@ func TestIsReferenced(t *testing.T) {
 			resource: serviceNotInGraphSameNameDifferentNS,
 			graph:    graph,
 			expected: false,
+		},
+		{
+			name:     "Service referenced only by a PayloadProcessor policy is referenced",
+			resource: payloadProcessorServiceInGraph,
+			graph:    graph,
+			expected: true,
 		},
 		{
 			name:     "Empty Service",

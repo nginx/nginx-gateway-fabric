@@ -3031,6 +3031,125 @@ func TestBuildConfiguration(t *testing.T) {
 	}
 }
 
+func TestBuildConfiguration_Guardrails(t *testing.T) {
+	t.Parallel()
+
+	fakeResolver := &resolverfakes.FakeServiceResolver{}
+	fakeResolver.ResolveReturns(fooEndpoints, nil)
+
+	tokenSecretNsName := types.NamespacedName{Namespace: "test", Name: "guardrails-token"}
+
+	guardrailsPolicy := func() *graph.Policy {
+		return &graph.Policy{
+			Valid: true,
+			PayloadProcessorState: &graph.PolicyPayloadProcessorState{
+				APIURL:            "http://ext-svc.test.svc.cluster.local:9000",
+				AuthTokenSecret:   &tokenSecretNsName,
+				ResolvedAuthToken: []byte("tok"),
+			},
+		}
+	}
+
+	// buildGraph creates a graph with a single HTTP listener and route, optionally attaching a
+	// PayloadProcessor policy to that route as its effective processor.
+	buildGraph := func(processor *graph.Policy) *graph.Graph {
+		hr, _, route := createTestResources(
+			"hr-guardrails",
+			"foo.example.com",
+			"listener-80-1",
+			pathAndType{path: "/", pathType: prefix},
+		)
+		if processor != nil {
+			route.EffectivePayloadProcessors = map[types.NamespacedName]*graph.Policy{
+				gatewayNsName: processor,
+			}
+		}
+
+		return getModifiedGraph(func(g *graph.Graph) *graph.Graph {
+			gw := g.Gateways[gatewayNsName]
+			gw.Listeners = append(gw.Listeners, &graph.Listener{
+				Name:        "listener-80-1",
+				GatewayName: gatewayNsName,
+				Source:      listener80,
+				Valid:       true,
+				Routes: map[graph.RouteKey]*graph.L7Route{
+					graph.CreateRouteKey(hr): route,
+				},
+			})
+			g.Routes = map[graph.RouteKey]*graph.L7Route{
+				graph.CreateRouteKey(hr): route,
+			}
+			return g
+		})
+	}
+
+	// findGuardrails returns the Guardrails config on the first MatchRule of the first HTTP server's
+	// first path rule, or nil.
+	findGuardrails := func(conf Configuration) *GuardrailsConfig {
+		for _, s := range conf.HTTPServers {
+			for _, pr := range s.PathRules {
+				for _, mr := range pr.MatchRules {
+					if mr.Guardrails != nil {
+						return mr.Guardrails
+					}
+				}
+			}
+		}
+		return nil
+	}
+
+	t.Run("route with effective processor enables guardrails and wires auth secret", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+
+		gr := buildGraph(guardrailsPolicy())
+
+		result := BuildConfiguration(
+			t.Context(),
+			logr.Discard(),
+			gr,
+			gr.Gateways[gatewayNsName],
+			fakeResolver,
+			false,
+			ngfAPIv1alpha2.Dual,
+		)
+
+		g.Expect(result.GuardrailsEnabled).To(BeTrue())
+
+		tokenFileID := GenerateGuardrailsTokenFileID(tokenSecretNsName.Namespace, tokenSecretNsName.Name)
+		g.Expect(result.AuthSecrets).To(HaveKeyWithValue(tokenFileID, AuthFileData("tok")))
+
+		gc := findGuardrails(result)
+		g.Expect(gc).ToNot(BeNil())
+		g.Expect(gc.Enabled).To(BeTrue())
+		g.Expect(gc.APIURL).To(Equal("http://ext-svc.test.svc.cluster.local:9000"))
+		g.Expect(gc.APITokenAuthFileID).To(Equal(tokenFileID))
+	})
+
+	t.Run("route without processor leaves guardrails disabled", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+
+		gr := buildGraph(nil)
+
+		result := BuildConfiguration(
+			t.Context(),
+			logr.Discard(),
+			gr,
+			gr.Gateways[gatewayNsName],
+			fakeResolver,
+			false,
+			ngfAPIv1alpha2.Dual,
+		)
+
+		g.Expect(result.GuardrailsEnabled).To(BeFalse())
+		g.Expect(findGuardrails(result)).To(BeNil())
+
+		tokenFileID := GenerateGuardrailsTokenFileID(tokenSecretNsName.Namespace, tokenSecretNsName.Name)
+		g.Expect(result.AuthSecrets).ToNot(HaveKey(tokenFileID))
+	})
+}
+
 func TestBuildConfiguration_Plus(t *testing.T) {
 	t.Parallel()
 	fooEndpoints := []resolver.Endpoint{
@@ -11992,6 +12111,67 @@ func TestBuildCertBundles(t *testing.T) {
 	}
 }
 
+func TestCollectGuardrailsCertBundleIDs(t *testing.T) {
+	t.Parallel()
+
+	serverWith := func(guardrails *GuardrailsConfig) VirtualServer {
+		return VirtualServer{
+			PathRules: []PathRule{
+				{MatchRules: []MatchRule{{Guardrails: guardrails}}},
+			},
+		}
+	}
+
+	tests := []struct {
+		name     string
+		expected map[CertBundleID]struct{}
+		servers  []VirtualServer
+	}{
+		{
+			name:     "no guardrails",
+			servers:  []VirtualServer{serverWith(nil)},
+			expected: map[CertBundleID]struct{}{},
+		},
+		{
+			name:     "guardrails without VerifyTLS",
+			servers:  []VirtualServer{serverWith(&GuardrailsConfig{Enabled: true})},
+			expected: map[CertBundleID]struct{}{},
+		},
+		{
+			name: "guardrails VerifyTLS using system store (no CertBundleID) is skipped",
+			servers: []VirtualServer{
+				serverWith(&GuardrailsConfig{Enabled: true, VerifyTLS: &VerifyTLS{RootCAPath: AlpineSSLRootCAPath}}),
+			},
+			expected: map[CertBundleID]struct{}{},
+		},
+		{
+			name: "guardrails VerifyTLS with CertBundleID is collected",
+			servers: []VirtualServer{
+				serverWith(&GuardrailsConfig{Enabled: true, VerifyTLS: &VerifyTLS{CertBundleID: "guardrails-ca"}}),
+			},
+			expected: map[CertBundleID]struct{}{"guardrails-ca": {}},
+		},
+		{
+			name: "multiple guardrails backends across servers are deduplicated",
+			servers: []VirtualServer{
+				serverWith(&GuardrailsConfig{Enabled: true, VerifyTLS: &VerifyTLS{CertBundleID: "ca-a"}}),
+				serverWith(&GuardrailsConfig{Enabled: true, VerifyTLS: &VerifyTLS{CertBundleID: "ca-a"}}),
+				serverWith(&GuardrailsConfig{Enabled: true, VerifyTLS: &VerifyTLS{CertBundleID: "ca-b"}}),
+			},
+			expected: map[CertBundleID]struct{}{"ca-a": {}, "ca-b": {}},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			g.Expect(collectGuardrailsCertBundleIDs(test.servers)).To(Equal(test.expected))
+		})
+	}
+}
+
 func TestBuildUpstreamsWithClusterIP(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
@@ -12190,4 +12370,137 @@ func TestBuildUpstreamsUseClusterIPPrecedence(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestBuildGuardrailsAuthSecrets(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	secretNsName := types.NamespacedName{Namespace: "ns1", Name: "token-secret"}
+	otherSecretNsName := types.NamespacedName{Namespace: "ns1", Name: "other-token-secret"}
+
+	gwNsName := types.NamespacedName{Namespace: "ns1", Name: "gw"}
+	otherGwNsName := types.NamespacedName{Namespace: "ns1", Name: "other-gw"}
+
+	gwSource := func(nsName types.NamespacedName) *v1.Gateway {
+		return &v1.Gateway{
+			ObjectMeta: metav1.ObjectMeta{Namespace: nsName.Namespace, Name: nsName.Name},
+		}
+	}
+
+	// routeWithToken builds a route whose per-Gateway effective processor (for the given gateways)
+	// carries a token backed by secret.
+	routeWithToken := func(
+		secret types.NamespacedName,
+		token string,
+		valid bool,
+		gateways ...types.NamespacedName,
+	) *graph.L7Route {
+		policy := &graph.Policy{
+			Valid: true,
+			PayloadProcessorState: &graph.PolicyPayloadProcessorState{
+				APIURL:            "http://svc:9000",
+				AuthTokenSecret:   &secret,
+				ResolvedAuthToken: []byte(token),
+			},
+		}
+		effective := make(map[types.NamespacedName]*graph.Policy)
+		for _, gw := range gateways {
+			effective[gw] = policy
+		}
+		return &graph.L7Route{Valid: valid, EffectivePayloadProcessors: effective}
+	}
+
+	withToken := routeWithToken(secretNsName, "tok", true, gwNsName)
+	withoutToken := &graph.L7Route{
+		Valid: true,
+		EffectivePayloadProcessors: map[types.NamespacedName]*graph.Policy{
+			gwNsName: {
+				Valid:                 true,
+				PayloadProcessorState: &graph.PolicyPayloadProcessorState{APIURL: "http://svc:9000"},
+			},
+		},
+	}
+	noProcessor := &graph.L7Route{Valid: true}
+	// invalidRoute carries a token but is not Valid, so it must be skipped.
+	invalidRoute := routeWithToken(otherSecretNsName, "invalid-route-tok", false, gwNsName)
+	// invalidListenerRoute carries a token but sits on an invalid listener, so it must be skipped.
+	invalidListenerRoute := routeWithToken(otherSecretNsName, "invalid-listener-tok", true, gwNsName)
+	// otherGwOnlyRoute has a token, but only for another Gateway; it must not leak into gw's config
+	// even though it is enumerated under gw's listener.
+	otherGwOnlyRoute := routeWithToken(otherSecretNsName, "other-gw-tok", true, otherGwNsName)
+
+	key := func(name string) graph.RouteKey {
+		return graph.RouteKey{NamespacedName: types.NamespacedName{Namespace: "ns1", Name: name}}
+	}
+
+	gateway := &graph.Gateway{
+		Source: gwSource(gwNsName),
+		Listeners: []*graph.Listener{
+			{
+				Valid: true,
+				Routes: map[graph.RouteKey]*graph.L7Route{
+					key("r1"): withToken,
+					key("r2"): withoutToken,
+					key("r3"): noProcessor,
+					key("r4"): invalidRoute,
+					key("r7"): otherGwOnlyRoute,
+				},
+			},
+			{
+				Valid: false,
+				Routes: map[graph.RouteKey]*graph.L7Route{
+					key("r5"): invalidListenerRoute,
+				},
+			},
+		},
+	}
+
+	got := buildGuardrailsAuthSecrets(gateway)
+
+	id := GenerateGuardrailsTokenFileID("ns1", "token-secret")
+	otherID := GenerateGuardrailsTokenFileID("ns1", "other-token-secret")
+	// Only the valid route on the valid listener with a processor for this gateway contributes a token.
+	g.Expect(got).To(HaveLen(1))
+	g.Expect(got).To(HaveKeyWithValue(id, AuthFileData("tok")))
+	// Tokens from an invalid route, a route on an invalid listener, or a route whose processor belongs
+	// to another gateway must not be included.
+	g.Expect(got).ToNot(HaveKey(otherID))
+
+	// The other gateway does collect its own token for the shared route, confirming per-gateway scoping
+	// rather than a global drop.
+	otherGateway := &graph.Gateway{
+		Source: gwSource(otherGwNsName),
+		Listeners: []*graph.Listener{
+			{
+				Valid:  true,
+				Routes: map[graph.RouteKey]*graph.L7Route{key("r7"): otherGwOnlyRoute},
+			},
+		},
+	}
+	g.Expect(buildGuardrailsAuthSecrets(otherGateway)).To(HaveKeyWithValue(otherID, AuthFileData("other-gw-tok")))
+
+	// A gateway with a nil Source yields no tokens.
+	g.Expect(buildGuardrailsAuthSecrets(&graph.Gateway{})).To(BeEmpty())
+	g.Expect(buildGuardrailsAuthSecrets(nil)).To(BeEmpty())
+}
+
+func TestGuardrailsEnabled(t *testing.T) {
+	t.Parallel()
+
+	withGuardrails := []VirtualServer{
+		{
+			PathRules: []PathRule{
+				{MatchRules: []MatchRule{{Guardrails: &GuardrailsConfig{Enabled: true}}}},
+			},
+		},
+	}
+	withoutGuardrails := []VirtualServer{
+		{PathRules: []PathRule{{MatchRules: []MatchRule{{}}}}},
+	}
+
+	g := NewWithT(t)
+	g.Expect(guardrailsEnabled(withoutGuardrails)).To(BeFalse())
+	g.Expect(guardrailsEnabled(withoutGuardrails, withGuardrails)).To(BeTrue())
+	g.Expect(guardrailsEnabled()).To(BeFalse())
 }

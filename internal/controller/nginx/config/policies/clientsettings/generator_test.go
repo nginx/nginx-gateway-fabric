@@ -16,6 +16,7 @@ import (
 func TestGenerate(t *testing.T) {
 	t.Parallel()
 	maxSize := helpers.GetPointer[ngfAPIv1alpha1.Size]("10m")
+	bufferSize := helpers.GetPointer[ngfAPIv1alpha1.Size]("8k")
 	bodyTimeout := helpers.GetPointer[ngfAPIv1alpha1.Duration]("600ms")
 	keepaliveRequests := helpers.GetPointer[int32](900)
 	keepaliveTime := helpers.GetPointer[ngfAPIv1alpha1.Duration]("50s")
@@ -39,6 +40,19 @@ func TestGenerate(t *testing.T) {
 			},
 			expStrings: []string{
 				"client_max_body_size 10m;",
+			},
+		},
+		{
+			name: "body buffer size populated",
+			policy: &ngfAPIv1alpha1.ClientSettingsPolicy{
+				Spec: ngfAPIv1alpha1.ClientSettingsPolicySpec{
+					Body: &ngfAPIv1alpha1.ClientBody{
+						BufferSize: bufferSize,
+					},
+				},
+			},
+			expStrings: []string{
+				"client_body_buffer_size 8k;",
 			},
 		},
 		{
@@ -142,8 +156,9 @@ func TestGenerate(t *testing.T) {
 			policy: &ngfAPIv1alpha1.ClientSettingsPolicy{
 				Spec: ngfAPIv1alpha1.ClientSettingsPolicySpec{
 					Body: &ngfAPIv1alpha1.ClientBody{
-						MaxSize: maxSize,
-						Timeout: bodyTimeout,
+						MaxSize:    maxSize,
+						BufferSize: bufferSize,
+						Timeout:    bodyTimeout,
 					},
 					KeepAlive: &ngfAPIv1alpha1.ClientKeepAlive{
 						Requests:   keepaliveRequests,
@@ -158,6 +173,7 @@ func TestGenerate(t *testing.T) {
 			},
 			expStrings: []string{
 				"client_max_body_size 10m;",
+				"client_body_buffer_size 8k;",
 				"client_body_timeout 600ms",
 				"keepalive_requests 900;",
 				"keepalive_time 50s;",

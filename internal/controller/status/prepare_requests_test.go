@@ -2695,6 +2695,7 @@ func TestBuildNGFPolicyStatusesProgrammedCondition(t *testing.T) {
 		kinds.ProxySettingsPolicy,
 		kinds.RateLimitPolicy,
 		kinds.SnippetsPolicy,
+		kinds.PayloadProcessor,
 	}
 
 	programmedCond := metav1.Condition{

@@ -428,12 +428,16 @@ func TestManager_pollErrors(t *testing.T) {
 	policyNsName := types.NamespacedName{Namespace: "default", Name: "test-policy"}
 	bundleKey := graph.WAFBundleKey("default_test-policy")
 
+	// Register a poller entry so recordPollResult accepts results for this policy.
+	p := &poller{}
+	mgr.pollers[policyNsName] = &pollerEntry{poller: p, cancel: func() {}}
+
 	// Initially no errors.
 	g.Expect(mgr.GetAllPollErrors()).To(BeNil())
 
 	// Record an error.
 	testErr := errors.New("network timeout")
-	mgr.recordPollResult(policyNsName, bundleKey, "policy bundle", "", testErr)
+	mgr.recordPollResult(p, policyNsName, bundleKey, "policy bundle", "", testErr)
 
 	allErrors := mgr.GetAllPollErrors()
 	g.Expect(allErrors).To(HaveLen(1))
@@ -443,7 +447,7 @@ func TestManager_pollErrors(t *testing.T) {
 	g.Expect(allErrors[policyNsName].Err).To(Equal(testErr))
 
 	// Clear error on success.
-	mgr.recordPollResult(policyNsName, bundleKey, "policy bundle", "", nil)
+	mgr.recordPollResult(p, policyNsName, bundleKey, "policy bundle", "", nil)
 
 	g.Expect(mgr.GetAllPollErrors()).To(BeNil())
 }
@@ -585,6 +589,107 @@ func TestManager_stopPollersNotInClearsBundleCache(t *testing.T) {
 	g.Expect(bundles).ToNot(HaveKey(bundleKeyB))
 }
 
+func TestManager_stopPollerDiscardsInFlightPollResults(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	mgr := newTestManager(ManagerConfig{
+		Logger:      logr.Discard(),
+		Fetcher:     &fetchfakes.FakeFetcher{},
+		Deployments: &agentfakes.FakeDeploymentStorer{},
+	})
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	policyNsName := types.NamespacedName{Namespace: "default", Name: "test-policy"}
+	bundleKey := graph.WAFBundleKey("test_policy")
+	sources := []BundleSource{
+		{
+			BundleKey: bundleKey,
+			Request:   fetch.Request{URL: "http://example.com/bundle.tgz"},
+			Interval:  1 * time.Hour,
+		},
+	}
+
+	mgr.ReconcilePoller(ctx, Config{
+		PolicyNsName:      policyNsName,
+		Sources:           sources,
+		TargetDeployments: []types.NamespacedName{{Namespace: "nginx-gateway", Name: "nginx"}},
+	})
+
+	// Capture the poller's callbacks; an in-flight poll invokes these, possibly after teardown.
+	p := mgr.pollers[policyNsName].poller
+
+	mgr.StopPoller(policyNsName)
+
+	// Simulate an in-flight poll finishing after the poller was stopped.
+	// The stopped poller's results must be discarded, not resurrect cleared state.
+	p.statusCallback(policyNsName, bundleKey, "", errors.New("network timeout"))
+	g.Expect(mgr.GetAllPollErrors()).ToNot(HaveKey(policyNsName))
+
+	p.statusCallback(policyNsName, bundleKey, "stale-checksum", nil)
+	g.Expect(mgr.GetAllBundleUpdates()).ToNot(HaveKey(policyNsName))
+
+	p.bundleUpdateCallback(bundleKey, []byte("stale-data"), "stale-checksum")
+	g.Expect(mgr.GetLatestBundles()).ToNot(HaveKey(bundleKey))
+}
+
+func TestManager_restartedPollerDiscardsStaleInFlightPollResults(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	mgr := newTestManager(ManagerConfig{
+		Logger:      logr.Discard(),
+		Fetcher:     &fetchfakes.FakeFetcher{},
+		Deployments: &agentfakes.FakeDeploymentStorer{},
+	})
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	policyNsName := types.NamespacedName{Namespace: "default", Name: "test-policy"}
+	oldBundleKey := graph.WAFBundleKey("test_policy_old")
+	newBundleKey := graph.WAFBundleKey("test_policy_new")
+	targets := []types.NamespacedName{{Namespace: "nginx-gateway", Name: "nginx"}}
+
+	mgr.ReconcilePoller(ctx, Config{
+		PolicyNsName: policyNsName,
+		Sources: []BundleSource{{
+			BundleKey: oldBundleKey,
+			Request:   fetch.Request{URL: "http://example.com/old.tgz"},
+			Interval:  1 * time.Hour,
+		}},
+		TargetDeployments: targets,
+	})
+
+	oldPoller := mgr.pollers[policyNsName].poller
+
+	// Reconcile with changed sources - the poller is replaced by a new instance.
+	mgr.ReconcilePoller(ctx, Config{
+		PolicyNsName: policyNsName,
+		Sources: []BundleSource{{
+			BundleKey: newBundleKey,
+			Request:   fetch.Request{URL: "http://example.com/new.tgz"},
+			Interval:  1 * time.Hour,
+		}},
+		TargetDeployments: targets,
+	})
+
+	g.Expect(mgr.pollers[policyNsName].poller).ToNot(BeIdenticalTo(oldPoller))
+
+	// Simulate the replaced poller's in-flight poll finishing after the restart.
+	// Its results must not be recorded under the new poller's registration.
+	oldPoller.statusCallback(policyNsName, oldBundleKey, "", errors.New("network timeout"))
+	g.Expect(mgr.GetAllPollErrors()).ToNot(HaveKey(policyNsName))
+
+	oldPoller.statusCallback(policyNsName, oldBundleKey, "stale-checksum", nil)
+	g.Expect(mgr.GetAllBundleUpdates()).ToNot(HaveKey(policyNsName))
+
+	oldPoller.bundleUpdateCallback(oldBundleKey, []byte("stale-data"), "stale-checksum")
+	g.Expect(mgr.GetLatestBundles()).ToNot(HaveKey(oldBundleKey))
+}
+
 func TestManager_GetLatestBundles(t *testing.T) {
 	t.Parallel()
 
@@ -615,6 +720,8 @@ func TestManager_GetLatestBundles(t *testing.T) {
 		bundleData := []byte("bundle content")
 		checksum := "abc123"
 
+		mgr.bundleKeyToPolicy[bundleKey] = types.NamespacedName{Namespace: "default", Name: "my-policy"}
+
 		mgr.cacheBundleUpdate(bundleKey, bundleData, checksum)
 
 		bundles := mgr.GetLatestBundles()
@@ -636,6 +743,7 @@ func TestManager_GetLatestBundles(t *testing.T) {
 		})
 
 		bundleKey := graph.WAFBundleKey("default_my-policy")
+		mgr.bundleKeyToPolicy[bundleKey] = types.NamespacedName{Namespace: "default", Name: "my-policy"}
 		mgr.cacheBundleUpdate(bundleKey, []byte("old"), "old-checksum")
 		mgr.cacheBundleUpdate(bundleKey, []byte("new"), "new-checksum")
 
@@ -656,6 +764,7 @@ func TestManager_GetLatestBundles(t *testing.T) {
 		})
 
 		bundleKey := graph.WAFBundleKey("default_my-policy")
+		mgr.bundleKeyToPolicy[bundleKey] = types.NamespacedName{Namespace: "default", Name: "my-policy"}
 		mgr.cacheBundleUpdate(bundleKey, []byte("data"), "checksum")
 
 		copy1 := mgr.GetLatestBundles()
@@ -676,7 +785,9 @@ func TestManager_GetLatestBundles(t *testing.T) {
 			Deployments: &agentfakes.FakeDeploymentStorer{},
 		})
 
-		mgr.cacheBundleUpdate(graph.WAFBundleKey("default_policy"), []byte("data"), "checksum")
+		bundleKey := graph.WAFBundleKey("default_policy")
+		mgr.bundleKeyToPolicy[bundleKey] = types.NamespacedName{Namespace: "default", Name: "policy"}
+		mgr.cacheBundleUpdate(bundleKey, []byte("data"), "checksum")
 		g.Expect(mgr.GetLatestBundles()).To(HaveLen(1))
 
 		mgr.stopAll()
