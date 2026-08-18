@@ -1028,48 +1028,30 @@ func addPolicyAffectedStatusToTargetRefs(
 	}
 }
 
-//nolint:gocyclo // will refactor later
 func addStatusToTargetRefs(policyKind string, conditionsList *[]conditions.Condition) {
 	if conditionsList == nil {
 		return
 	}
-	switch policyKind {
-	case kinds.ObservabilityPolicy:
-		if conditions.HasMatchingCondition(*conditionsList, conditions.NewObservabilityPolicyAffected()) {
-			return
-		}
-		*conditionsList = append(*conditionsList, conditions.NewObservabilityPolicyAffected())
-	case kinds.ClientSettingsPolicy:
-		if conditions.HasMatchingCondition(*conditionsList, conditions.NewClientSettingsPolicyAffected()) {
-			return
-		}
-		*conditionsList = append(*conditionsList, conditions.NewClientSettingsPolicyAffected())
-	case kinds.SnippetsPolicy:
-		if conditions.HasMatchingCondition(*conditionsList, conditions.NewSnippetsPolicyAffected()) {
-			return
-		}
-		*conditionsList = append(*conditionsList, conditions.NewSnippetsPolicyAffected())
-	case kinds.ProxySettingsPolicy:
-		if conditions.HasMatchingCondition(*conditionsList, conditions.NewProxySettingsPolicyAffected()) {
-			return
-		}
-		*conditionsList = append(*conditionsList, conditions.NewProxySettingsPolicyAffected())
-	case kinds.RateLimitPolicy:
-		if conditions.HasMatchingCondition(*conditionsList, conditions.NewRateLimitPolicyAffected()) {
-			return
-		}
-		*conditionsList = append(*conditionsList, conditions.NewRateLimitPolicyAffected())
-	case kinds.WAFPolicy:
-		if conditions.HasMatchingCondition(*conditionsList, conditions.NewWAFPolicyAffected()) {
-			return
-		}
-		*conditionsList = append(*conditionsList, conditions.NewWAFPolicyAffected())
-	case kinds.PayloadProcessor:
-		if conditions.HasMatchingCondition(*conditionsList, conditions.NewPayloadProcessorPolicyAffected()) {
-			return
-		}
-		*conditionsList = append(*conditionsList, conditions.NewPayloadProcessorPolicyAffected())
+
+	policyDeterminingCondition := map[string]func() conditions.Condition{
+		kinds.ObservabilityPolicy:  conditions.NewObservabilityPolicyAffected,
+		kinds.ClientSettingsPolicy: conditions.NewClientSettingsPolicyAffected,
+		kinds.SnippetsPolicy:       conditions.NewSnippetsPolicyAffected,
+		kinds.ProxySettingsPolicy:  conditions.NewProxySettingsPolicyAffected,
+		kinds.RateLimitPolicy:      conditions.NewRateLimitPolicyAffected,
+		kinds.WAFPolicy:            conditions.NewWAFPolicyAffected,
+		kinds.PayloadProcessor:     conditions.NewPayloadProcessorPolicyAffected,
 	}
+
+	condition, ok := policyDeterminingCondition[policyKind]
+	if !ok {
+		return
+	}
+
+	if conditions.HasMatchingCondition(*conditionsList, condition()) {
+		return
+	}
+	*conditionsList = append(*conditionsList, condition())
 }
 
 // processWAFPolicies processes WAFPolicy resources and fetches their bundles.
