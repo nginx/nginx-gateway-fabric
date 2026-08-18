@@ -1911,9 +1911,8 @@ func buildUpstream(
 		useClusterIP = *uspSettings.UseClusterIP
 	}
 
-	// The NginxProxy setting provides the default; a ZoneSize value set in an
-	// UpstreamSettingsPolicy for this Service takes precedence over that default.
-	if resolveZoneSize(gateway.EffectiveNginxProxy, uspSettings.ZoneSize) {
+	// The NginxProxy setting provides the default; If the upstream value is not set, the default takes over
+	if gateway.EffectiveNginxProxy != nil && gateway.EffectiveNginxProxy.ZoneSize != nil && uspSettings.ZoneSize == nil {
 		uspSettings.ZoneSize = gateway.EffectiveNginxProxy.ZoneSize
 	}
 
@@ -2815,12 +2814,6 @@ func getClusterIP(
 // Service ClusterIP instead of individual Pod IPs.
 func useClusterIPForNginxProxy(np *graph.EffectiveNginxProxy) bool {
 	return np != nil && np.UseClusterIP != nil && *np.UseClusterIP
-}
-
-// resolveZoneSize returns true if the NginxProxy has a zone size configured
-// but the upstream route does not.
-func resolveZoneSize(np *graph.EffectiveNginxProxy, uspZoneSize *ngfAPIv1alpha1.Size) bool {
-	return np != nil && np.ZoneSize != nil && uspZoneSize == nil
 }
 
 // resolveUpstreamEndpoints handles service resolution for both regular and ExternalName services.
