@@ -15,7 +15,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/nginx/agent/v3 v3.11.3
 	github.com/nginx/telemetry-exporter v0.1.5
-	github.com/onsi/ginkgo/v2 v2.32.0
+	github.com/onsi/ginkgo/v2 v2.32.1
 	github.com/onsi/gomega v1.42.1
 	github.com/prometheus/client_golang v1.24.1
 	github.com/spf13/cobra v1.10.2
