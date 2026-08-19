@@ -668,6 +668,11 @@ func (in *NginxProxySpec) DeepCopyInto(out *NginxProxySpec) {
 		*out = new(WAFSpec)
 		(*in).DeepCopyInto(*out)
 	}
+	if in.ZoneSize != nil {
+		in, out := &in.ZoneSize, &out.ZoneSize
+		*out = new(v1alpha1.Size)
+		**out = **in
+	}
 	if in.DisableBaseHeaders != nil {
 		in, out := &in.DisableBaseHeaders, &out.DisableBaseHeaders
 		*out = make([]BaseHeaderName, len(*in))
