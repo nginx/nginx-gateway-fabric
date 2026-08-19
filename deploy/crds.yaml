@@ -10574,7 +10574,7 @@ spec:
                   accessLog:
                     description: |-
                       AccessLog defines the access log settings, including format itself and disabling option.
-                      For now only path /dev/stdout can be used.
+                      Default path /dev/stdout can be used or file/syslog destinations can be configured.
                     properties:
                       disable:
                         description: Disable turns off access logging when set to
@@ -10595,13 +10595,42 @@ spec:
                         description: |-
                           Format specifies the custom log format string.
                           If not specified, NGINX default 'combined' format is used.
-                          For now only path /dev/stdout can be used.
+                          Default path /dev/stdout can be used or file/syslog destinations can be configured.
                           Single quotes and line breaks are not allowed because the format is
                           rendered inside a single-quoted NGINX log_format directive.
                           See https://nginx.org/en/docs/http/ngx_http_log_module.html#log_format
                         maxLength: 4096
                         pattern: ^[^'\x0A\x0D]*$
                         type: string
+                      destination:
+                        description: |-
+                          Destination specifies where access logs are sent.
+                          Possible type values are: 'file', 'syslog'.
+                          If type not specified, NGINX default type 'file' is used.
+                        properties:
+                          file:
+                            description: File path configuration.
+                            properties:
+                              path:
+                                description: Path is the path to the access log file.
+                                type: string
+                            type: object
+                          syslog:
+                            description: Syslog destination configuration.
+                            properties:
+                              server:
+                                description: Server is the syslog server for access logs.
+                                pattern: ^[a-zA-Z0-9.-]+:[0-9]+$
+                                type: string
+                            type: object
+                          type:
+                            default: file
+                            description: Type specifies the type of destination for access logs.
+                            enum:
+                            - file
+                            - syslog
+                            type: string
+                        type: object
                     type: object
                   agentLevel:
                     default: info
