@@ -1911,6 +1911,11 @@ func buildUpstream(
 		useClusterIP = *uspSettings.UseClusterIP
 	}
 
+	// The NginxProxy setting provides the default; If the upstream value is not set, the default takes over
+	if gateway.EffectiveNginxProxy != nil && gateway.EffectiveNginxProxy.ZoneSize != nil && uspSettings.ZoneSize == nil {
+		uspSettings.ZoneSize = gateway.EffectiveNginxProxy.ZoneSize
+	}
+
 	eps, err := resolveUpstreamEndpoints(
 		ctx,
 		logger,
