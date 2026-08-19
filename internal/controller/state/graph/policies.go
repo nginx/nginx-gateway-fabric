@@ -103,6 +103,16 @@ type PolicyKey struct {
 // where urlHash is a truncated SHA-256 hex digest of the log source URL.
 type WAFBundleKey string
 
+var policyDeterminingCondition = map[string]func() conditions.Condition{
+	kinds.ObservabilityPolicy:  conditions.NewObservabilityPolicyAffected,
+	kinds.ClientSettingsPolicy: conditions.NewClientSettingsPolicyAffected,
+	kinds.SnippetsPolicy:       conditions.NewSnippetsPolicyAffected,
+	kinds.ProxySettingsPolicy:  conditions.NewProxySettingsPolicyAffected,
+	kinds.RateLimitPolicy:      conditions.NewRateLimitPolicyAffected,
+	kinds.WAFPolicy:            conditions.NewWAFPolicyAffected,
+	kinds.PayloadProcessor:     conditions.NewPayloadProcessorPolicyAffected,
+}
+
 // PolicyBundleKey returns the WAFBundleKey for a WAFPolicy's main policy bundle.
 func PolicyBundleKey(policyNsName types.NamespacedName) WAFBundleKey {
 	return WAFBundleKey(fmt.Sprintf("%s_%s", policyNsName.Namespace, policyNsName.Name))
@@ -1031,16 +1041,6 @@ func addPolicyAffectedStatusToTargetRefs(
 func addStatusToTargetRefs(policyKind string, conditionsList *[]conditions.Condition) {
 	if conditionsList == nil {
 		return
-	}
-
-	policyDeterminingCondition := map[string]func() conditions.Condition{
-		kinds.ObservabilityPolicy:  conditions.NewObservabilityPolicyAffected,
-		kinds.ClientSettingsPolicy: conditions.NewClientSettingsPolicyAffected,
-		kinds.SnippetsPolicy:       conditions.NewSnippetsPolicyAffected,
-		kinds.ProxySettingsPolicy:  conditions.NewProxySettingsPolicyAffected,
-		kinds.RateLimitPolicy:      conditions.NewRateLimitPolicyAffected,
-		kinds.WAFPolicy:            conditions.NewWAFPolicyAffected,
-		kinds.PayloadProcessor:     conditions.NewPayloadProcessorPolicyAffected,
 	}
 
 	condition, ok := policyDeterminingCondition[policyKind]
