@@ -161,6 +161,14 @@ type NginxProxySpec struct {
 	//
 	// +optional
 	WAF *WAFSpec `json:"waf,omitempty"`
+	// ZoneSize is the size of the shared memory zone used by the upstream. This memory zone is used to share
+	// the upstream configuration between nginx worker processes. The more servers that an upstream has,
+	// the larger memory zone is required.
+	// Default: OSS: 512k, Plus: 1m.
+	// Directive: https://nginx.org/en/docs/http/ngx_http_upstream_module.html#zone
+	//
+	// +optional
+	ZoneSize *v1alpha1.Size `json:"zoneSize,omitempty"`
 	// DisableBaseHeaders specifies which default X-* base headers should be omitted
 	// from being added to the base proxy_set_header directives in the NGINX configuration.
 	// This allows users to set these headers themselves without NGF overriding them.
