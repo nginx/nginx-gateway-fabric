@@ -2661,13 +2661,12 @@ func buildAccessLog(srcLogSettings *ngfAPIv1alpha2.NginxLogging) *AccessLog {
 			srcLogSettings.AccessLog.Destination != nil {
 			accessLog := &AccessLog{
 				Format: *srcLogSettings.AccessLog.Format,
-				Path:   DefaultAccessLogPath,
 			}
 			if srcLogSettings.AccessLog.Escape != nil {
 				accessLog.Escape = string(*srcLogSettings.AccessLog.Escape)
-			}
-			if srcLogSettings.AccessLog.Destination != nil {
-				setAccessLogDestination(accessLog, srcLogSettings.AccessLog.Destination)
+				if srcLogSettings.AccessLog.Destination != nil {
+					setAccessLogDestination(accessLog, srcLogSettings.AccessLog.Destination)
+				}
 			}
 			return accessLog
 		}
