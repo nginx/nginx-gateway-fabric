@@ -915,6 +915,8 @@ type DeploymentContext struct {
 type AccessLog struct {
 	// Format is the access log format template.
 	Format string
+	// Path is the destination for the access log (file path or syslog).
+	Path string
 	// Escape specifies how to escape characters in variables (default, json, none).
 	Escape string
 	// Disable specifies whether the access log is disabled.
