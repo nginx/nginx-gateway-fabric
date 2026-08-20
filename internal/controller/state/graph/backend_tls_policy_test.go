@@ -267,7 +267,7 @@ func TestValidateBackendTLSPolicy(t *testing.T) {
 				Spec: gatewayv1.BackendTLSPolicySpec{
 					TargetRefs: targetRefNormalCase,
 					Validation: gatewayv1.BackendTLSPolicyValidation{
-						WellKnownCACertificates: (helpers.GetPointer(gatewayv1.WellKnownCACertificatesSystem)),
+						WellKnownCACertificates: helpers.GetPointer(gatewayv1.WellKnownCACertificatesSystem),
 						Hostname:                "foo.test.com",
 					},
 				},
@@ -397,7 +397,7 @@ func TestValidateBackendTLSPolicy(t *testing.T) {
 					Validation: gatewayv1.BackendTLSPolicyValidation{
 						CACertificateRefs:       localObjectRefNormalCase,
 						Hostname:                "foo.test.com",
-						WellKnownCACertificates: (helpers.GetPointer(gatewayv1.WellKnownCACertificatesSystem)),
+						WellKnownCACertificates: helpers.GetPointer(gatewayv1.WellKnownCACertificatesSystem),
 					},
 				},
 			},
