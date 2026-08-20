@@ -145,6 +145,14 @@ func validateInferencePoolExtensionRef(
 		return nil
 	}
 
+	if ip.Spec.EndpointPickerRef == nil {
+		failingCond = conditions.NewInferencePoolEndpointPickerRefMissing(
+			"spec.endpointPickerRef must be set; NGINX Gateway Fabric requires " +
+				"an EndpointPicker extension to route to this InferencePool",
+		)
+		return &failingCond
+	}
+
 	// if kind is empty, it defaults to Service
 	kind := string(ip.Spec.EndpointPickerRef.Kind)
 	if kind == "" {

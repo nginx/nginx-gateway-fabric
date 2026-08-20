@@ -1171,7 +1171,7 @@ func TestAddBackendRefsToRules(t *testing.T) {
 					IsInferencePool:    true,
 					EndpointPickerConfig: EndpointPickerConfig{
 						NsName:            svcInferenceNsName.Namespace,
-						EndpointPickerRef: &inference.EndpointPickerRef{},
+						EndpointPickerRef: nil,
 					},
 				},
 			},
