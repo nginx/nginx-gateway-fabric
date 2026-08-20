@@ -348,7 +348,7 @@ func TestValidateBackendTLSPolicy(t *testing.T) {
 				Spec: gatewayv1.BackendTLSPolicySpec{
 					TargetRefs: targetRefNormalCase,
 					Validation: gatewayv1.BackendTLSPolicyValidation{
-						WellKnownCACertificates: (helpers.GetPointer(gatewayv1.WellKnownCACertificatesType("unknown"))),
+						WellKnownCACertificates: helpers.GetPointer(gatewayv1.WellKnownCACertificatesType("unknown")),
 						Hostname:                "foo.test.com",
 					},
 				},

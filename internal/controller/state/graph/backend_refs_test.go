@@ -1336,7 +1336,7 @@ func TestCreateBackend(t *testing.T) {
 				},
 				Validation: gatewayv1.BackendTLSPolicyValidation{
 					Hostname:                "foo.example.com",
-					WellKnownCACertificates: (helpers.GetPointer(gatewayv1.WellKnownCACertificatesType("unknown"))),
+					WellKnownCACertificates: helpers.GetPointer(gatewayv1.WellKnownCACertificatesType("unknown")),
 				},
 			},
 		},
