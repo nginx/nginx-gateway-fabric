@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.23
+# syntax=docker/dockerfile:1.26
 # Build/test *environment* image for the ai-guardrails Rust module.
 # It contains the toolchain, clang, and a configured nginx
 # source tree, but NO module source and NO test/lint execution. Lint and tests
