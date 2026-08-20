@@ -2660,7 +2660,6 @@ func buildAccessLog(srcLogSettings *ngfAPIv1alpha2.NginxLogging) *AccessLog {
 		if srcLogSettings.AccessLog.Format != nil && *srcLogSettings.AccessLog.Format != "" {
 			accessLog := &AccessLog{
 				Format: *srcLogSettings.AccessLog.Format,
-				Path:   DefaultAccessLogPath,
 			}
 			if srcLogSettings.AccessLog.Escape != nil {
 				accessLog.Escape = string(*srcLogSettings.AccessLog.Escape)
