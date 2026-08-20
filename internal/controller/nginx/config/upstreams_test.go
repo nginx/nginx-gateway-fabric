@@ -64,7 +64,7 @@ func TestExecuteUpstreams_NginxOSS(t *testing.T) {
 				},
 			},
 			UpstreamSettings: upstreamsettings.UpstreamSettings{
-				ZoneSize: "2m",
+				ZoneSize: helpers.GetPointer[ngfAPI.Size]("2m"),
 				KeepAlive: http.UpstreamKeepAlive{
 					Connections: helpers.GetPointer[int32](1),
 					Requests:    1,
@@ -83,7 +83,7 @@ func TestExecuteUpstreams_NginxOSS(t *testing.T) {
 				},
 			},
 			UpstreamSettings: upstreamsettings.UpstreamSettings{
-				ZoneSize: "2m",
+				ZoneSize: helpers.GetPointer[ngfAPI.Size]("2m"),
 				KeepAlive: http.UpstreamKeepAlive{
 					Connections: helpers.GetPointer[int32](0),
 					Requests:    1,
@@ -215,7 +215,7 @@ func TestExecuteUpstreams_NginxPlus(t *testing.T) {
 				},
 			},
 			UpstreamSettings: upstreamsettings.UpstreamSettings{
-				ZoneSize: "2m",
+				ZoneSize: helpers.GetPointer[ngfAPI.Size]("2m"),
 				KeepAlive: http.UpstreamKeepAlive{
 					Connections: helpers.GetPointer[int32](1),
 					Requests:    1,
@@ -278,7 +278,7 @@ func TestExecuteUpstreams_NginxPlus(t *testing.T) {
 				},
 			},
 			UpstreamSettings: upstreamsettings.UpstreamSettings{
-				ZoneSize: "2m",
+				ZoneSize: helpers.GetPointer[ngfAPI.Size]("2m"),
 				KeepAlive: http.UpstreamKeepAlive{
 					Connections: helpers.GetPointer[int32](0),
 					Requests:    1,
@@ -407,7 +407,7 @@ func TestCreateUpstreams(t *testing.T) {
 				},
 			},
 			UpstreamSettings: upstreamsettings.UpstreamSettings{
-				ZoneSize: "2m",
+				ZoneSize: helpers.GetPointer[ngfAPI.Size]("2m"),
 				KeepAlive: http.UpstreamKeepAlive{
 					Connections: helpers.GetPointer[int32](1),
 					Requests:    1,
@@ -426,7 +426,7 @@ func TestCreateUpstreams(t *testing.T) {
 				},
 			},
 			UpstreamSettings: upstreamsettings.UpstreamSettings{
-				ZoneSize: "2m",
+				ZoneSize: helpers.GetPointer[ngfAPI.Size]("2m"),
 				KeepAlive: http.UpstreamKeepAlive{
 					Connections: helpers.GetPointer[int32](0),
 					Requests:    1,
@@ -640,7 +640,7 @@ func TestCreateUpstream(t *testing.T) {
 					},
 				},
 				UpstreamSettings: upstreamsettings.UpstreamSettings{
-					ZoneSize: "2m",
+					ZoneSize: helpers.GetPointer[ngfAPI.Size]("2m"),
 					KeepAlive: http.UpstreamKeepAlive{
 						Connections: helpers.GetPointer[int32](1),
 						Requests:    1,
@@ -678,7 +678,7 @@ func TestCreateUpstream(t *testing.T) {
 					},
 				},
 				UpstreamSettings: upstreamsettings.UpstreamSettings{
-					ZoneSize: "2m",
+					ZoneSize: helpers.GetPointer[ngfAPI.Size]("2m"),
 					KeepAlive: http.UpstreamKeepAlive{
 						Connections: helpers.GetPointer[int32](1),
 						Requests:    1,
@@ -884,6 +884,48 @@ func TestCreateUpstream(t *testing.T) {
 				LoadBalancingMethod: defaultLBMethod,
 			},
 			msg: "mixed IP addresses and DNS names",
+		},
+		{
+			stateUpstream: dataplane.Upstream{
+				Name: "zone-size-override",
+				UpstreamSettings: upstreamsettings.UpstreamSettings{
+					ZoneSize: helpers.GetPointer[ngfAPI.Size]("2m"),
+				},
+				Endpoints: []resolver.Endpoint{
+					{
+						Address: "10.0.0.1",
+						Port:    80,
+					},
+					{
+						Address: "example.com",
+						Port:    443,
+						Resolve: true,
+					},
+					{
+						Address: "fd00:10:244:1::7",
+						Port:    80,
+						IPv6:    true,
+					},
+				},
+			},
+			expectedUpstream: http.Upstream{
+				Name:     "zone-size-override",
+				ZoneSize: "2m",
+				Servers: []http.UpstreamServer{
+					{
+						Address: "10.0.0.1:80",
+					},
+					{
+						Address: "example.com:443",
+						Resolve: true,
+					},
+					{
+						Address: "[fd00:10:244:1::7]:80",
+					},
+				},
+				LoadBalancingMethod: defaultLBMethod,
+			},
+			msg: "zone size override",
 		},
 	}
 
