@@ -1600,6 +1600,17 @@ func NewInferencePoolInvalidExtensionref(msg string) Condition {
 	}
 }
 
+// NewInferencePoolEndpointPickerRefMissing returns a Condition that indicates that the InferencePool is not
+// accepted because the endpointPickerRef field is unset. NGF requires this field to be set.
+func NewInferencePoolEndpointPickerRefMissing(msg string) Condition {
+	return Condition{
+		Type:    string(inference.InferencePoolConditionAccepted),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(inference.InferencePoolReasonEndpointPickerRefMissing),
+		Message: msg,
+	}
+}
+
 // NewDefaultListenerSetConditions returns the default conditions that must be present in the status of a ListenerSet.
 func NewDefaultListenerSetConditions() []Condition {
 	return []Condition{

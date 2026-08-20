@@ -208,7 +208,7 @@ func resolveInferencePoolRef(
 
 	port := gatewayv1.PortNumber(pool.Source.Spec.TargetPorts[0].Number)
 	ref.Port = helpers.GetPointer(port)
-	ref.EndpointPickerConfig.EndpointPickerRef = &pool.Source.Spec.EndpointPickerRef
+	ref.EndpointPickerConfig.EndpointPickerRef = pool.Source.Spec.EndpointPickerRef
 	ref.EndpointPickerConfig.NsName = poolName.Namespace
 
 	return ref, true
