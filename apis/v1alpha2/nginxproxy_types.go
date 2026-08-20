@@ -542,7 +542,7 @@ type NginxAccessLog struct {
 	// +optional
 	Escape *NginxAccessLogEscapeType `json:"escape,omitempty"`
 
-	// Destination specifies where the access logs are sent to.
+	// Destination specifies where access logs are sent to.
 	// If file/syslog not specified, access logs are by default sent to /dev/stdout.
 	//
 	// +optional
@@ -585,7 +585,7 @@ type NginxAccessLogDestination struct {
 	// Type specifies the type of destination for access logs.
 	//
 	// +kubebuilder:default=file
-	Type *NginxAccessLogDestinationType `json:"type"`
+	Type NginxAccessLogDestinationType `json:"type"`
 }
 
 // NginxAccessLogDestinationType defines the supported destination types for access logs.

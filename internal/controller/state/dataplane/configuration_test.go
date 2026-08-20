@@ -12395,7 +12395,7 @@ func TestBuildAccessLogDestination(t *testing.T) {
 			AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
 				Format: helpers.GetPointer(logFormat),
 				Destination: &ngfAPIv1alpha2.NginxAccessLogDestination{
-					Type:   &destinationType,
+					Type:   destinationType,
 					Syslog: &ngfAPIv1alpha2.NginxAccessLogSyslog{Server: server},
 				},
 			},
@@ -12413,7 +12413,7 @@ func TestBuildAccessLogDestination(t *testing.T) {
 			AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
 				Format: helpers.GetPointer(logFormat),
 				Destination: &ngfAPIv1alpha2.NginxAccessLogDestination{
-					Type: &destinationType,
+					Type: destinationType,
 					File: &ngfAPIv1alpha2.NginxAccessLogFile{Path: &path},
 				},
 			},
