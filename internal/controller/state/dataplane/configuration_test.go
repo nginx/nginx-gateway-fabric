@@ -8204,6 +8204,7 @@ func TestBuildLogging(t *testing.T) {
 				AccessLog: &AccessLog{
 					Format: JSONAccessLogFormat,
 					Escape: "json",
+					Path:   DefaultAccessLogPath,
 				},
 			},
 		},
@@ -8226,6 +8227,7 @@ func TestBuildLogging(t *testing.T) {
 				ErrorLogFormat: "json",
 				AccessLog: &AccessLog{
 					Format: logFormat,
+					Path:   DefaultAccessLogPath,
 				},
 			},
 		},
@@ -8292,6 +8294,7 @@ func TestBuildLogging(t *testing.T) {
 				ErrorLevel: "info",
 				AccessLog: &AccessLog{
 					Format: logFormat,
+					Path:   DefaultAccessLogPath,
 				},
 			},
 		},
@@ -8314,6 +8317,7 @@ func TestBuildLogging(t *testing.T) {
 				AccessLog: &AccessLog{
 					Disable: false,
 					Format:  logFormat,
+					Path:    DefaultAccessLogPath,
 				},
 			},
 		},
@@ -8391,6 +8395,7 @@ func TestBuildLogging(t *testing.T) {
 				AccessLog: &AccessLog{
 					Format: logFormat,
 					Escape: "json",
+					Path:   DefaultAccessLogPath,
 				},
 			},
 		},
@@ -8412,6 +8417,7 @@ func TestBuildLogging(t *testing.T) {
 				AccessLog: &AccessLog{
 					Format: logFormat,
 					Escape: "default",
+					Path:   DefaultAccessLogPath,
 				},
 			},
 		},
@@ -8433,6 +8439,7 @@ func TestBuildLogging(t *testing.T) {
 				AccessLog: &AccessLog{
 					Format: logFormat,
 					Escape: "none",
+					Path:   DefaultAccessLogPath,
 				},
 			},
 		},

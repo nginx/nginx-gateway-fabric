@@ -288,44 +288,6 @@
                     "format": {
                       "description": "Format specifies the custom log format string. If not specified, NGINX default 'combined' format is used.",
                       "type": "string"
-                    },
-                    "destination": {
-                      "description": "Destination specifies where access logs are sent. Supports 'file' and 'syslog' destinations.",
-                      "properties": {
-                        "type": {
-                          "description": "Destination type.",
-                          "enum": [
-                            "file",
-                            "syslog"
-                          ],
-                          "required": []
-                        },
-                        "file": {
-                          "description": "File destination configuration.",
-                          "properties": {
-                            "path": {
-                              "description": "Path to the access log file.",
-                              "type": "string"
-                            }
-                          },
-                          "required": [],
-                          "type": "object"
-                        },
-                        "syslog": {
-                          "description": "Syslog destination configuration.",
-                          "properties": {
-                            "server": {
-                              "description": "Syslog server address.",
-                              "pattern": "^[a-zA-Z0-9.-]+:[0-9]+$",
-                              "type": "string"
-                            }
-                          },
-                          "required": [],
-                          "type": "object"
-                        }
-                      },
-                      "required": [],
-                      "type": "object"
                     }
                   },
                   "required": [],
