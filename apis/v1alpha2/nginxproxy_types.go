@@ -585,7 +585,7 @@ type NginxAccessLogDestination struct {
 	// Type specifies the type of destination for access logs.
 	//
 	// +kubebuilder:default=file
-	Type *NginxAccessLogDestinationType `json:"type"`
+	Type NginxAccessLogDestinationType `json:"type"`
 }
 
 // NginxAccessLogDestinationType defines the supported destination types for access logs.
