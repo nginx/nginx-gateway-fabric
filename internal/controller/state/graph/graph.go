@@ -227,71 +227,100 @@ type FeatureFlags struct {
 }
 
 // IsReferenced returns true if the Graph references the resource.
-//
-//nolint:gocyclo // will refactor later
 func (g *Graph) IsReferenced(resourceType ngftypes.ObjectType, nsname types.NamespacedName) bool {
 	switch obj := resourceType.(type) {
 	case *v1.Secret:
-		// Check if secret is a Gateway-referenced Secret, or if it's a Secret used for
-		// NGINX Plus reporting, WAF bundle auth, or PLM S3 storage.
-		_, exists := g.ReferencedSecrets[nsname]
-		_, plusSecretExists := g.PlusSecrets[nsname]
-		_, wafAuthSecretExists := g.ReferencedWAFSecrets[nsname]
-		_, plmSecretExists := g.PLMSecrets[nsname]
-		_, payloadProcessorSecretExists := g.ReferencedPayloadProcessorSecrets[nsname]
-		return exists || plusSecretExists || wafAuthSecretExists || plmSecretExists ||
-			payloadProcessorSecretExists
+		return g.secretIsReferenced(nsname)
 	case *v1.ConfigMap:
-		_, exists := g.ReferencedCaCertConfigMaps[nsname]
-		return exists
+		return g.configMapIsReferenced(nsname)
 	case *v1.Namespace:
-		// `existed` is needed as it checks the graph's ReferencedNamespaces which stores all the namespaces that
-		// match the Gateway listener's label selector when the graph was created. This covers the case when
-		// a Namespace changes its label so it no longer matches a Gateway listener's label selector, but because
-		// it was in the graph's ReferencedNamespaces we know that the Graph did reference the Namespace.
-		//
-		// However, if there is a Namespace which changes its label (previously it did not match) to match a Gateway
-		// listener's label selector, it will not be in the current graph's ReferencedNamespaces until it is rebuilt
-		// and thus not be caught in `existed`. Therefore, we need `exists` to check the graph's Gateway and see if the
-		// new Namespace actually matches any of the Gateway listener's label selector.
-		//
-		// `exists` does not cover the case highlighted above by `existed` and vice versa so both are needed.
-
-		_, existed := g.ReferencedNamespaces[nsname]
-		exists := isNamespaceReferenced(obj, g.Gateways)
-		return existed || exists
+		return g.namespaceIsReferenced(nsname, obj)
 	// Service reference exists if at least one Route references it, or a PayloadProcessor policy
 	// references it as its ExtProcess backend.
 	case *v1.Service:
-		_, exists := g.ReferencedServices[nsname]
-		_, payloadProcessorServiceExists := g.ReferencedPayloadProcessorServices[nsname]
-		return exists || payloadProcessorServiceExists
+		return g.serviceIsReferenced(nsname)
 	// InferencePool reference exists if at least one Route references it.
 	case *inference.InferencePool:
-		_, exists := g.ReferencedInferencePools[nsname]
-		return exists
+		return g.inferencePoolIsReferenced(nsname)
 	// EndpointSlice reference exists if its Service owner is referenced by at least one Route.
 	case *discoveryV1.EndpointSlice:
-		svcName := index.GetServiceNameFromEndpointSlice(obj)
-
-		// Service Namespace should be the same Namespace as the EndpointSlice
-		_, exists := g.ReferencedServices[types.NamespacedName{Namespace: nsname.Namespace, Name: svcName}]
-		return exists
+		return g.endpointSliceIsReferenced(nsname, obj)
 	// NginxProxy reference exists if the GatewayClass or Gateway references it.
 	case *ngfAPIv1alpha2.NginxProxy:
-		_, exists := g.ReferencedNginxProxies[nsname]
-		return exists
+		return g.nginxProxyIsReferenced(nsname)
 	case *unstructured.Unstructured:
-		switch obj.GroupVersionKind() {
-		case kinds.APPolicyGVK:
-			_, exists := g.ReferencedAPPolicies[nsname]
-			return exists
-		case kinds.APLogConfGVK:
-			_, exists := g.ReferencedAPLogConfs[nsname]
-			return exists
-		default:
-			return false
-		}
+		return g.unstructuredIsReferenced(nsname, obj)
+	default:
+		return false
+	}
+}
+
+func (g *Graph) secretIsReferenced(nsname types.NamespacedName) bool {
+	// Check if secret is a Gateway-referenced Secret, or if it's a Secret used for
+	// NGINX Plus reporting, WAF bundle auth, or PLM S3 storage.
+	_, exists := g.ReferencedSecrets[nsname]
+	_, plusSecretExists := g.PlusSecrets[nsname]
+	_, wafAuthSecretExists := g.ReferencedWAFSecrets[nsname]
+	_, plmSecretExists := g.PLMSecrets[nsname]
+	_, payloadProcessorSecretExists := g.ReferencedPayloadProcessorSecrets[nsname]
+	return exists || plusSecretExists || wafAuthSecretExists || plmSecretExists ||
+		payloadProcessorSecretExists
+}
+
+func (g *Graph) configMapIsReferenced(nsname types.NamespacedName) bool {
+	_, exists := g.ReferencedCaCertConfigMaps[nsname]
+	return exists
+}
+
+func (g *Graph) namespaceIsReferenced(nsname types.NamespacedName, obj *v1.Namespace) bool {
+	// `existed` is needed as it checks the graph's ReferencedNamespaces which stores all the namespaces that
+	// match the Gateway listener's label selector when the graph was created. This covers the case when
+	// a Namespace changes its label so it no longer matches a Gateway listener's label selector, but because
+	// it was in the graph's ReferencedNamespaces we know that the Graph did reference the Namespace.
+	//
+	// However, if there is a Namespace which changes its label (previously it did not match) to match a Gateway
+	// listener's label selector, it will not be in the current graph's ReferencedNamespaces until it is rebuilt
+	// and thus not be caught in `existed`. Therefore, we need `exists` to check the graph's Gateway and see if the
+	// new Namespace actually matches any of the Gateway listener's label selector.
+	//
+	// `exists` does not cover the case highlighted above by `existed` and vice versa so both are needed.
+	_, existed := g.ReferencedNamespaces[nsname]
+	exists := isNamespaceReferenced(obj, g.Gateways)
+	return existed || exists
+}
+
+func (g *Graph) serviceIsReferenced(nsname types.NamespacedName) bool {
+	_, exists := g.ReferencedServices[nsname]
+	_, payloadProcessorServiceExists := g.ReferencedPayloadProcessorServices[nsname]
+	return exists || payloadProcessorServiceExists
+}
+
+func (g *Graph) inferencePoolIsReferenced(nsname types.NamespacedName) bool {
+	_, exists := g.ReferencedInferencePools[nsname]
+	return exists
+}
+
+func (g *Graph) endpointSliceIsReferenced(nsname types.NamespacedName, obj *discoveryV1.EndpointSlice) bool {
+	svcName := index.GetServiceNameFromEndpointSlice(obj)
+
+	// Service Namespace should be the same Namespace as the EndpointSlice
+	_, exists := g.ReferencedServices[types.NamespacedName{Namespace: nsname.Namespace, Name: svcName}]
+	return exists
+}
+
+func (g *Graph) nginxProxyIsReferenced(nsname types.NamespacedName) bool {
+	_, exists := g.ReferencedNginxProxies[nsname]
+	return exists
+}
+
+func (g *Graph) unstructuredIsReferenced(nsname types.NamespacedName, obj *unstructured.Unstructured) bool {
+	switch obj.GroupVersionKind() {
+	case kinds.APPolicyGVK:
+		_, exists := g.ReferencedAPPolicies[nsname]
+		return exists
+	case kinds.APLogConfGVK:
+		_, exists := g.ReferencedAPLogConfs[nsname]
+		return exists
 	default:
 		return false
 	}
