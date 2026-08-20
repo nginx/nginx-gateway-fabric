@@ -302,7 +302,8 @@ func TestExecuteUpstreams_NginxPlus(t *testing.T) {
 		"upstream invalid-backend-ref":                1,
 
 		defaultLBMethod + ";": 9,
-		"ip_hash;":            1,
+
+		"ip_hash;": 1,
 
 		"zone up1 1m;":                                1,
 		"zone up2 1m;":                                1,
@@ -334,7 +335,8 @@ func TestExecuteUpstreams_NginxPlus(t *testing.T) {
 		"state /var/lib/nginx/state/up7-with-sp.conf;":                        1,
 		"state /var/lib/nginx/state/up8-with-sp-expiry-and-path-empty.conf;":  1,
 		"state /var/lib/nginx/state/up9-usp-keepAlive-connections-zero.conf;": 1,
-		fmt.Sprintf("server %snginx-500-server.sock;", SocketBasePath):        1,
+
+		fmt.Sprintf("server %snginx-500-server.sock;", SocketBasePath): 1,
 	}
 
 	upstreams := gen.createUpstreams(stateUpstreams)
