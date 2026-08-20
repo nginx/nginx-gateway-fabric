@@ -10578,7 +10578,11 @@ spec:
                     properties:
                       destination:
                         description: |-
+<<<<<<< HEAD
                           Destination specifies where access logs are sent to.
+=======
+                          Destination specifies where the access logs are sent to.
+>>>>>>> 9a0b7d7e (fix CI check fail)
                           If file/syslog not specified, access logs are by default sent to /dev/stdout.
                         properties:
                           file:
@@ -10588,8 +10592,11 @@ spec:
                             properties:
                               path:
                                 type: string
+<<<<<<< HEAD
                             required:
                             - path
+=======
+>>>>>>> 9a0b7d7e (fix CI check fail)
                             type: object
                           syslog:
                             description: |-
@@ -10605,6 +10612,10 @@ spec:
                             - server
                             type: object
                           type:
+<<<<<<< HEAD
+=======
+                            default: file
+>>>>>>> 9a0b7d7e (fix CI check fail)
                             description: Type specifies the type of destination for
                               access logs.
                             enum:
@@ -10614,9 +10625,12 @@ spec:
                         required:
                         - type
                         type: object
+<<<<<<< HEAD
                         x-kubernetes-validations:
                         - rule: '!(has(self.type) && self.type == ''file'' && !has(self.file))'
                         - rule: '!(has(self.type) && self.type == ''syslog'' && !has(self.syslog))'
+=======
+>>>>>>> 9a0b7d7e (fix CI check fail)
                       disable:
                         description: Disable turns off access logging when set to
                           true.
