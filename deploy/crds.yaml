@@ -10574,8 +10574,45 @@ spec:
                   accessLog:
                     description: |-
                       AccessLog defines the access log settings, including format itself and disabling option.
-                      For now only path /dev/stdout can be used.
+                      Default path /dev/stdout can be used or file/syslog destinations can be configured.
                     properties:
+                      destination:
+                        description: |-
+                          Destination specifies where access logs are sent to.
+                          If file/syslog not specified, access logs are by default sent to /dev/stdout.
+                        properties:
+                          file:
+                            description: |-
+                              File specifies the file destination for access logs.
+                              Only valid when type is set to "file".
+                            properties:
+                              path:
+                                type: string
+                            type: object
+                          syslog:
+                            description: |-
+                              Syslog specifies the syslog destination for access logs.
+                              Only valid when type is set to "syslog".
+                            properties:
+                              server:
+                                description: Server is the syslog server address in
+                                  the format "hostname:port" or "IP:port".
+                                pattern: ^[a-zA-Z0-9.-]+:[0-9]+$
+                                type: string
+                            required:
+                            - server
+                            type: object
+                          type:
+                            default: file
+                            description: Type specifies the type of destination for
+                              access logs.
+                            enum:
+                            - file
+                            - syslog
+                            type: string
+                        required:
+                        - type
+                        type: object
                       disable:
                         description: Disable turns off access logging when set to
                           true.
@@ -10595,7 +10632,7 @@ spec:
                         description: |-
                           Format specifies the custom log format string.
                           If not specified, NGINX default 'combined' format is used.
-                          For now only path /dev/stdout can be used.
+                          Default path /dev/stdout can be used or file/syslog destinations can be configured.
                           Single quotes and line breaks are not allowed because the format is
                           rendered inside a single-quoted NGINX log_format directive.
                           See https://nginx.org/en/docs/http/ngx_http_log_module.html#log_format
