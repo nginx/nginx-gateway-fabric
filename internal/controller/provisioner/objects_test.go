@@ -1422,16 +1422,24 @@ func TestBuildNginxResourceObjects_DataplaneKeySecret(t *testing.T) {
 		},
 		Data: map[string][]byte{secrets.TLSCertKey: []byte("tls")},
 	}
-	dataplaneKeySecret := &corev1.Secret{
+	n1cDataplaneKeySecret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "dataplane-key-secret",
+			Name:      "n1c-dataplane-key-secret",
 			Namespace: ngfNamespace,
 		},
-		Data: map[string][]byte{"dataplane.key": []byte("keydata")},
+		Data: map[string][]byte{secrets.DataplaneSecretKey: []byte("keydata")},
 	}
-	fakeClient := createFakeClientWithScheme(agentTLSSecret, dataplaneKeySecret)
+	nimDataplaneKeySecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "nim-dataplane-key-secret",
+			Namespace: ngfNamespace,
+		},
+		Data: map[string][]byte{secrets.DataplaneSecretKey: []byte("nim-keydata")},
+	}
+	fakeClient := createFakeClientWithScheme(agentTLSSecret, n1cDataplaneKeySecret, nimDataplaneKeySecret)
 
-	dataplaneKeySecretName := "dataplane-key-secret" //nolint:gosec // not credentials
+	n1cDataplaneKeySecretName := "n1c-dataplane-key-secret" //nolint:gosec // not credentials
+	nimDataplaneKeySecretName := "nim-dataplane-key-secret" //nolint:gosec // not credentials
 
 	provisioner := &NginxProvisioner{
 		cfg: Config{
@@ -1439,11 +1447,16 @@ func TestBuildNginxResourceObjects_DataplaneKeySecret(t *testing.T) {
 				Namespace: ngfNamespace,
 			},
 			AgentTLSSecretName: agentTLSTestSecretName,
-			NginxOneConsoleTelemetryConfig: config.NginxOneConsoleTelemetryConfig{
-				DataplaneKeySecretName: dataplaneKeySecretName,
+			NginxOneConsoleTelemetryConfig: config.ManagementPlaneTelemetryConfig{
+				DataplaneKeySecretName: n1cDataplaneKeySecretName,
 				EndpointHost:           "my.endpoint.com",
 				EndpointPort:           443,
 				EndpointTLSSkipVerify:  false,
+			},
+			NginxInstanceManagerTelemetryConfig: config.ManagementPlaneTelemetryConfig{
+				DataplaneKeySecretName: nimDataplaneKeySecretName,
+				EndpointHost:           "my.endpoint.com",
+				EndpointPort:           4317,
 			},
 			AgentLabels: make(map[string]string),
 		},
@@ -1474,31 +1487,57 @@ func TestBuildNginxResourceObjects_DataplaneKeySecret(t *testing.T) {
 		nil,
 	)
 	g.Expect(err).ToNot(HaveOccurred())
-	g.Expect(objects).To(HaveLen(7)) // 2 secrets, 2 configmaps, serviceaccount, service, deployment
+	// 3 secrets (agentTLS, n1c dataplane key, nim dataplane key), 2 configmaps, serviceaccount, service, deployment
+	g.Expect(objects).To(HaveLen(8))
 
-	// Find the dataplane key secret
-	var found bool
+	// Find the N1C dataplane key secret
+	var foundN1C bool
 	for _, obj := range objects {
 		if s, ok := obj.(*corev1.Secret); ok {
-			if s.GetName() == controller.CreateNginxResourceName(resourceName, dataplaneKeySecretName) {
-				found = true
-				g.Expect(s.Data).To(HaveKey("dataplane.key"))
-				g.Expect(s.Data["dataplane.key"]).To(Equal([]byte("keydata")))
+			if s.GetName() == controller.CreateNginxResourceName(resourceName, n1cDataplaneKeySecretName) {
+				foundN1C = true
+				g.Expect(s.Data).To(HaveKey(secrets.DataplaneSecretKey))
+				g.Expect(s.Data[secrets.DataplaneSecretKey]).To(Equal([]byte("keydata")))
 			}
 		}
 	}
-	g.Expect(found).To(BeTrue())
+	g.Expect(foundN1C).To(BeTrue())
 
-	// Check deployment mounts the secret
-	dep, ok := objects[6].(*appsv1.Deployment)
+	// Find the NIM dataplane key secret
+	var foundNIM bool
+	for _, obj := range objects {
+		if s, ok := obj.(*corev1.Secret); ok {
+			if s.GetName() == controller.CreateNginxResourceName(resourceName, nimDataplaneKeySecretName) {
+				foundNIM = true
+				g.Expect(s.Data).To(HaveKey(secrets.DataplaneSecretKey))
+				g.Expect(s.Data[secrets.DataplaneSecretKey]).To(Equal([]byte("nim-keydata")))
+			}
+		}
+	}
+	g.Expect(foundNIM).To(BeTrue())
+
+	// Check deployment mounts secrets
+	dep, ok := objects[7].(*appsv1.Deployment)
 	g.Expect(ok).To(BeTrue())
 	g.Expect(dep).ToNot(BeNil())
 	container := dep.Spec.Template.Spec.Containers[0]
 	g.Expect(container.VolumeMounts).To(ContainElement(corev1.VolumeMount{
-		Name:      "agent-dataplane-key",
-		MountPath: "/etc/nginx-agent/secrets/dataplane.key",
-		SubPath:   "dataplane.key",
+		Name:      agentNICVolumeName,
+		MountPath: fmt.Sprintf("%s/%s", agentVolumeMountPath, agentNICDataplaneKeyFile),
+		SubPath:   secrets.DataplaneSecretKey,
 	}))
+	g.Expect(container.VolumeMounts).To(ContainElement(corev1.VolumeMount{
+		Name:      agentNIMVolumeName,
+		MountPath: fmt.Sprintf("%s/%s", agentVolumeMountPath, agentNIMDataplaneKeyFile),
+		SubPath:   secrets.DataplaneSecretKey,
+	}))
+
+	// Check agent config contains NIM reporting fields
+	agentCM := findAgentConfigMap(objects)
+	g.Expect(agentCM).ToNot(BeNil())
+	agentData := agentCM.Data[configmaps.AgentConfKey]
+	g.Expect(agentData).To(ContainSubstring("my.endpoint.com"))
+	g.Expect(agentData).To(ContainSubstring("4317"))
 }
 
 func TestGetAndUpdateSecret_NotFound(t *testing.T) {
@@ -1762,12 +1801,16 @@ func TestBuildResourcesForInvalidGatewayCleanup_DataplaneKeySecret(t *testing.T)
 	t.Parallel()
 	g := NewWithT(t)
 
-	dataplaneKeySecretName := "dataplane-key-secret" //nolint:gosec // not credentials
+	n1cDataplaneKeySecretName := "n1c-dataplane-key-secret" //nolint:gosec // not credentials
+	nimDataplaneKeySecretName := "nim-dataplane-key-secret" //nolint:gosec // not credentials
 
 	provisioner := &NginxProvisioner{
 		cfg: Config{
-			NginxOneConsoleTelemetryConfig: config.NginxOneConsoleTelemetryConfig{
-				DataplaneKeySecretName: dataplaneKeySecretName,
+			NginxOneConsoleTelemetryConfig: config.ManagementPlaneTelemetryConfig{
+				DataplaneKeySecretName: n1cDataplaneKeySecretName,
+			},
+			NginxInstanceManagerTelemetryConfig: config.ManagementPlaneTelemetryConfig{
+				DataplaneKeySecretName: nimDataplaneKeySecretName,
 			},
 			AgentTLSSecretName: agentTLSTestSecretName,
 		},
@@ -1780,26 +1823,32 @@ func TestBuildResourcesForInvalidGatewayCleanup_DataplaneKeySecret(t *testing.T)
 
 	objects := provisioner.buildResourcesForInvalidGatewayCleanup(deploymentNSName)
 
-	// Should include the dataplane key secret in the objects list
-	// Default: deployment, daemonset, service, hpa, pdb, serviceaccount, 2 configmaps, agentTLSSecret, dataplaneKeySecret
-	g.Expect(objects).To(HaveLen(10))
+	// deployment, daemonset, service, hpa, pdb, serviceaccount, 2 configmaps,
+	// agentTLSSecret, n1cDataplaneKeySecret, nimDataplaneKeySecret
+	g.Expect(objects).To(HaveLen(11))
 
 	validateMeta := func(obj client.Object, name string) {
 		g.Expect(obj.GetName()).To(Equal(name))
 		g.Expect(obj.GetNamespace()).To(Equal(deploymentNSName.Namespace))
 	}
 
-	// Validate the dataplane key secret is present
-	found := false
+	// Validate the dataplane key secrets are present
+	foundN1C := false
+	foundNIM := false
 	for _, obj := range objects {
 		if s, ok := obj.(*corev1.Secret); ok {
-			if s.GetName() == controller.CreateNginxResourceName(deploymentNSName.Name, dataplaneKeySecretName) {
-				validateMeta(s, controller.CreateNginxResourceName(deploymentNSName.Name, dataplaneKeySecretName))
-				found = true
+			if s.GetName() == controller.CreateNginxResourceName(deploymentNSName.Name, n1cDataplaneKeySecretName) {
+				validateMeta(s, controller.CreateNginxResourceName(deploymentNSName.Name, n1cDataplaneKeySecretName))
+				foundN1C = true
+			}
+			if s.GetName() == controller.CreateNginxResourceName(deploymentNSName.Name, nimDataplaneKeySecretName) {
+				validateMeta(s, controller.CreateNginxResourceName(deploymentNSName.Name, nimDataplaneKeySecretName))
+				foundNIM = true
 			}
 		}
 	}
-	g.Expect(found).To(BeTrue())
+	g.Expect(foundN1C).To(BeTrue())
+	g.Expect(foundNIM).To(BeTrue())
 }
 
 func TestBuildNginxDeploymentPDB(t *testing.T) {
@@ -2154,11 +2203,16 @@ func TestBuildNginxConfigMaps_AgentFields(t *testing.T) {
 				"key1": "val1",
 				"key2": "val2",
 			},
-			NginxOneConsoleTelemetryConfig: config.NginxOneConsoleTelemetryConfig{
-				DataplaneKeySecretName: "dataplane-key",
+			NginxOneConsoleTelemetryConfig: config.ManagementPlaneTelemetryConfig{ //nolint:gosec // not credentials
+				DataplaneKeySecretName: "n1c-dataplane-key",
 				EndpointHost:           "console.example.com",
 				EndpointPort:           443,
 				EndpointTLSSkipVerify:  false,
+			},
+			NginxInstanceManagerTelemetryConfig: config.ManagementPlaneTelemetryConfig{ //nolint:gosec // not credentials
+				DataplaneKeySecretName: "nim-dataplane-key",
+				EndpointHost:           "nim.example.com",
+				EndpointPort:           4317,
 			},
 			ServerTLSDomain: "svc",
 		},
@@ -2205,6 +2259,14 @@ func TestBuildNginxConfigMaps_AgentFields(t *testing.T) {
 	// Should not have WAF or Plus features
 	g.Expect(data).ToNot(ContainSubstring("- logs-nap"))
 	g.Expect(data).ToNot(ContainSubstring("- api-action"))
+
+	// Verify NIM reporting fields are present
+	g.Expect(data).To(ContainSubstring("nim.example.com"))
+	g.Expect(data).To(ContainSubstring("4317"))
+	g.Expect(data).To(ContainSubstring("otlp"))
+	g.Expect(data).To(ContainSubstring("headers_setter"))
+	g.Expect(data).To(ContainSubstring("securityviolationsfilter"))
+	g.Expect(data).To(ContainSubstring("dataplane-nim.key"))
 }
 
 func TestBuildNginxConfigMaps_AgentConfigUsesCustomServerTLSDomain(t *testing.T) {
@@ -2909,7 +2971,7 @@ func TestOwnerReferencesAreSet(t *testing.T) {
 			Namespace: ngfNamespace,
 		},
 		Data: map[string][]byte{
-			"dataplane.key": []byte("key"),
+			secrets.DataplaneSecretKey: []byte("key"),
 		},
 		Type: corev1.SecretTypeOpaque,
 	}

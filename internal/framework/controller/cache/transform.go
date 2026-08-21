@@ -18,7 +18,7 @@ var (
 		secrets.TLSKeyKey,
 		secrets.ClientSecretKey,
 		secrets.CRLKey,
-		secrets.N1CDataplaneKey,
+		secrets.DataplaneSecretKey,
 		corev1.DockerConfigJsonKey,
 		corev1.DockerConfigKey,
 		// WAF bundle auth credentials
