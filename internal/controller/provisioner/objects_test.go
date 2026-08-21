@@ -2959,9 +2959,20 @@ func TestOwnerReferencesAreSet(t *testing.T) {
 		Type: corev1.SecretTypeTLS,
 	}
 
-	dataplaneKeySecret := &corev1.Secret{
+	n1cDataplaneKeySecret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      nginxOneDataplaneKeySecretName,
+			Namespace: ngfNamespace,
+		},
+		Data: map[string][]byte{
+			secrets.DataplaneSecretKey: []byte("key"),
+		},
+		Type: corev1.SecretTypeOpaque,
+	}
+
+	nimDataplaneKeySecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      nginxInstanceManagerDataplaneKeySecretName,
 			Namespace: ngfNamespace,
 		},
 		Data: map[string][]byte{
@@ -2977,7 +2988,8 @@ func TestOwnerReferencesAreSet(t *testing.T) {
 		jwtSecret,
 		caSecret,
 		clientSecret,
-		dataplaneKeySecret,
+		n1cDataplaneKeySecret,
+		nimDataplaneKeySecret,
 	)
 
 	resourceName := controller.CreateNginxResourceName(gateway.Name, "nginx")
