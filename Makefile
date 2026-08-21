@@ -207,10 +207,8 @@ generate-helm-schema: ## Generate the Helm chart schema
 
 .PHONY: generate-policies
 generate-policies: ## Generate policies that would otherwise have to be manually typed. Must add new policy below to generate methods
-	go run apis/policy-generation/policygen.go -package v1alpha1 -output apis/v1alpha1/policy_methods.go \
-		ClientSettingsPolicy ProxySettingsPolicy UpstreamSettingsPolicy SnippetsPolicy RateLimitPolicy WAFPolicy PayloadProcessor
-	go run apis/policy-generation/policygen.go -package v1alpha2 -output apis/v1alpha2/policy_methods.go \
-		ObservabilityPolicy
+	go run apis/policy-generation/policygen.go -package v1alpha1 -output apis/v1alpha1/policy_methods.go
+	go run apis/policy-generation/policygen.go -package v1alpha2 -output apis/v1alpha2/policy_methods.go
 
 .PHONY: generate-all
 generate-all: generate generate-crds generate-helm-schema generate-manifests generate-api-docs generate-helm-docs generate-policies verify-operator-rbac ## Generate all the necessary files
