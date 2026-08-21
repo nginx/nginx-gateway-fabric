@@ -14191,6 +14191,7 @@ spec:
                           that owns the security policy.
                         maxLength: 253
                         minLength: 1
+                        pattern: ^[A-Za-z0-9][-A-Za-z0-9_.]*$
                         type: string
                       policyName:
                         description: |-
@@ -14198,6 +14199,7 @@ spec:
                           Mutually exclusive with policyObjectID.
                         maxLength: 253
                         minLength: 1
+                        pattern: ^[A-Za-z0-9][-A-Za-z0-9_.]*$
                         type: string
                       policyObjectID:
                         description: |-
@@ -14240,6 +14242,7 @@ spec:
                           Mutually exclusive with policyUID.
                         maxLength: 253
                         minLength: 1
+                        pattern: ^[A-Za-z0-9][-A-Za-z0-9_.]*$
                         type: string
                       policyUID:
                         description: |-
@@ -14500,6 +14503,7 @@ spec:
                                 that owns the log profile.
                               maxLength: 253
                               minLength: 1
+                              pattern: ^[A-Za-z0-9][-A-Za-z0-9_.]*$
                               type: string
                             profileName:
                               description: ProfileName is the name of the log profile

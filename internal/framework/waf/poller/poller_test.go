@@ -17,6 +17,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent/broadcast/broadcastfakes"
 	agentgrpc "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent/grpc"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/waf/fetch"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/waf/fetch/fetchfakes"
 )
@@ -826,6 +827,22 @@ func TestBuildBundleSources(t *testing.T) {
 		expectedSources int
 	}{
 		{
+			name: "nil PolicySource",
+			spec: ngfAPIv1alpha1.WAFPolicySpec{
+				Type:         ngfAPIv1alpha1.PolicySourceTypeHTTP,
+				PolicySource: nil,
+			},
+			expectedSources: 0,
+		},
+		{
+			name: "empty PolicySource ",
+			spec: ngfAPIv1alpha1.WAFPolicySpec{
+				Type:         ngfAPIv1alpha1.PolicySourceTypeHTTP,
+				PolicySource: &ngfAPIv1alpha1.PolicySource{},
+			},
+			expectedSources: 0,
+		},
+		{
 			name: "no polling enabled",
 			spec: ngfAPIv1alpha1.WAFPolicySpec{
 				Type: ngfAPIv1alpha1.PolicySourceTypeHTTP,
@@ -862,7 +879,7 @@ func TestBuildBundleSources(t *testing.T) {
 			},
 			expectedSources: 1,
 			validateSources: func(g Gomega, sources []BundleSource) {
-				g.Expect(sources[0].BundleKey).To(Equal(graph.WAFBundleKey("default_test-policy")))
+				g.Expect(sources[0].BundleKey).To(Equal(graph.WAFBundleKey(helpers.URLHash("http://example.com/policy.tgz"))))
 				g.Expect(sources[0].Request.URL).To(Equal("http://example.com/policy.tgz"))
 				g.Expect(sources[0].Interval).To(Equal(defaultPollingInterval))
 			},
@@ -939,7 +956,7 @@ func TestBuildBundleSources(t *testing.T) {
 			},
 			expectedSources: 1,
 			validateSources: func(g Gomega, sources []BundleSource) {
-				g.Expect(string(sources[0].BundleKey)).To(ContainSubstring("default_test-policy_log_"))
+				g.Expect(string(sources[0].BundleKey)).To(ContainSubstring("log_"))
 				g.Expect(sources[0].Request.URL).To(Equal("http://example.com/log-profile.tgz"))
 			},
 		},
@@ -1106,8 +1123,7 @@ func TestBuildBundleSources(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			policyNsName := types.NamespacedName{Namespace: "default", Name: "test-policy"}
-			sources := BuildBundleSources(policyNsName, tc.spec, tc.auth, tc.tlsCA)
+			sources := BuildBundleSources(tc.spec, tc.auth, tc.tlsCA)
 
 			g.Expect(sources).To(HaveLen(tc.expectedSources))
 

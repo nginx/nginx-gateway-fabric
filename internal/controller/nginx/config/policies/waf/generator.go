@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"text/template"
 
-	"k8s.io/apimachinery/pkg/types"
-
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/http"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
@@ -16,6 +14,8 @@ import (
 const appProtectBundleFolder = "/etc/app_protect/bundles"
 
 var tmpl = template.Must(template.New("waf policy").Parse(wafTemplate))
+
+const bundlePathFmt = appProtectBundleFolder + "/%s.tgz"
 
 const wafTemplate = `
 {{- if .BundlePath }}
@@ -67,17 +67,18 @@ func generate(pols []policies.Policy) policies.GenerateResultFiles {
 
 		if wp.Spec.PolicySource != nil && (wp.Spec.PolicySource.HTTPSource != nil ||
 			wp.Spec.PolicySource.NIMSource != nil ||
-			wp.Spec.PolicySource.N1CSource != nil) ||
-			wp.Spec.PolicyRef != nil && wp.Spec.PolicyRef.APPolicyRef != nil {
-			bundleName := string(graph.PLMPolicyBundleKey(types.NamespacedName{
-				Namespace: wp.Namespace,
-				Name:      wp.Name,
-			}))
-			bundlePath := fmt.Sprintf("%s/%s.tgz", appProtectBundleFolder, bundleName)
+			wp.Spec.PolicySource.N1CSource != nil) {
+			bundleName := string(graph.PolicyBundleKey(wp.Spec))
+			bundlePath := fmt.Sprintf(bundlePathFmt, bundleName)
+			fields["BundlePath"] = bundlePath
+		} else if wp.Spec.PolicyRef != nil && wp.Spec.PolicyRef.APPolicyRef != nil {
+			nsName := graph.APPolicyRefNamespacedName(wp.Namespace, wp.Spec.PolicyRef.APPolicyRef)
+			bundleName := string(graph.PLMPolicyBundleKey(nsName))
+			bundlePath := fmt.Sprintf(bundlePathFmt, bundleName)
 			fields["BundlePath"] = bundlePath
 		}
 
-		if securityLogs := buildSecurityLogEntries(wp, pol); len(securityLogs) > 0 {
+		if securityLogs := buildSecurityLogEntries(wp); len(securityLogs) > 0 {
 			fields["SecurityLogs"] = securityLogs
 		}
 
@@ -90,22 +91,21 @@ func generate(pols []policies.Policy) policies.GenerateResultFiles {
 	return files
 }
 
-func buildSecurityLogEntries(wp *ngfAPI.WAFPolicy, pol policies.Policy) []map[string]string {
+func buildSecurityLogEntries(wp *ngfAPI.WAFPolicy) []map[string]string {
 	securityLogs := make([]map[string]string, 0, len(wp.Spec.SecurityLogs))
-	polNsName := types.NamespacedName{Namespace: pol.GetNamespace(), Name: pol.GetName()}
 
 	for _, secLog := range wp.Spec.SecurityLogs {
 		logEntry := map[string]string{}
 
 		switch {
 		case secLog.LogRef != nil && secLog.LogRef.APLogConfRef != nil:
-			bundleName := graph.PLMLogBundleKey(polNsName, secLog.LogRef.APLogConfRef)
-			logEntry["LogProfileBundlePath"] = fmt.Sprintf("%s/%s.tgz", appProtectBundleFolder, bundleName)
+			bundleName := graph.PLMLogBundleKey(wp.Namespace, secLog.LogRef.APLogConfRef)
+			logEntry["LogProfileBundlePath"] = fmt.Sprintf(bundlePathFmt, bundleName)
 		case secLog.LogSource == nil:
 			continue
 		case secLog.LogSource.HTTPSource != nil || secLog.LogSource.NIMSource != nil || secLog.LogSource.N1CSource != nil:
-			bundleName := graph.LogBundleKey(polNsName, secLog.LogSource)
-			logEntry["LogProfileBundlePath"] = fmt.Sprintf("%s/%s.tgz", appProtectBundleFolder, bundleName)
+			bundleName := graph.LogBundleKey(secLog.LogSource)
+			logEntry["LogProfileBundlePath"] = fmt.Sprintf(bundlePathFmt, bundleName)
 		case secLog.LogSource.DefaultProfile != nil:
 			logEntry["LogProfileName"] = string(*secLog.LogSource.DefaultProfile)
 		default:

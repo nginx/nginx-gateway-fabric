@@ -1,0 +1,23 @@
+# WAFPolicy targeting the tea HTTPRoute with the same HTTP bundle URL as
+# wafpolicy-duplicate-coffee.yaml. Both policies reference the identical bundle,
+# which triggers the "Duplicate policy name found" error in NAP when both are
+# loaded into the same NGINX instance (issue #5478).
+apiVersion: gateway.nginx.org/v1alpha1
+kind: WAFPolicy
+metadata:
+  name: tea-waf-dup
+spec:
+  targetRefs:
+  - group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: tea
+  type: HTTP
+  policySource:
+    httpSource:
+      url: http://bundle-server.waf-policy.svc.cluster.local/attack-signatures-blocking.tgz
+  securityLogs:
+  - logSource:
+      httpSource:
+        url: http://bundle-server.waf-policy.svc.cluster.local/logconf.tgz
+    destination:
+      type: stderr
