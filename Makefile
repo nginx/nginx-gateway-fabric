@@ -206,7 +206,7 @@ generate-helm-schema: ## Generate the Helm chart schema
 	go run github.com/dadav/helm-schema/cmd/helm-schema@$(HELM_SCHEMA_VERSION) --chart-search-root=charts --add-schema-reference "--skip-auto-generation=required,additionalProperties" --append-newline
 
 .PHONY: generate-policies
-generate-policies: ## Generate policies that would otherwise have to be manually typed. Must add new policy below to generate methods
+generate-policies: ## Generate policies that would otherwise have to be manually typed.
 	go run apis/policy-generation/policygen.go -package v1alpha1 -output apis/v1alpha1/policy_methods.go
 	go run apis/policy-generation/policygen.go -package v1alpha2 -output apis/v1alpha2/policy_methods.go
 
