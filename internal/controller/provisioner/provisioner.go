@@ -64,16 +64,17 @@ type Config struct {
 	GCName           string
 	NGINXSCCName     string
 	// GatewayCtlrName is the controller name string (from main config)
-	GatewayCtlrName                string
-	AgentTLSSecretName             string
-	ServerTLSDomain                string
-	NginxDockerSecretNames         []string
-	NginxOneConsoleTelemetryConfig config.NginxOneConsoleTelemetryConfig
-	Plus                           bool
-	InferenceExtension             bool
-	EndpointPickerDisableTLS       bool
-	EndpointPickerTLSSkipVerify    bool
-	ExternalLoadBalancer           bool
+	GatewayCtlrName                     string
+	AgentTLSSecretName                  string
+	ServerTLSDomain                     string
+	NginxDockerSecretNames              []string
+	NginxOneConsoleTelemetryConfig      config.ManagementPlaneTelemetryConfig
+	NginxInstanceManagerTelemetryConfig config.ManagementPlaneTelemetryConfig
+	Plus                                bool
+	InferenceExtension                  bool
+	EndpointPickerDisableTLS            bool
+	EndpointPickerTLSSkipVerify         bool
+	ExternalLoadBalancer                bool
 }
 
 // NginxProvisioner handles provisioning nginx kubernetes resources.
@@ -123,9 +124,14 @@ func NewNginxProvisioner(
 		clientSSLSecretName = cfg.PlusUsageConfig.ClientSSLSecretName
 	}
 
-	var dataplaneKeySecretName string
+	var n1cDataplaneKeySecretName string
 	if cfg.NginxOneConsoleTelemetryConfig.DataplaneKeySecretName != "" {
-		dataplaneKeySecretName = cfg.NginxOneConsoleTelemetryConfig.DataplaneKeySecretName
+		n1cDataplaneKeySecretName = cfg.NginxOneConsoleTelemetryConfig.DataplaneKeySecretName
+	}
+
+	var nimDataplaneKeySecretName string
+	if cfg.NginxInstanceManagerTelemetryConfig.DataplaneKeySecretName != "" {
+		nimDataplaneKeySecretName = cfg.NginxInstanceManagerTelemetryConfig.DataplaneKeySecretName
 	}
 
 	store := newStore(
@@ -134,7 +140,8 @@ func NewNginxProvisioner(
 		jwtSecretName,
 		caSecretName,
 		clientSSLSecretName,
-		dataplaneKeySecretName,
+		n1cDataplaneKeySecretName,
+		nimDataplaneKeySecretName,
 	)
 
 	selector := metav1.LabelSelector{
@@ -188,7 +195,8 @@ func NewNginxProvisioner(
 		cfg.GatewayPodConfig.Namespace,
 		cfg.NginxDockerSecretNames,
 		cfg.AgentTLSSecretName,
-		dataplaneKeySecretName,
+		n1cDataplaneKeySecretName,
+		nimDataplaneKeySecretName,
 		cfg.PlusUsageConfig,
 		eventLoopFeatures{
 			isOpenshift:          isOpenshift,

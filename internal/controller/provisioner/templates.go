@@ -83,20 +83,50 @@ auxiliary_command:
         port: {{ .EndpointPort }}
         type: grpc
     auth:
-        tokenpath: /etc/nginx-agent/secrets/dataplane.key
+        tokenpath: /etc/nginx-agent/secrets/dataplane-n1c.key
     tls:
         skip_verify: {{ .EndpointTLSSkipVerify }}
 {{- end }}
 {{- if .EnableMetrics }}
 collector:
-    log:
-       path: "stdout"
     exporters:
         prometheus:
             server:
                 host: "0.0.0.0"
                 port: {{ .MetricsPort }}
+{{- if .NIMReporting }}
+        otlp:
+            "nim":
+                server:
+                    host: "{{ .NIMEndpointHost }}"
+                    port: {{ .NIMEndpointPort }}
+                authenticator: headers_setter
+{{- end }}
+    processors:
+{{- if .NIMReporting }}
+        batch:
+            "nim_logs": {}
+        securityviolationsfilter:
+            "nim": {}
+{{- end }}
+    extensions:
+{{- if .NIMReporting }}
+        headers_setter:
+            headers:
+             - action: insert
+               key: authorization
+               file_path: /etc/nginx-agent/secrets/dataplane-nim.key
+{{- end }}
+    log:
+        path: "stdout"
     pipelines:
+{{- if .NIMReporting }}
+        logs:
+            "nim":
+                receivers: ["tcplog/nginx_app_protect"]
+                processors: ["securityviolationsfilter/nim","batch/nim_logs"]
+                exporters: ["otlp_grpc/nim"]
+{{- end }}
         metrics:
 {{- if .NginxOneReporting }}
             "ngf":

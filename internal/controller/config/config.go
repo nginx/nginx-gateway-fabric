@@ -46,7 +46,9 @@ type Config struct {
 	// WatchNamespaces is the list of namespaces to watch for resources. If empty, all namespaces are watched.
 	WatchNamespaces []string
 	// NginxOneConsoleTelemetryConfig contains the configuration for NGINX One Console telemetry.
-	NginxOneConsoleTelemetryConfig NginxOneConsoleTelemetryConfig
+	NginxOneConsoleTelemetryConfig ManagementPlaneTelemetryConfig
+	// NginxInstanceManagerTelemetryConfig contains the configuration for NGINX Instance Manager telemetry.
+	NginxInstanceManagerTelemetryConfig ManagementPlaneTelemetryConfig
 	// ProductTelemetryConfig contains the configuration for collecting product telemetry.
 	ProductTelemetryConfig ProductTelemetryConfig
 	// HealthConfig specifies the health probe config.
@@ -174,8 +176,9 @@ type Flags struct {
 	Values []string
 }
 
-// NginxOneConsoleTelemetryConfig contains the configuration for NGINX One Console telemetry.
-type NginxOneConsoleTelemetryConfig struct {
+// ManagementPlaneTelemetryConfig contains the configuration for management plane telemetry
+// such as NGINX One Console or NGINX Instance Manager.
+type ManagementPlaneTelemetryConfig struct {
 	// DataplaneKeySecretName is the name of the Secret containing the dataplane key.
 	DataplaneKeySecretName string
 	// EndpointHost is the host of the telemetry endpoint.

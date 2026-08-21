@@ -45,13 +45,14 @@ import (
 )
 
 const (
-	agentTLSTestSecretName         = "agent-tls-secret"
-	jwtTestSecretName              = "jwt-secret"
-	caTestSecretName               = "ca-secret"
-	clientTestSecretName           = "client-secret"
-	dockerTestSecretName           = "docker-secret"
-	ngfNamespace                   = "nginx-gateway"
-	nginxOneDataplaneKeySecretName = "dataplane-key"
+	agentTLSTestSecretName                     = "agent-tls-secret"
+	jwtTestSecretName                          = "jwt-secret"
+	caTestSecretName                           = "ca-secret"
+	clientTestSecretName                       = "client-secret"
+	dockerTestSecretName                       = "docker-secret"
+	ngfNamespace                               = "nginx-gateway"
+	nginxOneDataplaneKeySecretName             = "n1c-dataplane-key" //nolint:gosec // not credentials
+	nginxInstanceManagerDataplaneKeySecretName = "nim-dataplane-key" //nolint:gosec // not credentials
 )
 
 func createScheme() *runtime.Scheme {
@@ -191,6 +192,7 @@ func defaultNginxProvisioner(
 			caTestSecretName,
 			clientTestSecretName,
 			nginxOneDataplaneKeySecretName,
+			nginxInstanceManagerDataplaneKeySecretName,
 		),
 		k8sClient: fakeClient,
 		cfg: Config{
@@ -210,11 +212,16 @@ func defaultNginxProvisioner(
 			},
 			NginxDockerSecretNames: []string{dockerTestSecretName},
 			AgentTLSSecretName:     agentTLSTestSecretName,
-			NginxOneConsoleTelemetryConfig: config.NginxOneConsoleTelemetryConfig{
-				DataplaneKeySecretName: "dataplane-key",
+			NginxOneConsoleTelemetryConfig: config.ManagementPlaneTelemetryConfig{
+				DataplaneKeySecretName: nginxOneDataplaneKeySecretName,
 				EndpointHost:           "agent.connect.nginx.com",
 				EndpointPort:           443,
 				EndpointTLSSkipVerify:  false,
+			},
+			NginxInstanceManagerTelemetryConfig: config.ManagementPlaneTelemetryConfig{
+				DataplaneKeySecretName: nginxInstanceManagerDataplaneKeySecretName,
+				EndpointHost:           "nim.example.com",
+				EndpointPort:           443,
 			},
 			AgentLabels: map[string]string{
 				"product-type":      "ngf",
@@ -288,8 +295,11 @@ func TestNewNginxProvisioner(t *testing.T) {
 			InstanceName: "test-instance",
 		},
 		Logger: logr.Discard(),
-		NginxOneConsoleTelemetryConfig: config.NginxOneConsoleTelemetryConfig{
-			DataplaneKeySecretName: "dataplane-key",
+		NginxOneConsoleTelemetryConfig: config.ManagementPlaneTelemetryConfig{
+			DataplaneKeySecretName: nginxOneDataplaneKeySecretName,
+		},
+		NginxInstanceManagerTelemetryConfig: config.ManagementPlaneTelemetryConfig{
+			DataplaneKeySecretName: nginxInstanceManagerDataplaneKeySecretName,
 		},
 	}
 
@@ -311,7 +321,8 @@ func TestNewNginxProvisioner(t *testing.T) {
 	}
 	g.Expect(provisioner.baseLabelSelector).To(Equal(labelSelector))
 
-	g.Expect(provisioner.store.dataplaneKeySecretName).To(Equal("dataplane-key"))
+	g.Expect(provisioner.store.n1cDataplaneKeySecretName).To(Equal(nginxOneDataplaneKeySecretName))
+	g.Expect(provisioner.store.nimDataplaneKeySecretName).To(Equal(nginxInstanceManagerDataplaneKeySecretName))
 
 	g.Expect(provisioner.clusterIPFamily).To(Equal(ngfAPIv1alpha2.Dual))
 }
@@ -850,7 +861,7 @@ func TestProvisionNginxDeletesServiceOnLBClassChange(t *testing.T) {
 		WithObjects(existingSvc).
 		Build()
 
-	st := newStore(nil, "", "", "", "", "")
+	st := newStore(nil, "", "", "", "", "", "")
 	// Register the Service in the store so we can verify it gets cleared.
 	st.registerResourceInGatewayConfig(gatewayNSName, existingSvc)
 
@@ -913,7 +924,7 @@ func TestDeleteServiceForLBClassChangeRestoresStoreOnFailure(t *testing.T) {
 		WithObjects(existingSvc).
 		Build()
 
-	st := newStore(nil, "", "", "", "", "")
+	st := newStore(nil, "", "", "", "", "", "")
 	st.registerResourceInGatewayConfig(gatewayNSName, existingSvc)
 
 	deleteErr := errors.New("connection refused")
@@ -968,7 +979,7 @@ func TestDeleteServiceForLBClassChangeFallsBackToLiveGet(t *testing.T) {
 		WithObjects(existingSvc).
 		Build()
 
-	st := newStore(nil, "", "", "", "", "")
+	st := newStore(nil, "", "", "", "", "", "")
 	// Intentionally do NOT register the Service in the store.
 
 	provisioner := &NginxProvisioner{
@@ -1607,7 +1618,7 @@ func TestProvisionNginxPatchesServiceStatus(t *testing.T) {
 
 			provisioner := &NginxProvisioner{
 				leader: true,
-				store:  newStore(nil, "", "", "", "", ""),
+				store:  newStore(nil, "", "", "", "", "", ""),
 				cfg: Config{
 					Logger:        logr.Discard(),
 					EventRecorder: &k8sEvents.FakeRecorder{},
