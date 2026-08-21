@@ -13,10 +13,10 @@ import (
 	extprocv3 "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	typev3 "github.com/envoyproxy/go-control-plane/envoy/type/v3"
 	"github.com/go-logr/logr"
+	eppMetadata "github.com/llm-d/llm-d-router/pkg/epp/metadata"
 	. "github.com/onsi/gomega"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
-	eppMetadata "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/types"
 )

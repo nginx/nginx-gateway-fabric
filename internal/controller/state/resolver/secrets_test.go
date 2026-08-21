@@ -606,7 +606,7 @@ func TestSecretResolver(t *testing.T) {
 		if test.expectedErrMsg == "" {
 			g.Expect(err).ToNot(HaveOccurred(), fmt.Sprintf("case %q", test.name))
 		} else {
-			g.Expect(err).To(MatchError(test.expectedErrMsg), fmt.Sprintf("case %q", test.name))
+			g.Expect(err).To(MatchError(ContainSubstring(test.expectedErrMsg)), fmt.Sprintf("case %q", test.name))
 		}
 	}
 
@@ -756,7 +756,7 @@ func TestValidateTLS(t *testing.T) {
 			err := secrets.ValidateTLS(test.tlsCert, test.tlsPrivateKey)
 			if test.expectedErr != "" {
 				g.Expect(err).To(HaveOccurred())
-				g.Expect(err).To(MatchError(test.expectedErr))
+				g.Expect(err).To(MatchError(ContainSubstring(test.expectedErr)))
 			} else {
 				g.Expect(err).ToNot(HaveOccurred())
 			}

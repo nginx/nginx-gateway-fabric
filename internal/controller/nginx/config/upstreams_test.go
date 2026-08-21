@@ -64,7 +64,7 @@ func TestExecuteUpstreams_NginxOSS(t *testing.T) {
 				},
 			},
 			UpstreamSettings: upstreamsettings.UpstreamSettings{
-				ZoneSize: "2m",
+				ZoneSize: helpers.GetPointer[ngfAPI.Size]("2m"),
 				KeepAlive: http.UpstreamKeepAlive{
 					Connections: helpers.GetPointer[int32](1),
 					Requests:    1,
@@ -83,7 +83,7 @@ func TestExecuteUpstreams_NginxOSS(t *testing.T) {
 				},
 			},
 			UpstreamSettings: upstreamsettings.UpstreamSettings{
-				ZoneSize: "2m",
+				ZoneSize: helpers.GetPointer[ngfAPI.Size]("2m"),
 				KeepAlive: http.UpstreamKeepAlive{
 					Connections: helpers.GetPointer[int32](0),
 					Requests:    1,
@@ -108,6 +108,7 @@ func TestExecuteUpstreams_NginxOSS(t *testing.T) {
 		"server [2001:db8::1]:80": 1,
 		"server 12.0.0.0:80;":     1,
 		"server 12.0.0.6:80;":     1,
+
 		fmt.Sprintf("server %snginx-503-server.sock;", SocketBasePath): 1,
 
 		"keepalive 1;":           1,
@@ -215,7 +216,7 @@ func TestExecuteUpstreams_NginxPlus(t *testing.T) {
 				},
 			},
 			UpstreamSettings: upstreamsettings.UpstreamSettings{
-				ZoneSize: "2m",
+				ZoneSize: helpers.GetPointer[ngfAPI.Size]("2m"),
 				KeepAlive: http.UpstreamKeepAlive{
 					Connections: helpers.GetPointer[int32](1),
 					Requests:    1,
@@ -278,7 +279,7 @@ func TestExecuteUpstreams_NginxPlus(t *testing.T) {
 				},
 			},
 			UpstreamSettings: upstreamsettings.UpstreamSettings{
-				ZoneSize: "2m",
+				ZoneSize: helpers.GetPointer[ngfAPI.Size]("2m"),
 				KeepAlive: http.UpstreamKeepAlive{
 					Connections: helpers.GetPointer[int32](0),
 					Requests:    1,
@@ -290,27 +291,30 @@ func TestExecuteUpstreams_NginxPlus(t *testing.T) {
 	}
 
 	expectedSubStrings := map[string]int{
-		"upstream up1":                                1,
-		"upstream up2":                                1,
-		"upstream up3-ipv6":                           1,
-		"upstream up4-ipv6":                           1,
-		"upstream up5":                                1,
-		"upstream up6-usp-with-sp":                    1,
-		"upstream up7-with-sp":                        1,
+		"upstream up1":             1,
+		"upstream up2":             1,
+		"upstream up3-ipv6":        1,
+		"upstream up4-ipv6":        1,
+		"upstream up5":             1,
+		"upstream up6-usp-with-sp": 1,
+		"upstream up7-with-sp":     1,
+
 		"upstream up8-with-sp-expiry-and-path-empty":  1,
 		"upstream up9-usp-keepAlive-connections-zero": 1,
 		"upstream invalid-backend-ref":                1,
 
 		defaultLBMethod + ";": 9,
-		"ip_hash;":            1,
 
-		"zone up1 1m;":                                1,
-		"zone up2 1m;":                                1,
-		"zone up3-ipv6 1m;":                           1,
-		"zone up4-ipv6 1m;":                           1,
-		"zone up5 1m;":                                1,
-		"zone up6-usp-with-sp 2m;":                    1,
-		"zone up7-with-sp 1m;":                        1,
+		"ip_hash;": 1,
+
+		"zone up1 1m;":             1,
+		"zone up2 1m;":             1,
+		"zone up3-ipv6 1m;":        1,
+		"zone up4-ipv6 1m;":        1,
+		"zone up5 1m;":             1,
+		"zone up6-usp-with-sp 2m;": 1,
+		"zone up7-with-sp 1m;":     1,
+
 		"zone up8-with-sp-expiry-and-path-empty 1m;":  1,
 		"zone up9-usp-keepAlive-connections-zero 2m;": 1,
 
@@ -334,7 +338,8 @@ func TestExecuteUpstreams_NginxPlus(t *testing.T) {
 		"state /var/lib/nginx/state/up7-with-sp.conf;":                        1,
 		"state /var/lib/nginx/state/up8-with-sp-expiry-and-path-empty.conf;":  1,
 		"state /var/lib/nginx/state/up9-usp-keepAlive-connections-zero.conf;": 1,
-		fmt.Sprintf("server %snginx-500-server.sock;", SocketBasePath):        1,
+
+		fmt.Sprintf("server %snginx-500-server.sock;", SocketBasePath): 1,
 	}
 
 	upstreams := gen.createUpstreams(stateUpstreams)
@@ -407,7 +412,7 @@ func TestCreateUpstreams(t *testing.T) {
 				},
 			},
 			UpstreamSettings: upstreamsettings.UpstreamSettings{
-				ZoneSize: "2m",
+				ZoneSize: helpers.GetPointer[ngfAPI.Size]("2m"),
 				KeepAlive: http.UpstreamKeepAlive{
 					Connections: helpers.GetPointer[int32](1),
 					Requests:    1,
@@ -426,7 +431,7 @@ func TestCreateUpstreams(t *testing.T) {
 				},
 			},
 			UpstreamSettings: upstreamsettings.UpstreamSettings{
-				ZoneSize: "2m",
+				ZoneSize: helpers.GetPointer[ngfAPI.Size]("2m"),
 				KeepAlive: http.UpstreamKeepAlive{
 					Connections: helpers.GetPointer[int32](0),
 					Requests:    1,
@@ -640,7 +645,7 @@ func TestCreateUpstream(t *testing.T) {
 					},
 				},
 				UpstreamSettings: upstreamsettings.UpstreamSettings{
-					ZoneSize: "2m",
+					ZoneSize: helpers.GetPointer[ngfAPI.Size]("2m"),
 					KeepAlive: http.UpstreamKeepAlive{
 						Connections: helpers.GetPointer[int32](1),
 						Requests:    1,
@@ -678,7 +683,7 @@ func TestCreateUpstream(t *testing.T) {
 					},
 				},
 				UpstreamSettings: upstreamsettings.UpstreamSettings{
-					ZoneSize: "2m",
+					ZoneSize: helpers.GetPointer[ngfAPI.Size]("2m"),
 					KeepAlive: http.UpstreamKeepAlive{
 						Connections: helpers.GetPointer[int32](1),
 						Requests:    1,
@@ -884,6 +889,48 @@ func TestCreateUpstream(t *testing.T) {
 				LoadBalancingMethod: defaultLBMethod,
 			},
 			msg: "mixed IP addresses and DNS names",
+		},
+		{
+			stateUpstream: dataplane.Upstream{
+				Name: "zone-size-override",
+				UpstreamSettings: upstreamsettings.UpstreamSettings{
+					ZoneSize: helpers.GetPointer[ngfAPI.Size]("2m"),
+				},
+				Endpoints: []resolver.Endpoint{
+					{
+						Address: "10.0.0.1",
+						Port:    80,
+					},
+					{
+						Address: "example.com",
+						Port:    443,
+						Resolve: true,
+					},
+					{
+						Address: "fd00:10:244:1::7",
+						Port:    80,
+						IPv6:    true,
+					},
+				},
+			},
+			expectedUpstream: http.Upstream{
+				Name:     "zone-size-override",
+				ZoneSize: "2m",
+				Servers: []http.UpstreamServer{
+					{
+						Address: "10.0.0.1:80",
+					},
+					{
+						Address: "example.com:443",
+						Resolve: true,
+					},
+					{
+						Address: "[fd00:10:244:1::7]:80",
+					},
+				},
+				LoadBalancingMethod: defaultLBMethod,
+			},
+			msg: "zone size override",
 		},
 	}
 
@@ -1658,7 +1705,8 @@ func TestExecuteUpstreams_LoadBalancingMethod(t *testing.T) {
 			expectedSubStrings: map[string]int{
 				"upstream up1-usp-ipv4": 1,
 				"upstream up2-usp-ipv6": 1,
-				defaultLBMethod + ";":   2,
+
+				defaultLBMethod + ";": 2,
 			},
 		},
 		{

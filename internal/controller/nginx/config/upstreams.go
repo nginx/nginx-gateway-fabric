@@ -167,8 +167,8 @@ func (g GeneratorImpl) createUpstream(
 		sp = getSessionPersistenceConfiguration(up.SessionPersistence)
 	}
 
-	if upstreamPolicySettings.ZoneSize != "" {
-		zoneSize = upstreamPolicySettings.ZoneSize
+	if upstreamPolicySettings.ZoneSize != nil {
+		zoneSize = string(*upstreamPolicySettings.ZoneSize)
 	}
 
 	chosenLBMethod := defaultLBMethod

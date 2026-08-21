@@ -347,8 +347,6 @@ func (g *Gateway) GetReferencedSnippetsFilters(
 
 // GetReferencedRateLimitPolicies returns all RateLimitPolicies that target routes attached to this Gateway.
 // RateLimitPolicies that target the Gateway directly are excluded.
-//
-//nolint:gocyclo // complexity is acceptable for this function
 func (g *Gateway) GetReferencedRateLimitPolicies(
 	routes map[RouteKey]*L7Route,
 	allPolicies map[PolicyKey]*Policy,
@@ -361,14 +359,7 @@ func (g *Gateway) GetReferencedRateLimitPolicies(
 	referencedRateLimitPolicies := make(map[PolicyKey]*Policy)
 
 	// Create a lookup map of routes attached to this gateway for efficient checking
-	attachedRoutes := make(map[types.NamespacedName]struct{})
-	for _, route := range routes {
-		if !route.Valid || !g.isRouteAttachedToGateway(route, gatewayNsName) {
-			continue
-		}
-		routeNsName := client.ObjectKeyFromObject(route.Source)
-		attachedRoutes[routeNsName] = struct{}{}
-	}
+	attachedRoutes := g.buildAttachedRoutes(routes, gatewayNsName)
 
 	// Iterate through all policies and check their target references
 	for policyKey, policy := range allPolicies {
@@ -381,24 +372,8 @@ func (g *Gateway) GetReferencedRateLimitPolicies(
 			continue
 		}
 
-		var targetsGateway, targetsAttachedRoute bool
-
 		// Check all target references in a single loop
-		for _, targetRef := range policy.TargetRefs {
-			// Check if targeting this gateway directly
-			if targetRef.Kind == kinds.Gateway && targetRef.Nsname == gatewayNsName {
-				targetsGateway = true
-				break // No need to check further if it targets the gateway
-			}
-
-			// Check if targeting a route attached to this gateway
-			if targetRef.Kind == kinds.HTTPRoute || targetRef.Kind == kinds.GRPCRoute {
-				if _, exists := attachedRoutes[targetRef.Nsname]; exists {
-					targetsAttachedRoute = true
-					// Don't break here, we still need to check if any other targetRef targets the gateway
-				}
-			}
-		}
+		targetsGateway, targetsAttachedRoute := checkPolicyTargetRefs(policy, gatewayNsName, attachedRoutes)
 
 		// Only include policies that target attached routes but NOT the gateway
 		if targetsAttachedRoute && !targetsGateway {
@@ -411,6 +386,48 @@ func (g *Gateway) GetReferencedRateLimitPolicies(
 	}
 
 	return referencedRateLimitPolicies
+}
+
+func (g *Gateway) buildAttachedRoutes(
+	routes map[RouteKey]*L7Route,
+	gatewayNsName client.ObjectKey,
+) map[types.NamespacedName]struct{} {
+	attachedRoutes := make(map[types.NamespacedName]struct{})
+	for _, route := range routes {
+		if !route.Valid || !g.isRouteAttachedToGateway(route, gatewayNsName) {
+			continue
+		}
+		routeNsName := client.ObjectKeyFromObject(route.Source)
+		attachedRoutes[routeNsName] = struct{}{}
+	}
+
+	return attachedRoutes
+}
+
+func checkPolicyTargetRefs(
+	policy *Policy,
+	gatewayNsName types.NamespacedName,
+	attachedRoutes map[types.NamespacedName]struct{},
+) (bool, bool) {
+	var targetsGateway, targetsAttachedRoute bool
+
+	for _, targetRef := range policy.TargetRefs {
+		// Check if targeting this gateway directly
+		if targetRef.Kind == kinds.Gateway && targetRef.Nsname == gatewayNsName {
+			targetsGateway = true
+			break // No need to check further if it targets the gateway
+		}
+
+		// Check if targeting a route attached to this gateway
+		if targetRef.Kind == kinds.HTTPRoute || targetRef.Kind == kinds.GRPCRoute {
+			if _, exists := attachedRoutes[targetRef.Nsname]; exists {
+				targetsAttachedRoute = true
+				// Don't break here, we still need to check if any other targetRef targets the gateway
+			}
+		}
+	}
+
+	return targetsGateway, targetsAttachedRoute
 }
 
 // isRouteAttachedToGateway checks if the given route is attached to this gateway.
