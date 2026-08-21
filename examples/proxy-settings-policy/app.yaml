@@ -78,7 +78,7 @@ spec:
     spec:
       containers:
       - name: coffee
-        image: golang:1.26-alpine
+        image: golang:1.27-alpine
         command: ["/bin/sh"]
         args:
           - -c

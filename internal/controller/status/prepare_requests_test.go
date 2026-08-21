@@ -3482,7 +3482,7 @@ func TestBuildInferencePoolStatuses(t *testing.T) {
 			Generation: 1,
 		},
 		Spec: inference.InferencePoolSpec{
-			EndpointPickerRef: inference.EndpointPickerRef{
+			EndpointPickerRef: &inference.EndpointPickerRef{
 				Name: inference.ObjectName("invalid-extension-ref"),
 			},
 		},
