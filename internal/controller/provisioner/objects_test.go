@@ -1490,8 +1490,9 @@ func TestBuildNginxResourceObjects_DataplaneKeySecret(t *testing.T) {
 	// 3 secrets (agentTLS, n1c dataplane key, nim dataplane key), 2 configmaps, serviceaccount, service, deployment
 	g.Expect(objects).To(HaveLen(8))
 
-	// Find the N1C dataplane key secret
+	// Find the dataplane key secrets
 	var foundN1C bool
+	var foundNIM bool
 	for _, obj := range objects {
 		if s, ok := obj.(*corev1.Secret); ok {
 			if s.GetName() == controller.CreateNginxResourceName(resourceName, n1cDataplaneKeySecretName) {
@@ -1499,14 +1500,6 @@ func TestBuildNginxResourceObjects_DataplaneKeySecret(t *testing.T) {
 				g.Expect(s.Data).To(HaveKey(secrets.DataplaneSecretKey))
 				g.Expect(s.Data[secrets.DataplaneSecretKey]).To(Equal([]byte("keydata")))
 			}
-		}
-	}
-	g.Expect(foundN1C).To(BeTrue())
-
-	// Find the NIM dataplane key secret
-	var foundNIM bool
-	for _, obj := range objects {
-		if s, ok := obj.(*corev1.Secret); ok {
 			if s.GetName() == controller.CreateNginxResourceName(resourceName, nimDataplaneKeySecretName) {
 				foundNIM = true
 				g.Expect(s.Data).To(HaveKey(secrets.DataplaneSecretKey))
@@ -1514,6 +1507,7 @@ func TestBuildNginxResourceObjects_DataplaneKeySecret(t *testing.T) {
 			}
 		}
 	}
+	g.Expect(foundN1C).To(BeTrue())
 	g.Expect(foundNIM).To(BeTrue())
 
 	// Check deployment mounts secrets
