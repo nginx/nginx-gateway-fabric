@@ -782,6 +782,27 @@ func TestValidateLeaderElectionTimings(t *testing.T) {
 			renewDeadline: 20 * time.Second,
 			expErr:        true,
 		},
+		{
+			name:          "invalid - negative lease duration",
+			leaseDuration: -5 * time.Second,
+			renewDeadline: 10 * time.Second,
+			retryPeriod:   2 * time.Second,
+			expErr:        true,
+		},
+		{
+			name:          "invalid - negative renew deadline",
+			leaseDuration: 15 * time.Second,
+			renewDeadline: -10 * time.Second,
+			retryPeriod:   2 * time.Second,
+			expErr:        true,
+		},
+		{
+			name:          "invalid - negative retry period",
+			leaseDuration: 15 * time.Second,
+			renewDeadline: 10 * time.Second,
+			retryPeriod:   -2 * time.Second,
+			expErr:        true,
+		},
 	}
 
 	for _, tc := range tests {

@@ -154,6 +154,13 @@ const (
 // A zero value for any of the three settings means "unset", and the corresponding controller-runtime default is
 // substituted for the purposes of this cross-field validation.
 func validateLeaderElectionTimings(leaseDuration, renewDeadline, retryPeriod time.Duration) error {
+	if leaseDuration < 0 {
+		return errors.New("lease duration must not be negative")
+	}
+	if renewDeadline < 0 {
+		return errors.New("renew deadline must not be negative")
+	}
+
 	if leaseDuration == 0 {
 		leaseDuration = defaultLeaderElectionLeaseDuration
 	}
@@ -164,14 +171,14 @@ func validateLeaderElectionTimings(leaseDuration, renewDeadline, retryPeriod tim
 		retryPeriod = defaultLeaderElectionRetryPeriod
 	}
 
+	if retryPeriod <= 0 {
+		return errors.New("retry period must be greater than zero")
+	}
 	if leaseDuration <= renewDeadline {
 		return errors.New("lease duration must be greater than renew deadline")
 	}
 	if renewDeadline <= time.Duration(leaderelection.JitterFactor*float64(retryPeriod)) {
 		return fmt.Errorf("renew deadline must be greater than retry period * %.1f", leaderelection.JitterFactor)
-	}
-	if retryPeriod <= 0 {
-		return errors.New("retry period must be greater than zero")
 	}
 
 	return nil
