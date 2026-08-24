@@ -359,6 +359,89 @@ func TestServiceChangedPredicate_Update(t *testing.T) {
 			},
 			expUpdate: true,
 		},
+		{
+			msg: "externalName changed",
+			objectOld: &v1.Service{
+				Spec: v1.ServiceSpec{
+					Type:         v1.ServiceTypeExternalName,
+					ExternalName: "old.example.com",
+					Ports: []v1.ServicePort{
+						{
+							Port:       80,
+							TargetPort: intstr.FromInt(80),
+						},
+					},
+				},
+			},
+			objectNew: &v1.Service{
+				Spec: v1.ServiceSpec{
+					Type:         v1.ServiceTypeExternalName,
+					ExternalName: "new.example.com",
+					Ports: []v1.ServicePort{
+						{
+							Port:       80,
+							TargetPort: intstr.FromInt(80),
+						},
+					},
+				},
+			},
+			expUpdate: true,
+		},
+		{
+			msg: "externalName stayed the same",
+			objectOld: &v1.Service{
+				Spec: v1.ServiceSpec{
+					Type:         v1.ServiceTypeExternalName,
+					ExternalName: "same.example.com",
+					Ports: []v1.ServicePort{
+						{
+							Port:       80,
+							TargetPort: intstr.FromInt(80),
+						},
+					},
+				},
+			},
+			objectNew: &v1.Service{
+				Spec: v1.ServiceSpec{
+					Type:         v1.ServiceTypeExternalName,
+					ExternalName: "same.example.com",
+					Ports: []v1.ServicePort{
+						{
+							Port:       80,
+							TargetPort: intstr.FromInt(80),
+						},
+					},
+				},
+			},
+			expUpdate: false,
+		},
+		{
+			msg: "service type changed from ClusterIP to ExternalName",
+			objectOld: &v1.Service{
+				Spec: v1.ServiceSpec{
+					Type: v1.ServiceTypeClusterIP,
+					Ports: []v1.ServicePort{
+						{
+							Port:       80,
+							TargetPort: intstr.FromInt(80),
+						},
+					},
+				},
+			},
+			objectNew: &v1.Service{
+				Spec: v1.ServiceSpec{
+					Type:         v1.ServiceTypeExternalName,
+					ExternalName: "new.example.com",
+					Ports: []v1.ServicePort{
+						{
+							Port:       80,
+							TargetPort: intstr.FromInt(80),
+						},
+					},
+				},
+			},
+			expUpdate: true,
+		},
 	}
 
 	p := ServiceChangedPredicate{}
