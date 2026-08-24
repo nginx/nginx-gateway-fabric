@@ -9,7 +9,7 @@
 
 FROM alpine:3.23 AS nginx-source
 
-# renovate: datasource=github-tags depName=nginx/nginx extractVersion=^release-(?<version>.+)$
+# renovate: datasource=github-tags depName=nginx/nginx
 ARG NGINX_VERSION=1.31.3
 
 RUN apk add --no-cache gcc musl-dev openssl-dev pcre2-dev zlib-dev linux-headers perl make
@@ -27,7 +27,7 @@ RUN apk add --no-cache musl-dev protobuf-dev openssl-dev perl make \
 
 RUN rustup component add clippy
 
-# renovate: datasource=github-tags depName=nginx/nginx extractVersion=^release-(?<version>.+)$
+# renovate: datasource=github-tags depName=nginx/nginx
 ARG NGINX_VERSION=1.31.3
 
 COPY --from=nginx-source /nginx-${NGINX_VERSION} /nginx-src
