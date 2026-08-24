@@ -12381,7 +12381,6 @@ func TestBuildUpstreamsUseClusterIPPrecedence(t *testing.T) {
 
 func TestBuildAccessLogDestination(t *testing.T) {
 	t.Parallel()
-	g := NewWithT(t)
 
 	logFormat := `'$remote_addr - $remote_user [$time_local] '
 							'"$request" $status $body_bytes_sent '
@@ -12389,6 +12388,7 @@ func TestBuildAccessLogDestination(t *testing.T) {
 
 	t.Run("syslog destination set correctly", func(t *testing.T) {
 		t.Parallel()
+		g := NewWithT(t)
 		destinationType := ngfAPIv1alpha2.NginxAccessLogDestinationTypeSyslog
 		server := "syslog.example.com:514"
 		src := &ngfAPIv1alpha2.NginxLogging{
@@ -12407,6 +12407,7 @@ func TestBuildAccessLogDestination(t *testing.T) {
 
 	t.Run("file destination sets file path", func(t *testing.T) {
 		t.Parallel()
+		g := NewWithT(t)
 		destinationType := ngfAPIv1alpha2.NginxAccessLogDestinationTypeFile
 		path := "/var/log/nginx/access.log"
 		src := &ngfAPIv1alpha2.NginxLogging{
@@ -12425,6 +12426,7 @@ func TestBuildAccessLogDestination(t *testing.T) {
 
 	t.Run("unset destination falls back to default path", func(t *testing.T) {
 		t.Parallel()
+		g := NewWithT(t)
 		src := &ngfAPIv1alpha2.NginxLogging{
 			AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
 				Format: helpers.GetPointer(logFormat),
