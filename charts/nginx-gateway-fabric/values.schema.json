@@ -1064,10 +1064,28 @@
               "title": "enable",
               "type": "boolean"
             },
+            "leaseDuration": {
+              "default": "",
+              "description": "The duration that non-leader candidates will wait to force acquire leadership. Must be greater than\nrenewDeadline. Must be parsable by https://pkg.go.dev/time#ParseDuration.",
+              "title": "leaseDuration",
+              "type": "string"
+            },
             "lockName": {
               "default": "",
               "description": "The name of the leader election lock. A Lease object with this name will be created in the same Namespace as\nthe controller.",
               "title": "lockName",
+              "type": "string"
+            },
+            "renewDeadline": {
+              "default": "",
+              "description": "The duration that the acting leader will retry refreshing leadership before giving up. Must be greater\nthan retryPeriod * 1.2 and less than leaseDuration. Increase this value if leader election is failing due to\nslow Kubernetes API server responses. Must be parsable by https://pkg.go.dev/time#ParseDuration.",
+              "title": "renewDeadline",
+              "type": "string"
+            },
+            "retryPeriod": {
+              "default": "",
+              "description": "The duration the leader election clients should wait between action tries. Must be less than renewDeadline.\nMust be parsable by https://pkg.go.dev/time#ParseDuration.",
+              "title": "retryPeriod",
               "type": "string"
             }
           },

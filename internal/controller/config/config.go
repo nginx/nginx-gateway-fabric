@@ -39,8 +39,6 @@ type Config struct {
 	UsageReportConfig UsageReportConfig
 	// Flags contains the NGF command-line flag names and values.
 	Flags Flags
-	// LeaderElection contains the configuration for leader election.
-	LeaderElection LeaderElectionConfig
 	// NginxDockerSecretNames are the names of any Docker registry Secrets for the NGINX container.
 	NginxDockerSecretNames []string
 	// WatchNamespaces is the list of namespaces to watch for resources. If empty, all namespaces are watched.
@@ -49,6 +47,8 @@ type Config struct {
 	NginxOneConsoleTelemetryConfig NginxOneConsoleTelemetryConfig
 	// ProductTelemetryConfig contains the configuration for collecting product telemetry.
 	ProductTelemetryConfig ProductTelemetryConfig
+	// LeaderElection contains the configuration for leader election.
+	LeaderElection LeaderElectionConfig
 	// HealthConfig specifies the health probe config.
 	HealthConfig HealthConfig
 	// MetricsConfig specifies the metrics config.
@@ -130,6 +130,13 @@ type LeaderElectionConfig struct {
 	LockName string
 	// Identity is the unique name of the controller used for identifying the leader.
 	Identity string
+	// LeaseDuration is the duration that non-leader candidates will wait to force acquire leadership. This is
+	// measured against time of last observed ack.
+	LeaseDuration time.Duration
+	// RenewDeadline is the duration that the acting leader will retry refreshing leadership before giving up.
+	RenewDeadline time.Duration
+	// RetryPeriod is the duration the LeaderElector clients should wait between action tries.
+	RetryPeriod time.Duration
 	// Enabled indicates whether leader election is enabled.
 	Enabled bool
 }

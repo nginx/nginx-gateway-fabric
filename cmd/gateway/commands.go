@@ -100,6 +100,9 @@ func createControllerCommand() *cobra.Command {
 		healthPortFlag                      = "health-port"
 		leaderElectionDisableFlag           = "leader-election-disable"
 		leaderElectionLockNameFlag          = "leader-election-lock-name"
+		leaderElectionLeaseDurationFlag     = "leader-election-lease-duration"
+		leaderElectionRenewDeadlineFlag     = "leader-election-renew-deadline"
+		leaderElectionRetryPeriodFlag       = "leader-election-retry-period"
 		productTelemetryDisableFlag         = "product-telemetry-disable"
 		gwAPIExperimentalFlag               = "gateway-api-experimental-features"
 		gwAPIInferenceExtensionFlag         = "gateway-api-inference-extension"
@@ -172,6 +175,10 @@ func createControllerCommand() *cobra.Command {
 			validator: validateResourceName,
 			value:     "nginx-gateway-leader-election-lock",
 		}
+
+		leaderElectionLeaseDuration time.Duration
+		leaderElectionRenewDeadline time.Duration
+		leaderElectionRetryPeriod   time.Duration
 
 		gwExperimentalFeatures bool
 		gwInferenceExtension   bool
@@ -267,6 +274,14 @@ func createControllerCommand() *cobra.Command {
 				return fmt.Errorf("error validating ports: %w", err)
 			}
 
+			if err := validateLeaderElectionTimings(
+				leaderElectionLeaseDuration,
+				leaderElectionRenewDeadline,
+				leaderElectionRetryPeriod,
+			); err != nil {
+				return fmt.Errorf("error validating leader election timings: %w", err)
+			}
+
 			imageSource := os.Getenv("BUILD_AGENT")
 			if imageSource != "gha" && imageSource != "local" {
 				imageSource = "unknown"
@@ -322,9 +337,12 @@ func createControllerCommand() *cobra.Command {
 					Secure:  metricsSecure,
 				},
 				LeaderElection: config.LeaderElectionConfig{
-					Enabled:  !disableLeaderElection,
-					LockName: leaderElectionLockName.String(),
-					Identity: podConfig.Name,
+					Enabled:       !disableLeaderElection,
+					LockName:      leaderElectionLockName.String(),
+					Identity:      podConfig.Name,
+					LeaseDuration: leaderElectionLeaseDuration,
+					RenewDeadline: leaderElectionRenewDeadline,
+					RetryPeriod:   leaderElectionRetryPeriod,
 				},
 				UsageReportConfig: usageReportConfig,
 				ProductTelemetryConfig: config.ProductTelemetryConfig{
@@ -481,6 +499,35 @@ func createControllerCommand() *cobra.Command {
 		leaderElectionLockNameFlag,
 		"The name of the leader election lock. "+
 			"A Lease object with this name will be created in the same Namespace as the controller.",
+	)
+
+	cmd.Flags().DurationVar(
+		&leaderElectionLeaseDuration,
+		leaderElectionLeaseDurationFlag,
+		leaderElectionLeaseDuration,
+		"The duration that non-leader candidates will wait to force acquire leadership. "+
+			"Must be parsable by https://pkg.go.dev/time#ParseDuration. Must be greater than the renew deadline. "+
+			"If not set, defaults to controller-runtime's built-in default (15s).",
+	)
+
+	cmd.Flags().DurationVar(
+		&leaderElectionRenewDeadline,
+		leaderElectionRenewDeadlineFlag,
+		leaderElectionRenewDeadline,
+		"The duration that the acting leader will retry refreshing leadership before giving up. "+
+			"Must be parsable by https://pkg.go.dev/time#ParseDuration. "+
+			"Must be greater than the retry period and less than the lease duration. Increase this value if leader "+
+			"election is failing due to slow Kubernetes API server responses. "+
+			"If not set, defaults to controller-runtime's built-in default (10s).",
+	)
+
+	cmd.Flags().DurationVar(
+		&leaderElectionRetryPeriod,
+		leaderElectionRetryPeriodFlag,
+		leaderElectionRetryPeriod,
+		"The duration the leader election clients should wait between action tries. "+
+			"Must be parsable by https://pkg.go.dev/time#ParseDuration. Must be less than the renew deadline. "+
+			"If not set, defaults to controller-runtime's built-in default (2s).",
 	)
 
 	cmd.Flags().BoolVar(

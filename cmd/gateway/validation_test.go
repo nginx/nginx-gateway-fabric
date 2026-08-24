@@ -2,6 +2,7 @@ package main
 
 import (
 	"testing"
+	"time"
 
 	. "github.com/onsi/gomega"
 )
@@ -698,6 +699,97 @@ func TestValidateInitializeArgs(t *testing.T) {
 			g := NewWithT(t)
 
 			err := validateCopyArgs(tc.srcFiles, tc.destDirs)
+			if !tc.expErr {
+				g.Expect(err).ToNot(HaveOccurred())
+			} else {
+				g.Expect(err).To(HaveOccurred())
+			}
+		})
+	}
+}
+
+func TestValidateLeaderElectionTimings(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		leaseDuration time.Duration
+		renewDeadline time.Duration
+		retryPeriod   time.Duration
+		expErr        bool
+	}{
+		{
+			name:   "valid - all unset, defaults used",
+			expErr: false,
+		},
+		{
+			name:          "valid - explicit values",
+			leaseDuration: 15 * time.Second,
+			renewDeadline: 10 * time.Second,
+			retryPeriod:   2 * time.Second,
+			expErr:        false,
+		},
+		{
+			name:          "valid - only lease duration set, other defaults used",
+			leaseDuration: 20 * time.Second,
+			expErr:        false,
+		},
+		{
+			name:          "valid - only renew deadline set, other defaults used",
+			renewDeadline: 12 * time.Second,
+			expErr:        false,
+		},
+		{
+			name:        "valid - only retry period set, other defaults used",
+			retryPeriod: 3 * time.Second,
+			expErr:      false,
+		},
+		{
+			name:          "invalid - lease duration equal to renew deadline",
+			leaseDuration: 10 * time.Second,
+			renewDeadline: 10 * time.Second,
+			retryPeriod:   2 * time.Second,
+			expErr:        true,
+		},
+		{
+			name:          "invalid - lease duration less than renew deadline",
+			leaseDuration: 5 * time.Second,
+			renewDeadline: 10 * time.Second,
+			retryPeriod:   2 * time.Second,
+			expErr:        true,
+		},
+		{
+			name:          "invalid - renew deadline not greater than retry period * jitter factor",
+			leaseDuration: 15 * time.Second,
+			renewDeadline: 2 * time.Second,
+			retryPeriod:   2 * time.Second,
+			expErr:        true,
+		},
+		{
+			name:          "invalid - retry period explicitly too high relative to renew deadline",
+			leaseDuration: 15 * time.Second,
+			renewDeadline: 10 * time.Second,
+			retryPeriod:   9 * time.Second,
+			expErr:        true,
+		},
+		{
+			name:          "invalid - lease duration set too low relative to default renew deadline",
+			leaseDuration: 5 * time.Second,
+			expErr:        true,
+		},
+		{
+			name:          "invalid - renew deadline set too high relative to default lease duration",
+			renewDeadline: 20 * time.Second,
+			expErr:        true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			err := validateLeaderElectionTimings(tc.leaseDuration, tc.renewDeadline, tc.retryPeriod)
 			if !tc.expErr {
 				g.Expect(err).ToNot(HaveOccurred())
 			} else {

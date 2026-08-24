@@ -8,8 +8,10 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"k8s.io/apimachinery/pkg/util/validation"
+	"k8s.io/client-go/tools/leaderelection"
 )
 
 const (
@@ -136,6 +138,43 @@ func validateEndpoint(endpoint string) error {
 	// we don't know if the user intended to use a hostname or an IP address,
 	// so we return a generic error message
 	return fmt.Errorf("%q must be in the format <host>:<port>", endpoint)
+}
+
+// Default leader election timings, mirroring controller-runtime's own defaults. These are only used here to
+// validate the relationship between the three settings when one or more of them is left unset (zero) by the user,
+// in which case controller-runtime will substitute its own default for that value at runtime.
+const (
+	defaultLeaderElectionLeaseDuration = 15 * time.Second
+	defaultLeaderElectionRenewDeadline = 10 * time.Second
+	defaultLeaderElectionRetryPeriod   = 2 * time.Second
+)
+
+// validateLeaderElectionTimings validates the relationship between the leader election LeaseDuration,
+// RenewDeadline, and RetryPeriod, matching the constraints enforced by client-go's leaderelection.NewLeaderElector.
+// A zero value for any of the three settings means "unset", and the corresponding controller-runtime default is
+// substituted for the purposes of this cross-field validation.
+func validateLeaderElectionTimings(leaseDuration, renewDeadline, retryPeriod time.Duration) error {
+	if leaseDuration == 0 {
+		leaseDuration = defaultLeaderElectionLeaseDuration
+	}
+	if renewDeadline == 0 {
+		renewDeadline = defaultLeaderElectionRenewDeadline
+	}
+	if retryPeriod == 0 {
+		retryPeriod = defaultLeaderElectionRetryPeriod
+	}
+
+	if leaseDuration <= renewDeadline {
+		return errors.New("lease duration must be greater than renew deadline")
+	}
+	if renewDeadline <= time.Duration(leaderelection.JitterFactor*float64(retryPeriod)) {
+		return fmt.Errorf("renew deadline must be greater than retry period * %.1f", leaderelection.JitterFactor)
+	}
+	if retryPeriod <= 0 {
+		return errors.New("retry period must be greater than zero")
+	}
+
+	return nil
 }
 
 func validateEndpointOptionalPort(value string) error {
