@@ -8,8 +8,6 @@ import (
 )
 
 // ServiceChangedPredicate implements an update predicate function for a Service.
-// This predicate will skip update events that have no change in a Service's Ports, TargetPorts,
-// AppProtocols, Type, or ExternalName.
 type ServiceChangedPredicate struct {
 	predicate.Funcs
 }

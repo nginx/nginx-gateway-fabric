@@ -442,6 +442,33 @@ func TestServiceChangedPredicate_Update(t *testing.T) {
 			},
 			expUpdate: true,
 		},
+		{
+			msg: "service type changed from ExternalName to ClusterIP",
+			objectOld: &v1.Service{
+				Spec: v1.ServiceSpec{
+					Type:         v1.ServiceTypeExternalName,
+					ExternalName: "old.example.com",
+					Ports: []v1.ServicePort{
+						{
+							Port:       80,
+							TargetPort: intstr.FromInt(80),
+						},
+					},
+				},
+			},
+			objectNew: &v1.Service{
+				Spec: v1.ServiceSpec{
+					Type: v1.ServiceTypeClusterIP,
+					Ports: []v1.ServicePort{
+						{
+							Port:       80,
+							TargetPort: intstr.FromInt(80),
+						},
+					},
+				},
+			},
+			expUpdate: true,
+		},
 	}
 
 	p := ServiceChangedPredicate{}
