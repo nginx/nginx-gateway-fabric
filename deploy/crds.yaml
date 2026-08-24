@@ -10578,7 +10578,7 @@ spec:
                     properties:
                       destination:
                         description: |-
-                          Destination specifies where the access logs are sent to.
+                          Destination specifies where access logs are sent to.
                           If file/syslog not specified, access logs are by default sent to /dev/stdout.
                         properties:
                           file:
@@ -10588,6 +10588,8 @@ spec:
                             properties:
                               path:
                                 type: string
+                            required:
+                            - path
                             type: object
                           syslog:
                             description: |-
@@ -10603,7 +10605,6 @@ spec:
                             - server
                             type: object
                           type:
-                            default: file
                             description: Type specifies the type of destination for
                               access logs.
                             enum:
@@ -10613,6 +10614,9 @@ spec:
                         required:
                         - type
                         type: object
+                        x-kubernetes-validations:
+                        - rule: '!(has(self.type) && self.type == ''file'' && !has(self.file))'
+                        - rule: '!(has(self.type) && self.type == ''syslog'' && !has(self.syslog))'
                       disable:
                         description: Disable turns off access logging when set to
                           true.

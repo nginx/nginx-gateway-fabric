@@ -569,6 +569,9 @@ const (
 )
 
 // NginxAccessLogDestination defines the destination for access logs.
+//
+// +kubebuilder:validation:XValidation:rule="!(has(self.type) && self.type == 'file' && !has(self.file))"
+// +kubebuilder:validation:XValidation:rule="!(has(self.type) && self.type == 'syslog' && !has(self.syslog))"
 type NginxAccessLogDestination struct {
 	// File specifies the file destination for access logs.
 	// Only valid when type is set to "file".
@@ -583,8 +586,6 @@ type NginxAccessLogDestination struct {
 	Syslog *NginxAccessLogSyslog `json:"syslog,omitempty"`
 
 	// Type specifies the type of destination for access logs.
-	//
-	// +kubebuilder:default=file
 	Type NginxAccessLogDestinationType `json:"type"`
 }
 
@@ -602,7 +603,7 @@ const (
 
 // NginxAccessLogFile specifies the file destination for access logs.
 type NginxAccessLogFile struct {
-	Path *string `json:"path,omitempty"`
+	Path *string `json:"path"`
 }
 
 // NginxAccessLogSyslog specifies the syslog destination for access logs.

@@ -12389,14 +12389,13 @@ func TestBuildAccessLogDestination(t *testing.T) {
 
 	t.Run("syslog destination set correctly", func(t *testing.T) {
 		t.Parallel()
-		g := NewWithT(t)
 		destinationType := ngfAPIv1alpha2.NginxAccessLogDestinationTypeSyslog
 		server := "syslog.example.com:514"
 		src := &ngfAPIv1alpha2.NginxLogging{
 			AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
 				Format: helpers.GetPointer(logFormat),
 				Destination: &ngfAPIv1alpha2.NginxAccessLogDestination{
-					Type:   &destinationType,
+					Type:   destinationType,
 					Syslog: &ngfAPIv1alpha2.NginxAccessLogSyslog{Server: server},
 				},
 			},
@@ -12408,14 +12407,13 @@ func TestBuildAccessLogDestination(t *testing.T) {
 
 	t.Run("file destination sets file path", func(t *testing.T) {
 		t.Parallel()
-		g := NewWithT(t)
 		destinationType := ngfAPIv1alpha2.NginxAccessLogDestinationTypeFile
 		path := "/var/log/nginx/access.log"
 		src := &ngfAPIv1alpha2.NginxLogging{
 			AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
 				Format: helpers.GetPointer(logFormat),
 				Destination: &ngfAPIv1alpha2.NginxAccessLogDestination{
-					Type: &destinationType,
+					Type: destinationType,
 					File: &ngfAPIv1alpha2.NginxAccessLogFile{Path: &path},
 				},
 			},

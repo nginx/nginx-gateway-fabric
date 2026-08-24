@@ -2657,9 +2657,11 @@ func buildAccessLog(srcLogSettings *ngfAPIv1alpha2.NginxLogging) *AccessLog {
 			return &AccessLog{Disable: true}
 		}
 
-		if srcLogSettings.AccessLog.Format != nil && *srcLogSettings.AccessLog.Format != "" {
+		if (srcLogSettings.AccessLog.Format != nil && *srcLogSettings.AccessLog.Format != "") ||
+			srcLogSettings.AccessLog.Destination != nil {
 			accessLog := &AccessLog{
 				Format: *srcLogSettings.AccessLog.Format,
+				Path:   DefaultAccessLogPath,
 			}
 			if srcLogSettings.AccessLog.Escape != nil {
 				accessLog.Escape = string(*srcLogSettings.AccessLog.Escape)
@@ -2672,11 +2674,17 @@ func buildAccessLog(srcLogSettings *ngfAPIv1alpha2.NginxLogging) *AccessLog {
 	}
 
 	if srcLogSettings.ErrorLogFormat != nil && *srcLogSettings.ErrorLogFormat == ngfAPIv1alpha2.NginxErrorLogFormatJSON {
-		return &AccessLog{
+		accessLog := &AccessLog{
 			Format: JSONAccessLogFormat,
 			Escape: string(ngfAPIv1alpha2.NginxAccessLogEscapeJSON),
 			Path:   DefaultAccessLogPath,
 		}
+
+		if srcLogSettings.AccessLog != nil && srcLogSettings.AccessLog.Destination != nil {
+			setAccessLogDestination(accessLog, srcLogSettings.AccessLog.Destination)
+		}
+
+		return accessLog
 	}
 
 	return nil
@@ -2686,9 +2694,10 @@ func setAccessLogDestination(accessLog *AccessLog, destination *ngfAPIv1alpha2.N
 	if accessLog == nil || destination == nil {
 		return
 	}
+	accessLog.Path = DefaultAccessLogPath
 	destinationType := ngfAPIv1alpha2.NginxAccessLogDestinationTypeFile
-	if destination.Type != nil {
-		destinationType = *destination.Type
+	if destination.Type != "" {
+		destinationType = destination.Type
 	}
 	if destinationType == ngfAPIv1alpha2.NginxAccessLogDestinationTypeSyslog && destination.Syslog != nil {
 		accessLog.Path = "syslog:server=" + destination.Syslog.Server
