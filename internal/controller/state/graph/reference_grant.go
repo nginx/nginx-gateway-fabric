@@ -142,6 +142,14 @@ func fromWAFPolicy(namespace string) fromResource {
 	}
 }
 
+func fromPayloadProcessor(namespace string) fromResource {
+	return fromResource{
+		group:     ngfAPIGroup,
+		kind:      kinds.PayloadProcessor,
+		namespace: namespace,
+	}
+}
+
 func toAPPolicy(nsname types.NamespacedName) toResource {
 	return toResource{
 		group:     wafAPIGroup,

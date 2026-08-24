@@ -41,6 +41,7 @@ const (
 	nginxOneTelemetryEndpointHost   = "agent.connect.nginx.com"
 	endpointPickerDisableTLSFlag    = "endpoint-picker-disable-tls"
 	endpointPickerTLSSkipVerifyFlag = "endpoint-picker-tls-skip-verify"
+	clusterDomainFlag               = "cluster-domain"
 
 	plmStorageURLFlag               = "plm-storage-url"
 	plmStorageCredentialsSecretFlag = "plm-storage-credentials-secret" //nolint:gosec // not credentials
@@ -115,6 +116,7 @@ func createControllerCommand() *cobra.Command {
 		usageReportEnforceInitialReportFlag = "usage-report-enforce-initial-report"
 		snippetsFiltersFlag                 = "snippets-filters"
 		snippetsFlag                        = "snippets"
+		payloadProcessorFlag                = "payload-processor"
 		nginxSCCFlag                        = "nginx-scc"
 		watchNamespacesFlag                 = "watch-namespaces"
 		serverTLSDomainFlag                 = "server-tls-domain"
@@ -193,6 +195,8 @@ func createControllerCommand() *cobra.Command {
 		snippets             bool
 		externalLoadBalancer bool
 
+		payloadProcessor bool
+
 		plus               bool
 		nginxDockerSecrets = stringSliceValidatingValue{
 			validator: validateResourceName,
@@ -208,6 +212,11 @@ func createControllerCommand() *cobra.Command {
 		serverTLSDomain = stringValidatingValue{
 			validator: validateResourceName,
 			value:     "svc",
+		}
+
+		clusterDomain = stringValidatingValue{
+			validator: validateClusterDomain,
+			value:     defaultDomain,
 		}
 	)
 
@@ -347,6 +356,7 @@ func createControllerCommand() *cobra.Command {
 				},
 				SnippetsFilters:        snippetsFilters,
 				Snippets:               snippets,
+				PayloadProcessor:       payloadProcessor,
 				NginxDockerSecretNames: nginxDockerSecrets.values,
 				AgentTLSSecretName:     agentTLSSecretName.value,
 				NGINXSCCName:           nginxSCCName.value,
@@ -365,6 +375,7 @@ func createControllerCommand() *cobra.Command {
 				EndpointPickerTLSSkipVerify: endpointPickerTLSSkipVerify,
 				WatchNamespaces:             watchNamespaces.values,
 				ServerTLSDomain:             serverTLSDomain.value,
+				ClusterDomain:               clusterDomain.value,
 				PLMStorageConfig:            plmStorageConfig,
 				ExternalLoadBalancer:        externalLoadBalancer,
 			}
@@ -624,6 +635,15 @@ func createControllerCommand() *cobra.Command {
 			"balancer. Supported load balancers: F5 BIG-IP, through F5 Container Ingress Services.",
 	)
 
+	cmd.Flags().BoolVar(
+		&payloadProcessor,
+		payloadProcessorFlag,
+		false,
+		"Enable the PayloadProcessor API. PayloadProcessors enable declarative, ordered processing of HTTP "+
+			"request and response payloads by attaching to a Gateway or HTTPRoute, and are used to implement "+
+			"features such as Guardrails for AI workloads.",
+	)
+
 	cmd.Flags().Var(
 		&nginxSCCName,
 		nginxSCCFlag,
@@ -642,6 +662,12 @@ func createControllerCommand() *cobra.Command {
 		&serverTLSDomain,
 		serverTLSDomainFlag,
 		`The domain suffix used in the server TLS certificate SAN and agent config host. Defaults to "svc".`,
+	)
+
+	cmd.Flags().Var(
+		&clusterDomain,
+		clusterDomainFlag,
+		`The DNS domain of your Kubernetes cluster.`,
 	)
 
 	cmd.Flags().Var(
@@ -770,7 +796,6 @@ func createGenerateCertsCommand() *cobra.Command {
 		serverTLSSecretFlag = "server-tls-secret" //nolint:gosec // not credentials
 		agentTLSSecretFlag  = "agent-tls-secret"
 		serviceFlag         = "service"
-		clusterDomainFlag   = "cluster-domain"
 		overwriteFlag       = "overwrite"
 		serverTLSDomainFlag = "server-tls-domain"
 	)
@@ -789,7 +814,7 @@ func createGenerateCertsCommand() *cobra.Command {
 			validator: validateResourceName,
 		}
 		clusterDomain = stringValidatingValue{
-			validator: validateQualifiedName,
+			validator: validateClusterDomain,
 			value:     defaultDomain,
 		}
 		serverTLSDomain = stringValidatingValue{

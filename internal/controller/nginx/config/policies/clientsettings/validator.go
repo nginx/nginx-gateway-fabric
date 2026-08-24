@@ -71,7 +71,9 @@ func conflicts(a, b ngfAPI.ClientSettingsPolicySpec) bool {
 }
 
 func bodyConflicts(a, b ngfAPI.ClientBody) bool {
-	return (a.Timeout != nil && b.Timeout != nil) || (a.MaxSize != nil && b.MaxSize != nil)
+	return (a.Timeout != nil && b.Timeout != nil) ||
+		(a.MaxSize != nil && b.MaxSize != nil) ||
+		(a.BufferSize != nil && b.BufferSize != nil)
 }
 
 func keepAliveConflicts(a, b ngfAPI.ClientKeepAlive) bool {
@@ -113,6 +115,14 @@ func (v *Validator) validateClientBody(body ngfAPI.ClientBody, fieldPath *field.
 			path := fieldPath.Child("maxSize")
 
 			allErrs = append(allErrs, field.Invalid(path, body.MaxSize, err.Error()))
+		}
+	}
+
+	if body.BufferSize != nil {
+		if err := v.genericValidator.ValidateNginxSize(string(*body.BufferSize)); err != nil {
+			path := fieldPath.Child("bufferSize")
+
+			allErrs = append(allErrs, field.Invalid(path, body.BufferSize, err.Error()))
 		}
 	}
 

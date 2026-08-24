@@ -448,6 +448,7 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				ExperimentalFeatures: true,
 				InferenceExtension:   true,
 				Snippets:             true,
+				PayloadProcessor:     true,
 			},
 			discoveredCRDs: map[string]bool{
 				"BackendTLSPolicy": true,
@@ -488,6 +489,7 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&ngfAPIv1alpha1.RateLimitPolicyList{},
 				&gatewayv1.ListenerSetList{},
 				&ngfAPIv1alpha1.WAFPolicyList{},
+				&ngfAPIv1alpha1.PayloadProcessorList{},
 			},
 		},
 		{

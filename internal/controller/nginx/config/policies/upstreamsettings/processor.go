@@ -16,7 +16,9 @@ type UpstreamSettings struct {
 	// other configuration (e.g. the NginxProxy setting).
 	UseClusterIP *bool
 	// ZoneSize is the zone size setting.
-	ZoneSize string
+	// A nil value means the policy did not set this field, allowing callers to fall back to
+	// global configuration (e.g. the NginxProxy setting).
+	ZoneSize *ngfAPI.Size
 	// LoadBalancingMethod is the load balancing method setting.
 	LoadBalancingMethod string
 	// HashMethodKey is the key to be used for hash-based load balancing methods.
@@ -50,7 +52,7 @@ func processPolicies(pols []policies.Policy) UpstreamSettings {
 		// we can assume that there will be no instance of two or more policies setting the same
 		// field for the same service
 		if usp.Spec.ZoneSize != nil {
-			upstreamSettings.ZoneSize = string(*usp.Spec.ZoneSize)
+			upstreamSettings.ZoneSize = usp.Spec.ZoneSize
 		}
 
 		if usp.Spec.KeepAlive != nil {

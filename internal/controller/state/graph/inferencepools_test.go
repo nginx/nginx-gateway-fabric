@@ -74,7 +74,7 @@ func TestBuildReferencedInferencePools(t *testing.T) {
 
 	validRoute := getNormalRoute()
 
-	endpointPickerConfig := inference.EndpointPickerRef{
+	endpointPickerConfig := &inference.EndpointPickerRef{
 		Kind: "Service",
 		Name: "valid-svc",
 	}
@@ -410,7 +410,7 @@ func TestBuildReferencedInferencePools(t *testing.T) {
 				{Name: "pool", Namespace: "test"}: {
 					ObjectMeta: metav1.ObjectMeta{Name: "pool", Namespace: "test"},
 					Spec: inference.InferencePoolSpec{
-						EndpointPickerRef: inference.EndpointPickerRef{
+						EndpointPickerRef: &inference.EndpointPickerRef{
 							Kind: "Service",
 							Name: "invalid-extension-ref",
 						},
@@ -422,7 +422,7 @@ func TestBuildReferencedInferencePools(t *testing.T) {
 					Source: &inference.InferencePool{
 						ObjectMeta: metav1.ObjectMeta{Name: "pool", Namespace: "test"},
 						Spec: inference.InferencePoolSpec{
-							EndpointPickerRef: inference.EndpointPickerRef{
+							EndpointPickerRef: &inference.EndpointPickerRef{
 								Kind: "Service",
 								Name: "invalid-extension-ref",
 							},
@@ -566,7 +566,7 @@ func TestValidateInferencePoolExtensionRef(t *testing.T) {
 					Name:      "pool",
 				},
 				Spec: inference.InferencePoolSpec{
-					EndpointPickerRef: inference.EndpointPickerRef{
+					EndpointPickerRef: &inference.EndpointPickerRef{
 						Kind: "Service",
 						Name: "valid-svc",
 					},
@@ -590,6 +590,25 @@ func TestValidateInferencePoolExtensionRef(t *testing.T) {
 			expCond: nil,
 		},
 		{
+			name: "inference pool has a nil extensionRef",
+			pool: &inference.InferencePool{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: "test",
+					Name:      "pool",
+				},
+				Spec: inference.InferencePoolSpec{
+					EndpointPickerRef: nil,
+				},
+			},
+			services: map[types.NamespacedName]*v1.Service{},
+			expCond: helpers.GetPointer(
+				conditions.NewInferencePoolEndpointPickerRefMissing(
+					"spec.endpointPickerRef must be set; NGINX Gateway Fabric requires " +
+						"an EndpointPicker extension to route to this InferencePool",
+				),
+			),
+		},
+		{
 			name: "inference pool references a non-existent service",
 			pool: &inference.InferencePool{
 				ObjectMeta: metav1.ObjectMeta{
@@ -597,7 +616,7 @@ func TestValidateInferencePoolExtensionRef(t *testing.T) {
 					Name:      "pool",
 				},
 				Spec: inference.InferencePoolSpec{
-					EndpointPickerRef: inference.EndpointPickerRef{
+					EndpointPickerRef: &inference.EndpointPickerRef{
 						Kind: "Service",
 						Name: "does-not-exist",
 					},
@@ -616,7 +635,7 @@ func TestValidateInferencePoolExtensionRef(t *testing.T) {
 					Name:      "pool",
 				},
 				Spec: inference.InferencePoolSpec{
-					EndpointPickerRef: inference.EndpointPickerRef{
+					EndpointPickerRef: &inference.EndpointPickerRef{
 						Kind: "Invalid-Kind",
 						Name: "svc",
 					},

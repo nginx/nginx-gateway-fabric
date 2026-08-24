@@ -66,6 +66,9 @@ const (
 
 	// PLMS3Secret is the Secret data key for the PLM S3 storage secret access key.
 	PLMS3Secret = "seaweedfs_admin_secret"
+
+	// GuardrailsTokenKey is the Secret key for the AI Guardrails ExtProcess bearer token.
+	GuardrailsTokenKey = "token"
 )
 
 // CertificateBundle is used to submit certificate data to nginx that is kubernetes aware.

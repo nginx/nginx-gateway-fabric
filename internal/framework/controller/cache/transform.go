@@ -26,6 +26,8 @@ var (
 		secrets.BundlePasswordKey,
 		secrets.BundleTokenKey,
 		secrets.PLMS3Secret,
+		// AI Guardrails ExtProcess auth token
+		secrets.GuardrailsTokenKey,
 	}
 
 	configMapKeys = []string{

@@ -22,7 +22,7 @@ SUPPORTED_EXTENDED_FEATURES_OPENSHIFT = HTTPRouteQueryParamMatching,HTTPRouteMet
 SKIP_TESTS_OPENSHIFT = HTTPRouteServiceTypes,TLSRouteHostnameIntersection,TLSRouteInvalidBackendRefNonexistent,TLSRouteInvalidBackendRefUnknownKind,TLSRouteInvalidNoMatchingListenerHostname,TLSRouteInvalidNoMatchingListener,TLSRouteInvalidReferenceGrant,TLSRouteListenerPassthroughSupportedKinds,TLSRouteListenerTerminateNotSupported,TLSRouteSimpleSameNamespace
 SKIP_TESTS =
 CEL_TEST_TARGET =
-INFERENCE_SKIP_TESTS = GatewayDestinationEndpointServed,InferencePoolAppProtocol,InferencePoolMissingEPPRef
+INFERENCE_SKIP_TESTS = GatewayDestinationEndpointServed,InferencePoolAppProtocol
 
 # renovate: datasource=github-releases depName=F5Networks/f5-appsvcs-extension
 AS3_VERSION = v3.56.0
@@ -232,8 +232,9 @@ gatewaylink-test: ## Run the GatewayLink integration test on a GCP VM against a 
 		--ipam-range=$(IPAM_RANGE)
 
 .PHONY: test
-test: build-crossplane-image ## Runs the functional tests on your kind k8s cluster
+test: build-crossplane-image build-guardrails-mock-image ## Runs the functional tests on your kind k8s cluster
 	kind load docker-image nginx-crossplane:latest --name $(CLUSTER_NAME)
+	kind load docker-image guardrails-mock:latest --name $(CLUSTER_NAME)
 	go run github.com/onsi/ginkgo/v2/ginkgo --race --randomize-all --randomize-suites --keep-going --fail-on-pending \
 		--trace -r -v --buildvcs --force-newlines $(GITHUB_OUTPUT) --procs $(GINKGO_PROCS) \
 		--label-filter "functional" $(GINKGO_FLAGS) ./suite -- \
@@ -247,6 +248,10 @@ test: build-crossplane-image ## Runs the functional tests on your kind k8s clust
 .PHONY: test-with-plus
 test-with-plus: PLUS_ENABLED=true
 test-with-plus: check-for-plus-usage-endpoint test ## Runs the functional tests for NGF with NGINX Plus on your default k8s cluster
+
+.PHONY: build-guardrails-mock-image
+build-guardrails-mock-image: ## Build the guardrails mock (Guardrails API + mock LLM) image
+	docker build --platform $(GOOS)/$(GOARCH) -t guardrails-mock:latest -f guardrails-mock/Dockerfile ..
 
 .PHONY: cleanup-gcp
 cleanup-gcp: cleanup-router cleanup-vm delete-gke-cluster ## Cleanup all GCP resources

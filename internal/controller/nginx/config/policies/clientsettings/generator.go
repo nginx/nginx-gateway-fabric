@@ -17,6 +17,9 @@ const clientSettingsTemplate = `
 	{{- if .Body.MaxSize }}
 client_max_body_size {{ .Body.MaxSize }};
 	{{- end }}
+	{{- if .Body.BufferSize }}
+client_body_buffer_size {{ .Body.BufferSize }};
+	{{- end }}
 	{{- if .Body.Timeout }}
 client_body_timeout {{ .Body.Timeout }};
 	{{- end }}

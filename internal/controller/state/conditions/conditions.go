@@ -117,6 +117,11 @@ const (
 	// when telemetry is not enabled in the NginxProxy resource.
 	PolicyMessageTelemetryNotEnabled = "Telemetry is not enabled in the NginxProxy resource"
 
+	// PolicyMessagePayloadProcessorResolverMissing is used when an ExternalName PayloadProcessor
+	// backend is attached to a Gateway whose NginxProxy has no DNS resolver configured.
+	PolicyMessagePayloadProcessorResolverMissing = "PayloadProcessor ExternalName backend requires " +
+		"DNS resolver configuration in Gateway's NginxProxy"
+
 	// PolicyReasonTargetConflict is used with the "PolicyAccepted" condition when a Route that it targets
 	// has an overlapping hostname:port/path combination with another Route.
 	PolicyReasonTargetConflict v1.PolicyConditionReason = "TargetConflict"
@@ -195,6 +200,10 @@ const (
 	// RateLimitPolicyAffected is used with the "PolicyAffected" condition when a
 	// RateLimitPolicy is applied to a Gateway, HTTPRoute, or GRPCRoute.
 	RateLimitPolicyAffected v1.PolicyConditionType = "RateLimitPolicyAffected"
+
+	// PayloadProcessorPolicyAffected is used with the "PolicyAffected" condition when a
+	// PayloadProcessor is applied to a Gateway or HTTPRoute.
+	PayloadProcessorPolicyAffected v1.PolicyConditionType = "PayloadProcessorPolicyAffected"
 
 	// PolicyAffectedReason is used with the "PolicyAffected" condition when a
 	// custom policy is applied to Gateways or Routes.
@@ -1241,6 +1250,17 @@ func NewPolicyInvalid(msg string) Condition {
 	}
 }
 
+// NewPolicyRefNotPermitted returns a Condition that indicates that the Policy is not accepted because it
+// contains a cross-namespace reference that is not permitted by any ReferenceGrant.
+func NewPolicyRefNotPermitted(msg string) Condition {
+	return Condition{
+		Type:    string(v1.PolicyConditionAccepted),
+		Status:  metav1.ConditionFalse,
+		Reason:  "RefNotPermitted",
+		Message: msg,
+	}
+}
+
 // NewPolicyConflicted returns a Condition that indicates that the Policy is not accepted because it conflicts with
 // another Policy and a merge is not possible.
 func NewPolicyConflicted(msg string) Condition {
@@ -1473,6 +1493,17 @@ func NewRateLimitPolicyAffected() Condition {
 	}
 }
 
+// NewPayloadProcessorPolicyAffected returns a Condition that indicates that a PayloadProcessor
+// is applied to the resource.
+func NewPayloadProcessorPolicyAffected() Condition {
+	return Condition{
+		Type:    string(PayloadProcessorPolicyAffected),
+		Status:  metav1.ConditionTrue,
+		Reason:  string(PolicyAffectedReason),
+		Message: "PayloadProcessor is applied to the resource",
+	}
+}
+
 // NewBackendTLSPolicyResolvedRefs returns a Condition that indicates that all CACertificateRefs
 // in the BackendTLSPolicy are resolved.
 func NewBackendTLSPolicyResolvedRefs() Condition {
@@ -1565,6 +1596,17 @@ func NewInferencePoolInvalidExtensionref(msg string) Condition {
 		Type:    string(inference.InferencePoolConditionResolvedRefs),
 		Status:  metav1.ConditionFalse,
 		Reason:  string(inference.InferencePoolReasonInvalidExtensionRef),
+		Message: msg,
+	}
+}
+
+// NewInferencePoolEndpointPickerRefMissing returns a Condition that indicates that the InferencePool is not
+// accepted because the endpointPickerRef field is unset. NGF requires this field to be set.
+func NewInferencePoolEndpointPickerRefMissing(msg string) Condition {
+	return Condition{
+		Type:    string(inference.InferencePoolConditionAccepted),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(inference.InferencePoolReasonEndpointPickerRefMissing),
 		Message: msg,
 	}
 }

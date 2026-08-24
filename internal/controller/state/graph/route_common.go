@@ -143,6 +143,9 @@ func (spec *L4RouteSpec) GetBackendRefs() []BackendRef {
 type L7Route struct {
 	// Source is the source Gateway API object of the Route.
 	Source client.Object
+	// EffectivePayloadProcessors maps a parent Gateway's NamespacedName to the PayloadProcessor policy
+	// that applies to this Route when it is built for that Gateway.
+	EffectivePayloadProcessors map[types.NamespacedName]*Policy
 	// RouteType is the type (http or grpc) of the Route.
 	RouteType RouteType
 	// Spec is the L7RouteSpec of the Route
@@ -814,7 +817,7 @@ func bindL4RouteToListeners(
 	}
 
 	for i := range route.ParentRefs {
-		ref := &(route.ParentRefs)[i]
+		ref := &route.ParentRefs[i]
 
 		gwNsName := types.NamespacedName{
 			Name:      gw.Source.Name,
@@ -1043,7 +1046,7 @@ func bindL7RouteToListeners(
 	}
 
 	for i := range route.ParentRefs {
-		ref := &(route.ParentRefs)[i]
+		ref := &route.ParentRefs[i]
 
 		gwNsName := types.NamespacedName{
 			Name:      gw.Source.Name,

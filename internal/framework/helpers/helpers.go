@@ -7,6 +7,9 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
+	"net"
+	"net/url"
+	"strconv"
 	"strings"
 	"text/template"
 
@@ -113,4 +116,51 @@ func ToSafeFileName(input string) string {
 	hasher := sha256.New()
 	hasher.Write([]byte(input))
 	return base64.URLEncoding.EncodeToString(hasher.Sum(nil))
+}
+
+// BuildPortFwdPort uses the specified portFwdPort if that is supplied, else uses the defaultPort provided.
+func BuildPortFwdPort(defaultPort int, portFwdPort int) int {
+	if portFwdPort != 0 {
+		return portFwdPort
+	}
+	return defaultPort
+}
+
+// BuildPortFwdURL builds a URL for port forwarding based on the given address and port.
+// If no scheme is provided in the rawURL parameter (i.e. "cafe.example.com"), http is used.
+func BuildPortFwdURL(rawURL string, port int) string {
+	input := rawURL
+	if !strings.Contains(input, "://") {
+		input = "//" + input
+	}
+
+	parsed, err := url.Parse(input)
+	if err != nil {
+		panic(fmt.Errorf("failed to parse url %q: %w", rawURL, err))
+	}
+
+	// use http if no scheme is defined
+	scheme := parsed.Scheme
+	if scheme == "" {
+		scheme = "http"
+	}
+
+	host := parsed.Hostname() // existing ports stripped away
+	if port != 0 {
+		host = net.JoinHostPort(parsed.Hostname(), strconv.Itoa(port))
+	}
+
+	// include all parts of URL struct
+	builtURL := url.URL{
+		Scheme:      scheme,
+		Opaque:      parsed.Opaque,
+		User:        parsed.User,
+		Host:        host,
+		Path:        parsed.Path,
+		RawPath:     parsed.RawPath,
+		RawQuery:    parsed.RawQuery,
+		Fragment:    parsed.Fragment,
+		RawFragment: parsed.RawFragment,
+	}
+	return builtURL.String()
 }

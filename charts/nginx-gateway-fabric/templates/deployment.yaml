@@ -47,6 +47,7 @@ spec:
         - --service={{ include "nginx-gateway.fullname" . }}
         - --agent-tls-secret={{ .Values.certGenerator.agentTLSSecretName }}
         - --server-tls-domain={{ .Values.serverTLSDomain }}
+        - --cluster-domain={{ .Values.clusterDomain }}
         {{- if .Values.nginxGateway.watchNamespaces }}
         - --watch-namespaces={{ join "," .Values.nginxGateway.watchNamespaces }}
         {{- end }}
@@ -118,6 +119,9 @@ spec:
         {{- end }}
         {{- if .Values.nginxGateway.snippets.enable }}
         - --snippets
+        {{- end }}
+        {{- if .Values.nginxGateway.payloadProcessor.enable }}
+        - --payload-processor
         {{- end }}
         {{- if .Values.nginxGateway.plmStorage.url }}
         - --plm-storage-url={{ .Values.nginxGateway.plmStorage.url }}

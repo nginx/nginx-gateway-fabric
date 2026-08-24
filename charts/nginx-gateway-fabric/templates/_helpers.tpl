@@ -251,6 +251,9 @@ Create namespaced RBAC rules.
   {{- if .Values.nginxGateway.externalLoadBalancer.enable }}
   - externalloadbalancers
   {{- end }}
+  {{- if .Values.nginxGateway.payloadProcessor.enable }}
+  - payloadprocessors
+  {{- end }}
   {{- if or .Values.nginxGateway.snippetsFilters.enable .Values.nginxGateway.snippets.enable }}
   - snippetsfilters
   {{- end }}
@@ -273,6 +276,9 @@ Create namespaced RBAC rules.
   - wafpolicies/status
   {{- if .Values.nginxGateway.externalLoadBalancer.enable }}
   - externalloadbalancers/status
+  {{- end }}
+  {{- if .Values.nginxGateway.payloadProcessor.enable }}
+  - payloadprocessors/status
   {{- end }}
   {{- if or .Values.nginxGateway.snippetsFilters.enable .Values.nginxGateway.snippets.enable }}
   - snippetsfilters/status

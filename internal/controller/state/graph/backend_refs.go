@@ -208,7 +208,7 @@ func resolveInferencePoolRef(
 
 	port := gatewayv1.PortNumber(pool.Source.Spec.TargetPorts[0].Number)
 	ref.Port = helpers.GetPointer(port)
-	ref.EndpointPickerConfig.EndpointPickerRef = &pool.Source.Spec.EndpointPickerRef
+	ref.EndpointPickerConfig.EndpointPickerRef = pool.Source.Spec.EndpointPickerRef
 	ref.EndpointPickerConfig.NsName = poolName.Namespace
 
 	return ref, true
@@ -455,23 +455,23 @@ func btpTargetsService(
 		(targetRef.Group == "" || targetRef.Group == "core")
 }
 
-func findBackendTLSPolicyForService(
+// selectBackendTLSPolicyForService performs the pure lookup: it finds the BackendTLSPolicy targeting
+// the given Service and port, resolving conflicts deterministically. It returns the winning policy,
+// the losing (conflicting) policies, and an error if the winner is invalid. It does NOT mutate any
+// policy status (IsReferenced/Conditions); callers decide how to record status so a single BackendTLSPolicy
+// referenced by multiple backends (e.g. a Route backend AND a guardrails backend) is not marked twice.
+func selectBackendTLSPolicyForService(
 	backendTLSPolicies map[types.NamespacedName]*BackendTLSPolicy,
 	refNamespace *gatewayv1.Namespace,
 	refName,
 	routeNamespace string,
 	servicePort v1.ServicePort,
-) (*BackendTLSPolicy, error) {
-	var beTLSPolicy *BackendTLSPolicy
-	var conflictingPolicies []*BackendTLSPolicy
-	var err error
-
+) (winner *BackendTLSPolicy, losers []*BackendTLSPolicy, err error) {
 	refNs := routeNamespace
 	if refNamespace != nil {
 		refNs = string(*refNamespace)
 	}
 
-	// First pass: find all policies targeting this service and port
 	for _, btp := range backendTLSPolicies {
 		btpNs := btp.Source.Namespace
 		for _, targetRef := range btp.Source.Spec.TargetRefs {
@@ -488,21 +488,48 @@ func findBackendTLSPolicyForService(
 			}
 			// Policy applies to all ports (no sectionName) or matches our port
 
-			if beTLSPolicy == nil {
-				beTLSPolicy = btp
+			if winner == nil {
+				winner = btp
 			} else {
 				// Found a conflict - determine which policy wins
-				if sort.LessClientObject(btp.Source, beTLSPolicy.Source) {
-					// btp wins, beTLSPolicy loses
-					conflictingPolicies = append(conflictingPolicies, beTLSPolicy)
-					beTLSPolicy = btp
+				if sort.LessClientObject(btp.Source, winner.Source) {
+					// btp wins, current winner loses
+					losers = append(losers, winner)
+					winner = btp
 				} else {
-					// beTLSPolicy wins, btp loses
-					conflictingPolicies = append(conflictingPolicies, btp)
+					// current winner wins, btp loses
+					losers = append(losers, btp)
 				}
 			}
 		}
 	}
+
+	if winner != nil && !winner.Valid {
+		//nolint:staticcheck // Capitalization required for alignment with other messages.
+		err = fmt.Errorf("The BackendTLSPolicy is invalid: %s", winner.Conditions[0].Message)
+	}
+
+	return winner, losers, err
+}
+
+// findBackendTLSPolicyForService selects the BackendTLSPolicy for a Service/port (see
+// selectBackendTLSPolicyForService) and records status on the affected policies: losers get a
+// Conflicted condition; a valid winner gets an Accepted condition. Used by the Route/TLSRoute backend
+// paths, which own BackendTLSPolicy status.
+func findBackendTLSPolicyForService(
+	backendTLSPolicies map[types.NamespacedName]*BackendTLSPolicy,
+	refNamespace *gatewayv1.Namespace,
+	refName,
+	routeNamespace string,
+	servicePort v1.ServicePort,
+) (*BackendTLSPolicy, error) {
+	beTLSPolicy, conflictingPolicies, err := selectBackendTLSPolicyForService(
+		backendTLSPolicies,
+		refNamespace,
+		refName,
+		routeNamespace,
+		servicePort,
+	)
 
 	// Set conflicted conditions on losing policies
 	for _, conflictedPolicy := range conflictingPolicies {
@@ -513,15 +540,33 @@ func findBackendTLSPolicyForService(
 
 	if beTLSPolicy != nil {
 		beTLSPolicy.IsReferenced = true
-		if !beTLSPolicy.Valid {
-			//nolint:staticcheck // Capitalization required for alignment with other messages.
-			err = fmt.Errorf("The BackendTLSPolicy is invalid: %s", beTLSPolicy.Conditions[0].Message)
-		} else {
+		if beTLSPolicy.Valid {
 			beTLSPolicy.Conditions = append(beTLSPolicy.Conditions, conditions.NewPolicyAccepted())
 		}
 	}
 
 	return beTLSPolicy, err
+}
+
+// markBackendTLSPolicyAccepted records that a valid BackendTLSPolicy is referenced and accepted,
+// idempotently: it will not append a duplicate Accepted condition. This lets a non-Route referrer
+// (the guardrails/PayloadProcessor backend path) ensure a BackendTLSPolicy that is otherwise only
+// referenced by it still gets Accepted/IsReferenced status, without double-appending when the Route
+// backend path already recorded the same policy.
+func markBackendTLSPolicyAccepted(btp *BackendTLSPolicy) {
+	if btp == nil {
+		return
+	}
+	btp.IsReferenced = true
+	if !btp.Valid {
+		return
+	}
+	for _, c := range btp.Conditions {
+		if c.Reason == conditions.NewPolicyAccepted().Reason {
+			return
+		}
+	}
+	btp.Conditions = append(btp.Conditions, conditions.NewPolicyAccepted())
 }
 
 // getPortFromRef extracts the port from a BackendRef.

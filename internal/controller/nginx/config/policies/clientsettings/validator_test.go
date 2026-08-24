@@ -30,8 +30,9 @@ func createValidPolicy() *ngfAPI.ClientSettingsPolicy {
 				Name:  "gateway",
 			},
 			Body: &ngfAPI.ClientBody{
-				MaxSize: helpers.GetPointer[ngfAPI.Size]("10m"),
-				Timeout: helpers.GetPointer[ngfAPI.Duration]("600ms"),
+				MaxSize:    helpers.GetPointer[ngfAPI.Size]("10m"),
+				BufferSize: helpers.GetPointer[ngfAPI.Size]("8k"),
+				Timeout:    helpers.GetPointer[ngfAPI.Duration]("600ms"),
 			},
 			KeepAlive: &ngfAPI.ClientKeepAlive{
 				Requests: helpers.GetPointer[int32](900),
@@ -87,6 +88,18 @@ func TestValidator_Validate(t *testing.T) {
 			}),
 			expConditions: []conditions.Condition{
 				conditions.NewPolicyInvalid("spec.body.maxSize: Invalid value: \"invalid\": " +
+					"must contain a number. May be followed by 'k', 'm', or 'g', otherwise bytes are assumed " +
+					"(e.g. '1024',  or '8k',  or '20m',  or '1g', regex used for validation is '^\\d{1,4}(k|m|g)?$')"),
+			},
+		},
+		{
+			name: "invalid client body buffer size",
+			policy: createModifiedPolicy(func(p *ngfAPI.ClientSettingsPolicy) *ngfAPI.ClientSettingsPolicy {
+				p.Spec.Body.BufferSize = helpers.GetPointer[ngfAPI.Size]("invalid")
+				return p
+			}),
+			expConditions: []conditions.Condition{
+				conditions.NewPolicyInvalid("spec.body.bufferSize: Invalid value: \"invalid\": " +
 					"must contain a number. May be followed by 'k', 'm', or 'g', otherwise bytes are assumed " +
 					"(e.g. '1024',  or '8k',  or '20m',  or '1g', regex used for validation is '^\\d{1,4}(k|m|g)?$')"),
 			},
@@ -229,6 +242,18 @@ func TestValidator_Conflicts(t *testing.T) {
 				Spec: ngfAPI.ClientSettingsPolicySpec{
 					Body: &ngfAPI.ClientBody{
 						MaxSize: helpers.GetPointer[ngfAPI.Size]("10m"),
+					},
+				},
+			},
+			conflicts: true,
+		},
+		{
+			name: "body buffer size conflicts",
+			polA: createValidPolicy(),
+			polB: &ngfAPI.ClientSettingsPolicy{
+				Spec: ngfAPI.ClientSettingsPolicySpec{
+					Body: &ngfAPI.ClientBody{
+						BufferSize: helpers.GetPointer[ngfAPI.Size]("8k"),
 					},
 				},
 			},
