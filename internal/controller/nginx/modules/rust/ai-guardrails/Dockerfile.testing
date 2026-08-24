@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.23
+# syntax=docker/dockerfile:1.26
 # Build/test *environment* image for the ai-guardrails Rust module.
 # It contains the toolchain, clang, and a configured nginx
 # source tree, but NO module source and NO test/lint execution. Lint and tests
@@ -19,7 +19,7 @@ RUN wget -q https://nginx.org/download/nginx-${NGINX_VERSION}.tar.gz \
 
 RUN cd nginx-${NGINX_VERSION} && ./configure --with-compat --with-http_ssl_module
 
-FROM rust:1.97-alpine AS base
+FROM rust:1.98-alpine AS base
 
 # Pin clang20-dev: clang21's libclang.so cannot be dlopen'd on Alpine musl.
 RUN apk add --no-cache musl-dev protobuf-dev openssl-dev perl make \

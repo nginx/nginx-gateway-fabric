@@ -817,7 +817,7 @@ func bindL4RouteToListeners(
 	}
 
 	for i := range route.ParentRefs {
-		ref := &(route.ParentRefs)[i]
+		ref := &route.ParentRefs[i]
 
 		gwNsName := types.NamespacedName{
 			Name:      gw.Source.Name,
@@ -1046,7 +1046,7 @@ func bindL7RouteToListeners(
 	}
 
 	for i := range route.ParentRefs {
-		ref := &(route.ParentRefs)[i]
+		ref := &route.ParentRefs[i]
 
 		gwNsName := types.NamespacedName{
 			Name:      gw.Source.Name,

@@ -73,10 +73,11 @@ func createStreamServers(logger logr.Logger, conf dataplane.Configuration) []str
 					ProxyPass:  upstreamName,
 					IsSocket:   true,
 				}
-				// set rewriteClientIP settings as this is a socket stream server
-				streamServer.RewriteClientIP = getRewriteClientIPSettingsForStream(
-					conf.BaseHTTPConfig.RewriteClientIPSettings,
-				)
+				// NOTE: We do not set rewriteClientIP settings for passthrough socket servers.
+				// The frontend server uses `pass` (raw byte forwarding with ssl_preread)
+				// which does not add PROXY protocol headers,
+				// so the backend socket server must not expect them.
+				// See https://github.com/nginx/nginx-gateway-fabric/issues/5698
 				streamServers = append(streamServers, streamServer)
 			}
 		}

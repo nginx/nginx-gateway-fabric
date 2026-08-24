@@ -2162,8 +2162,8 @@ func checkForAuthenticationFilterToBeAccepted(authenticationFilterNsNames types.
 	return framework.CheckFilterAccepted(
 		af,
 		framework.AuthenticationFilterControllers,
-		(string)(ngfAPI.AuthenticationFilterConditionTypeAccepted),
-		(string)(ngfAPI.AuthenticationFilterConditionReasonAccepted),
+		string(ngfAPI.AuthenticationFilterConditionTypeAccepted),
+		string(ngfAPI.AuthenticationFilterConditionReasonAccepted),
 	)
 }
 
