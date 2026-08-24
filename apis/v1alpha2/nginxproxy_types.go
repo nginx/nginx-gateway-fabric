@@ -444,6 +444,7 @@ type NginxLogging struct {
 
 	// AccessLog defines the access log settings, including format itself and disabling option.
 	// Default path /dev/stdout can be used or file/syslog destinations can be configured.
+	// Default path /dev/stdout can be used or file/syslog destinations can be configured.
 	//
 	// +optional
 	AccessLog *NginxAccessLog `json:"accessLog,omitempty"`
@@ -524,6 +525,7 @@ type NginxAccessLog struct {
 
 	// Format specifies the custom log format string.
 	// If not specified, NGINX default 'combined' format is used.
+	// Default path /dev/stdout can be used or file/syslog destinations can be configured.
 	// Default path /dev/stdout can be used or file/syslog destinations can be configured.
 	// Single quotes and line breaks are not allowed because the format is
 	// rendered inside a single-quoted NGINX log_format directive.
