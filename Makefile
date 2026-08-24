@@ -45,7 +45,7 @@ NODE_VERSION = 24
 # renovate: datasource=docker depName=quay.io/helmpack/chart-testing
 CHART_TESTING_VERSION = v3.14.0
 # renovate: datasource=github-tags depName=dadav/helm-schema
-HELM_SCHEMA_VERSION = 0.23.4
+HELM_SCHEMA_VERSION = 0.23.5
 # renovate: datasource=docker depName=rust
 RUST_VERSION = 1.97
 
