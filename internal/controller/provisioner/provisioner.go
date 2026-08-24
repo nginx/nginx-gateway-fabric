@@ -807,6 +807,10 @@ func (p *NginxProvisioner) isUserSecret(name string) bool {
 		return true
 	}
 
+	if p.cfg.NginxInstanceManagerTelemetryConfig.DataplaneKeySecretName == name {
+		return true
+	}
+
 	if p.cfg.PlusUsageConfig != nil {
 		return name == p.cfg.PlusUsageConfig.SecretName ||
 			name == p.cfg.PlusUsageConfig.CASecretName ||
