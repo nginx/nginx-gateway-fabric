@@ -8204,6 +8204,7 @@ func TestBuildLogging(t *testing.T) {
 				AccessLog: &AccessLog{
 					Format: JSONAccessLogFormat,
 					Escape: "json",
+					Path:   DefaultAccessLogPath,
 				},
 			},
 		},
@@ -8226,6 +8227,7 @@ func TestBuildLogging(t *testing.T) {
 				ErrorLogFormat: "json",
 				AccessLog: &AccessLog{
 					Format: logFormat,
+					Path:   DefaultAccessLogPath,
 				},
 			},
 		},
@@ -8292,6 +8294,7 @@ func TestBuildLogging(t *testing.T) {
 				ErrorLevel: "info",
 				AccessLog: &AccessLog{
 					Format: logFormat,
+					Path:   DefaultAccessLogPath,
 				},
 			},
 		},
@@ -8314,6 +8317,7 @@ func TestBuildLogging(t *testing.T) {
 				AccessLog: &AccessLog{
 					Disable: false,
 					Format:  logFormat,
+					Path:    DefaultAccessLogPath,
 				},
 			},
 		},
@@ -8391,6 +8395,7 @@ func TestBuildLogging(t *testing.T) {
 				AccessLog: &AccessLog{
 					Format: logFormat,
 					Escape: "json",
+					Path:   DefaultAccessLogPath,
 				},
 			},
 		},
@@ -8412,6 +8417,7 @@ func TestBuildLogging(t *testing.T) {
 				AccessLog: &AccessLog{
 					Format: logFormat,
 					Escape: "default",
+					Path:   DefaultAccessLogPath,
 				},
 			},
 		},
@@ -8433,6 +8439,7 @@ func TestBuildLogging(t *testing.T) {
 				AccessLog: &AccessLog{
 					Format: logFormat,
 					Escape: "none",
+					Path:   DefaultAccessLogPath,
 				},
 			},
 		},
@@ -12370,6 +12377,210 @@ func TestBuildUpstreamsUseClusterIPPrecedence(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestBuildAccessLogDestination(t *testing.T) {
+	t.Parallel()
+
+	logFormat := `'$remote_addr - $remote_user [$time_local] '
+							'"$request" $status $body_bytes_sent '
+							'"$http_referer" "$http_user_agent" '`
+
+	t.Run("syslog destination set correctly", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+		destinationType := ngfAPIv1alpha2.NginxAccessLogDestinationTypeSyslog
+		server := "syslog.example.com:514"
+		src := &ngfAPIv1alpha2.NginxLogging{
+			AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
+				Format: helpers.GetPointer(logFormat),
+				Destination: &ngfAPIv1alpha2.NginxAccessLogDestination{
+					Type:   destinationType,
+					Syslog: &ngfAPIv1alpha2.NginxAccessLogSyslog{Server: server},
+				},
+			},
+		}
+		got := buildAccessLog(src)
+		g.Expect(got).ToNot(BeNil())
+		g.Expect(got.Path).To(Equal("syslog:server=" + server))
+	})
+
+	t.Run("file destination sets file path", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+		destinationType := ngfAPIv1alpha2.NginxAccessLogDestinationTypeFile
+		path := "/var/log/nginx/access.log"
+		src := &ngfAPIv1alpha2.NginxLogging{
+			AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
+				Format: helpers.GetPointer(logFormat),
+				Destination: &ngfAPIv1alpha2.NginxAccessLogDestination{
+					Type: destinationType,
+					File: &ngfAPIv1alpha2.NginxAccessLogFile{Path: &path},
+				},
+			},
+		}
+		got := buildAccessLog(src)
+		g.Expect(got).ToNot(BeNil())
+		g.Expect(got.Path).To(Equal(path))
+	})
+
+	t.Run("unset destination falls back to default path", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+		src := &ngfAPIv1alpha2.NginxLogging{
+			AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
+				Format: helpers.GetPointer(logFormat),
+			},
+		}
+		got := buildAccessLog(src)
+		g.Expect(got).ToNot(BeNil())
+		g.Expect(got.Path).To(Equal(DefaultAccessLogPath))
+	})
+
+	t.Run("nil access log destination falls back to default access log path", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+		src := &ngfAPIv1alpha2.NginxLogging{
+			AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
+				Format:      helpers.GetPointer(logFormat),
+				Destination: nil,
+			},
+		}
+		got := buildAccessLog(src)
+		g.Expect(got).ToNot(BeNil())
+		g.Expect(got.Path).To(Equal(DefaultAccessLogPath))
+	})
+
+	t.Run("destination set without format uses default format", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+		destinationType := ngfAPIv1alpha2.NginxAccessLogDestinationTypeFile
+		path := "/var/log/nginx/access.log"
+		src := &ngfAPIv1alpha2.NginxLogging{
+			AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
+				Destination: &ngfAPIv1alpha2.NginxAccessLogDestination{
+					Type: destinationType,
+					File: &ngfAPIv1alpha2.NginxAccessLogFile{
+						Path: &path,
+					},
+				},
+			},
+		}
+
+		got := buildAccessLog(src)
+		g.Expect(got).ToNot(BeNil())
+		g.Expect(got.Path).To(Equal(path))
+		g.Expect(got.Format).To(BeEmpty())
+	})
+
+	t.Run("json access log template correctly applies destination", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+
+		server := "syslog.example.com:514"
+		src := &ngfAPIv1alpha2.NginxLogging{
+			ErrorLogFormat: helpers.GetPointer(ngfAPIv1alpha2.NginxErrorLogFormatJSON),
+			AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
+				Destination: &ngfAPIv1alpha2.NginxAccessLogDestination{
+					Type: ngfAPIv1alpha2.NginxAccessLogDestinationTypeSyslog,
+					Syslog: &ngfAPIv1alpha2.NginxAccessLogSyslog{
+						Server: server,
+					},
+				},
+			},
+		}
+
+		got := buildAccessLog(src)
+		g.Expect(got).ToNot(BeNil())
+		g.Expect(got.Path).To(Equal("syslog:server=" + server))
+		g.Expect(got.Format).To(BeEmpty())
+	})
+
+	t.Run("nil file struct falls back to default path", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+		src := &ngfAPIv1alpha2.NginxLogging{
+			AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
+				Destination: &ngfAPIv1alpha2.NginxAccessLogDestination{
+					Type: ngfAPIv1alpha2.NginxAccessLogDestinationTypeFile,
+					File: nil,
+				},
+			},
+		}
+		got := buildAccessLog(src)
+		g.Expect(got).ToNot(BeNil())
+		g.Expect(got.Path).To(Equal(DefaultAccessLogPath))
+	})
+
+	t.Run("nil file path falls back to default path", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+		src := &ngfAPIv1alpha2.NginxLogging{
+			AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
+				Destination: &ngfAPIv1alpha2.NginxAccessLogDestination{
+					Type: ngfAPIv1alpha2.NginxAccessLogDestinationTypeFile,
+					File: &ngfAPIv1alpha2.NginxAccessLogFile{
+						Path: nil,
+					},
+				},
+			},
+		}
+		got := buildAccessLog(src)
+		g.Expect(got).ToNot(BeNil())
+		g.Expect(got.Path).To(Equal(DefaultAccessLogPath))
+	})
+
+	t.Run("nil syslog struct falls back to default path", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+		src := &ngfAPIv1alpha2.NginxLogging{
+			AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
+				Destination: &ngfAPIv1alpha2.NginxAccessLogDestination{
+					Type:   ngfAPIv1alpha2.NginxAccessLogDestinationTypeSyslog,
+					Syslog: nil,
+				},
+			},
+		}
+		got := buildAccessLog(src)
+		g.Expect(got).ToNot(BeNil())
+		g.Expect(got.Path).To(Equal(DefaultAccessLogPath))
+		g.Expect(got.Format).To(BeEmpty())
+	})
+
+	t.Run("syslog destination with empty server string falls back to default path", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+		src := &ngfAPIv1alpha2.NginxLogging{
+			AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
+				Destination: &ngfAPIv1alpha2.NginxAccessLogDestination{
+					Type: ngfAPIv1alpha2.NginxAccessLogDestinationTypeSyslog,
+					Syslog: &ngfAPIv1alpha2.NginxAccessLogSyslog{
+						Server: "",
+					},
+				},
+			},
+		}
+		got := buildAccessLog(src)
+		g.Expect(got).ToNot(BeNil())
+		g.Expect(got.Path).To(Equal(DefaultAccessLogPath))
+		g.Expect(got.Format).To(BeEmpty())
+	})
+
+	t.Run("destination with empty type falls back to default path", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+		src := &ngfAPIv1alpha2.NginxLogging{
+			AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
+				Destination: &ngfAPIv1alpha2.NginxAccessLogDestination{
+					Type: "",
+				},
+			},
+		}
+		got := buildAccessLog(src)
+		g.Expect(got).ToNot(BeNil())
+		g.Expect(got.Path).To(Equal(DefaultAccessLogPath))
+		g.Expect(got.Format).To(BeEmpty())
+	})
 }
 
 func TestBuildUpstreamsZoneSizePrecedence(t *testing.T) {
