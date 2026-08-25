@@ -101,16 +101,12 @@ collector:
                     host: "{{ .NIMEndpointHost }}"
                     port: {{ .NIMEndpointPort }}
                 authenticator: headers_setter
-{{- end }}
     processors:
-{{- if .NIMReporting }}
         batch:
             "nim_logs": {}
         securityviolationsfilter:
             "nim": {}
-{{- end }}
     extensions:
-{{- if .NIMReporting }}
         headers_setter:
             headers:
              - action: insert
