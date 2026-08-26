@@ -74,7 +74,8 @@ var _ = Describe("eventHandler", func() {
 		Expect(fakeProcessor.ProcessCallCount()).Should(Equal(1))
 
 		Expect(fakeGenerator.GenerateCallCount()).Should(Equal(1))
-		Expect(fakeGenerator.GenerateArgsForCall(0)).Should(Equal(expectedConf))
+		_, conf := fakeGenerator.GenerateArgsForCall(0)
+		Expect(conf).Should(Equal(expectedConf))
 
 		Expect(fakeNginxUpdater.UpdateConfigCallCount()).Should(Equal(1))
 		_, files, _ := fakeNginxUpdater.UpdateConfigArgsForCall(0)
@@ -84,11 +85,11 @@ var _ = Describe("eventHandler", func() {
 			func() int {
 				return fakeStatusUpdater.UpdateGroupCallCount()
 			}).Should(Equal(2))
-		_, name, reqs := fakeStatusUpdater.UpdateGroupArgsForCall(0)
+		_, _, name, reqs := fakeStatusUpdater.UpdateGroupArgsForCall(0)
 		Expect(name).To(Equal(groupAllExceptGateways))
 		Expect(reqs).To(BeEmpty())
 
-		_, name, reqs = fakeStatusUpdater.UpdateGroupArgsForCall(1)
+		_, _, name, reqs = fakeStatusUpdater.UpdateGroupArgsForCall(1)
 		Expect(name).To(Equal(groupGateways))
 		Expect(reqs).To(HaveLen(1))
 
@@ -186,12 +187,13 @@ var _ = Describe("eventHandler", func() {
 
 		checkUpsertEventExpectations := func(e *events.UpsertEvent) {
 			Expect(fakeProcessor.CaptureUpsertChangeCallCount()).Should(Equal(1))
-			Expect(fakeProcessor.CaptureUpsertChangeArgsForCall(0)).Should(Equal(e.Resource))
+			_, passedResource := fakeProcessor.CaptureUpsertChangeArgsForCall(0)
+			Expect(passedResource).Should(Equal(e.Resource))
 		}
 
 		checkDeleteEventExpectations := func(e *events.DeleteEvent) {
 			Expect(fakeProcessor.CaptureDeleteChangeCallCount()).Should(Equal(1))
-			passedResourceType, passedNsName := fakeProcessor.CaptureDeleteChangeArgsForCall(0)
+			_, passedResourceType, passedNsName := fakeProcessor.CaptureDeleteChangeArgsForCall(0)
 			Expect(passedResourceType).Should(Equal(e.Type))
 			Expect(passedNsName).Should(Equal(e.NamespacedName))
 		}
@@ -345,10 +347,10 @@ var _ = Describe("eventHandler", func() {
 					}).Should(Equal(2))
 
 				// Verify that status updates were made for both all-except-gateways and gateways groups
-				_, name, _ := fakeStatusUpdater.UpdateGroupArgsForCall(0)
+				_, _, name, _ := fakeStatusUpdater.UpdateGroupArgsForCall(0)
 				Expect(name).To(Equal(groupAllExceptGateways))
 
-				_, name, _ = fakeStatusUpdater.UpdateGroupArgsForCall(1)
+				_, _, name, _ = fakeStatusUpdater.UpdateGroupArgsForCall(1)
 				Expect(name).To(Equal(groupGateways))
 			})
 		})
@@ -404,7 +406,7 @@ var _ = Describe("eventHandler", func() {
 					return fakeStatusUpdater.UpdateGroupCallCount()
 				}).Should(BeNumerically(">", 1))
 
-			_, name, reqs := fakeStatusUpdater.UpdateGroupArgsForCall(0)
+			_, _, name, reqs := fakeStatusUpdater.UpdateGroupArgsForCall(0)
 			Expect(name).To(Equal(groupControlPlane))
 			Expect(reqs).To(HaveLen(1))
 
@@ -423,7 +425,7 @@ var _ = Describe("eventHandler", func() {
 					return fakeStatusUpdater.UpdateGroupCallCount()
 				}).Should(BeNumerically(">", 1))
 
-			_, name, reqs := fakeStatusUpdater.UpdateGroupArgsForCall(0)
+			_, _, name, reqs := fakeStatusUpdater.UpdateGroupArgsForCall(0)
 			Expect(name).To(Equal(groupControlPlane))
 			Expect(reqs).To(HaveLen(1))
 
@@ -455,7 +457,7 @@ var _ = Describe("eventHandler", func() {
 					return fakeStatusUpdater.UpdateGroupCallCount()
 				}).Should(BeNumerically(">", 1))
 
-			_, name, reqs := fakeStatusUpdater.UpdateGroupArgsForCall(0)
+			_, _, name, reqs := fakeStatusUpdater.UpdateGroupArgsForCall(0)
 			Expect(name).To(Equal(groupControlPlane))
 			Expect(reqs).To(BeEmpty())
 
@@ -1134,7 +1136,7 @@ var _ = Describe("getDeploymentContext", func() {
 				statusQueue: status.NewQueue(),
 				plus:        true,
 				deployCtxCollector: &licensingfakes.FakeCollector{
-					CollectStub: func(_ context.Context) (dataplane.DeploymentContext, error) {
+					CollectStub: func(_ context.Context, _ logr.Logger) (dataplane.DeploymentContext, error) {
 						return expDepCtx, nil
 					},
 				},
@@ -1152,7 +1154,7 @@ var _ = Describe("getDeploymentContext", func() {
 				statusQueue: status.NewQueue(),
 				plus:        true,
 				deployCtxCollector: &licensingfakes.FakeCollector{
-					CollectStub: func(_ context.Context) (dataplane.DeploymentContext, error) {
+					CollectStub: func(_ context.Context, _ logr.Logger) (dataplane.DeploymentContext, error) {
 						return dataplane.DeploymentContext{}, expErr
 					},
 				},

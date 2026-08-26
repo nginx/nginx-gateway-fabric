@@ -51,21 +51,19 @@ type Setter func(client.Object) (wasSet bool)
 // FIXME(pleshakov): https://github.com/nginx/nginx-gateway-fabric/issues/1813
 type Updater struct {
 	client client.Client
-	logger logr.Logger
 }
 
 var ErrFailedAssert = errors.New("type assertion failed")
 
 // NewUpdater creates a new Updater.
-func NewUpdater(c client.Client, logger logr.Logger) *Updater {
+func NewUpdater(c client.Client) *Updater {
 	return &Updater{
 		client: c,
-		logger: logger,
 	}
 }
 
 // Update updates the status of the resources from the requests.
-func (u *Updater) Update(ctx context.Context, reqs ...UpdateRequest) {
+func (u *Updater) Update(ctx context.Context, logger logr.Logger, reqs ...UpdateRequest) {
 	for _, r := range reqs {
 		select {
 		case <-ctx.Done():
@@ -73,19 +71,20 @@ func (u *Updater) Update(ctx context.Context, reqs ...UpdateRequest) {
 		default:
 		}
 
-		u.logger.V(1).Info(
+		logger.V(1).Info(
 			"Updating status for resource",
 			"namespace", r.NsName.Namespace,
 			"name", r.NsName.Name,
 			"kind", r.ResourceType.GetObjectKind().GroupVersionKind().Kind,
 		)
 
-		u.writeStatuses(ctx, r.NsName, r.ResourceType, r.Setter)
+		u.writeStatuses(ctx, logger, r.NsName, r.ResourceType, r.Setter)
 	}
 }
 
 func (u *Updater) writeStatuses(
 	ctx context.Context,
+	logger logr.Logger,
 	nsname types.NamespacedName,
 	resourceType ngftypes.ObjectType,
 	statusSetter Setter,
@@ -106,10 +105,10 @@ func (u *Updater) writeStatuses(
 			Cap:      time.Millisecond * 3000,
 		},
 		// Function returns true if the condition is satisfied, or an error if the loop should be aborted.
-		NewRetryUpdateFunc(u.client, u.client.Status(), nsname, obj, u.logger, statusSetter),
+		NewRetryUpdateFunc(u.client, u.client.Status(), nsname, obj, logger, statusSetter),
 	)
 	if err != nil && !errors.Is(err, context.Canceled) {
-		u.logger.Error(
+		logger.Error(
 			err,
 			"Failed to update status",
 			"namespace", nsname.Namespace,

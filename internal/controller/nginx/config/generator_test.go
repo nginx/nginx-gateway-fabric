@@ -150,10 +150,9 @@ func TestGenerate(t *testing.T) {
 	generator := config.NewGeneratorImpl(
 		plus,
 		&ngfConfig.UsageReportConfig{Endpoint: "test-endpoint"},
-		logr.Discard(),
 	)
 
-	files := generator.Generate(conf)
+	files := generator.Generate(logr.Discard(), conf)
 
 	g.Expect(files).To(HaveLen(21))
 	arrange := func(i, j int) bool {

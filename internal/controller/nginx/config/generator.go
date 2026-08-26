@@ -79,7 +79,7 @@ const (
 // This interface is used for testing purposes only.
 type Generator interface {
 	// Generate generates NGINX configuration files from internal representation.
-	Generate(configuration dataplane.Configuration) []agent.File
+	Generate(logger logr.Logger, configuration dataplane.Configuration) []agent.File
 	// GenerateDeploymentContext generates the deployment context used for N+ licensing.
 	GenerateDeploymentContext(depCtx dataplane.DeploymentContext) (agent.File, error)
 }
@@ -92,7 +92,6 @@ type Generator interface {
 // includes (https://nginx.org/en/docs/ngx_core_module.html#include) the files from other folders.
 type GeneratorImpl struct {
 	usageReportConfig *ngfConfig.UsageReportConfig
-	logger            logr.Logger
 	plus              bool
 }
 
@@ -100,12 +99,10 @@ type GeneratorImpl struct {
 func NewGeneratorImpl(
 	plus bool,
 	usageReportConfig *ngfConfig.UsageReportConfig,
-	logger logr.Logger,
 ) GeneratorImpl {
 	return GeneratorImpl{
 		plus:              plus,
 		usageReportConfig: usageReportConfig,
-		logger:            logger,
 	}
 }
 
@@ -121,7 +118,7 @@ type executeFunc func(configuration dataplane.Configuration) []executeResult
 // It is the responsibility of the caller to validate the configuration before calling this function.
 // In case of invalid configuration, NGINX will fail to reload or could be configured with malicious configuration.
 // To validate, use the validators from the validation package.
-func (g GeneratorImpl) Generate(conf dataplane.Configuration) []agent.File {
+func (g GeneratorImpl) Generate(logger logr.Logger, conf dataplane.Configuration) []agent.File {
 	files := make([]agent.File, 0)
 
 	for id, pair := range conf.SSLKeyPairs {
@@ -137,7 +134,7 @@ func (g GeneratorImpl) Generate(conf dataplane.Configuration) []agent.File {
 		waf.NewGenerator(),
 	)
 
-	files = append(files, g.executeConfigTemplates(conf, policyGenerator)...)
+	files = append(files, g.executeConfigTemplates(logger, conf, policyGenerator)...)
 
 	for id, bundle := range conf.WAF.WAFBundles {
 		files = append(files, generateWAFBundle(id, bundle))
@@ -179,6 +176,7 @@ func (g GeneratorImpl) GenerateDeploymentContext(depCtx dataplane.DeploymentCont
 }
 
 func (g GeneratorImpl) executeConfigTemplates(
+	logger logr.Logger,
 	conf dataplane.Configuration,
 	generator policies.Generator,
 ) []agent.File {
@@ -187,7 +185,7 @@ func (g GeneratorImpl) executeConfigTemplates(
 	httpUpstreams := g.createUpstreams(conf.Upstreams)
 	keepAliveCheck := newKeepAliveChecker(httpUpstreams)
 
-	for _, execute := range g.getExecuteFuncs(generator, httpUpstreams, keepAliveCheck) {
+	for _, execute := range g.getExecuteFuncs(logger, generator, httpUpstreams, keepAliveCheck) {
 		results := execute(conf)
 		for _, res := range results {
 			fileBytes[res.dest] = append(fileBytes[res.dest], res.data...)
@@ -196,7 +194,7 @@ func (g GeneratorImpl) executeConfigTemplates(
 
 	var mgmtFiles []agent.File
 	if g.plus {
-		mgmtFiles = g.generateMgmtFiles(conf)
+		mgmtFiles = g.generateMgmtFiles(logger, conf)
 	}
 
 	files := make([]agent.File, 0, len(fileBytes)+len(mgmtFiles))
@@ -217,6 +215,7 @@ func (g GeneratorImpl) executeConfigTemplates(
 }
 
 func (g GeneratorImpl) getExecuteFuncs(
+	logger logr.Logger,
 	generator policies.Generator,
 	upstreams []http.Upstream,
 	keepAliveCheck keepAliveChecker,
@@ -230,7 +229,7 @@ func (g GeneratorImpl) getExecuteFuncs(
 		executeSplitClients,
 		executeMaps,
 		executeTelemetry,
-		g.executeStreamServers,
+		g.newExecuteStreamServersFunc(logger.WithName("compositeGenerator")),
 		g.executeStreamUpstreams,
 		executeStreamMaps,
 		executePlusAPI,

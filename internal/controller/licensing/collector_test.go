@@ -3,6 +3,7 @@ package licensing_test
 import (
 	"context"
 
+	"github.com/go-logr/logr"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	v1 "k8s.io/api/core/v1"
@@ -43,7 +44,7 @@ var _ = Describe("DeploymentContextCollector", func() {
 			ClusterNodeCount: helpers.GetPointer(1),
 		}
 
-		depCtx, err := collector.Collect(context.Background())
+		depCtx, err := collector.Collect(context.Background(), logr.Discard())
 		Expect(err).ToNot(HaveOccurred())
 		Expect(depCtx).To(Equal(expCtx))
 	})
@@ -59,7 +60,7 @@ var _ = Describe("DeploymentContextCollector", func() {
 			InstallationID: helpers.GetPointer("pod-uid"),
 		}
 
-		depCtx, err := collector.Collect(context.Background())
+		depCtx, err := collector.Collect(context.Background(), logr.Discard())
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("error collecting cluster ID and cluster node count"))
 		Expect(depCtx).To(Equal(expCtx))

@@ -166,7 +166,6 @@ func StartManager(cfg config.Config) error {
 		GatewayCtlrName:  cfg.GatewayCtlrName,
 		GatewayClassName: cfg.GatewayClassName,
 		ClusterDomain:    cfg.ClusterDomain,
-		Logger:           cfg.Logger.WithName("changeProcessor"),
 		Validators: validation.Validators{
 			HTTPFieldsValidator: ngxvalidation.HTTPValidator{},
 			GenericValidator:    genericValidator,
@@ -196,14 +195,12 @@ func StartManager(cfg config.Config) error {
 
 	statusUpdater := status.NewUpdater(
 		mgr.GetClient(),
-		cfg.Logger.WithName("statusUpdater"),
 	)
 
 	groupStatusUpdater := status.NewLeaderAwareGroupUpdater(statusUpdater)
 	deployCtxCollector := licensing.NewDeploymentContextCollector(licensing.DeploymentContextCollectorConfig{
 		K8sClientReader: mgr.GetAPIReader(),
 		PodUID:          cfg.GatewayPodConfig.UID,
-		Logger:          cfg.Logger.WithName("deployCtxCollector"),
 	})
 
 	statusQueue := status.NewQueue()
@@ -231,7 +228,6 @@ func StartManager(cfg config.Config) error {
 		generator: ngxcfg.NewGeneratorImpl(
 			cfg.Plus,
 			&cfg.UsageReportConfig,
-			cfg.Logger.WithName("generator"),
 		),
 		k8sClient:               mgr.GetClient(),
 		logger:                  cfg.Logger.WithName("eventHandler"),
@@ -268,7 +264,7 @@ func StartManager(cfg config.Config) error {
 	}
 
 	if err = mgr.Add(runnables.NewCallFunctionsAfterBecameLeader([]func(context.Context){
-		groupStatusUpdater.Enable,
+		func(ctx context.Context) { groupStatusUpdater.Enable(ctx, cfg.Logger.WithName("statusUpdater")) },
 		nginxProvisioner.Enable,
 		eventHandler.enable,
 	})); err != nil {

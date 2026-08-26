@@ -74,7 +74,7 @@ func TestExecuteStreamServers(t *testing.T) {
 	g := NewWithT(t)
 
 	gen := GeneratorImpl{}
-	results := gen.executeStreamServers(conf)
+	results := gen.executeStreamServers(logr.Discard(), conf)
 	g.Expect(results).To(HaveLen(1))
 	result := results[0]
 
@@ -119,7 +119,7 @@ func TestExecuteStreamServers_Plus(t *testing.T) {
 	g := NewWithT(t)
 
 	gen := GeneratorImpl{plus: true}
-	results := gen.executeStreamServers(config)
+	results := gen.executeStreamServers(logr.Discard(), config)
 	g.Expect(results).To(HaveLen(1))
 
 	serverConf := string(results[0].data)
@@ -187,7 +187,7 @@ func TestExecuteStreamServersWithTLSTerminate(t *testing.T) {
 	}
 
 	gen := GeneratorImpl{}
-	results := gen.executeStreamServers(conf)
+	results := gen.executeStreamServers(logr.Discard(), conf)
 	g.Expect(results).To(HaveLen(1))
 
 	serverConf := string(results[0].data)
@@ -410,7 +410,7 @@ func TestExecuteStreamServersForIPFamily(t *testing.T) {
 			g := NewWithT(t)
 
 			gen := GeneratorImpl{}
-			results := gen.executeStreamServers(test.config)
+			results := gen.executeStreamServers(logr.Discard(), test.config)
 			g.Expect(results).To(HaveLen(1))
 			serverConf := string(results[0].data)
 
@@ -509,7 +509,7 @@ func TestExecuteStreamServers_RewriteClientIP(t *testing.T) {
 			g := NewWithT(t)
 
 			gen := GeneratorImpl{}
-			results := gen.executeStreamServers(test.config)
+			results := gen.executeStreamServers(logr.Discard(), test.config)
 			g.Expect(results).To(HaveLen(1))
 			serverConf := string(results[0].data)
 
@@ -1022,7 +1022,7 @@ server {
 			t.Parallel()
 			g := NewWithT(t)
 			generator := GeneratorImpl{}
-			results := generator.executeStreamServers(test.conf)
+			results := generator.executeStreamServers(logr.Discard(), test.conf)
 
 			g.Expect(results).To(HaveLen(1))
 			g.Expect(string(results[0].data)).To(Equal(test.expectedConfig))

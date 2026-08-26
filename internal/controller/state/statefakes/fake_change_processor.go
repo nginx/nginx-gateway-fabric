@@ -5,6 +5,7 @@ import (
 	"context"
 	"sync"
 
+	"github.com/go-logr/logr"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/types"
@@ -13,16 +14,18 @@ import (
 )
 
 type FakeChangeProcessor struct {
-	CaptureDeleteChangeStub        func(types.ObjectType, typesa.NamespacedName)
+	CaptureDeleteChangeStub        func(logr.Logger, types.ObjectType, typesa.NamespacedName)
 	captureDeleteChangeMutex       sync.RWMutex
 	captureDeleteChangeArgsForCall []struct {
-		arg1 types.ObjectType
-		arg2 typesa.NamespacedName
+		arg1 logr.Logger
+		arg2 types.ObjectType
+		arg3 typesa.NamespacedName
 	}
-	CaptureUpsertChangeStub        func(client.Object)
+	CaptureUpsertChangeStub        func(logr.Logger, client.Object)
 	captureUpsertChangeMutex       sync.RWMutex
 	captureUpsertChangeArgsForCall []struct {
-		arg1 client.Object
+		arg1 logr.Logger
+		arg2 client.Object
 	}
 	ForceRebuildStub        func()
 	forceRebuildMutex       sync.RWMutex
@@ -38,10 +41,11 @@ type FakeChangeProcessor struct {
 	getLatestGraphReturnsOnCall map[int]struct {
 		result1 *graph.Graph
 	}
-	ProcessStub        func(context.Context) *graph.Graph
+	ProcessStub        func(context.Context, logr.Logger) *graph.Graph
 	processMutex       sync.RWMutex
 	processArgsForCall []struct {
 		arg1 context.Context
+		arg2 logr.Logger
 	}
 	processReturns struct {
 		result1 *graph.Graph
@@ -53,17 +57,18 @@ type FakeChangeProcessor struct {
 	invocationsMutex sync.RWMutex
 }
 
-func (fake *FakeChangeProcessor) CaptureDeleteChange(arg1 types.ObjectType, arg2 typesa.NamespacedName) {
+func (fake *FakeChangeProcessor) CaptureDeleteChange(arg1 logr.Logger, arg2 types.ObjectType, arg3 typesa.NamespacedName) {
 	fake.captureDeleteChangeMutex.Lock()
 	fake.captureDeleteChangeArgsForCall = append(fake.captureDeleteChangeArgsForCall, struct {
-		arg1 types.ObjectType
-		arg2 typesa.NamespacedName
-	}{arg1, arg2})
+		arg1 logr.Logger
+		arg2 types.ObjectType
+		arg3 typesa.NamespacedName
+	}{arg1, arg2, arg3})
 	stub := fake.CaptureDeleteChangeStub
-	fake.recordInvocation("CaptureDeleteChange", []interface{}{arg1, arg2})
+	fake.recordInvocation("CaptureDeleteChange", []interface{}{arg1, arg2, arg3})
 	fake.captureDeleteChangeMutex.Unlock()
 	if stub != nil {
-		fake.CaptureDeleteChangeStub(arg1, arg2)
+		fake.CaptureDeleteChangeStub(arg1, arg2, arg3)
 	}
 }
 
@@ -73,29 +78,30 @@ func (fake *FakeChangeProcessor) CaptureDeleteChangeCallCount() int {
 	return len(fake.captureDeleteChangeArgsForCall)
 }
 
-func (fake *FakeChangeProcessor) CaptureDeleteChangeCalls(stub func(types.ObjectType, typesa.NamespacedName)) {
+func (fake *FakeChangeProcessor) CaptureDeleteChangeCalls(stub func(logr.Logger, types.ObjectType, typesa.NamespacedName)) {
 	fake.captureDeleteChangeMutex.Lock()
 	defer fake.captureDeleteChangeMutex.Unlock()
 	fake.CaptureDeleteChangeStub = stub
 }
 
-func (fake *FakeChangeProcessor) CaptureDeleteChangeArgsForCall(i int) (types.ObjectType, typesa.NamespacedName) {
+func (fake *FakeChangeProcessor) CaptureDeleteChangeArgsForCall(i int) (logr.Logger, types.ObjectType, typesa.NamespacedName) {
 	fake.captureDeleteChangeMutex.RLock()
 	defer fake.captureDeleteChangeMutex.RUnlock()
 	argsForCall := fake.captureDeleteChangeArgsForCall[i]
-	return argsForCall.arg1, argsForCall.arg2
+	return argsForCall.arg1, argsForCall.arg2, argsForCall.arg3
 }
 
-func (fake *FakeChangeProcessor) CaptureUpsertChange(arg1 client.Object) {
+func (fake *FakeChangeProcessor) CaptureUpsertChange(arg1 logr.Logger, arg2 client.Object) {
 	fake.captureUpsertChangeMutex.Lock()
 	fake.captureUpsertChangeArgsForCall = append(fake.captureUpsertChangeArgsForCall, struct {
-		arg1 client.Object
-	}{arg1})
+		arg1 logr.Logger
+		arg2 client.Object
+	}{arg1, arg2})
 	stub := fake.CaptureUpsertChangeStub
-	fake.recordInvocation("CaptureUpsertChange", []interface{}{arg1})
+	fake.recordInvocation("CaptureUpsertChange", []interface{}{arg1, arg2})
 	fake.captureUpsertChangeMutex.Unlock()
 	if stub != nil {
-		fake.CaptureUpsertChangeStub(arg1)
+		fake.CaptureUpsertChangeStub(arg1, arg2)
 	}
 }
 
@@ -105,17 +111,17 @@ func (fake *FakeChangeProcessor) CaptureUpsertChangeCallCount() int {
 	return len(fake.captureUpsertChangeArgsForCall)
 }
 
-func (fake *FakeChangeProcessor) CaptureUpsertChangeCalls(stub func(client.Object)) {
+func (fake *FakeChangeProcessor) CaptureUpsertChangeCalls(stub func(logr.Logger, client.Object)) {
 	fake.captureUpsertChangeMutex.Lock()
 	defer fake.captureUpsertChangeMutex.Unlock()
 	fake.CaptureUpsertChangeStub = stub
 }
 
-func (fake *FakeChangeProcessor) CaptureUpsertChangeArgsForCall(i int) client.Object {
+func (fake *FakeChangeProcessor) CaptureUpsertChangeArgsForCall(i int) (logr.Logger, client.Object) {
 	fake.captureUpsertChangeMutex.RLock()
 	defer fake.captureUpsertChangeMutex.RUnlock()
 	argsForCall := fake.captureUpsertChangeArgsForCall[i]
-	return argsForCall.arg1
+	return argsForCall.arg1, argsForCall.arg2
 }
 
 func (fake *FakeChangeProcessor) ForceRebuild() {
@@ -195,18 +201,19 @@ func (fake *FakeChangeProcessor) GetLatestGraphReturnsOnCall(i int, result1 *gra
 	}{result1}
 }
 
-func (fake *FakeChangeProcessor) Process(arg1 context.Context) *graph.Graph {
+func (fake *FakeChangeProcessor) Process(arg1 context.Context, arg2 logr.Logger) *graph.Graph {
 	fake.processMutex.Lock()
 	ret, specificReturn := fake.processReturnsOnCall[len(fake.processArgsForCall)]
 	fake.processArgsForCall = append(fake.processArgsForCall, struct {
 		arg1 context.Context
-	}{arg1})
+		arg2 logr.Logger
+	}{arg1, arg2})
 	stub := fake.ProcessStub
 	fakeReturns := fake.processReturns
-	fake.recordInvocation("Process", []interface{}{arg1})
+	fake.recordInvocation("Process", []interface{}{arg1, arg2})
 	fake.processMutex.Unlock()
 	if stub != nil {
-		return stub(arg1)
+		return stub(arg1, arg2)
 	}
 	if specificReturn {
 		return ret.result1
@@ -220,17 +227,17 @@ func (fake *FakeChangeProcessor) ProcessCallCount() int {
 	return len(fake.processArgsForCall)
 }
 
-func (fake *FakeChangeProcessor) ProcessCalls(stub func(context.Context) *graph.Graph) {
+func (fake *FakeChangeProcessor) ProcessCalls(stub func(context.Context, logr.Logger) *graph.Graph) {
 	fake.processMutex.Lock()
 	defer fake.processMutex.Unlock()
 	fake.ProcessStub = stub
 }
 
-func (fake *FakeChangeProcessor) ProcessArgsForCall(i int) context.Context {
+func (fake *FakeChangeProcessor) ProcessArgsForCall(i int) (context.Context, logr.Logger) {
 	fake.processMutex.RLock()
 	defer fake.processMutex.RUnlock()
 	argsForCall := fake.processArgsForCall[i]
-	return argsForCall.arg1
+	return argsForCall.arg1, argsForCall.arg2
 }
 
 func (fake *FakeChangeProcessor) ProcessReturns(result1 *graph.Graph) {

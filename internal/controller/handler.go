@@ -207,7 +207,7 @@ func (h *eventHandlerImpl) HandleEventBatch(ctx context.Context, logger logr.Log
 		h.parseAndCaptureEvent(ctx, logger, event)
 	}
 
-	gr := h.cfg.processor.Process(ctx)
+	gr := h.cfg.processor.Process(ctx, logger.WithName("changeProcessor"))
 
 	// Once we've processed resources on startup and built our first graph, mark the Pod as ready.
 	if !h.cfg.graphBuiltHealthChecker.ready {
@@ -670,7 +670,7 @@ func (h *eventHandlerImpl) updateGatewayStatus(
 		gwAddresses,
 		gw.LatestReloadResult,
 	)
-	h.cfg.statusUpdater.UpdateGroup(ctx, groupGateways, gatewayStatuses...)
+	h.cfg.statusUpdater.UpdateGroup(ctx, h.cfg.logger.WithName("statusUpdater"), groupGateways, gatewayStatuses...)
 }
 
 // configuredAddress returns the address the attached ExternalLoadBalancer configures up front.
@@ -723,7 +723,7 @@ func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph, 
 	gcReqs := status.PrepareGatewayClassRequests(gr.GatewayClass, gr.IgnoredGatewayClasses, transitionTime)
 
 	if gw == nil {
-		h.cfg.statusUpdater.UpdateGroup(ctx, groupAllExceptGateways, gcReqs...)
+		h.cfg.statusUpdater.UpdateGroup(ctx, h.cfg.logger.WithName("statusUpdater"), groupAllExceptGateways, gcReqs...)
 		return
 	}
 
@@ -833,7 +833,7 @@ func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph, 
 	reqs = append(reqs, externalLoadBalancerReqs...)
 	reqs = append(reqs, inferencePoolReqs...)
 
-	h.cfg.statusUpdater.UpdateGroup(ctx, groupAllExceptGateways, reqs...)
+	h.cfg.statusUpdater.UpdateGroup(ctx, h.cfg.logger.WithName("statusUpdater"), groupAllExceptGateways, reqs...)
 
 	// We put Gateway status updates separately from the rest of the statuses because we want to be able
 	// to update them separately from the rest of the graph whenever the public IP of NGF changes.
@@ -845,7 +845,7 @@ func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph, 
 		gwAddresses,
 		gw.LatestReloadResult,
 	)
-	h.cfg.statusUpdater.UpdateGroup(ctx, groupGateways, gwReqs...)
+	h.cfg.statusUpdater.UpdateGroup(ctx, h.cfg.logger.WithName("statusUpdater"), groupGateways, gwReqs...)
 }
 
 // mergeWAFPollErrors adds StaleBundleWarning conditions to policies that have active poll errors.
@@ -962,7 +962,7 @@ func (h *eventHandlerImpl) parseAndCaptureEvent(ctx context.Context, logger logr
 			}
 		}
 
-		h.cfg.processor.CaptureUpsertChange(e.Resource)
+		h.cfg.processor.CaptureUpsertChange(logger.WithName("changeProcessor"), e.Resource)
 	case *events.DeleteEvent:
 		delFilterKey := objectFilterKey(e.Type, e.NamespacedName)
 
@@ -973,7 +973,7 @@ func (h *eventHandlerImpl) parseAndCaptureEvent(ctx context.Context, logger logr
 			}
 		}
 
-		h.cfg.processor.CaptureDeleteChange(e.Type, e.NamespacedName)
+		h.cfg.processor.CaptureDeleteChange(logger.WithName("changeProcessor"), e.Type, e.NamespacedName)
 	case events.WAFBundleReconcileEvent:
 		// Guard against stale events: the poller may have been stopped (policy deleted) between
 		// when the event was queued and when it is processed here. Skip the rebuild if the poller
@@ -1004,7 +1004,7 @@ func (h *eventHandlerImpl) updateNginxConf(
 	conf dataplane.Configuration,
 	volumeMounts []v1.VolumeMount,
 ) {
-	files := h.cfg.generator.Generate(conf)
+	files := h.cfg.generator.Generate(h.cfg.logger.WithName("generator"), conf)
 	h.cfg.nginxUpdater.UpdateConfig(deployment, files, volumeMounts)
 
 	// If using NGINX Plus, update upstream servers using the API.
@@ -1050,7 +1050,7 @@ func (h *eventHandlerImpl) updateControlPlaneAndSetStatus(
 		reqs = append(reqs, *req)
 	}
 
-	h.cfg.statusUpdater.UpdateGroup(ctx, groupControlPlane, reqs...)
+	h.cfg.statusUpdater.UpdateGroup(ctx, logger.WithName("statusUpdater"), groupControlPlane, reqs...)
 
 	logger.Info("Reconfigured control plane.")
 }
@@ -1177,7 +1177,7 @@ func (h *eventHandlerImpl) getDeploymentContext(ctx context.Context) (dataplane.
 		return dataplane.DeploymentContext{}, nil
 	}
 
-	return h.cfg.deployCtxCollector.Collect(ctx)
+	return h.cfg.deployCtxCollector.Collect(ctx, h.cfg.logger.WithName("deployCtxCollector"))
 }
 
 // GetLatestConfiguration gets configuration snapshots for telemetry consumers.

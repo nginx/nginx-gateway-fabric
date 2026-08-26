@@ -250,7 +250,7 @@ func createControllerCommand() *cobra.Command {
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			atom := zap.NewAtomicLevel()
 
-			logger := ctlrZap.New(ctlrZap.Level(atom))
+			logger := ctlrZap.New(ctlrZap.Level(atom)).WithName("controllerCommand")
 			klog.SetLogger(logger)
 
 			commit, date, dirty := getBuildInfo()
@@ -895,7 +895,7 @@ func createInitializeCommand() *cobra.Command {
 				return fmt.Errorf("could not get cluster UID: %w", err)
 			}
 
-			logger := ctlrZap.New()
+			logger := ctlrZap.New().WithName("initializeCommand")
 			klog.SetLogger(logger)
 			logger.Info(
 				"Starting init container",
@@ -916,7 +916,7 @@ func createInitializeCommand() *cobra.Command {
 
 			return initialize(initializeConfig{
 				fileManager:   file.NewStdLibOSFileManager(),
-				fileGenerator: ngxConfig.NewGeneratorImpl(plus, nil, logger.WithName("generator")),
+				fileGenerator: ngxConfig.NewGeneratorImpl(plus, nil),
 				logger:        logger,
 				podUID:        podUID,
 				clusterUID:    clusterUID,
