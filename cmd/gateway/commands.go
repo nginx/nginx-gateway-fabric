@@ -274,14 +274,6 @@ func createControllerCommand() *cobra.Command {
 				return fmt.Errorf("error validating ports: %w", err)
 			}
 
-			if err := validateLeaderElectionTimings(
-				leaderElectionLeaseDuration,
-				leaderElectionRenewDeadline,
-				leaderElectionRetryPeriod,
-			); err != nil {
-				return fmt.Errorf("error validating leader election timings: %w", err)
-			}
-
 			imageSource := os.Getenv("BUILD_AGENT")
 			if imageSource != "gha" && imageSource != "local" {
 				imageSource = "unknown"
