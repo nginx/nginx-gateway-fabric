@@ -4,18 +4,27 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/go-logr/logr"
 	. "github.com/onsi/gomega"
+	appsv1 "k8s.io/api/apps/v1"
+	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	apiv1 "k8s.io/api/core/v1"
 	discoveryV1 "k8s.io/api/discovery/v1"
+	policyv1 "k8s.io/api/policy/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	apiext "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/rest"
+	k8sEvents "k8s.io/client-go/tools/events"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	crconfig "sigs.k8s.io/controller-runtime/pkg/config"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -25,8 +34,12 @@ import (
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/config"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/crd/crdfakes"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent"
+	agentgrpc "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent/grpc"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/secrets"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/status"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 	ngftypes "github.com/nginx/nginx-gateway-fabric/v2/internal/framework/types"
 )
@@ -1507,6 +1520,114 @@ func TestFeatureFlagControllerCfgs(t *testing.T) {
 
 			result := featureFlagControllerCfgs(test.cfg)
 			g.Expect(result).To(HaveLen(len(test.expectedKinds)))
+		})
+	}
+}
+
+// createManagerTestScheme creates a new runtime.Scheme
+// with the necessary API schemes registered.
+func createManagerTestScheme() *runtime.Scheme {
+	scheme := runtime.NewScheme()
+
+	utilruntime.Must(gatewayv1.Install(scheme))
+	utilruntime.Must(apiv1.AddToScheme(scheme))
+	utilruntime.Must(appsv1.AddToScheme(scheme))
+	utilruntime.Must(autoscalingv2.AddToScheme(scheme))
+	utilruntime.Must(policyv1.AddToScheme(scheme))
+	utilruntime.Must(rbacv1.AddToScheme(scheme))
+
+	return scheme
+}
+
+func TestCreateAndRegisterProvisioner(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	mgr, err := manager.New(&rest.Config{}, manager.Options{
+		Scheme: createManagerTestScheme(),
+		Controller: crconfig.Controller{
+			// Skip name validation for the controller.
+			// This allows multiple controllers to be created with the same name,
+			// which is required for parallel test runs.
+			SkipNameValidation: helpers.GetPointer(true),
+		},
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+
+	nginxUpdater := &agent.NginxUpdaterImpl{
+		NginxDeployments: agent.NewDeploymentStore(agentgrpc.NewConnectionsTracker()),
+	}
+	statusQueue := status.NewQueue()
+	recorder := &k8sEvents.FakeRecorder{}
+
+	// fullCfg is a config.Config with all fields set to non-default values.
+	fullCfg := config.Config{
+		GatewayClassName: "test-gc",
+		GatewayCtlrName:  "gateway.nginx.org/nginx-gateway-controller",
+		GatewayPodConfig: config.GatewayPodConfig{
+			InstanceName: "test-instance",
+			Namespace:    "nginx-gateway",
+		},
+		Logger:             logr.Discard(),
+		AgentTLSSecretName: "agent-tls-secret",
+		NGINXSCCName:       "nginx-scc",
+		Plus:               true,
+		UsageReportConfig: config.UsageReportConfig{
+			SecretName:          "jwt-secret",
+			CASecretName:        "ca-secret",
+			ClientSSLSecretName: "client-secret",
+		},
+		NginxDockerSecretNames: []string{"docker-secret"},
+		NginxOneConsoleTelemetryConfig: config.ManagementPlaneTelemetryConfig{
+			DataplaneKeySecretName: "n1c-key",
+			EndpointHost:           "agent.connect.nginx.com",
+			EndpointPort:           443,
+		},
+		NginxInstanceManagerTelemetryConfig: config.ManagementPlaneTelemetryConfig{
+			DataplaneKeySecretName: "nim-key",
+			EndpointHost:           "nim.example.com",
+			EndpointPort:           4317,
+		},
+		InferenceExtension:          true,
+		EndpointPickerDisableTLS:    true,
+		EndpointPickerTLSSkipVerify: true,
+		ServerTLSDomain:             "custom.domain",
+		ExternalLoadBalancer:        true,
+	}
+
+	tests := []struct {
+		name string
+		cfg  config.Config
+	}{
+		{
+			name: "all config fields set",
+			cfg:  fullCfg,
+		},
+		{
+			name: "defaults serverTLSDomain to svc when empty",
+			cfg: func() config.Config {
+				cfg := fullCfg
+				cfg.ServerTLSDomain = ""
+				return cfg
+			}(),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			prov, err := createAndRegisterProvisioner(
+				t.Context(),
+				tt.cfg,
+				mgr,
+				nginxUpdater,
+				statusQueue,
+				recorder,
+			)
+			g.Expect(err).ToNot(HaveOccurred())
+			g.Expect(prov).ToNot(BeNil())
 		})
 	}
 }
