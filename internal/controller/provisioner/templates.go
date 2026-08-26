@@ -87,13 +87,15 @@ auxiliary_command:
     tls:
         skip_verify: {{ .EndpointTLSSkipVerify }}
 {{- end }}
-{{- if .EnableMetrics }}
+{{- if or .EnableMetrics .NIMReporting }}
 collector:
     exporters:
+{{- if .EnableMetrics }}
         prometheus:
             server:
                 host: "0.0.0.0"
                 port: {{ .MetricsPort }}
+{{- end }}
 {{- if .NIMReporting }}
         otlp:
             "nim":
@@ -123,6 +125,7 @@ collector:
                 processors: ["securityviolationsfilter/nim","batch/nim_logs"]
                 exporters: ["otlp_grpc/nim"]
 {{- end }}
+{{- if .EnableMetrics }}
         metrics:
 {{- if .NginxOneReporting }}
             "ngf":
@@ -131,5 +134,6 @@ collector:
 {{- end}}
                 receivers: ["host_metrics", "nginx_metrics"]
                 exporters: ["prometheus"]
+{{- end }}
 {{- end }}
 `
