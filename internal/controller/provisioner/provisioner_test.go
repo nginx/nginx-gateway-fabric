@@ -297,6 +297,11 @@ func TestNewNginxProvisioner(t *testing.T) {
 	})
 	g.Expect(err).ToNot(HaveOccurred())
 
+	apiChecker = &openshiftfakes.FakeAPIChecker{}
+	labelCollectorFactory = func(_ manager.Manager, _ Config) AgentLabelCollector {
+		return &fakeLabelCollector{}
+	}
+
 	tests := []struct {
 		name string
 		cfg  Config
@@ -356,11 +361,6 @@ func TestNewNginxProvisioner(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
-
-			apiChecker = &openshiftfakes.FakeAPIChecker{}
-			labelCollectorFactory = func(_ manager.Manager, _ Config) AgentLabelCollector {
-				return &fakeLabelCollector{}
-			}
 
 			provisioner, eventLoop, err := NewNginxProvisioner(t.Context(), mgr, tt.cfg)
 			g.Expect(err).ToNot(HaveOccurred())

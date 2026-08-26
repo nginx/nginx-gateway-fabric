@@ -13,6 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
@@ -1292,6 +1293,220 @@ func TestBuildPLMSecretNames(t *testing.T) {
 			result := buildPLMSecretNames(test.plmCfg, test.ns)
 
 			g.Expect(result).To(Equal(test.expected))
+		})
+	}
+}
+
+func TestValidateSecretData(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		secret    *apiv1.Secret
+		fields    []string
+		expectErr bool
+	}{
+		{
+			name: "all fields present",
+			secret: &apiv1.Secret{
+				ObjectMeta: metav1.ObjectMeta{Name: "my-secret"},
+				Data: map[string][]byte{
+					"key1": []byte("val1"),
+					"key2": []byte("val2"),
+				},
+			},
+			fields:    []string{"key1", "key2"},
+			expectErr: false,
+		},
+		{
+			name: "missing field",
+			secret: &apiv1.Secret{
+				ObjectMeta: metav1.ObjectMeta{Name: "my-secret"},
+				Data: map[string][]byte{
+					"key1": []byte("val1"),
+				},
+			},
+			fields:    []string{"key1", "missing"},
+			expectErr: true,
+		},
+		{
+			name: "no fields requested",
+			secret: &apiv1.Secret{
+				ObjectMeta: metav1.ObjectMeta{Name: "my-secret"},
+				Data:       map[string][]byte{},
+			},
+			fields:    []string{},
+			expectErr: false,
+		},
+		{
+			name: "nil data map with field requested",
+			secret: &apiv1.Secret{
+				ObjectMeta: metav1.ObjectMeta{Name: "my-secret"},
+			},
+			fields:    []string{"key1"},
+			expectErr: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			err := validateSecretData(test.secret, test.fields...)
+			if test.expectErr {
+				g.Expect(err).To(HaveOccurred())
+			} else {
+				g.Expect(err).ToNot(HaveOccurred())
+			}
+		})
+	}
+}
+
+func TestBuildManagerCache(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		expectedNamespaces map[string]cache.Config
+		name               string
+		cfg                config.Config
+	}{
+		{
+			name:               "no watch namespaces",
+			cfg:                config.Config{},
+			expectedNamespaces: nil,
+		},
+		{
+			name: "watch namespaces includes pod namespace",
+			cfg: config.Config{
+				WatchNamespaces: []string{"ns1", "ns2"},
+				GatewayPodConfig: config.GatewayPodConfig{
+					Namespace: "ns1",
+				},
+			},
+			expectedNamespaces: map[string]cache.Config{
+				"ns1": {},
+				"ns2": {},
+			},
+		},
+		{
+			name: "watch namespaces does not include pod namespace - gets added",
+			cfg: config.Config{
+				WatchNamespaces: []string{"ns1"},
+				GatewayPodConfig: config.GatewayPodConfig{
+					Namespace: "pod-ns",
+				},
+			},
+			expectedNamespaces: map[string]cache.Config{
+				"ns1":    {},
+				"pod-ns": {},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			result := buildManagerCache(test.cfg)
+
+			g.Expect(result.DefaultNamespaces).To(Equal(test.expectedNamespaces))
+			g.Expect(result.ByObject).To(HaveLen(3))
+			g.Expect(result.DefaultTransform).ToNot(BeNil())
+		})
+	}
+}
+
+func TestFeatureFlagControllerCfgs(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		expectedKinds []string
+		cfg           config.Config
+		expectedLen   int
+	}{
+		{
+			name:        "no feature flags enabled",
+			cfg:         config.Config{},
+			expectedLen: 0,
+		},
+		{
+			name: "inference extension enabled",
+			cfg: config.Config{
+				InferenceExtension: true,
+			},
+			expectedKinds: []string{"InferencePool"},
+		},
+		{
+			name: "snippets filters enabled",
+			cfg: config.Config{
+				SnippetsFilters: true,
+			},
+			expectedKinds: []string{"SnippetsFilter"},
+		},
+		{
+			name: "snippets enabled adds SnippetsFilter and SnippetsPolicy",
+			cfg: config.Config{
+				Snippets: true,
+			},
+			expectedKinds: []string{"SnippetsFilter", "SnippetsPolicy"},
+		},
+		{
+			name: "external load balancer enabled",
+			cfg: config.Config{
+				ExternalLoadBalancer: true,
+			},
+			expectedKinds: []string{"ExternalLoadBalancer"},
+		},
+		{
+			name: "payload processor enabled",
+			cfg: config.Config{
+				PayloadProcessor: true,
+			},
+			expectedKinds: []string{"PayloadProcessor"},
+		},
+		{
+			name: "PLM storage configured adds APPolicy and APLogConf",
+			cfg: config.Config{
+				PLMStorageConfig: &config.PLMStorageConfig{
+					URL: "http://example.com",
+				},
+			},
+			expectedKinds: []string{"APPolicy", "APLogConf"},
+		},
+		{
+			name: "all features enabled",
+			cfg: config.Config{
+				PLMStorageConfig: &config.PLMStorageConfig{
+					URL: "http://example.com",
+				},
+				InferenceExtension:   true,
+				SnippetsFilters:      true,
+				Snippets:             true,
+				ExternalLoadBalancer: true,
+				PayloadProcessor:     true,
+			},
+			expectedKinds: []string{
+				"APPolicy",
+				"APLogConf",
+				"InferencePool",
+				"SnippetsFilter",
+				"ExternalLoadBalancer",
+				"SnippetsPolicy",
+				"PayloadProcessor",
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			result := featureFlagControllerCfgs(test.cfg)
+			g.Expect(result).To(HaveLen(len(test.expectedKinds)))
 		})
 	}
 }
