@@ -146,6 +146,9 @@ func TestControllerCmdFlagValidation(t *testing.T) {
 				"--health-disable",
 				"--leader-election-lock-name=my-lock",
 				"--leader-election-disable=false",
+				"--leader-election-lease-duration=15s",
+				"--leader-election-renew-deadline=10s",
+				"--leader-election-retry-period=2s",
 				"--nginx-plus",
 				"--nginx-docker-secret=secret1",
 				"--nginx-docker-secret=secret2",
@@ -304,6 +307,60 @@ func TestControllerCmdFlagValidation(t *testing.T) {
 			},
 			wantErr:           true,
 			expectedErrPrefix: `invalid argument "" for "--leader-election-disable" flag: strconv.ParseBool`,
+		},
+		{
+			name: "leader-election-lease-duration is set to empty string",
+			args: []string{
+				"--leader-election-lease-duration=",
+			},
+			wantErr: true,
+			expectedErrPrefix: `invalid argument "" for "--leader-election-lease-duration" flag:` +
+				` time: invalid duration ""`,
+		},
+		{
+			name: "leader-election-lease-duration is invalid",
+			args: []string{
+				"--leader-election-lease-duration=invalid",
+			},
+			wantErr: true,
+			expectedErrPrefix: `invalid argument "invalid" for "--leader-election-lease-duration" flag:` +
+				` time: invalid duration "invalid"`,
+		},
+		{
+			name: "leader-election-renew-deadline is set to empty string",
+			args: []string{
+				"--leader-election-renew-deadline=",
+			},
+			wantErr: true,
+			expectedErrPrefix: `invalid argument "" for "--leader-election-renew-deadline" flag:` +
+				` time: invalid duration ""`,
+		},
+		{
+			name: "leader-election-renew-deadline is invalid",
+			args: []string{
+				"--leader-election-renew-deadline=invalid",
+			},
+			wantErr: true,
+			expectedErrPrefix: `invalid argument "invalid" for "--leader-election-renew-deadline" flag:` +
+				` time: invalid duration "invalid"`,
+		},
+		{
+			name: "leader-election-retry-period is set to empty string",
+			args: []string{
+				"--leader-election-retry-period=",
+			},
+			wantErr: true,
+			expectedErrPrefix: `invalid argument "" for "--leader-election-retry-period" flag:` +
+				` time: invalid duration ""`,
+		},
+		{
+			name: "leader-election-retry-period is invalid",
+			args: []string{
+				"--leader-election-retry-period=invalid",
+			},
+			wantErr: true,
+			expectedErrPrefix: `invalid argument "invalid" for "--leader-election-retry-period" flag:` +
+				` time: invalid duration "invalid"`,
 		},
 		{
 			name: "nginx-docker-secret is set to empty string",
