@@ -298,11 +298,14 @@ func TestExecuteUpstreams_NginxPlus(t *testing.T) {
 		"upstream up5":             1,
 		"upstream up6-usp-with-sp": 1,
 		"upstream up7-with-sp":     1,
+
 		"upstream up8-with-sp-expiry-and-path-empty":  1,
 		"upstream up9-usp-keepAlive-connections-zero": 1,
 		"upstream invalid-backend-ref":                1,
 
 		defaultLBMethod + ";": 9,
+
+		"ip_hash;": 1,
 
 		"zone up1 1m;":             1,
 		"zone up2 1m;":             1,
@@ -311,6 +314,7 @@ func TestExecuteUpstreams_NginxPlus(t *testing.T) {
 		"zone up5 1m;":             1,
 		"zone up6-usp-with-sp 2m;": 1,
 		"zone up7-with-sp 1m;":     1,
+
 		"zone up8-with-sp-expiry-and-path-empty 1m;":  1,
 		"zone up9-usp-keepAlive-connections-zero 2m;": 1,
 
