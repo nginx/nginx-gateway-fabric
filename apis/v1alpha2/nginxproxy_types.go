@@ -845,7 +845,7 @@ type AutoscalingSpec struct {
 	Enable bool `json:"enable"`
 }
 
-// ServiceMonitorSpec defines the configuration for the ServiceMonitor.
+// ServiceMonitorSpec defines the configuration for the ServiceMonitor resource.
 type ServiceMonitorSpec struct {
 	// NamespaceSelector is used to select which namespaces the Kubernetes endpoints
 	// objects are discovered from.
