@@ -144,7 +144,7 @@ type OIDCAuth struct {
 	// If not specified, defaults to /oidc_callback_<filternamespace>_<filtername>.
 	// Directive: https://nginx.org/en/docs/http/ngx_http_oidc_module.html#redirect_uri
 	// NGINX Default: /oidc_callback
-	// Example: /oidc_callback, https://cafe.example.com:8442/oidc_callback
+	// Example: /oidc_callback, `https://cafe.example.com:8442/oidc_callback`
 	//
 	// +optional
 	// +kubebuilder:validation:Pattern=`^(https:\/\/[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*(:[0-9]{1,5})?(\/[a-zA-Z0-9._~:\/?@!&'()*+,=-]*)?|\/[a-zA-Z0-9._~:\/?@!&'()*+,=-]*)$`
@@ -167,9 +167,9 @@ type OIDCAuth struct {
 	// .well-known/openid-configuration endpoint.
 	// Directive: https://nginx.org/en/docs/http/ngx_http_oidc_module.html#issuer
 	// Examples:
-	//   - Keycloak: "https://keycloak.example.com/realms/my-realm"
-	//   - Okta: "https://dev-123456.okta.com/oauth2/default"
-	//   - Auth0: "https://my-tenant.auth0.com/"
+	//   - Keycloak: `https://keycloak.example.com/realms/my-realm`
+	//   - Okta: `https://dev-123456.okta.com/oauth2/default`
+	//   - Auth0: `https://my-tenant.auth0.com/`
 	//
 	// +kubebuilder:validation:Pattern=`^https:\/\/[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*(:[0-9]{1,5})?(\/[a-zA-Z0-9._~:\/?@!&'()*+,=-]*)?$`
 	Issuer string `json:"issuer"`
@@ -226,7 +226,7 @@ type OIDCLogoutConfig struct {
 	// PostLogoutURI defines the URI to redirect to after logout.
 	// Must match the configuration on the provider's side.
 	// Directive: https://nginx.org/en/docs/http/ngx_http_oidc_module.html#post_logout_uri
-	// Example: /after_logout, https://example.com/after_logout
+	// Example: /after_logout, `https://example.com/after_logout`
 	//
 	// +optional
 	// +kubebuilder:validation:Pattern=`^(https?:\/\/[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*(:[0-9]{1,5})?(\/[a-zA-Z0-9._~:\/?@!&'()*+,=-]*)?|\/[a-zA-Z0-9._~:\/?@!&'()*+,=-]*)$`
