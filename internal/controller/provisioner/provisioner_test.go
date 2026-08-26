@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-logr/logr"
 	. "github.com/onsi/gomega"
+	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
@@ -63,6 +64,7 @@ func createScheme() *runtime.Scheme {
 	utilruntime.Must(autoscalingv2.AddToScheme(scheme))
 	utilruntime.Must(policyv1.AddToScheme(scheme))
 	utilruntime.Must(rbacv1.AddToScheme(scheme))
+	utilruntime.Must(monitoringv1.AddToScheme(scheme))
 
 	return scheme
 }
@@ -791,6 +793,54 @@ func TestNeedToDeleteIngressLink(t *testing.T) {
 	}
 }
 
+func TestRegisterGateway_CleansUpOldServiceMonitor(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	oldServiceMonitor := &monitoringv1.ServiceMonitor{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "gw-nginx",
+			Namespace: "default",
+		},
+	}
+
+	gateway := &graph.Gateway{
+		Source: &gatewayv1.Gateway{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "gw",
+				Namespace: "default",
+			},
+		},
+		Listeners: []*graph.Listener{
+			{},
+		},
+		Valid: true,
+		EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+			Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+				Deployment: &ngfAPIv1alpha2.DeploymentSpec{
+					ServiceMonitor: &ngfAPIv1alpha2.ServiceMonitorSpec{
+						Enable: false,
+					},
+				},
+			},
+		},
+	}
+
+	provisioner, fakeClient, _ := defaultNginxProvisioner(gateway.Source, oldServiceMonitor)
+	provisioner.store.nginxResources[types.NamespacedName{Name: "gw", Namespace: "default"}] = &NginxResources{
+		ServiceMonitor: oldServiceMonitor.ObjectMeta,
+	}
+
+	g.Expect(provisioner.RegisterGateway(t.Context(), gateway, "gw-nginx")).To(Succeed())
+
+	smErr := fakeClient.Get(
+		t.Context(),
+		types.NamespacedName{Name: "gw-nginx", Namespace: "default"},
+		&monitoringv1.ServiceMonitor{},
+	)
+	g.Expect(smErr).To(HaveOccurred())
+}
+
 func TestRegisterGateway_EmptyListeners(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
@@ -1422,6 +1472,28 @@ func TestCreateMinimalClone(t *testing.T) {
 				g.Expect(rb.GetAnnotations()).To(BeEmpty())
 				g.Expect(rb.RoleRef).To(Equal(rbacv1.RoleRef{}))
 				g.Expect(rb.Subjects).To(BeEmpty())
+			},
+		},
+		{
+			name: "creates minimal ServiceMonitor",
+			input: &monitoringv1.ServiceMonitor{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:        "test-servicemonitor",
+					Namespace:   "test-namespace",
+					Labels:      map[string]string{"app": "nginx"},
+					Annotations: map[string]string{"note": "test"},
+				},
+			},
+			validate: func(g *WithT, obj client.Object) {
+				sm, ok := obj.(*monitoringv1.ServiceMonitor)
+				g.Expect(ok).To(BeTrue())
+				g.Expect(sm.GetName()).To(Equal("test-servicemonitor"))
+				g.Expect(sm.GetNamespace()).To(Equal("test-namespace"))
+				g.Expect(sm.GetLabels()).To(BeEmpty())
+				g.Expect(sm.GetAnnotations()).To(BeEmpty())
+				g.Expect(sm.Spec.Selector.MatchLabels).To(BeNil())
+				g.Expect(sm.Spec.NamespaceSelector.MatchNames).To(BeNil())
+				g.Expect(sm.Spec.Endpoints).To(BeNil())
 			},
 		},
 	}

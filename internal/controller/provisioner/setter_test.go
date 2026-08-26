@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	. "github.com/onsi/gomega"
+	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
@@ -1047,6 +1048,66 @@ func TestRoleBindingSpecSetter(t *testing.T) {
 
 	g.Expect(existing.RoleRef).To(Equal(roleRef))
 	g.Expect(existing.Subjects).To(Equal(subjects))
+}
+
+func TestServiceMonitorSpecSetter(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	existing := &monitoringv1.ServiceMonitor{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-servicemonitor",
+			Namespace: "default",
+		},
+	}
+
+	labels := map[string]string{
+		"app": "nginx-gateway",
+	}
+
+	annotations := map[string]string{
+		"custom.annotation": "test-value",
+	}
+
+	ownerRefs := []metav1.OwnerReference{
+		{
+			APIVersion: "apps/v1",
+			Kind:       "Deployment",
+			Name:       "nginx-gateway",
+			UID:        "12345",
+		},
+	}
+
+	desiredMeta := metav1.ObjectMeta{
+		Labels:          labels,
+		Annotations:     annotations,
+		OwnerReferences: ownerRefs,
+	}
+
+	spec := monitoringv1.ServiceMonitorSpec{
+		Selector: metav1.LabelSelector{
+			MatchLabels: map[string]string{"app": "nginx"},
+		},
+		Endpoints: []monitoringv1.Endpoint{
+			{
+				Port:     "metrics",
+				Interval: monitoringv1.Duration("10s"),
+			},
+		},
+		NamespaceSelector: monitoringv1.NamespaceSelector{
+			MatchNames: []string{"default"},
+		},
+	}
+
+	err := serviceMonitorSpecSetter(existing, spec, desiredMeta)()
+	g.Expect(err).ToNot(HaveOccurred())
+
+	g.Expect(existing.Name).To(Equal("test-servicemonitor"))
+	g.Expect(existing.Namespace).To(Equal("default"))
+	g.Expect(existing.Labels).To(Equal(labels))
+	g.Expect(existing.Annotations).To(Equal(annotations))
+	g.Expect(existing.OwnerReferences).To(Equal(ownerRefs))
+	g.Expect(existing.Spec).To(Equal(spec))
 }
 
 func TestUnstructuredSpecSetter(t *testing.T) {

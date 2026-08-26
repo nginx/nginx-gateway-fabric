@@ -312,6 +312,17 @@ nginxGateway:
     # Please note that this endpoint will be secured with a self-signed certificate.
     secure: false
 
+    # -- Defines the configuration of the serviceMonitor for the nginxGateway control plane
+    serviceMonitor:
+      # -- Enable the serviceMonitor for the control plane
+      enable: false
+      # -- Set the labels to be added to the serviceMonitor
+      labels: {}
+      # -- Set the annotations to be added to the serviceMonitor
+      annotations: {}
+      # -- The scraping interval used by the serviceMonitor when scraping metrics
+      interval: ""
+
   gwAPIExperimentalFeatures:
     # -- Enable the experimental features of Gateway API which are supported by NGINX Gateway Fabric. Requires the Gateway
     # APIs installed from the experimental channel.
@@ -441,6 +452,16 @@ nginx:
     #     target:
     #       type: AverageValue
     #       averageValue: "400Mi"
+  # -- Defines the configuration of the serviceMonitor for the nginx data plane
+  serviceMonitor:
+    # -- Enable the serviceMonitor for the data plane
+    enable: false
+    # -- The name of the port used for scraping metrics
+    port: "metrics"
+    # -- The scraping interval used by the serviceMonitor when scraping metrics
+    interval: ""
+  metrics:
+    port: 9113
   image:
     # -- The NGINX image to use.
     repository: ghcr.io/nginx/nginx-gateway-fabric/nginx

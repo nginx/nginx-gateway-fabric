@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 
+	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
@@ -63,6 +64,10 @@ func objectSpecSetter(minimalObject, object client.Object) controllerutil.Mutate
 	case *rbacv1.RoleBinding:
 		if minObj, ok := minimalObject.(*rbacv1.RoleBinding); ok {
 			return roleBindingSpecSetter(minObj, obj.RoleRef, obj.Subjects, obj.ObjectMeta)
+		}
+	case *monitoringv1.ServiceMonitor:
+		if minObj, ok := minimalObject.(*monitoringv1.ServiceMonitor); ok {
+			return serviceMonitorSpecSetter(minObj, obj.Spec, obj.ObjectMeta)
 		}
 	case *unstructured.Unstructured:
 		if minObj, ok := minimalObject.(*unstructured.Unstructured); ok {
@@ -316,6 +321,22 @@ func roleBindingSpecSetter(
 
 		roleBinding.RoleRef = roleRef
 		roleBinding.Subjects = subjects
+		return nil
+	}
+}
+
+func serviceMonitorSpecSetter(
+	serviceMonitor *monitoringv1.ServiceMonitor,
+	spec monitoringv1.ServiceMonitorSpec,
+	objectMeta metav1.ObjectMeta,
+) controllerutil.MutateFn {
+	return func() error {
+		// objectMeta fields
+		serviceMonitor.Labels = objectMeta.Labels
+		serviceMonitor.Annotations = objectMeta.Annotations
+		serviceMonitor.OwnerReferences = objectMeta.OwnerReferences
+
+		serviceMonitor.Spec = spec
 		return nil
 	}
 }

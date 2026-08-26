@@ -621,6 +621,18 @@
           "required": [],
           "title": "kind"
         },
+        "metrics": {
+          "properties": {
+            "port": {
+              "default": 9113,
+              "title": "port",
+              "type": "integer"
+            }
+          },
+          "required": [],
+          "title": "metrics",
+          "type": "object"
+        },
         "nginxOneConsole": {
           "description": "Configuration for NGINX One Console.",
           "properties": {
@@ -757,6 +769,32 @@
           },
           "required": [],
           "title": "service",
+          "type": "object"
+        },
+        "serviceMonitor": {
+          "description": "Defines the configuration of the serviceMonitor for the nginx data plane",
+          "properties": {
+            "enable": {
+              "default": false,
+              "description": "Enable the serviceMonitor for the data plane",
+              "title": "enable",
+              "type": "boolean"
+            },
+            "interval": {
+              "default": "",
+              "description": "The scraping interval used by the serviceMonitor when scraping metrics",
+              "title": "interval",
+              "type": "string"
+            },
+            "port": {
+              "default": "metrics",
+              "description": "The name of the port used for scraping metrics",
+              "title": "port",
+              "type": "string"
+            }
+          },
+          "required": [],
+          "title": "serviceMonitor",
           "type": "object"
         },
         "usage": {
@@ -1102,6 +1140,38 @@
               "description": "Enable serving metrics via https. By default metrics are served via http.\nPlease note that this endpoint will be secured with a self-signed certificate.",
               "title": "secure",
               "type": "boolean"
+            },
+            "serviceMonitor": {
+              "description": "Defines the configuration of the serviceMonitor for the nginxGateway control plane",
+              "properties": {
+                "annotations": {
+                  "description": "Set the annotations to be added to the serviceMonitor",
+                  "required": [],
+                  "title": "annotations",
+                  "type": "object"
+                },
+                "enable": {
+                  "default": false,
+                  "description": "Enable the serviceMonitor for the control plane",
+                  "title": "enable",
+                  "type": "boolean"
+                },
+                "interval": {
+                  "default": "",
+                  "description": "The scraping interval used by the serviceMonitor when scraping metrics",
+                  "title": "interval",
+                  "type": "string"
+                },
+                "labels": {
+                  "description": "Set the labels to be added to the serviceMonitor",
+                  "required": [],
+                  "title": "labels",
+                  "type": "object"
+                }
+              },
+              "required": [],
+              "title": "serviceMonitor",
+              "type": "object"
             }
           },
           "required": [],

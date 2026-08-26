@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/go-logr/logr"
+	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
@@ -174,6 +175,16 @@ func newEventLoop(
 				),
 			},
 		},
+		{
+			objectType: &monitoringv1.ServiceMonitor{},
+			options: []controller.Option{
+				controller.WithK8sPredicate(
+					k8spredicate.And(
+						nginxResourceLabelPredicate,
+					),
+				),
+			},
+		},
 	}
 
 	if features.isOpenshift {
@@ -261,6 +272,7 @@ func newEventLoop(
 		&corev1.ServiceAccountList{},
 		&corev1.ConfigMapList{},
 		&corev1.SecretList{},
+		&monitoringv1.ServiceMonitorList{},
 	}
 
 	if features.isOpenshift {

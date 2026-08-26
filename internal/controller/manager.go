@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-logr/logr"
 	tel "github.com/nginx/telemetry-exporter/pkg/telemetry"
+	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"google.golang.org/grpc"
 	appsv1 "k8s.io/api/apps/v1"
@@ -107,6 +108,7 @@ func init() {
 	utilruntime.Must(rbacv1.AddToScheme(scheme))
 	utilruntime.Must(gatewayv1beta1.Install(scheme))
 	utilruntime.Must(inference.Install(scheme))
+	utilruntime.Must(monitoringv1.AddToScheme(scheme))
 
 	// Pre-register unstructured AP types (and their List variants) so fake clients built
 	// with this scheme don't lazily mutate the shared scheme during parallel test execution.

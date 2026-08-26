@@ -5,6 +5,7 @@ import (
 	"strings"
 	"sync"
 
+	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
@@ -41,6 +42,7 @@ type NginxResources struct {
 	DockerSecrets        []metav1.ObjectMeta
 	PlusClientSSLSecret  metav1.ObjectMeta
 	ExternalLoadBalancer metav1.ObjectMeta
+	ServiceMonitor       metav1.ObjectMeta
 }
 
 // store stores the cluster state needed by the provisioner and allows to update it from the events.
@@ -135,12 +137,10 @@ func (s *store) registerResourceInGatewayConfig(gatewayNSName types.NamespacedNa
 
 	switch obj := object.(type) {
 	case *graph.Gateway:
-		if cfg, ok := s.nginxResources[gatewayNSName]; ok {
-			changed := gatewayChanged(cfg.Gateway, obj)
-			cfg.Gateway = obj
-			return changed
-		}
-		s.nginxResources[gatewayNSName] = &NginxResources{Gateway: obj}
+		cfg := s.getOrCreateNginxResources(gatewayNSName)
+		changed := gatewayChanged(cfg.Gateway, obj)
+		cfg.Gateway = obj
+		return changed
 	case *appsv1.Deployment:
 		s.getOrCreateNginxResources(gatewayNSName).Deployment = obj.ObjectMeta
 	case *autoscalingv2.HorizontalPodAutoscaler:
@@ -163,6 +163,8 @@ func (s *store) registerResourceInGatewayConfig(gatewayNSName types.NamespacedNa
 		s.registerConfigMapInGatewayConfig(obj, gatewayNSName)
 	case *corev1.Secret:
 		s.registerSecretInGatewayConfig(obj, gatewayNSName)
+	case *monitoringv1.ServiceMonitor:
+		s.getOrCreateNginxResources(gatewayNSName).ServiceMonitor = obj.ObjectMeta
 	case *unstructured.Unstructured:
 		if obj.GroupVersionKind() == kinds.IngressLinkGVK {
 			s.getOrCreateNginxResources(gatewayNSName).ExternalLoadBalancer = objectMetaOf(obj)
@@ -400,6 +402,8 @@ func (r *NginxResources) matchesObject(object client.Object, nsName types.Namesp
 		return resourceMatches(r.BootstrapConfigMap, nsName) || resourceMatches(r.AgentConfigMap, nsName)
 	case *corev1.Secret:
 		return secretResourceMatches(r, nsName)
+	case *monitoringv1.ServiceMonitor:
+		return resourceMatches(r.ServiceMonitor, nsName)
 	case *unstructured.Unstructured:
 		return resourceMatches(r.ExternalLoadBalancer, nsName)
 	}
@@ -467,6 +471,8 @@ func (s *store) getResourceVersionForObject(gatewayNSName types.NamespacedName, 
 		return getResourceVersionForConfigMap(resources, obj)
 	case *corev1.Secret:
 		return getResourceVersionForSecret(resources, obj)
+	case *monitoringv1.ServiceMonitor:
+		return resourceVersionIfNameMatches(resources.ServiceMonitor, obj.GetName())
 	}
 
 	return ""

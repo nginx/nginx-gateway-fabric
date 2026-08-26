@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	. "github.com/onsi/gomega"
+	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
@@ -392,6 +393,18 @@ func TestRegisterResourceInGatewayConfig(t *testing.T) {
 	// clear out resources before next test
 	store.deleteResourcesForGateway(nsName)
 
+	// ServiceMonitor
+	serviceMonitor := &monitoringv1.ServiceMonitor{ObjectMeta: defaultMeta}
+	resources = registerAndGetResources(serviceMonitor)
+	g.Expect(resources.ServiceMonitor).To(Equal(defaultMeta))
+
+	// ServiceMonitor again, already exists
+	resources = registerAndGetResources(serviceMonitor)
+	g.Expect(resources.ServiceMonitor).To(Equal(defaultMeta))
+
+	// clear out resources before next test
+	store.deleteResourcesForGateway(nsName)
+
 	// An unstructured object of a different kind is ignored: it creates no resources entry.
 	other := &unstructured.Unstructured{}
 	other.SetGroupVersionKind(kinds.APPolicyGVK)
@@ -664,6 +677,10 @@ func TestGatewayExistsForResource(t *testing.T) {
 			Name:      "test-ingresslink",
 			Namespace: "default",
 		},
+		ServiceMonitor: metav1.ObjectMeta{
+			Name:      "test-servicemonitor",
+			Namespace: "default",
+		},
 	}
 
 	ingressLink := &unstructured.Unstructured{}
@@ -842,6 +859,16 @@ func TestGatewayExistsForResource(t *testing.T) {
 			expected: gateway,
 		},
 		{
+			name: "ServiceMonitor exists",
+			object: &monitoringv1.ServiceMonitor{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-servicemonitor",
+					Namespace: "default",
+				},
+			},
+			expected: gateway,
+		},
+		{
 			name: "Resource does not exist",
 			object: &corev1.Service{
 				ObjectMeta: metav1.ObjectMeta{
@@ -951,6 +978,11 @@ func TestGetResourceVersionForObject(t *testing.T) {
 			Name:            "test-dataplane-key-secret",
 			Namespace:       "default",
 			ResourceVersion: "15",
+		},
+		ServiceMonitor: metav1.ObjectMeta{
+			Name:            "test-servicemonitor",
+			Namespace:       "default",
+			ResourceVersion: "16",
 		},
 	}
 
@@ -1118,6 +1150,16 @@ func TestGetResourceVersionForObject(t *testing.T) {
 				},
 			},
 			expectedResult: "15",
+		},
+		{
+			name: "Service Monitor resource version",
+			object: &monitoringv1.ServiceMonitor{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-servicemonitor",
+					Namespace: "default",
+				},
+			},
+			expectedResult: "16",
 		},
 		{
 			name: "Non-existent resource",

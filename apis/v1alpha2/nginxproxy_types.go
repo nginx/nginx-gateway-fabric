@@ -717,6 +717,11 @@ type DeploymentSpec struct {
 	// +optional
 	PodDisruptionBudget *PodDisruptionBudgetSpec `json:"podDisruptionBudget,omitempty"`
 
+	// Defines the configuration of the Service Monitor resource used for scraping metrics
+	//
+	// +optional
+	ServiceMonitor *ServiceMonitorSpec `json:"serviceMonitor,omitempty"`
+
 	// WAFContainers defines container specifications for NGINX App Protect WAF v5 containers.
 	// These containers are only deployed when WAF is enabled in the NginxProxy spec.
 	//
@@ -838,6 +843,60 @@ type AutoscalingSpec struct {
 
 	// Enable or disable Horizontal Pod Autoscaler.
 	Enable bool `json:"enable"`
+}
+
+// ServiceMonitorSpec defines the configuration for the ServiceMonitor.
+type ServiceMonitorSpec struct {
+	// NamespaceSelector is used to select which namespaces the Kubernetes endpoints
+	// objects are discovered from.
+	//
+	// +optional
+	NamespaceSelector *NamespaceSelector `json:"namespaceSelector,omitempty"`
+
+	// Selector is used to select the Endpoints objects by specifying the expected labels.
+	//
+	// +optional
+	Selector *metav1.LabelSelector `json:"selector,omitempty"`
+
+	// Endpoints defines a scrapable endpoints serving Prometheus metrics.
+	Endpoints []Endpoint `json:"endpoints"`
+
+	// Enable or disable the Service Monitor.
+	Enable bool `json:"enable"`
+}
+
+// Specification of the fields available for the NamespaceSelector field in the ServiceMonitor.
+// Used to select which namespaces the Kubernetes endpoints objects are discovered from.
+type NamespaceSelector struct {
+	// A value of any=true will tell a Prometheus Operator to look for target resources across every
+	// namespace available.
+	//
+	// +optional
+	Any *bool `json:"any,omitempty"`
+
+	// MatchNames is the list of namespaces names to select from.
+	//
+	// +optional
+	MatchNames *[]string `json:"matchNames,omitempty"`
+}
+
+// Endpoint is used to define which scrapable endpoint is serving Prometheus metrics.
+type Endpoint struct {
+	// Port is the name of the service this endpoint refers to.
+	//
+	// +optional
+	Port *string `json:"port,omitempty"`
+
+	// Path is the HTTP path to scrape metrics from. If empty the prometheus default "/metrics" is used.
+	//
+	// +optional
+	Path *string `json:"path,omitempty"`
+
+	// The interval at which metrics should be scraped. If not specified, the Prometheus global
+	// scrape interval is used
+	//
+	// +optional
+	Interval *string `json:"interval,omitempty"`
 }
 
 // PodSpec defines Pod-specific fields.

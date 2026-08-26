@@ -86,6 +86,13 @@ Create the name of the ServiceAccount to use
 {{- end }}
 
 {{/*
+Create the name of the gateway ServiceMonitor to use
+*/}}
+{{- define "nginx-gateway.serviceMonitorName" -}}
+{{- printf "%s-%s" (include "nginx-gateway.fullname" .) "metrics" }}
+{{- end }}
+
+{{/*
 Expand leader election lock name.
 */}}
 {{- define "nginx-gateway.leaderElectionName" -}}
@@ -185,6 +192,17 @@ Create namespaced RBAC rules.
   - policy
   resources:
   - poddisruptionbudgets
+  verbs:
+  - create
+  - update
+  - delete
+  - list
+  - get
+  - watch
+- apiGroups:
+  - monitoring.coreos.com
+  resources:
+  - servicemonitors
   verbs:
   - create
   - update

@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	jsonpatch "gopkg.in/evanphx/json-patch.v4"
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
@@ -45,6 +46,7 @@ const (
 	defaultNginxErrorLogLevel        = "info"
 	nginxIncludesConfigMapNameSuffix = "includes-bootstrap"
 	nginxAgentConfigMapNameSuffix    = "agent-config"
+	metricsServiceName               = "metrics"
 
 	defaultServiceType   = corev1.ServiceTypeLoadBalancer
 	defaultServicePolicy = corev1.ServiceExternalTrafficPolicyLocal
@@ -149,6 +151,12 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 		errs = append(errs, err)
 	}
 
+	serviceMonitor := p.buildServiceMonitor(
+		objectMeta,
+		gateway,
+		nProxyCfg,
+	)
+
 	var openshiftObjs []client.Object
 	if p.isOpenshift {
 		var openShiftErrs []error
@@ -207,6 +215,7 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 	// secrets
 	// configmaps
 	// serviceaccount
+	// servicemonitor
 	// role/binding (if openshift)
 	// service
 	// deployment/daemonset
@@ -218,6 +227,7 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 	objects = append(objects, secretsList...)
 	objects = append(objects, configmapsList...)
 	objects = append(objects, serviceAccount)
+	objects = append(objects, serviceMonitor...)
 	if p.isOpenshift {
 		objects = append(objects, openshiftObjs...)
 	}
@@ -369,6 +379,65 @@ func (p *NginxProvisioner) buildServiceAccount(
 	return serviceAccount, nil
 }
 
+// buildServiceMonitor builds the ServiceMonitor for the NGINX deployment.
+func (p *NginxProvisioner) buildServiceMonitor(
+	objectMeta metav1.ObjectMeta,
+	gateway *gatewayv1.Gateway,
+	nProxyCfg *graph.EffectiveNginxProxy,
+) []client.Object {
+	// Only build the service monitor if it has been enabled in the NginxProxy spec
+	if nProxyCfg == nil || nProxyCfg.Kubernetes == nil ||
+		!isServiceMonitorEnabled(nProxyCfg.Kubernetes.Deployment) {
+		return nil
+	}
+
+	objectMeta.Name = controller.CreateNginxResourceName(objectMeta.Name, metricsServiceName)
+
+	monitoring := nProxyCfg.Kubernetes.Deployment.ServiceMonitor
+
+	matchNames := []string{gateway.Namespace}
+
+	matchLabels := map[string]string{"app.kubernetes.io/instance": gateway.Name}
+	if monitoring.Selector != nil && monitoring.Selector.MatchLabels != nil {
+		matchLabels = monitoring.Selector.MatchLabels
+	}
+
+	var endpoints []monitoringv1.Endpoint
+	for _, endpoint := range monitoring.Endpoints {
+		ep := monitoringv1.Endpoint{}
+		if endpoint.Port != nil {
+			ep.Port = *endpoint.Port
+		} else {
+			ep.Port = "metrics"
+		}
+
+		if endpoint.Interval != nil {
+			ep.Interval = monitoringv1.Duration(*endpoint.Interval)
+		}
+
+		endpoints = append(endpoints, ep)
+	}
+
+	serviceMonitor := &monitoringv1.ServiceMonitor{
+		ObjectMeta: objectMeta,
+		Spec: monitoringv1.ServiceMonitorSpec{
+			NamespaceSelector: monitoringv1.NamespaceSelector{
+				MatchNames: matchNames,
+			},
+			Selector: metav1.LabelSelector{
+				MatchLabels: matchLabels,
+			},
+			Endpoints: endpoints,
+		},
+	}
+
+	if err := p.setOwnerReference(serviceMonitor, gateway); err != nil {
+		return []client.Object{serviceMonitor}
+	}
+
+	return []client.Object{serviceMonitor}
+}
+
 // buildPortsFromListeners builds a list of port/protocol entries from the graph listeners.
 // This includes listeners from both the Gateway and any attached ListenerSets.
 // A port number can appear multiple times if it has different protocols (e.g., TCP and UDP on port 53).
@@ -414,6 +483,10 @@ func cloneObjectMeta(meta metav1.ObjectMeta) metav1.ObjectMeta {
 
 func isAutoscalingEnabled(dep *ngfAPIv1alpha2.DeploymentSpec) bool {
 	return dep != nil && dep.Autoscaling != nil && dep.Autoscaling.Enable
+}
+
+func isServiceMonitorEnabled(dep *ngfAPIv1alpha2.DeploymentSpec) bool {
+	return dep != nil && dep.ServiceMonitor != nil && dep.ServiceMonitor.Enable
 }
 
 func (p *NginxProvisioner) buildHPA(
@@ -1948,10 +2021,11 @@ func (p *NginxProvisioner) buildResourcesForInvalidGatewayCleanup(
 	// 3. service
 	// 4. hpa (Horizontal Pod Autoscaler)
 	// 5. pdb (Pod Disruption Budget)
-	// 6. role/binding (if openshift)
-	// 7. serviceaccount
-	// 8. configmaps
-	// 9. secrets
+	// 6. service monitor
+	// 7. role/binding (if openshift)
+	// 8. serviceaccount
+	// 9. configmaps
+	// 10. secrets
 
 	var objects []client.Object
 
@@ -1992,7 +2066,10 @@ func (p *NginxProvisioner) buildResourcesForInvalidGatewayCleanup(
 	// 5. PodDisruptionBudget
 	objects = append(objects, &policyv1.PodDisruptionBudget{ObjectMeta: baseMeta})
 
-	// 6. RBAC (OpenShift only)
+	// 6. ServiceMonitor
+	objects = append(objects, &monitoringv1.ServiceMonitor{ObjectMeta: baseMeta})
+
+	// 7. RBAC (OpenShift only)
 	if p.isOpenshift {
 		objects = append(objects,
 			&rbacv1.Role{ObjectMeta: baseMeta},
@@ -2000,16 +2077,16 @@ func (p *NginxProvisioner) buildResourcesForInvalidGatewayCleanup(
 		)
 	}
 
-	// 7. ServiceAccount
+	// 8. ServiceAccount
 	objects = append(objects, &corev1.ServiceAccount{ObjectMeta: baseMeta})
 
-	// 8. ConfigMaps
+	// 9. ConfigMaps
 	objects = append(objects,
 		&corev1.ConfigMap{ObjectMeta: meta(resourceName(nginxIncludesConfigMapNameSuffix))},
 		&corev1.ConfigMap{ObjectMeta: meta(resourceName(nginxAgentConfigMapNameSuffix))},
 	)
 
-	// 9. Secrets
+	// 10. Secrets
 	objects = append(objects, &corev1.Secret{ObjectMeta: meta(resourceName(p.cfg.AgentTLSSecretName))})
 
 	for _, name := range p.cfg.NginxDockerSecretNames {

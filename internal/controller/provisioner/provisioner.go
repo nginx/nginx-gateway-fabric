@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 	appsv1 "k8s.io/api/apps/v1"
@@ -387,6 +388,9 @@ var minimalObjectFactory = map[reflect.Type]func(name, namespace string) client.
 	},
 	reflect.TypeOf(&policyv1.PodDisruptionBudget{}): func(name, namespace string) client.Object {
 		return &policyv1.PodDisruptionBudget{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace}}
+	},
+	reflect.TypeOf(&monitoringv1.ServiceMonitor{}): func(name, namespace string) client.Object {
+		return &monitoringv1.ServiceMonitor{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace}}
 	},
 }
 
@@ -880,6 +884,12 @@ func (p *NginxProvisioner) handleObjectDeletion(ctx context.Context, nginxResour
 		}
 	}
 
+	if needToDeleteServiceMonitor(nginxResources) {
+		if err := p.deleteObject(ctx, &monitoringv1.ServiceMonitor{ObjectMeta: nginxResources.ServiceMonitor}); err != nil {
+			p.cfg.Logger.Error(err, "error deleting nginx resource")
+		}
+	}
+
 	if p.needToDeleteIngressLink(nginxResources) {
 		il := &unstructured.Unstructured{}
 		il.SetGroupVersionKind(kinds.IngressLinkGVK)
@@ -1075,6 +1085,22 @@ func needToDeleteHPA(cfg *NginxResources) bool {
 			return true
 		} else if cfg.Gateway.EffectiveNginxProxy == nil ||
 			cfg.Gateway.EffectiveNginxProxy.Kubernetes == nil {
+			return true
+		}
+	}
+
+	return false
+}
+
+// needToDeleteServiceMonitor returns true if a ServiceMonitor was previously created for this
+// Gateway but is no longer configured in the NginxProxy spec, and therefore should be deleted.
+func needToDeleteServiceMonitor(cfg *NginxResources) bool {
+	if cfg.ServiceMonitor.Name != "" && cfg.Gateway != nil {
+		if cfg.Gateway.EffectiveNginxProxy != nil &&
+			cfg.Gateway.EffectiveNginxProxy.Kubernetes != nil &&
+			!cfg.Gateway.EffectiveNginxProxy.Kubernetes.Deployment.ServiceMonitor.Enable {
+			return true
+		} else if cfg.Gateway.EffectiveNginxProxy == nil {
 			return true
 		}
 	}
