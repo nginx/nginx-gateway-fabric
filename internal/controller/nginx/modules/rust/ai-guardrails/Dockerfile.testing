@@ -7,7 +7,7 @@
 # nginx-sys needs a configured nginx source tree for bindgen.
 # Only --with-compat is required; it sets NGX_COMPAT for dynamic module compatibility.
 
-FROM alpine:3.23 AS nginx-source
+FROM alpine:3.24 AS nginx-source
 
 # renovate: datasource=github-tags depName=nginx/nginx
 ARG NGINX_VERSION=1.31.4
