@@ -43,11 +43,6 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
 
-const (
-	NimConfigErrMsg = "NginxInstanceManagerTelemetryConfig.EndpointHost and EndpointPort must be set " +
-		"when NginxInstanceManagerTelemetryConfig.DataplaneKeySecretName is set"
-)
-
 //go:generate go tool counterfeiter -generate
 
 //counterfeiter:generate . Provisioner
@@ -138,7 +133,11 @@ func NewNginxProvisioner(
 	if cfg.NginxInstanceManagerTelemetryConfig.DataplaneKeySecretName != "" {
 		if cfg.NginxInstanceManagerTelemetryConfig.EndpointHost == "" ||
 			cfg.NginxInstanceManagerTelemetryConfig.EndpointPort == 0 {
-			cfg.Logger.Error(errors.New(NimConfigErrMsg), "invalid NginxInstanceManagerTelemetryConfig")
+			cfg.Logger.Error(
+				errors.New("NginxInstanceManagerTelemetryConfig.EndpointHost and EndpointPort must be set "+
+					"when NginxInstanceManagerTelemetryConfig.DataplaneKeySecretName is set"),
+				"invalid NginxInstanceManagerTelemetryConfig",
+			)
 		}
 		nimDataplaneKeySecretName = cfg.NginxInstanceManagerTelemetryConfig.DataplaneKeySecretName
 	}
