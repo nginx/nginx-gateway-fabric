@@ -93,6 +93,9 @@ func createControllerCommand() *cobra.Command {
 		nginxOneTelemetryEndpointHostFlag   = "nginx-one-telemetry-endpoint-host"
 		nginxOneTelemetryEndpointPortFlag   = "nginx-one-telemetry-endpoint-port"
 		nginxOneTLSSkipVerifyFlag           = "nginx-one-tls-skip-verify"
+		nimDataplaneKeySecretFlag           = "nim-dataplane-key-secret" //nolint:gosec // not credentials
+		nimTelemetryEndpointHostFlag        = "nim-telemetry-endpoint-host"
+		nimTelemetryEndpointPortFlag        = "nim-telemetry-endpoint-port"
 		metricsDisableFlag                  = "metrics-disable"
 		metricsSecureFlag                   = "metrics-secure-serving"
 		metricsPortFlag                     = "metrics-port"
@@ -155,7 +158,17 @@ func createControllerCommand() *cobra.Command {
 			value:     443,
 		}
 		nginxOneConsoleTLSSkipVerify bool
-		nginxSCCName                 = stringValidatingValue{
+		nimDataplaneKeySecretName    = stringValidatingValue{
+			validator: validateResourceName,
+		}
+		nimTelemetryEndpointHost = stringValidatingValue{
+			validator: validateResourceName,
+		}
+		nimTelemetryEndpointPort = intValidatingValue{
+			validator: validateAnyPort,
+			value:     4317,
+		}
+		nginxSCCName = stringValidatingValue{
 			validator: validateResourceName,
 		}
 		disableMetrics    bool
@@ -357,11 +370,16 @@ func createControllerCommand() *cobra.Command {
 				NginxDockerSecretNames: nginxDockerSecrets.values,
 				AgentTLSSecretName:     agentTLSSecretName.value,
 				NGINXSCCName:           nginxSCCName.value,
-				NginxOneConsoleTelemetryConfig: config.NginxOneConsoleTelemetryConfig{
+				NginxOneConsoleTelemetryConfig: config.ManagementPlaneTelemetryConfig{
 					DataplaneKeySecretName: nginxOneConsoleDataplaneKeySecretName.value,
 					EndpointHost:           nginxOneConsoleTelemetryEndpointHost.value,
 					EndpointPort:           nginxOneConsoleTelemetryEndpointPort.value,
 					EndpointTLSSkipVerify:  nginxOneConsoleTLSSkipVerify,
+				},
+				NginxInstanceManagerTelemetryConfig: config.ManagementPlaneTelemetryConfig{
+					DataplaneKeySecretName: nimDataplaneKeySecretName.value,
+					EndpointHost:           nimTelemetryEndpointHost.value,
+					EndpointPort:           nimTelemetryEndpointPort.value,
 				},
 				EndpointPickerDisableTLS:    endpointPickerDisableTLS,
 				EndpointPickerTLSSkipVerify: endpointPickerTLSSkipVerify,
@@ -441,6 +459,25 @@ func createControllerCommand() *cobra.Command {
 		nginxOneTLSSkipVerifyFlag,
 		false,
 		"Disable client verification of the NGINX One Console's telemetry endpoint server certificate.",
+	)
+
+	cmd.Flags().Var(
+		&nimDataplaneKeySecretName,
+		nimDataplaneKeySecretFlag,
+		`The name of the Secret containing the NGINX Instance Manager's dataplane key. Must exist in the same namespace `+
+			`that the NGINX Gateway Fabric control plane is running in (default namespace: nginx-gateway).`,
+	)
+
+	cmd.Flags().Var(
+		&nimTelemetryEndpointHost,
+		nimTelemetryEndpointHostFlag,
+		`The host of the NGINX Instance Manager's telemetry endpoint.`,
+	)
+
+	cmd.Flags().Var(
+		&nimTelemetryEndpointPort,
+		nimTelemetryEndpointPortFlag,
+		`The port of the NGINX Instance Manager's telemetry endpoint.`,
 	)
 
 	cmd.Flags().BoolVar(

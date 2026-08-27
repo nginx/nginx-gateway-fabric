@@ -165,6 +165,15 @@ spec:
         - --nginx-one-tls-skip-verify
           {{- end }}
         {{- end }}
+        {{- if .Values.nginx.nginxInstanceManager.dataplaneKeySecretName }}
+        - --nim-dataplane-key-secret={{ .Values.nginx.nginxInstanceManager.dataplaneKeySecretName }}
+          {{- if .Values.nginx.nginxInstanceManager.endpointHost }}
+        - --nim-telemetry-endpoint-host={{ .Values.nginx.nginxInstanceManager.endpointHost }}
+          {{- end }}
+          {{- if .Values.nginx.nginxInstanceManager.endpointPort }}
+        - --nim-telemetry-endpoint-port={{ .Values.nginx.nginxInstanceManager.endpointPort }}
+          {{- end }}
+        {{- end }}
         env:
         - name: POD_NAMESPACE
           valueFrom:

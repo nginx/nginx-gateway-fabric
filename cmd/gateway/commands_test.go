@@ -166,6 +166,9 @@ func TestControllerCmdFlagValidation(t *testing.T) {
 				"--nginx-one-dataplane-key-secret=dataplane-key-secret",
 				"--nginx-one-telemetry-endpoint-host=telemetry-endpoint-host",
 				"--nginx-one-telemetry-endpoint-port=443",
+				"--nim-dataplane-key-secret=nim-dataplane-key-secret",
+				"--nim-telemetry-endpoint-host=nim-telemetry-endpoint-host",
+				"--nim-telemetry-endpoint-port=443",
 				"--nginx-one-tls-skip-verify",
 				"--endpoint-picker-disable-tls",
 				"--endpoint-picker-tls-skip-verify",
@@ -580,6 +583,57 @@ func TestControllerCmdFlagValidation(t *testing.T) {
 				"--nginx-one-tls-skip-verify=not-a-bool",
 			},
 			wantErr: true,
+		},
+		{
+			name: "nim-dataplane-key-secret is set to empty string",
+			args: []string{
+				"--nim-dataplane-key-secret=",
+			},
+			wantErr:           true,
+			expectedErrPrefix: `invalid argument "" for "--nim-dataplane-key-secret" flag: must be set`,
+		},
+		{
+			name: "nim-dataplane-key-secret is invalid",
+			args: []string{
+				"--nim-dataplane-key-secret=!@#$",
+			},
+			wantErr:           true,
+			expectedErrPrefix: `invalid argument "!@#$" for "--nim-dataplane-key-secret" flag: invalid format: `,
+		},
+		{
+			name: "nim-telemetry-endpoint-host is set to empty string",
+			args: []string{
+				"--nim-telemetry-endpoint-host=",
+			},
+			wantErr:           true,
+			expectedErrPrefix: `invalid argument "" for "--nim-telemetry-endpoint-host" flag: must be set`,
+		},
+		{
+			name: "nim-telemetry-endpoint-host is invalid",
+			args: []string{
+				"--nim-telemetry-endpoint-host=!@#$",
+			},
+			wantErr: true,
+			expectedErrPrefix: `invalid argument "!@#$" for "--nim-telemetry-endpoint-host" ` +
+				`flag: invalid format: `,
+		},
+		{
+			name: "nim-telemetry-endpoint-port is invalid type",
+			args: []string{
+				"--nim-telemetry-endpoint-port=invalid", // not an int
+			},
+			wantErr: true,
+			expectedErrPrefix: `invalid argument "invalid" for "--nim-telemetry-endpoint-port" ` +
+				`flag: failed to parse int value: strconv.ParseInt: parsing "invalid": invalid syntax`,
+		},
+		{
+			name: "nim-telemetry-endpoint-port is outside of range",
+			args: []string{
+				"--nim-telemetry-endpoint-port=65536", // outside of range
+			},
+			wantErr: true,
+			expectedErrPrefix: `invalid argument "65536" for "--nim-telemetry-endpoint-port" flag:` +
+				` port outside of valid port range [1 - 65535]: 65536`,
 		},
 		{
 			name: "watch-namespaces is set to empty string",
