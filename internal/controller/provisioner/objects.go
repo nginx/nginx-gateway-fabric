@@ -64,6 +64,14 @@ const (
 	appProtectConfigVolumeName   = "app-protect-config"
 	appProtectBdConfigVolumeName = "app-protect-bd-config"
 	appProtectLockVolumeName     = "app-protect-lock"
+
+	agentVolumeMountPath = "/etc/nginx-agent/secrets"
+
+	agentNICVolumeName       = "agent-n1c-dataplane-key"
+	agentNICDataplaneKeyFile = "dataplane-n1c.key"
+
+	agentNIMVolumeName       = "agent-nim-dataplane-key"
+	agentNIMDataplaneKeyFile = "dataplane-nim.key"
 )
 
 // portProtoEntry represents a unique port and protocol combination.
@@ -89,7 +97,8 @@ type resourceNames struct {
 	jwt                    string
 	ca                     string
 	clientSSL              string
-	dataplaneKey           string
+	n1cDataplaneKey        string
+	nimDataplaneKey        string
 }
 
 // buildNginxResourceObjects builds all the NGINX resource objects for a given Gateway and EffectiveNginxProxy.
@@ -285,9 +294,16 @@ func (p *NginxProvisioner) buildResourceNames(resourceName string) resourceNames
 	}
 
 	if p.cfg.NginxOneConsoleTelemetryConfig.DataplaneKeySecretName != "" {
-		names.dataplaneKey = controller.CreateNginxResourceName(
+		names.n1cDataplaneKey = controller.CreateNginxResourceName(
 			resourceName,
 			p.cfg.NginxOneConsoleTelemetryConfig.DataplaneKeySecretName,
+		)
+	}
+
+	if p.cfg.NginxInstanceManagerTelemetryConfig.DataplaneKeySecretName != "" {
+		names.nimDataplaneKey = controller.CreateNginxResourceName(
+			resourceName,
+			p.cfg.NginxInstanceManagerTelemetryConfig.DataplaneKeySecretName,
 		)
 	}
 
@@ -451,87 +467,110 @@ func (p *NginxProvisioner) buildPDB(
 	}
 }
 
+// secretFields contains the properties of a secret
+// to be copied from the source secret to the target secret.
+type secretFields struct {
+	sourceSecretName string
+	targetSecretName string
+	secretType       corev1.SecretType
+}
+
 func (p *NginxProvisioner) buildNginxSecrets(
 	objectMeta metav1.ObjectMeta,
 	names resourceNames,
 	gateway *gatewayv1.Gateway,
 ) ([]client.Object, error) {
-	var secretsList []client.Object
-	var dockerSecrets []client.Object
 	var errs []error
 
-	addSecret := func(
-		sourceSecretName string,
-		targetSecretName string,
-		secretType corev1.SecretType,
-	) *corev1.Secret {
-		if targetSecretName == "" {
-			return nil
+	// Build the full ordered list of secret specs, starting with agentTLS secrets.
+	// Order: agentTLS, docker (sorted), plus (jwt, ca, clientSSL), n1c dataplane key, nim dataplane key.
+	fields := []secretFields{
+		{
+			sourceSecretName: p.cfg.AgentTLSSecretName,
+			targetSecretName: names.agentTLS,
+			secretType:       corev1.SecretTypeTLS,
+		},
+	}
+
+	// Docker secrets need to be sorted for everytime this function is called since
+	// names.dockerSecrets is a map. This is needed to satisfy deterministic results of the method.
+	dockerTargetNames := make([]string, 0, len(names.dockerSecrets))
+	for targetName := range names.dockerSecrets {
+		dockerTargetNames = append(dockerTargetNames, targetName)
+	}
+	sort.Strings(dockerTargetNames)
+
+	// Docker secrets.
+	for _, targetName := range dockerTargetNames {
+		fields = append(fields, secretFields{
+			sourceSecretName: names.dockerSecrets[targetName],
+			targetSecretName: targetName,
+			secretType:       corev1.SecretTypeDockerConfigJson,
+		})
+	}
+
+	// Plus secrets (in order: jwt, ca, clientSSL).
+	if p.cfg.PlusUsageConfig != nil {
+		fields = append(
+			fields,
+			secretFields{
+				sourceSecretName: p.cfg.PlusUsageConfig.SecretName,
+				targetSecretName: names.jwt,
+				secretType:       corev1.SecretTypeOpaque,
+			},
+			secretFields{
+				sourceSecretName: p.cfg.PlusUsageConfig.CASecretName,
+				targetSecretName: names.ca,
+				secretType:       corev1.SecretTypeOpaque,
+			},
+			secretFields{
+				sourceSecretName: p.cfg.PlusUsageConfig.ClientSSLSecretName,
+				targetSecretName: names.clientSSL,
+				secretType:       corev1.SecretTypeTLS,
+			},
+		)
+	}
+
+	//  Dataplane key secrets.
+	fields = append(
+		fields,
+		secretFields{
+			sourceSecretName: p.cfg.NginxOneConsoleTelemetryConfig.DataplaneKeySecretName,
+			targetSecretName: names.n1cDataplaneKey,
+			secretType:       corev1.SecretTypeOpaque,
+		},
+		secretFields{
+			sourceSecretName: p.cfg.NginxInstanceManagerTelemetryConfig.DataplaneKeySecretName,
+			targetSecretName: names.nimDataplaneKey,
+			secretType:       corev1.SecretTypeOpaque,
+		},
+	)
+
+	// Process all secrets in order.
+	secretsList := make([]client.Object, 0, len(fields))
+	for _, f := range fields {
+		if f.targetSecretName == "" {
+			continue
 		}
 		newSecret, err := p.getAndUpdateSecret(
-			sourceSecretName,
+			f.sourceSecretName,
 			metav1.ObjectMeta{
-				Name:        targetSecretName,
+				Name:        f.targetSecretName,
 				Namespace:   objectMeta.Namespace,
 				Labels:      objectMeta.Labels,
 				Annotations: objectMeta.Annotations,
 			},
-			secretType,
+			f.secretType,
 		)
 		if err != nil {
 			errs = append(errs, err)
-			return nil
+			continue
 		}
 		if err := p.setOwnerReference(newSecret, gateway); err != nil {
 			errs = append(errs, fmt.Errorf("failed to set owner reference on Secret %s: %w", newSecret.GetName(), err))
-			return nil
+			continue
 		}
-		return newSecret
-	}
-
-	// agent TLS Secret
-	if secret := addSecret(p.cfg.AgentTLSSecretName, names.agentTLS, corev1.SecretTypeTLS); secret != nil {
-		secretsList = append(secretsList, secret)
-	}
-
-	// docker Secrets
-	for targetSecretName, sourceSecretName := range names.dockerSecrets {
-		if secret := addSecret(sourceSecretName, targetSecretName, corev1.SecretTypeDockerConfigJson); secret != nil {
-			dockerSecrets = append(dockerSecrets, secret)
-		}
-	}
-
-	// need to sort secrets so everytime buildNginxSecrets is called it will generate the exact same
-	// array of secrets. This is needed to satisfy deterministic results of the method.
-	sort.Slice(dockerSecrets, func(i, j int) bool {
-		return dockerSecrets[i].GetName() < dockerSecrets[j].GetName()
-	})
-	secretsList = append(secretsList, dockerSecrets...)
-
-	// plus Secrets (in order: jwt, ca, clientSSL)
-	if p.cfg.PlusUsageConfig != nil {
-		if secret := addSecret(p.cfg.PlusUsageConfig.SecretName, names.jwt, corev1.SecretTypeOpaque); secret != nil {
-			secretsList = append(secretsList, secret)
-		}
-		if secret := addSecret(p.cfg.PlusUsageConfig.CASecretName, names.ca, corev1.SecretTypeOpaque); secret != nil {
-			secretsList = append(secretsList, secret)
-		}
-		if secret := addSecret(
-			p.cfg.PlusUsageConfig.ClientSSLSecretName,
-			names.clientSSL,
-			corev1.SecretTypeTLS,
-		); secret != nil {
-			secretsList = append(secretsList, secret)
-		}
-	}
-
-	// Dataplane Key Secret
-	if secret := addSecret(
-		p.cfg.NginxOneConsoleTelemetryConfig.DataplaneKeySecretName,
-		names.dataplaneKey,
-		corev1.SecretTypeOpaque,
-	); secret != nil {
-		secretsList = append(secretsList, secret)
+		secretsList = append(secretsList, newSecret)
 	}
 
 	return secretsList, errors.Join(errs...)
@@ -699,6 +738,12 @@ func (p *NginxProvisioner) buildAgentConfigMap(
 		agentFields["EndpointHost"] = p.cfg.NginxOneConsoleTelemetryConfig.EndpointHost
 		agentFields["EndpointPort"] = strconv.Itoa(p.cfg.NginxOneConsoleTelemetryConfig.EndpointPort)
 		agentFields["EndpointTLSSkipVerify"] = p.cfg.NginxOneConsoleTelemetryConfig.EndpointTLSSkipVerify
+	}
+
+	if p.cfg.NginxInstanceManagerTelemetryConfig.DataplaneKeySecretName != "" {
+		agentFields["NIMReporting"] = true
+		agentFields["NIMEndpointHost"] = p.cfg.NginxInstanceManagerTelemetryConfig.EndpointHost
+		agentFields["NIMEndpointPort"] = strconv.Itoa(p.cfg.NginxInstanceManagerTelemetryConfig.EndpointPort)
 	}
 
 	return &corev1.ConfigMap{
@@ -1152,7 +1197,24 @@ func (p *NginxProvisioner) buildNginxPodTemplateSpec(
 
 	// Configure dataplane key secret for NGINX One Console telemetry
 	if p.cfg.NginxOneConsoleTelemetryConfig.DataplaneKeySecretName != "" {
-		p.configureDataplaneKeySecret(&spec, names)
+		p.configureDataplaneKeySecret(
+			&spec,
+			names.n1cDataplaneKey,
+			agentNICVolumeName,
+			fmt.Sprintf("%s/%s", agentVolumeMountPath, agentNICDataplaneKeyFile),
+			secrets.DataplaneSecretKey,
+		)
+	}
+
+	// Configure dataplane key secret for NGINX Instance Manager telemetry
+	if p.cfg.NginxInstanceManagerTelemetryConfig.DataplaneKeySecretName != "" {
+		p.configureDataplaneKeySecret(
+			&spec,
+			names.nimDataplaneKey,
+			agentNIMVolumeName,
+			fmt.Sprintf("%s/%s", agentVolumeMountPath, agentNIMDataplaneKeyFile),
+			secrets.DataplaneSecretKey,
+		)
 	}
 
 	// Configure inference extension if enabled
@@ -1511,7 +1573,8 @@ func (p *NginxProvisioner) configureNginxPlus(
 ) {
 	// Update init container command
 	initCmd := spec.Spec.InitContainers[0].Command
-	initCmd = append(initCmd,
+	initCmd = append(
+		initCmd,
 		"--source", "/includes/mgmt.conf",
 		"--destination", "/etc/nginx/main-includes",
 		"--nginx-plus",
@@ -1580,24 +1643,20 @@ func (p *NginxProvisioner) configureNginxPlus(
 	spec.Spec.Containers[0].VolumeMounts = volumeMounts
 }
 
-// configureDataplaneKeySecret configures the dataplane key secret for NGINX One Console telemetry.
+// configureDataplaneKeySecret configures a dataplane key.
 func (p *NginxProvisioner) configureDataplaneKeySecret(
 	spec *corev1.PodTemplateSpec,
-	names resourceNames,
+	resourceName, volumeName, mountPath, subPath string,
 ) {
-	volumeMounts := spec.Spec.Containers[0].VolumeMounts
-
-	volumeMounts = append(volumeMounts, corev1.VolumeMount{
-		Name:      "agent-dataplane-key",
-		MountPath: "/etc/nginx-agent/secrets/dataplane.key",
-		SubPath:   "dataplane.key",
+	spec.Spec.Containers[0].VolumeMounts = append(spec.Spec.Containers[0].VolumeMounts, corev1.VolumeMount{
+		Name:      volumeName,
+		MountPath: mountPath,
+		SubPath:   subPath,
 	})
 	spec.Spec.Volumes = append(spec.Spec.Volumes, corev1.Volume{
-		Name:         "agent-dataplane-key",
-		VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: names.dataplaneKey}},
+		Name:         volumeName,
+		VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: resourceName}},
 	})
-
-	spec.Spec.Containers[0].VolumeMounts = volumeMounts
 }
 
 // configureInferenceExtension configures the inference extension endpoint-picker sidecar.
@@ -1978,7 +2037,8 @@ func (p *NginxProvisioner) buildResourcesForInvalidGatewayCleanup(
 	}
 
 	// 2. Deployment/DaemonSet
-	objects = append(objects,
+	objects = append(
+		objects,
 		&appsv1.Deployment{ObjectMeta: baseMeta},
 		&appsv1.DaemonSet{ObjectMeta: baseMeta},
 	)
@@ -1994,7 +2054,8 @@ func (p *NginxProvisioner) buildResourcesForInvalidGatewayCleanup(
 
 	// 6. RBAC (OpenShift only)
 	if p.isOpenshift {
-		objects = append(objects,
+		objects = append(
+			objects,
 			&rbacv1.Role{ObjectMeta: baseMeta},
 			&rbacv1.RoleBinding{ObjectMeta: baseMeta},
 		)
@@ -2004,7 +2065,8 @@ func (p *NginxProvisioner) buildResourcesForInvalidGatewayCleanup(
 	objects = append(objects, &corev1.ServiceAccount{ObjectMeta: baseMeta})
 
 	// 8. ConfigMaps
-	objects = append(objects,
+	objects = append(
+		objects,
 		&corev1.ConfigMap{ObjectMeta: meta(resourceName(nginxIncludesConfigMapNameSuffix))},
 		&corev1.ConfigMap{ObjectMeta: meta(resourceName(nginxAgentConfigMapNameSuffix))},
 	)
@@ -2032,6 +2094,15 @@ func (p *NginxProvisioner) buildResourcesForInvalidGatewayCleanup(
 		objects = append(
 			objects,
 			&corev1.Secret{ObjectMeta: meta(resourceName(p.cfg.NginxOneConsoleTelemetryConfig.DataplaneKeySecretName))},
+		)
+	}
+
+	if p.cfg.NginxInstanceManagerTelemetryConfig.DataplaneKeySecretName != "" {
+		objects = append(
+			objects,
+			&corev1.Secret{
+				ObjectMeta: meta(resourceName(p.cfg.NginxInstanceManagerTelemetryConfig.DataplaneKeySecretName)),
+			},
 		)
 	}
 
