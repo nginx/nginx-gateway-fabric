@@ -533,6 +533,9 @@ func createManager(cfg config.Config, healthChecker *graphBuiltHealthChecker) (m
 		// running Leader-only Runnables before the old leader has finished running them.
 		// See the doc comment for the LeaderElectionReleaseOnCancel for more details.
 		LeaderElectionReleaseOnCancel: false,
+		LeaseDuration:                 leaderElectionDurationPtr(cfg.LeaderElection.LeaseDuration),
+		RenewDeadline:                 leaderElectionDurationPtr(cfg.LeaderElection.RenewDeadline),
+		RetryPeriod:                   leaderElectionDurationPtr(cfg.LeaderElection.RetryPeriod),
 		Controller: ctrlcfg.Controller{
 			// All of our controllers still need to work in case of non-leader pods
 			NeedLeaderElection: helpers.GetPointer(false),
@@ -1452,4 +1455,14 @@ func getMetricsOptions(cfg config.MetricsConfig) metricsserver.Options {
 	}
 
 	return metricsOptions
+}
+
+// leaderElectionDurationPtr returns a pointer to d, or nil if d is zero so that controller-runtime falls back to
+// its own default value.
+func leaderElectionDurationPtr(d time.Duration) *time.Duration {
+	if d == 0 {
+		return nil
+	}
+
+	return &d
 }

@@ -101,6 +101,15 @@ spec:
         {{- else }}
         - --leader-election-disable
         {{- end }}
+        {{- if .Values.nginxGateway.leaderElection.leaseDuration }}
+        - --leader-election-lease-duration={{ .Values.nginxGateway.leaderElection.leaseDuration }}
+        {{- end }}
+        {{- if .Values.nginxGateway.leaderElection.renewDeadline }}
+        - --leader-election-renew-deadline={{ .Values.nginxGateway.leaderElection.renewDeadline }}
+        {{- end }}
+        {{- if .Values.nginxGateway.leaderElection.retryPeriod }}
+        - --leader-election-retry-period={{ .Values.nginxGateway.leaderElection.retryPeriod }}
+        {{- end }}
         {{- if not .Values.nginxGateway.productTelemetry.enable }}
         - --product-telemetry-disable
         {{- end }}
