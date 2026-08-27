@@ -828,11 +828,6 @@ The logs are attached only if there are errors.
 		promInstance.WaitForPortForwardExit()
 		Expect(framework.UninstallPrometheus(resourceManager)).To(Succeed())
 		Expect(outFile.Close()).To(Succeed())
-
-		// restoring NGF shared among tests in the suite
-		cfg := getDefaultSetupCfg()
-		cfg.nfr = true
-		setup(cfg)
 	})
 })
 
