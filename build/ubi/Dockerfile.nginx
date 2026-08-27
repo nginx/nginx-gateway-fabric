@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.26
 
 # renovate: datasource=github-tags depName=nginx/nginx
-ARG NGINX_VERSION=1.31.3
+ARG NGINX_VERSION=1.31.4
 
 FROM scratch AS nginx-files
 
@@ -49,7 +49,7 @@ FROM registry.access.redhat.com/ubi10/ubi-minimal:10.2 AS ubi-nginx
 ARG NGINX_VERSION
 
 # renovate: datasource=github-tags depName=nginx/agent
-ARG NGINX_AGENT_VERSION=v3.11.3
+ARG NGINX_AGENT_VERSION=v3.11.4
 ARG NJS_DIR
 ARG NGINX_CONF_DIR
 ARG BUILD_AGENT
