@@ -17,7 +17,7 @@ select a backend, all while forwarding the original body to the backend unchange
   JSON request body, including nested fields.
 - Allow a single routing rule to combine body field conditions with existing match types (host, path, method,
   headers, query parameters).
-- Support matching extracted body fields by exact value and by regular expression.
+- Support matching extracted body fields by exact value or by regular expression.
 - Support matching on the presence, absence, or emptiness of a body field.
 - Handle malformed JSON and oversized request bodies safely, failing closed by default.
 - Forward the original, unmodified request body to the selected backend.
