@@ -15,6 +15,9 @@ import (
 
 // PayloadProcessor is an Inherited Attached Policy. It enables declarative processing of HTTP
 // request and response payload content by attaching to a Gateway or HTTPRoute.
+//
+// note: this CRD is based on the proposed "PayloadProcessor" policy from the Gateway API.
+// Once the upstream API is finalized, migration to the official API will be considered.
 type PayloadProcessor struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
