@@ -962,7 +962,7 @@ func (h *eventHandlerImpl) parseAndCaptureEvent(ctx context.Context, logger logr
 			}
 		}
 
-		h.cfg.processor.CaptureUpsertChange(logger.WithName("changeProcessor"), e.Resource)
+		h.cfg.processor.CaptureUpsertChange(e.Resource)
 	case *events.DeleteEvent:
 		delFilterKey := objectFilterKey(e.Type, e.NamespacedName)
 
@@ -973,7 +973,7 @@ func (h *eventHandlerImpl) parseAndCaptureEvent(ctx context.Context, logger logr
 			}
 		}
 
-		h.cfg.processor.CaptureDeleteChange(logger.WithName("changeProcessor"), e.Type, e.NamespacedName)
+		h.cfg.processor.CaptureDeleteChange(e.Type, e.NamespacedName)
 	case events.WAFBundleReconcileEvent:
 		// Guard against stale events: the poller may have been stopped (policy deleted) between
 		// when the event was queued and when it is processed here. Skip the rebuild if the poller

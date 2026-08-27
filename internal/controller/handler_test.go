@@ -187,13 +187,12 @@ var _ = Describe("eventHandler", func() {
 
 		checkUpsertEventExpectations := func(e *events.UpsertEvent) {
 			Expect(fakeProcessor.CaptureUpsertChangeCallCount()).Should(Equal(1))
-			_, passedResource := fakeProcessor.CaptureUpsertChangeArgsForCall(0)
-			Expect(passedResource).Should(Equal(e.Resource))
+			Expect(fakeProcessor.CaptureUpsertChangeArgsForCall(0)).Should(Equal(e.Resource))
 		}
 
 		checkDeleteEventExpectations := func(e *events.DeleteEvent) {
 			Expect(fakeProcessor.CaptureDeleteChangeCallCount()).Should(Equal(1))
-			_, passedResourceType, passedNsName := fakeProcessor.CaptureDeleteChangeArgsForCall(0)
+			passedResourceType, passedNsName := fakeProcessor.CaptureDeleteChangeArgsForCall(0)
 			Expect(passedResourceType).Should(Equal(e.Type))
 			Expect(passedNsName).Should(Equal(e.NamespacedName))
 		}

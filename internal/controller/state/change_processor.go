@@ -40,11 +40,11 @@ type ChangeProcessor interface {
 	// CaptureUpsertChange captures an upsert change to a resource.
 	// It panics if the resource is of unsupported type or if the passed Gateway is different from the one this
 	// ChangeProcessor was created for.
-	CaptureUpsertChange(logger logr.Logger, obj client.Object)
+	CaptureUpsertChange(obj client.Object)
 	// CaptureDeleteChange captures a delete change to a resource.
 	// The method panics if the resource is of unsupported type or if the passed Gateway is different from the one
 	// this ChangeProcessor was created for.
-	CaptureDeleteChange(logger logr.Logger, resourceType ngftypes.ObjectType, nsname types.NamespacedName)
+	CaptureDeleteChange(resourceType ngftypes.ObjectType, nsname types.NamespacedName)
 	// Process produces a graph-like representation of GatewayAPI resources.
 	// If no changes were captured, the graph will be empty.
 	Process(ctx context.Context, logger logr.Logger) (graphCfg *graph.Graph)
@@ -350,7 +350,7 @@ func NewChangeProcessorImpl(cfg ChangeProcessorConfig) *ChangeProcessorImpl {
 // Now the clients make a combination of CaptureUpsertChange() and CaptureDeleteChange() calls followed by a call to
 // Process().
 
-func (c *ChangeProcessorImpl) CaptureUpsertChange(_ logr.Logger, obj client.Object) {
+func (c *ChangeProcessorImpl) CaptureUpsertChange(obj client.Object) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
@@ -358,7 +358,6 @@ func (c *ChangeProcessorImpl) CaptureUpsertChange(_ logr.Logger, obj client.Obje
 }
 
 func (c *ChangeProcessorImpl) CaptureDeleteChange(
-	_ logr.Logger,
 	resourceType ngftypes.ObjectType,
 	nsname types.NamespacedName,
 ) {

@@ -14,18 +14,16 @@ import (
 )
 
 type FakeChangeProcessor struct {
-	CaptureDeleteChangeStub        func(logr.Logger, types.ObjectType, typesa.NamespacedName)
+	CaptureDeleteChangeStub        func(types.ObjectType, typesa.NamespacedName)
 	captureDeleteChangeMutex       sync.RWMutex
 	captureDeleteChangeArgsForCall []struct {
-		arg1 logr.Logger
-		arg2 types.ObjectType
-		arg3 typesa.NamespacedName
+		arg1 types.ObjectType
+		arg2 typesa.NamespacedName
 	}
-	CaptureUpsertChangeStub        func(logr.Logger, client.Object)
+	CaptureUpsertChangeStub        func(client.Object)
 	captureUpsertChangeMutex       sync.RWMutex
 	captureUpsertChangeArgsForCall []struct {
-		arg1 logr.Logger
-		arg2 client.Object
+		arg1 client.Object
 	}
 	ForceRebuildStub        func()
 	forceRebuildMutex       sync.RWMutex
@@ -57,18 +55,17 @@ type FakeChangeProcessor struct {
 	invocationsMutex sync.RWMutex
 }
 
-func (fake *FakeChangeProcessor) CaptureDeleteChange(arg1 logr.Logger, arg2 types.ObjectType, arg3 typesa.NamespacedName) {
+func (fake *FakeChangeProcessor) CaptureDeleteChange(arg1 types.ObjectType, arg2 typesa.NamespacedName) {
 	fake.captureDeleteChangeMutex.Lock()
 	fake.captureDeleteChangeArgsForCall = append(fake.captureDeleteChangeArgsForCall, struct {
-		arg1 logr.Logger
-		arg2 types.ObjectType
-		arg3 typesa.NamespacedName
-	}{arg1, arg2, arg3})
+		arg1 types.ObjectType
+		arg2 typesa.NamespacedName
+	}{arg1, arg2})
 	stub := fake.CaptureDeleteChangeStub
-	fake.recordInvocation("CaptureDeleteChange", []interface{}{arg1, arg2, arg3})
+	fake.recordInvocation("CaptureDeleteChange", []interface{}{arg1, arg2})
 	fake.captureDeleteChangeMutex.Unlock()
 	if stub != nil {
-		fake.CaptureDeleteChangeStub(arg1, arg2, arg3)
+		fake.CaptureDeleteChangeStub(arg1, arg2)
 	}
 }
 
@@ -78,30 +75,29 @@ func (fake *FakeChangeProcessor) CaptureDeleteChangeCallCount() int {
 	return len(fake.captureDeleteChangeArgsForCall)
 }
 
-func (fake *FakeChangeProcessor) CaptureDeleteChangeCalls(stub func(logr.Logger, types.ObjectType, typesa.NamespacedName)) {
+func (fake *FakeChangeProcessor) CaptureDeleteChangeCalls(stub func(types.ObjectType, typesa.NamespacedName)) {
 	fake.captureDeleteChangeMutex.Lock()
 	defer fake.captureDeleteChangeMutex.Unlock()
 	fake.CaptureDeleteChangeStub = stub
 }
 
-func (fake *FakeChangeProcessor) CaptureDeleteChangeArgsForCall(i int) (logr.Logger, types.ObjectType, typesa.NamespacedName) {
+func (fake *FakeChangeProcessor) CaptureDeleteChangeArgsForCall(i int) (types.ObjectType, typesa.NamespacedName) {
 	fake.captureDeleteChangeMutex.RLock()
 	defer fake.captureDeleteChangeMutex.RUnlock()
 	argsForCall := fake.captureDeleteChangeArgsForCall[i]
-	return argsForCall.arg1, argsForCall.arg2, argsForCall.arg3
+	return argsForCall.arg1, argsForCall.arg2
 }
 
-func (fake *FakeChangeProcessor) CaptureUpsertChange(arg1 logr.Logger, arg2 client.Object) {
+func (fake *FakeChangeProcessor) CaptureUpsertChange(arg1 client.Object) {
 	fake.captureUpsertChangeMutex.Lock()
 	fake.captureUpsertChangeArgsForCall = append(fake.captureUpsertChangeArgsForCall, struct {
-		arg1 logr.Logger
-		arg2 client.Object
-	}{arg1, arg2})
+		arg1 client.Object
+	}{arg1})
 	stub := fake.CaptureUpsertChangeStub
-	fake.recordInvocation("CaptureUpsertChange", []interface{}{arg1, arg2})
+	fake.recordInvocation("CaptureUpsertChange", []interface{}{arg1})
 	fake.captureUpsertChangeMutex.Unlock()
 	if stub != nil {
-		fake.CaptureUpsertChangeStub(arg1, arg2)
+		fake.CaptureUpsertChangeStub(arg1)
 	}
 }
 
@@ -111,17 +107,17 @@ func (fake *FakeChangeProcessor) CaptureUpsertChangeCallCount() int {
 	return len(fake.captureUpsertChangeArgsForCall)
 }
 
-func (fake *FakeChangeProcessor) CaptureUpsertChangeCalls(stub func(logr.Logger, client.Object)) {
+func (fake *FakeChangeProcessor) CaptureUpsertChangeCalls(stub func(client.Object)) {
 	fake.captureUpsertChangeMutex.Lock()
 	defer fake.captureUpsertChangeMutex.Unlock()
 	fake.CaptureUpsertChangeStub = stub
 }
 
-func (fake *FakeChangeProcessor) CaptureUpsertChangeArgsForCall(i int) (logr.Logger, client.Object) {
+func (fake *FakeChangeProcessor) CaptureUpsertChangeArgsForCall(i int) client.Object {
 	fake.captureUpsertChangeMutex.RLock()
 	defer fake.captureUpsertChangeMutex.RUnlock()
 	argsForCall := fake.captureUpsertChangeArgsForCall[i]
-	return argsForCall.arg1, argsForCall.arg2
+	return argsForCall.arg1
 }
 
 func (fake *FakeChangeProcessor) ForceRebuild() {

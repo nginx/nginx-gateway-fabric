@@ -4,7 +4,6 @@ import (
 	gotemplate "text/template"
 
 	"github.com/go-logr/logr"
-
 	pb "github.com/nginx/agent/v3/api/grpc/mpi/v1"
 	filesHelper "github.com/nginx/agent/v3/pkg/files"
 
