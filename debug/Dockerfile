@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.26
 # This Dockerfile builds an image with the dlv debugger. See the debugging guide in the developer docs for details
 # on how to use it.
-FROM golang:1.26-alpine AS builder
+FROM golang:1.27-alpine AS builder
 
 RUN go install github.com/go-delve/delve/cmd/dlv@latest
 

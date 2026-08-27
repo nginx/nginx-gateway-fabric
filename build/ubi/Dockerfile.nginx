@@ -42,7 +42,7 @@ WORKDIR /build
 COPY internal/controller/nginx/modules/rust/ai-guardrails/ ./
 RUN cargo build --release
 
-FROM ghcr.io/nginx/dependencies/nginx-ubi:ubi10@sha256:b7fb8464aa834f116e605eb42d89118eb2d937c61665c5d2f4638f20f0fa3e02 AS ubi10-packages
+FROM ghcr.io/nginx/dependencies/nginx-ubi:ubi10@sha256:553a4a4d9cb4c6683c0c7266cbbbb4f190d9f38b47f78c8d3ec01923a5d4f521 AS ubi10-packages
 
 FROM registry.access.redhat.com/ubi10/ubi-minimal:10.2 AS ubi-nginx
 

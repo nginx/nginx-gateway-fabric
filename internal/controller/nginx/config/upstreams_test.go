@@ -108,6 +108,7 @@ func TestExecuteUpstreams_NginxOSS(t *testing.T) {
 		"server [2001:db8::1]:80": 1,
 		"server 12.0.0.0:80;":     1,
 		"server 12.0.0.6:80;":     1,
+
 		fmt.Sprintf("server %snginx-503-server.sock;", SocketBasePath): 1,
 
 		"keepalive 1;":           1,
@@ -290,27 +291,30 @@ func TestExecuteUpstreams_NginxPlus(t *testing.T) {
 	}
 
 	expectedSubStrings := map[string]int{
-		"upstream up1":                                1,
-		"upstream up2":                                1,
-		"upstream up3-ipv6":                           1,
-		"upstream up4-ipv6":                           1,
-		"upstream up5":                                1,
-		"upstream up6-usp-with-sp":                    1,
-		"upstream up7-with-sp":                        1,
+		"upstream up1":             1,
+		"upstream up2":             1,
+		"upstream up3-ipv6":        1,
+		"upstream up4-ipv6":        1,
+		"upstream up5":             1,
+		"upstream up6-usp-with-sp": 1,
+		"upstream up7-with-sp":     1,
+
 		"upstream up8-with-sp-expiry-and-path-empty":  1,
 		"upstream up9-usp-keepAlive-connections-zero": 1,
 		"upstream invalid-backend-ref":                1,
 
 		defaultLBMethod + ";": 9,
-		"ip_hash;":            1,
 
-		"zone up1 1m;":                                1,
-		"zone up2 1m;":                                1,
-		"zone up3-ipv6 1m;":                           1,
-		"zone up4-ipv6 1m;":                           1,
-		"zone up5 1m;":                                1,
-		"zone up6-usp-with-sp 2m;":                    1,
-		"zone up7-with-sp 1m;":                        1,
+		"ip_hash;": 1,
+
+		"zone up1 1m;":             1,
+		"zone up2 1m;":             1,
+		"zone up3-ipv6 1m;":        1,
+		"zone up4-ipv6 1m;":        1,
+		"zone up5 1m;":             1,
+		"zone up6-usp-with-sp 2m;": 1,
+		"zone up7-with-sp 1m;":     1,
+
 		"zone up8-with-sp-expiry-and-path-empty 1m;":  1,
 		"zone up9-usp-keepAlive-connections-zero 2m;": 1,
 
@@ -334,7 +338,8 @@ func TestExecuteUpstreams_NginxPlus(t *testing.T) {
 		"state /var/lib/nginx/state/up7-with-sp.conf;":                        1,
 		"state /var/lib/nginx/state/up8-with-sp-expiry-and-path-empty.conf;":  1,
 		"state /var/lib/nginx/state/up9-usp-keepAlive-connections-zero.conf;": 1,
-		fmt.Sprintf("server %snginx-500-server.sock;", SocketBasePath):        1,
+
+		fmt.Sprintf("server %snginx-500-server.sock;", SocketBasePath): 1,
 	}
 
 	upstreams := gen.createUpstreams(stateUpstreams)
@@ -1700,7 +1705,8 @@ func TestExecuteUpstreams_LoadBalancingMethod(t *testing.T) {
 			expectedSubStrings: map[string]int{
 				"upstream up1-usp-ipv4": 1,
 				"upstream up2-usp-ipv6": 1,
-				defaultLBMethod + ";":   2,
+
+				defaultLBMethod + ";": 2,
 			},
 		},
 		{

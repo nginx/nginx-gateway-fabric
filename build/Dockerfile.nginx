@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.26
 
-# renovate: datasource=github-tags depName=nginx/nginx extractVersion=^release-(?<version>.+)$
+# renovate: datasource=github-tags depName=nginx/nginx
 ARG NGINX_VERSION=1.31.3
 
 FROM scratch AS nginx-files

@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.23
+# syntax=docker/dockerfile:1.26
 # Build/test *environment* image for the ai-guardrails Rust module.
 # It contains the toolchain, clang, and a configured nginx
 # source tree, but NO module source and NO test/lint execution. Lint and tests
@@ -9,7 +9,7 @@
 
 FROM alpine:3.23 AS nginx-source
 
-# renovate: datasource=github-tags depName=nginx/nginx extractVersion=^release-(?<version>.+)$
+# renovate: datasource=github-tags depName=nginx/nginx
 ARG NGINX_VERSION=1.31.3
 
 RUN apk add --no-cache gcc musl-dev openssl-dev pcre2-dev zlib-dev linux-headers perl make
@@ -19,7 +19,7 @@ RUN wget -q https://nginx.org/download/nginx-${NGINX_VERSION}.tar.gz \
 
 RUN cd nginx-${NGINX_VERSION} && ./configure --with-compat --with-http_ssl_module
 
-FROM rust:1.97-alpine AS base
+FROM rust:1.98-alpine AS base
 
 # Pin clang20-dev: clang21's libclang.so cannot be dlopen'd on Alpine musl.
 RUN apk add --no-cache musl-dev protobuf-dev openssl-dev perl make \
@@ -27,7 +27,7 @@ RUN apk add --no-cache musl-dev protobuf-dev openssl-dev perl make \
 
 RUN rustup component add clippy
 
-# renovate: datasource=github-tags depName=nginx/nginx extractVersion=^release-(?<version>.+)$
+# renovate: datasource=github-tags depName=nginx/nginx
 ARG NGINX_VERSION=1.31.3
 
 COPY --from=nginx-source /nginx-${NGINX_VERSION} /nginx-src
