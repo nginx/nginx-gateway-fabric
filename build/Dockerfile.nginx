@@ -50,7 +50,7 @@ ARG NJS_DIR
 ARG NGINX_CONF_DIR
 ARG BUILD_AGENT
 
-RUN apk update && apk upgrade --no-cache curl libpng
+RUN apk update && apk upgrade --no-cache curl libcrypto3 libssl3
 
 RUN --mount=type=bind,from=nginx-files,src=nginx_signing.rsa.pub,target=/etc/apk/keys/nginx_signing.rsa.pub \
     addgroup -g 1001 -S nginx \
