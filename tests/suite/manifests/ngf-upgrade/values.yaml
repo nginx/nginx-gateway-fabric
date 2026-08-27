@@ -25,3 +25,6 @@ affinity:
       labelSelector:
         matchLabels:
           app.kubernetes.io/name: nginx-gateway
+
+certGenerator:
+  overwrite: true
