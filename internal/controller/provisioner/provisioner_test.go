@@ -307,7 +307,7 @@ func TestNewNginxProvisioner(t *testing.T) {
 		cfg  Config
 	}{
 		{
-			name: "Nim and N1C configured correctly",
+			name: "NIM and N1C configured correctly",
 			cfg: Config{
 				GCName: "test-gc",
 				GatewayPodConfig: &config.GatewayPodConfig{
