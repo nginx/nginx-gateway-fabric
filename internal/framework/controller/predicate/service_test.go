@@ -365,24 +365,12 @@ func TestServiceChangedPredicate_Update(t *testing.T) {
 				Spec: v1.ServiceSpec{
 					Type:         v1.ServiceTypeExternalName,
 					ExternalName: "old.example.com",
-					Ports: []v1.ServicePort{
-						{
-							Port:       80,
-							TargetPort: intstr.FromInt(80),
-						},
-					},
 				},
 			},
 			objectNew: &v1.Service{
 				Spec: v1.ServiceSpec{
 					Type:         v1.ServiceTypeExternalName,
 					ExternalName: "new.example.com",
-					Ports: []v1.ServicePort{
-						{
-							Port:       80,
-							TargetPort: intstr.FromInt(80),
-						},
-					},
 				},
 			},
 			expUpdate: true,
@@ -393,24 +381,12 @@ func TestServiceChangedPredicate_Update(t *testing.T) {
 				Spec: v1.ServiceSpec{
 					Type:         v1.ServiceTypeExternalName,
 					ExternalName: "same.example.com",
-					Ports: []v1.ServicePort{
-						{
-							Port:       80,
-							TargetPort: intstr.FromInt(80),
-						},
-					},
 				},
 			},
 			objectNew: &v1.Service{
 				Spec: v1.ServiceSpec{
 					Type:         v1.ServiceTypeExternalName,
 					ExternalName: "same.example.com",
-					Ports: []v1.ServicePort{
-						{
-							Port:       80,
-							TargetPort: intstr.FromInt(80),
-						},
-					},
 				},
 			},
 			expUpdate: false,
@@ -420,24 +396,11 @@ func TestServiceChangedPredicate_Update(t *testing.T) {
 			objectOld: &v1.Service{
 				Spec: v1.ServiceSpec{
 					Type: v1.ServiceTypeClusterIP,
-					Ports: []v1.ServicePort{
-						{
-							Port:       80,
-							TargetPort: intstr.FromInt(80),
-						},
-					},
 				},
 			},
 			objectNew: &v1.Service{
 				Spec: v1.ServiceSpec{
-					Type:         v1.ServiceTypeExternalName,
-					ExternalName: "new.example.com",
-					Ports: []v1.ServicePort{
-						{
-							Port:       80,
-							TargetPort: intstr.FromInt(80),
-						},
-					},
+					Type: v1.ServiceTypeExternalName,
 				},
 			},
 			expUpdate: true,
@@ -446,25 +409,12 @@ func TestServiceChangedPredicate_Update(t *testing.T) {
 			msg: "service type changed from ExternalName to ClusterIP",
 			objectOld: &v1.Service{
 				Spec: v1.ServiceSpec{
-					Type:         v1.ServiceTypeExternalName,
-					ExternalName: "old.example.com",
-					Ports: []v1.ServicePort{
-						{
-							Port:       80,
-							TargetPort: intstr.FromInt(80),
-						},
-					},
+					Type: v1.ServiceTypeExternalName,
 				},
 			},
 			objectNew: &v1.Service{
 				Spec: v1.ServiceSpec{
 					Type: v1.ServiceTypeClusterIP,
-					Ports: []v1.ServicePort{
-						{
-							Port:       80,
-							TargetPort: intstr.FromInt(80),
-						},
-					},
 				},
 			},
 			expUpdate: true,
