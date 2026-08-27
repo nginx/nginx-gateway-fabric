@@ -1310,6 +1310,15 @@ func fetchPolicyBundle(
 		return
 	}
 
+	// Multiple WAFPolicies may reference the same upstream source and therefore produce the same
+	// bundleKey. Once the bundle has been fetched, skip subsequent policies with the same key
+	// to avoid redundant network calls and to prevent a failed fetch (e.g. due to different
+	// auth settings on the duplicate policy) from overwriting a successful fetch's data.
+	if existing, alreadyFetched := output.Bundles[bundleKey]; alreadyFetched {
+		policy.WAFState.Bundles[bundleKey] = existing
+		return
+	}
+
 	req := BuildPolicyFetchRequest(policySource, wafPolicy.Spec.Type, auth, tlsCA)
 
 	result, err := wafInput.Fetcher.FetchPolicyBundle(ctx, req)
@@ -1578,6 +1587,14 @@ func fetchPLMPolicyBundle(
 	}
 
 	bundleKey := PLMPolicyBundleKey(nsName)
+
+	// Multiple WAFPolicies may reference the same APPolicy and therefore produce the same
+	// bundleKey. Once the bundle has been fetched, skip subsequent policies with the same key
+	// to avoid redundant S3 calls and to prevent a failed fetch from overwriting a successful one.
+	if existing, alreadyFetched := output.Bundles[bundleKey]; alreadyFetched {
+		policy.WAFState.Bundles[bundleKey] = existing
+		return
+	}
 
 	creds, tlsCfg, err := plmFetchCredentials(wafInput)
 	if err != nil {

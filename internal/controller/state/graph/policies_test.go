@@ -4813,6 +4813,108 @@ func TestFetchPLMPolicyBundle(t *testing.T) {
 	}
 }
 
+func TestFetchPLMPolicyBundle_AlreadyFetched(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	const (
+		policyNs     = "test-ns"
+		apPolicyName = "my-ap-policy"
+	)
+
+	apPolicyNsName := types.NamespacedName{Namespace: policyNs, Name: apPolicyName}
+	bundleKey := PLMPolicyBundleKey(apPolicyNsName)
+
+	wafPolicy := &ngfAPIv1alpha1.WAFPolicy{
+		ObjectMeta: metav1.ObjectMeta{Name: "second-plm-waf", Namespace: policyNs},
+		Spec: ngfAPIv1alpha1.WAFPolicySpec{
+			Type:      ngfAPIv1alpha1.PolicySourceTypePLM,
+			PolicyRef: &ngfAPIv1alpha1.PolicyRef{APPolicyRef: &ngfAPIv1alpha1.APPolicyReference{Name: apPolicyName}},
+		},
+	}
+
+	existingBundle := &WAFBundleData{Data: []byte("already-fetched"), Checksum: "existing-checksum"}
+
+	policy := newPLMPolicy(wafPolicy)
+	output := newPLMOutput()
+	// Pre-populate the output with an already-fetched bundle for the same key.
+	output.Bundles[bundleKey] = existingBundle
+
+	wafInput := &WAFProcessingInput{
+		PLMFetcher: fakePLMFetcher(),
+		APPolicies: map[types.NamespacedName]*unstructured.Unstructured{
+			apPolicyNsName: makeUnstructuredAPResource(
+				"APPolicy", policyNs, apPolicyName, "ready", "s3://bucket/policy.tgz", "sha-abc", true,
+			),
+		},
+		PreviousBundles: map[WAFBundleKey]*WAFBundleData{},
+	}
+
+	fetchPLMPolicyBundle(t.Context(), logr.Discard(), wafPolicy, policy, wafInput, output)
+
+	// The existing bundle should be reused, not overwritten.
+	g.Expect(output.Bundles[bundleKey]).To(Equal(existingBundle))
+	g.Expect(policy.WAFState.Bundles[bundleKey]).To(Equal(existingBundle))
+	g.Expect(policy.Valid).To(BeTrue())
+	g.Expect(policy.Conditions).To(BeEmpty())
+	g.Expect(policy.WAFState.BundlePending).To(BeFalse())
+}
+
+func TestFetchPolicyBundle_AlreadyFetched(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	const (
+		policyNs  = "test-ns"
+		bundleURL = "https://example.com/bundle.tgz"
+	)
+
+	wafPolicy := &ngfAPIv1alpha1.WAFPolicy{
+		ObjectMeta: metav1.ObjectMeta{Name: "second-waf", Namespace: policyNs},
+		Spec: ngfAPIv1alpha1.WAFPolicySpec{
+			Type: ngfAPIv1alpha1.PolicySourceTypeHTTP,
+			PolicySource: &ngfAPIv1alpha1.PolicySource{
+				HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: bundleURL},
+			},
+		},
+	}
+
+	bundleKey := PolicyBundleKey(wafPolicy.Spec)
+	existingBundle := &WAFBundleData{Data: []byte("already-fetched"), Checksum: "existing-checksum"}
+
+	policy := &Policy{
+		Source: wafPolicy,
+		Valid:  true,
+		WAFState: &PolicyWAFState{
+			Bundles: make(map[WAFBundleKey]*WAFBundleData),
+		},
+	}
+
+	output := &WAFProcessingOutput{
+		Bundles:              map[WAFBundleKey]*WAFBundleData{bundleKey: existingBundle},
+		ReferencedWAFSecrets: make(map[types.NamespacedName]*corev1.Secret),
+	}
+
+	// The fetcher should never be called since the bundle is already fetched.
+	fetcher := &fetchfakes.FakeFetcher{}
+	wafInput := &WAFProcessingInput{
+		Fetcher:         fetcher,
+		Secrets:         map[types.NamespacedName]*corev1.Secret{},
+		PreviousBundles: map[WAFBundleKey]*WAFBundleData{},
+	}
+
+	fetchPolicyBundle(t.Context(), logr.Discard(), wafPolicy, policy, wafInput, output)
+
+	// The existing bundle should be reused, not overwritten.
+	g.Expect(output.Bundles[bundleKey]).To(Equal(existingBundle))
+	g.Expect(policy.WAFState.Bundles[bundleKey]).To(Equal(existingBundle))
+	g.Expect(policy.Valid).To(BeTrue())
+	g.Expect(policy.Conditions).To(BeEmpty())
+	g.Expect(policy.WAFState.BundlePending).To(BeFalse())
+	// Verify the fetcher was never called.
+	g.Expect(fetcher.FetchPolicyBundleCallCount()).To(Equal(0))
+}
+
 func TestValidatePLMAPLogConfReference(t *testing.T) {
 	t.Parallel()
 
