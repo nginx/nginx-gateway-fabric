@@ -359,6 +359,66 @@ func TestServiceChangedPredicate_Update(t *testing.T) {
 			},
 			expUpdate: true,
 		},
+		{
+			msg: "externalName changed",
+			objectOld: &v1.Service{
+				Spec: v1.ServiceSpec{
+					Type:         v1.ServiceTypeExternalName,
+					ExternalName: "old.example.com",
+				},
+			},
+			objectNew: &v1.Service{
+				Spec: v1.ServiceSpec{
+					Type:         v1.ServiceTypeExternalName,
+					ExternalName: "new.example.com",
+				},
+			},
+			expUpdate: true,
+		},
+		{
+			msg: "externalName stayed the same",
+			objectOld: &v1.Service{
+				Spec: v1.ServiceSpec{
+					Type:         v1.ServiceTypeExternalName,
+					ExternalName: "same.example.com",
+				},
+			},
+			objectNew: &v1.Service{
+				Spec: v1.ServiceSpec{
+					Type:         v1.ServiceTypeExternalName,
+					ExternalName: "same.example.com",
+				},
+			},
+			expUpdate: false,
+		},
+		{
+			msg: "service type changed from ClusterIP to ExternalName",
+			objectOld: &v1.Service{
+				Spec: v1.ServiceSpec{
+					Type: v1.ServiceTypeClusterIP,
+				},
+			},
+			objectNew: &v1.Service{
+				Spec: v1.ServiceSpec{
+					Type: v1.ServiceTypeExternalName,
+				},
+			},
+			expUpdate: true,
+		},
+		{
+			msg: "service type changed from ExternalName to ClusterIP",
+			objectOld: &v1.Service{
+				Spec: v1.ServiceSpec{
+					Type: v1.ServiceTypeExternalName,
+				},
+			},
+			objectNew: &v1.Service{
+				Spec: v1.ServiceSpec{
+					Type: v1.ServiceTypeClusterIP,
+				},
+			},
+			expUpdate: true,
+		},
 	}
 
 	p := ServiceChangedPredicate{}
