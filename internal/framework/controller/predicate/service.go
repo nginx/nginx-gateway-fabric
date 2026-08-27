@@ -8,7 +8,6 @@ import (
 )
 
 // ServiceChangedPredicate implements an update predicate function for a Service.
-// This predicate will skip update events that have no change in a Service's Ports, TargetPorts, or AppProtocols.
 type ServiceChangedPredicate struct {
 	predicate.Funcs
 }
@@ -37,6 +36,15 @@ func (ServiceChangedPredicate) Update(e event.UpdateEvent) bool {
 	newSvc, ok := e.ObjectNew.(*apiv1.Service)
 	if !ok {
 		return false
+	}
+
+	if oldSvc.Spec.Type != newSvc.Spec.Type &&
+		(oldSvc.Spec.Type == apiv1.ServiceTypeExternalName || newSvc.Spec.Type == apiv1.ServiceTypeExternalName) {
+		return true
+	}
+
+	if oldSvc.Spec.ExternalName != newSvc.Spec.ExternalName {
+		return true
 	}
 
 	oldPorts := oldSvc.Spec.Ports
