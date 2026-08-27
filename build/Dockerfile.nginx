@@ -45,7 +45,7 @@ FROM alpine:3.24
 ARG NGINX_VERSION
 
 # renovate: datasource=github-tags depName=nginx/agent
-ARG NGINX_AGENT_VERSION=v3.11.3
+ARG NGINX_AGENT_VERSION=v3.11.4
 ARG NJS_DIR
 ARG NGINX_CONF_DIR
 ARG BUILD_AGENT
