@@ -40,6 +40,9 @@ type Policy struct {
 	InvalidForGateways map[types.NamespacedName]struct{}
 	// WAFState holds WAF-specific state for this policy. Only populated for WAFPolicy resources.
 	WAFState *PolicyWAFState
+	// PayloadProcessorState holds resolved ExtProcess state for this policy.
+	// Only populated for PayloadProcessor resources.
+	PayloadProcessorState *PolicyPayloadProcessorState
 	// Ancestors is a list of ancestor objects of the Policy. Used in status.
 	Ancestors []PolicyAncestor
 	// TargetRefs are the resources that the Policy targets.
@@ -99,6 +102,16 @@ type PolicyKey struct {
 // Format: "<namespace>_<policyName>" for policy bundles, or "<namespace>_<policyName>_log_<urlHash>" for log bundles,
 // where urlHash is a truncated SHA-256 hex digest of the log source URL.
 type WAFBundleKey string
+
+var policyDeterminingCondition = map[string]func() conditions.Condition{
+	kinds.ObservabilityPolicy:  conditions.NewObservabilityPolicyAffected,
+	kinds.ClientSettingsPolicy: conditions.NewClientSettingsPolicyAffected,
+	kinds.SnippetsPolicy:       conditions.NewSnippetsPolicyAffected,
+	kinds.ProxySettingsPolicy:  conditions.NewProxySettingsPolicyAffected,
+	kinds.RateLimitPolicy:      conditions.NewRateLimitPolicyAffected,
+	kinds.WAFPolicy:            conditions.NewWAFPolicyAffected,
+	kinds.PayloadProcessor:     conditions.NewPayloadProcessorPolicyAffected,
+}
 
 // PolicyBundleKey returns the WAFBundleKey for a WAFPolicy's main policy bundle.
 // The key is derived from the upstream source identity (URL, policy name/ID, namespace)
@@ -323,6 +336,63 @@ func (g *Graph) attachPolicies(validator validation.PolicyValidator, ctlrName st
 	}
 }
 
+// resolveEffectivePayloadProcessors computes the effective PayloadProcessor for each Route, per parent
+// Gateway.
+func resolveEffectivePayloadProcessors(
+	gateways map[types.NamespacedName]*Gateway,
+	routes map[RouteKey]*L7Route,
+) {
+	for _, route := range routes {
+		if route.RouteType != RouteTypeHTTP {
+			continue
+		}
+		for _, parentRef := range route.ParentRefs {
+			// Only inherit for parent Gateways whose attachment succeeded
+			if parentRef.Attachment == nil || !parentRef.Attachment.Attached {
+				continue
+			}
+
+			gwNsName := parentRef.GatewayNsName
+			gw, exists := gateways[gwNsName]
+			if !exists || gw == nil {
+				continue
+			}
+
+			// A PayloadProcessor attached directly to the Route wins for each Gateway it is valid
+			// for; otherwise fall back to the Gateway's inherited PayloadProcessor. Selecting the
+			// route policy per Gateway (rather than once for all Gateways) ensures a route policy
+			// marked invalid for a specific Gateway (e.g. an ExternalName backend whose Gateway
+			// lacks a DNS resolver) is not emitted for that Gateway.
+			policy := firstValidPayloadProcessorForGateway(route.Policies, gwNsName)
+			if policy == nil {
+				policy = firstValidPayloadProcessorForGateway(gw.Policies, gwNsName)
+			}
+			if policy == nil {
+				continue
+			}
+
+			if route.EffectivePayloadProcessors == nil {
+				route.EffectivePayloadProcessors = make(map[types.NamespacedName]*Policy)
+			}
+			route.EffectivePayloadProcessors[gwNsName] = policy
+		}
+	}
+}
+
+// firstValidPayloadProcessorForGateway returns the first valid PayloadProcessor policy in the list that
+// is not marked invalid for the given Gateway, or nil.
+func firstValidPayloadProcessorForGateway(pols []*Policy, gwNsName types.NamespacedName) *Policy {
+	for _, policy := range pols {
+		if _, invalid := policy.InvalidForGateways[gwNsName]; invalid {
+			continue
+		}
+		if policy.Valid && getPolicyKind(policy.Source) == kinds.PayloadProcessor {
+			return policy
+		}
+	}
+	return nil
+}
+
 func attachPolicyToService(
 	policy *Policy,
 	svc *ReferencedService,
@@ -440,6 +510,15 @@ func attachPolicyToRoute(
 	}
 
 	for _, parentRef := range route.ParentRefs {
+		if payloadProcessorResolverMissing(policy, parentRef.EffectiveNginxProxy) {
+			policy.InvalidForGateways[parentRef.GatewayNsName] = struct{}{}
+			ancestor.Conditions = append(
+				ancestor.Conditions,
+				conditions.NewPolicyInvalid(conditions.PolicyMessagePayloadProcessorResolverMissing),
+			)
+			continue
+		}
+
 		if parentRef.EffectiveNginxProxy != nil {
 			globalSettings := &policies.GlobalSettings{
 				TelemetryEnabled: telemetryEnabledForNginxProxy(parentRef.EffectiveNginxProxy),
@@ -462,6 +541,21 @@ func attachPolicyToRoute(
 	if len(effectiveGateways) > 0 || len(policy.InvalidForGateways) < len(route.ParentRefs) {
 		route.Policies = append(route.Policies, policy)
 	}
+}
+
+// payloadProcessorResolverMissing reports whether the policy is a PayloadProcessor whose ExtProcess
+// backend is an ExternalName Service, but the given effective NginxProxy has no DNS resolver
+// configured. Such a configuration cannot re-resolve the external hostname per request, so the policy
+// must be marked invalid for the affected Gateway (mirroring regular ExternalName route handling in
+// checkExternalNameValidForGateways).
+func payloadProcessorResolverMissing(policy *Policy, effectiveNP *EffectiveNginxProxy) bool {
+	if getPolicyKind(policy.Source) != kinds.PayloadProcessor {
+		return false
+	}
+	if policy.PayloadProcessorState == nil || !policy.PayloadProcessorState.BackendIsExternalName {
+		return false
+	}
+	return effectiveNP == nil || effectiveNP.DNSResolver == nil
 }
 
 func attachPolicyToGateway(
@@ -521,6 +615,15 @@ func attachPolicyToGateway(
 	if !gw.Valid {
 		policy.InvalidForGateways[ref.Nsname] = struct{}{}
 		ancestor.Conditions = []conditions.Condition{conditions.NewPolicyTargetNotFound("The TargetRef is invalid")}
+		policy.Ancestors = append(policy.Ancestors, ancestor)
+		return
+	}
+
+	if payloadProcessorResolverMissing(policy, gw.EffectiveNginxProxy) {
+		policy.InvalidForGateways[ref.Nsname] = struct{}{}
+		ancestor.Conditions = []conditions.Condition{
+			conditions.NewPolicyInvalid(conditions.PolicyMessagePayloadProcessorResolverMissing),
+		}
 		policy.Ancestors = append(policy.Ancestors, ancestor)
 		return
 	}
@@ -631,6 +734,7 @@ func processPolicies(
 	services map[types.NamespacedName]*ReferencedService,
 	gws map[types.NamespacedName]*Gateway,
 	wafInput *WAFProcessingInput,
+	refGrantResolver *referenceGrantResolver,
 ) (map[PolicyKey]*Policy, *WAFProcessingOutput) {
 	if len(pols) == 0 || len(gws) == 0 {
 		return nil, nil
@@ -695,9 +799,54 @@ func processPolicies(
 
 	markConflictedPolicies(processedPolicies, validator)
 
+	validatePayloadProcessorRefs(processedPolicies, refGrantResolver)
+
 	wafOutput := processWAFPolicies(ctx, logger, processedPolicies, wafInput)
 
 	return processedPolicies, wafOutput
+}
+
+// validatePayloadProcessorRefs validates cross-namespace ExtProcess backendRefs on PayloadProcessor policies.
+// A backendRef targeting a Service in a namespace different from the PayloadProcessor's own namespace
+// requires a ReferenceGrant permitting the reference. Policies that are already invalid are skipped.
+func validatePayloadProcessorRefs(
+	processedPolicies map[PolicyKey]*Policy,
+	refGrantResolver *referenceGrantResolver,
+) {
+	for _, policy := range processedPolicies {
+		if !policy.Valid || getPolicyKind(policy.Source) != kinds.PayloadProcessor {
+			continue
+		}
+
+		pp, ok := policy.Source.(*ngfAPIv1alpha1.PayloadProcessor)
+		if !ok {
+			continue
+		}
+
+		for _, processor := range pp.Spec.Processors {
+			if processor.ExtProcess == nil || processor.ExtProcess.BackendRef.Namespace == nil {
+				continue
+			}
+
+			refNs := string(*processor.ExtProcess.BackendRef.Namespace)
+			if refNs == pp.Namespace {
+				continue
+			}
+
+			refNsName := types.NamespacedName{Namespace: refNs, Name: string(processor.ExtProcess.BackendRef.Name)}
+			if refGrantResolver != nil &&
+				refGrantResolver.refAllowed(toService(refNsName), fromPayloadProcessor(pp.Namespace)) {
+				continue
+			}
+
+			policy.Conditions = append(policy.Conditions, conditions.NewPolicyRefNotPermitted(
+				fmt.Sprintf("cross-namespace reference to Service %q not permitted by any ReferenceGrant", refNsName.String()),
+			))
+			policy.Valid = false
+
+			break
+		}
+	}
 }
 
 func checkTargetRoutesForOverlap(
@@ -936,38 +1085,16 @@ func addStatusToTargetRefs(policyKind string, conditionsList *[]conditions.Condi
 	if conditionsList == nil {
 		return
 	}
-	switch policyKind {
-	case kinds.ObservabilityPolicy:
-		if conditions.HasMatchingCondition(*conditionsList, conditions.NewObservabilityPolicyAffected()) {
-			return
-		}
-		*conditionsList = append(*conditionsList, conditions.NewObservabilityPolicyAffected())
-	case kinds.ClientSettingsPolicy:
-		if conditions.HasMatchingCondition(*conditionsList, conditions.NewClientSettingsPolicyAffected()) {
-			return
-		}
-		*conditionsList = append(*conditionsList, conditions.NewClientSettingsPolicyAffected())
-	case kinds.SnippetsPolicy:
-		if conditions.HasMatchingCondition(*conditionsList, conditions.NewSnippetsPolicyAffected()) {
-			return
-		}
-		*conditionsList = append(*conditionsList, conditions.NewSnippetsPolicyAffected())
-	case kinds.ProxySettingsPolicy:
-		if conditions.HasMatchingCondition(*conditionsList, conditions.NewProxySettingsPolicyAffected()) {
-			return
-		}
-		*conditionsList = append(*conditionsList, conditions.NewProxySettingsPolicyAffected())
-	case kinds.RateLimitPolicy:
-		if conditions.HasMatchingCondition(*conditionsList, conditions.NewRateLimitPolicyAffected()) {
-			return
-		}
-		*conditionsList = append(*conditionsList, conditions.NewRateLimitPolicyAffected())
-	case kinds.WAFPolicy:
-		if conditions.HasMatchingCondition(*conditionsList, conditions.NewWAFPolicyAffected()) {
-			return
-		}
-		*conditionsList = append(*conditionsList, conditions.NewWAFPolicyAffected())
+
+	condition, ok := policyDeterminingCondition[policyKind]
+	if !ok {
+		return
 	}
+
+	if conditions.HasMatchingCondition(*conditionsList, condition()) {
+		return
+	}
+	*conditionsList = append(*conditionsList, condition())
 }
 
 // processWAFPolicies processes WAFPolicy resources and fetches their bundles.

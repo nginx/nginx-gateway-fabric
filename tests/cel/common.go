@@ -56,6 +56,7 @@ const (
 	expectedTargetRefKindServiceError                    = "TargetRefs Kind must be: Service"
 	expectedTargetRefKindGatewayError                    = "TargetRef Kind must be: Gateway"
 	expectedTargetRefAllSameKindError                    = "All TargetRefs must be the same Kind"
+	expectedTargetRefKindGatewayOrHTTPRouteError         = "TargetRef Kind must be Gateway or HTTPRoute"
 
 	// Group validation errors.
 	expectedTargetRefGroupError     = "TargetRef Group must be gateway.networking.k8s.io"
@@ -142,6 +143,14 @@ const (
 	expectedELBVirtualServerAddressOrIPAMLabelRequiredError = "one of virtualServerAddress or ipamLabel must be set"
 	expectedELBPartitionCommonError                         = "partition cannot be Common"
 	expectedELBPartitionImmutableError                      = "partition cannot be modified"
+	// PayloadProcessor validation errors.
+	expectedProcessorExtProcessRequiredError = "extProcess must be set when type is ExtProcess"
+	expectedBackendRefNameEmptyError         = "backendRef.name must not be empty"
+	expectedBackendRefKindServiceError       = "backendRef.kind must be Service"
+	expectedBackendRefGroupCoreError         = "backendRef.group must be core"
+	expectedPortMinimumError                 = "port in body should be greater than or equal to 1"
+	expectedPortMaximumError                 = "port in body should be less than or equal to 65535"
+	expectedPortRequiredError                = "backendRef.port must be set"
 
 	// Namespace for tests.
 	defaultNamespace = "default"

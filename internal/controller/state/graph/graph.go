@@ -104,6 +104,13 @@ type Graph struct {
 	// We need such entries so that we can query the Graph to determine if a Secret is referenced
 	// by a WAFPolicy, including the case when the Secret is newly created.
 	ReferencedWAFSecrets map[types.NamespacedName]*v1.Secret
+	// ReferencedPayloadProcessorSecrets includes Secrets referenced by PayloadProcessor (auth token).
+	// Similar to ReferencedSecrets, it includes invalid Secrets or those that do not exist
+	ReferencedPayloadProcessorSecrets map[types.NamespacedName]*v1.Secret
+	// ReferencedPayloadProcessorServices includes backend Services referenced by PayloadProcessor
+	// policies. Similar to ReferencedServices, it includes entries for Services that do not exist,
+	// so that a rebuild is triggered when a referenced Service is created, deleted, or changed.
+	ReferencedPayloadProcessorServices map[types.NamespacedName]struct{}
 	// SnippetsFilters holds all the SnippetsFilters.
 	SnippetsFilters map[types.NamespacedName]*SnippetsFilter
 	// AuthenticationFilters holds all the AuthenticationFilters.
@@ -223,62 +230,97 @@ type FeatureFlags struct {
 func (g *Graph) IsReferenced(resourceType ngftypes.ObjectType, nsname types.NamespacedName) bool {
 	switch obj := resourceType.(type) {
 	case *v1.Secret:
-		// Check if secret is a Gateway-referenced Secret, or if it's a Secret used for
-		// NGINX Plus reporting, WAF bundle auth, or PLM S3 storage.
-		_, exists := g.ReferencedSecrets[nsname]
-		_, plusSecretExists := g.PlusSecrets[nsname]
-		_, wafAuthSecretExists := g.ReferencedWAFSecrets[nsname]
-		_, plmSecretExists := g.PLMSecrets[nsname]
-		return exists || plusSecretExists || wafAuthSecretExists || plmSecretExists
+		return g.secretIsReferenced(nsname)
 	case *v1.ConfigMap:
-		_, exists := g.ReferencedCaCertConfigMaps[nsname]
-		return exists
+		return g.configMapIsReferenced(nsname)
 	case *v1.Namespace:
-		// `existed` is needed as it checks the graph's ReferencedNamespaces which stores all the namespaces that
-		// match the Gateway listener's label selector when the graph was created. This covers the case when
-		// a Namespace changes its label so it no longer matches a Gateway listener's label selector, but because
-		// it was in the graph's ReferencedNamespaces we know that the Graph did reference the Namespace.
-		//
-		// However, if there is a Namespace which changes its label (previously it did not match) to match a Gateway
-		// listener's label selector, it will not be in the current graph's ReferencedNamespaces until it is rebuilt
-		// and thus not be caught in `existed`. Therefore, we need `exists` to check the graph's Gateway and see if the
-		// new Namespace actually matches any of the Gateway listener's label selector.
-		//
-		// `exists` does not cover the case highlighted above by `existed` and vice versa so both are needed.
-
-		_, existed := g.ReferencedNamespaces[nsname]
-		exists := isNamespaceReferenced(obj, g.Gateways)
-		return existed || exists
-	// Service reference exists if at least one Route references it.
+		return g.namespaceIsReferenced(nsname, obj)
+	// Service reference exists if at least one Route references it, or a PayloadProcessor policy
+	// references it as its ExtProcess backend.
 	case *v1.Service:
-		_, exists := g.ReferencedServices[nsname]
-		return exists
+		return g.serviceIsReferenced(nsname)
 	// InferencePool reference exists if at least one Route references it.
 	case *inference.InferencePool:
-		_, exists := g.ReferencedInferencePools[nsname]
-		return exists
+		return g.inferencePoolIsReferenced(nsname)
 	// EndpointSlice reference exists if its Service owner is referenced by at least one Route.
 	case *discoveryV1.EndpointSlice:
-		svcName := index.GetServiceNameFromEndpointSlice(obj)
-
-		// Service Namespace should be the same Namespace as the EndpointSlice
-		_, exists := g.ReferencedServices[types.NamespacedName{Namespace: nsname.Namespace, Name: svcName}]
-		return exists
+		return g.endpointSliceIsReferenced(nsname, obj)
 	// NginxProxy reference exists if the GatewayClass or Gateway references it.
 	case *ngfAPIv1alpha2.NginxProxy:
-		_, exists := g.ReferencedNginxProxies[nsname]
-		return exists
+		return g.nginxProxyIsReferenced(nsname)
 	case *unstructured.Unstructured:
-		switch obj.GroupVersionKind() {
-		case kinds.APPolicyGVK:
-			_, exists := g.ReferencedAPPolicies[nsname]
-			return exists
-		case kinds.APLogConfGVK:
-			_, exists := g.ReferencedAPLogConfs[nsname]
-			return exists
-		default:
-			return false
-		}
+		return g.unstructuredIsReferenced(nsname, obj)
+	default:
+		return false
+	}
+}
+
+func (g *Graph) secretIsReferenced(nsname types.NamespacedName) bool {
+	// Check if secret is a Gateway-referenced Secret, or if it's a Secret used for
+	// NGINX Plus reporting, WAF bundle auth, or PLM S3 storage.
+	_, exists := g.ReferencedSecrets[nsname]
+	_, plusSecretExists := g.PlusSecrets[nsname]
+	_, wafAuthSecretExists := g.ReferencedWAFSecrets[nsname]
+	_, plmSecretExists := g.PLMSecrets[nsname]
+	_, payloadProcessorSecretExists := g.ReferencedPayloadProcessorSecrets[nsname]
+	return exists || plusSecretExists || wafAuthSecretExists || plmSecretExists ||
+		payloadProcessorSecretExists
+}
+
+func (g *Graph) configMapIsReferenced(nsname types.NamespacedName) bool {
+	_, exists := g.ReferencedCaCertConfigMaps[nsname]
+	return exists
+}
+
+func (g *Graph) namespaceIsReferenced(nsname types.NamespacedName, obj *v1.Namespace) bool {
+	// `existed` is needed as it checks the graph's ReferencedNamespaces which stores all the namespaces that
+	// match the Gateway listener's label selector when the graph was created. This covers the case when
+	// a Namespace changes its label so it no longer matches a Gateway listener's label selector, but because
+	// it was in the graph's ReferencedNamespaces we know that the Graph did reference the Namespace.
+	//
+	// However, if there is a Namespace which changes its label (previously it did not match) to match a Gateway
+	// listener's label selector, it will not be in the current graph's ReferencedNamespaces until it is rebuilt
+	// and thus not be caught in `existed`. Therefore, we need `exists` to check the graph's Gateway and see if the
+	// new Namespace actually matches any of the Gateway listener's label selector.
+	//
+	// `exists` does not cover the case highlighted above by `existed` and vice versa so both are needed.
+	_, existed := g.ReferencedNamespaces[nsname]
+	exists := isNamespaceReferenced(obj, g.Gateways)
+	return existed || exists
+}
+
+func (g *Graph) serviceIsReferenced(nsname types.NamespacedName) bool {
+	_, exists := g.ReferencedServices[nsname]
+	_, payloadProcessorServiceExists := g.ReferencedPayloadProcessorServices[nsname]
+	return exists || payloadProcessorServiceExists
+}
+
+func (g *Graph) inferencePoolIsReferenced(nsname types.NamespacedName) bool {
+	_, exists := g.ReferencedInferencePools[nsname]
+	return exists
+}
+
+func (g *Graph) endpointSliceIsReferenced(nsname types.NamespacedName, obj *discoveryV1.EndpointSlice) bool {
+	svcName := index.GetServiceNameFromEndpointSlice(obj)
+
+	// Service Namespace should be the same Namespace as the EndpointSlice
+	_, exists := g.ReferencedServices[types.NamespacedName{Namespace: nsname.Namespace, Name: svcName}]
+	return exists
+}
+
+func (g *Graph) nginxProxyIsReferenced(nsname types.NamespacedName) bool {
+	_, exists := g.ReferencedNginxProxies[nsname]
+	return exists
+}
+
+func (g *Graph) unstructuredIsReferenced(nsname types.NamespacedName, obj *unstructured.Unstructured) bool {
+	switch obj.GroupVersionKind() {
+	case kinds.APPolicyGVK:
+		_, exists := g.ReferencedAPPolicies[nsname]
+		return exists
+	case kinds.APLogConfGVK:
+		_, exists := g.ReferencedAPLogConfs[nsname]
+		return exists
 	default:
 		return false
 	}
@@ -347,6 +389,7 @@ func BuildGraph(
 	state ClusterState,
 	controllerName string,
 	gcName string,
+	clusterDomain string,
 	plusSecrets map[types.NamespacedName][]PlusSecretFile,
 	wafFetcher fetch.Fetcher,
 	plmFetcher *s3fetch.Fetcher,
@@ -454,8 +497,6 @@ func BuildGraph(
 
 	referencedServices := buildReferencedServices(routes, l4routes, gws, state.Services, listenerSets)
 
-	addGatewaysForBackendTLSPolicies(processedBackendTLSPolicies, referencedServices, controllerName, gws, logger)
-
 	var wafInput *WAFProcessingInput
 	if wafFetcher != nil || plmFetcher != nil {
 		plmResolvedSecrets := resolvePLMSecrets(logger, state.Secrets, plmSecretNames)
@@ -481,7 +522,32 @@ func BuildGraph(
 		referencedServices,
 		gws,
 		wafInput,
+		refGrantResolver,
 	)
+
+	payloadProcessorOutput := processPayloadProcessorPolicies(
+		processedPolicies,
+		state.Services,
+		state.Secrets,
+		processedBackendTLSPolicies,
+		clusterDomain,
+	)
+
+	// Register PayloadProcessor backend Services (referenced only via a policy, not a Route backend)
+	// into referencedServices with the Gateways their policies attach to, so a BackendTLSPolicy
+	// targeting a Guardrails backend Service picks up those Gateways below.
+	referencedServices = addPayloadProcessorBackendServicesToReferencedServices(
+		processedPolicies,
+		routes,
+		gws,
+		referencedServices,
+		state.Services,
+	)
+
+	// BackendTLSPolicy gateway attachment must run after referencedServices includes both Route
+	// backends and PayloadProcessor backends, so a policy targeting either kind is attached to the
+	// correct Gateways.
+	addGatewaysForBackendTLSPolicies(processedBackendTLSPolicies, referencedServices, controllerName, gws, logger)
 
 	// add status conditions to each targetRef based on the policies that affect them.
 	addPolicyAffectedStatusToTargetRefs(processedPolicies, routes, gws)
@@ -500,32 +566,35 @@ func BuildGraph(
 	}
 
 	g := &Graph{
-		GatewayClass:               gc,
-		Gateways:                   gws,
-		Routes:                     routes,
-		L4Routes:                   l4routes,
-		IgnoredGatewayClasses:      processedGwClasses.Ignored,
-		ReferencedSecrets:          resourceResolver.GetSecrets(),
-		ReferencedNamespaces:       referencedNamespaces,
-		ReferencedServices:         referencedServices,
-		ReferencedInferencePools:   referencedInferencePools,
-		ReferencedCaCertConfigMaps: resourceResolver.GetConfigMaps(),
-		ReferencedNginxProxies:     processedNginxProxies,
-		BackendTLSPolicies:         processedBackendTLSPolicies,
-		NGFPolicies:                processedPolicies,
-		SnippetsFilters:            processedSnippetsFilters,
-		AuthenticationFilters:      processedAuthenticationFilters,
-		ExternalLoadBalancers:      processedExternalLoadBalancers,
-		ListenerSets:               listenerSets,
-		PlusSecrets:                plusSecrets,
-		PLMSecrets:                 plmSecretNames,
-		ReferencedWAFBundles:       referencedWAFBundles,
-		ReferencedAPPolicies:       referencedAPPolicies,
-		ReferencedAPLogConfs:       referencedAPLogConfs,
-		ReferencedWAFSecrets:       referencedWAFAuthSecrets,
+		GatewayClass:                       gc,
+		Gateways:                           gws,
+		Routes:                             routes,
+		L4Routes:                           l4routes,
+		IgnoredGatewayClasses:              processedGwClasses.Ignored,
+		ReferencedSecrets:                  resourceResolver.GetSecrets(),
+		ReferencedNamespaces:               referencedNamespaces,
+		ReferencedServices:                 referencedServices,
+		ReferencedInferencePools:           referencedInferencePools,
+		ReferencedCaCertConfigMaps:         resourceResolver.GetConfigMaps(),
+		ReferencedNginxProxies:             processedNginxProxies,
+		BackendTLSPolicies:                 processedBackendTLSPolicies,
+		NGFPolicies:                        processedPolicies,
+		SnippetsFilters:                    processedSnippetsFilters,
+		AuthenticationFilters:              processedAuthenticationFilters,
+		ExternalLoadBalancers:              processedExternalLoadBalancers,
+		ListenerSets:                       listenerSets,
+		PlusSecrets:                        plusSecrets,
+		PLMSecrets:                         plmSecretNames,
+		ReferencedWAFBundles:               referencedWAFBundles,
+		ReferencedAPPolicies:               referencedAPPolicies,
+		ReferencedAPLogConfs:               referencedAPLogConfs,
+		ReferencedWAFSecrets:               referencedWAFAuthSecrets,
+		ReferencedPayloadProcessorSecrets:  payloadProcessorOutput.ReferencedPayloadProcessorSecrets,
+		ReferencedPayloadProcessorServices: payloadProcessorOutput.ReferencedPayloadProcessorServices,
 	}
 
 	g.attachPolicies(validators.PolicyValidator, controllerName, logger)
+	resolveEffectivePayloadProcessors(g.Gateways, g.Routes)
 	validateExternalAuthConflicts(routes)
 
 	return g

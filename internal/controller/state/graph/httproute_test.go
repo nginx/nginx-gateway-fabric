@@ -407,7 +407,7 @@ func TestBuildHTTPRoutes(t *testing.T) {
 		AbsoluteTimeout: helpers.GetPointer(gatewayv1.Duration("1h")),
 		Type:            helpers.GetPointer(gatewayv1.CookieBasedSessionPersistence),
 		CookieConfig: &gatewayv1.CookieConfig{
-			LifetimeType: helpers.GetPointer((gatewayv1.PermanentCookieLifetimeType)),
+			LifetimeType: helpers.GetPointer(gatewayv1.PermanentCookieLifetimeType),
 		},
 	}
 
@@ -703,7 +703,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 		AbsoluteTimeout: helpers.GetPointer(gatewayv1.Duration("1h")),
 		Type:            helpers.GetPointer(gatewayv1.CookieBasedSessionPersistence),
 		CookieConfig: &gatewayv1.CookieConfig{
-			LifetimeType: helpers.GetPointer((gatewayv1.PermanentCookieLifetimeType)),
+			LifetimeType: helpers.GetPointer(gatewayv1.PermanentCookieLifetimeType),
 		},
 	}
 	// route with valid filter

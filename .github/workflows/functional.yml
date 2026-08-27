@@ -66,7 +66,7 @@ jobs:
         run: echo "GOPATH=$(go env GOPATH)" >> $GITHUB_ENV
 
       - name: Docker Buildx
-        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
 
       - name: NGF Docker meta
         id: ngf-meta
@@ -97,7 +97,7 @@ jobs:
       - name: Build binary
         uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
         with:
-          version: v2.17.1 # renovate: datasource=github-tags depName=goreleaser/goreleaser
+          version: v2.18.0 # renovate: datasource=github-tags depName=goreleaser/goreleaser
           args: build --single-target --snapshot --clean
         env:
           TELEMETRY_ENDPOINT: otel-collector-opentelemetry-collector.collector.svc.cluster.local:4317

@@ -46,7 +46,7 @@ func CheckFilterAccepted[T Filter](
 	}
 
 	filterStatus := controllers[0]
-	if filterStatus.ControllerName != (v1.GatewayController)(NgfControllerName) {
+	if filterStatus.ControllerName != v1.GatewayController(NgfControllerName) {
 		wrongNameErr := fmt.Errorf(
 			"expected controller name to be %s, got %s",
 			NgfControllerName,

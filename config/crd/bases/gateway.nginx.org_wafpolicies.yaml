@@ -116,7 +116,7 @@ spec:
                       url:
                         description: |-
                           URL is the full URL of the compiled policy bundle (.tgz),
-                          e.g. "https://storage.example.com/bundles/policy.tgz".
+                          e.g. `https://storage.example.com/bundles/policy.tgz`.
                         maxLength: 2083
                         minLength: 1
                         pattern: ^https?://
@@ -165,7 +165,7 @@ spec:
                       url:
                         description: |-
                           URL is the base URL of the F5 NGINX One Console instance,
-                          e.g. "https://<tenant>.volterra.us".
+                          e.g. `https://<tenant>.volterra.us`.
                         maxLength: 2083
                         minLength: 1
                         pattern: ^https?://
@@ -202,7 +202,7 @@ spec:
                       url:
                         description: |-
                           URL is the base URL of the NGINX Instance Manager instance,
-                          e.g. "https://nim.example.com".
+                          e.g. `https://nim.example.com`.
                         maxLength: 2083
                         minLength: 1
                         pattern: ^https?://
@@ -428,7 +428,7 @@ spec:
                             url:
                               description: |-
                                 URL is the full URL of the compiled policy bundle (.tgz),
-                                e.g. "https://storage.example.com/bundles/policy.tgz".
+                                e.g. `https://storage.example.com/bundles/policy.tgz`.
                               maxLength: 2083
                               minLength: 1
                               pattern: ^https?://
@@ -469,7 +469,7 @@ spec:
                             url:
                               description: |-
                                 URL is the base URL of the F5 NGINX One Console instance,
-                                e.g. "https://<tenant>.volterra.us".
+                                e.g. `https://<tenant>.volterra.us`.
                               maxLength: 2083
                               minLength: 1
                               pattern: ^https?://
@@ -498,7 +498,7 @@ spec:
                             url:
                               description: |-
                                 URL is the base URL of the NGINX Instance Manager instance,
-                                e.g. "https://nim.example.com".
+                                e.g. `https://nim.example.com`.
                               maxLength: 2083
                               minLength: 1
                               pattern: ^https?://

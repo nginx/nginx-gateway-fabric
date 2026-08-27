@@ -2695,6 +2695,7 @@ func TestBuildNGFPolicyStatusesProgrammedCondition(t *testing.T) {
 		kinds.ProxySettingsPolicy,
 		kinds.RateLimitPolicy,
 		kinds.SnippetsPolicy,
+		kinds.PayloadProcessor,
 	}
 
 	programmedCond := metav1.Condition{
@@ -3481,7 +3482,7 @@ func TestBuildInferencePoolStatuses(t *testing.T) {
 			Generation: 1,
 		},
 		Spec: inference.InferencePoolSpec{
-			EndpointPickerRef: inference.EndpointPickerRef{
+			EndpointPickerRef: &inference.EndpointPickerRef{
 				Name: inference.ObjectName("invalid-extension-ref"),
 			},
 		},

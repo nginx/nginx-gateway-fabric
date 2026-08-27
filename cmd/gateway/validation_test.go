@@ -201,7 +201,7 @@ func TestValidateNamespacedResourceName(t *testing.T) {
 	}
 }
 
-func TestValidateQualifiedName(t *testing.T) {
+func TestValidateClusterDomain(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		name   string
@@ -209,28 +209,23 @@ func TestValidateQualifiedName(t *testing.T) {
 		expErr bool
 	}{
 		{
-			name:   "valid",
-			value:  "myName",
+			name:   "valid default domain",
+			value:  "cluster.local",
+			expErr: false,
+		},
+		{
+			name:   "valid multi-label domain",
+			value:  "cluster.example.com",
+			expErr: false,
+		},
+		{
+			name:   "valid single label",
+			value:  "cluster",
 			expErr: false,
 		},
 		{
 			name:   "valid with hyphen",
-			value:  "my-name",
-			expErr: false,
-		},
-		{
-			name:   "valid with numbers",
-			value:  "myName123",
-			expErr: false,
-		},
-		{
-			name:   "valid with '/'",
-			value:  "my/name",
-			expErr: false,
-		},
-		{
-			name:   "valid with '.'",
-			value:  "my.name",
+			value:  "my-domain.local",
 			expErr: false,
 		},
 		{
@@ -239,13 +234,38 @@ func TestValidateQualifiedName(t *testing.T) {
 			expErr: true,
 		},
 		{
+			name:   "invalid with '/'",
+			value:  "my/domain",
+			expErr: true,
+		},
+		{
+			name:   "invalid with uppercase",
+			value:  "myDomain",
+			expErr: true,
+		},
+		{
+			name:   "invalid with uppercase and numbers",
+			value:  "myDomain123",
+			expErr: true,
+		},
+		{
+			name:   "invalid leading dot",
+			value:  ".cluster.local",
+			expErr: true,
+		},
+		{
+			name:   "invalid trailing dot",
+			value:  "cluster.local.",
+			expErr: true,
+		},
+		{
 			name:   "invalid character '$'",
-			value:  "myName$",
+			value:  "cluster$",
 			expErr: true,
 		},
 		{
 			name:   "invalid character '^'",
-			value:  "my^Name",
+			value:  "clus^ter",
 			expErr: true,
 		},
 	}
@@ -255,7 +275,7 @@ func TestValidateQualifiedName(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			err := validateQualifiedName(test.value)
+			err := validateClusterDomain(test.value)
 			if test.expErr {
 				g.Expect(err).To(HaveOccurred())
 			} else {
