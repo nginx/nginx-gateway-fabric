@@ -52,8 +52,8 @@ const (
 	// LicenseJWTKey is the key for the NGINX Plus license JWT.
 	LicenseJWTKey = "license.jwt"
 
-	// N1CDataplaneKey is the dataplane key for the NGINX One Console.
-	N1CDataplaneKey = "dataplane.key"
+	// DataplaneSecretKey is the key for the NGINX One Console and NGINX Instance Manager dataplane secret.
+	DataplaneSecretKey = "dataplane.key"
 
 	// BundleUsernameKey is the Secret key for WAF bundle Basic Auth username.
 	BundleUsernameKey = "username"
