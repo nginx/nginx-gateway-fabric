@@ -539,5 +539,3 @@ spec:
     service:
       externalTrafficPolicy: Local
       type: LoadBalancer
-  metrics:
-    port: 9113

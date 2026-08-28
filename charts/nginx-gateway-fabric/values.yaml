@@ -476,8 +476,6 @@ nginx:
     port: "metrics"
     # -- The scraping interval used by the serviceMonitor when scraping metrics
     interval: ""
-  metrics:
-    port: 9113
   image:
     # -- The NGINX image to use.
     repository: ghcr.io/nginx/nginx-gateway-fabric/nginx

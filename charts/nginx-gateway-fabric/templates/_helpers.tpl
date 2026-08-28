@@ -86,13 +86,6 @@ Create the name of the ServiceAccount to use
 {{- end }}
 
 {{/*
-Create the name of the gateway ServiceMonitor to use
-*/}}
-{{- define "nginx-gateway.serviceMonitorName" -}}
-{{- printf "%s-%s" (include "nginx-gateway.fullname" .) "metrics" }}
-{{- end }}
-
-{{/*
 Expand leader election lock name.
 */}}
 {{- define "nginx-gateway.leaderElectionName" -}}

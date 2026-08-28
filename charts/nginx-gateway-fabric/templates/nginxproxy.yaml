@@ -9,8 +9,6 @@ spec:
   {{- if .Values.nginx.config }}
   {{- toYaml .Values.nginx.config | nindent 2 }}
   {{- end }}
-  metrics:
-    port: {{ .Values.nginx.metrics.port }}
   kubernetes:
     {{- if eq .Values.nginx.kind "deployment" }}
     deployment:

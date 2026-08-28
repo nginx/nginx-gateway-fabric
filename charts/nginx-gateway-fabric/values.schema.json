@@ -621,18 +621,6 @@
           "required": [],
           "title": "kind"
         },
-        "metrics": {
-          "properties": {
-            "port": {
-              "default": 9113,
-              "title": "port",
-              "type": "integer"
-            }
-          },
-          "required": [],
-          "title": "metrics",
-          "type": "object"
-        },
         "nginxInstanceManager": {
           "description": "Configuration for NGINX Instance Manager.",
           "properties": {

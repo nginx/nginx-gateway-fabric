@@ -540,8 +540,6 @@ spec:
     service:
       externalTrafficPolicy: Local
       type: LoadBalancer
-  metrics:
-    port: 9113
 ---
 allowHostDirVolumePlugin: false
 allowHostIPC: false
