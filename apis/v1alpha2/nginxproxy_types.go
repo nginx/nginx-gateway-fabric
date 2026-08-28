@@ -751,6 +751,11 @@ type DaemonSetSpec struct {
 	// +optional
 	Container ContainerSpec `json:"container"`
 
+	// Defines the configuration of the Service Monitor resource used for scraping metrics
+	//
+	// +optional
+	ServiceMonitor *ServiceMonitorSpec `json:"serviceMonitor,omitempty"`
+
 	// WAFContainers defines container specifications for NGINX App Protect WAF v5 containers.
 	// These containers are only deployed when WAF is enabled in the NginxProxy spec.
 	//
@@ -867,6 +872,10 @@ type ServiceMonitorSpec struct {
 
 // Specification of the fields available for the NamespaceSelector field in the ServiceMonitor.
 // Used to select which namespaces the Kubernetes endpoints objects are discovered from.
+//
+// +kubebuilder:validation:XValidation:message="exactly one of Any or MatchNames must be set",rule="(has(self.any) && !has(self.matchNames)) || (!has(self.any) && has(self.matchNames))"
+//
+//nolint:lll
 type NamespaceSelector struct {
 	// A value of any=true will tell a Prometheus Operator to look for target resources across every
 	// namespace available.

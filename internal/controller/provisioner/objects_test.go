@@ -473,6 +473,7 @@ func TestBuildNginxResourceObjects_NginxProxyConfig(t *testing.T) {
 	fakeClient := createFakeClientWithScheme(agentTLSSecret)
 
 	provisioner := &NginxProvisioner{
+		serviceMonitorInstalled: true,
 		cfg: Config{
 			GatewayPodConfig: &config.GatewayPodConfig{
 				Namespace: ngfNamespace,
@@ -1439,6 +1440,85 @@ func TestBuildNginxResourceObjects_OpenShift(t *testing.T) {
 	g.Expect(roleBinding.GetLabels()).To(Equal(expLabels))
 }
 
+func TestBuildNginxResourceObjects_ServiceMonitor(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	agentTLSSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      agentTLSTestSecretName,
+			Namespace: ngfNamespace,
+		},
+		Data: map[string][]byte{secrets.TLSCertKey: []byte("tls")},
+	}
+	fakeClient := createFakeClientWithScheme(agentTLSSecret)
+
+	provisioner := &NginxProvisioner{
+		serviceMonitorInstalled: true,
+		cfg: Config{
+			GatewayPodConfig: &config.GatewayPodConfig{
+				Namespace: ngfNamespace,
+			},
+			AgentTLSSecretName: agentTLSTestSecretName,
+			AgentLabels:        make(map[string]string),
+		},
+		k8sClient: fakeClient,
+		baseLabelSelector: metav1.LabelSelector{
+			MatchLabels: map[string]string{
+				"app": "nginx",
+			},
+		},
+	}
+
+	gateway := &gatewayv1.Gateway{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "gw",
+			Namespace: "default",
+		},
+		Spec: gatewayv1.GatewaySpec{
+			Listeners: []gatewayv1.Listener{{Port: 80}},
+		},
+	}
+
+	nginxProxy := &graph.EffectiveNginxProxy{
+		Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+			Deployment: &ngfAPIv1alpha2.DeploymentSpec{
+				ServiceMonitor: &ngfAPIv1alpha2.ServiceMonitorSpec{
+					Enable: true,
+				},
+			},
+		},
+	}
+
+	resourceName := "gw-nginx"
+	objects, err := provisioner.buildNginxResourceObjects(
+		resourceName,
+		gateway,
+		nginxProxy,
+		graphListenersFromGateway(gateway),
+		nil,
+	)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	fmt.Println(len(objects))
+	g.Expect(objects).To(HaveLen(7))
+
+	expLabels := map[string]string{
+		"app":                                    "nginx",
+		"gateway.networking.k8s.io/gateway-name": "gw",
+		"app.kubernetes.io/name":                 "gw-nginx",
+	}
+
+	for i, o := range objects {
+		fmt.Println(i, o.GetName())
+	}
+
+	smObj := objects[4]
+	serviceMonitor, ok := smObj.(*monitoringv1.ServiceMonitor)
+	g.Expect(ok).To(BeTrue())
+	g.Expect(serviceMonitor.GetLabels()).To(Equal(expLabels))
+}
+
 func TestBuildNginxResourceObjects_DataplaneKeySecret(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
@@ -1570,7 +1650,7 @@ func TestBuildResourcesForInvalidGatewayCleanup(t *testing.T) {
 
 	objects := provisioner.buildResourcesForInvalidGatewayCleanup(deploymentNSName)
 
-	g.Expect(objects).To(HaveLen(10))
+	g.Expect(objects).To(HaveLen(9))
 
 	validateMeta := func(obj client.Object, name string) {
 		g.Expect(obj.GetName()).To(Equal(name))
@@ -1602,22 +1682,17 @@ func TestBuildResourcesForInvalidGatewayCleanup(t *testing.T) {
 	g.Expect(ok).To(BeTrue())
 	validateMeta(pdb, deploymentNSName.Name)
 
-	smObj := objects[5]
-	sm, ok := smObj.(*monitoringv1.ServiceMonitor)
-	g.Expect(ok).To(BeTrue())
-	validateMeta(sm, deploymentNSName.Name)
-
-	svcAcctObj := objects[6]
+	svcAcctObj := objects[5]
 	svcAcct, ok := svcAcctObj.(*corev1.ServiceAccount)
 	g.Expect(ok).To(BeTrue())
 	validateMeta(svcAcct, deploymentNSName.Name)
 
-	cmObj := objects[7]
+	cmObj := objects[6]
 	cm, ok := cmObj.(*corev1.ConfigMap)
 	g.Expect(ok).To(BeTrue())
 	validateMeta(cm, controller.CreateNginxResourceName(deploymentNSName.Name, nginxIncludesConfigMapNameSuffix))
 
-	cmObj = objects[8]
+	cmObj = objects[7]
 	cm, ok = cmObj.(*corev1.ConfigMap)
 	g.Expect(ok).To(BeTrue())
 	validateMeta(cm, controller.CreateNginxResourceName(deploymentNSName.Name, nginxAgentConfigMapNameSuffix))
@@ -1637,7 +1712,7 @@ func TestBuildResourcesForInvalidGatewayCleanup_ExternalLoadBalancer(t *testing.
 	objects := provisioner.buildResourcesForInvalidGatewayCleanup(deploymentNSName)
 
 	// The IngressLink is prepended to the default 9 resources so it is deleted first.
-	g.Expect(objects).To(HaveLen(11))
+	g.Expect(objects).To(HaveLen(10))
 
 	il, ok := objects[0].(*unstructured.Unstructured)
 	g.Expect(ok).To(BeTrue())
@@ -1670,7 +1745,7 @@ func TestBuildResourcesForInvalidGatewayCleanup_Plus(t *testing.T) {
 
 	objects := provisioner.buildResourcesForInvalidGatewayCleanup(deploymentNSName)
 
-	g.Expect(objects).To(HaveLen(14))
+	g.Expect(objects).To(HaveLen(13))
 
 	validateMeta := func(obj client.Object, name string) {
 		g.Expect(obj.GetName()).To(Equal(name))
@@ -1702,27 +1777,22 @@ func TestBuildResourcesForInvalidGatewayCleanup_Plus(t *testing.T) {
 	g.Expect(ok).To(BeTrue())
 	validateMeta(pdb, deploymentNSName.Name)
 
-	smObj := objects[5]
-	sm, ok := smObj.(*monitoringv1.ServiceMonitor)
-	g.Expect(ok).To(BeTrue())
-	validateMeta(sm, deploymentNSName.Name)
-
-	svcAcctObj := objects[6]
+	svcAcctObj := objects[5]
 	svcAcct, ok := svcAcctObj.(*corev1.ServiceAccount)
 	g.Expect(ok).To(BeTrue())
 	validateMeta(svcAcct, deploymentNSName.Name)
 
-	cmObj := objects[7]
+	cmObj := objects[6]
 	cm, ok := cmObj.(*corev1.ConfigMap)
 	g.Expect(ok).To(BeTrue())
 	validateMeta(cm, controller.CreateNginxResourceName(deploymentNSName.Name, nginxIncludesConfigMapNameSuffix))
 
-	cmObj = objects[8]
+	cmObj = objects[7]
 	cm, ok = cmObj.(*corev1.ConfigMap)
 	g.Expect(ok).To(BeTrue())
 	validateMeta(cm, controller.CreateNginxResourceName(deploymentNSName.Name, nginxAgentConfigMapNameSuffix))
 
-	secretObj := objects[9]
+	secretObj := objects[8]
 	secret, ok := secretObj.(*corev1.Secret)
 	g.Expect(ok).To(BeTrue())
 	validateMeta(secret, controller.CreateNginxResourceName(
@@ -1730,7 +1800,7 @@ func TestBuildResourcesForInvalidGatewayCleanup_Plus(t *testing.T) {
 		provisioner.cfg.AgentTLSSecretName,
 	))
 
-	secretObj = objects[10]
+	secretObj = objects[9]
 	secret, ok = secretObj.(*corev1.Secret)
 	g.Expect(ok).To(BeTrue())
 	validateMeta(secret, controller.CreateNginxResourceName(
@@ -1738,7 +1808,7 @@ func TestBuildResourcesForInvalidGatewayCleanup_Plus(t *testing.T) {
 		provisioner.cfg.NginxDockerSecretNames[0],
 	))
 
-	secretObj = objects[11]
+	secretObj = objects[10]
 	secret, ok = secretObj.(*corev1.Secret)
 	g.Expect(ok).To(BeTrue())
 	validateMeta(secret, controller.CreateNginxResourceName(
@@ -1746,7 +1816,7 @@ func TestBuildResourcesForInvalidGatewayCleanup_Plus(t *testing.T) {
 		provisioner.cfg.PlusUsageConfig.CASecretName,
 	))
 
-	secretObj = objects[12]
+	secretObj = objects[11]
 	secret, ok = secretObj.(*corev1.Secret)
 	g.Expect(ok).To(BeTrue())
 	validateMeta(secret, controller.CreateNginxResourceName(
@@ -1768,7 +1838,7 @@ func TestBuildResourcesForInvalidGatewayCleanup_OpenShift(t *testing.T) {
 
 	objects := provisioner.buildResourcesForInvalidGatewayCleanup(deploymentNSName)
 
-	g.Expect(objects).To(HaveLen(12))
+	g.Expect(objects).To(HaveLen(11))
 
 	validateMeta := func(obj client.Object, name string) {
 		g.Expect(obj.GetName()).To(Equal(name))
@@ -1785,20 +1855,37 @@ func TestBuildResourcesForInvalidGatewayCleanup_OpenShift(t *testing.T) {
 	g.Expect(ok).To(BeTrue())
 	validateMeta(pdb, deploymentNSName.Name)
 
-	smObj := objects[5]
-	sm, ok := smObj.(*monitoringv1.ServiceMonitor)
-	g.Expect(ok).To(BeTrue())
-	validateMeta(sm, deploymentNSName.Name)
-
-	roleObj := objects[6]
+	roleObj := objects[5]
 	role, ok := roleObj.(*rbacv1.Role)
 	g.Expect(ok).To(BeTrue())
 	validateMeta(role, deploymentNSName.Name)
 
-	roleBindingObj := objects[7]
+	roleBindingObj := objects[6]
 	roleBinding, ok := roleBindingObj.(*rbacv1.RoleBinding)
 	g.Expect(ok).To(BeTrue())
 	validateMeta(roleBinding, deploymentNSName.Name)
+}
+
+func TestBuildResourcesForInvalidGatewayCleanup_ServiceMonitor(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	provisioner := &NginxProvisioner{serviceMonitorInstalled: true}
+
+	deploymentNSName := types.NamespacedName{
+		Name:      "gw-nginx",
+		Namespace: "default",
+	}
+
+	objects := provisioner.buildResourcesForInvalidGatewayCleanup(deploymentNSName)
+	g.Expect(objects).To(HaveLen(10))
+
+	smObj := objects[5]
+	sm, ok := smObj.(*monitoringv1.ServiceMonitor)
+	g.Expect(ok).To(BeTrue())
+
+	g.Expect(sm.GetName()).To(Equal("gw-nginx-metrics"))
+	g.Expect(sm.GetNamespace()).To(Equal(deploymentNSName.Namespace))
 }
 
 func TestBuildResourcesForInvalidGatewayCleanup_DataplaneKeySecret(t *testing.T) {
@@ -1826,7 +1913,7 @@ func TestBuildResourcesForInvalidGatewayCleanup_DataplaneKeySecret(t *testing.T)
 	// Should include the dataplane key secret in the objects list
 	// Default: deployment, daemonset, service, hpa, pdb, servicemonitor, serviceaccount,
 	// 2 configmaps, agentTLSSecret, dataplaneKeySecret
-	g.Expect(objects).To(HaveLen(11))
+	g.Expect(objects).To(HaveLen(10))
 
 	validateMeta := func(obj client.Object, name string) {
 		g.Expect(obj.GetName()).To(Equal(name))

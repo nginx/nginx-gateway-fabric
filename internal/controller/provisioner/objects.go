@@ -151,11 +151,14 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 		errs = append(errs, err)
 	}
 
-	serviceMonitor := p.buildServiceMonitor(
-		objectMeta,
-		gateway,
-		nProxyCfg,
-	)
+	var serviceMonitor []client.Object
+	if p.serviceMonitorInstalled {
+		serviceMonitor = p.buildServiceMonitor(
+			objectMeta,
+			gateway,
+			nProxyCfg,
+		)
+	}
 
 	var openshiftObjs []client.Object
 	if p.isOpenshift {
@@ -166,15 +169,7 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 		}
 	}
 
-	// build ports from all listeners (Gateway + ListenerSets)
-	ports := p.buildPortsFromListeners(allListeners)
-
-	// Add healthcheck port to service if expose is enabled
-	var healthcheckPort int32
-	if isNginxReadinessProbeExposed(nProxyCfg) {
-		healthcheckPort = dataplane.GetNginxReadinessProbePort(nProxyCfg)
-		ports = appendUniquePortProtoEntry(ports, portProtoEntry{Port: healthcheckPort, Protocol: corev1.ProtocolTCP})
-	}
+	ports, healthcheckPort := p.addHealthCheckPort(allListeners, nProxyCfg)
 
 	service, err := p.buildNginxService(
 		cloneObjectMeta(objectMeta),
@@ -227,7 +222,9 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 	objects = append(objects, secretsList...)
 	objects = append(objects, configmapsList...)
 	objects = append(objects, serviceAccount)
-	objects = append(objects, serviceMonitor...)
+	if p.serviceMonitorInstalled {
+		objects = append(objects, serviceMonitor...)
+	}
 	if p.isOpenshift {
 		objects = append(objects, openshiftObjs...)
 	}
@@ -246,6 +243,23 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 	}
 
 	return objects, errors.Join(errs...)
+}
+
+func (p *NginxProvisioner) addHealthCheckPort(
+	allListeners []*graph.Listener,
+	nProxyCfg *graph.EffectiveNginxProxy,
+) ([]portProtoEntry, int32) {
+	// build ports from all listeners (Gateway + ListenerSets)
+	ports := p.buildPortsFromListeners(allListeners)
+
+	// Add healthcheck port to service if expose is enabled
+	var healthcheckPort int32
+	if isNginxReadinessProbeExposed(nProxyCfg) {
+		healthcheckPort = dataplane.GetNginxReadinessProbePort(nProxyCfg)
+		ports = appendUniquePortProtoEntry(ports, portProtoEntry{Port: healthcheckPort, Protocol: corev1.ProtocolTCP})
+	}
+
+	return ports, healthcheckPort
 }
 
 // buildHPAAndPDB builds the HPA and PDB for the NGINX deployment
@@ -386,14 +400,22 @@ func (p *NginxProvisioner) buildServiceMonitor(
 	nProxyCfg *graph.EffectiveNginxProxy,
 ) []client.Object {
 	// Only build the service monitor if it has been enabled in the NginxProxy spec
-	if nProxyCfg == nil || nProxyCfg.Kubernetes == nil ||
-		!isServiceMonitorEnabled(nProxyCfg.Kubernetes.Deployment) {
+	if nProxyCfg == nil || nProxyCfg.Kubernetes == nil {
+		return nil
+	}
+
+	var monitoring *ngfAPIv1alpha2.ServiceMonitorSpec
+	if nProxyCfg.Kubernetes.DaemonSet != nil && nProxyCfg.Kubernetes.DaemonSet.ServiceMonitor != nil {
+		monitoring = nProxyCfg.Kubernetes.DaemonSet.ServiceMonitor
+	} else if nProxyCfg.Kubernetes.Deployment != nil && nProxyCfg.Kubernetes.Deployment.ServiceMonitor != nil {
+		monitoring = nProxyCfg.Kubernetes.Deployment.ServiceMonitor
+	}
+
+	if monitoring == nil || !monitoring.Enable {
 		return nil
 	}
 
 	objectMeta.Name = controller.CreateNginxResourceName(objectMeta.Name, metricsServiceName)
-
-	monitoring := nProxyCfg.Kubernetes.Deployment.ServiceMonitor
 
 	matchNames := []string{gateway.Namespace}
 
@@ -485,7 +507,11 @@ func isAutoscalingEnabled(dep *ngfAPIv1alpha2.DeploymentSpec) bool {
 	return dep != nil && dep.Autoscaling != nil && dep.Autoscaling.Enable
 }
 
-func isServiceMonitorEnabled(dep *ngfAPIv1alpha2.DeploymentSpec) bool {
+func isServiceMonitorEnabledForDeployment(dep *ngfAPIv1alpha2.DeploymentSpec) bool {
+	return dep != nil && dep.ServiceMonitor != nil && dep.ServiceMonitor.Enable
+}
+
+func isServiceMonitorEnabledForDaemonSet(dep *ngfAPIv1alpha2.DaemonSetSpec) bool {
 	return dep != nil && dep.ServiceMonitor != nil && dep.ServiceMonitor.Enable
 }
 
@@ -2067,7 +2093,9 @@ func (p *NginxProvisioner) buildResourcesForInvalidGatewayCleanup(
 	objects = append(objects, &policyv1.PodDisruptionBudget{ObjectMeta: baseMeta})
 
 	// 6. ServiceMonitor
-	objects = append(objects, &monitoringv1.ServiceMonitor{ObjectMeta: baseMeta})
+	if p.serviceMonitorInstalled {
+		objects = append(objects, &monitoringv1.ServiceMonitor{ObjectMeta: meta(resourceName(metricsServiceName))})
+	}
 
 	// 7. RBAC (OpenShift only)
 	if p.isOpenshift {

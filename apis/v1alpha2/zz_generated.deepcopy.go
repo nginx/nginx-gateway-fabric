@@ -219,6 +219,11 @@ func (in *DNSResolverAddress) DeepCopy() *DNSResolverAddress {
 func (in *DaemonSetSpec) DeepCopyInto(out *DaemonSetSpec) {
 	*out = *in
 	in.Container.DeepCopyInto(&out.Container)
+	if in.ServiceMonitor != nil {
+		in, out := &in.ServiceMonitor, &out.ServiceMonitor
+		*out = new(ServiceMonitorSpec)
+		(*in).DeepCopyInto(*out)
+	}
 	if in.WAFContainers != nil {
 		in, out := &in.WAFContainers, &out.WAFContainers
 		*out = new(WAFContainerSpec)

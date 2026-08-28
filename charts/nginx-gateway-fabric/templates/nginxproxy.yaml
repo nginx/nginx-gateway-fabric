@@ -77,6 +77,17 @@ spec:
     {{- end }}
     {{- if eq .Values.nginx.kind "daemonSet" }}
     daemonSet:
+      {{- if .Values.nginx.serviceMonitor.enable }}
+      serviceMonitor:
+        enable: {{ .Values.nginx.serviceMonitor.enable }}
+        endpoints:
+        {{- if .Values.nginx.serviceMonitor.port }}
+        - port: {{ .Values.nginx.serviceMonitor.port }}
+        {{- end }}
+          {{- if .Values.nginx.serviceMonitor.interval }}
+          interval: {{ .Values.nginx.serviceMonitor.interval }}
+          {{- end }}
+      {{- end }}
       {{- if .Values.nginx.pod }}
       pod:
         {{- toYaml .Values.nginx.pod | nindent 8 }}

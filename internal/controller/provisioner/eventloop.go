@@ -37,8 +37,9 @@ func controllerName(kind string) string {
 
 // eventLoopFeatures decides which resources the event loop watches.
 type eventLoopFeatures struct {
-	isOpenshift          bool
-	externalLoadBalancer bool
+	isOpenshift             bool
+	externalLoadBalancer    bool
+	serviceMonitorInstalled bool
 }
 
 func newEventLoop(
@@ -175,16 +176,21 @@ func newEventLoop(
 				),
 			},
 		},
-		{
-			objectType: &monitoringv1.ServiceMonitor{},
-			options: []controller.Option{
-				controller.WithK8sPredicate(
-					k8spredicate.And(
-						nginxResourceLabelPredicate,
+	}
+
+	if features.serviceMonitorInstalled {
+		controllerRegCfgs = append(controllerRegCfgs,
+			ctlrCfg{
+				objectType: &monitoringv1.ServiceMonitor{},
+				options: []controller.Option{
+					controller.WithK8sPredicate(
+						k8spredicate.And(
+							nginxResourceLabelPredicate,
+						),
 					),
-				),
+				},
 			},
-		},
+		)
 	}
 
 	if features.isOpenshift {
@@ -272,7 +278,12 @@ func newEventLoop(
 		&corev1.ServiceAccountList{},
 		&corev1.ConfigMapList{},
 		&corev1.SecretList{},
-		&monitoringv1.ServiceMonitorList{},
+	}
+
+	if features.serviceMonitorInstalled {
+		objectList = append(objectList,
+			&monitoringv1.ServiceMonitorList{},
+		)
 	}
 
 	if features.isOpenshift {
