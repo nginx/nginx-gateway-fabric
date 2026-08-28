@@ -229,7 +229,7 @@ func (g GeneratorImpl) getExecuteFuncs(
 		executeSplitClients,
 		executeMaps,
 		executeTelemetry,
-		g.newExecuteStreamServersFunc(logger.WithName("compositeGenerator")),
+		g.newExecuteStreamServersFunc(logger.WithName("streamServers")),
 		g.executeStreamUpstreams,
 		executeStreamMaps,
 		executePlusAPI,
