@@ -720,7 +720,7 @@ func TestManager_GetLatestBundles(t *testing.T) {
 		bundleData := []byte("bundle content")
 		checksum := "abc123"
 
-		mgr.bundleKeyToPolicy[bundleKey] = types.NamespacedName{Namespace: "default", Name: "my-policy"}
+		mgr.bundleKeyToPolicy[bundleKey] = map[types.NamespacedName]struct{}{{Namespace: "default", Name: "my-policy"}: {}}
 
 		mgr.cacheBundleUpdate(bundleKey, bundleData, checksum)
 
@@ -743,7 +743,7 @@ func TestManager_GetLatestBundles(t *testing.T) {
 		})
 
 		bundleKey := graph.WAFBundleKey("default_my-policy")
-		mgr.bundleKeyToPolicy[bundleKey] = types.NamespacedName{Namespace: "default", Name: "my-policy"}
+		mgr.bundleKeyToPolicy[bundleKey] = map[types.NamespacedName]struct{}{{Namespace: "default", Name: "my-policy"}: {}}
 		mgr.cacheBundleUpdate(bundleKey, []byte("old"), "old-checksum")
 		mgr.cacheBundleUpdate(bundleKey, []byte("new"), "new-checksum")
 
@@ -764,7 +764,7 @@ func TestManager_GetLatestBundles(t *testing.T) {
 		})
 
 		bundleKey := graph.WAFBundleKey("default_my-policy")
-		mgr.bundleKeyToPolicy[bundleKey] = types.NamespacedName{Namespace: "default", Name: "my-policy"}
+		mgr.bundleKeyToPolicy[bundleKey] = map[types.NamespacedName]struct{}{{Namespace: "default", Name: "my-policy"}: {}}
 		mgr.cacheBundleUpdate(bundleKey, []byte("data"), "checksum")
 
 		copy1 := mgr.GetLatestBundles()
@@ -786,7 +786,7 @@ func TestManager_GetLatestBundles(t *testing.T) {
 		})
 
 		bundleKey := graph.WAFBundleKey("default_policy")
-		mgr.bundleKeyToPolicy[bundleKey] = types.NamespacedName{Namespace: "default", Name: "policy"}
+		mgr.bundleKeyToPolicy[bundleKey] = map[types.NamespacedName]struct{}{{Namespace: "default", Name: "policy"}: {}}
 		mgr.cacheBundleUpdate(bundleKey, []byte("data"), "checksum")
 		g.Expect(mgr.GetLatestBundles()).To(HaveLen(1))
 
@@ -814,7 +814,7 @@ func TestManager_cacheBundleUpdateInjectsReconcileEvent(t *testing.T) {
 			Ctx:         context.Background(),
 		})
 
-		mgr.bundleKeyToPolicy[bundleKey] = policyNsName
+		mgr.bundleKeyToPolicy[bundleKey] = map[types.NamespacedName]struct{}{policyNsName: {}}
 
 		mgr.cacheBundleUpdate(bundleKey, []byte("data"), "checksum")
 
@@ -834,7 +834,7 @@ func TestManager_cacheBundleUpdateInjectsReconcileEvent(t *testing.T) {
 			Ctx:         context.Background(),
 		})
 
-		mgr.bundleKeyToPolicy[bundleKey] = policyNsName
+		mgr.bundleKeyToPolicy[bundleKey] = map[types.NamespacedName]struct{}{policyNsName: {}}
 
 		mgr.cacheBundleUpdate(bundleKey, []byte("data-v1"), "checksum-v1")
 		// Consume the first event, then verify no second event is sent.
@@ -852,7 +852,7 @@ func TestManager_cacheBundleUpdateInjectsReconcileEvent(t *testing.T) {
 			Deployments: &agentfakes.FakeDeploymentStorer{},
 		})
 
-		mgr.bundleKeyToPolicy[bundleKey] = policyNsName
+		mgr.bundleKeyToPolicy[bundleKey] = map[types.NamespacedName]struct{}{policyNsName: {}}
 
 		// Must not panic.
 		mgr.cacheBundleUpdate(bundleKey, []byte("data"), "checksum")

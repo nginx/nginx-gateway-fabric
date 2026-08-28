@@ -139,10 +139,12 @@ func PolicyBundleKey(wafSpec ngfAPIv1alpha1.WAFPolicySpec) WAFBundleKey {
 			"%s_%s",
 			helpers.URLHash(wafSpec.PolicySource.N1CSource.URL),
 			helpers.URLHash(
-				fmt.Sprintf("%s/%s",
+				fmt.Sprintf(
+					"%s/%s",
 					wafSpec.PolicySource.N1CSource.Namespace,
 					policyIdentifier,
-				)),
+				),
+			),
 		))
 	case wafSpec.PolicySource.NIMSource != nil:
 		policyIdentifier := ""
@@ -192,10 +194,12 @@ func LogBundleKey(logSource *ngfAPIv1alpha1.LogSource) WAFBundleKey {
 				"log_%s_%s",
 				helpers.URLHash(logSource.N1CSource.URL),
 				helpers.URLHash(
-					fmt.Sprintf("%s/%s",
+					fmt.Sprintf(
+						"%s/%s",
 						logSource.N1CSource.Namespace,
 						profileIdentifier,
-					)),
+					),
+				),
 			),
 		)
 	}
@@ -1107,6 +1111,9 @@ func processWAFPolicies(
 	if wafInput == nil {
 		return nil
 	}
+
+	// Invalidate WAF policies that share the same upstream bundle but differ in polling config.
+	validateWAFPollingConsistency(processedPolicies)
 
 	output := &WAFProcessingOutput{
 		Bundles:              make(map[WAFBundleKey]*WAFBundleData),
@@ -2103,4 +2110,145 @@ func resolvePLMClientSSL(secret *corev1.Secret) ([]byte, []byte, error) {
 	}
 
 	return certData, keyData, nil
+}
+
+// policySourceHasPolling returns true when the WAFPolicy's PolicySource has polling enabled.
+func policySourceHasPolling(spec ngfAPIv1alpha1.WAFPolicySpec) bool {
+	return spec.PolicySource != nil &&
+		spec.PolicySource.Polling != nil &&
+		spec.PolicySource.Polling.Enabled
+}
+
+// logSourceHasPolling returns true when a SecurityLog's LogSource has polling enabled.
+func logSourceHasPolling(ls *ngfAPIv1alpha1.LogSource) bool {
+	return ls != nil &&
+		ls.Polling != nil &&
+		ls.Polling.Enabled
+}
+
+// pollingGroupEntry pairs a graph Policy with its underlying WAFPolicy source and
+// a flag indicating whether polling is enabled for this particular bundle reference.
+type pollingGroupEntry struct {
+	policy     *Policy
+	source     *ngfAPIv1alpha1.WAFPolicy
+	hasPolling bool
+}
+
+// validateWAFPollingConsistency invalidates WAF policies that share the same upstream
+// bundle (PolicyBundleKey or LogBundleKey) but differ in polling settings (enabled vs. disabled).
+//
+// Two policies that flatten to the same file on disk must agree on polling; otherwise the
+// polled policy will eventually receive a new bundle version while the non-polled policy
+// expects the file to remain unchanged.
+//
+// When a conflict is detected the oldest policy (by creation timestamp, then namespace/name)
+// wins and all others are marked invalid with a Conflicted condition.
+func validateWAFPollingConsistency(processedPolicies map[PolicyKey]*Policy) {
+	validatePolicyBundlePolling(processedPolicies)
+	validateLogBundlePolling(processedPolicies)
+}
+
+// validatePolicyBundlePolling checks policy-bundle polling consistency.
+func validatePolicyBundlePolling(processedPolicies map[PolicyKey]*Policy) {
+	groups := make(map[WAFBundleKey][]pollingGroupEntry)
+
+	for key, policy := range processedPolicies {
+		if key.GVK.Kind != kinds.WAFPolicy || !policy.Valid {
+			continue
+		}
+		wp, ok := policy.Source.(*ngfAPIv1alpha1.WAFPolicy)
+		if !ok || wp.Spec.PolicySource == nil {
+			continue
+		}
+		polBundleKey := PolicyBundleKey(wp.Spec)
+		if polBundleKey == "" {
+			continue
+		}
+		groups[polBundleKey] = append(groups[polBundleKey], pollingGroupEntry{
+			policy:     policy,
+			source:     wp,
+			hasPolling: policySourceHasPolling(wp.Spec),
+		})
+	}
+
+	invalidatePollingConflicts(groups, "policy bundles")
+}
+
+// validateLogBundlePolling checks security-log-bundle polling consistency.
+func validateLogBundlePolling(processedPolicies map[PolicyKey]*Policy) {
+	groups := make(map[WAFBundleKey][]pollingGroupEntry)
+
+	for key, policy := range processedPolicies {
+		if key.GVK.Kind != kinds.WAFPolicy || !policy.Valid {
+			continue
+		}
+		wp, ok := policy.Source.(*ngfAPIv1alpha1.WAFPolicy)
+		if !ok {
+			continue
+		}
+		for _, sl := range wp.Spec.SecurityLogs {
+			if sl.LogSource == nil {
+				continue
+			}
+			logBundleKey := LogBundleKey(sl.LogSource)
+			if logBundleKey == "" {
+				continue
+			}
+			groups[logBundleKey] = append(groups[logBundleKey], pollingGroupEntry{
+				policy:     policy,
+				source:     wp,
+				hasPolling: logSourceHasPolling(sl.LogSource),
+			})
+		}
+	}
+
+	invalidatePollingConflicts(groups, "security log bundles")
+}
+
+// invalidatePollingConflicts detects groups of WAFPolicies that share the same upstream bundle
+// but differ in polling configuration. Within each conflicting group the oldest policy wins
+// (by creation timestamp, then namespace/name) and all others are marked invalid.
+// bundleKind is a human-readable label (e.g. "policy bundles" or "security log bundles") used
+// in the conflict condition message.
+func invalidatePollingConflicts(groups map[WAFBundleKey][]pollingGroupEntry, bundleKind string) {
+	for _, entries := range groups {
+		if len(entries) < 2 {
+			continue
+		}
+
+		// Determine if there is a mix of entries with and without polling.
+		somePolling, someNoPolling := false, false
+		for _, e := range entries {
+			if e.hasPolling {
+				somePolling = true
+			} else {
+				someNoPolling = true
+			}
+		}
+		// No conflict if all entries either have polling or none have polling.
+		if !somePolling || !someNoPolling {
+			continue
+		}
+
+		// Sort the entries so that the oldest policy comes first.
+		// Ordered by creation timestamp, then namespace/name.
+		sort.Slice(entries, func(i, j int) bool {
+			return ngfsort.LessClientObject(entries[i].source, entries[j].source)
+		})
+
+		winner := entries[0]
+		for _, e := range entries[1:] {
+			if e.policy.Valid {
+				e.policy.Valid = false
+				e.policy.Conditions = append(
+					e.policy.Conditions,
+					conditions.NewPolicyConflicted(fmt.Sprintf(
+						"Conflicts with WAFPolicy %s/%s: %s share the same"+
+							" upstream identity but differ in polling configuration",
+						winner.source.Namespace, winner.source.Name, bundleKind,
+					)),
+				)
+			}
+		}
+	}
 }

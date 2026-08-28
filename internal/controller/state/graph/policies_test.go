@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/go-logr/logr"
 	. "github.com/onsi/gomega"
@@ -5432,6 +5433,208 @@ func TestPolicyBundleKey(t *testing.T) {
 
 			got := PolicyBundleKey(tc.spec)
 			g.Expect(got).To(Equal(tc.expKey))
+		})
+	}
+}
+
+func TestValidateWAFPollingConsistency(t *testing.T) {
+	t.Parallel()
+
+	pollNow := metav1.Now()
+	pollEarlier := metav1.NewTime(pollNow.Add(-time.Hour))
+	wafPolicyGVK := schema.GroupVersionKind{
+		Group:   ngfAPIv1alpha1.GroupName,
+		Version: "v1alpha1",
+		Kind:    kinds.WAFPolicy,
+	}
+
+	pollPolicyKey := func(name, ns string) PolicyKey {
+		return PolicyKey{
+			NsName: types.NamespacedName{Namespace: ns, Name: name},
+			GVK:    wafPolicyGVK,
+		}
+	}
+
+	pollWAFSource := func(name, ns, polSource string, ts metav1.Time, polling bool) *ngfAPIv1alpha1.WAFPolicy {
+		wp := &ngfAPIv1alpha1.WAFPolicy{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       kinds.WAFPolicy,
+				APIVersion: ngfAPIv1alpha1.GroupName + "/v1alpha1",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name: name, Namespace: ns, CreationTimestamp: ts,
+			},
+			Spec: ngfAPIv1alpha1.WAFPolicySpec{
+				Type: ngfAPIv1alpha1.PolicySourceTypeNIM,
+				PolicySource: &ngfAPIv1alpha1.PolicySource{
+					NIMSource: &ngfAPIv1alpha1.NIMBundleSource{
+						URL:        "https://nim.example.com",
+						PolicyName: helpers.GetPointer(polSource),
+					},
+				},
+			},
+		}
+		if polling {
+			wp.Spec.PolicySource.Polling = &ngfAPIv1alpha1.BundlePolling{Enabled: true}
+		}
+		return wp
+	}
+
+	later := metav1.NewTime(pollNow.Add(time.Hour))
+
+	type expPolicyStatus struct {
+		name           string
+		condSubstrings []string
+		expectCondLen  int
+		expectValid    bool
+	}
+
+	tests := []struct {
+		name      string
+		policies  map[PolicyKey]*Policy
+		expStatus []expPolicyStatus
+	}{
+		{
+			name: "no conflict when both have polling enabled",
+			policies: map[PolicyKey]*Policy{
+				pollPolicyKey("a", "default"): {
+					Source: pollWAFSource("a", "default", "same-policy", pollEarlier, true), Valid: true,
+				},
+				pollPolicyKey("b", "default"): {
+					Source: pollWAFSource("b", "default", "same-policy", pollNow, true), Valid: true,
+				},
+			},
+			expStatus: []expPolicyStatus{
+				{name: "a", expectValid: true},
+				{name: "b", expectValid: true},
+			},
+		},
+		{
+			name: "no conflict when both have polling disabled",
+			policies: map[PolicyKey]*Policy{
+				pollPolicyKey("a", "default"): {
+					Source: pollWAFSource("a", "default", "same-policy", pollEarlier, false), Valid: true,
+				},
+				pollPolicyKey("b", "default"): {
+					Source: pollWAFSource("b", "default", "same-policy", pollNow, false), Valid: true,
+				},
+			},
+			expStatus: []expPolicyStatus{
+				{name: "a", expectValid: true},
+				{name: "b", expectValid: true},
+			},
+		},
+		{
+			name: "conflict where older non-polling policy wins",
+			policies: map[PolicyKey]*Policy{
+				pollPolicyKey("a", "default"): {
+					Source: pollWAFSource("a", "default", "same-policy", pollEarlier, false), Valid: true,
+				},
+				pollPolicyKey("b", "default"): {
+					Source: pollWAFSource("b", "default", "same-policy", pollNow, true), Valid: true,
+				},
+			},
+			expStatus: []expPolicyStatus{
+				{
+					name:        "a",
+					expectValid: true,
+				},
+				{
+					name:           "b",
+					expectValid:    false,
+					expectCondLen:  1,
+					condSubstrings: []string{"polling configuration", "default/a"},
+				},
+			},
+		},
+		{
+			name: "conflict where older polling policy wins",
+			policies: map[PolicyKey]*Policy{
+				pollPolicyKey("a", "default"): {
+					Source: pollWAFSource("a", "default", "same-policy", pollEarlier, true), Valid: true,
+				},
+				pollPolicyKey("b", "default"): {
+					Source: pollWAFSource("b", "default", "same-policy", pollNow, false), Valid: true,
+				},
+			},
+			expStatus: []expPolicyStatus{
+				{name: "a", expectValid: true},
+				{name: "b", expectValid: false, expectCondLen: 1, condSubstrings: []string{"polling configuration"}},
+			},
+		},
+		{
+			name: "different bundle keys do not conflict",
+			policies: map[PolicyKey]*Policy{
+				pollPolicyKey("a", "default"): {
+					Source: pollWAFSource("a", "default", "same-policy", pollEarlier, true), Valid: true,
+				},
+				pollPolicyKey("b", "default"): {
+					Source: pollWAFSource("b", "default", "diff-policy", pollNow, false), Valid: true,
+				},
+			},
+			expStatus: []expPolicyStatus{
+				{name: "a", expectValid: true},
+				{name: "b", expectValid: true},
+			},
+		},
+		{
+			name: "already invalid policy is skipped",
+			policies: map[PolicyKey]*Policy{
+				pollPolicyKey("a", "default"): {
+					Source: pollWAFSource("a", "default", "same-policy", pollEarlier, true), Valid: true,
+				},
+				pollPolicyKey("b", "default"): {
+					Source: pollWAFSource("b", "default", "same-policy", pollNow, false), Valid: false,
+				},
+			},
+			expStatus: []expPolicyStatus{
+				{name: "a", expectValid: true},
+				{name: "b", expectValid: false, expectCondLen: 0},
+			},
+		},
+		{
+			name: "three policies with conflict invalidates all losing policies",
+			policies: map[PolicyKey]*Policy{
+				pollPolicyKey("a", "default"): {
+					Source: pollWAFSource("a", "default", "same-policy", pollEarlier, false), Valid: true,
+				},
+				pollPolicyKey("b", "default"): {
+					Source: pollWAFSource("b", "default", "same-policy", pollNow, true), Valid: true,
+				},
+				pollPolicyKey("c", "default"): {
+					Source: pollWAFSource("c", "default", "same-policy", later, true), Valid: true,
+				},
+			},
+			expStatus: []expPolicyStatus{
+				{name: "a", expectValid: true},
+				{name: "b", expectValid: false, expectCondLen: 1, condSubstrings: []string{"polling configuration"}},
+				{name: "c", expectValid: false, expectCondLen: 1, condSubstrings: []string{"polling configuration"}},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			validateWAFPollingConsistency(test.policies)
+
+			for _, exp := range test.expStatus {
+				policy := test.policies[pollPolicyKey(exp.name, "default")]
+				g.Expect(policy.Valid).To(Equal(exp.expectValid), "policy %s validity", exp.name)
+
+				if exp.expectCondLen > 0 {
+					g.Expect(policy.Conditions).To(HaveLen(exp.expectCondLen), "policy %s condition count", exp.name)
+					for _, substr := range exp.condSubstrings {
+						g.Expect(policy.Conditions[0].Message).To(
+							ContainSubstring(substr), "policy %s condition message", exp.name,
+						)
+					}
+				} else if !exp.expectValid {
+					g.Expect(policy.Conditions).To(BeEmpty(), "policy %s should have no conditions", exp.name)
+				}
+			}
 		})
 	}
 }
