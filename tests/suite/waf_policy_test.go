@@ -374,8 +374,6 @@ var _ = Describe("WAFPolicy", Ordered, Label("waf"), func() {
 					ngfPodName,
 					"Duplicate policy name found",
 					"Duplicate logging profile name found",
-					"Failed to update NGINX configuration",
-					"configuration_load_failure",
 				)
 			})
 		})

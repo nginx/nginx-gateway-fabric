@@ -1122,10 +1122,27 @@ func processWAFPolicies(
 		ReferencedWAFSecrets: make(map[types.NamespacedName]*corev1.Secret),
 	}
 
-	for key, policy := range processedPolicies {
+	// Collect and sort WAFPolicy keys so that iteration order is deterministic.
+	// When multiple WAFPolicies share a bundleKey the first one processed determines
+	// the effective fetch configuration (auth/TLS/skipVerify/etc.). Sorting by creation
+	// timestamp then namespace/name (via LessClientObject) ensures the oldest policy wins,
+	// consistent with the conflict-resolution semantics used elsewhere.
+	wafKeys := make([]PolicyKey, 0, len(processedPolicies))
+	for key := range processedPolicies {
 		if key.GVK.Kind != kinds.WAFPolicy {
 			continue
 		}
+		wafKeys = append(wafKeys, key)
+	}
+	sort.Slice(wafKeys, func(i, j int) bool {
+		return ngfsort.LessClientObject(
+			processedPolicies[wafKeys[i]].Source,
+			processedPolicies[wafKeys[j]].Source,
+		)
+	})
+
+	for _, key := range wafKeys {
+		policy := processedPolicies[key]
 
 		if !policy.Valid {
 			continue

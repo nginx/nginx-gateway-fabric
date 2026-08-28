@@ -835,7 +835,7 @@ func TestBuildBundleSources(t *testing.T) {
 			expectedSources: 0,
 		},
 		{
-			name: "empty PolicySource ",
+			name: "empty PolicySource",
 			spec: ngfAPIv1alpha1.WAFPolicySpec{
 				Type:         ngfAPIv1alpha1.PolicySourceTypeHTTP,
 				PolicySource: &ngfAPIv1alpha1.PolicySource{},
