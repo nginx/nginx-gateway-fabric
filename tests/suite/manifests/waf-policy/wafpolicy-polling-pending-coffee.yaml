@@ -1,0 +1,20 @@
+# WAFPolicy with polling enabled targeting the coffee HTTPRoute.
+# Points to a bundle that does not yet exist on the server, so the policy
+# starts in BundlePending state. Once the bundle is copied to the server,
+# the poller should fetch it and the policy should transition to Programmed.
+apiVersion: gateway.nginx.org/v1alpha1
+kind: WAFPolicy
+metadata:
+  name: coffee-waf-poll-pending
+spec:
+  targetRefs:
+  - group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: coffee
+  type: HTTP
+  policySource:
+    httpSource:
+      url: http://bundle-server.waf-policy.svc.cluster.local/deferred-bundle.tgz
+    polling:
+      enabled: true
+      interval: 15s
