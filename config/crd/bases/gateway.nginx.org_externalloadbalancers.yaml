@@ -4,8 +4,6 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.21.0
-  labels:
-    gateway.networking.k8s.io/policy: direct
   name: externalloadbalancers.gateway.nginx.org
 spec:
   group: gateway.nginx.org
