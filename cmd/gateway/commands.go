@@ -93,6 +93,9 @@ func createControllerCommand() *cobra.Command {
 		nginxOneTelemetryEndpointHostFlag   = "nginx-one-telemetry-endpoint-host"
 		nginxOneTelemetryEndpointPortFlag   = "nginx-one-telemetry-endpoint-port"
 		nginxOneTLSSkipVerifyFlag           = "nginx-one-tls-skip-verify"
+		nimDataplaneKeySecretFlag           = "nim-dataplane-key-secret" //nolint:gosec // not credentials
+		nimTelemetryEndpointHostFlag        = "nim-telemetry-endpoint-host"
+		nimTelemetryEndpointPortFlag        = "nim-telemetry-endpoint-port"
 		metricsDisableFlag                  = "metrics-disable"
 		metricsSecureFlag                   = "metrics-secure-serving"
 		metricsPortFlag                     = "metrics-port"
@@ -100,6 +103,9 @@ func createControllerCommand() *cobra.Command {
 		healthPortFlag                      = "health-port"
 		leaderElectionDisableFlag           = "leader-election-disable"
 		leaderElectionLockNameFlag          = "leader-election-lock-name"
+		leaderElectionLeaseDurationFlag     = "leader-election-lease-duration"
+		leaderElectionRenewDeadlineFlag     = "leader-election-renew-deadline"
+		leaderElectionRetryPeriodFlag       = "leader-election-retry-period"
 		productTelemetryDisableFlag         = "product-telemetry-disable"
 		gwAPIExperimentalFlag               = "gateway-api-experimental-features"
 		gwAPIInferenceExtensionFlag         = "gateway-api-inference-extension"
@@ -152,7 +158,17 @@ func createControllerCommand() *cobra.Command {
 			value:     443,
 		}
 		nginxOneConsoleTLSSkipVerify bool
-		nginxSCCName                 = stringValidatingValue{
+		nimDataplaneKeySecretName    = stringValidatingValue{
+			validator: validateResourceName,
+		}
+		nimTelemetryEndpointHost = stringValidatingValue{
+			validator: validateResourceName,
+		}
+		nimTelemetryEndpointPort = intValidatingValue{
+			validator: validateAnyPort,
+			value:     4317,
+		}
+		nginxSCCName = stringValidatingValue{
 			validator: validateResourceName,
 		}
 		disableMetrics    bool
@@ -172,6 +188,10 @@ func createControllerCommand() *cobra.Command {
 			validator: validateResourceName,
 			value:     "nginx-gateway-leader-election-lock",
 		}
+
+		leaderElectionLeaseDuration time.Duration
+		leaderElectionRenewDeadline time.Duration
+		leaderElectionRetryPeriod   time.Duration
 
 		gwExperimentalFeatures bool
 		gwInferenceExtension   bool
@@ -322,9 +342,12 @@ func createControllerCommand() *cobra.Command {
 					Secure:  metricsSecure,
 				},
 				LeaderElection: config.LeaderElectionConfig{
-					Enabled:  !disableLeaderElection,
-					LockName: leaderElectionLockName.String(),
-					Identity: podConfig.Name,
+					Enabled:       !disableLeaderElection,
+					LockName:      leaderElectionLockName.String(),
+					Identity:      podConfig.Name,
+					LeaseDuration: leaderElectionLeaseDuration,
+					RenewDeadline: leaderElectionRenewDeadline,
+					RetryPeriod:   leaderElectionRetryPeriod,
 				},
 				UsageReportConfig: usageReportConfig,
 				ProductTelemetryConfig: config.ProductTelemetryConfig{
@@ -347,11 +370,16 @@ func createControllerCommand() *cobra.Command {
 				NginxDockerSecretNames: nginxDockerSecrets.values,
 				AgentTLSSecretName:     agentTLSSecretName.value,
 				NGINXSCCName:           nginxSCCName.value,
-				NginxOneConsoleTelemetryConfig: config.NginxOneConsoleTelemetryConfig{
+				NginxOneConsoleTelemetryConfig: config.ManagementPlaneTelemetryConfig{
 					DataplaneKeySecretName: nginxOneConsoleDataplaneKeySecretName.value,
 					EndpointHost:           nginxOneConsoleTelemetryEndpointHost.value,
 					EndpointPort:           nginxOneConsoleTelemetryEndpointPort.value,
 					EndpointTLSSkipVerify:  nginxOneConsoleTLSSkipVerify,
+				},
+				NginxInstanceManagerTelemetryConfig: config.ManagementPlaneTelemetryConfig{
+					DataplaneKeySecretName: nimDataplaneKeySecretName.value,
+					EndpointHost:           nimTelemetryEndpointHost.value,
+					EndpointPort:           nimTelemetryEndpointPort.value,
 				},
 				EndpointPickerDisableTLS:    endpointPickerDisableTLS,
 				EndpointPickerTLSSkipVerify: endpointPickerTLSSkipVerify,
@@ -433,6 +461,25 @@ func createControllerCommand() *cobra.Command {
 		"Disable client verification of the NGINX One Console's telemetry endpoint server certificate.",
 	)
 
+	cmd.Flags().Var(
+		&nimDataplaneKeySecretName,
+		nimDataplaneKeySecretFlag,
+		`The name of the Secret containing the NGINX Instance Manager's dataplane key. Must exist in the same namespace `+
+			`that the NGINX Gateway Fabric control plane is running in (default namespace: nginx-gateway).`,
+	)
+
+	cmd.Flags().Var(
+		&nimTelemetryEndpointHost,
+		nimTelemetryEndpointHostFlag,
+		`The host of the NGINX Instance Manager's telemetry endpoint.`,
+	)
+
+	cmd.Flags().Var(
+		&nimTelemetryEndpointPort,
+		nimTelemetryEndpointPortFlag,
+		`The port of the NGINX Instance Manager's telemetry endpoint.`,
+	)
+
 	cmd.Flags().BoolVar(
 		&disableMetrics,
 		metricsDisableFlag,
@@ -481,6 +528,35 @@ func createControllerCommand() *cobra.Command {
 		leaderElectionLockNameFlag,
 		"The name of the leader election lock. "+
 			"A Lease object with this name will be created in the same Namespace as the controller.",
+	)
+
+	cmd.Flags().DurationVar(
+		&leaderElectionLeaseDuration,
+		leaderElectionLeaseDurationFlag,
+		leaderElectionLeaseDuration,
+		"The duration that non-leader candidates will wait to force acquire leadership. "+
+			"Must be parsable by https://pkg.go.dev/time#ParseDuration. Must be greater than the renew deadline. "+
+			"If not set, defaults to controller-runtime's built-in default (15s).",
+	)
+
+	cmd.Flags().DurationVar(
+		&leaderElectionRenewDeadline,
+		leaderElectionRenewDeadlineFlag,
+		leaderElectionRenewDeadline,
+		"The duration that the acting leader will retry refreshing leadership before giving up. "+
+			"Must be parsable by https://pkg.go.dev/time#ParseDuration. "+
+			"Must be greater than the retry period and less than the lease duration. Increase this value if leader "+
+			"election is failing due to slow Kubernetes API server responses. "+
+			"If not set, defaults to controller-runtime's built-in default (10s).",
+	)
+
+	cmd.Flags().DurationVar(
+		&leaderElectionRetryPeriod,
+		leaderElectionRetryPeriodFlag,
+		leaderElectionRetryPeriod,
+		"The duration the leader election clients should wait between action tries. "+
+			"Must be parsable by https://pkg.go.dev/time#ParseDuration. Must be less than the renew deadline. "+
+			"If not set, defaults to controller-runtime's built-in default (2s).",
 	)
 
 	cmd.Flags().BoolVar(

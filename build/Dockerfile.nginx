@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.26
 
 # renovate: datasource=github-tags depName=nginx/nginx
-ARG NGINX_VERSION=1.31.3
+ARG NGINX_VERSION=1.31.4
 
 FROM scratch AS nginx-files
 
@@ -11,7 +11,7 @@ ADD --link --chown=101:1001 https://cs.nginx.com/static/keys/nginx_signing.rsa.p
 # Configure nginx source for bindgen to generate Rust FFI bindings.
 # Only --with-compat is required; it defines NGX_COMPAT for dynamic module
 # binary compatibility.
-FROM alpine:3.23 AS nginx-source
+FROM alpine:3.24 AS nginx-source
 
 ARG NGINX_VERSION
 
@@ -40,12 +40,12 @@ WORKDIR /build
 COPY internal/controller/nginx/modules/rust/ai-guardrails/ ./
 RUN cargo build --release
 
-FROM alpine:3.23
+FROM alpine:3.24
 
 ARG NGINX_VERSION
 
 # renovate: datasource=github-tags depName=nginx/agent
-ARG NGINX_AGENT_VERSION=v3.11.3
+ARG NGINX_AGENT_VERSION=v3.11.4
 ARG NJS_DIR
 ARG NGINX_CONF_DIR
 ARG BUILD_AGENT
