@@ -42,7 +42,6 @@ type eventLoopFeatures struct {
 	serviceMonitorInstalled bool
 }
 
-//nolint:gocyclo // try to refactor
 func newEventLoop(
 	ctx context.Context,
 	mgr manager.Manager,
@@ -58,30 +57,13 @@ func newEventLoop(
 	features eventLoopFeatures,
 ) (*events.EventLoop, error) {
 	nginxResourceLabelPredicate := predicate.NginxLabelPredicate(selector)
-
-	secretsToWatch := make([]string, 0, len(dockerSecrets)+5)
-	secretsToWatch = append(secretsToWatch, agentTLSSecret)
-	secretsToWatch = append(secretsToWatch, dockerSecrets...)
-
-	if n1cDataplaneKeySecret != "" {
-		secretsToWatch = append(secretsToWatch, n1cDataplaneKeySecret)
-	}
-
-	if nimDataplaneKeySecret != "" {
-		secretsToWatch = append(secretsToWatch, nimDataplaneKeySecret)
-	}
-
-	if usageConfig != nil {
-		if usageConfig.SecretName != "" {
-			secretsToWatch = append(secretsToWatch, usageConfig.SecretName)
-		}
-		if usageConfig.CASecretName != "" {
-			secretsToWatch = append(secretsToWatch, usageConfig.CASecretName)
-		}
-		if usageConfig.ClientSSLSecretName != "" {
-			secretsToWatch = append(secretsToWatch, usageConfig.ClientSSLSecretName)
-		}
-	}
+	secretsToWatch := addSecretsToWatch(
+		dockerSecrets,
+		agentTLSSecret,
+		n1cDataplaneKeySecret,
+		nimDataplaneKeySecret,
+		usageConfig,
+	)
 
 	type ctlrCfg struct {
 		objectType ngftypes.ObjectType
@@ -313,4 +295,38 @@ func newEventLoop(
 	)
 
 	return eventLoop, nil
+}
+
+func addSecretsToWatch(
+	dockerSecrets []string,
+	agentTLSSecret,
+	n1cDataplaneKeySecret,
+	nimDataplaneKeySecret string,
+	usageConfig *config.UsageReportConfig,
+) []string {
+	secretsToWatch := make([]string, 0, len(dockerSecrets)+5)
+	secretsToWatch = append(secretsToWatch, agentTLSSecret)
+	secretsToWatch = append(secretsToWatch, dockerSecrets...)
+
+	if n1cDataplaneKeySecret != "" {
+		secretsToWatch = append(secretsToWatch, n1cDataplaneKeySecret)
+	}
+
+	if nimDataplaneKeySecret != "" {
+		secretsToWatch = append(secretsToWatch, nimDataplaneKeySecret)
+	}
+
+	if usageConfig != nil {
+		if usageConfig.SecretName != "" {
+			secretsToWatch = append(secretsToWatch, usageConfig.SecretName)
+		}
+		if usageConfig.CASecretName != "" {
+			secretsToWatch = append(secretsToWatch, usageConfig.CASecretName)
+		}
+		if usageConfig.ClientSSLSecretName != "" {
+			secretsToWatch = append(secretsToWatch, usageConfig.ClientSSLSecretName)
+		}
+	}
+
+	return secretsToWatch
 }

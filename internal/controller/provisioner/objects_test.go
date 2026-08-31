@@ -1442,7 +1442,6 @@ func TestBuildNginxResourceObjects_OpenShift(t *testing.T) {
 
 func TestBuildNginxResourceObjects_ServiceMonitor(t *testing.T) {
 	t.Parallel()
-	g := NewWithT(t)
 
 	agentTLSSecret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1480,43 +1479,65 @@ func TestBuildNginxResourceObjects_ServiceMonitor(t *testing.T) {
 		},
 	}
 
-	nginxProxy := &graph.EffectiveNginxProxy{
-		Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
-			Deployment: &ngfAPIv1alpha2.DeploymentSpec{
-				ServiceMonitor: &ngfAPIv1alpha2.ServiceMonitorSpec{
-					Enable: true,
-				},
-			},
-		},
-	}
-
-	resourceName := "gw-nginx"
-	objects, err := provisioner.buildNginxResourceObjects(
-		resourceName,
-		gateway,
-		nginxProxy,
-		graphListenersFromGateway(gateway),
-		nil,
-	)
-	g.Expect(err).ToNot(HaveOccurred())
-
-	fmt.Println(len(objects))
-	g.Expect(objects).To(HaveLen(7))
-
 	expLabels := map[string]string{
 		"app":                                    "nginx",
 		"gateway.networking.k8s.io/gateway-name": "gw",
 		"app.kubernetes.io/name":                 "gw-nginx",
 	}
 
-	for i, o := range objects {
-		fmt.Println(i, o.GetName())
+	tests := []struct {
+		proxy *graph.EffectiveNginxProxy
+		name  string
+	}{
+		{
+			name: "test deployment",
+			proxy: &graph.EffectiveNginxProxy{
+				Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+					Deployment: &ngfAPIv1alpha2.DeploymentSpec{
+						ServiceMonitor: &ngfAPIv1alpha2.ServiceMonitorSpec{
+							Enable: true,
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "test daemonset",
+			proxy: &graph.EffectiveNginxProxy{
+				Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+					DaemonSet: &ngfAPIv1alpha2.DaemonSetSpec{
+						ServiceMonitor: &ngfAPIv1alpha2.ServiceMonitorSpec{
+							Enable: true,
+						},
+					},
+				},
+			},
+		},
 	}
 
-	smObj := objects[4]
-	serviceMonitor, ok := smObj.(*monitoringv1.ServiceMonitor)
-	g.Expect(ok).To(BeTrue())
-	g.Expect(serviceMonitor.GetLabels()).To(Equal(expLabels))
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			resourceName := "gw-nginx"
+			objects, err := provisioner.buildNginxResourceObjects(
+				resourceName,
+				gateway,
+				test.proxy,
+				graphListenersFromGateway(gateway),
+				nil,
+			)
+
+			g.Expect(err).ToNot(HaveOccurred())
+			g.Expect(objects).To(HaveLen(7))
+
+			smObj := objects[4]
+			serviceMonitor, ok := smObj.(*monitoringv1.ServiceMonitor)
+			g.Expect(ok).To(BeTrue())
+			g.Expect(serviceMonitor.GetLabels()).To(Equal(expLabels))
+		})
+	}
 }
 
 func TestBuildNginxResourceObjects_DataplaneKeySecret(t *testing.T) {
