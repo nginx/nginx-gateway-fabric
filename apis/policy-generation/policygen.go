@@ -210,7 +210,7 @@ func main() {
 	}
 
 	if len(policies) == 0 {
-		fmt.Printf("failed to find policies in the %s directory", targetDir)
+		log.Fatalf("failed to find policies in the %s directory", targetDir)
 		return
 	}
 
@@ -229,8 +229,6 @@ func main() {
 	// format the output
 	formattedCode, err := format.Source(buf.Bytes())
 	if err != nil {
-		// If formatting fails, print the raw output so you can debug the template syntax
-		fmt.Println(buf.String())
 		log.Fatalf("Error: Failed to format generated Go code: %v", err)
 	}
 
@@ -238,6 +236,4 @@ func main() {
 	if err := os.WriteFile(*outputFile, formattedCode, 0o600); err != nil {
 		log.Fatalf("Error: Failed to write output file %s: %v", *outputFile, err)
 	}
-
-	fmt.Printf("Successfully generated boilerplate code for policies %v in %s\n", policies, *outputFile)
 }
