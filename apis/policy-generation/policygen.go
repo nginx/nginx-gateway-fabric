@@ -122,7 +122,8 @@ func targetRefField(structType *ast.StructType) (singleRef, found bool) {
 }
 
 // extractPolicies parses each file in filePaths and returns the PolicyData for found resources.
-func extractPolicies(fset *token.FileSet, filePaths []string) ([]PolicyData, error) {
+func extractPolicies(filePaths []string) ([]PolicyData, error) {
+	fset := token.NewFileSet()
 	var policies []PolicyData
 
 	for _, filePath := range filePaths {
@@ -197,14 +198,12 @@ func main() {
 
 	targetDir := filepath.Dir(*outputFile)
 
-	fset := token.NewFileSet()
-
 	policyFiles, err := findPolicyFiles(targetDir)
 	if err != nil {
 		log.Fatalf("Error: failed to find the policy files %v", err)
 	}
 
-	policies, err := extractPolicies(fset, policyFiles)
+	policies, err := extractPolicies(policyFiles)
 	if err != nil {
 		log.Fatalf("Error: failed to extract the policy names %v", err)
 	}
