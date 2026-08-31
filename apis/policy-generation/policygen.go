@@ -168,9 +168,6 @@ func findPolicyFiles(dir string) ([]string, error) {
 		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".go") || strings.HasSuffix(entry.Name(), "_test.go") {
 			continue // filter to use only the `.go` files in directory
 		}
-		if entry.Name() == "externalloadbalancer_types.go" {
-			continue // explicitly exclude ExternalLoadBalancer as this does not use the standard policy methods
-		}
 		filePath := filepath.Join(dir, entry.Name())
 
 		content, err := os.ReadFile(filePath)
