@@ -42,16 +42,16 @@ WORKDIR /build
 COPY internal/controller/nginx/modules/rust/ai-guardrails/ ./
 RUN cargo build --release
 
-FROM ghcr.io/nginx/dependencies/nginx-ubi:ubi10@sha256:f0be72c9046896d2a1927ec729ae729180533fd02dab1a67805b23d49a66c9df AS ubi10-packages
+FROM ghcr.io/nginx/dependencies/nginx-ubi:ubi10@sha256:1b36e5adcd6ada1814fd168f3f90cd8c77c7cba6fd3a684e90e0295f58b4ef49 AS ubi10-packages
 
 FROM registry.access.redhat.com/ubi10/ubi-minimal:10.2 AS ubi-nginx-plus
 
 ARG NGINX_PLUS_VERSION=R37.0
-ARG APP_PROTECT_VERSION=37.0+5.635
+ARG APP_PROTECT_VERSION=37.0+5.690
 ARG INCLUDE_NAP_WAF=false
 
 # renovate: datasource=github-tags depName=nginx/agent
-ARG NGINX_AGENT_VERSION=v3.11.3
+ARG NGINX_AGENT_VERSION=v3.11.4
 ARG NJS_DIR
 ARG NGINX_CONF_DIR
 ARG BUILD_AGENT
