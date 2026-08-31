@@ -2657,15 +2657,12 @@ func buildAccessLog(srcLogSettings *ngfAPIv1alpha2.NginxLogging) *AccessLog {
 			return &AccessLog{Disable: true}
 		}
 
-		if (srcLogSettings.AccessLog.Format != nil && *srcLogSettings.AccessLog.Format != "") ||
-			srcLogSettings.AccessLog.Destination != nil {
+		if srcLogSettings.AccessLog.Format != nil && *srcLogSettings.AccessLog.Format != "" {
 			accessLog := &AccessLog{
-				Path: DefaultAccessLogPath,
+				Path:   DefaultAccessLogPath,
+				Format: *srcLogSettings.AccessLog.Format,
 			}
 
-			if srcLogSettings.AccessLog.Format != nil && *srcLogSettings.AccessLog.Format != "" {
-				accessLog.Format = *srcLogSettings.AccessLog.Format
-			}
 			if srcLogSettings.AccessLog.Escape != nil {
 				accessLog.Escape = string(*srcLogSettings.AccessLog.Escape)
 			}
@@ -2685,6 +2682,12 @@ func buildAccessLog(srcLogSettings *ngfAPIv1alpha2.NginxLogging) *AccessLog {
 		if srcLogSettings.AccessLog != nil && srcLogSettings.AccessLog.Destination != nil {
 			setAccessLogDestination(accessLog, srcLogSettings.AccessLog.Destination)
 		}
+		return accessLog
+	}
+
+	if srcLogSettings.AccessLog != nil && srcLogSettings.AccessLog.Destination != nil {
+		accessLog := &AccessLog{}
+		setAccessLogDestination(accessLog, srcLogSettings.AccessLog.Destination)
 		return accessLog
 	}
 

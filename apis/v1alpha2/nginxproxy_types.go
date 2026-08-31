@@ -442,7 +442,8 @@ type NginxLogging struct {
 	// +kubebuilder:default=info
 	AgentLevel *AgentLogLevel `json:"agentLevel,omitempty"`
 
-	// Default path /dev/stdout can be used or file/syslog destinations can be configured.
+	// File or syslog destinations can be configured.
+	// If not specified, the default path is /dev/stdout.
 	//
 	// +optional
 	AccessLog *NginxAccessLog `json:"accessLog,omitempty"`
@@ -569,8 +570,8 @@ const (
 
 // NginxAccessLogDestination defines the destination for access logs.
 //
-// +kubebuilder:validation:XValidation:rule="!(has(self.type) && self.type == 'file' && !has(self.file))"
-// +kubebuilder:validation:XValidation:rule="!(has(self.type) && self.type == 'syslog' && !has(self.syslog))"
+// +kubebuilder:validation:XValidation:rule="has(self.file) == (has(self.type) && self.type == 'file')"
+// +kubebuilder:validation:XValidation:rule="has(self.syslog) == (has(self.type) && self.type == 'syslog')"
 type NginxAccessLogDestination struct {
 	// File specifies the file destination for access logs.
 	// Only valid when type is set to "file".
@@ -602,6 +603,11 @@ const (
 
 // NginxAccessLogFile specifies the file destination for access logs.
 type NginxAccessLogFile struct {
+	// Path is the file path where access logs will be written.
+	//
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=256
+	// +kubebuilder:validation:Pattern=`^/.*$`
 	Path *string `json:"path"`
 }
 

@@ -913,9 +913,13 @@ type DeploymentContext struct {
 
 // AccessLog defines the configuration for an NGINX access log.
 type AccessLog struct {
-	Format  string
-	Escape  string
-	Path    string
+	// Format specifies the custom log format string.
+	Format string
+	// Escape specifies how to escape characters in variables for access log.
+	Escape string
+	// Path is the destination file path or syslog endpoint.
+	Path string
+	// Disable specifies whether the access log is disabled.
 	Disable bool
 }
 

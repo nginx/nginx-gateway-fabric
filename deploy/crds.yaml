@@ -10572,8 +10572,9 @@ spec:
                 description: Logging defines logging related settings for NGINX.
                 properties:
                   accessLog:
-                    description: Default path /dev/stdout can be used or file/syslog
-                      destinations can be configured.
+                    description: |-
+                      File or syslog destinations can be configured.
+                      If not specified, the default path is /dev/stdout.
                     properties:
                       destination:
                         description: |-
@@ -10586,6 +10587,11 @@ spec:
                               Only valid when type is set to "file".
                             properties:
                               path:
+                                description: Path is the file path where access logs
+                                  will be written.
+                                maxLength: 256
+                                minLength: 1
+                                pattern: ^/.*$
                                 type: string
                             required:
                             - path
@@ -10614,8 +10620,10 @@ spec:
                         - type
                         type: object
                         x-kubernetes-validations:
-                        - rule: '!(has(self.type) && self.type == ''file'' && !has(self.file))'
-                        - rule: '!(has(self.type) && self.type == ''syslog'' && !has(self.syslog))'
+                        - rule: has(self.file) == (has(self.type) && self.type ==
+                            'file')
+                        - rule: has(self.syslog) == (has(self.type) && self.type ==
+                            'syslog')
                       disable:
                         description: Disable turns off access logging when set to
                           true.
