@@ -475,10 +475,12 @@ func TestExecuteStreamServers_RewriteClientIP(t *testing.T) {
 			expectedStreamConfig: map[string]int{
 				"listen 8443;":      1,
 				"listen [::]:8443;": 1,
-				fmt.Sprintf("listen %scafe.example.com-8443.sock proxy_protocol;", SocketBasePath): 1,
-				"set_real_ip_from 10.1.1.22/32;": 1,
-				"set_real_ip_from ::1/128;":      1,
-				"set_real_ip_from 3.4.5.6;":      1,
+				fmt.Sprintf("listen %scafe.example.com-8443.sock;", SocketBasePath): 1,
+				// Passthrough servers should not get proxy_protocol.
+				fmt.Sprintf("listen %scafe.example.com-8443.sock proxy_protocol;", SocketBasePath): 0,
+				"set_real_ip_from 10.1.1.22/32;": 0,
+				"set_real_ip_from ::1/128;":      0,
+				"set_real_ip_from 3.4.5.6;":      0,
 				"real_ip_recursive on;":          0,
 			},
 		},

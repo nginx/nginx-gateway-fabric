@@ -1,0 +1,20 @@
+# WAFPolicy WITH polling enabled, targeting the tea HTTPRoute.
+# Uses the same bundle URL as wafpolicy-polling-conflict-no-poll.yaml.
+# This policy is created second so it is newer and loses the conflict — it should
+# be rejected with Accepted=False/Conflicted.
+apiVersion: gateway.nginx.org/v1alpha1
+kind: WAFPolicy
+metadata:
+  name: tea-waf-poll
+spec:
+  targetRefs:
+  - group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: tea
+  type: HTTP
+  policySource:
+    httpSource:
+      url: http://bundle-server.waf-policy.svc.cluster.local/attack-signatures-blocking.tgz
+    polling:
+      enabled: true
+      interval: 15s

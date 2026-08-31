@@ -235,7 +235,7 @@ type BundlePolling struct {
 // HTTPBundleSource configures direct bundle fetching from an HTTP/HTTPS URL.
 type HTTPBundleSource struct {
 	// URL is the full URL of the compiled policy bundle (.tgz),
-	// e.g. "https://storage.example.com/bundles/policy.tgz".
+	// e.g. `https://storage.example.com/bundles/policy.tgz`.
 	//
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=2083
@@ -256,6 +256,7 @@ type NIMBundleSource struct {
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=253
+	// +kubebuilder:validation:Pattern=`^[A-Za-z0-9][-A-Za-z0-9_.]*$`
 	PolicyName *string `json:"policyName,omitempty"`
 
 	// PolicyUID is the unique identifier of the compiled policy bundle in NIM.
@@ -267,7 +268,7 @@ type NIMBundleSource struct {
 	PolicyUID *string `json:"policyUID,omitempty"`
 
 	// URL is the base URL of the NGINX Instance Manager instance,
-	// e.g. "https://nim.example.com".
+	// e.g. `https://nim.example.com`.
 	//
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=2083
@@ -285,7 +286,7 @@ type NIMLogProfileBundleSource struct {
 	ProfileName string `json:"profileName"`
 
 	// URL is the base URL of the NGINX Instance Manager instance,
-	// e.g. "https://nim.example.com".
+	// e.g. `https://nim.example.com`.
 	//
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=2083
@@ -314,7 +315,7 @@ type N1CLogProfileBundleSource struct {
 	ProfileObjectID *string `json:"profileObjectID,omitempty"`
 
 	// URL is the base URL of the F5 NGINX One Console instance,
-	// e.g. "https://<tenant>.volterra.us".
+	// e.g. `https://<tenant>.volterra.us`.
 	//
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=2083
@@ -325,6 +326,7 @@ type N1CLogProfileBundleSource struct {
 	//
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=253
+	// +kubebuilder:validation:Pattern=`^[A-Za-z0-9][-A-Za-z0-9_.]*$`
 	Namespace string `json:"namespace"`
 }
 
@@ -341,6 +343,7 @@ type N1CBundleSource struct {
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=253
+	// +kubebuilder:validation:Pattern=`^[A-Za-z0-9][-A-Za-z0-9_.]*$`
 	PolicyName *string `json:"policyName,omitempty"`
 
 	// PolicyObjectID is the unique object identifier of the security policy in N1C
@@ -359,7 +362,7 @@ type N1CBundleSource struct {
 	PolicyVersionID *string `json:"policyVersionID,omitempty"`
 
 	// URL is the base URL of the F5 NGINX One Console instance,
-	// e.g. "https://<tenant>.volterra.us".
+	// e.g. `https://<tenant>.volterra.us`.
 	//
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=2083
@@ -370,6 +373,7 @@ type N1CBundleSource struct {
 	//
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=253
+	// +kubebuilder:validation:Pattern=`^[A-Za-z0-9][-A-Za-z0-9_.]*$`
 	Namespace string `json:"namespace"`
 }
 

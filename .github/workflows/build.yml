@@ -216,7 +216,7 @@ jobs:
       - name: Scan SBOM
         id: scan
         if: ${{ !inputs.dry_run }}
-        uses: anchore/scan-action@e1165082ffb1fe366ebaf02d8526e7c4989ea9d2 # v7.4.0
+        uses: anchore/scan-action@8964e60c6fabdb85fdbbbfd9834d8f19c97a3086 # v7.4.1
         with:
           sbom: "sbom-${{ inputs.image }}.json"
           only-fixed: true
@@ -224,7 +224,7 @@ jobs:
           fail-build: false
 
       - name: Upload scan result to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
+        uses: github/codeql-action/upload-sarif@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4.37.8
         if: ${{ !inputs.dry_run }}
         continue-on-error: true
         with:
