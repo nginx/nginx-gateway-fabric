@@ -545,6 +545,175 @@ func TestCalculateReadyEndpoints(t *testing.T) {
 	g.Expect(result).To(Equal(7))
 }
 
+func TestCompareEndpoints(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	testcases := []struct {
+		msg      string
+		a        Endpoint
+		b        Endpoint
+		expected int
+	}{
+		{
+			msg:      "equal endpoints",
+			a:        Endpoint{Address: "10.0.0.1", Port: 80, IPv6: false, Resolve: false, Weight: 1},
+			b:        Endpoint{Address: "10.0.0.1", Port: 80, IPv6: false, Resolve: false, Weight: 1},
+			expected: 0,
+		},
+		{
+			msg:      "different address: a < b",
+			a:        Endpoint{Address: "10.0.0.1", Port: 80},
+			b:        Endpoint{Address: "10.0.0.2", Port: 80},
+			expected: -1,
+		},
+		{
+			msg:      "different address: a > b",
+			a:        Endpoint{Address: "10.0.0.2", Port: 80},
+			b:        Endpoint{Address: "10.0.0.1", Port: 80},
+			expected: 1,
+		},
+		{
+			msg:      "same address, different port: a < b",
+			a:        Endpoint{Address: "10.0.0.1", Port: 80},
+			b:        Endpoint{Address: "10.0.0.1", Port: 443},
+			expected: -1,
+		},
+		{
+			msg:      "same address, different port: a > b",
+			a:        Endpoint{Address: "10.0.0.1", Port: 443},
+			b:        Endpoint{Address: "10.0.0.1", Port: 80},
+			expected: 1,
+		},
+		{
+			msg:      "same address and port, IPv4 vs IPv6: a < b",
+			a:        Endpoint{Address: "2001:db8::1", Port: 80, IPv6: false},
+			b:        Endpoint{Address: "2001:db8::1", Port: 80, IPv6: true},
+			expected: -1,
+		},
+		{
+			msg:      "same address and port, IPv6 vs IPv4: a > b",
+			a:        Endpoint{Address: "2001:db8::1", Port: 80, IPv6: true},
+			b:        Endpoint{Address: "2001:db8::1", Port: 80, IPv6: false},
+			expected: 1,
+		},
+		{
+			msg:      "same address, port, IPv6, Resolve false vs true: a < b",
+			a:        Endpoint{Address: "example.com", Port: 80, Resolve: false},
+			b:        Endpoint{Address: "example.com", Port: 80, Resolve: true},
+			expected: -1,
+		},
+		{
+			msg:      "same address, port, IPv6, Resolve true vs false: a > b",
+			a:        Endpoint{Address: "example.com", Port: 80, Resolve: true},
+			b:        Endpoint{Address: "example.com", Port: 80, Resolve: false},
+			expected: 1,
+		},
+		{
+			msg:      "same address, port, IPv6, Resolve, Weight: a < b",
+			a:        Endpoint{Address: "10.0.0.1", Port: 80, Weight: 1},
+			b:        Endpoint{Address: "10.0.0.1", Port: 80, Weight: 2},
+			expected: -1,
+		},
+		{
+			msg:      "same address, port, IPv6, Resolve, Weight: a > b",
+			a:        Endpoint{Address: "10.0.0.1", Port: 80, Weight: 2},
+			b:        Endpoint{Address: "10.0.0.1", Port: 80, Weight: 1},
+			expected: 1,
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.msg, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+			g.Expect(compareEndpoints(tc.a, tc.b)).To(Equal(tc.expected))
+		})
+	}
+}
+
+func TestResolveEndpointsDeterministicOrder(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	svcPort := v1.ServicePort{
+		Name: "http",
+		Port: 80,
+	}
+	port80 := int32(80)
+	port8080 := int32(8080)
+
+	slice1 := discoveryV1.EndpointSlice{
+		AddressType: discoveryV1.AddressTypeIPv4,
+		Ports: []discoveryV1.EndpointPort{
+			{Name: helpers.GetPointer("http"), Port: &port80},
+		},
+		Endpoints: []discoveryV1.Endpoint{
+			{
+				Addresses:  []string{"10.0.0.5", "10.0.0.1", "10.0.0.3"},
+				Conditions: discoveryV1.EndpointConditions{Ready: helpers.GetPointer(true)},
+			},
+		},
+	}
+
+	slice2 := discoveryV1.EndpointSlice{
+		AddressType: discoveryV1.AddressTypeIPv4,
+		Ports: []discoveryV1.EndpointPort{
+			{Name: helpers.GetPointer("http"), Port: &port8080},
+		},
+		Endpoints: []discoveryV1.Endpoint{
+			{
+				Addresses:  []string{"10.0.0.1", "10.0.0.4"},
+				Conditions: discoveryV1.EndpointConditions{Ready: helpers.GetPointer(true)},
+			},
+		},
+	}
+
+	sliceIPv6 := discoveryV1.EndpointSlice{
+		AddressType: discoveryV1.AddressTypeIPv6,
+		Ports: []discoveryV1.EndpointPort{
+			{Name: helpers.GetPointer("http"), Port: &port80},
+		},
+		Endpoints: []discoveryV1.Endpoint{
+			{
+				Addresses:  []string{"2001:db8::2", "2001:db8::1"},
+				Conditions: discoveryV1.EndpointConditions{Ready: helpers.GetPointer(true)},
+			},
+		},
+	}
+
+	endpointSliceList := discoveryV1.EndpointSliceList{
+		Items: []discoveryV1.EndpointSlice{slice1, slice2, sliceIPv6},
+	}
+
+	initSet := func(logr.Logger, []discoveryV1.EndpointSlice) map[Endpoint]struct{} {
+		return make(map[Endpoint]struct{})
+	}
+
+	expected := []Endpoint{
+		{Address: "10.0.0.1", Port: 80, IPv6: false},
+		{Address: "10.0.0.1", Port: 8080, IPv6: false},
+		{Address: "10.0.0.3", Port: 80, IPv6: false},
+		{Address: "10.0.0.4", Port: 8080, IPv6: false},
+		{Address: "10.0.0.5", Port: 80, IPv6: false},
+		{Address: "2001:db8::1", Port: 80, IPv6: true},
+		{Address: "2001:db8::2", Port: 80, IPv6: true},
+	}
+
+	for range 50 {
+		endpoints, err := resolveEndpoints(
+			logr.Discard(),
+			types.NamespacedName{Namespace: "default", Name: "svc"},
+			svcPort,
+			endpointSliceList,
+			initSet,
+			dualAddressType,
+		)
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(endpoints).To(Equal(expected))
+	}
+}
+
 func generateEndpointSliceList(n int) discoveryV1.EndpointSliceList {
 	const maxEndpointsPerSlice = 100 // use the Kubernetes default max for endpoints in a slice.
 
