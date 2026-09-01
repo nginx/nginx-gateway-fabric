@@ -39,16 +39,18 @@ type Config struct {
 	UsageReportConfig UsageReportConfig
 	// Flags contains the NGF command-line flag names and values.
 	Flags Flags
-	// LeaderElection contains the configuration for leader election.
-	LeaderElection LeaderElectionConfig
 	// NginxDockerSecretNames are the names of any Docker registry Secrets for the NGINX container.
 	NginxDockerSecretNames []string
 	// WatchNamespaces is the list of namespaces to watch for resources. If empty, all namespaces are watched.
 	WatchNamespaces []string
 	// NginxOneConsoleTelemetryConfig contains the configuration for NGINX One Console telemetry.
-	NginxOneConsoleTelemetryConfig NginxOneConsoleTelemetryConfig
+	NginxOneConsoleTelemetryConfig ManagementPlaneTelemetryConfig
+	// NginxInstanceManagerTelemetryConfig contains the configuration for NGINX Instance Manager telemetry.
+	NginxInstanceManagerTelemetryConfig ManagementPlaneTelemetryConfig
 	// ProductTelemetryConfig contains the configuration for collecting product telemetry.
 	ProductTelemetryConfig ProductTelemetryConfig
+	// LeaderElection contains the configuration for leader election.
+	LeaderElection LeaderElectionConfig
 	// HealthConfig specifies the health probe config.
 	HealthConfig HealthConfig
 	// MetricsConfig specifies the metrics config.
@@ -130,6 +132,13 @@ type LeaderElectionConfig struct {
 	LockName string
 	// Identity is the unique name of the controller used for identifying the leader.
 	Identity string
+	// LeaseDuration is the duration that non-leader candidates will wait to force acquire leadership. This is
+	// measured against time of last observed ack.
+	LeaseDuration time.Duration
+	// RenewDeadline is the duration that the acting leader will retry refreshing leadership before giving up.
+	RenewDeadline time.Duration
+	// RetryPeriod is the duration the LeaderElector clients should wait between action tries.
+	RetryPeriod time.Duration
 	// Enabled indicates whether leader election is enabled.
 	Enabled bool
 }
@@ -174,8 +183,9 @@ type Flags struct {
 	Values []string
 }
 
-// NginxOneConsoleTelemetryConfig contains the configuration for NGINX One Console telemetry.
-type NginxOneConsoleTelemetryConfig struct {
+// ManagementPlaneTelemetryConfig contains the configuration for management plane telemetry
+// such as NGINX One Console or NGINX Instance Manager.
+type ManagementPlaneTelemetryConfig struct {
 	// DataplaneKeySecretName is the name of the Secret containing the dataplane key.
 	DataplaneKeySecretName string
 	// EndpointHost is the host of the telemetry endpoint.

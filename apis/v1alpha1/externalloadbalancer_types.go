@@ -12,7 +12,6 @@ import (
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:categories=nginx-gateway-fabric,shortName=elb
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
-// +kubebuilder:metadata:labels="gateway.networking.k8s.io/policy=direct"
 
 // ExternalLoadBalancer configures an external load balancer that fronts a Gateway.
 // It references a Gateway through TargetRefs. NGINX Gateway Fabric provisions the

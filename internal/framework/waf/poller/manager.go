@@ -70,9 +70,9 @@ type pollerManager struct {
 	pollErrors    map[types.NamespacedName]*PollError
 	bundleUpdates map[types.NamespacedName]BundleUpdate
 	bundleCache   map[graph.WAFBundleKey]*graph.WAFBundleData
-	// bundleKeyToPolicy maps each bundle key to the policy that owns it.
-	// Used to look up the policy namespace/name when injecting a WAFBundleReconcileEvent.
-	bundleKeyToPolicy map[graph.WAFBundleKey]types.NamespacedName
+	// bundleKeyToPolicy maps each bundle key to the set of policies that share it.
+	// Used to look up the policy namespace/name(s) when injecting a WAFBundleReconcileEvent.
+	bundleKeyToPolicy map[graph.WAFBundleKey]map[types.NamespacedName]struct{}
 	// bundleKeyToDescription maps each bundle key to a human-readable description of the bundle,
 	// e.g. "policy bundle" or "security log bundle (profile: default)".
 	// Used to produce user-visible condition messages without exposing internal key formats.
@@ -121,7 +121,7 @@ func NewManager(cfg ManagerConfig) Manager {
 		pollErrors:             make(map[types.NamespacedName]*PollError),
 		bundleUpdates:          make(map[types.NamespacedName]BundleUpdate),
 		bundleCache:            make(map[graph.WAFBundleKey]*graph.WAFBundleData),
-		bundleKeyToPolicy:      make(map[graph.WAFBundleKey]types.NamespacedName),
+		bundleKeyToPolicy:      make(map[graph.WAFBundleKey]map[types.NamespacedName]struct{}),
 		bundleKeyToDescription: make(map[graph.WAFBundleKey]string),
 		statusCallback:         cfg.StatusCallback,
 		eventCh:                cfg.EventCh,
@@ -175,7 +175,7 @@ func (m *pollerManager) startPoller(ctx context.Context, cfg Config) {
 		entry.cancel()
 		delete(m.pollErrors, cfg.PolicyNsName)
 		delete(m.bundleUpdates, cfg.PolicyNsName)
-		m.clearBundleCacheLocked(entry.poller)
+		m.clearBundleCacheLocked(entry.poller, cfg.PolicyNsName)
 	}
 
 	pollerCtx, cancel := context.WithCancel(ctx)
@@ -204,7 +204,10 @@ func (m *pollerManager) startPoller(ctx context.Context, cfg Config) {
 
 	// Record which policy owns each bundle key and its human-readable description.
 	for _, src := range cfg.Sources {
-		m.bundleKeyToPolicy[src.BundleKey] = cfg.PolicyNsName
+		if m.bundleKeyToPolicy[src.BundleKey] == nil {
+			m.bundleKeyToPolicy[src.BundleKey] = make(map[types.NamespacedName]struct{})
+		}
+		m.bundleKeyToPolicy[src.BundleKey][cfg.PolicyNsName] = struct{}{}
 		desc := src.Description
 		if desc == "" {
 			desc = "WAF bundle"
@@ -320,7 +323,8 @@ func (m *pollerManager) cacheBundleUpdate(bundleKey graph.WAFBundleKey, data []b
 	m.mu.Lock()
 
 	// Ownership check: only cache updates for bundle keys that are still registered.
-	if _, registered := m.bundleKeyToPolicy[bundleKey]; !registered {
+	owners := m.bundleKeyToPolicy[bundleKey]
+	if len(owners) == 0 {
 		m.mu.Unlock()
 		return
 	}
@@ -333,24 +337,26 @@ func (m *pollerManager) cacheBundleUpdate(bundleKey graph.WAFBundleKey, data []b
 	}
 
 	// Capture event details while holding the lock, then release before sending.
-	var event *events.WAFBundleReconcileEvent
-	if !alreadyCached {
-		if policyNsName, ok := m.bundleKeyToPolicy[bundleKey]; ok && m.eventCh != nil {
-			event = &events.WAFBundleReconcileEvent{PolicyNsName: policyNsName}
+	var eventsToSend []events.WAFBundleReconcileEvent
+	if !alreadyCached && m.eventCh != nil {
+		// Fan out a WAFBundleReconcileEvent to all policies that own this bundle key.
+		for policyNsName := range owners {
+			eventsToSend = append(eventsToSend, events.WAFBundleReconcileEvent{PolicyNsName: policyNsName})
 		}
 	}
 
 	m.mu.Unlock()
 
-	// Send the reconcile event after releasing the lock so other manager operations are not
+	// Send the reconcile events after releasing the lock so other manager operations are not
 	// blocked on the mutex while waiting for the event loop. The manager's root context is
 	// used as a cancellation escape hatch: on shutdown, the event loop exits before the
 	// manager's context is canceled, so without this the poller goroutine could block
 	// indefinitely trying to send to an already-drained channel.
-	if event != nil {
+	for _, event := range eventsToSend {
 		select {
-		case m.eventCh <- *event:
+		case m.eventCh <- event:
 		case <-m.ctx.Done():
+			return
 		}
 	}
 }
@@ -398,7 +404,7 @@ func (m *pollerManager) StopPoller(policyNsName types.NamespacedName) {
 	delete(m.pollers, policyNsName)
 	delete(m.pollErrors, policyNsName)
 	delete(m.bundleUpdates, policyNsName)
-	m.clearBundleCacheLocked(entry.poller)
+	m.clearBundleCacheLocked(entry.poller, policyNsName)
 	m.mu.Unlock()
 
 	entry.cancel()
@@ -416,7 +422,7 @@ func (m *pollerManager) stopAll() {
 	m.pollErrors = make(map[types.NamespacedName]*PollError)
 	m.bundleUpdates = make(map[types.NamespacedName]BundleUpdate)
 	m.bundleCache = make(map[graph.WAFBundleKey]*graph.WAFBundleData)
-	m.bundleKeyToPolicy = make(map[graph.WAFBundleKey]types.NamespacedName)
+	m.bundleKeyToPolicy = make(map[graph.WAFBundleKey]map[types.NamespacedName]struct{})
 	m.bundleKeyToDescription = make(map[graph.WAFBundleKey]string)
 	m.mu.Unlock()
 
@@ -427,13 +433,19 @@ func (m *pollerManager) stopAll() {
 	m.logger.Info("Stopped all WAF pollers", "count", len(entries))
 }
 
-// clearBundleCacheLocked removes cached bundle data and all per-key mappings for all bundle keys
-// owned by the given poller. Must be called while m.mu is held.
-func (m *pollerManager) clearBundleCacheLocked(p *poller) {
+// clearBundleCacheLocked removes the given policy from the owner sets of all bundle keys
+// owned by the given poller. If the policy was the last owner of a bundle key, the cached
+// bundle data and description are also removed. Must be called while m.mu is held.
+func (m *pollerManager) clearBundleCacheLocked(p *poller, policyNsName types.NamespacedName) {
 	for _, src := range p.getSources() {
-		delete(m.bundleCache, src.BundleKey)
-		delete(m.bundleKeyToPolicy, src.BundleKey)
-		delete(m.bundleKeyToDescription, src.BundleKey)
+		if owners := m.bundleKeyToPolicy[src.BundleKey]; owners != nil {
+			delete(owners, policyNsName)
+			if len(owners) == 0 {
+				delete(m.bundleKeyToPolicy, src.BundleKey)
+				delete(m.bundleCache, src.BundleKey)
+				delete(m.bundleKeyToDescription, src.BundleKey)
+			}
+		}
 	}
 }
 
@@ -463,7 +475,7 @@ func (m *pollerManager) StopPollersNotIn(activePolicies map[types.NamespacedName
 			delete(m.pollers, nsName)
 			delete(m.pollErrors, nsName)
 			delete(m.bundleUpdates, nsName)
-			m.clearBundleCacheLocked(entry.poller)
+			m.clearBundleCacheLocked(entry.poller, nsName)
 		}
 	}
 	m.mu.Unlock()
