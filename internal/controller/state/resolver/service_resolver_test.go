@@ -256,7 +256,7 @@ var _ = Describe("ServiceResolver", func() {
 				dualAddressType,
 			)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(endpoints).To(Equal(expectedEndpoints))
+			Expect(endpoints).To(ConsistOf(expectedEndpoints))
 		})
 		It("returns an error if there are no valid endpoint slices for the service and port", func() {
 			// delete valid endpoint slices

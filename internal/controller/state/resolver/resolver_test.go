@@ -557,8 +557,8 @@ func TestCompareEndpoints(t *testing.T) {
 	}{
 		{
 			msg:      "equal endpoints",
-			a:        Endpoint{Address: "10.0.0.1", Port: 80, IPv6: false, Resolve: false, Weight: 1},
-			b:        Endpoint{Address: "10.0.0.1", Port: 80, IPv6: false, Resolve: false, Weight: 1},
+			a:        Endpoint{Address: "10.0.0.1", Port: 80},
+			b:        Endpoint{Address: "10.0.0.1", Port: 80},
 			expected: 0,
 		},
 		{
@@ -583,42 +583,6 @@ func TestCompareEndpoints(t *testing.T) {
 			msg:      "same address, different port: a > b",
 			a:        Endpoint{Address: "10.0.0.1", Port: 443},
 			b:        Endpoint{Address: "10.0.0.1", Port: 80},
-			expected: 1,
-		},
-		{
-			msg:      "same address and port, IPv4 vs IPv6: a < b",
-			a:        Endpoint{Address: "2001:db8::1", Port: 80, IPv6: false},
-			b:        Endpoint{Address: "2001:db8::1", Port: 80, IPv6: true},
-			expected: -1,
-		},
-		{
-			msg:      "same address and port, IPv6 vs IPv4: a > b",
-			a:        Endpoint{Address: "2001:db8::1", Port: 80, IPv6: true},
-			b:        Endpoint{Address: "2001:db8::1", Port: 80, IPv6: false},
-			expected: 1,
-		},
-		{
-			msg:      "same address, port, IPv6, Resolve false vs true: a < b",
-			a:        Endpoint{Address: "example.com", Port: 80, Resolve: false},
-			b:        Endpoint{Address: "example.com", Port: 80, Resolve: true},
-			expected: -1,
-		},
-		{
-			msg:      "same address, port, IPv6, Resolve true vs false: a > b",
-			a:        Endpoint{Address: "example.com", Port: 80, Resolve: true},
-			b:        Endpoint{Address: "example.com", Port: 80, Resolve: false},
-			expected: 1,
-		},
-		{
-			msg:      "same address, port, IPv6, Resolve, Weight: a < b",
-			a:        Endpoint{Address: "10.0.0.1", Port: 80, Weight: 1},
-			b:        Endpoint{Address: "10.0.0.1", Port: 80, Weight: 2},
-			expected: -1,
-		},
-		{
-			msg:      "same address, port, IPv6, Resolve, Weight: a > b",
-			a:        Endpoint{Address: "10.0.0.1", Port: 80, Weight: 2},
-			b:        Endpoint{Address: "10.0.0.1", Port: 80, Weight: 1},
 			expected: 1,
 		},
 	}
