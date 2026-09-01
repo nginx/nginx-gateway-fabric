@@ -1576,10 +1576,7 @@ func (p *NginxProvisioner) configureNginxPlus(
 		spec.Spec.Volumes = append(spec.Spec.Volumes, corev1.Volume{
 			Name: "nginx-plus-license",
 			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName:  names.jwt,
-					DefaultMode: helpers.GetPointer[int32](0o640),
-				},
+				Secret: &corev1.SecretVolumeSource{SecretName: names.jwt},
 			},
 		})
 	}
