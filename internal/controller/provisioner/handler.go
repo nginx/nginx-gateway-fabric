@@ -388,8 +388,7 @@ func (h *eventHandler) deprovisionMatchingSecrets(
 		resources.PlusJWTSecret,
 		resources.PlusCASecret,
 		resources.PlusClientSSLSecret,
-		resources.N1CDataplaneKeySecret,
-		resources.NIMDataplaneKeySecret,
+		resources.DataplaneKeySecret,
 	}
 
 	for _, meta := range namedSecrets {
