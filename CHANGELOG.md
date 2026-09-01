@@ -28,7 +28,7 @@ FEATURES:
 - Add `useClusterIP` to the NginxProxy resource to globally route upstream traffic to a Service's ClusterIP instead of individual Pod IPs. [5557](https://github.com/nginx/nginx-gateway-fabric/pull/5557). Thanks to [SidharathBansal](https://github.com/SidharathBansal).
 - Add configurable `workerRlimitNofile` to the NginxProxy API, and support `ssl_session_cache`, `ssl_session_timeout`, and `ssl_ecdh_curve` per listener via Gateway Listener TLS options. [5534](https://github.com/nginx/nginx-gateway-fabric/pull/5534). Thanks to [SidharathBansal](https://github.com/SidharathBansal).
 - Added auto IP family detection for the LoadBalancer Service. NginxProxy `ipFamily` now defaults to "auto", which detects the cluster's IP family at startup instead of always using PreferDualStack. [5530](https://github.com/nginx/nginx-gateway-fabric/pull/5530). Thanks to [tanayarun](https://github.com/tanayarun).
-- Add native support for client_body_buffer_size to the ClientSettingsPolicy. [5700](https://github.com/nginx/nginx-gateway-fabric/pull/5700).
+- Add native support for `client_body_buffer_size` to the ClientSettingsPolicy. [5700](https://github.com/nginx/nginx-gateway-fabric/pull/5700).
 - Support sending WAF Security Telemetry to NGINX Instance Manager. [5751](https://github.com/nginx/nginx-gateway-fabric/pull/5751).
 - Support configurable leader lease timeouts. [5761](https://github.com/nginx/nginx-gateway-fabric/pull/5761).
 - Add supports for specifying podDisruptionBudget for control plane and data plane. [5370](https://github.com/nginx/nginx-gateway-fabric/pull/5370).
