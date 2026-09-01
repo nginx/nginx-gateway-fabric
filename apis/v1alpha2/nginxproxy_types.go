@@ -577,13 +577,13 @@ type NginxAccessLogDestination struct {
 	// Only valid when type is set to "file".
 	//
 	// +optional
-	File *NginxAccessLogFile `json:"file,omitempty"`
+	File *string `json:"file,omitempty"`
 
 	// Syslog specifies the syslog destination for access logs.
 	// Only valid when type is set to "syslog".
 	//
 	// +optional
-	Syslog *NginxAccessLogSyslog `json:"syslog,omitempty"`
+	Syslog *string `json:"syslog,omitempty"`
 
 	// Type specifies the type of destination for access logs.
 	Type NginxAccessLogDestinationType `json:"type"`
@@ -600,23 +600,6 @@ const (
 	// NginxAccessLogDestinationTypeSyslog writes access logs to a syslog server.
 	NginxAccessLogDestinationTypeSyslog NginxAccessLogDestinationType = "syslog"
 )
-
-// NginxAccessLogFile specifies the file destination for access logs.
-type NginxAccessLogFile struct {
-	// Path is the file path where access logs will be written.
-	//
-	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:MaxLength=256
-	// +kubebuilder:validation:Pattern=`^/.*$`
-	Path *string `json:"path"`
-}
-
-// NginxAccessLogSyslog specifies the syslog destination for access logs.
-type NginxAccessLogSyslog struct {
-	// Server is the syslog server address in the format "hostname:port" or "IP:port".
-	// +kubebuilder:validation:Pattern=`^[a-zA-Z0-9.-]+:[0-9]+$`
-	Server string `json:"server"`
-}
 
 // NginxPlus specifies NGINX Plus additional settings. These will only be applied if NGINX Plus is being used.
 type NginxPlus struct {

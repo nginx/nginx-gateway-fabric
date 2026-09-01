@@ -2704,11 +2704,11 @@ func setAccessLogDestination(accessLog *AccessLog, destination *ngfAPIv1alpha2.N
 		destinationType = destination.Type
 	}
 	if destinationType == ngfAPIv1alpha2.NginxAccessLogDestinationTypeSyslog && destination.Syslog != nil &&
-		destination.Syslog.Server != "" {
-		accessLog.Path = "syslog:server=" + destination.Syslog.Server
+		*destination.Syslog != "" {
+		accessLog.Path = "syslog:server=" + *destination.Syslog
 	} else if destinationType == ngfAPIv1alpha2.NginxAccessLogDestinationTypeFile &&
-		destination.File != nil && destination.File.Path != nil && *destination.File.Path != "" {
-		accessLog.Path = *destination.File.Path
+		destination.File != nil && *destination.File != "" {
+		accessLog.Path = *destination.File
 	}
 }
 

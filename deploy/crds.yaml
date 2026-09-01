@@ -10867,30 +10867,12 @@ spec:
                             description: |-
                               File specifies the file destination for access logs.
                               Only valid when type is set to "file".
-                            properties:
-                              path:
-                                description: Path is the file path where access logs
-                                  will be written.
-                                maxLength: 256
-                                minLength: 1
-                                pattern: ^/.*$
-                                type: string
-                            required:
-                            - path
-                            type: object
+                            type: string
                           syslog:
                             description: |-
                               Syslog specifies the syslog destination for access logs.
                               Only valid when type is set to "syslog".
-                            properties:
-                              server:
-                                description: Server is the syslog server address in
-                                  the format "hostname:port" or "IP:port".
-                                pattern: ^[a-zA-Z0-9.-]+:[0-9]+$
-                                type: string
-                            required:
-                            - server
-                            type: object
+                            type: string
                           type:
                             description: Type specifies the type of destination for
                               access logs.
