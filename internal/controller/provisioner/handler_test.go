@@ -26,7 +26,7 @@ func TestHandleEventBatch_Upsert(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	store := newStore([]string{dockerTestSecretName}, "", jwtTestSecretName, "", "", "")
+	store := newStore([]string{dockerTestSecretName}, "", jwtTestSecretName, "", "", "", "")
 	provisioner, fakeClient, _ := defaultNginxProvisioner()
 	provisioner.cfg.StatusQueue = status.NewQueue()
 
@@ -234,6 +234,7 @@ func TestHandleEventBatch_Delete(t *testing.T) {
 		caTestSecretName,
 		clientTestSecretName,
 		nginxOneDataplaneKeySecretName,
+		nginxInstanceManagerDataplaneKeySecretName,
 	)
 	provisioner, fakeClient, _ := defaultNginxProvisioner()
 	provisioner.cfg.StatusQueue = status.NewQueue()
@@ -331,13 +332,21 @@ func TestHandleEventBatch_Delete(t *testing.T) {
 	}
 	g.Expect(fakeClient.Create(ctx, userDockerSecret)).To(Succeed())
 
-	userDataplaneKeySecret := &corev1.Secret{
+	userN1CDataplaneKeySecret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      nginxOneDataplaneKeySecretName,
 			Namespace: ngfNamespace,
 		},
 	}
-	g.Expect(fakeClient.Create(ctx, userDataplaneKeySecret)).To(Succeed())
+	g.Expect(fakeClient.Create(ctx, userN1CDataplaneKeySecret)).To(Succeed())
+
+	userNIMDataplaneKeySecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      nginxInstanceManagerDataplaneKeySecretName,
+			Namespace: ngfNamespace,
+		},
+	}
+	g.Expect(fakeClient.Create(ctx, userNIMDataplaneKeySecret)).To(Succeed())
 
 	upsertEvent := &events.UpsertEvent{Resource: gateway}
 	batch := events.EventBatch{upsertEvent}
@@ -382,7 +391,8 @@ func TestHandleEventBatch_Delete(t *testing.T) {
 	verifySecret(caTestSecretName, userCASecret)
 	verifySecret(clientTestSecretName, userClientSSLSecret)
 	verifySecret(dockerTestSecretName, userDockerSecret)
-	verifySecret(nginxOneDataplaneKeySecretName, userDataplaneKeySecret)
+	verifySecret(nginxOneDataplaneKeySecretName, userN1CDataplaneKeySecret)
+	verifySecret(nginxInstanceManagerDataplaneKeySecretName, userNIMDataplaneKeySecret)
 
 	// delete Gateway when provisioner is not leader
 	provisioner.leader = false
@@ -418,7 +428,7 @@ func TestHandleEventBatch_GatewayDeletingClearedOnRecreate(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	store := newStore([]string{dockerTestSecretName}, agentTLSTestSecretName, "", "", "", "")
+	store := newStore([]string{dockerTestSecretName}, agentTLSTestSecretName, "", "", "", "", "")
 	provisioner, fakeClient, _ := defaultNginxProvisioner()
 	provisioner.cfg.StatusQueue = status.NewQueue()
 
@@ -508,7 +518,7 @@ func TestHandleEventBatch_NoListeners(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	store := newStore([]string{dockerTestSecretName}, agentTLSTestSecretName, "", "", "", "")
+	store := newStore([]string{dockerTestSecretName}, agentTLSTestSecretName, "", "", "", "", "")
 	provisioner, fakeClient, _ := defaultNginxProvisioner()
 	provisioner.cfg.StatusQueue = status.NewQueue()
 
@@ -676,7 +686,7 @@ func TestEventHandler_HasResourceVersionChanged(t *testing.T) {
 			}
 
 			// Create store with mock behavior
-			store := newStore(nil, "", "", "", "", "")
+			store := newStore(nil, "", "", "", "", "", "")
 			if test.storeResourceVersion != "" {
 				// Set up the store to return the expected resource version
 				store.nginxResources[gatewayNSName] = &NginxResources{

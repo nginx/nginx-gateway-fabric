@@ -149,6 +149,9 @@ func TestControllerCmdFlagValidation(t *testing.T) {
 				"--health-disable",
 				"--leader-election-lock-name=my-lock",
 				"--leader-election-disable=false",
+				"--leader-election-lease-duration=15s",
+				"--leader-election-renew-deadline=10s",
+				"--leader-election-retry-period=2s",
 				"--nginx-plus",
 				"--nginx-docker-secret=secret1",
 				"--nginx-docker-secret=secret2",
@@ -166,6 +169,9 @@ func TestControllerCmdFlagValidation(t *testing.T) {
 				"--nginx-one-dataplane-key-secret=dataplane-key-secret",
 				"--nginx-one-telemetry-endpoint-host=telemetry-endpoint-host",
 				"--nginx-one-telemetry-endpoint-port=443",
+				"--nim-dataplane-key-secret=nim-dataplane-key-secret",
+				"--nim-telemetry-endpoint-host=nim-telemetry-endpoint-host",
+				"--nim-telemetry-endpoint-port=443",
 				"--nginx-one-tls-skip-verify",
 				"--endpoint-picker-disable-tls",
 				"--endpoint-picker-tls-skip-verify",
@@ -307,6 +313,60 @@ func TestControllerCmdFlagValidation(t *testing.T) {
 			},
 			wantErr:           true,
 			expectedErrPrefix: `invalid argument "" for "--leader-election-disable" flag: strconv.ParseBool`,
+		},
+		{
+			name: "leader-election-lease-duration is set to empty string",
+			args: []string{
+				"--leader-election-lease-duration=",
+			},
+			wantErr: true,
+			expectedErrPrefix: `invalid argument "" for "--leader-election-lease-duration" flag:` +
+				` time: invalid duration ""`,
+		},
+		{
+			name: "leader-election-lease-duration is invalid",
+			args: []string{
+				"--leader-election-lease-duration=invalid",
+			},
+			wantErr: true,
+			expectedErrPrefix: `invalid argument "invalid" for "--leader-election-lease-duration" flag:` +
+				` time: invalid duration "invalid"`,
+		},
+		{
+			name: "leader-election-renew-deadline is set to empty string",
+			args: []string{
+				"--leader-election-renew-deadline=",
+			},
+			wantErr: true,
+			expectedErrPrefix: `invalid argument "" for "--leader-election-renew-deadline" flag:` +
+				` time: invalid duration ""`,
+		},
+		{
+			name: "leader-election-renew-deadline is invalid",
+			args: []string{
+				"--leader-election-renew-deadline=invalid",
+			},
+			wantErr: true,
+			expectedErrPrefix: `invalid argument "invalid" for "--leader-election-renew-deadline" flag:` +
+				` time: invalid duration "invalid"`,
+		},
+		{
+			name: "leader-election-retry-period is set to empty string",
+			args: []string{
+				"--leader-election-retry-period=",
+			},
+			wantErr: true,
+			expectedErrPrefix: `invalid argument "" for "--leader-election-retry-period" flag:` +
+				` time: invalid duration ""`,
+		},
+		{
+			name: "leader-election-retry-period is invalid",
+			args: []string{
+				"--leader-election-retry-period=invalid",
+			},
+			wantErr: true,
+			expectedErrPrefix: `invalid argument "invalid" for "--leader-election-retry-period" flag:` +
+				` time: invalid duration "invalid"`,
 		},
 		{
 			name: "nginx-docker-secret is set to empty string",
@@ -526,6 +586,57 @@ func TestControllerCmdFlagValidation(t *testing.T) {
 				"--nginx-one-tls-skip-verify=not-a-bool",
 			},
 			wantErr: true,
+		},
+		{
+			name: "nim-dataplane-key-secret is set to empty string",
+			args: []string{
+				"--nim-dataplane-key-secret=",
+			},
+			wantErr:           true,
+			expectedErrPrefix: `invalid argument "" for "--nim-dataplane-key-secret" flag: must be set`,
+		},
+		{
+			name: "nim-dataplane-key-secret is invalid",
+			args: []string{
+				"--nim-dataplane-key-secret=!@#$",
+			},
+			wantErr:           true,
+			expectedErrPrefix: `invalid argument "!@#$" for "--nim-dataplane-key-secret" flag: invalid format: `,
+		},
+		{
+			name: "nim-telemetry-endpoint-host is set to empty string",
+			args: []string{
+				"--nim-telemetry-endpoint-host=",
+			},
+			wantErr:           true,
+			expectedErrPrefix: `invalid argument "" for "--nim-telemetry-endpoint-host" flag: must be set`,
+		},
+		{
+			name: "nim-telemetry-endpoint-host is invalid",
+			args: []string{
+				"--nim-telemetry-endpoint-host=!@#$",
+			},
+			wantErr: true,
+			expectedErrPrefix: `invalid argument "!@#$" for "--nim-telemetry-endpoint-host" ` +
+				`flag: invalid format: `,
+		},
+		{
+			name: "nim-telemetry-endpoint-port is invalid type",
+			args: []string{
+				"--nim-telemetry-endpoint-port=invalid", // not an int
+			},
+			wantErr: true,
+			expectedErrPrefix: `invalid argument "invalid" for "--nim-telemetry-endpoint-port" ` +
+				`flag: failed to parse int value: strconv.ParseInt: parsing "invalid": invalid syntax`,
+		},
+		{
+			name: "nim-telemetry-endpoint-port is outside of range",
+			args: []string{
+				"--nim-telemetry-endpoint-port=65536", // outside of range
+			},
+			wantErr: true,
+			expectedErrPrefix: `invalid argument "65536" for "--nim-telemetry-endpoint-port" flag:` +
+				` port outside of valid port range [1 - 65535]: 65536`,
 		},
 		{
 			name: "watch-namespaces is set to empty string",

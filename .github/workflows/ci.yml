@@ -137,7 +137,7 @@ jobs:
       - name: Output Variables
         id: vars
         run: |
-          K8S_KIND_VERSION=v1.36.1 # renovate: datasource=docker depName=kindest/node
+          K8S_KIND_VERSION=v1.37.0 # renovate: datasource=docker depName=kindest/node
           echo "go_path=$(go env GOPATH)" >> $GITHUB_OUTPUT
           echo "min_k8s_version=v1.32.11" >> $GITHUB_OUTPUT
           echo "k8s_latest=${K8S_KIND_VERSION}" >> $GITHUB_OUTPUT
@@ -293,7 +293,7 @@ jobs:
 
       - name: Download Syft
         if: ${{ inputs.is_production_release }}
-        uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        uses: anchore/sbom-action/download-syft@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
 
       - name: Install Cosign
         if: ${{ inputs.is_production_release }}

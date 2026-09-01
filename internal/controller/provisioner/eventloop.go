@@ -50,7 +50,8 @@ func newEventLoop(
 	ngfNamespace string,
 	dockerSecrets []string,
 	agentTLSSecret string,
-	dataplaneKeySecret string,
+	n1cDataplaneKeySecret string,
+	nimDataplaneKeySecret string,
 	usageConfig *config.UsageReportConfig,
 	features eventLoopFeatures,
 ) (*events.EventLoop, error) {
@@ -60,8 +61,12 @@ func newEventLoop(
 	secretsToWatch = append(secretsToWatch, agentTLSSecret)
 	secretsToWatch = append(secretsToWatch, dockerSecrets...)
 
-	if dataplaneKeySecret != "" {
-		secretsToWatch = append(secretsToWatch, dataplaneKeySecret)
+	if n1cDataplaneKeySecret != "" {
+		secretsToWatch = append(secretsToWatch, n1cDataplaneKeySecret)
+	}
+
+	if nimDataplaneKeySecret != "" {
+		secretsToWatch = append(secretsToWatch, nimDataplaneKeySecret)
 	}
 
 	if usageConfig != nil {
