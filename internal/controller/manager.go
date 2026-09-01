@@ -235,6 +235,7 @@ func StartManager(cfg config.Config) error {
 		),
 		k8sClient:               mgr.GetClient(),
 		logger:                  cfg.Logger.WithName("eventHandler"),
+		flush:                   cfg.Flush,
 		logLevelSetter:          logLevelSetter,
 		eventRecorder:           recorder,
 		deployCtxCollector:      deployCtxCollector,
@@ -259,6 +260,7 @@ func StartManager(cfg config.Config) error {
 	eventLoop := events.NewEventLoop(
 		eventCh,
 		cfg.Logger.WithName("eventLoop"),
+		cfg.Flush,
 		eventHandler,
 		firstBatchPreparer,
 	)
@@ -325,6 +327,7 @@ func createAgentServices(
 
 	grpcServer := agentgrpc.NewServer(
 		cfg.Logger.WithName("agentGRPCServer"),
+		cfg.Flush,
 		grpcServerPort,
 		[]func(*grpc.Server){
 			nginxUpdater.CommandService.Register,
@@ -363,6 +366,7 @@ func createAndRegisterProvisioner(
 			DeploymentStore:                nginxUpdater.NginxDeployments,
 			StatusQueue:                    statusQueue,
 			Logger:                         cfg.Logger.WithName("provisioner"),
+			Flush:                          cfg.Flush,
 			EventRecorder:                  recorder,
 			GatewayPodConfig:               &cfg.GatewayPodConfig,
 			GCName:                         cfg.GatewayClassName,

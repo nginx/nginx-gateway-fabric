@@ -19,6 +19,9 @@ type Config struct {
 	GatewayPodConfig GatewayPodConfig
 	// Logger is the Zap Logger used by all components.
 	Logger logr.Logger
+	// Flush performs a best-effort flush of the configured logger backend.
+	// It is intended for panic/shutdown boundaries that need log durability.
+	Flush func()
 	// GatewayClassName is the name of the GatewayClass resource that the Gateway will use.
 	GatewayClassName string
 	// ConfigName is the name of the NginxGateway resource for this controller.

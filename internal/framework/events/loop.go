@@ -5,6 +5,8 @@ import (
 	"fmt"
 
 	"github.com/go-logr/logr"
+
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
 
 // EventLoop is the main event loop of the Gateway. It handles events coming through the event channel.
@@ -26,6 +28,7 @@ type EventLoop struct {
 	handler  EventHandler
 	preparer FirstEventBatchPreparer
 	eventCh  <-chan any
+	flush    func()
 	logger   logr.Logger
 
 	// The EventLoop uses double buffering to handle event batch processing.
@@ -43,11 +46,13 @@ type EventLoop struct {
 func NewEventLoop(
 	eventCh <-chan any,
 	logger logr.Logger,
+	flush func(),
 	handler EventHandler,
 	preparer FirstEventBatchPreparer,
 ) *EventLoop {
 	return &EventLoop{
 		eventCh:      eventCh,
+		flush:        flush,
 		logger:       logger,
 		handler:      handler,
 		preparer:     preparer,
@@ -65,9 +70,14 @@ func (el *EventLoop) Start(ctx context.Context) error {
 	handlingDone := make(chan struct{})
 
 	handleBatch := func() {
-		go func(batch EventBatch) {
-			el.currentBatchID++
-			batchLogger := el.logger.WithName("eventHandler").WithValues("batchID", el.currentBatchID)
+		el.currentBatchID++
+		batchID := el.currentBatchID
+		batchLogger := el.logger.WithName("eventHandler").WithValues("batchID", batchID)
+
+		go func(batch EventBatch, batchLogger logr.Logger) {
+			defer func() {
+				helpers.RecoverAndFlush(batchLogger, el.flush, "panic in event batch handler", recover(), true)
+			}()
 
 			batchLogger.V(1).Info("Handling events from the batch", "total", len(batch))
 
@@ -75,7 +85,7 @@ func (el *EventLoop) Start(ctx context.Context) error {
 
 			batchLogger.V(1).Info("Finished handling the batch")
 			handlingDone <- struct{}{}
-		}(el.currentBatch)
+		}(el.currentBatch, batchLogger)
 	}
 
 	swapAndHandleBatch := func() {

@@ -47,6 +47,7 @@ type Server struct {
 	interceptor Interceptor
 
 	logger logr.Logger
+	flush  func()
 
 	// resetConnChan is used by the filewatcher to trigger the Command service to
 	// reset any connections when TLS files are updated.
@@ -60,6 +61,7 @@ type Server struct {
 
 func NewServer(
 	logger logr.Logger,
+	flush func(),
 	port int,
 	registerSvcs []func(*grpc.Server),
 	k8sClient client.Client,
@@ -68,6 +70,7 @@ func NewServer(
 ) *Server {
 	return &Server{
 		logger:           logger,
+		flush:            flush,
 		port:             port,
 		registerServices: registerSvcs,
 		interceptor:      interceptor.NewContextSetter(k8sClient, tokenAudience),
@@ -126,8 +129,8 @@ func (g *Server) createServer(tlsCredentials credentials.TransportCredentials) *
 				PermitWithoutStream: true,
 			},
 		),
-		grpc.ChainStreamInterceptor(recoveryStreamInterceptor(g.logger), g.interceptor.Stream(g.logger)),
-		grpc.ChainUnaryInterceptor(recoveryUnaryInterceptor(g.logger), g.interceptor.Unary(g.logger)),
+		grpc.ChainStreamInterceptor(recoveryStreamInterceptor(g.logger, g.flush), g.interceptor.Stream(g.logger)),
+		grpc.ChainUnaryInterceptor(recoveryUnaryInterceptor(g.logger, g.flush), g.interceptor.Unary(g.logger)),
 		grpc.Creds(tlsCredentials),
 		// Set max message size to 4MB to match the agent side.
 		grpc.MaxSendMsgSize(1024*1024*4), // 4MB
@@ -137,7 +140,7 @@ func (g *Server) createServer(tlsCredentials credentials.TransportCredentials) *
 	return server
 }
 
-func recoveryStreamInterceptor(logger logr.Logger) grpc.StreamServerInterceptor {
+func recoveryStreamInterceptor(logger logr.Logger, flush func()) grpc.StreamServerInterceptor {
 	return func(
 		srv any,
 		ss grpc.ServerStream,
@@ -152,6 +155,9 @@ func recoveryStreamInterceptor(logger logr.Logger) grpc.StreamServerInterceptor 
 					"method", info.FullMethod,
 					"stack", string(debug.Stack()),
 				)
+				if flush != nil {
+					flush()
+				}
 				err = status.Error(codes.Internal, "internal server error")
 			}
 		}()
@@ -160,7 +166,7 @@ func recoveryStreamInterceptor(logger logr.Logger) grpc.StreamServerInterceptor 
 	}
 }
 
-func recoveryUnaryInterceptor(logger logr.Logger) grpc.UnaryServerInterceptor {
+func recoveryUnaryInterceptor(logger logr.Logger, flush func()) grpc.UnaryServerInterceptor {
 	return func(
 		ctx context.Context,
 		req any,
@@ -175,6 +181,9 @@ func recoveryUnaryInterceptor(logger logr.Logger) grpc.UnaryServerInterceptor {
 					"method", info.FullMethod,
 					"stack", string(debug.Stack()),
 				)
+				if flush != nil {
+					flush()
+				}
 				err = status.Error(codes.Internal, "internal server error")
 			}
 		}()

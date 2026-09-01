@@ -27,7 +27,7 @@ var _ = Describe("EventLoop", func() {
 		eventCh = make(chan any)
 		fakePreparer = &eventsfakes.FakeFirstEventBatchPreparer{}
 
-		eventLoop = events.NewEventLoop(eventCh, logr.Discard(), fakeHandler, fakePreparer)
+		eventLoop = events.NewEventLoop(eventCh, logr.Discard(), nil, fakeHandler, fakePreparer)
 
 		errorCh = make(chan error)
 	})

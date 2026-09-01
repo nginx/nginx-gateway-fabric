@@ -10,7 +10,7 @@ import (
 func TestEventLoop_SwapBatches(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
-	eventLoop := NewEventLoop(nil, logr.Discard(), nil, nil)
+	eventLoop := NewEventLoop(nil, logr.Discard(), nil, nil, nil)
 
 	eventLoop.currentBatch = EventBatch{
 		"event0",

@@ -45,6 +45,7 @@ func newEventLoop(
 	mgr manager.Manager,
 	handler *eventHandler,
 	logger logr.Logger,
+	flush func(),
 	selector metav1.LabelSelector,
 	ngfNamespace string,
 	dockerSecrets []string,
@@ -279,6 +280,7 @@ func newEventLoop(
 	eventLoop := events.NewEventLoop(
 		eventCh,
 		logger.WithName("eventLoop"),
+		flush,
 		handler,
 		firstBatchPreparer,
 	)

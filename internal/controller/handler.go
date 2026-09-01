@@ -86,6 +86,8 @@ type eventHandlerConfig struct {
 	controlConfigNSName types.NamespacedName
 	// logger is the logger for the event handler.
 	logger logr.Logger
+	// flush performs a best-effort log flush for panic boundaries owned by the handler.
+	flush func()
 	// gatewayCtlrName is the name of the NGF controller.
 	gatewayCtlrName string
 	// gatewayInstanceName is the name of the NGINX Gateway instance.
@@ -185,7 +187,17 @@ func newEventHandlerImpl(cfg eventHandlerConfig) *eventHandlerImpl {
 		},
 	}
 
-	go handler.waitForStatusUpdates(cfg.ctx)
+	go func() {
+		defer func() {
+			helpers.RecoverAndFlush(
+				handler.cfg.logger.WithName("statusUpdateLoop"),
+				handler.cfg.flush, "panic in waitForStatusUpdates",
+				recover(),
+				true,
+			)
+		}()
+		handler.waitForStatusUpdates(cfg.ctx)
+	}()
 
 	return handler
 }

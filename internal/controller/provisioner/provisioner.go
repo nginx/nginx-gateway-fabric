@@ -61,6 +61,7 @@ type Config struct {
 	GatewayPodConfig *config.GatewayPodConfig
 	AgentLabels      map[string]string
 	Logger           logr.Logger
+	Flush            func()
 	GCName           string
 	NGINXSCCName     string
 	// GatewayCtlrName is the controller name string (from main config)
@@ -184,6 +185,7 @@ func NewNginxProvisioner(
 		mgr,
 		handler,
 		cfg.Logger,
+		cfg.Flush,
 		selector,
 		cfg.GatewayPodConfig.Namespace,
 		cfg.NginxDockerSecretNames,
