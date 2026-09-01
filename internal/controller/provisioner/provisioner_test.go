@@ -46,14 +46,13 @@ import (
 )
 
 const (
-	agentTLSTestSecretName                     = "agent-tls-secret"
-	jwtTestSecretName                          = "jwt-secret"
-	caTestSecretName                           = "ca-secret"
-	clientTestSecretName                       = "client-secret"
-	dockerTestSecretName                       = "docker-secret"
-	ngfNamespace                               = "nginx-gateway"
-	nginxOneDataplaneKeySecretName             = "n1c-dataplane-key" //nolint:gosec // not credentials
-	nginxInstanceManagerDataplaneKeySecretName = "nim-dataplane-key" //nolint:gosec // not credentials
+	agentTLSTestSecretName = "agent-tls-secret"
+	jwtTestSecretName      = "jwt-secret"
+	caTestSecretName       = "ca-secret"
+	clientTestSecretName   = "client-secret"
+	dockerTestSecretName   = "docker-secret"
+	ngfNamespace           = "nginx-gateway"
+	dataplaneKeySecretName = "dataplane-key"
 )
 
 func createScheme() *runtime.Scheme {
@@ -192,8 +191,7 @@ func defaultNginxProvisioner(
 			jwtTestSecretName,
 			caTestSecretName,
 			clientTestSecretName,
-			nginxOneDataplaneKeySecretName,
-			nginxInstanceManagerDataplaneKeySecretName,
+			dataplaneKeySecretName,
 		),
 		k8sClient: fakeClient,
 		cfg: Config{
@@ -214,15 +212,14 @@ func defaultNginxProvisioner(
 			NginxDockerSecretNames: []string{dockerTestSecretName},
 			AgentTLSSecretName:     agentTLSTestSecretName,
 			NginxOneConsoleTelemetryConfig: config.ManagementPlaneTelemetryConfig{
-				DataplaneKeySecretName: nginxOneDataplaneKeySecretName,
+				DataplaneKeySecretName: dataplaneKeySecretName,
 				EndpointHost:           "agent.connect.nginx.com",
 				EndpointPort:           443,
 				EndpointTLSSkipVerify:  false,
 			},
 			NginxInstanceManagerTelemetryConfig: config.ManagementPlaneTelemetryConfig{
-				DataplaneKeySecretName: nginxInstanceManagerDataplaneKeySecretName,
-				EndpointHost:           "nim.example.com",
-				EndpointPort:           443,
+				EndpointHost: "nim.example.com",
+				EndpointPort: 443,
 			},
 			AgentLabels: map[string]string{
 				"product-type":      "ngf",
@@ -315,43 +312,13 @@ func TestNewNginxProvisioner(t *testing.T) {
 				},
 				Logger: logr.Discard(),
 				NginxOneConsoleTelemetryConfig: config.ManagementPlaneTelemetryConfig{
-					DataplaneKeySecretName: nginxOneDataplaneKeySecretName,
+					DataplaneKeySecretName: dataplaneKeySecretName,
 					EndpointHost:           "agent.connect.nginx.com",
 					EndpointPort:           443,
 				},
 				NginxInstanceManagerTelemetryConfig: config.ManagementPlaneTelemetryConfig{
-					DataplaneKeySecretName: nginxInstanceManagerDataplaneKeySecretName,
-					EndpointHost:           "nim.example.com",
-					EndpointPort:           4317,
-				},
-			},
-		},
-		{
-			name: "NIM DataplaneKeySecretName is set but EndpointHost is empty (logged, not fatal)",
-			cfg: Config{
-				GCName: "test-gc",
-				GatewayPodConfig: &config.GatewayPodConfig{
-					InstanceName: "test-instance",
-				},
-				Logger: logr.Discard(),
-				NginxInstanceManagerTelemetryConfig: config.ManagementPlaneTelemetryConfig{
-					DataplaneKeySecretName: nginxInstanceManagerDataplaneKeySecretName,
-					EndpointHost:           "",
-				},
-			},
-		},
-		{
-			name: "NIM DataplaneKeySecretName is set but EndpointPort is zero (logged, not fatal)",
-			cfg: Config{
-				GCName: "test-gc",
-				GatewayPodConfig: &config.GatewayPodConfig{
-					InstanceName: "test-instance",
-				},
-				Logger: logr.Discard(),
-				NginxInstanceManagerTelemetryConfig: config.ManagementPlaneTelemetryConfig{
-					DataplaneKeySecretName: nginxInstanceManagerDataplaneKeySecretName,
-					EndpointHost:           "nim.example.com",
-					EndpointPort:           0,
+					EndpointHost: "nim.example.com",
+					EndpointPort: 4317,
 				},
 			},
 		},
@@ -376,14 +343,8 @@ func TestNewNginxProvisioner(t *testing.T) {
 			g.Expect(provisioner.baseLabelSelector).To(Equal(labelSelector))
 
 			if tt.cfg.NginxOneConsoleTelemetryConfig.DataplaneKeySecretName != "" {
-				g.Expect(provisioner.store.n1cDataplaneKeySecretName).To(Equal(
+				g.Expect(provisioner.store.dataplaneKeySecretName).To(Equal(
 					tt.cfg.NginxOneConsoleTelemetryConfig.DataplaneKeySecretName,
-				))
-			}
-
-			if tt.cfg.NginxInstanceManagerTelemetryConfig.DataplaneKeySecretName != "" {
-				g.Expect(provisioner.store.nimDataplaneKeySecretName).To(Equal(
-					tt.cfg.NginxInstanceManagerTelemetryConfig.DataplaneKeySecretName,
 				))
 			}
 			g.Expect(provisioner.clusterIPFamily).To(Equal(ngfAPIv1alpha2.Dual))
@@ -925,7 +886,7 @@ func TestProvisionNginxDeletesServiceOnLBClassChange(t *testing.T) {
 		WithObjects(existingSvc).
 		Build()
 
-	st := newStore(nil, "", "", "", "", "", "")
+	st := newStore(nil, "", "", "", "", "")
 	// Register the Service in the store so we can verify it gets cleared.
 	st.registerResourceInGatewayConfig(gatewayNSName, existingSvc)
 
@@ -988,7 +949,7 @@ func TestDeleteServiceForLBClassChangeRestoresStoreOnFailure(t *testing.T) {
 		WithObjects(existingSvc).
 		Build()
 
-	st := newStore(nil, "", "", "", "", "", "")
+	st := newStore(nil, "", "", "", "", "")
 	st.registerResourceInGatewayConfig(gatewayNSName, existingSvc)
 
 	deleteErr := errors.New("connection refused")
@@ -1043,7 +1004,7 @@ func TestDeleteServiceForLBClassChangeFallsBackToLiveGet(t *testing.T) {
 		WithObjects(existingSvc).
 		Build()
 
-	st := newStore(nil, "", "", "", "", "", "")
+	st := newStore(nil, "", "", "", "", "")
 	// Intentionally do NOT register the Service in the store.
 
 	provisioner := &NginxProvisioner{
@@ -1682,7 +1643,7 @@ func TestProvisionNginxPatchesServiceStatus(t *testing.T) {
 
 			provisioner := &NginxProvisioner{
 				leader: true,
-				store:  newStore(nil, "", "", "", "", "", ""),
+				store:  newStore(nil, "", "", "", "", ""),
 				cfg: Config{
 					Logger:        logr.Discard(),
 					EventRecorder: &k8sEvents.FakeRecorder{},
