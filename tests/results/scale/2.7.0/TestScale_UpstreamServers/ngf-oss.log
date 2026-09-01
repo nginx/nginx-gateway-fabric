@@ -1,0 +1,1 @@
+{"level":"debug","ts":"2026-08-28T21:06:48Z","logger":"statusUpdater","msg":"Encountered error updating status","error":"Operation cannot be fulfilled on gatewayclasses.gateway.networking.k8s.io \"nginx-1\": the object has been modified; please apply your changes to the latest version and try again","namespace":"","name":"nginx-1","kind":"GatewayClass"}
