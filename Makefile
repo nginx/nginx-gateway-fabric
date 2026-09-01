@@ -207,8 +207,8 @@ generate-helm-schema: ## Generate the Helm chart schema
 
 .PHONY: generate-policies
 generate-policies: ## Generate apis/v1alpha{1,2}/policy_methods.go by scanning policy type files (gateway.networking.k8s.io/policy label).
-	go run apis/policy-generation/policygen.go -package v1alpha1 -output apis/v1alpha1/policy_methods.go
-	go run apis/policy-generation/policygen.go -package v1alpha2 -output apis/v1alpha2/policy_methods.go
+	go run apis/policygen.go -package v1alpha1 -output apis/v1alpha1/policy_methods.go
+	go run apis/policygen.go -package v1alpha2 -output apis/v1alpha2/policy_methods.go
 
 .PHONY: generate-all
 generate-all: generate generate-crds generate-helm-schema generate-manifests generate-api-docs generate-helm-docs generate-policies verify-operator-rbac ## Generate all the necessary files
