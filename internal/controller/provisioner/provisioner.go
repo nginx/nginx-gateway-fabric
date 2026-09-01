@@ -124,22 +124,9 @@ func NewNginxProvisioner(
 		clientSSLSecretName = cfg.PlusUsageConfig.ClientSSLSecretName
 	}
 
-	var n1cDataplaneKeySecretName string
+	var dataplaneKeySecretName string
 	if cfg.NginxOneConsoleTelemetryConfig.DataplaneKeySecretName != "" {
-		n1cDataplaneKeySecretName = cfg.NginxOneConsoleTelemetryConfig.DataplaneKeySecretName
-	}
-
-	var nimDataplaneKeySecretName string
-	if cfg.NginxInstanceManagerTelemetryConfig.DataplaneKeySecretName != "" {
-		if cfg.NginxInstanceManagerTelemetryConfig.EndpointHost == "" ||
-			cfg.NginxInstanceManagerTelemetryConfig.EndpointPort == 0 {
-			cfg.Logger.Error(
-				errors.New("NginxInstanceManagerTelemetryConfig.EndpointHost and EndpointPort must be set "+
-					"when NginxInstanceManagerTelemetryConfig.DataplaneKeySecretName is set"),
-				"invalid NginxInstanceManagerTelemetryConfig",
-			)
-		}
-		nimDataplaneKeySecretName = cfg.NginxInstanceManagerTelemetryConfig.DataplaneKeySecretName
+		dataplaneKeySecretName = cfg.NginxOneConsoleTelemetryConfig.DataplaneKeySecretName
 	}
 
 	store := newStore(
@@ -148,8 +135,7 @@ func NewNginxProvisioner(
 		jwtSecretName,
 		caSecretName,
 		clientSSLSecretName,
-		n1cDataplaneKeySecretName,
-		nimDataplaneKeySecretName,
+		dataplaneKeySecretName,
 	)
 
 	selector := metav1.LabelSelector{
@@ -203,8 +189,7 @@ func NewNginxProvisioner(
 		cfg.GatewayPodConfig.Namespace,
 		cfg.NginxDockerSecretNames,
 		cfg.AgentTLSSecretName,
-		n1cDataplaneKeySecretName,
-		nimDataplaneKeySecretName,
+		dataplaneKeySecretName,
 		cfg.PlusUsageConfig,
 		eventLoopFeatures{
 			isOpenshift:          isOpenshift,
@@ -812,10 +797,6 @@ func (p *NginxProvisioner) isUserSecret(name string) bool {
 	}
 
 	if p.cfg.NginxOneConsoleTelemetryConfig.DataplaneKeySecretName == name {
-		return true
-	}
-
-	if p.cfg.NginxInstanceManagerTelemetryConfig.DataplaneKeySecretName == name {
 		return true
 	}
 
