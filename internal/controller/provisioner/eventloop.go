@@ -49,8 +49,7 @@ func newEventLoop(
 	ngfNamespace string,
 	dockerSecrets []string,
 	agentTLSSecret string,
-	n1cDataplaneKeySecret string,
-	nimDataplaneKeySecret string,
+	dataplaneKeySecret string,
 	usageConfig *config.UsageReportConfig,
 	features eventLoopFeatures,
 ) (*events.EventLoop, error) {
@@ -60,12 +59,8 @@ func newEventLoop(
 	secretsToWatch = append(secretsToWatch, agentTLSSecret)
 	secretsToWatch = append(secretsToWatch, dockerSecrets...)
 
-	if n1cDataplaneKeySecret != "" {
-		secretsToWatch = append(secretsToWatch, n1cDataplaneKeySecret)
-	}
-
-	if nimDataplaneKeySecret != "" {
-		secretsToWatch = append(secretsToWatch, nimDataplaneKeySecret)
+	if dataplaneKeySecret != "" {
+		secretsToWatch = append(secretsToWatch, dataplaneKeySecret)
 	}
 
 	if usageConfig != nil {
@@ -182,7 +177,8 @@ func newEventLoop(
 	}
 
 	if features.isOpenshift {
-		controllerRegCfgs = append(controllerRegCfgs,
+		controllerRegCfgs = append(
+			controllerRegCfgs,
 			ctlrCfg{
 				objectType: &rbacv1.Role{},
 				options: []controller.Option{
@@ -269,7 +265,8 @@ func newEventLoop(
 	}
 
 	if features.isOpenshift {
-		objectList = append(objectList,
+		objectList = append(
+			objectList,
 			&rbacv1.RoleList{},
 			&rbacv1.RoleBindingList{},
 		)
