@@ -49,6 +49,10 @@ import (
 
 //counterfeiter:generate . Provisioner
 
+const (
+	serviceMonitorGroupVersion = "monitoring.coreos.com/v1"
+)
+
 // Provisioner is an interface for triggering NGINX resources to be created/updated/deleted.
 type Provisioner interface {
 	RegisterGateway(ctx context.Context, gateway *graph.Gateway, resourceName string) error
@@ -182,11 +186,13 @@ func NewNginxProvisioner(
 
 	clusterIPFamily := detectClusterIPFamily(ctx, mgr.GetAPIReader())
 
+	serviceMonitorInstalled := false
 	discoveryClient, err := discovery.NewDiscoveryClientForConfig(mgr.GetConfig())
 	if err != nil {
 		cfg.Logger.Error(err, "failed to create discovery client")
+	} else {
+		serviceMonitorInstalled = isServiceMonitorCRDInstalled(discoveryClient)
 	}
-	serviceMonitorInstalled := isServiceMonitorCRDInstalled(discoveryClient)
 
 	provisioner := &NginxProvisioner{
 		k8sClient:                  mgr.GetClient(),
@@ -1158,8 +1164,7 @@ func (p *NginxProvisioner) needToDeleteIngressLink(cfg *NginxResources) bool {
 }
 
 func isServiceMonitorCRDInstalled(dc discovery.DiscoveryInterface) bool {
-	groupVersion := "monitoring.coreos.com/v1"
-	resources, err := dc.ServerResourcesForGroupVersion(groupVersion)
+	resources, err := dc.ServerResourcesForGroupVersion(serviceMonitorGroupVersion)
 	if err != nil {
 		return false
 	}

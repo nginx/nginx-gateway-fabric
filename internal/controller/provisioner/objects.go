@@ -166,6 +166,7 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 			objectMeta,
 			gateway,
 			nProxyCfg,
+			selectorLabels,
 		)
 	}
 
@@ -178,13 +179,14 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 		}
 	}
 
-	ports, healthcheckPort := p.addHealthCheckPort(allListeners, nProxyCfg)
+	ports, healthcheckPort, metricsPort := p.addNginxServicePorts(allListeners, nProxyCfg)
 
 	service, err := p.buildNginxService(
 		cloneObjectMeta(objectMeta),
 		nProxyCfg,
 		ports,
 		healthcheckPort,
+		metricsPort,
 		selectorLabels,
 		gateway.Spec.Addresses,
 	)
@@ -254,10 +256,10 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 	return objects, errors.Join(errs...)
 }
 
-func (p *NginxProvisioner) addHealthCheckPort(
+func (p *NginxProvisioner) addNginxServicePorts(
 	allListeners []*graph.Listener,
 	nProxyCfg *graph.EffectiveNginxProxy,
-) ([]portProtoEntry, int32) {
+) ([]portProtoEntry, int32, int32) {
 	// build ports from all listeners (Gateway + ListenerSets)
 	ports := p.buildPortsFromListeners(allListeners)
 
@@ -268,7 +270,15 @@ func (p *NginxProvisioner) addHealthCheckPort(
 		ports = appendUniquePortProtoEntry(ports, portProtoEntry{Port: healthcheckPort, Protocol: corev1.ProtocolTCP})
 	}
 
-	return ports, healthcheckPort
+	var metricsPort int32
+	if port, enabled := graph.MetricsEnabledForNginxProxy(nProxyCfg); enabled {
+		metricsPort = config.DefaultNginxMetricsPort
+		if port != nil {
+			metricsPort = *port
+		}
+	}
+
+	return ports, healthcheckPort, metricsPort
 }
 
 // buildHPAAndPDB builds the HPA and PDB for the NGINX deployment
@@ -414,12 +424,14 @@ func (p *NginxProvisioner) buildServiceMonitor(
 	objectMeta metav1.ObjectMeta,
 	gateway *gatewayv1.Gateway,
 	nProxyCfg *graph.EffectiveNginxProxy,
+	selectorLabels map[string]string,
 ) []client.Object {
 	// Only build the service monitor if it has been enabled in the NginxProxy spec
 	if nProxyCfg == nil || nProxyCfg.Kubernetes == nil {
 		return nil
 	}
 
+	// Determine whether the ServiceMonitor is being enabled on a Deployment or a DaemonSet
 	var monitoring *ngfAPIv1alpha2.ServiceMonitorSpec
 	if nProxyCfg.Kubernetes.DaemonSet != nil && nProxyCfg.Kubernetes.DaemonSet.ServiceMonitor != nil {
 		monitoring = nProxyCfg.Kubernetes.DaemonSet.ServiceMonitor
@@ -433,9 +445,51 @@ func (p *NginxProvisioner) buildServiceMonitor(
 
 	objectMeta.Name = controller.CreateNginxResourceName(objectMeta.Name, metricsServiceName)
 
-	matchNames := []string{gateway.Namespace}
+	// Set the defaults for the service monitor if not specified in the NginxProxy
+	matchNames, useAny, matchLabels, endpoints := setServiceMonitorDefaults(monitoring, gateway, selectorLabels)
 
-	matchLabels := map[string]string{"app.kubernetes.io/instance": gateway.Name}
+	serviceMonitor := &monitoringv1.ServiceMonitor{
+		ObjectMeta: objectMeta,
+		Spec: monitoringv1.ServiceMonitorSpec{
+			NamespaceSelector: monitoringv1.NamespaceSelector{
+				MatchNames: matchNames,
+				Any:        *useAny,
+			},
+			Selector: metav1.LabelSelector{
+				MatchLabels: matchLabels,
+			},
+			Endpoints: endpoints,
+		},
+	}
+
+	if err := p.setOwnerReference(serviceMonitor, gateway); err != nil {
+		return []client.Object{serviceMonitor}
+	}
+
+	return []client.Object{serviceMonitor}
+}
+
+func setServiceMonitorDefaults(
+	monitoring *ngfAPIv1alpha2.ServiceMonitorSpec,
+	gateway *gatewayv1.Gateway,
+	selectorLabels map[string]string,
+) ([]string, *bool, map[string]string, []monitoringv1.Endpoint) {
+	var matchNames []string
+	useAny := helpers.GetPointer(false)
+
+	if monitoring.NamespaceSelector != nil {
+		if monitoring.NamespaceSelector.Any != nil {
+			useAny = monitoring.NamespaceSelector.Any
+		}
+		if monitoring.NamespaceSelector.MatchNames != nil {
+			matchNames = monitoring.NamespaceSelector.MatchNames
+		}
+	} else {
+		matchNames = []string{gateway.Namespace}
+		useAny = helpers.GetPointer(false)
+	}
+
+	matchLabels := selectorLabels
 	if monitoring.Selector != nil && monitoring.Selector.MatchLabels != nil {
 		matchLabels = monitoring.Selector.MatchLabels
 	}
@@ -456,24 +510,7 @@ func (p *NginxProvisioner) buildServiceMonitor(
 		endpoints = append(endpoints, ep)
 	}
 
-	serviceMonitor := &monitoringv1.ServiceMonitor{
-		ObjectMeta: objectMeta,
-		Spec: monitoringv1.ServiceMonitorSpec{
-			NamespaceSelector: monitoringv1.NamespaceSelector{
-				MatchNames: matchNames,
-			},
-			Selector: metav1.LabelSelector{
-				MatchLabels: matchLabels,
-			},
-			Endpoints: endpoints,
-		},
-	}
-
-	if err := p.setOwnerReference(serviceMonitor, gateway); err != nil {
-		return []client.Object{serviceMonitor}
-	}
-
-	return []client.Object{serviceMonitor}
+	return matchNames, useAny, matchLabels, endpoints
 }
 
 // buildPortsFromListeners builds a list of port/protocol entries from the graph listeners.
@@ -907,6 +944,7 @@ func (p *NginxProvisioner) buildNginxService(
 	nProxyCfg *graph.EffectiveNginxProxy,
 	ports []portProtoEntry,
 	healthcheckPort int32,
+	metricsPort int32,
 	selectorLabels map[string]string,
 	addresses []gatewayv1.GatewaySpecAddress,
 ) (*corev1.Service, error) {
@@ -935,7 +973,7 @@ func (p *NginxProvisioner) buildNginxService(
 		}
 	}
 
-	servicePorts := buildServicePorts(ports, healthcheckPort, serviceType, serviceCfg.NodePorts)
+	servicePorts := buildServicePorts(ports, healthcheckPort, metricsPort, serviceType, serviceCfg.NodePorts)
 
 	svc := &corev1.Service{
 		ObjectMeta: objectMeta,
@@ -980,6 +1018,7 @@ func (p *NginxProvisioner) updateLoadBalancerClass(
 func buildServicePorts(
 	ports []portProtoEntry,
 	healthcheckPort int32,
+	metricsPort int32,
 	serviceType corev1.ServiceType,
 	nodePorts []ngfAPIv1alpha2.NodePort,
 ) []corev1.ServicePort {
@@ -1014,6 +1053,26 @@ func buildServicePorts(
 		}
 
 		servicePorts = append(servicePorts, servicePort)
+	}
+
+	// Add the metrics port to the service if enabled and not already in listener ports
+	if metricsPort > 0 {
+		metricsAdded := false
+		for _, entry := range ports {
+			if entry.Port == metricsPort {
+				metricsAdded = true
+				break
+			}
+		}
+
+		if !metricsAdded {
+			servicePorts = append(servicePorts, corev1.ServicePort{
+				Name:       "metrics",
+				Port:       metricsPort,
+				TargetPort: intstr.FromInt32(metricsPort),
+				Protocol:   corev1.ProtocolTCP,
+			})
+		}
 	}
 
 	// need to sort ports so everytime buildNginxService is called it will generate the exact same

@@ -717,7 +717,7 @@ type DeploymentSpec struct {
 	// +optional
 	PodDisruptionBudget *PodDisruptionBudgetSpec `json:"podDisruptionBudget,omitempty"`
 
-	// Defines the configuration of the Service Monitor resource used for scraping metrics
+	// Defines the configuration of the Service Monitor resource used for scraping metrics.
 	//
 	// +optional
 	ServiceMonitor *ServiceMonitorSpec `json:"serviceMonitor,omitempty"`
@@ -751,7 +751,7 @@ type DaemonSetSpec struct {
 	// +optional
 	Container ContainerSpec `json:"container"`
 
-	// Defines the configuration of the Service Monitor resource used for scraping metrics
+	// Defines the configuration of the Service Monitor resource used for scraping metrics.
 	//
 	// +optional
 	ServiceMonitor *ServiceMonitorSpec `json:"serviceMonitor,omitempty"`
@@ -886,7 +886,7 @@ type NamespaceSelector struct {
 	// MatchNames is the list of namespaces names to select from.
 	//
 	// +optional
-	MatchNames *[]string `json:"matchNames,omitempty"`
+	MatchNames []string `json:"matchNames,omitempty"`
 }
 
 // Endpoint is used to define which scrapable endpoint is serving Prometheus metrics.

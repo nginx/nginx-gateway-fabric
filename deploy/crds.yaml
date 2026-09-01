@@ -5662,7 +5662,7 @@ spec:
                         type: object
                       serviceMonitor:
                         description: Defines the configuration of the Service Monitor
-                          resource used for scraping metrics
+                          resource used for scraping metrics.
                         properties:
                           enable:
                             description: Enable or disable the Service Monitor.
@@ -10519,7 +10519,7 @@ spec:
                         type: integer
                       serviceMonitor:
                         description: Defines the configuration of the Service Monitor
-                          resource used for scraping metrics
+                          resource used for scraping metrics.
                         properties:
                           enable:
                             description: Enable or disable the Service Monitor.

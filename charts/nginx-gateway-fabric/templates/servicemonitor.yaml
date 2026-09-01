@@ -25,9 +25,9 @@ spec:
     {{- if .Values.nginxGateway.metrics.serviceMonitor.interval }}
     interval: {{ .Values.nginxGateway.metrics.serviceMonitor.interval }}
     {{- end }}
-    {{- if .Values.nginxGateway.metrics.secure }}
+    {{- if .Values.nginxGateway.tlsConfig }}
     scheme: https
     tlsConfig:
-      insecureSkipVerify: true
+      insecureSkipVerify: {{ .Values.nginxGateway.tlsConfig }}
     {{- end }}
 {{- end }}

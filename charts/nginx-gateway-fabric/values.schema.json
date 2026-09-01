@@ -788,23 +788,23 @@
           "type": "object"
         },
         "serviceMonitor": {
-          "description": "Defines the configuration of the serviceMonitor for the nginx data plane",
+          "description": "Defines the configuration of the serviceMonitor for the nginx data plane.",
           "properties": {
             "enable": {
               "default": false,
-              "description": "Enable the serviceMonitor for the data plane",
+              "description": "Enable the serviceMonitor for the data plane.",
               "title": "enable",
               "type": "boolean"
             },
             "interval": {
               "default": "",
-              "description": "The scraping interval used by the serviceMonitor when scraping metrics",
+              "description": "The scraping interval used by the serviceMonitor when scraping metrics.",
               "title": "interval",
               "type": "string"
             },
             "port": {
               "default": "metrics",
-              "description": "The name of the port used for scraping metrics",
+              "description": "The name of the port used for scraping metrics.",
               "title": "port",
               "type": "string"
             }
@@ -1176,28 +1176,28 @@
               "type": "boolean"
             },
             "serviceMonitor": {
-              "description": "Defines the configuration of the serviceMonitor for the nginxGateway control plane",
+              "description": "Defines the configuration of the serviceMonitor for the nginxGateway control plane.",
               "properties": {
                 "annotations": {
-                  "description": "Set the annotations to be added to the serviceMonitor",
+                  "description": "Set the annotations to be added to the serviceMonitor.",
                   "required": [],
                   "title": "annotations",
                   "type": "object"
                 },
                 "enable": {
                   "default": false,
-                  "description": "Enable the serviceMonitor for the control plane",
+                  "description": "Enable the serviceMonitor for the control plane.",
                   "title": "enable",
                   "type": "boolean"
                 },
                 "interval": {
                   "default": "",
-                  "description": "The scraping interval used by the serviceMonitor when scraping metrics",
+                  "description": "The scraping interval used by the serviceMonitor when scraping metrics.",
                   "title": "interval",
                   "type": "string"
                 },
                 "labels": {
-                  "description": "Set the labels to be added to the serviceMonitor",
+                  "description": "Set the labels to be added to the serviceMonitor.",
                   "required": [],
                   "title": "labels",
                   "type": "object"
@@ -1520,6 +1520,11 @@
           "description": "The termination grace period of the NGINX Gateway Fabric control plane pod.",
           "title": "terminationGracePeriodSeconds",
           "type": "integer"
+        },
+        "tlsConfig": {
+          "default": false,
+          "title": "tlsConfig",
+          "type": "boolean"
         },
         "tolerations": {
           "description": "Tolerations for the NGINX Gateway Fabric control plane pod.",

@@ -248,6 +248,12 @@ func TestBuildNginxResourceObjects(t *testing.T) {
 			TargetPort: intstr.FromInt(8888),
 		},
 		{
+			Port:       9113,
+			Name:       "metrics",
+			Protocol:   corev1.ProtocolTCP,
+			TargetPort: intstr.FromInt(9113),
+		},
+		{
 			Port:       9999,
 			Name:       "port-9999",
 			Protocol:   corev1.ProtocolTCP,
@@ -536,7 +542,7 @@ func TestBuildNginxResourceObjects_NginxProxyConfig(t *testing.T) {
 						},
 					},
 					NamespaceSelector: &ngfAPIv1alpha2.NamespaceSelector{
-						MatchNames: &[]string{"default"},
+						MatchNames: []string{"default"},
 					},
 					Endpoints: []ngfAPIv1alpha2.Endpoint{
 						{

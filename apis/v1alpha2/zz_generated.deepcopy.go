@@ -473,12 +473,8 @@ func (in *NamespaceSelector) DeepCopyInto(out *NamespaceSelector) {
 	}
 	if in.MatchNames != nil {
 		in, out := &in.MatchNames, &out.MatchNames
-		*out = new([]string)
-		if **in != nil {
-			in, out := *in, *out
-			*out = make([]string, len(*in))
-			copy(*out, *in)
-		}
+		*out = make([]string, len(*in))
+		copy(*out, *in)
 	}
 }
 
