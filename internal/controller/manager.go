@@ -85,8 +85,6 @@ import (
 )
 
 const (
-	// clusterTimeout is a timeout for connections to the Kubernetes API.
-	clusterTimeout = 10 * time.Second
 	// the following are the names of data fields within NGINX Plus related Secrets.
 	grpcServerPort = 8443
 )
@@ -551,7 +549,9 @@ func createManager(cfg config.Config, healthChecker *graphBuiltHealthChecker) (m
 	if err != nil {
 		return nil, fmt.Errorf("failed to get cluster config: %w", err)
 	}
-	clusterCfg.Timeout = clusterTimeout
+	// Leave clusterCfg.Timeout at its zero-value default. A client-wide timeout here also
+	// applies to long-running watch requests, causing informer watches to be canceled and
+	// reopened at that interval instead of the longer server-side timeout client-go requests.
 
 	mgr, err := manager.New(clusterCfg, options)
 	if err != nil {
