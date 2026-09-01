@@ -1522,9 +1522,10 @@
           "type": "integer"
         },
         "tlsConfig": {
-          "default": false,
+          "description": "tlsConfig is an object that defines the full TLS configuration of the NGINX Gateway Fabric control plane for the Prometheus service monitor.\nAll fields are optional and can be configured by the user. For the full information on the fields that can be used in this object, refer to the official\nPrometheus documentation: https://prometheus-operator.dev/docs/api-reference/api/#monitoring.coreos.com/v1.TLSConfig",
+          "required": [],
           "title": "tlsConfig",
-          "type": "boolean"
+          "type": "object"
         },
         "tolerations": {
           "description": "Tolerations for the NGINX Gateway Fabric control plane pod.",

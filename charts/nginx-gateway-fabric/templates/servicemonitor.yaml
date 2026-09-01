@@ -28,6 +28,6 @@ spec:
     {{- if .Values.nginxGateway.tlsConfig }}
     scheme: https
     tlsConfig:
-      insecureSkipVerify: {{ .Values.nginxGateway.tlsConfig }}
+      {{- toYaml .Values.nginxGateway.tlsConfig | nindent 6 }}
     {{- end }}
 {{- end }}

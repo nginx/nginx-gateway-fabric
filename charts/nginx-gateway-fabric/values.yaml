@@ -339,7 +339,10 @@ nginxGateway:
       # -- The scraping interval used by the serviceMonitor when scraping metrics.
       interval: ""
 
-  tlsConfig: false
+  # -- tlsConfig is an object that defines the full TLS configuration of the NGINX Gateway Fabric control plane for the Prometheus service monitor.
+  # All fields are optional and can be configured by the user. For the full information on the fields that can be used in this object, refer to the official
+  # Prometheus documentation: https://prometheus-operator.dev/docs/api-reference/api/#monitoring.coreos.com/v1.TLSConfig
+  tlsConfig: {}
 
   gwAPIExperimentalFeatures:
     # -- Enable the experimental features of Gateway API which are supported by NGINX Gateway Fabric. Requires the Gateway
