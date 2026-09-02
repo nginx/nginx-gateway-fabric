@@ -169,7 +169,6 @@ func TestControllerCmdFlagValidation(t *testing.T) {
 				"--nginx-one-dataplane-key-secret=dataplane-key-secret",
 				"--nginx-one-telemetry-endpoint-host=telemetry-endpoint-host",
 				"--nginx-one-telemetry-endpoint-port=443",
-				"--nim-dataplane-key-secret=nim-dataplane-key-secret",
 				"--nim-telemetry-endpoint-host=nim-telemetry-endpoint-host",
 				"--nim-telemetry-endpoint-port=443",
 				"--nginx-one-tls-skip-verify",
@@ -586,22 +585,6 @@ func TestControllerCmdFlagValidation(t *testing.T) {
 				"--nginx-one-tls-skip-verify=not-a-bool",
 			},
 			wantErr: true,
-		},
-		{
-			name: "nim-dataplane-key-secret is set to empty string",
-			args: []string{
-				"--nim-dataplane-key-secret=",
-			},
-			wantErr:           true,
-			expectedErrPrefix: `invalid argument "" for "--nim-dataplane-key-secret" flag: must be set`,
-		},
-		{
-			name: "nim-dataplane-key-secret is invalid",
-			args: []string{
-				"--nim-dataplane-key-secret=!@#$",
-			},
-			wantErr:           true,
-			expectedErrPrefix: `invalid argument "!@#$" for "--nim-dataplane-key-secret" flag: invalid format: `,
 		},
 		{
 			name: "nim-telemetry-endpoint-host is set to empty string",
