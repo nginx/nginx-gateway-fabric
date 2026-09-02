@@ -19,6 +19,17 @@ type FakeAuthFieldsValidator struct {
 	validateOIDCConfigURLReturnsOnCall map[int]struct {
 		result1 error
 	}
+	ValidateOIDCEscapedStringStub        func(string) error
+	validateOIDCEscapedStringMutex       sync.RWMutex
+	validateOIDCEscapedStringArgsForCall []struct {
+		arg1 string
+	}
+	validateOIDCEscapedStringReturns struct {
+		result1 error
+	}
+	validateOIDCEscapedStringReturnsOnCall map[int]struct {
+		result1 error
+	}
 	ValidateOIDCExtraAuthArgStub        func(string, string) error
 	validateOIDCExtraAuthArgMutex       sync.RWMutex
 	validateOIDCExtraAuthArgArgsForCall []struct {
@@ -147,6 +158,67 @@ func (fake *FakeAuthFieldsValidator) ValidateOIDCConfigURLReturnsOnCall(i int, r
 		})
 	}
 	fake.validateOIDCConfigURLReturnsOnCall[i] = struct {
+		result1 error
+	}{result1}
+}
+
+func (fake *FakeAuthFieldsValidator) ValidateOIDCEscapedString(arg1 string) error {
+	fake.validateOIDCEscapedStringMutex.Lock()
+	ret, specificReturn := fake.validateOIDCEscapedStringReturnsOnCall[len(fake.validateOIDCEscapedStringArgsForCall)]
+	fake.validateOIDCEscapedStringArgsForCall = append(fake.validateOIDCEscapedStringArgsForCall, struct {
+		arg1 string
+	}{arg1})
+	stub := fake.ValidateOIDCEscapedStringStub
+	fakeReturns := fake.validateOIDCEscapedStringReturns
+	fake.recordInvocation("ValidateOIDCEscapedString", []interface{}{arg1})
+	fake.validateOIDCEscapedStringMutex.Unlock()
+	if stub != nil {
+		return stub(arg1)
+	}
+	if specificReturn {
+		return ret.result1
+	}
+	return fakeReturns.result1
+}
+
+func (fake *FakeAuthFieldsValidator) ValidateOIDCEscapedStringCallCount() int {
+	fake.validateOIDCEscapedStringMutex.RLock()
+	defer fake.validateOIDCEscapedStringMutex.RUnlock()
+	return len(fake.validateOIDCEscapedStringArgsForCall)
+}
+
+func (fake *FakeAuthFieldsValidator) ValidateOIDCEscapedStringCalls(stub func(string) error) {
+	fake.validateOIDCEscapedStringMutex.Lock()
+	defer fake.validateOIDCEscapedStringMutex.Unlock()
+	fake.ValidateOIDCEscapedStringStub = stub
+}
+
+func (fake *FakeAuthFieldsValidator) ValidateOIDCEscapedStringArgsForCall(i int) string {
+	fake.validateOIDCEscapedStringMutex.RLock()
+	defer fake.validateOIDCEscapedStringMutex.RUnlock()
+	argsForCall := fake.validateOIDCEscapedStringArgsForCall[i]
+	return argsForCall.arg1
+}
+
+func (fake *FakeAuthFieldsValidator) ValidateOIDCEscapedStringReturns(result1 error) {
+	fake.validateOIDCEscapedStringMutex.Lock()
+	defer fake.validateOIDCEscapedStringMutex.Unlock()
+	fake.ValidateOIDCEscapedStringStub = nil
+	fake.validateOIDCEscapedStringReturns = struct {
+		result1 error
+	}{result1}
+}
+
+func (fake *FakeAuthFieldsValidator) ValidateOIDCEscapedStringReturnsOnCall(i int, result1 error) {
+	fake.validateOIDCEscapedStringMutex.Lock()
+	defer fake.validateOIDCEscapedStringMutex.Unlock()
+	fake.ValidateOIDCEscapedStringStub = nil
+	if fake.validateOIDCEscapedStringReturnsOnCall == nil {
+		fake.validateOIDCEscapedStringReturnsOnCall = make(map[int]struct {
+			result1 error
+		})
+	}
+	fake.validateOIDCEscapedStringReturnsOnCall[i] = struct {
 		result1 error
 	}{result1}
 }

@@ -742,6 +742,33 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 			expCond: conditions.NewAuthenticationFilterInvalid("must be a valid HTTPS URL"),
 		},
 		{
+			name: "invalid: OIDC escaped string fails validation (clientID)",
+			args: args{
+				secretNsName: types.NamespacedName{Namespace: "test", Name: "oidc"},
+				isPlus:       true,
+				authValidator: &validationfakes.FakeAuthFieldsValidator{
+					ValidateOIDCEscapedStringStub: func(string) error {
+						return errors.New("invalid escaped string")
+					},
+				},
+				filter: createAuthenticationFilterWithOIDC(
+					types.NamespacedName{Namespace: "test", Name: "oidc"},
+					&ngfAPI.OIDCAuth{
+						ClientID:        "client$id",
+						ClientSecretRef: ngfAPI.LocalObjectReference{Name: "client-secret"},
+					},
+					false,
+				).Source,
+				resources: map[resolver.ResourceKey]client.Object{
+					{
+						ResourceType:   resolver.ResourceTypeSecret,
+						NamespacedName: types.NamespacedName{Namespace: "test", Name: "client-secret"},
+					}: createOpaqueClientSecret("client-secret", true),
+				},
+			},
+			expCond: conditions.NewAuthenticationFilterInvalid("invalid escaped string"),
+		},
+		{
 			name: "invalid: OIDC configURL fails regex validation",
 			args: args{
 				secretNsName: types.NamespacedName{Namespace: "test", Name: "oidc"},
