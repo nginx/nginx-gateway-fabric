@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	. "github.com/onsi/gomega"
+	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
@@ -247,6 +248,12 @@ func TestBuildNginxResourceObjects(t *testing.T) {
 			TargetPort: intstr.FromInt(8888),
 		},
 		{
+			Port:       9113,
+			Name:       "metrics",
+			Protocol:   corev1.ProtocolTCP,
+			TargetPort: intstr.FromInt(9113),
+		},
+		{
 			Port:       9999,
 			Name:       "port-9999",
 			Protocol:   corev1.ProtocolTCP,
@@ -472,6 +479,7 @@ func TestBuildNginxResourceObjects_NginxProxyConfig(t *testing.T) {
 	fakeClient := createFakeClientWithScheme(agentTLSSecret)
 
 	provisioner := &NginxProvisioner{
+		serviceMonitorInstalled: true,
 		cfg: Config{
 			GatewayPodConfig: &config.GatewayPodConfig{
 				Namespace: ngfNamespace,
@@ -526,6 +534,22 @@ func TestBuildNginxResourceObjects_NginxProxyConfig(t *testing.T) {
 					MaxReplicas:                       5,
 					TargetMemoryUtilizationPercentage: helpers.GetPointer[int32](60),
 				},
+				ServiceMonitor: &ngfAPIv1alpha2.ServiceMonitorSpec{
+					Enable: true,
+					Selector: &metav1.LabelSelector{
+						MatchLabels: map[string]string{
+							"app.kubernetes.io/instance": "gw",
+						},
+					},
+					NamespaceSelector: &ngfAPIv1alpha2.NamespaceSelector{
+						MatchNames: []string{"default"},
+					},
+					Endpoints: []ngfAPIv1alpha2.Endpoint{
+						{
+							Port: helpers.GetPointer("metrics"),
+						},
+					},
+				},
 				Pod: ngfAPIv1alpha2.PodSpec{
 					TerminationGracePeriodSeconds: helpers.GetPointer[int64](25),
 				},
@@ -559,7 +583,7 @@ func TestBuildNginxResourceObjects_NginxProxyConfig(t *testing.T) {
 	)
 	g.Expect(err).ToNot(HaveOccurred())
 
-	g.Expect(objects).To(HaveLen(7))
+	g.Expect(objects).To(HaveLen(8))
 
 	cmObj := objects[1]
 	cm, ok := cmObj.(*corev1.ConfigMap)
@@ -577,7 +601,18 @@ func TestBuildNginxResourceObjects_NginxProxyConfig(t *testing.T) {
 	g.Expect(cm.Data[configmaps.AgentConfKey]).To(ContainSubstring("- certificates"))
 	g.Expect(cm.Data[configmaps.AgentConfKey]).To(ContainSubstring("- metrics"))
 
-	svcObj := objects[4]
+	smObj := objects[4]
+	sm, ok := smObj.(*monitoringv1.ServiceMonitor)
+	g.Expect(ok).To(BeTrue())
+	g.Expect(sm.Spec.Selector.MatchLabels).To(Equal(map[string]string{
+		"app.kubernetes.io/instance": "gw",
+	}))
+	g.Expect(sm.Spec.NamespaceSelector.MatchNames).To(Equal([]string{
+		"default",
+	}))
+	g.Expect(sm.Spec.Endpoints).ToNot(BeNil())
+
+	svcObj := objects[5]
 	svc, ok := svcObj.(*corev1.Service)
 	g.Expect(ok).To(BeTrue())
 	g.Expect(svc.Spec.Type).To(Equal(corev1.ServiceTypeNodePort))
@@ -588,7 +623,7 @@ func TestBuildNginxResourceObjects_NginxProxyConfig(t *testing.T) {
 	g.Expect(*svc.Spec.IPFamilyPolicy).To(Equal(corev1.IPFamilyPolicySingleStack))
 	g.Expect(svc.Spec.IPFamilies).To(Equal([]corev1.IPFamily{corev1.IPv4Protocol}))
 
-	depObj := objects[5]
+	depObj := objects[6]
 	dep, ok := depObj.(*appsv1.Deployment)
 	g.Expect(ok).To(BeTrue())
 
@@ -619,7 +654,7 @@ func TestBuildNginxResourceObjects_NginxProxyConfig(t *testing.T) {
 	g.Expect(container.ReadinessProbe.HTTPGet.Port).To(Equal(intstr.FromInt(9091)))
 	g.Expect(container.ReadinessProbe.InitialDelaySeconds).To(Equal(int32(5)))
 
-	hpaObj := objects[6]
+	hpaObj := objects[7]
 	hpa, ok := hpaObj.(*autoscalingv2.HorizontalPodAutoscaler)
 	g.Expect(ok).To(BeTrue())
 	g.Expect(hpa.Spec.MinReplicas).ToNot(BeNil())
@@ -1411,6 +1446,106 @@ func TestBuildNginxResourceObjects_OpenShift(t *testing.T) {
 	g.Expect(roleBinding.GetLabels()).To(Equal(expLabels))
 }
 
+func TestBuildNginxResourceObjects_ServiceMonitor(t *testing.T) {
+	t.Parallel()
+
+	agentTLSSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      agentTLSTestSecretName,
+			Namespace: ngfNamespace,
+		},
+		Data: map[string][]byte{secrets.TLSCertKey: []byte("tls")},
+	}
+	fakeClient := createFakeClientWithScheme(agentTLSSecret)
+
+	provisioner := &NginxProvisioner{
+		serviceMonitorInstalled: true,
+		cfg: Config{
+			GatewayPodConfig: &config.GatewayPodConfig{
+				Namespace: ngfNamespace,
+			},
+			AgentTLSSecretName: agentTLSTestSecretName,
+			AgentLabels:        make(map[string]string),
+		},
+		k8sClient: fakeClient,
+		baseLabelSelector: metav1.LabelSelector{
+			MatchLabels: map[string]string{
+				"app": "nginx",
+			},
+		},
+	}
+
+	gateway := &gatewayv1.Gateway{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "gw",
+			Namespace: "default",
+		},
+		Spec: gatewayv1.GatewaySpec{
+			Listeners: []gatewayv1.Listener{{Port: 80}},
+		},
+	}
+
+	expLabels := map[string]string{
+		"app":                                    "nginx",
+		"gateway.networking.k8s.io/gateway-name": "gw",
+		"app.kubernetes.io/name":                 "gw-nginx",
+	}
+
+	tests := []struct {
+		proxy *graph.EffectiveNginxProxy
+		name  string
+	}{
+		{
+			name: "test deployment",
+			proxy: &graph.EffectiveNginxProxy{
+				Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+					Deployment: &ngfAPIv1alpha2.DeploymentSpec{
+						ServiceMonitor: &ngfAPIv1alpha2.ServiceMonitorSpec{
+							Enable: true,
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "test daemonset",
+			proxy: &graph.EffectiveNginxProxy{
+				Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+					DaemonSet: &ngfAPIv1alpha2.DaemonSetSpec{
+						ServiceMonitor: &ngfAPIv1alpha2.ServiceMonitorSpec{
+							Enable: true,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			resourceName := "gw-nginx"
+			objects, err := provisioner.buildNginxResourceObjects(
+				resourceName,
+				gateway,
+				test.proxy,
+				graphListenersFromGateway(gateway),
+				nil,
+			)
+
+			g.Expect(err).ToNot(HaveOccurred())
+			g.Expect(objects).To(HaveLen(7))
+
+			smObj := objects[4]
+			serviceMonitor, ok := smObj.(*monitoringv1.ServiceMonitor)
+			g.Expect(ok).To(BeTrue())
+			g.Expect(serviceMonitor.GetLabels()).To(Equal(expLabels))
+		})
+	}
+}
+
 func TestBuildNginxResourceObjects_DataplaneKeySecret(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
@@ -1790,6 +1925,28 @@ func TestBuildResourcesForInvalidGatewayCleanup_OpenShift(t *testing.T) {
 	validateMeta(roleBinding, deploymentNSName.Name)
 }
 
+func TestBuildResourcesForInvalidGatewayCleanup_ServiceMonitor(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	provisioner := &NginxProvisioner{serviceMonitorInstalled: true}
+
+	deploymentNSName := types.NamespacedName{
+		Name:      "gw-nginx",
+		Namespace: "default",
+	}
+
+	objects := provisioner.buildResourcesForInvalidGatewayCleanup(deploymentNSName)
+	g.Expect(objects).To(HaveLen(10))
+
+	smObj := objects[5]
+	sm, ok := smObj.(*monitoringv1.ServiceMonitor)
+	g.Expect(ok).To(BeTrue())
+
+	g.Expect(sm.GetName()).To(Equal("gw-nginx-metrics"))
+	g.Expect(sm.GetNamespace()).To(Equal(deploymentNSName.Namespace))
+}
+
 func TestBuildResourcesForInvalidGatewayCleanup_DataplaneKeySecret(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
@@ -1817,8 +1974,8 @@ func TestBuildResourcesForInvalidGatewayCleanup_DataplaneKeySecret(t *testing.T)
 
 	objects := provisioner.buildResourcesForInvalidGatewayCleanup(deploymentNSName)
 
-	// deployment, daemonset, service, hpa, pdb, serviceaccount, 2 configmaps,
-	// agentTLSSecret, dataplaneKeySecret, nimJwtSecret
+	// deployment, daemonset, service, hpa, pdb, serviceaccount, servicemonitor,
+	//  2 configmaps, agentTLSSecret, dataplaneKeySecret, nimJwtSecret
 	g.Expect(objects).To(HaveLen(11))
 
 	validateMeta := func(obj client.Object, name string) {

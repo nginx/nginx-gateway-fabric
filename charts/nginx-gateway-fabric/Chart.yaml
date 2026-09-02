@@ -2,7 +2,7 @@ apiVersion: v2
 name: nginx-gateway-fabric
 description: NGINX Gateway Fabric
 type: application
-version: 2.6.7
+version: 2.6.8
 appVersion: "edge"
 kubeVersion: ">= 1.32.0-0"
 home: https://github.com/nginx/nginx-gateway-fabric
