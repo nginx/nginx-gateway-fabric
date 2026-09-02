@@ -5,8 +5,10 @@ package main
 import (
 	"context"
 	"embed"
+	"encoding/json"
 	"flag"
 	"fmt"
+	"os"
 	"path"
 	"path/filepath"
 	"runtime"
@@ -79,6 +81,8 @@ var (
 	bigipUsername  = flag.String("bigip-username", "admin", "BIG-IP admin username")
 	bigipPassword  = flag.String("bigip-password", "", "BIG-IP admin password")
 	ipamRange      = flag.String("ipam-range", "", "F5 IPAM Controller address range for the ipamLabel test")
+
+	testOutDir = flag.String("test-outdir", "", "Directory for structured test logs and result.json files")
 )
 
 var (
@@ -413,6 +417,13 @@ var _ = SynchronizedBeforeSuite(
 	// Phase 2: runs on all procs after phase 1 completes.
 	func(_ []byte) {
 		proc := GinkgoParallelProcess()
+
+		procOutDir := ""
+		if *testOutDir != "" {
+			procOutDir = fmt.Sprintf("%s/proc-%d", *testOutDir, proc)
+		}
+		Expect(framework.SetupTestLogger(procOutDir)).To(Succeed())
+
 		releaseName = fmt.Sprintf("ngf-test-%d", proc)
 		ngfNamespace = fmt.Sprintf("nginx-gateway-%d", proc)
 		gatewayClassName = fmt.Sprintf("nginx-%d", proc)
@@ -456,6 +467,88 @@ var _ = SynchronizedBeforeSuite(
 	},
 )
 
+// suiteNameFromLabels returns the suite determined by the highest-priority Ginkgo label on the spec.
+func suiteNameFromLabels(labels []string) string {
+	priority := []struct {
+		label string
+		suite string
+	}{
+		{"waf", "waf"},
+		{"gatewaylink", "gatewaylink"},
+		{"graceful-recovery", "graceful-recovery"},
+		{"longevity-setup", "longevity"},
+		{"longevity-teardown", "longevity"},
+		{"longevity", "longevity"},
+		{"telemetry", "telemetry"},
+		{"nfr", "nfr"},
+		{"functional", "functional"},
+	}
+	for _, p := range priority {
+		for _, l := range labels {
+			if l == p.label {
+				return p.suite
+			}
+		}
+	}
+	return "functional"
+}
+
+// ReportBeforeEach logs the start of every individual spec to test.log.
+var _ = ReportBeforeEach(func(report SpecReport) {
+	framework.LogTestStart(report.FullText())
+})
+
+// ReportAfterEach logs the end of every individual spec and writes a JSON result record, so that
+// Loki receives a complete timeline including passing tests for trend and flakiness analysis.
+var _ = ReportAfterEach(func(report SpecReport) {
+	framework.LogTestEnd(report.FullText(), report.State.String())
+	if *testOutDir == "" {
+		return
+	}
+
+	proc := GinkgoParallelProcess()
+	procOutDir := fmt.Sprintf("%s/proc-%d", *testOutDir, proc)
+
+	clusterType := "local"
+	if clusterInfo.IsGKE {
+		clusterType = "GKE"
+	}
+
+	record := map[string]any{
+		"test_name":    report.FullText(),
+		"suite":        suiteNameFromLabels(report.Labels()),
+		"status":       report.State.String(),
+		"start_at":     report.StartTime.UTC().Format(time.RFC3339),
+		"duration_ms":  report.RunTime.Milliseconds(),
+		"labels":       report.Labels(),
+		"ngf_version":  version,
+		"plus_enabled": *plusEnabled,
+		"cluster_type": clusterType,
+	}
+
+	if len(report.ContainerHierarchyTexts) > 0 {
+		record["test_file"] = report.ContainerHierarchyTexts[0]
+	}
+
+	data, err := json.Marshal(record)
+	if err != nil {
+		GinkgoWriter.Printf("ERROR marshaling result record: %v\n", err)
+		return
+	}
+
+	resultPath := fmt.Sprintf("%s/result.json", procOutDir)
+	f, err := os.OpenFile(resultPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	if err != nil {
+		GinkgoWriter.Printf("ERROR opening result file: %v\n", err)
+		return
+	}
+	defer f.Close()
+
+	if _, err = fmt.Fprintf(f, "%s\n", data); err != nil {
+		GinkgoWriter.Printf("ERROR writing result record: %v\n", err)
+	}
+})
+
 var _ = SynchronizedAfterSuite(
 	// Phase 1: runs on all procs. Per-proc helm uninstall and namespace cleanup.
 	func() {
@@ -477,6 +570,8 @@ var _ = SynchronizedAfterSuite(
 
 			teardown(relName)
 		}
+
+		Expect(framework.CloseTestLogger()).To(Succeed())
 	},
 	// Phase 2: runs on proc 1 only, after all procs complete phase 1.
 	// Delete cluster-wide CRDs once all per-proc helm releases are gone.

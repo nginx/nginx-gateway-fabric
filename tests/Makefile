@@ -1,5 +1,6 @@
 CI ?= false
 CLUSTER_NAME ?= kind
+TEST_OUTDIR ?=## Directory for structured test logs and result.json (empty = local dev, no file output)
 CONFORMANCE_PREFIX = conformance-test-runner## Prefix for the conformance test runner image
 CONFORMANCE_TAG = latest## Tag for the conformance test runner image
 GATEWAY_CLASS = nginx## Gateway class to use
@@ -203,6 +204,7 @@ ipv6-tests: ## Example usage: make ipv6-tests TAG=release-X.Y-rc
 
 .PHONY: .vm-nfr-test
 .vm-nfr-test: ## Runs the NFR tests on the GCP VM (called by `nfr-test`)
+	$(if $(TEST_OUTDIR),mkdir -p $(TEST_OUTDIR))
 	CGO_ENABLED=1 go run github.com/onsi/ginkgo/v2/ginkgo --race --randomize-all --randomize-suites --keep-going --fail-on-pending \
 		--trace -r -v --buildvcs --force-newlines $(GITHUB_OUTPUT) --flake-attempts=1 --show-node-events --output-interceptor-mode=none \
 		--label-filter "nfr" $(GINKGO_FLAGS) --timeout 5h ./suite --  --gateway-api-version=$(GW_API_VERSION) \
@@ -211,7 +213,9 @@ ipv6-tests: ## Example usage: make ipv6-tests TAG=release-X.Y-rc
 		--pull-policy=$(PULL_POLICY) --service-type=$(GW_SERVICE_TYPE) \
 		--plus-enabled=$(PLUS_ENABLED) --plus-license-file-name=$(PLUS_LICENSE_FILE) \
 		--plus-usage-endpoint=$(PLUS_USAGE_ENDPOINT) --gke-project=$(GKE_PROJECT) \
-        --waf-enabled=$(WAF_PLM_ENABLED) $(if $(filter true,$(WAF_PLM_ENABLED)),--nginx-image-jwt-file-name=$(REGISTRY_JWT_FILE))
+        --waf-enabled=$(WAF_PLM_ENABLED) $(if $(filter true,$(WAF_PLM_ENABLED)),--nginx-image-jwt-file-name=$(REGISTRY_JWT_FILE)) \
+		$(if $(TEST_OUTDIR),--test-outdir=$(TEST_OUTDIR)) \
+		$(if $(TEST_OUTDIR),| tee $(TEST_OUTDIR)/raw_logs.log)
 
 .PHONY: gatewaylink-test
 gatewaylink-test: ## Run the GatewayLink integration test on a GCP VM against a BIG-IP
@@ -219,6 +223,7 @@ gatewaylink-test: ## Run the GatewayLink integration test on a GCP VM against a 
 
 .PHONY: .vm-gatewaylink-test
 .vm-gatewaylink-test: ## Runs the GatewayLink test on the GCP VM (called by `gatewaylink-test`)
+	$(if $(TEST_OUTDIR),mkdir -p $(TEST_OUTDIR))
 	CGO_ENABLED=1 go run github.com/onsi/ginkgo/v2/ginkgo --race --randomize-all --randomize-suites --keep-going --fail-on-pending \
 		--trace -r -v --buildvcs --force-newlines $(GITHUB_OUTPUT) --flake-attempts=1 --show-node-events --output-interceptor-mode=none \
 		--label-filter "$(GATEWAYLINK_LABEL)" $(GINKGO_FLAGS) --timeout 1h ./suite --  --gateway-api-version=$(GW_API_VERSION) \
@@ -229,12 +234,15 @@ gatewaylink-test: ## Run the GatewayLink integration test on a GCP VM against a 
 		--plus-usage-endpoint=$(PLUS_USAGE_ENDPOINT) --gke-project=$(GKE_PROJECT) \
 		--gatewaylink-enabled=true --bigip-mgmt-port=$(BIGIP_MGMT_PORT) --bigip-vip=$(BIGIP_VIP) \
 		--bigip-partition=$(BIGIP_PARTITION) --bigip-username=$(BIGIP_USERNAME) --bigip-password=$(BIGIP_PASSWORD) \
-		--ipam-range=$(IPAM_RANGE)
+		--ipam-range=$(IPAM_RANGE) \
+		$(if $(TEST_OUTDIR),--test-outdir=$(TEST_OUTDIR)) \
+		$(if $(TEST_OUTDIR),| tee $(TEST_OUTDIR)/raw_logs.log)
 
 .PHONY: test
 test: build-crossplane-image build-guardrails-mock-image ## Runs the functional tests on your kind k8s cluster
 	kind load docker-image nginx-crossplane:latest --name $(CLUSTER_NAME)
 	kind load docker-image guardrails-mock:latest --name $(CLUSTER_NAME)
+	$(if $(TEST_OUTDIR),mkdir -p $(TEST_OUTDIR))
 	go run github.com/onsi/ginkgo/v2/ginkgo --race --randomize-all --randomize-suites --keep-going --fail-on-pending \
 		--trace -r -v --buildvcs --force-newlines $(GITHUB_OUTPUT) --procs $(GINKGO_PROCS) \
 		--label-filter "functional" $(GINKGO_FLAGS) ./suite -- \
@@ -243,7 +251,9 @@ test: build-crossplane-image build-guardrails-mock-image ## Runs the functional 
 		--ngf-image-repo=$(PREFIX) --nginx-image-repo=$(NGINX_PREFIX) --nginx-plus-image-repo=$(NGINX_PLUS_PREFIX) \
 		--pull-policy=$(PULL_POLICY) --service-type=$(GW_SERVICE_TYPE) \
 		--cluster-name=$(CLUSTER_NAME) --plus-enabled=$(PLUS_ENABLED) \
-		--plus-license-file-name=$(PLUS_LICENSE_FILE) --plus-usage-endpoint=$(PLUS_USAGE_ENDPOINT)
+		--plus-license-file-name=$(PLUS_LICENSE_FILE) --plus-usage-endpoint=$(PLUS_USAGE_ENDPOINT) \
+		$(if $(TEST_OUTDIR),--test-outdir=$(TEST_OUTDIR)) \
+		$(if $(TEST_OUTDIR),| tee $(TEST_OUTDIR)/raw_logs.log)
 
 .PHONY: test-with-plus
 test-with-plus: PLUS_ENABLED=true
@@ -354,6 +364,7 @@ test-waf: PLUS_ENABLED=true
 # helm repo and reuses REGISTRY_JWT_FILE to pull its images from private-registry.nginx.com.
 test-waf: build-crossplane-image ## Runs the WAF tests on a kind cluster. Bundles must already be compiled (run compile-waf-bundles first).
 	kind load docker-image nginx-crossplane:latest --name $(CLUSTER_NAME)
+	$(if $(TEST_OUTDIR),mkdir -p $(TEST_OUTDIR))
 	go run github.com/onsi/ginkgo/v2/ginkgo --race --randomize-all --keep-going --fail-on-pending \
 		--trace -r -v --buildvcs --force-newlines $(GITHUB_OUTPUT) \
 		--label-filter "waf" $(GINKGO_FLAGS) ./suite -- \
@@ -363,7 +374,9 @@ test-waf: build-crossplane-image ## Runs the WAF tests on a kind cluster. Bundle
 		--pull-policy=$(PULL_POLICY) --service-type=$(GW_SERVICE_TYPE) \
 		--cluster-name=$(CLUSTER_NAME) --plus-enabled=$(PLUS_ENABLED) \
 		--plus-license-file-name=$(PLUS_LICENSE_FILE) --plus-usage-endpoint=$(PLUS_USAGE_ENDPOINT) \
-		--waf-enabled=true --nginx-image-jwt-file-name=$(REGISTRY_JWT_FILE)
+		--waf-enabled=true --nginx-image-jwt-file-name=$(REGISTRY_JWT_FILE) \
+		$(if $(TEST_OUTDIR),--test-outdir=$(TEST_OUTDIR)) \
+		$(if $(TEST_OUTDIR),| tee $(TEST_OUTDIR)/raw_logs.log)
 
 .PHONY: test-waf-gke
 test-waf-gke: PLUS_ENABLED=true
@@ -372,6 +385,7 @@ test-waf-gke: GOARCH=amd64
 # helm repo and reuses REGISTRY_JWT_FILE to pull its images from private-registry.nginx.com.
 test-waf-gke: compile-waf-bundles check-for-plus-usage-endpoint build-crossplane-image ## Runs the WAF tests on a GKE cluster (amd64 only).
 	./scripts/push-crossplane-image.sh
+	$(if $(TEST_OUTDIR),mkdir -p $(TEST_OUTDIR))
 	go run github.com/onsi/ginkgo/v2/ginkgo --race --randomize-all --keep-going --fail-on-pending \
 		--trace -r -v --buildvcs --force-newlines $(GITHUB_OUTPUT) \
 		--label-filter "waf" $(GINKGO_FLAGS) ./suite -- \
@@ -382,4 +396,6 @@ test-waf-gke: compile-waf-bundles check-for-plus-usage-endpoint build-crossplane
 		--plus-enabled=$(PLUS_ENABLED) \
 		--plus-license-file-name=$(PLUS_LICENSE_FILE) --plus-usage-endpoint=$(PLUS_USAGE_ENDPOINT) \
 		--gke-project=$(GKE_PROJECT) \
-		--waf-enabled=true --nginx-image-jwt-file-name=$(REGISTRY_JWT_FILE)
+		--waf-enabled=true --nginx-image-jwt-file-name=$(REGISTRY_JWT_FILE) \
+		$(if $(TEST_OUTDIR),--test-outdir=$(TEST_OUTDIR)) \
+		$(if $(TEST_OUTDIR),| tee $(TEST_OUTDIR)/raw_logs.log)
