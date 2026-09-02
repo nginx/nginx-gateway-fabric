@@ -160,7 +160,7 @@ func TestBuildGRPCRoutes(t *testing.T) {
 		AbsoluteTimeout: helpers.GetPointer(v1.Duration("10m")),
 		Type:            helpers.GetPointer(v1.CookieBasedSessionPersistence),
 		CookieConfig: &v1.CookieConfig{
-			LifetimeType: helpers.GetPointer((v1.PermanentCookieLifetimeType)),
+			LifetimeType: helpers.GetPointer(v1.PermanentCookieLifetimeType),
 		},
 	}
 
@@ -509,7 +509,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 		AbsoluteTimeout: helpers.GetPointer(v1.Duration("10h")),
 		Type:            helpers.GetPointer(v1.CookieBasedSessionPersistence),
 		CookieConfig: &v1.CookieConfig{
-			LifetimeType: helpers.GetPointer((v1.PermanentCookieLifetimeType)),
+			LifetimeType: helpers.GetPointer(v1.PermanentCookieLifetimeType),
 		},
 	}
 
