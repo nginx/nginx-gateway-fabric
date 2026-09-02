@@ -73,7 +73,6 @@ HELM CHART:
 DEPENDENCIES:
 
 - Support Gateway API v1.6.1. [5569](https://github.com/nginx/nginx-gateway-fabric/pull/5569).
-- F5 WAF on NGINX version update to 5.14. [5693](https://github.com/nginx/nginx-gateway-fabric/pull/5693).
 
 UPGRADE:
 
@@ -85,8 +84,8 @@ COMPATIBILITY:
 - Gateway API version: `1.6.1`
 - Gateway API Inference Extension version: `1.6.0`
 - NGINX version: `1.31.4`
-- NGINX Plus version: `R37.0`
-- F5 WAF on NGINX version: `5.14.0`
+- NGINX Plus version: `R37.1`
+- F5 WAF on NGINX version: `5.15.0`
 - NGINX Agent version: `v3.11.4`
 - Kubernetes version: `1.32+`
 
