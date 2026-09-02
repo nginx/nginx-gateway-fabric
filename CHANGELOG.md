@@ -12,10 +12,6 @@ BUG FIXES:
 
 - Add additional validation to OIDC auth fields [5823](https://github.com/nginx/nginx-gateway-fabric/pull/5823)
 
-MAINTENANCE:
-
-- Use go version in go.mod for workflow files [5824](https://github.com/nginx/nginx-gateway-fabric/pull/5824)
-
 HELM CHART:
 
 - The version of the Helm chart is now 2.6.8
