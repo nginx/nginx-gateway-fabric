@@ -458,7 +458,7 @@ func TestCreateUpstreams(t *testing.T) {
 							Time:        helpers.GetPointer[ngfAPI.Duration]("5s"),
 							Timeout:     helpers.GetPointer[ngfAPI.Duration]("10s"),
 						}),
-						LoadBalancingMethod: helpers.GetPointer(ngfAPI.LoadBalancingTypeIPHash),
+						LoadBalancingMethod: helpers.GetPointer((ngfAPI.LoadBalancingTypeIPHash)),
 					},
 				},
 			},
