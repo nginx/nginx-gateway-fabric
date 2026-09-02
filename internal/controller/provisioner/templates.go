@@ -83,7 +83,7 @@ auxiliary_command:
         port: {{ .EndpointPort }}
         type: grpc
     auth:
-        tokenpath: /etc/nginx-agent/secrets/dataplane-n1c.key
+        tokenpath: /etc/nginx-agent/secrets/dataplane.key
     tls:
         skip_verify: {{ .EndpointTLSSkipVerify }}
 {{- end }}
@@ -113,7 +113,7 @@ collector:
             headers:
              - action: insert
                key: authorization
-               file_path: /etc/nginx-agent/secrets/dataplane-nim.key
+               file_path: /etc/nginx/license.jwt
 {{- end }}
     log:
         path: "stdout"

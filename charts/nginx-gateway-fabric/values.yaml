@@ -495,11 +495,6 @@ nginx:
 
   # -- Configuration for NGINX Instance Manager.
   nginxInstanceManager:
-    # -- Name of the secret which holds the dataplane key that is required to authenticate with NGINX Instance Manager.
-    # Secret must exist in the same namespace that the NGINX Gateway Fabric control plane is running in
-    # (default namespace: nginx-gateway).
-    dataplaneKeySecretName: ""
-
     # -- The Endpoint host that the NGINX Instance Manager telemetry data will be sent to.
     endpointHost: ""
 
