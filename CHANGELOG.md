@@ -10,11 +10,11 @@ _September 2, 2026_
 
 BUG FIXES:
 
-- Add additional validation to OIDC auth fields (#5819) by @shaun-nx in https://github.com/nginx/nginx-gateway-fabric/pull/5823
+- Add additional validation to OIDC auth fields [5823](https://github.com/nginx/nginx-gateway-fabric/pull/5823)
 
 MAINTENANCE:
 
-- Add additional validation to OIDC auth fields (#5819) by @shaun-nx in https://github.com/nginx/nginx-gateway-fabric/pull/5823
+- Add additional validation to OIDC auth fields by [5823])https://github.com/nginx/nginx-gateway-fabric/pull/5823)
 
 HELM CHART:
 
