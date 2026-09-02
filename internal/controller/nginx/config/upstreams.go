@@ -25,7 +25,7 @@ const (
 	// ossZoneSize is the upstream zone size for nginx open source.
 	ossZoneSize = "512k"
 	// plusZoneSize is the upstream zone size for nginx plus.
-	plusZoneSize = "1m"
+	plusZoneSize = "2m"
 	// ossZoneSize is the upstream zone size for nginx open source.
 	ossZoneSizeStream = "512k"
 	// plusZoneSize is the upstream zone size for nginx plus.
