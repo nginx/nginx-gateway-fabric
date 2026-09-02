@@ -624,12 +624,6 @@
         "nginxInstanceManager": {
           "description": "Configuration for NGINX Instance Manager.",
           "properties": {
-            "dataplaneKeySecretName": {
-              "default": "",
-              "description": "Name of the secret which holds the dataplane key that is required to authenticate with NGINX Instance Manager.\nSecret must exist in the same namespace that the NGINX Gateway Fabric control plane is running in\n(default namespace: nginx-gateway).",
-              "title": "dataplaneKeySecretName",
-              "type": "string"
-            },
             "endpointHost": {
               "default": "",
               "description": "The Endpoint host that the NGINX Instance Manager telemetry data will be sent to.",

@@ -27,7 +27,7 @@ GO_LINKER_FLAGS = $(GO_LINKER_FLAGS_OPTIMIZATIONS) $(GO_LINKER_FlAGS_VARS)
 
 # tools versions
 # renovate: datasource=github-tags depName=golangci/golangci-lint
-GOLANGCI_LINT_VERSION = v2.13.1
+GOLANGCI_LINT_VERSION = v2.13.2
 # renovate: datasource=docker depName=kindest/node
 KIND_K8S_VERSION = v1.37.0
 # renovate: datasource=github-tags depName=norwoodj/helm-docs
@@ -205,8 +205,13 @@ generate-helm-docs: ## Generate the Helm chart documentation
 generate-helm-schema: ## Generate the Helm chart schema
 	go run github.com/dadav/helm-schema/cmd/helm-schema@$(HELM_SCHEMA_VERSION) --chart-search-root=charts --add-schema-reference "--skip-auto-generation=required,additionalProperties" --append-newline
 
+.PHONY: generate-policies
+generate-policies: ## Generate apis/v1alpha{1,2}/policy_methods.go by scanning policy type files (gateway.networking.k8s.io/policy label).
+	go run apis/policygen.go -package v1alpha1 -output apis/v1alpha1/policy_methods.go
+	go run apis/policygen.go -package v1alpha2 -output apis/v1alpha2/policy_methods.go
+
 .PHONY: generate-all
-generate-all: generate generate-crds generate-helm-schema generate-manifests generate-api-docs generate-helm-docs verify-operator-rbac ## Generate all the necessary files
+generate-all: generate generate-crds generate-helm-schema generate-manifests generate-api-docs generate-helm-docs generate-policies verify-operator-rbac ## Generate all the necessary files
 
 .PHONY: verify-operator-rbac
 verify-operator-rbac: ## Verify operator RBAC is in sync with Helm chart

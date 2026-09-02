@@ -1584,9 +1584,8 @@ func TestCreateAndRegisterProvisioner(t *testing.T) {
 			EndpointPort:           443,
 		},
 		NginxInstanceManagerTelemetryConfig: config.ManagementPlaneTelemetryConfig{
-			DataplaneKeySecretName: "nim-key",
-			EndpointHost:           "nim.example.com",
-			EndpointPort:           4317,
+			EndpointHost: "nim.example.com",
+			EndpointPort: 4317,
 		},
 		InferenceExtension:          true,
 		EndpointPickerDisableTLS:    true,

@@ -23,27 +23,26 @@ import (
 
 // NginxResources are all of the NGINX resources deployed in relation to a Gateway.
 type NginxResources struct {
-	Gateway               *graph.Gateway
-	Deployment            metav1.ObjectMeta
-	HPA                   metav1.ObjectMeta
-	PDB                   metav1.ObjectMeta
-	DaemonSet             metav1.ObjectMeta
-	Service               metav1.ObjectMeta
-	ServiceLBClass        *string
-	ServiceAccount        metav1.ObjectMeta
-	Role                  metav1.ObjectMeta
-	RoleBinding           metav1.ObjectMeta
-	BootstrapConfigMap    metav1.ObjectMeta
-	AgentConfigMap        metav1.ObjectMeta
-	AgentTLSSecret        metav1.ObjectMeta
-	PlusJWTSecret         metav1.ObjectMeta
-	PlusCASecret          metav1.ObjectMeta
-	N1CDataplaneKeySecret metav1.ObjectMeta
-	NIMDataplaneKeySecret metav1.ObjectMeta
-	DockerSecrets         []metav1.ObjectMeta
-	PlusClientSSLSecret   metav1.ObjectMeta
-	ExternalLoadBalancer  metav1.ObjectMeta
-	ServiceMonitor        metav1.ObjectMeta
+	Gateway              *graph.Gateway
+	Deployment           metav1.ObjectMeta
+	HPA                  metav1.ObjectMeta
+	PDB                  metav1.ObjectMeta
+	DaemonSet            metav1.ObjectMeta
+	Service              metav1.ObjectMeta
+	ServiceLBClass       *string
+	ServiceAccount       metav1.ObjectMeta
+	Role                 metav1.ObjectMeta
+	RoleBinding          metav1.ObjectMeta
+	BootstrapConfigMap   metav1.ObjectMeta
+	AgentConfigMap       metav1.ObjectMeta
+	AgentTLSSecret       metav1.ObjectMeta
+	PlusJWTSecret        metav1.ObjectMeta
+	PlusCASecret         metav1.ObjectMeta
+	DataplaneKeySecret   metav1.ObjectMeta
+	DockerSecrets        []metav1.ObjectMeta
+	PlusClientSSLSecret  metav1.ObjectMeta
+	ExternalLoadBalancer metav1.ObjectMeta
+	ServiceMonitor       metav1.ObjectMeta
 }
 
 // store stores the cluster state needed by the provisioner and allows to update it from the events.
@@ -66,10 +65,7 @@ type store struct {
 	clientSSLSecretName string
 
 	// NGINX One Dataplane key secret
-	n1cDataplaneKeySecretName string
-
-	// NGINX Instance Manager Dataplane key secret
-	nimDataplaneKeySecretName string
+	dataplaneKeySecretName string
 
 	lock sync.RWMutex
 }
@@ -80,8 +76,7 @@ func newStore(
 	jwtSecretName,
 	caSecretName,
 	clientSSLSecretName,
-	n1cDataplaneKeySecretName,
-	nimDataplaneKeySecretName string,
+	dataplaneKeySecretName string,
 ) *store {
 	dockerSecretNamesMap := make(map[string]struct{})
 	for _, name := range dockerSecretNames {
@@ -89,16 +84,15 @@ func newStore(
 	}
 
 	return &store{
-		gateways:                  make(map[types.NamespacedName]*gatewayv1.Gateway),
-		nginxResources:            make(map[types.NamespacedName]*NginxResources),
-		deletingGateways:          sync.Map{},
-		dockerSecretNames:         dockerSecretNamesMap,
-		agentTLSSecretName:        agentTLSSecretName,
-		jwtSecretName:             jwtSecretName,
-		caSecretName:              caSecretName,
-		clientSSLSecretName:       clientSSLSecretName,
-		n1cDataplaneKeySecretName: n1cDataplaneKeySecretName,
-		nimDataplaneKeySecretName: nimDataplaneKeySecretName,
+		gateways:               make(map[types.NamespacedName]*gatewayv1.Gateway),
+		nginxResources:         make(map[types.NamespacedName]*NginxResources),
+		deletingGateways:       sync.Map{},
+		dockerSecretNames:      dockerSecretNamesMap,
+		agentTLSSecretName:     agentTLSSecretName,
+		jwtSecretName:          jwtSecretName,
+		caSecretName:           caSecretName,
+		clientSSLSecretName:    clientSSLSecretName,
+		dataplaneKeySecretName: dataplaneKeySecretName,
 	}
 }
 
@@ -235,10 +229,8 @@ func (s *store) assignNamedSecret(cfg *NginxResources, obj *corev1.Secret) bool 
 		cfg.PlusCASecret = obj.ObjectMeta
 	case hasSuffix(name, s.clientSSLSecretName):
 		cfg.PlusClientSSLSecret = obj.ObjectMeta
-	case hasSuffix(name, s.n1cDataplaneKeySecretName):
-		cfg.N1CDataplaneKeySecret = obj.ObjectMeta
-	case hasSuffix(name, s.nimDataplaneKeySecretName):
-		cfg.NIMDataplaneKeySecret = obj.ObjectMeta
+	case hasSuffix(name, s.dataplaneKeySecretName):
+		cfg.DataplaneKeySecret = obj.ObjectMeta
 	default:
 		return false
 	}
@@ -438,11 +430,7 @@ func secretResourceMatches(resources *NginxResources, nsName types.NamespacedNam
 		return true
 	}
 
-	if resourceMatches(resources.N1CDataplaneKeySecret, nsName) {
-		return true
-	}
-
-	if resourceMatches(resources.NIMDataplaneKeySecret, nsName) {
+	if resourceMatches(resources.DataplaneKeySecret, nsName) {
 		return true
 	}
 
@@ -529,11 +517,8 @@ func getResourceVersionForSecret(resources *NginxResources, secret *corev1.Secre
 	if resources.PlusCASecret.GetName() == secret.GetName() {
 		return resources.PlusCASecret.GetResourceVersion()
 	}
-	if resources.N1CDataplaneKeySecret.GetName() == secret.GetName() {
-		return resources.N1CDataplaneKeySecret.GetResourceVersion()
-	}
-	if resources.NIMDataplaneKeySecret.GetName() == secret.GetName() {
-		return resources.NIMDataplaneKeySecret.GetResourceVersion()
+	if resources.DataplaneKeySecret.GetName() == secret.GetName() {
+		return resources.DataplaneKeySecret.GetResourceVersion()
 	}
 
 	return ""

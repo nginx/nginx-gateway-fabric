@@ -93,7 +93,6 @@ func createControllerCommand() *cobra.Command {
 		nginxOneTelemetryEndpointHostFlag   = "nginx-one-telemetry-endpoint-host"
 		nginxOneTelemetryEndpointPortFlag   = "nginx-one-telemetry-endpoint-port"
 		nginxOneTLSSkipVerifyFlag           = "nginx-one-tls-skip-verify"
-		nimDataplaneKeySecretFlag           = "nim-dataplane-key-secret" //nolint:gosec // not credentials
 		nimTelemetryEndpointHostFlag        = "nim-telemetry-endpoint-host"
 		nimTelemetryEndpointPortFlag        = "nim-telemetry-endpoint-port"
 		metricsDisableFlag                  = "metrics-disable"
@@ -158,9 +157,7 @@ func createControllerCommand() *cobra.Command {
 			value:     443,
 		}
 		nginxOneConsoleTLSSkipVerify bool
-		nimDataplaneKeySecretName    = stringValidatingValue{
-			validator: validateResourceName,
-		}
+
 		nimTelemetryEndpointHost = stringValidatingValue{
 			validator: validateResourceName,
 		}
@@ -377,9 +374,8 @@ func createControllerCommand() *cobra.Command {
 					EndpointTLSSkipVerify:  nginxOneConsoleTLSSkipVerify,
 				},
 				NginxInstanceManagerTelemetryConfig: config.ManagementPlaneTelemetryConfig{
-					DataplaneKeySecretName: nimDataplaneKeySecretName.value,
-					EndpointHost:           nimTelemetryEndpointHost.value,
-					EndpointPort:           nimTelemetryEndpointPort.value,
+					EndpointHost: nimTelemetryEndpointHost.value,
+					EndpointPort: nimTelemetryEndpointPort.value,
 				},
 				EndpointPickerDisableTLS:    endpointPickerDisableTLS,
 				EndpointPickerTLSSkipVerify: endpointPickerTLSSkipVerify,
@@ -459,13 +455,6 @@ func createControllerCommand() *cobra.Command {
 		nginxOneTLSSkipVerifyFlag,
 		false,
 		"Disable client verification of the NGINX One Console's telemetry endpoint server certificate.",
-	)
-
-	cmd.Flags().Var(
-		&nimDataplaneKeySecretName,
-		nimDataplaneKeySecretFlag,
-		`The name of the Secret containing the NGINX Instance Manager's dataplane key. Must exist in the same namespace `+
-			`that the NGINX Gateway Fabric control plane is running in (default namespace: nginx-gateway).`,
 	)
 
 	cmd.Flags().Var(

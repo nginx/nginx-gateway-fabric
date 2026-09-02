@@ -357,3 +357,31 @@ func TestValidateOIDCExtraAuthArg(t *testing.T) {
 		}
 	})
 }
+
+func TestValidateOIDCEscapedString(t *testing.T) {
+	t.Parallel()
+	validator := AuthFieldValidator{}
+
+	testValidValuesForSimpleValidator(
+		t,
+		validator.ValidateOIDCEscapedString,
+		`my-client-id`,
+		`app_123`,
+		`some.client.id`,
+		`NGX_OIDC_SESSION`,
+		`my-session-cookie`,
+		`my-client-secret`,
+		`s3cr3t_v4lu3`,
+		`simple`,
+	)
+
+	testInvalidValuesForSimpleValidator(
+		t,
+		validator.ValidateOIDCEscapedString,
+		`value"with-quote`,
+		`value$with-dollar`,
+		`value\`,
+		"value\nwith-newline",
+		"value\rwith-carriage-return",
+	)
+}

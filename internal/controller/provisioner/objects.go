@@ -67,13 +67,9 @@ const (
 	appProtectBdConfigVolumeName = "app-protect-bd-config"
 	appProtectLockVolumeName     = "app-protect-lock"
 
-	agentVolumeMountPath = "/etc/nginx-agent/secrets"
-
-	agentNICVolumeName       = "agent-n1c-dataplane-key"
-	agentNICDataplaneKeyFile = "dataplane-n1c.key"
-
-	agentNIMVolumeName       = "agent-nim-dataplane-key"
-	agentNIMDataplaneKeyFile = "dataplane-nim.key"
+	agentVolumeMountPath     = "/etc/nginx-agent/secrets"
+	agentNICVolumeName       = "agent-dataplane-key"
+	agentNICDataplaneKeyFile = "dataplane.key"
 )
 
 // portProtoEntry represents a unique port and protocol combination.
@@ -99,8 +95,7 @@ type resourceNames struct {
 	jwt                    string
 	ca                     string
 	clientSSL              string
-	n1cDataplaneKey        string
-	nimDataplaneKey        string
+	dataplaneKey           string
 }
 
 // buildNginxResourceObjects builds all the NGINX resource objects for a given Gateway and EffectiveNginxProxy.
@@ -328,16 +323,9 @@ func (p *NginxProvisioner) buildResourceNames(resourceName string) resourceNames
 	}
 
 	if p.cfg.NginxOneConsoleTelemetryConfig.DataplaneKeySecretName != "" {
-		names.n1cDataplaneKey = controller.CreateNginxResourceName(
+		names.dataplaneKey = controller.CreateNginxResourceName(
 			resourceName,
 			p.cfg.NginxOneConsoleTelemetryConfig.DataplaneKeySecretName,
-		)
-	}
-
-	if p.cfg.NginxInstanceManagerTelemetryConfig.DataplaneKeySecretName != "" {
-		names.nimDataplaneKey = controller.CreateNginxResourceName(
-			resourceName,
-			p.cfg.NginxInstanceManagerTelemetryConfig.DataplaneKeySecretName,
 		)
 	}
 
@@ -672,12 +660,7 @@ func (p *NginxProvisioner) buildNginxSecrets(
 		fields,
 		secretFields{
 			sourceSecretName: p.cfg.NginxOneConsoleTelemetryConfig.DataplaneKeySecretName,
-			targetSecretName: names.n1cDataplaneKey,
-			secretType:       corev1.SecretTypeOpaque,
-		},
-		secretFields{
-			sourceSecretName: p.cfg.NginxInstanceManagerTelemetryConfig.DataplaneKeySecretName,
-			targetSecretName: names.nimDataplaneKey,
+			targetSecretName: names.dataplaneKey,
 			secretType:       corev1.SecretTypeOpaque,
 		},
 	)
@@ -876,7 +859,7 @@ func (p *NginxProvisioner) buildAgentConfigMap(
 		agentFields["EndpointTLSSkipVerify"] = p.cfg.NginxOneConsoleTelemetryConfig.EndpointTLSSkipVerify
 	}
 
-	if p.cfg.NginxInstanceManagerTelemetryConfig.DataplaneKeySecretName != "" {
+	if p.cfg.NginxInstanceManagerTelemetryConfig.EndpointHost != "" {
 		agentFields["NIMReporting"] = true
 		agentFields["NIMEndpointHost"] = p.cfg.NginxInstanceManagerTelemetryConfig.EndpointHost
 		agentFields["NIMEndpointPort"] = strconv.Itoa(p.cfg.NginxInstanceManagerTelemetryConfig.EndpointPort)
@@ -1357,20 +1340,9 @@ func (p *NginxProvisioner) buildNginxPodTemplateSpec(
 	if p.cfg.NginxOneConsoleTelemetryConfig.DataplaneKeySecretName != "" {
 		p.configureDataplaneKeySecret(
 			&spec,
-			names.n1cDataplaneKey,
+			names.dataplaneKey,
 			agentNICVolumeName,
 			fmt.Sprintf("%s/%s", agentVolumeMountPath, agentNICDataplaneKeyFile),
-			secrets.DataplaneSecretKey,
-		)
-	}
-
-	// Configure dataplane key secret for NGINX Instance Manager telemetry
-	if p.cfg.NginxInstanceManagerTelemetryConfig.DataplaneKeySecretName != "" {
-		p.configureDataplaneKeySecret(
-			&spec,
-			names.nimDataplaneKey,
-			agentNIMVolumeName,
-			fmt.Sprintf("%s/%s", agentVolumeMountPath, agentNIMDataplaneKeyFile),
 			secrets.DataplaneSecretKey,
 		)
 	}
@@ -1760,8 +1732,10 @@ func (p *NginxProvisioner) configureNginxPlus(
 			SubPath:   secrets.LicenseJWTKey,
 		})
 		spec.Spec.Volumes = append(spec.Spec.Volumes, corev1.Volume{
-			Name:         "nginx-plus-license",
-			VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: names.jwt}},
+			Name: "nginx-plus-license",
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{SecretName: names.jwt},
+			},
 		})
 	}
 
@@ -1806,14 +1780,20 @@ func (p *NginxProvisioner) configureDataplaneKeySecret(
 	spec *corev1.PodTemplateSpec,
 	resourceName, volumeName, mountPath, subPath string,
 ) {
-	spec.Spec.Containers[0].VolumeMounts = append(spec.Spec.Containers[0].VolumeMounts, corev1.VolumeMount{
-		Name:      volumeName,
-		MountPath: mountPath,
-		SubPath:   subPath,
-	})
+	spec.Spec.Containers[0].VolumeMounts = append(
+		spec.Spec.Containers[0].VolumeMounts, corev1.VolumeMount{
+			Name:      volumeName,
+			MountPath: mountPath,
+			SubPath:   subPath,
+		},
+	)
 	spec.Spec.Volumes = append(spec.Spec.Volumes, corev1.Volume{
-		Name:         volumeName,
-		VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: resourceName}},
+		Name: volumeName,
+		VolumeSource: corev1.VolumeSource{
+			Secret: &corev1.SecretVolumeSource{
+				SecretName: resourceName,
+			},
+		},
 	})
 }
 
@@ -2258,15 +2238,6 @@ func (p *NginxProvisioner) buildResourcesForInvalidGatewayCleanup(
 		objects = append(
 			objects,
 			&corev1.Secret{ObjectMeta: meta(resourceName(p.cfg.NginxOneConsoleTelemetryConfig.DataplaneKeySecretName))},
-		)
-	}
-
-	if p.cfg.NginxInstanceManagerTelemetryConfig.DataplaneKeySecretName != "" {
-		objects = append(
-			objects,
-			&corev1.Secret{
-				ObjectMeta: meta(resourceName(p.cfg.NginxInstanceManagerTelemetryConfig.DataplaneKeySecretName)),
-			},
 		)
 	}
 
