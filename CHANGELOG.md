@@ -22,8 +22,8 @@ HELM CHART:
 
 COMPATIBILITY:
 
-- Gateway API version: `v1.5.1`
-- Gateway API Inference Extension version: `v1.5.0`
+- Gateway API version: `1.5.1`
+- Gateway API Inference Extension version: `1.5.0`
 - NGINX version: `1.31.3`
 - NGINX Plus version: `R37.0`
 - F5 WAF on NGINX version: `5.13.2`
