@@ -547,7 +547,6 @@ func TestCalculateReadyEndpoints(t *testing.T) {
 
 func TestCompareEndpoints(t *testing.T) {
 	t.Parallel()
-	g := NewWithT(t)
 
 	testcases := []struct {
 		msg      string
