@@ -69,6 +69,7 @@ type AuthFieldsValidator interface {
 	ValidateAuthZClaimValue(value string) error
 	ValidateAuthZProxySetHeader(header string) error
 	ValidateOIDCExtraAuthArg(key, value string) error
+	ValidateOIDCEscapedString(value string) error
 }
 
 // PolicyValidator validates an NGF Policy.
