@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 	appsv1 "k8s.io/api/apps/v1"
@@ -24,6 +25,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/client-go/discovery"
 	k8sEvents "k8s.io/client-go/tools/events"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -46,6 +48,10 @@ import (
 //go:generate go tool counterfeiter -generate
 
 //counterfeiter:generate . Provisioner
+
+const (
+	serviceMonitorGroupVersion = "monitoring.coreos.com/v1"
+)
 
 // Provisioner is an interface for triggering NGINX resources to be created/updated/deleted.
 type Provisioner interface {
@@ -90,6 +96,7 @@ type NginxProvisioner struct {
 	lock                       sync.RWMutex
 	leader                     bool
 	isOpenshift                bool
+	serviceMonitorInstalled    bool
 }
 
 var apiChecker openshift.APIChecker = &openshift.APICheckerImpl{}
@@ -165,6 +172,14 @@ func NewNginxProvisioner(
 
 	clusterIPFamily := detectClusterIPFamily(ctx, mgr.GetAPIReader())
 
+	serviceMonitorInstalled := false
+	discoveryClient, err := discovery.NewDiscoveryClientForConfig(mgr.GetConfig())
+	if err != nil {
+		cfg.Logger.Error(err, "failed to create discovery client")
+	} else {
+		serviceMonitorInstalled = isServiceMonitorCRDInstalled(discoveryClient)
+	}
+
 	provisioner := &NginxProvisioner{
 		k8sClient:                  mgr.GetClient(),
 		clusterIPFamily:            clusterIPFamily,
@@ -173,6 +188,7 @@ func NewNginxProvisioner(
 		resourcesToDeleteOnStartup: []types.NamespacedName{},
 		cfg:                        cfg,
 		isOpenshift:                isOpenshift,
+		serviceMonitorInstalled:    serviceMonitorInstalled,
 	}
 
 	handler, err := newEventHandler(store, provisioner, mgr.GetClient(), selector, cfg.GCName)
@@ -192,8 +208,9 @@ func NewNginxProvisioner(
 		dataplaneKeySecretName,
 		cfg.PlusUsageConfig,
 		eventLoopFeatures{
-			isOpenshift:          isOpenshift,
-			externalLoadBalancer: cfg.ExternalLoadBalancer,
+			isOpenshift:             isOpenshift,
+			externalLoadBalancer:    cfg.ExternalLoadBalancer,
+			serviceMonitorInstalled: serviceMonitorInstalled,
 		},
 	)
 	if err != nil {
@@ -388,6 +405,9 @@ var minimalObjectFactory = map[reflect.Type]func(name, namespace string) client.
 	},
 	reflect.TypeOf(&policyv1.PodDisruptionBudget{}): func(name, namespace string) client.Object {
 		return &policyv1.PodDisruptionBudget{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace}}
+	},
+	reflect.TypeOf(&monitoringv1.ServiceMonitor{}): func(name, namespace string) client.Object {
+		return &monitoringv1.ServiceMonitor{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace}}
 	},
 }
 
@@ -881,6 +901,12 @@ func (p *NginxProvisioner) handleObjectDeletion(ctx context.Context, nginxResour
 		}
 	}
 
+	if needToDeleteServiceMonitor(nginxResources) {
+		if err := p.deleteObject(ctx, &monitoringv1.ServiceMonitor{ObjectMeta: nginxResources.ServiceMonitor}); err != nil {
+			p.cfg.Logger.Error(err, "error deleting nginx resource")
+		}
+	}
+
 	if p.needToDeleteIngressLink(nginxResources) {
 		il := &unstructured.Unstructured{}
 		il.SetGroupVersionKind(kinds.IngressLinkGVK)
@@ -1083,6 +1109,31 @@ func needToDeleteHPA(cfg *NginxResources) bool {
 	return false
 }
 
+// needToDeleteServiceMonitor returns true if a ServiceMonitor was previously created for this
+// Gateway but is no longer configured in the NginxProxy spec, and therefore should be deleted.
+func needToDeleteServiceMonitor(cfg *NginxResources) bool {
+	if cfg.ServiceMonitor.Name == "" || cfg.Gateway == nil {
+		return false
+	}
+
+	nginxProxy := cfg.Gateway.EffectiveNginxProxy
+	if nginxProxy == nil || nginxProxy.Kubernetes == nil {
+		return true
+	}
+
+	var isEnabled bool
+	switch {
+	case nginxProxy.Kubernetes.DaemonSet != nil:
+		isEnabled = isServiceMonitorEnabledForDaemonSet(nginxProxy.Kubernetes.DaemonSet)
+	case nginxProxy.Kubernetes.Deployment != nil:
+		isEnabled = isServiceMonitorEnabledForDeployment(nginxProxy.Kubernetes.Deployment)
+	default:
+		return true
+	}
+
+	return !isEnabled
+}
+
 // needToDeleteIngressLink returns true if an IngressLink was previously provisioned for this Gateway
 // but its ExternalLoadBalancer is no longer attached, and therefore the IngressLink should be deleted.
 // The IngressLink is owned by the Gateway, so it is not garbage collected when only the
@@ -1091,4 +1142,19 @@ func (p *NginxProvisioner) needToDeleteIngressLink(cfg *NginxResources) bool {
 	return p.cfg.ExternalLoadBalancer &&
 		cfg.ExternalLoadBalancer.Name != "" &&
 		extractExternalLoadBalancer(cfg.Gateway) == nil
+}
+
+func isServiceMonitorCRDInstalled(dc discovery.DiscoveryInterface) bool {
+	resources, err := dc.ServerResourcesForGroupVersion(serviceMonitorGroupVersion)
+	if err != nil {
+		return false
+	}
+
+	for _, res := range resources.APIResources {
+		if res.Kind == "ServiceMonitor" {
+			return true
+		}
+	}
+
+	return false
 }
