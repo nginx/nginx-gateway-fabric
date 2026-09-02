@@ -393,28 +393,51 @@ func (p *poller) pushBundleToDeployments(bundleKey graph.WAFBundleKey, data []by
 // BuildBundleSources constructs BundleSource entries from a WAFPolicy spec.
 // It returns only sources that have polling enabled.
 func BuildBundleSources(
-	policyNsName types.NamespacedName,
 	spec ngfAPIv1alpha1.WAFPolicySpec,
 	auth *fetch.BundleAuth,
 	tlsCA []byte,
 ) []BundleSource {
 	var sources []BundleSource
 
-	// Check if policySource has polling enabled.
+	sources = append(sources, buildBundlePolicySources(spec, auth, tlsCA)...)
+
+	sources = append(sources, buildBundleLogSources(spec, auth, tlsCA)...)
+
+	return sources
+}
+
+func buildBundlePolicySources(
+	spec ngfAPIv1alpha1.WAFPolicySpec,
+	auth *fetch.BundleAuth,
+	tlsCA []byte,
+) []BundleSource {
+	var source []BundleSource
 	if spec.PolicySource != nil && spec.PolicySource.Polling != nil && spec.PolicySource.Polling.Enabled {
+		// Check if policySource has polling enabled.
 		interval := defaultPollingInterval
 		if spec.PolicySource.Polling.Interval != nil && spec.PolicySource.Polling.Interval.Duration > 0 {
 			interval = spec.PolicySource.Polling.Interval.Duration
 		}
 
-		sources = append(sources, BundleSource{
-			Type:        PolicyBundle,
-			BundleKey:   graph.PolicyBundleKey(policyNsName),
-			Request:     graph.BuildPolicyFetchRequest(spec.PolicySource, spec.Type, auth, tlsCA),
-			Description: "policy bundle",
-			Interval:    interval,
-		})
+		if bundleKey := graph.PolicyBundleKey(spec); bundleKey != "" {
+			source = append(source, BundleSource{
+				Type:        PolicyBundle,
+				BundleKey:   bundleKey,
+				Request:     graph.BuildPolicyFetchRequest(spec.PolicySource, spec.Type, auth, tlsCA),
+				Description: "policy bundle",
+				Interval:    interval,
+			})
+		}
 	}
+	return source
+}
+
+func buildBundleLogSources(
+	spec ngfAPIv1alpha1.WAFPolicySpec,
+	auth *fetch.BundleAuth,
+	tlsCA []byte,
+) []BundleSource {
+	var sources []BundleSource
 
 	// Check each logSource for polling.
 	for _, secLog := range spec.SecurityLogs {
@@ -435,7 +458,7 @@ func BuildBundleSources(
 
 		sources = append(sources, BundleSource{
 			Type:        LogProfileBundle,
-			BundleKey:   graph.LogBundleKey(policyNsName, secLog.LogSource),
+			BundleKey:   graph.LogBundleKey(secLog.LogSource),
 			Request:     graph.BuildLogFetchRequest(secLog.LogSource, auth, tlsCA),
 			Description: graph.LogBundleDescription(secLog.LogSource),
 			Interval:    interval,

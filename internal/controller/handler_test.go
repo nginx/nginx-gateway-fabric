@@ -1419,6 +1419,21 @@ func TestReconcileWAFPollers(t *testing.T) {
 
 	policyNsName := types.NamespacedName{Namespace: "default", Name: "waf-policy"}
 
+	wafSpec := &ngfAPI.WAFPolicySpec{
+		Type: ngfAPI.PolicySourceTypeHTTP,
+		TargetRefs: []gatewayv1.LocalPolicyTargetReference{
+			{
+				Group: gatewayv1.Group(gatewayv1.GroupName),
+				Kind:  gatewayv1.Kind(kinds.Gateway),
+				Name:  "my-gateway",
+			},
+		},
+		PolicySource: &ngfAPI.PolicySource{
+			HTTPSource: &ngfAPI.HTTPBundleSource{URL: "http://example.com/policy.tgz"},
+			Polling:    &ngfAPI.BundlePolling{Enabled: true},
+		},
+	}
+
 	tests := []struct {
 		ngfPolicies             map[graph.PolicyKey]*graph.Policy
 		gateways                map[types.NamespacedName]*graph.Gateway
@@ -1442,7 +1457,7 @@ func TestReconcileWAFPollers(t *testing.T) {
 					},
 					WAFState: &graph.PolicyWAFState{
 						Bundles: map[graph.WAFBundleKey]*graph.WAFBundleData{
-							graph.PolicyBundleKey(policyNsName): {Checksum: "abc123"},
+							graph.PolicyBundleKey(*wafSpec): {Checksum: "abc123"},
 						},
 					},
 				},
@@ -1552,7 +1567,7 @@ func TestReconcileWAFPollers(t *testing.T) {
 					},
 					WAFState: &graph.PolicyWAFState{
 						Bundles: map[graph.WAFBundleKey]*graph.WAFBundleData{
-							graph.PolicyBundleKey(policyNsName): {Checksum: "sha256-abc"},
+							graph.PolicyBundleKey(*wafSpec): {Checksum: "sha256-abc"},
 						},
 					},
 				},
@@ -1561,7 +1576,7 @@ func TestReconcileWAFPollers(t *testing.T) {
 			expectReconcileCount:    1,
 			expectStopNotInCount:    1,
 			expectActivePolicyCount: 1,
-			expectInitialChecksums:  map[graph.WAFBundleKey]string{graph.PolicyBundleKey(policyNsName): "sha256-abc"},
+			expectInitialChecksums:  map[graph.WAFBundleKey]string{graph.PolicyBundleKey(*wafSpec): "sha256-abc"},
 		},
 		{
 			name: "passes resolved auth to poller config",
@@ -1652,8 +1667,23 @@ func TestReconcileWAFPollers(t *testing.T) {
 func TestMergeWAFPollErrors(t *testing.T) {
 	t.Parallel()
 
+	wafSpec := &ngfAPI.WAFPolicySpec{
+		Type: ngfAPI.PolicySourceTypeN1C,
+		TargetRefs: []gatewayv1.LocalPolicyTargetReference{
+			{
+				Group: gatewayv1.Group(gatewayv1.GroupName),
+				Kind:  gatewayv1.Kind(kinds.Gateway),
+				Name:  "my-gateway",
+			},
+		},
+		PolicySource: &ngfAPI.PolicySource{
+			N1CSource: &ngfAPI.N1CBundleSource{URL: "http://example.com/policy.tgz"},
+			Polling:   &ngfAPI.BundlePolling{Enabled: true},
+		},
+	}
+
 	policyNsName := types.NamespacedName{Namespace: "default", Name: "waf-policy"}
-	bundleKey := graph.PolicyBundleKey(policyNsName)
+	bundleKey := graph.PolicyBundleKey(*wafSpec)
 
 	tests := []struct {
 		pollErrors      map[types.NamespacedName]wafPoller.PollError
@@ -1979,8 +2009,23 @@ func TestReconcileAPResourceFinalizers(t *testing.T) {
 func TestMergeWAFBundleUpdates(t *testing.T) {
 	t.Parallel()
 
+	wafSpec := &ngfAPI.WAFPolicySpec{
+		Type: ngfAPI.PolicySourceTypeNIM,
+		TargetRefs: []gatewayv1.LocalPolicyTargetReference{
+			{
+				Group: gatewayv1.Group(gatewayv1.GroupName),
+				Kind:  gatewayv1.Kind(kinds.Gateway),
+				Name:  "my-gateway",
+			},
+		},
+		PolicySource: &ngfAPI.PolicySource{
+			NIMSource: &ngfAPI.NIMBundleSource{URL: "http://example.com/policy.tgz"},
+			Polling:   &ngfAPI.BundlePolling{Enabled: true},
+		},
+	}
+
 	policyNsName := types.NamespacedName{Namespace: "default", Name: "waf-policy"}
-	bundleKey := graph.PolicyBundleKey(policyNsName)
+	bundleKey := graph.PolicyBundleKey(*wafSpec)
 	checksum := "abc123"
 	updatedAt := metav1.Now()
 

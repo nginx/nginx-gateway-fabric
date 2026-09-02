@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/go-logr/logr"
 	. "github.com/onsi/gomega"
@@ -3011,10 +3012,15 @@ func TestProcessWAFPolicies(t *testing.T) {
 	authSecretNsName := types.NamespacedName{Namespace: policyNs, Name: authSecretName}
 	tlsSecretNsName := types.NamespacedName{Namespace: policyNs, Name: tlsSecretName}
 
-	policyNsName := types.NamespacedName{Namespace: policyNs, Name: policyName}
-	bundleKey := PolicyBundleKey(policyNsName)
+	// Use the default HTTP source spec to compute the source-based bundle key.
+	defaultHTTPSpec := ngfAPIv1alpha1.WAFPolicySpec{
+		Type: ngfAPIv1alpha1.PolicySourceTypeHTTP,
+		PolicySource: &ngfAPIv1alpha1.PolicySource{
+			HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: bundleURL},
+		},
+	}
+	bundleKey := PolicyBundleKey(defaultHTTPSpec)
 	logBundleKey := LogBundleKey(
-		policyNsName,
 		&ngfAPIv1alpha1.LogSource{
 			HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: logBundleURL},
 		},
@@ -3456,7 +3462,15 @@ func TestProcessWAFPolicies(t *testing.T) {
 				}
 			},
 			expBundles: map[WAFBundleKey]*WAFBundleData{
-				bundleKey: {Data: fetchedData, Checksum: fetchedChecksum},
+				PolicyBundleKey(ngfAPIv1alpha1.WAFPolicySpec{
+					Type: ngfAPIv1alpha1.PolicySourceTypeNIM,
+					PolicySource: &ngfAPIv1alpha1.PolicySource{
+						NIMSource: &ngfAPIv1alpha1.NIMBundleSource{
+							URL:        bundleURL,
+							PolicyName: helpers.GetPointer("my-nim-policy"),
+						},
+					},
+				}): {Data: fetchedData, Checksum: fetchedChecksum},
 			},
 			expSecrets: map[types.NamespacedName]*corev1.Secret{},
 			expValid:   true,
@@ -3487,7 +3501,19 @@ func TestProcessWAFPolicies(t *testing.T) {
 				}
 			},
 			expBundles: map[WAFBundleKey]*WAFBundleData{
-				bundleKey: {Data: fetchedData, Checksum: fetchedChecksum},
+				PolicyBundleKey(ngfAPIv1alpha1.WAFPolicySpec{
+					Type: ngfAPIv1alpha1.PolicySourceTypeN1C,
+					PolicySource: &ngfAPIv1alpha1.PolicySource{
+						N1CSource: &ngfAPIv1alpha1.N1CBundleSource{
+							URL:        bundleURL,
+							PolicyName: helpers.GetPointer("my-n1c-policy"),
+							Namespace:  "my-n1c-namespace",
+						},
+						Auth: &ngfAPIv1alpha1.BundleAuth{
+							SecretRef: ngfAPIv1alpha1.LocalObjectReference{Name: authSecretName},
+						},
+					},
+				}): {Data: fetchedData, Checksum: fetchedChecksum},
 			},
 			expSecrets: map[types.NamespacedName]*corev1.Secret{authSecretNsName: tokenSecret},
 			expValid:   true,
@@ -3656,7 +3682,6 @@ func TestProcessWAFPolicies(t *testing.T) {
 			expBundles: map[WAFBundleKey]*WAFBundleData{
 				bundleKey: {Data: fetchedData, Checksum: fetchedChecksum},
 				LogBundleKey(
-					types.NamespacedName{Namespace: "test-ns", Name: policyName},
 					&ngfAPIv1alpha1.LogSource{HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: multiLogURL1}},
 				): {
 					Data: fetchedData, Checksum: fetchedChecksum,
@@ -3719,7 +3744,7 @@ func TestProcessWAFPolicies(t *testing.T) {
 			},
 			expBundles: map[WAFBundleKey]*WAFBundleData{
 				bundleKey: {Data: fetchedData, Checksum: fetchedChecksum},
-				WAFBundleKey(fmt.Sprintf("%s_%s_log_%s", "test-ns", policyName, helpers.URLHash(multiLogURL1))): {
+				WAFBundleKey(fmt.Sprintf("log_%s", helpers.URLHash(multiLogURL1))): {
 					Data: fetchedData, Checksum: fetchedChecksum,
 				},
 			},
@@ -4285,8 +4310,6 @@ func TestBuildPolicyFetchRequest(t *testing.T) {
 func TestLogBundleKey(t *testing.T) {
 	t.Parallel()
 
-	policyNsName := types.NamespacedName{Namespace: "mynamespace", Name: "mypolicy"}
-
 	nimURL := "https://nim.example.com"
 	n1cURL := "https://n1c.example.com"
 	httpURL := "https://http.example.com"
@@ -4317,7 +4340,7 @@ func TestLogBundleKey(t *testing.T) {
 					ProfileName: profileName,
 				},
 			},
-			expKey: WAFBundleKey(fmt.Sprintf("mynamespace_mypolicy_log_%s_%s", helpers.URLHash(nimURL), profileName)),
+			expKey: WAFBundleKey(fmt.Sprintf("log_%s_%s", helpers.URLHash(nimURL), helpers.URLHash(profileName))),
 		},
 		{
 			name: "N1C source with ProfileObjectID",
@@ -4328,7 +4351,7 @@ func TestLogBundleKey(t *testing.T) {
 					ProfileObjectID: &profileObjectID,
 				},
 			},
-			expKey: WAFBundleKey(fmt.Sprintf("mynamespace_mypolicy_log_%s_n1c-ns_%s", helpers.URLHash(n1cURL), profileObjectID)),
+			expKey: WAFBundleKey(fmt.Sprintf("log_%s_%s", helpers.URLHash(n1cURL), helpers.URLHash("n1c-ns/"+profileObjectID))),
 		},
 		{
 			name: "N1C source with ProfileName (no ObjectID)",
@@ -4339,7 +4362,7 @@ func TestLogBundleKey(t *testing.T) {
 					ProfileName: &profileName,
 				},
 			},
-			expKey: WAFBundleKey(fmt.Sprintf("mynamespace_mypolicy_log_%s_n1c-ns_%s", helpers.URLHash(n1cURL), profileName)),
+			expKey: WAFBundleKey(fmt.Sprintf("log_%s_%s", helpers.URLHash(n1cURL), helpers.URLHash("n1c-ns/"+profileName))),
 		},
 		{
 			name: "N1C source with neither ProfileObjectID nor ProfileName",
@@ -4349,7 +4372,7 @@ func TestLogBundleKey(t *testing.T) {
 					Namespace: "n1c-ns",
 				},
 			},
-			expKey: WAFBundleKey(fmt.Sprintf("mynamespace_mypolicy_log_%s_n1c-ns_", helpers.URLHash(n1cURL))),
+			expKey: WAFBundleKey(fmt.Sprintf("log_%s_%s", helpers.URLHash(n1cURL), helpers.URLHash("n1c-ns/"))),
 		},
 		{
 			name: "HTTP source",
@@ -4358,7 +4381,7 @@ func TestLogBundleKey(t *testing.T) {
 					URL: httpURL,
 				},
 			},
-			expKey: WAFBundleKey(fmt.Sprintf("mynamespace_mypolicy_log_%s", helpers.URLHash(httpURL))),
+			expKey: WAFBundleKey(fmt.Sprintf("log_%s", helpers.URLHash(httpURL))),
 		},
 	}
 
@@ -4367,7 +4390,7 @@ func TestLogBundleKey(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			got := LogBundleKey(policyNsName, tc.logSource)
+			got := LogBundleKey(tc.logSource)
 			g.Expect(got).To(Equal(tc.expKey))
 		})
 	}
@@ -4597,9 +4620,8 @@ func TestFetchPLMPolicyBundle(t *testing.T) {
 		otherNs      = "other-ns"
 	)
 
-	policyNsName := types.NamespacedName{Namespace: policyNs, Name: policyName}
 	apPolicyNsName := types.NamespacedName{Namespace: policyNs, Name: apPolicyName}
-	bundleKey := PLMPolicyBundleKey(policyNsName)
+	bundleKey := PLMPolicyBundleKey(apPolicyNsName)
 
 	makeWAFPolicy := func(ref *ngfAPIv1alpha1.APPolicyReference) *ngfAPIv1alpha1.WAFPolicy {
 		return &ngfAPIv1alpha1.WAFPolicy{
@@ -4792,6 +4814,108 @@ func TestFetchPLMPolicyBundle(t *testing.T) {
 	}
 }
 
+func TestFetchPLMPolicyBundle_AlreadyFetched(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	const (
+		policyNs     = "test-ns"
+		apPolicyName = "my-ap-policy"
+	)
+
+	apPolicyNsName := types.NamespacedName{Namespace: policyNs, Name: apPolicyName}
+	bundleKey := PLMPolicyBundleKey(apPolicyNsName)
+
+	wafPolicy := &ngfAPIv1alpha1.WAFPolicy{
+		ObjectMeta: metav1.ObjectMeta{Name: "second-plm-waf", Namespace: policyNs},
+		Spec: ngfAPIv1alpha1.WAFPolicySpec{
+			Type:      ngfAPIv1alpha1.PolicySourceTypePLM,
+			PolicyRef: &ngfAPIv1alpha1.PolicyRef{APPolicyRef: &ngfAPIv1alpha1.APPolicyReference{Name: apPolicyName}},
+		},
+	}
+
+	existingBundle := &WAFBundleData{Data: []byte("already-fetched"), Checksum: "existing-checksum"}
+
+	policy := newPLMPolicy(wafPolicy)
+	output := newPLMOutput()
+	// Pre-populate the output with an already-fetched bundle for the same key.
+	output.Bundles[bundleKey] = existingBundle
+
+	wafInput := &WAFProcessingInput{
+		PLMFetcher: fakePLMFetcher(),
+		APPolicies: map[types.NamespacedName]*unstructured.Unstructured{
+			apPolicyNsName: makeUnstructuredAPResource(
+				"APPolicy", policyNs, apPolicyName, "ready", "s3://bucket/policy.tgz", "sha-abc", true,
+			),
+		},
+		PreviousBundles: map[WAFBundleKey]*WAFBundleData{},
+	}
+
+	fetchPLMPolicyBundle(t.Context(), logr.Discard(), wafPolicy, policy, wafInput, output)
+
+	// The existing bundle should be reused, not overwritten.
+	g.Expect(output.Bundles[bundleKey]).To(Equal(existingBundle))
+	g.Expect(policy.WAFState.Bundles[bundleKey]).To(Equal(existingBundle))
+	g.Expect(policy.Valid).To(BeTrue())
+	g.Expect(policy.Conditions).To(BeEmpty())
+	g.Expect(policy.WAFState.BundlePending).To(BeFalse())
+}
+
+func TestFetchPolicyBundle_AlreadyFetched(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	const (
+		policyNs  = "test-ns"
+		bundleURL = "https://example.com/bundle.tgz"
+	)
+
+	wafPolicy := &ngfAPIv1alpha1.WAFPolicy{
+		ObjectMeta: metav1.ObjectMeta{Name: "second-waf", Namespace: policyNs},
+		Spec: ngfAPIv1alpha1.WAFPolicySpec{
+			Type: ngfAPIv1alpha1.PolicySourceTypeHTTP,
+			PolicySource: &ngfAPIv1alpha1.PolicySource{
+				HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: bundleURL},
+			},
+		},
+	}
+
+	bundleKey := PolicyBundleKey(wafPolicy.Spec)
+	existingBundle := &WAFBundleData{Data: []byte("already-fetched"), Checksum: "existing-checksum"}
+
+	policy := &Policy{
+		Source: wafPolicy,
+		Valid:  true,
+		WAFState: &PolicyWAFState{
+			Bundles: make(map[WAFBundleKey]*WAFBundleData),
+		},
+	}
+
+	output := &WAFProcessingOutput{
+		Bundles:              map[WAFBundleKey]*WAFBundleData{bundleKey: existingBundle},
+		ReferencedWAFSecrets: make(map[types.NamespacedName]*corev1.Secret),
+	}
+
+	// The fetcher should never be called since the bundle is already fetched.
+	fetcher := &fetchfakes.FakeFetcher{}
+	wafInput := &WAFProcessingInput{
+		Fetcher:         fetcher,
+		Secrets:         map[types.NamespacedName]*corev1.Secret{},
+		PreviousBundles: map[WAFBundleKey]*WAFBundleData{},
+	}
+
+	fetchPolicyBundle(t.Context(), logr.Discard(), wafPolicy, policy, wafInput, output)
+
+	// The existing bundle should be reused, not overwritten.
+	g.Expect(output.Bundles[bundleKey]).To(Equal(existingBundle))
+	g.Expect(policy.WAFState.Bundles[bundleKey]).To(Equal(existingBundle))
+	g.Expect(policy.Valid).To(BeTrue())
+	g.Expect(policy.Conditions).To(BeEmpty())
+	g.Expect(policy.WAFState.BundlePending).To(BeFalse())
+	// Verify the fetcher was never called.
+	g.Expect(fetcher.FetchPolicyBundleCallCount()).To(Equal(0))
+}
+
 func TestValidatePLMAPLogConfReference(t *testing.T) {
 	t.Parallel()
 
@@ -4972,10 +5096,9 @@ func TestFetchPLMLogBundleData(t *testing.T) {
 		policyNs   = "test-ns"
 		policyName = "my-plm-waf"
 	)
-	policyNsName := types.NamespacedName{Namespace: policyNs, Name: policyName}
 	logConfNsName := types.NamespacedName{Namespace: policyNs, Name: "my-log-conf"}
 	ref := &ngfAPIv1alpha1.APLogConfReference{Name: "my-log-conf"}
-	bundleKey := PLMLogBundleKey(policyNsName, ref)
+	bundleKey := PLMLogBundleKey(policyNs, ref)
 
 	status := &wafv1.APLogConfStatus{
 		Bundle: &wafv1.BundleStatus{
@@ -5140,9 +5263,8 @@ func TestFetchPLMSecurityLogBundle(t *testing.T) {
 		otherNs     = "other-ns"
 	)
 	logConfNsName := types.NamespacedName{Namespace: policyNs, Name: logConfName}
-	policyNsName := types.NamespacedName{Namespace: policyNs, Name: policyName}
 	sameNsRef := &ngfAPIv1alpha1.APLogConfReference{Name: logConfName}
-	bundleKey := PLMLogBundleKey(policyNsName, sameNsRef)
+	bundleKey := PLMLogBundleKey(policyNs, sameNsRef)
 
 	readyLogConf := makeUnstructuredAPResource("APLogConf", policyNs, logConfName, "ready", "s3://b/l.tgz", "sha", true)
 
@@ -5208,11 +5330,311 @@ func TestFetchPLMSecurityLogBundle(t *testing.T) {
 			}
 
 			fetchPLMSecurityLogBundle(
-				t.Context(), logr.Discard(), wafPolicy, policy, tc.wafInput, output, policyNsName, tc.ref,
+				t.Context(), logr.Discard(), wafPolicy, policy, tc.wafInput, output, tc.ref,
 			)
 
 			g.Expect(policy.Valid).To(Equal(tc.expValid))
 			g.Expect(policy.Conditions).To(HaveLen(tc.expConditions))
+		})
+	}
+}
+
+func TestPolicyBundleKey(t *testing.T) {
+	t.Parallel()
+
+	httpURL := "http://example.com/policy.tgz"
+	nimURL := "https://nim.example.com"
+	n1cURL := "https://n1c.example.com"
+
+	policyName := "my-policy"
+	policyUID := "uid-123"
+	policyObjectID := "obj-456"
+
+	tests := []struct {
+		name   string
+		expKey WAFBundleKey
+		spec   ngfAPIv1alpha1.WAFPolicySpec
+	}{
+		{
+			name:   "nil PolicySource returns empty key",
+			spec:   ngfAPIv1alpha1.WAFPolicySpec{PolicySource: nil},
+			expKey: WAFBundleKey(""),
+		},
+		{
+			name:   "PolicySource with all sub-sources nil returns empty key",
+			spec:   ngfAPIv1alpha1.WAFPolicySpec{PolicySource: &ngfAPIv1alpha1.PolicySource{}},
+			expKey: WAFBundleKey(""),
+		},
+		{
+			name: "HTTP source",
+			spec: ngfAPIv1alpha1.WAFPolicySpec{
+				PolicySource: &ngfAPIv1alpha1.PolicySource{
+					HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: httpURL},
+				},
+			},
+			expKey: WAFBundleKey(helpers.URLHash(httpURL)),
+		},
+		{
+			name: "NIM source with PolicyUID",
+			spec: ngfAPIv1alpha1.WAFPolicySpec{
+				PolicySource: &ngfAPIv1alpha1.PolicySource{
+					NIMSource: &ngfAPIv1alpha1.NIMBundleSource{
+						URL:       nimURL,
+						PolicyUID: &policyUID,
+					},
+				},
+			},
+			expKey: WAFBundleKey(fmt.Sprintf("%s_%s", helpers.URLHash(nimURL), helpers.URLHash(policyUID))),
+		},
+		{
+			name: "NIM source with PolicyName (no UID)",
+			spec: ngfAPIv1alpha1.WAFPolicySpec{
+				PolicySource: &ngfAPIv1alpha1.PolicySource{
+					NIMSource: &ngfAPIv1alpha1.NIMBundleSource{
+						URL:        nimURL,
+						PolicyName: &policyName,
+					},
+				},
+			},
+			expKey: WAFBundleKey(fmt.Sprintf("%s_%s", helpers.URLHash(nimURL), helpers.URLHash(policyName))),
+		},
+		{
+			name: "N1C source with PolicyObjectID",
+			spec: ngfAPIv1alpha1.WAFPolicySpec{
+				PolicySource: &ngfAPIv1alpha1.PolicySource{
+					N1CSource: &ngfAPIv1alpha1.N1CBundleSource{
+						URL:            n1cURL,
+						Namespace:      "n1c-ns",
+						PolicyObjectID: &policyObjectID,
+					},
+				},
+			},
+			expKey: WAFBundleKey(fmt.Sprintf("%s_%s", helpers.URLHash(n1cURL), helpers.URLHash("n1c-ns/"+policyObjectID))),
+		},
+		{
+			name: "N1C source with PolicyName (no ObjectID)",
+			spec: ngfAPIv1alpha1.WAFPolicySpec{
+				PolicySource: &ngfAPIv1alpha1.PolicySource{
+					N1CSource: &ngfAPIv1alpha1.N1CBundleSource{
+						URL:        n1cURL,
+						Namespace:  "n1c-ns",
+						PolicyName: &policyName,
+					},
+				},
+			},
+			expKey: WAFBundleKey(fmt.Sprintf("%s_%s", helpers.URLHash(n1cURL), helpers.URLHash("n1c-ns/"+policyName))),
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			got := PolicyBundleKey(tc.spec)
+			g.Expect(got).To(Equal(tc.expKey))
+		})
+	}
+}
+
+func TestValidateWAFPollingConsistency(t *testing.T) {
+	t.Parallel()
+
+	pollNow := metav1.Now()
+	pollEarlier := metav1.NewTime(pollNow.Add(-time.Hour))
+	wafPolicyGVK := schema.GroupVersionKind{
+		Group:   ngfAPIv1alpha1.GroupName,
+		Version: "v1alpha1",
+		Kind:    kinds.WAFPolicy,
+	}
+
+	pollPolicyKey := func(name, ns string) PolicyKey {
+		return PolicyKey{
+			NsName: types.NamespacedName{Namespace: ns, Name: name},
+			GVK:    wafPolicyGVK,
+		}
+	}
+
+	pollWAFSource := func(name, ns, polSource string, ts metav1.Time, polling bool) *ngfAPIv1alpha1.WAFPolicy {
+		wp := &ngfAPIv1alpha1.WAFPolicy{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       kinds.WAFPolicy,
+				APIVersion: ngfAPIv1alpha1.GroupName + "/v1alpha1",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name: name, Namespace: ns, CreationTimestamp: ts,
+			},
+			Spec: ngfAPIv1alpha1.WAFPolicySpec{
+				Type: ngfAPIv1alpha1.PolicySourceTypeNIM,
+				PolicySource: &ngfAPIv1alpha1.PolicySource{
+					NIMSource: &ngfAPIv1alpha1.NIMBundleSource{
+						URL:        "https://nim.example.com",
+						PolicyName: helpers.GetPointer(polSource),
+					},
+				},
+			},
+		}
+		if polling {
+			wp.Spec.PolicySource.Polling = &ngfAPIv1alpha1.BundlePolling{Enabled: true}
+		}
+		return wp
+	}
+
+	later := metav1.NewTime(pollNow.Add(time.Hour))
+
+	type expPolicyStatus struct {
+		name           string
+		condSubstrings []string
+		expectCondLen  int
+		expectValid    bool
+	}
+
+	tests := []struct {
+		name      string
+		policies  map[PolicyKey]*Policy
+		expStatus []expPolicyStatus
+	}{
+		{
+			name: "no conflict when both have polling enabled",
+			policies: map[PolicyKey]*Policy{
+				pollPolicyKey("a", "default"): {
+					Source: pollWAFSource("a", "default", "same-policy", pollEarlier, true), Valid: true,
+				},
+				pollPolicyKey("b", "default"): {
+					Source: pollWAFSource("b", "default", "same-policy", pollNow, true), Valid: true,
+				},
+			},
+			expStatus: []expPolicyStatus{
+				{name: "a", expectValid: true},
+				{name: "b", expectValid: true},
+			},
+		},
+		{
+			name: "no conflict when both have polling disabled",
+			policies: map[PolicyKey]*Policy{
+				pollPolicyKey("a", "default"): {
+					Source: pollWAFSource("a", "default", "same-policy", pollEarlier, false), Valid: true,
+				},
+				pollPolicyKey("b", "default"): {
+					Source: pollWAFSource("b", "default", "same-policy", pollNow, false), Valid: true,
+				},
+			},
+			expStatus: []expPolicyStatus{
+				{name: "a", expectValid: true},
+				{name: "b", expectValid: true},
+			},
+		},
+		{
+			name: "conflict where older non-polling policy wins",
+			policies: map[PolicyKey]*Policy{
+				pollPolicyKey("a", "default"): {
+					Source: pollWAFSource("a", "default", "same-policy", pollEarlier, false), Valid: true,
+				},
+				pollPolicyKey("b", "default"): {
+					Source: pollWAFSource("b", "default", "same-policy", pollNow, true), Valid: true,
+				},
+			},
+			expStatus: []expPolicyStatus{
+				{
+					name:        "a",
+					expectValid: true,
+				},
+				{
+					name:           "b",
+					expectValid:    false,
+					expectCondLen:  1,
+					condSubstrings: []string{"polling configuration", "default/a"},
+				},
+			},
+		},
+		{
+			name: "conflict where older polling policy wins",
+			policies: map[PolicyKey]*Policy{
+				pollPolicyKey("a", "default"): {
+					Source: pollWAFSource("a", "default", "same-policy", pollEarlier, true), Valid: true,
+				},
+				pollPolicyKey("b", "default"): {
+					Source: pollWAFSource("b", "default", "same-policy", pollNow, false), Valid: true,
+				},
+			},
+			expStatus: []expPolicyStatus{
+				{name: "a", expectValid: true},
+				{name: "b", expectValid: false, expectCondLen: 1, condSubstrings: []string{"polling configuration"}},
+			},
+		},
+		{
+			name: "different bundle keys do not conflict",
+			policies: map[PolicyKey]*Policy{
+				pollPolicyKey("a", "default"): {
+					Source: pollWAFSource("a", "default", "same-policy", pollEarlier, true), Valid: true,
+				},
+				pollPolicyKey("b", "default"): {
+					Source: pollWAFSource("b", "default", "diff-policy", pollNow, false), Valid: true,
+				},
+			},
+			expStatus: []expPolicyStatus{
+				{name: "a", expectValid: true},
+				{name: "b", expectValid: true},
+			},
+		},
+		{
+			name: "already invalid policy is skipped",
+			policies: map[PolicyKey]*Policy{
+				pollPolicyKey("a", "default"): {
+					Source: pollWAFSource("a", "default", "same-policy", pollEarlier, true), Valid: true,
+				},
+				pollPolicyKey("b", "default"): {
+					Source: pollWAFSource("b", "default", "same-policy", pollNow, false), Valid: false,
+				},
+			},
+			expStatus: []expPolicyStatus{
+				{name: "a", expectValid: true},
+				{name: "b", expectValid: false, expectCondLen: 0},
+			},
+		},
+		{
+			name: "three policies with conflict invalidates all losing policies",
+			policies: map[PolicyKey]*Policy{
+				pollPolicyKey("a", "default"): {
+					Source: pollWAFSource("a", "default", "same-policy", pollEarlier, false), Valid: true,
+				},
+				pollPolicyKey("b", "default"): {
+					Source: pollWAFSource("b", "default", "same-policy", pollNow, true), Valid: true,
+				},
+				pollPolicyKey("c", "default"): {
+					Source: pollWAFSource("c", "default", "same-policy", later, true), Valid: true,
+				},
+			},
+			expStatus: []expPolicyStatus{
+				{name: "a", expectValid: true},
+				{name: "b", expectValid: false, expectCondLen: 1, condSubstrings: []string{"polling configuration"}},
+				{name: "c", expectValid: false, expectCondLen: 1, condSubstrings: []string{"polling configuration"}},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			validateWAFPollingConsistency(test.policies)
+
+			for _, exp := range test.expStatus {
+				policy := test.policies[pollPolicyKey(exp.name, "default")]
+				g.Expect(policy.Valid).To(Equal(exp.expectValid), "policy %s validity", exp.name)
+
+				if exp.expectCondLen > 0 {
+					g.Expect(policy.Conditions).To(HaveLen(exp.expectCondLen), "policy %s condition count", exp.name)
+					for _, substr := range exp.condSubstrings {
+						g.Expect(policy.Conditions[0].Message).To(
+							ContainSubstring(substr), "policy %s condition message", exp.name,
+						)
+					}
+				} else if !exp.expectValid {
+					g.Expect(policy.Conditions).To(BeEmpty(), "policy %s should have no conditions", exp.name)
+				}
+			}
 		})
 	}
 }
