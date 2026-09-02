@@ -46,8 +46,8 @@ FROM ghcr.io/nginx/dependencies/nginx-ubi:ubi10@sha256:1b36e5adcd6ada1814fd168f3
 
 FROM registry.access.redhat.com/ubi10/ubi-minimal:10.2 AS ubi-nginx-plus
 
-ARG NGINX_PLUS_VERSION=R37.0
-ARG APP_PROTECT_VERSION=37.0+5.690
+ARG NGINX_PLUS_VERSION=R37.1
+ARG APP_PROTECT_VERSION=37.1+5.715
 ARG INCLUDE_NAP_WAF=false
 
 # renovate: datasource=github-tags depName=nginx/agent
