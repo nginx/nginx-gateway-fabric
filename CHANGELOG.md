@@ -14,7 +14,7 @@ BUG FIXES:
 
 MAINTENANCE:
 
-- Add additional validation to OIDC auth fields by [5823])https://github.com/nginx/nginx-gateway-fabric/pull/5823)
+- Use go version in go.mod for workflow files [5824](https://github.com/nginx/nginx-gateway-fabric/pull/5824)
 
 HELM CHART:
 
