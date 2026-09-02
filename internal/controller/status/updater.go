@@ -110,8 +110,7 @@ func (u *Updater) writeStatuses(
 	)
 	if err != nil && !errors.Is(err, context.Canceled) {
 		u.logger.Error(
-			err,
-			"Failed to update status",
+			err, "Failed to update status",
 			"namespace", nsname.Namespace,
 			"name", nsname.Name,
 			"kind", resourceType.GetObjectKind().GroupVersionKind().Kind)

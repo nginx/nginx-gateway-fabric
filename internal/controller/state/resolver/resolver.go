@@ -112,7 +112,10 @@ func calculateReadyEndpoints(logger logr.Logger, endpointSlices []discoveryV1.En
 	for _, eps := range endpointSlices {
 		for _, endpoint := range eps.Endpoints {
 			if !endpointReady(endpoint) {
-				logger.V(1).Info("ignoring endpoint that is not ready", "endpoint", endpoint)
+				logger.V(1).Info(
+					"Ignoring endpoint that is not ready",
+					"endpoint", endpoint,
+				)
 				continue
 			}
 
@@ -145,7 +148,10 @@ func resolveEndpoints(
 		ipv6 := eps.AddressType == discoveryV1.AddressTypeIPv6
 		for _, endpoint := range eps.Endpoints {
 			if !endpointReady(endpoint) {
-				logger.V(1).Info("ignoring endpoint that is not ready", "endpoint", endpoint)
+				logger.V(1).Info(
+					"Ignoring endpoint that is not ready",
+					"endpoint", endpoint,
+				)
 				continue
 			}
 

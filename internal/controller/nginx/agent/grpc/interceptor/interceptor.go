@@ -2,7 +2,6 @@ package interceptor
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"time"
 
@@ -82,7 +81,7 @@ func (c ContextSetter) Stream(logger logr.Logger) grpc.StreamServerInterceptor {
 	) error {
 		ctx, err := c.validateConnection(ss.Context(), logger)
 		if err != nil {
-			logger.Error(err, "error validating connection")
+			logger.Error(err, "Error validating connection")
 			return err
 		}
 		return handler(srv, &streamHandler{
@@ -100,7 +99,7 @@ func (c ContextSetter) Unary(logger logr.Logger) grpc.UnaryServerInterceptor {
 		handler grpc.UnaryHandler,
 	) (resp any, err error) {
 		if ctx, err = c.validateConnection(ctx, logger); err != nil {
-			logger.Error(err, "error validating connection")
+			logger.Error(err, "Error validating connection")
 			return nil, err
 		}
 		return handler(ctx, req)
@@ -156,19 +155,25 @@ func (c ContextSetter) validateToken(
 	defer createCancel()
 
 	if err := c.k8sClient.Create(createCtx, tokenReview); err != nil {
-		logger.Error(err, "failed to create TokenReview")
+		logger.Error(err, "Failed to create TokenReview")
 		return nil, status.Error(codes.Internal, "authentication failed")
 	}
 
 	if !tokenReview.Status.Authenticated {
-		logger.V(1).Info("token review was not authenticated", "reason", tokenReview.Status.Error)
+		logger.V(1).Info(
+			"Token review was not authenticated",
+			"reason", tokenReview.Status.Error,
+		)
 		return nil, status.Error(codes.Unauthenticated, "invalid authorization")
 	}
 
 	usernameItems := strings.Split(tokenReview.Status.User.Username, ":")
 	if len(usernameItems) != 4 || usernameItems[0] != "system" || usernameItems[1] != "serviceaccount" {
 		format := "system:serviceaccount:NAMESPACE:NAME"
-		logger.V(1).Info(fmt.Sprintf("token username did not match expected service account format %q", format))
+		logger.V(1).Info(
+			"Token username did not match expected service account format",
+			"format", format,
+		)
 		return nil, status.Error(codes.Unauthenticated, "invalid authorization")
 	}
 
@@ -211,7 +216,7 @@ func (c ContextSetter) waitForBoundPodFromTokenClaims(
 ) (bool, error) {
 	boundPodName, boundPodUID, ok := getBoundPodClaims(extra)
 	if !ok {
-		logger.V(1).Info("token has no bound pod identity claims; using service-account pod fallback validation")
+		logger.V(1).Info("Token has no bound pod identity claims; using service-account pod fallback validation")
 		return false, nil
 	}
 
@@ -255,14 +260,18 @@ func (c ContextSetter) waitForBoundPodIdentity(
 					return false, nil
 				}
 
-				logger.Error(err, "failed to fetch pod from token bound claims", "namespace", saNamespace, "pod", boundPodName)
+				logger.Error(
+					err, "Failed to fetch pod from token bound claims",
+					"namespace", saNamespace,
+					"pod", boundPodName,
+				)
 				validationErr = status.Error(codes.Internal, "authentication failed")
 				return false, validationErr
 			}
 
 			if reason, ok := validateBoundPodIdentity(pod, saName, boundPodUID); !ok {
 				logger.V(1).Info(
-					"bound pod identity validation failed",
+					"Bound pod identity validation failed",
 					"namespace", saNamespace,
 					"pod", boundPodName,
 					"reason", reason,
@@ -290,7 +299,7 @@ func (c ContextSetter) waitForBoundPodIdentity(
 		return false, status.Error(codes.Unavailable, "agent pod is not ready")
 	}
 
-	logger.Error(pollErr, "error waiting for pod identity from token bound claims")
+	logger.Error(pollErr, "Error waiting for pod identity from token bound claims")
 	return false, status.Error(codes.Internal, "authentication failed")
 }
 
@@ -341,7 +350,7 @@ func (c ContextSetter) waitForRunningPod(
 			attempt++
 			var podList corev1.PodList
 			if err := c.k8sClient.List(ctx, &podList, opts); err != nil {
-				logger.Error(err, "failed to list pods for service-account validation")
+				logger.Error(err, "Failed to list pods for service-account validation")
 				listErr = status.Error(codes.Internal, "authentication failed")
 				return false, listErr
 			}
@@ -353,7 +362,7 @@ func (c ContextSetter) waitForRunningPod(
 			}
 
 			logger.V(1).Info(
-				"no running pods found for agent service account; retrying",
+				"No running pods found for agent service account; retrying",
 				"namespace", saNamespace,
 				"serviceAccount", saName,
 				"attempt", attempt,
@@ -370,7 +379,7 @@ func (c ContextSetter) waitForRunningPod(
 	// Unavailable so callers can retry; otherwise propagate the List error.
 	if wait.Interrupted(pollErr) {
 		logger.V(1).Info(
-			"no running pods found for service account before timeout",
+			"No running pods found for service account before timeout",
 			"namespace", saNamespace,
 			"serviceAccount", saName,
 			"attempts", attempt,

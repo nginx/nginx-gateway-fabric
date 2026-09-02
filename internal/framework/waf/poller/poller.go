@@ -2,7 +2,6 @@ package poller
 
 import (
 	"context"
-	"fmt"
 	"reflect"
 	"sync"
 	"time"
@@ -129,13 +128,18 @@ func (p *poller) run(ctx context.Context) {
 	}
 
 	if minInterval <= 0 {
-		p.logger.Error(nil, fmt.Sprintf(
-			"Invalid polling interval, must be greater than zero. Using default interval: %v", defaultPollingInterval,
-		))
+		p.logger.V(1).Info(
+			"Invalid polling interval, must be greater than zero. Using default interval",
+			"interval", defaultPollingInterval,
+		)
 		minInterval = defaultPollingInterval
 	}
 
-	p.logger.Info("WAF polling started", "interval", minInterval, "sourceCount", len(p.sources))
+	p.logger.Info(
+		"WAF polling started",
+		"interval", minInterval,
+		"sourceCount", len(p.sources),
+	)
 
 	// Track last poll time for each source to handle different intervals.
 	lastPoll := make(map[graph.WAFBundleKey]time.Time, len(p.sources))
@@ -213,7 +217,10 @@ func sourcesEqual(a, b []BundleSource) bool {
 // stored from the previous successful fetch. A 304 Not Modified response is treated as
 // unchanged without downloading the bundle.
 func (p *poller) pollSource(ctx context.Context, src BundleSource) {
-	p.logger.V(1).Info("Polling bundle source", "bundle", src.BundleKey)
+	p.logger.V(1).Info(
+		"Polling bundle source",
+		"bundle", src.BundleKey,
+	)
 
 	p.stateMu.RLock()
 	last := p.bundleStates[src.BundleKey]
@@ -249,7 +256,11 @@ func (p *poller) pollSource(ctx context.Context, src BundleSource) {
 		return
 	}
 
-	p.logger.Info("Bundle changed, pushing to deployments", "bundle", src.BundleKey, "newChecksum", result.Checksum)
+	p.logger.Info(
+		"Bundle changed, pushing to deployments",
+		"bundle", src.BundleKey,
+		"newChecksum", result.Checksum,
+	)
 	p.pushBundleToDeployments(src.BundleKey, result.Data)
 	p.saveBundleState(src.BundleKey, result)
 
@@ -265,16 +276,26 @@ func (p *poller) pollSource(ctx context.Context, src BundleSource) {
 func (p *poller) skipIfChecksumUnchanged(ctx context.Context, src BundleSource, lastChecksum string) bool {
 	changed, checksum, err := p.checksumChanged(ctx, src, lastChecksum)
 	if err != nil {
-		p.logger.Error(err, "Failed to fetch bundle checksum during poll", "bundle", src.BundleKey)
+		p.logger.Error(
+			err, "Failed to fetch bundle checksum during poll",
+			"bundle", src.BundleKey,
+		)
 		p.reportStatus(src.BundleKey, "", err)
 		return true
 	}
 	if !changed {
-		p.logger.V(1).Info("Bundle unchanged, skipping download", "bundle", src.BundleKey)
+		p.logger.V(1).Info(
+			"Bundle unchanged, skipping download",
+			"bundle", src.BundleKey,
+		)
 		p.reportStatus(src.BundleKey, "", nil)
 		return true
 	}
-	p.logger.Info("Bundle checksum changed, downloading full bundle", "bundle", src.BundleKey, "newChecksum", checksum)
+	p.logger.Info(
+		"Bundle checksum changed, downloading full bundle",
+		"bundle", src.BundleKey,
+		"newChecksum", checksum,
+	)
 	return false
 }
 
@@ -289,13 +310,22 @@ func (p *poller) downloadBundle(
 
 	result, err := p.fetchBundle(ctx, src, req)
 	if err != nil {
-		p.logger.Error(err, "Failed to fetch bundle during poll", "bundle", src.BundleKey)
+		p.logger.Error(
+			err, "Failed to fetch bundle during poll",
+			"bundle", src.BundleKey,
+		)
 		return fetch.Result{}, err
 	}
 	if result.Unchanged {
-		p.logger.V(1).Info("Bundle unchanged (304), skipping push", "bundle", src.BundleKey)
+		p.logger.V(1).Info(
+			"Bundle unchanged (304), skipping push",
+			"bundle", src.BundleKey,
+		)
 	} else if result.Checksum == last.checksum {
-		p.logger.V(1).Info("Bundle unchanged, skipping push", "bundle", src.BundleKey)
+		p.logger.V(1).Info(
+			"Bundle unchanged, skipping push",
+			"bundle", src.BundleKey,
+		)
 	}
 	return result, nil
 }
@@ -366,7 +396,10 @@ func (p *poller) pushBundleToDeployments(bundleKey graph.WAFBundleKey, data []by
 	for depName := range p.targetDeployments {
 		deployment := p.deployments.Get(depName)
 		if deployment == nil {
-			p.logger.V(1).Info("Deployment not found, skipping bundle push", "deployment", depName)
+			p.logger.V(1).Info(
+				"Deployment not found, skipping bundle push",
+				"deployment", depName,
+			)
 			continue
 		}
 

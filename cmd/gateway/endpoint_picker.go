@@ -74,7 +74,10 @@ func createEndpointPickerHandler(factory extProcClientFactory, logger logr.Logge
 		}
 
 		target := net.JoinHostPort(host, port)
-		logger.Info("Getting inference workload endpoint from EndpointPicker", "endpointPicker", target)
+		logger.Info(
+			"Getting inference workload endpoint from EndpointPicker",
+			"endpointPicker", target,
+		)
 
 		client, closeConn, err := factory(target)
 		if err != nil {
@@ -115,7 +118,11 @@ func createEndpointPickerHandler(factory extProcClientFactory, logger logr.Logge
 			if ir := resp.GetImmediateResponse(); ir != nil {
 				code := int(ir.GetStatus().GetCode())
 				body := ir.GetBody()
-				logger.Error(fmt.Errorf("code: %d, body: %s", code, body), "received immediate response")
+				logger.V(1).Info(
+					"received immediate response",
+					"code", code,
+					"body", body,
+				)
 				http.Error(w, string(body), code)
 				return
 			}
