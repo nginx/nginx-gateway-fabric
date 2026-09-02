@@ -10,6 +10,7 @@ _September 2, 2026_
 
 FEATURES:
 
+- Add support for F5 Policy Lifecycle Manager as a policy bundle source for F5 WAF, providing a Kubernetes native, in cluster compilation using APPolicy and APLogConf CRDs. [5405](https://github.com/nginx/nginx-gateway-fabric/pull/5405)
 - Integration with F5 AI Guardrails to scan and protect LLM traffic. [5697](https://github.com/nginx/nginx-gateway-fabric/pull/5697).
 - Add the ExternalLoadBalancer CRD, letting you front a Gateway with an external load balancer. The first supported integration provisions an F5 BIG-IP as that load balancer through F5 Container Ingress Services. [5668](https://github.com/nginx/nginx-gateway-fabric/pull/5668).
 - Add support for External Authentication using [HTTPExternalAuthFilter](https://gateway-api.sigs.k8s.io/reference/spec/#httpexternalauthfilter) for HTTPRoutes. [5145](https://github.com/nginx/nginx-gateway-fabric/pull/5145).
@@ -32,6 +33,7 @@ FEATURES:
 - Support sending WAF Security Telemetry to NGINX Instance Manager. [5751](https://github.com/nginx/nginx-gateway-fabric/pull/5751).
 - Support configurable leader lease timeouts. [5761](https://github.com/nginx/nginx-gateway-fabric/pull/5761).
 - Add supports for specifying podDisruptionBudget for control plane and data plane. [5370](https://github.com/nginx/nginx-gateway-fabric/pull/5370).
+- Add `workerProcesses` field to the NginxProxy API to control the number of NGINX worker processes. [5519](https://github.com/nginx/nginx-gateway-fabric/pull/5519). Thanks to [SidharathBansal](https://github.com/SidharathBansal).
 
 BUG FIXES:
 
@@ -95,6 +97,36 @@ CONTAINER IMAGES:
 - Data plane with NGINX Plus: `private-registry.nginx.com/nginx-gateway-fabric/nginx-plus:2.7.0`
 - Data plane with NGINX Plus and F5 WAF: `private-registry.nginx.com/nginx-gateway-fabric/nginx-plus-f5waf:2.7.0`
 - Operator: `ghcr.io/nginx/nginx-gateway-fabric/operator:1.5.0`
+
+## Release 2.6.8
+
+_September 2, 2026_
+
+BUG FIXES:
+
+- Add additional validation to OIDC auth fields [5823](https://github.com/nginx/nginx-gateway-fabric/pull/5823)
+
+HELM CHART:
+
+- The version of the Helm chart is now 2.6.8
+
+COMPATIBILITY:
+
+- Gateway API version: `1.5.1`
+- Gateway API Inference Extension version: `1.5.0`
+- NGINX version: `1.31.3`
+- NGINX Plus version: `R37.0`
+- F5 WAF on NGINX version: `5.13.2`
+- NGINX Agent version: `v3.11.2`
+- Kubernetes version: `1.31+`
+
+CONTAINER IMAGES:
+
+- Control plane: `ghcr.io/nginx/nginx-gateway-fabric:2.6.8`
+- Data plane: `ghcr.io/nginx/nginx-gateway-fabric/nginx:2.6.8`
+- Data plane with NGINX Plus: `private-registry.nginx.com/nginx-gateway-fabric/nginx-plus:2.6.8`
+- Data plane with NGINX Plus and F5 WAF: `private-registry.nginx.com/nginx-gateway-fabric/nginx-plus-f5waf:2.6.8`
+- Operator: `ghcr.io/nginx/nginx-gateway-fabric/operator:1.4.8`
 
 ## Release 2.6.7
 
