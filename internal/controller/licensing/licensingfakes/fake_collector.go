@@ -5,15 +5,17 @@ import (
 	"context"
 	"sync"
 
+	"github.com/go-logr/logr"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/licensing"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
 )
 
 type FakeCollector struct {
-	CollectStub        func(context.Context) (dataplane.DeploymentContext, error)
+	CollectStub        func(context.Context, logr.Logger) (dataplane.DeploymentContext, error)
 	collectMutex       sync.RWMutex
 	collectArgsForCall []struct {
 		arg1 context.Context
+		arg2 logr.Logger
 	}
 	collectReturns struct {
 		result1 dataplane.DeploymentContext
@@ -27,18 +29,19 @@ type FakeCollector struct {
 	invocationsMutex sync.RWMutex
 }
 
-func (fake *FakeCollector) Collect(arg1 context.Context) (dataplane.DeploymentContext, error) {
+func (fake *FakeCollector) Collect(arg1 context.Context, arg2 logr.Logger) (dataplane.DeploymentContext, error) {
 	fake.collectMutex.Lock()
 	ret, specificReturn := fake.collectReturnsOnCall[len(fake.collectArgsForCall)]
 	fake.collectArgsForCall = append(fake.collectArgsForCall, struct {
 		arg1 context.Context
-	}{arg1})
+		arg2 logr.Logger
+	}{arg1, arg2})
 	stub := fake.CollectStub
 	fakeReturns := fake.collectReturns
-	fake.recordInvocation("Collect", []interface{}{arg1})
+	fake.recordInvocation("Collect", []interface{}{arg1, arg2})
 	fake.collectMutex.Unlock()
 	if stub != nil {
-		return stub(arg1)
+		return stub(arg1, arg2)
 	}
 	if specificReturn {
 		return ret.result1, ret.result2
@@ -52,17 +55,17 @@ func (fake *FakeCollector) CollectCallCount() int {
 	return len(fake.collectArgsForCall)
 }
 
-func (fake *FakeCollector) CollectCalls(stub func(context.Context) (dataplane.DeploymentContext, error)) {
+func (fake *FakeCollector) CollectCalls(stub func(context.Context, logr.Logger) (dataplane.DeploymentContext, error)) {
 	fake.collectMutex.Lock()
 	defer fake.collectMutex.Unlock()
 	fake.CollectStub = stub
 }
 
-func (fake *FakeCollector) CollectArgsForCall(i int) context.Context {
+func (fake *FakeCollector) CollectArgsForCall(i int) (context.Context, logr.Logger) {
 	fake.collectMutex.RLock()
 	defer fake.collectMutex.RUnlock()
 	argsForCall := fake.collectArgsForCall[i]
-	return argsForCall.arg1
+	return argsForCall.arg1, argsForCall.arg2
 }
 
 func (fake *FakeCollector) CollectReturns(result1 dataplane.DeploymentContext, result2 error) {
