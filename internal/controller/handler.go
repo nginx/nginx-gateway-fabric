@@ -1053,6 +1053,11 @@ func (h *eventHandlerImpl) updateControlPlaneAndSetStatus(
 			err.Error(),
 		)
 		cpUpdateRes.Error = err
+	} else {
+		logger.V(1).Info("Control plane log level update applied")
+		if h.cfg.flush != nil {
+			h.cfg.flush()
+		}
 	}
 
 	var reqs []status.UpdateRequest
