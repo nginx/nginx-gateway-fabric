@@ -150,3 +150,8 @@ func (AuthFieldValidator) ValidateOIDCExtraAuthArg(key, value string) error {
 	}
 	return nil
 }
+
+// ValidateOIDCEscapedString validates an OIDC field value.
+func (AuthFieldValidator) ValidateOIDCEscapedString(value string) error {
+	return validateEscapedStringNoVarExpansion(value, []string{"my-client-id", "my-session-cookie", "my-secret"})
+}
