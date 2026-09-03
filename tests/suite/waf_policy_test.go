@@ -739,6 +739,11 @@ var _ = Describe("WAFPolicy", Ordered, Label("waf"), func() {
 				Expect(resourceManager.ApplyFromFiles(noPollFile, namespace)).To(Succeed())
 				Expect(waitForWAFPolicyAccepted(winnerNsName)).To(Succeed())
 
+				// Sleep to guarantee the two policies land in different seconds, so the "oldest creation timestamp
+				// wins" conflict-resolution rule is exercised deterministically instead of falling
+				// through to the namespace/name tie-break.
+				time.Sleep(1 * time.Second)
+
 				// Apply the polling policy second — it should be rejected.
 				Expect(resourceManager.ApplyFromFiles(pollFile, namespace)).To(Succeed())
 			})
@@ -775,6 +780,11 @@ var _ = Describe("WAFPolicy", Ordered, Label("waf"), func() {
 				// Apply the polling policy first so it is older and wins the conflict.
 				Expect(resourceManager.ApplyFromFiles(pollFile, namespace)).To(Succeed())
 				Expect(waitForWAFPolicyAccepted(winnerNsName)).To(Succeed())
+
+				// Sleep to guarantee the two policies land in different seconds, so the "oldest creation timestamp
+				// wins" conflict-resolution rule is exercised deterministically instead of falling
+				// through to the namespace/name tie-break.
+				time.Sleep(1 * time.Second)
 
 				// Apply the non-polling policy second — it should be rejected.
 				Expect(resourceManager.ApplyFromFiles(noPollFile, namespace)).To(Succeed())
