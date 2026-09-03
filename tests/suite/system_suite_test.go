@@ -420,7 +420,7 @@ var _ = SynchronizedBeforeSuite(
 
 		procOutDir := ""
 		if *testOutDir != "" {
-			procOutDir = fmt.Sprintf("%s/proc-%d", *testOutDir, proc)
+			procOutDir = filepath.Join(*testOutDir, fmt.Sprintf("proc-%d", proc))
 		}
 		Expect(framework.SetupTestLogger(procOutDir)).To(Succeed())
 
@@ -536,7 +536,7 @@ var _ = ReportAfterEach(func(report SpecReport) {
 		return
 	}
 
-	resultPath := fmt.Sprintf("%s/result.json", procOutDir)
+	resultPath := filepath.Join(procOutDir, "result.json")
 	f, err := os.OpenFile(resultPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 	if err != nil {
 		GinkgoWriter.Printf("ERROR opening result file: %v\n", err)

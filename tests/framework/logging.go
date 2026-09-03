@@ -38,10 +38,14 @@ func SetupTestLogger(outDir string) error {
 
 // CloseTestLogger flushes and closes the log file; must be called from SynchronizedAfterSuite phase 1.
 func CloseTestLogger() error {
-	if testLogFile != nil {
-		return testLogFile.Close()
+	// Prevent any late log writes from targeting a closed file.
+	setLogger(slog.New(noopHandler{}))
+	if testLogFile == nil {
+		return nil
 	}
-	return nil
+	err := testLogFile.Close()
+	testLogFile = nil
+	return err
 }
 
 func LogTestStart(name string) {
