@@ -5,6 +5,7 @@ import (
 	"context"
 	"sync"
 
+	"github.com/go-logr/logr"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/types"
@@ -38,10 +39,11 @@ type FakeChangeProcessor struct {
 	getLatestGraphReturnsOnCall map[int]struct {
 		result1 *graph.Graph
 	}
-	ProcessStub        func(context.Context) *graph.Graph
+	ProcessStub        func(context.Context, logr.Logger) *graph.Graph
 	processMutex       sync.RWMutex
 	processArgsForCall []struct {
 		arg1 context.Context
+		arg2 logr.Logger
 	}
 	processReturns struct {
 		result1 *graph.Graph
@@ -195,18 +197,19 @@ func (fake *FakeChangeProcessor) GetLatestGraphReturnsOnCall(i int, result1 *gra
 	}{result1}
 }
 
-func (fake *FakeChangeProcessor) Process(arg1 context.Context) *graph.Graph {
+func (fake *FakeChangeProcessor) Process(arg1 context.Context, arg2 logr.Logger) *graph.Graph {
 	fake.processMutex.Lock()
 	ret, specificReturn := fake.processReturnsOnCall[len(fake.processArgsForCall)]
 	fake.processArgsForCall = append(fake.processArgsForCall, struct {
 		arg1 context.Context
-	}{arg1})
+		arg2 logr.Logger
+	}{arg1, arg2})
 	stub := fake.ProcessStub
 	fakeReturns := fake.processReturns
-	fake.recordInvocation("Process", []interface{}{arg1})
+	fake.recordInvocation("Process", []interface{}{arg1, arg2})
 	fake.processMutex.Unlock()
 	if stub != nil {
-		return stub(arg1)
+		return stub(arg1, arg2)
 	}
 	if specificReturn {
 		return ret.result1
@@ -220,17 +223,17 @@ func (fake *FakeChangeProcessor) ProcessCallCount() int {
 	return len(fake.processArgsForCall)
 }
 
-func (fake *FakeChangeProcessor) ProcessCalls(stub func(context.Context) *graph.Graph) {
+func (fake *FakeChangeProcessor) ProcessCalls(stub func(context.Context, logr.Logger) *graph.Graph) {
 	fake.processMutex.Lock()
 	defer fake.processMutex.Unlock()
 	fake.ProcessStub = stub
 }
 
-func (fake *FakeChangeProcessor) ProcessArgsForCall(i int) context.Context {
+func (fake *FakeChangeProcessor) ProcessArgsForCall(i int) (context.Context, logr.Logger) {
 	fake.processMutex.RLock()
 	defer fake.processMutex.RUnlock()
 	argsForCall := fake.processArgsForCall[i]
-	return argsForCall.arg1
+	return argsForCall.arg1, argsForCall.arg2
 }
 
 func (fake *FakeChangeProcessor) ProcessReturns(result1 *graph.Graph) {

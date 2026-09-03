@@ -624,12 +624,6 @@
         "nginxInstanceManager": {
           "description": "Configuration for NGINX Instance Manager.",
           "properties": {
-            "dataplaneKeySecretName": {
-              "default": "",
-              "description": "Name of the secret which holds the dataplane key that is required to authenticate with NGINX Instance Manager.\nSecret must exist in the same namespace that the NGINX Gateway Fabric control plane is running in\n(default namespace: nginx-gateway).",
-              "title": "dataplaneKeySecretName",
-              "type": "string"
-            },
             "endpointHost": {
               "default": "",
               "description": "The Endpoint host that the NGINX Instance Manager telemetry data will be sent to.",
@@ -785,6 +779,32 @@
           },
           "required": [],
           "title": "service",
+          "type": "object"
+        },
+        "serviceMonitor": {
+          "description": "Defines the configuration of the serviceMonitor for the nginx data plane.",
+          "properties": {
+            "enable": {
+              "default": false,
+              "description": "Enable the serviceMonitor for the data plane.",
+              "title": "enable",
+              "type": "boolean"
+            },
+            "interval": {
+              "default": "",
+              "description": "The scraping interval used by the serviceMonitor when scraping metrics.",
+              "title": "interval",
+              "type": "string"
+            },
+            "port": {
+              "default": "metrics",
+              "description": "The name of the port used for scraping metrics.",
+              "title": "port",
+              "type": "string"
+            }
+          },
+          "required": [],
+          "title": "serviceMonitor",
           "type": "object"
         },
         "usage": {
@@ -1148,6 +1168,44 @@
               "description": "Enable serving metrics via https. By default metrics are served via http.\nPlease note that this endpoint will be secured with a self-signed certificate.",
               "title": "secure",
               "type": "boolean"
+            },
+            "serviceMonitor": {
+              "description": "Defines the configuration of the serviceMonitor for the nginxGateway control plane.",
+              "properties": {
+                "annotations": {
+                  "description": "Set the annotations to be added to the serviceMonitor.",
+                  "required": [],
+                  "title": "annotations",
+                  "type": "object"
+                },
+                "enable": {
+                  "default": false,
+                  "description": "Enable the serviceMonitor for the control plane.",
+                  "title": "enable",
+                  "type": "boolean"
+                },
+                "interval": {
+                  "default": "",
+                  "description": "The scraping interval used by the serviceMonitor when scraping metrics.",
+                  "title": "interval",
+                  "type": "string"
+                },
+                "labels": {
+                  "description": "Set the labels to be added to the serviceMonitor.",
+                  "required": [],
+                  "title": "labels",
+                  "type": "object"
+                },
+                "tlsConfig": {
+                  "description": "tlsConfig is an object that defines the full TLS configuration of the NGINX Gateway Fabric control plane for the Prometheus service monitor.\nAll fields are optional and can be configured by the user. For the full information on the fields that can be used in this object, refer to the official\nPrometheus documentation: https://prometheus-operator.dev/docs/api-reference/api/#monitoring.coreos.com/v1.TLSConfig",
+                  "required": [],
+                  "title": "tlsConfig",
+                  "type": "object"
+                }
+              },
+              "required": [],
+              "title": "serviceMonitor",
+              "type": "object"
             }
           },
           "required": [],

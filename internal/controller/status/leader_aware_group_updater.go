@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"sync"
+
+	"github.com/go-logr/logr"
 )
 
 // GroupUpdater updates statuses of groups of resources.
@@ -13,7 +15,7 @@ import (
 //
 //counterfeiter:generate . GroupUpdater
 type GroupUpdater interface {
-	UpdateGroup(ctx context.Context, name string, reqs ...UpdateRequest)
+	UpdateGroup(ctx context.Context, logger logr.Logger, name string, reqs ...UpdateRequest)
 }
 
 // LeaderAwareGroupUpdater updates statuses of groups of resources.
@@ -37,7 +39,12 @@ func NewLeaderAwareGroupUpdater(updater *Updater) *LeaderAwareGroupUpdater {
 }
 
 // UpdateGroup updates statuses of a group of resources.
-func (u *LeaderAwareGroupUpdater) UpdateGroup(ctx context.Context, name string, reqs ...UpdateRequest) {
+func (u *LeaderAwareGroupUpdater) UpdateGroup(
+	ctx context.Context,
+	logger logr.Logger,
+	name string,
+	reqs ...UpdateRequest,
+) {
 	u.lock.Lock()
 	defer u.lock.Unlock()
 
@@ -51,11 +58,11 @@ func (u *LeaderAwareGroupUpdater) UpdateGroup(ctx context.Context, name string, 
 		return
 	}
 
-	u.updater.Update(ctx, reqs...)
+	u.updater.Update(ctx, logger, reqs...)
 }
 
 // Enable enables the LeaderAwareGroupUpdater, updating statuses using the saved requests.
-func (u *LeaderAwareGroupUpdater) Enable(ctx context.Context) {
+func (u *LeaderAwareGroupUpdater) Enable(ctx context.Context, logger logr.Logger) {
 	u.lock.Lock()
 	defer u.lock.Unlock()
 
@@ -66,7 +73,7 @@ func (u *LeaderAwareGroupUpdater) Enable(ctx context.Context) {
 	u.enabled = true
 
 	for name, reqs := range u.groupReqs {
-		u.updater.Update(ctx, reqs...)
+		u.updater.Update(ctx, logger.WithValues("statusGroup", name), reqs...)
 		delete(u.groupReqs, name)
 	}
 }

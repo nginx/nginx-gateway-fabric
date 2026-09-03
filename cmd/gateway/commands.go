@@ -93,7 +93,6 @@ func createControllerCommand() *cobra.Command {
 		nginxOneTelemetryEndpointHostFlag   = "nginx-one-telemetry-endpoint-host"
 		nginxOneTelemetryEndpointPortFlag   = "nginx-one-telemetry-endpoint-port"
 		nginxOneTLSSkipVerifyFlag           = "nginx-one-tls-skip-verify"
-		nimDataplaneKeySecretFlag           = "nim-dataplane-key-secret" //nolint:gosec // not credentials
 		nimTelemetryEndpointHostFlag        = "nim-telemetry-endpoint-host"
 		nimTelemetryEndpointPortFlag        = "nim-telemetry-endpoint-port"
 		metricsDisableFlag                  = "metrics-disable"
@@ -158,9 +157,7 @@ func createControllerCommand() *cobra.Command {
 			value:     443,
 		}
 		nginxOneConsoleTLSSkipVerify bool
-		nimDataplaneKeySecretName    = stringValidatingValue{
-			validator: validateResourceName,
-		}
+
 		nimTelemetryEndpointHost = stringValidatingValue{
 			validator: validateResourceName,
 		}
@@ -270,7 +267,7 @@ func createControllerCommand() *cobra.Command {
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			atom := zap.NewAtomicLevel()
 
-			logger := ctlrZap.New(ctlrZap.Level(atom))
+			logger := ctlrZap.New(ctlrZap.Level(atom)).WithName("controllerCommand")
 			klog.SetLogger(logger)
 
 			commit, date, dirty := getBuildInfo()
@@ -377,9 +374,8 @@ func createControllerCommand() *cobra.Command {
 					EndpointTLSSkipVerify:  nginxOneConsoleTLSSkipVerify,
 				},
 				NginxInstanceManagerTelemetryConfig: config.ManagementPlaneTelemetryConfig{
-					DataplaneKeySecretName: nimDataplaneKeySecretName.value,
-					EndpointHost:           nimTelemetryEndpointHost.value,
-					EndpointPort:           nimTelemetryEndpointPort.value,
+					EndpointHost: nimTelemetryEndpointHost.value,
+					EndpointPort: nimTelemetryEndpointPort.value,
 				},
 				EndpointPickerDisableTLS:    endpointPickerDisableTLS,
 				EndpointPickerTLSSkipVerify: endpointPickerTLSSkipVerify,
@@ -459,13 +455,6 @@ func createControllerCommand() *cobra.Command {
 		nginxOneTLSSkipVerifyFlag,
 		false,
 		"Disable client verification of the NGINX One Console's telemetry endpoint server certificate.",
-	)
-
-	cmd.Flags().Var(
-		&nimDataplaneKeySecretName,
-		nimDataplaneKeySecretFlag,
-		`The name of the Secret containing the NGINX Instance Manager's dataplane key. Must exist in the same namespace `+
-			`that the NGINX Gateway Fabric control plane is running in (default namespace: nginx-gateway).`,
 	)
 
 	cmd.Flags().Var(
@@ -971,7 +960,7 @@ func createInitializeCommand() *cobra.Command {
 				return fmt.Errorf("could not get cluster UID: %w", err)
 			}
 
-			logger := ctlrZap.New()
+			logger := ctlrZap.New().WithName("initializeCommand")
 			klog.SetLogger(logger)
 			logger.Info(
 				"Starting init container",
@@ -992,7 +981,7 @@ func createInitializeCommand() *cobra.Command {
 
 			return initialize(initializeConfig{
 				fileManager:   file.NewStdLibOSFileManager(),
-				fileGenerator: ngxConfig.NewGeneratorImpl(plus, nil, logger.WithName("generator")),
+				fileGenerator: ngxConfig.NewGeneratorImpl(plus, nil),
 				logger:        logger,
 				podUID:        podUID,
 				clusterUID:    clusterUID,
