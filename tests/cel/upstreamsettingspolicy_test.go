@@ -456,3 +456,102 @@ func TestUpstreamSettingsPolicy_LoadBalancing(t *testing.T) {
 		})
 	}
 }
+
+func TestUpstreamSettingsPolicy_HealthChecks(t *testing.T) {
+	t.Parallel()
+	k8sClient := getKubernetesClient(t)
+
+	tests := []struct {
+		spec       ngfAPIv1alpha1.UpstreamSettingsPolicySpec
+		name       string
+		wantErrors []string
+	}{
+		{
+			name: "path is set, grpc is not set, no error expected",
+			spec: ngfAPIv1alpha1.UpstreamSettingsPolicySpec{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{
+					{
+						Kind:  serviceKind,
+						Group: coreGroup,
+					},
+				},
+				HealthCheck: &ngfAPIv1alpha1.HealthCheck{
+					Active: &ngfAPIv1alpha1.ActiveHealthCheck{
+						Path: helpers.GetPointer(""),
+					},
+				},
+			},
+		},
+		{
+			name: "path is set, grpc is set, error expected",
+			spec: ngfAPIv1alpha1.UpstreamSettingsPolicySpec{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{
+					{
+						Kind:  serviceKind,
+						Group: coreGroup,
+					},
+				},
+				HealthCheck: &ngfAPIv1alpha1.HealthCheck{
+					Active: &ngfAPIv1alpha1.ActiveHealthCheck{
+						Path: helpers.GetPointer(""),
+						GRPC: &ngfAPIv1alpha1.GRPCHealthCheck{},
+					},
+				},
+			},
+			wantErrors: []string{expectedPathNotSetError},
+		},
+		{
+			name: "match is set, grpc is not set, no error expected",
+			spec: ngfAPIv1alpha1.UpstreamSettingsPolicySpec{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{
+					{
+						Kind:  serviceKind,
+						Group: coreGroup,
+					},
+				},
+				HealthCheck: &ngfAPIv1alpha1.HealthCheck{
+					Active: &ngfAPIv1alpha1.ActiveHealthCheck{
+						Match: &ngfAPIv1alpha1.Match{},
+					},
+				},
+			},
+		},
+		{
+			name: "match is set, grpc is set, error expected",
+			spec: ngfAPIv1alpha1.UpstreamSettingsPolicySpec{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{
+					{
+						Kind:  serviceKind,
+						Group: coreGroup,
+					},
+				},
+				HealthCheck: &ngfAPIv1alpha1.HealthCheck{
+					Active: &ngfAPIv1alpha1.ActiveHealthCheck{
+						Match: &ngfAPIv1alpha1.Match{},
+						GRPC:  &ngfAPIv1alpha1.GRPCHealthCheck{},
+					},
+				},
+			},
+			wantErrors: []string{expectedMatchNotSetError},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			for i := range tt.spec.TargetRefs {
+				tt.spec.TargetRefs[i].Name = gatewayv1.ObjectName(uniqueResourceName(testTargetRefName))
+			}
+
+			upstreamSettingsPolicy := &ngfAPIv1alpha1.UpstreamSettingsPolicy{
+				ObjectMeta: controllerruntime.ObjectMeta{
+					Name:      uniqueResourceName(testResourceName),
+					Namespace: defaultNamespace,
+				},
+				Spec: tt.spec,
+			}
+			validateCrd(t, tt.wantErrors, upstreamSettingsPolicy, k8sClient)
+		})
+	}
+}
