@@ -1,9 +1,11 @@
 package resolver
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"slices"
+	"strings"
 	"sync"
 
 	"github.com/go-logr/logr"
@@ -165,7 +167,16 @@ func resolveEndpoints(
 		endpoints = append(endpoints, ep)
 	}
 
+	slices.SortFunc(endpoints, compareEndpoints)
+
 	return endpoints, nil
+}
+
+func compareEndpoints(a, b Endpoint) int {
+	if c := strings.Compare(a.Address, b.Address); c != 0 {
+		return c
+	}
+	return cmp.Compare(a.Port, b.Port)
 }
 
 // getDefaultPort returns the default port for a ServicePort.
