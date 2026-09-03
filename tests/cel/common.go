@@ -110,8 +110,9 @@ const (
 		`is 'hash' or 'hash consistent'`
 
 	// ActiveHealthCheck validation errors.
-	expectedPathNotSetError  = "path must not be set when grpc is set"
-	expectedMatchNotSetError = "match must not be set when grpc is set"
+	expectedPathNotSetError          = "path must not be set when grpc is set"
+	expectedMatchNotSetError         = "match must not be set when grpc is set"
+	expectedMandatoryPersistentError = "persistent can only be true when mandatory is true"
 
 	// WAFPolicy errors.
 	expectedWAFFileIfAndOnlyIfFileTypeError     = "destination.file must be set if and only if type is file"

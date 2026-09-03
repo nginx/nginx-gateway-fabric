@@ -534,6 +534,58 @@ func TestUpstreamSettingsPolicy_HealthChecks(t *testing.T) {
 			},
 			wantErrors: []string{expectedMatchNotSetError},
 		},
+		{
+			name: "mandatory is set and true, persistent is set and true, no error expected",
+			spec: ngfAPIv1alpha1.UpstreamSettingsPolicySpec{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{
+					{
+						Kind:  serviceKind,
+						Group: coreGroup,
+					},
+				},
+				HealthCheck: &ngfAPIv1alpha1.HealthCheck{
+					Active: &ngfAPIv1alpha1.ActiveHealthCheck{
+						Mandatory:  helpers.GetPointer(true),
+						Persistent: helpers.GetPointer(true),
+					},
+				},
+			},
+		},
+		{
+			name: "mandatory is set and false, persistent is set and true, error expected",
+			spec: ngfAPIv1alpha1.UpstreamSettingsPolicySpec{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{
+					{
+						Kind:  serviceKind,
+						Group: coreGroup,
+					},
+				},
+				HealthCheck: &ngfAPIv1alpha1.HealthCheck{
+					Active: &ngfAPIv1alpha1.ActiveHealthCheck{
+						Mandatory:  helpers.GetPointer(false),
+						Persistent: helpers.GetPointer(true),
+					},
+				},
+			},
+			wantErrors: []string{expectedMandatoryPersistentError},
+		},
+		{
+			name: "mandatory is not set, persistent is set and true, error expected",
+			spec: ngfAPIv1alpha1.UpstreamSettingsPolicySpec{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{
+					{
+						Kind:  serviceKind,
+						Group: coreGroup,
+					},
+				},
+				HealthCheck: &ngfAPIv1alpha1.HealthCheck{
+					Active: &ngfAPIv1alpha1.ActiveHealthCheck{
+						Persistent: helpers.GetPointer(true),
+					},
+				},
+			},
+			wantErrors: []string{expectedMandatoryPersistentError},
+		},
 	}
 
 	for _, tt := range tests {

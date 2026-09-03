@@ -98,23 +98,23 @@ spec:
                               two forms accepted by NGINX's grpc_status parameter.
                               Directive: https://nginx.org/en/docs/http/ngx_http_upstream_hc_module.html#health_check
                             enum:
-                            - 1
-                            - 2
-                            - 3
-                            - 4
-                            - 5
-                            - 6
-                            - 7
-                            - 8
-                            - 9
-                            - 10
-                            - 11
-                            - 12
-                            - 13
-                            - 14
-                            - 15
-                            - 16
-                            - CANCELED
+                            - "1"
+                            - "2"
+                            - "3"
+                            - "4"
+                            - "5"
+                            - "6"
+                            - "7"
+                            - "8"
+                            - "9"
+                            - "10"
+                            - "11"
+                            - "12"
+                            - "13"
+                            - "14"
+                            - "15"
+                            - "16"
+                            - CANCELLED
                             - UNKNOWN
                             - INVALID_ARGUMENT
                             - DEADLINE_EXCEEDED
@@ -266,6 +266,9 @@ spec:
                       rule: '!(has(self.path) && has(self.grpc))'
                     - message: match must not be set when grpc is set
                       rule: '!(has(self.match) && has(self.grpc))'
+                    - message: persistent can only be true when mandatory is true
+                      rule: '!(has(self.persistent) && self.persistent == true) ||
+                        (has(self.mandatory) && self.mandatory == true)'
                   passive:
                     description: |-
                       Passive defines the passive health check settings for the upstream. Passive health checks are supported

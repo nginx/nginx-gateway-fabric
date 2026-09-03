@@ -271,6 +271,7 @@ type PassiveHealthCheck struct {
 //
 // +kubebuilder:validation:XValidation:message="path must not be set when grpc is set",rule="!(has(self.path) && has(self.grpc))"
 // +kubebuilder:validation:XValidation:message="match must not be set when grpc is set",rule="!(has(self.match) && has(self.grpc))"
+// +kubebuilder:validation:XValidation:message="persistent can only be true when mandatory is true",rule="!(has(self.persistent) && self.persistent == true) || (has(self.mandatory) && self.mandatory == true)"
 //
 //nolint:lll
 type ActiveHealthCheck struct {
@@ -403,7 +404,7 @@ type GRPCHealthCheck struct {
 // ("UNIMPLEMENTED"). "OK"/"0" is intentionally omitted: it is already
 // the default healthy response and NGINX's grpc_status parameter requires a non-zero code.
 //
-// +kubebuilder:validation:Enum=1;2;3;4;5;6;7;8;9;10;11;12;13;14;15;16;CANCELED;UNKNOWN;INVALID_ARGUMENT;DEADLINE_EXCEEDED;NOT_FOUND;ALREADY_EXISTS;PERMISSION_DENIED;RESOURCE_EXHAUSTED;FAILED_PRECONDITION;ABORTED;OUT_OF_RANGE;UNIMPLEMENTED;INTERNAL;UNAVAILABLE;DATA_LOSS;UNAUTHENTICATED
+// +kubebuilder:validation:Enum="1";"2";"3";"4";"5";"6";"7";"8";"9";"10";"11";"12";"13";"14";"15";"16";CANCELED;UNKNOWN;INVALID_ARGUMENT;DEADLINE_EXCEEDED;NOT_FOUND;ALREADY_EXISTS;PERMISSION_DENIED;RESOURCE_EXHAUSTED;FAILED_PRECONDITION;ABORTED;OUT_OF_RANGE;UNIMPLEMENTED;INTERNAL;UNAVAILABLE;DATA_LOSS;UNAUTHENTICATED
 //
 //nolint:lll
 type GRPCStatus string
