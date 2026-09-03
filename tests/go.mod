@@ -6,7 +6,7 @@ replace github.com/nginx/nginx-gateway-fabric/v2 => ../
 
 require (
 	github.com/golang-jwt/jwt/v5 v5.3.1
-	github.com/nginx/nginx-gateway-fabric/v2 v2.6.7
+	github.com/nginx/nginx-gateway-fabric/v2 v2.7.0
 	github.com/onsi/ginkgo/v2 v2.32.1
 	github.com/onsi/gomega v1.43.0
 	github.com/prometheus/client_golang v1.24.1
