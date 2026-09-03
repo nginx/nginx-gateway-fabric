@@ -10211,28 +10211,11 @@ func TestBuildSSLKeyPairs(t *testing.T) {
 func TestBuildAuthSecrets(t *testing.T) {
 	t.Parallel()
 
-	htpasswdSecretNsName := types.NamespacedName{Namespace: "test", Name: "htpasswd-secret"}
 	tlsSecretNsName := types.NamespacedName{Namespace: "test", Name: "tls-secret"}
 	nilSourceSecretNsName := types.NamespacedName{Namespace: "test", Name: "nil-source"}
 	opaqueBasicAuthSecretNsName := types.NamespacedName{Namespace: "test", Name: "opaque-auth-basic-secret"}
 	opaqueJWTAuthSecretNsName := types.NamespacedName{Namespace: "test", Name: "opaque-auth-jwt-secret"}
 	invalidKeySecretNsName := types.NamespacedName{Namespace: "test", Name: "invalid-key-secret"}
-
-	// TODO: This secret type will be removed in a future release.
-	// Right now, this validates the `fallthrough` scenario.
-	// https://github.com/nginx/nginx-gateway-fabric/issues/4870
-	htpasswdSecret := &secrets.Secret{
-		Source: &apiv1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      htpasswdSecretNsName.Name,
-				Namespace: htpasswdSecretNsName.Namespace,
-			},
-			Type: apiv1.SecretType(secrets.SecretTypeHtpasswd),
-			Data: map[string][]byte{
-				secrets.AuthKey: []byte("user:$apr1$cred"),
-			},
-		},
-	}
 
 	opaqueAuthSecretBasicData := &secrets.Secret{
 		Source: &apiv1.Secret{
@@ -10305,21 +10288,6 @@ func TestBuildAuthSecrets(t *testing.T) {
 		expected map[AuthFileID]AuthFileData
 		name     string
 	}{
-		{
-			name: "htpasswd secret",
-			secrets: map[types.NamespacedName]*secrets.Secret{
-				htpasswdSecretNsName: htpasswdSecret,
-			},
-			filters: map[types.NamespacedName]*graph.AuthenticationFilter{
-				htpasswdSecretNsName: buildBasicAuthFilter(
-					htpasswdSecretNsName,
-					htpasswdSecretNsName.Namespace,
-				),
-			},
-			expected: map[AuthFileID]AuthFileData{
-				"basic_auth_test_htpasswd-secret": []byte("user:$apr1$cred"),
-			},
-		},
 		{
 			name: "opaque secret with auth key for basic auth",
 			secrets: map[types.NamespacedName]*secrets.Secret{
