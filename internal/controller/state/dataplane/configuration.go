@@ -1927,7 +1927,7 @@ func buildUpstream(
 	if err != nil {
 		errMsg = err.Error()
 		logger.V(1).Info(
-			"failed to resolve endpoints, endpoints may not be ready",
+			"Failed to resolve endpoints, endpoints may not be ready",
 			"error", errMsg,
 			"service", br.SvcNsName,
 		)

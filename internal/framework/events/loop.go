@@ -122,10 +122,10 @@ func (el *EventLoop) Start(ctx context.Context) error {
 		case e := <-el.eventCh:
 			// Add the event to the current batch.
 			el.nextBatch = append(el.nextBatch, e)
-
+			eType := fmt.Sprintf("%T", e)
 			el.logger.V(1).Info(
 				"Added an event to the next batch",
-				"type", e,
+				"type", eType,
 				"total", len(el.nextBatch),
 			)
 

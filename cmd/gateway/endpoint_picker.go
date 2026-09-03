@@ -119,9 +119,9 @@ func createEndpointPickerHandler(factory extProcClientFactory, logger logr.Logge
 				code := int(ir.GetStatus().GetCode())
 				body := ir.GetBody()
 				logger.V(1).Info(
-					"received immediate response",
+					"Received immediate response",
 					"code", code,
-					"body", body,
+					"bodyLen", len(body),
 				)
 				http.Error(w, string(body), code)
 				return

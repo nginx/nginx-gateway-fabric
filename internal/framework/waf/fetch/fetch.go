@@ -358,7 +358,8 @@ func (f *HTTPFetcher) fetch(
 				"Transient fetch error, retrying",
 				"attempt", attempt,
 				"maxAttempts", backoff.Steps,
-				"error", fetchErr)
+				"error", fetchErr,
+			)
 			return false, nil
 		}
 		result = fr

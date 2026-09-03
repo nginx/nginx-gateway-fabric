@@ -908,7 +908,7 @@ func (p *NginxProvisioner) handleObjectDeletion(ctx context.Context, nginxResour
 
 	if needToDeleteServiceMonitor(nginxResources) {
 		if err := p.deleteObject(ctx, &monitoringv1.ServiceMonitor{ObjectMeta: nginxResources.ServiceMonitor}); err != nil {
-			p.cfg.Logger.Error(err, "error deleting service monitor resource")
+			p.cfg.Logger.Error(err, "Error deleting service monitor resource")
 		}
 	}
 

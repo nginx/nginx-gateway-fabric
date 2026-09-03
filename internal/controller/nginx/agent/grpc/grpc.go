@@ -147,10 +147,10 @@ func recoveryStreamInterceptor(logger logr.Logger) grpc.StreamServerInterceptor 
 	) (err error) {
 		defer func() {
 			if recovered := recover(); recovered != nil {
-				logger.V(1).Info(
-					"Panic recovered in stream RPC",
+				panicErr := fmt.Errorf("panic: %v", recovered)
+				logger.Error(
+					panicErr, "Panic recovered in stream RPC",
 					"method", info.FullMethod,
-					"panic", recovered,
 				)
 				err = status.Error(codes.Internal, "internal server error")
 			}
@@ -169,10 +169,10 @@ func recoveryUnaryInterceptor(logger logr.Logger) grpc.UnaryServerInterceptor {
 	) (resp any, err error) {
 		defer func() {
 			if recovered := recover(); recovered != nil {
-				logger.V(1).Info(
-					"Panic recovered in unary RPC",
+				panicErr := fmt.Errorf("panic: %v", recovered)
+				logger.Error(
+					panicErr, "Panic recovered in unary RPC",
 					"method", info.FullMethod,
-					"panic", recovered,
 				)
 				err = status.Error(codes.Internal, "internal server error")
 			}
