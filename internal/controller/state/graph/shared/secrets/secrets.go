@@ -21,15 +21,6 @@ type Secret struct {
 	CertBundle *CertificateBundle
 }
 
-type SecretType string
-
-const (
-	// SecretTypeHtpasswd represents a Secret containing an htpasswd file for Basic Auth.
-	// FIXME(s.odonovan): Remove this secret type 3 releases after 2.5.0.
-	// Issue https://github.com/nginx/nginx-gateway-fabric/issues/4870 will remove this secret type.
-	SecretTypeHtpasswd SecretType = "nginx.org/htpasswd" // #nosec G101
-)
-
 const (
 	// AuthKey is the Secret key for Basic Auth credentials.
 	AuthKey = "auth"
