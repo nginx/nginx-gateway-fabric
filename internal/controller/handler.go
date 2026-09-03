@@ -204,10 +204,10 @@ func (h *eventHandlerImpl) HandleEventBatch(ctx context.Context, logger logr.Log
 	}()
 
 	for _, event := range batch {
-		h.parseAndCaptureEvent(ctx, logger, event)
+		h.handleEventSideEffects(ctx, logger, event)
 	}
 
-	gr := h.cfg.processor.Process(ctx, logger.WithName("changeProcessor"))
+	gr := h.cfg.processor.Process(ctx, logger.WithName("changeProcessor"), batch)
 
 	// Once we've processed resources on startup and built our first graph, mark the Pod as ready.
 	if !h.cfg.graphBuiltHealthChecker.ready {
@@ -950,7 +950,7 @@ func findWAFPolicyKey(gr *graph.Graph, nsName types.NamespacedName) *graph.Polic
 	return nil
 }
 
-func (h *eventHandlerImpl) parseAndCaptureEvent(ctx context.Context, logger logr.Logger, event any) {
+func (h *eventHandlerImpl) handleEventSideEffects(ctx context.Context, logger logr.Logger, event any) {
 	switch e := event.(type) {
 	case *events.UpsertEvent:
 		upFilterKey := objectFilterKey(e.Resource, client.ObjectKeyFromObject(e.Resource))
@@ -962,7 +962,6 @@ func (h *eventHandlerImpl) parseAndCaptureEvent(ctx context.Context, logger logr
 			}
 		}
 
-		h.cfg.processor.CaptureUpsertChange(e.Resource)
 	case *events.DeleteEvent:
 		delFilterKey := objectFilterKey(e.Type, e.NamespacedName)
 
@@ -973,7 +972,6 @@ func (h *eventHandlerImpl) parseAndCaptureEvent(ctx context.Context, logger logr
 			}
 		}
 
-		h.cfg.processor.CaptureDeleteChange(e.Type, e.NamespacedName)
 	case events.WAFBundleReconcileEvent:
 		// Guard against stale events: the poller may have been stopped (policy deleted) between
 		// when the event was queued and when it is processed here. Skip the rebuild if the poller
