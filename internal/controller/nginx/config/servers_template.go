@@ -176,6 +176,26 @@ server {
         internal;
         {{ end }}
 
+        {{- if $l.RouteMetadata }}
+        set $ngf_route_name "{{ $l.RouteMetadata.Name }}";
+        set $ngf_route_namespace "{{ $l.RouteMetadata.Namespace }}";
+        {{- if $l.RouteMetadata.GatewayName }}
+        set $ngf_gateway_name "{{ $l.RouteMetadata.GatewayName }}";
+        {{- end }}
+        {{- if $l.RouteMetadata.GatewayNamespace }}
+        set $ngf_gateway_namespace "{{ $l.RouteMetadata.GatewayNamespace }}";
+        {{- end }}
+        {{- if $l.RouteMetadata.GatewayClassName }}
+        set $ngf_gateway_class "{{ $l.RouteMetadata.GatewayClassName }}";
+        {{- end }}
+
+        otel_span_attr "http.route" "{{ $l.RouteMetadata.Namespace }}/{{ $l.RouteMetadata.Name }}";
+
+        {{- if $.Plus }}
+        location_zone {{ $l.RouteMetadata.Namespace }}_{{ $l.RouteMetadata.Name }};
+        {{- end }}
+        {{- end }}
+
         {{ if ne $l.MirrorSplitClientsVariableName "" -}}
         if (${{ $l.MirrorSplitClientsVariableName }} = "") {
             return 204;

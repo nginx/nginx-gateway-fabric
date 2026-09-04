@@ -632,16 +632,14 @@ type HTTPQueryParamMatch struct {
 // If no rule or match is specified by the user, the default rule {{path:{ type: "PathPrefix", value: "/"}}}
 // is set by the schema.
 type MatchRule struct {
-	// Filters holds the filters for the MatchRule.
-	Filters HTTPFilters
-	// Source is the ObjectMeta of the resource that includes the rule.
-	Source *metav1.ObjectMeta
-	// Guardrails holds the ai-guardrails (PayloadProcessor ExtProcess) configuration for the rule, if any.
-	Guardrails *GuardrailsConfig
-	// Match holds the match for the rule.
-	Match Match
-	// BackendGroup is the group of Backends that the rule routes to.
-	BackendGroup BackendGroup
+	Source           *metav1.ObjectMeta
+	Guardrails       *GuardrailsConfig
+	GatewayName      string
+	GatewayNamespace string
+	GatewayClassName string
+	Filters          HTTPFilters
+	Match            Match
+	BackendGroup     BackendGroup
 }
 
 // GuardrailsConfig contains the ai-guardrails / ExtProcess configuration that must be emitted into the
