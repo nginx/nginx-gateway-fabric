@@ -2,6 +2,7 @@ package poller
 
 import (
 	"context"
+	"errors"
 	"reflect"
 	"sync"
 	"time"
@@ -128,7 +129,9 @@ func (p *poller) run(ctx context.Context) {
 	}
 
 	if minInterval <= 0 {
-		p.logger.V(1).Info(
+		pollingErr := errors.New("invalid minimum polling interval")
+		p.logger.Error(
+			pollingErr,
 			"Invalid polling interval, must be greater than zero. Using default interval",
 			"interval", defaultPollingInterval,
 		)

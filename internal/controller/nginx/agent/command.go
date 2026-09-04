@@ -491,6 +491,7 @@ func (cs *commandService) waitForInitialConfigApply(
 			res := msg.GetCommandResponse()
 			if res.GetStatus() != pb.CommandResponse_COMMAND_STATUS_OK {
 				applyErr := fmt.Errorf("msg: %s; error: %s", res.GetMessage(), res.GetError())
+				cs.logger.Error(applyErr, "Received initial config response with error")
 				return applyErr, nil
 			}
 

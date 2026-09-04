@@ -1052,7 +1052,7 @@ func registerControllers(
 		if exists {
 			cfg.Logger.V(1).Info("CRD detected, enabling controller", "kind", kind)
 		} else {
-			cfg.Logger.V(1).Info("CRD not found, controller disabled", "kind", kind)
+			cfg.Logger.Info("CRD not found, controller disabled", "kind", kind)
 		}
 	}
 

@@ -313,8 +313,9 @@ func (p *NginxProvisioner) patchServiceStatus(ctx context.Context, namespace, na
 	backoff := wait.Backoff{Steps: 5, Duration: 100 * time.Millisecond, Factor: 2.0, Jitter: 0.1}
 	err := wait.ExponentialBackoff(backoff, func() (bool, error) {
 		if err := p.k8sClient.Status().Patch(ctx, svc, client.MergeFrom(original)); err != nil {
-			p.cfg.Logger.Error(
-				err, "Encountered error patching service status",
+			p.cfg.Logger.V(1).Info(
+				"Encountered error patching service status",
+				"error", err,
 				"namespace", svc.Namespace,
 				"name", svc.Name,
 				"kind", svc.GetObjectKind().GroupVersionKind().Kind,

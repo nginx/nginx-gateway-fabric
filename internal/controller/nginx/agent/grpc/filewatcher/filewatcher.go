@@ -153,7 +153,7 @@ func (w *FileWatcher) checkForUpdates() {
 	}
 
 	if w.filesChanged.Load() {
-		w.logger.V(1).Info("TLS files changed, sending notification to reset nginx agent connections")
+		w.logger.Info("TLS files changed, sending notification to reset nginx agent connections")
 		w.notifyCh <- struct{}{}
 		w.filesChanged.Store(false)
 	}
