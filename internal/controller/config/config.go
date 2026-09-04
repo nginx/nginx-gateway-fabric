@@ -23,7 +23,6 @@ type Config struct {
 	// GatewayPodConfig contains information about this Pod.
 	GatewayPodConfig GatewayPodConfig
 	// RuntimeLogger is the configured logger and its best-effort flush hook.
-	// Flush is intended for panic/shutdown boundaries that need log durability.
 	RuntimeLogger RuntimeLogger
 	// GatewayClassName is the name of the GatewayClass resource that the Gateway will use.
 	GatewayClassName string
