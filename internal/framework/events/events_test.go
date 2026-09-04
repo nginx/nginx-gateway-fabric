@@ -5,12 +5,14 @@ import (
 
 	"github.com/go-logr/logr"
 	. "github.com/onsi/gomega"
+
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/config"
 )
 
 func TestEventLoop_SwapBatches(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
-	eventLoop := NewEventLoop(nil, logr.Discard(), nil, nil, nil)
+	eventLoop := NewEventLoop(nil, config.RuntimeLogger{Logger: logr.Discard()}, nil, nil)
 
 	eventLoop.currentBatch = EventBatch{
 		"event0",

@@ -4,7 +4,6 @@ import (
 	"errors"
 	"io"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -1272,11 +1271,10 @@ func TestRunWithPanicFlush_FlushesToRealSink(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	logDir := t.TempDir()
-	logPath := filepath.Join(logDir, "panic.log")
-	logFile, err := os.Create(logPath)
+	logFile, err := os.CreateTemp("", "panic-*.log")
 	g.Expect(err).ToNot(HaveOccurred())
 	defer logFile.Close()
+	defer os.Remove(logFile.Name())
 
 	loggerCfg := newLoggerBootstrap(zap.WriteTo(logFile))
 
@@ -1288,7 +1286,7 @@ func TestRunWithPanicFlush_FlushesToRealSink(t *testing.T) {
 
 	g.Expect(panicFn).To(PanicWith("panic-to-file"))
 
-	contents, err := os.ReadFile(logPath)
+	contents, err := os.ReadFile(logFile.Name())
 	g.Expect(err).ToNot(HaveOccurred())
 	logged := string(contents)
 	g.Expect(logged).To(ContainSubstring("panic recovered at command boundary"))

@@ -9,6 +9,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/config"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/events"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/events/eventsfakes"
 )
@@ -27,7 +28,7 @@ var _ = Describe("EventLoop", func() {
 		eventCh = make(chan any)
 		fakePreparer = &eventsfakes.FakeFirstEventBatchPreparer{}
 
-		eventLoop = events.NewEventLoop(eventCh, logr.Discard(), nil, fakeHandler, fakePreparer)
+		eventLoop = events.NewEventLoop(eventCh, config.RuntimeLogger{Logger: logr.Discard()}, fakeHandler, fakePreparer)
 
 		errorCh = make(chan error)
 	})

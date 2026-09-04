@@ -281,8 +281,7 @@ func newEventLoop(
 
 	eventLoop := events.NewEventLoop(
 		eventCh,
-		logger.WithName("eventLoop"),
-		flush,
+		config.RuntimeLogger{Logger: logger.WithName("eventLoop"), Flush: flush},
 		handler,
 		firstBatchPreparer,
 	)

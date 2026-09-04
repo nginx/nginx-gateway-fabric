@@ -7,6 +7,11 @@ import (
 	"go.uber.org/zap"
 )
 
+type RuntimeLogger struct {
+	Flush  func()
+	Logger logr.Logger
+}
+
 const DefaultNginxMetricsPort = int32(9113)
 
 type Config struct {
@@ -17,11 +22,9 @@ type Config struct {
 	AtomicLevel zap.AtomicLevel
 	// GatewayPodConfig contains information about this Pod.
 	GatewayPodConfig GatewayPodConfig
-	// Logger is the Zap Logger used by all components.
-	Logger logr.Logger
-	// Flush performs a best-effort flush of the configured logger backend.
-	// It is intended for panic/shutdown boundaries that need log durability.
-	Flush func()
+	// RuntimeLogger is the configured logger and its best-effort flush hook.
+	// Flush is intended for panic/shutdown boundaries that need log durability.
+	RuntimeLogger RuntimeLogger
 	// GatewayClassName is the name of the GatewayClass resource that the Gateway will use.
 	GatewayClassName string
 	// ConfigName is the name of the NginxGateway resource for this controller.

@@ -363,8 +363,7 @@ func createControllerCommand() *cobra.Command {
 				conf := config.Config{
 					GatewayCtlrName:  gatewayCtlrName.value,
 					ConfigName:       configName.String(),
-					Logger:           logger,
-					Flush:            loggerCfg.flush,
+					RuntimeLogger:    config.RuntimeLogger{Logger: logger, Flush: loggerCfg.flush},
 					AtomicLevel:      loggerCfg.atomicLevel,
 					GatewayClassName: gatewayClassName.value,
 					GatewayPodConfig: podConfig,
