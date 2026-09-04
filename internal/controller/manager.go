@@ -361,11 +361,13 @@ func createAndRegisterProvisioner(
 		ctx,
 		mgr,
 		provisioner.Config{
-			DeploymentStore:                     nginxUpdater.NginxDeployments,
-			StatusQueue:                         statusQueue,
-			Logger:                              cfg.RuntimeLogger.Logger.WithName("provisioner"),
+			DeploymentStore: nginxUpdater.NginxDeployments,
+			StatusQueue:     statusQueue,
+			RuntimeLogger: config.RuntimeLogger{
+				Logger: cfg.RuntimeLogger.Logger.WithName("provisioner"),
+				Flush:  cfg.RuntimeLogger.Flush,
+			},
 			EventRecorder:                       recorder,
-			Flush:                               cfg.RuntimeLogger.Flush,
 			GatewayPodConfig:                    &cfg.GatewayPodConfig,
 			GCName:                              cfg.GatewayClassName,
 			GatewayCtlrName:                     cfg.GatewayCtlrName,

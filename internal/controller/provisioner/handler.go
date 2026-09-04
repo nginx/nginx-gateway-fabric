@@ -330,7 +330,7 @@ func (h *eventHandler) reprovisionResources(ctx context.Context, event *events.D
 				return err
 			}
 		} else if h.store.isGatewayDeleting(gatewayNsName) {
-			h.provisioner.cfg.Logger.Info(
+			h.provisioner.cfg.logger().Info(
 				"Skipping reprovisioning of deleted resource because Gateway is marked as deleting",
 				"resource", event.NamespacedName,
 				"resourceType", fmt.Sprintf("%T", event.Type),
