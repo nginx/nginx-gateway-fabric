@@ -81,6 +81,10 @@ type Graph struct {
 	ReferencedNamespaces map[types.NamespacedName]*v1.Namespace
 	// ReferencedServices includes the NamespacedNames of all the Services that are referenced by at least one Route.
 	ReferencedServices map[types.NamespacedName]*ReferencedService
+	// ReferencedEndpointSlices tracks which EndpointSlices are associated with which Services.
+	// Used to detect EndpointSlice deletion when the slice object has no labels (delete path).
+	// Key is Service NamespacedName, value is a map of EndpointSlice NamespacedNames.
+	ReferencedEndpointSlices map[types.NamespacedName]map[types.NamespacedName]struct{}
 	// ReferencedInferencePools includes the NamespacedNames of all the InferencePools
 	// that are referenced by at least one Route.
 	ReferencedInferencePools map[types.NamespacedName]*ReferencedInferencePool
@@ -301,11 +305,24 @@ func (g *Graph) inferencePoolIsReferenced(nsname types.NamespacedName) bool {
 }
 
 func (g *Graph) endpointSliceIsReferenced(nsname types.NamespacedName, obj *discoveryV1.EndpointSlice) bool {
+	// First try the normal path: extract service name from labels.
+	// This works for upsert events where the full object is available.
 	svcName := index.GetServiceNameFromEndpointSlice(obj)
+	if svcName != "" {
+		_, exists := g.ReferencedServices[types.NamespacedName{Namespace: nsname.Namespace, Name: svcName}]
+		return exists
+	}
 
-	// Service Namespace should be the same Namespace as the EndpointSlice
-	_, exists := g.ReferencedServices[types.NamespacedName{Namespace: nsname.Namespace, Name: svcName}]
-	return exists
+	// Fallback for delete events: the object has no labels, so we can't
+	// extract the service name. Check if any referenced service exists
+	// in the same namespace as the deleted slice.
+	// This is a coarse check but prevents stale upstream servers.
+	for svcNsName := range g.ReferencedServices {
+		if svcNsName.Namespace == nsname.Namespace {
+			return true
+		}
+	}
+	return false
 }
 
 func (g *Graph) nginxProxyIsReferenced(nsname types.NamespacedName) bool {
