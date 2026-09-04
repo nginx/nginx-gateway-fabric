@@ -129,8 +129,8 @@ const (
 
 // PayloadProcessorEntry defines a single processing step in the pipeline.
 //
-// +kubebuilder:validation:XValidation:message="extProcess must be set when type is ExtProcess",rule="self.type != 'ExtProcess' || has(self.extProcess)"
-// +kubebuilder:validation:XValidation:message="inProcess must be set when type is InProcess",rule="self.type != 'InProcess' || has(self.inProcess)"
+// +kubebuilder:validation:XValidation:message="extProcess must be set if and only if type is ExtProcess",rule="(self.type == 'ExtProcess') == has(self.extProcess)"
+// +kubebuilder:validation:XValidation:message="inProcess must be set if and only if type is InProcess",rule="(self.type == 'InProcess') == has(self.inProcess)"
 type PayloadProcessorEntry struct {
     // Type specifies how the processor executes.
     Type ProcessorType `json:"type"`
