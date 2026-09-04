@@ -105,10 +105,6 @@ func (c Config) logger() logr.Logger {
 	return c.RuntimeLogger.Logger
 }
 
-func (c Config) flush() func() {
-	return c.RuntimeLogger.Flush
-}
-
 var labelCollectorFactory func(mgr manager.Manager, cfg Config) AgentLabelCollector = defaultLabelCollectorFactory
 
 func defaultLabelCollectorFactory(mgr manager.Manager, cfg Config) AgentLabelCollector {
@@ -208,8 +204,7 @@ func NewNginxProvisioner(
 		ctx,
 		mgr,
 		handler,
-		cfg.logger(),
-		cfg.flush(),
+		cfg.RuntimeLogger,
 		selector,
 		cfg.GatewayPodConfig.Namespace,
 		cfg.NginxDockerSecretNames,

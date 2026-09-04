@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/go-logr/logr"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
@@ -46,8 +45,7 @@ func newEventLoop(
 	ctx context.Context,
 	mgr manager.Manager,
 	handler *eventHandler,
-	logger logr.Logger,
-	flush func(),
+	runtimeLogger config.RuntimeLogger,
 	selector metav1.LabelSelector,
 	ngfNamespace string,
 	dockerSecrets []string,
@@ -291,7 +289,7 @@ func newEventLoop(
 
 	eventLoop := events.NewEventLoop(
 		eventCh,
-		config.RuntimeLogger{Logger: logger.WithName("eventLoop"), Flush: flush},
+		config.RuntimeLogger{Logger: runtimeLogger.Logger.WithName("eventLoop"), Flush: runtimeLogger.Flush},
 		handler,
 		firstBatchPreparer,
 	)
