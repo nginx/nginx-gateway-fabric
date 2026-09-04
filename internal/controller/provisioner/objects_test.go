@@ -2348,9 +2348,10 @@ func TestBuildNginxConfigMaps_ModuleLoading(t *testing.T) {
 	}
 
 	tests := []struct {
-		nProxyCfg  *graph.EffectiveNginxProxy
-		name       string
-		assertions []confAssertion
+		nProxyCfg   *graph.EffectiveNginxProxy
+		name        string
+		assertions  []confAssertion
+		disablePlus bool
 	}{
 		{
 			name:      "defaults (nil config) loads no optional modules",
@@ -2460,12 +2461,34 @@ func TestBuildNginxConfigMaps_ModuleLoading(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "WAF enabled with Plus disabled does not load ngx_http_app_protect_module",
+			nProxyCfg: &graph.EffectiveNginxProxy{
+				WAF: &ngfAPIv1alpha2.WAFSpec{
+					Enable: helpers.GetPointer(true),
+				},
+			},
+			disablePlus: true,
+			assertions: []confAssertion{
+				{
+					confKey: configmaps.MainConfKey,
+					notExpSubStrings: []string{
+						"load_module modules/ngx_http_app_protect_module.so;",
+					},
+				},
+			},
+		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
+
+			plus := true
+			if test.disablePlus {
+				plus = false
+			}
 
 			provisioner := &NginxProvisioner{
 				k8sClient: createFakeClientWithScheme(),
@@ -2476,6 +2499,10 @@ func TestBuildNginxConfigMaps_ModuleLoading(t *testing.T) {
 					},
 					AgentLabels: make(map[string]string),
 				},
+			}
+			if plus {
+				provisioner.cfg.Plus = true
+				provisioner.cfg.PlusUsageConfig = &config.UsageReportConfig{SecretName: jwtTestSecretName}
 			}
 
 			objectMeta := metav1.ObjectMeta{Name: "test", Namespace: "default"}
