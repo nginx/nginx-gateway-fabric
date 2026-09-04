@@ -143,7 +143,7 @@ func unmarshalAdditionalSpec(raw *apiextv1.JSON, logger logr.Logger) map[string]
 
 	var m map[string]any
 	if err := json.Unmarshal(raw.Raw, &m); err != nil {
-		logger.Error(err, "ignoring invalid additionalIngressLinkSpec; must be a JSON object")
+		logger.Error(err, "Ignoring invalid additionalIngressLinkSpec; must be a JSON object")
 		return map[string]any{}
 	}
 	if m == nil {

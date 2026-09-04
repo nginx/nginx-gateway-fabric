@@ -67,11 +67,11 @@ func (h *eventHandler) HandleEventBatch(ctx context.Context, logger logr.Logger,
 		switch e := event.(type) {
 		case *events.UpsertEvent:
 			if err := h.handleUpsertEvent(ctx, e, logger); err != nil {
-				logger.Error(err, "error handling upsert event")
+				logger.Error(err, "Error handling upsert event")
 			}
 		case *events.DeleteEvent:
 			if err := h.handleDeleteEvent(ctx, e); err != nil {
-				logger.Error(err, "error handling delete event")
+				logger.Error(err, "Error handling delete event")
 			}
 		default:
 			panic(fmt.Errorf("unknown event type %T", e))
@@ -212,8 +212,11 @@ func (h *eventHandler) updateOrDeleteResources(
 			h.provisioner.setResourceToDelete(gatewayNSName)
 			return nil
 		}
-		logger.Info("Gateway not found, associated resources will be garbage collected",
-			"resource", obj.GetName(), "gateway", gatewayNSName)
+		logger.Info(
+			"Gateway not found, associated resources will be garbage collected",
+			"resource", obj.GetName(),
+			"gateway", gatewayNSName,
+		)
 		return nil
 	}
 
@@ -247,7 +250,7 @@ func (h *eventHandler) hasResourceVersionChanged(
 			if getError == nil {
 				storeResourceVersion = storeObject.GetResourceVersion()
 			} else {
-				logger.Error(getError, "error finding already provisioned resource")
+				logger.Error(getError, "Error finding already provisioned resource")
 			}
 		}
 	}
@@ -277,7 +280,7 @@ func (h *eventHandler) provisionResource(
 				extractExternalLoadBalancer(resources.Gateway),
 			)
 			if err != nil {
-				logger.Error(err, "error building some nginx resources")
+				logger.Error(err, "Error building some nginx resources")
 			}
 		}
 
@@ -333,7 +336,7 @@ func (h *eventHandler) reprovisionResources(ctx context.Context, event *events.D
 			h.provisioner.cfg.Logger.Info(
 				"Skipping reprovisioning of deleted resource because Gateway is marked as deleting",
 				"resource", event.NamespacedName,
-				"resourceType", fmt.Sprintf("%T", event.Type),
+				"resourceType", event.Type.GetName(),
 				"gateway", gatewayNsName,
 			)
 		}
@@ -429,20 +432,30 @@ func (h *eventHandler) handleIngressLinkUpdate(logger logr.Logger, il *unstructu
 	}
 
 	if gatewayName == "" {
-		logger.V(1).Info("IngressLink has no gateway label, skipping", "name", il.GetName())
+		logger.V(1).Info(
+			"IngressLink has no gateway label, skipping",
+			"name", il.GetName(),
+		)
 		return
 	}
 
 	// Extract vsAddress from status
 	vsAddress := predicate.GetVSAddress(il)
 	if vsAddress == "" {
-		logger.V(1).Info("IngressLink has no vsAddress in status, waiting for IPAM allocation",
-			"name", il.GetName(), "gateway", gatewayName)
+		logger.V(1).Info(
+			"IngressLink has no vsAddress in status, waiting for IPAM allocation",
+			"name", il.GetName(),
+			"gateway", gatewayName,
+		)
 		return
 	}
 
-	logger.Info("IngressLink status updated with vsAddress",
-		"name", il.GetName(), "gateway", gatewayName, "vsAddress", vsAddress)
+	logger.Info(
+		"IngressLink status updated with vsAddress",
+		"name", il.GetName(),
+		"gateway", gatewayName,
+		"vsAddress", vsAddress,
+	)
 
 	// Enqueue a status update to update the Gateway addresses
 	resourceName := controller.CreateNginxResourceName(gatewayName, h.gcName)

@@ -296,7 +296,7 @@ func (h *eventHandlerImpl) sendNginxConfig(ctx context.Context, logger logr.Logg
 			cfg := dataplane.BuildConfiguration(ctx, logger, gr, gw, h.cfg.serviceResolver, h.cfg.plus, h.cfg.clusterIPFamily)
 			depCtx, getErr := h.getDeploymentContext(ctx)
 			if getErr != nil {
-				logger.Error(getErr, "error getting deployment context for usage reporting")
+				logger.Error(getErr, "Error getting deployment context for usage reporting")
 			}
 			cfg.DeploymentContext = depCtx
 
@@ -322,7 +322,7 @@ func (h *eventHandlerImpl) sendNginxConfig(ctx context.Context, logger logr.Logg
 
 		go func() {
 			if err := h.cfg.nginxProvisioner.RegisterGateway(ctx, gw, gw.DeploymentName.Name); err != nil {
-				logger.Error(err, "error from provisioner")
+				logger.Error(err, "Error from provisioner")
 			}
 			h.cfg.statusQueue.Enqueue(statusObj)
 		}()
@@ -609,7 +609,7 @@ func (h *eventHandlerImpl) handleGatewayServiceStatusUpdate(
 		h.cfg.gatewayClassName,
 	)
 	if err != nil {
-		msg := "error getting Gateway Service IP address"
+		msg := "Error getting Gateway Service IP address"
 		h.cfg.logger.Error(err, msg)
 		h.cfg.eventRecorder.Eventf(
 			item.GatewayService,
@@ -734,7 +734,7 @@ func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph, 
 		var err error
 		gwAddresses, err = getGatewayAddresses(ctx, h.cfg.k8sClient, nil, gw, h.cfg.gatewayClassName)
 		if err != nil {
-			msg := "error getting Gateway Service IP address"
+			msg := "Error getting Gateway Service IP address"
 			h.cfg.logger.Error(err, msg)
 			h.cfg.eventRecorder.Eventf(
 				&v1.Service{},
@@ -789,7 +789,7 @@ func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph, 
 	if h.cfg.inferenceExtension {
 		err := h.cfg.k8sClient.List(ctx, ipList)
 		if err != nil {
-			msg := "error listing InferencePools for status update"
+			msg := "Error listing InferencePools for status update"
 			h.cfg.logger.Error(err, msg)
 			h.cfg.eventRecorder.Eventf(
 				&inference.InferencePoolList{},
@@ -986,7 +986,10 @@ func (h *eventHandlerImpl) parseAndCaptureEvent(ctx context.Context, logger logr
 			)
 			return
 		}
-		logger.V(1).Info("WAF bundle now available, triggering re-reconcile", "policy", e.PolicyNsName)
+		logger.V(1).Info(
+			"WAF bundle now available, triggering re-reconcile",
+			"policy", e.PolicyNsName,
+		)
 		// Mark the processor dirty so Process() performs a graph rebuild even if this is the
 		// only event in the batch. Without this, clusterStateChanged=false causes Process() to
 		// return nil and the pending Gateway is never unblocked.
@@ -1247,7 +1250,10 @@ func (h *eventHandlerImpl) reconcileAPResourceFinalizers(
 
 		reconciled, err := h.updateAPResourceFinalizer(ctx, key, controllerutil.AddFinalizer)
 		if err != nil {
-			logger.Error(err, "Failed to add finalizer to AP resource", "resource", key.nsName)
+			logger.Error(
+				err, "Failed to add finalizer to AP resource",
+				"resource", key.nsName,
+			)
 			continue
 		}
 		if !reconciled {
@@ -1264,7 +1270,10 @@ func (h *eventHandlerImpl) reconcileAPResourceFinalizers(
 
 		reconciled, err := h.updateAPResourceFinalizer(ctx, key, controllerutil.RemoveFinalizer)
 		if err != nil {
-			logger.Error(err, "Failed to remove finalizer from AP resource", "resource", key.nsName)
+			logger.Error(
+				err, "Failed to remove finalizer from AP resource",
+				"resource", key.nsName,
+			)
 			continue
 		}
 		if !reconciled {
@@ -1415,7 +1424,11 @@ func (h *eventHandlerImpl) ensureInferencePoolServices(
 
 		if err := controllerutil.SetControllerReference(pool.Source, svc, h.cfg.k8sClient.Scheme()); err != nil {
 			msg := "Failed to set owner reference on headless Service for InferencePool"
-			h.cfg.logger.Error(err, msg, "Service", svc.Name, "InferencePool", pool.Source.Name)
+			h.cfg.logger.Error(
+				err, msg,
+				"service", svc.Name,
+				"inferencePool", pool.Source.Name,
+			)
 			h.cfg.eventRecorder.Eventf(
 				svc,
 				&inference.InferencePool{
@@ -1442,7 +1455,11 @@ func (h *eventHandlerImpl) ensureInferencePoolServices(
 		if err != nil {
 			cancel()
 			msg := "Failed to upsert headless Service for InferencePool"
-			h.cfg.logger.Error(err, msg, "Service", svc.Name, "InferencePool", pool.Source.Name)
+			h.cfg.logger.Error(
+				err, msg,
+				"service", svc.Name,
+				"inferencePool", pool.Source.Name,
+			)
 			h.cfg.eventRecorder.Eventf(
 				svc,
 				&inference.InferencePool{
@@ -1462,8 +1479,10 @@ func (h *eventHandlerImpl) ensureInferencePoolServices(
 
 		if res == controllerutil.OperationResultCreated || res == controllerutil.OperationResultUpdated {
 			h.cfg.logger.Info(
-				fmt.Sprintf("Successfully %s headless Service for InferencePool", res),
-				"Service", svc.Name, "InferencePool", pool.Source.Name,
+				"Successfully Created/Updated headless Service for InferencePool",
+				"result", res,
+				"service", svc.Name,
+				"inferencePool", pool.Source.Name,
 			)
 		}
 	}
