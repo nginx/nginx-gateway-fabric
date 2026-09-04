@@ -10,13 +10,13 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/events"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/config"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/recorder"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/conversion"
 )
@@ -139,16 +139,16 @@ type FakeManager struct {
 	getConverterRegistryReturnsOnCall map[int]struct {
 		result1 conversion.Registry
 	}
-	GetEventRecorderStub        func(string) events.EventRecorder
+	GetEventRecorderStub        func(string) recorder.EventRecorder
 	getEventRecorderMutex       sync.RWMutex
 	getEventRecorderArgsForCall []struct {
 		arg1 string
 	}
 	getEventRecorderReturns struct {
-		result1 events.EventRecorder
+		result1 recorder.EventRecorder
 	}
 	getEventRecorderReturnsOnCall map[int]struct {
-		result1 events.EventRecorder
+		result1 recorder.EventRecorder
 	}
 	GetEventRecorderForStub        func(string) record.EventRecorder
 	getEventRecorderForMutex       sync.RWMutex
@@ -854,7 +854,7 @@ func (fake *FakeManager) GetConverterRegistryReturnsOnCall(i int, result1 conver
 	}{result1}
 }
 
-func (fake *FakeManager) GetEventRecorder(arg1 string) events.EventRecorder {
+func (fake *FakeManager) GetEventRecorder(arg1 string) recorder.EventRecorder {
 	fake.getEventRecorderMutex.Lock()
 	ret, specificReturn := fake.getEventRecorderReturnsOnCall[len(fake.getEventRecorderArgsForCall)]
 	fake.getEventRecorderArgsForCall = append(fake.getEventRecorderArgsForCall, struct {
@@ -879,7 +879,7 @@ func (fake *FakeManager) GetEventRecorderCallCount() int {
 	return len(fake.getEventRecorderArgsForCall)
 }
 
-func (fake *FakeManager) GetEventRecorderCalls(stub func(string) events.EventRecorder) {
+func (fake *FakeManager) GetEventRecorderCalls(stub func(string) recorder.EventRecorder) {
 	fake.getEventRecorderMutex.Lock()
 	defer fake.getEventRecorderMutex.Unlock()
 	fake.GetEventRecorderStub = stub
@@ -892,26 +892,26 @@ func (fake *FakeManager) GetEventRecorderArgsForCall(i int) string {
 	return argsForCall.arg1
 }
 
-func (fake *FakeManager) GetEventRecorderReturns(result1 events.EventRecorder) {
+func (fake *FakeManager) GetEventRecorderReturns(result1 recorder.EventRecorder) {
 	fake.getEventRecorderMutex.Lock()
 	defer fake.getEventRecorderMutex.Unlock()
 	fake.GetEventRecorderStub = nil
 	fake.getEventRecorderReturns = struct {
-		result1 events.EventRecorder
+		result1 recorder.EventRecorder
 	}{result1}
 }
 
-func (fake *FakeManager) GetEventRecorderReturnsOnCall(i int, result1 events.EventRecorder) {
+func (fake *FakeManager) GetEventRecorderReturnsOnCall(i int, result1 recorder.EventRecorder) {
 	fake.getEventRecorderMutex.Lock()
 	defer fake.getEventRecorderMutex.Unlock()
 	fake.GetEventRecorderStub = nil
 	if fake.getEventRecorderReturnsOnCall == nil {
 		fake.getEventRecorderReturnsOnCall = make(map[int]struct {
-			result1 events.EventRecorder
+			result1 recorder.EventRecorder
 		})
 	}
 	fake.getEventRecorderReturnsOnCall[i] = struct {
-		result1 events.EventRecorder
+		result1 recorder.EventRecorder
 	}{result1}
 }
 
