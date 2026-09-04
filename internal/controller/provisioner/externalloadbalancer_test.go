@@ -10,6 +10,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/config"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
@@ -103,7 +104,10 @@ func TestBuildExternalLoadBalancer_DisabledOrUnconfigured(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			p := &NginxProvisioner{cfg: Config{ExternalLoadBalancer: test.externalLoadBalancer, Logger: log.Log}}
+			p := &NginxProvisioner{cfg: Config{
+				ExternalLoadBalancer: test.externalLoadBalancer,
+				RuntimeLogger:        config.RuntimeLogger{Logger: log.Log},
+			}}
 			g.Expect(p.buildExternalLoadBalancer(testObjectMeta(), test.elb, testSelectorLabels())).To(BeNil())
 		})
 	}
@@ -113,7 +117,7 @@ func TestBuildExternalLoadBalancer_GatewayLinkBackendYieldsAnIngressLink(t *test
 	t.Parallel()
 	g := NewWithT(t)
 
-	p := &NginxProvisioner{cfg: Config{ExternalLoadBalancer: true, Logger: log.Log}}
+	p := &NginxProvisioner{cfg: Config{ExternalLoadBalancer: true, RuntimeLogger: config.RuntimeLogger{Logger: log.Log}}}
 	elb := elbWithGatewayLink(&ngfAPIv1alpha1.GatewayLinkConfig{
 		VirtualServerAddress: helpers.GetPointer("10.0.0.1"),
 	})
@@ -130,7 +134,7 @@ func TestBuildIngressLink_SetsGVKMetadataAndSelector(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	p := &NginxProvisioner{cfg: Config{ExternalLoadBalancer: true, Logger: log.Log}}
+	p := &NginxProvisioner{cfg: Config{ExternalLoadBalancer: true, RuntimeLogger: config.RuntimeLogger{Logger: log.Log}}}
 	glCfg := &ngfAPIv1alpha1.GatewayLinkConfig{VirtualServerAddress: helpers.GetPointer("10.0.0.1")}
 
 	obj := p.buildIngressLink(testObjectMeta(), glCfg, testSelectorLabels())

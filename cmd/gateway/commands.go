@@ -3,12 +3,15 @@ package main
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"runtime/debug"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/go-logr/logr"
+	"github.com/go-logr/zapr"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"go.uber.org/zap"
@@ -23,7 +26,46 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/config"
 	ngxConfig "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/file"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
+
+type loggerBootstrap struct {
+	atomicLevel zap.AtomicLevel
+	flush       func()
+	rawLogger   *zap.Logger
+	logger      logr.Logger
+}
+
+func newLoggerBootstrap(opts ...ctlrZap.Opts) loggerBootstrap {
+	atom := zap.NewAtomicLevel()
+	rawLogger := ctlrZap.NewRaw(append(opts, ctlrZap.Level(atom))...)
+	logger := zapr.NewLogger(rawLogger)
+	klog.SetLogger(logger)
+	log.SetLogger(logger)
+
+	return loggerBootstrap{
+		atomicLevel: atom,
+		flush: func() {
+			if err := rawLogger.Sync(); err != nil {
+				var pathErr *os.PathError
+				if errors.As(err, &pathErr) && errors.Is(pathErr.Err, io.ErrClosedPipe) {
+					return
+				}
+			}
+		},
+		logger:    logger,
+		rawLogger: rawLogger,
+	}
+}
+
+func runWithPanicFlush(loggerCfg loggerBootstrap, run func() error) (err error) {
+	defer func() {
+		recovered := recover()
+		helpers.RecoverAndFlush(loggerCfg.logger, loggerCfg.flush, "panic recovered at command boundary", recovered, true)
+	}()
+
+	return run()
+}
 
 // These flags are shared by multiple commands.
 const (
@@ -265,132 +307,129 @@ func createControllerCommand() *cobra.Command {
 			return validatePLMSecretNamespacesWatched(plmParams, watchNamespaces.values, os.Getenv("POD_NAMESPACE"))
 		},
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			atom := zap.NewAtomicLevel()
+			loggerCfg := newLoggerBootstrap()
+			return runWithPanicFlush(loggerCfg, func() error {
+				logger := loggerCfg.logger
 
-			logger := ctlrZap.New(ctlrZap.Level(atom)).WithName("controllerCommand")
-			klog.SetLogger(logger)
+				commit, date, dirty := getBuildInfo()
+				logger.Info(
+					"Starting the NGINX Gateway Fabric control plane",
+					"version", version,
+					"commit", commit,
+					"date", date,
+					"dirty", dirty,
+				)
 
-			commit, date, dirty := getBuildInfo()
-			logger.Info(
-				"Starting the NGINX Gateway Fabric control plane",
-				"version", version,
-				"commit", commit,
-				"date", date,
-				"dirty", dirty,
-			)
-			log.SetLogger(logger)
-
-			if err := ensureNoPortCollisions(metricsListenPort.value, healthListenPort.value); err != nil {
-				return fmt.Errorf("error validating ports: %w", err)
-			}
-
-			imageSource := os.Getenv("BUILD_AGENT")
-			if imageSource != "gha" && imageSource != "local" {
-				imageSource = "unknown"
-			}
-
-			period, err := time.ParseDuration(telemetryReportPeriod)
-			if err != nil {
-				return fmt.Errorf("error parsing telemetry report period: %w", err)
-			}
-
-			if telemetryEndpoint != "" {
-				if err := validateEndpoint(telemetryEndpoint); err != nil {
-					return fmt.Errorf("error validating telemetry endpoint: %w", err)
+				if err := ensureNoPortCollisions(metricsListenPort.value, healthListenPort.value); err != nil {
+					return fmt.Errorf("error validating ports: %w", err)
 				}
-			}
 
-			telemetryEndpointInsecure, err := strconv.ParseBool(telemetryEndpointInsecure)
-			if err != nil {
-				return fmt.Errorf("error parsing telemetry endpoint insecure: %w", err)
-			}
+				imageSource := os.Getenv("BUILD_AGENT")
+				if imageSource != "gha" && imageSource != "local" {
+					imageSource = "unknown"
+				}
 
-			var usageReportConfig config.UsageReportConfig
-			if plus {
-				usageReportConfig, err = buildUsageReportConfig(usageReportParams)
+				period, err := time.ParseDuration(telemetryReportPeriod)
 				if err != nil {
-					return err
+					return fmt.Errorf("error parsing telemetry report period: %w", err)
 				}
-			}
 
-			plmStorageConfig := buildPLMStorageConfig(plmParams)
+				if telemetryEndpoint != "" {
+					if err := validateEndpoint(telemetryEndpoint); err != nil {
+						return fmt.Errorf("error validating telemetry endpoint: %w", err)
+					}
+				}
 
-			flagKeys, flagValues := parseFlags(cmd.Flags())
+				telemetryEndpointInsecure, err := strconv.ParseBool(telemetryEndpointInsecure)
+				if err != nil {
+					return fmt.Errorf("error parsing telemetry endpoint insecure: %w", err)
+				}
 
-			podConfig, err := createGatewayPodConfig(version, serviceName.value)
-			if err != nil {
-				return fmt.Errorf("error creating gateway pod config: %w", err)
-			}
+				var usageReportConfig config.UsageReportConfig
+				if plus {
+					usageReportConfig, err = buildUsageReportConfig(usageReportParams)
+					if err != nil {
+						return err
+					}
+				}
+				flagKeys, flagValues := parseFlags(cmd.Flags())
 
-			conf := config.Config{
-				GatewayCtlrName:  gatewayCtlrName.value,
-				ConfigName:       configName.String(),
-				Logger:           logger,
-				AtomicLevel:      atom,
-				GatewayClassName: gatewayClassName.value,
-				GatewayPodConfig: podConfig,
-				HealthConfig: config.HealthConfig{
-					Enabled: !disableHealth,
-					Port:    healthListenPort.value,
-				},
-				MetricsConfig: config.MetricsConfig{
-					Enabled: !disableMetrics,
-					Port:    metricsListenPort.value,
-					Secure:  metricsSecure,
-				},
-				LeaderElection: config.LeaderElectionConfig{
-					Enabled:       !disableLeaderElection,
-					LockName:      leaderElectionLockName.String(),
-					Identity:      podConfig.Name,
-					LeaseDuration: leaderElectionLeaseDuration,
-					RenewDeadline: leaderElectionRenewDeadline,
-					RetryPeriod:   leaderElectionRetryPeriod,
-				},
-				UsageReportConfig: usageReportConfig,
-				ProductTelemetryConfig: config.ProductTelemetryConfig{
-					ReportPeriod:     period,
-					Enabled:          !disableProductTelemetry,
-					Endpoint:         telemetryEndpoint,
-					EndpointInsecure: telemetryEndpointInsecure,
-				},
-				Plus:                 plus,
-				ExperimentalFeatures: gwExperimentalFeatures,
-				InferenceExtension:   gwInferenceExtension,
-				ImageSource:          imageSource,
-				Flags: config.Flags{
-					Names:  flagKeys,
-					Values: flagValues,
-				},
-				SnippetsFilters:        snippetsFilters,
-				Snippets:               snippets,
-				PayloadProcessor:       payloadProcessor,
-				NginxDockerSecretNames: nginxDockerSecrets.values,
-				AgentTLSSecretName:     agentTLSSecretName.value,
-				NGINXSCCName:           nginxSCCName.value,
-				NginxOneConsoleTelemetryConfig: config.ManagementPlaneTelemetryConfig{
-					DataplaneKeySecretName: nginxOneConsoleDataplaneKeySecretName.value,
-					EndpointHost:           nginxOneConsoleTelemetryEndpointHost.value,
-					EndpointPort:           nginxOneConsoleTelemetryEndpointPort.value,
-					EndpointTLSSkipVerify:  nginxOneConsoleTLSSkipVerify,
-				},
-				NginxInstanceManagerTelemetryConfig: config.ManagementPlaneTelemetryConfig{
-					EndpointHost: nimTelemetryEndpointHost.value,
-					EndpointPort: nimTelemetryEndpointPort.value,
-				},
-				EndpointPickerDisableTLS:    endpointPickerDisableTLS,
-				EndpointPickerTLSSkipVerify: endpointPickerTLSSkipVerify,
-				WatchNamespaces:             watchNamespaces.values,
-				ServerTLSDomain:             serverTLSDomain.value,
-				ClusterDomain:               clusterDomain.value,
-				PLMStorageConfig:            plmStorageConfig,
-				ExternalLoadBalancer:        externalLoadBalancer,
-			}
+				podConfig, err := createGatewayPodConfig(version, serviceName.value)
+				if err != nil {
+					return fmt.Errorf("error creating gateway pod config: %w", err)
+				}
 
-			if err := controller.StartManager(conf); err != nil {
-				return fmt.Errorf("failed to start control loop: %w", err)
-			}
+				plmStorageConfig := buildPLMStorageConfig(plmParams)
+				conf := config.Config{
+					GatewayCtlrName:  gatewayCtlrName.value,
+					ConfigName:       configName.String(),
+					RuntimeLogger:    config.RuntimeLogger{Logger: logger, Flush: loggerCfg.flush},
+					AtomicLevel:      loggerCfg.atomicLevel,
+					GatewayClassName: gatewayClassName.value,
+					GatewayPodConfig: podConfig,
+					HealthConfig: config.HealthConfig{
+						Enabled: !disableHealth,
+						Port:    healthListenPort.value,
+					},
+					MetricsConfig: config.MetricsConfig{
+						Enabled: !disableMetrics,
+						Port:    metricsListenPort.value,
+						Secure:  metricsSecure,
+					},
+					LeaderElection: config.LeaderElectionConfig{
+						Enabled:       !disableLeaderElection,
+						LockName:      leaderElectionLockName.String(),
+						Identity:      podConfig.Name,
+						LeaseDuration: leaderElectionLeaseDuration,
+						RenewDeadline: leaderElectionRenewDeadline,
+						RetryPeriod:   leaderElectionRetryPeriod,
+					},
+					UsageReportConfig: usageReportConfig,
+					ProductTelemetryConfig: config.ProductTelemetryConfig{
+						ReportPeriod:     period,
+						Enabled:          !disableProductTelemetry,
+						Endpoint:         telemetryEndpoint,
+						EndpointInsecure: telemetryEndpointInsecure,
+					},
+					Plus:                 plus,
+					ExperimentalFeatures: gwExperimentalFeatures,
+					InferenceExtension:   gwInferenceExtension,
+					ImageSource:          imageSource,
+					Flags: config.Flags{
+						Names:  flagKeys,
+						Values: flagValues,
+					},
+					SnippetsFilters:        snippetsFilters,
+					Snippets:               snippets,
+					PayloadProcessor:       payloadProcessor,
+					NginxDockerSecretNames: nginxDockerSecrets.values,
+					AgentTLSSecretName:     agentTLSSecretName.value,
+					NGINXSCCName:           nginxSCCName.value,
+					NginxOneConsoleTelemetryConfig: config.ManagementPlaneTelemetryConfig{
+						DataplaneKeySecretName: nginxOneConsoleDataplaneKeySecretName.value,
+						EndpointHost:           nginxOneConsoleTelemetryEndpointHost.value,
+						EndpointPort:           nginxOneConsoleTelemetryEndpointPort.value,
+						EndpointTLSSkipVerify:  nginxOneConsoleTLSSkipVerify,
+					},
+					NginxInstanceManagerTelemetryConfig: config.ManagementPlaneTelemetryConfig{
+						EndpointHost: nimTelemetryEndpointHost.value,
+						EndpointPort: nimTelemetryEndpointPort.value,
+					},
+					EndpointPickerDisableTLS:    endpointPickerDisableTLS,
+					EndpointPickerTLSSkipVerify: endpointPickerTLSSkipVerify,
+					WatchNamespaces:             watchNamespaces.values,
+					ServerTLSDomain:             serverTLSDomain.value,
+					ClusterDomain:               clusterDomain.value,
+					PLMStorageConfig:            plmStorageConfig,
+					ExternalLoadBalancer:        externalLoadBalancer,
+				}
 
-			return nil
+				if err := controller.StartManager(conf); err != nil {
+					return fmt.Errorf("failed to start control loop: %w", err)
+				}
+
+				return nil
+			})
 		},
 	}
 
@@ -946,47 +985,48 @@ func createInitializeCommand() *cobra.Command {
 		Use:   "initialize",
 		Short: "Write initial configuration files",
 		RunE: func(_ *cobra.Command, _ []string) error {
-			if err := validateCopyArgs(srcFiles, destDirs); err != nil {
-				return err
-			}
+			loggerCfg := newLoggerBootstrap()
+			return runWithPanicFlush(loggerCfg, func() error {
+				if err := validateCopyArgs(srcFiles, destDirs); err != nil {
+					return err
+				}
 
-			podUID, err := getValueFromEnv("POD_UID")
-			if err != nil {
-				return fmt.Errorf("could not get pod UID: %w", err)
-			}
+				podUID, err := getValueFromEnv("POD_UID")
+				if err != nil {
+					return fmt.Errorf("could not get pod UID: %w", err)
+				}
 
-			clusterUID, err := getValueFromEnv("CLUSTER_UID")
-			if err != nil {
-				return fmt.Errorf("could not get cluster UID: %w", err)
-			}
+				clusterUID, err := getValueFromEnv("CLUSTER_UID")
+				if err != nil {
+					return fmt.Errorf("could not get cluster UID: %w", err)
+				}
 
-			logger := ctlrZap.New().WithName("initializeCommand")
-			klog.SetLogger(logger)
-			logger.Info(
-				"Starting init container",
-				"source filenames to copy", srcFiles,
-				"destination directories", destDirs,
-				"nginx-plus",
-				plus,
-			)
-			log.SetLogger(logger)
+				logger := loggerCfg.logger
+				logger.Info(
+					"Starting init container",
+					"source filenames to copy", srcFiles,
+					"destination directories", destDirs,
+					"nginx-plus",
+					plus,
+				)
 
-			files := make([]fileToCopy, 0, len(srcFiles))
-			for i, src := range srcFiles {
-				files = append(files, fileToCopy{
-					destDirName: destDirs[i],
-					srcFileName: src,
+				files := make([]fileToCopy, 0, len(srcFiles))
+				for i, src := range srcFiles {
+					files = append(files, fileToCopy{
+						destDirName: destDirs[i],
+						srcFileName: src,
+					})
+				}
+
+				return initialize(initializeConfig{
+					fileManager:   file.NewStdLibOSFileManager(),
+					fileGenerator: ngxConfig.NewGeneratorImpl(plus, nil),
+					logger:        logger,
+					podUID:        podUID,
+					clusterUID:    clusterUID,
+					plus:          plus,
+					copy:          files,
 				})
-			}
-
-			return initialize(initializeConfig{
-				fileManager:   file.NewStdLibOSFileManager(),
-				fileGenerator: ngxConfig.NewGeneratorImpl(plus, nil),
-				logger:        logger,
-				podUID:        podUID,
-				clusterUID:    clusterUID,
-				plus:          plus,
-				copy:          files,
 			})
 		},
 	}
@@ -1055,12 +1095,15 @@ func createEndpointPickerCommand() *cobra.Command {
 		Use:   "endpoint-picker",
 		Short: "Shim server for communication between NGINX and the Gateway API Inference Extension Endpoint Picker",
 		RunE: func(_ *cobra.Command, _ []string) error {
-			logger := ctlrZap.New().WithName("endpoint-picker-shim")
-			handler := createEndpointPickerHandler(
-				realExtProcClientFactory(endpointPickerDisableTLS, endpointPickerTLSSkipVerify),
-				logger,
-			)
-			return endpointPickerServer(handler)
+			loggerCfg := newLoggerBootstrap()
+			return runWithPanicFlush(loggerCfg, func() error {
+				logger := loggerCfg.logger.WithName("endpoint-picker-shim")
+				handler := createEndpointPickerHandler(
+					realExtProcClientFactory(endpointPickerDisableTLS, endpointPickerTLSSkipVerify),
+					logger,
+				)
+				return endpointPickerServer(handler)
+			})
 		},
 	}
 

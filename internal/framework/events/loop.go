@@ -5,6 +5,9 @@ import (
 	"fmt"
 
 	"github.com/go-logr/logr"
+
+	controllerconfig "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/config"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
 
 // EventLoop is the main event loop of the Gateway. It handles events coming through the event channel.
@@ -23,10 +26,10 @@ import (
 // So when the EventLoop have 100 saved events, it is better to process them at once rather than one by one.
 // https://github.com/nginx/nginx-gateway-fabric/issues/551
 type EventLoop struct {
-	handler  EventHandler
-	preparer FirstEventBatchPreparer
-	eventCh  <-chan any
-	logger   logr.Logger
+	handler       EventHandler
+	preparer      FirstEventBatchPreparer
+	eventCh       <-chan any
+	runtimeLogger controllerconfig.RuntimeLogger
 
 	// The EventLoop uses double buffering to handle event batch processing.
 	// The goroutine that handles the batch will always read from the currentBatch slice.
@@ -42,17 +45,17 @@ type EventLoop struct {
 // NewEventLoop creates a new EventLoop.
 func NewEventLoop(
 	eventCh <-chan any,
-	logger logr.Logger,
+	runtimeLogger controllerconfig.RuntimeLogger,
 	handler EventHandler,
 	preparer FirstEventBatchPreparer,
 ) *EventLoop {
 	return &EventLoop{
-		eventCh:      eventCh,
-		logger:       logger,
-		handler:      handler,
-		preparer:     preparer,
-		currentBatch: make(EventBatch, 0),
-		nextBatch:    make(EventBatch, 0),
+		eventCh:       eventCh,
+		runtimeLogger: runtimeLogger,
+		handler:       handler,
+		preparer:      preparer,
+		currentBatch:  make(EventBatch, 0),
+		nextBatch:     make(EventBatch, 0),
 	}
 }
 
@@ -65,9 +68,14 @@ func (el *EventLoop) Start(ctx context.Context) error {
 	handlingDone := make(chan struct{})
 
 	handleBatch := func() {
-		go func(batch EventBatch) {
-			el.currentBatchID++
-			batchLogger := el.logger.WithName("eventHandler").WithValues("batchID", el.currentBatchID)
+		el.currentBatchID++
+		batchID := el.currentBatchID
+		batchLogger := el.runtimeLogger.Logger.WithName("eventHandler").WithValues("batchID", batchID)
+
+		go func(batch EventBatch, batchLogger logr.Logger) {
+			defer func() {
+				helpers.RecoverAndFlush(batchLogger, el.runtimeLogger.Flush, "panic in event batch handler", recover(), true)
+			}()
 
 			batchLogger.V(1).Info("Handling events from the batch", "total", len(batch))
 
@@ -75,7 +83,7 @@ func (el *EventLoop) Start(ctx context.Context) error {
 
 			batchLogger.V(1).Info("Finished handling the batch")
 			handlingDone <- struct{}{}
-		}(el.currentBatch)
+		}(el.currentBatch, batchLogger)
 	}
 
 	swapAndHandleBatch := func() {
@@ -120,7 +128,7 @@ func (el *EventLoop) Start(ctx context.Context) error {
 			// Add the event to the current batch.
 			el.nextBatch = append(el.nextBatch, e)
 
-			el.logger.V(1).Info(
+			el.runtimeLogger.Logger.V(1).Info(
 				"added an event to the next batch",
 				"type", fmt.Sprintf("%T", e),
 				"total", len(el.nextBatch),

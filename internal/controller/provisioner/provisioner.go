@@ -66,7 +66,7 @@ type Config struct {
 	StatusQueue      *status.Queue
 	GatewayPodConfig *config.GatewayPodConfig
 	AgentLabels      map[string]string
-	Logger           logr.Logger
+	RuntimeLogger    config.RuntimeLogger
 	GCName           string
 	NGINXSCCName     string
 	// GatewayCtlrName is the controller name string (from main config)
@@ -100,6 +100,10 @@ type NginxProvisioner struct {
 }
 
 var apiChecker openshift.APIChecker = &openshift.APICheckerImpl{}
+
+func (c Config) logger() logr.Logger {
+	return c.RuntimeLogger.Logger
+}
 
 var labelCollectorFactory func(mgr manager.Manager, cfg Config) AgentLabelCollector = defaultLabelCollectorFactory
 
@@ -157,13 +161,13 @@ func NewNginxProvisioner(
 
 	isOpenshift, err := apiChecker.IsOpenshift(mgr.GetConfig())
 	if err != nil {
-		cfg.Logger.Error(err, "could not determine if running in openshift, will not create Role/RoleBinding")
+		cfg.logger().Error(err, "could not determine if running in openshift, will not create Role/RoleBinding")
 	}
 
 	agentLabelCollector := labelCollectorFactory(mgr, cfg)
 	agentLabels, err := agentLabelCollector.Collect(ctx)
 	if err != nil {
-		cfg.Logger.Error(err, "failed to collect agent labels")
+		cfg.logger().Error(err, "failed to collect agent labels")
 	}
 	cfg.AgentLabels = agentLabels
 	if cfg.AgentLabels == nil {
@@ -175,7 +179,7 @@ func NewNginxProvisioner(
 	serviceMonitorInstalled := false
 	discoveryClient, err := discovery.NewDiscoveryClientForConfig(mgr.GetConfig())
 	if err != nil {
-		cfg.Logger.Error(err, "failed to create discovery client")
+		cfg.logger().Error(err, "failed to create discovery client")
 	} else {
 		serviceMonitorInstalled = isServiceMonitorCRDInstalled(discoveryClient)
 	}
@@ -200,7 +204,7 @@ func NewNginxProvisioner(
 		ctx,
 		mgr,
 		handler,
-		cfg.Logger,
+		cfg.RuntimeLogger,
 		selector,
 		cfg.GatewayPodConfig.Namespace,
 		cfg.NginxDockerSecretNames,
@@ -232,7 +236,7 @@ func (p *NginxProvisioner) Enable(ctx context.Context) {
 			continue
 		}
 		if err := p.deprovisionNginxForInvalidGateway(ctx, gatewayNSName); err != nil {
-			p.cfg.Logger.Error(err, "error deprovisioning nginx resources on startup")
+			p.cfg.logger().Error(err, "error deprovisioning nginx resources on startup")
 		}
 	}
 	p.lock.RUnlock()
@@ -282,7 +286,7 @@ func (p *NginxProvisioner) patchServiceStatus(ctx context.Context, namespace, na
 	instance := svc.Labels[controller.AppInstanceLabel]
 	expectedManagedBy := controller.CreateNginxResourceName(p.cfg.GatewayPodConfig.InstanceName, p.cfg.GCName)
 	if instance != p.cfg.GatewayPodConfig.InstanceName || managedBy != expectedManagedBy {
-		p.cfg.Logger.V(1).Info(
+		p.cfg.logger().V(1).Info(
 			"skipping status patch for Service that is not managed by NGF",
 			"service", fmt.Sprintf("%s/%s", namespace, name),
 		)
@@ -312,7 +316,7 @@ func (p *NginxProvisioner) patchServiceStatus(ctx context.Context, namespace, na
 	backoff := wait.Backoff{Steps: 5, Duration: 100 * time.Millisecond, Factor: 2.0, Jitter: 0.1}
 	err := wait.ExponentialBackoff(backoff, func() (bool, error) {
 		if err := p.k8sClient.Status().Patch(ctx, svc, client.MergeFrom(original)); err != nil {
-			p.cfg.Logger.V(1).Info(
+			p.cfg.logger().V(1).Info(
 				"Encountered error patching service status",
 				"error", err,
 				"namespace", svc.Namespace,
@@ -448,7 +452,7 @@ func (p *NginxProvisioner) provisionNginx(
 		objNames = append(objNames, fmt.Sprintf("%s (%s)", obj.GetName(), reflect.TypeOf(obj).Elem().Name()))
 	}
 
-	p.cfg.Logger.Info(
+	p.cfg.logger().Info(
 		"Creating/Updating nginx resources",
 		"namespace", gateway.GetNamespace(),
 		"nginx resource name", resourceName,
@@ -479,7 +483,7 @@ func (p *NginxProvisioner) provisionNginx(
 		}
 
 		if res != controllerutil.OperationResultCreated && res != controllerutil.OperationResultUpdated {
-			p.cfg.Logger.V(1).Info(
+			p.cfg.logger().V(1).Info(
 				"nginx resource already up to date with this result: "+string(res),
 				"namespace", gateway.GetNamespace(),
 				"name", fmt.Sprintf("%s (%s)", resourceName, reflect.TypeOf(minimalObj).Elem().Name()),
@@ -488,7 +492,7 @@ func (p *NginxProvisioner) provisionNginx(
 		}
 
 		result := cases.Title(language.English, cases.Compact).String(string(res))
-		p.cfg.Logger.V(1).Info(
+		p.cfg.logger().V(1).Info(
 			fmt.Sprintf("%s nginx %s", result, reflect.TypeOf(minimalObj).Elem().Name()),
 			"namespace", gateway.GetNamespace(),
 			"name", resourceName,
@@ -559,14 +563,14 @@ func (p *NginxProvisioner) createOrUpdateNginxResource(
 
 			if upsertErr != nil {
 				if apierrors.IsInvalid(upsertErr) { // log this error at the error level
-					p.cfg.Logger.Error(
+					p.cfg.logger().Error(
 						upsertErr,
 						"Retrying CreateOrUpdate for nginx resource after error",
 						"namespace", gateway.GetNamespace(),
 						"name", fmt.Sprintf("%s (%s)", resourceName, reflect.TypeOf(obj).Elem().Name()),
 					)
 				} else {
-					p.cfg.Logger.V(1).Info(
+					p.cfg.logger().V(1).Info(
 						"Retrying CreateOrUpdate for nginx resource after error",
 						"namespace", gateway.GetNamespace(),
 						"name", fmt.Sprintf("%s (%s)", resourceName, reflect.TypeOf(obj).Elem().Name()),
@@ -578,7 +582,7 @@ func (p *NginxProvisioner) createOrUpdateNginxResource(
 			return true, nil
 		},
 	); err != nil {
-		p.cfg.Logger.Error(
+		p.cfg.logger().Error(
 			err,
 			"Failed to CreateOrUpdate nginx resource after retries",
 			"namespace", gateway.GetNamespace(),
@@ -622,7 +626,7 @@ func (p *NginxProvisioner) patchLoadBalancerServiceStatus(
 
 	if svc.Spec.LoadBalancerClass != nil && *svc.Spec.LoadBalancerClass == p.cfg.GatewayCtlrName && len(ips) > 0 {
 		if err := p.patchServiceStatus(ctx, svc.GetNamespace(), svc.GetName(), ips); err != nil {
-			p.cfg.Logger.Error(
+			p.cfg.logger().Error(
 				err,
 				"failed to patch Service status with gateway external IPs",
 				"service", fmt.Sprintf("%s/%s", svc.GetNamespace(), svc.GetName()),
@@ -665,7 +669,7 @@ func (p *NginxProvisioner) restartNginxAfterConfigUpdate(
 		return nil
 	}
 
-	p.cfg.Logger.V(1).Info(
+	p.cfg.logger().V(1).Info(
 		"Restarting nginx after agent configmap update",
 		"name", object.GetName(),
 		"namespace", object.GetNamespace(),
@@ -703,10 +707,10 @@ func (p *NginxProvisioner) reprovisionNginx(
 	}
 	objects, err := p.buildNginxResourceObjects(resourceName, gateway, nProxyCfg, allListeners, elb)
 	if err != nil {
-		p.cfg.Logger.Error(err, "error provisioning some nginx resources")
+		p.cfg.logger().Error(err, "error provisioning some nginx resources")
 	}
 
-	p.cfg.Logger.Info(
+	p.cfg.logger().Info(
 		"Re-creating nginx resources",
 		"namespace", gateway.GetNamespace(),
 		"name", resourceName,
@@ -743,7 +747,7 @@ func (p *NginxProvisioner) deprovisionNginxForInvalidGateway(
 	}
 
 	if p.isLeader() {
-		p.cfg.Logger.Info(
+		p.cfg.logger().Info(
 			"Removing nginx resources for Gateway",
 			"name", gatewayNSName.Name,
 			"namespace", gatewayNSName.Namespace,
@@ -856,7 +860,7 @@ func (p *NginxProvisioner) RegisterGateway(
 			extractExternalLoadBalancer(gateway),
 		)
 		if err != nil {
-			p.cfg.Logger.Error(err, "error building some nginx resources")
+			p.cfg.logger().Error(err, "error building some nginx resources")
 		}
 
 		// If NGINX deployment type switched between Deployment and DaemonSet, clean up the old one.
@@ -881,29 +885,29 @@ func (p *NginxProvisioner) RegisterGateway(
 func (p *NginxProvisioner) handleObjectDeletion(ctx context.Context, nginxResources *NginxResources) {
 	if needToDeleteDaemonSet(nginxResources) {
 		if err := p.deleteObject(ctx, &appsv1.DaemonSet{ObjectMeta: nginxResources.DaemonSet}); err != nil {
-			p.cfg.Logger.Error(err, "error deleting nginx resource")
+			p.cfg.logger().Error(err, "error deleting nginx resource")
 		}
 	} else if needToDeleteDeployment(nginxResources) {
 		if err := p.deleteObject(ctx, &appsv1.Deployment{ObjectMeta: nginxResources.Deployment}); err != nil {
-			p.cfg.Logger.Error(err, "error deleting nginx resource")
+			p.cfg.logger().Error(err, "error deleting nginx resource")
 		}
 	}
 
 	if needToDeleteHPA(nginxResources) {
 		if err := p.deleteObject(ctx, &autoscalingv2.HorizontalPodAutoscaler{ObjectMeta: nginxResources.HPA}); err != nil {
-			p.cfg.Logger.Error(err, "error deleting nginx resource")
+			p.cfg.logger().Error(err, "error deleting nginx resource")
 		}
 	}
 
 	if needToDeletePDB(nginxResources) {
 		if err := p.deleteObject(ctx, &policyv1.PodDisruptionBudget{ObjectMeta: nginxResources.PDB}); err != nil {
-			p.cfg.Logger.Error(err, "error deleting nginx resource")
+			p.cfg.logger().Error(err, "error deleting nginx resource")
 		}
 	}
 
 	if needToDeleteServiceMonitor(nginxResources) {
 		if err := p.deleteObject(ctx, &monitoringv1.ServiceMonitor{ObjectMeta: nginxResources.ServiceMonitor}); err != nil {
-			p.cfg.Logger.Error(err, "error deleting nginx resource")
+			p.cfg.logger().Error(err, "error deleting nginx resource")
 		}
 	}
 
@@ -913,7 +917,7 @@ func (p *NginxProvisioner) handleObjectDeletion(ctx context.Context, nginxResour
 		il.SetName(nginxResources.ExternalLoadBalancer.Name)
 		il.SetNamespace(nginxResources.ExternalLoadBalancer.Namespace)
 		if err := p.deleteObject(ctx, il); err != nil {
-			p.cfg.Logger.Error(err, "error deleting nginx resource")
+			p.cfg.logger().Error(err, "error deleting nginx resource")
 		}
 	}
 }
@@ -1001,7 +1005,7 @@ func (p *NginxProvisioner) deleteServiceForLBClassChange(
 		return nil
 	}
 
-	p.cfg.Logger.Info(
+	p.cfg.logger().Info(
 		"Deleting Service to update immutable loadBalancerClass field",
 		"namespace", svcToDelete.Namespace,
 		"name", svcToDelete.Name,

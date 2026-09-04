@@ -202,7 +202,7 @@ func defaultNginxProvisioner(
 				InstanceName: "test-instance",
 				Namespace:    ngfNamespace,
 			},
-			Logger:        logr.Discard(),
+			RuntimeLogger: config.RuntimeLogger{Logger: logr.Discard()},
 			EventRecorder: &k8sEvents.FakeRecorder{},
 			GCName:        "nginx",
 			Plus:          true,
@@ -312,7 +312,7 @@ func TestNewNginxProvisioner(t *testing.T) {
 				GatewayPodConfig: &config.GatewayPodConfig{
 					InstanceName: "test-instance",
 				},
-				Logger: logr.Discard(),
+				RuntimeLogger: config.RuntimeLogger{Logger: logr.Discard()},
 				NginxOneConsoleTelemetryConfig: config.ManagementPlaneTelemetryConfig{
 					DataplaneKeySecretName: dataplaneKeySecretName,
 					EndpointHost:           "agent.connect.nginx.com",
@@ -944,7 +944,7 @@ func TestProvisionNginxDeletesServiceOnLBClassChange(t *testing.T) {
 		leader: true,
 		store:  st,
 		cfg: Config{
-			Logger:           logr.Discard(),
+			RuntimeLogger:    config.RuntimeLogger{Logger: logr.Discard()},
 			EventRecorder:    &k8sEvents.FakeRecorder{},
 			GatewayPodConfig: &config.GatewayPodConfig{},
 		},
@@ -1007,7 +1007,7 @@ func TestDeleteServiceForLBClassChangeRestoresStoreOnFailure(t *testing.T) {
 		leader: true,
 		store:  st,
 		cfg: Config{
-			Logger:           logr.Discard(),
+			RuntimeLogger:    config.RuntimeLogger{Logger: logr.Discard()},
 			EventRecorder:    &k8sEvents.FakeRecorder{},
 			GatewayPodConfig: &config.GatewayPodConfig{},
 		},
@@ -1061,7 +1061,7 @@ func TestDeleteServiceForLBClassChangeFallsBackToLiveGet(t *testing.T) {
 		leader: true,
 		store:  st,
 		cfg: Config{
-			Logger:           logr.Discard(),
+			RuntimeLogger:    config.RuntimeLogger{Logger: logr.Discard()},
 			EventRecorder:    &k8sEvents.FakeRecorder{},
 			GatewayPodConfig: &config.GatewayPodConfig{},
 		},
@@ -1717,7 +1717,7 @@ func TestProvisionNginxPatchesServiceStatus(t *testing.T) {
 				leader: true,
 				store:  newStore(nil, "", "", "", "", ""),
 				cfg: Config{
-					Logger:        logr.Discard(),
+					RuntimeLogger: config.RuntimeLogger{Logger: logr.Discard()},
 					EventRecorder: &k8sEvents.FakeRecorder{},
 					GatewayPodConfig: &config.GatewayPodConfig{
 						InstanceName: instanceName,
@@ -1786,8 +1786,8 @@ func TestPatchServiceStatus(t *testing.T) {
 					InstanceName: instanceName,
 					Namespace:    ngfNamespace,
 				},
-				Logger: logr.Discard(),
-				GCName: gcName,
+				RuntimeLogger: config.RuntimeLogger{Logger: logr.Discard()},
+				GCName:        gcName,
 			},
 			k8sClient: k8sClient,
 		}
