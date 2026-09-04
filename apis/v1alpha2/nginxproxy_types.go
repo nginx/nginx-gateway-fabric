@@ -442,8 +442,8 @@ type NginxLogging struct {
 	// +kubebuilder:default=info
 	AgentLevel *AgentLogLevel `json:"agentLevel,omitempty"`
 
-	// AccessLog defines the access log settings, including format itself and disabling option.
-	// For now only path /dev/stdout can be used.
+	// File or syslog destinations can be configured.
+	// If not specified, the default path is /dev/stdout.
 	//
 	// +optional
 	AccessLog *NginxAccessLog `json:"accessLog,omitempty"`
@@ -524,7 +524,7 @@ type NginxAccessLog struct {
 
 	// Format specifies the custom log format string.
 	// If not specified, NGINX default 'combined' format is used.
-	// For now only path /dev/stdout can be used.
+	// Default path /dev/stdout can be used or file/syslog destinations can be configured.
 	// Single quotes and line breaks are not allowed because the format is
 	// rendered inside a single-quoted NGINX log_format directive.
 	// See https://nginx.org/en/docs/http/ngx_http_log_module.html#log_format
@@ -541,6 +541,12 @@ type NginxAccessLog struct {
 	//
 	// +optional
 	Escape *NginxAccessLogEscapeType `json:"escape,omitempty"`
+
+	// Destination specifies where access logs are sent to.
+	// If file/syslog not specified, access logs are by default sent to /dev/stdout.
+	//
+	// +optional
+	Destination *NginxAccessLogDestination `json:"destination,omitempty"`
 }
 
 // NginxAccessLogEscapeType defines the escape setting for variables in access log format.
@@ -560,6 +566,39 @@ const (
 
 	// NginxAccessLogEscapeNone disables escaping of characters.
 	NginxAccessLogEscapeNone NginxAccessLogEscapeType = "none"
+)
+
+// NginxAccessLogDestination defines the destination for access logs.
+//
+// +kubebuilder:validation:XValidation:rule="has(self.file) == (has(self.type) && self.type == 'file')"
+// +kubebuilder:validation:XValidation:rule="has(self.syslog) == (has(self.type) && self.type == 'syslog')"
+type NginxAccessLogDestination struct {
+	// File specifies the file destination for access logs.
+	// Only valid when type is set to "file".
+	//
+	// +optional
+	File *string `json:"file,omitempty"`
+
+	// Syslog specifies the syslog destination for access logs.
+	// Only valid when type is set to "syslog".
+	//
+	// +optional
+	Syslog *string `json:"syslog,omitempty"`
+
+	// Type specifies the type of destination for access logs.
+	Type NginxAccessLogDestinationType `json:"type"`
+}
+
+// NginxAccessLogDestinationType defines the supported destination types for access logs.
+//
+// +kubebuilder:validation:Enum=file;syslog
+type NginxAccessLogDestinationType string
+
+const (
+	// NginxAccessLogDestinationTypeFile writes access logs to a specified file path.
+	NginxAccessLogDestinationTypeFile NginxAccessLogDestinationType = "file"
+	// NginxAccessLogDestinationTypeSyslog writes access logs to a syslog server.
+	NginxAccessLogDestinationTypeSyslog NginxAccessLogDestinationType = "syslog"
 )
 
 // NginxPlus specifies NGINX Plus additional settings. These will only be applied if NGINX Plus is being used.

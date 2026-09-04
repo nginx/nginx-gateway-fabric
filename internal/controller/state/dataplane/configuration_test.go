@@ -8204,6 +8204,7 @@ func TestBuildLogging(t *testing.T) {
 				AccessLog: &AccessLog{
 					Format: JSONAccessLogFormat,
 					Escape: "json",
+					Path:   DefaultAccessLogPath,
 				},
 			},
 		},
@@ -8226,6 +8227,7 @@ func TestBuildLogging(t *testing.T) {
 				ErrorLogFormat: "json",
 				AccessLog: &AccessLog{
 					Format: logFormat,
+					Path:   DefaultAccessLogPath,
 				},
 			},
 		},
@@ -8292,6 +8294,7 @@ func TestBuildLogging(t *testing.T) {
 				ErrorLevel: "info",
 				AccessLog: &AccessLog{
 					Format: logFormat,
+					Path:   DefaultAccessLogPath,
 				},
 			},
 		},
@@ -8314,6 +8317,7 @@ func TestBuildLogging(t *testing.T) {
 				AccessLog: &AccessLog{
 					Disable: false,
 					Format:  logFormat,
+					Path:    DefaultAccessLogPath,
 				},
 			},
 		},
@@ -8391,6 +8395,7 @@ func TestBuildLogging(t *testing.T) {
 				AccessLog: &AccessLog{
 					Format: logFormat,
 					Escape: "json",
+					Path:   DefaultAccessLogPath,
 				},
 			},
 		},
@@ -8412,6 +8417,7 @@ func TestBuildLogging(t *testing.T) {
 				AccessLog: &AccessLog{
 					Format: logFormat,
 					Escape: "default",
+					Path:   DefaultAccessLogPath,
 				},
 			},
 		},
@@ -8433,6 +8439,7 @@ func TestBuildLogging(t *testing.T) {
 				AccessLog: &AccessLog{
 					Format: logFormat,
 					Escape: "none",
+					Path:   DefaultAccessLogPath,
 				},
 			},
 		},
@@ -12336,6 +12343,176 @@ func TestBuildUpstreamsUseClusterIPPrecedence(t *testing.T) {
 				g.Expect(fakeResolver.ResolveCallCount()).To(Equal(1))
 				g.Expect(upstreams[0].Endpoints).To(Equal(podEndpoints))
 			}
+		})
+	}
+}
+
+func TestBuildAccessLogDestination(t *testing.T) {
+	t.Parallel()
+
+	logFormat := `'$remote_addr - $remote_user [$time_local] '
+							'"$request" $status $body_bytes_sent '
+							'"$http_referer" "$http_user_agent" '`
+
+	server := "syslog.example.com:514"
+	path := "/var/log/nginx/access.log"
+
+	tests := []struct {
+		name           string
+		src            *ngfAPIv1alpha2.NginxLogging
+		expectedPath   string
+		expectedFormat string
+	}{
+		{
+			name: "syslog destination set correctly",
+			src: &ngfAPIv1alpha2.NginxLogging{
+				AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
+					Format: helpers.GetPointer(logFormat),
+					Destination: &ngfAPIv1alpha2.NginxAccessLogDestination{
+						Type:   ngfAPIv1alpha2.NginxAccessLogDestinationTypeSyslog,
+						Syslog: &server,
+					},
+				},
+			},
+			expectedPath:   "syslog:server=" + server,
+			expectedFormat: logFormat,
+		},
+		{
+			name: "file destination sets file path",
+			src: &ngfAPIv1alpha2.NginxLogging{
+				AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
+					Format: helpers.GetPointer(logFormat),
+					Destination: &ngfAPIv1alpha2.NginxAccessLogDestination{
+						Type: ngfAPIv1alpha2.NginxAccessLogDestinationTypeFile,
+						File: &path,
+					},
+				},
+			},
+			expectedPath:   path,
+			expectedFormat: logFormat,
+		},
+		{
+			name: "unset destination falls back to default path",
+			src: &ngfAPIv1alpha2.NginxLogging{
+				AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
+					Format: helpers.GetPointer(logFormat),
+				},
+			},
+			expectedPath:   DefaultAccessLogPath,
+			expectedFormat: logFormat,
+		},
+		{
+			name: "nil access log destination falls back to default access log path",
+			src: &ngfAPIv1alpha2.NginxLogging{
+				AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
+					Format:      helpers.GetPointer(logFormat),
+					Destination: nil,
+				},
+			},
+			expectedPath:   DefaultAccessLogPath,
+			expectedFormat: logFormat,
+		},
+		{
+			name: "destination set without format uses default format",
+			src: &ngfAPIv1alpha2.NginxLogging{
+				AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
+					Destination: &ngfAPIv1alpha2.NginxAccessLogDestination{
+						Type: ngfAPIv1alpha2.NginxAccessLogDestinationTypeFile,
+						File: &path,
+					},
+				},
+			},
+			expectedPath:   path,
+			expectedFormat: "",
+		},
+		{
+			name: "json access log template correctly applies destination",
+			src: &ngfAPIv1alpha2.NginxLogging{
+				ErrorLogFormat: helpers.GetPointer(ngfAPIv1alpha2.NginxErrorLogFormatJSON),
+				AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
+					Destination: &ngfAPIv1alpha2.NginxAccessLogDestination{
+						Type:   ngfAPIv1alpha2.NginxAccessLogDestinationTypeSyslog,
+						Syslog: &server,
+					},
+				},
+			},
+			expectedPath:   "syslog:server=" + server,
+			expectedFormat: JSONAccessLogFormat,
+		},
+		{
+			name: "nil file path string falls back to default path",
+			src: &ngfAPIv1alpha2.NginxLogging{
+				AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
+					Destination: &ngfAPIv1alpha2.NginxAccessLogDestination{
+						Type: ngfAPIv1alpha2.NginxAccessLogDestinationTypeFile,
+						File: nil,
+					},
+				},
+			},
+			expectedPath: DefaultAccessLogPath,
+		},
+		{
+			name: "empty file path string falls back to default path",
+			src: &ngfAPIv1alpha2.NginxLogging{
+				AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
+					Destination: &ngfAPIv1alpha2.NginxAccessLogDestination{
+						Type: ngfAPIv1alpha2.NginxAccessLogDestinationTypeFile,
+						File: helpers.GetPointer(""),
+					},
+				},
+			},
+			expectedPath: DefaultAccessLogPath,
+		},
+		{
+			name: "nil syslog string falls back to default path",
+			src: &ngfAPIv1alpha2.NginxLogging{
+				AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
+					Destination: &ngfAPIv1alpha2.NginxAccessLogDestination{
+						Type:   ngfAPIv1alpha2.NginxAccessLogDestinationTypeSyslog,
+						Syslog: nil,
+					},
+				},
+			},
+			expectedPath:   DefaultAccessLogPath,
+			expectedFormat: "",
+		},
+		{
+			name: "empty syslog string falls back to default path",
+			src: &ngfAPIv1alpha2.NginxLogging{
+				AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
+					Destination: &ngfAPIv1alpha2.NginxAccessLogDestination{
+						Type:   ngfAPIv1alpha2.NginxAccessLogDestinationTypeSyslog,
+						Syslog: helpers.GetPointer(""),
+					},
+				},
+			},
+			expectedPath:   DefaultAccessLogPath,
+			expectedFormat: "",
+		},
+		{
+			name: "destination with empty type falls back to default path",
+			src: &ngfAPIv1alpha2.NginxLogging{
+				AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
+					Destination: &ngfAPIv1alpha2.NginxAccessLogDestination{
+						Type: "",
+					},
+				},
+			},
+			expectedPath:   DefaultAccessLogPath,
+			expectedFormat: "",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			g := NewWithT(t)
+			got := buildAccessLog(test.src)
+
+			g.Expect(got).ToNot(BeNil())
+			g.Expect(got.Path).To(Equal(test.expectedPath))
+			g.Expect(got.Format).To(Equal(test.expectedFormat))
 		})
 	}
 }
