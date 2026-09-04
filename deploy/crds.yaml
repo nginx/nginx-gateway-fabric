@@ -14102,6 +14102,242 @@ spec:
                   This field is required when `LoadBalancingMethod` is set to `hash` or `hash consistent`.
                 pattern: ^\$[a-z_]+$
                 type: string
+              healthCheck:
+                description: HealthCheck defines the health check settings for the
+                  upstream.
+                properties:
+                  active:
+                    description: |-
+                      Active defines the active health check settings for the upstream. Active health checks are only
+                      supported by NGINX Plus. Setting this field while running NGINX OSS will cause the Policy to be
+                      rejected.
+                    properties:
+                      fails:
+                        description: |-
+                          Fails sets the number of consecutive failed health checks of a particular server after which this
+                          server will be considered unhealthy. Unlike PassiveHealthCheck's MaxFails, a value of 0 has no meaning
+                          for active health checks (NGINX does not define a "disable" behavior for this parameter); active health
+                          checking is disabled entirely by omitting ActiveHealthCheck, so a minimum of 1 is enforced here.
+                        format: int32
+                        minimum: 1
+                        type: integer
+                      grpc:
+                        description: |-
+                          GRPC configures the health check to use the gRPC health checking protocol. Mutually exclusive with
+                          Path and Match. Only valid for gRPC upstreams.
+                        properties:
+                          service:
+                            description: |-
+                              Service is the gRPC service to be monitored on the upstream server, corresponding to the "service"
+                              field of the gRPC Health Checking Protocol's HealthCheckRequest. If not set, the health of the overall
+                              server is monitored using the gRPC Health Checking Protocol.
+                            maxLength: 253
+                            minLength: 1
+                            pattern: ^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*$
+                            type: string
+                          status:
+                            description: |-
+                              Status is the gRPC status code expected in the response to the Check method, treated as healthy.
+                              Configure this field only if the gRPC service does not implement the gRPC Health Checking Protocol.
+                              Accepts either the numeric code (e.g. "12") or its canonical name (e.g. "UNIMPLEMENTED"), matching the
+                              two forms accepted by NGINX's grpc_status parameter.
+                              Directive: https://nginx.org/en/docs/http/ngx_http_upstream_hc_module.html#health_check
+                            enum:
+                            - "1"
+                            - "2"
+                            - "3"
+                            - "4"
+                            - "5"
+                            - "6"
+                            - "7"
+                            - "8"
+                            - "9"
+                            - "10"
+                            - "11"
+                            - "12"
+                            - "13"
+                            - "14"
+                            - "15"
+                            - "16"
+                            - CANCELLED
+                            - UNKNOWN
+                            - INVALID_ARGUMENT
+                            - DEADLINE_EXCEEDED
+                            - NOT_FOUND
+                            - ALREADY_EXISTS
+                            - PERMISSION_DENIED
+                            - RESOURCE_EXHAUSTED
+                            - FAILED_PRECONDITION
+                            - ABORTED
+                            - OUT_OF_RANGE
+                            - UNIMPLEMENTED
+                            - INTERNAL
+                            - UNAVAILABLE
+                            - DATA_LOSS
+                            - UNAUTHENTICATED
+                            type: string
+                        type: object
+                      headers:
+                        description: |-
+                          Headers are the request headers to send with health check requests. NGINX Plus always sets the Host,
+                          User-Agent, and Connection headers for health check requests, and these cannot be overridden.
+                        items:
+                          description: HTTPHeader represents an HTTP Header name and
+                            value as defined by RFC 7230.
+                          properties:
+                            name:
+                              description: |-
+                                Name is the name of the HTTP Header to be matched. Name matching MUST be
+                                case-insensitive. (See https://tools.ietf.org/html/rfc7230#section-3.2).
+
+                                If multiple entries specify equivalent header names, the first entry with
+                                an equivalent name MUST be considered for a match. Subsequent entries
+                                with an equivalent header name MUST be ignored. Due to the
+                                case-insensitivity of header names, "foo" and "Foo" are considered
+                                equivalent.
+                              maxLength: 256
+                              minLength: 1
+                              pattern: ^[A-Za-z0-9!#$%&'*+\-.^_\x60|~]+$
+                              type: string
+                            value:
+                              description: |-
+                                Value is the value of HTTP Header to be matched.
+                                <gateway:experimental:description>
+                                Must consist of printable US-ASCII characters, optionally separated
+                                by single tabs or spaces. See: https://tools.ietf.org/html/rfc7230#section-3.2
+                                </gateway:experimental:description>
+
+                                <gateway:experimental:validation:Pattern=`^[!-~]+([\t ]?[!-~]+)*$`>
+                              maxLength: 4096
+                              minLength: 1
+                              type: string
+                          required:
+                          - name
+                          - value
+                          type: object
+                        maxItems: 16
+                        type: array
+                      interval:
+                        description: Interval sets the interval between two consecutive
+                          health checks.
+                        pattern: ^[0-9]{1,4}(ms|s|m|h)?$
+                        type: string
+                      jitter:
+                        description: Jitter sets the time within which each health
+                          check will be randomly delayed.
+                        pattern: ^[0-9]{1,4}(ms|s|m|h)?$
+                        type: string
+                      keepAliveTime:
+                        description: |-
+                          KeepAliveTime enables keepalive connections for health checks and specifies the time during which
+                          requests can be processed through one keepalive connection.
+                        pattern: ^[0-9]{1,4}(ms|s|m|h)?$
+                        type: string
+                      mandatory:
+                        description: |-
+                          Mandatory requires every newly added server to pass the configured health check(s) before NGINX Plus
+                          sends traffic to it.
+                        type: boolean
+                      match:
+                        description: |-
+                          Match defines the response criteria that must be satisfied for a health check to pass. If not set, the
+                          response must have a status code of 2xx or 3xx (NGINX's default). Mutually exclusive with GRPC.
+                          Directive: https://nginx.org/en/docs/http/ngx_http_upstream_hc_module.html#match
+                        properties:
+                          status:
+                            description: |-
+                              Status defines the expected response status code(s) for a health check to pass. By default, the
+                              response must have a status code of 2xx or 3xx.
+                              Must be an optional "!" negation followed by one or more space-separated status codes or status code
+                              ranges (each 3 digits), matching the syntax of the "status" test in an NGINX match block.
+                              Examples: "200", "! 500", "200 204", "! 301 302", "200-399", "! 400-599", "301-303 307".
+                            maxLength: 64
+                            pattern: ^(!\s+)?\d{3}(-\d{3})?(\s+\d{3}(-\d{3})?)*$
+                            type: string
+                        type: object
+                      passes:
+                        description: |-
+                          Passes sets the number of consecutive passed health checks of a particular server after which the
+                          server will be considered healthy.
+                        format: int32
+                        minimum: 1
+                        type: integer
+                      path:
+                        description: |-
+                          Path defines the URI used in health check requests, by default, "/". Mutually exclusive with GRPC: the
+                          "type=grpc" parameter is not compatible with the "uri" parameter.
+                        maxLength: 2048
+                        pattern: ^[^\s{};$\\]*$
+                        type: string
+                      persistent:
+                        description: |-
+                          Persistent sets the initial "up" state for a server after a reload, if the server was considered
+                          healthy before the reload. Requires Mandatory to be set to true.
+                        type: boolean
+                      port:
+                        description: Port defines the port used when connecting to
+                          a server to perform a health check.
+                        format: int32
+                        maximum: 65535
+                        minimum: 1
+                        type: integer
+                      timeout:
+                        description: |-
+                          Timeout sets the connect/read/send timeouts used for health check requests. If not set, fall back to
+                          NGINX's defaults.
+                        properties:
+                          connect:
+                            description: |-
+                              Connect sets the timeout for establishing a connection with the proxied server.
+                              Directive: https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_connect_timeout
+                            pattern: ^[0-9]{1,4}(ms|s|m|h)?$
+                            type: string
+                          read:
+                            description: |-
+                              Read sets the timeout for reading a response from the proxied server.
+                              Directive: https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_read_timeout
+                            pattern: ^[0-9]{1,4}(ms|s|m|h)?$
+                            type: string
+                          send:
+                            description: |-
+                              Send sets the timeout for transmitting a request to the proxied server.
+                              Directive: https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_send_timeout
+                            pattern: ^[0-9]{1,4}(ms|s|m|h)?$
+                            type: string
+                        type: object
+                    type: object
+                    x-kubernetes-validations:
+                    - message: path must not be set when grpc is set
+                      rule: '!(has(self.path) && has(self.grpc))'
+                    - message: match must not be set when grpc is set
+                      rule: '!(has(self.match) && has(self.grpc))'
+                    - message: persistent can only be true when mandatory is true
+                      rule: '!(has(self.persistent) && self.persistent == true) ||
+                        (has(self.mandatory) && self.mandatory == true)'
+                  passive:
+                    description: |-
+                      Passive defines the passive health check settings for the upstream. Passive health checks are supported
+                      by NGINX OSS and NGINX Plus.
+                    properties:
+                      failTimeout:
+                        description: |-
+                          FailTimeout sets the time during which the specified number of unsuccessful attempts to communicate
+                          with a server must happen for the server to be considered unavailable. This is also the period of time
+                          the server will be considered unavailable.
+                          Directive: https://nginx.org/en/docs/http/ngx_http_upstream_module.html#fail_timeout
+                        pattern: ^[0-9]{1,4}(ms|s|m|h)?$
+                        type: string
+                      maxFails:
+                        description: |-
+                          MaxFails sets the number of consecutive unsuccessful attempts to communicate with a server that must
+                          happen during FailTimeout for the server to be considered unavailable. A value of 0 disables the
+                          accounting of attempts entirely.
+                          Directive: https://nginx.org/en/docs/http/ngx_http_upstream_module.html#max_fails
+                        format: int32
+                        minimum: 0
+                        type: integer
+                    type: object
+                type: object
               keepAlive:
                 description: KeepAlive defines the keep-alive settings.
                 properties:
