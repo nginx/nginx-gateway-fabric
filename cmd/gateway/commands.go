@@ -1020,7 +1020,7 @@ func createInitializeCommand() *cobra.Command {
 
 				return initialize(initializeConfig{
 					fileManager:   file.NewStdLibOSFileManager(),
-					fileGenerator: ngxConfig.NewGeneratorImpl(plus, nil, logger.WithName("generator")),
+					fileGenerator: ngxConfig.NewGeneratorImpl(plus, nil),
 					logger:        logger,
 					podUID:        podUID,
 					clusterUID:    clusterUID,

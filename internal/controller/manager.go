@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-logr/logr"
 	tel "github.com/nginx/telemetry-exporter/pkg/telemetry"
+	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"google.golang.org/grpc"
 	appsv1 "k8s.io/api/apps/v1"
@@ -107,6 +108,7 @@ func init() {
 	utilruntime.Must(rbacv1.AddToScheme(scheme))
 	utilruntime.Must(gatewayv1beta1.Install(scheme))
 	utilruntime.Must(inference.Install(scheme))
+	utilruntime.Must(monitoringv1.AddToScheme(scheme))
 
 	// Pre-register unstructured AP types (and their List variants) so fake clients built
 	// with this scheme don't lazily mutate the shared scheme during parallel test execution.
@@ -166,7 +168,6 @@ func StartManager(cfg config.Config) error {
 		GatewayCtlrName:  cfg.GatewayCtlrName,
 		GatewayClassName: cfg.GatewayClassName,
 		ClusterDomain:    cfg.ClusterDomain,
-		Logger:           cfg.RuntimeLogger.Logger.WithName("changeProcessor"),
 		Validators: validation.Validators{
 			HTTPFieldsValidator: ngxvalidation.HTTPValidator{},
 			GenericValidator:    genericValidator,
@@ -196,14 +197,12 @@ func StartManager(cfg config.Config) error {
 
 	statusUpdater := status.NewUpdater(
 		mgr.GetClient(),
-		cfg.RuntimeLogger.Logger.WithName("statusUpdater"),
 	)
 
 	groupStatusUpdater := status.NewLeaderAwareGroupUpdater(statusUpdater)
 	deployCtxCollector := licensing.NewDeploymentContextCollector(licensing.DeploymentContextCollectorConfig{
 		K8sClientReader: mgr.GetAPIReader(),
 		PodUID:          cfg.GatewayPodConfig.UID,
-		Logger:          cfg.RuntimeLogger.Logger.WithName("deployCtxCollector"),
 	})
 
 	statusQueue := status.NewQueue()
@@ -231,7 +230,6 @@ func StartManager(cfg config.Config) error {
 		generator: ngxcfg.NewGeneratorImpl(
 			cfg.Plus,
 			&cfg.UsageReportConfig,
-			cfg.RuntimeLogger.Logger.WithName("generator"),
 		),
 		k8sClient:               mgr.GetClient(),
 		logger:                  cfg.RuntimeLogger.Logger.WithName("eventHandler"),
@@ -269,7 +267,9 @@ func StartManager(cfg config.Config) error {
 	}
 
 	if err = mgr.Add(runnables.NewCallFunctionsAfterBecameLeader([]func(context.Context){
-		groupStatusUpdater.Enable,
+		func(ctx context.Context) {
+			groupStatusUpdater.Enable(ctx, cfg.RuntimeLogger.Logger.WithName("statusUpdater"))
+		},
 		nginxProvisioner.Enable,
 		eventHandler.enable,
 	})); err != nil {

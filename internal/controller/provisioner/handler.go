@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/go-logr/logr"
+	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
@@ -88,7 +89,8 @@ func (h *eventHandler) handleUpsertEvent(ctx context.Context, e *events.UpsertEv
 		h.store.updateGateway(obj)
 	case *appsv1.Deployment, *appsv1.DaemonSet, *corev1.ServiceAccount,
 		*corev1.ConfigMap, *rbacv1.Role, *rbacv1.RoleBinding,
-		*autoscalingv2.HorizontalPodAutoscaler, *policyv1.PodDisruptionBudget:
+		*autoscalingv2.HorizontalPodAutoscaler, *policyv1.PodDisruptionBudget,
+		*monitoringv1.ServiceMonitor:
 		if gatewayNSName, ok := h.getGatewayForManagedResource(obj); ok {
 			if err := h.updateOrDeleteResources(ctx, logger, obj, gatewayNSName); err != nil {
 				return fmt.Errorf("error handling resource update: %w", err)
@@ -174,7 +176,7 @@ func (h *eventHandler) handleDeleteEvent(ctx context.Context, e *events.DeleteEv
 	case *appsv1.Deployment, *appsv1.DaemonSet, *corev1.Service, *corev1.ServiceAccount,
 		*corev1.ConfigMap, *rbacv1.Role, *rbacv1.RoleBinding,
 		*autoscalingv2.HorizontalPodAutoscaler, *policyv1.PodDisruptionBudget,
-		*unstructured.Unstructured:
+		*monitoringv1.ServiceMonitor, *unstructured.Unstructured:
 
 		if err := h.reprovisionResources(ctx, e); err != nil {
 			return fmt.Errorf("error re-provisioning nginx resources: %w", err)

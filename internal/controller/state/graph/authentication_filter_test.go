@@ -236,9 +236,7 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 		args    args
 	}{
 		{
-			// FIXME(s.odonovan): Remove this secret type 3 releases after 2.5.0.
-			// Issue https://github.com/nginx/nginx-gateway-fabric/issues/4870 will remove this secret type.
-			name: "valid Basic auth filter with htpasswd secret",
+			name: "invalid: Basic auth filter with unsupported htpasswd secret type",
 			args: args{
 				secretNsName: types.NamespacedName{Namespace: "test", Name: "af"},
 				filter: createAuthenticationFilterWithBasicAuth(
@@ -250,13 +248,12 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 					{
 						ResourceType:   resolver.ResourceTypeSecret,
 						NamespacedName: types.NamespacedName{Namespace: "test", Name: "hp"},
-					}: createAuthSecret(corev1.SecretType(secrets.SecretTypeHtpasswd), "test", "hp", true),
+					}: createAuthSecret(corev1.SecretType("nginx.org/htpasswd"), "test", "hp", true),
 				},
 			},
-			expCond: conditions.NewAuthenticationFilterAcceptedWithMessage(
-				"The AuthenticationFilter is accepted, but the referenced Secret test/hp of type \"nginx.org/htpasswd\"" +
-					" is now deprecated. This secret type will be removed in a future release." +
-					" Please use type \"Opaque\" instead.",
+			expCond: conditions.NewAuthenticationFilterInvalid(
+				"spec.basic.secretRef: Invalid value: \"secret test/hp is invalid\": " +
+					"unsupported secret type \"nginx.org/htpasswd\"",
 			),
 		},
 		{
@@ -389,7 +386,7 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 			),
 		},
 		{
-			name: "invalid: htpasswd secret missing required key",
+			name: "invalid: basic auth secret missing required key",
 			args: args{
 				filter: createAuthenticationFilterWithBasicAuth(
 					types.NamespacedName{Namespace: "test", Name: "af"},
