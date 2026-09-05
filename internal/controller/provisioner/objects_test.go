@@ -2348,10 +2348,10 @@ func TestBuildNginxConfigMaps_ModuleLoading(t *testing.T) {
 	}
 
 	tests := []struct {
-		nProxyCfg   *graph.EffectiveNginxProxy
-		name        string
-		assertions  []confAssertion
-		disablePlus bool
+		nProxyCfg  *graph.EffectiveNginxProxy
+		name       string
+		assertions []confAssertion
+		plus       bool
 	}{
 		{
 			name:      "defaults (nil config) loads no optional modules",
@@ -2407,6 +2407,7 @@ func TestBuildNginxConfigMaps_ModuleLoading(t *testing.T) {
 					Enable: helpers.GetPointer(true),
 				},
 			},
+			plus: true,
 			assertions: []confAssertion{
 				{
 					confKey: configmaps.MainConfKey,
@@ -2431,6 +2432,7 @@ func TestBuildNginxConfigMaps_ModuleLoading(t *testing.T) {
 					Enable: helpers.GetPointer(true),
 				},
 			},
+			plus: true,
 			assertions: []confAssertion{
 				{
 					confKey: configmaps.MainConfKey,
@@ -2468,7 +2470,6 @@ func TestBuildNginxConfigMaps_ModuleLoading(t *testing.T) {
 					Enable: helpers.GetPointer(true),
 				},
 			},
-			disablePlus: true,
 			assertions: []confAssertion{
 				{
 					confKey: configmaps.MainConfKey,
@@ -2485,11 +2486,6 @@ func TestBuildNginxConfigMaps_ModuleLoading(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			plus := true
-			if test.disablePlus {
-				plus = false
-			}
-
 			provisioner := &NginxProvisioner{
 				k8sClient: createFakeClientWithScheme(),
 				cfg: Config{
@@ -2500,7 +2496,7 @@ func TestBuildNginxConfigMaps_ModuleLoading(t *testing.T) {
 					AgentLabels: make(map[string]string),
 				},
 			}
-			if plus {
+			if test.plus {
 				provisioner.cfg.Plus = true
 				provisioner.cfg.PlusUsageConfig = &config.UsageReportConfig{SecretName: jwtTestSecretName}
 			}
