@@ -549,9 +549,6 @@ func createManager(cfg config.Config, healthChecker *graphBuiltHealthChecker) (m
 	if err != nil {
 		return nil, fmt.Errorf("failed to get cluster config: %w", err)
 	}
-	// Leave clusterCfg.Timeout at its zero-value default. A client-wide timeout here also
-	// applies to long-running watch requests, causing informer watches to be canceled and
-	// reopened at that interval instead of the longer server-side timeout client-go requests.
 
 	mgr, err := manager.New(clusterCfg, options)
 	if err != nil {
