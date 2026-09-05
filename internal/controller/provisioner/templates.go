@@ -10,6 +10,12 @@ var (
 )
 
 const mainTemplateText = `
+{{ if .Telemetry -}}
+load_module modules/ngx_otel_module.so;
+{{ end -}}
+{{ if .WAF -}}
+load_module modules/ngx_http_app_protect_module.so;
+{{ end -}}
 error_log stderr {{ .ErrorLevel }};
 {{- if .WorkerProcesses }}
 worker_processes {{ .WorkerProcesses }};
