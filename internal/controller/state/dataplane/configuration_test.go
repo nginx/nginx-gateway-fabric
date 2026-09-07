@@ -12396,13 +12396,15 @@ func TestBuildAccessLogDestination(t *testing.T) {
 		expectedFormat string
 	}{
 		{
-			name: "syslog destination set correctly",
+			name: "syslog server destination configuration set correctly",
 			src: &ngfAPIv1alpha2.NginxLogging{
 				AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
 					Format: helpers.GetPointer(logFormat),
 					Destination: &ngfAPIv1alpha2.NginxAccessLogDestination{
-						Type:   ngfAPIv1alpha2.NginxAccessLogDestinationTypeSyslog,
-						Syslog: &server,
+						Type: ngfAPIv1alpha2.NginxAccessLogDestinationTypeSyslog,
+						Syslog: &ngfAPIv1alpha2.NginxAccessLogSyslog{
+							Server: server,
+						},
 					},
 				},
 			},
@@ -12410,13 +12412,15 @@ func TestBuildAccessLogDestination(t *testing.T) {
 			expectedFormat: logFormat,
 		},
 		{
-			name: "file destination sets file path",
+			name: "file path destination configuration sets correctly",
 			src: &ngfAPIv1alpha2.NginxLogging{
 				AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
 					Format: helpers.GetPointer(logFormat),
 					Destination: &ngfAPIv1alpha2.NginxAccessLogDestination{
 						Type: ngfAPIv1alpha2.NginxAccessLogDestinationTypeFile,
-						File: &path,
+						File: &ngfAPIv1alpha2.NginxAccessLogFile{
+							Path: path,
+						},
 					},
 				},
 			},
@@ -12434,7 +12438,7 @@ func TestBuildAccessLogDestination(t *testing.T) {
 			expectedFormat: logFormat,
 		},
 		{
-			name: "nil access log destination falls back to default access log path",
+			name: "nil destination falls back to default path",
 			src: &ngfAPIv1alpha2.NginxLogging{
 				AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
 					Format:      helpers.GetPointer(logFormat),
@@ -12450,7 +12454,9 @@ func TestBuildAccessLogDestination(t *testing.T) {
 				AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
 					Destination: &ngfAPIv1alpha2.NginxAccessLogDestination{
 						Type: ngfAPIv1alpha2.NginxAccessLogDestinationTypeFile,
-						File: &path,
+						File: &ngfAPIv1alpha2.NginxAccessLogFile{
+							Path: path,
+						},
 					},
 				},
 			},
@@ -12463,8 +12469,10 @@ func TestBuildAccessLogDestination(t *testing.T) {
 				ErrorLogFormat: helpers.GetPointer(ngfAPIv1alpha2.NginxErrorLogFormatJSON),
 				AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
 					Destination: &ngfAPIv1alpha2.NginxAccessLogDestination{
-						Type:   ngfAPIv1alpha2.NginxAccessLogDestinationTypeSyslog,
-						Syslog: &server,
+						Type: ngfAPIv1alpha2.NginxAccessLogDestinationTypeSyslog,
+						Syslog: &ngfAPIv1alpha2.NginxAccessLogSyslog{
+							Server: server,
+						},
 					},
 				},
 			},
@@ -12472,7 +12480,7 @@ func TestBuildAccessLogDestination(t *testing.T) {
 			expectedFormat: JSONAccessLogFormat,
 		},
 		{
-			name: "nil file path string falls back to default path",
+			name: "nil file struct falls back to default path",
 			src: &ngfAPIv1alpha2.NginxLogging{
 				AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
 					Destination: &ngfAPIv1alpha2.NginxAccessLogDestination{
@@ -12484,19 +12492,19 @@ func TestBuildAccessLogDestination(t *testing.T) {
 			expectedPath: DefaultAccessLogPath,
 		},
 		{
-			name: "empty file path string falls back to default path",
+			name: "empty file struct falls back to default path",
 			src: &ngfAPIv1alpha2.NginxLogging{
 				AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
 					Destination: &ngfAPIv1alpha2.NginxAccessLogDestination{
 						Type: ngfAPIv1alpha2.NginxAccessLogDestinationTypeFile,
-						File: helpers.GetPointer(""),
+						File: &ngfAPIv1alpha2.NginxAccessLogFile{},
 					},
 				},
 			},
 			expectedPath: DefaultAccessLogPath,
 		},
 		{
-			name: "nil syslog string falls back to default path",
+			name: "nil syslog struct falls back to default path",
 			src: &ngfAPIv1alpha2.NginxLogging{
 				AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
 					Destination: &ngfAPIv1alpha2.NginxAccessLogDestination{
@@ -12505,16 +12513,43 @@ func TestBuildAccessLogDestination(t *testing.T) {
 					},
 				},
 			},
-			expectedPath:   DefaultAccessLogPath,
-			expectedFormat: "",
+			expectedPath: DefaultAccessLogPath,
+		},
+		{
+			name: "empty syslog struct falls back to default path",
+			src: &ngfAPIv1alpha2.NginxLogging{
+				AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
+					Destination: &ngfAPIv1alpha2.NginxAccessLogDestination{
+						Type:   ngfAPIv1alpha2.NginxAccessLogDestinationTypeSyslog,
+						Syslog: &ngfAPIv1alpha2.NginxAccessLogSyslog{},
+					},
+				},
+			},
+			expectedPath: DefaultAccessLogPath,
+		},
+		{
+			name: "empty file path string falls back to default path",
+			src: &ngfAPIv1alpha2.NginxLogging{
+				AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
+					Destination: &ngfAPIv1alpha2.NginxAccessLogDestination{
+						Type: ngfAPIv1alpha2.NginxAccessLogDestinationTypeFile,
+						File: &ngfAPIv1alpha2.NginxAccessLogFile{
+							Path: "",
+						},
+					},
+				},
+			},
+			expectedPath: DefaultAccessLogPath,
 		},
 		{
 			name: "empty syslog string falls back to default path",
 			src: &ngfAPIv1alpha2.NginxLogging{
 				AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
 					Destination: &ngfAPIv1alpha2.NginxAccessLogDestination{
-						Type:   ngfAPIv1alpha2.NginxAccessLogDestinationTypeSyslog,
-						Syslog: helpers.GetPointer(""),
+						Type: ngfAPIv1alpha2.NginxAccessLogDestinationTypeSyslog,
+						Syslog: &ngfAPIv1alpha2.NginxAccessLogSyslog{
+							Server: "",
+						},
 					},
 				},
 			},
