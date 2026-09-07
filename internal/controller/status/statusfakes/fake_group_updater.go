@@ -5,33 +5,36 @@ import (
 	"context"
 	"sync"
 
+	"github.com/go-logr/logr"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/status"
 )
 
 type FakeGroupUpdater struct {
-	UpdateGroupStub        func(context.Context, string, ...status.UpdateRequest)
+	UpdateGroupStub        func(context.Context, logr.Logger, string, ...status.UpdateRequest)
 	updateGroupMutex       sync.RWMutex
 	updateGroupArgsForCall []struct {
 		arg1 context.Context
-		arg2 string
-		arg3 []status.UpdateRequest
+		arg2 logr.Logger
+		arg3 string
+		arg4 []status.UpdateRequest
 	}
 	invocations      map[string][][]interface{}
 	invocationsMutex sync.RWMutex
 }
 
-func (fake *FakeGroupUpdater) UpdateGroup(arg1 context.Context, arg2 string, arg3 ...status.UpdateRequest) {
+func (fake *FakeGroupUpdater) UpdateGroup(arg1 context.Context, arg2 logr.Logger, arg3 string, arg4 ...status.UpdateRequest) {
 	fake.updateGroupMutex.Lock()
 	fake.updateGroupArgsForCall = append(fake.updateGroupArgsForCall, struct {
 		arg1 context.Context
-		arg2 string
-		arg3 []status.UpdateRequest
-	}{arg1, arg2, arg3})
+		arg2 logr.Logger
+		arg3 string
+		arg4 []status.UpdateRequest
+	}{arg1, arg2, arg3, arg4})
 	stub := fake.UpdateGroupStub
-	fake.recordInvocation("UpdateGroup", []interface{}{arg1, arg2, arg3})
+	fake.recordInvocation("UpdateGroup", []interface{}{arg1, arg2, arg3, arg4})
 	fake.updateGroupMutex.Unlock()
 	if stub != nil {
-		fake.UpdateGroupStub(arg1, arg2, arg3...)
+		fake.UpdateGroupStub(arg1, arg2, arg3, arg4...)
 	}
 }
 
@@ -41,17 +44,17 @@ func (fake *FakeGroupUpdater) UpdateGroupCallCount() int {
 	return len(fake.updateGroupArgsForCall)
 }
 
-func (fake *FakeGroupUpdater) UpdateGroupCalls(stub func(context.Context, string, ...status.UpdateRequest)) {
+func (fake *FakeGroupUpdater) UpdateGroupCalls(stub func(context.Context, logr.Logger, string, ...status.UpdateRequest)) {
 	fake.updateGroupMutex.Lock()
 	defer fake.updateGroupMutex.Unlock()
 	fake.UpdateGroupStub = stub
 }
 
-func (fake *FakeGroupUpdater) UpdateGroupArgsForCall(i int) (context.Context, string, []status.UpdateRequest) {
+func (fake *FakeGroupUpdater) UpdateGroupArgsForCall(i int) (context.Context, logr.Logger, string, []status.UpdateRequest) {
 	fake.updateGroupMutex.RLock()
 	defer fake.updateGroupMutex.RUnlock()
 	argsForCall := fake.updateGroupArgsForCall[i]
-	return argsForCall.arg1, argsForCall.arg2, argsForCall.arg3
+	return argsForCall.arg1, argsForCall.arg2, argsForCall.arg3, argsForCall.arg4
 }
 
 func (fake *FakeGroupUpdater) Invocations() map[string][][]interface{} {

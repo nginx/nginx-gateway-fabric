@@ -179,14 +179,6 @@ var _ = Describe("ServiceResolver", func() {
 		It("resolves a service for a given port", func() {
 			expectedEndpoints := []resolver.Endpoint{
 				{
-					Address: "9.0.0.1",
-					Port:    8080,
-				},
-				{
-					Address: "9.0.0.2",
-					Port:    8080,
-				},
-				{
 					Address: "10.0.0.1",
 					Port:    8081,
 				},
@@ -199,37 +191,12 @@ var _ = Describe("ServiceResolver", func() {
 					Port:    8081,
 				},
 				{
-					Address: "2.0.0.1",
-					Port:    8080,
-				},
-				{
-					Address: "2.0.0.2",
-					Port:    8080,
-				},
-				{
-					Address: "2.0.0.3",
-					Port:    8080,
-				},
-				{
-					Address: "2.0.0.1",
-					Port:    8081,
-				},
-				{
-					Address: "2.0.0.2",
-					Port:    8081,
-				},
-				{
-					Address: "2.0.0.3",
-					Port:    8081,
-				},
-				{
 					Address: "12.0.0.1",
 					Port:    8080,
 				},
 				{
-					Address: "FE80:CD00:0:CDE:1257:0:211E:729C",
+					Address: "2.0.0.1",
 					Port:    8080,
-					IPv6:    true,
 				},
 				{
 					Address: "2.0.0.1",
@@ -237,12 +204,45 @@ var _ = Describe("ServiceResolver", func() {
 					IPv6:    true,
 				},
 				{
+					Address: "2.0.0.1",
+					Port:    8081,
+				},
+				{
+					Address: "2.0.0.2",
+					Port:    8080,
+				},
+				{
 					Address: "2.0.0.2",
 					Port:    8080,
 					IPv6:    true,
 				},
 				{
+					Address: "2.0.0.2",
+					Port:    8081,
+				},
+				{
 					Address: "2.0.0.3",
+					Port:    8080,
+				},
+				{
+					Address: "2.0.0.3",
+					Port:    8080,
+					IPv6:    true,
+				},
+				{
+					Address: "2.0.0.3",
+					Port:    8081,
+				},
+				{
+					Address: "9.0.0.1",
+					Port:    8080,
+				},
+				{
+					Address: "9.0.0.2",
+					Port:    8080,
+				},
+				{
+					Address: "FE80:CD00:0:CDE:1257:0:211E:729C",
 					Port:    8080,
 					IPv6:    true,
 				},

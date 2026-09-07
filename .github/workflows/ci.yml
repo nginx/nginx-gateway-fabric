@@ -405,7 +405,7 @@ jobs:
           finished-on: ${{ github.event.head_commit.timestamp || github.event.created_at }}
           artifactory-user: ${{ env.ARTIFACTORY_USER }}
           artifactory-api-token: ${{ env.ARTIFACTORY_TOKEN }}
-          artifactory-url: ${{ env.ARTIFACTORY_URL }}
+          artifactory-url: https://${{ env.ARTIFACTORY_URL }}
           artifactory-repo: 'f5-nginx-go-local-approved-dependency'
           build-content-path: ${{ steps.godeps.outputs.goversionm }}
           assertion-doc-file: assertion_${{ github.event.repository.name }}_${{ github.sha }}_${{ github.run_id }}_${{ github.run_number }}_${{ matrix.gateway.os }}_${{ matrix.gateway.arch }}.json
