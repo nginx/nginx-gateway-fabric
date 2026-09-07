@@ -590,7 +590,7 @@ func TestBuildHTTPRouteStatuses(t *testing.T) {
 		g.Expect(err).ToNot(HaveOccurred())
 	}
 
-	updater := NewUpdater(k8sClient, logr.Discard())
+	updater := NewUpdater(k8sClient)
 
 	reqs := PrepareRouteRequests(
 		map[graph.L4RouteKey]*graph.L4Route{},
@@ -599,7 +599,7 @@ func TestBuildHTTPRouteStatuses(t *testing.T) {
 		gatewayCtlrName,
 	)
 
-	updater.Update(t.Context(), reqs...)
+	updater.Update(t.Context(), logr.Discard(), reqs...)
 
 	g.Expect(reqs).To(HaveLen(len(expectedStatuses)))
 
@@ -668,7 +668,7 @@ func TestBuildGRPCRouteStatuses(t *testing.T) {
 		g.Expect(err).ToNot(HaveOccurred())
 	}
 
-	updater := NewUpdater(k8sClient, logr.Discard())
+	updater := NewUpdater(k8sClient)
 
 	reqs := PrepareRouteRequests(
 		map[graph.L4RouteKey]*graph.L4Route{},
@@ -677,7 +677,7 @@ func TestBuildGRPCRouteStatuses(t *testing.T) {
 		gatewayCtlrName,
 	)
 
-	updater.Update(t.Context(), reqs...)
+	updater.Update(t.Context(), logr.Discard(), reqs...)
 
 	g.Expect(reqs).To(HaveLen(len(expectedStatuses)))
 
@@ -744,7 +744,7 @@ func TestBuildTLSRouteStatuses(t *testing.T) {
 		g.Expect(err).ToNot(HaveOccurred())
 	}
 
-	updater := NewUpdater(k8sClient, logr.Discard())
+	updater := NewUpdater(k8sClient)
 
 	reqs := PrepareRouteRequests(
 		routes,
@@ -753,7 +753,7 @@ func TestBuildTLSRouteStatuses(t *testing.T) {
 		gatewayCtlrName,
 	)
 
-	updater.Update(t.Context(), reqs...)
+	updater.Update(t.Context(), logr.Discard(), reqs...)
 
 	g.Expect(reqs).To(HaveLen(len(expectedStatuses)))
 
@@ -1011,13 +1011,13 @@ func TestBuildGatewayClassStatuses(t *testing.T) {
 				expectedTotalReqs++
 			}
 
-			updater := NewUpdater(k8sClient, logr.Discard())
+			updater := NewUpdater(k8sClient)
 
 			reqs := PrepareGatewayClassRequests(test.gc, test.ignoredClasses, transitionTime)
 
 			g.Expect(reqs).To(HaveLen(expectedTotalReqs))
 
-			updater.Update(t.Context(), reqs...)
+			updater.Update(t.Context(), logr.Discard(), reqs...)
 
 			for nsname, expected := range test.expected {
 				var gc v1.GatewayClass
@@ -1976,7 +1976,7 @@ func TestBuildGatewayStatuses(t *testing.T) {
 				expectedTotalReqs++
 			}
 
-			updater := NewUpdater(k8sClient, logr.Discard())
+			updater := NewUpdater(k8sClient)
 
 			reqs := PrepareGatewayRequests(
 				test.gateway,
@@ -1987,7 +1987,7 @@ func TestBuildGatewayStatuses(t *testing.T) {
 
 			g.Expect(reqs).To(HaveLen(expectedTotalReqs))
 
-			updater.Update(t.Context(), reqs...)
+			updater.Update(t.Context(), logr.Discard(), reqs...)
 
 			for nsname, expected := range test.expected {
 				var gw v1.Gateway
@@ -2239,13 +2239,13 @@ func TestBuildBackendTLSPolicyStatuses(t *testing.T) {
 				g.Expect(err).ToNot(HaveOccurred())
 			}
 
-			updater := NewUpdater(k8sClient, logr.Discard())
+			updater := NewUpdater(k8sClient)
 
 			reqs := PrepareBackendTLSPolicyRequests(test.backendTLSPolicies, transitionTime, gatewayCtlrName)
 
 			g.Expect(reqs).To(HaveLen(test.expectedReqs))
 
-			updater.Update(t.Context(), reqs...)
+			updater.Update(t.Context(), logr.Discard(), reqs...)
 
 			for nsname, expected := range test.expected {
 				var pol v1.BackendTLSPolicy
@@ -2333,7 +2333,7 @@ func TestBuildNginxGatewayStatus(t *testing.T) {
 				g.Expect(err).ToNot(HaveOccurred())
 			}
 
-			updater := NewUpdater(k8sClient, logr.Discard())
+			updater := NewUpdater(k8sClient)
 
 			req := PrepareNginxGatewayStatus(test.nginxGateway, transitionTime, test.cpUpdateResult)
 
@@ -2341,7 +2341,7 @@ func TestBuildNginxGatewayStatus(t *testing.T) {
 				g.Expect(req).To(BeNil())
 			} else {
 				g.Expect(req).ToNot(BeNil())
-				updater.Update(t.Context(), *req)
+				updater.Update(t.Context(), logr.Discard(), *req)
 
 				var ngw ngfAPI.NginxGateway
 
@@ -2659,13 +2659,13 @@ func TestBuildNGFPolicyStatuses(t *testing.T) {
 				g.Expect(err).ToNot(HaveOccurred())
 			}
 
-			updater := NewUpdater(k8sClient, logr.Discard())
+			updater := NewUpdater(k8sClient)
 
 			reqs := PrepareNGFPolicyRequests(test.policies, transitionTime, gatewayCtlrName)
 
 			g.Expect(reqs).To(HaveLen(len(test.expected)))
 
-			updater.Update(t.Context(), reqs...)
+			updater.Update(t.Context(), logr.Discard(), reqs...)
 
 			for nsname, expected := range test.expected {
 				var pol ngfAPI.ClientSettingsPolicy
@@ -2768,7 +2768,7 @@ func TestBuildNGFPolicyStatusesProgrammedCondition(t *testing.T) {
 					reqs := PrepareNGFPolicyRequests(policies, transitionTime, gatewayCtlrName)
 					g.Expect(reqs).To(HaveLen(1))
 
-					NewUpdater(k8sClient, logr.Discard()).Update(t.Context(), reqs...)
+					NewUpdater(k8sClient).Update(t.Context(), logr.Discard(), reqs...)
 
 					var pol ngfAPI.ClientSettingsPolicy
 					g.Expect(k8sClient.Get(t.Context(), nsname, &pol)).To(Succeed())
@@ -3015,13 +3015,13 @@ func TestBuildWAFPolicyStatuses(t *testing.T) {
 				g.Expect(err).ToNot(HaveOccurred())
 			}
 
-			updater := NewUpdater(k8sClient, logr.Discard())
+			updater := NewUpdater(k8sClient)
 
 			reqs := PrepareNGFPolicyRequests(test.policies, transitionTime, gatewayCtlrName)
 
 			g.Expect(reqs).To(HaveLen(len(test.expected)))
 
-			updater.Update(t.Context(), reqs...)
+			updater.Update(t.Context(), logr.Discard(), reqs...)
 
 			for nsname, expected := range test.expected {
 				var pol ngfAPI.WAFPolicy
@@ -3147,13 +3147,13 @@ func TestBuildSnippetsFilterStatuses(t *testing.T) {
 				g.Expect(err).ToNot(HaveOccurred())
 			}
 
-			updater := NewUpdater(k8sClient, logr.Discard())
+			updater := NewUpdater(k8sClient)
 
 			reqs := PrepareSnippetsFilterRequests(test.snippetsFilters, transitionTime, gatewayCtlrName)
 
 			g.Expect(reqs).To(HaveLen(test.expectedReqs))
 
-			updater.Update(t.Context(), reqs...)
+			updater.Update(t.Context(), logr.Discard(), reqs...)
 
 			for nsname, expected := range test.expected {
 				var snippetsFilter ngfAPI.SnippetsFilter
@@ -3282,13 +3282,13 @@ func TestPrepareExternalLoadBalancerRequests(t *testing.T) {
 				g.Expect(k8sClient.Create(t.Context(), elb.Source)).ToNot(HaveOccurred())
 			}
 
-			updater := NewUpdater(k8sClient, logr.Discard())
+			updater := NewUpdater(k8sClient)
 
 			reqs := PrepareExternalLoadBalancerRequests(test.externalLoadBalancers, transitionTime, gatewayCtlrName)
 
 			g.Expect(reqs).To(HaveLen(test.expectedReqs))
 
-			updater.Update(t.Context(), reqs...)
+			updater.Update(t.Context(), logr.Discard(), reqs...)
 
 			for nsname, expected := range test.expected {
 				var elb ngfAPI.ExternalLoadBalancer
@@ -3404,13 +3404,13 @@ func TestBuildAuthenticationFilterStatuses(t *testing.T) {
 				g.Expect(err).ToNot(HaveOccurred())
 			}
 
-			updater := NewUpdater(k8sClient, logr.Discard())
+			updater := NewUpdater(k8sClient)
 
 			reqs := PrepareAuthenticationFilterRequests(test.authenticationFilters, transitionTime, gatewayCtlrName)
 
 			g.Expect(reqs).To(HaveLen(test.expectedReqs))
 
-			updater.Update(t.Context(), reqs...)
+			updater.Update(t.Context(), logr.Discard(), reqs...)
 
 			for nsname, expected := range test.expected {
 				var authFilter ngfAPI.AuthenticationFilter
@@ -3815,7 +3815,7 @@ func TestBuildInferencePoolStatuses(t *testing.T) {
 				g.Expect(err).ToNot(HaveOccurred())
 			}
 
-			updater := NewUpdater(k8sClient, logr.Discard())
+			updater := NewUpdater(k8sClient)
 			reqs := PrepareInferencePoolRequests(
 				test.referencedInferencePool,
 				&test.clusterInferencePools,
@@ -3823,7 +3823,7 @@ func TestBuildInferencePoolStatuses(t *testing.T) {
 				transitionTime,
 			)
 			g.Expect(reqs).To(HaveLen(test.expectedReqs))
-			updater.Update(t.Context(), reqs...)
+			updater.Update(t.Context(), logr.Discard(), reqs...)
 
 			for nsname, expected := range test.expectedPoolWithStatus {
 				var inferencePool inference.InferencePool
@@ -3890,7 +3890,7 @@ func TestBuildTCPRouteStatuses(t *testing.T) {
 		g.Expect(err).ToNot(HaveOccurred())
 	}
 
-	updater := NewUpdater(k8sClient, logr.Discard())
+	updater := NewUpdater(k8sClient)
 
 	reqs := PrepareRouteRequests(
 		routes,
@@ -3899,7 +3899,7 @@ func TestBuildTCPRouteStatuses(t *testing.T) {
 		gatewayCtlrName,
 	)
 
-	updater.Update(t.Context(), reqs...)
+	updater.Update(t.Context(), logr.Discard(), reqs...)
 
 	g.Expect(reqs).To(HaveLen(len(expectedStatuses)))
 
@@ -3966,7 +3966,7 @@ func TestBuildUDPRouteStatuses(t *testing.T) {
 		g.Expect(err).ToNot(HaveOccurred())
 	}
 
-	updater := NewUpdater(k8sClient, logr.Discard())
+	updater := NewUpdater(k8sClient)
 
 	reqs := PrepareRouteRequests(
 		routes,
@@ -3975,7 +3975,7 @@ func TestBuildUDPRouteStatuses(t *testing.T) {
 		gatewayCtlrName,
 	)
 
-	updater.Update(t.Context(), reqs...)
+	updater.Update(t.Context(), logr.Discard(), reqs...)
 
 	g.Expect(reqs).To(HaveLen(len(expectedStatuses)))
 
@@ -4438,14 +4438,14 @@ func TestBuildListenerSetStatuses(t *testing.T) {
 		g.Expect(err).ToNot(HaveOccurred())
 	}
 
-	updater := NewUpdater(k8sClient, logr.Discard())
+	updater := NewUpdater(k8sClient)
 
 	reqs := PrepareListenerSetRequests(
 		listenerSets,
 		transitionTime,
 	)
 
-	updater.Update(t.Context(), reqs...)
+	updater.Update(t.Context(), logr.Discard(), reqs...)
 
 	g.Expect(reqs).To(HaveLen(len(expectedStatuses)))
 

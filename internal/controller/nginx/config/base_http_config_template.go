@@ -127,8 +127,8 @@ gzip_vary on;
 {{- range .OIDCProviders }}
 oidc_provider {{ .Name }} {
     issuer {{ .Issuer }};
-    client_id {{ .ClientID }};
-    client_secret {{ .ClientSecret }};
+    client_id "{{ .ClientID }}";
+    client_secret "{{ .ClientSecret }}";
     redirect_uri {{ .RedirectURI }};
 
     {{- if .TrustedCertificatePath }}
@@ -152,7 +152,7 @@ oidc_provider {{ .Name }} {
     {{- end }}
 
     {{- if .CookieName }}
-    cookie_name {{ .CookieName }};
+    cookie_name "{{ .CookieName }}";
     {{- end }}
 
     {{- if .Timeout }}

@@ -4,6 +4,7 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/go-logr/logr"
 	. "github.com/onsi/gomega"
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/policiesfakes"
@@ -247,7 +248,7 @@ func TestGenerateMgmtFiles_NoPlus(t *testing.T) {
 	t.Parallel()
 
 	gen := GeneratorImpl{}
-	files := gen.generateMgmtFiles(dataplane.Configuration{})
+	files := gen.generateMgmtFiles(logr.Discard(), dataplane.Configuration{})
 
 	g := NewWithT(t)
 	g.Expect(files).To(BeNil())
@@ -261,7 +262,7 @@ func TestGenerateMgmtFiles_Panic(t *testing.T) {
 
 	// panics if JWT token is not set in the AuxiliarySecrets map
 	g.Expect(func() {
-		gen.generateMgmtFiles(dataplane.Configuration{})
+		gen.generateMgmtFiles(logr.Discard(), dataplane.Configuration{})
 	}).To(Panic())
 }
 

@@ -1938,9 +1938,16 @@ func buildUpstream(
 	)
 	if err != nil {
 		errMsg = err.Error()
-		logger.V(1).Info("failed to resolve endpoints, endpoints may not be ready", "error", errMsg, "service", br.SvcNsName)
+		logger.V(1).Info(
+			"Failed to resolve endpoints, endpoints may not be ready",
+			"error", errMsg,
+			"service", br.SvcNsName,
+		)
 	} else {
-		logger.V(1).Info("successfully resolved endpoints", "service", br.SvcNsName)
+		logger.V(1).Info(
+			"Successfully resolved endpoints",
+			"service", br.SvcNsName,
+		)
 	}
 
 	var sp SessionPersistenceConfig
@@ -2848,7 +2855,8 @@ func resolveUpstreamEndpoints(
 			Resolve: true,  // ExternalName services require DNS resolution
 		}
 
-		logger.V(1).Info("resolved ExternalName service",
+		logger.V(1).Info(
+			"Resolved ExternalName service",
 			"service", br.SvcNsName,
 			"externalName", externalName,
 			"port", br.ServicePort.Port)

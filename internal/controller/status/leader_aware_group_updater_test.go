@@ -38,6 +38,7 @@ var _ = Describe("LeaderAwareGroupUpdater", func() {
 
 		var (
 			updater *LeaderAwareGroupUpdater
+			logger  logr.Logger
 
 			group1GCNames = []string{"one-first", "one-second"}
 			group2GCNames = []string{"two-first", "two-second"}
@@ -46,7 +47,8 @@ var _ = Describe("LeaderAwareGroupUpdater", func() {
 		)
 
 		BeforeAll(func() {
-			updater = NewLeaderAwareGroupUpdater(NewUpdater(k8sClient, logr.Discard()))
+			logger = logr.Discard()
+			updater = NewLeaderAwareGroupUpdater(NewUpdater(k8sClient))
 
 			for _, name := range allGCNames {
 				gc := createGC(name)
@@ -102,24 +104,24 @@ var _ = Describe("LeaderAwareGroupUpdater", func() {
 		When("updater is disabled", func() {
 			It("should save requests for later", func() {
 				reqs1 := prepareReqs(group1GCNames, "TestAllSaveForLater")
-				updater.UpdateGroup(context.Background(), group1, reqs1...)
+				updater.UpdateGroup(context.Background(), logger, group1, reqs1...)
 
 				reqs2 := prepareReqs(group2GCNames, "TestAllSaveForLater")
-				updater.UpdateGroup(context.Background(), group2, reqs2...)
+				updater.UpdateGroup(context.Background(), logger, group2, reqs2...)
 
 				testNoStatuses(allGCNames)
 			})
 
 			When("passing no update requests", func() {
 				It("should clear saved requests of group2", func() {
-					updater.UpdateGroup(context.Background(), group2)
+					updater.UpdateGroup(context.Background(), logger, group2)
 				})
 			})
 		})
 
 		When("updater is enabled", func() {
 			It("should update statuses from saved requests", func() {
-				updater.Enable(context.Background())
+				updater.Enable(context.Background(), logger)
 
 				testStatuses(group1GCNames, "TestAllSaveForLater")
 				testNoStatuses(group2GCNames)
@@ -127,17 +129,17 @@ var _ = Describe("LeaderAwareGroupUpdater", func() {
 
 			When("passing no update requests", func() {
 				It("should not update statuses of group1", func() {
-					updater.UpdateGroup(context.Background(), group1)
+					updater.UpdateGroup(context.Background(), logger, group1)
 					testStatuses(group1GCNames, "TestAllSaveForLater")
 				})
 			})
 
 			It("should update statuses of all groups", func() {
 				reqs1 := prepareReqs(group1GCNames, "TestAll")
-				updater.UpdateGroup(context.Background(), group1, reqs1...)
+				updater.UpdateGroup(context.Background(), logger, group1, reqs1...)
 
 				reqs2 := prepareReqs(group2GCNames, "TestAll")
-				updater.UpdateGroup(context.Background(), group2, reqs2...)
+				updater.UpdateGroup(context.Background(), logger, group2, reqs2...)
 
 				testStatuses(allGCNames, "TestAll")
 			})
@@ -146,7 +148,7 @@ var _ = Describe("LeaderAwareGroupUpdater", func() {
 		When("updater is enabled second time", func() {
 			It("should panic", func() {
 				Expect(func() {
-					updater.Enable(context.Background())
+					updater.Enable(context.Background(), logger)
 				}).Should(Panic())
 			})
 		})

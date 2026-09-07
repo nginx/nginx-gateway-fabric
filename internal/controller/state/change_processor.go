@@ -47,7 +47,7 @@ type ChangeProcessor interface {
 	CaptureDeleteChange(resourceType ngftypes.ObjectType, nsname types.NamespacedName)
 	// Process produces a graph-like representation of GatewayAPI resources.
 	// If no changes were captured, the graph will be empty.
-	Process(ctx context.Context) (graphCfg *graph.Graph)
+	Process(ctx context.Context, logger logr.Logger) (graphCfg *graph.Graph)
 	// GetLatestGraph returns a read-only snapshot of the latest Graph.
 	GetLatestGraph() *graph.Graph
 	// ForceRebuild forces the next Process() call to perform a full graph rebuild,
@@ -81,8 +81,6 @@ type ChangeProcessorConfig struct {
 	PLMFetcher *s3fetch.Fetcher
 	// PLMSecretNames maps each PLM secret NamespacedName to its PLMRole(s).
 	PLMSecretNames map[types.NamespacedName][]graph.PLMRole
-	// Logger is the logger for this Change Processor.
-	Logger logr.Logger
 	// GatewayCtlrName is the name of the Gateway controller.
 	GatewayCtlrName string
 	// GatewayClassName is the name of the GatewayClass resource.
@@ -359,7 +357,10 @@ func (c *ChangeProcessorImpl) CaptureUpsertChange(obj client.Object) {
 	c.updater.Upsert(obj)
 }
 
-func (c *ChangeProcessorImpl) CaptureDeleteChange(resourceType ngftypes.ObjectType, nsname types.NamespacedName) {
+func (c *ChangeProcessorImpl) CaptureDeleteChange(
+	resourceType ngftypes.ObjectType,
+	nsname types.NamespacedName,
+) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
@@ -374,7 +375,7 @@ func (c *ChangeProcessorImpl) ForceRebuild() {
 	c.forceClusterStateRebuild()
 }
 
-func (c *ChangeProcessorImpl) Process(ctx context.Context) *graph.Graph {
+func (c *ChangeProcessorImpl) Process(ctx context.Context, logger logr.Logger) *graph.Graph {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
@@ -396,7 +397,7 @@ func (c *ChangeProcessorImpl) Process(ctx context.Context) *graph.Graph {
 		c.cfg.PLMSecretNames,
 		previousWAFBundles,
 		c.cfg.Validators,
-		c.cfg.Logger,
+		logger,
 		c.cfg.FeatureFlags,
 	)
 
