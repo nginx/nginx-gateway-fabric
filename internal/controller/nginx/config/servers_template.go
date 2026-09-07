@@ -189,8 +189,6 @@ server {
         set $ngf_gateway_class "{{ $l.RouteMetadata.GatewayClassName }}";
         {{- end }}
 
-        otel_span_attr "http.route" "{{ $l.RouteMetadata.Namespace }}/{{ $l.RouteMetadata.Name }}";
-
         {{- if $.Plus }}
         location_zone {{ $l.RouteMetadata.Namespace }}_{{ $l.RouteMetadata.Name }};
         {{- end }}

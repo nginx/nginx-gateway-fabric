@@ -89,18 +89,6 @@ auxiliary_command:
 {{- end }}
 {{- if or .EnableMetrics .NIMReporting }}
 collector:
-{{- if .EnableMetrics }}
-    receivers:
-        otlp:
-            protocols:
-                grpc:
-                    endpoint: "0.0.0.0:4317"
-    connectors:
-        spanmetrics:
-            dimensions:
-                - name: http.route
-                - name: http.response.status_code
-{{- end }}
     exporters:
 {{- if .EnableMetrics }}
         prometheus:
