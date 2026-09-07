@@ -611,7 +611,7 @@ type NginxAccessLogFile struct {
 	//
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=256
-	// +kubebuilder:validation:Pattern=`^/.*$`
+	// +kubebuilder:validation:Pattern=`^/[^\s;{}#$"\\]*$`
 	Path string `json:"path"`
 }
 

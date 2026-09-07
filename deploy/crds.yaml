@@ -11077,7 +11077,7 @@ spec:
                                   will be written.
                                 maxLength: 256
                                 minLength: 1
-                                pattern: ^/.*$
+                                pattern: ^/[^\s;{}#$"\\]*$
                                 type: string
                             required:
                             - path
