@@ -10,12 +10,18 @@ import (
 )
 
 type FakeNginxUpdater struct {
-	UpdateConfigStub        func(*agent.Deployment, []agent.File, []v1.VolumeMount)
+	UpdateConfigStub        func(*agent.Deployment, []agent.File, []v1.VolumeMount) bool
 	updateConfigMutex       sync.RWMutex
 	updateConfigArgsForCall []struct {
 		arg1 *agent.Deployment
 		arg2 []agent.File
 		arg3 []v1.VolumeMount
+	}
+	updateConfigReturns struct {
+		result1 bool
+	}
+	updateConfigReturnsOnCall map[int]struct {
+		result1 bool
 	}
 	UpdateUpstreamServersStub        func(*agent.Deployment, dataplane.Configuration)
 	updateUpstreamServersMutex       sync.RWMutex
@@ -27,7 +33,7 @@ type FakeNginxUpdater struct {
 	invocationsMutex sync.RWMutex
 }
 
-func (fake *FakeNginxUpdater) UpdateConfig(arg1 *agent.Deployment, arg2 []agent.File, arg3 []v1.VolumeMount) {
+func (fake *FakeNginxUpdater) UpdateConfig(arg1 *agent.Deployment, arg2 []agent.File, arg3 []v1.VolumeMount) bool {
 	var arg2Copy []agent.File
 	if arg2 != nil {
 		arg2Copy = make([]agent.File, len(arg2))
@@ -39,17 +45,23 @@ func (fake *FakeNginxUpdater) UpdateConfig(arg1 *agent.Deployment, arg2 []agent.
 		copy(arg3Copy, arg3)
 	}
 	fake.updateConfigMutex.Lock()
+	ret, specificReturn := fake.updateConfigReturnsOnCall[len(fake.updateConfigArgsForCall)]
 	fake.updateConfigArgsForCall = append(fake.updateConfigArgsForCall, struct {
 		arg1 *agent.Deployment
 		arg2 []agent.File
 		arg3 []v1.VolumeMount
 	}{arg1, arg2Copy, arg3Copy})
 	stub := fake.UpdateConfigStub
+	fakeReturns := fake.updateConfigReturns
 	fake.recordInvocation("UpdateConfig", []interface{}{arg1, arg2Copy, arg3Copy})
 	fake.updateConfigMutex.Unlock()
 	if stub != nil {
-		fake.UpdateConfigStub(arg1, arg2, arg3)
+		return stub(arg1, arg2, arg3)
 	}
+	if specificReturn {
+		return ret.result1
+	}
+	return fakeReturns.result1
 }
 
 func (fake *FakeNginxUpdater) UpdateConfigCallCount() int {
@@ -58,7 +70,7 @@ func (fake *FakeNginxUpdater) UpdateConfigCallCount() int {
 	return len(fake.updateConfigArgsForCall)
 }
 
-func (fake *FakeNginxUpdater) UpdateConfigCalls(stub func(*agent.Deployment, []agent.File, []v1.VolumeMount)) {
+func (fake *FakeNginxUpdater) UpdateConfigCalls(stub func(*agent.Deployment, []agent.File, []v1.VolumeMount) bool) {
 	fake.updateConfigMutex.Lock()
 	defer fake.updateConfigMutex.Unlock()
 	fake.UpdateConfigStub = stub
@@ -69,6 +81,29 @@ func (fake *FakeNginxUpdater) UpdateConfigArgsForCall(i int) (*agent.Deployment,
 	defer fake.updateConfigMutex.RUnlock()
 	argsForCall := fake.updateConfigArgsForCall[i]
 	return argsForCall.arg1, argsForCall.arg2, argsForCall.arg3
+}
+
+func (fake *FakeNginxUpdater) UpdateConfigReturns(result1 bool) {
+	fake.updateConfigMutex.Lock()
+	defer fake.updateConfigMutex.Unlock()
+	fake.UpdateConfigStub = nil
+	fake.updateConfigReturns = struct {
+		result1 bool
+	}{result1}
+}
+
+func (fake *FakeNginxUpdater) UpdateConfigReturnsOnCall(i int, result1 bool) {
+	fake.updateConfigMutex.Lock()
+	defer fake.updateConfigMutex.Unlock()
+	fake.UpdateConfigStub = nil
+	if fake.updateConfigReturnsOnCall == nil {
+		fake.updateConfigReturnsOnCall = make(map[int]struct {
+			result1 bool
+		})
+	}
+	fake.updateConfigReturnsOnCall[i] = struct {
+		result1 bool
+	}{result1}
 }
 
 func (fake *FakeNginxUpdater) UpdateUpstreamServers(arg1 *agent.Deployment, arg2 dataplane.Configuration) {
