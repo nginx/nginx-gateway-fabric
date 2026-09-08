@@ -59,10 +59,6 @@ func (s *secretEntry) validate(obj client.Object) {
 		}
 
 		certBundle = secrets.NewCertificateBundle(client.ObjectKeyFromObject(secret), "Secret", cert)
-	// FIXME(s.odonovan): Remove this secret type 3 releases after 2.5.0.
-	// Issue https://github.com/nginx/nginx-gateway-fabric/issues/4870 will remove this secret type.
-	case secret.Type == v1.SecretType(secrets.SecretTypeHtpasswd):
-		fallthrough
 	case secret.Type == v1.SecretTypeOpaque && s.expectedKey != "":
 		validationErr = validateOpaqueSecretKey(secret, s.expectedKey)
 	default:

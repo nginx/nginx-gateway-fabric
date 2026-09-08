@@ -143,7 +143,10 @@ type Config struct {
 // This avoids unnecessary poller restarts when only targets change.
 func (m *pollerManager) ReconcilePoller(ctx context.Context, cfg Config) {
 	if len(cfg.Sources) == 0 {
-		m.logger.V(1).Info("No polling sources, not starting poller", "policy", cfg.PolicyNsName)
+		m.logger.V(1).Info(
+			"No polling sources, not starting poller",
+			"policy", cfg.PolicyNsName,
+		)
 		return
 	}
 
@@ -171,7 +174,10 @@ func (m *pollerManager) startPoller(ctx context.Context, cfg Config) {
 	// This is safe even if the caller didn't observe one, because another
 	// goroutine may have started one between our check and acquiring this lock.
 	if entry, exists := m.pollers[cfg.PolicyNsName]; exists {
-		m.logger.V(1).Info("Stopping existing poller before starting new one", "policy", cfg.PolicyNsName)
+		m.logger.V(1).Info(
+			"Stopping existing poller before starting new one",
+			"policy", cfg.PolicyNsName,
+		)
 		entry.cancel()
 		delete(m.pollErrors, cfg.PolicyNsName)
 		delete(m.bundleUpdates, cfg.PolicyNsName)
@@ -243,7 +249,11 @@ func (m *pollerManager) startPoller(ctx context.Context, cfg Config) {
 		m.mu.Unlock()
 	}()
 
-	m.logger.Info("Started WAF poller", "policy", cfg.PolicyNsName, "sourceCount", len(cfg.Sources))
+	m.logger.Info(
+		"Started WAF poller",
+		"policy", cfg.PolicyNsName,
+		"sourceCount", len(cfg.Sources),
+	)
 }
 
 // recordPollResult records the result of a poll attempt for a policy.
@@ -430,7 +440,10 @@ func (m *pollerManager) stopAll() {
 		entry.cancel()
 	}
 
-	m.logger.Info("Stopped all WAF pollers", "count", len(entries))
+	m.logger.Info(
+		"Stopped all WAF pollers",
+		"count", len(entries),
+	)
 }
 
 // clearBundleCacheLocked removes the given policy from the owner sets of all bundle keys
@@ -485,6 +498,9 @@ func (m *pollerManager) StopPollersNotIn(activePolicies map[types.NamespacedName
 	}
 
 	if len(toStop) > 0 {
-		m.logger.Info("Stopped stale WAF pollers", "count", len(toStop))
+		m.logger.Info(
+			"Stopped stale WAF pollers",
+			"count", len(toStop),
+		)
 	}
 }

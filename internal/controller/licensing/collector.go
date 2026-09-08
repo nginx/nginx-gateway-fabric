@@ -18,7 +18,7 @@ import (
 // Collector collects licensing information for N+.
 type Collector interface {
 	// Collect collects the licensing information for N+ and returns it in the deployment context.
-	Collect(ctx context.Context) (dataplane.DeploymentContext, error)
+	Collect(ctx context.Context, logger logr.Logger) (dataplane.DeploymentContext, error)
 }
 
 const integrationID = "ngf"
@@ -29,8 +29,6 @@ type DeploymentContextCollectorConfig struct {
 	K8sClientReader client.Reader
 	// PodUID is the UID of the NGF Pod.
 	PodUID string
-	// Logger is the logger.
-	Logger logr.Logger
 }
 
 // DeploymentContextCollector collects the deployment context information needed for N+ licensing.
@@ -48,11 +46,16 @@ func NewDeploymentContextCollector(
 }
 
 // Collect collects all the information needed to create the deployment context for N+ licensing.
-func (c *DeploymentContextCollector) Collect(ctx context.Context) (dataplane.DeploymentContext, error) {
+func (c *DeploymentContextCollector) Collect(
+	ctx context.Context,
+	logger logr.Logger,
+) (dataplane.DeploymentContext, error) {
 	depCtx := dataplane.DeploymentContext{
 		Integration:    integrationID,
 		InstallationID: &c.cfg.PodUID,
 	}
+
+	logger.V(1).Info("Collecting deployment context")
 
 	clusterInfo, err := telemetry.CollectClusterInformation(ctx, c.cfg.K8sClientReader)
 	if err != nil {

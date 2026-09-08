@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	jsonpatch "gopkg.in/evanphx/json-patch.v4"
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
@@ -45,6 +46,7 @@ const (
 	defaultNginxErrorLogLevel        = "info"
 	nginxIncludesConfigMapNameSuffix = "includes-bootstrap"
 	nginxAgentConfigMapNameSuffix    = "agent-config"
+	metricsServiceName               = "metrics"
 
 	defaultServiceType   = corev1.ServiceTypeLoadBalancer
 	defaultServicePolicy = corev1.ServiceExternalTrafficPolicyLocal
@@ -153,6 +155,16 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 		errs = append(errs, err)
 	}
 
+	var serviceMonitor []client.Object
+	if p.serviceMonitorInstalled {
+		serviceMonitor = p.buildServiceMonitor(
+			objectMeta,
+			gateway,
+			nProxyCfg,
+			selectorLabels,
+		)
+	}
+
 	var openshiftObjs []client.Object
 	if p.isOpenshift {
 		var openShiftErrs []error
@@ -162,21 +174,14 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 		}
 	}
 
-	// build ports from all listeners (Gateway + ListenerSets)
-	ports := p.buildPortsFromListeners(allListeners)
-
-	// Add healthcheck port to service if expose is enabled
-	var healthcheckPort int32
-	if isNginxReadinessProbeExposed(nProxyCfg) {
-		healthcheckPort = dataplane.GetNginxReadinessProbePort(nProxyCfg)
-		ports = appendUniquePortProtoEntry(ports, portProtoEntry{Port: healthcheckPort, Protocol: corev1.ProtocolTCP})
-	}
+	ports, healthcheckPort, metricsPort := p.addNginxServicePorts(allListeners, nProxyCfg)
 
 	service, err := p.buildNginxService(
 		cloneObjectMeta(objectMeta),
 		nProxyCfg,
 		ports,
 		healthcheckPort,
+		metricsPort,
 		selectorLabels,
 		gateway.Spec.Addresses,
 	)
@@ -211,6 +216,7 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 	// secrets
 	// configmaps
 	// serviceaccount
+	// servicemonitor
 	// role/binding (if openshift)
 	// service
 	// deployment/daemonset
@@ -222,6 +228,9 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 	objects = append(objects, secretsList...)
 	objects = append(objects, configmapsList...)
 	objects = append(objects, serviceAccount)
+	if p.serviceMonitorInstalled {
+		objects = append(objects, serviceMonitor...)
+	}
 	if p.isOpenshift {
 		objects = append(objects, openshiftObjs...)
 	}
@@ -240,6 +249,31 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 	}
 
 	return objects, errors.Join(errs...)
+}
+
+func (p *NginxProvisioner) addNginxServicePorts(
+	allListeners []*graph.Listener,
+	nProxyCfg *graph.EffectiveNginxProxy,
+) ([]portProtoEntry, int32, int32) {
+	// build ports from all listeners (Gateway + ListenerSets)
+	ports := p.buildPortsFromListeners(allListeners)
+
+	// Add healthcheck port to service if expose is enabled
+	var healthcheckPort int32
+	if isNginxReadinessProbeExposed(nProxyCfg) {
+		healthcheckPort = dataplane.GetNginxReadinessProbePort(nProxyCfg)
+		ports = appendUniquePortProtoEntry(ports, portProtoEntry{Port: healthcheckPort, Protocol: corev1.ProtocolTCP})
+	}
+
+	var metricsPort int32
+	if port, enabled := graph.MetricsEnabledForNginxProxy(nProxyCfg); enabled {
+		metricsPort = config.DefaultNginxMetricsPort
+		if port != nil {
+			metricsPort = *port
+		}
+	}
+
+	return ports, healthcheckPort, metricsPort
 }
 
 // buildHPAAndPDB builds the HPA and PDB for the NGINX deployment
@@ -373,6 +407,100 @@ func (p *NginxProvisioner) buildServiceAccount(
 	return serviceAccount, nil
 }
 
+// buildServiceMonitor builds the ServiceMonitor for the NGINX deployment.
+func (p *NginxProvisioner) buildServiceMonitor(
+	objectMeta metav1.ObjectMeta,
+	gateway *gatewayv1.Gateway,
+	nProxyCfg *graph.EffectiveNginxProxy,
+	selectorLabels map[string]string,
+) []client.Object {
+	// Only build the service monitor if it has been enabled in the NginxProxy spec
+	if nProxyCfg == nil || nProxyCfg.Kubernetes == nil {
+		return nil
+	}
+
+	// Determine whether the ServiceMonitor is being enabled on a Deployment or a DaemonSet
+	var monitoring *ngfAPIv1alpha2.ServiceMonitorSpec
+	if nProxyCfg.Kubernetes.DaemonSet != nil && nProxyCfg.Kubernetes.DaemonSet.ServiceMonitor != nil {
+		monitoring = nProxyCfg.Kubernetes.DaemonSet.ServiceMonitor
+	} else if nProxyCfg.Kubernetes.Deployment != nil && nProxyCfg.Kubernetes.Deployment.ServiceMonitor != nil {
+		monitoring = nProxyCfg.Kubernetes.Deployment.ServiceMonitor
+	}
+
+	if monitoring == nil || !monitoring.Enable {
+		return nil
+	}
+
+	objectMeta.Name = controller.CreateNginxResourceName(objectMeta.Name, metricsServiceName)
+
+	// Set the defaults for the service monitor if not specified in the NginxProxy
+	matchNames, useAny, matchLabels, endpoints := setServiceMonitorDefaults(monitoring, gateway, selectorLabels)
+
+	serviceMonitor := &monitoringv1.ServiceMonitor{
+		ObjectMeta: objectMeta,
+		Spec: monitoringv1.ServiceMonitorSpec{
+			NamespaceSelector: monitoringv1.NamespaceSelector{
+				MatchNames: matchNames,
+				Any:        *useAny,
+			},
+			Selector: metav1.LabelSelector{
+				MatchLabels: matchLabels,
+			},
+			Endpoints: endpoints,
+		},
+	}
+
+	if err := p.setOwnerReference(serviceMonitor, gateway); err != nil {
+		return []client.Object{serviceMonitor}
+	}
+
+	return []client.Object{serviceMonitor}
+}
+
+func setServiceMonitorDefaults(
+	monitoring *ngfAPIv1alpha2.ServiceMonitorSpec,
+	gateway *gatewayv1.Gateway,
+	selectorLabels map[string]string,
+) ([]string, *bool, map[string]string, []monitoringv1.Endpoint) {
+	var matchNames []string
+	useAny := helpers.GetPointer(false)
+
+	if monitoring.NamespaceSelector != nil {
+		if monitoring.NamespaceSelector.Any != nil {
+			useAny = monitoring.NamespaceSelector.Any
+		}
+		if monitoring.NamespaceSelector.MatchNames != nil {
+			matchNames = monitoring.NamespaceSelector.MatchNames
+		}
+	} else {
+		matchNames = []string{gateway.Namespace}
+		useAny = helpers.GetPointer(false)
+	}
+
+	matchLabels := selectorLabels
+	if monitoring.Selector != nil && monitoring.Selector.MatchLabels != nil {
+		matchLabels = monitoring.Selector.MatchLabels
+	}
+
+	var endpoints []monitoringv1.Endpoint
+	for _, endpoint := range monitoring.Endpoints {
+		ep := monitoringv1.Endpoint{}
+		if endpoint.Port != nil {
+			ep.Port = *endpoint.Port
+		} else {
+			ep.Port = "metrics"
+		}
+
+		if endpoint.Interval != nil {
+			ep.Interval = monitoringv1.Duration(*endpoint.Interval)
+		}
+
+		endpoints = append(endpoints, ep)
+	}
+
+	return matchNames, useAny, matchLabels, endpoints
+}
+
 // buildPortsFromListeners builds a list of port/protocol entries from the graph listeners.
 // This includes listeners from both the Gateway and any attached ListenerSets.
 // A port number can appear multiple times if it has different protocols (e.g., TCP and UDP on port 53).
@@ -418,6 +546,14 @@ func cloneObjectMeta(meta metav1.ObjectMeta) metav1.ObjectMeta {
 
 func isAutoscalingEnabled(dep *ngfAPIv1alpha2.DeploymentSpec) bool {
 	return dep != nil && dep.Autoscaling != nil && dep.Autoscaling.Enable
+}
+
+func isServiceMonitorEnabledForDeployment(dep *ngfAPIv1alpha2.DeploymentSpec) bool {
+	return dep != nil && dep.ServiceMonitor != nil && dep.ServiceMonitor.Enable
+}
+
+func isServiceMonitorEnabledForDaemonSet(dep *ngfAPIv1alpha2.DaemonSetSpec) bool {
+	return dep != nil && dep.ServiceMonitor != nil && dep.ServiceMonitor.Enable
 }
 
 func (p *NginxProvisioner) buildHPA(
@@ -791,6 +927,7 @@ func (p *NginxProvisioner) buildNginxService(
 	nProxyCfg *graph.EffectiveNginxProxy,
 	ports []portProtoEntry,
 	healthcheckPort int32,
+	metricsPort int32,
 	selectorLabels map[string]string,
 	addresses []gatewayv1.GatewaySpecAddress,
 ) (*corev1.Service, error) {
@@ -819,7 +956,7 @@ func (p *NginxProvisioner) buildNginxService(
 		}
 	}
 
-	servicePorts := buildServicePorts(ports, healthcheckPort, serviceType, serviceCfg.NodePorts)
+	servicePorts := buildServicePorts(ports, healthcheckPort, metricsPort, serviceType, serviceCfg.NodePorts)
 
 	svc := &corev1.Service{
 		ObjectMeta: objectMeta,
@@ -864,6 +1001,7 @@ func (p *NginxProvisioner) updateLoadBalancerClass(
 func buildServicePorts(
 	ports []portProtoEntry,
 	healthcheckPort int32,
+	metricsPort int32,
 	serviceType corev1.ServiceType,
 	nodePorts []ngfAPIv1alpha2.NodePort,
 ) []corev1.ServicePort {
@@ -898,6 +1036,26 @@ func buildServicePorts(
 		}
 
 		servicePorts = append(servicePorts, servicePort)
+	}
+
+	// Add the metrics port to the service if enabled and not already in listener ports
+	if metricsPort > 0 {
+		metricsAdded := false
+		for _, entry := range ports {
+			if entry.Port == metricsPort {
+				metricsAdded = true
+				break
+			}
+		}
+
+		if !metricsAdded {
+			servicePorts = append(servicePorts, corev1.ServicePort{
+				Name:       "metrics",
+				Port:       metricsPort,
+				TargetPort: intstr.FromInt32(metricsPort),
+				Protocol:   corev1.ProtocolTCP,
+			})
+		}
 	}
 
 	// need to sort ports so everytime buildNginxService is called it will generate the exact same
@@ -1987,10 +2145,11 @@ func (p *NginxProvisioner) buildResourcesForInvalidGatewayCleanup(
 	// 3. service
 	// 4. hpa (Horizontal Pod Autoscaler)
 	// 5. pdb (Pod Disruption Budget)
-	// 6. role/binding (if openshift)
-	// 7. serviceaccount
-	// 8. configmaps
-	// 9. secrets
+	// 6. service monitor
+	// 7. role/binding (if openshift)
+	// 8. serviceaccount
+	// 9. configmaps
+	// 10. secrets
 
 	var objects []client.Object
 
@@ -2032,7 +2191,12 @@ func (p *NginxProvisioner) buildResourcesForInvalidGatewayCleanup(
 	// 5. PodDisruptionBudget
 	objects = append(objects, &policyv1.PodDisruptionBudget{ObjectMeta: baseMeta})
 
-	// 6. RBAC (OpenShift only)
+	// 6. ServiceMonitor
+	if p.serviceMonitorInstalled {
+		objects = append(objects, &monitoringv1.ServiceMonitor{ObjectMeta: meta(resourceName(metricsServiceName))})
+	}
+
+	// 7. RBAC (OpenShift only)
 	if p.isOpenshift {
 		objects = append(
 			objects,
@@ -2041,17 +2205,17 @@ func (p *NginxProvisioner) buildResourcesForInvalidGatewayCleanup(
 		)
 	}
 
-	// 7. ServiceAccount
+	// 8. ServiceAccount
 	objects = append(objects, &corev1.ServiceAccount{ObjectMeta: baseMeta})
 
-	// 8. ConfigMaps
+	// 9. ConfigMaps
 	objects = append(
 		objects,
 		&corev1.ConfigMap{ObjectMeta: meta(resourceName(nginxIncludesConfigMapNameSuffix))},
 		&corev1.ConfigMap{ObjectMeta: meta(resourceName(nginxAgentConfigMapNameSuffix))},
 	)
 
-	// 9. Secrets
+	// 10. Secrets
 	objects = append(objects, &corev1.Secret{ObjectMeta: meta(resourceName(p.cfg.AgentTLSSecretName))})
 
 	for _, name := range p.cfg.NginxDockerSecretNames {

@@ -48,7 +48,7 @@ metadata:
               "image": {
                 "pullPolicy": "IfNotPresent",
                 "repository": "ghcr.io/nginx/nginx-gateway-fabric/nginx",
-                "tag": "2.6.7-ubi"
+                "tag": "2.7.0-ubi"
               },
               "imagePullSecret": "",
               "imagePullSecrets": [],
@@ -118,7 +118,7 @@ metadata:
               "image": {
                 "pullPolicy": "IfNotPresent",
                 "repository": "ghcr.io/nginx/nginx-gateway-fabric",
-                "tag": "2.6.7-ubi"
+                "tag": "2.7.0-ubi"
               },
               "kind": "deployment",
               "labels": {},
@@ -171,12 +171,12 @@ metadata:
         }
       ]
     capabilities: Basic Install
-    createdAt: "2026-07-15T22:10:44Z"
+    createdAt: "2026-09-02T19:44:11Z"
     operators.operatorframework.io/builder: operator-sdk-v1.42.0
     operators.operatorframework.io/project_layout: helm.sdk.operatorframework.io/v1
     categories: Networking
     certified: "true"
-    containerImage: ghcr.io/nginx/nginx-gateway-fabric/operator@sha256:e178b3a2c77653991c05496fa105d4bdd941eda10dd759bd4aea501fafce40a5
+    containerImage: ghcr.io/nginx/nginx-gateway-fabric/operator@sha256:beba62f00369777163ec7f63c44c8f305c60e21b0935b0d580b8b100ccdbcd41
     description: The NGINX Gateway Fabric is a Kubernetes Gateway API implementation that provides application traffic management for modern cloud-native applications
     features.operators.openshift.io/cnf: "false"
     features.operators.openshift.io/cni: "false"
@@ -192,7 +192,7 @@ metadata:
     repository: https://github.com/nginx/nginx-gateway-fabric
     support: NGINX Inc.
     com.redhat.openshift.versions: v4.19-v4.21
-  name: nginx-gateway-fabric.v1.4.7
+  name: nginx-gateway-fabric.v1.5.0
   namespace: placeholder
   labels:
     operatorframework.io/arch.amd64: supported
@@ -302,6 +302,18 @@ spec:
                 - autoscaling
               resources:
                 - horizontalpodautoscalers
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - policy
+              resources:
+                - poddisruptionbudgets
               verbs:
                 - create
                 - delete
@@ -421,6 +433,7 @@ spec:
                 - authenticationfilters
                 - snippetspolicies
                 - wafpolicies
+                - externalloadbalancers
                 - payloadprocessors
               verbs:
                 - create
@@ -442,6 +455,7 @@ spec:
                 - authenticationfilters/status
                 - snippetspolicies/status
                 - wafpolicies/status
+                - externalloadbalancers/status
                 - payloadprocessors/status
               verbs:
                 - update
@@ -479,6 +493,40 @@ spec:
                 - update
                 - use
                 - watch
+            - apiGroups:
+                - ""
+              resources:
+                - services/status
+              verbs:
+                - patch
+            - apiGroups:
+                - appprotect.f5.com
+              resources:
+                - appolicies
+                - aplogconfs
+              verbs:
+                - get
+                - list
+                - patch
+                - watch
+            - apiGroups:
+                - cis.f5.com
+              resources:
+                - ingresslinks
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - cis.f5.com
+              resources:
+                - ingresslinks/status
+              verbs:
+                - get
             - apiGroups:
                 - authentication.k8s.io
               resources:
@@ -521,7 +569,7 @@ spec:
                       - --leader-elect
                       - --leader-election-id=nginx-gateway-fabric
                       - --health-probe-bind-address=:8081
-                    image: ghcr.io/nginx/nginx-gateway-fabric/operator@sha256:e178b3a2c77653991c05496fa105d4bdd941eda10dd759bd4aea501fafce40a5
+                    image: ghcr.io/nginx/nginx-gateway-fabric/operator@sha256:beba62f00369777163ec7f63c44c8f305c60e21b0935b0d580b8b100ccdbcd41
                     livenessProbe:
                       httpGet:
                         path: /healthz
@@ -609,11 +657,11 @@ spec:
     - email: kubernetes@nginx.com
       name: F5NGINX
   maturity: alpha
-  minKubeVersion: 1.31.0
+  minKubeVersion: 1.32.0
   provider:
     name: F5 NGINX
     url: https://www.f5.com/go/product/welcome-to-nginx
   relatedImages:
-    - image: ghcr.io/nginx/nginx-gateway-fabric/operator@sha256:e178b3a2c77653991c05496fa105d4bdd941eda10dd759bd4aea501fafce40a5
+    - image: ghcr.io/nginx/nginx-gateway-fabric/operator@sha256:beba62f00369777163ec7f63c44c8f305c60e21b0935b0d580b8b100ccdbcd41
       name: manager
-  version: 1.4.7
+  version: 1.5.0
