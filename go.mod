@@ -7,7 +7,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/config v1.33.3
 	github.com/aws/aws-sdk-go-v2/credentials v1.20.3
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.111.0
-	github.com/dlclark/regexp2/v2 v2.7.1
+	github.com/dlclark/regexp2/v2 v2.8.0
 	github.com/envoyproxy/go-control-plane/envoy v1.39.0
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/go-logr/logr v1.4.4
