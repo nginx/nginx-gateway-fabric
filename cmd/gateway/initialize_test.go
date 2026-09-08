@@ -32,10 +32,12 @@ func TestInitialize_OSS(t *testing.T) {
 			{
 				destDirName: "destDir",
 				srcFileName: "src1",
+				permissions: file.RegularFileMode,
 			},
 			{
 				destDirName: "destDir2",
 				srcFileName: "src2",
+				permissions: file.RegularFileMode,
 			},
 		},
 		plus: false,
@@ -66,10 +68,12 @@ func TestInitialize_OSS_Error(t *testing.T) {
 			{
 				destDirName: "destDir",
 				srcFileName: "src1",
+				permissions: file.RegularFileMode,
 			},
 			{
 				destDirName: "destDir2",
 				srcFileName: "src2",
+				permissions: file.RegularFileMode,
 			},
 		},
 		plus: false,
@@ -129,10 +133,12 @@ func TestInitialize_Plus(t *testing.T) {
 					{
 						destDirName: "destDir",
 						srcFileName: "src1",
+						permissions: file.RegularFileMode,
 					},
 					{
 						destDirName: "destDir2",
 						srcFileName: "src2",
+						permissions: file.RegularFileMode,
 					},
 				},
 				podUID:     "install-id",
@@ -168,7 +174,7 @@ func TestCopyFile(t *testing.T) {
 	g.Expect(err).ToNot(HaveOccurred())
 	defer os.RemoveAll(dest)
 
-	g.Expect(copyFile(file.NewStdLibOSFileManager(), src.Name(), dest)).To(Succeed())
+	g.Expect(copyFile(file.NewStdLibOSFileManager(), src.Name(), dest, file.RegularFileMode)).To(Succeed())
 	_, err = os.Stat(filepath.Join(dest, filepath.Base(src.Name())))
 	g.Expect(err).ToNot(HaveOccurred())
 }
@@ -229,7 +235,7 @@ func TestCopyFileErrors(t *testing.T) {
 			t.Parallel()
 
 			g := NewWithT(t)
-			err := copyFile(test.fileMgr, "source", "destDir")
+			err := copyFile(test.fileMgr, "source", "destDir", file.RegularFileMode)
 
 			g.Expect(err).To(MatchError(test.expErr))
 		})
