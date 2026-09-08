@@ -152,7 +152,7 @@ func (g GeneratorImpl) generateMgmtFiles(logger logr.Logger, conf dataplane.Conf
 
 	deploymentCtxFile, err := g.GenerateDeploymentContext(conf.DeploymentContext)
 	if err != nil {
-		logger.Error(err, "error building deployment context for mgmt block")
+		logger.Error(err, "Error building deployment context for mgmt block")
 	} else {
 		files = append(files, deploymentCtxFile)
 	}

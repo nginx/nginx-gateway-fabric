@@ -79,7 +79,7 @@ func (w *FileWatcher) Watch(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			if err := w.watcher.Close(); err != nil {
-				w.logger.Error(err, "unable to close file watcher")
+				w.logger.Error(err, "Unable to close file watcher")
 			}
 			return
 		case event := <-w.watcher.Events:
@@ -87,14 +87,17 @@ func (w *FileWatcher) Watch(ctx context.Context) {
 		case <-ticker.C:
 			w.checkForUpdates()
 		case err := <-w.watcher.Errors:
-			w.logger.Error(err, "error watching file")
+			w.logger.Error(err, "Error watching file")
 		}
 	}
 }
 
 func (w *FileWatcher) addWatcher(path string) {
 	if err := w.watcher.Add(path); err != nil {
-		w.logger.Error(err, "failed to watch path", "path", path)
+		w.logger.Error(
+			err, "Failed to watch path",
+			"path", path,
+		)
 	}
 }
 
@@ -111,7 +114,11 @@ func (w *FileWatcher) addWatcherWithRetry(ctx context.Context, path string) {
 		attempt++
 		if err := w.watcher.Add(path); err != nil {
 			lastErr = err
-			w.logger.Error(err, "failed to watch path, retrying", "path", path, "attempt", attempt)
+			w.logger.Error(
+				err, "Failed to watch path, retrying",
+				"path", path,
+				"attempt", attempt,
+			)
 			return false, nil
 		}
 
@@ -120,7 +127,11 @@ func (w *FileWatcher) addWatcherWithRetry(ctx context.Context, path string) {
 	// Only log a final failure if retries were exhausted; if ctx was canceled (e.g. shutdown),
 	// exit silently as the caller no longer cares about the outcome.
 	if err != nil && ctx.Err() == nil {
-		w.logger.Error(lastErr, "failed to watch path after retries", "path", path, "attempts", attempt)
+		w.logger.Error(
+			lastErr, "Failed to watch path after retries",
+			"path", path,
+			"attempts", attempt,
+		)
 	}
 }
 
@@ -152,7 +163,10 @@ func (w *FileWatcher) snapshotFileHashes() {
 	for _, file := range w.filesToWatch {
 		hash, err := hashFileContents(file)
 		if err != nil {
-			w.logger.Error(err, "failed to read file for hashing", "path", file)
+			w.logger.Error(
+				err, "Failed to read file for hashing",
+				"path", file,
+			)
 		}
 		w.fileHashes[file] = hash
 	}
@@ -163,7 +177,10 @@ func (w *FileWatcher) didFileHashesChange() bool {
 	for _, file := range w.filesToWatch {
 		currentHash, err := hashFileContents(file)
 		if err != nil {
-			w.logger.Error(err, "failed to read file for hashing", "path", file)
+			w.logger.Error(
+				err, "Failed to read file for hashing",
+				"path", file,
+			)
 		}
 		if prevHash, ok := w.fileHashes[file]; !ok || prevHash != currentHash {
 			w.fileHashes[file] = currentHash
