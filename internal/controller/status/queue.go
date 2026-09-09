@@ -37,7 +37,8 @@ type QueueObject struct {
 	Deployment         Deployment
 	UpdateType         UpdateType
 	// NginxConfigPushed indicates that an NGINX configuration push was attempted for this update.
-	// When false the update is a status-only change (e.g. a WAF poll result) and the
+	// When false the update is a status-only change (e.g. a WAF poll result) or a no-op
+	// UpdateConfig where files were unchanged, and the
 	// "NGINX configuration was successfully updated" log should be suppressed.
 	NginxConfigPushed bool
 }

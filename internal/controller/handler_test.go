@@ -530,6 +530,37 @@ var _ = Describe("eventHandler", func() {
 		})
 	})
 
+	It("should not treat a no-op UpdateConfig as an NGINX config push", func() {
+		fakeProcessor.ProcessReturns(baseGraph)
+		fakeGenerator.GenerateReturns([]agent.File{
+			{
+				Meta: &pb.FileMeta{
+					Name: "test.conf",
+				},
+			},
+		})
+		fakeNginxUpdater.UpdateConfigReturns(false)
+
+		gw := baseGraph.Gateways[types.NamespacedName{Namespace: "test", Name: "gateway"}]
+		priorErr := errors.New("prior reload error")
+		gw.LatestReloadResult.Error = priorErr
+
+		handler.HandleEventBatch(context.Background(), logr.Discard(), []any{
+			&events.UpsertEvent{Resource: &gatewayv1.HTTPRoute{}},
+		})
+
+		Eventually(func() int {
+			return fakeProvisioner.RegisterGatewayCallCount()
+		}).Should(Equal(1))
+		Eventually(func() int {
+			return fakeStatusUpdater.UpdateGroupCallCount()
+		}).Should(BeNumerically(">=", 1))
+
+		Expect(fakeNginxUpdater.UpdateConfigCallCount()).To(Equal(1))
+		// waitForStatusUpdates must not clear a prior reload error when nothing was pushed.
+		Expect(gw.LatestReloadResult.Error).To(Equal(priorErr))
+	})
+
 	It("should update status when receiving a queue event", func() {
 		obj := &status.QueueObject{
 			UpdateType: status.UpdateAll,

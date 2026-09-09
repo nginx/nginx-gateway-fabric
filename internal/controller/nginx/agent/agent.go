@@ -30,7 +30,9 @@ const retryUpstreamTimeout = 5 * time.Second
 
 // NginxUpdater is an interface for updating NGINX using the NGINX agent.
 type NginxUpdater interface {
-	UpdateConfig(deployment *Deployment, files []File, volumeMounts []v1.VolumeMount)
+	// UpdateConfig sends the nginx configuration to agents if files changed.
+	// It returns true when a ConfigApplyRequest was broadcast; false when files were unchanged.
+	UpdateConfig(deployment *Deployment, files []File, volumeMounts []v1.VolumeMount) bool
 	UpdateUpstreamServers(deployment *Deployment, conf dataplane.Configuration)
 }
 
@@ -89,12 +91,12 @@ func (n *NginxUpdaterImpl) UpdateConfig(
 	deployment *Deployment,
 	files []File,
 	volumeMounts []v1.VolumeMount,
-) {
+) bool {
 	msg := deployment.SetFiles(files, volumeMounts)
 	if msg == nil {
 		deployment.SetLatestConfigError(deployment.GetConfigurationStatus())
 		n.logger.V(1).Info("No changes to nginx configuration files, not sending to agent")
-		return
+		return false
 	}
 
 	applied := deployment.GetBroadcaster().Send(*msg)
@@ -103,6 +105,7 @@ func (n *NginxUpdaterImpl) UpdateConfig(
 	}
 
 	deployment.SetLatestConfigError(deployment.GetConfigurationStatus())
+	return true
 }
 
 // UpdateUpstreamServers sends an APIRequest to the agent to update upstream servers using the NGINX Plus API.
