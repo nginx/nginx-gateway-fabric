@@ -597,7 +597,11 @@ func attachPolicyToGateway(
 		} else {
 			// Situation where gateway target is not found and the ancestors slice is full so I cannot add the condition.
 			// Log in the controller log.
-			logger.Info("Gateway target not found and ancestors slice is full.", "policy", policyName, "ancestor", ancestorName)
+			logger.Info(
+				"Gateway target not found and ancestors slice is full",
+				"policy", policyName,
+				"ancestor", ancestorName,
+			)
 		}
 		logAncestorLimitReached(logger, policyName, policyKind, ancestorName)
 
@@ -1347,7 +1351,10 @@ func fetchPolicyBundle(
 
 	result, err := wafInput.Fetcher.FetchPolicyBundle(ctx, req)
 	if err != nil {
-		logger.Error(err, "Failed to fetch WAF policy bundle", "resource", wafPolicy.Name)
+		logger.Error(
+			err, "Failed to fetch WAF policy bundle",
+			"resource", wafPolicy.Name,
+		)
 		if prev, ok := wafInput.PreviousBundles[bundleKey]; ok {
 			cond := conditions.NewPolicyProgrammedStaleBundleWarning("policy bundle", err.Error())
 			policy.Conditions = append(policy.Conditions, cond)
@@ -1422,10 +1429,8 @@ func fetchSecurityLogBundles(
 		result, err := wafInput.Fetcher.FetchLogProfileBundle(ctx, req)
 		if err != nil {
 			logger.Error(
-				err,
-				"Failed to fetch WAF security log bundle",
-				"resource",
-				wafPolicy.Name,
+				err, "Failed to fetch WAF security log bundle",
+				"resource", wafPolicy.Name,
 			)
 			if prev, ok := wafInput.PreviousBundles[bundleKey]; ok {
 				cond := conditions.NewPolicyProgrammedStaleBundleWarning(LogBundleDescription(secLog.LogSource), err.Error())
@@ -1636,7 +1641,11 @@ func fetchPLMPolicyBundle(
 		tlsCfg,
 	)
 	if err != nil {
-		logger.Error(err, "Failed to fetch PLM policy bundle", "resource", wafPolicy.Name, "apPolicy", nsName)
+		logger.Error(
+			err, "Failed to fetch PLM policy bundle",
+			"resource", wafPolicy.Name,
+			"apPolicy", nsName,
+		)
 		if prev, ok := handlePLMBundleFetchError(policy, wafInput.PreviousBundles, bundleKey, "policy bundle", err); ok {
 			output.Bundles[bundleKey] = prev
 		}
@@ -1751,9 +1760,8 @@ func fetchPLMSecurityLogBundles(
 		if wafInput.PLMFetcher == nil {
 			// PLM not configured but we have an APLogConfRef — should not happen due to CEL,
 			// but guard against it.
-			logger.Error(
-				fmt.Errorf("APLogConfRef set but PLM is not configured"),
-				"Skipping PLM log bundle fetch",
+			logger.V(1).Info(
+				"APLogConfRef set but PLM is not configured, skipping PLM log bundle fetch",
 				"resource", wafPolicy.Name,
 				"apLogConfRef", ref.Name,
 			)
@@ -1956,7 +1964,11 @@ func fetchPLMLogBundleData(
 		return &WAFBundleData{Data: data, Checksum: status.Bundle.SHA256}, true
 	}
 
-	logger.Error(err, "Failed to fetch PLM log bundle", "resource", wafPolicy.Name, "apLogConf", nsName)
+	logger.Error(
+		err, "Failed to fetch PLM log bundle",
+		"resource", wafPolicy.Name,
+		"apLogConf", nsName,
+	)
 	return handlePLMBundleFetchError(
 		policy,
 		wafInput.PreviousBundles,
@@ -2020,8 +2032,7 @@ func resolvePLMSecrets(
 		if !ok {
 			err := fmt.Errorf("configured secret %q not found", nsName)
 			logger.Error(
-				err,
-				"PLM secret is not available",
+				err, "PLM secret is not available",
 				"secret", nsName,
 				"roles", roles,
 			)
@@ -2034,7 +2045,11 @@ func resolvePLMSecrets(
 			case PLMRoleCredentials:
 				accessKeyID, secretAccessKey, err := resolvePLMCredentials(secret)
 				if err != nil {
-					logger.Error(err, "PLM secret is invalid", "secret", nsName, "role", role)
+					logger.Error(
+						err, "PLM secret is invalid",
+						"secret", nsName,
+						"role", role,
+					)
 					resolutionErrors = append(
 						resolutionErrors,
 						fmt.Errorf("configured %s secret %q is invalid: %w", role, nsName, err),
@@ -2049,7 +2064,11 @@ func resolvePLMSecrets(
 			case PLMRoleCA:
 				caData, err := resolvePLMCA(secret)
 				if err != nil {
-					logger.Error(err, "PLM secret is invalid", "secret", nsName, "role", role)
+					logger.Error(
+						err, "PLM secret is invalid",
+						"secret", nsName,
+						"role", role,
+					)
 					resolutionErrors = append(
 						resolutionErrors,
 						fmt.Errorf("configured %s secret %q is invalid: %w", role, nsName, err),
@@ -2064,7 +2083,11 @@ func resolvePLMSecrets(
 			case PLMRoleClientSSL:
 				certData, keyData, err := resolvePLMClientSSL(secret)
 				if err != nil {
-					logger.Error(err, "PLM secret is invalid", "secret", nsName, "role", role)
+					logger.Error(
+						err, "PLM secret is invalid",
+						"secret", nsName,
+						"role", role,
+					)
 					resolutionErrors = append(
 						resolutionErrors,
 						fmt.Errorf("configured %s secret %q is invalid: %w", role, nsName, err),
