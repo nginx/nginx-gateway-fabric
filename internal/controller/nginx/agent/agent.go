@@ -105,7 +105,7 @@ func (n *NginxUpdaterImpl) UpdateConfig(
 	}
 
 	deployment.SetLatestConfigError(deployment.GetConfigurationStatus())
-	return true
+	return applied
 }
 
 // UpdateUpstreamServers sends an APIRequest to the agent to update upstream servers using the NGINX Plus API.
