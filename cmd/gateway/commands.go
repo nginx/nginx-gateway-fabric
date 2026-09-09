@@ -1059,8 +1059,8 @@ func createInitializeCommand() *cobra.Command {
 		permissionsFlag,
 		[]string{},
 		fmt.Sprintf(
-			"The file permissions (%s or %s) to apply to the source file at the same array index. "+
-				"Defaults to %s for all files.",
+			"The file permissions (octal, e.g. %s for regular files or %s for secrets) to apply to the "+
+				"source file at the same array index. Defaults to %s for all files.",
 			file.RegularFileMode, file.SecretFileMode, file.RegularFileMode,
 		),
 	)

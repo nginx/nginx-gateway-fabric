@@ -241,3 +241,21 @@ func TestCopyFileErrors(t *testing.T) {
 		})
 	}
 }
+
+func TestCopyFileInvalidPermissions(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	src, err := os.CreateTemp(os.TempDir(), "testfile")
+	g.Expect(err).ToNot(HaveOccurred())
+	defer os.Remove(src.Name())
+
+	dest, err := os.MkdirTemp(os.TempDir(), "testdir")
+	g.Expect(err).ToNot(HaveOccurred())
+	defer os.RemoveAll(dest)
+
+	err = copyFile(file.NewStdLibOSFileManager(), src.Name(), dest, "not-octal")
+
+	expErr := `invalid file permissions "not-octal": strconv.ParseUint: parsing "not-octal": invalid syntax`
+	g.Expect(err).To(MatchError(expErr))
+}
