@@ -4,7 +4,6 @@ import (
 	"errors"
 	"io"
 	"os"
-	"strings"
 	"testing"
 
 	. "github.com/onsi/gomega"
@@ -1291,7 +1290,6 @@ func TestRunWithPanicFlush_FlushesToRealSink(t *testing.T) {
 	logged := string(contents)
 	g.Expect(logged).To(ContainSubstring("panic recovered at command boundary"))
 	g.Expect(logged).To(ContainSubstring("panic-to-file"))
-	g.Expect(strings.TrimSpace(logged)).ToNot(BeEmpty())
 }
 
 func TestEndpointPickerFlags(t *testing.T) {

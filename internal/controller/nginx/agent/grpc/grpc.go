@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"runtime/debug"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -78,6 +77,8 @@ func NewServer(
 
 // Start is a runnable that starts the gRPC server for communicating with the nginx agent.
 func (g *Server) Start(ctx context.Context) error {
+	g.runtimeLogger.Logger.Info("Starting GRPC Server")
+
 	var lc net.ListenConfig
 	listener, err := lc.Listen(ctx, "tcp", fmt.Sprintf(":%d", g.port))
 	if err != nil {
@@ -157,11 +158,10 @@ func recoveryStreamInterceptor(logger logr.Logger, flush func()) grpc.StreamServ
 	) (err error) {
 		defer func() {
 			if recovered := recover(); recovered != nil {
+				panicErr := fmt.Errorf("panic: %v", recovered)
 				logger.Error(
-					fmt.Errorf("%v", recovered),
-					"panic recovered in stream RPC",
+					panicErr, "Panic recovered in stream RPC",
 					"method", info.FullMethod,
-					"stack", string(debug.Stack()),
 				)
 				if flush != nil {
 					flush()
@@ -183,11 +183,10 @@ func recoveryUnaryInterceptor(logger logr.Logger, flush func()) grpc.UnaryServer
 	) (resp any, err error) {
 		defer func() {
 			if recovered := recover(); recovered != nil {
+				panicErr := fmt.Errorf("panic: %v", recovered)
 				logger.Error(
-					fmt.Errorf("%v", recovered),
-					"panic recovered in unary RPC",
+					panicErr, "Panic recovered in unary RPC",
 					"method", info.FullMethod,
-					"stack", string(debug.Stack()),
 				)
 				if flush != nil {
 					flush()

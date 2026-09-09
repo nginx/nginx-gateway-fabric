@@ -285,7 +285,7 @@ func StartManager(cfg config.Config) error {
 	cfg.RuntimeLogger.Logger.Info("Starting manager")
 	go func() {
 		<-ctx.Done()
-		cfg.RuntimeLogger.Logger.Info("Shutting down")
+		cfg.RuntimeLogger.Logger.Info("Shutting down manager")
 	}()
 
 	return mgr.Start(ctx)
@@ -1046,9 +1046,7 @@ func registerControllers(
 	// We can't skip ReferenceGrant entirely (unlike other optional CRDs) because it's required
 	// for cross-namespace reference validation.
 	if !discoveredCRDs[kinds.ReferenceGrant] {
-		cfg.RuntimeLogger.Logger.Info(
-			"ReferenceGrant v1 CRD not found, falling back to v1beta1",
-		)
+		cfg.RuntimeLogger.Logger.Info("ReferenceGrant v1 CRD not found, falling back to v1beta1")
 		controllerRegCfgs = append(controllerRegCfgs, ctlrCfg{
 			objectType: &gatewayv1beta1.ReferenceGrant{},
 			options: []controller.Option{
