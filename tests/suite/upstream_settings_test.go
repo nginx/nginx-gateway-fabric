@@ -38,7 +38,7 @@ var _ = Describe("UpstreamSettingsPolicy", Ordered, Label("functional", "uspolic
 
 	zoneSize := "512k"
 	if *plusEnabled {
-		zoneSize = "1m"
+		zoneSize = "2m"
 	}
 
 	BeforeAll(func() {
