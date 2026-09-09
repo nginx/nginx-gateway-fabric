@@ -3,6 +3,7 @@ package provisioner
 import (
 	"context"
 	"fmt"
+	"path"
 	"testing"
 
 	. "github.com/onsi/gomega"
@@ -1122,10 +1123,18 @@ func TestBuildNginxResourceObjects_Plus(t *testing.T) {
 		MountPath: "/etc/nginx/" + secrets.LicenseJWTKey,
 		SubPath:   secrets.LicenseJWTKey,
 	}))
-	g.Expect(container.VolumeMounts).To(ContainElement(corev1.VolumeMount{
+	g.Expect(initContainer.VolumeMounts).To(ContainElement(corev1.VolumeMount{
 		Name:      "nginx-plus-usage-certs",
-		MountPath: "/etc/nginx/certs-bootstrap/",
+		MountPath: usageCertsSourceMountPath,
+		ReadOnly:  true,
 	}))
+	g.Expect(initContainer.VolumeMounts).To(ContainElement(corev1.VolumeMount{
+		Name:      "nginx-secrets",
+		MountPath: "/etc/nginx/secrets",
+	}))
+	g.Expect(initContainer.Command).To(ContainElement(path.Join(usageCertsSourceMountPath, "mgmt-ca.crt")))
+	g.Expect(initContainer.Command).To(ContainElement(path.Join(usageCertsSourceMountPath, "mgmt-tls.crt")))
+	g.Expect(initContainer.Command).To(ContainElement(path.Join(usageCertsSourceMountPath, "mgmt-tls.key")))
 	g.Expect(container.Image).To(Equal(fmt.Sprintf("%s:1.0.0", defaultNginxPlusImagePath)))
 }
 

@@ -1184,7 +1184,7 @@ var _ = Describe("ensureInferencePoolServices", func() {
 			k8sClient:     fakeK8sClient,
 			statusQueue:   status.NewQueue(),
 			eventRecorder: fakeEventRecorder,
-			logger:        logr.Discard(),
+			runtimeLogger: config.RuntimeLogger{Logger: logr.Discard()},
 		})
 		// Set as leader so ensureInferencePoolServices will run
 		handler.leader = true
