@@ -111,7 +111,7 @@ func (g GeneratorImpl) generateMgmtFiles(logger logr.Logger, conf dataplane.Conf
 	if content, ok := conf.AuxiliarySecrets[graph.PlusReportCACertificate]; ok {
 		caFile := agent.File{
 			Meta: &pb.FileMeta{
-				Name:        secretsFolder + "/mgmt-ca.crt",
+				Name:        MgmtCAFile,
 				Hash:        filesHelper.GenerateHash(content),
 				Permissions: file.SecretFileMode,
 				Size:        int64(len(content)),
@@ -125,7 +125,7 @@ func (g GeneratorImpl) generateMgmtFiles(logger logr.Logger, conf dataplane.Conf
 	if content, ok := conf.AuxiliarySecrets[graph.PlusReportClientSSLCertificate]; ok {
 		certFile := agent.File{
 			Meta: &pb.FileMeta{
-				Name:        secretsFolder + "/mgmt-tls.crt",
+				Name:        MgmtClientSSLCertFile,
 				Hash:        filesHelper.GenerateHash(content),
 				Permissions: file.SecretFileMode,
 				Size:        int64(len(content)),
@@ -139,7 +139,7 @@ func (g GeneratorImpl) generateMgmtFiles(logger logr.Logger, conf dataplane.Conf
 	if content, ok := conf.AuxiliarySecrets[graph.PlusReportClientSSLKey]; ok {
 		keyFile := agent.File{
 			Meta: &pb.FileMeta{
-				Name:        secretsFolder + "/mgmt-tls.key",
+				Name:        MgmtClientSSLKeyFile,
 				Hash:        filesHelper.GenerateHash(content),
 				Permissions: file.SecretFileMode,
 				Size:        int64(len(content)),
@@ -152,7 +152,7 @@ func (g GeneratorImpl) generateMgmtFiles(logger logr.Logger, conf dataplane.Conf
 
 	deploymentCtxFile, err := g.GenerateDeploymentContext(conf.DeploymentContext)
 	if err != nil {
-		logger.Error(err, "error building deployment context for mgmt block")
+		logger.Error(err, "Error building deployment context for mgmt block")
 	} else {
 		files = append(files, deploymentCtxFile)
 	}

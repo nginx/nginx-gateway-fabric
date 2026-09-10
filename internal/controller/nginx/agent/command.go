@@ -85,8 +85,9 @@ func (cs *commandService) CreateConnection(
 	resource := req.GetResource()
 	podName := resource.GetContainerInfo().GetHostname()
 	cs.logger.Info(
-		fmt.Sprintf("Creating connection for nginx pod: %s", podName),
-		"correlation_id", req.GetMessageMeta().GetCorrelationId(),
+		"Creating connection for nginx pod",
+		"podName", podName,
+		"correlationId", req.GetMessageMeta().GetCorrelationId(),
 	)
 
 	name, depType := getAgentDeploymentNameAndType(resource.GetInstances())
@@ -99,7 +100,10 @@ func (cs *commandService) CreateConnection(
 				Error:   err.Error(),
 			},
 		}
-		cs.logger.Error(err, "error getting pod owner", "correlation_id", req.GetMessageMeta().GetCorrelationId())
+		cs.logger.Error(
+			err, "Error getting pod owner",
+			"correlationId", req.GetMessageMeta().GetCorrelationId(),
+		)
 		return response, grpcStatus.Errorf(codes.InvalidArgument, "error getting pod owner: %s", err.Error())
 	}
 
@@ -139,7 +143,10 @@ func (cs *commandService) Subscribe(in pb.CommandService_SubscribeServer) error 
 	// wait for the agent to report itself and nginx
 	conn, deployment, err := cs.waitForConnection(ctx, grpcInfo)
 	if err != nil {
-		cs.logger.Error(err, "error waiting for connection", "uuid", grpcInfo.UUID)
+		cs.logger.Error(
+			err, "Error waiting for connection",
+			"uuid", grpcInfo.UUID,
+		)
 		return err
 	}
 	defer deployment.RemovePodStatus(grpcInfo.UUID)
@@ -223,8 +230,8 @@ func (cs *commandService) Subscribe(in pb.CommandService_SubscribeServer) error 
 					"Sending configuration to agent",
 					"requestType", msg.Type,
 					"uuid", grpcInfo.UUID,
-					"correlation_id", req.GetMessageMeta().GetCorrelationId(),
-					"number_of_files", len(msg.FileOverviews),
+					"correlationId", req.GetMessageMeta().GetCorrelationId(),
+					"numberOfFiles", len(msg.FileOverviews),
 				)
 			case broadcast.APIRequest:
 				req = buildPlusAPIRequest(msg.NGINXPlusAction, conn.InstanceID)
@@ -232,14 +239,14 @@ func (cs *commandService) Subscribe(in pb.CommandService_SubscribeServer) error 
 					"Sending configuration to agent",
 					"requestType", msg.Type,
 					"uuid", grpcInfo.UUID,
-					"correlation_id", req.GetMessageMeta().GetCorrelationId(),
+					"correlationId", req.GetMessageMeta().GetCorrelationId(),
 				)
 			default:
 				panic(fmt.Sprintf("unknown request type %d", msg.Type))
 			}
 
 			if err := msgr.Send(ctx, req); err != nil {
-				cs.logger.Error(err, "error sending request to agent")
+				cs.logger.Error(err, "Error sending request to agent")
 				deployment.SetPodErrorStatus(grpcInfo.UUID, err)
 				trySignalBroadcastResponse(channels.ResponseCh)
 
@@ -250,11 +257,18 @@ func (cs *commandService) Subscribe(in pb.CommandService_SubscribeServer) error 
 			// Only broadcast operations should signal ResponseCh for coordination.
 			pendingCorrelationID = req.GetMessageMeta().GetCorrelationId()
 		case err = <-msgr.Errors():
-			cs.logger.Error(err, "connection error", conn.ParentType, conn.ParentName, "uuid", grpcInfo.UUID)
+			cs.logger.Error(
+				err, "Connection error",
+				conn.ParentType, conn.ParentName,
+				"uuid", grpcInfo.UUID,
+			)
 			deployment.SetPodErrorStatus(grpcInfo.UUID, err)
 			if pendingCorrelationID != "" {
 				trySignalBroadcastResponse(channels.ResponseCh)
-				cs.logger.V(1).Info("Connection error during pending request, operation failed", "uuid", grpcInfo.UUID)
+				cs.logger.V(1).Info(
+					"Connection error during pending request, operation failed",
+					"uuid", grpcInfo.UUID,
+				)
 			}
 
 			if errors.Is(err, io.EOF) {
@@ -381,7 +395,10 @@ func (cs *commandService) setInitialConfig(
 
 	applyErr, connErr := cs.waitForInitialConfigApply(ctx, msgr, initialConfigReq.GetMessageMeta().GetCorrelationId())
 	if connErr != nil {
-		cs.logger.Error(connErr, "error setting initial configuration", "uuid", grpcInfo.UUID)
+		cs.logger.Error(
+			connErr, "Error setting initial configuration",
+			"uuid", grpcInfo.UUID,
+		)
 
 		return connErr
 	}
@@ -408,7 +425,10 @@ func (cs *commandService) setInitialConfig(
 					ctx, msgr, plusReq.GetMessageMeta().GetCorrelationId(),
 				)
 				if connErr != nil {
-					cs.logger.Error(connErr, "error setting initial configuration", "uuid", grpcInfo.UUID)
+					cs.logger.Error(
+						connErr, "Error setting initial configuration",
+						"uuid", grpcInfo.UUID,
+					)
 
 					return false, connErr
 				}
@@ -471,7 +491,7 @@ func (cs *commandService) waitForInitialConfigApply(
 			res := msg.GetCommandResponse()
 			if res.GetStatus() != pb.CommandResponse_COMMAND_STATUS_OK {
 				applyErr := fmt.Errorf("msg: %s; error: %s", res.GetMessage(), res.GetError())
-				cs.logger.V(1).Info("Received initial config response with error", "error", applyErr)
+				cs.logger.Error(applyErr, "Received initial config response with error")
 				return applyErr, nil
 			}
 
@@ -492,7 +512,10 @@ func (cs *commandService) logAndSendErrorStatus(
 	err error,
 ) {
 	if err != nil {
-		cs.logger.Error(err, "error sending request to agent", "uuid", grpcInfo.UUID)
+		cs.logger.Error(
+			err, "Error sending request to agent",
+			"uuid", grpcInfo.UUID,
+		)
 	} else {
 		cs.logger.Info(
 			"Successfully configured nginx for new subscription",
@@ -607,9 +630,11 @@ func (cs *commandService) validatePodImageVersion(
 		return fmt.Errorf("nginx image version mismatch: has %q but expected %q", nginxImage, expectedImage)
 	}
 
-	cs.logger.V(1).Info("nginx image version validated successfully",
+	cs.logger.V(1).Info(
+		"Nginx image version validated successfully",
 		"parent", parent.String(),
-		"image", nginxImage)
+		"image", nginxImage,
+	)
 
 	return nil
 }

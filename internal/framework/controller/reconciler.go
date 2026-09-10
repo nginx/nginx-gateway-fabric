@@ -2,7 +2,6 @@ package controller
 
 import (
 	"context"
-	"fmt"
 	"reflect"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -136,7 +135,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reco
 	case r.cfg.EventCh <- e:
 	}
 
-	logger.Info(fmt.Sprintf("%s the resource", op))
+	logger.Info("Resource operation applied", "operation", op)
 
 	return reconcile.Result{}, nil
 }

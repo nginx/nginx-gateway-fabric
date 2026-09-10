@@ -1,15 +1,54 @@
 package helpers_test
 
 import (
+	"strings"
 	"testing"
 	"text/template"
 
+	"github.com/go-logr/logr"
 	. "github.com/onsi/gomega"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
+
+type testLogSink struct {
+	entries *[]string
+}
+
+func (s *testLogSink) Init(logr.RuntimeInfo) {}
+
+func (s *testLogSink) Enabled(int) bool {
+	return true
+}
+
+func (s *testLogSink) Info(_ int, msg string, keysAndValues ...any) {
+	entry := msg
+	if len(keysAndValues) > 0 {
+		entry += " " + strings.TrimSpace(strings.Repeat("kv ", len(keysAndValues)/2))
+	}
+	*s.entries = append(*s.entries, entry)
+}
+
+func (s *testLogSink) Error(err error, msg string, keysAndValues ...any) {
+	entry := msg
+	if err != nil {
+		entry += ": " + err.Error()
+	}
+	if len(keysAndValues) > 0 {
+		entry += " " + strings.TrimSpace(strings.Repeat("kv ", len(keysAndValues)/2))
+	}
+	*s.entries = append(*s.entries, entry)
+}
+
+func (s *testLogSink) WithValues(...any) logr.LogSink {
+	return s
+}
+
+func (s *testLogSink) WithName(string) logr.LogSink {
+	return s
+}
 
 func TestMustCastObject(t *testing.T) {
 	t.Parallel()
@@ -292,4 +331,29 @@ func TestBuildPortFwdURL(t *testing.T) {
 			g.Expect(helpers.BuildPortFwdURL(tt.url, tt.port)).To(Equal(tt.expectedURL))
 		})
 	}
+}
+
+func TestRecoverAndFlush_LogsFlushesAndRepanics(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	var entries []string
+	flushCalls := 0
+	logger := logr.New(&testLogSink{entries: &entries})
+
+	panicFn := func() {
+		defer func() {
+			helpers.RecoverAndFlush(logger, func() {
+				flushCalls++
+			}, "panic recovered in test", recover(), true)
+		}()
+		panic("unrecoverable panic")
+	}
+
+	g.Expect(panicFn).To(PanicWith("unrecoverable panic"))
+	g.Expect(flushCalls).To(Equal(1))
+	g.Expect(entries).ToNot(BeEmpty())
+	g.Expect(entries[0]).To(ContainSubstring("panic recovered in test"))
+	joined := strings.Join(entries, "\n")
+	g.Expect(joined).To(ContainSubstring("unrecoverable panic"))
 }

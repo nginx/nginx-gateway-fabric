@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"maps"
 	"net"
+	"path"
 	"sort"
 	"strconv"
 	"strings"
@@ -31,12 +32,14 @@ import (
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/config"
+	nginxconfig "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config"
 	nginxTypes "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/types"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/configmaps"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/secrets"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/file"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/waf"
@@ -70,6 +73,11 @@ const (
 	agentVolumeMountPath     = "/etc/nginx-agent/secrets"
 	agentNICVolumeName       = "agent-dataplane-key"
 	agentNICDataplaneKeyFile = "dataplane.key"
+
+	// usageCertsSourceMountPath is where the raw CA/client SSL Secrets for NGINX Plus usage reporting are
+	// mounted (read-only) in the init container, so their contents can be copied into the writable
+	// nginx-secrets volume under mgmt-prefixed filenames before the agent starts managing them.
+	usageCertsSourceMountPath = "/etc/nginx/certs-bootstrap-source"
 )
 
 // portProtoEntry represents a unique port and protocol combination.
@@ -798,10 +806,15 @@ func (p *NginxProvisioner) buildBootstrapConfigMap(
 
 	if p.cfg.Plus {
 		mgmtFields := map[string]any{
-			"UsageEndpoint":        p.cfg.PlusUsageConfig.Endpoint,
-			"SkipVerify":           p.cfg.PlusUsageConfig.SkipVerify,
-			"UsageCASecret":        caSecret,
-			"UsageClientSSLSecret": clientSSLSecret,
+			"UsageEndpoint": p.cfg.PlusUsageConfig.Endpoint,
+			"SkipVerify":    p.cfg.PlusUsageConfig.SkipVerify,
+		}
+		if caSecret {
+			mgmtFields["UsageCAFile"] = nginxconfig.MgmtCAFile
+		}
+		if clientSSLSecret {
+			mgmtFields["UsageClientSSLCertFile"] = nginxconfig.MgmtClientSSLCertFile
+			mgmtFields["UsageClientSSLKeyFile"] = nginxconfig.MgmtClientSSLKeyFile
 		}
 		cm.Data[configmaps.MgmtConfKey] = string(helpers.MustExecuteTemplate(mgmtTemplate, mgmtFields))
 	}
@@ -1547,10 +1560,13 @@ func (p *NginxProvisioner) buildInitContainers(nProxyCfg *graph.EffectiveNginxPr
 				"initialize",
 				"--source", "/agent/nginx-agent.conf",
 				"--destination", "/etc/nginx-agent",
+				"--permissions", file.RegularFileMode,
 				"--source", "/includes/main.conf",
 				"--destination", "/etc/nginx/main-includes",
+				"--permissions", file.RegularFileMode,
 				"--source", "/includes/events.conf",
 				"--destination", "/etc/nginx/events-includes",
+				"--permissions", file.RegularFileMode,
 			},
 			Env: []corev1.EnvVar{
 				{
@@ -1707,6 +1723,7 @@ func (p *NginxProvisioner) configureNginxPlus(
 		initCmd,
 		"--source", "/includes/mgmt.conf",
 		"--destination", "/etc/nginx/main-includes",
+		"--permissions", file.RegularFileMode,
 		"--nginx-plus",
 	)
 	spec.Spec.InitContainers[0].Command = initCmd
@@ -1739,28 +1756,50 @@ func (p *NginxProvisioner) configureNginxPlus(
 		})
 	}
 
-	// Add usage certs if configured
+	// Add usage certs if configured. The Secrets are mounted read-only into the init container only; the
+	// init container copies their contents into the writable nginx-secrets volume (under the same
+	// filenames the dynamic config generator uses) so nginx-agent has write access for its own file
+	// management once it takes over from this bootstrap config.
 	if names.ca != "" || names.clientSSL != "" {
-		volumeMounts = append(volumeMounts, corev1.VolumeMount{
-			Name:      "nginx-plus-usage-certs",
-			MountPath: "/etc/nginx/certs-bootstrap/",
-		})
-
 		sources := []corev1.VolumeProjection{}
+		initCmd := spec.Spec.InitContainers[0].Command
+		destDir := path.Dir(nginxconfig.MgmtCAFile)
 		if names.ca != "" {
+			caFileName := path.Base(nginxconfig.MgmtCAFile)
 			sources = append(sources, corev1.VolumeProjection{
 				Secret: &corev1.SecretProjection{
 					LocalObjectReference: corev1.LocalObjectReference{Name: names.ca},
+					Items:                []corev1.KeyToPath{{Key: secrets.CAKey, Path: caFileName}},
 				},
 			})
+			initCmd = append(initCmd,
+				"--source", path.Join(usageCertsSourceMountPath, caFileName),
+				"--destination", destDir,
+				"--permissions", file.SecretFileMode,
+			)
 		}
 		if names.clientSSL != "" {
+			certFileName := path.Base(nginxconfig.MgmtClientSSLCertFile)
+			keyFileName := path.Base(nginxconfig.MgmtClientSSLKeyFile)
 			sources = append(sources, corev1.VolumeProjection{
 				Secret: &corev1.SecretProjection{
 					LocalObjectReference: corev1.LocalObjectReference{Name: names.clientSSL},
+					Items: []corev1.KeyToPath{
+						{Key: secrets.TLSCertKey, Path: certFileName},
+						{Key: secrets.TLSKeyKey, Path: keyFileName},
+					},
 				},
 			})
+			initCmd = append(initCmd,
+				"--source", path.Join(usageCertsSourceMountPath, certFileName),
+				"--destination", destDir,
+				"--permissions", file.SecretFileMode,
+				"--source", path.Join(usageCertsSourceMountPath, keyFileName),
+				"--destination", destDir,
+				"--permissions", file.SecretFileMode,
+			)
 		}
+		spec.Spec.InitContainers[0].Command = initCmd
 
 		spec.Spec.Volumes = append(spec.Spec.Volumes, corev1.Volume{
 			Name: "nginx-plus-usage-certs",
@@ -1770,6 +1809,11 @@ func (p *NginxProvisioner) configureNginxPlus(
 				},
 			},
 		})
+
+		spec.Spec.InitContainers[0].VolumeMounts = append(spec.Spec.InitContainers[0].VolumeMounts,
+			corev1.VolumeMount{Name: "nginx-plus-usage-certs", MountPath: usageCertsSourceMountPath, ReadOnly: true},
+			corev1.VolumeMount{Name: "nginx-secrets", MountPath: destDir},
+		)
 	}
 
 	spec.Spec.Containers[0].VolumeMounts = volumeMounts

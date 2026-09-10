@@ -1568,7 +1568,7 @@ func TestCreateAndRegisterProvisioner(t *testing.T) {
 			InstanceName: "test-instance",
 			Namespace:    "nginx-gateway",
 		},
-		Logger:             logr.Discard(),
+		RuntimeLogger:      config.RuntimeLogger{Logger: logr.Discard()},
 		AgentTLSSecretName: "agent-tls-secret",
 		NGINXSCCName:       "nginx-scc",
 		Plus:               true,
