@@ -21,9 +21,12 @@ select a backend, all while forwarding the original body to the backend unchange
 - Support matching on the presence, absence, or emptiness of a body field.
 - Handle malformed JSON and oversized request bodies safely, failing closed by default.
 - Forward the original, unmodified request body to the selected backend.
-- Ensure routes that do not use body-based matching are completely unaffected in behavior and performance.
+- Ensure Gateways with no body-based `PayloadProcessor` attached are completely unaffected in behavior and
+  performance.
 - Ensure existing NGINX Gateway Fabric capabilities (TLS termination, load balancing, rate limiting, logging,
-  tracing, etc.) continue to work unchanged for routes that use body-based matching.
+  tracing, etc.) continue to work unchanged for routes that use body-based matching, including capabilities that
+  themselves read, buffer, or suppress the request body (request mirroring, `ExternalAuth`'s body forwarding, the
+  inference extension's endpoint-picker, AI Guardrails).
 
 ## Non-Goals
 
@@ -61,6 +64,10 @@ This proposal extends that same CRD with a new `InProcess` processor type execut
 an external service. Like its upstream counterpart, `InProcess` is a general extraction/action mechanism; this
 proposal, however, is scoped specifically to the routing use case -- extracting a body field and making it
 available for `HTTPRoute` matching.
+
+### Prerequisite
+
+Replacing our existing NJS matching module with predicate matching must be completed before implementing this feature. NJS and predicate routing can't coexist.
 
 ### Understanding the new NGINX directives
 
@@ -110,9 +117,32 @@ itself. Body-based conditions are therefore treated the same as any other `HTTPR
 method, etc.): the `TargetRef` on an `InProcess` `PayloadProcessor` used for routing can target an `HTTPRoute` (or a
 `Gateway`, to apply across all attached routes), consistent with how other Inherited Policies work today.
 
+The existing `PayloadProcessorSpec.Processors` list is capped at one entry (`MaxItems=1`), which is sufficient
+while `ExtProcess` is the only processor type. This proposal raises that cap to one entry per `ProcessorType` (an
+`ExtProcess` entry and an `InProcess` entry), so a single `PayloadProcessor` can carry AI Guardrails and body-based
+routing configuration together. Selection across the Gateway/Route hierarchy is also extended to merge by type
+instead of picking a single winning policy: for each `ProcessorType`, the Route-level entry of that type wins if
+present, otherwise NGF falls back to the Gateway-level entry of that type. This preserves a Gateway-level
+`ExtProcess` (Guardrails) policy for a Route that only attaches its own `InProcess` entry for routing, rather than
+the Route's policy silently overriding Guardrails for that Route.
+
 ### Go
 
 ```go
+// PayloadProcessorSpec defines the desired state of a PayloadProcessor.
+type PayloadProcessorSpec struct {
+    // TargetRef identifies the Gateway or HTTPRoute this policy applies to.
+    TargetRef gatewayv1.LocalPolicyTargetReference `json:"targetRef"`
+
+    // Processors is a list of processing steps applied to the request and response payloads,
+    // with at most one entry per ProcessorType.
+    //
+    // +kubebuilder:validation:MinItems=1
+    // +kubebuilder:validation:MaxItems=2
+    // +kubebuilder:validation:XValidation:message="processors must not contain duplicate types",rule="self.all(x, self.exists_one(y, y.type == x.type))"
+    Processors []PayloadProcessorEntry `json:"processors"`
+}
+
 // ProcessorType specifies how the processor executes.
 // ExtProcess calls an external service. InProcess is executed by NGINX itself, without a network hop.
 //
@@ -303,16 +333,33 @@ matched -- without NGF depending on the header for the match itself.
 
 ## Security Considerations
 
-- Reading the request body before routing requires buffering it in memory. Existing body size limits (e.g.
-  `client_max_body_size`, `ClientSettingsPolicy`'s body buffer settings) apply, and requests exceeding configured
-  limits will fail closed (rejected) rather than silently skipping body-based matching.
-- Malformed or non-JSON bodies on a route that requires body-based matching will fail closed by default, rather
-  than falling through to an unintended backend.
+- Reading the request body before routing requires buffering it in memory. `client_max_body_size` bounds the total
+  body size and is enforced as today; requests over that limit fail closed. `client_body_buffer_size` bounds how
+  much of the body NGINX keeps in memory before spilling the remainder to a temp file, and `$request_body` (and
+  therefore `json_parse`) only sees the in-memory portion -- a body that spills to disk would otherwise be
+  misrouted silently instead of failing closed. NGF prevents this by requiring `client_body_buffer_size` to be at
+  least as large as `client_max_body_size` for any Gateway or route with a body-based `PayloadProcessor` attached,
+  using the same conflict-validation approach NGF already applies to other body-size consumers (e.g.
+  `ExternalAuth`'s `forwardBody.maxSize` against `ClientSettingsPolicy`'s `body.maxSize`); a smaller buffer size is
+  rejected with a status condition. This mirrors the constraint AI Guardrails already enforces for the same
+  underlying reason. Because `client_body_preread` runs at the server level, before a location (and therefore a
+  location-scoped `ClientSettingsPolicy`) is selected, the effective `client_body_buffer_size` for preread is the
+  maximum configured across all routes and the Gateway on that listener.
+- `client_body_preread` and fail-closed behavior are scoped to listeners with at least one body-based
+  `PayloadProcessor` attached; listeners without one are unaffected, consistent with the Goals above. Within a
+  listener that has one attached, a missing or malformed body is compiled to an absent value for every
+  `json_parse`-extracted field rather than to a request-level error, so a request only fails closed (`400`) if it
+  is evaluated against a `predicate` that depends on one of those fields; requests that don't need the missing
+  field continue to route normally.
 - Values extracted from the body and written into headers will be sanitized to prevent header injection (e.g.
   stripping or rejecting CR/LF characters) before being set on the proxied request.
 - Because extracted values may be echoed into a request header that is forwarded to the backend, users should be
   aware that sensitive body content (tokens, PII, etc.) used for routing will also be visible to the backend and to
   anything that logs request headers.
+- Because NGF matches directly against the `json_parse`-extracted value rather than the header value, the routing
+  decision cannot be spoofed by a client setting its own `X-Gateway-Model-Name` header. NGF overwrites or strips
+  the client-supplied header value before proxying, using the value derived from the actual request body --
+  including the empty-string case where the field is absent from the body.
 
 ## Alternatives
 
