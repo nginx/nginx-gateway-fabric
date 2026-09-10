@@ -34,12 +34,12 @@ const mgmtTemplateText = `mgmt {
     {{- if .SkipVerify }}
     ssl_verify off;
     {{- end }}
-    {{- if .UsageCASecret }}
-    ssl_trusted_certificate /etc/nginx/certs-bootstrap/ca.crt;
+    {{- if .UsageCAFile }}
+    ssl_trusted_certificate {{ .UsageCAFile }};
     {{- end }}
-    {{- if .UsageClientSSLSecret }}
-    ssl_certificate        /etc/nginx/certs-bootstrap/tls.crt;
-    ssl_certificate_key    /etc/nginx/certs-bootstrap/tls.key;
+    {{- if .UsageClientSSLCertFile }}
+    ssl_certificate        {{ .UsageClientSSLCertFile }};
+    ssl_certificate_key    {{ .UsageClientSSLKeyFile }};
     {{- end }}
     enforce_initial_report off;
     deployment_context /etc/nginx/main-includes/deployment_ctx.json;

@@ -9,6 +9,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/config"
 )
@@ -1263,6 +1264,32 @@ func TestValidatePLMSecretNamespacesWatched(t *testing.T) {
 			g.Expect(err).ToNot(HaveOccurred())
 		})
 	}
+}
+
+func TestRunWithPanicFlush_FlushesToRealSink(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	logFile, err := os.CreateTemp("", "panic-*.log")
+	g.Expect(err).ToNot(HaveOccurred())
+	defer logFile.Close()
+	defer os.Remove(logFile.Name())
+
+	loggerCfg := newLoggerBootstrap(zap.WriteTo(logFile))
+
+	panicFn := func() {
+		_ = runWithPanicFlush(loggerCfg, func() error {
+			panic("panic-to-file")
+		})
+	}
+
+	g.Expect(panicFn).To(PanicWith("panic-to-file"))
+
+	contents, err := os.ReadFile(logFile.Name())
+	g.Expect(err).ToNot(HaveOccurred())
+	logged := string(contents)
+	g.Expect(logged).To(ContainSubstring("panic recovered at command boundary"))
+	g.Expect(logged).To(ContainSubstring("panic-to-file"))
 }
 
 func TestEndpointPickerFlags(t *testing.T) {
