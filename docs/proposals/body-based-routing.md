@@ -207,7 +207,7 @@ type InProcessConfig struct {
     Request *InProcessTransform `json:"request,omitempty"`
 }
 
-// InProcessTransform defines header and body mutations.
+// InProcessTransform defines header mutations.
 // CEL expressions can access request.body via the json() function,
 // e.g. json(request.body).model
 type InProcessTransform struct {
@@ -250,6 +250,16 @@ to `json_set $body_field $request_body model;`. Any value that doesn't match thi
 server at admission time, so there's no runtime notion of an "invalid CEL expression" to handle: the field is
 named and typed as `CELExpression` to align with the upstream GEP-5091 shape and leave room for real CEL support
 later, but today it accepts only this fixed grammar.
+
+#### Header name uniqueness
+
+`SetHeaders`'s `+listType=map`/`+listMapKey=name` markers only give us CRD-level uniqueness on the `name` field as
+an exact string match, but HTTP header names are case-insensitive, so the API as declared would still accept both
+`X-Model` and `x-model` in the same list. Compiling that to NGINX config would make the resulting overwrite
+behavior and generated `proxy_set_header` directives ambiguous (whichever entry happens to be processed last would
+silently win). To prevent this, NGF will validate `SetHeaders` names for case-insensitive uniqueness the same way
+it already validates `HTTPHeaderFilter`'s `Add`/`Set` header names today, rejecting
+the `PayloadProcessor` with a `PolicyInvalid`-style condition if two `SetHeaders` entries collide case-insensitively.
 
 ### YAML
 
@@ -314,9 +324,8 @@ server {
         match $body_model = gpt-4;
     }
 
-    proxy_set_header X-Gateway-Model-Name $body_model;
-
     location $gpt4_route {
+        proxy_set_header X-Gateway-Model-Name $body_model;
         proxy_pass http://gpt4-backend;
     }
 
@@ -359,8 +368,9 @@ matched -- without NGF depending on the header for the match itself.
 ## Testing
 
 - Unit tests
-- Functional tests validating end-to-end routing decisions based on body content, including
-  nested fields, multiple combined conditions, and interaction with existing path/method/header/query matches.
+- Functional tests validating end-to-end routing decisions based on body content, including nested fields, multiple
+  combined conditions, existing path/method/header/query matches, malformed/missing/oversized bodies Gateway/Route
+  inheritance and conflicts.
 
 
 ## Security Considerations
