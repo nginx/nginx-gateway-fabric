@@ -325,7 +325,7 @@ server {
     }
 
     location $gpt4_route {
-        proxy_set_header X-Gateway-Model-Name $body_model;
+        proxy_set_header X-Gateway-Model-Name gpt-4;
         proxy_pass http://gpt4-backend;
     }
 
@@ -337,7 +337,9 @@ server {
 
 Note that the `predicate`'s `match $body_model = gpt-4` condition is compiled directly from the `HTTPRoute`'s
 `X-Gateway-Model-Name: gpt-4` header match plus the `PayloadProcessor`'s `json(request.body).model` extraction --
-NGF resolves the indirection between the two at translation time, rather than at request time.
+NGF resolves the indirection between the two at translation time, rather than at request time. The header value
+itself, `gpt-4`, comes straight from the `HTTPRoute`'s header match condition, so it's a static, already-validated
+string known at config-build time.
 
 From the user's perspective, this is identical to the upstream GEP-5091 pattern: define a `PayloadProcessor` that
 extracts a body field into a header, then write a normal `HTTPRoute` that matches on that header. NGF will honor
@@ -422,8 +424,12 @@ matched -- without NGF depending on the header for the match itself.
   `json_set`-extracted field rather than to a request-level error, so a request only fails closed (`400`) if it
   is evaluated against a `predicate` that depends on one of those fields; requests that don't need the missing
   field continue to route normally.
-- Extracted values are validated before they're used for anything: a value that contains CR/LF or is otherwise
-  not a valid HTTP header field value is **rejected**, causing the request to fail closed (`400`) before routing occurs, the same as any other malformed-body case described above.
+- A header set from a body-derived match is never the raw, request-derived value: it's the literal value declared
+  in the `HTTPRoute`'s header match condition, which NGF already validates as a well-formed HTTP header value
+  today, the same as any other header value it sets. The `json_set`-extracted variable itself is only ever used on
+  the left-hand side of a `predicate`/`match` comparison to decide whether a rule matches -- it's never forwarded
+  to the backend directly -- so there's no path by which unvalidated, request-controlled body content reaches a
+  proxied header, and no additional runtime sanitization is needed.
 - Because extracted values may be echoed into a request header that is forwarded to the backend, users should be
   aware that sensitive body content (tokens, PII, etc.) used for routing will also be visible to the backend and to
   anything that logs request headers.
