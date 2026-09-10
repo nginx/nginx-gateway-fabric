@@ -342,7 +342,7 @@ NGF resolves the indirection between the two at translation time, rather than at
 From the user's perspective, this is identical to the upstream GEP-5091 pattern: define a `PayloadProcessor` that
 extracts a body field into a header, then write a normal `HTTPRoute` that matches on that header. NGF will honor
 that API exactly as written and will still set `X-Gateway-Model-Name` on the request, since the user explicitly
-configured it via `setHeaders` and other consumers (the backend, other filters/policies, request logs) may depend
+configured it via `setHeaders` and other consumers (the backend, offload services) may depend
 on seeing it.
 
 Internally, NGF translates this configuration into `client_body_early_read` and `json_set` directives, and compiles
@@ -371,38 +371,59 @@ matched -- without NGF depending on the header for the match itself.
 - Functional tests validating end-to-end routing decisions based on body content, including nested fields, multiple
   combined conditions, existing path/method/header/query matches, malformed/missing/oversized bodies Gateway/Route
   inheritance and conflicts.
+- Functional compatibility tests for request mirroring, `ExternalAuth` body forwarding, the inference extension's
+  endpoint-picker, and AI Guardrails, verifying that each still receives the complete, unchanged request body.
 
 
 ## Security Considerations
 
-- Reading the request body before routing requires buffering it in memory. `client_max_body_size` bounds the total
-  body size and is enforced as today; requests over that limit fail closed. `client_body_buffer_size` bounds how
-  much of the body NGINX keeps in memory before spilling the remainder to a temp file, and `$request_body` (and
-  therefore `json_set`) only sees the in-memory portion -- a body that spills to disk would otherwise be
-  misrouted silently instead of failing closed. Rather than having NGF invent a separate, hidden extraction limit,
-  this proposal reuses the existing `ClientSettingsPolicy` `body.bufferSize` field for this purpose, since it
-  already exists precisely to bound how much of a request body NGINX keeps resident in memory: for any listener
-  with a Gateway-attached body-based `PayloadProcessor`, NGF sets `client_body_buffer_size` from that Gateway's
-  `ClientSettingsPolicy` `body.bufferSize` (falling back to NGINX's own platform default, e.g. `8k`/`16k`, if
-  unset). A request whose body would need to spill past that size to be fully read fails closed (`413`), the same
-  as exceeding `client_max_body_size` today, mirroring the constraint AI Guardrails already enforces. This puts the
-  choice of "a good extraction limit" in the hands of the Cluster Operator, who already controls `body.bufferSize`
+- Reading the request body before routing requires buffering it in memory, and the settings that normally govern
+  that read -- `client_max_body_size`, `client_body_buffer_size`, and `client_body_timeout` -- are ordinarily
+  applied per-location, after routing has already selected one. `client_body_early_read`, however, reads the body
+  at the server level, *before* any location (and therefore any location-scoped `ClientSettingsPolicy`) has been
+  selected. This timing problem applies equally to all three settings, not just buffer size: whichever effective
+  values are in force for the pre-routing read are the only ones that actually govern that request, since a
+  route-scoped override of any of them cannot retroactively re-check a read that already happened at the server
+  level under different values -- a smaller Route-scoped `client_max_body_size` can't reject an oversized body the
+  server-level value already accepted, and a larger Route-scoped value can't rescue a body the server-level value
+  already rejected.
+
+  For this reason, `client_max_body_size`, `client_body_buffer_size`, and `client_body_timeout` for the
+  pre-routing read are always taken from the listener's **Gateway-scoped** `ClientSettingsPolicy` `body` settings
+  (falling back to NGINX's own platform defaults -- e.g. `1m`, `8k`/`16k`, `60s` -- for any that are unset), for
+  every listener that has at least one body-based `PayloadProcessor` attached, regardless of whether that
+  `PayloadProcessor` is itself attached to the `Gateway` or to one of the listener's `HTTPRoute`s. This
+  Gateway-scoped fallback is what governs the primary use case in this proposal, where `InProcess` is attached
+  directly to an `HTTPRoute` (see the [YAML example](#yaml) above): even though the triggering `PayloadProcessor`
+  is Route-scoped, the values that bound the pre-routing read still have to come from the Gateway's
+  `ClientSettingsPolicy`, because the Gateway scope is the only one in effect before any route has been selected.
+  This puts the choice of these limits in the hands of the Cluster Operator, who already controls `body` settings
   for their own reasons and understands their own body sizes, rather than NGF guessing a one-size-fits-all
-  constant. There's no way to determine ahead of time whether a given request's body will fit in memory or spill
-  to disk -- that's only known once NGINX has actually started reading the body -- so, as with `client_max_body_size`
-  today, this check is necessarily reactive rather than a config-time guarantee. Because `client_body_early_read`
-  runs at the server level, before a location (and therefore a location-scoped `ClientSettingsPolicy`) is selected,
-  only a Gateway-attached `ClientSettingsPolicy`'s `body.bufferSize` affects the extraction buffer; a
-  `body.bufferSize` set on an `HTTPRoute`-scoped `ClientSettingsPolicy` applies too late (after routing) to have any
-  effect on it.
+  constant.
+
+  A `body` setting on an `HTTPRoute`-scoped `ClientSettingsPolicy` is therefore **incompatible with body-based
+  routing on that route** and has no effect on the pre-routing read: by the time a location is selected, the body
+  has already been fully read (or the request already rejected) using the Gateway-scoped values, so a
+  Route-scoped `body.maxSize`, `body.bufferSize`, or `body.timeout` can never be enforced or relaxed for that
+  request. NGF will report this with a status condition on the Route-scoped `ClientSettingsPolicy` (indicating it
+  is overridden/ineffective) whenever it targets a route that shares a listener with a body-based
+  `PayloadProcessor`, rather than silently ignoring it.
+
+  A request whose body would need to spill past `client_body_buffer_size` to be fully read, or that exceeds
+  `client_max_body_size`, or that exceeds `client_body_timeout`, fails closed during the pre-routing read --
+  before a route is even selected -- with the same status NGINX already returns for each of these conditions today
+  (`413` for size, `408` for timeout), mirroring the constraint AI Guardrails already enforces for its own body
+  inspection. There's no way to determine ahead of time whether a given request's body will fit in memory or
+  spill to disk -- that's only known once NGINX has actually started reading the body -- so, as with
+  `client_max_body_size` today, this check is necessarily reactive rather than a config-time guarantee.
 - `client_body_early_read` and fail-closed behavior are scoped to listeners with at least one body-based
   `PayloadProcessor` attached; listeners without one are unaffected, consistent with the Goals above. Within a
   listener that has one attached, a missing or malformed body is compiled to an absent value for every
   `json_set`-extracted field rather than to a request-level error, so a request only fails closed (`400`) if it
   is evaluated against a `predicate` that depends on one of those fields; requests that don't need the missing
   field continue to route normally.
-- Values extracted from the body and written into headers will be sanitized to prevent header injection (e.g.
-  stripping or rejecting CR/LF characters) before being set on the proxied request.
+- Extracted values are validated before they're used for anything: a value that contains CR/LF or is otherwise
+  not a valid HTTP header field value is **rejected**, causing the request to fail closed (`400`) before routing occurs, the same as any other malformed-body case described above.
 - Because extracted values may be echoed into a request header that is forwarded to the backend, users should be
   aware that sensitive body content (tokens, PII, etc.) used for routing will also be visible to the backend and to
   anything that logs request headers.
