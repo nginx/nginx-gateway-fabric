@@ -18,7 +18,10 @@ select a backend, all while forwarding the original body to the backend unchange
 - Allow a single routing rule to combine body field conditions with existing match types (host, path, method,
   headers, query parameters).
 - Support matching extracted body fields by exact value or by regular expression.
-- Handle malformed JSON and oversized request bodies safely, failing closed by default.
+- Handle malformed, incomplete, or oversized request bodies safely: an oversized body or a body that doesn't
+  arrive in time fails closed via NGINX's existing `client_max_body_size`/`client_body_timeout` behavior, while a
+  malformed/incomplete JSON body (including one that spilled to a temporary file) is treated as an absent value
+  for matching purposes, using native `json_set`/predicate semantics, rather than a forced error.
 - Forward the original, unmodified request body to the selected backend.
 - Ensure listeners with no body-based `PayloadProcessor` attached, whether directly or via an attached route, are
   completely unaffected in behavior and performance.
@@ -364,8 +367,10 @@ matched -- without NGF depending on the header for the match itself.
 - As a Cluster Operator, I want routes on listeners with no body-based `PayloadProcessor` attached, directly or via
   another route on the same listener, to see no change in behavior or performance. For a route that shares a
   listener with a body-matched route, I accept that its requests will also be preread and buffered (since the
-  listener must buffer bodies for the sibling route regardless), but I expect no change to that route's own
-  routing correctness, security, or backend behavior as a result.
+  listener must buffer bodies for the sibling route regardless), and that its own `body.maxSize`, `bufferSize`, and
+  `timeout` settings are overridden by the listener's Gateway-scoped values for that pre-routing read (see Security
+  Considerations below), but I expect no other change to that route's routing correctness, security, or backend
+  behavior as a result.
 
 ## Testing
 
@@ -411,19 +416,31 @@ matched -- without NGF depending on the header for the match itself.
   is overridden/ineffective) whenever it targets a route that shares a listener with a body-based
   `PayloadProcessor`, rather than silently ignoring it.
 
-  A request whose body would need to spill past `client_body_buffer_size` to be fully read, or that exceeds
-  `client_max_body_size`, or that exceeds `client_body_timeout`, fails closed during the pre-routing read --
-  before a route is even selected -- with the same status NGINX already returns for each of these conditions today
-  (`413` for size, `408` for timeout), mirroring the constraint AI Guardrails already enforces for its own body
-  inspection. There's no way to determine ahead of time whether a given request's body will fit in memory or
-  spill to disk -- that's only known once NGINX has actually started reading the body -- so, as with
-  `client_max_body_size` today, this check is necessarily reactive rather than a config-time guarantee.
-- `client_body_early_read` and fail-closed behavior are scoped to listeners with at least one body-based
-  `PayloadProcessor` attached; listeners without one are unaffected, consistent with the Goals above. Within a
-  listener that has one attached, a missing or malformed body is compiled to an absent value for every
-  `json_set`-extracted field rather than to a request-level error, so a request only fails closed (`400`) if it
-  is evaluated against a `predicate` that depends on one of those fields; requests that don't need the missing
-  field continue to route normally.
+  A request that exceeds `client_max_body_size` or `client_body_timeout` during the pre-routing read is rejected
+  before a route is even selected, with the same status NGINX already returns for each of these conditions today
+  (`413` for size, `408` for timeout) -- this is unchanged, native NGINX behavior; NGF isn't introducing anything
+  new here, only fixing which `ClientSettingsPolicy` governs the values these checks are made against.
+
+  A body that exceeds `client_body_buffer_size` is not an error condition in NGINX at all: NGINX spills the excess
+  to a temporary file and continues, exactly as it does today for a normally-routed request. `$request_body` is
+  only populated when the body was read into memory; a spilled body leaves `$request_body` -- and so every
+  `json_set`-extracted field derived from it -- **not found**, per the `ngx_http_json_module` documentation. This
+  isn't a special case NGF needs to invent handling for: it's the same "not found" state produced by a missing
+  field or malformed JSON (see below), and NGF doesn't add any interception, custom module, or forced status code
+  on top of it, unlike AI Guardrails' custom `ngx_http_ai_guardrails_module`, which deliberately fails closed on a
+  spilled body because it must inspect the full prompt to make a safety decision. Body-based routing has no
+  equivalent requirement to inspect the whole body -- only the specific extracted fields matter -- so there's
+  nothing to fail closed over: whatever locations don't depend on the missing field still work normally, and
+  whichever location predicate would have depended on it simply doesn't match, the same as if the field were
+  absent from a well-formed body.
+- `client_body_early_read` is scoped to listeners with at least one body-based `PayloadProcessor` attached;
+  listeners without one are unaffected, consistent with the Goals above. Within a listener that has one attached,
+  a missing field, a malformed/incomplete JSON body, or a body that spilled to disk are all indistinguishable to
+  `json_set`: every extracted variable is simply **not found**. Per native `location $variable { ... }` semantics,
+  a predicate whose condition depends on a not-found variable is not empty and not "0", so it simply does not
+  match -- there is no special error path or forced status code. Request handling falls through to whichever
+  `location` would otherwise apply next (typically the deployment's catch-all/default backend, per the compiled
+  example above), exactly as an ordinary unmatched regex or predicate location falls through today.
 - A header set from a body-derived match is never the raw, request-derived value: it's the literal value declared
   in the `HTTPRoute`'s header match condition, which NGF already validates as a well-formed HTTP header value
   today, the same as any other header value it sets. The `json_set`-extracted variable itself is only ever used on
