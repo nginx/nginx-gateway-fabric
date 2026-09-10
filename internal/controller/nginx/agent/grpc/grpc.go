@@ -19,6 +19,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
+	controllerconfig "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/config"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent/grpc/filewatcher"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent/grpc/interceptor"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/secrets"
@@ -45,7 +46,7 @@ type Server struct {
 	// Interceptor provides hooks to intercept the execution of an RPC on the server.
 	interceptor Interceptor
 
-	logger logr.Logger
+	runtimeLogger controllerconfig.RuntimeLogger
 
 	// resetConnChan is used by the filewatcher to trigger the Command service to
 	// reset any connections when TLS files are updated.
@@ -58,7 +59,7 @@ type Server struct {
 }
 
 func NewServer(
-	logger logr.Logger,
+	runtimeLogger controllerconfig.RuntimeLogger,
 	port int,
 	registerSvcs []func(*grpc.Server),
 	k8sClient client.Client,
@@ -66,7 +67,7 @@ func NewServer(
 	resetConnChan chan<- struct{},
 ) *Server {
 	return &Server{
-		logger:           logger,
+		runtimeLogger:    runtimeLogger,
 		port:             port,
 		registerServices: registerSvcs,
 		interceptor:      interceptor.NewContextSetter(k8sClient, tokenAudience),
@@ -76,7 +77,7 @@ func NewServer(
 
 // Start is a runnable that starts the gRPC server for communicating with the nginx agent.
 func (g *Server) Start(ctx context.Context) error {
-	g.logger.Info("Starting GRPC Server")
+	g.runtimeLogger.Logger.Info("Starting GRPC Server")
 
 	var lc net.ListenConfig
 	listener, err := lc.Listen(ctx, "tcp", fmt.Sprintf(":%d", g.port))
@@ -96,7 +97,11 @@ func (g *Server) Start(ctx context.Context) error {
 	}
 
 	tlsFiles := []string{caCertPath, tlsCertPath, tlsKeyPath}
-	fileWatcher, err := filewatcher.NewFileWatcher(g.logger.WithName("fileWatcher"), tlsFiles, g.resetConnChan)
+	fileWatcher, err := filewatcher.NewFileWatcher(
+		g.runtimeLogger.Logger.WithName("fileWatcher"),
+		tlsFiles,
+		g.resetConnChan,
+	)
 	if err != nil {
 		return err
 	}
@@ -105,7 +110,7 @@ func (g *Server) Start(ctx context.Context) error {
 
 	go func() {
 		<-ctx.Done()
-		g.logger.Info("Shutting down GRPC Server")
+		g.runtimeLogger.Logger.Info("Shutting down GRPC Server")
 		// Since we use a long-lived stream, GracefulStop does not terminate. Therefore we use Stop.
 		server.Stop()
 	}()
@@ -127,8 +132,14 @@ func (g *Server) createServer(tlsCredentials credentials.TransportCredentials) *
 				PermitWithoutStream: true,
 			},
 		),
-		grpc.ChainStreamInterceptor(recoveryStreamInterceptor(g.logger), g.interceptor.Stream(g.logger)),
-		grpc.ChainUnaryInterceptor(recoveryUnaryInterceptor(g.logger), g.interceptor.Unary(g.logger)),
+		grpc.ChainStreamInterceptor(
+			recoveryStreamInterceptor(g.runtimeLogger.Logger, g.runtimeLogger.Flush),
+			g.interceptor.Stream(g.runtimeLogger.Logger),
+		),
+		grpc.ChainUnaryInterceptor(
+			recoveryUnaryInterceptor(g.runtimeLogger.Logger, g.runtimeLogger.Flush),
+			g.interceptor.Unary(g.runtimeLogger.Logger),
+		),
 		grpc.Creds(tlsCredentials),
 		// Set max message size to 4MB to match the agent side.
 		grpc.MaxSendMsgSize(1024*1024*4), // 4MB
@@ -138,7 +149,7 @@ func (g *Server) createServer(tlsCredentials credentials.TransportCredentials) *
 	return server
 }
 
-func recoveryStreamInterceptor(logger logr.Logger) grpc.StreamServerInterceptor {
+func recoveryStreamInterceptor(logger logr.Logger, flush func()) grpc.StreamServerInterceptor {
 	return func(
 		srv any,
 		ss grpc.ServerStream,
@@ -152,6 +163,9 @@ func recoveryStreamInterceptor(logger logr.Logger) grpc.StreamServerInterceptor 
 					panicErr, "Panic recovered in stream RPC",
 					"method", info.FullMethod,
 				)
+				if flush != nil {
+					flush()
+				}
 				err = status.Error(codes.Internal, "internal server error")
 			}
 		}()
@@ -160,7 +174,7 @@ func recoveryStreamInterceptor(logger logr.Logger) grpc.StreamServerInterceptor 
 	}
 }
 
-func recoveryUnaryInterceptor(logger logr.Logger) grpc.UnaryServerInterceptor {
+func recoveryUnaryInterceptor(logger logr.Logger, flush func()) grpc.UnaryServerInterceptor {
 	return func(
 		ctx context.Context,
 		req any,
@@ -174,6 +188,9 @@ func recoveryUnaryInterceptor(logger logr.Logger) grpc.UnaryServerInterceptor {
 					panicErr, "Panic recovered in unary RPC",
 					"method", info.FullMethod,
 				)
+				if flush != nil {
+					flush()
+				}
 				err = status.Error(codes.Internal, "internal server error")
 			}
 		}()

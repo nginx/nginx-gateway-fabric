@@ -7,7 +7,7 @@ replace github.com/nginx/nginx-gateway-fabric/v2 => ../
 require (
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/nginx/nginx-gateway-fabric/v2 v2.7.0
-	github.com/onsi/ginkgo/v2 v2.32.1
+	github.com/onsi/ginkgo/v2 v2.32.2
 	github.com/onsi/gomega v1.43.0
 	github.com/prometheus/client_golang v1.24.1
 	github.com/prometheus/common v0.71.0
@@ -18,7 +18,7 @@ require (
 	k8s.io/apiextensions-apiserver v0.37.0
 	k8s.io/apimachinery v0.37.0
 	k8s.io/client-go v0.37.0
-	sigs.k8s.io/controller-runtime v0.24.1
+	sigs.k8s.io/controller-runtime v0.25.0
 	sigs.k8s.io/gateway-api v1.6.1
 	sigs.k8s.io/gateway-api-inference-extension/conformance v1.6.0
 	sigs.k8s.io/gateway-api/conformance v1.6.1
