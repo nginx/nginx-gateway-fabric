@@ -543,7 +543,8 @@ type NginxAccessLog struct {
 	Escape *NginxAccessLogEscapeType `json:"escape,omitempty"`
 
 	// Destination specifies where access logs are sent to.
-	// If file/syslog not specified, access logs are by default sent to /dev/stdout.
+	// File path or syslog server destination can be configured.
+	// If destination is not specified, access logs are sent to /dev/stdout.
 	//
 	// +optional
 	Destination *NginxAccessLogDestination `json:"destination,omitempty"`
