@@ -1419,8 +1419,11 @@ func fetchSecurityLogBundles(
 		// Multiple SecurityLog entries may reference the same URL and therefore produce the same
 		// bundleKey. Once the bundle has been fetched, skip subsequent entries with the same key
 		// to avoid redundant network calls and to prevent a failed fetch (e.g. due to different
-		// auth settings on the duplicate entry) from invalidating the policy.
-		if _, alreadyFetched := output.Bundles[bundleKey]; alreadyFetched {
+		// auth settings on the duplicate entry) from invalidating the policy. We still record the
+		// existing bundle on this policy's WAFState so that this policy's gateway(s) include the
+		// bundle even if the policy that originally fetched it does not target the same gateway.
+		if existing, alreadyFetched := output.Bundles[bundleKey]; alreadyFetched {
+			policy.WAFState.Bundles[bundleKey] = existing
 			continue
 		}
 
@@ -1799,7 +1802,13 @@ func fetchPLMSecurityLogBundle(
 	}
 
 	bundleKey := PLMLogBundleKey(wafPolicy.Namespace, ref)
-	if _, alreadyFetched := output.Bundles[bundleKey]; alreadyFetched {
+	// Multiple WAFPolicies may reference the same APLogConf and therefore produce the same
+	// bundleKey. Once the bundle has been fetched, skip subsequent policies with the same key
+	// to avoid redundant S3 calls. We still record the existing bundle on this policy's WAFState
+	// so that this policy's gateway(s) include the bundle even if the policy that originally
+	// fetched it does not target the same gateway.
+	if existing, alreadyFetched := output.Bundles[bundleKey]; alreadyFetched {
+		policy.WAFState.Bundles[bundleKey] = existing
 		return
 	}
 
