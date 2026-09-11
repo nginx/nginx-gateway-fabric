@@ -392,9 +392,9 @@ When compiling path conditions into the `map`, NGF handles each `HTTPRoute` path
 - **Exact**: the path is escaped the same way and anchored with `$` so that only an exact path match triggers
   the read (e.g. `~^POST:/v1/chat/completions$`).
 - **RegularExpression**: the path regex is wrapped in a non-capturing group before prepending the method prefix,
-  so that PCRE alternation inside the original expression stays scoped correctly. For example, a path regex of
-  `/v[12]/chat/.*` becomes `~^POST:(?:/v[12]/chat/.*)$`, and an alternation like `/foo|/bar` becomes
-  `~^POST:(?:/foo|/bar)$` rather than `~^POST:/foo|/bar$` (which would let the second branch match any method).
+  so that PCRE alternation inside the original expression stays scoped correctly, while preserving NGF's existing
+  start-anchored regex-location semantics. For example, a path regex of `/v[12]/chat/.*` becomes
+  `~^POST:(?:/v[12]/chat/.*)`, and an alternation like `/foo|/bar` becomes `~^POST:(?:/foo|/bar)`.
 
 Note that the `predicate`'s `match $body_model = gpt-4` condition is compiled directly from the `HTTPRoute`'s
 `X-Gateway-Model-Name: gpt-4` header match plus the `PayloadProcessor`'s `json(request.body).model` extraction --
