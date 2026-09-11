@@ -102,8 +102,8 @@ original client.
   (default-deny posture) so that only authorized networks can reach internal services.
 - As an Application Developer, I want to restrict access to my application's administrative endpoints to a specific
   set of IP addresses so that only authorized users can access sensitive functionality.
-- As an Application Developer, I want to override the Cluster Operator's Gateway-level access rules for my specific
-  Route because my application has different access requirements than the default.
+- As an Application Developer, I want to attach Route-level access rules that further restrict access to my specific
+  Route beyond the Cluster Operator's Gateway-level defaults.
 - As a Cluster Operator, I want to apply an IP denylist at the Gateway and have Application Developers apply
   additional allowlist rules at the Route level, with the denylist always taking precedence regardless of the
   Route-level policy.
@@ -191,7 +191,7 @@ type AccessPolicySpec struct {
 	//
 	// Note: A single policy cannot target both Gateway and Route kinds simultaneously.
 	// Use separate policies: one targeting Gateway (for inherited settings) and others
-	// targeting specific Routes (for overrides).
+	// targeting specific Routes.
 	//
 	// +kubebuilder:validation:MinItems=1
 	// +kubebuilder:validation:MaxItems=10
@@ -217,7 +217,7 @@ const (
 
 // AccessRule defines an access control rule.
 type AccessRule struct {
-	// Name specifies a unique name for this rule.
+	// Name specifies the name for this rule.
 	// This follows the DNS Subdomain naming convention.
 	//
 	// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$`
@@ -417,7 +417,7 @@ The `AccessPolicy` may be attached to Gateways, HTTPRoutes, and GRPCRoutes.
 
 **Important Constraint**: A single `AccessPolicy` instance cannot target both Gateway and Route kinds simultaneously.
 This prevents configuration conflicts and ensures clear policy boundaries. To configure both Gateway-level defaults
-and Route-level overrides, use separate policy instances.
+and Route-level rules, use separate policy instances.
 
 ### How Inheritance Works
 
@@ -538,7 +538,11 @@ rules are not sufficient, we will use
 
 Key validation rules:
 
-- `Address` fields must be valid IPv4 or IPv6 addresses or CIDR ranges.
+- `Address` fields must be valid IPv4 or IPv6 addresses or CIDR ranges. Because the OpenAPI schema and CEL do not
+  natively support IP/CIDR format validation, this is enforced by the controller at reconciliation time. Invalid
+  addresses will cause the policy to be rejected with the `Accepted` condition set to `False`. This is consistent
+  with how other IP address fields in the codebase (e.g., `RewriteClientIPAddress`, `NginxPlusAllowAddress`) are
+  validated.
 - TargetRef must reference Gateway, HTTPRoute, or GRPCRoute only.
 - TargetRefs cannot mix Gateway kind with HTTPRoute or GRPCRoute kinds in the same policy.
 - Rule names must be unique within a policy.
