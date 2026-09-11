@@ -443,6 +443,17 @@ func TestTelemetryEnabledForNginxProxy(t *testing.T) {
 			enabled: false,
 		},
 		{
+			name: "exporter endpoint is empty",
+			ep: &EffectiveNginxProxy{
+				Telemetry: &ngfAPIv1alpha2.Telemetry{
+					Exporter: &ngfAPIv1alpha2.TelemetryExporter{
+						Endpoint: helpers.GetPointer(""),
+					},
+				},
+			},
+			enabled: false,
+		},
+		{
 			name: "normal case; enabled",
 			ep: &EffectiveNginxProxy{
 				Telemetry: &ngfAPIv1alpha2.Telemetry{
@@ -460,7 +471,7 @@ func TestTelemetryEnabledForNginxProxy(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			enabled := telemetryEnabledForNginxProxy(test.ep)
+			enabled := TelemetryEnabledForNginxProxy(test.ep)
 			g.Expect(enabled).To(Equal(test.enabled))
 		})
 	}
