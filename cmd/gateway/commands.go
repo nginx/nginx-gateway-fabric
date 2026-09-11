@@ -975,10 +975,12 @@ func createInitializeCommand() *cobra.Command {
 	// flag names
 	const srcFlag = "source"
 	const destFlag = "destination"
+	const permissionsFlag = "permissions"
 
 	// flag values
 	var srcFiles []string
 	var destDirs []string
+	var permissions []string
 	var plus bool
 
 	cmd := &cobra.Command{
@@ -987,7 +989,13 @@ func createInitializeCommand() *cobra.Command {
 		RunE: func(_ *cobra.Command, _ []string) error {
 			loggerCfg := newLoggerBootstrap()
 			return runWithPanicFlush(loggerCfg, func() error {
-				if err := validateCopyArgs(srcFiles, destDirs); err != nil {
+				if len(permissions) == 0 {
+					permissions = make([]string, len(srcFiles))
+					for i := range permissions {
+						permissions[i] = file.RegularFileMode
+					}
+				}
+				if err := validateCopyArgs(srcFiles, destDirs, permissions); err != nil {
 					return err
 				}
 
@@ -1015,6 +1023,7 @@ func createInitializeCommand() *cobra.Command {
 					files = append(files, fileToCopy{
 						destDirName: destDirs[i],
 						srcFileName: src,
+						permissions: permissions[i],
 					})
 				}
 
@@ -1043,6 +1052,17 @@ func createInitializeCommand() *cobra.Command {
 		destFlag,
 		[]string{},
 		"The destination directories for the source files at the same array index to be copied to",
+	)
+
+	cmd.Flags().StringSliceVar(
+		&permissions,
+		permissionsFlag,
+		[]string{},
+		fmt.Sprintf(
+			"The file permissions (octal, e.g. %s for regular files or %s for secrets) to apply to the "+
+				"source file at the same array index. Defaults to %s for all files.",
+			file.RegularFileMode, file.SecretFileMode, file.RegularFileMode,
+		),
 	)
 
 	cmd.Flags().BoolVar(

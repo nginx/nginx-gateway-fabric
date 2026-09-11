@@ -5,17 +5,18 @@ import (
 	"context"
 	"sync"
 
+	"sigs.k8s.io/controller-runtime/pkg/cache/cacheapi"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type FakeFieldIndexer struct {
-	IndexFieldStub        func(context.Context, client.Object, string, client.IndexerFunc) error
+	IndexFieldStub        func(context.Context, cacheapi.Object, string, cacheapi.IndexerFunc) error
 	indexFieldMutex       sync.RWMutex
 	indexFieldArgsForCall []struct {
 		arg1 context.Context
-		arg2 client.Object
+		arg2 cacheapi.Object
 		arg3 string
-		arg4 client.IndexerFunc
+		arg4 cacheapi.IndexerFunc
 	}
 	indexFieldReturns struct {
 		result1 error
@@ -27,14 +28,14 @@ type FakeFieldIndexer struct {
 	invocationsMutex sync.RWMutex
 }
 
-func (fake *FakeFieldIndexer) IndexField(arg1 context.Context, arg2 client.Object, arg3 string, arg4 client.IndexerFunc) error {
+func (fake *FakeFieldIndexer) IndexField(arg1 context.Context, arg2 cacheapi.Object, arg3 string, arg4 cacheapi.IndexerFunc) error {
 	fake.indexFieldMutex.Lock()
 	ret, specificReturn := fake.indexFieldReturnsOnCall[len(fake.indexFieldArgsForCall)]
 	fake.indexFieldArgsForCall = append(fake.indexFieldArgsForCall, struct {
 		arg1 context.Context
-		arg2 client.Object
+		arg2 cacheapi.Object
 		arg3 string
-		arg4 client.IndexerFunc
+		arg4 cacheapi.IndexerFunc
 	}{arg1, arg2, arg3, arg4})
 	stub := fake.IndexFieldStub
 	fakeReturns := fake.indexFieldReturns
@@ -55,13 +56,13 @@ func (fake *FakeFieldIndexer) IndexFieldCallCount() int {
 	return len(fake.indexFieldArgsForCall)
 }
 
-func (fake *FakeFieldIndexer) IndexFieldCalls(stub func(context.Context, client.Object, string, client.IndexerFunc) error) {
+func (fake *FakeFieldIndexer) IndexFieldCalls(stub func(context.Context, cacheapi.Object, string, cacheapi.IndexerFunc) error) {
 	fake.indexFieldMutex.Lock()
 	defer fake.indexFieldMutex.Unlock()
 	fake.IndexFieldStub = stub
 }
 
-func (fake *FakeFieldIndexer) IndexFieldArgsForCall(i int) (context.Context, client.Object, string, client.IndexerFunc) {
+func (fake *FakeFieldIndexer) IndexFieldArgsForCall(i int) (context.Context, cacheapi.Object, string, cacheapi.IndexerFunc) {
 	fake.indexFieldMutex.RLock()
 	defer fake.indexFieldMutex.RUnlock()
 	argsForCall := fake.indexFieldArgsForCall[i]
