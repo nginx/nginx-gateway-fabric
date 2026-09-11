@@ -4861,6 +4861,45 @@ func TestFetchPLMPolicyBundle_AlreadyFetched(t *testing.T) {
 	g.Expect(policy.WAFState.BundlePending).To(BeFalse())
 }
 
+func TestFetchPLMSecurityLogBundle_AlreadyFetched(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	const (
+		policyNs    = "test-ns"
+		logConfName = "my-log-conf"
+	)
+
+	ref := &ngfAPIv1alpha1.APLogConfReference{Name: logConfName}
+	bundleKey := PLMLogBundleKey(policyNs, ref)
+
+	wafPolicy := &ngfAPIv1alpha1.WAFPolicy{
+		ObjectMeta: metav1.ObjectMeta{Name: "second-plm-waf", Namespace: policyNs},
+	}
+
+	existingBundle := &WAFBundleData{Data: []byte("already-fetched"), Checksum: "existing-checksum"}
+
+	policy := newPLMPolicy(wafPolicy)
+	output := newPLMOutput()
+	// Pre-populate the output with an already-fetched bundle for the same key, simulating a
+	// different WAFPolicy having already fetched it.
+	output.Bundles[bundleKey] = existingBundle
+
+	wafInput := &WAFProcessingInput{
+		PLMFetcher:      fakePLMFetcher(),
+		PreviousBundles: map[WAFBundleKey]*WAFBundleData{},
+	}
+
+	fetchPLMSecurityLogBundle(t.Context(), logr.Discard(), wafPolicy, policy, wafInput, output, ref)
+
+	// The existing bundle should be reused, not overwritten...
+	g.Expect(output.Bundles[bundleKey]).To(Equal(existingBundle))
+	// ...and, critically, it must also be recorded on THIS policy's own WAFState so that any
+	// Gateway targeted only by this policy still receives the bundle data.
+	g.Expect(policy.WAFState.Bundles[bundleKey]).To(Equal(existingBundle))
+	g.Expect(policy.Valid).To(BeTrue())
+}
+
 func TestFetchPolicyBundle_AlreadyFetched(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
@@ -5335,8 +5374,103 @@ func TestFetchPLMSecurityLogBundle(t *testing.T) {
 
 			g.Expect(policy.Valid).To(Equal(tc.expValid))
 			g.Expect(policy.Conditions).To(HaveLen(tc.expConditions))
+
+			if tc.expBundleStored {
+				g.Expect(output.Bundles).To(HaveKey(bundleKey))
+				g.Expect(policy.WAFState.Bundles).To(HaveKey(bundleKey))
+				g.Expect(policy.WAFState.Bundles[bundleKey]).To(Equal(output.Bundles[bundleKey]))
+			}
 		})
 	}
+}
+
+func TestFetchSecurityLogBundles_SharedAcrossPolicies(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	const (
+		policyNs = "test-ns"
+		logURL   = "https://example.com/shared-log.tgz"
+	)
+
+	makeWAFPolicy := func(name string) *ngfAPIv1alpha1.WAFPolicy {
+		return &ngfAPIv1alpha1.WAFPolicy{
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: policyNs},
+			Spec: ngfAPIv1alpha1.WAFPolicySpec{
+				Type: ngfAPIv1alpha1.PolicySourceTypeHTTP,
+				SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
+					{
+						LogSource: &ngfAPIv1alpha1.LogSource{
+							HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: logURL},
+						},
+						Destination: ngfAPIv1alpha1.SecurityLogDestination{
+							Type: ngfAPIv1alpha1.SecurityLogDestinationTypeStderr,
+						},
+					},
+				},
+			},
+		}
+	}
+
+	logBundleKey := LogBundleKey(&ngfAPIv1alpha1.LogSource{
+		HTTPSource: &ngfAPIv1alpha1.HTTPBundleSource{URL: logURL},
+	})
+
+	firstPolicy := &Policy{
+		Source: makeWAFPolicy("waf-policy-a"),
+		Valid:  true,
+		WAFState: &PolicyWAFState{
+			Bundles: make(map[WAFBundleKey]*WAFBundleData),
+		},
+	}
+	secondPolicy := &Policy{
+		Source: makeWAFPolicy("waf-policy-b"),
+		Valid:  true,
+		WAFState: &PolicyWAFState{
+			Bundles: make(map[WAFBundleKey]*WAFBundleData),
+		},
+	}
+
+	fetchedData := []byte("log-bundle-data")
+	fetchedChecksum := "checksum-1"
+
+	fetcher := &fetchfakes.FakeFetcher{}
+	fetcher.FetchLogProfileBundleReturnsOnCall(0, fetch.Result{Data: fetchedData, Checksum: fetchedChecksum}, nil)
+	fetcher.FetchLogProfileBundleReturnsOnCall(1, fetch.Result{}, fmt.Errorf("unexpected second fetch for shared log URL"))
+
+	wafInput := &WAFProcessingInput{
+		Fetcher:         fetcher,
+		Secrets:         map[types.NamespacedName]*corev1.Secret{},
+		PreviousBundles: map[WAFBundleKey]*WAFBundleData{},
+	}
+
+	output := &WAFProcessingOutput{
+		Bundles:              make(map[WAFBundleKey]*WAFBundleData),
+		ReferencedWAFSecrets: make(map[types.NamespacedName]*corev1.Secret),
+	}
+
+	// Simulate processWAFPolicies processing the first policy (fetches the bundle),
+	// then the second policy (must reuse the already-fetched bundle).
+	firstSource, ok := firstPolicy.Source.(*ngfAPIv1alpha1.WAFPolicy)
+	g.Expect(ok).To(BeTrue())
+
+	secondSource, ok := secondPolicy.Source.(*ngfAPIv1alpha1.WAFPolicy)
+	g.Expect(ok).To(BeTrue())
+
+	fetchSecurityLogBundles(
+		t.Context(), logr.Discard(), firstSource, firstPolicy, wafInput, output,
+	)
+	fetchSecurityLogBundles(
+		t.Context(), logr.Discard(), secondSource, secondPolicy, wafInput, output,
+	)
+
+	expectedBundle := &WAFBundleData{Data: fetchedData, Checksum: fetchedChecksum}
+
+	g.Expect(output.Bundles[logBundleKey]).To(Equal(expectedBundle))
+	g.Expect(firstPolicy.WAFState.Bundles[logBundleKey]).To(Equal(expectedBundle))
+	g.Expect(secondPolicy.WAFState.Bundles[logBundleKey]).To(Equal(expectedBundle))
+
+	g.Expect(fetcher.FetchLogProfileBundleCallCount()).To(Equal(1))
 }
 
 func TestPolicyBundleKey(t *testing.T) {
