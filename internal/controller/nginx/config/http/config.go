@@ -69,6 +69,8 @@ type Location struct {
 	AuthBasic *AuthBasic
 	// Guardrails holds the ai-guardrails (PayloadProcessor ExtProcess) configuration for this location.
 	Guardrails *GuardrailsConfig
+	// RouteMetadata contains metadata about originating Route and Gateway of this location.
+	RouteMetadata *RouteMetadata
 	// ProxyPassRequestBody renders proxy_pass_request_body ("on"/"off"); unset leaves the directive out.
 	ProxyPassRequestBody string
 	// ProxyPassRequestHeaders renders proxy_pass_request_headers ("on"/"off"); unset leaves the directive out.
@@ -316,6 +318,22 @@ type ServerConfig struct {
 	IPFamily                 shared.IPFamily
 	Plus                     bool
 	DisableSNIHostValidation bool
+}
+
+// RouteMetadata contains metadata about originating Route and Gateway of this location.
+type RouteMetadata struct {
+	// Name of HTTPRoute or GRPCRoute.
+	Name string
+	// Namespace of route.
+	Namespace string
+	// Route resource type ("HTTPRoute or GRPCRoute").
+	Kind string
+	// Name of parent Gateway.
+	GatewayName string
+	// Namespace of parent Gateway.
+	GatewayNamespace string
+	// Name of GatewayClass.
+	GatewayClassName string
 }
 
 var (

@@ -1196,8 +1196,10 @@ func TestBuildConfiguration(t *testing.T) {
 								PathType: PathTypePrefix,
 								MatchRules: []MatchRule{
 									{
-										BackendGroup: expHR2Groups[0],
-										Source:       &hr2.ObjectMeta,
+										BackendGroup:     expHR2Groups[0],
+										Source:           &hr2.ObjectMeta,
+										GatewayName:      "gateway",
+										GatewayNamespace: "test",
 									},
 								},
 							},
@@ -1212,8 +1214,10 @@ func TestBuildConfiguration(t *testing.T) {
 								PathType: PathTypePrefix,
 								MatchRules: []MatchRule{
 									{
-										BackendGroup: expHR1Groups[0],
-										Source:       &hr1.ObjectMeta,
+										BackendGroup:     expHR1Groups[0],
+										Source:           &hr1.ObjectMeta,
+										GatewayName:      "gateway",
+										GatewayNamespace: "test",
 									},
 								},
 							},
@@ -1255,8 +1259,10 @@ func TestBuildConfiguration(t *testing.T) {
 							GRPC:     true,
 							MatchRules: []MatchRule{
 								{
-									BackendGroup: expGRGroups[0],
-									Source:       &gr.ObjectMeta,
+									BackendGroup:     expGRGroups[0],
+									Source:           &gr.ObjectMeta,
+									GatewayName:      "gateway",
+									GatewayNamespace: "test",
 								},
 							},
 						},
@@ -1320,8 +1326,10 @@ func TestBuildConfiguration(t *testing.T) {
 								PathType: PathTypePrefix,
 								MatchRules: []MatchRule{
 									{
-										BackendGroup: expHTTPSHR2Groups[0],
-										Source:       &httpsHR2.ObjectMeta,
+										BackendGroup:     expHTTPSHR2Groups[0],
+										Source:           &httpsHR2.ObjectMeta,
+										GatewayName:      "gateway",
+										GatewayNamespace: "test",
 									},
 								},
 							},
@@ -1337,8 +1345,10 @@ func TestBuildConfiguration(t *testing.T) {
 								PathType: PathTypePrefix,
 								MatchRules: []MatchRule{
 									{
-										BackendGroup: expHTTPSHR5Groups[0],
-										Source:       &httpsHR5.ObjectMeta,
+										BackendGroup:     expHTTPSHR5Groups[0],
+										Source:           &httpsHR5.ObjectMeta,
+										GatewayName:      "gateway",
+										GatewayNamespace: "test",
 									},
 								},
 							},
@@ -1354,8 +1364,10 @@ func TestBuildConfiguration(t *testing.T) {
 								PathType: PathTypePrefix,
 								MatchRules: []MatchRule{
 									{
-										BackendGroup: expHTTPSHR1Groups[0],
-										Source:       &httpsHR1.ObjectMeta,
+										BackendGroup:     expHTTPSHR1Groups[0],
+										Source:           &httpsHR1.ObjectMeta,
+										GatewayName:      "gateway",
+										GatewayNamespace: "test",
 									},
 								},
 							},
@@ -1434,8 +1446,10 @@ func TestBuildConfiguration(t *testing.T) {
 								PathType: PathTypePrefix,
 								MatchRules: []MatchRule{
 									{
-										BackendGroup: setPathRuleIdx(expHR4Groups[0], 0),
-										Source:       &hr4.ObjectMeta,
+										BackendGroup:     setPathRuleIdx(expHR4Groups[0], 0),
+										Source:           &hr4.ObjectMeta,
+										GatewayName:      "gateway",
+										GatewayNamespace: "test",
 									},
 								},
 							},
@@ -1444,8 +1458,10 @@ func TestBuildConfiguration(t *testing.T) {
 								PathType: PathTypePrefix,
 								MatchRules: []MatchRule{
 									{
-										BackendGroup: setPathRuleIdx(expHR3Groups[1], 1),
-										Source:       &hr3.ObjectMeta,
+										BackendGroup:     setPathRuleIdx(expHR3Groups[1], 1),
+										Source:           &hr3.ObjectMeta,
+										GatewayName:      "gateway",
+										GatewayNamespace: "test",
 									},
 								},
 							},
@@ -1454,12 +1470,16 @@ func TestBuildConfiguration(t *testing.T) {
 								PathType: PathTypePrefix,
 								MatchRules: []MatchRule{
 									{
-										BackendGroup: setPathRuleIdx(expHR3Groups[0], 2),
-										Source:       &hr3.ObjectMeta,
+										BackendGroup:     setPathRuleIdx(expHR3Groups[0], 2),
+										Source:           &hr3.ObjectMeta,
+										GatewayName:      "gateway",
+										GatewayNamespace: "test",
 									},
 									{
-										BackendGroup: setPathRuleIdx(expHR4Groups[1], 2),
-										Source:       &hr4.ObjectMeta,
+										BackendGroup:     setPathRuleIdx(expHR4Groups[1], 2),
+										Source:           &hr4.ObjectMeta,
+										GatewayName:      "gateway",
+										GatewayNamespace: "test",
 									},
 								},
 							},
@@ -1477,8 +1497,10 @@ func TestBuildConfiguration(t *testing.T) {
 								PathType: PathTypePrefix,
 								MatchRules: []MatchRule{
 									{
-										BackendGroup: setPathRuleIdx(expHTTPSHR4Groups[0], 0),
-										Source:       &httpsHR4.ObjectMeta,
+										BackendGroup:     setPathRuleIdx(expHTTPSHR4Groups[0], 0),
+										Source:           &httpsHR4.ObjectMeta,
+										GatewayName:      "gateway",
+										GatewayNamespace: "test",
 									},
 								},
 							},
@@ -1487,8 +1509,10 @@ func TestBuildConfiguration(t *testing.T) {
 								PathType: PathTypePrefix,
 								MatchRules: []MatchRule{
 									{
-										BackendGroup: setPathRuleIdx(expHTTPSHR3Groups[1], 1),
-										Source:       &httpsHR3.ObjectMeta,
+										BackendGroup:     setPathRuleIdx(expHTTPSHR3Groups[1], 1),
+										Source:           &httpsHR3.ObjectMeta,
+										GatewayName:      "gateway",
+										GatewayNamespace: "test",
 									},
 								},
 							},
@@ -1497,12 +1521,16 @@ func TestBuildConfiguration(t *testing.T) {
 								PathType: PathTypePrefix,
 								MatchRules: []MatchRule{
 									{
-										BackendGroup: setPathRuleIdx(expHTTPSHR3Groups[0], 2),
-										Source:       &httpsHR3.ObjectMeta,
+										BackendGroup:     setPathRuleIdx(expHTTPSHR3Groups[0], 2),
+										Source:           &httpsHR3.ObjectMeta,
+										GatewayName:      "gateway",
+										GatewayNamespace: "test",
 									},
 									{
-										BackendGroup: setPathRuleIdx(expHTTPSHR4Groups[1], 2),
-										Source:       &httpsHR4.ObjectMeta,
+										BackendGroup:     setPathRuleIdx(expHTTPSHR4Groups[1], 2),
+										Source:           &httpsHR4.ObjectMeta,
+										GatewayName:      "gateway",
+										GatewayNamespace: "test",
 									},
 								},
 							},
@@ -1597,8 +1625,10 @@ func TestBuildConfiguration(t *testing.T) {
 								PathType: PathTypePrefix,
 								MatchRules: []MatchRule{
 									{
-										BackendGroup: setPathRuleIdx(expHR3Groups[1], 0),
-										Source:       &hr3.ObjectMeta,
+										BackendGroup:     setPathRuleIdx(expHR3Groups[1], 0),
+										Source:           &hr3.ObjectMeta,
+										GatewayName:      "gateway",
+										GatewayNamespace: "test",
 									},
 								},
 							},
@@ -1607,8 +1637,10 @@ func TestBuildConfiguration(t *testing.T) {
 								PathType: PathTypePrefix,
 								MatchRules: []MatchRule{
 									{
-										BackendGroup: setPathRuleIdx(expHR3Groups[0], 1),
-										Source:       &hr3.ObjectMeta,
+										BackendGroup:     setPathRuleIdx(expHR3Groups[0], 1),
+										Source:           &hr3.ObjectMeta,
+										GatewayName:      "gateway",
+										GatewayNamespace: "test",
 									},
 								},
 							},
@@ -1627,8 +1659,10 @@ func TestBuildConfiguration(t *testing.T) {
 								PathType: PathTypePrefix,
 								MatchRules: []MatchRule{
 									{
-										BackendGroup: setPathRuleIdx(expHR8Groups[1], 0),
-										Source:       &hr8.ObjectMeta,
+										BackendGroup:     setPathRuleIdx(expHR8Groups[1], 0),
+										Source:           &hr8.ObjectMeta,
+										GatewayName:      "gateway",
+										GatewayNamespace: "test",
 									},
 								},
 							},
@@ -1637,8 +1671,10 @@ func TestBuildConfiguration(t *testing.T) {
 								PathType: PathTypePrefix,
 								MatchRules: []MatchRule{
 									{
-										BackendGroup: setPathRuleIdx(expHR8Groups[0], 1),
-										Source:       &hr8.ObjectMeta,
+										BackendGroup:     setPathRuleIdx(expHR8Groups[0], 1),
+										Source:           &hr8.ObjectMeta,
+										GatewayName:      "gateway",
+										GatewayNamespace: "test",
 									},
 								},
 							},
@@ -1656,8 +1692,10 @@ func TestBuildConfiguration(t *testing.T) {
 								PathType: PathTypePrefix,
 								MatchRules: []MatchRule{
 									{
-										BackendGroup: setPathRuleIdx(expHTTPSHR3Groups[1], 0),
-										Source:       &httpsHR3.ObjectMeta,
+										BackendGroup:     setPathRuleIdx(expHTTPSHR3Groups[1], 0),
+										Source:           &httpsHR3.ObjectMeta,
+										GatewayName:      "gateway",
+										GatewayNamespace: "test",
 									},
 								},
 							},
@@ -1666,8 +1704,10 @@ func TestBuildConfiguration(t *testing.T) {
 								PathType: PathTypePrefix,
 								MatchRules: []MatchRule{
 									{
-										BackendGroup: setPathRuleIdx(expHTTPSHR3Groups[0], 1),
-										Source:       &httpsHR3.ObjectMeta,
+										BackendGroup:     setPathRuleIdx(expHTTPSHR3Groups[0], 1),
+										Source:           &httpsHR3.ObjectMeta,
+										GatewayName:      "gateway",
+										GatewayNamespace: "test",
 									},
 								},
 							},
@@ -1693,8 +1733,10 @@ func TestBuildConfiguration(t *testing.T) {
 								PathType: PathTypePrefix,
 								MatchRules: []MatchRule{
 									{
-										BackendGroup: setPathRuleIdx(expHTTPSHR7Groups[1], 0),
-										Source:       &httpsHR7.ObjectMeta,
+										BackendGroup:     setPathRuleIdx(expHTTPSHR7Groups[1], 0),
+										Source:           &httpsHR7.ObjectMeta,
+										GatewayName:      "gateway",
+										GatewayNamespace: "test",
 									},
 								},
 							},
@@ -1703,8 +1745,10 @@ func TestBuildConfiguration(t *testing.T) {
 								PathType: PathTypePrefix,
 								MatchRules: []MatchRule{
 									{
-										BackendGroup: setPathRuleIdx(expHTTPSHR7Groups[0], 1),
-										Source:       &httpsHR7.ObjectMeta,
+										BackendGroup:     setPathRuleIdx(expHTTPSHR7Groups[0], 1),
+										Source:           &httpsHR7.ObjectMeta,
+										GatewayName:      "gateway",
+										GatewayNamespace: "test",
 									},
 								},
 							},
@@ -1790,8 +1834,10 @@ func TestBuildConfiguration(t *testing.T) {
 								PathType: PathTypePrefix,
 								MatchRules: []MatchRule{
 									{
-										Source:       &hr5.ObjectMeta,
-										BackendGroup: setPathRuleIdx(expHR5Groups[1], 0),
+										Source:           &hr5.ObjectMeta,
+										GatewayName:      "gateway",
+										GatewayNamespace: "test",
+										BackendGroup:     setPathRuleIdx(expHR5Groups[1], 0),
 										Filters: HTTPFilters{
 											InvalidFilter: &InvalidHTTPFilter{},
 										},
@@ -1803,8 +1849,10 @@ func TestBuildConfiguration(t *testing.T) {
 								PathType: PathTypePrefix,
 								MatchRules: []MatchRule{
 									{
-										Source:       &hr5.ObjectMeta,
-										BackendGroup: setPathRuleIdx(expHR5Groups[0], 1),
+										Source:           &hr5.ObjectMeta,
+										GatewayName:      "gateway",
+										GatewayNamespace: "test",
+										BackendGroup:     setPathRuleIdx(expHR5Groups[0], 1),
 										Filters: HTTPFilters{
 											RequestRedirect:      &expRedirect,
 											SnippetsFilters:      []SnippetsFilter{expExtRefFiltersSf},
@@ -1856,8 +1904,10 @@ func TestBuildConfiguration(t *testing.T) {
 								PathType: PathTypePrefix,
 								MatchRules: []MatchRule{
 									{
-										Source:       &hr9.ObjectMeta,
-										BackendGroup: setPathRuleIdx(expHR9Groups[0], 0),
+										Source:           &hr9.ObjectMeta,
+										GatewayName:      "gateway",
+										GatewayNamespace: "test",
+										BackendGroup:     setPathRuleIdx(expHR9Groups[0], 0),
 										Filters: HTTPFilters{
 											AuthenticationFilter: expExtRefFiltersAfBasic,
 										},
@@ -1869,8 +1919,10 @@ func TestBuildConfiguration(t *testing.T) {
 								PathType: PathTypePrefix,
 								MatchRules: []MatchRule{
 									{
-										Source:       &hr9.ObjectMeta,
-										BackendGroup: setPathRuleIdx(expHR9Groups[1], 1),
+										Source:           &hr9.ObjectMeta,
+										GatewayName:      "gateway",
+										GatewayNamespace: "test",
+										BackendGroup:     setPathRuleIdx(expHR9Groups[1], 1),
 										Filters: HTTPFilters{
 											AuthenticationFilter: expExtRefFiltersAfJWT,
 										},
@@ -1972,8 +2024,10 @@ func TestBuildConfiguration(t *testing.T) {
 								PathType: PathTypePrefix,
 								MatchRules: []MatchRule{
 									{
-										BackendGroup: expHR6Groups[0],
-										Source:       &hr6.ObjectMeta,
+										BackendGroup:     expHR6Groups[0],
+										Source:           &hr6.ObjectMeta,
+										GatewayName:      "gateway",
+										GatewayNamespace: "test",
 									},
 								},
 							},
@@ -1991,8 +2045,10 @@ func TestBuildConfiguration(t *testing.T) {
 								PathType: PathTypePrefix,
 								MatchRules: []MatchRule{
 									{
-										BackendGroup: expHTTPSHR6Groups[0],
-										Source:       &httpsHR6.ObjectMeta,
+										BackendGroup:     expHTTPSHR6Groups[0],
+										Source:           &httpsHR6.ObjectMeta,
+										GatewayName:      "gateway",
+										GatewayNamespace: "test",
 									},
 								},
 							},
@@ -2075,8 +2131,10 @@ func TestBuildConfiguration(t *testing.T) {
 								PathType: PathTypeExact,
 								MatchRules: []MatchRule{
 									{
-										BackendGroup: expHR7Groups[1],
-										Source:       &hr7.ObjectMeta,
+										BackendGroup:     expHR7Groups[1],
+										Source:           &hr7.ObjectMeta,
+										GatewayName:      "gateway",
+										GatewayNamespace: "test",
 									},
 								},
 							},
@@ -2085,8 +2143,10 @@ func TestBuildConfiguration(t *testing.T) {
 								PathType: PathTypePrefix,
 								MatchRules: []MatchRule{
 									{
-										BackendGroup: setPathRuleIdx(expHR7Groups[0], 1),
-										Source:       &hr7.ObjectMeta,
+										BackendGroup:     setPathRuleIdx(expHR7Groups[0], 1),
+										Source:           &hr7.ObjectMeta,
+										GatewayName:      "gateway",
+										GatewayNamespace: "test",
 									},
 								},
 							},
@@ -2147,12 +2207,16 @@ func TestBuildConfiguration(t *testing.T) {
 								MatchRules: []MatchRule{
 									// duplicate match rules since two listeners both match this route's hostname
 									{
-										BackendGroup: expHTTPSHR5Groups[0],
-										Source:       &httpsHR5.ObjectMeta,
+										BackendGroup:     expHTTPSHR5Groups[0],
+										Source:           &httpsHR5.ObjectMeta,
+										GatewayName:      "gateway",
+										GatewayNamespace: "test",
 									},
 									{
-										BackendGroup: expHTTPSHR5Groups[0],
-										Source:       &httpsHR5.ObjectMeta,
+										BackendGroup:     expHTTPSHR5Groups[0],
+										Source:           &httpsHR5.ObjectMeta,
+										GatewayName:      "gateway",
+										GatewayNamespace: "test",
 									},
 								},
 							},
@@ -2217,12 +2281,16 @@ func TestBuildConfiguration(t *testing.T) {
 								PathType: PathTypePrefix,
 								MatchRules: []MatchRule{
 									{
-										BackendGroup: expHTTPSHR8Groups[0],
-										Source:       &httpsHR8.ObjectMeta,
+										BackendGroup:     expHTTPSHR8Groups[0],
+										Source:           &httpsHR8.ObjectMeta,
+										GatewayName:      "gateway",
+										GatewayNamespace: "test",
 									},
 									{
-										BackendGroup: expHTTPSHR8Groups[1],
-										Source:       &httpsHR8.ObjectMeta,
+										BackendGroup:     expHTTPSHR8Groups[1],
+										Source:           &httpsHR8.ObjectMeta,
+										GatewayName:      "gateway",
+										GatewayNamespace: "test",
 									},
 								},
 							},
@@ -2280,12 +2348,16 @@ func TestBuildConfiguration(t *testing.T) {
 								PathType: PathTypePrefix,
 								MatchRules: []MatchRule{
 									{
-										BackendGroup: expHTTPSHR9Groups[0],
-										Source:       &httpsHR9.ObjectMeta,
+										BackendGroup:     expHTTPSHR9Groups[0],
+										Source:           &httpsHR9.ObjectMeta,
+										GatewayName:      "gateway",
+										GatewayNamespace: "test",
 									},
 									{
-										BackendGroup: expHTTPSHR9Groups[1],
-										Source:       &httpsHR9.ObjectMeta,
+										BackendGroup:     expHTTPSHR9Groups[1],
+										Source:           &httpsHR9.ObjectMeta,
+										GatewayName:      "gateway",
+										GatewayNamespace: "test",
 									},
 								},
 							},
@@ -2338,8 +2410,10 @@ func TestBuildConfiguration(t *testing.T) {
 								PathType: PathTypePrefix,
 								MatchRules: []MatchRule{
 									{
-										BackendGroup: expHRWithMirrorGroups[0],
-										Source:       &hrWithMirror.ObjectMeta,
+										BackendGroup:     expHRWithMirrorGroups[0],
+										Source:           &hrWithMirror.ObjectMeta,
+										GatewayName:      "gateway",
+										GatewayNamespace: "test",
 										Filters: HTTPFilters{
 											RequestMirrors: []*HTTPRequestMirrorFilter{
 												{
@@ -2415,8 +2489,10 @@ func TestBuildConfiguration(t *testing.T) {
 								PathType: PathTypePrefix,
 								MatchRules: []MatchRule{
 									{
-										BackendGroup: expHTTPSHRWithPolicyGroups[0],
-										Source:       &httpsHRWithPolicy.ObjectMeta,
+										BackendGroup:     expHTTPSHRWithPolicyGroups[0],
+										Source:           &httpsHRWithPolicy.ObjectMeta,
+										GatewayName:      "gateway",
+										GatewayNamespace: "test",
 									},
 								},
 								Policies: []policies.Policy{hrPolicy2.Source},
@@ -2447,8 +2523,10 @@ func TestBuildConfiguration(t *testing.T) {
 								PathType: PathTypePrefix,
 								MatchRules: []MatchRule{
 									{
-										Source:       &hrWithPolicy.ObjectMeta,
-										BackendGroup: expHRWithPolicyGroups[0],
+										Source:           &hrWithPolicy.ObjectMeta,
+										GatewayName:      "gateway",
+										GatewayNamespace: "test",
+										BackendGroup:     expHRWithPolicyGroups[0],
 									},
 								},
 								Policies: []policies.Policy{hrPolicy1.Source},
@@ -2504,8 +2582,10 @@ func TestBuildConfiguration(t *testing.T) {
 								PathType: PathTypePrefix,
 								MatchRules: []MatchRule{
 									{
-										BackendGroup: groupsHRAdvancedWithHeaderMatch[0],
-										Source:       &hrAdvancedRouteWithPolicyAndHeaderMatch.ObjectMeta,
+										BackendGroup:     groupsHRAdvancedWithHeaderMatch[0],
+										Source:           &hrAdvancedRouteWithPolicyAndHeaderMatch.ObjectMeta,
+										GatewayName:      "gateway",
+										GatewayNamespace: "test",
 										Match: Match{
 											Headers: []HTTPHeaderMatch{
 												{
@@ -2517,8 +2597,10 @@ func TestBuildConfiguration(t *testing.T) {
 										},
 									},
 									{
-										BackendGroup: groupsHRAdvancedWithHeaderMatch[0],
-										Source:       &hrAdvancedRouteWithPolicyAndHeaderMatch.ObjectMeta,
+										BackendGroup:     groupsHRAdvancedWithHeaderMatch[0],
+										Source:           &hrAdvancedRouteWithPolicyAndHeaderMatch.ObjectMeta,
+										GatewayName:      "gateway",
+										GatewayNamespace: "test",
 									},
 								},
 								Policies: []policies.Policy{hrPolicy1.Source},
@@ -2801,8 +2883,10 @@ func TestBuildConfiguration(t *testing.T) {
 								PathType: PathTypePrefix,
 								MatchRules: []MatchRule{
 									{
-										BackendGroup: expHR1Groups[0],
-										Source:       &hr1.ObjectMeta,
+										BackendGroup:     expHR1Groups[0],
+										Source:           &hr1.ObjectMeta,
+										GatewayName:      "gateway",
+										GatewayNamespace: "test",
 									},
 								},
 							},
@@ -2903,8 +2987,10 @@ func TestBuildConfiguration(t *testing.T) {
 							PathType: PathTypePrefix,
 							MatchRules: []MatchRule{
 								{
-									BackendGroup: expHR1Groups[0],
-									Source:       &hr1.ObjectMeta,
+									BackendGroup:     expHR1Groups[0],
+									Source:           &hr1.ObjectMeta,
+									GatewayName:      "gateway",
+									GatewayNamespace: "test",
 								},
 							},
 						},
@@ -3354,6 +3440,148 @@ func TestUpsertRoute_PathRuleHasInferenceBackend(t *testing.T) {
 		}
 	}
 	g.Expect(found).To(BeTrue(), "PathRule for '/infer' not found")
+}
+
+func TestUpsertRoute_GatewayMetadata(t *testing.T) {
+	t.Parallel()
+
+	listenerName := "listener-80"
+	gwName := types.NamespacedName{Namespace: "gw-ns", Name: "gw"}
+
+	tests := []struct {
+		name                   string
+		route                  *graph.L7Route
+		expectedRouteName      string
+		expectedRouteNamespace string
+		expectedGRPC           bool
+	}{
+		{
+			name: "HTTPRoute extracts Gateway and Route metadata",
+			route: &graph.L7Route{
+				RouteType: graph.RouteTypeHTTP,
+				Source: &v1.HTTPRoute{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "httpr",
+						Namespace: "test-http",
+					},
+				},
+				Spec: graph.L7RouteSpec{
+					Rules: []graph.RouteRule{
+						{
+							ValidMatches: true,
+							Filters:      graph.RouteRuleFilters{Valid: true},
+							Matches: []v1.HTTPRouteMatch{
+								{
+									Path: &v1.HTTPPathMatch{
+										Type:  helpers.GetPointer(v1.PathMatchPathPrefix),
+										Value: helpers.GetPointer("/http-path"),
+									},
+								},
+							},
+						},
+					},
+				},
+				ParentRefs: []graph.ParentRef{
+					{
+						Attachment: &graph.ParentRefAttachmentStatus{
+							AcceptedHostnames: map[string][]string{
+								graph.CreateParentRefListenerKey(gwName, listenerName): {"*"},
+							},
+						},
+					},
+				},
+				Valid: true,
+			},
+			expectedRouteName:      "httpr",
+			expectedRouteNamespace: "test-http",
+			expectedGRPC:           false,
+		},
+		{
+			name: "GRPCRoute extracts Gateway and Route metadata",
+			route: &graph.L7Route{
+				RouteType: graph.RouteTypeGRPC,
+				Source: &v1.GRPCRoute{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "grpcr",
+						Namespace: "test-grpc",
+					},
+				},
+				Spec: graph.L7RouteSpec{
+					Rules: []graph.RouteRule{
+						{
+							ValidMatches: true,
+							Filters:      graph.RouteRuleFilters{Valid: true},
+							Matches: []v1.HTTPRouteMatch{
+								{
+									Path: &v1.HTTPPathMatch{
+										Type:  helpers.GetPointer(v1.PathMatchPathPrefix),
+										Value: helpers.GetPointer("/grpc-service"),
+									},
+								},
+							},
+						},
+					},
+				},
+				ParentRefs: []graph.ParentRef{
+					{
+						Attachment: &graph.ParentRefAttachmentStatus{
+							AcceptedHostnames: map[string][]string{
+								graph.CreateParentRefListenerKey(gwName, listenerName): {"*"},
+							},
+						},
+					},
+				},
+				Valid: true,
+			},
+			expectedRouteName:      "grpcr",
+			expectedRouteNamespace: "test-grpc",
+			expectedGRPC:           true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			listener := &graph.Listener{
+				Name:        listenerName,
+				GatewayName: gwName,
+				Valid:       true,
+				Routes: map[graph.RouteKey]*graph.L7Route{
+					graph.CreateRouteKey(test.route.Source): test.route,
+				},
+			}
+			gateway := &graph.Gateway{
+				Source: &v1.Gateway{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      gwName.Name,
+						Namespace: gwName.Namespace,
+					},
+					Spec: v1.GatewaySpec{
+						GatewayClassName: "nginx",
+					},
+				},
+				Listeners: []*graph.Listener{listener},
+			}
+
+			hpr := newHostPathRules()
+			hpr.upsertRoute(test.route, listener, gateway, nil, nil, nil)
+			servers := hpr.buildServers()
+
+			g.Expect(servers).To(HaveLen(1))
+			g.Expect(servers[0].PathRules).To(HaveLen(1))
+			g.Expect(servers[0].PathRules[0].MatchRules).To(HaveLen(1))
+			g.Expect(servers[0].PathRules[0].GRPC).To(Equal(test.expectedGRPC))
+
+			matchRule := servers[0].PathRules[0].MatchRules[0]
+			g.Expect(matchRule.Source.Name).To(Equal(test.expectedRouteName))
+			g.Expect(matchRule.Source.Namespace).To(Equal(test.expectedRouteNamespace))
+			g.Expect(matchRule.GatewayName).To(Equal("gw"))
+			g.Expect(matchRule.GatewayNamespace).To(Equal("gw-ns"))
+			g.Expect(matchRule.GatewayClassName).To(Equal("nginx"))
+		})
+	}
 }
 
 func TestNewBackendGroup_Mirror(t *testing.T) {
@@ -9574,8 +9802,10 @@ func TestBuildConfiguration_GatewaysAndListeners(t *testing.T) {
 									PathType: PathTypePrefix,
 									MatchRules: []MatchRule{
 										{
-											BackendGroup: expTLSGroups[0],
-											Source:       &tlsHR.ObjectMeta,
+											BackendGroup:     expTLSGroups[0],
+											Source:           &tlsHR.ObjectMeta,
+											GatewayName:      "gateway",
+											GatewayNamespace: "test",
 										},
 									},
 								},
