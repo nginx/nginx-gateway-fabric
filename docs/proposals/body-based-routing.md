@@ -97,8 +97,10 @@ This feature is built on a new set of NGINX directives:
 At a high level:
 
 ```nginx
-# Only preread requests whose URI matches a body-based route.
-map $request_uri $need_body_read {
+# Only preread requests whose path matches a body-based route.
+# $uri is the normalized path without query string; $request_uri includes
+# the query string and would break prefix matching (e.g. /api/rpc?debug=1).
+map $uri $need_body_read {
     ~^/api/rpc(/|$)  1;
     default          0;
 }
@@ -162,12 +164,26 @@ under which the older resource (by `CreationTimestamp`) wins and the newer, conf
 via a `PolicyConflicted` status condition, consistent with the [Gateway API conflict resolution
 guidelines](https://gateway-api.sigs.k8s.io/concepts/guidelines/?h=conflict#conflicts).
 
+Conflict resolution is **resource-atomic**: if *any* entry in a `PayloadProcessor` conflicts with an existing
+resource at the same scope, the entire newer `PayloadProcessor` is rejected. For example, if an older
+`PayloadProcessor` (A) owns the `InProcess` slot for a given target, and a newer `PayloadProcessor` (B)
+contains both an `InProcess` and an `ExtProcess` entry for the same target, B is rejected as a whole --
+even though B's `ExtProcess` entry does not itself conflict -- because `PayloadProcessor.Status` is
+`gatewayv1.PolicyStatus`, which exposes only ancestor-level conditions and has no per-entry sub-status.
+Reporting B as `PolicyConflicted` (`Accepted=False`) while silently accepting some of its entries would be
+misleading. Users who need both an `InProcess` and an `ExtProcess` entry for the same target without risk of
+conflict should split them into separate `PayloadProcessor` resources, each with a single entry, so that
+conflict on one does not block the other.
+
 ### Go
 
 ```go
 // PayloadProcessorSpec defines the desired state of a PayloadProcessor.
 type PayloadProcessorSpec struct {
     // TargetRef identifies the Gateway or HTTPRoute this policy applies to.
+    //
+    // +kubebuilder:validation:XValidation:message="TargetRef Kind must be Gateway or HTTPRoute",rule="self.kind == 'Gateway' || self.kind == 'HTTPRoute'"
+    // +kubebuilder:validation:XValidation:message="TargetRef Group must be gateway.networking.k8s.io",rule="self.group == 'gateway.networking.k8s.io'"
     TargetRef gatewayv1.LocalPolicyTargetReference `json:"targetRef"`
 
     // Processors is a list of processing steps applied to the request and response payloads,
@@ -240,7 +256,7 @@ type InProcessTransform struct {
 // HeaderTransformation sets a header to a CEL-evaluated value.
 type HeaderTransformation struct {
 	// Name is the HTTP header name.
-	Name gatewayv1.HeaderName `json:"name"`
+	Name gatewayv1.HTTPHeaderName `json:"name"`
 
 	// Value is the CEL expression that produces the header value.
 	// Use json(request.body).fieldName to extract from the JSON body.
@@ -330,7 +346,9 @@ Above resources roughly translated into nginx config:
 
 ```nginx
 # Gate the early read: only fire for paths/methods that have a body-based route.
-map $request_method:$request_uri $need_body_read {
+# Uses $uri (path only) rather than $request_uri (path + query string) so that
+# query parameters don't break prefix matching (e.g. /v1/chat/completions?stream=true).
+map $request_method:$uri $need_body_read {
     ~^POST:/v1/chat/completions(/|$)  1;
     default                           0;
 }
@@ -356,18 +374,46 @@ server {
 }
 ```
 
-The `map` block is compiled by NGF from the union of all body-based `HTTPRoute` match conditions (path prefixes
-and methods) attached to this server block. `client_body_early_read $need_body_read;` evaluates the variable
+The `map` block is compiled by NGF from the union of all body-based `HTTPRoute` match conditions (paths and
+methods) attached to this server block. `client_body_early_read $need_body_read;` evaluates the variable
 per-request: a `GET /healthz` or `POST /legacy-api` request on the same listener is never preread, because
-`$need_body_read` evaluates to `0`. Only requests whose method and URI overlap with at least one body-matched
+`$need_body_read` evaluates to `0`. Only requests whose method and path overlap with at least one body-matched
 route trigger the early read. If the server block has multiple body-matched routes with different paths, their
 patterns are combined into the same `map`.
 
+When compiling path conditions into the `map`, NGF handles each `HTTPRoute` path type as follows:
+
+- **PathPrefix** (the common case): the path is converted to a PCRE prefix expression. PCRE metacharacters in
+  the literal path (e.g. `$`, `.`, `+`) are escaped before embedding, the same way NGF already escapes them
+  when generating `location` regex rewrites today. The root prefix `/` is special-cased: because every URI
+  starts with `/`, `PathPrefix: /` compiles to `~^POST:/` (matching all paths under the given method) rather
+  than `~^POST:/(/|$)`, which would only match `/` and `//`. For non-root paths the leading `/` is retained
+  in the escaped form; for example, a PathPrefix of `/$coffee` becomes `~^POST:/\$coffee(/|$)` in the `map`.
+- **Exact**: the path is escaped the same way and anchored with `$` so that only an exact path match triggers
+  the read (e.g. `~^POST:/v1/chat/completions$`).
+- **RegularExpression**: the path regex is wrapped in a non-capturing group before prepending the method prefix,
+  so that PCRE alternation inside the original expression stays scoped correctly. For example, a path regex of
+  `/v[12]/chat/.*` becomes `~^POST:(?:/v[12]/chat/.*)$`, and an alternation like `/foo|/bar` becomes
+  `~^POST:(?:/foo|/bar)$` rather than `~^POST:/foo|/bar$` (which would let the second branch match any method).
+
 Note that the `predicate`'s `match $body_model = gpt-4` condition is compiled directly from the `HTTPRoute`'s
 `X-Gateway-Model-Name: gpt-4` header match plus the `PayloadProcessor`'s `json(request.body).model` extraction --
-NGF resolves the indirection between the two at translation time, rather than at request time. The header value
-itself, `gpt-4`, comes straight from the `HTTPRoute`'s header match condition, so it's a static, already-validated
-string known at config-build time.
+NGF resolves the indirection between the two at translation time, rather than at request time.
+
+#### Header value: exact match vs. regular-expression match
+
+The value set by `proxy_set_header` depends on the `HTTPRoute`'s header match type:
+
+- **Exact match** (the common case, shown above): the header value is the **static literal** from the
+  `HTTPRoute`'s `HTTPHeaderMatch.Value` (e.g. `gpt-4`). It's a config-time constant, already validated as a
+  well-formed header value, and requires no runtime sanitization.
+- **RegularExpression match**: there is no single literal to set, so NGF sets the header to the actual extracted
+  value (e.g. `proxy_set_header X-Gateway-Model-Name $body_model;`). The `predicate`/`match` rule's regex
+  condition ensures only values matching the expected pattern reach the `proxy_set_header` directive. The value
+  is forwarded as-is after passing the regex gate -- NGF does not apply additional sanitization beyond the match
+  itself -- so users who need tighter control should write a sufficiently restrictive regex (e.g. anchored,
+  character-class-limited). The forwarded value is request-derived content and should be treated with the same
+  care as any other client-supplied header (see the sensitivity note below).
 
 From the user's perspective, this is identical to the upstream GEP-5091 pattern: define a `PayloadProcessor` that
 extracts a body field into a header, then write a normal `HTTPRoute` that matches on that header. NGF will honor
@@ -376,11 +422,11 @@ configured it via `setHeaders` and other consumers (the backend, offload service
 on seeing it.
 
 Internally, NGF translates this configuration into `client_body_early_read` and `json_set` directives, and compiles
-the `HTTPRoute`'s `X-Gateway-Model-Name: gpt-4` header match into a `predicate`/`match` rule evaluated directly
-against the `json_set`-extracted variable (e.g. `$model = gpt-4`), rather than against the header NGINX itself
-sets on the request. The observable result matches the literal "set header, then match on header" semantics implied
-by the API -- the header is present with the correct value, and the request is routed as if that header had been
-matched -- without NGF depending on the header for the match itself.
+the `HTTPRoute`'s header match into a `predicate`/`match` rule evaluated directly against the `json_set`-extracted
+variable (e.g. `$body_model = gpt-4` for exact, or `$body_model ~ ^gpt-[45]$` for regex), rather than against the
+header NGINX itself sets on the request. The observable result matches the literal "set header, then match on
+header" semantics implied by the API -- the header is present with the correct value, and the request is routed as
+if that header had been matched -- without NGF depending on the header for the match itself.
 
 ## Use Cases
 
@@ -468,19 +514,15 @@ matched -- without NGF depending on the header for the match itself.
   match -- there is no special error path or forced status code. Request handling falls through to whichever
   `location` would otherwise apply next (typically the deployment's catch-all/default backend, per the compiled
   example above), exactly as an ordinary unmatched regex or predicate location falls through today.
-- A header set from a body-derived match is never the raw, request-derived value: it's the literal value declared
-  in the `HTTPRoute`'s header match condition, which NGF already validates as a well-formed HTTP header value
-  today, the same as any other header value it sets. The `json_set`-extracted variable itself is only ever used on
-  the left-hand side of a `predicate`/`match` comparison to decide whether a rule matches -- it's never forwarded
-  to the backend directly -- so there's no path by which unvalidated, request-controlled body content reaches a
-  proxied header, and no additional runtime sanitization is needed.
+- For exact header matches, the header set by `proxy_set_header` is the static literal from the `HTTPRoute`'s
+  match value (after the config-safe validation described in [Header value: exact match vs. regular-expression
+  match](#header-value-exact-match-vs-regular-expression-match)). For regular-expression header matches, the
+  header is set to the `json_set`-extracted variable (e.g. `$body_model`), which is request-derived content
+  forwarded as-is after passing the route's regex gate. Users who need tighter control should write a
+  sufficiently restrictive regex. See the same subsection above for the full rationale.
 - Because extracted values may be echoed into a request header that is forwarded to the backend, users should be
   aware that sensitive body content (tokens, PII, etc.) used for routing will also be visible to the backend and to
   anything that logs request headers.
-- Because NGF matches directly against the `json_set`-extracted value rather than the header value, the routing
-  decision cannot be spoofed by a client setting its own `X-Gateway-Model-Name` header. NGF overwrites or strips
-  the client-supplied header value before proxying, using the value derived from the actual request body, even
-  when that value is an empty string because the field is absent from the body.
 
 ## Alternatives
 
