@@ -23,8 +23,11 @@ select a backend, all while forwarding the original body to the backend unchange
   malformed/incomplete JSON body (including one that spilled to a temporary file) is treated as an absent value
   for matching purposes, using native `json_set`/predicate semantics, rather than a forced error.
 - Forward the original, unmodified request body to the selected backend.
-- Ensure listeners with no body-based `PayloadProcessor` attached, whether directly or via an attached route, are
-  completely unaffected in behavior and performance.
+- Ensure requests that don't match a body-based route's path and method are never preread, even on a listener
+  that has a body-based `PayloadProcessor` attached to one of its routes, by using `client_body_early_read` with
+  a variable that NGF derives from the union of body-matched routes' path/method conditions (see
+  [NGINX Configuration](#nginx-configuration) and [Security Considerations](#security-considerations) below).
+  Listeners with no body-based `PayloadProcessor` attached at all remain completely unaffected.
 - Ensure existing NGINX Gateway Fabric capabilities (TLS termination, load balancing, rate limiting, logging,
   tracing, etc.) continue to work unchanged for routes that use body-based matching, including capabilities that
   themselves read, buffer, or suppress the request body (request mirroring, `ExternalAuth`'s body forwarding, the
@@ -79,7 +82,10 @@ This feature is built on a new set of NGINX directives:
 
 - [`client_body_early_read`](https://nginx.org/en/docs/http/ngx_http_core_module.html#client_body_early_read) --
   reads the request body into memory immediately after the request headers are received, before the
-  backend/location is selected.
+  backend/location is selected. The directive accepts one or more `string` parameters that may contain
+  variables; the body is only read early if at least one of those values is non-empty and non-`"0"`. This
+  lets NGF gate the read on a `map`-derived variable so that only requests matching body-based routes'
+  path/method conditions trigger the preread.
 - [`json_set`](https://nginx.org/en/docs/http/ngx_http_json_module.html) -- extracts a named field (including
   nested fields, e.g. `params.clientInfo.name`) from a JSON document held in one NGINX variable into another
   NGINX variable.
@@ -91,7 +97,13 @@ This feature is built on a new set of NGINX directives:
 At a high level:
 
 ```nginx
-client_body_early_read on;
+# Only preread requests whose URI matches a body-based route.
+map $request_uri $need_body_read {
+    ~^/api/rpc(/|$)  1;
+    default          0;
+}
+
+client_body_early_read $need_body_read;
 
 json_set $rpc_method $request_body method;
 
@@ -317,8 +329,14 @@ single `matches` entry are ANDed together, so this rule only selects `gpt4-backe
 Above resources roughly translated into nginx config:
 
 ```nginx
+# Gate the early read: only fire for paths/methods that have a body-based route.
+map $request_method:$request_uri $need_body_read {
+    ~^POST:/v1/chat/completions(/|$)  1;
+    default                           0;
+}
+
 server {
-    client_body_early_read on;
+    client_body_early_read $need_body_read;
     json_set $body_model $request_body model;
 
     predicate $gpt4_route {
@@ -337,6 +355,13 @@ server {
     }
 }
 ```
+
+The `map` block is compiled by NGF from the union of all body-based `HTTPRoute` match conditions (path prefixes
+and methods) attached to this server block. `client_body_early_read $need_body_read;` evaluates the variable
+per-request: a `GET /healthz` or `POST /legacy-api` request on the same listener is never preread, because
+`$need_body_read` evaluates to `0`. Only requests whose method and URI overlap with at least one body-matched
+route trigger the early read. If the server block has multiple body-matched routes with different paths, their
+patterns are combined into the same `map`.
 
 Note that the `predicate`'s `match $body_model = gpt-4` condition is compiled directly from the `HTTPRoute`'s
 `X-Gateway-Model-Name: gpt-4` header match plus the `PayloadProcessor`'s `json(request.body).model` extraction --
@@ -364,13 +389,8 @@ matched -- without NGF depending on the header for the match itself.
 - As an Application Developer building an MCP server, I want to route requests to different backends based on the
   JSON-RPC `method` field (e.g. `initialize`, `tools/list`, `tools/call`), so that discovery, control, and tool
   invocation traffic can be handled independently.
-- As a Cluster Operator, I want routes on listeners with no body-based `PayloadProcessor` attached, directly or via
-  another route on the same listener, to see no change in behavior or performance. For a route that shares a
-  listener with a body-matched route, I accept that its requests will also be preread and buffered (since the
-  listener must buffer bodies for the sibling route regardless), and that its own `body.maxSize`, `bufferSize`, and
-  `timeout` settings are overridden by the listener's Gateway-scoped values for that pre-routing read (see Security
-  Considerations below), but I expect no other change to that route's routing correctness, security, or backend
-  behavior as a result.
+- As a Cluster Operator, I want sibling routes on the same listener as a body-matched route to be unaffected
+  whenever their requests don't overlap in path and method with the body-matched route's conditions.
 
 ## Testing
 
@@ -384,21 +404,27 @@ matched -- without NGF depending on the header for the match itself.
 
 ## Security Considerations
 
-- Reading the request body before routing requires buffering it in memory, and the settings that normally govern
-  that read -- `client_max_body_size`, `client_body_buffer_size`, and `client_body_timeout` -- are ordinarily
-  applied per-location, after routing has already selected one. `client_body_early_read`, however, reads the body
-  at the server level, *before* any location (and therefore any location-scoped `ClientSettingsPolicy`) has been
+- `client_body_early_read` is gated by a `map`-derived variable that NGF compiles from the union of all
+  body-based routes' path and method conditions on each server block (see
+  [NGINX Configuration](#nginx-configuration)). Only requests whose method and URI match that `map` trigger the
+  early read; all other requests on the same listener are never preread and their Route-scoped
+  `ClientSettingsPolicy` `body` settings remain fully effective.
+
+  For the requests that *do* trigger the early read, the body settings that govern the read --
+  `client_max_body_size`, `client_body_buffer_size`, and `client_body_timeout` -- are ordinarily applied
+  per-location, after routing has already selected one. `client_body_early_read`, however, reads the body at the
+  server level, *before* any location (and therefore any location-scoped `ClientSettingsPolicy`) has been
   selected. This timing problem applies equally to all three settings, not just buffer size: whichever effective
   values are in force for the pre-routing read are the only ones that actually govern that request, since a
   route-scoped override of any of them cannot retroactively re-check a read that already happened at the server
-  level under different values -- a smaller Route-scoped `client_max_body_size` can't reject an oversized body the
-  server-level value already accepted, and a larger Route-scoped value can't rescue a body the server-level value
-  already rejected.
+  level under different values -- a smaller Route-scoped `client_max_body_size` can't reject an oversized body
+  the server-level value already accepted, and a larger Route-scoped value can't rescue a body the server-level
+  value already rejected.
 
   For this reason, `client_max_body_size`, `client_body_buffer_size`, and `client_body_timeout` for the
   pre-routing read are always taken from the listener's **Gateway-scoped** `ClientSettingsPolicy` `body` settings
   (falling back to NGINX's own platform defaults -- e.g. `1m`, `8k`/`16k`, `60s` -- for any that are unset), for
-  every listener that has at least one body-based `PayloadProcessor` attached, regardless of whether that
+  every server block that has at least one body-based `PayloadProcessor` attached, regardless of whether that
   `PayloadProcessor` is itself attached to the `Gateway` or to one of the listener's `HTTPRoute`s. This
   Gateway-scoped fallback is what governs the primary use case in this proposal, where `InProcess` is attached
   directly to an `HTTPRoute` (see the [YAML example](#yaml) above): even though the triggering `PayloadProcessor`
@@ -413,8 +439,10 @@ matched -- without NGF depending on the header for the match itself.
   has already been fully read (or the request already rejected) using the Gateway-scoped values, so a
   Route-scoped `body.maxSize`, `body.bufferSize`, or `body.timeout` can never be enforced or relaxed for that
   request. NGF will report this with a status condition on the Route-scoped `ClientSettingsPolicy` (indicating it
-  is overridden/ineffective) whenever it targets a route that shares a listener with a body-based
-  `PayloadProcessor`, rather than silently ignoring it.
+  is overridden/ineffective) whenever it targets a route whose requests trigger the early read, rather than
+  silently ignoring it. Routes on the same listener whose path/method conditions don't overlap with any
+  body-based route are **not** affected by this constraint -- their requests never trigger the early read, so
+  their Route-scoped `body` settings work normally.
 
   A request that exceeds `client_max_body_size` or `client_body_timeout` during the pre-routing read is rejected
   before a route is even selected, with the same status NGINX already returns for each of these conditions today
@@ -433,8 +461,7 @@ matched -- without NGF depending on the header for the match itself.
   nothing to fail closed over: whatever locations don't depend on the missing field still work normally, and
   whichever location predicate would have depended on it simply doesn't match, the same as if the field were
   absent from a well-formed body.
-- `client_body_early_read` is scoped to listeners with at least one body-based `PayloadProcessor` attached;
-  listeners without one are unaffected, consistent with the Goals above. Within a listener that has one attached,
+- Within a server block that has at least one body-based `PayloadProcessor` attached,
   a missing field, a malformed/incomplete JSON body, or a body that spilled to disk are all indistinguishable to
   `json_set`: every extracted variable is simply **not found**. Per native `location $variable { ... }` semantics,
   a predicate whose condition depends on a not-found variable is not empty and not "0", so it simply does not
