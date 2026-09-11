@@ -963,13 +963,7 @@ func (p *NginxProvisioner) buildNginxService(
 		}
 	}
 
-	var servicePolicy corev1.ServiceExternalTrafficPolicy
-	if serviceType != corev1.ServiceTypeClusterIP {
-		servicePolicy = defaultServicePolicy
-		if serviceCfg.ExternalTrafficPolicy != nil {
-			servicePolicy = corev1.ServiceExternalTrafficPolicy(*serviceCfg.ExternalTrafficPolicy)
-		}
-	}
+	servicePolicy := buildServiceExternalTrafficPolicy(serviceType, externalIPs, serviceCfg)
 
 	servicePorts := buildServicePorts(ports, healthcheckPort, metricsPort, serviceType, serviceCfg.NodePorts)
 
@@ -979,6 +973,7 @@ func (p *NginxProvisioner) buildNginxService(
 			Type:                  serviceType,
 			Ports:                 servicePorts,
 			ExternalTrafficPolicy: servicePolicy,
+			ExternalIPs:           externalIPs,
 			Selector:              selectorLabels,
 			IPFamilyPolicy:        helpers.GetPointer(corev1.IPFamilyPolicyPreferDualStack),
 		},
@@ -999,6 +994,23 @@ func (p *NginxProvisioner) buildNginxService(
 	p.updateLoadBalancerClass(svc, externalIPs)
 
 	return svc, nil
+}
+
+// buildServiceExternalTrafficPolicy determines the Service's ExternalTrafficPolicy field.
+func buildServiceExternalTrafficPolicy(
+	serviceType corev1.ServiceType,
+	externalIPs []string,
+	serviceCfg ngfAPIv1alpha2.ServiceSpec,
+) corev1.ServiceExternalTrafficPolicy {
+	if serviceType == corev1.ServiceTypeClusterIP && len(externalIPs) == 0 {
+		return ""
+	}
+
+	if serviceCfg.ExternalTrafficPolicy != nil {
+		return corev1.ServiceExternalTrafficPolicy(*serviceCfg.ExternalTrafficPolicy)
+	}
+
+	return defaultServicePolicy
 }
 
 // updateLoadBalancerClass sets the Service's LoadBalancerClass to this controller
