@@ -1,0 +1,91 @@
+suite: test nginxproxy
+chart:
+  version: 2.7.0
+  appVersion: edge
+templates:
+  - nginxproxy.yaml
+tests:
+  - it: should do something
+    asserts:
+      - isKind:
+          of: NginxProxy
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-proxy-config
+      - equal:
+          path: metadata.namespace
+          value: NAMESPACE
+
+  - it: should render the correct labels by default
+    asserts:
+      - isKind:
+          of: NginxProxy
+      - equal:
+          path: metadata.labels
+          value:
+            helm.sh/chart: nginx-gateway-fabric-2.7.0
+            app.kubernetes.io/name: nginx-gateway-fabric
+            app.kubernetes.io/instance: RELEASE-NAME
+            app.kubernetes.io/version: "edge"
+            app.kubernetes.io/managed-by: Helm
+
+  - it: should render the default amount of replicas
+    asserts:
+      - isKind:
+          of: NginxProxy
+      - equal:
+          path: spec.kubernetes.deployment.replicas
+          value: 1
+
+  - it: should render the correct amount of replicas when set by the user
+    set:
+      nginx.replicas: 3
+    asserts:
+      - isKind:
+          of: NginxProxy
+      - equal:
+          path: spec.kubernetes.deployment.replicas
+          value: 3
+
+  - it: should render the the imagePullPolicy, repository and tag by default
+    asserts:
+      - isKind:
+          of: NginxProxy
+      - equal:
+          path: spec.kubernetes.deployment.container.image.pullPolicy
+          value: Always
+      - equal:
+          path: spec.kubernetes.deployment.container.image.repository
+          value: ghcr.io/nginx/nginx-gateway-fabric/nginx
+      - equal:
+          path: spec.kubernetes.deployment.container.image.tag
+          value: edge
+
+  - it: should render the the imagePullPolicy, repository and tag when set by the user
+    set:
+      nginx.image.pullPolicy: IfNotPresent
+      nginx.image.repository: ghcr.io/nginx/nginx-gateway-fabric/ngf
+      nginx.image.tag: latest
+    asserts:
+      - isKind:
+          of: NginxProxy
+      - equal:
+          path: spec.kubernetes.deployment.container.image.pullPolicy
+          value: IfNotPresent
+      - equal:
+          path: spec.kubernetes.deployment.container.image.repository
+          value: ghcr.io/nginx/nginx-gateway-fabric/ngf
+      - equal:
+          path: spec.kubernetes.deployment.container.image.tag
+          value: latest
+
+  - it: should render the kubernetes service externalTrafficPolicy and type be default
+    asserts:
+      - isKind:
+          of: NginxProxy
+      - equal:
+          path: spec.kubernetes.service.externalTrafficPolicy
+          value: Local
+      - equal:
+          path: spec.kubernetes.service.type
+          value: LoadBalancer

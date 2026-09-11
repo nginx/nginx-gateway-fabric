@@ -7,7 +7,7 @@ templates:
 tests:
   - it: should render HPA when kind == deployment and autoscaling is enabled
     set:
-      kind: deployment
+      nginxGateway.kind: deployment
       nginxGateway.autoscaling.enable: true
     asserts:
       - hasDocuments:
@@ -18,7 +18,7 @@ tests:
           path: spec.scaleTargetRef.kind
           value: Deployment
 
-  - it: shoud not render HPA when autoscaling is disabled
+  - it: should not render HPA when autoscaling is disabled
     set:
       nginxGateway:
         kind: deployment
@@ -29,7 +29,7 @@ tests:
 
   - it: should render HPA with the default min replicas and max replicas when not set by the user
     set:
-      kind: deployment
+      nginxGateway.kind: deployment
       nginxGateway.autoscaling.enable: true
     asserts:
       - equal:
@@ -41,7 +41,7 @@ tests:
 
   - it: should render HPA with the min replicas and max replicas set by the user
     set:
-      kind: deployment
+      nginxGateway.kind: deployment
       nginxGateway.autoscaling.enable: true
       nginxGateway.autoscaling.minReplicas: 2
       nginxGateway.autoscaling.maxReplicas: 8
@@ -55,7 +55,7 @@ tests:
 
   - it: should render HPA with the default targetMemoryUtilizationPercentage and targetCPUUtilizationPercentage when not set by the user
     set:
-      kind: deployment
+      nginxGateway.kind: deployment
       nginxGateway.autoscaling.enable: true
     asserts:
       - contains:
@@ -79,7 +79,7 @@ tests:
 
   - it: should render HPA with the targetMemoryUtilizationPercentage and targetCPUUtilizationPercentage when set by the user
     set:
-      kind: deployment
+      nginxGateway.kind: deployment
       nginxGateway.autoscaling.enable: true
       nginxGateway.autoscaling.targetMemoryUtilizationPercentage: 20
       nginxGateway.autoscaling.targetCPUUtilizationPercentage: 70

@@ -461,7 +461,7 @@ tests:
           path: spec.template.spec.containers[0].args
           content: --nginx-scc=RELEASE-NAME-scc-nginx
 ---
-suite: Deployment - Open Shift SSC
+suite: test - Open Shift SSC in deployment
 chart:
   version: 2.7.0
   appVersion: edge
