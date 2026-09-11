@@ -785,6 +785,8 @@ func (p *NginxProvisioner) buildBootstrapConfigMap(
 		"WorkerConnections":  workerConnections,
 		"WorkerProcesses":    workerProcesses,
 		"WorkerRlimitNofile": workerRlimitNofile,
+		"Telemetry":          graph.TelemetryEnabledForNginxProxy(nProxyCfg),
+		"WAF":                p.cfg.Plus && graph.WAFEnabledForNginxProxy(nProxyCfg),
 	}
 
 	eventsFields := map[string]any{
