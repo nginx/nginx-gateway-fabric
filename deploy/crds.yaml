@@ -11059,9 +11059,63 @@ spec:
                 properties:
                   accessLog:
                     description: |-
-                      AccessLog defines the access log settings, including format itself and disabling option.
-                      For now only path /dev/stdout can be used.
+                      File or syslog destinations can be configured.
+                      If not specified, the default path is /dev/stdout.
                     properties:
+                      destination:
+                        description: |-
+                          Destination specifies where access logs are sent to.
+                          File path or syslog server destination can be configured.
+                          If destination is not specified, access logs are sent to /dev/stdout.
+                        properties:
+                          file:
+                            description: |-
+                              File defines the file destination configuration for access logs.
+                              Only valid when type is set to "file".
+                            properties:
+                              path:
+                                description: Path is the file path where access logs
+                                  will be written.
+                                maxLength: 256
+                                minLength: 1
+                                pattern: ^/[^\s;{}#$"\\]*$
+                                type: string
+                            required:
+                            - path
+                            type: object
+                          syslog:
+                            description: |-
+                              Syslog defines the syslog destination configuration for access logs.
+                              Only valid when type is set to "syslog".
+                            properties:
+                              server:
+                                description: Server is the syslog server address in
+                                  the format "host:port".
+                                maxLength: 253
+                                minLength: 1
+                                pattern: ^[a-zA-Z0-9.-]+:[0-9]+$
+                                type: string
+                            required:
+                            - server
+                            type: object
+                          type:
+                            description: Type identifies the type of access log destination.
+                            enum:
+                            - file
+                            - syslog
+                            type: string
+                        required:
+                        - type
+                        type: object
+                        x-kubernetes-validations:
+                        - message: destination.file must be set if and only if type
+                            is file
+                          rule: has(self.file) == (has(self.type) && self.type ==
+                            'file')
+                        - message: destination.syslog must be set if and only if type
+                            is syslog
+                          rule: has(self.syslog) == (has(self.type) && self.type ==
+                            'syslog')
                       disable:
                         description: Disable turns off access logging when set to
                           true.
@@ -11081,7 +11135,7 @@ spec:
                         description: |-
                           Format specifies the custom log format string.
                           If not specified, NGINX default 'combined' format is used.
-                          For now only path /dev/stdout can be used.
+                          Default path /dev/stdout can be used or file/syslog destinations can be configured.
                           Single quotes and line breaks are not allowed because the format is
                           rendered inside a single-quoted NGINX log_format directive.
                           See https://nginx.org/en/docs/http/ngx_http_log_module.html#log_format

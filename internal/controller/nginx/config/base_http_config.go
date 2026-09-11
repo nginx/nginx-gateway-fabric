@@ -17,7 +17,7 @@ var baseHTTPTemplate = gotemplate.Must(gotemplate.New("baseHttp").Parse(baseHTTP
 type AccessLog struct {
 	Format     string // User's format string
 	Escape     string // Escape setting for variables (default, json, none)
-	Path       string // Where to write logs (/dev/stdout)
+	Path       string // Where to write logs
 	FormatName string // Internal format name (ngf_user_defined_log_format)
 	Disable    bool   // User's disable flag
 }
@@ -218,6 +218,9 @@ func buildAccessLog(accessLogConfig *dataplane.AccessLog) *AccessLog {
 		}
 		if accessLogConfig.Escape != "" {
 			accessLog.Escape = accessLogConfig.Escape
+		}
+		if accessLogConfig.Path != "" {
+			accessLog.Path = accessLogConfig.Path
 		}
 		accessLog.Disable = accessLogConfig.Disable
 
