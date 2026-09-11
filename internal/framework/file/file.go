@@ -16,7 +16,7 @@ const (
 	RegularFileModeInt = 0o644
 	// RegularFileMode defines the default file mode for regular files.
 	RegularFileMode = "0644"
-	// secretFileMode defines the default file mode for files with secrets as an integer.
+	// secretFileModeInt defines the default file mode for files with secrets as an integer.
 	secretFileModeInt = 0o640
 	// SecretFileMode defines the default file mode for files with secrets.
 	SecretFileMode = "0640"
