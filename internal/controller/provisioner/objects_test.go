@@ -3214,18 +3214,20 @@ func TestBuildNginxResourceObjects_LoadBalancerClass(t *testing.T) {
 	}
 
 	tests := []struct {
-		nProxyCfg        *graph.EffectiveNginxProxy
-		expectedLBClass  *string
-		name             string
-		gatewayCtlrName  string
-		gatewayAddresses []gatewayv1.GatewaySpecAddress
+		nProxyCfg                     *graph.EffectiveNginxProxy
+		expectedLBClass               *string
+		name                          string
+		gatewayCtlrName               string
+		expectedExternalTrafficPolicy corev1.ServiceExternalTrafficPolicy
+		gatewayAddresses              []gatewayv1.GatewaySpecAddress
 	}{
 		{
-			name:             "LB service + IP addresses + no user LBClass + GatewayCtlrName set → sets LoadBalancerClass",
-			gatewayCtlrName:  ctlrName,
-			gatewayAddresses: ipAddresses,
-			nProxyCfg:        nil,
-			expectedLBClass:  helpers.GetPointer(ctlrName),
+			name:                          "LB service + IP addresses + no user LBClass → sets LoadBalancerClass",
+			gatewayCtlrName:               ctlrName,
+			gatewayAddresses:              ipAddresses,
+			nProxyCfg:                     nil,
+			expectedLBClass:               helpers.GetPointer(ctlrName),
+			expectedExternalTrafficPolicy: defaultServicePolicy,
 		},
 		{
 			name:             "LB service + IP addresses + user LBClass in nProxyCfg → sets LoadBalancerClass",
@@ -3238,17 +3240,19 @@ func TestBuildNginxResourceObjects_LoadBalancerClass(t *testing.T) {
 					},
 				},
 			},
-			expectedLBClass: helpers.GetPointer(string(ctlrName)),
+			expectedLBClass:               helpers.GetPointer(string(ctlrName)),
+			expectedExternalTrafficPolicy: defaultServicePolicy,
 		},
 		{
-			name:             "LB service + no IP addresses → LoadBalancerClass nil",
-			gatewayCtlrName:  ctlrName,
-			gatewayAddresses: nil,
-			nProxyCfg:        nil,
-			expectedLBClass:  nil,
+			name:                          "LB service + no IP addresses → LoadBalancerClass nil",
+			gatewayCtlrName:               ctlrName,
+			gatewayAddresses:              nil,
+			nProxyCfg:                     nil,
+			expectedLBClass:               nil,
+			expectedExternalTrafficPolicy: defaultServicePolicy,
 		},
 		{
-			name:             "ClusterIP service + IP addresses → LoadBalancerClass nil",
+			name:             "ClusterIP service + IP addresses → LoadBalancerClass nil, ExternalTrafficPolicy Local",
 			gatewayCtlrName:  ctlrName,
 			gatewayAddresses: ipAddresses,
 			nProxyCfg: &graph.EffectiveNginxProxy{
@@ -3258,7 +3262,22 @@ func TestBuildNginxResourceObjects_LoadBalancerClass(t *testing.T) {
 					},
 				},
 			},
-			expectedLBClass: nil,
+			expectedLBClass:               nil,
+			expectedExternalTrafficPolicy: defaultServicePolicy,
+		},
+		{
+			name:             "ClusterIP service + no IP addresses → LoadBalancerClass nil, ExternalTrafficPolicy unset",
+			gatewayCtlrName:  ctlrName,
+			gatewayAddresses: nil,
+			nProxyCfg: &graph.EffectiveNginxProxy{
+				Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+					Service: &ngfAPIv1alpha2.ServiceSpec{
+						ServiceType: helpers.GetPointer(ngfAPIv1alpha2.ServiceTypeClusterIP),
+					},
+				},
+			},
+			expectedLBClass:               nil,
+			expectedExternalTrafficPolicy: "",
 		},
 	}
 
@@ -3305,6 +3324,7 @@ func TestBuildNginxResourceObjects_LoadBalancerClass(t *testing.T) {
 				g.Expect(svc.Spec.LoadBalancerClass).ToNot(BeNil())
 				g.Expect(*svc.Spec.LoadBalancerClass).To(Equal(*test.expectedLBClass))
 			}
+			g.Expect(svc.Spec.ExternalTrafficPolicy).To(Equal(test.expectedExternalTrafficPolicy))
 		})
 	}
 }
