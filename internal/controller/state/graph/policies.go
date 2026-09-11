@@ -525,7 +525,7 @@ func attachPolicyToRoute(
 
 		if parentRef.EffectiveNginxProxy != nil {
 			globalSettings := &policies.GlobalSettings{
-				TelemetryEnabled: telemetryEnabledForNginxProxy(parentRef.EffectiveNginxProxy),
+				TelemetryEnabled: TelemetryEnabledForNginxProxy(parentRef.EffectiveNginxProxy),
 				WAFEnabled:       WAFEnabledForNginxProxy(parentRef.EffectiveNginxProxy),
 			}
 
@@ -633,7 +633,7 @@ func attachPolicyToGateway(
 	}
 
 	globalSettings := &policies.GlobalSettings{
-		TelemetryEnabled: telemetryEnabledForNginxProxy(gw.EffectiveNginxProxy),
+		TelemetryEnabled: TelemetryEnabledForNginxProxy(gw.EffectiveNginxProxy),
 		WAFEnabled:       WAFEnabledForNginxProxy(gw.EffectiveNginxProxy),
 	}
 
