@@ -89,6 +89,7 @@ The following table lists the OpenShift versions and Operator versions compatibl
 
 | NGINX Gateway Fabric | Operator | Preferred Gateway API | Compatible Gateway API | OCP with Preferred GWAPI | Supported OCP Versions |
 |----------------------|----------|-----------------------|------------------------|--------------------------|------------------------|
+| 2.7.x                | v1.5.x   | v1.6.x                | v1.2.1-v1.6.x          | ---                      | 4.19 - 4.22            |
 | 2.6.x                | v1.4.x   | v1.5.x                | v1.2.1-v1.5.x          | ---                      | 4.19 - 4.21            |
 | 2.5.x                | v1.3.x   | v1.5.x                | v1.2.1-v1.5.x          | ---                      | 4.19 - 4.21            |
 | 2.4.x                | v1.2.x   | v1.4.x                | v1.2.1-v1.4.x          | 4.20 & 4.21              | 4.19 - 4.21            |
