@@ -98,6 +98,10 @@ const (
 	// AccessLog format validation error.
 	expectedAccessLogFormatPatternError = `format in body should match`
 
+	// AccessLog destination validation errors.
+	expectedAccessLogDestinationFileError   = "destination.file must be set if and only if type is file"
+	expectedAccessLogDestinationSyslogError = "destination.syslog must be set if and only if type is syslog"
+
 	// ExtraAuthArgs validation error.
 	expectedExtraAuthArgsKeyError = "extraAuthArgs keys must contain only alphanumeric characters, hyphens, " +
 		"underscores, or dots"
