@@ -540,6 +540,7 @@ jobs:
   functional-tests:
     name: Functional tests
     needs: [vars, build-oss, build-plus, build-plus-nap-waf]
+    if: ${{ !cancelled() && !failure() }}
     strategy:
       fail-fast: false
       matrix:
@@ -561,6 +562,7 @@ jobs:
   conformance-tests:
     name: Conformance tests
     needs: [vars, build-oss, build-plus]
+    if: ${{ !cancelled() && !failure() }}
     strategy:
       fail-fast: false
       matrix:
@@ -626,7 +628,7 @@ jobs:
       contents: read
       id-token: write # for get-from-vault to authenticate with Azure
     secrets: inherit
-    if: ${{ needs.vars.outputs.helm_changes == 'true' || github.event_name == 'schedule' || inputs.is_production_release }}
+    if: ${{ !cancelled() && !failure() && (needs.vars.outputs.helm_changes == 'true' || github.event_name == 'schedule' || inputs.is_production_release) }}
 
   publish-helm:
     name: Package and Publish Helm Chart
