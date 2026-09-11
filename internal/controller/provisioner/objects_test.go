@@ -261,7 +261,7 @@ func TestBuildNginxResourceObjects(t *testing.T) {
 			TargetPort: intstr.FromInt(9999),
 		},
 	}))
-	g.Expect(svc.Spec.ExternalIPs).To(BeNil())
+	g.Expect(svc.Spec.ExternalIPs).To(Equal([]string{"192.0.0.2"}))
 	g.Expect(*svc.Spec.LoadBalancerClass).To(Equal("nginx-gateway-controller"))
 
 	depObj := objects[5]
@@ -3294,7 +3294,11 @@ func TestBuildNginxResourceObjects_LoadBalancerClass(t *testing.T) {
 				}
 			}
 			g.Expect(svc).ToNot(BeNil())
-			g.Expect(svc.Spec.ExternalIPs).To(BeNil())
+			if test.gatewayAddresses == nil {
+				g.Expect(svc.Spec.ExternalIPs).To(BeNil())
+			} else {
+				g.Expect(svc.Spec.ExternalIPs).To(Equal([]string{"10.0.0.1"}))
+			}
 			if test.expectedLBClass == nil {
 				g.Expect(svc.Spec.LoadBalancerClass).To(BeNil())
 			} else {
