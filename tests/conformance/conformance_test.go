@@ -18,6 +18,8 @@ limitations under the License.
 package conformance
 
 import (
+	"context"
+	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -35,6 +37,8 @@ import (
 	ctlr "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	inference_conformance "sigs.k8s.io/gateway-api-inference-extension/conformance"
+	inference_tests "sigs.k8s.io/gateway-api-inference-extension/conformance/tests"
+	inference_version "sigs.k8s.io/gateway-api-inference-extension/version"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	"sigs.k8s.io/gateway-api/conformance"
 	conf_v1 "sigs.k8s.io/gateway-api/conformance/apis/v1"
@@ -89,25 +93,27 @@ func TestConformance(t *testing.T) {
 	testSuite, err := suite.NewConformanceTestSuite(opts)
 	g.Expect(err).To(Not(HaveOccurred()))
 
+	t.Cleanup(func() {
+		report, err := testSuite.Report()
+		g.Expect(err).To(Not(HaveOccurred()))
+
+		yamlReport, err := yaml.Marshal(report)
+		g.Expect(err).ToNot(HaveOccurred())
+
+		f, err := os.Create(opts.ReportOutputPath)
+		g.Expect(err).ToNot(HaveOccurred())
+		defer f.Close()
+
+		_, err = f.WriteString("CONFORMANCE PROFILE\n")
+		g.Expect(err).ToNot(HaveOccurred())
+
+		_, err = f.Write(yamlReport)
+		g.Expect(err).ToNot(HaveOccurred())
+	})
+
 	testSuite.Setup(t, tests.ConformanceTests)
 	err = testSuite.Run(t, tests.ConformanceTests)
 	g.Expect(err).To(Not(HaveOccurred()))
-
-	report, err := testSuite.Report()
-	g.Expect(err).To(Not(HaveOccurred()))
-
-	yamlReport, err := yaml.Marshal(report)
-	g.Expect(err).ToNot(HaveOccurred())
-
-	f, err := os.Create(opts.ReportOutputPath)
-	g.Expect(err).ToNot(HaveOccurred())
-	defer f.Close()
-
-	_, err = f.WriteString("CONFORMANCE PROFILE\n")
-	g.Expect(err).ToNot(HaveOccurred())
-
-	_, err = f.Write(yamlReport)
-	g.Expect(err).ToNot(HaveOccurred())
 }
 
 func TestInferenceExtensionConformance(t *testing.T) {
@@ -136,7 +142,55 @@ func TestInferenceExtensionConformance(t *testing.T) {
 	)
 
 	opts.ConformanceProfiles = append(opts.ConformanceProfiles, inference_conformance.GatewayLayerProfileName)
-	inference_conformance.RunConformanceWithOptions(t, opts)
+
+	suite.RegisterConformanceProfile(inference_conformance.GatewayLayerProfile)
+
+	testSuite, err := suite.NewConformanceTestSuite(opts)
+	g.Expect(err).To(Not(HaveOccurred()))
+
+	ctx := context.Background()
+	installedCRDs := &apiext.CustomResourceDefinitionList{}
+	g.Expect(opts.Client.List(ctx, installedCRDs)).To(Succeed())
+
+	apiVersion, err := getGatewayInferenceExtensionVersion(installedCRDs.Items)
+	if err != nil {
+		g.Expect(opts.AllowCRDsMismatch).To(BeTrue(), "error getting the gateway inference extension version: %v", err)
+	}
+
+	if opts.ReportOutputPath != "" {
+		t.Cleanup(func() {
+			report, err := testSuite.Report()
+			g.Expect(err).To(Not(HaveOccurred()))
+
+			inferenceReport := inference_conformance.GatewayAPIInferenceExtensionConformanceReport{
+				GatewayAPIInferenceExtensionVersion: apiVersion,
+				ConformanceReport:                   *report,
+			}
+			g.Expect(inferenceReport.WriteReport(t.Logf, opts.ReportOutputPath)).To(Succeed())
+		})
+	}
+
+	inference_conformance.SetupConformanceTestSuite(ctx, t, testSuite, opts, inference_tests.ConformanceTests)
+	err = testSuite.Run(t, inference_tests.ConformanceTests)
+	g.Expect(err).To(Not(HaveOccurred()))
+}
+
+func getGatewayInferenceExtensionVersion(crds []apiext.CustomResourceDefinition) (string, error) {
+	var inferenceVersion string
+	for _, crd := range crds {
+		v, ok := crd.Annotations[inference_version.BundleVersionAnnotation]
+		if !ok {
+			continue
+		}
+		if inferenceVersion != "" && v != inferenceVersion {
+			return "", fmt.Errorf("multiple gateway api inference extension CRDs versions detected")
+		}
+		inferenceVersion = v
+	}
+	if inferenceVersion == "" {
+		return "", fmt.Errorf("no gateway api inference extension CRDs with the proper annotations found in the cluster")
+	}
+	return inferenceVersion, nil
 }
 
 // collectNGFLogsOnFailure collects NGF pod logs when tests fail
