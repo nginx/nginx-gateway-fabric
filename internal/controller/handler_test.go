@@ -185,16 +185,10 @@ var _ = Describe("eventHandler", func() {
 			},
 		}
 
-		checkUpsertEventExpectations := func(e *events.UpsertEvent) {
-			Expect(fakeProcessor.CaptureUpsertChangeCallCount()).Should(Equal(1))
-			Expect(fakeProcessor.CaptureUpsertChangeArgsForCall(0)).Should(Equal(e.Resource))
-		}
-
-		checkDeleteEventExpectations := func(e *events.DeleteEvent) {
-			Expect(fakeProcessor.CaptureDeleteChangeCallCount()).Should(Equal(1))
-			passedResourceType, passedNsName := fakeProcessor.CaptureDeleteChangeArgsForCall(0)
-			Expect(passedResourceType).Should(Equal(e.Type))
-			Expect(passedNsName).Should(Equal(e.NamespacedName))
+		checkProcessEventExpectations := func(batch events.EventBatch) {
+			Expect(fakeProcessor.ProcessCallCount()).Should(Equal(1))
+			_, _, passedBatch := fakeProcessor.ProcessArgsForCall(0)
+			Expect(passedBatch).Should(Equal(batch))
 		}
 
 		BeforeEach(func() {
@@ -215,7 +209,7 @@ var _ = Describe("eventHandler", func() {
 
 				dcfg := dataplane.GetDefaultConfiguration(&graph.Graph{}, &graph.Gateway{})
 
-				checkUpsertEventExpectations(e)
+				checkProcessEventExpectations(batch)
 				expectReconfig(dcfg, fakeCfgFiles)
 				config := handler.GetLatestConfiguration()
 				Expect(config).To(HaveLen(1))
@@ -232,7 +226,7 @@ var _ = Describe("eventHandler", func() {
 
 				dcfg := dataplane.GetDefaultConfiguration(&graph.Graph{}, &graph.Gateway{})
 
-				checkDeleteEventExpectations(e)
+				checkProcessEventExpectations(batch)
 				expectReconfig(dcfg, fakeCfgFiles)
 				config := handler.GetLatestConfiguration()
 				Expect(config).To(HaveLen(1))
@@ -247,7 +241,7 @@ var _ = Describe("eventHandler", func() {
 
 				handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
 
-				checkUpsertEventExpectations(e)
+				checkProcessEventExpectations(batch)
 				Expect(fakeProvisioner.RegisterGatewayCallCount()).Should(Equal(0))
 				Expect(fakeGenerator.GenerateCallCount()).Should(Equal(0))
 				// status update for GatewayClass should still occur
@@ -264,7 +258,7 @@ var _ = Describe("eventHandler", func() {
 
 				handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
 
-				checkUpsertEventExpectations(e)
+				checkProcessEventExpectations(batch)
 				Expect(fakeProvisioner.RegisterGatewayCallCount()).Should(Equal(0))
 				Expect(fakeGenerator.GenerateCallCount()).Should(Equal(0))
 				// status update for GatewayClass should not occur
@@ -296,7 +290,7 @@ var _ = Describe("eventHandler", func() {
 
 				handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
 
-				checkUpsertEventExpectations(e)
+				checkProcessEventExpectations(batch)
 				// status update should still occur for GatewayClasses
 				Eventually(
 					func() int {
@@ -328,7 +322,7 @@ var _ = Describe("eventHandler", func() {
 
 				handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
 
-				checkUpsertEventExpectations(e)
+				checkProcessEventExpectations(batch)
 
 				// Provisioner should still be called to deprovision resources
 				Eventually(
@@ -365,8 +359,7 @@ var _ = Describe("eventHandler", func() {
 
 				handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
 
-				checkUpsertEventExpectations(upsertEvent)
-				checkDeleteEventExpectations(deleteEvent)
+				checkProcessEventExpectations(batch)
 
 				handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
 
