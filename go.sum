@@ -388,8 +388,8 @@ sigs.k8s.io/controller-runtime v0.25.0 h1:44KgRUPew331KSJpNu8zJow3iTR5W0p/SfrHdw
 sigs.k8s.io/controller-runtime v0.25.0/go.mod h1:4QqLdT6z/L6Olj8JJCtvztid4/fnIiYsfaTFScegctc=
 sigs.k8s.io/gateway-api v1.6.1 h1:mock6phZbI6rvZerwrVNk7hVNymQgHo+6sJ81Ia7ftY=
 sigs.k8s.io/gateway-api v1.6.1/go.mod h1:FVfx3t389ybeXOqvDghLbdvJdSCfI/PReqCUI3lu3mY=
-sigs.k8s.io/gateway-api-inference-extension v1.6.0 h1:cjtwMJYcTnLXBYE5ffR1/hHhn7U1aIFfe2RITYmOXVA=
-sigs.k8s.io/gateway-api-inference-extension v1.6.0/go.mod h1:/2qXfsk/+TVl6JEnxxUIjFY5VsiB67Uxo1rnPxWHSIU=
+sigs.k8s.io/gateway-api-inference-extension v1.6.1 h1:EjcFww9P096btMpkFSVjBI0IVkg06ZKoU62ZY4vbme4=
+sigs.k8s.io/gateway-api-inference-extension v1.6.1/go.mod h1:/2qXfsk/+TVl6JEnxxUIjFY5VsiB67Uxo1rnPxWHSIU=
 sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 h1:IpInykpT6ceI+QxKBbEflcR5EXP7sU1kvOlxwZh5txg=
 sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730/go.mod h1:mdzfpAEoE6DHQEN0uh9ZbOCuHbLK5wOm7dK4ctXE9Tg=
 sigs.k8s.io/randfill v1.0.0 h1:JfjMILfT8A6RbawdsK2JXGBR5AQVfd+9TbzrlneTyrU=
