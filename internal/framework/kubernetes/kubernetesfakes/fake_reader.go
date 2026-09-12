@@ -42,6 +42,11 @@ type FakeReader struct {
 }
 
 func (fake *FakeReader) Get(arg1 context.Context, arg2 client.ObjectKey, arg3 client.Object, arg4 ...client.GetOption) error {
+	var arg4Copy []client.GetOption
+	if arg4 != nil {
+		arg4Copy = make([]client.GetOption, len(arg4))
+		copy(arg4Copy, arg4)
+	}
 	fake.getMutex.Lock()
 	ret, specificReturn := fake.getReturnsOnCall[len(fake.getArgsForCall)]
 	fake.getArgsForCall = append(fake.getArgsForCall, struct {
@@ -49,10 +54,10 @@ func (fake *FakeReader) Get(arg1 context.Context, arg2 client.ObjectKey, arg3 cl
 		arg2 client.ObjectKey
 		arg3 client.Object
 		arg4 []client.GetOption
-	}{arg1, arg2, arg3, arg4})
+	}{arg1, arg2, arg3, arg4Copy})
 	stub := fake.GetStub
 	fakeReturns := fake.getReturns
-	fake.recordInvocation("Get", []interface{}{arg1, arg2, arg3, arg4})
+	fake.recordInvocation("Get", []interface{}{arg1, arg2, arg3, arg4Copy})
 	fake.getMutex.Unlock()
 	if stub != nil {
 		return stub(arg1, arg2, arg3, arg4...)
@@ -106,16 +111,21 @@ func (fake *FakeReader) GetReturnsOnCall(i int, result1 error) {
 }
 
 func (fake *FakeReader) List(arg1 context.Context, arg2 client.ObjectList, arg3 ...client.ListOption) error {
+	var arg3Copy []client.ListOption
+	if arg3 != nil {
+		arg3Copy = make([]client.ListOption, len(arg3))
+		copy(arg3Copy, arg3)
+	}
 	fake.listMutex.Lock()
 	ret, specificReturn := fake.listReturnsOnCall[len(fake.listArgsForCall)]
 	fake.listArgsForCall = append(fake.listArgsForCall, struct {
 		arg1 context.Context
 		arg2 client.ObjectList
 		arg3 []client.ListOption
-	}{arg1, arg2, arg3})
+	}{arg1, arg2, arg3Copy})
 	stub := fake.ListStub
 	fakeReturns := fake.listReturns
-	fake.recordInvocation("List", []interface{}{arg1, arg2, arg3})
+	fake.recordInvocation("List", []interface{}{arg1, arg2, arg3Copy})
 	fake.listMutex.Unlock()
 	if stub != nil {
 		return stub(arg1, arg2, arg3...)
