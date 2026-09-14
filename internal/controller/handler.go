@@ -215,7 +215,7 @@ func (h *eventHandlerImpl) HandleEventBatch(ctx context.Context, logger logr.Log
 
 	processorBatch := make(events.EventBatch, 0, len(batch))
 	for _, event := range batch {
-		if h.handleEventSideEffects(ctx, logger, event) {
+		if h.shouldCaptureEventAfterPreprocessing(ctx, logger, event) {
 			processorBatch = append(processorBatch, event)
 		}
 	}
@@ -978,7 +978,11 @@ func findWAFPolicyKey(gr *graph.Graph, nsName types.NamespacedName) *graph.Polic
 	return nil
 }
 
-func (h *eventHandlerImpl) handleEventSideEffects(ctx context.Context, logger logr.Logger, event any) bool {
+func (h *eventHandlerImpl) shouldCaptureEventAfterPreprocessing(
+	ctx context.Context,
+	logger logr.Logger,
+	event any,
+) bool {
 	switch e := event.(type) {
 	case *events.UpsertEvent:
 		upFilterKey := objectFilterKey(e.Resource, client.ObjectKeyFromObject(e.Resource))
